@@ -1,914 +1,1191 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "title": "恋爱回复 Skill：92 个独立场景",
-  "case_policy": "案例为原创合成示例，沿用来源方法的情境与处理逻辑；不包含真实聊天或人物资料。",
+  "content_policy": "upstream-extracts-only",
+  "provenance_file": "provenance.json",
   "entries": [
     {
       "id": 1,
       "name": "romance-001-first-contact",
       "title": "初次开聊：承接共同经历或已知兴趣",
       "category": "初识与重新开聊",
-      "source_candidates": [
+      "inventory_candidates": [
         "D09",
         "G06",
         "G29",
         "E04",
         "E19"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 2,
       "name": "romance-002-slow-warmup",
       "title": "对方慢热谨慎时的轻量破冰",
       "category": "初识与重新开聊",
-      "source_candidates": [
+      "inventory_candidates": [
         "C09"
-      ]
+      ],
+      "provenance_status": "shared_method",
+      "source_method_count": 1,
+      "source_example_count": 0
     },
     {
       "id": 3,
       "name": "romance-003-reconnect-after-gap",
       "title": "很久没联系后的重新搭话",
       "category": "初识与重新开聊",
-      "source_candidates": [
+      "inventory_candidates": [
         "E17",
         "G29",
         "D12"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 4,
       "name": "romance-004-refresh-routine-chat",
       "title": "例行问候聊成流水账后的重启",
       "category": "初识与重新开聊",
-      "source_candidates": [
+      "inventory_candidates": [
         "D12"
-      ]
+      ],
+      "provenance_status": "shared_method",
+      "source_method_count": 1,
+      "source_example_count": 0
     },
     {
       "id": 5,
       "name": "romance-005-why-contact-now",
       "title": "回应“怎么突然找我”",
       "category": "初识与重新开聊",
-      "source_candidates": [
+      "inventory_candidates": [
         "G01"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 6,
       "name": "romance-006-topic-expansion",
       "title": "延展对方已经抛出的话题",
       "category": "接话与相互了解",
-      "source_candidates": [
+      "inventory_candidates": [
         "D10",
         "G07"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 7,
       "name": "romance-007-short-reply",
       "title": "对方只回“哈哈”、表情或短词",
       "category": "接话与相互了解",
-      "source_candidates": [
+      "inventory_candidates": [
         "G01",
         "E05"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 2
     },
     {
       "id": 8,
       "name": "romance-008-interview-to-sharing",
       "title": "连续查户口后改成双向分享",
       "category": "接话与相互了解",
-      "source_candidates": [
+      "inventory_candidates": [
         "D07",
         "D10",
         "C14",
         "G07"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 9,
       "name": "romance-009-passive-chat",
       "title": "对方愿意回但不主动找话题",
       "category": "接话与相互了解",
-      "source_candidates": [
+      "inventory_candidates": [
         "C10"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 10,
       "name": "romance-010-close-chat",
       "title": "正在聊天但需要先结束",
       "category": "接话与相互了解",
-      "source_candidates": [
+      "inventory_candidates": [
         "G26"
-      ]
+      ],
+      "provenance_status": "shared_method",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 11,
       "name": "romance-011-topic-reset",
       "title": "原话题聊完或单次冷场后的转场",
       "category": "接话与相互了解",
-      "source_candidates": [
+      "inventory_candidates": [
         "G25",
         "G26"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 12,
       "name": "romance-012-share-experience",
       "title": "分享自己的真实经历和生活状态",
       "category": "接话与相互了解",
-      "source_candidates": [
+      "inventory_candidates": [
         "E26",
         "C14"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 13,
       "name": "romance-013-past-relationships",
       "title": "回应前任、恋爱史等问题",
       "category": "接话与相互了解",
-      "source_candidates": [
+      "inventory_candidates": [
         "D06"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 14,
       "name": "romance-014-dating-values",
       "title": "回应择偶标准、感情观等问题",
       "category": "接话与相互了解",
-      "source_candidates": [
+      "inventory_candidates": [
         "D06",
         "G32"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 15,
       "name": "romance-015-private-question",
       "title": "被问暂时不想说的私人问题",
       "category": "接话与相互了解",
-      "source_candidates": [
+      "inventory_candidates": [
         "G26",
         "E26"
-      ]
+      ],
+      "provenance_status": "shared_method",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 16,
       "name": "romance-016-playful-banter",
       "title": "接住对方的玩笑、调侃和轻挑战",
       "category": "玩笑、暧昧与好感",
-      "source_candidates": [
+      "inventory_candidates": [
         "D04",
         "D11",
         "G08",
         "C05"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 17,
       "name": "romance-017-sincerity-challenge",
       "title": "回应“你对谁都这样吗”的真诚质疑",
       "category": "玩笑、暧昧与好感",
-      "source_candidates": [
+      "inventory_candidates": [
         "E05",
         "G01",
         "D11"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 2
     },
     {
       "id": 18,
       "name": "romance-018-specific-compliment",
       "title": "基于真实细节夸奖对方",
       "category": "玩笑、暧昧与好感",
-      "source_candidates": [
+      "inventory_candidates": [
         "G09",
         "D18"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 19,
       "name": "romance-019-light-flirting",
       "title": "轻度暧昧试探与接招",
       "category": "玩笑、暧昧与好感",
-      "source_candidates": [
+      "inventory_candidates": [
         "D13",
         "G08",
         "C05"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 20,
       "name": "romance-020-miss-you",
       "title": "轻松表达“想你了”",
       "category": "玩笑、暧昧与好感",
-      "source_candidates": [
+      "inventory_candidates": [
         "G10"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 21,
       "name": "romance-021-friend-to-romance",
       "title": "从朋友式相处表达不同的好感",
       "category": "玩笑、暧昧与好感",
-      "source_candidates": [
+      "inventory_candidates": [
         "C11",
         "G10"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 22,
       "name": "romance-022-gaming-to-personal",
       "title": "从游戏搭子转成想和对方相处",
       "category": "玩笑、暧昧与好感",
-      "source_candidates": [
+      "inventory_candidates": [
         "C13"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 23,
       "name": "romance-023-after-showing-interest",
       "title": "表露好感后的接话与收住",
       "category": "玩笑、暧昧与好感",
-      "source_candidates": [
+      "inventory_candidates": [
         "C16",
         "C04"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 24,
       "name": "romance-024-flirt-repair",
       "title": "暧昧过头、让对方不舒服后的收回",
       "category": "玩笑、暧昧与好感",
-      "source_candidates": [
+      "inventory_candidates": [
         "D13",
         "C03"
-      ]
+      ],
+      "provenance_status": "shared_method",
+      "source_method_count": 1,
+      "source_example_count": 0
     },
     {
       "id": 25,
       "name": "romance-025-meeting-interest",
       "title": "试探对方是否愿意见面",
       "category": "邀约与约会前后",
-      "source_candidates": [
+      "inventory_candidates": [
         "D14",
         "C04",
         "E08"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 26,
       "name": "romance-026-concrete-date-plan",
       "title": "把“有空约”落实为具体安排",
       "category": "邀约与约会前后",
-      "source_candidates": [
+      "inventory_candidates": [
         "D14",
         "G11",
         "C07"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 27,
       "name": "romance-027-call-video-invite",
       "title": "通话或视频聊天的邀约",
       "category": "邀约与约会前后",
-      "source_candidates": [
+      "inventory_candidates": [
         "E08"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 28,
       "name": "romance-028-vague-invite-response",
       "title": "邀约只得到“下次吧”“再看看”",
       "category": "邀约与约会前后",
-      "source_candidates": [
+      "inventory_candidates": [
         "G11",
         "E10"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 29,
       "name": "romance-029-schedule-conflict",
       "title": "有见面意愿但时间冲突的协调",
       "category": "邀约与约会前后",
-      "source_candidates": [
+      "inventory_candidates": [
         "G11",
         "E08"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 30,
       "name": "romance-030-last-minute-cancel",
       "title": "已经约好却临时取消或改期",
       "category": "邀约与约会前后",
-      "source_candidates": [
+      "inventory_candidates": [
         "G11"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 31,
       "name": "romance-031-pre-date-confirmation",
       "title": "见面前再次确认必要细节",
       "category": "邀约与约会前后",
-      "source_candidates": [
+      "inventory_candidates": [
         "G12",
         "D15"
-      ]
+      ],
+      "provenance_status": "shared_method",
+      "source_method_count": 1,
+      "source_example_count": 0
     },
     {
       "id": 32,
       "name": "romance-032-extra-companion",
       "title": "约会临时增加朋友或同行者",
       "category": "邀约与约会前后",
-      "source_candidates": [
+      "inventory_candidates": [
         "D26",
         "G12"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 2
     },
     {
       "id": 33,
       "name": "romance-033-in-person-silence",
       "title": "见面时冷场或接不上话",
       "category": "邀约与约会前后",
-      "source_candidates": [
+      "inventory_candidates": [
         "D25",
         "G25"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 3
     },
     {
       "id": 34,
       "name": "romance-034-date-awkwardness",
       "title": "见面时说错话、出糗或尴尬的化解",
       "category": "邀约与约会前后",
-      "source_candidates": [
+      "inventory_candidates": [
         "G25",
         "T02",
         "T06"
-      ]
+      ],
+      "provenance_status": "shared_method",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 35,
       "name": "romance-035-first-date-followup",
       "title": "见面结束后的第一条跟进",
       "category": "邀约与约会前后",
-      "source_candidates": [
+      "inventory_candidates": [
         "D16",
         "E22",
         "G16"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 36,
       "name": "romance-036-next-date-invite",
       "title": "承接上次体验提出再次见面",
       "category": "邀约与约会前后",
-      "source_candidates": [
+      "inventory_candidates": [
         "D16",
         "E22"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 37,
       "name": "romance-037-end-date",
       "title": "约会不合拍时结束当次见面",
       "category": "邀约与约会前后",
-      "source_candidates": [
+      "inventory_candidates": [
         "E25"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 0
     },
     {
       "id": 38,
       "name": "romance-038-unanswered-message",
       "title": "一条消息迟迟没有回复",
       "category": "冷淡、被动与互动失衡",
-      "source_candidates": [
+      "inventory_candidates": [
         "E10",
         "G21"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 39,
       "name": "romance-039-fading-interaction",
       "title": "多轮互动逐渐变冷",
       "category": "冷淡、被动与互动失衡",
-      "source_candidates": [
+      "inventory_candidates": [
         "D21",
         "E18",
         "G15"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 40,
       "name": "romance-040-hot-cold-contact",
       "title": "对方忽冷忽热时稳定交流",
       "category": "冷淡、被动与互动失衡",
-      "source_candidates": [
+      "inventory_candidates": [
         "C15",
         "G21"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 41,
       "name": "romance-041-busy-tired-exit",
       "title": "对方说忙、困或想休息时收住",
       "category": "冷淡、被动与互动失衡",
-      "source_candidates": [
+      "inventory_candidates": [
         "C03",
         "C16"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 42,
       "name": "romance-042-after-overexplaining",
       "title": "自己连发追问、解释过多后的降压",
       "category": "冷淡、被动与互动失衡",
-      "source_candidates": [
+      "inventory_candidates": [
         "C03"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 0
     },
     {
       "id": 43,
       "name": "romance-043-help-only-contact",
       "title": "对方主要在需要帮助时才联系",
       "category": "冷淡、被动与互动失衡",
-      "source_candidates": [
+      "inventory_candidates": [
         "C12",
         "G15"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 0
     },
     {
       "id": 44,
       "name": "romance-044-one-sided-venting",
       "title": "长时间倾诉陪聊却没有双向相处",
       "category": "冷淡、被动与互动失衡",
-      "source_candidates": [
+      "inventory_candidates": [
         "C06",
         "C12",
         "G15"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 45,
       "name": "romance-045-conditional-affection",
       "title": "回应“达到某条件才考虑在一起”",
       "category": "冷淡、被动与互动失衡",
-      "source_candidates": [
+      "inventory_candidates": [
         "C17"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 46,
       "name": "romance-046-mixed-signals",
       "title": "说有好感却持续回避见面等矛盾信息",
       "category": "冷淡、被动与互动失衡",
-      "source_candidates": [
+      "inventory_candidates": [
         "C08",
         "E10"
-      ]
+      ],
+      "provenance_status": "shared_method",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 47,
       "name": "romance-047-sadness-support",
       "title": "对方难过或受委屈时回应",
       "category": "倾诉、支持与日常亲密",
-      "source_candidates": [
+      "inventory_candidates": [
         "D05",
         "G20"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 48,
       "name": "romance-048-anxiety-support",
       "title": "对方焦虑、纠结或担忧未来时回应",
       "category": "倾诉、支持与日常亲密",
-      "source_candidates": [
+      "inventory_candidates": [
         "G20"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 49,
       "name": "romance-049-venting-about-others",
       "title": "对方生气、抱怨别人或某件事时回应",
       "category": "倾诉、支持与日常亲密",
-      "source_candidates": [
+      "inventory_candidates": [
         "G20"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 50,
       "name": "romance-050-celebrate-good-news",
       "title": "对方分享好消息或成果时捧场",
       "category": "倾诉、支持与日常亲密",
-      "source_candidates": [
+      "inventory_candidates": [
         "G20",
         "G09"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 51,
       "name": "romance-051-illness-fatigue-care",
       "title": "对方身体不适或疲惫时关心",
       "category": "倾诉、支持与日常亲密",
-      "source_candidates": [
+      "inventory_candidates": [
         "D18",
         "G20"
-      ]
+      ],
+      "provenance_status": "shared_method",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 52,
       "name": "romance-052-specific-gratitude",
       "title": "感谢对方为自己做的具体事情",
       "category": "倾诉、支持与日常亲密",
-      "source_candidates": [
+      "inventory_candidates": [
         "E15",
         "G09",
         "G28"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 53,
       "name": "romance-053-couple-reconnection",
       "title": "稳定关系中疏远后的重新亲近",
       "category": "倾诉、支持与日常亲密",
-      "source_candidates": [
+      "inventory_candidates": [
         "E17",
         "E14"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 54,
       "name": "romance-054-couple-help-request",
       "title": "情侣之间提出或回应具体求助",
       "category": "倾诉、支持与日常亲密",
-      "source_candidates": [
+      "inventory_candidates": [
         "G28",
         "T02",
         "G24"
-      ]
+      ],
+      "provenance_status": "shared_method",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 55,
       "name": "romance-055-work-busy-relationship",
       "title": "忙事业或学习时说明陪伴安排",
       "category": "倾诉、支持与日常亲密",
-      "source_candidates": [
+      "inventory_candidates": [
         "T04"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 56,
       "name": "romance-056-confession",
       "title": "正式表白与回应表白",
       "category": "关系确认与相处边界",
-      "source_candidates": [
+      "inventory_candidates": [
         "D17",
         "G10"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 2
     },
     {
       "id": 57,
       "name": "romance-057-premature-confession",
       "title": "过早表白后的沟通补救",
       "category": "关系确认与相处边界",
-      "source_candidates": [
+      "inventory_candidates": [
         "D24"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 58,
       "name": "romance-058-define-relationship",
       "title": "暧昧已久时问清彼此的关系意愿",
       "category": "关系确认与相处边界",
-      "source_candidates": [
+      "inventory_candidates": [
         "E12",
         "C08",
         "G14"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 59,
       "name": "romance-059-exclusivity-commitment",
       "title": "明确排他性、称谓和承诺范围",
       "category": "关系确认与相处边界",
-      "source_candidates": [
+      "inventory_candidates": [
         "E12",
         "G14"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 60,
       "name": "romance-060-contact-frequency",
       "title": "商量联系频率和消息回应期待",
       "category": "关系确认与相处边界",
-      "source_candidates": [
+      "inventory_candidates": [
         "G14",
         "G21",
         "T03"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 61,
       "name": "romance-061-personal-space",
       "title": "表达独处、朋友或个人生活的空间需要",
       "category": "关系确认与相处边界",
-      "source_candidates": [
+      "inventory_candidates": [
         "D19",
         "E14",
         "G14"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 0
     },
     {
       "id": 62,
       "name": "romance-062-physical-consent",
       "title": "身体亲密前后表达、确认和撤回同意",
       "category": "关系确认与相处边界",
-      "source_candidates": [
+      "inventory_candidates": [
         "D33",
         "E27",
         "G13"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 63,
       "name": "romance-063-public-relationship-photos",
       "title": "关系公开和合照发布的边界",
       "category": "关系确认与相处边界",
-      "source_candidates": [
+      "inventory_candidates": [
         "G43"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 64,
       "name": "romance-064-digital-privacy",
       "title": "手机、密码、定位和查岗的边界",
       "category": "关系确认与相处边界",
-      "source_candidates": [
+      "inventory_candidates": [
         "G43"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 65,
       "name": "romance-065-jealousy-conversation",
       "title": "吃醋或对异性交往不安时的沟通",
       "category": "关系确认与相处边界",
-      "source_candidates": [
+      "inventory_candidates": [
         "E13",
         "G43"
-      ]
+      ],
+      "provenance_status": "shared_method",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 66,
       "name": "romance-066-express-dissatisfaction",
       "title": "表达不满与回应对方的不满",
       "category": "误解、冲突与修复",
-      "source_candidates": [
+      "inventory_candidates": [
         "D19",
         "G22"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 67,
       "name": "romance-067-conflicting-statements",
       "title": "前后说法矛盾时问清一个关键事实",
       "category": "误解、冲突与修复",
-      "source_candidates": [
+      "inventory_candidates": [
         "C08",
         "G03",
         "G19"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 68,
       "name": "romance-068-text-misunderstanding",
       "title": "文字或语气被误解后的澄清",
       "category": "误解、冲突与修复",
-      "source_candidates": [
+      "inventory_candidates": [
         "E16",
         "G22"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 69,
       "name": "romance-069-hurtful-words-apology",
       "title": "失言伤到对方后的道歉",
       "category": "误解、冲突与修复",
-      "source_candidates": [
+      "inventory_candidates": [
         "E16",
         "G23"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 70,
       "name": "romance-070-broken-promise-repair",
       "title": "失约或失信后的具体补救",
       "category": "误解、冲突与修复",
-      "source_candidates": [
+      "inventory_candidates": [
         "G23"
-      ]
+      ],
+      "provenance_status": "shared_method",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 71,
       "name": "romance-071-conflict-pause",
       "title": "争执升温时暂停并约好恢复沟通",
       "category": "误解、冲突与修复",
-      "source_candidates": [
+      "inventory_candidates": [
         "G22"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 72,
       "name": "romance-072-reopen-after-silence",
       "title": "冷战后重新开启对话",
       "category": "误解、冲突与修复",
-      "source_candidates": [
+      "inventory_candidates": [
         "E16",
         "E17"
-      ]
+      ],
+      "provenance_status": "shared_method",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 73,
       "name": "romance-073-recurring-conflict",
       "title": "同一矛盾反复出现时协商可试行办法",
       "category": "误解、冲突与修复",
-      "source_candidates": [
+      "inventory_candidates": [
         "G22",
         "G34"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 2
     },
     {
       "id": 74,
       "name": "romance-074-romantic-rejection",
       "title": "对方说“不合适”“不想恋爱”时回应",
       "category": "拒绝、分手与复联",
-      "source_candidates": [
+      "inventory_candidates": [
         "D27",
         "G24"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 2
     },
     {
       "id": 75,
       "name": "romance-075-end-dating-interest",
       "title": "自己不想继续发展时说清楚",
       "category": "拒绝、分手与复联",
-      "source_candidates": [
+      "inventory_candidates": [
         "E23"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 76,
       "name": "romance-076-after-rejection-coworkers",
       "title": "被拒后仍需同学、同事式往来",
       "category": "拒绝、分手与复联",
-      "source_candidates": [
+      "inventory_candidates": [
         "D23"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 2
     },
     {
       "id": 77,
       "name": "romance-077-meet-new-partner",
       "title": "聚会遇到对方新伴侣时的回应",
       "category": "拒绝、分手与复联",
-      "source_candidates": [
+      "inventory_candidates": [
         "D28"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 3,
+      "source_example_count": 0
     },
     {
       "id": 78,
       "name": "romance-078-breakup-conversation",
       "title": "表达分手决定或回应分手",
       "category": "拒绝、分手与复联",
-      "source_candidates": [
+      "inventory_candidates": [
         "G39"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 79,
       "name": "romance-079-breakup-logistics",
       "title": "分手后的物品和必要事务交接",
       "category": "拒绝、分手与复联",
-      "source_candidates": [
+      "inventory_candidates": [
         "G39"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 80,
       "name": "romance-080-reconnect-after-breakup",
       "title": "明确想尝试复联时写第一条消息",
       "category": "拒绝、分手与复联",
-      "source_candidates": [
+      "inventory_candidates": [
         "G41"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 0
     },
     {
       "id": 81,
       "name": "romance-081-betrayal-clarification",
       "title": "发现背叛后问清与沟通有关的事实",
       "category": "拒绝、分手与复联",
-      "source_candidates": [
+      "inventory_candidates": [
         "G42"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 0
     },
     {
       "id": 82,
       "name": "romance-082-trust-repair-conditions",
       "title": "明确选择尝试修复后谈条件和具体行动",
       "category": "拒绝、分手与复联",
-      "source_candidates": [
+      "inventory_candidates": [
         "G42"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 83,
       "name": "romance-083-meet-family",
       "title": "见家长前商量意愿、分寸和安排",
       "category": "长期恋爱与婚前家庭",
-      "source_candidates": [
+      "inventory_candidates": [
         "D20"
-      ]
+      ],
+      "provenance_status": "shared_method",
+      "source_method_count": 2,
+      "source_example_count": 0
     },
     {
       "id": 84,
       "name": "romance-084-marriage-timing",
       "title": "谈是否结婚以及时间期待",
       "category": "长期恋爱与婚前家庭",
-      "source_candidates": [
+      "inventory_candidates": [
         "D20",
         "G33"
-      ]
+      ],
+      "provenance_status": "shared_method",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 85,
       "name": "romance-085-parenthood-intentions",
       "title": "谈生育意愿和未来责任预期",
       "category": "长期恋爱与婚前家庭",
-      "source_candidates": [
+      "inventory_candidates": [
         "G33",
         "G37"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 86,
       "name": "romance-086-city-future-life",
       "title": "谈居住城市和未来生活安排",
       "category": "长期恋爱与婚前家庭",
-      "source_candidates": [
+      "inventory_candidates": [
         "D20",
         "G33"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 1
     },
     {
       "id": 87,
       "name": "romance-087-shared-expenses",
       "title": "谈共同开支和金钱边界",
       "category": "长期恋爱与婚前家庭",
-      "source_candidates": [
+      "inventory_candidates": [
         "G35"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 88,
       "name": "romance-088-housework-care",
       "title": "谈日常家务和照护分工",
       "category": "长期恋爱与婚前家庭",
-      "source_candidates": [
+      "inventory_candidates": [
         "G36"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 89,
       "name": "romance-089-caregiving-transition",
       "title": "育儿或照护变化后重新商量分工",
       "category": "长期恋爱与婚前家庭",
-      "source_candidates": [
+      "inventory_candidates": [
         "G37"
-      ]
+      ],
+      "provenance_status": "shared_method",
+      "source_method_count": 3,
+      "source_example_count": 1
     },
     {
       "id": 90,
       "name": "romance-090-parents-boundaries",
       "title": "双方父母介入、探访和责任边界",
       "category": "长期恋爱与婚前家庭",
-      "source_candidates": [
+      "inventory_candidates": [
         "G38"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 2,
+      "source_example_count": 1
     },
     {
       "id": 91,
       "name": "romance-091-blended-family",
       "title": "重组家庭中前伴侣、孩子的往来边界",
       "category": "长期恋爱与婚前家庭",
-      "source_candidates": [
+      "inventory_candidates": [
         "G38"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 0
     },
     {
       "id": 92,
       "name": "romance-092-relationship-checkin",
       "title": "提出并安排一次关系近况沟通",
       "category": "长期恋爱与婚前家庭",
-      "source_candidates": [
+      "inventory_candidates": [
         "G34"
-      ]
+      ],
+      "provenance_status": "direct",
+      "source_method_count": 1,
+      "source_example_count": 2
     }
   ]
 }

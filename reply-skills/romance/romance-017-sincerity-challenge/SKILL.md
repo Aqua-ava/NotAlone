@@ -1,31 +1,34 @@
 ---
 name: romance-017-sincerity-challenge
-description: "回应“你对谁都这样吗”的真诚质疑：用于对方怀疑用户是否对所有人都一样热情的场景，辨别她是在开玩笑还是认真确认，再坦率说明真实态度。"
+description: "回应“你对谁都这样吗”的真诚质疑：用于该恋爱沟通场景，参考相应处理方法及表达示例。"
 ---
 
 # 回应“你对谁都这样吗”的真诚质疑
 
-## 使用边界
-用于“你是不是对谁都这样”“你很会说”等带有真诚质疑的表达。它与普通互相逗趣不同：如果对方真在确认用户是否可靠，要给直接答案。不可用反问、吃醋暗示或故意模糊来操控，也不许诺排他关系或未来承诺。
+## 处理边界
 
-## 处理步骤
-1. 观察语气和前文：刚收到夸奖后的笑谈，还是对方认真谈到信任、专一、承诺？不确定就先轻问“你是开玩笑，还是认真想确认？”
-2. 确认用户的事实与意图：是否确实对很多人都这样、是否只是在这段互动里有好感。必要时先问用户，不替他声称“只对你”。
-3. 直接回答核心，再给一个具体依据：用户愿意认识对方的真实原因、喜欢她提过的某个观点等；依据要来自本轮已知事实，不用抽象套路。
-4. 留下平等对话空间。若关系还未确认，说明目前到哪里；若她提出排他、承诺等问题，用户尚未决定时就明确说未决定。
+### 共用规则 1
 
-## 按反馈接
-- 对方笑着接受：可以轻松接一句，随后回到正在聊的话题。
-- 对方追问是否认真：更具体、诚实地说清用户的兴趣程度和不确定处。
-- 对方认为回答像套话：承认刚才说得太泛，问她最在意哪部分，不继续辩论自己多真诚。
+资料彼此矛盾时指出矛盾；缺失信息保持未知，不为了完整而虚构。
 
-## 场景补充判断
-不要用“我只对你这样”作为默认答案。只有用户确认事实和关系边界都支持时才能这样说；否则，说明现在确实欣赏对方但仍在了解，比制造排他感更清楚。
+需要回复文字时结合原文直接生成可发送成品。只有来源差异确实会改变建议时，追问一个必要问题。
 
-## 完成条件
-答复回应了质疑本身，真实说明用户当前态度和关系范围；没有夸大独特性来换取认可。
+## 具体方法
 
-## 案例读取
-对方半开玩笑问时读 references/cases.md 案例一；对方认真担心套路化时读 references/cases.md 的案例二。
+### 方法 1
 
-来源候选编号：E05、G01、D11。
+Sometimes people test confidence with playful (or pointed) questions. The key: don't take it seriously.
+
+| The Test | What She's Checking | How to Respond |
+|----------|-------------------|---------------|
+| "Why are you single?" | Are you insecure about it? | "I'm actually three toddlers in a trench coat. Don't tell anyone." |
+| "Do you say that to all the girls?" | Are you genuine? | "Only the ones who [callback to something specific about her]." |
+| "Buy me a drink" | Do you have boundaries? | "Sure, you can get the second round. Seems fair." |
+| "You're too nice" | Are you a pushover? | "Give it time. I have layers." |
+
+**The Universal Formula:** Acknowledge + Deflect with Humor + Redirect
+
+
+## 按需查看示例
+
+需要参考具体表达时读取 `references/cases.md`。

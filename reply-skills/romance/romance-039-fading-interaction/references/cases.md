@@ -1,41 +1,13 @@
-# 多轮互动逐渐变冷：合成案例
+# 多轮互动逐渐变冷：示例
 
-来源候选：D21、E18、G15。**本文件为原创合成案例，人物、经历与对话均为虚构。**
+### 话术片段 1
 
-## 案例一：常见情形
+**Option 1: Call it out directly (recommended)**
+> "Hey, I've noticed our conversations have kind of slowed down. No judgment — but I'd rather know where we stand than guess. Are you still feeling this?"
 
-**背景：**用户和对方认识一个月。近两周三次都是用户先发消息，对方回答都很短，也没有回应她提的两次周末安排。用户仍想确认一次是否有见面的可能。
+**Option 2: Match her energy and let it fade**
+- Sometimes the fade is the answer. Not every connection needs a formal ending.
+- Stop over-investing in someone who's under-investing in you.
 
-**当前对话：**用户：“这周六我想去看那个摄影展，你有兴趣一起吗？”对方：“最近有点忙。”
-
-**用户意图：**只再问清是否有替代时间，避免继续用聊天热度测试。
-
-**候选：**“懂。你要是之后有空，也可以给我一个你方便的时间；如果最近不想约，也可以直说。”
-
-**坏例：**“我已经这么主动了，你至少应该给我一个交代。”
-
-**原因：**把自己的选择写成对方必须履行的义务，可能激化互动。
-
-**对方后续不同反应与接法：**
-- 对方提出下周具体时间：“好，那下周日见。时间地点定下来后告诉我。”
-- 对方还是说忙：“明白，那我先按自己的安排走，不替你留时间。”
-- 对方明确不想发展：“谢谢你说清楚，我尊重这个决定。”
-
-## 案例二：困难或边界情形
-
-**背景：**用户和对方曾经每天聊天。最近连续数周对方只回答问题，不再分享自己的事，也拒绝了两次约会，没有提出替代时间。用户希望结束无期限等待。
-
-**当前对话：**对方：“哈哈，还好吧。”
-
-**用户意图：**表达已经观察到的互动变化，说明自己将停止主动，避免指责其性格或动机。
-
-**候选：**“最近几次都是我主动聊和提见面，我不太想继续单方面维持了。这段时间我先收住，祝你顺利。”
-
-**坏例：**“你就是故意吊着我，等我追你吧。”
-
-**原因：**用动机推断代替事实，容易把退出变成争辩或索取回应。
-
-**对方后续不同反应与接法：**
-- 对方愿意聊投入不均：“如果你也愿意，我们找个时间当面聊一次。”
-- 对方说忙但没有安排：“好，那我先不主动约了。”
-- 对方要求结束联系：“我听到了，之后不再联系你。”
+**Option 3: Make one genuine effort**
+> "I feel like we were vibing earlier and something shifted. If there's something on your mind, I'm open to hearing it. If not, no hard feelings."

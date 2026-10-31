@@ -1,20 +1,38 @@
-以下为原创合成的虚构案例，仅作处理示例。
+# 初次开聊：承接共同经历或已知兴趣：示例
 
-## 案例一：从共同看展切入
-背景：用户和对方在朋友组织的周末展览里聊了十分钟，发现都喜欢老式海报。用户确实拍了展厅里的蓝色海报，但不知道对方是否记得自己。
-当前对话：展览当天没有继续聊天，第二天刚加上联系方式。
-用户意图：想自然打个招呼，暂时不急着约会。
-候选回复：“昨天那张蓝底海报我回家还想了一下，越看越像小时候的汽水包装。你觉得它是复古还是有点土？”
-坏例： “我一眼就觉得我们特别投缘，今天可以出来吗？”原因：把一次短聊夸成关系结论，又把问候和邀约堆在一起，给对方额外压力。
-后续接法：若她说也喜欢那张，回应她提到的颜色或设计，再分享自己实际注意到的一处细节；若只说“哈哈还行”，可以回“我可能被童年滤镜影响了”，然后结束这一轮；若她说没注意到，不要假装她当时也很在意，直接换成当天真实聊过的话题，或者收住。
+### 教学对话 1
 
-## 案例二：只有很短的共同经历
-背景：用户在桌游局认识对方，两人同桌玩过一局，知道她喜欢推理游戏，但没有交换很多私人信息。
-当前对话：用户刚通过好友申请，想提起那一局。
-用户意图：让对方知道自己记得共同活动，同时看看她愿不愿继续聊。
-候选回复：“上次那局你最后把线索串起来的时候，我才发现我前面漏看了一整段。你平时也常玩推理本吗？”
-坏例：“听说你最近压力很大，要不要我陪你？”原因：场景里没有这条信息，私密关心显得像套话，也擅自假定对方状态。
-后续接法：若她说常玩，追问一个具体偏好并说出自己玩过的类型；若她说偶尔玩，回“那天那本确实挺绕”，不要逼她给推荐清单；若她不接问题，只回应共同经历一句就停。
+## Example 1: The Profile-Based Opener
 
-## 案例延伸
-这两种开场都只借用双方确实共同经历过的事。若用户只从公开内容知道一个兴趣，应把它当作话题线索，而不是宣称很了解对方；候选中的问句也允许对方回答“不太记得”。
+### The Scenario
+You matched with someone on Hinge. Her profile says she's a nurse who loves hiking and has a photo with a golden retriever named "Captain."
+
+### ❌ What Most Guys Send
+```
+"Hey how are you?"
+"You're really pretty"
+"I like hiking too!"
+```
+
+### ✅ The EROS Approach
+
+**Your opener:**
+> "Okay but I need to know — does Captain approve of your dating choices? Because his opinion is the only one that matters here."
+
+**Why it works:**
+- Specific to HER profile (not copy-paste)
+- Playful and fun (not serious or try-hard)
+- Easy for her to respond to (she just talks about her dog)
+- Shows personality without showing off
+
+**Her response:**
+> "Haha Captain is very picky actually. He only likes people who bring treats 😂"
+
+**Your follow-up:**
+> "Bold of you to assume I wouldn't show up with a full charcuterie board for him. What about you though — are you as high-maintenance as Captain or can I win you over with personality alone?"
+
+**What's happening here:**
+- Callback humor (continuing the Captain joke)
+- Absurd escalation (charcuterie board for a dog)
+- Smooth transition to learning about HER
+- Playful challenge ("can I win you over")

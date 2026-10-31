@@ -1,34 +1,54 @@
 ---
 name: romance-029-schedule-conflict
-description: "有见面意愿但时间冲突的协调：用于双方都表达想见面、但原定日期不合适的场景，整理真实可用时段并共同找到替代安排。"
+description: "有见面意愿但时间冲突的协调：用于该恋爱沟通场景，参考相应处理方法及表达示例。"
 ---
 
 # 有见面意愿但时间冲突的协调
 
-## 使用边界
-适用于双方已经表达明确见面意愿，卡点只是时间或活动安排冲突。若对方只说“以后吧”而没确认想见面，使用含糊邀约场景处理。不能替用户承诺空档或让一方总迁就另一方。
+## 处理边界
 
-## 处理步骤
-1. 区分“想见但那天不行”与“还没决定要不要见”。优先看对方是否提出替代日期、活动或表达继续安排的意愿。
-2. 让用户列出自己真实方便的时间段和不可变约束。不要把工作、照护、交通等限制解释成兴趣强弱。
-3. 给出一两个可行选项，邀请对方选或提出另一时间。时间范围保持清楚，避免“你什么时候都行吗”让对方承担全部协调。
-4. 若短期内没有交集，可暂时不定，约定有空再对照日程。确定后复述日期、时间和地点，避免双方理解不同。
+### 共用规则 1
 
-## 按反馈接
-- 找到共同时间：简洁确认，并留意是否还缺地点等关键细节。
-- 对方提出新时段，用户也可行：接受并复述。
-- 近期都不方便：不强行挤档期，双方各自确认之后是否还想约。
+资料彼此矛盾时指出矛盾；缺失信息保持未知，不为了完整而虚构。
 
-## 场景补充判断
-双方都愿意见面时，协调成功的标准是两边日程都可行，不是某一方证明更在意。给出可选时间后，留给对方回应；不要要求她为了用户取消既有安排。
+需要回复文字时结合原文直接生成可发送成品。只有来源差异确实会改变建议时，追问一个必要问题。
 
-## 场景补充判断
-双方都愿意见面时，协调成功的标准是两边日程都可行，不是某一方证明更在意。给出可选时间后，留给对方回应；不要要求她为了用户取消既有安排。
+## 具体方法
 
-## 完成条件
-新的时间由双方确认，符合用户真实日程；没有人因为“证明在意”而被迫取消重要安排。
+### 方法 1
 
-## 案例读取
-对方积极提出替代周末时读 references/cases.md 案例一；双方近期都忙时读 references/cases.md 的案例二。
+**Common Text Patterns & What They Mean:**
 
-来源候选编号：G11、E08。
+| Her Message | Likely Meaning | Suggested Response |
+|-------------|---------------|-------------------|
+| "Hey" / "Hi" (low effort) | Testing if you'll carry the conversation | Make it easy and fun: "Hey back. Your turn to carry the conversation—I'm tired from carrying all these groceries." |
+| "I'm busy this week" (no counter-offer) | Soft no / low priority | Respect it: "Totally get it. Let me know when things calm down." Don't chase. |
+| "I'm busy this week but next week works!" | Genuine interest + schedule conflict | She's investing. Lock it down: "Perfect. Thursday or Friday? I'll plan something fun." |
+| "Why are you single?" | Curiosity / mild test | Light deflection: "I'm actually three toddlers in a trench coat. Don't tell anyone." |
+| Long emotional text | High investment / seeking connection | Match her depth. Validate feelings. Show you actually read it. |
+| "Haha" / "lol" (only) | Energy is dropping | Time to either change topics or suggest meeting up. Don't keep pushing text. |
+| Quick replies + questions back | She's engaged and interested | Keep the momentum. This is your green light. |
+| Increasing response times | Interest may be fading | Don't panic-text. Match her energy or suggest a call/meetup. |
+
+### 方法 2
+
+### 5. 从泛聊转邀约
+
+**稳健**
+
+> 你刚说的[兴趣／食物]让我想到一家[具体地方]。这周六下午要不要一起去看看？
+
+**会撩**
+
+> 这个话题在微信里聊有点浪费。周六我带你去[地方]，你继续当面说服我。
+
+**强势**
+
+> 我周六下午在[区域]，有一小时空档。你想见的话，我们去[具体地方]坐坐。
+
+若对方不方便但主动给替代时间，再具体化；只说“最近忙”且不给任何新信息时，本轮不连环追问。若没有明确拒绝，可等到有新的时间或活动信息时换一个具体方案再邀请；整体趋势长期只有礼貌回应且不投入时，再调整策略。
+
+
+## 按需查看示例
+
+需要参考具体表达时读取 `references/cases.md`。

@@ -1,34 +1,41 @@
 ---
 name: romance-016-playful-banter
-description: "接住对方的玩笑、调侃和轻挑战：用于恋爱对象用玩笑、调侃或轻挑战打开话题的场景，先判断语气，再用贴合双方熟悉程度的幽默回应。"
+description: "接住对方的玩笑、调侃和轻挑战：用于该恋爱沟通场景，参考相应处理方法及表达示例。"
 ---
 
 # 接住对方的玩笑、调侃和轻挑战
 
-## 使用边界
-用于对方语气明显轻松、双方已有相应熟悉度的玩笑互动。若文字可能是认真不满，先澄清或回应事实，不把所有质疑叫作“测试”。玩笑对象限于眼前情境或用户自己，不拿外貌、身份、脆弱经历开刀。
+## 处理边界
 
-## 处理步骤
-1. 看原句和前后文：是否有笑点、表情、双方既往同类玩笑；若证据不足，不把尖锐批评硬改成调情。
-2. 找到玩笑的安全落点：承认一小处事实、拿自己轻轻开涮，或把情境延伸出有趣画面。不要否认明显事实或反咬对方。
-3. 控制力度：关系不熟时用轻回应；对方一直参与同类调侃、用户也确实喜欢时才加一点暧昧。不要套用固定“高位反转”台词。
-4. 留一个可继续的口子但不逼对方接梗。用户想表达认真态度时，应直接说清，而不是永远靠玩笑躲开。
+### 共用规则 1
 
-## 按反馈接
-- 对方加码玩笑：沿同一安全主题再接一次，之后可转回普通话题。
-- 对方只笑或转开：把这句当作本轮结束，不追着问笑点。
-- 对方指出玩笑不舒服：立即停下，承认影响并道歉；不说“开不起玩笑”。
+资料彼此矛盾时指出矛盾；缺失信息保持未知，不为了完整而虚构。
 
-## 场景补充判断
-调侃应针对可共享的情境，而不是用羞辱、外貌评价或身份刻板印象取笑。对方也可能只是跟着礼貌笑；一次笑声不构成继续升级暧昧的许可，力度需要逐轮看回应。
+需要回复文字时结合原文直接生成可发送成品。只有来源差异确实会改变建议时，追问一个必要问题。
 
-## 场景补充判断
-调侃应针对可共享的情境，而不是用羞辱、外貌评价或身份刻板印象取笑。对方也可能只是跟着礼貌笑；一次笑声不构成继续升级暧昧的许可，力度需要逐轮看回应。
+## 具体方法
 
-## 完成条件
-回复回应了对方实际的玩笑，力度与当前熟悉程度相称；能从玩笑顺畅回到真诚交流。
+### 方法 1
 
-## 案例读取
-用户想接住双方熟悉的日常玩笑时读 references/cases.md 案例一；原句可能已经触及敏感处时读 references/cases.md 的案例二。
+### 2.3 The Art of Banter
 
-来源候选编号：D04、D11、G08、C05。
+**Banter = Playful Conflict + Mutual Respect**
+
+Banter is the language of equals. It proves you're not intimidated by their attractiveness and that you're fun to be around.
+
+**Banter Techniques:**
+
+| Technique | What It Is | Example |
+|-----------|-----------|---------|
+| **Playful Challenge** | Gently question something | "You put pineapple on pizza? This might be a dealbreaker." |
+| **Callback** | Reference something from earlier | "Okay, Miss 'I never watch reality TV' — explain your Love Island knowledge then" |
+| **Role Reversal** | Flip the dynamic playfully | "Slow down, I haven't even decided if I like YOU yet" |
+| **Absurd Escalation** | Take something to a funny extreme | "At this rate we'll be arguing about pizza toppings at our wedding" |
+| **Self-Deprecation** | Light joke at your own expense | "I'd try to impress you with my cooking but my smoke alarm counts as a kitchen timer" |
+
+**The Banter Guardrail:** If you can't imagine her laughing while reading it, don't send it.
+
+
+## 按需查看示例
+
+需要参考具体表达时读取 `references/cases.md`。

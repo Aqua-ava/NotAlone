@@ -1,36 +1,42 @@
 ---
 name: romance-039-fading-interaction
-description: "多轮互动逐渐变冷：用于多次聊天都变短、缺少延续且主动性持续下降的场景，帮用户用一次清楚沟通决定如何收住或调整投入。"
+description: "多轮互动逐渐变冷：用于该恋爱沟通场景，参考相应处理方法及表达示例。"
 ---
 
 # 多轮互动逐渐变冷
 
-来源候选：D21、E18、G15。
+## 处理边界
 
-**适用：**有多轮往来作为依据，互动持续变短或很少由对方开启。候选可以表达观察、提出一次具体选择或自然收尾。
+### 共用规则 1
 
-**边界：**仅一条暂未回复不能据此判定趋势；忽冷忽热需处理反复变化；关系分析应保持独立、由用户发起。
+资料彼此矛盾时指出矛盾；缺失信息保持未知，不为了完整而虚构。
 
-**信息不全时：**优先使用用户本轮表达的目的、已提供的原话和当前可用的背景。缺少会改变候选的关键事实时，只问一个必要问题；否则写条件清楚的候选，不补造经历、情绪、约定或对方动机。
+需要回复文字时结合原文直接生成可发送成品。只有来源差异确实会改变建议时，追问一个必要问题。
 
-## 处理步骤
+## 具体方法
 
-1. 回顾多个具体轮次，只记录可观察行为，例如谁开话题、是否回答问题、是否兑现约定；不把“冷淡”当成动机结论。
+### 方法 1
 
-2. 确认用户此刻要的是一次邀约、问清对方是否还想继续了解，还是停止单方维持聊天。
+The slow fade is different from ghosting. It's a gradual withdrawal:
+- Response times get longer and longer
+- Messages get shorter and less engaged
+- She stops asking questions
+- Plans keep getting pushed back
+- The energy just... deflates
 
-3. 若仍想推进，给一个具体且可拒绝的下一步，避免继续高频闲聊来测兴趣。
+### What to Do
 
-4. 若用户更想收回投入，说清本轮决定后停下来观察事实；不设置暗中测试或期限。
+**Option 1: Call it out directly (recommended)**
+> "Hey, I've noticed our conversations have kind of slowed down. No judgment — but I'd rather know where we stand than guess. Are you still feeling this?"
 
-## 按实际反馈选择下一步
+**Option 2: Match her energy and let it fade**
+- Sometimes the fade is the answer. Not every connection needs a formal ending.
+- Stop over-investing in someone who's under-investing in you.
 
-- 对方提出具体替代安排并投入交流：按新信息继续一小步。
-- 对方礼貌回应但没有任何后续行动：收住，不再用更强话术填补空缺。
-- 对方说明不想发展或要求停止：确认并结束联系。
+**Option 3: Make one genuine effort**
+> "I feel like we were vibing earlier and something shifted. If there's something on your mind, I'm open to hearing it. If not, no hard feelings."
 
-## 完成条件
 
-回应依多轮事实而非猜心，提供一个用户愿意承担的下一步或收尾。候选保持可编辑，由用户选择、改写后自行决定是否使用。
+## 按需查看示例
 
-**案例指针：**只有在需要比较本场景的常见与困难情形、或用户明确要求演练时，才读取 `references/cases.md`；普通单次回复依本文件步骤处理。
+需要参考具体表达时读取 `references/cases.md`。

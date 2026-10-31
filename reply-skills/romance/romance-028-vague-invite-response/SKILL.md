@@ -1,34 +1,44 @@
 ---
 name: romance-028-vague-invite-response
-description: "邀约只得到“下次吧”“再看看”：用于用户邀请见面后只收到“下次吧”“再看看”等答复的场景，澄清一次是否想另约，然后接受对方选择。"
+description: "邀约只得到“下次吧”“再看看”：用于该恋爱沟通场景，参考相应处理方法及表达示例。"
 ---
 
 # 邀约只得到“下次吧”“再看看”
 
-## 使用边界
-适用于邀请后收到暂不确定的答复。用户可以澄清一次，以分辨是真的时间不合适还是没有见面意愿；不能通过连发日期、反复询问或指责来逼出答案。单次含糊回复不足以判断对方动机。
+## 处理边界
 
-## 处理步骤
-1. 还原邀请原文和对方答复，确认是否已有她提出的具体替代时间。若有，优先回应那个安排。
-2. 表达理解，再轻轻给一个清晰入口：例如“你之后想约的话告诉我”；若用户确实需要安排日程，可问一次对方是否愿意另找时间。
-3. 如果对方给出可行时间，进入安排；如果仍含糊、不答问题或把话题转开，结束邀约，不继续追问。
-4. 提醒用户按自己的需要安排时间，不把日程一直空出来等对方，也不以冷处理惩罚对方。候选不作兴趣评分。
+### 共用规则 1
 
-## 按反馈接
-- 对方提出日期或主动替代方案：直接协调双方都方便的时间。
-- 对方表示最近确实忙但没有替代时间：友好回应，之后由她方便时再提出。
-- 对方再次含糊、拒绝或不回应：接受当前信息，停止这轮邀约。
+资料彼此矛盾时指出矛盾；缺失信息保持未知，不为了完整而虚构。
 
-## 场景补充判断
-含糊答复可能来自忙碌、犹豫或不想见，单凭一句无法确认原因。此场景只负责给出一次清楚入口，然后把决定留给双方；不要继续替对方拟定动机或修改十种邀约。
+需要回复文字时结合原文直接生成可发送成品。只有来源差异确实会改变建议时，追问一个必要问题。
 
-## 场景补充判断
-含糊答复可能来自忙碌、犹豫或不想见，单凭一句无法确认原因。此场景只负责给出一次清楚入口，然后把决定留给双方；不要继续替对方拟定动机或修改十种邀约。
+## 具体方法
 
-## 完成条件
-候选让对方可以明确另约或就此结束，用户也不会继续等待一个未确认的安排。
+### 方法 1
 
-## 案例读取
-收到“下次吧”且用户仍想确认时读 references/cases.md 案例一；用户已经问过一次仍无明确计划时读 references/cases.md 的案例二。
+**Common Text Patterns & What They Mean:**
 
-来源候选编号：G11、E10。
+| Her Message | Likely Meaning | Suggested Response |
+|-------------|---------------|-------------------|
+| "Hey" / "Hi" (low effort) | Testing if you'll carry the conversation | Make it easy and fun: "Hey back. Your turn to carry the conversation—I'm tired from carrying all these groceries." |
+| "I'm busy this week" (no counter-offer) | Soft no / low priority | Respect it: "Totally get it. Let me know when things calm down." Don't chase. |
+| "I'm busy this week but next week works!" | Genuine interest + schedule conflict | She's investing. Lock it down: "Perfect. Thursday or Friday? I'll plan something fun." |
+| "Why are you single?" | Curiosity / mild test | Light deflection: "I'm actually three toddlers in a trench coat. Don't tell anyone." |
+| Long emotional text | High investment / seeking connection | Match her depth. Validate feelings. Show you actually read it. |
+| "Haha" / "lol" (only) | Energy is dropping | Time to either change topics or suggest meeting up. Don't keep pushing text. |
+| Quick replies + questions back | She's engaged and interested | Keep the momentum. This is your green light. |
+| Increasing response times | Interest may be fading | Don't panic-text. Match her energy or suggest a call/meetup. |
+
+### 方法 2
+
+### 4. 为每句话留后续分支
+
+- **积极**：对方延展、反问、给时间或明确接住，只加温一小步。
+- **含糊**：对方礼貌但没有新信息，不在同一轮追问或追加第二段解释；没有明确拒绝时，可在合理间隔后换时间或场景再主动一次。
+- **拒绝或不适**：停止当前方向，必要时简短确认已听到。
+
+
+## 按需查看示例
+
+需要参考具体表达时读取 `references/cases.md`。

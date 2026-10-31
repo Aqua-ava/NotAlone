@@ -14,7 +14,9 @@ import {romanceBundleRoot, validateRomanceBundle} from '../../scripts/validate_r
 test('92 个恋爱包通过真实校验器，完整目录只加载一个正文及其案例', {timeout:60000}, async t => {
   const {catalog, summary} = await validateRomanceBundle();
   assert.equal(summary.packages, 92);
-  assert.ok(summary.cases >= 184);
+  assert.ok(summary.withoutSeparateExamples > 0);
+  assert.ok(summary.sharedMethod > 0);
+  assert.equal(summary.unsupported, 0);
   const directory = await realpath(await mkdtemp(join(tmpdir(), 'notalone-romance-bundle-')));
   t.after(() => rm(directory, {recursive:true, force:true}));
   const root = join(directory, 'packages'); await mkdir(root);
