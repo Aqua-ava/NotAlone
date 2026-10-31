@@ -89,7 +89,9 @@
 .memory-processing-card { padding: 10px 14px; margin: 0; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); }
 .memory-processing-card p { margin: 6px 0; }
 .fixed-memory-processing { min-width: 0; }
-.fixed-memory-processing pre { max-width: 100%; max-height: 28rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fixed-memory-processing .memory-processing-bar { flex-wrap: wrap; }
+.fixed-memory-processing h2 { margin: 0; font-size: 16px; }
+.memory-processing-progress { display: block; width: 100%; height: 8px; margin: 8px 0; accent-color: #426f8a; }
 .memory-processing-bar, .memory-processing-brief, .memory-processing-actions, .memory-processing-detail-heading { display: flex; align-items: center; gap: 8px 16px; }
 .memory-processing-bar, .memory-processing-detail-heading { justify-content: space-between; }
 .memory-processing-brief { flex-wrap: wrap; min-width: 0; }

@@ -11,125 +11,118 @@ async function withPanel(t,command,testPage){
  const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(4000);
  await page.exposeFunction('command',command);await page.route('http://127.0.0.1/fixed-memory-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/fixed-memory-test');await page.addScriptTag({content:compiled.outputFiles[0].text});await testPage(page);
 }
-test('无产出成功独立于后续阶段，失效通知立即撤下候选及过程正文', {timeout:20000},async t=>{
- let current=run();
- await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:current}:method==='trace'?{events:[{eventId:ids.task,attemptId:ids.task,kind:'request',payload:{input:'合成过程输入',output:'合成过程返回'},callId:null,inputNos:[1],sources:[{contactId:ids.contact,recordId:ids.task}]}],calls:[]}:undefined,async page=>{
+// 回到可见页面走正式的自动状态读取，不通过已移除的刷新按钮。
+const revisit=page=>page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+
+test('无轮次显示等待，卡片只读状态与进度，不启动或控制任务', {timeout:20000},async t=>{
+ let current=null;const methods=[];
+ await withPanel(t,async method=>{methods.push(method);if(method==='readCurrent')return {connectionGeneration:1,run:current};},async page=>{
   const panel=page.getByRole('region',{name:'固定范围记忆处理'});
-  await panel.getByText('已处理，未产生新记忆',{exact:true}).waitFor();await panel.getByText('主题整理、长期概览尚未全部完成。',{exact:true}).waitFor();assert.equal(await panel.getByText('本轮已完成',{exact:true}).count(),0);
-  current={...run(),candidates:[{id:ids.task,scopeKind:'contact',contactId:ids.contact,body:'合成候选正文',state:'verified_pending_decision',origin:'auto'}]};
-  await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();await panel.getByText('合成候选正文',{exact:true}).waitFor();await panel.getByText('以下候选来自自动提取，正式记忆与决定请查看下方。',{exact:true}).waitFor();assert.equal(await panel.getByText('以下候选来自自动提取，等待正式记忆裁决。',{exact:true}).count(),0);
-  await panel.locator('summary').filter({hasText:'查看本轮任务'}).click();await panel.getByRole('button',{name:'查看联系人 1过程',exact:true}).click();
-  await panel.locator('summary').filter({hasText:'request'}).click();await panel.locator('pre').filter({hasText:'合成过程输入'}).waitFor();
-  await page.evaluate(()=>window.invalidate());await panel.getByRole('alert').waitFor();assert.equal(await panel.getByText('合成候选正文',{exact:true}).count(),0);assert.equal(await panel.locator('pre').filter({hasText:'合成过程输入'}).count(),0);
+  await panel.getByRole('status').filter({hasText:'等待处理'}).waitFor();
+  await panel.getByText('暂无处理记录',{exact:true}).waitFor();
+  const projections=[
+   {status:'waiting',state:'pending',stage:'extraction_verification',text:'等待提取与核验'},
+   {status:'processing',state:'running',stage:'extraction_verification',text:'正在提取与核验'},
+   {status:'paused',state:'paused',stage:'document_profile',text:'已暂停'},
+   {status:'blocked',state:'incomplete',stage:'document_scene',text:'处理受阻'},
+   {status:'completed',state:'completed',stage:'completed',text:'本轮已完成'},
+  ];
+  for(const projection of projections){
+   current={...run(),...projection,total:2,succeeded:1,actions:['pause','continue'],laterStages:projection.status==='completed'?'completed':'pending',candidates:[{id:ids.task,scopeKind:'contact',contactId:ids.contact,body:'不在状态卡重复展示的合成候选',state:'verified_pending_decision',origin:'auto'}]};
+   await revisit(page);await panel.getByRole('status').filter({hasText:projection.text}).waitFor();
+   assert.equal(await panel.getByRole('button').count(),0);
+   assert.equal(await panel.getByText('不在状态卡重复展示的合成候选',{exact:true}).count(),0);
+   assert.equal(await panel.locator('pre, details').count(),0);
+  }
+  assert.equal(methods.every(method=>method==='readCurrent'),true,'查看进度不得启动、暂停、继续或读取过程正文');
  });
 });
-test('旧页迟到正文不能填回，新读取失败撤下快照，unknown不展示继续', {timeout:20000},async t=>{
+
+test('处理中自动更新真实计数，提取全部结束仍不冒充整轮完成', {timeout:20000},async t=>{
+ let current={...run(),status:'processing',state:'running',total:3,succeeded:1,pending:2};
+ await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:current}:undefined,async page=>{
+  const panel=page.getByRole('region',{name:'固定范围记忆处理'});
+  await panel.getByText('提取与核验：已处理 1 / 3 条文字目标',{exact:true}).waitFor();
+  const progress=panel.getByRole('progressbar',{name:'文字提取与核验进度'});
+  assert.equal(await progress.getAttribute('value'),'1');assert.equal(await progress.getAttribute('max'),'3');
+  current={...current,succeeded:3,pending:0};
+  await panel.getByText('提取与核验：已处理 3 / 3 条文字目标',{exact:true}).waitFor();
+  assert.equal(await progress.getAttribute('value'),'3');
+  await panel.getByText('主题整理、长期概览尚未全部完成。',{exact:true}).waitFor();
+  assert.equal(await panel.getByText('本轮已完成',{exact:true}).count(),0);
+ });
+});
+
+test('无产出成功独立于后续阶段，来源失效不冒充无产出成功', {timeout:20000},async t=>{
+ let current=run();
+ await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:current}:undefined,async page=>{
+  const panel=page.getByRole('region',{name:'固定范围记忆处理'});
+  await panel.getByText('已处理，未产生新记忆',{exact:true}).waitFor();
+  current={...run(),statusReason:'scope_revoked',revoked:1,tasks:run().tasks.map(task=>({...task,state:'revoked'}))};
+  await revisit(page);await panel.getByText('范围已失效',{exact:true}).waitFor();
+  assert.equal(await panel.getByText('已处理，未产生新记忆',{exact:true}).count(),0);
+  assert.equal(await panel.getByText('本轮已完成',{exact:true}).count(),0);
+ });
+});
+
+test('失效立即清除进度，旧读取迟到不能恢复快照，随后自动重新核验', {timeout:20000},async t=>{
  let mode='initial',release,started;
  const pending=new Promise(resolve=>{release=resolve;});const entered=new Promise(resolve=>{started=resolve;});
  await withPanel(t,async method=>{
   if(method==='readCurrent'){
    if(mode==='late'){started();return pending;}
    if(mode==='denied')throw new Error('synthetic_deleted');
-   return {connectionGeneration:1,run:{...run(),state:'failed',succeeded:0,unknown:1,status:'blocked',statusReason:'model_receipt_unknown',actions:[],pending:0,calls:{prepared:0,sending:0,succeeded:1,failed:0,unknown:1},candidates:[{id:ids.task,scopeKind:'contact',contactId:ids.contact,body:'合法候选快照',state:'verified_pending_decision',origin:'auto'}]}};
+   return {connectionGeneration:1,run:run()};
   }
  },async page=>{
   const panel=page.getByRole('region',{name:'固定范围记忆处理'});
-  await panel.getByText('合法候选快照',{exact:true}).waitFor();await panel.getByText('调用结果待核实',{exact:true}).waitFor();assert.equal(await panel.getByRole('button',{name:'继续原任务',exact:true}).count(),0);
-  mode='denied';await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();await panel.getByRole('alert').waitFor();assert.equal(await panel.getByText('合法候选快照',{exact:true}).count(),0);
-  mode='late';await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();await entered;await page.evaluate(()=>window.invalidate());release({connectionGeneration:1,run:{...run(),status:'blocked',statusReason:'model_receipt_unknown',actions:[],pending:0,calls:{prepared:0,sending:0,succeeded:1,failed:0,unknown:1},candidates:[{id:ids.task,scopeKind:'contact',contactId:ids.contact,body:'不得恢复旧正文',state:'verified_pending_decision',origin:'auto'}]}});
-  await panel.getByRole('alert').waitFor();assert.equal(await panel.getByText('不得恢复旧正文',{exact:true}).count(),0);
- });
-});
-test('同轮unknown只封对应任务，其他failed或paused目标可沿原run继续，已无目标不展示继续', {timeout:20000},async t=>{
- const otherTask='55555555-5555-4555-8555-555555555555',otherContact='66666666-6666-4666-8666-666666666666';
- const blocked={taskId:ids.task,scopeKind:'contact',contactId:ids.contact,state:'unknown',total:1,succeeded:0,errorCode:'memory_extraction_receipt_unknown'};
- const retryable={taskId:otherTask,scopeKind:'contact',contactId:otherContact,state:'failed',total:1,succeeded:0,errorCode:'memory_extraction_source_insufficient'};
- let current={...run(),state:'incomplete',total:2,succeeded:0,failed:1,unknown:1,status:'blocked',statusReason:'model_receipt_unknown',actions:['continue'],pending:0,revoked:0,calls:{prepared:0,sending:0,succeeded:2,failed:0,unknown:1},tasks:[blocked,retryable]};const actions=[];
- await withPanel(t,async(method,...args)=>{
-  if(method==='readCurrent')return {connectionGeneration:7,run:current};
-  if(method==='continue'){
-   actions.push({method,args});current={...current,succeeded:1,failed:0,status:'blocked',statusReason:'model_receipt_unknown',actions:[],pending:0,tasks:[blocked,{...retryable,state:'succeeded',succeeded:1,errorCode:null}]};return {connectionGeneration:7,run:current};
-  }
- },async page=>{
-  const panel=page.getByRole('region',{name:'固定范围记忆处理'});
-  await panel.getByRole('status').filter({hasText:'调用结果待核实'}).waitFor();
-  await panel.getByRole('button',{name:'继续原任务',exact:true}).click();
-  assert.equal(actions.length,1);assert.equal(actions[0].method,'continue');
-  assert.equal(actions[0].args[0].runId,ids.run);assert.equal(actions[0].args[0].controlVersion,0);
-  assert.equal(actions[0].args[0].connectionGeneration,7);assert.match(actions[0].args[0].operationId,/^[a-f0-9-]{36}$/);
-  await panel.getByText('已处理 1 / 2 条文字目标',{exact:true}).waitFor();assert.equal(await panel.getByRole('button',{name:'继续原任务',exact:true}).count(),0,'unknown-only没有可继续任务');
-  const retryProjection={failed:{status:'blocked',statusReason:'contact_failed'},paused:{status:'paused',statusReason:null},pending:{status:'blocked',statusReason:'round_incomplete'}};
-  for(const state of ['failed','paused','pending']){
-   current={...run(),state:'incomplete',succeeded:0,pending:state==='pending'?1:0,actions:['continue'],status:retryProjection[state].status,statusReason:retryProjection[state].statusReason,tasks:[{...retryable,state}]};
-   await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();await panel.getByRole('button',{name:'继续原任务',exact:true}).waitFor();
-  }
-  current={...run(),state:'incomplete',succeeded:0,pending:1,status:'blocked',statusReason:'round_incomplete',actions:[],tasks:[{...retryable,state:'incomplete',errorCode:'targets_completed_elsewhere'}]};
-  await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();await panel.getByRole('status').filter({hasText:'本轮尚未完成'}).waitFor();assert.equal(await panel.getByRole('button',{name:'继续原任务',exact:true}).count(),0);
- });
-});
-test('来源或资格失效后的历史成功计数不能冒充正常无产出成功', {timeout:20000},async t=>{
- const invalidated={...run(),status:'blocked',statusReason:'scope_revoked',actions:[],pending:0,revoked:1,tasks:run().tasks.map(task=>({...task,state:'revoked'}))};
- await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:invalidated}:undefined,async page=>{
-  const panel=page.getByRole('region',{name:'固定范围记忆处理'});
-  await panel.locator(':scope > p').filter({hasText:'已处理 1 / 1 条文字目标'}).waitFor();
-  assert.equal(await panel.getByText('已处理，未产生新记忆',{exact:true}).count(),0,'失效不能被解释成提取成功但没有值得保存的新记忆');
-  await panel.getByRole('status').filter({hasText:'范围已失效'}).waitFor();
+  await panel.getByRole('progressbar').waitFor();mode='late';await revisit(page);await entered;
+  mode='denied';await page.evaluate(()=>window.invalidate());
+  await panel.getByRole('alert').filter({hasText:'资料资格或连接已变化'}).waitFor();
+  release({connectionGeneration:1,run:{...run(),total:99,succeeded:99}});
+  assert.equal(await panel.getByRole('progressbar').count(),0);
+  assert.equal(await panel.getByRole('status').count(),0);
+  await panel.getByRole('alert').filter({hasText:'处理状态暂不可用'}).waitFor();
+  assert.equal(await panel.getByText('提取与核验：已处理 99 / 99 条文字目标',{exact:true}).count(),0);
+  mode='initial';await revisit(page);await panel.getByRole('progressbar').waitFor();
+  assert.equal(await panel.getByRole('alert').count(),0);
  });
 });
 
-test('页面暂停动作携带控制修订与操作标识，暂停后显示可继续',{timeout:20000},async t=>{
- let current={...run(),state:'running',status:'processing',statusReason:null,actions:['pause'],pending:1,succeeded:0};
- const actions=[];
- await withPanel(t,async(method,...args)=>{
-  if(method==='readCurrent')return {connectionGeneration:3,run:current};
-  if(method==='pause'){
-   actions.push({method,args});current={...current,state:'paused',status:'paused',actions:['continue']};
-   return {connectionGeneration:3,run:current};
-  }
- },async page=>{
-  const panel=page.getByRole('region',{name:'固定范围记忆处理'});
-  await panel.getByRole('button',{name:'暂停记忆处理'}).click();
-  assert.equal(actions.length,1);assert.equal(actions[0].method,'pause');
-  assert.equal(actions[0].args[0].runId,ids.run);assert.equal(actions[0].args[0].controlVersion,0);
-  assert.equal(actions[0].args[0].connectionGeneration,3);assert.match(actions[0].args[0].operationId,/^[a-f0-9-]{36}$/);
-  await panel.getByRole('status').filter({hasText:'已暂停'}).waitFor();
-  await panel.getByRole('button',{name:'继续原任务',exact:true}).waitFor();
+test('状态读取失败撤下快照，回到页面可自动恢复且不改写任务', {timeout:20000},async t=>{
+ let denied=false;
+ await withPanel(t,async method=>{if(method==='readCurrent'){if(denied)throw new Error('synthetic_failure');return {connectionGeneration:1,run:run()};}},async page=>{
+  const panel=page.getByRole('region',{name:'固定范围记忆处理'});await panel.getByRole('progressbar').waitFor();
+  denied=true;await revisit(page);await panel.getByRole('alert').filter({hasText:'正在自动重试'}).waitFor();
+  assert.equal(await panel.getByRole('status').count(),0);assert.equal(await panel.getByRole('progressbar').count(),0);
+  denied=false;await revisit(page);await panel.getByRole('progressbar').waitFor();
+  assert.equal(await panel.getByRole('button').count(),0);
  });
 });
 
-test('共用故障固定原因只显示一处，未知回执可附原因但不出现继续',{timeout:20000},async t=>{
- let current={...run(),state:'incomplete',status:'blocked',statusReason:'model_receipt_unknown',sharedFaultCode:'document_model_unconfigured',actions:[],unknown:1,calls:{prepared:0,sending:0,succeeded:0,failed:0,unknown:1}};
+test('共用故障原因只显示一处，未知回执保留受阻状态', {timeout:20000},async t=>{
+ let current={...run(),statusReason:'model_receipt_unknown',sharedFaultCode:'document_model_unconfigured',unknown:1,calls:{prepared:0,sending:0,succeeded:0,failed:0,unknown:1}};
  await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:2,run:current}:undefined,async page=>{
   const panel=page.getByRole('region',{name:'固定范围记忆处理'});
-  await panel.getByRole('status').filter({hasText:'调用结果待核实'}).waitFor();
-  const unknownText=await panel.innerText();
-  assert.equal((unknownText.match(/模型配置或服务不可用/g)??[]).length,1,'未知回执只附一处共用原因');
-  assert.equal(await panel.getByRole('button',{name:'继续原任务',exact:true}).count(),0);
-  current={...current,statusReason:'document_model_unconfigured',unknown:0,calls:{prepared:0,sending:0,succeeded:1,failed:0,unknown:0}};
-  await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();
-  await panel.getByRole('status').filter({hasText:'模型配置或服务不可用'}).waitFor();
-  const blockedText=await panel.innerText();
-  assert.equal((blockedText.match(/模型配置或服务不可用/g)??[]).length,1,'共用故障原因不得同屏重复');
-  assert.equal(blockedText.includes('修复后可继续原任务'),true);
-  assert.equal(await panel.getByRole('button',{name:'继续原任务',exact:true}).count(),0,'文档共用故障不提供继续');
-  assert.equal(await panel.getByRole('button',{name:'暂停记忆处理',exact:true}).count(),0);
+  await panel.getByText('调用结果待核实',{exact:true}).waitFor();
+  assert.equal((await panel.innerText()).match(/模型配置或服务不可用/g)?.length,1);
+  current={...current,statusReason:'document_model_unconfigured',unknown:0};await revisit(page);
+  await panel.getByText('模型配置或服务不可用：模型尚未配置。',{exact:true}).waitFor();
+  assert.equal((await panel.innerText()).match(/模型配置或服务不可用/g)?.length,1);
+  await panel.getByRole('status').filter({hasText:'处理受阻'}).waitFor();
+  assert.equal(await panel.getByRole('button').count(),0);
  });
 });
 
-test('全部适用阶段完成后页面显示整轮完成，不再声称主题未执行',{timeout:20000},async t=>{
- const completed={...run(),state:'completed',stage:'completed',laterStages:'completed'};
- await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:completed}:undefined,async page=>{
-  const panel=page.getByRole('region',{name:'固定范围记忆处理'});await panel.getByRole('status').filter({hasText:'本轮已完成'}).waitFor();
-  assert.equal(await panel.getByText('主题整理、长期概览尚未执行，本轮未完成。',{exact:true}).count(),0);
- });
-});
-
-test('页面按真实主题和画像阶段显示处理中状态',{timeout:20000},async t=>{
- let current={...run(),state:'running',stage:'document_scene'};
+test('主题与概览阶段自动更新，全部阶段完成后才显示整轮完成', {timeout:20000},async t=>{
+ let current={...run(),status:'processing',state:'running',stage:'document_scene'};
  await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:current}:undefined,async page=>{
   const panel=page.getByRole('region',{name:'固定范围记忆处理'});
-  await panel.getByRole('status').filter({hasText:'正在整理主题资料'}).waitFor({timeout:3000});
-  current={...current,stage:'document_profile'};await panel.getByRole('button',{name:'刷新处理状态',exact:true}).click();
-  await panel.getByRole('status').filter({hasText:'正在整理长期概览'}).waitFor({timeout:3000});
+  await panel.getByRole('status').filter({hasText:'正在整理主题资料'}).waitFor();
+  current={...current,stage:'document_profile'};
+  await panel.getByRole('status').filter({hasText:'正在整理长期概览'}).waitFor();
+  current={...current,status:'completed',state:'completed',stage:'completed',laterStages:'completed'};
+  await panel.getByRole('status').filter({hasText:'本轮已完成'}).waitFor();
+  await panel.getByText('主题整理与长期概览已完成。',{exact:true}).waitFor();
  });
 });

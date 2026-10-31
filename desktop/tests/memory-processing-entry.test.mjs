@@ -9,14 +9,13 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function currentView(connectionGeneration, body) {
+function currentView(connectionGeneration, total) {
   return { connectionGeneration, run: {
-    runId: '11111111-1111-4111-8111-111111111111', state: 'incomplete', total: 1, succeeded: 1,
+    runId: '11111111-1111-4111-8111-111111111111', state: 'incomplete', total, succeeded: total,
     failed: 0, unknown: 0, stage: 'extraction_verification', laterStages: 'pending',
     status: 'blocked', statusReason: 'later_stages_pending', sharedFaultCode: null, actions: [], controlVersion: 0, pending: 0, revoked: 0,
     calls: { prepared: 0, sending: 0, succeeded: 2, failed: 0, unknown: 0 }, tasks: [], inputs: [],
-    candidates: [{ id: '22222222-2222-4222-8222-222222222222', scopeKind: 'contact', contactId: '33333333-3333-4333-8333-333333333333',
-      body, state: 'verified_pending_decision', origin: 'auto' }],
+    candidates: [],
   } };
 }
 
@@ -115,7 +114,7 @@ test('明确 sqlite 后挂载固定范围处理，正文失效由面板处理且
     if (method === 'readCurrent') return { connectionGeneration: 2, run: null };
   }, async page => {
     const panel = page.getByRole('region', { name: '固定范围记忆处理' });
-    await panel.getByRole('status').filter({ hasText: '尚未开始' }).waitFor();
+    await panel.getByRole('status').filter({ hasText: '等待处理' }).waitFor();
     assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
     assert.equal(await page.evaluate(() => window.legacyMounts), 0);
     await page.evaluate(() => window.invalidate());
@@ -132,12 +131,12 @@ test('连接变化先撤下正文，旧连接晚到的模式不能盖过新连�
       reads++;
       return reads === 1 ? { connectionGeneration: 1, mode: 'sqlite' } : reads === 2 ? oldMode.promise : newMode.promise;
     }
-    if (method === 'readCurrent') return currentView(generation, generation === 1 ? '合成旧连接候选' : '合成新连接候选');
+    if (method === 'readCurrent') return currentView(generation, generation === 1 ? 1 : 3);
   }, async page => {
-    await page.getByText('合成旧连接候选', { exact: true }).waitFor();
+    await page.getByText('提取与核验：已处理 1 / 1 条文字目标', { exact: true }).waitFor();
     await page.evaluate(() => window.emitBackend('disconnected'));
     await page.getByRole('status').filter({ hasText: '等待重新连接' }).waitFor();
-    assert.equal(await page.getByText('合成旧连接候选', { exact: true }).count(), 0);
+    assert.equal(await page.getByText('提取与核验：已处理 1 / 1 条文字目标', { exact: true }).count(), 0);
     assert.equal(await page.getByRole('region', { name: '固定范围记忆处理' }).count(), 0);
     await page.evaluate(() => window.emitBackend('connected'));
     await page.getByRole('status').filter({ hasText: '正在核对记忆处理模式' }).waitFor();
@@ -152,10 +151,10 @@ test('连接变化先撤下正文，旧连接晚到的模式不能盖过新连�
     assert.equal(await page.getByRole('region', { name: '固定范围记忆处理' }).count(), 0);
     generation = 3;
     newMode.resolve({ connectionGeneration: 3, mode: 'sqlite' });
-    await page.getByText('合成新连接候选', { exact: true }).waitFor();
+    await page.getByText('提取与核验：已处理 3 / 3 条文字目标', { exact: true }).waitFor();
     await page.evaluate(() => window.emitBackend('connecting'));
     await page.getByRole('status').filter({ hasText: '等待重新连接' }).waitFor();
-    assert.equal(await page.getByText('合成新连接候选', { exact: true }).count(), 0);
+    assert.equal(await page.getByText('提取与核验：已处理 3 / 3 条文字目标', { exact: true }).count(), 0);
   });
 });
 
@@ -169,7 +168,7 @@ test('模式读取失败撤下原页面，重试通过核验后才恢复对应�
       if (reads === 2) throw new Error('synthetic_mode_unavailable');
       return retry.promise;
     }
-    if (method === 'readCurrent') return currentView(2, '合成重试成功候选');
+    if (method === 'readCurrent') return currentView(2, 2);
   }, async page => {
     await page.getByRole('region', { name: '旧版记忆正文' }).waitFor();
     await page.evaluate(() => window.emitBackend('connected'));
@@ -181,23 +180,23 @@ test('模式读取失败撤下原页面，重试通过核验后才恢复对应�
     assert.equal(await page.getByRole('alert').count(), 0);
     assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
     retry.resolve({ connectionGeneration: 2, mode: 'sqlite' });
-    await page.getByText('合成重试成功候选', { exact: true }).waitFor();
+    await page.getByText('提取与核验：已处理 2 / 2 条文字目标', { exact: true }).waitFor();
     assert.equal(await page.evaluate(() => window.legacyMounts), 1);
   });
 });
 
 test('范围变化撤下快照并重新核验，旧范围和卸载后的模式不能恢复页面', { timeout: 20000 }, async t => {
   const oldScope = deferred(), newScope = deferred(), afterUnmount = deferred();
-  let reads = 0, body = '合成旧范围候选';
+  let reads = 0, total = 1;
   await withEntry(t, async method => {
     if (method === 'readMode') {
       reads++;
       return reads === 1 ? { connectionGeneration: 1, mode: 'sqlite' }
         : reads === 2 ? oldScope.promise : reads === 3 ? newScope.promise : afterUnmount.promise;
     }
-    if (method === 'readCurrent') return currentView(1, body);
+    if (method === 'readCurrent') return currentView(1, total);
   }, async page => {
-    await page.getByText('合成旧范围候选', { exact: true }).waitFor();
+    await page.getByText('提取与核验：已处理 1 / 1 条文字目标', { exact: true }).waitFor();
     await page.evaluate(() => window.changeScope('scope-b'));
     await page.getByRole('status').filter({ hasText: '正在核对记忆处理模式' }).waitFor();
     assert.equal(await page.getByRole('region', { name: '固定范围记忆处理' }).count(), 0);
@@ -206,10 +205,10 @@ test('范围变化撤下快照并重新核验，旧范围和卸载后的模式�
     await modesSettled(page, 2);
     assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
     assert.equal(await page.evaluate(() => window.legacyMounts), 0);
-    body = '合成新范围候选';
+    total = 3;
     newScope.resolve({ connectionGeneration: 1, mode: 'sqlite' });
-    await page.getByText('合成新范围候选', { exact: true }).waitFor();
-    assert.equal(await page.getByText('合成旧范围候选', { exact: true }).count(), 0);
+    await page.getByText('提取与核验：已处理 3 / 3 条文字目标', { exact: true }).waitFor();
+    assert.equal(await page.getByText('提取与核验：已处理 1 / 1 条文字目标', { exact: true }).count(), 0);
     await page.evaluate(() => window.emitBackend('connected'));
     await page.getByRole('status').filter({ hasText: '正在核对记忆处理模式' }).waitFor();
     await page.evaluate(() => window.hide());
@@ -235,7 +234,7 @@ test('真实控制器在旧面板释放后仍能完成 connected 触发的合法
     throw new Error(`未约定的合成请求：${path}`);
   }, async page => {
     const panel = page.getByRole('region', { name: '固定范围记忆处理' });
-    await panel.getByRole('status').filter({ hasText: '尚未开始' }).waitFor();
+    await panel.getByRole('status').filter({ hasText: '等待处理' }).waitFor();
     await page.evaluate(() => window.emitBackend('connected'));
     await panel.waitFor({ state: 'detached' });
     await page.getByRole('status').filter({ hasText: '正在核对记忆处理模式' }).waitFor();
@@ -243,7 +242,7 @@ test('真实控制器在旧面板释放后仍能完成 connected 触发的合法
     reconnectedMode.resolve(status);
     await modesSettled(page, 2);
     assert.equal(await page.getByRole('alert').count(), 0, '旧面板释放不应使新连接的合法模式核验失败');
-    await panel.getByRole('status').filter({ hasText: '尚未开始' }).waitFor();
+    await panel.getByRole('status').filter({ hasText: '等待处理' }).waitFor();
     assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
   }, true);
 });

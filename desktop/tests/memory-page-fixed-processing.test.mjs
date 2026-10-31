@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { chromium } from '@playwright/test';
 
-test('真实记忆页面在 SQLite 模式仅挂载固定处理，资格失效撤下候选和过程正文', { timeout: 20000 }, async t => {
+test('真实记忆页面仅展示处理进度并自动刷新资料，资格失效撤下快照', { timeout: 20000 }, async t => {
   const ids = {
     run: '11111111-1111-4111-8111-111111111111', task: '22222222-2222-4222-8222-222222222222',
     contact: '33333333-3333-4333-8333-333333333333', record: '44444444-4444-4444-8444-444444444444',
@@ -16,10 +16,6 @@ test('真实记忆页面在 SQLite 模式仅挂载固定处理，资格失效撤
     tasks: [{ taskId: ids.task, scopeKind: 'contact', contactId: ids.contact, state: 'succeeded', total: 1, succeeded: 1, errorCode: null }],
     candidates: [{ id: ids.record, scopeKind: 'contact', contactId: ids.contact, body: '合成记忆页面候选', state: 'verified_pending_decision', origin: 'auto' }],
   };
-  const trace = { calls: [], events: [{
-    eventId: ids.record, attemptId: ids.task, kind: 'request', callId: null, inputNos: [1],
-    payload: { input: '合成记忆页面输入', output: '合成记忆页面返回' }, sources: [{ contactId: ids.contact, recordId: ids.record }],
-  }] };
   let documents = {status:'idle',publication:null,documents:[]};
   let memoryView = {candidates:[],memories:[]};
   const compiled = await build({
@@ -72,7 +68,6 @@ test('真实记忆页面在 SQLite 模式仅挂载固定处理，资格失效撤
   await page.exposeFunction('requestJson', async path => {
     if (path === '/api/runtime/status') return { state: 'running', runtime: 'dsh', hostRuntime: 'typescript', storage: 'sqlite' };
     if (path === '/api/memory-processing/runs/current') return run;
-    if (path === `/api/memory-processing/tasks/${ids.task}/events`) return trace;
     throw new Error(`未约定的合成请求：${path}`);
   });
   await page.exposeFunction('readDocuments', async () => documents);
@@ -81,7 +76,9 @@ test('真实记忆页面在 SQLite 模式仅挂载固定处理，资格失效撤
   await page.goto('http://127.0.0.1/memory-page-fixed-test');
   await page.addScriptTag({ content: compiled.outputFiles[0].text });
   const panel = page.getByRole('region', { name: '固定范围记忆处理' });
-  await panel.getByText('合成记忆页面候选', { exact: true }).waitFor();
+  await panel.getByText('提取与核验：已处理 1 / 1 条文字目标', { exact: true }).waitFor();
+  assert.equal(await panel.getByRole('button').count(), 0);
+  assert.equal(await panel.getByText('合成记忆页面候选', { exact: true }).count(), 0);
   const documentPanel=page.getByRole('region',{name:'主题资料与长期概览'});
   await documentPanel.getByText('当前尚无已发布的主题资料。',{exact:true}).waitFor();
   const management=page.getByRole('region',{name:'记忆候选与版本'});
@@ -89,16 +86,13 @@ test('真实记忆页面在 SQLite 模式仅挂载固定处理，资格失效撤
   const version={mergeParents:[],mergeParentCount:0,verificationState:'verified',versionNo:'1',body:'本轮新增的合成正式记忆',formationKind:'adoption',adoptionMode:'auto',previousVersionNo:null,restoredFromVersionNo:null,contentState:'present',provenanceState:'eligible',decisionId:ids.record,sources:[],contributingContactIds:[ids.contact]};
   memoryView={candidates:[],memories:[{id:ids.task,scopeKind:'contact',contactId:ids.contact,headRevision:'1',state:'active',manualProtection:false,current:version,versions:[version],decisions:[]}]};
   documents={status:'completed',publication:{id:ids.record,members:[{documentId:ids.task,versionNo:'1'}]},documents:[{id:ids.task,versionNo:'1',scopeKind:'contact',contactId:ids.contact,kind:'scene',title:'合成主题',statements:[{text:'发布后的合成主题正文',kind:'fact',basis:null,section:null,uncertainty:null,temporalStatus:null,leftClaim:null,rightClaim:null,resolutionState:null,resolutionText:null,references:[{memoryId:ids.record,versionNo:1,level:'contact',provenanceKind:'source_supported',memoryText:'已核验的合成底层记忆'}]}]}]};
-  run={...run,state:'completed',stage:'completed',laterStages:'completed'};
-  await panel.getByRole('button',{name:'刷新处理状态'}).click();
+  run={...run,status:'completed',state:'completed',stage:'completed',laterStages:'completed'};
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await panel.getByRole('status').filter({hasText:'本轮已完成'}).waitFor();
   await documentPanel.getByText('发布后的合成主题正文',{exact:true}).waitFor();
   await management.getByText('本轮新增的合成正式记忆',{exact:true}).first().waitFor();
   assert.equal(await page.getByRole('navigation', { name: '记忆分类' }).count(), 0);
-  await panel.locator('summary').filter({ hasText: '查看本轮任务' }).click();
-  await panel.getByRole('button', { name: '查看联系人 1过程', exact: true }).click();
-  await panel.locator('summary').filter({ hasText: 'request' }).click();
-  await panel.locator('pre').filter({ hasText: '合成记忆页面输入' }).waitFor();
+  assert.equal(await panel.locator('pre, details').count(), 0);
   await page.evaluate(() => window.invalidate());
   await panel.getByRole('alert').filter({ hasText: '资料资格或连接已变化' }).waitFor();
   assert.equal(await panel.getByText('合成记忆页面候选', { exact: true }).count(), 0);
