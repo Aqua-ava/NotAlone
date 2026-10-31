@@ -136,6 +136,37 @@ func TestNotAloneDeltaPagesTracksChangedEncryptedPagesWithoutPayload(t *testing.
 	}
 }
 
+func TestNotAloneDeltaPagesAuditsSelectedTreeAfterWALReset(t *testing.T) {
+	dbPath, key, rootPage, writer := notaloneDeltaPageFixture(t)
+	db, dbSize, wal, walSize := notaloneDeltaReaders(t, dbPath)
+	baseline, err := readNotaloneDeltaPages(context.Background(), db, dbSize, wal, walSize, rootPage, key, nil)
+	if err != nil {
+		t.Fatalf("index encrypted synthetic table pages: %v", err)
+	}
+	if err = writer.Exec("UPDATE Msg_delta_fixture SET body=zeroblob(60) WHERE local_id=44"); err != nil {
+		t.Fatal("mutate before checkpoint")
+	}
+	changedDB, changedSize, changedWAL, changedWALSize := notaloneDeltaReaders(t, dbPath)
+	delta, err := readNotaloneDeltaPages(context.Background(), changedDB, changedSize, changedWAL, changedWALSize, rootPage, key, &baseline.State)
+	if err != nil || delta.FullAudit || !containsInt64(delta.ChangedIDs, 44) {
+		t.Fatalf("continuous WAL update was not tracked: %#v (%v)", delta, err)
+	}
+	if err = writer.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+		t.Fatal("truncate synthetic WAL checkpoint")
+	}
+	if err = writer.Exec("UPDATE Msg_delta_fixture SET body=zeroblob(61) WHERE local_id=4"); err != nil {
+		t.Fatal("mutate after WAL reset")
+	}
+	resetDB, resetSize, resetWAL, resetWALSize := notaloneDeltaReaders(t, dbPath)
+	reset, err := readNotaloneDeltaPages(context.Background(), resetDB, resetSize, resetWAL, resetWALSize, rootPage, key, &delta.State)
+	if err != nil {
+		t.Fatalf("audit selected table after WAL reset: %v", err)
+	}
+	if !reset.FullAudit || !containsInt64(reset.ChangedIDs, 4) {
+		t.Fatalf("WAL reset did not audit physical pages and report changed low ID: %#v", reset)
+	}
+}
+
 func containsInt64(values []int64, target int64) bool {
 	for _, value := range values {
 		if value == target {

@@ -216,7 +216,20 @@ func notaloneDeltaPriorValid(prior notaloneDeltaPageState, rootPage uint32, salt
 		len(prior.Pages) == 0 || len(prior.Pages) > notaloneDeltaMaxPages {
 		return false
 	}
-	seen := make(map[uint32]struct{}, len(prior.Pages))
+	if len(prior.SaltDigest) != sha256.Size*2 {
+		return false
+	}
+	if prior.WAL.HeaderDigest == "" {
+		if prior.WAL.CommitOffset != 0 || prior.WAL.Salt1 != 0 || prior.WAL.Salt2 != 0 || prior.WAL.Checksum1 != 0 || prior.WAL.Checksum2 != 0 {
+			return false
+		}
+	} else if len(prior.WAL.HeaderDigest) != sha256.Size*2 || prior.WAL.CommitOffset < notaloneDeltaWALHeaderSize {
+		return false
+	} else if _, err := hex.DecodeString(prior.WAL.HeaderDigest); err != nil {
+		return false
+	}
+	seen := make(map[uint32]notaloneDeltaTrackedPage, len(prior.Pages))
+	rowIDs := make(map[int64]struct{})
 	for _, page := range prior.Pages {
 		if page.Number == 0 || page.Number > prior.PageCount || len(page.Hash) != sha256.Size*2 ||
 			(page.Kind != notaloneDeltaPageInterior && page.Kind != notaloneDeltaPageLeaf && page.Kind != notaloneDeltaPageOverflow) {
@@ -228,12 +241,111 @@ func notaloneDeltaPriorValid(prior notaloneDeltaPageState, rootPage uint32, salt
 		if _, ok := seen[page.Number]; ok {
 			return false
 		}
-		seen[page.Number] = struct{}{}
+		seen[page.Number] = page
 		if len(page.RowIDs) > notaloneDeltaMaxRowIDs || len(page.ChildPages) > notaloneDeltaMaxPages || len(page.OverflowHeads) > notaloneDeltaMaxRowIDs || len(page.OverflowPages) > notaloneDeltaMaxPages {
 			return false
 		}
+		if page.Kind == notaloneDeltaPageLeaf {
+			if len(page.ChildPages) != 0 || page.OverflowNext != 0 {
+				return false
+			}
+			for _, id := range page.RowIDs {
+				if _, ok := rowIDs[id]; ok {
+					return false
+				}
+				rowIDs[id] = struct{}{}
+			}
+		} else if page.Kind == notaloneDeltaPageInterior {
+			if len(page.RowIDs) != 0 || len(page.OverflowHeads) != 0 || len(page.OverflowPages) != 0 || page.OverflowNext != 0 || len(page.ChildPages) == 0 {
+				return false
+			}
+		} else if len(page.RowIDs) != 1 || len(page.ChildPages) != 0 || len(page.OverflowHeads) != 0 || len(page.OverflowPages) != 0 || page.OverflowNext > prior.PageCount {
+			return false
+		}
 	}
-	return true
+	root, ok := seen[rootPage]
+	if !ok || root.Parent != 0 || (root.Kind != notaloneDeltaPageInterior && root.Kind != notaloneDeltaPageLeaf) {
+		return false
+	}
+	visited := make(map[uint32]bool, len(seen))
+	stack := []uint32{rootPage}
+	for len(stack) > 0 {
+		last := len(stack) - 1
+		number := stack[last]
+		stack = stack[:last]
+		if visited[number] {
+			return false
+		}
+		visited[number] = true
+		page := seen[number]
+		if page.Kind == notaloneDeltaPageInterior {
+			children := make(map[uint32]struct{}, len(page.ChildPages))
+			for _, child := range page.ChildPages {
+				childPage, exists := seen[child]
+				if !exists || childPage.Parent != number || (childPage.Kind != notaloneDeltaPageInterior && childPage.Kind != notaloneDeltaPageLeaf) {
+					return false
+				}
+				if _, duplicate := children[child]; duplicate {
+					return false
+				}
+				children[child] = struct{}{}
+				stack = append(stack, child)
+			}
+		} else {
+			leafOverflow := make(map[uint32]struct{}, len(page.OverflowPages))
+			for _, overflow := range page.OverflowPages {
+				if _, duplicate := leafOverflow[overflow]; duplicate {
+					return false
+				}
+				leafOverflow[overflow] = struct{}{}
+			}
+			used := make(map[uint32]struct{}, len(page.OverflowPages))
+			ownerIDs := make(map[int64]struct{}, len(page.OverflowHeads))
+			for _, owner := range page.OverflowHeads {
+				if owner.HeadPage == 0 || owner.PageCount == 0 || owner.PageCount > notaloneDeltaMaxPages || owner.HeadPage > prior.PageCount {
+					return false
+				}
+				if _, exists := rowIDs[owner.RowID]; !exists {
+					return false
+				}
+				if _, duplicate := ownerIDs[owner.RowID]; duplicate {
+					return false
+				}
+				ownerIDs[owner.RowID] = struct{}{}
+				current := owner.HeadPage
+				for index := uint32(0); index < owner.PageCount; index++ {
+					overflowPage, exists := seen[current]
+					if !exists || overflowPage.Kind != notaloneDeltaPageOverflow || overflowPage.Parent != number || len(overflowPage.RowIDs) != 1 || overflowPage.RowIDs[0] != owner.RowID {
+						return false
+					}
+					if _, duplicate := used[current]; duplicate {
+						return false
+					}
+					used[current] = struct{}{}
+					if index+1 == owner.PageCount {
+						if overflowPage.OverflowNext != 0 {
+							return false
+						}
+					} else {
+						if overflowPage.OverflowNext == 0 {
+							return false
+						}
+						current = overflowPage.OverflowNext
+					}
+				}
+			}
+			if len(used) != len(leafOverflow) {
+				return false
+			}
+			for overflow := range leafOverflow {
+				if _, exists := used[overflow]; !exists {
+					return false
+				}
+				visited[overflow] = true
+			}
+		}
+	}
+	return len(visited) == len(seen)
 }
 
 func notaloneDeltaSortedPages(pages map[uint32]notaloneDeltaTrackedPage) []notaloneDeltaTrackedPage {
@@ -355,7 +467,8 @@ func notaloneDeltaPBKDF2SHA512(password, salt []byte, iterations, length int) []
 	}
 	const blockSize = sha512.Size
 	blocks := (length + blockSize - 1) / blockSize
-	out := make([]byte, 0, blocks*blockSize)
+	out := make([]byte, length)
+	written := 0
 	var index [4]byte
 	for block := 1; block <= blocks; block++ {
 		binary.BigEndian.PutUint32(index[:], uint32(block))
@@ -373,11 +486,16 @@ func notaloneDeltaPBKDF2SHA512(password, salt []byte, iterations, length int) []
 				t[i] ^= u[i]
 			}
 		}
-		out = append(out, t...)
+		count := len(t)
+		if count > length-written {
+			count = length - written
+		}
+		copy(out[written:written+count], t[:count])
+		written += count
 		clear(u)
 		clear(t)
 	}
-	return out[:length]
+	return out
 }
 
 func notaloneDeltaDecryptPage(raw []byte, page uint32, cryptoState *notaloneDeltaCrypto) ([]byte, error) {
