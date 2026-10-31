@@ -52,9 +52,6 @@ export function ContactsPage({ session, navigate }: { session: ContactSessionVie
         onClick={() => void refreshContacts()}>刷新联系人</button></div></div>
     {allPrivate && <p className="contacts-note" role="status">现有及以后新增的微信私聊会自动关联，无需逐个添加；已单独停止的会话保持排除。<button className="button" onClick={() => navigate('sync')}>查看同步范围</button></p>}
     {enabled === false && <p className="contacts-note" role="status">所有联系人同步已暂停：总开关已关闭，已有授权仍保留。<button className="button" onClick={() => navigate('sync')}>前往同步设置</button></p>}
-    {enabled === true && sync.report?.backgroundPhase === 'degraded' && <p className="contacts-note" role="alert">{sync.report.bodyAvailable === true
-      ? '部分消息或会话待核验。'
-      : '后台读取暂不可用。'}<button className="button" onClick={() => navigate('sync')}>查看同步详情</button></p>}
     {addingWechat && <BindingConsentPage contacts={session} consent={consent} navigate={navigate} targetContactId={targetContactId} allPrivate={allPrivate}
       onClose={() => { setAddingWechat(false); consent.setSelection({}); }} />}
     <BindingFeedback consent={consent} />
