@@ -227,20 +227,24 @@ for (const selectionOnly of [undefined, true]) test(selectionOnly ? '停止同�
  createRoot(document.getElementById('root')).render(<View/>);
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',write:false,loader:{'.css':'empty'}});
  await page.setContent('<div id="root"></div>');await page.addScriptTag({content:bundle.outputFiles[0].text});
- await page.getByRole('button',{name:'停止会话 synthetic-private 的自动同步',exact:true}).click();
+ await expect(page.getByText('微信关联与同步',{exact:true})).toHaveCount(0);
+ await expect(page.getByText('已关联微信：合成联系人',{exact:true})).toHaveCount(0);
+ await expect(page.getByText('核对会话标识',{exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'停止合成联系人的自动同步',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'撤销后台读取授权确认',exact:true});
+ await expect(dialog).not.toContainText('synthetic-private');
+ await expect(dialog).not.toContainText('synthetic-contact');
  if(selectionOnly) {
-  await expect(dialog).toContainText('立即撤销此联系人的新读取、记忆处理和本地媒体转换资格');
-  await expect(dialog).toContainText('旧请求即使迟到也不能提交');
+  await expect(dialog).toContainText('停止读取这位联系人的聊天、整理关系资料和转换媒体');
  } else {
-  await expect(dialog).toContainText('等待本轮读取收尾后生效');
-  await expect(dialog).not.toContainText('立即撤销');
+  await expect(dialog).toContainText('本轮同步结束后停止更新');
  }
+ await expect(dialog).toContainText('已保存的聊天和关系资料仍保留');
  assert.deepEqual(await page.evaluate(()=>window.calls),[]);
  await dialog.getByRole('button',{name:'确认撤销此会话授权',exact:true}).click();
  assert.deepEqual(await page.evaluate(()=>window.calls),[{scopeRevision:7,contactId:'synthetic-contact',bindingId:'synthetic-binding'}]);
  await expect(page.getByRole('dialog')).toHaveCount(0);
- await expect(page.getByText('曾关联：合成联系人',{exact:true})).toBeVisible();
+ await expect(page.getByText('已停止自动同步，已有资料仍保留。重新开启前请核对微信会话。',{exact:true})).toBeVisible();
  await expect(page.getByText(selectionOnly ? '已撤销此联系人的读取与处理资格，已有资料仍保留。' : '已撤销此会话的后台读取授权，历史资料仍保留。',{exact:true})).toBeVisible();
 });
 

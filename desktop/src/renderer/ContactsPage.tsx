@@ -1,4 +1,3 @@
-import { ContactHistoryCoverage } from './HistoryCoverageStatus';
 import { ContactHistoryClear } from './HistoryClearPanel';
 import { ContactChatHistory } from './ContactChatHistory';
 import type { ContactSessionView } from './contact-session';
@@ -73,12 +72,10 @@ export function ContactsPage({ session, navigate }: { session: ContactSessionVie
           <div className="contact-row-copy"><div className="contact-row-name"><b>{contact.displayName}</b>
             {state.selectedContactId === contact.contactId && <span className="contact-row-choice">当前</span>}</div>
             <small>{contact.messageCount} 条消息</small><small className="contact-sync-status">{syncLabel(contact.contactId)}</small>
-            <ContactHistoryCoverage compact coverages={sync.report?.historyCoverages} contactId={contact.contactId} bodyAvailable={sync.report?.bodyAvailable} />
           </div>
         </div>
         {selected?.contactId === contact.contactId && <details className="contact-management">
           <summary>同步与资料管理</summary>
-          <ContactHistoryCoverage coverages={sync.report?.historyCoverages} contactId={selected.contactId} bodyAvailable={sync.report?.bodyAvailable} />
           <ContactSyncDetails contactId={selected.contactId} consent={consent} onConnect={() => addWechat(selected.contactId)} allPrivate={allPrivate} />
           <ContactHistoryClear session={session} />
           <button className="button" onClick={() => navigate('memory')}>查看关系资料</button>

@@ -63,17 +63,15 @@ export function ContactSyncDetails({ contactId, consent, onConnect, allPrivate =
   const known = state.knownBindings?.filter((binding) => binding.contactId === contactId) ?? [];
   const active = state.bindings.filter((binding) => binding.contactId === contactId);
   if (state.phase !== 'ready' || !state.knownBindings) return <p>同步状态尚未确认，请刷新联系人后再操作。</p>;
-  return <section className="contact-sync-details" aria-label="联系人自动同步"><h3>微信关联与同步</h3>
+  return <section className="contact-sync-details" aria-label="联系人自动同步">
     {active.length === 0 && <><p>{known.length ? '已停止自动同步，已有资料仍保留。重新开启前请核对微信会话。' : selectionOnly ? '尚未核验这位联系人的微信身份。请明确选择对应私聊；同名不会自动合并。' : allPrivateMode ? '尚未发现与这份资料关联的微信账号。全部私聊会按账号自动关联，不会按同名合并资料；需要时可在此核对关联。' : '尚未关联微信，当前资料来自手动输入或文件导入。'}</p>
-      {known.map((binding) => <p key={binding.bindingId}>曾关联：{binding.displayName || binding.locator}</p>)}
       <button className="button" disabled={!!state.busy || !state.knownBindings} onClick={onConnect}>{known.length ? '开启自动同步' : selectionOnly ? '核对微信关联并授权' : allPrivateMode ? '核对微信关联' : '关联微信并开启同步'}</button></>}
     {active.map((binding) => {
       const session = state.sessions.find((item) => item.locator === binding.locator);
-      return <div key={binding.bindingId} className="contact-binding"><p>已关联微信：{binding.displayName || binding.locator}</p>
-        <details><summary>核对会话标识</summary><code>{binding.locator}</code><p>联系人标识：{binding.contactId}</p></details>
+      return <div key={binding.bindingId} className="contact-binding">
         {!state.sessionIssue && !session && <p className="binding-warning">当前微信列表没有此会话；授权仍保留，请核对后决定是否停止同步。</p>}
         {session && session.displayName !== binding.displayName && <p className="binding-warning">微信会话已改名为“{session.displayName}”。请停止同步后重新关联，原绑定不会静默改名。</p>}
-        <button className="button" disabled={!!state.busy} aria-label={`停止会话 ${binding.locator} 的自动同步`} onClick={() => setRevocation(binding)}>停止自动同步</button>
+        <button className="button" disabled={!!state.busy} aria-label={`停止${binding.displayName || '此联系人'}的自动同步`} onClick={() => setRevocation(binding)}>停止自动同步</button>
       </div>;
     })}
   </section>;
@@ -89,8 +87,8 @@ export function BindingFeedback({ consent }: { consent: BindingConsentView }) {
     {state.phase === 'failed' && <p role="alert">联系人同步状态读取失败，请刷新联系人重试；当前不能确认授权范围。</p>}
     {state.sessionIssue && state.sessionIssue !== 'not-requested' && <p role="alert">{selectionOnly ? '微信会话名单暂时无法核验，不能据此确认当前读取资格；可在联系人详情中停止同步。' : '微信会话名单暂时无法读取，已保存的授权仍有效；可在联系人详情中停止同步。'}</p>}
     {revocation && <div className="binding-dialog-backdrop"><section className="binding-dialog" role="dialog" aria-modal="true" aria-label="撤销后台读取授权确认">
-      <h2>停止这个微信会话的自动同步？</h2><b>{revocation.displayName || revocation.locator}</b><code>{revocation.locator}</code>
-      <p>联系人标识：{revocation.contactId}</p><p>{selectionOnly ? '确认后立即撤销此联系人的新读取、记忆处理和本地媒体转换资格；旧请求即使迟到也不能提交。已合法保存的聊天和关系资料仍保留。' : '停止会撤销此会话的后台读取授权。等待本轮读取收尾后生效，已保存的聊天和关系资料仍保留。'}</p>
+      <h2>停止这个微信会话的自动同步？</h2><b>{revocation.displayName || '此联系人'}</b>
+      <p>{selectionOnly ? '确认后将停止读取这位联系人的聊天、整理关系资料和转换媒体。已保存的聊天和关系资料仍保留。' : '本轮同步结束后停止更新，已保存的聊天和关系资料仍保留。'}</p>
       {state.errorCode === 'revoke-busy' && <p role="alert">{selectionOnly ? '撤销结果尚未确认，请刷新授权范围后重试。' : '当前同步仍在收尾，尚未撤销授权。请稍后重新确认撤销。'}</p>}
       {state.errorCode === 'revoke-failed' && <p role="alert">撤销结果尚未确认。请核对当前授权范围后重试。</p>}
       <div className="bindings-submit"><button className="button" disabled={!!state.busy} onClick={() => setRevocation(null)}>取消撤销</button>

@@ -167,30 +167,37 @@ test('旧增量授权没有历史行时，后台及当前联系人仍明确显�
  await expect(page.getByLabel('当前联系人同步状态')).toContainText('会话类型与私聊授权不一致，已停止读取；请在联系人中核对关联。');
 });
 
-test('联系人详情只显示当前联系人的覆盖进度，切换时不沿用其他人的完整状态', async t => {
+test('联系人详情隐藏同步技术明细，切换后仍可管理当前联系人', async t => {
  const browser = await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
  const page = await browser.newPage();
  await mount(page, `
  import React from 'react';import {createRoot} from 'react-dom/client';import {ContactsPage} from './src/renderer/ContactsPage';
  const contacts=[{contactId:'a',displayName:'合成甲',messageCount:200},{contactId:'b',displayName:'合成乙',messageCount:10}];
- const bindings={revision:1,scopeRevision:1,phase:'ready',sessions:[],bindings:[],knownBindings:[],busy:null};
+ const active=contacts.map(contact=>({bindingId:contact.contactId+'1',contactId:contact.contactId,locator:'synthetic-'+contact.contactId,displayName:contact.displayName,status:'active'}));
+ const bindings={revision:1,scopeRevision:1,phase:'ready',sessions:[],bindings:active,knownBindings:active,sessionIssue:'not-requested',busy:null};
  const sync={revision:1,scopeRevision:1,phase:'ready',busy:null,report:{enabled:true,historyCoverages:[
  {bindingId:'a1',contactId:'a',phase:'complete',messageCount:200,pageCount:2,nonTextCount:0,failureCode:null},
- {bindingId:'b1',contactId:'b',phase:'incomplete',messageCount:10,pageCount:1,nonTextCount:0,failureCode:'cli_timeout'}]}};
+ {bindingId:'b1',contactId:'b',phase:'incomplete',messageCount:10,pageCount:1,nonTextCount:2,metadataOnlyCount:3,
+ nonTextTypes:[{messageType:'image',label:'图片',count:2}],failureCode:'cli_timeout',incrementalPhase:'syncing',incrementalPages:200,incrementalFailureCode:'unknown'}]}};
  window.notalone={bindings:{getState:async()=>bindings,onStateChanged:()=>()=>{},refreshSaved:async()=>{}},
  historyClear:{getState:async()=>({revision:1,contactId:null,scopeRevision:1,phase:'idle',clear:null,resync:null,busy:null,error:null}),onStateChanged:()=>()=>{},refresh:async()=>{}},
  syncControl:{getState:async()=>sync,onStateChanged:()=>()=>{},refresh:async()=>{}}};
  const root=createRoot(document.getElementById('root'));
- const render=id=>root.render(<ContactsPage session={{state:{contacts,selectedContactId:id,directoryPhase:'ready'},refreshContacts:async()=>{}}} navigate={()=>{}}/>);
+ window.notalone.contactHistory={getState:async()=>({revision:1,contactId:null,scopeRevision:1,messages:{phase:'idle',items:[],nextCursor:null},error:null}),onStateChanged:()=>()=>{}};
+ const render=id=>root.render(<ContactsPage session={{state:{contacts,selectedContactId:id,scopeRevision:1,directoryPhase:'ready'},refreshContacts:async()=>{}}} navigate={()=>{}}/>);
  window.select=render;render('a');
  `);
- const summary=page.getByRole('complementary',{name:'本次联系人资料摘要'});
- await expect(summary.getByText('本机历史已读完',{exact:true})).toBeVisible();
- await expect(summary.getByText('本机历史已读完 · 已保存 200 条文字消息、0 条非文字占位',{exact:true})).toBeVisible();
+ const directory=page.getByRole('region',{name:'联系人目录'});
+ await directory.getByText('同步与资料管理',{exact:true}).click();
+ await expect(directory.getByRole('button',{name:'停止合成甲的自动同步',exact:true})).toBeVisible();
+ await expect(directory.getByRole('button',{name:'查看关系资料',exact:true})).toBeVisible();
  await page.evaluate(()=>window.select('b'));
- await expect(summary.getByText('历史读取受阻',{exact:true})).toBeVisible();
- await expect(summary.getByText('历史读取受阻 · 已保存 10 条文字消息、0 条非文字占位',{exact:true})).toBeVisible();
- await expect(summary.getByText('本机历史已读完',{exact:true})).toHaveCount(0);
+ await directory.getByText('同步与资料管理',{exact:true}).click();
+ await expect(directory.getByRole('button',{name:'停止合成乙的自动同步',exact:true})).toBeVisible();
+ await expect(directory.getByRole('button',{name:'停止合成甲的自动同步',exact:true})).toHaveCount(0);
+ for(const text of ['历史读取受阻','本机历史已读完','非文字占位','系统等元数据','已跟进','新消息同步暂未继续','图片：','微信关联与同步','已关联微信','核对会话标识','联系人标识','synthetic-a','synthetic-b']) {
+  await expect(directory).not.toContainText(text);
+ }
 });
 
 

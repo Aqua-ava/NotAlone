@@ -57,7 +57,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await expect(chat.getByText('合成聊天正文\n第二行', { exact: true })).toBeVisible();
   await expect(chat.getByText('[图片]', { exact: true })).toBeVisible();
   await expect(chat.getByText('按保存位置展示，消息先后尚未核验。')).toBeVisible();
-  await expect(page.locator('.contact-history-status').filter({ hasText: '本机历史已读完' })).toBeVisible();
+  await expect(page.locator('.contact-history-status')).toHaveCount(0);
   assert.equal(await page.getByText('同步与资料管理', { exact: true }).evaluate(el => el.parentElement.open), false);
   const columns = await page.locator('.contacts-columns').boundingBox();
   const sidebar = await page.getByRole('list', { name: '联系人同步状态' }).boundingBox();
