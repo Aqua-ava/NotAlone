@@ -174,8 +174,9 @@ export class ForegroundController {
   }
   desktopConfirmation(selection: ForegroundConfirmation): { contact_id: string; observation_id: string } {
     const generation = this.checkConfirmation(selection), receipt = this.confirmationObservation;
-    const age = receipt ? Date.now() - Date.parse(receipt.observedAt) : NaN;
-    if (!receipt || receipt.generation !== generation || receipt.scopeRevision !== selection.contactScopeRevision
+    if (!receipt) throw new Error('foreground_confirmation_unavailable');
+    const age = Date.now() - Date.parse(receipt.observedAt);
+    if (receipt.generation !== generation || receipt.scopeRevision !== selection.contactScopeRevision
       || !Number.isFinite(age) || age < -1000 || age >= 5000) throw new Error('foreground_confirmation_stale');
     return { contact_id: selection.contactId, observation_id: receipt.observationId };
   }

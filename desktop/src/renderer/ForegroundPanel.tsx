@@ -40,6 +40,9 @@ export function ForegroundPanel({ state, session, permission, manualRelease = fa
     : state.reason === 'wechat_not_in_front' ? '等待微信切到前台，请打开要聊天的私聊窗口'
     : state.reason === 'probe_warming' ? '微信 OCR 引擎正在准备，完成后自动重新识别'
     : state.reason === 'probe_warmup_timeout' ? '微信 OCR 引擎准备超时，正在等待下一次重试'
+    : (state.phase === 'manual-required' || state.phase === 'unavailable' && state.unsupportedConversation) && failure
+      && !['unmatched_requires_selection', 'ambiguous_requires_selection', 'manual_confirmation_required'].includes(state.reason ?? '')
+      ? `${failure.message}；切回微信后会自动重试，也可切换为手动输入`
     : state.unsupportedConversation ? '正在重新识别当前会话，请保持微信窗口在前台'
     : state.reason === 'unmatched_requires_selection' ? '当前会话未匹配到已确认绑定，请在上方选择联系人'
     : paused ? '前台定位已暂停' : state.phase === 'observing' ? '正在定位前台会话'

@@ -1,6 +1,6 @@
 import { ContactPicker } from './ContactPicker';
 export { ContactPicker } from './ContactPicker';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ForegroundState } from '../shared/foreground-bridge';
 import type { ContactSessionState } from '../shared/contact-session-bridge';
 import { createContactSessionReceiver } from '../shared/contact-session-bridge';
@@ -13,13 +13,22 @@ const initial: ContactSessionState = {
 
 export function useContactSession() {
   const reduce = useMemo(createContactSessionReceiver, []);
-  const { state, error, setError, latest, active, receive, retry } = useRevisionedSession(initial, window.notalone.contacts, true, reduce);
+  const { state, error: sessionError, setError, latest, active, receive, retry } = useRevisionedSession(initial, window.notalone.contacts, true, reduce);
+  const latestForegroundRevision = useRef(-1);
+  const [confirmationError, setConfirmationError] = useState<{ message: string; foregroundRevision: number; scopeRevision: number } | null>(null);
+  // 确认错误只属于发起时的观察，后续识别不能继续显示旧错误或接收迟到失败。
+  useEffect(() => window.notalone.foreground.onStateChanged(next => {
+    if (next.foregroundRevision <= latestForegroundRevision.current) return;
+    latestForegroundRevision.current = next.foregroundRevision;
+    setConfirmationError(previous => previous && previous.foregroundRevision < next.foregroundRevision ? null : previous);
+  }), []);
+  const error = confirmationError?.scopeRevision === state.scopeRevision ? confirmationError.message : sessionError;
 
   async function selectContact(contactId: string) {
     const scopeRevision = latest.current.scopeRevision;
     try {
       receive(await window.notalone.contacts.selectContact({ contactId, scopeRevision }));
-      if (active.current) setError('');
+      if (active.current) { setError(''); setConfirmationError(null); }
     } catch {
       if (active.current && scopeRevision === latest.current.scopeRevision) setError('联系人选择已失效，请刷新后重新确认。');
     }
@@ -27,15 +36,21 @@ export function useContactSession() {
 
   async function confirmContact(contactId: string, foregroundRevision: number) {
     const contactScopeRevision = latest.current.scopeRevision;
+    latestForegroundRevision.current = Math.max(latestForegroundRevision.current, foregroundRevision);
     try {
       receive(await window.notalone.foreground.confirm({ contactId, contactScopeRevision, foregroundRevision }));
-      if (active.current) setError('');
+      if (active.current) { setError(''); setConfirmationError(null); }
     } catch (error) {
-      if (active.current) setError(error instanceof Error && error.message.includes('foreground_binding_required')
+      if (active.current && latestForegroundRevision.current === foregroundRevision && latest.current.scopeRevision === contactScopeRevision) {
+        const message = error instanceof Error && error.message.includes('foreground_binding_required')
         ? '当前联系人没有与本次微信观察一致的有效绑定，请到同步设置重新确认会话，或切换为手动输入。'
+        : error instanceof Error && error.message.includes('foreground_confirmation_unavailable')
+        ? '尚未取得可确认的微信会话，请切回目标私聊等待自动识别，或切换为手动输入。'
         : error instanceof Error && error.message.includes('foreground_confirmation_stale')
-        ? '微信识别结果已过期，请切回目标私聊，重新打开小窗后选择联系人。'
-        : '联系人确认已失效，请重新选择本次联系人。');
+        ? '微信识别结果已过期，请切回目标私聊等待自动重新识别，再选择联系人。'
+        : '联系人确认已失效，请重新选择本次联系人。';
+        setConfirmationError({ message, foregroundRevision, scopeRevision: contactScopeRevision });
+      }
     }
   }
 
@@ -69,7 +84,7 @@ export function useContactSession() {
   async function confirmManualContact(contactId: string) {
     try {
       receive(await window.notalone.contacts.confirmManualContact({ contactId, scopeRevision: latest.current.scopeRevision }));
-      if (active.current) setError('');
+      if (active.current) { setError(''); setConfirmationError(null); }
       return true;
     } catch { if (active.current) setError('本次联系人未确认，请刷新目录后重新选择。'); return false; }
   }

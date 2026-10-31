@@ -111,7 +111,7 @@ test('新鲜微信观察进入小窗后仍可显式确认，并把观察回执�
 
 test('没有新鲜完整观察时不能把已有渠道绑定升级为桌面确认', async t => {
   const f = fixture(t, [binding()]);
-  await assert.rejects(f.confirm(), /foreground_confirmation_stale/);
+  await assert.rejects(f.confirm(), /foreground_confirmation_unavailable/);
   assert.deepEqual(f.calls, []);
   await f.observe({ observed_at: new Date(Date.now() - 6000).toISOString() });
   await assert.rejects(f.confirm(), /foreground_confirmation_stale/);
@@ -121,9 +121,22 @@ test('没有新鲜完整观察时不能把已有渠道绑定升级为桌面确�
 test('低质量或暂停观察不能持有桌面确认回执，关闭小窗也丢弃已有回执', async t => {
   const f = fixture(t, [binding()]);
   await f.observe({ reason: 'quality_unverified' });
-  await assert.rejects(f.confirm(), /foreground_confirmation_stale/);
+  await assert.rejects(f.confirm(), /foreground_confirmation_unavailable/);
   await f.observe();
   f.foreground.notifyHelperLifecycle('closed');
-  await assert.rejects(f.confirm(), /foreground_confirmation_stale/);
+  await assert.rejects(f.confirm(), /foreground_confirmation_unavailable/);
   assert.deepEqual(f.calls, []);
+});
+
+test('本轮没有完整会话证据时准确说明尚不可确认，不误报为观察过期', async t => {
+  const f = fixture(t, [binding()]);
+  for (const observation of [
+    { reason: 'quality_unverified' },
+    { phase: 'paused', reason: 'wechat_not_in_front', wechat_in_front: false },
+  ]) {
+    await f.observe(observation);
+    await assert.rejects(f.confirm(), /foreground_confirmation_unavailable/);
+    assert.equal(f.foreground.getGenerationBlock(), 'foreground-confirmation-required');
+    assert.deepEqual(f.calls, []);
+  }
 });
