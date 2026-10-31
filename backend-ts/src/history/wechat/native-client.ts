@@ -86,6 +86,7 @@ const absentPrivateTargetProfile = 'wechat-4.0.6-29387-absent-private-target-v1'
 // 系统会话不代表用户的真实关系对象，也不能成为单联系人读取目标。
 const systemConversations = new Set(['filehelper', 'notifymessage']);
 const allowedErrors = new Set([
+  'history_target_growth_required',
   'history_checkpoint_invalid', 'history_checkpoint_too_large', 'history_checkpoint_unavailable',
   'history_delta_btree_cell_invalid', 'history_delta_btree_cells_invalid', 'history_delta_btree_child_invalid',
   'history_delta_btree_child_missing', 'history_delta_btree_cycle', 'history_delta_btree_duplicate_rowid',

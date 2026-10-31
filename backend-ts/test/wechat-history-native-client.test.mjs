@@ -44,6 +44,7 @@ async function fixture(t,mode='normal') {
   if(mode==='invalid-utf8'){process.stdout.write(Buffer.from([0x7b,0xff,0x7d,0x0a]));return;}
   if(mode==='unknown-code'){process.stdout.write(JSON.stringify({ok:false,error:{code:'sensitive-arbitrary-native-value'}})+'\\n');return;}
   if(mode==='known-code'){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_account_changed'}})+'\\n');return;}
+  if(mode==='known-growth-code'){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_target_growth_required'}})+'\\n');return;}
   if(r.op==='resolve')currentConversation=r.displayName==='另一位合成联系人'?'synthetic-other':'${conversation}';
   let data=r.op==='resolve'?{accountKey:'${account}',conversationKey:currentConversation,displayName:'合成目标',sourceGeneration:'${generation}'}:schema;
   if(r.op==='resolve'&&mode==='display-control')data.displayName='合成\\t目标';
@@ -619,4 +620,9 @@ test('旧目标没有已检查文件证据时不能跨新增表恢复检查点',
  await f.client.inspectSelected();await f.client.supportSelected();
  await assert.rejects(f.client.resumeTargetSelected(old,'accepted-cursor'),{code:'history_target_unverified'});
  const requests=(await readFile(f.logFile,'utf8')).trim().split('\n').map(line=>JSON.parse(line));assert.equal(requests.some(row=>row.op==='resume-target'),false);
+});
+
+test('原生已核验的表增长交接码保留给协调器，不改成协议损坏',async t=>{
+ const f=await fixture(t,'known-growth-code');
+ await assert.rejects(f.client.resolveSelected('合成目标'),{code:'history_target_growth_required'});
 });
