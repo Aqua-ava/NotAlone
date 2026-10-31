@@ -49,3 +49,24 @@ test('同步HTTP投影单独报告增量检查点与降级，不把不可用或�
  assert.equal(unavailable.cli_incremental_phase,'unavailable');
  assert.equal(unavailable.cli_history_coverages[0].incremental_failure_code,'history_incremental_unavailable');
 });
+
+test('已认证空目标只投影为等待新消息，不造成不可用或全局degraded',()=>{
+ const empty={...coverage,phase:'complete',failureCode:null,messageCount:0,nonTextCount:0,
+  incremental:{goalId:null,phase:'unavailable',failureCode:'history_incremental_unavailable',cursorPresent:false,pagesAccepted:0,lastAcceptedAt:null,resumedFromGoalId:null,emptyTargetAwaitingMessages:true}};
+ const projected=projectHistorySyncStatus({sync_enabled:true,cli_bound_count:1,cli_sync_phase:'degraded',cli_failure_code:'wechat_body_unavailable'},[empty],undefined,
+  {phase:'blocked',lastError:'history_incremental_unavailable',contacts:[{contactId:id,phase:'blocked',lastError:'history_incremental_unavailable'}]},false);
+ assert.equal(projected.cli_sync_phase,'active');
+ assert.equal(projected.cli_failure_code,null);
+ assert.equal(projected.body_available,false,'空目标不应伪报消息正文读取能力');
+ assert.equal(projected.cli_history_coverages[0].incremental_phase,'not_started');
+ assert.equal(projected.cli_history_coverages[0].incremental_failure_code,null);
+ assert.equal(projected.cli_history_coverages[0].incremental_waiting_for_messages,true);
+ assert.equal(projected.cli_incremental_phase,'idle');
+ assert.equal(projected.cli_incremental_failure_code,null);
+ const paused=projectHistorySyncStatus({sync_enabled:false,cli_bound_count:1,cli_sync_phase:'disabled'},[empty]);
+ assert.equal(paused.cli_history_coverages[0].incremental_waiting_for_messages,undefined,'总开关关闭时不能宣称还会定期检查');
+ const failed=projectHistorySyncStatus({sync_enabled:true,cli_bound_count:1,cli_sync_phase:'degraded'},[empty],undefined,
+  {phase:'blocked',lastError:'history_snapshot_window_changed',contacts:[{contactId:id,phase:'degraded',lastError:'history_snapshot_window_changed'}]},false);
+ assert.equal(failed.cli_history_coverages[0].incremental_failure_code,'history_snapshot_window_changed','真实瞬时错误仍须可见');
+ assert.equal(failed.cli_history_coverages[0].incremental_waiting_for_messages,undefined);
+});

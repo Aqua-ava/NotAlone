@@ -94,6 +94,8 @@ function historyCoverages(value: unknown): HistoryCoverage[] | undefined {
       || !['not_started', 'syncing', 'complete', 'incomplete'].includes(item.phase)) throw new Error('同步报告不可用。');
     const incrementalPhase = optionalIncrementalPhase(item.incremental_phase);
     const incrementalFailureCode = item.incremental_failure_code === undefined ? undefined : failureCode(item.incremental_failure_code);
+    if(item.incremental_waiting_for_messages!==undefined&&typeof item.incremental_waiting_for_messages!=='boolean')throw new Error('同步报告不可用。');
+    const incrementalAwaitingMessages=item.incremental_waiting_for_messages as boolean|undefined;
     const incrementalLastAcceptedAt = item.incremental_last_accepted_at === undefined || item.incremental_last_accepted_at === null ? null : count(item.incremental_last_accepted_at);
     const incrementalPages = item.incremental_pages === undefined ? undefined : count(item.incremental_pages);
     return { bindingId: item.binding_id.toLowerCase(), contactId: item.contact_id.toLowerCase(),
@@ -102,6 +104,7 @@ function historyCoverages(value: unknown): HistoryCoverage[] | undefined {
       ...(item.metadata_only_count === undefined ? {} : { metadataOnlyCount: count(item.metadata_only_count) }),
       ...(incrementalPhase === undefined ? {} : { incrementalPhase }),
       ...(incrementalFailureCode === undefined ? {} : { incrementalFailureCode }),
+      ...(incrementalAwaitingMessages === undefined ? {} : { incrementalAwaitingMessages }),
       ...(item.incremental_last_accepted_at === undefined ? {} : { incrementalLastAcceptedAt }),
       ...(incrementalPages === undefined ? {} : { incrementalPages }) };
   });

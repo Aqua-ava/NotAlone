@@ -51,38 +51,51 @@ export function projectHistorySyncStatus(base: Record<string, unknown>, persiste
   const pending = coverages.filter(row => (row.phase === 'not_started' || row.phase === 'running')&&!blocked.has(row.contactId)).length;
   const textCount = (row: HistoryCoverage) => Math.max(0, row.messageCount - row.nonTextCount);
   const incrementalRuntime = (contactId: string) => incremental?.contacts.find(contact => contact.contactId === contactId);
+  const incrementalFailure = (row:HistoryCoverage) => {
+    const live=incrementalRuntime(row.contactId);
+    if(row.incremental?.emptyTargetAwaitingMessages===true&&(!live||!['blocked','degraded'].includes(live.phase)
+      ||live.phase==='blocked'&&live.lastError==='history_incremental_unavailable'))return null;
+    return live?.lastError??row.incremental?.failureCode??null;
+  };
   // 运行中/降级只影响展示；持久检查点仍是是否允许继续读取的事实。
   const incrementalPhase = (row: HistoryCoverage) => {
     const live = incrementalRuntime(row.contactId);
     if (live) {
+      if(live.phase==='blocked'&&live.lastError==='history_incremental_unavailable'&&row.incremental?.emptyTargetAwaitingMessages===true)return 'not_started';
       if (live.phase === 'blocked') return 'blocked';
       if (live.phase === 'degraded') return 'incomplete';
       if (live.phase === 'queued' || live.phase === 'running') return 'syncing';
       if (live.phase === 'stopped') return 'stopped';
+      if (live.phase === 'waiting_new_messages') return 'not_started';
     }
+    if(row.incremental?.emptyTargetAwaitingMessages===true)return 'not_started';
     return row.incremental?.phase ?? 'not_started';
   };
   const rows = coverages.filter(row => row.bindingId !== null);
   const incrementalPhases = rows.map(incrementalPhase);
-  const incrementalFailure = rows.map(row => incrementalRuntime(row.contactId)?.lastError ?? row.incremental?.failureCode ?? null).find(code => code !== null) ?? null;
+  const incrementalFailureCode = rows.map(incrementalFailure).find(code => code !== null) ?? null;
   const incrementalOverallPhase = incrementalPhases.includes('blocked') ? 'incomplete'
     : incrementalPhases.includes('syncing') ? 'active'
       : incrementalPhases.length > 0 && incrementalPhases.every(phase => phase === 'unavailable') ? 'unavailable'
         : incrementalPhases.includes('incomplete') || incrementalPhases.includes('invalidated') ? 'incomplete' : 'idle';
-  const specificFailure = coverages.find(row => row.failureCode !== null)?.failureCode ?? incrementalFailure;
+  const specificFailure = coverages.find(row => row.failureCode !== null)?.failureCode ?? incrementalFailureCode;
   const enabled = base.sync_enabled === true;
   const boundCount = typeof base.cli_bound_count === 'number' ? base.cli_bound_count : rows.length;
+  const hasEmptyWaiter=rows.some(row=>row.incremental?.emptyTargetAwaitingMessages===true);
+  const emptyWaitDoesNotExplainFailure=hasEmptyWaiter&&specificFailure===null&&incomplete===0&&enabled&&boundCount>0;
   const backgroundPhase = bodyCapabilityVerified
     ? !enabled ? 'disabled' : boundCount === 0 ? 'waiting_bindings' : specificFailure || incomplete > 0 || incrementalOverallPhase === 'incomplete' ? 'degraded' : 'active'
-    : base.cli_sync_phase;
+    : emptyWaitDoesNotExplainFailure&&base.cli_failure_code==='wechat_body_unavailable'?'active':base.cli_sync_phase;
+  const bodyUnavailableOnly=base.cli_failure_code==='wechat_body_unavailable';
   const backgroundFailure = specificFailure
-    ?? (bodyCapabilityVerified && base.cli_failure_code === 'wechat_body_unavailable' ? null : base.cli_failure_code ?? null);
+    ?? (bodyUnavailableOnly&&(bodyCapabilityVerified||emptyWaitDoesNotExplainFailure)?null:base.cli_failure_code??null);
   return { ...base,
     cli_history_authorization_state: coverages.some(row=>row.bindingId!==null)?'accepted':'unknown', cli_history_authorization_version: coverages.some(row=>row.bindingId!==null)?1:null, cli_history_authorization_current_version: 1,
     cli_history_coverages: coverages.filter(row => row.bindingId !== null).map(row => ({
       binding_id: row.bindingId, contact_id: row.contactId, phase: row.phase === 'running' ? 'syncing' : row.phase,
       failure_code: row.failureCode, message_count: textCount(row), non_text_count: row.nonTextCount, metadata_only_count: row.metadataOnlyCount ?? 0, page_count: row.pageCount,
-      incremental_phase: incrementalPhase(row), incremental_failure_code: incrementalRuntime(row.contactId)?.lastError ?? row.incremental?.failureCode ?? null,
+      incremental_phase: incrementalPhase(row), incremental_failure_code: incrementalFailure(row),
+      ...(enabled&&row.incremental?.emptyTargetAwaitingMessages===true&&incrementalFailure(row)===null?{incremental_waiting_for_messages:true}:{}),
       incremental_last_accepted_at: row.incremental?.lastAcceptedAt ?? null, incremental_pages: row.incremental?.pagesAccepted ?? 0,
     })),
     cli_backfill_phase: pending > 0 ? 'backfilling' : incomplete > 0 ? 'incomplete' : coverages.length > 0 ? 'complete' : 'not_required',
@@ -90,7 +103,7 @@ export function projectHistorySyncStatus(base: Record<string, unknown>, persiste
     cli_backfill_total_contacts: coverages.length, cli_backfill_completed_contacts: completed,
     cli_backfill_succeeded_contacts: completed, cli_backfill_skipped_contacts: 0, cli_backfill_failed_contacts: 0,
     cli_backfill_incomplete_contacts: incomplete, cli_backfill_pending_contacts: pending,
-    cli_incremental_phase: incrementalOverallPhase, cli_incremental_failure_code: incrementalFailure,
+    cli_incremental_phase: incrementalOverallPhase, cli_incremental_failure_code: incrementalFailureCode,
     // 即时能力必须由宿主传入当前资格范围的受信任支持核验结果；覆盖数量、进度和缓存错误均不能推导正文能力。
     body_available: bodyCapabilityVerified === true,
     cli_sync_phase: backgroundPhase,

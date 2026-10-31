@@ -76,6 +76,7 @@ export function ContactHistoryCoverage({ coverages, contactId, bodyAvailable }: 
       <p><strong>{historyLabel(row)}</strong> · 已保存 {row.messageCount} 条文字消息、{row.nonTextCount} 条非文字占位</p>
       {(row.metadataOnlyCount ?? 0) > 0 && <p>另保存 {row.metadataOnlyCount} 条系统等元数据记录，不含正文。</p>}
       {row.phase !== 'complete' && row.failureCode && <p role="status">{syncScopeNotice(row.failureCode) ?? reasons[row.failureCode] ?? '部分聊天暂时无法读取，开启同步时会自动重试。'}</p>}
+      {row.incrementalAwaitingMessages === true && <p role="status">这台电脑上当前没有可读聊天记录，系统会等待新消息并定期检查。</p>}
       {row.incrementalPhase !== undefined && (row.incrementalPhase !== 'not_started' || row.incrementalFailureCode) && <p role="status">
         <strong>{incrementalLabel(row.incrementalPhase)}</strong>{bodyAvailable !== false && typeof row.incrementalPages === 'number' ? ` · 已跟进 ${row.incrementalPages} 次` : ''}
       </p>}
@@ -109,6 +110,7 @@ export function HistoryCoverageStatus({ coverages, contacts = [], currentContact
   const complete = coverages?.filter(row => row.phase === 'complete') ?? [];
   const incrementalAttention = coverages?.filter(row => row.incrementalFailureCode || ['blocked', 'incomplete', 'invalidated', 'unavailable'].includes(row.incrementalPhase ?? '')) ?? [];
   const incrementalBusy = bodyAvailable === false ? [] : coverages?.filter(row => row.incrementalPhase === 'syncing' && !row.incrementalFailureCode) ?? [];
+  const awaitingMessages = coverages?.filter(row => row.incrementalAwaitingMessages === true) ?? [];
   const activeHistoryCount = coverages?.filter(row => row.phase === 'syncing' && !row.failureCode && !row.incrementalFailureCode).length ?? 0;
   const attentionCount = new Set([...incomplete, ...incrementalAttention].map(row => row.contactId)).size;
   return <>
@@ -118,9 +120,11 @@ export function HistoryCoverageStatus({ coverages, contacts = [], currentContact
           <p>已读完 {complete.length} / {coverages.length} 个会话的本机历史</p>
           <progress aria-label="本机历史读取进度" value={complete.length} max={coverages.length} />
           {bodyAvailable === false
-            ? <p>正在核验读取能力：{verificationIds.size} 个会话 · 等待核验：{pending.length} 个 · 需要关注：{attentionCount} 个</p>
+            ? <p>{awaitingMessages.length > 0 ? `等待新消息：${awaitingMessages.length} 个会话 · 正在核验：${verificationIds.size} 个 · 等待核验：${pending.length} 个 · 需要关注：${attentionCount} 个`
+              : `正在核验读取能力：${verificationIds.size} 个会话 · 等待核验：${pending.length} 个 · 需要关注：${attentionCount} 个`}</p>
             : <p>正在读取 {activeHistoryCount} 个 · 等待同步 {pending.length} 个 · 需要关注 {attentionCount} 个</p>}
           {incrementalBusy.length > 0 && <p role="status">正在同步 {incrementalBusy.length} 个会话的新消息…</p>}
+          {awaitingMessages.length > 0 && <p>{awaitingMessages.length} 个会话已确认当前没有可读记录，等待新消息并定期检查。</p>}
           {incrementalAttention.length > 0 && <div role="status">
             <p>{bodyAvailable === false ? `${incrementalAttention.length} 个会话的读取能力核验需要关注。` : `${incrementalAttention.length} 个会话的新消息同步已停止或不完整。`}</p>
             {incrementalAttention[0]?.incrementalFailureCode && <p>{incrementalReasons[incrementalAttention[0].incrementalFailureCode] ?? '请刷新状态查看原因。'}</p>}

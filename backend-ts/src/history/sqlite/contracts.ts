@@ -68,6 +68,8 @@ export type HistoryIncrementalPhase = 'not_started' | 'ready' | 'incomplete' | '
 export interface HistoryIncrementalCoverage {
   goalId: string | null; phase: HistoryIncrementalPhase; failureCode: string | null; cursorPresent: boolean;
   pagesAccepted: number; lastAcceptedAt: number | null; resumedFromGoalId: string | null;
+  /** 已持久化认证空目标的低频元数据重探状态；不可由零消息数推断。 */
+  emptyTargetAwaitingMessages?: true;
 }
 export interface HistoryCoverage {
   goalId: string | null; contactId: string; bindingId: string | null;
