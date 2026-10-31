@@ -47,6 +47,9 @@ func TestNotAloneHistorySchemaOnlyTargetStructure(t *testing.T) {
 	if len(report.Indexes) != 1 || report.Indexes[0].Unique {
 		t.Fatal("索引名称不证明唯一")
 	}
+	if report.Indexes[0].ID != notaloneHash(notaloneHash("opaque-partition", "Msg_target"), "misleading_SERVERID") {
+		t.Fatal("表实例变更不得改变既有索引标识口径")
+	}
 }
 
 func TestNotAloneHistoryScopeRejectsUnknownFieldsAndOtherTarget(t *testing.T) {

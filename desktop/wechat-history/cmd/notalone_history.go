@@ -169,7 +169,8 @@ func inspectNotaloneTable(ctx context.Context, db *wcdb.DB, table, partition str
 	}
 	for _, r := range indexes {
 		name := rowString(r, "name")
-		index := notaloneIndex{ID: notaloneHash(result.Target, name), name: name, Unique: rowInt64(r, "unique") != 0, Origin: rowString(r, "origin"), Partial: rowInt64(r, "partial") != 0, Columns: []notaloneIndexColumn{}}
+		// 保持既有索引标识口径；表实例及兼容别名不改变同一索引的结构证据。
+		index := notaloneIndex{ID: notaloneHash(notaloneHash(partition, table), name), name: name, Unique: rowInt64(r, "unique") != 0, Origin: rowString(r, "origin"), Partial: rowInt64(r, "partial") != 0, Columns: []notaloneIndexColumn{}}
 		parts, e := db.QueryBounded(ctx, 128, "PRAGMA index_xinfo("+quoteIdent(name)+")")
 		if e != nil {
 			return result, notaloneFailure("history_index_unavailable")
