@@ -208,9 +208,9 @@ test('同账号来源换代须明确重确认，只恢复账号且保持旧许�
  const before=await service.directory(),binding=before.bindings.find(b=>b.conversation_locator==='friend-a');
  const old=await service.eligibility(binding.contact_id);
  await service.confirmForeground({contactId:old.contact_id,bindingId:old.binding_id,accountId:old.account_id,sourceGeneration:old.source_generation,
-  scopeRevision:old.scope_revision,readEpoch:old.read_epoch,grantId:old.grant_id,selectionGeneration:old.selection_generation,dataGeneration:old.data_generation,barrierGeneration:old.barrier_generation,
+  scopeRevision:old.scope_revision,readEpoch:old.read_epoch,grantId:old.grant_id,selectionGeneration:old.selection_generation, dataGeneration:old.data_generation,barrierGeneration:old.barrier_generation,
   observationId:'00000000-0000-4000-8000-000000000099',observedAt:new Date().toISOString()});
- assert.equal((await service.foregroundSnapshot()).bindings.find(b=>b.contact_id===binding.contact_id).desktopVerified,true);
+ assert.equal((await service.foregroundSnapshot()).bindings.find(b=>b.contact_id===binding.contact_id).binding_id,binding.binding_id);
  await service.revoke(before.bindings.find(b=>b.conversation_locator==='friend-b').contact_id,before.bindings.find(b=>b.conversation_locator==='friend-b').binding_id,'1');
  await service.setReading(false);
  channel.account=async()=>({externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-2',assurance:'verified',supportProfile:'synthetic-metadata-v1'});
@@ -230,7 +230,6 @@ test('同账号来源换代须明确重确认，只恢复账号且保持旧许�
  assert.equal((await service.directory()).bindings.filter(b=>b.status==='active').length,1);
  assert.equal((await service.directory()).bindings.find(b=>b.conversation_locator==='friend-b').status,'revoked');
  assert.notEqual((await service.eligibility(binding.contact_id)).grant_id,old.grant_id);
- assert.equal((await service.foregroundSnapshot()).bindings.find(b=>b.contact_id===binding.contact_id).desktopVerified,false);
  await assert.rejects(service.validate(old),{code:'read_eligibility_stale'});
  await assert.rejects(service.confirm(snapshot.snapshot_token,[{locator:'friend-a',observed_display_name:'同名',expected_selection_generation:'0'}]),{code:'account_identity_changed'});
 });
@@ -373,35 +372,52 @@ test('会话元数据端口失败时暂停旧资格，不能只拒绝新名单',
  const b=(await service.confirm(snapshot.snapshot_token,[{locator:'friend-a',observed_display_name:'同名',expected_selection_generation:'0'}])).bindings[0];const token=await service.eligibility(b.contact_id);
  channel.sessions=async()=>{throw new Error('合成外部端口失败');};await assert.rejects(service.candidates(true));await assert.rejects(service.validate(token),{code:'read_not_authorized'});
 });
-test('前台范围只返回当前有效绑定，不把渠道元数据当桌面确认',async t=>{
- const {service}=await fixture(t);await connect(service);await service.setReading(true);const selected=await service.candidates(true);
- const saved=(await service.confirm(selected.snapshot_token,[{locator:'friend-a',observed_display_name:'同名',expected_selection_generation:'0'}])).bindings[0];
- let view=await service.foregroundSnapshot();assert.equal(view.enabled,true);assert.equal(view.bindings.length,1);assert.equal(view.bindings[0].desktopVerified,false);assert.equal(view.bindings[0].binding_id,saved.binding_id);
- await service.revoke(saved.contact_id,saved.binding_id,saved.selection_generation);view=await service.foregroundSnapshot();assert.equal(view.bindings.length,0);
-});
-test('新鲜桌面会话明确确认后恢复自动识别，不重写后台读取授权',async t=>{
+test('已建联私聊撤销读取许可后仍可直接关联，不增加授权或确认事实',async t=>{
  const {service}=await fixture(t);await connect(service);await service.setReading(true);const selected=await service.candidates(true);
  const binding=(await service.confirm(selected.snapshot_token,[{locator:'friend-a',observed_display_name:'同名',expected_selection_generation:'0'}])).bindings[0];
- const before=await service.eligibility(binding.contact_id);
+ await service.revoke(binding.contact_id,binding.binding_id,binding.selection_generation);
+ const before=await service.directory(),beforeForeground=await service.foregroundSnapshot();await assert.rejects(service.eligibility(binding.contact_id),{code:'read_not_authorized'});
+ let confirmations=0;
  const foreground=new SqliteForeground({ownerId:owner,snapshot:()=>service.foregroundSnapshot(),
-  probe:{observe:async()=>({wechat_in_front:true,display_name:'同名',captured_at:new Date().toISOString(),capture_version:'automatic-header-v4',quality:{layout_verified:true,display_name_confidence:.98,name_complete:true}}),close:async()=>{},dispose:async()=>{}},
-  sessions:async()=>[{username:'friend-a',display_name:'同名',chat_type:'private'}],closeSessions:async()=>{},confirmBinding:proof=>service.confirmForeground(proof)});
+  probe:{observe:async()=>({wechat_in_front:true,display_name:'同名',captured_at:new Date().toISOString(),capture_version:'automatic-header-v4',quality:{layout_verified:true,display_name_confidence:.30,name_complete:true}}),close:async()=>{},dispose:async()=>{}},
+  sessions:async()=>[{username:'friend-a',display_name:'同名',chat_type:'private'}],closeSessions:async()=>{},confirmBinding:async proof=>{confirmations++;await service.confirmForeground(proof);}});
  t.after(()=>foreground.close());
- const observed=await foreground.observe();assert.equal(observed.phase,'manual-required');
- assert.deepEqual(await foreground.confirm(binding.contact_id,observed.observation_id),{confirmed:true});
- assert.equal((await foreground.observe()).contact_id,binding.contact_id);
- assert.deepEqual(await service.eligibility(binding.contact_id),before);
+ const observed=await foreground.observe();assert.equal(observed.phase,'confirmed');assert.equal(observed.recognition_confidence,.30);assert.equal(observed.contact_id,binding.contact_id);assert.equal(observed.binding_id,binding.binding_id);assert.equal(confirmations,0);
+ assert.deepEqual(await service.directory(),before);assert.deepEqual(await service.foregroundSnapshot(),beforeForeground);await assert.rejects(service.eligibility(binding.contact_id),{code:'read_not_authorized'});
 });
-test('桌面确认在存储前遇到资料清空屏障，旧观察不得保存身份事实',async t=>{
+test('已有身份的前台关联遇到来源、删除或改名变化仍丢弃在途观察',async t=>{
+ for(const change of ['source','delete','rename'])await t.test(change,async t=>{
+  const {service,channel,storage}=await fixture(t,{registryModule:new URL('./fixtures/contacts/registry.mjs',import.meta.url).href});await connect(service);await service.setReading(true);
+  const selected=await service.candidates(true),binding=(await service.confirm(selected.snapshot_token,[{locator:'friend-a',observed_display_name:'同名',expected_selection_generation:'0'}])).bindings[0];
+  const foreground=new SqliteForeground({ownerId:owner,snapshot:()=>service.foregroundSnapshot(),
+   probe:{observe:async()=>({wechat_in_front:true,display_name:'同名',captured_at:new Date().toISOString(),capture_version:'automatic-header-v4',quality:{layout_verified:true,display_name_confidence:.98,name_complete:true}}),close:async()=>{},dispose:async()=>{}},
+   sessions:async()=>{
+    if(change==='source'){const old=await channel.account();channel.account=async()=>({...old,sourceGeneration:'source-2'});await service.detectAccount();}
+    else if(change==='delete')await storage.execute('fixture.fenceIdentity',{ownerId:owner,scope:{kind:'contact',contactId:binding.contact_id}});
+    else{channel.sessions=async()=>[{externalKey:'friend-a',displayName:'已改名称',kind:'private',identityAssurance:'verified'}];await service.candidates(true);}
+    return [{username:'friend-a',display_name:'同名',chat_type:'private'}];
+   },closeSessions:async()=>{},confirmBinding:async()=>assert.fail('自动观察不应写入人工确认')});
+  t.after(()=>foreground.close());
+  await assert.rejects(foreground.observe(),{code:'foreground_observation_cancelled'});
+  assert.equal((await service.foregroundSnapshot()).bindings.length,0);
+  await assert.rejects(service.eligibility(binding.contact_id),{code:'read_not_authorized'});
+ });
+});
+test('前台身份投影不随读取许可撤销消失',async t=>{
+ const {service}=await fixture(t);await connect(service);await service.setReading(true);const selected=await service.candidates(true);
+ const saved=(await service.confirm(selected.snapshot_token,[{locator:'friend-a',observed_display_name:'同名',expected_selection_generation:'0'}])).bindings[0];
+ let view=await service.foregroundSnapshot();assert.equal(view.enabled,true);assert.equal(view.bindings.length,1);assert.equal(view.bindings[0].binding_id,saved.binding_id);
+ await service.revoke(saved.contact_id,saved.binding_id,saved.selection_generation);view=await service.foregroundSnapshot();assert.equal(view.bindings.length,1);assert.equal(view.bindings[0].binding_id,saved.binding_id);assert.equal(view.bindings[0].grant_id,null);await assert.rejects(service.eligibility(saved.contact_id),{code:'read_not_authorized'});
+});
+test('前台观察遇到资料清空屏障后丢弃，不保存身份事实',async t=>{
  const {service,storage}=await fixture(t,{registryModule:new URL('./fixtures/contacts/registry.mjs',import.meta.url).href});
  await connect(service);await service.setReading(true);const selected=await service.candidates(true);
  const binding=(await service.confirm(selected.snapshot_token,[{locator:'friend-a',observed_display_name:'同名',expected_selection_generation:'0'}])).bindings[0];
  const token=await service.eligibility(binding.contact_id);
  const foreground=new SqliteForeground({ownerId:owner,snapshot:()=>service.foregroundSnapshot(),
-  probe:{observe:async()=>({wechat_in_front:true,display_name:'同名',captured_at:new Date().toISOString(),capture_version:'automatic-header-v4',quality:{layout_verified:true,display_name_confidence:.98,name_complete:true}}),close:async()=>{},dispose:async()=>{}},
+  probe:{observe:async()=>{await storage.execute('fixture.advanceBarrier',token);return {wechat_in_front:true,display_name:'同名',captured_at:new Date().toISOString(),capture_version:'automatic-header-v4',quality:{layout_verified:true,display_name_confidence:.98,name_complete:true}};},close:async()=>{},dispose:async()=>{}},
   sessions:async()=>[{username:'friend-a',display_name:'同名',chat_type:'private'}],closeSessions:async()=>{},
-  confirmBinding:async proof=>{await storage.execute('fixture.advanceBarrier',token);await service.confirmForeground(proof);}});
+  confirmBinding:async()=>assert.fail('自动观察不应写入人工确认')});
  t.after(()=>foreground.close());
- const observed=await foreground.observe();await assert.rejects(foreground.confirm(binding.contact_id,observed.observation_id),{code:'foreground_confirmation_stale'});
- assert.equal((await service.foregroundSnapshot()).bindings[0].desktopVerified,false);
+ await assert.rejects(foreground.observe(),{code:'foreground_observation_cancelled'});
 });

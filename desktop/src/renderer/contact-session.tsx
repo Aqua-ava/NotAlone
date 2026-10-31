@@ -94,10 +94,9 @@ export function useContactSession() {
 
 export type ContactSessionView = ReturnType<typeof useContactSession>;
 
-export function HelperContactPicker({ session, foreground, manualRelease = false, manualInput = false }: { session: ContactSessionView; foreground?: ForegroundState; manualRelease?: boolean; manualInput?: boolean }) {
-  const manual = manualRelease || manualInput || foreground?.manualInput;
-  return <ContactPicker session={session} disabled={!foreground || !manual && foreground.unsupportedConversation}
-    onSelect={async (contactId) => foreground && (manual ? session.confirmManualContact(contactId) : session.confirmContact(contactId, foreground.foregroundRevision))} />;
+export function HelperContactPicker({ session, foreground }: { session: ContactSessionView; foreground?: ForegroundState; manualRelease?: boolean; manualInput?: boolean }) {
+  // 用户明确选择只确认本次表达对象，不依赖前台回执，也不恢复微信读取授权。
+  return <ContactPicker session={session} disabled={!foreground} onSelect={session.confirmManualContact} />;
 }
 
 export function HelperDraft({ session, currentChat = false, workspace = false, disabled = false, restoreRevision, placeholder }: { session: ContactSessionView; currentChat?: boolean; workspace?: boolean; disabled?: boolean; restoreRevision?: number; placeholder?: string }) {

@@ -197,7 +197,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 - 新联系人按 ADR-087／089 从真实微信会话加入，支持逐会话确认或全部私聊范围授权；ADR-095 补充已有可用外置工具的首次账号连接，无需先导入历史。已有联系人可手动表达，顶部选择器是唯一搜索入口；未配置机器的工具初始化与独立渠道验收仍未完成，ADR-065 的空目录无需微信首用承诺已被替代。资料更新按 ADR-066 原地补齐，历史副本删除清理、隐私与人工发送要求保持。
 - 数据隔离键为 `owner_id + contact_id`；`contact_id` 由 NotAlone 创建，昵称、备注和微信来源标识不能替代它。
 - 文字是统一的检索与生成表示；前台 display name OCR、本地微信 CLI、截图和语音都是输入适配器。
-- Mac 前台 OCR 按 ADR-052 仅识别顶部 display name，再按 ADR-076 结合完整会话名单、唯一私聊及已确认绑定定位联系人；CLI 独立同步用户主动选择并确认的联系人及我方文字增量，首次不预选会话。CLI 的外部会话标识不能替代 `contact_id`，同步范围与停止/恢复规则见 ADR-030。
+- Mac 前台 OCR 按 ADR-052 仅识别顶部 display name，再按 ADR-076／132 结合有界全类型会话元数据、唯一已知私聊及已有稳定绑定匹配联系人；CLI 独立同步用户主动选择并确认的联系人及我方文字增量，首次不预选会话。CLI 的外部会话标识不能替代 `contact_id`，同步范围与停止/恢复规则见 ADR-030。
 - 持续前台定位按 ADR-050 采用每轮单帧，进入助手或其他 App 后暂停；一个助手窗口按联系人恢复输入和编辑，切换不取消原生成。约束见[正式规格](../.scratch/foreground-contact-follow/spec.md)，实施进度统一见[任务索引](../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录；任务关闭不表示其他渠道或交付任务已通过验收。ADR-049 的双帧复查仅保留为历史决定。
 - 生成只使用已选联系人及用户本人范围内的有界上下文；模型提取的记忆必须带来源、标记 `auto` 且可撤销。
 - 正常自动记忆按 ADR-070 与 [ADR-085](adr/085-source-verified-automatic-adoption.md) 使用逐项来源核验，通过适用检查后自动裁决，不以额外语用、置信度或风险标签转入人工待办。来源、人工保护、删除及 ADR-081 的关系矛盾待定例外保持；旧评测结果不因此变成达标。
@@ -233,3 +233,4 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 129. [ADR-129：DSH 回复 Skill 的受控发现与启用](adr/129-controlled-dsh-reply-skill-discovery.md)
 130. [ADR-130：同账号本机来源变化后的明确重新关联](adr/130-explicit-wechat-source-reconfirmation.md)
 131. [ADR-131：联系人确认后使用当前可用资料生成](adr/131-available-context-without-history-wait.md)
+132. [ADR-132：按会话名称关联已有联系人](adr/132-existing-contact-name-matching.md)

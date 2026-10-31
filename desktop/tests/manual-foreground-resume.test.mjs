@@ -284,8 +284,8 @@ test('名单核验可恢复单纯质量门且兼容旧表情证据，原始低�
   assert.equal(f.foreground.getGenerationBlock(), null);
   assert.equal(f.foreground.getState().recognitionConfidence, 0.3);
   const panel = JSON.stringify(ports.ForegroundPanel({ state: f.foreground.getState(), session: { state: f.state } }));
-  assert.match(panel, /根据会话名单唯一匹配，已核验既有绑定/);
-  assert.match(panel, /上方分数仍是原始 OCR 结果/);
+  assert.match(panel, /低分本身不阻止名单中的唯一匹配/);
+  assert.match(panel, /原始 OCR 分数/);
  }
 });
 

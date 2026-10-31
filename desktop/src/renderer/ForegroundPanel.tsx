@@ -75,19 +75,19 @@ export function ForegroundPanel({ state, session, permission, manualRelease = fa
       当前联系人未确认；以下保留内容属于{session.state.contacts.find((item) => item.contactId === session.state.selectedContactId)?.displayName}，请明确选择后再生成。
     </p>}
     {!state.unsupportedConversation && session?.state.selectedContactId && state.generationBlock !== null && <button
-      onClick={() => void session.confirmContact(session.state.selectedContactId!, state.foregroundRevision)}>
+      onClick={() => void session.confirmManualContact(session.state.selectedContactId!)}>
       确认本次联系人
     </button>}
     {state.confirmation === 'manual-confirmed' && <p>本次联系人已由你确认。</p>}
-    {state.confirmation === 'verified-binding' && <p>本次联系人已通过微信会话绑定确认。</p>}
+    {state.confirmation === 'verified-binding' && <p>已按会话名称匹配到配置账号的已有联系人。</p>}
     {(state.reason === 'confirmed_active_binding_name_match' || state.reason === 'confirmed_active_binding_emoji_fallback')
-      && <p>根据会话名单唯一匹配，已核验既有绑定；上方分数仍是原始 OCR 结果。</p>}
+      && <p>上方是原始 OCR 分数；低分本身不阻止名单中的唯一匹配。</p>}
     {(state.phase === 'confirmed' || state.suggestedContactId || state.recognizedName) && state.observedAt && <p>
       识别结果对应 <time dateTime={state.observedAt}>{new Date(state.observedAt).toLocaleTimeString('zh-CN', { hour12: false })}</time> 采集时的会话；之后的切换可能尚未反映。
     </p>}
     {session && state.suggestedContactId && <p>
       采集时的微信会话对应{session.state.contacts.find((item) => item.contactId === state.suggestedContactId)?.displayName}，已有编辑已保留。
-      <button onClick={() => void session.confirmContact(state.suggestedContactId!, state.foregroundRevision)}>
+      <button onClick={() => void session.confirmManualContact(state.suggestedContactId!)}>
         确认微信会话对应联系人
       </button>
     </p>}

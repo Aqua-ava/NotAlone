@@ -5,9 +5,8 @@ import {ForegroundLocator,ForegroundLocationError,type ForegroundProbe,type Fore
 import {NativeForegroundProbe} from './foreground-location-probe.ts';
 import {loadNarrowWechatOptions} from '../history/wechat/artifacts.ts';
 import {NarrowWechatClient} from '../history/wechat/native-client.ts';
-import type {SavedContactBinding} from '../contacts/sqlite/contracts.ts';
 
-export interface ForegroundSnapshot {enabled:boolean;readEpoch:string;account:{id:string;key:string;sourceGeneration:string;revision:string}|null;bindings:(SavedContactBinding&{desktopVerified:boolean;dataGeneration:string;barrierGeneration:string})[]}
+export interface ForegroundSnapshot {enabled:boolean;readEpoch:string;account:{id:string;key:string;sourceGeneration:string;revision:string}|null;bindings:{binding_id:string;contact_id:string;account_id:string;conversation_locator:string;display_name:string|null;status:'active';grant_id:string|null;selection_generation:string;identityGeneration:string;dataGeneration:string;barrierGeneration:string}[]}
 export interface ForegroundBindingConfirmation {
  observationId:string;observedAt:string;contactId:string;bindingId:string;readEpoch:string;
  accountId:string;sourceGeneration:string;scopeRevision:string;grantId:string;selectionGeneration:string;dataGeneration:string;barrierGeneration:string;
@@ -50,7 +49,6 @@ export class ForegroundSessionList {
 export class SqliteForeground {
  private locator?:ForegroundLocator;
  private locatorAccount?:string;
- private sessionNamesComplete=false;
  private closed=false;
  private changing=0;
  private active?:Promise<ForegroundObservation>;
@@ -70,18 +68,16 @@ export class SqliteForeground {
    if(!before.account)throw new ForegroundLocationError('foreground_scope_unavailable');
    const account=before.account,key=JSON.stringify(before);
    if(!this.locator||this.locatorAccount!==key){await this.locator?.invalidate();this.locatorAccount=key;this.locator=new ForegroundLocator({ownerId:this.options.ownerId,accountScope:account.key,probe:this.options.probe,
-    sessions:async o=>{const rows=await this.options.sessions(account,o);this.sessionNamesComplete=!rows.some(row=>row.chat_type==='group'&&row.display_name===row.username);return rows;},bindings:async(_signal,check)=>{const current=await this.options.snapshot();check();if(JSON.stringify(current)!==JSON.stringify(before))throw new ForegroundLocationError('foreground_scope_unavailable');return current.bindings.map(b=>({...b,owner_id:this.options.ownerId,channel:'wechat',account_scope:account.key}));}});}
+    sessions:o=>this.options.sessions(account,o),bindings:async(_signal,check)=>{const current=await this.options.snapshot();check();if(JSON.stringify(current)!==JSON.stringify(before))throw new ForegroundLocationError('foreground_scope_unavailable');return current.bindings.map(b=>({...b,owner_id:this.options.ownerId,channel:'wechat',account_scope:account.key}));}});}
    const result=await this.locator.observe({enabled:true,signal});const after=await this.options.snapshot();
    if(this.closed||this.changing||signal?.aborted||JSON.stringify(before)!==JSON.stringify(after))throw new ForegroundLocationError('foreground_observation_cancelled');
    const age=Date.now()-Date.parse(result.observed_at);if(result.phase==='confirmed'&&(!Number.isFinite(age)||age< -1000||age>=5000))throw new ForegroundLocationError('observation_timeout');
-   // 渠道元数据只证明配置来源，不证明前台微信登录的是该账号；仅桌面确认过的绑定可自动授予身份。
-   if(result.phase==='confirmed'&&(!this.sessionNamesComplete||!before.bindings.some(b=>b.binding_id===result.binding_id&&b.desktopVerified))){
+   // SQLite只提供稳定绑定；名称识别成功后直接关联已有联系人，不创建或改写身份/读取授权。
+   if(result.phase==='confirmed'){
     const binding=before.bindings.find(b=>b.binding_id===result.binding_id&&b.contact_id===result.contact_id);
-    // 仅完整名单下的唯一既有私聊可供本次明确确认；名称和身份事实不由页面提供。
-    if(this.sessionNamesComplete&&binding?.grant_id)this.pendingConfirmation={snapshot:key,proof:{observationId:result.observation_id,observedAt:result.observed_at,
+    if(binding?.grant_id)this.pendingConfirmation={snapshot:key,proof:{observationId:result.observation_id,observedAt:result.observed_at,
      contactId:binding.contact_id,bindingId:binding.binding_id,readEpoch:before.readEpoch,accountId:account.id,sourceGeneration:account.sourceGeneration,
      scopeRevision:account.revision,grantId:binding.grant_id,selectionGeneration:binding.selection_generation,dataGeneration:binding.dataGeneration,barrierGeneration:binding.barrierGeneration}};
-    return {...result,phase:'manual-required' as const,reason:'unmatched_requires_selection',binding_id:null,contact_id:null};
    }
    return result;
   })();this.active=work;void work.finally(()=>{if(this.active===work)this.active=undefined;}).catch(()=>{});return work;

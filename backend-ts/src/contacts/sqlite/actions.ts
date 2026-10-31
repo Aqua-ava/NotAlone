@@ -66,20 +66,16 @@ export const identityActions: StorageAction[] = [
  action('identity.foregroundSnapshot','read',(tx,i)=>{
   const owner=text(i.ownerId),row=tx.get("SELECT read_enabled,read_epoch FROM owner WHERE owner_id=? AND state='active'",[owner]);
   const account=tx.get("SELECT id,external_key,source_generation,scope_revision FROM channel_account WHERE owner_id=? AND identity_state='verified'",[owner]);
-  const scopes=new Map(tx.all(`SELECT b.id,p.data_generation,c.barrier_generation FROM conversation_binding b
-   JOIN contact p ON p.owner_id=b.owner_id AND p.id=b.contact_id JOIN channel_conversation c ON c.owner_id=b.owner_id AND c.id=b.conversation_id
-   WHERE b.owner_id=?`,[owner]).map(b=>[String(b.id),{dataGeneration:String(b.data_generation),barrierGeneration:String(b.barrier_generation)}]));
-  const verifiedDesktop=new Set(tx.all(`SELECT g.binding_id FROM read_grant g JOIN binding_verification v ON v.owner_id=g.owner_id AND v.binding_id=g.binding_id
-   JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id AND b.contact_id=g.contact_id
-   JOIN contact p ON p.owner_id=b.owner_id AND p.id=b.contact_id
+  // 前台关联只使用已确认身份；读取许可撤销不撤销既有联系人和稳定会话绑定。
+  const currentBindings=row&&account?tx.all(`SELECT b.id AS binding_id,b.contact_id,c.account_id,c.external_key AS conversation_locator,c.display_name,
+   'active' AS status,g.id AS grant_id,CAST(p.selection_generation AS TEXT) AS selection_generation,
+   CAST(b.identity_generation AS TEXT) AS identityGeneration,CAST(p.data_generation AS TEXT) AS dataGeneration,CAST(c.barrier_generation AS TEXT) AS barrierGeneration
+   FROM conversation_binding b JOIN contact p ON p.owner_id=b.owner_id AND p.id=b.contact_id
    JOIN channel_conversation c ON c.owner_id=b.owner_id AND c.id=b.conversation_id
-   JOIN channel_account a ON a.owner_id=c.owner_id AND a.id=c.account_id
-   WHERE g.owner_id=? AND g.revoked_at IS NULL AND v.method='foreground_confirmation' AND b.state='verified' AND p.state='active'
-   AND a.identity_state='verified' AND v.identity_generation=b.identity_generation AND g.selection_generation=p.selection_generation
-   AND json_extract(v.proof,'$.account_id')=a.id AND json_extract(v.proof,'$.source_generation')=a.source_generation
-   AND json_extract(v.proof,'$.grant_id')=g.id AND json_extract(v.proof,'$.selection_generation')=CAST(p.selection_generation AS TEXT)`,[owner]).map(b=>String(b.binding_id)));
+   LEFT JOIN read_grant g ON g.owner_id=b.owner_id AND g.binding_id=b.id AND g.contact_id=p.id AND g.revoked_at IS NULL AND g.selection_generation=p.selection_generation
+   WHERE b.owner_id=? AND c.account_id=? AND b.state='verified' AND p.state='active' ORDER BY b.id`,[owner,account.id]):[];
   return {enabled:row?.read_enabled===1n,readEpoch:String(row?.read_epoch??''),account:account?{id:String(account.id),key:String(account.external_key),sourceGeneration:String(account.source_generation),revision:String(account.scope_revision)}:null,
-   bindings:bindings(tx,owner).filter(b=>b.status==='active'&&b.account_id===account?.id).map(b=>({...b,...scopes.get(b.binding_id)!,desktopVerified:verifiedDesktop.has(b.binding_id)}))};
+   bindings:currentBindings};
  }),
  action('identity.confirmForeground','write',(tx,i)=>{
   const proof=i.proof;if(!proof||typeof proof!=='object')fail('foreground_confirmation_stale');
