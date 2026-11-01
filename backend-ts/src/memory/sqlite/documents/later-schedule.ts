@@ -212,11 +212,12 @@ export function resumeRunSchedule(tx:StorageTransaction,ownerId:string,runId:str
  return resumed;
 }
 
-export function laterStagesState(tx:StorageTransaction,ownerId:string,runId:string):LaterStagesProjection|null {
+export function laterStagesState(tx:StorageTransaction,ownerId:string,runId:string,contactId?:string):LaterStagesProjection|null {
  if(!exists(tx)||!tx.get('SELECT 1 FROM memory_document_later_run_requirement WHERE owner_id=? AND run_id=?',[ownerId,runId]))return null;
  const rows=tx.all(`SELECT q.scope_key,q.generation,q.outcome,q.paused,q.reason,s.stage,s.state,s.due_at,s.error_code FROM memory_document_later_run_requirement q
   LEFT JOIN memory_document_later_schedule s ON s.owner_id=q.owner_id AND s.scope_key=q.scope_key AND s.generation=q.generation
-  WHERE q.owner_id=? AND q.run_id=? ORDER BY q.scope_key`,[ownerId,runId]);
+  WHERE q.owner_id=? AND q.run_id=?${contactId===undefined?'':" AND q.scope_kind='contact' AND q.contact_id=?"} ORDER BY q.scope_key`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]);
+ if(!rows.length)return null;
  const linkedScopes=rows.filter(row=>row.outcome==='pending'&&row.generation!==null).map(row=>String(row.scope_key));
  const scopeUnknown=linkedScopes.some(scopeKey=>!!tx.get("SELECT 1 FROM memory_document_later_schedule WHERE owner_id=? AND scope_key=? AND state='unknown' LIMIT 1",[ownerId,scopeKey]));
  if(scopeUnknown||rows.some(row=>row.outcome==='unknown'||row.state==='unknown'))return {state:'unknown',reasons:['document_call_unknown'],nextDueAt:null,stage:null};
@@ -225,19 +226,19 @@ export function laterStagesState(tx:StorageTransaction,ownerId:string,runId:stri
  if(l1.state==='revoked')return {state:'revoked',reasons:['document_run_revoked'],nextDueAt:null,stage:null};
  if(tx.get(`SELECT 1 FROM processing_task t WHERE t.owner_id=? AND t.run_id=? AND
   (t.state='unknown' OR EXISTS(SELECT 1 FROM processing_step s LEFT JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id LEFT JOIN model_call c ON c.owner_id=a.owner_id AND c.step_attempt_id=a.id
-   WHERE s.owner_id=t.owner_id AND s.task_id=t.id AND (s.state='unknown' OR a.state='unknown' OR c.state='unknown'))) LIMIT 1`,[ownerId,runId]))
+   WHERE s.owner_id=t.owner_id AND s.task_id=t.id AND (s.state='unknown' OR a.state='unknown' OR c.state='unknown')))${contactId===undefined?'':" AND t.scope_kind='contact' AND t.contact_id=?"} LIMIT 1`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]))
   return {state:'unknown',reasons:['extraction_call_unknown'],nextDueAt:null,stage:null};
- const l1Tasks=tx.all('SELECT state,scope_kind,error_code FROM processing_task WHERE owner_id=? AND run_id=?',[ownerId,runId]);
- if(l1.state==='failed'||l1Tasks.some(task=>task.state==='failed'))return {state:'failed',reasons:['l1_preceding_stage_failed'],nextDueAt:null,stage:null};
+ const l1Tasks=tx.all(`SELECT state,scope_kind,error_code FROM processing_task WHERE owner_id=? AND run_id=?${contactId===undefined?'':" AND scope_kind='contact' AND contact_id=?"}`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]);
+ if(contactId===undefined&&l1.state==='failed'||l1Tasks.some(task=>task.state==='failed'))return {state:'failed',reasons:['l1_preceding_stage_failed'],nextDueAt:null,stage:null};
  const scopeFailed=linkedScopes.some(scopeKey=>!!tx.get("SELECT 1 FROM memory_document_later_schedule WHERE owner_id=? AND scope_key=? AND state='failed' LIMIT 1",[ownerId,scopeKey]));
  if(scopeFailed||rows.some(row=>row.outcome==='failed'||row.state==='failed'))return {state:'failed',reasons:['later_stage_failed'],nextDueAt:null,stage:null};
  const pendingCandidate=!!tx.get(`SELECT 1 FROM memory_candidate c JOIN step_attempt a ON a.owner_id=c.owner_id AND a.id=c.produced_attempt_id
   JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
-  WHERE t.owner_id=? AND t.run_id=? AND c.state='pending' LIMIT 1`,[ownerId,runId]);
+  WHERE t.owner_id=? AND t.run_id=? AND c.state='pending'${contactId===undefined?'':" AND t.scope_kind='contact' AND t.contact_id=?"} LIMIT 1`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]);
  const unfinishedTask=l1Tasks.some(task=>task.state!=='succeeded'&&task.state!=='revoked'&&
   !(task.scope_kind==='self'&&task.state==='awaiting_decision')&&
   !(task.scope_kind==='contact'&&task.state==='incomplete'&&task.error_code==='targets_completed_elsewhere'));
- if(!l1Tasks.length||pendingCandidate||unfinishedTask||!['completed','incomplete','paused'].includes(String(l1.state)))
+ if(!l1Tasks.length||pendingCandidate||unfinishedTask||contactId===undefined&&!['completed','incomplete','paused'].includes(String(l1.state)))
   return {state:'pending',reasons:['l1_preceding_stage_incomplete'],nextDueAt:null,stage:null};
  const unresolved=rows.filter(row=>row.outcome==='pending');
  const scheduled=unresolved.filter(row=>row.state==='scheduled');
@@ -250,10 +251,10 @@ export function laterStagesState(tx:StorageTransaction,ownerId:string,runId:stri
  return {state:'completed',reasons:[],nextDueAt:null,stage:null};
 }
 
-export function queueSummary(tx:StorageTransaction,ownerId:string,now=Date.now()):{pending:number;nextDueAt:number|null;stage:'document_scene'|'document_profile'|null} {
+export function queueSummary(tx:StorageTransaction,ownerId:string,now=Date.now(),contactId?:string):{pending:number;nextDueAt:number|null;stage:'document_scene'|'document_profile'|null} {
  if(!exists(tx))return {pending:0,nextDueAt:null,stage:null};
- const pending=tx.get("SELECT count(*) AS n FROM memory_document_later_schedule WHERE owner_id=? AND state IN ('scheduled','running','failed','unknown')",[ownerId])!;
- const due=dueRows(tx,ownerId,now,true)[0];
+ const pending=tx.get(`SELECT count(*) AS n FROM memory_document_later_schedule WHERE owner_id=? AND state IN ('scheduled','running','failed','unknown')${contactId===undefined?'':" AND scope_kind='contact' AND contact_id=?"}`,contactId===undefined?[ownerId]:[ownerId,contactId])!;
+ const due=dueRows(tx,ownerId,now,true).find(row=>contactId===undefined||row.scope_kind==='contact'&&row.contact_id===contactId);
  return {pending:Number(pending.n),nextDueAt:due?Number(due.due_at):null,stage:due?String(due.stage) as 'document_scene'|'document_profile':null};
 }
 

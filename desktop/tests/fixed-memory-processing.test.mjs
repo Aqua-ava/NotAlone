@@ -24,6 +24,20 @@ test('固定轮次具名入口只发request_key，保留未完成阶段且旧连
  f.changeGeneration();const count=f.calls.length;await assert.rejects(f.controller.start({requestKey:ids.request,connectionGeneration:1}));assert.equal(f.calls.length,count);
  await assert.rejects(f.controller.start({requestKey:ids.request,connectionGeneration:2,ownerId:'other'}));assert.equal(f.calls.length,count);
 });
+test('联系人状态使用独立只读入口，拒绝错范围、混入本人和额外输入',async t=>{
+ let data={contactId:ids.contact,run:snapshot(),queue:{pending:2,nextDueAt:123,blockedContacts:0,later:{pending:0,nextDueAt:null,stage:null}}};
+ const f=await fixture(t,async()=>data);
+ const view=await f.controller.read({contactId:ids.contact});
+ assert.equal(f.calls.length,1);
+ assert.equal(f.calls[0].path,`/api/memory-processing/contacts/${ids.contact}/current`);
+ assert.equal(f.calls[0].method,'GET');assert.equal(view.contactId,ids.contact);assert.equal(view.queue.pending,2);
+ data={...data,contactId:ids.request};await assert.rejects(f.controller.read({contactId:ids.contact}));
+ data={...data,contactId:ids.contact,run:{...snapshot(),tasks:[{...snapshot().tasks[0],scopeKind:'self',contactId:null}]}};
+ await assert.rejects(f.controller.read({contactId:ids.contact}));
+ const count=f.calls.length;
+ await assert.rejects(f.controller.read({contactId:ids.contact,ownerId:'other'}));
+ await assert.rejects(f.controller.read({contactId:'invalid'}));assert.equal(f.calls.length,count);
+});
 test('状态读取拒绝会通知撤下旧快照，失效后旧回调不能返回正文',async t=>{
  let rejectRead=false,finish,entered;
  const started=new Promise(resolve=>{entered=resolve;});const pending=new Promise(resolve=>{finish=resolve;});let wait=false;
@@ -74,6 +88,9 @@ test('具名模式桥不接受renderer自选模式或额外参数',async t=>{
  const bridge=createFixedMemoryProcessingBridge({invoke:async(...args)=>{calls.push(args);return {mode:'sqlite',connectionGeneration:1};}});
  assert.deepEqual(await bridge.readMode(),{mode:'sqlite',connectionGeneration:1});assert.deepEqual(calls,[['memory:fixed-processing-mode']]);
  await assert.rejects(bridge.readMode('legacy'));assert.equal(calls.length,1);
+ await bridge.readCurrent({contactId:ids.contact});
+ assert.deepEqual(calls.at(-1),['memory:fixed-processing-current',{contactId:ids.contact}]);
+ await assert.rejects(bridge.readCurrent({contactId:ids.contact},'extra'));assert.equal(calls.length,2);
 });
 
 test('面板释放只取消正文，模式核验仍等待其回执且完整资格变化会取消模式',async t=>{

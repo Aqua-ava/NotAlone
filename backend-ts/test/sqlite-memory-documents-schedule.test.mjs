@@ -42,6 +42,11 @@ test('真实L1记忆可立即读取；L2合并窗口到期后单独发布，首�
  const scope={scopeKind:'contact',contactId:f.contactId},scheduled=await f.documents.readSchedule(scope),firstChangeAt=scheduled.scene.firstChangedAt;
  assert.equal(scheduled.scene.state,'scheduled');assert.equal(scheduled.scene.dueAt,firstChangeAt+60*60*1000);
  assert.equal(scheduled.scene.memoryRevision,'1');
+ const contactView=await f.extraction.readContact(f.contactId),otherView=await f.extraction.readContact(f.saved[1].contact_id);
+ assert.equal(contactView.run.status,'waiting');assert.equal(contactView.run.statusReason,'later_stages_scheduled');
+ assert.equal(contactView.run.nextDueAt,scheduled.scene.dueAt);assert.equal(contactView.queue.later.pending,1);
+ assert.equal(contactView.queue.later.nextDueAt,scheduled.scene.dueAt);
+ assert.equal(otherView.run,null);assert.deepEqual(otherView.queue.later,{pending:0,nextDueAt:null,stage:null});
  const memory=l1.memories.find(item=>item.current.body==='联系人长期喜欢合成园艺。');
  await f.management.decide({requestKey:'later-schedule-coalesced-edit',action:'correct',memoryId:memory.id,expectedVersionNo:memory.current.versionNo,expectedHeadRevision:memory.headRevision,body:'联系人长期喜欢水培园艺。'});
  const afterEdit=await f.documents.readSchedule(scope);assert.equal(afterEdit.scene.generation,scheduled.scene.generation);
@@ -64,6 +69,8 @@ test('真实L1记忆可立即读取；L2合并窗口到期后单独发布，首�
  assert.equal(settled.scene.state,'succeeded');assert.equal(settled.profile.state,'succeeded');
  assert.ok(settled.profile.lastSuccessAt>0&&settled.profile.lastSuccessAt<=scheduled.scene.dueAt);
  assert.equal(await f.documents.nextDueAt(),null);
+ const ownCompleted=await f.extraction.readContact(f.contactId);
+ assert.equal(ownCompleted.run.status,'completed');assert.equal(ownCompleted.run.laterStages,'completed');assert.equal(ownCompleted.queue.later.pending,0);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 

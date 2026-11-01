@@ -83,6 +83,8 @@ export class SqliteMemoryExtraction {
   finally{if(!this.stopped)await this.storage.execute('memoryExtraction.finishLater',{ownerId:this.ownerId,runId});}
  }
  read(runId?:string){this.available();return this.storage.execute<any>('memoryExtraction.read',{ownerId:this.ownerId,runId});}
+ /** 当前联系人的独立进度与队列；不启动任务，也不包含本人或其他联系人的资料。 */
+ readContact(contactId:string){this.available();return this.storage.execute<any>('memoryExtraction.readContact',{ownerId:this.ownerId,contactId});}
  trace(taskId:string){this.available();return this.storage.execute<any>('memoryExtraction.trace',{ownerId:this.ownerId,taskId});}
  /** 用户暂停带控制修订CAS；共享故障的宿主内暂停不带版本，仍走同一事务状态机。 */
  async pause(runId:string,actionVersion?:number,operationId?:string){return this.admit(()=>this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'pause',...(actionVersion===undefined?{}:{actionVersion,operationId})}));}

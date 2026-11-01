@@ -58,15 +58,15 @@ export function taskView(tx:StorageTransaction,ownerId:string,taskId:string){
 }
 export interface LaterStagesState extends LaterStagesProjection {}
 /** 整轮后置阶段投影：completed 仅在全部任务适用阶段结束、完整发布集合仍可用且无未解未知文档调用时成立。 */
-export function laterStagesState(tx:StorageTransaction,ownerId:string,runId:string):LaterStagesState {
- const scheduled=scheduledLaterStagesState(tx,ownerId,runId);if(scheduled)return scheduled;
+export function laterStagesState(tx:StorageTransaction,ownerId:string,runId:string,contactId?:string):LaterStagesState {
+ const scheduled=scheduledLaterStagesState(tx,ownerId,runId,contactId);if(scheduled)return scheduled;
  const run=tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);
  if(!run)return {state:'pending',reasons:['document_run_missing'],nextDueAt:null,stage:null};
  if(run.state==='revoked')return {state:'revoked',reasons:['document_run_revoked'],nextDueAt:null,stage:null};
  // 12 及更早结构没有文档表；迁移前的轮次视图不能据此宣称后置阶段完成。
  if(!tx.get('SELECT 1 FROM schema_migration WHERE version=13'))return {state:run.state==='completed'?'completed':run.state==='failed'?'failed':'pending',reasons:['document_schema_unavailable'],nextDueAt:null,stage:null};
  const reasons:string[]=[];
- const tasks=tx.all('SELECT * FROM processing_task WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[ownerId,runId]);
+ const tasks=tx.all('SELECT * FROM processing_task WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[ownerId,runId]).filter(task=>contactId===undefined||task.scope_kind==='contact'&&task.contact_id===contactId);
  if(!tasks.length)reasons.push('document_run_without_tasks');
  for(const t of tasks){
   const view=taskView(tx,ownerId,String(t.id));
@@ -80,11 +80,12 @@ export function laterStagesState(tx:StorageTransaction,ownerId:string,runId:stri
  // 未解 unknown 仍可能出现在租约或调用回执上；不能以缺记录或任务态冒充完成。
  const unresolved=tx.get(`SELECT 1 FROM processing_step s JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
   WHERE t.owner_id=? AND t.run_id=? AND s.kind IN ('document_scene','document_profile')
+  ${contactId===undefined?'':" AND t.scope_kind='contact' AND t.contact_id=?"}
   AND (s.state='unknown' OR EXISTS(SELECT 1 FROM step_attempt a WHERE a.owner_id=s.owner_id AND a.step_id=s.id AND a.state='unknown')
-   OR EXISTS(SELECT 1 FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE o.owner_id=s.owner_id AND o.memory_step_id=s.id AND c.state='unknown')) LIMIT 1`,[ownerId,runId]);
+   OR EXISTS(SELECT 1 FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE o.owner_id=s.owner_id AND o.memory_step_id=s.id AND c.state='unknown')) LIMIT 1`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]);
  if(unresolved)reasons.push('document_call_unknown');
- if(reasons.length)return {state:run.state==='failed'?'failed':'pending',reasons,nextDueAt:null,stage:null};
- return run.state==='completed'?{state:'completed',reasons:[],nextDueAt:null,stage:null}:{state:'pending',reasons:[`document_run_${String(run.state)}`],nextDueAt:null,stage:null};
+ if(reasons.length)return {state:(contactId===undefined?run.state==='failed':tasks.some(task=>task.state==='failed'))?'failed':'pending',reasons,nextDueAt:null,stage:null};
+ return contactId!==undefined||run.state==='completed'?{state:'completed',reasons:[],nextDueAt:null,stage:null}:{state:'pending',reasons:[`document_run_${String(run.state)}`],nextDueAt:null,stage:null};
 }
 function noFormalChangeStatus(tx:StorageTransaction,ownerId:string,s:{scopeKind:'self'|'contact';contactId:string|null},latest:StorageRow):'idle'|'processing'|'needs_revalidation'|null {
  if(latest.state!=='succeeded'&&!(s.scopeKind==='self'&&latest.state==='awaiting_decision'))return null;

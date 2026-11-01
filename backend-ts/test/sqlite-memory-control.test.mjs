@@ -51,6 +51,51 @@ const steps=(f,taskId)=>f.storage.execute('fixture.steps',{ownerId:owner,taskId}
 const calls=(f,runId)=>f.storage.execute('fixture.modelCalls',{ownerId:owner,runId});
 const contactTask=(rows,contactId)=>rows.find(row=>row.scope_kind==='contact'&&row.contact_id===contactId);
 
+test('联系人处理快照隔离同轮其他联系人的失败、本人任务和调用',async t=>{
+ const f=await fixtureWithMessages(t,{a:['我长期住在高雄。'],b:['我长期住在台南。']});
+ const x=extractionFixture(f);t.after(()=>x.service.close());
+ const rejected=supplier({negative:true}),accepted=supplier();
+ x.state.respond=(request,input)=>(input.scope.contact_id===f.ca?rejected:accepted).respond(request,input);
+ const run=await x.service.start('control-contact-isolation');await x.service.waitForIdle(run.runId);
+ const callsBefore=x.state.calls;
+ const a=await x.service.readContact(f.ca),b=await x.service.readContact(f.cb);
+ assert.equal(a.contactId,f.ca);assert.equal(b.contactId,f.cb);
+ assert.equal(a.run.runId,run.runId);assert.equal(b.run.runId,run.runId);
+ assert.equal(a.run.total,1);assert.equal(a.run.succeeded,0);assert.equal(a.run.failed,1);
+ assert.equal(a.run.status,'blocked');assert.equal(a.run.tasks[0].errorCode,'memory_extraction_source_insufficient');
+ assert.equal(b.run.total,1);assert.equal(b.run.succeeded,1);assert.equal(b.run.failed,0);
+ assert.equal(b.run.statusReason,'later_stages_pending','其他联系人失败不能污染已完成提取的联系人');
+ for(const [view,contactId] of [[a,f.ca],[b,f.cb]]){
+  assert.equal(view.run.tasks.length,1);assert.equal(view.run.tasks[0].scopeKind,'contact');
+  assert.equal(view.run.tasks[0].contactId,contactId);assert.ok(view.run.inputs.every(input=>input.contactId===contactId));
+  assert.ok(view.run.candidates.every(candidate=>candidate.contactId===contactId));
+  assert.equal(view.run.calls.succeeded,2);assert.deepEqual(view.run.actions,[],'单联系人只读投影不能提供整轮控制动作');
+ }
+ assert.equal(x.state.calls,callsBefore,'查询状态不能调用模型');
+});
+
+test('没有当前联系人处理记录时返回空；各联系人保留自己的最近轮次',async t=>{
+ const f=await fixture(t,{registryModule}),[a,b]=f.saved.map(binding=>binding.contact_id);
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'我长期喜欢合成园艺。'})],completedPartitions:['shard-a'],exhausted:true});
+ const x=extractionFixture(f);t.after(()=>x.service.close());
+ assert.deepEqual(await x.service.readContact(b),{contactId:b,run:null,queue:{pending:0,nextDueAt:null,blockedContacts:0,later:{pending:0,nextDueAt:null,stage:null}}});
+ await f.service.synchronize(a);const first=await x.service.start('contact-first-a');await x.service.waitForIdle(first.runId);
+ assert.equal((await x.service.readContact(b)).run,null,'甲的记录不成为乙的最近记录');
+ await f.service.synchronize(b);const second=await x.service.start('contact-second-b');await x.service.waitForIdle(second.runId);
+ assert.notEqual(first.runId,second.runId);
+ assert.equal((await x.service.readContact(a)).run.runId,first.runId);assert.equal((await x.service.readContact(b)).run.runId,second.runId);
+ await assert.rejects(x.service.readContact('not-a-contact'),error=>error.code==='memory_extraction_input_invalid');
+ await assert.rejects(x.service.readContact(randomUUID()),error=>error.code==='memory_extraction_not_found');
+ const foreign=new SqliteMemoryExtraction(f.storage,randomUUID(),x.port);t.after(()=>foreign.close());
+ await assert.rejects(foreign.readContact(a),error=>error.code==='memory_extraction_not_found');
+ const binding=f.saved.find(binding=>binding.contact_id===a);
+ await f.contacts.revoke(a,binding.binding_id,binding.selection_generation);
+ const revoked=await x.service.readContact(a);
+ assert.equal(revoked.run.status,'blocked');assert.equal(revoked.run.tasks[0].state,'revoked');assert.equal(revoked.run.revoked,1);
+ assert.deepEqual(revoked.run.candidates,[],'撤销范围后不显示旧候选正文');
+ assert.ok((await x.service.readContact(b)).run.tasks.every(task=>task.state!=='revoked'));
+});
+
 test('统一状态只呈现固定轮次/实际阶段/计数，不以历史失败或数量换算冒充完成',async t=>{
  const f=await fixtureWithMessages(t,{a:['我长期住在高雄。'],b:['我长期住在台南。']});
  const x=extractionFixture(f);t.after(()=>x.service.close());

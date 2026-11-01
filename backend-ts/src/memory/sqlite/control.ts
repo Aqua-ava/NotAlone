@@ -49,9 +49,9 @@ function resolvableStep(tx:StorageTransaction,ownerId:string,stepId:string):bool
  const calls=tx.all('SELECT c.state FROM model_call c WHERE c.owner_id=? AND c.step_attempt_id IN (SELECT id FROM step_attempt WHERE owner_id=? AND step_id=?)',[ownerId,ownerId,stepId]);
  return calls.length>0&&calls.every(call=>call.state==='succeeded'||call.state==='failed');
 }
-function unknownSteps(tx:StorageTransaction,ownerId:string,runId:string):StorageRow[]{
+function unknownSteps(tx:StorageTransaction,ownerId:string,runId:string,contactId?:string):StorageRow[]{
  return tx.all(`SELECT s.* FROM processing_step s JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
-  WHERE t.owner_id=? AND t.run_id=? AND s.state='unknown' AND t.state<>'revoked'`,[ownerId,runId]);
+  WHERE t.owner_id=? AND t.run_id=? AND s.state='unknown' AND t.state<>'revoked'${contactId===undefined?'':" AND t.scope_kind='contact' AND t.contact_id=?"}`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]);
 }
 /** 用户手动继续时，只有全部相关回执已知的中断才允许恢复为可重试；真实未知保持原状。 */
 export function reconcileKnownInterruptions(tx:StorageTransaction,ownerId:string,runId:string):number{
@@ -64,20 +64,20 @@ export function reconcileKnownInterruptions(tx:StorageTransaction,ownerId:string
  }
  return reconciled;
 }
-function targetClasses(tx:StorageTransaction,ownerId:string,runId:string,taskStates:Map<string,string>):{states:string[];pending:number;revoked:number}{
+function targetClasses(tx:StorageTransaction,ownerId:string,runId:string,taskStates:Map<string,string>,contactId?:string):{states:string[];pending:number;revoked:number}{
  const tasks=tx.all('SELECT id,scope_kind,contact_id FROM processing_task WHERE owner_id=? AND run_id=?',[ownerId,runId]);
  const contactTask=new Map<string,{id:string;revoked:boolean}>();
  for(const task of tasks)if(task.scope_kind==='contact')contactTask.set(String(task.contact_id),{id:String(task.id),revoked:taskStates.get(String(task.id))==='revoked'});
- const resolvedUnknownSteps=new Set(unknownSteps(tx,ownerId,runId).filter(step=>resolvableStep(tx,ownerId,String(step.id))).map(step=>String(step.id)));
+ const resolvedUnknownSteps=new Set(unknownSteps(tx,ownerId,runId,contactId).filter(step=>resolvableStep(tx,ownerId,String(step.id))).map(step=>String(step.id)));
  const rows=tx.all(`SELECT i.input_no,i.source_contact_id,i.item_id,s.id AS step_id,s.state AS step_state,s.step_no,s.task_id
   FROM run_input i JOIN step_input si ON si.owner_id=i.owner_id AND si.run_id=i.run_id AND si.run_input_no=i.input_no
   JOIN processing_step s ON s.owner_id=si.owner_id AND s.id=si.step_id
   JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
-  WHERE i.owner_id=? AND i.run_id=? AND i.role='target'`,[ownerId,runId]);
+  WHERE i.owner_id=? AND i.run_id=? AND i.role='target'${contactId===undefined?'':" AND t.scope_kind='contact' AND t.contact_id=?"}`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]);
  const latest=new Map<string,StorageRow>();
  for(const row of rows){const key=String(row.input_no),prior=latest.get(key);if(!prior||(row.step_no as bigint)>(prior.step_no as bigint))latest.set(key,row);}
  const states:string[]=[];let pending=0,revoked=0;
- for(const input of tx.all("SELECT input_no,source_contact_id,item_id FROM run_input WHERE owner_id=? AND run_id=? AND role='target'",[ownerId,runId])){
+ for(const input of tx.all(`SELECT input_no,source_contact_id,item_id FROM run_input WHERE owner_id=? AND run_id=? AND role='target'${contactId===undefined?'':' AND source_contact_id=?'}`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId])){
   const task=contactTask.get(String(input.source_contact_id));
   if(!task||task.revoked){revoked++;states.push('revoked');continue;}
   const row=latest.get(String(input.input_no));
@@ -90,13 +90,13 @@ function targetClasses(tx:StorageTransaction,ownerId:string,runId:string,taskSta
  }
  return {states,pending,revoked};
 }
-function calls(tx:StorageTransaction,ownerId:string,runId:string):ControlCallSummary{
+function calls(tx:StorageTransaction,ownerId:string,runId:string,contactId?:string):ControlCallSummary{
  const summary:ControlCallSummary={prepared:0,sending:0,succeeded:0,failed:0,unknown:0};
  for(const row of tx.all(`SELECT c.state,count(*) AS n FROM model_call c
   JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
   JOIN processing_step s ON s.owner_id=o.owner_id AND s.id=o.memory_step_id
   JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
-  WHERE t.owner_id=? AND t.run_id=? GROUP BY c.state`,[ownerId,runId])){
+  WHERE t.owner_id=? AND t.run_id=?${contactId===undefined?'':" AND t.scope_kind='contact' AND t.contact_id=?"} GROUP BY c.state`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId])){
   const state=String(row.state);if(state in summary)summary[state as keyof ControlCallSummary]=count(row.n);
  }
  return summary;
@@ -118,10 +118,10 @@ function resumable(tx:StorageTransaction,ownerId:string,runId:string,rows:Storag
  return false;
 }
 /** 只读投影；后续阶段由09的 laterStagesState 提供，未合并时视为尚未完成。 */
-export function projectControl(tx:StorageTransaction,ownerId:string,run:StorageRow,options:{laterStages?:LaterStagesState;taskStates?:Map<string,string>}={}):ControlProjection{
+export function projectControl(tx:StorageTransaction,ownerId:string,run:StorageRow,options:{laterStages?:LaterStagesState;taskStates?:Map<string,string>;contactId?:string}={}):ControlProjection{
  const runId=String(run.id),state=String(run.state),pauseRequested=run.pause_requested_at!==null;
  const taskStates=options.taskStates??currentTaskStates(tx,ownerId,runId);
- const taskRows=tasks(tx,ownerId,runId),callsSummary=calls(tx,ownerId,runId),classes=targetClasses(tx,ownerId,runId,taskStates);
+ const taskRows=tasks(tx,ownerId,runId).filter(task=>options.contactId===undefined||task.scope_kind==='contact'&&task.contact_id===options.contactId),callsSummary=calls(tx,ownerId,runId,options.contactId),classes=targetClasses(tx,ownerId,runId,taskStates,options.contactId);
  const laterStages:LaterStagesState=options.laterStages??(state==='completed'?'completed':'pending');
  const activeTasks=taskRows.filter(task=>taskStates.get(String(task.id))!=='revoked');
  const failedTasks=activeTasks.filter(task=>taskStates.get(String(task.id))==='failed');
@@ -130,7 +130,7 @@ export function projectControl(tx:StorageTransaction,ownerId:string,run:StorageR
  const classUnknown=classes.states.includes('unknown');
  const taskUnknown=[...taskStates.values()].includes('unknown');
  const anyUnknown=callUnknown||classUnknown;
- const interruptedKnown=!anyUnknown&&(taskUnknown||unknownSteps(tx,ownerId,runId).length>0);
+ const interruptedKnown=!anyUnknown&&(taskUnknown||unknownSteps(tx,ownerId,runId,options.contactId).length>0);
  const canResume=resumable(tx,ownerId,runId,taskRows,taskStates);
  const retryable=failedTasks.length>0||classes.pending>0;
  const controlVersion=count(run.intent_revision);

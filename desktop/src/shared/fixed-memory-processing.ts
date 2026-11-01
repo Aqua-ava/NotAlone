@@ -41,14 +41,15 @@ export interface FixedProcessingQueue {
   pending: number; nextDueAt: number | null; blockedContacts: number;
   later?: { pending: number; nextDueAt: number | null; stage: 'document_scene' | 'document_profile' | null };
 }
-export interface FixedProcessingView { connectionGeneration: number; run: FixedProcessingRun | null; queue?: FixedProcessingQueue }
+export interface FixedProcessingView { connectionGeneration: number; contactId?: string; run: FixedProcessingRun | null; queue?: FixedProcessingQueue }
+export interface FixedProcessingRead { contactId: string }
 export interface FixedProcessingMode { connectionGeneration: number; mode: 'sqlite' | 'legacy' }
 export interface FixedProcessingStart { requestKey: string; connectionGeneration: number }
 export interface FixedProcessingControl { runId: string; controlVersion: number; operationId: string; connectionGeneration: number }
 export interface FixedProcessingTraceRequest { taskId: string; connectionGeneration: number }
 export interface FixedMemoryProcessingBridge {
   readMode(): Promise<FixedProcessingMode>;
-  readCurrent(): Promise<FixedProcessingView>;
+  readCurrent(request?: FixedProcessingRead): Promise<FixedProcessingView>;
   start(request: FixedProcessingStart): Promise<FixedProcessingView>;
   pause(request: FixedProcessingControl): Promise<FixedProcessingView>;
   continue(request: FixedProcessingControl): Promise<FixedProcessingView>;

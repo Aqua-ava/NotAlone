@@ -40,7 +40,7 @@ async function withEntry(t, command, inspect, controller = false) {
         listeners.add(() => controller.synchronize());
         const bridge = {
           readMode: async () => { try { return await controller.mode(); } finally { window.modeSettled++; } },
-          readCurrent: () => controller.read(),
+          readCurrent: request => controller.read(request),
           start: request => controller.start(request),
           pause: request => controller.control('pause', request),
           continue: request => controller.control('continue', request),
@@ -52,7 +52,7 @@ async function withEntry(t, command, inspect, controller = false) {
             invalidations.add(listener); return () => invalidations.delete(listener);
           };
           return async (...args) => {
-            try { return await window.command(method, ...args); }
+            try { const value = await window.command(method, ...args); return method === 'readCurrent' && value ? {...value,contactId:args[0]?.contactId} : value; }
             finally { if (method === 'readMode') window.modeSettled++; }
           };
         }});`}
@@ -65,7 +65,7 @@ async function withEntry(t, command, inspect, controller = false) {
         }
         const root = createRoot(document.getElementById('root'));
         let scopeKey = 'scope-a', revision = 0;
-        const render = () => root.render(<MemoryProcessingEntry bridge={bridge} backend={backend} scopeKey={scopeKey}><LegacyBody/></MemoryProcessingEntry>);
+        const render = () => root.render(<MemoryProcessingEntry bridge={bridge} backend={backend} contactId="33333333-3333-4333-8333-333333333333" scopeKey={scopeKey}><LegacyBody/></MemoryProcessingEntry>);
         window.emitBackend = phase => {
           for (const listener of listeners) listener({phase, revision: ++revision, reused: false,
             canRetryConnection: false, canRetryShutdown: false, canSaveStartupPaths: false, canPrepareConfiguration: false});
@@ -230,7 +230,7 @@ test('真实控制器在旧面板释放后仍能完成 connected 触发的合法
       modeReads++;
       return modeReads === 1 ? status : reconnectedMode.promise;
     }
-    if (path === '/api/memory-processing/runs/current') return null;
+    if (path === '/api/memory-processing/contacts/33333333-3333-4333-8333-333333333333/current') return {contactId:'33333333-3333-4333-8333-333333333333',run:null,queue:{pending:0,nextDueAt:null,blockedContacts:0}};
     throw new Error(`未约定的合成请求：${path}`);
   }, async page => {
     const panel = page.getByRole('region', { name: '固定范围记忆处理' });

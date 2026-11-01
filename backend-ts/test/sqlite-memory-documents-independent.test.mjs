@@ -29,6 +29,17 @@ test('真正的文档阶段失败仍写入任务错误并投影到失败步骤',
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
+test('联系人全部阶段完成后撤销读取范围，状态和正文随当前资格失效',async t=>{
+ const f=await documentFixture(t);
+ const run=await f.extraction.start('contact-completed-then-revoked');await f.extraction.waitForIdle(run.runId);
+ const before=await f.extraction.readContact(f.contactId);assert.equal(before.run.status,'completed');assert.equal(before.run.stage,'completed');
+ const binding=f.saved.find(binding=>binding.contact_id===f.contactId);
+ await f.contacts.revoke(f.contactId,binding.binding_id,binding.selection_generation);
+ const after=await f.extraction.readContact(f.contactId);
+ assert.equal(after.run.state,'revoked');assert.equal(after.run.status,'blocked');assert.equal(after.run.laterStages,'pending');
+ assert.notEqual(after.run.stage,'completed');assert.deepEqual(after.run.candidates,[]);assert.equal(after.run.tasks[0].state,'revoked');
+});
+
 test('同轮甲提取失败时已成功的乙仍可完成文档发布，整轮保持失败',async t=>{
  let failedContact;
  const f=await deletionFixture(t,{twoContacts:true,ownerB:false,beforeExtractionPrepare:async({request,input})=>{
@@ -47,6 +58,10 @@ test('同轮甲提取失败时已成功的乙仍可完成文档发布，整轮�
  assert.equal(document.outcome,'completed','无关联系人的局部失败不能阻塞乙的09');
  assert.deepEqual(document.stages.map(stage=>stage.status),['succeeded','succeeded']);
  assert.equal(view.publication.members.length,2);assert.ok(view.documents.every(item=>JSON.stringify(item).includes('合成登山')));
+ const ownA=await f.extraction.readContact(f.contactId),ownB=await f.extraction.readContact(f.otherContactId);
+ assert.equal(ownA.run.status,'blocked');assert.equal(ownA.run.failed,ownA.run.total);
+ assert.equal(ownB.run.status,'completed');assert.equal(ownB.run.state,'completed');assert.equal(ownB.run.laterStages,'completed');
+ assert.equal(ownB.run.failed,0);assert.ok(ownB.run.inputs.every(input=>input.contactId===f.otherContactId));
  assert.ok(f.calls.filter(call=>call.input.scope.contact_id===f.contactId).length===0,'失败联系人不得发布文档');
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

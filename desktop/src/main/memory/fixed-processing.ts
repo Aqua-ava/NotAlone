@@ -3,7 +3,7 @@ import type { PageCommands } from '../page-commands';
 import { noArguments } from '../page-commands';
 import { isUuid } from '../uuid';
 import type { FixedProcessingCall, FixedProcessingControl, FixedProcessingEvent, FixedProcessingRun,
-  FixedProcessingStart, FixedProcessingTrace, FixedProcessingTraceRequest, FixedProcessingView, FixedProcessingMode, FixedProcessingQueue } from '../../shared/fixed-memory-processing';
+  FixedProcessingStart, FixedProcessingTrace, FixedProcessingTraceRequest, FixedProcessingView, FixedProcessingMode, FixedProcessingQueue, FixedProcessingRead } from '../../shared/fixed-memory-processing';
 
 const invalid = () => new Error('记忆处理状态不可用，请刷新后重试。');
 const row = (value: unknown): Record<string, unknown> => {
@@ -22,6 +22,16 @@ function decimal(value: unknown): string {
   if (typeof value !== 'string' || !/^(0|[1-9][0-9]{0,24})$/.test(value)) throw invalid(); return value;
 }
 function array(value: unknown): unknown[] { if (!Array.isArray(value)) throw invalid(); return value; }
+function readQueue(raw: unknown): FixedProcessingQueue {
+  const queue = row(raw); exact(queue, ['pending','nextDueAt','blockedContacts',...(Object.hasOwn(queue,'later')?['later']:[])]);
+  let later: FixedProcessingQueue['later'];
+  if (Object.hasOwn(queue,'later')) {
+    const value=row(queue.later); exact(value,['pending','nextDueAt','stage']);
+    if (value.stage!==null&&!['document_scene','document_profile'].includes(String(value.stage))) throw invalid();
+    later={pending:count(value.pending),nextDueAt:value.nextDueAt===null?null:count(value.nextDueAt),stage:value.stage as 'document_scene'|'document_profile'|null};
+  }
+  return {pending:count(queue.pending),blockedContacts:count(queue.blockedContacts),nextDueAt:queue.nextDueAt===null?null:count(queue.nextDueAt),...(later?{later}:{})};
+}
 function scope(value: Record<string, unknown>) {
   if (value.scopeKind !== 'self' && value.scopeKind !== 'contact' || value.scopeKind === 'self' && value.contactId !== null) throw invalid();
   return { scopeKind: value.scopeKind as 'self' | 'contact', contactId: value.scopeKind === 'self' ? null : id(value.contactId) };
@@ -147,20 +157,26 @@ export class FixedMemoryProcessingController {
       return { connectionGeneration: response.generation, mode: value.storage === 'sqlite' ? 'sqlite' : 'legacy' };
     } catch { this.synchronize(); throw invalid(); }
   }
-  async read(): Promise<FixedProcessingView> {
+  async read(input?: FixedProcessingRead): Promise<FixedProcessingView> {
+    if (input !== undefined) {
+      const requested = row(input); exact(requested, ['contactId']); const contactId = id(requested.contactId);
+      const response = await this.request(`/api/memory-processing/contacts/${contactId}/current`, 'GET');
+      try {
+        const value = row(response.data); exact(value, ['contactId','run','queue']);
+        if (value.contactId !== contactId) throw invalid();
+        const run = readFixedProcessingRun(value.run);
+        if (run && (run.tasks.some(task => task.scopeKind !== 'contact' || task.contactId !== contactId)
+          || run.inputs.some(item => item.contactId !== contactId)
+          || run.candidates.some(item => item.scopeKind !== 'contact' || item.contactId !== contactId))) throw invalid();
+        return {connectionGeneration:response.generation,contactId,run,queue:readQueue(value.queue)};
+      } catch { this.synchronize(); throw invalid(); }
+    }
     const [current, scheduled] = await Promise.all([
       this.request('/api/memory-processing/runs/current', 'GET'), this.request('/api/memory-processing/schedule', 'GET'),
     ]);
     try {
       if (current.generation !== scheduled.generation) throw invalid();
-      const queue = row(scheduled.data);exact(queue, ['pending','nextDueAt','blockedContacts',...(Object.hasOwn(queue,'later')?['later']:[])]);
-      let later: FixedProcessingQueue['later'];
-      if(Object.hasOwn(queue,'later')){
-        const value=row(queue.later);exact(value,['pending','nextDueAt','stage']);
-        if(value.stage!==null&&!['document_scene','document_profile'].includes(String(value.stage)))throw invalid();
-        later={pending:count(value.pending),nextDueAt:value.nextDueAt===null?null:count(value.nextDueAt),stage:value.stage as 'document_scene'|'document_profile'|null};
-      }
-      return { connectionGeneration: current.generation, run: readFixedProcessingRun(current.data), queue: { pending: count(queue.pending), blockedContacts: count(queue.blockedContacts), nextDueAt: queue.nextDueAt === null ? null : count(queue.nextDueAt),...(later?{later}:{}) } };
+      return {connectionGeneration:current.generation,run:readFixedProcessingRun(current.data),queue:readQueue(scheduled.data)};
     } catch { this.synchronize(); throw invalid(); }
   }
   async start(input: FixedProcessingStart): Promise<FixedProcessingView> {
@@ -187,7 +203,9 @@ export function installFixedMemoryProcessingBridge(commands: PageCommands, backe
   const controller = new FixedMemoryProcessingController(backend, () => commands.publish('memory:fixed-processing-invalidated', {}, 'manager'));
   backend.onStateChanged(() => controller.synchronize());
   commands.handle('memory:fixed-processing-mode', (...args) => { noArguments(args); return controller.mode(); }, 'manager');
-  commands.handle('memory:fixed-processing-current', (...args) => { noArguments(args); return controller.read(); }, 'manager');
+  commands.handle('memory:fixed-processing-current', (...args) => {
+    if (args.length > 1) throw invalid(); return controller.read(args[0] as FixedProcessingRead | undefined);
+  }, 'manager');
   commands.handle('memory:fixed-processing-start', (...args) => {
     if (args.length !== 1) throw invalid(); return controller.start(args[0] as FixedProcessingStart);
   }, 'manager');

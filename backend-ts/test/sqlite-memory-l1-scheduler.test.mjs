@@ -28,6 +28,8 @@ async function appendIncrementalPage(f,contactId,{records,at=Date.now()}={}){
 test('只对首次增量来源计数；静默十分钟后进入联系人自己的待处理队列',async t=>{
  const {f,contactId,memory,at}=await incrementalFixture(t);
  const schedule=await memory.readSchedule(at+9*60_000);assert.equal(schedule.pending,1);
+ const own=await memory.readContact(contactId),other=await memory.readContact(f.saved[1].contact_id);
+ assert.equal(own.queue.pending,1);assert.equal(other.queue.pending,0);
  assert.deepEqual(await memory.dueContacts(at+9*60_000),[]);
  assert.equal(await memory.nextDueAt(at+9*60_000),at+10*60_000);
  assert.deepEqual(await memory.dueContacts(at+10*60_000),[contactId]);

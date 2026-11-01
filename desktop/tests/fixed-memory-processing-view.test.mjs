@@ -7,12 +7,47 @@ const run=()=>({runId:ids.run,state:'incomplete',total:1,succeeded:1,failed:0,un
  tasks:[{taskId:ids.task,scopeKind:'contact',contactId:ids.contact,state:'succeeded',total:1,succeeded:1,errorCode:null}],inputs:[],candidates:[]});
 async function withPanel(t,command,testPage){
  const compiled=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {FixedMemoryProcessingPanel} from './src/renderer/FixedMemoryProcessingPanel';
- const listeners=new Set();window.invalidate=()=>{for(const listener of listeners)listener();};const bridge=new Proxy({},{get:(_,method)=>method==='onInvalidated'?(listener)=>{listeners.add(listener);return()=>listeners.delete(listener);}:(...args)=>window.command(method,...args)});const root=createRoot(document.getElementById('root'));window.show=visible=>root.render(visible?<FixedMemoryProcessingPanel bridge={bridge}/>:null);window.show(true);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
+ const listeners=new Set();window.invalidate=()=>{for(const listener of listeners)listener();};const bridge=new Proxy({},{get:(_,method)=>method==='onInvalidated'?(listener)=>{listeners.add(listener);return()=>listeners.delete(listener);}:(...args)=>window.command(method,...args)});const root=createRoot(document.getElementById('root'));let contactId='${ids.contact}';window.show=visible=>root.render(visible?<FixedMemoryProcessingPanel bridge={bridge} contactId={contactId}/>:null);window.selectContact=id=>{contactId=id;window.show(true);};window.show(true);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
  const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(4000);
- await page.exposeFunction('command',command);await page.route('http://127.0.0.1/fixed-memory-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/fixed-memory-test');await page.addScriptTag({content:compiled.outputFiles[0].text});await testPage(page);
+ await page.exposeFunction('command',async(method,...args)=>{const value=await command(method,...args);return method==='readCurrent'&&value&&!Object.hasOwn(value,'contactId')?{...value,contactId:args[0]?.contactId}:value;});await page.route('http://127.0.0.1/fixed-memory-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/fixed-memory-test');await page.addScriptTag({content:compiled.outputFiles[0].text});await testPage(page);
 }
 // 回到可见页面走正式的自动状态读取，不通过已移除的刷新按钮。
 const revisit=page=>page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+
+test('切换联系人读取各自状态，旧范围迟到不回填，未选联系人不读取全局',async t=>{
+ const other='44444444-4444-4444-8444-444444444444',entered=Promise.withResolvers(),late=Promise.withResolvers();let first=true;
+ const reads=[],failed={...run(),state:'failed',succeeded:0,total:8,failed:8,status:'blocked',statusReason:'contact_failed',tasks:[{...run().tasks[0],state:'failed',total:8,succeeded:0,errorCode:'memory_extraction_source_insufficient'}]};
+ await withPanel(t,async(method,input)=>{
+  if(method!=='readCurrent')return;
+  reads.push(input?.contactId);
+  if(first){first=false;entered.resolve();return late.promise;}
+  if(input?.contactId===other)return {connectionGeneration:1,contactId:other,run:null};
+  return {connectionGeneration:1,contactId:ids.contact,run:failed};
+ },async page=>{
+  await entered.promise;
+  await page.evaluate(id=>window.selectContact(id),other);
+  await page.getByText('暂无处理记录',{exact:true}).waitFor();
+  assert.deepEqual(reads,[ids.contact,other]);
+  late.resolve({connectionGeneration:1,contactId:ids.contact,run:failed});
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  assert.equal(await page.getByText('处理受阻',{exact:true}).count(),0);
+  await page.evaluate(()=>window.selectContact(null));
+  await page.getByText('请先选择联系人，再查看记忆处理状态。',{exact:true}).waitFor();
+  assert.equal(reads.length,2);
+  await page.evaluate(id=>window.selectContact(id),ids.contact);
+  await page.getByText('提取结果未通过来源核验，本轮尚未完成。',{exact:true}).waitFor();
+  assert.equal(await page.getByText('部分联系人处理受阻',{exact:true}).count(),0);
+ });
+});
+
+test('当前来源范围已撤销时，不把历史提取失败当作当前受阻原因',async t=>{
+ const current={...run(),state:'revoked',status:'blocked',statusReason:'run_revoked',revoked:1,
+  tasks:[{...run().tasks[0],state:'revoked',errorCode:'memory_extraction_source_insufficient'}]};
+ await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:current}:undefined,async page=>{
+  await page.getByText('范围已失效',{exact:true}).waitFor();
+  assert.equal(await page.getByText('提取结果未通过来源核验，本轮尚未完成。',{exact:true}).count(),0);
+ });
+});
 
 test('无轮次显示等待，卡片只读状态与进度，不启动或控制任务', {timeout:20000},async t=>{
  let current=null;const methods=[];
@@ -147,7 +182,7 @@ test('首轮尚未建立时显示真实待提取队列，旧轮完成不掩盖�
   await panel.getByText(/新增待提取文字 4 条/).waitFor();
   current={...current,run:{...run(),status:'completed',state:'completed',stage:'completed',laterStages:'completed'},queue:{pending:6,nextDueAt:null,blockedContacts:1}};
   await revisit(page);await panel.getByText(/新增待提取文字 6 条/).waitFor();
-  await panel.getByText(/部分联系人已暂停或受阻/).waitFor();
+  await panel.getByText(/当前联系人已暂停或受阻/).waitFor();
   await panel.getByRole('status').filter({hasText:'等待提取与核验'}).waitFor();
   assert.equal(await panel.getByText('本轮已完成',{exact:true}).count(),0);
   assert.equal(await panel.getByRole('button').count(),0);

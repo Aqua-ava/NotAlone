@@ -22,3 +22,25 @@ test('正式Bearer认证HTTP冻结并处理已保存文字，拒绝Origin、owne
  const done=await (await fetch(`${base}/runs/current`,{headers})).json();assert.equal(done.succeeded,1);assert.equal(done.laterStages,'pending');assert.equal((await (await fetch(`${base}/runs`,{method:'POST',headers,body:JSON.stringify({request_key:requestKey})})).json()).runId,done.runId);
  const task=done.tasks.find(t=>t.scopeKind==='contact');const trace=await (await fetch(`${base}/tasks/${task.taskId}/events`,{headers})).json();assert.ok(trace.events.some(e=>e.kind==='stage_result'));assert.equal(trace.calls[0].state,'succeeded');assert.equal((await fetch(`${base}/runs/current?owner_id=${owner}`,{headers})).status,400);
 });
+
+test('认证联系人状态接口只读当前联系人，拒绝其他owner范围与任意扩围',async t=>{
+ const f=await fixture(t),[a,b]=f.saved.map(binding=>binding.contact_id);await f.service.synchronize(a);
+ let memory;const port=modelPort(()=>memory.accounting);memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
+ const handler=new SqliteMemoryExtractionHttp(memory,req=>authorizeSqliteRequest(req,'synthetic-contact-token'));
+ const server=createServer(async(req,res)=>{if(!await handler.handle(req,res)){res.writeHead(404);res.end();}});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const base=`http://127.0.0.1:${server.address().port}/api/memory-processing/contacts`,headers={authorization:'Bearer synthetic-contact-token'};
+ assert.equal((await fetch(`${base}/${a}/current`)).status,401);
+ assert.equal((await fetch(`${base}/${a}/current`,{headers:{...headers,origin:'https://invalid.example'}})).status,401);
+ assert.equal((await fetch(`${base}/${a}/current?owner_id=${randomUUID()}`,{headers})).status,400);
+ assert.equal((await fetch(`${base}/${a}/current?contact_id=${b}`,{headers})).status,400);
+ assert.equal((await fetch(`${base}/${a}/current`,{method:'POST',headers})).status,400);
+ assert.equal((await fetch(`${base}/${randomUUID()}/current`,{headers})).status,404);
+ const empty=await fetch(`${base}/${b}/current`,{headers});assert.equal(empty.status,200);assert.equal(empty.headers.get('cache-control'),'no-store');
+ assert.deepEqual(await empty.json(),{contactId:b,run:null,queue:{pending:0,nextDueAt:null,blockedContacts:0,later:{pending:0,nextDueAt:null,stage:null}}});
+ assert.equal(port.calls,0,'状态查询不读取模型或启动记忆任务');
+ const run=await memory.start(randomUUID());await memory.waitForIdle(run.runId);const before=port.calls;
+ const own=await (await fetch(`${base}/${a}/current`,{headers})).json();
+ assert.equal(own.contactId,a);assert.equal(own.run.total,1);assert.equal(own.run.tasks.length,1);assert.equal(own.run.tasks[0].contactId,a);
+ assert.equal((await (await fetch(`${base}/${b}/current`,{headers})).json()).run,null);
+ assert.equal(port.calls,before);
+});

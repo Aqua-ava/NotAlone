@@ -4,6 +4,7 @@ import {assertContribution,assertInputs,assertTaskContributions,fail,inputRows,t
 import {assertSourceEligibility} from '../../history/sqlite/source.ts';
 import {currentSourceScopeCTE,currentSourcePredicate} from '../../history/sqlite/current-scope.ts';
 import {laterStagesState} from './documents/actions.ts';
+import {queueSummary as laterQueueSummary} from './documents/later-schedule.ts';
 import {projectControl} from './control.ts';
 import {memoryIncrementalBaseline} from '../../storage/sqlite/message-order.ts';
 const number=(v:unknown):number=>{if(typeof v!=='bigint'||v<0n||v>BigInt(Number.MAX_SAFE_INTEGER))return fail('memory_extraction_count_invalid');return Number(v);};
@@ -83,11 +84,11 @@ export function currentReuseAttempt(tx:StorageTransaction,ownerId:string,runId:s
  if(!proof)return;
  try{assertTaskContributions(tx,ownerId,String(proof.original_run_id),String(proof.task_id));assertInputs(tx,ownerId,String(proof.original_run_id),inputRows(tx,ownerId,String(proof.step_id)));return String(proof.id);}catch{return;}
 }
-export function snapshot(tx:StorageTransaction,ownerId:string,runId:string){
- const r=tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);if(!r)fail('memory_extraction_not_found');
- const inputs=tx.all('SELECT * FROM run_input WHERE owner_id=? AND run_id=? ORDER BY input_no',[ownerId,runId]);
+export function snapshot(tx:StorageTransaction,ownerId:string,runId:string,contactId?:string){
+ let r=tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);if(!r)fail('memory_extraction_not_found');
+ const inputs=tx.all(`SELECT * FROM run_input WHERE owner_id=? AND run_id=?${contactId===undefined?'':' AND source_contact_id=?'} ORDER BY input_no`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]);
  const targets=inputs.filter(i=>i.role==='target');
- const tasks=tx.all('SELECT * FROM processing_task WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[ownerId,runId]);
+ const tasks=tx.all(`SELECT * FROM processing_task WHERE owner_id=? AND run_id=?${contactId===undefined?'':" AND scope_kind='contact' AND contact_id=?"} ORDER BY scope_kind,contact_id`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]);
  const taskStates=new Map<string,string>();
  for(const task of tasks){let state=String(task.state);try{assertTaskContributions(tx,ownerId,runId,String(task.id));}catch{state='revoked';}taskStates.set(String(task.id),state);}
  const targetStates=new Map<string,Set<string>>();
@@ -105,19 +106,27 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string){
  const targetSucceeded=(i:StorageRow)=>targetHasState(i,'succeeded');
  const succeeded=targets.filter(targetSucceeded).length;
  const runningDocument=tx.get(`SELECT s.kind FROM processing_step s JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
-  WHERE t.owner_id=? AND t.run_id=? AND t.state<>'revoked' AND s.state='running' AND s.kind IN ('document_scene','document_profile') ORDER BY s.step_no LIMIT 1`,[ownerId,runId]);
- const candidates=tx.all(`SELECT e.*,t.id AS task_id,t.scope_kind,t.contact_id FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE t.owner_id=? AND t.run_id=? AND e.kind='verified_output' AND t.state<>'revoked' ORDER BY e.created_at,e.event_no`,[ownerId,runId]).flatMap(e=>{
-  if(taskStates.get(String(e.task_id))==='revoked')return [];
+  WHERE t.owner_id=? AND t.run_id=? AND t.state<>'revoked' AND s.state='running' AND s.kind IN ('document_scene','document_profile')${contactId===undefined?'':" AND t.scope_kind='contact' AND t.contact_id=?"} ORDER BY s.step_no LIMIT 1`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]);
+ const candidates=tx.all(`SELECT e.*,t.id AS task_id,t.scope_kind,t.contact_id FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE t.owner_id=? AND t.run_id=? AND e.kind='verified_output' AND t.state<>'revoked'${contactId===undefined?'':" AND t.scope_kind='contact' AND t.contact_id=?"} ORDER BY e.created_at,e.event_no`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]).flatMap(e=>{
+  if(contactId!==undefined&&(e.scope_kind!=='contact'||e.contact_id!==contactId)||taskStates.get(String(e.task_id))==='revoked')return [];
   try{const deps=tx.all(`SELECT i.* FROM execution_input x JOIN step_input si ON si.owner_id=x.owner_id AND si.step_id=x.planned_step_id AND si.input_no=x.planned_input_no JOIN run_input i ON i.owner_id=si.owner_id AND i.run_id=si.run_id AND i.input_no=si.run_input_no WHERE x.owner_id=? AND x.event_id=?`,[ownerId,e.id]);assertInputs(tx,ownerId,runId,deps);}catch{return [];}
   const p=JSON.parse(String(e.payload));return [{id:String(e.id),attemptId:String(e.step_attempt_id),outputNo:number(e.event_no),scopeKind:p.scopeKind,contactId:p.contactId,body:p.fact.text,fact:p.fact,state:'verified_pending_decision',origin:'auto'}];
  });
- const laterProjection=laterStagesState(tx,ownerId,runId),laterStages:('pending'|'completed')=laterProjection.state==='completed'?'completed':'pending';
+ const laterProjection=contactId!==undefined&&tasks.some(task=>taskStates.get(String(task.id))==='revoked')
+  ?{state:'revoked' as const,reasons:['document_scope_revoked'],nextDueAt:null,stage:null}:laterStagesState(tx,ownerId,runId,contactId);
+ const laterStages:('pending'|'completed')=laterProjection.state==='completed'?'completed':'pending';
+ if(contactId!==undefined){
+  const taskState=taskStates.get(String(tasks[0]?.id));
+  const state=taskState==='revoked'?'revoked':taskState==='failed'?'failed':taskState==='unknown'?'incomplete':r!.pause_requested_at!==null||r!.state==='paused'?'paused':taskState==='pending'||taskState==='running'?taskState:laterProjection.state==='completed'?'completed':'incomplete';
+  r={...r!,state};
+ }
  const stage=r!.state==='completed'||laterProjection.state==='completed'?'completed':runningDocument?String(runningDocument.kind):laterProjection.stage??'extraction_verification';
  const result={runId,state:String(r!.state),total:targets.length,succeeded,failed:targets.filter(i=>!targetSucceeded(i)&&targetHasState(i,'failed')).length,unknown:targets.filter(i=>!targetSucceeded(i)&&targetHasState(i,'unknown')).length,
   stage,laterStages,nextDueAt:laterProjection.nextDueAt,tasks:tasks.map(t=>({taskId:String(t.id),scopeKind:String(t.scope_kind),contactId:t.contact_id===null?null:String(t.contact_id),state:taskStates.get(String(t.id))!,
    total:t.scope_kind==='self'?0:targets.filter(i=>i.source_contact_id===t.contact_id).length,succeeded:t.scope_kind==='self'?0:targets.filter(i=>i.source_contact_id===t.contact_id&&targetSucceeded(i)).length,errorCode:t.error_code===null?null:String(t.error_code)})),
   inputs:inputs.map(i=>({inputNo:number(i.input_no),role:String(i.role),contactId:String(i.source_contact_id),messageId:String(i.message_id),recordId:String(i.record_id),itemId:i.item_id===null?null:String(i.item_id)})),candidates};
- return {...result,...projectControl(tx,ownerId,r!,{taskStates,laterStages:laterProjection.state})};
+ const control=projectControl(tx,ownerId,r!,{taskStates,laterStages:laterProjection.state,contactId});
+ return {...result,...control,...(contactId===undefined?{}:{actions:[]})};
 }
 
 /** 同现有手动入口一样复验当前来源；另外记录首个被接受的目标类型和采集时间。 */
@@ -300,8 +309,8 @@ function queueStates(tx:StorageTransaction,ownerId:string,now:number,contactId?:
  const contacts=validContacts(tx,ownerId,contactId);
  return contacts.map(row=>{const state=contactQueueState(tx,ownerId,String(row.id));return {state,dueAt:triggerAt(state,now)};});
 }
-function scheduleSummary(tx:StorageTransaction,ownerId:string,now:number){
- const states=queueStates(tx,ownerId,now),pending=states.reduce((sum,row)=>sum+row.state.pendingCount,0),due=states.map(row=>row.dueAt).filter((value):value is number=>value!==null);
+function scheduleSummary(tx:StorageTransaction,ownerId:string,now:number,contactId?:string){
+ const states=queueStates(tx,ownerId,now,contactId),pending=states.reduce((sum,row)=>sum+row.state.pendingCount,0),due=states.map(row=>row.dueAt).filter((value):value is number=>value!==null);
  return {pending,nextDueAt:due.length?due.reduce((earliest,value)=>Math.min(earliest,value)):null,blockedContacts:states.filter(row=>row.state.pendingCount>0&&row.state.blocked).length};
 }
 function startRun(tx:StorageTransaction,raw:unknown,scheduled=false){
@@ -350,6 +359,20 @@ export const scheduleActions:StorageAction[]=[
  {name:'memoryExtraction.nextDueAt',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;now:number};const ownerId=textId(i.ownerId),now=checkedNow(i.now);let earliest:number|null=null;for(const row of queueStates(tx,ownerId,now)){if(row.dueAt!==null&&(earliest===null||row.dueAt<earliest))earliest=row.dueAt;}return earliest;}},
  {name:'memoryExtraction.readSchedule',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;now:number};return scheduleSummary(tx,textId(i.ownerId),checkedNow(i.now));}},
 ];
-export const runActions:StorageAction[]=[...scheduleActions,{name:'memoryExtraction.findRequest',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;requestKey:string};const r=tx.get('SELECT id FROM processing_run WHERE owner_id=? AND start_request_key=?',[textId(i.ownerId),textId(i.requestKey)]);return r?snapshot(tx,i.ownerId,String(r.id)):null;}},{name:'memoryExtraction.contactGeneration',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;contactId:string};const r=tx.get('SELECT data_generation FROM contact WHERE owner_id=? AND id=?',[i.ownerId,i.contactId]);if(!r)fail('memory_extraction_scope_stale');return {generation:String(r!.data_generation)};}},{name:'memoryExtraction.start',mode:'write',retryBusy:true,execute(tx,raw){return startRun(tx,raw);}},{name:'memoryExtraction.startContact',mode:'write',retryBusy:true,execute(tx,raw){return startRun(tx,raw,true);}},{name:'memoryExtraction.read',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;runId?:string};const owner=textId(i.ownerId);if(i.runId)return snapshot(tx,owner,textId(i.runId));const r=tx.get(`SELECT id FROM processing_run WHERE owner_id=? AND coalesce(json_extract(policy_config,'$.intent'),'')<>'memory_document_later_stage'
+/** 联系人视图只读投影，不把全局最新轮次或本人资料混入当前联系人。 */
+function contactView(tx:StorageTransaction,raw:unknown){
+ const input=raw as {ownerId:string;contactId:string},ownerId=textId(input.ownerId),contactId=textId(input.contactId);
+ if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(contactId))fail('memory_extraction_input_invalid');
+ if(!tx.get("SELECT 1 FROM contact c JOIN owner o ON o.owner_id=c.owner_id WHERE c.owner_id=? AND c.id=? AND c.state='active' AND o.state='active'",[ownerId,contactId]))fail('memory_extraction_not_found');
+ if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' LIMIT 1",[ownerId]))fail('memory_extraction_scope_stale');
+ const latest=tx.get(`SELECT r.id FROM processing_run r WHERE r.owner_id=?
+  AND coalesce(json_extract(r.policy_config,'$.intent'),'')<>'memory_document_later_stage'
+  AND EXISTS(SELECT 1 FROM processing_task task WHERE task.owner_id=r.owner_id AND task.run_id=r.id AND task.scope_kind='contact' AND task.contact_id=?)
+  AND EXISTS(SELECT 1 FROM run_input i WHERE i.owner_id=r.owner_id AND i.run_id=r.id AND i.role='target' AND i.source_contact_id=?)
+  ORDER BY r.started_at DESC,r.rowid DESC LIMIT 1`,[ownerId,contactId,contactId]);
+ const now=Date.now();
+ return {contactId,run:latest?snapshot(tx,ownerId,String(latest.id),contactId):null,queue:{...scheduleSummary(tx,ownerId,now,contactId),later:laterQueueSummary(tx,ownerId,now,contactId)}};
+}
+export const runActions:StorageAction[]=[...scheduleActions,{name:'memoryExtraction.readContact',mode:'read',retryBusy:false,execute:contactView},{name:'memoryExtraction.findRequest',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;requestKey:string};const r=tx.get('SELECT id FROM processing_run WHERE owner_id=? AND start_request_key=?',[textId(i.ownerId),textId(i.requestKey)]);return r?snapshot(tx,i.ownerId,String(r.id)):null;}},{name:'memoryExtraction.contactGeneration',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;contactId:string};const r=tx.get('SELECT data_generation FROM contact WHERE owner_id=? AND id=?',[i.ownerId,i.contactId]);if(!r)fail('memory_extraction_scope_stale');return {generation:String(r!.data_generation)};}},{name:'memoryExtraction.start',mode:'write',retryBusy:true,execute(tx,raw){return startRun(tx,raw);}},{name:'memoryExtraction.startContact',mode:'write',retryBusy:true,execute(tx,raw){return startRun(tx,raw,true);}},{name:'memoryExtraction.read',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;runId?:string};const owner=textId(i.ownerId);if(i.runId)return snapshot(tx,owner,textId(i.runId));const r=tx.get(`SELECT id FROM processing_run WHERE owner_id=? AND coalesce(json_extract(policy_config,'$.intent'),'')<>'memory_document_later_stage'
  AND EXISTS(SELECT 1 FROM run_input i WHERE i.owner_id=processing_run.owner_id AND i.run_id=processing_run.id AND i.role='target')
  ORDER BY started_at DESC,rowid DESC LIMIT 1`,[owner]);return r?snapshot(tx,owner,String(r.id)):null;}},{name:'memoryExtraction.pendingFollowups',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string};return pendingFollowupIds(tx,textId(i.ownerId));}},{name:'memoryExtraction.followupEligible',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;runId:string};return pendingFollowupIds(tx,textId(i.ownerId),textId(i.runId)).length===1;}}];
