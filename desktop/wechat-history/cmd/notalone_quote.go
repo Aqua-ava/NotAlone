@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/xml"
 	"io"
+	"reflect"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -23,6 +24,9 @@ const (
 )
 
 var notaloneQuoteZstdMagic = []byte{0x28, 0xb5, 0x2f, 0xfd}
+
+// 生产路径关闭临时固定读者；测试可验证清理失败时不会发布已解析正文。
+var notaloneQuoteSnapshotCloser = func(snapshot *notaloneSnapshot) error { return snapshot.Close() }
 
 type notaloneQuoteReadResponse struct {
 	Format               string  `json:"format"`
@@ -213,18 +217,79 @@ func notaloneQuoteReferencedSenderRole(fromUser, owner, conversation string) str
 	}
 }
 
-func (h *notaloneHistorySession) readQuote(ctx context.Context, request notaloneHistoryRequest) (notaloneQuoteReadResponse, error) {
+func (h *notaloneHistorySession) quoteReadSnapshot(ctx context.Context, request notaloneHistoryRequest) (*notaloneSnapshot, notaloneSnapshotTarget, func() error, error) {
+	if h.snapshot != nil {
+		if h.snapshotMode != "normal" || h.supportProfile == nil || !reflect.DeepEqual(h.snapshot.profile, *h.supportProfile) {
+			return nil, notaloneSnapshotTarget{}, nil, notaloneFailure("history_quote_association_unverified")
+		}
+		target := h.snapshot.Target()
+		if target.Descriptor == "" || target.Descriptor != request.Target || target.SourceGeneration != h.selected.SourceGeneration {
+			return nil, notaloneSnapshotTarget{}, nil, notaloneFailure("history_quote_association_unverified")
+		}
+		return h.snapshot, target, func() error { return nil }, nil
+	}
+	tail := h.tail
+	if h.snapshotMode != "normal" || tail == nil || h.inspected == nil || h.supportReport == nil || h.supportProfile == nil ||
+		tail.target.Descriptor == "" || tail.target.Descriptor != request.Target || tail.scopeDigest != notaloneHash(h.selected.Account, h.selected.Conversation) ||
+		tail.sourceGeneration != h.selected.SourceGeneration || tail.schemaFingerprint != h.inspected.SchemaFingerprint ||
+		!reflect.DeepEqual(tail.profile, *h.supportProfile) || !tail.profile.IncrementalTailVerified {
+		return nil, notaloneSnapshotTarget{}, nil, notaloneFailure("history_quote_association_unverified")
+	}
+	if err := h.ensureMessageGuard(); err != nil {
+		return nil, notaloneSnapshotTarget{}, nil, notaloneFailure("history_quote_source_changed")
+	}
+	if tail.snapshot != nil {
+		if !reflect.DeepEqual(tail.snapshot.profile, tail.profile) || tail.snapshot.Check() != nil || !notaloneSameSnapshotInstances(tail.target, tail.snapshot.Target()) {
+			return nil, notaloneSnapshotTarget{}, nil, notaloneFailure("history_quote_source_changed")
+		}
+		return tail.snapshot, tail.target, func() error { return nil }, nil
+	}
+	life, cancel := context.WithCancel(ctx)
+	snapshot, err := newNotaloneSnapshot(life, h.server, *h.selected, *h.inspected, *h.supportProfile)
+	if err != nil {
+		cancel()
+		return nil, notaloneSnapshotTarget{}, nil, notaloneFailure("history_quote_source_changed")
+	}
+	cleanup := func() error {
+		closeErr := notaloneQuoteSnapshotCloser(snapshot)
+		cancel()
+		if closeErr != nil {
+			h.cancel()
+		}
+		return closeErr
+	}
+	proof, proofErr := snapshot.FixedSnapshotProof(*h.inspected)
+	if proofErr != nil || proof.Status != "verified" || proof.Format != notaloneFixedSnapshotProofFormat ||
+		proof.Scope != "single-fixed-snapshot" || proof.AuthorizesSubsequentRead || proof.ExpectedPartitionCount == 0 ||
+		proof.ExpectedPartitionCount != proof.CompletedPartitionCount || !notaloneSameSnapshotInstances(tail.target, snapshot.Target()) {
+		_ = cleanup()
+		return nil, notaloneSnapshotTarget{}, nil, notaloneFailure("history_quote_source_changed")
+	}
+	return snapshot, tail.target, cleanup, nil
+}
+
+func (h *notaloneHistorySession) readQuote(ctx context.Context, request notaloneHistoryRequest) (response notaloneQuoteReadResponse, resultErr error) {
 	failed := notaloneQuoteReadResponse{}
 	failAssociation := func() (notaloneQuoteReadResponse, error) {
 		return failed, notaloneFailure("history_quote_association_unverified")
 	}
 	if h.selected == nil || h.selected.Account != request.Account || h.selected.Conversation != request.Conversation ||
-		h.selected.SourceGeneration == "" || h.snapshot == nil || h.snapshotMode != "normal" ||
+		h.selected.SourceGeneration == "" || h.snapshotMode != "normal" ||
 		h.supportReport == nil || h.supportProfile == nil || h.inspected == nil {
 		return failAssociation()
 	}
-	quoteRules, quoteProfileReady := notaloneCurrentQuoteStatusRules(h.supportReport, h.supportProfile, h.inspected, h.selected, h.snapshot)
-	target := h.snapshot.Target()
+	snapshot, target, cleanupSnapshot, snapshotErr := h.quoteReadSnapshot(ctx, request)
+	if snapshotErr != nil {
+		return failed, snapshotErr
+	}
+	defer func() {
+		if closeErr := cleanupSnapshot(); closeErr != nil {
+			h.cancel()
+			response = notaloneQuoteReadResponse{}
+			resultErr = notaloneFailure("history_quote_source_changed")
+		}
+	}()
+	quoteRules, quoteProfileReady := notaloneCurrentQuoteStatusRules(h.supportReport, h.supportProfile, h.inspected, h.selected, snapshot)
 	if target.Descriptor == "" || target.Descriptor != request.Target || target.SourceGeneration != h.selected.SourceGeneration ||
 		!quoteProfileReady {
 		return failAssociation()
@@ -232,11 +297,11 @@ func (h *notaloneHistorySession) readQuote(ctx context.Context, request notalone
 	if err := h.ensureMessageGuard(); err != nil {
 		return failed, notaloneFailure("history_quote_source_changed")
 	}
-	if err := h.snapshot.Check(); err != nil {
+	if err := snapshot.Check(); err != nil {
 		return failed, notaloneFailure("history_quote_source_changed")
 	}
 	matchedShard := -1
-	for index, shard := range h.snapshot.shards {
+	for index, shard := range snapshot.shards {
 		if shard.partition == request.Partition && shard.instance == request.Table {
 			if matchedShard >= 0 {
 				return failAssociation()
@@ -257,14 +322,14 @@ func (h *notaloneHistorySession) readQuote(ctx context.Context, request notalone
 			return failed, notaloneFailure("history_quote_association_unverified")
 		}
 	}
-	shard := h.snapshot.shards[matchedShard]
-	h.snapshot.mu.Lock()
-	defer h.snapshot.mu.Unlock()
-	if h.snapshot.checkLocked() != nil || matchedShard >= len(h.snapshot.shards) {
+	shard := snapshot.shards[matchedShard]
+	snapshot.mu.Lock()
+	defer snapshot.mu.Unlock()
+	if snapshot.checkLocked() != nil || matchedShard >= len(snapshot.shards) {
 		return failed, notaloneFailure("history_quote_source_changed")
 	}
 	metadataQuery := `SELECT local_id,server_id,local_type,real_sender_id,create_time,status,WCDB_CT_message_content
-FROM ` + quoteIdent(h.snapshot.table) + ` WHERE local_id=? LIMIT 2`
+FROM ` + quoteIdent(snapshot.table) + ` WHERE local_id=? LIMIT 2`
 	rows, err := shard.reader.QueryBounded(ctx, 2, metadataQuery, localID)
 	if err != nil {
 		return failed, notaloneFailure("history_quote_read_failed")
@@ -309,7 +374,7 @@ FROM ` + quoteIdent(h.snapshot.table) + ` WHERE local_id=? LIMIT 2`
 	} else if request.SentAt != "" {
 		return failed, notaloneFailure("history_quote_association_unverified")
 	}
-	if !h.snapshot.profile.StatusSemanticsVerified {
+	if !snapshot.profile.StatusSemanticsVerified {
 		return failed, notaloneFailure("history_quote_state_unverified")
 	}
 	names, err := shard.reader.QueryBounded(ctx, 2, "SELECT user_name FROM Name2Id WHERE rowid=? LIMIT 2", senderID)
@@ -322,7 +387,7 @@ FROM ` + quoteIdent(h.snapshot.table) + ` WHERE local_id=? LIMIT 2`
 	currentSender := rowString(names[0], "user_name")
 	currentRole := "unknown"
 	switch currentSender {
-	case h.snapshot.senderOwner:
+	case snapshot.senderOwner:
 		currentRole = "owner"
 	case h.selected.Conversation:
 		currentRole = "contact"
@@ -337,7 +402,7 @@ FROM ` + quoteIdent(h.snapshot.table) + ` WHERE local_id=? LIMIT 2`
 	}
 	contentQuery := `SELECT CASE WHEN local_id=? AND server_id=? AND local_type=? AND real_sender_id=? AND status=?
 AND create_time IS ? AND WCDB_CT_message_content=? THEN length(CAST(message_content AS BLOB)) ELSE NULL END AS quote_content_length
-FROM ` + quoteIdent(h.snapshot.table) + ` WHERE local_id=? LIMIT 2`
+FROM ` + quoteIdent(snapshot.table) + ` WHERE local_id=? LIMIT 2`
 	contentRows, err := shard.reader.QueryBounded(ctx, 2, contentQuery,
 		rowLocalID, rowServerID, rowType, senderID, status, sourceTime, contentType, localID)
 	if err != nil {
@@ -358,7 +423,7 @@ FROM ` + quoteIdent(h.snapshot.table) + ` WHERE local_id=? LIMIT 2`
 	}
 	bodyQuery := `SELECT CASE WHEN local_id=? AND server_id=? AND local_type=? AND real_sender_id=? AND status=?
 AND create_time IS ? AND WCDB_CT_message_content=? AND length(CAST(message_content AS BLOB))<=?
-THEN message_content ELSE NULL END AS quote_xml FROM ` + quoteIdent(h.snapshot.table) + ` WHERE local_id=? LIMIT 2`
+THEN message_content ELSE NULL END AS quote_xml FROM ` + quoteIdent(snapshot.table) + ` WHERE local_id=? LIMIT 2`
 	bodyRows, err := shard.reader.QueryBounded(ctx, 2, bodyQuery,
 		rowLocalID, rowServerID, rowType, senderID, status, row["create_time"], contentType,
 		int64(notaloneQuoteXMLByteLimit), localID)
@@ -372,7 +437,7 @@ THEN message_content ELSE NULL END AS quote_xml FROM ` + quoteIdent(h.snapshot.t
 	if len(encodedXML) == 0 || int64(len(encodedXML)) != contentLength {
 		return failed, notaloneFailure("history_quote_metadata_invalid")
 	}
-	if h.snapshot.checkLocked() != nil || h.currentAccount() != nil || h.ensureMessageGuard() != nil {
+	if snapshot.checkLocked() != nil || h.currentAccount() != nil || h.ensureMessageGuard() != nil {
 		return failed, notaloneFailure("history_quote_source_changed")
 	}
 	decodedXML, err := notaloneDecodeQuoteXML(encodedXML, contentType)
@@ -383,7 +448,7 @@ THEN message_content ELSE NULL END AS quote_xml FROM ` + quoteIdent(h.snapshot.t
 	if err != nil {
 		return failed, err
 	}
-	parsed.ReferencedSenderRole = notaloneQuoteReferencedSenderRole(parsed.ReferencedFromUser, h.snapshot.senderOwner, h.selected.Conversation)
+	parsed.ReferencedSenderRole = notaloneQuoteReferencedSenderRole(parsed.ReferencedFromUser, snapshot.senderOwner, h.selected.Conversation)
 	digest := sha256.Sum256(decodedXML)
 	return notaloneQuoteReadResponse{
 		Format: quoteReadFormat, AccountKey: h.selected.Account, ConversationKey: h.selected.Conversation,

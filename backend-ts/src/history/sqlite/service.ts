@@ -8,7 +8,7 @@ import { assertSupport, serializeSupport } from './actions.ts';
 import { isSourceContinuityLost } from './continuity.ts';
 import { isPartitionGrowthTargetChange } from '../partition-growth.ts';
 import {SqliteQuoteStore} from './quote-store.ts';
-export const quoteParserVersion='wechat-quote-v1';
+export const quoteParserVersion='wechat-quote-v2';
 interface PendingGoal { id:string; target:HistoryTarget; cursor:string|null }
 export interface HistoryContactGateway {
  readonly ownerId:string;

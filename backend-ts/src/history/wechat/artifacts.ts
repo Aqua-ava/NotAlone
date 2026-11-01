@@ -13,7 +13,7 @@ async function regular(file: string) {
   return stat;
 }
 /** 只读取显式制品旁的固定manifest；版本、补丁与实际制品hash仍由窄客户端复验。 */
-async function readNarrowWechatManifest(executable: string): Promise<{options:NarrowWechatClientOptions;originalImageProtocol:unknown;originalImageQualityProof:unknown;quoteProtocol:unknown}> {
+async function readNarrowWechatManifest(executable: string): Promise<{options:NarrowWechatClientOptions;originalImageProtocol:unknown;originalImageQualityProof:unknown;quoteProtocol:unknown;quoteReader:unknown}> {
   try {
     if (typeof executable !== 'string') return reject();
     await regular(executable);
@@ -42,7 +42,7 @@ async function readNarrowWechatManifest(executable: string): Promise<{options:Na
       if (typeof row.cliSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.cliSha256)
         || typeof row.wcdbSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.wcdbSha256)) return reject();
       const imageKeyChannel=row.originalImageProtocol==='wechat-original-image-v1'&&['wechat-cdn-big-hd-exact-content-v4','wechat-message-image-content-v1'].includes(row.originalImageQualityProof as string);
-      return {options:{ executable, expectedCliSha256: row.cliSha256, expectedWcdbSha256: row.wcdbSha256,...(imageKeyChannel?{imageKeyChannel:true as const}:{}) },originalImageProtocol:row.originalImageProtocol,originalImageQualityProof:row.originalImageQualityProof,quoteProtocol:row.quoteProtocol};
+      return {options:{ executable, expectedCliSha256: row.cliSha256, expectedWcdbSha256: row.wcdbSha256,...(imageKeyChannel?{imageKeyChannel:true as const}:{}) },originalImageProtocol:row.originalImageProtocol,originalImageQualityProof:row.originalImageQualityProof,quoteProtocol:row.quoteProtocol,quoteReader:row.quoteReader};
     } finally { await handle.close(); }
   } catch (error) {
     if (error instanceof StorageFailure && error.code === 'history_artifact_manifest_missing') throw error;
@@ -55,7 +55,8 @@ export async function loadNarrowWechatOptions(executable:string):Promise<NarrowW
 }
 export async function supportsWechatQuotes(executable?:string):Promise<boolean>{
  if(!executable)return false;
- try{return (await readNarrowWechatManifest(executable)).quoteProtocol==='wechat-quote-message-v1';}catch{return false;}
+ try{const manifest=await readNarrowWechatManifest(executable);return manifest.quoteProtocol==='wechat-quote-message-v1'
+  &&manifest.quoteReader==='wechat-quote-normal-tail-v2';}catch{return false;}
 }
 
 /** 旧组件继续使用原消息同步能力，不把不支持的新协议误记成某张图片缺失。 */

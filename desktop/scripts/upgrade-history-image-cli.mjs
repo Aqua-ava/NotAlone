@@ -285,6 +285,32 @@ const imageContentPolicy=Object.freeze({
  identityAlgorithmSha256:'b486521e243caec817a865aaf0d8fd44808a1ea167ac892d41a32dd8d37d71e6',
 });
 
+// 仅修复普通历史结束后的引用读取；保留已接入的图片内容合同和源码。
+const quoteTailPolicy=Object.freeze({
+ ...imageContentPolicy,oldName:'image-content-20261101-v2',newName:'quote-tail-20261101-v1',
+ oldCliSha256:'71dee721e15f74348ece3ae8428444b1fc6018f752dcc7e0040f010529b636d3',newCliSha256:'90cda91a6e39dffc6cd07efa1ce832f5d1c69b209838c3d8e40f72b6edf00b7a',
+ oldOverlaySha256:'d85391e316ff9ce8c5760940bf4e732f79ec7ee920aa18ebf82a2b1a28e125be',newOverlaySha256:'f299e92bab366fd69c4b02422fee4195aa99e18ad648ef387c81e3a440b8e283',
+ oldImageQualityProof:'wechat-message-image-content-v1',newImageQualityProof:'wechat-message-image-content-v1',
+ oldImageSha256:imageContentPolicy.imageSha256,oldImageTestSha256:imageContentPolicy.imageTestSha256,
+ newQuoteReader:'wechat-quote-normal-tail-v1',
+ sourceChanges:Object.freeze({
+  'cmd/wechat-cli/notalone_quote.go':{old:'23d14f47cb72a0758c9086af04b300487c13bb4a3ce85b2b822888ba3186725e',new:'d67399218c0378176b6c903401f02e64d7b97dd5e05f5d9ea4f36c9ece4f71ea'},
+  'cmd/wechat-cli/notalone_quote_test.go':{old:'d9b54a037616d020fff0f589444382bd9c8bd99865b63fccb6738c32d300a6af',new:'1b2ce2ae7c35ad8fba7d0fa75707ba24fdce2002c419271dda65415a6a75e63f'},
+ }),
+});
+
+// 关闭临时引用读取器失败时清空内容并停用会话；保留已签发的首版升级合同。
+const quoteTailClosePolicy=Object.freeze({
+ ...quoteTailPolicy,oldName:'quote-tail-20261101-v1',newName:'quote-tail-20261101-v2',
+ oldCliSha256:'90cda91a6e39dffc6cd07efa1ce832f5d1c69b209838c3d8e40f72b6edf00b7a',newCliSha256:'93e85f1b7087cd901cb69ab5ab7fa714e14cbf67ad3e86c20619159c0b4c30b8',
+ oldOverlaySha256:'f299e92bab366fd69c4b02422fee4195aa99e18ad648ef387c81e3a440b8e283',newOverlaySha256:'be01c0776a3472d0262c6a1ca130f004dfb6ab421e97500bef0d021b130fe69a',
+ oldQuoteReader:'wechat-quote-normal-tail-v1',newQuoteReader:'wechat-quote-normal-tail-v2',
+ sourceChanges:Object.freeze({
+  'cmd/wechat-cli/notalone_quote.go':{old:'d67399218c0378176b6c903401f02e64d7b97dd5e05f5d9ea4f36c9ece4f71ea',new:'8bcf887f071e5ff9d4e6f5ac39d5d084ae50b1c222619368d49691367a8b01c4'},
+  'cmd/wechat-cli/notalone_quote_test.go':{old:'1b2ce2ae7c35ad8fba7d0fa75707ba24fdce2002c419271dda65415a6a75e63f',new:'7df32876fdeb4559c2667bb49aea24afcd55dcbc73a0f593086c92aff42a257e'},
+ }),
+});
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -534,7 +560,8 @@ function manifestForSide(policy, side) {
       ? { originalImageProtocol: isNew ? policy.newImageProtocol : policy.oldImageProtocol } : {}),
     ...((isNew ? policy.newImageQualityProof : policy.oldImageQualityProof)
       ? { originalImageQualityProof: isNew ? policy.newImageQualityProof : policy.oldImageQualityProof } : {}),
-    ...((isNew?policy.newQuoteProtocol:policy.oldQuoteProtocol)?{quoteProtocol:isNew?policy.newQuoteProtocol:policy.oldQuoteProtocol}:{}) };
+    ...((isNew?policy.newQuoteProtocol:policy.oldQuoteProtocol)?{quoteProtocol:isNew?policy.newQuoteProtocol:policy.oldQuoteProtocol}:{}),
+    ...((isNew?policy.newQuoteReader:policy.oldQuoteReader)?{quoteReader:isNew?policy.newQuoteReader:policy.oldQuoteReader}:{}) };
 }
 
 export function createUpgradeImageCliTools({ repositoryRoot, policy, afterReceiptPublished } = {}) {
@@ -681,7 +708,13 @@ const decodingFixTools = createUpgradeImageCliTools({ repositoryRoot, policy: de
 const wxgfImageTools = createUpgradeImageCliTools({repositoryRoot,policy:wxgfImagePolicy});
 const quoteSyncTools=createUpgradeImageCliTools({repositoryRoot,policy:quoteSyncPolicy});
 const imageContentTools=createUpgradeImageCliTools({repositoryRoot,policy:imageContentPolicy});
-export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageContentPolicy.oldName)
+const quoteTailTools=createUpgradeImageCliTools({repositoryRoot,policy:quoteTailPolicy});
+const quoteTailCloseTools=createUpgradeImageCliTools({repositoryRoot,policy:quoteTailClosePolicy});
+export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteTailClosePolicy.oldName)
+ &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteTailClosePolicy.newName)
+ ?quoteTailCloseTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteTailPolicy.oldName)
+ &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteTailPolicy.newName)
+ ?quoteTailTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageContentPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageContentPolicy.newName)
  ?imageContentTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteSyncPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteSyncPolicy.newName)
