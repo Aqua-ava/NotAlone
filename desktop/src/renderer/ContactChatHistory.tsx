@@ -78,7 +78,7 @@ export function ContactChatHistory({ session, settings, contactActions }: { sess
         <button className="button" disabled={!sameScope || loading} onClick={() => void load()}>刷新记录</button>
         {selected && contactActions}
         {selected && settings && <button ref={settingsButton} className="button contact-chat-settings-toggle" type="button"
-          aria-label="同步与资料管理" title="同步与资料管理" aria-expanded={settingsOpen} aria-controls={settingsId}
+          aria-label="资料管理" title="资料管理" aria-expanded={settingsOpen} aria-controls={settingsId}
           onClick={() => setSettingsScope(settingsOpen ? null : { contactId: selected.contactId, scopeRevision })}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="m9 3-.6 3a7 7 0 0 0-1.5.9L4 6l-3 5 2.3 2a7 7 0 0 0 0 1.8L1 17l3 5 2.9-.9a7 7 0 0 0 1.5.9l.6 3h6l.6-3a7 7 0 0 0 1.5-.9l2.9.9 3-5-2.3-2.2a7 7 0 0 0 0-1.8L23 11l-3-5-2.9.9a7 7 0 0 0-1.5-.9L15 3Z" transform="translate(2 0) scale(.83)" />
@@ -89,7 +89,7 @@ export function ContactChatHistory({ session, settings, contactActions }: { sess
     </header>
     {/* 收起时保留操作状态，避免丢失结果尚未确认的重新同步请求。 */}
     {selected && settings && <section key={selected.contactId} id={settingsId} className="contact-management contact-chat-settings" aria-label="当前联系人设置" hidden={!settingsOpen}>
-      <h3>同步与资料管理</h3>
+      <h3>资料管理</h3>
       {settings}
     </section>}
     {!selected ? <div className="contact-chat-empty"><p>在顶部选择联系人后，查看你们已保存的聊天记录。</p></div>

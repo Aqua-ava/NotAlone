@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import type { SyncControlState } from '../shared/sync-control-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
 import { useBindingConsent } from './use-binding-consent';
-import { BindingConsentPage, BindingFeedback, ContactSyncDetails } from './BindingConsentPage';
+import { BindingConsentPage, BindingFeedback } from './BindingConsentPage';
 import { ContactDeletionMenu, ContactDeletionStatus, useContactDeletion } from './ContactDeletionPanel';
 
 const initialSync: SyncControlState = { revision: -1, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
@@ -32,16 +32,6 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
     if (allPrivate && bindingCount !== undefined) void window.notalone.bindings.refreshSaved().catch(() => {});
   }, [allPrivate, bindingCount]);
   const enabled = sync.phase === 'ready' && !sync.errorCode ? sync.report?.enabled : null;
-  const scopeKnown = consent.state.phase === 'ready' && consent.state.knownBindings !== undefined;
-  function syncLabel(contactId: string) {
-    if (!scopeKnown) return '同步状态待确认';
-    if (consent.state.bindings.some((binding) => binding.contactId === contactId)) {
-      if (enabled === false) return '已授权 · 全部同步已暂停';
-      if (selectionOnly && sync.report?.bodyAvailable === false) return '已授权 · 等待读取能力核验';
-      return enabled === true ? '自动同步已开启' : '已授权 · 总开关状态待确认';
-    }
-    return consent.state.knownBindings?.some((binding) => binding.contactId === contactId) ? '自动同步未开启' : '仅手动资料';
-  }
   function addWechat(contactId?: string) {
     consent.setSelection({}); setTargetContactId(contactId); setStartSync(false); setAddingWechat(true);
   }
@@ -62,7 +52,7 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
   </section>;
   return <section className="contacts-panel" aria-label="联系人目录">
     {deletionBridge && <ContactDeletionStatus bridge={deletionBridge} state={deletion.state} />}
-    <div className="contacts-toolbar"><div><h2>联系人</h2><p>在顶部切换联系人，查看聊天记录与同步状态。</p></div><div>
+    <div className="contacts-toolbar"><div><h2>联系人</h2><p>在顶部切换联系人，查看聊天记录与资料。</p></div><div>
       <button className="button primary" disabled={!!consent.state.busy || state.directoryPhase !== 'ready'} onClick={() => addWechat()}>{allPrivate ? '管理单个微信会话' : '添加微信联系人'}</button>
       <button className="button" disabled={state.directoryPhase === 'unavailable' || state.directoryPhase === 'loading'}
         onClick={() => void refreshContacts()}>刷新联系人</button></div></div>
@@ -76,20 +66,19 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
     {state.directoryPhase === 'error' && <p className="contacts-note" role="alert">联系人目录读取失败，请刷新重试。</p>}
     {state.directoryPhase === 'ready' && state.contacts.length === 0 && <div className="contacts-empty"><h3>还没有联系人</h3>
       <p>{selectionOnly ? '逐人确认微信私聊后加入联系人；未选中的会话和以后新增的私聊不会获得读取授权。' : allPrivate ? '开启后台同步后会自动关联微信私聊；联系人出现后，可在顶部搜索本次对象。' : '首次使用可到同步设置连接微信，默认仅同步你选择并确认的私聊；也可以明确选择全部私聊。'}</p><button className="button primary" onClick={() => navigate('sync')}>前往同步设置连接微信</button></div>}
-    {state.contacts.length > 0 && <div className="contacts-columns"><ul className="contact-list" aria-label="联系人同步状态">
+    {state.contacts.length > 0 && <div className="contacts-columns"><ul className="contact-list" aria-label="联系人列表">
       {visibleContacts.map((contact) => <li key={contact.contactId} className="contact-card" data-current={state.selectedContactId === contact.contactId}>
         <div className="contact-row">
           <span className="contact-avatar" aria-hidden="true">{Array.from(contact.displayName)[0]}</span>
           <div className="contact-row-copy"><div className="contact-row-name"><b>{contact.displayName}</b>
             {state.selectedContactId === contact.contactId && <span className="contact-row-choice">当前</span>}</div>
-            <small>{contact.messageCount} 条消息</small><small className="contact-sync-status">{syncLabel(contact.contactId)}</small>
+            <small>{contact.messageCount} 条消息</small>
           </div>
         </div>
       </li>)}
     </ul><ContactChatHistory session={session} contactActions={selected && deletionBridge && <ContactDeletionMenu
       bridge={deletionBridge} state={deletion.state} selected={selected} contacts={state.contacts} scopeRevision={state.scopeRevision} />}
       settings={selected && <>
-      <ContactSyncDetails contactId={selected.contactId} consent={consent} onConnect={() => addWechat(selected.contactId)} allPrivate={allPrivate} />
       <ContactHistoryClear session={session} />
       <div className="contact-management-shortcuts">
         <button className="button" onClick={() => navigate('memory')}>查看关系资料</button>

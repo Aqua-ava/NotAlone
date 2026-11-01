@@ -25,6 +25,7 @@ import { ReplyCandidates, useReplySession } from './RewritePanel';
 import { UnifiedReplyWorkspace } from './UnifiedReplyWorkspace';
 import { MemoryPage } from './MemoryPage';
 import { SyncControlPanel } from './SyncControlPanel';
+import { ContactSyncSettings } from './ContactSyncSettings';
 import { SkillLearningPage } from './SkillLearningPage';
 import { PrioritySyncStatus } from './PrioritySyncStatus';
 import { DeveloperTraces } from './DeveloperTraces';
@@ -157,7 +158,10 @@ export function App() {
         {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} initialSelection={selectingWechatContacts} onSelectionClosed={() => setSelectingWechatContacts(false)} />}
         {page === 'memory' && <MemoryPage session={contactSession} navigate={setPage} />}
         {page === 'skillLearning' && <SkillLearningPage session={contactSession} />}
-        {page === 'sync' && <WechatSetupPanel bridge={window.notalone.wechatSetup} selectionOnly={consent.selectionOnly === true} onSelectContacts={selectWechatContacts}><SyncControlPanel bridge={window.notalone.syncControl} contacts={contactSession.state.contacts} currentContactId={contactSession.state.selectedContactId} /></WechatSetupPanel>}
+        {page === 'sync' && <>
+          {contactSession.state.contacts.length > 0 && <ContactSyncSettings key={contactSession.state.selectedContactId ?? ''} session={contactSession} navigate={setPage} />}
+          <WechatSetupPanel bridge={window.notalone.wechatSetup} selectionOnly={consent.selectionOnly === true} onSelectContacts={selectWechatContacts}><SyncControlPanel bridge={window.notalone.syncControl} contacts={contactSession.state.contacts} currentContactId={contactSession.state.selectedContactId} /></WechatSetupPanel>
+        </>}
         {page !== 'config' && page !== 'contacts' && page !== 'memory' && page !== 'sync' && page !== 'skillLearning' && <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>
           <h2>{currentPage.emptyTitle}</h2><p>{currentPage.emptyDescription}</p>

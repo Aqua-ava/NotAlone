@@ -91,13 +91,13 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
         {selectionOnly ? <p>请到「联系人」逐人确认私聊；每次确认包含该会话本机可读的历史文字和后续新消息，新私聊不会自动纳入。</p> : allPrivate ? <>
           <p>已有和以后新增的微信私聊会自动建立对应联系人并同步，无需逐个确认。不会按同名合并不同微信账号。</p>
           {!report?.enabled && <p>总开关已关闭；范围已保存，开启后台同步后开始自动关联并读取。</p>}
-          <p>改回仅同步已关联会话后，不再自动添加新会话；已有授权仍保留。停止某个人的同步，请到「联系人」管理。</p>
+          <p>改回仅同步已关联会话后，不再自动添加新会话；已有授权仍保留。停止某个人的同步，请在顶部选择联系人后，在本页操作。</p>
           <button className="button" disabled={!available} onClick={() => void changeScope('selected')}>改为仅同步已关联会话</button>
         </> : <>
           <p><strong>同步全部微信私聊，包括以后新增的会话</strong></p>
           <p>确认后，开启后台同步时会自动创建或复用对应联系人，读取现有及以后新增的微信私聊文字，不再逐个询问。群聊不在此范围；已单独停止的会话保持排除。</p>
           <button className="button primary" disabled={!available} onClick={() => void changeScope('all_private')}>确认同步全部微信私聊</button>
-          <p>也可以继续到「联系人」单独添加或停止同步对象。</p>
+          <p>添加同步对象请到「联系人」确认；停止单个联系人的同步可在本页操作。</p>
         </>}
         {state.busy === 'scope' && <p role="status">正在保存同步范围…</p>}
         {!selectionOnly && report?.syncScopeFailureCode && <div role="alert"><p>自动关联微信私聊暂时受阻。请确认微信可用后重试；存在身份冲突的会话需要到「联系人」核对，已停止的会话不会自动恢复。</p>

@@ -97,11 +97,11 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await expect.poll(() => page.evaluate(() => window.mediaCalls.length)).toBe(2);
   await expect(chat.getByText('按消息时间展示；同一时间或时间未知的消息先后未核验。')).toBeVisible();
   await expect(page.locator('.contact-history-status')).toHaveCount(0);
-  const settingsButton = chat.getByRole('button', { name: '同步与资料管理', exact: true });
+  const settingsButton = chat.getByRole('button', { name: '资料管理', exact: true });
   const settings = chat.getByRole('region', { name: '当前联系人设置', includeHidden: true });
   await expect(settingsButton).toHaveAttribute('aria-expanded', 'false');
   await expect(settings).toBeHidden();
-  await expect(page.getByRole('list', { name: '联系人同步状态' }).getByText('同步与资料管理')).toHaveCount(0);
+  await expect(page.getByRole('list', { name: '联系人列表' }).getByText('资料管理')).toHaveCount(0);
   const refreshButton = await chat.getByRole('button', { name: '刷新记录' }).boundingBox();
   const settingsBox = await settingsButton.boundingBox();
   assert.ok(settingsBox.x >= refreshButton.x + refreshButton.width);
@@ -121,7 +121,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await settingsButton.click();
   await expect(settings).toBeHidden();
   const columns = await page.locator('.contacts-columns').boundingBox();
-  const sidebar = await page.getByRole('list', { name: '联系人同步状态' }).boundingBox();
+  const sidebar = await page.getByRole('list', { name: '联系人列表' }).boundingBox();
   const right = await chat.boundingBox();
   assert.ok(sidebar.width / columns.width >= 0.29 && sidebar.width / columns.width <= 0.33);
   assert.ok(right.x >= sidebar.x + sidebar.width);
@@ -154,7 +154,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await page.setViewportSize({ width: 600, height: 900 });
   await settingsButton.click();
   await expect(settings).toBeVisible();
-  const narrowLeft = await page.getByRole('list', { name: '联系人同步状态' }).boundingBox();
+  const narrowLeft = await page.getByRole('list', { name: '联系人列表' }).boundingBox();
   const narrowChat = await chat.boundingBox();
   assert.ok(narrowChat.y > narrowLeft.y + narrowLeft.height);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);

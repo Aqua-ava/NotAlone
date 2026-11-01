@@ -114,7 +114,6 @@
 .contacts-toolbar > div:last-child { display: flex; flex-wrap: wrap; gap: 8px; }
 .contact-list { max-height: 65vh; overflow-y: auto; padding: 3px; scrollbar-width: none; }
 .contact-list::-webkit-scrollbar { display: none; }
-.contact-row-copy .contact-sync-status { color: #355f7c; }
 .contact-sync-details { margin: 14px 0; }
 .contact-binding details { margin-top: 12px; font-size: 12px; overflow-wrap: anywhere; }
 .contact-binding code { display: block; margin-top: 10px; }

@@ -6,7 +6,7 @@ export const managerPages = {
   },
   contacts: {
     title: '联系人', icon: 'contacts',
-    description: '查看聊天记录，管理每个人的同步状态与微信关联。',
+    description: '查看联系人的聊天记录，管理已保存的资料。',
     emptyTitle: '联系人暂不可用',
     emptyDescription: '连接完成后，这里会显示你的联系人与消息、来源摘要。',
     action: '选择联系人',
@@ -20,7 +20,7 @@ export const managerPages = {
   },
   sync: {
     title: '同步设置', icon: 'sync',
-    description: '选择微信私聊的同步范围；遗漏消息会自动补齐。单个会话的同步可在「联系人」中管理。',
+    description: '管理同步总开关、单个联系人的同步与微信私聊范围；遗漏消息会自动补齐。',
     emptyTitle: '同步尚未就绪',
     emptyDescription: '尚未连接，无法查询读取状态。连接完成后，由你确认会话范围。',
     action: '确认同步范围',

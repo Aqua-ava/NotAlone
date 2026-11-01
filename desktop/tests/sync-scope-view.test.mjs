@@ -167,39 +167,72 @@ test('旧增量授权没有历史行时，后台及当前联系人仍明确显�
  await expect(page.getByLabel('当前联系人同步状态')).toContainText('会话类型与私聊授权不一致，已停止读取；请在联系人中核对关联。');
 });
 
-test('联系人详情隐藏同步技术明细，切换后仍可管理当前联系人', async t => {
+test('联系人列表省略同步标签，单个联系人的启停统一在同步设置管理', async t => {
  const browser = await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
  const page = await browser.newPage();
  await mount(page, `
  import React from 'react';import {createRoot} from 'react-dom/client';import {ContactsPage} from './src/renderer/ContactsPage';
+ import {ContactSyncSettings} from './src/renderer/ContactSyncSettings';
  const contacts=[{contactId:'a',displayName:'合成甲',messageCount:200},{contactId:'b',displayName:'合成乙',messageCount:10}];
  const active=contacts.map(contact=>({bindingId:contact.contactId+'1',contactId:contact.contactId,locator:'synthetic-'+contact.contactId,displayName:contact.displayName,status:'active'}));
- const bindings={revision:1,scopeRevision:1,phase:'ready',sessions:[],bindings:active,knownBindings:active,sessionIssue:'not-requested',busy:null};
- const sync={revision:1,scopeRevision:1,phase:'ready',busy:null,report:{enabled:true,historyCoverages:[
+ let bindings={revision:1,scopeRevision:1,phase:'ready',selectionOnly:true,sessions:[],bindings:active,knownBindings:active,sessionIssue:'not-requested',busy:null};
+ const listeners=new Set();window.writes=[];window.listReads=0;
+ const sync={revision:1,scopeRevision:1,phase:'ready',busy:null,report:{enabled:true,selectionOnly:true,backfill:{phase:'complete'},historyCoverages:[
  {bindingId:'a1',contactId:'a',phase:'complete',messageCount:200,pageCount:2,nonTextCount:0,failureCode:null},
  {bindingId:'b1',contactId:'b',phase:'incomplete',messageCount:10,pageCount:1,nonTextCount:2,metadataOnlyCount:3,
  nonTextTypes:[{messageType:'image',label:'图片',count:2}],failureCode:'cli_timeout',incrementalPhase:'syncing',incrementalPages:200,incrementalFailureCode:'unknown'}]}};
- window.notalone={bindings:{getState:async()=>bindings,onStateChanged:()=>()=>{},refreshSaved:async()=>{}},
+ window.notalone={bindings:{getState:async()=>bindings,onStateChanged:fn=>{listeners.add(fn);return()=>listeners.delete(fn);},refreshSaved:async()=>{},
+ refresh:async()=>{window.listReads++;},revokeBinding:async request=>{window.writes.push(request);
+ bindings={...bindings,revision:2,scopeRevision:2,bindings:active.filter(binding=>binding.bindingId!==request.bindingId),
+ knownBindings:active.map(binding=>binding.bindingId===request.bindingId?{...binding,status:'revoked'}:binding),notice:'revoked'};
+ for(const listener of listeners)listener(bindings);}},
  historyClear:{getState:async()=>({revision:1,contactId:null,scopeRevision:1,phase:'idle',clear:null,resync:null,busy:null,error:null}),onStateChanged:()=>()=>{},refresh:async()=>{}},
  syncControl:{getState:async()=>sync,onStateChanged:()=>()=>{},refresh:async()=>{}}};
  const root=createRoot(document.getElementById('root'));
  window.notalone.contactHistory={getState:async()=>({revision:1,contactId:null,scopeRevision:1,messages:{phase:'idle',items:[],nextCursor:null},error:null}),onStateChanged:()=>()=>{}};
- const render=id=>root.render(<ContactsPage session={{state:{contacts,selectedContactId:id,scopeRevision:1,directoryPhase:'ready'},refreshContacts:async()=>{}}} navigate={()=>{}}/>);
+ const render=(id,view='contacts')=>{const session={state:{contacts,selectedContactId:id,scopeRevision:1,directoryPhase:'ready'},refreshContacts:async()=>{}};
+ root.render(view==='contacts'?<ContactsPage session={session} navigate={()=>{}}/>:
+ <ContactSyncSettings key={id??''} session={session} navigate={()=>{}}/>);};
  window.select=render;render('a');
  `);
  const directory=page.getByRole('region',{name:'联系人目录'});
- const settingsButton=directory.getByRole('button',{name:'同步与资料管理',exact:true});
+ const list=directory.getByRole('list',{name:'联系人列表'});
+ await expect(list).toContainText('200 条消息');
+ await expect(list).toContainText('10 条消息');
+ await expect(list).not.toContainText('同步');
+ const settingsButton=directory.getByRole('button',{name:'资料管理',exact:true});
  await settingsButton.click();
- await expect(directory.getByRole('button',{name:'停止合成甲的自动同步',exact:true})).toBeVisible();
+ await expect(directory.getByRole('button',{name:/停止.*的自动同步/})).toHaveCount(0);
  await expect(directory.getByRole('button',{name:'查看关系资料',exact:true})).toBeVisible();
  await page.evaluate(()=>window.select('b'));
  await expect(settingsButton).toHaveAttribute('aria-expanded','false');
  await settingsButton.click();
- await expect(directory.getByRole('button',{name:'停止合成乙的自动同步',exact:true})).toBeVisible();
- await expect(directory.getByRole('button',{name:'停止合成甲的自动同步',exact:true})).toHaveCount(0);
+ await expect(directory.getByRole('button',{name:/停止.*的自动同步/})).toHaveCount(0);
  for(const text of ['历史读取受阻','本机历史已读完','非文字占位','系统等元数据','已跟进','新消息同步暂未继续','图片：','微信关联与同步','已关联微信','核对会话标识','联系人标识','synthetic-a','synthetic-b']) {
   await expect(directory).not.toContainText(text);
  }
+ await page.evaluate(()=>window.select('a','sync'));
+ const settings=page.getByRole('region',{name:'单个联系人同步'});
+ await settings.getByRole('button',{name:'停止合成甲的自动同步',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'撤销后台读取授权确认'});
+ await expect(dialog).toContainText('合成甲');
+ assert.deepEqual(await page.evaluate(()=>window.writes),[]);
+ await page.evaluate(()=>window.select('b','sync'));
+ await expect(dialog).toHaveCount(0);
+ await expect(settings.getByRole('button',{name:'停止合成甲的自动同步',exact:true})).toHaveCount(0);
+ await settings.getByRole('button',{name:'停止合成乙的自动同步',exact:true}).click();
+ await dialog.getByRole('button',{name:'确认撤销此会话授权',exact:true}).click();
+ assert.deepEqual(await page.evaluate(()=>window.writes),[{scopeRevision:1,contactId:'b',bindingId:'b1'}]);
+ await expect(settings.getByRole('button',{name:'开启自动同步',exact:true})).toBeVisible();
+ await settings.getByRole('button',{name:'开启自动同步',exact:true}).click();
+ await expect(settings.getByRole('region',{name:'添加微信联系人'})).toBeVisible();
+ assert.equal(await page.evaluate(()=>window.listReads),0);
+ assert.equal((await page.evaluate(()=>window.writes)).length,1);
+ await settings.getByRole('button',{name:'返回同步设置',exact:true}).click();
+ await expect(settings.getByRole('button',{name:'开启自动同步',exact:true})).toBeVisible();
+ await page.evaluate(()=>window.select(null,'sync'));
+ await expect(settings).toContainText('在顶部选择联系人后');
+ await expect(settings.getByRole('button',{name:/停止.*的自动同步/})).toHaveCount(0);
 });
 
 

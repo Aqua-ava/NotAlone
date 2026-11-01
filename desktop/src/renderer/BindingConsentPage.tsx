@@ -5,9 +5,9 @@ import type { ManagerPage } from './pages';
 import './bindings.css';
 import { useEffect, useState } from 'react';
 
-export function BindingConsentPage({ contacts, consent, navigate, onClose, targetContactId, allPrivate = false, startSync = false }: {
+export function BindingConsentPage({ contacts, consent, navigate, onClose, targetContactId, allPrivate = false, startSync = false, returnLabel = '返回联系人' }: {
   contacts: ContactSessionView; consent: BindingConsentView; navigate: (page: ManagerPage) => void;
-  onClose(): void; targetContactId?: string; allPrivate?: boolean; startSync?: boolean;
+  onClose(): void; targetContactId?: string; allPrivate?: boolean; startSync?: boolean; returnLabel?: string;
 }) {
   const { state, selection, setSelection } = consent;
   const selectionOnly = state.selectionOnly === true;
@@ -28,7 +28,7 @@ export function BindingConsentPage({ contacts, consent, navigate, onClose, targe
   return <section className="bindings-section" aria-label={title}>
     <div className="bindings-toolbar"><h2>{title}</h2><div>
       <button className="button" disabled={!!state.busy || state.phase === 'offline' || state.phase === 'loading'} onClick={() => void consent.refresh()}>刷新微信会话</button>
-      <button className="button" disabled={!!state.busy} onClick={onClose}>返回联系人</button>
+      <button className="button" disabled={!!state.busy} onClick={onClose}>{returnLabel}</button>
     </div></div>
     {!startSync && allPrivateMode && <p>全部私聊已纳入自动同步范围，无需逐个添加。这里用于处理身份冲突，或重新开启你曾单独停止的会话。</p>}
     {startSync && <>
@@ -91,7 +91,7 @@ export function ContactSyncDetails({ contactId, consent, onConnect, allPrivate =
   const allPrivateMode = allPrivate && !selectionOnly;
   const known = state.knownBindings?.filter((binding) => binding.contactId === contactId) ?? [];
   const active = state.bindings.filter((binding) => binding.contactId === contactId);
-  if (state.phase !== 'ready' || !state.knownBindings) return <p>同步状态尚未确认，请刷新联系人后再操作。</p>;
+  if (state.phase !== 'ready' || !state.knownBindings) return <p>同步状态尚未确认，请刷新联系人同步状态后再操作。</p>;
   return <section className="contact-sync-details" aria-label="联系人自动同步">
     {active.length === 0 && <><p>{known.length ? '已停止自动同步，已有资料仍保留。重新开启前请核对微信会话。' : selectionOnly ? '尚未核验这位联系人的微信身份。请明确选择对应私聊；同名不会自动合并。' : allPrivateMode ? '尚未发现与这份资料关联的微信账号。全部私聊会按账号自动关联，不会按同名合并资料；需要时可在此核对关联。' : '尚未关联微信，当前资料来自手动输入或文件导入。'}</p>
       <button className="button" disabled={!!state.busy || !state.knownBindings} onClick={onConnect}>{known.length ? '开启自动同步' : selectionOnly ? '核对微信关联并授权' : allPrivateMode ? '核对微信关联' : '关联微信并开启同步'}</button></>}
@@ -114,7 +114,7 @@ export function BindingFeedback({ consent }: { consent: BindingConsentView }) {
     {state.phase === 'offline' && <p>连接本机服务后查看联系人同步状态。</p>}
     {state.phase === 'unavailable' && <p>{selectionOnly ? '微信账号或会话身份尚未核验，当前不能读取对应正文。' : '微信同步尚未就绪，仍可手动输入或导入资料。'}</p>}
     {state.phase === 'failed' && <p role="alert">联系人同步状态读取失败，请刷新联系人重试；当前不能确认授权范围。</p>}
-    {state.sessionIssue && state.sessionIssue !== 'not-requested' && <p role="alert">{selectionOnly ? '微信会话名单暂时无法核验，不能据此确认当前读取资格；可在联系人详情中停止同步。' : '微信会话名单暂时无法读取，已保存的授权仍有效；可在联系人详情中停止同步。'}</p>}
+    {state.sessionIssue && state.sessionIssue !== 'not-requested' && <p role="alert">{selectionOnly ? '微信会话名单暂时无法核验，不能据此确认当前读取资格；可在同步设置中停止同步。' : '微信会话名单暂时无法读取，已保存的授权仍有效；可在同步设置中停止同步。'}</p>}
     {revocation && <div className="binding-dialog-backdrop"><section className="binding-dialog" role="dialog" aria-modal="true" aria-label="撤销后台读取授权确认">
       <h2>停止这个微信会话的自动同步？</h2><b>{revocation.displayName || '此联系人'}</b>
       <p>{selectionOnly ? '确认后将停止读取这位联系人的聊天、整理关系资料和转换媒体。已保存的聊天和关系资料仍保留。' : '本轮同步结束后停止更新，已保存的聊天和关系资料仍保留。'}</p>

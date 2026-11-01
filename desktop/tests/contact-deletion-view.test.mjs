@@ -136,7 +136,7 @@ test('目录移除联系人后删除结果仍保留；完成项不显示姓名�
   const status = page.getByRole('region', { name: '联系人删除任务' });
   await expect(status).toContainText('联系人删除已完成');
   await page.evaluate(() => window.removeContactFromDirectory('contact-001'));
-  await expect(page.getByRole('list', { name: '联系人同步状态' }).getByText('王小明')).toHaveCount(1);
+  await expect(page.getByRole('list', { name: '联系人列表' }).getByText('王小明')).toHaveCount(1);
   await expect(status).toContainText('联系人删除已完成');
   await expect(status.getByText(/contact-001|王小明/)).toHaveCount(0);
 });
