@@ -2,9 +2,9 @@
 
 `contracts.ts` 是后续07/11/16的稳定入口。`HistoryChannel` 是唯一外部替换边界：结构支持认证、固定目标、分页读取分别执行；未认证真实渠道不能读取正文。合成渠道仅替换此边界，正式身份服务、规范化、具名事务和SQLite均不替换。
 
-`message` 的内部id与来源出现键、服务端别名、续读cursor各自独立。来源出现键包含来源代次、分片、表实例及精确十进制localId；serverId为0不建立别名。只有支持档明确 `serverAliasSemantics=verified_within_scope` 时才使用服务端别名连接不同本地身份；未知或不支持时保留观测值而不凭正文、时间或相同serverId猜测合并。message_alias使用内部id作为清理主键，完整scope+scheme+external_key仍有唯一约束，长复合出现键不会挤入删除目标键。`capture_record` 直接引用实际规范消息；每次重新读取产生新捕获，原执行引用的record不改写。非文字正文始终NULL，不下载媒体或调用模型。
+`message` 的内部id与来源出现键、服务端别名、续读cursor各自独立。来源出现键包含来源代次、分片、表实例及精确十进制localId；serverId为0不建立别名。只有支持档明确 `serverAliasSemantics=verified_within_scope` 时才使用服务端别名连接不同本地身份；未知或不支持时保留观测值而不凭正文、时间或相同serverId猜测合并。message_alias使用内部id作为清理主键，完整scope+scheme+external_key仍有唯一约束，长复合出现键不会挤入删除目标键。`capture_record` 直接引用实际规范消息。按 [ADR-128](../../../../architecture/adr/128-deduplicated-wechat-message-storage.md)，重复读取命中仍有效的相同消息来源时复用来源，不再每次新增捕获；正常文字仅在消息层保存正文，来源记录保留定位与必要元数据。版本22迁移仅移除与消息正文完全一致的旧来源正文副本，不一致的历史内容保留；原执行的来源身份不因重复读取改写。非文字正文始终NULL，不下载媒体或调用模型。
 
-服务读取提供 `HistoryRead`，含消息、实际来源record及覆盖；`running/not_started` 阻止生成，`incomplete` 要求每次请求明确确认并保留警告，不能把确认保存为永久偏好。未知顺序只提供稳定展示，不代表真实先后。后续派生域必须以完整 `(owner_id,contact_id,record_id,message_id)` FK 引用实际来源，不能从当前来源替换过去执行输入。
+服务读取提供 `HistoryRead`，含消息、实际来源record及覆盖；按 [ADR-131](../../../../architecture/adr/131-available-context-without-history-wait.md)，已确认联系人可使用当前有效资料生成，`running/not_started/incomplete` 不阻止生成，也不要求额外确认；受理时冻结实际覆盖与限制，未完成不能标为完整，后续同步不改写原请求依据。旧确认字段仅兼容，不伪造用户确认或扩大读取授权。未知顺序只提供稳定展示，不代表真实先后。后续派生域必须以完整 `(owner_id,contact_id,record_id,message_id)` FK 引用实际来源，不能从当前来源替换过去执行输入。
 
 迁移由 `historyMigration(version)` 生成，版本仅由公共registry串行决定。03领域删除注册导出 `historyDeletionDomain`；`source(contactId,recordId)` 返回原捕获的不可变实际来源及当时支持档，隔离记录不从此入口提供给派生服务。`capture_record.availability` 在删除fence时立即失效；`source.ts` 的 `assertSourceEligibility(tx,MessageSourceReference)` 要在派生写者自己的接受事务复验，配合其运行/联系人代次，不能只检查先前读到的sourceRecordIds。
 

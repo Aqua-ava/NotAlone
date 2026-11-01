@@ -8,6 +8,29 @@ const root = path.resolve(new URL('../../', import.meta.url).pathname);
 const productEntries = ['backend-ts/src/sqlite-host-plugin.ts', 'backend-ts/src/launch.ts', 'desktop/src/main/index.ts'];
 const sourceRoots = ['backend-ts/src', 'desktop/src'];
 
+test('旧宿主消费者退役后清除遗留解析器与模型测试孤岛，保留现行验收入口', () => {
+  for (const file of [
+    'backend-ts/src/memory/records/json.ts',
+    'backend-ts/test/diagnostic-scenario-budget-plugin.ts',
+    'backend-ts/test/extraction-model-plugin.ts',
+    'backend-ts/test/host-model-network-guard.mjs',
+    'backend-ts/test/stalled-tool.ts',
+    'backend-ts/test/pure-ts-provider-fixture.mjs',
+    'backend-ts/test/main-host-reply-chain-preload.mjs',
+  ]) assert.equal(existsSync(path.join(root, file)), false, `${file} 的旧宿主或测试消费者已退役`);
+  for (const file of [
+    'backend-ts/src/host/host-json.ts',
+    'backend-ts/src/memory/sqlite/http.ts',
+    'backend-ts/test/observe.mjs',
+    'backend-ts/test/model-provider-fixture.ts',
+    'backend-ts/test/profile-support.mjs',
+    'backend-ts/test/prepare-memory-desktop.mjs',
+    'backend-ts/test/prepare-memory-management-desktop.mjs',
+    'backend-ts/test/prepare-skill-desktop.mjs',
+    'backend-ts/test/prepare-visual-desktop.mjs',
+  ]) assert.equal(existsSync(path.join(root, file)), true, `${file} 的现行调用或独立验收入口须保留`);
+});
+
 test('旧同步解析、候选协议及已移除导入页的孤立模块不再留在当前树', () => {
   for (const file of [
     'backend-ts/src/memory/overview/evidence/semantic.ts',

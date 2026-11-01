@@ -100,3 +100,47 @@
 - 相比第二轮基线，内联本地路径缺失 **429 → 397**，无新增缺失；**29 条固定 SHA 源码链接、24 个唯一 Git 对象路径全部存在**。只验证本地 Git 对象及相对路径，不声称已联网检查每个网页、锚点或每条历史验收。
 - 运行源码相对 import、package 入口及 `git diff --check` 继续核对；未变更 package 或锁文件。
 - 原有 5 项桌面测试清单漏登记和缺少安装依赖的验证限制继续保留；未启动原生 App、微信、真实模型，也未修改业务数据。
+
+### 后续补充验证（f991f948）
+
+以上“缺少安装依赖／未运行 typecheck”保留为当时状态。随后执行 `pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile --store-dir ../notalone-pnpm-store`，冻结锁文件且不执行安装脚本；package 清单与锁文件未变化。已核实安装及编译日志：`pnpm run typecheck` 的后台和桌面 `tsc --noEmit` 均完成，解除此前缺依赖及未编译的验证限制。
+
+相关验证按不同测试计共 **26 项：25 通过、1 项环境阻断**，不重复计数安装前后的重跑：
+
+- 仓库根运行 `node --test backend-ts/test/sqlite-cutover-retirement.test.mjs desktop/tests/test-inventory.test.mjs`：11/11 通过。
+- 在 `backend-ts/` 运行 `timeout 45s node --test --test-name-pattern='未经确认|预算只投影|完整Messages|第二轮工具|真实配置漂移|工具选择必须' test/model-ledger-contract.test.mjs test/model-input-budget.test.mjs`：6/6 通过，未选择需要模型适配器的 HTTP 用例。
+- 在 `desktop/` 运行 `timeout 30s node --test --test-name-pattern='只复用当前项目|已有打包宿主|常用启动入口|孤立宿主|开发 CDP' tests/development-policy.test.mjs`：4 通过，1 项合成开发租约测试因 Unix socket 监听被环境以 `EPERM` 拒绝而阻断；清理前 `4d25443a` 的同一用例亦复现该限制，未提权或改写测试规避。
+- 在 `backend-ts/` 运行 `timeout 45s node --test --test-name-pattern='来源删除立即封禁旧写入|文件身份错误不误删替换件|错误owner目标|联系人和账户删除清理' test/sqlite-deletion.test.mjs`：安装依赖后 4/4 通过，取代此前缺少 DSH 导致的 `worker_failed`，覆盖隔离临时库中的删除围栏、文件身份保护、所有者隔离和墓碑。
+
+这些是有界的相关验证，不是全量测试或 CI 通过证明；原有 5 项桌面测试漏登记及上述 socket 限制仍保留。未运行真实 App／微信、原生构建或真实模型，未接触或修改用户业务资料。
+
+## 第三轮：旧宿主辅助文件与当前状态校准（基线 f991f948）
+
+### 有依据的清理与保留
+
+本轮移除以下 7 个孤立文件：
+
+- `backend-ts/src/memory/records/json.ts`
+- `backend-ts/test/diagnostic-scenario-budget-plugin.ts`
+- `backend-ts/test/extraction-model-plugin.ts`
+- `backend-ts/test/host-model-network-guard.mjs`
+- `backend-ts/test/stalled-tool.ts`
+- `backend-ts/test/pure-ts-provider-fixture.mjs`
+- `backend-ts/test/main-host-reply-chain-preload.mjs`
+
+旧消费者已随 `b3830bf6` 的 PostgreSQL 退役清理移除；本轮同时核对静态引用、动态 profile、`--import` 预加载链及测试入口，不以普通 import 搜索为空作为唯一依据。历史整树 runner 与固定历史清单继续保留，不恢复旧执行栈到当前默认入口。现行 JSON 处理、SQLite HTTP、模型夹具和 profile 支持入口保留，并以退役／保留清单断言约束。`prepare-memory-desktop.mjs`、`prepare-memory-management-desktop.mjs`、`prepare-skill-desktop.mjs` 等独立手工验收 helper 不因无普通调用而删除；`prepare-visual-desktop.mjs` 同样保留。
+
+### 文档校准
+
+- 架构索引、ADR-128、现行核心流程与隐私文档区分“去重及旧正文副本清理已实施”与“撤回状态的新展示／使用规则暂缓”，不将实现存在写成所有用户数据已迁移或实机验收通过。
+- SQLite 历史 README 对齐重复读取复用来源及版本 22 的单正文副本迁移；按 ADR-131 修正历史覆盖未完成时的生成资格，仍冻结实际覆盖与限制，不扩大读取授权。
+- 桌面 README 将 PostgreSQL 测试准备及旧文件导入／来源管理步骤明确标为历史，保留数据保护说明，不暗示当前提供静态加密。
+
+### 第三轮验证
+
+- 删除后 `pnpm run typecheck`：后台、桌面两端 `tsc --noEmit` 均通过。
+- `node --test backend-ts/test/sqlite-cutover-retirement.test.mjs desktop/tests/test-inventory.test.mjs backend-ts/test/sqlite-single-text-copy.test.mjs`：**13 通过、0 失败、0 跳过**，覆盖退役／保留清单、测试清单校验器及单正文副本合成迁移；不是完整桌面测试清单通过。
+- 相对第三轮独立基线 `f991f948`，1,987 条 Markdown 内联本地路径中既有缺失 **397 → 397**，无新增；29 条固定 SHA 链接、24 个不同 Git 路径全部存在。未检查远端网页、标题锚点及 reference-style 链接。
+- 运行源码相对导入候选 1,995 条，无缺失路径；此正则检查含字符串字面量动态 import／require，但不证明变量构造动态路径或完整运行可达性，不能替代上述编译。
+- `git diff --check` 通过。提交前 `node scripts/check_public_history.mjs --ref HEAD --working-tree` 通过，0 issues；覆盖当时 HEAD 的 3,114 个历史提交、22,744 个 blob 与当前文件，不等同新提交生成后的检查。
+- 本轮未安装或升级依赖，未运行 App／微信、原生构建或真实模型；既有桌面测试漏登记及 socket 环境限制未在本轮修复。补充验证与前两轮结果分别报告，不把重复执行累计为新增覆盖。
