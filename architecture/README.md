@@ -255,3 +255,4 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 145. [ADR-145：记忆处理卡跟随当前联系人](adr/145-contact-scoped-memory-processing-view.md)
 
 146. [ADR-146：AI 服务地址与密钥由用户填写](adr/146-editable-deepseek-endpoint.md)
+147. [ADR-147：OpenCode Go 的模型环境配置](adr/147-opencode-go-model-configuration.md)

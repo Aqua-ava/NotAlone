@@ -10,6 +10,28 @@ const configured = (environment = {}, options = {}) => {
   return result;
 };
 
+test('OpenCode Go模型使用独立容量、Bearer认证及同一Go套餐的核验接口', async()=>{
+  for(const [base,strict] of [
+    ['https://opencode.ai/inference/go/anthropic','https://opencode.ai/inference/go/openai/v1/chat/completions'],
+    ['https://opencode.ai/inference/go/anthropic/v1','https://opencode.ai/inference/go/openai/v1/chat/completions'],
+    ['https://opencode.ai/zen/go/v1','https://opencode.ai/zen/go/v1/chat/completions'],
+  ]) {
+    const c=configured({NOTALONE_DEEPSEEK_BASE_URL:base,NOTALONE_DEEPSEEK_MODEL:'deepseek-v4.1-flash'});
+    assert.equal(c.model.model,'deepseek-v4.1-flash');
+    assert.equal(c.model.maxTokens,384000);
+    assert.equal(c.model.budgetProfile.context_window_tokens,1000000);
+    assert.equal(c.provider.connection.models[0].id,c.model.model);
+    assert.equal(c.provider.strictVerificationEndpoint,strict);
+    const auth=await c.provider.resolveAuth(c.provider.connection);
+    assert.equal(auth.headers.authorization,`Bearer ${syntheticKey}`);
+    assert.equal(auth.headers['user-agent'],'NotAlone/0.1');
+    await assert.rejects(c.provider.resolveAuth({...c.provider.connection,baseURL:PUBLIC_BASE_URL}),/route_mismatch/);
+  }
+  for(const base of ['https://api.deepseek.com','https://opencode.ai.evil.invalid/inference/go/anthropic','https://opencode.ai/inference/anthropic'])
+    assert.equal(resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:syntheticKey,NOTALONE_DEEPSEEK_BASE_URL:base,NOTALONE_DEEPSEEK_MODEL:'deepseek-v4.1-flash'}).status,'unavailable');
+  assert.equal(resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:syntheticKey,NOTALONE_DEEPSEEK_BASE_URL:'https://opencode.ai/inference/go/anthropic',NOTALONE_DEEPSEEK_MODEL:'deepseek-v4.1-flash',NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS:'384001'}).status,'unavailable');
+});
+
 test('宿主显式配置覆盖DSH默认值，输出采用供应商上限，认证仅保存在回调中', async () => {
   const result = configured();
   const {model, provider} = result;
@@ -100,7 +122,7 @@ test('公开官方adapter实际生成的路由、凭据、输出和思考字段�
   globalThis.fetch = async (input, init) => {
     requests.push({url: String(input), headers: new Headers(init?.headers), body: JSON.parse(init.body)});
     const events = [
-      {type: 'message_start', message: {id: 'synthetic-config', model: 'deepseek-flash', usage: {input_tokens: 1, output_tokens: 0}}},
+      {type: 'message_start', message: {id: 'synthetic-config', model: JSON.parse(init.body).model, usage: {input_tokens: 1, output_tokens: 0}}},
       {type: 'content_block_start', index: 0, content_block: {type: 'text', text: ''}},
       {type: 'content_block_delta', index: 0, delta: {type: 'text_delta', text: '合成'}},
       {type: 'content_block_stop', index: 0},
@@ -112,24 +134,30 @@ test('公开官方adapter实际生成的路由、凭据、输出和思考字段�
   };
   t.after(() => {globalThis.fetch = previousFetch;});
   const cases=[{effort:null,maxTokens:393216},{effort:'high',maxTokens:393216},{effort:null,maxTokens:65536},
-    {effort:null,maxTokens:8192,base:'https://gateway.invalid/proxy/v1'}];
-  for (const {effort,maxTokens,base} of cases) {
-    const configuration = configured({NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS:String(maxTokens),...(base?{NOTALONE_DEEPSEEK_BASE_URL:base}:{})}, {replyThinkingEffort: effort});
+    {effort:null,maxTokens:8192,base:'https://gateway.invalid/proxy/v1'},
+    {effort:null,maxTokens:384000,base:'https://opencode.ai/inference/go/anthropic/v1',modelId:'deepseek-v4.1-flash'}];
+  for (const {effort,maxTokens,base,modelId} of cases) {
+    const configuration = configured({NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS:String(maxTokens),...(base?{NOTALONE_DEEPSEEK_BASE_URL:base}:{}),...(modelId?{NOTALONE_DEEPSEEK_MODEL:modelId}:{})}, {replyThinkingEffort: effort});
     const {provider, model} = configuration;
     const adapter = new DeepSeekAdapter({options: () => provider.connection,
       resolveAuth: provider.resolveAuth, resolveUserId: () => 'synthetic-config-anonymous',
       prepareExtensions: async () => ({fields: {}})});
     const chunks = [];
-    for await (const chunk of adapter.stream({provider: model.provider, model: model.model,
+    for await (const chunk of adapter.stream({sessionId:'synthetic-config-session',provider: model.provider, model: model.model,
       maxTokens: model.maxTokens, temperature: model.temperature, reasoningEffort: model.reasoningEffort,
       messages: [{role: 'user', content: [{type: 'text', text: '合成配置验收'}]}]})) chunks.push(chunk);
     assert.ok(chunks.some(chunk => chunk.type === 'finish'));
   }
-  assert.equal(requests.length, 4);
+  assert.equal(requests.length, cases.length);
   for (const [index,request] of requests.entries()) {
     assert.equal(request.url, cases[index].base?`${cases[index].base}/messages`:'https://api.deepseek.com/anthropic/v1/messages');
-    assert.equal(request.headers.get('x-api-key'), syntheticKey);
-    assert.equal(request.body.model, 'deepseek-flash');
+    if(cases[index].modelId){
+      assert.equal(request.headers.get('authorization'),`Bearer ${syntheticKey}`);
+      assert.equal(request.headers.get('x-api-key'),null);
+      assert.equal(request.headers.get('user-agent'),'NotAlone/0.1');
+    }else assert.equal(request.headers.get('x-api-key'), syntheticKey);
+    assert.equal(request.headers.get('x-deepseek-harness-session-id'),'synthetic-config-session');
+    assert.equal(request.body.model, cases[index].modelId??'deepseek-flash');
     assert.equal(request.body.max_tokens, cases[index].maxTokens);
     assert.equal(request.body.temperature, 0);
     assert.equal(request.body.stream, true);

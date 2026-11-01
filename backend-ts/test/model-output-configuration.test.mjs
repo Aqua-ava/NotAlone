@@ -29,13 +29,15 @@ test('实际strict发送入口的最终HTTP实体和预约快照使用配置额�
       usage:{prompt_tokens:3,completion_tokens:1}}),{status:200,headers:{'content-type':'application/json'}});
   };
   t.after(()=>{globalThis.fetch=previous;});
-  const cases=[{maxTokens:393216},{maxTokens:65536},{maxTokens:8192,base:'https://gateway.invalid/proxy/v1'}];
-  for(const {maxTokens,base} of cases){
-    const resolved=configured({NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS:String(maxTokens),...(base?{NOTALONE_DEEPSEEK_BASE_URL:base}:{})}),binding={provider:resolved.model.provider,
+  const cases=[{maxTokens:393216},{maxTokens:65536},{maxTokens:8192,base:'https://gateway.invalid/proxy/v1'},
+    {maxTokens:384000,base:'https://opencode.ai/inference/go/anthropic',modelId:'deepseek-v4.1-flash'}];
+  for(const {maxTokens,base,modelId} of cases){
+    const resolved=configured({NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS:String(maxTokens),...(base?{NOTALONE_DEEPSEEK_BASE_URL:base}:{}),...(modelId?{NOTALONE_DEEPSEEK_MODEL:modelId}:{})}),binding={provider:resolved.model.provider,
       model:resolved.model.model,maxTokens:resolved.model.maxTokens,temperature:0,reasoningEffort:'off'};
     const provider=installModelProvider({llm:{registerAdapter:()=>()=>{}}},{...resolved.provider,resolveUserId:()=> 'synthetic-output-test'});
     let reservations=0,budget;
-    const call=provider.beginStrictVerificationCall({sessionId:randomUUID(),attempt_id:randomUUID(),permit_id:randomUUID(),
+    const sessionId=randomUUID();
+    const call=provider.beginStrictVerificationCall({sessionId,attempt_id:randomUUID(),permit_id:randomUUID(),
       binding,profile:resolved.model.budgetProfile,requireCurrent:async()=>{},beforeDispatch:async value=>{
         reservations++;budget=modelLedgerInputBudget(value.budget);
       }});
@@ -43,14 +45,18 @@ test('实际strict发送入口的最终HTTP实体和预约快照使用配置额�
       await call.send({system:'仅作合成配置验证。',user:'保留完整的合成核验内容。',signal:new AbortController().signal,
         tool:{name:'SourceVerificationOutput',description:'合成',parameters:{type:'object',additionalProperties:false,properties:{},required:[]}}});
       const request=requests.at(-1);
-      assert.equal(request.url,base?'https://gateway.invalid/proxy/beta/chat/completions':'https://api.deepseek.com/beta/chat/completions');
+      assert.equal(request.url,modelId?'https://opencode.ai/inference/go/openai/v1/chat/completions':base?'https://gateway.invalid/proxy/beta/chat/completions':'https://api.deepseek.com/beta/chat/completions');
+      assert.equal(request.headers.get('x-deepseek-harness-session-id'),sessionId);
+      assert.equal(request.body.model,modelId??'deepseek-flash');
+      assert.equal(budget.context_window_tokens,modelId?1000000:1048576);
+      if(modelId)assert.equal(request.headers.get('user-agent'),'NotAlone/0.1');
       assert.equal(request.headers.get('authorization'),'Bearer synthetic-output-configuration-key');
       assert.equal(request.body.max_tokens,maxTokens);assert.equal(budget.max_output_tokens,maxTokens);
       assert.equal(budget.request_sha256,createHash('sha256').update(request.raw).digest('hex'));
       assert.equal(reservations,1);assert.equal(call.observation().dispatch,'http_accepted');
     }finally{call.close();await provider.dispose();}
   }
-  assert.equal(requests.length,3);
+  assert.equal(requests.length,cases.length);
 });
 
 test('strict请求与记录沿用宿主实际配置，不被旧4096静默缩减',()=>{

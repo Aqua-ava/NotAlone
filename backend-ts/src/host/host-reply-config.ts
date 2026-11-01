@@ -78,7 +78,13 @@ export function resolveHostReplyConfiguration(
   if (effort != null && effort !== 'low' && effort !== 'high' && effort !== 'max') {
     return unavailable('reply_thinking_configuration_invalid');
   }
-  if (model !== DEFAULT_MODEL) {
+  const url = new URL(baseURL);
+  const openCodeGo = url.origin === 'https://opencode.ai' && ['/inference/go/anthropic', '/inference/go/anthropic/v1', '/zen/go/v1'].includes(url.pathname);
+  const openCodeModel = openCodeGo && model === 'deepseek-v4.1-flash';
+  // OpenCode模型目录声明的容量，不能套用DeepSeek官方别名的容量。
+  const maxOutputTokens = openCodeModel ? 384000 : MODEL_MAX_OUTPUT_TOKENS;
+  const contextWindowTokens = openCodeModel ? 1000000 : CONTEXT_WINDOW_TOKENS;
+  if ((model !== DEFAULT_MODEL || openCodeGo) && !openCodeModel) {
     return unavailable('input_budget_unavailable');
   }
 
@@ -86,8 +92,8 @@ export function resolveHostReplyConfiguration(
   if (rawOutputTokens !== undefined && (typeof rawOutputTokens !== 'string' || !/^[1-9][0-9]*$/.test(rawOutputTokens))) {
     return unavailable('reply_model_configuration_invalid');
   }
-  const outputTokens = rawOutputTokens === undefined ? MODEL_MAX_OUTPUT_TOKENS : Number(rawOutputTokens);
-  if (!Number.isSafeInteger(outputTokens) || outputTokens < 1 || outputTokens > MODEL_MAX_OUTPUT_TOKENS) {
+  const outputTokens = rawOutputTokens === undefined ? maxOutputTokens : Number(rawOutputTokens);
+  if (!Number.isSafeInteger(outputTokens) || outputTokens < 1 || outputTokens > maxOutputTokens) {
     return unavailable('reply_model_configuration_invalid');
   }
 
@@ -96,7 +102,9 @@ export function resolveHostReplyConfiguration(
   const messagesBaseURL=official?PUBLIC_BASE_URL:baseURL;
   // 自填地址沿用DeepSeek协议；核验使用同一接收方，不能回落到官方并带走第三方密钥。
   const strictRoot=messagesBaseURL.replace(/\/(?:anthropic(?:\/v1)?|v1)$/,'');
-  const strictVerificationEndpoint=`${strictRoot}/beta/chat/completions`;
+  const strictVerificationEndpoint=openCodeGo
+    ? (url.pathname.startsWith('/inference/go/') ? 'https://opencode.ai/inference/go/openai/v1/chat/completions' : 'https://opencode.ai/zen/go/v1/chat/completions')
+    : `${strictRoot}/beta/chat/completions`;
   const reasoningEffort = effort ?? 'off';
   const connection = resolveAdapterOptions({
     // 官方旧root/v1映射Messages入口，自填地址作为Messages根交给官方适配器。
@@ -104,8 +112,8 @@ export function resolveHostReplyConfiguration(
     thinking: reasoningEffort === 'off' ? 'disabled' : 'enabled',
     reasoningEffort,
     maxTokens: outputTokens,
-    defaultContextWindow: CONTEXT_WINDOW_TOKENS,
-    models: [{id: DEFAULT_MODEL, contextWindow: CONTEXT_WINDOW_TOKENS,
+    defaultContextWindow: contextWindowTokens,
+    models: [{id: model, contextWindow: contextWindowTokens,
       maxTokens: outputTokens, inputModalities: ['text']}],
     // 单次流空闲仍为60秒；前台循环另由业务signal约束全部步骤与保存。
     streamIdleTimeoutMs: 60000,
@@ -119,15 +127,18 @@ export function resolveHostReplyConfiguration(
       strictVerificationEndpoint,
       resolveAuth: async requestConnection => {
         if (requestConnection.baseURL !== messagesBaseURL) throw new Error('reply_auth_route_mismatch');
-        return {headers: {'x-api-key': key.value}};
+        const headers: Record<string, string> = openCodeGo
+          ? {authorization: `Bearer ${key.value}`, 'user-agent': 'NotAlone/0.1'}
+          : {'x-api-key': key.value};
+        return {headers};
       },
     },
     model: {
-      provider: PROVIDER, model: DEFAULT_MODEL, maxTokens: outputTokens,
+      provider: PROVIDER, model, maxTokens: outputTokens,
       temperature: 0, reasoningEffort,
       // 两层场景预算各至多8；业务层仍须按请求执行min(24, 8 + 实际call_limit)。
       physical_limit: 24, deadline_ms: REPLY_EXECUTION_DEADLINE_MS, warning_ratio: 0.8,
-      budgetProfile: {context_window_tokens: CONTEXT_WINDOW_TOKENS,
+      budgetProfile: {context_window_tokens: contextWindowTokens,
         safety_margin_tokens: SAFETY_MARGIN_TOKENS},
     },
   };
