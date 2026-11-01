@@ -17,14 +17,23 @@ export class SqliteMemoryExtractionHttp {
    if(req.method!=='GET'||url.search){send(res,400,{error:'memory_extraction_request_invalid'});return true;}
    try{send(res,200,await this.schedule());}catch{send(res,409,{error:'memory_extraction_schedule_unavailable'});}return true;
   }
-  const contact=/^\/api\/memory-processing\/contacts\/([a-f0-9-]{36})\/current$/.exec(url.pathname);
+  const contact=/^\/api\/memory-processing\/contacts\/([a-f0-9-]{36})\/(current|history)$/.exec(url.pathname);
   const task=/^\/api\/memory-processing\/tasks\/([a-f0-9-]{36})\/events$/.exec(url.pathname);
   const run=/^\/api\/memory-processing\/runs(?:\/(current|[a-f0-9-]{36})(?:\/(pause|continue))?)?$/.exec(url.pathname);
   if(!contact&&!task&&!run){send(res,404,{error:'memory_extraction_not_found'});return true;}
   try{
    if(url.search)throw new StorageFailure('memory_extraction_request_invalid');
    let value:unknown;
-   if(contact){if(req.method!=='GET'||!uuid.test(contact[1]!))throw new StorageFailure('memory_extraction_request_invalid');value=await this.service.readContact(contact[1]!);}
+   if(contact){
+    if(!uuid.test(contact[1]!))throw new StorageFailure('memory_extraction_request_invalid');
+    if(contact[2]==='current'){if(req.method!=='GET')throw new StorageFailure('memory_extraction_request_invalid');value=await this.service.readContact(contact[1]!);}
+    else{
+     if(req.method!=='POST')throw new StorageFailure('memory_extraction_request_invalid');
+     const body=JSON.parse((await readWechatHttpBody(req,2048,10_000)).toString('utf8'));
+     if(!body||Array.isArray(body)||Object.keys(body).join(',')!=='request_key'||!uuid.test(body.request_key))throw new StorageFailure('memory_extraction_request_invalid');
+     value=await this.service.startHistory(contact[1]!,body.request_key);
+    }
+   }
    else if(task){if(req.method!=='GET'||!uuid.test(task[1]!))throw new StorageFailure('memory_extraction_request_invalid');value=await this.service.trace(task[1]!);}
    else if(!run![1]){
     if(req.method!=='POST')throw new StorageFailure('memory_extraction_request_invalid');

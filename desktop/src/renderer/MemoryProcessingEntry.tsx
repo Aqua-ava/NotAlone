@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { BackendBridge } from '../shared/backend-bridge';
 import type { FixedMemoryProcessingBridge, FixedProcessingMode, FixedProcessingRun } from '../shared/fixed-memory-processing';
 import { FixedMemoryProcessingPanel } from './FixedMemoryProcessingPanel';
+import { HistoryMemoryProcessingPanel } from './HistoryMemoryProcessingPanel';
 
 export interface MemoryProcessingEntryProps {
   bridge: FixedMemoryProcessingBridge;
   backend: Pick<BackendBridge, 'onStateChanged'>;
   scopeKey?: string | number;
   contactId?: string | null;
+  scopeRevision?: number;
   children: ReactNode;
   sqliteChildren?: ReactNode | ((processingRevision:number,completedRunId:string|null)=>ReactNode);
 }
@@ -18,10 +20,12 @@ type EntryState = { scope: EntryScope } & (
 );
 
 /** 模式经本机桥核验后才挂载对应的记忆页面。 */
-export function MemoryProcessingEntry({ bridge, backend, scopeKey, contactId = null, children, sqliteChildren }: MemoryProcessingEntryProps) {
+export function MemoryProcessingEntry({ bridge, backend, scopeKey, contactId = null, scopeRevision = 0, children, sqliteChildren }: MemoryProcessingEntryProps) {
   const [state, setState] = useState<EntryState | null>(null);
   const [processingRevision,setProcessingRevision]=useState(0);
   const [completedRunId,setCompletedRunId]=useState<string|null>(null);
+  const [historyRevision,setHistoryRevision]=useState(0);
+  const historyStarted=useCallback(()=>setHistoryRevision(value=>value+1),[]);
   const onRunUpdated=useCallback((run:FixedProcessingRun|null)=>{
     setProcessingRevision(value=>value+1);setCompletedRunId(run?.state==='completed'?run.runId:null);
   },[]);
@@ -62,7 +66,7 @@ export function MemoryProcessingEntry({ bridge, backend, scopeKey, contactId = n
   const current = state?.scope === acceptedScope ? state : null;
   if (current?.phase === 'ready') {
     if (current.mode.mode === 'legacy') return children;
-    if (current.mode.mode === 'sqlite') return <><FixedMemoryProcessingPanel bridge={bridge} contactId={contactId} scopeKey={scopeKey} onRunUpdated={onRunUpdated}/>{typeof sqliteChildren==='function'?sqliteChildren(processingRevision,completedRunId):sqliteChildren}</>;
+    if (current.mode.mode === 'sqlite') return <><FixedMemoryProcessingPanel bridge={bridge} contactId={contactId} scopeKey={`${scopeKey??''}:${historyRevision}`} onRunUpdated={onRunUpdated}/><HistoryMemoryProcessingPanel bridge={bridge} contactId={contactId} scopeRevision={scopeRevision} onStarted={historyStarted}/>{typeof sqliteChildren==='function'?sqliteChildren(processingRevision,completedRunId):sqliteChildren}</>;
   }
   if (current?.phase === 'disconnected') return <p role="status">本机连接已变化，正在等待重新连接。</p>;
   if (current?.phase === 'failed') return <section aria-label="记忆处理模式">

@@ -51,6 +51,88 @@ const steps=(f,taskId)=>f.storage.execute('fixture.steps',{ownerId:owner,taskId}
 const calls=(f,runId)=>f.storage.execute('fixture.modelCalls',{ownerId:owner,runId});
 const contactTask=(rows,contactId)=>rows.find(row=>row.scope_kind==='contact'&&row.contact_id===contactId);
 
+test('用户只启动所选联系人的已保存历史，保留20条小批且同键重放不重新执行',async t=>{
+ const f=await fixtureWithMessages(t,{a:Array.from({length:25},(_,i)=>`合成历史${i+1}`),b:['乙的合成历史']});
+ let memory;const port=modelPort(()=>memory.accounting);memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
+ const key=randomUUID(),before=await memory.readContact(f.ca);assert.equal(before.run,null);assert.equal(port.calls,0);
+ const start=await memory.startHistory(f.ca,key);assert.equal(start.contactId,f.ca);assert.equal(start.run.total,25);
+ assert.ok(start.run.inputs.every(input=>input.contactId===f.ca));assert.equal(start.run.tasks.length,1);
+ await memory.waitForIdle(start.run.runId);
+ const done=await memory.readContact(f.ca);assert.equal(done.run.succeeded,25);assert.equal(port.calls,2,'正常20条提取小批仍由正式执行链处理');
+ assert.equal((await memory.readContact(f.cb)).run,null,'乙的历史没有被甲的启动请求处理');
+ const replay=await memory.startHistory(f.ca,key);assert.equal(replay.run.runId,start.run.runId);await memory.waitForIdle();assert.equal(port.calls,2);
+ await assert.rejects(memory.startHistory(f.cb,key),error=>error.code==='memory_extraction_request_scope_mismatch');
+});
+
+test('历史初始化并发同键幂等，不同键不能重复建轮，运行中新文字不扩张固定输入',async t=>{
+ const f=await fixture(t,{registryModule}),[a,b]=f.saved.map(binding=>binding.contact_id);
+ f.channel.page=async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true,resumeCursor:'tail-1'});
+ await f.service.synchronize(a);await f.service.synchronize(b);
+ const entered=Promise.withResolvers(),gate=Promise.withResolvers();let first=true,memory;
+ const port=modelPort(()=>memory.accounting,async(request)=>{if(first){first=false;entered.resolve();await gate.promise;}return {blocks:[{type:'tool-call',name:request.tool.name,arguments:JSON.stringify({scenes:[]})}]};});
+ memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(async()=>{gate.resolve();await memory.close();});
+ const key=randomUUID(),starts=await Promise.all([memory.startHistory(a,key),memory.startHistory(a,key)]);assert.equal(starts[0].run.runId,starts[1].run.runId);
+ await entered.promise;
+ const before=port.calls;await assert.rejects(memory.startHistory(a,randomUUID()),error=>error.code==='memory_extraction_contact_busy');assert.equal(port.calls,before);
+ const coverage=await f.service.coverage(a),token=await f.contacts.eligibility(a);
+ await f.storage.execute('history.acceptIncrementalPage',{token,goalId:coverage.incremental.goalId,captureId:randomUUID(),page:{target:f.target.descriptor,cursorIn:'tail-1',cursorOut:'tail-2',caughtUp:true,records:[record('2')]},at:Date.now(),runtimeToken:f.storage.status.runtimeId});
+ assert.equal((await memory.readContact(a)).run.total,1,'运行中新到文字不能改变已冻结历史范围');
+ gate.resolve();await memory.waitForIdle(starts[0].run.runId);assert.equal((await memory.readContact(a)).run.succeeded,1);assert.equal(port.calls,1);
+ assert.equal((await memory.readContact(a)).queue.pending,1,'新到文字保留为后续增量资料');
+ assert.equal((await memory.readContact(b)).run,null);
+});
+
+test('空历史、跨owner、撤销授权和来源失证不建新轮，也不影响无关联系人',async t=>{
+ const f=await fixture(t,{registryModule}),[a,b]=f.saved.map(binding=>binding.contact_id);let memory;
+ const port=modelPort(()=>memory.accounting);memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
+ await assert.rejects(memory.startHistory(a,randomUUID()),error=>error.code==='memory_extraction_no_pending_history');assert.equal((await memory.readContact(a)).run,null);
+ const foreign=new SqliteMemoryExtraction(f.storage,randomUUID(),port);t.after(()=>foreign.close());
+ await assert.rejects(foreign.startHistory(a,randomUUID()),error=>error.code==='memory_extraction_not_found');
+ await f.service.synchronize(a);await f.service.synchronize(b);
+ const token=await f.contacts.eligibility(a);await f.storage.execute('history.markContinuityLost',{token});
+ await assert.rejects(memory.startHistory(a,randomUUID()),error=>error.code==='history_source_not_available');assert.equal((await memory.readContact(a)).run,null);
+ const other=await memory.startHistory(b,randomUUID());await memory.waitForIdle(other.run.runId);assert.equal((await memory.readContact(b)).run.succeeded,1);
+ const binding=f.saved.find(binding=>binding.contact_id===b);await f.contacts.revoke(b,binding.binding_id,binding.selection_generation);
+ await assert.rejects(memory.startHistory(b,randomUUID()),error=>error.code==='memory_extraction_scope_stale');assert.equal(port.calls,1);
+});
+
+for(const kind of ['failed','paused','unknown'])test(`历史初始化保留${kind}保护，新键不重试旧调用，同键只读重放`,async t=>{
+ const f=await fixtureWithMessages(t,{a:['我长期住在高雄。'],b:['乙的合成历史']});
+ const entered=Promise.withResolvers(),gate=Promise.withResolvers();let memory;
+ const negative=supplier({negative:true});
+ const port=modelPort(()=>memory.accounting,async(request,input)=>{
+  if(input.scope.contact_id===f.ca){
+   if(kind==='failed')return negative.respond(request,input);
+   if(kind==='unknown')throw new Error('合成未知调用');
+   entered.resolve();await gate.promise;
+  }
+  return {blocks:[{type:'tool-call',name:request.tool.name,arguments:JSON.stringify({scenes:[]})}]};
+ });
+ memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(async()=>{gate.resolve();await memory.close();});
+ const key=randomUUID(),start=await memory.startHistory(f.ca,key);
+ if(kind==='paused'){await entered.promise;const current=await memory.read(start.run.runId);await memory.pause(start.run.runId,current.controlVersion,randomUUID());}
+ else await memory.waitForIdle(start.run.runId);
+ const callsBefore=port.calls;
+ await assert.rejects(memory.startHistory(f.ca,randomUUID()),error=>error.code==='memory_extraction_history_blocked');
+ const replay=await memory.startHistory(f.ca,key);assert.equal(replay.run.runId,start.run.runId);assert.equal(port.calls,callsBefore);
+ if(kind==='paused')gate.resolve();await memory.waitForIdle(start.run.runId);
+ const other=await memory.startHistory(f.cb,randomUUID());await memory.waitForIdle(other.run.runId);
+ assert.equal((await memory.readContact(f.cb)).run.succeeded,1,'甲的失败或未知结果不把乙并入同一轮，也不阻止乙初始化');
+});
+
+test('来源删除围栏阻止历史初始化，删除后同键墓碑不能恢复原文字或任务',async t=>{
+ const f=await fixtureWithMessages(t,{a:['甲的合成历史'],b:['乙的合成历史']}),holders=new ActiveHolders();let memory;
+ const port=modelPort(()=>memory.accounting);memory=new SqliteMemoryExtraction(f.storage,owner,port,holders);t.after(()=>memory.close());
+ const key=randomUUID(),view=await memory.startHistory(f.ca,key);await memory.waitForIdle(view.run.runId);
+ const sourceId=view.run.inputs.find(input=>input.role==='target').recordId;
+ const deletion=new DeletionService(f.storage,holders,new ManagedFiles(f.root));
+ const plan=await deletion.plan({ownerId:owner,requestKey:'history-init-source-delete',scope:{kind:'source',contactId:f.ca,sourceId}});
+ await assert.rejects(memory.startHistory(f.cb,randomUUID()),error=>error.code==='memory_extraction_scope_stale');
+ const result=await deletion.advance({ownerId:owner,operationId:plan.operationId});assert.equal(result.state,'completed');
+ await assert.rejects(memory.startHistory(f.ca,key),error=>error.code==='memory_extraction_request_deleted');
+ assert.equal(port.calls,1);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
 test('联系人处理快照隔离同轮其他联系人的失败、本人任务和调用',async t=>{
  const f=await fixtureWithMessages(t,{a:['我长期住在高雄。'],b:['我长期住在台南。']});
  const x=extractionFixture(f);t.after(()=>x.service.close());

@@ -31,7 +31,7 @@ test('真实记忆页面仅展示处理进度并自动刷新资料，资格失�
       window.legacyCalls = [];
       window.notalone = {
         fixedMemoryProcessing: {
-          readMode: () => controller.mode(), readCurrent: () => controller.read(),
+          readMode: () => controller.mode(), readCurrent: request => controller.read(request),
           start: request => controller.start(request), pause: request => controller.control('pause', request),
           continue: request => controller.control('continue', request), trace: request => controller.trace(request),
           release: async () => controller.release(),
@@ -67,7 +67,7 @@ test('真实记忆页面仅展示处理进度并自动刷新资料，资格失�
   // 只替换网络边界；页面、控制器解析和失效发布均使用正式实现。
   await page.exposeFunction('requestJson', async path => {
     if (path === '/api/runtime/status') return { state: 'running', runtime: 'dsh', hostRuntime: 'typescript', storage: 'sqlite' };
-    if (path === '/api/memory-processing/runs/current') return run;
+    if (path === `/api/memory-processing/contacts/${ids.contact}/current`) return {contactId:ids.contact,run,queue:{pending:0,nextDueAt:null,blockedContacts:0,later:{pending:0,nextDueAt:null,stage:null}}};
     if (path === '/api/memory-processing/schedule') return {pending:0,nextDueAt:null,blockedContacts:0,later:{pending:0,nextDueAt:null,stage:null}};
     throw new Error(`未约定的合成请求：${path}`);
   });

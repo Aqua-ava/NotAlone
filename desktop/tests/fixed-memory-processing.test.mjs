@@ -14,8 +14,9 @@ async function fixture(t,handle){
  const output=path.join(root,'controller.mjs');await build({entryPoints:['src/main/memory/fixed-processing.ts'],outfile:output,bundle:true,platform:'node',format:'esm',logLevel:'silent'});
  const {FixedMemoryProcessingController}=await import(pathToFileURL(output));let generation=1;const calls=[],invalidations=[];
  const backend={getConnectionGeneration:()=>generation,requestJson:async req=>{calls.push(req);return {generation,data:req.path==='/api/memory-processing/schedule'?{pending:0,nextDueAt:null,blockedContacts:0}:await handle(req)};}};
- const controller=new FixedMemoryProcessingController(backend,event=>invalidations.push(event));
- return {controller,calls,invalidations,changeGeneration:()=>{generation++;controller.synchronize();}};
+ let selectedContactId=ids.contact,scopeRevision=7;
+ const controller=new FixedMemoryProcessingController(backend,event=>invalidations.push(event),{getState:()=>({selectedContactId,scopeRevision})});
+ return {controller,calls,invalidations,changeGeneration:()=>{generation++;controller.synchronize();},selectContact:id=>{selectedContactId=id;scopeRevision++;controller.synchronize();}};
 }
 test('固定轮次具名入口只发request_key，保留未完成阶段且旧连接写入不出站',async t=>{
  const f=await fixture(t,async()=>snapshot());const view=await f.controller.read();assert.equal(view.connectionGeneration,1);assert.equal(view.run.state,'incomplete');
@@ -37,6 +38,27 @@ test('联系人状态使用独立只读入口，拒绝错范围、混入本人�
  const count=f.calls.length;
  await assert.rejects(f.controller.read({contactId:ids.contact,ownerId:'other'}));
  await assert.rejects(f.controller.read({contactId:'invalid'}));assert.equal(f.calls.length,count);
+});
+test('历史处理只启动当前联系人，复验选择修订并保留幂等键',async t=>{
+ const f=await fixture(t,async()=>({contactId:ids.contact,run:snapshot(),queue:{pending:0,nextDueAt:null,blockedContacts:0}}));
+ const input={contactId:ids.contact,scopeRevision:7,requestKey:ids.request,connectionGeneration:1};
+ const result=await f.controller.startHistory(input);
+ assert.equal(result.status,'started');assert.equal(result.view.contactId,ids.contact);
+ assert.equal(f.calls.length,1);assert.equal(f.calls[0].method,'POST');
+ assert.equal(f.calls[0].path,`/api/memory-processing/contacts/${ids.contact}/history`);
+ assert.deepEqual(f.calls[0].body,{request_key:ids.request});
+ f.selectContact(ids.request);
+ await assert.rejects(f.controller.startHistory(input));assert.equal(f.calls.length,1);
+ await assert.rejects(f.controller.startHistory({...input,contactId:ids.request,scopeRevision:8,ownerId:'other'}));assert.equal(f.calls.length,1);
+});
+test('历史启动业务阻碍返回固定分类，未知错误不泄露后端原文',async t=>{
+ let code='memory_extraction_no_pending_history';
+ const f=await fixture(t,async()=>{throw {kind:'response',status:409,code,message:'不应回传的正文'};});
+ const input={contactId:ids.contact,scopeRevision:7,requestKey:ids.request,connectionGeneration:1};
+ assert.deepEqual(await f.controller.startHistory(input),{status:'unavailable',reason:'no_pending_history'});
+ code='memory_extraction_history_blocked';assert.deepEqual(await f.controller.startHistory(input),{status:'unavailable',reason:'blocked'});
+ code='history_source_not_available';assert.deepEqual(await f.controller.startHistory(input),{status:'unavailable',reason:'source_stale'});
+ code='unknown_private_error';await assert.rejects(f.controller.startHistory(input),error=>!error.message.includes('不应回传'));
 });
 test('状态读取拒绝会通知撤下旧快照，失效后旧回调不能返回正文',async t=>{
  let rejectRead=false,finish,entered;

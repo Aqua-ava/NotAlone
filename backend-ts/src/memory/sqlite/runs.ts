@@ -313,9 +313,9 @@ function scheduleSummary(tx:StorageTransaction,ownerId:string,now:number,contact
  const states=queueStates(tx,ownerId,now,contactId),pending=states.reduce((sum,row)=>sum+row.state.pendingCount,0),due=states.map(row=>row.dueAt).filter((value):value is number=>value!==null);
  return {pending,nextDueAt:due.length?due.reduce((earliest,value)=>Math.min(earliest,value)):null,blockedContacts:states.filter(row=>row.state.pendingCount>0&&row.state.blocked).length};
 }
-function startRun(tx:StorageTransaction,raw:unknown,scheduled=false){
+function startRun(tx:StorageTransaction,raw:unknown,scheduled=false,history=false){
  const i=raw as {ownerId:string;requestKey:string;policyConfig:unknown;followupStages?:boolean;contactId?:string;now?:number};
- const ownerId=textId(i.ownerId),requestKey=textId(i.requestKey),contactId=scheduled?textId(i.contactId):undefined,now=scheduled?checkedNow(i.now):Date.now();
+ const ownerId=textId(i.ownerId),requestKey=textId(i.requestKey),contactId=scheduled||history?textId(i.contactId):undefined,now=scheduled?checkedNow(i.now):Date.now();
  const existing=tx.get('SELECT id FROM processing_run WHERE owner_id=? AND start_request_key=?',[ownerId,requestKey]);if(existing)return snapshot(tx,ownerId,String(existing.id));
  const owner=tx.get("SELECT * FROM owner WHERE owner_id=? AND state='active'",[ownerId]);if(!owner)fail('memory_extraction_scope_stale');
  if(tx.get('SELECT 1 FROM request_tombstone WHERE owner_identity=? AND request_key=?',[ownerId,requestKey]))fail('memory_extraction_request_deleted');
@@ -325,19 +325,19 @@ function startRun(tx:StorageTransaction,raw:unknown,scheduled=false){
  const runId=randomUUID();
  if(hasRunFollowupState(tx))tx.run("INSERT INTO processing_run(owner_id,id,start_request_key,state,started_at,accepted_owner_feedback_revision,policy_config,followup_state) VALUES(?,?,?,'preparing',?,?,?,?)",[ownerId,runId,requestKey,now,owner!.feedback_revision,JSON.stringify(i.policyConfig),i.followupStages===true?'pending':'none']);
  else tx.run("INSERT INTO processing_run(owner_id,id,start_request_key,state,started_at,accepted_owner_feedback_revision,policy_config) VALUES(?,?,?,'preparing',?,?,?)",[ownerId,runId,requestKey,now,owner!.feedback_revision,JSON.stringify(i.policyConfig)]);
- const contacts=scheduled?validContacts(tx,ownerId,contactId):validContacts(tx,ownerId);
+ const contacts=scheduled||history?validContacts(tx,ownerId,contactId):validContacts(tx,ownerId);
  let inputNo=0;const contributing:string[]=[];
  for(const c of contacts){
   const rows=currentMessageRows(tx,ownerId,String(c.id));
   // 只有接线了后续文档阶段的正常宿主才复用已有提取证明；仅提取入口保持“已成功目标不重做”。
-  const canReuse=!scheduled&&i.followupStages===true&&!!tx.get('SELECT 1 FROM schema_migration WHERE version=13'),reused=new Map<string,StorageRow>();
+  const canReuse=!scheduled&&!history&&i.followupStages===true&&!!tx.get('SELECT 1 FROM schema_migration WHERE version=13'),reused=new Map<string,StorageRow>();
   if(canReuse)for(const row of rows){const proof=reusableExtraction(tx,ownerId,String(c.id),row);if(proof)reused.set(String(row.id),proof);}
   const baseline=scheduled?memoryIncrementalBaseline(tx):0n;
   const targets=scheduled?rows.filter(r=>r.first_goal_kind==='incremental'&&(r.display_no as bigint)>baseline&&(r.item_id===null||r.extraction_state==='pending')&&r.target_assigned!==1n&&r.target_assigned!==1):
-   rows.filter(r=>r.extraction_state!=='succeeded'||reused.has(String(r.id)));
+   rows.filter(r=>(r.extraction_state!=='succeeded'||reused.has(String(r.id)))&&(!history||r.target_assigned!==1n&&r.target_assigned!==1));
   if(!targets.length)continue;
   const targetIds=new Set(targets.map(row=>String(row.id)));
-  if(scheduled)for(const target of targets)assertSourceEligibility(tx,{owner_id:ownerId,contact_id:String(c.id),message_id:String(target.id),record_id:String(target.record_id)});
+  if(scheduled||history)for(const target of targets)assertSourceEligibility(tx,{owner_id:ownerId,contact_id:String(c.id),message_id:String(target.id),record_id:String(target.record_id)});
   tx.run('INSERT INTO run_contact VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[ownerId,runId,c.id,c.grant_id,c.binding_id,c.selection_generation,c.data_generation,c.identity_generation,c.scope_revision,c.source_generation,c.feedback_revision,'active']);
   assertContribution(tx,ownerId,runId,String(c.id));contributing.push(String(c.id));
   const context=rows.filter(r=>r.extraction_state==='succeeded'&&!reused.has(String(r.id))).slice(-8); // 有界前文也在点击事务内冻结。
@@ -350,6 +350,7 @@ function startRun(tx:StorageTransaction,raw:unknown,scheduled=false){
   const taskId=randomUUID();tx.run("INSERT INTO processing_task(owner_id,id,run_id,scope_kind,contact_id,state) VALUES(?,?,?,'contact',?,'pending')",[ownerId,taskId,runId,c.id]);
   tx.run('INSERT INTO task_contribution VALUES(?,?,?,?)',[ownerId,taskId,runId,c.id]);
  }
+ if(!contributing.length&&history)fail('memory_extraction_no_pending_history');
  if(!contributing.length&&scheduled){tx.run('DELETE FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);return null;}
  if(contributing.length){const self=randomUUID();tx.run("INSERT INTO processing_task(owner_id,id,run_id,scope_kind,state) VALUES(?,?,?,'self','pending')",[ownerId,self,runId]);for(const c of contributing)tx.run('INSERT INTO task_contribution VALUES(?,?,?,?)',[ownerId,self,runId,c]);}
  tx.run("UPDATE processing_run SET state='pending' WHERE owner_id=? AND id=?",[ownerId,runId]);return snapshot(tx,ownerId,runId);
@@ -373,6 +374,36 @@ function contactView(tx:StorageTransaction,raw:unknown){
  const now=Date.now();
  return {contactId,run:latest?snapshot(tx,ownerId,String(latest.id),contactId):null,queue:{...scheduleSummary(tx,ownerId,now,contactId),later:laterQueueSummary(tx,ownerId,now,contactId)}};
 }
-export const runActions:StorageAction[]=[...scheduleActions,{name:'memoryExtraction.readContact',mode:'read',retryBusy:false,execute:contactView},{name:'memoryExtraction.findRequest',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;requestKey:string};const r=tx.get('SELECT id FROM processing_run WHERE owner_id=? AND start_request_key=?',[textId(i.ownerId),textId(i.requestKey)]);return r?snapshot(tx,i.ownerId,String(r.id)):null;}},{name:'memoryExtraction.contactGeneration',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;contactId:string};const r=tx.get('SELECT data_generation FROM contact WHERE owner_id=? AND id=?',[i.ownerId,i.contactId]);if(!r)fail('memory_extraction_scope_stale');return {generation:String(r!.data_generation)};}},{name:'memoryExtraction.start',mode:'write',retryBusy:true,execute(tx,raw){return startRun(tx,raw);}},{name:'memoryExtraction.startContact',mode:'write',retryBusy:true,execute(tx,raw){return startRun(tx,raw,true);}},{name:'memoryExtraction.read',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;runId?:string};const owner=textId(i.ownerId);if(i.runId)return snapshot(tx,owner,textId(i.runId));const r=tx.get(`SELECT id FROM processing_run WHERE owner_id=? AND coalesce(json_extract(policy_config,'$.intent'),'')<>'memory_document_later_stage'
+/** 历史初始化是具名用户动作；新请求不能借新预算绕过未决调用、暂停或失败。 */
+function startHistory(tx:StorageTransaction,raw:unknown){
+ const input=raw as {ownerId:string;contactId:string;requestKey:string;policyConfig:unknown;followupStages?:boolean};
+ const ownerId=textId(input.ownerId),contactId=textId(input.contactId),requestKey=textId(input.requestKey);
+ const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+ if(!uuid.test(contactId)||!uuid.test(requestKey))fail('memory_extraction_request_invalid');
+ // 与旧全局启动分开命名；删除领域沿 start_request_key 原样写入墓碑。
+ const storedKey=`history:${requestKey.toLowerCase()}`;
+ if(tx.get('SELECT 1 FROM request_tombstone WHERE owner_identity=? AND request_key=?',[ownerId,storedKey]))fail('memory_extraction_request_deleted');
+ const prior=tx.get('SELECT id FROM processing_run WHERE owner_id=? AND start_request_key=?',[ownerId,storedKey]);
+ if(prior){
+  const contacts=tx.all('SELECT contact_id FROM run_contact WHERE owner_id=? AND run_id=?',[ownerId,prior.id]);
+  if(contacts.length!==1||contacts[0]!.contact_id!==contactId)fail('memory_extraction_request_scope_mismatch');
+ }
+ const view=contactView(tx,{ownerId,contactId});
+ if(!validContacts(tx,ownerId,contactId).length)fail('memory_extraction_scope_stale');
+ // 原键只回放该轮只读状态，不继续任务，也不重新领取或发送已知/未知调用。
+ if(prior)return {view:{...view,run:snapshot(tx,ownerId,String(prior.id),contactId)},launchRunId:null};
+ const unresolved=tx.get(`SELECT 1 FROM processing_task t JOIN task_contribution tc ON tc.owner_id=t.owner_id AND tc.task_id=t.id
+  WHERE t.owner_id=? AND tc.source_contact_id=? AND (t.state IN ('paused','unknown')
+   OR EXISTS(SELECT 1 FROM processing_step s LEFT JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id LEFT JOIN model_call c ON c.owner_id=a.owner_id AND c.step_attempt_id=a.id
+    WHERE s.owner_id=t.owner_id AND s.task_id=t.id AND (s.state='unknown' OR a.state='unknown' OR c.state='unknown'))
+   OR EXISTS(SELECT 1 FROM memory_candidate candidate JOIN step_attempt a ON a.owner_id=candidate.owner_id AND a.id=candidate.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
+    WHERE s.owner_id=t.owner_id AND s.task_id=t.id AND candidate.state='pending')) LIMIT 1`,[ownerId,contactId]);
+ if(unresolved||view.run?.status==='blocked'||view.run?.status==='paused')fail('memory_extraction_history_blocked');
+ if(view.run&&view.run.status!=='completed'||view.queue.later.pending>0)fail('memory_extraction_contact_busy');
+ const run=startRun(tx,{...input,requestKey:storedKey},false,true);
+ if(!run)return fail('memory_extraction_no_pending_history');
+ return {view:{...contactView(tx,{ownerId,contactId}),run:snapshot(tx,ownerId,run.runId,contactId)},launchRunId:run.runId};
+}
+export const runActions:StorageAction[]=[...scheduleActions,{name:'memoryExtraction.startHistory',mode:'write',retryBusy:true,execute:startHistory},{name:'memoryExtraction.readContact',mode:'read',retryBusy:false,execute:contactView},{name:'memoryExtraction.findRequest',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;requestKey:string};const r=tx.get('SELECT id FROM processing_run WHERE owner_id=? AND start_request_key=?',[textId(i.ownerId),textId(i.requestKey)]);return r?snapshot(tx,i.ownerId,String(r.id)):null;}},{name:'memoryExtraction.contactGeneration',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;contactId:string};const r=tx.get('SELECT data_generation FROM contact WHERE owner_id=? AND id=?',[i.ownerId,i.contactId]);if(!r)fail('memory_extraction_scope_stale');return {generation:String(r!.data_generation)};}},{name:'memoryExtraction.start',mode:'write',retryBusy:true,execute(tx,raw){return startRun(tx,raw);}},{name:'memoryExtraction.startContact',mode:'write',retryBusy:true,execute(tx,raw){return startRun(tx,raw,true);}},{name:'memoryExtraction.read',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;runId?:string};const owner=textId(i.ownerId);if(i.runId)return snapshot(tx,owner,textId(i.runId));const r=tx.get(`SELECT id FROM processing_run WHERE owner_id=? AND coalesce(json_extract(policy_config,'$.intent'),'')<>'memory_document_later_stage'
  AND EXISTS(SELECT 1 FROM run_input i WHERE i.owner_id=processing_run.owner_id AND i.run_id=processing_run.id AND i.role='target')
  ORDER BY started_at DESC,rowid DESC LIMIT 1`,[owner]);return r?snapshot(tx,owner,String(r.id)):null;}},{name:'memoryExtraction.pendingFollowups',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string};return pendingFollowupIds(tx,textId(i.ownerId));}},{name:'memoryExtraction.followupEligible',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;runId:string};return pendingFollowupIds(tx,textId(i.ownerId),textId(i.runId)).length===1;}}];

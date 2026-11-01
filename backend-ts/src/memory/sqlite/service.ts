@@ -62,6 +62,14 @@ export class SqliteMemoryExtraction {
    if(run)this.launch(run.runId);return run;
   });
  }
+ /** 用户显式初始化当前联系人的已保存文字，沿正常提取、核验和后续整理链执行。 */
+ async startHistory(contactId:string,requestKey:string){
+  return this.admit(async()=>{
+   await this.initialize();const policy=await this.version();await policy.assertCurrent();this.available();
+   const result=await this.storage.execute<any>('memoryExtraction.startHistory',{ownerId:this.ownerId,contactId,requestKey,policyConfig:policy.newTaskConfig(),followupStages:this.afterRunSettled!==undefined});
+   if(result.launchRunId)this.launch(result.launchRunId);return result.view;
+  });
+ }
  /** 重启时只恢复持久标记为pending且L1已安全结束的后续登记，不再领取提取目标。 */
  async resumeFollowups():Promise<number>{
   this.available();if(!this.afterRunSettled)return 0;

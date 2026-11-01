@@ -45,12 +45,16 @@ export interface FixedProcessingView { connectionGeneration: number; contactId?:
 export interface FixedProcessingRead { contactId: string }
 export interface FixedProcessingMode { connectionGeneration: number; mode: 'sqlite' | 'legacy' }
 export interface FixedProcessingStart { requestKey: string; connectionGeneration: number }
+export interface FixedProcessingHistoryStart extends FixedProcessingStart { contactId: string; scopeRevision: number }
+export type FixedHistoryFailureReason = 'no_pending_history' | 'busy' | 'blocked' | 'scope_changed' | 'source_stale';
+export type FixedProcessingHistoryResult = {status:'started';view:FixedProcessingView} | {status:'unavailable';reason:FixedHistoryFailureReason};
 export interface FixedProcessingControl { runId: string; controlVersion: number; operationId: string; connectionGeneration: number }
 export interface FixedProcessingTraceRequest { taskId: string; connectionGeneration: number }
 export interface FixedMemoryProcessingBridge {
   readMode(): Promise<FixedProcessingMode>;
   readCurrent(request?: FixedProcessingRead): Promise<FixedProcessingView>;
   start(request: FixedProcessingStart): Promise<FixedProcessingView>;
+  startHistory(request: FixedProcessingHistoryStart): Promise<FixedProcessingHistoryResult>;
   pause(request: FixedProcessingControl): Promise<FixedProcessingView>;
   continue(request: FixedProcessingControl): Promise<FixedProcessingView>;
   trace(request: FixedProcessingTraceRequest): Promise<FixedProcessingTrace>;

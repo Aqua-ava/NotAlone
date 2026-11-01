@@ -24,6 +24,22 @@ async function reopenDocuments(t,f){
  return {...restoredDocuments(t,f,storage),storage};
 }
 
+test('显式历史初始化沿正常后续发布，等待阶段不换轮，成功文字不重复提取',async t=>{
+ const f=await documentFixture(t,{registryModule,laterScheduling:true});
+ assert.equal((await f.extraction.readContact(f.contactId)).run,null);assert.equal(f.extractionCalls,0);
+ const key=randomUUID(),view=await f.extraction.startHistory(f.contactId,key);await f.extraction.waitForIdle(view.run.runId);
+ const waiting=await f.extraction.readContact(f.contactId);assert.equal(waiting.run.succeeded,1);assert.equal(waiting.run.status,'waiting');
+ assert.equal(waiting.run.statusReason,'later_stages_scheduled');assert.equal(waiting.queue.later.pending,1);
+ const callsBefore=f.extractionCalls;
+ await assert.rejects(f.extraction.startHistory(f.contactId,randomUUID()),error=>error.code==='memory_extraction_contact_busy');
+ assert.equal((await f.extraction.startHistory(f.contactId,key)).run.runId,view.run.runId);assert.equal(f.extractionCalls,callsBefore);
+ await f.documents.runDueStages(waiting.run.nextDueAt);
+ const completed=await f.extraction.readContact(f.contactId);assert.equal(completed.run.status,'completed');assert.equal(completed.run.laterStages,'completed');
+ await assert.rejects(f.extraction.startHistory(f.contactId,randomUUID()),error=>error.code==='memory_extraction_no_pending_history');
+ assert.equal((await f.extraction.readContact(f.contactId)).run.runId,view.run.runId,'空请求不创建空轮次覆盖实际完成记录');
+ assert.equal(f.extractionCalls,callsBefore,'已成功文字不因换请求键而重发模型');
+});
+
 test('旧式完整双阶段出版会结清同版本的等待队列',async t=>{
  const f=await documentFixture(t,{registryModule});
  const run=await f.extraction.start('later-schedule-legacy-full-publication');await f.extraction.waitForIdle(run.runId);

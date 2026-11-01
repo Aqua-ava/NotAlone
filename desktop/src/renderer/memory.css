@@ -89,6 +89,7 @@
 .memory-processing-card { padding: 10px 14px; margin: 0; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); }
 .memory-processing-card p { margin: 6px 0; }
 .fixed-memory-processing { min-width: 0; }
+.memory-history-processing { margin-top: 16px; }
 .fixed-memory-processing .memory-processing-bar { flex-wrap: wrap; }
 .fixed-memory-processing h2 { margin: 0; font-size: 16px; }
 .memory-processing-progress { display: block; width: 100%; height: 8px; margin: 8px 0; accent-color: #426f8a; }

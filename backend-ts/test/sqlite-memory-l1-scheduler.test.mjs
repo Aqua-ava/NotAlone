@@ -25,6 +25,13 @@ async function appendIncrementalPage(f,contactId,{records,at=Date.now()}={}){
  return at;
 }
 
+test('显式初始化包含点击时已保存的历史和增量文字，不受自动静默窗口筛选',async t=>{
+ const {f,contactId,memory:readOnly}=await incrementalFixture(t);await readOnly.close();
+ let memory;const port=modelPort(()=>memory.accounting);memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
+ const view=await memory.startHistory(contactId,randomUUID());assert.equal(view.run.total,2);await memory.waitForIdle(view.run.runId);
+ assert.equal((await memory.readContact(contactId)).run.succeeded,2);assert.equal(port.calls,1);
+});
+
 test('只对首次增量来源计数；静默十分钟后进入联系人自己的待处理队列',async t=>{
  const {f,contactId,memory,at}=await incrementalFixture(t);
  const schedule=await memory.readSchedule(at+9*60_000);assert.equal(schedule.pending,1);

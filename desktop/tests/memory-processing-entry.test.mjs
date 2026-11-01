@@ -42,6 +42,7 @@ async function withEntry(t, command, inspect, controller = false) {
           readMode: async () => { try { return await controller.mode(); } finally { window.modeSettled++; } },
           readCurrent: request => controller.read(request),
           start: request => controller.start(request),
+          startHistory: request => controller.startHistory(request),
           pause: request => controller.control('pause', request),
           continue: request => controller.control('continue', request),
           trace: request => controller.trace(request),
@@ -64,14 +65,15 @@ async function withEntry(t, command, inspect, controller = false) {
           return <section aria-label="旧版记忆正文">合成旧版记忆</section>;
         }
         const root = createRoot(document.getElementById('root'));
-        let scopeKey = 'scope-a', revision = 0;
-        const render = () => root.render(<MemoryProcessingEntry bridge={bridge} backend={backend} contactId="33333333-3333-4333-8333-333333333333" scopeKey={scopeKey}><LegacyBody/></MemoryProcessingEntry>);
+        let scopeKey = 'scope-a', revision = 0, contactId = '33333333-3333-4333-8333-333333333333', scopeRevision = 0;
+        const render = () => root.render(<MemoryProcessingEntry bridge={bridge} backend={backend} contactId={contactId} scopeRevision={scopeRevision} scopeKey={scopeKey}><LegacyBody/></MemoryProcessingEntry>);
         window.emitBackend = phase => {
           for (const listener of listeners) listener({phase, revision: ++revision, reused: false,
             canRetryConnection: false, canRetryShutdown: false, canSaveStartupPaths: false, canPrepareConfiguration: false});
         };
         window.invalidate = () => { for (const listener of invalidations) listener(); };
         window.changeScope = value => { scopeKey = value; render(); };
+        window.selectContact = value => {contactId=value;scopeRevision++;scopeKey='contact-'+scopeRevision;render();};
         window.hide = () => root.render(null);
         render();`,
       resolveDir: process.cwd(), loader: 'tsx',
@@ -121,6 +123,61 @@ test('明确 sqlite 后挂载固定范围处理，正文失效由面板处理且
     await panel.getByRole('alert').filter({ hasText: '资料资格或连接已变化' }).waitFor();
     assert.equal(await panel.getByRole('status').count(), 0);
   });
+});
+
+test('历史入口点击才启动当前联系人，切换后迟到回执不影响新范围', {timeout:20000}, async t=>{
+ const a='33333333-3333-4333-8333-333333333333',b='44444444-4444-4444-8444-444444444444';
+ const started=deferred(),late=deferred(),calls=[];
+ await withEntry(t,async(method,input)=>{
+  if(method==='readMode')return {connectionGeneration:1,mode:'sqlite'};
+  if(method==='readCurrent')return {...currentView(1,input.contactId===a?1:2),contactId:input.contactId};
+  if(method==='startHistory'){
+   calls.push(input);started.resolve();
+   if(input.contactId===a)return late.promise;
+   return {status:'started',view:{...currentView(1,2),contactId:b}};
+  }
+ },async page=>{
+  const button=page.getByRole('button',{name:'处理历史聊天',exact:true});await button.waitFor();
+  assert.equal(calls.length,0,'打开页面只读取状态');await button.click();await started.promise;
+  assert.equal(calls[0].contactId,a);assert.equal(calls[0].scopeRevision,0);assert.match(calls[0].requestKey,/^[a-f0-9-]{36}$/);
+  assert.equal(await page.getByRole('button',{name:'正在启动…',exact:true}).isDisabled(),true);
+  await page.evaluate(id=>window.selectContact(id),b);
+  await page.getByText('提取与核验：已处理 2 / 2 条文字目标',{exact:true}).waitFor();
+  late.resolve({status:'started',view:{...currentView(1,1),contactId:a}});
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  assert.equal(await page.getByText('已核对原任务，当前仍有处理阻碍。',{exact:true}).count(),0);
+  await button.click();await page.getByText('已核对原任务，当前仍有处理阻碍。',{exact:true}).waitFor();
+  assert.equal(calls.length,2);assert.equal(calls[1].contactId,b);assert.equal(calls[1].scopeRevision,1);
+  await page.evaluate(()=>window.selectContact(null));await button.waitFor();assert.equal(await button.isDisabled(),true);
+ });
+});
+
+test('历史启动显示空资料和既有任务阻碍，失败重试保留原请求键', {timeout:20000},async t=>{
+ let reason='no_pending_history';const keys=[];
+ await withEntry(t,async(method,input)=>{
+  if(method==='readMode')return {connectionGeneration:1,mode:'sqlite'};
+  if(method==='readCurrent')return {...currentView(1,1),contactId:input.contactId};
+  if(method==='startHistory'){keys.push(input.requestKey);return {status:'unavailable',reason};}
+ },async page=>{
+  const button=page.getByRole('button',{name:'处理历史聊天',exact:true});await button.click();
+  await page.getByText('当前联系人没有待处理的历史文字。',{exact:true}).waitFor();
+  reason='blocked';await button.click();
+  await page.getByText('当前联系人已有受阻或暂停的记忆任务，请先解决原任务的阻碍。',{exact:true}).waitFor();
+  assert.equal(keys[0],keys[1]);
+ });
+});
+
+test('同键返回已完成任务时显示原任务结果，不宣称重新启动', {timeout:20000},async t=>{
+ await withEntry(t,async(method,input)=>{
+  if(method==='readMode')return {connectionGeneration:1,mode:'sqlite'};
+  const view={...currentView(1,1),contactId:input?.contactId};
+  if(method==='readCurrent')return view;
+  if(method==='startHistory')return {status:'started',view:{...view,run:{...view.run,state:'completed',status:'completed',stage:'completed',laterStages:'completed'}}};
+ },async page=>{
+  await page.getByRole('button',{name:'处理历史聊天',exact:true}).click();
+  await page.getByText('本次历史聊天已处理完成。',{exact:true}).waitFor();
+  assert.equal(await page.getByText('已开始处理当前联系人的历史聊天。',{exact:true}).count(),0);
+ });
 });
 
 test('连接变化先撤下正文，旧连接晚到的模式不能盖过新连接核验', { timeout: 20000 }, async t => {

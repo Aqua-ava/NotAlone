@@ -44,3 +44,25 @@ test('认证联系人状态接口只读当前联系人，拒绝其他owner范围
  assert.equal((await (await fetch(`${base}/${b}/current`,{headers})).json()).run,null);
  assert.equal(port.calls,before);
 });
+
+test('联系人历史只有显式POST才启动，严格请求范围且重复同键不重新执行',async t=>{
+ const f=await fixture(t),[a,b]=f.saved.map(binding=>binding.contact_id);await f.service.synchronize(a);await f.contacts.setReading(false);
+ let memory;const port=modelPort(()=>memory.accounting);memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
+ const handler=new SqliteMemoryExtractionHttp(memory,req=>authorizeSqliteRequest(req,'synthetic-history-token'));
+ const server=createServer(async(req,res)=>{if(!await handler.handle(req,res)){res.writeHead(404);res.end();}});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const base=`http://127.0.0.1:${server.address().port}/api/memory-processing/contacts`,headers={authorization:'Bearer synthetic-history-token','content-type':'application/json'},key=randomUUID();
+ const post=(contactId,body,extra={})=>fetch(`${base}/${contactId}/history`,{method:'POST',headers,body:JSON.stringify(body),...extra});
+ assert.equal((await (await fetch(`${base}/${a}/current`,{headers})).json()).run,null);assert.equal(port.calls,0);
+ assert.equal((await post(a,{request_key:key},{headers:{'content-type':'application/json'}})).status,401);
+ assert.equal((await post(a,{request_key:key},{headers:{...headers,origin:'https://invalid.example'}})).status,401);
+ assert.equal((await fetch(`${base}/${a}/history`,{headers})).status,400);
+ for(const body of [{request_key:key,owner_id:owner},{request_key:key,contact_id:b},{request_key:key,inputs:[]},{request_key:'invalid'},{}])assert.equal((await post(a,body)).status,400);
+ assert.equal((await fetch(`${base}/${a}/history?owner_id=${owner}`,{method:'POST',headers,body:JSON.stringify({request_key:key})})).status,400);
+ const empty=await post(b,{request_key:randomUUID()});assert.equal(empty.status,409);assert.equal((await empty.json()).error,'memory_extraction_no_pending_history');
+ const response=await post(a,{request_key:key});assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');
+ const started=await response.json();assert.deepEqual(Object.keys(started).sort(),['contactId','queue','run']);assert.equal(started.contactId,a);assert.equal(started.run.total,1);assert.ok(started.run.inputs.every(input=>input.contactId===a));
+ await memory.waitForIdle(started.run.runId);const before=port.calls;
+ const repeated=await post(a,{request_key:key});assert.equal(repeated.status,200);assert.equal((await repeated.json()).run.runId,started.run.runId);assert.equal(port.calls,before);
+ const mismatch=await post(b,{request_key:key});assert.equal(mismatch.status,409);assert.equal((await mismatch.json()).error,'memory_extraction_request_scope_mismatch');
+ assert.equal((await (await fetch(`${base}/${b}/current`,{headers})).json()).run,null);assert.equal(port.calls,1);
+});
