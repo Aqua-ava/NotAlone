@@ -12,9 +12,15 @@ await writeFile(path.join(directory, 'controller.mjs'), result.outputFiles[0].te
 const { BindingConsentController, installBindingConsentBridge, createBindingConsentBridge } = await import(path.join(directory, 'controller.mjs'));
 after(() => rm(directory, { recursive: true, force: true }));
 
-function fixture({ withBinding = false, revokeFails = false, sqlite = false } = {}) {
+function syncReport(enabled) { return { sync_mode: 'cli_background', sync_enabled: enabled, cli_available: false,
+  probe_available: false, wechat_in_front: false, cli_sync_phase: enabled ? 'degraded' : 'disabled',
+  foreground_phase: enabled ? 'unavailable' : 'sync_disabled', cli_bound_count: 0 }; }
+
+function fixture({ withBinding = false, revokeFails = false, sqlite = false, initiallyEnabled = false,
+  enableFails = false, confirmBarrier } = {}) {
   let snapshotNumber = 0;
   let generation, listener;
+  let enabled = initiallyEnabled;
   const calls = [], requests = [];
   const binding = { binding_id: '11111111-1111-4111-8111-111111111111',
     contact_id: '22222222-2222-4222-8222-222222222222',
@@ -33,10 +39,20 @@ function fixture({ withBinding = false, revokeFails = false, sqlite = false } = 
         active = []; revoked = [{ ...binding, status: 'revoked' }];
         return { generation, data: revoked[0] };
       }
+      if (path === '/api/sync/cli-bindings/confirm') {
+        if (confirmBarrier) await confirmBarrier;
+        active = [{ ...binding }];
+        return { generation, data: { sync_enabled: enabled } };
+      }
+      if (path === '/api/sync/enable') {
+        if (enableFails) throw new Error('合成开启失败');
+        enabled = true;
+        return { generation, data: syncReport(enabled) };
+      }
       const data = path === '/api/setup/status' ? { runtime_owner_configured: true }
         : path === '/api/sync/cli-bindings' ? { bindings: active, revoked_bindings: revoked, ...(sqlite ? { identity_protocol: 'sqlite-selected-v1' } : {}) }
         : path === '/api/sync/cli-sessions' ? { ...(sqlite ? { snapshot_token: `snapshot-${++snapshotNumber}` } : {}), sessions: [{ username: 'wxid_synthetic', display_name: '合成联系人', last_timestamp: null, bound_contact_id: null, ...(sqlite ? { selection_generation: snapshotNumber === 1 ? '0' : '2', known_contact_id: null } : {}) }] }
-        : { sync_enabled: false };
+        : syncReport(enabled);
       return { generation, data };
     },
   };
@@ -150,6 +166,60 @@ test('确认新授权前及完成后均使旧读取范围失效', async () => {
   assert.deepEqual(changes, ['started', 'settled']);
 });
 
+test('首次选择只在绑定确认成功后开启原本关闭的同步', async () => {
+  const f = fixture(); await f.connect(1); await f.controller.refresh(); f.calls.length = 0;
+  await f.controller.confirmSelections({ scopeRevision: f.controller.getState().scopeRevision, startSync: true,
+    selections: [{ locator: 'wxid_synthetic', displayName: '合成联系人', contactId: null }] });
+  const confirmation = f.calls.indexOf('/api/sync/cli-bindings/confirm');
+  const enable = f.calls.indexOf('/api/sync/enable');
+  assert.ok(confirmation >= 0 && enable > confirmation);
+  assert.equal(f.controller.getState().syncEnabled, true);
+});
+
+test('后续添加沿用原有关闭状态，不隐式开启总开关', async () => {
+  const f = fixture(); await f.connect(1); await f.controller.refresh(); f.calls.length = 0;
+  await f.controller.confirmSelections({ scopeRevision: f.controller.getState().scopeRevision,
+    selections: [{ locator: 'wxid_synthetic', displayName: '合成联系人', contactId: null }] });
+  assert.ok(f.calls.includes('/api/sync/cli-bindings/confirm'));
+  assert.equal(f.calls.includes('/api/sync/enable'), false);
+  assert.equal(f.controller.getState().syncEnabled, false);
+});
+
+test('首次选择同步已开启时不重复发送开启命令', async () => {
+  const f = fixture({ initiallyEnabled: true }); await f.connect(1); await f.controller.refresh(); f.calls.length = 0;
+  await f.controller.confirmSelections({ scopeRevision: f.controller.getState().scopeRevision, startSync: true,
+    selections: [{ locator: 'wxid_synthetic', displayName: '合成联系人', contactId: null }] });
+  assert.equal(f.calls.includes('/api/sync/enable'), false);
+  assert.equal(f.controller.getState().syncEnabled, true);
+});
+
+test('同步开启失败保留已保存绑定并报告可恢复状态', async () => {
+  const f = fixture({ enableFails: true }); await f.connect(1); await f.controller.refresh(); f.calls.length = 0;
+  await f.controller.confirmSelections({ scopeRevision: f.controller.getState().scopeRevision, startSync: true,
+    selections: [{ locator: 'wxid_synthetic', displayName: '合成联系人', contactId: null }] });
+  const state = f.controller.getState();
+  assert.equal(state.notice, 'confirmed');
+  assert.equal(state.errorCode, 'sync-start-failed');
+  assert.equal(state.syncEnabled, false);
+  assert.equal(state.bindings.length, 1);
+  assert.equal(f.calls.filter(path => path === '/api/sync/cli-bindings/confirm').length, 1);
+  assert.ok(f.calls.includes('/api/sync/status'));
+});
+
+test('确认绑定期间切换 backend generation 不会在新连接开启同步', async () => {
+  let releaseConfirm;
+  const confirmBarrier = new Promise(resolve => { releaseConfirm = resolve; });
+  const f = fixture({ confirmBarrier }); await f.connect(1); await f.controller.refresh(); f.calls.length = 0;
+  const confirmation = f.controller.confirmSelections({ scopeRevision: f.controller.getState().scopeRevision, startSync: true,
+    selections: [{ locator: 'wxid_synthetic', displayName: '合成联系人', contactId: null }] });
+  for (let i = 0; i < 30 && !f.calls.includes('/api/sync/cli-bindings/confirm'); i++) await new Promise(resolve => setImmediate(resolve));
+  assert.ok(f.calls.includes('/api/sync/cli-bindings/confirm'));
+  await f.connect(undefined); await f.connect(2);
+  releaseConfirm();
+  await confirmation;
+  assert.equal(f.calls.includes('/api/sync/enable'), false);
+});
+
 for (const historyAuthorized of [undefined, false, true]) test(`所选会话历史选择${historyAuthorized}明确传至HTTP，旧调用默认false`, async () => {
   const f = fixture(); await f.connect(1); await f.controller.refresh();
   await f.controller.confirmSelections({ scopeRevision: f.controller.getState().scopeRevision,
@@ -186,6 +256,24 @@ test('绑定IPC与预加载拒绝非布尔历史字段，保留旧缺省调用',
     await assert.rejects(handlers.get('bindings:confirm-selections')(value),/本次授权选择已失效/);
   }
   assert.deepEqual(calls.map(call=>call[1]),[request,{...request,historyAuthorized:false},{...request,historyAuthorized:true}]);
+});
+
+test('绑定IPC与预加载只接受显式布尔 startSync，并保留旧调用', async () => {
+  const handlers = new Map();
+  installBindingConsentBridge({handle:(name, fn)=>handlers.set(name,fn),publish(){}},
+    {getConnectionGeneration:()=>undefined,onStateChanged:()=>{}}, {getState:()=>({contacts:[]})});
+  const calls=[];const preload=createBindingConsentBridge({invoke:async(...args)=>calls.push(args)});
+  const request={scopeRevision:1,selections:[{locator:'synthetic',displayName:'合成',contactId:null}]};
+  for(const startSync of ['true',null,1,undefined]) {
+    const value={...request,startSync};
+    assert.throws(()=>handlers.get('bindings:confirm-selections')(value));
+    await assert.rejects(preload.confirmSelections(value));
+  }
+  for(const value of [request,{...request,startSync:false},{...request,startSync:true}]) {
+    await preload.confirmSelections(value);
+    await assert.rejects(handlers.get('bindings:confirm-selections')(value),/本次授权选择已失效/);
+  }
+  assert.deepEqual(calls.map(call=>call[1]),[request,{...request,startSync:false},{...request,startSync:true}]);
 });
 test('SQLite确认保留用户勾选时的名单代次，不把提交前刷新自动升级成新授权',async()=>{
  const f=fixture({sqlite:true});await f.connect(1);await f.controller.refresh();

@@ -12,11 +12,11 @@ export interface BindingConsentState {
   sessions: CliSessionSummary[]; bindings: BindingSummary[]; syncEnabled: boolean | null;
   sessionIssue: 'not-requested' | 'unavailable' | 'failed' | null;
   busy: 'confirm' | 'revoke' | null;
-  errorCode: 'selection-stale' | 'confirmation-failed' | 'revoke-busy' | 'revoke-failed' | null;
+  errorCode: 'selection-stale' | 'confirmation-failed' | 'sync-start-failed' | 'revoke-busy' | 'revoke-failed' | null;
   notice: 'confirmed' | 'revoked' | null;
 }
 export interface BindingSelection { locator: string; displayName: string; contactId: string | null; }
-export interface BindingConfirmation { scopeRevision: number; selections: BindingSelection[]; historyAuthorized?: boolean; }
+export interface BindingConfirmation { scopeRevision: number; selections: BindingSelection[]; historyAuthorized?: boolean; startSync?: boolean; }
 export interface BindingRevocation { scopeRevision: number; contactId: string; bindingId: string; }
 export interface BindingConsentBridge {
   getState(): Promise<BindingConsentState>;
@@ -30,5 +30,7 @@ export interface BindingConsentBridge {
 // 旧调用未提供历史选择时仅授权增量；存在字段时必须为明确布尔值。
 export function validBindingHistoryChoice(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  return !Object.hasOwn(value, 'historyAuthorized') || typeof (value as Record<string, unknown>).historyAuthorized === 'boolean';
+  const fields = value as Record<string, unknown>;
+  return (!Object.hasOwn(fields, 'historyAuthorized') || typeof fields.historyAuthorized === 'boolean')
+    && (!Object.hasOwn(fields, 'startSync') || typeof fields.startSync === 'boolean');
 }

@@ -60,6 +60,9 @@ export function App() {
   const foreground = foregroundRead.state;
   const [error, setError] = useState('');
   const [page, setPage] = useState<ManagerPage>('contacts');
+  const [selectingWechatContacts, setSelectingWechatContacts] = useState(false);
+  function selectWechatContacts() { setSelectingWechatContacts(true); setPage('contacts'); }
+  useEffect(() => { if (page !== 'contacts') setSelectingWechatContacts(false); }, [page]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const diagnostics = useRef<HTMLDivElement>(null);
@@ -151,10 +154,10 @@ export function App() {
             <div ref={diagnostics}><StartupSettings state={startup} backend={backend} open={diagnosticsOpen} onOpenChange={setDiagnosticsOpen} /></div>
             {advancedOpen && <DeveloperTraces session={contactSession} />}
           </details></>}
-        {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} />}
+        {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} initialSelection={selectingWechatContacts} onSelectionClosed={() => setSelectingWechatContacts(false)} />}
         {page === 'memory' && <MemoryPage session={contactSession} navigate={setPage} />}
         {page === 'skillLearning' && <SkillLearningPage session={contactSession} />}
-        {page === 'sync' && <WechatSetupPanel bridge={window.notalone.wechatSetup} selectionOnly={consent.selectionOnly === true}><SyncControlPanel bridge={window.notalone.syncControl} contacts={contactSession.state.contacts} currentContactId={contactSession.state.selectedContactId} /></WechatSetupPanel>}
+        {page === 'sync' && <WechatSetupPanel bridge={window.notalone.wechatSetup} selectionOnly={consent.selectionOnly === true} onSelectContacts={selectWechatContacts}><SyncControlPanel bridge={window.notalone.syncControl} contacts={contactSession.state.contacts} currentContactId={contactSession.state.selectedContactId} /></WechatSetupPanel>}
         {page !== 'config' && page !== 'contacts' && page !== 'memory' && page !== 'sync' && page !== 'skillLearning' && <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>
           <h2>{currentPage.emptyTitle}</h2><p>{currentPage.emptyDescription}</p>

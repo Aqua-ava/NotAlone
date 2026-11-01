@@ -45,13 +45,20 @@ export function useBindingConsent(contacts: ContactSessionView) {
     try { await window.notalone.bindings.refresh(); setError(''); }
     catch { setError('会话与授权暂时无法刷新，请重试。'); }
   }
-  async function confirm() {
+  async function confirm(options?: { startSync: true }) {
     const scopeRevision = state.scopeRevision;
     try {
-      await window.notalone.bindings.confirmSelections({ scopeRevision, historyAuthorized: state.selectionOnly === true || historyAuthorized, selections: Object.entries(selection).map(([locator, item]) =>
+      await window.notalone.bindings.confirmSelections({ scopeRevision, historyAuthorized: options?.startSync === true || state.selectionOnly === true || historyAuthorized,
+        ...(options?.startSync ? { startSync: true } : {}), selections: Object.entries(selection).map(([locator, item]) =>
         ({ locator, displayName: item.displayName, contactId: item.target === 'new' ? null : item.target })) });
       if (scopeRevision === latest.current.scopeRevision) setError('');
+      if (options?.startSync) {
+        const result = await window.notalone.bindings.getState();
+        return active.current && result.scopeRevision === scopeRevision + 1 && result.notice === 'confirmed'
+          && result.errorCode === null && result.syncEnabled === true;
+      }
     } catch { if (scopeRevision === latest.current.scopeRevision) setError('本次授权选择已失效，请刷新后重新确认。'); }
+    return false;
   }
   async function revoke() {
     if (!revocation) return;

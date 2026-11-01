@@ -4,6 +4,7 @@ import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import { runtimeOwnerConfigured } from '../contacts/directory';
 import type { ContactSession } from '../contacts/session';
+import { setSyncEnabled } from '../sync/status';
 import { isBindingIdentifier, isConversationLocator } from './validation';
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -170,10 +171,25 @@ export class BindingConsentController {
           ...(this.identityProtocol ? { expected_selection_generation: this.snapshotGenerations.get(item.locator) } : {}),
           ...(item.contactId === null ? {} : { contact_id: item.contactId }) })),
       } });
-      if (!this.current(operation)) return;
+      if (!this.current(operation) || result.generation !== operation.generation) return;
       if (!record(result.data) || typeof result.data.sync_enabled !== 'boolean') throw new Error('授权确认结果不可用。');
-      this.publish({ notice: 'confirmed', syncEnabled: result.data.sync_enabled, scopeRevision: this.state.scopeRevision + 1 });
-      await this.contacts.refreshContacts();
+      let syncEnabled = result.data.sync_enabled;
+      let syncStartFailed = false;
+      if (confirmation.startSync === true && !syncEnabled) {
+        try {
+          if (!this.current(operation)) return;
+          const enabled = await setSyncEnabled(this.backend, true, new AbortController().signal);
+          if (!this.current(operation) || enabled.generation !== operation.generation) return;
+          if (!enabled.report.enabled) throw new Error('同步开启结果未确认。');
+          syncEnabled = true;
+        } catch {
+          if (!this.current(operation)) return;
+          syncStartFailed = true;
+        }
+      }
+      this.publish({ notice: 'confirmed', syncEnabled, ...(syncStartFailed ? { errorCode: 'sync-start-failed' as const } : {}),
+        scopeRevision: this.state.scopeRevision + 1 });
+      try { await this.contacts.refreshContacts(); } catch { /* 已保存授权不得因联系人目录刷新失败而重放。 */ }
       if (this.current(operation)) await this.load(operation);
     } catch (error) {
       if (!this.current(operation)) return;

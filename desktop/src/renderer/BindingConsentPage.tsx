@@ -3,42 +3,66 @@ import type { BindingConsentView } from './use-binding-consent';
 import type { ContactSessionView } from './contact-session';
 import type { ManagerPage } from './pages';
 import './bindings.css';
+import { useEffect, useState } from 'react';
 
-export function BindingConsentPage({ contacts, consent, navigate, onClose, targetContactId, allPrivate = false }: {
+export function BindingConsentPage({ contacts, consent, navigate, onClose, targetContactId, allPrivate = false, startSync = false }: {
   contacts: ContactSessionView; consent: BindingConsentView; navigate: (page: ManagerPage) => void;
-  onClose(): void; targetContactId?: string; allPrivate?: boolean;
+  onClose(): void; targetContactId?: string; allPrivate?: boolean; startSync?: boolean;
 }) {
   const { state, selection, setSelection } = consent;
   const selectionOnly = state.selectionOnly === true;
   const allPrivateMode = allPrivate && !selectionOnly;
+  const [query, setQuery] = useState('');
+  const [selectedOnly, setSelectedOnly] = useState(false);
+  const [page, setPage] = useState(0);
   const unbound = state.sessions.filter((session) => session.boundContactId === null && !state.bindings.some((binding) => binding.locator === session.locator));
-  const title = allPrivateMode ? '管理单个微信会话' : '添加微信联系人';
+  const search = query.trim().toLocaleLowerCase();
+  const filtered = unbound.filter(session => (!selectedOnly || !!selection[session.locator])
+    && (!search || session.displayName.toLocaleLowerCase().includes(search) || session.locator.toLocaleLowerCase().includes(search)));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / 50));
+  const currentPage = Math.min(page, pageCount - 1);
+  const visible = filtered.slice(currentPage * 50, (currentPage + 1) * 50);
+  const selectedCount = Object.keys(selection).length;
+  useEffect(() => { setPage(0); }, [query, selectedOnly, state.scopeRevision]);
+  const title = startSync ? '选择要同步的联系人' : allPrivateMode ? '管理单个微信会话' : '添加微信联系人';
   return <section className="bindings-section" aria-label={title}>
     <div className="bindings-toolbar"><h2>{title}</h2><div>
       <button className="button" disabled={!!state.busy || state.phase === 'offline' || state.phase === 'loading'} onClick={() => void consent.refresh()}>刷新微信会话</button>
       <button className="button" disabled={!!state.busy} onClick={onClose}>返回联系人</button>
     </div></div>
-    <p>{selectionOnly ? '选择要同步的微信私聊，再核对渠道身份并确认加入联系人。没有勾选的会话不会获得授权，新私聊不会自动加入。' : allPrivateMode ? '全部私聊已纳入自动同步范围，无需逐个添加。这里用于处理身份冲突，或重新开启你曾单独停止的会话。' : '选择要同步的微信会话，再确认新建联系人或关联已有联系人。没有勾选的会话不会获得授权。'}</p>
-    <p>{selectionOnly
+    {!startSync && <p>{selectionOnly ? '选择要同步的微信私聊，再核对渠道身份并确认加入联系人。没有勾选的会话不会获得授权，新私聊不会自动加入。' : allPrivateMode ? '全部私聊已纳入自动同步范围，无需逐个添加。这里用于处理身份冲突，或重新开启你曾单独停止的会话。' : '选择要同步的微信会话，再确认新建联系人或关联已有联系人。没有勾选的会话不会获得授权。'}</p>}
+    {startSync ? <>
+      <p>可以先选几位开始，之后随时添加。没有勾选的私聊和以后新增的私聊不会自动加入。</p>
+      <p>点击下方“开始同步”后，才会授权所选联系人的本机可读历史文字和后续新消息，并开启同步。关闭同步总开关或退出 App 会停止读取。</p>
+      {state.bindings.length > 0 && state.syncEnabled === false && <p>开启总开关也会恢复其他已授权联系人的同步。</p>}
+    </> : <p>{selectionOnly
       ? state.syncEnabled === true ? '总开关已开启：确认后允许读取所选会话的本机历史文字，再持续同步新消息。' : state.syncEnabled === false ? '总开关已关闭：确认后保留授权，开启总开关后才开始读取所选会话。' : '总开关状态尚未确认；核验身份、确认所选会话并开启后才允许读取。'
-      : state.syncEnabled === true ? '总开关已开启：确认后允许所选会话从本次绑定起持续同步新消息。' : state.syncEnabled === false ? '总开关已关闭：确认后保留授权，开启总开关后从本次绑定起同步。' : '总开关状态尚未确认；确认绑定并开启后，从本次绑定起同步。'}</p>
-    <p>点击“刷新微信会话”表示同意读取当前微信账号的会话列表，以便核对并选择联系人；列表附带的消息摘要会立即丢弃，不保存或用于回复。此操作不授权读取聊天正文。</p>
-    <p>{selectionOnly ? '确认后允许读取本次所选会话在本机可读的历史文字和后续新消息；非文字消息只保留占位，不自动下载媒体。' : '更早的历史消息需独立确认；本次历史选择仅覆盖本次所选会话，后续新增会话不会继承。已有明确历史授权仍按其原范围执行。'}</p>
+      : state.syncEnabled === true ? '总开关已开启：确认后允许所选会话从本次绑定起持续同步新消息。' : state.syncEnabled === false ? '总开关已关闭：确认后保留授权，开启总开关后从本次绑定起同步。' : '总开关状态尚未确认；确认绑定并开启后，从本次绑定起同步。'}</p>}
+    <p>{startSync ? '会话名单仅用于选择联系人，列表附带的消息摘要会立即丢弃，不保存或用于回复。' : '点击“刷新微信会话”表示同意读取当前微信账号的会话列表，以便核对并选择联系人；列表附带的消息摘要会立即丢弃，不保存或用于回复。此操作不授权读取聊天正文。'}</p>
+    {!startSync && <p>{selectionOnly ? '确认后允许读取本次所选会话在本机可读的历史文字和后续新消息；非文字消息只保留占位，不自动下载媒体。' : '更早的历史消息需独立确认；本次历史选择仅覆盖本次所选会话，后续新增会话不会继承。已有明确历史授权仍按其原范围执行。'}</p>}
     {state.phase === 'ready' && <section aria-label="可添加的微信会话">
       <div className="bindings-toolbar"><h3>{allPrivateMode ? '待处理或已停止同步的会话' : '可添加的微信会话'}</h3><span>已选 {Object.keys(selection).length} 个</span></div>
       {state.sessionIssue === 'not-requested' ? <p>点击“刷新微信会话”后读取列表，系统可能请求访问微信数据。</p>
         : state.sessionIssue ? <p>会话名单读取失败，请刷新重试；当前不能判断是否有可添加的联系人。</p>
         : unbound.length === 0 && <p>当前没有可添加的微信会话。</p>}
-      {selectionOnly && !targetContactId && !state.sessionIssue && unbound.length > 0 && <div className="bindings-toolbar">
-        <button className="button" disabled={!!state.busy} onClick={() => setSelection((previous) => Object.fromEntries(unbound.map((session) =>
-          [session.locator, {displayName: session.displayName, target: previous[session.locator]?.target || session.knownContactId || 'new'}])))}>全选当前列表</button>
-        <button className="button" disabled={!!state.busy || !Object.keys(selection).length} onClick={() => setSelection({})}>清空选择</button>
-        <span>仅选择本次列表中的私聊，新增会话仍需另行确认。</span>
+      {!state.sessionIssue && unbound.length > 0 && <div className="binding-search">
+        <label htmlFor="wechat-contact-search">搜索微信联系人</label>
+        <input id="wechat-contact-search" type="search" value={query} placeholder="搜索名称或微信会话标识" onChange={event => setQuery(event.target.value)} />
+        <button className="button" aria-pressed={selectedOnly} onClick={() => { setSelectedOnly(value => !value); setQuery(''); }}>
+          {selectedOnly ? '查看全部' : `查看已选（${selectedCount}）`}</button>
       </div>}
-      <div className="binding-session-list">{unbound.map((session) => <div className="binding-row" key={session.locator}>
+      {selectionOnly && !targetContactId && !state.sessionIssue && unbound.length > 0 && <div className="binding-selection-actions">
+        <button className="button" disabled={!!state.busy || !filtered.length} onClick={() => setSelection((previous) => ({ ...previous, ...Object.fromEntries(filtered.map((session) =>
+          [session.locator, {displayName: session.displayName, target: previous[session.locator]?.target || session.knownContactId || 'new'}])) }))}>全选当前列表</button>
+        <button className="button" disabled={!!state.busy || !Object.keys(selection).length} onClick={() => setSelection({})}>清空选择</button>
+        <span>全选仅包含当前搜索结果，新增会话仍需另行确认。</span>
+      </div>}
+      {!state.sessionIssue && unbound.length > 0 && <p role="status">{selectedOnly ? '已选中' : '找到'} {filtered.length} 位联系人 · 已选 {selectedCount} 位</p>}
+      {!state.sessionIssue && unbound.length > 0 && filtered.length === 0 && <p>{selectedOnly ? '还没有符合条件的已选联系人。' : '没有找到匹配的联系人，请试试其他名称。'}</p>}
+      <div className="binding-session-list">{visible.map((session) => <div className="binding-row" key={session.locator}>
         <label className="binding-choice"><input type="checkbox" disabled={!!state.busy || !!state.sessionIssue} aria-label={`选择会话 ${session.locator}`} checked={!!selection[session.locator]}
           onChange={(event) => setSelection((previous) => {
-            const next = { ...previous }; if (event.target.checked) next[session.locator] = { displayName: session.displayName, target: targetContactId ?? '' }; else delete next[session.locator]; return next;
+            const next = { ...previous }; if (event.target.checked) next[session.locator] = { displayName: session.displayName, target: targetContactId ?? session.knownContactId ?? 'new' }; else delete next[session.locator]; return next;
           })} /><span><b>{session.displayName}</b><code>{session.locator}</code></span></label>
         <select aria-label={`会话 ${session.locator} 对应联系人`} value={selection[session.locator]?.target ?? ''} disabled={!!state.busy || !selection[session.locator]}
           onChange={(event) => setSelection((previous) => ({ ...previous, [session.locator]: { ...previous[session.locator], target: event.target.value } }))}>
@@ -46,12 +70,20 @@ export function BindingConsentPage({ contacts, consent, navigate, onClose, targe
           {contacts.state.contacts.map((contact) => <option key={contact.contactId} value={contact.contactId}>{contact.displayName} · {contact.contactId}</option>)}
         </select>
       </div>)}</div>
-      {!selectionOnly && <><label><input type="checkbox" checked={consent.historyAuthorized ?? false} disabled={!!state.busy || !Object.keys(selection).length}
+      {pageCount > 1 && <nav className="binding-pagination" aria-label="微信联系人列表分页">
+        <button className="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>上一页</button>
+        <span>第 {currentPage + 1} / {pageCount} 页</span>
+        <button className="button" disabled={currentPage + 1 === pageCount} onClick={() => setPage(currentPage + 1)}>下一页</button>
+      </nav>}
+      {!selectionOnly && !startSync && <><label><input type="checkbox" checked={consent.historyAuthorized ?? false} disabled={!!state.busy || !Object.keys(selection).length}
         onChange={event => consent.setHistoryAuthorized(event.target.checked)} />同时读取本次所选会话在本机可用的历史消息</label>
       <p>默认不读取绑定以前的历史。更改所选会话、对应联系人或刷新列表后，需要重新勾选历史授权。</p></>}
-      <div className="bindings-submit"><span>{selectionOnly ? '同名联系人请核对稳定会话与联系人标识；停止已有同步请在联系人详情中撤销授权。' : '同名联系人请核对会话与联系人标识。取消勾选不会撤销已有授权。'}</span><button className="button primary"
-        disabled={!!state.busy || !!state.sessionIssue || !Object.keys(selection).length || Object.values(selection).some((item) => !item.target)} onClick={() => void consent.confirm()}>确认并授权所选会话</button></div>
+      <div className="bindings-submit"><span>{startSync ? '只同步你选中的联系人；之后可随时添加或停止。' : selectionOnly ? '同名联系人请核对稳定会话与联系人标识；停止已有同步请在联系人详情中撤销授权。' : '同名联系人请核对会话与联系人标识。取消勾选不会撤销已有授权。'}</span><button className="button primary"
+        disabled={!!state.busy || !!state.sessionIssue || !Object.keys(selection).length || Object.values(selection).some((item) => !item.target)}
+        onClick={() => void consent.confirm(startSync ? { startSync: true } : undefined).then(confirmed => { if (confirmed && startSync) onClose(); })}>
+        {state.busy === 'confirm' ? '正在确认…' : startSync ? `开始同步这 ${selectedCount} 位联系人` : '确认并授权所选会话'}</button></div>
     </section>}
+    {state.errorCode === 'sync-start-failed' && <p role="alert">联系人已添加，但同步开启尚未确认。<button className="button" onClick={() => navigate('sync')}>查看同步设置</button></p>}
     {state.phase === 'unavailable' && <div><h3>微信同步尚未就绪</h3>{selectionOnly ? <p>当前无法核验微信账号或会话身份，尚不能读取聊天正文。请核对已有微信读取组件与账号状态后重试。</p> : <><p>请先完成本人渠道身份与本机微信读取配置。可继续使用手动联系人；手动文件导入入口已退役。</p></>}</div>}
   </section>;
 }

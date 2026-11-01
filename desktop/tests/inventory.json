@@ -171,6 +171,7 @@
   "tests/workspace-local-draft-transition.test.mjs",
   "tests/workspace-submission.test.mjs",
   "tests/sync-scope-view.test.mjs",
+  "tests/contact-selection-view.test.mjs",
   "tests/wechat-setup-view.test.mjs",
   "tests/history-reply-warning-view.test.mjs",
   "tests/message-media-integration.test.mjs",

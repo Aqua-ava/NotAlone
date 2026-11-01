@@ -1,5 +1,7 @@
 # NotAlone 架构文档
 
+> 2026-11-01 首用交互：[ADR-142](adr/142-first-connection-contact-selection.md)将首次账号连接接到搜索、多选联系人，确认所选授权后才开启同步；之后可补加，已有暂停状态保持。来源、稳定身份、逐人授权和人工发送边界不变；实现与实际验收分别核验。
+
 > 当前运行状态（2026-10-30）：SQLite 已成为 TypeScript 后台默认业务存储；受控实例、迁移、联系人、历史、记忆、回复与删除实现见[SQLite 底座 ADR](adr/109-controlled-sqlite-storage-foundation.md)和[切换验收](../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。本地 PostgreSQL 旧实现和数据已退役；其它历史架构决策保留原意，不代表当前运行入口。
 
 > 2026-10-26 助手会话决定：[ADR-106](adr/106-persistent-assistant-conversations.md)已采纳每位联系人独立的持久会话、空闲 12 小时分段和旧会话明确继续；数据库作为可见业务历史主记录，DSH 文件保存可恢复执行记录。新策略、持久化与删除链已实现并接入正常开发入口，局部修订 ADR-042／102，不改变已有来源与输入预算边界。隔离合成、实际热更新、性能与有界模型样例的结论及限制见 ADR-106，不据此宣称整体性能或质量提升。
@@ -245,3 +247,4 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 139. [ADR-139：引用回复同步与历史补齐](adr/139-quoted-reply-sync-and-history-enrichment.md)
 
 140. [ADR-140：聊天图片取消原图证明门槛](adr/140-source-verified-viewable-chat-images.md)
+142. [ADR-142：首次连接后先选择联系人，再确认开启同步](adr/142-first-connection-contact-selection.md)

@@ -18,6 +18,12 @@
 .binding-row select { width: min(100%, 440px); padding: 8px; color: #4b6c7d; background: #fffef8; border: 1px solid #cbd4cb; border-radius: 4px; }
 .binding-row > div { min-width: 0; }
 .binding-row > button { flex-shrink: 0; }
+.binding-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; margin: 18px 0; }
+.binding-search label { grid-column: 1 / -1; color: var(--panel-heading); }
+.binding-search input { min-width: 0; width: 100%; padding: 10px 12px; border: 1px solid var(--panel-border); border-radius: 6px; background: #fffef8; color: var(--panel-heading); font: inherit; }
+.binding-selection-actions, .binding-pagination { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.binding-session-list { max-height: 360px; overflow-y: auto; overscroll-behavior: contain; }
+.binding-pagination { justify-content: center; margin: 16px 0; }
 .bindings-submit { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 18px; }
 .binding-warning, .bindings-page [role="alert"] { color: #98594b; }
 .binding-dialog-backdrop { position: fixed; inset: 0; z-index: 30; background: #53676b66; display: grid; place-items: center; padding: 25px; }

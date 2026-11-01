@@ -11,13 +11,15 @@ import { BindingConsentPage, BindingFeedback, ContactSyncDetails } from './Bindi
 
 const initialSync: SyncControlState = { revision: -1, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
 
-export function ContactsPage({ session, navigate }: { session: ContactSessionView; navigate: (page: ManagerPage) => void }) {
+export function ContactsPage({ session, navigate, initialSelection = false, onSelectionClosed }: { session: ContactSessionView; navigate: (page: ManagerPage) => void; initialSelection?: boolean; onSelectionClosed?: () => void }) {
   const { state } = session;
-  const [addingWechat, setAddingWechat] = useState(false), [targetContactId, setTargetContactId] = useState<string>();
+  const [addingWechat, setAddingWechat] = useState(initialSelection), [targetContactId, setTargetContactId] = useState<string>();
+  const [startSync, setStartSync] = useState(initialSelection);
   const consent = useBindingConsent(session);
   const { state: sync } = useRevisionedSession(initialSync, window.notalone.syncControl);
   useEffect(() => {
-    void window.notalone.bindings.refreshSaved().catch(() => {});
+    // 仅本次账号确认已明确同意读取名单；普通进入目录仍只读保存状态。
+    void (initialSelection ? consent.refresh() : window.notalone.bindings.refreshSaved()).catch(() => {});
     void window.notalone.syncControl.refresh().catch(() => {});
   }, []);
   const selectionOnly = consent.state.selectionOnly === true;
@@ -38,13 +40,22 @@ export function ContactsPage({ session, navigate }: { session: ContactSessionVie
     return consent.state.knownBindings?.some((binding) => binding.contactId === contactId) ? '自动同步未开启' : '仅手动资料';
   }
   function addWechat(contactId?: string) {
-    consent.setSelection({}); setTargetContactId(contactId); setAddingWechat(true);
+    consent.setSelection({}); setTargetContactId(contactId); setStartSync(false); setAddingWechat(true);
+  }
+  function closeSelection() {
+    setAddingWechat(false); setStartSync(false); consent.setSelection({}); onSelectionClosed?.();
+    void window.notalone.syncControl.refresh().catch(() => {});
   }
   async function refreshContacts() {
     await Promise.allSettled([session.refreshContacts(), consent.refreshSaved(), window.notalone.syncControl.refresh()]);
   }
   const selected = state.contacts.find((contact) => contact.contactId === state.selectedContactId);
   const visibleContacts = selected ? [selected, ...state.contacts.filter(contact => contact.contactId !== selected.contactId)] : state.contacts;
+  if (addingWechat) return <section className="contacts-panel" aria-label="联系人目录">
+    <BindingConsentPage contacts={session} consent={consent} navigate={navigate} targetContactId={targetContactId} allPrivate={allPrivate}
+      startSync={startSync} onClose={closeSelection} />
+    <BindingFeedback consent={consent} />
+  </section>;
   return <section className="contacts-panel" aria-label="联系人目录">
     <div className="contacts-toolbar"><div><h2>联系人</h2><p>在顶部切换联系人，查看聊天记录与同步状态。</p></div><div>
       <button className="button primary" disabled={!!consent.state.busy || state.directoryPhase !== 'ready'} onClick={() => addWechat()}>{allPrivate ? '管理单个微信会话' : '添加微信联系人'}</button>
@@ -52,8 +63,6 @@ export function ContactsPage({ session, navigate }: { session: ContactSessionVie
         onClick={() => void refreshContacts()}>刷新联系人</button></div></div>
     {allPrivate && <p className="contacts-note" role="status">现有及以后新增的微信私聊会自动关联，无需逐个添加；已单独停止的会话保持排除。<button className="button" onClick={() => navigate('sync')}>查看同步范围</button></p>}
     {enabled === false && <p className="contacts-note" role="status">所有联系人同步已暂停：总开关已关闭，已有授权仍保留。<button className="button" onClick={() => navigate('sync')}>前往同步设置</button></p>}
-    {addingWechat && <BindingConsentPage contacts={session} consent={consent} navigate={navigate} targetContactId={targetContactId} allPrivate={allPrivate}
-      onClose={() => { setAddingWechat(false); consent.setSelection({}); }} />}
     <BindingFeedback consent={consent} />
     {state.directoryPhase === 'loading' && <p className="contacts-note" aria-live="polite">正在读取联系人目录…</p>}
     {state.directoryPhase === 'unavailable' && <div className="contacts-empty"><h3>联系人暂不可用</h3><p>连接本机服务后，确认本次运行的本人身份，再查看联系人。</p></div>}

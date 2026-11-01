@@ -12,7 +12,7 @@ async function pageFixture(t, phase='needs_detection', selectionOnly=false, fail
  const bridge={getState:async()=>state,refresh:async()=>window.calls.push('refresh'),onStateChanged:fn=>{listeners.add(fn);return()=>listeners.delete(fn);},
  detect:async()=>{window.calls.push('detect');window.update({phase:'ready',accountId:'synthetic-account'});},
  confirm:async value=>{window.calls.push(value);window.update({phase:'connected'});},retryRestart:async()=>window.calls.push('retry')};
- createRoot(document.getElementById('root')).render(<WechatSetupPanel bridge={bridge} selectionOnly={${selectionOnly}}><button>同步总开关</button></WechatSetupPanel>);
+ createRoot(document.getElementById('root')).render(<WechatSetupPanel bridge={bridge} selectionOnly={${selectionOnly}} onSelectContacts={()=>window.calls.push('selectContacts')}><button>同步总开关</button></WechatSetupPanel>);
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',write:false,loader:{'.css':'empty'}});
  await page.setContent('<div id="root"></div>');await page.addScriptTag({content:bundle.outputFiles[0].text});return page;
 }
@@ -36,7 +36,7 @@ test('来源换代显示明确重确认且默认不勾选，连接本身不恢�
  await page.evaluate(()=>window.update({phase:'ready',accountId:'synthetic-account',sourceReconfirmationRequired:true}));
  await expect(confirmation).not.toBeChecked();await expect(connect).toBeDisabled();
  await confirmation.check();await connect.click();
- assert.deepEqual((await page.evaluate(()=>window.calls)).at(-1),{revision:3,confirmed:true,mode:'selected',historyAuthorized:false,sourceReconfirmed:true});
+ assert.deepEqual((await page.evaluate(()=>window.calls)).filter(call=>typeof call==='object').at(-1),{revision:3,confirmed:true,mode:'selected',historyAuthorized:false,sourceReconfirmed:true});
 });
 
 test('名单失败不显示空列表，明确全选只覆盖当前未添加私聊', async t => {
@@ -64,28 +64,81 @@ test('名单失败不显示空列表，明确全选只覆盖当前未添加私�
  await page.getByRole('button',{name:'清空选择',exact:true}).click();
  await expect(page.getByRole('checkbox',{name:'选择会话 a',exact:true})).not.toBeChecked();
 });
-test('新用户主动检测并确认列表读取，默认仅所选且不读取历史',async t=>{
+test('首次确认只连接账号并进入选人流程，不提供全部范围或历史开关',async t=>{
  const page=await pageFixture(t);
  await expect(page.getByRole('button',{name:'检测微信账号',exact:true})).toBeVisible();
  assert.deepEqual(await page.evaluate(()=>window.calls),['refresh']);
  await expect(page.getByRole('button',{name:'同步总开关',exact:true})).toHaveCount(0);
- await expect(page.getByRole('button',{name:'确认连接并开启同步',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'确认账号并选择联系人',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'检测微信账号',exact:true}).click();
  await expect(page.getByText('synthetic-account',{exact:true})).toBeVisible();
  await expect(page.getByText('读取工具配置的微信账号：synthetic-account',{exact:true})).toBeVisible();
- await expect(page.getByRole('radio',{name:'仅我选择的私聊',exact:true})).toBeChecked();
- await expect(page.getByRole('checkbox')).not.toBeChecked();
- await expect(page.getByText(/确认连接表示允许读取该账号的会话列表/)).toBeVisible();
- await page.getByRole('button',{name:'确认连接并开启同步',exact:true}).click();
- assert.deepEqual((await page.evaluate(()=>window.calls)).at(-1),{revision:2,confirmed:true,mode:'selected',historyAuthorized:false});
- await expect(page.getByText('微信账号已连接',{exact:true})).toBeVisible();
- await expect(page.getByText('已关联的微信账号：synthetic-account',{exact:true})).toBeVisible();
- await expect(page.getByRole('button',{name:'同步总开关',exact:true})).toBeVisible();
+ await expect(page.getByRole('radio')).toHaveCount(0);
+ await expect(page.getByRole('checkbox')).toHaveCount(0);
+ await expect(page.getByText(/确认连接后，将读取该账号的私聊会话列表/)).toBeVisible();
+ await page.getByRole('button',{name:'确认账号并选择联系人',exact:true}).click();
+ assert.deepEqual((await page.evaluate(()=>window.calls)).filter(call=>typeof call==='object').at(-1),{revision:2,confirmed:true,mode:'selected',historyAuthorized:false});
+ await expect(page.getByText('账号已连接。你可以随时到「联系人」添加同步对象；没有确认的私聊不会获得读取授权。',{exact:true})).toBeVisible();
+ await expect.poll(()=>page.evaluate(()=>window.calls.at(-1))).toBe('selectContacts');
+});
+
+test('普通已连接状态不会触发首次联系人选择',async t=>{
+ const page=await pageFixture(t,'connected');
+ await expect(page.getByText('账号已连接。你可以随时到「联系人」添加同步对象；没有确认的私聊不会获得读取授权。',{exact:true})).toBeVisible();
+ await page.evaluate(()=>window.update({phase:'connected',accountId:'synthetic-account'}));
+ assert.deepEqual(await page.evaluate(()=>window.calls),['refresh']);
+});
+
+test('首次连接成功直接进入联系人选择并读取会话名单，选择确认前不开始正文同步',async t=>{
+ const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const page=await browser.newPage();
+ const bundle=await build({stdin:{contents:`
+ import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
+ import {WechatSetupPanel} from './src/renderer/WechatSetupPanel';import {ContactsPage} from './src/renderer/ContactsPage';
+ window.calls=[];const setupListeners=new Set(),bindingListeners=new Set();
+ let setup={phase:'needs_detection',accountId:null,failureCode:null,revision:1};
+ let binding={selectionOnly:true,revision:1,scopeRevision:1,phase:'ready',sessions:[],bindings:[],knownBindings:[],syncEnabled:false,
+  sessionIssue:'not-requested',busy:null,errorCode:null,notice:null};
+ const noop=async()=>{};
+ const wechat={getState:async()=>setup,refresh:async()=>window.calls.push('setup-refresh'),onStateChanged:fn=>{setupListeners.add(fn);return()=>setupListeners.delete(fn);},
+  detect:async()=>{window.calls.push('detect');setup={...setup,phase:'ready',accountId:'synthetic-account',revision:2};setupListeners.forEach(fn=>fn(setup));},
+  confirm:async value=>{window.calls.push({type:'wechat-confirm',...value});setup={...setup,phase:'connected',revision:3};setupListeners.forEach(fn=>fn(setup));},
+  retryRestart:async()=>{}};
+ const bindings={getState:async()=>binding,onStateChanged:fn=>{bindingListeners.add(fn);return()=>bindingListeners.delete(fn);},
+  refresh:async()=>{window.calls.push('read-session-list');binding={...binding,revision:binding.revision+1,sessionIssue:null,
+   sessions:[{locator:'wxid_synthetic_friend',displayName:'林晓雨',lastTimestamp:null,boundContactId:null,knownContactId:null}]};bindingListeners.forEach(fn=>fn(binding));},
+  refreshSaved:async()=>window.calls.push('saved-bindings'),confirmSelections:async value=>window.calls.push({type:'binding-confirm',...value})};
+ const syncState={revision:1,scopeRevision:1,phase:'ready',busy:null,errorCode:null,report:{selectionOnly:true,syncScope:'selected',enabled:false,confirmedBindingCount:0}};
+ const syncControl={getState:async()=>syncState,onStateChanged:()=>()=>{},refresh:async()=>window.calls.push('sync-status'),
+  enable:async value=>window.calls.push({type:'sync-enable',...value})};
+ window.notalone={bindings,syncControl};
+ const session={state:{directoryPhase:'ready',contacts:[],selectedContactId:null},refreshContacts:noop};
+ function App(){const [page,setPage]=useState('sync');
+   return page==='sync' ? <WechatSetupPanel bridge={wechat} selectionOnly onSelectContacts={()=>setPage('contacts')}><button>同步总开关</button></WechatSetupPanel>
+     : <ContactsPage session={session} navigate={()=>{}} initialSelection onSelectionClosed={()=>setPage('contacts')}/>;}
+ createRoot(document.getElementById('root')).render(<App/>);
+ `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',write:false,loader:{'.css':'empty'}});
+ await page.setContent('<div id="root"></div>');await page.addScriptTag({content:bundle.outputFiles[0].text});
+ await page.getByRole('button',{name:'检测微信账号',exact:true}).click();
+ await page.getByRole('button',{name:'确认账号并选择联系人',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'选择要同步的联系人',exact:true})).toBeVisible();
+ await expect(page.getByRole('searchbox',{name:'搜索微信联系人',exact:true})).toBeVisible();
+ await expect(page.getByRole('checkbox',{name:'选择会话 wxid_synthetic_friend',exact:true})).toBeVisible();
+ await page.getByRole('checkbox',{name:'选择会话 wxid_synthetic_friend',exact:true}).check();
+ await expect(page.getByRole('button',{name:'开始同步这 1 位联系人',exact:true})).toBeVisible();
+ const calls=await page.evaluate(()=>window.calls);
+ assert.deepEqual(calls.find(call=>call?.type==='wechat-confirm'),{type:'wechat-confirm',revision:2,confirmed:true,mode:'selected',historyAuthorized:false});
+ assert.equal(calls.filter(call=>call==='read-session-list').length,1);
+ assert.equal(calls.some(call=>call?.type==='binding-confirm'||call?.type==='sync-enable'),false);
+ await page.getByRole('button',{name:'开始同步这 1 位联系人',exact:true}).click();
+ assert.deepEqual((await page.evaluate(()=>window.calls)).find(call=>call?.type==='binding-confirm'),{
+  type:'binding-confirm',scopeRevision:1,historyAuthorized:true,startSync:true,
+  selections:[{locator:'wxid_synthetic_friend',displayName:'林晓雨',contactId:null}]});
 });
 test('未准备的工具不能伪装为连接成功，保存后只重试加载',async t=>{
  const page=await pageFixture(t,'tool_not_ready');
  await expect(page.getByText(/暂时无法完成微信账号核验/)).toBeVisible();
- await expect(page.getByRole('button',{name:'确认连接并开启同步',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'确认账号并选择联系人',exact:true})).toHaveCount(0);
  await page.evaluate(()=>window.update({phase:'restart-failed',accountId:'synthetic-account'}));
  await expect(page.getByText(/授权已保存/)).toBeVisible();
  await page.getByRole('button',{name:'重新加载连接',exact:true}).click();
@@ -96,7 +149,7 @@ test('工具清单缺失准确提示制品不完整，不误报全新电脑初�
  const page = await pageFixture(t, 'tool_not_ready', false, 'history_artifact_manifest_missing');
  await expect(page.getByRole('alert')).toContainText('微信读取工具不完整，缺少校验清单');
  await expect(page.getByText(/全新电脑/)).toHaveCount(0);
- await expect(page.getByRole('button', {name: '确认连接并开启同步', exact: true})).toHaveCount(0);
+ await expect(page.getByRole('button', {name: '确认账号并选择联系人', exact: true})).toHaveCount(0);
  assert.deepEqual(await page.evaluate(() => window.calls), ['refresh']);
  await page.evaluate(() => window.update({failureCode: 'history_account_unavailable'}));
  await expect(page.getByRole('alert')).toContainText('尚未配置可用的微信账号');
@@ -109,31 +162,24 @@ test('工具清单缺失准确提示制品不完整，不误报全新电脑初�
  await expect(page.getByText(/unknown_internal_detail|全新电脑/)).toHaveCount(0);
 });
 
-test('全部私聊及历史独立明确选择，扩大范围清除旧历史勾选',async t=>{
+test('首次账号连接没有范围和历史选择；只提交仅所选会话候选',async t=>{
  const page=await pageFixture(t);await page.getByRole('button',{name:'检测微信账号',exact:true}).click();
- await expect(page.getByRole('checkbox')).toBeDisabled();
- await expect(page.getByText(/选择会话时再确认历史范围/)).toBeVisible();
- await page.getByRole('radio',{name:'当前账号的全部私聊',exact:true}).check();
- await page.getByRole('checkbox').check();
- await page.getByRole('radio',{name:'仅我选择的私聊',exact:true}).check();
- await page.getByRole('radio',{name:'当前账号的全部私聊',exact:true}).check();
- await expect(page.getByRole('checkbox')).not.toBeChecked();
- await expect(page.getByText(/现有及以后新增的微信私聊/)).toBeVisible();
+ await expect(page.getByRole('radio')).toHaveCount(0);
+ await expect(page.getByRole('checkbox')).toHaveCount(0);
  assert.deepEqual(await page.evaluate(()=>window.calls),['refresh','detect']);
- await page.getByRole('checkbox').check();
- await page.getByRole('button',{name:'确认连接并开启同步',exact:true}).click();
- assert.deepEqual((await page.evaluate(()=>window.calls)).at(-1),{revision:2,confirmed:true,mode:'all_private',historyAuthorized:true});
+ await page.getByRole('button',{name:'确认账号并选择联系人',exact:true}).click();
+ assert.deepEqual((await page.evaluate(()=>window.calls)).at(-2),{revision:2,confirmed:true,mode:'selected',historyAuthorized:false});
 });
 
-test('账号候选变化重置授权选择，未经确认离开不保存授权',async t=>{
+test('账号候选变化不会自动连接；普通已连接状态不自动跳进选人页',async t=>{
  const page=await pageFixture(t);await page.getByRole('button',{name:'检测微信账号',exact:true}).click();
- await page.getByRole('radio',{name:'当前账号的全部私聊',exact:true}).check();await page.getByRole('checkbox').check();
  await page.evaluate(()=>window.update({accountId:'another-synthetic-account'}));
- await expect(page.getByRole('radio',{name:'仅我选择的私聊',exact:true})).toBeChecked();
- await expect(page.getByRole('checkbox')).not.toBeChecked();
+ await expect(page.getByRole('button',{name:'确认账号并选择联系人',exact:true})).toBeVisible();
+ await expect(page.getByRole('radio')).toHaveCount(0);
  await page.evaluate(()=>window.update({phase:'needs_detection',accountId:null}));
  assert.deepEqual(await page.evaluate(()=>window.calls),['refresh','detect']);
- await expect(page.getByRole('button',{name:'确认连接并开启同步',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'确认账号并选择联系人',exact:true})).toHaveCount(0);
+ assert.equal(await page.evaluate(()=>window.calls.includes('selectContacts')),false);
 });
 
 test('进入添加联系人只展示同意说明，明确刷新才读取列表，返回不授权正文',async t=>{
@@ -249,14 +295,13 @@ for (const selectionOnly of [undefined, true]) test(selectionOnly ? '停止同�
 });
 
 
-test('SQLite账号确认只提供逐人范围，连接账号不授权历史或全部私聊',async t=>{
+test('已配置逐人授权时，连接账号仍不授权正文或全部私聊',async t=>{
  const page=await pageFixture(t,'needs_detection',true);
  await page.getByRole('button',{name:'检测微信账号',exact:true}).click();
- await expect(page.getByRole('radio',{name:'仅我选择的私聊',exact:true})).toBeChecked();
- await expect(page.getByRole('radio',{name:'当前账号的全部私聊',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('radio')).toHaveCount(0);
  await expect(page.getByRole('checkbox')).toHaveCount(0);
- await expect(page.getByText('连接账号本身不授权聊天读取。请到「联系人」逐人确认私聊；每次确认包含该会话本机可读的历史文字和后续新消息。',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'确认微信账号',exact:true}).click();
- assert.deepEqual((await page.evaluate(()=>window.calls)).at(-1),{revision:2,confirmed:true,mode:'selected',historyAuthorized:false});
- await expect(page.getByText(/账号关联已保存。请到「联系人」逐人核验/)).toBeVisible();
+ await expect(page.getByText(/确认连接后，将读取该账号的私聊会话列表/)).toBeVisible();
+ await page.getByRole('button',{name:'确认账号并选择联系人',exact:true}).click();
+ assert.deepEqual((await page.evaluate(()=>window.calls)).filter(call=>typeof call==='object').at(-1),{revision:2,confirmed:true,mode:'selected',historyAuthorized:false});
+ await expect(page.getByText(/账号已连接。你可以随时到「联系人」添加同步对象/)).toBeVisible();
 });
