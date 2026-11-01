@@ -182,7 +182,7 @@ test('账号候选变化不会自动连接；普通已连接状态不自动跳�
  assert.equal(await page.evaluate(()=>window.calls.includes('selectContacts')),false);
 });
 
-test('进入添加联系人只展示同意说明，明确刷新才读取列表，返回不授权正文',async t=>{
+test('进入添加联系人不读取名单，明确刷新才读取列表，返回不授权正文',async t=>{
  const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
  const page=await browser.newPage();
  const bundle=await build({stdin:{contents:`
@@ -198,7 +198,7 @@ test('进入添加联系人只展示同意说明，明确刷新才读取列表�
  await expect(page.getByText('逐人确认微信私聊后加入联系人；未选中的会话和以后新增的私聊不会获得读取授权。',{exact:true})).toBeVisible();
  await expect(page.getByText(/从文件导入|全部私聊/)).toHaveCount(0);
  await page.getByRole('button',{name:'添加微信联系人',exact:true}).click();
- await expect(page.getByText(/表示同意读取当前微信账号的会话列表/)).toBeVisible();
+ await expect(page.getByText('点击“刷新微信会话”后读取列表，系统可能请求访问微信数据。',{exact:true})).toBeVisible();
  assert.ok(!(await page.evaluate(()=>window.calls)).includes('list'));
  await page.getByRole('button',{name:'返回联系人',exact:true}).click();
  assert.ok(!(await page.evaluate(()=>window.calls)).includes('list'));
@@ -229,7 +229,6 @@ for (const selectionOnly of [undefined, true]) test(selectionOnly
  const history=page.getByRole('checkbox',{name:'同时读取本次所选会话在本机可用的历史消息',exact:true});
  if(selectionOnly) {
   await expect(history).toHaveCount(0);
-  await expect(page.getByText('确认后允许读取本次所选会话在本机可读的历史文字和后续新消息；非文字消息只保留占位，不自动下载媒体。',{exact:true})).toBeVisible();
  } else { await expect(history).not.toBeChecked();await expect(history).toBeDisabled(); }
  await page.getByRole('button',{name:'刷新微信会话',exact:true}).click();
  await expect(page.getByRole('checkbox',{name:'选择会话 a',exact:true})).not.toBeChecked();

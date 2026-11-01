@@ -30,16 +30,13 @@ export function BindingConsentPage({ contacts, consent, navigate, onClose, targe
       <button className="button" disabled={!!state.busy || state.phase === 'offline' || state.phase === 'loading'} onClick={() => void consent.refresh()}>刷新微信会话</button>
       <button className="button" disabled={!!state.busy} onClick={onClose}>返回联系人</button>
     </div></div>
-    {!startSync && <p>{selectionOnly ? '选择要同步的微信私聊，再核对渠道身份并确认加入联系人。没有勾选的会话不会获得授权，新私聊不会自动加入。' : allPrivateMode ? '全部私聊已纳入自动同步范围，无需逐个添加。这里用于处理身份冲突，或重新开启你曾单独停止的会话。' : '选择要同步的微信会话，再确认新建联系人或关联已有联系人。没有勾选的会话不会获得授权。'}</p>}
-    {startSync ? <>
+    {!startSync && allPrivateMode && <p>全部私聊已纳入自动同步范围，无需逐个添加。这里用于处理身份冲突，或重新开启你曾单独停止的会话。</p>}
+    {startSync && <>
       <p>可以先选几位开始，之后随时添加。没有勾选的私聊和以后新增的私聊不会自动加入。</p>
       <p>点击下方“开始同步”后，才会授权所选联系人的本机可读历史文字和后续新消息，并开启同步。关闭同步总开关或退出 App 会停止读取。</p>
       {state.bindings.length > 0 && state.syncEnabled === false && <p>开启总开关也会恢复其他已授权联系人的同步。</p>}
-    </> : <p>{selectionOnly
-      ? state.syncEnabled === true ? '总开关已开启：确认后允许读取所选会话的本机历史文字，再持续同步新消息。' : state.syncEnabled === false ? '总开关已关闭：确认后保留授权，开启总开关后才开始读取所选会话。' : '总开关状态尚未确认；核验身份、确认所选会话并开启后才允许读取。'
-      : state.syncEnabled === true ? '总开关已开启：确认后允许所选会话从本次绑定起持续同步新消息。' : state.syncEnabled === false ? '总开关已关闭：确认后保留授权，开启总开关后从本次绑定起同步。' : '总开关状态尚未确认；确认绑定并开启后，从本次绑定起同步。'}</p>}
-    <p>{startSync ? '会话名单仅用于选择联系人，列表附带的消息摘要会立即丢弃，不保存或用于回复。' : '点击“刷新微信会话”表示同意读取当前微信账号的会话列表，以便核对并选择联系人；列表附带的消息摘要会立即丢弃，不保存或用于回复。此操作不授权读取聊天正文。'}</p>
-    {!startSync && <p>{selectionOnly ? '确认后允许读取本次所选会话在本机可读的历史文字和后续新消息；非文字消息只保留占位，不自动下载媒体。' : '更早的历史消息需独立确认；本次历史选择仅覆盖本次所选会话，后续新增会话不会继承。已有明确历史授权仍按其原范围执行。'}</p>}
+      <p>会话名单仅用于选择联系人，列表附带的消息摘要会立即丢弃，不保存或用于回复。</p>
+    </>}
     {state.phase === 'ready' && <section aria-label="可添加的微信会话">
       <div className="bindings-toolbar"><h3>{allPrivateMode ? '待处理或已停止同步的会话' : '可添加的微信会话'}</h3><span>已选 {Object.keys(selection).length} 个</span></div>
       {state.sessionIssue === 'not-requested' ? <p>点击“刷新微信会话”后读取列表，系统可能请求访问微信数据。</p>
@@ -78,7 +75,7 @@ export function BindingConsentPage({ contacts, consent, navigate, onClose, targe
       {!selectionOnly && !startSync && <><label><input type="checkbox" checked={consent.historyAuthorized ?? false} disabled={!!state.busy || !Object.keys(selection).length}
         onChange={event => consent.setHistoryAuthorized(event.target.checked)} />同时读取本次所选会话在本机可用的历史消息</label>
       <p>默认不读取绑定以前的历史。更改所选会话、对应联系人或刷新列表后，需要重新勾选历史授权。</p></>}
-      <div className="bindings-submit"><span>{startSync ? '只同步你选中的联系人；之后可随时添加或停止。' : selectionOnly ? '同名联系人请核对稳定会话与联系人标识；停止已有同步请在联系人详情中撤销授权。' : '同名联系人请核对会话与联系人标识。取消勾选不会撤销已有授权。'}</span><button className="button primary"
+      <div className="bindings-submit"><span>{startSync ? '只同步你选中的联系人；之后可随时添加或停止。' : selectionOnly ? '授权仅包含所选会话的本机历史文字和后续消息。' : '同名联系人请核对会话与联系人标识。取消勾选不会撤销已有授权。'}</span><button className="button primary"
         disabled={!!state.busy || !!state.sessionIssue || !Object.keys(selection).length || Object.values(selection).some((item) => !item.target)}
         onClick={() => void consent.confirm(startSync ? { startSync: true } : undefined).then(confirmed => { if (confirmed && startSync) onClose(); })}>
         {state.busy === 'confirm' ? '正在确认…' : startSync ? `开始同步这 ${selectedCount} 位联系人` : '确认并授权所选会话'}</button></div>

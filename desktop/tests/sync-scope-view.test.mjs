@@ -45,7 +45,7 @@ for (const selectionOnly of [undefined, true]) test(selectionOnly ? '联系人�
  </>);
  `);
  await expect(page.getByRole('heading',{name:selectionOnly ? '添加微信联系人' : '管理单个微信会话',exact:true})).toBeVisible();
- await expect(page.getByText(selectionOnly ? '选择要同步的微信私聊，再核对渠道身份并确认加入联系人。没有勾选的会话不会获得授权，新私聊不会自动加入。' : '全部私聊已纳入自动同步范围，无需逐个添加。这里用于处理身份冲突，或重新开启你曾单独停止的会话。',{exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:selectionOnly ? '可添加的微信会话' : '待处理或已停止同步的会话',exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'开启自动同步',exact:true})).toBeVisible();
 });
 
