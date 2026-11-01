@@ -23,6 +23,8 @@ export interface FixedProcessingRun {
   stage: 'extraction_verification' | 'document_scene' | 'document_profile' | 'completed'; laterStages: 'pending' | 'completed'; tasks: FixedProcessingTask[];
   /** 控制投影：固定轮次的统一状态、可执行动作、固定原因与计数；不含百分比。 */
   status: FixedProcessingStatus; statusReason: string | null; sharedFaultCode: string | null; actions: FixedProcessingControlAction[];
+  /** 后续阶段合并等待的最早执行时间；到期仍须重新核验资格。 */
+  nextDueAt?: number | null;
   controlVersion: number; pending: number; revoked: number; calls: FixedProcessingCallSummary;
   inputs: FixedProcessingInput[]; candidates: FixedProcessingCandidate[];
 }
@@ -35,7 +37,11 @@ export interface FixedProcessingCall {
   provider: string; requestKey: string; reservedBudgetUnits: string; actualBudgetUnits: string | null;
 }
 export interface FixedProcessingTrace { events: FixedProcessingEvent[]; calls: FixedProcessingCall[] }
-export interface FixedProcessingView { connectionGeneration: number; run: FixedProcessingRun | null }
+export interface FixedProcessingQueue {
+  pending: number; nextDueAt: number | null; blockedContacts: number;
+  later?: { pending: number; nextDueAt: number | null; stage: 'document_scene' | 'document_profile' | null };
+}
+export interface FixedProcessingView { connectionGeneration: number; run: FixedProcessingRun | null; queue?: FixedProcessingQueue }
 export interface FixedProcessingMode { connectionGeneration: number; mode: 'sqlite' | 'legacy' }
 export interface FixedProcessingStart { requestKey: string; connectionGeneration: number }
 export interface FixedProcessingControl { runId: string; controlVersion: number; operationId: string; connectionGeneration: number }

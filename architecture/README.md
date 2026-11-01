@@ -42,7 +42,7 @@
 
 DSH 与业务 Skill 接入的职责和受控文件读取实验见 [DSH Skill 接入草案](drafts/dsh-skill-integration.md)；自动学习规则留待后续讨论。
 
-L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-memory.md)已于 2026-10-17 整体确认，并整理为[正式规格](../.scratch/layered-relationship-memory/spec.md)；[11项拆分](../.scratch/layered-relationship-memory/ticket-proposal.md)已获认可并逐张发布，实际状态见[任务索引](../.scratch/layered-relationship-memory/planning.md)，现按真实依赖分票实现。加载方向由 ADR-067 局部修订；工程实现状态、真实模型质量与自动使用资格分别核验。
+L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-memory.md)已于 2026-10-17 整体确认，并整理为[正式规格](../.scratch/layered-relationship-memory/spec.md)；[11项拆分](../.scratch/layered-relationship-memory/ticket-proposal.md)已获认可并逐张发布，实际状态见[任务索引](../.scratch/layered-relationship-memory/planning.md)，现按真实依赖分票实现。加载方向由 ADR-067 局部修订；工程实现状态、真实模型质量与自动使用资格分别核验。调度和发布按[ADR-143](adr/143-hybrid-memory-processing-schedule.md)分阶段进行：L2 与 L3 可在不同任务和窗口生成，但每次仍须逐项核验后原子发布完整当前集合；不要求同一任务立即串行生成两者。该调度已实现并完成合成开发 App 验收，见[验证记录](../docs/verification/hybrid-memory-scheduling-20261101.md)；自动调度限启用边界后首次保存且首个来源为 read_goal.kind=incremental 的文字，既有消息需单独显式初始化，不自动入队。
 
 记忆持续更新、纠错、概览、回复检索及自动 Skill 学习等 8 个完整功能，已从[草图](drafts/memory-skill-evolution.md)整理为[正式规格](../.scratch/memory-skill-evolution/spec.md)；[15项拆分](../.scratch/memory-skill-evolution/ticket-proposal.md)已确认并逐张发布，实际进度见[任务索引](../.scratch/memory-skill-evolution/planning.md)。该轮 DSH 选型曾搁置；后续迁移已由ADR-102实施为TypeScript／DSH；联系人／本人概览服务及回复检索已接入正式后端与回复流程，见[后端装配](../backend-ts/src/sqlite-host-plugin.ts)和[回复服务装配](../backend-ts/src/reply/sqlite/runtime.ts)；这不表示全部 8 项功能、真实模型质量或实际 App 验收均已完成，其余状态按对应任务核验。
 
@@ -204,6 +204,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 - 持续前台定位按 ADR-050 采用每轮单帧，进入助手或其他 App 后暂停；一个助手窗口按联系人恢复输入和编辑，切换不取消原生成。约束见[正式规格](../.scratch/foreground-contact-follow/spec.md)，实施进度统一见[任务索引](../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录；任务关闭不表示其他渠道或交付任务已通过验收。ADR-049 的双帧复查仅保留为历史决定。
 - 生成只使用已选联系人及用户本人范围内的有界上下文；模型提取的记忆必须带来源、标记 `auto` 且可撤销。
 - 正常自动记忆按 ADR-070 与 [ADR-085](adr/085-source-verified-automatic-adoption.md) 使用逐项来源核验，通过适用检查后自动裁决，不以额外语用、置信度或风险标签转入人工待办。来源、人工保护、删除及 ADR-081 的关系矛盾待定例外保持；旧评测结果不因此变成达标。
+- 增量记忆调度按[ADR-143](adr/143-hybrid-memory-processing-schedule.md)：仅自动安排 read_goal.kind=incremental；新文字先持久保存为待处理，联系人静默 10 分钟、待处理 50 条或最早待处理 6 小时后可启动 L1，且同联系人两次 L1 启动至少相隔 30 分钟。有效正式记忆变化从首个变化起合并 1 小时触发 L2；主题正文变化后 L3 同范围最多每 24 小时启动一次，首次有效主题正文允许初始化。L2/L3 延迟不阻止独立到期的 L1；采纳策略、来源核验与完整集合发布合同不变。实现及合成验收见[验证记录](../docs/verification/hybrid-memory-scheduling-20261101.md)；启用前已有消息与历史来源消息仅由独立显式初始化处理，不自动入队。
 - 所有实际记忆提取默认保存从原始聊天到最终处理结果的全过程追踪，保留到手动删除或来源删除，追踪写入失败停止本批；含正文资料与最小出站台账分开管理（见 ADR-037，后端及 React 查看/反查/删除已实现，历史／不可观察载荷明确保留缺口；普通页面验证不代替最终原生 App 验收）。
 - 关系记忆与本人记忆不设置固定常驻模式；记忆召回第一期按当前正文做确定性中文词法评分，使用独立双预算和相关性阈值；联系人记忆目录只保留版本复验职责。
 - 后续 L2/L3 目标按 ADR-067，在关系语境开启时使用受预算限制的 L3 背景与 L2 目录、按需读取正文，同时保留原 L1 动态检索。该分层加载已有受控生产接线，见[运行时装配](../backend-ts/src/reply/sqlite/runtime.ts)与[回复上下文](../backend-ts/src/reply/sqlite/candidates/turns.ts)；默认逐项核验策略与自动启用后续由ADR-070修订；显式评测配置仍保留原资格边界。本机实际运行、真实质量和 App 验收需分别核验；底层记忆仍不添加常驻模式，现有无正文概览的存储合同保持。
@@ -249,3 +250,4 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 140. [ADR-140：聊天图片取消原图证明门槛](adr/140-source-verified-viewable-chat-images.md)
 141. [ADR-141：引用回复随正常消息同步读取](adr/141-inline-quoted-reply-sync.md)
 142. [ADR-142：首次连接后先选择联系人，再确认开启同步](adr/142-first-connection-contact-selection.md)
+143. [ADR-143：混合记忆处理调度](adr/143-hybrid-memory-processing-schedule.md)

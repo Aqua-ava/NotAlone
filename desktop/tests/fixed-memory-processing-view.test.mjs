@@ -126,3 +126,30 @@ test('主题与概览阶段自动更新，全部阶段完成后才显示整轮�
   await panel.getByText('主题整理与长期概览已完成。',{exact:true}).waitFor();
  });
 });
+
+test('后续阶段合并等待显示实际阶段与到期时间，页面保持只读', {timeout:20000},async t=>{
+ let current={...run(),status:'waiting',statusReason:'later_stages_scheduled',stage:'document_scene',nextDueAt:Date.now()+3_600_000};
+ await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:current}:undefined,async page=>{
+  const panel=page.getByRole('region',{name:'固定范围记忆处理'});
+  await panel.getByRole('status').filter({hasText:'等待整理主题资料'}).waitFor();
+  await panel.getByText(/预计.*开始/).waitFor();
+  current={...current,stage:'document_profile'};await revisit(page);
+  await panel.getByRole('status').filter({hasText:'等待更新长期概览'}).waitFor();
+  assert.equal(await panel.getByText('本轮已完成',{exact:true}).count(),0);
+  assert.equal(await panel.getByRole('button').count(),0);
+ });
+});
+
+test('首轮尚未建立时显示真实待提取队列，旧轮完成不掩盖新消息', {timeout:20000},async t=>{
+ let current={connectionGeneration:1,run:null,queue:{pending:4,nextDueAt:Date.now()+600_000,blockedContacts:0}};
+ await withPanel(t,async method=>method==='readCurrent'?current:undefined,async page=>{
+  const panel=page.getByRole('region',{name:'固定范围记忆处理'});
+  await panel.getByText(/新增待提取文字 4 条/).waitFor();
+  current={...current,run:{...run(),status:'completed',state:'completed',stage:'completed',laterStages:'completed'},queue:{pending:6,nextDueAt:null,blockedContacts:1}};
+  await revisit(page);await panel.getByText(/新增待提取文字 6 条/).waitFor();
+  await panel.getByText(/部分联系人已暂停或受阻/).waitFor();
+  await panel.getByRole('status').filter({hasText:'等待提取与核验'}).waitFor();
+  assert.equal(await panel.getByText('本轮已完成',{exact:true}).count(),0);
+  assert.equal(await panel.getByRole('button').count(),0);
+ });
+});

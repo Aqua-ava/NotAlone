@@ -17,6 +17,8 @@ import {SqliteMemoryExtraction,type ExtractionModelPort} from './service.ts';
 import {SqliteMemoryExtractionHttp} from './http.ts';
 import {SqliteMemoryDocuments} from './documents/service.ts';
 import {createSqliteDocumentsModelPort} from './documents/model-port.ts';
+import {SqliteMemoryL1Scheduler} from './scheduler.ts';
+import {SqliteMemoryLaterWorker} from './later-worker.ts';
 /** 只消费共享host的许可端点；关闭能力继续由唯一宿主持有。 */
 export interface SqliteMemorySharedModel {
  configuration:HostReplyConfiguration;
@@ -29,6 +31,7 @@ export interface SqliteMemorySharedModel {
 export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:SqliteStorage;ownerId:string;userData:string;businessHome:string;infoPath:string;envFilePath:string;environment:Readonly<NodeJS.ProcessEnv>;sharedModel?:SqliteMemorySharedModel;holders:ActiveHolders;authorize(req:IncomingMessage):boolean;afterRunSettled?:(runId:string)=>Promise<unknown>;adjudicationEnabled?:boolean}){
  const configuration=options.sharedModel?.configuration??resolveHostReplyConfiguration(options.environment);
  let service:SqliteMemoryExtraction;let adjudication:SqliteMemoryAdjudication|undefined;let documents:SqliteMemoryDocuments|undefined;
+ let l1Scheduler:SqliteMemoryL1Scheduler|undefined;let laterWorker:SqliteMemoryLaterWorker|undefined;let schedulingStarted=false;
  let modelHost:Awaited<ReturnType<typeof startModelHost>>|undefined;
  let port:ExtractionModelPort={prepare:async()=>{throw new StorageFailure('extraction_model_unconfigured');},invoke:async()=>{throw new StorageFailure('extraction_model_unconfigured');}};
  try{
@@ -50,11 +53,26 @@ export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:Sql
    const documentPort=options.sharedModel&&configuration.status==='configured'?createSqliteDocumentsModelPort({ctx:options.ctx,configuration,provider:options.sharedModel.provider,permit:options.sharedModel.permit,ownerId:options.ownerId}):undefined;
    documents=new SqliteMemoryDocuments(options.storage,options.ownerId,documentPort,options.holders);await documents.initialize();
   }
-  service=new SqliteMemoryExtraction(options.storage,options.ownerId,port,options.holders,adjudication?async(runId)=>{await adjudication!.publishRun(runId);return documents!.publishRun(runId);}:options.afterRunSettled);await service.initialize();
-  const http=new SqliteMemoryExtractionHttp(service,options.authorize);let closing:Promise<void>|undefined;
-  return {service,http,documents,configurationState:configuration.status,close:()=>closing??=(async()=>{
+  service=new SqliteMemoryExtraction(options.storage,options.ownerId,port,options.holders,adjudication?async(runId)=>{
+   await adjudication!.publishRun(runId);await documents!.enrollRun(runId);
+   // 只安排持久队列，不同步等候一小时／一天的后续阶段。
+   laterWorker?.wake();l1Scheduler?.wake();
+  }:options.afterRunSettled);await service.initialize();
+  if(adjudication&&documents){
+   l1Scheduler=new SqliteMemoryL1Scheduler({
+    nextDueAt:now=>service.nextDueAt(now),dueContacts:now=>service.dueContacts(now),
+    // 先排空已有 L1／裁决，再受理下一个联系人，避免本人范围的并行裁决争抢同一版本。
+    startContact:async(contactId,requestKey)=>{await service.waitForIdle();const run=await service.startContact(contactId,requestKey);if(run)await service.waitForIdle(run.runId);return run;},
+   });
+   laterWorker=new SqliteMemoryLaterWorker(documents,()=>console.error('MEMORY_LATER_SCHEDULER_FAILED'));
+  }
+  const http=new SqliteMemoryExtractionHttp(service,options.authorize,async()=>({...await service.readSchedule(),...(documents?{later:await documents.queueSummary()}:{})}));let closing:Promise<void>|undefined;
+  return {service,http,documents,configurationState:configuration.status,
+   startScheduling(){if(schedulingStarted)return;schedulingStarted=true;void service.resumeFollowups().then(()=>service.waitForIdle()).catch(()=>console.error('MEMORY_FOLLOWUP_RECOVERY_FAILED')).finally(()=>{if(schedulingStarted){void l1Scheduler?.start();laterWorker?.start();}});},
+   wake(contactId?:string){if(!schedulingStarted)return;l1Scheduler?.wake(contactId);laterWorker?.wake();},
+   close:()=>closing??=(async()=>{
    // 自有许可先停领；业务释放失败时保留host，重试成功后才关闭其账本与socket。
-   modelHost?.arbiter.stop();await Promise.all([service.close(),adjudication?.close(),documents?.close()]);if(modelHost)await modelHost.close(async()=>{});
+   schedulingStarted=false;modelHost?.arbiter.stop();await Promise.all([l1Scheduler?.close(),laterWorker?.close(),service.close(),adjudication?.close(),documents?.close()]);if(modelHost)await modelHost.close(async()=>{});
   })().catch(error=>{closing=undefined;throw error;})};
  }catch(error){await documents?.close();await adjudication?.close();await port.close?.();await modelHost?.shutdown();throw error;}
 }

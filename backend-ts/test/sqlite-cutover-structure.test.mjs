@@ -20,7 +20,7 @@ async function fixture(t) {
   return { root, database: path.join(root, 'managed/sqlite/notalone.sqlite'), status };
 }
 
-test('实际 DDL 与 89 表结构基线逐表一致（含 CHECK、触发器 body、FK action、索引 SQL 与视图）', async t => {
+test('实际 DDL 与 92 表结构基线逐表一致（含 CHECK、触发器 body、FK action、索引 SQL 与视图）', async t => {
   const f = await fixture(t);
   const actual = dumpSchema(f.database);
   // sqliteVersion 随运行构建的 SQLite 版本变化，不参与结构等价；其余元数据必须逐项一致。
@@ -29,10 +29,10 @@ test('实际 DDL 与 89 表结构基线逐表一致（含 CHECK、触发器 body
   assert.match(actualSqliteVersion, /^\d+\.\d+\.\d+$/);
   if (baselineSqliteVersion !== undefined) assert.match(baselineSqliteVersion, /^\d+\.\d+\.\d+$/);
   assert.deepEqual(actualStable, baselineStable, '结构元数据与基线不一致');
-  assert.equal(actual.metadata.checkCount, 275);
-  assert.equal(actual.metadata.triggerCount, 98);
-  assert.deepEqual(actual.metadata.migrationVersions, Array.from({ length: 26 }, (_, index) => index + 1));
-  assert.equal(actual.metadata.userVersion, 26);
+  assert.equal(actual.metadata.checkCount, 295);
+  assert.equal(actual.metadata.triggerCount, 99);
+  assert.deepEqual(actual.metadata.migrationVersions, Array.from({ length: 28 }, (_, index) => index + 1));
+  assert.equal(actual.metadata.userVersion, 28);
   assert.deepEqual(Object.keys(actual.tables), EXPECTED_TABLES, '实际表集合必须等于实现表基线');
   for (const [name, expected] of Object.entries(baseline.tables)) {
     const table = actual.tables[name];
@@ -65,14 +65,14 @@ test('迁移账本、结构版本与重开身份稳定', async t => {
   const db = new DatabaseSync(f.database, { readOnly: true });
   try {
     const ledger = db.prepare('SELECT version FROM schema_migration ORDER BY version').all().map(row => Number(row.version));
-    assert.deepEqual(ledger, Array.from({ length: 26 }, (_, index) => index + 1));
-    assert.equal(Number(db.prepare('PRAGMA user_version').all()[0].user_version), 26);
+    assert.deepEqual(ledger, Array.from({ length: 28 }, (_, index) => index + 1));
+    assert.equal(Number(db.prepare('PRAGMA user_version').all()[0].user_version), 28);
     assert.equal(Number(db.prepare('SELECT COUNT(*) AS n FROM database_instance').all()[0].n), 1);
   } finally { db.close(); }
   const reopened = await SqliteStorage.open({ userData: f.root, intent: 'open', expectedDatabaseId: f.status.databaseId, role: 'test' });
   try {
     assert.equal(reopened.status.databaseId, f.status.databaseId);
-    assert.equal(reopened.status.schemaVersion, 26);
+    assert.equal(reopened.status.schemaVersion, 28);
     assert.deepEqual(await reopened.check(), { integrity: 'ok', foreignKeys: 'ok' });
     const ownerId = await reopened.execute('identity.resolveOwner', { proposedOwnerId: '11111111-1111-4111-8111-111111111111', at: 1 });
     const skillRoot = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-cutover-skill-root-')));
@@ -85,7 +85,7 @@ test('迁移账本、结构版本与重开身份稳定', async t => {
     const snapshot = await reopened.execute('cutover.snapshot', { ownerId });
     assert.deepEqual(snapshot.missingTables, []);
     assert.deepEqual(snapshot.unexpectedTables, []);
-    assert.equal(snapshot.tables.length, 89);
+    assert.equal(snapshot.tables.length, 92);
     assert.deepEqual(snapshot.media, { message_media: 0, current_files: 0, staged_files: 0, cleanup_pending: 0, attempts_running: 0 });
     assert.deepEqual(snapshot.skills, { packages: 1, revisions: 1, enabled: 1, unknown: 0 });
   } finally { await reopened.close(); }
@@ -96,7 +96,7 @@ test('必要事务与约束：外键、CHECK、唯一键、幂等与范围触发
   const db = new DatabaseSync(f.database, { enableForeignKeyConstraints: true });
   try {
     assert.throws(() => db.prepare("INSERT INTO channel_conversation(owner_id,id,account_id,identity_scheme,external_key) VALUES('o','c','missing-account','wx','k')").run(), /FOREIGN KEY/);
-    assert.throws(() => db.prepare("INSERT INTO database_instance VALUES(2,'id','notalone-sqlite-v1','test',1,'r',0,'')").run(), /CHECK/);
+    assert.throws(() => db.prepare("INSERT INTO database_instance(slot,database_id,format_family,role,created_at,runtime_id,epoch,schema_digest) VALUES(2,'id','notalone-sqlite-v1','test',1,'r',0,'')").run(), /CHECK/);
     assert.throws(() => db.prepare("INSERT INTO deletion_target(operation_id,target_no,storage_kind,domain,target_key,row_kind,plan_revision,state) VALUES('missing',1,'row','d','k','m',1,'cleared')").run(), /FOREIGN KEY|CHECK/);
     assert.throws(() => db.prepare("INSERT INTO capture_record(owner_id,id,contact_id,capture_id,item_no,state,message_id,normalizer_version,availability) VALUES('o','r','c','cap',1,'normalized','m','v1','available')").run(), /capture_record_binding_mismatch/);
     assert.throws(() => db.prepare("INSERT INTO memory_citation(owner_id,id,source_contact_id,message_id,record_id,accepted_revision,span_start,span_end) VALUES('o','c','c','m','r',1,0,1)").run(), /memory_citation_required_mismatch/);

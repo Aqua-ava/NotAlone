@@ -7,11 +7,16 @@ function send(res:ServerResponse,status:number,value:unknown){res.writeHead(stat
 /** 认证函数来自唯一宿主；owner和固定输入不能由HTTP指定。 */
 export class SqliteMemoryExtractionHttp {
  private service:SqliteMemoryExtraction;private authorize:(req:IncomingMessage)=>boolean;
- constructor(service:SqliteMemoryExtraction,authorize:(req:IncomingMessage)=>boolean){this.service=service;this.authorize=authorize;}
+ private readonly schedule:()=>Promise<unknown>;
+ constructor(service:SqliteMemoryExtraction,authorize:(req:IncomingMessage)=>boolean,schedule=()=>service.readSchedule()){this.service=service;this.authorize=authorize;this.schedule=schedule;}
  async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
   const url=new URL(req.url??'/','http://localhost');
   if(!url.pathname.startsWith('/api/memory-processing/'))return false;
   if(!this.authorize(req)||req.headers.origin!==undefined){send(res,401,{error:'unauthorized'});return true;}
+  if(url.pathname==='/api/memory-processing/schedule'){
+   if(req.method!=='GET'||url.search){send(res,400,{error:'memory_extraction_request_invalid'});return true;}
+   try{send(res,200,await this.schedule());}catch{send(res,409,{error:'memory_extraction_schedule_unavailable'});}return true;
+  }
   const task=/^\/api\/memory-processing\/tasks\/([a-f0-9-]{36})\/events$/.exec(url.pathname);
   const run=/^\/api\/memory-processing\/runs(?:\/(current|[a-f0-9-]{36})(?:\/(pause|continue))?)?$/.exec(url.pathname);
   if(!task&&!run){send(res,404,{error:'memory_extraction_not_found'});return true;}

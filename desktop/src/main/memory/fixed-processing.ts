@@ -3,7 +3,7 @@ import type { PageCommands } from '../page-commands';
 import { noArguments } from '../page-commands';
 import { isUuid } from '../uuid';
 import type { FixedProcessingCall, FixedProcessingControl, FixedProcessingEvent, FixedProcessingRun,
-  FixedProcessingStart, FixedProcessingTrace, FixedProcessingTraceRequest, FixedProcessingView, FixedProcessingMode } from '../../shared/fixed-memory-processing';
+  FixedProcessingStart, FixedProcessingTrace, FixedProcessingTraceRequest, FixedProcessingView, FixedProcessingMode, FixedProcessingQueue } from '../../shared/fixed-memory-processing';
 
 const invalid = () => new Error('记忆处理状态不可用，请刷新后重试。');
 const row = (value: unknown): Record<string, unknown> => {
@@ -34,7 +34,8 @@ const callStates = ['prepared', 'sending', 'succeeded', 'failed', 'unknown'];
 export function readFixedProcessingRun(raw: unknown): FixedProcessingRun | null {
   if (raw === null) return null;
   const value = row(raw);
-  if (!runStates.includes(String(value.state)) || (value.state === 'completed'
+  const pausedAfterCompletion = value.state === 'paused' && value.laterStages === 'completed' && value.status === 'paused';
+  if (!runStates.includes(String(value.state)) || (value.state === 'completed' || pausedAfterCompletion
     ? value.stage !== 'completed' || value.laterStages !== 'completed'
     : !['extraction_verification','document_scene','document_profile'].includes(String(value.stage)) || value.laterStages !== 'pending')) throw invalid();
   const total = count(value.total), succeeded = count(value.succeeded), failed = count(value.failed), unknown = count(value.unknown);
@@ -42,6 +43,7 @@ export function readFixedProcessingRun(raw: unknown): FixedProcessingRun | null 
   if (!statuses.includes(String(value.status)) || (value.statusReason !== null && (typeof value.statusReason !== 'string' || !reasonCode.test(value.statusReason)))
     || !Array.isArray(value.actions) || value.actions.some(action => !controlActions.includes(String(action))) || new Set(value.actions).size !== value.actions.length) throw invalid();
   const controlVersion = count(value.controlVersion), pending = count(value.pending), revoked = count(value.revoked);
+  const nextDueAt = value.nextDueAt == null ? null : count(value.nextDueAt);
   if (value.sharedFaultCode !== undefined && value.sharedFaultCode !== null && (typeof value.sharedFaultCode !== 'string' || !reasonCode.test(value.sharedFaultCode))) throw invalid();
   const callInput = row(value.calls);
   if (Object.keys(callInput).length !== callStates.length || callStates.some(state => !Object.hasOwn(callInput, state))) throw invalid();
@@ -71,7 +73,7 @@ export function readFixedProcessingRun(raw: unknown): FixedProcessingRun | null 
     stage: value.stage as FixedProcessingRun['stage'], laterStages: value.laterStages as FixedProcessingRun['laterStages'],
     status: value.status as FixedProcessingRun['status'],
     statusReason: value.statusReason as string | null, sharedFaultCode: (value.sharedFaultCode as string | null | undefined) ?? null, actions: value.actions as FixedProcessingRun['actions'],
-    controlVersion, pending, revoked, calls, tasks, inputs, candidates };
+    controlVersion, pending, revoked, calls, tasks, inputs, candidates, nextDueAt };
 }
 function readTrace(raw: unknown): FixedProcessingTrace {
   const value = row(raw);
@@ -145,7 +147,22 @@ export class FixedMemoryProcessingController {
       return { connectionGeneration: response.generation, mode: value.storage === 'sqlite' ? 'sqlite' : 'legacy' };
     } catch { this.synchronize(); throw invalid(); }
   }
-  async read(): Promise<FixedProcessingView> { return this.view(await this.request('/api/memory-processing/runs/current', 'GET')); }
+  async read(): Promise<FixedProcessingView> {
+    const [current, scheduled] = await Promise.all([
+      this.request('/api/memory-processing/runs/current', 'GET'), this.request('/api/memory-processing/schedule', 'GET'),
+    ]);
+    try {
+      if (current.generation !== scheduled.generation) throw invalid();
+      const queue = row(scheduled.data);exact(queue, ['pending','nextDueAt','blockedContacts',...(Object.hasOwn(queue,'later')?['later']:[])]);
+      let later: FixedProcessingQueue['later'];
+      if(Object.hasOwn(queue,'later')){
+        const value=row(queue.later);exact(value,['pending','nextDueAt','stage']);
+        if(value.stage!==null&&!['document_scene','document_profile'].includes(String(value.stage)))throw invalid();
+        later={pending:count(value.pending),nextDueAt:value.nextDueAt===null?null:count(value.nextDueAt),stage:value.stage as 'document_scene'|'document_profile'|null};
+      }
+      return { connectionGeneration: current.generation, run: readFixedProcessingRun(current.data), queue: { pending: count(queue.pending), blockedContacts: count(queue.blockedContacts), nextDueAt: queue.nextDueAt === null ? null : count(queue.nextDueAt),...(later?{later}:{}) } };
+    } catch { this.synchronize(); throw invalid(); }
+  }
   async start(input: FixedProcessingStart): Promise<FixedProcessingView> {
     const value = this.generation(input, ['requestKey', 'connectionGeneration']), requestKey = id(value.requestKey);
     return this.view(await this.request('/api/memory-processing/runs', 'POST', { request_key: requestKey }, value.connectionGeneration as number));

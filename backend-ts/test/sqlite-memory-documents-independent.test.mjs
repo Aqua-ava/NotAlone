@@ -38,7 +38,7 @@ test('同轮甲提取失败时已成功的乙仍可完成文档发布，整轮�
  const run=await f.extraction.start('independent-document-after-failure');await f.extraction.waitForIdle(run.runId);
  const snapshot=await f.extraction.read(run.runId),a=snapshot.tasks.find(task=>task.contactId===f.contactId),b=snapshot.tasks.find(task=>task.contactId===f.otherContactId);
  assert.equal(snapshot.state,'failed');assert.equal(a.state,'failed');assert.equal(b.state,'succeeded');
- assert.ok(snapshot.failed>0);assert.ok(snapshot.succeeded>0);assert.equal(snapshot.laterStages,'pending');
+ assert.ok(snapshot.failed>0);assert.ok(snapshot.succeeded>0);assert.equal(snapshot.laterStages,'pending');assert.equal(snapshot.status,'blocked','成功联系人的文档不能把含前置失败的整轮投影成完成');
  const trace=await f.extraction.trace(b.taskId);assert.ok(trace.events.some(event=>event.kind==='verified_output'),'乙必须真实完成07提取和来源核验');
  const memory=await new SqliteMemoryManagement(f.storage,f.owner).read({scopeKind:'contact',contactId:f.otherContactId});
  assert.ok(memory.memories.some(item=>item.current.body.includes('合成登山')),'乙须经真实08完成正式记忆');

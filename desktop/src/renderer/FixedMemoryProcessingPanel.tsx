@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FixedMemoryProcessingBridge, FixedProcessingRun, FixedProcessingView } from '../shared/fixed-memory-processing';
+import type { FixedMemoryProcessingBridge, FixedProcessingRun, FixedProcessingView, FixedProcessingQueue } from '../shared/fixed-memory-processing';
 
 const sharedReasons: Record<string, string> = {
   extraction_model_unconfigured: '模型尚未配置',
@@ -40,12 +40,17 @@ function stageText(run: FixedProcessingRun): string {
   if (run.stage !== 'extraction_verification') return '正在处理后续阶段';
   return '正在提取与核验';
 }
-function statusText(run: FixedProcessingRun | null): string {
+function statusText(run: FixedProcessingRun | null, queue?: FixedProcessingQueue): string {
   if (!run) return '等待处理';
   if (run.status === 'paused') return '已暂停';
   if (run.status === 'blocked') return '处理受阻';
-  if (run.status === 'completed') return '本轮已完成';
+  if (run.status === 'completed') {
+    if(queue?.pending)return '等待提取与核验';
+    if(queue?.later?.pending)return queue.later.stage==='document_profile'?'等待更新长期概览':queue.later.stage==='document_scene'?'等待整理主题资料':'后续阶段待处理';
+    return '本轮已完成';
+  }
   if (run.status === 'processing') return stageText(run);
+  if (run.statusReason === 'later_stages_scheduled') return run.stage === 'document_profile' ? '等待更新长期概览' : '等待整理主题资料';
   return run.total === 0 ? '当前没有待处理的文字目标' : '等待提取与核验';
 }
 
@@ -102,14 +107,17 @@ export function FixedMemoryProcessingPanel({ bridge, scopeKey = '', onRunUpdated
     && run.tasks.length > 0 && run.tasks.every(task => ['succeeded', 'awaiting_decision'].includes(task.state));
   return <section className="memory-processing-card fixed-memory-processing" aria-label="固定范围记忆处理">
     <header className="memory-processing-bar"><h2>记忆处理</h2>
-      {view && <p role="status">{statusText(run)}</p>}
+      {view && <p role="status">{statusText(run,view.queue)}</p>}
     </header>
-    <p className="memory-section-note">当前勾选联系人的记忆整理状态与进度</p>
+    <p className="memory-section-note">全部已确认读取范围的后台队列，以及最近一轮提取进度</p>
     {error && <p role="alert">{error}</p>}
     {!view && !error && <p aria-live="polite">正在核对处理状态…</p>}
-    {view && !run && <p>暂无处理记录</p>}
+    {view && !run && <><p>暂无处理记录</p><p>新增文字会先积累，在会话静默或达到批量条件后自动处理；已有历史单独初始化。</p></>}
+    {view?.queue && view.queue.pending > 0 && <p>新增待提取文字 {view.queue.pending} 条。{view.queue.nextDueAt != null ? `预计 ${new Date(view.queue.nextDueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 检查批量条件。` : ''}{view.queue.blockedContacts > 0 ? '部分联系人已暂停或受阻，待处理文字会保留。' : ''}</p>}
+    {view?.queue?.later && view.queue.later.pending > 0 && <p>主题与长期概览仍有 {view.queue.later.pending} 项待处理。{view.queue.later.nextDueAt != null && run?.statusReason !== 'later_stages_scheduled' ? `预计 ${new Date(view.queue.later.nextDueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 继续。` : ''}</p>}
     {run && <>
       {run.status === 'blocked' && <p>{reasonText(run.statusReason)}</p>}
+      {run.statusReason === 'later_stages_scheduled' && run.nextDueAt != null && <p>预计 {new Date(run.nextDueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 开始，执行前会重新核对资料。</p>}
       <p>提取与核验：已处理 {run.succeeded} / {run.total} 条文字目标</p>
       {run.total > 0 && <progress className="memory-processing-progress" aria-label="文字提取与核验进度" max={run.total} value={run.succeeded}/>}
       {run.pending > 0 && <p>待处理 {run.pending} 条文字目标</p>}

@@ -8,12 +8,17 @@ test('来源删除立即撤下发布集合并清除文档正文与实际输入�
  assert.equal((await f.documents.read(scope)).status,'idle','从未发布时应显示尚无资料');
  const run=await f.extraction.start('document-source-deletion');await f.extraction.waitForIdle();
  const before=await f.documents.read(scope);assert.equal(before.documents.length,2);
+ const cursorBefore=await f.storage.execute('fixture.documentLaterCursor',{ownerId:f.owner,scopeKey:f.contactId});assert.ok(cursorBefore.last_profile_success_at>0);
  const sourceId=f.message.sourceRecordIds[0];
  const plan=await f.deletion.plan({ownerId:f.owner,requestKey:randomUUID(),scope:{kind:'source',contactId:f.contactId,sourceId}});
  assert.equal((await f.documents.read(scope)).publication,null);
  const result=await f.deletion.advance({ownerId:f.owner,operationId:plan.operationId});
  assert.equal(result.state,'completed',JSON.stringify(result.checks));
  const after=await f.documents.read(scope);assert.deepEqual(after.documents,[]);
+ const queued=await f.documents.readSchedule(scope),cursorAfter=await f.storage.execute('fixture.documentLaterCursor',{ownerId:f.owner,scopeKey:f.contactId});
+ assert.equal(queued.scene.state,'scheduled','来源失效后仍保留同事务排入的L2重整');
+ assert.equal(cursorAfter.scene_body_digest,null);assert.equal(cursorAfter.profile_scene_body_digest,null);
+ assert.equal(cursorAfter.last_profile_success_at,cursorBefore.last_profile_success_at,'来源删除不重置画像24小时频率基线');
  assert.equal(after.status,'needs_revalidation','来源删除后不是从未发布，页面须提示等待重新核验');
  const proof=await f.storage.execute('fixture.documentErasure',{ownerId:f.owner,text:'合成园艺'});
  assert.deepEqual(proof,{statements:0n,versions:0n,blocks:0n,events:0n,references:0n});

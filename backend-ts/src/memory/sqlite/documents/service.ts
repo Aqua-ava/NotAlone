@@ -2,6 +2,7 @@ import type {SqliteStorage} from '../../../storage/sqlite/client.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import type {ActiveHolders} from '../../../storage/sqlite/deletion/holders.ts';
 import type {MemoryScope} from '../management/contracts.ts';
+import type {LaterScheduleSnapshot} from './later-schedule.ts';
 import type {ModelTaskClaim} from '../../../platform/models/model-permit-server.ts';
 import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
 import type {SqliteExtractionModelPreparation} from '../model-port.ts';
@@ -20,7 +21,30 @@ export class SqliteMemoryDocuments {
  private readonly storage:SqliteStorage;readonly ownerId:string;private readonly model:DocumentModelPort|undefined;private readonly holders:ActiveHolders;
  private readonly stop=new AbortController();private pending=new Set<Promise<unknown>>();private active=new Map<string,Promise<unknown>>();private closing?:Promise<void>;
  constructor(storage:SqliteStorage,ownerId:string,model:DocumentModelPort|undefined,holders:ActiveHolders){this.storage=storage;this.ownerId=ownerId;this.model=model;this.holders=holders;}
- async initialize(){await this.storage.execute('memoryDocuments.recover',{ownerId:this.ownerId});}
+ async initialize(){
+  await this.storage.execute('memoryDocuments.recover',{ownerId:this.ownerId});
+  const runs=await this.storage.execute<string[]>('memoryDocuments.recoverableLaterRuns',{ownerId:this.ownerId});
+  for(const runId of runs)await this.publishRun(runId);
+ }
+ enrollRun(runId:string):Promise<boolean>{return this.storage.execute('memoryDocuments.enrollRun',{ownerId:this.ownerId,runId});}
+ scheduleMemoryChange(scope:MemoryScope,changedAt=Date.now(),runId?:string):Promise<LaterScheduleSnapshot|null>{return this.storage.execute('memoryDocuments.scheduleMemoryChange',{ownerId:this.ownerId,scope,changedAt,runId});}
+ readSchedule(scope:MemoryScope):Promise<LaterScheduleSnapshot>{return this.storage.execute('memoryDocuments.readSchedule',{ownerId:this.ownerId,scope});}
+ queueSummary():Promise<{pending:number;nextDueAt:number|null;stage:'document_scene'|'document_profile'|null}>{return this.storage.execute('memoryDocuments.queueSummary',{ownerId:this.ownerId});}
+ nextDueAt():Promise<number|null>{return this.storage.execute('memoryDocuments.nextDueAt',{ownerId:this.ownerId});}
+ async runDueStages(now=Date.now()):Promise<unknown[]> {
+  const results:unknown[]=[];if(this.stop.signal.aborted)return results;
+  for(let index=0;index<32&&!this.stop.signal.aborted;index++){
+   const job=await this.storage.execute<any>('memoryDocuments.claimDue',{ownerId:this.ownerId,now});
+   if(!job)break;
+   if(job.failed){results.push(job);break;}
+   const runResults=await this.publishRun(String(job.runId));
+   const state=await this.readSchedule(job.scope as MemoryScope);
+   results.push({stage:job.stage,generation:job.generation,runId:job.runId,taskId:job.taskId,results:runResults,state:job.stage==='document_scene'?state.scene?.state:state.profile?.state});
+   const finalState=job.stage==='document_scene'?state.scene?.state:state.profile?.state;
+   if(finalState==='failed'||finalState==='unknown')break;
+  }
+  return results;
+ }
  publishRun(runId:string):Promise<unknown>{
   if(this.stop.signal.aborted)return Promise.reject(new StorageFailure('document_service_closed'));
   const prior=this.active.get(runId);if(prior)return prior;
@@ -36,15 +60,24 @@ export class SqliteMemoryDocuments {
      // 已冻结且场景成功的任务可能停在暂停/中断的小批边界；继续时单独领取画像，不重新整理主题。
      const view=await this.readTask(taskId),stages=Array.isArray(view?.stages)?view.stages as {kind:string;status:string}[]:[];
      const sceneDone=stages.some(stage=>stage.kind==='scene'&&stage.status==='succeeded'),profileDone=stages.some(stage=>stage.kind==='profile');
-     if(sceneDone&&!profileDone){
+     if(view?.laterStage==='document_scene'&&sceneDone&&!view.publicationId){
+      const result=await this.storage.execute('memoryDocuments.publish',{ownerId:this.ownerId,taskId,now:view.scheduleNow??undefined});
+      await this.storage.execute('memoryDocuments.settle',{ownerId:this.ownerId,runId}).catch(()=>false);results.push(result);continue;
+     }
+     if(view?.laterStage==='document_profile'||sceneDone&&!profileDone){
       const profileClaim=await this.storage.execute<DocumentClaim|null>('memoryDocuments.claimProfile',{ownerId:this.ownerId,taskId});
       if(profileClaim){const result=await this.processTask(profileClaim);results.push(result);if(result.errorCode==='document_model_unconfigured')break;continue;}
+     }
+     if(view?.laterStage&&stages.some(stage=>stage.status==='succeeded')&&!view.publicationId){
+      const result=await this.storage.execute('memoryDocuments.publish',{ownerId:this.ownerId,taskId,now:view.scheduleNow??undefined});
+      await this.storage.execute('memoryDocuments.settle',{ownerId:this.ownerId,runId}).catch(()=>false);results.push(result);continue;
      }
      results.push(view);await this.storage.execute('memoryDocuments.settle',{ownerId:this.ownerId,runId}).catch(()=>false);continue;
     }
     const result=await this.processTask(claim);results.push(result);
     if(result.errorCode==='document_model_unconfigured')break;
    }catch(error){
+    if(this.stop.signal.aborted){results.push({taskId,outcome:'incomplete',errorCode:'runtime_interrupted'});break;}
     const code=this.errorCode(error);await this.storage.execute('memoryDocuments.noteFailure',{ownerId:this.ownerId,taskId,code}).catch(()=>{});
     results.push({taskId,outcome:'incomplete',errorCode:code});
    }
@@ -62,6 +95,10 @@ export class SqliteMemoryDocuments {
    if(initial.kind==='document_scene'){
     scene=await this.processScene(initial,signal);
     signal.throwIfAborted();
+    if(initial.laterStage==='document_scene'){
+     const result=await this.storage.execute<{taskId:string;outcome:string}>('memoryDocuments.publish',{ownerId:this.ownerId,taskId:initial.taskId,now:initial.scheduleNow??undefined});
+     await this.storage.execute('memoryDocuments.settle',{ownerId:this.ownerId,runId:initial.runId}).catch(()=>false);return result;
+    }
     // 场景批次收尾后如已请求普通暂停，不再领取画像小批；任务保持可继续而不是失败。
     if(await this.storage.execute<boolean>('memoryDocuments.runPaused',{ownerId:this.ownerId,runId:initial.runId}))return {taskId:initial.taskId,outcome:'incomplete'};
     active=await this.storage.execute<DocumentClaim>('memoryDocuments.claimProfile',{ownerId:this.ownerId,taskId:initial.taskId});
@@ -73,11 +110,12 @@ export class SqliteMemoryDocuments {
    }
    await this.processProfile(active,scene,signal);
    signal.throwIfAborted();
-   const result=await this.storage.execute<{taskId:string;outcome:string}>('memoryDocuments.publish',{ownerId:this.ownerId,taskId:initial.taskId});
+   const result=await this.storage.execute<{taskId:string;outcome:string}>('memoryDocuments.publish',{ownerId:this.ownerId,taskId:initial.taskId,now:initial.scheduleNow??undefined});
    signal.throwIfAborted();
    await this.storage.execute('memoryDocuments.settle',{ownerId:this.ownerId,runId:initial.runId}).catch(()=>false);
    return result;
   }catch(error){
+   if(this.stop.signal.aborted)return {taskId:initial.taskId,outcome:'incomplete',errorCode:'runtime_interrupted'};
    const code=this.errorCode(error);
    await this.storage.execute('memoryDocuments.fail',{ownerId:this.ownerId,attemptId:active.attemptId,code}).catch(()=>{});
    await this.storage.execute('memoryDocuments.noteFailure',{ownerId:this.ownerId,taskId:initial.taskId,code}).catch(()=>{});

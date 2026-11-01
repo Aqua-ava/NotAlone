@@ -11,6 +11,9 @@ const rowKinds:DeletionDomain['rowKinds']={
  memory_document_version:{keys:['owner_id','document_id','version_no'],ownerKey:'owner_id'},
  memory_document:{keys:['owner_id','id'],ownerKey:'owner_id'},
  document_publication:{keys:['owner_id','id'],ownerKey:'owner_id'},
+ memory_document_later_schedule:{keys:['owner_id','scope_key','generation'],ownerKey:'owner_id'},
+ memory_document_later_run_requirement:{keys:['owner_id','run_id','scope_key'],ownerKey:'owner_id'},
+ memory_document_later_cursor:{keys:['owner_id','scope_key'],ownerKey:'owner_id'},
 };
 const allowed=(op:DeletionOperation)=>['source','contact_history','contact','account'].includes(op.scope.kind);
 const eraseLedger=(op:DeletionOperation)=>op.scope.kind==='contact'||op.scope.kind==='account';
@@ -105,15 +108,55 @@ function collect(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget[]
  for(const v of [...c.versions.values()].sort((a,b)=>a.documentId.localeCompare(b.documentId)||(a.versionNo===b.versionNo?0:a.versionNo>b.versionNo?-1:1)))if(tx.get('SELECT 1 FROM memory_document_version WHERE owner_id=? AND document_id=? AND version_no=?',[owner_id,v.documentId,v.versionNo]))result.push(target('memory_document_version',{owner_id,document_id:v.documentId,version_no:String(v.versionNo)},holders));
  for(const documentId of [...c.documents].sort())if(tx.get('SELECT 1 FROM memory_document WHERE owner_id=? AND id=?',[owner_id,documentId]))result.push(target('memory_document',{owner_id,id:documentId},holders));
  for(const publicationId of [...c.publications].sort())if(tx.get('SELECT 1 FROM document_publication WHERE owner_id=? AND id=?',[owner_id,publicationId]))result.push(target('document_publication',{owner_id,id:publicationId},holders));
+ if(tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='memory_document_later_schedule'")){
+  // 来源／历史删除只保留非正文队列元数据；management domain 会在同事务更新版本并排入重整。
+  // 联系人删除清该联系人的队列，账号删除清该owner全部队列。
+  if(op.scope.kind==='contact'||op.scope.kind==='account'){
+   const contactOnly=op.scope.kind==='contact',where=contactOnly?' AND contact_id=?':'';
+   const args=contactOnly?[owner_id,op.scope.kind==='contact'?op.scope.contactId:'']:[owner_id];
+   for(const row of tx.all(`SELECT owner_id,scope_key,generation FROM memory_document_later_schedule WHERE owner_id=?${where}`,args))result.push(target('memory_document_later_schedule',{owner_id:String(row.owner_id),scope_key:String(row.scope_key),generation:String(row.generation)},holders));
+   for(const row of tx.all(`SELECT owner_id,run_id,scope_key FROM memory_document_later_run_requirement WHERE owner_id=?${where}`,args))result.push(target('memory_document_later_run_requirement',{owner_id:String(row.owner_id),run_id:String(row.run_id),scope_key:String(row.scope_key)},holders));
+   for(const row of tx.all(`SELECT owner_id,scope_key FROM memory_document_later_cursor WHERE owner_id=?${where}`,args))result.push(target('memory_document_later_cursor',{owner_id:String(row.owner_id),scope_key:String(row.scope_key)},holders));
+  }
+ }
  return result;
 }
 function clearGraph(tx:StorageTransaction,op:DeletionOperation):void {
  const targets=planned(tx,op),ownerId=op.ownerId;
  const steps=new Set(targets.filter(t=>t.rowKind==='processing_step').map(t=>t.key.id));
+ const laterSchedules=targets.filter(t=>t.rowKind==='memory_document_later_schedule');
+ const laterRequirements=targets.filter(t=>t.rowKind==='memory_document_later_run_requirement');
+ const laterCursors=targets.filter(t=>t.rowKind==='memory_document_later_cursor');
  const versions=targets.filter(t=>t.rowKind==='memory_document_version').map(t=>({documentId:t.key.document_id,versionNo:BigInt(t.key.version_no)}));
  const publications=new Set(targets.filter(t=>t.rowKind==='document_publication').map(t=>t.key.id));
  const documents=new Set(targets.filter(t=>t.rowKind==='memory_document').map(t=>t.key.id));
- const stepIds=json(steps),pubIds=json(publications);
+ const stepIds=json(steps),taskIds=json(tx.all('SELECT DISTINCT task_id FROM processing_step WHERE owner_id=? AND id IN (SELECT value FROM json_each(?))',[ownerId,stepIds]).map(row=>String(row.task_id))),pubIds=json(publications);
+ for(const target of laterRequirements)tx.run('DELETE FROM memory_document_later_run_requirement WHERE owner_id=? AND run_id=? AND scope_key=?',[ownerId,target.key.run_id,target.key.scope_key]);
+ for(const target of laterSchedules)tx.run('DELETE FROM memory_document_later_schedule WHERE owner_id=? AND scope_key=? AND generation=?',[ownerId,target.key.scope_key,BigInt(target.key.generation)]);
+ for(const target of laterCursors)tx.run('DELETE FROM memory_document_later_cursor WHERE owner_id=? AND scope_key=?',[ownerId,target.key.scope_key]);
+ // 来源删除撤销的stage任务在删除门关闭后按新版本重排；unknown永远保持锁定。
+ if((op.scope.kind==='source'||op.scope.kind==='contact_history')&&tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='memory_document_later_schedule'")){
+  const now=Date.now();
+  for(const row of tx.all("SELECT * FROM memory_document_later_schedule WHERE owner_id=? AND state='running' AND task_id IN (SELECT value FROM json_each(?))",[ownerId,taskIds])){
+   const unknown=!!tx.get("SELECT 1 FROM processing_step s LEFT JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id LEFT JOIN model_call c ON c.owner_id=a.owner_id AND c.step_attempt_id=a.id WHERE s.owner_id=? AND s.task_id=? AND (s.state='unknown' OR a.state='unknown' OR c.state='unknown') LIMIT 1",[ownerId,row.task_id]);
+   if(unknown){
+    tx.run("UPDATE memory_document_later_schedule SET state='unknown',error_code='document_call_unknown' WHERE owner_id=? AND scope_key=? AND generation=?",[ownerId,row.scope_key,row.generation]);
+    tx.run("UPDATE memory_document_later_run_requirement SET outcome='unknown',reason='document_call_unknown',updated_at=? WHERE owner_id=? AND scope_key=? AND generation=? AND outcome='pending'",[now,ownerId,row.scope_key,row.generation]);continue;
+   }
+   const base=row.scope_kind==='self'?tx.get("SELECT memory_revision FROM owner WHERE owner_id=? AND state='active'",[ownerId]):tx.get("SELECT memory_revision FROM contact WHERE owner_id=? AND id=? AND state='active'",[ownerId,row.contact_id]);
+   if(!base)continue;
+   const newer=tx.get("SELECT generation FROM memory_document_later_schedule WHERE owner_id=? AND scope_key=? AND stage='document_scene' AND state='scheduled' AND requested_memory_revision=? ORDER BY generation DESC LIMIT 1",[ownerId,row.scope_key,base.memory_revision]);
+   if(newer){
+    tx.run("UPDATE memory_document_later_schedule SET state='superseded',error_code='document_source_invalidated' WHERE owner_id=? AND scope_key=? AND generation=? AND state='running'",[ownerId,row.scope_key,row.generation]);
+    tx.run("UPDATE memory_document_later_run_requirement SET generation=?,outcome='pending',reason=NULL,updated_at=? WHERE owner_id=? AND scope_key=? AND generation=? AND outcome='pending'",[newer.generation,now,ownerId,row.scope_key,row.generation]);
+   }else tx.run("UPDATE memory_document_later_schedule SET state='scheduled',task_id=NULL,frozen_memory_revision=NULL,frozen_document_revision=NULL,frozen_publication_id=NULL,requested_memory_revision=?,due_at=min(due_at,?),error_code=NULL WHERE owner_id=? AND scope_key=? AND generation=? AND state='running'",[base.memory_revision,now,ownerId,row.scope_key,row.generation]);
+  }
+  for(const task of tx.all("SELECT DISTINCT t.scope_kind,t.contact_id FROM processing_task t WHERE t.owner_id=? AND t.id IN (SELECT value FROM json_each(?))",[ownerId,taskIds])){
+   const scopeKey=task.scope_kind==='self'?'self':String(task.contact_id);
+   // 删除只清除失效的正文基线；最近画像成功时间仍约束下一次L3，避免删除绕过24小时频率。
+   tx.run('UPDATE memory_document_later_cursor SET scene_body_digest=NULL,profile_scene_body_digest=NULL WHERE owner_id=? AND scope_key=?',[ownerId,scopeKey]);
+  }
+ }
  // 基线只在该任务已撤销及当前删除仍未结束时释放，避免以改写旧基线恢复处理。
  for(const t of tx.all(`SELECT t.id,t.state FROM processing_task t WHERE t.owner_id=? AND t.state='revoked' AND t.accepted_publication_id IN (SELECT value FROM json_each(?))
   AND NOT EXISTS(SELECT 1 FROM document_publication p WHERE p.owner_id=t.owner_id AND p.basis_task_id=t.id AND p.availability='available')`,[ownerId,pubIds])){

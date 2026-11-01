@@ -13,14 +13,14 @@ async function fixture(t,handle){
  const root=await mkdtemp(path.join(tmpdir(),'notalone-fixed-processing-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const output=path.join(root,'controller.mjs');await build({entryPoints:['src/main/memory/fixed-processing.ts'],outfile:output,bundle:true,platform:'node',format:'esm',logLevel:'silent'});
  const {FixedMemoryProcessingController}=await import(pathToFileURL(output));let generation=1;const calls=[],invalidations=[];
- const backend={getConnectionGeneration:()=>generation,requestJson:async req=>{calls.push(req);return {generation,data:await handle(req)};}};
+ const backend={getConnectionGeneration:()=>generation,requestJson:async req=>{calls.push(req);return {generation,data:req.path==='/api/memory-processing/schedule'?{pending:0,nextDueAt:null,blockedContacts:0}:await handle(req)};}};
  const controller=new FixedMemoryProcessingController(backend,event=>invalidations.push(event));
  return {controller,calls,invalidations,changeGeneration:()=>{generation++;controller.synchronize();}};
 }
 test('固定轮次具名入口只发request_key，保留未完成阶段且旧连接写入不出站',async t=>{
  const f=await fixture(t,async()=>snapshot());const view=await f.controller.read();assert.equal(view.connectionGeneration,1);assert.equal(view.run.state,'incomplete');
  const started=await f.controller.start({requestKey:ids.request,connectionGeneration:1});assert.equal(started.run.succeeded,1);
- assert.deepEqual(f.calls[1].body,{request_key:ids.request});assert.equal(f.calls[1].path,'/api/memory-processing/runs');
+ assert.deepEqual(f.calls.find(call=>call.path==='/api/memory-processing/runs').body,{request_key:ids.request});
  f.changeGeneration();const count=f.calls.length;await assert.rejects(f.controller.start({requestKey:ids.request,connectionGeneration:1}));assert.equal(f.calls.length,count);
  await assert.rejects(f.controller.start({requestKey:ids.request,connectionGeneration:2,ownerId:'other'}));assert.equal(f.calls.length,count);
 });
@@ -100,4 +100,17 @@ test('主进程接受权威的主题和画像运行阶段',async t=>{
  const f=await fixture(t,async()=>data);assert.equal((await f.controller.read()).run.stage,'document_scene');
  data={...data,stage:'document_profile'};assert.equal((await f.controller.read()).run.stage,'document_profile');
  data={...data,stage:'invented'};await assert.rejects(f.controller.read());
+});
+
+test('主进程保留后续阶段到期时间并拒绝非法时间',async t=>{
+ let data={...snapshot(),status:'waiting',statusReason:'later_stages_scheduled',stage:'document_scene',nextDueAt:1_800_000_000_000};
+ const f=await fixture(t,async()=>data);
+ assert.equal((await f.controller.read()).run.nextDueAt,1_800_000_000_000);
+ for(const nextDueAt of [-1,NaN,'tomorrow',Infinity]){data={...data,nextDueAt};await assert.rejects(f.controller.read());}
+});
+
+test('最后合法小批收尾不清除用户暂停，已完成阶段仍可如实读取',async t=>{
+ const data={...snapshot(),state:'paused',status:'paused',stage:'completed',laterStages:'completed',actions:['continue']};
+ const f=await fixture(t,async()=>data),view=await f.controller.read();
+ assert.equal(view.run.status,'paused');assert.equal(view.run.state,'paused');assert.equal(view.run.laterStages,'completed');
 });

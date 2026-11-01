@@ -4,6 +4,7 @@ import type {DeletionDomain,DeletionOperation,RowDeletionTarget,CheckResult} fro
 import {identityDeletionAuthority} from '../../../contacts/sqlite/deletion.ts';
 import {fail} from './qualification.ts';
 import {memoryDeletionImpact} from '../deletion-impact.ts';
+import {scheduleMemoryChange} from '../documents/later-schedule.ts';
 const domain='memory_management';
 const rowKinds:DeletionDomain['rowKinds']={memory_candidate:{keys:['owner_id','id'],ownerKey:'owner_id'},memory_version:{keys:['owner_id','memory_id','version_no'],ownerKey:'owner_id'},memory:{keys:['owner_id','id'],ownerKey:'owner_id'},memory_decision:{keys:['owner_id','id'],ownerKey:'owner_id'}};
 const allowed=(op:DeletionOperation)=>['source','contact_history','contact','account'].includes(op.scope.kind);
@@ -47,10 +48,18 @@ function releaseTypedConsumers(tx:StorageTransaction,op:DeletionOperation,parent
 function eraseVersion(tx:StorageTransaction,op:DeletionOperation,memoryId:string,versionNo:bigint):void{
  const ownerId=op.ownerId;releaseTypedConsumers(tx,op,{memoryId,versionNo});
  const v=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,memoryId,versionNo]);if(!v)return;
+ const head=tx.get('SELECT scope_kind,contact_id,current_version_no,state FROM memory WHERE owner_id=? AND id=?',[ownerId,memoryId]);
  tx.run('DELETE FROM memory_citation WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,memoryId,versionNo]);tx.run('DELETE FROM memory_required_message WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,memoryId,versionNo]);
  if(v.content_state==='present')tx.run("UPDATE memory_version SET body=NULL,content_state='redacted',provenance_state='invalidated' WHERE owner_id=? AND memory_id=? AND version_no=?",[ownerId,memoryId,versionNo]);
  redactDecision(tx,ownerId,String(v.decision_id));
  tx.run("UPDATE memory SET state='invalidated',head_revision=head_revision+1 WHERE owner_id=? AND id=? AND current_version_no=? AND state<>'invalidated'",[ownerId,memoryId,versionNo]);
+ // 来源／历史删除后的正式资料确实失效，留下重整要求；删除联系人或账号时不创建新工作。
+ if(head?.state==='active'&&head.current_version_no===versionNo&&['source','contact_history'].includes(op.scope.kind)){
+  const scope={scopeKind:head.scope_kind as 'self'|'contact',contactId:head.contact_id as string|null};
+  if(scope.scopeKind==='self')tx.run('UPDATE owner SET memory_revision=memory_revision+1 WHERE owner_id=?',[ownerId]);
+  else tx.run('UPDATE contact SET memory_revision=memory_revision+1 WHERE owner_id=? AND id=?',[ownerId,scope.contactId]);
+  scheduleMemoryChange(tx,ownerId,scope);
+ }
 }
 export const memoryManagementDeletionDomain:DeletionDomain={id:domain,rowKinds,
  fence(tx,op){

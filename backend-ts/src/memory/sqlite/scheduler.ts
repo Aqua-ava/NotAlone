@@ -1,0 +1,72 @@
+import {randomUUID} from 'node:crypto';
+
+export interface MemoryL1SchedulerPort {
+ nextDueAt(now:number):Promise<number|null>;
+ dueContacts(now:number):Promise<string[]>;
+ startContact(contactId:string,requestKey:string,now:number):Promise<unknown|null>;
+}
+export interface MemoryL1SchedulerOptions {
+ now?:()=>number;
+ setTimeout?:(callback:()=>void,delayMs:number)=>unknown;
+ clearTimeout?:(timer:unknown)=>void;
+}
+
+/** 从SQLite派生下一次到期时间；单timer只负责唤醒，不保存业务资格或待处理边界。 */
+export class SqliteMemoryL1Scheduler {
+ readonly #port:MemoryL1SchedulerPort;
+ readonly #now:()=>number;
+ readonly #setTimeout:(callback:()=>void,delayMs:number)=>unknown;
+ readonly #clearTimeout:(timer:unknown)=>void;
+ #timer:unknown|null=null;
+ #scan?:Promise<void>;
+ #rescan=false;
+ #started=false;
+ #closed=false;
+ #closing?:Promise<void>;
+ constructor(port:MemoryL1SchedulerPort,options:MemoryL1SchedulerOptions={}){
+  this.#port=port;this.#now=options.now??Date.now;
+  this.#setTimeout=options.setTimeout??((callback,delay)=>setTimeout(callback,delay));
+  this.#clearTimeout=options.clearTimeout??(timer=>clearTimeout(timer as ReturnType<typeof setTimeout>));
+ }
+ start():Promise<void>{
+  if(this.#closed)return Promise.resolve();
+  this.#started=true;return this.scan();
+ }
+ /** 历史接受事件、启动或用户处理动作都只唤醒重扫，不扩大已冻结轮次。 */
+ wake(_contactId?:string):Promise<void>{if(!this.#started||this.#closed)return Promise.resolve();return this.scan();}
+ private scan():Promise<void>{
+  if(this.#scan){this.#rescan=true;return this.#scan;}
+  this.#scan=(async()=>{
+   do{this.#rescan=false;await this.scanOnce();}while(this.#rescan&&!this.#closed);
+  })().finally(()=>{this.#scan=undefined;});
+  return this.#scan;
+ }
+ private clearTimer():void{if(this.#timer!==null){this.#clearTimeout(this.#timer);this.#timer=null;}}
+ private arm(delayMs:number):void{
+  if(this.#closed)return;
+  this.clearTimer();
+  this.#timer=this.#setTimeout(()=>{this.#timer=null;if(!this.#closed)void this.scan().catch(()=>{});},Math.max(0,Math.min(delayMs,2_147_483_647)));
+ }
+ private async scanOnce():Promise<void>{
+  this.clearTimer();if(this.#closed)return;
+  const now=this.#now();let started=0;
+  try{
+   const contacts=await this.#port.dueContacts(now);
+   for(const contactId of contacts){
+    if(this.#closed)return;
+    const run=await this.#port.startContact(contactId,randomUUID(),this.#now());
+    if(run)started++;
+   }
+   if(this.#closed)return;
+   const next=await this.#port.nextDueAt(this.#now());
+   if(next===null)return;
+   const delay=next-this.#now();
+   // 若资格在扫描与建轮之间变化，给写事务留出空间，避免到期状态形成零间隔重扫。
+   this.arm(delay<=0&&started===0?1_000:delay);
+  }catch{
+   // SQLite临时不可用时仅延迟下一次扫描；模型失败由固定轮次记录，已入轮目标不会被重发。
+   if(!this.#closed)this.arm(5_000);
+  }
+ }
+ close():Promise<void>{return this.#closing??=(async()=>{this.#closed=true;this.#started=false;this.clearTimer();await this.#scan;})().catch(error=>{this.#closing=undefined;throw error;});}
+}

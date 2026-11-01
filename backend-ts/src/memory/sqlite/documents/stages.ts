@@ -10,8 +10,9 @@ import {documentActualInputs} from './inputs.ts';
 import {preconditions,revisions,task,taskView} from './actions.ts';
 import {fail,textId} from '../qualification.ts';
 import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
+import {failLaterStage,finishLaterStagePublication,laterTaskPaused} from './later-schedule.ts';
 
-export interface DocumentClaim {attemptId:string;stepId:string;taskId:string;runId:string;kind:'document_scene'|'document_profile';scopeKind:'self'|'contact';contactId:string|null;claim:ModelTaskClaim;memories:L2ScenarioMemory[];scenarios:any[];profile:any;}
+export interface DocumentClaim {attemptId:string;stepId:string;taskId:string;runId:string;kind:'document_scene'|'document_profile';laterStage:string|null;scheduleNow:number|null;scopeKind:'self'|'contact';contactId:string|null;claim:ModelTaskClaim;memories:L2ScenarioMemory[];scenarios:any[];profile:any;}
 const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute} as StorageAction);
 /** 普通暂停后不再启动新的文档小批；正在执行的批次允许收尾。 */
 function runPaused(tx:StorageTransaction,ownerId:string,runId:string):boolean {
@@ -19,6 +20,24 @@ function runPaused(tx:StorageTransaction,ownerId:string,runId:string):boolean {
  return !run||run.pause_requested_at!==null;
 }
 const digest=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
+function laterStage(tx:StorageTransaction,ownerId:string,t:StorageRow):string|null {
+ const row=tx.get('SELECT policy_config FROM processing_run WHERE owner_id=? AND id=?',[ownerId,t.run_id]);if(!row)return null;
+ try{const policy=JSON.parse(String(row.policy_config));return policy?.intent==='memory_document_later_stage'&&['document_scene','document_profile'].includes(policy.stage)?String(policy.stage):null;}catch{return null;}
+}
+function laterTaskOwnsSchedule(tx:StorageTransaction,ownerId:string,t:StorageRow):boolean {
+ const run=tx.get('SELECT policy_config FROM processing_run WHERE owner_id=? AND id=?',[ownerId,t.run_id]);if(!run)return false;
+ try{
+  const policy=JSON.parse(String(run.policy_config));
+  if(policy?.intent!=='memory_document_later_stage')return true;
+  if(!['document_scene','document_profile'].includes(policy.stage)||!Number.isSafeInteger(policy.generation))return false;
+  const scopeKey=t.scope_kind==='self'?'self':String(t.contact_id);
+  return !!tx.get("SELECT 1 FROM memory_document_later_schedule WHERE owner_id=? AND scope_key=? AND generation=? AND stage=? AND task_id=? AND state='running' LIMIT 1",[ownerId,scopeKey,policy.generation,policy.stage,t.id]);
+ }catch{return false;}
+}
+function laterNow(tx:StorageTransaction,ownerId:string,t:StorageRow):number|null {
+ if(!laterStage(tx,ownerId,t))return null;
+ const row=tx.get('SELECT started_at FROM processing_run WHERE owner_id=? AND id=?',[ownerId,t.run_id]);return row?Number(row.started_at):null;
+}
 function eligible(tx:StorageTransaction,ownerId:string,t:StorageRow){
  const contributions=new Set(tx.all('SELECT source_contact_id FROM task_contribution WHERE owner_id=? AND task_id=?',[ownerId,t.id]).map(c=>String(c.source_contact_id)));
  const selected:{row:StorageRow;version:StorageRow;memory:L2ScenarioMemory;sources:ReplySource[]}[]=[];
@@ -35,7 +54,9 @@ function createStep(tx:StorageTransaction,ownerId:string,t:StorageRow,kind:Docum
  if(kind==='document_profile'){
   const prior=tx.all(`SELECT i.memory_id,i.memory_version_no,i.accepted_head_revision FROM step_input i JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id
    WHERE s.owner_id=? AND s.task_id=? AND s.kind='document_scene' AND s.state='succeeded' AND i.kind='memory' ORDER BY i.memory_id`,[ownerId,t.id]);
-  if(prior.length!==selected.length||prior.some((item,index)=>item.memory_id!==selected[index]?.row.id||item.memory_version_no!==selected[index]?.version.version_no||item.accepted_head_revision!==selected[index]?.row.head_revision))fail('document_memory_stale');
+  if(prior.length){
+   if(prior.length!==selected.length||prior.some((item,index)=>item.memory_id!==selected[index]?.row.id||item.memory_version_no!==selected[index]?.version.version_no||item.accepted_head_revision!==selected[index]?.row.head_revision))fail('document_memory_stale');
+  }else if(laterStage(tx,ownerId,t)!=='document_profile'||!members.some(member=>member.kind==='scene'))fail('document_scene_incomplete');
  }
  const stepId=randomUUID(),attemptId=randomUUID(),now=Date.now(),stepNo=tx.get('SELECT coalesce(max(step_no),0)+1 AS n FROM processing_step WHERE owner_id=? AND task_id=?',[ownerId,t.id])!.n;
  tx.run("INSERT INTO processing_step(owner_id,id,task_id,step_no,kind,state,input_state,accepted_memory_revision) VALUES(?,?,?,?,?,'running','frozen',?)",[ownerId,stepId,t.id,stepNo,kind,t.accepted_memory_revision]);
@@ -57,7 +78,7 @@ function createStep(tx:StorageTransaction,ownerId:string,t:StorageRow,kind:Docum
    renderMembers=[...members.filter(member=>!stagedIds.has(String(member.document_id))),...staged];
   }
   const rendered=renderDocuments(tx,ownerId,renderMembers,selected.map(x=>x.memory));
- return {attemptId,stepId,taskId:String(t.id),runId:String(t.run_id),kind,scopeKind:t.scope_kind as 'self'|'contact',contactId:t.contact_id as string|null,claim:{task_id:String(t.id),step_id:stepId,step_name:kind,worker_id:lease.runtimeId,lease_generation:Number(t.resume_no)},memories:selected.map(x=>x.memory),scenarios:rendered.scenarios,profile:rendered.profile};
+ return {attemptId,stepId,taskId:String(t.id),runId:String(t.run_id),kind,laterStage:laterStage(tx,ownerId,t),scheduleNow:laterNow(tx,ownerId,t),scopeKind:t.scope_kind as 'self'|'contact',contactId:t.contact_id as string|null,claim:{task_id:String(t.id),step_id:stepId,step_name:kind,worker_id:lease.runtimeId,lease_generation:Number(t.resume_no)},memories:selected.map(x=>x.memory),scenarios:rendered.scenarios,profile:rendered.profile};
 }
 export function current(tx:StorageTransaction,ownerId:string,attemptId:string,lease:StorageLease):{attempt:StorageRow;t:StorageRow} {
  const a=tx.get(`SELECT a.*,s.kind,s.state AS step_state,t.id AS task_id FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE a.owner_id=? AND a.id=?`,[ownerId,attemptId]);
@@ -115,7 +136,7 @@ function fixedPublication(tx:StorageTransaction,ownerId:string,t:StorageRow,base
  if(revisions(tx,ownerId,t).current_publication_id!==p)fail('document_publication_conflict');
 }
 export const memoryDocumentsStageActions:StorageAction[]=[
- act('noteFailure','write',(tx,i)=>{const t=task(tx,textId(i.ownerId),textId(i.taskId));if(t.state!=='revoked')tx.run('UPDATE processing_task SET error_code=COALESCE(error_code,?) WHERE owner_id=? AND id=?',[textId(i.code),i.ownerId,i.taskId]);return true;}),
+ act('noteFailure','write',(tx,i)=>{const ownerId=textId(i.ownerId),taskId=textId(i.taskId),t=task(tx,ownerId,taskId);if(t.state!=='revoked')tx.run('UPDATE processing_task SET error_code=COALESCE(error_code,?) WHERE owner_id=? AND id=?',[textId(i.code),ownerId,taskId]);failLaterStage(tx,ownerId,taskId,textId(i.code));return true;}),
  act('runPaused','read',(tx,i)=>runPaused(tx,textId(i.ownerId),textId(i.runId))),
  act('recover','write',(tx,i,lease)=>{
   const ownerId=textId(i.ownerId);
@@ -132,28 +153,51 @@ export const memoryDocumentsStageActions:StorageAction[]=[
    tx.run('UPDATE step_attempt SET state=?,finished_at=?,error_code=? WHERE owner_id=? AND id=?',[unknown?'unknown':'failed',Date.now(),'runtime_interrupted',ownerId,a.id]);
    tx.run("UPDATE processing_step SET state=? WHERE owner_id=? AND id=? AND state='running'",[unknown?'unknown':'failed',ownerId,a.step_id]);
   }
+  for(const row of tx.all("SELECT * FROM memory_document_later_schedule WHERE owner_id=? AND state='running' ORDER BY scope_key,generation",[ownerId])){
+   const taskId=String(row.task_id),steps=tx.all("SELECT kind,state FROM processing_step WHERE owner_id=? AND task_id=? AND kind IN ('document_scene','document_profile') ORDER BY step_no",[ownerId,taskId]);
+   const mode=String(row.stage),ready=steps.length===1&&steps[0]?.kind===mode&&steps[0]?.state==='succeeded';
+   if(ready)continue; // 数据库结果已保存，启动恢复时可直接发布，无需再次调用模型。
+   const unresolved=!!tx.get("SELECT 1 FROM processing_step s LEFT JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id LEFT JOIN model_call c ON c.owner_id=a.owner_id AND c.step_attempt_id=a.id WHERE s.owner_id=? AND s.task_id=? AND (s.state='unknown' OR a.state='unknown' OR c.state='unknown') LIMIT 1",[ownerId,taskId]);
+   if(unresolved){failLaterStage(tx,ownerId,taskId,'document_call_unknown');continue;}
+   const retrySafe=!steps.length||steps.every(step=>step.state==='failed')&&
+    !tx.get("SELECT 1 FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE s.owner_id=? AND s.task_id=? AND (a.state<>'failed' OR a.error_code<>'runtime_interrupted') LIMIT 1",[ownerId,taskId])&&
+    !tx.get("SELECT 1 FROM model_call c JOIN step_attempt a ON a.owner_id=c.owner_id AND a.id=c.step_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE s.owner_id=? AND s.task_id=? AND (c.state<>'failed' OR c.error_code<>'not_dispatched') LIMIT 1",[ownerId,taskId]);
+   if(retrySafe)tx.run("UPDATE memory_document_later_schedule SET state='scheduled',task_id=NULL,frozen_memory_revision=NULL,frozen_document_revision=NULL,frozen_publication_id=NULL,due_at=min(due_at,?) WHERE owner_id=? AND scope_key=? AND generation=?",[Date.now(),ownerId,row.scope_key,row.generation]);
+   else failLaterStage(tx,ownerId,taskId,'document_stage_interrupted');
+  }
   return attempts.length;
  }),
  act('claimScene','write',(tx,i,lease)=>{
   const ownerId=textId(i.ownerId),t=task(tx,ownerId,textId(i.taskId));
+  const later=laterStage(tx,ownerId,t);
+  if(later==='document_profile')return null;
+  if(later&&(!laterTaskOwnsSchedule(tx,ownerId,t)||laterTaskPaused(tx,ownerId,String(t.id))))return null;
   // 普通暂停只阻止新小批；已完成的提取核验与正在执行的场景批次可收尾，继续后再领取主题。
   if(runPaused(tx,ownerId,String(t.run_id)))return null;
   if(t.document_basis_state!=='pending')return null;
   preconditions(tx,ownerId,t);const base=revisions(tx,ownerId,t),selected=eligible(tx,ownerId,t);
   tx.run("UPDATE processing_task SET document_basis_state='frozen',accepted_memory_revision=?,accepted_document_revision=?,accepted_publication_id=? WHERE owner_id=? AND id=? AND document_basis_state='pending'",[base.memory_revision,base.document_revision,base.current_publication_id,ownerId,t.id]);
   const frozen=task(tx,ownerId,String(t.id));
-  if(!selected.length){if(base.current_publication_id!==null&&eligiblePriorMembers(tx,ownerId,frozen).length)fail('document_existing_collection_requires_review');fixedPublication(tx,ownerId,frozen,base,[],'no_eligible_memories');return null;}
+  if(!selected.length){if(base.current_publication_id!==null&&eligiblePriorMembers(tx,ownerId,frozen).length)fail('document_existing_collection_requires_review');fixedPublication(tx,ownerId,frozen,base,[],'no_eligible_memories');if(laterStage(tx,ownerId,frozen)==='document_scene')finishLaterStagePublication(tx,ownerId,String(frozen.id),laterNow(tx,ownerId,frozen)??Date.now());return null;}
   const unchanged=unchangedMembers(tx,ownerId,frozen,base);
-  if(unchanged){fixedPublication(tx,ownerId,frozen,base,unchanged,'unchanged_memories');return null;}
+  if(unchanged){fixedPublication(tx,ownerId,frozen,base,unchanged,'unchanged_memories');if(laterStage(tx,ownerId,frozen)==='document_scene')finishLaterStagePublication(tx,ownerId,String(frozen.id),laterNow(tx,ownerId,frozen)??Date.now());return null;}
   return createStep(tx,ownerId,frozen,'document_scene',lease);
  }),
  act('claimProfile','write',(tx,i,lease)=>{
-  const ownerId=textId(i.ownerId),t=task(tx,ownerId,textId(i.taskId));
+  const ownerId=textId(i.ownerId),original=task(tx,ownerId,textId(i.taskId)),mode=laterStage(tx,ownerId,original);let t=original;
   if(tx.get("SELECT 1 FROM processing_step WHERE owner_id=? AND task_id=? AND kind='document_profile'",[ownerId,t.id]))return null;
+  if(mode&&!laterTaskOwnsSchedule(tx,ownerId,t))return null;
   if(runPaused(tx,ownerId,String(t.run_id)))return null;
+  if(laterTaskPaused(tx,ownerId,String(t.id)))return null;
   const scene=tx.get("SELECT successful_attempt_id FROM processing_step WHERE owner_id=? AND task_id=? AND kind='document_scene' AND state='succeeded'",[ownerId,t.id]);
-  if(!scene)fail('document_scene_incomplete');
-  preconditions(tx,ownerId,t);const r=revisions(tx,ownerId,t);
+  if(!scene&&mode!=='document_profile')fail('document_scene_incomplete');
+  preconditions(tx,ownerId,t);
+  if(t.document_basis_state==='pending'){
+   const base=revisions(tx,ownerId,t);
+   tx.run("UPDATE processing_task SET document_basis_state='frozen',accepted_memory_revision=?,accepted_document_revision=?,accepted_publication_id=? WHERE owner_id=? AND id=? AND document_basis_state='pending'",[base.memory_revision,base.document_revision,base.current_publication_id,ownerId,t.id]);
+   t=task(tx,ownerId,String(t.id));
+  }
+  const r=revisions(tx,ownerId,t);
   if(r.memory_revision!==t.accepted_memory_revision||r.document_revision!==t.accepted_document_revision||r.current_publication_id!==t.accepted_publication_id)fail('document_publication_conflict');
   return createStep(tx,ownerId,t,'document_profile',lease);
  }),

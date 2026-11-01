@@ -150,12 +150,12 @@ export async function apply(ctx: Context) {
       checkpointCache=new WechatHistoryCheckpointCache(storage,ownerId,deletionHolders,sqlite.wechatCliPath,contactId=>history?.stop(contactId)??Promise.resolve());
       await checkpointCache.initialize();
       history=new SqliteHistoryService(storage,contacts,createHistoryChannel,deletionHolders,
-        (contactId,messageId,kind)=>events?.publish(`message.${kind}`,contactId,{message_id:messageId}),contactId=>{imageSync?.wake(contactId);quoteSync?.wake(contactId);});
+        (contactId,messageId,kind)=>{events?.publish(`message.${kind}`,contactId,{message_id:messageId});memory?.wake(contactId);},contactId=>{imageSync?.wake(contactId);quoteSync?.wake(contactId);});
       firstHistory=new FirstHistoryCoordinator(contacts,history);
       history.setFirstHistoryWake(contactId=>firstHistory?.wakeContact(contactId));
       incremental=new IncrementalHistoryCoordinator(contacts,history,{firstHistoryManagedExternally:true});
       // 开启/重选只唤醒合法读取；关闭/取消/退出由 readStop 停止后续查询并等待在途释放。
-      contacts.setReadStart(()=>{firstHistory!.wake();incremental!.wake();imageSync?.wake();quoteSync?.wake();});
+      contacts.setReadStart(()=>{firstHistory!.wake();incremental!.wake();imageSync?.wake();quoteSync?.wake();memory?.wake();});
     }
     if(history&&process.env.NOTALONE_SYNC_PROBE&&path.isAbsolute(process.env.NOTALONE_SYNC_PROBE)) foreground=SqliteForeground.create(ownerId,process.env.NOTALONE_SYNC_PROBE,sqlite.wechatCliPath??'',()=>contacts!.foregroundSnapshot(),proof=>contacts!.confirmForeground(proof));
     const historyHttp=history?new SqliteHistoryHttp(history):undefined;
@@ -192,10 +192,12 @@ export async function apply(ctx: Context) {
         recordReserved:async receipt=>{if(!memory)throw new StorageFailure('sqlite_model_producer_unavailable');await memory.service.accounting.recordReserved(receipt);},
         unconfirmedRequests:async scope=>{if(scope.owner_id!==ownerId)throw new StorageFailure('sqlite_model_owner_invalid');return [...new Set([...(memory?await memory.service.accounting.unconfirmedRequests!(scope):[]),...await storage!.execute<string[]>('discussion.unconfirmed',scope)])];}}});
     const memoryManagement=new SqliteMemoryManagement(storage,ownerId);
-    const memoryManagementHttp=memoryEnabled?new SqliteMemoryManagementHttp(memoryManagement,req=>authorizeSqliteRequest(req,token)):undefined;
+    const memoryManagementHttp=memoryEnabled?new SqliteMemoryManagementHttp(memoryManagement,req=>authorizeSqliteRequest(req,token),()=>memory?.wake()):undefined;
     // 即使入口未开启，也恢复并持有旧副本的清理所有者，避免资料删除遗漏持久副本。
     memory=await createSqliteMemoryRuntime({ctx,storage,ownerId,userData:sqlite.userData,businessHome:config.businessHome,infoPath:config.infoPath,envFilePath:config.envFilePath,environment:modelEnvironment,
       ...(models?.shared?{sharedModel:models.shared}:{}),holders:deletionHolders,authorize:req=>authorizeSqliteRequest(req,token),adjudicationEnabled:memoryEnabled});
+    // 共享模型宿主的记账回调已可找到唯一 memory 实例，再受理自动调度。
+    if(memoryEnabled)memory.startScheduling();
     const memoryDocumentsHttp=memoryEnabled&&memory.documents?new SqliteMemoryDocumentsHttp(memory.documents,req=>authorizeSqliteRequest(req,token)):undefined;
     discussions=await createSqliteDiscussionHost({ctx,storage,ownerId,userData:sqlite.userData,holders:deletionHolders,library,authorizeRequest:req=>authorizeSqliteRequest(req,token),
       ...(models?.shared?{model:{configuration:models.shared.configuration.model,provider:models.shared.provider,arbiter:models.shared.arbiter}}:{})});
@@ -213,6 +215,8 @@ export async function apply(ctx: Context) {
       try { url = new URL(req.url ?? '', 'http://localhost'); }
       catch { respond(400, { error: 'invalid_request' }); return; }
       if (req.url !== url.pathname && (req.url !== url.pathname + url.search || !(deletionQueryAllowed(req.method, url)||history&&historyQueryAllowed(req.method,url)||memoryManagementHttp&&memoryManagementQueryAllowed(req.method,url)||memoryDocumentsHttp&&memoryDocumentsQueryAllowed(req.method,url)||historyClearHttp&&clearQueryAllowed(req.method,url)))) { respond(400, { error: 'invalid_request' }); return; }
+      const changesMemoryScope=req.method==='DELETE'||req.method==='POST'&&(/^\/api\/deletions\//.test(url.pathname)||/^\/api\/contacts\/[a-f0-9-]{36}\/history\/(clear|resync)$/.test(url.pathname)||/^\/api\/sync\/(enable|disable|cli-bindings\/(confirm|revoke))$/.test(url.pathname));
+      if(changesMemoryScope)res.once('finish',()=>{if(res.statusCode>=200&&res.statusCode<300)memory?.wake();});
       let releaseForeground:(()=>void)|undefined;
       try {
         const changesAuthority=req.method==='DELETE'||req.method==='POST'&&(/^\/api\/sync\/(enable|disable|cli-bindings\/(confirm|revoke))$/.test(url.pathname)||/^\/api\/setup\/wechat\//.test(url.pathname));

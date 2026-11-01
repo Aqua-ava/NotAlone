@@ -5,10 +5,17 @@ import {verifiedExtractionOutput} from '../outputs.ts';
 import {available,body,fail,id,integer,requireCandidate,requireAutomaticCandidate,requireSources,requireVersion,scope} from './qualification.ts';
 import {managementRead} from './read.ts';
 import type {MemoryDecisionResult,MemoryScope} from './contracts.ts';
+import {scheduleMemoryChange} from '../documents/later-schedule.ts';
 const seal=(v:unknown):string=>createHash('sha256').update(JSON.stringify(v,(_k,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.fromEntries(Object.entries(x).sort(([a],[b])=>a.localeCompare(b))):x)).digest('hex');
-function advance(tx:StorageTransaction,ownerId:string,s:MemoryScope):void{
+function executionRun(tx:StorageTransaction,ownerId:string,attemptId:unknown):string|undefined{
+ if(typeof attemptId!=='string')return;
+ const task=tx.get('SELECT t.run_id FROM step_attempt a JOIN processing_step ps ON ps.owner_id=a.owner_id AND ps.id=a.step_id JOIN processing_task t ON t.owner_id=ps.owner_id AND t.id=ps.task_id WHERE a.owner_id=? AND a.id=?',[ownerId,attemptId]);
+ return task?String(task.run_id):undefined;
+}
+function advance(tx:StorageTransaction,ownerId:string,s:MemoryScope,formalChanged=true,runIds:string[]=[]):void{
  if(s.scopeKind==='self')tx.run('UPDATE owner SET memory_revision=memory_revision+1 WHERE owner_id=?',[ownerId]);
  else tx.run('UPDATE contact SET memory_revision=memory_revision+1 WHERE owner_id=? AND id=?',[ownerId,s.contactId]);
+ if(formalChanged){const at=Date.now();scheduleMemoryChange(tx,ownerId,s,at,runIds[0]);for(const runId of runIds.slice(1))scheduleMemoryChange(tx,ownerId,s,at,runId);}
 }
 function result(tx:StorageTransaction,ownerId:string,d:StorageRow):MemoryDecisionResult{
  const v=tx.get('SELECT memory_id,version_no FROM memory_version WHERE owner_id=? AND decision_id=?',[ownerId,d.id]);
@@ -48,7 +55,7 @@ export function retireMergedParents(tx:StorageTransaction,input:{ownerId:string;
  return snapshots.map(({memory,parent})=>{
   const decisionId=randomUUID(),key=`memory:merge-retire:${seal([requestKey,parent.memoryId])}`;
   tx.run("INSERT INTO memory_decision(owner_id,id,request_key,request_seal,action,actor_kind,execution_id,target_memory_id,expected_version_no,expected_head_revision,created_at,outcome) VALUES(?,?,?,?,'auto_retire','system',?,?,?,?,?,'applied')",[ownerId,decisionId,key,seal({requestKey,executionId,memoryId:parent.memoryId,versionNo:String(parent.versionNo),headRevision:String(parent.headRevision)}),executionId,parent.memoryId,parent.versionNo,parent.headRevision,Date.now()]);
-  tx.run("UPDATE memory SET state='withdrawn',head_revision=head_revision+1 WHERE owner_id=? AND id=?",[ownerId,parent.memoryId]);advance(tx,ownerId,{scopeKind:memory.scope_kind as 'self'|'contact',contactId:memory.contact_id as string|null});
+  tx.run("UPDATE memory SET state='withdrawn',head_revision=head_revision+1 WHERE owner_id=? AND id=?",[ownerId,parent.memoryId]);advance(tx,ownerId,{scopeKind:memory.scope_kind as 'self'|'contact',contactId:memory.contact_id as string|null},true,[executionRun(tx,ownerId,executionId)].filter((id):id is string=>id!==undefined));
   return {decisionId,memoryId:parent.memoryId,versionNo:null,action:'auto_retire'};
  });
 }
@@ -172,7 +179,8 @@ export function applyDecision(tx:StorageTransaction,input:unknown,system=false,a
   tx.run("UPDATE memory SET current_version_no=?,head_revision=head_revision+1,state='active' WHERE owner_id=? AND id=?",[versionNo,ownerId,memoryId]);
  }
  if(action==='restore')restoreMergedParents(tx,ownerId,requestKey,retiredParents);
- advance(tx,ownerId,s);return result(tx,ownerId,tx.get('SELECT * FROM memory_decision WHERE owner_id=? AND id=?',[ownerId,decisionId])!);
+ const runIds=[...new Set([authority?.executionId,...candidates.map(c=>c.produced_attempt_id)].flatMap(attempt=>{const runId=executionRun(tx,ownerId,attempt);return runId?[runId]:[];}))];
+ advance(tx,ownerId,s,!noVersion||action==='withdraw',runIds);return result(tx,ownerId,tx.get('SELECT * FROM memory_decision WHERE owner_id=? AND id=?',[ownerId,decisionId])!);
 }
 function importRun(tx:StorageTransaction,input:unknown):{candidateIds:string[]}{
  const q=input as any,ownerId=id(q?.ownerId),runId=id(q?.runId),ids:string[]=[];

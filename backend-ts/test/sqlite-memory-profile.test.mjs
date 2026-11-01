@@ -30,7 +30,7 @@ function changed(directory,probe,accept,{timeoutMs=12000,label='正式SQLite记�
 }
 const quote=value=>"'"+value.replaceAll("'","'\\''")+"'";
 
-test('正式SQLite profile使用唯一模型宿主经认证HTTP完成两联系人和本人固定范围提取核验',{timeout:30000},async t=>{
+test('正式SQLite profile共用唯一模型宿主完成L1并持久等待主题窗口',{timeout:30000},async t=>{
  const cleanups=[];let host,provider,reopened,info;
  const f=await fixture({after:cleanup=>cleanups.push(cleanup)});
  const root=f.root,infoPath=join(root,'managed/sqlite-backend.info'),envFilePath=join(root,'synthetic.env');
@@ -112,13 +112,13 @@ test('正式SQLite profile使用唯一模型宿主经认证HTTP完成两联系�
  catch(error){const observed=await api(`/api/memory-processing/runs/${first.data.runId}`);throw new Error(`${error.message}; ${JSON.stringify({http:observed.status,state:observed.data.state,succeeded:observed.data.succeeded,tasks:observed.data.tasks?.map(task=>({scope:task.scopeKind,state:task.state,error:task.errorCode})),requests:{extraction:supplier.windows.length,verification:supplier.verifications.length},guard:(await readFile(auditPath,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line)),stderr:(await readFile(stderrPath,'utf8')).slice(-1200)})}`);}
  assert.equal(runResponse.status,200);const run=runResponse.data;
  try{await changed(join(root,'managed/sqlite/notalone.sqlite-wal'),()=>api('/api/memory-management?scope_kind=self'),value=>value.status!==200||value.data.memories?.filter(memory=>memory.current?.adoptionMode==='auto').length===2,{timeoutMs:10000,label:'正式08裁决发布'});}catch(error){const trace=await Promise.all(run.tasks.map(task=>api(`/api/memory-processing/tasks/${task.taskId}/events`)));throw new Error(`${error.message}; ${JSON.stringify({self:(await api('/api/memory-management?scope_kind=self')).data,supplierErrors:supplier.errors,adjudications:supplier.adjudications.length,trace:trace.map(value=>({calls:value.data.calls,events:value.data.events?.filter(e=>['adjudication_result','adjudication_failure'].includes(e.kind)).map(e=>e.payload)})),stderr:(await readFile(stderrPath,'utf8')).slice(-2000)})}`);}
- const finalRun=await changed(join(root,'managed/sqlite/notalone.sqlite-wal'),()=>api(`/api/memory-processing/runs/${run.runId}`),value=>value.status!==200||value.data.laterStages==='completed',{timeoutMs:10000,label:'正式09文档阶段'});
+ const finalRun=await changed(join(root,'managed/sqlite/notalone.sqlite-wal'),()=>api(`/api/memory-processing/runs/${run.runId}`),value=>value.status!==200||value.data.status==='waiting'&&value.data.statusReason==='later_stages_scheduled',{timeoutMs:10000,label:'正式主题合并窗口'});
  assert.equal(finalRun.status,200);Object.assign(run,finalRun.data);
  const traces=await Promise.all(run.tasks.map(async task=>({task,trace:(await api(`/api/memory-processing/tasks/${task.taskId}/events`)).data})));
  assert.deepEqual(supplier.errors,[]);assert.equal(run.succeeded,4,JSON.stringify(traces.map(({task,trace})=>({scope:task.scopeKind,state:task.state,errorCode:task.errorCode,calls:trace.calls,events:trace.events?.map(event=>event.kind)}))));assert.equal(run.failed,0);assert.equal(run.unknown,0);assert.equal(run.candidates.length,4);
  assert.deepEqual(run.candidates.filter(candidate=>candidate.scopeKind==='contact').map(candidate=>[candidate.contactId,candidate.body]).sort(),contactIds.map(contactId=>[contactId,expectedByContact.get(contactId).contactBody]).sort());
  assert.deepEqual(run.candidates.filter(candidate=>candidate.scopeKind==='self').map(candidate=>candidate.body).sort(),['用户长期偏好绿茶。','用户长期偏好红茶。'].sort());
- assert.ok(run.candidates.every(candidate=>candidate.origin==='auto'&&candidate.state==='verified_pending_decision'));assert.equal(run.laterStages,'completed');assert.equal(run.state,'completed');
+ assert.ok(run.candidates.every(candidate=>candidate.origin==='auto'&&candidate.state==='verified_pending_decision'));assert.equal(run.laterStages,'pending');assert.equal(run.state,'incomplete');assert.equal(run.stage,'document_scene');assert.ok(run.nextDueAt>Date.now());
  assert.equal(supplier.windows.length,2);assert.equal(supplier.verifications.length,2);
  const normal=resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-only'});assert.equal(normal.status,'configured');
  const extractionContacts=[],verificationContacts=[],extractionOutputs=new Map(),verificationOutputs=new Map();
@@ -159,7 +159,8 @@ test('正式SQLite profile使用唯一模型宿主经认证HTTP完成两联系�
   const fact=event.payload.fact;assert.equal(fact.source_message_ids.length,1);assert.equal(fact.subject,'self');assert.equal(event.payload.contactId,null);assert.deepEqual({subject:fact.subject,text:fact.text},expectedFact(fact.source_message_ids[0]));
   const contactId=contactForMessage.get(fact.source_message_ids[0]);assert.ok(event.sources.every(source=>source.contactId===contactId&&contactForRecord.get(source.recordId)===contactId));assert.deepEqual(new Set(event.sources.map(source=>source.recordId)),new Set(messagesForContact(contactId).flatMap(message=>message.sourceRecordIds)));
  }
- assert.ok(supplier.documents.some(call=>call.names.includes('ScenarioVerificationOutput')));assert.ok(supplier.documents.some(call=>call.names.includes('ProfileVerificationOutput')));
+ assert.equal(supplier.documents.length,0,'一小时合并窗口之前不调用主题或概览模型');
+ const schedule=await api('/api/memory-processing/schedule');assert.equal(schedule.status,200);assert.equal(schedule.data.pending,0);assert.equal(schedule.data.later.pending,3);assert.equal(schedule.data.later.stage,'document_scene');
  assert.equal((await api('/api/memory-processing/runs',{body:{request_key:requestKey}})).data.runId,run.runId);assert.equal(supplier.windows.length+supplier.verifications.length+supplier.adjudications.length,6);
  const permits=await readdir(join(root,'model-permits'));assert.equal(permits.length,1,'记忆与已安装讨论所有者共用唯一模型宿主');
  const redirects=(await readFile(auditPath,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));assert.equal(redirects.length,6+supplier.documents.length);assert.ok(redirects.every(item=>item.kind==='redirect'&&item.syntheticAuthentication));assert.equal(redirects.filter(item=>item.officialPath==='/beta/chat/completions').length,2);

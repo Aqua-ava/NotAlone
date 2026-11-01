@@ -126,7 +126,7 @@ test('场景执行中普通暂停后不领取画像小批，继续后从画像�
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('正式SQLite profile共享模型宿主并经认证HTTP贯通08到09到12',{timeout:30000},async t=>{
+test('正式SQLite profile中L1记忆立即进入回复，主题窗口未到期不调用文档模型',{timeout:30000},async t=>{
  const {watch}=await import('node:fs');const {readFile,writeFile,access}=await import('node:fs/promises');
  const {join,dirname,resolve}=await import('node:path');const {createServer}=await import('node:http');const {once}=await import('node:events');const {randomUUID}=await import('node:crypto');
  const {launchDsh}=await import('../src/launch.ts');const {documentProfileSupplier}=await import('./fixtures/memory-documents/profile-supplier.mjs');
@@ -158,15 +158,14 @@ test('正式SQLite profile共享模型宿主并经认证HTTP贯通08到09到12',
  const api=async(route,body,auth=true)=>{const response=await fetch(`http://${info.address}${route}`,{method:body===undefined?'GET':'POST',headers:auth?{Authorization:`Bearer ${info.token}`}:{},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(8000)});return {status:response.status,data:await response.json()};};
  assert.equal((await api('/api/memory-documents?scope_kind=self',undefined,false)).status,401);
  const started=await api('/api/memory-processing/runs',{request_key:randomUUID()});assert.equal(started.status,200,JSON.stringify(started.data));
- let run;try{run=await changed(join(root,'managed/sqlite/notalone.sqlite-wal'),()=>api(`/api/memory-processing/runs/${started.data.runId}`),value=>value.status!==200||['completed','incomplete','failed','paused'].includes(value.data.state));}
+ let run;try{run=await changed(join(root,'managed/sqlite/notalone.sqlite-wal'),()=>api(`/api/memory-processing/runs/${started.data.runId}`),value=>value.status!==200||value.data.status==='waiting'&&value.data.statusReason==='later_stages_scheduled');}
  catch(error){throw new Error(`${error.message}; ${JSON.stringify({supplier:supplier.errors,base:supplier.base.errors,documentCalls:supplier.documents.map(x=>x.names),stderr:(await readFile(stderr,'utf8')).slice(-1800)})}`);}
- assert.equal(run.status,200);assert.equal(run.data.state,'completed',JSON.stringify({run:run.data,supplier:supplier.errors,base:supplier.base.errors,documentCalls:supplier.documents.map(x=>x.names)}));
- const view=await api(`/api/memory-documents?scope_kind=contact&contact_id=${contactId}`);assert.equal(view.status,200,JSON.stringify(view.data));assert.equal(view.data.status,'completed');assert.equal(view.data.publication.members.length,2);
- assert.deepEqual(view.data.documents.map(d=>d.kind).sort(),['profile','scene']);assert.ok(view.data.documents.every(d=>JSON.stringify(d).includes('联系人长期喜欢合成园艺。')));
+ assert.equal(run.status,200);assert.equal(run.data.state,'incomplete');assert.equal(run.data.succeeded,1);assert.ok(run.data.nextDueAt>Date.now());
+ const view=await api(`/api/memory-documents?scope_kind=contact&contact_id=${contactId}`);assert.equal(view.status,200,JSON.stringify(view.data));assert.equal(view.data.publication,null);assert.deepEqual(view.data.documents,[]);assert.equal(supplier.documents.length,0);
  const session=await api(`/api/contacts/${contactId}/assistant-sessions`,{});assert.equal(session.status,200,JSON.stringify(session.data));
  const route=`/api/contacts/${contactId}/assistant-sessions/${session.data.session_id}/reply-candidates`;
  const generated=await api(route,{request_key:randomUUID(),text:'结合资料表达',confirmed_contact:true});assert.equal(generated.status,200,JSON.stringify(generated.data));
- const replies=await api(route);assert.equal(replies.status,200,JSON.stringify(replies.data));assert.ok(replies.data.requests[0].candidates[0].basis.some(b=>b.kind==='document'));
+ const replies=await api(route);assert.equal(replies.status,200,JSON.stringify(replies.data));assert.ok(replies.data.requests[0].candidates[0].basis.some(b=>b.kind==='memory'));assert.ok(!replies.data.requests[0].candidates[0].basis.some(b=>b.kind==='document'));
  assert.equal(supplier.errors.length,0);assert.equal(supplier.base.errors.length,0);assert.ok(supplier.replies.length>0);
  const network=(await readFile(audit,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));assert.ok(network.length>0);assert.ok(network.every(item=>item.kind==='redirect'));
 });

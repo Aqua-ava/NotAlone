@@ -4,10 +4,16 @@ import {assertInputs,assertTaskContributions,fail,textId} from '../qualification
 import {available,scope as readScope} from '../management/qualification.ts';
 import {memoryBasis,publicationMembers,renderDocuments} from './basis.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
+import {laterStagesState as scheduledLaterStagesState,type LaterStagesProjection} from './later-schedule.ts';
 
 export function task(tx:StorageTransaction,ownerId:string,taskId:string):StorageRow {
  const row=tx.get('SELECT * FROM processing_task WHERE owner_id=? AND id=?',[ownerId,taskId]);
  if(!row)fail('document_task_not_found');return row!;
+}
+function laterStageForTask(tx:StorageTransaction,ownerId:string,t:StorageRow):string|null {
+ const run=tx.get('SELECT policy_config FROM processing_run WHERE owner_id=? AND id=?',[ownerId,t.run_id]);
+ if(!run)return null;
+ try{const policy=JSON.parse(String(run.policy_config));return policy?.intent==='memory_document_later_stage'&&['document_scene','document_profile'].includes(policy.stage)?String(policy.stage):null;}catch{return null;}
 }
 export function revisions(tx:StorageTransaction,ownerId:string,t:StorageRow):StorageRow {
  const row=t.scope_kind==='self'?tx.get('SELECT memory_revision,document_revision,current_publication_id FROM owner WHERE owner_id=?',[ownerId]):
@@ -29,7 +35,8 @@ export function preconditions(tx:StorageTransaction,ownerId:string,t:StorageRow,
    WHERE failed.owner_id=? AND failed.run_id=? AND failed.state='failed' AND a.error_code IN ('extraction_model_unconfigured','extraction_model_configuration_invalid','extraction_model_credentials_unavailable','extraction_model_authentication_failed','extraction_model_provider_unavailable') LIMIT 1`,[ownerId,t.run_id]);
   if(t.scope_kind!=='contact'||!failedContact||commonFailure)fail('document_preceding_stage_incomplete');
  }
- assertTaskContributions(tx,ownerId,String(t.run_id),String(t.id));
+ const contributions=tx.get('SELECT 1 FROM task_contribution WHERE owner_id=? AND task_id=? LIMIT 1',[ownerId,t.id]);
+ if(contributions||!laterStageForTask(tx,ownerId,t))assertTaskContributions(tx,ownerId,String(t.run_id),String(t.id));
  const inputs=tx.all(`SELECT i.* FROM run_input i JOIN task_contribution c ON c.owner_id=i.owner_id AND c.run_id=i.run_id AND c.source_contact_id=i.source_contact_id
   WHERE c.owner_id=? AND c.task_id=? ORDER BY i.input_no`,[ownerId,t.id]);
  assertInputs(tx,ownerId,String(t.run_id),inputs);
@@ -44,16 +51,20 @@ export function stages(tx:StorageTransaction,ownerId:string,taskId:string){
 export function taskView(tx:StorageTransaction,ownerId:string,taskId:string){
  const t=task(tx,ownerId,taskId),steps=stages(tx,ownerId,taskId);
  const publication=tx.get('SELECT id FROM document_publication WHERE owner_id=? AND basis_task_id=? AND availability=\'available\'',[ownerId,taskId]);
- return {taskId,basis:{state:String(t.document_basis_state),memoryRevision:t.accepted_memory_revision===null?null:String(t.accepted_memory_revision),documentRevision:t.accepted_document_revision===null?null:String(t.accepted_document_revision),publicationId:t.accepted_publication_id===null?null:String(t.accepted_publication_id)},stages:steps,errorCode:t.error_code===null?null:String(t.error_code),outcome:publication&&steps.length===2&&steps.every(s=>['succeeded','not_applicable'].includes(s.status))?'completed':'incomplete'};
+ const mode=laterStageForTask(tx,ownerId,t),complete=publication&&steps.every(s=>['succeeded','not_applicable'].includes(s.status))&&
+  (mode?steps.some(s=>s.kind===(mode==='document_scene'?'scene':'profile')):steps.length===2);
+ const run=tx.get('SELECT started_at FROM processing_run WHERE owner_id=? AND id=?',[ownerId,t.run_id]);
+ return {taskId,laterStage:mode,scheduleNow:mode&&run?Number(run.started_at):null,publicationId:publication?String(publication.id):null,basis:{state:String(t.document_basis_state),memoryRevision:t.accepted_memory_revision===null?null:String(t.accepted_memory_revision),documentRevision:t.accepted_document_revision===null?null:String(t.accepted_document_revision),publicationId:t.accepted_publication_id===null?null:String(t.accepted_publication_id)},stages:steps,errorCode:t.error_code===null?null:String(t.error_code),outcome:complete?'completed':'incomplete'};
 }
-export interface LaterStagesState {state:'completed'|'pending'|'failed'|'revoked';reasons:string[]}
+export interface LaterStagesState extends LaterStagesProjection {}
 /** 整轮后置阶段投影：completed 仅在全部任务适用阶段结束、完整发布集合仍可用且无未解未知文档调用时成立。 */
 export function laterStagesState(tx:StorageTransaction,ownerId:string,runId:string):LaterStagesState {
+ const scheduled=scheduledLaterStagesState(tx,ownerId,runId);if(scheduled)return scheduled;
  const run=tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);
- if(!run)return {state:'pending',reasons:['document_run_missing']};
- if(run.state==='revoked')return {state:'revoked',reasons:['document_run_revoked']};
+ if(!run)return {state:'pending',reasons:['document_run_missing'],nextDueAt:null,stage:null};
+ if(run.state==='revoked')return {state:'revoked',reasons:['document_run_revoked'],nextDueAt:null,stage:null};
  // 12 及更早结构没有文档表；迁移前的轮次视图不能据此宣称后置阶段完成。
- if(!tx.get('SELECT 1 FROM schema_migration WHERE version=13'))return {state:run.state==='completed'?'completed':run.state==='failed'?'failed':'pending',reasons:['document_schema_unavailable']};
+ if(!tx.get('SELECT 1 FROM schema_migration WHERE version=13'))return {state:run.state==='completed'?'completed':run.state==='failed'?'failed':'pending',reasons:['document_schema_unavailable'],nextDueAt:null,stage:null};
  const reasons:string[]=[];
  const tasks=tx.all('SELECT * FROM processing_task WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[ownerId,runId]);
  if(!tasks.length)reasons.push('document_run_without_tasks');
@@ -72,8 +83,8 @@ export function laterStagesState(tx:StorageTransaction,ownerId:string,runId:stri
   AND (s.state='unknown' OR EXISTS(SELECT 1 FROM step_attempt a WHERE a.owner_id=s.owner_id AND a.step_id=s.id AND a.state='unknown')
    OR EXISTS(SELECT 1 FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE o.owner_id=s.owner_id AND o.memory_step_id=s.id AND c.state='unknown')) LIMIT 1`,[ownerId,runId]);
  if(unresolved)reasons.push('document_call_unknown');
- if(reasons.length)return {state:run.state==='failed'?'failed':'pending',reasons};
- return run.state==='completed'?{state:'completed',reasons:[]}:{state:'pending',reasons:[`document_run_${String(run.state)}`]};
+ if(reasons.length)return {state:run.state==='failed'?'failed':'pending',reasons,nextDueAt:null,stage:null};
+ return run.state==='completed'?{state:'completed',reasons:[],nextDueAt:null,stage:null}:{state:'pending',reasons:[`document_run_${String(run.state)}`],nextDueAt:null,stage:null};
 }
 const action=(name:string,mode:'read'|'write',fn:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:fn});
 export const memoryDocumentsActions:StorageAction[]=[

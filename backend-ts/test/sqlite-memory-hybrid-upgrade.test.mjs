@@ -1,0 +1,51 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {fixture,owner,modelPort,record} from './fixtures/memory-sqlite/support.mjs';
+import {randomUUID} from 'node:crypto';
+import {SqliteStorage} from '../src/storage/sqlite/client.ts';
+import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
+import {SqliteContactService} from '../src/contacts/sqlite/service.ts';
+import {SqliteHistoryService} from '../src/history/sqlite/service.ts';
+import {DeletionService} from '../src/storage/sqlite/deletion/service.ts';
+import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
+import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
+
+test('启用边界保留既有消息和账本，旧增量不自动处理且清空后新消息序号不回退',async t=>{
+ const cleanups=[];let storage,extraction,contacts,history;
+ t.after(async()=>{await extraction?.close();await history?.close();await contacts?.close();await storage?.close();for(const cleanup of cleanups.reverse())await cleanup();});
+ const legacy=new URL('./fixtures/memory-documents/hybrid-upgrade-registry.mjs?legacy=true',import.meta.url).href;
+ const current=new URL('./fixtures/memory-documents/hybrid-upgrade-registry.mjs',import.meta.url).href;
+ const f=await fixture({after:cleanup=>cleanups.push(cleanup)},{registryModule:legacy}),contactId=f.saved[0].contact_id;
+ f.channel.page=async(_scope,target)=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true,resumeCursor:'tail-1'});
+ await f.service.synchronize(contactId);
+ extraction=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>extraction.accounting));
+ const run=await extraction.start('hybrid-upgrade-existing-history');await extraction.waitForIdle(run.runId);await extraction.close();
+ const coverage=await f.service.coverage(contactId),token=await f.contacts.eligibility(contactId);
+ await f.storage.execute('history.acceptIncrementalPage',{token,goalId:coverage.incremental.goalId,captureId:randomUUID(),page:{target:f.target.descriptor,cursorIn:'tail-1',cursorOut:'tail-2',caughtUp:true,records:[record('2')]},at:Date.now(),runtimeToken:f.storage.status.runtimeId});
+ assert.equal((await f.storage.execute('memoryExtraction.readSchedule',{ownerId:owner,now:Date.now()})).pending,1);
+ const before=await f.storage.execute('fixture.hybridUpgradeInspect',{}),databaseId=f.storage.status.databaseId;
+ assert.equal(f.storage.status.schemaVersion,26);assert.ok(before.tables.message.length>0);assert.ok(before.tables.model_call.length>0);
+ assert.equal(before.tables.processing_run.some(row=>Object.hasOwn(row,'followup_state')),false);
+ await f.service.close();await f.contacts.close();await f.storage.close();
+ storage=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:databaseId,registryModule:current});
+ const after=await storage.execute('fixture.hybridUpgradeInspect',{});
+ assert.equal(storage.status.schemaVersion,28);assert.deepEqual(after.ledger.slice(0,26),before.ledger);
+ for(const [name,rows] of Object.entries(before.tables)){
+  const projected=after.tables[name].map(row=>Object.fromEntries(Object.keys(rows[0]??{}).map(key=>[key,row[key]])));
+  assert.deepEqual(projected,rows,`${name}既有内容不被结构升级改写`);
+ }
+ assert.ok(after.tables.processing_run.every(row=>row.followup_state==='none'));
+ assert.deepEqual(await storage.execute('memoryExtraction.pendingFollowups',{ownerId:owner}),[]);
+ assert.deepEqual(await storage.execute('memoryExtraction.readSchedule',{ownerId:owner,now:Date.now()}),{pending:0,nextDueAt:null,blockedContacts:0});
+ const unavailable=async()=>{throw Error('此验收不读取真实渠道');};
+ contacts=new SqliteContactService(storage,owner,{account:unavailable,conversations:unavailable});await contacts.initialize();
+ history=new SqliteHistoryService(storage,contacts,f.channel);
+ const nextToken=await contacts.eligibility(contactId),nextGoal=(await history.coverage(contactId)).incremental.goalId;
+ await storage.execute('history.acceptIncrementalPage',{token:nextToken,goalId:nextGoal,captureId:randomUUID(),page:{target:f.target.descriptor,cursorIn:'tail-2',cursorOut:'tail-3',caughtUp:true,records:[record('3')]},at:Date.now(),runtimeToken:storage.status.runtimeId});
+ assert.equal((await storage.execute('memoryExtraction.readSchedule',{ownerId:owner,now:Date.now()})).pending,1,'启用之后新增文字仍自动排队');
+ await history.close();await contacts.close();
+ const deletion=new DeletionService(storage,new ActiveHolders(),new ManagedFiles(f.root)),plan=await deletion.plan({ownerId:owner,requestKey:'hybrid-baseline-account-delete',scope:{kind:'account'}});
+ assert.equal((await deletion.advance({ownerId:owner,operationId:plan.operationId})).state,'completed');
+ const sequence=await storage.execute('fixture.nextDisplay',{});assert.equal(sequence.remaining,0n);assert.ok(sequence.baseline>0n);assert.equal(sequence.next,sequence.baseline+1n);
+ assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});

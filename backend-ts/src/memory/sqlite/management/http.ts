@@ -13,7 +13,8 @@ function send(res:ServerResponse,status:number,value:unknown){res.writeHead(stat
 /** owner来自宿主，系统自动决定没有HTTP分支。 */
 export class SqliteMemoryManagementHttp {
  private service:SqliteMemoryManagement;private authorize:(req:IncomingMessage)=>boolean;
- constructor(service:SqliteMemoryManagement,authorize:(req:IncomingMessage)=>boolean){this.service=service;this.authorize=authorize;}
+ private readonly afterDecision:()=>void;
+ constructor(service:SqliteMemoryManagement,authorize:(req:IncomingMessage)=>boolean,afterDecision:()=>void=()=>{}){this.service=service;this.authorize=authorize;this.afterDecision=afterDecision;}
  async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
   const url=new URL(req.url??'/','http://localhost');if(!url.pathname.startsWith('/api/memory-management'))return false;
   if(!this.authorize(req)||req.headers.origin!==undefined){send(res,401,{error:'unauthorized'});return true;}
@@ -25,7 +26,7 @@ export class SqliteMemoryManagementHttp {
    }else if(url.pathname==='/api/memory-management/decisions'&&req.method==='POST'&&!url.search){
     const request=JSON.parse((await readWechatHttpBody(req,65536,10000)).toString('utf8'));
     if(!request||Array.isArray(request)||Object.keys(request).some(k=>!fields.has(k))||!uuid.test(request.requestKey??'')||['auto_accept','auto_update','auto_retire','auto_noop'].includes(request.action)||request.scope&&Object.keys(request.scope).some(k=>!['scopeKind','contactId'].includes(k)))throw new StorageFailure('memory_request_invalid');
-    send(res,200,await this.service.decide(request as MemoryDecisionRequest));
+    const result=await this.service.decide(request as MemoryDecisionRequest);this.afterDecision();send(res,200,result);
    }else send(res,404,{error:'memory_not_found'});
   }catch(error){const code=error instanceof StorageFailure?error.code:'memory_request_invalid';send(res,code==='memory_request_invalid'||code==='memory_scope_invalid'?400:409,{error:code});}
   return true;

@@ -68,6 +68,7 @@ test('真实记忆页面仅展示处理进度并自动刷新资料，资格失�
   await page.exposeFunction('requestJson', async path => {
     if (path === '/api/runtime/status') return { state: 'running', runtime: 'dsh', hostRuntime: 'typescript', storage: 'sqlite' };
     if (path === '/api/memory-processing/runs/current') return run;
+    if (path === '/api/memory-processing/schedule') return {pending:0,nextDueAt:null,blockedContacts:0,later:{pending:0,nextDueAt:null,stage:null}};
     throw new Error(`未约定的合成请求：${path}`);
   });
   await page.exposeFunction('readDocuments', async () => documents);

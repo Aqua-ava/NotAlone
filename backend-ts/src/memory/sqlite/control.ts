@@ -1,10 +1,11 @@
 import type {StorageRow,StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import {assertTaskContributions,fail,textId} from './qualification.ts';
+import {setRunSchedulePaused,resumeRunSchedule} from './documents/later-schedule.ts';
 
 /** 轮次控制投影：只读派生，不新增业务状态，也不把数量换算成百分比。 */
 export type ControlStatus='waiting'|'processing'|'paused'|'blocked'|'completed';
 export type ControlAction='pause'|'continue';
-export type LaterStagesState='pending'|'completed'|'failed'|'revoked';
+export type LaterStagesState='pending'|'scheduled'|'running'|'unknown'|'completed'|'failed'|'revoked';
 
 /** 通用模型配置故障；单人资料失败不在其中，不能据此暂停整轮。 */
 export const sharedFailureCodes=new Set([
@@ -135,6 +136,8 @@ export function projectControl(tx:StorageTransaction,ownerId:string,run:StorageR
  const controlVersion=count(run.intent_revision);
  const base={controlVersion,pending:classes.pending,revoked:classes.revoked,sharedFaultCode:sharedFault,calls:callsSummary};
  if(state==='revoked')return {...base,status:'blocked',statusReason:'run_revoked',actions:[]};
+ if(laterStages==='unknown')return {...base,status:'blocked',statusReason:'model_receipt_unknown',actions:[]};
+ if(laterStages==='completed'&&(pauseRequested||state==='paused'))return {...base,status:'paused',statusReason:null,actions:['continue']};
  if(state==='completed'||laterStages==='completed')return {...base,status:'completed',statusReason:null,actions:[]};
  if(anyUnknown)return {...base,status:'blocked',statusReason:'model_receipt_unknown',actions:retryable?['continue']:[]};
  if(interruptedKnown)return {...base,status:'blocked',statusReason:'interrupted_known_receipts',actions:['continue']};
@@ -151,8 +154,10 @@ export function projectControl(tx:StorageTransaction,ownerId:string,run:StorageR
   const selfTask=activeTasks.find(task=>task.scope_kind==='self');
   const revokedContact=taskRows.some(task=>task.scope_kind==='contact'&&taskStates.get(String(task.id))==='revoked');
   const ownerUnfinished=(!selfTask&&revokedContact)||(!!selfTask&&!['succeeded','awaiting_decision'].includes(taskStates.get(String(selfTask.id))??'succeeded'));
+  if(extractionDone&&laterStages==='scheduled')return {...base,status:'waiting',statusReason:'later_stages_scheduled',actions:[]};
+  if(extractionDone&&laterStages==='running')return {...base,status:'processing',statusReason:null,actions:['pause']};
   if(extractionDone&&laterStages==='pending')return {...base,status:'blocked',statusReason:ownerUnfinished?'owner_contribution_pending':'later_stages_pending',actions:[]};
-  if(extractionDone&&laterStages==='failed')return {...base,status:'blocked',statusReason:'later_stages_failed',actions:retryable?['continue']:[]};
+  if(extractionDone&&laterStages==='failed')return {...base,status:'blocked',statusReason:'later_stages_failed',actions:['continue']};
   return {...base,status:'blocked',statusReason:'round_incomplete',actions:retryable?['continue']:[]};
  }
  if(state==='pending'||state==='running')return {...base,status:'processing',statusReason:null,actions:['pause']};
@@ -172,14 +177,21 @@ export function applyControl(tx:StorageTransaction,input:unknown):{ownerId:strin
  if(i.action==='pause'){
   if(state==='revoked'||state==='completed')fail('memory_extraction_control_conflict');
   if(state==='paused'||run.pause_requested_at!==null)return {ownerId,runId,replayed:true};
+  if(state==='incomplete'&&setRunSchedulePaused(tx,ownerId,runId,true)){
+   tx.run("UPDATE processing_run SET pause_requested_at=?,state='paused',intent_revision=intent_revision+1 WHERE owner_id=? AND id=?",[Date.now(),ownerId,runId]);
+   return {ownerId,runId,replayed:false};
+  }
   // 已结束轮次没有可暂停的小批；按幂等空操作返回，不把暂停请求伪造成执行状态。
   if(!['preparing','pending','running'].includes(state))return {ownerId,runId,replayed:true};
   tx.run("UPDATE processing_run SET pause_requested_at=?,state='paused',intent_revision=intent_revision+1 WHERE owner_id=? AND id=? AND state IN ('preparing','pending','running')",[Date.now(),ownerId,runId]);
+  setRunSchedulePaused(tx,ownerId,runId,true);
   return {ownerId,runId,replayed:false};
  }
  if(state==='revoked'||state==='completed'||state==='preparing')fail('memory_extraction_control_conflict');
  // 已知回执的中断可以安全重试（复用既有回执）；真实未知任务保持 unknown，不重发也不清除。
  reconcileKnownInterruptions(tx,ownerId,runId);
+ setRunSchedulePaused(tx,ownerId,runId,false);
+ resumeRunSchedule(tx,ownerId,runId);
  if(!['paused','failed','incomplete'].includes(state)&&run.pause_requested_at===null)return {ownerId,runId,replayed:true};
  tx.run("UPDATE processing_run SET pause_requested_at=NULL,state='pending',intent_revision=intent_revision+1 WHERE owner_id=? AND id=?",[ownerId,runId]);
  // 只恢复失败/暂停任务并推进控制修订；unknown 任务保持原样，不能靠继续刷新资格。

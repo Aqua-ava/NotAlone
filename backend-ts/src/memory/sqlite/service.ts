@@ -45,6 +45,43 @@ export class SqliteMemoryExtraction {
   this.launch(run.runId);return run;
   });
  }
+ /** 自动增量调度的只读入口；返回下一次最早到期时刻（Unix毫秒），不执行处理。 */
+ nextDueAt(now=Date.now()):Promise<number|null>{this.available();return this.storage.execute('memoryExtraction.nextDueAt',{ownerId:this.ownerId,now});}
+ /** 当前已满足阈值且安全门放行的联系人；实际建轮仍须在写事务内重新复验。 */
+ dueContacts(now=Date.now()):Promise<string[]>{this.available();return this.storage.execute('memoryExtraction.dueContacts',{ownerId:this.ownerId,now});}
+ /** 页面只读队列摘要；pending包含被同联系人阻碍而暂不能自动建轮的增量目标。 */
+ readSchedule(now=Date.now()):Promise<{pending:number;nextDueAt:number|null;blockedContacts:number}>{this.available();return this.storage.execute('memoryExtraction.readSchedule',{ownerId:this.ownerId,now});}
+ /** 内部按单联系人建立一个固定增量轮；此方法不暴露给HTTP。 */
+ async startContact(contactId:string,requestKey:string,now=Date.now()){
+  return this.admit(async()=>{
+   await this.initialize();const policy=await this.version();await policy.assertCurrent();this.available();
+   const prior=await this.storage.execute<any>('memoryExtraction.findRequest',{ownerId:this.ownerId,requestKey});this.available();
+   if(prior)return prior;
+   const run=await this.storage.execute<any>('memoryExtraction.startContact',{ownerId:this.ownerId,contactId,requestKey,now,
+    policyConfig:policy.newTaskConfig(),followupStages:this.afterRunSettled!==undefined});
+   if(run)this.launch(run.runId);return run;
+  });
+ }
+ /** 重启时只恢复持久标记为pending且L1已安全结束的后续登记，不再领取提取目标。 */
+ async resumeFollowups():Promise<number>{
+  this.available();if(!this.afterRunSettled)return 0;
+  await this.initialize();this.available();
+  const runIds=await this.storage.execute<string[]>('memoryExtraction.pendingFollowups',{ownerId:this.ownerId});let started=0;
+  for(const runId of runIds)if(this.launchFollowup(runId))started++;
+  return started;
+ }
+ private launchFollowup(runId:string):boolean{
+  if(this.runs.has(runId)||this.stopped||!this.afterRunSettled)return false;
+  const work=this.executeFollowup(runId).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});return true;
+ }
+ private async executeFollowup(runId:string,recovering=true):Promise<void>{
+  if(this.stopped||!this.afterRunSettled)return;
+  // 启动恢复必须整轮安全；本次正常收尾仍由各领域门禁隔离单联系人失败。
+  const eligible=!recovering||await this.storage.execute<boolean>('memoryExtraction.followupEligible',{ownerId:this.ownerId,runId});
+  if(!eligible||this.stopped)return;
+  try{await this.afterRunSettled(runId);}
+  finally{if(!this.stopped)await this.storage.execute('memoryExtraction.finishLater',{ownerId:this.ownerId,runId});}
+ }
  read(runId?:string){this.available();return this.storage.execute<any>('memoryExtraction.read',{ownerId:this.ownerId,runId});}
  trace(taskId:string){this.available();return this.storage.execute<any>('memoryExtraction.trace',{ownerId:this.ownerId,taskId});}
  /** 用户暂停带控制修订CAS；共享故障的宿主内暂停不带版本，仍走同一事务状态机。 */
@@ -79,8 +116,7 @@ export class SqliteMemoryExtraction {
   if(!this.stopped){
    // 后续文档阶段的暂停边界由09在领取动作内复验；提取层只保证不自动重试失败模型。
    await this.storage.execute('memoryExtraction.settleRun',{ownerId:this.ownerId,runId,laterWork:!!this.afterRunSettled});
-   try{if(!this.stopped)await this.afterRunSettled?.(runId);}
-   finally{if(this.afterRunSettled)await this.storage.execute('memoryExtraction.finishLater',{ownerId:this.ownerId,runId});}
+   if(this.afterRunSettled&&!this.stopped)await this.executeFollowup(runId,false);
   }
  }
  private async process(batch:ClaimedStep,signal:AbortSignal){

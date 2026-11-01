@@ -19,7 +19,7 @@ export function documentProfileSupplier(){
   if(!document){
    if(!names.length&&req.url!=='/beta/chat/completions'){
     const text=body.messages.flatMap(message=>Array.isArray(message.content)?message.content.filter(block=>block.type==='text').map(block=>block.text):[message.content??'']).join('\n');
-    const match=text.match(/\[(\d+)\] document\n/);if(match){replies.push({text});respond(res,null,JSON.stringify({candidates:[{parts:['结合合成资料的候选。'],basis:[Number(match[1])]}]}));return;}
+    const match=text.match(/\[(\d+)\] document\n/)??text.match(/\[(\d+)\] memory\n/);if(match){replies.push({text});respond(res,null,JSON.stringify({candidates:[{parts:['结合合成资料的候选。'],basis:[Number(match[1])]}]}));return;}
    }
    const copy=Readable.from([raw]);copy.url=req.url;copy.headers=req.headers;return base.handler(copy,res);
   }

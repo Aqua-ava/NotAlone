@@ -7,6 +7,7 @@ import { verifiedTerminalReason, prepareRecord } from './normalize.ts';
 import {currentSourceScopeCTE,currentSourcePredicate} from './current-scope.ts';
 import {rememberSourceTerminal,type SourceTerminalReason} from './terminal.ts';
 import {failHistoryQuoteInTransaction,quoteParserVersion,saveHistoryQuoteInTransaction} from './quote-store.ts';
+import {nextMessageDisplayNo} from '../../storage/sqlite/message-order.ts';
 
 /** 逐条排除判定：来源删除（05）与清空截断（06）分别记账，都不写回正文或原始载荷。 */
 export type IngestExclusion = 'source_excluded' | 'clear_excluded';
@@ -140,7 +141,7 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
       if (!reason) {
         if (!message) {
           const id = randomUUID();
-          const display = (tx.get('SELECT coalesce(max(display_no),0)+1 AS n FROM message')!.n as bigint);
+          const display = nextMessageDisplayNo(tx);
           tx.run(`INSERT INTO message(owner_id,id,contact_id,binding_id,identity_scheme,external_key,sender_role,kind,text_body,original_type,sent_at,time_precision,order_scheme,order_key,display_no) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [token.owner_id, id, token.contact_id, token.binding_id, 'source-table-local-v1', prepared.localKey, record.sender, record.kind, record.text, record.originalType, record.sentAt === null ? null : BigInt(record.sentAt), record.timePrecision, record.orderScheme, record.orderKey, display]);
           message = tx.get('SELECT * FROM message WHERE owner_id=? AND id=?', [token.owner_id, id]);
           createdMessageIds.push(id);

@@ -63,4 +63,7 @@ export const registry={...base,actions:[...base.actions.filter(a=>!replaced.has(
    events:tx.get("SELECT count(*) n FROM execution_event WHERE owner_id=? AND kind IN ('document_input','document_output') AND payload LIKE ?",[ownerId,`%${text}%`]).n,
    references:tx.get("SELECT count(*) n FROM step_input WHERE owner_id=? AND kind IN ('memory','document','message') AND step_id IN (SELECT id FROM processing_step WHERE owner_id=? AND kind IN ('document_scene','document_profile'))",[ownerId,ownerId]).n};
  }},
+ {name:'fixture.documentLaterCursor',mode:'read',retryBusy:false,execute(tx,{ownerId,scopeKey}){
+  return tx.get('SELECT scene_body_digest,profile_scene_body_digest,last_profile_success_at FROM memory_document_later_cursor WHERE owner_id=? AND scope_key=?',[ownerId,scopeKey])??null;
+ }},
 ]};

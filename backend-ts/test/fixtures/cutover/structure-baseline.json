@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 26,
+  "schemaVersion": 28,
   "migrationVersions": [
    1,
    2,
@@ -27,15 +27,17 @@
    23,
    24,
    25,
-   26
+   26,
+   27,
+   28
   ],
-  "userVersion": 26,
+  "userVersion": 28,
   "sqliteVersion": "3.53.4",
-  "tableCount": 89,
-  "fieldCount": 878,
-  "foreignKeyGroups": 184,
-  "triggerCount": 98,
-  "checkCount": 275,
+  "tableCount": 92,
+  "fieldCount": 914,
+  "foreignKeyGroups": 192,
+  "triggerCount": 99,
+  "checkCount": 295,
   "viewCount": 0
  },
  "tables": {
@@ -1098,6 +1100,13 @@
      "notnull": 1,
      "dflt_value": null,
      "pk": 0
+    },
+    {
+     "name": "memory_incremental_baseline_display_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": "0",
+     "pk": 0
     }
    ],
    "foreignKeys": [],
@@ -1113,7 +1122,7 @@
      "sql": null
     }
    ],
-   "sql": "CREATE TABLE database_instance ( slot INTEGER PRIMARY KEY CHECK(slot=1), database_id TEXT NOT NULL UNIQUE, format_family TEXT NOT NULL CHECK(format_family='notalone-sqlite-v1'), role TEXT NOT NULL CHECK(role IN ('business','test')), created_at INTEGER NOT NULL CHECK(created_at>=0), runtime_id TEXT NOT NULL, epoch INTEGER NOT NULL CHECK(epoch>=0), schema_digest TEXT NOT NULL ) STRICT"
+   "sql": "CREATE TABLE database_instance ( slot INTEGER PRIMARY KEY CHECK(slot=1), database_id TEXT NOT NULL UNIQUE, format_family TEXT NOT NULL CHECK(format_family='notalone-sqlite-v1'), role TEXT NOT NULL CHECK(role IN ('business','test')), created_at INTEGER NOT NULL CHECK(created_at>=0), runtime_id TEXT NOT NULL, epoch INTEGER NOT NULL CHECK(epoch>=0), schema_digest TEXT NOT NULL , memory_incremental_baseline_display_no INTEGER NOT NULL DEFAULT 0 CHECK(memory_incremental_baseline_display_no>=0)) STRICT"
   },
   "decision_candidate": {
    "columns": [
@@ -7002,6 +7011,468 @@
    ],
    "sql": "CREATE TABLE memory_document ( owner_id TEXT NOT NULL,id TEXT NOT NULL,scope_kind TEXT NOT NULL CHECK(scope_kind IN ('self','contact')),contact_id TEXT, kind TEXT NOT NULL CHECK(kind IN ('scene','profile')),state TEXT NOT NULL CHECK(state IN ('active','invalidated')), PRIMARY KEY(owner_id,id),FOREIGN KEY(owner_id) REFERENCES owner(owner_id),FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id), CHECK((scope_kind='contact')=(contact_id IS NOT NULL)) ) STRICT"
   },
+  "memory_document_later_cursor": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "scope_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "scope_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "scene_body_digest",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "profile_scene_body_digest",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "last_profile_success_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 0,
+     "table": "owner",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_memory_document_later_cursor_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "scope_key"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE memory_document_later_cursor ( owner_id TEXT NOT NULL,scope_kind TEXT NOT NULL CHECK(scope_kind IN ('self','contact')),scope_key TEXT NOT NULL,contact_id TEXT, scene_body_digest TEXT,profile_scene_body_digest TEXT,last_profile_success_at INTEGER, PRIMARY KEY(owner_id,scope_key),FOREIGN KEY(owner_id) REFERENCES owner(owner_id) ON DELETE CASCADE, FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) ON DELETE CASCADE, CHECK((scope_kind='self' AND contact_id IS NULL AND scope_key='self') OR (scope_kind='contact' AND contact_id IS NOT NULL AND scope_key=contact_id)) ) STRICT"
+  },
+  "memory_document_later_run_requirement": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "run_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "scope_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "scope_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 3
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "generation",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "outcome",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "paused",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": "0",
+     "pk": 0
+    },
+    {
+     "name": "reason",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "updated_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "memory_document_later_schedule",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "memory_document_later_schedule",
+     "from": "scope_key",
+     "to": "scope_key",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 2,
+     "table": "memory_document_later_schedule",
+     "from": "generation",
+     "to": "generation",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 0,
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 1,
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 2,
+     "seq": 0,
+     "table": "processing_run",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 2,
+     "seq": 1,
+     "table": "processing_run",
+     "from": "run_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_memory_document_later_run_requirement_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "run_id",
+      "scope_key"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE memory_document_later_run_requirement ( owner_id TEXT NOT NULL,run_id TEXT NOT NULL,scope_kind TEXT NOT NULL CHECK(scope_kind IN ('self','contact')),scope_key TEXT NOT NULL,contact_id TEXT, generation INTEGER,outcome TEXT NOT NULL CHECK(outcome IN ('pending','completed','failed','unknown','revoked','no_formal_change')), paused INTEGER NOT NULL DEFAULT 0 CHECK(paused IN (0,1)),reason TEXT,updated_at INTEGER NOT NULL, PRIMARY KEY(owner_id,run_id,scope_key),FOREIGN KEY(owner_id,run_id) REFERENCES processing_run(owner_id,id) ON DELETE CASCADE, FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) ON DELETE CASCADE, FOREIGN KEY(owner_id,scope_key,generation) REFERENCES memory_document_later_schedule(owner_id,scope_key,generation) ON DELETE CASCADE, CHECK((scope_kind='self' AND contact_id IS NULL AND scope_key='self') OR (scope_kind='contact' AND contact_id IS NOT NULL AND scope_key=contact_id)), CHECK((outcome='no_formal_change' AND generation IS NULL) OR (outcome<>'no_formal_change' AND generation IS NOT NULL)) ) STRICT"
+  },
+  "memory_document_later_schedule": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "scope_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "scope_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "generation",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 3
+    },
+    {
+     "name": "stage",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "first_changed_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "last_changed_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "due_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "requested_memory_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "frozen_memory_revision",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "frozen_document_revision",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "frozen_publication_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "task_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "error_code",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "scene_body_digest",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "processing_task",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "processing_task",
+     "from": "task_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 0,
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 1,
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 2,
+     "seq": 0,
+     "table": "owner",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "memory_document_later_due",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "state",
+      "due_at"
+     ],
+     "sql": "CREATE INDEX memory_document_later_due ON memory_document_later_schedule(owner_id,state,due_at)"
+    },
+    {
+     "name": "sqlite_autoindex_memory_document_later_schedule_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "scope_key",
+      "generation"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE memory_document_later_schedule ( owner_id TEXT NOT NULL,scope_kind TEXT NOT NULL CHECK(scope_kind IN ('self','contact')),scope_key TEXT NOT NULL,contact_id TEXT, generation INTEGER NOT NULL CHECK(generation>0),stage TEXT NOT NULL CHECK(stage IN ('document_scene','document_profile')), state TEXT NOT NULL CHECK(state IN ('scheduled','running','succeeded','failed','unknown','superseded')), first_changed_at INTEGER NOT NULL CHECK(first_changed_at>=0),last_changed_at INTEGER NOT NULL CHECK(last_changed_at>=0),due_at INTEGER NOT NULL CHECK(due_at>=0), requested_memory_revision INTEGER NOT NULL CHECK(requested_memory_revision>=0),frozen_memory_revision INTEGER,frozen_document_revision INTEGER,frozen_publication_id TEXT, task_id TEXT,error_code TEXT,scene_body_digest TEXT, PRIMARY KEY(owner_id,scope_key,generation),FOREIGN KEY(owner_id) REFERENCES owner(owner_id) ON DELETE CASCADE, FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) ON DELETE CASCADE, FOREIGN KEY(owner_id,task_id) REFERENCES processing_task(owner_id,id) ON DELETE CASCADE, CHECK((scope_kind='self' AND contact_id IS NULL AND scope_key='self') OR (scope_kind='contact' AND contact_id IS NOT NULL AND scope_key=contact_id)), CHECK((state='running' AND task_id IS NOT NULL) OR state<>'running'), CHECK((frozen_memory_revision IS NULL AND frozen_document_revision IS NULL AND frozen_publication_id IS NULL) OR frozen_memory_revision IS NOT NULL AND frozen_document_revision IS NOT NULL) ) STRICT"
+  },
   "memory_document_version": {
    "columns": [
     {
@@ -9060,6 +9531,13 @@
      "notnull": 1,
      "dflt_value": null,
      "pk": 0
+    },
+    {
+     "name": "followup_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": "'none'",
+     "pk": 0
     }
    ],
    "foreignKeys": [
@@ -9098,7 +9576,7 @@
      "sql": null
     }
    ],
-   "sql": "CREATE TABLE \"processing_run\" ( owner_id TEXT NOT NULL,id TEXT NOT NULL,start_request_key TEXT NOT NULL,state TEXT NOT NULL, intent_revision INTEGER NOT NULL DEFAULT 0,pause_requested_at INTEGER,started_at INTEGER NOT NULL, accepted_owner_feedback_revision INTEGER NOT NULL,policy_config TEXT NOT NULL CHECK(json_valid(policy_config)), PRIMARY KEY(owner_id,id),UNIQUE(owner_id,start_request_key),FOREIGN KEY(owner_id) REFERENCES owner(owner_id), CHECK(state IN ('preparing','pending','running','paused','failed','incomplete','revoked','completed')) ) STRICT"
+   "sql": "CREATE TABLE \"processing_run\" ( owner_id TEXT NOT NULL,id TEXT NOT NULL,start_request_key TEXT NOT NULL,state TEXT NOT NULL, intent_revision INTEGER NOT NULL DEFAULT 0,pause_requested_at INTEGER,started_at INTEGER NOT NULL, accepted_owner_feedback_revision INTEGER NOT NULL,policy_config TEXT NOT NULL CHECK(json_valid(policy_config)), followup_state TEXT NOT NULL DEFAULT 'none' CHECK(followup_state IN ('none','pending','enrolled')), PRIMARY KEY(owner_id,id),UNIQUE(owner_id,start_request_key),FOREIGN KEY(owner_id) REFERENCES owner(owner_id), CHECK(state IN ('preparing','pending','running','paused','failed','incomplete','revoked','completed')) ) STRICT"
   },
   "processing_step": {
    "columns": [
@@ -14476,6 +14954,11 @@
    "name": "memory_head_closure",
    "table": "memory",
    "sql": "CREATE TRIGGER memory_head_closure BEFORE UPDATE OF current_version_no ON memory WHEN NEW.current_version_no IS NOT NULL AND NOT EXISTS( SELECT 1 FROM memory_version v JOIN memory_decision d ON d.owner_id=v.owner_id AND d.id=v.decision_id WHERE v.owner_id=NEW.owner_id AND v.memory_id=NEW.id AND v.version_no=NEW.current_version_no AND d.target_memory_id=NEW.id AND d.action NOT IN ('auto_retire','auto_noop') AND v.content_state='present' AND v.provenance_state='eligible' AND d.expected_version_no IS OLD.current_version_no AND (d.expected_head_revision IS NULL OR d.expected_head_revision=OLD.head_revision) AND (v.adoption_mode='manual' OR EXISTS(SELECT 1 FROM memory_required_message r WHERE r.owner_id=v.owner_id AND r.memory_id=v.memory_id AND r.version_no=v.version_no)) AND NOT EXISTS(SELECT 1 FROM memory_required_message r WHERE r.owner_id=v.owner_id AND r.memory_id=v.memory_id AND r.version_no=v.version_no AND NOT EXISTS(SELECT 1 FROM memory_citation c WHERE c.owner_id=r.owner_id AND c.memory_id=r.memory_id AND c.version_no=r.version_no AND c.message_id=r.message_id))) BEGIN SELECT RAISE(ABORT,'memory_head_incomplete'); END"
+  },
+  {
+   "name": "memory_incremental_baseline_immutable",
+   "table": "database_instance",
+   "sql": "CREATE TRIGGER memory_incremental_baseline_immutable BEFORE UPDATE OF memory_incremental_baseline_display_no ON database_instance BEGIN SELECT RAISE(ABORT,'memory_incremental_baseline_immutable'); END"
   },
   {
    "name": "memory_required_scope",

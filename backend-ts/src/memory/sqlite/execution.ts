@@ -6,7 +6,7 @@ import {validateModelLedgerReceipt,type ModelLedgerReceipt} from '../../platform
 import type {ModelTaskClaim} from '../../platform/models/model-permit-server.ts';
 import {assertContribution,assertInputs,currentAttempt,inputRows,fail,textId} from './qualification.ts';
 import {applyControl,takeOverExpiredAttempt} from './control.ts';
-import {snapshot} from './runs.ts';
+import {hasRunFollowupState,snapshot} from './runs.ts';
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>unknown):StorageAction=>({name:`memoryExtraction.${name}`,mode,retryBusy:mode==='write',execute} as StorageAction);
 const budgetNumbers=['input_tokens','max_output_tokens','context_window_tokens','safety_margin_tokens','serialized_bytes'] as const;
 function budgetSummary(value:unknown):Record<string,number>|null {
@@ -222,6 +222,26 @@ export const executionActions:StorageAction[]=[
    tx.run("UPDATE step_attempt SET state=?,error_code='runtime_interrupted' WHERE owner_id=? AND id=?",[unknown?'unknown':'aborted',ownerId,a.id]);
    tx.run('UPDATE processing_step SET state=? WHERE owner_id=? AND id=?',[unknown?'unknown':'failed',ownerId,a.step_id]);
    tx.run("UPDATE processing_task SET state=?,error_code='runtime_interrupted' WHERE owner_id=? AND id=(SELECT task_id FROM processing_step WHERE owner_id=? AND id=?) AND state<>'revoked'",[unknown?'unknown':'paused',ownerId,ownerId,a.step_id]);
+  }
+  // 安全恢复停在L1结算与后续登记之间的持久轮；仅接受新标记的轮次，旧incomplete历史不作猜测。
+  if(hasRunFollowupState(tx))for(const run of tx.all(`SELECT * FROM processing_run WHERE owner_id=? AND state='running' AND followup_state IN ('pending','enrolled')
+   AND pause_requested_at IS NULL AND coalesce(json_extract(policy_config,'$.intent'),'')<>'memory_document_later_stage'`,[ownerId])){
+   const runId=String(run.id),tasks=tx.all('SELECT * FROM processing_task WHERE owner_id=? AND run_id=?',[ownerId,runId]);
+   if(!tasks.length||tasks.some(task=>!['succeeded','awaiting_decision','incomplete'].includes(String(task.state))||task.state==='incomplete'&&(task.scope_kind!=='contact'||task.error_code!=='targets_completed_elsewhere')))continue;
+   if(tx.get(`SELECT 1 FROM processing_step s JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
+    WHERE s.owner_id=? AND t.run_id=? AND s.state IN ('failed','unknown','paused','pending','running') LIMIT 1`,[ownerId,runId]))continue;
+   if(tx.get(`SELECT 1 FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
+    JOIN processing_step s ON s.owner_id=o.owner_id AND s.id=o.memory_step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
+    WHERE c.owner_id=? AND t.run_id=? AND c.state IN ('unknown','sending','prepared') LIMIT 1`,[ownerId,runId]))continue;
+   const targets=tx.all(`SELECT p.extraction_state FROM run_input i JOIN processing_item p ON p.owner_id=i.owner_id AND p.id=i.item_id
+    WHERE i.owner_id=? AND i.run_id=? AND i.role='target'`,[ownerId,runId]);
+   if(!targets.length||targets.some(item=>item.extraction_state!=='succeeded'))continue;
+   let qualified=true;
+   for(const task of tasks)try{for(const contribution of tx.all('SELECT source_contact_id FROM task_contribution WHERE owner_id=? AND task_id=?',[ownerId,task.id]))assertContribution(tx,ownerId,runId,String(contribution.source_contact_id));}
+    catch{qualified=false;break;}
+   if(!qualified)continue;
+   try{assertInputs(tx,ownerId,runId,tx.all('SELECT * FROM run_input WHERE owner_id=? AND run_id=?',[ownerId,runId]));}catch{continue;}
+   tx.run("UPDATE processing_run SET state='incomplete' WHERE owner_id=? AND id=? AND state='running' AND followup_state IN ('pending','enrolled') AND pause_requested_at IS NULL",[ownerId,runId]);
   }
   tx.run("UPDATE processing_run SET state='paused',pause_requested_at=? WHERE owner_id=? AND state IN ('running','pending')",[Date.now(),ownerId]);return true;
  }),

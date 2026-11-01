@@ -7,6 +7,7 @@ import {documentSources,frozenMemories,eligiblePriorMembers,publicationMembers,p
 import {current} from './stages.ts';
 import {preconditions,revisions,task,taskView} from './actions.ts';
 import {fail,textId} from '../qualification.ts';
+import {finishLaterStagePublication} from './later-schedule.ts';
 const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute} as StorageAction);
 function verification(tx:StorageTransaction,ownerId:string,attemptId:string,eventId:string,tool:string):unknown {
  const e=tx.get(`SELECT e.payload FROM execution_event e JOIN model_call c ON c.owner_id=e.owner_id AND c.id=e.originated_call_id
@@ -15,6 +16,10 @@ function verification(tx:StorageTransaction,ownerId:string,attemptId:string,even
  return readExtractionToolArguments(JSON.parse(String(e!.payload)).blocks,tool).value;
 }
 const members=eligiblePriorMembers;
+function laterStage(tx:StorageTransaction,ownerId:string,t:StorageRow):string|null {
+ const row=tx.get('SELECT policy_config FROM processing_run WHERE owner_id=? AND id=?',[ownerId,t.run_id]);if(!row)return null;
+ try{const policy=JSON.parse(String(row.policy_config));return policy?.intent==='memory_document_later_stage'&&['document_scene','document_profile'].includes(policy.stage)?String(policy.stage):null;}catch{return null;}
+}
 function storeBasis(tx:StorageTransaction,ownerId:string,documentId:string,versionNo:bigint,blockNo:number,statementNo:number,eventId:string,refs:readonly L2ScenarioReference[],relation:'support'|'contradiction'='support'){
  if(!refs.length)fail('document_basis_missing');
  for(const [index,ref] of refs.entries()){
@@ -102,7 +107,9 @@ export const memoryDocumentsPublicationActions:StorageAction[]=[
   const r=revisions(tx,ownerId,t);
   if(t.document_basis_state!=='frozen'||r.memory_revision!==t.accepted_memory_revision||r.document_revision!==t.accepted_document_revision||r.current_publication_id!==t.accepted_publication_id)fail('document_publication_conflict');
   const stages=tx.all("SELECT kind,state FROM processing_step WHERE owner_id=? AND task_id=? AND kind IN ('document_scene','document_profile')",[ownerId,t.id]);
-  if(stages.length!==2||stages.some(s=>s.state!=='succeeded'&&s.state!=='not_applicable'))fail('document_stage_incomplete');
+  const mode=laterStage(tx,ownerId,t),completed=stages.every(s=>s.state==='succeeded'||s.state==='not_applicable');
+  if(!completed||(mode==='document_scene'?(stages.length!==1||stages[0]?.kind!=='document_scene'||stages[0]?.state!=='succeeded'):
+   mode==='document_profile'?(stages.length!==1||stages[0]?.kind!=='document_profile'||stages[0]?.state!=='succeeded'):stages.length!==2))fail('document_stage_incomplete');
   const prior=members(tx,ownerId,t),created=tx.all(`SELECT v.*,d.kind,d.scope_kind,d.contact_id,d.state FROM memory_document_version v JOIN memory_document d ON d.owner_id=v.owner_id AND d.id=v.document_id JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE v.owner_id=? AND s.task_id=? AND s.kind IN ('document_scene','document_profile') AND s.state='succeeded' AND a.state='succeeded' AND v.content_state='present'`,[ownerId,t.id]);
   const replacements=tx.all(`SELECT r.old_document_id,r.old_version_no FROM document_replacement r JOIN memory_document_version v ON v.owner_id=r.owner_id AND v.document_id=r.document_id AND v.version_no=r.version_no JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE r.owner_id=? AND s.task_id=?`,[ownerId,t.id]);
   const all=[...prior.filter(v=>!replacements.some(x=>x.old_document_id===v.document_id&&x.old_version_no===v.version_no)),...created];
@@ -113,7 +120,8 @@ export const memoryDocumentsPublicationActions:StorageAction[]=[
   for(const m of all)tx.run('INSERT INTO publication_member VALUES(?,?,?,?)',[ownerId,publicationId,m.document_id,m.version_no]);
   if(t.scope_kind==='self')tx.run('UPDATE owner SET current_publication_id=?,document_revision=document_revision+1 WHERE owner_id=? AND memory_revision=? AND document_revision=? AND current_publication_id IS ?',[publicationId,ownerId,t.accepted_memory_revision,t.accepted_document_revision,t.accepted_publication_id]);
   else tx.run('UPDATE contact SET current_publication_id=?,document_revision=document_revision+1 WHERE owner_id=? AND id=? AND memory_revision=? AND document_revision=? AND current_publication_id IS ?',[publicationId,ownerId,t.contact_id,t.accepted_memory_revision,t.accepted_document_revision,t.accepted_publication_id]);
-  if(revisions(tx,ownerId,t).current_publication_id!==publicationId)fail('document_publication_conflict');return taskView(tx,ownerId,String(t.id));
+  if(revisions(tx,ownerId,t).current_publication_id!==publicationId)fail('document_publication_conflict');
+  finishLaterStagePublication(tx,ownerId,String(t.id),typeof i.now==='number'?i.now:Date.now());return taskView(tx,ownerId,String(t.id));
  }),
  act('settle','write',(tx,i)=>{
   const ownerId=textId(i.ownerId),runId=textId(i.runId),run=tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);
