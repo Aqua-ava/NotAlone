@@ -52,6 +52,7 @@ import { QuarantineLibrary } from '../../../backend-ts/src/history/quarantine-li
 import { QuarantineController } from './quarantine/controller';
 import { installQuarantineBridge } from './quarantine/bridge';
 import { presentQuarantine } from './quarantine/window';
+import { resolveQuarantineRoot } from './quarantine/paths';
 
 app.setName('NotAlone');
 const selectedDataPath = app.commandLine.getSwitchValue('user-data-dir');
@@ -88,7 +89,8 @@ void app.whenReady().then(async () => {
   const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart), resourcesDirectory);
   installUsageBridge(windows, new UsageController(backend));
   const commands = electronPageCommands(windows);
-  const quarantine = new QuarantineController(new QuarantineLibrary(path.join(app.getPath('appData'), 'NotAlone-Quarantine')),presentQuarantine);
+  const quarantine = new QuarantineController(new QuarantineLibrary(resolveQuarantineRoot(
+    app.getPath('appData'), app.getPath('userData'), selectedDataPath)),presentQuarantine);
   installQuarantineBridge(commands, quarantine);
   const contacts = installContactSessionBridge(commands, backend);
   const media = installMessageMediaBridge(commands, backend, contacts);
