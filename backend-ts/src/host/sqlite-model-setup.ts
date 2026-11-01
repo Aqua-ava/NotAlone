@@ -4,6 +4,7 @@ import {basename, dirname, join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {StorageFailure} from '../storage/sqlite/contracts.ts';
 import {readSqliteModelEnvironment} from './sqlite-model-config.ts';
+import {normalizeModelBaseUrl} from './model-base-url.ts';
 
 const modelKeys=['NOTALONE_DEEPSEEK_API_KEY','NOTALONE_DEEPSEEK_MODEL','NOTALONE_DEEPSEEK_BASE_URL'] as const;
 function parseLine(line:string):[string,string]|undefined {
@@ -31,7 +32,8 @@ export class SqliteModelSetup {
   return new SqliteModelSetup(location,{...environment},values,overridden);
  }
  runtimeEnvironment():Readonly<NodeJS.ProcessEnv>{return Object.freeze({...this.values});}
- status(){return {initialized:true,owner_configured:true,runtime_owner_configured:true,
+ private baseUrl():string|null {try{return normalizeModelBaseUrl(this.values.NOTALONE_DEEPSEEK_BASE_URL??'https://api.deepseek.com');}catch{return null;}}
+ status(){return {deepseek_base_url:this.baseUrl(),initialized:true,owner_configured:true,runtime_owner_configured:true,
   credentials_configured:Boolean(this.values.NOTALONE_DEEPSEEK_API_KEY?.trim()),
   official_deepseek_defaults:(this.values.NOTALONE_DEEPSEEK_MODEL||'deepseek-flash')==='deepseek-flash'&&['https://api.deepseek.com','https://api.deepseek.com/v1'].includes((this.values.NOTALONE_DEEPSEEK_BASE_URL??'https://api.deepseek.com').replace(/\/+$/,'')),
   runtime_configuration_pending:this.pending,runtime_configuration_environment_override:this.overridden};}
@@ -39,6 +41,14 @@ export class SqliteModelSetup {
   if(typeof key!=='string'||!key.trim()||key.length>4096||!/^[-A-Za-z0-9_]+$/.test(key.trim()))throw new StorageFailure('setup_request_invalid');
   const changes:Record<string,string>={NOTALONE_DEEPSEEK_API_KEY:key.trim()};
   if(official){changes.NOTALONE_DEEPSEEK_MODEL='deepseek-flash';changes.NOTALONE_DEEPSEEK_BASE_URL='https://api.deepseek.com';}
+  await this.writeChanges(changes);
+ }
+ async saveConfiguration(baseUrl:string,apiKey:string):Promise<void>{
+  const normalized=normalizeModelBaseUrl(baseUrl);
+  if(typeof apiKey!=='string'||!apiKey.trim()||apiKey.length>4096||!/^[-A-Za-z0-9_]+$/.test(apiKey.trim()))throw new StorageFailure('setup_request_invalid');
+  await this.writeChanges({NOTALONE_DEEPSEEK_BASE_URL:normalized,NOTALONE_DEEPSEEK_API_KEY:apiKey.trim()});
+ }
+ private async writeChanges(changes:Record<string,string>):Promise<void>{
   if(this.environment.NOTALONE_DISABLE_DOTENV==='1'||Object.entries(changes).some(([name,value])=>this.environment[name]!==undefined&&this.environment[name]!==value))throw new StorageFailure('configuration_environment_override');
   const operation=this.tail.then(async()=>{
    let temp:string|undefined;

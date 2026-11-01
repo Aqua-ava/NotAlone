@@ -1,3 +1,4 @@
+import { isAiServiceBaseUrl, isDeepSeekConfiguration, type DeepSeekConfiguration } from '../../shared/ai-service-configuration';
 import { isUuid } from '../uuid';
 import { BackendRequestFailure } from '../backend/json-client';
 import type { SetupState } from '../../shared/setup-bridge';
@@ -22,7 +23,7 @@ export class SetupController {
       ++this.epoch;
       // 主动重启期间保留进度；普通保存遇到失联时仍立即失效旧界面。
       if (this.busy && this.state.phase === 'restarting') return;
-      if (generation === undefined) this.publish({ phase: 'offline', ownerReady: false, credentialsConfigured: false });
+      if (generation === undefined) this.publish({ phase: 'offline', ownerReady: false, credentialsConfigured: false, baseUrl: undefined });
       else void this.refresh();
     });
   }
@@ -38,7 +39,7 @@ export class SetupController {
     this.publish({ phase: 'loading', ownerReady: false, credentialsConfigured: false, errorCode: undefined });
     try {
       const { data } = await this.backend.requestJson({ method: 'GET', path: '/api/setup/status', maxResponseBytes: 4096 });
-      const status = data as { initialized?: unknown; owner_configured?: unknown; credentials_configured?: unknown; runtime_owner_configured?: unknown; official_deepseek_defaults?: unknown; recoverable_owner?: unknown; runtime_configuration_pending?: unknown; runtime_configuration_environment_override?: unknown };
+      const status = data as { initialized?: unknown; owner_configured?: unknown; credentials_configured?: unknown; runtime_owner_configured?: unknown; official_deepseek_defaults?: unknown; recoverable_owner?: unknown; deepseek_base_url?: unknown; runtime_configuration_pending?: unknown; runtime_configuration_environment_override?: unknown };
       if (!status || typeof status.initialized !== 'boolean' || typeof status.owner_configured !== 'boolean'
         || typeof status.credentials_configured !== 'boolean' || typeof status.runtime_owner_configured !== 'boolean'
         || status.runtime_configuration_pending !== undefined && typeof status.runtime_configuration_pending !== 'boolean'
@@ -52,6 +53,7 @@ export class SetupController {
       }
       this.publish({ phase: pending ? 'restart-failed' : ownerReady ? 'ready' : status.owner_configured ? 'identity-unbound' : 'needs-owner',
         ownerReady, configurationPending: pending, errorCode: pending ? status.runtime_configuration_environment_override === true ? 'configuration-environment-override' : 'reload-failed' : undefined, recoverableOwner: !ownerReady && status.recoverable_owner === true, credentialsConfigured: status.credentials_configured,
+        baseUrl: isAiServiceBaseUrl(status.deepseek_base_url) ? status.deepseek_base_url : undefined,
         officialDefaults: typeof status.official_deepseek_defaults === 'boolean' ? status.official_deepseek_defaults : undefined });
     } catch { if (this.isCurrent(operation)) this.publish({ phase: 'failed', ownerReady: false, credentialsConfigured: false }); }
   }
@@ -74,6 +76,16 @@ export class SetupController {
         body: { confirm_existing_owner: true }, maxResponseBytes: 4096 });
       const value = data as { owner_id?: unknown; created?: unknown };
       if (!isUuid(value?.owner_id) || value.created !== false) throw new Error();
+    });
+  }
+  async saveDeepSeekConfiguration(configuration: DeepSeekConfiguration): Promise<void> {
+    if (!isDeepSeekConfiguration(configuration)) throw new Error('AI 服务配置无效');
+    if (this.state.phase !== 'ready') return;
+    await this.writeConfiguration('credentials', async () => {
+      const result = await this.backend.requestJson({ method: 'POST', path: '/api/setup/deepseek-configuration',
+        body: { base_url: configuration.baseUrl, api_key: configuration.apiKey }, maxResponseBytes: 4096 });
+      const value = result.data as { provider?: unknown; configured?: unknown };
+      if (value?.provider !== 'deepseek' || value.configured !== true) throw new Error();
     });
   }
   async saveDeepSeekKey(apiKey: string): Promise<void> {

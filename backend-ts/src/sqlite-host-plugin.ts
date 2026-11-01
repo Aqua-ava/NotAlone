@@ -240,14 +240,14 @@ export async function apply(ctx: Context) {
         if(req.method==='GET'&&url.pathname==='/api/setup/status'){
           respond(200,{...modelSetup.status(),owner_id:ownerId,storage:'sqlite',capabilities:capabilities.capabilities});return;
         }
-        if(req.method==='POST'&&(url.pathname==='/api/setup/credentials'||url.pathname==='/api/setup/official-deepseek')){
+        if(req.method==='POST'&&(url.pathname==='/api/setup/credentials'||url.pathname==='/api/setup/official-deepseek'||url.pathname==='/api/setup/deepseek-configuration')){
           try {
             const body=await readWechatHttpBody(req,16384,10000);
-            const payload=JSON.parse(body.toString('utf8')),official=url.pathname==='/api/setup/official-deepseek';
+            const payload=JSON.parse(body.toString('utf8')),official=url.pathname==='/api/setup/official-deepseek',custom=url.pathname==='/api/setup/deepseek-configuration';
             if(!payload||typeof payload!=='object'||Array.isArray(payload)||typeof payload.api_key!=='string'||
-              (official?(payload.confirm_official_defaults!==true||Object.keys(payload).some(key=>!['api_key','confirm_official_defaults'].includes(key))):
+              (custom?(typeof payload.base_url!=='string'||Object.keys(payload).length!==2||Object.keys(payload).some(key=>!['base_url','api_key'].includes(key))):official?(payload.confirm_official_defaults!==true||Object.keys(payload).some(key=>!['api_key','confirm_official_defaults'].includes(key))):
                 (payload.provider!=='deepseek'||Object.keys(payload).some(key=>!['provider','api_key'].includes(key)))))throw new StorageFailure('setup_request_invalid');
-            await modelSetup.save(payload.api_key,official);
+            if(custom)await modelSetup.saveConfiguration(payload.base_url,payload.api_key);else await modelSetup.save(payload.api_key,official);
             respond(200,{provider:'deepseek',configured:true,restart_required:true,...(official?{official_deepseek_defaults:true}:{})});
           }catch(error){respond(400,{error:error instanceof StorageFailure?error.code:'setup_request_invalid'});}return;
         }

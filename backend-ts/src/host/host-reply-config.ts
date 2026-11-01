@@ -1,5 +1,6 @@
 /** 只解析宿主注入的模型环境；认证、提供者生命周期和业务许可仍由宿主装配。 */
 import {normalizeApiKey} from '@deepseek-ai/dsh-llm';
+import {normalizeModelBaseUrl} from './model-base-url.ts';
 import {REPLY_EXECUTION_DEADLINE_MS} from '../reply/generation/reply-execution-budget.ts';
 import {PUBLIC_BASE_URL, resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import type {DeepSeekAdapterOptions, DeepSeekConnectionOptions} from '@deepseek-ai/dsh-llm-deepseek';
@@ -13,6 +14,7 @@ export interface HostMessagesProviderConfiguration {
   provider: string;
   connection: DeepSeekConnectionOptions;
   resolveAuth: DeepSeekAdapterOptions['resolveAuth'];
+  strictVerificationEndpoint?: string;
 }
 export interface HostReplyModelConfiguration {
   provider: string;
@@ -62,7 +64,8 @@ export function resolveHostReplyConfiguration(
     || typeof rawBaseURL !== 'string' || !rawBaseURL.trim()) {
     return unavailable('reply_model_configuration_invalid');
   }
-  const baseURL = rawBaseURL.replace(/\/+$/, '');
+  let baseURL:string;
+  try{baseURL=normalizeModelBaseUrl(rawBaseURL);}catch{return unavailable('reply_model_configuration_invalid');}
   // 用户已废除ECNU；旧模型或已知旧入口都要求显式改配置，不自动换供应商。
   if (model === 'ecnu-max' || baseURL === ECNU_BASE_URL) return unavailable('ecnu_provider_retired');
 
@@ -75,8 +78,7 @@ export function resolveHostReplyConfiguration(
   if (effort != null && effort !== 'low' && effort !== 'high' && effort !== 'max') {
     return unavailable('reply_thinking_configuration_invalid');
   }
-  if (model !== DEFAULT_MODEL
-    || (baseURL !== LEGACY_OFFICIAL_ROOT && baseURL !== `${LEGACY_OFFICIAL_ROOT}/v1`)) {
+  if (model !== DEFAULT_MODEL) {
     return unavailable('input_budget_unavailable');
   }
 
@@ -89,10 +91,16 @@ export function resolveHostReplyConfiguration(
     return unavailable('reply_model_configuration_invalid');
   }
 
+  const official=new URL(baseURL).origin===LEGACY_OFFICIAL_ROOT;
+  if(official&&!['','/v1','/anthropic','/anthropic/v1'].includes(new URL(baseURL).pathname.replace(/\/+$/,'')))return unavailable('input_budget_unavailable');
+  const messagesBaseURL=official?PUBLIC_BASE_URL:baseURL;
+  // 自填地址沿用DeepSeek协议；核验使用同一接收方，不能回落到官方并带走第三方密钥。
+  const strictRoot=messagesBaseURL.replace(/\/(?:anthropic(?:\/v1)?|v1)$/,'');
+  const strictVerificationEndpoint=`${strictRoot}/beta/chat/completions`;
   const reasoningEffort = effort ?? 'off';
   const connection = resolveAdapterOptions({
-    // root/v1是旧Chat Completions入口；原生DSH接收官方Messages入口，不能直接拼旧URL。
-    baseURL: PUBLIC_BASE_URL,
+    // 官方旧root/v1映射Messages入口，自填地址作为Messages根交给官方适配器。
+    baseURL: messagesBaseURL,
     thinking: reasoningEffort === 'off' ? 'disabled' : 'enabled',
     reasoningEffort,
     maxTokens: outputTokens,
@@ -108,8 +116,9 @@ export function resolveHostReplyConfiguration(
     provider: {
       provider: PROVIDER,
       connection,
+      strictVerificationEndpoint,
       resolveAuth: async requestConnection => {
-        if (requestConnection.baseURL !== PUBLIC_BASE_URL) throw new Error('reply_auth_route_mismatch');
+        if (requestConnection.baseURL !== messagesBaseURL) throw new Error('reply_auth_route_mismatch');
         return {headers: {'x-api-key': key.value}};
       },
     },

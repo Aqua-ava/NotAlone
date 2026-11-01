@@ -115,3 +115,52 @@ test('重开检测到历史文件被环境覆盖时仍待加载，重复重启�
   assert.equal(f.controller.getState().errorCode, 'configuration-environment-override');
   assert.equal(f.writes, 0);
 });
+
+
+test('保存AI服务地址与新密钥走专用接口并确认受控重启，状态仅回显无凭据地址', async () => {
+ const calls=[];let generation=1,pending=false;
+ const controller=new SetupController({onStateChanged(){},getConnectionGeneration:()=>generation,
+  async requestJson(request){calls.push(request);if(request.method==='POST'){pending=true;return {data:{provider:'deepseek',configured:true}};}
+   return {data:{initialized:true,owner_configured:true,runtime_owner_configured:true,credentials_configured:true,deepseek_base_url:'https://synthetic.example/messages',runtime_configuration_pending:pending}};},
+  async restart(){generation++;pending=false;return true;}});
+ await controller.refresh();assert.equal(controller.getState().baseUrl,'https://synthetic.example/messages');
+ await controller.saveDeepSeekConfiguration({baseUrl:'https://synthetic.example/messages',apiKey:'synthetic-config-secret'});
+ assert.deepEqual(calls.find(call=>call.method==='POST'),{method:'POST',path:'/api/setup/deepseek-configuration',body:{base_url:'https://synthetic.example/messages',api_key:'synthetic-config-secret'},maxResponseBytes:4096});
+ assert.equal(controller.getState().phase,'ready');assert.equal(controller.getState().configurationPending,false);
+ assert.doesNotMatch(JSON.stringify(controller.getState()),/synthetic-config-secret/);
+});
+
+test('AI服务配置拒绝不安全地址和无新密钥，不能发出保存或触发重启',async()=>{
+ const f=fixture();await f.controller.refresh();
+ for(const baseUrl of ['https://user:secret@example.com','https://example.com/?key=secret','https://example.com/#secret','http://example.com','https://example.com/\\path','https://example.com/ spaced','https://example.com/"quoted']){
+  await assert.rejects(f.controller.saveDeepSeekConfiguration({baseUrl,apiKey:'synthetic-key'}));
+ }
+ await assert.rejects(f.controller.saveDeepSeekConfiguration({baseUrl:'https://example.com',apiKey:''}));
+ assert.equal(f.writes,0);assert.equal(f.restarts,0);
+});
+
+
+test('状态地址兼容旧后端与非法旧配置，公开状态不会携带URL凭据',async()=>{
+ for(const baseUrl of [undefined,null,'https://user:synthetic-secret@example.com/path','https://example.com?key=synthetic-secret']){
+  const controller=new SetupController({onStateChanged(){},getConnectionGeneration:()=>1,async requestJson(){return {data:{initialized:true,owner_configured:true,runtime_owner_configured:true,credentials_configured:true,deepseek_base_url:baseUrl}};}});
+  await controller.refresh();assert.equal(controller.getState().phase,'ready');assert.equal(controller.getState().baseUrl,undefined);
+  assert.doesNotMatch(JSON.stringify(controller.getState()),/synthetic-secret/);
+ }
+});
+
+test('AI配置专用IPC与预加载桥复验管理窗口和严格参数，错误不包含凭据',async()=>{
+ const handlers=new Map(),calls=[],invokes=[];
+ globalThis.__setupIpc={ipcMain:{handle:(name,fn)=>handlers.set(name,fn)},ipcRenderer:{invoke:async(...args)=>{invokes.push(args);},on(){},removeListener(){}}};
+ const built=await build({stdin:{contents:"export {installSetupBridge} from './src/main/setup/bridge';export {createSetupBridge} from './src/preload/setup';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false,plugins:[{name:'synthetic-electron',setup(plugin){plugin.onResolve({filter:/^electron$/},()=>({path:'electron',namespace:'synthetic'}));plugin.onLoad({filter:/.*/,namespace:'synthetic'},()=>({contents:'export const ipcMain=globalThis.__setupIpc.ipcMain;export const ipcRenderer=globalThis.__setupIpc.ipcRenderer;'}));}}]});
+ const {installSetupBridge,createSetupBridge}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+ let url='notalone://app/index.html#manager';
+ installSetupBridge({validateCaller:()=>({webContents:{getURL:()=>url}}),publish(){}},{onStateChanged(){},saveDeepSeekConfiguration:async value=>calls.push(value)});
+ const save=handlers.get('setup:save-deepseek-configuration'),value={baseUrl:'https://synthetic.example',apiKey:'synthetic-ipc-key'};
+ await save({},value);assert.deepEqual(calls,[value]);
+ url='notalone://app/index.html#assistant';assert.throws(()=>save({},value),error=>!error.message.includes(value.apiKey));url='notalone://app/index.html#manager';
+ assert.throws(()=>save({}, {...value,extra:true}));assert.throws(()=>save({},value,{}));assert.throws(()=>save({}, {...value,baseUrl:'http://external.example'}));
+ const bridge=createSetupBridge();await bridge.saveDeepSeekConfiguration(value);
+ assert.deepEqual(invokes,[['setup:save-deepseek-configuration',value]]);
+ await assert.rejects(bridge.saveDeepSeekConfiguration({...value,extra:true}));await assert.rejects(bridge.saveDeepSeekConfiguration(value,{}));
+ assert.equal(invokes.length,1);delete globalThis.__setupIpc;
+});

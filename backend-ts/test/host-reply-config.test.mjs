@@ -70,10 +70,8 @@ test('缺凭据、非法字符、空配置、未知模型或路由均有脱敏�
     [{NOTALONE_DEEPSEEK_BASE_URL: ''}, 'reply_model_configuration_invalid'],
     [{NOTALONE_DEEPSEEK_MODEL: 'other-model'}, 'input_budget_unavailable'],
     [{NOTALONE_DEEPSEEK_MODEL: ' deepseek-flash'}, 'input_budget_unavailable'],
-    [{NOTALONE_DEEPSEEK_BASE_URL: 'https://custom.invalid/v1'}, 'input_budget_unavailable'],
-    [{NOTALONE_DEEPSEEK_BASE_URL: 'https://api.deepseek.com/anthropic'}, 'input_budget_unavailable'],
     [{NOTALONE_DEEPSEEK_BASE_URL: 'https://api.deepseek.com/beta'}, 'input_budget_unavailable'],
-    [{NOTALONE_DEEPSEEK_BASE_URL: `https://user:${syntheticKey}@api.deepseek.com`}, 'input_budget_unavailable'],
+    [{NOTALONE_DEEPSEEK_BASE_URL: `https://user:${syntheticKey}@api.deepseek.com`}, 'reply_model_configuration_invalid'],
   ];
   for (const [environment, code] of cases) {
     const input = Object.keys(environment).length ? {NOTALONE_DEEPSEEK_API_KEY: syntheticKey, ...environment} : {};
@@ -113,9 +111,10 @@ test('公开官方adapter实际生成的路由、凭据、输出和思考字段�
       {status: 200, headers: {'content-type': 'text/event-stream'}});
   };
   t.after(() => {globalThis.fetch = previousFetch;});
-  const cases=[{effort:null,maxTokens:393216},{effort:'high',maxTokens:393216},{effort:null,maxTokens:65536}];
-  for (const {effort,maxTokens} of cases) {
-    const configuration = configured({NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS:String(maxTokens)}, {replyThinkingEffort: effort});
+  const cases=[{effort:null,maxTokens:393216},{effort:'high',maxTokens:393216},{effort:null,maxTokens:65536},
+    {effort:null,maxTokens:8192,base:'https://gateway.invalid/proxy/v1'}];
+  for (const {effort,maxTokens,base} of cases) {
+    const configuration = configured({NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS:String(maxTokens),...(base?{NOTALONE_DEEPSEEK_BASE_URL:base}:{})}, {replyThinkingEffort: effort});
     const {provider, model} = configuration;
     const adapter = new DeepSeekAdapter({options: () => provider.connection,
       resolveAuth: provider.resolveAuth, resolveUserId: () => 'synthetic-config-anonymous',
@@ -126,9 +125,9 @@ test('公开官方adapter实际生成的路由、凭据、输出和思考字段�
       messages: [{role: 'user', content: [{type: 'text', text: '合成配置验收'}]}]})) chunks.push(chunk);
     assert.ok(chunks.some(chunk => chunk.type === 'finish'));
   }
-  assert.equal(requests.length, 3);
+  assert.equal(requests.length, 4);
   for (const [index,request] of requests.entries()) {
-    assert.equal(request.url, 'https://api.deepseek.com/anthropic/v1/messages');
+    assert.equal(request.url, cases[index].base?`${cases[index].base}/messages`:'https://api.deepseek.com/anthropic/v1/messages');
     assert.equal(request.headers.get('x-api-key'), syntheticKey);
     assert.equal(request.body.model, 'deepseek-flash');
     assert.equal(request.body.max_tokens, cases[index].maxTokens);
@@ -141,3 +140,23 @@ test('公开官方adapter实际生成的路由、凭据、输出和思考字段�
   assert.deepEqual(requests[1].body.thinking, {type: 'enabled'});
   assert.equal(requests[1].body.output_config.effort, 'high');
 });
+
+ test('自填接收地址实际装配Messages及同源核验路由，密钥只绑定选定地址', async()=>{
+  for(const [base,messages,strict] of [
+    ['https://gateway.invalid','https://gateway.invalid','https://gateway.invalid/beta/chat/completions'],
+    ['https://gateway.invalid/proxy/v1/','https://gateway.invalid/proxy/v1','https://gateway.invalid/proxy/beta/chat/completions'],
+    ['https://gateway.invalid/proxy/anthropic','https://gateway.invalid/proxy/anthropic','https://gateway.invalid/proxy/beta/chat/completions'],
+    ['http://127.0.0.1:12345/v1','http://127.0.0.1:12345/v1','http://127.0.0.1:12345/beta/chat/completions'],
+  ]){
+    const result=configured({NOTALONE_DEEPSEEK_BASE_URL:base});
+    assert.equal(result.provider.connection.baseURL,messages);
+    assert.equal(result.provider.strictVerificationEndpoint,strict);
+    assert.equal(result.model.model,'deepseek-flash');
+    assert.deepEqual(await result.provider.resolveAuth(result.provider.connection),{headers:{'x-api-key':syntheticKey}});
+    await assert.rejects(result.provider.resolveAuth({...result.provider.connection,baseURL:PUBLIC_BASE_URL}),/reply_auth_route_mismatch/);
+  }
+  assert.equal(configured({NOTALONE_DEEPSEEK_BASE_URL:PUBLIC_BASE_URL}).provider.connection.baseURL,PUBLIC_BASE_URL);
+  for(const base of ['http://gateway.invalid/v1','https://gateway.invalid/?key=private','https://gateway.invalid/#private','https://gateway.invalid/\\bad']){
+    assert.equal(resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:syntheticKey,NOTALONE_DEEPSEEK_BASE_URL:base}).code,'reply_model_configuration_invalid');
+  }
+ });

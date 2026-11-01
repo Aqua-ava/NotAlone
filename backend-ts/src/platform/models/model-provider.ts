@@ -33,7 +33,7 @@ export interface ModelProviderConfiguration {
   connection: DeepSeekConnectionOptions;
   resolveAuth: DeepSeekAdapterOptions['resolveAuth'];
   resolveUserId: DeepSeekAdapterOptions['resolveUserId'];
-  /** 仅可指向官方 DeepSeek strict Beta Chat Completions；官方 Messages 根可省略并按固定规则推导。 */
+  /** 同一接收方的 DeepSeek strict Beta Chat Completions；官方 Messages 根可省略并按固定规则推导。 */
   strictVerificationEndpoint?: string;
 }
 export interface StrictVerificationSendInput {

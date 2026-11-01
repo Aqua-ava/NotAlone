@@ -23,14 +23,15 @@ test('宿主输出缺省使用供应商上限，显式任务额度可超过旧40
 test('实际strict发送入口的最终HTTP实体和预约快照使用配置额度，fetch全程拦截',async t=>{
   const previous=globalThis.fetch,requests=[];
   globalThis.fetch=async(url,init)=>{
-    requests.push({url,raw:init.body,body:JSON.parse(init.body)});
+    requests.push({url,raw:init.body,headers:new Headers(init.headers),body:JSON.parse(init.body)});
     return new Response(JSON.stringify({choices:[{finish_reason:'tool_calls',message:{role:'assistant',content:null,
       tool_calls:[{id:'synthetic-output-call',type:'function',function:{name:'SourceVerificationOutput',arguments:'{"results":[]}'}}]}}],
       usage:{prompt_tokens:3,completion_tokens:1}}),{status:200,headers:{'content-type':'application/json'}});
   };
   t.after(()=>{globalThis.fetch=previous;});
-  for(const maxTokens of [393216,65536,8192]){
-    const resolved=configured({NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS:String(maxTokens)}),binding={provider:resolved.model.provider,
+  const cases=[{maxTokens:393216},{maxTokens:65536},{maxTokens:8192,base:'https://gateway.invalid/proxy/v1'}];
+  for(const {maxTokens,base} of cases){
+    const resolved=configured({NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS:String(maxTokens),...(base?{NOTALONE_DEEPSEEK_BASE_URL:base}:{})}),binding={provider:resolved.model.provider,
       model:resolved.model.model,maxTokens:resolved.model.maxTokens,temperature:0,reasoningEffort:'off'};
     const provider=installModelProvider({llm:{registerAdapter:()=>()=>{}}},{...resolved.provider,resolveUserId:()=> 'synthetic-output-test'});
     let reservations=0,budget;
@@ -42,7 +43,8 @@ test('实际strict发送入口的最终HTTP实体和预约快照使用配置额�
       await call.send({system:'仅作合成配置验证。',user:'保留完整的合成核验内容。',signal:new AbortController().signal,
         tool:{name:'SourceVerificationOutput',description:'合成',parameters:{type:'object',additionalProperties:false,properties:{},required:[]}}});
       const request=requests.at(-1);
-      assert.equal(request.url,'https://api.deepseek.com/beta/chat/completions');
+      assert.equal(request.url,base?'https://gateway.invalid/proxy/beta/chat/completions':'https://api.deepseek.com/beta/chat/completions');
+      assert.equal(request.headers.get('authorization'),'Bearer synthetic-output-configuration-key');
       assert.equal(request.body.max_tokens,maxTokens);assert.equal(budget.max_output_tokens,maxTokens);
       assert.equal(budget.request_sha256,createHash('sha256').update(request.raw).digest('hex'));
       assert.equal(reservations,1);assert.equal(call.observation().dispatch,'http_accepted');

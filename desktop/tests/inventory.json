@@ -163,6 +163,7 @@
   "tests/fixed-memory-processing-view.test.mjs",
   "tests/memory-page-fixed-processing.test.mjs",
   "tests/memory-processing-entry.test.mjs",
+  "tests/setup-view.test.mjs",
   "tests/visual-media-integration.test.mjs",
   "tests/candidate-manual-edit-view.test.mjs",
   "tests/desktop-interaction-view.test.mjs",
