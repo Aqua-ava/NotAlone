@@ -92,7 +92,7 @@ test('SQLite官方profile随父宿主EOF退出并清理握手和临时home', asy
   await assert.rejects(access(record.home),{code:'ENOENT'});
 });
 
-test('SQLite正式宿主读取App数据目录外的Skill根，状态与CAS管理可重开且原件不改',async t=>{
+test('SQLite正式宿主默认核验启用外置Skill，CAS停用再启用可重开且原件不改',async t=>{
  const {mkdir,writeFile}=await import('node:fs/promises');
  const root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-sqlite-skills-host-')));t.after(()=>rm(root,{recursive:true,force:true}));
  const skillPackageRoot=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-sqlite-skill-originals-')));t.after(()=>rm(skillPackageRoot,{recursive:true,force:true}));
@@ -110,10 +110,12 @@ test('SQLite正式宿主读取App数据目录外的Skill根，状态与CAS管理
   let view=(await request('/api/skills')).body;assert.equal(view.mode,'minimal');
   if(!attempt){
    assert.equal(view.skills.length,1);const automatic=view.skills[0];
-   assert.equal(automatic.name,'gentle');assert.equal(automatic.enabled_state,'unknown');assert.equal(automatic.verification_state,'pending');
-   assert.equal(automatic.current_revision_no,null);assert.deepEqual(automatic.revisions,[]);
+   assert.equal(automatic.name,'gentle');assert.equal(automatic.enabled_state,'enabled');assert.equal(automatic.verification_state,'verified');
+   assert.equal(automatic.current_revision_no,'1');assert.equal(automatic.revisions.length,1);
    let item=automatic;packageId=item.package_id;
-   assert.equal(packageId,automatic.package_id);assert.equal(item.head_revision,automatic.head_revision);assert.equal(item.enabled_state,'unknown');
+   assert.equal(packageId,automatic.package_id);assert.equal(item.head_revision,automatic.head_revision);assert.equal(item.enabled_state,'enabled');
+   item=(await request(`/api/skills/${packageId}/disable`,{expected_head_revision:item.head_revision,confirmed:true})).body.skill;
+   assert.equal(item.enabled_state,'disabled');
    item=(await request(`/api/skills/${packageId}/enable`,{expected_head_revision:item.head_revision,confirmed:true})).body.skill;
    assert.equal(item.enabled_state,'enabled');assert.equal(item.verification_state,'verified');assert.equal(item.current_revision_no,'1');
   }else{assert.equal(view.skills[0].package_id,packageId);assert.equal(view.skills[0].enabled_state,'enabled');}
