@@ -36,6 +36,7 @@ test('显式SQLite联系人使用官方DSH最小profile，认证、关闭和重�
     assert.equal((await fetch(url+'/api/runtime/status')).status,401);
     assert.equal((await request('/api/runtime/status',{headers:{Origin:'http://localhost'}})).status,401);
     assert.equal((await fetch(url+'/api/events',{headers:{Accept:'text/event-stream'}})).status,401);
+    assert.equal((await fetch(url+'/api/ledger/summary')).status,401);
     assert.equal((await request('/api/events')).status,406);
     assert.equal((await request('/api/events',{method:'POST',headers:{Accept:'text/event-stream'}})).status,405);
     const firstEvents=await request('/api/events',{headers:{Accept:'text/event-stream'}});
@@ -52,6 +53,11 @@ test('显式SQLite联系人使用官方DSH最小profile，认证、关闭和重�
     const directory=await (await request('/api/contacts')).json();assert.deepEqual(directory.contacts,[]);
     const setup=await (await request('/api/setup/status')).json();assert.equal(setup.runtime_owner_configured,true);
     if(firstOwner)assert.equal(setup.owner_id,firstOwner);else firstOwner=setup.owner_id;
+    const usageResponse=await request('/api/ledger/summary');assert.equal(usageResponse.status,200);
+    const usage=await usageResponse.json();assert.equal(usage.schema_version,1);assert.equal(usage.total_calls,0);
+    assert.equal(usage.total_attempts,0);assert.equal(usage.total_input_tokens,0);assert.deepEqual(usage.recent,[]);
+    assert.equal((await request('/api/ledger/summary?unexpected=1')).status,400);
+    assert.equal((await request('/api/ledger/summary',{method:'POST'})).status,405);
     assert.equal((await request('/api/reply/generate',{method:'POST'})).status,503);
     const shutdown=await request('/api/runtime/shutdown',{method:'POST'});assert.equal(shutdown.status,200);
     assert.equal((await shutdown.json()).state,'stopped');

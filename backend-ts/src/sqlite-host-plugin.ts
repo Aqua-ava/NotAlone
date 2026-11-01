@@ -285,6 +285,11 @@ export async function apply(ctx: Context) {
         if(history&&req.method==='GET'&&url.pathname==='/api/sync/status'){
           respond(200,await historyStatus());return;
         }
+        if(url.pathname==='/api/ledger/summary'){
+          if(req.method!=='GET'){respond(405,{error:'method_not_allowed'});return;}
+          if(url.search){respond(400,{error:'ledger_summary_query_invalid'});return;}
+          respond(200,await storage!.execute('modelUsage.summary',{ownerId}));return;
+        }
         if (!await deletions.handle(req,res)&&!await memoryManagementHttp?.handle(req,res)&&!await memoryDocumentsHttp?.handle(req,res)&&!await mediaHttp.handle(req,res)&&!await historyHttp?.handle(req,res)&&!await historyClearHttp?.handle(req,res)&&!await skills?.handle(req,res)&&!(discussionsEnabled&&await discussions!.http.handle(req,res))&&!(memoryEnabled&&await memory!.http.handle(req,res))&&!await contacts!.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
       } catch { if (!res.headersSent) respond(503, { error: 'sqlite_contact_operation_failed' }); else res.destroy(); }
       finally {releaseForeground?.();}
