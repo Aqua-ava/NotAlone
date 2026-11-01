@@ -251,3 +251,4 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 141. [ADR-141：引用回复随正常消息同步读取](adr/141-inline-quoted-reply-sync.md)
 142. [ADR-142：首次连接后先选择联系人，再确认开启同步](adr/142-first-connection-contact-selection.md)
 143. [ADR-143：混合记忆处理调度](adr/143-hybrid-memory-processing-schedule.md)
+144. [ADR-144：保留旧资料的来源重新认证](adr/144-preserved-history-source-recertification.md)（已采纳，实现及验收进行中）
