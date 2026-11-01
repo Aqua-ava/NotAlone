@@ -346,7 +346,7 @@ test('真实控制器在旧面板释放后仍能完成 connected 触发的合法
 });
 
 test('受阻轮次恢复按钮等待回执防重入并读取权威状态', {timeout:20000}, async t=>{
-  let view=currentView(1,20);view.run.actions=['continue'];view.run.succeeded=0;view.run.pending=20;
+  let view=currentView(1,20);view.run.actions=['continue'];view.run.succeeded=0;view.run.pending=20;view.run.statusReason='extraction_policy_source_unavailable';
   const calls=[],receipt=deferred();
   await withEntry(t,async(method,input)=>{
     if(method==='readMode')return {connectionGeneration:1,mode:'sqlite'};
@@ -355,6 +355,7 @@ test('受阻轮次恢复按钮等待回执防重入并读取权威状态', {time
   },async page=>{
     const button=page.getByRole('button',{name:'恢复本轮处理',exact:true});await button.waitFor();
     await page.getByText('恢复本轮提取与相关本人资料整理；已完成内容会跳过。',{exact:true}).waitFor();
+    await page.getByText('应用已更新，旧任务需要按当前版本恢复；点击恢复本轮处理继续未完成内容。',{exact:true}).waitFor();
     await button.click();assert.equal(await page.getByRole('button',{name:'正在恢复…',exact:true}).isDisabled(),true);
     assert.equal(calls.length,1);assert.equal(calls[0].runId,view.run.runId);assert.equal(calls[0].controlVersion,0);assert.equal(calls[0].connectionGeneration,1);assert.match(calls[0].operationId,/^[0-9a-f-]{36}$/);
     receipt.resolve();await page.getByRole('status').filter({hasText:'正在提取与核验'}).waitFor();assert.equal(await button.count(),0);

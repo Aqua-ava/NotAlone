@@ -174,6 +174,7 @@ export function applyControl(tx:StorageTransaction,input:unknown):{ownerId:strin
  if(!internal&&i.operationId!==undefined&&typeof i.operationId!=='string')fail('memory_extraction_input_invalid');
  if(!internal&&BigInt(i.actionVersion as number)!==(run.intent_revision as bigint))fail('memory_extraction_control_conflict');
  const state=String(run.state);
+ if(i.action==='continue'&&tx.get('SELECT 1 FROM processing_run WHERE owner_id=? AND start_request_key=?',[ownerId,`policy-recovery:${runId}`]))fail('memory_extraction_control_conflict');
  if(i.action==='pause'){
   if(state==='revoked'||state==='completed')fail('memory_extraction_control_conflict');
   if(state==='paused'||run.pause_requested_at!==null)return {ownerId,runId,replayed:true};

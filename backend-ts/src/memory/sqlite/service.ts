@@ -103,7 +103,16 @@ export class SqliteMemoryExtraction {
  trace(taskId:string){this.available();return this.storage.execute<any>('memoryExtraction.trace',{ownerId:this.ownerId,taskId});}
  /** 用户暂停带控制修订CAS；共享故障的宿主内暂停不带版本，仍走同一事务状态机。 */
  async pause(runId:string,actionVersion?:number,operationId?:string){return this.admit(()=>this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'pause',...(actionVersion===undefined?{}:{actionVersion,operationId})}));}
- async continue(runId:string,actionVersion:number,operationId:string){return this.admit(async()=>{await this.initialize();this.available();const run=await this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'continue',actionVersion,operationId});this.launch(runId);return run;});}
+ async continue(runId:string,actionVersion:number,operationId:string){return this.admit(async()=>{
+  await this.initialize();this.available();const policy=await this.version();await policy.assertCurrent();
+  const oldPolicy=await this.storage.execute<unknown>('memoryExtraction.readPolicy',{ownerId:this.ownerId,runId});
+  try{policy.resolve(oldPolicy);}catch(error){
+   if((error as {code?:string}).code!=='extraction_policy_source_unavailable')throw error;
+   const next=await this.storage.execute<any>('memoryExtraction.restartPolicy',{ownerId:this.ownerId,runId,actionVersion,policyConfig:policy.newTaskConfig()});
+   if(next.launchRunId)this.launch(next.launchRunId);return next.run;
+  }
+  const run=await this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'continue',actionVersion,operationId});this.launch(runId);return run;
+ });}
  private launch(runId:string){if(this.runs.has(runId)||this.stopped)return;const work=this.executeRun(runId).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});}
  async waitForIdle(runId?:string){if(runId!==undefined){await this.runs.get(runId);return;}await Promise.all([...this.runs.values()]);}
  private async executeRun(runId:string){
@@ -123,7 +132,7 @@ export class SqliteMemoryExtraction {
      this.active.set(task.taskId,{abort:controller,done:completed});
      await this.process(batch,controller.signal);
     }catch(error){
-     const code=error instanceof StorageFailure?error.code:typeof (error as any)?.code==='string'&&(error as any).code.startsWith('extraction_model_')?(error as any).code:'memory_extraction_failed';
+     const code=error instanceof StorageFailure?error.code:typeof (error as any)?.code==='string'&&/^(?:extraction_model_|extraction_policy_|extraction_runtime_)/.test((error as any).code)?(error as any).code:'memory_extraction_failed';
      await this.storage.execute('memoryExtraction.fail',{ownerId:this.ownerId,attemptId:batch.attemptId,code});
      if(isSharedFailure(code))await this.pause(runId);
      break;

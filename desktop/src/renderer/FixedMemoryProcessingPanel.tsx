@@ -15,6 +15,8 @@ const sharedReasons: Record<string, string> = {
   document_model_scope_invalid: '模型用途范围不可用',
 };
 const blockedReasons: Record<string, string> = {
+  extraction_policy_source_unavailable: '应用已更新，旧任务需要按当前版本恢复；点击恢复本轮处理继续未完成内容。',
+  extraction_runtime_config_invalid: '旧任务的提取配置无法读取，请检查配置后再恢复。',
   model_receipt_unknown: '调用结果待核实',
   interrupted_known_receipts: '上次处理已中断，已完成的进度已保留',
   run_revoked: '范围已失效',

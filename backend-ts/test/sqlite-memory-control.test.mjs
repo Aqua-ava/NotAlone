@@ -668,3 +668,90 @@ test('09真实文档阶段共用故障经noteFailure投影固定原因且不提�
  assert.deepEqual(view.actions,[],'文档共用故障不提供重发/继续类动作');
  assert.notEqual(view.status,'completed');
 });
+
+
+test('源码策略变化后恢复只迁移原轮未完成目标，旧结果与新到消息不重发',async t=>{
+ const f=await fixtureWithMessages(t,{a:Array.from({length:21},(_,i)=>`合成偏好${i}`),b:['其他联系人的资料']});
+ let memory;const port=modelPort(()=>memory.accounting);memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
+ const original=port.prepare.bind(port);let failed=false;
+ port.prepare=async(request,input)=>{if(port.calls>=1&&!failed){failed=true;throw Object.assign(new Error('synthetic_auth'),{code:'extraction_model_authentication_failed'});}return original(request,input);};
+ const started=await memory.startHistory(f.ca,randomUUID());await memory.waitForIdle(started.run.runId);
+ await f.storage.execute('fixture.stalePolicy',{ownerId:owner,runId:started.run.runId});
+ const blocked=await memory.readContact(f.ca),before=port.calls;
+ assert.equal(blocked.run.succeeded,20);
+ const originalInputs=await f.storage.execute('fixture.runInputs',{ownerId:owner,runId:blocked.run.runId});
+ f.channel.page=async scope=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:Array.from({length:22},(_,i)=>record(String(i+1),{text:`合成偏好${i}`})),completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(f.ca);
+ assert.equal((await f.storage.execute('fixture.messages',{ownerId:owner,contactId:f.ca})).length,22);
+ const reply=await memory.continue(blocked.run.runId,blocked.run.controlVersion,randomUUID());
+ assert.equal(reply.runId,blocked.run.runId,'保留原控制回执合同');
+ const next=await memory.readContact(f.ca);assert.notEqual(next.run.runId,blocked.run.runId);
+ await memory.waitForIdle(next.run.runId);
+ const done=await memory.readContact(f.ca);assert.equal(done.run.total,1);assert.equal(done.run.succeeded,1);assert.equal(port.calls,before+1);
+ const copied=await f.storage.execute('fixture.runInputs',{ownerId:owner,runId:done.run.runId});
+ for(const row of copied)assert.ok(originalInputs.some(old=>old.message_id===row.message_id&&old.record_id===row.record_id&&old.accepted_interpretation_revision===row.accepted_interpretation_revision));
+ const old=await runRow(f,blocked.run.runId);assert.equal(JSON.parse(old.policy_config).source_stamp,'a'.repeat(64));
+ assert.deepEqual((await memory.read(blocked.run.runId)).actions,[]);
+ const replay=await memory.continue(blocked.run.runId,blocked.run.controlVersion,randomUUID());
+ assert.equal(replay.runId,blocked.run.runId);await memory.waitForIdle();assert.equal(port.calls,before+1);
+ assert.equal((await memory.readContact(f.cb)).run,null);
+});
+
+
+test('策略升级不能重发未知回执，也不能用旧恢复请求重启失败后继轮',async t=>{
+ const f=await fixtureWithMessages(t,{a:['合成原始消息']});
+ const x=extractionFixture(f);t.after(()=>x.service.close());
+ x.state.respond=async()=>{throw Object.assign(new Error('synthetic_timeout'),{code:'extraction_model_timeout'});};
+ const first=await x.service.startHistory(f.ca,randomUUID());await x.service.waitForIdle(first.run.runId);
+ await f.storage.execute('fixture.stalePolicy',{ownerId:owner,runId:first.run.runId});
+ const before=await x.service.readContact(f.ca),count=x.state.calls;
+ assert.equal(before.run.unknown,1);
+ await assert.rejects(x.service.continue(first.run.runId,before.run.controlVersion,randomUUID()),e=>e.code==='memory_extraction_receipt_unknown');
+ assert.equal(x.state.calls,count);assert.equal((await x.service.readContact(f.ca)).run.runId,first.run.runId);
+});
+
+test('策略恢复新轮失败后重放旧控制请求不再次调用模型',async t=>{
+ const f=await fixtureWithMessages(t,{a:['合成原始消息']});
+ const x=extractionFixture(f);t.after(()=>x.service.close());
+ let preparations=0;x.state.prepare=async()=>{preparations++;throw Object.assign(new Error('synthetic_auth'),{code:'extraction_model_authentication_failed'});};
+ const first=await x.service.startHistory(f.ca,randomUUID());await x.service.waitForIdle(first.run.runId);
+ await f.storage.execute('fixture.stalePolicy',{ownerId:owner,runId:first.run.runId});
+ const before=await x.service.readContact(f.ca);
+ await x.service.continue(first.run.runId,before.run.controlVersion,randomUUID());const next=await x.service.readContact(f.ca);await x.service.waitForIdle(next.run.runId);
+ assert.notEqual(next.run.runId,first.run.runId);const count=preparations;
+ await x.service.continue(first.run.runId,before.run.controlVersion,randomUUID());await x.service.waitForIdle();
+ assert.equal(preparations,count);
+});
+
+
+test('策略升级恢复保留原授权代次，撤销后不能借新轮恢复读取',async t=>{
+ const f=await fixtureWithMessages(t,{a:['合成原始消息']});
+ const x=extractionFixture(f);t.after(()=>x.service.close());
+ x.state.prepare=async()=>{throw Object.assign(new Error('synthetic_auth'),{code:'extraction_model_authentication_failed'});};
+ const first=await x.service.startHistory(f.ca,randomUUID());await x.service.waitForIdle(first.run.runId);
+ await f.storage.execute('fixture.stalePolicy',{ownerId:owner,runId:first.run.runId});
+ const before=await x.service.readContact(f.ca),binding=f.saved.find(row=>row.contact_id===f.ca);
+ await f.contacts.revoke(f.ca,binding.binding_id,binding.selection_generation);
+ await assert.rejects(x.service.continue(first.run.runId,before.run.controlVersion,randomUUID()),e=>e.code==='memory_extraction_scope_stale');
+ assert.equal(x.state.calls,0);assert.equal((await x.service.readContact(f.ca)).run.runId,first.run.runId);
+});
+
+
+test('策略后继轮完整成功后旧失败轮不阻止新历史目标启动',async t=>{
+ const f=await documentFixture(t,{registryModule});
+ const original=f.extractionPort.prepare;let failed=false;
+ f.extractionPort.prepare=async(...args)=>{if(!failed){failed=true;throw Object.assign(new Error('synthetic_auth'),{code:'extraction_model_authentication_failed'});}return original(...args);};
+ const first=await f.extraction.startHistory(f.contactId,randomUUID());await f.extraction.waitForIdle(first.run.runId);
+ await f.storage.execute('fixture.stalePolicy',{ownerId:owner,runId:first.run.runId});
+ const blocked=await f.extraction.readContact(f.contactId);
+ await f.extraction.continue(first.run.runId,blocked.run.controlVersion,randomUUID());
+ const successor=await f.extraction.readContact(f.contactId);await f.extraction.waitForIdle(successor.run.runId);
+ assert.equal((await f.extraction.readContact(f.contactId)).run.status,'completed');
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'我长期喜欢合成园艺。'}),record('2',{text:'我长期喜欢合成音乐。'})],completedPartitions:['shard-a'],exhausted:true});
+ await f.contacts.setReading(true);await f.service.synchronize(f.contactId);
+ const next=await f.extraction.startHistory(f.contactId,randomUUID());
+ assert.notEqual(next.run.runId,first.run.runId);assert.notEqual(next.run.runId,successor.run.runId);
+ assert.equal(next.run.total,1);
+ await f.extraction.waitForIdle(next.run.runId);
+ assert.equal((await f.extraction.readContact(f.contactId)).run.succeeded,1);
+});

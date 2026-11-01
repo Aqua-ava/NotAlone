@@ -1,6 +1,7 @@
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 /** 仅用于在真实 SQLite/动作边界制造租约与进程重启时序；不替代控制事务本身。 */
 export const registry={...base,actions:[...base.actions,
+ {name:'fixture.stalePolicy',mode:'write',retryBusy:true,execute(tx,input){tx.run("UPDATE processing_run SET policy_config=json_set(policy_config,'$.source_stamp',?) WHERE owner_id=? AND id=?",['a'.repeat(64),input.ownerId,input.runId]);return true;}},
  {name:'fixture.messages',mode:'read',retryBusy:false,execute(tx,input){return tx.all(`SELECT m.id,m.text_body,m.availability,m.kind,r.id AS record_id,r.state AS record_state,r.availability AS record_availability,p.extraction_state FROM message m LEFT JOIN capture_record r ON r.owner_id=m.owner_id AND r.message_id=m.id LEFT JOIN processing_item p ON p.owner_id=m.owner_id AND p.message_id=m.id AND p.purpose='memory_extraction' WHERE m.owner_id=? AND m.contact_id=? ORDER BY m.display_no`,[input.ownerId,input.contactId]);}},
  {name:'fixture.processingRun',mode:'read',retryBusy:false,execute(tx,input){return tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[input.ownerId,input.runId]);}},
  {name:'fixture.processingTasks',mode:'read',retryBusy:false,execute(tx,input){return tx.all('SELECT * FROM processing_task WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[input.ownerId,input.runId]);}},
