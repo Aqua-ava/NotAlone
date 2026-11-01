@@ -5,6 +5,7 @@ import { lstat, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { Writable } from 'node:stream';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
+import {readWechatQuotePayload,type WechatQuotePayload,type WechatQuoteSourceIdentity} from './quote-payload.ts';
 import type { HistoryPage, HistoryRecord, HistorySupportReport, HistoryTarget, HistoryTailPage } from '../sqlite/contracts.ts';
 import { boundaryProtocol, maxBoundaryMembers, membersManifestSha256, sourceLocalKey, type HistoryBoundaryCandidate } from '../sqlite/boundary.ts';
 import { isPartitionGrowthTargetChange, isSafePartitionGrowth, historyTargetTransition } from '../partition-growth.ts';
@@ -118,6 +119,10 @@ const boundaryResponseLimit = 32 * 1024 * 1024;
 // 16×65536×最坏6倍JSON转义为6MiB，为有界元数据及游标保留2MiB。
 const pageRecordLimit = 16;
 const stderrLimit = 64 * 1024;
+const recoverableQuoteErrors = new Set([
+  'history_quote_unavailable', 'history_quote_metadata_invalid', 'history_quote_too_large',
+  'history_quote_state_unverified', 'history_quote_association_unverified', 'history_quote_read_failed',
+]);
 const digest = (input: string | Buffer) => createHash('sha256').update(input).digest('hex');
 const fail = (code = 'history_protocol_invalid'): never => { throw new StorageFailure(code); };
 const hashPattern = /^[a-f0-9]{64}$/;
@@ -155,6 +160,8 @@ const allowedErrors = new Set([
   'history_image_too_large', 'history_image_read_failed', 'history_image_request_invalid',
   'history_image_metadata_invalid', 'history_image_local_file_missing', 'history_image_key_unavailable', 'history_image_quality_unverified',
   'history_image_thumbnail_only', 'history_image_format_unsupported', 'history_image_decoder_unavailable',
+  'history_quote_unavailable','history_quote_metadata_invalid','history_quote_too_large','history_quote_state_unverified',
+  'history_quote_association_unverified','history_quote_source_changed','history_quote_read_failed','history_quote_request_invalid',
   'history_account_unavailable', 'history_account_changed', 'history_native_unavailable',
   'history_metadata_unavailable', 'history_identity_unverified', 'history_identity_ambiguous',
   'history_source_changed', 'history_source_unverified', 'history_shards_unavailable',
@@ -667,7 +674,7 @@ function validatedOptions(options: NarrowWechatClientOptions): NarrowWechatClien
   } catch { return fail('history_request_invalid'); }
 }
 interface NativeProcess { child: ChildProcessWithoutNullStreams; exited: Promise<void>; output: Buffer; stderrBytes: number }
-interface PendingResponse { limit: number; parse(value: unknown): unknown; resolve(value: unknown): void; reject(error: StorageFailure): void }
+interface PendingResponse { operation: string; limit: number; recoverableErrors?: ReadonlySet<string>; parse(value: unknown): unknown; resolve(value: unknown): void; reject(error: StorageFailure): void }
 interface ActiveImage { token: string; sourceGeneration: string; expectedBytes: number; expectedSha256: string; nextOffset: number }
 /** 只提供已选目标的固定协议；正文分页另需当前支持认证，不提供通用命令、SQL或路径RPC。 */
 export class NarrowWechatClient {
@@ -928,6 +935,17 @@ export class NarrowWechatClient {
       return opened;
     },signal);
   }
+  readQuoteSelected(target:HistoryTarget,source:WechatQuoteSourceIdentity,signal?:AbortSignal):Promise<WechatQuotePayload> {
+    try{signalValid(signal);hash(source.partition);hash(source.table);unsigned(source.localId);unsigned(source.serverId);if(source.sentAt!==null)unsigned(source.sentAt);}
+    catch{return Promise.reject(new StorageFailure('history_quote_request_invalid'));}
+    return this.#enqueue(async()=>{
+      const scope=this.#readableScope(),accepted=this.#target,parsed=historyTarget(target,scope,this.#schema);
+      if(!accepted||JSON.stringify(parsed)!==JSON.stringify(accepted))return fail('history_target_unverified');
+      if(!accepted.tables.some(item=>item.partition===source.partition&&item.instance===source.table))return fail('history_quote_association_unverified');
+      return this.#request({op:'quote-read',account:scope.accountKey,conversation:scope.conversationKey,consent:'selected-quote-v1',
+        target:accepted.descriptor,...source,sentAt:source.sentAt??''},value=>readWechatQuotePayload(value,scope,source),256*1024,recoverableQuoteErrors);
+    },signal);
+  }
   readImageSelected(resourceToken:string, offset:number, signal?:AbortSignal):Promise<WechatImageReadResult> {
     let token:string;
     try {signalValid(signal);token=imageToken(resourceToken);integer(offset,32*1024*1024);}
@@ -1093,13 +1111,13 @@ export class NarrowWechatClient {
     });
     return native;
   }
-  async #request<T>(request: Record<string, string | number | boolean>, parse: (value: unknown) => T, limit = responseLimit): Promise<T> {
+  async #request<T>(request: Record<string, string | number | boolean>, parse: (value: unknown) => T, limit = responseLimit, recoverableErrors?: ReadonlySet<string>): Promise<T> {
     let native: NativeProcess;
     try { native = await this.#start(); }
     catch (error) { const code = error instanceof StorageFailure ? error.code : 'history_native_unavailable'; await this.#stop(code); return fail(code); }
     if (this.#stopped) return fail(this.#failureCode);
     return new Promise<T>((resolve, reject) => {
-      this.#pending = { limit, parse, resolve: value => resolve(value as T), reject };
+      this.#pending = { operation:typeof request.op==='string'?request.op:'', limit, recoverableErrors, parse, resolve: value => resolve(value as T), reject };
       try { native.child.stdin.write(`${JSON.stringify(request)}\n`, error => { if (error) void this.#stop('history_native_unavailable'); }); }
       catch { void this.#stop('history_native_unavailable'); }
     });
@@ -1125,6 +1143,9 @@ export class NarrowWechatClient {
         const row = object(envelope, ['ok', 'error']); const error = object(row.error, ['code']);
         const code = typeof error.code === 'string' && allowedErrors.has(error.code) ? error.code : 'history_protocol_invalid';
         if(code==='history_image_key_unavailable'&&this.#options.imageKeyChannel){
+          native.output=Buffer.alloc(0);this.#pending=undefined;pending.reject(new StorageFailure(code));return;
+        }
+        if(pending.operation==='quote-read'&&pending.recoverableErrors?.has(code)){
           native.output=Buffer.alloc(0);this.#pending=undefined;pending.reject(new StorageFailure(code));return;
         }
         void this.#stop(code); return;

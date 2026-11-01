@@ -97,6 +97,28 @@ test('当前聊天中的图片状态变更通过消息事件刷新历史投影',
   history.dispose();
 });
 
+test('引用快照从占位更新为内容时刷新并替换同一消息 ID', async () => {
+  const replyId = randomUUID(), targetId = randomUUID();
+  let quote = null;
+  const setup = harness(async () => ({ generation: 7, data: { messages: [{ ...message('这是本次回复正文'),
+    message_id: replyId, message_type: 'quote', quoted: quote }], next_cursor: null } }));
+  await setup.select();
+  const history = new ContactHistoryController(setup.backend, setup.contacts);
+  const scope = setup.contacts.getState();
+  await history.load({ contactId: setup.contactIds[0], scopeRevision: scope.scopeRevision, older: false });
+  quote = { text: '补齐后的引用快照', target_message_id: targetId, sender: '合成联系人0',
+    sender_role: 'contact', message_type: 'text', state: 'resolved' };
+  setup.backend.emitMessage({ contactId: setup.contactIds[0], messageId: replyId, change: 'updated' });
+  await new Promise(resolve => setTimeout(resolve, 180));
+  const updated = history.getState().messages.items;
+  assert.equal(updated.length, 1);
+  assert.equal(updated[0].messageId, replyId);
+  assert.equal(updated[0].text, '这是本次回复正文');
+  assert.equal(updated[0].quoted.text, '补齐后的引用快照');
+  assert.equal(updated[0].quoted.state, 'resolved');
+  history.dispose();
+});
+
 test('已加载的较早页中图片状态变化时按该页游标刷新并保留消息顺序', async () => {
   const cursor = randomUUID(), targetId = randomUUID(), calls = [];
   let imageState = { state: 'pending', file_id: null, mime_type: null };

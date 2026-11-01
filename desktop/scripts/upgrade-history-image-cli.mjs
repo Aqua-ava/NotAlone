@@ -259,6 +259,19 @@ const wxgfImagePolicy = Object.freeze({
  identityAlgorithmSha256:'0d74d4ccd82206f5ff1f14281e3b76564b4368b9458001837dab379de18555d2',
 });
 
+// 引用回复窄读取固定配对；普通消息和来源身份实现不变。
+const quoteSyncPolicy=Object.freeze({
+ ...wxgfImagePolicy,oldName:'original-image-20261031-v3',newName:'quote-sync-20261101-v1',
+ oldCliSha256:'9d6da5197d410b8727386863eac45fd6ad12f61ce484b0ee17ba9e6b6fd6d893',newCliSha256:'6a95270fb64fe6d2d92b727965d3217ad96f19f236ee5262f2bcdb5dfa6427cc',
+ oldOverlaySha256:'001b643bd04fbc97706aeb8618ca33b4ad50708ede61fdfc3ce44b228a5ccf15',newOverlaySha256:'7ab302bbbe6a8ad5fb48eb32620cc60b6496f7eb52587d4e0845dc48370ab480',
+ oldImageQualityProof:'wechat-cdn-big-hd-exact-content-v4',newImageQualityProof:'wechat-cdn-big-hd-exact-content-v4',
+ protocolOldSha256:'dde1590bf04f1c407f371c9a89dc6e6df24fc6ffa0534694fb316ca0d5c3744d',protocolNewSha256:'2b5351608063c70af73e80e9cee6868d342ffb2b32d8f46caf64cdb14846d60c',
+ oldImageSha256:wxgfImagePolicy.imageSha256,oldImageTestSha256:wxgfImagePolicy.imageTestSha256,
+ newQuoteProtocol:'wechat-quote-message-v1',sourceChanges:Object.freeze({"cmd/wechat-cli/notalone_quote.go":{"old":null,"new":"23d14f47cb72a0758c9086af04b300487c13bb4a3ce85b2b822888ba3186725e"},"cmd/wechat-cli/notalone_quote_test.go":{"old":null,"new":"d9b54a037616d020fff0f589444382bd9c8bd99865b63fccb6738c32d300a6af"}}),
+ identityAlgorithmSha256:'e14f91c04b22b0abfd2c1035ef3030cdf4b93a0c06032ef1b0a7f365eee570f8',
+});
+
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -425,13 +438,19 @@ function assertSourcePair(oldFiles, newFiles, policy) {
     if (oldFiles.get(file) !== sha || newFiles.get(file) !== sha) fail('history_image_upgrade_source_mismatch');
   }
   const permitted = new Set([protocol, image, imageTest]);
+  for(const [name,pair] of Object.entries(policy.sourceChanges??{})){
+    if(!/^cmd\/wechat-cli\/notalone_quote(?:_[a-z0-9]+)*\.go$/.test(name)||!isObject(pair)
+      ||!(pair.old===null||hashPattern.test(pair.old))||!hashPattern.test(pair.new)
+      ||(oldFiles.get(name)??null)!==pair.old||newFiles.get(name)!==pair.new)fail('history_image_upgrade_source_mismatch');
+    permitted.add(name);
+  }
   const paths = new Set([...oldFiles.keys(), ...newFiles.keys()]);
   for (const name of paths) {
     if (permitted.has(name)) continue;
     if (oldFiles.get(name) !== newFiles.get(name)) fail('history_image_upgrade_source_mismatch');
   }
   // 后续图片修复允许协议保持逐字相同；允许变化的每份源码仍分别绑定旧、新摘要。
-  if (![protocol, image, imageTest].some(name => oldFiles.get(name) !== newFiles.get(name))) fail('history_image_upgrade_source_mismatch');
+  if (![...permitted].some(name => oldFiles.get(name) !== newFiles.get(name))) fail('history_image_upgrade_source_mismatch');
 }
 
 function validateAliasRecord(record, { artifactSha256, accountKey, rootScope }) {
@@ -501,7 +520,8 @@ function manifestForSide(policy, side) {
     ...((isNew ? policy.newImageProtocol : policy.oldImageProtocol)
       ? { originalImageProtocol: isNew ? policy.newImageProtocol : policy.oldImageProtocol } : {}),
     ...((isNew ? policy.newImageQualityProof : policy.oldImageQualityProof)
-      ? { originalImageQualityProof: isNew ? policy.newImageQualityProof : policy.oldImageQualityProof } : {}) };
+      ? { originalImageQualityProof: isNew ? policy.newImageQualityProof : policy.oldImageQualityProof } : {}),
+    ...((isNew?policy.newQuoteProtocol:policy.oldQuoteProtocol)?{quoteProtocol:isNew?policy.newQuoteProtocol:policy.oldQuoteProtocol}:{}) };
 }
 
 export function createUpgradeImageCliTools({ repositoryRoot, policy, afterReceiptPublished } = {}) {
@@ -646,7 +666,10 @@ const repositoryRoot = path.dirname(fileURLToPath(new URL('../', import.meta.url
 const productionTools = createUpgradeImageCliTools({ repositoryRoot, policy: productionPolicy });
 const decodingFixTools = createUpgradeImageCliTools({ repositoryRoot, policy: decodingFixPolicy });
 const wxgfImageTools = createUpgradeImageCliTools({repositoryRoot,policy:wxgfImagePolicy});
-export const prepareAliases = input => input?.fromRoot === path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',wxgfImagePolicy.oldName)
+const quoteSyncTools=createUpgradeImageCliTools({repositoryRoot,policy:quoteSyncPolicy});
+export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteSyncPolicy.oldName)
+ &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteSyncPolicy.newName)
+ ?quoteSyncTools.prepareAliases(input):input?.fromRoot === path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',wxgfImagePolicy.oldName)
  && input?.toRoot === path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',wxgfImagePolicy.newName)
  ? wxgfImageTools.prepareAliases(input) : input?.fromRoot === path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',decodingFixPolicy.oldName)
   && input?.toRoot === path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',decodingFixPolicy.newName)

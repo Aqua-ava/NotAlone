@@ -1,7 +1,7 @@
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import { loadNarrowWechatOptions } from '../wechat/artifacts.ts';
 import { NarrowWechatClient } from '../wechat/native-client.ts';
-import type { HistoryChannel, HistoryScope, HistorySupportReport, HistoryTarget } from './contracts.ts';
+import type { HistoryChannel, HistoryScope, HistorySource, HistorySupportReport, HistoryTarget } from './contracts.ts';
 import { prepareBoundaryCandidate } from './boundary.ts';
 
 function unavailableReport():HistorySupportReport {
@@ -94,6 +94,17 @@ class WechatHistoryChannel implements HistoryChannel {
  async tail(scope:HistoryScope,target:HistoryTarget,cursor:string,signal?:AbortSignal){
   if(!this.#executable)return reject('history_support_unverified');
   return this.#run(scope,signal,native=>native.tailSelected(target,cursor,signal));
+ }
+ async readQuote(scope:HistoryScope,target:HistoryTarget,source:HistorySource,signal?:AbortSignal){
+  const raw=source.raw;
+  if(source.contactId!==scope.token.contact_id||raw.originalType!=='244813135921'||raw.kind!=='other'
+   ||typeof raw.localId!=='string'||typeof raw.serverId!=='string')return reject('history_quote_association_unverified');
+  const identity={partition:raw.partition,table:raw.table,localId:raw.localId,serverId:raw.serverId,sentAt:raw.sentAt};
+  return this.#run(scope,signal,async native=>{
+   const quote=await native.readQuoteSelected(target,identity,signal);
+   return {replyText:quote.replyText,referencedText:quote.referencedText,referencedSender:quote.referencedSender,
+    referencedSenderRole:quote.referencedSenderRole,referencedType:quote.referencedType,referencedServerId:quote.referencedServerId,proofDigest:quote.contentSha256};
+  });
  }
  async boundarySnapshot(scope:HistoryScope,signal?:AbortSignal){
   if(!this.#executable)return reject('history_support_unverified');

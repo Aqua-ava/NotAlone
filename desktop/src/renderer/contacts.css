@@ -59,6 +59,10 @@
 .contact-chat-message[data-speaker="user"] .contact-chat-bubble { background: #e5eff0; border-color: #c7d9df; border-radius: 11px 3px 11px 11px; }
 .contact-chat-message[data-speaker="system"] .contact-chat-bubble { background: transparent; border: 0; color: #758184; font-size: 11px; text-align: center; }
 .contact-chat-bubble blockquote { margin: 0 0 8px; padding-left: 9px; border-left: 2px solid #aabec6; color: #758184; font-size: 11px; }
+.contact-chat-bubble blockquote.contact-chat-quote { display: grid; gap: 2px; white-space: normal; }
+.contact-chat-quote-author, .contact-chat-quote-type, .contact-chat-quote-status { display: block; font-size: 10px; line-height: 1.5; }
+.contact-chat-quote-text { display: block; white-space: pre-wrap; }
+.contact-chat-quote-status { color: #8a6d59; }
 .contact-chat-more { display: block; margin: 16px auto 0; }
 .contact-picker-container { position: relative; width: 280px; max-width: 100%; min-width: 0; -webkit-app-region: no-drag; }
 .contact-picker { display: block; box-sizing: border-box; width: 100%; min-width: 0; padding: 9px 14px; font: inherit; font-size: 12px; line-height: 1.5; color: #456b87; background: #fffdf6; border: 1px solid #b8c5cc; border-radius: 3px 6px 4px 5px; text-overflow: ellipsis; cursor: text; }

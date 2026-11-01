@@ -1,4 +1,5 @@
 import { isUuid } from '../uuid';
+import { parseMessageQuoteSnapshot } from '../../shared/message-quote';
 import type { ContactHistoryImageMedia, ContactHistoryMessage } from '../../shared/contact-history-bridge';
 import type { BackendHost } from '../backend/host';
 
@@ -41,9 +42,8 @@ export async function readContactHistoryMessages(backend: Pick<BackendHost, 'req
     if (!isRecord(item) || !isUuid(item.message_id) || !['user', 'contact', 'system'].includes(item.speaker as string)
       || typeof item.message_type !== 'string' || item.message_type.length > 128
       || !optionalText(item.text) || !optionalText(item.media_placeholder)
-      || !(item.occurred_at === null || typeof item.occurred_at === 'string' && Number.isFinite(Date.parse(item.occurred_at)))
-      || !(item.quoted === null || isRecord(item.quoted) && typeof item.quoted.text === 'string' && item.quoted.text.length <= 65_536
-        && (item.quoted.target_message_id === null || isUuid(item.quoted.target_message_id)))) throw new Error('聊天消息格式无效。');
+      || !(item.occurred_at === null || typeof item.occurred_at === 'string' && Number.isFinite(Date.parse(item.occurred_at)))) throw new Error('聊天消息格式无效。');
+    const quoted = parseMessageQuoteSnapshot(item.quoted, '聊天消息格式无效。');
     const sqliteOrder = 'ordering' in item || 'display_position' in item;
     if (sqliteOrder && (!['verified', 'unknown'].includes(item.ordering as string)
       || typeof item.display_position !== 'string' || !/^(0|[1-9][0-9]{0,18})$/.test(item.display_position))) throw new Error('聊天消息顺序无效。');
@@ -54,8 +54,7 @@ export async function readContactHistoryMessages(backend: Pick<BackendHost, 'req
     return { messageId, speaker: item.speaker as ContactHistoryMessage['speaker'], messageType: item.message_type,
       text: item.text, mediaPlaceholder: item.media_placeholder, occurredAt: item.occurred_at as string | null,
       ...(sqliteOrder ? { ordering: item.ordering as 'verified' | 'unknown', displayPosition: item.display_position as string } : {}),
-      quoted: item.quoted === null ? null : { text: item.quoted.text as string,
-        targetMessageId: item.quoted.target_message_id === null ? null : (item.quoted.target_message_id as string).toLowerCase() },
+      quoted,
       ...('image_media' in item && item.image_media !== null ? { imageMedia: imageMedia(item.image_media) } : {}) };
   });
   return { generation: response.generation, messages, nextCursor: page.next_cursor === null ? null : page.next_cursor.toLowerCase() };

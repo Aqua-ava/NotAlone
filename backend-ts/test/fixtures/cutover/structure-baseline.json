@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 24,
+  "schemaVersion": 26,
   "migrationVersions": [
    1,
    2,
@@ -25,15 +25,17 @@
    21,
    22,
    23,
-   24
+   24,
+   25,
+   26
   ],
-  "userVersion": 24,
+  "userVersion": 26,
   "sqliteVersion": "3.53.4",
-  "tableCount": 87,
-  "fieldCount": 844,
-  "foreignKeyGroups": 179,
+  "tableCount": 89,
+  "fieldCount": 878,
+  "foreignKeyGroups": 184,
   "triggerCount": 98,
-  "checkCount": 258,
+  "checkCount": 275,
   "viewCount": 0
  },
  "tables": {
@@ -4186,6 +4188,537 @@
     }
    ],
    "sql": "CREATE TABLE history_message_quarantine ( owner_id TEXT NOT NULL, contact_id TEXT NOT NULL, message_id TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY(owner_id,contact_id,message_id), FOREIGN KEY(owner_id,contact_id,message_id) REFERENCES message(owner_id,contact_id,id) ON DELETE CASCADE ) STRICT"
+  },
+  "history_quote": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "message_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "binding_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "source_record_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "source_generation",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "version",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "reply_text",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "referenced_text",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "referenced_sender",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "referenced_sender_role",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "referenced_type",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "referenced_server_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "target_message_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "proof_digest",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "source_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "interpretation_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "carrier_interpretation_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "source_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": "''",
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "message",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "message",
+     "from": "contact_id",
+     "to": "contact_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 2,
+     "table": "message",
+     "from": "binding_id",
+     "to": "binding_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 3,
+     "table": "message",
+     "from": "target_message_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 0,
+     "table": "capture_record",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 1,
+     "table": "capture_record",
+     "from": "contact_id",
+     "to": "contact_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 2,
+     "table": "capture_record",
+     "from": "source_record_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 3,
+     "table": "capture_record",
+     "from": "message_id",
+     "to": "message_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 2,
+     "seq": 0,
+     "table": "message",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 2,
+     "seq": 1,
+     "table": "message",
+     "from": "contact_id",
+     "to": "contact_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 2,
+     "seq": 2,
+     "table": "message",
+     "from": "binding_id",
+     "to": "binding_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 2,
+     "seq": 3,
+     "table": "message",
+     "from": "message_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "history_quote_target",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "target_message_id"
+     ],
+     "sql": "CREATE INDEX history_quote_target ON history_quote(owner_id,contact_id,target_message_id)"
+    },
+    {
+     "name": "sqlite_autoindex_history_quote_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "message_id"
+     ],
+     "sql": null
+    },
+    {
+     "name": "sqlite_autoindex_history_quote_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE history_quote ( owner_id TEXT NOT NULL,id TEXT NOT NULL,contact_id TEXT NOT NULL,message_id TEXT NOT NULL,binding_id TEXT NOT NULL, source_record_id TEXT NOT NULL,source_generation TEXT NOT NULL,version TEXT NOT NULL, reply_text TEXT NOT NULL,referenced_text TEXT,referenced_sender TEXT, referenced_sender_role TEXT NOT NULL CHECK(referenced_sender_role IN ('owner','contact','unknown')), referenced_type TEXT,referenced_server_id TEXT,target_message_id TEXT, state TEXT NOT NULL CHECK(state IN ('resolved','unresolved','unavailable')), proof_digest TEXT NOT NULL CHECK(length(proof_digest)=64),source_revision INTEGER NOT NULL CHECK(source_revision>0), interpretation_revision INTEGER NOT NULL CHECK(interpretation_revision>0),carrier_interpretation_revision INTEGER NOT NULL CHECK(carrier_interpretation_revision>0), source_key TEXT NOT NULL DEFAULT '', PRIMARY KEY(owner_id,id),UNIQUE(owner_id,contact_id,message_id), FOREIGN KEY(owner_id,contact_id,binding_id,message_id) REFERENCES message(owner_id,contact_id,binding_id,id), FOREIGN KEY(owner_id,contact_id,source_record_id,message_id) REFERENCES capture_record(owner_id,contact_id,id,message_id), FOREIGN KEY(owner_id,contact_id,binding_id,target_message_id) REFERENCES message(owner_id,contact_id,binding_id,id), CHECK(length(version) BETWEEN 1 AND 128),CHECK(length(reply_text) BETWEEN 1 AND 1000000), CHECK(referenced_text IS NULL OR length(referenced_text)<=1000000), CHECK(referenced_sender IS NULL OR length(referenced_sender)<=255), CHECK(referenced_type IS NULL OR length(referenced_type)<=128), CHECK(referenced_server_id IS NULL OR length(referenced_server_id)<=20), CHECK((target_message_id IS NOT NULL AND state='resolved') OR (target_message_id IS NULL AND state<>'resolved')) ) STRICT"
+  },
+  "history_quote_attempt": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "message_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "binding_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "record_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "source_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "source_generation",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "version",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "carrier_interpretation_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "carrier_status",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "outcome",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "error_code",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "capture_record",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "capture_record",
+     "from": "contact_id",
+     "to": "contact_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 2,
+     "table": "capture_record",
+     "from": "record_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 3,
+     "table": "capture_record",
+     "from": "message_id",
+     "to": "message_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 0,
+     "table": "message",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 1,
+     "table": "message",
+     "from": "contact_id",
+     "to": "contact_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 2,
+     "table": "message",
+     "from": "binding_id",
+     "to": "binding_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 3,
+     "table": "message",
+     "from": "message_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "history_quote_attempt_message",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "message_id"
+     ],
+     "sql": "CREATE INDEX history_quote_attempt_message ON history_quote_attempt(owner_id,contact_id,message_id)"
+    },
+    {
+     "name": "sqlite_autoindex_history_quote_attempt_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "message_id",
+      "source_generation",
+      "source_key",
+      "version",
+      "carrier_interpretation_revision",
+      "carrier_status"
+     ],
+     "sql": null
+    },
+    {
+     "name": "sqlite_autoindex_history_quote_attempt_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE \"history_quote_attempt\" ( owner_id TEXT NOT NULL,id TEXT NOT NULL,contact_id TEXT NOT NULL,message_id TEXT NOT NULL,binding_id TEXT NOT NULL, record_id TEXT NOT NULL,source_key TEXT NOT NULL,source_generation TEXT NOT NULL,version TEXT NOT NULL, carrier_interpretation_revision INTEGER NOT NULL CHECK(carrier_interpretation_revision>0),carrier_status TEXT NOT NULL, outcome TEXT NOT NULL CHECK(outcome IN ('saved','failed')),error_code TEXT, PRIMARY KEY(owner_id,id),UNIQUE(owner_id,contact_id,message_id,source_generation,source_key,version,carrier_interpretation_revision,carrier_status), FOREIGN KEY(owner_id,contact_id,binding_id,message_id) REFERENCES message(owner_id,contact_id,binding_id,id), FOREIGN KEY(owner_id,contact_id,record_id,message_id) REFERENCES capture_record(owner_id,contact_id,id,message_id), CHECK((outcome='saved' AND error_code IS NULL) OR (outcome='failed' AND error_code IS NOT NULL)), CHECK(length(version) BETWEEN 1 AND 128) ) STRICT"
   },
   "history_restore": {
    "columns": [

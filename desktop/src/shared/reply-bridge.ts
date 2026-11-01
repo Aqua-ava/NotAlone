@@ -8,6 +8,7 @@ import type { AssistantCandidateDraft, ReplyCandidateDraftUpdate, AssistantCandi
 import type { AssistantContinuationClarification, RequirementChange } from './assistant-continuation-clarification';
 import type { ReplyBasisChange } from './reply-basis-change';
 import type { SkillPublicationScope } from './skill-learning-bridge';
+import type { MessageQuoteSnapshot } from './message-quote';
 
 export type WorkspaceAction = 'express' | 'suggest';
 export type RewriteTone = 'original' | 'warm' | 'concise' | 'polite';
@@ -90,7 +91,7 @@ export interface ReplyMessage {
   // SQLite稳定展示位置不代表真实消息先后；旧渠道无此声明时保持旧合同。
   ordering?: 'verified' | 'unknown';
   displayPosition?: string;
-  quoted: { text: string; targetMessageId: string | null } | null;
+  quoted: MessageQuoteSnapshot | null;
 }
 export interface ReplyMessagesState {
   phase: 'idle' | 'loading' | 'ready' | 'failed';

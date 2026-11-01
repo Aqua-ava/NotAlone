@@ -137,9 +137,10 @@ export class ContactHistoryController {
       connected: () => {}, interrupted: () => {},
       message: event => {
         if (!current() || event.contactId !== scope.contactId) return;
-        const visibleImage = this.state.messages.items.some(message => message.messageId === event.messageId && message.messageType === 'image');
+        const visibleRefreshableMessage = this.state.messages.items.some(message => message.messageId === event.messageId
+          && (message.messageType === 'image' || message.messageType === 'quote' || message.quoted !== null));
         if (event.change === 'created') this.queueRefresh(scope);
-        else if (visibleImage) this.queueRefresh(scope, event.messageId);
+        else if (visibleRefreshableMessage) this.queueRefresh(scope, event.messageId);
       },
     }, stream.signal);
   }

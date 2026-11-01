@@ -20,7 +20,7 @@ async function fixture(t,mode='normal') {
  const fs=require('node:fs'); const readline=require('node:readline');const crypto=require('node:crypto');
  fs.writeFileSync(process.env.PID_FILE,String(process.pid));
  if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['notalone-history']))process.exit(91);
- const schema=${JSON.stringify(schema)};const initialTable=structuredClone(schema.tables[0]);let busy=false,supportCount=0,inspectCount=0;let currentConversation='${conversation}';let receivedRecords=[];
+ const schema=${JSON.stringify(schema)};const initialTable=structuredClone(schema.tables[0]);let busy=false,supportCount=0,inspectCount=0,quoteFailureCount=0;let currentConversation='${conversation}';let receivedRecords=[];
  const target={protocol:'private-history-v1',descriptor:'synthetic-target-v1',partitions:['d'.repeat(64)],tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'};
  if(process.env.TEST_MODE.startsWith('empty-target')){
   schema.checkedPartitions=Array.from({length:8},(_,i)=>(i+1).toString(16).repeat(64));schema.tables=[];
@@ -47,9 +47,21 @@ async function fixture(t,mode='normal') {
   if(mode==='known-code'){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_account_changed'}})+'\\n');return;}
   if(mode==='known-wal-index-code'){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_delta_wal_index_invalid'}})+'\\n');return;}
   if(mode==='known-growth-code'){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_target_growth_required'}})+'\\n');return;}
+  if(mode==='quote-state-on-resolve'&&r.op==='resolve'){busy=false;process.stdout.write(JSON.stringify({ok:false,error:{code:'history_quote_state_unverified'}})+'\\n');return;}
+  if(mode.startsWith('quote-recover-')&&r.op==='quote-read'&&quoteFailureCount++===0){busy=false;process.stdout.write(JSON.stringify({ok:false,error:{code:mode.slice('quote-recover-'.length)}})+'\\n');return;}
+  if(mode==='quote-source-changed'&&r.op==='quote-read'){busy=false;process.stdout.write(JSON.stringify({ok:false,error:{code:'history_quote_source_changed'}})+'\\n');return;}
+  if(mode==='quote-request-invalid'&&r.op==='quote-read'){busy=false;process.stdout.write(JSON.stringify({ok:false,error:{code:'history_quote_request_invalid'}})+'\\n');return;}
   if(r.op==='resolve')currentConversation=r.displayName==='另一位合成联系人'?'synthetic-other':'${conversation}';
   let data=r.op==='resolve'?{accountKey:'${account}',conversationKey:currentConversation,displayName:'合成目标',sourceGeneration:'${generation}'}:schema;
   if(r.op==='resolve'&&mode==='display-control')data.displayName='合成\\t目标';
+  if(r.op==='quote-read'){
+   data={format:'wechat-quote-message-v1',accountKey:'${account}',conversationKey:currentConversation,sourceGeneration:'${generation}',
+    partition:r.partition,table:r.table,localId:r.localId,serverId:r.serverId,sentAt:r.sentAt||null,
+    replyText:'周六回',referencedText:'周末回来吗？',referencedSender:'合成联系人',referencedSenderRole:'contact',referencedType:'1',referencedServerId:'18446744073709551615',contentSha256:'9'.repeat(64)};
+   if(mode==='quote-wrong-scope')data.conversationKey='synthetic-other';
+   if(mode==='quote-wrong-local')data.localId='2';
+   if(mode==='quote-invalid-role')data.referencedSenderRole='assistant';
+  }
   if(r.op==='inspect'&&mode.startsWith('growth-')&&++inspectCount===2){
    if(schema.tables[0])schema.tables[0].schemaVersion='9007199254740994';
    if(mode!=='growth-version-only'){
@@ -228,6 +240,41 @@ async function waitForPid(file) {
  });
 }
 function noProcess(pid){assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});}
+
+test('引用窄读取保留回复与引用并精确绑定当前会话和消息',async t=>{
+ const f=await fixture(t);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();const target=await f.client.targetSelected();
+ const source={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'18446744073709551615',sentAt:'1700000000000'};
+ const quote=await f.client.readQuoteSelected(target,source);
+ assert.equal(quote.replyText,'周六回');assert.equal(quote.referencedText,'周末回来吗？');assert.equal(quote.referencedServerId,'18446744073709551615');
+ const requests=(await readFile(f.logFile,'utf8')).trim().split('\n').map(JSON.parse);assert.equal(requests.at(-1).consent,'selected-quote-v1');assert.equal(requests.at(-1).localId,source.localId);
+});
+test('引用窄读取拒绝跨会话、错消息和非法作者，不发布正文',async t=>{
+ for(const mode of ['quote-wrong-scope','quote-wrong-local','quote-invalid-role']){
+  const f=await fixture(t,mode);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();const target=await f.client.targetSelected();
+  await assert.rejects(f.client.readQuoteSelected(target,{partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'18446744073709551615',sentAt:'1700000000000'}),{code:'history_quote_association_unverified'});
+  assert.equal(f.client.stoppedReason,'history_quote_association_unverified');
+ }
+});
+test('引用逐条可恢复错误保留当前目标并允许后续引用继续读取',async t=>{
+ for(const code of ['history_quote_unavailable','history_quote_metadata_invalid','history_quote_too_large','history_quote_state_unverified','history_quote_association_unverified','history_quote_read_failed'])await t.test(code,async t=>{
+  const f=await fixture(t,'quote-recover-'+code);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();const target=await f.client.targetSelected();
+  const source={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'18446744073709551615',sentAt:'1700000000000'};
+  await assert.rejects(f.client.readQuoteSelected(target,source),{code});assert.equal(f.client.stoppedReason,null);
+  const quote=await f.client.readQuoteSelected(target,source);assert.equal(quote.replyText,'周六回');assert.equal(f.client.stoppedReason,null);
+  const requests=(await readFile(f.logFile,'utf8')).trim().split('\n').map(JSON.parse).slice(-2);
+  assert.deepEqual(requests.map(row=>row.op),['quote-read','quote-read']);assert.deepEqual(requests.map(row=>row.target),[target.descriptor,target.descriptor]);
+ });
+});
+test('引用source_changed仍停止，且其他operation不能借用quote逐条恢复白名单',async t=>{
+ const recoverable='history_quote_state_unverified';
+ for(const [mode,code] of [['quote-source-changed','history_quote_source_changed'],['quote-request-invalid','history_quote_request_invalid']]){
+  const f=await fixture(t,mode);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();const target=await f.client.targetSelected();
+  await assert.rejects(f.client.readQuoteSelected(target,{partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'18446744073709551615',sentAt:'1700000000000'}),{code});
+  assert.equal(f.client.stoppedReason,code);noProcess(await waitForPid(f.pidFile));
+ }
+ const g=await fixture(t,'quote-state-on-resolve');
+ await assert.rejects(g.client.resolveSelected('合成目标'),{code:recoverable});assert.equal(g.client.stoppedReason,recoverable);noProcess(await waitForPid(g.pidFile));
+});
 
 test('固定快照核验覆盖全部分片且不授予后续正文读取',async t=>{
  const f=await fixture(t,'sparse-partitions');

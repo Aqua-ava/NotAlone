@@ -5,7 +5,7 @@ import { historyTargetTransition, isPartitionGrowthTargetChange, type HistoryTar
 
 const reason = 'history_source_continuity_unverified';
 export const normalUseContinuity = 'same-source-instances-normal-use-v1';
-const lostCodes=new Set(['history_source_changed','history_source_unverified','history_external_scope_changed','history_scope_changed','history_schema_changed','history_shards_changed','history_cursor_scope_changed','history_support_changed','history_target_unverified']);
+const lostCodes=new Set(['history_source_changed','history_source_unverified','history_external_scope_changed','history_scope_changed','history_schema_changed','history_shards_changed','history_cursor_scope_changed','history_support_changed','history_target_unverified','history_quote_source_changed']);
 export const isSourceContinuityLost=(error:unknown):boolean=>error instanceof StorageFailure&&lostCodes.has(error.code);
 function tables(target: HistoryTarget): string {
  const value:{partitions:string[];tables:[string,string][];checkedPartitions?:string[]}={

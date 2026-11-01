@@ -560,6 +560,9 @@ func cloneNotaloneReadProfile(value *notaloneReadProfile) *notaloneReadProfile {
 }
 func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRequest) (any, error) {
 	if r.Operation != "observe-metadata" && r.Operation != "observe-test-metadata" && r.Operation != "observe-received-test-metadata" && r.Kind != "" {
+		if r.Operation == "quote-read" {
+			return nil, notaloneFailure("history_quote_request_invalid")
+		}
 		return nil, notaloneFailure("history_request_invalid")
 	}
 	switch r.Operation {
@@ -601,6 +604,14 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 			!notaloneImageDigestPattern.MatchString(r.Partition) || !notaloneImageDigestPattern.MatchString(r.Table) ||
 			!notaloneCanonicalDecimal(r.LocalID, true) || !notaloneCanonicalDecimal(r.ServerID, false) || !notaloneCanonicalDecimal(r.SentAt, true) || r.ResourceToken != "" || r.Offset != 0 {
 			return nil, notaloneFailure("history_image_request_invalid")
+		}
+	case "quote-read":
+		if r.Consent != "selected-quote-v1" || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) ||
+			r.DisplayName != "" || r.Target == "" || len(r.Target) > 64000 || r.Cursor != "" || r.Kind != "" ||
+			!notaloneImageDigestPattern.MatchString(r.Partition) || !notaloneImageDigestPattern.MatchString(r.Table) ||
+			!notaloneCanonicalDecimal(r.LocalID, true) || !notaloneCanonicalDecimal(r.ServerID, true) ||
+			(r.SentAt != "" && !notaloneCanonicalDecimal(r.SentAt, true)) || r.ResourceToken != "" || r.Offset != 0 || r.ImageKeySupplied {
+			return nil, notaloneFailure("history_quote_request_invalid")
 		}
 	case "image-read":
 		if r.Account != "" || r.Conversation != "" || r.DisplayName != "" || r.Consent != "" || r.Target != "" || r.Cursor != "" || r.Kind != "" || r.Partition != "" || r.Table != "" || r.LocalID != "" || r.ServerID != "" || r.SentAt != "" ||
@@ -666,6 +677,9 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		return h.bindMetadata(ctx, r.DisplayName)
 	}
 	if h.selected == nil || r.Account != h.selected.Account || r.Conversation != h.selected.Conversation {
+		if r.Operation == "quote-read" {
+			return nil, notaloneFailure("history_quote_association_unverified")
+		}
 		return nil, notaloneFailure("history_scope_unverified")
 	}
 	if err := h.currentAccount(); err != nil {
@@ -676,6 +690,9 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	}
 	if r.Operation == "image-open" {
 		return h.openImage(ctx, r)
+	}
+	if r.Operation == "quote-read" {
+		return h.readQuote(ctx, r)
 	}
 	if r.Operation == "inspect" {
 		return h.inspect(ctx)

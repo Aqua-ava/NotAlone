@@ -1,6 +1,6 @@
 import { StorageFailure, type StorageTransaction, type StorageRow } from '../../storage/sqlite/contracts.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
-import type { HistoryCoverage, HistoryIncrementalCoverage, HistoryRead, HistorySupportReport, HistoryTarget, StoredMessage } from './contracts.ts';
+import type { HistoryCoverage, HistoryIncrementalCoverage, HistoryRead, HistoryQuoteErrorCode, HistorySupportReport, HistoryTarget, StoredHistoryQuote, StoredMessage } from './contracts.ts';
 import {quarantineSummary} from './quarantine.ts';
 import {currentSourceScopeCTE,currentSourcePredicate,currentGoalPredicate} from './current-scope.ts';
 import { displayMessageType, messageTypeLabels, type HistoryMessageType, type NonTextTypeCount } from './message-types.ts';
@@ -133,7 +133,7 @@ export function readCoverage(tx:StorageTransaction,owner:string,contact:string):
   messageCount:safeCount(counts.messages),nonTextCount:safeCount(counts.nontext),nonTextTypes,pageCount:safeCount(pages),quarantinedCount:quarantined,metadataOnlyCount:summary.metadataOnly,
   incremental:effectiveContinuityBlocked?{...incrementalCoverage(resolvedGoal,safeIncremental),phase:'invalidated',failureCode:'history_source_continuity_unverified'}:stateQuarantined&&!normalUseTraversal?{...incrementalCoverage(resolvedGoal,safeIncremental),phase:'incomplete',failureCode:'history_identity_quarantined'}:incrementalCoverage(resolvedGoal,safeIncremental,emptyTargetAwaitingMessages)};
 }
-function readRows(tx:StorageTransaction,owner:string,contact:string,coverage:HistoryCoverage,rows:StorageRow[]):HistoryRead {
+function readRows(tx:StorageTransaction,owner:string,contact:string,coverage:HistoryCoverage,rows:StorageRow[],includeQuotes=true):HistoryRead {
  const sources=new Map<string,string[]>();
  if(rows.length)for(const source of tx.all(`WITH ${currentSourceScopeCTE} SELECT r.id,r.message_id FROM capture_record r
   JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
@@ -141,11 +141,84 @@ function readRows(tx:StorageTransaction,owner:string,contact:string,coverage:His
   AND ${currentSourcePredicate()} ORDER BY r.id`,[owner,contact,contact,owner,contact,...rows.map(row=>row.id)])){
    const key=String(source.message_id),existing=sources.get(key);if(existing)existing.push(String(source.id));else sources.set(key,[String(source.id)]);
   }
+ const quotes=new Map<string,StoredHistoryQuote>();
+ const quoteErrors=new Map<string,HistoryQuoteErrorCode>();
+ if(includeQuotes&&rows.some(row=>row.original_type==='244813135921')){
+  const selected=rows.filter(row=>row.original_type==='244813135921').map(row=>String(row.id));
+  const safeQuoteErrors:readonly HistoryQuoteErrorCode[]=['history_quote_unavailable','history_quote_metadata_invalid','history_quote_too_large',
+   'history_quote_state_unverified','history_quote_association_unverified','history_quote_read_failed'];
+  for(const quote of tx.all(`WITH ${currentSourceScopeCTE}
+   SELECT q.message_id,q.reply_text,q.referenced_text,q.referenced_sender,q.referenced_sender_role,q.referenced_type,q.referenced_server_id,
+    EXISTS(SELECT 1 FROM history_source_exclusion excluded WHERE excluded.owner_id=q.owner_id AND excluded.conversation_id=qb.conversation_id
+     AND excluded.scheme='server' AND excluded.external_key=q.referenced_server_id) target_excluded,
+    CASE WHEN q.referenced_server_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM history_source_exclusion excluded
+     WHERE excluded.owner_id=q.owner_id AND excluded.conversation_id=qb.conversation_id AND excluded.scheme='server'
+      AND excluded.external_key=q.referenced_server_id) THEN (
+     SELECT CASE WHEN count(DISTINCT target.id)=1 THEN min(target.id) END FROM message_alias alias
+      JOIN message target ON target.owner_id=alias.owner_id AND target.contact_id=alias.contact_id AND target.id=alias.message_id
+      JOIN capture_record tr ON tr.owner_id=target.owner_id AND tr.contact_id=target.contact_id AND tr.message_id=target.id
+      JOIN sync_capture tc ON tc.owner_id=tr.owner_id AND tc.contact_id=tr.contact_id AND tc.id=tr.capture_id
+      JOIN read_goal tg ON tg.owner_id=tc.owner_id AND tg.contact_id=tc.contact_id AND tg.id=tc.goal_id
+      WHERE alias.owner_id=q.owner_id AND alias.contact_id=q.contact_id AND alias.binding_id=q.binding_id AND alias.scheme='server'
+       AND alias.external_key=q.referenced_server_id AND target.binding_id=q.binding_id AND target.availability='available'
+       AND tr.state='normalized' AND tr.availability='available' AND json_extract(tg.support_json,'$.serverAliasSemantics')='verified_within_scope'
+       AND NOT EXISTS(SELECT 1 FROM history_message_quarantine tq WHERE tq.owner_id=target.owner_id AND tq.contact_id=target.contact_id AND tq.message_id=target.id)
+       AND ${currentSourcePredicate('tr','tg')}
+    ) ELSE NULL END resolved_target
+   FROM history_quote q JOIN conversation_binding qb ON qb.owner_id=q.owner_id AND qb.contact_id=q.contact_id AND qb.id=q.binding_id AND qb.state='verified'
+   JOIN message carrier ON carrier.owner_id=q.owner_id AND carrier.contact_id=q.contact_id AND carrier.id=q.message_id
+   JOIN capture_record r ON r.owner_id=q.owner_id AND r.contact_id=q.contact_id AND r.id=q.source_record_id AND r.message_id=q.message_id
+   JOIN sync_capture c ON c.owner_id=r.owner_id AND c.contact_id=r.contact_id AND c.id=r.capture_id
+   JOIN read_goal g ON g.owner_id=c.owner_id AND g.contact_id=c.contact_id AND g.id=c.goal_id
+   JOIN contact p ON p.owner_id=q.owner_id AND p.id=q.contact_id AND p.state='active'
+   JOIN owner o ON o.owner_id=q.owner_id AND o.state='active'
+   WHERE q.owner_id=? AND q.contact_id=? AND q.message_id IN (${selected.map(()=>'?').join(',')})
+    AND carrier.binding_id=q.binding_id AND carrier.kind='other' AND carrier.text_body IS NULL AND carrier.original_type='244813135921'
+    AND carrier.availability='available' AND carrier.interpretation_revision=q.carrier_interpretation_revision
+    AND r.state='normalized' AND r.availability='available' AND json_extract(g.target_json,'$.sourceGeneration')=q.source_generation
+    AND NOT EXISTS(SELECT 1 FROM history_message_quarantine cq WHERE cq.owner_id=carrier.owner_id AND cq.contact_id=carrier.contact_id AND cq.message_id=carrier.id)
+    AND ${currentSourcePredicate('r','g')}`,
+   [owner,contact,contact,owner,contact,...selected])){
+    const excluded=String(quote.target_excluded)==='1';
+    const targetMessageId=excluded||quote.resolved_target===null||quote.resolved_target===undefined?null:String(quote.resolved_target);
+    const referencedText=excluded||quote.referenced_text===null?null:String(quote.referenced_text);
+    const referencedServerId=excluded||quote.referenced_server_id===null?null:String(quote.referenced_server_id);
+    const referencedSender=excluded||quote.referenced_sender===null?null:String(quote.referenced_sender);
+    const referencedType=excluded||quote.referenced_type===null?null:String(quote.referenced_type);
+    const state:StoredHistoryQuote['state']=excluded?'unavailable':targetMessageId?'resolved':referencedText!==null||referencedServerId!==null?'unresolved':'unavailable';
+    quotes.set(String(quote.message_id),{replyText:String(quote.reply_text),referencedText,
+     referencedSender,referencedSenderRole:excluded?'unknown':String(quote.referenced_sender_role) as StoredHistoryQuote['referencedSenderRole'],
+     referencedType,referencedServerId,targetMessageId,state});
+  }
+  const placeholders=selected.map(()=>'?').join(',');
+  const quoteAttemptHasStableSourceKey=Boolean(tx.get("SELECT 1 FROM pragma_table_info('history_quote_attempt') WHERE name='source_key'"));
+  if(quoteAttemptHasStableSourceKey)for(const failure of tx.all(`WITH ${currentSourceScopeCTE}
+   SELECT m.id message_id,a.error_code FROM message m
+   JOIN capture_record r ON r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id
+   JOIN sync_capture c ON c.owner_id=r.owner_id AND c.contact_id=r.contact_id AND c.id=r.capture_id
+   JOIN read_goal g ON g.owner_id=c.owner_id AND g.contact_id=c.contact_id AND g.id=c.goal_id
+   JOIN history_quote_attempt a ON a.owner_id=r.owner_id AND a.contact_id=r.contact_id AND a.message_id=m.id AND a.record_id=r.id
+   WHERE m.owner_id=? AND m.contact_id=? AND m.id IN (${placeholders}) AND m.original_type='244813135921'
+    AND m.kind='other' AND m.text_body IS NULL AND m.availability='available' AND r.state='normalized' AND r.availability='available'
+    AND a.outcome='failed' AND a.error_code IN (${safeQuoteErrors.map(()=>'?').join(',')}) AND a.source_key=r.observed_key
+    AND a.source_generation=json_extract(g.target_json,'$.sourceGeneration') AND a.carrier_interpretation_revision=m.interpretation_revision
+    AND a.carrier_status=coalesce(m.status_code,'') AND g.binding_id=m.binding_id
+    AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
+    AND NOT EXISTS(SELECT 1 FROM history_quote stored WHERE stored.owner_id=m.owner_id AND stored.contact_id=m.contact_id AND stored.message_id=m.id
+     AND stored.source_key=r.observed_key AND stored.source_generation=a.source_generation AND stored.carrier_interpretation_revision=m.interpretation_revision)
+    AND ${currentSourcePredicate('r','g')}
+   ORDER BY a.version DESC,a.error_code ASC`,
+  [owner,contact,contact,owner,contact,...selected,...safeQuoteErrors])){
+   const code=String(failure.error_code) as HistoryQuoteErrorCode,messageId=String(failure.message_id);
+   if(!quoteErrors.has(messageId)&&safeQuoteErrors.includes(code))quoteErrors.set(messageId,code);
+  }
+ }
  const messages=rows.map(r=>({id:String(r.id),contactId:contact,bindingId:String(r.binding_id),sender:r.sender_role,
   kind:r.kind,text:r.text_body,originalType:r.original_type,sentAt:r.sent_at===null?null:String(r.sent_at),timePrecision:r.time_precision,
   orderScheme:r.order_scheme,orderKey:r.order_key,status:r.status_code===null||r.status_code===undefined?null:String(r.status_code),
   displayPosition:String(r.display_no),ordering:'unknown',
-  sourceRecordIds:sources.get(String(r.id))??[]})) as StoredMessage[];
+  sourceRecordIds:sources.get(String(r.id))??[],...(quotes.has(String(r.id))?{quote:quotes.get(String(r.id))}:{}),
+  ...(quoteErrors.has(String(r.id))?{quoteErrorCode:quoteErrors.get(String(r.id))}:{})})) as StoredMessage[];
  return {messages,coverage,replyEligibility:coverage.phase==='complete'?'ready':coverage.phase==='incomplete'?'history_incomplete':'history_syncing'};
 }
 function readMessagePage(tx:StorageTransaction,owner:string,contact:string,limit:number,before:string|undefined,order:'stored'|'message-time'):HistoryRead {
@@ -178,5 +251,5 @@ export function readRecentMessages(tx:StorageTransaction,owner:string,contact:st
   AND kind='text' AND text_body IS NOT NULL AND length(text_body)>0 AND sent_at IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
   AND ${currentMessageSource} ORDER BY sent_at DESC,display_no DESC LIMIT ?`,[owner,contact,contact,owner,contact,limit]);
- return readRows(tx,owner,contact,coverage,rows);
+ return readRows(tx,owner,contact,coverage,rows,false);
 }

@@ -36,6 +36,7 @@
   "tests/candidate-provenance/controller.test.mjs",
   "tests/contact-confirmation-witness.test.mjs",
   "tests/contact-history-controller.test.mjs",
+  "tests/contact-history-quotes.test.mjs",
   "tests/contact-restore-coalescing.test.mjs",
   "tests/desktop-state-optimization.test.mjs",
   "tests/development-policy.test.mjs",
@@ -149,6 +150,7 @@
  ],
  "headless": [
   "tests/contacts-history-view.test.mjs",
+  "tests/contact-history-quote-view.test.mjs",
   "tests/fixed-memory-processing-view.test.mjs",
   "tests/memory-page-fixed-processing.test.mjs",
   "tests/memory-processing-entry.test.mjs",

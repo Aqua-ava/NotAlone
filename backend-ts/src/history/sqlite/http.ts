@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import { readWechatHttpBody, WechatHttpBodyError } from '../../sync/wechat-http-body.ts';
-import type { HistoryCoverage, HistoryImageMedia, HistoryRead, StoredMessage } from './contracts.ts';
+import type { HistoryCoverage, HistoryImageMedia, HistoryQuoteErrorCode, HistoryRead, StoredMessage } from './contracts.ts';
 import type { FirstHistoryCoordinatorState } from './coordinator.ts';
 import type { IncrementalHistoryCoordinatorState } from './incremental-coordinator.ts';
 import { displayMessageType, messagePlaceholder } from './message-types.ts';
@@ -14,6 +14,14 @@ interface HistoryHttpService {
   synchronize(contactId: string, signal?: AbortSignal): Promise<HistoryCoverage>;
 }
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+const quoteErrorPlaceholders:Record<HistoryQuoteErrorCode,string>={
+  history_quote_unavailable:'[引用回复：引用内容暂不可用]',
+  history_quote_metadata_invalid:'[引用回复：引用信息无效]',
+  history_quote_too_large:'[引用回复：引用内容过长]',
+  history_quote_state_unverified:'[引用回复：消息状态尚未核验]',
+  history_quote_association_unverified:'[引用回复：引用对象尚未核验]',
+  history_quote_read_failed:'[引用回复：引用内容读取失败]',
+};
 function isoTime(message: StoredMessage): string | null {
   if (message.sentAt === null) return null;
   const timestamp = Number(message.sentAt);
@@ -26,13 +34,20 @@ export function projectHistoryMessages(read: HistoryRead, limit: number, imageMe
   const selected = read.messages.slice(0, limit);
   return {
     messages: selected.map(message => {
+      const type=displayMessageType(message),quote=message.quote;
       const image = imageMedia && message.kind === 'image' ? imageMedia.get(message.id) ?? {state:'pending' as const,fileId:null,mimeType:null} : null;
       const safeImage = image?.state === 'original' && uuid.test(image.fileId??'') && image.mimeType && /^image\/[a-z0-9.+-]{1,64}$/.test(image.mimeType)
         ? image : image ? {...image,fileId:null,mimeType:null} : null;
+      const quoted=type==='quote'&&quote?{
+        text:quote?.referencedText||'引用内容暂不可用',target_message_id:quote?.targetMessageId??null,
+        sender:quote?.referencedSender??null,sender_role:quote?.referencedSenderRole??'unknown',
+        message_type:quote?.referencedType??null,state:quote?.state??'unavailable',
+      }:null;
       return {
         message_id: message.id, speaker: message.sender === 'owner' ? 'user' : 'contact',
-        message_type: displayMessageType(message), text: message.kind === 'text' ? message.text : null,
-        media_placeholder: messagePlaceholder(displayMessageType(message)), occurred_at: isoTime(message), quoted: null,
+        message_type: type, text: quote?.replyText??(message.kind === 'text' ? message.text : null),
+        media_placeholder: type==='quote'&&message.quoteErrorCode?quoteErrorPlaceholders[message.quoteErrorCode]:messagePlaceholder(type),
+        occurred_at: isoTime(message), quoted,
         ordering: message.ordering, display_position: message.displayPosition, source_record_ids: message.sourceRecordIds,
         ...(safeImage ? {image_media:{state:safeImage.state,file_id:safeImage.fileId,mime_type:safeImage.mimeType,
           ...('errorCode' in safeImage&&safeImage.errorCode?{error_code:safeImage.errorCode}:{})}} : {}),

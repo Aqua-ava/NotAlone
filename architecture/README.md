@@ -242,3 +242,4 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 137. [ADR-137：授权会话同步中的原图保存](adr/137-original-image-authorized-sync.md)
 138. [ADR-138：聊天图片原图提取与占位替换](adr/138-chat-image-original-extraction-and-placeholder.md)
+139. [ADR-139：引用回复同步与历史补齐](adr/139-quoted-reply-sync-and-history-enrichment.md)

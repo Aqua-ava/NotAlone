@@ -1,3 +1,5 @@
+import type { MessageQuoteSnapshot } from './message-quote';
+
 export interface ContactHistoryRequest {
   contactId: string;
   scopeRevision: number;
@@ -19,7 +21,7 @@ export interface ContactHistoryMessage {
   occurredAt: string | null;
   ordering?: 'verified' | 'unknown';
   displayPosition?: string;
-  quoted: { text: string; targetMessageId: string | null } | null;
+  quoted: MessageQuoteSnapshot | null;
   imageMedia?: ContactHistoryImageMedia;
 }
 export interface ContactHistoryMessagesState {

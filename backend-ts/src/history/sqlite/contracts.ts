@@ -37,6 +37,21 @@ export interface HistoryRecord {
   // 渠道已核验的具体状态；撤回是无正文终态，不能仅凭原始状态数字推断。
   messageState?: 'sent' | 'received' | 'recalled' | 'absent';
 }
+/** 一对一引用解析的最小结构化结果；不保存原始 XML 或其他消息载荷。 */
+export interface HistoryQuoteContent {
+  replyText: string;
+  referencedText: string | null;
+  referencedSender: string | null;
+  referencedSenderRole: 'owner' | 'contact' | 'unknown';
+  referencedType: string | null;
+  referencedServerId: string | null;
+}
+export interface StoredHistoryQuote extends HistoryQuoteContent {
+  targetMessageId: string | null;
+  state: 'resolved' | 'unresolved' | 'unavailable';
+}
+export type HistoryQuoteErrorCode = 'history_quote_unavailable' | 'history_quote_metadata_invalid' | 'history_quote_too_large'
+  | 'history_quote_state_unverified' | 'history_quote_association_unverified' | 'history_quote_read_failed';
 export interface HistoryPage {
   target: string; cursorIn: string | null; cursorOut: string | null;
   records: readonly HistoryRecord[];
@@ -57,6 +72,8 @@ export interface HistoryChannel {
   // 只接续业务事务已接受且作用域未变的本机检查点；缺失返回 null，不能猜测水位。
   resumeTarget?(scope: HistoryScope, previous: HistoryTarget, cursor: string, signal?: AbortSignal): Promise<HistoryTarget | null>;
   page(scope: HistoryScope, target: HistoryTarget, cursor: string | null, signal?: AbortSignal): Promise<HistoryPage>;
+  /** 仅受信任渠道对已验证的单条引用来源做有限解析，不返回原始 XML。 */
+  readQuote?(scope: HistoryScope, target: HistoryTarget, source: HistorySource, signal?: AbortSignal): Promise<HistoryQuoteContent & {proofDigest: string}>;
   // 可选增量尾部能力：只由支持档声明 incrementalTail=supported 的已认证适配器提供。
   tail?(scope: HistoryScope, target: HistoryTarget, cursor: string, signal?: AbortSignal): Promise<HistoryTailPage>;
   // 06 精确历史边界能力：仅已认证适配器提供，生产适配器不实现（空缺即拒绝）。
@@ -92,6 +109,8 @@ export interface StoredMessage {
   status?: string | null;
   // 当前按保存位置分页；ordering描述展示次序，不能从原消息orderScheme推定。
   displayPosition: string; ordering: 'verified' | 'unknown'; sourceRecordIds: string[];
+  quote?: StoredHistoryQuote;
+  quoteErrorCode?: HistoryQuoteErrorCode;
 }
 export interface HistoryRead {
   messages: StoredMessage[]; coverage: HistoryCoverage;
