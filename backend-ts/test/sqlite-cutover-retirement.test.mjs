@@ -8,6 +8,79 @@ const root = path.resolve(new URL('../../', import.meta.url).pathname);
 const productEntries = ['backend-ts/src/sqlite-host-plugin.ts', 'backend-ts/src/launch.ts', 'desktop/src/main/index.ts'];
 const sourceRoots = ['backend-ts/src', 'desktop/src'];
 
+test('旧宿主消费者退役后清除遗留解析器与模型测试孤岛，保留现行验收入口', () => {
+  for (const file of [
+    'backend-ts/src/memory/records/json.ts',
+    'backend-ts/test/diagnostic-scenario-budget-plugin.ts',
+    'backend-ts/test/extraction-model-plugin.ts',
+    'backend-ts/test/host-model-network-guard.mjs',
+    'backend-ts/test/stalled-tool.ts',
+    'backend-ts/test/pure-ts-provider-fixture.mjs',
+    'backend-ts/test/main-host-reply-chain-preload.mjs',
+  ]) assert.equal(existsSync(path.join(root, file)), false, `${file} 的旧宿主或测试消费者已退役`);
+  for (const file of [
+    'backend-ts/src/host/host-json.ts',
+    'backend-ts/src/memory/sqlite/http.ts',
+    'backend-ts/test/observe.mjs',
+    'backend-ts/test/model-provider-fixture.ts',
+    'backend-ts/test/profile-support.mjs',
+    'backend-ts/test/prepare-memory-desktop.mjs',
+    'backend-ts/test/prepare-memory-management-desktop.mjs',
+    'backend-ts/test/prepare-skill-desktop.mjs',
+    'backend-ts/test/prepare-visual-desktop.mjs',
+  ]) assert.equal(existsSync(path.join(root, file)), true, `${file} 的现行调用或独立验收入口须保留`);
+});
+
+test('旧同步解析、候选协议及已移除导入页的孤立模块不再留在当前树', () => {
+  for (const file of [
+    'backend-ts/src/memory/overview/evidence/semantic.ts',
+    'backend-ts/src/memory/overview/evidence/legacy-semantic.ts',
+    'backend-ts/src/memory/overview/evidence/legacy-grammar.ts',
+    'backend-ts/src/memory/processing/reason.ts',
+    'backend-ts/src/memory/records/documents/target.ts',
+    'backend-ts/src/reply/generation/reply-candidate-prompt.ts',
+    'backend-ts/src/reply/generation/reply-prepared-schema.ts',
+    'backend-ts/src/reply/generation/reply-prompts.ts',
+    'backend-ts/src/skills/skills-root.ts',
+    'backend-ts/src/sync/sync-incremental-cli-stream.ts',
+    'backend-ts/src/sync/sync-incremental-cli-history.ts',
+    'backend-ts/src/sync/sync-incremental-normalize.ts',
+    'backend-ts/src/sync/wechat-scope-json.ts',
+    'desktop/src/renderer/SourceDeletionPanel.tsx',
+  ]) assert.equal(existsSync(path.join(root, file)), false, `${file} 已无当前消费者`);
+  for (const file of ['backend-ts/src/sync/wechat-http-body.ts',
+    'backend-ts/src/history/sqlite/incremental-coordinator.ts',
+    'backend-ts/src/memory/overview/evidence/bounded-body.ts',
+    'backend-ts/src/memory/overview/evidence/bounded-graph.ts',
+    'backend-ts/src/memory/overview/evidence/bounded-contract.ts',
+    'desktop/src/shared/source-deletion-bridge.ts',
+    'desktop/src/preload/source-deletion.ts']) {
+    assert.equal(existsSync(path.join(root, file)), true, `${file} 的现行能力不能随孤立模块移除`);
+  }
+});
+
+test('SQLite 切换后不保留无消费者的旧合成宿主与传输辅助文件', () => {
+  const retired = [
+    'backend-ts/src/plugin.ts',
+    'backend-ts/src/host/service.ts',
+    'backend-ts/src/host/runtime.ts',
+    'backend-ts/src/host/business.ts',
+    'backend-ts/src/host/pure-ts-public-pages.ts',
+    'backend-ts/src/host/pure-ts-runtime.ts',
+    'backend-ts/test/reply-service-runtime-support.mjs',
+    'backend-ts/test/assistant-runtime-faults.mjs',
+    'backend-ts/test/assistant-runtime-lock-holder.mjs',
+    'desktop/scripts/test-dsh-host.mjs',
+    'desktop/scripts/test-dsh-contact-context.mjs',
+  ];
+  for (const file of retired) assert.equal(existsSync(path.join(root, file)), false, `${file} 已无当前入口或测试消费者`);
+  // 原生辅助程序和 SQLite 共用模块仍是当前依赖，不能按旧目录名整体移除。
+  for (const file of ['backend-ts/src/host/host-json.ts', 'backend-ts/src/host/host-reply-config.ts',
+    'backend-ts/src/host/pure-ts-events.ts', 'native/skill-read/build.sh', 'native/media-validation/build.sh']) {
+    assert.equal(existsSync(path.join(root, file)), true, `${file} 仍须保留`);
+  }
+});
+
 async function sourceFiles() {
   const files = [];
   const walk = async (relative) => {

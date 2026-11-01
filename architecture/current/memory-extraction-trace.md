@@ -1,5 +1,7 @@
 # 记忆提取完整追踪
 
+> 历史源码链接：本文已退役 Python 文件指向历史测试清单采用的固定 Git 快照 `23a76733`，仅供查看旧实现，不表示该快照就是文中各日期的原始验收版本，也不是当前运行入口。
+
 > 2026-10-21 决定收敛：下文固定语用／置信度／维度门步骤属于显式历史提取协议；默认 direct／automatic 路径按 [ADR-085](../adr/085-source-verified-automatic-adoption.md) 取消额外人工门。追踪应记录实际协议、有效检查、执行分支和未执行阶段，不能伪造已执行旧门；默认空维度表已由 ADR-070 退役，旧评测合同保持。
 
 > 状态：SQLite 全过程记录、默认提取装配和受范围查询／删除已实现；React 管理页已接入查看与删除，并通过合成普通页面验证。原生 Electron、最终签名包与真实微信验收仍独立保留。
@@ -224,26 +226,28 @@ flowchart TD
 
 用户删除单条候选或记忆时，其派生内容继续按现行删除规则清理，追踪中的正文快照和解释也纳入清理，不能从记录里静默恢复已删除的资料。
 
-## 当前后端实现与缺口
+## 历史 Python 后端实现与缺口
+
+> 以下表格保留 Python 版本的实现沿革，旧源码路径可能已不在当前检出中，不能作为当前能力证明。当前 TypeScript／SQLite 的承接实现见 [执行与追踪](../../backend-ts/src/memory/sqlite/execution.ts)，映射与验证限制见 [SQLite 切换记录](../../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。上文的隐私、来源与删除要求不因历史实现退役而取消。
 
 下表区分已保存的实际处理与不能复原的历史／外部信息。验证使用合成资料，不证明真实模型、真实微信或新 App 界面已经验收。
 
-| 当前环节 | 代码证据 | 已实现行为与边界 |
+| 历史环节 | 当时代码证据 | 当时已实现行为与边界 |
 | --- | --- | --- |
-| 历史导入 | [导入命令](../../backend/src/notalone/ingest/import_command.py)、[来源处理存储](../../backend/src/notalone/persistence/source_processing.py)、[规则文件适配器](../../backend/src/notalone/source_processing/rule_capture.py) | 保存相关原始行、实际解析／校验／规范化输入输出及映射，来源与消息在同一事务提交；导入仍拒绝文件内重复或既有重叠，不改为合并。失败仅存具体安全类别、字段、规则与位置；执行边界取得实际时刻和当时文件摘要，快照构造只接收摘要和时刻。 |
-| CLI 增量 | [CLI 适配器](../../backend/src/notalone/wechat_cli/adapter.py)、[观察持久化](../../backend/src/notalone/persistence/observation_store.py)、[来源处理存储](../../backend/src/notalone/persistence/source_processing.py) | 保存实际事件、转换与去重决定、消息／来源引用映射；非文字／未知事件标明过滤原因。只处理已授权记录，不复制整段 CLI 输出；增量入口不新增提取调度。 |
-| 原处理时间 | [导入命令](../../backend/src/notalone/ingest/import_command.py)、[Worker](../../backend/src/notalone/tasks/worker.py) | 原处理记录连接到提取使用的快照，保留实际处理时间与版本；后台 `parse / normalize` 步骤记账仍不是原解析时间。 |
-| 消息读取与窗口 | [读取支持](../../backend/src/notalone/memory_extraction/cli_support.py)、[批次命令](../../backend/src/notalone/memory_extraction/command.py)、[追踪存储](../../backend/src/notalone/persistence/extraction_trace.py) | 保存实际水位、消息版本、排除规则、20 + 20 + 20 窗口、顺序与 target 标记；保存前在范围锁内核对实际缓存的消息、来源与 ref 存活和原始投影，拒绝已删缓存，保留活来源与真实处理链缺口；没有重新读取扩大范围。 |
-| 模型调用 | [捕获边界](../../backend/src/notalone/memory_trace/transport.py)、[生产组装](../../backend/src/notalone/memory_extraction/cli_support.py) | 分别保存 E/V/A 的提示词、schema、参数与原始返回；真实 SDK HTTP hooks 保存最终序列化正文、供应商返回及可观察重试，不保存鉴权头。未进入该 transport 的适配器标为 `not_observable`。 |
-| 解析、时间与核验 | [提取流程](../../backend/src/notalone/memory_extraction/flow.py)、[核验适配器](../../backend/src/notalone/memory_extraction/verification_adapters.py) | 原始响应先保存，再记结构解析、来源契约、字段变化与逐候选核验，包含拒绝、失败与未执行结果。 |
-| 采纳与裁决 | [采纳流程](../../backend/src/notalone/memory_extraction/adoption.py)、[裁决适配器](../../backend/src/notalone/memory_extraction/adjudication_adapters.py) | 保存稳定候选标识、语用分流、删除指纹、重复、门槛、shortlist 与 ADD/UPDATE/NOOP；手输本人资料的 owner 归属标识不充当来源，仍以自身 memory_id 绑定删除；其他真实来源继续复验。只记录实际执行；默认策略按 ADR-070／085，显式历史放行表与评测合同保持，追踪本身不改变提示词或预算。 |
-| 业务写入 | [追踪存储](../../backend/src/notalone/persistence/extraction_trace.py)、[记忆存储](../../backend/src/notalone/persistence/memory_store.py)、历史迁移 `backend-ts/database/migrations/043_extraction_trace_record_operations.sql` | 保存写入意图、返回／权威记录回执与部分提交；联系人及本人旧记忆失效计划也关联实际 ID，按 invalidated 状态核对提交，原行仍 active 时不能因行存在就报失效成功。结束记录和水位同事务提交；回执丢失显示未知／待核对，不假称回滚。 |
-| 调用台账 | [上下文与补账](../../backend/src/notalone/memory_trace/context.py)、历史迁移 `backend-ts/database/migrations/042_extraction_trace_call_receipts.sql` | 正常、停止和来源删除后的实际调用关联同一 `call_id`／台账 ID，区分 received／returned／unavailable 与 consumed／not_adopted；提交回执未知不另造补账。不保存正文，正文删除后只保留最小关联。 |
-| 查询与删除 | [查询服务](../../backend/src/notalone/application/trace_service.py)、[HTTP](../../backend/src/notalone/server/app.py)、[CLI](../../backend/src/notalone/memory_trace/command.py)、[React 查看页](../../desktop/src/renderer/TracePanel.tsx)、[具名控制器](../../desktop/src/main/traces/controller.ts) | 默认查询装配不需要模型；授权批次列表稳定分页、详情和候选／记忆反查；消息正查引用或使用它的提取批次，包括仅上下文、零候选与失败。来源处理仍使用独立资源。区分已删、未记录及手输不适用，人工确认模型候选仍可反查。所有 HTTP 追踪响应 no-store，越界／不存在统一 404。React 管理页可主动查看阶段原始快照和关联、翻页、按记录查询、确认后删除追踪；切换范围、断线、读取失败和来源删除检查点清除旧正文，迟到响应不回填。正文事件只发布到可信管理窗口，小窗不得查询。普通页面证据不替代原生 IPC 或最终 App 验收。 |
+| 历史导入 | [导入命令](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/ingest/import_command.py)、[来源处理存储](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/persistence/source_processing.py)、[规则文件适配器](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/source_processing/rule_capture.py) | 保存相关原始行、实际解析／校验／规范化输入输出及映射，来源与消息在同一事务提交；导入仍拒绝文件内重复或既有重叠，不改为合并。失败仅存具体安全类别、字段、规则与位置；执行边界取得实际时刻和当时文件摘要，快照构造只接收摘要和时刻。 |
+| CLI 增量 | [CLI 适配器](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/wechat_cli/adapter.py)、[观察持久化](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/persistence/observation_store.py)、[来源处理存储](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/persistence/source_processing.py) | 保存实际事件、转换与去重决定、消息／来源引用映射；非文字／未知事件标明过滤原因。只处理已授权记录，不复制整段 CLI 输出；增量入口不新增提取调度。 |
+| 原处理时间 | [导入命令](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/ingest/import_command.py)、[Worker](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/tasks/worker.py) | 原处理记录连接到提取使用的快照，保留实际处理时间与版本；后台 `parse / normalize` 步骤记账仍不是原解析时间。 |
+| 消息读取与窗口 | [读取支持](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/memory_extraction/cli_support.py)、[批次命令](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/memory_extraction/command.py)、[追踪存储](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/persistence/extraction_trace.py) | 保存实际水位、消息版本、排除规则、20 + 20 + 20 窗口、顺序与 target 标记；保存前在范围锁内核对实际缓存的消息、来源与 ref 存活和原始投影，拒绝已删缓存，保留活来源与真实处理链缺口；没有重新读取扩大范围。 |
+| 模型调用 | [捕获边界](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/memory_trace/transport.py)、[生产组装](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/memory_extraction/cli_support.py) | 分别保存 E/V/A 的提示词、schema、参数与原始返回；真实 SDK HTTP hooks 保存最终序列化正文、供应商返回及可观察重试，不保存鉴权头。未进入该 transport 的适配器标为 `not_observable`。 |
+| 解析、时间与核验 | [提取流程](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/memory_extraction/flow.py)、[核验适配器](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/memory_extraction/verification_adapters.py) | 原始响应先保存，再记结构解析、来源契约、字段变化与逐候选核验，包含拒绝、失败与未执行结果。 |
+| 采纳与裁决 | [采纳流程](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/memory_extraction/adoption.py)、[裁决适配器](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/memory_extraction/adjudication_adapters.py) | 保存稳定候选标识、语用分流、删除指纹、重复、门槛、shortlist 与 ADD/UPDATE/NOOP；手输本人资料的 owner 归属标识不充当来源，仍以自身 memory_id 绑定删除；其他真实来源继续复验。只记录实际执行；默认策略按 ADR-070／085，显式历史放行表与评测合同保持，追踪本身不改变提示词或预算。 |
+| 业务写入 | [追踪存储](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/persistence/extraction_trace.py)、[记忆存储](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/persistence/memory_store.py)、历史迁移 `backend-ts/database/migrations/043_extraction_trace_record_operations.sql` | 保存写入意图、返回／权威记录回执与部分提交；联系人及本人旧记忆失效计划也关联实际 ID，按 invalidated 状态核对提交，原行仍 active 时不能因行存在就报失效成功。结束记录和水位同事务提交；回执丢失显示未知／待核对，不假称回滚。 |
+| 调用台账 | [上下文与补账](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/memory_trace/context.py)、历史迁移 `backend-ts/database/migrations/042_extraction_trace_call_receipts.sql` | 正常、停止和来源删除后的实际调用关联同一 `call_id`／台账 ID，区分 received／returned／unavailable 与 consumed／not_adopted；提交回执未知不另造补账。不保存正文，正文删除后只保留最小关联。 |
+| 查询与删除 | [查询服务](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/application/trace_service.py)、[HTTP](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/server/app.py)、[CLI](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/memory_trace/command.py)、[React 查看页](../../desktop/src/renderer/TracePanel.tsx)、[具名控制器](../../desktop/src/main/traces/controller.ts) | 默认查询装配不需要模型；授权批次列表稳定分页、详情和候选／记忆反查；消息正查引用或使用它的提取批次，包括仅上下文、零候选与失败。来源处理仍使用独立资源。区分已删、未记录及手输不适用，人工确认模型候选仍可反查。所有 HTTP 追踪响应 no-store，越界／不存在统一 404。React 管理页可主动查看阶段原始快照和关联、翻页、按记录查询、确认后删除追踪；切换范围、断线、读取失败和来源删除检查点清除旧正文，迟到响应不回填。正文事件只发布到可信管理窗口，小窗不得查询。普通页面证据不替代原生 IPC 或最终 App 验收。 |
 
-043 前已有窗口可以按实际已保存的消息标识正查；清除这类窗口前只保留无正文标识关联，继续显示已删状态。早已清除且未保存关联的历史无法补造，仍保留 `not_recorded`。生产与合成追踪的错误码／状态使用[同一纯映射](../../backend/src/notalone/memory_trace/status.py)。
+043 前已有窗口可以按实际已保存的消息标识正查；清除这类窗口前只保留无正文标识关联，继续显示已删状态。早已清除且未保存关联的历史无法补造，仍保留 `not_recorded`。生产与合成追踪的错误码／状态使用[同一纯映射](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/memory_trace/status.py)。
 
-规范化还有以下当前差异，需要按实际输入与版本记录，不能统一写成“清洗了一下”：
+该历史版本的规范化还有以下差异，需要按实际输入与版本记录，不能统一写成“清洗了一下”：
 
 - 历史导入：`is_from_me` 映射说话人；要求 `time_iso` 带时区且与 `create_time` 对应，失败则拒绝文件；保存媒体占位文字，但占位不等于媒体内容。
 - CLI：`is_from_me` 映射说话人，文字原样使用；优先由 `create_time` 转 UTC，否则使用 `time_iso`，当前对不带时区的值赋 UTC；完全缺失时间保留未知，不补成读取时间。

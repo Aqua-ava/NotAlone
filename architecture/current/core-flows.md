@@ -1,6 +1,6 @@
 # 现行核心流程
 
-> 微信同步和撤回的新目标见 [ADR-128](../adr/128-deduplicated-wechat-message-storage.md)：重复扫描不重复保存正文，已撤回正文可查看但不参与新的生成或记忆提取；实施与迁移尚未完成。
+> 微信同步和撤回的新目标见 [ADR-128](../adr/128-deduplicated-wechat-message-storage.md)：重复扫描不重复保存正文；去重与旧记录清理已实施，集成验收进行中。撤回正文可查看但不参与新的生成或记忆提取的目标暂缓，继续执行现有来源资格保护；不将已实施的去重等同于撤回功能或完整实机验收。
 
 > 当前 TypeScript 后台以受控本机 SQLite 承载业务写入和查询，迁移及具名事务动作见 [ADR-109](../adr/109-controlled-sqlite-storage-foundation.md)与[切换记录](../../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。来源、范围、删除及 DSH 约束继续适用。
 

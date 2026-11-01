@@ -5,16 +5,14 @@
 > 2026-10-31 发现与启用修订：[ADR-129](../adr/129-controlled-dsh-reply-skill-discovery.md)是目录发现、技术更新和新包启用的当前入口。用户已取消手动添加与手填目录入口，管理刷新自动发现，新增内容不要求用户填写安装或导入路径。当前 DSH/SQLite 实现使用官方 scoped registry 和业务受控 provider；下文旧 Python、数据库表及历史验收只描述当时状态，不能视为当前集成证据。
 > 回复组合修订：[ADR-136](../adr/136-multi-skill-reply-composition.md)允许正常回复按需组合零个或多个已启用、已核验 Skill；每包固定一个当前不可变修订，总模型请求数、静态资源数与输入预算不扩大。
 
-> 2026-10-23 框架迁移：[ADR-102](../adr/102-dsh-typescript-backend-migration.md)采纳精简 DSH 与 TS 后端；当前 Python／LangChain 与 `SkillsMiddleware` 仍是待替换实现，尚未完成迁移或验收。ADR-010 的框架选择由 ADR-102 替代，本文的范围、不可变版本、审核、渐进加载、预算和删除契约保持。DSH 官方 Skill 基础设施须通过受控适配承接 `SkillPort`，不得默认开放任意目录或脚本。
+> 2026-10-23 框架迁移：[ADR-102](../adr/102-dsh-typescript-backend-migration.md)采纳精简 DSH 与 TS 后端；当时 Python／LangChain 与 `SkillsMiddleware` 的实现已退役；当前装配与技术核验见 [DSH／SQLite Skill 实现](../../backend-ts/src/skills/sqlite/README.md)，实际验收范围仍须分别核对。ADR-010 的框架选择由 ADR-102 替代，本文的范围、不可变版本、审核、渐进加载、预算和删除契约保持。DSH 官方 Skill 基础设施须通过受控适配承接 `SkillPort`，不得默认开放任意目录或脚本。
 
 > 数据库精简：[ADR-098](../adr/098-skill-business-state-only.md)将描述、质量警告和资源索引放入不可变版本的无正文清单，数据库仅保存其完整性锚点和业务状态。
 > 目录存储决定：[ADR-096](../adr/096-directory-backed-reply-skills.md)采用标准目录保存已发布正文及辅助资源，自动发现新增和修改；数据库仅保留业务状态和内容定位。实现及本机迁移证据见[本次规格](../../.scratch/directory-reply-skills/spec.md)。
 
 > 2026-10-21 决定收敛：按 [ADR-093](../adr/093-retain-current-skill-resource-budget.md)沿用当前导入限制和整轮输入预算，不新增独立辅助资源额度。原规格中的独立额度缺口已不属于必做功能；导入边界测试、真实质量及桌面／HTTP 等其他历史验证仍按实际证据核对，不能据接口存在宣称全部完成。
 
-> 状态：已采纳；已有管理、资源持久化与运行时读取实现，各项完成及验收范围须按证据分别核对。测试入口见
-> [tests](../../backend/tests/unit/skills)、[tests](../../backend/tests/integration/persistence) 与
-> [tests](../../backend/tests/unit/reply)，以 在 `backend/` 运行 `python -m unittest discover -s tests` 的真实验证为准。
+> 状态：已采纳；当前管理、持久化和读取入口见 [DSH／SQLite Skill 实现](../../backend-ts/src/skills/sqlite/README.md)，当前测试命令见[后台说明](../../backend-ts/README.md#开发与验证)。历史 Python 测试目录与 `python -m unittest discover -s tests` 属于旧版本，不是当前检出的执行入口；需要追溯时遵循[历史测试说明](../../backend-ts/test/HISTORICAL.md)，不能用历史通过数代替当前验收。
 > 日期：2026-08-24
 
 > [ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)的授权经验草稿、同输入审核及明确范围发布已在独立集成候选接线并签收；实际范围见[09](../../.scratch/memory-skill-integration-preparation/issues/09-learning-drafts.md)与[11集成记录](../../.scratch/memory-skill-integration-preparation/frontier-11-validation.md)。12接续版本历史、更新／合并与合法回滚，实际验证见[12集成记录](../../.scratch/memory-skill-integration-preparation/frontier-12-validation.md)；范围政策继续13。下方 v1 本地包路径保持，不能以其直接发布行为替代自动草稿的用户审核。

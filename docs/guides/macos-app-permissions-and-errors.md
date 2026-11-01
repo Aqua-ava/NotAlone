@@ -1,5 +1,7 @@
 # macOS App 权限与启动错误记录
 
+> 历史源码定位：已退役 Python 链接使用固定 Git 快照 `23a76733`，只供查看旧实现，不表示该快照就是各条记录的原始验收版本；当前后台入口见[TypeScript 后台说明](../../backend-ts/README.md)。本页按日期保留的旧环境和操作记录不自动成为当前操作指南。
+
 ## 2026-10-31 开发监督器的微信数据访问归属
 
 本轮开发监督器由 Codex 自带的独立 Node 启动；系统日志将该链路的微信 CLI 数据访问归属于 `node`，并记录 App Data 拒绝。用户明确同意开启 Electron 和 node 的微信单项访问；Electron 项已开启，node 项经 Agent 和用户尝试仍显示关闭，原因未确认。未开启完全磁盘访问、修改 TCC 数据库或改变微信读取范围。
@@ -457,7 +459,7 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 | `回复生成超时` / `本次生成尝试过多` | 模型或只读 Tool 在本次有界运行内未完成 | 运行预算、模型响应、Skill 资源反馈和候选请求台账 | 不要把未完成请求当成已生成或已发送 |
 | `Follow 流：未运行` | Follow 当前没有启动或已退出 | Follow 控制状态、CLI 可用性和用户是否启动人工验证 | 不要把状态文字当作消息发送失败，也不要自动发送消息 |
 
-适配层只向 UI 暴露稳定错误码和安全说明，不回显 CLI 原始输出、数据库路径、完整会话标识、聊天正文或凭据。相关实现：[CLI 错误定义](../../backend/src/notalone/wechat_cli/errors.py)、[前台探针适配器](../../backend/src/notalone/front_sync/probe_adapter.py)。
+适配层只向 UI 暴露稳定错误码和安全说明，不回显 CLI 原始输出、数据库路径、完整会话标识、聊天正文或凭据。相关实现：[CLI 错误定义](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/wechat_cli/errors.py)、[前台探针适配器](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/front_sync/probe_adapter.py)。
 
 2026-10-03 桌面连接修复范围：握手解析、普通 HTTP 客户端和 SSE 共用回环地址校验；直接构造非法连接也在请求前返回既有安全连接错误，避免强制解包崩溃。验证只使用合成握手、临时路径和合成本机服务；不读取真实 backend.info、不启动 App 或微信读取进程、不改变权限／签名，不替换当前 App。独立临时构建目录中的 Swift 37 项与真正 App 目标编译通过，Standards／Spec 两轴均 0；打包与实机集成不在本轮验证范围。详细红绿过程和命令见 [连接地址修复任务](../../.scratch/native-app-backend/issues/17-validate-backend-connection.md)。
 

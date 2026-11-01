@@ -186,7 +186,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 ## 当前架构决策
 
-- 微信消息去重与撤回保留按 [ADR-128](adr/128-deduplicated-wechat-message-storage.md)调整，修订 ADR-113 的重复捕获及撤回正文规则；设计已确认，实施、迁移和验收尚未完成。
+- 微信消息去重与撤回保留按 [ADR-128](adr/128-deduplicated-wechat-message-storage.md)调整，修订 ADR-113 的重复捕获及撤回正文规则；去重与旧记录清理已实施，集成验收进行中，撤回状态的新展示与使用规则暂缓。实现不证明所有用户资料已迁移或完整实机验收通过。
 
 - 完整本机首用及资料生命周期按 [ADR-101](adr/101-local-app-first-use-lifecycle.md)与[新票据](../.scratch/local-app-first-use/planning.md)落实：默认仅所选会话；联系人、SQLite 实例与本机资料按当前生命周期管理；完整独立交付仍待验收。
 

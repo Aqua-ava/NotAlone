@@ -1,5 +1,7 @@
 # 2026-10-23 微信首次接入排障与体验问题记录
 
+> 历史实测记录：下文保留当时版本的环境、命令与结果，其中 Python／Conda／PostgreSQL 步骤不是当前启动指南。现行 TypeScript／DSH／SQLite 入口以[项目 README](../README.md#从源码运行)与[后台说明](../backend-ts/README.md)为准；历史成功不代表当前版本已重新验收。
+
 ## 结果与记录范围
 
 本次已完成外置工具安装、App 路径配置和本机密钥初始化；CLI 返回 `live_read_ok=true`、`schema2_ready=true`，NotAlone 实际点击“检测微信账号”后成功显示配置账号，进入同步范围确认页。

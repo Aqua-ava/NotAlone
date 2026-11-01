@@ -1,6 +1,6 @@
 # 记忆与 Skill 演进草图
 
-> 后续框架决定（2026-10-23）：[ADR-102](../adr/102-dsh-typescript-backend-migration.md)已采纳精简 DSH 与 TS 后端迁移。下文未选择／搁置 DSH 的表述保留当时讨论来历，不再代表当前选型；领域行为按后续正式规格保持，迁移未实现。
+> 后续框架决定（2026-10-23）：[ADR-102](../adr/102-dsh-typescript-backend-migration.md)已采纳精简 DSH 与 TS 后端迁移。下文未选择／搁置 DSH 的表述保留当时讨论来历，不再代表当前选型；领域行为按后续正式规格保持；当前运行入口与实际验证范围见[后台说明](../../backend-ts/README.md)。
 
 > 2026-10-21 设计审查：下文全部 open／尚未实现为当时状态，工程签收见对应正式任务索引，不等于真实质量或 App 验收。默认自动维护及升级入口退役见 [ADR-070](../adr/070-automatic-memory-maintenance.md)，个人 L2/L3 有据推断见 [ADR-072](../adr/072-personal-memory-insights-without-action-guidance.md)，失效版本禁止生成见 [ADR-080](../adr/080-unified-memory-list-and-retired-exclusion.md)。这些后继局部替代旧手动启用、推断禁令和历史版本生成条款；显式暂停、删除、来源核验、人工纠错和 Skill 审核发布保持。
 
