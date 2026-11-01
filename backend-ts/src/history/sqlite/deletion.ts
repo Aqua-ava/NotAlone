@@ -1,3 +1,4 @@
+import {sourceDeletionIds} from './source-deletion.ts';
 import { createHash } from 'node:crypto';
 import { StorageFailure, type StorageRow, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
 import type { DeletionDomain, DeletionOperation, RowDeletionTarget, CheckResult } from '../../storage/sqlite/deletion/contracts.ts';
@@ -8,6 +9,8 @@ rowKinds.history_quote_dependency={keys:['owner_id','id'],ownerKey:'owner_id'};
 rowKinds.history_quote_attempt={keys:['owner_id','id'],ownerKey:'owner_id'};
 rowKinds.history_continuity_fence={keys:['owner_id','contact_id'],ownerKey:'owner_id'};
 rowKinds.history_continuity_scope={keys:['owner_id','contact_id'],ownerKey:'owner_id'};
+rowKinds.history_source_recertification_cancel={keys:['owner_id','request_key'],ownerKey:'owner_id'};
+rowKinds.history_source_recertification={keys:['owner_id','id'],ownerKey:'owner_id'};
 rowKinds.history_guard_lease={keys:['owner_id','contact_id'],ownerKey:'owner_id'};
 rowKinds.history_source_terminal={keys:['owner_id','id'],ownerKey:'owner_id'};
 const pass=(proof:string):CheckResult=>({result:'passed',proof});
@@ -36,10 +39,13 @@ function quoteTargetAffected(tx:StorageTransaction,ownerId:string,contactId:stri
 function scopeRows(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget[]{
  const {ownerId,scope}=op;
  if(!['source','contact_history','contact','account'].includes(scope.kind))return [];
- const args=scope.kind==='account'?[ownerId]:scope.kind==='source'?[ownerId,scope.contactId,scope.sourceId]:[ownerId,scope.contactId];
- const clause=scope.kind==='account'?'r.owner_id=?':scope.kind==='source'?'r.owner_id=? AND r.contact_id=? AND r.id=?':'r.owner_id=? AND r.contact_id=?';
+ const args=scope.kind==='account'?[ownerId]:scope.kind==='source'?[ownerId,scope.contactId,JSON.stringify(sourceDeletionIds(tx,op))]:[ownerId,scope.contactId];
+ const clause=scope.kind==='account'?'r.owner_id=?':scope.kind==='source'?'r.owner_id=? AND r.contact_id=? AND r.id IN (SELECT value FROM json_each(?))':'r.owner_id=? AND r.contact_id=?';
  const records=tx.all(`SELECT r.*,g.binding_id source_binding_id FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id WHERE ${clause}${scope.kind==='account'?'':' AND g.accepted_data_generation<?'}`,scope.kind==='account'?args:[...args,op.acceptedGeneration]);
  const targets:RowDeletionTarget[]=[];
+ if(scope.kind==='contact'||scope.kind==='account')for(const r of tx.all(`SELECT id FROM history_source_recertification WHERE owner_id=?${scope.kind==='contact'?' AND contact_id=?':''}`,scope.kind==='contact'?[ownerId,scope.contactId]:[ownerId]))targets.push(target('history_source_recertification',{owner_id:ownerId,id:String(r.id)}));
+ if(scope.kind==='contact'||scope.kind==='account')for(const r of tx.all(`SELECT request_key FROM history_source_recertification_cancel WHERE owner_id=?${scope.kind==='contact'?' AND contact_id=?':''}`,scope.kind==='contact'?[ownerId,scope.contactId]:[ownerId]))targets.push(target('history_source_recertification_cancel',{owner_id:ownerId,request_key:String(r.request_key)}));
+ // 来源删除及聊天清空保留无正文取消意图，防止旧请求重新启动。
  // 聊天清空保留无正文终态抑制；显式重读不能恢复撤回或已消失的来源。
  if(scope.kind==='source')for(const record of records)if(record.observed_key)for(const terminal of tx.all(`SELECT id FROM history_source_terminal
   WHERE owner_id=? AND contact_id=? AND binding_id=? AND external_key=? AND accepted_data_generation<?`,[ownerId,scope.contactId,record.source_binding_id,record.observed_key,op.acceptedGeneration]))targets.push(target('history_source_terminal',{owner_id:ownerId,id:String(terminal.id)}));
@@ -101,7 +107,7 @@ export const historyDeletionDomain:DeletionDomain={
   const older=scope.kind==='account'?'':' AND accepted_data_generation<?';
   const args=scope.kind==='account'?[ownerId]:[ownerId,scope.contactId,op.acceptedGeneration];
   const contacts=scope.kind==='account'?'':' AND contact_id=?';
-  tx.run(`UPDATE capture_record SET availability='deleting' WHERE owner_id=?${scope.kind==='source'?' AND contact_id=? AND id=?':contacts} AND capture_id IN (SELECT c.id FROM sync_capture c JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id WHERE g.owner_id=?${older})`,scope.kind==='source'?[ownerId,scope.contactId,scope.sourceId,ownerId,op.acceptedGeneration]:scope.kind==='account'?[ownerId,ownerId]:[ownerId,scope.contactId,ownerId,op.acceptedGeneration]);
+  tx.run(`UPDATE capture_record SET availability='deleting' WHERE owner_id=?${scope.kind==='source'?' AND contact_id=? AND id IN (SELECT value FROM json_each(?))':contacts} AND capture_id IN (SELECT c.id FROM sync_capture c JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id WHERE g.owner_id=?${older})`,scope.kind==='source'?[ownerId,scope.contactId,JSON.stringify(sourceDeletionIds(tx,op)),ownerId,op.acceptedGeneration]:scope.kind==='account'?[ownerId,ownerId]:[ownerId,scope.contactId,ownerId,op.acceptedGeneration]);
   tx.run(`UPDATE read_goal SET state='invalidated',failure_code='history_deleted' WHERE owner_id=?${contacts}${older} AND state<>'invalidated'`,args);
   return [];
  },
@@ -116,8 +122,8 @@ export const historyDeletionDomain:DeletionDomain={
    const row=tx.get('SELECT * FROM history_quote WHERE owner_id=? AND id=?',[t.key.owner_id,t.key.id]);
    if(!row)return;
    const records=tx.all(`SELECT r.* FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id
-    JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id WHERE ${op.scope.kind==='account'?'r.owner_id=?':op.scope.kind==='source'?'r.owner_id=? AND r.contact_id=? AND r.id=?':'r.owner_id=? AND r.contact_id=?'}${op.scope.kind==='account'?'':" AND g.accepted_data_generation<?"}`,
-    op.scope.kind==='account'?[op.ownerId]:op.scope.kind==='source'?[op.ownerId,op.scope.contactId,op.scope.sourceId,op.acceptedGeneration]:[op.ownerId,op.scope.contactId,op.acceptedGeneration]);
+    JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id WHERE ${op.scope.kind==='account'?'r.owner_id=?':op.scope.kind==='source'?'r.owner_id=? AND r.contact_id=? AND r.id IN (SELECT value FROM json_each(?))':'r.owner_id=? AND r.contact_id=?'}${op.scope.kind==='account'?'':" AND g.accepted_data_generation<?"}`,
+    op.scope.kind==='account'?[op.ownerId]:op.scope.kind==='source'?[op.ownerId,op.scope.contactId,JSON.stringify(sourceDeletionIds(tx,op)),op.acceptedGeneration]:[op.ownerId,op.scope.contactId,op.acceptedGeneration]);
    if(quoteTargetAffected(tx,op.ownerId,String(row.contact_id),row,idsForScope(tx,op,records).affectedMessageIds))
     tx.run(`UPDATE history_quote SET referenced_text=NULL,referenced_sender=NULL,referenced_sender_role='unknown',referenced_type=NULL,
      referenced_server_id=NULL,target_message_id=NULL,state='unavailable',interpretation_revision=interpretation_revision+1

@@ -1,3 +1,4 @@
+import {sourceDeletionIds} from '../../history/sqlite/source-deletion.ts';
 import type {StorageRow,StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {DeletionOperation,RowDeletionTarget} from '../../storage/sqlite/deletion/contracts.ts';
 
@@ -15,6 +16,7 @@ export function deletionRows(tx:StorageTransaction,ownerId:string,table:string,k
 }
 /** 实际event/input是来源依赖；task只撤销待执行writer，不扩散到独立成功历史。 */
 export function memoryDeletionImpact(tx:StorageTransaction,op:DeletionOperation):MemoryDeletionImpact{
+ const sourceIds=JSON.stringify(sourceDeletionIds(tx,op));
  const {ownerId,scope}=op,seeds:Identity[]=[],touchedSteps=new Set<string>();
  const add=(kind:Kind,id:unknown,slot:unknown=null)=>{if(id!==null&&id!==undefined)seeds.push({kind,id:String(id),slot:slot===null?null:String(slot)});};
  const planned=tx.all("SELECT target_payload FROM deletion_target WHERE operation_id=? AND domain IN ('memory_management','memory_extraction') AND target_payload IS NOT NULL",[op.operationId]).map(r=>JSON.parse(String(r.target_payload)) as RowDeletionTarget);
@@ -30,8 +32,8 @@ export function memoryDeletionImpact(tx:StorageTransaction,op:DeletionOperation)
   for(const m of tx.all('SELECT id FROM memory WHERE owner_id=?',[ownerId]))add('memory',m.id);
   for(const d of tx.all('SELECT id FROM memory_decision WHERE owner_id=?',[ownerId]))add('decision',d.id);
  }else if('contactId'in scope){
-  const values=scope.kind==='source'?[ownerId,scope.contactId,scope.sourceId]:[ownerId,scope.contactId,op.acceptedGeneration];
-  inputs=tx.all(`SELECT i.* FROM run_input i INDEXED BY run_inputs_source JOIN run_contact rc ON rc.owner_id=i.owner_id AND rc.run_id=i.run_id AND rc.contact_id=i.source_contact_id WHERE i.owner_id=? AND i.source_contact_id=? AND ${scope.kind==='source'?'i.record_id=?':'rc.accepted_data_generation<?'}`,values);
+  const values=scope.kind==='source'?[ownerId,scope.contactId,sourceIds]:[ownerId,scope.contactId,op.acceptedGeneration];
+  inputs=tx.all(`SELECT i.* FROM run_input i INDEXED BY run_inputs_source JOIN run_contact rc ON rc.owner_id=i.owner_id AND rc.run_id=i.run_id AND rc.contact_id=i.source_contact_id WHERE i.owner_id=? AND i.source_contact_id=? AND ${scope.kind==='source'?'i.record_id IN (SELECT value FROM json_each(?))':'rc.accepted_data_generation<?'}`,values);
   const tasks=new Set<string>(),sourceRuns=new Set(inputs.map(i=>String(i.run_id)));
   if(scope.kind==='contact')for(const c of tx.all('SELECT run_id FROM run_contact WHERE owner_id=? AND contact_id=?',[ownerId,scope.contactId]))sourceRuns.add(String(c.run_id));
   for(const runId of sourceRuns){
@@ -40,11 +42,11 @@ export function memoryDeletionImpact(tx:StorageTransaction,op:DeletionOperation)
   }
   for(const taskId of tasks){
    add('task',taskId);
-   for(const i of tx.all(`SELECT i.step_id,i.input_no FROM processing_step s JOIN step_input i ON i.owner_id=s.owner_id AND i.step_id=s.id JOIN run_input r ON r.owner_id=i.owner_id AND r.run_id=i.run_id AND r.input_no=i.run_input_no WHERE s.owner_id=? AND s.task_id=? AND r.source_contact_id=? ${scope.kind==='source'?'AND r.record_id=?':''}`,scope.kind==='source'?[ownerId,taskId,scope.contactId,scope.sourceId]:[ownerId,taskId,scope.contactId]))add('input',i.step_id,i.input_no);
+   for(const i of tx.all(`SELECT i.step_id,i.input_no FROM processing_step s JOIN step_input i ON i.owner_id=s.owner_id AND i.step_id=s.id JOIN run_input r ON r.owner_id=i.owner_id AND r.run_id=i.run_id AND r.input_no=i.run_input_no WHERE s.owner_id=? AND s.task_id=? AND r.source_contact_id=? ${scope.kind==='source'?'AND r.record_id IN (SELECT value FROM json_each(?))':''}`,scope.kind==='source'?[ownerId,taskId,scope.contactId,sourceIds]:[ownerId,taskId,scope.contactId]))add('input',i.step_id,i.input_no);
   }
-  for(const e of tx.all(`SELECT event_id FROM event_source INDEXED BY event_sources_record WHERE owner_id=? AND source_contact_id=? ${scope.kind==='source'?'AND record_id=?':''}`,scope.kind==='source'?[ownerId,scope.contactId,scope.sourceId]:[ownerId,scope.contactId]))add('event',e.event_id);
-  for(const c of tx.all(`SELECT candidate_id,memory_id,version_no FROM memory_citation INDEXED BY memory_citation_source WHERE owner_id=? AND source_contact_id=? ${scope.kind==='source'?'AND record_id=?':''}`,scope.kind==='source'?[ownerId,scope.contactId,scope.sourceId]:[ownerId,scope.contactId])){add('candidate',c.candidate_id);add('version',c.memory_id,c.version_no);}
-  if(typed)for(const i of tx.all(`SELECT i.step_id,i.input_no FROM step_input i INDEXED BY step_inputs_source JOIN capture_record r ON r.owner_id=i.owner_id AND r.contact_id=i.source_contact_id AND r.id=i.record_id AND r.message_id=i.message_id JOIN sync_capture sc ON sc.owner_id=r.owner_id AND sc.contact_id=r.contact_id AND sc.id=r.capture_id JOIN read_goal g ON g.owner_id=sc.owner_id AND g.contact_id=sc.contact_id AND g.id=sc.goal_id WHERE i.owner_id=? AND i.source_contact_id=? AND i.record_id IS NOT NULL AND i.kind='message' ${scope.kind==='source'?'AND i.record_id=?':'AND g.accepted_data_generation<?'}`,values))add('input',i.step_id,i.input_no);
+  for(const e of tx.all(`SELECT event_id FROM event_source INDEXED BY event_sources_record WHERE owner_id=? AND source_contact_id=? ${scope.kind==='source'?'AND record_id IN (SELECT value FROM json_each(?))':''}`,scope.kind==='source'?[ownerId,scope.contactId,sourceIds]:[ownerId,scope.contactId]))add('event',e.event_id);
+  for(const c of tx.all(`SELECT candidate_id,memory_id,version_no FROM memory_citation INDEXED BY memory_citation_source WHERE owner_id=? AND source_contact_id=? ${scope.kind==='source'?'AND record_id IN (SELECT value FROM json_each(?))':''}`,scope.kind==='source'?[ownerId,scope.contactId,sourceIds]:[ownerId,scope.contactId])){add('candidate',c.candidate_id);add('version',c.memory_id,c.version_no);}
+  if(typed)for(const i of tx.all(`SELECT i.step_id,i.input_no FROM step_input i INDEXED BY step_inputs_source JOIN capture_record r ON r.owner_id=i.owner_id AND r.contact_id=i.source_contact_id AND r.id=i.record_id AND r.message_id=i.message_id JOIN sync_capture sc ON sc.owner_id=r.owner_id AND sc.contact_id=r.contact_id AND sc.id=r.capture_id JOIN read_goal g ON g.owner_id=sc.owner_id AND g.contact_id=sc.contact_id AND g.id=sc.goal_id WHERE i.owner_id=? AND i.source_contact_id=? AND i.record_id IS NOT NULL AND i.kind='message' ${scope.kind==='source'?'AND i.record_id IN (SELECT value FROM json_each(?))':'AND g.accepted_data_generation<?'}`,values))add('input',i.step_id,i.input_no);
   if(scope.kind==='contact'){
    for(const c of tx.all("SELECT id FROM memory_candidate INDEXED BY candidate_scope WHERE owner_id=? AND scope_kind='contact' AND contact_id=?",[ownerId,scope.contactId]))add('candidate',c.id);
    for(const m of tx.all("SELECT id FROM memory INDEXED BY memory_scope WHERE owner_id=? AND scope_kind='contact' AND contact_id=?",[ownerId,scope.contactId]))add('memory',m.id);

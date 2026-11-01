@@ -39,6 +39,7 @@ import { installSourceDeletionBridge } from './sources/bridge';
 import { installBindingConsentBridge } from './bindings/bridge';
 import { installSyncControlBridge } from './sync/bridge';
 import { installHistoryClearBridge } from './history-clear/bridge';
+import { coordinateHistoryRecertification } from './history-clear/recertify-coordinator';
 import { installContactDeletionBridge } from './contact-deletion/bridge';
 import { installContactHistoryBridge } from './contact-history/bridge';
 import { SyncPriorityController } from './sync/priority';
@@ -163,6 +164,16 @@ void app.whenReady().then(async () => {
   memory.onRecordDeletion((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   replies.onSessionDeletion((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   const candidateProvenance = installCandidateProvenanceBridge(commands, backend, contacts, replies);
+  coordinateHistoryRecertification(historyClear, {
+    withdraw: () => {
+      contactHistory.invalidate('来源正在重新认证，旧聊天资料已撤下；全部核验完成后会刷新。');
+      media.invalidate(); traces.invalidateSource(); candidateProvenance.invalidateSource();
+      sqliteDiscussion.synchronize(true); fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize();
+      replies.beginOwnerContextChange();
+    },
+    revalidate: () => replies.revalidateOwnerContextChange(),
+    refresh: contactId => contactHistory.refreshCurrent(contactId),
+  });
   const skillLearning = installSkillLearningBridge(commands, backend, contacts,()=>sqliteDiscussion.synchronize(true));
   const preferenceDeletion = coordinateSkillLearningDeletion(skillLearning, memory, replies,
     expressionPreferenceDeletion(traces, replies, candidateProvenance));

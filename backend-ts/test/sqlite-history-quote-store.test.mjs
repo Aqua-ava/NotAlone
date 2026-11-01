@@ -11,6 +11,7 @@ import {projectHistoryMessages} from '../src/history/sqlite/http.ts';
 import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
 import {DeletionService} from '../src/storage/sqlite/deletion/service.ts';
 import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
+import {randomUUID} from 'node:crypto';
 
 const owner='00000000-0000-4000-8000-000000000219';
 const metadata=()=>({account:async()=>({externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-1',assurance:'verified',supportProfile:'synthetic-metadata-v1'}),
@@ -147,14 +148,17 @@ test('v26迁移保留v25引用正文、来源和去重尝试',async t=>{
  let storage,contacts,history;
  t.after(async()=>{await history?.close().catch(()=>{});await contacts?.close().catch(()=>{});await storage?.close().catch(()=>{});await rm(root,{recursive:true,force:true});});
  storage=await SqliteStorage.open({...databaseOptions,intent:'create',registryModule:new URL('./fixtures/history/v25-quote-registry.mjs',import.meta.url).href});
- const databaseId=storage.status.databaseId;contacts=new SqliteContactService(storage,owner,metadata());history=new SqliteHistoryService(storage,contacts,channel({records}));
- await contacts.initialize();const account=await contacts.detectAccount();await contacts.confirmAccount(account.candidate_token);await contacts.setReading(true);
- const snapshot=await contacts.candidates(true);await contacts.confirm(snapshot.snapshot_token,snapshot.sessions.map(row=>({locator:row.username,observed_display_name:row.display_name,expected_selection_generation:'0'})));
- const binding=(await contacts.directory()).bindings.find(row=>row.conversation_locator==='friend-a'),contact=binding.contact_id;
- await history.synchronize(contact);const carrier=(await history.read(contact)).messages.find(row=>row.originalType==='244813135921');
- await storage.execute('fixture.seedQuoteV25',{ownerId:owner,contactId:contact,messageId:carrier.id,recordId:carrier.sourceRecordIds[0],sourceGeneration:'source-1',
+ const databaseId=storage.status.databaseId;assert.equal(storage.status.schemaVersion,25);
+ await storage.execute('identity.initialize',{ownerId:owner,at:Date.now()});
+ const {contactId:contact}=await storage.execute('fixture.seedIdentityV25',{ownerId:owner});
+ const token=await storage.execute('identity.eligibility',{ownerId:owner,contactId:contact}),scope=await storage.execute('history.scope',{token}),legacyChannel=channel({records});
+ const report=await legacyChannel.inspect(scope),target=await legacyChannel.target(scope);
+ assert.equal(await storage.execute('history.preflightContinuity',{token,target,report}),true);
+ const goal=await storage.execute('history.begin',{token,target,report,id:randomUUID(),at:Date.now()});
+ const seeded=await storage.execute('fixture.seedHistoryV25',{token,goalId:goal.id,target,records}),carrier=seeded.find(row=>row.originalType==='244813135921');
+ await storage.execute('fixture.seedQuoteV25',{ownerId:owner,contactId:contact,messageId:carrier.id,recordId:carrier.recordId,sourceGeneration:'source-1',
   quoteId:'10000000-0000-4000-8000-000000000001',attemptId:'10000000-0000-4000-8000-000000000002',version:'quote-v1',replyText:'迁移后保留回复',referencedText:'迁移后保留引用'});
- await history.close();history=undefined;await contacts.close();contacts=undefined;await storage.close();storage=undefined;
+ await storage.close();storage=undefined;
  storage=await SqliteStorage.open({...databaseOptions,intent:'open',expectedDatabaseId:databaseId});
  contacts=new SqliteContactService(storage,owner,metadata());history=new SqliteHistoryService(storage,contacts,channel({records}));await contacts.initialize();
  const quote=(await history.read(contact)).messages.find(row=>row.id===carrier.id).quote;

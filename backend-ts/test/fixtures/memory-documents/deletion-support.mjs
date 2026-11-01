@@ -12,6 +12,8 @@ const registryModule=new URL('./deletion-registry.mjs',import.meta.url).href;
 export async function deletionFixture(t,{beforeCall,beforeExtractionPrepare,beforeDocuments,extractionResponse,documentResponse,twoContacts=false,twoCaptures=false,noMemory=false,ownerB=true,targetOnly=false,orderOwnerA=false,preferText}={}){
  const f=await fixture(t,{registryModule}),contactId=f.saved[0].contact_id,otherContactId=f.saved[1].contact_id;
  f.channel.page=async scope=>{const other=scope.token.contact_id===otherContactId;const records=[record('1',{text:other?'我长期喜欢合成登山。':'我长期喜欢合成园艺。'})];if(twoContacts&&(!other||ownerB))records.push(record('2',{sender:'owner',text:other?'我长期偏好合成蓝茶。':'我长期偏好合成白茶。'}));return {target:f.target.descriptor,cursorIn:null,cursorOut:null,records,completedPartitions:['shard-a'],exhausted:true};};
+ // 两个不同的可信出现经已认证server别名支持同一消息；普通重复读取不能伪装独立来源。
+ if(twoCaptures){const inspect=f.channel.inspect,page=f.channel.page;let reads=0;f.channel.inspect=async scope=>({...await inspect(scope),serverAliasSemantics:'verified_within_scope'});f.channel.page=async scope=>{const result=await page(scope);reads++;return {...result,records:result.records.map((item,index)=>index===0?{...item,localId:reads===1?'1':'11',serverId:'999'}:item)};};}
  await f.service.synchronize(contactId);if(twoCaptures)await f.service.synchronize(contactId);if(twoContacts)await f.service.synchronize(otherContactId);await f.contacts.setReading(false);
  const otherMessages=twoContacts?(await f.service.read(otherContactId)).messages:[];
  const messages=(await f.service.read(contactId)).messages,message=messages.find(m=>m.text==='我长期喜欢合成园艺。'),ownerMessage=messages.find(m=>m.text==='我长期偏好合成白茶。'),holders=new ActiveHolders(),calls=[];let extraction;

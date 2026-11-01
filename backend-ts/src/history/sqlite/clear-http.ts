@@ -1,3 +1,4 @@
+import {projectRecertifyStatus,type SqliteHistoryRecertifyService} from './recertify.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import { readWechatHttpBody, WechatHttpBodyError } from '../../sync/wechat-http-body.ts';
@@ -47,30 +48,33 @@ function send(res: ServerResponse, status: number, value: unknown): void {
 }
 /** 宿主查询门：只放行这两条固定路径，避免任意路由穿越。 */
 export function clearQueryAllowed(method: string | undefined, url: URL): boolean {
-  if (!/^\/api\/contacts\/[a-f0-9-]{36}\/history\/(clear|resync)$/.test(url.pathname)) return false;
-  if (method === 'GET') return !url.search;
+  if (!/^\/api\/contacts\/[a-f0-9-]{36}\/history\/(clear|resync|recertify(?:\/cancel)?)$/.test(url.pathname)) return false;
+  if(method==='GET'&&url.pathname.endsWith('/recertify'))return !url.search||url.searchParams.size===1&&url.searchParams.has('request_key')&&requestKey.test(url.searchParams.get('request_key')??'');
+  if (method === 'GET') return !url.search&&!url.pathname.endsWith('/cancel');
   return method === 'POST' && !url.search;
 }
 /** 清空与显式重读的受控 HTTP 边界；正文、边界证明和任意 SQL 不进入请求/响应。 */
 export class SqliteHistoryClearHttp {
   private readonly clear: ClearHttpService;
   private readonly resync: ResyncHttpService;
-  constructor(clear: ClearHttpService, resync: ResyncHttpService) { this.clear = clear; this.resync = resync; }
+  private readonly recertify?:Pick<SqliteHistoryRecertifyService,'status'|'admit'|'cancel'>;
+  constructor(clear: ClearHttpService, resync: ResyncHttpService,recertify?:Pick<SqliteHistoryRecertifyService,'status'|'admit'|'cancel'>) { this.clear = clear; this.resync = resync;this.recertify=recertify; }
   async handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const url = new URL(req.url ?? '/', 'http://localhost');
-    const route = /^\/api\/contacts\/([a-f0-9-]{36})\/history\/(clear|resync)$/.exec(url.pathname);
+    const route = /^\/api\/contacts\/([a-f0-9-]{36})\/history\/(clear|resync|recertify(?:\/cancel)?)$/.exec(url.pathname);
     if (!route) return false;
     if (!uuid.test(route[1]!)) { send(res, 400, { error: 'history_request_invalid' }); return true; }
     const contactId = route[1]!.toLowerCase();
     const operation = route[2]!;
-    if (!['GET', 'POST'].includes(req.method ?? '') || url.search) { send(res, 400, { error: 'history_request_invalid' }); return true; }
+    if(operation.startsWith('recertify')&&!this.recertify){send(res,503,{error:'history_recertify_unavailable'});return true;}
+    if (!clearQueryAllowed(req.method,url)) { send(res, 400, { error: 'history_request_invalid' }); return true; }
     const controller = new AbortController();
     const abort = () => controller.abort();
     req.once('aborted', abort);
     try {
       let value: unknown;
       if (req.method === 'GET') {
-        value = operation === 'clear' ? projectClearStatus(await this.clear.statusOf(contactId))
+        value = operation==='recertify'?projectRecertifyStatus(await this.recertify!.status(contactId,url.searchParams.get('request_key')??undefined)):operation === 'clear' ? projectClearStatus(await this.clear.statusOf(contactId))
           : projectResyncStatus(await this.resync.status(contactId));
       } else if (operation === 'clear') {
         // 请求体必须为空：清空范围只来自已核验联系人与当前同步选择。
@@ -81,9 +85,9 @@ export class SqliteHistoryClearHttp {
         const raw = JSON.parse((await readWechatHttpBody(req, 4096, 10_000)).toString('utf8'));
         if (!raw || typeof raw !== 'object' || Array.isArray(raw) || Object.keys(raw).sort().join(',') !== 'request_key'
           || typeof raw.request_key !== 'string' || !requestKey.test(raw.request_key)) throw new StorageFailure('history_request_invalid');
-        value = projectResyncStatus(await this.resync.resync(contactId, { requestKey: raw.request_key, signal: controller.signal }));
+        value = operation==='recertify/cancel'?projectRecertifyStatus(await this.recertify!.cancel(contactId,{requestKey:raw.request_key})):operation==='recertify'?projectRecertifyStatus(await this.recertify!.admit(contactId,{requestKey:raw.request_key,signal:controller.signal})):projectResyncStatus(await this.resync.resync(contactId, { requestKey: raw.request_key, signal: controller.signal }));
       }
-      send(res, 200, value);
+      send(res, operation==='recertify'&&(value as {state?:string}).state==='running'?202:200, value);
     } catch (error) {
       const code = error instanceof StorageFailure ? error.code : error instanceof WechatHttpBodyError ? error.code
         : error instanceof SyntaxError ? 'history_request_invalid' : 'history_request_failed';

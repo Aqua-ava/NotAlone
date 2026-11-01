@@ -1,3 +1,4 @@
+import {SqliteHistoryRecertifyService} from '../src/history/sqlite/recertify.ts';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -98,13 +99,15 @@ async function attach(ctx, storage) {
   const clear = new SqliteHistoryClearService(storage, contacts, () => ctx.channel, deletion, holders,
     { maxBoundaryAttempts: ctx.maxBoundaryAttempts ?? 3 });
   const resync = new SqliteHistoryResyncService(storage, contacts, () => ctx.channel, holders);
-  ctx.current = { storage, holders, contacts, deletion, history, clear, resync };
+  const recertify=new SqliteHistoryRecertifyService(storage,contacts,()=>ctx.channel,holders,{stopHistory:id=>history.stop(id)});
+  ctx.current = { storage, holders, contacts, deletion, history, clear, resync,recertify };
   return ctx.current;
 }
 export async function closeCurrent(ctx) {
   const current = ctx.current;
   if (!current) return;
   ctx.current = null;
+  await current.recertify.close().catch(()=>{});
   await current.resync.close().catch(() => {});
   await current.clear.close().catch(() => {});
   await current.history.close().catch(() => {});

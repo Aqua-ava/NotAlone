@@ -90,7 +90,7 @@ test('删除账户清除所有范围的文档和真实输入追踪',async t=>{
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('同一消息的来源按实际 record 区分，不能替换旧证明',async t=>{
+test('同一消息的不同可信物理出现保持独立，不能替换旧证明',async t=>{
  async function prepared(sub){
   const f=await deletionFixture(sub,{twoCaptures:true}),run=await f.extraction.start('document-source-exact');await f.extraction.waitForIdle(run.runId);
   const scope={scopeKind:'contact',contactId:f.contactId},before=await f.documents.read(scope);assert.equal(before.documents.length,2);

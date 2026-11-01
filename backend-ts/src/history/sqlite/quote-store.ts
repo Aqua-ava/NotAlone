@@ -7,6 +7,7 @@ import {assertHistoryReadBoundary} from './suppression.ts';
 import type {HistoryQuoteContent,MessageSourceReference} from './contracts.ts';
 import {assertSourceEligibility} from './source.ts';
 import {currentSourcePredicate,currentSourceScopeCTE} from './current-scope.ts';
+import {assertRecertifySourceWrite,type RecertifySourceWrite} from './recertify-access.ts';
 
 const quoteType='244813135921';
 export const quoteParserVersion='wechat-quote-v2';
@@ -30,8 +31,9 @@ function content(value:unknown):HistoryQuoteContent {
  return {replyText:row.replyText,referencedText:row.referencedText,referencedSender:row.referencedSender,
   referencedSenderRole:row.referencedSenderRole,referencedType:row.referencedType,referencedServerId:row.referencedServerId};
 }
-function source(tx:StorageTransaction,token:ReadEligibility,recordId:string,messageId:string){
- assertSourceEligibility(tx,{owner_id:token.owner_id,contact_id:token.contact_id,record_id:recordId,message_id:messageId} satisfies MessageSourceReference);
+function source(tx:StorageTransaction,token:ReadEligibility,recordId:string,messageId:string,recertify?:RecertifySourceWrite){
+ if(recertify)assertRecertifySourceWrite(tx,token,recertify,recordId,messageId);
+ else assertSourceEligibility(tx,{owner_id:token.owner_id,contact_id:token.contact_id,record_id:recordId,message_id:messageId} satisfies MessageSourceReference);
  const row=tx.get(`SELECT r.normalizer_version,r.raw_payload,r.state,r.availability,r.message_id,r.observed_key,m.binding_id,m.kind,m.text_body,m.original_type,
   m.interpretation_revision,m.status_code,g.target_json,g.support_json
   FROM capture_record r JOIN message m ON m.owner_id=r.owner_id AND m.contact_id=r.contact_id AND m.id=r.message_id
@@ -86,10 +88,10 @@ export interface FailHistoryQuoteInput {
  token:ReadEligibility;recordId:string;messageId:string;version:string;errorCode:string;
 }
 /** Storage action 与正常同步共用这段事务逻辑，确保联系人、来源删除和目标排除规则一致。 */
-export function saveHistoryQuoteInTransaction(tx:StorageTransaction,input:SaveHistoryQuoteInput){
+export function saveHistoryQuoteInTransaction(tx:StorageTransaction,input:SaveHistoryQuoteInput,recertify?:RecertifySourceWrite){
  const token=input.token,recordId=id(input.recordId),messageId=id(input.messageId),expectedVersion=version(input.version),quote=content(input.content);
  if(!isUuid(recordId)||!isUuid(messageId)||typeof input.proofDigest!=='string'||!/^[a-f0-9]{64}$/.test(input.proofDigest))fail('history_quote_request_invalid');
- assertScope(tx,token);const sourceRow=source(tx,token,recordId,messageId),excludedTarget=targetExcluded(tx,token,quote.referencedServerId);
+ assertScope(tx,token);const sourceRow=source(tx,token,recordId,messageId,recertify),excludedTarget=targetExcluded(tx,token,quote.referencedServerId);
  const savedContent:HistoryQuoteContent=excludedTarget?{...quote,referencedText:null,referencedSender:null,referencedSenderRole:'unknown',
   referencedType:null,referencedServerId:null}:quote;
  const targetMessageId=excludedTarget?null:targetFor(tx,token,savedContent.referencedServerId);
@@ -124,10 +126,10 @@ export function saveHistoryQuoteInTransaction(tx:StorageTransaction,input:SaveHi
   [token.owner_id,randomUUID(),token.contact_id,messageId,token.binding_id,recordId,sourceRow.observed_key,token.source_generation,expectedVersion,sourceRow.interpretation_revision,sourceRow.status_code===null?'':String(sourceRow.status_code)]);
  return {saved:true,changed,targetMessageId,state,sourceRevision,interpretationRevision};
 }
-export function failHistoryQuoteInTransaction(tx:StorageTransaction,input:FailHistoryQuoteInput){
+export function failHistoryQuoteInTransaction(tx:StorageTransaction,input:FailHistoryQuoteInput,recertify?:RecertifySourceWrite){
  const token=input.token,recordId=id(input.recordId),messageId=id(input.messageId),expectedVersion=version(input.version),errorCode=id(input.errorCode);
  if(!isUuid(recordId)||!isUuid(messageId)||!/^[a-z][a-z0-9_]{0,79}$/.test(errorCode))fail('history_quote_request_invalid');
- assertScope(tx,token);const sourceRow=source(tx,token,recordId,messageId),carrierStatus=sourceRow.status_code===null?'':String(sourceRow.status_code);
+ assertScope(tx,token);const sourceRow=source(tx,token,recordId,messageId,recertify),carrierStatus=sourceRow.status_code===null?'':String(sourceRow.status_code);
  const existing=tx.get('SELECT outcome,error_code FROM history_quote_attempt WHERE owner_id=? AND contact_id=? AND message_id=? AND source_key=? AND source_generation=? AND version=? AND carrier_interpretation_revision=? AND carrier_status=?',
   [token.owner_id,token.contact_id,messageId,sourceRow.observed_key,token.source_generation,expectedVersion,sourceRow.interpretation_revision,carrierStatus]);
  if(existing?.outcome==='saved')return {failed:false,alreadySaved:true,changed:false};

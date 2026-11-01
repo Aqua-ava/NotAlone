@@ -1,3 +1,4 @@
+import {sourceDeletionIds} from '../../history/sqlite/source-deletion.ts';
 import { createHash } from 'node:crypto';
 import { StorageFailure, type StorageRow, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
 import type { CheckResult, DeletionAuthority, DeletionDomain, DeletionOperation, DeletionRegistration, DeletionScope, DeletionTarget, FileDeletionTarget, ManagedAddress, RowDeletionTarget } from '../../storage/sqlite/deletion/contracts.ts';
@@ -41,6 +42,7 @@ interface Selection { attempts: StorageRow[]; files: StorageRow[]; heads: Storag
 /** 来源只沿实际生产、输入及父文件关系闭包；同一消息的其他来源不能替换旧证明。 */
 function select(tx: StorageTransaction, op: DeletionOperation): Selection {
   const {ownerId, scope} = op;
+  const deletionSources=new Set(sourceDeletionIds(tx,op));
   if (scope.kind === 'discussion') return {attempts: [], files: [], heads: []};
   const params = scope.kind === 'account' ? [ownerId] : [ownerId, scope.contactId];
   const clause = scope.kind === 'account' ? 'owner_id=?' : 'owner_id=? AND contact_id=?';
@@ -52,7 +54,7 @@ function select(tx: StorageTransaction, op: DeletionOperation): Selection {
   for (const a of attempts) {
     const match = a.cleanup_operation_id === op.operationId || (isMedia(scope)
       ? scope.kind === 'media_result_clear' && a.message_id === scope.messageId && (a.accepted_media_generation as bigint) < op.acceptedGeneration
-      : scope.kind === 'source' ? a.record_id === scope.sourceId
+      : scope.kind === 'source' ? deletionSources.has(String(a.record_id))
         : scope.kind === 'account' || scope.kind === 'contact' || (a.accepted_data_generation as bigint) < op.acceptedGeneration);
     if (match) chosenAttempts.add(String(a.id));
   }
@@ -77,11 +79,11 @@ function select(tx: StorageTransaction, op: DeletionOperation): Selection {
       && !files.some(f => f.produced_attempt_id === a.id && !chosenFiles.has(String(f.id)))
       && files.some(f => f.produced_attempt_id === a.id && chosenFiles.has(String(f.id)))) chosenAttempts.add(String(a.id));
   }
-  const sourceMessage = scope.kind === 'source' ? tx.get('SELECT message_id FROM capture_record WHERE owner_id=? AND contact_id=? AND id=?', [ownerId, scope.contactId, scope.sourceId])?.message_id : null;
+  const sourceMessages = new Set(scope.kind === 'source' ? tx.all('SELECT DISTINCT message_id FROM capture_record WHERE owner_id=? AND contact_id=? AND id IN (SELECT value FROM json_each(?))', [ownerId, scope.contactId, JSON.stringify([...deletionSources])]).map(row=>row.message_id) : []);
   const selectedHeads = isMedia(scope) ? [] : heads.filter(h => {
     const related = attempts.filter(a => a.message_id === h.message_id);
     if (related.some(a => !chosenAttempts.has(String(a.id)))) return false;
-    return related.some(a => chosenAttempts.has(String(a.id))) || sourceMessage === h.message_id || scope.kind === 'account' || scope.kind === 'contact'
+    return related.some(a => chosenAttempts.has(String(a.id))) || sourceMessages.has(h.message_id) || scope.kind === 'account' || scope.kind === 'contact'
       || !!tx.get("SELECT 1 FROM message WHERE owner_id=? AND id=? AND availability='deleting'", [ownerId, h.message_id]);
   });
   return {attempts: attempts.filter(a => chosenAttempts.has(String(a.id))), files: files.filter(f => chosenFiles.has(String(f.id))), heads: selectedHeads};

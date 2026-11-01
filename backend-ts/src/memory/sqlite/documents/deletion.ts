@@ -1,3 +1,4 @@
+import {sourceDeletionIds} from '../../../history/sqlite/source-deletion.ts';
 import {createHash} from 'node:crypto';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {CheckResult,DeletionDomain,DeletionOperation,RowDeletionTarget} from '../../../storage/sqlite/deletion/contracts.ts';
@@ -44,15 +45,15 @@ function closure(tx:StorageTransaction,op:DeletionOperation):Closure {
   for(const v of tx.all('SELECT document_id,version_no FROM memory_document_version WHERE owner_id=?',[ownerId]))addVersion(v.document_id,v.version_no);
   for(const p of tx.all('SELECT id FROM document_publication WHERE owner_id=?',[ownerId]))addPublication(p.id);
  }else if('contactId' in scope){
-  const sourceWhere=scope.kind==='source'?'i.record_id=?':'g.accepted_data_generation<?';
-  const args=scope.kind==='source'?[ownerId,scope.contactId,scope.sourceId]:[ownerId,scope.contactId,op.acceptedGeneration];
+  const sourceWhere=scope.kind==='source'?'i.record_id IN (SELECT value FROM json_each(?))':'g.accepted_data_generation<?';
+  const args=scope.kind==='source'?[ownerId,scope.contactId,JSON.stringify(sourceDeletionIds(tx,op))]:[ownerId,scope.contactId,op.acceptedGeneration];
   for(const s of tx.all(`SELECT DISTINCT s.id FROM step_input i JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id
    JOIN capture_record r ON r.owner_id=i.owner_id AND r.contact_id=i.source_contact_id AND r.id=i.record_id AND r.message_id=i.message_id
    JOIN sync_capture sc ON sc.owner_id=r.owner_id AND sc.contact_id=r.contact_id AND sc.id=r.capture_id
    JOIN read_goal g ON g.owner_id=sc.owner_id AND g.contact_id=sc.contact_id AND g.id=sc.goal_id
    WHERE i.owner_id=? AND i.source_contact_id=? AND i.kind='message' AND ${sourceWhere} AND s.kind IN ('document_scene','document_profile')
    AND (s.state<>'succeeded' OR EXISTS(SELECT 1 FROM execution_input x JOIN execution_event e ON e.owner_id=x.owner_id AND e.id=x.event_id WHERE x.owner_id=i.owner_id AND x.planned_step_id=i.step_id AND x.planned_input_no=i.input_no AND e.kind='document_input'))`,args))addStep(s.id);
-  const runSource=scope.kind==='source'?'i.record_id=?':'rc.accepted_data_generation<?';
+  const runSource=scope.kind==='source'?'i.record_id IN (SELECT value FROM json_each(?))':'rc.accepted_data_generation<?';
   for(const s of tx.all(`SELECT DISTINCT s.id FROM run_input i JOIN run_contact rc ON rc.owner_id=i.owner_id AND rc.run_id=i.run_id AND rc.contact_id=i.source_contact_id
    JOIN task_contribution c ON c.owner_id=i.owner_id AND c.run_id=i.run_id AND c.source_contact_id=i.source_contact_id
    JOIN processing_step s ON s.owner_id=c.owner_id AND s.task_id=c.task_id

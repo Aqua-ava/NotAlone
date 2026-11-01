@@ -1,3 +1,4 @@
+import {assertRecertifyAccess} from './recertify-access.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { StorageFailure, type StorageAction, type StorageTransaction, type StorageRow } from '../../storage/sqlite/contracts.ts';
 import { assertReadEligibility } from '../../contacts/sqlite/actions.ts';
@@ -134,6 +135,7 @@ export const historyActions:StorageAction[]=[
   if(i.normalUse!==true||i.sourceLost===true)fenceContinuity(tx,token);return true;
  }),
  action('history.markContinuityLost','write',(tx,i)=>{const token=i.token as ReadEligibility;
+  if(!tx.get("SELECT 1 FROM conversation_binding WHERE owner_id=? AND contact_id=? AND id=? AND state='verified'",[token.owner_id,token.contact_id,token.binding_id]))return false;
   const scope=tx.get('SELECT conversation_id,source_generation FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
   if(scope?.conversation_id===token.conversation_id&&scope.source_generation===token.source_generation)return fenceContinuity(tx,token);
   return false;}),
@@ -175,7 +177,7 @@ export const historyActions:StorageAction[]=[
  }),
  action('history.begin','write',(tx,i)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertSupport(i.report);
-  const target=targetOf(i.target,token,i.report);assertHistoryReadBoundary(tx,token,{kind:'history'});assertSourceContinuity(tx,token,target,i.report?.continuity===normalUseContinuity?i.report.accountKey:undefined);
+  const target=targetOf(i.target,token,i.report);assertHistoryReadBoundary(tx,token,{kind:'history'});if(i.recertifyId)assertRecertifyAccess(tx,token,i.recertifyId,i.guardId,target);else assertSourceContinuity(tx,token,target,i.report?.continuity===normalUseContinuity?i.report.accountKey:undefined);
   // 新固定快照会替换原生读取器中的目标；旧目标的增量游标不能再交给该读取器。
   tx.run("UPDATE read_goal SET state='invalidated',failure_code='history_snapshot_replaced' WHERE owner_id=? AND contact_id=? AND kind='incremental' AND state IN ('running','incomplete')",[token.owner_id,token.contact_id]);
   const scopeDigest=historyCursorScopeDigest(token,i.report,target);
@@ -196,7 +198,7 @@ export const historyActions:StorageAction[]=[
  }),
  action('history.acceptPage','write',(tx,i)=>{
   const token=i.token as ReadEligibility;const goal=currentGoal(tx,token,i.goalId);const page=i.page as HistoryPage;
-  assertLiveGuard(tx,token,i.guardId);
+  if(i.recertifyId)assertRecertifyAccess(tx,token,i.recertifyId,i.guardId,JSON.parse(String(goal.target_json)));else assertLiveGuard(tx,token,i.guardId);
   if(goal.kind!=='history')fail('history_goal_kind_invalid');
   const digest=createHash('sha256').update(JSON.stringify(page)).digest('hex');
   const prior=tx.get('SELECT response_digest,contact_id,goal_id,read_epoch,cursor_in,cursor_out FROM sync_capture WHERE owner_id=? AND id=?',[token.owner_id,i.captureId]);
@@ -205,7 +207,7 @@ export const historyActions:StorageAction[]=[
   assertHistoryReadBoundary(tx,token,{kind:'history'});
   const target=JSON.parse(String(goal.target_json)) as HistoryTarget;
   const report=JSON.parse(String(goal.support_json)) as HistorySupportReport;
-  assertSourceContinuity(tx,token,target,report.continuity===normalUseContinuity?report.accountKey:undefined);
+  if(!i.recertifyId)assertSourceContinuity(tx,token,target,report.continuity===normalUseContinuity?report.accountKey:undefined);
   if(page?.target!==goal.target_descriptor||page.cursorIn!==goal.cursor||!Array.isArray(page.records)||page.records.length>1000||!Array.isArray(page.completedPartitions)||page.completedPartitions.some(p=>!target.partitions.includes(p))||typeof page.exhausted!=='boolean'||page.exhausted&&page.cursorOut!==null||!page.exhausted&&(typeof page.cursorOut!=='string'||!page.cursorOut||page.cursorOut===page.cursorIn))fail('history_page_invalid');
   const resumeCursor=page.resumeCursor===undefined||page.resumeCursor===null?null:assertHistoryCursor(page.resumeCursor,'history_page_invalid');
   if(resumeCursor!==null&&!page.exhausted)fail('history_page_invalid');
@@ -213,10 +215,11 @@ export const historyActions:StorageAction[]=[
   tx.run("INSERT INTO sync_capture(owner_id,id,contact_id,goal_id,read_epoch,runtime_token,captured_at,adapter_version,cursor_in,cursor_out,state,response_digest,acceptance_no) VALUES(?,?,?,?,?,?,?,?,?,?,'accepted',?,(SELECT coalesce(max(acceptance_no),0)+1 FROM sync_capture WHERE acceptance_no IS NOT NULL))",[token.owner_id,i.captureId,token.contact_id,goal.id,BigInt(token.read_epoch),i.runtimeToken,i.at,report.adapterVersion,page.cursorIn,page.cursorOut,digest]);
   const restoreOperationId=restoreOperationForGoal(tx,token.owner_id,String(goal.id))??null;
   const {quarantined,createdMessageIds,updatedMessageIds}=ingestRecords({tx,token,report,target,captureId:i.captureId,at:i.at,records:page.records,
+   ...(i.recertifyId?{recertify:{operationId:i.recertifyId,guardId:i.guardId,goalId:String(goal.id)}}:{}),
    exclude:observed=>observed.localKey&&clearBoundaryExclusion(tx,{ownerId:token.owner_id,conversationId:token.conversation_id,externalKey:observed.localKey,restoreOperationId})?'clear_excluded':null});
   const partitions=new Set<string>([...JSON.parse(String(goal.completed_partitions)),...page.completedPartitions]);
   const traversalComplete=page.exhausted&&target.partitions.every(p=>partitions.has(p));
-  const unresolved=quarantined||unresolvedQuarantineCount(tx,token.owner_id,token.contact_id)>0;
+  const unresolved=quarantined||(i.recertifyId?Boolean(tx.get("SELECT 1 FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id WHERE c.owner_id=? AND c.goal_id=? AND r.state='quarantined' AND r.reason_code<>'metadata_only' LIMIT 1",[token.owner_id,goal.id])):unresolvedQuarantineCount(tx,token.owner_id,token.contact_id)>0);
   const complete=traversalComplete&&!unresolved;
   const state=complete?'complete':page.exhausted?'incomplete':'running';const code=unresolved?'history_identity_quarantined':page.exhausted&&!complete?'history_partitions_missing':null;
   if(quarantined)tx.run("UPDATE sync_capture SET state='quarantined',error_code='history_identity_quarantined' WHERE owner_id=? AND id=?",[token.owner_id,i.captureId]);

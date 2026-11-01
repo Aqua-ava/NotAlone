@@ -1,3 +1,4 @@
+import {sourceDeletionIds} from '../../history/sqlite/source-deletion.ts';
 import {createHash} from 'node:crypto';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import {currentSourceScopeCTE,currentSourcePredicate} from '../../history/sqlite/current-scope.ts';
@@ -37,6 +38,7 @@ function discussions(tx:StorageTransaction,op:DeletionOperation):StorageRow[]{
 interface Closure {contexts:Set<string>;requests:Set<string>;copies:Set<string>}
 /** 反查实际输入；后续复用同副本的上下文也确实接触过先前输入，按纳入顺序传播。 */
 function closure(tx:StorageTransaction,op:DeletionOperation,sourceKeys?:ReadonlySet<string>,staleContexts?:ReadonlySet<string>):Closure{
+ const deletionSources=new Set(sourceDeletionIds(tx,op));
  const result:Closure={contexts:new Set(staleContexts),requests:new Set(),copies:new Set()};
  if(!supported(op.scope))return result;
  const ds=new Set(sourceKeys?[]:discussions(tx,op).map(d=>String(d.id)));
@@ -53,11 +55,11 @@ function closure(tx:StorageTransaction,op:DeletionOperation,sourceKeys?:Readonly
   for(const c of tx.all("SELECT id,discussion_id FROM runtime_copy WHERE owner_id=? AND state<>'deleted'",[op.ownerId]))if(ds.has(String(c.discussion_id)))result.copies.add(String(c.id));
  }else{
   const scope=op.scope;
-  for(const item of items)if(item.kind==='message'&&(sourceKeys?sourceKeys.has(JSON.stringify([item.source_contact_id,item.record_id])):'contactId' in scope&&item.source_contact_id===scope.contactId&&(scope.kind!=='source'||item.record_id===scope.sourceId)))result.contexts.add(String(item.context_id));
+  for(const item of items)if(item.kind==='message'&&(sourceKeys?sourceKeys.has(JSON.stringify([item.source_contact_id,item.record_id])):'contactId' in scope&&item.source_contact_id===scope.contactId&&(scope.kind!=='source'||deletionSources.has(String(item.record_id)))))result.contexts.add(String(item.context_id));
  }
  if(tx.get("SELECT 1 FROM sqlite_master WHERE name='reply_candidate_input_source'")){
   const scope=op.scope;
-  if(sourceKeys||scope.kind==='source'||scope.kind==='contact_history'||scope.kind==='contact')for(const item of tx.all('SELECT * FROM reply_candidate_input_source WHERE owner_id=?',[op.ownerId]))if(sourceKeys?sourceKeys.has(JSON.stringify([item.source_contact_id,item.record_id])):'contactId' in scope&&item.source_contact_id===scope.contactId&&(scope.kind!=='source'||item.record_id===scope.sourceId))result.contexts.add(String(item.context_id));
+  if(sourceKeys||scope.kind==='source'||scope.kind==='contact_history'||scope.kind==='contact')for(const item of tx.all('SELECT * FROM reply_candidate_input_source WHERE owner_id=?',[op.ownerId]))if(sourceKeys?sourceKeys.has(JSON.stringify([item.source_contact_id,item.record_id])):'contactId' in scope&&item.source_contact_id===scope.contactId&&(scope.kind!=='source'||deletionSources.has(String(item.record_id))))result.contexts.add(String(item.context_id));
  }
  // request_tombstone是05同操作持久闭包；清context后仍能找到尚待清理的请求。
  if(!sourceKeys)for(const r of tx.all(`SELECT r.id FROM reply_request r JOIN request_tombstone t ON t.owner_identity=r.owner_id AND t.request_key=r.request_key
