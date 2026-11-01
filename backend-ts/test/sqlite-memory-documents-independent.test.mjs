@@ -3,6 +3,31 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {deletionFixture} from './fixtures/memory-documents/deletion-support.mjs';
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
+import {supplier} from './fixtures/memory-management/supplier.mjs';
+import {documentFixture} from './fixtures/memory-documents/support.mjs';
+
+test('来源核验失败后文档阶段不能覆盖提取错误归因',async t=>{
+ const rejected=supplier({negative:true});
+ const f=await deletionFixture(t,{extractionResponse:(request,input)=>rejected.respond(request,input)});
+ const run=await f.extraction.start('source-failure-keeps-attribution');await f.extraction.waitForIdle(run.runId);
+ const result=await f.extraction.read(run.runId),task=result.tasks.find(item=>item.contactId===f.contactId);
+ assert.equal(task.state,'failed');assert.equal(task.errorCode,'memory_extraction_source_insufficient');
+ assert.equal((await f.documents.readTask(task.taskId)).errorCode,'memory_extraction_source_insufficient');
+ assert.deepEqual((await f.documents.readTask(task.taskId)).stages,[],'前置提取失败时没有成功启动文档步骤');
+ assert.ok(rejected.purposes.some(item=>item.purpose==='extraction')&&rejected.purposes.some(item=>item.purpose==='verification'));
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('真正的文档阶段失败仍写入任务错误并投影到失败步骤',async t=>{
+ const f=await documentFixture(t,{documentModel:'unconfigured'});
+ const run=await f.extraction.start('document-failure-keeps-attribution');await f.extraction.waitForIdle(run.runId);
+ const task=(await f.extraction.read(run.runId)).tasks.find(item=>item.contactId===f.contactId);
+ const state=await f.documents.readTask(task.taskId);
+ assert.equal(state.errorCode,'document_model_unconfigured');
+ assert.equal(state.stages[0].status,'failed');assert.equal(state.stages[0].errorCode,'document_model_unconfigured');
+ assert.equal(state.outcome,'incomplete');
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
 
 test('同轮甲提取失败时已成功的乙仍可完成文档发布，整轮保持失败',async t=>{
  let failedContact;

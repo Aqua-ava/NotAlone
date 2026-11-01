@@ -24,6 +24,11 @@ async function subject(name, delay) {
 const fs=require('node:fs'),http=require('node:http');
 const info=process.env.NOTALONE_BACKEND_INFO;
 fs.writeFileSync(${JSON.stringify(marker)},String(process.pid));
+fs.writeFileSync(${JSON.stringify(marker + '.environment')},JSON.stringify({
+ budget:process.env.NOTALONE_PROBLEM_BUDGET??null,
+ round:process.env.NOTALONE_PROBLEM_ROUND??null,
+ apiKeyPresent:process.env.NOTALONE_DEEPSEEK_API_KEY!==undefined,
+}));
 let server;
 const timer=setTimeout(()=>{
  server=http.createServer((req,res)=>{
@@ -48,6 +53,24 @@ async function ownedPid(marker) {
   while (!(value = await readFile(marker, 'utf8').catch(() => '')) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
   assert.ok(Number(value) > 1); return Number(value);
 }
+
+test('桌面启动真实子进程时保留显式诊断预算绑定，不传递模型凭据环境', async t => {
+  const names = ['NOTALONE_PROBLEM_BUDGET', 'NOTALONE_PROBLEM_ROUND', 'NOTALONE_DEEPSEEK_API_KEY'];
+  const previous = new Map(names.map(name => [name, process.env[name]]));
+  t.after(() => { for (const [name, value] of previous) { if (value === undefined) delete process.env[name]; else process.env[name] = value; } });
+  const budget = path.join(directory, 'synthetic-problem.sqlite');
+  process.env.NOTALONE_PROBLEM_BUDGET = budget;
+  process.env.NOTALONE_PROBLEM_ROUND = 'synthetic-r1';
+  process.env.NOTALONE_DEEPSEEK_API_KEY = 'synthetic-only';
+  const { host, marker } = await subject('diagnostic-budget', 0);
+  try {
+    await host.connect();
+    assert.equal(host.getState().phase, 'connected');
+    assert.deepEqual(JSON.parse(await readFile(marker + '.environment', 'utf8')), {
+      budget, round: 'synthetic-r1', apiKeyPresent: false,
+    });
+  } finally { await host.stop(); }
+});
 
 test('SQLite后台迟到握手仍在有界冷启窗口内连接，认证退出回收孩子', { timeout: 10_000 }, async () => {
   const { host, marker } = await subject('delayed', 250);

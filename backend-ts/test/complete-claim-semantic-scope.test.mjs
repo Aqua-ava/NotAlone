@@ -30,6 +30,33 @@ const semanticFields = ['category', 'topic', 'scene_name', 'alternatives', 'inte
   'valid_at', 'invalid_at', 'speech_act', 'assertion_status', 'figurative_type', 'event', 'conditions'];
 const facet = (verdict = 'supported', evidence_indices = [0]) => ({verdict, evidence_indices});
 const completeFields = () => Object.fromEntries(semanticFields.map(field => [field, facet()]));
+
+test('多条引文可共用真实主体提及，补造省略句的人称位置仍拒绝', async () => {
+  const input = scenario({source: '我住在海城。', candidate: '联系人住在海城，目前没有搬家。',
+    category: 'common_fact', scene: '居住资料', interpretation_reason: '合成的居住陈述与后续补充。'});
+  const second = '44444444-4444-4444-8444-444444444444';
+  input.window.messages.push({...input.window.messages[0], message_id: second, text: '目前没有搬家。'});
+  input.window.target_message_ids.push(second);
+  input.facts[0].source_message_ids.push(second);
+  const prepared = prepareSourceVerification({...input, policy, requireCurrent: async () => {}});
+  const output = response(input, prepared, {attribution: {actor_kind: 'contact',
+    evidence_indices: [0, 1], subject_mentions: [mention('first_person', 0, 1, 0, 3)]}});
+  const payload = JSON.parse(output[0].arguments), item = payload.results[0];
+  item.evidence.push({message_id: second, quote: '目前没有搬家。'});
+  item.claim_check.parts[0].arguments_and_relation.evidence_indices = [0, 1];
+  item.claim_check.parts[0].temporal_and_modality.evidence_indices = [0, 1];
+  output[0].arguments = JSON.stringify(payload);
+  assert.equal((await prepared.decode(output)).items[0].admitted, true);
+
+  item.claim_check.parts[0].attribution.subject_mentions.push({
+    ...mention('first_person', 0, 1, 0, 3), evidence_index: 1,
+  });
+  output[0].arguments = JSON.stringify(payload);
+  const negative = prepareSourceVerification({...input, policy, requireCurrent: async () => {}});
+  const rejected = (await negative.decode(output)).items[0];
+  assert.equal(rejected.admitted, false);
+  assert.ok(rejected.result.issues.includes('subject'));
+});
 const mention = (kind = 'literal_subject', sourceStart = 0, sourceEnd = 2, candidateStart = 0, candidateEnd = 2) => ({
   kind, evidence_index: 0, source_span: {start: sourceStart, end: sourceEnd},
   candidate_span: {start: candidateStart, end: candidateEnd},

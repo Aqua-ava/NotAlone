@@ -88,7 +88,7 @@ export class SqliteMemoryExtraction {
   const requireCurrent=async()=>{signal.throwIfAborted();await policy.assertCurrent();await this.storage.execute('memoryExtraction.current',{ownerId:this.ownerId,attemptId:batch.attemptId});};
   const rows=[...batch.rows].sort((a,b)=>a.sent_at!==null&&b.sent_at!==null?(a.sent_at as bigint)<(b.sent_at as bigint)?-1:(a.sent_at as bigint)>(b.sent_at as bigint)?1:Number(a.input_no)-Number(b.input_no):Number(a.input_no)-Number(b.input_no));
   const actualNos=rows.map(row=>Number(row.input_no));
-  const window:ExtractionWindow={owner_id:this.ownerId,contact_id:batch.contactId,target_message_ids:rows.filter(r=>r.role==='target').map(r=>String(r.message_id)),messages:rows.map(r=>({message_id:String(r.message_id),text:String(r.text_body),sender:r.sender_role==='owner'?'self':'contact',occurred_at:r.sent_at===null?null:new Date(Number(r.sent_at)).toISOString()}))};
+  const window:ExtractionWindow={owner_id:this.ownerId,contact_id:batch.contactId,target_message_ids:rows.filter(r=>r.role==='target').map(r=>String(r.message_id)),messages:rows.map(r=>({message_id:String(r.message_id),text:String(r.text_body),sender:r.sender_role==='owner'?'self':'contact',occurred_at:r.sent_at===null?null:new Date(Number(r.sent_at)).toISOString(),text_representation:'text'}))};
   let commonFailure:string|null=null;let modelFailure:string|null=null;
   let verificationInputEventId:string|null=null,verificationCall:{callId:string;reused:boolean}|null=null;
   const verificationEvents=new Map<string,string>();

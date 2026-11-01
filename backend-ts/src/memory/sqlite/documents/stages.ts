@@ -115,7 +115,7 @@ function fixedPublication(tx:StorageTransaction,ownerId:string,t:StorageRow,base
  if(revisions(tx,ownerId,t).current_publication_id!==p)fail('document_publication_conflict');
 }
 export const memoryDocumentsStageActions:StorageAction[]=[
- act('noteFailure','write',(tx,i)=>{const t=task(tx,textId(i.ownerId),textId(i.taskId));if(t.state!=='revoked')tx.run('UPDATE processing_task SET error_code=? WHERE owner_id=? AND id=?',[textId(i.code),i.ownerId,i.taskId]);return true;}),
+ act('noteFailure','write',(tx,i)=>{const t=task(tx,textId(i.ownerId),textId(i.taskId));if(t.state!=='revoked')tx.run('UPDATE processing_task SET error_code=COALESCE(error_code,?) WHERE owner_id=? AND id=?',[textId(i.code),i.ownerId,i.taskId]);return true;}),
  act('runPaused','read',(tx,i)=>runPaused(tx,textId(i.ownerId),textId(i.runId))),
  act('recover','write',(tx,i,lease)=>{
   const ownerId=textId(i.ownerId);

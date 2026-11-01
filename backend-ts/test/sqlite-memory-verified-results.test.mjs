@@ -12,7 +12,7 @@ function fact(message){
   confidence:0.8,risk_flags:[],valid_at:null,invalid_at:null,speech_act:'assertion',assertion_status:'asserted',figurative_type:'literal',alternatives:[],
   interpretation_reason:'保留合成原句明确陈述。',event:null,conditions:null};
 }
-function supplier({negative=false}={}){
+function supplier({negative=false,eventQuote=false}={}){
  const windows=[],sources=new Map(),purposes=[];
  const respond=async(request,input)=>{
   purposes.push({contactId:input.scope.contact_id,purpose:request.purpose});const payload=JSON.parse(request.user);let value;
@@ -20,12 +20,19 @@ function supplier({negative=false}={}){
    assert.equal(request.tool.name,'DirectMemoryExtractionOutput');
    windows.push({contactId:input.scope.contact_id,payload});
    for(const message of payload.messages)sources.set(message.message_id,{...message,contactId:input.scope.contact_id});
-   value={scenes:[{scene_name:'合成长期资料',memories:payload.messages.map(fact)}]};
+   value={scenes:[{scene_name:'合成长期资料',memories:payload.messages.map(message=>{
+    const candidate=fact(message);
+    if(eventQuote)candidate.event={version:2,stage:'cancelled',stage_evidence:[],occurrence_start:null,occurrence_end:null,
+     occurrence_evidence:[],occurrence_precision:'unknown',occurrence_expression:null,anchor_message_id:null};
+    return candidate;
+   })}]};
   }else{
    assert.equal(request.tool.name,'SourceVerificationOutput');
    value={request_fingerprint:payload.request_fingerprint,results:payload.candidates.map((candidate,candidate_index)=>{
     const message=sources.get(candidate.source_message_ids[0]);assert.equal(message.contactId,input.scope.contact_id);
     return {candidate_index,verdict:'supported',issues:[],evidence:[{message_id:message.message_id,quote:message.text}],
+     ...(eventQuote?{event_verification:{stage_verdict:'supported',occurrence_verdict:'uncertain',
+      stage_evidence:[{message_id:message.message_id,quote:message.text}],occurrence_evidence:[]}}:{}),
      claim_check:{version:2,field_checks:Object.fromEntries(semanticFields.map(field=>[field,facet()])),parts:[{
       candidate_span:{start:0,end:[...candidate.text].length},attribution:{...facet(),scope_subject:candidate.subject,actor_kind:candidate.subject,resolution:'explicit',
        subject_mentions:[{kind:'first_person',evidence_index:0,source_span:{start:0,end:1},candidate_span:{start:0,end:candidate.subject==='self'?2:3}}]},
@@ -90,6 +97,24 @@ test('语义核验逐项证据不足保留失败事实，已知模型返回不�
  assert.equal(trace.events.some(event=>event.kind==='stage_result'&&event.payload.outcome==='no_new_memory'),false);
  assert.equal(trace.events.some(event=>event.kind==='verified_output'),false);
  assert.equal(done.laterStages,'pending');assert.notEqual(done.state,'completed');assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('SQLite提取窗口为事件逐字引文提供文字表示，完整核验可接纳已取消事件',async t=>{
+ const f=await fixture(t);const contactId=f.saved[0].contact_id;
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'我把周末聚会取消了。'})],completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(contactId);await f.contacts.setReading(false);
+ const external=supplier({eventQuote:true});let memory;const model=modelPort(()=>memory.accounting,external.respond);memory=new SqliteMemoryExtraction(f.storage,owner,model);t.after(()=>memory.close());
+ const started=await memory.start('sqlite-event-quote-needs-text-representation');await memory.waitForIdle();const done=await memory.read(started.runId);
+ const task=done.tasks.find(task=>task.scopeKind==='contact'),trace=await memory.trace(task.taskId);
+ const diagnostic=JSON.stringify({state:task.state,error:task.errorCode,verification:trace.events.filter(event=>event.kind==='verification').map(event=>event.payload.result)});
+ assert.equal(done.total,1);assert.equal(done.succeeded,1,diagnostic);assert.equal(done.failed,0);assert.equal(done.unknown,0);assert.equal(done.candidates.length,1);
+ assert.equal(model.calls,2);assert.equal(external.windows.length,1);
+ const verificationInput=trace.events.find(event=>event.kind==='verification_input');assert.ok(verificationInput);
+ assert.equal(verificationInput.payload.window.messages[0].text_representation,'text');
+ const verification=trace.events.find(event=>event.kind==='verification');assert.ok(verification);
+ assert.equal(verification.payload.result.verdict,'supported');assert.equal(verification.payload.result.event.stage,'cancelled');
+ assert.equal(verification.payload.result.event.stage_verified,true);assert.deepEqual(verification.payload.result.event.stage_evidence,[{message_id:verification.payload.result.event.stage_evidence[0].message_id,char_start:0,char_end:'我把周末聚会取消了。'.length}]);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
 test('完成后撤销一位贡献者授权使完整本人混合任务候选失效，另一联系人合法结果保持可读',async t=>{
