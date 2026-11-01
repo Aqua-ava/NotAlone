@@ -1,6 +1,9 @@
 {
  "safe-node": [
     "tests/history-recertify.test.mjs",
+    "tests/message-stream.test.mjs",
+    "tests/packaging/upgrade-history-image-cli.test.mjs",
+    "tests/sqlite-first-session-regression.test.mjs",
     "tests/history-image-message.test.mjs",
     "tests/quarantine-controller.test.mjs",
   "tests/diagnostic-export.test.mjs",
@@ -153,6 +156,8 @@
  ],
  "headless": [
   "tests/history-recertify-view.test.mjs",
+  "tests/assistant-session-workspace.test.mjs",
+  "tests/foreground-recovery-view.test.mjs",
   "tests/contacts-history-view.test.mjs",
   "tests/contact-history-quote-view.test.mjs",
   "tests/fixed-memory-processing-view.test.mjs",
