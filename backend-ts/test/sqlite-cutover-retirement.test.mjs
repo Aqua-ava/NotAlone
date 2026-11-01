@@ -8,6 +8,34 @@ const root = path.resolve(new URL('../../', import.meta.url).pathname);
 const productEntries = ['backend-ts/src/sqlite-host-plugin.ts', 'backend-ts/src/launch.ts', 'desktop/src/main/index.ts'];
 const sourceRoots = ['backend-ts/src', 'desktop/src'];
 
+test('旧同步解析、候选协议及已移除导入页的孤立模块不再留在当前树', () => {
+  for (const file of [
+    'backend-ts/src/memory/overview/evidence/semantic.ts',
+    'backend-ts/src/memory/overview/evidence/legacy-semantic.ts',
+    'backend-ts/src/memory/overview/evidence/legacy-grammar.ts',
+    'backend-ts/src/memory/processing/reason.ts',
+    'backend-ts/src/memory/records/documents/target.ts',
+    'backend-ts/src/reply/generation/reply-candidate-prompt.ts',
+    'backend-ts/src/reply/generation/reply-prepared-schema.ts',
+    'backend-ts/src/reply/generation/reply-prompts.ts',
+    'backend-ts/src/skills/skills-root.ts',
+    'backend-ts/src/sync/sync-incremental-cli-stream.ts',
+    'backend-ts/src/sync/sync-incremental-cli-history.ts',
+    'backend-ts/src/sync/sync-incremental-normalize.ts',
+    'backend-ts/src/sync/wechat-scope-json.ts',
+    'desktop/src/renderer/SourceDeletionPanel.tsx',
+  ]) assert.equal(existsSync(path.join(root, file)), false, `${file} 已无当前消费者`);
+  for (const file of ['backend-ts/src/sync/wechat-http-body.ts',
+    'backend-ts/src/history/sqlite/incremental-coordinator.ts',
+    'backend-ts/src/memory/overview/evidence/bounded-body.ts',
+    'backend-ts/src/memory/overview/evidence/bounded-graph.ts',
+    'backend-ts/src/memory/overview/evidence/bounded-contract.ts',
+    'desktop/src/shared/source-deletion-bridge.ts',
+    'desktop/src/preload/source-deletion.ts']) {
+    assert.equal(existsSync(path.join(root, file)), true, `${file} 的现行能力不能随孤立模块移除`);
+  }
+});
+
 test('SQLite 切换后不保留无消费者的旧合成宿主与传输辅助文件', () => {
   const retired = [
     'backend-ts/src/plugin.ts',

@@ -186,7 +186,7 @@ Q1–Q10已全部明确。三实体关系与状态已整体确认；剩余的是
 事实查证支线由Agent负责，用户无需判断底层唯一性：
 
 - [CLI锁定记录](../../desktop/wechat-sources.lock.json)固定2.0.1-rc.5源码，不证明用户外置程序的实际版本；[身份研究](../../research/sqlite-wechat-message-identity.md)尚未证明local_id/时间可唯一定位媒体。
-- 当前[同步调用](../../backend-ts/src/sync/sync-incremental-cli.ts)关闭include-media-paths；[规范化](../../backend-ts/src/sync/sync-incremental-normalize.ts)对非文字保存过滤收据后跳过。占位与实际提取均是待实现目标，不宣称正式链已接通。
+- 当时的历史实现：[旧同步调用快照](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend-ts/src/sync-incremental-cli.ts)关闭 include-media-paths；[旧规范化快照](https://github.com/Aqua-ava/NotAlone/blob/51b75c842bbd56a2cc69d564a99d9cccec44d464/backend-ts/src/sync/sync-incremental-normalize.ts)对非文字保存过滤收据后跳过。此处保留规格编写时“占位与实际提取待实现”的结论，固定快照仅供源码定位，不代表原始验收版本或当前功能状态；当前同步入口见 [SQLite 增量协调器](../../backend-ts/src/history/sqlite/incremental-coordinator.ts)。
 - 旧[媒体生命周期迁移](../../backend-ts/database/migrations/072_scoped_media_lifecycle.sql)与[删除器](../../backend-ts/src/deletion/cross-domain-deletion.ts)可查漏自有缓存/删除身份规则，不要求照搬旧表，不证明新SQLite媒体链可用。
 
 上述设计与源码证据未读取真实微信消息或媒体、执行真实媒体导出或模型调用；本轮新验证范围和结果以末尾证据记录为准。

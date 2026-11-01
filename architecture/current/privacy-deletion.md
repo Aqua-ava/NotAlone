@@ -1,5 +1,7 @@
 # 现行隐私、模型调用与删除
 
+> 历史源码链接：本文已退役 Python 文件指向历史测试清单采用的固定 Git 快照 `23a76733`，仅供查看旧实现，不表示该快照就是文中各日期的原始验收版本，也不是当前运行入口。
+
 > 微信撤回与删除的已采纳新目标见 [ADR-128](../adr/128-deduplicated-wechat-message-storage.md)：撤回前已保存正文可查看但不得用于新的回复或记忆；微信端删除不自动删除 NotAlone 消息。既有来源删除、联系人清空和备份删除边界保持；尚未实施。
 
 > 联系人身份与逐人授权按 [ADR-110](../adr/110-selected-sqlite-contact-read-grants.md)：不延续旧授权、不启用全部私聊，取消立即封禁旧资格；首用搁置不取消授权核验。
@@ -12,7 +14,7 @@
 
 > 状态：已采纳的安全边界；独立桌面版按 ADR-061 使用本机后台和本机资料，已有[正式启动路径](../../desktop/src/main/startup/diagnostics.ts)及[SQLite 开发存储核验](../../desktop/src/main/startup/sqlite-development.ts)；独立机器安装与最终交付验收另行核验。2026-10-29用户已取消云端工程；业务资料保存在本机，外部模型API仍须明确用途、供应商政策和授权范围。
 > 2026-10-07 补充：按 [ADR-037](../adr/037-complete-memory-extraction-trace.md) 采纳独立含正文的记忆提取追踪要求，功能尚未实现；普通日志与最小出站台账仍不得保存正文。
-> 历史实现更新：2026-10-16。以下 Python 服务已退役；管理页源码仍保留，以下页面记录仅说明当时接线，不代表当前集成验收。当前后台承接入口见 [SQLite 执行与追踪](../../backend-ts/src/memory/sqlite/execution.ts)及[切换记录](../../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。当时上条的追踪功能已在后端与 React 管理页实现（迁移 `039`–`043`，[追踪服务](../../backend/src/notalone/application/trace_service.py)、[管理页](../../desktop/src/renderer/TracePanel.tsx)），契约与实现状态以[记忆提取完整追踪](memory-extraction-trace.md)为准；本节隐私边界不变——追踪仍是独立的含正文敏感资料，普通日志与最小出站台账继续不得保存正文。原生 App、最终签名包与真实模型质量不因此条获得验收。
+> 历史实现更新：2026-10-16。以下 Python 服务已退役；管理页源码仍保留，以下页面记录仅说明当时接线，不代表当前集成验收。当前后台承接入口见 [SQLite 执行与追踪](../../backend-ts/src/memory/sqlite/execution.ts)及[切换记录](../../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。当时上条的追踪功能已在后端与 React 管理页实现（迁移 `039`–`043`，[追踪服务](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/application/trace_service.py)、[管理页](../../desktop/src/renderer/TracePanel.tsx)），契约与实现状态以[记忆提取完整追踪](memory-extraction-trace.md)为准；本节隐私边界不变——追踪仍是独立的含正文敏感资料，普通日志与最小出站台账继续不得保存正文。原生 App、最终签名包与真实模型质量不因此条获得验收。
 
 > 演进状态：[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)的授权草稿、审核与范围发布，以及版本历史和反馈执行视图，已具有主线工程装配；当前签收范围见[演进索引](../../.scratch/memory-skill-evolution/planning.md)与[集成索引](../../.scratch/memory-skill-integration-preparation/planning.md)。原[11阶段验证](../../.scratch/memory-skill-integration-preparation/frontier-11-validation.md)保留历史结果，不代表当前仍停在待审阶段，也不代表真实质量或最终 App 已验收。学习产物、对照和发布完整继承来源删除，无独立留存例外；候选回复 Agent 仍无 Skill 管理或发布权限，新增模型用途不自动获得出站授权。
 

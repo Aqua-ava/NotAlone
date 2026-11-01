@@ -57,3 +57,46 @@
 ### 既有问题及未执行验证
 
 桌面真实测试清单仍有 5 个既有漏登记文件，默认测试入口会报错；本次没有通过删除这些现行测试来掩盖问题，也未将其混入旧代码清理。缺少已安装 DSH 等依赖，未运行 typecheck／全量后台集成测试。未安装依赖、构建产品、启动 Electron／微信、调用真实模型、修改用户资料或推送远端。安全源码测试通过不代表原生或端到端验收。
+
+## 第二轮：继续核查（基线 51b75c84）
+
+第一轮已正常快进推送到 `main`；本节记录其后的独立清理批次，不能把第一轮推送结果当成第二轮已发布。
+
+### 已移除的 14 个文件
+
+| 文件／组 | 证据与保留边界 |
+| --- | --- |
+| `memory/overview/evidence/{semantic,legacy-semantic,legacy-grammar}.ts` | `reverifySemantic` 无当前调用，后两文件仅供该孤岛使用。当前提取核验用 `memory/extraction/verification/bounded-proof.ts`；`bounded-body/graph/contract.ts` 仍被正式代码导入，保留。 |
+| `memory/processing/reason.ts` | `processingReason` 仅定义。当前处理 API 与桌面投影走 SQLite HTTP 和 fixed-processing，不加载该文件。 |
+| `memory/records/documents/target.ts` | 导出没有外部消费者。当前文档阶段冻结由 `memory/sqlite/documents/{inputs,stages}.ts` 负责。 |
+| `reply/generation/{reply-candidate-prompt,reply-prepared-schema,reply-prompts}.ts` | 旧提示常量及 prepared schema 无当前消费者。当前普通讨论与候选各自构造系统提示；仍被宿主引用的 `reply-execution-budget.ts` 保留。 |
+| `skills/skills-root.ts` | `resolveSkillsRoot` 仅定义；现行宿主使用 `capabilities.skillPackageRoot` 创建受控 Skill 库。 |
+| `sync/{sync-incremental-cli-stream,sync-incremental-cli-history,sync-incremental-normalize,wechat-scope-json}.ts` | stream 和两个 CLI 解析文件形成无外部消费者的孤岛，scope JSON 导出仅定义；正式同步使用 SQLite 增量协调器。保留正在使用的 `wechat-http-body.ts`。 |
+| `desktop/src/renderer/SourceDeletionPanel.tsx` | 唯一挂载页 `ImportPage.tsx` 已在 `52ab1a6f` 删除；当前无导入、测试或动态挂载入口。来源删除 main/preload/shared API 仍在使用并保留，不能因面板孤立而一并移除。 |
+
+除最后一项外，上表路径相对 `backend-ts/src/`。文件名、公开符号、配置、测试、具名动态引用与当前 SQLite 入口共同核查，不以孤立的静态图结论单独作删除依据。
+
+唯一指向本轮删除文件的 Markdown 引用在 `.scratch/wechat-media-extraction/spec.md`；已改为历史快照并标明当时结论，不篡改旧规格。固定历史测试清单未修改。
+
+### 文档对齐与历史来源
+
+- Skill 库文档不再把 Python／LangChain 写成当前实现，也不指示在当前树执行旧 Python 测试；指向 SQLite Skill 说明及后台验证入口。
+- 原生 README 对齐实际 `automatic-header-v4` 输出及 ADR-132，明确顶部名称、v4 文字回退、旧 v2 各自质量规则；没有取消质量门或修改探针代码。
+- 桌面 README 按 ADR-136 修正多 Skill 组合说明；旧 JSONL 正常导入和首次连接自动授权全部私聊的段落标为历史，当前入口按 ADR-142 选择联系人再授权。
+- 旧 Python 追踪／排障源码链接使用已核验 Git 快照 `23a76733`；旧规范化实现引用第一轮基线 `51b75c84`。快照可定位旧代码，不等同每条历史日期的验收版本，也不代表当前运行。
+- 原生 README 的缺失任务链接改为现存采集源码与安全测试入口，明确源码不替代历史或当前实机验收。
+
+### 继续保留
+
+- `BackgroundTasksPanel.tsx` 虽没有普通组件导入，却有 esbuild 字符串测试入口，保留。
+- `measure-desktop-state.mjs` 是独立合成 benchmark；无产品调用不足以证明废弃，保留。
+- quarantine、diagnostics、model-host 与来源删除桥接均有当前调用，保留。
+- 范围内缺失的 `.scratch` 资料对应“停止跟踪 .scratch 本地资料并保留历史”的提交 `553b6698`；不擅自恢复、删除历史需求或批量改成其他版本的规格。
+- 没有删除 Markdown 整篇或重新生成历史评测证据。
+
+### 第二轮验证
+
+- 新增孤立模块退役／活跃依赖保留断言；删除前失败、删除后与现有清单单测合计 **11/11 通过**。
+- 相比第二轮基线，内联本地路径缺失 **429 → 397**，无新增缺失；**29 条固定 SHA 源码链接、24 个唯一 Git 对象路径全部存在**。只验证本地 Git 对象及相对路径，不声称已联网检查每个网页、锚点或每条历史验收。
+- 运行源码相对 import、package 入口及 `git diff --check` 继续核对；未变更 package 或锁文件。
+- 原有 5 项桌面测试清单漏登记和缺少安装依赖的验证限制继续保留；未启动原生 App、微信、真实模型，也未修改业务数据。
