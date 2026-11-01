@@ -40,7 +40,7 @@ function quoteTypeLabel(messageType: string): string {
   return `引用类型：${numericLabels[String(base)] ?? `未知类型（${messageType}）`}`;
 }
 
-export function ContactChatHistory({ session, settings }: { session: ContactSessionView; settings?: ReactNode }) {
+export function ContactChatHistory({ session, settings, contactActions }: { session: ContactSessionView; settings?: ReactNode; contactActions?: ReactNode }) {
   const bridge = window.notalone.contactHistory;
   const { state, error, setError, latest, active, retry } = useRevisionedSession(initialHistory, bridge);
   const contactId = session.state.selectedContactId;
@@ -76,6 +76,7 @@ export function ContactChatHistory({ session, settings }: { session: ContactSess
     <header className="contact-chat-header"><div><h3>聊天记录</h3><p>{selected?.displayName ?? '请在顶部选择联系人'}</p></div>
       <div className="contact-chat-actions">
         <button className="button" disabled={!sameScope || loading} onClick={() => void load()}>刷新记录</button>
+        {selected && contactActions}
         {selected && settings && <button ref={settingsButton} className="button contact-chat-settings-toggle" type="button"
           aria-label="同步与资料管理" title="同步与资料管理" aria-expanded={settingsOpen} aria-controls={settingsId}
           onClick={() => setSettingsScope(settingsOpen ? null : { contactId: selected.contactId, scopeRevision })}>

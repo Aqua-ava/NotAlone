@@ -24,6 +24,7 @@ import type { SkillLearningBridge } from './skill-learning-bridge';
 import type { BackgroundTaskBridge } from './background-task-bridge';
 import type { HistoryClearBridge } from './history-clear-bridge';
 import type { ContactHistoryBridge } from './contact-history-bridge';
+import type { ContactDeletionBridge } from './contact-deletion-bridge';
 import type { QuarantineBridge } from './quarantine-bridge';
 
 export type AppBridge = WindowBridge & DesktopBridge & {
@@ -42,6 +43,7 @@ export type AppBridge = WindowBridge & DesktopBridge & {
   backgroundTasks: BackgroundTaskBridge;
   historyClear: HistoryClearBridge;
   contactHistory: ContactHistoryBridge;
+  contactDeletion: ContactDeletionBridge;
   quarantine: QuarantineBridge;
 };
 import type { TraceBridge } from './trace-bridge';

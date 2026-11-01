@@ -144,9 +144,14 @@ export const identityActions: StorageAction[] = [
   if(String(account.scope_revision)!==i.scopeRevision||account.source_generation!==i.sourceGeneration)fail('account_scope_stale');
   for(const choice of i.choices){
    const c=tx.get('SELECT * FROM channel_conversation WHERE owner_id=? AND account_id=? AND external_key=?',[i.ownerId,i.accountId,choice.locator]);
+   const historicalBindings=c?tx.all(`SELECT b.state,p.id AS contact_id,p.state AS contact_state,
+    EXISTS(SELECT 1 FROM deletion_operation d WHERE d.owner_identity=b.owner_id AND d.contact_identity=b.contact_id AND d.scope_kind='contact' AND d.state='completed') AS deletion_completed
+    FROM conversation_binding b JOIN contact p ON p.owner_id=b.owner_id AND p.id=b.contact_id
+    WHERE b.owner_id=? AND b.conversation_id=?`,[i.ownerId,c.id]):[];
    let b=c&&tx.get("SELECT * FROM conversation_binding WHERE owner_id=? AND conversation_id=? AND state<>'revoked'",[i.ownerId,c.id]);
-   if(c&&!b&&tx.get('SELECT id FROM conversation_binding WHERE owner_id=? AND conversation_id=?',[i.ownerId,c.id]))fail('binding_identity_conflict');
-   if(c?.display_name!==undefined&&c.display_name!==choice.observed_display_name)fail('selection_stale');
+   const deletedIdentityTombstone=historicalBindings.length>0&&historicalBindings.every(row=>row.state==='revoked'&&row.contact_state==='deleted'&&row.deletion_completed===1n);
+   if(c&&!b&&historicalBindings.length&&!deletedIdentityTombstone)fail('binding_identity_conflict');
+   if(c&&c.display_name!==choice.observed_display_name&&!(deletedIdentityTombstone&&c.display_name===null))fail('selection_stale');
    let contactId=b?.contact_id??choice.contactId;
    if(choice.contact_id&&choice.contact_id!==contactId)fail('binding_identity_conflict');
    if(b){
@@ -155,10 +160,11 @@ export const identityActions: StorageAction[] = [
     if(g)fail('selection_stale');
    }else{
     // 不以名称复用；存在旧绑定或其他渠道时不能把联系人改绑过去。
-    if(choice.contact_id||c&&tx.get('SELECT id FROM conversation_binding WHERE owner_id=? AND conversation_id=?',[i.ownerId,c.id]))fail('binding_identity_conflict');
+    if(choice.contact_id||c&&historicalBindings.length&&!deletedIdentityTombstone)fail('binding_identity_conflict');
     if(generation(choice.expected_selection_generation)!==0n)fail('selection_stale');
     tx.run('INSERT INTO contact(owner_id,id,display_name) VALUES(?,?,?)',[i.ownerId,contactId,choice.observed_display_name]);
     if(!c)tx.run("INSERT INTO channel_conversation(owner_id,id,account_id,identity_scheme,external_key,display_name) VALUES(?,?,?,'wechat.private.v1',?,?)",[i.ownerId,choice.conversationId,i.accountId,choice.locator,choice.observed_display_name]);
+    else if(deletedIdentityTombstone)tx.run('UPDATE channel_conversation SET display_name=? WHERE owner_id=? AND id=?',[choice.observed_display_name,i.ownerId,c.id]);
     tx.run("INSERT INTO conversation_binding(owner_id,id,contact_id,conversation_id,state) VALUES(?,?,?,?,'verified')",[i.ownerId,choice.bindingId,contactId,c?.id??choice.conversationId]);
     b=one(tx,'SELECT * FROM conversation_binding WHERE owner_id=? AND id=?',[i.ownerId,choice.bindingId]);
    }

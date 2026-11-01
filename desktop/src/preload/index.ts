@@ -25,6 +25,7 @@ import type { DesktopSettings } from '../shared/desktop-bridge';
 import { createBackgroundTaskBridge } from './background-tasks';
 import { createHistoryClearBridge } from './history-clear';
 import { createContactHistoryBridge } from './contact-history';
+import { createContactDeletionBridge } from './contact-deletion';
 import { createQuarantineBridge } from './quarantine';
 
 const bridge: AppBridge = {
@@ -53,6 +54,7 @@ const bridge: AppBridge = {
   syncControl: createSyncControlBridge(ipcRenderer),
   historyClear: createHistoryClearBridge(ipcRenderer),
   contactHistory: createContactHistoryBridge(ipcRenderer),
+  contactDeletion: createContactDeletionBridge(ipcRenderer),
   quarantine: createQuarantineBridge(ipcRenderer),
   openManager: () => ipcRenderer.invoke('window:open-manager'),
   openHelper: () => ipcRenderer.invoke('window:open-helper'),

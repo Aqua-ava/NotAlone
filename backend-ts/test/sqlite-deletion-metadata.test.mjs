@@ -29,7 +29,7 @@ async function fixture(t,createMetadata,unblock=()=>{}){
   const response=await fetch(`http://127.0.0.1:${server.address().port}`+path,{method,headers:{authorization:'Bearer synthetic-only','content-type':'application/json',...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});
   return {status:response.status,body:await response.json()};
  };
- return {request,deletion};
+ return {request,deletion,storage};
 }
 test('账号删除等待真实元数据持有者，迟到读取不返回旧账号候选且删除后不重装',async t=>{
  let release,started,closed=0,reads=0,created=0;
@@ -56,14 +56,64 @@ test('联系人删除清掉账号候选与跨联系人预览，重建空服务�
  const snapshot=(await f.request('/api/sync/cli-sessions','GET',undefined,{'x-notalone-metadata-consent':'selected-list'})).body;
  const confirmation={snapshot_token:snapshot.snapshot_token,selections:snapshot.sessions.map(row=>({locator:row.username,observed_display_name:row.display_name,expected_selection_generation:'0'})),history_authorized:true};
  assert.equal((await f.request('/api/sync/cli-bindings/confirm','POST',confirmation)).status,200);
- const before=(await f.request('/api/contacts')).body.contacts;const contact=before[0].contact_id;
+ const before=(await f.request('/api/contacts')).body.contacts;const contact=before.find(row=>row.display_name==='合成甲').contact_id;const sibling=before.find(row=>row.display_name==='合成乙').contact_id;
  const response=await f.request(`/api/contacts/${contact}`,'DELETE',{confirmed:true,confirm_contact_id:contact});
  assert.equal(response.status,202);assert.equal(closed,1);
- assert.equal((await f.request(`/api/deletions/${response.body.operation_id}`)).body.state,'completed');
- const remaining=(await f.request('/api/contacts')).body.contacts;assert.deepEqual(remaining.map(row=>row.contact_id),[before[1].contact_id]);
+ const completed=await f.request(`/api/deletions/${response.body.operation_id}`);
+ assert.equal(completed.body.state,'completed');assert.equal(completed.body.scope_kind,'contact');
+ assert.equal(completed.body.status,'succeeded');assert.equal(typeof completed.body.finished_at,'string');
+ assert.ok(completed.body.checks.some(check=>check.kind==='final_recheck'&&check.result==='passed'));
+ assert.ok(completed.body.checks.every(check=>['passed','not_applicable'].includes(check.result)));
+ assert.equal(Object.hasOwn(completed.body,'contact_id'),false);
+ const listed=(await f.request('/api/deletions')).body.operations.find(row=>row.operation_id===response.body.operation_id);
+ assert.equal(listed.state,'completed');assert.equal(listed.scope_kind,'contact');
+ const remaining=(await f.request('/api/contacts')).body.contacts;assert.deepEqual(remaining.map(row=>row.contact_id),[sibling]);
  const oldReads=reads;
  const oldCandidate=await f.request('/api/setup/wechat/confirm','POST',{candidate_token:candidate.candidate_token,confirmed:true,mode:'selected',history_authorized:false});
  assert.equal(oldCandidate.body.error,'account_candidate_stale');
  assert.equal((await f.request('/api/sync/cli-bindings/confirm','POST',confirmation)).body.error,'selection_stale');
  assert.equal(reads,oldReads);
+ const fresh=(await f.request('/api/sync/cli-sessions','GET',undefined,{'x-notalone-metadata-consent':'selected-list'})).body;
+ const deletedSession=fresh.sessions.find(row=>row.username==='synthetic-a');
+ assert.equal(deletedSession.bound_contact_id,null);
+ assert.equal(deletedSession.known_contact_id,null);
+ const explicit=await f.request('/api/sync/cli-bindings/confirm','POST',{snapshot_token:fresh.snapshot_token,history_authorized:true,
+  selections:[{locator:deletedSession.username,display_name:deletedSession.display_name,observed_display_name:deletedSession.display_name,
+   expected_selection_generation:deletedSession.selection_generation}]});
+ assert.equal(explicit.status,200,JSON.stringify(explicit.body));
+ const restored=(await f.request('/api/sync/cli-bindings')).body.bindings.find(row=>row.conversation_locator==='synthetic-a');
+ assert.ok(restored);
+ assert.notEqual(restored.contact_id,contact);
+ assert.equal(restored.display_name,'合成甲');
+ const preview=(await f.request('/api/sync/cli-sessions','GET',undefined,{'x-notalone-metadata-consent':'selected-list'})).body.sessions.find(row=>row.username==='synthetic-a');
+ assert.equal(preview.known_contact_id,restored.contact_id);
+ assert.equal(preview.display_name,'合成甲');
+ assert.equal((await f.request('/api/sync/enable','POST',{})).status,200);
+ assert.equal((await f.storage.execute('identity.eligibility',{ownerId,contactId:restored.contact_id})).contact_id,restored.contact_id);
+ const activeBinding=(await f.request('/api/sync/cli-bindings')).body.bindings.find(row=>row.contact_id===restored.contact_id);
+ assert.ok(activeBinding);
+ assert.equal((await f.request('/api/sync/disable','POST',{})).status,200);
+ await assert.rejects(f.storage.execute('identity.eligibility',{ownerId,contactId:restored.contact_id}),{code:'read_not_authorized'});
+ assert.equal((await f.request('/api/sync/cli-bindings/revoke','POST',{contact_id:restored.contact_id,binding_id:activeBinding.binding_id,
+  expected_selection_generation:activeBinding.selection_generation})).status,200);
+ const stopped=(await f.request('/api/sync/cli-sessions','GET',undefined,{'x-notalone-metadata-consent':'selected-list'})).body;
+ const stoppedSession=stopped.sessions.find(row=>row.username==='synthetic-a');
+ assert.equal(stoppedSession.bound_contact_id,null);
+ assert.equal(stoppedSession.known_contact_id,restored.contact_id);
+ assert.equal((await f.request('/api/sync/cli-bindings/confirm','POST',{snapshot_token:stopped.snapshot_token,history_authorized:true,
+  selections:[{locator:stoppedSession.username,contact_id:restored.contact_id,observed_display_name:stoppedSession.display_name,
+   expected_selection_generation:stoppedSession.selection_generation}]})).status,200);
+ const reselected=(await f.request('/api/sync/cli-bindings')).body.bindings.find(row=>row.conversation_locator==='synthetic-a');
+ assert.equal(reselected.contact_id,restored.contact_id);
+ assert.equal(reselected.display_name,'合成甲');
+ assert.equal((await f.request('/api/sync/enable','POST',{})).status,200);
+ assert.equal((await f.storage.execute('identity.eligibility',{ownerId,contactId:restored.contact_id})).contact_id,restored.contact_id);
+ const afterExplicit=(await f.request('/api/contacts')).body.contacts;
+ assert.ok(afterExplicit.some(row=>row.contact_id===restored.contact_id));
+ assert.ok(!afterExplicit.some(row=>row.contact_id===contact));
+ const replay=await f.request(`/api/contacts/${contact}`,'DELETE',{confirmed:true,confirm_contact_id:contact});
+ assert.equal(replay.body.operation_id,response.body.operation_id);
+ const afterReplay=(await f.request('/api/contacts')).body.contacts;
+ assert.ok(afterReplay.some(row=>row.contact_id===restored.contact_id));
+ assert.ok(afterReplay.some(row=>row.contact_id===sibling));
 });

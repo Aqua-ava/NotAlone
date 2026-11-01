@@ -109,6 +109,16 @@ test('联系人和账户删除清理对应最小台账，其他owner和墓碑不
     assert.equal(closed, false); await release(); assert.equal(closed, true);
   }
 });
+test('未完成联系人删除可从owner恢复列表取回，不被近期完成历史挤出', async t => {
+  const f = await fixture(t); await f.storage.execute('sample.seed', {});
+  const pending = await f.service().plan(request('pending-contact', {kind: 'contact', contactId: 'pending'}));
+  for (let i = 0; i < 55; i++) {
+    const completed = await f.service().plan(request(`completed-contact-${i}`, {kind: 'contact', contactId: `done-${i}`}));
+    assert.equal((await f.service().advance(completed)).state, 'completed');
+  }
+  const rows = await f.storage.execute('deletion.list', {ownerId: 'o'});
+  assert.ok(rows.some(row => row.operationId === pending.operationId));
+});
 test('SQLite长读者阻止checkpoint时保持未完成，释放后复核页与WAL/SHM', async t => {
   const f = await fixture(t); await f.storage.execute('sample.seed', {}); await f.storage.execute('sample.large', {});
   const reader = new DatabaseSync(join(f.userData, 'managed/sqlite/notalone.sqlite'));

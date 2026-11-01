@@ -39,6 +39,31 @@
 .contact-chat-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .contact-chat-actions .contact-chat-settings-toggle { display: grid; place-items: center; width: 34px; height: 34px; padding: 7px; }
 .contact-chat-settings-toggle[aria-expanded="true"] { background: #e5eff0; border-color: #8cabbe; }
+.contact-deletion-menu { position: relative; }
+.contact-deletion-trigger { width: 34px; height: 34px; padding: 0 0 4px; font-size: 22px; line-height: 1; }
+.contact-deletion-popover { position: absolute; z-index: 25; top: calc(100% + 5px); right: 0; min-width: 150px; padding: 5px; background: var(--panel-background); border: 1px solid var(--panel-border); border-radius: 7px; box-shadow: 0 6px 20px #314c5a24; }
+.contact-deletion-menuitem { display: block; width: 100%; padding: 9px 10px; border: 0; border-radius: 4px; background: transparent; color: #99594e; text-align: left; cursor: pointer; font: inherit; font-size: 12px; }
+.contact-deletion-menuitem:hover, .contact-deletion-menuitem:focus-visible { background: #f7e9e4; outline: none; }
+.contact-deletion-dialog { box-sizing: border-box; width: min(500px, calc(100vw - 44px)); max-height: calc(100vh - 44px); overflow: auto; padding: 24px; background: var(--panel-background); border: 1px solid var(--panel-border); border-radius: var(--panel-radius); color: #596c71; box-shadow: 0 15px 44px #20333c40; }
+.contact-deletion-dialog::backdrop { background: #31434d66; }
+.contact-deletion-dialog h3 { margin: 0; color: var(--panel-heading); font-size: 16px; font-weight: 500; }
+.contact-deletion-dialog > p { margin: 15px 0 0; color: #596c71; font-size: 13px; line-height: 1.9; }
+.contact-deletion-dialog > .contact-deletion-privacy { margin-top: 8px; color: #788383; font-size: 11px; line-height: 1.7; }
+.contact-deletion-dialog .contact-deletion-identity { padding-top: 10px; border-top: 1px solid var(--panel-border); color: #758184; font-size: 11px; }
+.contact-deletion-identity code { overflow-wrap: anywhere; }
+.contact-deletion-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.contact-deletion-dialog-actions .danger { border-color: #b87265; background: #a75f54; color: #fffdf6; }
+.contact-deletion-dialog-actions .danger:hover:not(:disabled) { background: #914f45; }
+.contact-deletion-status { margin: 0 0 16px; padding: 14px 16px; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: #f7f8f0; color: #53666d; font-size: 12px; }
+.contact-deletion-status-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.contact-deletion-status h3 { margin: 0; color: var(--panel-heading); font-size: 13px; font-weight: 500; }
+.contact-deletion-status p { margin: 9px 0 0; line-height: 1.8; }
+.contact-deletion-status ul { display: grid; gap: 9px; margin: 10px 0 0; padding: 0; list-style: none; }
+.contact-deletion-status li { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 9px; border-top: 1px solid #dce4df; }
+.contact-deletion-operation-copy { display: grid; gap: 4px; min-width: 0; line-height: 1.7; overflow-wrap: anywhere; }
+.contact-deletion-operation-copy small { color: #788383; }
+.contact-deletion-status .button { flex-shrink: 0; }
+.contact-chat-actions > .contact-deletion-menu { flex-shrink: 0; }
 .contact-chat-body { height: clamp(320px, 60vh, 680px); overflow-y: auto; overscroll-behavior: contain; padding: 0 20px 20px; scrollbar-width: thin; }
 .contact-chat-note { margin: 14px 0; color: #758184; font-size: 11px; line-height: 1.8; }
 .contact-chat > .contact-chat-note { padding: 0 20px; }
@@ -101,4 +126,8 @@
   .contacts-toolbar { align-items: flex-start; flex-wrap: wrap; }
   .contact-list { max-height: 36vh; }
   .contact-chat-body { height: 55vh; }
+  .contact-chat-header { align-items: flex-start; flex-wrap: wrap; padding: 14px; }
+  .contact-chat-actions { justify-content: flex-end; flex-wrap: wrap; width: 100%; }
+  .contact-deletion-dialog { padding: 19px; }
+  .contact-deletion-status li { align-items: flex-start; flex-wrap: wrap; }
 }

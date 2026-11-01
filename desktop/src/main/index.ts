@@ -39,6 +39,7 @@ import { installSourceDeletionBridge } from './sources/bridge';
 import { installBindingConsentBridge } from './bindings/bridge';
 import { installSyncControlBridge } from './sync/bridge';
 import { installHistoryClearBridge } from './history-clear/bridge';
+import { installContactDeletionBridge } from './contact-deletion/bridge';
 import { installContactHistoryBridge } from './contact-history/bridge';
 import { SyncPriorityController } from './sync/priority';
 import { SetupController } from './setup/controller';
@@ -186,6 +187,13 @@ void app.whenReady().then(async () => {
     memory.sourceDeletionChanged(phase);
     if (phase === 'started') { contactHistory.invalidate('聊天记录来源正在删除，删除完成后会重新读取。'); media.invalidate(); sqliteDiscussion.synchronize(true); fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize(); }
   });
+  const contactDeletion = installContactDeletionBridge(commands, backend, contacts, beginReadingScopeChange, (contactId) => {
+    if (contacts.getState().selectedContactId !== contactId) return;
+    contactHistory.invalidate('联系人正在删除，旧聊天与资料已停用。');
+    media.invalidate(); traces.invalidateSource(); skillLearning.invalidate(); candidateProvenance.invalidateSource();
+    sqliteDiscussion.synchronize(true); fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize();
+  });
+  app.on('before-quit', () => contactDeletion.dispose());
   installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies,
     (selection, text) => candidateProvenance.recordCopied(selection, text)));
   backend.setConnectionChangePreparation(async () => {

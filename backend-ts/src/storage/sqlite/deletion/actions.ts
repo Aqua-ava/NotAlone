@@ -128,7 +128,11 @@ export function createDeletionActions(configInput?: DeletionRegistration): Stora
     action('list', 'read', (tx, input) => {
       const rows = input.contactId
         ? tx.all("SELECT * FROM deletion_operation WHERE owner_identity=? AND contact_identity=? AND scope_kind='discussion' AND state!='completed' ORDER BY created_at DESC,operation_id DESC LIMIT 50", [id(input.ownerId), id(input.contactId)])
-        : tx.all('SELECT * FROM deletion_operation WHERE owner_identity=? ORDER BY created_at DESC,operation_id DESC LIMIT 50', [id(input.ownerId)]);
+        : tx.all(`SELECT * FROM deletion_operation WHERE owner_identity=? AND (
+            (scope_kind='contact' AND state!='completed') OR operation_id IN (
+              SELECT operation_id FROM deletion_operation WHERE owner_identity=? ORDER BY created_at DESC,operation_id DESC LIMIT 50
+            )
+          ) ORDER BY created_at DESC,operation_id DESC`, [id(input.ownerId), id(input.ownerId)]);
       return rows.map(row => snapshot(tx, row));
     }),
     action('requestAllowed', 'read', (tx, input, lease) => requestAllowed(tx, lease, input.ownerId, input.namespace, input.key)),

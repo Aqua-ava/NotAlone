@@ -8,11 +8,14 @@ import type { SyncControlState } from '../shared/sync-control-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
 import { useBindingConsent } from './use-binding-consent';
 import { BindingConsentPage, BindingFeedback, ContactSyncDetails } from './BindingConsentPage';
+import { ContactDeletionMenu, ContactDeletionStatus, useContactDeletion } from './ContactDeletionPanel';
 
 const initialSync: SyncControlState = { revision: -1, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
 
 export function ContactsPage({ session, navigate, initialSelection = false, onSelectionClosed }: { session: ContactSessionView; navigate: (page: ManagerPage) => void; initialSelection?: boolean; onSelectionClosed?: () => void }) {
   const { state } = session;
+  const deletionBridge = window.notalone.contactDeletion;
+  const deletion = useContactDeletion(deletionBridge);
   const [addingWechat, setAddingWechat] = useState(initialSelection), [targetContactId, setTargetContactId] = useState<string>();
   const [startSync, setStartSync] = useState(initialSelection);
   const consent = useBindingConsent(session);
@@ -52,11 +55,13 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
   const selected = state.contacts.find((contact) => contact.contactId === state.selectedContactId);
   const visibleContacts = selected ? [selected, ...state.contacts.filter(contact => contact.contactId !== selected.contactId)] : state.contacts;
   if (addingWechat) return <section className="contacts-panel" aria-label="联系人目录">
+    {deletionBridge && <ContactDeletionStatus bridge={deletionBridge} state={deletion.state} />}
     <BindingConsentPage contacts={session} consent={consent} navigate={navigate} targetContactId={targetContactId} allPrivate={allPrivate}
       startSync={startSync} onClose={closeSelection} />
     <BindingFeedback consent={consent} />
   </section>;
   return <section className="contacts-panel" aria-label="联系人目录">
+    {deletionBridge && <ContactDeletionStatus bridge={deletionBridge} state={deletion.state} />}
     <div className="contacts-toolbar"><div><h2>联系人</h2><p>在顶部切换联系人，查看聊天记录与同步状态。</p></div><div>
       <button className="button primary" disabled={!!consent.state.busy || state.directoryPhase !== 'ready'} onClick={() => addWechat()}>{allPrivate ? '管理单个微信会话' : '添加微信联系人'}</button>
       <button className="button" disabled={state.directoryPhase === 'unavailable' || state.directoryPhase === 'loading'}
@@ -81,7 +86,9 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
           </div>
         </div>
       </li>)}
-    </ul><ContactChatHistory session={session} settings={selected && <>
+    </ul><ContactChatHistory session={session} contactActions={selected && deletionBridge && <ContactDeletionMenu
+      bridge={deletionBridge} state={deletion.state} selected={selected} contacts={state.contacts} scopeRevision={state.scopeRevision} />}
+      settings={selected && <>
       <ContactSyncDetails contactId={selected.contactId} consent={consent} onConnect={() => addWechat(selected.contactId)} allPrivate={allPrivate} />
       <ContactHistoryClear session={session} />
       <div className="contact-management-shortcuts">
