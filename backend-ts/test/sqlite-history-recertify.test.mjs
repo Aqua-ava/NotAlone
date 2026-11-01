@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {fixture,owner,record,report,createChannel,target,identity,restart} from './sqlite-clear-support.mjs';
 import {SqliteHistoryRecertifyService} from '../src/history/sqlite/recertify.ts';
 import {StorageFailure} from '../src/storage/sqlite/contracts.ts';
+import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
+import {randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
 import {SqliteHistoryClearHttp} from '../src/history/sqlite/clear-http.ts';
 
@@ -233,4 +235,69 @@ test('激活后守卫失证或释放失败且失证回写失败时，关闭共�
   await assert.rejects(execute('history.readChat',{ownerId:owner,contactId:f.contactA,limit:20}),{code:'worker_failed'});
   await assert.rejects(execute('history.source',{ownerId:owner,contactId:f.contactA,recordId:f.saved.sourceRecordIds[0]}),{code:'worker_failed'});
  }
+});
+
+test('来源认证完成清洁关闭后，仅重验元数据即可供记忆使用，不重读历史或创建目标',async t=>{
+ const f=await setup(t);const done=await f.service.recertify(f.contactA,{requestKey:'memory-source-ready'});assert.equal(done.state,'completed');
+ const before=await f.snapshot(),token=await f.current.contacts.eligibility(f.contactA);
+ const source=before.captures.find(r=>before.messages.some(m=>m.id===r.message_id&&m.binding_id===token.binding_id));
+ const ref={owner_id:owner,contact_id:f.contactA,record_id:source.id,message_id:source.message_id};
+ await assert.rejects(f.current.storage.execute('fixture.recertifyAssertSource',ref),{code:'history_source_not_available'});
+ f.state.inspectFactory=scope=>({...report,continuity:'same-source-instances-normal-use-v1',accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation});
+ f.channel.guardSession={loss:new Promise(()=>{})};const pageCalls=f.state.pageCalls;
+ const execute=f.current.storage.execute.bind(f.current.storage),actions=[];f.current.storage.execute=async(name,...args)=>{actions.push(name);return execute(name,...args);};
+ f.channel.page=async()=>{throw new Error('来源就绪不能读取正文页');};f.channel.tail=async()=>{throw new Error('来源就绪不能读取增量正文');};
+ await f.current.history.ensureSourceReady(f.contactA);
+ assert.equal(await f.current.storage.execute('fixture.recertifyAssertSource',ref),true);
+ assert.equal(f.state.pageCalls,pageCalls);assert.equal(actions.some(name=>['history.begin','history.beginIncremental','history.acceptPage','history.acceptTail'].includes(name)),false);const after=await f.snapshot();assert.deepEqual(after.messages,before.messages);assert.deepEqual(after.captures,before.captures);assert.deepEqual(after.operations,before.operations);
+ assert.equal(after.leases[0].state,'active');
+});
+
+test('派生来源元数据就绪拒绝真实来源变化及严格档lost租约，不读取正文',async t=>{
+ for(const changed of ['table','account','strict','fence']){
+  const f=await setup(t);assert.equal((await f.service.recertify(f.contactA,{requestKey:`source-ready-${changed}`})).state,'completed');
+  f.state.inspectFactory=scope=>({...report,continuity:changed==='strict'?'synthetic-generation-1':'same-source-instances-normal-use-v1',accountKey:changed==='account'?'different-account':scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation});
+  f.channel.guardSession={loss:new Promise(()=>{})};f.channel.page=async()=>{throw new Error('拒绝前不得读取正文');};
+  if(changed==='table')f.channel.target=async()=>({...target,tables:target.tables.map(t=>({...t,instance:t.instance+'-changed'}))});
+  if(changed==='fence')await f.current.storage.execute('history.markContinuityLost',{token:await f.current.contacts.eligibility(f.contactA)});
+  await assert.rejects(f.current.history.ensureSourceReady(f.contactA),error=>['history_source_continuity_unverified','history_external_scope_changed'].includes(error.code),changed);
+  assert.notEqual((await f.snapshot()).leases[0].state,'active',changed);
+ }
+});
+test('派生来源元数据就绪与同联系人同步互斥，明确返回忙且不轮询',async t=>{
+ const f=await setup(t);assert.equal((await f.service.recertify(f.contactA,{requestKey:'source-ready-busy'})).state,'completed');
+ let enter,release;const entered=new Promise(resolve=>{enter=resolve;}),gate=new Promise(resolve=>{release=resolve;});
+ f.state.inspectFactory=async scope=>{enter();await gate;return {...report,continuity:'same-source-instances-normal-use-v1',accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation};};
+ f.channel.guardSession={loss:new Promise(()=>{})};
+ const pending=f.current.history.ensureSourceReady(f.contactA);await entered;
+ await assert.rejects(f.current.history.ensureSourceReady(f.contactA),{code:'history_already_running'});release();await pending;
+});
+
+test('来源认证正常关闭后，历史记忆启动经元数据续证建轮且不重读聊天',async t=>{
+ const f=await setup(t);assert.equal((await f.service.recertify(f.contactA,{requestKey:'memory-start-after-recertify'})).state,'completed');
+ f.state.inspectFactory=scope=>({...report,continuity:'same-source-instances-normal-use-v1',accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation});f.channel.guardSession={loss:new Promise(()=>{})};
+ f.channel.page=async()=>{throw new Error('记忆启动不能重读微信正文');};f.channel.tail=async()=>{throw new Error('记忆启动不能读取增量正文');};
+ const port={prepare:async()=>{throw new StorageFailure('model_not_configured');},invoke:async()=>{throw new Error('禁止真实模型调用');}};
+ const memory=new SqliteMemoryExtraction(f.current.storage,owner,port,f.current.holders,undefined,id=>f.current.history.ensureSourceReady(id));t.after(()=>memory.close());
+ const started=await memory.startHistory(f.contactA,randomUUID());assert.equal(started.contactId,f.contactA);assert.equal(started.run.total,1);await memory.waitForIdle();
+ assert.equal((await f.snapshot()).leases[0].state,'active');
+});
+
+test('来源元数据重验期间撤销读取或关闭服务，不能恢复活来源',async t=>{
+ for(const mode of ['reading-off','closed']){
+  const f=await setup(t);assert.equal((await f.service.recertify(f.contactA,{requestKey:`source-ready-${mode}`})).state,'completed');
+  f.state.inspectFactory=scope=>({...report,continuity:'same-source-instances-normal-use-v1',accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation});f.channel.guardSession={loss:new Promise(()=>{})};
+  const targetOf=f.channel.target;let release,entered;const gate=new Promise(resolve=>{release=resolve;}),ready=new Promise(resolve=>{entered=resolve;});
+  f.channel.target=async scope=>{entered();await gate;return targetOf(scope);};f.channel.close=async()=>{release();};
+  const pending=f.current.history.ensureSourceReady(f.contactA);await ready;
+  if(mode==='reading-off'){await f.current.contacts.setReading(false);release();await assert.rejects(pending);}
+  else{const closed=f.current.history.close();await assert.rejects(pending,{code:'history_interrupted'});await closed;}
+  assert.notEqual((await f.snapshot()).leases[0].state,'active',mode);
+ }
+});
+
+test('严格档已有活守卫时来源目标变化仍阻断派生处理',async t=>{
+ const f=await fixture(t);f.state.pageRecords=[record('shard-a','1')];f.channel.guardSession={loss:new Promise(()=>{})};await f.current.history.synchronize(f.contactA);
+ f.channel.target=async()=>({...target,tables:target.tables.map(t=>({...t,instance:t.instance+'-changed'}))});
+ await assert.rejects(f.current.history.ensureSourceReady(f.contactA),{code:'history_source_continuity_unverified'});
 });

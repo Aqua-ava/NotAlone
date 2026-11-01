@@ -10,7 +10,8 @@ const historyFailures:Record<string,FixedHistoryFailureReason>={
   memory_extraction_no_pending_history:'no_pending_history',memory_extraction_contact_busy:'busy',
   memory_extraction_history_blocked:'blocked',memory_extraction_request_scope_mismatch:'scope_changed',
   memory_extraction_scope_stale:'source_stale',memory_extraction_request_deleted:'source_stale',memory_extraction_not_found:'source_stale',
-  history_source_not_available:'source_stale',
+  history_source_not_available:'source_stale',history_source_continuity_unverified:'source_stale',
+  history_external_scope_changed:'source_stale',history_already_running:'source_check_busy',
 };
 class HistoryStartFailure extends Error { constructor(readonly reason:FixedHistoryFailureReason){super('历史处理暂不可启动');} }
 

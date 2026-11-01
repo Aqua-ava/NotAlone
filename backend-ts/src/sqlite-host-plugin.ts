@@ -198,7 +198,7 @@ export async function apply(ctx: Context) {
     const memoryManagementHttp=memoryEnabled?new SqliteMemoryManagementHttp(memoryManagement,req=>authorizeSqliteRequest(req,token),()=>memory?.wake()):undefined;
     // 即使入口未开启，也恢复并持有旧副本的清理所有者，避免资料删除遗漏持久副本。
     memory=await createSqliteMemoryRuntime({ctx,storage,ownerId,userData:sqlite.userData,businessHome:config.businessHome,infoPath:config.infoPath,envFilePath:config.envFilePath,environment:modelEnvironment,
-      ...(models?.shared?{sharedModel:models.shared}:{}),holders:deletionHolders,authorize:req=>authorizeSqliteRequest(req,token),adjudicationEnabled:memoryEnabled});
+      ...(models?.shared?{sharedModel:models.shared}:{}),holders:deletionHolders,authorize:req=>authorizeSqliteRequest(req,token),adjudicationEnabled:memoryEnabled,...(history?{ensureSourceReady:(contactId:string)=>history!.ensureSourceReady(contactId)}:{})});
     // 共享模型宿主的记账回调已可找到唯一 memory 实例，再受理自动调度。
     if(memoryEnabled)memory.startScheduling();
     const memoryDocumentsHttp=memoryEnabled&&memory.documents?new SqliteMemoryDocumentsHttp(memory.documents,req=>authorizeSqliteRequest(req,token)):undefined;

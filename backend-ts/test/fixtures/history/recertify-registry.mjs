@@ -1,7 +1,8 @@
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 import {randomUUID} from 'node:crypto';
+import {assertSourceEligibility} from '../../../src/history/sqlite/source.ts';
 import {saveHistoryQuoteInTransaction} from '../../../src/history/sqlite/quote-store.ts';
-const actions=[{name:'fixture.recertifyQuoteWrite',mode:'write',retryBusy:true,execute:(tx,i)=>saveHistoryQuoteInTransaction(tx,i.input,i.cap)},
+const actions=[{name:'fixture.recertifyAssertSource',mode:'read',retryBusy:false,execute(tx,i){assertSourceEligibility(tx,i);return true;}},{name:'fixture.recertifyQuoteWrite',mode:'write',retryBusy:true,execute:(tx,i)=>saveHistoryQuoteInTransaction(tx,i.input,i.cap)},
  {name:'fixture.recertifyCheckedManifest',mode:'write',retryBusy:true,execute(tx,i){const r=tx.get('SELECT tables_json FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId]),target=JSON.parse(r.tables_json);target.checkedPartitions=i.checked;tx.run('UPDATE history_continuity_scope SET tables_json=? WHERE owner_id=? AND contact_id=?',[JSON.stringify(target),i.ownerId,i.contactId]);return true;}},{name:'fixture.recertifySnapshot',mode:'read',retryBusy:true,execute(tx,i){
  const rows=table=>tx.all(`SELECT * FROM ${table} WHERE owner_id=? AND contact_id=? ORDER BY rowid`,[i.ownerId,i.contactId]);
  return {messages:rows('message'),captures:rows('capture_record'),aliases:rows('message_alias'),operations:rows('history_source_recertification'),terminals:rows('history_source_terminal'),fences:rows('history_continuity_fence'),leases:rows('history_guard_lease'),quotes:rows('history_quote'),quoteAttempts:rows('history_quote_attempt')};

@@ -21,3 +21,5 @@ SQLite 记忆页曾读取全局最近一轮与全局队列，导致切换联系�
 历史初始化通过独立的「历史聊天」区域显式启动当前联系人，处理状态主卡继续只读；来源与预算保护不变。该入口的后续实现和验证见[历史初始化验收](../../docs/verification/contact-history-memory-start-20261101.md)。
 
 实现和实际验证范围见[联系人记忆处理验收](../../docs/verification/contact-memory-processing-20261101.md)。工程回归与桌面状态验证不证明模型语义质量。
+
+正常认证关闭读取守卫后，历史启动先按原渠道重验来源元数据，再重试固定范围事务；旧错误提示不代表当前授权状态。实现及验收见[来源守卫恢复](../../docs/verification/history-memory-source-guard-20261101.md)。

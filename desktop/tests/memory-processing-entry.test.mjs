@@ -167,6 +167,47 @@ test('历史启动显示空资料和既有任务阻碍，失败重试保留原�
  });
 });
 
+test('历史启动失败提示随资格失效事件撤下，重试保持原请求且不自动启动', {timeout:20000},async t=>{
+ const keys=[];
+ await withEntry(t,async(method,input)=>{
+  if(method==='readMode')return {connectionGeneration:1,mode:'sqlite'};
+  if(method==='readCurrent')return {...currentView(1,1),contactId:input.contactId};
+  if(method==='startHistory'){keys.push(input.requestKey);return {status:'unavailable',reason:'source_stale'};}
+ },async page=>{
+  const panel=page.getByRole('region',{name:'历史聊天记忆处理'}),button=panel.getByRole('button',{name:'处理历史聊天',exact:true});
+  await button.click();await panel.getByRole('alert').waitFor();
+  assert.match(await panel.getByRole('alert').innerText(),/^上次启动/);
+  await page.evaluate(()=>window.invalidate());
+  await page.waitForFunction(()=>!document.querySelector('[aria-label="历史聊天记忆处理"] [role="alert"]'));
+  assert.equal(keys.length,1,'资格变化只撤下旧提示，不创建处理请求');
+  await button.click();await panel.getByRole('alert').waitFor();
+  assert.equal(keys.length,2);assert.equal(keys[0],keys[1],'结果不确定或失效后重试仍复用幂等键');
+ });
+});
+
+test('历史启动在资格变化后忽略迟到回执，只有再次点击才重试原请求', {timeout:20000},async t=>{
+ const late=deferred(),entered=deferred(),keys=[];
+ await withEntry(t,async(method,input)=>{
+  if(method==='readMode')return {connectionGeneration:1,mode:'sqlite'};
+  if(method==='readCurrent')return {...currentView(1,1),contactId:input.contactId};
+  if(method==='startHistory'){
+   keys.push(input.requestKey);entered.resolve();
+   return keys.length===1?late.promise:{status:'unavailable',reason:'no_pending_history'};
+  }
+ },async page=>{
+  const panel=page.getByRole('region',{name:'历史聊天记忆处理'});
+  await panel.getByRole('button',{name:'处理历史聊天',exact:true}).click();await entered.promise;
+  await page.evaluate(()=>window.invalidate());
+  late.resolve({status:'unavailable',reason:'source_stale'});
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  assert.equal(await panel.getByRole('alert').count(),0,'旧资格下的失败回执不得回填');
+  assert.equal(keys.length,1);
+  await panel.getByRole('button',{name:'处理历史聊天',exact:true}).click();
+  await panel.getByText('当前联系人没有待处理的历史文字。',{exact:true}).waitFor();
+  assert.equal(keys[0],keys[1]);
+ });
+});
+
 test('同键返回已完成任务时显示原任务结果，不宣称重新启动', {timeout:20000},async t=>{
  await withEntry(t,async(method,input)=>{
   if(method==='readMode')return {connectionGeneration:1,mode:'sqlite'};

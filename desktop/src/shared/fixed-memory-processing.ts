@@ -46,7 +46,7 @@ export interface FixedProcessingRead { contactId: string }
 export interface FixedProcessingMode { connectionGeneration: number; mode: 'sqlite' | 'legacy' }
 export interface FixedProcessingStart { requestKey: string; connectionGeneration: number }
 export interface FixedProcessingHistoryStart extends FixedProcessingStart { contactId: string; scopeRevision: number }
-export type FixedHistoryFailureReason = 'no_pending_history' | 'busy' | 'blocked' | 'scope_changed' | 'source_stale';
+export type FixedHistoryFailureReason = 'no_pending_history' | 'busy' | 'blocked' | 'scope_changed' | 'source_stale' | 'source_check_busy';
 export type FixedProcessingHistoryResult = {status:'started';view:FixedProcessingView} | {status:'unavailable';reason:FixedHistoryFailureReason};
 export interface FixedProcessingControl { runId: string; controlVersion: number; operationId: string; connectionGeneration: number }
 export interface FixedProcessingTraceRequest { taskId: string; connectionGeneration: number }

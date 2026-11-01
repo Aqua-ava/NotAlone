@@ -58,6 +58,8 @@ test('历史启动业务阻碍返回固定分类，未知错误不泄露后端�
  assert.deepEqual(await f.controller.startHistory(input),{status:'unavailable',reason:'no_pending_history'});
  code='memory_extraction_history_blocked';assert.deepEqual(await f.controller.startHistory(input),{status:'unavailable',reason:'blocked'});
  code='history_source_not_available';assert.deepEqual(await f.controller.startHistory(input),{status:'unavailable',reason:'source_stale'});
+ code='history_already_running';assert.deepEqual(await f.controller.startHistory(input),{status:'unavailable',reason:'source_check_busy'});
+ code='history_source_continuity_unverified';assert.deepEqual(await f.controller.startHistory(input),{status:'unavailable',reason:'source_stale'});
  code='unknown_private_error';await assert.rejects(f.controller.startHistory(input),error=>!error.message.includes('不应回传'));
 });
 test('状态读取拒绝会通知撤下旧快照，失效后旧回调不能返回正文',async t=>{

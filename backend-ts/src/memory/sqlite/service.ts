@@ -18,13 +18,14 @@ export interface ExtractionModelPort {
 interface ClaimedStep {attemptId:string;stepId:string;taskId:string;runId:string;contactId:string;rows:StorageRow[];policyConfig:unknown;claim:ModelTaskClaim}
 export class SqliteMemoryExtraction {
  private afterRunSettled?:((runId:string)=>Promise<unknown>);
+ private readonly ensureSourceReady?:((contactId:string)=>Promise<void>);
  private storage:SqliteStorage;readonly ownerId:string;private model:ExtractionModelPort;readonly holders:ActiveHolders;
  private policy?:Promise<ExtractionPolicyVersion>;private initialized?:Promise<void>;private stopped=false;
  private closing?:Promise<void>;private pending=new Set<Promise<unknown>>();
  private runs=new Map<string,Promise<void>>();private active=new Map<string,{abort:AbortController;done:Promise<void>}>();
  readonly accounting:ModelPermitAccounting;
- constructor(storage:SqliteStorage,ownerId:string,model:ExtractionModelPort,holders=new ActiveHolders(),afterRunSettled?:((runId:string)=>Promise<unknown>)){
-  this.storage=storage;this.ownerId=ownerId;this.model=model;this.holders=holders;this.afterRunSettled=afterRunSettled;
+ constructor(storage:SqliteStorage,ownerId:string,model:ExtractionModelPort,holders=new ActiveHolders(),afterRunSettled?:((runId:string)=>Promise<unknown>),ensureSourceReady?:((contactId:string)=>Promise<void>)){
+  this.storage=storage;this.ownerId=ownerId;this.model=model;this.holders=holders;this.afterRunSettled=afterRunSettled;this.ensureSourceReady=ensureSourceReady;
   this.accounting={reserve:async(receipt,claim)=>{await this.storage.execute(claim?.step_name==='extraction_verification'?'memoryExtraction.reserve':claim?.step_name==='document_scene'||claim?.step_name==='document_profile'?'memoryDocuments.reserve':'memoryAdjudication.reserve',{receipt,claim});},recordReserved:async receipt=>{await this.storage.execute('memoryExtraction.receipt',{receipt});},unconfirmedRequests:scope=>this.storage.execute('memoryExtraction.unconfirmed',scope)};
  }
  private version(){return this.policy??=createExtractionPolicyVersion();}
@@ -66,7 +67,13 @@ export class SqliteMemoryExtraction {
  async startHistory(contactId:string,requestKey:string){
   return this.admit(async()=>{
    await this.initialize();const policy=await this.version();await policy.assertCurrent();this.available();
-   const result=await this.storage.execute<any>('memoryExtraction.startHistory',{ownerId:this.ownerId,contactId,requestKey,policyConfig:policy.newTaskConfig(),followupStages:this.afterRunSettled!==undefined});
+   const start=()=>this.storage.execute<any>('memoryExtraction.startHistory',{ownerId:this.ownerId,contactId,requestKey,policyConfig:policy.newTaskConfig(),followupStages:this.afterRunSettled!==undefined});
+   let result;
+   try{result=await start();}catch(error){
+    // 正常认证会关闭读取守卫；先通过原渠道续证，再由同一事务合同重验，不能直接放行旧来源。
+    if(!(error instanceof StorageFailure)||error.code!=='history_source_not_available'||!this.ensureSourceReady)throw error;
+    await this.ensureSourceReady(contactId);this.available();result=await start();
+   }
    if(result.launchRunId)this.launch(result.launchRunId);return result.view;
   });
  }

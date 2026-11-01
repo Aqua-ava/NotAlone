@@ -149,6 +149,18 @@ export class SqliteHistoryService {
   const guard=this.guards.get(contactId);
   if(guard)guard.bodyVerified=report.status==='supported'&&bodyCapabilities.every(key=>report.capabilities?.[key]==='supported');
  }
+ /** 记忆等派生处理只重验来源元数据并保留活守卫，不读取历史页或推进同步目标。 */
+ async ensureSourceReady(contactId:string):Promise<void>{
+  return this.withChannel(contactId,undefined,async(scope,channel,controller,_register,armGuard)=>{
+   const report=await channel.inspect(scope,controller.signal);await this.check(scope,controller);assertSupport(report);
+   if(report.accountKey!==scope.accountKey||report.conversationKey!==scope.conversationKey||report.sourceGeneration!==scope.token.source_generation)throw new StorageFailure('history_external_scope_changed');
+   const normalUse=report.continuity==='same-source-instances-normal-use-v1';
+   const target=await channel.target(scope,controller.signal);await this.check(scope,controller);
+   const armed=await armGuard(normalUse?{report,target}:undefined);
+   if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target,report}))throw new StorageFailure('history_source_continuity_unverified');
+   await this.check(scope,controller);await this.storage.execute('history.guardAuthorize',{token:scope.token,guardId:armed.guardId});
+  });
+ }
  support(contactId:string):Promise<HistorySupportReport>{return this.withChannel(contactId,undefined,async(scope,channel,controller)=>{const report=await channel.inspect(scope,controller.signal);await this.check(scope,controller);return report;});}
  read(contactId:string,options:{limit?:number;before?:string}={}):Promise<HistoryRead>{
   if(this.closed)throw new StorageFailure('history_closed');

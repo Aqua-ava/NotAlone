@@ -6,7 +6,8 @@ const reasons:Record<FixedHistoryFailureReason,string>={
   busy:'当前联系人已有记忆任务正在处理或等待后续整理，请等待本轮完成。',
   blocked:'当前联系人已有受阻或暂停的记忆任务，请先解决原任务的阻碍。',
   scope_changed:'联系人或处理请求已变化，请重新核对后启动。',
-  source_stale:'当前联系人的来源或读取授权已失效，请先核对同步设置。',
+  source_check_busy:'正在同步当前联系人的聊天，请稍后重试处理历史聊天。',
+  source_stale:'上次启动未通过联系人或资料来源检查，请到同步设置核对后重试。',
 };
 type Scope={bridge:FixedMemoryProcessingBridge;contactId:string|null;scopeRevision:number};
 type Notice={scope:Scope;phase:'starting'|'started'|'failed';message?:string};
@@ -17,15 +18,22 @@ export function HistoryMemoryProcessingPanel({bridge,contactId,scopeRevision,onS
   if(scope.current.bridge!==bridge||scope.current.contactId!==contactId||scope.current.scopeRevision!==scopeRevision)scope.current={bridge,contactId,scopeRevision};
   const accepted=scope.current;
   const [notice,setNotice]=useState<Notice|null>(null);
-  const pending=useRef<Scope|null>(null),request=useRef<{scope:Scope;key:string}|null>(null);
+  const revision=useRef(0),pending=useRef<{scope:Scope;revision:number}|null>(null),request=useRef<{scope:Scope;key:string}|null>(null);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+  useEffect(()=>{
+    const unsubscribe=bridge.onInvalidated(()=>{
+      revision.current++;pending.current=null;setNotice(null);
+    });
+    return()=>{revision.current++;pending.current=null;unsubscribe();};
+  },[bridge]);
   const current=notice?.scope===accepted?notice:null;
   const start=async()=>{
-    if(!contactId||pending.current===accepted)return;
-    pending.current=accepted;
+    if(!contactId||pending.current?.scope===accepted)return;
+    const operation={scope:accepted,revision:revision.current};
+    pending.current=operation;
     if(request.current?.scope!==accepted)request.current={scope:accepted,key:crypto.randomUUID()};
     const requestKey=request.current.key;
-    const valid=()=>mounted.current&&scope.current===accepted;
+    const valid=()=>mounted.current&&scope.current===accepted&&revision.current===operation.revision;
     setNotice({scope:accepted,phase:'starting'});
     try{
       const view=await bridge.readCurrent({contactId});if(!valid())return;
@@ -43,7 +51,7 @@ export function HistoryMemoryProcessingPanel({bridge,contactId,scopeRevision,onS
       }
     }catch{
       if(valid())setNotice({scope:accepted,phase:'failed',message:'启动结果暂未确认，请重试核对；重复点击会沿用同一次请求。'});
-    }finally{if(pending.current===accepted)pending.current=null;}
+    }finally{if(pending.current===operation)pending.current=null;}
   };
   return <section className="memory-processing-card memory-history-processing" aria-label="历史聊天记忆处理">
     <h3>历史聊天</h3>

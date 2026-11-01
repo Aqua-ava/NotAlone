@@ -28,7 +28,7 @@ export interface SqliteMemorySharedModel {
  resolveUserId:()=>string;
 }
 /** environment须由宿主安全加载env文件；configuration可复用该宿主已冻结的同一解析结果。 */
-export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:SqliteStorage;ownerId:string;userData:string;businessHome:string;infoPath:string;envFilePath:string;environment:Readonly<NodeJS.ProcessEnv>;sharedModel?:SqliteMemorySharedModel;holders:ActiveHolders;authorize(req:IncomingMessage):boolean;afterRunSettled?:(runId:string)=>Promise<unknown>;adjudicationEnabled?:boolean}){
+export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:SqliteStorage;ownerId:string;userData:string;businessHome:string;infoPath:string;envFilePath:string;environment:Readonly<NodeJS.ProcessEnv>;sharedModel?:SqliteMemorySharedModel;holders:ActiveHolders;authorize(req:IncomingMessage):boolean;afterRunSettled?:(runId:string)=>Promise<unknown>;adjudicationEnabled?:boolean;ensureSourceReady?:(contactId:string)=>Promise<void>}){
  const configuration=options.sharedModel?.configuration??resolveHostReplyConfiguration(options.environment);
  let service:SqliteMemoryExtraction;let adjudication:SqliteMemoryAdjudication|undefined;let documents:SqliteMemoryDocuments|undefined;
  let l1Scheduler:SqliteMemoryL1Scheduler|undefined;let laterWorker:SqliteMemoryLaterWorker|undefined;let schedulingStarted=false;
@@ -57,7 +57,7 @@ export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:Sql
    await adjudication!.publishRun(runId);await documents!.enrollRun(runId);
    // 只安排持久队列，不同步等候一小时／一天的后续阶段。
    laterWorker?.wake();l1Scheduler?.wake();
-  }:options.afterRunSettled);await service.initialize();
+  }:options.afterRunSettled,options.ensureSourceReady);await service.initialize();
   if(adjudication&&documents){
    l1Scheduler=new SqliteMemoryL1Scheduler({
     nextDueAt:now=>service.nextDueAt(now),dueContacts:now=>service.dueContacts(now),
