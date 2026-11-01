@@ -91,8 +91,10 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
   active.current=true;decisionPending.current=false;completionRefreshPending.current=false;setState(null);setNotice(null);setBusy(false);setDocumentsBlocked(false);
   const unsubscribe=bridge.onInvalidated(()=>{revision.current++;decisionPending.current=false;completionRefreshPending.current=false;setState(null);setDocumentsBlocked(true);setBusy(false);setNotice({context:accepted,message:'资料资格或连接已变化，已撤下正文、依据和编辑，请重新读取。',error:true});});
   if(contactId)void refresh.current();
-  return()=>{active.current=false;revision.current++;unsubscribe();void bridge.release().catch(()=>{});};
+  return()=>{active.current=false;revision.current++;unsubscribe();};
  },[accepted]);
+ // 范围切换由 context 撤下旧快照；释放桥会广播失效，只在面板卸载或桥更换时执行。
+ useEffect(()=>()=>{void bridge.release().catch(()=>{});},[bridge]);
  useEffect(()=>{
   if(completedRunId!==lastCompletedRun.current){lastCompletedRun.current=completedRunId;if(completedRunId)completionRefreshPending.current=true;}
   if(completionRefreshPending.current&&!busy&&contactId){completionRefreshPending.current=false;void refresh.current(true);}

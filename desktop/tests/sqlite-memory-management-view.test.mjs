@@ -7,10 +7,38 @@ const contact='11111111-1111-4111-8111-111111111111',id='22222222-2222-4222-8222
 const source={contactId:contact,messageId:id,recordId:id,acceptedRevision:'1',quote:'合成原话证据'};
 const candidate={id,scopeKind:'contact',contactId:contact,verificationState:'verified',body:'原始合成结论',state:'pending',stateRevision:'0',eventId:id,sources:[source],contributingContactIds:[contact]};
 const view=()=>({connectionGeneration:1,scope:{scopeKind:'contact',contactId:contact},view:{candidates:[candidate],memories:[]}});
-async function panel(t,command,inspect,withDocuments=false,selectedContact=contact){
- const compiled=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {SqliteMemoryManagementPanel} from './src/renderer/SqliteMemoryManagementPanel';const listeners=new Set();window.invalidate=()=>{for(const fn of listeners)fn();};const bridge={read:(...args)=>window.command('read',...args),${withDocuments ? "readDocuments:(...args)=>window.command('readDocuments',...args)," : ''}decide:(...args)=>window.command('decide',...args),release:async()=>{},onInvalidated:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}};createRoot(document.getElementById('root')).render(<SqliteMemoryManagementPanel bridge={bridge} contactId='${selectedContact}' scopeRevision={1}/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
- const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(4000);await page.exposeFunction('command',command);await page.route('http://127.0.0.1/memory-management-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/memory-management-test');await page.addScriptTag({content:compiled.outputFiles[0].text});await inspect(page);
+async function panel(t,command,inspect,withDocuments=false,selectedContact=contact,release=async()=>{}){
+ const compiled=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {SqliteMemoryManagementPanel} from './src/renderer/SqliteMemoryManagementPanel';const listeners=new Set();window.invalidate=()=>{for(const fn of listeners)fn();};const bridge={read:(...args)=>window.command('read',...args),${withDocuments ? "readDocuments:(...args)=>window.command('readDocuments',...args)," : ''}decide:(...args)=>window.command('decide',...args),release:()=>window.release(),onInvalidated:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}};const root=createRoot(document.getElementById('root'));window.unmount=()=>root.unmount();root.render(<SqliteMemoryManagementPanel bridge={bridge} contactId='${selectedContact}' scopeRevision={1}/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
+ const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(4000);await page.exposeFunction('command',command);await page.exposeFunction('release',release);await page.route('http://127.0.0.1/memory-management-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/memory-management-test');await page.addScriptTag({content:compiled.outputFiles[0].text});await inspect(page);
 }
+test('真实释放桥不会把正常对方与本人切换误报为资格失效，卸载仍释放读取',{timeout:20000},async t=>{
+ const compiled=await build({entryPoints:['src/main/memory/sqlite-management.ts'],bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
+ const {SqliteMemoryManagementController}=await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
+ const deliveries=[],reads=[];let publish=async()=>{},releases=0,finishRelease,holdContact=false,enterOld,finishOld,completeOld;
+ const released=new Promise(resolve=>{finishRelease=resolve;});
+ const enteredOld=new Promise(resolve=>{enterOld=resolve;}),oldResult=new Promise(resolve=>{finishOld=resolve;}),oldCompleted=new Promise(resolve=>{completeOld=resolve;});
+ const controller=new SqliteMemoryManagementController({getConnectionGeneration:()=>1,requestJson:async request=>{
+  if(request.path.startsWith('/api/memory-documents'))return {generation:1,data:{scope:{scopeKind:'contact',contactId:contact},status:'idle',publication:null,documents:[]}};
+  if(holdContact&&request.path.includes('scope_kind=contact')){holdContact=false;enterOld();return {generation:1,data:await oldResult};}
+  return {generation:1,data:{candidates:[],memories:[]}};
+ }},()=>{deliveries.push(publish());},{getState:()=>({selectedContactId:contact,scopeRevision:1})});
+ await panel(t,async(method,input)=>{const result=await(method==='read'?controller.read(input):controller.readDocuments(input));if(method==='read'){reads.push(input.scope.scopeKind);if(result.view.candidates.length)completeOld();}return result;},async page=>{
+  publish=()=>page.evaluate(()=>window.invalidate());
+  const section=page.getByRole('region',{name:'记忆候选与版本'}),empty=section.getByText('当前范围没有可展示的候选。',{exact:true});
+  await empty.waitFor();await section.getByRole('button',{name:'我',exact:true}).click();
+  await Promise.all(deliveries);
+  assert.deepEqual(await section.getByRole('alert').allTextContents(),[]);
+  await empty.waitFor();await section.getByRole('button',{name:'对方',exact:true}).click();await empty.waitFor();
+  await Promise.all(deliveries);assert.deepEqual(await section.getByRole('alert').allTextContents(),[]);assert.deepEqual(reads,['contact','self','contact']);assert.equal(releases,0);
+  holdContact=true;await section.getByRole('button',{name:'刷新记忆管理'}).click();await enteredOld;
+  await section.getByRole('button',{name:'我',exact:true}).click();await empty.waitFor();
+  finishOld({candidates:[candidate],memories:[]});await oldCompleted;await page.evaluate(()=>new Promise(requestAnimationFrame));
+  assert.equal(await section.getByText(candidate.body,{exact:true}).count(),0);assert.deepEqual(await section.getByRole('alert').allTextContents(),[]);await empty.waitFor();
+  controller.synchronize();await Promise.all(deliveries);await section.getByRole('alert').filter({hasText:'资料资格或连接已变化'}).waitFor();
+  await section.getByRole('button',{name:'刷新记忆管理'}).click();await empty.waitFor();
+  await page.evaluate(()=>window.unmount());await released;await Promise.all(deliveries);assert.equal(releases,1);
+ },true,contact,async()=>{releases++;controller.release();finishRelease();});
+});
 test('正常空提取完成后，主题资料页显示尚无发布而不是持续处理中',{timeout:20000},async t=>{
  const f=await emptyDocumentFixture(t),run=await f.runEmpty('empty-documents-page');assert.equal(run.status,'completed');
  await panel(t,async(method,input)=>({connectionGeneration:1,scope:input.scope,view:method==='readDocuments'?await f.documents.read(input.scope):{candidates:[],memories:[]}}),async page=>{

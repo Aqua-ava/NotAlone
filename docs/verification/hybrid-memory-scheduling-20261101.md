@@ -29,6 +29,7 @@
 - `node --test test/sqlite-memory-documents-empty-status.test.mjs test/sqlite-memory-documents-schedule.test.mjs`：17 项通过。新增 4 项覆盖正常空提取、缺少持久证明、同范围旧待办／失败／unknown、范围隔离及旧有效发布保留。
 - 文档发布、独立范围、无变化、重验和 unknown 的 5 个相关后端文件共 42 项通过；`node --test tests/sqlite-memory-management-view.test.mjs` 18 项通过，正常空提取完成后的实际页面不再显示处理中；后端 `pnpm run typecheck` 通过。
 - 本补验只使用临时合成 SQLite 数据和合成模型端口；未更改实际业务数据库、未调用真实模型、未操作桌面 App 或微信、未打包。
+- 随后补验记忆页正常“对方／我”切换：原范围 effect 清理调用 `release`，其主进程失效广播误伤新范围，实际控制器到页面的红例复现了相同的资格失效提示。释放改为仅在面板卸载或桥更换时执行，范围切换仍立即撤下旧快照；新回归同时覆盖旧范围迟到候选不能回填、真实失效仍撤下资料和卸载仍释放。`node --test tests/sqlite-memory-management.test.mjs tests/sqlite-memory-management-view.test.mjs` 34 项通过，桌面 `pnpm run typecheck` 通过；本项没有操作实际 App 或业务库。
 
 ## 开发 App 实测
 
