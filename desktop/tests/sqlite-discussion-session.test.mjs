@@ -14,7 +14,7 @@ test('既有ReplySession来源失效同步擦除实际发言快照，旧快照�
   else if(request.path.endsWith('/assistant-sessions'))data={sessions:[{session_id:sessionId,is_current:true}],current_session_id:sessionId};
   else if(request.path.endsWith('/assistant-session/default'))data={session_id:sessionId};
   else if(request.path.endsWith('/assistant-session/binding'))data={confirmed:true};
-  else if(request.path.includes('/messages?')){if(messageGate)await messageGate;data={messages:[],next_cursor:null};}
+  else if(request.path.includes('/history-messages?')){if(messageGate)await messageGate;data={messages:[],next_cursor:null};}
   else if(request.path.endsWith('/assistant-sessions/'+sessionId)){
    data={mode:'sqlite',session_id:sessionId,runtime_recovery:'ready',entries:[{entry_id:randomUUID(),position:'1',role:'user',text:body,request_id:requestId,call_id:null,content_state:'available'}]};
   }else throw new Error('未安排的合成端口');return {generation:7,data};
@@ -38,7 +38,7 @@ test('SQLite讨论切换甲乙再回甲不读取旧候选选择端口，独立�
   else if(request.path.endsWith('/assistant-sessions'))data={sessions:[{session_id:sessionIds[index],is_current:true}],current_session_id:sessionIds[index]};
   else if(request.path.endsWith('/select')||request.path.endsWith('/resume'))data={session_id:sessionIds[index]};
   else if(request.path.endsWith('/assistant-session/binding'))data={confirmed:true};
-  else if(request.path.includes('/messages?'))data={messages:[],next_cursor:null};
+  else if(request.path.includes('/history-messages?'))data={messages:[],next_cursor:null};
   else if(request.path.endsWith('/assistant-sessions/'+sessionIds[index]))data={mode:'sqlite',session_id:sessionIds[index],runtime_recovery:'ready',entries:emptySessions.has(sessionIds[index])?[]:[
    {entry_id:randomUUID(),position:'1',role:'user',text:index===0?'合成甲用户发言':'合成乙用户发言',request_id:randomUUID(),call_id:null,content_state:'available'}]};
   else throw new Error('SQLite讨论不提供旧候选选择端口');

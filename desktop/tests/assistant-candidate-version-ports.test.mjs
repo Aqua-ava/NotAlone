@@ -88,7 +88,7 @@ async function fixture() {
         : request.path.endsWith('/replies') ? { ...generatedTurn.reply, session_id: records.saved.session_id,
           turn_id: generatedTurn.turn_id, input_version_id: generatedTurn.input_version_id, state: 'completed' }
         : request.path.endsWith('/evidence') ? { reply_request_id: evidenceRequestId, evidence: [] }
-        : request.path.includes('/messages?') ? records.messagePages?.[
+        : request.path.includes('/history-messages?') ? records.messagePages?.[
           new URL(request.path, 'http://localhost').searchParams.get('before') ?? 'latest'] ?? records.messagePage
         : request.path.endsWith('/explorations') ? records.explorationOutcome
         : requestedCandidateId ? records.histories?.[requestedCandidateId] ?? records.history

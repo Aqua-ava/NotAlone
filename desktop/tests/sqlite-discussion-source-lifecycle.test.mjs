@@ -42,7 +42,7 @@ async function fixture(t) {
       else if (request.path.endsWith('/assistant-session/default')) data = { session_id: sessionId };
       else if (request.path.endsWith('/assistant-session/binding')) data = { confirmed: true };
       else if (request.path.endsWith('/selections')) data = { selection: null };
-      else if (request.path.includes('/messages?')) data = { messages: [], next_cursor: null };
+      else if (request.path.includes('/history-messages?')) data = { messages: [], next_cursor: null };
       else if (request.path.endsWith(`/assistant-sessions/${sessionId}`)) {
         const text = control.text, gate = control.readGate; control.readGate = undefined;
         if (gate) await gate.promise;

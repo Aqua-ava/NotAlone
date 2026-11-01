@@ -15,17 +15,17 @@ export function mergeReplyMessages(previous: readonly ReplyMessage[], incoming: 
   const messages = new Map(previous.map((message) => [message.messageId, message]));
   for (const message of incoming) messages.set(message.messageId, message);
   return [...messages.values()].sort((left, right) => {
+    const leftTime = left.occurredAt === null ? -Infinity : Date.parse(left.occurredAt);
+    const rightTime = right.occurredAt === null ? -Infinity : Date.parse(right.occurredAt);
+    if (leftTime !== rightTime) return leftTime < rightTime ? 1 : -1;
+    // Date.parse 只保留毫秒，补比较服务端剩余微秒后，再比较稳定保存位置。
+    const microseconds = remainingMicroseconds(right.occurredAt) - remainingMicroseconds(left.occurredAt);
+    if (microseconds) return microseconds;
     if (left.displayPosition !== undefined && right.displayPosition !== undefined) {
       const a = BigInt(left.displayPosition), b = BigInt(right.displayPosition);
       if (a !== b) return a > b ? -1 : 1;
       return left.messageId.localeCompare(right.messageId);
     }
-    const leftTime = left.occurredAt === null ? -Infinity : Date.parse(left.occurredAt);
-    const rightTime = right.occurredAt === null ? -Infinity : Date.parse(right.occurredAt);
-    if (leftTime !== rightTime) return leftTime < rightTime ? 1 : -1;
-    // Date.parse 只保留毫秒，先补比较服务端剩余微秒，再用 ID 打破平局。
-    const microseconds = remainingMicroseconds(right.occurredAt) - remainingMicroseconds(left.occurredAt);
-    if (microseconds) return microseconds;
     return left.messageId < right.messageId ? 1 : left.messageId === right.messageId ? 0 : -1;
   });
 }
@@ -33,7 +33,7 @@ export function mergeReplyMessages(previous: readonly ReplyMessage[], incoming: 
 // 页码只来自后端游标，联系人只来自主进程已确认范围。
 export async function readReplyMessages(backend: Pick<BackendHost, 'requestJson'>, contactId: string, before: string | null, signal: AbortSignal) {
   const response = await backend.requestJson({ method: 'GET',
-    path: `/api/contacts/${contactId}/messages?limit=20${before ? `&before=${before}` : ''}`,
+    path: `/api/contacts/${contactId}/history-messages?limit=20${before ? `&before=${before}` : ''}`,
     timeoutMs: 10_000, signal });
   const page = response.data;
   if (!record(page) || !Array.isArray(page.messages) || page.messages.length > 20

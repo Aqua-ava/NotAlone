@@ -152,7 +152,7 @@ test('聊天输入经策略确认的偏好变更也封旧重试，保留当前�
   const f = await changingPreference(), task = randomUUID(), input = randomUUID(), original = f.backend.requestJson;
   let preparedBody; const targetId = randomUUID();
   f.backend.requestJson = async (request) => {
-    if (request.path.includes('/messages?')) return { generation: 7, data: { messages: [{ message_id: targetId,
+    if (request.path.includes('/history-messages?')) return { generation: 7, data: { messages: [{ message_id: targetId,
       speaker: 'contact', message_type: 'text', text: '合成待回复消息。', media_placeholder: null,
       occurred_at: '2026-10-16T01:00:00Z', quoted: null }], next_cursor: null } };
     if (request.path.endsWith('/explorations')) return { generation: 7, data: {

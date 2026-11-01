@@ -9,7 +9,7 @@ const id='00000000-0000-4000-8000-000000000001',sid='00000000-0000-4000-8000-000
 async function fixture(){
  const controls={failure:false,hold:null};
  const backend={getConnectionGeneration:()=>1,onStateChanged:()=>()=>{},subscribeMessages:()=>()=>{},requestJson:async req=>{
-  if(req.path.includes('/messages?')){if(controls.hold)await controls.hold;if(controls.failure)throw Error('synthetic_denied');return {generation:1,data:{messages:[{message_id:mid,speaker:'contact',message_type:'text',text:'应撤下的合成正文',media_placeholder:null,occurred_at:null,quoted:null,ordering:'unknown',display_position:'1'}],next_cursor:null}};}
+  if(req.path.includes('/history-messages?')){if(controls.hold)await controls.hold;if(controls.failure)throw Error('synthetic_denied');return {generation:1,data:{messages:[{message_id:mid,speaker:'contact',message_type:'text',text:'应撤下的合成正文',media_placeholder:null,occurred_at:null,quoted:null,ordering:'unknown',display_position:'1'}],next_cursor:null}};}
   const data=req.path.endsWith('/assistant-session/default')?{session_id:sid}:req.path.endsWith('/assistant-sessions')?{sessions:[{session_id:sid,is_current:true}],current_session_id:sid}:req.path.includes('/assistant-sessions/')?{session_id:sid,current_input_version_id:null,turns:[],inputs:[]}:req.path.startsWith('/api/deletions')?{operations:[]}:{};
   return {generation:1,data};
  }};

@@ -33,7 +33,7 @@ export async function replyInputFixture(rounds) {
       return { generation: 1,
       data: path.includes('/skills/catalog') || path === '/api/skills' ? { skills: [] }
         : path.endsWith('/selections') ? { selection: null }
-        : path.includes('/messages?') ? { contact_id: contactId, messages: [], next_cursor: null } : structuredClone(saved) }; } };
+        : path.includes('/history-messages?') ? { contact_id: contactId, messages: [], next_cursor: null } : structuredClone(saved) }; } };
   const contacts = new ContactSession(async () => ({ generation: 1, contacts: [contactId, otherContactId].map(contactId => ({
     contactId, displayName: '合成联系人', messageCount: 0, sourceCount: 0 })) }));
   contacts.setConnection(1); await contacts.refreshContacts();

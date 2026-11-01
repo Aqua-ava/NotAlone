@@ -137,7 +137,7 @@ for (const failure of [false, true]) test(`授权撤销及恢复后，消息和�
   f.control.barrier = request => isContext(request) ? gate.then(() => {
     if (failure) throw new Error('合成迟到失败');
   }) : undefined;
-  f.control.respond = request => request.path.includes('/messages?') ? { messages: [{
+  f.control.respond = request => request.path.includes('/history-messages?') ? { messages: [{
     message_id: randomUUID(), speaker: 'contact', message_type: 'text', text: '合成旧授权正文',
     media_placeholder: null, occurred_at: null, quoted: null,
   }], next_cursor: null } : request.path.endsWith('/relationship-overview') ? { overview: {
