@@ -3,7 +3,7 @@
 .contacts-toolbar h2 { color: var(--panel-heading); font-size: 15px; font-weight: 500; }
 .contacts-toolbar p, .contacts-note { margin-top: 8px; color: #737e80; font-size: 12px; line-height: 1.8; }
 .contacts-note[role="alert"] { color: #99594e; }
-.contacts-columns { display: grid; grid-template-columns: minmax(170px, 24%) minmax(0, 1fr); gap: 16px; align-items: start; }
+.contacts-columns { display: grid; grid-template-columns: minmax(170px, 24%) minmax(0, 1fr); gap: 16px; align-items: stretch; }
 .contact-list { list-style: none; margin: 0; padding: 0; display: grid; align-content: start; gap: 6px; }
 .contact-card { min-width: 0; padding: 8px 10px; border: 1px solid var(--panel-border); border-radius: 10px; background: var(--panel-background); }
 .contact-card[data-current="true"] { background: #e9f2f3; border-color: #8cabbe; }
@@ -112,7 +112,7 @@
 .ime-contact-note { padding: 0 6px 7px; color: #7a807b; font-size: 10px; }
 .ime-status-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .contacts-toolbar > div:last-child { display: flex; flex-wrap: wrap; gap: 8px; }
-.contact-list { max-height: 65vh; overflow-y: auto; padding: 3px; scrollbar-width: none; }
+.contact-list { min-height: 0; contain: size; overflow-y: auto; scrollbar-width: none; }
 .contact-list::-webkit-scrollbar { display: none; }
 .contact-sync-details { margin: 14px 0; }
 .contact-binding details { margin-top: 12px; font-size: 12px; overflow-wrap: anywhere; }
@@ -123,7 +123,7 @@
 @media (max-width: 760px) {
   .contacts-columns { grid-template-columns: 1fr; }
   .contacts-toolbar { align-items: flex-start; flex-wrap: wrap; }
-  .contact-list { max-height: 36vh; }
+  .contact-list { max-height: 36vh; contain: none; }
   .contact-chat-body { height: 55vh; }
   .contact-chat-header { align-items: flex-start; flex-wrap: wrap; padding: 14px; }
   .contact-chat-actions { justify-content: flex-end; flex-wrap: wrap; width: 100%; }
