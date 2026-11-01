@@ -1,3 +1,6 @@
+import {FirstHistoryCoordinator} from '../src/history/sqlite/coordinator.ts';
+import {IncrementalHistoryCoordinator} from '../src/history/sqlite/incremental-coordinator.ts';
+import {SqliteHistoryService} from '../src/history/sqlite/service.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
@@ -106,4 +109,44 @@ test('已持久记录guard故障但关闭尚未完成即重启，保留原始固
  const op=(await f.snapshot()).operations[0];await f.current.storage.execute('history.recertifyNoteFailure',{ownerId:owner,id:op.id,code:'history_source_changed',at:Date.now()});
  await f.current.storage.close();f.release();await assert.rejects(pending,{code:'worker_failed'});await f.service.close();
  const current=await restart(f,t),status=await current.recertify.status(f.contactA,'known-loss-restart');assert.equal(status.state,'interrupted');assert.equal(status.stage,'history');assert.equal(status.failure_code,'history_source_changed');assert.equal((await current.history.readChat(f.contactA)).messages.length,0);
+});
+
+test('仅成功收尾后通知一次本contact，native和holder未确认完成前不通知', {timeout:5000},async t=>{
+ const calls=[],f=await setup(t,{onCompleted:id=>calls.push(id)}),closeEntered=gate(),allowClose=gate(),holderReleased=gate(),allowHolder=gate(),register=f.current.holders.register.bind(f.current.holders);
+ f.current.holders.register=resource=>{const release=register(resource);return resource.key.startsWith('history:recertify_')?async()=>{await release();holderReleased.resolve();await allowHolder.promise;}:release;};
+ const pending=f.service.recertify(f.contactA,{requestKey:'notify-after-cleanup'});await f.entered();f.channels[1].close=async()=>{closeEntered.resolve();await allowClose.promise;};f.release();await closeEntered.promise;
+ assert.equal((await f.service.status(f.contactA,'notify-after-cleanup')).state,'running');assert.deepEqual(calls,[]);allowClose.resolve();await holderReleased.promise;
+ assert.equal((await f.service.status(f.contactA,'notify-after-cleanup')).state,'completed');assert.deepEqual(calls,[]);allowHolder.resolve();assert.equal((await pending).state,'completed');assert.deepEqual(calls,[f.contactA]);
+ await f.service.admit(f.contactA,{requestKey:'notify-after-cleanup'});assert.deepEqual(calls,[f.contactA]);
+});
+test('成功通知抛错或异步拒绝不翻转completed且幂等查询不再次通知', {timeout:5000},async t=>{
+ for(const asynchronous of [false,true]){
+  let count=0;const f=await setup(t,{onCompleted:()=>{count++;if(asynchronous)return Promise.reject(Error('合成通知拒绝'));throw Error('合成通知失败');}});
+  const pending=f.service.recertify(f.contactA,{requestKey:'notify-failed'});await f.entered();f.release();const done=await pending;assert.equal(done.state,'completed');assert.equal(count,1);
+  await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(await f.service.admit(f.contactA,{requestKey:'notify-failed'}),done);assert.equal(count,1);assert.equal((await f.snapshot()).fences.length,0);
+ }
+});
+test('失败取消或应用退出不发成功通知，退出收尾中的稳定completed也不唤醒', {timeout:5000},async t=>{
+ for(const mode of ['failed','cancelled','closed','closed-completed']){
+  const calls=[],f=await setup(t,{onCompleted:id=>calls.push(id)}),holderReleased=gate(),allowHolder=gate();
+  if(mode==='closed-completed'){const register=f.current.holders.register.bind(f.current.holders);f.current.holders.register=resource=>{const release=register(resource);return resource.key.startsWith('history:recertify_')?async()=>{await release();holderReleased.resolve();await allowHolder.promise;}:release;};}
+  const pending=f.service.recertify(f.contactA,{requestKey:`no-notify-${mode}`});await f.entered();
+  if(mode==='failed'){f.channels[1].guardSession.failureCode=()=> 'history_source_changed';f.release();}
+  if(mode==='cancelled')await f.service.cancel(f.contactA,{requestKey:`no-notify-${mode}`});
+  if(mode==='closed')await f.service.close();
+  if(mode==='closed-completed'){f.release();await holderReleased.promise;assert.equal((await f.service.status(f.contactA)).state,'completed');const closing=f.service.close();allowHolder.resolve();await closing;}
+  const done=await pending;assert.equal(done.state,mode==='failed'?'failed':mode==='closed-completed'?'completed':'interrupted');assert.deepEqual(calls,[]);
+ }
+});
+test('成功通知接真实FirstHistory及SQLite续证，普通增量恢复且不重建认证代次或重排他人', {timeout:5000},async t=>{
+ let first;const f=await setup(t,{onCompleted:id=>first.wakeContact(id)}),reads=[],tailReads=[];
+ const createNormal=()=>{const {channel,state}=createChannel();state.pageRecords=[record('shard-a','1')];state.inspectFactory=scope=>({...report,capabilities:{...report.capabilities,incrementalTail:'supported'},continuity:'same-source-instances-normal-use-v1',accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation});channel.guardSession={loss:new Promise(()=>{})};const page=channel.page;channel.page=async(scope,target,cursor,signal)=>{reads.push(scope.token.contact_id);return {...await page(scope,target,cursor,signal),resumeCursor:'synthetic-tail-1'};};channel.tail=async(scope,target,cursor)=>{tailReads.push(scope.token.contact_id);return {target:target.descriptor,cursorIn:cursor,cursorOut:'synthetic-tail-2',records:[],caughtUp:true};};return channel;};
+ const history=new SqliteHistoryService(f.current.storage,f.current.contacts,createNormal,f.current.holders);first=new FirstHistoryCoordinator(f.current.contacts,history);const incremental=new IncrementalHistoryCoordinator({directory:async()=>{const d=await f.current.contacts.directory();return {...d,bindings:d.bindings.filter(b=>b.contact_id===f.contactA)};}},history,{firstHistoryManagedExternally:true,intervalMs:0});
+ try{
+ first.wake();await first.waitForIdle();assert.equal(first.getState().contacts.find(x=>x.contactId===f.contactA).phase,'blocked');const otherReads=reads.filter(id=>id===f.contactB).length;
+ const pending=f.service.recertify(f.contactA,{requestKey:'notify-normal-coordinator'});await f.entered();f.release();assert.equal((await pending).state,'completed');await first.waitForIdle();
+ const covered=await history.coverage(f.contactA);assert.equal(covered.phase,'complete');assert.equal(covered.incremental.phase,'ready');assert.equal(covered.incremental.cursorPresent,true);assert.equal(reads.filter(id=>id===f.contactA).length,1);assert.equal(reads.filter(id=>id===f.contactB).length,otherReads);
+ const before=await f.snapshot(),op=before.operations[0],token=await f.current.contacts.eligibility(f.contactA);assert.equal(token.binding_id,op.new_binding_id);assert.equal(before.operations.length,1);assert.equal(before.leases[0].state,'active');assert.equal(before.fences.length,0);
+ incremental.wake();await incremental.waitForIdle();assert.deepEqual(tailReads,[f.contactA]);assert.equal((await history.coverage(f.contactA)).incremental.phase,'ready');const after=await f.snapshot();assert.equal(after.operations.length,1);assert.equal((await f.current.contacts.eligibility(f.contactA)).binding_id,token.binding_id);assert.equal(after.messages.length,before.messages.length);assert.equal(after.captures.length,before.captures.length);
+ }finally{await first.close();await incremental.close();await history.close();}
 });

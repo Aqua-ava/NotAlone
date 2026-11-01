@@ -34,9 +34,9 @@ export class SqliteHistoryRecertifyService {
  private readonly contacts:HistoryClearContactGateway;
  private readonly createChannel:HistoryClearChannelFactory;
  private readonly holders:ActiveHolders;
- private readonly options:{stopHistory?:(id:string)=>Promise<void>;maxPages?:number};
+ private readonly options:{stopHistory?:(id:string)=>Promise<void>;onCompleted?:(id:string)=>void|Promise<void>;maxPages?:number};
  constructor(storage:SqliteStorage,contacts:HistoryClearContactGateway,createChannel:HistoryClearChannelFactory,
-  holders:ActiveHolders=new ActiveHolders(),options:{stopHistory?:(id:string)=>Promise<void>;maxPages?:number}={}) {
+  holders:ActiveHolders=new ActiveHolders(),options:{stopHistory?:(id:string)=>Promise<void>;onCompleted?:(id:string)=>void|Promise<void>;maxPages?:number}={}) {
   this.storage=storage;this.contacts=contacts;this.createChannel=createChannel;this.holders=holders;this.options=options;
   this.initialized=storage.execute('history.recertifyInterruptStale',{ownerId:contacts.ownerId,at:Date.now()});
  }
@@ -81,7 +81,14 @@ export class SqliteHistoryRecertifyService {
     const initial=projectRecertifyStatus(await this.read(contactId,job.requestKey));
     if(!job.prepared){job.finishWork();await job.release();this.active.delete(contactId);job.finish();return initial;}
     // 接纳之后仅服务生命周期控制任务；旧reader排空属于后台工作。
-    void this.run(job,token).catch(error=>{job.error=error;}).finally(()=>{if(this.active.get(contactId)===job)this.active.delete(contactId);job.finish();});
+    void this.run(job,token).catch(error=>{job.error=error;}).finally(()=>{
+     if(this.active.get(contactId)===job)this.active.delete(contactId);
+     // run已等待渠道和holder收尾；通知只安排当前联系人的正常续证，不改变稳定终态。
+     if(!this.closed&&!job.error&&job.finalized&&job.result?.completed&&!job.controller.signal.aborted){
+      try{void Promise.resolve(this.options.onCompleted?.(contactId)).catch(()=>{});}catch{/* 调度失败不回滚已完成认证。 */}
+     }
+     job.finish();
+    });
     return initial;
    }catch(error){
     try{if(job.prepared)await this.persist(job,'history.recertifyFail',{ownerId:this.contacts.ownerId,id:job.id,code:'history_recertify_failed',stage:job.stage,at:Date.now()});}
