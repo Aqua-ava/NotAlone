@@ -123,7 +123,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   const columns = await page.locator('.contacts-columns').boundingBox();
   const sidebar = await page.getByRole('list', { name: '联系人列表' }).boundingBox();
   const right = await chat.boundingBox();
-  assert.ok(sidebar.width / columns.width >= 0.29 && sidebar.width / columns.width <= 0.33);
+  assert.ok(sidebar.width / columns.width >= 0.22 && sidebar.width / columns.width <= 0.26);
   assert.ok(right.x >= sidebar.x + sidebar.width);
   assert.ok(right.width > sidebar.width * 1.8);
   await chat.getByRole('button', { name: '加载更早记录' }).click();
