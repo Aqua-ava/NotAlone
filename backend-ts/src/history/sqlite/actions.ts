@@ -330,14 +330,14 @@ export const historyActions:StorageAction[]=[
    ||new Set(i.messageIds).size!==i.messageIds.length)fail('history_request_invalid');
   if(!i.messageIds.length)return [];
   return tx.all(`WITH ${currentSourceScopeCTE} SELECT m.id message_id,mm.state media_state,a.state attempt_state,a.error_code,
-   f.id file_id,f.mime_type FROM message m
+   f.id file_id,f.mime_type,f.image_quality FROM message m
    JOIN contact active_contact ON active_contact.owner_id=m.owner_id AND active_contact.id=m.contact_id AND active_contact.state='active'
    JOIN owner active_owner ON active_owner.owner_id=m.owner_id AND active_owner.state='active'
    LEFT JOIN message_media mm ON mm.owner_id=m.owner_id AND mm.contact_id=m.contact_id AND mm.message_id=m.id
    LEFT JOIN media_extraction_attempt a ON a.owner_id=m.owner_id AND a.contact_id=m.contact_id AND a.message_id=m.id
     AND a.attempt_no=(SELECT max(last.attempt_no) FROM media_extraction_attempt last WHERE last.owner_id=m.owner_id AND last.contact_id=m.contact_id AND last.message_id=m.id)
    LEFT JOIN media_file f ON f.owner_id=m.owner_id AND f.contact_id=m.contact_id AND f.message_id=m.id AND f.role='image_display'
-    AND f.image_quality='original' AND f.publish_state='current' AND f.content_state='present' AND f.container_valid=1 AND f.viewable=1
+    AND f.publish_state='current' AND f.content_state='present' AND f.container_valid=1 AND f.viewable=1
    WHERE m.owner_id=? AND m.contact_id=? AND m.kind='image' AND m.availability='available'
     AND m.id IN (${i.messageIds.map(()=>'?').join(',')})
     AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)

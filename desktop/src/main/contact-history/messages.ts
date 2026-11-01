@@ -8,7 +8,7 @@ const optionalText = (value: unknown): value is string | null => value === null 
 const imageMimes = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/bmp']);
 
 function imageMedia(value: unknown): ContactHistoryImageMedia {
-  if (!isRecord(value) || !['pending', 'original', 'thumbnail_only', 'unavailable', 'failed', 'cleared'].includes(value.state as string)
+  if (!isRecord(value) || !['pending', 'original', 'available', 'thumbnail_only', 'unavailable', 'failed', 'cleared'].includes(value.state as string)
     || !Object.hasOwn(value, 'file_id') || !Object.hasOwn(value, 'mime_type')
     || !(value.file_id === null || isUuid(value.file_id))
     || !(value.mime_type === null || typeof value.mime_type === 'string' && imageMimes.has(value.mime_type))
@@ -16,7 +16,7 @@ function imageMedia(value: unknown): ContactHistoryImageMedia {
     throw new Error('聊天图片状态无效。');
   }
   const state = value.state as ContactHistoryImageMedia['state'];
-  if (state === 'original' ? value.file_id === null || value.mime_type === null : value.file_id !== null || value.mime_type !== null) {
+  if (state === 'original' || state === 'available' ? value.file_id === null || value.mime_type === null : value.file_id !== null || value.mime_type !== null) {
     throw new Error('聊天图片引用无效。');
   }
   return { state, fileId: value.file_id === null ? null : (value.file_id as string).toLowerCase(), mimeType: value.mime_type as string | null,

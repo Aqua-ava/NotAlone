@@ -94,19 +94,19 @@ function missingKeyDat(){
  return Buffer.concat([header,aes,png.subarray(16)]);
 }
 
-test('真实图片类型经HTTP和具名桥显示缩略图、补原图及失败，撤下预览后才完成清除',{timeout:25000},async t=>{
+test('真实图片类型经HTTP和具名桥保存可查看文件及失败，撤下预览后才完成清除',{timeout:25000},async t=>{
  const options={data:datV4(png),envelope:'wechat_dat',quality:{kind:'thumbnail',proof:'synthetic-thumbnail-v1'}};
  const h=await visualPage(t,'image',options),{page,f,message}=h;
  await page.getByRole('button',{name:'保存这条图片',exact:true}).click();
- await expect(page.getByText('缩略图，原图未取得',{exact:true})).toBeVisible();
- const thumbnail=await f.media.read(f.contact,message.id);assert.equal(thumbnail.latestAttempt.outcome,'limited');
+ await expect(page.getByText('图片已保存',{exact:true})).toBeVisible();await expect(page.getByText('已存图片',{exact:true})).toBeVisible();
+ const thumbnail=await f.media.read(f.contact,message.id);assert.equal(thumbnail.latestAttempt.outcome,'full');assert.equal(thumbnail.files[0].imageQuality,'thumbnail');
  options.quality={kind:'original',proof:'synthetic-original-v1'};
- await page.getByRole('button',{name:'补提原图',exact:true}).click();await expect(page.getByText('原图',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'保存这条图片',exact:true}).click();await expect(page.getByText('原图',{exact:true})).toBeVisible();
  const original=await f.media.read(f.contact,message.id);assert.equal(original.latestAttempt.outcome,'full');assert.notEqual(original.files[0].fileId,thumbnail.files[0].fileId);
  options.data=missingKeyDat();options.envelope='wechat_dat';
- await page.getByRole('button',{name:'补提原图',exact:true}).click();await expect(page.getByRole('alert')).toContainText('媒体操作结果尚未确认');
+ await page.getByRole('button',{name:'保存这条图片',exact:true}).click();await expect(page.getByRole('alert')).toContainText('媒体操作结果尚未确认');
  await page.getByRole('button',{name:'刷新媒体状态',exact:true}).click();
- await expect(page.getByText('缺少当前账号已核验的图片密钥，或密钥不匹配；本次未取得图片。',{exact:true})).toBeVisible();
+ await expect(page.getByText('缺少当前账号已核验的图片密钥，或密钥不匹配；本次没有保存图片，消息记录仍保留。',{exact:true})).toBeVisible();
  const failed=await f.media.read(f.contact,message.id);assert.equal(failed.latestAttempt.errorCode,'needs_image_key');assert.equal(failed.files[0].fileId,original.files[0].fileId);assert.equal(h.opens(),3);
  const padding=datV4(png),cipher=createCipheriv('aes-128-ecb',Buffer.from('cfcd208495d565ef'),null);cipher.setAutoPadding(false);
  Buffer.concat([cipher.update(Buffer.alloc(16)),cipher.final()]).copy(padding,31);
@@ -118,7 +118,7 @@ test('真实图片类型经HTTP和具名桥显示缩略图、补原图及失败�
   [Buffer.from('unknown-format'),'plain','media_format_unsupported','此媒体格式或编码尚未支持，本次未保存新结果。'],
  ]){
   options.data=data;options.envelope=envelope;
-  await page.getByRole('button',{name:'补提原图',exact:true}).click();await expect(page.getByRole('alert')).toContainText('媒体操作结果尚未确认');
+  await page.getByRole('button',{name:'保存这条图片',exact:true}).click();await expect(page.getByRole('alert')).toContainText('媒体操作结果尚未确认');
   await page.getByRole('button',{name:'刷新媒体状态',exact:true}).click();await expect(page.getByText(label,{exact:true})).toBeVisible();
   const result=await f.media.read(f.contact,message.id);assert.equal(result.latestAttempt.errorCode,code);assert.equal(result.files[0].fileId,original.files[0].fileId);
  }
@@ -128,13 +128,13 @@ test('真实图片类型经HTTP和具名桥显示缩略图、补原图及失败�
  h.hold();await page.getByRole('button',{name:'清除这条媒体',exact:true}).click();await h.released.promise;
  await expect(image).toHaveCount(0);assert.deepEqual(h.releaseEvidence,[{imageSources:0,videoSources:0,videoPaused:true}]);
  let receipt;await expect.poll(async()=>{receipt=(await f.media.deletion.list({ownerId:f.owner})).find(op=>op.scope.kind==='media_result_clear');return receipt?.state;}).toBe('cleaning');
- assert.equal((await lstat(location)).isFile(),true);h.release.resolve();await expect(page.getByText('媒体已清除，聊天占位保留',{exact:true})).toBeVisible();
+ assert.equal((await lstat(location)).isFile(),true);h.release.resolve();await expect(page.getByText('已清除，消息记录仍保留',{exact:true})).toBeVisible();
  assert.equal((await f.media.deletion.status({ownerId:f.owner,operationId:receipt.operationId})).state,'completed');await assert.rejects(lstat(location),{code:'ENOENT'});
  assert.ok((await f.history.read(f.contact)).messages.some(item=>item.id===message.id));
  options.data=png;options.envelope='plain';options.quality={kind:'unknown',proof:null};
- await page.getByRole('button',{name:'保存这条图片',exact:true}).click();await expect(page.getByText('图片质量未核验',{exact:true})).toBeVisible();
- assert.equal((await f.media.read(f.contact,message.id)).latestAttempt.outcome,'quality_unknown');
- await page.getByRole('button',{name:'清除这条媒体',exact:true}).click();await expect(page.getByText('媒体已清除，聊天占位保留',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'保存这条图片',exact:true}).click();await expect(page.getByText('图片已保存',{exact:true})).toBeVisible();await expect(page.getByText('已存图片',{exact:true})).toBeVisible();
+ const unknown=await f.media.read(f.contact,message.id);assert.equal(unknown.latestAttempt.outcome,'full');assert.equal(unknown.files[0].imageQuality,'unknown');
+ await page.getByRole('button',{name:'清除这条媒体',exact:true}).click();await expect(page.getByText('已清除，消息记录仍保留',{exact:true})).toBeVisible();
  assert.equal(h.opens(),8);assert.deepEqual(h.publicationFailures,[]);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 

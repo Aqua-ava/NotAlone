@@ -13,7 +13,7 @@
 - GIF：完整子块/trailer、声明帧数与ImageIO帧数一致，每帧实际解码；最多120帧。
 - BMP：完整声明长度与像素区，仅24/32位未压缩或32位标准RGBA bitfields；DIB40/108/124。其他BMP分支拒绝。
 - 全部图片：每帧最多40M像素，合计最多80M像素；每帧实际绘制以强制解码。TIFF、HEIC、WebP、SVG及其他格式明确不支持。
-- `media-validation wxgf` 是独立的有界解码命令：fd3 接收已解密的 WXGF 文件，stdout 仅输出已实际解码并完成 PNG 结构与像素校验的单帧 PNG，stderr 仅输出错误码。它不声明来源质量或图片消息关联；调用方须先独立验证微信资源来源、完整性及原图资格。WXGF 内嵌 JPEG/PNG 与 HEVC Annex B 均受支持；HEVC 必须有完整 VPS/SPS/PPS 与画面数据，解码恰有一个画面，尺寸不超40M像素，输出不超32MiB。
+- `media-validation wxgf` 是独立的有界解码命令：fd3 接收已解密的 WXGF 文件，stdout 仅输出已实际解码并完成 PNG 结构与像素校验的单帧 PNG，stderr 仅输出错误码。输出是供显示的解码派生图，不证明源字节可逐字节复制或图片消息关联；调用方仍须验证受管文件及其消息关联，无需额外证明源字节符合“原图”资格。WXGF 内嵌 JPEG/PNG 与 HEVC Annex B 均受支持；遇到非法包头单元时，仅可在4KiB前缀内恢复到合法VPS，之后必须有序包含SPS/PPS和画面数据且所有HEVC单元头有效。HEVC最终解码恰有一个画面，尺寸不超40M像素，输出不超32MiB。
 - 视频：仅完整MP4，1条H264视频轨及至多1条AAC音轨，所有轨解码到`AVAssetReader.completed`，检查非空样本和末尾时间覆盖。最多120秒、60fps、7200视频样本、每帧40M像素；音频最多双声道48kHz/6M采样。保守拒绝其他轨道、codec、fragmented MP4、外部引用及未知容器。
 - MP4先检查所有顶层atom长度，限定自包含data-reference，禁止引用其他文件或URL。AVFoundation不能直接打开`/dev/fd/3`，因此窄`AVAssetResourceLoader`仅响应固定内部URL的精确有界Data范围；不读取其他路径，不生成第二份临时媒体。
 

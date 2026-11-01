@@ -7,6 +7,7 @@ import VideoToolbox
 
 private let wxgfPrefix=Data("wxgf".utf8)
 private let wxgfStartCode=[UInt8](arrayLiteral:0,0,0,1)
+private let wxgfHeaderPrefixLimit=4096
 private let wxgfOutputLimit=32*1024*1024
 private let wxgfPixelLimit=40_000_000
 
@@ -15,8 +16,7 @@ private struct AnnexNAL {
     let bytes:Data
 }
 
-private func annexBUnits(_ data:Data) throws -> [AnnexNAL] {
-    let bytes=[UInt8](data)
+private func annexBStarts(_ bytes:[UInt8]) throws -> [(offset:Int,length:Int)] {
     var starts:[(offset:Int,length:Int)]=[]
     var cursor=0
     while cursor+3<bytes.count {
@@ -27,20 +27,60 @@ private func annexBUnits(_ data:Data) throws -> [AnnexNAL] {
         } else {cursor+=1}
         guard starts.count<=8192 else {throw Failure("media_resource_limit")}
     }
+    return starts
+}
+
+private func annexBNAL(_ bytes:[UInt8],_ starts:[(offset:Int,length:Int)],at index:Int) throws -> AnnexNAL {
+    let start=starts[index].offset+starts[index].length
+    var end=index+1<starts.count ? starts[index+1].offset:bytes.count
+    while end>start && bytes[end-1]==0 {end-=1}
+    guard end-start>=2 else {throw Failure("media_image_invalid")}
+    let unit=Data(bytes[start..<end])
+    let type=(Int(unit[0])>>1)&0x3f
+    guard unit[0]&0x80==0,unit[1]&0x07 != 0 else {throw Failure("media_image_invalid")}
+    return AnnexNAL(type:type,bytes:unit)
+}
+
+private func annexBUnits(_ data:Data) throws -> [AnnexNAL] {
+    let bytes=[UInt8](data)
+    let starts=try annexBStarts(bytes)
     guard starts.count>=4,starts.count<=8192 else {throw Failure("media_image_invalid")}
     var result:[AnnexNAL]=[]
     result.reserveCapacity(starts.count)
     for index in starts.indices {
-        let start=starts[index].offset+starts[index].length
-        var end=index+1<starts.count ? starts[index+1].offset:bytes.count
-        while end>start && bytes[end-1]==0 {end-=1}
-        guard end-start>=2 else {throw Failure("media_image_invalid")}
-        let unit=Data(bytes[start..<end])
-        let type=(Int(unit[0])>>1)&0x3f
-        guard unit[0]&0x80==0 else {throw Failure("media_image_invalid")}
-        result.append(AnnexNAL(type:type,bytes:unit))
+        result.append(try annexBNAL(bytes,starts,at:index))
     }
     return result
+}
+
+private func hasOrderedHEVCFrameUnits(_ units:[AnnexNAL]) -> Bool {
+    var vps=false,sps=false,pps=false
+    for unit in units {
+        if unit.type==32 && !vps {vps=true}
+        else if unit.type==33 && vps && !sps {sps=true}
+        else if unit.type==34 && sps && !pps {pps=true}
+        else if (0...31).contains(unit.type) {return pps}
+    }
+    return false
+}
+
+private func wxgfHeaderRecoveryPayload(_ data:Data) throws -> Data? {
+    let bytes=[UInt8](data)
+    let starts=try annexBStarts(bytes)
+    guard starts.count>=5 else {return nil}
+    var sawMalformedHeader=false
+    for index in starts.indices {
+        let startCodeOffset=starts[index].offset
+        if startCodeOffset>wxgfHeaderPrefixLimit {break}
+        let unit:AnnexNAL
+        do {unit=try annexBNAL(bytes,starts,at:index)}
+        catch {sawMalformedHeader=true;continue}
+        guard sawMalformedHeader,unit.type==32 else {continue}
+        let suffix=Data(data.dropFirst(startCodeOffset))
+        guard let units=try? annexBUnits(suffix),hasOrderedHEVCFrameUnits(units) else {continue}
+        return suffix
+    }
+    return nil
 }
 
 private func png(_ image:CGImage) throws -> Data {
@@ -189,12 +229,16 @@ private func decodeHEVC(_ units:[AnnexNAL]) throws -> CGImage {
 func decodeWxgf(_ data:Data) throws -> Data {
     guard data.count>=4,data.count<=maxBytes,data.prefix(4)==wxgfPrefix else {throw Failure("media_format_unsupported")}
     let payload=data.dropFirst(4)
+    let payloadData=Data(payload)
     let jpeg=Data([0xff,0xd8,0xff])
     let pngHeader=Data([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a])
-    let hevc=try? annexBUnits(Data(payload))
-    if let hevc,hevc.contains(where:{$0.type==32}),hevc.contains(where:{$0.type==33}),
-       hevc.contains(where:{$0.type==34}),hevc.contains(where:{(0...31).contains($0.type)}) {
-        return try png(decodeHEVC(hevc))
+    var hevcUnits=try? annexBUnits(payloadData)
+    if hevcUnits==nil,let recoveryPayload=try? wxgfHeaderRecoveryPayload(payloadData) {
+        hevcUnits=try? annexBUnits(recoveryPayload)
+    }
+    if let hevcUnits,hevcUnits.contains(where:{$0.type==32}),hevcUnits.contains(where:{$0.type==33}),
+       hevcUnits.contains(where:{$0.type==34}),hevcUnits.contains(where:{(0...31).contains($0.type)}) {
+        return try png(decodeHEVC(hevcUnits))
     }
     if let range=payload.range(of:jpeg) {
         let encoded=Data(payload[range.lowerBound..<payload.endIndex])
@@ -214,6 +258,6 @@ func decodeWxgf(_ data:Data) throws -> Data {
               CGImageSourceGetStatusAtIndex(source,0) == .statusComplete else {throw Failure("media_image_invalid")}
         return try png(image)
     }
-    let units=try annexBUnits(Data(payload))
+    let units=try hevcUnits ?? annexBUnits(payloadData)
     return try png(decodeHEVC(units))
 }

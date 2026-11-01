@@ -272,6 +272,19 @@ const quoteSyncPolicy=Object.freeze({
 });
 
 
+// 图片只验证来源和完整解码，固定升级仍保持账号、来源及引用协议不变。
+const imageContentPolicy=Object.freeze({
+ ...quoteSyncPolicy,oldName:'quote-sync-20261101-v1',newName:'image-content-20261101-v2',
+ oldCliSha256:'6a95270fb64fe6d2d92b727965d3217ad96f19f236ee5262f2bcdb5dfa6427cc',newCliSha256:'71dee721e15f74348ece3ae8428444b1fc6018f752dcc7e0040f010529b636d3',
+ oldOverlaySha256:'7ab302bbbe6a8ad5fb48eb32620cc60b6496f7eb52587d4e0845dc48370ab480',newOverlaySha256:'d85391e316ff9ce8c5760940bf4e732f79ec7ee920aa18ebf82a2b1a28e125be',
+ oldImageQualityProof:'wechat-cdn-big-hd-exact-content-v4',newImageQualityProof:'wechat-message-image-content-v1',
+ protocolOldSha256:'2b5351608063c70af73e80e9cee6868d342ffb2b32d8f46caf64cdb14846d60c',protocolNewSha256:'2b5351608063c70af73e80e9cee6868d342ffb2b32d8f46caf64cdb14846d60c',
+ oldImageSha256:'b6fa04c71f3c1b50c8062d0022a306020b0ad4e4612123a9c3e01ef8123f211e',oldImageTestSha256:'b6bc9ff5aad59b4d59d8d4625b2be4778ba3970552da990f6ca8d66f5955e89e',
+ imageSha256:'e511286e25d979894d527eff48731551052db7f3ee7adacdb218707885c28eb6',imageTestSha256:'79590545dffd31afd210f2e84d02eb5910ea18caacf46ccedbbd327e0f29750b',
+ oldQuoteProtocol:'wechat-quote-message-v1',newQuoteProtocol:'wechat-quote-message-v1',sourceChanges:Object.freeze({}),
+ identityAlgorithmSha256:'b486521e243caec817a865aaf0d8fd44808a1ea167ac892d41a32dd8d37d71e6',
+});
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -667,7 +680,10 @@ const productionTools = createUpgradeImageCliTools({ repositoryRoot, policy: pro
 const decodingFixTools = createUpgradeImageCliTools({ repositoryRoot, policy: decodingFixPolicy });
 const wxgfImageTools = createUpgradeImageCliTools({repositoryRoot,policy:wxgfImagePolicy});
 const quoteSyncTools=createUpgradeImageCliTools({repositoryRoot,policy:quoteSyncPolicy});
-export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteSyncPolicy.oldName)
+const imageContentTools=createUpgradeImageCliTools({repositoryRoot,policy:imageContentPolicy});
+export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageContentPolicy.oldName)
+ &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageContentPolicy.newName)
+ ?imageContentTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteSyncPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteSyncPolicy.newName)
  ?quoteSyncTools.prepareAliases(input):input?.fromRoot === path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',wxgfImagePolicy.oldName)
  && input?.toRoot === path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',wxgfImagePolicy.newName)

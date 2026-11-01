@@ -159,3 +159,30 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   assert.ok(narrowChat.y > narrowLeft.y + narrowLeft.height);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 });
+
+test('unknown质量的可查看聊天图片打开受管预览而不显示不可用占位', async t => {
+  const bundle = await build({ stdin: { contents: `
+    import React from 'react'; import { createRoot } from 'react-dom/client';
+    import { HistoryImageBubble } from './src/renderer/HistoryImageBubble';
+    const selection={contactId:'00000000-0000-4000-8000-000000000021',messageId:'00000000-0000-4000-8000-000000000022',scopeRevision:4};
+    const fileId='00000000-0000-4000-8000-000000000023';
+    const listeners=new Set();window.mediaCalls=[];
+    const media={openHistoryImagePreview:async request=>{window.mediaCalls.push(request);return {sessionId:'00000000-0000-4000-8000-000000000024',mimeType:'image/png',dataBase64:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='};},
+      releasePreview:async()=>{},onPreviewRevoking:listener=>{listeners.add(listener);return()=>listeners.delete(listener);}};
+    createRoot(document.getElementById('root')).render(<HistoryImageBubble media={media} imageMedia={{state:'available',fileId,mimeType:'image/png'}} selection={selection}/>);
+  `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, logLevel: 'silent' });
+  const browser = await chromium.launch({ headless: true, channel: 'chrome' });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.setContent(`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob:; script-src 'unsafe-inline';"><div id="root"></div>`);
+  await page.addScriptTag({ content: bundle.outputFiles[0].text });
+  const image = page.getByRole('img', { name: '聊天图片', exact: true });
+  await expect(image).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.mediaCalls.length)).toBe(1);
+  assert.deepEqual(await page.evaluate(() => window.mediaCalls[0]), {
+    contactId: '00000000-0000-4000-8000-000000000021', messageId: '00000000-0000-4000-8000-000000000022', scopeRevision: 4,
+    fileId: '00000000-0000-4000-8000-000000000023', mimeType: 'image/png',
+  });
+  await expect(page.getByRole('status')).toHaveCount(0);
+  await expect.poll(() => image.evaluate(element => element.complete && element.naturalWidth)).toBe(1);
+});

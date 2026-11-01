@@ -41,9 +41,9 @@ test('重开媒体时跳过来源已失效的副本，仍拒绝预览且其他�
  assert.deepEqual((await reopened.read(other,otherMessage.id)).files,good.files);
 });
 
-test('明确单消息保存真实独立文件、有限状态、幂等及清除保留占位',async t=>{
+test('明确单消息保存真实独立文件、可查看状态、幂等及清除保留占位',async t=>{
  const f=await fixture(t,imageAdapter());const m=f.messages.find(m=>m.kind==='image');
- const value=await f.media.extract(f.contact,m.id,{requestKey:'save-one',goal:'extract'});assert.equal(value.latestAttempt.state,'completed');assert.equal(value.latestAttempt.outcome,'limited');assert.equal(value.files.length,1);assert.equal(value.files[0].imageQuality,'thumbnail');
+ const value=await f.media.extract(f.contact,m.id,{requestKey:'save-one',goal:'extract'});assert.equal(value.latestAttempt.state,'completed');assert.equal(value.latestAttempt.outcome,'full');assert.equal(value.files.length,1);assert.equal(value.files[0].imageQuality,'thumbnail');
  const repeated=await f.media.extract(f.contact,m.id,{requestKey:'save-one',goal:'extract'});assert.equal(repeated.latestAttempt.attemptId,value.latestAttempt.attemptId);assert.equal(repeated.files[0].fileId,value.files[0].fileId);
  const {readdir}=await import('node:fs/promises');assert.equal((await readdir(join(f.root,'managed','media'))).length,1);
  const cleared=await f.media.clear(f.contact,m.id,'clear-one');assert.equal(cleared.state,'cleared');assert.deepEqual(cleared.files,[]);assert.equal((await readdir(join(f.root,'managed','media'))).length,0);
@@ -61,11 +61,11 @@ test('关闭读取后旧请求只返回原结果，重新选中不受旧尝试�
  await f.contacts.setReading(true);assert.equal((await f.media.read(f.contact,m.id)).capabilities.extract,true);
 });
 
-test('新结果校验失败及质量降级保留合法原图，只清本次临时文件',async t=>{
+test('旧原图升级请求没有原图证据时保留合法原图，只清本次临时文件',async t=>{
  const adapter=imageAdapter({quality:'original'});const f=await fixture(t,adapter);const m=f.messages.find(m=>m.kind==='image');
  const first=await f.media.extract(f.contact,m.id,{requestKey:'original',goal:'extract'});assert.equal(first.latestAttempt.outcome,'full');const original=first.files[0].fileId;
  adapter.execute=imageAdapter().execute;
- await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'degrade',goal:'original_upgrade'}),{code:'media_result_would_degrade'});
+ await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'degrade',goal:'original_upgrade'}),{code:'media_original_unavailable'});
  const after=await f.media.read(f.contact,m.id);assert.equal(after.files[0].fileId,original);assert.equal(after.latestAttempt.state,'failed');assert.equal(after.latestAttempt.outcome,'no_result');
  const {readdir}=await import('node:fs/promises');assert.equal((await readdir(join(f.root,'managed','media'))).length,1);
 });

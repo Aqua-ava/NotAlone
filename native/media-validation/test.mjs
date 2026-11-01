@@ -55,12 +55,20 @@ test('支持PNG JPEG BMP及完整GIF每帧，明确拒绝未支持容器',async(
  await writeFile(join(directory,'bad-crc'),corrupt);
  await assert.rejects(validate(join(directory,'bad-crc'),'image',signal()),{code:'media_image_invalid'});
 });
-test('WXGF中的HEVC原图完整解码为同尺寸PNG',async()=>{
+test('WXGF中的HEVC帧解码为同尺寸PNG',async()=>{
  const input=join(directory,'wxgf');
  const result=await decodeWxgf(input);
  assert.equal(result.status,0,result.stderr?.toString());
  assert.deepEqual([...result.stdout.subarray(0,8)],[137,80,78,71,13,10,26,10]);
  const output=join(directory,'wxgf.png');await writeFile(output,result.stdout);
+ assert.deepEqual(await validate(output,'image',signal()),{format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false});
+});
+test('WXGF包头伪起始码后仍解码合法HEVC单帧',async()=>{
+ const input=join(directory,'wxgf.header-preamble');
+ const result=await decodeWxgf(input);
+ assert.equal(result.status,0,result.stderr?.toString());
+ assert.deepEqual([...result.stdout.subarray(0,8)],[137,80,78,71,13,10,26,10]);
+ const output=join(directory,'wxgf.header-preamble.png');await writeFile(output,result.stdout);
  assert.deepEqual(await validate(output,'image',signal()),{format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false});
 });
 test('WXGF可从已unlink的继承fd3解码且不创建临时文件',async()=>{
@@ -81,7 +89,7 @@ test('WXGF内嵌JPEG与PNG保留内容并转成经过校验的PNG',async()=>{
 });
 test('拒绝损坏或无法完整解码的WXGF，不输出部分图片',async()=>{
  const source=await readFile(join(directory,'wxgf'));
- for(const [name,bytes] of [['truncated',source.subarray(0,-8)],['unknown',Buffer.from('wxgfnot-an-image')],['multiframe',await readFile(join(directory,'wxgf.multiframe'))]]){
+ for(const [name,bytes] of [['truncated',source.subarray(0,-8)],['unknown',Buffer.from('wxgfnot-an-image')],['multiframe',await readFile(join(directory,'wxgf.multiframe'))],['header-over-limit',await readFile(join(directory,'wxgf.header-over-limit'))]]){
   const input=join(directory,'wxgf-'+name);await writeFile(input,bytes);
   const result=await decodeWxgf(input);assert.equal(result.status,1,name);assert.equal(result.stdout.length,0,name);
   assert.match(result.stderr.toString(),/^media_(image_invalid|format_unsupported)\n$/);

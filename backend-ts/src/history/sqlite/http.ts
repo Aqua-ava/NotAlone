@@ -36,7 +36,7 @@ export function projectHistoryMessages(read: HistoryRead, limit: number, imageMe
     messages: selected.map(message => {
       const type=displayMessageType(message),quote=message.quote;
       const image = imageMedia && message.kind === 'image' ? imageMedia.get(message.id) ?? {state:'pending' as const,fileId:null,mimeType:null} : null;
-      const safeImage = image?.state === 'original' && uuid.test(image.fileId??'') && image.mimeType && /^image\/[a-z0-9.+-]{1,64}$/.test(image.mimeType)
+      const safeImage = (image?.state === 'original'||image?.state==='available') && uuid.test(image.fileId??'') && image.mimeType && /^image\/[a-z0-9.+-]{1,64}$/.test(image.mimeType)
         ? image : image ? {...image,fileId:null,mimeType:null} : null;
       const quoted=type==='quote'&&quote?{
         text:quote?.referencedText||'引用内容暂不可用',target_message_id:quote?.targetMessageId??null,

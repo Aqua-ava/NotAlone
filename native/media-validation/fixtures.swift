@@ -133,9 +133,19 @@ func wxgf(_ root:String) throws {
         return result
     }
     let output=stream(repeats:1),multiple=stream(repeats:2)
-    guard output.count>4,output.count<=32*1024*1024,multiple.count<=32*1024*1024 else {throw FixtureFailure("wxgf_size")}
+    var headerPreamble=Data("wxgf".utf8)
+    headerPreamble.append(contentsOf:[0,0,0,1,0x80,0x01])
+    for unit in sets+slices {headerPreamble.append(contentsOf:[0,0,0,1]);headerPreamble.append(unit)}
+    var headerBeyondBound=Data("wxgf".utf8)
+    headerBeyondBound.append(Data(repeating:0xff,count:4097))
+    headerBeyondBound.append(contentsOf:[0,0,0,1,0x80,0x01])
+    for unit in sets+slices {headerBeyondBound.append(contentsOf:[0,0,0,1]);headerBeyondBound.append(unit)}
+    guard output.count>4,output.count<=32*1024*1024,multiple.count<=32*1024*1024,
+          headerPreamble.count<=32*1024*1024,headerBeyondBound.count<=32*1024*1024 else {throw FixtureFailure("wxgf_size")}
     try output.write(to:URL(fileURLWithPath:root+"/wxgf"))
     try multiple.write(to:URL(fileURLWithPath:root+"/wxgf.multiframe"))
+    try headerPreamble.write(to:URL(fileURLWithPath:root+"/wxgf.header-preamble"))
+    try headerBeyondBound.write(to:URL(fileURLWithPath:root+"/wxgf.header-over-limit"))
 }
 @main struct Fixtures {
     static func main() async throws {

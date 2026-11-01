@@ -39,10 +39,10 @@ async function collect(context:VisualRequest,resource:VisualResource):Promise<Bu
 }
 function quality(resource:VisualResource):VisualResource['quality'] {
   const value=resource.quality;
-  if(!value||!['original','thumbnail','unknown'].includes(value.kind))throw new StorageFailure('media_quality_unverified');
-  if(value.kind==='unknown')return {kind:'unknown',proof:null};
-  if(typeof value.proof!=='string'||!/^[a-zA-Z0-9_:-]{1,128}$/.test(value.proof))throw new StorageFailure('media_quality_unverified');
-  return value;
+  if(!value||!['original','thumbnail','unknown'].includes(value.kind))return {kind:'unknown',proof:null};
+  if(value.kind==='thumbnail'||value.kind==='unknown')return {kind:value.kind,proof:null};
+  if(typeof value.proof==='string'&&/^[a-zA-Z0-9_:-]{1,128}$/.test(value.proof))return value;
+  return {kind:'unknown',proof:null};
 }
 /** 类型处理不定位微信路径；只消费认证端口固定的一条完整资源。 */
 export class VisualMediaAdapter implements MediaAdapter {

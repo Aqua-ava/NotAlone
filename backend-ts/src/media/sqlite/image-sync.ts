@@ -7,7 +7,7 @@ interface ImageSyncDirectory {
 }
 interface ImageTarget {messageId:string;displayNo:string;requestKey:string}
 
-/** 消息提交后唤醒；同一账号串行取原图，成功和缺失结果均持久去重，不用定时扫描微信。 */
+/** 消息提交后唤醒；同一账号串行保存可查看图片，成功和失败结果均持久去重，不用定时扫描微信。 */
 export class SqliteImageSyncCoordinator {
  readonly #storage:SqliteStorage;readonly #contacts:ImageSyncDirectory;readonly #media:SqliteMediaService;
  readonly #pending=new Set<string>();readonly #stoppedContacts=new Set<string>();#all=false;#paused=false;#closed=false;#work?:Promise<void>;
@@ -41,8 +41,8 @@ export class SqliteImageSyncCoordinator {
       for(const target of targets){
        if(this.#closed||controller.signal.aborted)break;
        after=target.displayNo;
-       try{await this.#media.extract(contactId,target.messageId,{requestKey:target.requestKey,goal:'original_upgrade'},controller.signal);}
-       catch{/* 原图未取得也保存本次尝试，继续其余消息；所有实际读取仍由服务复验资格。 */}
+       try{await this.#media.extract(contactId,target.messageId,{requestKey:target.requestKey,goal:'extract'},controller.signal);}
+       catch{/* 图片未保存也保留本次尝试，继续其余消息；所有实际读取仍由服务复验资格。 */}
       }
      }
     }finally{finish();if(this.#active?.controller===controller)this.#active=undefined;}

@@ -3,12 +3,12 @@ import type {VisualResourcePort,VisualValidator} from './contracts.ts';
 import {VisualMediaAdapter} from './adapter.ts';
 import {clearImageRuntimeKeys} from './image-tools.ts';
 
-/** 正常图片同步与手动重试统一只取原图；保留通用视觉适配器的既有独立合同。 */
+/** 正常图片提取只要求来源关联、完整读取和实际可查看解码，不要求原图质量证明。 */
 export class OriginalImageMediaAdapter implements MediaAdapter {
- readonly version='original-image-v3';
+ readonly version='chat-image-v1';
  readonly #visual:VisualMediaAdapter;
  constructor(resources:VisualResourcePort,validate?:VisualValidator){this.#visual=new VisualMediaAdapter(resources,validate);}
- supports(kind:MediaKind,goal:MediaGoal):boolean{return kind==='image'&&(goal==='extract'||goal==='original_upgrade');}
- execute(context:MediaExecution){return this.#visual.execute({...context,goal:'original_upgrade'});}
+ supports(kind:MediaKind,goal:MediaGoal):boolean{return kind==='image'&&goal==='extract';}
+ execute(context:MediaExecution){return this.#visual.execute(context);}
  async close(){await this.#visual.close();await clearImageRuntimeKeys();}
 }

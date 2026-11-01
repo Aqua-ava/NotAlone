@@ -12,8 +12,11 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"hash"
-	"image"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"io"
+	mathbits "math/bits"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,8 +39,12 @@ const (
 	notaloneImageMaxPixelCount       = 100_000_000
 	notaloneImagePackedInfoByteLimit = 4096
 	notaloneImageResourceTableID     = "wechat-message-resource-v1"
-	notaloneImageQualityProofKind    = "wechat-cdn-big-hd-exact-content-v4"
+	notaloneImageQualityProofKind    = "wechat-message-image-content-v1"
+	notaloneOriginalImageProofKind   = "wechat-cdn-big-hd-exact-content-v4"
 	notaloneImageXMLZstdContentType  = int64(4)
+	notaloneImageMaxGIFFrames        = 120
+	notaloneImageMaxGIFPixels        = int64(80_000_000)
+	notaloneImageContentPixelLimit   = int64(40_000_000)
 )
 
 var notaloneImageXMLZstdMagic = []byte{0x28, 0xb5, 0x2f, 0xfd}
@@ -66,6 +73,20 @@ type notaloneOriginalImageMetadata struct {
 }
 
 type notaloneImageQualityProof struct {
+	Kind                string   `json:"kind"`
+	ResourceInfoID      string   `json:"resourceInfoId"`
+	MatchingResourceIDs []string `json:"matchingResourceIds"`
+	ResourceSize        int64    `json:"resourceSize"`
+	VerifiedBytes       int64    `json:"verifiedBytes"`
+	VerifiedSHA256      string   `json:"verifiedSha256"`
+	SourceSHA256        string   `json:"sourceSha256"`
+	Conversion          string   `json:"conversion"`
+	ContentWidth        int      `json:"contentWidth"`
+	ContentHeight       int      `json:"contentHeight"`
+}
+
+// 此类型仅供历史原图验证辅助函数及其兼容测试使用。
+type notaloneOriginalImageQualityProof struct {
 	Kind                string   `json:"kind"`
 	MessageMD5          string   `json:"messageMd5"`
 	HDLength            int64    `json:"hdLength"`
@@ -403,23 +424,425 @@ func notaloneBMPDimensions(data []byte) (int, int, error) {
 }
 
 func notaloneImageDimensions(data []byte) (int, int, error) {
-	if imageExtForData(data) == "bmp" {
-		return notaloneBMPDimensions(data)
-	}
-	config, _, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil {
-		return 0, 0, notaloneFailure("history_image_quality_unverified")
-	}
-	return config.Width, config.Height, nil
+	return notaloneImageDimensionsWithPixelLimit(data, int64(notaloneImageMaxPixelCount))
 }
 
-func notaloneVerifyOriginalImage(metadata notaloneOriginalImageMetadata, data []byte) (notaloneImageQualityProof, string, error) {
+func notaloneContentImageDimensions(data []byte) (int, int, error) {
+	return notaloneImageDimensionsWithPixelLimit(data, notaloneImageContentPixelLimit)
+}
+
+func notaloneImageDimensionsWithPixelLimit(data []byte, pixelLimit int64) (int, int, error) {
+	fail := func() (int, int, error) { return 0, 0, notaloneFailure("history_image_quality_unverified") }
+	if len(data) == 0 || int64(len(data)) > notaloneImageMaxBytes {
+		return fail()
+	}
+	switch imageExtForData(data) {
+	case "jpg", "jpeg":
+		config, err := jpeg.DecodeConfig(bytes.NewReader(data))
+		if err != nil || !notaloneImageDimensionsWithinPixelLimit(config.Width, config.Height, pixelLimit) {
+			return fail()
+		}
+		decoded, err := jpeg.Decode(bytes.NewReader(data))
+		if err != nil || decoded.Bounds().Dx() != config.Width || decoded.Bounds().Dy() != config.Height {
+			return fail()
+		}
+		return config.Width, config.Height, nil
+	case "png":
+		config, err := png.DecodeConfig(bytes.NewReader(data))
+		if err != nil || !notaloneImageDimensionsWithinPixelLimit(config.Width, config.Height, pixelLimit) {
+			return fail()
+		}
+		decoded, err := png.Decode(bytes.NewReader(data))
+		if err != nil || decoded.Bounds().Dx() != config.Width || decoded.Bounds().Dy() != config.Height {
+			return fail()
+		}
+		return config.Width, config.Height, nil
+	case "gif":
+		width, height, frames, err := notaloneGIFFramePixelCountWithPixelLimit(data, pixelLimit)
+		if err != nil || frames < 1 || frames > notaloneImageMaxGIFFrames {
+			return fail()
+		}
+		decoded, err := gif.DecodeAll(bytes.NewReader(data))
+		if err != nil || len(decoded.Image) != frames || len(decoded.Image) == 0 ||
+			decoded.Config.Width != width || decoded.Config.Height != height {
+			return fail()
+		}
+		return width, height, nil
+	case "bmp":
+		return notaloneDecodeBMPWithPixelLimit(data, pixelLimit)
+	default:
+		return fail()
+	}
+}
+
+func notaloneImageDimensionsWithinLimits(width, height int) bool {
+	return notaloneImageDimensionsWithinPixelLimit(width, height, int64(notaloneImageMaxPixelCount))
+}
+
+func notaloneImageDimensionsWithinPixelLimit(width, height int, pixelLimit int64) bool {
+	return width > 0 && height > 0 && width <= notaloneImageMaxDimension && height <= notaloneImageMaxDimension &&
+		pixelLimit > 0 && int64(width)*int64(height) <= pixelLimit
+}
+
+func notaloneGIFFramePixelCount(data []byte) (int, int, int, error) {
+	return notaloneGIFFramePixelCountWithPixelLimit(data, int64(notaloneImageMaxPixelCount))
+}
+
+func notaloneGIFFramePixelCountWithPixelLimit(data []byte, pixelLimit int64) (int, int, int, error) {
+	fail := func() (int, int, int, error) { return 0, 0, 0, notaloneFailure("history_image_quality_unverified") }
+	if len(data) < 13 || string(data[:6]) != "GIF87a" && string(data[:6]) != "GIF89a" {
+		return fail()
+	}
+	width := int(binary.LittleEndian.Uint16(data[6:8]))
+	height := int(binary.LittleEndian.Uint16(data[8:10]))
+	if !notaloneImageDimensionsWithinPixelLimit(width, height, pixelLimit) {
+		return fail()
+	}
+	position := 13
+	if data[10]&0x80 != 0 {
+		position += 3 * (1 << ((data[10] & 0x07) + 1))
+	}
+	if position > len(data) {
+		return fail()
+	}
+	frames := 0
+	var totalPixels int64
+	framePixelLimit := notaloneImageMaxGIFPixels
+	if pixelLimit < framePixelLimit {
+		framePixelLimit = pixelLimit
+	}
+	skipBlocks := func() bool {
+		for {
+			if position >= len(data) {
+				return false
+			}
+			size := int(data[position])
+			position++
+			if size == 0 {
+				return true
+			}
+			if position+size > len(data) {
+				return false
+			}
+			position += size
+		}
+	}
+	for position < len(data) {
+		marker := data[position]
+		position++
+		switch marker {
+		case 0x3b:
+			if frames == 0 {
+				return fail()
+			}
+			return width, height, frames, nil
+		case 0x21:
+			if position >= len(data) {
+				return fail()
+			}
+			position++ // 跳过扩展标签。
+			if !skipBlocks() {
+				return fail()
+			}
+		case 0x2c:
+			if position+9 > len(data) {
+				return fail()
+			}
+			x := int(binary.LittleEndian.Uint16(data[position : position+2]))
+			y := int(binary.LittleEndian.Uint16(data[position+2 : position+4]))
+			frameWidth := int(binary.LittleEndian.Uint16(data[position+4 : position+6]))
+			frameHeight := int(binary.LittleEndian.Uint16(data[position+6 : position+8]))
+			packed := data[position+8]
+			position += 9
+			if frameWidth <= 0 || frameHeight <= 0 || x+frameWidth > width || y+frameHeight > height ||
+				int64(frameWidth)*int64(frameHeight) > framePixelLimit {
+				return fail()
+			}
+			if packed&0x80 != 0 {
+				position += 3 * (1 << ((packed & 0x07) + 1))
+			}
+			if position >= len(data) {
+				return fail()
+			}
+			position++ // 跳过 LZW 最小码长，具体值由 GIF 解码器验证。
+			if position > len(data) || !skipBlocks() {
+				return fail()
+			}
+			frames++
+			totalPixels += int64(frameWidth) * int64(frameHeight)
+			if frames > notaloneImageMaxGIFFrames || totalPixels > framePixelLimit {
+				return fail()
+			}
+		default:
+			return fail()
+		}
+	}
+	return fail()
+}
+
+func notaloneDecodeBMP(data []byte) (int, int, error) {
+	return notaloneDecodeBMPWithPixelLimit(data, int64(notaloneImageMaxPixelCount))
+}
+
+func notaloneDecodeBMPWithPixelLimit(data []byte, pixelLimit int64) (int, int, error) {
+	width, height, err := notaloneBMPDimensions(data)
+	if err != nil {
+		return 0, 0, err
+	}
+	if !notaloneImageDimensionsWithinPixelLimit(width, height, pixelLimit) {
+		return 0, 0, notaloneFailure("history_image_quality_unverified")
+	}
+	core := binary.LittleEndian.Uint32(data[14:18]) == 12
+	bitsOffset := 28
+	if core {
+		bitsOffset = 24
+	}
+	bits := int(binary.LittleEndian.Uint16(data[bitsOffset : bitsOffset+2]))
+	compression := uint32(0)
+	imageSize := uint32(0)
+	colorsUsed := uint32(0)
+	if !core {
+		compression = binary.LittleEndian.Uint32(data[30:34])
+		imageSize = binary.LittleEndian.Uint32(data[34:38])
+		colorsUsed = binary.LittleEndian.Uint32(data[46:50])
+	}
+	pixelOffset := int(binary.LittleEndian.Uint32(data[10:14]))
+	paletteStart := 14 + int(binary.LittleEndian.Uint32(data[14:18]))
+	if core {
+		paletteStart = 26
+	}
+	if !core && (compression == 3 || compression == 6) && binary.LittleEndian.Uint32(data[14:18]) == 40 {
+		maskCount := 3
+		if compression == 6 {
+			maskCount = 4
+		}
+		paletteStart += 4 * maskCount
+	}
+	var paletteSize int
+	if bits <= 8 {
+		paletteSize = 1 << bits
+		if colorsUsed != 0 {
+			paletteSize = int(colorsUsed)
+		}
+	}
+	entryBytes := 4
+	if core {
+		entryBytes = 3
+	}
+	paletteEnd := paletteStart + paletteSize*entryBytes
+	if paletteEnd > pixelOffset || paletteEnd > len(data) {
+		return 0, 0, notaloneFailure("history_image_quality_unverified")
+	}
+	palette := make([][4]byte, paletteSize)
+	for index := range palette {
+		entry := data[paletteStart+index*entryBytes : paletteStart+(index+1)*entryBytes]
+		palette[index] = [4]byte{entry[2], entry[1], entry[0], 255}
+	}
+	validIndex := func(index int) bool { return bits > 8 || index >= 0 && index < paletteSize }
+	if compression == 1 || compression == 2 {
+		if err := notaloneDecodeBMPRLE(data[pixelOffset:pixelOffset+int(imageSize)], width, height, bits, paletteSize, compression == 1); err != nil {
+			return 0, 0, err
+		}
+		return width, height, nil
+	}
+	if compression != 0 && compression != 3 && compression != 6 {
+		return 0, 0, notaloneFailure("history_image_quality_unverified")
+	}
+	var redMask, greenMask, blueMask, alphaMask uint32
+	switch {
+	case compression == 3 || compression == 6:
+		dibSize := int(binary.LittleEndian.Uint32(data[14:18]))
+		maskOffset := 54
+		if dibSize < 52 {
+			maskOffset = 14 + dibSize
+		}
+		redMask = binary.LittleEndian.Uint32(data[maskOffset : maskOffset+4])
+		greenMask = binary.LittleEndian.Uint32(data[maskOffset+4 : maskOffset+8])
+		blueMask = binary.LittleEndian.Uint32(data[maskOffset+8 : maskOffset+12])
+		if compression == 6 {
+			if dibSize >= 56 {
+				alphaMask = binary.LittleEndian.Uint32(data[14+52 : 14+56])
+			} else {
+				alphaMask = binary.LittleEndian.Uint32(data[maskOffset+12 : maskOffset+16])
+			}
+		}
+	case bits == 16:
+		redMask, greenMask, blueMask = 0x7c00, 0x03e0, 0x001f
+	case bits == 32:
+		redMask, greenMask, blueMask = 0x00ff0000, 0x0000ff00, 0x000000ff
+	}
+	if bits == 16 || bits == 32 {
+		if !notaloneBMPMaskValid(redMask, bits) || !notaloneBMPMaskValid(greenMask, bits) || !notaloneBMPMaskValid(blueMask, bits) ||
+			redMask&greenMask != 0 || redMask&blueMask != 0 || greenMask&blueMask != 0 || alphaMask&(redMask|greenMask|blueMask) != 0 ||
+			alphaMask != 0 && !notaloneBMPMaskValid(alphaMask, bits) {
+			return 0, 0, notaloneFailure("history_image_quality_unverified")
+		}
+	}
+	decodedPixels := sha256.New()
+	rowBytes := ((width*bits + 31) / 32) * 4
+	for row := 0; row < height; row++ {
+		fileRow := row
+		if !core && int32(binary.LittleEndian.Uint32(data[22:26])) > 0 {
+			fileRow = height - 1 - row
+		}
+		line := data[pixelOffset+fileRow*rowBytes : pixelOffset+(fileRow+1)*rowBytes]
+		for column := 0; column < width; column++ {
+			var pixel [4]byte
+			switch bits {
+			case 1:
+				index := int((line[column/8] >> (7 - uint(column%8))) & 1)
+				if !validIndex(index) {
+					return 0, 0, notaloneFailure("history_image_quality_unverified")
+				}
+				pixel = palette[index]
+			case 4:
+				value := line[column/2]
+				index := value & 0x0f
+				if column%2 == 0 {
+					index = value >> 4
+				}
+				if !validIndex(int(index)) {
+					return 0, 0, notaloneFailure("history_image_quality_unverified")
+				}
+				pixel = palette[index]
+			case 8:
+				index := int(line[column])
+				if !validIndex(index) {
+					return 0, 0, notaloneFailure("history_image_quality_unverified")
+				}
+				pixel = palette[index]
+			case 16:
+				value := uint32(binary.LittleEndian.Uint16(line[column*2 : column*2+2]))
+				pixel[0], _ = notaloneBMPMaskChannel(value, redMask, bits)
+				pixel[1], _ = notaloneBMPMaskChannel(value, greenMask, bits)
+				pixel[2], _ = notaloneBMPMaskChannel(value, blueMask, bits)
+				pixel[3] = 255
+				if alphaMask != 0 {
+					pixel[3], _ = notaloneBMPMaskChannel(value, alphaMask, bits)
+				}
+			case 24:
+				pixel = [4]byte{line[column*3+2], line[column*3+1], line[column*3], 255}
+			case 32:
+				value := binary.LittleEndian.Uint32(line[column*4 : column*4+4])
+				pixel[0], _ = notaloneBMPMaskChannel(value, redMask, bits)
+				pixel[1], _ = notaloneBMPMaskChannel(value, greenMask, bits)
+				pixel[2], _ = notaloneBMPMaskChannel(value, blueMask, bits)
+				pixel[3] = 255
+				if alphaMask != 0 {
+					pixel[3], _ = notaloneBMPMaskChannel(value, alphaMask, bits)
+				}
+			default:
+				return 0, 0, notaloneFailure("history_image_quality_unverified")
+			}
+			_, _ = decodedPixels.Write(pixel[:])
+		}
+	}
+	if len(decodedPixels.Sum(nil)) != sha256.Size {
+		return 0, 0, notaloneFailure("history_image_quality_unverified")
+	}
+	return width, height, nil
+}
+
+func notaloneBMPMaskValid(mask uint32, depth int) bool {
+	if mask == 0 || depth != 16 && depth != 32 || depth == 16 && mask>>16 != 0 {
+		return false
+	}
+	shift := mathbits.TrailingZeros32(mask)
+	normalized := mask >> shift
+	return normalized&(normalized+1) == 0
+}
+
+func notaloneBMPMaskChannel(value, mask uint32, depth int) (byte, bool) {
+	if !notaloneBMPMaskValid(mask, depth) {
+		return 0, false
+	}
+	shift := mathbits.TrailingZeros32(mask)
+	maximum := mask >> shift
+	component := (value & mask) >> shift
+	return byte((uint64(component)*255 + uint64(maximum)/2) / uint64(maximum)), true
+}
+
+func notaloneDecodeBMPRLE(data []byte, width, height, bits, paletteSize int, rle8 bool) error {
+	fail := func() error { return notaloneFailure("history_image_quality_unverified") }
+	if rle8 && bits != 8 || !rle8 && bits != 4 || len(data) < 2 {
+		return fail()
+	}
+	x, y, position := 0, height-1, 0
+	validIndex := func(index int) bool { return index >= 0 && index < paletteSize }
+	for position+2 <= len(data) {
+		count, value := int(data[position]), int(data[position+1])
+		position += 2
+		if count != 0 {
+			if y < 0 || x+count > width {
+				return fail()
+			}
+			for index := 0; index < count; index++ {
+				pixel := value
+				if !rle8 && index%2 == 1 {
+					pixel &= 0x0f
+				} else if !rle8 {
+					pixel >>= 4
+				}
+				if !validIndex(pixel) {
+					return fail()
+				}
+			}
+			x += count
+			continue
+		}
+		switch value {
+		case 0: // 行结束。
+			x, y = 0, y-1
+		case 1: // 位图结束。
+			return nil
+		case 2: // 增量移动。
+			if position+2 > len(data) {
+				return fail()
+			}
+			x += int(data[position])
+			y -= int(data[position+1])
+			position += 2
+			if x > width || y < 0 || y >= height {
+				return fail()
+			}
+		default: // 绝对像素段。
+			pixels := value
+			byteCount := pixels
+			if !rle8 {
+				byteCount = (pixels + 1) / 2
+			}
+			paddedBytes := byteCount + byteCount%2
+			if y < 0 || x+pixels > width || position+paddedBytes > len(data) {
+				return fail()
+			}
+			for index := 0; index < pixels; index++ {
+				pixel := int(data[position+index])
+				if !rle8 {
+					pixel = int(data[position+index/2])
+					if index%2 == 0 {
+						pixel >>= 4
+					} else {
+						pixel &= 0x0f
+					}
+				}
+				if !validIndex(pixel) {
+					return fail()
+				}
+			}
+			x += pixels
+			position += paddedBytes
+		}
+	}
+	return fail()
+}
+
+func notaloneVerifyOriginalImage(metadata notaloneOriginalImageMetadata, data []byte) (notaloneOriginalImageQualityProof, string, error) {
 	return notaloneVerifyOriginalImageContent(metadata, data, data, "none")
 }
 
-func notaloneVerifyOriginalImageContent(metadata notaloneOriginalImageMetadata, source, data []byte, conversion string) (notaloneImageQualityProof, string, error) {
-	proof := notaloneImageQualityProof{}
-	fail := func() (notaloneImageQualityProof, string, error) {
+func notaloneVerifyOriginalImageContent(metadata notaloneOriginalImageMetadata, source, data []byte, conversion string) (notaloneOriginalImageQualityProof, string, error) {
+	proof := notaloneOriginalImageQualityProof{}
+	fail := func() (notaloneOriginalImageQualityProof, string, error) {
 		return proof, "", notaloneFailure("history_image_quality_unverified")
 	}
 	if !metadata.BigURLFound || !md5LikeRe.MatchString(metadata.MD5) || metadata.HDLength <= 0 || int64(len(source)) != metadata.HDLength ||
@@ -445,10 +868,48 @@ func notaloneVerifyOriginalImageContent(metadata notaloneOriginalImageMetadata, 
 	}
 	sha := sha256.Sum256(data)
 	sourceSHA := sha256.Sum256(source)
-	proof = notaloneImageQualityProof{Kind: notaloneImageQualityProofKind, MessageMD5: metadata.MD5, HDLength: metadata.HDLength,
+	proof = notaloneOriginalImageQualityProof{Kind: notaloneOriginalImageProofKind, MessageMD5: metadata.MD5, HDLength: metadata.HDLength,
 		HDWidth: metadata.HDWidth, HDHeight: metadata.HDHeight, BigImageURLFound: true, ResourceSize: metadata.HDLength,
 		VerifiedBytes: int64(len(data)), VerifiedSHA256: hex.EncodeToString(sha[:]), ContentWidth: width, ContentHeight: height,
 		SourceSHA256: hex.EncodeToString(sourceSHA[:]), Conversion: conversion}
+	return proof, mimeType, nil
+}
+
+func notaloneVerifyImageContent(source, data []byte, conversion string) (notaloneImageQualityProof, string, error) {
+	fail := func() (notaloneImageQualityProof, string, error) {
+		return notaloneImageQualityProof{}, "", notaloneFailure("history_image_quality_unverified")
+	}
+	if len(source) == 0 || int64(len(source)) > notaloneImageSourceByteLimit || len(data) == 0 || int64(len(data)) > notaloneImageMaxBytes {
+		return fail()
+	}
+	switch conversion {
+	case "none":
+		if !bytes.Equal(source, data) {
+			return fail()
+		}
+	case "wxgf-to-png-v1":
+		if !bytes.HasPrefix(source, []byte("wxgf")) || imageMIMEForExt(imageExtForData(data)) != "image/png" {
+			return fail()
+		}
+	default:
+		return fail()
+	}
+	ext := imageExtForData(data)
+	mimeType := imageMIMEForExt(ext)
+	switch mimeType {
+	case "image/jpeg", "image/png", "image/gif", "image/bmp":
+	default:
+		return fail()
+	}
+	width, height, err := notaloneContentImageDimensions(data)
+	if err != nil || !notaloneImageDimensionsWithinPixelLimit(width, height, notaloneImageContentPixelLimit) {
+		return fail()
+	}
+	verifiedSHA := sha256.Sum256(data)
+	sourceSHA := sha256.Sum256(source)
+	proof := notaloneImageQualityProof{Kind: notaloneImageQualityProofKind, ResourceSize: int64(len(source)),
+		VerifiedBytes: int64(len(data)), VerifiedSHA256: hex.EncodeToString(verifiedSHA[:]),
+		SourceSHA256: hex.EncodeToString(sourceSHA[:]), Conversion: conversion, ContentWidth: width, ContentHeight: height}
 	return proof, mimeType, nil
 }
 
@@ -472,15 +933,7 @@ func (h *notaloneHistorySession) openImage(ctx context.Context, request notalone
 	if messageErr != nil {
 		return failed, messageErr
 	}
-	imageXML, err := notaloneDecodeImageXML(message.content, message.contentType)
-	if err != nil {
-		return failed, err
-	}
-	metadata, err := notaloneParseOriginalImageXML(imageXML)
-	if err != nil {
-		return failed, err
-	}
-	resource, resourceGuard, err := h.findOriginalImageResource(ctx, message, metadata)
+	resource, resourceGuard, err := h.findMessageImageResource(ctx, message)
 	if err != nil {
 		return failed, err
 	}
@@ -495,7 +948,7 @@ func (h *notaloneHistorySession) openImage(ctx context.Context, request notalone
 			return failed, err
 		}
 	}
-	imageData, sourceEnvelope, imageGuard, proof, mimeType, err := h.readOriginalImage(ctx, message, metadata, &resource)
+	imageData, sourceEnvelope, imageGuard, proof, mimeType, err := h.readMessageImage(ctx, message, &resource)
 	if err != nil {
 		return failed, err
 	}
@@ -540,7 +993,7 @@ func (h *notaloneHistorySession) openImage(ctx context.Context, request notalone
 		Target: target.Descriptor, Partition: request.Partition, Table: request.Table, LocalID: request.LocalID,
 		ServerID: request.ServerID, SentAt: request.SentAt, ResourceTable: notaloneImageResourceTableID,
 		ResourceID: strconv.FormatInt(resource.ID, 10), ResourceTypeRaw: resource.TypeRaw, VariantCode: resource.TypeRaw >> 16,
-		Complete: true, Quality: "original", QualityProof: proof, Envelope: "plain", SourceEnvelope: sourceEnvelope,
+		Complete: true, Quality: "unknown", QualityProof: proof, Envelope: "plain", SourceEnvelope: sourceEnvelope,
 		ExpectedBytes: int64(len(imageData)), ExpectedSHA256: proof.VerifiedSHA256, MimeType: mimeType,
 	}
 	opened := &notaloneOpenImage{metadata: response, data: imageData, digest: sha256.New(), guards: []*notaloneSourceGuard{resourceGuard, imageGuard}}
@@ -565,8 +1018,6 @@ type notaloneSnapshotImageMessage struct {
 	serverID       int64
 	localType      int64
 	createTime     int64
-	content        []byte
-	contentType    int64
 	cacheMD5       string
 	resourceDBPath string
 }
@@ -629,8 +1080,8 @@ func (h *notaloneHistorySession) openImageMessage(ctx context.Context, request n
 		return message, target, notaloneFailure("history_image_association_unverified")
 	}
 	shard := snapshot.shards[matched]
-	query := "SELECT local_id,server_id,local_type,create_time,WCDB_CT_message_content AS image_content_type,CASE WHEN (local_type & 4294967295)=3 THEN CASE WHEN length(CAST(message_content AS BLOB))<=? THEN message_content ELSE NULL END ELSE NULL END AS image_xml,CASE WHEN (local_type & 4294967295)=3 THEN CASE WHEN length(CAST(packed_info_data AS BLOB))<=? THEN packed_info_data ELSE NULL END ELSE NULL END AS image_message_packed_info,CASE WHEN (local_type & 4294967295)=3 THEN length(CAST(packed_info_data AS BLOB)) ELSE 0 END AS image_message_packed_info_length FROM " + quoteIdent(snapshot.table) + " WHERE local_id=? LIMIT 2"
-	rows, err := shard.reader.QueryBounded(ctx, 2, query, int64(notaloneImageXMLByteLimit), int64(notaloneImagePackedInfoByteLimit), localID)
+	query := "SELECT local_id,server_id,local_type,create_time,CASE WHEN (local_type & 4294967295)=3 THEN CASE WHEN length(CAST(packed_info_data AS BLOB))<=? THEN packed_info_data ELSE NULL END ELSE NULL END AS image_message_packed_info,CASE WHEN (local_type & 4294967295)=3 THEN length(CAST(packed_info_data AS BLOB)) ELSE 0 END AS image_message_packed_info_length FROM " + quoteIdent(snapshot.table) + " WHERE local_id=? LIMIT 2"
+	rows, err := shard.reader.QueryBounded(ctx, 2, query, int64(notaloneImagePackedInfoByteLimit), localID)
 	if err != nil || len(rows) != 1 {
 		return message, target, notaloneFailure("history_image_association_unverified")
 	}
@@ -641,10 +1092,6 @@ func (h *notaloneHistorySession) openImageMessage(ctx context.Context, request n
 	if rowLocalID != localID || rowServerID != serverID || rowCreateTime != createTime || baseKind != 3 {
 		return message, target, notaloneFailure("history_image_association_unverified")
 	}
-	content := rowBytes(row, "image_xml")
-	if len(content) == 0 {
-		return message, target, notaloneFailure("history_image_metadata_invalid")
-	}
 	cacheMD5, validCacheMD5 := notaloneSinglePackedMD5(rowBytes(row, "image_message_packed_info"), rowInt64(row, "image_message_packed_info_length"))
 	if !validCacheMD5 {
 		return message, target, notaloneFailure("history_image_association_unverified")
@@ -654,8 +1101,7 @@ func (h *notaloneHistorySession) openImageMessage(ctx context.Context, request n
 		return message, target, notaloneFailure("history_image_association_unverified")
 	}
 	message = notaloneSnapshotImageMessage{partition: shard.partition, tableInstance: shard.instance, localID: rowLocalID,
-		serverID: rowServerID, localType: rowType, createTime: rowCreateTime, content: content,
-		contentType: rowInt64(row, "image_content_type"), cacheMD5: cacheMD5, resourceDBPath: resourcePath}
+		serverID: rowServerID, localType: rowType, createTime: rowCreateTime, cacheMD5: cacheMD5, resourceDBPath: resourcePath}
 	return message, target, nil
 }
 
@@ -689,7 +1135,7 @@ func (h *notaloneHistorySession) newImageGuard(directory string, files []string)
 	return guard, nil
 }
 
-func (h *notaloneHistorySession) findOriginalImageResource(ctx context.Context, message notaloneSnapshotImageMessage, _ notaloneOriginalImageMetadata) (notaloneImageResourceRecord, *notaloneSourceGuard, error) {
+func (h *notaloneHistorySession) findMessageImageResource(ctx context.Context, message notaloneSnapshotImageMessage) (notaloneImageResourceRecord, *notaloneSourceGuard, error) {
 	resource := notaloneImageResourceRecord{}
 	resourcePath := message.resourceDBPath
 	if filepath.Clean(resourcePath) != resourcePath || !filepath.IsAbs(resourcePath) {
@@ -768,7 +1214,7 @@ func (h *notaloneHistorySession) findOriginalImageResource(ctx context.Context, 
 	return resource, resourceGuard, nil
 }
 
-func (h *notaloneHistorySession) readOriginalImage(ctx context.Context, message notaloneSnapshotImageMessage, metadata notaloneOriginalImageMetadata, resource *notaloneImageResourceRecord) ([]byte, string, *notaloneSourceGuard, notaloneImageQualityProof, string, error) {
+func (h *notaloneHistorySession) readMessageImage(ctx context.Context, message notaloneSnapshotImageMessage, resource *notaloneImageResourceRecord) ([]byte, string, *notaloneSourceGuard, notaloneImageQualityProof, string, error) {
 	var emptyProof notaloneImageQualityProof
 	if resource == nil || resource.InfoID <= 0 || resource.CacheMD5 == "" || len(resource.Details) == 0 {
 		return nil, "", nil, emptyProof, "", notaloneFailure("history_image_association_unverified")
@@ -787,100 +1233,106 @@ func (h *notaloneHistorySession) readOriginalImage(ctx context.Context, message 
 	var verified []verifiedCandidate
 	var foundCandidate, foundAssociation, associationUnverified, qualityUnverified, keyUnavailable bool
 	var decoderFailure string
-	for _, suffix := range []string{".dat", "_h.dat"} {
-		if err := ctx.Err(); err != nil {
-			for _, candidate := range verified {
-				_ = candidate.guard.Close()
-			}
-			return nil, "", nil, emptyProof, "", notaloneFailure("history_image_read_failed")
-		}
-		candidate := filepath.Join(baseDir, resource.CacheMD5+suffix)
-		guard, resolved, err := h.guardImageCandidate(candidate)
-		if err != nil {
-			if err.Error() == "history_image_source_changed" {
+	for _, suffixes := range [][]string{{".dat", "_h.dat"}, {"_t.dat"}} {
+		for _, suffix := range suffixes {
+			if err := ctx.Err(); err != nil {
 				for _, candidate := range verified {
 					_ = candidate.guard.Close()
 				}
-				return nil, "", nil, emptyProof, "", err
+				return nil, "", nil, emptyProof, "", notaloneFailure("history_image_read_failed")
 			}
-			continue
-		}
-		foundCandidate = true
-		data, err := readNotaloneImageFile(resolved)
-		if err != nil {
-			_ = guard.Close()
-			switch err.Error() {
-			case "history_image_source_changed", "history_image_read_failed":
-				for _, candidate := range verified {
-					_ = candidate.guard.Close()
+			candidate := filepath.Join(baseDir, resource.CacheMD5+suffix)
+			guard, resolved, err := h.guardImageCandidate(candidate)
+			if err != nil {
+				if err.Error() == "history_image_source_changed" {
+					for _, candidate := range verified {
+						_ = candidate.guard.Close()
+					}
+					return nil, "", nil, emptyProof, "", err
 				}
-				return nil, "", nil, emptyProof, "", err
-			case "history_image_local_file_missing":
-				foundCandidate = false
-			default:
-				qualityUnverified = true
-			}
-			continue
-		}
-		matching := make([]notaloneImageResourceDetail, 0, len(resource.Details))
-		var candidateAssociationInvalid bool
-		for _, detail := range resource.Details {
-			if detail.Size != int64(len(data)) {
 				continue
 			}
-			foundAssociation = true
-			if !detail.PackedInfoValid || len(detail.PackedMD5s) > 1 || len(detail.PackedMD5s) == 1 && detail.PackedMD5s[0] != resource.CacheMD5 {
-				candidateAssociationInvalid = true
-				break
+			foundCandidate = true
+			data, err := readNotaloneImageFile(resolved)
+			if err != nil {
+				_ = guard.Close()
+				switch err.Error() {
+				case "history_image_source_changed", "history_image_read_failed":
+					for _, candidate := range verified {
+						_ = candidate.guard.Close()
+					}
+					return nil, "", nil, emptyProof, "", err
+				case "history_image_local_file_missing":
+					foundCandidate = false
+				default:
+					qualityUnverified = true
+				}
+				continue
 			}
-			matching = append(matching, detail)
-		}
-		if candidateAssociationInvalid || len(matching) == 0 {
-			associationUnverified = true
-			_ = guard.Close()
-			continue
-		}
-		imageConfig := h.server.cfg
-		if h.imageRuntimeConfig != nil {
-			imageConfig = h.imageRuntimeConfig
-		}
-		decoded, envelope, err := notaloneDecodeLocalImage(data, imageConfig)
-		if err != nil {
-			_ = guard.Close()
-			if err.Error() == "history_image_key_unavailable" {
-				keyUnavailable = true
-			} else {
+			matching := make([]notaloneImageResourceDetail, 0, len(resource.Details))
+			var candidateAssociationInvalid bool
+			for _, detail := range resource.Details {
+				if detail.Size != int64(len(data)) {
+					continue
+				}
+				foundAssociation = true
+				if !detail.PackedInfoValid || len(detail.PackedMD5s) > 1 || len(detail.PackedMD5s) == 1 && detail.PackedMD5s[0] != resource.CacheMD5 {
+					candidateAssociationInvalid = true
+					break
+				}
+				matching = append(matching, detail)
+			}
+			if candidateAssociationInvalid || len(matching) == 0 {
+				associationUnverified = true
+				_ = guard.Close()
+				continue
+			}
+			imageConfig := h.server.cfg
+			if h.imageRuntimeConfig != nil {
+				imageConfig = h.imageRuntimeConfig
+			}
+			decoded, envelope, err := notaloneDecodeLocalImage(data, imageConfig)
+			if err != nil {
+				_ = guard.Close()
+				if err.Error() == "history_image_key_unavailable" {
+					keyUnavailable = true
+				} else {
+					qualityUnverified = true
+				}
+				continue
+			}
+			viewable, conversion, decodeErr := notaloneDecodeImageContent(ctx, decoded)
+			if decodeErr != nil {
+				_ = guard.Close()
+				decoderFailure = decodeErr.Error()
+				continue
+			}
+			proof, mimeType, err := notaloneVerifyImageContent(decoded, viewable, conversion)
+			if err != nil {
+				_ = guard.Close()
 				qualityUnverified = true
+				continue
 			}
-			continue
-		}
-		viewable, conversion, decodeErr := notaloneDecodeOriginalContent(ctx, metadata, decoded)
-		if decodeErr != nil {
-			_ = guard.Close()
-			decoderFailure = decodeErr.Error()
-			continue
-		}
-		proof, mimeType, err := notaloneVerifyOriginalImageContent(metadata, decoded, viewable, conversion)
-		if err != nil {
-			_ = guard.Close()
-			qualityUnverified = true
-			continue
-		}
-		if guard.Check() != nil {
-			_ = guard.Close()
-			for _, candidate := range verified {
-				_ = candidate.guard.Close()
+			if guard.Check() != nil {
+				_ = guard.Close()
+				for _, candidate := range verified {
+					_ = candidate.guard.Close()
+				}
+				return nil, "", nil, emptyProof, "", notaloneFailure("history_image_source_changed")
 			}
-			return nil, "", nil, emptyProof, "", notaloneFailure("history_image_source_changed")
+			proof.ResourceInfoID = strconv.FormatInt(resource.InfoID, 10)
+			proof.MatchingResourceIDs = make([]string, 0, len(matching))
+			for _, detail := range matching {
+				proof.MatchingResourceIDs = append(proof.MatchingResourceIDs, strconv.FormatInt(detail.ID, 10))
+			}
+			proof.ResourceSize = int64(len(data))
+			verified = append(verified, verifiedCandidate{data: viewable, envelope: envelope, guard: guard, proof: proof,
+				mimeType: mimeType, record: matching[0], matching: matching})
 		}
-		proof.ResourceInfoID = strconv.FormatInt(resource.InfoID, 10)
-		proof.MatchingResourceIDs = make([]string, 0, len(matching))
-		for _, detail := range matching {
-			proof.MatchingResourceIDs = append(proof.MatchingResourceIDs, strconv.FormatInt(detail.ID, 10))
+		// 继续检查同级别的别名以发现冲突。已有合法非缩略图候选时不读取缩略图。
+		if len(verified) > 0 {
+			break
 		}
-		proof.ResourceSize = int64(len(data))
-		verified = append(verified, verifiedCandidate{data: viewable, envelope: envelope, guard: guard, proof: proof,
-			mimeType: mimeType, record: matching[0], matching: matching})
 	}
 	if len(verified) > 1 {
 		for _, candidate := range verified[1:] {
@@ -917,9 +1369,6 @@ func (h *notaloneHistorySession) readOriginalImage(ctx context.Context, message 
 	}
 	if foundCandidate {
 		return nil, "", nil, emptyProof, "", notaloneFailure("history_image_quality_unverified")
-	}
-	if h.hasOnlyThumbnail(baseDir, resource) {
-		return nil, "", nil, emptyProof, "", notaloneFailure("history_image_thumbnail_only")
 	}
 	return nil, "", nil, emptyProof, "", notaloneFailure("history_image_local_file_missing")
 }
@@ -1087,31 +1536,6 @@ func (h *notaloneHistorySession) acceptImageRuntimeKey() error {
 	return nil
 }
 
-// 缩略图仅检查已绑定缓存键的存在性和资源长度，不打开或返回其内容。
-func (h *notaloneHistorySession) hasOnlyThumbnail(base string, resource *notaloneImageResourceRecord) bool {
-	for _, suffix := range []string{".dat", "_h.dat"} {
-		if _, err := os.Lstat(filepath.Join(base, resource.CacheMD5+suffix)); !os.IsNotExist(err) {
-			return false
-		}
-	}
-	name := filepath.Join(base, resource.CacheMD5+"_t.dat")
-	resolved, err := filepath.EvalSymlinks(name)
-	baseResolved, baseErr := filepath.EvalSymlinks(base)
-	if err != nil || baseErr != nil || resolved != filepath.Join(baseResolved, resource.CacheMD5+"_t.dat") {
-		return false
-	}
-	info, err := os.Lstat(name)
-	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > notaloneImageSourceByteLimit {
-		return false
-	}
-	for _, detail := range resource.Details {
-		if detail.Size == info.Size() && detail.PackedInfoValid && (len(detail.PackedMD5s) == 0 || len(detail.PackedMD5s) == 1 && detail.PackedMD5s[0] == resource.CacheMD5) {
-			return true
-		}
-	}
-	return false
-}
-
 type notaloneImageOutput struct {
 	bytes.Buffer
 	limit int
@@ -1124,13 +1548,9 @@ func (b *notaloneImageOutput) Write(data []byte) (int, error) {
 	return b.Buffer.Write(data)
 }
 
-func notaloneDecodeOriginalContent(ctx context.Context, metadata notaloneOriginalImageMetadata, source []byte) ([]byte, string, error) {
+func notaloneDecodeImageContent(ctx context.Context, source []byte) ([]byte, string, error) {
 	if !bytes.HasPrefix(source, []byte("wxgf")) {
 		return source, "none", nil
-	}
-	sum := md5.Sum(source)
-	if !metadata.BigURLFound || metadata.HDLength != int64(len(source)) || metadata.MD5 != hex.EncodeToString(sum[:]) {
-		return nil, "", notaloneFailure("history_image_quality_unverified")
 	}
 	helper, expected := os.Getenv("NOTALONE_IMAGE_DECODER"), os.Getenv("NOTALONE_IMAGE_DECODER_SHA256")
 	info, err := os.Lstat(helper)
@@ -1166,7 +1586,7 @@ func notaloneDecodeOriginalContent(ctx context.Context, metadata notaloneOrigina
 	command.Env = []string{"PATH=/usr/bin:/bin"}
 	output := &notaloneImageOutput{limit: notaloneImageMaxBytes}
 	command.Stdout = output
-	if command.Run() != nil || bounded.Err() != nil || output.Len() == 0 || !bytes.HasPrefix(output.Bytes(), []byte{137, 80, 78, 71, 13, 10, 26, 10}) {
+	if command.Run() != nil || bounded.Err() != nil || output.Len() == 0 || output.Len() > notaloneImageMaxBytes || !bytes.HasPrefix(output.Bytes(), []byte{137, 80, 78, 71, 13, 10, 26, 10}) {
 		return nil, "", notaloneFailure("history_image_format_unsupported")
 	}
 	return output.Bytes(), "wxgf-to-png-v1", nil

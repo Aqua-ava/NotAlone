@@ -103,9 +103,9 @@ test('生产CSP页面经具名桥和认证SQLite保存单条图片，真实显�
  await page.getByRole('button',{name:'媒体文件',exact:true}).click();
  await expect(page.getByRole('button',{name:'保存这条图片',exact:true})).toBeEnabled();assert.equal(executions,0);
  await page.getByRole('button',{name:'保存这条图片',exact:true}).click();
- await expect(page.getByText('已保存有限结果',{exact:true})).toBeVisible();await expect(page.getByText('缩略图，原图未取得',{exact:true})).toBeVisible();
+ await expect(page.getByText('图片已保存',{exact:true})).toBeVisible();await expect(page.getByText('已存图片',{exact:true})).toBeVisible();
  assert.equal(executions,1);
- const saved=await f.media.read(f.contact,message.id);assert.equal(saved.latestAttempt.state,'completed');assert.equal(saved.latestAttempt.outcome,'limited');assert.equal(saved.files.length,1);
+ const saved=await f.media.read(f.contact,message.id);assert.equal(saved.latestAttempt.state,'completed');assert.equal(saved.latestAttempt.outcome,'full');assert.equal(saved.files.length,1);
  const current=await f.storage.execute('media.file',{ownerId:f.owner,contactId:f.contact,messageId:message.id,fileId:saved.files[0].fileId});
  const filePath=f.media.files.location(current.address);assert.deepEqual(await readFile(filePath),png);
  await page.getByRole('button',{name:'查看文件',exact:true}).click();
@@ -116,7 +116,7 @@ test('生产CSP页面经具名桥和认证SQLite保存单条图片，真实显�
  let deletion;
  await expect.poll(async()=>{deletion=(await f.media.deletion.list({ownerId:f.owner})).find(op=>op.scope.kind==='media_result_clear');return deletion?.state;},{timeout:3000}).toBe('cleaning');
  assert.notEqual(deletion.state,'completed');assert.equal((await lstat(filePath)).isFile(),true);
- releaseGate.resolve();await expect(page.getByText('媒体已清除，聊天占位保留',{exact:true})).toBeVisible();
+ releaseGate.resolve();await expect(page.getByText('已清除，消息记录仍保留',{exact:true})).toBeVisible();
  const receipt=await f.media.deletion.status({ownerId:f.owner,operationId:deletion.operationId});assert.equal(receipt.state,'completed');assert.equal(receipt.checks.some(check=>check.result.result==='blocked'),false);
  await assert.rejects(lstat(filePath),{code:'ENOENT'});assert.deepEqual((await f.media.read(f.contact,message.id)).files,[]);
  const preserved=(await f.history.read(f.contact)).messages.find(m=>m.id===message.id);assert.ok(preserved);assert.equal(preserved.kind,'image');assert.equal(preserved.text,null);

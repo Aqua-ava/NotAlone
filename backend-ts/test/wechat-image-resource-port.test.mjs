@@ -28,11 +28,13 @@ test('旧读取组件没有声明原图协议时不启用自动取图',async t=>
  const denied=new NarrowWechatClient({...await loadNarrowWechatOptions(f.executable),imageKeyChannel:true});
  await assert.rejects(denied.resolveSelected(conversation),{code:'history_artifact_unverified'});await denied.close();
  manifest.originalImageQualityProof='wechat-cdn-big-hd-exact-content-v4';await writeFile(path,JSON.stringify(manifest));
+ assert.equal(await supportsWechatOriginalImages(f.executable),false);assert.equal(await supportsWechatImageKeyChannel(f.executable),true);
+ manifest.originalImageQualityProof='wechat-message-image-content-v1';await writeFile(path,JSON.stringify(manifest));
  assert.equal(await supportsWechatOriginalImages(f.executable),true);assert.equal(await supportsWechatImageKeyChannel(f.executable),true);
  assert.equal(await supportsWechatOriginalImages(undefined),false);
 });
 
-async function fixture(t,{proof:proofOverride,nativeError=null,dataLength=70_000,openAudit={},representativeId=resourceId}={}){
+async function fixture(t,{proof:proofOverride,nativeError=null,dataLength=70_000,openAudit={},representativeId=resourceId,capability='wechat-cdn-big-hd-exact-content-v4'}={}){
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-wechat-image-resource-'))),artifact=join(root,'artifact');
  await mkdir(join(artifact,'bin'),{recursive:true});await mkdir(join(artifact,'lib'));
  const executable=join(artifact,'bin','wx-cli'),requestsFile=join(root,'requests'),pidFile=join(root,'pid'),keySeenFile=join(root,'key-seen');
@@ -56,7 +58,7 @@ if(r.op==='resolve')value={accountKey:account,conversationKey:conversation,displ
 else if(r.op==='inspect')value=schema;
 else if(r.op==='support')value=support;
 else if(r.op==='target')value={protocol:'private-history-v1',descriptor:target,partitions:[partition],tables:[{partition,instance:table}],sourceGeneration:generation,checkedPartitions:[partition]};
-else if(r.op==='image-open'){if(r.imageKeySupplied){const raw=fs.readFileSync(3),payload=JSON.parse(raw.toString('utf8')),aes=Buffer.from(payload.aesKey,'base64');fs.writeFileSync(keySeenFile,JSON.stringify({fd:process.env.NOTALONE_IMAGE_KEY_FD,accountKey:payload.accountKey,rootSha256:payload.rootSha256,aesBytes:aes.length,xorKey:payload.xorKey}));raw.fill(0);aes.fill(0);}blockReads=r.localId==='125';value={protocol:'wechat-original-image-v1',resourceToken,sourceGeneration:generation,resourceSourceGeneration:${JSON.stringify(resourceSourceGeneration)},target:r.target,partition:r.partition,table:r.table,localId:r.localId==='124'?'125':r.localId,serverId:r.serverId,sentAt:r.sentAt,resourceTable:'wechat-message-resource-v1',resourceId:representativeId,resourceTypeRaw:audit.resourceTypeRaw??3,variantCode:audit.variantCode??1,complete:true,quality:'original',qualityProof:proof,expectedBytes:data.length,expectedSha256,mimeType:'image/png',envelope:'plain',sourceEnvelope:'wechat_dat'};}
+else if(r.op==='image-open'){if(r.imageKeySupplied){const raw=fs.readFileSync(3),payload=JSON.parse(raw.toString('utf8')),aes=Buffer.from(payload.aesKey,'base64');fs.writeFileSync(keySeenFile,JSON.stringify({fd:process.env.NOTALONE_IMAGE_KEY_FD,accountKey:payload.accountKey,rootSha256:payload.rootSha256,aesBytes:aes.length,xorKey:payload.xorKey}));raw.fill(0);aes.fill(0);}blockReads=r.localId==='125';value={protocol:'wechat-original-image-v1',resourceToken,sourceGeneration:generation,resourceSourceGeneration:${JSON.stringify(resourceSourceGeneration)},target:r.target,partition:r.partition,table:r.table,localId:r.localId==='124'?'125':r.localId,serverId:r.serverId,sentAt:r.sentAt,resourceTable:'wechat-message-resource-v1',resourceId:representativeId,resourceTypeRaw:audit.resourceTypeRaw??3,variantCode:audit.variantCode??1,complete:true,quality:audit.quality??'original',qualityProof:proof,expectedBytes:data.length,expectedSha256,mimeType:'image/png',envelope:'plain',sourceEnvelope:'wechat_dat'};}
 else if(r.op==='image-read'){if(blockReads)return;const chunk=data.subarray(r.offset,Math.min(data.length,r.offset+65536));value={resourceToken,sourceGeneration:generation,offset:r.offset,bytesRead:chunk.length,totalBytes:data.length,chunkBase64:chunk.toString('base64'),eof:r.offset+chunk.length===data.length,...(r.offset+chunk.length===data.length?{verifiedSha256:expectedSha256}:{})};}
 else if(r.op==='image-close')value={closed:true};
 else{console.log(JSON.stringify({ok:false,error:{code:'history_operation_unsupported'}}));return;}
@@ -65,7 +67,7 @@ console.log(JSON.stringify({ok:true,data:value}));});`;
  await writeFile(join(artifact,'manifest.json'),JSON.stringify({formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,
   sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',
   signing:'ad-hoc-development',realWechatVerified:false,cliSha256:hash(script),wcdbSha256:hash(wcdb),
-  originalImageProtocol:'wechat-original-image-v1',originalImageQualityProof:'wechat-cdn-big-hd-exact-content-v4'}));
+  originalImageProtocol:'wechat-original-image-v1',originalImageQualityProof:capability}));
  t.after(()=>rm(root,{recursive:true,force:true}));
  return {root,executable,requestsFile,pidFile,keySeenFile,bytes,expectedSha256,resourceSourceGeneration};
 }
@@ -241,4 +243,31 @@ test('取消在途原图读取会关闭原生客户端',async t=>{
  await waitForOperation(f,'image-read');controller.abort();
  await assert.rejects(pending,{code:'media_interrupted'});await resource.close();
  const pid=Number(await readFile(f.pidFile,'utf8'));assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});
+});
+
+
+test('已关联图片无需原图字段也可按完整内容读取，不冒充原图',async t=>{
+ const bytes=imageBytes(70_000),sha=hash(bytes);
+ const proof={kind:'wechat-message-image-content-v1',resourceInfoId,matchingResourceIds,resourceSize:70_000,
+  verifiedBytes:70_000,verifiedSha256:sha,sourceSha256:sha,conversion:'none',contentWidth:280,contentHeight:250};
+ const f=await fixture(t,{proof,openAudit:{quality:'unknown'},capability:proof.kind});
+ const request={...selection(),goal:'extract'},resource=await createWechatImageResourcePort(f.executable).open(request);
+ try{
+  assert.deepEqual(resource.quality,{kind:'unknown',proof:null});
+  const chunks=[];for await(const chunk of resource.bytes)chunks.push(Buffer.from(chunk));
+  assert.deepEqual(Buffer.concat(chunks),bytes);
+  assert.equal(resource.association.recordId,request.source.recordId);
+ }finally{await resource.close();}
+});
+
+
+test('图片取消原图门槛后仍拒绝传输摘要和来源资源集合不一致',async t=>{
+ const sha=hash(imageBytes(70_000));
+ const valid={kind:'wechat-message-image-content-v1',resourceInfoId,matchingResourceIds,resourceSize:70_000,
+  verifiedBytes:70_000,verifiedSha256:sha,sourceSha256:sha,conversion:'none',contentWidth:280,contentHeight:250};
+ for(const override of [{verifiedBytes:69_999},{verifiedSha256:'f'.repeat(64)},{sourceSha256:'f'.repeat(64)},
+  {matchingResourceIds:[matchingResourceIds[1],matchingResourceIds[0]]}]){
+  const proof={...valid,...override};const f=await fixture(t,{proof,openAudit:{quality:'unknown'},capability:proof.kind});
+  await assert.rejects(createWechatImageResourcePort(f.executable).open({...selection(),goal:'extract'}));
+ }
 });

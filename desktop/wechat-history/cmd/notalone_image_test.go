@@ -11,12 +11,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"image"
 	"image/color"
+	"image/gif"
+	"image/jpeg"
 	"image/png"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -26,15 +30,52 @@ import (
 )
 
 func notaloneTinyPNG(t *testing.T, width, height int) []byte {
+	return notaloneTinyPNGWithBaseColor(t, width, height, color.RGBA{R: 40, G: 80, B: 120, A: 255})
+}
+
+func notaloneTinyPNGWithBaseColor(t *testing.T, width, height int, base color.RGBA) []byte {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
-			img.Set(x, y, color.RGBA{R: uint8(40 + x), G: uint8(80 + y), B: 120, A: 255})
+			img.Set(x, y, color.RGBA{R: base.R + uint8(x), G: base.G + uint8(y), B: base.B, A: base.A})
 		}
 	}
 	var data bytes.Buffer
 	if err := png.Encode(&data, img); err != nil {
+		t.Fatal(err)
+	}
+	return data.Bytes()
+}
+
+func notaloneTinyJPEG(t *testing.T, width, height int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, color.RGBA{R: uint8(20 + x), G: uint8(60 + y), B: 150, A: 255})
+		}
+	}
+	var data bytes.Buffer
+	if err := jpeg.Encode(&data, img, &jpeg.Options{Quality: 80}); err != nil {
+		t.Fatal(err)
+	}
+	return data.Bytes()
+}
+
+func notaloneTinyGIF(t *testing.T, width, height int) []byte {
+	t.Helper()
+	palette := color.Palette{color.RGBA{A: 255}, color.RGBA{R: 255, A: 255}}
+	first := image.NewPaletted(image.Rect(0, 0, width, height), palette)
+	second := image.NewPaletted(image.Rect(0, 0, width, height), palette)
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			first.SetColorIndex(x, y, uint8((x+y)%2))
+			second.SetColorIndex(x, y, uint8((x+y+1)%2))
+		}
+	}
+	var data bytes.Buffer
+	if err := gif.EncodeAll(&data, &gif.GIF{Image: []*image.Paletted{first, second}, Delay: []int{0, 0}, LoopCount: 0}); err != nil {
 		t.Fatal(err)
 	}
 	return data.Bytes()
@@ -236,8 +277,12 @@ func newNotaloneImageProtocolFixtureWithResourceData(t *testing.T, messageConten
 		writer.Close()
 		t.Fatal(err)
 	}
-	if err = writer.Exec(fmt.Sprintf(`UPDATE %s SET server_id=%d,local_type=3,create_time=%d,status=0,message_content=X'%x',WCDB_CT_message_content=%d,packed_info_data=X'%x' WHERE local_id=%d`,
-		messageTable, serverID, createTime, messageContent, contentType, messagePackedInfo, localID)); err != nil {
+	messageContentValue := fmt.Sprintf("X'%x'", messageContent)
+	if len(messageContent) == 0 {
+		messageContentValue = "NULL"
+	}
+	if err = writer.Exec(fmt.Sprintf(`UPDATE %s SET server_id=%d,local_type=3,create_time=%d,status=0,message_content=%s,WCDB_CT_message_content=%d,packed_info_data=X'%x' WHERE local_id=%d`,
+		messageTable, serverID, createTime, messageContentValue, contentType, messagePackedInfo, localID)); err != nil {
 		writer.Close()
 		t.Fatal(err)
 	}
@@ -322,7 +367,7 @@ func notaloneTestV4ImageDAT(t *testing.T, key, plain []byte) []byte {
 	return append(header, encrypted...)
 }
 
-func TestNotAloneImageOpenBindsCacheKeyAndAliasesToDecodedOriginal(t *testing.T) {
+func TestNotAloneImageOpenBindsCacheKeyAndAliasesToVerifiedImageContent(t *testing.T) {
 	imageBytes := notaloneTinyPNG(t, 3, 2)
 	const cacheMD5 = "a71dbe52628a3f83a77ab494817525c6"
 	key := []byte("0123456789abcdef")
@@ -353,12 +398,17 @@ func TestNotAloneImageOpenBindsCacheKeyAndAliasesToDecodedOriginal(t *testing.T)
 		t.Fatal(err)
 	}
 	ids, _ := proof["matchingResourceIds"].([]any)
-	if opened.QualityProof.Kind != "wechat-cdn-big-hd-exact-content-v4" || opened.ResourceID != "10" ||
+	if opened.Protocol != "wechat-original-image-v1" || opened.Quality != "unknown" ||
+		opened.QualityProof.Kind != "wechat-message-image-content-v1" || opened.ResourceID != "10" ||
 		opened.ResourceTypeRaw != 65537 || opened.SourceEnvelope != "wechat_dat" || opened.Envelope != "plain" ||
 		proof["resourceInfoId"] != "5" || proof["resourceSize"] != float64(len(storage)) ||
-		proof["verifiedBytes"] != float64(len(imageBytes)) || proof["hdLength"] != float64(len(imageBytes)) ||
+		proof["verifiedBytes"] != float64(len(imageBytes)) || proof["sourceSha256"] != fmt.Sprintf("%x", sha256.Sum256(imageBytes)) ||
+		proof["verifiedSha256"] != fmt.Sprintf("%x", sha256.Sum256(imageBytes)) || proof["conversion"] != "none" ||
 		len(ids) != 2 || ids[0] != "10" || ids[1] != "12" {
 		t.Fatalf("V4 stored bytes and matching detail aliases were not represented accurately: open=%#v proof=%s", opened, proofJSON)
+	}
+	if len(proof) != 10 {
+		t.Fatalf("new proof must contain only source/content integrity fields, got %s", proofJSON)
 	}
 	chunkValue, err := fixture.history.handle(context.Background(), notaloneHistoryRequest{Operation: "image-read", ResourceToken: opened.ResourceToken, Offset: 0})
 	if err != nil {
@@ -368,6 +418,27 @@ func TestNotAloneImageOpenBindsCacheKeyAndAliasesToDecodedOriginal(t *testing.T)
 	decoded, err := base64.StdEncoding.DecodeString(chunk.ChunkBase64)
 	if err != nil || !bytes.Equal(decoded, imageBytes) || !chunk.EOF || chunk.VerifiedSHA256 != opened.ExpectedSHA256 {
 		t.Fatalf("image stream did not return exact HD content: err=%v eof=%t", err, chunk.EOF)
+	}
+}
+
+func TestNotAloneImageOpenDoesNotRequireOriginalImageXML(t *testing.T) {
+	imageBytes := notaloneTinyPNG(t, 3, 2)
+	for name, message := range map[string][]byte{
+		"missing message content":  nil,
+		"empty image attributes":   []byte(`<msg><img /></msg>`),
+		"no original-image fields": []byte(`<msg><img md5="" hdlength="" cdnbigimgurl="" /></msg>`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newNotaloneImageProtocolFixtureWithImage(t, string(message), imageBytes)
+			value, err := fixture.history.handle(context.Background(), fixture.request)
+			if err != nil {
+				t.Fatalf("type 3 and packed-info association are sufficient without original-image XML: %v", err)
+			}
+			opened := value.(notaloneImageOpenResponse)
+			if opened.Quality != "unknown" || opened.QualityProof.Kind != "wechat-message-image-content-v1" {
+				t.Fatalf("decoded bytes must not claim original-image quality: %#v", opened)
+			}
+		})
 	}
 }
 
@@ -395,8 +466,6 @@ func TestNotAloneImageOpenRejectsUnprovenCacheIdentityAndSize(t *testing.T) {
 			details: []notaloneImageTestResourceDetail{{id: 11, typeRaw: 65537, size: int64(len(imageBytes) + 1), packedInfo: packed}}, wantCode: "history_image_association_unverified"},
 		{name: "matching detail declares another cache key", message: validMessage, messagePacked: packed, infoPacked: packed,
 			details: []notaloneImageTestResourceDetail{{id: 11, typeRaw: 65537, size: int64(len(imageBytes)), packedInfo: notaloneTestPackedInfo(otherMD5)}}, wantCode: "history_image_association_unverified"},
-		{name: "HD content digest is wrong", message: []byte(strings.Replace(notaloneImageXML(imageBytes, len(imageBytes), 0, 0, true), fmt.Sprintf("%x", md5.Sum(imageBytes)), otherMD5, 1)),
-			messagePacked: packed, infoPacked: packed, details: []notaloneImageTestResourceDetail{{id: 11, typeRaw: 65537, size: int64(len(imageBytes)), packedInfo: packed}}, wantCode: "history_image_quality_unverified"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -422,23 +491,17 @@ func TestNotAloneImageOpenReportsMissingConfiguredV4Key(t *testing.T) {
 	}
 }
 
-func TestNotAloneImageOpenDecodesBoundedZstdXMLAndStreamsOriginal(t *testing.T) {
+func TestNotAloneImageOpenDoesNotNeedToDecodeImageXML(t *testing.T) {
 	imageBytes := notaloneTinyPNG(t, 3, 2)
-	rawXML := []byte(notaloneImageXML(imageBytes, len(imageBytes), 0, 0, true))
-	compressedXML := notaloneCompressImageXML(t, rawXML)
-	if len(compressedXML) >= len(rawXML) {
-		t.Fatalf("fixture should exercise compressed message_content: compressed=%d plain=%d", len(compressedXML), len(rawXML))
-	}
-	fixture := newNotaloneImageProtocolFixtureWithMessageContent(t, compressedXML, 4, imageBytes)
+	fixture := newNotaloneImageProtocolFixtureWithMessageContent(t, []byte(`<msg><img md5="not-an-md5" hdlength="1" cdnhdwidth="900" cdnhdheight="900" cdnbigimgurl="not-the-source" /></msg>`), 0, imageBytes)
 	value, err := fixture.history.handle(context.Background(), fixture.request)
 	if err != nil {
-		t.Fatalf("zstd-compressed selected message XML should open: %v", err)
+		t.Fatalf("mismatching original-image declarations must not block byte validation: %v", err)
 	}
 	opened := value.(notaloneImageOpenResponse)
-	if opened.QualityProof.Kind != "wechat-cdn-big-hd-exact-content-v4" || opened.Quality != "original" ||
-		opened.QualityProof.HDWidth != nil || opened.QualityProof.HDHeight != nil ||
+	if opened.QualityProof.Kind != "wechat-message-image-content-v1" || opened.Quality != "unknown" ||
 		opened.QualityProof.ContentWidth != 3 || opened.QualityProof.ContentHeight != 2 {
-		t.Fatalf("unexpected v2 image proof: %#v", opened.QualityProof)
+		t.Fatalf("unexpected content proof: %#v", opened.QualityProof)
 	}
 	chunkValue, err := fixture.history.handle(context.Background(), notaloneHistoryRequest{Operation: "image-read", ResourceToken: opened.ResourceToken, Offset: 0})
 	if err != nil {
@@ -447,14 +510,71 @@ func TestNotAloneImageOpenDecodesBoundedZstdXMLAndStreamsOriginal(t *testing.T) 
 	chunk := chunkValue.(notaloneImageReadResponse)
 	decoded, err := base64.StdEncoding.DecodeString(chunk.ChunkBase64)
 	if err != nil || !bytes.Equal(decoded, imageBytes) || !chunk.EOF || chunk.VerifiedSHA256 != opened.ExpectedSHA256 {
-		t.Fatalf("compressed XML changed original image bytes: err=%v eof=%t", err, chunk.EOF)
+		t.Fatalf("image stream failed content digest verification: err=%v eof=%t", err, chunk.EOF)
+	}
+}
+
+func TestNotAloneImageOpenRejectsImageThatOnlyHasAValidHeader(t *testing.T) {
+	valid := notaloneTinyPNG(t, 3, 2)
+	// 保留 PNG 签名和完整 IHDR，使 DecodeConfig 能读出尺寸，但省略图像数据。
+	truncated := append([]byte(nil), valid[:33]...)
+	fixture := newNotaloneImageProtocolFixtureWithImage(t, `<msg><img /></msg>`, truncated)
+	if _, err := fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != "history_image_quality_unverified" {
+		t.Fatalf("image must fail when only its format header and dimensions decode, got %v", err)
+	}
+}
+
+func TestNotAloneImageOpenRejectsOversizedPixelsBeforeDecodeAllocation(t *testing.T) {
+	imageBytes := notaloneTinyPNG(t, 3, 2)
+	binary.BigEndian.PutUint32(imageBytes[16:20], 10000)
+	binary.BigEndian.PutUint32(imageBytes[20:24], 4001)
+	binary.BigEndian.PutUint32(imageBytes[29:33], crc32.ChecksumIEEE(imageBytes[12:29]))
+	if _, err := png.DecodeConfig(bytes.NewReader(imageBytes)); err != nil {
+		t.Fatalf("synthetic PNG header should be valid before the protocol checks its pixel budget: %v", err)
+	}
+	fixture := newNotaloneImageProtocolFixtureWithImage(t, `<msg><img /></msg>`, imageBytes)
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	_, err := fixture.history.handle(context.Background(), fixture.request)
+	runtime.ReadMemStats(&after)
+	allocated := after.TotalAlloc - before.TotalAlloc
+	if err == nil || err.Error() != "history_image_quality_unverified" {
+		t.Fatalf("image larger than the content decode budget must be rejected: %v", err)
+	}
+	if allocated >= 8<<20 {
+		t.Fatalf("oversized image should be rejected before full decoder allocation: allocated=%d bytes", allocated)
+	}
+	t.Logf("oversized image rejected before decode: TotalAlloc delta=%d bytes", allocated)
+}
+
+func TestNotAloneImageOpenFullyDecodesJPEGAndEveryGIFFrame(t *testing.T) {
+	for name, data := range map[string][]byte{
+		"jpeg": notaloneTinyJPEG(t, 3, 2),
+		"gif":  notaloneTinyGIF(t, 3, 2),
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newNotaloneImageProtocolFixtureWithImage(t, `<msg><img /></msg>`, data)
+			value, err := fixture.history.handle(context.Background(), fixture.request)
+			if err != nil {
+				t.Fatalf("well-formed %s image should fully decode: %v", name, err)
+			}
+			opened := value.(notaloneImageOpenResponse)
+			if opened.Quality != "unknown" || opened.QualityProof.ContentWidth != 3 || opened.QualityProof.ContentHeight != 2 {
+				t.Fatalf("decoded %s content should report actual dimensions without original quality: %#v", name, opened)
+			}
+		})
+	}
+	truncatedGIF := notaloneTinyGIF(t, 3, 2)
+	truncatedGIF = truncatedGIF[:len(truncatedGIF)-1] // 移除所有帧数据后的必需结束标记。
+	fixture := newNotaloneImageProtocolFixtureWithImage(t, `<msg><img /></msg>`, truncatedGIF)
+	if _, err := fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != "history_image_quality_unverified" {
+		t.Fatalf("GIF with complete frames but no trailer must fail full validation, got %v", err)
 	}
 }
 
 func TestNotAloneImageXMLDecoderRejectsInvalidOrUnboundedZstd(t *testing.T) {
 	validXML := []byte(`<msg><img /></msg>`)
 	valid := notaloneCompressImageXML(t, validXML)
-	imageBytes := notaloneTinyPNG(t, 3, 2)
 	randomBytes := make([]byte, notaloneImageXMLByteLimit+1)
 	if _, err := rand.New(rand.NewSource(20261031)).Read(randomBytes); err != nil {
 		t.Fatal(err)
@@ -474,9 +594,8 @@ func TestNotAloneImageXMLDecoderRejectsInvalidOrUnboundedZstd(t *testing.T) {
 		"expanded output over limit":    {bytes: notaloneCompressImageXML(t, bytes.Repeat([]byte("x"), notaloneImageXMLByteLimit+1)), contentType: 4},
 	} {
 		t.Run(name, func(t *testing.T) {
-			fixture := newNotaloneImageProtocolFixtureWithMessageContent(t, input.bytes, input.contentType, imageBytes)
-			if _, err := fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != "history_image_metadata_invalid" {
-				t.Fatalf("invalid zstd XML should fail closed with metadata code, got %v", err)
+			if _, err := notaloneDecodeImageXML(input.bytes, input.contentType); err == nil || err.Error() != "history_image_metadata_invalid" {
+				t.Fatalf("legacy XML decoder helper must fail closed on invalid zstd framing, got %v", err)
 			}
 		})
 	}
@@ -516,7 +635,8 @@ func TestNotAloneImageOpenStreamsOnlyVerifiedOriginalFromSelectedSnapshot(t *tes
 		t.Fatal(err)
 	}
 	opened, ok := value.(notaloneImageOpenResponse)
-	if !ok || !opened.Complete || opened.Quality != "original" || opened.Envelope != "plain" || opened.SourceEnvelope != "plain" ||
+	if !ok || !opened.Complete || opened.Protocol != "wechat-original-image-v1" || opened.Quality != "unknown" ||
+		opened.QualityProof.Kind != "wechat-message-image-content-v1" || opened.Envelope != "plain" || opened.SourceEnvelope != "plain" ||
 		opened.ExpectedBytes != int64(len(imageBytes)) || opened.ExpectedSHA256 != fmt.Sprintf("%x", sha256.Sum256(imageBytes)) ||
 		opened.LocalID != fixture.request.LocalID || opened.ServerID != fixture.request.ServerID || opened.Target != fixture.request.Target ||
 		opened.Partition != fixture.request.Partition || opened.Table != fixture.request.Table || opened.ResourceID != "11" {
@@ -541,7 +661,7 @@ func TestNotAloneImageOpenStreamsOnlyVerifiedOriginalFromSelectedSnapshot(t *tes
 	}
 }
 
-func TestNotAloneImageOpenStreamsBMPOriginalFromTopDownInfoHeader(t *testing.T) {
+func TestNotAloneImageOpenStreamsBMPAsUnknownContent(t *testing.T) {
 	imageBytes := notaloneTinyBMPDIBHeader(t, 40, 2, -2)
 	width, height, err := notaloneBMPDimensions(imageBytes)
 	if err != nil || width != 2 || height != 2 {
@@ -553,8 +673,8 @@ func TestNotAloneImageOpenStreamsBMPOriginalFromTopDownInfoHeader(t *testing.T) 
 		t.Fatal(err)
 	}
 	opened, ok := value.(notaloneImageOpenResponse)
-	if !ok || opened.MimeType != "image/bmp" || opened.Quality != "original" || opened.ExpectedBytes != int64(len(imageBytes)) {
-		t.Fatalf("valid standard top-down BMP was not verified as original: %#v", value)
+	if !ok || opened.MimeType != "image/bmp" || opened.Quality != "unknown" || opened.ExpectedBytes != int64(len(imageBytes)) {
+		t.Fatalf("valid standard top-down BMP was not verified as image content: %#v", value)
 	}
 	chunkValue, err := fixture.history.handle(context.Background(), notaloneHistoryRequest{Operation: "image-read", ResourceToken: opened.ResourceToken, Offset: 0})
 	if err != nil {
@@ -564,6 +684,11 @@ func TestNotAloneImageOpenStreamsBMPOriginalFromTopDownInfoHeader(t *testing.T) 
 	decoded, err := base64.StdEncoding.DecodeString(chunk.ChunkBase64)
 	if err != nil || !bytes.Equal(decoded, imageBytes) || !chunk.EOF {
 		t.Fatalf("BMP resource did not stream unchanged: err=%v eof=%t", err, chunk.EOF)
+	}
+	rleBytes := notaloneTinyBMPRLE8(t, 2)
+	rleFixture := newNotaloneImageProtocolFixtureWithImage(t, `<msg><img /></msg>`, rleBytes)
+	if _, err = rleFixture.history.handle(context.Background(), rleFixture.request); err != nil {
+		t.Fatalf("well-formed RLE8 BMP pixels should fully decode: %v", err)
 	}
 }
 
@@ -643,17 +768,18 @@ func TestNotAloneImageOpenRejectsCrossRecordIdentityAndUnverifiedThumbnail(t *te
 	}
 }
 
-func TestNotAloneImageOpenConvertsVerifiedWXGFWithoutConfusingSourceDigest(t *testing.T) {
+func TestNotAloneImageOpenConvertsWXGFDespiteMismatchingOriginalImageXML(t *testing.T) {
 	png := notaloneTinyPNG(t, 3, 2)
 	source := append([]byte("wxgf"), png...)
-	fixture := newNotaloneImageProtocolFixtureWithImage(t, notaloneImageXML(source, len(source), 3, 2, true), source)
-	helper := os.Getenv("NOTALONE_TEST_IMAGE_DECODER")
-	bytes, err := os.ReadFile(helper)
-	if err != nil {
+	wrongXML := `<msg><img md5="00000000000000000000000000000000" hdlength="1" cdnhdwidth="999" cdnhdheight="999" cdnbigimgurl="wrong" /></msg>`
+	fixture := newNotaloneImageProtocolFixtureWithImage(t, wrongXML, source)
+	helper := filepath.Join(t.TempDir(), "wxgf-helper.sh")
+	helperBytes := []byte("#!/bin/sh\n[ \"$1\" = wxgf ] || exit 2\nexec /bin/dd if=/dev/fd/3 bs=1 skip=4 2>/dev/null\n")
+	if err := os.WriteFile(helper, helperBytes, 0700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("NOTALONE_IMAGE_DECODER", helper)
-	t.Setenv("NOTALONE_IMAGE_DECODER_SHA256", fmt.Sprintf("%x", sha256.Sum256(bytes)))
+	t.Setenv("NOTALONE_IMAGE_DECODER_SHA256", fmt.Sprintf("%x", sha256.Sum256(helperBytes)))
 	value, err := fixture.history.handle(context.Background(), fixture.request)
 	if err != nil {
 		t.Fatalf("原图WXGF应经真实解码器保存可查看结果: %v", err)
@@ -662,18 +788,56 @@ func TestNotAloneImageOpenConvertsVerifiedWXGFWithoutConfusingSourceDigest(t *te
 	raw, _ := json.Marshal(opened.QualityProof)
 	var proof map[string]any
 	_ = json.Unmarshal(raw, &proof)
-	if proof["kind"] != "wechat-cdn-big-hd-exact-content-v4" || proof["conversion"] != "wxgf-to-png-v1" || proof["sourceSha256"] != fmt.Sprintf("%x", sha256.Sum256(source)) || proof["verifiedSha256"] == proof["sourceSha256"] || opened.MimeType != "image/png" || opened.QualityProof.ContentWidth != 3 || opened.QualityProof.ContentHeight != 2 {
+	if proof["kind"] != "wechat-message-image-content-v1" || opened.Quality != "unknown" || proof["conversion"] != "wxgf-to-png-v1" || proof["sourceSha256"] != fmt.Sprintf("%x", sha256.Sum256(source)) || proof["verifiedSha256"] == proof["sourceSha256"] || opened.MimeType != "image/png" || opened.QualityProof.ContentWidth != 3 || opened.QualityProof.ContentHeight != 2 {
 		t.Fatalf("转换证明须分别保留源与输出: %#v", proof)
 	}
 }
 
-func TestNotAloneImageOpenMarksOnlyThumbnailWithoutReadingItsBytes(t *testing.T) {
+func TestNotAloneImageOpenCanDecodeBoundThumbnailBytes(t *testing.T) {
 	source := notaloneTinyPNG(t, 3, 2)
 	fixture := newNotaloneImageProtocolFixtureWithImage(t, notaloneImageXML(source, len(source), 3, 2, true), source)
 	if err := os.Rename(fixture.path, strings.TrimSuffix(fixture.path, ".dat")+"_t.dat"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != "history_image_thumbnail_only" {
-		t.Fatalf("仅缩略图必须明确分类而不保存: %v", err)
+	value, err := fixture.history.handle(context.Background(), fixture.request)
+	if err != nil {
+		t.Fatalf("a uniquely bound and decodable thumbnail candidate can be saved as unknown-quality content: %v", err)
 	}
+	opened := value.(notaloneImageOpenResponse)
+	if opened.Quality != "unknown" || opened.QualityProof.Kind != "wechat-message-image-content-v1" {
+		t.Fatalf("thumbnail must not be certified as original: %#v", opened)
+	}
+}
+
+func TestNotAloneImageOpenPrefersNonThumbnailAndRejectsSameTierConflicts(t *testing.T) {
+	primary := notaloneTinyPNG(t, 3, 2)
+	other := notaloneTinyPNGWithBaseColor(t, 3, 2, color.RGBA{R: 180, G: 10, B: 40, A: 255})
+	if len(primary) != len(other) || bytes.Equal(primary, other) {
+		t.Fatalf("candidate conflict fixture must be valid, distinct, and same-sized: primary=%d other=%d", len(primary), len(other))
+	}
+	t.Run("non-thumbnail beats conflicting thumbnail without reading it", func(t *testing.T) {
+		fixture := newNotaloneImageProtocolFixtureWithImage(t, `<msg><img /></msg>`, primary)
+		thumbnail := strings.TrimSuffix(fixture.path, ".dat") + "_t.dat"
+		if err := os.WriteFile(thumbnail, other, 0600); err != nil {
+			t.Fatal(err)
+		}
+		value, err := fixture.history.handle(context.Background(), fixture.request)
+		if err != nil {
+			t.Fatalf("valid bound .dat candidate should win before thumbnail: %v", err)
+		}
+		opened := value.(notaloneImageOpenResponse)
+		if opened.ExpectedSHA256 != fmt.Sprintf("%x", sha256.Sum256(primary)) {
+			t.Fatalf("selected bytes must come from the non-thumbnail candidate: %#v", opened)
+		}
+	})
+	t.Run("conflicting non-thumbnail aliases fail closed", func(t *testing.T) {
+		fixture := newNotaloneImageProtocolFixtureWithImage(t, `<msg><img /></msg>`, primary)
+		hdCandidate := strings.TrimSuffix(fixture.path, ".dat") + "_h.dat"
+		if err := os.WriteFile(hdCandidate, other, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != "history_image_quality_unverified" {
+			t.Fatalf("conflicting candidates in the same priority tier must not be guessed between, got %v", err)
+		}
+	})
 }

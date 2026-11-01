@@ -20,16 +20,17 @@ export function HistoryImageBubble({ media, imageMedia, selection }: Props) {
   const state = imageMedia?.state ?? 'pending';
   const fileId = imageMedia?.fileId;
   const mimeType = imageMedia?.mimeType;
+  const imageAvailable = state === 'original' || state === 'available';
   const container = useRef<HTMLDivElement>(null);
   const image = useRef<HTMLImageElement>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [failed, setFailed] = useState(false);
   const [visibleKey, setVisibleKey] = useState<string | null>(null);
-  const visibilityKey = state === 'original' ? `${selection.contactId}:${selection.scopeRevision}:${selection.messageId}:${fileId}` : '';
+  const visibilityKey = imageAvailable ? `${selection.contactId}:${selection.scopeRevision}:${selection.messageId}:${fileId}` : '';
   const visible = visibilityKey !== '' && visibleKey === visibilityKey;
 
   useLayoutEffect(() => {
-    if (state !== 'original') return;
+    if (!imageAvailable) return;
     const target = container.current;
     if (!target || typeof IntersectionObserver === 'undefined') { setVisibleKey(visibilityKey); return; }
     const observer = new IntersectionObserver(entries => {
@@ -38,12 +39,12 @@ export function HistoryImageBubble({ media, imageMedia, selection }: Props) {
     }, { root: target.closest('.contact-chat-body'), rootMargin: '160px 0px' });
     observer.observe(target);
     return () => observer.disconnect();
-  }, [state, selection.contactId, selection.messageId, selection.scopeRevision, fileId, visibilityKey]);
+  }, [imageAvailable, state, selection.contactId, selection.messageId, selection.scopeRevision, fileId, visibilityKey]);
 
   useLayoutEffect(() => {
     setPreview(null);
     setFailed(false);
-    if (state !== 'original' || !fileId || !mimeType || !visible) return;
+    if (!imageAvailable || !fileId || !mimeType || !visible) return;
     let active = true;
     const opening = { active: true, sessionId: null as string | null, url: null as string | null,
       revokedWhileOpening: new Set<string>() };
@@ -95,14 +96,14 @@ export function HistoryImageBubble({ media, imageMedia, selection }: Props) {
       if (sessionId) setPreview(current => current?.sessionId === sessionId ? null : current);
       if (sessionId) release(sessionId);
     };
-  }, [media, selection.contactId, selection.messageId, selection.scopeRevision, state, fileId, mimeType, visible]);
+  }, [media, selection.contactId, selection.messageId, selection.scopeRevision, state, fileId, mimeType, visible, imageAvailable]);
 
   let status: string | null = null;
   if (state === 'thumbnail_only') status = '仅有缩略图，原图未取得';
   else if (state === 'unavailable') status = '图片资源不可用';
   else if (state === 'failed' || failed) status = '图片暂不可用';
   else if (state === 'cleared') status = '[图片已清除]';
-  else if (state !== 'original' || !fileId || !mimeType || !visible || !preview) status = '图片加载中';
+  else if (!imageAvailable || !fileId || !mimeType || !visible || !preview) status = '图片加载中';
   return <div ref={container} className="contact-chat-image-container">
     {status ? <p className="contact-chat-image-status" role="status">{status}</p>
       : preview && <img ref={image} className="contact-chat-image" src={preview.url} alt="聊天图片" onError={() => {

@@ -191,7 +191,7 @@ export class SqliteHistoryService {
  }
  async imageMedia(contactId:string,messageIds:readonly string[]):Promise<ReadonlyMap<string,HistoryImageMedia>>{
   if(this.closed)throw new StorageFailure('history_closed');
-  const rows=await this.storage.execute<{message_id:string;media_state:string|null;attempt_state:string|null;error_code:string|null;file_id:string|null;mime_type:string|null}[]>(
+  const rows=await this.storage.execute<{message_id:string;media_state:string|null;attempt_state:string|null;error_code:string|null;file_id:string|null;mime_type:string|null;image_quality:string|null}[]>(
    'history.imageMedia',{ownerId:this.contacts.ownerId,contactId,messageIds:[...messageIds]});
   const summaries=new Map<string,HistoryImageMedia>();
   for(const row of rows){
@@ -202,7 +202,7 @@ export class SqliteHistoryService {
     summaries.set(row.message_id,{state:'unavailable',fileId:null,mimeType:null,errorCode:'media_source_invalidated'});continue;
    }
    if(row.file_id&&typeof row.mime_type==='string'&&row.mime_type.startsWith('image/')){
-    summaries.set(row.message_id,{state:'original',fileId:row.file_id,mimeType:row.mime_type});continue;
+   summaries.set(row.message_id,{state:row.image_quality==='original'?'original':'available',fileId:row.file_id,mimeType:row.mime_type});continue;
    }
    const errorCode=typeof row.error_code==='string'&&/^[-a-z0-9_]{1,80}$/.test(row.error_code)?row.error_code:null;
    if(row.attempt_state==='pending'||row.attempt_state==='running'||!row.attempt_state){

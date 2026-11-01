@@ -5,17 +5,17 @@ const stateLabels = {pending:'待执行',running:'进行中',completed:'已保�
 const kindLabels = {image:'图片',video:'视频',voice:'语音'};
 const emptyState:MessageMediaState={revision:-1,contactId:null,messageId:null,scopeRevision:0,phase:'idle',snapshot:null,busy:null,retryGoal:null,error:null};
 const processingErrors:Record<string,string>={
-  needs_image_key:'缺少当前账号已核验的图片密钥，或密钥不匹配；原图未取得，消息记录仍保留。',
+  needs_image_key:'缺少当前账号已核验的图片密钥，或密钥不匹配；本次没有保存图片，消息记录仍保留。',
   unsupported:'此封装尚未支持，本次未保存新结果。',
   image_dat_invalid:'图片加密封装的长度或填充校验失败，本次未保存新结果。',
   media_format_unsupported:'此媒体格式或编码尚未支持，本次未保存新结果。',
   media_image_invalid:'图片内容或实际解码校验失败，本次未保存新结果。',
   media_video_invalid:'视频容器不完整或无法完整解码，本次未保存新结果。',
   media_resource_incomplete:'资源完整读取或复制证明不符，本次未保存新结果。',
-  media_original_unavailable:'未取得经过质量验证的原图；消息记录和先前合法文件仍保留。',
+  media_original_unavailable:'本次图片提取未完成；消息记录和先前合法文件仍保留。',
   media_metadata_invalid:'图片元数据或标记无法核验，未保存该文件；消息记录仍保留。',
-  media_local_file_missing:'本机没有找到对应图片文件，未取得原图；消息记录仍保留。',
-  media_quality_unverified:'图片质量无法核验，未保存该文件；消息记录仍保留。',
+  media_local_file_missing:'本机没有找到对应图片文件，本次没有保存图片；消息记录仍保留。',
+  media_quality_unverified:'图片资源未通过完整文件校验，本次没有保存图片；消息记录仍保留。',
   media_validation_timeout:'媒体校验超时，本次未完成；先前合法文件保留。',
   media_resource_limit:'媒体超过当前尺寸、帧数或时长上限，本次未保存新结果。',
   media_validator_unavailable:'本机媒体校验组件尚未就绪，当前不可提取。',
@@ -42,8 +42,9 @@ function resultLabel(snapshot:MediaSnapshot):string {
   const attempt=snapshot.latestAttempt;
   if(snapshot.kind==='image'){
     if(snapshot.files.some(file=>file.role==='image_display'&&file.imageQuality==='original'))return '原图已保存';
+    if(snapshot.files.some(file=>file.role==='image_display'&&file.viewable))return '图片已保存';
     if(attempt&&['pending','running'].includes(attempt.state))return stateLabels[attempt.state];
-    return attempt?'原图未取得，消息记录已保留':'尚未取得原图，消息记录已保留';
+    return attempt?'图片提取未完成，消息记录已保留':'尚未提取图片，消息记录已保留';
   }
   if(!attempt)return '尚未提取';
   if(attempt.state==='completed'&&snapshot.kind==='voice'&&snapshot.files.some(f=>f.role==='audio_source')&&!snapshot.files.some(f=>f.role==='audio_playback'&&f.playable))return '语音已保存，暂不可播放';
@@ -132,15 +133,14 @@ function MediaDetails({bridge,selection,messageType}:{bridge:MessageMediaBridge;
       {snapshot.latestAttempt?.errorCode&&<p className="rewrite-privacy">{processingErrors[snapshot.latestAttempt.errorCode]??'本次处理有未完成步骤，请根据文件状态核对结果。'}</p>}
       {snapshot.cleanup&&snapshot.cleanup.state!=='completed'&&<p role="status">{snapshot.cleanup.state==='blocked'?'清理尚未完成，可继续原清理操作。':'文件清理尚在复核中。'}</p>}
       {snapshot.files.length>0&&<ul className="message-media-files">{snapshot.files.map(file=><li key={file.fileId}>
-        <span><span>{file.role==='image_display'?(file.imageQuality==='original'?'原图':file.imageQuality==='thumbnail'?'已存缩略图（非原图）':file.imageQuality==='unknown'?'已存文件（质量未核验）':'已存图片文件'):
+        <span><span>{file.role==='image_display'?(file.imageQuality==='original'?'原图':'已存图片'):
           file.role==='audio_source'?'原始语音文件':file.role==='audio_playback'?'语音播放文件':'视频播放文件'}</span> · {file.format.toUpperCase()} · {file.byteSize} 字节</span>
         {file.role==='audio_source'&&!snapshot.files.some(f=>f.role==='audio_playback'&&f.playable)&&<span> · 尚不可播放</span>}
         {(file.viewable||file.playable)&&<button type="button" disabled={busy} onClick={()=>void open(file.fileId)}>{file.viewable?'查看文件':'播放文件'}</button>}
       </li>)}</ul>}
       {unavailableReason(snapshot.capabilities.reason)&&<p role="status">{unavailableReason(snapshot.capabilities.reason)}</p>}
       <div className="message-media-actions">
-        {!voiceProcessingDeferred&&snapshot.kind!=='image'&&<button type="button" disabled={busy||!!liveAttempt||!snapshot.capabilities.extract} onClick={()=>goal('extract')}>保存这条{kindLabels[snapshot.kind]}</button>}
-        {snapshot.kind==='image'&&!snapshot.files.some(file=>file.role==='image_display'&&file.imageQuality==='original')&&<button type="button" disabled={busy||!!liveAttempt||!snapshot.capabilities.originalUpgrade} onClick={()=>goal('original_upgrade')}>重新获取原图</button>}
+        {!voiceProcessingDeferred&&<button type="button" disabled={busy||!!liveAttempt||!snapshot.capabilities.extract} onClick={()=>goal('extract')}>保存这条{kindLabels[snapshot.kind]}</button>}
         <button type="button" disabled={state.busy==='clear'||state.busy==='preview'} onClick={()=>void run(()=>bridge.clear(selection))}>{snapshot.cleanup&&snapshot.cleanup.state!=='completed'?'继续清理原操作':'清除这条媒体'}</button>
       </div>
     </>}

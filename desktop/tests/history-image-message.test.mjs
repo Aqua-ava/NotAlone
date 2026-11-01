@@ -39,6 +39,14 @@ test('聊天历史读取使用专用投影并保留原图状态和引用', async
   assert.equal(page.messages[0].mediaPlaceholder, '[图片]');
 });
 
+test('聊天历史桥保留可查看的unknown质量文件为available', async () => {
+  const response = { messages: [message({ state: 'available', file_id: fileId, mime_type: 'image/png' })], next_cursor: null };
+  const page = await readContactHistoryMessages({ requestJson: async () => ({ generation: 7, data: response }) },
+    contactId, null, new AbortController().signal);
+  assert.deepEqual(page.messages[0].imageMedia, { state: 'available', fileId, mimeType: 'image/png' });
+  assert.equal(page.messages[0].mediaPlaceholder, '[图片]');
+});
+
 test('仅缩略图状态不携带可预览文件', async () => {
   const response = { messages: [message({ state: 'thumbnail_only', file_id: null, mime_type: null, error_code: 'media_thumbnail_only' })], next_cursor: null };
   const page = await readContactHistoryMessages({ requestJson: async () => ({ generation: 7, data: response }) },

@@ -27,7 +27,7 @@ function eligibility(value:unknown):ReadEligibility {
   return structuredClone(row) as unknown as ReadEligibility;
 }
 function identity(request:VisualRequest,source:HistorySource,token:ReadEligibility):WechatImageSourceIdentity {
-  if(request.kind!=='image'||request.goal!=='original_upgrade'||source.contactId!==request.contactId||source.messageId!==request.messageId
+  if(request.kind!=='image'||request.goal!=='original_upgrade'&&request.goal!=='extract'||source.contactId!==request.contactId||source.messageId!==request.messageId
     ||source.raw.kind!=='image'||source.raw.text!==null||source.support.status!=='supported'
     ||source.support.sourceGeneration!==token.source_generation||token.contact_id!==request.contactId
     ||!hashPattern.test(source.raw.partition)||!hashPattern.test(source.raw.table)
@@ -74,6 +74,9 @@ async function checked(request:VisualRequest):Promise<void> {
 }
 function qualityProofString(opened:WechatImageOpenResult):string {
   const proof=opened.qualityProof;
+  if(proof.kind==='wechat-message-image-content-v1')return proof.kind+':'+createHash('sha256').update(JSON.stringify([
+    proof.kind,proof.resourceInfoId,proof.matchingResourceIds,proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256,
+    proof.sourceSha256,proof.conversion,proof.contentWidth,proof.contentHeight])).digest('hex');
   const serialized=proof.kind==='wechat-cdn-big-hd-exact-content-v4'
     ?JSON.stringify([proof.kind,proof.messageMd5,proof.hdLength,proof.hdWidth,proof.hdHeight,proof.contentWidth,proof.contentHeight,
       proof.resourceInfoId,proof.matchingResourceIds,proof.bigImageUrlPresent,proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256,proof.sourceSha256,proof.conversion])
@@ -89,7 +92,7 @@ function qualityProofString(opened:WechatImageOpenResult):string {
 }
 function association(opened:WechatImageOpenResult,source:HistorySource,messageId:string) {
   const proof=opened.qualityProof;
-  const identitySource=proof.kind==='wechat-cdn-big-hd-exact-content-v4'
+  const identitySource=proof.kind==='wechat-cdn-big-hd-exact-content-v4'||proof.kind==='wechat-message-image-content-v1'
     ?[opened.resourceSourceGeneration,proof.resourceInfoId,proof.matchingResourceIds,proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256,
       proof.sourceSha256,proof.conversion,opened.partition,opened.table,opened.localId,opened.serverId,opened.sentAt]
     :proof.kind==='wechat-cdn-big-hd-exact-content-v3'
@@ -98,8 +101,9 @@ function association(opened:WechatImageOpenResult,source:HistorySource,messageId
     :[opened.resourceSourceGeneration,opened.resourceTable,opened.resourceId,opened.resourceTypeRaw,opened.variantCode,
       opened.partition,opened.table,opened.localId,opened.serverId,opened.sentAt];
   const identity=createHash('sha256').update(JSON.stringify(identitySource)).digest('hex');
-  return Object.freeze({protocol:'media-association-v1' as const,profileId:'wechat-image-original-v1',recordId:source.recordId,
-    messageId,resourceIdentity:'wechat-image-original-v1:'+identity});
+  const profileId=proof.kind==='wechat-message-image-content-v1'?'wechat-message-image-v1':'wechat-image-original-v1';
+  return Object.freeze({protocol:'media-association-v1' as const,profileId,recordId:source.recordId,
+    messageId,resourceIdentity:profileId+':'+identity});
 }
 function resourceBytes(request:VisualRequest,client:NarrowWechatClient,opened:WechatImageOpenResult):AsyncIterable<Uint8Array> {
   let started=false;
@@ -135,7 +139,7 @@ async function closeResource(client:NarrowWechatClient,token:string):Promise<voi
   if(closeError)throw mapped(closeError);
 }
 
-/** 只通过固定版本的窄原生客户端打开当前授权联系人中已保存的一条图片原图。 */
+/** 只通过固定版本的窄原生客户端打开当前授权联系人中已关联的一条图片。 */
 export function createWechatImageResourcePort(executable?:string):VisualResourcePort {
   return {open:async(input:VisualRequest):Promise<VisualResource>=>{
     if(!executable)return reject('history_support_unverified');
@@ -185,7 +189,7 @@ export function createWechatImageResourcePort(executable?:string):VisualResource
       const resource:VisualResource=Object.freeze({
         association:association(stableOpened,expectedSource,input.messageId),authority:stableAuthority,envelope:'plain',
         expectedBytes:stableOpened.expectedBytes,expectedSha256:stableOpened.expectedSha256,complete:true as const,
-        quality:Object.freeze({kind:'original' as const,proof:hashProof}),bytes:resourceBytes(request,client,stableOpened),
+        quality:stableOpened.quality==='original'?Object.freeze({kind:'original' as const,proof:hashProof}):Object.freeze({kind:'unknown' as const,proof:null}),bytes:resourceBytes(request,client,stableOpened),
         close,
       });
       transferred=true;

@@ -14,7 +14,7 @@ test('正常媒体服务经图片类型适配器保存可实际解码的独立�
  let closed=0;const f=await fixture(t,new VisualMediaAdapter(resourcePort({closed:()=>closed++})));
  const image=f.messages.find(m=>m.kind==='image');
  const value=await f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'});
- assert.equal(value.latestAttempt.outcome,'limited');assert.equal(value.files[0].imageQuality,'thumbnail');
+ assert.equal(value.latestAttempt.outcome,'full');assert.equal(value.files[0].imageQuality,'thumbnail');
  assert.equal(value.files[0].viewable,true);assert.equal(value.files[0].format,'png');assert.equal(closed,1);
  const preview=await f.media.openPreview(f.contact,image.id,value.files[0].fileId);
  assert.deepEqual(Buffer.from(preview.dataBase64,'base64'),png);await f.media.releasePreview(preview.sessionId);
@@ -67,17 +67,18 @@ test('读取前拒绝错误账号或代次及无完整快照证明，不消费�
  await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'}),{code:'media_resource_too_large'});
  assert.deepEqual((await f.media.read(f.contact,image.id)).files,[]);
 });
-test('复制完整性与图片质量独立，缺质量证据不能宣称原图',async t=>{
+test('复制完整性与图片质量独立，缺原图质量证明时仍保存并标记unknown',async t=>{
  const options={quality:{kind:'unknown',proof:null}};
  const f=await fixture(t,new VisualMediaAdapter(resourcePort(options))),image=f.messages.find(m=>m.kind==='image');
- const value=await f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'});assert.equal(value.latestAttempt.outcome,'quality_unknown');assert.equal(value.files[0].viewable,true);
+ const value=await f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'});assert.equal(value.latestAttempt.outcome,'full');assert.equal(value.files[0].viewable,true);assert.equal(value.files[0].imageQuality,'unknown');
  options.quality={kind:'original',proof:null};
- await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'}),{code:'media_quality_unverified'});
+ const downgraded=await f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'});
+ assert.equal(downgraded.latestAttempt.outcome,'full');assert.equal(downgraded.files[0].imageQuality,'unknown');
  options.quality={kind:'unknown',proof:null};options.expectedSha256='0'.repeat(64);
  await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'}),{code:'media_resource_incomplete'});
  delete options.expectedSha256;options.expectedBytes=png.length+1;
  await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'}),{code:'media_resource_incomplete'});
- assert.equal((await f.media.read(f.contact,image.id)).files[0].fileId,value.files[0].fileId);
+ assert.equal((await f.media.read(f.contact,image.id)).files[0].fileId,downgraded.files[0].fileId);
 });
 test('来源删除等待真实类型资源读者结算，旧在途图片不能复活',async t=>{
  let started,aborted,releaseClose,delay=false;

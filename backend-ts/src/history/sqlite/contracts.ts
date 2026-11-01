@@ -116,7 +116,7 @@ export interface HistoryRead {
   messages: StoredMessage[]; coverage: HistoryCoverage;
   replyEligibility: 'ready' | 'history_syncing' | 'history_incomplete';
 }
-export type HistoryImageMediaState = 'pending' | 'original' | 'thumbnail_only' | 'unavailable' | 'failed' | 'cleared';
+export type HistoryImageMediaState = 'pending' | 'original' | 'available' | 'thumbnail_only' | 'unavailable' | 'failed' | 'cleared';
 export interface HistoryImageMedia {
   state: HistoryImageMediaState; fileId: string | null; mimeType: string | null; errorCode?: string | null;
 }

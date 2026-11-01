@@ -41,7 +41,7 @@ async function readNarrowWechatManifest(executable: string): Promise<{options:Na
       const row = manifest as Record<string, unknown>;
       if (typeof row.cliSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.cliSha256)
         || typeof row.wcdbSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.wcdbSha256)) return reject();
-      const imageKeyChannel=row.originalImageProtocol==='wechat-original-image-v1'&&row.originalImageQualityProof==='wechat-cdn-big-hd-exact-content-v4';
+      const imageKeyChannel=row.originalImageProtocol==='wechat-original-image-v1'&&['wechat-cdn-big-hd-exact-content-v4','wechat-message-image-content-v1'].includes(row.originalImageQualityProof as string);
       return {options:{ executable, expectedCliSha256: row.cliSha256, expectedWcdbSha256: row.wcdbSha256,...(imageKeyChannel?{imageKeyChannel:true as const}:{}) },originalImageProtocol:row.originalImageProtocol,originalImageQualityProof:row.originalImageQualityProof,quoteProtocol:row.quoteProtocol};
     } finally { await handle.close(); }
   } catch (error) {
@@ -62,14 +62,14 @@ export async function supportsWechatQuotes(executable?:string):Promise<boolean>{
 export async function supportsWechatOriginalImages(executable?:string):Promise<boolean>{
  if(!executable)return false;
  try{const manifest=await readNarrowWechatManifest(executable);return manifest.originalImageProtocol==='wechat-original-image-v1'
-  &&manifest.originalImageQualityProof==='wechat-cdn-big-hd-exact-content-v4';}
+  &&manifest.originalImageQualityProof==='wechat-message-image-content-v1';}
  catch{return false;}
 }
 
-/** fd3只为明确声明v4的真实图片制品启用，旧图片证明和历史客户端不创建密钥通道。 */
+/** fd3只为明确支持内存密钥通道的图片制品启用。 */
 export async function supportsWechatImageKeyChannel(executable?:string):Promise<boolean>{
  if(!executable)return false;
  try{const manifest=await readNarrowWechatManifest(executable);return manifest.originalImageProtocol==='wechat-original-image-v1'
-  &&manifest.originalImageQualityProof==='wechat-cdn-big-hd-exact-content-v4';}
+  &&['wechat-cdn-big-hd-exact-content-v4','wechat-message-image-content-v1'].includes(manifest.originalImageQualityProof as string);}
  catch{return false;}
 }

@@ -9,13 +9,52 @@ import {SqliteImageSyncCoordinator} from '../src/media/sqlite/image-sync.ts';
 
 const bytes=Buffer.from('合成原图文件');
 function originalAdapter(onRead=()=>{}){
- return {version:'synthetic-original-v1',supports:(kind,goal)=>kind==='image'&&goal==='original_upgrade',async execute(context){
+ return {version:'synthetic-original-v1',supports:(kind,goal)=>kind==='image'&&(goal==='extract'||goal==='original_upgrade'),async execute(context){
   onRead();await context.checkpoint();
   await context.save({role:'image_display',expectedBytes:bytes.length,expectedSha256:createHash('sha256').update(bytes).digest('hex'),
    bytes:(async function*(){yield bytes;})(),validate:async path=>{assert.deepEqual(await readFile(path),bytes);return {format:'synthetic',mimeType:'image/png',containerValid:true,viewable:true,playable:false,imageQuality:'original',qualityProof:'synthetic-original-proof'};}});
   return {association:{protocol:'media-association-v1',profileId:'synthetic-original-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-original'}};
  }};
 }
+
+function unknownQualityAdapter(onRead=()=>{}){
+ return {version:'synthetic-current-image-v1',supports:(kind,goal)=>kind==='image'&&goal==='extract',async execute(context){
+  onRead();await context.checkpoint();
+  await context.save({role:'image_display',expectedBytes:bytes.length,expectedSha256:createHash('sha256').update(bytes).digest('hex'),
+   bytes:(async function*(){yield bytes;})(),validate:async path=>{assert.deepEqual(await readFile(path),bytes);return {format:'synthetic',mimeType:'image/png',containerValid:true,viewable:true,playable:false,imageQuality:'unknown',qualityProof:null};}});
+  return {association:{protocol:'media-association-v1',profileId:'synthetic-current-image-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-current-image'}};
+ }};
+}
+
+test('自动图片同步以普通提取保存unknown文件，重复唤醒和清除后不重取',async t=>{
+ let reads=0;const f=await fixture(t,unknownQualityAdapter(()=>reads++));
+ const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());
+ sync.wake();await sync.waitForIdle();
+ const image=f.messages.find(m=>m.kind==='image'),saved=await f.media.read(f.contact,image.id);
+ assert.equal(reads,1);assert.equal(saved.latestAttempt.outcome,'full');assert.equal(saved.files[0].imageQuality,'unknown');
+ sync.wake(f.contact);await sync.waitForIdle();assert.equal(reads,1);
+ await f.media.clear(f.contact,image.id,'clear-unknown-image');sync.wake(f.contact);await sync.waitForIdle();
+ assert.equal(reads,1);assert.deepEqual((await f.media.read(f.contact,image.id)).files,[]);
+});
+
+test('v5自动同步为旧v3与v4失败补一轮，成功或清除后不重取',async t=>{
+ let reads=0;const adapter=unknownQualityAdapter(()=>reads++),extract=adapter.execute;
+ adapter.supports=(kind,goal)=>kind==='image'&&(goal==='extract'||goal==='original_upgrade');
+ adapter.execute=async context=>{if(context.goal==='original_upgrade'){reads++;throw new StorageFailure('media_original_unavailable');}return extract(context);};
+ const f=await fixture(t,adapter),image=f.messages.find(m=>m.kind==='image');
+ for(const oldVersion of ['v3','v4']){
+  await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:`image_sync_${oldVersion}_${image.id}_0`,goal:'original_upgrade'}),{code:'media_original_unavailable'});
+ }
+ const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());
+ sync.wake();await sync.waitForIdle();
+ const current=await f.media.read(f.contact,image.id);
+ assert.equal(reads,3);assert.equal(current.files.length,1);assert.equal(current.files[0].imageQuality,'unknown');
+ const newKey=`image_sync_v5_${image.id}_0`;
+ const savedAttempt=await f.storage.execute('media.request',{ownerId:f.owner,contactId:f.contact,messageId:image.id,requestKey:newKey,goal:'extract'});
+ assert.equal(savedAttempt.state,'completed');
+ sync.wake(f.contact);await sync.waitForIdle();assert.equal(reads,3);
+ await f.media.clear(f.contact,image.id,'clear-v5-image');sync.wake(f.contact);await sync.waitForIdle();assert.equal(reads,3);
+});
 
 test('已授权图片随同步保存原图，重复唤醒复用副本且不依赖记忆任务',async t=>{
  let reads=0;const f=await fixture(t,originalAdapter(()=>reads++));
@@ -61,15 +100,16 @@ test('解码修复后旧版误判可重试一次，后续唤醒仍去重且清�
  await f.media.clear(f.contact,image.id,'clear-after-decoding-fix');sync.wake();await sync.waitForIdle();assert.equal(reads,2);
 });
 
-test('同步适配器返回缩略图也不能发布为原图，临时文件收尾清理',async t=>{
+test('同步适配器返回缩略图也保存为可查看文件并保留质量标记',async t=>{
+ let reads=0;
  const adapter=originalAdapter();const original=adapter.execute;
- adapter.execute=context=>original({...context,save:input=>context.save({...input,validate:async path=>({...await input.validate(path),imageQuality:'thumbnail',qualityProof:'synthetic-thumbnail-proof'})})});
+ adapter.execute=context=>{reads++;return original({...context,save:input=>context.save({...input,validate:async path=>({...await input.validate(path),imageQuality:'thumbnail',qualityProof:'synthetic-thumbnail-proof'})})});};
  const f=await fixture(t,adapter),image=f.messages.find(m=>m.kind==='image');
  const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());
  sync.wake();await sync.waitForIdle();
- const result=await f.media.read(f.contact,image.id);assert.deepEqual(result.files,[]);
- assert.equal(result.latestAttempt.errorCode,'media_original_unavailable');
- assert.equal((await readdir(join(f.root,'managed','media'))).length,0);
+ const result=await f.media.read(f.contact,image.id);assert.equal(result.files.length,1);
+ assert.equal(result.files[0].imageQuality,'thumbnail');assert.equal(result.latestAttempt.outcome,'full');
+ sync.wake(f.contact);await sync.waitForIdle();assert.equal(reads,1);
 });
 
 test('关闭读取不取图，开启后保存且清除图片后普通同步不恢复',async t=>{

@@ -7,7 +7,7 @@ export interface ContactHistoryRequest {
 }
 
 export interface ContactHistoryImageMedia {
-  state: 'pending' | 'original' | 'thumbnail_only' | 'unavailable' | 'failed' | 'cleared';
+  state: 'pending' | 'original' | 'available' | 'thumbnail_only' | 'unavailable' | 'failed' | 'cleared';
   fileId: string | null;
   mimeType: string | null;
   errorCode?: string | null;
