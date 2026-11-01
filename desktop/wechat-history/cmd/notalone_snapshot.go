@@ -149,22 +149,24 @@ type notaloneSnapshotTarget struct {
 	CheckedPartitions []string                `json:"checkedPartitions,omitempty"`
 }
 type notaloneSnapshotRecord struct {
-	Partition      string  `json:"partition"`
-	Table          string  `json:"table"`
-	LocalID        *string `json:"localId"`
-	ServerID       *string `json:"serverId"`
-	Sender         string  `json:"sender"`
-	Kind           string  `json:"kind"`
-	Text           *string `json:"text"`
-	OriginalType   string  `json:"originalType"`
-	Status         *string `json:"status"`
-	MessageState   string  `json:"messageState,omitempty"`
-	StateAssurance string  `json:"stateAssurance"`
-	MetadataOnly   bool    `json:"metadataOnly,omitempty"`
-	SentAt         *string `json:"sentAt"`
-	TimePrecision  *string `json:"timePrecision"`
-	OrderScheme    *string `json:"orderScheme"`
-	OrderKey       *string `json:"orderKey"`
+	Partition      string                     `json:"partition"`
+	Table          string                     `json:"table"`
+	LocalID        *string                    `json:"localId"`
+	ServerID       *string                    `json:"serverId"`
+	Sender         string                     `json:"sender"`
+	Kind           string                     `json:"kind"`
+	Text           *string                    `json:"text"`
+	OriginalType   string                     `json:"originalType"`
+	Status         *string                    `json:"status"`
+	MessageState   string                     `json:"messageState,omitempty"`
+	StateAssurance string                     `json:"stateAssurance"`
+	MetadataOnly   bool                       `json:"metadataOnly,omitempty"`
+	SentAt         *string                    `json:"sentAt"`
+	TimePrecision  *string                    `json:"timePrecision"`
+	OrderScheme    *string                    `json:"orderScheme"`
+	OrderKey       *string                    `json:"orderKey"`
+	Quote          *notaloneQuoteReadResponse `json:"quote,omitempty"`
+	QuoteErrorCode string                     `json:"quoteErrorCode,omitempty"`
 }
 type notaloneSnapshotPage struct {
 	Target              string                   `json:"target"`
@@ -176,17 +178,18 @@ type notaloneSnapshotPage struct {
 	Exhausted           bool                     `json:"exhausted"`
 }
 type notaloneSnapshotShard struct {
-	reader       *wcdb.DB
-	observer     *wcdb.DB
-	path         string
-	partition    string
-	instance     string
-	observerPre  int64
-	observerPost int64
-	pinned       bool
-	present      bool
-	lastID       *int64
-	done         bool
+	reader               *wcdb.DB
+	observer             *wcdb.DB
+	path                 string
+	partition            string
+	instance             string
+	observerPre          int64
+	observerPost         int64
+	pinned               bool
+	present              bool
+	hasContentTypeColumn bool
+	lastID               *int64
+	done                 bool
 }
 type notaloneSnapshot struct {
 	mu                sync.Mutex
@@ -375,6 +378,12 @@ func newNotaloneSnapshotWithIdleTimeout(ctx context.Context, s *server, selected
 				return nil, notaloneFailure("history_schema_changed")
 			}
 			shard.instance = actual.Target
+			for _, column := range actual.Columns {
+				if column.Name == "WCDB_CT_message_content" {
+					shard.hasContentTypeColumn = true
+					break
+				}
+			}
 		}
 	}
 	// 独立observer的共同无提交窗口固定所有reader；后续提交不移动既有切面。
@@ -511,7 +520,7 @@ func (n *notaloneSnapshot) checkLocked() error {
 	}
 	return nil
 }
-func (n *notaloneSnapshot) Page(ctx context.Context, cursor string) (page notaloneSnapshotPage, err error) {
+func (n *notaloneSnapshot) Page(ctx context.Context, cursor string, inlineQuotes ...notaloneInlineQuoteContext) (page notaloneSnapshotPage, err error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	defer func() {
@@ -558,7 +567,11 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string) (page notalo
 		if n.deltaOnly && remaining > deltaReadBudget {
 			remaining = deltaReadBudget
 		}
-		query := "SELECT local_id,server_id,local_type,real_sender_id,create_time,status FROM " + quoteIdent(n.table)
+		query := "SELECT local_id,server_id,local_type,real_sender_id,create_time,status"
+		if shard.hasContentTypeColumn {
+			query += ",WCDB_CT_message_content"
+		}
+		query += " FROM " + quoteIdent(n.table)
 		args := []any{}
 		var deltaEnd int
 		if n.deltaOnly {
@@ -599,7 +612,11 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string) (page notalo
 		if !exhausted {
 			rows = rows[:remaining]
 		}
-		records, e := n.projectRows(op, shard, rows)
+		var inlineQuote *notaloneInlineQuoteContext
+		if len(inlineQuotes) > 0 {
+			inlineQuote = &inlineQuotes[0]
+		}
+		records, e := n.projectRows(op, shard, rows, inlineQuote)
 		if e != nil {
 			return page, e
 		}
@@ -677,7 +694,7 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string) (page notalo
 	}
 	return page, nil
 }
-func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnapshotShard, rows []wcdb.Row) ([]notaloneSnapshotRecord, error) {
+func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnapshotShard, rows []wcdb.Row, inlineQuote *notaloneInlineQuoteContext) ([]notaloneSnapshotRecord, error) {
 	quarantine := n.profile.OpaqueStatusPolicy == "quarantine-text-v1"
 	records := make([]notaloneSnapshotRecord, 0, len(rows))
 	bodyIDs := []any{}
@@ -692,6 +709,18 @@ func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnaps
 			kind = notaloneSnapshotKind(rawType)
 		}
 		record := notaloneSnapshotRecord{Partition: shard.partition, Table: shard.instance, LocalID: notaloneSnapshotDecimal(row["local_id"]), ServerID: notaloneSnapshotDecimal(row["server_id"]), Sender: "unknown", Kind: kind, OriginalType: originalType, Status: notaloneSnapshotDecimal(row["status"])}
+		if inlineQuote != nil && inlineQuote.session != nil && !quarantine && rawType == notaloneQuoteRawType && knownType {
+			quote, quoteErr := inlineQuote.read(ctx, n, shard, row)
+			if quoteErr != nil {
+				if code := notaloneInlineQuoteErrorCode(quoteErr); code != "" {
+					record.QuoteErrorCode = code
+				} else {
+					return nil, quoteErr
+				}
+			} else {
+				record.Quote = &quote
+			}
+		}
 		if senderID, ok := row["real_sender_id"].(int64); (n.profile.StatusSemanticsVerified || quarantine) && ok {
 			names, e := shard.reader.QueryBounded(ctx, 1, "SELECT user_name FROM Name2Id WHERE rowid=? LIMIT 1", senderID)
 			if e == nil && len(names) == 1 {

@@ -6,6 +6,7 @@ import type { HistoryRecord, HistorySupportReport, HistoryTarget } from './contr
 import { verifiedTerminalReason, prepareRecord } from './normalize.ts';
 import {currentSourceScopeCTE,currentSourcePredicate} from './current-scope.ts';
 import {rememberSourceTerminal,type SourceTerminalReason} from './terminal.ts';
+import {failHistoryQuoteInTransaction,quoteParserVersion,saveHistoryQuoteInTransaction} from './quote-store.ts';
 
 /** 逐条排除判定：来源删除（05）与清空截断（06）分别记账，都不写回正文或原始载荷。 */
 export type IngestExclusion = 'source_excluded' | 'clear_excluded';
@@ -181,7 +182,8 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
           AND NOT EXISTS (SELECT 1 FROM media_extraction_attempt x WHERE x.owner_id=r.owner_id AND x.record_id=r.id))`,
         [token.owner_id,token.contact_id,token.owner_id,token.contact_id,prepared.localKey,token.binding_id,BigInt(token.data_generation),record.status??null,record.serverId]);
     }
-    if (!reason && message && prepared.localKey && tx.get(`SELECT 1 FROM capture_record r
+    if (!reason && message && prepared.localKey) {
+      const priorSource=tx.get(`SELECT r.id FROM capture_record r
       JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id
       JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
       WHERE r.owner_id=? AND r.contact_id=? AND r.message_id=? AND r.observed_key=?
@@ -193,7 +195,15 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
           AND qg.binding_id=g.binding_id AND q.state='quarantined' AND q.availability='available'
           AND (c.acceptance_no IS NULL OR qc.acceptance_no>c.acceptance_no
             OR (qc.acceptance_no=c.acceptance_no AND q.item_no>r.item_no))) LIMIT 1`,
-      [token.owner_id,token.contact_id,message.id,prepared.localKey,token.binding_id,BigInt(token.data_generation)])) continue;
+      [token.owner_id,token.contact_id,message.id,prepared.localKey,token.binding_id,BigInt(token.data_generation)]);
+      if(priorSource){
+        const quoteInput={token,recordId:String(priorSource.id),messageId:String(message.id),version:quoteParserVersion};
+        const quoteResult=prepared.quote?saveHistoryQuoteInTransaction(tx,{...quoteInput,content:prepared.quote,proofDigest:prepared.quote.proofDigest})
+          :prepared.quoteErrorCode?failHistoryQuoteInTransaction(tx,{...quoteInput,errorCode:prepared.quoteErrorCode}):null;
+        if(quoteResult?.changed)updatedMessageIds.add(String(message.id));
+        continue;
+      }
+    }
     if (excluded && prepared.localKey && tx.get(`SELECT 1 FROM capture_record r
       JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id
       JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
@@ -217,7 +227,13 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
     // 正文存于消息表，来源记录仅保留渠道信息。
     const singleTextCopy=!reason&&record.kind==='text';
     const sourcePayload=singleTextCopy?JSON.stringify({...record,text:null}):prepared.raw;
-    tx.run('INSERT INTO capture_record(owner_id,id,contact_id,capture_id,item_no,state,message_id,raw_payload,observed_scheme,observed_key,normalizer_version,reason_code) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', [token.owner_id, randomUUID(), token.contact_id, captureId, index, excluded ? 'excluded' : reason ? 'quarantined' : 'normalized', reason ? null : message!.id, excluded ? null : sourcePayload, prepared.localKey ? 'source-table-local-v1' : null, prepared.localKey, singleTextCopy?'2':'1', reason]);
+    const recordId=randomUUID();
+    tx.run('INSERT INTO capture_record(owner_id,id,contact_id,capture_id,item_no,state,message_id,raw_payload,observed_scheme,observed_key,normalizer_version,reason_code) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', [token.owner_id, recordId, token.contact_id, captureId, index, excluded ? 'excluded' : reason ? 'quarantined' : 'normalized', reason ? null : message!.id, excluded ? null : sourcePayload, prepared.localKey ? 'source-table-local-v1' : null, prepared.localKey, singleTextCopy?'2':'1', reason]);
+    if(!reason&&!excluded&&message&&prepared.quote){
+      saveHistoryQuoteInTransaction(tx,{token,recordId,messageId:String(message.id),version:quoteParserVersion,content:prepared.quote,proofDigest:prepared.quote.proofDigest});
+    }else if(!reason&&!excluded&&message&&prepared.quoteErrorCode){
+      failHistoryQuoteInTransaction(tx,{token,recordId,messageId:String(message.id),version:quoteParserVersion,errorCode:prepared.quoteErrorCode});
+    }
   }
   return { quarantined:quarantined||pendingStates.size>0, createdMessageIds, updatedMessageIds:[...updatedMessageIds] };
 }

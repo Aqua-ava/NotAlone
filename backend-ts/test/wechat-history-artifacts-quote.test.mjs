@@ -16,3 +16,15 @@ test('旧引用组件保留普通读取和图片能力，仅完整认证的tail�
  await save('wechat-quote-normal-tail-v1');assert.equal(await supportsWechatQuotes(executable),false);
  await save('wechat-quote-normal-tail-v2');assert.equal(await supportsWechatQuotes(executable),true);assert.equal(await supportsWechatOriginalImages(executable),true);
 });
+
+test('仅声明完整内联引用协议的组件启用同步引用解码，旧组件继续普通读取',async t=>{
+ const root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-inline-quote-artifact-'))),executable=path.join(root,'bin/wechat-cli');
+ t.after(()=>rm(root,{recursive:true,force:true}));await mkdir(path.dirname(executable));await writeFile(executable,'synthetic-cli',{mode:0o700});
+ const manifest={cliSha256:'a'.repeat(64),wcdbSha256:'b'.repeat(64),quoteProtocol:'wechat-quote-message-v1',quoteReader:'wechat-quote-normal-tail-v2'};
+ const save=extra=>writeFile(path.join(root,'manifest.json'),JSON.stringify({...manifest,...extra}));
+ await save({});assert.equal((await loadNarrowWechatOptions(executable)).inlineQuotes,undefined);
+ await save({quoteInline:'unverified'});assert.equal((await loadNarrowWechatOptions(executable)).inlineQuotes,undefined);
+ await save({quoteInline:'wechat-quote-inline-sync-v1'});assert.equal((await loadNarrowWechatOptions(executable)).inlineQuotes,true);
+ assert.equal(await supportsWechatQuotes(executable),true,'内联组件继续支持旧占位补齐');
+ await save({quoteInline:'wechat-quote-inline-sync-v1',quoteProtocol:'unverified'});assert.equal((await loadNarrowWechatOptions(executable)).inlineQuotes,undefined);
+});

@@ -110,6 +110,22 @@ test('目标先删除时登记server排除，后补齐引用只保存回复并�
  assert.equal(read.messages.find(row=>row.id===carrier.id).quoteErrorCode,undefined,'成功解析后的引用不显示失败码');
 });
 
+test('普通同步遇到指向已删除目标的引用时沿用server排除并擦除引用快照',async t=>{
+ const placeholder={...records[0],stateAssurance:'unverified',metadataOnly:true};
+ const f=await fixture(t,{records:[placeholder,records[1]]}),contact=f.bindings.find(row=>row.conversation_locator==='friend-a').contact_id;
+ const before=await f.history.read(contact),target=before.messages.find(row=>row.text==='这是被引用的原话');assert.ok(target);
+ const removeTarget=await f.deletion.plan({ownerId:owner,requestKey:'inline-quote-target-first',scope:{kind:'source',contactId:contact,sourceId:target.sourceRecordIds[0]}});
+ assert.equal((await f.deletion.advance(removeTarget)).state,'completed');
+ const inlineCarrier={...placeholder,quote:{...content,proofDigest:'e'.repeat(64)}};
+ f.state.records=[inlineCarrier];
+ await f.history.synchronize(contact);
+ const read=await f.history.read(contact),carrier=read.messages.find(row=>row.originalType==='244813135921');
+ assert.ok(carrier,JSON.stringify(read.messages));assert.equal(carrier.quote.replyText,content.replyText);assert.equal(carrier.quote.referencedText,null);
+ assert.equal(carrier.quote.referencedSender,null);assert.equal(carrier.quote.referencedSenderRole,'unknown');
+ assert.equal(carrier.quote.referencedServerId,null);assert.equal(carrier.quote.targetMessageId,null);assert.equal(carrier.quote.state,'unavailable');
+ assert.deepEqual(await f.store.candidates(contact,'wechat-quote-v2'),[]);
+});
+
 test('同联系人现授权下重开读取后仍能补齐先前合法历史',async t=>{
  const f=await fixture(t),contact=f.bindings[0].contact_id;
  await f.contacts.setReading(false);await f.contacts.setReading(true);

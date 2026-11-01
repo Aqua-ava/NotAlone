@@ -67,7 +67,7 @@ function overlaySha(files) {
   return hash(JSON.stringify(rows));
 }
 
-async function syntheticUpgradeFixture({ existingImage = false, quotes = false, quoteTail = false } = {}) {
+async function syntheticUpgradeFixture({ existingImage = false, quotes = false, quoteTail = false, quoteInline = false } = {}) {
   const repositoryRoot = await mkdtemp(path.join(process.cwd(), '.tmp-notalone-image-upgrade-'));
   const buildsRoot = path.join(repositoryRoot, 'local-tools/wx-cli/.notalone-builds');
   const oldName = existingImage ? 'original-image-20261031-v1' : 'true-delta-20261031-c2';
@@ -117,6 +117,7 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
     oldFiles['cmd/wechat-cli/notalone_image.go']=newImage;
     oldFiles['cmd/wechat-cli/notalone_image_test.go']=newImageTest;
   }
+  if(quoteInline)newFiles['cmd/wechat-cli/notalone_snapshot.go']='snapshot with bounded inline quote projection';
   const write = async (file, data, mode = 0o600) => {
     await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
     await writeFile(file, data, { mode });
@@ -139,7 +140,8 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
       ...(imageProtocol ? { originalImageProtocol: imageProtocol } : {}),
       ...(quoteTail?{originalImageQualityProof:'wechat-message-image-content-v1'}:existingImage && root === toRoot ? { originalImageQualityProof: 'wechat-cdn-big-hd-exact-content-v3' } : {}),
       ...(quotes&&(root===toRoot||quoteTail)?{quoteProtocol:'wechat-quote-message-v1'}:{}),
-      ...(quoteTail&&root===toRoot?{quoteReader:'wechat-quote-normal-tail-v2'}:{}) };
+      ...(quoteTail&&root===toRoot?{quoteReader:'wechat-quote-normal-tail-v2'}:{}),
+      ...(quoteInline&&root===toRoot?{quoteInline:'wechat-quote-inline-sync-v1'}:{}) };
     await write(path.join(root, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   }
   const rootScope = hash(`${accountKey}\0${path.resolve(dbRoot)}`);
@@ -154,11 +156,13 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
   const identityFiles = Object.fromEntries(identityFileNames.map(name => [`cmd/wechat-cli/${name}`, hash(oldFiles[`cmd/wechat-cli/${name}`])]));
   const protocolOldSha256 = hash(oldFiles['cmd/wechat-cli/notalone_protocol.go']);
   const protocolNewSha256 = hash(newProtocol);
+  const inlineSourceChanges=quoteInline?{'cmd/wechat-cli/notalone_snapshot.go':{old:hash(oldFiles['cmd/wechat-cli/notalone_snapshot.go']),new:hash(newFiles['cmd/wechat-cli/notalone_snapshot.go'])}}:{};
   const identityAlgorithmSha256 = hash(JSON.stringify({ files: Object.entries(identityFiles).sort((left, right) => left[0].localeCompare(right[0])),
-    protocol: [protocolOldSha256, protocolNewSha256] }));
+    protocol: [protocolOldSha256, protocolNewSha256],...(quoteInline?{updates:Object.entries(inlineSourceChanges)}:{}) }));
   const policy = { oldName, newName, commonManifest: common,
-    ...(quotes?{newQuoteProtocol:'wechat-quote-message-v1',sourceChanges:{'cmd/wechat-cli/notalone_quote.go':{old:quoteTail?hash(oldFiles['cmd/wechat-cli/notalone_quote.go']):null,new:hash(newFiles['cmd/wechat-cli/notalone_quote.go'])}}}:{}),
+    ...(quotes?{newQuoteProtocol:'wechat-quote-message-v1',sourceChanges:{'cmd/wechat-cli/notalone_quote.go':{old:quoteTail?hash(oldFiles['cmd/wechat-cli/notalone_quote.go']):null,new:hash(newFiles['cmd/wechat-cli/notalone_quote.go'])},...inlineSourceChanges}}:{}),
     ...(quoteTail?{oldQuoteProtocol:'wechat-quote-message-v1',newQuoteReader:'wechat-quote-normal-tail-v2'}:{}),
+    ...(quoteInline?{newQuoteInline:'wechat-quote-inline-sync-v1'}:{}),
     oldCliSha256, newCliSha256, oldOverlaySha256: overlaySha(oldFiles), newOverlaySha256: overlaySha(newFiles),
     newImageProtocol: 'wechat-original-image-v1', identityFiles, identityAlgorithmSha256,
     protocolOldSha256, protocolNewSha256, imageSha256: hash(newImage), imageTestSha256: hash(newImageTest),
@@ -272,6 +276,15 @@ test('未认证的tail引用能力声明不能复用固定升级证明',async t=
  const f=await syntheticUpgradeFixture({existingImage:true,quotes:true,quoteTail:true});t.after(()=>rm(f.repositoryRoot,{recursive:true,force:true}));
  const p=path.join(f.toRoot,'manifest.json'),m=JSON.parse(await readFile(p,'utf8'));m.quoteReader='unverified';await writeFile(p,JSON.stringify(m));
  await assert.rejects(f.tools.prepareAliases(f),/history_image_upgrade_manifest_mismatch/);
+});
+
+test('同步内联引用升级保留来源别名并精确核对内联协议',async t=>{
+ const f=await syntheticUpgradeFixture({existingImage:true,quotes:true,quoteTail:true,quoteInline:true});t.after(()=>rm(f.repositoryRoot,{recursive:true,force:true}));
+ assert.equal((await f.tools.prepareAliases(f)).status,'prepared');
+ const aliases=JSON.parse(await readFile(path.join(f.toRoot,'source-identity-aliases.json'),'utf8'));assert.deepEqual(aliases.aliases,f.aliases);
+ const invalid=await syntheticUpgradeFixture({existingImage:true,quotes:true,quoteTail:true,quoteInline:true});t.after(()=>rm(invalid.repositoryRoot,{recursive:true,force:true}));
+ const p=path.join(invalid.toRoot,'manifest.json'),m=JSON.parse(await readFile(p,'utf8'));m.quoteInline='unverified';await writeFile(p,JSON.stringify(m));
+ await assert.rejects(invalid.tools.prepareAliases(invalid),/history_image_upgrade_manifest_mismatch/);
 });
 
 test('原图修复组件仅图片源码变化，沿用相同协议和身份实现也须独立签发', async t => {

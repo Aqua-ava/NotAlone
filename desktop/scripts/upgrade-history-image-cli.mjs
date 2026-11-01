@@ -311,6 +311,17 @@ const quoteTailClosePolicy=Object.freeze({
  }),
 });
 
+// 正常同步直接携带引用详情；已保存占位继续使用原有补齐协议。
+const quoteInlinePolicy=Object.freeze({
+ ...quoteTailClosePolicy,oldName:'quote-tail-20261101-v2',newName:'quote-inline-20261101-v1',
+ oldCliSha256:"93e85f1b7087cd901cb69ab5ab7fa714e14cbf67ad3e86c20619159c0b4c30b8",newCliSha256:"ad9f9a095f902aee7c5709f1d864b91cb2479f45f016f9271194ab60a9b1f9dd",
+ oldOverlaySha256:"be01c0776a3472d0262c6a1ca130f004dfb6ab421e97500bef0d021b130fe69a",newOverlaySha256:"707cc2a3f2463fb5ff7f0a2e446018d07bb3c745c549c0aca4252f03f4664488",
+ oldQuoteReader:'wechat-quote-normal-tail-v2',newQuoteReader:'wechat-quote-normal-tail-v2',newQuoteInline:'wechat-quote-inline-sync-v1',
+ protocolOldSha256:"2b5351608063c70af73e80e9cee6868d342ffb2b32d8f46caf64cdb14846d60c",protocolNewSha256:"3d629049d5d0f911e5eba16c78a23eef9cf824981230613e1314bac7968177fa",
+ sourceChanges:Object.freeze({"cmd/wechat-cli/notalone_quote.go":{"old":"8bcf887f071e5ff9d4e6f5ac39d5d084ae50b1c222619368d49691367a8b01c4","new":"12097d887c1b01f079bf5d90871f8b48a86736e2e2193c4c5d0e94fd6ab95f9d"},"cmd/wechat-cli/notalone_quote_inline.go":{"old":null,"new":"22786a35d6187ff689e09bb355ae26d855a7bbea107ad1491163f1f6ad110ef4"},"cmd/wechat-cli/notalone_quote_test.go":{"old":"7df32876fdeb4559c2667bb49aea24afcd55dcbc73a0f593086c92aff42a257e","new":"8322da44188a0e1b5017865cd527ed3f81e4f3accde586d51b2a2b3175986a65"},"cmd/wechat-cli/notalone_snapshot.go":{"old":"d9f9f40408ff6462b426d7ef01db9ee382c8c8456d635e076162c55fac3613fc","new":"9f0e158ef32491f20e334c91e0d8d890d3539c5d4efd3cb64174b818219b2928"},"cmd/wechat-cli/notalone_tail.go":{"old":"3f5708629b7744458057b8d8e4369b498e946643cc3ea2a889b9d3a7c42782fb","new":"f08df4256aa00fa32743abc5fb3cb0e6d32d2efb3591b34f295979e8eb37df29"}}),
+ identityAlgorithmSha256:"0b708ebbdcb462c637286077048abe79958cdc95248007a8cd42269d9009b860",
+});
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -452,7 +463,8 @@ async function scanSourceTree(root) {
 
 function identityAlgorithmDigest(policy) {
   const files = Object.entries(policy.identityFiles).sort(([left], [right]) => left.localeCompare(right));
-  return digest(JSON.stringify({ files, protocol: [policy.protocolOldSha256, policy.protocolNewSha256] }));
+  const updates=Object.entries(policy.sourceChanges??{}).filter(([name])=>Object.hasOwn(policy.identityFiles,name)).sort(([left],[right])=>left.localeCompare(right));
+  return digest(JSON.stringify({ files, protocol: [policy.protocolOldSha256, policy.protocolNewSha256],...(updates.length?{updates}:{}) }));
 }
 
 function sourceOverlayDigest(files, expectedReadonlyTestSha256) {
@@ -474,11 +486,15 @@ function assertSourcePair(oldFiles, newFiles, policy) {
     || oldFiles.get(image) !== policy.oldImageSha256 || oldFiles.get(imageTest) !== policy.oldImageTestSha256 || newFiles.get(image) !== policy.imageSha256
     || newFiles.get(imageTest) !== policy.imageTestSha256) fail('history_image_upgrade_source_mismatch');
   for (const [file, sha] of Object.entries(policy.identityFiles)) {
-    if (oldFiles.get(file) !== sha || newFiles.get(file) !== sha) fail('history_image_upgrade_source_mismatch');
+    const expectedNew=policy.sourceChanges?.[file]?.new??sha;
+    if (oldFiles.get(file) !== sha || newFiles.get(file) !== expectedNew) fail('history_image_upgrade_source_mismatch');
   }
   const permitted = new Set([protocol, image, imageTest]);
   for(const [name,pair] of Object.entries(policy.sourceChanges??{})){
-    if(!/^cmd\/wechat-cli\/notalone_quote(?:_[a-z0-9]+)*\.go$/.test(name)||!isObject(pair)
+    // 内联同步只额外开放固定页／增量投影文件；每份仍绑定旧、新摘要，不接受任意身份源码变化。
+    const allowed=/^cmd\/wechat-cli\/notalone_quote(?:_[a-z0-9]+)*\.go$/.test(name)
+      ||policy.newQuoteInline==='wechat-quote-inline-sync-v1'&&/^cmd\/wechat-cli\/notalone_(?:snapshot|tail)(?:_test)?\.go$/.test(name);
+    if(!allowed||!isObject(pair)
       ||!(pair.old===null||hashPattern.test(pair.old))||!hashPattern.test(pair.new)
       ||(oldFiles.get(name)??null)!==pair.old||newFiles.get(name)!==pair.new)fail('history_image_upgrade_source_mismatch');
     permitted.add(name);
@@ -561,7 +577,8 @@ function manifestForSide(policy, side) {
     ...((isNew ? policy.newImageQualityProof : policy.oldImageQualityProof)
       ? { originalImageQualityProof: isNew ? policy.newImageQualityProof : policy.oldImageQualityProof } : {}),
     ...((isNew?policy.newQuoteProtocol:policy.oldQuoteProtocol)?{quoteProtocol:isNew?policy.newQuoteProtocol:policy.oldQuoteProtocol}:{}),
-    ...((isNew?policy.newQuoteReader:policy.oldQuoteReader)?{quoteReader:isNew?policy.newQuoteReader:policy.oldQuoteReader}:{}) };
+    ...((isNew?policy.newQuoteReader:policy.oldQuoteReader)?{quoteReader:isNew?policy.newQuoteReader:policy.oldQuoteReader}:{}),
+    ...((isNew?policy.newQuoteInline:policy.oldQuoteInline)?{quoteInline:isNew?policy.newQuoteInline:policy.oldQuoteInline}:{}) };
 }
 
 export function createUpgradeImageCliTools({ repositoryRoot, policy, afterReceiptPublished } = {}) {
@@ -710,7 +727,10 @@ const quoteSyncTools=createUpgradeImageCliTools({repositoryRoot,policy:quoteSync
 const imageContentTools=createUpgradeImageCliTools({repositoryRoot,policy:imageContentPolicy});
 const quoteTailTools=createUpgradeImageCliTools({repositoryRoot,policy:quoteTailPolicy});
 const quoteTailCloseTools=createUpgradeImageCliTools({repositoryRoot,policy:quoteTailClosePolicy});
-export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteTailClosePolicy.oldName)
+const quoteInlineTools=createUpgradeImageCliTools({repositoryRoot,policy:quoteInlinePolicy});
+export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteInlinePolicy.oldName)
+ &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteInlinePolicy.newName)
+ ?quoteInlineTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteTailClosePolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteTailClosePolicy.newName)
  ?quoteTailCloseTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteTailPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteTailPolicy.newName)

@@ -6,7 +6,7 @@ import path from 'node:path';
 import type { Writable } from 'node:stream';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import {readWechatQuotePayload,type WechatQuotePayload,type WechatQuoteSourceIdentity} from './quote-payload.ts';
-import type { HistoryPage, HistoryRecord, HistorySupportReport, HistoryTarget, HistoryTailPage } from '../sqlite/contracts.ts';
+import type { HistoryPage, HistoryQuoteErrorCode,HistoryRecord, HistorySupportReport, HistoryTarget, HistoryTailPage } from '../sqlite/contracts.ts';
 import { boundaryProtocol, maxBoundaryMembers, membersManifestSha256, sourceLocalKey, type HistoryBoundaryCandidate } from '../sqlite/boundary.ts';
 import { isPartitionGrowthTargetChange, isSafePartitionGrowth, historyTargetTransition } from '../partition-growth.ts';
 
@@ -75,6 +75,7 @@ export interface NarrowWechatClientOptions {
   executable: string; expectedCliSha256: string; expectedWcdbSha256: string;
   environment?: Record<string, string | undefined>;
   imageKeyChannel?: true;
+  inlineQuotes?:true;
 }
 export interface WechatImageSourceIdentity {
   partition: string; table: string; localId: string; serverId: string; sentAt: string;
@@ -482,11 +483,18 @@ function historyTarget(value: unknown, scope: ResolvedWechatScope, schema?: Wech
   if(schema&&checkedPartitions&&JSON.stringify([...checkedPartitions].sort())!==JSON.stringify([...schema.checkedPartitions].sort()))return fail();
   return { protocol: 'private-history-v1', descriptor: opaque(row.descriptor), partitions, tables, sourceGeneration: scope.sourceGeneration,...(checkedPartitions?{checkedPartitions}:{}) };
 }
-function historyRecord(value: unknown, target: HistoryTarget, mode: 'normal' | 'quarantine' = 'normal'): HistoryRecord {
+const inlineQuoteErrorCodes:readonly HistoryQuoteErrorCode[]=['history_quote_unavailable','history_quote_metadata_invalid','history_quote_too_large',
+  'history_quote_state_unverified','history_quote_association_unverified','history_quote_read_failed'];
+const quoteRawType='244813135921';
+type InlineQuoteScope={accountKey:string;conversationKey:string;sourceGeneration:string};
+function historyRecord(value: unknown, target: HistoryTarget, mode: 'normal' | 'quarantine' = 'normal', inlineQuoteScope?:InlineQuoteScope): HistoryRecord {
   const quarantine = mode === 'quarantine';
   const hasMessageState=!!value&&typeof value==='object'&&Object.hasOwn(value,'messageState');
   const hasMetadataOnly=!!value&&typeof value==='object'&&Object.hasOwn(value,'metadataOnly');
-  const row = object(value, ['partition', 'table', 'localId', 'serverId', 'sender', 'kind', 'text', 'originalType', 'sentAt', 'timePrecision', 'orderScheme', 'orderKey', 'status', 'stateAssurance',...(hasMessageState?['messageState']:[]),...(hasMetadataOnly?['metadataOnly']:[])]);
+  const hasInlineQuote=!!value&&typeof value==='object'&&Object.hasOwn(value,'quote');
+  const hasInlineQuoteError=!!value&&typeof value==='object'&&Object.hasOwn(value,'quoteErrorCode');
+  const inlineKeys=inlineQuoteScope?[...(hasInlineQuote?['quote']:[]),...(hasInlineQuoteError?['quoteErrorCode']:[])]:[];
+  const row = object(value, ['partition', 'table', 'localId', 'serverId', 'sender', 'kind', 'text', 'originalType', 'sentAt', 'timePrecision', 'orderScheme', 'orderKey', 'status', 'stateAssurance',...(hasMessageState?['messageState']:[]),...(hasMetadataOnly?['metadataOnly']:[]),...inlineKeys]);
   const partition = hash(row.partition), table = hash(row.table);
   if (!target.tables.some(candidate => candidate.partition === partition && candidate.instance === table)
     || !['owner', 'contact', 'unknown'].includes(row.sender as string)
@@ -513,14 +521,33 @@ function historyRecord(value: unknown, target: HistoryTarget, mode: 'normal' | '
   if(hasMetadataOnly&&(quarantine||row.metadataOnly!==true||row.kind==='text'||row.text!==null||row.stateAssurance!=='unverified'||hasMessageState
     ||originalType==='unknown'||BigInt(originalType)<0n||(BigInt(originalType)&0xffffffffn)===1n||row.kind!==historyMetadataKind(originalType)))return fail();
   if(quarantine && (originalType==='unknown'?'other':historyMetadataKind(originalType))!==row.kind)return fail();
-  return { partition, table, localId: row.localId === null ? null : exactInteger(row.localId), serverId: row.serverId === null ? null : exactInteger(row.serverId),
+  const localId=row.localId===null?null:exactInteger(row.localId),serverId=row.serverId===null?null:exactInteger(row.serverId);
+  const inlineQuoteCarrier=inlineQuoteScope!==undefined&&originalType===quoteRawType&&row.kind==='other'&&body===null
+    &&hasMetadataOnly&&row.metadataOnly===true&&row.stateAssurance==='unverified'&&!hasMessageState;
+  let parsedQuote:HistoryRecord['quote'];
+  let quoteErrorCode:HistoryQuoteErrorCode|undefined;
+  if(hasInlineQuote||hasInlineQuoteError){
+    if(!inlineQuoteCarrier||hasInlineQuote===hasInlineQuoteError)return fail();
+    if(hasInlineQuote){
+      if(localId===null||serverId===null)return fail();
+      const validated=readWechatQuotePayload(row.quote,inlineQuoteScope!,{partition,table,localId,serverId,sentAt});
+      parsedQuote={replyText:validated.replyText,referencedText:validated.referencedText,referencedSender:validated.referencedSender,
+        referencedSenderRole:validated.referencedSenderRole,referencedType:validated.referencedType,referencedServerId:validated.referencedServerId,proofDigest:validated.contentSha256};
+    }else{
+      if(typeof row.quoteErrorCode!=='string'||!inlineQuoteErrorCodes.includes(row.quoteErrorCode as HistoryQuoteErrorCode))return fail();
+      quoteErrorCode=row.quoteErrorCode as HistoryQuoteErrorCode;
+    }
+  }
+  if(inlineQuoteScope&&originalType===quoteRawType&&!hasInlineQuote&&!hasInlineQuoteError)return fail();
+  return { partition, table, localId, serverId,
     sender: row.sender as HistoryRecord['sender'], kind: row.kind as HistoryRecord['kind'], text: body, originalType,
-    sentAt, timePrecision: row.timePrecision as HistoryRecord['timePrecision'], orderScheme, orderKey, status: row.status === null ? null : exactInteger(row.status), stateAssurance: row.stateAssurance as HistoryRecord['stateAssurance'],...(hasMetadataOnly?{metadataOnly:true as const}:{}),...(hasMessageState?{messageState:row.messageState as HistoryRecord['messageState']}:{}) };
+    sentAt, timePrecision: row.timePrecision as HistoryRecord['timePrecision'], orderScheme, orderKey, status: row.status === null ? null : exactInteger(row.status), stateAssurance: row.stateAssurance as HistoryRecord['stateAssurance'],...(hasMetadataOnly?{metadataOnly:true as const}:{}),...(hasMessageState?{messageState:row.messageState as HistoryRecord['messageState']}:{}) ,
+    ...(parsedQuote?{quote:parsedQuote}:{}),...(quoteErrorCode?{quoteErrorCode}:{}) };
 }
 function historyMetadataKind(originalType:string):HistoryRecord['kind'] {
   return (BigInt(originalType)&0xffffffffn)===49n ? BigInt(originalType)>>32n===6n?'file':'other' : metadataKind(originalType);
 }
-function historyPage(value: unknown, target: HistoryTarget, cursor: string | null, mode: 'normal' | 'quarantine' = 'normal'): HistoryPage {
+function historyPage(value: unknown, target: HistoryTarget, cursor: string | null, mode: 'normal' | 'quarantine' = 'normal',inlineQuoteScope?:InlineQuoteScope): HistoryPage {
   const hasResume = !!value && typeof value === 'object' && Object.hasOwn(value, 'resumeCursor');
   const row = object(value, ['target', 'cursorIn', 'cursorOut', 'records', 'completedPartitions', 'exhausted', ...(hasResume ? ['resumeCursor'] : [])]);
   if (row.target !== target.descriptor || row.cursorIn !== cursor) return fail();
@@ -529,14 +556,14 @@ function historyPage(value: unknown, target: HistoryTarget, cursor: string | nul
   const completedPartitions = list(row.completedPartitions, 128, hash); unique(completedPartitions);
   if (completedPartitions.some(partition => !target.partitions.includes(partition))) return fail();
   if (hasResume && (mode !== 'normal' || !exhausted || row.resumeCursor === null)) return fail();
-  return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target, mode)), completedPartitions, exhausted,
+  return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target, mode,inlineQuoteScope)), completedPartitions, exhausted,
     ...(hasResume ? { resumeCursor: opaque(row.resumeCursor) } : {}) };
 }
-function historyTailPage(value: unknown, target: HistoryTarget, cursor: string): HistoryTailPage {
+function historyTailPage(value: unknown, target: HistoryTarget, cursor: string,inlineQuoteScope?:InlineQuoteScope): HistoryTailPage {
   const row = object(value, ['target', 'cursorIn', 'cursorOut', 'records', 'caughtUp']);
   const cursorOut = opaque(row.cursorOut);
   if (row.target !== target.descriptor || row.cursorIn !== cursor || cursorOut === cursor) return fail();
-  return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target)), caughtUp: bool(row.caughtUp) };
+  return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target,'normal',inlineQuoteScope)), caughtUp: bool(row.caughtUp) };
 }
 function historyBoundary(value: unknown, scope: ResolvedWechatScope, schema: WechatSchemaInspection, support: HistorySupportReport): HistoryBoundaryCandidate {
   const row = object(value, ['format', 'scopeDigest', 'sourceGeneration', 'schemaFingerprint', 'target', 'boundaryToken', 'members', 'partitions', 'namespaceContinuity', 'instanceContinuity', 'observedAt']);
@@ -685,9 +712,10 @@ async function verifyArtifacts(options: NarrowWechatClientOptions): Promise<void
 function validatedOptions(options: NarrowWechatClientOptions): NarrowWechatClientOptions {
   try {
     if (!options || typeof options !== 'object' || Array.isArray(options)
-      || Object.keys(options).some(key => !['executable', 'expectedCliSha256', 'expectedWcdbSha256', 'environment', 'imageKeyChannel'].includes(key))
+      || Object.keys(options).some(key => !['executable', 'expectedCliSha256', 'expectedWcdbSha256', 'environment', 'imageKeyChannel','inlineQuotes'].includes(key))
       || typeof options.executable !== 'string' || typeof options.expectedCliSha256 !== 'string' || typeof options.expectedWcdbSha256 !== 'string') fail('history_request_invalid');
     if(options.imageKeyChannel!==undefined&&options.imageKeyChannel!==true)fail('history_request_invalid');
+    if(options.inlineQuotes!==undefined&&options.inlineQuotes!==true)fail('history_request_invalid');
     if (options.environment !== undefined && (!options.environment || typeof options.environment !== 'object' || Array.isArray(options.environment)
       || Object.entries(options.environment).some(([key, value]) => !key.length || /[=\u0000]/.test(key) || value !== undefined && (typeof value !== 'string' || value.includes('\0'))))) fail('history_request_invalid');
     return { ...options, ...(options.environment ? { environment: { ...options.environment } } : {}) };
@@ -1017,7 +1045,8 @@ export class NarrowWechatClient {
       if (!this.#target || JSON.stringify(parsed) !== JSON.stringify(this.#target)) return fail('history_target_unverified');
       const accepted = this.#target;
       return this.#request({ op: 'page', account: scope.accountKey, conversation: scope.conversationKey, consent: 'selected-history-v1', target: accepted.descriptor, cursor: cursor ?? '' }, value => {
-        const page = historyPage(value, accepted, cursor);
+        const inlineQuoteScope=this.#options.inlineQuotes?scope:undefined;
+        const page = historyPage(value, accepted, cursor,'normal',inlineQuoteScope);
         if (page.resumeCursor && this.#support?.capabilities?.incrementalTail !== 'supported') return fail();
         if (page.resumeCursor) this.#tailCursor = page.resumeCursor;
         return page;
@@ -1036,7 +1065,7 @@ export class NarrowWechatClient {
       const replay = this.#lastTail?.input === cursor;
       if (cursor !== this.#tailCursor && !replay) return fail('history_cursor_invalid');
       return this.#request({ op: 'tail', account: scope.accountKey, conversation: scope.conversationKey, consent: 'selected-history-v1', target: parsed.descriptor, cursor }, value => {
-        const page = historyTailPage(value, parsed, cursor);
+        const page = historyTailPage(value, parsed, cursor,this.#options.inlineQuotes?scope:undefined);
         // 重放仍交给原生守卫复验，只接受上一页的相同响应，不能改变已交付检查点。
         if (replay) { if (JSON.stringify(page) !== JSON.stringify(this.#lastTail!.page)) return fail('history_protocol_invalid'); }
         else { this.#tailCursor = page.cursorOut; this.#lastTail = { input: cursor, page: structuredClone(page) }; }

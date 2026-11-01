@@ -60,8 +60,10 @@ func notaloneQuoteProtocolFixture(t *testing.T, row notaloneQuoteTestRow, withCh
 	query := fmt.Sprintf(`CREATE TABLE Name2Id(user_name TEXT);
 INSERT INTO Name2Id(rowid,user_name) VALUES(1,'synthetic-owner'),(2,'friend-a'),(3,'other-person');
 ALTER TABLE %s ADD COLUMN WCDB_CT_message_content INTEGER NOT NULL DEFAULT 0;
-UPDATE %s SET local_id=%d,server_id=%d,local_type=%d,real_sender_id=%d,create_time=%s,status=%d,message_content=x'%s',WCDB_CT_message_content=%d WHERE local_id=1;`,
-		table, table, notaloneQuoteTestLocalID, serverID, row.rawType, row.senderID, createAtSQL, row.status, hex.EncodeToString(row.content), row.typeCode)
+UPDATE %s SET server_id=1841310816813489187,local_type=1,real_sender_id=2,create_time=1700000001,status=4,message_content='合成普通文字' WHERE local_id=1;
+INSERT INTO %s(local_id,server_id,local_type,real_sender_id,create_time,status,message_content,WCDB_CT_message_content)
+VALUES(%d,%d,%d,%d,%s,%d,x'%s',%d);`,
+		table, table, table, notaloneQuoteTestLocalID, serverID, row.rawType, row.senderID, createAtSQL, row.status, hex.EncodeToString(row.content), row.typeCode)
 	if err = db.Exec(query); err != nil {
 		db.Close()
 		t.Fatal(err)
@@ -138,6 +140,189 @@ func notaloneQuoteTestResponse(t *testing.T, value any) map[string]any {
 	}
 	return response
 }
+
+func notaloneQuotePage(t *testing.T, h *notaloneHistorySession, request notaloneHistoryRequest) notaloneSnapshotPage {
+	t.Helper()
+	request.Operation = "page"
+	request.Consent = "selected-history-v1"
+	value, err := h.handle(context.Background(), request)
+	if err != nil {
+		t.Fatalf("同步页应成功：%v", err)
+	}
+	page, ok := value.(notaloneSnapshotPage)
+	if !ok {
+		t.Fatalf("响应不是历史同步页：%T", value)
+	}
+	return page
+}
+
+func TestNotAloneHistoryPageIncludesInlineQuoteWithoutQuoteRead(t *testing.T) {
+	raw := notaloneQuoteTestXML("我晚点到", "1", "1841310816813489186", "synthetic-owner", "我", "先去吃饭吗？")
+	h, request := notaloneQuoteProtocolFixture(t, notaloneQuoteTestRow{
+		rawType: notaloneQuoteTestRawType, senderID: 1, status: 2, createAt: int64(1700000000), content: raw,
+	})
+	page := notaloneQuotePage(t, h, request)
+	if !page.Exhausted || len(page.Records) != 2 {
+		t.Fatalf("首次历史页应携带普通文字与引用回复：%#v", page)
+	}
+	var quote, ordinary *notaloneSnapshotRecord
+	for index := range page.Records {
+		record := &page.Records[index]
+		if record.OriginalType == notaloneQuoteTestRawTypeString() {
+			quote = record
+		} else if record.OriginalType == "1" {
+			ordinary = record
+		}
+	}
+	if quote == nil || quote.Quote == nil || quote.QuoteErrorCode != "" {
+		t.Fatalf("历史同步页应直接返回核验通过的引用结构：%#v", quote)
+	}
+	if quote.Quote.Format != quoteReadFormat || quote.Quote.AccountKey != request.Account || quote.Quote.ConversationKey != request.Conversation ||
+		quote.Quote.SourceGeneration != h.selected.SourceGeneration || quote.Quote.Partition != quote.Partition || quote.Quote.Table != quote.Table ||
+		quote.Quote.LocalID != *quote.LocalID || quote.Quote.ServerID != *quote.ServerID || quote.Quote.ReplyText != "我晚点到" ||
+		quote.Quote.ReferencedText == nil || *quote.Quote.ReferencedText != "先去吃饭吗？" || quote.Quote.ContentSHA256 != fmt.Sprintf("%x", sha256.Sum256(raw)) {
+		t.Fatalf("内联引用来源或正文不符：%#v", quote.Quote)
+	}
+	if ordinary == nil || ordinary.Text == nil || *ordinary.Text != "合成普通文字" || ordinary.Quote != nil || ordinary.QuoteErrorCode != "" {
+		t.Fatalf("非引用文字保持原同步行为：%#v", ordinary)
+	}
+}
+
+func TestNotAloneMalformedInlineQuoteDoesNotBlockOrdinaryText(t *testing.T) {
+	h, request := notaloneQuoteProtocolFixture(t, notaloneQuoteTestRow{
+		rawType: notaloneQuoteTestRawType, senderID: 1, status: 2, createAt: int64(1700000000), content: []byte("<msg><appmsg>bad"),
+	})
+	page := notaloneQuotePage(t, h, request)
+	if !page.Exhausted || len(page.Records) != 2 {
+		t.Fatalf("引用解析失败不能中断包含普通文字的同步页：%#v", page)
+	}
+	var quote, ordinary *notaloneSnapshotRecord
+	for index := range page.Records {
+		record := &page.Records[index]
+		if record.OriginalType == notaloneQuoteTestRawTypeString() {
+			quote = record
+		} else if record.OriginalType == "1" {
+			ordinary = record
+		}
+	}
+	if quote == nil || quote.Quote != nil || quote.QuoteErrorCode != "history_quote_metadata_invalid" {
+		t.Fatalf("无效引用应在该条消息上单独记账：%#v", quote)
+	}
+	if ordinary == nil || ordinary.Text == nil || *ordinary.Text != "合成普通文字" {
+		t.Fatalf("无效引用不能丢弃同页普通文字：%#v", ordinary)
+	}
+}
+
+func TestNotAloneInlineQuoteEnforcesNormalizedTextByteLimit(t *testing.T) {
+	cases := []struct {
+		name       string
+		replyText  string
+		referenced string
+		wantError  string
+		wantLength int
+	}{
+		{name: "reply exactly at limit", replyText: strings.Repeat("r", notaloneTextByteLimit), wantLength: notaloneTextByteLimit},
+		{name: "reply above limit", replyText: strings.Repeat("r", notaloneTextByteLimit+1), wantError: "history_quote_too_large"},
+		{name: "referenced text above limit", replyText: "回复", referenced: strings.Repeat("引", notaloneTextByteLimit/3+1), wantError: "history_quote_too_large"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			raw := notaloneQuoteTestXML(test.replyText, "1", "1841310816813489186", "synthetic-owner", "我", test.referenced)
+			h, request := notaloneQuoteProtocolFixture(t, notaloneQuoteTestRow{
+				rawType: notaloneQuoteTestRawType, senderID: 1, status: 2, createAt: int64(1700000000), content: raw,
+			})
+			page := notaloneQuotePage(t, h, request)
+			var quote *notaloneSnapshotRecord
+			for index := range page.Records {
+				if page.Records[index].OriginalType == notaloneQuoteTestRawTypeString() {
+					quote = &page.Records[index]
+					break
+				}
+			}
+			if quote == nil {
+				t.Fatal("同步页缺少引用消息")
+			}
+			if test.wantError != "" {
+				if quote.Quote != nil || quote.QuoteErrorCode != test.wantError {
+					t.Fatalf("超过规范文字上限应只标记该引用：%#v", quote)
+				}
+				return
+			}
+			if quote.Quote == nil || quote.QuoteErrorCode != "" || len(quote.Quote.ReplyText) != test.wantLength {
+				t.Fatalf("上限内引用文字应按UTF-8字节完整保留：%#v", quote)
+			}
+		})
+	}
+}
+
+func TestNotAloneInlineQuoteFieldsDoNotChangeStoredTailIdentityDigest(t *testing.T) {
+	base := notaloneSnapshotRecord{Partition: "partition", Table: "table", LocalID: notaloneQuoteTestStringPointer("7"), ServerID: notaloneQuoteTestStringPointer("8"), Sender: "owner",
+		Kind: "other", OriginalType: notaloneQuoteTestRawTypeString(), StateAssurance: "verified"}
+	_, baseline, err := notaloneSnapshotRecordDigest(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withQuote := base
+	withQuote.Quote = &notaloneQuoteReadResponse{Format: quoteReadFormat, ReplyText: "回话"}
+	_, quoteDigest, err := notaloneSnapshotRecordDigest(withQuote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withError := base
+	withError.QuoteErrorCode = "history_quote_metadata_invalid"
+	_, errorDigest, err := notaloneSnapshotRecordDigest(withError)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if quoteDigest.Digest != baseline.Digest || errorDigest.Digest != baseline.Digest {
+		t.Fatal("新增引用扩展不能改变旧CLI持久化的消息身份摘要")
+	}
+}
+
+func TestNotAloneTailPageIncludesNewInlineQuote(t *testing.T) {
+	oldRaw := notaloneQuoteTestXML("旧回复", "1", "1841310816813489186", "synthetic-owner", "我", "旧原话")
+	h, request := notaloneQuoteProtocolFixture(t, notaloneQuoteTestRow{
+		rawType: notaloneQuoteTestRawType, senderID: 1, status: 2, createAt: int64(1700000000), content: oldRaw,
+	}, true)
+	page := notaloneQuotePage(t, h, request)
+	if !page.Exhausted || page.ResumeCursor == nil || h.tail == nil {
+		t.Fatalf("首次历史应完成并建立tail检查点：%#v", page)
+	}
+	quoteTable := `"Msg_` + talkerHash(request.Conversation) + `"`
+	writer, err := wcdb.OpenWithKeyMapWritable(filepath.Join(h.server.cfg.DBRoot, "db_storage", "message", "message_0.db"), h.server.cfg.Keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Close()
+	newRaw := notaloneQuoteTestXML("新回复", "1", "1841310816813489187", "friend-a", "对方", "新原话")
+	if err = writer.Exec(fmt.Sprintf(`PRAGMA journal_mode=WAL; INSERT INTO %s(local_id,server_id,local_type,real_sender_id,create_time,status,message_content) VALUES(9007199254740994,9223372036854775805,%d,1,1700000001,2,x'%s');`,
+		quoteTable, notaloneQuoteTestRawType, hex.EncodeToString(newRaw))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = h.handle(context.Background(), notaloneHistoryRequest{Operation: "inspect", Account: request.Account, Conversation: request.Conversation, Consent: "selected-schema-v1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = h.handle(context.Background(), notaloneHistoryRequest{Operation: "support", Account: request.Account, Conversation: request.Conversation, Consent: "selected-schema-v1"}); err != nil {
+		t.Fatal(err)
+	}
+	tailValue, err := h.handle(context.Background(), notaloneHistoryRequest{Operation: "tail", Account: request.Account, Conversation: request.Conversation,
+		Consent: "selected-history-v1", Target: page.Target, Cursor: *page.ResumeCursor})
+	if err != nil {
+		t.Fatalf("tail应读取新引用：%v", err)
+	}
+	tail, ok := tailValue.(notaloneTailPage)
+	if !ok || !tail.CaughtUp || len(tail.Records) != 1 {
+		t.Fatalf("tail应直接返回一条新引用：%#v", tailValue)
+	}
+	quote := tail.Records[0]
+	if quote.Quote == nil || quote.QuoteErrorCode != "" || quote.Quote.ReplyText != "新回复" || quote.Quote.ReferencedText == nil || *quote.Quote.ReferencedText != "新原话" {
+		t.Fatalf("新消息tail响应应带引用结构：%#v", quote)
+	}
+}
+
+func notaloneQuoteTestRawTypeString() string { return fmt.Sprint(notaloneQuoteTestRawType) }
+
+func notaloneQuoteTestStringPointer(value string) *string { return &value }
 
 func TestNotAloneQuoteReadReturnsOnlyVerifiedExactReference(t *testing.T) {
 	raw := notaloneQuoteTestXML("我晚点到", "1", "1841310816813489186", "synthetic-owner", "我", "先去吃饭吗？")

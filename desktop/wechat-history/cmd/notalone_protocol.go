@@ -923,7 +923,17 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	if h.snapshot == nil || h.snapshotMode != mode || r.Target != h.snapshot.Target().Descriptor {
 		return nil, notaloneFailure("history_target_invalid")
 	}
-	page, err := h.snapshot.Page(ctx, r.Cursor)
+	var inlineQuote *notaloneInlineQuoteContext
+	var page notaloneSnapshotPage
+	if r.Operation == "page" {
+		context := h.inlineQuoteContext(h.snapshot, &report, profile)
+		inlineQuote = &context
+	}
+	if inlineQuote != nil {
+		page, err = h.snapshot.Page(ctx, r.Cursor, *inlineQuote)
+	} else {
+		page, err = h.snapshot.Page(ctx, r.Cursor)
+	}
 	if err != nil {
 		_ = h.snapshot.Close()
 		h.snapshot = nil

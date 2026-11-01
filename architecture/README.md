@@ -247,4 +247,5 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 139. [ADR-139：引用回复同步与历史补齐](adr/139-quoted-reply-sync-and-history-enrichment.md)
 
 140. [ADR-140：聊天图片取消原图证明门槛](adr/140-source-verified-viewable-chat-images.md)
+141. [ADR-141：引用回复随正常消息同步读取](adr/141-inline-quoted-reply-sync.md)
 142. [ADR-142：首次连接后先选择联系人，再确认开启同步](adr/142-first-connection-contact-selection.md)

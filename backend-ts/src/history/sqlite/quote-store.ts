@@ -9,6 +9,7 @@ import {assertSourceEligibility} from './source.ts';
 import {currentSourcePredicate,currentSourceScopeCTE} from './current-scope.ts';
 
 const quoteType='244813135921';
+export const quoteParserVersion='wechat-quote-v2';
 const fail=(code:string):never=>{throw new StorageFailure(code);};
 const isUuid=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
 function id(value:unknown):string {if(typeof value!=='string'||!value||value.length>256||/[\x00-\x1f]/.test(value))return fail('history_quote_request_invalid');return value;}
@@ -78,6 +79,66 @@ function assertScope(tx:StorageTransaction,token:ReadEligibility):void {
 }
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>({name:`history.quote${name}`,mode,retryBusy:mode==='write',execute});
 
+export interface SaveHistoryQuoteInput {
+ token:ReadEligibility;recordId:string;messageId:string;version:string;content:HistoryQuoteContent;proofDigest:string;
+}
+export interface FailHistoryQuoteInput {
+ token:ReadEligibility;recordId:string;messageId:string;version:string;errorCode:string;
+}
+/** Storage action 与正常同步共用这段事务逻辑，确保联系人、来源删除和目标排除规则一致。 */
+export function saveHistoryQuoteInTransaction(tx:StorageTransaction,input:SaveHistoryQuoteInput){
+ const token=input.token,recordId=id(input.recordId),messageId=id(input.messageId),expectedVersion=version(input.version),quote=content(input.content);
+ if(!isUuid(recordId)||!isUuid(messageId)||typeof input.proofDigest!=='string'||!/^[a-f0-9]{64}$/.test(input.proofDigest))fail('history_quote_request_invalid');
+ assertScope(tx,token);const sourceRow=source(tx,token,recordId,messageId),excludedTarget=targetExcluded(tx,token,quote.referencedServerId);
+ const savedContent:HistoryQuoteContent=excludedTarget?{...quote,referencedText:null,referencedSender:null,referencedSenderRole:'unknown',
+  referencedType:null,referencedServerId:null}:quote;
+ const targetMessageId=excludedTarget?null:targetFor(tx,token,savedContent.referencedServerId);
+ const state=targetMessageId?'resolved':savedContent.referencedText!==null||savedContent.referencedServerId!==null?'unresolved':'unavailable';
+ const prior=tx.get('SELECT * FROM history_quote WHERE owner_id=? AND contact_id=? AND message_id=?',[token.owner_id,token.contact_id,messageId]);
+ const sourceChanged=Boolean(prior&&(prior.source_key!==sourceRow.observed_key||prior.source_generation!==token.source_generation));
+ const contentChanged=!prior||sourceChanged||prior.reply_text!==savedContent.replyText||prior.referenced_text!==savedContent.referencedText
+  ||prior.referenced_sender!==savedContent.referencedSender||prior.referenced_sender_role!==savedContent.referencedSenderRole
+  ||prior.referenced_type!==savedContent.referencedType||prior.referenced_server_id!==savedContent.referencedServerId
+  ||prior.target_message_id!==targetMessageId||prior.state!==state
+  ||String(prior.carrier_interpretation_revision)!==String(sourceRow.interpretation_revision);
+ const sourceRevision=prior?revisions(prior.source_revision,'source_revision')+(sourceChanged?1:0):1;
+ const interpretationRevision=prior?revisions(prior.interpretation_revision,'interpretation_revision')+(contentChanged?1:0):1;
+ const changed=!prior||contentChanged||prior.version!==expectedVersion||prior.proof_digest!==input.proofDigest
+  ||prior.source_record_id!==recordId||prior.source_key!==sourceRow.observed_key||prior.source_generation!==token.source_generation;
+ const quoteValues=[savedContent.replyText,savedContent.referencedText,savedContent.referencedSender,savedContent.referencedSenderRole,
+  savedContent.referencedType,savedContent.referencedServerId,targetMessageId,state,input.proofDigest];
+ if(!prior){
+  tx.run(`INSERT INTO history_quote(owner_id,id,contact_id,message_id,binding_id,source_record_id,source_key,source_generation,version,reply_text,
+   referenced_text,referenced_sender,referenced_sender_role,referenced_type,referenced_server_id,target_message_id,state,proof_digest,
+   source_revision,interpretation_revision,carrier_interpretation_revision) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+   [token.owner_id,randomUUID(),token.contact_id,messageId,token.binding_id,recordId,sourceRow.observed_key,token.source_generation,expectedVersion,...quoteValues,sourceRevision,interpretationRevision,sourceRow.interpretation_revision]);
+ }else if(changed){
+  tx.run(`UPDATE history_quote SET source_record_id=?,source_key=?,source_generation=?,version=?,reply_text=?,referenced_text=?,referenced_sender=?,referenced_sender_role=?,referenced_type=?,referenced_server_id=?,target_message_id=?,state=?,proof_digest=?,source_revision=?,interpretation_revision=?,carrier_interpretation_revision=? WHERE owner_id=? AND contact_id=? AND message_id=?`,
+   [recordId,sourceRow.observed_key,token.source_generation,expectedVersion,savedContent.replyText,savedContent.referencedText,savedContent.referencedSender,
+    savedContent.referencedSenderRole,savedContent.referencedType,savedContent.referencedServerId,targetMessageId,state,input.proofDigest,sourceRevision,
+    interpretationRevision,sourceRow.interpretation_revision,token.owner_id,token.contact_id,messageId]);
+ }
+ tx.run(`INSERT INTO history_quote_attempt(owner_id,id,contact_id,message_id,binding_id,record_id,source_key,source_generation,version,carrier_interpretation_revision,carrier_status,outcome,error_code)
+  VALUES(?,?,?,?,?,?,?,?,?,?,?,'saved',NULL) ON CONFLICT(owner_id,contact_id,message_id,source_generation,source_key,version,carrier_interpretation_revision,carrier_status)
+  DO UPDATE SET outcome='saved',error_code=NULL WHERE outcome<>'saved' OR error_code IS NOT NULL`,
+  [token.owner_id,randomUUID(),token.contact_id,messageId,token.binding_id,recordId,sourceRow.observed_key,token.source_generation,expectedVersion,sourceRow.interpretation_revision,sourceRow.status_code===null?'':String(sourceRow.status_code)]);
+ return {saved:true,changed,targetMessageId,state,sourceRevision,interpretationRevision};
+}
+export function failHistoryQuoteInTransaction(tx:StorageTransaction,input:FailHistoryQuoteInput){
+ const token=input.token,recordId=id(input.recordId),messageId=id(input.messageId),expectedVersion=version(input.version),errorCode=id(input.errorCode);
+ if(!isUuid(recordId)||!isUuid(messageId)||!/^[a-z][a-z0-9_]{0,79}$/.test(errorCode))fail('history_quote_request_invalid');
+ assertScope(tx,token);const sourceRow=source(tx,token,recordId,messageId),carrierStatus=sourceRow.status_code===null?'':String(sourceRow.status_code);
+ const existing=tx.get('SELECT outcome,error_code FROM history_quote_attempt WHERE owner_id=? AND contact_id=? AND message_id=? AND source_key=? AND source_generation=? AND version=? AND carrier_interpretation_revision=? AND carrier_status=?',
+  [token.owner_id,token.contact_id,messageId,sourceRow.observed_key,token.source_generation,expectedVersion,sourceRow.interpretation_revision,carrierStatus]);
+ if(existing?.outcome==='saved')return {failed:false,alreadySaved:true,changed:false};
+ if(existing?.outcome==='failed'&&existing.error_code===errorCode)return {failed:true,unchanged:true,changed:false};
+ tx.run(`INSERT INTO history_quote_attempt(owner_id,id,contact_id,message_id,binding_id,record_id,source_key,source_generation,version,carrier_interpretation_revision,carrier_status,outcome,error_code)
+  VALUES(?,?,?,?,?,?,?,?,?,?,?,'failed',?) ON CONFLICT(owner_id,contact_id,message_id,source_generation,source_key,version,carrier_interpretation_revision,carrier_status)
+  DO UPDATE SET outcome='failed',error_code=excluded.error_code`,
+  [token.owner_id,randomUUID(),token.contact_id,messageId,token.binding_id,recordId,sourceRow.observed_key,token.source_generation,expectedVersion,sourceRow.interpretation_revision,carrierStatus,errorCode]);
+ return {failed:true,changed:true};
+}
+
 export const historyQuoteActions:StorageAction[]=[
  action('Candidates','read',(tx,i)=>{
   const token=i.token as ReadEligibility,expectedVersion=version(i.version),limit=i.limit;
@@ -105,58 +166,8 @@ export const historyQuoteActions:StorageAction[]=[
   // 不验证活 guard：干净进程重启后旧 runtime lease 会阻止正文读取，但不应阻止 withChannel 先重验证。
   return rows.map(row=>({messageId:String(row.message_id),recordId:String(row.record_id)}));
  }),
- action('Save','write',(tx,i)=>{
-  const token=i.token as ReadEligibility,recordId=id(i.recordId),messageId=id(i.messageId),expectedVersion=version(i.version),quote=content(i.content);
-  if(!isUuid(recordId)||!isUuid(messageId)||typeof i.proofDigest!=='string'||!/^[a-f0-9]{64}$/.test(i.proofDigest))fail('history_quote_request_invalid');
-  assertScope(tx,token);const sourceRow=source(tx,token,recordId,messageId),excludedTarget=targetExcluded(tx,token,quote.referencedServerId);
-  const savedContent:HistoryQuoteContent=excludedTarget?{...quote,referencedText:null,referencedSender:null,referencedSenderRole:'unknown',
-   referencedType:null,referencedServerId:null}:quote;
-  const targetMessageId=excludedTarget?null:targetFor(tx,token,savedContent.referencedServerId);
-  const state=targetMessageId?'resolved':savedContent.referencedText!==null||savedContent.referencedServerId!==null?'unresolved':'unavailable';
-  const prior=tx.get('SELECT * FROM history_quote WHERE owner_id=? AND contact_id=? AND message_id=?',[token.owner_id,token.contact_id,messageId]);
-  const sourceChanged=Boolean(prior&&(prior.source_key!==sourceRow.observed_key||prior.source_generation!==token.source_generation));
-  const contentChanged=!prior||sourceChanged||prior.reply_text!==savedContent.replyText||prior.referenced_text!==savedContent.referencedText
-   ||prior.referenced_sender!==savedContent.referencedSender||prior.referenced_sender_role!==savedContent.referencedSenderRole
-   ||prior.referenced_type!==savedContent.referencedType||prior.referenced_server_id!==savedContent.referencedServerId
-   ||prior.target_message_id!==targetMessageId||prior.state!==state
-   ||String(prior.carrier_interpretation_revision)!==String(sourceRow.interpretation_revision);
-  const sourceRevision=prior?revisions(prior.source_revision,'source_revision')+(sourceChanged?1:0):1;
-  const interpretationRevision=prior?revisions(prior.interpretation_revision,'interpretation_revision')+(contentChanged?1:0):1;
-  const quoteValues=[savedContent.replyText,savedContent.referencedText,savedContent.referencedSender,savedContent.referencedSenderRole,
-   savedContent.referencedType,savedContent.referencedServerId,targetMessageId,state,i.proofDigest];
-  if(!prior){
-   tx.run(`INSERT INTO history_quote(owner_id,id,contact_id,message_id,binding_id,source_record_id,source_key,source_generation,version,reply_text,
-    referenced_text,referenced_sender,referenced_sender_role,referenced_type,referenced_server_id,target_message_id,state,proof_digest,
-    source_revision,interpretation_revision,carrier_interpretation_revision) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [token.owner_id,randomUUID(),token.contact_id,messageId,token.binding_id,recordId,sourceRow.observed_key,token.source_generation,expectedVersion,...quoteValues,sourceRevision,interpretationRevision,sourceRow.interpretation_revision]);
-  }else if(contentChanged||prior.version!==expectedVersion||prior.proof_digest!==i.proofDigest||prior.source_record_id!==recordId||prior.source_key!==sourceRow.observed_key||prior.source_generation!==token.source_generation){
-   tx.run(`UPDATE history_quote SET source_record_id=?,source_key=?,source_generation=?,version=?,reply_text=?,referenced_text=?,referenced_sender=?,referenced_sender_role=?,referenced_type=?,referenced_server_id=?,target_message_id=?,state=?,proof_digest=?,source_revision=?,interpretation_revision=?,carrier_interpretation_revision=? WHERE owner_id=? AND contact_id=? AND message_id=?`,
-    [recordId,sourceRow.observed_key,token.source_generation,expectedVersion,savedContent.replyText,savedContent.referencedText,savedContent.referencedSender,
-     savedContent.referencedSenderRole,savedContent.referencedType,savedContent.referencedServerId,targetMessageId,state,i.proofDigest,sourceRevision,
-     interpretationRevision,sourceRow.interpretation_revision,token.owner_id,token.contact_id,messageId]);
-  }
-  tx.run(`INSERT INTO history_quote_attempt(owner_id,id,contact_id,message_id,binding_id,record_id,source_key,source_generation,version,carrier_interpretation_revision,carrier_status,outcome,error_code)
-   VALUES(?,?,?,?,?,?,?,?,?,?,?,'saved',NULL) ON CONFLICT(owner_id,contact_id,message_id,source_generation,source_key,version,carrier_interpretation_revision,carrier_status)
-   DO UPDATE SET outcome='saved',error_code=NULL WHERE outcome<>'saved' OR error_code IS NOT NULL`,
-   [token.owner_id,randomUUID(),token.contact_id,messageId,token.binding_id,recordId,sourceRow.observed_key,token.source_generation,expectedVersion,sourceRow.interpretation_revision,sourceRow.status_code===null?'':String(sourceRow.status_code)]);
-  return {saved:true,targetMessageId,state,sourceRevision,interpretationRevision};
- }),
- action('Fail','write',(tx,i)=>{
-  const token=i.token as ReadEligibility,recordId=id(i.recordId),messageId=id(i.messageId),expectedVersion=version(i.version);
-  const errorCode=id(i.errorCode);
-  if(!isUuid(recordId)||!isUuid(messageId)||!/^[a-z][a-z0-9_]{0,79}$/.test(errorCode))fail('history_quote_request_invalid');
-  assertScope(tx,token);const sourceRow=source(tx,token,recordId,messageId);
-  const carrierStatus=sourceRow.status_code===null?'':String(sourceRow.status_code);
-  const existing=tx.get(`SELECT outcome,error_code FROM history_quote_attempt WHERE owner_id=? AND contact_id=? AND message_id=? AND source_key=? AND source_generation=? AND version=? AND carrier_interpretation_revision=? AND carrier_status=?`,
-   [token.owner_id,token.contact_id,messageId,sourceRow.observed_key,token.source_generation,expectedVersion,sourceRow.interpretation_revision,carrierStatus]);
-  if(existing?.outcome==='saved')return {failed:false,alreadySaved:true};
-  if(existing?.outcome==='failed'&&existing.error_code===errorCode)return {failed:true,unchanged:true};
-  tx.run(`INSERT INTO history_quote_attempt(owner_id,id,contact_id,message_id,binding_id,record_id,source_key,source_generation,version,carrier_interpretation_revision,carrier_status,outcome,error_code)
-   VALUES(?,?,?,?,?,?,?,?,?,?,?,'failed',?) ON CONFLICT(owner_id,contact_id,message_id,source_generation,source_key,version,carrier_interpretation_revision,carrier_status)
-   DO UPDATE SET outcome='failed',error_code=excluded.error_code`,
-   [token.owner_id,randomUUID(),token.contact_id,messageId,token.binding_id,recordId,sourceRow.observed_key,token.source_generation,expectedVersion,sourceRow.interpretation_revision,carrierStatus,errorCode]);
-  return {failed:true};
- }),
+ action('Save','write',(tx,i)=>{const {changed:_changed,...result}=saveHistoryQuoteInTransaction(tx,i as SaveHistoryQuoteInput);return result;}),
+ action('Fail','write',(tx,i)=>{const {changed:_changed,...result}=failHistoryQuoteInTransaction(tx,i as FailHistoryQuoteInput);return result;}),
 ];
 
 /** 受控存储门面；解析期间 token 由 HistoryService.withChannel 绑定，候选也自行重验当前资格。 */

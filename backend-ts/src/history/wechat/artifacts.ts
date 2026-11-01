@@ -42,7 +42,8 @@ async function readNarrowWechatManifest(executable: string): Promise<{options:Na
       if (typeof row.cliSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.cliSha256)
         || typeof row.wcdbSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.wcdbSha256)) return reject();
       const imageKeyChannel=row.originalImageProtocol==='wechat-original-image-v1'&&['wechat-cdn-big-hd-exact-content-v4','wechat-message-image-content-v1'].includes(row.originalImageQualityProof as string);
-      return {options:{ executable, expectedCliSha256: row.cliSha256, expectedWcdbSha256: row.wcdbSha256,...(imageKeyChannel?{imageKeyChannel:true as const}:{}) },originalImageProtocol:row.originalImageProtocol,originalImageQualityProof:row.originalImageQualityProof,quoteProtocol:row.quoteProtocol,quoteReader:row.quoteReader};
+      const inlineQuotes=row.quoteProtocol==='wechat-quote-message-v1'&&row.quoteReader==='wechat-quote-normal-tail-v2'&&row.quoteInline==='wechat-quote-inline-sync-v1';
+      return {options:{ executable, expectedCliSha256: row.cliSha256, expectedWcdbSha256: row.wcdbSha256,...(imageKeyChannel?{imageKeyChannel:true as const}:{}),...(inlineQuotes?{inlineQuotes:true as const}:{}) },originalImageProtocol:row.originalImageProtocol,originalImageQualityProof:row.originalImageQualityProof,quoteProtocol:row.quoteProtocol,quoteReader:row.quoteReader};
     } finally { await handle.close(); }
   } catch (error) {
     if (error instanceof StorageFailure && error.code === 'history_artifact_manifest_missing') throw error;

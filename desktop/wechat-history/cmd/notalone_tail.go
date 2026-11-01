@@ -61,6 +61,9 @@ func notaloneSnapshotRecordDigest(record notaloneSnapshotRecord) (notaloneTailId
 	if err != nil || localID < 0 || strconv.FormatInt(localID, 10) != *record.LocalID {
 		return notaloneTailIdentity{}, notaloneTailBaselineEntry{}, notaloneFailure("history_identity_unverified")
 	}
+	// 引用是同步时附带的补充投影，不改变旧checkpoint对消息身份与普通记录内容的摘要。
+	record.Quote = nil
+	record.QuoteErrorCode = ""
 	encoded, err := json.Marshal(record)
 	if err != nil {
 		return notaloneTailIdentity{}, notaloneTailBaselineEntry{}, notaloneFailure("history_page_read_failed")
@@ -303,7 +306,8 @@ func (h *notaloneHistorySession) tailPage(ctx context.Context, request notaloneH
 	records := make([]notaloneSnapshotRecord, 0, 16)
 	scanDone := tail.deletionsReady
 	if tail.snapshot != nil {
-		page, pageErr := tail.snapshot.Page(ctx, tail.snapshotCursor)
+		inlineQuote := h.inlineQuoteContext(tail.snapshot, &support, profile)
+		page, pageErr := tail.snapshot.Page(ctx, tail.snapshotCursor, inlineQuote)
 		if pageErr != nil {
 			h.resetTail()
 			return empty, pageErr

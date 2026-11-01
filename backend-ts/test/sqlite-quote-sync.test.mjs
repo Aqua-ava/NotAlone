@@ -6,6 +6,85 @@ import {StorageFailure} from '../src/storage/sqlite/contracts.ts';
 import {fixture as historyFixture,record} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteHistoryService} from '../src/history/sqlite/service.ts';
 import {SqliteQuoteStore} from '../src/history/sqlite/quote-store.ts';
+import {prepareRecord} from '../src/history/sqlite/normalize.ts';
+test('引用成功内容与单条失败码同时出现时拒绝整条引用载荷',()=>{
+ const prepared=prepareRecord(record('98',{kind:'other',text:null,originalType:'244813135921',serverId:'98',metadataOnly:true,stateAssurance:'unverified',
+  quote:{replyText:'回复',referencedText:'原话',referencedSender:null,referencedSenderRole:'unknown',referencedType:'1',referencedServerId:'7',proofDigest:'b'.repeat(64)},
+  quoteErrorCode:'history_quote_read_failed'}),'source-1',{partitions:['shard-a'],tables:[{partition:'shard-a',instance:'table-instance-1'}]});
+ assert.equal(prepared.reason,'message_content_unverified');
+ assert.equal(prepared.quote,undefined);assert.equal(prepared.quoteErrorCode,undefined);
+ assert.equal(prepared.raw.includes('原话'),false);
+});
+test('普通同步页内引用随消息入库并立即读取，不再候选给后台二次读取',async t=>{
+ const f=await historyFixture(t),contact=f.saved[0].contact_id,previousPage=f.channel.page;
+ const quoteRecord=record('99',{kind:'other',text:null,originalType:'244813135921',status:'2',serverId:'99',metadataOnly:true,stateAssurance:'unverified',
+  quote:{replyText:'周六回',referencedText:'周末回来吗？',referencedSender:'合成联系人',referencedSenderRole:'contact',referencedType:'1',referencedServerId:'77',proofDigest:'d'.repeat(64)}});
+ f.channel.page=async(...args)=>{const page=await previousPage(...args);return {...page,records:[...page.records,quoteRecord]};};
+ let separateReads=0;f.channel.readQuote=async()=>{separateReads++;throw new Error('新同步消息不应再触发quote-read');};
+ await f.service.synchronize(contact);
+ const stored=(await f.service.readChat(contact)).messages.find(message=>message.originalType==='244813135921');
+ assert.equal(stored.quote.replyText,'周六回');
+ assert.equal(stored.quote.referencedText,'周末回来吗？');
+ assert.equal(stored.quote.state,'unresolved');
+ assert.equal((await new SqliteQuoteStore(f.storage,f.contacts.ownerId).candidates(contact,'wechat-quote-v2')).length,0);
+ assert.equal(separateReads,0);
+ const source=await f.service.source(contact,stored.sourceRecordIds[0]);
+ assert.equal(JSON.stringify(source.raw).includes('周末回来吗'),false,'引用正文不得进入原始来源载荷');
+});
+test('普通同步页的单条引用安全失败会记账且不阻断同页后续正文',async t=>{
+ const f=await historyFixture(t),contact=f.saved[0].contact_id,previousPage=f.channel.page;
+ const failedQuote=record('98',{kind:'other',text:null,originalType:'244813135921',status:'2',serverId:'98',metadataOnly:true,stateAssurance:'unverified',
+  quoteErrorCode:'history_quote_unavailable'});
+ f.channel.page=async(...args)=>{const page=await previousPage(...args);return {...page,records:[...page.records,failedQuote,record('97',{text:'引用失败之后仍正常同步'})]};};
+ let separateReads=0;f.channel.readQuote=async()=>{separateReads++;throw new Error('同步页中的失败引用不应进入后台重读');};
+ await f.service.synchronize(contact);
+ const read=await f.service.readChat(contact),failed=read.messages.find(message=>message.originalType==='244813135921');
+ assert.equal(failed.quoteErrorCode,'history_quote_unavailable');
+ assert.ok(read.messages.some(message=>message.text==='引用失败之后仍正常同步'));
+ assert.equal((await new SqliteQuoteStore(f.storage,f.contacts.ownerId).candidates(contact,'wechat-quote-v2')).length,0);
+ assert.equal(separateReads,0);
+});
+test('同页引用扩展写入失败时捕获事务回滚且历史游标不推进',async t=>{
+ const f=await historyFixture(t,{registryModule:new URL('./fixtures/memory-sqlite/quote-write-failure-registry.mjs',import.meta.url).href});
+ const contact=f.saved[0].contact_id,before=await f.service.coverage(contact),quoteRecord=record('44',{kind:'other',text:null,originalType:'244813135921',status:'2',serverId:'44',metadataOnly:true,stateAssurance:'unverified',
+  quote:{replyText:'事务回滚回复',referencedText:'事务回滚引用',referencedSender:'合成联系人',referencedSenderRole:'contact',referencedType:'1',referencedServerId:'77',proofDigest:'f'.repeat(64)}});
+ const previousPage=f.channel.page;
+ f.channel.page=async(...args)=>{const page=await previousPage(...args);return {...page,records:[quoteRecord],cursorOut:'inline-cursor-after-quote',completedPartitions:[],exhausted:false};};
+ await f.storage.execute('test.installQuoteWriteFailure',{});
+ await assert.rejects(f.service.synchronize(contact));
+ const after=await f.service.coverage(contact);
+ assert.equal(after.cursor,before.cursor);
+ assert.equal(after.messageCount,before.messageCount);
+ assert.equal((await f.service.read(contact)).messages.some(message=>message.originalType==='244813135921'),false);
+});
+test('重复同步来源首次补入引用会发布updated，完全相同的重复观察不再刷新',async t=>{
+ const f=await historyFixture(t),contact=f.saved[0].contact_id,previousPage=f.channel.page,changes=[];
+ let quoteRecord=record('99',{kind:'other',text:null,originalType:'244813135921',status:'2',serverId:'99',metadataOnly:true,stateAssurance:'unverified'});
+ f.channel.page=async(...args)=>{const page=await previousPage(...args);return {...page,records:[...page.records,quoteRecord]};};
+ const service=new SqliteHistoryService(f.storage,f.contacts,f.channel,undefined,(...change)=>changes.push(change));t.after(()=>service.close());
+ await service.synchronize(contact);
+ const carrier=(await service.readChat(contact)).messages.find(message=>message.originalType==='244813135921');assert.ok(carrier);
+ changes.length=0;
+ quoteRecord={...quoteRecord,quote:{replyText:'补入回复',referencedText:'补入原话',referencedSender:'合成联系人',referencedSenderRole:'contact',referencedType:'1',referencedServerId:'77',proofDigest:'a'.repeat(64)}};
+ await service.synchronize(contact);
+ assert.deepEqual(changes,[[contact,carrier.id,'updated']]);
+ changes.length=0;
+ await service.synchronize(contact);
+ assert.deepEqual(changes,[],'相同引用重放不能重复发消息更新事件');
+});
+test('重复同步来源首次记账引用失败会发布updated，同码重放不重复刷新',async t=>{
+ const f=await historyFixture(t),contact=f.saved[0].contact_id,previousPage=f.channel.page,changes=[];
+ let quoteRecord=record('100',{kind:'other',text:null,originalType:'244813135921',status:'2',serverId:'100',metadataOnly:true,stateAssurance:'unverified'});
+ f.channel.page=async(...args)=>{const page=await previousPage(...args);return {...page,records:[...page.records,quoteRecord]};};
+ const service=new SqliteHistoryService(f.storage,f.contacts,f.channel,undefined,(...change)=>changes.push(change));t.after(()=>service.close());
+ await service.synchronize(contact);
+ const carrier=(await service.readChat(contact)).messages.find(message=>message.originalType==='244813135921');assert.ok(carrier);
+ changes.length=0;quoteRecord={...quoteRecord,quoteErrorCode:'history_quote_read_failed'};
+ await service.synchronize(contact);
+ assert.deepEqual(changes,[[contact,carrier.id,'updated']]);
+ changes.length=0;await service.synchronize(contact);
+ assert.deepEqual(changes,[],'重复失败码不可重复发送更新事件');
+});
 test('引用读取发现来源变化时建立连续性隔离，不提交内容或继续补读',async t=>{
  const f=await fixture(t),page=f.channel.page;
  f.channel.page=async(...args)=>{const p=await page(...args);return {...p,records:[...p.records,record('5',{partition:'a',table:'one',kind:'other',text:null,originalType:'244813135921',status:'2',metadataOnly:true,stateAssurance:'unverified'})]};};

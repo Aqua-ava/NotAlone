@@ -12,7 +12,7 @@ const generation='a'.repeat(64), account='synthetic-owner', conversation='synthe
 const scopeDigest=hash(`${account}\0${conversation}`);
 const schema={format:'wechat-message-schema-v1',status:'unverified',scopeDigest,sourceGeneration:generation,schemaFingerprint:'b'.repeat(64),
  tables:[{target:'c'.repeat(64),partition:'d'.repeat(64),role:'private_message',columns:[{name:'local_id',type:'INTEGER',notNull:false,primaryKey:1,hidden:0}],indexes:[],declaredPrimaryKey:['local_id'],autoIncrement:true,sqlFingerprint:'e'.repeat(64),triggerFingerprints:[],schemaVersion:'9007199254740993',rootPage:'2'}],checkedPartitions:['d'.repeat(64)]};
-async function fixture(t,mode='normal') {
+async function fixture(t,mode='normal',extraOptions={}) {
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-narrow-native-')));
  await mkdir(join(root,'bin'));await mkdir(join(root,'lib'));
  const executable=join(root,'bin','wx-cli'),pidFile=join(root,'pid'),logFile=join(root,'requests');
@@ -22,6 +22,7 @@ async function fixture(t,mode='normal') {
  if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['notalone-history']))process.exit(91);
  const schema=${JSON.stringify(schema)};const initialTable=structuredClone(schema.tables[0]);let busy=false,supportCount=0,inspectCount=0,quoteFailureCount=0;let currentConversation='${conversation}';let receivedRecords=[];
  const target={protocol:'private-history-v1',descriptor:'synthetic-target-v1',partitions:['d'.repeat(64)],tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'};
+ const inlineQuoteRow=()=>{const source={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'456',sentAt:'1000'};return {...source,sender:'owner',kind:'other',text:null,originalType:'244813135921',timePrecision:'second',orderScheme:null,orderKey:null,status:'2',stateAssurance:'unverified',metadataOnly:true,quote:{format:'wechat-quote-message-v1',accountKey:'${account}',conversationKey:currentConversation,sourceGeneration:'${generation}',...source,replyText:'周六回',referencedText:'周末回来吗？',referencedSender:'合成联系人',referencedSenderRole:'contact',referencedType:'1',referencedServerId:'77',contentSha256:'9'.repeat(64)}};};
  if(process.env.TEST_MODE.startsWith('empty-target')){
   schema.checkedPartitions=Array.from({length:8},(_,i)=>(i+1).toString(16).repeat(64));schema.tables=[];
   target.partitions=schema.checkedPartitions;target.tables=[];
@@ -82,7 +83,7 @@ async function fixture(t,mode='normal') {
    if(mode.startsWith('empty-target'))data={...data,profileId:'wechat-4.0.6-29387-absent-private-target-v1',declaredPrimaryKey:[],statusSemantics:'no-message-table-v1',continuity:'same-source-instances-normal-use-v1',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','private-history-boundary-v1'].map(key=>[key,['declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','incrementalTail'].includes(key)?'unsupported':key==='private-history-boundary-v1'?'unverified':'supported']))};
    if(mode==='empty-target-ordinary-profile')data={...data,profileId:'synthetic-profile-v1',declaredPrimaryKey:['local_id']};
    if(mode==='empty-target-false-tail')data.capabilities.incrementalTail='supported';
-   if(mode.startsWith('durable-'))data.capabilities=Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','durableIncremental'].map(key=>[key,'supported']));
+   if(mode.startsWith('durable-')||mode.startsWith('inline-quotes'))data.capabilities=Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','durableIncremental'].map(key=>[key,'supported']));
    if(mode.startsWith('growth-')){
     data.schemaFingerprint=schema.schemaFingerprint;
     data.capabilities=Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','durableIncremental','partitionGrowth'].map(key=>[key,'supported']));
@@ -203,6 +204,7 @@ async function fixture(t,mode='normal') {
    if(mode==='metadata-only-false')data.records[0].metadataOnly=false;
    if(mode==='metadata-only-negative')data.records[0].originalType='-1';
    if(mode==='metadata-only-kind-conflict')data.records[0].kind='image';
+   if(mode.startsWith('inline-quotes'))data={...data,records:[inlineQuoteRow()],resumeCursor:'inline-tail-cursor'};
    if(mode==='missing-state-assurance'){const {stateAssurance,...untrusted}=row;data={...data,records:[untrusted]};}
    if(mode==='known-recall')data={...data,records:[{...row,sender:'unknown',kind:'other',text:null,originalType:'10000',status:'4',messageState:'recalled'}]};
    if(mode==='unlocated-recall')data={...data,records:[{...row,localId:null,sender:'unknown',kind:'other',text:null,originalType:'10000',status:'4',messageState:'recalled'}]};
@@ -212,6 +214,7 @@ async function fixture(t,mode='normal') {
    if(mode==='wrong-text-kind')data={...data,records:[{...row,kind:'image',text:'不能夹带正文'}]};
    if(mode==='oversized-text')data={...data,records:[{...row,text:'x'.repeat(65537)}]};
   }
+  if(r.op==='tail'&&mode.startsWith('inline-quotes'))data={target:r.target,cursorIn:r.cursor,cursorOut:'inline-tail-next',records:[inlineQuoteRow()],caughtUp:true};
 
   if(mode==='unsafe-integer'&&r.op==='inspect')data={...schema,tables:[{...schema.tables[0],columns:[{...schema.tables[0].columns[0],primaryKey:9007199254740993}]}]};
   if(mode==='unsafe-version'&&r.op==='inspect')data={...schema,tables:[{...schema.tables[0],schemaVersion:9007199254740993}]};
@@ -226,7 +229,7 @@ async function fixture(t,mode='normal') {
  await writeFile(join(root,'lib','libWCDB.dylib'),wcdb);
  const manifest={formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',cliSha256:hash(script),wcdbSha256:hash(wcdb),signing:'ad-hoc-development',realWechatVerified:false};
  await writeFile(join(root,'manifest.json'),JSON.stringify(manifest));
- const options={executable,expectedCliSha256:manifest.cliSha256,expectedWcdbSha256:manifest.wcdbSha256,environment:{TEST_MODE:mode,PID_FILE:pidFile,LOG_FILE:logFile}};
+ const options={executable,expectedCliSha256:manifest.cliSha256,expectedWcdbSha256:manifest.wcdbSha256,environment:{TEST_MODE:mode,PID_FILE:pidFile,LOG_FILE:logFile},...extraOptions};
  const client=new NarrowWechatClient(options);
  t.after(async()=>{await client.close();await rm(root,{recursive:true,force:true});});
  return {client,options,root,pidFile,logFile,manifest};
@@ -247,6 +250,23 @@ test('引用窄读取保留回复与引用并精确绑定当前会话和消息',
  const quote=await f.client.readQuoteSelected(target,source);
  assert.equal(quote.replyText,'周六回');assert.equal(quote.referencedText,'周末回来吗？');assert.equal(quote.referencedServerId,'18446744073709551615');
  const requests=(await readFile(f.logFile,'utf8')).trim().split('\n').map(JSON.parse);assert.equal(requests.at(-1).consent,'selected-quote-v1');assert.equal(requests.at(-1).localId,source.localId);
+});
+test('新版固定制品在历史页和增量tail内携带已绑定的引用内容，无quote-read请求',async t=>{
+ const f=await fixture(t,'inline-quotes',{inlineQuotes:true});
+ await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();const target=await f.client.targetSelected();
+ const page=await f.client.pageSelected(target,null),pageQuote=page.records[0];
+ assert.equal(pageQuote.quote.replyText,'周六回');assert.equal(pageQuote.quote.referencedText,'周末回来吗？');assert.equal(pageQuote.quote.proofDigest,'9'.repeat(64));
+ const tail=await f.client.tailSelected(target,page.resumeCursor),tailQuote=tail.records[0];
+ assert.equal(tailQuote.quote.replyText,'周六回');assert.equal(tailQuote.quote.referencedServerId,'77');
+ const requests=(await readFile(f.logFile,'utf8')).trim().split('\n').map(JSON.parse);
+ assert.deepEqual(requests.map(row=>row.op),['resolve','inspect','support','target','page','tail']);
+});
+test('未启用inlineQuotes的旧制品仍只接受旧page结构',async t=>{
+ const old=await fixture(t),inline=await fixture(t,'inline-quotes');
+ await old.client.resolveSelected('合成目标');await old.client.inspectSelected();await old.client.supportSelected();
+ const oldTarget=await old.client.targetSelected();assert.equal((await old.client.pageSelected(oldTarget,null)).records[0].text,'合成分页文字');
+ await inline.client.resolveSelected('合成目标');await inline.client.inspectSelected();await inline.client.supportSelected();const target=await inline.client.targetSelected();
+ await assert.rejects(inline.client.pageSelected(target,null),{code:'history_protocol_invalid'});
 });
 test('引用窄读取拒绝跨会话、错消息和非法作者，不发布正文',async t=>{
  for(const mode of ['quote-wrong-scope','quote-wrong-local','quote-invalid-role']){

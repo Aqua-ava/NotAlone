@@ -7,8 +7,8 @@ import type { HistoryChannel, HistorySource, HistoryCoverage, HistoryImageMedia,
 import { assertSupport, serializeSupport } from './actions.ts';
 import { isSourceContinuityLost } from './continuity.ts';
 import { isPartitionGrowthTargetChange } from '../partition-growth.ts';
-import {SqliteQuoteStore} from './quote-store.ts';
-export const quoteParserVersion='wechat-quote-v2';
+import {SqliteQuoteStore,quoteParserVersion} from './quote-store.ts';
+export {quoteParserVersion};
 interface PendingGoal { id:string; target:HistoryTarget; cursor:string|null }
 export interface HistoryContactGateway {
  readonly ownerId:string;

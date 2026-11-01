@@ -36,6 +36,9 @@ export interface HistoryRecord {
   metadataOnly?: true;
   // 渠道已核验的具体状态；撤回是无正文终态，不能仅凭原始状态数字推断。
   messageState?: 'sent' | 'received' | 'recalled' | 'absent';
+  // 仅受认可的新版 CLI 随同步页携带的引用投影；不会进入原始来源载荷。
+  quote?: HistoryQuoteContent & {proofDigest:string};
+  quoteErrorCode?: HistoryQuoteErrorCode;
 }
 /** 一对一引用解析的最小结构化结果；不保存原始 XML 或其他消息载荷。 */
 export interface HistoryQuoteContent {
