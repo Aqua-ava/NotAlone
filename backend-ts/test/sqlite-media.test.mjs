@@ -22,6 +22,25 @@ function imageAdapter(options={}){return {version:'synthetic-media-v1',supports:
  await context.save({role:'image_display',expectedBytes:imageBytes.length,expectedSha256:createHash('sha256').update(imageBytes).digest('hex'),bytes:(async function*(){yield imageBytes;})(),validate:async localPath=>{const {readFile}=await import('node:fs/promises');assert.deepEqual(await readFile(localPath),imageBytes);return {format:'synthetic',mimeType:'image/png',containerValid:true,viewable:true,playable:false,imageQuality:options.quality??'thumbnail',qualityProof:options.quality==='original'?'synthetic-original-proof':null};}});
  return {association:{protocol:'media-association-v1',profileId:'synthetic-media-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-resource-one'}};
  }};}
+test('重开媒体时跳过来源已失效的副本，仍拒绝预览且其他联系人可用',async t=>{
+ const f=await fixture(t,imageAdapter()),other=f.saved[1].contact_id;
+ const m=f.messages.find(m=>m.kind==='image');
+ const stale=await f.media.extract(f.contact,m.id,{requestKey:'source-before-quarantine',goal:'extract'});
+ await f.history.synchronize(other);const otherMessage=(await f.history.read(other)).messages.find(m=>m.kind==='image');
+ const good=await f.media.extract(other,otherMessage.id,{requestKey:'source-still-valid',goal:'extract'});
+ const page=f.channel.page;
+ f.channel.page=async(scope,...args)=>scope.token.contact_id===f.contact?{
+  target:f.target.descriptor,cursorIn:null,cursorOut:null,completedPartitions:['a'],exhausted:true,
+  records:[{partition:'a',table:'one',localId:'1',serverId:'0',sender:'unknown',kind:'image',text:null,originalType:'image',sentAt:null,timePrecision:null,orderScheme:null,orderKey:null,stateAssurance:'unverified'}],
+ }:page(scope,...args);
+ await f.history.synchronize(f.contact);
+ await assert.rejects(f.media.openPreview(f.contact,m.id,stale.files[0].fileId),{code:'history_source_not_available'});
+ const reopened=new SqliteMediaService({storage:f.storage,contacts:f.contacts,history:f.history,userData:f.root,adapters:[imageAdapter()]});
+ t.after(()=>reopened.close());await reopened.initialize();
+ await assert.rejects(reopened.openPreview(f.contact,m.id,stale.files[0].fileId),{code:'history_source_not_available'});
+ assert.deepEqual((await reopened.read(other,otherMessage.id)).files,good.files);
+});
+
 test('明确单消息保存真实独立文件、有限状态、幂等及清除保留占位',async t=>{
  const f=await fixture(t,imageAdapter());const m=f.messages.find(m=>m.kind==='image');
  const value=await f.media.extract(f.contact,m.id,{requestKey:'save-one',goal:'extract'});assert.equal(value.latestAttempt.state,'completed');assert.equal(value.latestAttempt.outcome,'limited');assert.equal(value.files.length,1);assert.equal(value.files[0].imageQuality,'thumbnail');

@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { SqliteStorage } from '../src/storage/sqlite/client.ts';
 import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 import { SqliteHistoryService } from '../src/history/sqlite/service.ts';
+import { SqliteHistoryHttp } from '../src/history/sqlite/http.ts';
+import { EventEmitter } from 'node:events';
 const owner='00000000-0000-4000-8000-000000000001';
 const report={serverAliasSemantics:'verified_within_scope',protocol:'private-history-v1',profileId:'synthetic-v1',adapterVersion:'1',status:'supported',reason:null,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic-final-rows',continuity:'synthetic-generation-1'};
 const absentReport=base=>({...base,profileId:'wechat-4.0.6-29387-absent-private-target-v1',declaredPrimaryKey:[],statusSemantics:'no-message-table-v1',continuity:'same-source-instances-normal-use-v1',
@@ -25,6 +27,37 @@ async function fixture(t,options={}){
  const service=new SqliteHistoryService(storage,contacts,channel);
  return {storage,contacts,channel,service,saved:saved.bindings,target,root};
 }
+test('聊天首页按消息时间取最近记录，后入库的多年历史不挤掉近期消息且分页不漏',async t=>{
+ const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
+ const recent=record('1',{sentAt:String(Date.parse('2026-10-29T12:00:00Z'))});
+ const old=record('2',{sentAt:String(Date.parse('2021-10-14T12:00:00Z'))});
+ const latest=record('3',{sentAt:String(Date.parse('2026-10-31T12:00:00Z'))});
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[recent,old,latest],completedPartitions:target.partitions,exhausted:true});
+ await service.synchronize(contact);
+ const http=new SqliteHistoryHttp(service);
+ async function page(before){
+  const req=Object.assign(new EventEmitter(),{method:'GET',url:`/api/contacts/${contact}/history-messages?limit=2${before?`&before=${before}`:''}`});
+  let status,body;const res={writeHead:code=>{status=code;},end:value=>{body=JSON.parse(value);}};
+  assert.equal(await http.handle(req,res),true);assert.equal(status,200);return body;
+ }
+ const first=await page();
+ assert.deepEqual(first.messages.map(m=>m.occurred_at),['2026-10-31T12:00:00.000Z','2026-10-29T12:00:00.000Z']);
+ const older=await page(first.next_cursor);
+ assert.deepEqual(older.messages.map(m=>m.occurred_at),['2021-10-14T12:00:00.000Z']);
+ assert.equal(older.next_cursor,null);
+ assert.equal(new Set([...first.messages,...older.messages].map(m=>m.message_id)).size,3);
+ assert.deepEqual((await service.read(contact,{limit:2})).messages.map(m=>m.sentAt),[latest.sentAt,old.sentAt],'旧消息读取仍使用原保存游标');
+ await assert.rejects(service.readChat(saved[1].contact_id,{before:first.next_cursor}),{code:'history_cursor_invalid'});
+ const same=record('4',{sentAt:latest.sentAt});
+ const unknownA=record('5',{sentAt:null,timePrecision:null}),unknownB=record('6',{sentAt:null,timePrecision:null});
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[recent,old,latest,same,unknownA,unknownB],completedPartitions:target.partitions,exhausted:true});
+ await service.synchronize(contact);
+ const pages=[];let cursor;
+ do {const result=await page(cursor);pages.push(...result.messages);cursor=result.next_cursor;}while(cursor);
+ assert.deepEqual(pages.map(m=>m.occurred_at),['2026-10-31T12:00:00.000Z','2026-10-31T12:00:00.000Z','2026-10-29T12:00:00.000Z','2021-10-14T12:00:00.000Z',null,null]);
+ assert.equal(new Set(pages.map(m=>m.message_id)).size,6,'同时间与未知时间跨页无重复或遗漏');
+ assert.ok(pages.every(m=>m.ordering==='unknown'),'展示时间不认证渠道的精确先后');
+});
 test('已有占位按原始类型细分计数，联系人与系统元数据保持隔离且不改变正文资格',async t=>{
  const {service,channel,saved,target}=await fixture(t);const [a,b]=saved;
  const items=[record('1'),record('2',{kind:'image',text:null,originalType:'3'}),

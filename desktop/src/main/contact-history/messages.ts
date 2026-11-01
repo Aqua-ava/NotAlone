@@ -65,16 +65,16 @@ export function mergeContactHistoryMessages(previous: readonly ContactHistoryMes
   const messages = new Map(previous.map((message) => [message.messageId, message]));
   for (const message of incoming) messages.set(message.messageId, message);
   return [...messages.values()].sort((left, right) => {
-    if (left.displayPosition !== undefined && right.displayPosition !== undefined) {
-      const a = BigInt(left.displayPosition), b = BigInt(right.displayPosition);
-      if (a !== b) return a > b ? -1 : 1;
-      return left.messageId.localeCompare(right.messageId);
-    }
     const leftTime = left.occurredAt === null ? -Infinity : Date.parse(left.occurredAt);
     const rightTime = right.occurredAt === null ? -Infinity : Date.parse(right.occurredAt);
     if (leftTime !== rightTime) return leftTime < rightTime ? 1 : -1;
     const microseconds = remainingMicroseconds(right.occurredAt) - remainingMicroseconds(left.occurredAt);
     if (microseconds) return microseconds;
+    if (left.displayPosition !== undefined && right.displayPosition !== undefined) {
+      const a = BigInt(left.displayPosition), b = BigInt(right.displayPosition);
+      if (a !== b) return a > b ? -1 : 1;
+      return left.messageId.localeCompare(right.messageId);
+    }
     return left.messageId < right.messageId ? 1 : left.messageId === right.messageId ? 0 : -1;
   });
 }

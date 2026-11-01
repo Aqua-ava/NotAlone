@@ -8,6 +8,7 @@ import { displayMessageType, messagePlaceholder } from './message-types.ts';
 
 interface HistoryHttpService {
   read(contactId: string, options?: { limit?: number; before?: string }): Promise<HistoryRead>;
+  readChat(contactId: string, options?: { limit?: number; before?: string }): Promise<HistoryRead>;
   imageMedia(contactId: string, messageIds: readonly string[]): Promise<ReadonlyMap<string, HistoryImageMedia>>;
   coverage(contactId: string): Promise<HistoryCoverage>;
   synchronize(contactId: string, signal?: AbortSignal): Promise<HistoryCoverage>;
@@ -155,7 +156,8 @@ export class SqliteHistoryHttp {
         const before = parameters.get('before');
         if (!/^[1-9][0-9]{0,2}$/.test(rawLimit) || Number(rawLimit) > 100 || before !== null && !uuid.test(before)) throw new StorageFailure('history_request_invalid');
         const limit = Number(rawLimit);
-        const read = await this.service.read(contactId, { limit: limit + 1, ...(before ? { before: before.toLowerCase() } : {}) });
+        const options = { limit: limit + 1, ...(before ? { before: before.toLowerCase() } : {}) };
+        const read = operation === 'history-messages' ? await this.service.readChat(contactId, options) : await this.service.read(contactId, options);
         if(operation==='history-messages'){
           const imageIds = read.messages.slice(0,limit).filter(message=>message.kind==='image').map(message=>message.id);
           const imageMedia = imageIds.length ? await this.service.imageMedia(contactId,imageIds) : new Map();

@@ -4,7 +4,7 @@ import { assertReadEligibility } from '../../contacts/sqlite/actions.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistoryPage, HistoryTailPage, HistoryTarget, HistorySupportReport } from './contracts.ts';
 import { ingestRecords, quarantineUnverifiedRecords } from './ingest.ts';
-import { isCertifiedEmptyTarget, readCoverage, readMessages, readRecentMessages } from './read.ts';
+import { isCertifiedEmptyTarget, readCoverage, readMessages, readChatMessages, readRecentMessages } from './read.ts';
 import {unresolvedQuarantineCount} from './quarantine.ts';
 import {currentSourceScopeCTE,currentSourcePredicate} from './current-scope.ts';
 import { clearBoundaryExclusion, completeRestoreGoal, restoreOperationForGoal } from './clear-actions.ts';
@@ -323,6 +323,7 @@ export const historyActions:StorageAction[]=[
    return i.contactIds.map((contactId:string)=>readCoverage(tx,i.ownerId,contactId));
   }),
  action('history.read','read',(tx,i)=>readMessages(tx,i.ownerId,i.contactId,i.limit,i.before)),
+ action('history.readChat','read',(tx,i)=>readChatMessages(tx,i.ownerId,i.contactId,i.limit,i.before)),
  action('history.imageMedia','read',(tx,i)=>{
   if(typeof i.ownerId!=='string'||!i.ownerId||typeof i.contactId!=='string'||!i.contactId||!Array.isArray(i.messageIds)
    ||i.messageIds.length>100||i.messageIds.some((value:unknown)=>typeof value!=='string'||!/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i.test(value))

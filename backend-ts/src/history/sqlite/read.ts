@@ -148,13 +148,27 @@ function readRows(tx:StorageTransaction,owner:string,contact:string,coverage:His
   sourceRecordIds:sources.get(String(r.id))??[]})) as StoredMessage[];
  return {messages,coverage,replyEligibility:coverage.phase==='complete'?'ready':coverage.phase==='incomplete'?'history_incomplete':'history_syncing'};
 }
-export function readMessages(tx:StorageTransaction,owner:string,contact:string,limit=101,before?:string):HistoryRead {
+function readMessagePage(tx:StorageTransaction,owner:string,contact:string,limit:number,before:string|undefined,order:'stored'|'message-time'):HistoryRead {
  const coverage=readCoverage(tx,owner,contact);
  if(!Number.isSafeInteger(limit)||limit<1||limit>101)throw new StorageFailure('history_request_invalid');
- const cursor=before?tx.get('SELECT display_no FROM message WHERE owner_id=? AND contact_id=? AND id=?',[owner,contact,before]):undefined;
+ const cursor=before?tx.get('SELECT display_no,sent_at FROM message WHERE owner_id=? AND contact_id=? AND id=?',[owner,contact,before]):undefined;
  if(before&&!cursor)throw new StorageFailure('history_cursor_invalid');
- const rows=tx.all(`WITH ${currentSourceScopeCTE} SELECT * FROM message m WHERE owner_id=? AND contact_id=? AND availability='available' AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) AND ${currentMessageSource}${cursor?' AND display_no<?':''} ORDER BY display_no DESC LIMIT ?`,cursor?[owner,contact,contact,owner,contact,cursor.display_no,limit]:[owner,contact,contact,owner,contact,limit]);
+ const timeOrder=order==='message-time';
+ const after=cursor?timeOrder
+  ?cursor.sent_at===null?' AND m.sent_at IS NULL AND m.display_no<?'
+   :' AND (m.sent_at IS NULL OR m.sent_at<? OR (m.sent_at=? AND m.display_no<?))'
+  :' AND m.display_no<?':'';
+ const cursorValues=cursor?timeOrder&&cursor.sent_at!==null?[cursor.sent_at,cursor.sent_at,cursor.display_no]:[cursor.display_no]:[];
+ const sorting=timeOrder?'m.sent_at IS NULL ASC,m.sent_at DESC,m.display_no DESC':'m.display_no DESC';
+ const rows=tx.all(`WITH ${currentSourceScopeCTE} SELECT * FROM message m WHERE owner_id=? AND contact_id=? AND availability='available' AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) AND ${currentMessageSource}${after} ORDER BY ${sorting} LIMIT ?`,[owner,contact,contact,owner,contact,...cursorValues,limit]);
  return readRows(tx,owner,contact,coverage,rows);
+}
+export function readMessages(tx:StorageTransaction,owner:string,contact:string,limit=101,before?:string):HistoryRead {
+ return readMessagePage(tx,owner,contact,limit,before,'stored');
+}
+/** 聊天按已知发送时间取最近消息；同时间及未知时间只用保存位置稳定分页，不认证因果。 */
+export function readChatMessages(tx:StorageTransaction,owner:string,contact:string,limit=101,before?:string):HistoryRead {
+ return readMessagePage(tx,owner,contact,limit,before,'message-time');
 }
 /** 候选工作区按有时间的文字消息选最新材料；不改变历史页的 display_no 游标语义。 */
 export function readRecentMessages(tx:StorageTransaction,owner:string,contact:string,limit=50):HistoryRead {

@@ -17,5 +17,5 @@ export async function fixture(t,adapter=null,{onAcceptedPage,onMediaChanged}={})
  const history=new SqliteHistoryService(storage,contacts,channel,undefined,undefined,onAcceptedPage);const contact=saved.bindings[0].contact_id;await history.synchronize(contact);const messages=(await history.read(contact)).messages;
  const media=new SqliteMediaService({storage,contacts,history,userData:root,adapters:adapter?[adapter]:[],changed:onMediaChanged});await media.initialize();
  t.after(async()=>{await media.close();await history.close();await contacts.close();await storage.close();await rm(root,{recursive:true,force:true});});
- return {root,storage,contacts,history,media,owner,contact,messages,saved:saved.bindings};
+ return {root,storage,contacts,history,media,owner,contact,messages,saved:saved.bindings,channel,target};
 }

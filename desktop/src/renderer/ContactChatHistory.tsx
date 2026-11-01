@@ -61,7 +61,7 @@ export function ContactChatHistory({ session, settings }: { session: ContactSess
     {!selected ? <div className="contact-chat-empty"><p>在顶部选择联系人后，查看你们已保存的聊天记录。</p></div>
       : <div className="contact-chat-body" aria-busy={loading}>
         {messages.items.length > 0 && <p className="contact-chat-note">{unknownOrder
-          ? '按保存位置展示，消息先后尚未核验。' : '最近消息在前。'}</p>}
+          ? '按消息时间展示；同一时间或时间未知的消息先后未核验。' : '最近消息在前。'}</p>}
         {(!sameScope || loading) && <p className="contact-chat-note" role="status">正在读取聊天记录…</p>}
         {sameScope && messages.phase === 'ready' && messages.items.length === 0 && <div className="contact-chat-empty"><p>还没有已保存的聊天记录</p><small>同步或导入这位联系人的资料后，会显示在这里。</small></div>}
         {sameScope && (messages.phase === 'failed' || state.error) && <p role="alert" className="contact-chat-note">{state.error || '聊天记录暂时无法读取，请刷新重试。'}</p>}

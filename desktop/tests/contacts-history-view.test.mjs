@@ -95,7 +95,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','original'));
   await expect(image).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.mediaCalls.length)).toBe(2);
-  await expect(chat.getByText('按保存位置展示，消息先后尚未核验。')).toBeVisible();
+  await expect(chat.getByText('按消息时间展示；同一时间或时间未知的消息先后未核验。')).toBeVisible();
   await expect(page.locator('.contact-history-status')).toHaveCount(0);
   const settingsButton = chat.getByRole('button', { name: '同步与资料管理', exact: true });
   const settings = chat.getByRole('region', { name: '当前联系人设置', includeHidden: true });

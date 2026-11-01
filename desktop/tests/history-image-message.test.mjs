@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { randomUUID } from 'node:crypto';
 
-const bundle = await build({ stdin: { contents: "export { readContactHistoryMessages } from './src/main/contact-history/messages';", resolveDir: process.cwd() },
+const bundle = await build({ stdin: { contents: "export { readContactHistoryMessages, mergeContactHistoryMessages } from './src/main/contact-history/messages';", resolveDir: process.cwd() },
   bundle: true, platform: 'node', format: 'esm', write: false });
-const { readContactHistoryMessages } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
+const { readContactHistoryMessages, mergeContactHistoryMessages } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
 const contactId = randomUUID(), messageId = randomUUID(), fileId = randomUUID();
 
 function message(image_media) {
@@ -13,6 +13,21 @@ function message(image_media) {
     media_placeholder: '[图片]', occurred_at: '2026-10-31T12:00:00Z', quoted: null,
     ...(image_media ? { image_media } : {}) };
 }
+
+test('聊天合并按消息时间排序，后补旧记录不插入近期记录之间', () => {
+  const recent = { messageId: randomUUID(), occurredAt: '2026-10-29T12:00:00Z', displayPosition: '1' };
+  const old = { messageId: randomUUID(), occurredAt: '2021-10-14T12:00:00Z', displayPosition: '9007199254740993' };
+  const latest = { messageId: randomUUID(), occurredAt: '2026-10-31T12:00:00Z', displayPosition: '9007199254740994' };
+  assert.deepEqual(mergeContactHistoryMessages([recent, old], [latest]), [latest, recent, old]);
+});
+
+test('聊天时间相同时以精确保存位置稳定分页，未知时间排在已知时间之后', () => {
+  const known = { messageId: randomUUID(), occurredAt: '2026-10-31T12:00:00.000002Z', displayPosition: '1' };
+  const same = { ...known, messageId: randomUUID(), displayPosition: '9007199254740994' };
+  const microsecond = { ...known, messageId: randomUUID(), occurredAt: '2026-10-31T12:00:00.000001Z', displayPosition: '9007199254740995' };
+  const unknown = { ...known, messageId: randomUUID(), occurredAt: null, displayPosition: '9007199254740996' };
+  assert.deepEqual(mergeContactHistoryMessages([unknown, microsecond, known], [same]), [same, known, microsecond, unknown]);
+});
 
 test('聊天历史读取使用专用投影并保留原图状态和引用', async () => {
   const calls = [];

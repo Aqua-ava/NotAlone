@@ -28,7 +28,12 @@ export class SqliteMediaService {
  initialize():Promise<void>{return this.track(this.start());}
  private async start():Promise<void>{await this.options.storage.execute('media.recover',{ownerId:this.ownerId});await this.resumeCleanup();
   const current=await this.options.storage.execute<{contactId:string;messageId:string;fileId:string}[]>('media.currentFiles',{ownerId:this.ownerId});
-  for(const file of current)await this.verifyFile(file.contactId,file.messageId,file.fileId);
+  for(const file of current){
+   try{await this.verifyFile(file.contactId,file.messageId,file.fileId);}catch(error){
+    // 个别副本的旧来源失效只阻止该副本访问，不阻断其他联系人的宿主启动。
+    if(!(error instanceof StorageFailure)||error.code!=='history_source_not_available')throw error;
+   }
+  }
  }
  private available():void{if(this.closed)throw new StorageFailure('media_closed');}
  read(contactId:string,messageId:string):Promise<MediaSnapshot>{return this.track(this.readCurrent(contactId,messageId));}

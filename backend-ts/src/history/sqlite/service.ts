@@ -152,6 +152,10 @@ export class SqliteHistoryService {
   if(this.closed)throw new StorageFailure('history_closed');
   return this.storage.execute('history.read',{ownerId:this.contacts.ownerId,contactId,limit:options.limit??101,before:options.before});
  }
+ readChat(contactId:string,options:{limit?:number;before?:string}={}):Promise<HistoryRead>{
+  if(this.closed)throw new StorageFailure('history_closed');
+  return this.storage.execute('history.readChat',{ownerId:this.contacts.ownerId,contactId,limit:options.limit??101,before:options.before});
+ }
  async imageMedia(contactId:string,messageIds:readonly string[]):Promise<ReadonlyMap<string,HistoryImageMedia>>{
   if(this.closed)throw new StorageFailure('history_closed');
   const rows=await this.storage.execute<{message_id:string;media_state:string|null;attempt_state:string|null;error_code:string|null;file_id:string|null;mime_type:string|null}[]>(
