@@ -30,6 +30,68 @@ test('授权根中核验通过的 Skill 默认启用，用户停用持续优先�
  assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
+test('92个已核验Skill无变化时，刷新不重复排队查询或提交观察',async t=>{
+ const {library,root,bytes,storage}=await fixture(t);
+ for(let i=1;i<92;i++){
+  const name=`synthetic-${i}`;await mkdir(join(root,name));
+  await writeFile(join(root,name,'SKILL.md'),bytes.replace('name: gentle',`name: ${name}`));
+ }
+ const before=await library.refresh(),calls=[],execute=storage.execute.bind(storage);
+ storage.execute=(name,...args)=>{calls.push(name);return execute(name,...args);};
+ const after=await library.inspect();
+ assert.deepEqual(after,before);
+ assert.ok(calls.length<=3,`无变化的列表核验不应产生逐包数据库往返，实际 ${calls.length} 次`);
+ assert.ok(calls.every(name=>name==='skills.list'));
+});
+
+test('多个管理及回复调用同时刷新时共用在途核验，完成后仍重新读取',async t=>{
+ const {library,storage}=await fixture(t);const before=await library.refresh();
+ const calls=[],execute=storage.execute.bind(storage);
+ storage.execute=(name,...args)=>{calls.push(name);return execute(name,...args);};
+ const views=await Promise.all([library.refresh(),library.inspect(),library.refresh()]);
+ for(const view of views)assert.deepEqual(view,before);
+ assert.ok(calls.length<=3,`同一轮并发核验应共用数据库读取，实际 ${calls.length} 次`);
+ calls.length=0;assert.deepEqual(await library.inspect(),before);
+ assert.ok(calls.length>0,'核验完成后不复用已完成结果');
+});
+
+for(const action of ['停用','来源撤销','显式核验','运行时文件失效'])test(`${action}完成后不复用写入前在途刷新已读出的旧状态`,{timeout:3000},async t=>{
+ const {library,storage,root,bytes}=await fixture(t);const [item]=await library.refresh();
+ const captured=Promise.withResolvers(),release=Promise.withResolvers(),execute=storage.execute.bind(storage);let lists=0;
+ t.after(()=>release.resolve());
+ storage.execute=async(name,...args)=>{
+  const result=await execute(name,...args);
+  if(name==='skills.list'&&++lists===2){captured.resolve();await release.promise;}
+  return result;
+ };
+ const old=library.inspect();await captured.promise;
+ let latest;
+ if(action==='停用')latest=await library.setEnabled(item.id,item.headRevision,'disabled');
+ else if(action==='来源撤销')latest=await library.requireVerification(item.id,item.headRevision);
+ else if(action==='运行时文件失效'){
+  await rm(join(root,'gentle'),{recursive:true});
+  await assert.rejects(library.assertAnchor(skillAnchor(item)),{code:'skill_directory_unavailable'});
+  latest=await library.get(item.id);
+ }
+ else {await writeFile(join(root,'gentle/SKILL.md'),bytes+'新的合成方法。\n');latest=await library.verify(item.id,item.headRevision);}
+ const next=library.inspect();release.resolve();await old;
+ assert.deepEqual(await next,[latest]);
+});
+
+test('共用核验失败后可重试，账号失效时仍拒绝返回列表',async t=>{
+ const {library,storage}=await fixture(t);await library.refresh();
+ const execute=storage.execute.bind(storage);let fail=true;
+ storage.execute=(name,...args)=>{
+  if(name==='skills.list'&&fail){fail=false;return Promise.reject(new Error('synthetic-read-failure'));}
+  return execute(name,...args);
+ };
+ const failed=await Promise.allSettled([library.inspect(),library.refresh()]);
+ assert.ok(failed.every(result=>result.status==='rejected'));
+ assert.equal((await library.inspect()).length,1);
+ await storage.execute('fixture.ownerState',{ownerId:'owner-a',state:'deleted'});
+ await assert.rejects(library.inspect(),{code:'skill_owner_unavailable'});
+});
+
 import {Context} from '@deepseek-ai/cordis';
 import {createScope} from '@deepseek-ai/dsh-scope';
 import SkillRegistry from '@deepseek-ai/dsh-skill';
