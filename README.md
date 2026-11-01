@@ -216,4 +216,4 @@ SQLite 存储状态可在管理后台的“SQLite 存储诊断”查看。结构
 
 历史 Python 后台及测试已从当前工作树清理，对照仍保存在固定 Git 提交与显式独立测试环境；登记及命令见 `backend-ts/test/historical-inventory.json`、`npm run test:historical -- --list`。`backend-ts/test/fixtures/` 下的合成 JSON／JSONL 夹具保留原始字节，现已归入 TypeScript 后台；冻结历史清单中的原路径仅用于来源追溯。历史结果不表示当前源码通过，正常测试不依赖 Conda 或 Python 后端。
 
-迁移本轮的固定采集为96/96成功、96次物理调用、0重试；用户明确跳过回复盲评和启动／内存对照，未评／未测不写为通过。详见[范围及实测记录](.scratch/dsh-ts-migration/final-acceptance-closeout/capture-summary.json)。当前源码开发验证与旧安装包、发布验收分别记录。
+迁移本轮的固定采集为96/96成功、96次物理调用、0重试；用户明确跳过回复盲评和启动／内存对照，未评／未测不写为通过。历史证据标识为 `.scratch/dsh-ts-migration/final-acceptance-closeout/capture-summary.json`（未随当前检出提供），不作为可打开的当前文件链接；现存说明见[后台的数据与验收边界](backend-ts/README.md#数据与验收边界)。当前源码开发验证与旧安装包、发布验收分别记录。

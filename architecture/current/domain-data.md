@@ -271,7 +271,7 @@ status
 
 `conversation_binding` 的首次建立和 display name 改名映射必须经用户确认。按 ADR-052，顶部名称完整且质量达标后，须由有界 CLI 元数据证明唯一私聊，并核验 owner／渠道账号范围内已确认的 active 绑定，才能定位到外部 `talker`/`username`；重名或没有唯一匹配时要求用户选择，不读取左侧选中行或使用头像指纹消歧，不得猜测消息归属。CLI 后台读取独立依赖已确认的稳定绑定；前台定位失败不阻塞已有绑定的读取（ADR-030）。
 
-历史设计中的 `session_capture` 未作为当前数据库实体落地。正式前台路径采用 [FreshForegroundObservation](../../backend/src/notalone/front_sync/foreground_observation.py) 瞬时投影，经认证本机 HTTP 返回；它不是持久化联系人资料，不沿用“先保存未归属记录、再补归属”的设计。
+历史设计中的 `session_capture` 未作为当前数据库实体落地。正式前台路径采用 [ForegroundObservation](../../backend-ts/src/foreground/foreground-location-locator.ts) 瞬时投影，经认证本机 HTTP 返回；它不是持久化联系人资料，不沿用“先保存未归属记录、再补归属”的设计。
 
 - 后端在固定 owner／渠道账号范围内，按 ADR-052 核验唯一私聊与 active 绑定；只有 `confirmed` 阶段可以携带联系人及绑定标识，其他阶段不得携带身份。
 - 名称和置信度只作为临时预览，不写业务库或普通日志；观察不产生 `message`，也不参与记忆检索。聊天正文与来源由 `local_wechat_observation` 路径管理。

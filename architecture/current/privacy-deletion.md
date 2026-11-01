@@ -10,9 +10,9 @@
 
 > 删除范围决定：[ADR-094](../adr/094-ledger-erasure-by-deletion-scope.md)要求单份资料删除保留最小无正文调用记录，整联系人／账户删除清除对应记录；底层台账清理、产品接线及端到端验收尚待完成，不将下文目标描述视为已交付功能。
 
-> 状态：已采纳的安全边界；独立桌面版按 ADR-061 使用本机后台和本机资料，已有[正式启动路径](../../desktop/src/main/startup/diagnostics.ts)及[受管数据库实现](../../desktop/src/main/startup/managed-runtime.ts)；独立机器安装与最终交付验收另行核验。2026-10-29用户已取消云端工程；业务资料保存在本机，外部模型API仍须明确用途、供应商政策和授权范围。
+> 状态：已采纳的安全边界；独立桌面版按 ADR-061 使用本机后台和本机资料，已有[正式启动路径](../../desktop/src/main/startup/diagnostics.ts)及[SQLite 开发存储核验](../../desktop/src/main/startup/sqlite-development.ts)；独立机器安装与最终交付验收另行核验。2026-10-29用户已取消云端工程；业务资料保存在本机，外部模型API仍须明确用途、供应商政策和授权范围。
 > 2026-10-07 补充：按 [ADR-037](../adr/037-complete-memory-extraction-trace.md) 采纳独立含正文的记忆提取追踪要求，功能尚未实现；普通日志与最小出站台账仍不得保存正文。
-> 状态更新：2026-10-16。上条的追踪功能已在后端与 React 管理页实现（迁移 `039`–`043`，[追踪服务](../../backend/src/notalone/application/trace_service.py)、[管理页](../../desktop/src/renderer/TracePanel.tsx)），契约与实现状态以[记忆提取完整追踪](memory-extraction-trace.md)为准；本节隐私边界不变——追踪仍是独立的含正文敏感资料，普通日志与最小出站台账继续不得保存正文。原生 App、最终签名包与真实模型质量不因此条获得验收。
+> 历史实现更新：2026-10-16。以下 Python 服务已退役；管理页源码仍保留，以下页面记录仅说明当时接线，不代表当前集成验收。当前后台承接入口见 [SQLite 执行与追踪](../../backend-ts/src/memory/sqlite/execution.ts)及[切换记录](../../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。当时上条的追踪功能已在后端与 React 管理页实现（迁移 `039`–`043`，[追踪服务](../../backend/src/notalone/application/trace_service.py)、[管理页](../../desktop/src/renderer/TracePanel.tsx)），契约与实现状态以[记忆提取完整追踪](memory-extraction-trace.md)为准；本节隐私边界不变——追踪仍是独立的含正文敏感资料，普通日志与最小出站台账继续不得保存正文。原生 App、最终签名包与真实模型质量不因此条获得验收。
 
 > 演进状态：[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)的授权草稿、审核与范围发布，以及版本历史和反馈执行视图，已具有主线工程装配；当前签收范围见[演进索引](../../.scratch/memory-skill-evolution/planning.md)与[集成索引](../../.scratch/memory-skill-integration-preparation/planning.md)。原[11阶段验证](../../.scratch/memory-skill-integration-preparation/frontier-11-validation.md)保留历史结果，不代表当前仍停在待审阶段，也不代表真实质量或最终 App 已验收。学习产物、对照和发布完整继承来源删除，无独立留存例外；候选回复 Agent 仍无 Skill 管理或发布权限，新增模型用途不自动获得出站授权。
 
@@ -60,7 +60,7 @@
 
 ## 回复 Skill 指令安全
 
-- 回复 Skill 包是不可信指令。按 [ADR-129](../adr/129-controlled-dsh-reply-skill-discovery.md)，已授权根仅发现未知包目录名，用户明确启用才核验正文并发布；应用自动核验已启用包的有效更新，保留停用、来源撤销和删除决定。候选回复 Agent 不得自行搜索、下载、写入、启用或删除 Skill。未来网络安装也必须是独立用户操作。
+- 回复 Skill 包是不可信指令。按 [ADR-129](../adr/129-controlled-dsh-reply-skill-discovery.md)及其后继 [ADR-135](../adr/135-default-enabled-localized-skill-library.md)，仅在宿主已配置并授权根发现包；新包和既有未知项完整技术核验成功后默认启用，以 `default` 来历记录，不冒充用户确认。已启用包核验有效更新；显式停用、来源撤销、删除和身份冲突不因刷新恢复。候选回复 Agent 不得自行搜索、下载、写入、启用或删除 Skill。未来网络安装也必须是独立用户操作。
 - Skill 技术校验器必须校验格式、大小、路径、资源类型和内容摘要，拒绝路径遍历与符号链接逃逸。经校验的 `SKILL.md`、references 和允许的静态 assets 与不可变版本绑定；scripts 不进入可运行版本，`allowed-tools` 等能力声明被忽略且不进入模型目录。
 - Skill 正文不能注册或授权 Tool、MCP、Shell、文件写入、外部网络或聊天发送能力；即使正文提出这些要求，实际 Tool 注册表和应用层 permission policy 仍具有唯一执行权。
 - DSH 官方 registry 的业务受控 provider 只暴露当前已验证 owner/contact 可用的 Skill 虚拟路径；只读 Skill 工具只允许读取该版本列出的 `SKILL.md` 和辅助资源，不得读取任意服务器文件、外部 URL 或其他用户、其他联系人的 Skill。

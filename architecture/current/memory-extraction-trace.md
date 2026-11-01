@@ -224,11 +224,13 @@ flowchart TD
 
 用户删除单条候选或记忆时，其派生内容继续按现行删除规则清理，追踪中的正文快照和解释也纳入清理，不能从记录里静默恢复已删除的资料。
 
-## 当前后端实现与缺口
+## 历史 Python 后端实现与缺口
+
+> 以下表格保留 Python 版本的实现沿革，旧源码路径可能已不在当前检出中，不能作为当前能力证明。当前 TypeScript／SQLite 的承接实现见 [执行与追踪](../../backend-ts/src/memory/sqlite/execution.ts)，映射与验证限制见 [SQLite 切换记录](../../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。上文的隐私、来源与删除要求不因历史实现退役而取消。
 
 下表区分已保存的实际处理与不能复原的历史／外部信息。验证使用合成资料，不证明真实模型、真实微信或新 App 界面已经验收。
 
-| 当前环节 | 代码证据 | 已实现行为与边界 |
+| 历史环节 | 当时代码证据 | 当时已实现行为与边界 |
 | --- | --- | --- |
 | 历史导入 | [导入命令](../../backend/src/notalone/ingest/import_command.py)、[来源处理存储](../../backend/src/notalone/persistence/source_processing.py)、[规则文件适配器](../../backend/src/notalone/source_processing/rule_capture.py) | 保存相关原始行、实际解析／校验／规范化输入输出及映射，来源与消息在同一事务提交；导入仍拒绝文件内重复或既有重叠，不改为合并。失败仅存具体安全类别、字段、规则与位置；执行边界取得实际时刻和当时文件摘要，快照构造只接收摘要和时刻。 |
 | CLI 增量 | [CLI 适配器](../../backend/src/notalone/wechat_cli/adapter.py)、[观察持久化](../../backend/src/notalone/persistence/observation_store.py)、[来源处理存储](../../backend/src/notalone/persistence/source_processing.py) | 保存实际事件、转换与去重决定、消息／来源引用映射；非文字／未知事件标明过滤原因。只处理已授权记录，不复制整段 CLI 输出；增量入口不新增提取调度。 |
@@ -243,7 +245,7 @@ flowchart TD
 
 043 前已有窗口可以按实际已保存的消息标识正查；清除这类窗口前只保留无正文标识关联，继续显示已删状态。早已清除且未保存关联的历史无法补造，仍保留 `not_recorded`。生产与合成追踪的错误码／状态使用[同一纯映射](../../backend/src/notalone/memory_trace/status.py)。
 
-规范化还有以下当前差异，需要按实际输入与版本记录，不能统一写成“清洗了一下”：
+该历史版本的规范化还有以下差异，需要按实际输入与版本记录，不能统一写成“清洗了一下”：
 
 - 历史导入：`is_from_me` 映射说话人；要求 `time_iso` 带时区且与 `create_time` 对应，失败则拒绝文件；保存媒体占位文字，但占位不等于媒体内容。
 - CLI：`is_from_me` 映射说话人，文字原样使用；优先由 `create_time` 转 UTC，否则使用 `time_iso`，当前对不带时区的值赋 UTC；完全缺失时间保留未知，不补成读取时间。

@@ -8,6 +8,28 @@ const root = path.resolve(new URL('../../', import.meta.url).pathname);
 const productEntries = ['backend-ts/src/sqlite-host-plugin.ts', 'backend-ts/src/launch.ts', 'desktop/src/main/index.ts'];
 const sourceRoots = ['backend-ts/src', 'desktop/src'];
 
+test('SQLite 切换后不保留无消费者的旧合成宿主与传输辅助文件', () => {
+  const retired = [
+    'backend-ts/src/plugin.ts',
+    'backend-ts/src/host/service.ts',
+    'backend-ts/src/host/runtime.ts',
+    'backend-ts/src/host/business.ts',
+    'backend-ts/src/host/pure-ts-public-pages.ts',
+    'backend-ts/src/host/pure-ts-runtime.ts',
+    'backend-ts/test/reply-service-runtime-support.mjs',
+    'backend-ts/test/assistant-runtime-faults.mjs',
+    'backend-ts/test/assistant-runtime-lock-holder.mjs',
+    'desktop/scripts/test-dsh-host.mjs',
+    'desktop/scripts/test-dsh-contact-context.mjs',
+  ];
+  for (const file of retired) assert.equal(existsSync(path.join(root, file)), false, `${file} 已无当前入口或测试消费者`);
+  // 原生辅助程序和 SQLite 共用模块仍是当前依赖，不能按旧目录名整体移除。
+  for (const file of ['backend-ts/src/host/host-json.ts', 'backend-ts/src/host/host-reply-config.ts',
+    'backend-ts/src/host/pure-ts-events.ts', 'native/skill-read/build.sh', 'native/media-validation/build.sh']) {
+    assert.equal(existsSync(path.join(root, file)), true, `${file} 仍须保留`);
+  }
+});
+
 async function sourceFiles() {
   const files = [];
   const walk = async (relative) => {

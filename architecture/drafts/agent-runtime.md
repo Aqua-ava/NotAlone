@@ -8,13 +8,13 @@
 
 > 后续修订（2026-10-20）：主动收藏表达样本及其生成参考按 [ADR-082](../adr/082-retire-explicit-style-samples.md)退役；本文相关历史方案不再构成实施要求。当前意图优先、长期表达偏好及其他已采纳约束分别保留。
 
-> 状态：历史运行时草案与迁移阅读入口。精简 DSH 与 TS 后端已由 [ADR-102](../adr/102-dsh-typescript-backend-migration.md)正式采纳，框架选择替代 ADR-006／009／010；下方旧选型、图和实现步骤保留追溯，不再作为新实现的技术选型约束。当前产品代码仍使用 Python、LangChain `create_agent`、LangGraph 与 `SkillsMiddleware`，迁移尚未实现或验收。
+> 状态：历史运行时草案与迁移阅读入口。精简 DSH 与 TS 后端已由 [ADR-102](../adr/102-dsh-typescript-backend-migration.md)正式采纳，框架选择替代 ADR-006／009／010；下方旧选型、图和实现步骤保留追溯，不再作为新实现的技术选型约束。当前源码后台已切换为 TypeScript／DSH，业务存储已由 [ADR-109](../adr/109-controlled-sqlite-storage-foundation.md)改为 SQLite；正常入口与实际验证范围见[后台说明](../../backend-ts/README.md)。下文保留当时方案，不作为完整质量、性能或发行验收通过的证明。
 
-早期进度见[历史功能目录](../../.scratch/agent-runtime/planning.md)。本次正式[实施规格](../../.scratch/dsh-ts-migration/spec.md)已整理，[任务拆分](../../.scratch/dsh-ts-migration/ticket-proposal.md)及验收入口已获认可，[26份任务](../../.scratch/dsh-ts-migration/planning.md)已发布，尚未开始实现。
+早期进度见[历史功能目录](../../.scratch/agent-runtime/planning.md)。本次正式[实施规格](../../.scratch/dsh-ts-migration/spec.md)已整理，[任务拆分](../../.scratch/dsh-ts-migration/ticket-proposal.md)及验收入口已获认可，[26份任务](../../.scratch/dsh-ts-migration/planning.md)是当时发布记录，不代表当前仍未开始实现；当前入口见上述后台说明。
 
 ## 已采纳的迁移入口（2026-10-23）
 
-正式决定以 [ADR-102](../adr/102-dsh-typescript-backend-migration.md)为准；本次只收敛文档，不以官方接口说明或历史测试宣称新运行时可用。
+本节记录 2026-10-23 的迁移决定及当时范围，以 [ADR-102](../adr/102-dsh-typescript-backend-migration.md)为来源；其中 PostgreSQL 和仅临时会话的条款分别已有 ADR-109 与 ADR-106 后继修订。不能把这段历史实施计划当作当前运行状态。
 
 - Electron 保持独立；TS 业务模块与精简 DSH 共用官方 profile 启动的后台进程，由薄的 NotAlone 插件装配。联系人、检索、事务、来源和删除保持普通业务模块，不必全部插件化，也不长期保留 Python 工具桥。
 - DSH 承担通用模型、Agent 循环、工具与 Skill 基础设施；确定性流程仍由业务代码控制。单次模型调用不自动变为开放式循环，模型不能决定权限或提交事务。
