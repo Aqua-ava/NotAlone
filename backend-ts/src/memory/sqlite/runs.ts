@@ -86,6 +86,7 @@ export function currentReuseAttempt(tx:StorageTransaction,ownerId:string,runId:s
 }
 export function snapshot(tx:StorageTransaction,ownerId:string,runId:string,contactId?:string){
  let r=tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);if(!r)fail('memory_extraction_not_found');
+ const storedRun=r!;
  const inputs=tx.all(`SELECT * FROM run_input WHERE owner_id=? AND run_id=?${contactId===undefined?'':' AND source_contact_id=?'} ORDER BY input_no`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]);
  const targets=inputs.filter(i=>i.role==='target');
  const tasks=tx.all(`SELECT * FROM processing_task WHERE owner_id=? AND run_id=?${contactId===undefined?'':" AND scope_kind='contact' AND contact_id=?"} ORDER BY scope_kind,contact_id`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]);
@@ -126,7 +127,11 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string,conta
    total:t.scope_kind==='self'?0:targets.filter(i=>i.source_contact_id===t.contact_id).length,succeeded:t.scope_kind==='self'?0:targets.filter(i=>i.source_contact_id===t.contact_id&&targetSucceeded(i)).length,errorCode:t.error_code===null?null:String(t.error_code)})),
   inputs:inputs.map(i=>({inputNo:number(i.input_no),role:String(i.role),contactId:String(i.source_contact_id),messageId:String(i.message_id),recordId:String(i.record_id),itemId:i.item_id===null?null:String(i.item_id)})),candidates};
  const control=projectControl(tx,ownerId,r!,{taskStates,laterStages:laterProjection.state,contactId});
- return {...result,...control,...(contactId===undefined?{}:{actions:[]})};
+ // 只有整轮联系人及输入来源均属于当前联系人才可恢复，包含本轮相关本人整理；混合轮次仍不可从局部视图控制。
+ const exclusiveContact=contactId!==undefined&&!tx.get("SELECT 1 FROM processing_task WHERE owner_id=? AND run_id=? AND scope_kind='contact' AND contact_id<>? LIMIT 1",[ownerId,runId,contactId])&&!tx.get("SELECT 1 FROM run_input WHERE owner_id=? AND run_id=? AND source_contact_id<>? LIMIT 1",[ownerId,runId,contactId]);
+ const actions=contactId===undefined?control.actions:exclusiveContact
+  ?projectControl(tx,ownerId,storedRun,{taskStates,laterStages:laterStagesState(tx,ownerId,runId).state}).actions.filter(action=>action==='continue'):[];
+ return {...result,...control,actions};
 }
 
 /** 同现有手动入口一样复验当前来源；另外记录首个被接受的目标类型和采集时间。 */

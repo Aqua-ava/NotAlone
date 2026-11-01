@@ -267,6 +267,28 @@ test('单人失败只让其受阻，共用模型故障暂停整轮并显示固�
  assert.equal(view.sharedFaultCode,'extraction_model_authentication_failed');
  assert.deepEqual(view.actions,['continue']);
  assert.equal(x.state.calls,callsBeforeShared,'共用故障没有新增模型调用');
+ const blockedContact=await x.service.readContact(f.ca);
+ assert.equal(blockedContact.run.status,'blocked');
+ assert.equal(blockedContact.run.statusReason,'extraction_model_authentication_failed');
+ assert.deepEqual(blockedContact.run.actions,[],'混合轮次不能从单联系人卡片恢复整轮');
+
+});
+
+test('单联系人历史认证失败可从联系人卡片恢复，成功小批不重做',async t=>{
+ const f=await fixtureWithMessages(t,{a:Array.from({length:21},(_,i)=>`合成偏好${i}`),b:['其他联系人的资料']});
+ let memory;const port=modelPort(()=>memory.accounting);memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
+ const original=port.prepare.bind(port);let failed=false;
+ port.prepare=async(request,input)=>{if(port.calls>=1&&!failed){failed=true;throw Object.assign(new Error('synthetic_auth'),{code:'extraction_model_authentication_failed'});}return original(request,input);};
+ const started=await memory.startHistory(f.ca,randomUUID());await memory.waitForIdle(started.run.runId);
+ const blocked=await memory.readContact(f.ca);
+ assert.equal(blocked.run.statusReason,'extraction_model_authentication_failed');
+ assert.deepEqual(blocked.run.actions,['continue']);
+ assert.equal(blocked.run.succeeded,20);
+ const before=port.calls;
+ await memory.continue(blocked.run.runId,blocked.run.controlVersion,randomUUID());await memory.waitForIdle(started.run.runId);
+ const recovered=await memory.readContact(f.ca);
+ assert.equal(recovered.run.succeeded,21);assert.equal(port.calls,before+1);
+ assert.equal((await memory.readContact(f.cb)).run,null);
 });
 
 test('未知回执不盲目重发；迟到已知回执恢复后才能继续并复用原调用',async t=>{

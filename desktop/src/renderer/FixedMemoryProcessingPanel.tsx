@@ -56,10 +56,37 @@ function statusText(run: FixedProcessingRun | null, queue?: FixedProcessingQueue
   return run.total === 0 ? '当前没有待处理的文字目标' : '等待提取与核验';
 }
 
+/** 只使用后端发布的恢复资格；回执后重新读取，不把接纳当作已完成。 */
+function RecoveryControl({bridge,view,onSettled}:{bridge:FixedMemoryProcessingBridge;view:FixedProcessingView;onSettled:()=>Promise<void>}) {
+  const [pending,setPending]=useState(false),[error,setError]=useState('');
+  const busy=useRef(false),alive=useRef(true),attempt=useRef<{version:number;id:string}|null>(null);
+  useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
+  const run=view.run;
+  if(!run || !run.actions.includes('continue') || !['blocked','paused'].includes(run.status))return null;
+  const recover=async()=>{
+    if(busy.current)return;
+    busy.current=true;setPending(true);setError('');
+    if(attempt.current?.version!==run.controlVersion)attempt.current={version:run.controlVersion,id:crypto.randomUUID()};
+    try{
+      await bridge.continue({runId:run.runId,controlVersion:run.controlVersion,operationId:attempt.current.id,connectionGeneration:view.connectionGeneration});
+      if(alive.current)attempt.current=null;
+    }catch{if(alive.current)setError('恢复结果暂未确认，请核对最新状态后重试。');}
+    finally{
+      if(alive.current){await onSettled();if(alive.current){busy.current=false;setPending(false);}}
+    }
+  };
+  return <div className="memory-processing-actions">
+    <button className="button primary" type="button" disabled={pending} onClick={()=>void recover()}>{pending?'正在恢复…':'恢复本轮处理'}</button>
+    <p className="memory-section-note">恢复本轮提取与相关本人资料整理；已完成内容会跳过。</p>
+    {error&&<p role="alert">{error}</p>}
+  </div>;
+}
+
 /** 由记忆页面传入具名桥；scopeKey变化或失效事件先撤下全部本地快照。 */
 export function FixedMemoryProcessingPanel({ bridge, contactId, scopeKey = '', onRunUpdated }: { bridge: FixedMemoryProcessingBridge; contactId: string | null; scopeKey?: string | number; onRunUpdated?:(run:FixedProcessingRun|null)=>void }) {
   const [snapshot, setSnapshot] = useState<{ bridge: FixedMemoryProcessingBridge; contactId: string; scopeKey: string | number; view: FixedProcessingView } | null>(null);
   const [error, setError] = useState('');
+  const refresh=useRef<()=>Promise<void>>(async()=>{});
   const updated = useRef(onRunUpdated);
   updated.current = onRunUpdated;
   const view = snapshot?.bridge === bridge && snapshot.contactId === contactId && snapshot.scopeKey === scopeKey ? snapshot.view : null;
@@ -90,6 +117,7 @@ export function FixedMemoryProcessingPanel({ bridge, contactId, scopeKey = '', o
         schedule(10000);
       }
     };
+    refresh.current=read;
     const unsubscribe = bridge.onInvalidated(() => {
       revision++; setSnapshot(null);
       setError('资料资格或连接已变化，正在重新核对处理状态。');
@@ -125,6 +153,7 @@ export function FixedMemoryProcessingPanel({ bridge, contactId, scopeKey = '', o
     {view?.queue?.later && view.queue.later.pending > 0 && <p>主题与长期概览仍有 {view.queue.later.pending} 项待处理。{view.queue.later.nextDueAt != null && run?.statusReason !== 'later_stages_scheduled' ? `预计 ${new Date(view.queue.later.nextDueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 继续。` : ''}</p>}
     {run && <>
       {run.status === 'blocked' && <p>{reasonText(failureReason)}</p>}
+      <RecoveryControl key={`${contactId}:${scopeKey}:${view!.connectionGeneration}:${run.runId}`} bridge={bridge} view={view!} onSettled={()=>refresh.current()}/>
       {run.statusReason === 'later_stages_scheduled' && run.nextDueAt != null && <p>预计 {new Date(run.nextDueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 开始，执行前会重新核对资料。</p>}
       <p>提取与核验：已处理 {run.succeeded} / {run.total} 条文字目标</p>
       {run.total > 0 && <progress className="memory-processing-progress" aria-label="文字提取与核验进度" max={run.total} value={run.succeeded}/>}

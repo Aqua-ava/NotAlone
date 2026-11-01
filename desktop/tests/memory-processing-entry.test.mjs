@@ -344,3 +344,35 @@ test('真实控制器在旧面板释放后仍能完成 connected 触发的合法
     assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
   }, true);
 });
+
+test('受阻轮次恢复按钮等待回执防重入并读取权威状态', {timeout:20000}, async t=>{
+  let view=currentView(1,20);view.run.actions=['continue'];view.run.succeeded=0;view.run.pending=20;
+  const calls=[],receipt=deferred();
+  await withEntry(t,async(method,input)=>{
+    if(method==='readMode')return {connectionGeneration:1,mode:'sqlite'};
+    if(method==='readCurrent')return view;
+    if(method==='continue'){calls.push(input);await receipt.promise;view={...view,run:{...view.run,status:'processing',actions:[],controlVersion:1}};return {...view,run:{...view.run,total:9999}};}
+  },async page=>{
+    const button=page.getByRole('button',{name:'恢复本轮处理',exact:true});await button.waitFor();
+    await page.getByText('恢复本轮提取与相关本人资料整理；已完成内容会跳过。',{exact:true}).waitFor();
+    await button.click();assert.equal(await page.getByRole('button',{name:'正在恢复…',exact:true}).isDisabled(),true);
+    assert.equal(calls.length,1);assert.equal(calls[0].runId,view.run.runId);assert.equal(calls[0].controlVersion,0);assert.equal(calls[0].connectionGeneration,1);assert.match(calls[0].operationId,/^[0-9a-f-]{36}$/);
+    receipt.resolve();await page.getByRole('status').filter({hasText:'正在提取与核验'}).waitFor();assert.equal(await button.count(),0);
+    assert.equal(await page.getByText('提取与核验：已处理 0 / 20 条文字目标',{exact:true}).count(),1);assert.equal((await page.locator('body').innerText()).includes('9999'),false);
+  });
+});
+
+test('恢复失败显示错误并重用操作号，切换联系人撤下旧轮次', {timeout:20000}, async t=>{
+  const view=currentView(1,20);view.run.actions=['continue'];const calls=[];
+  await withEntry(t,async(method,input)=>{
+    if(method==='readMode')return {connectionGeneration:1,mode:'sqlite'};
+    if(method==='readCurrent')return input.contactId==='33333333-3333-4333-8333-333333333333'?view:{connectionGeneration:1,run:null};
+    if(method==='continue'){calls.push(input);throw new Error('synthetic');}
+  },async page=>{
+    const button=page.getByRole('button',{name:'恢复本轮处理',exact:true});await button.click();
+    await page.getByRole('alert').filter({hasText:'恢复结果暂未确认'}).waitFor();
+    await button.click();await page.getByRole('alert').filter({hasText:'恢复结果暂未确认'}).waitFor();assert.equal(calls.length,2);assert.equal(calls[0].operationId,calls[1].operationId);
+    await page.evaluate(()=>window.selectContact('44444444-4444-4444-8444-444444444444'));
+    await page.getByText('暂无处理记录',{exact:true}).waitFor();assert.equal(await button.count(),0);
+  });
+});
