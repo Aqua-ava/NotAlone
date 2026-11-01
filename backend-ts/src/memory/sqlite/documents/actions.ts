@@ -86,6 +86,21 @@ export function laterStagesState(tx:StorageTransaction,ownerId:string,runId:stri
  if(reasons.length)return {state:run.state==='failed'?'failed':'pending',reasons,nextDueAt:null,stage:null};
  return run.state==='completed'?{state:'completed',reasons:[],nextDueAt:null,stage:null}:{state:'pending',reasons:[`document_run_${String(run.state)}`],nextDueAt:null,stage:null};
 }
+function noFormalChangeStatus(tx:StorageTransaction,ownerId:string,s:{scopeKind:'self'|'contact';contactId:string|null},latest:StorageRow):'idle'|'processing'|'needs_revalidation'|null {
+ if(latest.state!=='succeeded'&&!(s.scopeKind==='self'&&latest.state==='awaiting_decision'))return null;
+ if(tx.all("SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('memory_document_later_schedule','memory_document_later_run_requirement')").length!==2)return null;
+ const scopeKey=s.scopeKind==='self'?'self':s.contactId;
+ // 空内容和缺少文档步骤都不是完成证明；这里只采用 L1 已登记的同范围无正式变化事实。
+ if(!tx.get("SELECT 1 FROM memory_document_later_run_requirement WHERE owner_id=? AND run_id=? AND scope_kind=? AND scope_key=? AND contact_id IS ? AND outcome='no_formal_change' AND reason='no_formal_memory_change' AND generation IS NULL",[ownerId,latest.run_id,s.scopeKind,scopeKey,s.contactId]))return null;
+ if(tx.get(`SELECT 1 FROM processing_step s LEFT JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id LEFT JOIN model_call c ON c.owner_id=a.owner_id AND c.step_attempt_id=a.id
+  WHERE s.owner_id=? AND s.task_id=? AND (s.state='unknown' OR a.state='unknown' OR c.state='unknown') LIMIT 1`,[ownerId,latest.id]))return 'needs_revalidation';
+ const schedule=tx.all("SELECT state FROM memory_document_later_schedule WHERE owner_id=? AND scope_kind=? AND scope_key=? AND contact_id IS ? AND state IN ('scheduled','running','failed','unknown')",[ownerId,s.scopeKind,scopeKey,s.contactId]);
+ const requirements=tx.all("SELECT outcome FROM memory_document_later_run_requirement WHERE owner_id=? AND scope_kind=? AND scope_key=? AND contact_id IS ? AND outcome IN ('pending','failed','unknown','revoked')",[ownerId,s.scopeKind,scopeKey,s.contactId]);
+ if(schedule.some(row=>['failed','unknown'].includes(String(row.state)))||requirements.some(row=>['failed','unknown','revoked'].includes(String(row.outcome))))return 'needs_revalidation';
+ if(tx.get(`SELECT 1 FROM memory_candidate c JOIN step_attempt a ON a.owner_id=c.owner_id AND a.id=c.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
+  WHERE s.owner_id=? AND s.task_id=? AND c.state='pending' LIMIT 1`,[ownerId,latest.id]))return 'processing';
+ return schedule.length||requirements.length?'processing':'idle';
+}
 const action=(name:string,mode:'read'|'write',fn:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:fn});
 export const memoryDocumentsActions:StorageAction[]=[
  action('tasks','read',(tx,i)=>tx.all('SELECT id FROM processing_task WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[textId(i.ownerId),textId(i.runId)]).map(row=>String(row.id))),
@@ -94,12 +109,13 @@ export const memoryDocumentsActions:StorageAction[]=[
   const ownerId=textId(i.ownerId),s=readScope(i.scope);available(tx,ownerId,s);
   const scope={scopeKind:s.scopeKind,contactId:s.contactId};
   if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed'",[ownerId]))return {scope,publication:null,documents:[],status:'needs_revalidation'};
-  const latest=tx.get(`SELECT t.id,t.state,t.document_basis_state FROM processing_task t JOIN processing_run r ON r.owner_id=t.owner_id AND r.id=t.run_id WHERE t.owner_id=? AND t.scope_kind=? AND t.contact_id IS ? ORDER BY r.started_at DESC,r.rowid DESC LIMIT 1`,[ownerId,s.scopeKind,s.contactId]);
+  const latest=tx.get(`SELECT t.id,t.run_id,t.state,t.document_basis_state FROM processing_task t JOIN processing_run r ON r.owner_id=t.owner_id AND r.id=t.run_id WHERE t.owner_id=? AND t.scope_kind=? AND t.contact_id IS ? ORDER BY r.started_at DESC,r.rowid DESC LIMIT 1`,[ownerId,s.scopeKind,s.contactId]);
   const view=latest?taskView(tx,ownerId,String(latest.id)):null;
   const failed=view?.stages.find(step=>['failed','unknown','revoked'].includes(step.status));
   const code=failed?.errorCode??view?.errorCode??null;
   const conflict=code!==null&&['document_publication_conflict','document_memory_stale','document_attempt_stale'].includes(code);
-  const status=!latest?'idle':conflict?'conflict':failed||code?'needs_revalidation':view?.outcome==='completed'?'completed':'processing';
+  const unchanged=latest?noFormalChangeStatus(tx,ownerId,s,latest):null;
+  const status=!latest?'idle':conflict?'conflict':failed||code?'needs_revalidation':view?.outcome==='completed'?'completed':unchanged??'processing';
   const base=revisions(tx,ownerId,{scope_kind:s.scopeKind,contact_id:s.contactId});
   const p=base.current_publication_id&&tx.get("SELECT * FROM document_publication WHERE owner_id=? AND id=? AND scope_kind=? AND contact_id IS ? AND availability='available'",[ownerId,base.current_publication_id,s.scopeKind,s.contactId]);
   if(!p)return {scope,publication:null,documents:[],status:base.current_publication_id||((base.document_revision as bigint)>0n&&['idle','completed'].includes(status))?'needs_revalidation':status};
@@ -112,7 +128,7 @@ export const memoryDocumentsActions:StorageAction[]=[
    const rendered=renderDocuments(tx,ownerId,rows,memories);
    const members=rows.map(m=>({documentId:String(m.document_id),versionNo:String(m.version_no)}));
    // 共享任务的其他裁决可能因来源删除而撤销；仍须按文档自己的完整依据判断当前发布。
-   const publishedStatus=!conflict&&view?.outcome==='completed'&&p.basis_task_id===latest?.id?'completed':status;
+   const publishedStatus=(unchanged==='idle'&&status==='idle')||(!conflict&&view?.outcome==='completed'&&p.basis_task_id===latest?.id)?'completed':status;
    return {scope,publication:{id:String(p.id),members},documents:rendered.documents,status:publishedStatus};
   }catch(error){if(error instanceof StorageFailure)return {scope,publication:null,documents:[],status:'needs_revalidation'};throw error;}
  }),
