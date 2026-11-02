@@ -123,7 +123,9 @@ export function checkedEventCalendar(event:MemoryEvent,window:ExtractionWindow,s
 export function verifyEvent(raw:unknown,fact:ExtractedFact,window:ExtractionWindow):MemoryEvent|null {
   const event=fact.event;
   if(raw==null)return event?.version===2?checkedEventCalendar(event,window,fact.source_message_ids):event;
-  requireValid(event!==null);const payload=object(raw);
+  // 没有时间提案时忽略多余的 event_verification 槽：时间本就不入库，不能因此拒绝正文候选。
+  if(event===null)return null;
+  const payload=object(raw);
   requireValid(Object.keys(payload).length===4&&['stage_verdict','occurrence_verdict','stage_evidence','occurrence_evidence'].every(k=>Object.hasOwn(payload,k)));
   const check=(kind:string)=>{const verdict=choices(payload[kind+'_verdict'],['supported','uncertain','unsupported']),refs=positions(payload[kind+'_evidence']);
     sourcePositions(refs,fact,window);requireValid(verdict!=='supported'||refs.length>0);return {verified:verdict==='supported',refs};};

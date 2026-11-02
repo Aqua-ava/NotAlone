@@ -12,7 +12,7 @@ function fact(message){
   confidence:0.8,risk_flags:[],valid_at:null,invalid_at:null,speech_act:'assertion',assertion_status:'asserted',figurative_type:'literal',alternatives:[],
   interpretation_reason:'保留合成原句明确陈述。',event:null,conditions:null};
 }
-function supplier({negative=false,eventQuote=false}={}){
+function supplier({negative=false,eventQuote=false,ungroundedEvent=false}={}){
  const windows=[],sources=new Map(),purposes=[];
  const respond=async(request,input)=>{
   purposes.push({contactId:input.scope.contact_id,purpose:request.purpose});const payload=JSON.parse(request.user);let value;
@@ -24,16 +24,22 @@ function supplier({negative=false,eventQuote=false}={}){
     const candidate=fact(message);
     if(eventQuote)candidate.event={version:2,stage:'cancelled',stage_evidence:[],occurrence_start:null,occurrence_end:null,
      occurrence_evidence:[],occurrence_precision:'unknown',occurrence_expression:null,anchor_message_id:null};
+    if(ungroundedEvent)candidate.event={version:2,stage:'unknown',stage_evidence:[{message_id:message.message_id,char_start:0,char_end:2}],
+     occurrence_start:null,occurrence_end:null,occurrence_evidence:[],occurrence_precision:'unknown',occurrence_expression:'这周末',anchor_message_id:message.message_id};
     return candidate;
    })}]};
   }else{
    assert.equal(request.tool.name,'SourceVerificationOutput');
    value={request_fingerprint:payload.request_fingerprint,results:payload.candidates.map((candidate,candidate_index)=>{
     const message=sources.get(candidate.source_message_ids[0]);assert.equal(message.contactId,input.scope.contact_id);
+    const field_checks=Object.fromEntries(semanticFields.map(field=>[field,facet()]));
+    if(ungroundedEvent)field_checks.event={verdict:'uncertain',evidence_indices:[0]};
     return {candidate_index,verdict:'supported',issues:[],evidence:[{message_id:message.message_id,quote:message.text}],
      ...(eventQuote?{event_verification:{stage_verdict:'supported',occurrence_verdict:'uncertain',
       stage_evidence:[{message_id:message.message_id,quote:message.text}],occurrence_evidence:[]}}:{}),
-     claim_check:{version:2,field_checks:Object.fromEntries(semanticFields.map(field=>[field,facet()])),parts:[{
+     ...(ungroundedEvent?{event_verification:{stage_verdict:'uncertain',occurrence_verdict:'uncertain',
+      stage_evidence:[{message_id:message.message_id,char_start:0,char_end:2}],occurrence_evidence:[]}}:{}),
+     claim_check:{version:2,field_checks,parts:[{
       candidate_span:{start:0,end:[...candidate.text].length},attribution:{...facet(),scope_subject:candidate.subject,actor_kind:candidate.subject,resolution:'explicit',
        subject_mentions:[{kind:'first_person',evidence_index:0,source_span:{start:0,end:1},candidate_span:{start:0,end:candidate.subject==='self'?2:3}}]},
       arguments_and_relation:facet(),temporal_and_modality:facet(negative?'uncertain':'supported'),
@@ -98,6 +104,28 @@ test('语义核验逐项拒绝按内容跳过完成本轮，已知模型返回�
  assert.equal(staged.payload.outcome,'no_new_memory');assert.equal(staged.payload.rejected,1);
  assert.equal(trace.events.some(event=>event.kind==='verified_output'),false);
  assert.equal(done.laterStages,'pending');assert.notEqual(done.state,'completed');assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('时间标注不可核验时只丢时间，正文候选照常入库并保留丢弃标记',async t=>{
+ const f=await fixture(t);const contactId=f.saved[0].contact_id;
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'我长期住在合成城市。'})],completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(contactId);await f.contacts.setReading(false);
+ const external=supplier({ungroundedEvent:true});let memory;const model=modelPort(()=>memory.accounting,external.respond);memory=new SqliteMemoryExtraction(f.storage,owner,model);t.after(()=>memory.close());
+ const started=await memory.start('time-unverified-still-admits-text');await memory.waitForIdle();const done=await memory.read(started.runId);
+ assert.equal(done.total,1);assert.equal(done.succeeded,1);assert.equal(done.failed,0);assert.equal(done.unknown,0);
+ assert.equal(done.candidates.length,1,'时间不可核验不丢正文候选');
+ const task=done.tasks.find(task=>task.scopeKind==='contact');assert.equal(task.state,'succeeded');assert.equal(task.errorCode,null);
+ const trace=await memory.trace(task.taskId);
+ const verification=trace.events.find(event=>event.kind==='verification');assert.ok(verification);
+ assert.equal(verification.payload.result.model_verdict,'supported');
+ assert.equal(verification.payload.result.verdict,'supported');
+ assert.equal(verification.payload.result.event,null,'时间标注被丢弃');
+ assert.equal(verification.payload.result.time_unverified,true,'丢弃时间保留可审计标记');
+ assert.equal(verification.payload.result.claim_validation.status,'checked');
+ const output=trace.events.find(event=>event.kind==='verified_output');assert.ok(output);
+ assert.equal(output.payload.fact.event,null);
+ assert.equal(output.payload.fact.conditions,null);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
 test('整批候选全被拒按已处理收尾并继续后续批次，后续目标不再排队',async t=>{

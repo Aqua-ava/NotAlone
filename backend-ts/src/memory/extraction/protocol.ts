@@ -28,6 +28,8 @@ export interface SourceVerificationResult {
   evidence:{message_id:string;quote:string}[];verification_mode:'legacy-v4'|'nullable-proof-v3'|'complete-claim-v1';
   model_verdict:'supported'|'uncertain'|'unsupported';model_issues:string[];event:MemoryEvent|null;conditions:MemoryConditions|null;
   proof:ProofProposal|null;proof_verification:ProofVerification|null;
+  /** 发生时间标注（event）可选：核验不可采纳时丢弃 event 并置真，不参与整条候选的准入；不覆盖 valid_at/invalid_at。 */
+  time_unverified?:boolean;
   model_claim_check?:unknown;
   claim_validation?:{status:'checked'|'invalid'|'unverified';policy_fingerprint:string;reason:string;semantic_support:'supported'|'uncertain'|'unsupported'};
 }
@@ -182,16 +184,20 @@ export function validateSourceVerification(payload:unknown,window:ExtractionWind
     const unresolved=verdict==='supported'&&unresolvedAuthorQuote(window,fact);
     if(unresolved){verdict='uncertain';issues=['pragmatics'];}
     const event=verifyEvent(raw.event_verification,fact,window),conditions=verifyConditions(raw.condition_verification,fact,window);
-    if(!eventAdoptionVerified(event)||!conditionsAdoptionVerified(conditions)){
-      verdict='unsupported';if(!eventAdoptionVerified(event)&&!issues.includes('time'))issues=[...issues,'time'];
-      if(!conditionsAdoptionVerified(conditions)&&!issues.includes('condition'))issues=[...issues,'condition'];
+    // 时间标注是可选信息：不可采纳时只丢时间并保留候选正文，不把整条候选判为不通过。
+    const timeUnverified=event!==null&&!eventAdoptionVerified(event);
+    if(!conditionsAdoptionVerified(conditions)){
+      verdict='unsupported';
+      if(!issues.includes('condition'))issues=[...issues,'condition'];
     }
     results.set(index,{candidate_index:index,verdict,issues,evidence,model_verdict:modelVerdict,model_issues:modelIssues,
-      verification_mode:'legacy-v4',event,conditions,proof:null,proof_verification:null});
+      verification_mode:'legacy-v4',event:timeUnverified?null:event,conditions,proof:null,proof_verification:null,
+      ...(timeUnverified?{time_unverified:true}:{})});
   }
   return Array.from({length:facts.length},(_,index)=>results.get(index)!);
 }
 
+// 历史 bounded-runtime-v1（nullable-proof-v3）与存档重放保留原语义：时间仍按原规则参与候选判定，不适用 ADR-150；该路径当前不可写入生产，启用前须先对齐。
 function validateSourceVerificationV3(payload:unknown,window:ExtractionWindow,facts:ExtractedFact[]):SourceVerificationResult[]{
   validateExtractionWindow(window);requireValid(facts.length<=60&&Array.isArray(payload)&&payload.length===facts.length);
   const results=new Map<number,SourceVerificationResult>();

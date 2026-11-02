@@ -68,6 +68,54 @@ test('完整命题核验聚合时间/认知模态负向判断，保留两个有�
   }
 });
 
+test('时间核验不过只丢时间标注，正文候选仍按其余字段准入', async () => {
+  const example = mechanism.cases[1];
+  const event = {version: 2, stage: 'unknown', stage_evidence: [], occurrence_start: null, occurrence_end: null,
+    occurrence_evidence: [], occurrence_precision: 'unknown', occurrence_expression: '明天', anchor_message_id: message};
+  const {window, facts} = scenario(example, {event});
+  assert.notEqual(facts[0].event, null);
+  const prepared = prepareSourceVerification({window, facts, policy, requireCurrent: async () => {}});
+  const output = blocks(prepared, example);
+  // 核验模型如实把时间字段判为不确定；其余字段全部有据。时间不参与整条准入。
+  const value = JSON.parse(output[0].arguments);
+  value.results[0].claim_check.field_checks.event = {verdict: 'uncertain', evidence_indices: [0]};
+  output[0].arguments = JSON.stringify(value);
+  const checked = await prepared.decode(output);
+  assert.equal(checked.items[0].admitted, true);
+  assert.equal(checked.items[0].result.event, null);
+  assert.equal(checked.items[0].result.time_unverified, true);
+  assert.equal(checked.items[0].result.claim_validation.status, 'checked');
+  assert.equal(checked.items[0].result.claim_validation.semantic_support, 'supported');
+  assert.equal(checked.items[0].result.model_verdict, 'supported');
+  assert.equal(checked.items[0].result.evidence.length, 1, '丢弃时间标注不能连带清空正文证据');
+});
+
+test('claim_check 判时间不确定时丢弃结构上已采纳的时间标注', async () => {
+  const example = mechanism.cases[1];
+  const event = {version: 2, stage: 'cancelled', stage_evidence: [], occurrence_start: null, occurrence_end: null,
+    occurrence_evidence: [], occurrence_precision: 'unknown', occurrence_expression: null, anchor_message_id: null};
+  const {window, facts} = scenario(example, {event});
+  const prepared = prepareSourceVerification({window, facts, policy, requireCurrent: async () => {}});
+  const output = blocks(prepared, example);
+  const value = JSON.parse(output[0].arguments), item = value.results[0];
+  item.event_verification = {stage_verdict: 'supported', occurrence_verdict: 'uncertain',
+    stage_evidence: [{message_id: message, char_start: 0, char_end: 2}], occurrence_evidence: []};
+  item.claim_check.field_checks.event = {verdict: 'supported', evidence_indices: [0]};
+  output[0].arguments = JSON.stringify(value);
+  const adopted = (await prepared.decode(output)).items[0];
+  assert.equal(adopted.result.event?.stage, 'cancelled', '结构核验通过且 claim 支持时保留已取消事件');
+  const dropped = JSON.parse(JSON.stringify(value));
+  dropped.results[0].claim_check.field_checks.event = {verdict: 'uncertain', evidence_indices: [0]};
+  const reprepared = prepareSourceVerification({window, facts, policy, requireCurrent: async () => {}});
+  const droppedOutput = blocks(reprepared, example);
+  droppedOutput[0].arguments = JSON.stringify(dropped);
+  const checked = (await reprepared.decode(droppedOutput)).items[0];
+  assert.equal(checked.admitted, true);
+  assert.equal(checked.result.event, null, 'claim_check 判时间不确定时丢弃结构上已采纳的时间标注');
+  assert.equal(checked.result.time_unverified, true);
+  assert.equal(checked.result.claim_validation.status, 'checked');
+});
+
 test('prepared decode 幂等并隔离返回值，不能在验证后交换另一份响应', async () => {
   const example = mechanism.cases[1], {window, facts} = scenario(example);
   const prepared = prepareSourceVerification({window, facts, policy, requireCurrent: async () => {}});
@@ -131,7 +179,7 @@ test('覆盖按Unicode码点计数且请求指纹不能跨候选或来源复用'
   await assert.rejects(other.decode(blocks(prepared,example)),/fingerprint_mismatch/);
 });
 
-test('shared仍归联系人资料范围，三项supported也不能覆盖旧事件或条件未核验',async()=>{
+test('shared仍归联系人资料范围；旧事件未核验只丢时间，条件未核验仍拒绝',async()=>{
   const example={source:'我和阿青都喜欢绿茶。',candidate:'联系人与阿青都喜欢绿茶。'};
   const shared=scenario(example,{subject:'shared'}),prepared=prepareSourceVerification({...shared,policy,requireCurrent:async()=>{}});
   const response=blocks(prepared,example),value=JSON.parse(response[0].arguments);
@@ -139,14 +187,17 @@ test('shared仍归联系人资料范围，三项supported也不能覆盖旧事�
   response[0].arguments=JSON.stringify(value);
   assert.equal((await prepared.decode(response)).items[0].admitted,true);
   const ref={message_id:message,char_start:0,char_end:2};
-  for(const extra of [
-    {event:{version:1,stage:'planned',stage_evidence:[ref],occurrence_start:null,occurrence_end:null,occurrence_evidence:[]}},
-    {conditions:{version:1,items:[{text:'合成条件',evidence:[ref]}]}},
-  ]){
-    const input=scenario(example,extra),check=prepareSourceVerification({...input,policy,requireCurrent:async()=>{}});
-    const result=(await check.decode(blocks(check,example))).items[0];
-    assert.equal(result.admitted,false);
-    assert.equal(result.result.model_verdict,'supported');
-    assert.equal(result.result.verdict,'unsupported');
-  }
+  const eventInput=scenario(example,{event:{version:1,stage:'planned',stage_evidence:[ref],occurrence_start:null,occurrence_end:null,occurrence_evidence:[]}});
+  const eventCheck=prepareSourceVerification({...eventInput,policy,requireCurrent:async()=>{}});
+  const eventResult=(await eventCheck.decode(blocks(eventCheck,example))).items[0];
+  assert.equal(eventResult.admitted,true,'时间标注未核验只丢时间，不拒绝正文候选');
+  assert.equal(eventResult.result.event,null);
+  assert.equal(eventResult.result.time_unverified,true);
+  assert.equal(eventResult.result.model_verdict,'supported');
+  const conditionInput=scenario(example,{conditions:{version:1,items:[{text:'合成条件',evidence:[ref]}]}});
+  const conditionCheck=prepareSourceVerification({...conditionInput,policy,requireCurrent:async()=>{}});
+  const conditionResult=(await conditionCheck.decode(blocks(conditionCheck,example))).items[0];
+  assert.equal(conditionResult.admitted,false,'条件不属于可选时间标注，仍按准入拒绝');
+  assert.equal(conditionResult.result.model_verdict,'supported');
+  assert.equal(conditionResult.result.verdict,'unsupported');
 });

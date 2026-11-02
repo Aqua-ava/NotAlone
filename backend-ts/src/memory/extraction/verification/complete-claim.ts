@@ -63,7 +63,7 @@ const claimSchema={type:'object',additionalProperties:false,properties:{
   required:['candidate_span','attribution','arguments_and_relation','temporal_and_modality']}},
  },required:['version','parts','field_checks']};
 const claimInstructions=`\n逐条核验完整候选，不改写正文或字段。顶层request_fingerprint逐字回传输入同名值，每项results必须填写claim_check。
-claim_check.version固定为2；field_checks逐字段独立核验category、topic、scene_name、alternatives、interpretation_reason、valid_at、invalid_at、speech_act、assertion_status、figurative_type、event、conditions。分类、场景、解释不能引入原话未确定的领域、人物状态或长短期性质；不要求分类标签逐字出现在原话，但须由具体来源支持。备选解释保留原有不确定性，不扩成已证实事实。空数组和null不声明额外事实，可用空evidence_indices表示；非空语义字段的supported必须引用支持它的逐字依据。任一字段uncertain/unsupported均阻止接纳，不能以正文或总verdict代签。
+claim_check.version固定为2；field_checks逐字段独立核验category、topic、scene_name、alternatives、interpretation_reason、valid_at、invalid_at、speech_act、assertion_status、figurative_type、event、conditions。分类、场景、解释不能引入原话未确定的领域、人物状态或长短期性质；不要求分类标签逐字出现在原话，但须由具体来源支持。备选解释保留原有不确定性，不扩成已证实事实。空数组和null不声明额外事实，可用空evidence_indices表示；非空语义字段的supported必须引用支持它的逐字依据。除event（发生时间标注）外，任一字段uncertain/unsupported均阻止接纳，不能以正文或总verdict代签；event是可选的标注，时间不确定时按未核实处理，不用它否决有据的正文。
 confidence、risk_flags、requires_all_sources、source_dependency_mode、timing和来源ID是结构、策略或来源定位信息，不要求原话声明这些配置；低confidence、有风险标签或合法any与requires_all_sources=true组合本身不表示命题无支持。结构不授予语义支持。
 claim_check.parts按Unicode码点覆盖完整正文（包括空白与标点），默认一段覆盖全文，最多四段，连续、不重叠、不遗漏。
 每段分别判断归属、对象与关系、时间与认知模态；evidence_indices只引用本项evidence的0起索引。每个supported facet必须有逐字依据。资料scope_subject只取self/contact；原shared共同事实仍属contact关系范围，actor_kind可为shared或third_party，不能把亲友或转述中的人物变成说话人本人。
@@ -126,16 +126,18 @@ function groundedAttribution(row:Row,part:Row,fact:ExtractedFact,evidence:Source
  const actor=actors.size>1||actors.has('shared')?'shared':[...actors][0];
  return actor!==undefined&&actor===row.actor_kind;
 }
-function checkClaim(value:unknown,fact:ExtractedFact,evidence:SourceVerificationResult['evidence'],window:ExtractionWindow):{verdict:Support;issues:string[]}{
+function checkClaim(value:unknown,fact:ExtractedFact,evidence:SourceVerificationResult['evidence'],window:ExtractionWindow):{verdict:Support;issues:string[];eventSupport:Support}{
  const root=object(value,['version','parts','field_checks']);
  if(root.version!==2||!Array.isArray(root.parts)||!root.parts.length||root.parts.length>4)fail('parts_invalid');
- let cursor=0;const statuses:Support[]=[],issues=new Set<string>();
+ let cursor=0;const statuses:Support[]=[],issues=new Set<string>();let eventSupport:Support='supported';
  const fields=object(root.field_checks,semanticFields);
  for(const field of semanticFields){
   const fieldValue=field==='scene_name'?fact._scene_name:fact[field];
   const checked=checkFacet(fields[field],evidence.length,false,fieldValue===null||Array.isArray(fieldValue)&&!fieldValue.length);
+  // 发生时间标注是可选信息：仍校验结构，但不参与整条候选的准入聚合；不可采纳时由 validateSourceVerification 丢弃。
+  if(field==='event'){eventSupport=checked.verdict;continue;}
   statuses.push(checked.verdict);
-  if(checked.verdict!=='supported')issues.add(['valid_at','invalid_at','event'].includes(field)?'time'
+  if(checked.verdict!=='supported')issues.add(['valid_at','invalid_at'].includes(field)?'time'
    :field==='conditions'?'condition':['speech_act','assertion_status','figurative_type'].includes(field)?'pragmatics':'meaning');
  }
  for(const entry of root.parts){
@@ -157,7 +159,7 @@ function checkClaim(value:unknown,fact:ExtractedFact,evidence:SourceVerification
   }
  }
  if(cursor!==[...fact.text].length)fail('coverage_invalid');
- return {verdict:statuses.includes('unsupported')?'unsupported':statuses.includes('uncertain')?'uncertain':'supported',issues:[...issues]};
+ return {verdict:statuses.includes('unsupported')?'unsupported':statuses.includes('uncertain')?'uncertain':'supported',issues:[...issues],eventSupport};
 }
 
 function verificationPayload(window:ExtractionWindow,facts:ExtractedFact[],modern:boolean):Row{
@@ -201,6 +203,8 @@ function decodeVerificationRows(raw:Row,window:ExtractionWindow,facts:ExtractedF
    support=result.verdict==='unsupported'||checked.verdict==='unsupported'?'unsupported'
     :result.verdict==='uncertain'||checked.verdict==='uncertain'?'uncertain':'supported';
    result={...result,verdict:support,issues:[...new Set([...result.issues,...checked.issues])]};
+   // claim_check 对时间的逐字段判定也不支持时，丢弃结构上可能已采纳的时间标注，只丢时间不拒绝正文。
+   if(fact.event!==null&&!result.time_unverified&&checked.eventSupport!=='supported')result={...result,event:null,time_unverified:true};
   }catch(error){
    if(!(error instanceof ExtractionProtocolError))throw error;
    state='invalid';reason='structure_invalid';support='unsupported';

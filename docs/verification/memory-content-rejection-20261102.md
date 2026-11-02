@@ -41,3 +41,33 @@
 - 现有历史失败记录（含旧 `memory_extraction_source_insufficient`）保持原样，不追溯改写；本次只改变新执行的结果语义。
 - 主卡未新增“跳过条数”展示；如需要，另开界面改动。
 - 未覆盖：已有发布联系人在内容拒绝后的 `unchanged_memories` 重发组合、ADR-148 后继轮内容拒绝后解除阻塞的端到端回归；现有后继轮用例使用认证失败。以上两项留作后续补测。
+
+## 补充（2026-11-02）：时间标注降级为可选信息
+
+用户确认时间问题参考参考实现 TencentDB-Agent-Memory 处理：发生时间核验不可采纳时只丢弃时间标注、保留正文候选（决定见 [ADR-150](../../architecture/adr/150-optional-event-time.md)）。实现与回归：
+
+1. `memory/extraction/protocol.ts`：核验结果新增可选 `time_unverified`；`event` 不可采纳（未能确认 stage/occurrence）时 `event` 置空并置标记，不再因此把候选判为不通过；`valid_at`/`invalid_at` 与条件仍按原规则准入，不随本条降级。
+2. `memory/extraction/verification/complete-claim.ts`：`event` 字段仍校验结构，但不进入整条候选的字段聚合；`time_unverified` 随声明结果传回，供执行事件与处理历史查看。
+3. 回归：
+   - `extraction-protocol.test.mjs`：时间无逐字证据、发生证据不含表达、来源日历缺失三种情况均由“拒绝候选”改为“丢弃时间、保留候选支持并置 `time_unverified`”；已取消事件仍可采纳但时间未知；条件未核验仍拒绝未被放宽。
+   - `complete-claim-verification.test.mjs`：新增“时间字段 uncertain、其余字段有据 → 准入且 event 为空、标记为真、证据保留”；旧事件未核验只丢时间，条件未核验仍拒绝。
+   - `complete-claim-semantic-scope.test.mjs`：逐字段否决用例明确排除 `event`（时间可选），其余语义字段仍逐项否决。
+   - `sqlite-memory-verified-results.test.mjs`：新增端到端“提取产出无发生证据的时间 + 核验判时间不确定 → 记忆入库、event 为空、`time_unverified` 保留在执行事件”。
+   - 追加：结构上可采纳（已取消事件）但 `claim_check.event` 判 uncertain 时丢弃时间并保留候选；没有时间提案时忽略多余的 `event_verification` 槽，不拒绝正文。
+
+先红后绿：`extraction-protocol` 三条用例在协议修改前失败；`complete-claim` 新增用例在聚合修改前 `admitted=false`；端到端用例在协议与聚合修改前无候选。
+
+验证命令与结果：
+
+```
+cd backend-ts && node test/run-current.mjs \
+  test/extraction-protocol.test.mjs test/complete-claim-verification.test.mjs \
+  test/complete-claim-semantic-scope.test.mjs test/sqlite-memory-verified-results.test.mjs \
+  test/extraction-flow.test.mjs test/extraction-flow-failure-contract.test.mjs \
+  test/extraction-verification-envelope.test.mjs test/extraction-verification-quality-regression.test.mjs \
+  test/sqlite-memory-control.test.mjs test/sqlite-memory-documents-independent.test.mjs
+```
+
+上述 10 个文件 96/96 通过；其中前 8 个文件单独运行为 55/55。另运行 `test/sqlite-memory-documents.test.mjs` 时其“合成正式宿主未在有界时间内就绪”失败；临时回退本次源码改动后同样失败（6 项中 5 通过、同一条失败），确认为既有环境问题，与本次无关，故不并入本命令。后端 `tsc --noEmit` 退出 0。
+
+数据处理影响：发生时间不可核验的记忆现在会入库（正文、主体、分类、语义、有效起止与条件仍按逐字证据核验），不再被整条丢弃；`verification` 事件的 `result.time_unverified=true` 与 `event=null` 是丢弃依据；记忆字段不带额外标记，避免改变准入绑定。剩余风险同上一节；另需注意按时间检索不到已丢弃时间标注的记忆。独立 Standards/Spec 审查提出并已处理的修正：时间决定拆到 ADR-150、核验提示词与准入规则对齐（含 `claim_check.event` 判定）、验收命令与数量按实跑修正、`nullable-proof-v3` 旧路径例外与“核验模型整体判不确定时仍按原规则”的残余边界在 ADR-150 记录；既有解析归一（日期原话无发生主张的空事件置空）不属于本次时间可选规则，不产生 `time_unverified`。

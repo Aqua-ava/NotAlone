@@ -68,10 +68,13 @@ test('事件发生日期只接受活动来源原偏移与独立V位置，过期�
  assert.equal(located.verdict,'supported');assert.deepEqual(located.event.occurrence_evidence,[ref]);
  const ambiguous={...scoped,messages:[{...source,text:'去年去了北京，去年去了上海'}]};
  assert.equal(parseSourceVerification({results:[{...quotes,evidence:[{message_id:id,quote:'去年去了北京'}]}]},ambiguous,facts,{isolate_items:true})[0].verdict,'unsupported');
- const unknown=validateSourceVerification([result],{...scoped,messages:[{...source,source_snapshots:[]}]},facts)[0].event;
- assert.equal(unknown.occurrence_start,null);assert.equal(unknown.occurrence_verified,false);
+ const unknown=validateSourceVerification([result],{...scoped,messages:[{...source,source_snapshots:[]}]},facts)[0];
+ assert.equal(unknown.event,null,'来源日历缺失时时间不可采纳');assert.equal(unknown.time_unverified,true);
+ assert.equal(unknown.verdict,'supported');assert.equal(unknown.model_verdict,'supported');
  const unverified=validateSourceVerification([{...result,event_verification:{...result.event_verification,occurrence_verdict:'uncertain'}}],scoped,facts)[0];
- assert.equal(unverified.verdict,'unsupported');assert.ok(unverified.issues.includes('time'));assert.equal(unverified.model_verdict,'supported');
+ assert.equal(unverified.verdict,'supported','时间核验不确定不再拖垮整条候选');
+ assert.equal(unverified.event,null);assert.equal(unverified.time_unverified,true);assert.equal(unverified.model_verdict,'supported');
+ assert.equal(unverified.evidence.length,1);
  const isolated=parseSourceVerification({results:[{...result,event_verification:{...result.event_verification,
   stage_evidence:[{message_id:id,char_start:0,char_end:999}]}}]},scoped,facts,{isolate_items:true})[0];
  assert.equal(isolated.verdict,'unsupported');assert.deepEqual(isolated.issues,['insufficient_evidence']);
@@ -88,15 +91,16 @@ test('时间表达没有逐字证据时按发生时间未知收口，合法核�
  const result={candidate_index:0,verdict:'supported',issues:[],evidence:[{message_id:id,quote:source.text}],
   event_verification:{stage_verdict:'uncertain',occurrence_verdict:'uncertain',stage_evidence:[{message_id:id,char_start:0,char_end:2}],occurrence_evidence:[]}};
  const checked=validateSourceVerification([result],scoped,facts)[0];
- assert.equal(checked.verdict,'unsupported');assert.deepEqual(checked.issues,['time']);
+ assert.equal(checked.verdict,'supported','只有时间核验不过时正文候选仍可入库');
+ assert.deepEqual(checked.issues,[]);
  assert.equal(checked.model_verdict,'supported');assert.equal(checked.evidence.length,1,'合法核验输出保留原证据，不能伪装成证据不足');
- assert.equal(checked.event.occurrence_start,null);assert.equal(checked.event.occurrence_verified,false);
+ assert.equal(checked.event,null,'不可采纳的时间标注被丢弃');assert.equal(checked.time_unverified,true);
  const quoted={...result,event_verification:{...result.event_verification,stage_evidence:[{message_id:id,quote:source.text}]}};
  const isolated=parseSourceVerification({results:[quoted]},scoped,facts,{isolate_items:true})[0];
- assert.equal(isolated.verdict,'unsupported');assert.equal(isolated.evidence.length,1);
+ assert.equal(isolated.verdict,'supported');assert.equal(isolated.event,null);assert.equal(isolated.time_unverified,true);assert.equal(isolated.evidence.length,1);
 });
 
-test('已取消事件缺少发生时间证据仍可采纳，但时间保持未知；错误发生证据只拒绝该候选',()=>{
+test('已取消事件缺少发生时间证据仍可采纳，但时间保持未知；错误发生证据只丢时间不拒绝候选',()=>{
  const source={...window.messages[0],text:'周末的爬山活动取消了'};
  const scoped={...window,messages:[source]};
  const cancelled={version:2,stage:'cancelled',stage_evidence:[{message_id:id,char_start:0,char_end:2}],occurrence_start:null,occurrence_end:null,
@@ -114,8 +118,22 @@ test('已取消事件缺少发生时间证据仍可采纳，但时间保持未�
  const plannedFacts=parseDirectExtraction(direct(memory({event:planned})),scoped).accepted;
  assert.equal(plannedFacts[0].event.occurrence_start,'2026-09-19T00:00:00+08:00');
  const rejected=validateSourceVerification([wrongOccurrence],scoped,plannedFacts)[0];
- assert.equal(rejected.verdict,'unsupported');assert.ok(rejected.issues.includes('time'));
- assert.equal(rejected.model_verdict,'supported');assert.equal(rejected.event.occurrence_start,null,'证据不含时间表达时不能采纳发生日期');
+ assert.equal(rejected.verdict,'supported','发生证据不含时间表达只丢弃时间标注');
+ assert.equal(rejected.event,null);assert.equal(rejected.time_unverified,true);
+ assert.equal(rejected.model_verdict,'supported');
+});
+
+test('没有时间提案时忽略多余的 event_verification，不因此拒绝正文候选',()=>{
+ const scoped={...window};
+ const facts=parseDirectExtraction(direct(memory()),scoped).accepted;
+ assert.equal(facts[0].event,null);
+ const result={candidate_index:0,verdict:'supported',issues:[],evidence:[{message_id:id,quote:window.messages[0].text}],
+  event_verification:{stage_verdict:'uncertain',occurrence_verdict:'uncertain',
+   stage_evidence:[{message_id:id,char_start:0,char_end:2}],occurrence_evidence:[]}};
+ const checked=validateSourceVerification([result],scoped,facts)[0];
+ assert.equal(checked.verdict,'supported');
+ assert.equal(checked.event,null);
+ assert.equal(checked.time_unverified,undefined,'没有时间提案就没有可丢弃的时间标注');
 });
 
 test('条件必须独立覆盖且核验位置按Unicode码点回指正文',()=>{

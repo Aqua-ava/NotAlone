@@ -96,10 +96,11 @@ test('正文忠实也不能在语义元数据尚未逐项核验时接纳', async
   assert.equal((await prepared.decode(response(input, prepared, {version: 1, fields: null}))).items[0].admitted, false);
 });
 
-test('每个语义字段的未定或无支持都否决整体；结构配置与忠实未知不判假', async () => {
+test('每个语义字段的未定或无支持都否决整体（时间标注除外）；结构配置与忠实未知不判假', async () => {
   const input = scenario({source: '陈禾说展演日期还没有确定。', confidence: 0, risk_flags: ['synthetic-risk'],
     scene: '展演日期', interpretation_reason: '陈禾表示展演日期仍未知。'});
-  for (const field of semanticFields) {
+  // event（时间）是可选的标注，不参与整条候选准入，单独由 complete-claim-verification 的时间用例覆盖。
+  for (const field of semanticFields.filter(name => name !== 'event')) {
     for (const verdict of ['supported', 'uncertain', 'unsupported']) {
       const prepared = prepareSourceVerification({...input, policy, requireCurrent: async () => {}});
       const fields = completeFields();
