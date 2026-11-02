@@ -177,7 +177,7 @@ export const mediaDeletionDomain: DeletionDomain = {
   authorizeFile,
   fileCleared(tx, op, target) {
     authorizeFile(tx, op, target);
-    tx.run("UPDATE media_file SET content_state='erased',publish_state='cleanup_pending',managed_locator=NULL,expected_file_identity=NULL,managed_address=NULL,quality_proof=NULL,content_digest=NULL,byte_size=NULL,format=NULL,mime_type=NULL WHERE owner_id=? AND id=?", [op.ownerId, target.fileId]);
+    tx.run("UPDATE media_file SET content_state='erased',publish_state='cleanup_pending',managed_locator=NULL,expected_file_identity=NULL,managed_address=NULL,quality_proof=NULL,image_quality_evidence=NULL,content_digest=NULL,byte_size=NULL,format=NULL,mime_type=NULL WHERE owner_id=? AND id=?", [op.ownerId, target.fileId]);
     purge(tx, op);
   },
   verify(tx, op) {

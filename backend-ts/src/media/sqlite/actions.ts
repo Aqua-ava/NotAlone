@@ -10,6 +10,30 @@ import type {MediaGoal, MediaKind, MediaSnapshot, MediaValidation, MediaAssociat
 const fail=(code:string):never=>{throw new StorageFailure(code);};
 const id=(v:unknown):string=>typeof v==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(v)?v:fail('media_request_invalid');
 const one=(tx:StorageTransaction,sql:string,args:(string|bigint)[],code='media_message_not_found'):StorageRow=>tx.get(sql,args)??fail(code);
+function qualityEvidence(validation:MediaValidation,digest:string,role:unknown):string|null {
+ const value=validation.imageQualityEvidence;
+ if(value===undefined)return null;
+ const invalid=()=>fail('media_validation_invalid');
+ if(!value||typeof value!=='object'||Array.isArray(value)||role!=='image_display'
+  ||Object.keys(value).sort().join(',')!=='contentSha256,originalProofDigest,protocol,quality,resourceInfoId,resources,sourceSha256,sourceVariant')return invalid();
+ const resourceId=(v:unknown):v is string=>typeof v==='string'&&/^[1-9][0-9]{0,18}$/.test(v)&&BigInt(v)<=9223372036854775807n;
+ const sha=(v:unknown):v is string=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
+ if(value.protocol!=='wechat-image-quality-v1'||value.quality!==validation.imageQuality
+  ||!['original','thumbnail','unknown'].includes(value.quality)||!['main','thumbnail'].includes(value.sourceVariant)
+  ||!resourceId(value.resourceInfoId)||!sha(value.sourceSha256)||!sha(value.contentSha256)||value.contentSha256!==digest
+  ||value.originalProofDigest!==null&&!sha(value.originalProofDigest)
+  ||!Array.isArray(value.resources)||value.resources.length<1||value.resources.length>32)return invalid();
+ if(value.sourceVariant==='thumbnail'?(value.quality!=='thumbnail'||value.originalProofDigest!==null)
+  :value.quality!==(value.originalProofDigest===null?'unknown':'original'))return invalid();
+ let previous=0n;
+ for(const resource of value.resources){
+  if(!resource||typeof resource!=='object'||Array.isArray(resource)||Object.keys(resource).sort().join(',')!=='resourceId,resourceTypeRaw'
+   ||!resourceId(resource.resourceId)||BigInt(resource.resourceId)<=previous||!Number.isSafeInteger(resource.resourceTypeRaw)
+   ||resource.resourceTypeRaw<1||resource.resourceTypeRaw%65536!==1)return invalid();
+  previous=BigInt(resource.resourceId);
+ }
+ const serialized=JSON.stringify(value);if(serialized.length>8192)return invalid();return serialized;
+}
 export interface AttemptHandle {ownerId:string;contactId:string;messageId:string;attemptId:string;leaseToken:string}
 function message(tx:StorageTransaction,i:{ownerId:string;contactId:string;messageId:string}):StorageRow {
  const m=one(tx,`SELECT m.* FROM message m JOIN contact p ON p.owner_id=m.owner_id AND p.id=m.contact_id
@@ -77,6 +101,7 @@ function cleanup(tx:StorageTransaction,lease:StorageLease,registration:DeletionR
 export function createMediaActions(registration:DeletionRegistration):StorageAction[] {
  const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any,lease:StorageLease)=>unknown):StorageAction=>({name:`media.${name}`,mode,retryBusy:mode==='write',execute});
  return [
+ action('kind','read',(tx,i)=>message(tx,i).kind),
  action('read','read',(tx,i)=>snapshot(tx,i)),
  action('request','read',(tx,i,lease)=>{
   id(i.ownerId);id(i.contactId);id(i.messageId);id(i.requestKey);
@@ -128,14 +153,15 @@ export function createMediaActions(registration:DeletionRegistration):StorageAct
  }),
  action('uncreated','write',(tx,i,lease)=>{
   const a=one(tx,'SELECT runtime_id FROM media_extraction_attempt WHERE owner_id=? AND id=?',[i.ownerId,i.attemptId],'media_attempt_not_found');if(a.runtime_id!==lease.runtimeId)fail('media_execution_stale');
-  tx.run("UPDATE media_file SET content_state='erased',managed_locator=NULL WHERE owner_id=? AND id=? AND produced_attempt_id=? AND managed_address IS NULL AND expected_file_identity IS NULL AND publish_state IN ('staged','cleanup_pending')",[i.ownerId,i.fileId,i.attemptId]);
+  tx.run("UPDATE media_file SET content_state='erased',managed_locator=NULL,image_quality_evidence=NULL WHERE owner_id=? AND id=? AND produced_attempt_id=? AND managed_address IS NULL AND expected_file_identity IS NULL AND publish_state IN ('staged','cleanup_pending')",[i.ownerId,i.fileId,i.attemptId]);
  }),
  action('validated','write',(tx,i,lease)=>{
   assertAttempt(tx,i,lease);const v=i.validation as MediaValidation;
   if(!v||v.containerValid!==true||typeof v.format!=='string'||!/^[-a-zA-Z0-9_]{1,40}$/.test(v.format)||typeof v.mimeType!=='string'||!/^[-a-z0-9.+]+\/[-a-z0-9.+]+$/.test(v.mimeType)||!Number.isSafeInteger(i.byteSize)||i.byteSize<1||!/^[a-f0-9]{64}$/.test(i.digest))fail('media_validation_invalid');
   const f=one(tx,"SELECT * FROM media_file WHERE owner_id=? AND id=? AND produced_attempt_id=? AND publish_state='staged' AND content_state='present' AND managed_address IS NOT NULL",[i.ownerId,id(i.fileId),i.attemptId],'media_file_not_found');
   if(f.role==='image_display'&&(!v.viewable||!['original','thumbnail','unknown'].includes(v.imageQuality))||f.role==='video_playback'&&!v.playable||f.role==='audio_playback'&&!v.playable||f.role!=='image_display'&&v.imageQuality!=='not_applicable'||v.imageQuality==='original'&&(!v.qualityProof||!/^[-a-zA-Z0-9_:]{1,128}$/.test(v.qualityProof)))fail('media_validation_invalid');
-  tx.run('UPDATE media_file SET format=?,mime_type=?,byte_size=?,content_digest=?,container_valid=1,viewable=?,playable=?,image_quality=?,quality_proof=? WHERE owner_id=? AND id=?',[v.format,v.mimeType,i.byteSize,i.digest,v.viewable?1:0,v.playable?1:0,v.imageQuality,v.qualityProof,i.ownerId,i.fileId]);return true;
+  const evidence=qualityEvidence(v,i.digest,f.role);
+  tx.run('UPDATE media_file SET format=?,mime_type=?,byte_size=?,content_digest=?,container_valid=1,viewable=?,playable=?,image_quality=?,quality_proof=?,image_quality_evidence=? WHERE owner_id=? AND id=?',[v.format,v.mimeType,i.byteSize,i.digest,v.viewable?1:0,v.playable?1:0,v.imageQuality,v.qualityProof,evidence,i.ownerId,i.fileId]);return true;
  }),
  action('discardPlayback','write',(tx,i,lease)=>{
   const a=assertAttempt(tx,i,lease);if(a.goal!=='extract'||message(tx,i).kind!=='voice')fail('media_failure_mode_invalid');

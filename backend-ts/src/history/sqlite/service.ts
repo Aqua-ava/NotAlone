@@ -175,8 +175,8 @@ export class SqliteHistoryService {
   if(guard)guard.bodyVerified=report.status==='supported'&&bodyCapabilities.every(key=>report.capabilities?.[key]==='supported');
  }
  /** 记忆等派生处理只重验来源元数据并保留活守卫，不读取历史页或推进同步目标。 */
- async ensureSourceReady(contactId:string):Promise<void>{
-  return this.withChannel(contactId,undefined,async(scope,channel,controller,_register,armGuard)=>{
+ async ensureSourceReady(contactId:string,signal?:AbortSignal):Promise<void>{
+  return this.withChannel(contactId,signal,async(scope,channel,controller,_register,armGuard)=>{
    const report=await channel.inspect(scope,controller.signal);await this.check(scope,controller);assertSupport(report);
    if(report.accountKey!==scope.accountKey||report.conversationKey!==scope.conversationKey||report.sourceGeneration!==scope.token.source_generation)throw new StorageFailure('history_external_scope_changed');
    const normalUse=report.continuity==='same-source-instances-normal-use-v1';
@@ -244,7 +244,8 @@ export class SqliteHistoryService {
     summaries.set(row.message_id,{state:'unavailable',fileId:null,mimeType:null,errorCode:'media_source_invalidated'});continue;
    }
    if(row.file_id&&typeof row.mime_type==='string'&&row.mime_type.startsWith('image/')){
-   summaries.set(row.message_id,{state:row.image_quality==='original'?'original':'available',fileId:row.file_id,mimeType:row.mime_type});continue;
+   summaries.set(row.message_id,{state:row.image_quality==='original'?'original':'available',fileId:row.file_id,mimeType:row.mime_type,
+    imageQuality:row.image_quality==='original'?'original':row.image_quality==='thumbnail'?'thumbnail':'unknown'});continue;
    }
    const errorCode=typeof row.error_code==='string'&&/^[-a-z0-9_]{1,80}$/.test(row.error_code)?row.error_code:null;
    if(row.attempt_state==='pending'||row.attempt_state==='running'||!row.attempt_state){

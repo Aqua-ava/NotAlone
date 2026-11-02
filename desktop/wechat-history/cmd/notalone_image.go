@@ -39,7 +39,7 @@ const (
 	notaloneImageMaxPixelCount       = 100_000_000
 	notaloneImagePackedInfoByteLimit = 4096
 	notaloneImageResourceTableID     = "wechat-message-resource-v1"
-	notaloneImageQualityProofKind    = "wechat-message-image-content-v1"
+	notaloneImageQualityProofKind    = "wechat-message-image-content-v2"
 	notaloneOriginalImageProofKind   = "wechat-cdn-big-hd-exact-content-v4"
 	notaloneImageXMLZstdContentType  = int64(4)
 	notaloneImageMaxGIFFrames        = 120
@@ -72,20 +72,28 @@ type notaloneOriginalImageMetadata struct {
 	BigURLFound bool
 }
 
-type notaloneImageQualityProof struct {
-	Kind                string   `json:"kind"`
-	ResourceInfoID      string   `json:"resourceInfoId"`
-	MatchingResourceIDs []string `json:"matchingResourceIds"`
-	ResourceSize        int64    `json:"resourceSize"`
-	VerifiedBytes       int64    `json:"verifiedBytes"`
-	VerifiedSHA256      string   `json:"verifiedSha256"`
-	SourceSHA256        string   `json:"sourceSha256"`
-	Conversion          string   `json:"conversion"`
-	ContentWidth        int      `json:"contentWidth"`
-	ContentHeight       int      `json:"contentHeight"`
+type notaloneImageMatchedResource struct {
+	ResourceID      string `json:"resourceId"`
+	ResourceTypeRaw int64  `json:"resourceTypeRaw"`
 }
 
-// 此类型仅供历史原图验证辅助函数及其兼容测试使用。
+type notaloneImageQualityProof struct {
+	Kind                string                             `json:"kind"`
+	ResourceInfoID      string                             `json:"resourceInfoId"`
+	MatchingResourceIDs []string                           `json:"matchingResourceIds"`
+	ResourceSize        int64                              `json:"resourceSize"`
+	VerifiedBytes       int64                              `json:"verifiedBytes"`
+	VerifiedSHA256      string                             `json:"verifiedSha256"`
+	SourceSHA256        string                             `json:"sourceSha256"`
+	Conversion          string                             `json:"conversion"`
+	ContentWidth        int                                `json:"contentWidth"`
+	ContentHeight       int                                `json:"contentHeight"`
+	SourceVariant       string                             `json:"sourceVariant"`
+	MatchingResources   []notaloneImageMatchedResource     `json:"matchingResources"`
+	OriginalProof       *notaloneOriginalImageQualityProof `json:"originalProof"`
+}
+
+// 原图内容证明作为可选分类依据，不影响普通图和缩略图保存。
 type notaloneOriginalImageQualityProof struct {
 	Kind                string   `json:"kind"`
 	MessageMD5          string   `json:"messageMd5"`
@@ -980,11 +988,19 @@ func (h *notaloneHistorySession) openImage(ctx context.Context, request notalone
 		imageGuard.Fingerprint(), imageFingerprint, "message", message.partition, message.tableInstance, strconv.FormatInt(message.localID, 10),
 		strconv.FormatInt(message.serverID, 10), strconv.FormatInt(message.createTime, 10), "resource_info", strconv.FormatInt(resource.InfoID, 10),
 		"cache_md5", resource.CacheMD5, "info_packed_length", strconv.FormatInt(resource.InfoPackedInfoLength, 10),
-		"info_packed_sha256", resource.InfoPackedInfoSHA256, "verified_sha256", proof.VerifiedSHA256}
+		"info_packed_sha256", resource.InfoPackedInfoSHA256, "verified_sha256", proof.VerifiedSHA256,
+		"classification", proof.Kind, proof.SourceVariant}
 	for _, detail := range resource.MatchingDetails {
 		resourceIdentityParts = append(resourceIdentityParts, "resource_detail", strconv.FormatInt(detail.ID, 10), strconv.FormatInt(detail.TypeRaw, 10),
 			strconv.FormatInt(detail.Size, 10), strconv.FormatInt(detail.Status, 10), detail.DataIndex, strconv.FormatInt(detail.CreateTime, 10),
 			strconv.FormatInt(detail.AccessTime, 10), strconv.FormatInt(detail.PackedInfoLength, 10), detail.PackedInfoSHA256)
+	}
+	quality := "unknown"
+	if proof.SourceVariant == "thumbnail" {
+		quality = "thumbnail"
+	} else if proof.OriginalProof != nil {
+		quality = "original"
+		resourceIdentityParts = append(resourceIdentityParts, "original_proof", proof.OriginalProof.Kind, proof.OriginalProof.MessageMD5, proof.OriginalProof.SourceSHA256)
 	}
 	resourceSourceGeneration := notaloneHash(resourceIdentityParts...)
 	response := notaloneImageOpenResponse{
@@ -993,7 +1009,7 @@ func (h *notaloneHistorySession) openImage(ctx context.Context, request notalone
 		Target: target.Descriptor, Partition: request.Partition, Table: request.Table, LocalID: request.LocalID,
 		ServerID: request.ServerID, SentAt: request.SentAt, ResourceTable: notaloneImageResourceTableID,
 		ResourceID: strconv.FormatInt(resource.ID, 10), ResourceTypeRaw: resource.TypeRaw, VariantCode: resource.TypeRaw >> 16,
-		Complete: true, Quality: "unknown", QualityProof: proof, Envelope: "plain", SourceEnvelope: sourceEnvelope,
+		Complete: true, Quality: quality, QualityProof: proof, Envelope: "plain", SourceEnvelope: sourceEnvelope,
 		ExpectedBytes: int64(len(imageData)), ExpectedSHA256: proof.VerifiedSHA256, MimeType: mimeType,
 	}
 	opened := &notaloneOpenImage{metadata: response, data: imageData, digest: sha256.New(), guards: []*notaloneSourceGuard{resourceGuard, imageGuard}}
@@ -1012,14 +1028,15 @@ func (h *notaloneHistorySession) openImage(ctx context.Context, request notalone
 }
 
 type notaloneSnapshotImageMessage struct {
-	partition      string
-	tableInstance  string
-	localID        int64
-	serverID       int64
-	localType      int64
-	createTime     int64
-	cacheMD5       string
-	resourceDBPath string
+	partition        string
+	tableInstance    string
+	localID          int64
+	serverID         int64
+	localType        int64
+	createTime       int64
+	cacheMD5         string
+	resourceDBPath   string
+	originalMetadata *notaloneOriginalImageMetadata
 }
 
 func (h *notaloneHistorySession) openImageMessage(ctx context.Context, request notaloneHistoryRequest, localID, serverID, createTime int64) (notaloneSnapshotImageMessage, notaloneSnapshotTarget, error) {
@@ -1080,8 +1097,12 @@ func (h *notaloneHistorySession) openImageMessage(ctx context.Context, request n
 		return message, target, notaloneFailure("history_image_association_unverified")
 	}
 	shard := snapshot.shards[matched]
-	query := "SELECT local_id,server_id,local_type,create_time,CASE WHEN (local_type & 4294967295)=3 THEN CASE WHEN length(CAST(packed_info_data AS BLOB))<=? THEN packed_info_data ELSE NULL END ELSE NULL END AS image_message_packed_info,CASE WHEN (local_type & 4294967295)=3 THEN length(CAST(packed_info_data AS BLOB)) ELSE 0 END AS image_message_packed_info_length FROM " + quoteIdent(snapshot.table) + " WHERE local_id=? LIMIT 2"
-	rows, err := shard.reader.QueryBounded(ctx, 2, query, int64(notaloneImagePackedInfoByteLimit), localID)
+	query := "SELECT local_id,server_id,local_type,create_time,CASE WHEN (local_type & 4294967295)=3 THEN CASE WHEN length(CAST(packed_info_data AS BLOB))<=? THEN packed_info_data ELSE NULL END ELSE NULL END AS image_message_packed_info,CASE WHEN (local_type & 4294967295)=3 THEN length(CAST(packed_info_data AS BLOB)) ELSE 0 END AS image_message_packed_info_length,CASE WHEN (local_type & 4294967295)=3 AND length(CAST(message_content AS BLOB))<=? THEN message_content ELSE NULL END AS image_message_content"
+	if shard.hasContentTypeColumn {
+		query += ",WCDB_CT_message_content AS image_message_content_type"
+	}
+	query += " FROM " + quoteIdent(snapshot.table) + " WHERE local_id=? LIMIT 2"
+	rows, err := shard.reader.QueryBounded(ctx, 2, query, int64(notaloneImagePackedInfoByteLimit), int64(notaloneImageXMLByteLimit), localID)
 	if err != nil || len(rows) != 1 {
 		return message, target, notaloneFailure("history_image_association_unverified")
 	}
@@ -1100,7 +1121,14 @@ func (h *notaloneHistorySession) openImageMessage(ctx context.Context, request n
 	if err != nil {
 		return message, target, notaloneFailure("history_image_association_unverified")
 	}
-	message = notaloneSnapshotImageMessage{partition: shard.partition, tableInstance: shard.instance, localID: rowLocalID,
+	// 分类只使用同一稳定消息的有界元数据；缺失、损坏或不匹配不得阻断可查看图片。
+	var originalMetadata *notaloneOriginalImageMetadata
+	if xmlBytes, decodeErr := notaloneDecodeImageXML(rowBytes(row, "image_message_content"), rowInt64(row, "image_message_content_type")); decodeErr == nil {
+		if parsed, parseErr := notaloneParseOriginalImageXML(xmlBytes); parseErr == nil {
+			originalMetadata = &parsed
+		}
+	}
+	message = notaloneSnapshotImageMessage{originalMetadata: originalMetadata, partition: shard.partition, tableInstance: shard.instance, localID: rowLocalID,
 		serverID: rowServerID, localType: rowType, createTime: rowCreateTime, cacheMD5: cacheMD5, resourceDBPath: resourcePath}
 	return message, target, nil
 }
@@ -1320,12 +1348,28 @@ func (h *notaloneHistorySession) readMessageImage(ctx context.Context, message n
 				}
 				return nil, "", nil, emptyProof, "", notaloneFailure("history_image_source_changed")
 			}
+			proof.SourceVariant = "main"
+			if suffix == "_t.dat" {
+				proof.SourceVariant = "thumbnail"
+			}
+			// 资源高位仅留作审计；原图必须由此消息声明与实际解密内容共同证实。
+			if proof.SourceVariant == "main" && message.originalMetadata != nil {
+				if original, _, originalErr := notaloneVerifyOriginalImageContent(*message.originalMetadata, decoded, viewable, conversion); originalErr == nil {
+					proof.OriginalProof = &original
+				}
+			}
 			proof.ResourceInfoID = strconv.FormatInt(resource.InfoID, 10)
 			proof.MatchingResourceIDs = make([]string, 0, len(matching))
 			for _, detail := range matching {
 				proof.MatchingResourceIDs = append(proof.MatchingResourceIDs, strconv.FormatInt(detail.ID, 10))
+				proof.MatchingResources = append(proof.MatchingResources, notaloneImageMatchedResource{ResourceID: strconv.FormatInt(detail.ID, 10), ResourceTypeRaw: detail.TypeRaw})
 			}
 			proof.ResourceSize = int64(len(data))
+			if proof.OriginalProof != nil {
+				proof.OriginalProof.ResourceInfoID = proof.ResourceInfoID
+				proof.OriginalProof.MatchingResourceIDs = append([]string(nil), proof.MatchingResourceIDs...)
+				proof.OriginalProof.ResourceSize = proof.ResourceSize
+			}
 			verified = append(verified, verifiedCandidate{data: viewable, envelope: envelope, guard: guard, proof: proof,
 				mimeType: mimeType, record: matching[0], matching: matching})
 		}

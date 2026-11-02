@@ -398,8 +398,8 @@ func TestNotAloneImageOpenBindsCacheKeyAndAliasesToVerifiedImageContent(t *testi
 		t.Fatal(err)
 	}
 	ids, _ := proof["matchingResourceIds"].([]any)
-	if opened.Protocol != "wechat-original-image-v1" || opened.Quality != "unknown" ||
-		opened.QualityProof.Kind != "wechat-message-image-content-v1" || opened.ResourceID != "10" ||
+	if opened.Protocol != "wechat-original-image-v1" || opened.Quality != "original" ||
+		opened.QualityProof.Kind != "wechat-message-image-content-v2" || opened.ResourceID != "10" ||
 		opened.ResourceTypeRaw != 65537 || opened.SourceEnvelope != "wechat_dat" || opened.Envelope != "plain" ||
 		proof["resourceInfoId"] != "5" || proof["resourceSize"] != float64(len(storage)) ||
 		proof["verifiedBytes"] != float64(len(imageBytes)) || proof["sourceSha256"] != fmt.Sprintf("%x", sha256.Sum256(imageBytes)) ||
@@ -407,8 +407,8 @@ func TestNotAloneImageOpenBindsCacheKeyAndAliasesToVerifiedImageContent(t *testi
 		len(ids) != 2 || ids[0] != "10" || ids[1] != "12" {
 		t.Fatalf("V4 stored bytes and matching detail aliases were not represented accurately: open=%#v proof=%s", opened, proofJSON)
 	}
-	if len(proof) != 10 {
-		t.Fatalf("new proof must contain only source/content integrity fields, got %s", proofJSON)
+	if len(proof) != 13 {
+		t.Fatalf("新证明必须包含完整来源、版本和可选原图内容依据, got %s", proofJSON)
 	}
 	chunkValue, err := fixture.history.handle(context.Background(), notaloneHistoryRequest{Operation: "image-read", ResourceToken: opened.ResourceToken, Offset: 0})
 	if err != nil {
@@ -435,7 +435,7 @@ func TestNotAloneImageOpenDoesNotRequireOriginalImageXML(t *testing.T) {
 				t.Fatalf("type 3 and packed-info association are sufficient without original-image XML: %v", err)
 			}
 			opened := value.(notaloneImageOpenResponse)
-			if opened.Quality != "unknown" || opened.QualityProof.Kind != "wechat-message-image-content-v1" {
+			if opened.Quality != "unknown" || opened.QualityProof.Kind != "wechat-message-image-content-v2" {
 				t.Fatalf("decoded bytes must not claim original-image quality: %#v", opened)
 			}
 		})
@@ -499,7 +499,7 @@ func TestNotAloneImageOpenDoesNotNeedToDecodeImageXML(t *testing.T) {
 		t.Fatalf("mismatching original-image declarations must not block byte validation: %v", err)
 	}
 	opened := value.(notaloneImageOpenResponse)
-	if opened.QualityProof.Kind != "wechat-message-image-content-v1" || opened.Quality != "unknown" ||
+	if opened.QualityProof.Kind != "wechat-message-image-content-v2" || opened.Quality != "unknown" ||
 		opened.QualityProof.ContentWidth != 3 || opened.QualityProof.ContentHeight != 2 {
 		t.Fatalf("unexpected content proof: %#v", opened.QualityProof)
 	}
@@ -635,8 +635,8 @@ func TestNotAloneImageOpenStreamsOnlyVerifiedOriginalFromSelectedSnapshot(t *tes
 		t.Fatal(err)
 	}
 	opened, ok := value.(notaloneImageOpenResponse)
-	if !ok || !opened.Complete || opened.Protocol != "wechat-original-image-v1" || opened.Quality != "unknown" ||
-		opened.QualityProof.Kind != "wechat-message-image-content-v1" || opened.Envelope != "plain" || opened.SourceEnvelope != "plain" ||
+	if !ok || !opened.Complete || opened.Protocol != "wechat-original-image-v1" || opened.Quality != "original" ||
+		opened.QualityProof.Kind != "wechat-message-image-content-v2" || opened.Envelope != "plain" || opened.SourceEnvelope != "plain" ||
 		opened.ExpectedBytes != int64(len(imageBytes)) || opened.ExpectedSHA256 != fmt.Sprintf("%x", sha256.Sum256(imageBytes)) ||
 		opened.LocalID != fixture.request.LocalID || opened.ServerID != fixture.request.ServerID || opened.Target != fixture.request.Target ||
 		opened.Partition != fixture.request.Partition || opened.Table != fixture.request.Table || opened.ResourceID != "11" {
@@ -661,7 +661,7 @@ func TestNotAloneImageOpenStreamsOnlyVerifiedOriginalFromSelectedSnapshot(t *tes
 	}
 }
 
-func TestNotAloneImageOpenStreamsBMPAsUnknownContent(t *testing.T) {
+func TestNotAloneImageOpenStreamsBMPWithOriginalContentProof(t *testing.T) {
 	imageBytes := notaloneTinyBMPDIBHeader(t, 40, 2, -2)
 	width, height, err := notaloneBMPDimensions(imageBytes)
 	if err != nil || width != 2 || height != 2 {
@@ -673,7 +673,7 @@ func TestNotAloneImageOpenStreamsBMPAsUnknownContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	opened, ok := value.(notaloneImageOpenResponse)
-	if !ok || opened.MimeType != "image/bmp" || opened.Quality != "unknown" || opened.ExpectedBytes != int64(len(imageBytes)) {
+	if !ok || opened.MimeType != "image/bmp" || opened.Quality != "original" || opened.ExpectedBytes != int64(len(imageBytes)) {
 		t.Fatalf("valid standard top-down BMP was not verified as image content: %#v", value)
 	}
 	chunkValue, err := fixture.history.handle(context.Background(), notaloneHistoryRequest{Operation: "image-read", ResourceToken: opened.ResourceToken, Offset: 0})
@@ -788,7 +788,7 @@ func TestNotAloneImageOpenConvertsWXGFDespiteMismatchingOriginalImageXML(t *test
 	raw, _ := json.Marshal(opened.QualityProof)
 	var proof map[string]any
 	_ = json.Unmarshal(raw, &proof)
-	if proof["kind"] != "wechat-message-image-content-v1" || opened.Quality != "unknown" || proof["conversion"] != "wxgf-to-png-v1" || proof["sourceSha256"] != fmt.Sprintf("%x", sha256.Sum256(source)) || proof["verifiedSha256"] == proof["sourceSha256"] || opened.MimeType != "image/png" || opened.QualityProof.ContentWidth != 3 || opened.QualityProof.ContentHeight != 2 {
+	if proof["kind"] != "wechat-message-image-content-v2" || opened.Quality != "unknown" || proof["conversion"] != "wxgf-to-png-v1" || proof["sourceSha256"] != fmt.Sprintf("%x", sha256.Sum256(source)) || proof["verifiedSha256"] == proof["sourceSha256"] || opened.MimeType != "image/png" || opened.QualityProof.ContentWidth != 3 || opened.QualityProof.ContentHeight != 2 {
 		t.Fatalf("转换证明须分别保留源与输出: %#v", proof)
 	}
 }
@@ -801,10 +801,10 @@ func TestNotAloneImageOpenCanDecodeBoundThumbnailBytes(t *testing.T) {
 	}
 	value, err := fixture.history.handle(context.Background(), fixture.request)
 	if err != nil {
-		t.Fatalf("a uniquely bound and decodable thumbnail candidate can be saved as unknown-quality content: %v", err)
+		t.Fatalf("同消息唯一关联且可解码的缩略图必须带缩略图分类保存: %v", err)
 	}
 	opened := value.(notaloneImageOpenResponse)
-	if opened.Quality != "unknown" || opened.QualityProof.Kind != "wechat-message-image-content-v1" {
+	if opened.Quality != "thumbnail" || opened.QualityProof.Kind != "wechat-message-image-content-v2" {
 		t.Fatalf("thumbnail must not be certified as original: %#v", opened)
 	}
 }
@@ -840,4 +840,92 @@ func TestNotAloneImageOpenPrefersNonThumbnailAndRejectsSameTierConflicts(t *test
 			t.Fatalf("conflicting candidates in the same priority tier must not be guessed between, got %v", err)
 		}
 	})
+}
+
+func TestNotAloneImageClassificationUsesBoundResourceRole(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		width, height    int
+		thumbnail        bool
+		originalMetadata bool
+		typeRaw          int64
+		wantQuality      string
+	}{
+		{"小图有原图内容依据", 3, 2, false, true, 65537, "original"},
+		{"大图仍是已绑定缩略图", 1280, 960, true, true, 65537, "thumbnail"},
+		{"未知资源高位不冒充原图", 3, 2, false, false, 99<<16 | 1, "unknown"},
+		{"未知资源高位不推翻原图内容证明", 3, 2, false, true, 99<<16 | 1, "original"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := notaloneTinyPNG(t, tc.width, tc.height)
+			message := []byte(`<msg><img /></msg>`)
+			if tc.originalMetadata {
+				message = []byte(notaloneImageXML(data, len(data), tc.width, tc.height, true))
+			}
+			const cacheMD5 = "f71dbe52628a3f83a77ab494817525c6"
+			packed := notaloneTestPackedInfo(cacheMD5)
+			fixture := newNotaloneImageProtocolFixtureWithResourceData(t, message, 0, data, data, cacheMD5, packed, packed,
+				[]notaloneImageTestResourceDetail{{id: 11, typeRaw: tc.typeRaw, size: int64(len(data)), packedInfo: packed}})
+			wantVariant := "main"
+			if tc.thumbnail {
+				wantVariant = "thumbnail"
+				if err := os.Rename(fixture.path, strings.TrimSuffix(fixture.path, ".dat")+"_t.dat"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			value, err := fixture.history.handle(context.Background(), fixture.request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			opened := value.(notaloneImageOpenResponse)
+			wire, _ := json.Marshal(opened.QualityProof)
+			var proof map[string]any
+			if err = json.Unmarshal(wire, &proof); err != nil {
+				t.Fatal(err)
+			}
+			resources, _ := proof["matchingResources"].([]any)
+			if opened.Quality != tc.wantQuality || proof["kind"] != "wechat-message-image-content-v2" || proof["sourceVariant"] != wantVariant || len(resources) != 1 {
+				t.Fatalf("分类必须来自已认证消息资源及所选版本，不能按尺寸或高位猜测: quality=%s proof=%#v", opened.Quality, proof)
+			}
+			resource := resources[0].(map[string]any)
+			if resource["resourceId"] != "11" || resource["resourceTypeRaw"] != float64(tc.typeRaw) {
+				t.Fatalf("资源分类审计信息缺失: %#v", resource)
+			}
+			original, ok := proof["originalProof"].(map[string]any)
+			if tc.wantQuality == "original" {
+				if !ok || original["kind"] != "wechat-cdn-big-hd-exact-content-v4" || original["sourceSha256"] != proof["sourceSha256"] || original["resourceInfoId"] != proof["resourceInfoId"] {
+					t.Fatalf("原图需同一资源的完整内容证明: %#v", proof)
+				}
+			} else if ok || proof["originalProof"] != nil {
+				t.Fatalf("非原图不能附原图证明: %#v", proof)
+			}
+		})
+	}
+}
+
+func TestNotAloneImageClassificationTreatsOptionalMetadataAsNonBlocking(t *testing.T) {
+	data := notaloneTinyPNG(t, 3, 2)
+	valid := []byte(notaloneImageXML(data, len(data), 3, 2, true))
+	for _, tc := range []struct {
+		name        string
+		content     []byte
+		contentType int64
+		quality     string
+	}{
+		{"压缩元数据可核验原图", notaloneCompressImageXML(t, valid), 4, "original"},
+		{"压缩元数据损坏仍可保存", []byte{0x28, 0xb5, 0x2f, 0xfd, 0}, 4, "unknown"},
+		{"元数据超限仍可保存", bytes.Repeat([]byte("x"), notaloneImageXMLByteLimit+1), 0, "unknown"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newNotaloneImageProtocolFixtureWithMessageContent(t, tc.content, tc.contentType, data)
+			value, err := fixture.history.handle(context.Background(), fixture.request)
+			if err != nil {
+				t.Fatalf("原图分类依据不可用不能阻断普通图片保存: %v", err)
+			}
+			opened := value.(notaloneImageOpenResponse)
+			if opened.Quality != tc.quality || opened.QualityProof.SourceVariant != "main" || opened.ExpectedSHA256 != fmt.Sprintf("%x", sha256.Sum256(data)) {
+				t.Fatalf("可选元数据分类结果错误: %#v", opened)
+			}
+		})
+	}
 }

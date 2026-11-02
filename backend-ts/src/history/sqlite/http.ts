@@ -50,6 +50,7 @@ export function projectHistoryMessages(read: HistoryRead, limit: number, imageMe
         occurred_at: isoTime(message), quoted,
         ordering: message.ordering, display_position: message.displayPosition, source_record_ids: message.sourceRecordIds,
         ...(safeImage ? {image_media:{state:safeImage.state,file_id:safeImage.fileId,mime_type:safeImage.mimeType,
+          ...(safeImage.imageQuality?{image_quality:safeImage.imageQuality}:{}),
           ...('errorCode' in safeImage&&safeImage.errorCode?{error_code:safeImage.errorCode}:{})}} : {}),
       };
     }),

@@ -16,6 +16,49 @@ const token={owner_id:'00000000-0000-4000-8000-000000000091',contact_id:'0000000
 const resourceId='9007199254740993',resourceInfoId='9007199254741000',matchingResourceIds=[resourceId,'9007199254740994'];
 function imageBytes(length){const bytes=Buffer.alloc(length);for(let index=0;index<length;index++)bytes[index]=index%251;return bytes;}
 
+function classifiedImageProof(sourceVariant='thumbnail',original=false){
+ const digest=hash(imageBytes(70_000));
+ const proof={kind:'wechat-message-image-content-v2',resourceInfoId,matchingResourceIds,resourceSize:70_000,
+  verifiedBytes:70_000,verifiedSha256:digest,sourceSha256:digest,conversion:'none',contentWidth:96,contentHeight:210,
+  sourceVariant,matchingResources:matchingResourceIds.map(resourceId=>({resourceId,resourceTypeRaw:65537})),originalProof:null};
+ if(original)proof.originalProof={kind:'wechat-cdn-big-hd-exact-content-v4',messageMd5:'f'.repeat(32),hdLength:70_000,
+  hdWidth:null,hdHeight:null,bigImageUrlPresent:true,resourceSize:70_000,verifiedBytes:70_000,verifiedSha256:digest,
+  contentWidth:96,contentHeight:210,resourceInfoId,matchingResourceIds,sourceSha256:digest,conversion:'none'};
+ return proof;
+}
+
+test('微信图片按绑定资源版本保留分类和依据，像素尺寸不决定类别',async t=>{
+ for(const [name,proof,quality] of [
+  ['小尺寸原图',classifiedImageProof('main',true),'original'],
+  ['大尺寸缩略图',{...classifiedImageProof(),contentWidth:3000,contentHeight:2000},'thumbnail'],
+  ['普通图缺原图证明',classifiedImageProof('main'),'unknown'],
+ ])await t.test(name,async t=>{
+  const f=await fixture(t,{proof,capability:proof.kind,openAudit:{quality,resourceTypeRaw:65537,variantCode:1}});
+  const resource=await createWechatImageResourcePort(f.executable).open(selection());
+  try{
+   assert.equal(resource.quality.kind,quality);
+   assert.deepEqual(resource.quality.evidence,{protocol:'wechat-image-quality-v1',quality,sourceVariant:proof.sourceVariant,
+    resourceInfoId,resources:proof.matchingResources,sourceSha256:proof.sourceSha256,contentSha256:proof.verifiedSha256,
+    originalProofDigest:proof.originalProof?hash(JSON.stringify(proof.originalProof)):null});
+  }finally{await resource.close();}
+ });
+});
+
+test('微信图片分类拒绝变造或不一致的资源依据',async t=>{
+ const original=classifiedImageProof('main',true),thumbnail=classifiedImageProof();
+ for(const [name,proof,quality,audit] of [
+  ['缩略图冒充原图',thumbnail,'original',{}],
+  ['未证明的主图冒充原图',classifiedImageProof('main'),'original',{}],
+  ['资源类型错配',thumbnail,'thumbnail',{resourceTypeRaw:131073,variantCode:2}],
+  ['资源ID错配',{...thumbnail,matchingResources:[{resourceId:'1',resourceTypeRaw:65537}]},'thumbnail',{}],
+  ['原图证明来自别的内容',{...original,originalProof:{...original.originalProof,sourceSha256:'b'.repeat(64)}},'original',{}],
+  ['缩略图夹带原图证明',{...thumbnail,originalProof:original.originalProof},'thumbnail',{}],
+ ])await t.test(name,async t=>{
+  const f=await fixture(t,{proof,capability:proof.kind,openAudit:{quality,resourceTypeRaw:65537,variantCode:1,...audit}});
+  await assert.rejects(createWechatImageResourcePort(f.executable).open(selection()));
+ });
+});
+
 test('旧读取组件没有声明原图协议时不启用自动取图',async t=>{
  const f=await fixture(t);
  const path=join(f.executable,'../../manifest.json'),manifest=JSON.parse(await readFile(path,'utf8'));

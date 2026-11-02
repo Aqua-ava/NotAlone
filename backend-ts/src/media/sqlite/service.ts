@@ -7,7 +7,7 @@ import type {ManagedAddress,DeletionSnapshot} from '../../storage/sqlite/deletio
 import {MediaFiles} from './files.ts';
 import type {AttemptHandle} from './actions.ts';
 import type {MediaAdapter,MediaGoal,MediaSnapshot,MediaPreview,MediaValidation,MediaContactPort,MediaSourcePort,MediaFileInput,MediaAttemptView} from './contracts.ts';
-export interface MediaServiceOptions {storage:SqliteStorage;contacts:MediaContactPort;history:MediaSourcePort;userData:string;adapters:readonly MediaAdapter[];holders?:ActiveHolders;deletion?:DeletionService;changed?:(contactId:string,messageId:string)=>void}
+export interface MediaServiceOptions {storage:SqliteStorage;contacts:MediaContactPort;history:MediaSourcePort;userData:string;adapters:readonly MediaAdapter[];holders?:ActiveHolders;deletion?:DeletionService;changed?:(contactId:string,messageId:string)=>void;ensureSourceReady?:(contactId:string,signal?:AbortSignal)=>Promise<void>}
 interface FileReference {fileId:string;generation:string;dataGeneration:string;address:ManagedAddress;mimeType:string;byteSize:string;digest:string;viewable:boolean;playable:boolean}
 interface Begin {reused:boolean;cleanupRequired?:boolean;attemptId:string;dataGeneration:string;leaseToken?:string;recordId?:string;inputFile?:{fileId:string;address:ManagedAddress;byteSize:string;digest:string}|null;token?:any}
 interface PreviewSession {state:'active'|'revoking';release:()=>Promise<void>;ack:()=>void;contactId:string;messageId:string;fileId:string}
@@ -51,8 +51,12 @@ export class SqliteMediaService {
  private async runExtraction(contactId:string,messageId:string,input:{requestKey:string;goal:MediaGoal},signal?:AbortSignal):Promise<MediaSnapshot>{
   this.available();const scope={ownerId:this.ownerId,contactId,messageId};
   const requested=await this.options.storage.execute<MediaAttemptView|null>('media.request',{...scope,...input});if(requested)return {...await this.read(contactId,messageId),requestedAttempt:requested};
+  const kind=await this.options.storage.execute<MediaSnapshot['kind']>('media.kind',scope);
+  const adapter=this.options.adapters.find(a=>a.supports(kind,input.goal));if(!adapter)throw new StorageFailure('media_adapter_unavailable');
+  // 重启后的手动取图先重验当前会话来源；不读取历史页或派发记忆任务。
+  if(signal?.aborted)throw new StorageFailure('media_interrupted');
+  if(input.goal!=='audio_conversion')await this.options.ensureSourceReady?.(contactId,signal);
   const state=await this.read(contactId,messageId);
-  const adapter=this.options.adapters.find(a=>a.supports(state.kind,input.goal));if(!adapter)throw new StorageFailure('media_adapter_unavailable');
   const token=input.goal==='audio_conversion'?null:await this.options.contacts.eligibility(contactId);
   this.available();const begin=await this.options.storage.execute<Begin>('media.begin',{...scope,...input,token,adapterVersion:adapter.version});
   if(begin.reused)return this.requestResult(contactId,messageId,input);

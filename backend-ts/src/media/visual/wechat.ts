@@ -75,6 +75,7 @@ async function checked(request:VisualRequest):Promise<void> {
 }
 function qualityProofString(opened:WechatImageOpenResult):string {
   const proof=opened.qualityProof;
+  if(proof.kind==='wechat-message-image-content-v2')return proof.kind+':'+createHash('sha256').update(JSON.stringify(proof)).digest('hex');
   if(proof.kind==='wechat-message-image-content-v1')return proof.kind+':'+createHash('sha256').update(JSON.stringify([
     proof.kind,proof.resourceInfoId,proof.matchingResourceIds,proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256,
     proof.sourceSha256,proof.conversion,proof.contentWidth,proof.contentHeight])).digest('hex');
@@ -93,6 +94,10 @@ function qualityProofString(opened:WechatImageOpenResult):string {
 }
 function association(opened:WechatImageOpenResult,source:HistorySource,messageId:string) {
   const proof=opened.qualityProof;
+  if(proof.kind==='wechat-message-image-content-v2')return Object.freeze({protocol:'media-association-v1' as const,
+    profileId:'wechat-message-image-v2',recordId:source.recordId,messageId,
+    resourceIdentity:'wechat-message-image-v2:'+createHash('sha256').update(JSON.stringify([
+      opened.resourceSourceGeneration,proof,opened.partition,opened.table,opened.localId,opened.serverId,opened.sentAt])).digest('hex')});
   const identitySource=proof.kind==='wechat-cdn-big-hd-exact-content-v4'||proof.kind==='wechat-message-image-content-v1'
     ?[opened.resourceSourceGeneration,proof.resourceInfoId,proof.matchingResourceIds,proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256,
       proof.sourceSha256,proof.conversion,opened.partition,opened.table,opened.localId,opened.serverId,opened.sentAt]
@@ -195,7 +200,14 @@ export function createWechatImageResourcePort(executable?:string,shared?:SharedW
       const resource:VisualResource=Object.freeze({
         association:association(stableOpened,expectedSource,input.messageId),authority:stableAuthority,envelope:'plain',
         expectedBytes:stableOpened.expectedBytes,expectedSha256:stableOpened.expectedSha256,complete:true as const,
-        quality:stableOpened.quality==='original'?Object.freeze({kind:'original' as const,proof:hashProof}):Object.freeze({kind:'unknown' as const,proof:null}),bytes:resourceBytes(request,client,stableOpened),
+        quality:stableOpened.qualityProof.kind==='wechat-message-image-content-v2'
+          ?fixed({kind:stableOpened.quality,proof:hashProof,evidence:{protocol:'wechat-image-quality-v1' as const,
+            quality:stableOpened.quality,sourceVariant:stableOpened.qualityProof.sourceVariant,
+            resourceInfoId:stableOpened.qualityProof.resourceInfoId,resources:stableOpened.qualityProof.matchingResources,
+            sourceSha256:stableOpened.qualityProof.sourceSha256,contentSha256:stableOpened.qualityProof.verifiedSha256,
+            originalProofDigest:stableOpened.qualityProof.originalProof
+              ?createHash('sha256').update(JSON.stringify(stableOpened.qualityProof.originalProof)).digest('hex'):null}})
+          :stableOpened.quality==='original'?Object.freeze({kind:'original' as const,proof:hashProof}):Object.freeze({kind:'unknown' as const,proof:null}),bytes:resourceBytes(request,client,stableOpened),
         close,
       });
       transferred=true;

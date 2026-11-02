@@ -1,4 +1,4 @@
-import type {MediaAssociationProof, ImageQuality} from '../sqlite/contracts.ts';
+import type {MediaAssociationProof, ImageQuality, ImageQualityEvidence} from '../sqlite/contracts.ts';
 import type {ReadEligibility} from '../../contacts/sqlite/contracts.ts';
 import type {HistorySource} from '../../history/sqlite/contracts.ts';
 
@@ -16,7 +16,7 @@ export interface VisualResource {
   expectedSha256: string;
   /** 必须是固定资源的完整快照读取；不能由本次读到的长度反推expectedBytes。 */
   complete: true;
-  quality: {kind:Exclude<ImageQuality,'not_applicable'>; proof:string|null};
+  quality: {kind:Exclude<ImageQuality,'not_applicable'>; proof:string|null;evidence?:ImageQualityEvidence};
   bytes: AsyncIterable<Uint8Array>;
   /** 受控端口仅在当前账号核验后提供已有密钥；不刷新、不扫描、不搜索兄弟文件。 */
   withImageKey?<T>(consume:(key:{aesKey?:Uint8Array;xorKey?:number})=>T):Promise<T>;

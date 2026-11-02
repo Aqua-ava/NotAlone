@@ -5,7 +5,7 @@ import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {SqliteContactService} from '../src/contacts/sqlite/service.ts';
 import {SqliteHistoryService} from '../src/history/sqlite/service.ts';
 import {SqliteMediaService} from '../src/media/sqlite/service.ts';
-export async function fixture(t,adapter=null,{onAcceptedPage,onMediaChanged}={}){
+export async function fixture(t,adapter=null,{onAcceptedPage,onMediaChanged,ensureSourceReady}={}){
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-media-')));
  const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test',registryModule:new URL('./fixtures/media/registry.mjs',import.meta.url).href});
  const owner='00000000-0000-4000-8000-000000000001';
@@ -15,7 +15,7 @@ export async function fixture(t,adapter=null,{onAcceptedPage,onMediaChanged}={})
  const target={protocol:'private-history-v1',descriptor:'synthetic-fixed',partitions:['a'],tables:[{partition:'a',instance:'one'}],sourceGeneration:'source-1'};
  const channel={inspect:async s=>({...report,accountKey:s.accountKey,conversationKey:s.conversationKey,sourceGeneration:s.token.source_generation}),target:async()=>target,page:async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:['image','voice','video','text'].map((kind,i)=>({partition:'a',table:'one',localId:String(i+1),serverId:'0',sender:'contact',kind,text:kind==='text'?'合成文字':null,originalType:kind,sentAt:null,timePrecision:null,orderScheme:null,orderKey:null,stateAssurance:'verified'})),completedPartitions:['a'],exhausted:true})};
  const history=new SqliteHistoryService(storage,contacts,channel,undefined,undefined,onAcceptedPage);const contact=saved.bindings[0].contact_id;await history.synchronize(contact);const messages=(await history.read(contact)).messages;
- const media=new SqliteMediaService({storage,contacts,history,userData:root,adapters:adapter?[adapter]:[],changed:onMediaChanged});await media.initialize();
+ const media=new SqliteMediaService({storage,contacts,history,userData:root,adapters:adapter?[adapter]:[],changed:onMediaChanged,ensureSourceReady});await media.initialize();
  t.after(async()=>{await media.close();await history.close();await contacts.close();await storage.close();await rm(root,{recursive:true,force:true});});
  return {root,storage,contacts,history,media,owner,contact,messages,saved:saved.bindings,channel,target};
 }

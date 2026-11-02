@@ -268,3 +268,4 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 152. [ADR-152：历史与增量记忆分开自动处理](adr/152-history-and-incremental-memory-processing.md)（已采纳，实现及验收进行中）
 153. [ADR-153：图文共同参与记忆处理](adr/153-joint-text-image-memory-input.md)（已采纳，图文接线尚未实现）
+154. [ADR-154：按微信资源来源记录图片版本](adr/154-source-grounded-image-versions.md)

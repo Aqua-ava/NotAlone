@@ -80,3 +80,9 @@ CREATE TRIGGER media_file_identity_immutable BEFORE UPDATE OF owner_id,id,contac
 CREATE TRIGGER media_attempt_identity_immutable BEFORE UPDATE OF owner_id,id,contact_id,message_id,request_key,goal,record_id,input_file_id ON media_extraction_attempt
  BEGIN SELECT RAISE(ABORT,'media_attempt_immutable'); END;
 `});
+
+/** 历史图片保留原分类与证明，仅新保存结果可附带资源分类依据。 */
+export const mediaImageQualityEvidenceMigration = (version: number): StorageMigration => ({version, sql: `
+ALTER TABLE media_file ADD COLUMN image_quality_evidence TEXT CHECK(image_quality_evidence IS NULL OR
+ (content_state<>'erased' AND role='image_display' AND length(image_quality_evidence)<=8192 AND json_valid(image_quality_evidence)));
+`});

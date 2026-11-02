@@ -190,11 +190,11 @@ export async function apply(ctx: Context) {
       historyResync=new SqliteHistoryResyncService(storage,contacts,createHistoryChannel,deletionHolders);}
     if(history)historyRecertify=new SqliteHistoryRecertifyService(storage,contacts,createHistoryChannel,deletionHolders,{stopHistory:id=>history!.stop(id),onCompleted:id=>{if(automaticBackground)firstHistory?.wakeContact(id);}});
     const historyClearHttp=historyClear&&historyResync?new SqliteHistoryClearHttp(historyClear,historyResync,historyRecertify):undefined;
-    // 图片同步仅装配原图入口；其他媒体继续沿各自已认证能力开放。
+    // 图片同步装配来源可验证的图片入口；其他媒体沿已认证能力开放。
     const originalImages=history&&await supportsWechatOriginalImages(sqlite.wechatCliPath);
     media = new SqliteMediaService({storage,contacts,history:{source:(contactId,recordId)=>{
       if(!history)throw new StorageFailure('media_source_unavailable');return history.source(contactId,recordId);
-    }},userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,changed:(contactId,messageId)=>events?.publish('message.updated',contactId,{message_id:messageId}),adapters:originalImages?[new OriginalImageMediaAdapter(createWechatImageResourcePort(sqlite.wechatCliPath,wechat))]:[]});
+    }},...(history?{ensureSourceReady:(contactId:string,signal?:AbortSignal)=>history!.ensureSourceReady(contactId,signal)}:{}),userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,changed:(contactId,messageId)=>events?.publish('message.updated',contactId,{message_id:messageId}),adapters:originalImages?[new OriginalImageMediaAdapter(createWechatImageResourcePort(sqlite.wechatCliPath,wechat))]:[]});
     await media.initialize();
     if(originalImages)imageSync=new SqliteImageSyncCoordinator(storage,contacts,media);
     if(history&&await supportsWechatQuotes(sqlite.wechatCliPath))quoteSync=new SqliteQuoteSyncCoordinator(contacts,history);

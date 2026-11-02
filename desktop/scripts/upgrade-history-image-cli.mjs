@@ -341,6 +341,38 @@ const sharedProcessPolicy=Object.freeze({
  identityAlgorithmSha256:"57f92f51358595d049d3bc7d82f13ca2eccf939f611dfc057573198fc2116b0d"
 });
 
+// 图片来源分类只修改图片读取与测试，保留账号、来源身份、共享进程及引用合同。
+const imageQualityPolicy=Object.freeze({
+ ...sharedProcessPolicy,
+ oldName:"shared-cli-20261102-v2",
+ newName:"image-quality-20261102-v1",
+ oldCliSha256:"62600db86b0eb04cec57adf32cd03fe688e2a2d4241cf3f3f99a34126d348bcc",
+ newCliSha256:"8c2711c5ec49221ac293c1bf79785d735f72960602b2cd124a4c4c873ce8f7fe",
+ oldOverlaySha256:"a30971e780e77290dfb6f5425c1917f7c46bfcc847322a2b53196989629479f2",
+ newOverlaySha256:"0226344fc635b1599cfce677dadaf59f9f171a3d1c86909d592a211eacb003aa",
+ oldImageProtocol:"wechat-original-image-v1",
+ newImageProtocol:"wechat-original-image-v1",
+ oldImageQualityProof:"wechat-message-image-content-v1",
+ newImageQualityProof:"wechat-message-image-content-v2",
+ oldImageSha256:"e511286e25d979894d527eff48731551052db7f3ee7adacdb218707885c28eb6",
+ oldImageTestSha256:"79590545dffd31afd210f2e84d02eb5910ea18caacf46ccedbbd327e0f29750b",
+ imageSha256:"2b2ba7ec17510eb9f46fa7967d629a34efefcd62a324415abb084a93f61843aa",
+ imageTestSha256:"a3664eb970f705722e87faa752f888a22020717cfcad560f08031b9257098bbc",
+ oldQuoteProtocol:"wechat-quote-message-v1",
+ newQuoteProtocol:"wechat-quote-message-v1",
+ oldQuoteReader:"wechat-quote-normal-tail-v2",
+ newQuoteReader:"wechat-quote-normal-tail-v2",
+ oldQuoteInline:"wechat-quote-inline-sync-v1",
+ newQuoteInline:"wechat-quote-inline-sync-v1",
+ oldSharedProcessProtocol:"wechat-shared-process-v1",
+ newSharedProcessProtocol:"wechat-shared-process-v1",
+ protocolOldSha256:"e57b08c66dea2a5c6ee63c0122ac64ca1008b8b78b54b2d51d8e8619cd16de83",
+ protocolNewSha256:"e57b08c66dea2a5c6ee63c0122ac64ca1008b8b78b54b2d51d8e8619cd16de83",
+ identityFiles:Object.freeze({"cmd/wechat-cli/notalone_identity_aliases.go":"a2060c261101e537a477b16e8ea706c7ccb1e90bbc1c99ebb203b23c9681193c","cmd/wechat-cli/notalone_watch_darwin.go":"697b69668348c4f26fa79d0612b579258ff5667c32dbc5a73e21851f95e294df","cmd/wechat-cli/notalone_history.go":"735ea75af0e2202e40d7cce08a2501b9e4bd5bf855077427bb8337ff34d4ca4f","cmd/wechat-cli/notalone_snapshot.go":"9f0e158ef32491f20e334c91e0d8d890d3539c5d4efd3cb64174b818219b2928","cmd/wechat-cli/notalone_account_metadata.go":"934b33f197171a3eb4b0ccaf38ed0bf43996efd0fb761343360f7926acb1a78d"}),
+ sourceChanges:Object.freeze({}),
+ identityAlgorithmSha256:"bf1c53644693cbadc354d5b93caf5bf11d21839520d355700f705bc4143dbc49"
+});
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -750,7 +782,10 @@ const quoteTailTools=createUpgradeImageCliTools({repositoryRoot,policy:quoteTail
 const quoteTailCloseTools=createUpgradeImageCliTools({repositoryRoot,policy:quoteTailClosePolicy});
 const quoteInlineTools=createUpgradeImageCliTools({repositoryRoot,policy:quoteInlinePolicy});
 const sharedProcessTools=createUpgradeImageCliTools({repositoryRoot,policy:sharedProcessPolicy});
-export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',sharedProcessPolicy.oldName)
+const imageQualityTools=createUpgradeImageCliTools({repositoryRoot,policy:imageQualityPolicy});
+export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageQualityPolicy.oldName)
+ &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageQualityPolicy.newName)
+ ?imageQualityTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',sharedProcessPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',sharedProcessPolicy.newName)
  ?sharedProcessTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteInlinePolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteInlinePolicy.newName)

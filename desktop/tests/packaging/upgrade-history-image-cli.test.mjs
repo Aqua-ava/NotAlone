@@ -277,6 +277,40 @@ test('tail引用reader升级绑定既有quote源码及能力声明，图片合�
  const aliases=JSON.parse(await readFile(path.join(f.toRoot,'source-identity-aliases.json'),'utf8'));assert.deepEqual(aliases.aliases,f.aliases);
 });
 
+async function syntheticImageQualityUpgradeFixture() {
+ const fixture=await syntheticUpgradeFixture({existingImage:true});
+ const preserved={quoteProtocol:'wechat-quote-message-v1',quoteReader:'wechat-quote-normal-tail-v2',quoteInline:'wechat-quote-inline-sync-v1',sharedProcessProtocol:'wechat-shared-process-v1'};
+ for(const [root,proof] of [[fixture.fromRoot,'wechat-message-image-content-v1'],[fixture.toRoot,'wechat-message-image-content-v2']]){
+  const file=path.join(root,'manifest.json'),manifest=JSON.parse(await readFile(file,'utf8'));
+  await writeFile(file,JSON.stringify({...manifest,...preserved,originalImageQualityProof:proof}));
+ }
+ fixture.policy={...fixture.policy,oldImageQualityProof:'wechat-message-image-content-v1',newImageQualityProof:'wechat-message-image-content-v2',
+  oldQuoteProtocol:preserved.quoteProtocol,newQuoteProtocol:preserved.quoteProtocol,oldQuoteReader:preserved.quoteReader,newQuoteReader:preserved.quoteReader,
+  oldQuoteInline:preserved.quoteInline,newQuoteInline:preserved.quoteInline,oldSharedProcessProtocol:preserved.sharedProcessProtocol,newSharedProcessProtocol:preserved.sharedProcessProtocol};
+ fixture.tools=createUpgradeImageCliTools({repositoryRoot:fixture.repositoryRoot,policy:fixture.policy});
+ return fixture;
+}
+
+test('图片来源分类升级只改变两份图片源码，保留共享进程、引用能力和来源别名',async t=>{
+ const f=await syntheticImageQualityUpgradeFixture();t.after(()=>rm(f.repositoryRoot,{recursive:true,force:true}));
+ const before=await readFile(path.join(f.dbRoot,'business.sqlite'));
+ assert.equal((await f.tools.prepareAliases(f)).status,'prepared');
+ const aliases=JSON.parse(await readFile(path.join(f.toRoot,'source-identity-aliases.json'),'utf8'));
+ assert.deepEqual(aliases.aliases,f.aliases);assert.equal(aliases.artifactSha256,f.policy.newCliSha256);
+ assert.deepEqual(await readFile(path.join(f.dbRoot,'business.sqlite')),before);
+});
+
+test('图片分类升级拒绝伪称旧合同、丢失既有能力或夹带身份源码变化',async t=>{
+ for(const change of ['proof','shared','source'])await t.test(change,async t=>{
+  const f=await syntheticImageQualityUpgradeFixture();t.after(()=>rm(f.repositoryRoot,{recursive:true,force:true}));
+  if(change==='source')await writeFile(path.join(f.toRoot,'source/cmd/wechat-cli/notalone_history.go'),'changed identity');
+  else{const file=path.join(f.toRoot,'manifest.json'),manifest=JSON.parse(await readFile(file,'utf8'));
+   if(change==='proof')manifest.originalImageQualityProof='wechat-message-image-content-v1';else delete manifest.sharedProcessProtocol;
+   await writeFile(file,JSON.stringify(manifest));}
+  await assert.rejects(f.tools.prepareAliases(f),change==='source'?/history_image_upgrade_source_mismatch/:/history_image_upgrade_manifest_mismatch/);
+ });
+});
+
 test('未认证的tail引用能力声明不能复用固定升级证明',async t=>{
  const f=await syntheticUpgradeFixture({existingImage:true,quotes:true,quoteTail:true});t.after(()=>rm(f.repositoryRoot,{recursive:true,force:true}));
  const p=path.join(f.toRoot,'manifest.json'),m=JSON.parse(await readFile(p,'utf8'));m.quoteReader='unverified';await writeFile(p,JSON.stringify(m));

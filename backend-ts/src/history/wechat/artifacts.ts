@@ -41,7 +41,7 @@ async function readNarrowWechatManifest(executable: string): Promise<{options:Na
       const row = manifest as Record<string, unknown>;
       if (typeof row.cliSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.cliSha256)
         || typeof row.wcdbSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.wcdbSha256)) return reject();
-      const imageKeyChannel=row.originalImageProtocol==='wechat-original-image-v1'&&['wechat-cdn-big-hd-exact-content-v4','wechat-message-image-content-v1'].includes(row.originalImageQualityProof as string);
+      const imageKeyChannel=row.originalImageProtocol==='wechat-original-image-v1'&&['wechat-cdn-big-hd-exact-content-v4','wechat-message-image-content-v1','wechat-message-image-content-v2'].includes(row.originalImageQualityProof as string);
       const inlineQuotes=row.quoteProtocol==='wechat-quote-message-v1'&&row.quoteReader==='wechat-quote-normal-tail-v2'&&row.quoteInline==='wechat-quote-inline-sync-v1';
       return {options:{ executable, expectedCliSha256: row.cliSha256, expectedWcdbSha256: row.wcdbSha256,...(imageKeyChannel?{imageKeyChannel:true as const}:{}),...(inlineQuotes?{inlineQuotes:true as const}:{}) },originalImageProtocol:row.originalImageProtocol,originalImageQualityProof:row.originalImageQualityProof,quoteProtocol:row.quoteProtocol,quoteReader:row.quoteReader,sharedProcessProtocol:row.sharedProcessProtocol};
     } finally { await handle.close(); }
@@ -70,7 +70,7 @@ export async function supportsWechatQuotes(executable?:string):Promise<boolean>{
 export async function supportsWechatOriginalImages(executable?:string):Promise<boolean>{
  if(!executable)return false;
  try{const manifest=await readNarrowWechatManifest(executable);return manifest.originalImageProtocol==='wechat-original-image-v1'
-  &&manifest.originalImageQualityProof==='wechat-message-image-content-v1';}
+  &&['wechat-message-image-content-v1','wechat-message-image-content-v2'].includes(manifest.originalImageQualityProof as string);}
  catch{return false;}
 }
 
@@ -78,6 +78,6 @@ export async function supportsWechatOriginalImages(executable?:string):Promise<b
 export async function supportsWechatImageKeyChannel(executable?:string):Promise<boolean>{
  if(!executable)return false;
  try{const manifest=await readNarrowWechatManifest(executable);return manifest.originalImageProtocol==='wechat-original-image-v1'
-  &&['wechat-cdn-big-hd-exact-content-v4','wechat-message-image-content-v1'].includes(manifest.originalImageQualityProof as string);}
+  &&['wechat-cdn-big-hd-exact-content-v4','wechat-message-image-content-v1','wechat-message-image-content-v2'].includes(manifest.originalImageQualityProof as string);}
  catch{return false;}
 }

@@ -1,5 +1,7 @@
 # 图片与视频类型合同（17）
 
+按 [ADR-154](../../../../architecture/adr/154-source-grounded-image-versions.md)，`wechat-message-image-content-v2`保留实际绑定的主图／缩略图候选、匹配资源原始类型和可选原图内容证明；不按尺寸、大小阈值或资源高位数字猜测类别。客户端核对分类、资源集合及同一份内容证明，保存模块持久化分类依据并随删除清除。旧content-v1与已有原图证明兼容，不自动重读旧图片。
+
 `contracts.ts` 的 `VisualResourcePort.open(request)` 是19的认证资源接点。request只包含当前固定消息、实际来源、完整读取资格、目标、取消信号和checkpoint；没有任意SQL、文件路径、save或批量范围。端口必须先证明当前账号/绑定/来源代次和唯一消息到资源映射，再打开精确资源；无法证明时不读字节，返回 `media_association_unverified`。字节流及打开须响应取消，close等待全部在途读取结算且不留下XML、路径、密钥或字节缓存。
 
 资源返回固定快照的预期长度、SHA-256、完整读取声明、与request逐字段相同的读取资格和16的窄关联证明；预期长度/摘要不得由本次收到的片段补造。图片质量与可解码性分开，original/thumbnail必须有同资源可靠质量证明；否则unknown。只允许内部受信任装配注入，HTTP/renderer/Tool不能构造端口或资源。合成资源登记仅证明类型与生命周期，不能认证真实微信归属。

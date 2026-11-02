@@ -40,7 +40,7 @@ async function collect(context:VisualRequest,resource:VisualResource):Promise<Bu
 function quality(resource:VisualResource):VisualResource['quality'] {
   const value=resource.quality;
   if(!value||!['original','thumbnail','unknown'].includes(value.kind))return {kind:'unknown',proof:null};
-  if(value.kind==='thumbnail'||value.kind==='unknown')return {kind:value.kind,proof:null};
+  if(value.kind==='thumbnail'||value.kind==='unknown')return {kind:value.kind,proof:null,...(value.evidence?{evidence:value.evidence}:{})};
   if(typeof value.proof==='string'&&/^[a-zA-Z0-9_:-]{1,128}$/.test(value.proof))return value;
   return {kind:'unknown',proof:null};
 }
@@ -110,7 +110,8 @@ export class VisualMediaAdapter implements MediaAdapter {
           }
           await context.checkpoint();
           if(validation.containerValid!==true||validation.viewable!==(context.kind==='image')||validation.playable!==(context.kind==='video'))throw new StorageFailure('media_validation_failed');
-          return {...validation,imageQuality:imageQuality?.kind??'not_applicable',qualityProof:imageQuality?.proof??null};
+          return {...validation,imageQuality:imageQuality?.kind??'not_applicable',qualityProof:imageQuality?.proof??null,
+            ...(imageQuality?.evidence?{imageQualityEvidence:imageQuality.evidence}:{})};
         }});
       await context.checkpoint();
       return {association:resource.association};

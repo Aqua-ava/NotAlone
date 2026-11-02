@@ -11,6 +11,7 @@ export interface ContactHistoryImageMedia {
   fileId: string | null;
   mimeType: string | null;
   errorCode?: string | null;
+  imageQuality?:'original'|'thumbnail'|'unknown';
 }
 export interface ContactHistoryMessage {
   messageId: string;

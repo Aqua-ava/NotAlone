@@ -113,5 +113,7 @@ export function HistoryImageBubble({ media, imageMedia, selection }: Props) {
         setFailed(true);
         void media.releasePreview(preview.sessionId).catch(() => {});
       }} />}
+    {!status && preview && <span className="contact-chat-image-status">{imageMedia?.imageQuality==='thumbnail'?'缩略图'
+      :imageMedia?.imageQuality==='original'||state==='original'?'原图':'图片版本未确认'}</span>}
   </div>;
 }
