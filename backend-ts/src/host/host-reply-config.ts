@@ -52,6 +52,11 @@ const CONTEXT_WINDOW_TOKENS = 1048576;
 const SAFETY_MARGIN_TOKENS = 65536;
 const PROVIDER = 'notalone-deepseek';
 
+/** 按明确接收方选密钥；供应商之间不回落，避免把官方密钥送到转发服务。 */
+export function modelCredentialKey(baseURL:string):'NOTALONE_DEEPSEEK_API_KEY'|'NOTALONE_OPENCODE_API_KEY'{
+ return new URL(baseURL).origin==='https://opencode.ai'?'NOTALONE_OPENCODE_API_KEY':'NOTALONE_DEEPSEEK_API_KEY';
+}
+
 /** 配置成功只表示可装配；实际发送仍须经过05的最终载荷计量、额度和来源守卫。 */
 export function resolveHostReplyConfiguration(
   environment: HostReplyEnvironment,
@@ -69,7 +74,7 @@ export function resolveHostReplyConfiguration(
   // 用户已废除ECNU；旧模型或已知旧入口都要求显式改配置，不自动换供应商。
   if (model === 'ecnu-max' || baseURL === ECNU_BASE_URL) return unavailable('ecnu_provider_retired');
 
-  const rawKey = environment.NOTALONE_DEEPSEEK_API_KEY;
+  const rawKey = environment[modelCredentialKey(baseURL)];
   if (typeof rawKey !== 'string') return unavailable('reply_model_unconfigured');
   const key = normalizeApiKey(rawKey);
   if (!key.ok) return unavailable(key.reason === 'empty'

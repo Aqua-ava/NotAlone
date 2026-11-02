@@ -5,7 +5,7 @@ import {resolveHostReplyConfiguration} from '../src/host/host-reply-config.ts';
 
 const syntheticKey = 'synthetic-host-config-key';
 const configured = (environment = {}, options = {}) => {
-  const result = resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY: syntheticKey, ...environment}, options);
+  const result = resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY: syntheticKey, NOTALONE_OPENCODE_API_KEY: syntheticKey, ...environment}, options);
   assert.equal(result.status, 'configured');
   return result;
 };
@@ -16,7 +16,7 @@ test('OpenCode Go模型使用独立容量、Bearer认证及同一Go套餐的核�
     ['https://opencode.ai/inference/go/anthropic/v1','https://opencode.ai/inference/go/openai/v1/chat/completions'],
     ['https://opencode.ai/zen/go/v1','https://opencode.ai/zen/go/v1/chat/completions'],
   ]) {
-    const c=configured({NOTALONE_DEEPSEEK_BASE_URL:base,NOTALONE_DEEPSEEK_MODEL:'deepseek-v4.1-flash'});
+    const c=configured({NOTALONE_OPENCODE_API_KEY:syntheticKey,NOTALONE_DEEPSEEK_BASE_URL:base,NOTALONE_DEEPSEEK_MODEL:'deepseek-v4.1-flash'});
     assert.equal(c.model.model,'deepseek-v4.1-flash');
     assert.equal(c.model.maxTokens,384000);
     assert.equal(c.model.budgetProfile.context_window_tokens,1000000);
@@ -188,3 +188,14 @@ test('公开官方adapter实际生成的路由、凭据、输出和思考字段�
     assert.equal(resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:syntheticKey,NOTALONE_DEEPSEEK_BASE_URL:base}).code,'reply_model_configuration_invalid');
   }
  });
+
+test('OpenCode与官方DeepSeek密钥按接收方隔离，不相互回落',async()=>{
+ const keys={NOTALONE_DEEPSEEK_API_KEY:'synthetic-official-key',NOTALONE_OPENCODE_API_KEY:'synthetic-opencode-key'};
+ const official=resolveHostReplyConfiguration(keys);assert.equal(official.status,'configured');
+ assert.equal((await official.provider.resolveAuth(official.provider.connection)).headers['x-api-key'],'synthetic-official-key');
+ const route={NOTALONE_DEEPSEEK_BASE_URL:'https://opencode.ai/inference/go/anthropic',NOTALONE_DEEPSEEK_MODEL:'deepseek-v4.1-flash'};
+ const opencode=resolveHostReplyConfiguration({...keys,...route});assert.equal(opencode.status,'configured');
+ assert.equal((await opencode.provider.resolveAuth(opencode.provider.connection)).headers.authorization,'Bearer synthetic-opencode-key');
+ assert.equal(resolveHostReplyConfiguration({...route,NOTALONE_DEEPSEEK_API_KEY:keys.NOTALONE_DEEPSEEK_API_KEY}).status,'unavailable');
+ assert.equal(resolveHostReplyConfiguration({NOTALONE_OPENCODE_API_KEY:keys.NOTALONE_OPENCODE_API_KEY}).status,'unavailable');
+});

@@ -94,3 +94,16 @@ test('自填模型地址拒绝远端明文、凭据、查询与环境注入，�
  }
  await writeFile(location,'NOTALONE_DEEPSEEK_BASE_URL=https://user:secret@gateway.invalid/v1\n',{mode:0o600});const legacy=await SqliteModelSetup.open(location,{});assert.equal(legacy.status().deepseek_base_url,null);assert.doesNotMatch(JSON.stringify(legacy.status()),/secret|user:/);
 });
+
+test('两套凭据并存时按地址显示状态和保存，切换接收方不覆盖另一把密钥',async t=>{
+ const {SqliteModelSetup}=await import('../src/host/sqlite-model-setup.ts');
+ const root=await mkdtemp(path.join(tmpdir(),'notalone-two-model-keys-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const file=path.join(root,'model.env');
+ await writeFile(file,'NOTALONE_DEEPSEEK_API_KEY=synthetic-official-key\nNOTALONE_OPENCODE_API_KEY=synthetic-opencode-key\nNOTALONE_DEEPSEEK_BASE_URL=https://opencode.ai/inference/go/anthropic\nNOTALONE_DEEPSEEK_MODEL=deepseek-v4.1-flash\n',{mode:0o600});
+ const setup=await SqliteModelSetup.open(file,{});assert.equal(setup.status().credentials_configured,true);
+ await setup.saveConfiguration('https://opencode.ai/inference/go/anthropic','synthetic-new-opencode-key');
+ let saved=await readFile(file,'utf8');assert.match(saved,/NOTALONE_OPENCODE_API_KEY=synthetic-new-opencode-key/);assert.match(saved,/NOTALONE_DEEPSEEK_API_KEY=synthetic-official-key/);
+ await setup.save('synthetic-new-official-key',true);saved=await readFile(file,'utf8');
+ assert.match(saved,/NOTALONE_DEEPSEEK_API_KEY=synthetic-new-official-key/);assert.match(saved,/NOTALONE_OPENCODE_API_KEY=synthetic-new-opencode-key/);
+ const reopened=await SqliteModelSetup.open(file,{});assert.equal(reopened.status().official_deepseek_defaults,true);assert.doesNotMatch(JSON.stringify(reopened.status()),/synthetic/);
+});
