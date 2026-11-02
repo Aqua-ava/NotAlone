@@ -13,7 +13,7 @@ async function regular(file: string) {
   return stat;
 }
 /** 只读取显式制品旁的固定manifest；版本、补丁与实际制品hash仍由窄客户端复验。 */
-async function readNarrowWechatManifest(executable: string): Promise<{options:NarrowWechatClientOptions;originalImageProtocol:unknown;originalImageQualityProof:unknown;quoteProtocol:unknown;quoteReader:unknown}> {
+async function readNarrowWechatManifest(executable: string): Promise<{options:NarrowWechatClientOptions;originalImageProtocol:unknown;originalImageQualityProof:unknown;quoteProtocol:unknown;quoteReader:unknown;sharedProcessProtocol:unknown}> {
   try {
     if (typeof executable !== 'string') return reject();
     await regular(executable);
@@ -43,7 +43,7 @@ async function readNarrowWechatManifest(executable: string): Promise<{options:Na
         || typeof row.wcdbSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.wcdbSha256)) return reject();
       const imageKeyChannel=row.originalImageProtocol==='wechat-original-image-v1'&&['wechat-cdn-big-hd-exact-content-v4','wechat-message-image-content-v1'].includes(row.originalImageQualityProof as string);
       const inlineQuotes=row.quoteProtocol==='wechat-quote-message-v1'&&row.quoteReader==='wechat-quote-normal-tail-v2'&&row.quoteInline==='wechat-quote-inline-sync-v1';
-      return {options:{ executable, expectedCliSha256: row.cliSha256, expectedWcdbSha256: row.wcdbSha256,...(imageKeyChannel?{imageKeyChannel:true as const}:{}),...(inlineQuotes?{inlineQuotes:true as const}:{}) },originalImageProtocol:row.originalImageProtocol,originalImageQualityProof:row.originalImageQualityProof,quoteProtocol:row.quoteProtocol,quoteReader:row.quoteReader};
+      return {options:{ executable, expectedCliSha256: row.cliSha256, expectedWcdbSha256: row.wcdbSha256,...(imageKeyChannel?{imageKeyChannel:true as const}:{}),...(inlineQuotes?{inlineQuotes:true as const}:{}) },originalImageProtocol:row.originalImageProtocol,originalImageQualityProof:row.originalImageQualityProof,quoteProtocol:row.quoteProtocol,quoteReader:row.quoteReader,sharedProcessProtocol:row.sharedProcessProtocol};
     } finally { await handle.close(); }
   } catch (error) {
     if (error instanceof StorageFailure && error.code === 'history_artifact_manifest_missing') throw error;
@@ -53,6 +53,12 @@ async function readNarrowWechatManifest(executable: string): Promise<{options:Na
 
 export async function loadNarrowWechatOptions(executable:string):Promise<NarrowWechatClientOptions>{
  return (await readNarrowWechatManifest(executable)).options;
+}
+/** 共享宿主在启动进程前要求明确的切换协议；独立旧读取器仍可用于升级对照。 */
+export async function loadSharedNarrowWechatOptions(executable:string):Promise<NarrowWechatClientOptions>{
+ const manifest=await readNarrowWechatManifest(executable);
+ if(manifest.sharedProcessProtocol!=='wechat-shared-process-v1')return reject();
+ return manifest.options;
 }
 export async function supportsWechatQuotes(executable?:string):Promise<boolean>{
  if(!executable)return false;

@@ -1,47 +1,45 @@
 import {randomUUID} from 'node:crypto';
-import {execFile} from 'node:child_process';
-import {promisify} from 'node:util';
 import {ForegroundLocator,ForegroundLocationError,type ForegroundProbe,type ForegroundSession,type ForegroundObservation} from './foreground-location-locator.ts';
 import {NativeForegroundProbe} from './foreground-location-probe.ts';
 import {loadNarrowWechatOptions} from '../history/wechat/artifacts.ts';
 import {NarrowWechatClient} from '../history/wechat/native-client.ts';
+import type {SharedWechatClient} from '../history/wechat/shared-client.ts';
 
 export interface ForegroundSnapshot {enabled:boolean;readEpoch:string;account:{id:string;key:string;sourceGeneration:string;revision:string}|null;bindings:{binding_id:string;contact_id:string;account_id:string;conversation_locator:string;display_name:string|null;status:'active';grant_id:string|null;selection_generation:string;identityGeneration:string;dataGeneration:string;barrierGeneration:string}[]}
 export interface ForegroundBindingConfirmation {
  observationId:string;observedAt:string;contactId:string;bindingId:string;readEpoch:string;
  accountId:string;sourceGeneration:string;scopeRevision:string;grantId:string;selectionGeneration:string;dataGeneration:string;barrierGeneration:string;
 }
-const exec=promisify(execFile);
-/** 已核验的固定只读 CLI 只枚举会话身份、名称和类型；不请求消息正文。 */
+/** 只经共享窄协议枚举身份、名称和类型；不请求消息正文。 */
 export class ForegroundSessionList {
  private client?:NarrowWechatClient;
  private closed=false;
+ private lifetime=new AbortController();
+ private readonly owner={};
+ private readonly active=new Set<Promise<unknown>>();
  private readonly executable:string;
- constructor(executable:string){this.executable=executable;}
+ private readonly shared?:SharedWechatClient;
+ constructor(executable:string,shared?:SharedWechatClient){this.executable=executable;this.shared=shared;}
  async sessions(account:NonNullable<ForegroundSnapshot['account']>,options:{signal:AbortSignal;timeoutMs:number;limit:number;keyword?:string}):Promise<ForegroundSession[]>{
   if(this.closed||options.signal.aborted)throw new ForegroundLocationError('foreground_observation_cancelled');
-  try{
-   this.client??=new NarrowWechatClient(await loadNarrowWechatOptions(this.executable));
-   const before=await this.client.accountMetadata(options.signal);
-   if(before.status!=='verified'||before.accountKey!==account.key||before.sourceGeneration!==account.sourceGeneration)throw new Error();
-   const config=process.env.NOTALONE_WECHAT_CONFIG;
-   if(!config||!config.startsWith('/')||/[\0\r\n]/.test(config))throw new Error();
-   const args=['sessions','--type-filter','all','--limit',String(options.limit),'--strict-read-only'];
-   if(options.keyword!==undefined)args.push('--keyword',options.keyword);
-   const env:NodeJS.ProcessEnv={PATH:process.env.PATH,HOME:process.env.HOME,LANG:process.env.LANG,WECHAT_CLI_CONFIG:config};
-   const {stdout}=await exec(this.executable,args,{env,timeout:Math.max(1,options.timeoutMs),signal:options.signal,maxBuffer:1024*1024});
-   const envelope=JSON.parse(stdout),data=envelope?.data;
-   if(envelope?.ok!==true||!Array.isArray(data?.sessions)||data.sessions.length>=options.limit||data.warnings?.length||data.freshness?.metadata_cache_status!=='ready')throw new Error();
-   const rows:ForegroundSession[]=data.sessions.map((row:Record<string,unknown>)=>{
-    if(!row||typeof row.username!=='string'||!row.username||typeof row.display_name!=='string'||!row.display_name||[...row.display_name].length>256||typeof row.chat_type!=='string'||!row.chat_type||Object.keys(row).some(k=>!['username','display_name','chat_type','last_timestamp','sort_timestamp'].includes(k)))throw new Error();
-    return {username:row.username,display_name:row.display_name,chat_type:row.chat_type};
-   });
-   const after=await this.client.accountMetadata(options.signal);
-   if(JSON.stringify(before)!==JSON.stringify(after))throw new Error();
+  const signal=AbortSignal.any([options.signal,this.lifetime.signal,AbortSignal.timeout(Math.max(1,Math.floor(options.timeoutMs)))]);
+  const read=async(client:NarrowWechatClient)=>{
+   const before=await client.accountMetadata(signal);
+   if(before.status!=='verified'||before.accountKey!==account.key||before.sourceGeneration!==account.sourceGeneration)throw new ForegroundLocationError('foreground_scope_unavailable');
+   const sessions=await client.allSessionMetadata(before,{limit:options.limit,keyword:options.keyword},signal);
+   if(sessions.length>=options.limit)throw new ForegroundLocationError('foreground_scope_unavailable');
+   const rows:ForegroundSession[]=sessions.map(row=>({username:row.username,display_name:row.displayName,chat_type:row.kind}));
+   const after=await client.accountMetadata(signal);
+   if(JSON.stringify(before)!==JSON.stringify(after))throw new ForegroundLocationError('foreground_scope_unavailable');
    return rows;
-  }catch(error){const old=this.client;this.client=undefined;await old?.close();throw error;}
+  };
+  const work=this.shared?this.shared.run(this.owner,read,undefined,signal):(async()=>{
+   this.client??=new NarrowWechatClient(await loadNarrowWechatOptions(this.executable));
+   try{return await read(this.client);}catch(error){const old=this.client;this.client=undefined;await old?.close();throw error;}
+  })();
+  this.active.add(work);try{return await work;}finally{this.active.delete(work);}
  }
- async reset(){const old=this.client;this.client=undefined;await old?.close();}
+ async reset(){this.lifetime.abort();await Promise.allSettled([...this.active]);const old=this.client;this.client=undefined;await old?.close();if(!this.closed)this.lifetime=new AbortController();}
  async close(){this.closed=true;await this.reset();}
 }
 
@@ -56,7 +54,7 @@ export class SqliteForeground {
  private pendingConfirmation?:{snapshot:string;proof:ForegroundBindingConfirmation};
  private readonly options:{ownerId:string;probe:ForegroundProbe;snapshot:()=>Promise<ForegroundSnapshot>;sessions:(account:NonNullable<ForegroundSnapshot['account']>,options:{signal:AbortSignal;timeoutMs:number;limit:number;keyword?:string})=>Promise<ForegroundSession[]>;closeSessions:()=>Promise<void>;invalidateSessions?:()=>Promise<void>;confirmBinding?:(proof:ForegroundBindingConfirmation)=>Promise<void>};
  constructor(options:SqliteForeground['options']){this.options=options;}
- static create(ownerId:string,probePath:string,cliPath:string,snapshot:()=>Promise<ForegroundSnapshot>,confirmBinding?:(proof:ForegroundBindingConfirmation)=>Promise<void>){const list=new ForegroundSessionList(cliPath);return new SqliteForeground({ownerId,probe:new NativeForegroundProbe({executable:probePath}),snapshot,sessions:(a,o)=>list.sessions(a,o),closeSessions:()=>list.close(),invalidateSessions:()=>list.reset(),confirmBinding});}
+ static create(ownerId:string,probePath:string,cliPath:string,snapshot:()=>Promise<ForegroundSnapshot>,confirmBinding?:(proof:ForegroundBindingConfirmation)=>Promise<void>,shared?:SharedWechatClient){const list=new ForegroundSessionList(cliPath,shared);return new SqliteForeground({ownerId,probe:new NativeForegroundProbe({executable:probePath}),snapshot,sessions:(a,o)=>list.sessions(a,o),closeSessions:()=>list.close(),invalidateSessions:()=>list.reset(),confirmBinding});}
  observe(signal?:AbortSignal):Promise<ForegroundObservation>{
   if(this.closed||this.changing)throw new ForegroundLocationError('foreground_observation_cancelled');
   if(this.active||this.confirming)throw new ForegroundLocationError('foreground_observation_busy');

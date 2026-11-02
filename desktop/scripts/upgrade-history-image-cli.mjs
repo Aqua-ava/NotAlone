@@ -322,6 +322,25 @@ const quoteInlinePolicy=Object.freeze({
  identityAlgorithmSha256:"0b708ebbdcb462c637286077048abe79958cdc95248007a8cd42269d9009b860",
 });
 
+// 单进程切换的固定升级配对；账号和来源身份算法保持，新增会话释放与有界名单协议。
+const sharedProcessPolicy=Object.freeze({
+ ...quoteInlinePolicy,
+ oldName:"quote-inline-20261101-v1",
+ newName:"shared-cli-20261102-v2",
+ oldCliSha256:"ad9f9a095f902aee7c5709f1d864b91cb2479f45f016f9271194ab60a9b1f9dd",
+ newCliSha256:"62600db86b0eb04cec57adf32cd03fe688e2a2d4241cf3f3f99a34126d348bcc",
+ oldOverlaySha256:"707cc2a3f2463fb5ff7f0a2e446018d07bb3c745c549c0aca4252f03f4664488",
+ newOverlaySha256:"a30971e780e77290dfb6f5425c1917f7c46bfcc847322a2b53196989629479f2",
+ oldQuoteInline:"wechat-quote-inline-sync-v1",
+ newQuoteInline:"wechat-quote-inline-sync-v1",
+ newSharedProcessProtocol:"wechat-shared-process-v1",
+ protocolOldSha256:"3d629049d5d0f911e5eba16c78a23eef9cf824981230613e1314bac7968177fa",
+ protocolNewSha256:"e57b08c66dea2a5c6ee63c0122ac64ca1008b8b78b54b2d51d8e8619cd16de83",
+ identityFiles:{"cmd/wechat-cli/notalone_identity_aliases.go":"a2060c261101e537a477b16e8ea706c7ccb1e90bbc1c99ebb203b23c9681193c","cmd/wechat-cli/notalone_watch_darwin.go":"697b69668348c4f26fa79d0612b579258ff5667c32dbc5a73e21851f95e294df","cmd/wechat-cli/notalone_history.go":"735ea75af0e2202e40d7cce08a2501b9e4bd5bf855077427bb8337ff34d4ca4f","cmd/wechat-cli/notalone_snapshot.go":"9f0e158ef32491f20e334c91e0d8d890d3539c5d4efd3cb64174b818219b2928","cmd/wechat-cli/notalone_account_metadata.go":"58b4eb811c8b0ac4e16ee3279aab3ae81b60ad38827f3ae8f7f4808753c88858"},
+ sourceChanges:{"cmd/wechat-cli/notalone_account_metadata.go":{"old":"58b4eb811c8b0ac4e16ee3279aab3ae81b60ad38827f3ae8f7f4808753c88858","new":"934b33f197171a3eb4b0ccaf38ed0bf43996efd0fb761343360f7926acb1a78d"},"cmd/wechat-cli/notalone_selection_test.go":{"old":null,"new":"317338c933194208c08ab0c4d50d74a78564d5a4340f06a55e902a6672f36a6b"}},
+ identityAlgorithmSha256:"57f92f51358595d049d3bc7d82f13ca2eccf939f611dfc057573198fc2116b0d"
+});
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -493,7 +512,8 @@ function assertSourcePair(oldFiles, newFiles, policy) {
   for(const [name,pair] of Object.entries(policy.sourceChanges??{})){
     // 内联同步只额外开放固定页／增量投影文件；每份仍绑定旧、新摘要，不接受任意身份源码变化。
     const allowed=/^cmd\/wechat-cli\/notalone_quote(?:_[a-z0-9]+)*\.go$/.test(name)
-      ||policy.newQuoteInline==='wechat-quote-inline-sync-v1'&&/^cmd\/wechat-cli\/notalone_(?:snapshot|tail)(?:_test)?\.go$/.test(name);
+      ||policy.newQuoteInline==='wechat-quote-inline-sync-v1'&&/^cmd\/wechat-cli\/notalone_(?:snapshot|tail)(?:_test)?\.go$/.test(name)
+      ||policy.newSharedProcessProtocol==='wechat-shared-process-v1'&&/^cmd\/wechat-cli\/notalone_(?:account_metadata|selection)(?:_test)?\.go$/.test(name);
     if(!allowed||!isObject(pair)
       ||!(pair.old===null||hashPattern.test(pair.old))||!hashPattern.test(pair.new)
       ||(oldFiles.get(name)??null)!==pair.old||newFiles.get(name)!==pair.new)fail('history_image_upgrade_source_mismatch');
@@ -578,7 +598,8 @@ function manifestForSide(policy, side) {
       ? { originalImageQualityProof: isNew ? policy.newImageQualityProof : policy.oldImageQualityProof } : {}),
     ...((isNew?policy.newQuoteProtocol:policy.oldQuoteProtocol)?{quoteProtocol:isNew?policy.newQuoteProtocol:policy.oldQuoteProtocol}:{}),
     ...((isNew?policy.newQuoteReader:policy.oldQuoteReader)?{quoteReader:isNew?policy.newQuoteReader:policy.oldQuoteReader}:{}),
-    ...((isNew?policy.newQuoteInline:policy.oldQuoteInline)?{quoteInline:isNew?policy.newQuoteInline:policy.oldQuoteInline}:{}) };
+    ...((isNew?policy.newQuoteInline:policy.oldQuoteInline)?{quoteInline:isNew?policy.newQuoteInline:policy.oldQuoteInline}:{}),
+    ...((isNew?policy.newSharedProcessProtocol:policy.oldSharedProcessProtocol)?{sharedProcessProtocol:isNew?policy.newSharedProcessProtocol:policy.oldSharedProcessProtocol}:{}) };
 }
 
 export function createUpgradeImageCliTools({ repositoryRoot, policy, afterReceiptPublished } = {}) {
@@ -728,7 +749,10 @@ const imageContentTools=createUpgradeImageCliTools({repositoryRoot,policy:imageC
 const quoteTailTools=createUpgradeImageCliTools({repositoryRoot,policy:quoteTailPolicy});
 const quoteTailCloseTools=createUpgradeImageCliTools({repositoryRoot,policy:quoteTailClosePolicy});
 const quoteInlineTools=createUpgradeImageCliTools({repositoryRoot,policy:quoteInlinePolicy});
-export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteInlinePolicy.oldName)
+const sharedProcessTools=createUpgradeImageCliTools({repositoryRoot,policy:sharedProcessPolicy});
+export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',sharedProcessPolicy.oldName)
+ &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',sharedProcessPolicy.newName)
+ ?sharedProcessTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteInlinePolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteInlinePolicy.newName)
  ?quoteInlineTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteTailClosePolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',quoteTailClosePolicy.newName)

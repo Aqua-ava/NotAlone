@@ -273,3 +273,92 @@ func (h *notaloneHistorySession) metadataSessions(ctx context.Context) (report n
 	}
 	return notalonePrivateSessionMetadataReport{"wechat-private-session-metadata-v1", account, result}, nil
 }
+
+// 前台匹配只需要会话身份，不查询摘要、正文、发送者或消息类型。
+// 无关群的联系人信息缺失只退回稳定名称，不使整个名单失败。
+type notaloneAllSessionMetadata struct {
+	Username    string `json:"username"`
+	DisplayName string `json:"displayName"`
+	Kind        string `json:"kind"`
+}
+type notaloneAllSessionMetadataReport struct {
+	Format   string                        `json:"format"`
+	Account  notaloneAccountMetadataReport `json:"account"`
+	Sessions []notaloneAllSessionMetadata  `json:"sessions"`
+}
+
+func (h *notaloneHistorySession) metadataAllSessions(ctx context.Context, limit int, keyword string) (report notaloneAllSessionMetadataReport, err error) {
+	account, err := h.metadataAccount(ctx)
+	if err != nil {
+		return report, err
+	}
+	if account.Status != "verified" {
+		return report, notaloneFailure(*account.Reason)
+	}
+	session, err := h.server.openDBNoRefresh("session", "session.db")
+	if err != nil {
+		return report, notaloneFailure("history_metadata_unavailable")
+	}
+	defer session.Close()
+	rows, err := session.QueryBounded(ctx, 5000, "SELECT username FROM SessionTable WHERE COALESCE(is_hidden,0)=0 ORDER BY sort_timestamp DESC,username DESC LIMIT 5001")
+	if err != nil {
+		return report, notaloneFailure("history_metadata_unavailable")
+	}
+	contact, err := h.server.openDBNoRefresh("contact", "contact.db")
+	if err != nil {
+		return report, notaloneFailure("history_metadata_unavailable")
+	}
+	defer contact.Close()
+	result := []notaloneAllSessionMetadata{}
+	seen := map[string]bool{}
+	normalize := func(value string) string { return strings.ToLower(strings.Join(strings.Fields(value), "")) }
+	needle := normalize(keyword)
+	for _, row := range rows {
+		username := rowString(row, "username")
+		if !notaloneIdentity.MatchString(username) || seen[username] {
+			return report, notaloneFailure("history_identity_ambiguous")
+		}
+		seen[username] = true
+		displayName := username
+		verified := false
+		matched := strings.Contains(normalize(username), needle)
+		contacts, e := contact.QueryBounded(ctx, 2, "SELECT username,verify_flag,remark,nick_name,alias FROM contact WHERE username=? LIMIT 2", username)
+		if e != nil {
+			return report, notaloneFailure("history_metadata_unavailable")
+		}
+		if len(contacts) > 1 {
+			return report, notaloneFailure("history_identity_ambiguous")
+		}
+		if len(contacts) == 1 {
+			item := contacts[0]
+			verified = rowInt64(item, "verify_flag") != 0
+			for _, key := range []string{"remark", "nick_name"} {
+				if value := rowString(item, key); value != "" {
+					displayName = value
+					break
+				}
+			}
+			for _, key := range []string{"remark", "nick_name", "alias"} {
+				matched = matched || strings.Contains(normalize(rowString(item, key)), needle)
+			}
+		}
+		if len(displayName) == 0 || len(displayName) > 255 || !utf8.ValidString(displayName) || strings.ContainsAny(displayName, "\x00\r\n") {
+			return report, notaloneFailure("history_identity_unverified")
+		}
+		if !matched {
+			continue
+		}
+		result = append(result, notaloneAllSessionMetadata{username, displayName, agentChatType(username, wxkind.ClassifyUsername(username), verified)})
+		if len(result) == limit {
+			break
+		}
+	}
+	after, err := h.metadataAccount(ctx)
+	if err != nil {
+		return report, err
+	}
+	if after != account {
+		return report, notaloneFailure("history_scope_changed")
+	}
+	return notaloneAllSessionMetadataReport{"wechat-all-session-metadata-v1", account, result}, nil
+}

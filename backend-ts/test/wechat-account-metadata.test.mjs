@@ -5,6 +5,8 @@ import { watch } from 'node:fs';
 import { mkdtemp, mkdir, readFile, writeFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { SharedWechatClient } from '../src/history/wechat/shared-client.ts';
+import { ForegroundSessionList } from '../src/foreground/sqlite-foreground.ts';
 import { NarrowWechatClient } from '../src/history/wechat/native-client.ts';
 import { loadNarrowWechatOptions } from '../src/history/wechat/artifacts.ts';
 import { createWechatContactMetadata } from '../src/contacts/sqlite/wechat-metadata.ts';
@@ -33,6 +35,7 @@ if(s.mode==='no-config'){console.log(JSON.stringify({ok:false,error:{code:'histo
 if(s.mode==='unverified-source'){console.log(JSON.stringify({ok:false,error:{code:'history_source_unverified'}}));return;}
 if(s.mode==='explicit-config'&&(process.env.WECHAT_CLI_CONFIG!==stateFile||process.env.HOME!==s.expectedHome||process.env.NOTALONE_UNRELATED_SECRET)){console.log(JSON.stringify({ok:false,error:{code:'history_account_unavailable'}}));return;}
 if(r.op==='metadata-account'){data=account(s);if(s.mode==='account-body')data.body='BODY_SENTINEL';if(s.mode==='account-promoted')data.normalHistory=true;if(s.mode==='account-artifact')data.artifactSha256='f'.repeat(64);}
+if(r.op==='metadata-sessions-all')data={format:'wechat-all-session-metadata-v1',account:account(s),sessions:[{username:'friend-a',displayName:'合成甲',kind:'private'},{username:'room@chatroom',displayName:'合成群',kind:'group'},...['folded','bot','official_account','corp_im','stranger'].map(kind=>({username:'synthetic-'+kind,displayName:'合成其他类型',kind}))]};
 if(r.op==='metadata-sessions'){
  if(s.mode==='cancel')return;
  data={format:'wechat-private-session-metadata-v1',account:account(s),sessions:[{username:'friend-a',displayName:'合成甲',kind:'private',identityAssurance:'verified'},{username:'friend-b',displayName:'合成乙',kind:'private',identityAssurance:'verified'}]};
@@ -239,4 +242,45 @@ test('名单取消及factory关闭会等待真实受控子进程退出',async t=
   await requested(f,'metadata-sessions');controller.abort();await rejected;noProcess(Number(await readFile(f.pidFile,'utf8')));
   const g=await fixture(t,'cancel'),port=createWechatContactMetadata(g.executable);const evidence=await port.account();
   const reading=port.sessions(evidence),closed=assert.rejects(reading,{code:'history_native_closed'});await requested(g,'metadata-sessions');await port.close();await closed;noProcess(Number(await readFile(g.pidFile,'utf8')));
+});
+
+
+test('联系人元数据与前台名单共享同一进程，单个门面关闭不终止其他读者',async t=>{
+ const f=await fixture(t),shared=new SharedWechatClient(()=>loadNarrowWechatOptions(f.executable));
+ const first=createWechatContactMetadata(f.executable,shared),second=createWechatContactMetadata(f.executable,shared);
+ const foreground=new ForegroundSessionList(f.executable,shared);
+ f.cleanups.push(()=>shared.close(),()=>foreground.close(),()=>second.close(),()=>first.close());
+ const initial=await first.account(),pid=Number(await readFile(f.pidFile,'utf8'));
+ await first.close();assert.doesNotThrow(()=>process.kill(pid,0));
+ assert.deepEqual(await second.account(),initial);
+ const sessions=await foreground.sessions({id:'synthetic-id',key:accountKey,sourceGeneration:generation,revision:'1'},
+  {signal:new AbortController().signal,timeoutMs:5000,limit:100});
+ assert.deepEqual(sessions,[{username:'friend-a',display_name:'合成甲',chat_type:'private'},{username:'room@chatroom',display_name:'合成群',chat_type:'group'},...['folded','bot','official_account','corp_im','stranger'].map(kind=>({username:'synthetic-'+kind,display_name:'合成其他类型',chat_type:kind}))]);
+ assert.equal(Number(await readFile(f.pidFile,'utf8')),pid);
+ await foreground.reset();assert.deepEqual(await second.account(),initial);
+ await shared.close();noProcess(pid);
+});
+
+test('关闭等待中的元数据门面取消其排队读取，不终止另一持锁操作',async t=>{
+ const f=await fixture(t),shared=new SharedWechatClient(()=>loadNarrowWechatOptions(f.executable));
+ const metadata=createWechatContactMetadata(f.executable,shared);
+ f.cleanups.push(()=>shared.close(),()=>metadata.close());
+ const held=await shared.acquire({});await held.client.accountMetadata();
+ const pid=Number(await readFile(f.pidFile,'utf8'));
+ const pending=metadata.account(),rejected=assert.rejects(pending,{code:'history_native_cancelled'});
+ await metadata.close();await rejected;
+ assert.doesNotThrow(()=>process.kill(pid,0));
+ assert.equal((await requests(f)).filter(row=>row.op==='metadata-account').length,1);
+ assert.equal((await held.client.accountMetadata()).accountKey,accountKey);
+ await held.release();
+});
+
+
+test('全会话名单参数不能覆盖固定协议操作、账号或授权字段',async t=>{
+ const f=await fixture(t),account=await f.client.accountMetadata();
+ const before=(await requests(f)).length;
+ for(const extra of [{op:'page'},{account:'other'},{consent:'selected-history-v1'},{sql:'SELECT 1'}]){
+  await assert.rejects(f.client.allSessionMetadata(account,{limit:100,...extra}),{code:'history_request_invalid'});
+ }
+ assert.equal((await requests(f)).length,before);
 });

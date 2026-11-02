@@ -727,6 +727,7 @@ interface ActiveImage { token: string; sourceGeneration: string; expectedBytes: 
 /** 只提供已选目标的固定协议；正文分页另需当前支持认证，不提供通用命令、SQL或路径RPC。 */
 export class NarrowWechatClient {
   readonly #stoppedSignal=Promise.withResolvers<void>();
+  readonly #stopListeners=new Set<()=>void>();
   readonly #options: NarrowWechatClientOptions;
   #queue: Promise<void> = Promise.resolve();
   #native?: NativeProcess;
@@ -750,6 +751,13 @@ export class NarrowWechatClient {
   #stopping?: Promise<void>;
   constructor(options: NarrowWechatClientOptions) { this.#options = validatedOptions(options); }
   get stopped():Promise<void>{return this.#stoppedSignal.promise;}
+  /** 长寿命共享进程的可撤销守卫订阅；已关闭的会话必须释放订阅。 */
+  onStopped(listener:()=>void):()=>void {
+    if(typeof listener!=='function')return fail('history_request_invalid');
+    if(this.#stopped){listener();return ()=>{};}
+    this.#stopListeners.add(listener);
+    return ()=>{this.#stopListeners.delete(listener);};
+  }
   get stoppedReason():string|null{return this.#stopped?this.#failureCode:null;}
   inspectAccountSchema(signal?: AbortSignal): Promise<WechatAccountSchema> {
     try { signalValid(signal); } catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
@@ -778,6 +786,39 @@ export class NarrowWechatClient {
       const account = this.#account;
       return this.#request({op:'metadata-sessions',account:account.accountKey,consent:'private-session-list-metadata-v1'}, value => privateSessionMetadata(value, account, this.#options), 4 * 1024 * 1024);
     }, signal);
+  }
+  /** 仅释放会话资源；账号级来源守卫与一次性图片密钥通道继续属于当前进程。 */
+  releaseSelection(signal?:AbortSignal):Promise<void> {
+    try { signalValid(signal); } catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
+    return this.#enqueue(async()=>{
+      const scope=this.#selected;
+      if(!scope)return;
+      await this.#request({op:'release-selection',account:scope.accountKey,conversation:scope.conversationKey,consent:'selected-metadata-v1'},value=>{
+        const row=object(value,['released']);if(row.released!==true)return fail();return true;
+      });
+      this.#selected=undefined;this.#schema=undefined;this.#support=undefined;this.#growthFromSchema=undefined;
+      this.#target=undefined;this.#tailCursor=undefined;this.#lastTail=undefined;this.#quarantineTarget=undefined;
+      this.#testMetadata=undefined;this.#receivedTestMetadata=undefined;this.#activeImage=undefined;
+    },signal);
+  }
+  allSessionMetadata(evidence:WechatAccountMetadata,options:{limit:number;keyword?:string},signal?:AbortSignal):Promise<{username:string;displayName:string;kind:string}[]> {
+    try {signalValid(signal);accountMetadata(evidence,this.#options);
+      if(!options||typeof options!=='object'||Array.isArray(options)||Object.keys(options).some(key=>!['limit','keyword'].includes(key))||!Number.isSafeInteger(options.limit)||options.limit<1||options.limit>5000
+        ||options.keyword!==undefined&&(typeof options.keyword!=='string'||Buffer.byteLength(options.keyword)>255||/[\u0000-\u001f\u007f]/.test(options.keyword)))fail('history_request_invalid');
+    }catch{return Promise.reject(new StorageFailure('history_request_invalid'));}
+    return this.#enqueue(()=>{
+      if(!this.#account||this.#account.status!=='verified'||JSON.stringify(evidence)!==JSON.stringify(this.#account))return fail('history_scope_unverified');
+      return this.#request({op:'metadata-sessions-all',account:evidence.accountKey,consent:'all-session-list-metadata-v1',limit:options.limit,...(options.keyword===undefined?{}:{keyword:options.keyword})},value=>{
+        const row=object(value,['format','account','sessions']),account=accountMetadata(row.account,this.#options);
+        if(row.format!=='wechat-all-session-metadata-v1'||JSON.stringify(account)!==JSON.stringify(evidence))return fail();
+        const sessions=list(row.sessions,options.limit,value=>{
+          const item=object(value,['username','displayName','kind']),username=accountIdentity(item.username);
+          if(typeof item.kind!=='string'||!['private','group','folded','bot','official_account','corp_im','stranger'].includes(item.kind))return fail();
+          return {username,displayName:metadataDisplayName(item.displayName,username),kind:item.kind};
+        });
+        unique(sessions.map(row=>row.username));return sessions;
+      },4*1024*1024);
+    },signal);
   }
   resolveSelected(name: string, signal?: AbortSignal): Promise<ResolvedWechatScope> {
     try { signalValid(signal); if (typeof name !== 'string' || !name.length || Buffer.byteLength(name, 'utf8') > 255 || /[\u0000\r\n]/.test(name)) fail('history_request_invalid'); }
@@ -1208,6 +1249,8 @@ export class NarrowWechatClient {
     if (this.#stopped) { await this.#stopping; return; }
     this.#stopped = true; this.#failureCode = allowedErrors.has(code) ? code : 'history_native_unavailable'; this.#selected = undefined; this.#account = undefined; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#activeImage=undefined; this.#tailCursor = undefined; this.#lastTail = undefined; this.#quarantineTarget=undefined; this.#testMetadata = undefined; this.#receivedTestMetadata = undefined;
     this.#stoppedSignal.resolve();
+    const listeners=[...this.#stopListeners];this.#stopListeners.clear();
+    for(const listener of listeners)try{listener();}catch{/* 订阅者失败不得阻止进程排空。 */}
     const pending = this.#pending; this.#pending = undefined;
     this.#stopping = (async () => {
       const native = this.#native;

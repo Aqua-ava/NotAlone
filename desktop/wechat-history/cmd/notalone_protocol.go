@@ -21,6 +21,8 @@ import (
 
 type notaloneHistoryRequest struct {
 	Operation        string `json:"op"`
+	Limit            int    `json:"limit,omitempty"`
+	Keyword          string `json:"keyword,omitempty"`
 	Account          string `json:"account,omitempty"`
 	Conversation     string `json:"conversation,omitempty"`
 	DisplayName      string `json:"displayName,omitempty"`
@@ -126,6 +128,48 @@ func (h *notaloneHistorySession) close() {
 		_ = g.Close()
 	}
 	h.guards = nil
+}
+
+// 只释放所选联系人的状态；账号、来源目录和微信进程守卫持续有效。
+// 协议循环串行调用，释放完成后才允许下一次 resolve。
+func (h *notaloneHistorySession) releaseSelection() error {
+	var failure error
+	closeResource := func(err error) {
+		if err != nil && failure == nil {
+			failure = err
+		}
+	}
+	if h.tail != nil {
+		if h.tail.snapshot != nil {
+			closeResource(h.tail.snapshot.Close())
+		}
+		h.tail = nil
+	}
+	if h.snapshot != nil {
+		closeResource(h.snapshot.Close())
+		h.snapshot = nil
+	}
+	if h.testMetadata != nil {
+		closeResource(h.testMetadata.Close())
+		h.testMetadata = nil
+	}
+	if h.receivedTestMetadata != nil {
+		closeResource(h.receivedTestMetadata.Close())
+		h.receivedTestMetadata = nil
+	}
+	h.closeAllImages()
+
+	h.selected = nil
+	h.snapshotMode = ""
+	h.inspected = nil
+	h.supportReport = nil
+	h.supportProfile = nil
+	h.supportTargetChanged = false
+	if failure != nil {
+		h.cancel()
+		return notaloneFailure("history_snapshot_close_failed")
+	}
+	return nil
 }
 
 // 在一个原生会话内跨快照持有目录及分片守卫；进程结束后不声称连续。
@@ -559,6 +603,13 @@ func cloneNotaloneReadProfile(value *notaloneReadProfile) *notaloneReadProfile {
 	return &clone
 }
 func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRequest) (any, error) {
+	if r.Operation != "metadata-sessions-all" && (r.Limit != 0 || r.Keyword != "") {
+		return nil, notaloneFailure("history_request_invalid")
+	}
+	if h.life.Err() != nil {
+		return nil, notaloneFailure("history_snapshot_closed")
+	}
+
 	if r.Operation != "observe-metadata" && r.Operation != "observe-test-metadata" && r.Operation != "observe-received-test-metadata" && r.Kind != "" {
 		if r.Operation == "quote-read" {
 			return nil, notaloneFailure("history_quote_request_invalid")
@@ -574,8 +625,16 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		if r.Consent != "account-session-metadata-v1" || r.Account != "" || r.Conversation != "" || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
 			return nil, notaloneFailure("history_request_invalid")
 		}
+	case "metadata-sessions-all":
+		if r.Consent != "all-session-list-metadata-v1" || !notaloneIdentity.MatchString(r.Account) || r.Limit < 1 || r.Limit > 5000 || len(r.Keyword) > 255 || strings.ContainsAny(r.Keyword, "\x00\r\n") || r.Conversation != "" || r.DisplayName != "" || r.Target != "" || r.Cursor != "" || r.Partition != "" || r.Table != "" || r.LocalID != "" || r.ServerID != "" || r.SentAt != "" || r.ResourceToken != "" || r.Offset != 0 || r.ImageKeySupplied {
+			return nil, notaloneFailure("history_request_invalid")
+		}
 	case "metadata-sessions":
 		if r.Consent != "private-session-list-metadata-v1" || !notaloneIdentity.MatchString(r.Account) || r.Conversation != "" || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
+			return nil, notaloneFailure("history_request_invalid")
+		}
+	case "release-selection":
+		if r.Consent != "selected-metadata-v1" || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" || r.Kind != "" || r.Partition != "" || r.Table != "" || r.LocalID != "" || r.ServerID != "" || r.SentAt != "" || r.ResourceToken != "" || r.Offset != 0 || r.ImageKeySupplied {
 			return nil, notaloneFailure("history_request_invalid")
 		}
 	case "resolve":
@@ -667,6 +726,12 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 	if r.Operation == "metadata-account" {
 		return h.metadataAccount(ctx)
 	}
+	if r.Operation == "metadata-sessions-all" {
+		if r.Account != h.server.cfg.Wxid {
+			return nil, notaloneFailure("history_scope_unverified")
+		}
+		return h.metadataAllSessions(ctx, r.Limit, r.Keyword)
+	}
 	if r.Operation == "metadata-sessions" {
 		if r.Account != h.server.cfg.Wxid {
 			return nil, notaloneFailure("history_scope_unverified")
@@ -681,6 +746,17 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 			return nil, notaloneFailure("history_quote_association_unverified")
 		}
 		return nil, notaloneFailure("history_scope_unverified")
+	}
+	if r.Operation == "release-selection" {
+		if h.messageGuard != nil && h.messageGuard.Check() != nil {
+			return nil, notaloneFailure("history_source_changed")
+		}
+		if err := h.releaseSelection(); err != nil {
+			return nil, err
+		}
+		return struct {
+			Released bool `json:"released"`
+		}{true}, nil
 	}
 	if err := h.currentAccount(); err != nil {
 		return nil, err

@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, readFile, writeFile, realpath, rm, symlink } from 'node
 import { watch } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import {SharedWechatClient} from '../src/history/wechat/shared-client.ts';
 import { NarrowWechatClient } from '../src/history/wechat/native-client.ts';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -217,6 +218,7 @@ async function fixture(t,mode='normal',extraOptions={}) {
   if(r.op==='tail'&&mode.startsWith('inline-quotes'))data={target:r.target,cursorIn:r.cursor,cursorOut:'inline-tail-next',records:[inlineQuoteRow()],caughtUp:true};
 
   if(mode==='unsafe-integer'&&r.op==='inspect')data={...schema,tables:[{...schema.tables[0],columns:[{...schema.tables[0].columns[0],primaryKey:9007199254740993}]}]};
+  if(r.op==='release-selection')data={released:true};
   if(mode==='unsafe-version'&&r.op==='inspect')data={...schema,tables:[{...schema.tables[0],schemaVersion:9007199254740993}]};
   if(mode==='wrong-scope'&&r.op==='inspect')data={...schema,scopeDigest:'f'.repeat(64)};
   if(mode==='wrong-generation'&&r.op==='inspect')data={...schema,sourceGeneration:'f'.repeat(64)};
@@ -711,4 +713,69 @@ test('空目标出现首张聊天表时可建立新认证目标，不借旧空�
  const old=await f.client.targetSelected();assert.equal(old.tables.length,0);
  await f.client.inspectSelected();const after=await f.client.supportSelected();assert.equal(after.profileId,'wechat-4.0.6-29387-observed-states-v1');
  const current=await f.client.targetSelected();assert.equal(current.tables.length,1);assert.deepEqual(current.checkedPartitions,old.checkedPartitions);
+});
+
+
+test('释放联系人后清空正文资格和游标，同一进程可重新绑定',async t=>{
+ const f=await fixture(t),client=f.client;
+ await client.resolveSelected('合成目标');await client.inspectSelected();await client.supportSelected();
+ const target=await client.targetSelected();const pid=await waitForPid(f.pidFile);
+ await client.releaseSelection();
+ await assert.rejects(client.pageSelected(target,null),{code:'history_scope_unverified'});
+ await client.resolveSelected('另一位合成联系人');
+ assert.equal(Number(await readFile(f.pidFile,'utf8')),pid);
+ await assert.rejects(client.targetSelected(),{code:'history_support_unverified'});
+ const rows=(await readFile(f.logFile,'utf8')).trim().split('\n').map(JSON.parse);
+ assert.equal(rows.filter(row=>row.op==='release-selection').length,1);
+ assert.equal(rows.at(-1).op,'resolve');
+});
+
+
+test('共享进程以完整租约串行切换，取消排队联系人不会关闭当前读者',async t=>{
+ const f=await fixture(t),pool=new SharedWechatClient(async()=>f.options);t.after(()=>pool.close());
+ let released=0;
+ const a=await pool.acquire('A',async()=>{released++;});await a.client.resolveSelected('合成目标');
+ const pid=await waitForPid(f.pidFile),abort=new AbortController();
+ let bStarted=false;
+ const bPending=pool.acquire('B').then(lease=>{bStarted=true;return lease;});
+ const cancelled=pool.acquire('cancelled',undefined,abort.signal);abort.abort();
+ await assert.rejects(cancelled,{code:'history_native_cancelled'});
+ assert.equal(bStarted,false);assert.equal(a.client.stoppedReason,null);
+ await a.release();const b=await bPending;
+ assert.equal(released,1);await b.client.resolveSelected('另一位合成联系人');
+ assert.equal(Number(await readFile(f.pidFile,'utf8')),pid);
+ await b.release();
+ await pool.run('A',async client=>{await client.resolveSelected('合成目标');assert.equal(pool.current,client);});
+ assert.equal(pool.current,undefined);assert.equal(Number(await readFile(f.pidFile,'utf8')),pid);
+});
+
+test('共享进程停止期间拒绝新租约，排空后才能启动下一代',async t=>{
+ const f=await fixture(t),pool=new SharedWechatClient(async()=>f.options);t.after(()=>pool.close());
+ const a=await pool.acquire('A');await a.client.resolveSelected('合成目标');
+ const oldPid=await waitForPid(f.pidFile),stopping=pool.stop();
+ await assert.rejects(pool.acquire('B'),{code:'history_native_closed'});
+ await a.release();await stopping;
+ assert.throws(()=>process.kill(oldPid,0),{code:'ESRCH'});
+ await pool.run('B',client=>client.resolveSelected('另一位合成联系人'));
+ assert.notEqual(Number(await readFile(f.pidFile,'utf8')),oldPid);
+});
+
+test('287个排队租约只创建一个客户端进程并逐个切换',async t=>{
+ const f=await fixture(t);let created=0;
+ const pool=new SharedWechatClient(async()=>{created++;return f.options;});t.after(()=>pool.close());
+ await Promise.all(Array.from({length:287},(_,index)=>pool.run(String(index),client=>client.resolveSelected('合成目标'))));
+ const rows=(await readFile(f.logFile,'utf8')).trim().split('\n').map(JSON.parse);
+ assert.equal(created,1);assert.equal(rows.filter(row=>row.op==='resolve').length,287);
+ assert.equal(rows.filter(row=>row.op==='release-selection').length,286);
+ const pid=Number(await readFile(f.pidFile,'utf8'));await pool.close();assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});
+});
+
+
+test('关闭订阅可撤销且只通知仍存活的守卫一次',async t=>{
+ const f=await fixture(t);let retired=0,active=0;
+ for(let index=0;index<1000;index++){const off=f.client.onStopped(()=>{retired++;});off();off();}
+ f.client.onStopped(()=>{active++;});
+ await f.client.resolveSelected('合成目标');await f.client.close();await f.client.close();
+ assert.equal(retired,0);assert.equal(active,1);
+ let late=0;f.client.onStopped(()=>{late++;})();assert.equal(late,1);
 });

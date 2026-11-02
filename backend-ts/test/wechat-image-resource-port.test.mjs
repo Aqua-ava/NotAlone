@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createWechatImageResourcePort} from '../src/media/visual/wechat.ts';
 import {loadNarrowWechatOptions,supportsWechatImageKeyChannel,supportsWechatOriginalImages} from '../src/history/wechat/artifacts.ts';
+import {SharedWechatClient} from '../src/history/wechat/shared-client.ts';
 import {NarrowWechatClient} from '../src/history/wechat/native-client.ts';
 
 const hash=value=>createHash('sha256').update(value).digest('hex');
@@ -45,7 +46,7 @@ async function fixture(t,{proof:proofOverride,nativeError=null,dataLength=70_000
 const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline');
 const log=${JSON.stringify(requestsFile)},pidFile=${JSON.stringify(pidFile)},keySeenFile=${JSON.stringify(keySeenFile)},data=Buffer.from(${JSON.stringify(base64)},'base64'),audit=${JSON.stringify(openAudit)},representativeId=${JSON.stringify(representativeId)};
 const generation=${JSON.stringify(generation)},partition=${JSON.stringify(partition)},table=${JSON.stringify(table)},fingerprint=${JSON.stringify(schemaFingerprint)};
-const account=${JSON.stringify(account)},conversation=${JSON.stringify(conversation)},target='synthetic-target',resourceToken='synthetic-opaque-resource-token';let blockReads=false,imageAttempts=0;
+const account=${JSON.stringify(account)},target='synthetic-target',resourceToken='synthetic-opaque-resource-token';let conversation=${JSON.stringify(conversation)},blockReads=false,imageAttempts=0;
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex'),scopeDigest=hash(account+'\\0'+conversation),expectedSha256=hash(data);
 fs.writeFileSync(pidFile,String(process.pid));if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['notalone-history']))process.exit(91);
 const schema={format:'wechat-message-schema-v1',status:'unverified',scopeDigest,sourceGeneration:generation,schemaFingerprint:fingerprint,tables:[{target:table,partition,role:'private_message',columns:[{name:'local_id',type:'INTEGER',notNull:false,primaryKey:1,hidden:0}],indexes:[],declaredPrimaryKey:['local_id'],autoIncrement:true,sqlFingerprint:'e'.repeat(64),triggerFingerprints:[],schemaVersion:'1',rootPage:'2'}],checkedPartitions:[partition]};
@@ -54,13 +55,14 @@ const proof=${JSON.stringify(proof)},nativeError=${JSON.stringify(nativeError)};
 readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line);fs.appendFileSync(log,JSON.stringify(r)+'\\n');let value;
 if(r.op==='image-open'&&nativeError&&imageAttempts++===0){console.log(JSON.stringify({ok:false,error:{code:nativeError}}));return;}
 if(r.op==='image-open'&&r.serverId==='999'){console.log(JSON.stringify({ok:false,error:{code:'history_image_original_unavailable'}}));return;}
-if(r.op==='resolve')value={accountKey:account,conversationKey:conversation,displayName:'合成甲',sourceGeneration:generation};
+if(r.op==='resolve'){conversation=r.displayName;schema.scopeDigest=hash(account+'\\0'+conversation);support.conversationKey=conversation;value={accountKey:account,conversationKey:conversation,displayName:'合成甲',sourceGeneration:generation};}
 else if(r.op==='inspect')value=schema;
 else if(r.op==='support')value=support;
 else if(r.op==='target')value={protocol:'private-history-v1',descriptor:target,partitions:[partition],tables:[{partition,instance:table}],sourceGeneration:generation,checkedPartitions:[partition]};
 else if(r.op==='image-open'){if(r.imageKeySupplied){const raw=fs.readFileSync(3),payload=JSON.parse(raw.toString('utf8')),aes=Buffer.from(payload.aesKey,'base64');fs.writeFileSync(keySeenFile,JSON.stringify({fd:process.env.NOTALONE_IMAGE_KEY_FD,accountKey:payload.accountKey,rootSha256:payload.rootSha256,aesBytes:aes.length,xorKey:payload.xorKey}));raw.fill(0);aes.fill(0);}blockReads=r.localId==='125';value={protocol:'wechat-original-image-v1',resourceToken,sourceGeneration:generation,resourceSourceGeneration:${JSON.stringify(resourceSourceGeneration)},target:r.target,partition:r.partition,table:r.table,localId:r.localId==='124'?'125':r.localId,serverId:r.serverId,sentAt:r.sentAt,resourceTable:'wechat-message-resource-v1',resourceId:representativeId,resourceTypeRaw:audit.resourceTypeRaw??3,variantCode:audit.variantCode??1,complete:true,quality:audit.quality??'original',qualityProof:proof,expectedBytes:data.length,expectedSha256,mimeType:'image/png',envelope:'plain',sourceEnvelope:'wechat_dat'};}
 else if(r.op==='image-read'){if(blockReads)return;const chunk=data.subarray(r.offset,Math.min(data.length,r.offset+65536));value={resourceToken,sourceGeneration:generation,offset:r.offset,bytesRead:chunk.length,totalBytes:data.length,chunkBase64:chunk.toString('base64'),eof:r.offset+chunk.length===data.length,...(r.offset+chunk.length===data.length?{verifiedSha256:expectedSha256}:{})};}
 else if(r.op==='image-close')value={closed:true};
+else if(r.op==='release-selection')value={released:true};
 else{console.log(JSON.stringify({ok:false,error:{code:'history_operation_unsupported'}}));return;}
 console.log(JSON.stringify({ok:true,data:value}));});`;
  await writeFile(executable,script,{mode:0o700});const wcdb=Buffer.from('synthetic-wcdb');await writeFile(join(artifact,'lib','libWCDB.dylib'),wcdb);
@@ -270,4 +272,26 @@ test('图片取消原图门槛后仍拒绝传输摘要和来源资源集合不�
   const proof={...valid,...override};const f=await fixture(t,{proof,openAudit:{quality:'unknown'},capability:proof.kind});
   await assert.rejects(createWechatImageResourcePort(f.executable).open({...selection(),goal:'extract'}));
  }
+});
+
+
+test('共享图片资源持有完整流租约，关闭后下一资源复用同一进程',async t=>{
+ const f=await fixture(t),shared=new SharedWechatClient(()=>loadNarrowWechatOptions(f.executable));
+ t.after(()=>shared.close());
+ const port=createWechatImageResourcePort(f.executable,shared),first=await port.open(selection());
+ const pid=Number(await readFile(f.pidFile,'utf8'));
+ let nextOpened=false;
+ const secondRequest=selection();secondRequest.contactId='00000000-0000-4000-8000-000000000093';secondRequest.token={...secondRequest.token,contact_id:secondRequest.contactId};secondRequest.source.contactId=secondRequest.contactId;secondRequest.source.support.conversationKey='synthetic-friend-b';
+ const next=port.open(secondRequest).then(resource=>{nextOpened=true;return resource;});
+ for await(const chunk of first.bytes)assert.ok(chunk.length>0);
+ assert.equal(nextOpened,false);
+ await first.close();const second=await next;
+ assert.equal(Number(await readFile(f.pidFile,'utf8')),pid);
+ const recorded=await requests(f),operations=recorded.map(row=>row.op);
+ assert.deepEqual(recorded.filter(row=>row.op==='resolve').map(row=>row.displayName),[conversation,'synthetic-friend-b']);
+ assert.equal(operations.filter(op=>op==='release-selection').length,1);
+ assert.ok(operations.indexOf('image-close')<operations.indexOf('release-selection'));
+ for await(const chunk of second.bytes)assert.ok(chunk.length>0);
+ await second.close();assert.doesNotThrow(()=>process.kill(pid,0));
+ await shared.close();assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});
 });

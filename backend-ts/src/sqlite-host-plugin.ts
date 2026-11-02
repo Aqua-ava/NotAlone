@@ -11,7 +11,9 @@ import { SqliteMediaHttp } from './media/sqlite/http.ts';
 import {SqliteImageSyncCoordinator} from './media/sqlite/image-sync.ts';
 import {OriginalImageMediaAdapter} from './media/visual/original-image.ts';
 import {createWechatImageResourcePort} from './media/visual/wechat.ts';
-import {supportsWechatOriginalImages} from './history/wechat/artifacts.ts';
+import {loadSharedNarrowWechatOptions,supportsWechatImageKeyChannel,supportsWechatOriginalImages} from './history/wechat/artifacts.ts';
+import {enrichImageToolOptions} from './media/visual/image-tools.ts';
+import {SharedWechatClient} from './history/wechat/shared-client.ts';
 import { StorageFailure } from './storage/sqlite/contracts.ts';
 import type { Context } from '@deepseek-ai/cordis';
 import { exitOnStdinEnd } from '@deepseek-ai/dsh-cmdline';
@@ -62,12 +64,14 @@ interface SqliteHostResource { close(): Promise<void> }
 /** 逐域尝试真实排空；任何业务所有者未释放时保留共享模型与SQLite，允许原操作续清。 */
 export async function closeSqliteHostResources(resources: {
   firstHistory?: SqliteHostResource; incremental?: SqliteHostResource; imageSync?: SqliteHostResource; quoteSync?:SqliteHostResource; discussions?: SqliteHostResource; memory?: SqliteHostResource; media?: SqliteHostResource; history?: SqliteHostResource;
-  historyRecertify?: SqliteHostResource; historyClear?: SqliteHostResource; historyResync?: SqliteHostResource; foreground?: SqliteHostResource; contacts?: SqliteHostResource; models?: SqliteHostResource; storage?: SqliteHostResource;
+  historyRecertify?: SqliteHostResource; historyClear?: SqliteHostResource; historyResync?: SqliteHostResource; foreground?: SqliteHostResource; contacts?: SqliteHostResource; wechat?:SqliteHostResource; models?: SqliteHostResource; storage?: SqliteHostResource;
 }): Promise<void> {
   const failures: unknown[] = [];
   for (const resource of [resources.firstHistory, resources.incremental, resources.imageSync, resources.quoteSync, resources.historyRecertify, resources.historyClear, resources.historyResync, resources.foreground, resources.discussions, resources.memory, resources.media, resources.history, resources.contacts]) {
     try { await resource?.close(); } catch (error) { failures.push(error); }
   }
+  if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
+  try { await resources.wechat?.close(); } catch (error) { failures.push(error); }
   if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
   try { await resources.models?.close(); } catch (error) { failures.push(error); }
   if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
@@ -91,6 +95,7 @@ export async function apply(ctx: Context) {
   let opening: Promise<SqliteStorage> | undefined;
   let events: PureTsEvents | undefined;
   let contacts: ContactMetadataLifetime | undefined;
+  let wechat:SharedWechatClient|undefined;
   let history: SqliteHistoryService | undefined;
   let checkpointCache:WechatHistoryCheckpointCache|undefined;
   let foreground: SqliteForeground | undefined;
@@ -117,7 +122,7 @@ export async function apply(ctx: Context) {
     state = 'stopping'; readyDispose(); models?.stopAccepting(); events?.close();
     await publication?.catch(() => {});
     if (opening) { try { storage ??= await opening; } catch {} }
-    await closeSqliteHostResources({firstHistory,incremental,imageSync,quoteSync,historyRecertify,historyClear,historyResync,foreground,discussions,memory,media,history,contacts,models,storage:storage?{close:async()=>{await Promise.allSettled([...requests]);await storage!.close();}}:undefined});
+    await closeSqliteHostResources({firstHistory,incremental,imageSync,quoteSync,historyRecertify,historyClear,historyResync,foreground,discussions,memory,media,history,contacts,wechat,models,storage:storage?{close:async()=>{await Promise.allSettled([...requests]);await storage!.close();}}:undefined});
     if (published) await rm(config.infoPath, { force: true });
     state = 'stopped';
   })().catch(error=>{stopping=undefined;throw error;});
@@ -144,22 +149,26 @@ export async function apply(ctx: Context) {
     if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
     events = new PureTsEvents(ownerId);
     const deletionHolders = new ActiveHolders();
-    contacts = new ContactMetadataLifetime(storage, ownerId, deletionHolders, () => createWechatContactMetadata(sqlite.wechatCliPath));
+    if(sqlite.wechatCliPath)wechat=new SharedWechatClient(async()=>{
+      const options=await loadSharedNarrowWechatOptions(sqlite.wechatCliPath!);
+      return await supportsWechatImageKeyChannel(sqlite.wechatCliPath)?enrichImageToolOptions(options):options;
+    });
+    contacts = new ContactMetadataLifetime(storage, ownerId, deletionHolders, () => createWechatContactMetadata(sqlite.wechatCliPath,wechat));
     await contacts.initialize();
     if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
-    const createHistoryChannel=()=>createWechatHistoryChannel(sqlite.wechatCliPath,scope=>checkpointCache?.track(scope)??Promise.resolve());
+    const createHistoryChannel=()=>createWechatHistoryChannel(sqlite.wechatCliPath,scope=>checkpointCache?.track(scope)??Promise.resolve(),wechat);
     if(capabilities.capabilities.some(capability=>capability==='history')){
       checkpointCache=new WechatHistoryCheckpointCache(storage,ownerId,deletionHolders,sqlite.wechatCliPath,contactId=>history?.stop(contactId)??Promise.resolve());
       await checkpointCache.initialize();
       history=new SqliteHistoryService(storage,contacts,createHistoryChannel,deletionHolders,
-        (contactId,messageId,kind)=>{events?.publish(`message.${kind}`,contactId,{message_id:messageId});memory?.wake(contactId);},contactId=>{imageSync?.wake(contactId);quoteSync?.wake(contactId);});
+        (contactId,messageId,kind)=>{events?.publish(`message.${kind}`,contactId,{message_id:messageId});memory?.wake(contactId);},contactId=>{imageSync?.wake(contactId);quoteSync?.wake(contactId);},wechat);
       firstHistory=new FirstHistoryCoordinator(contacts,history);
       history.setFirstHistoryWake(contactId=>firstHistory?.wakeContact(contactId));
       incremental=new IncrementalHistoryCoordinator(contacts,history,{firstHistoryManagedExternally:true});
       // 开启/重选只唤醒合法读取；关闭/取消/退出由 readStop 停止后续查询并等待在途释放。
       contacts.setReadStart(()=>{firstHistory!.wake();incremental!.wake();imageSync?.wake();quoteSync?.wake();memory?.wake();});
     }
-    if(history&&process.env.NOTALONE_SYNC_PROBE&&path.isAbsolute(process.env.NOTALONE_SYNC_PROBE)) foreground=SqliteForeground.create(ownerId,process.env.NOTALONE_SYNC_PROBE,sqlite.wechatCliPath??'',()=>contacts!.foregroundSnapshot(),proof=>contacts!.confirmForeground(proof));
+    if(history&&process.env.NOTALONE_SYNC_PROBE&&path.isAbsolute(process.env.NOTALONE_SYNC_PROBE)) foreground=SqliteForeground.create(ownerId,process.env.NOTALONE_SYNC_PROBE,sqlite.wechatCliPath??'',()=>contacts!.foregroundSnapshot(),proof=>contacts!.confirmForeground(proof),wechat);
     const historyHttp=history?new SqliteHistoryHttp(history):undefined;
     let historyStatusInFlight:Promise<Record<string,unknown>>|undefined;
     const readHistoryStatus=async()=>{
@@ -181,11 +190,11 @@ export async function apply(ctx: Context) {
     const originalImages=history&&await supportsWechatOriginalImages(sqlite.wechatCliPath);
     media = new SqliteMediaService({storage,contacts,history:{source:(contactId,recordId)=>{
       if(!history)throw new StorageFailure('media_source_unavailable');return history.source(contactId,recordId);
-    }},userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,changed:(contactId,messageId)=>events?.publish('message.updated',contactId,{message_id:messageId}),adapters:originalImages?[new OriginalImageMediaAdapter(createWechatImageResourcePort(sqlite.wechatCliPath))]:[]});
+    }},userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,changed:(contactId,messageId)=>events?.publish('message.updated',contactId,{message_id:messageId}),adapters:originalImages?[new OriginalImageMediaAdapter(createWechatImageResourcePort(sqlite.wechatCliPath,wechat))]:[]});
     await media.initialize();
     if(originalImages)imageSync=new SqliteImageSyncCoordinator(storage,contacts,media);
     if(history&&await supportsWechatQuotes(sqlite.wechatCliPath))quoteSync=new SqliteQuoteSyncCoordinator(contacts,history);
-    contacts.setReadStop(async contactId=>{await Promise.all([historyRecertify?.stop(contactId),imageSync?.stop(contactId),quoteSync?.stop(contactId),firstHistory?firstHistory.stop(contactId):history?.stop(contactId),incremental?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);if(contactId)await checkpointCache?.forget(contactId);});
+    contacts.setReadStop(async contactId=>{await Promise.all([historyRecertify?.stop(contactId),imageSync?.stop(contactId),quoteSync?.stop(contactId),firstHistory?firstHistory.stop(contactId):history?.stop(contactId),incremental?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);if(contactId)await checkpointCache?.forget(contactId);else await wechat?.stop();});
     const mediaHttp = new SqliteMediaHttp(media);
     const modelSetup=await SqliteModelSetup.open(config.envFilePath,process.env);
     const discussionsEnabled=capabilities.capabilities.includes('discussions'),memoryEnabled=capabilities.capabilities.includes('memory');

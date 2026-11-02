@@ -1,5 +1,6 @@
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import { loadNarrowWechatOptions } from '../wechat/artifacts.ts';
+import type {SharedWechatClient,SharedWechatLease} from '../wechat/shared-client.ts';
 import { NarrowWechatClient } from '../wechat/native-client.ts';
 import type { HistoryChannel, HistoryScope, HistorySource, HistorySupportReport, HistoryTarget } from './contracts.ts';
 import { prepareBoundaryCandidate } from './boundary.ts';
@@ -29,18 +30,26 @@ class WechatHistoryChannel implements HistoryChannel {
  readonly #executable?:string;
  readonly #checkpointScope?:(scope:HistoryScope)=>Promise<void>;
  #native?:NarrowWechatClient;
+ readonly #shared?:SharedWechatClient;
+ #lease?:SharedWechatLease;
  #opening?:Promise<NarrowWechatClient>;
  #identity?:string;
  #scope?:HistoryScope;
  #targetIssued=false;
  #closed=false;
- constructor(executable?:string,checkpointScope?:(scope:HistoryScope)=>Promise<void>){this.#executable=executable;this.#checkpointScope=checkpointScope;}
+ #closing?:Promise<void>;
+ #parking?:Promise<void>;
+ #unsubscribeStop?:()=>void;
+ constructor(executable?:string,checkpointScope?:(scope:HistoryScope)=>Promise<void>,shared?:SharedWechatClient){this.#executable=executable;this.#checkpointScope=checkpointScope;this.#shared=shared;}
  async #open(signal?:AbortSignal):Promise<NarrowWechatClient>{
   try{
-   const options=await loadNarrowWechatOptions(this.#executable!);
+   const options=this.#shared?undefined:await loadNarrowWechatOptions(this.#executable!);
    if(signal?.aborted)return reject('history_native_cancelled');
    if(this.#closed)return reject('history_native_closed');
-   const native=new NarrowWechatClient(options);this.#native=native;void native.stopped.then(()=>this.#guardLoss.resolve());
+   const borrowed=this.#shared?.current;
+   if(this.#shared&&!borrowed)this.#lease=await this.#shared.acquire(this,undefined,signal);
+   if(this.#closed||signal?.aborted){await this.#lease?.release();return reject('history_native_cancelled');}
+   const native=borrowed??this.#lease?.client??new NarrowWechatClient(options!);this.#native=native;this.#unsubscribeStop=native.onStopped(()=>this.#guardLoss.resolve());
    const scope=this.#scope!,resolved=await native.resolveSelected(scope.conversationKey,signal);
    if(resolved.accountKey!==scope.accountKey)return reject('history_account_changed');
    if(resolved.conversationKey!==scope.conversationKey)return reject('history_scope_changed');
@@ -48,7 +57,7 @@ class WechatHistoryChannel implements HistoryChannel {
    await this.#checkpointScope?.(scope);
    return native;
   }catch(error){
-   this.#closed=true;await this.#native?.close();
+   this.#closed=true;await this.#native?.close();await this.#lease?.release();
    throw error instanceof StorageFailure?error:new StorageFailure('history_native_unavailable');
   }
  }
@@ -114,10 +123,26 @@ class WechatHistoryChannel implements HistoryChannel {
    prepareBoundaryCandidate(scope,candidate);return candidate;
   });
  }
- async close():Promise<void>{
-  this.#closed=true;this.#guardLoss.resolve();await this.#native?.close();
-  try{await this.#opening;}catch{/* 已失败的初始化也必须排空，不能再次打开读者。 */}
-  await this.#native?.close();
+ park():Promise<void>{
+  if(!this.#shared)return this.close();
+  if(this.#parking)return this.#parking;
+  this.#closed=true;
+  return this.#parking=(async()=>{
+   try{await this.#opening;}catch{/* 初始化失败仍须排空；不重开读者。 */}
+   try{if(this.#native&&!this.#native.stoppedReason)await this.#native.releaseSelection();}
+   finally{await this.#lease?.release();}
+  })();
  }
+ close():Promise<void>{
+  if(this.#closing)return this.#closing;
+  this.#closed=true;this.#guardLoss.resolve();this.#unsubscribeStop?.();this.#unsubscribeStop=undefined;
+  return this.#closing=(async()=>{
+   if(this.#shared){await this.park();return;}
+   await this.#native?.close();
+   try{await this.#opening;}catch{/* 初始化失败仍须排空；不重开读者。 */}
+   await this.#native?.close();
+  })();
+ }
+
 }
-export function createWechatHistoryChannel(executable?:string,checkpointScope?:(scope:HistoryScope)=>Promise<void>):HistoryChannel{return new WechatHistoryChannel(executable,checkpointScope);}
+export function createWechatHistoryChannel(executable?:string,checkpointScope?:(scope:HistoryScope)=>Promise<void>,shared?:SharedWechatClient):HistoryChannel{return new WechatHistoryChannel(executable,checkpointScope,shared);}

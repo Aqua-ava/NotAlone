@@ -55,3 +55,11 @@ test('全部领域排空后才关闭共享模型和SQLite，存储错误仍不�
  }),error=>error instanceof AggregateError&&error.errors[0]===failure);
  assert.deepEqual(calls,['discussions','memory','models','storage']);
 });
+
+
+test('所有CLI使用者排空后才关闭共享进程，随后关闭模型与存储',async()=>{
+ const calls=[];
+ const resource=name=>({close:async()=>{calls.push(name);}});
+ await closeSqliteHostResources({foreground:resource('foreground'),media:resource('media'),history:resource('history'),contacts:resource('contacts'),wechat:resource('wechat'),models:resource('models'),storage:resource('storage')});
+ assert.deepEqual(calls,['foreground','media','history','contacts','wechat','models','storage']);
+});

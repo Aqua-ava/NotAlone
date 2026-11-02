@@ -16,6 +16,10 @@
 
 该层叠加在锁定的官方 CLI 源码和既有严格只读补丁上，提供选定联系人元数据、目标结构检查、受状态与来源能力报告门控的普通历史及增量读取和受控快照诊断；不开放 SQL、任意路径、发送或密钥扫描。`notalone-history` 使用有界 JSONL，未知操作及未确认范围在打开来源前拒绝。
 
+共享进程协议 `wechat-shared-process-v1` 使用排他租约串行处理联系人。`release-selection` 必须携带当前 `account`、`conversation` 和 `consent='selected-metadata-v1'`；返回 `{released:true}` 前关闭会话快照、增量状态、双向测试观察基线与图片令牌，并清除目标及支持报告。随后才能重新 `resolve`。账号元数据、来源文件和微信进程守卫持续持有；账号级图片密钥通道随进程最终关闭时清理，不在每次切换时重新读取。关闭失败会取消整个会话，旧目标与图片令牌不能在切换回来后复活；切换不代表重新授予读取资格，App 仍须核验当前完整授权并走来源重验／检查点续读。
+
+`metadata-sessions-all` 使用单独的 `all-session-list-metadata-v1` 许可，只返回全部可见会话的身份、显示名和类型，用于前台名称匹配。请求显式账号及 `limit`（1–5000），可带最多255字节的 `keyword`。它不查询摘要或正文，不改变私聊正文授权；无联系人信息的群以稳定用户名展示，格式错误或重名身份记录失败关闭，不能靠丢弃候选制造唯一匹配。
+
 构建入口为 `desktop/scripts/build-history-cli.mjs`。输入必须是锁定源码、经摘要核验的 Go 归档及既有 WCDB 字节，输出只能是 `local-tools/wx-cli/.notalone-builds/` 的一个新直接子目录。构建先核验剩余空间，复制自有源码、补丁与测试，离线构建后只对新 CLI 作开发签名，并写入不含私人路径的 manifest。
 
 完整上游源码统一放在仓库根目录的 `local-tools/wx-cli/`，该目录由 Git 忽略，仅供本机使用，不提交或推送。历史 CLI 构建的命令行及程序调用均默认读取这里；需要隔离对照时仍可显式传入 `--source-directory`。旧组件构建入口 `prepare-wechat.mjs` 也从这里读取 CLI 源码，`--source-cache` 仅保留其他来源和依赖缓存；本地源码缺失时直接报错，不退回旧缓存或自动下载。两个入口继续核验锁定的 commit/tree，并从固定 Git 对象归档，工作副本中的未提交编辑不会进入构建；本项目扩展仍在 `desktop/wechat-history/` 维护。

@@ -1,5 +1,7 @@
 # NotAlone 架构文档
 
+> 2026-11-02 读取进程：[ADR-151](adr/151-shared-wechat-cli-process.md) 已实施单个 CLI 串行切换联系人，保留账号守卫、逐次授权核验和联系人隔离；自动检查及开发实例停读／恢复通过，首次检查点重建状态见[核验记录](../docs/verification/shared-wechat-cli-20261102.md)。
+
 > 2026-11-01 首用交互：[ADR-142](adr/142-first-connection-contact-selection.md)将首次账号连接接到搜索、多选联系人，确认所选授权后才开启同步；之后可补加，已有暂停状态保持。来源、稳定身份、逐人授权和人工发送边界不变；实现与实际验收分别核验。
 
 > 当前运行状态（2026-10-30）：SQLite 已成为 TypeScript 后台默认业务存储；受控实例、迁移、联系人、历史、记忆、回复与删除实现见[SQLite 底座 ADR](adr/109-controlled-sqlite-storage-foundation.md)和[切换验收](../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。本地 PostgreSQL 旧实现和数据已退役；其它历史架构决策保留原意，不代表当前运行入口。

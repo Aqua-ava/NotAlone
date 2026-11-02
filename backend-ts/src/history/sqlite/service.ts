@@ -1,3 +1,4 @@
+import type {SharedWechatClient} from '../wechat/shared-client.ts';
 import { ActiveHolders } from '../../storage/sqlite/deletion/holders.ts';
 import { randomUUID } from 'node:crypto';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
@@ -16,7 +17,7 @@ export interface HistoryContactGateway {
  validate(token:ReadEligibility):Promise<unknown>;
 }
 interface ActiveHistoryRead { controller:AbortController; done:Promise<void>; stop():Promise<void> }
-interface RetainedGuard {channel:HistoryChannel; token:ReadEligibility; report?:HistorySupportReport; target?:HistoryTarget; guardId:string; failed:boolean; sourceLost:boolean; normalUse:boolean; bodyVerified:boolean; release:()=>Promise<void>}
+interface RetainedGuard {channel:HistoryChannel; token:ReadEligibility; report?:HistorySupportReport; target?:HistoryTarget; guardId:string; failed:boolean; sourceLost:boolean; normalUse:boolean; bodyVerified:boolean; parked?:boolean; release:()=>Promise<void>}
 interface GuardProof {report:HistorySupportReport;target:HistoryTarget}
 interface GuardResult {guardId?:string;revalidated:boolean}
 type MessageChangeKind='created'|'updated';
@@ -35,8 +36,10 @@ export class SqliteHistoryService {
  private readonly active=new Map<string,ActiveHistoryRead>();
  private readonly guards=new Map<string,RetainedGuard>();
  private closed=false;
- constructor(storage:SqliteStorage,contacts:HistoryContactGateway,channel:HistoryChannel|(()=>HistoryChannel),holders:ActiveHolders=new ActiveHolders(),onMessageChange?:(contactId:string,messageId:string,kind:MessageChangeKind)=>void,onAcceptedPage?:(contactId:string)=>void){
-  this.storage=storage;this.contacts=contacts;this.createChannel=typeof channel==='function'?channel:()=>channel;this.holders=holders;this.onMessageChange=onMessageChange;this.onAcceptedPage=onAcceptedPage;
+ private readonly shared?:SharedWechatClient;
+ private readonly queued=new Map<string,{controller:AbortController;done:Promise<void>}>();
+ constructor(storage:SqliteStorage,contacts:HistoryContactGateway,channel:HistoryChannel|(()=>HistoryChannel),holders:ActiveHolders=new ActiveHolders(),onMessageChange?:(contactId:string,messageId:string,kind:MessageChangeKind)=>void,onAcceptedPage?:(contactId:string)=>void,shared?:SharedWechatClient){
+  this.storage=storage;this.contacts=contacts;this.createChannel=typeof channel==='function'?channel:()=>channel;this.holders=holders;this.onMessageChange=onMessageChange;this.onAcceptedPage=onAcceptedPage;this.shared=shared;
  }
  setFirstHistoryWake(callback:(contactId:string)=>void):void {this.firstHistoryWake=callback;}
  private wakeFirstHistory(contactId:string):void {try{this.firstHistoryWake?.(contactId);}catch{/* 唤醒失败不回滚已持久化的历史目标。 */}}
@@ -57,6 +60,15 @@ export class SqliteHistoryService {
   this.publishMessageChanges(contactId,changed.updatedMessageIds,'updated');
  }
  private async withChannel<T>(contactId:string,signal:AbortSignal|undefined,run:(scope:HistoryScope,channel:HistoryChannel,controller:AbortController,registerGoal:(goalId:string)=>void,armGuard:(proof?:GuardProof)=>Promise<GuardResult>,metadataRevalidation:boolean,retainedGuardAvailable:boolean,releaseNormalUseGuard:()=>void)=>Promise<T>):Promise<T>{
+  if(!this.shared)return this.withExclusiveChannel(contactId,signal,run);
+  if(this.closed)throw new StorageFailure('history_closed');
+  if(this.queued.has(contactId))throw new StorageFailure('history_already_running');
+  const controller=new AbortController();let finish!:()=>void;const done=new Promise<void>(resolve=>{finish=resolve;});this.queued.set(contactId,{controller,done});
+  const combined=signal?AbortSignal.any([controller.signal,signal]):controller.signal;
+  try{return await this.shared.run(contactId,()=>this.withExclusiveChannel(contactId,combined,run),async()=>{const guard=this.guards.get(contactId);if(guard?.normalUse&&guard.channel.park){await guard.channel.park();guard.parked=true;}else await guard?.release();},combined);}
+  finally{this.queued.delete(contactId);finish();}
+ }
+ private async withExclusiveChannel<T>(contactId:string,signal:AbortSignal|undefined,run:(scope:HistoryScope,channel:HistoryChannel,controller:AbortController,registerGoal:(goalId:string)=>void,armGuard:(proof?:GuardProof)=>Promise<GuardResult>,metadataRevalidation:boolean,retainedGuardAvailable:boolean,releaseNormalUseGuard:()=>void)=>Promise<T>):Promise<T>{
   if(this.closed)throw new StorageFailure('history_closed');
   if(this.active.has(contactId))throw new StorageFailure('history_already_running');
   const controller=new AbortController();
@@ -72,7 +84,7 @@ export class SqliteHistoryService {
   const releases:(()=>Promise<void>)[]=[];
   const abort=()=>{controller.abort();void (retained?retained.release():closeChannel()).catch(()=>{});};signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
   try{
-   const previous=this.guards.get(contactId);if(previous?.failed)await previous.release();
+   const previous=this.guards.get(contactId);if(previous?.failed||previous?.parked)await previous.release();
    const token=await this.contacts.eligibility(contactId);const scope=await this.storage.execute<HistoryScope>('history.scope',{token});
    const metadataRevalidation=await this.storage.execute<boolean>('history.normalUseRevalidationCandidate',{token});
    if(!metadataRevalidation&&!await this.storage.execute<boolean>('history.preflightGeneration',{token}))throw new StorageFailure('history_source_continuity_unverified');
@@ -95,7 +107,7 @@ export class SqliteHistoryService {
     const entry:RetainedGuard={channel,token,...(proof?{report:structuredClone(proof.report),target:structuredClone(proof.target)}:{}),guardId,failed:false,sourceLost:false,normalUse:proof!==undefined,bodyVerified:false,release:async()=>{}};
     let leaseReleased=false,releaseFailed=false,storageClosed=false;
     try{entry.release=this.holders.register({key:`history:guard_${contactId}_${token.data_generation}`,ownerId:token.owner_id,contactId,generation:BigInt(token.data_generation),coversAllSources:true,close:async()=>{
-     entry.failed=true;this.active.get(contactId)?.controller.abort();
+     entry.failed=true;if(!entry.parked)this.active.get(contactId)?.controller.abort();
      let failure:unknown;
      if(!leaseReleased&&!releaseFailed)try{
       if(!await this.storage.execute<boolean>('history.guardRelease',{token,guardId,normalUse:entry.normalUse,sourceLost:entry.sourceLost}))throw new StorageFailure('history_source_continuity_unverified');
@@ -108,7 +120,7 @@ export class SqliteHistoryService {
      if(this.guards.get(contactId)===entry)this.guards.delete(contactId);
     }});}catch(error){await this.storage.execute('history.guardRelease',{token,guardId,normalUse:entry.normalUse,sourceLost:entry.sourceLost});throw error;}
     this.guards.set(contactId,entry);retained=entry;
-    const lost=()=>{if(!entry.failed){entry.failed=true;this.active.get(contactId)?.controller.abort();
+    const lost=()=>{if(!entry.failed){entry.failed=true;if(!entry.parked)this.active.get(contactId)?.controller.abort();
      const code=guardSession.failureCode?.();entry.sourceLost=typeof code==='string'&&isSourceContinuityLost(new StorageFailure(code));
      const release=async()=>{if(entry.sourceLost)await this.storage.execute('history.markContinuityLost',{token});await entry.release();};void release().catch(()=>{});}};
     void guardSession.loss.then(lost,lost);
@@ -159,6 +171,7 @@ export class SqliteHistoryService {
    const armed=await armGuard(normalUse?{report,target}:undefined);
    if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target,report}))throw new StorageFailure('history_source_continuity_unverified');
    await this.check(scope,controller);await this.storage.execute('history.guardAuthorize',{token:scope.token,guardId:armed.guardId});
+   if(this.shared&&channel.park){await channel.park();const guard=this.guards.get(contactId);if(guard)guard.parked=true;}
   });
  }
  support(contactId:string):Promise<HistorySupportReport>{return this.withChannel(contactId,undefined,async(scope,channel,controller)=>{const report=await channel.inspect(scope,controller.signal);await this.check(scope,controller);return report;});}
@@ -179,10 +192,13 @@ export class SqliteHistoryService {
    const report=await channel.inspect(scope,controller.signal);await this.check(scope,controller);assertSupport(report);
    if(report.accountKey!==scope.accountKey||report.conversationKey!==scope.conversationKey||report.sourceGeneration!==scope.token.source_generation)throw new StorageFailure('history_external_scope_changed');
    const normalUse=report.continuity==='same-source-instances-normal-use-v1',guard=this.guards.get(contactId);
-   // 引用只借用普通同步已认证的固定目标，不重新建立目标或改写文字检查点。
-   if(normalUse&&(!guard?.bodyVerified||!guard.target||!guard.report||serializeSupport(guard.report)!==serializeSupport(report)))return {processed:0,more:false};
-   const target=normalUse?guard!.target!:await channel.target(scope,controller.signal);await this.check(scope,controller);
-   await armGuard();let processed=0;
+   // 共享进程切回联系人后重新证明来源；不借用另一联系人目标，也不推进文字检查点。
+   if(normalUse&&!this.shared&&(!guard?.bodyVerified||!guard.target||!guard.report||serializeSupport(guard.report)!==serializeSupport(report)))return {processed:0,more:false};
+   const reusable=normalUse&&guard?.bodyVerified&&guard.target&&guard.report&&serializeSupport(guard.report)===serializeSupport(report);
+   const target=reusable?guard!.target!:await channel.target(scope,controller.signal);await this.check(scope,controller);
+   await armGuard(normalUse&&!reusable?{report,target}:undefined);
+   if(normalUse&&!reusable&&!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target,report}))throw new StorageFailure('history_source_continuity_unverified');
+   this.rememberBodySupport(contactId,report);let processed=0;
    for(const item of targets){
     await this.check(scope,controller);
     const source=await this.source(contactId,item.recordId);
@@ -198,6 +214,7 @@ export class SqliteHistoryService {
     }
     processed++;this.publishMessageChanges(contactId,[item.messageId],'updated');
    }
+   if(this.shared&&channel.park){await channel.park();const guard=this.guards.get(contactId);if(guard)guard.parked=true;}
    return {processed,more:targets.length===limit};
   });
  }
@@ -231,7 +248,7 @@ export class SqliteHistoryService {
   return summaries;
  }
  source(contactId:string,recordId:string):Promise<HistorySource>{return this.storage.execute('history.source',{ownerId:this.contacts.ownerId,contactId,recordId});}
- waitForReadIdle(contactId:string):Promise<void>{return this.active.get(contactId)?.done??Promise.resolve();}
+ waitForReadIdle(contactId:string):Promise<void>{return this.queued.get(contactId)?.done??this.active.get(contactId)?.done??Promise.resolve();}
  coverage(contactId:string):Promise<HistoryCoverage>{return this.storage.execute('history.coverage',{ownerId:this.contacts.ownerId,contactId});}
  private async resumeOrTarget(scope:HistoryScope,channel:HistoryChannel,report:HistorySupportReport,signal:AbortSignal):Promise<HistoryTarget>{
   if(channel.resumeTarget&&report.capabilities?.durableIncremental==='supported'){
@@ -387,6 +404,6 @@ export class SqliteHistoryService {
   }
   });}finally{if(wakeGrowth)this.wakeFirstHistory(contactId);}
  }
- async stop(contactId?:string):Promise<void>{const entries=[...this.active.entries()].filter(([id])=>!contactId||id===contactId).map(([,entry])=>entry);const guards=[...this.guards.entries()].filter(([id])=>!contactId||id===contactId).map(([,entry])=>entry);await Promise.all([...entries.map(entry=>entry.stop()),...guards.map(entry=>entry.release())]);await Promise.all(entries.map(entry=>entry.done));}
+ async stop(contactId?:string):Promise<void>{const queued=[...this.queued.entries()].filter(([id])=>!contactId||id===contactId).map(([,entry])=>entry);for(const entry of queued)entry.controller.abort();const entries=[...this.active.entries()].filter(([id])=>!contactId||id===contactId).map(([,entry])=>entry);const guards=[...this.guards.entries()].filter(([id])=>!contactId||id===contactId).map(([,entry])=>entry);await Promise.all([...entries.map(entry=>entry.stop()),...guards.map(entry=>entry.release())]);await Promise.all([...entries.map(entry=>entry.done),...queued.map(entry=>entry.done)]);}
  async close():Promise<void>{this.closed=true;await this.stop();}
 }

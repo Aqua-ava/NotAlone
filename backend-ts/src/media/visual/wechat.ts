@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import type {SharedWechatClient} from '../../history/wechat/shared-client.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {ReadEligibility} from '../../contacts/sqlite/contracts.ts';
 import type {HistorySource} from '../../history/sqlite/contracts.ts';
@@ -132,15 +133,15 @@ function resourceBytes(request:VisualRequest,client:NarrowWechatClient,opened:We
     if(!finished||offset!==opened.expectedBytes)throw new StorageFailure('media_resource_incomplete');
   })();
 }
-async function closeResource(client:NarrowWechatClient,token:string):Promise<void> {
+async function closeResource(client:NarrowWechatClient,token:string,release?:()=>Promise<void>):Promise<void> {
   let closeError:unknown;
   try{await client.closeImageSelected(token);}catch(error){if(!client.stoppedReason)closeError=error;}
-  await client.close();
+  if(release)await release();else await client.close();
   if(closeError)throw mapped(closeError);
 }
 
 /** 只通过固定版本的窄原生客户端打开当前授权联系人中已关联的一条图片。 */
-export function createWechatImageResourcePort(executable?:string):VisualResourcePort {
+export function createWechatImageResourcePort(executable?:string,shared?:SharedWechatClient):VisualResourcePort {
   return {open:async(input:VisualRequest):Promise<VisualResource>=>{
     if(!executable)return reject('history_support_unverified');
     if(!input||typeof input!=='object'||!(input.signal instanceof AbortSignal)||typeof input.checkpoint!=='function')return reject();
@@ -148,15 +149,20 @@ export function createWechatImageResourcePort(executable?:string):VisualResource
     const selected=identity(input,source,token);
     if(input.contactId!==token.contact_id)return reject();
     const request:VisualRequest=Object.freeze({...input,source:fixed(source),token:fixed(token)});
+    let lease:Awaited<ReturnType<SharedWechatClient['acquire']>>|undefined;
     let client:NarrowWechatClient|undefined,opened:WechatImageOpenResult|undefined,transferred=false;
     try{
       await checked(request);
       const imageKeyChannel=await supportsWechatImageKeyChannel(executable);
       if(!imageKeyChannel)reject('history_support_unverified');
-      const loadedOptions=await loadNarrowWechatOptions(executable);
-      const options=await enrichImageToolOptions({...loadedOptions,imageKeyChannel:true});
-      if(request.signal.aborted)throw new StorageFailure('media_interrupted');
-      client=new NarrowWechatClient(options);
+      if(shared){lease=await shared.acquire({},undefined,request.signal);client=lease.client;}
+      else{
+        const loadedOptions=await loadNarrowWechatOptions(executable);
+        const options=await enrichImageToolOptions({...loadedOptions,imageKeyChannel:true});
+        if(request.signal.aborted)throw new StorageFailure('media_interrupted');
+        client=new NarrowWechatClient(options);
+      }
+      await checked(request);
       const selectedScope=await client.resolveSelected(source.support.conversationKey,request.signal);
       if(selectedScope.accountKey!==source.support.accountKey||selectedScope.conversationKey!==source.support.conversationKey
         ||selectedScope.sourceGeneration!==expectedToken.source_generation||selectedScope.sourceGeneration!==expectedSource.support.sourceGeneration)reject();
@@ -185,7 +191,7 @@ export function createWechatImageResourcePort(executable?:string):VisualResource
       await checked(request);
       const stableOpened=fixed(opened),stableAuthority=fixed(expectedToken),hashProof=qualityProofString(stableOpened);
       let closing:Promise<void>|undefined;
-      const close=()=>closing??=closeResource(client!,stableOpened.resourceToken);
+      const close=()=>closing??=closeResource(client!,stableOpened.resourceToken,lease?()=>lease!.release():undefined);
       const resource:VisualResource=Object.freeze({
         association:association(stableOpened,expectedSource,input.messageId),authority:stableAuthority,envelope:'plain',
         expectedBytes:stableOpened.expectedBytes,expectedSha256:stableOpened.expectedSha256,complete:true as const,
@@ -198,7 +204,7 @@ export function createWechatImageResourcePort(executable?:string):VisualResource
     finally{
       if(client&&!transferred){
         if(opened&&!client.stoppedReason)try{await client.closeImageSelected(opened.resourceToken);}catch{/* 关闭进程会释放已打开的本机资源。 */}
-        await client.close();
+        if(lease)await lease.release();else await client.close();
       }
     }
   }};

@@ -37,6 +37,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
  const r=JSON.parse(line),plan=JSON.parse(fs.readFileSync(${JSON.stringify(planFile)}));fs.appendFileSync(${JSON.stringify(logFile)},JSON.stringify({pid:process.pid,...r})+'\\n');let data;
  if(r.op==='metadata-account')data=account();
  else if(r.op==='metadata-sessions')data={format:'wechat-private-session-metadata-v1',account:account(),sessions:[{username:'friend-a',displayName:'合成甲',kind:'private',identityAssurance:'verified'},{username:'friend-b',displayName:'合成乙',kind:'private',identityAssurance:'verified'}]};
+ else if(r.op==='release-selection')data={released:true};
  else if(r.op==='resolve')data={accountKey:'${account}',conversationKey:'${conversation}',displayName:'合成甲',sourceGeneration:'${generation}'};
  else if(r.op==='inspect')data=schema;
  else if(r.op==='support')data={protocol:'private-history-v1',profileId:'synthetic-startup-history-v1',adapterVersion:'1',status:plan.history,reason:plan.history==='supported'?null:'history_message_state_unverified',accountKey:'${account}',conversationKey:'${conversation}',sourceGeneration:'${generation}',programVersion:'4.0.6',build:'29387',artifactSha256:cli,schemaFingerprint:schema.schemaFingerprint,declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-final-status',continuity:'synthetic-fixed-source'};
@@ -46,7 +47,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
  process.stdout.write(JSON.stringify({ok:true,data})+'\\n');
 });`;
  await writeFile(executable,script,{mode:0o700});const wcdb=Buffer.from('synthetic-startup-WCDB');await writeFile(wcdbFile,wcdb);
- await writeFile(join(artifact,'manifest.json'),JSON.stringify({formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',signing:'ad-hoc-development',realWechatVerified:false,cliSha256:hash(script),wcdbSha256:hash(wcdb)}));
+ await writeFile(join(artifact,'manifest.json'),JSON.stringify({formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',signing:'ad-hoc-development',realWechatVerified:false,sharedProcessProtocol:'wechat-shared-process-v1',cliSha256:hash(script),wcdbSha256:hash(wcdb)}));
  const storage=await SqliteStorage.open({userData,intent:'create',role:'test'}),databaseId=storage.status.databaseId;await storage.close();
  const hosts=[],routes=[];
  t.after(async()=>{for(const host of hosts.reverse())await host.terminate();await rm(root,{recursive:true,force:true});});
@@ -82,7 +83,7 @@ test('正式launchDsh/profile通过HTTP授权自动首次capture，无手动sync
  const status=await coverage(h,selected.contactId,row=>row?.phase==='complete');assert.equal(status.body_available,false);assert.equal(status.cli_backfill_total_message_count,1);
  const messages=await h.request(`/api/contacts/${selected.contactId}/messages`);assert.equal(messages.body.messages.length,1);assert.equal(messages.body.messages[0].text,'仅合成的启动首次历史');assert.equal(messages.body.messages[0].source_record_ids.length,1);
  const persisted=await h.request(`/api/contacts/${selected.contactId}/history`);assert.equal(persisted.body.phase,'complete');assert.equal(persisted.body.pageCount,1);assert.ok(persisted.body.goalId);
- const rows=await requests(f);assert.ok(rows.some(row=>row.op==='metadata-account'));assert.ok(rows.some(row=>row.op==='metadata-sessions'));assert.ok(rows.filter(row=>row.op==='resolve').every(row=>row.displayName===conversation));assert.deepEqual(rows.filter(row=>['target','page'].includes(row.op)).map(row=>row.op),['target','page']);assert.ok(f.routes.every(route=>!route.endsWith('/history/sync')));
+ const rows=await requests(f);assert.equal(new Set(rows.map(row=>row.pid)).size,1);assert.ok(rows.some(row=>row.op==='metadata-account'));assert.ok(rows.some(row=>row.op==='metadata-sessions'));assert.ok(rows.filter(row=>row.op==='resolve').every(row=>row.displayName===conversation));assert.deepEqual(rows.filter(row=>['target','page'].includes(row.op)).map(row=>row.op),['target','page']);assert.ok(f.routes.every(route=>!route.endsWith('/history/sync')));
  await h.shutdown();noCliOrphans(await requests(f));
 });
 
