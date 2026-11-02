@@ -55,7 +55,7 @@ export function HistoryMemoryProcessingPanel({bridge,contactId,scopeRevision,onS
   };
   return <section className="memory-processing-card memory-history-processing" aria-label="历史聊天记忆处理">
     <h3>历史聊天</h3>
-    <p className="memory-section-note">处理当前联系人已保存的历史文字，已完成的文字会跳过。开始后会调用已配置的模型提取记忆。</p>
+    <p className="memory-section-note">历史导入完成后会自动分批处理；增量文字独立排队。手动启动同样会跳过已完成内容。</p>
     <button className="button primary" type="button" disabled={!contactId||current?.phase==='starting'} onClick={()=>void start()}>{current?.phase==='starting'?'正在启动…':'处理历史聊天'}</button>
     {!contactId&&<p>请先选择联系人。</p>}
     {current?.phase==='started'&&<p role="status">{current.message}</p>}

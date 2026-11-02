@@ -6,6 +6,7 @@ import {currentSourceScopeCTE,currentSourcePredicate} from '../../history/sqlite
 import {laterStagesState} from './documents/actions.ts';
 import {queueSummary as laterQueueSummary} from './documents/later-schedule.ts';
 import {projectControl} from './control.ts';
+import {backlogRecoveryActions,backlogRunRecoverable} from './backlog-recovery.ts';
 import {memoryIncrementalBaseline} from '../../storage/sqlite/message-order.ts';
 const number=(v:unknown):number=>{if(typeof v!=='bigint'||v<0n||v>BigInt(Number.MAX_SAFE_INTEGER))return fail('memory_extraction_count_invalid');return Number(v);};
 const minute=60_000,hour=60*minute,quietThreshold=10*minute,volumeThreshold=50,ageThreshold=6*hour,startCooldown=30*minute;
@@ -161,7 +162,7 @@ function currentMessageRows(tx:StorageTransaction,ownerId:string,contactId:strin
   ${quarantine}
  ORDER BY m.display_no`,[ownerId,contactId,contactId,ownerId,contactId,ownerId,contactId,ownerId,contactId]);
 }
-function pendingIncrementalStats(tx:StorageTransaction,ownerId:string,contactId:string):{count:number;oldestAt:number|null;latestAt:number|null}{
+function pendingIncrementalStats(tx:StorageTransaction,ownerId:string,contactId:string,history=false):{count:number;oldestAt:number|null;latestAt:number|null}{
  const sourceOrder=acceptedCaptureOrder(tx),scopeCte=sourceScopeCTE(tx),quarantine=tableExists(tx,'history_message_quarantine')?`AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)`:'';
  const row=tx.get(`WITH ${scopeCte},current_records AS MATERIALIZED (
   SELECT source.message_id,min(source.id) record_id FROM capture_record source
@@ -182,7 +183,7 @@ function pendingIncrementalStats(tx:StorageTransaction,ownerId:string,contactId:
  FROM message m JOIN current_records r ON r.message_id=m.id JOIN first_source f ON f.message_id=m.id
  LEFT JOIN processing_item p ON p.owner_id=m.owner_id AND p.contact_id=m.contact_id AND p.message_id=m.id AND p.purpose='memory_extraction'
  WHERE m.owner_id=? AND m.contact_id=? AND m.kind='text' AND length(trim(m.text_body))>0 AND m.availability='available'
-  AND f.first_goal_kind='incremental' AND m.display_no>? AND (p.id IS NULL OR p.extraction_state='pending')
+  AND ${history?"(f.first_goal_kind='history' OR m.display_no<=?)":"f.first_goal_kind='incremental' AND m.display_no>?"} AND (p.id IS NULL OR p.extraction_state='pending')
   ${quarantine}
   AND (p.id IS NULL OR NOT EXISTS(SELECT 1 FROM run_input assigned WHERE assigned.owner_id=p.owner_id AND assigned.item_id=p.id AND assigned.role='target'))`,
  [ownerId,contactId,contactId,ownerId,contactId,ownerId,contactId,ownerId,contactId,memoryIncrementalBaseline(tx)]);
@@ -243,13 +244,15 @@ function pendingFollowupIds(tx:StorageTransaction,ownerId:string,runId?:string):
 }
 function hasUnresolvedContactBlocker(tx:StorageTransaction,ownerId:string,contactId:string):boolean{
  if(tableExists(tx,'memory_document_later_schedule')&&tableExists(tx,'memory_document_later_run_requirement')&&tx.get(`SELECT 1 FROM memory_document_later_schedule s WHERE s.owner_id=? AND (s.scope_kind='self' OR s.contact_id=?)
-  AND (s.state IN ('failed','unknown') OR EXISTS(SELECT 1 FROM memory_document_later_run_requirement q WHERE q.owner_id=s.owner_id AND q.scope_key=s.scope_key AND q.generation=s.generation AND q.outcome='pending' AND q.paused=1)) LIMIT 1`,[ownerId,contactId]))return true;
+  AND EXISTS(SELECT 1 FROM memory_document_later_run_requirement q WHERE q.owner_id=s.owner_id AND q.scope_key=s.scope_key AND q.generation=s.generation AND q.outcome='pending' AND q.paused=1) LIMIT 1`,[ownerId,contactId]))return true;
  const runs=tx.all(`SELECT r.* FROM processing_run r JOIN run_contact rc ON rc.owner_id=r.owner_id AND rc.run_id=r.id
   WHERE rc.owner_id=? AND rc.contact_id=? AND rc.state='active'`,[ownerId,contactId]);
  for(const run of runs){
   const runId=String(run.id),tasks=tx.all(`SELECT DISTINCT t.* FROM processing_task t JOIN task_contribution c ON c.owner_id=t.owner_id AND c.task_id=t.id
    WHERE t.owner_id=? AND t.run_id=? AND c.source_contact_id=?`,[ownerId,runId,contactId]);
   if(run.pause_requested_at!==null||run.state==='paused')return true;
+  // L1完成后，候选决定与文档阶段各自保留状态，不再阻挡新的文字提取。
+  if(extractionCompleteForRun(tx,ownerId,runId,contactId))continue;
   if(tasks.some(task=>task.state==='paused'||task.state==='unknown'))return true;
   if(tx.get(`SELECT 1 FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
    JOIN processing_step s ON s.owner_id=o.owner_id AND s.id=o.memory_step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
@@ -280,13 +283,12 @@ function extractionCompleteForRun(tx:StorageTransaction,ownerId:string,runId:str
  if(!contactTask||!(contactTask.state==='succeeded'||contactTask.state==='incomplete'&&contactTask.error_code==='targets_completed_elsewhere'))return false;
  const linkedTasks=tx.all(`SELECT DISTINCT t.* FROM processing_task t JOIN task_contribution c ON c.owner_id=t.owner_id AND c.task_id=t.id
   WHERE t.owner_id=? AND t.run_id=? AND c.source_contact_id=?`,[ownerId,runId,contactId]);
- if(linkedTasks.some(task=>task.scope_kind==='self'&&task.state!=='succeeded'&&!(task.state==='awaiting_decision'&&!taskHasPendingCandidate(tx,ownerId,String(task.id)))))return false;
+ if(linkedTasks.some(task=>task.scope_kind==='self'&&task.state!=='succeeded'&&task.state!=='awaiting_decision'))return false;
  return true;
 }
 function hasOnlyLaterStageWaiting(tx:StorageTransaction,ownerId:string,contactId:string,run:StorageRow):boolean{
  if(run.state!=='incomplete'||run.pause_requested_at!==null||!extractionCompleteForRun(tx,ownerId,String(run.id),contactId))return false;
- const later=String(laterStagesState(tx,ownerId,String(run.id)).state);
- return later==='pending'||later==='scheduled';
+ return true;
 }
 interface ContactQueueState {contactId:string;pendingCount:number;oldestAt:number|null;latestAt:number|null;lastStartedAt:number|null;blocked:boolean}
 function contactQueueState(tx:StorageTransaction,ownerId:string,contactId:string):ContactQueueState{
@@ -294,7 +296,7 @@ function contactQueueState(tx:StorageTransaction,ownerId:string,contactId:string
  let blocked=hasUnresolvedContactBlocker(tx,ownerId,contactId);
  if(latest&&latest.state!=='completed'&&latest.state!=='revoked'&&!hasOnlyLaterStageWaiting(tx,ownerId,contactId,latest))blocked=true;
  const last=tx.get(`SELECT max(r.started_at) AS started_at FROM processing_run r JOIN run_contact rc ON rc.owner_id=r.owner_id AND rc.run_id=r.id
-  WHERE rc.owner_id=? AND rc.contact_id=? AND rc.state='active' AND coalesce(json_extract(r.policy_config,'$.intent'),'')<>'memory_document_later_stage'
+  WHERE rc.owner_id=? AND rc.contact_id=? AND rc.state='active' AND coalesce(json_extract(r.policy_config,'$.intent'),'')<>'memory_document_later_stage' AND r.start_request_key NOT LIKE 'history-auto:%' AND r.start_request_key NOT LIKE 'history:%'
    AND EXISTS(SELECT 1 FROM run_input i WHERE i.owner_id=r.owner_id AND i.run_id=r.id AND i.source_contact_id=rc.contact_id AND i.role='target')`,[ownerId,contactId]);
  const pending=pendingIncrementalStats(tx,ownerId,contactId);
  return {contactId,pendingCount:pending.count,oldestAt:pending.oldestAt,latestAt:pending.latestAt,lastStartedAt:last?.started_at===null||last?.started_at===undefined?null:timeNumber(last.started_at),blocked};
@@ -319,7 +321,25 @@ function scheduleSummary(tx:StorageTransaction,ownerId:string,now:number,contact
  const states=queueStates(tx,ownerId,now,contactId),pending=states.reduce((sum,row)=>sum+row.state.pendingCount,0),due=states.map(row=>row.dueAt).filter((value):value is number=>value!==null);
  return {pending,nextDueAt:due.length?due.reduce((earliest,value)=>Math.min(earliest,value)):null,blockedContacts:states.filter(row=>row.state.pendingCount>0&&row.state.blocked).length};
 }
-function startRun(tx:StorageTransaction,raw:unknown,scheduled=false,history=false){
+/** 历史终页落库后即可处理；旧边界之前的增量资料归入历史补齐。 */
+function historyQueueStates(tx:StorageTransaction,ownerId:string,scope?:string){
+ return validContacts(tx,ownerId,scope).map(c=>{
+  const contactId=String(c.id),latest=tx.get(`SELECT state FROM read_goal WHERE owner_id=? AND contact_id=? AND binding_id=? AND kind='history' ORDER BY ${hasColumn(tx,'read_goal','creation_no')?'creation_no':'created_at'} DESC,rowid DESC LIMIT 1`,[ownerId,contactId,c.binding_id]);
+  const stats=pendingIncrementalStats(tx,ownerId,contactId,true);
+  return {contactId,pending:stats.count,ready:latest?.state==='complete',blocked:contactQueueState(tx,ownerId,contactId).blocked};
+ }).filter(row=>row.pending>0);
+}
+function startHistoryBatch(tx:StorageTransaction,raw:unknown){
+ const i=raw as {ownerId:string;contactId:string;requestKey:string;policyConfig:Record<string,unknown>;followupStages?:boolean;now:number};
+ const ownerId=textId(i.ownerId),contactId=textId(i.contactId);checkedNow(i.now);
+ const requestKey=`history-auto:${textId(i.requestKey)}`;
+ const prior=tx.get('SELECT id FROM processing_run WHERE owner_id=? AND start_request_key=?',[ownerId,requestKey]);
+ if(prior){if(!tx.get('SELECT 1 FROM run_contact WHERE owner_id=? AND run_id=? AND contact_id=?',[ownerId,prior.id,contactId]))fail('memory_extraction_request_scope_mismatch');return snapshot(tx,ownerId,String(prior.id));}
+ const current=historyQueueStates(tx,ownerId,contactId)[0];
+ if(!current?.ready||current.blocked)return null;
+ return startRun(tx,{...i,requestKey,policyConfig:i.policyConfig},false,true,true);
+}
+function startRun(tx:StorageTransaction,raw:unknown,scheduled=false,history=false,automaticHistory=false){
  const i=raw as {ownerId:string;requestKey:string;policyConfig:unknown;followupStages?:boolean;contactId?:string;now?:number};
  const ownerId=textId(i.ownerId),requestKey=textId(i.requestKey),contactId=scheduled||history?textId(i.contactId):undefined,now=scheduled?checkedNow(i.now):Date.now();
  const existing=tx.get('SELECT id FROM processing_run WHERE owner_id=? AND start_request_key=?',[ownerId,requestKey]);if(existing)return snapshot(tx,ownerId,String(existing.id));
@@ -339,8 +359,8 @@ function startRun(tx:StorageTransaction,raw:unknown,scheduled=false,history=fals
   const canReuse=!scheduled&&!history&&i.followupStages===true&&!!tx.get('SELECT 1 FROM schema_migration WHERE version=13'),reused=new Map<string,StorageRow>();
   if(canReuse)for(const row of rows){const proof=reusableExtraction(tx,ownerId,String(c.id),row);if(proof)reused.set(String(row.id),proof);}
   const baseline=scheduled?memoryIncrementalBaseline(tx):0n;
-  const targets=scheduled?rows.filter(r=>r.first_goal_kind==='incremental'&&(r.display_no as bigint)>baseline&&(r.item_id===null||r.extraction_state==='pending')&&r.target_assigned!==1n&&r.target_assigned!==1):
-   rows.filter(r=>(r.extraction_state!=='succeeded'||reused.has(String(r.id)))&&(!history||r.target_assigned!==1n&&r.target_assigned!==1));
+  const targets=(scheduled?rows.filter(r=>r.first_goal_kind==='incremental'&&(r.display_no as bigint)>baseline&&(r.item_id===null||r.extraction_state==='pending')&&r.target_assigned!==1n&&r.target_assigned!==1):
+   rows.filter(r=>(r.extraction_state!=='succeeded'||reused.has(String(r.id)))&&(!history||r.target_assigned!==1n&&r.target_assigned!==1)&&(!history||r.first_goal_kind==='history'||(r.display_no as bigint)<=memoryIncrementalBaseline(tx)))).slice(0,automaticHistory?50:undefined);
   if(!targets.length)continue;
   const targetIds=new Set(targets.map(row=>String(row.id)));
   if(scheduled||history)for(const target of targets)assertSourceEligibility(tx,{owner_id:ownerId,contact_id:String(c.id),message_id:String(target.id),record_id:String(target.record_id)});
@@ -362,6 +382,9 @@ function startRun(tx:StorageTransaction,raw:unknown,scheduled=false,history=fals
  tx.run("UPDATE processing_run SET state='pending' WHERE owner_id=? AND id=?",[ownerId,runId]);return snapshot(tx,ownerId,runId);
 }
 export const scheduleActions:StorageAction[]=[
+ {name:'memoryExtraction.dueHistoryContacts',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string};return historyQueueStates(tx,textId(i.ownerId)).filter(row=>row.ready&&!row.blocked).map(row=>row.contactId);}},
+ {name:'memoryExtraction.nextHistoryDueAt',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;now:number};return historyQueueStates(tx,textId(i.ownerId)).some(row=>row.ready&&!row.blocked)?checkedNow(i.now):null;}},
+ {name:'memoryExtraction.startHistoryBatch',mode:'write',retryBusy:true,execute:startHistoryBatch},
  {name:'memoryExtraction.dueContacts',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;now:number};const ownerId=textId(i.ownerId),now=checkedNow(i.now);return queueStates(tx,ownerId,now).filter(row=>row.dueAt!==null&&row.dueAt<=now).map(row=>row.state.contactId);}},
  {name:'memoryExtraction.nextDueAt',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;now:number};const ownerId=textId(i.ownerId),now=checkedNow(i.now);let earliest:number|null=null;for(const row of queueStates(tx,ownerId,now)){if(row.dueAt!==null&&(earliest===null||row.dueAt<earliest))earliest=row.dueAt;}return earliest;}},
  {name:'memoryExtraction.readSchedule',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;now:number};return scheduleSummary(tx,textId(i.ownerId),checkedNow(i.now));}},
@@ -378,7 +401,7 @@ function contactView(tx:StorageTransaction,raw:unknown){
   AND EXISTS(SELECT 1 FROM run_input i WHERE i.owner_id=r.owner_id AND i.run_id=r.id AND i.role='target' AND i.source_contact_id=?)
   ORDER BY r.started_at DESC,r.rowid DESC LIMIT 1`,[ownerId,contactId,contactId]);
  const now=Date.now();
- return {contactId,run:latest?snapshot(tx,ownerId,String(latest.id),contactId):null,queue:{...scheduleSummary(tx,ownerId,now,contactId),later:laterQueueSummary(tx,ownerId,now,contactId)}};
+ return {contactId,run:latest?snapshot(tx,ownerId,String(latest.id),contactId):null,queue:{...scheduleSummary(tx,ownerId,now,contactId),history:{pending:pendingIncrementalStats(tx,ownerId,contactId,true).count},later:laterQueueSummary(tx,ownerId,now,contactId)}};
 }
 /** 历史初始化是具名用户动作；新请求不能借新预算绕过未决调用、暂停或失败。 */
 function startHistory(tx:StorageTransaction,raw:unknown){
@@ -412,8 +435,9 @@ function startHistory(tx:StorageTransaction,raw:unknown){
 }
 /** 策略升级后只从原轮冻结输入建立后继轮；不重写旧策略或扩大授权。 */
 function restartPolicyRun(tx:StorageTransaction,raw:unknown){
- const i=raw as {ownerId:string;runId:string;actionVersion:number;policyConfig:unknown};
+ const i=raw as {ownerId:string;runId:string;actionVersion:number;policyConfig:unknown;automatic?:boolean};
  const ownerId=textId(i.ownerId),oldId=textId(i.runId),key=`policy-recovery:${oldId}`;
+ if(i.automatic&&!backlogRunRecoverable(tx,ownerId,oldId))return {run:snapshot(tx,ownerId,oldId),launchRunId:null};
  const old=tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[ownerId,oldId]);if(!old)fail('memory_extraction_not_found');
  if(tx.get('SELECT 1 FROM request_tombstone WHERE owner_identity=? AND request_key=?',[ownerId,key]))fail('memory_extraction_request_deleted');
  const prior=tx.get('SELECT id FROM processing_run WHERE owner_id=? AND start_request_key=?',[ownerId,key]);
@@ -437,11 +461,12 @@ function restartPolicyRun(tx:StorageTransaction,raw:unknown){
  }
  for(const row of selected)tx.run('INSERT INTO run_input VALUES(?,?,?,?,?,?,?,?,?,?)',[ownerId,nextId,row.input_no,row.role,row.kind,row.source_contact_id,row.item_id,row.message_id,row.record_id,row.accepted_interpretation_revision]);
  const self=randomUUID();tx.run("INSERT INTO processing_task(owner_id,id,run_id,scope_kind,state) VALUES(?,?,?,'self','pending')",[ownerId,self,nextId]);for(const contactId of contacts)tx.run('INSERT INTO task_contribution VALUES(?,?,?,?)',[ownerId,self,nextId,contactId]);
+ if(i.automatic)tx.run('UPDATE processing_task SET resume_no=1 WHERE owner_id=? AND run_id=?',[ownerId,nextId]);
  tx.run("UPDATE processing_run SET state='pending' WHERE owner_id=? AND id=?",[ownerId,nextId]);
  tx.run("UPDATE processing_run SET state='failed',pause_requested_at=NULL,intent_revision=intent_revision+1 WHERE owner_id=? AND id=?",[ownerId,oldId]);
  tx.run("UPDATE processing_task SET state='incomplete',error_code='extraction_policy_superseded' WHERE owner_id=? AND run_id=? AND state='paused'",[ownerId,oldId]);
  return {run:snapshot(tx,ownerId,oldId),launchRunId:nextId};
 }
-export const runActions:StorageAction[]=[...scheduleActions,{name:'memoryExtraction.restartPolicy',mode:'write',retryBusy:true,execute:restartPolicyRun},{name:'memoryExtraction.readPolicy',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;runId:string};const row=tx.get('SELECT policy_config FROM processing_run WHERE owner_id=? AND id=?',[i.ownerId,i.runId]);if(!row)fail('memory_extraction_not_found');return JSON.parse(String(row!.policy_config));}},{name:'memoryExtraction.startHistory',mode:'write',retryBusy:true,execute:startHistory},{name:'memoryExtraction.readContact',mode:'read',retryBusy:false,execute:contactView},{name:'memoryExtraction.findRequest',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;requestKey:string};const r=tx.get('SELECT id FROM processing_run WHERE owner_id=? AND start_request_key=?',[textId(i.ownerId),textId(i.requestKey)]);return r?snapshot(tx,i.ownerId,String(r.id)):null;}},{name:'memoryExtraction.contactGeneration',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;contactId:string};const r=tx.get('SELECT data_generation FROM contact WHERE owner_id=? AND id=?',[i.ownerId,i.contactId]);if(!r)fail('memory_extraction_scope_stale');return {generation:String(r!.data_generation)};}},{name:'memoryExtraction.start',mode:'write',retryBusy:true,execute(tx,raw){return startRun(tx,raw);}},{name:'memoryExtraction.startContact',mode:'write',retryBusy:true,execute(tx,raw){return startRun(tx,raw,true);}},{name:'memoryExtraction.read',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;runId?:string};const owner=textId(i.ownerId);if(i.runId)return snapshot(tx,owner,textId(i.runId));const r=tx.get(`SELECT id FROM processing_run WHERE owner_id=? AND coalesce(json_extract(policy_config,'$.intent'),'')<>'memory_document_later_stage'
+export const runActions:StorageAction[]=[...scheduleActions,...backlogRecoveryActions,{name:'memoryExtraction.restartPolicy',mode:'write',retryBusy:true,execute:restartPolicyRun},{name:'memoryExtraction.readPolicy',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;runId:string};const row=tx.get('SELECT policy_config FROM processing_run WHERE owner_id=? AND id=?',[i.ownerId,i.runId]);if(!row)fail('memory_extraction_not_found');return JSON.parse(String(row!.policy_config));}},{name:'memoryExtraction.startHistory',mode:'write',retryBusy:true,execute:startHistory},{name:'memoryExtraction.readContact',mode:'read',retryBusy:false,execute:contactView},{name:'memoryExtraction.findRequest',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;requestKey:string};const r=tx.get('SELECT id FROM processing_run WHERE owner_id=? AND start_request_key=?',[textId(i.ownerId),textId(i.requestKey)]);return r?snapshot(tx,i.ownerId,String(r.id)):null;}},{name:'memoryExtraction.contactGeneration',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;contactId:string};const r=tx.get('SELECT data_generation FROM contact WHERE owner_id=? AND id=?',[i.ownerId,i.contactId]);if(!r)fail('memory_extraction_scope_stale');return {generation:String(r!.data_generation)};}},{name:'memoryExtraction.start',mode:'write',retryBusy:true,execute(tx,raw){return startRun(tx,raw);}},{name:'memoryExtraction.startContact',mode:'write',retryBusy:true,execute(tx,raw){return startRun(tx,raw,true);}},{name:'memoryExtraction.read',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;runId?:string};const owner=textId(i.ownerId);if(i.runId)return snapshot(tx,owner,textId(i.runId));const r=tx.get(`SELECT id FROM processing_run WHERE owner_id=? AND coalesce(json_extract(policy_config,'$.intent'),'')<>'memory_document_later_stage'
  AND EXISTS(SELECT 1 FROM run_input i WHERE i.owner_id=processing_run.owner_id AND i.run_id=processing_run.id AND i.role='target')
  ORDER BY started_at DESC,rowid DESC LIMIT 1`,[owner]);return r?snapshot(tx,owner,String(r.id)):null;}},{name:'memoryExtraction.pendingFollowups',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string};return pendingFollowupIds(tx,textId(i.ownerId));}},{name:'memoryExtraction.followupEligible',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;runId:string};return pendingFollowupIds(tx,textId(i.ownerId),textId(i.runId)).length===1;}}];

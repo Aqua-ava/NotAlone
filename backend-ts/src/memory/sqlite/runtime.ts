@@ -60,15 +60,18 @@ export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:Sql
   }:options.afterRunSettled,options.ensureSourceReady);await service.initialize();
   if(adjudication&&documents){
    l1Scheduler=new SqliteMemoryL1Scheduler({
+    recoverBacklog:async()=>{await service.waitForIdle();await service.recoverBacklog();},
     nextDueAt:now=>service.nextDueAt(now),dueContacts:now=>service.dueContacts(now),
+    nextHistoryDueAt:now=>service.nextHistoryDueAt(now),dueHistoryContacts:now=>service.dueHistoryContacts(now),
     // 先排空已有 L1／裁决，再受理下一个联系人，避免本人范围的并行裁决争抢同一版本。
     startContact:async(contactId,requestKey)=>{await service.waitForIdle();const run=await service.startContact(contactId,requestKey);if(run)await service.waitForIdle(run.runId);return run;},
+    startHistoryBatch:async(contactId,requestKey)=>{await service.waitForIdle();const run=await service.startHistoryBatch(contactId,requestKey);if(run)await service.waitForIdle(run.runId);return run;},
    });
    laterWorker=new SqliteMemoryLaterWorker(documents,()=>console.error('MEMORY_LATER_SCHEDULER_FAILED'));
   }
   const http=new SqliteMemoryExtractionHttp(service,options.authorize,async()=>({...await service.readSchedule(),...(documents?{later:await documents.queueSummary()}:{})}));let closing:Promise<void>|undefined;
   return {service,http,documents,configurationState:configuration.status,
-   startScheduling(){if(schedulingStarted)return;schedulingStarted=true;void service.resumeFollowups().then(()=>service.waitForIdle()).catch(()=>console.error('MEMORY_FOLLOWUP_RECOVERY_FAILED')).finally(()=>{if(schedulingStarted){void l1Scheduler?.start();laterWorker?.start();}});},
+   startScheduling(){if(schedulingStarted)return;schedulingStarted=true;void service.recoverBacklog().then(()=>service.resumeFollowups()).then(()=>service.waitForIdle()).catch(()=>console.error('MEMORY_FOLLOWUP_RECOVERY_FAILED')).finally(()=>{if(schedulingStarted){void l1Scheduler?.start();laterWorker?.start();}});},
    wake(contactId?:string){if(!schedulingStarted)return;l1Scheduler?.wake(contactId);laterWorker?.wake();},
    close:()=>closing??=(async()=>{
    // 自有许可先停领；业务释放失败时保留host，重试成功后才关闭其账本与socket。

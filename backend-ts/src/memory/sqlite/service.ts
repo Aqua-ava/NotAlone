@@ -28,6 +28,13 @@ export class SqliteMemoryExtraction {
   this.storage=storage;this.ownerId=ownerId;this.model=model;this.holders=holders;this.afterRunSettled=afterRunSettled;this.ensureSourceReady=ensureSourceReady;
   this.accounting={reserve:async(receipt,claim)=>{await this.storage.execute(claim?.step_name==='extraction_verification'?'memoryExtraction.reserve':claim?.step_name==='document_scene'||claim?.step_name==='document_profile'?'memoryDocuments.reserve':'memoryAdjudication.reserve',{receipt,claim});},recordReserved:async receipt=>{await this.storage.execute('memoryExtraction.receipt',{receipt});},unconfirmedRequests:scope=>this.storage.execute('memoryExtraction.unconfirmed',scope)};
  }
+ /** 仅补同一来源的元数据续证，不换输入、预算或模型操作；第二次失败按原原因保留。 */
+ private async withSourceReady<T>(contactId:string,work:()=>Promise<T>):Promise<T>{
+  try{return await work();}catch(error){
+   if(!(error instanceof StorageFailure)||error.code!=='history_source_not_available'||!this.ensureSourceReady)throw error;
+   await this.ensureSourceReady(contactId);this.available();return work();
+  }
+ }
  private version(){return this.policy??=createExtractionPolicyVersion();}
  initialize(){this.available();return this.initialized??=this.admit(async()=>{await this.storage.execute('memoryExtraction.recover',{ownerId:this.ownerId});});}
  private available(){if(this.stopped)throw new StorageFailure('memory_extraction_closed');}
@@ -58,9 +65,47 @@ export class SqliteMemoryExtraction {
    await this.initialize();const policy=await this.version();await policy.assertCurrent();this.available();
    const prior=await this.storage.execute<any>('memoryExtraction.findRequest',{ownerId:this.ownerId,requestKey});this.available();
    if(prior)return prior;
-   const run=await this.storage.execute<any>('memoryExtraction.startContact',{ownerId:this.ownerId,contactId,requestKey,now,
-    policyConfig:policy.newTaskConfig(),followupStages:this.afterRunSettled!==undefined});
+   const run=await this.withSourceReady(contactId,()=>this.storage.execute<any>('memoryExtraction.startContact',{ownerId:this.ownerId,contactId,requestKey,now,
+    policyConfig:policy.newTaskConfig(),followupStages:this.afterRunSettled!==undefined}));
    if(run)this.launch(run.runId);return run;
+  });
+ }
+ /** 历史与增量各自筛选，建轮事务再次核验来源和原任务状态。 */
+ dueHistoryContacts(now=Date.now()):Promise<string[]>{this.available();return this.storage.execute('memoryExtraction.dueHistoryContacts',{ownerId:this.ownerId,now});}
+ nextHistoryDueAt(now=Date.now()):Promise<number|null>{this.available();return this.storage.execute('memoryExtraction.nextHistoryDueAt',{ownerId:this.ownerId,now});}
+ async startHistoryBatch(contactId:string,requestKey:string,now=Date.now()){
+  return this.admit(async()=>{
+   await this.initialize();const policy=await this.version();await policy.assertCurrent();this.available();
+   const start=()=>this.storage.execute<any>('memoryExtraction.startHistoryBatch',{ownerId:this.ownerId,contactId,requestKey,now,policyConfig:policy.newTaskConfig(),followupStages:this.afterRunSettled!==undefined});
+   let run;
+   try{run=await start();}catch(error){
+    if(!(error instanceof StorageFailure)||error.code!=='history_source_not_available'||!this.ensureSourceReady)throw error;
+    await this.ensureSourceReady(contactId);this.available();run=await start();
+   }
+   if(run)this.launch(run.runId);return run;
+  });
+ }
+ /** 已知失败只自动恢复一次；次数沿原任务持久保存，暂停和未知调用不受理。 */
+ async recoverBacklog():Promise<number>{
+  return this.admit(async()=>{
+   await this.initialize();const policy=await this.version();await policy.assertCurrent();
+   const candidates=await this.storage.execute<{runId:string;controlVersion:number}[]>('memoryExtraction.recoverableBacklog',{ownerId:this.ownerId});let recovered=0;
+   for(const candidate of candidates){
+    if(this.stopped||recovered>0)break;
+    try{
+     const snapshot=await this.read(candidate.runId);
+     if(this.ensureSourceReady)for(const task of snapshot.tasks.filter((t:any)=>t.scopeKind==='contact'))await this.ensureSourceReady(task.contactId);
+     const old=await this.storage.execute('memoryExtraction.readPolicy',{ownerId:this.ownerId,runId:candidate.runId});
+     try{policy.resolve(old);}catch(error){
+      if((error as {code?:string}).code!=='extraction_policy_source_unavailable')throw error;
+      const next=await this.storage.execute<any>('memoryExtraction.restartPolicy',{ownerId:this.ownerId,...candidate,actionVersion:candidate.controlVersion,automatic:true,policyConfig:policy.newTaskConfig()});
+      if(next.launchRunId){this.launch(next.launchRunId);await this.waitForIdle(next.launchRunId);recovered++;}continue;
+     }
+     const accepted=await this.storage.execute<any>('memoryExtraction.autoContinue',{ownerId:this.ownerId,...candidate});
+     if(accepted){this.launch(candidate.runId);await this.waitForIdle(candidate.runId);recovered++;}
+    }catch{/* 单个旧轮不安全或配置仍失败时保留状态，继续检查其他联系人。 */}
+   }
+   return recovered;
   });
  }
  /** 用户显式初始化当前联系人的已保存文字，沿正常提取、核验和后续整理链执行。 */
@@ -121,7 +166,10 @@ export class SqliteMemoryExtraction {
    if(this.stopped)break;
    while(!this.stopped){
     let batch:ClaimedStep|null;
-    try{batch=await this.storage.execute('memoryExtraction.claim',{ownerId:this.ownerId,runId,taskId:task.taskId});}catch(error){if(error instanceof StorageFailure&&error.code==='memory_extraction_scope_stale')break;throw error;}
+    try{batch=await this.withSourceReady(task.contactId,()=>this.storage.execute('memoryExtraction.claim',{ownerId:this.ownerId,runId,taskId:task.taskId}));}catch(error){
+     const code=this.stopped?'memory_extraction_interrupted':error instanceof StorageFailure?error.code:'memory_extraction_claim_failed';
+     await this.storage.execute('memoryExtraction.blockClaim',{ownerId:this.ownerId,runId,taskId:task.taskId,code});break;
+    }
     if(!batch)break;
     const controller=new AbortController();let finish!:()=>void;const completed=new Promise<void>(r=>finish=r);
     const generation=BigInt((await this.storage.execute<any>('memoryExtraction.contactGeneration',{ownerId:this.ownerId,contactId:batch.contactId})).generation);
@@ -132,7 +180,7 @@ export class SqliteMemoryExtraction {
      this.active.set(task.taskId,{abort:controller,done:completed});
      await this.process(batch,controller.signal);
     }catch(error){
-     const code=error instanceof StorageFailure?error.code:typeof (error as any)?.code==='string'&&/^(?:extraction_model_|extraction_policy_|extraction_runtime_)/.test((error as any).code)?(error as any).code:'memory_extraction_failed';
+     const code=this.stopped?'memory_extraction_interrupted':error instanceof StorageFailure?error.code:typeof (error as any)?.code==='string'&&/^(?:extraction_model_|extraction_policy_|extraction_runtime_)/.test((error as any).code)?(error as any).code:'memory_extraction_failed';
      await this.storage.execute('memoryExtraction.fail',{ownerId:this.ownerId,attemptId:batch.attemptId,code});
      if(isSharedFailure(code))await this.pause(runId);
      break;
@@ -147,7 +195,7 @@ export class SqliteMemoryExtraction {
  }
  private async process(batch:ClaimedStep,signal:AbortSignal){
   const policy=await this.version();const resolved=policy.resolve(batch.policyConfig);
-  const requireCurrent=async()=>{signal.throwIfAborted();await policy.assertCurrent();await this.storage.execute('memoryExtraction.current',{ownerId:this.ownerId,attemptId:batch.attemptId});};
+  const requireCurrent=async()=>{signal.throwIfAborted();await policy.assertCurrent();await this.withSourceReady(batch.contactId,()=>this.storage.execute('memoryExtraction.current',{ownerId:this.ownerId,attemptId:batch.attemptId}));};
   const rows=[...batch.rows].sort((a,b)=>a.sent_at!==null&&b.sent_at!==null?(a.sent_at as bigint)<(b.sent_at as bigint)?-1:(a.sent_at as bigint)>(b.sent_at as bigint)?1:Number(a.input_no)-Number(b.input_no):Number(a.input_no)-Number(b.input_no));
   const actualNos=rows.map(row=>Number(row.input_no));
   const window:ExtractionWindow={owner_id:this.ownerId,contact_id:batch.contactId,target_message_ids:rows.filter(r=>r.role==='target').map(r=>String(r.message_id)),messages:rows.map(r=>({message_id:String(r.message_id),text:String(r.text_body),sender:r.sender_role==='owner'?'self':'contact',occurred_at:r.sent_at===null?null:new Date(Number(r.sent_at)).toISOString(),text_representation:'text'}))};
@@ -193,7 +241,7 @@ export class SqliteMemoryExtraction {
    assertCompleteClaimAdmission(window,fact,checked.result);
    return {eventId,candidateTraceId,inputEventId:verificationInputEventId,callId:verificationCall.callId,policyFingerprint:checked.result.claim_validation!.policy_fingerprint};
   });
-  await this.storage.execute('memoryExtraction.finish',{ownerId:this.ownerId,attemptId:batch.attemptId,outcome,verificationRefs,inputNos:actualNos});
+  await this.withSourceReady(batch.contactId,()=>this.storage.execute('memoryExtraction.finish',{ownerId:this.ownerId,attemptId:batch.attemptId,outcome,verificationRefs,inputNos:actualNos}));
  }
  close():Promise<void>{return this.closing??=(async()=>{this.stopped=true;for(const entry of this.active.values())entry.abort.abort();await Promise.allSettled([...this.pending]);await Promise.allSettled([...this.runs.values()]);await this.model.close?.();})().catch(error=>{this.closing=undefined;throw error;});}
 }

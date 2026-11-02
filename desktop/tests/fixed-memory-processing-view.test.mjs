@@ -63,7 +63,7 @@ test('无轮次显示等待，卡片只读状态与进度，不启动或控制�
    {status:'completed',state:'completed',stage:'completed',text:'本轮已完成'},
   ];
   for(const projection of projections){
-   current={...run(),...projection,total:2,succeeded:1,actions:['pause','continue'],laterStages:projection.status==='completed'?'completed':'pending',candidates:[{id:ids.task,scopeKind:'contact',contactId:ids.contact,body:'不在状态卡重复展示的合成候选',state:'verified_pending_decision',origin:'auto'}]};
+   current={...run(),...projection,total:2,succeeded:1,actions:[],laterStages:projection.status==='completed'?'completed':'pending',candidates:[{id:ids.task,scopeKind:'contact',contactId:ids.contact,body:'不在状态卡重复展示的合成候选',state:'verified_pending_decision',origin:'auto'}]};
    await revisit(page);await panel.getByRole('status').filter({hasText:projection.text}).waitFor();
    assert.equal(await panel.getByRole('button').count(),0);
    assert.equal(await panel.getByText('不在状态卡重复展示的合成候选',{exact:true}).count(),0);
@@ -77,11 +77,11 @@ test('处理中自动更新真实计数，提取全部结束仍不冒充整轮�
  let current={...run(),status:'processing',state:'running',total:3,succeeded:1,pending:2};
  await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:current}:undefined,async page=>{
   const panel=page.getByRole('region',{name:'固定范围记忆处理'});
-  await panel.getByText('提取与核验：已处理 1 / 3 条文字目标',{exact:true}).waitFor();
+  await panel.getByText('最近一批提取与核验：已处理 1 / 3 条文字目标',{exact:true}).waitFor();
   const progress=panel.getByRole('progressbar',{name:'文字提取与核验进度'});
   assert.equal(await progress.getAttribute('value'),'1');assert.equal(await progress.getAttribute('max'),'3');
   current={...current,succeeded:3,pending:0};
-  await panel.getByText('提取与核验：已处理 3 / 3 条文字目标',{exact:true}).waitFor();
+  await panel.getByText('最近一批提取与核验：已处理 3 / 3 条文字目标',{exact:true}).waitFor();
   assert.equal(await progress.getAttribute('value'),'3');
   await panel.getByText('主题整理、长期概览尚未全部完成。',{exact:true}).waitFor();
   assert.equal(await panel.getByText('本轮已完成',{exact:true}).count(),0);
@@ -118,7 +118,7 @@ test('失效立即清除进度，旧读取迟到不能恢复快照，随后自�
   assert.equal(await panel.getByRole('progressbar').count(),0);
   assert.equal(await panel.getByRole('status').count(),0);
   await panel.getByRole('alert').filter({hasText:'处理状态暂不可用'}).waitFor();
-  assert.equal(await panel.getByText('提取与核验：已处理 99 / 99 条文字目标',{exact:true}).count(),0);
+  assert.equal(await panel.getByText('最近一批提取与核验：已处理 99 / 99 条文字目标',{exact:true}).count(),0);
   mode='initial';await revisit(page);await panel.getByRole('progressbar').waitFor();
   assert.equal(await panel.getByRole('alert').count(),0);
  });
@@ -179,9 +179,9 @@ test('首轮尚未建立时显示真实待提取队列，旧轮完成不掩盖�
  let current={connectionGeneration:1,run:null,queue:{pending:4,nextDueAt:Date.now()+600_000,blockedContacts:0}};
  await withPanel(t,async method=>method==='readCurrent'?current:undefined,async page=>{
   const panel=page.getByRole('region',{name:'固定范围记忆处理'});
-  await panel.getByText(/新增待提取文字 4 条/).waitFor();
+  await panel.getByText(/增量待提取文字 4 条/).waitFor();
   current={...current,run:{...run(),status:'completed',state:'completed',stage:'completed',laterStages:'completed'},queue:{pending:6,nextDueAt:null,blockedContacts:1}};
-  await revisit(page);await panel.getByText(/新增待提取文字 6 条/).waitFor();
+  await revisit(page);await panel.getByText(/增量待提取文字 6 条/).waitFor();
   await panel.getByText(/当前联系人已暂停或受阻/).waitFor();
   await panel.getByRole('status').filter({hasText:'等待提取与核验'}).waitFor();
   assert.equal(await panel.getByText('本轮已完成',{exact:true}).count(),0);

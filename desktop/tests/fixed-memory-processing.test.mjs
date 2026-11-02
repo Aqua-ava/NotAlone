@@ -26,12 +26,12 @@ test('固定轮次具名入口只发request_key，保留未完成阶段且旧连
  await assert.rejects(f.controller.start({requestKey:ids.request,connectionGeneration:2,ownerId:'other'}));assert.equal(f.calls.length,count);
 });
 test('联系人状态使用独立只读入口，拒绝错范围、混入本人和额外输入',async t=>{
- let data={contactId:ids.contact,run:snapshot(),queue:{pending:2,nextDueAt:123,blockedContacts:0,later:{pending:0,nextDueAt:null,stage:null}}};
+ let data={contactId:ids.contact,run:snapshot(),queue:{pending:2,nextDueAt:123,blockedContacts:0,history:{pending:348},later:{pending:0,nextDueAt:null,stage:null}}};
  const f=await fixture(t,async()=>data);
  const view=await f.controller.read({contactId:ids.contact});
  assert.equal(f.calls.length,1);
  assert.equal(f.calls[0].path,`/api/memory-processing/contacts/${ids.contact}/current`);
- assert.equal(f.calls[0].method,'GET');assert.equal(view.contactId,ids.contact);assert.equal(view.queue.pending,2);
+ assert.equal(f.calls[0].method,'GET');assert.equal(view.contactId,ids.contact);assert.equal(view.queue.pending,2);assert.equal(view.queue.history.pending,348);
  data={...data,contactId:ids.request};await assert.rejects(f.controller.read({contactId:ids.contact}));
  data={...data,contactId:ids.contact,run:{...snapshot(),tasks:[{...snapshot().tasks[0],scopeKind:'self',contactId:null}]}};
  await assert.rejects(f.controller.read({contactId:ids.contact}));

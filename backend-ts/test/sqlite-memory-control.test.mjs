@@ -161,7 +161,7 @@ test('没有当前联系人处理记录时返回空；各联系人保留自己�
  const f=await fixture(t,{registryModule}),[a,b]=f.saved.map(binding=>binding.contact_id);
  f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'我长期喜欢合成园艺。'})],completedPartitions:['shard-a'],exhausted:true});
  const x=extractionFixture(f);t.after(()=>x.service.close());
- assert.deepEqual(await x.service.readContact(b),{contactId:b,run:null,queue:{pending:0,nextDueAt:null,blockedContacts:0,later:{pending:0,nextDueAt:null,stage:null}}});
+ assert.deepEqual(await x.service.readContact(b),{contactId:b,run:null,queue:{pending:0,nextDueAt:null,blockedContacts:0,history:{pending:0},later:{pending:0,nextDueAt:null,stage:null}}});
  await f.service.synchronize(a);const first=await x.service.start('contact-first-a');await x.service.waitForIdle(first.runId);
  assert.equal((await x.service.readContact(b)).run,null,'甲的记录不成为乙的最近记录');
  await f.service.synchronize(b);const second=await x.service.start('contact-second-b');await x.service.waitForIdle(second.runId);
@@ -323,7 +323,7 @@ test('未知回执不盲目重发；迟到已知回执恢复后才能继续并�
  assert.equal(trace.calls[0].state,'unknown');
 });
 
-test('退出中断后重开保持暂停/受阻与已完成结果，不自动模型调用；合法回执复用且不重发',async t=>{
+test('退出中断后保留安全恢复资格与已完成结果；合法回执复用且不重发',async t=>{
  const f=await fixtureWithMessages(t,{a:['我长期住在高雄。']});
  const normal=extractionFixture(f);t.after(()=>normal.service.close());
  const first=await normal.service.start('control-before-restart');await normal.service.waitForIdle(first.runId);
@@ -345,12 +345,12 @@ test('退出中断后重开保持暂停/受阻与已完成结果，不自动模�
  await f.storage.execute('fixture.setRuntimeToken',{ownerId:owner,attemptId:running.id,token:'synthetic-old-runtime'});
  await f.storage.execute('memoryExtraction.recover',{ownerId:owner});
  let view=await service.read(interrupted.runId);
- assert.equal(view.status,'paused');assert.equal(view.statusReason,null);
- assert.deepEqual(view.actions,['continue'],'重开保持暂停并等待手动继续');
+ assert.equal(view.status,'blocked');
+ assert.deepEqual(view.actions,['continue'],'安全中断保留原轮恢复资格，不伪造用户暂停');
  const known=await calls(f,interrupted.runId);
  assert.equal(known.filter(row=>row.state==='unknown'||row.state==='sending').length,0,'已成功回执不伪造未知');
  assert.equal(known.filter(row=>row.state==='succeeded').length,2);
- // 重开不自动模型调用，也不把宿主重启当手动继续。
+ // 存储恢复只保留资格；由正常宿主的有限恢复调度领取，读取本身不调用模型。
  const callsBeforeContinue=port.calls;await wait(50);
  assert.equal(port.calls,callsBeforeContinue);
  const preserved=await service.read(first.runId);

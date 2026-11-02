@@ -1,9 +1,13 @@
 import {randomUUID} from 'node:crypto';
 
 export interface MemoryL1SchedulerPort {
+ recoverBacklog?():Promise<unknown>;
  nextDueAt(now:number):Promise<number|null>;
  dueContacts(now:number):Promise<string[]>;
  startContact(contactId:string,requestKey:string,now:number):Promise<unknown|null>;
+ dueHistoryContacts?(now:number):Promise<string[]>;
+ nextHistoryDueAt?(now:number):Promise<number|null>;
+ startHistoryBatch?(contactId:string,requestKey:string,now:number):Promise<unknown|null>;
 }
 export interface MemoryL1SchedulerOptions {
  now?:()=>number;
@@ -23,6 +27,7 @@ export class SqliteMemoryL1Scheduler {
  #started=false;
  #closed=false;
  #closing?:Promise<void>;
+ #lastHistoryContact:string|null=null;
  constructor(port:MemoryL1SchedulerPort,options:MemoryL1SchedulerOptions={}){
   this.#port=port;this.#now=options.now??Date.now;
   this.#setTimeout=options.setTimeout??((callback,delay)=>setTimeout(callback,delay));
@@ -49,22 +54,41 @@ export class SqliteMemoryL1Scheduler {
  }
  private async scanOnce():Promise<void>{
   this.clearTimer();if(this.#closed)return;
-  const now=this.#now();let started=0;
+  let started=0,failed=false;
+  const historyEnabled=Boolean(this.#port.dueHistoryContacts&&this.#port.startHistoryBatch&&this.#port.nextHistoryDueAt);
   try{
-   const contacts=await this.#port.dueContacts(now);
+   const contacts=await this.#port.dueContacts(this.#now());
    for(const contactId of contacts){
     if(this.#closed)return;
-    const run=await this.#port.startContact(contactId,randomUUID(),this.#now());
-    if(run)started++;
+    try{if(await this.#port.startContact(contactId,randomUUID(),this.#now()))started++;}
+    catch{failed=true;}
    }
    if(this.#closed)return;
-   const next=await this.#port.nextDueAt(this.#now());
-   if(next===null)return;
-   const delay=next-this.#now();
-   // 若资格在扫描与建轮之间变化，给写事务留出空间，避免到期状态形成零间隔重扫。
-   this.arm(delay<=0&&started===0?1_000:delay);
+   if(this.#port.recoverBacklog)await this.#port.recoverBacklog();
+   if(this.#closed)return;
+   if(historyEnabled){
+    const due=await this.#port.dueHistoryContacts!(this.#now());
+    const previous=this.#lastHistoryContact===null?-1:due.indexOf(this.#lastHistoryContact);
+    const ordered=previous<0?due:[...due.slice(previous+1),...due.slice(0,previous+1)];
+    for(const contactId of ordered){
+     if(this.#closed)return;
+     this.#lastHistoryContact=contactId;
+     try{
+      if(await this.#port.startHistoryBatch!(contactId,randomUUID(),this.#now())){started++;break;}
+     }catch{failed=true;}
+    }
+   }
+   if(this.#closed)return;
+   const now=this.#now(),incremental=await this.#port.nextDueAt(now);
+   const history=historyEnabled?await this.#port.nextHistoryDueAt!(now):null;
+   const due=[incremental,history].filter((value):value is number=>value!==null);
+   // 历史终页可能没有新增文字事件，有限周期重扫保证恢复导入及空终页也能被发现。
+   if(historyEnabled)due.push(now+30_000);
+   if(!due.length){if(failed)this.arm(5_000);return;}
+   const delay=Math.min(...due)-this.#now();
+   // 每次只执行一个历史小批，下一轮优先重新领取增量；资格变化或异常时避免忙重试。
+   this.arm(failed?Math.max(5_000,delay):delay<=0?(started===0?1_000:1):delay);
   }catch{
-   // SQLite临时不可用时仅延迟下一次扫描；模型失败由固定轮次记录，已入轮目标不会被重发。
    if(!this.#closed)this.arm(5_000);
   }
  }

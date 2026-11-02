@@ -84,19 +84,33 @@ export class SqliteHistoryService {
   const releases:(()=>Promise<void>)[]=[];
   const abort=()=>{controller.abort();void (retained?retained.release():closeChannel()).catch(()=>{});};signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
   try{
-   const previous=this.guards.get(contactId);if(previous?.failed||previous?.parked)await previous.release();
+   const previous=this.guards.get(contactId);if(previous?.failed)await previous.release();
    const token=await this.contacts.eligibility(contactId);const scope=await this.storage.execute<HistoryScope>('history.scope',{token});
    const metadataRevalidation=await this.storage.execute<boolean>('history.normalUseRevalidationCandidate',{token});
    if(!metadataRevalidation&&!await this.storage.execute<boolean>('history.preflightGeneration',{token}))throw new StorageFailure('history_source_continuity_unverified');
    await this.check(scope,controller);retained=this.guards.get(contactId);
    if(retained&&JSON.stringify(retained.token)!==JSON.stringify(token)){await retained.release();throw new StorageFailure('history_source_continuity_unverified');}
-   channel=retained?.channel??this.createChannel();
+   channel=retained&&!retained.parked?retained.channel:this.createChannel();
    const register=(key:string,coversAllSources=false)=>releases.push(this.holders.register({key,ownerId:token.owner_id,contactId,generation:BigInt(token.data_generation),coversAllSources,close:stop}));
    // target会打开固定快照；没有goal之前也必须先登记实际读者。
    register(historyReaderHolderKey(contactId,token.data_generation),true);
+   const observeGuardLoss=(entry:RetainedGuard,transport:HistoryChannel)=>{
+    const session=transport.guardSession;if(!session||!(session.loss instanceof Promise))throw new StorageFailure('history_guard_invalid');
+    const lost=()=>{if(!entry.failed&&entry.channel===transport){entry.failed=true;if(!entry.parked)this.active.get(contactId)?.controller.abort();
+     const code=session.failureCode?.();entry.sourceLost=typeof code==='string'&&isSourceContinuityLost(new StorageFailure(code));
+     const release=async()=>{if(entry.sourceLost)await this.storage.execute('history.markContinuityLost',{token:entry.token});await entry.release();};void release().catch(()=>{});}};
+    void session.loss.then(lost,lost);
+   };
    const armGuard=async(proof?:GuardProof):Promise<GuardResult>=>{
     if(retained){if(retained.failed||!await this.storage.execute<boolean>('history.guardCheck',{token,guardId:retained.guardId}))throw new StorageFailure('history_source_continuity_unverified');
-    if(proof){const checked=await this.storage.execute<{ok:boolean;revalidated:boolean}>('history.prepareNormalUseGuard',{token,target:proof.target,report:proof.report,guardId:retained.guardId});if(!checked.ok)throw new StorageFailure('history_source_continuity_unverified');retained.report=structuredClone(proof.report);retained.target=structuredClone(proof.target);return {guardId:retained.guardId,revalidated:checked.revalidated};}
+    if(retained.parked&&!proof)throw new StorageFailure('history_source_continuity_unverified');
+    if(proof){const checked=await this.storage.execute<{ok:boolean;revalidated:boolean}>('history.prepareNormalUseGuard',{token,target:proof.target,report:proof.report,guardId:retained.guardId});if(!checked.ok)throw new StorageFailure('history_source_continuity_unverified');retained.report=structuredClone(proof.report);retained.target=structuredClone(proof.target);
+     if(retained.parked){
+      // 正常停车只更换原生选择；完整元数据查证成功后复用同一持久证明与删除holder，避免先lost再active的空窗。
+      if(!channel?.guardSession||!(channel.guardSession.loss instanceof Promise))throw new StorageFailure('history_guard_invalid');
+      const parked=retained.channel;retained.channel=channel;retained.parked=false;observeGuardLoss(retained,channel);await parked.close?.();
+     }
+     return {guardId:retained.guardId,revalidated:checked.revalidated};}
      return {guardId:retained.guardId,revalidated:false};}
     if(!channel?.guardSession){if(proof)throw new StorageFailure('history_guard_invalid');return {revalidated:false};}
     const guardSession=channel.guardSession;
@@ -120,19 +134,18 @@ export class SqliteHistoryService {
      if(this.guards.get(contactId)===entry)this.guards.delete(contactId);
     }});}catch(error){await this.storage.execute('history.guardRelease',{token,guardId,normalUse:entry.normalUse,sourceLost:entry.sourceLost});throw error;}
     this.guards.set(contactId,entry);retained=entry;
-    const lost=()=>{if(!entry.failed){entry.failed=true;if(!entry.parked)this.active.get(contactId)?.controller.abort();
-     const code=guardSession.failureCode?.();entry.sourceLost=typeof code==='string'&&isSourceContinuityLost(new StorageFailure(code));
-     const release=async()=>{if(entry.sourceLost)await this.storage.execute('history.markContinuityLost',{token});await entry.release();};void release().catch(()=>{});}};
-    void guardSession.loss.then(lost,lost);
+    observeGuardLoss(entry,channel);
     return {guardId,revalidated};
    };
    const releaseNormalUseGuard=()=>{if(retained?.normalUse&&!retained.failed&&!retained.sourceLost)releaseGuardAfterSuccess=true;};
-   try{const result=await run(scope,channel,controller,goalId=>register(`history:${goalId}`),armGuard,metadataRevalidation,Boolean(retained),releaseNormalUseGuard);if(retained?.failed)throw new StorageFailure('history_source_continuity_unverified');successful=true;return result;}
+   try{const result=await run(scope,channel,controller,goalId=>register(`history:${goalId}`),armGuard,metadataRevalidation,Boolean(retained&&!retained.parked),releaseNormalUseGuard);if(retained?.failed)throw new StorageFailure('history_source_continuity_unverified');successful=true;return result;}
    catch(error){if(isSourceContinuityLost(error))await this.storage.execute('history.markContinuityLost',{token});throw error;}
   }finally{
    let cleanupError:unknown;
    const intentionalRelease=successful&&releaseGuardAfterSuccess&&Boolean(retained?.normalUse&&!retained.failed&&!retained.sourceLost);
    try{if(retained&&(!successful||retained.failed||intentionalRelease))await retained.release();else if(!retained)await closeChannel();if(successful&&retained?.failed&&!intentionalRelease)cleanupError=new StorageFailure('history_source_continuity_unverified');}catch(error){cleanupError=error;}
+   // 新通道尚未完成交接就失败时，也必须排空它，不能只关闭旧parked通道。
+   if(retained&&channel!==retained.channel)try{await closeChannel();}catch(error){cleanupError??=error;}
    finished=true;finishWork();
    try{for(const release of releases.reverse())await release();}catch(error){cleanupError??=error;}
    finally{this.active.delete(contactId);signal?.removeEventListener('abort',abort);finishAll();}

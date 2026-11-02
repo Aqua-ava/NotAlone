@@ -22,7 +22,7 @@ const statusCapabilityKeys=['programVersion','exactSchema','declaredLocalKey','a
 const capabilities=extra=>Object.fromEntries([...statusCapabilityKeys,...Object.keys(extra)].map(key=>[key,extra[key]??'unverified']));
 const schema={format:'wechat-message-schema-v1',status:'unverified',scopeDigest:hash(`${account}\0${conversation}`),sourceGeneration:generation,schemaFingerprint:'b'.repeat(64),
  tables:[{target:'c'.repeat(64),partition:'d'.repeat(64),role:'private_message',columns:[{name:'local_id',type:'INTEGER',notNull:false,primaryKey:1,hidden:0}],indexes:[],declaredPrimaryKey:['local_id'],autoIncrement:true,sqlFingerprint:'e'.repeat(64),triggerFingerprints:[],schemaVersion:'1',rootPage:'2'}],checkedPartitions:['d'.repeat(64)]};
-async function fixture(t,sharedMode=false){
+async function fixture(t,sharedMode=false,storageOptions={}){
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-wechat-channel-'))),artifact=join(root,'artifact');
  await mkdir(join(artifact,'bin'),{recursive:true});await mkdir(join(artifact,'lib'));await mkdir(join(root,'state'));
  const executable=join(artifact,'bin','wx-cli'),manifestPath=join(artifact,'manifest.json'),planFile=join(root,'plan'),logFile=join(root,'requests'),pidFile=join(root,'pid');
@@ -61,7 +61,7 @@ async function fixture(t,sharedMode=false){
  await writeFile(executable,script,{mode:0o700});const wcdb=Buffer.from('synthetic-channel-WCDB');await writeFile(join(artifact,'lib','libWCDB.dylib'),wcdb);
  const manifest={formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',cliSha256:hash(script),wcdbSha256:hash(wcdb),signing:'ad-hoc-development',realWechatVerified:false};
  await writeFile(manifestPath,JSON.stringify(manifest));
- const storage=await SqliteStorage.open({userData:join(root,'state'),intent:'create',role:'test'});
+ const storage=await SqliteStorage.open({userData:join(root,'state'),intent:'create',role:'test',...storageOptions});
  const contacts=new SqliteContactService(storage,owner,{account:async()=>({externalKey:account,identityScheme:'wechat.account.v1',sourceGeneration:generation,assurance:'verified',supportProfile:'synthetic-metadata-v1'}),sessions:async()=>[conversation,...(sharedMode?['synthetic-second']:[])].map(externalKey=>({externalKey,displayName:externalKey,kind:'private',identityAssurance:'verified'}))});
  await contacts.initialize();const candidate=await contacts.detectAccount();await contacts.confirmAccount(candidate.candidate_token);await contacts.setReading(true);
  const snapshot=await contacts.candidates(true);await contacts.confirm(snapshot.snapshot_token,snapshot.sessions.map(s=>({locator:s.username,observed_display_name:s.display_name,expected_selection_generation:s.selection_generation})));
@@ -374,4 +374,32 @@ test('反复切换仅保留当前联系人轻量证明订阅，关闭后无遗�
   assert.ok(subscriptions<=2,'来源证明按联系人保留，不随切换次数增长');
  }
  await f.history.close();assert.equal(subscriptions,0);
+});
+
+test('共享parked联系人重新查证期间原来源保持可用，实际原生失证仍撤销证明',async t=>{
+ const f=await fixture(t,true,{registryModule:new URL('./fixtures/history-parked-registry.mjs',import.meta.url).href}),[a,b]=f.bindings;
+ await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
+ const execute=f.storage.execute.bind(f.storage);let checked=0;
+ f.storage.execute=async(action,input)=>{
+  if(action==='history.prepareNormalUseGuard'&&input.token.contact_id===a.contact_id){
+   checked=await execute('fixture.currentSourceValid',{ownerId:owner,contactId:a.contact_id});
+  }
+  return execute(action,input);
+ };
+ try{await f.history.synchronize(a.contact_id);assert.equal(checked,2,'重新inspect和target后、提交新证明前，旧来源不能临时失效');}
+ finally{f.storage.execute=execute;}
+ assert.equal(await execute('fixture.currentSourceValid',{ownerId:owner,contactId:a.contact_id}),2);
+ await f.shared.stop();
+ await assert.rejects(execute('fixture.currentSourceValid',{ownerId:owner,contactId:a.contact_id}),{code:'history_source_not_available'});
+ assert.equal((await f.history.coverage(a.contact_id)).failureCode,'history_source_continuity_unverified');
+});
+
+for(const mode of ['wrong-account','wrong-generation'])test(`parked联系人重新查证发现${mode}时旧来源立即失效且不读取正文`,async t=>{
+ const f=await fixture(t,true,{registryModule:new URL('./fixtures/history-parked-registry.mjs',import.meta.url).href}),[a,b]=f.bindings;
+ await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
+ const before=(await requests(f.logFile)).filter(row=>row.op==='page').length;
+ await f.setPlan({mode});await assert.rejects(f.history.synchronize(a.contact_id));
+ assert.equal((await requests(f.logFile)).filter(row=>row.op==='page').length,before);
+ await assert.rejects(f.storage.execute('fixture.currentSourceValid',{ownerId:owner,contactId:a.contact_id}),{code:'history_source_not_available'});
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

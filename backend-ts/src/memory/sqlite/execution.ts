@@ -97,6 +97,14 @@ function prepareStep(tx:StorageTransaction,i:{ownerId:string;runId:string;taskId
  return {attemptId,stepId:String(s.id),taskId:i.taskId,runId:i.runId,contactId:String(t.contact_id),rows,policyConfig:JSON.parse(String(r.policy_config)),claim:{task_id:i.taskId,step_id:String(s.id),step_name:'extraction_verification',worker_id:lease.runtimeId,lease_generation:Number(t.resume_no)}};
 }
 export const executionActions:StorageAction[]=[
+ action('blockClaim','write',(tx,raw)=>{
+  const i=raw as {ownerId:string;runId:string;taskId:string;code:string};
+  const code=/^(history_|memory_extraction_|storage_)[a-z_]+$/.test(i.code)?i.code:'memory_extraction_claim_failed';
+  // 领取事务已回滚，不能伪造attempt或覆盖在途／未知调用；只记录没有执行者的失败。
+  tx.run(`UPDATE processing_task SET state='failed',error_code=? WHERE owner_id=? AND run_id=? AND id=? AND state IN ('pending','running')
+   AND NOT EXISTS(SELECT 1 FROM processing_step s WHERE s.owner_id=processing_task.owner_id AND s.task_id=processing_task.id AND s.state IN ('running','unknown'))`,[code,i.ownerId,i.runId,i.taskId]);
+  return null;
+ }),
  action('claim','write',(tx,raw,lease)=>prepareStep(tx,raw as Parameters<typeof prepareStep>[1],lease)),
  action('current','read',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string};currentAttempt(tx,i.ownerId,i.attemptId,lease);return true;}),
  action('event','write',(tx,raw,lease)=>event(tx,raw as Parameters<typeof event>[1],lease)),
@@ -221,7 +229,7 @@ export const executionActions:StorageAction[]=[
    for(const call of tx.all('SELECT operation_id,state FROM model_call WHERE owner_id=? AND step_attempt_id=?',[ownerId,a.id])){if(call.state==='unknown'||call.state==='failed'){tx.run("UPDATE model_operation SET state=? WHERE owner_id=? AND id=? AND state<>'sealed'",[call.state,ownerId,call.operation_id]);for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state=? WHERE owner_id=? AND operation_id=?`,[call.state==='unknown'?'unknown':'released',ownerId,call.operation_id]);}}
    tx.run("UPDATE step_attempt SET state=?,error_code='runtime_interrupted' WHERE owner_id=? AND id=?",[unknown?'unknown':'aborted',ownerId,a.id]);
    tx.run('UPDATE processing_step SET state=? WHERE owner_id=? AND id=?',[unknown?'unknown':'failed',ownerId,a.step_id]);
-   tx.run("UPDATE processing_task SET state=?,error_code='runtime_interrupted' WHERE owner_id=? AND id=(SELECT task_id FROM processing_step WHERE owner_id=? AND id=?) AND state<>'revoked'",[unknown?'unknown':'paused',ownerId,ownerId,a.step_id]);
+   tx.run("UPDATE processing_task SET state=?,error_code='memory_extraction_interrupted' WHERE owner_id=? AND id=(SELECT task_id FROM processing_step WHERE owner_id=? AND id=?) AND state<>'revoked'",[unknown?'unknown':'failed',ownerId,ownerId,a.step_id]);
   }
   // 安全恢复停在L1结算与后续登记之间的持久轮；仅接受新标记的轮次，旧incomplete历史不作猜测。
   if(hasRunFollowupState(tx))for(const run of tx.all(`SELECT * FROM processing_run WHERE owner_id=? AND state='running' AND followup_state IN ('pending','enrolled')
@@ -243,7 +251,12 @@ export const executionActions:StorageAction[]=[
    try{assertInputs(tx,ownerId,runId,tx.all('SELECT * FROM run_input WHERE owner_id=? AND run_id=?',[ownerId,runId]));}catch{continue;}
    tx.run("UPDATE processing_run SET state='incomplete' WHERE owner_id=? AND id=? AND state='running' AND followup_state IN ('pending','enrolled') AND pause_requested_at IS NULL",[ownerId,runId]);
   }
-  tx.run("UPDATE processing_run SET state='paused',pause_requested_at=? WHERE owner_id=? AND state IN ('running','pending')",[Date.now(),ownerId]);return true;
+  // 应用退出不是用户暂停；未发送或已取得确定回执的L1可沿原输入继续，未知调用仍保持未知。
+  tx.run(`UPDATE processing_task SET state='failed',error_code='memory_extraction_interrupted'
+   WHERE owner_id=? AND scope_kind='contact' AND state IN ('pending','running')
+    AND EXISTS(SELECT 1 FROM processing_run r WHERE r.owner_id=processing_task.owner_id AND r.id=processing_task.run_id AND r.state IN ('running','pending') AND r.pause_requested_at IS NULL)
+    AND NOT EXISTS(SELECT 1 FROM processing_step s WHERE s.owner_id=processing_task.owner_id AND s.task_id=processing_task.id AND s.state IN ('running','unknown'))`,[ownerId]);
+  tx.run("UPDATE processing_run SET state=CASE WHEN pause_requested_at IS NULL THEN 'incomplete' ELSE 'paused' END WHERE owner_id=? AND state IN ('running','pending')",[ownerId]);return true;
  }),
  action('trace','read',(tx,raw)=>{
   const i=raw as {ownerId:string;taskId:string};const t=tx.get('SELECT * FROM processing_task WHERE owner_id=? AND id=?',[textId(i.ownerId),textId(i.taskId)]);if(!t||t.state==='revoked')fail('memory_extraction_not_found');

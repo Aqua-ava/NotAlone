@@ -15,6 +15,9 @@ const sharedReasons: Record<string, string> = {
   document_model_scope_invalid: '模型用途范围不可用',
 };
 const blockedReasons: Record<string, string> = {
+  extraction_model_validation_failed: '模型返回未通过格式校验，待处理文字和已完成进度会保留。',
+  history_source_not_available: '聊天来源暂不可用，需要重新核验；待处理文字和已完成进度会保留。',
+  memory_extraction_interrupted: '上次处理被应用退出中断，已保留进度，等待安全续跑。',
   extraction_policy_source_unavailable: '应用已更新，旧任务需要按当前版本恢复；点击恢复本轮处理继续未完成内容。',
   extraction_runtime_config_invalid: '旧任务的提取配置无法读取，请检查配置后再恢复。',
   model_receipt_unknown: '调用结果待核实',
@@ -146,18 +149,19 @@ export function FixedMemoryProcessingPanel({ bridge, contactId, scopeKey = '', o
     <header className="memory-processing-bar"><h2>记忆处理</h2>
       {view && <p role="status">{statusText(run,view.queue)}</p>}
     </header>
-    <p className="memory-section-note">当前联系人的后台队列，以及最近一轮提取进度</p>
+    <p className="memory-section-note">历史与增量分别排队；下方进度只表示最近一批文字的处理情况</p>
     {error && <p role="alert">{error}</p>}
     {!contactId && <p>请先选择联系人，再查看记忆处理状态。</p>}
     {contactId && !view && !error && <p aria-live="polite">正在核对处理状态…</p>}
     {view && !run && <><p>暂无处理记录</p><p>新增文字会先积累，在会话静默或达到批量条件后自动处理；已有历史单独初始化。</p></>}
-    {view?.queue && view.queue.pending > 0 && <p>新增待提取文字 {view.queue.pending} 条。{view.queue.nextDueAt != null ? `预计 ${new Date(view.queue.nextDueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 检查批量条件。` : ''}{view.queue.blockedContacts > 0 ? '当前联系人已暂停或受阻，待处理文字会保留。' : ''}</p>}
+    {view?.queue?.history && <p>历史待提取文字 {view.queue.history.pending} 条。导入完成后自动分批处理，已完成文字会跳过。</p>}
+    {view?.queue && view.queue.pending > 0 && <p>增量待提取文字 {view.queue.pending} 条。{view.queue.nextDueAt != null ? `预计 ${new Date(view.queue.nextDueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 检查批量条件。` : ''}{view.queue.blockedContacts > 0 ? '当前联系人已暂停或受阻，待处理文字会保留。' : ''}</p>}
     {view?.queue?.later && view.queue.later.pending > 0 && <p>主题与长期概览仍有 {view.queue.later.pending} 项待处理。{view.queue.later.nextDueAt != null && run?.statusReason !== 'later_stages_scheduled' ? `预计 ${new Date(view.queue.later.nextDueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 继续。` : ''}</p>}
     {run && <>
       {run.status === 'blocked' && <p>{reasonText(failureReason)}</p>}
       <RecoveryControl key={`${contactId}:${scopeKey}:${view!.connectionGeneration}:${run.runId}`} bridge={bridge} view={view!} onSettled={()=>refresh.current()}/>
       {run.statusReason === 'later_stages_scheduled' && run.nextDueAt != null && <p>预计 {new Date(run.nextDueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 开始，执行前会重新核对资料。</p>}
-      <p>提取与核验：已处理 {run.succeeded} / {run.total} 条文字目标</p>
+      <p>最近一批提取与核验：已处理 {run.succeeded} / {run.total} 条文字目标</p>
       {run.total > 0 && <progress className="memory-processing-progress" aria-label="文字提取与核验进度" max={run.total} value={run.succeeded}/>}
       {run.pending > 0 && <p>待处理 {run.pending} 条文字目标</p>}
       {run.revoked > 0 && <p>有 {run.revoked} 条目标因取消勾选或来源删除失效，不计入待处理。</p>}

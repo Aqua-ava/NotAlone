@@ -33,14 +33,16 @@ function decimal(value: unknown): string {
 }
 function array(value: unknown): unknown[] { if (!Array.isArray(value)) throw invalid(); return value; }
 function readQueue(raw: unknown): FixedProcessingQueue {
-  const queue = row(raw); exact(queue, ['pending','nextDueAt','blockedContacts',...(Object.hasOwn(queue,'later')?['later']:[])]);
+  const queue = row(raw); exact(queue, ['pending','nextDueAt','blockedContacts',...(Object.hasOwn(queue,'later')?['later']:[]),...(Object.hasOwn(queue,'history')?['history']:[])]);
+  let history: FixedProcessingQueue['history'];
+  if(Object.hasOwn(queue,'history')){const value=row(queue.history);exact(value,['pending']);history={pending:count(value.pending)};}
   let later: FixedProcessingQueue['later'];
   if (Object.hasOwn(queue,'later')) {
     const value=row(queue.later); exact(value,['pending','nextDueAt','stage']);
     if (value.stage!==null&&!['document_scene','document_profile'].includes(String(value.stage))) throw invalid();
     later={pending:count(value.pending),nextDueAt:value.nextDueAt===null?null:count(value.nextDueAt),stage:value.stage as 'document_scene'|'document_profile'|null};
   }
-  return {pending:count(queue.pending),blockedContacts:count(queue.blockedContacts),nextDueAt:queue.nextDueAt===null?null:count(queue.nextDueAt),...(later?{later}:{})};
+  return {pending:count(queue.pending),blockedContacts:count(queue.blockedContacts),nextDueAt:queue.nextDueAt===null?null:count(queue.nextDueAt),...(later?{later}:{}),...(history?{history}:{})};
 }
 function scope(value: Record<string, unknown>) {
   if (value.scopeKind !== 'self' && value.scopeKind !== 'contact' || value.scopeKind === 'self' && value.contactId !== null) throw invalid();

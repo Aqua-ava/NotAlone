@@ -77,7 +77,7 @@ test('真实记忆页面仅展示处理进度并自动刷新资料，资格失�
   await page.goto('http://127.0.0.1/memory-page-fixed-test');
   await page.addScriptTag({ content: compiled.outputFiles[0].text });
   const panel = page.getByRole('region', { name: '固定范围记忆处理' });
-  await panel.getByText('提取与核验：已处理 1 / 1 条文字目标', { exact: true }).waitFor();
+  await panel.getByText('最近一批提取与核验：已处理 1 / 1 条文字目标', { exact: true }).waitFor();
   assert.equal(await panel.getByRole('button').count(), 0);
   assert.equal(await panel.getByText('合成记忆页面候选', { exact: true }).count(), 0);
   const documentPanel=page.getByRole('region',{name:'主题资料与长期概览'});

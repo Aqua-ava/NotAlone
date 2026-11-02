@@ -39,6 +39,7 @@ export interface FixedProcessingCall {
 export interface FixedProcessingTrace { events: FixedProcessingEvent[]; calls: FixedProcessingCall[] }
 export interface FixedProcessingQueue {
   pending: number; nextDueAt: number | null; blockedContacts: number;
+  history?: { pending: number };
   later?: { pending: number; nextDueAt: number | null; stage: 'document_scene' | 'document_profile' | null };
 }
 export interface FixedProcessingView { connectionGeneration: number; contactId?: string; run: FixedProcessingRun | null; queue?: FixedProcessingQueue }
