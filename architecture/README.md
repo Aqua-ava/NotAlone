@@ -257,3 +257,4 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 146. [ADR-146：AI 服务地址与密钥由用户填写](adr/146-editable-deepseek-endpoint.md)
 147. [ADR-147：OpenCode Go 的模型环境配置](adr/147-opencode-go-model-configuration.md)
 148. [ADR-148：代码策略更新后的未完成记忆任务恢复](adr/148-memory-policy-recovery.md)
+149. [ADR-149：内容级候选拒绝不构成记忆处理失败](adr/149-content-rejection-is-not-failure.md)

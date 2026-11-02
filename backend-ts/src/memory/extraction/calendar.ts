@@ -113,7 +113,8 @@ export function checkedEventCalendar(event:MemoryEvent,window:ExtractionWindow,s
   const original=Array.from(anchor.text),matches=event.occurrence_evidence.filter(ref=>ref.message_id===uuid(anchor.message_id)).flatMap(ref=>{
     const fragment=original.slice(ref.char_start,ref.char_end).join(''),index=expression?fragment.indexOf(expression):-1;
     return index<0?[]:[ref.char_start+Array.from(fragment.slice(0,index)).length];});
-  requireValid(expression&&matches.length>0);
+  // 时间表达没有可定位的原话证据时按“发生时间未知”收口；逐条拒绝属于内容结果，不能升级为契约异常。
+  if(!expression||matches.length===0)return unknown(event);
   if(matches.some(index=>/(说|表示|告诉|提到|转述|问)/.test(original.slice(0,index).join('').split(/[。！？；;\n]/).at(-1)!)))return unknown(event);
   let expected:Calendar|null;try{expected=calendar(expression,sourceCalendar(anchor));}catch{expected=null;}
   if(!expected||!event.occurrence_verified||event.occurrence_precision!==expected.precision||!sameTime(event.occurrence_start,expected.start)||!sameTime(event.occurrence_end,expected.end))return unknown(event);

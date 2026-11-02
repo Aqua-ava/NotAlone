@@ -186,7 +186,7 @@ export class SqliteMemoryExtraction {
   await requireCurrent();
   if(commonFailure)throw new StorageFailure(commonFailure);
   if(outcome.failure_kind!==null||!outcome.extraction_completed)throw new StorageFailure(modelFailure??'memory_extraction_protocol_incomplete');
-  if(outcome.rejected_count>0&&outcome.accepted.length===0)throw new StorageFailure('memory_extraction_source_insufficient');
+  // 逐条拒绝是内容结果：目标按“已处理、无新增”收尾并继续后续批次，不能升级为整批失败或整轮受阻。
   const verificationRefs:(CandidateVerificationReference|null)[]=outcome.accepted.map((fact,index)=>{
    const checked=outcome.verification.find(v=>v.fact===fact),candidateTraceId=outcome.candidate_trace_ids[index]!,eventId=verificationEvents.get(candidateTraceId);
    if(resolved.verification.id!=='complete-claim-v1'||!checked||!eventId||!verificationInputEventId||!verificationCall)return null;

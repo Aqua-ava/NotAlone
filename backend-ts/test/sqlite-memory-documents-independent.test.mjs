@@ -6,14 +6,18 @@ import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts
 import {supplier} from './fixtures/memory-management/supplier.mjs';
 import {documentFixture} from './fixtures/memory-documents/support.mjs';
 
-test('来源核验失败后文档阶段不能覆盖提取错误归因',async t=>{
+test('来源核验逐条拒绝按内容跳过，不产生记忆也不进入文档阶段错误归因',async t=>{
  const rejected=supplier({negative:true});
  const f=await deletionFixture(t,{extractionResponse:(request,input)=>rejected.respond(request,input)});
- const run=await f.extraction.start('source-failure-keeps-attribution');await f.extraction.waitForIdle(run.runId);
+ const run=await f.extraction.start('source-rejection-skips-without-failure');await f.extraction.waitForIdle(run.runId);
  const result=await f.extraction.read(run.runId),task=result.tasks.find(item=>item.contactId===f.contactId);
- assert.equal(task.state,'failed');assert.equal(task.errorCode,'memory_extraction_source_insufficient');
- assert.equal((await f.documents.readTask(task.taskId)).errorCode,'memory_extraction_source_insufficient');
- assert.deepEqual((await f.documents.readTask(task.taskId)).stages,[],'前置提取失败时没有成功启动文档步骤');
+ assert.equal(task.state,'succeeded');assert.equal(task.errorCode,null);
+ const documents=await f.documents.readTask(task.taskId);
+ assert.equal(documents.errorCode,null);
+ assert.deepEqual(documents.stages.map(stage=>[stage.kind,stage.status,stage.reason]),
+  [['scene','not_applicable','no_eligible_memories'],['profile','not_applicable','no_eligible_memories']],
+  '内容拒绝没有产生记忆，文档两阶段按无合格记忆明确不适用');
+ assert.deepEqual(result.candidates,[]);
  assert.ok(rejected.purposes.some(item=>item.purpose==='extraction')&&rejected.purposes.some(item=>item.purpose==='verification'));
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

@@ -96,18 +96,17 @@ test('空历史、跨owner、撤销授权和来源失证不建新轮，也不影
  await assert.rejects(memory.startHistory(b,randomUUID()),error=>error.code==='memory_extraction_scope_stale');assert.equal(port.calls,1);
 });
 
-for(const kind of ['failed','paused','unknown'])test(`历史初始化保留${kind}保护，新键不重试旧调用，同键只读重放`,async t=>{
+for(const kind of ['technical','paused','unknown'])test(`历史初始化保留${kind}保护，新键不重试旧调用，同键只读重放`,async t=>{
  const f=await fixtureWithMessages(t,{a:['我长期住在高雄。'],b:['乙的合成历史']});
  const entered=Promise.withResolvers(),gate=Promise.withResolvers();let memory;
- const negative=supplier({negative:true});
  const port=modelPort(()=>memory.accounting,async(request,input)=>{
-  if(input.scope.contact_id===f.ca){
-   if(kind==='failed')return negative.respond(request,input);
-   if(kind==='unknown')throw new Error('合成未知调用');
-   entered.resolve();await gate.promise;
-  }
+  if(input.scope.contact_id===f.ca&&kind==='unknown')throw new Error('合成未知调用');
+  if(input.scope.contact_id===f.ca&&kind==='paused'){entered.resolve();await gate.promise;}
   return {blocks:[{type:'tool-call',name:request.tool.name,arguments:JSON.stringify({scenes:[]})}]};
  });
+ const originalPrepare=port.prepare.bind(port);
+ // 技术失败（非共用配置）用于生成真实受阻历史，区别于已改为逐条跳过完成的内容拒绝。
+ port.prepare=async(request,input)=>{if(kind==='technical'&&input.scope.contact_id===f.ca)throw Object.assign(new Error('synthetic_purpose'),{code:'extraction_model_purpose_invalid'});return originalPrepare(request,input);};
  memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(async()=>{gate.resolve();await memory.close();});
  const key=randomUUID(),start=await memory.startHistory(f.ca,key);
  if(kind==='paused'){await entered.promise;const current=await memory.read(start.run.runId);await memory.pause(start.run.runId,current.controlVersion,randomUUID());}
@@ -133,7 +132,7 @@ test('来源删除围栏阻止历史初始化，删除后同键墓碑不能恢�
  assert.equal(port.calls,1);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('联系人处理快照隔离同轮其他联系人的失败、本人任务和调用',async t=>{
+test('联系人处理快照隔离同轮不同内容结果、本人任务和调用',async t=>{
  const f=await fixtureWithMessages(t,{a:['我长期住在高雄。'],b:['我长期住在台南。']});
  const x=extractionFixture(f);t.after(()=>x.service.close());
  const rejected=supplier({negative:true}),accepted=supplier();
@@ -143,10 +142,12 @@ test('联系人处理快照隔离同轮其他联系人的失败、本人任务�
  const a=await x.service.readContact(f.ca),b=await x.service.readContact(f.cb);
  assert.equal(a.contactId,f.ca);assert.equal(b.contactId,f.cb);
  assert.equal(a.run.runId,run.runId);assert.equal(b.run.runId,run.runId);
- assert.equal(a.run.total,1);assert.equal(a.run.succeeded,0);assert.equal(a.run.failed,1);
- assert.equal(a.run.status,'blocked');assert.equal(a.run.tasks[0].errorCode,'memory_extraction_source_insufficient');
+ assert.equal(a.run.total,1);assert.equal(a.run.succeeded,1);assert.equal(a.run.failed,0);
+ assert.equal(a.run.tasks[0].state,'succeeded');assert.equal(a.run.tasks[0].errorCode,null);
+ assert.deepEqual(a.run.candidates,[],'内容拒绝只影响本条候选，不产生记忆');
  assert.equal(b.run.total,1);assert.equal(b.run.succeeded,1);assert.equal(b.run.failed,0);
- assert.equal(b.run.statusReason,'later_stages_pending','其他联系人失败不能污染已完成提取的联系人');
+ assert.equal(b.run.candidates.length,1);
+ assert.equal(a.run.statusReason,'later_stages_pending');assert.equal(b.run.statusReason,'later_stages_pending','另一联系人的内容结果不能污染本联系人投影');
  for(const [view,contactId] of [[a,f.ca],[b,f.cb]]){
   assert.equal(view.run.tasks.length,1);assert.equal(view.run.tasks[0].scopeKind,'contact');
   assert.equal(view.run.tasks[0].contactId,contactId);assert.ok(view.run.inputs.every(input=>input.contactId===contactId));
@@ -234,14 +235,23 @@ test('普通暂停不启动新小批，执行中合法小批提交后显示暂�
  assert.equal(nextView.total,1);assert.equal(nextView.succeeded,1,'新消息留到下一次明确启动时处理');
 });
 
-test('单人失败只让其受阻，共用模型故障暂停整轮并显示固定原因，失败不自动重试模型',async t=>{
+test('单人技术失败只让其受阻，共用模型故障暂停整轮并显示固定原因，失败不自动重试模型',async t=>{
  const f=await fixtureWithMessages(t,{a:['我住在高雄。','我偏好绿茶。'],b:['我住在台南。','我偏好红茶。']});
  const x=extractionFixture(f);t.after(()=>x.service.close());
- const normal=supplier(),negative=supplier({negative:true});
- let shared=null;
+ const normal=supplier();
+ let shared=null,perContactFault=true;
+ const prepareByContact=new Map();
  const originalPrepare=x.port.prepare;
- x.state.respond=(request,input)=>input.scope.contact_id===f.ca?negative.respond(request,input):normal.respond(request,input);
- x.port.prepare=async(request,input)=>{if(shared)throw Object.assign(new Error('synthetic_shared'),{code:shared});return originalPrepare(request,input);};
+ // 单人技术失败（非共用配置）：只让该联系人失败，其他联系人继续；内容逐条拒绝不再上升到失败。
+ // 真实供应商的配置类故障是共用的，调用阶段失败会落为未知回执；这里用 prepare 阶段的非共用码作为合成代理，
+ // 只为覆盖“失败联系人单独重试、成功联系人不重跑”的控制与投影路径。
+ x.state.respond=normal.respond;
+ x.port.prepare=async(request,input)=>{
+  const contactId=input.scope.contact_id;prepareByContact.set(contactId,(prepareByContact.get(contactId)??0)+1);
+  if(shared)throw Object.assign(new Error('synthetic_shared'),{code:shared});
+  if(perContactFault&&contactId===f.ca)throw Object.assign(new Error('synthetic_purpose'),{code:'extraction_model_purpose_invalid'});
+  return originalPrepare(request,input);
+ };
  const run=await x.service.start('control-failures');await x.service.waitForIdle(run.runId);
  let view=await x.service.read(run.runId);
  assert.equal(view.status,'blocked');assert.equal(view.statusReason,'contact_failed');
@@ -250,14 +260,14 @@ test('单人失败只让其受阻，共用模型故障暂停整轮并显示固�
  let other=view.tasks.find(task=>task.scopeKind==='contact'&&task.contactId===f.cb);
  assert.equal(failed.state,'failed');assert.equal(other.state,'succeeded');assert.equal(view.unknown,0);
  const candidatesBefore=view.candidates.length,callsBefore=x.state.calls;
- const callsByContactBefore=x.state.callsByContact.get(f.ca)??0,callsByOtherBefore=x.state.callsByContact.get(f.cb)??0;
+ const caPreparedBefore=prepareByContact.get(f.ca)??0,cbPreparedBefore=prepareByContact.get(f.cb)??0;
  view=await x.service.continue(run.runId,view.controlVersion,randomUUID());await x.service.waitForIdle(run.runId);
  view=await x.service.read(run.runId);
  other=view.tasks.find(task=>task.scopeKind==='contact'&&task.contactId===f.cb);
  assert.equal(other.state,'succeeded','成功联系人不得被继续重跑');
  assert.equal(view.candidates.length,candidatesBefore,'成功结果不重复生成');
- assert.equal(x.state.callsByContact.get(f.ca),callsByContactBefore+1,'只重试失败联系人');
- assert.equal(x.state.callsByContact.get(f.cb),callsByOtherBefore,'成功联系人不重跑');
+ assert.equal(prepareByContact.get(f.ca),caPreparedBefore+1,'只重试失败联系人');
+ assert.equal(prepareByContact.get(f.cb),cbPreparedBefore,'成功联系人不重跑');
  // 共用模型配置故障：整轮暂停，固定原因，等待手动继续，不自动重试。
  const callsBeforeShared=x.state.calls;
  shared='extraction_model_authentication_failed';

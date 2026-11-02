@@ -82,21 +82,59 @@ test('正常提取逐项来源语义核验保持两位联系人输入隔离，�
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('语义核验逐项证据不足保留失败事实，已知模型返回不能被计为无产出成功',async t=>{
+test('语义核验逐项拒绝按内容跳过完成本轮，已知模型返回仍保留拒绝事实且不阻断',async t=>{
  const f=await fixture(t);const contactId=f.saved[0].contact_id;
  f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'我长期住在高雄。'})],completedPartitions:['shard-a'],exhausted:true});
  await f.service.synchronize(contactId);await f.contacts.setReading(false);
  const external=supplier({negative:true});let memory;const model=modelPort(()=>memory.accounting,external.respond);memory=new SqliteMemoryExtraction(f.storage,owner,model);t.after(()=>memory.close());
- const started=await memory.start('source-insufficient-is-not-empty-success');await memory.waitForIdle();const done=await memory.read(started.runId);
- assert.equal(done.total,1);assert.equal(done.succeeded,0);assert.equal(done.failed,1);assert.equal(done.unknown,0);assert.equal(done.candidates.length,0);
- const task=done.tasks.find(task=>task.scopeKind==='contact');assert.equal(task.state,'failed');assert.equal(task.errorCode,'memory_extraction_source_insufficient',JSON.stringify({task,calls:model.calls,trace:(await memory.trace(task.taskId)).events.map(event=>event.kind)}));
+ const started=await memory.start('content-rejection-is-not-a-failure');await memory.waitForIdle();const done=await memory.read(started.runId);
+ assert.equal(done.total,1);assert.equal(done.succeeded,1);assert.equal(done.failed,0);assert.equal(done.unknown,0);assert.equal(done.candidates.length,0);
+ const task=done.tasks.find(task=>task.scopeKind==='contact');assert.equal(task.state,'succeeded');assert.equal(task.errorCode,null,JSON.stringify({task,calls:model.calls,trace:(await memory.trace(task.taskId)).events.map(event=>event.kind)}));
  const trace=await memory.trace(task.taskId);assert.equal(model.calls,2);assert.ok(trace.calls.every(call=>call.state==='succeeded'));
  const verification=trace.events.find(event=>event.kind==='verification');assert.ok(verification);assert.equal(verification.payload.result.verification_mode,'complete-claim-v1');
  assert.equal(verification.payload.result.model_verdict,'supported');assert.equal(verification.payload.result.verdict,'uncertain');assert.equal(verification.payload.result.claim_validation.semantic_support,'uncertain');
  assert.ok(trace.events.some(event=>event.kind==='extraction_return'));assert.ok(trace.events.some(event=>event.kind==='verification_return'));
- assert.equal(trace.events.some(event=>event.kind==='stage_result'&&event.payload.outcome==='no_new_memory'),false);
+ const staged=trace.events.find(event=>event.kind==='stage_result');assert.ok(staged,'逐条拒绝的真实结果仍要保留在执行记录中');
+ assert.equal(staged.payload.outcome,'no_new_memory');assert.equal(staged.payload.rejected,1);
  assert.equal(trace.events.some(event=>event.kind==='verified_output'),false);
  assert.equal(done.laterStages,'pending');assert.notEqual(done.state,'completed');assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('整批候选全被拒按已处理收尾并继续后续批次，后续目标不再排队',async t=>{
+ const f=await fixture(t);const contactId=f.saved[0].contact_id;
+ const texts=Array.from({length:25},(_,index)=>`我长期住在合成城市${index+1}。`);
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:texts.map((text,index)=>record(String(index+1),{text})),completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(contactId);await f.contacts.setReading(false);
+ // 第一批（20条）核验逐条拒绝，第二批（5条）恢复正常：拒绝不能阻塞后续目标。
+ const normal=supplier();let verifications=0;
+ const respond=async(request,input)=>{
+  if(request.purpose!=='verification'||verifications++>0)return normal.respond(request,input);
+  // 第一次核验整批判为语义不确定；同一 block 必须先构造再统一走 validateOutput，不能事后改写。
+  const payload=JSON.parse(request.user);
+  const value={request_fingerprint:payload.request_fingerprint,results:payload.candidates.map((candidate,index)=>{
+   const message=normal.sources.get(candidate.source_message_ids[0]);
+   return {candidate_index:index,verdict:'supported',issues:[],evidence:[{message_id:message.message_id,quote:message.text}],
+    claim_check:{version:2,field_checks:Object.fromEntries(semanticFields.map(field=>[field,facet()])),parts:[{
+     candidate_span:{start:0,end:[...candidate.text].length},
+     attribution:{...facet(),scope_subject:candidate.subject,actor_kind:candidate.subject,resolution:'explicit',
+      subject_mentions:[{kind:'first_person',evidence_index:0,source_span:{start:0,end:1},candidate_span:{start:0,end:candidate.subject==='self'?2:3}}]},
+     arguments_and_relation:facet(),temporal_and_modality:facet('uncertain'),
+    }]}};
+  })};
+  const blocks=[{type:'tool-call',name:request.tool.name,arguments:JSON.stringify(value)}];
+  await request.validateOutput(blocks);return {blocks};
+ };
+ let memory;const model=modelPort(()=>memory.accounting,respond);memory=new SqliteMemoryExtraction(f.storage,owner,model);t.after(()=>memory.close());
+ const started=await memory.start('content-rejection-continues-next-batch');await memory.waitForIdle();const done=await memory.read(started.runId);
+ assert.equal(done.total,25);assert.equal(done.succeeded,25);assert.equal(done.failed,0);assert.equal(done.unknown,0);assert.equal(done.pending,0);
+ assert.equal(done.candidates.length,5,'第一批20条全部内容拒绝，第二批5条正常产生候选');
+ const task=done.tasks.find(task=>task.scopeKind==='contact');
+ assert.equal(task.state,'succeeded');assert.equal(task.errorCode,null);
+ const trace=await memory.trace(task.taskId);
+ const staged=trace.events.filter(event=>event.kind==='stage_result');
+ assert.deepEqual(staged.map(event=>[event.payload.outcome,event.payload.rejected]),[['no_new_memory',20],['verified_pending_decision',0]],'第一批保留真实拒绝条数并按已处理收尾，第二批继续');
+ const schedule=await memory.readSchedule();assert.equal(schedule.blockedContacts,0,'内容拒绝不能让该联系人继续排队');
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
 test('SQLite提取窗口为事件逐字引文提供文字表示，完整核验可接纳已取消事件',async t=>{

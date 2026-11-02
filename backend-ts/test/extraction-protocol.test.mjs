@@ -78,6 +78,46 @@ test('事件发生日期只接受活动来源原偏移与独立V位置，过期�
  assert.throws(()=>validateSourceVerification([{...result,event_verification:{...result.event_verification,stage_evidence:[]}}],scoped,facts),ExtractionProtocolError);
 });
 
+test('时间表达没有逐字证据时按发生时间未知收口，合法核验输出不再被判成契约异常',()=>{
+ const source={...window.messages[0],text:'咱们这周末去爬山吧'};
+ const scoped={...window,messages:[source]};
+ const event={version:2,stage:'unknown',stage_evidence:[{message_id:id,char_start:0,char_end:2}],occurrence_start:null,occurrence_end:null,
+  occurrence_evidence:[],occurrence_precision:'unknown',occurrence_expression:'这周末',anchor_message_id:id};
+ const facts=parseDirectExtraction(direct(memory({event})),scoped).accepted;
+ assert.equal(facts[0].event.occurrence_expression,'这周末');
+ const result={candidate_index:0,verdict:'supported',issues:[],evidence:[{message_id:id,quote:source.text}],
+  event_verification:{stage_verdict:'uncertain',occurrence_verdict:'uncertain',stage_evidence:[{message_id:id,char_start:0,char_end:2}],occurrence_evidence:[]}};
+ const checked=validateSourceVerification([result],scoped,facts)[0];
+ assert.equal(checked.verdict,'unsupported');assert.deepEqual(checked.issues,['time']);
+ assert.equal(checked.model_verdict,'supported');assert.equal(checked.evidence.length,1,'合法核验输出保留原证据，不能伪装成证据不足');
+ assert.equal(checked.event.occurrence_start,null);assert.equal(checked.event.occurrence_verified,false);
+ const quoted={...result,event_verification:{...result.event_verification,stage_evidence:[{message_id:id,quote:source.text}]}};
+ const isolated=parseSourceVerification({results:[quoted]},scoped,facts,{isolate_items:true})[0];
+ assert.equal(isolated.verdict,'unsupported');assert.equal(isolated.evidence.length,1);
+});
+
+test('已取消事件缺少发生时间证据仍可采纳，但时间保持未知；错误发生证据只拒绝该候选',()=>{
+ const source={...window.messages[0],text:'周末的爬山活动取消了'};
+ const scoped={...window,messages:[source]};
+ const cancelled={version:2,stage:'cancelled',stage_evidence:[{message_id:id,char_start:0,char_end:2}],occurrence_start:null,occurrence_end:null,
+  occurrence_evidence:[],occurrence_precision:'unknown',occurrence_expression:'周末',anchor_message_id:id};
+ const cancelledFacts=parseDirectExtraction(direct(memory({event:cancelled})),scoped).accepted;
+ const cancelledResult={candidate_index:0,verdict:'supported',issues:[],evidence:[{message_id:id,quote:source.text}],
+  event_verification:{stage_verdict:'supported',occurrence_verdict:'uncertain',stage_evidence:[{message_id:id,char_start:0,char_end:2}],occurrence_evidence:[]}};
+ const adopted=validateSourceVerification([cancelledResult],scoped,cancelledFacts)[0];
+ assert.equal(adopted.verdict,'supported');
+ assert.equal(adopted.event.stage_verified,true);assert.equal(adopted.event.occurrence_verified,false);assert.equal(adopted.event.occurrence_start,null,'缺少发生证据时只丢时间标注，不丢已取消事件');
+ const wrongOccurrence={...cancelledResult,event_verification:{...cancelledResult.event_verification,
+  stage_verdict:'supported',occurrence_verdict:'supported',occurrence_evidence:[{message_id:id,char_start:5,char_end:7}]}};
+ const planned={version:2,stage:'planned',stage_evidence:[{message_id:id,char_start:0,char_end:2}],occurrence_start:'2026-09-19T00:00:00+08:00',
+  occurrence_end:'2026-09-21T00:00:00+08:00',occurrence_evidence:[],occurrence_precision:'day',occurrence_expression:'周末',anchor_message_id:id};
+ const plannedFacts=parseDirectExtraction(direct(memory({event:planned})),scoped).accepted;
+ assert.equal(plannedFacts[0].event.occurrence_start,'2026-09-19T00:00:00+08:00');
+ const rejected=validateSourceVerification([wrongOccurrence],scoped,plannedFacts)[0];
+ assert.equal(rejected.verdict,'unsupported');assert.ok(rejected.issues.includes('time'));
+ assert.equal(rejected.model_verdict,'supported');assert.equal(rejected.event.occurrence_start,null,'证据不含时间表达时不能采纳发生日期');
+});
+
 test('条件必须独立覆盖且核验位置按Unicode码点回指正文',()=>{
  const scoped={...window,messages:[{...window.messages[0],text:'🙂出差时不打电话'}]};
  const conditions={version:1,items:[{text:'出差时',evidence:[{message_id:id,char_start:1,char_end:4}]}]};
