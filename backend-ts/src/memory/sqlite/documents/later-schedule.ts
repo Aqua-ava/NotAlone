@@ -435,6 +435,29 @@ function finishLaterStage(tx:StorageTransaction,ownerId:string,taskId:string,now
  return true;
 }
 export function finishLaterStagePublication(tx:StorageTransaction,ownerId:string,taskId:string,now=Date.now()):boolean{return exists(tx)?finishLaterStage(tx,ownerId,taskId,now):false;}
+/** 仅结清专用文档轮的已知终态；不发布内容，不把活租约、未决调用或用户暂停当作已完成。 */
+export function reconcileTerminalLaterRuns(tx:StorageTransaction,ownerId:string):number {
+ if(!exists(tx))return 0;
+ const rows=tx.all(`SELECT DISTINCT r.id,s.state AS schedule_state FROM memory_document_later_schedule s
+  JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
+  JOIN processing_run r ON r.owner_id=t.owner_id AND r.id=t.run_id
+  WHERE s.owner_id=? AND s.state IN ('failed','superseded') AND r.state IN ('preparing','running') AND r.pause_requested_at IS NULL
+   AND json_extract(r.policy_config,'$.intent')='memory_document_later_stage'
+   AND NOT EXISTS(SELECT 1 FROM processing_task active WHERE active.owner_id=r.owner_id AND active.run_id=r.id AND active.state IN ('paused','unknown','running'))
+   AND NOT EXISTS(SELECT 1 FROM processing_step step JOIN processing_task task ON task.owner_id=step.owner_id AND task.id=step.task_id
+    LEFT JOIN step_attempt attempt ON attempt.owner_id=step.owner_id AND attempt.step_id=step.id
+    WHERE task.owner_id=r.owner_id AND task.run_id=r.id AND (step.state IN ('running','unknown') OR attempt.state IN ('running','unknown')))
+   AND NOT EXISTS(SELECT 1 FROM model_operation operation JOIN processing_step step ON step.owner_id=operation.owner_id AND step.id=operation.memory_step_id
+    JOIN processing_task task ON task.owner_id=step.owner_id AND task.id=step.task_id LEFT JOIN model_call call ON call.owner_id=operation.owner_id AND call.operation_id=operation.id
+    WHERE task.owner_id=r.owner_id AND task.run_id=r.id AND (operation.state IN ('prepared','in_flight','unknown') OR call.state IN ('prepared','sending','unknown')))
+  ORDER BY r.id`,[ownerId]);
+ let settled=0;
+ for(const row of rows){
+  tx.run("UPDATE processing_run SET state=? WHERE owner_id=? AND id=? AND state IN ('preparing','running') AND pause_requested_at IS NULL",[row.schedule_state==='failed'?'failed':'incomplete',ownerId,row.id]);
+  settled++;
+ }
+ return settled;
+}
 export function failLaterStage(tx:StorageTransaction,ownerId:string,taskId:string,code:string,now=Date.now()):boolean {
  if(!exists(tx))return false;
  const row=tx.get("SELECT * FROM memory_document_later_schedule WHERE owner_id=? AND task_id=? AND state='running'",[ownerId,taskId]);if(!row)return false;
@@ -447,10 +470,10 @@ export function failLaterStage(tx:StorageTransaction,ownerId:string,taskId:strin
  const current=scopeRow(tx,ownerId,scope),newer=tx.get("SELECT generation FROM memory_document_later_schedule WHERE owner_id=? AND scope_key=? AND stage='document_scene' AND state='scheduled' ORDER BY generation DESC LIMIT 1",[ownerId,row.scope_key]);
  if(current&&current.memory_revision!==row.frozen_memory_revision&&newer){
   tx.run("UPDATE memory_document_later_schedule SET state='superseded',error_code=? WHERE owner_id=? AND scope_key=? AND generation=?",[code,ownerId,row.scope_key,row.generation]);
-  transferRequirements(tx,ownerId,scope,Number(row.generation),Number(newer.generation),instant);return true;
+  transferRequirements(tx,ownerId,scope,Number(row.generation),Number(newer.generation),instant);reconcileTerminalLaterRuns(tx,ownerId);return true;
  }
  tx.run("UPDATE memory_document_later_schedule SET state='failed',error_code=? WHERE owner_id=? AND scope_key=? AND generation=?",[code,ownerId,row.scope_key,row.generation]);
- tx.run("UPDATE memory_document_later_run_requirement SET outcome='failed',reason=?,updated_at=? WHERE owner_id=? AND scope_key=? AND generation=? AND outcome='pending'",[code,instant,ownerId,row.scope_key,row.generation]);return true;
+ tx.run("UPDATE memory_document_later_run_requirement SET outcome='failed',reason=?,updated_at=? WHERE owner_id=? AND scope_key=? AND generation=? AND outcome='pending'",[code,instant,ownerId,row.scope_key,row.generation]);reconcileTerminalLaterRuns(tx,ownerId);return true;
 }
 
 export const memoryDocumentsLaterScheduleActions:StorageAction[]=[

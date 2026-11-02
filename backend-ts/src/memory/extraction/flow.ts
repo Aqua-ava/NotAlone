@@ -110,10 +110,10 @@ async function runLegacyExtractionFlow(options:ExtractionFlowOptions):Promise<Ex
   try{
    options.signal.throwIfAborted();await options.requireCurrent();
    raw=(await options.invoke(invocation('extraction',DIRECT_EXTRACTION_PROMPT,DIRECT_EXTRACTION_SCHEMA,user,blocks=>{
-    const decoded=readExtractionToolArguments(blocks,DIRECT_EXTRACTION_SCHEMA.title,{repair:true,field_names:[...directFields,'scenes','scene_name','memories']});
+    const decoded=readExtractionToolArguments(blocks,DIRECT_EXTRACTION_SCHEMA.title,{repair:true,allow_text_json:true,field_names:[...directFields,'scenes','scene_name','memories']});
     if(!Array.isArray(decoded.value.scenes))throw new ExtractionArgumentsError();
    }),options.signal)).blocks;
-   const decoded=readExtractionToolArguments(raw,DIRECT_EXTRACTION_SCHEMA.title,{repair:true,field_names:[...directFields,'scenes','scene_name','memories']});
+   const decoded=readExtractionToolArguments(raw,DIRECT_EXTRACTION_SCHEMA.title,{repair:true,allow_text_json:true,field_names:[...directFields,'scenes','scene_name','memories']});
    if(!Array.isArray(decoded.value.scenes))throw new ExtractionArgumentsError();candidates=rawCandidates(decoded.value);
    await options.record({stage:'extraction_return',payload:{blocks:raw,repaired:decoded.repaired,
     payloads:candidates.map(candidate=>candidate.fields),candidate_trace_ids:candidates.map(candidate=>candidate.candidate_trace_id)}});
@@ -194,11 +194,11 @@ async function runBoundedExtractionFlow(options:ExtractionFlowOptions):Promise<E
   try{
    options.signal.throwIfAborted();await options.requireCurrent();
    const request=invocation('extraction',prompt,schema,boundedExtractionInput(window),blocks=>{
-    const decoded=readExtractionToolArguments(blocks,schema.title,{repair:true,field_names:['units',...targetIds]});
+    const decoded=readExtractionToolArguments(blocks,schema.title,{repair:true,allow_text_json:true,field_names:['units',...targetIds]});
     compileGroundedLabels(window,decoded.value);
    });
    raw=(await options.invoke(request,options.signal)).blocks;
-   const decoded=readExtractionToolArguments(raw,schema.title,{repair:true,field_names:['units',...targetIds]});
+   const decoded=readExtractionToolArguments(raw,schema.title,{repair:true,allow_text_json:true,field_names:['units',...targetIds]});
    draft=decoded.value;compileGroundedLabels(window,draft);
    await options.record({stage:'grounded_draft',payload:{protocol:'grounded-v2',compiler_version:'grounded-source-event-v1',prompt_profile:'bounded-dependency-teaching-v2',draft}});
    break;

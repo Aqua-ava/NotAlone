@@ -10,7 +10,7 @@ import {documentActualInputs} from './inputs.ts';
 import {preconditions,revisions,task,taskView} from './actions.ts';
 import {fail,textId} from '../qualification.ts';
 import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
-import {failLaterStage,finishLaterStagePublication,laterTaskPaused} from './later-schedule.ts';
+import {failLaterStage,finishLaterStagePublication,laterTaskPaused,reconcileTerminalLaterRuns} from './later-schedule.ts';
 
 export interface DocumentClaim {attemptId:string;stepId:string;taskId:string;runId:string;kind:'document_scene'|'document_profile';laterStage:string|null;scheduleNow:number|null;scopeKind:'self'|'contact';contactId:string|null;claim:ModelTaskClaim;memories:L2ScenarioMemory[];scenarios:any[];profile:any;}
 const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute} as StorageAction);
@@ -165,6 +165,7 @@ export const memoryDocumentsStageActions:StorageAction[]=[
    if(retrySafe)tx.run("UPDATE memory_document_later_schedule SET state='scheduled',task_id=NULL,frozen_memory_revision=NULL,frozen_document_revision=NULL,frozen_publication_id=NULL,due_at=min(due_at,?) WHERE owner_id=? AND scope_key=? AND generation=?",[Date.now(),ownerId,row.scope_key,row.generation]);
    else failLaterStage(tx,ownerId,taskId,'document_stage_interrupted');
   }
+  reconcileTerminalLaterRuns(tx,ownerId);
   return attempts.length;
  }),
  act('claimScene','write',(tx,i,lease)=>{

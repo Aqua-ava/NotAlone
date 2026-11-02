@@ -80,14 +80,23 @@ function argumentValue(raw:string,options:{repair:boolean;field_names:readonly s
  }
  throw new ExtractionArgumentsError();
 }
-export function readExtractionToolArguments(blocks:readonly unknown[],name:string,options:{repair?:boolean;field_names?:readonly string[];root_array_key?:string}={}):{value:Record<string,unknown>;repaired:boolean}{
+export function readExtractionToolArguments(blocks:readonly unknown[],name:string,options:{repair?:boolean;field_names?:readonly string[];root_array_key?:string;allow_text_json?:boolean}={}):{value:Record<string,unknown>;repaired:boolean}{
  const calls=blocks.filter((block):block is Record<string,unknown>=>Boolean(block&&typeof block==='object'&&(block as Record<string,unknown>).type==='tool-call'));
- if(calls.length!==1||calls[0]!.name!==name||typeof calls[0]!.arguments!=='string')throw new ExtractionArgumentsError();
- const decoded=argumentValue(calls[0]!.arguments,{repair:options.repair??false,field_names:options.field_names??[]});
+ let raw:string,textJson=false;
+ if(calls.length===0&&options.allow_text_json===true){
+  // 仅由提取调用点显式允许唯一文本包络；已有工具、多个文本或媒体不能借此回退。
+  const texts=blocks.filter((block):block is Record<string,unknown>=>Boolean(block&&typeof block==='object'&&(block as Record<string,unknown>).type==='text'));
+  if(texts.length!==1||typeof texts[0]!.text!=='string'||blocks.some(block=>!block||typeof block!=='object'||!['text','reasoning'].includes(String((block as Record<string,unknown>).type))))throw new ExtractionArgumentsError();
+  raw=texts[0]!.text;textJson=true;
+ }else{
+  if(calls.length!==1||calls[0]!.name!==name||typeof calls[0]!.arguments!=='string')throw new ExtractionArgumentsError();
+  raw=calls[0]!.arguments;
+ }
+ const decoded=argumentValue(raw,{repair:options.repair??false,field_names:options.field_names??[]});
  if(Array.isArray(decoded.value)&&options.root_array_key)
   return {value:{[options.root_array_key]:decoded.value},repaired:true};
  if(!decoded.value||typeof decoded.value!=='object'||Array.isArray(decoded.value))throw new ExtractionArgumentsError();
- return {value:decoded.value as Record<string,unknown>,repaired:decoded.repaired};
+ return {value:decoded.value as Record<string,unknown>,repaired:decoded.repaired||textJson};
 }
 /** 私有身份协议使用同一严格解码器，绝不启用模型输出修复。 */
 export function decodeExtractionArguments(raw:string):Record<string,unknown>{
