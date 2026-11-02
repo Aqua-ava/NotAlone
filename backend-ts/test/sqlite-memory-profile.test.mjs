@@ -51,11 +51,15 @@ test('正式SQLite profile共用唯一模型宿主完成L1并持久等待主题�
   [contactIds[0],{contactText:'我长期住在高雄。',ownerText:'我长期偏好绿茶。',contactBody:'联系人长期住在高雄。',ownerBody:'用户长期偏好绿茶。'}],
   [contactIds[1],{contactText:'我长期住在台南。',ownerText:'我长期偏好红茶。',contactBody:'联系人长期住在台南。',ownerBody:'用户长期偏好红茶。'}],
  ]);
- f.channel.page=async scope=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[
-  record('1',{text:expectedByContact.get(scope.token.contact_id).contactText}),
-  record('2',{sender:'owner',text:expectedByContact.get(scope.token.contact_id).ownerText}),
- ],completedPartitions:['shard-a'],exhausted:true});
- for(const contactId of contactIds)await f.service.synchronize(contactId);
+ // 此用例验证显式跨联系人固定轮；让历史导入保留下一页，避免自动历史抢先消费其输入。
+ f.channel.page=async(scope,_target,cursor)=>{
+  if(cursor)throw Error('synthetic-manual-history-kept-open');
+  return {target:f.target.descriptor,cursorIn:null,cursorOut:'manual-page-2',records:[
+   record('1',{text:expectedByContact.get(scope.token.contact_id).contactText}),
+   record('2',{sender:'owner',text:expectedByContact.get(scope.token.contact_id).ownerText}),
+  ],completedPartitions:[],exhausted:false};
+ };
+ for(const contactId of contactIds){await assert.rejects(f.service.synchronize(contactId),/synthetic-manual-history-kept-open/);assert.equal((await f.service.coverage(contactId)).traversalComplete,false);}
  await f.contacts.setReading(false);const prepared=[],contactForMessage=new Map(),contactForRecord=new Map();
  for(const contactId of contactIds){
   const messages=(await f.service.read(contactId)).messages;assert.equal(messages.length,2);
@@ -207,8 +211,12 @@ test('正式SQLite profile的unknown保持可读和幂等，暂停后关闭排�
   t.diagnostic(JSON.stringify({phase:'unknown_fixture_cleanup',forced,socketResidue,childStopped:!host?.isRunning(),rootRemoved:true}));
  },{timeout:30000});
  const contactIds=f.saved.map(binding=>binding.contact_id),contactForMessage=new Map();
- f.channel.page=async scope=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:scope.token.contact_id===contactIds[0]?'合成甲长期住在高雄。':'合成乙长期住在台南。'})],completedPartitions:['shard-a'],exhausted:true});
- for(const contactId of contactIds){await f.service.synchronize(contactId);for(const message of (await f.service.read(contactId)).messages)contactForMessage.set(message.id,contactId);}
+ // 未到历史终页的已保存文字只由本次显式轮领取，隔离自动队列与unknown控制验收。
+ f.channel.page=async(scope,_target,cursor)=>{
+  if(cursor)throw Error('synthetic-manual-history-kept-open');
+  return {target:f.target.descriptor,cursorIn:null,cursorOut:'manual-page-2',records:[record('1',{text:scope.token.contact_id===contactIds[0]?'合成甲长期住在高雄。':'合成乙长期住在台南。'})],completedPartitions:[],exhausted:false};
+ };
+ for(const contactId of contactIds){await assert.rejects(f.service.synchronize(contactId),/synthetic-manual-history-kept-open/);assert.equal((await f.service.coverage(contactId)).traversalComplete,false);for(const message of (await f.service.read(contactId)).messages)contactForMessage.set(message.id,contactId);}
  await f.contacts.setReading(false);const databaseId=f.storage.status.databaseId;
  await f.service.close();await f.contacts.close();await f.storage.close();await assert.rejects(f.storage.check(),{code:'worker_failed'});
  for(const [path,text] of [[envFilePath,'NOTALONE_DEEPSEEK_API_KEY=synthetic-only\n'],[auditPath,''],[stderrPath,'']])await writeFile(path,text,{mode:0o600,flag:'wx'});
@@ -259,11 +267,16 @@ test('正式SQLite profile的unknown保持可读和幂等，暂停后关闭排�
  const exited=await host.waitForExit(stopped.status===200?5000:1000),runtime=exited?null:await api('/api/runtime/status').catch(error=>({status:null,error:error.name}));
  const residues={info:await exists(infoPath),lock:await exists(infoPath+'.dsh-lock'),profile:await exists(launchRecord.home),socket:await exists(socketDirectory)};
  t.diagnostic(JSON.stringify({phase:'unknown_normal_shutdown',receivedRequests:received,parsedRequests:requests.length,unknown:observed.run.unknown,waitingCall:waiting.trace.data.calls[0].state,pause:paused.data.state,shutdown:stopped,exited,runtime,residues}));
- assert.equal(stopped.status,200,'正常关闭应有界排空另一联系人许可等待');assert.equal(stopped.data.state,'stopped');assert.equal(exited,true);assert.deepEqual(residues,{info:false,lock:false,profile:false,socket:false});assert.equal(requests.length,1);
+ assert.equal(stopped.status,200,'正常关闭应有界排空另一联系人许可等待');assert.equal(stopped.data.state,'stopped');assert.equal(exited,true);assert.deepEqual(residues,{info:false,lock:false,profile:false,socket:false});
  reopened=await SqliteStorage.open({userData:root,intent:'open',role:'test',expectedDatabaseId:databaseId});assert.deepEqual(await reopened.check(),{integrity:'ok',foreignKeys:'ok'});
- const persisted=await reopened.execute('memoryExtraction.read',{ownerId:owner,runId:first.data.runId});assert.equal(persisted.state,'paused');assert.equal(persisted.unknown,1);assert.equal(persisted.candidates.length,0);
- const persistedUnknown=await reopened.execute('memoryExtraction.trace',{ownerId:owner,taskId:uncertain.task.taskId});assert.equal(persistedUnknown.calls.length,1);assert.equal(persistedUnknown.calls[0].state,'unknown');
- const persistedWaiting=await reopened.execute('memoryExtraction.trace',{ownerId:owner,taskId:waiting.task.taskId});assert.equal(persistedWaiting.calls.length,1);assert.equal(persistedWaiting.calls[0].callId,waiting.trace.data.calls[0].callId);assert.equal(persistedWaiting.calls[0].state,'failed');
- assert.equal(received,1);assert.equal(requests.length,1);assert.deepEqual(supplierErrors,[]);
- const finalRedirects=(await readFile(auditPath,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));assert.equal(finalRedirects.length,1);assert.deepEqual(finalRedirects,redirects);
+ // prepared是关闭前的瞬时观察；关闭期间若已经进入fetch，即使服务器未收到也必须保留unknown。
+ const finalRedirects=(await readFile(auditPath,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
+ assert.ok(finalRedirects.every(item=>item.kind==='redirect'&&item.syntheticAuthentication));
+ assert.ok([1,2].includes(finalRedirects.length));assert.deepEqual(finalRedirects.slice(0,redirects.length),redirects);
+ const waitingDispatched=finalRedirects.length===2;
+ const persisted=await reopened.execute('memoryExtraction.read',{ownerId:owner,runId:first.data.runId});assert.equal(persisted.state,'paused');assert.equal(persisted.unknown,waitingDispatched?2:1);assert.equal(persisted.candidates.length,0);
+ const persistedUnknown=await reopened.execute('memoryExtraction.trace',{ownerId:owner,taskId:uncertain.task.taskId});assert.equal(persistedUnknown.calls.length,1);assert.equal(persistedUnknown.calls[0].state,'unknown');assert.equal(persistedUnknown.calls[0].callId,call.callId,'原未知调用的物理身份不得改变');
+ const persistedWaiting=await reopened.execute('memoryExtraction.trace',{ownerId:owner,taskId:waiting.task.taskId});assert.equal(persistedWaiting.calls.length,1);assert.equal(persistedWaiting.calls[0].callId,waiting.trace.data.calls[0].callId);assert.equal(persistedWaiting.calls[0].state,waitingDispatched?'unknown':'failed');
+ assert.equal(received,requests.length);assert.ok(requests.length>=1&&requests.length<=finalRedirects.length);assert.deepEqual(supplierErrors,[]);
+ assert.equal(new Set(requests.map(request=>contactForMessage.get(request.payload.target_message_ids[0]))).size,requests.length,'任一联系人的未知调用不能被重发');
 });

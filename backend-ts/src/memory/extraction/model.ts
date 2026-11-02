@@ -160,7 +160,7 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
           text=result.blocks.filter(block=>block.type==='text').map(block=>block.text).join('');
           usage=result.usage;success=result.success;failure=!success;
         }else if(prepared){
-          for await(const chunk of prepared.stream({...prepared.config,sessionId,messages:input.messages,system:input.system,tools:input.tools,signal:input.signal})) {
+          const consume=async()=>{for await(const chunk of prepared.stream({...prepared.config,sessionId,messages:input.messages,system:input.system,tools:input.tools,signal:input.signal})) {
             if(chunk.type==='block-end')blocks.push(structuredClone(chunk.block));
             if(chunk.type==='text-delta')text+=chunk.text;
             if(chunk.type==='usage')usage={input_tokens:chunk.usage.inputTokens+(chunk.usage.cacheReadTokens??0)+(chunk.usage.cacheWriteTokens??0),output_tokens:chunk.usage.outputTokens,cache_read_tokens:chunk.usage.cacheReadTokens??null,cache_write_tokens:chunk.usage.cacheWriteTokens??null};
@@ -168,7 +168,8 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
               success=['stop','tool-calls'].includes(chunk.reason.kind);failure=!success;
               if(chunk.reason.kind==='error'||chunk.reason.kind==='aborted')providerFailure=providerFailureSnapshot(chunk.reason.failure,'LlmFailure');
             }
-          }
+          }};
+          await (call?.runWithDispatchObservation?call.runWithDispatchObservation(consume):consume());
         }else throw new ExtractionModelError('extraction_model_call_failed');
       } catch(error) {
         failure=true;
@@ -188,9 +189,10 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
       if(reserved&&reservedReceipt) {
         const observation=(strictCall??call)!.observation();
         const responseObserved=observation.dispatch==='http_accepted'||providerFailure?.status!==undefined;
+        const notSent=!responseObserved&&(observation.fetch_started===false||observation.dispatch==='not_authorized');
         receipt={...reservedReceipt,...(responseObserved&&input.ledger_entry_id?{ledger_entry_id:input.ledger_entry_id}:{}),latency_ms:Date.now()-started,
-          dispatch:responseObserved?'response_observed':observation.dispatch==='not_authorized'?'not_sent':'authorized_unconfirmed',
-          outcome:validationRejected?'failed':success?'succeeded':responseObserved&&failure?'failed':observation.dispatch==='not_authorized'?'cancelled':'unknown',
+          dispatch:responseObserved?'response_observed':notSent?'not_sent':'authorized_unconfirmed',
+          outcome:validationRejected?'failed':success?'succeeded':responseObserved&&failure?'failed':notSent?'cancelled':'unknown',
           usage,...(validationRejected?{legacy_outcome:'rejected_by_validation' as const}:{}),cost:usage&&input.costForUsage?input.costForUsage(usage):base.cost};
         uncertain=true;
         try {await recordExtractionModelReceipt(options.permit,receipt);uncertain=false;}

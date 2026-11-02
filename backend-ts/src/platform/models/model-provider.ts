@@ -1,5 +1,6 @@
 /** 普通调用沿用官方DeepSeekAdapter；来源核验另用同供应商的专用strict Beta传输。 */
 import type { Context } from '@deepseek-ai/cordis';
+import {AsyncLocalStorage} from 'node:async_hooks';
 import {LlmError} from '@deepseek-ai/dsh-llm';
 import {bindDiagnosticProblemBudget} from '../../diagnostics/diagnostic-problem-budget.ts';
 import { DeepSeekAdapter, PUBLIC_BASE_URL, type DeepSeekConnectionOptions, type DeepSeekAdapterOptions } from '@deepseek-ai/dsh-llm-deepseek';
@@ -25,6 +26,8 @@ export interface ModelProviderObservation {
   dispatch: 'not_authorized'|'authorized_unconfirmed'|'http_accepted';
   /** 显式 false 才能证明尚未进入原预约回调；旧观测缺省时仍按未知处理。 */
   before_dispatch_started?: boolean;
+  /** 仅显式false证明未到物理fetch前门；缺省或true均不能证明未发送。 */
+  fetch_started?:boolean;
   budget: MessagesBudgetReceipt | null;
   budget_rejection:{code:ModelInputBudgetError['code'];receipt:MessagesBudgetReceipt|null}|null;
 }
@@ -71,10 +74,15 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
       throw new Error('model_provider_strict_endpoint_invalid');
   }
   const calls=new Map<string,{call:ModelProviderCall;observation:ModelProviderObservation;prepared:boolean}>();
+  const dispatchContext=new AsyncLocalStorage<{observation:ModelProviderObservation}>();
   const adapter=new DeepSeekAdapter({
     options:()=>connection,
     resolveAuth:configuration.resolveAuth,
-    resolveUserId:configuration.resolveUserId,
+    resolveUserId:()=>{
+      // 锁定官方adapter只在构造fetch请求头时调用此钩子；标记后仍保守视为可能已发送。
+      const current=dispatchContext.getStore();if(current)current.observation.fetch_started=true;
+      return configuration.resolveUserId();
+    },
     // 不挂载attachment/files resolver：当前业务只允许文字，禁止文件重试扩大物理次数。
     prepareExtensions:async request=>{
       const current=request.sessionId ? calls.get(request.sessionId) : undefined;
@@ -102,7 +110,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
   function register(call:ModelProviderCall){
     if(!call.sessionId||!call.attempt_id||!call.permit_id||call.binding.provider!==configuration.provider||calls.has(call.sessionId))throw new Error('model_provider_call_conflict');
     const registered={call:{...call,binding:freeze(structuredClone(call.binding)),profile:freeze(structuredClone(call.profile))},
-      observation:{attempt_id:call.attempt_id,permit_id:call.permit_id,dispatch:'not_authorized' as ModelProviderObservation['dispatch'],before_dispatch_started:false,budget:null as MessagesBudgetReceipt|null,budget_rejection:null as ModelProviderObservation['budget_rejection']},prepared:false};
+      observation:{attempt_id:call.attempt_id,permit_id:call.permit_id,dispatch:'not_authorized' as ModelProviderObservation['dispatch'],before_dispatch_started:false,budget:null as MessagesBudgetReceipt|null,budget_rejection:null as ModelProviderObservation['budget_rejection']} as ModelProviderObservation,prepared:false};
     calls.set(call.sessionId,registered);
     return registered;
   }
@@ -112,13 +120,17 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
     beginCall(call: ModelProviderCall) {
       const registered=register(call);
       return {
+        runWithDispatchObservation<T>(work:()=>Promise<T>):Promise<T>{
+          if(registered.observation.fetch_started===undefined)registered.observation.fetch_started=false;
+          return dispatchContext.run(registered,work);
+        },
         observation:():ModelProviderObservation=>structuredClone(registered.observation),
         /** 在实际官方stream退出后释放session，取消等待者不能提前解绑在途调用。 */
         close() { if(calls.get(call.sessionId)===registered)calls.delete(call.sessionId); },
       };
     },
     beginStrictVerificationCall(call:ModelProviderCall){
-      const registered=register(call);
+      const registered=register(call);registered.observation.fetch_started=false;
       return {
         observation:():ModelProviderObservation=>structuredClone(registered.observation),
         async send(input:StrictVerificationSendInput):Promise<DeepSeekStrictVerificationResponse>{
@@ -155,6 +167,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
           registered.observation.budget=budget;registered.observation.dispatch='authorized_unconfirmed';
           input.signal.throwIfAborted();
           let response:Response;
+          registered.observation.fetch_started=true;
           try{response=await fetch(request.endpoint,{method:'POST',headers,body:JSON.stringify(request.body),
             redirect:'error',signal:input.signal});}
           catch(error){throw new LlmError('DeepSeek strict transport failed.',error instanceof Error&&error.name==='AbortError'?'ABORTED':'TRANSPORT',{cause:error});}

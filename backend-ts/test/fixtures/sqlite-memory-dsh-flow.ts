@@ -7,6 +7,8 @@ import {resolveHostReplyConfiguration} from '../../src/host/host-reply-config.ts
 import {startModelHost} from '../../src/platform/models/model-host.ts';
 import {createSqliteExtractionModelPort} from '../../src/memory/sqlite/model-port.ts';
 import {SqliteMemoryExtraction} from '../../src/memory/sqlite/service.ts';
+import {installModelProvider} from '../../src/platform/models/model-provider.ts';
+import type {ModelLedgerReceipt} from '../../src/platform/models/model-ledger-contract.ts';
 import {SqliteMemoryExtractionHttp} from '../../src/memory/sqlite/http.ts';
 import {authorizeSqliteRequest} from '../../src/sqlite-host-plugin.ts';
 import {join} from 'node:path';
@@ -68,12 +70,13 @@ export async function apply(ctx:Context) {
  const providerURL=process.env.NOTALONE_SYNTHETIC_PROVIDER_URL!;
  const targetURL=new URL(providerURL);
  if(targetURL.protocol!=='http:'||targetURL.hostname!=='127.0.0.1'||targetURL.username||targetURL.password)throw new Error('synthetic_provider_loopback_required');
+ let cancelNext=false,extraMessage=1;const receipts:ModelLedgerReceipt[]=[];
  const configuration=resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-only'});
  if(configuration.status!=='configured')throw new Error('synthetic_configuration_unavailable');
  host=await startModelHost({runtimeEnvironment:{NOTALONE_MANAGED_USER_DATA:f.root},businessHome:f.root,
   infoPath:join(f.root,'info'),envFilePath:join(f.root,'env'),accounting:{
    reserve:async(receipt,claim)=>{if(!memory)throw new Error('synthetic_not_ready');await memory.accounting.reserve(receipt,claim);},
-   recordReserved:async receipt=>{if(!memory)throw new Error('synthetic_not_ready');await memory.accounting.recordReserved(receipt);},
+   recordReserved:async receipt=>{if(!memory)throw new Error('synthetic_not_ready');await memory.accounting.recordReserved(receipt);receipts.push(structuredClone(receipt));},
    unconfirmedRequests:scope=>{if(!memory)throw new Error('synthetic_not_ready');return memory.accounting.unconfirmedRequests!(scope);},
   }});
  // 正常模型、预算、期限不覆盖；认证仍由正常配置解析器提供，只替换实际网络目的地。
@@ -81,11 +84,24 @@ export async function apply(ctx:Context) {
   ...(mode==='verified'?{strictVerificationEndpoint:new URL('/beta/chat/completions',providerURL).href}:{}),
   resolveAuth:()=>configuration.provider.resolveAuth(configuration.provider.connection)}};
  const createMemory=()=>{
- const model=createSqliteExtractionModelPort({ctx,configuration:loopbackConfiguration,permit:host!.permit,
-  resolveUserId:()=> 'synthetic-anonymous' as never,authorizePurpose:async input=>{
+ const cancellations=new Map<string,AbortController>();
+ const registered=installModelProvider(ctx,{...loopbackConfiguration.provider,resolveUserId:()=> 'synthetic-anonymous' as never});
+ const provider={...registered,beginCall(input:Parameters<typeof registered.beginCall>[0]){
+  return registered.beginCall({...input,beforeDispatch:async value=>{
+   await input.beforeDispatch(value);cancellations.get(input.attempt_id)?.abort();
+  }});
+ }};
+ const model=createSqliteExtractionModelPort({ctx,configuration:loopbackConfiguration,permit:host!.permit,provider,
+  authorizePurpose:async input=>{
    if(input.scope.owner_id!==owner||!f.saved.some((binding:{contact_id:string})=>binding.contact_id===input.scope.contact_id))throw new Error('synthetic_purpose_denied');
   }});
- return new SqliteMemoryExtraction(f.storage,owner,model);
+ const port={...model,invoke:async(request:Parameters<typeof model.invoke>[0],input:Parameters<typeof model.invoke>[1])=>{
+  const cancellation=cancelNext?new AbortController():undefined;cancelNext=false;
+  if(cancellation)cancellations.set(input.attemptId,cancellation);
+  try{return await model.invoke(request,cancellation?{...input,signal:AbortSignal.any([input.signal,cancellation.signal])}:input);}
+  finally{cancellations.delete(input.attemptId);}
+ },close:async()=>{await model.close();await registered.dispose();}};
+ return new SqliteMemoryExtraction(f.storage,owner,port);
  };
  memory=createMemory();
  f.channel.page=async(scope:any)=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,
@@ -110,9 +126,16 @@ export async function apply(ctx:Context) {
      const proof=await f.storage.execute('fixture.memoryFlowProof',{runId:run!.runId});
      res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(proof));return;
     }
+    if(req.url==='/__fixture/cancel-next'&&req.method==='POST'){
+     cancelNext=true;res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({armed:true}));return;
+    }
+    if(req.url==='/__fixture/dispatch-proof'&&req.method==='GET'){
+     const pending=await Promise.all(f.saved.map((binding:{contact_id:string})=>memory!.accounting.unconfirmedRequests!({owner_id:owner,contact_id:binding.contact_id})));
+     res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({receipts:receipts.map(receipt=>({attemptId:receipt.attempt_id,dispatch:receipt.dispatch,outcome:receipt.outcome})),pending}));return;
+    }
     if(req.url==='/__fixture/add-message'&&req.method==='POST'){
-     await f.contacts.setReading(true);
-     f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('2',{text:'合成甲的后到文字。'})],completedPartitions:['shard-a'],exhausted:true});
+     await f.contacts.setReading(true);const nextId=String(++extraMessage);
+     f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record(nextId,{text:'合成甲的后到文字。'})],completedPartitions:['shard-a'],exhausted:true});
      await f.service.synchronize(f.saved[0].contact_id);await f.contacts.setReading(false);
      f.channel.page=async()=>{throw new Error('synthetic_reading_disabled');};
      res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({saved:true}));return;

@@ -35,7 +35,8 @@ export function positiveSupplier(){
    assert.equal(toolName,'DirectMemoryExtractionOutput');
    const user=body.messages.find(message=>message.role==='user').content.find(block=>block.type==='text').text;
    const payload=JSON.parse(user);for(const message of payload.messages)messages.set(message.message_id,message);
-   const output={scenes:[{scene_name:'合成长期资料',memories:payload.messages.map(fact)}]};
+   const targets=new Set(payload.target_message_ids??payload.messages.map(message=>message.message_id));
+   const output={scenes:[{scene_name:'合成长期资料',memories:payload.messages.filter(message=>targets.has(message.message_id)).map(fact)}]};
    windows.push({body,payload,output});
    const events=[{type:'message_start',message:{id:`synthetic-e-${windows.length}`,type:'message',role:'assistant',model:body.model,content:[],usage:{input_tokens:3,output_tokens:0}}},{type:'content_block_start',index:0,content_block:{type:'tool_use',id:`synthetic-e-tool-${windows.length}`,name:'DirectMemoryExtractionOutput',input:{}}},{type:'content_block_delta',index:0,delta:{type:'input_json_delta',partial_json:JSON.stringify(output)}},{type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:'tool_use'},usage:{output_tokens:7}},{type:'message_stop'}];
    res.setHeader('Content-Type','text/event-stream');res.end(events.map(event=>`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''));

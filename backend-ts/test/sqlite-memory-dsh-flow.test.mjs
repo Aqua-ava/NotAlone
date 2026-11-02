@@ -69,16 +69,28 @@ test('官方DSH经真实SQLite许可、认证HTTP和正常提取端口完成固�
   assert.ok(trace.data.events.every(event=>event.sources.length===1&&event.sources[0].contactId===task.contactId));
  }
  assert.equal((await api('/api/memory-processing/runs',{body:{request_key:requestKey}})).data.runId,first.data.runId);assert.equal(requests.length,2);
+ // 精确取消在真实SQLite预约成功之后、官方adapter进入fetch之前，不把它记成未知或占住许可。
+ assert.equal((await api('/__fixture/add-message',{method:'POST'})).status,200);
+ assert.equal((await api('/__fixture/cancel-next',{method:'POST'})).status,200);
+ const cancelled=await api('/api/memory-processing/runs',{body:{request_key:randomUUID()}});assert.equal(cancelled.data.total,1);
+ await api('/__fixture/wait',{method:'POST'});
+ const cancelledDone=await api(`/api/memory-processing/runs/${cancelled.data.runId}`);assert.equal(cancelledDone.data.failed,1);assert.equal(cancelledDone.data.unknown,0);assert.equal(requests.length,2,'确定未到fetch的取消不产生第三次网络调用');
+ const cancelledTask=cancelledDone.data.tasks.find(task=>task.scopeKind==='contact');
+ const cancelledTrace=await api(`/api/memory-processing/tasks/${cancelledTask.taskId}/events`);assert.equal(cancelledTrace.data.calls.length,1);assert.equal(cancelledTrace.data.calls[0].state,'failed');
+ const dispatchProof=await api('/__fixture/dispatch-proof');assert.deepEqual(dispatchProof.data.pending,[[],[]]);
+ const cancellationReceipt=dispatchProof.data.receipts.find(receipt=>receipt.attemptId===cancelledTrace.data.calls[0].callId);assert.equal(cancellationReceipt.dispatch,'not_sent');assert.equal(cancellationReceipt.outcome,'cancelled');
+ const resumedCancellation=await api(`/api/memory-processing/runs/${cancelled.data.runId}/continue`,{body:{action_version:cancelledDone.data.controlVersion,operation_id:randomUUID()}});assert.equal(resumedCancellation.status,200);
+ await api('/__fixture/wait',{method:'POST'});assert.equal((await api(`/api/memory-processing/runs/${cancelled.data.runId}`)).data.succeeded,1);assert.equal(requests.length,3,'取消回执已释放许可，随后同一固定任务可正常调用一次');
  // 未观察到响应的真实已派发调用，关闭后在同一SQLite和ModelHost重建端口。
  assert.equal((await api('/__fixture/add-message',{method:'POST'})).status,200);hangNext=true;
  const interrupted=await api('/api/memory-processing/runs',{body:{request_key:randomUUID()}});assert.equal(interrupted.status,200);assert.equal(interrupted.data.total,1);
- await dispatched.promise;assert.equal(requests.length,3);assert.equal((await api('/__fixture/restart-model',{method:'POST'})).status,200);
+ await dispatched.promise;assert.equal(requests.length,4);assert.equal((await api('/__fixture/restart-model',{method:'POST'})).status,200);
  const uncertain=await api(`/api/memory-processing/runs/${interrupted.data.runId}`);assert.equal(uncertain.data.succeeded,0);assert.equal(uncertain.data.unknown,1);
  const unknownTask=uncertain.data.tasks.find(task=>task.scopeKind==='contact');const unknownTrace=await api(`/api/memory-processing/tasks/${unknownTask.taskId}/events`);
  assert.equal(unknownTrace.data.calls.length,1);assert.equal(unknownTrace.data.calls[0].state,'unknown');assert.ok(BigInt(unknownTrace.data.calls[0].reservedBudgetUnits)>0n);assert.equal(unknownTrace.data.calls[0].actualBudgetUnits,null);
- await api(`/api/memory-processing/runs/${interrupted.data.runId}/continue`,{body:{}});await api('/__fixture/wait',{method:'POST'});assert.equal(requests.length,3);
+ await api(`/api/memory-processing/runs/${interrupted.data.runId}/continue`,{body:{}});await api('/__fixture/wait',{method:'POST'});assert.equal(requests.length,4);
  const next=await api('/api/memory-processing/runs',{body:{request_key:randomUUID()}});assert.equal(next.status,200);await api('/__fixture/wait',{method:'POST'});
- const stillUnknown=await api(`/api/memory-processing/runs/${next.data.runId}`);assert.equal(stillUnknown.data.succeeded,0);assert.equal(stillUnknown.data.unknown,1);assert.equal(requests.length,3,'新请求和手动继续均不能盲重发已派发未知效果');
+ const stillUnknown=await api(`/api/memory-processing/runs/${next.data.runId}`);assert.equal(stillUnknown.data.succeeded,0);assert.equal(stillUnknown.data.unknown,1);assert.equal(requests.length,4,'新请求和手动继续均不能盲重发已派发未知效果');
  await api('/__fixture/stop',{method:'POST'});const [code,signal]=await exited;assert.equal(code,0,log.slice(-1500));assert.equal(signal,null);
  await assert.rejects(access(ready.businessRoot),error=>error.code==='ENOENT');
 });
