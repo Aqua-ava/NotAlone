@@ -20,13 +20,15 @@ interface ClaimedStep {attemptId:string;stepId:string;taskId:string;runId:string
 export class SqliteMemoryExtraction {
  private afterRunSettled?:((runId:string)=>Promise<unknown>);
  private readonly ensureSourceReady?:((contactId:string)=>Promise<void>);
+ private readonly afterStepSettled?:()=>Promise<void>;
  private storage:SqliteStorage;readonly ownerId:string;private model:ExtractionModelPort;readonly holders:ActiveHolders;
  private policy?:Promise<ExtractionPolicyVersion>;private initialized?:Promise<void>;private stopped=false;
  private closing?:Promise<void>;private pending=new Set<Promise<unknown>>();
+ private turnTail:Promise<void>=Promise.resolve();
  private runs=new Map<string,Promise<void>>();private active=new Map<string,{abort:AbortController;done:Promise<void>}>();
  readonly accounting:ModelPermitAccounting;
- constructor(storage:SqliteStorage,ownerId:string,model:ExtractionModelPort,holders=new ActiveHolders(),afterRunSettled?:((runId:string)=>Promise<unknown>),ensureSourceReady?:((contactId:string)=>Promise<void>)){
-  this.storage=storage;this.ownerId=ownerId;this.model=model;this.holders=holders;this.afterRunSettled=afterRunSettled;this.ensureSourceReady=ensureSourceReady;
+ constructor(storage:SqliteStorage,ownerId:string,model:ExtractionModelPort,holders=new ActiveHolders(),afterRunSettled?:((runId:string)=>Promise<unknown>),ensureSourceReady?:((contactId:string)=>Promise<void>),afterStepSettled?:()=>Promise<void>){
+  this.storage=storage;this.ownerId=ownerId;this.model=model;this.holders=holders;this.afterRunSettled=afterRunSettled;this.ensureSourceReady=ensureSourceReady;this.afterStepSettled=afterStepSettled;
   this.accounting={reserve:async(receipt,claim)=>{await this.storage.execute(claim?.step_name==='extraction_verification'?'memoryExtraction.reserve':claim?.step_name==='document_scene'||claim?.step_name==='document_profile'?'memoryDocuments.reserve':'memoryAdjudication.reserve',{receipt,claim});},recordReserved:async receipt=>{await this.storage.execute('memoryExtraction.receipt',{receipt});},unconfirmedRequests:scope=>this.storage.execute('memoryExtraction.unconfirmed',scope)};
  }
  /** 仅补同一来源的元数据续证，不换输入、预算或模型操作；第二次失败按原原因保留。 */
@@ -35,6 +37,10 @@ export class SqliteMemoryExtraction {
    if(!(error instanceof StorageFailure)||error.code!=='history_source_not_available'||!this.ensureSourceReady)throw error;
    await this.ensureSourceReady(contactId);this.available();return work();
   }
+ }
+ /** 每次只执行一个提取步骤或一次后续裁决；原轮次在步骤间按FIFO让出，不重置输入和预算。 */
+ private turn<T>(work:()=>Promise<T>):Promise<T>{
+  const next=this.turnTail.then(work);this.turnTail=next.then(()=>{},()=>{});return next;
  }
  private version(){return this.policy??=createExtractionPolicyVersion();}
  initialize(){this.available();return this.initialized??=this.admit(async()=>{await this.storage.execute('memoryExtraction.recover',{ownerId:this.ownerId});});}
@@ -87,7 +93,7 @@ export class SqliteMemoryExtraction {
   });
  }
  /** 已知失败只自动恢复一次；次数沿原任务持久保存，暂停和未知调用不受理。 */
- async recoverBacklog():Promise<number>{
+ async recoverBacklog(options:{wait?:boolean}={}):Promise<number>{
   return this.admit(async()=>{
    await this.initialize();const policy=await this.version();await policy.assertCurrent();
    const candidates=await this.storage.execute<{runId:string;controlVersion:number}[]>('memoryExtraction.recoverableBacklog',{ownerId:this.ownerId});let recovered=0;
@@ -100,10 +106,10 @@ export class SqliteMemoryExtraction {
      try{policy.resolve(old);}catch(error){
       if((error as {code?:string}).code!=='extraction_policy_source_unavailable')throw error;
       const next=await this.storage.execute<any>('memoryExtraction.restartPolicy',{ownerId:this.ownerId,...candidate,actionVersion:candidate.controlVersion,automatic:true,policyConfig:policy.newTaskConfig()});
-      if(next.launchRunId){this.launch(next.launchRunId);await this.waitForIdle(next.launchRunId);recovered++;}continue;
+      if(next.launchRunId){this.launch(next.launchRunId);if(options.wait!==false)await this.waitForIdle(next.launchRunId);recovered++;}continue;
      }
      const accepted=await this.storage.execute<any>('memoryExtraction.autoContinue',{ownerId:this.ownerId,...candidate});
-     if(accepted){this.launch(candidate.runId);await this.waitForIdle(candidate.runId);recovered++;}
+     if(accepted){this.launch(candidate.runId);if(options.wait!==false)await this.waitForIdle(candidate.runId);recovered++;}
     }catch{/* 单个旧轮不安全或配置仍失败时保留状态，继续检查其他联系人。 */}
    }
    return recovered;
@@ -136,12 +142,14 @@ export class SqliteMemoryExtraction {
   const work=this.executeFollowup(runId).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});return true;
  }
  private async executeFollowup(runId:string,recovering=true):Promise<void>{
-  if(this.stopped||!this.afterRunSettled)return;
-  // 启动恢复必须整轮安全；本次正常收尾仍由各领域门禁隔离单联系人失败。
-  const eligible=!recovering||await this.storage.execute<boolean>('memoryExtraction.followupEligible',{ownerId:this.ownerId,runId});
-  if(!eligible||this.stopped)return;
-  try{await this.afterRunSettled(runId);}
-  finally{if(!this.stopped)await this.storage.execute('memoryExtraction.finishLater',{ownerId:this.ownerId,runId});}
+  await this.turn(async()=>{
+   if(this.stopped||!this.afterRunSettled)return;
+   // 启动恢复必须整轮安全；本次正常收尾仍由各领域门禁隔离单联系人失败。
+   const eligible=!recovering||await this.storage.execute<boolean>('memoryExtraction.followupEligible',{ownerId:this.ownerId,runId});
+   if(!eligible||this.stopped)return;
+   try{await this.afterRunSettled(runId);}
+   finally{if(!this.stopped)await this.storage.execute('memoryExtraction.finishLater',{ownerId:this.ownerId,runId});}
+  });
  }
  read(runId?:string){this.available();return this.storage.execute<any>('memoryExtraction.read',{ownerId:this.ownerId,runId});}
  /** 当前联系人的独立进度与队列；不启动任务，也不包含本人或其他联系人的资料。 */
@@ -166,31 +174,38 @@ export class SqliteMemoryExtraction {
   for(const task of before.tasks.filter((t:any)=>t.scopeKind==='contact')){
    if(this.stopped)break;
    while(!this.stopped){
-    let batch:ClaimedStep|null;
-    try{batch=await this.withSourceReady(task.contactId,()=>this.storage.execute('memoryExtraction.claim',{ownerId:this.ownerId,runId,taskId:task.taskId}));}catch(error){
-     const code=this.stopped?'memory_extraction_interrupted':error instanceof StorageFailure?error.code:'memory_extraction_claim_failed';
-     await this.storage.execute('memoryExtraction.blockClaim',{ownerId:this.ownerId,runId,taskId:task.taskId,code});break;
-    }
-    if(!batch)break;
-    const controller=new AbortController();let finish!:()=>void;const completed=new Promise<void>(r=>finish=r);
-    const generation=BigInt((await this.storage.execute<any>('memoryExtraction.contactGeneration',{ownerId:this.ownerId,contactId:batch.contactId})).generation);
-    let release:undefined|(()=>Promise<void>);
-    try{
-     if(this.stopped)controller.abort();
-     release=this.holders.register({ownerId:this.ownerId,key:`memory:${task.taskId}`,contactId:batch.contactId,generation,close:async()=>{controller.abort();await completed;}});
-     this.active.set(task.taskId,{abort:controller,done:completed});
-     await this.process(batch,controller.signal);
-    }catch(error){
-     const code=this.stopped?'memory_extraction_interrupted':error instanceof StorageFailure?error.code:typeof (error as any)?.code==='string'&&/^(?:extraction_model_|extraction_policy_|extraction_runtime_)/.test((error as any).code)?(error as any).code:'memory_extraction_failed';
-     await this.storage.execute('memoryExtraction.fail',{ownerId:this.ownerId,attemptId:batch.attemptId,code});
-     if(isSharedFailure(code))await this.pause(runId);
-     break;
-    }finally{this.active.delete(task.taskId);finish();await release?.();}
+    const more=await this.turn(async()=>{
+     if(this.stopped)return false;
+     let batch:ClaimedStep|null;
+     try{batch=await this.withSourceReady(task.contactId,()=>this.storage.execute('memoryExtraction.claim',{ownerId:this.ownerId,runId,taskId:task.taskId}));}catch(error){
+      const code=this.stopped?'memory_extraction_interrupted':error instanceof StorageFailure?error.code:'memory_extraction_claim_failed';
+      await this.storage.execute('memoryExtraction.blockClaim',{ownerId:this.ownerId,runId,taskId:task.taskId,code});return false;
+     }
+     if(!batch)return false;
+     const controller=new AbortController();let finish!:()=>void;const completed=new Promise<void>(r=>finish=r);
+     const generation=BigInt((await this.storage.execute<any>('memoryExtraction.contactGeneration',{ownerId:this.ownerId,contactId:batch.contactId})).generation);
+     let release:undefined|(()=>Promise<void>);
+     try{
+      if(this.stopped)controller.abort();
+      release=this.holders.register({ownerId:this.ownerId,key:`memory:${task.taskId}`,contactId:batch.contactId,generation,close:async()=>{controller.abort();await completed;}});
+      this.active.set(task.taskId,{abort:controller,done:completed});
+      await this.process(batch,controller.signal);
+     }catch(error){
+      const code=this.stopped?'memory_extraction_interrupted':error instanceof StorageFailure?error.code:typeof (error as any)?.code==='string'&&/^(?:extraction_model_|extraction_policy_|extraction_runtime_)/.test((error as any).code)?(error as any).code:'memory_extraction_failed';
+      await this.storage.execute('memoryExtraction.fail',{ownerId:this.ownerId,attemptId:batch.attemptId,code});
+      if(isSharedFailure(code))await this.pause(runId);
+      return false;
+     }finally{this.active.delete(task.taskId);finish();await release?.();}
+     return true;
+    });
+    if(!more)break;
+    // 已提交并释放本步后先完成增量准入，再领取下一历史步；回调只建轮，不等待模型。
+    if(!this.stopped)try{await this.afterStepSettled?.();}catch{/* 短暂扫描失败由下一步或持久调度重查，不回滚已成功步骤。 */}
    }
   }
   if(!this.stopped){
    // 后续文档阶段的暂停边界由09在领取动作内复验；提取层只保证不自动重试失败模型。
-   await this.storage.execute('memoryExtraction.settleRun',{ownerId:this.ownerId,runId,laterWork:!!this.afterRunSettled});
+   await this.turn(async()=>{if(!this.stopped)await this.storage.execute('memoryExtraction.settleRun',{ownerId:this.ownerId,runId,laterWork:!!this.afterRunSettled});});
    if(this.afterRunSettled&&!this.stopped)await this.executeFollowup(runId,false);
   }
  }

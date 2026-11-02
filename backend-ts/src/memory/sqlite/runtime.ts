@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import {SqliteMemoryAdjudication} from './management/adjudication-service.ts';
 import {createSqliteAdjudicationModelPort} from './management/model-port.ts';
 import {getOrCreateAnonymousUserId} from '@deepseek-ai/dsh-anonymous-user-id';
@@ -31,7 +32,7 @@ export interface SqliteMemorySharedModel {
 export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:SqliteStorage;ownerId:string;userData:string;businessHome:string;infoPath:string;envFilePath:string;environment:Readonly<NodeJS.ProcessEnv>;sharedModel?:SqliteMemorySharedModel;holders:ActiveHolders;authorize(req:IncomingMessage):boolean;afterRunSettled?:(runId:string)=>Promise<unknown>;adjudicationEnabled?:boolean;ensureSourceReady?:(contactId:string)=>Promise<void>}){
  const configuration=options.sharedModel?.configuration??resolveHostReplyConfiguration(options.environment);
  let service:SqliteMemoryExtraction;let adjudication:SqliteMemoryAdjudication|undefined;let documents:SqliteMemoryDocuments|undefined;
- let l1Scheduler:SqliteMemoryL1Scheduler|undefined;let laterWorker:SqliteMemoryLaterWorker|undefined;let schedulingStarted=false;
+ let l1Scheduler:SqliteMemoryL1Scheduler|undefined;let laterWorker:SqliteMemoryLaterWorker|undefined;let schedulingStarted=false;let incrementalAdmissionDirty=true;
  let modelHost:Awaited<ReturnType<typeof startModelHost>>|undefined;
  let port:ExtractionModelPort={prepare:async()=>{throw new StorageFailure('extraction_model_unconfigured');},invoke:async()=>{throw new StorageFailure('extraction_model_unconfigured');}};
  try{
@@ -57,22 +58,30 @@ export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:Sql
    await adjudication!.publishRun(runId);await documents!.enrollRun(runId);
    // 只安排持久队列，不同步等候一小时／一天的后续阶段。
    laterWorker?.wake();l1Scheduler?.wake();
-  }:options.afterRunSettled,options.ensureSourceReady);await service.initialize();
+  }:options.afterRunSettled,options.ensureSourceReady,async()=>{
+   if(!schedulingStarted||!l1Scheduler||!incrementalAdmissionDirty)return;
+   incrementalAdmissionDirty=false;
+   // 不等待scheduler.scan或新轮结束：当前scan可能正等本历史轮，等待会形成自锁。
+   for(const contactId of await service.dueContacts()){
+    if(!schedulingStarted)break;
+    try{await service.startContact(contactId,randomUUID());}catch{/* 单人资格变化不阻断其他已到期联系人。 */}
+   }
+  });await service.initialize();
   if(adjudication&&documents){
    l1Scheduler=new SqliteMemoryL1Scheduler({
-    recoverBacklog:async()=>{await service.waitForIdle();await service.recoverBacklog();},
-    nextDueAt:now=>service.nextDueAt(now),dueContacts:now=>service.dueContacts(now),
+    recoverBacklog:()=>service.recoverBacklog({wait:false}),
+    nextDueAt:now=>service.nextDueAt(now),dueContacts:now=>{incrementalAdmissionDirty=true;return service.dueContacts(now);},
     nextHistoryDueAt:now=>service.nextHistoryDueAt(now),dueHistoryContacts:now=>service.dueHistoryContacts(now),
-    // 先排空已有 L1／裁决，再受理下一个联系人，避免本人范围的并行裁决争抢同一版本。
-    startContact:async(contactId,requestKey)=>{await service.waitForIdle();const run=await service.startContact(contactId,requestKey);if(run)await service.waitForIdle(run.runId);return run;},
-    startHistoryBatch:async(contactId,requestKey)=>{await service.waitForIdle();const run=await service.startHistoryBatch(contactId,requestKey);if(run)await service.waitForIdle(run.runId);return run;},
+    // 步骤和裁决由service的FIFO串行；等待自己轮次不阻止既有大轮在步骤间让出。
+    startContact:async(contactId,requestKey)=>{const run=await service.startContact(contactId,requestKey);if(run)await service.waitForIdle(run.runId);return run;},
+    startHistoryBatch:async(contactId,requestKey)=>{const run=await service.startHistoryBatch(contactId,requestKey);if(run)await service.waitForIdle(run.runId);return run;},
    });
    laterWorker=new SqliteMemoryLaterWorker(documents,()=>console.error('MEMORY_LATER_SCHEDULER_FAILED'));
   }
   const http=new SqliteMemoryExtractionHttp(service,options.authorize,async()=>({...await service.readSchedule(),...(documents?{later:await documents.queueSummary()}:{})}));let closing:Promise<void>|undefined;
   return {service,http,documents,configurationState:configuration.status,
-   startScheduling(){if(schedulingStarted)return;schedulingStarted=true;void service.recoverBacklog().then(()=>service.resumeFollowups()).then(()=>service.waitForIdle()).catch(()=>console.error('MEMORY_FOLLOWUP_RECOVERY_FAILED')).finally(()=>{if(schedulingStarted){void l1Scheduler?.start();laterWorker?.start();}});},
-   wake(contactId?:string){if(!schedulingStarted)return;l1Scheduler?.wake(contactId);laterWorker?.wake();},
+   startScheduling(){if(schedulingStarted)return;schedulingStarted=true;void service.recoverBacklog({wait:false}).then(()=>service.resumeFollowups()).catch(()=>console.error('MEMORY_FOLLOWUP_RECOVERY_FAILED')).finally(()=>{if(schedulingStarted){void l1Scheduler?.start();laterWorker?.start();}});},
+   wake(contactId?:string){if(!schedulingStarted)return;incrementalAdmissionDirty=true;l1Scheduler?.wake(contactId);laterWorker?.wake();},
    close:()=>closing??=(async()=>{
    // 自有许可先停领；业务释放失败时保留host，重试成功后才关闭其账本与socket。
    schedulingStarted=false;modelHost?.arbiter.stop();await Promise.all([l1Scheduler?.close(),laterWorker?.close(),service.close(),adjudication?.close(),documents?.close()]);if(modelHost)await modelHost.close(async()=>{});
