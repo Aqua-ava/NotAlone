@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash,randomUUID } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, writeFile, realpath, rm } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { tmpdir } from 'node:os';
@@ -54,14 +54,17 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
  return {root,userData,executable,databaseId,logFile,hosts,routes,setSupport:status=>writeFile(planFile,JSON.stringify({history:status}))};
 }
 async function requests(f){try{return (await readFile(f.logFile,'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);}catch(error){if(error.code==='ENOENT')return [];throw error;}}
-async function start(f){
+async function start(f,options={}){
  const infoPath=join(f.userData,'managed/sqlite-backend.info');
- const host=await launchDsh({nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath:join(f.root,'unused.env'),infoPath,businessHome:f.root,environment:{},sqlite:{userData:f.userData,expectedDatabaseId:f.databaseId,role:'test',capabilities:['contacts','history'],wechatCliPath:f.executable}},()=>true);f.hosts.push(host);
- const info=await ready(async()=>{try{return Object.fromEntries((await readFile(infoPath,'utf8')).trim().split('\n').map(line=>{const index=line.indexOf('=');return [line.slice(0,index),line.slice(index+1)];}));}catch(error){if(error.code==='ENOENT')return null;throw error;}},value=>value?.address&&value?.token,'synthetic_host_appReady_timeout');
+ if(options.manual)await writeFile(join(f.root,'unused.env'),'NOTALONE_BACKGROUND_PROCESSING=manual\nNOTALONE_DEEPSEEK_API_KEY=\n',{mode:0o600});
+ let nodeExecutable=process.execPath;
+ if(options.manual){const quote=value=>"'"+value.replaceAll("'","'\\''")+"'";nodeExecutable=join(f.root,'synthetic-node');await writeFile(nodeExecutable,`#!/bin/sh\nexec ${quote(process.execPath)} \"$@\" 2>> ${quote(join(f.root,'manual.stderr'))}\n`,{mode:0o700});}
+ const host=await launchDsh({nodeExecutable,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath:join(f.root,'unused.env'),infoPath,businessHome:f.root,environment:{},sqlite:{userData:f.userData,expectedDatabaseId:f.databaseId,role:'test',capabilities:options.memory?['contacts','history','memory']:['contacts','history'],wechatCliPath:f.executable}},()=>true);f.hosts.push(host);
+ const info=await ready(async()=>{try{return Object.fromEntries((await readFile(infoPath,'utf8')).trim().split('\n').map(line=>{const index=line.indexOf('=');return [line.slice(0,index),line.slice(index+1)];}));}catch(error){if(error.code==='ENOENT')return null;throw error;}},value=>value?.address&&value?.token,'synthetic_host_appReady_timeout').catch(async error=>{if(options.manual)throw new Error(error.message+'; '+await readFile(join(f.root,'manual.stderr'),'utf8'));throw error;});
  const request=async(route,method='GET',body,headers={})=>{
   f.routes.push(route);const response=await fetch(`http://${info.address}`+route,{method,signal:AbortSignal.timeout(5000),headers:{authorization:`Bearer ${info.token}`,'content-type':'application/json',...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:response.status,body:await response.json()};
  };
- const runtime=await request('/api/runtime/status');assert.deepEqual(runtime.body.capabilities,['contacts','history']);
+ const runtime=await request('/api/runtime/status');assert.deepEqual(runtime.body.capabilities,options.memory?['contacts','history','memory']:['contacts','history']);
  return {host,request,shutdown:async()=>{assert.equal((await request('/api/runtime/shutdown','POST',{})).body.state,'stopped');assert.equal(await host.waitForExit(15000),true);}};
 }
 async function authorize(h){
@@ -102,4 +105,28 @@ test('正式appReady按持久开关首次派发，未知支持保持缺口且零
   else{assert.deepEqual(messages.body.messages,[]);assert.equal(status.cli_backfill_phase,'incomplete');assert.equal(newRows.some(row=>row.op==='target'||row.op==='page'),false);assert.equal((await reopened.request(`/api/contacts/${selected.contactId}/history`)).body.goalId,null);}
   assert.ok(newRows.some(row=>row.op==='resolve'));assert.ok(newRows.some(row=>row.op==='support'));assert.ok(f.routes.every(route=>!route.endsWith('/history/sync')));await reopened.shutdown();noCliOrphans(await requests(f));
  });
+});
+
+
+test('manual正式profile不自动派发历史或记忆，重启后仍只执行具名单联系人请求',{timeout:45000},async t=>{
+ const f=await fixture(t),h=await start(f,{manual:true,memory:true}),selected=await authorize(h);
+ assert.equal((await h.request('/api/runtime/status')).body.background_processing,'manual');
+ assert.equal((await h.request('/api/sync/enable','POST',{})).status,200);
+ assert.equal((await h.request(`/api/contacts/${selected.contactId}/history`)).body.phase,'not_started');
+ assert.equal((await h.request('/api/memory-processing/runs/current')).body,null);
+ assert.equal((await requests(f)).some(row=>row.op==='target'||row.op==='page'),false,'开启读取不唤醒后台控制器');
+ const synced=await h.request(`/api/contacts/${selected.contactId}/history/sync`,'POST',{});assert.equal(synced.status,200);
+ assert.equal((await h.request(`/api/contacts/${selected.contactId}/messages`)).body.messages.length,1);
+ assert.equal((await h.request('/api/memory-processing/runs/current')).body,null,'手动同步成功也不自动提取');
+ const started=await h.request(`/api/memory-processing/contacts/${selected.contactId}/history`,'POST',{request_key:randomUUID()});assert.equal(started.status,200);
+ assert.ok(started.body.run.inputs.every(input=>input.contactId===selected.contactId));
+ const blocked=await ready(async()=>h.request(`/api/memory-processing/runs/${started.body.run.runId}`),value=>value.body.status==='blocked'||value.body.status==='paused','synthetic_manual_memory_unconfigured');
+ const continued=await h.request(`/api/memory-processing/runs/${started.body.run.runId}/continue`,'POST',{action_version:blocked.body.controlVersion,operation_id:randomUUID()});assert.equal(continued.status,200);assert.ok(continued.body.inputs.every(input=>input.contactId===selected.contactId));
+ await ready(async()=>h.request(`/api/memory-processing/runs/${started.body.run.runId}`),value=>value.body.status==='blocked'||value.body.status==='paused','synthetic_manual_continue_unconfigured');
+ await h.shutdown();const offset=(await requests(f)).length,reopened=await start(f,{manual:true,memory:true});
+ assert.equal((await reopened.request('/api/runtime/status')).body.background_processing,'manual');
+ assert.equal((await requests(f)).slice(offset).some(row=>row.op==='target'||row.op==='page'),false,'重启不恢复后台历史');
+ const old=(await reopened.request(`/api/memory-processing/runs/${started.body.run.runId}`)).body;
+ assert.ok(old.inputs.every(input=>input.contactId===selected.contactId));assert.equal(old.calls.prepared+old.calls.sending+old.calls.succeeded+old.calls.unknown,0,'模型未配置时零外部调用');
+ await reopened.shutdown();noCliOrphans(await requests(f));
 });

@@ -1,3 +1,4 @@
+import {resolveBackgroundProcessingMode} from './host/sqlite-model-config.ts';
 import {SqliteHistoryRecertifyService} from './history/sqlite/recertify.ts';
 import {SqliteMemoryManagement} from './memory/sqlite/management/service.ts';
 import {SqliteMemoryManagementHttp,memoryManagementQueryAllowed} from './memory/sqlite/management/http.ts';
@@ -89,6 +90,9 @@ export async function apply(ctx: Context) {
     || !capabilities
     || sqlite.wechatCliPath !== undefined && !path.isAbsolute(sqlite.wechatCliPath)
     || config.infoPath !== path.join(sqlite.userData, 'managed/sqlite-backend.info')) throw new Error('SQLITE_HOST_CONFIGURATION_INVALID');
+  const modelSetup=await SqliteModelSetup.open(config.envFilePath,process.env);
+  const modelEnvironment=modelSetup.runtimeEnvironment();
+  const backgroundProcessing=resolveBackgroundProcessingMode(modelEnvironment),automaticBackground=backgroundProcessing==='automatic';
   const token = randomBytes(32).toString('base64url');
   let state: 'running' | 'stopping' | 'stopped' = 'running';
   let storage: SqliteStorage | undefined;
@@ -161,12 +165,12 @@ export async function apply(ctx: Context) {
       checkpointCache=new WechatHistoryCheckpointCache(storage,ownerId,deletionHolders,sqlite.wechatCliPath,contactId=>history?.stop(contactId)??Promise.resolve());
       await checkpointCache.initialize();
       history=new SqliteHistoryService(storage,contacts,createHistoryChannel,deletionHolders,
-        (contactId,messageId,kind)=>{events?.publish(`message.${kind}`,contactId,{message_id:messageId});memory?.wake(contactId);},contactId=>{imageSync?.wake(contactId);quoteSync?.wake(contactId);},wechat);
+        (contactId,messageId,kind)=>{events?.publish(`message.${kind}`,contactId,{message_id:messageId});if(automaticBackground)memory?.wake(contactId);},contactId=>{if(automaticBackground){imageSync?.wake(contactId);quoteSync?.wake(contactId);}},wechat);
       firstHistory=new FirstHistoryCoordinator(contacts,history);
-      history.setFirstHistoryWake(contactId=>firstHistory?.wakeContact(contactId));
+      history.setFirstHistoryWake(contactId=>{if(automaticBackground)firstHistory?.wakeContact(contactId);});
       incremental=new IncrementalHistoryCoordinator(contacts,history,{firstHistoryManagedExternally:true});
       // 开启/重选只唤醒合法读取；关闭/取消/退出由 readStop 停止后续查询并等待在途释放。
-      contacts.setReadStart(()=>{firstHistory!.wake();incremental!.wake();imageSync?.wake();quoteSync?.wake();memory?.wake();});
+      contacts.setReadStart(()=>{if(!automaticBackground)return;firstHistory!.wake();incremental!.wake();imageSync?.wake();quoteSync?.wake();memory?.wake();});
     }
     if(history&&process.env.NOTALONE_SYNC_PROBE&&path.isAbsolute(process.env.NOTALONE_SYNC_PROBE)) foreground=SqliteForeground.create(ownerId,process.env.NOTALONE_SYNC_PROBE,sqlite.wechatCliPath??'',()=>contacts!.foregroundSnapshot(),proof=>contacts!.confirmForeground(proof),wechat);
     const historyHttp=history?new SqliteHistoryHttp(history):undefined;
@@ -184,7 +188,7 @@ export async function apply(ctx: Context) {
     const deletionService = new DeletionService(storage, deletionHolders, new ManagedFiles(sqlite.userData));
     if(history){historyClear=new SqliteHistoryClearService(storage,contacts,createHistoryChannel,deletionService,deletionHolders);
       historyResync=new SqliteHistoryResyncService(storage,contacts,createHistoryChannel,deletionHolders);}
-    if(history)historyRecertify=new SqliteHistoryRecertifyService(storage,contacts,createHistoryChannel,deletionHolders,{stopHistory:id=>history!.stop(id),onCompleted:id=>firstHistory?.wakeContact(id)});
+    if(history)historyRecertify=new SqliteHistoryRecertifyService(storage,contacts,createHistoryChannel,deletionHolders,{stopHistory:id=>history!.stop(id),onCompleted:id=>{if(automaticBackground)firstHistory?.wakeContact(id);}});
     const historyClearHttp=historyClear&&historyResync?new SqliteHistoryClearHttp(historyClear,historyResync,historyRecertify):undefined;
     // 图片同步仅装配原图入口；其他媒体继续沿各自已认证能力开放。
     const originalImages=history&&await supportsWechatOriginalImages(sqlite.wechatCliPath);
@@ -196,20 +200,18 @@ export async function apply(ctx: Context) {
     if(history&&await supportsWechatQuotes(sqlite.wechatCliPath))quoteSync=new SqliteQuoteSyncCoordinator(contacts,history);
     contacts.setReadStop(async contactId=>{await Promise.all([historyRecertify?.stop(contactId),imageSync?.stop(contactId),quoteSync?.stop(contactId),firstHistory?firstHistory.stop(contactId):history?.stop(contactId),incremental?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);if(contactId)await checkpointCache?.forget(contactId);else await wechat?.stop();});
     const mediaHttp = new SqliteMediaHttp(media);
-    const modelSetup=await SqliteModelSetup.open(config.envFilePath,process.env);
     const discussionsEnabled=capabilities.capabilities.includes('discussions'),memoryEnabled=capabilities.capabilities.includes('memory');
-    const modelEnvironment=modelSetup.runtimeEnvironment();
     if(discussionsEnabled||memoryEnabled)models=await createSqliteModelRuntime({ctx,environment:modelEnvironment,userData:sqlite.userData,businessHome:config.businessHome,infoPath:config.infoPath,envFilePath:config.envFilePath,
       accounting:{reserve:async(receipt,claim)=>{if(!memory)throw new StorageFailure('sqlite_model_producer_unavailable');await memory.service.accounting.reserve(receipt,claim);},
         recordReserved:async receipt=>{if(!memory)throw new StorageFailure('sqlite_model_producer_unavailable');await memory.service.accounting.recordReserved(receipt);},
         unconfirmedRequests:async scope=>{if(scope.owner_id!==ownerId)throw new StorageFailure('sqlite_model_owner_invalid');return [...new Set([...(memory?await memory.service.accounting.unconfirmedRequests!(scope):[]),...await storage!.execute<string[]>('discussion.unconfirmed',scope)])];}}});
     const memoryManagement=new SqliteMemoryManagement(storage,ownerId);
-    const memoryManagementHttp=memoryEnabled?new SqliteMemoryManagementHttp(memoryManagement,req=>authorizeSqliteRequest(req,token),()=>memory?.wake()):undefined;
+    const memoryManagementHttp=memoryEnabled?new SqliteMemoryManagementHttp(memoryManagement,req=>authorizeSqliteRequest(req,token),()=>{if(automaticBackground)memory?.wake();}):undefined;
     // 即使入口未开启，也恢复并持有旧副本的清理所有者，避免资料删除遗漏持久副本。
     memory=await createSqliteMemoryRuntime({ctx,storage,ownerId,userData:sqlite.userData,businessHome:config.businessHome,infoPath:config.infoPath,envFilePath:config.envFilePath,environment:modelEnvironment,
       ...(models?.shared?{sharedModel:models.shared}:{}),holders:deletionHolders,authorize:req=>authorizeSqliteRequest(req,token),adjudicationEnabled:memoryEnabled,...(history?{ensureSourceReady:(contactId:string)=>history!.ensureSourceReady(contactId)}:{})});
     // 共享模型宿主的记账回调已可找到唯一 memory 实例，再受理自动调度。
-    if(memoryEnabled)memory.startScheduling();
+    if(memoryEnabled&&automaticBackground)memory.startScheduling();
     const memoryDocumentsHttp=memoryEnabled&&memory.documents?new SqliteMemoryDocumentsHttp(memory.documents,req=>authorizeSqliteRequest(req,token)):undefined;
     discussions=await createSqliteDiscussionHost({ctx,storage,ownerId,userData:sqlite.userData,holders:deletionHolders,library,authorizeRequest:req=>authorizeSqliteRequest(req,token),
       ...(models?.shared?{model:{configuration:models.shared.configuration.model,provider:models.shared.provider,arbiter:models.shared.arbiter}}:{})});
@@ -228,13 +230,13 @@ export async function apply(ctx: Context) {
       catch { respond(400, { error: 'invalid_request' }); return; }
       if (req.url !== url.pathname && (req.url !== url.pathname + url.search || !(deletionQueryAllowed(req.method, url)||history&&historyQueryAllowed(req.method,url)||memoryManagementHttp&&memoryManagementQueryAllowed(req.method,url)||memoryDocumentsHttp&&memoryDocumentsQueryAllowed(req.method,url)||historyClearHttp&&clearQueryAllowed(req.method,url)))) { respond(400, { error: 'invalid_request' }); return; }
       const changesMemoryScope=req.method==='DELETE'||req.method==='POST'&&(/^\/api\/deletions\//.test(url.pathname)||/^\/api\/contacts\/[a-f0-9-]{36}\/history\/(clear|resync)$/.test(url.pathname)||/^\/api\/sync\/(enable|disable|cli-bindings\/(confirm|revoke))$/.test(url.pathname));
-      if(changesMemoryScope)res.once('finish',()=>{if(res.statusCode>=200&&res.statusCode<300)memory?.wake();});
+      if(changesMemoryScope)res.once('finish',()=>{if(automaticBackground&&res.statusCode>=200&&res.statusCode<300)memory?.wake();});
       let releaseForeground:(()=>void)|undefined;
       try {
         const changesAuthority=req.method==='DELETE'||req.method==='POST'&&(/^\/api\/contacts\/[a-f0-9-]{36}\/history\/recertify(?:\/cancel)?$/.test(url.pathname)||/^\/api\/sync\/(enable|disable|cli-bindings\/(confirm|revoke))$/.test(url.pathname)||/^\/api\/setup\/wechat\//.test(url.pathname));
         if(changesAuthority&&foreground)releaseForeground=await foreground.beginChange();
         if (req.method === 'GET' && url.pathname === '/api/runtime/status') {
-          respond(200, { state, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', storageDiagnostic: storage?.failureDiagnostic ?? null, capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
+          respond(200, { state, background_processing:backgroundProcessing, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', storageDiagnostic: storage?.failureDiagnostic ?? null, capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
         }
         if (url.pathname === '/api/events') {
           if (req.method!=='GET') { respond(405,{error:'method_not_allowed'});return; }
@@ -325,7 +327,7 @@ export async function apply(ctx: Context) {
           await link(pending, config.infoPath); published = true;
         } finally { await rm(pending, { force: true }); }
       })();
-      void publication.then(()=>{if(state==='running'){firstHistory?.wake();incremental?.wake();incremental?.start();imageSync?.wake();quoteSync?.wake();}}).catch(() => ctx.appExit!(1));
+      void publication.then(()=>{if(state==='running'&&automaticBackground){firstHistory?.wake();incremental?.wake();incremental?.start();imageSync?.wake();quoteSync?.wake();}}).catch(() => ctx.appExit!(1));
     });
   } catch {
     await close();
