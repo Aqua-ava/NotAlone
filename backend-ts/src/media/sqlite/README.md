@@ -2,7 +2,7 @@
 
 `contracts.ts` 是17/18的窄适配器入口。`MediaAdapter.execute(context)` 仅处理明确指定的一条消息。新读取分支拿到固定 `HistorySource`（`recordId` 是 capture_record.id）及当前读取资格；本地重转分支只拿同消息合法 `audio_source`，不要求微信读取开关。适配器每段前后调用 `checkpoint()`，以 `save()` 提交独立文件流、预期字节数/摘要和实际类型校验回调；返回窄资源关联证明。不传任意SQL，不从HTTP接受路径、字节、适配器或关联证明。
 
-`save`先持久登记随机不可复用定位，再排他创建、登记真实文件及父目录身份，随后分段写入、sync、完整性和类型复核；发布在短事务复验所有资格。类型校验必须分别报告容器、可查看/播放及图片质量；合成校验器只认证生命周期，不能放行真实类型。媒体不转写、OCR、入记忆或调用模型。
+`save`先持久登记随机不可复用定位，再排他创建、登记真实文件及父目录身份，随后分段写入、sync、完整性和类型复核；发布在短事务复验所有资格。类型校验必须分别报告容器、可查看/播放及图片质量；合成校验器只认证生命周期，不能放行真实类型。本模块负责媒体文件提取与管理，保存操作本身不调用模型；记忆模块按 [ADR-153](../../../../architecture/adr/153-joint-text-image-memory-input.md)的目标将已保存图片与聊天文字共同带入记忆请求，图文接线尚未实现。
 
 三实体迁移导出 `mediaMigration(version)`，正式registry已分配版本6。删除复用05同一账本；安装时使用 `composeMediaDeletionRegistration(base)`，media域在history/identity前，requiredDomains显式包含media；media独立清除只推进自身代次。正式DSH宿主、具名桌面桥及聊天行页面已经串行集成并验收；真实渠道和类型适配器仍由17/18认证。
 

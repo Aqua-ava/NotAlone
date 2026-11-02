@@ -41,7 +41,7 @@
 | `local_wechat_observation` | 本地微信 CLI 从一个外部会话读取的一次文字增量来源记录。 | 显式关联 `owner_id + contact_id + conversation_binding`，保存外部会话定位标识、CLI 版本、`local_id`/`cursor`、读取时间、`from_me`/sender 和 `capture_mode`（live/cli_catchup）；不保存全量导出文件。 |
 | `background_task` | 一次完整的长时后台工作，取代独立的导入/删除/重建任务表。 | `type` 区分 import/delete/reindex；`scope` 声明作用域（account/contact/source）；状态为 `queued/running/verifying/succeeded/failed/cancelled`，记录总体进度、失败原因、重试与关联来源。删除任务不得跨越隔离边界。 |
 | `background_task_step` | `background_task` 下可恢复、可重试的固定执行步骤。 | 关联父任务并保存 `step_type`、顺序、状态、尝试次数、输入/输出业务引用、错误分类和 Worker 租约；不保存完整聊天正文。只用于确实需要逐步恢复或展示进度的长任务。 |
-| `message` | 统一的规范化文字消息。 | 显式冗余 `owner_id + contact_id`，并保存说话人、正文或明确的媒体占位信息、可用时间戳；来源字段（`source_document` 或 `local_wechat_observation`）仅用于定位与删除，不承担隔离过滤。渠道专属字段不是所有消息的必填字段。 |
+| `message` | 统一的规范化聊天消息，保留文字、图片等消息类型及来源关系。 | 显式冗余 `owner_id + contact_id`，并保存说话人、正文或明确的媒体占位信息、可用时间戳；来源字段（`source_document` 或 `local_wechat_observation`）仅用于定位与删除，不承担隔离过滤。渠道专属字段不是所有消息的必填字段。 |
 | `memory_candidate` | 模型或规则从资料中提取的待采纳关系线索。 | 关联证据消息并保留 `self/contact/shared` 主体；不能被检索为已知事实。 |
 | `confirmed_memory` | 自动采纳或手动录入的共同事实、偏好、禁忌、关系资料。 | 关联一个或多个来源证据、采纳方式（auto/manual）、删除状态、分类与有效期；不保存固定常驻模式。 |
 | `contact_memory_index` | 当前联系人有效关系记忆的精简主题目录。 | 按 `owner_id + contact_id` 隔离，由固定主分类和系统自动生成的子主题组成；是可重建投影，不是新的事实源；召回第一期不再用它筛选候选，只提供 `memory_revision` 快照用于生成前后复验。 |
@@ -57,7 +57,7 @@
 
 消息列表与覆盖摘要按已经保存的完整原始类型码细分展示已知消息类型，并分别统计非文字占位数量。引用回复、链接、小程序、合并转发等使用各自中文标签；未登记的类型保留为“其他消息（未识别）”，不凭正文猜测。系统等独立元数据仍单独计数。
 
-上述类型细分仅改变查询投影，不改写已保存的消息或来源，不把占位提升为可供记忆提取的文字。按 [ADR-139](../adr/139-quoted-reply-sync-and-history-enrichment.md)及 [ADR-141](../adr/141-inline-quoted-reply-sync.md)，一对一引用回复在正常历史页和增量页读取时有界解析真实回复正文及引用快照，与消息和来源同事务保存，并保留独立作者和原消息关联；原消息身份与时间不变，已有引用占位继续后台补齐。引用正文不进入普通来源元数据，其他富消息和转发仍不展开 XML 正文，媒体读取沿各自已认证能力处理。
+图文记忆输入按 [ADR-153](../adr/153-joint-text-image-memory-input.md)将实际图片与同一联系人的聊天文字共同组装；该目标尚未完成代码接线。上述类型细分仅改变查询投影，不改写已保存的消息或来源，占位文案不能替代实际图片证据。按 [ADR-139](../adr/139-quoted-reply-sync-and-history-enrichment.md)及 [ADR-141](../adr/141-inline-quoted-reply-sync.md)，一对一引用回复在正常历史页和增量页读取时有界解析真实回复正文及引用快照，与消息和来源同事务保存，并保留独立作者和原消息关联；原消息身份与时间不变，已有引用占位继续后台补齐。引用正文不进入普通来源元数据，其他富消息和转发仍不展开 XML 正文，媒体读取沿各自已认证能力处理。
 
 ### 来源重新认证
 
