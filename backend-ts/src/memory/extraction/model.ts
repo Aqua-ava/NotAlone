@@ -17,11 +17,41 @@ function providerFailureSnapshot(failure:LlmFailure,name:ExtractionProviderFailu
   return {name,code:/^[A-Z][A-Z0-9_]{0,63}$/.test(failure.code)?failure.code:'PROVIDER_ERROR',
     ...(failure.status===undefined?{}:{status:failure.status})};
 }
+/** 仅在端侧来源事件中保留校验拒绝的有界输出；不作为可重试或准入证明。 */
+export interface RejectedExtractionOutput {
+ readonly blocks:readonly ContentBlock[];readonly truncated:boolean;
+ readonly originalBlockCount:number;readonly originalBytes:number;
+}
+function rejectedOutputSnapshot(blocks:readonly ContentBlock[]):RejectedExtractionOutput {
+ const snapshot={blocks:[] as ContentBlock[],truncated:blocks.length>16,
+  originalBlockCount:blocks.length,originalBytes:Buffer.byteLength(JSON.stringify(blocks))};
+ const fits=()=>Buffer.byteLength(JSON.stringify(snapshot))<=256*1024;
+ for(const block of blocks.slice(0,16)){
+  const copy=structuredClone(block);snapshot.blocks.push(copy);
+  if(fits())continue;
+  snapshot.truncated=true;snapshot.blocks.pop();
+  const field=copy.type==='tool-call'?'arguments':copy.type==='text'||copy.type==='reasoning'?'text':null;
+  if(field===null)continue;
+  const row=copy as unknown as Record<string,unknown>,original=row[field];
+  if(typeof original!=='string')continue;
+  const characters=Array.from(original);row[field]='';snapshot.blocks.push(copy);
+  if(!fits()){snapshot.blocks.pop();continue;}
+  let low=0,high=characters.length;
+  while(low<high){
+   const middle=Math.ceil((low+high)/2);row[field]=characters.slice(0,middle).join('');
+   if(fits())low=middle;else high=middle-1;
+  }
+  row[field]=characters.slice(0,low).join('');
+ }
+ return Object.freeze({...snapshot,blocks:Object.freeze(snapshot.blocks.map(block=>Object.freeze(block)))});
+}
 export class ExtractionModelError extends Error {
   readonly code:string;readonly receipt:ModelLedgerReceipt|null;
   readonly retryable:boolean;readonly provider_failure:ExtractionProviderFailure|null;
-  constructor(code:string, receipt:ModelLedgerReceipt|null=null,providerFailure:ExtractionProviderFailure|null=null){
+  declare readonly rejectedOutput:RejectedExtractionOutput|undefined;
+  constructor(code:string, receipt:ModelLedgerReceipt|null=null,providerFailure:ExtractionProviderFailure|null=null,rejectedBlocks?:readonly ContentBlock[]){
     super(code);this.code=code;this.receipt=receipt;
+    if(code==='extraction_model_validation_failed'&&rejectedBlocks)Object.defineProperty(this,'rejectedOutput',{value:rejectedOutputSnapshot(rejectedBlocks),enumerable:false});
     this.provider_failure=providerFailure?Object.freeze({...providerFailure}):null;
     const status=providerFailure?.status;
     this.retryable=code==='extraction_model_call_failed'&&receipt?.outcome==='failed'&&receipt.dispatch==='response_observed'
@@ -176,7 +206,7 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
       if(receipt)await input.onReceipt?.(structuredClone(receipt));
       const state=await connection.exchange({op:'settled'});if(state.state!=='settled')throw new ExtractionModelError('extraction_model_ack_unknown',receipt);
       if(outputError!==undefined)throw outputError;
-      if(validationRejected)throw new ExtractionModelError('extraction_model_validation_failed',receipt);
+      if(validationRejected)throw new ExtractionModelError('extraction_model_validation_failed',receipt,null,blocks);
       if(!success||!receipt){
         const rejection=(strictCall??call)?.observation().budget_rejection;
         throw new ExtractionModelError(input.signal.aborted?'extraction_model_cancelled':rejection?.code==='reply_budget_exceeded'?'extraction_model_budget_exceeded':rejection?'extraction_model_budget_unavailable':'extraction_model_call_failed',receipt,providerFailure);

@@ -6,7 +6,7 @@ import {once} from 'node:events';
 import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {startModelHost} from '../src/platform/models/model-host.ts';
 import {resolveHostReplyConfiguration} from '../src/host/host-reply-config.ts';
@@ -41,8 +41,12 @@ test('官方DSH和真实ModelHost端口：用途、凭据、最终预算、未�
     }});
   provider=createServer(async(req,res)=>{
     let raw='';for await(const chunk of req)raw+=chunk;requests++;
-    assert.equal(req.headers['x-api-key'],'synthetic-only');
+    if(req.url==='/strict/chat/completions')assert.equal(req.headers.authorization,'Bearer synthetic-only');
+    else assert.equal(req.headers['x-api-key'],'synthetic-only');
     if(rejectHTTP){rejectHTTP=false;res.writeHead(401,{'content-type':'application/json'});res.end(JSON.stringify({type:'error',error:{type:'authentication_error',message:'合成供应商原始正文不进入安全元数据'}}));return;}
+    if(req.url==='/strict/chat/completions'){
+      res.setHeader('content-type','application/json');res.end(JSON.stringify({choices:[{message:{role:'assistant',content:null,tool_calls:[{id:'synthetic-invalid-json',type:'function',function:{name:'SourceVerificationOutput',arguments:'{"results":[PRIVATE_SYNTHETIC_BROKEN'}}]},finish_reason:'tool_calls'}],usage:{prompt_tokens:3,completion_tokens:2}}));return;
+    }
     const events=[{type:'message_start',message:{id:'synthetic',model:'deepseek-flash',usage:{input_tokens:3,output_tokens:0}}},
       {type:'content_block_start',index:0,content_block:{type:'text',text:''}},
       {type:'content_block_delta',index:0,delta:{type:'text_delta',text:'合成输出'}},
@@ -77,11 +81,16 @@ test('官方DSH和真实ModelHost端口：用途、凭据、最终预算、未�
   rejectHTTP=true;const authentication=await call();assert.equal(authentication.error,'extraction_model_call_failed');assert.deepEqual(authentication.providerFailure,{name:'LlmFailure',code:'AUTH',status:401});assert.equal(authentication.dispatch,'response_observed');assert.equal(authentication.outcome,'failed');assert.doesNotMatch(JSON.stringify(authentication),/合成供应商原始正文/);assert.equal(requests,3);
   const shared=await call({sharedProbe:true});
   assert.equal(shared.text,'合成输出');assert.equal(shared.sharedCalls,5);assert.equal(requests,4);
+  const invalid=await call({verification:true,invalidOutput:true});
+  assert.equal(invalid.error,'extraction_model_validation_failed');assert.equal(invalid.outcome,'failed');assert.equal(invalid.dispatch,'response_observed');assert.equal(requests,5);
+  assert.deepEqual(invalid.rejection,{originalBytes:invalid.rejection.originalBytes,originalBlockCount:1,truncated:false,
+    capturedHash:createHash('sha256').update('{"results":[PRIVATE_SYNTHETIC_BROKEN').digest('hex'),enumerable:false,publicHasRaw:false});
+  assert.ok(invalid.rejection.originalBytes>0);assert.doesNotMatch(JSON.stringify(invalid),/PRIVATE_SYNTHETIC_BROKEN|rejectedOutput/);
   // 未知许可必须保守占用；先验证临时端口关闭，再由原端口派发，不能靠新scope绕过未知占用。
   failReceipt=true;
   const unknownContext={...context,requestId:randomUUID(),attemptId:randomUUID()};
-  const unknown=await call({context:unknownContext});assert.equal(unknown.error,'extraction_model_ack_unknown');assert.equal(requests,5,'关闭另一个提取端口后原端口仍复用宿主provider');
-  const retried=await call({context:{...unknownContext,attemptId:randomUUID()}});assert.equal(retried.error,'extraction_model_recovery_unknown');assert.equal(requests,5);
+  const unknown=await call({context:unknownContext});assert.equal(unknown.error,'extraction_model_ack_unknown');assert.equal(requests,6,'关闭另一个提取端口后原端口仍复用宿主provider');
+  const retried=await call({context:{...unknownContext,attemptId:randomUUID()}});assert.equal(retried.error,'extraction_model_recovery_unknown');assert.equal(requests,6);
   assert.equal((await call({close:true})).closed,true);
-  assert.equal((await call()).error,'extraction_model_closed');assert.equal(requests,5);
+  assert.equal((await call()).error,'extraction_model_closed');assert.equal(requests,6);
 });

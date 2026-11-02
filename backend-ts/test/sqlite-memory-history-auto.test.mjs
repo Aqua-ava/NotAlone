@@ -71,3 +71,17 @@ test('启用前旧增量归历史补齐，启用后新文字仍归增量',async 
  const run=await memory.startHistoryBatch(contactId,randomUUID());assert.equal(run.total,2);await memory.waitForIdle(run.runId);
  assert.equal((await memory.read(run.runId)).succeeded,2);assert.equal((await memory.readSchedule()).pending,1);
 });
+
+test('模型拒绝输出保留原调用和来源关联，不生成成功输出或记忆候选',async t=>{
+ const {ExtractionModelError}=await import('../src/memory/extraction/model.ts');
+ const f=await fixture(t),contactId=f.saved[0].contact_id;await f.service.synchronize(contactId);
+ let memory;const blocks=[{type:'tool-call',name:'DirectMemoryExtractionOutput',arguments:'{"scenes":[SYNTHETIC_BROKEN'}];
+ const base=modelPort(()=>memory.accounting,async()=>({blocks}));
+ const port={prepare:base.prepare,close:base.close,invoke:async(request,input)=>{const result=await base.invoke(request,input);throw new ExtractionModelError('extraction_model_validation_failed',null,null,result.blocks);}};
+ memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
+ const run=await memory.startHistoryBatch(contactId,randomUUID());await memory.waitForIdle(run.runId);
+ const view=await memory.read(run.runId);assert.equal(view.state,'failed');assert.equal(view.candidates.length,0);
+ const trace=await memory.trace(view.tasks.find(t=>t.scopeKind==='contact').taskId),rejected=trace.events.find(e=>e.kind==='model_output_rejected');
+ assert.ok(rejected);assert.deepEqual(rejected.payload.blocks,blocks);assert.equal(rejected.payload.truncated,false);assert.ok(rejected.callId);assert.equal(rejected.sources.length,1);
+ assert.equal(rejected.sources[0].contactId,contactId);assert.equal(trace.events.some(e=>e.kind==='model_output'),false);
+});

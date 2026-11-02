@@ -8,6 +8,7 @@ import {assertCompleteClaimAdmission} from '../extraction/verification/complete-
 import {isSharedFailure,sharedFailureCodes} from './control.ts';
 import type {CandidateVerificationReference} from './management/admission.ts';
 import type {ExtractionWindow} from '../extraction/protocol.ts';
+import {ExtractionModelError} from '../extraction/model.ts';
 import type {ModelPermitAccounting,ModelTaskClaim} from '../../platform/models/model-permit-server.ts';
 import type {SqliteExtractionModelInvocation,SqliteExtractionModelPreparation} from './model-port.ts';
 export interface ExtractionModelPort {
@@ -226,6 +227,8 @@ export class SqliteMemoryExtraction {
      const code=typeof value?.code==='string'&&/^extraction_model_[a-z_]+$/.test(value.code)?value.code:'extraction_model_unavailable';
      const status=typeof value?.provider_failure?.status==='number'?value.provider_failure.status:null;
      const providerCode=typeof value?.provider_failure?.code==='string'&&/^[A-Z][A-Z0-9_]{0,63}$/.test(value.provider_failure.code)?value.provider_failure.code:null;
+     // 校验拒绝仍保存有界原始输出及来源关联；只供本机排错，绝不作为成功回执复用。
+     if(error instanceof ExtractionModelError&&error.rejectedOutput)await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'model_output_rejected',payload:{purpose:request.purpose,...error.rejectedOutput},callId:call.callId,inputNos:actualNos});
      modelFailure=code;if(status===401||status===403)commonFailure='extraction_model_authentication_failed';else if(status===429||status!==null&&status>=500)commonFailure='extraction_model_provider_unavailable';
      await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'model_failure',payload:{code,providerCode,status},callId:call.callId,inputNos:actualNos});throw error;
     }

@@ -1,6 +1,8 @@
 import type {} from '@deepseek-ai/dsh-cmdline';
 import type {Context} from '@deepseek-ai/cordis';
 import {createServer} from 'node:http';
+import {createHash} from 'node:crypto';
+import {readExtractionToolArguments} from '../../src/memory/extraction/arguments.ts';
 import {resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import {createSqliteExtractionModelPort} from '../../src/memory/sqlite/model-port.ts';
 import {resolveHostReplyConfiguration} from '../../src/host/host-reply-config.ts';
@@ -17,6 +19,7 @@ export function apply(ctx:Context) {
     budgetProfile:{context_window_tokens:131072,safety_margin_tokens:4096}},provider:{...base.provider,
     connection:resolveAdapterOptions({baseURL:process.env.NOTALONE_SYNTHETIC_PROVIDER_URL!,thinking:'disabled',maxTokens:512,
       retryPolicy:{mode:'normal',maxRetries:0}}),
+    strictVerificationEndpoint:new URL('/strict/chat/completions',process.env.NOTALONE_SYNTHETIC_PROVIDER_URL!).href,
     resolveAuth:async()=>({headers:credentials?{'x-api-key':'synthetic-only'}:{}})}};
   let sharedCalls=0;
   const registered=installModelProvider(ctx,{...configuration.provider,resolveUserId:()=> 'synthetic-anonymous' as never});
@@ -30,9 +33,9 @@ export function apply(ctx:Context) {
     const chunks=[];for await(const chunk of req)chunks.push(chunk);
     const input=JSON.parse(Buffer.concat(chunks).toString());
     deny=Boolean(input.deny);credentials=!input.noCredentials;current=true;
-    const request={purpose:'extraction' as const,system:'合成提取提示',user:input.oversized?'合成'.repeat(300000):'合成消息',
-      tool:{name:DIRECT_EXTRACTION_SCHEMA.title,description:'合成提取',parameters:DIRECT_EXTRACTION_SCHEMA},
-      validateOutput:()=>{}};
+    const request={purpose:input.verification?'verification' as const:'extraction' as const,system:'合成提取提示',user:input.verification?'{}':input.oversized?'合成'.repeat(300000):'合成消息',
+      tool:input.verification?{name:'SourceVerificationOutput',description:'合成核验',parameters:{title:'SourceVerificationOutput',type:'object',properties:{results:{type:'array',items:{type:'object',properties:{}}}}}}:{name:DIRECT_EXTRACTION_SCHEMA.title,description:'合成提取',parameters:DIRECT_EXTRACTION_SCHEMA},
+      validateOutput:(blocks:readonly unknown[])=>{if(input.invalidOutput)readExtractionToolArguments(blocks,'SourceVerificationOutput');}};
     const context={...input.context,signal:new AbortController().signal,
       requireCurrent:async()=>{if(!current)throw new Error('synthetic_scope_deleted');},
       onReceipt:async()=>{if(input.lateDeletion)current=false;}};
@@ -42,7 +45,12 @@ export function apply(ctx:Context) {
       if(input.prepare){res.end(JSON.stringify(await port.prepare(request,context)));return;}
       const result=await port.invoke(request,context);
       res.end(JSON.stringify({text:result.text,receipt:result.receipt,sharedCalls}));
-    }catch(error){res.end(JSON.stringify({error:error&&typeof error==='object'&&'code'in error?error.code:
+    }catch(error){
+      const rejected=(error as {rejectedOutput?:{blocks:readonly {arguments?:string}[];truncated:boolean;originalBytes:number;originalBlockCount:number}})?.rejectedOutput;
+      const rejection=rejected?{originalBytes:rejected.originalBytes,originalBlockCount:rejected.originalBlockCount,truncated:rejected.truncated,
+        capturedHash:createHash('sha256').update(rejected.blocks[0]?.arguments??'').digest('hex'),
+        enumerable:Object.keys(error as object).includes('rejectedOutput'),publicHasRaw:JSON.stringify(error).includes('PRIVATE_SYNTHETIC_BROKEN')}:undefined;
+      res.end(JSON.stringify({...(rejection?{rejection}:{}),error:error&&typeof error==='object'&&'code'in error?error.code:
       error instanceof Error?error.message:'synthetic_unknown',...((error as any)?.provider_failure?{providerFailure:(error as any).provider_failure}:{}),...((error as any)?.receipt?{dispatch:(error as any).receipt.dispatch,outcome:(error as any).receipt.outcome}:{})}));}
   });
   const ready=ctx.appReady!.onReady(()=>server.listen(0,'127.0.0.1',()=>{
