@@ -11,8 +11,6 @@ import { ExpressionPreferences } from './ExpressionPreferences';
 import { CandidateCopyControls } from './CandidateCopyControls';
 import { CandidateVersionEditor } from './CandidateVersionEditor';
 import type { ReplyCandidateDraftUpdate, ReplyCandidateVersionRead, ReplyCandidateVersionEdit, ReplyCandidateVersionDisplay } from '../shared/assistant-candidate-versions';
-import type { RequirementChange } from '../shared/assistant-continuation-clarification';
-import { AssistantContinuationControls } from './AssistantContinuationControls';
 import { AssistantMessageNoticeActions } from './AssistantMessageNoticeActions';
 import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
 
@@ -20,7 +18,7 @@ export function useReplySession(enabled = true) {
   const { state, error, setError, latest, active, receive, retry } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null, generationBlock: 'foreground-confirmation-required',
     options: { tone: 'original', instruction: '', includeRelationshipContext: false },
     mode: 'rewrite_draft', scene: '', messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null, direction: '', purpose: '',
-    correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], exploration: { phase: 'idle', result: null },
+    correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [],
     messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
     phase: 'idle', result: null, selectedCandidateId: null, canRetry: false }, window.notalone.replies, enabled);
   async function operate(operation: () => Promise<ReplySessionState | void>) {
@@ -96,15 +94,9 @@ export function useReplySession(enabled = true) {
     updateDirection: (direction: string) => operate(() => window.notalone.replies.updateInput({ type: 'direction', update: { ...selection(), direction } })),
     updateCorrection: (correction: string) => operate(() => window.notalone.replies.updateInput({ type: 'correction', update: { ...selection(), correction } })),
     updateSupplement: (supplement: string) => operate(() => window.notalone.replies.updateInput({ type: 'supplement', update: { ...selection(), supplement } })),
-    explore: (changeGroup = false) => operate(() => changeGroup ? window.notalone.replies.changeDirections(selection()) : window.notalone.replies.explore(selection())),
-    beginClarificationEdit: (inputVersion: string, questionId: string) => operate(() => window.notalone.replies.beginClarificationEdit({ ...selection(), inputVersion, questionId })),
-    answerClarification: (answer: string, inputVersion: string, questionId: string) => operate(() => window.notalone.replies.answerClarification({ ...selection(), answer, inputVersion, questionId })),
-    stopExploration: () => operate(() => window.notalone.replies.stopExploration(selection())),
-    retryExploration: () => operate(() => window.notalone.replies.retryExploration(selection())),
     updateRequirements: (requirements: string) => operate(() => window.notalone.replies.updateInput({ type: 'requirements', update: { ...selection(), requirements } })),
     updateSkill: (skill: import('../shared/reply-bridge').ReplySkillChoice) => operate(() => window.notalone.replies.updateSkill({ ...selection(), skill })),
     updateScene: (scene: string) => operate(() => window.notalone.replies.updateInput({ type: 'scene', update: { ...selection(), scene } })),
-    selectDirection: (suggestionId: string, inputVersion: string) => operate(() => window.notalone.replies.selectDirection({ ...selection(), suggestionId, inputVersion })),
     updatePurpose: (purpose: string) => operate(() => window.notalone.replies.updateInput({ type: 'purpose', update: { ...selection(), purpose } })),
     retryInterruptedGeneration: (sessionId: string, turnId: string, inputVersionId: string) =>
       operate(() => window.notalone.replies.retryInterruptedGeneration({ ...selection(), sessionId, turnId, inputVersionId })),
@@ -116,15 +108,6 @@ export function useReplySession(enabled = true) {
       await window.notalone.replies.generate({ ...scope, newRequest: true, workspaceAction, ...(allowIncompleteHistory ? { allowIncompleteHistory: true } : {}) });
     }),
     generate: (newRequest = false) => operate(() => window.notalone.replies.generate({ ...selection(), newRequest })),
-    continueSession: (instruction: string, intentionUpdate?: string, allowIncompleteHistory = false) => operate(() => window.notalone.replies.continueSession({
-      ...selection(), sessionId: latest.current.savedSession!.sessionId!, instruction,
-      ...(allowIncompleteHistory ? { allowIncompleteHistory: true } : {}),
-      ...(intentionUpdate === undefined ? {} : { intentionUpdate }) })),
-    confirmContinuation: (requirementChanges: readonly RequirementChange[]) => operate(() => window.notalone.replies.confirmContinuation({
-      ...selection(), sessionId: latest.current.continuation!.sessionId,
-      expectedInputVersionId: latest.current.continuation!.expectedInputVersionId, requirementChanges })),
-    retryContinuation: () => operate(() => window.notalone.replies.retryContinuation({ ...selection(),
-      sessionId: latest.current.savedSession!.sessionId! })),
     editCandidate: (candidateId: string, text: string) => operate(() => window.notalone.replies.updateInput({ type: 'candidate', update: { ...selection(), replyRequestId: latest.current.result!.replyRequestId, candidateId, text } })),
   };
 }
@@ -226,7 +209,7 @@ export function ReplyCandidates({ replies, currentDraft, historyCoverage, onInit
     const result = state.result;
     // 删除复核暂时清空结果，返回后须重读同一会话的可信完成记录。
     if (!result) { completedRead.current = ''; return; }
-    if (result.input.mode === 'rewrite_draft' && result.input.inputKind !== 'workspace' && !result.continuation || state.phase !== 'ready'
+    if (result.input.mode === 'rewrite_draft' && result.input.inputKind !== 'workspace' || state.phase !== 'ready'
       || state.savedSession?.sessionId !== result.assistantSessionId || state.savedSession?.phase !== 'idle') return;
     const identity = `${state.contactId}:${state.scopeRevision}:${result.assistantSessionId}:${result.replyRequestId}`;
     if (completedRead.current === identity) return;
@@ -246,8 +229,7 @@ export function ReplyCandidates({ replies, currentDraft, historyCoverage, onInit
     {replyRequestId && candidates.length > 0 && <p className="reply-note" role="status" aria-label="本次回复方法">
       {replyMethodText(usedSkill, usedVersion)}
     </p>}
-    {candidates.length > 0 && (!state.result || state.exploration.result || state.exploration.phase === 'waiting' || state.exploration.phase === 'failed'
-      || state.phase === 'waiting' || state.phase === 'failed' || hasChangedReplyInput(state, currentDraft))
+    {candidates.length > 0 && (!state.result || state.phase === 'waiting' || state.phase === 'failed' || hasChangedReplyInput(state, currentDraft))
       && <p className="reply-generation-guidance" role="status">上一组候选，尚未按当前输入重新生成。</p>}
     {state.contentRestoreNotice && <p role="status">{state.contentRestoreNotice}</p>}
     <AssistantSessionBudgetNotice replies={replies} />
@@ -282,7 +264,7 @@ export function ReplyCandidates({ replies, currentDraft, historyCoverage, onInit
     {state.phase === 'failed' && (state.errorCode === 'unavailable' || state.errorCode === 'input_budget_unavailable') && <button onClick={() => void window.notalone.openManager()}>打开本人和模型设置</button>}
     {state.phase === 'failed' && state.mode === 'reply_to_message' && <p className="reply-note">可以刷新待回复消息重新选择，或切换到草稿改写。</p>}
     {state.result ? <>
-      {state.result.input.mode === 'rewrite_draft' && state.result.input.inputKind !== 'workspace' && !state.result.continuation && <div className="reply-candidate-grid">
+      {state.result.input.mode === 'rewrite_draft' && state.result.input.inputKind !== 'workspace' && <div className="reply-candidate-grid">
         {state.result.candidates.map(({ original, editedText }, index) => <article className="reply-candidate" key={original.candidateId}>
           <h3 className="candidate-strip-label" aria-label={`说法 ${index + 1}`}><span>{String(index + 1).padStart(2, '0')}</span><small>说法</small></h3>
           <div className="candidate-strip-content legacy-candidate-editor"><CandidateEditor text={editedText} candidateId={original.candidateId} number={index + 1} edit={replies.editCandidate}
@@ -294,7 +276,7 @@ export function ReplyCandidates({ replies, currentDraft, historyCoverage, onInit
         </article>)}
       </div>}
     </> : state.phase !== 'waiting' && candidates.length === 0 && <div className="reply-empty"><p>暂无候选</p><small>写下想法让我帮你表达，或点击「帮我想想」获取建议。</small></div>}
-    {(state.result?.input.mode !== 'rewrite_draft' || state.result.input.inputKind === 'workspace' || state.result.continuation || !state.result) && candidates.length > 0 && <div className="reply-candidate-grid">
+    {(state.result?.input.mode !== 'rewrite_draft' || state.result.input.inputKind === 'workspace' || !state.result) && candidates.length > 0 && <div className="reply-candidate-grid">
       {candidates.map((candidate, index) => {
         const view = state.candidateVersions?.items.find((item) => item.candidateId === candidate.candidateId);
         return <article className="reply-candidate" key={candidate.candidateId}>
@@ -342,8 +324,6 @@ export function ReplyCandidates({ replies, currentDraft, historyCoverage, onInit
     </details>}
     {copyNoticeError && <p className="reply-note" role="alert">{copyNoticeError}</p>}
     {replies.error && <p className="reply-note" role="alert">{replies.error}<button className="button" onClick={() => void replies.retry()}>重试读取</button></p>}
-    <AssistantContinuationControls historyCoverage={historyCoverage} key={`${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${state.inputClearRevision ?? 0}`}
-      replies={replies} hasUnsavedEdits={hasUnsavedEdits} />
     <AssistantMessageNoticeActions replies={replies} hasUnsavedEdits={hasUnsavedEdits} />
   </section>
     <AssistantSessionPanel onDraftChange={onDraftChange} replies={replies} />

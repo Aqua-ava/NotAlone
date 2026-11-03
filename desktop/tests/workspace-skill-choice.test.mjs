@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { replyWorkspaceFixture } from './fixtures/reply-workspace.mjs';
 
 for (const action of ['express', 'suggest']) for (const mode of ['user', 'disabled']) {
-  test(`工作区${action}冻结${mode}选择，失败重试、续改和中断恢复不改选`, async () => {
+  test(`工作区${action}冻结${mode}选择，失败重试和中断恢复不改选`, async () => {
     const f = await replyWorkspaceFixture();
     try {
       const choice = { mode, versionId: mode === 'user' ? randomUUID() : null };
@@ -24,8 +24,6 @@ for (const action of ['express', 'suggest']) for (const mode of ['user', 'disabl
       assert.deepEqual(f.replies.getState().result.input.skillChoice, choice);
       await f.bridge.updateSkill({ ...f.scope(), skill: { mode: 'auto', versionId: null } });
       await f.bridge.readSavedSession(f.scope());
-      await f.bridge.continueSession({ ...f.scope(), sessionId: f.replies.getState().savedSession.sessionId, instruction: '简短一点' });
-      assert.equal(f.replies.getState().continuation.phase, 'completed');
       assert.deepEqual(f.replies.getState().result.input.skillChoice, choice);
       const entry = f.records.entries.at(-1); entry.completed = false; entry.interrupted = true;
       await f.bridge.readSavedSession(f.scope());

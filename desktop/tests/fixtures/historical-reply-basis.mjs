@@ -77,7 +77,6 @@ export async function historicalReplyFixture({ replyRequestId } = {}) {
       cited: true, valid_at: null, invalid_at: null, timing: { recorded_at: null, source_started_at: null,
         source_ended_at: null, source_time_complete: false } }] } };
   const calls = [], handlers = new Map(), listeners = new Map(), backendListeners = new Set();
-  let continuation;
   const backend = { getConnectionGeneration: () => records.generation,
     onStateChanged: (listener) => { backendListeners.add(listener); return () => backendListeners.delete(listener); },
     subscribeMessages: (observer) => observer.connected(),
@@ -90,36 +89,11 @@ export async function historicalReplyFixture({ replyRequestId } = {}) {
       if (failure) { await records.beforeFailure?.(request); throw failure; }
       const generated = records.saved.turns.at(-1);
       if (request.path.endsWith('/replies/prepare')) generated.request_key = request.body.idempotency_key;
-      if (request.path.endsWith('/continue/prepare')) continuation = { turnId: randomUUID(),
-        inputVersionId: randomUUID(), replyRequestId: randomUUID(), candidateId: randomUUID(), messageId: randomUUID(),
-        requestKey: request.body.idempotency_key };
-      if (request.path.endsWith('/continue') && continuation) {
-        const next = continuation;
-        const text = '合成当前依据的新候选。';
-        const input = { content: { type: 'rewrite_draft', draft_text: request.body.intention_update ?? '合成当前草稿。',
-          include_relationship_context: false, user_instruction: request.body.instruction } };
-        const reply = { reply_request_id: next.replyRequestId, candidates: [{ candidate_id: next.candidateId,
-          text, basis: '重新核验当前合成依据。', citation_ids: [], risk_notes: [],
-          messages: [{ message_id: next.messageId, text }] }], context_receipt: { evidence_ids: [] } };
-        records.saved.turns.push({ turn_id: next.turnId, input_version_id: next.inputVersionId, request_key: next.requestKey,
-          state: 'completed', interruption_reason: null, input, reply, placeholder: null, basis_changes: [] });
-        records.saved.inputs.push({ input_version_id: next.inputVersionId, type: 'generation', conversation_binding_id: bindingId,
-          turn_id: next.turnId, state: 'active', content: null, placeholder: null });
-        records.saved.current_input_version_id = next.inputVersionId;
-        const response = { ...reply, session_id: sessionId, turn_id: next.turnId, input_version_id: next.inputVersionId, state: 'completed',
-          effective_input: input.content, continuation: { candidate_group_id: request.body.displayed_group.candidate_group_id,
-            candidate_id: null, version_id: null, effective_requirements: [request.body.instruction],
-            effective_intent: { source: 'draft_text' } } };
-        await records.beforeResponse?.(request);
-        return { generation: records.generation, data: response };
-      }
       if (request.path.startsWith('/api/deletions?')) return { generation: records.generation, data: { operations: [] } };
       if (request.path.endsWith('/assistant-sessions') && request.method === 'GET') return { generation: records.generation,
         data: { sessions: [{ session_id: records.saved.session_id, is_current: true }], current_session_id: records.saved.session_id } };
       if (request.path.endsWith('/resume')) return { generation: records.generation, data: { session_id: request.path.split('/').at(-2) } };
       const data = request.path.endsWith('/assistant-session/default') ? { session_id: records.saved.session_id }
-        : request.path.endsWith('/continue/prepare') ? { session_id: sessionId, turn_id: continuation.turnId,
-          input_version_id: continuation.inputVersionId, request_key: continuation.requestKey, state: 'running' }
         : request.path.endsWith('/versions') ? records.history
           : request.path.endsWith('/selections') ? { selection: records.selection }
             : request.path.endsWith('/evidence') ? records.evidence

@@ -1,6 +1,6 @@
 import type { AssistantNoGenerationProof } from '../../shared/assistant-no-generation';
 import type { AssistantGenerationIdentity, AssistantGenerationOwner, AssistantGenerationReceipt,
-  AssistantGenerationStopping, AssistantPreparationCommandIdentity, OwnedAssistantGeneration, PendingAssistantGenerationReceipt } from './assistant-generation-jobs';
+  AssistantGenerationStopping, OwnedAssistantGeneration, PendingAssistantGenerationReceipt } from './assistant-generation-jobs';
 
 // 协议适配器提交已经核验的证据；传输结束本身不是终态。
 export type GenerationEvidence = { kind: 'completed' | 'invalidated' }
@@ -25,7 +25,6 @@ export interface GenerationExecution<Result, Failure> {
   identity: AssistantGenerationIdentity | AssistantGenerationOwner;
   controller?: AbortController;
   stopping?: AssistantGenerationStopping;
-  preparationCommand?: AssistantPreparationCommandIdentity;
   adapter: GenerationAdapter<Result, Failure>;
   registered?(job: OwnedAssistantGeneration): void;
   prepared?(job: OwnedAssistantGeneration, receipt: AssistantGenerationReceipt): void;

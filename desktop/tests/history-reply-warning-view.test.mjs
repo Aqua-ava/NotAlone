@@ -37,32 +37,3 @@ test('历史各阶段均可直接生成，切换联系人或重开无需额外�
   await expect(generate).toBeEnabled();
   await expect(page.getByText(/历史尚未追平|等待当前联系人历史同步/)).toHaveCount(0);
 });
-
-test('连续修改使用可用资料，历史同步与不完整均不阻塞', async t => {
-  const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTALONE_TEST_CHROMIUM_PATH });
-  t.after(() => browser.close());
-  const page = await browser.newPage();
-  const bundle = await build({ stdin: { contents: `
-    import React from 'react'; import { createRoot } from 'react-dom/client';
-    import { AssistantContinuationControls } from './src/renderer/AssistantContinuationControls';
-    const root = createRoot(document.getElementById('root')); window.calls = [];
-    window.render = (phase = 'incomplete') => root.render(<AssistantContinuationControls historyCoverage={phase}
-      replies={{ state: { contactId: 'a', phase: 'idle', exploration: { phase: 'idle' }, candidateVersions: { phase: 'ready' },
-        savedSession: { phase: 'ready', sessionId: 'saved', turns: [{ state: 'completed', reply: {}, input: { allow_incomplete_history: true } }] } },
-        continueSession: async (...args) => window.calls.push(args) }} />);
-    window.render();
-  `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false });
-  await page.setContent('<div id="root"></div>'); await page.addScriptTag({ content: bundle.outputFiles[0].text });
-  const button = page.getByRole('button', { name: '继续修改', exact: true });
-  await page.getByRole('textbox', { name: '继续修改要求' }).fill('再简短一点');
-  for (const phase of ['not_started', 'syncing', 'incomplete', 'complete']) {
-    await page.evaluate(phase => window.render(phase), phase);
-    await expect(button).toBeEnabled();
-    await expect(page.getByRole('checkbox', { name: '本次连续修改基于已同步部分继续' })).toHaveCount(0);
-    await button.click();
-  }
-  const calls = await page.evaluate(() => window.calls);
-  assert.equal(calls.length, 4);
-  assert.ok(calls.every(args => args[2] === undefined));
-  await expect(page.getByText(/历史尚未追平|暂不能继续生成/)).toHaveCount(0);
-});

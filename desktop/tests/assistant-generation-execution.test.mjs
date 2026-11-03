@@ -5,9 +5,9 @@ Error.stackTraceLimit = 2;
 const bundled = await build({ stdin: { contents: `
   export { BackendRequestFailure } from './src/main/backend/json-client';
   export { AssistantGenerationJobs } from './src/main/reply/assistant-generation-jobs';
-  export { continuationGeneration, strategyGeneration, ordinaryGeneration } from './src/main/reply/assistant-generation-adapters';
+  export { ordinaryGeneration } from './src/main/reply/assistant-generation-adapters';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false });
-const { BackendRequestFailure, AssistantGenerationJobs, continuationGeneration, strategyGeneration, ordinaryGeneration } = await import(
+const { BackendRequestFailure, AssistantGenerationJobs, ordinaryGeneration } = await import(
   `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`);
 const owner = { connectionGeneration: 7, contactId: '38c6e784-93dc-476b-8a2c-2733523a23b9',
   sessionId: 'ad630563-b558-40ec-bdaa-c34201756c42' };
@@ -15,45 +15,6 @@ const requestKey = '69b51458-cf1d-47d2-a96c-fd465f15c353';
 const command = { requestKey, expectedInputVersionId: 'a4afba16-2fa1-45d0-ac42-de8d06045bda',
   instruction: '合成要求', displayedGroup: { sessionId: owner.sessionId,
     candidateGroupId: '7a750bd7-d1b9-4b96-969c-99e5464d896a', candidates: [] } };
-const clarification = { error: 'assistant_continuation_clarification_required', clarification: {
-  reason: 'requirements_need_confirmation', requirements: ['合成要求'],
-  requirement_actions: ['add'],
-  requirement_options: [{ requirement: '合成要求', origin: 'new', actions: ['add'] }],
-} };
-test('受管继续准备澄清在消费窗口保持可发布，消费失败仍结算明确未生成身份', async () => {
-  const jobs = new AssistantGenerationJobs(), requests = [];
-  const backend = { getConnectionGeneration: () => 7, requestJson: async (request) => {
-    requests.push(request.path); return { generation: 7, data: clarification };
-  } };
-  let job;
-  await assert.rejects(jobs.execute({ identity: { ...owner, requestKey },
-    adapter: continuationGeneration(backend, owner, command),
-    registered: (registered) => { job = registered; },
-    consume: (result) => {
-      assert.equal(result.phase, 'clarification'); assert.equal(jobs.canPublish(job, owner), true);
-      throw new Error('合成展示失败');
-    },
-  }), /合成展示失败/);
-  assert.equal(requests.length, 1, '展示错误不能触发生成失败的权威复读');
-  assert.deepEqual(jobs.pendingReceipts(), []);
-  await jobs.beginClosing(() => { throw new Error('澄清不应中断生成'); });
-});
-
-test('受管方向准备明确暂停后不派发执行，也不保留未知准备退出身份', async () => {
-  const jobs = new AssistantGenerationJobs(), requests = [];
-  const backend = { getConnectionGeneration: () => 7, requestJson: async (request) => {
-    requests.push(request.path); return { generation: 7, data: { kind: 'paused',
-      exploration_id: command.displayedGroup.candidateGroupId, input_version_id: command.expectedInputVersionId } };
-  } };
-  const request = { contactId: owner.contactId, sessionId: owner.sessionId, taskId: command.displayedGroup.candidateGroupId,
-    inputVersion: command.expectedInputVersionId, action: 'confirm', directIntent: '合成意愿', generate: true };
-  await jobs.execute({ identity: owner, preparationCommand: { taskId: request.taskId,
-    inputVersionId: request.inputVersion, action: 'confirm', suggestionId: null, operationKey: requestKey },
-    adapter: strategyGeneration(backend, owner, request), consume: (result) => assert.equal(result.kind, 'paused') });
-  assert.equal(requests.length, 1);
-  await jobs.beginClosing(() => { throw new Error('明确暂停不能中断生成'); });
-});
-
 const turnId = '868bd7c5-d71c-435e-9ab1-10ff304b67a9';
 const receipt = { session_id: owner.sessionId, request_key: requestKey, turn_id: turnId,
   input_version_id: command.expectedInputVersionId, state: 'running' };

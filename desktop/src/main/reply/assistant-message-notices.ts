@@ -13,7 +13,6 @@ export type MessageNoticeRefresh = Readonly<{ epoch: number; revision: number; g
 export type MessageNoticeAdoption = Readonly<NoticeRecord & { epoch: number }>;
 type Verification = { controller: AbortController; epoch: number; done: Promise<void> };
 type NoticeBackend = Pick<BackendHost, 'getConnectionGeneration' | 'subscribeMessages' | 'requestJson'>;
-type NoticeEffect = 'verified' | 'uncertain';
 
 // 事件只提供线索；提醒资格来自当前认证联系人的有界消息投影。
 export class AssistantMessageNotices {
@@ -25,14 +24,13 @@ export class AssistantMessageNotices {
   private phase: ReplyMessageNotice['phase'] = 'idle';
   private stream: AbortController | undefined;
   private verification: Verification | undefined;
-  private candidate: { record: NoticeRecord; explore: boolean } | undefined;
+  private candidate: { record: NoticeRecord } | undefined;
   private verified: MessageNoticeAdoption | undefined;
   private readonly retained = new Map<string, NoticeRecord>();
 
   constructor(private readonly backend: NoticeBackend,
     private readonly knownSessions: (contactId: string, generation: number) => readonly string[],
-    private readonly changed: (state: ReplyMessageNotice, effect?: NoticeEffect,
-      page?: Awaited<ReturnType<typeof readReplyMessages>>) => void) {}
+    private readonly changed: (state: ReplyMessageNotice, page?: Awaited<ReturnType<typeof readReplyMessages>>) => void) {}
 
   // 同联系人切换助手会话只废弃本次核验与票据，继续复用已有订阅。
   setScope(scope: MessageNoticeScope): ReplyMessageNotice {
@@ -100,7 +98,7 @@ export class AssistantMessageNotices {
     if (!contactId || !sessionId || !this.isCurrent(this.epoch)) return;
     const record = this.retained.get(this.key(contactId, sessionId));
     if (!record || this.candidate?.record === record && this.verified?.revision === record.revision) return;
-    if (this.candidate?.record !== record) this.candidate = { record, explore: false };
+    if (this.candidate?.record !== record) this.candidate = { record };
     await this.verify();
   }
 
@@ -134,13 +132,14 @@ export class AssistantMessageNotices {
       },
       interrupted: () => {
         if (!current()) return;
-        this.cancelVerification(); this.phase = 'interrupted'; this.markGap(); this.emit('uncertain');
+        this.cancelVerification(); this.phase = 'interrupted'; this.markGap(); this.emit();
       },
       message: (event) => {
         if (!current()) return;
         if (event.change === 'updated') {
           if (event.contactId !== contactId) return;
-          if (this.candidate) this.candidate = { ...this.candidate, explore: false };
+          // 对象换代使在途旧快照失效，当前读取结算后继续核验本次更新。
+          if (this.candidate) this.candidate = { ...this.candidate };
           this.needsRefresh = true; this.emit(); void this.verify();
           return;
         }
@@ -151,7 +150,7 @@ export class AssistantMessageNotices {
           return;
         }
         const record = Object.freeze({ ...event, sessionId: this.scope.sessionId, revision: ++this.revision });
-        this.retain(record); this.candidate = { record, explore: true }; this.verified = undefined;
+        this.retain(record); this.candidate = { record }; this.verified = undefined;
         this.emit();
         void this.verify();
       },
@@ -179,16 +178,16 @@ export class AssistantMessageNotices {
         if (page.generation !== this.scope.connectionGeneration) return;
         if (!record) {
           if (gap === this.gap) this.needsRefresh = false;
-          this.emit(undefined, page);
+          this.emit(page);
         } else if (page.messages.some((message) => message.messageId === record.messageId)) {
           if (gap === this.gap) this.needsRefresh = false;
           this.verified = Object.freeze({ ...record, epoch: this.epoch });
-          this.emit(candidate.explore ? 'verified' : undefined, page);
-        } else { this.verified = undefined; this.markGap(); this.emit('uncertain'); }
+          this.emit(page);
+        } else { this.verified = undefined; this.markGap(); this.emit(); }
       } catch {
         if (!this.isCurrent(verification.epoch) || verification.controller.signal.aborted) return;
         if (this.candidate !== candidate) continue;
-        this.markGap(); this.emit('uncertain');
+        this.markGap(); this.emit();
       }
       return;
     }
@@ -213,7 +212,7 @@ export class AssistantMessageNotices {
       && this.scope.connectionGeneration === this.backend.getConnectionGeneration();
   }
   private cancelVerification(): void { this.verification?.controller.abort(); this.verification = undefined; }
-  private emit(effect?: NoticeEffect, page?: Awaited<ReturnType<typeof readReplyMessages>>): void {
-    this.changed(this.getState(), effect, page);
+  private emit(page?: Awaited<ReturnType<typeof readReplyMessages>>): void {
+    this.changed(this.getState(), page);
   }
 }

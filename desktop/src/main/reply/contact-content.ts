@@ -17,7 +17,7 @@ export type RetainedContactContent = {
   sessionId: string | null;
   draft: string;
   notice?: string;
-  result?: { continuation?: NonNullable<ReplySessionState['result']>['continuation']; replyRequestId: string; selectedCandidateId: string | null; edits: { candidateId: string; text: string }[] };
+  result?: { replyRequestId: string; selectedCandidateId: string | null; edits: { candidateId: string; text: string }[] };
   derivedIntent: DerivedIntent;
   inputVersionId: string | null;
   workspaceRequirementInputVersion?: string;
@@ -32,7 +32,7 @@ export function retainContactContent(state: ReplySessionState, derivedIntent: De
     || state.sessionCatalog?.selectionPending || state.sourceAvailability) return;
   const { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene, workspaceMigrationNotice } = state;
   return structuredClone({ sessionId: state.savedSession?.sessionId ?? null, draft, derivedIntent, workspaceRequirementInputVersion, inputVersionId: state.savedSession?.currentInputVersionId ?? state.result?.inputVersionId ?? null, candidateDrafts: state.candidateDrafts ?? [],
-    result: state.result ? { continuation: state.result.continuation, replyRequestId: state.result.replyRequestId, selectedCandidateId: state.selectedCandidateId,
+    result: state.result ? { replyRequestId: state.result.replyRequestId, selectedCandidateId: state.selectedCandidateId,
       edits: state.result.candidates.map((candidate) => ({ candidateId: candidate.original.candidateId, text: candidate.editedText })) } : undefined,
     input: { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene, workspaceMigrationNotice } });
 }
@@ -112,7 +112,7 @@ export async function validateContactInput(backend: BackendHost, contactId: stri
       const input = await interruptedReplyInput(backend, turn, { contactId, displayName: contactDisplayName }, signal, current);
       if (!current()) throw new Error('恢复范围已变化。');
       update.result = { replyRequestId: turn.reply.replyRequestId, assistantSessionId: saved.sessionId!,
-        inputVersionId: turn.inputVersionId, input, continuation: content.result.continuation, contextEvidenceIds: turn.reply.contextEvidenceIds, expressionPreferenceIds: turn.reply.expressionPreferenceIds,
+        inputVersionId: turn.inputVersionId, input, contextEvidenceIds: turn.reply.contextEvidenceIds, expressionPreferenceIds: turn.reply.expressionPreferenceIds,
         expressionPreferences: turn.reply.expressionPreferences,
         usedSkill: turn.reply.usedSkill, inputBudget: turn.reply.inputBudget,
         basisChanges: turn.basisChanges ?? turn.reply.basisChanges,

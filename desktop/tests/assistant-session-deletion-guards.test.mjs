@@ -62,50 +62,6 @@ async function fixture({ pendingDeletion = false } = {}) {
   return { bridge, scope, calls, controls, remove, generationCalls, sessionId };
 }
 
-for (const action of ['explore', 'changeDirections']) {
-  test(`删除传输失败且同 SID 仍可读取时，${action} 不得打开策略生成入口`, async () => {
-    const f = await fixture();
-    await f.remove();
-    assert.equal((await f.bridge.getState()).sessionDeletion, 'failed');
-    const error = await f.bridge[action](f.scope).then(() => undefined, (failure) => failure);
-    assert.equal(f.generationCalls().length, 0);
-    assert.match(error?.message ?? '', /删除结果/);
-    await f.bridge.retryExploration(f.scope);
-    assert.equal(f.generationCalls().length, 0);
-  });
-}
-
-test('删除尚在传输时，切换聊天模式后也不能打开策略入口', async () => {
-  const f = await fixture();
-  let release;
-  f.controls.deleteBarrier = new Promise((resolve) => { release = resolve; });
-  const deleting = f.remove();
-  try {
-    assert.equal((await f.bridge.getState()).sessionDeletion, 'deleting');
-    const error = await f.bridge.explore(f.scope).then(() => undefined, (failure) => failure);
-    assert.equal(f.generationCalls().length, 0);
-    assert.match(error?.message ?? '', /删除结果/);
-  } finally { release(); await deleting; }
-});
-
-test('删除失败仍允许精确重试和读取，确认旧 SID 不存在后新会话可以探索', async () => {
-  const f = await fixture();
-  await f.remove();
-  await f.bridge.readSavedSession(f.scope);
-  assert.equal((await f.bridge.getState()).sessionDeletion, 'failed');
-  f.controls.deleteFailure = false;
-  await f.remove();
-  assert.equal((await f.bridge.getState()).sessionDeletion, 'deleted');
-  f.controls.sessionId = randomUUID();
-  await f.bridge.readSavedSession(f.scope);
-  await f.bridge.setMode({ ...f.scope, mode: 'initiate_conversation' });
-  await f.bridge.updatePurpose({ ...f.scope, purpose: '新会话中的合成安排。' });
-  await f.bridge.explore(f.scope);
-  assert.equal(f.generationCalls().length, 1);
-  assert(f.generationCalls()[0].path.includes(f.controls.sessionId));
-  assert(!f.generationCalls()[0].path.includes(f.sessionId));
-});
-
 test('删除工作区讨论后保留空白输入入口，不自动重建会话或保留上下文', async () => {
   const f = await fixture();
   await f.bridge.enterWorkspace(f.scope);

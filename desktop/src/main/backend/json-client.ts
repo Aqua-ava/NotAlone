@@ -2,11 +2,9 @@ import { parsePreferenceJson, stringifyPreferenceJson } from '../../shared/expre
 import { request, type ClientRequest } from 'node:http';
 import type { BackendConnection } from './connection';
 import { isUuid } from '../uuid';
-import { readAssistantContinuationClarification } from '../../shared/assistant-continuation-clarification';
 import type { AssistantInputBudget } from '../../shared/assistant-input-budget';
 import { readInputBudgetFailure } from '../reply/input-budget-read';
 import { readAssistantNoGenerationProof, type AssistantNoGenerationProof } from '../../shared/assistant-no-generation';
-import { readExplorationNoGenerationProof } from '../../shared/exploration-no-generation';
 
 export interface JsonRequest {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -16,7 +14,6 @@ export interface JsonRequest {
   timeoutMs?: number;
   asyncPreparation?: true;
   maxResponseBytes?: number;
-  acceptAssistantContinuationClarification?: true;
   acceptAssistantNoGenerationProof?: true;
   manualContactId?: string;
   metadataConsent?: true;
@@ -174,32 +171,19 @@ export class JsonClient {
             const status = response.statusCode ?? 0;
             if (status < 200 || status >= 300) {
               const parts = responseFor.path.split('/');
-              if (responseFor.acceptAssistantContinuationClarification === true && responseFor.method === 'POST' && status === 409
-                && (parts.length === 7 || parts.length === 8 && parts[7] === 'prepare')
-                && parts[1] === 'api' && parts[2] === 'contacts' && isUuid(parts[3])
-                && parts[4] === 'assistant-sessions' && isUuid(parts[5]) && parts[6] === 'continue') {
-                const clarification = readAssistantContinuationClarification(data);
-                if (clarification) {
-                  // 仅本次具名请求返回受限业务状态；普通Error不携带任何响应正文。
-                  settled = true;
-                  resolve({ status, data: { error: 'assistant_continuation_clarification_required', clarification } });
-                  return;
-                }
-              }
               const code = (data as { error?: unknown })?.error;
               const reason = (data as { reason?: unknown })?.reason;
               const preparedPath = responseFor.acceptAssistantNoGenerationProof === true && responseFor.method === 'POST'
                 && parts.length === 8 && parts[1] === 'api' && parts[2] === 'contacts' && isUuid(parts[3])
                 && parts[4] === 'assistant-sessions' && isUuid(parts[5]) && parts[7] === 'prepare'
-                && ['replies', 'replace', 'continue', 'retry-interrupted'].includes(parts[6]);
+                && ['replies', 'replace', 'retry-interrupted'].includes(parts[6]);
               const requestBody = responseFor.body as { idempotency_key?: unknown; request_key?: unknown;
                 replacement?: { idempotency_key?: unknown } } | undefined;
               const proof = preparedPath ? readAssistantNoGenerationProof(data, status, {
                 contactId: parts[3], sessionId: parts[5], requestKey: parts[6] === 'replace'
                   ? requestBody?.replacement?.idempotency_key : parts[6] === 'retry-interrupted'
                     ? requestBody?.request_key : requestBody?.idempotency_key,
-              }) : responseFor.acceptAssistantNoGenerationProof === true && responseFor.method === 'POST'
-                ? readExplorationNoGenerationProof(data, status, responseFor.path, responseFor.body) : undefined;
+              }) : undefined;
               fail(new BackendRequestFailure('response', status,
                 typeof code === 'string' && /^[a-z][a-z0-9_]{0,79}$/.test(code) ? code : undefined,
                 reason === 'target_message_unavailable' || reason === 'source_unavailable' || reason === 'source_deleted'

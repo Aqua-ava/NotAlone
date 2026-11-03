@@ -123,7 +123,6 @@ export function AssistantSessionPanel({ replies, initialDraft = '', onDraftChang
   const stoppedNotice = stoppedTurn?.interruptionReason === 'user_cancelled'
     && stoppedTurn.inputVersionId === saved?.currentInputVersionId;
   const busy = deleting || catalog?.phase === 'loading' || saved?.phase === 'loading'
-    || replies.state.exploration.phase === 'waiting'
     || replies.state.sessionDeletion === 'failed' || replies.state.sourceAvailability === 'checking';
   const currentDiscussion = catalog?.phase === 'ready' && !catalog.selectionPending
     && !!saved?.sessionId && catalog.currentSessionId === saved.sessionId;

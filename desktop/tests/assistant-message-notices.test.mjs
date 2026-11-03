@@ -19,7 +19,7 @@ function fixture() {
     getConnectionGeneration: () => generation,
     subscribeMessages: (callbacks, signal) => streams.push({ ...callbacks, signal }),
     requestJson: (request) => new Promise((resolve, reject) => requests.push({ ...request, resolve, reject })),
-  }, (contactId) => sessions.get(contactId) ?? [], (state, effect, page) => { effects.push({ state, effect }); if (page) pages.push(page); });
+  }, (contactId) => sessions.get(contactId) ?? [], (state, page) => { effects.push({ state }); if (page) pages.push(page); });
   notices.setScope(scope);
   let connectedStream;
   return { notices, requests, streams, effects, pages, sessions,
@@ -29,9 +29,9 @@ function fixture() {
     update: (messageId = first, contactId = a) => { const stream = streams.at(-1); if (stream !== connectedStream) { connectedStream = stream; stream.connected(); }
       stream.message({ contactId, messageId, change: 'updated' }); },
     generation: (value) => { generation = value; },
-    page: async (index, ids, speaker = 'contact') => {
+    page: async (index, ids, speaker = 'contact', text = '合成消息') => {
       requests[index].resolve({ generation, data: { messages: ids.map((message_id) => ({ message_id,
-        speaker, message_type: 'text', text: '合成消息', media_placeholder: null, occurred_at: null, quoted: null })), next_cursor: null } });
+        speaker, message_type: 'text', text, media_placeholder: null, occurred_at: null, quoted: null })), next_cursor: null } });
       await setImmediate();
     },
   };
@@ -53,7 +53,6 @@ test('事件流首次连接自动核对最近消息，不生成新消息提醒',
   await f.page(0, [first]);
   assert.deepEqual(f.notices.getState(), { phase: 'connected', changed: false, needsRefresh: false });
   assert.deepEqual(f.pages.at(-1).messages.map((message) => message.messageId), [first]);
-  assert.equal(f.effects.some((entry) => entry.effect === 'verified'), false);
 });
 
 test('事件流重连自动核对离线消息变化，不生成新消息提醒', async () => {
@@ -64,7 +63,6 @@ test('事件流重连自动核对离线消息变化，不生成新消息提醒',
   await f.page(1, [first]);
   assert.deepEqual(f.notices.getState(), { phase: 'connected', changed: false, needsRefresh: false });
   assert.deepEqual(f.pages.at(-1).messages.map((message) => message.messageId), [first]);
-  assert.equal(f.effects.some((entry) => entry.effect === 'verified'), false);
 });
 
 test('旧消息更新刷新当前联系人最近消息，但不作为新消息提醒', async () => {
@@ -75,7 +73,19 @@ test('旧消息更新刷新当前联系人最近消息，但不作为新消息�
   await f.page(1, [first]);
   assert.equal(f.notices.getState().changed, false);
   assert.deepEqual(f.pages.at(-1).messages.map((message) => message.messageId), [first]);
-  assert.equal(f.effects.some((entry) => entry.effect === 'verified'), false);
+});
+
+test('新消息核验在途收到正文更新时丢弃旧页并继续核验最新正文', async () => {
+  const f = fixture(); f.event(first); f.update(first);
+  assert.equal(f.requests.length, 1, '同一时刻仍只有一项消息核验');
+  await f.page(0, [first], 'contact', '更新前的合成正文');
+  assert.equal(f.requests.length, 2, '旧读取结束后必须继续核验更新');
+  assert.deepEqual(f.pages, [], '更新前快照不能发布到消息投影');
+  assert.deepEqual(f.notices.getState(), { phase: 'connected', changed: false, needsRefresh: true });
+  await f.page(1, [first], 'contact', '更新后的合成正文');
+  assert.deepEqual(f.pages.map(page => page.messages.map(message => message.text)), [['更新后的合成正文']]);
+  assert.deepEqual(f.notices.getState(), { phase: 'connected', changed: true, needsRefresh: false });
+  assert.equal(f.notices.captureAdoption().messageId, first);
 });
 
 test('旧刷新只能确认原提醒，断流重连产生的新缺口保留', async () => {
@@ -132,13 +142,12 @@ test('后到消息核验中或失败时不展示旧结合资格，重读可恢�
   assert.equal(f.notices.captureAdoption().messageId, second);
 });
 
-test('完整重读遇到同一在途事件时共享核验，仍报告活动探索所需的消息变化', async () => {
+test('完整重读遇到同一在途事件时共享核验并保留消息变化', async () => {
   const f = fixture(); f.event();
   const restoring = f.notices.restore();
   await f.page(0, [first]);
   assert.equal(f.requests.length, 1);
   await restoring;
-  assert.equal(f.effects.filter((entry) => entry.effect === 'verified').length, 1);
 });
 
 test('连续事件仅一个核验在途，完成后只核验最后待处理标识', async () => {
@@ -146,7 +155,7 @@ test('连续事件仅一个核验在途，完成后只核验最后待处理标�
   assert.equal(f.requests.length, 1); assert.equal(f.requests[0].signal.aborted, false);
   await f.page(0, [first]); assert.equal(f.requests.length, 2); assert.equal(f.notices.getState().changed, false);
   await f.page(1, [third, second, first]); assert.equal(f.notices.captureAdoption().messageId, third);
-  assert.equal(f.requests.length, 2); assert.equal(f.effects.filter((entry) => entry.effect === 'verified').length, 1);
+  assert.equal(f.requests.length, 2);
 });
 
 test('本人消息也提醒；后台只记已知会话标识，切回才读取正文', async () => {

@@ -1,9 +1,9 @@
 import {invalidatedSqliteDiscussion} from './sqlite-discussion-read';
 import type { ReplyStateUpdate } from '../../shared/reply-bridge';
-import { continuationGeneration, strategyGeneration, ordinaryGeneration, type OrdinaryFailureObservation, type OrdinaryGenerationResult } from './assistant-generation-adapters';
+import { ordinaryGeneration, type OrdinaryFailureObservation, type OrdinaryGenerationResult } from './assistant-generation-adapters';
 import { randomUUID } from 'node:crypto';
 import type { ContactSelection, ContactSessionState } from '../../shared/contact-session-bridge';
-import type { AssistantGenerationStop, AssistantSessionDeletion, GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyCorrectionUpdate, ReplyDirectionChoice, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyInputSnapshot, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, ReplySessionState, RewriteOptionsUpdate } from '../../shared/reply-bridge';
+import type { AssistantGenerationStop, AssistantSessionDeletion, GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyCorrectionUpdate, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyInputSnapshot, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, ReplySessionState, RewriteOptionsUpdate } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import { isUuid } from '../uuid';
@@ -14,8 +14,7 @@ import { checkPreparationFormat } from './preparation-format';
 import { newAssistantSessionWithCandidate } from './assistant-candidate-carry';
 import type { AssistantCandidateCarry } from '../../shared/reply-bridge';
 import { matchesReplyAdoption, type InterruptedReplyOrigin } from './client';
-import type { DirectionExploration, ReplyClarificationAnswer, ReplyClarificationEdit, ReplyRequirementsUpdate, ReplySkillChoice, ReplySkillUpdate } from '../../shared/reply-bridge';
-import { actOnExploration, explorationIdentity, openExploration, type ExplorationRequest, type ExplorationAction } from './exploration-client';
+import type { ReplyRequirementsUpdate, ReplySkillUpdate } from '../../shared/reply-bridge';
 import { mergeReplyMessages, readReplyMessages } from './messages';
 import { readReplyEvidence } from './evidence-read';
 import { fitsReplyTextLimit, replyFailureDecision, replyTextLimit } from '../../shared/reply-contract';
@@ -25,9 +24,6 @@ import type { AssistantInterruptedRetry, AssistantSessionSelection } from '../..
 import type { ReplyCandidateDraftUpdate, ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from '../../shared/assistant-candidate-versions';
 import { AssistantCandidateSourceUnavailable, AssistantCandidateVersionSession } from './assistant-candidate-versions';
 import { AssistantGenerationJobs, type AssistantGenerationReceipt, type AssistantGenerationRecovery, type OwnedAssistantGeneration, type PendingAssistantGenerationReceipt } from './assistant-generation-jobs';
-import type { ReplyContinuation, ReplyContinuationConfirmation } from '../../shared/reply-bridge';
-import { requirementChangeFromClarification, type AssistantContinuationCommand } from './assistant-continuation';
-import { captureReplyContinuation, continuationInputSnapshot } from './continuation-view';
 import { invalidatedIntent, type DerivedIntent, invalidatedSupplement, retainContactContent, restoredWorkspaceRequirementVersion, validateContactInput, removeDependentContent, revalidateRetainedContent, type RetainedContactContent } from './contact-content';
 import { readReplyScene, sceneSnapshot } from './scene';
 import { AssistantSessionProjection, type AssistantProjectionRead, type AssistantProjectionScope, type AssistantProjectionVerification } from './assistant-session-projection';
@@ -36,19 +32,6 @@ import { AssistantMessageNotices, type MessageNoticeAdoption } from './assistant
 const defaults = () => ({ tone: 'original' as const, instruction: '', includeRelationshipContext: false });
 const tones = { original: '', warm: '本次语气自然温和。', concise: '本次表达简洁直接。', polite: '本次语气礼貌克制。' };
 
-type StrategySourceValidation = {
-  scope: ContactSelection & { sessionId: string };
-  operation: number;
-  generation: number;
-  phase: 'checking' | 'ready' | 'failed';
-  inputs: { inputVersionId: string; state: 'active' | 'redacted' | 'unavailable' }[];
-};
-type StrategyJob = ({ type: 'open'; request: ExplorationRequest; signature: string; input: ReplyInputSnapshot }
-  | { type: 'action'; request: ExplorationAction; input: ReplyInputSnapshot }) & {
-    actualInputVersionId?: string;
-    sourceValidation?: StrategySourceValidation;
-    confirmationOperationKey?: string;
-  };
 type CandidateSourceCheck = {
   pending: AbortController;
   scope: ContactSelection & { sessionId: string };
@@ -56,9 +39,6 @@ type CandidateSourceCheck = {
   inputIds: string[];
   refreshMessages: boolean;
   confirmedCandidateIds: string[];
-  strategyJob: StrategyJob | undefined;
-  strategyOperation: number;
-  strategyWaiting: boolean;
 };
 type MessageAdoptionCommand = Readonly<{ notice: MessageNoticeAdoption; messageId?: string }>;
 
@@ -73,21 +53,11 @@ export class ReplySession {
   private state: ReplySessionState = { revision: 0, scopeRevision: 0, contactId: null, generationBlock: null,
     options: defaults(), workspaceMigrationNotice: undefined, mode: 'rewrite_draft', scene: '', messages: { phase: 'idle', items: [], nextCursor: null },
     messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
-    targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], exploration: { phase: 'idle', result: null },
+    targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [],
     phase: 'idle', result: null, selectedCandidateId: null, canRetry: false };
-  private currentExploration: DirectionExploration | undefined;
-  private generationSkillChoice: ReplySkillChoice | undefined;
   // 只关联未被用户改写要求的权威输入版本，完整累计正文仍由后端回读。
   private workspaceRequirementInputVersion: string | undefined;
-  private explorationPurpose: string | undefined;
-  private strategyJob: StrategyJob | undefined;
   private derivedIntent: DerivedIntent = { direction: false, purpose: false };
-  private explorationOperation = 0;
-  private explorationPending: AbortController | undefined;
-  private strategyCandidatePending: AbortController | undefined;
-  private automaticExploration: { contactId: string; scopeRevision: number; generation: number;
-    sessionId: string; remaining: number; expiresAt: number; queued: boolean } | undefined;
-  private automaticExplorationTimer: ReturnType<typeof setTimeout> | undefined;
   private sourceCheck: AbortController | undefined;
   private heldResult: { result: NonNullable<ReplySessionState['result']>; selectedCandidateId: string | null;
     preserveInput?: true } | undefined;
@@ -101,7 +71,6 @@ export class ReplySession {
   private restoredRetry: string | undefined;
   private lastAttempt: { input: ReplyInputSnapshot; requestKey: string; expectedInputVersionId?: string;
     interrupted?: InterruptedReplyOrigin; adoptNewMessageId?: string; messageNotice?: MessageNoticeAdoption } | undefined;
-  private continuationAttempt: { scope: ContactSelection; generation: number; command: AssistantContinuationCommand } | undefined;
   private messageOperation = 0;
   private messagePending: AbortController | undefined;
   private automaticMessageRevision = 0;
@@ -134,11 +103,9 @@ export class ReplySession {
       const retained = this.retainedContent.get(contactId)?.sessionId;
       if (retained) sessions.add(retained);
       return [...sessions];
-    }, (messageNotice, effect, page) => {
+    }, (messageNotice, page) => {
       const messages = page ? this.acceptAutomaticMessagePage(page) : undefined;
       this.publish({ messageNotice, ...(messages ? { messages } : {}) });
-      if (effect === 'verified') this.queueAutomaticExploration();
-      if (effect === 'uncertain' && this.automaticExploration) this.stopAutomaticExploration(true);
     });
     this.candidateVersions = new AssistantCandidateVersionSession(backend);
     this.candidateVersions.onStateChanged((state) => {
@@ -182,10 +149,9 @@ export class ReplySession {
     if (!this.candidateSourceCheck && !this.pendingContent && !this.retainedSourceValidation?.checking
       && this.pendingExpressionPreferenceDeletions === 0 && this.pendingOwnerContextChanges === 0) return state;
     // 完整来源复验期间只隔离现有视图，不另存可恢复正文。
-    return { ...state, candidateDrafts: [], inputBudgetNotice: undefined, continuation: undefined, result: null, selectedCandidateId: null, canRetry: false,
+    return { ...state, candidateDrafts: [], inputBudgetNotice: undefined, result: null, selectedCandidateId: null, canRetry: false,
       messages: { phase: 'loading', items: [], nextCursor: null }, targetMessageId: null,
       ...invalidatedIntent(this.derivedIntent),
-      exploration: { phase: 'idle', result: null },
       savedSession: state.savedSession ? { ...state.savedSession, ...invalidatedSqliteDiscussion(state.savedSession),
         phase: state.savedSession.phase === 'failed' ? 'failed' : 'loading', turns: [], inputs: [], currentInputVersionId: null } : undefined,
       candidateVersions: state.candidateVersions ? { ...state.candidateVersions, phase: 'loading',
@@ -225,9 +191,6 @@ export class ReplySession {
   }
   notifyHelperLifecycle(event: 'focused' | 'blurred' | 'hidden' | 'closed'): void {
     if (event === 'hidden' || event === 'closed') {
-      this.stopAutomaticExploration();
-      const generating = this.strategyJob?.type === 'action' && this.strategyJob.request.generate === true;
-      if (!generating) this.invalidateExploration();
       this.helperHidden = true; this.leaveGenerationView();
       this.lastAttempt = undefined;
       this.publish({ phase: this.state.result ? 'ready' : 'idle', canRetry: false, errorCode: undefined });
@@ -250,73 +213,6 @@ export class ReplySession {
     const closing = this.generationJobs.beginClosing(onReceipt, recoverUnknown); this.leaveGenerationView(); return closing;
   }
 
-  async continueSession(update: ReplyContinuation): Promise<void> {
-    this.assertCurrentSession();
-    const contacts = this.assertScope(update);
-    this.assertSessionSelection();
-    if (this.state.generationBlock || this.state.phase === 'waiting' || this.state.exploration.phase === 'waiting') {
-      throw new Error('请等待当前操作完成后再继续本次讨论。');
-    }
-    const generation = this.backend.getConnectionGeneration()!;
-    const frame = captureReplyContinuation(this.getState(), update.sessionId);
-    const command: AssistantContinuationCommand = Object.freeze({ ...frame, requestKey: randomUUID(),
-      instruction: update.instruction.trim(),
-      ...(update.allowIncompleteHistory === true ? { allowIncompleteHistory: true } : {}),
-      ...(update.intentionUpdate === undefined ? {} : { intentionUpdate: update.intentionUpdate.trim() }),
-      ...(update.requirementChanges === undefined ? {} : { requirementChanges: structuredClone(update.requirementChanges) }) });
-    await this.runContinuation(update, command,
-      contacts.contacts.find((contact) => contact.contactId === update.contactId)!.displayName, generation);
-  }
-  async confirmContinuation(update: ReplyContinuationConfirmation): Promise<void> {
-    const contacts = this.assertScope(update); this.assertSessionSelection();
-    const attempt = this.continuationAttempt, continuation = this.state.continuation;
-    const generation = this.backend.getConnectionGeneration()!;
-    if (!attempt || continuation?.phase !== 'clarification' || !continuation.clarification
-      || attempt.generation !== generation || update.contactId !== attempt.scope.contactId
-      || update.scopeRevision !== attempt.scope.scopeRevision || update.sessionId !== continuation.sessionId
-      || update.expectedInputVersionId !== attempt.command.expectedInputVersionId
-      || this.state.savedSession?.currentInputVersionId !== update.expectedInputVersionId
-      || this.state.generationBlock || this.state.phase === 'waiting') {
-      throw new Error('本次澄清已经失效，请重新提交要求。');
-    }
-    const frame = captureReplyContinuation(this.getState(), update.sessionId);
-    if (JSON.stringify(frame.displayedGroup) !== JSON.stringify(attempt.command.displayedGroup)) {
-      throw new Error('候选展示已变化，请重新提交要求。');
-    }
-    const options = continuation.clarification.requirement_options;
-    if (!options.length || options.length !== update.requirementChanges.length) throw new Error('请逐项明确本次要求的处理方式。');
-    const seen = new Set<string>();
-    const changes = update.requirementChanges.map((change) => {
-      const option = options.find((item) => change.action === 'add'
-        ? item.origin === 'new' && item.requirement === change.replacement
-        : item.origin === 'existing' && item.requirement === change.previous);
-      if (!option || seen.has(option.requirement)) throw new Error('本次要求已变化，请重新确认。');
-      seen.add(option.requirement);
-      return requirementChangeFromClarification(option, change.action, change.action === 'replace' ? change.replacement : undefined);
-    });
-    // 同一冻结命令的多步澄清保留已确认项；当前选项覆盖同一来源的旧选择。
-    const confirmedChanges = new Map<string, (typeof changes)[number]>();
-    for (const change of [...(attempt.command.requirementChanges ?? []), ...changes]) {
-      const source = change.action === 'add' ? change.replacement : change.previous;
-      // 按后端 str.strip 的空白集合生成来源键，保持传输正文不变。
-      const normalizedSource = source.replace(/^[\p{White_Space}\u001c-\u001f]+|[\p{White_Space}\u001c-\u001f]+$/gu, '');
-      const key = (change.action === 'add' ? 'new:' : 'existing:') + normalizedSource;
-      confirmedChanges.set(key, change);
-    }
-    await this.runContinuation(update, Object.freeze({ ...attempt.command,
-      requirementChanges: Object.freeze([...confirmedChanges.values()]) }),
-      contacts.contacts.find((contact) => contact.contactId === update.contactId)!.displayName, generation);
-  }
-  async retryContinuation(update: AssistantSessionSelection): Promise<void> {
-    const contacts = this.assertScope(update); this.assertSessionSelection();
-    const attempt = this.continuationAttempt;
-    if (!attempt || this.state.continuation?.phase !== 'failed' || !this.state.continuation.canRetry
-      || attempt.generation !== this.backend.getConnectionGeneration() || update.contactId !== attempt.scope.contactId
-      || update.scopeRevision !== attempt.scope.scopeRevision || update.sessionId !== attempt.command.displayedGroup.sessionId
-      || this.state.generationBlock || this.state.phase === 'waiting') throw new Error('本次连续修改已失效，请重新提交要求。');
-    await this.runContinuation(update, attempt.command,
-      contacts.contacts.find((contact) => contact.contactId === update.contactId)!.displayName, attempt.generation);
-  }
   private showIdleRollover(receipt: AssistantGenerationReceipt, sessionId: string, selection: ContactSelection,
     operation: number, generation: number | undefined, pending: AbortController): boolean {
     if (receipt.previousSessionId && receipt.sessionId !== sessionId
@@ -335,126 +231,13 @@ export class ReplySession {
     }
     return this.state.savedSession?.sessionId === receipt.sessionId;
   }
-  private async runContinuation(update: AssistantSessionSelection, command: AssistantContinuationCommand,
-    contactDisplayName: string, generation: number): Promise<void> {
-    this.invalidateExploration(); this.notifyInputChanged(); this.cancelPending(); this.lastAttempt = undefined;
-    this.continuationAttempt = { scope: { contactId: update.contactId, scopeRevision: update.scopeRevision }, generation, command };
-    const pending = new AbortController(); this.pending = pending;
-    const operation = this.operation;
-    let job: OwnedAssistantGeneration | undefined;
-    let acceptedSessionId = update.sessionId;
-    const current = () => !pending.signal.aborted && operation === this.operation
-      && generation === this.backend.getConnectionGeneration() && update.contactId === this.state.contactId
-      && update.scopeRevision === this.state.scopeRevision && acceptedSessionId === this.state.savedSession?.sessionId
-      && !this.state.sessionCatalog?.selectionPending && !this.candidateSourceCheck
-      && (!job || this.generationJobs.canPublish(job, { connectionGeneration: generation,
-        contactId: update.contactId, sessionId: acceptedSessionId }));
-    const identity = { sessionId: update.sessionId, expectedInputVersionId: command.expectedInputVersionId };
-    this.publish({ phase: 'waiting', canRetry: false, errorCode: undefined,
-      continuation: { ...identity, sessionId: acceptedSessionId, phase: 'waiting', canRetry: false } });
-    try {
-      const owner = { connectionGeneration: generation, contactId: update.contactId, sessionId: update.sessionId };
-      await this.generationJobs.execute({ identity: { ...owner, requestKey: command.requestKey }, controller: pending,
-        stopping: captureAssistantGenerationStopping(this.backend, owner),
-        adapter: continuationGeneration(this.backend, owner, command),
-        registered: (registered) => {
-          job = registered;
-          this.retainRetry(command.requestKey, update.contactId, update.sessionId, () => this.runContinuation(
-            { contactId: update.contactId, scopeRevision: this.state.scopeRevision, sessionId: update.sessionId }, command, contactDisplayName, generation));
-        },
-        prepared: (_registered, receipt) => {
-          if (this.showIdleRollover(receipt, update.sessionId, update, operation, generation, pending)) acceptedSessionId = receipt.sessionId;
-        },
-        finished: (finished, settled, couldPublish) => this.generationFinished(finished, settled, couldPublish),
-        consume: async (result) => {
-          if (!current() || result.generation !== generation) return;
-          if (result.phase === 'clarification') {
-            this.publish({ phase: this.state.result ? 'ready' : 'idle',
-              continuation: { ...identity, phase: 'clarification', canRetry: false,
-                clarification: result.clarification, message: result.message } });
-            return;
-          }
-          this.cancelSavedRead();
-          const verification = this.sessionProjection.beginVerification(this.projectionScope(acceptedSessionId));
-          const saved = await readAssistantSession(this.backend, update.contactId, acceptedSessionId, pending.signal);
-          if (!current() || saved.generation !== generation) return;
-          const accepted = this.sessionProjection.acceptCompletion(verification, saved,
-            { requestKey: command.requestKey, inputVersionId: result.inputVersionId, replyRequestId: result.replyRequestId });
-          if (accepted.kind !== 'accepted') {
-            this.continuationAttempt = undefined;
-            this.publish({ phase: this.state.result ? 'ready' : 'idle', continuation: undefined });
-            if (accepted.kind === 'unavailable') await this.readSavedSession(update);
-            return;
-          }
-          const completed = accepted.turn;
-          const frozenScene = readReplyScene(accepted.verifiedTurn.input?.scene);
-          if (frozenScene !== result.effectiveScene) throw new Error('继续输入的场景与已保存版本不一致。');
-          const input = continuationInputSnapshot(result.effectiveInput, this.state, contactDisplayName, frozenScene);
-          if (input.mode === 'rewrite_draft' && input.inputKind === 'workspace') {
-            input.skillChoice = savedReplySkillChoice(accepted.verifiedTurn);
-            this.workspaceRequirementInputVersion = result.inputVersionId;
-          }
-          this.savedRead?.abort(); this.savedRead = undefined;
-          this.continuationAttempt = undefined;
-          this.publish({ phase: 'ready', savedSession: accepted.snapshot,
-            requirements: result.effectiveRequirements.join('；'),
-            ...(input.mode === 'reply_to_message' ? { direction: input.direction }
-              : input.mode === 'initiate_conversation' ? { purpose: input.purpose } : {}),
-            continuation: { ...identity, sessionId: acceptedSessionId, phase: 'completed', canRetry: false, effectiveRequirements: result.effectiveRequirements },
-            result: { replyRequestId: result.replyRequestId, assistantSessionId: result.assistantSessionId,
-              inputVersionId: result.inputVersionId, input, contextEvidenceIds: result.contextEvidenceIds,
-              expressionPreferenceIds: result.expressionPreferenceIds,
-              expressionPreferences: result.expressionPreferences, usedSkill: result.usedSkill, inputBudget: result.inputBudget,
-              basisChanges: completed.basisChanges ?? completed.reply?.basisChanges,
-              continuation: { candidateId: result.resolvedCandidateId, versionId: result.resolvedVersionId,
-                candidateGroupId: command.displayedGroup.candidateGroupId },
-              candidates: result.candidates.map((original) => ({ original, editedText: original.text })) },
-            selectedCandidateId: null }, 'authoritative');
-          await this.restoreCandidateVersions(update, acceptedSessionId, result.candidates.map((candidate) => candidate.candidateId));
-        },
-        failed: async (error) => {
-          const failure = error instanceof BackendRequestFailure ? error : undefined;
-          if (failure?.kind === 'response' && failure.status === 409 && failure.reason === 'source_deleted'
-            && ['assistant_session_rejected', 'assistant_session_conflict'].includes(failure.code ?? '')
-            && generation === this.backend.getConnectionGeneration() && update.contactId === this.state.contactId
-            && update.scopeRevision === this.state.scopeRevision && update.sessionId === this.state.savedSession?.sessionId) {
-            const wasCurrent = current();
-            // 明确删除只撤下本次引用的组和输入，不等失败复读来裁定已知来源。
-            this.savedRead?.abort(); this.savedRead = undefined;
-            this.candidateRestoreOperation += 1;
-            const scope = { contactId: update.contactId, scopeRevision: update.scopeRevision, sessionId: update.sessionId };
-            this.candidateVersions.setScope(scope);
-            this.clearUnavailableCandidateSource(scope, command.displayedGroup.candidates.map((candidate) => candidate.candidateId),
-              new Set([command.expectedInputVersionId]));
-            if (this.continuationAttempt?.command.requestKey === command.requestKey) this.continuationAttempt = undefined;
-            if (wasCurrent) this.publish({ phase: this.state.result ? 'ready' : 'idle', canRetry: false,
-              continuation: { ...identity, phase: 'failed', canRetry: false, message: '本次引用的来源已删除，请重新读取讨论。' } });
-            await this.readSavedSession(update);
-            return;
-          }
-          if (!current()) return;
-          const providerLimit = failure?.status === 409 && failure.code === 'provider_context_limit';
-          const canRetry = failure?.kind === 'connection' || failure?.code === 'reply_timeout'
-            || failure?.code === 'assistant_session_save_failed' || Boolean(failure?.status && failure.status >= 500);
-          if (!canRetry) this.continuationAttempt = undefined;
-          this.publish({ phase: this.state.result ? 'ready' : 'idle',
-            continuation: { ...identity, phase: 'failed', canRetry,
-              message: providerLimit ? '模型提示这次内容过长，请新开助手会话。'
-                : failure?.code === 'reply_candidates_rejected' ? '本次候选未通过要求与内容核对。请调整本次要求后继续。'
-                : canRetry ? '本次继续的结果尚未确认，请用原请求重试。' : '本次继续尚未可靠确认，请重新读取讨论。' } });
-          if (!canRetry && failure) await this.readSavedSession(update);
-        },
-      });
-    } finally { if (this.pending === pending) this.pending = undefined; }
-  }
-
   private async restoreGenerationView(selection: ContactSelection,
     saved: Awaited<ReturnType<typeof readAssistantSession>>, signal: AbortSignal, current: () => boolean): Promise<void> {
     const turn = saved.turns.find((item) => item.inputVersionId === saved.currentInputVersionId);
     const job = this.generationJobs.states(saved.generation).find((item) => item.contactId === selection.contactId
       && item.sessionId === saved.sessionId && item.turnId === turn?.turnId && item.requestKey === turn?.requestKey);
     if (turn?.requiresReprepare && turn.input) {
-      this.publish({ phase: 'failed', canRetry: false, exploration: { ...this.state.exploration, canRetry: false },
+      this.publish({ phase: 'failed', canRetry: false,
         errorCode: turn.generationActive === true ? 'prepared_context_running'
           : turn.generationActive === false ? 'prepared_context_reprepare_required' : 'prepared_context_unconfirmed' });
       return;
@@ -710,7 +493,7 @@ export class ReplySession {
   async selectSavedSession(selection: AssistantSessionSelection): Promise<void> { await this.switchSavedSession(selection); }
   private async switchSavedSession(selection: ContactSelection & { sessionId?: string }, carry?: AssistantCandidateCarry, viewOnly = false): Promise<void> {
     this.assertScope(selection);
-    if (this.catalogPending || this.state.exploration.phase === 'waiting'
+    if (this.catalogPending
       || this.state.savedSession?.phase === 'loading' || this.state.sessionDeletion === 'deleting'
       || this.state.sessionDeletion === 'failed' || this.state.sourceAvailability === 'checking') {
       throw new Error('请等待当前操作完成后再切换助手会话。');
@@ -743,7 +526,7 @@ export class ReplySession {
       this.savedRead?.abort(); this.savedRead = undefined;
       this.candidateSourceCheck?.pending.abort();
       this.lastAttempt = undefined;
-      this.invalidateExploration(); this.derivedIntent = { direction: false, purpose: false };
+      this.derivedIntent = { direction: false, purpose: false };
       this.notifyInputChanged(); this.retainedContent.delete(selection.contactId);
       // 初次开始或读取失败后明确新开，只保留本联系人的独立想法；旧聊天输入和讨论材料仍清空。
       const independentDraft = this.state.mode === 'rewrite_draft'
@@ -804,7 +587,7 @@ export class ReplySession {
     this.candidateVersions.setScope(null);
     this.savedRead?.abort(); this.savedRead = undefined;
     this.cancelPending(); this.lastAttempt = undefined;
-    this.invalidateExploration(); this.derivedIntent = { direction: false, purpose: false };
+    this.derivedIntent = { direction: false, purpose: false };
     this.notifyInputChanged();
     const pending = new AbortController(); this.sessionDelete = pending;
     const generation = this.backend.getConnectionGeneration();
@@ -890,7 +673,7 @@ export class ReplySession {
     this.generationJobs.cancelAll();
     this.savedRead?.abort(); this.savedRead = undefined;
     this.cancelPending(); this.lastAttempt = undefined;
-    this.invalidateExploration();
+
     this.pendingContent = content;
     this.heldResult = held;
     this.candidateVersions.setScope(null);
@@ -964,7 +747,7 @@ export class ReplySession {
         this.catalogPending.abort(); this.catalogPending = undefined;
         this.publish({ sessionCatalog: { phase: 'failed', items: [], currentSessionId: null, selectionPending: true } });
       }
-      this.invalidateExploration();
+
       this.savedRead?.abort();
       this.savedRead = undefined;
       if (this.state.savedSession && !candidateSnapshotAccepted) this.publish({ savedSession: { ...this.state.savedSession, ...invalidatedSqliteDiscussion(this.state.savedSession), phase: 'idle', turns: [], inputs: [], currentInputVersionId: null } });
@@ -1194,7 +977,7 @@ export class ReplySession {
     if (!fitsReplyTextLimit(update.supplement) && Array.from(update.supplement).length > previousLength) throw new Error(`补充内容最多${replyTextLimit}个字符。`);
     if (update.supplement !== this.state.requirements || this.state.correction || this.state.supplementInput !== true) {
       // 统一补充沿用请求级要求槽；一次更新清掉旧纠正，避免隐藏文字继续影响回复。
-      this.invalidateInput(true); this.publish({ requirements: update.supplement, correction: '', supplementInput: true });
+      this.invalidateInput(); this.publish({ requirements: update.supplement, correction: '', supplementInput: true });
     }
     return snapshot ? this.getState() : undefined;
   }
@@ -1203,119 +986,20 @@ export class ReplySession {
     this.assertScope(update);
     if (this.state.mode === 'rewrite_draft') throw new Error('请先选择聊天场景。');
     if (update.correction !== this.state.correction) {
-      this.invalidateInput(true); this.publish({ correction: update.correction });
+      this.invalidateInput(); this.publish({ correction: update.correction });
     }
     return snapshot ? this.getState() : undefined;
   }
 
-  async explore(selection: ContactSelection, changeGroup = false, automatic = false): Promise<void> {
-    this.assertScope(selection);
-    if (!fitsReplyTextLimit([this.state.correction, this.state.requirements].filter(Boolean).join('\n'))) throw new Error(`请将补充内容缩短至${replyTextLimit}个字符以内再更新。`);
-    this.refreshGenerationEligibility();
-    this.assertSessionSelection();
-    if (this.state.generationBlock || this.state.mode === 'rewrite_draft' || this.state.phase === 'waiting'
-      || this.state.exploration.phase === 'waiting' || this.state.mode === 'reply_to_message' && !this.state.targetMessageId) return;
-    if (!automatic) {
-      this.clearAutomaticExplorationTimer();
-      if (this.state.exploration.automaticUpdatesPaused) {
-        // 明确手动更新建立新任务；不重放失败的自动请求，也不静默延长旧根预算。
-        this.currentExploration = undefined; this.explorationPurpose = undefined; this.strategyJob = undefined;
-        this.stopAutomaticExploration();
-      }
-    }
-    const automaticSkill: ReplySkillChoice = { mode: 'auto', versionId: null };
-    const signature = JSON.stringify({ mode: this.state.mode, target: this.state.targetMessageId,
-      purpose: this.explorationPurpose ?? this.state.purpose, correction: this.state.correction,
-      requirements: this.state.requirements, skill: automaticSkill, scene: null, changeGroup, automatic });
-    if (!automatic && this.strategyJob?.type === 'open' && !this.strategyJob.request.automatic
-      && this.strategyJob.signature === signature && this.state.exploration.phase === 'failed') {
-      await this.runStrategy(this.strategyJob); return;
-    }
-    const generation = this.backend.getConnectionGeneration();
-    if (generation === undefined) throw new Error('后端连接不可用，请重新连接。');
-    const operation = ++this.explorationOperation;
-    const pending = new AbortController(); this.explorationPending = pending;
-    // 新探索按当前对话自动判断，不继承其他模式或旧输入中已隐藏的手动设置。
-    this.generationSkillChoice = undefined;
-    this.publish({ skillChoice: automaticSkill, scene: '', skillChoices: [],
-      exploration: { phase: 'waiting', result: null, canRetry: false } });
-    try {
-      const previous = this.currentExploration;
-      const identity = previous ? { sessionId: previous.sessionId, currentInputVersionId: previous.inputVersion, generation }
-        : await explorationIdentity(this.backend, selection.contactId, this.state.savedSession?.sessionId ?? undefined, pending.signal);
-      if (pending.signal.aborted || operation !== this.explorationOperation || identity.generation !== generation
-        || selection.contactId !== this.state.contactId || selection.scopeRevision !== this.state.scopeRevision) return;
-      this.explorationPurpose ??= this.state.purpose;
-      const request: ExplorationRequest = { contactId: selection.contactId, sessionId: identity.sessionId,
-        operationKey: randomUUID(), expectedInputVersionId: identity.currentInputVersionId, previousId: previous?.taskId ?? null,
-        scene: this.state.mode as 'reply_to_message' | 'initiate_conversation', targetMessageId: this.state.targetMessageId,
-        purposeHint: this.explorationPurpose, correction: this.state.correction.trim(), requirements: this.state.requirements.trim(),
-        skill: automaticSkill, skillScene: null, changeGroup, automatic };
-      if (!automatic && !previous?.confirmedIntent && !this.automaticExploration) {
-        this.automaticExploration = { contactId: selection.contactId, scopeRevision: selection.scopeRevision,
-          generation, sessionId: identity.sessionId, remaining: 3, expiresAt: Date.now() + 15 * 60_000, queued: false };
-      }
-      this.strategyJob = { type: 'open', request, signature, input: this.strategySnapshot(selection) };
-      await this.runStrategy(this.strategyJob);
-    } catch { if (operation === this.explorationOperation && !pending.signal.aborted) this.publish({ exploration: { phase: 'failed', result: null } }); }
-    finally { if (this.explorationPending === pending) this.explorationPending = undefined; }
-  }
-
-  async selectDirection(selection: ReplyDirectionChoice): Promise<ReplySessionState> {
-    this.assertScope(selection);
-    const result = this.state.exploration.result;
-    const option = result?.directions.find((item) => item.suggestionId === selection.suggestionId);
-    if (!result || !option || result.inputVersion !== selection.inputVersion || this.state.exploration.phase !== 'ready') throw new Error('方向建议已失效，请重新探索。');
-    this.stopAutomaticExploration();
-    this.strategyJob = { type: 'action', request: { contactId: selection.contactId, sessionId: result.sessionId,
-      taskId: result.taskId, inputVersion: result.inputVersion, action: 'confirm', suggestionId: option.suggestionId },
-      input: this.strategySnapshot(selection) };
-    await this.runStrategy(this.strategyJob);
-    return this.getState();
-  }
-  beginClarificationEdit(selection: ReplyClarificationEdit): ReplySessionState {
-    this.assertScope(selection); this.assertSessionSelection();
-    const result = this.currentExploration;
-    if (!result?.question || result.inputVersion !== selection.inputVersion
-      || result.question.questionId !== selection.questionId) throw new Error('关键问题已经失效，请更新理解。');
-    this.stopAutomaticExploration(!result.confirmedIntent);
-    return this.getState();
-  }
-  async answerClarification(selection: ReplyClarificationAnswer): Promise<void> {
-    this.assertScope(selection);
-    const result = this.state.exploration.result;
-    if (!result?.question || result.inputVersion !== selection.inputVersion || result.question.questionId !== selection.questionId
-      || this.state.exploration.phase !== 'ready') throw new Error('关键问题已经失效，请更新理解。');
-    this.publish({ clarificationAnswer: selection.answer });
-    this.strategyJob = { type: 'action', request: { contactId: selection.contactId, sessionId: result.sessionId,
-      taskId: result.taskId, inputVersion: result.inputVersion, action: 'answer', questionId: selection.questionId,
-      answer: selection.answer, operationKey: randomUUID() }, input: this.strategySnapshot(selection) };
-    await this.runStrategy(this.strategyJob);
-  }
-  async stopExploration(selection: ContactSelection): Promise<void> {
-    this.assertScope(selection);
-    const result = this.currentExploration;
-    if (!result || this.state.exploration.phase === 'waiting') return;
-    this.stopAutomaticExploration();
-    this.strategyJob = { type: 'action', request: { contactId: selection.contactId, sessionId: result.sessionId,
-      taskId: result.taskId, inputVersion: result.inputVersion, action: 'stop' }, input: this.strategySnapshot(selection) };
-    await this.runStrategy(this.strategyJob);
-  }
-  async retryExploration(selection: ContactSelection): Promise<void> {
-    this.assertScope(selection);
-    if (this.strategyJob?.type === 'open' && this.strategyJob.request.automatic) return;
-    if (this.strategyJob && this.state.exploration.phase !== 'waiting') await this.runStrategy(this.strategyJob);
-  }
   updateRequirements(update: ReplyRequirementsUpdate, snapshot = true): ReplySessionState | void {
     this.assertScope(update);
-    if (update.requirements !== this.state.requirements || this.state.supplementInput !== false) { this.invalidateInput(true); this.publish({ requirements: update.requirements, supplementInput: false }); }
+    if (update.requirements !== this.state.requirements || this.state.supplementInput !== false) { this.invalidateInput(); this.publish({ requirements: update.requirements, supplementInput: false }); }
     return snapshot ? this.getState() : undefined;
   }
   updateSkill(update: ReplySkillUpdate): ReplySessionState {
     this.assertScope(update);
     if (JSON.stringify(update.skill) !== JSON.stringify(this.state.skillChoice)) {
-      this.generationSkillChoice = undefined;
-      this.invalidateInput(true); this.publish({ skillChoice: { ...update.skill } });
+      this.invalidateInput(); this.publish({ skillChoice: { ...update.skill } });
     }
     return this.getState();
   }
@@ -1329,195 +1013,6 @@ export class ReplySession {
     }
     return snapshot ? this.getState() : undefined;
   }
-  private strategySnapshot(selection: ContactSelection): ReplyInputSnapshot {
-    const contact = this.contacts.getState().contacts.find((item) => item.contactId === selection.contactId)!;
-    const common = { contactId: selection.contactId, contactDisplayName: contact.displayName,
-      correction: this.state.correction, userInstruction: this.state.requirements, clarificationAnswer: this.state.clarificationAnswer,
-      skillChoice: { ...(this.generationSkillChoice ?? this.state.skillChoice) }, ...sceneSnapshot(this.state.scene || null) };
-    if (this.state.mode === 'initiate_conversation') return { ...common, mode: 'initiate_conversation', purpose: this.state.purpose };
-    const target = this.state.messages.items.find((item) => item.messageId === this.state.targetMessageId);
-    if (!target) throw new Error('待回应消息已失效。');
-    return { ...common, mode: 'reply_to_message', target: structuredClone(target), direction: this.state.direction };
-  }
-  private async runStrategy(job: StrategyJob): Promise<void> {
-    this.assertCurrentSession();
-    this.refreshGenerationEligibility();
-    this.assertSessionSelection();
-    if (this.state.generationBlock) return;
-    this.clearAutomaticExplorationTimer();
-    this.notifyInputChanged(true); this.cancelPending(); this.lastAttempt = undefined;
-    this.explorationPending?.abort();
-    const pending = new AbortController(); this.explorationPending = pending;
-    const operation = ++this.explorationOperation, scopeRevision = this.state.scopeRevision;
-    const viewOperation = this.operation;
-    const generation = this.backend.getConnectionGeneration();
-    let ownedGeneration: OwnedAssistantGeneration | undefined;
-    let generationReceipt: AssistantGenerationReceipt | undefined;
-    const candidateRequest = job.type === 'action' && job.request.generate === true;
-    if (candidateRequest) {
-      this.strategyCandidatePending = pending;
-    }
-    const automaticTask = job.type === 'open' && job.request.automatic ? this.automaticExploration : undefined;
-    const current = () => (!(job.type === 'open' && job.request.automatic)
-      || Boolean(automaticTask && automaticTask === this.automaticExploration))
-      && !pending.signal.aborted && operation === this.explorationOperation
-      && (!candidateRequest || viewOperation === this.operation)
-      && scopeRevision === this.state.scopeRevision && job.request.contactId === this.state.contactId
-      && job === this.strategyJob && (!this.state.savedSession?.sessionId || job.request.sessionId === this.state.savedSession.sessionId)
-      && generation === this.backend.getConnectionGeneration()
-      && (!ownedGeneration || this.generationJobs.canPublish(ownedGeneration, {
-        connectionGeneration: ownedGeneration.identity.connectionGeneration,
-        contactId: job.request.contactId, sessionId: this.state.savedSession?.sessionId ?? job.request.sessionId }));
-    if (job.sourceValidation && generation !== undefined) job.sourceValidation = {
-      scope: { contactId: job.request.contactId, scopeRevision, sessionId: job.request.sessionId },
-      operation, generation, phase: 'checking', inputs: [],
-    };
-    this.publish({ exploration: { phase: 'waiting', result: this.state.exploration.result, canRetry: true,
-      automaticUpdatesPaused: this.state.exploration.automaticUpdatesPaused } });
-    const consume = async (result: import('./exploration-client').ExplorationOutcome) => {
-      if (!current() || result.generation !== generation) return;
-      const actualInputVersionId = result.kind === 'exploration' ? result.result.inputVersion
-        : result.kind === 'generated' ? result.reply.inputVersionId : undefined;
-      if (actualInputVersionId) {
-        job.actualInputVersionId = actualInputVersionId;
-        const sourceState = await this.strategyInputSourceState(job, actualInputVersionId, pending.signal, current);
-        if (!current()) return;
-        if (sourceState === 'unavailable') {
-          this.clearUnavailableCandidateSource({ contactId: job.request.contactId, scopeRevision, sessionId: job.request.sessionId },
-            [], new Set([actualInputVersionId]));
-          return;
-        }
-        if (sourceState === 'unknown') throw new Error('本次探索来源尚未核验。');
-      }
-      if (result.kind === 'exploration') {
-        this.currentExploration = result.result;
-        this.generationSkillChoice = result.result.usedSkill
-          ? { mode: 'user', versionId: result.result.usedSkill.versionId } : { mode: 'disabled', versionId: null };
-        const confirmed = result.result.confirmedIntent;
-        if (confirmed) {
-          this.derivedIntent[this.state.mode === 'reply_to_message' ? 'direction' : 'purpose'] = true;
-          this.stopAutomaticExploration();
-        }
-        this.publish({ exploration: { phase: 'ready', result: result.result, canRetry: true,
-          automaticUpdatesPaused: !confirmed && !this.automaticExploration
-            && Boolean(this.state.exploration.automaticUpdatesPaused) },
-          savedSession: { phase: 'idle', sessionId: result.result.sessionId, turns: [], inputs: [], currentInputVersionId: null }, skillChoices: result.result.skillChoices,
-          ...(confirmed ? this.state.mode === 'reply_to_message' ? { direction: confirmed } : { purpose: confirmed } : {}) });
-      } else if (result.kind === 'paused') {
-        this.stopAutomaticExploration();
-        this.currentExploration = undefined; this.explorationPurpose = undefined;
-        this.publish({ exploration: { phase: 'paused', result: null, canRetry: false } });
-      } else {
-        this.stopAutomaticExploration();
-        this.currentExploration = undefined; this.explorationPurpose = undefined;
-        const input = job.input.mode === 'rewrite_draft' ? job.input : job.input.mode === 'reply_to_message'
-          ? { ...job.input, direction: result.confirmedIntent } : { ...job.input, purpose: result.confirmedIntent };
-        if (input.mode !== 'rewrite_draft') this.derivedIntent[input.mode === 'reply_to_message' ? 'direction' : 'purpose'] = true;
-        this.publish({ exploration: { phase: 'ready', result: null, canRetry: true }, phase: 'ready', errorCode: undefined,
-          savedSession: { phase: 'idle', sessionId: result.reply.assistantSessionId, turns: [], inputs: [], currentInputVersionId: null },
-          ...(input.mode === 'reply_to_message' ? { direction: input.direction } : input.mode === 'initiate_conversation' ? { purpose: input.purpose } : {}) });
-        if (this.state.result?.replyRequestId !== result.reply.replyRequestId) this.publish({ result: {
-          ...result.reply, input, candidates: result.reply.candidates.map((original) => ({ original, editedText: original.text })) },
-          selectedCandidateId: result.reply.candidates[0].candidateId });
-        await this.restoreCandidateVersions({ contactId: job.request.contactId, scopeRevision },
-          result.reply.assistantSessionId, result.reply.candidates.map((candidate) => candidate.candidateId));
-      }
-    };
-    const failed = async (error: unknown) => {
-      const preparationRejected = error instanceof BackendRequestFailure && error.kind === 'response'
-        && error.status === 409 && (error.code === 'expression_preferences_changed'
-          || error.reason?.startsWith('prepared_context_') === true);
-      if (candidateRequest && preparationRejected) {
-        this.stopAutomaticExploration();
-        await this.revalidateRejectedPreparation({ contactId: job.request.contactId, scopeRevision }, generationReceipt, current);
-        const publishRecovery = current();
-        if (this.strategyJob === job) {
-          this.strategyJob = undefined; this.currentExploration = undefined; this.explorationPurpose = undefined;
-        }
-        if (publishRecovery) this.publish({ exploration: { phase: 'failed', result: null, canRetry: false, automaticUpdatesPaused: true } });
-        return;
-      }
-      if (current()) {
-        const automatic = job.type === 'open' && Boolean(job.request.automatic);
-        const providerLimit = error instanceof BackendRequestFailure
-          && error.status === 409 && error.code === 'provider_context_limit';
-        this.publish({ ...(providerLimit ? { phase: 'failed' as const, errorCode: 'provider_context_limit' as const,
-          canRetry: false, inputBudgetNotice: undefined }
-          : ownedGeneration ? { phase: this.state.result ? 'ready' as const : 'failed' as const } : {}),
-          exploration: { phase: 'failed', result: null, canRetry: !automatic && !providerLimit,
-          automaticUpdatesPaused: automatic } });
-        if (providerLimit) {
-          this.stopAutomaticExploration();
-          this.strategyJob = undefined; this.currentExploration = undefined; this.explorationPurpose = undefined;
-        } else if (automatic) this.stopAutomaticExploration(true);
-      }
-    };
-    try {
-      if (candidateRequest && job.type === 'action' && job.request.action !== 'stop') {
-        if (generation === undefined) throw new Error('本次生成连接尚未确认。');
-        const owner = { connectionGeneration: generation, contactId: job.request.contactId, sessionId: job.request.sessionId };
-        await this.generationJobs.execute({ identity: owner, controller: pending,
-          stopping: captureAssistantGenerationStopping(this.backend, owner),
-          preparationCommand: { taskId: job.request.taskId, inputVersionId: job.request.inputVersion,
-            action: job.request.action, suggestionId: job.request.action === 'confirm' ? job.request.suggestionId ?? null : null,
-            operationKey: job.request.action === 'answer' ? job.request.operationKey : (job.confirmationOperationKey ??= randomUUID()) },
-          adapter: strategyGeneration(this.backend, owner, job.request),
-          registered: (registered) => { ownedGeneration = registered; },
-          prepared: (_registered, receipt) => {
-            generationReceipt = receipt;
-            if (!pending.signal.aborted && generation === this.backend.getConnectionGeneration()) {
-              this.retainRetry(receipt.requestKey, job.request.contactId, job.request.sessionId,
-                () => { this.strategyJob = job; return this.runStrategy(job); });
-            }
-            if (current()) this.publish({ phase: 'waiting', canRetry: false,
-              exploration: { phase: 'ready', result: null, canRetry: true } });
-          },
-          consume, failed, finished: (finished, settled, couldPublish) => this.generationFinished(finished, settled, couldPublish),
-        });
-      } else {
-        if (pending.signal.aborted || generation === undefined || generation !== this.backend.getConnectionGeneration()) return;
-        await consume(job.type === 'open' ? await openExploration(this.backend, job.request, pending.signal)
-          : await actOnExploration(this.backend, job.request, pending.signal));
-      }
-    } catch (error) { await failed(error);
-    } finally {
-      if (this.strategyCandidatePending === pending) this.strategyCandidatePending = undefined;
-      if (this.explorationPending === pending) this.explorationPending = undefined;
-      if (current() && this.automaticExploration?.queued) this.queueAutomaticExploration();
-    }
-  }
-
-  private async strategyInputSourceState(job: StrategyJob, inputVersionId: string, signal: AbortSignal,
-    current: () => boolean): Promise<'active' | 'unavailable' | 'unknown'> {
-    const validation = job.sourceValidation;
-    if (!validation) return 'active';
-    const valid = () => current() && job.sourceValidation === validation
-      && validation.operation === this.explorationOperation && validation.generation === this.backend.getConnectionGeneration()
-      && validation.scope.contactId === this.state.contactId && validation.scope.scopeRevision === this.state.scopeRevision
-      && validation.scope.sessionId === job.request.sessionId;
-    if (!valid()) return 'unknown';
-    const known = validation.phase === 'ready' && !this.candidateSourceCheck
-      ? validation.inputs.find((input) => input.inputVersionId === inputVersionId) : undefined;
-    if (known) return known.state === 'active' ? 'active' : 'unavailable';
-    // 首次 open 的实际新输入由响应给出；完整快照未覆盖它时只重新核验，不猜测前版本或复制依据。
-    try {
-      const saved = await readAssistantSession(this.backend, job.request.contactId, job.request.sessionId, signal);
-      if (!valid() || saved.generation !== validation.generation || this.candidateSourceCheck) return 'unknown';
-      validation.phase = 'ready';
-      validation.inputs = saved.inputs.map(({ inputVersionId, state }) => ({ inputVersionId, state }));
-      return saved.inputs.some((input) => input.inputVersionId === inputVersionId && input.state === 'active')
-        ? 'active' : 'unavailable';
-    } catch (error) {
-      if (!valid()) return 'unknown';
-      validation.phase = 'failed'; validation.inputs = [];
-      if (error instanceof BackendRequestFailure && error.kind === 'response'
-        && (error.status === 404 && error.code === 'not_found' || error.status === 409 && error.reason === 'source_unavailable')) {
-        this.clearUnavailableCandidateSource(validation.scope);
-      }
-      return 'unknown';
-    }
-  }
-
   async generate(selection: GenerateReply): Promise<void> {
     this.assertCurrentSession();
     let contactState = this.assertScope(selection);
@@ -1582,26 +1077,13 @@ export class ReplySession {
         || this.state.savedSession.currentInputVersionId !== oldPreparation.inputVersionId) return;
       reprepareInputVersion = oldPreparation.inputVersionId;
     }
-    this.stopAutomaticExploration();
+
     if (!selection.newRequest && this.restoredRetry && this.state.canRetry) {
       const retry = this.retainedRetries.get(this.restoredRetry);
       if (retry?.contactId === selection.contactId && retry.sessionId === this.state.savedSession?.sessionId) {
         await retry.run(); return;
       }
     }
-    if (this.state.mode !== 'rewrite_draft' && this.state.exploration.result) {
-      const result = this.state.exploration.result;
-      const intent = this.state.mode === 'reply_to_message' ? this.state.direction : this.state.purpose;
-      if (!intent.trim() || this.state.exploration.phase !== 'ready') return;
-      const selected = result.confirmedIntent === intent.trim()
-        ? result.directions.find((item) => item.direction === result.confirmedIntent) : undefined;
-      this.strategyJob = { type: 'action', request: { contactId: selection.contactId, sessionId: result.sessionId,
-        taskId: result.taskId, inputVersion: result.inputVersion, action: 'confirm', generate: true,
-        ...(selected ? { suggestionId: selected.suggestionId } : { directIntent: intent.trim() }) },
-        input: this.strategySnapshot(selection) };
-      await this.runStrategy(this.strategyJob); return;
-    }
-    if (this.state.mode !== 'rewrite_draft' && this.currentExploration) return;
     const generation = this.backend.getConnectionGeneration();
     const currentSessionId = this.state.savedSession?.sessionId;
     const activeReceipt = generation !== undefined && currentSessionId ? this.generationJobs.requestReceipt({
@@ -1625,14 +1107,14 @@ export class ReplySession {
         userInstruction: [tones[options.tone], options.instruction.trim()].filter(Boolean).join('\n') || null,
         includeRelationshipContext: options.includeRelationshipContext,
         ...(options.inputKind === 'workspace' ? { inputKind: 'workspace', workspaceAction: options.workspaceAction,
-          skillChoice: { ...(this.generationSkillChoice ?? this.state.skillChoice) },
+          skillChoice: { ...this.state.skillChoice },
           ...(options.contextText?.trim() ? { contextText: options.contextText.trim() } : {}),
           ...(options.excludedMessageIds?.length ? { excludedMessageIds: [...options.excludedMessageIds] } : {}) } : {}),
         ...(options.inputKind === 'current_chat' ? { inputKind: 'current_chat', pastedDirection: options.pastedDirection!.trim() } : {}) }
       : this.state.mode === 'initiate_conversation'
-        ? { ...common, mode: 'initiate_conversation', purpose: this.state.purpose.trim(), correction: this.state.correction.trim(), userInstruction: this.state.requirements.trim(), clarificationAnswer: this.state.clarificationAnswer.trim(), skillChoice: { ...(this.generationSkillChoice ?? this.state.skillChoice) } }
+        ? { ...common, mode: 'initiate_conversation', purpose: this.state.purpose.trim(), correction: this.state.correction.trim(), userInstruction: this.state.requirements.trim(), clarificationAnswer: this.state.clarificationAnswer.trim(), skillChoice: { ...this.state.skillChoice } }
         : { ...common, mode: 'reply_to_message', target: structuredClone(target!), direction: this.state.direction.trim(),
-        correction: this.state.correction.trim(), userInstruction: this.state.requirements.trim(), clarificationAnswer: this.state.clarificationAnswer.trim(), skillChoice: { ...(this.generationSkillChoice ?? this.state.skillChoice) } };
+        correction: this.state.correction.trim(), userInstruction: this.state.requirements.trim(), clarificationAnswer: this.state.clarificationAnswer.trim(), skillChoice: { ...this.state.skillChoice } };
     await this.generateInput(selection, input, replaceable, reprepareInputVersion);
   }
 
@@ -2027,10 +1509,6 @@ export class ReplySession {
       inputIds: this.state.savedSession.inputs.map((input) => input.inputVersionId),
       refreshMessages: this.state.messages.items.length > 0 || this.state.targetMessageId !== null,
       confirmedCandidateIds: error.candidateId === null ? [] : [error.candidateId],
-      strategyJob: this.strategyJob, strategyOperation: this.explorationOperation,
-      strategyWaiting: this.explorationPending !== undefined };
-    if (check.strategyJob?.request.sessionId === error.scope.sessionId) check.strategyJob.sourceValidation = {
-      scope: { ...error.scope }, operation: check.strategyOperation, generation: error.generation, phase: 'checking', inputs: [],
     };
     this.candidateSourceCheck = check;
     this.cancelMessagePage(); this.cancelPending(true); this.lastAttempt = undefined;
@@ -2102,20 +1580,6 @@ export class ReplySession {
       ? { ...input, state: 'unavailable' as const, content: null, placeholder: '相关来源不可用' } : input);
     const invalidInputs = new Set(inputs.filter((input) => input.state !== 'active').map((input) => input.inputVersionId));
     for (const inputId of check.inputIds) if (!inputs.some((input) => input.inputVersionId === inputId)) invalidInputs.add(inputId);
-    const strategyValidation = check.strategyJob?.sourceValidation;
-    if (check.strategyJob === this.strategyJob && check.strategyOperation === this.explorationOperation
-      && strategyValidation?.operation === check.strategyOperation && strategyValidation.generation === saved.generation
-      && strategyValidation.scope.contactId === check.scope.contactId
-      && strategyValidation.scope.scopeRevision === check.scope.scopeRevision && strategyValidation.scope.sessionId === saved.sessionId) {
-      // 只保留本次 operation 的来源身份/状态，迟到响应须按实际新输入版本匹配。
-      strategyValidation.phase = 'ready';
-      strategyValidation.inputs = inputs.map(({ inputVersionId, state }) => ({ inputVersionId, state }));
-      const actualInputVersionId = check.strategyJob?.actualInputVersionId;
-      const actualInput = inputs.find((input) => input.inputVersionId === actualInputVersionId);
-      if (actualInputVersionId && (actualInput ? actualInput.state !== 'active' : !check.strategyWaiting)) {
-        invalidInputs.add(actualInputVersionId);
-      }
-    }
     for (const result of [this.state.result, this.heldResult?.result]) {
       if (result?.assistantSessionId === saved.sessionId && result.inputVersionId
         && !inputs.some((input) => input.inputVersionId === result.inputVersionId && input.state === 'active')) {
@@ -2123,13 +1587,8 @@ export class ReplySession {
         candidateIds.push(...result.candidates.map((candidate) => candidate.original.candidateId));
       }
     }
-    // 首次探索保存的新输入尚未回包；expectedInputVersionId 只是前版本，不能证明目标仍有效。
-    const strategyTarget = this.strategyJob?.request.sessionId === saved.sessionId
-      && this.strategyJob.input.mode === 'reply_to_message' ? this.strategyJob.input.target.messageId : null;
-    const strategyTargetUnavailable = Boolean(messages && strategyTarget
-      && !messages.items.some((message) => message.messageId === strategyTarget));
     this.candidateVersions.setScope(check.scope);
-    const ownedRead = this.clearUnavailableCandidateSource(check.scope, candidateIds, invalidInputs, strategyTargetUnavailable, read);
+    const ownedRead = this.clearUnavailableCandidateSource(check.scope, candidateIds, invalidInputs, read);
     const targetUnavailable = messages && this.state.targetMessageId !== null
       && !messages.items.some((message) => message.messageId === this.state.targetMessageId);
     const clearMessageDirection = targetUnavailable && this.derivedIntent.direction;
@@ -2147,7 +1606,7 @@ export class ReplySession {
       read: ownedRead ? this.sessionProjection.acceptSourceProjection(ownedRead, snapshot) : undefined };
   }
   private clearUnavailableCandidateSource(scope: ContactSelection & { sessionId: string }, candidateIds?: string[],
-    invalidInputs: Set<string> = new Set(), strategyTargetUnavailable = false,
+    invalidInputs: Set<string> = new Set(),
     read?: AssistantProjectionRead): AssistantProjectionRead | undefined {
     const ownedRead = this.sessionProjection.invalidateSource(read);
     this.messageNotices.forget(scope.contactId, scope.sessionId);
@@ -2164,13 +1623,7 @@ export class ReplySession {
         || (result.inputVersionId && inputIds.has(result.inputVersionId))
         || result.candidates.some((candidate) => affected.has(candidate.original.candidateId))));
     const clearResult = matches(this.state.result), clearHeld = matches(this.heldResult?.result);
-    const clearExploration = this.currentExploration && (!affected || inputIds.has(this.currentExploration.inputVersion));
-    const jobInputId = this.strategyJob?.actualInputVersionId
-      ?? (this.strategyJob?.type === 'action' ? this.strategyJob.request.inputVersion : undefined);
-    const clearStrategy = this.strategyJob?.request.sessionId === scope.sessionId
-      && (!affected || clearResult || clearHeld || clearExploration || strategyTargetUnavailable
-        || (jobInputId && inputIds.has(jobInputId)));
-    const clearDerived = (this.derivedIntent.direction || this.derivedIntent.purpose) && (!affected || clearResult || clearHeld || clearExploration || clearStrategy);
+    const clearDerived = (this.derivedIntent.direction || this.derivedIntent.purpose) && (!affected || clearResult || clearHeld);
     if (!affected || clearResult || clearHeld) {
       const result = clearResult ? this.state.result : this.heldResult?.result;
       if (result?.inputVersionId) inputIds.add(result.inputVersionId);
@@ -2178,12 +1631,6 @@ export class ReplySession {
       this.notifyInputChanged(); this.cancelPending(); this.lastAttempt = undefined;
     } else if (this.lastAttempt && turns.some((turn) => turn.requestKey === this.lastAttempt?.requestKey)) {
       this.lastAttempt = undefined;
-    }
-    if (!affected || clearExploration || clearStrategy) {
-      this.explorationOperation += 1; this.explorationPending?.abort(); this.explorationPending = undefined;
-      this.currentExploration = undefined; this.explorationPurpose = undefined;
-      this.generationSkillChoice = undefined; this.strategyJob = undefined;
-      this.publish({ exploration: { phase: 'idle', result: null } });
     }
     this.candidateVersions.invalidate(scope, affected ? [...affected] : undefined);
     const placeholder = '相关来源不可用';
@@ -2294,13 +1741,13 @@ export class ReplySession {
       this.savedRead?.abort(); this.savedRead = undefined;
       this.leaveGenerationView();
       this.cancelMessagePage();
-      this.invalidateExploration();
+
       this.derivedIntent = { direction: false, purpose: false };
       this.lastAttempt = undefined;
       this.draft = state.draft;
       this.publish({ scopeRevision: state.scopeRevision, contactId: state.selectedContactId, candidateDrafts: [], contentRestoreNotice: undefined,
         options: defaults(), workspaceMigrationNotice: undefined, mode: 'rewrite_draft', scene: '', messages: { phase: 'idle', items: [], nextCursor: null },
-        targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], exploration: { phase: 'idle', result: null },
+        targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [],
         phase: 'idle', errorCode: undefined, result: null, selectedCandidateId: null, canRetry: false,
         savedSession: { phase: 'idle', sessionId: null, turns: [], inputs: [], currentInputVersionId: null }, sessionDeletion: undefined,
         sessionCatalog: undefined,
@@ -2372,14 +1819,14 @@ export class ReplySession {
     const contact = contacts.contacts.find((item) => item.contactId === selection.contactId)!;
     const common = { contactId: selection.contactId, contactDisplayName: contact.displayName,
       correction: this.state.correction.trim(), userInstruction: this.state.requirements.trim(),
-      clarificationAnswer: this.state.clarificationAnswer.trim(), skillChoice: { ...(this.generationSkillChoice ?? this.state.skillChoice) }, ...sceneSnapshot(this.state.scene || null) };
+      clarificationAnswer: this.state.clarificationAnswer.trim(), skillChoice: { ...this.state.skillChoice }, ...sceneSnapshot(this.state.scene || null) };
     const input: ReplyInputSnapshot = mode === 'rewrite_draft'
       ? { contactId: common.contactId, contactDisplayName: common.contactDisplayName, ...sceneSnapshot(this.state.scene || null),
         mode, inputKind: 'workspace', workspaceAction: options.workspaceAction,
         draftText: contacts.draft.trim(),
         userInstruction: [tones[options.tone], options.instruction.trim()].filter(Boolean).join('\n') || null,
         includeRelationshipContext: options.includeRelationshipContext,
-        skillChoice: { ...(this.generationSkillChoice ?? this.state.skillChoice) },
+        skillChoice: { ...this.state.skillChoice },
         ...(options.contextText?.trim() ? { contextText: options.contextText.trim() } : {}),
         ...(options.excludedMessageIds?.length ? { excludedMessageIds: [...options.excludedMessageIds] } : {}) }
       : mode === 'reply_to_message'
@@ -2402,87 +1849,33 @@ export class ReplySession {
       && (mode !== 'rewrite_draft' || originalContent.input_kind === 'workspace')
       && (originalContent.user_instruction ?? '') === (input.userInstruction ?? '')
       && (workspace || (originalInput?.scene ?? null) === (common.scene ?? null)) ? notice.messageId : undefined;
-    this.invalidateExploration(); this.notifyInputChanged();
+    this.notifyInputChanged();
     this.publish({ messages: { phase: 'ready', items: page.messages, nextCursor: page.nextCursor },
       ...(mode === 'reply_to_message' ? { targetMessageId: target.messageId } : {}) });
     await this.generateInput({ ...selection, newRequest: true }, input, receipt, expected,
       undefined, { notice, messageId: adoptNewMessageId });
   }
-  private clearAutomaticExplorationTimer(): void {
-    if (this.automaticExplorationTimer) clearTimeout(this.automaticExplorationTimer);
-    this.automaticExplorationTimer = undefined;
-  }
-  private stopAutomaticExploration(paused = false): void {
-    const inFlight = this.state.exploration.phase === 'waiting'
-      && this.strategyJob?.type === 'open' && this.strategyJob.request.automatic;
-    this.clearAutomaticExplorationTimer(); this.automaticExploration = undefined;
-    if (inFlight) {
-      ++this.explorationOperation;
-      this.explorationPending?.abort(); this.explorationPending = undefined;
-      this.strategyJob = undefined; this.currentExploration = undefined; this.explorationPurpose = undefined;
-      this.publish({ exploration: { phase: 'failed', result: null, canRetry: false, automaticUpdatesPaused: true } });
-    } else if (paused) this.publish({ exploration: { ...this.state.exploration, automaticUpdatesPaused: true } });
-  }
-  private queueAutomaticExploration(): void {
-    const task = this.automaticExploration, result = this.currentExploration;
-    if (!task || result?.confirmedIntent || this.state.mode === 'rewrite_draft'
-      || task.contactId !== this.state.contactId || task.scopeRevision !== this.state.scopeRevision
-      || task.generation !== this.backend.getConnectionGeneration() || result && task.sessionId !== result.sessionId
-      || this.state.sessionDeletion === 'deleting' || this.state.sessionDeletion === 'failed'
-      || this.state.generationBlock || this.catalogPending
-      || this.state.sessionCatalog?.selectionPending) return;
-    task.queued = true;
-    if (this.state.exploration.phase === 'waiting') return;
-    if (task.remaining <= 0 || Date.now() >= task.expiresAt) { this.stopAutomaticExploration(true); return; }
-    if (!result || this.state.exploration.phase !== 'ready' || this.automaticExplorationTimer) return;
-    this.automaticExplorationTimer = setTimeout(() => {
-      this.automaticExplorationTimer = undefined;
-      if (this.automaticExploration !== task || this.currentExploration !== result) return;
-      task.queued = false; --task.remaining;
-      // 唯一后端探索存储仍复验实际 CURRENT、来源、Skill 和根预算；失败不自动重试。
-      void this.explore({ contactId: task.contactId, scopeRevision: task.scopeRevision }, false, true)
-        .catch(() => { if (this.automaticExploration === task) this.stopAutomaticExploration(true); });
-    }, 150);
-  }
-  private invalidateInput(preserveExploration = false): void {
+  private invalidateInput(): void {
     this.leaveGenerationView();
-    this.invalidateExploration(preserveExploration);
     this.notifyInputChanged();
     this.lastAttempt = undefined;
     this.publish({ phase: this.state.result ? 'ready' : 'idle', errorCode: undefined, canRetry: false });
   }
-  private invalidateExploration(preserve = false): void {
-    this.stopAutomaticExploration();
-    this.strategyJob = undefined;
-    if (!preserve) { this.currentExploration = undefined; this.explorationPurpose = undefined; this.generationSkillChoice = undefined; }
-    ++this.explorationOperation;
-    this.explorationPending?.abort(); this.explorationPending = undefined;
-    this.publish({ exploration: { phase: 'idle', result: null }, clarificationAnswer: '' });
-  }
-  private notifyInputChanged(preserveAutomatic = false): void {
+  private notifyInputChanged(): void {
     if (this.pendingContent && this.state.contactId) this.retainedContent.delete(this.state.contactId);
     this.pendingContent = undefined;
     this.restoredRetry = undefined;
-    if (!preserveAutomatic) this.stopAutomaticExploration();
-    this.continuationAttempt = undefined;
-    if (this.state.continuation) this.publish({ continuation: undefined });
     for (const listener of this.inputListeners) listener();
   }
   private cancelMessagePage(): void { ++this.messageOperation; this.messagePending?.abort(); this.messagePending = undefined; }
   private cancelSavedRead(): void { this.savedRead?.abort(); this.savedRead = undefined; }
   private leaveGenerationView(): void {
     this.generationJobs.leaveView(); ++this.operation; this.pending = undefined;
-    this.continuationAttempt = undefined;
-    if (this.state.continuation) this.publish({ continuation: undefined });
-    // 明确确认/已确认回答已送出；离开视图仍接收真实准备回执，交由同一作业继续或退出中断。
-    if (this.explorationPending === this.strategyCandidatePending) this.explorationPending = undefined;
     this.sourceCheck?.abort(); this.sourceCheck = undefined; this.heldResult = undefined;
     if (this.state.sourceAvailability) this.publish({ sourceAvailability: undefined });
   }
   private cancelPending(preserveSourceValidation = false): void {
     ++this.operation; this.pending?.abort(); this.pending = undefined;
-    this.continuationAttempt = undefined;
-    if (this.state.continuation) this.publish({ continuation: undefined });
     if (this.state.inputBudgetNotice) this.publish({ inputBudgetNotice: undefined });
     if (preserveSourceValidation) return;
     this.sourceCheck?.abort(); this.sourceCheck = undefined; this.heldResult = undefined;

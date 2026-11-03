@@ -3,7 +3,7 @@ import {randomUUID} from 'node:crypto';
 import test from 'node:test';
 import {historicalReplyFixture,renderSession} from './fixtures/historical-reply-basis.mjs';
 
-for(const action of ['replies','continue'])test(`生产Main与preload的${action}以分段回执接管真实会话，显示轻提示并明确继续上一段`,async()=>{
+for(const action of ['replies'])test(`生产Main与preload的${action}以分段回执接管真实会话，显示轻提示并明确继续上一段`,async()=>{
  const f=await historicalReplyFixture(),fresh=randomUUID(),original=f.backend.requestJson;
  let current=f.sessionId;
  const old=structuredClone(f.records.saved);
@@ -12,13 +12,12 @@ for(const action of ['replies','continue'])test(`生产Main与preload的${action
   if(request.path.endsWith('/'+action+'/prepare')){
    f.calls.push(request);current=fresh;
    turn.request_key=request.body.idempotency_key;
-   if(action==='continue'){turn.input.content.include_relationship_context=false;turn.input.content.user_instruction=request.body.instruction;}
    f.records.saved.session_id=fresh;f.records.history.session_id=fresh;
    return {generation:7,data:{session_id:fresh,previous_session_id:f.sessionId,turn_id:turn.turn_id,
     request_key:turn.request_key,input_version_id:turn.input_version_id,state:'running'}};
   }
   if(request.path.endsWith('/'+action)){f.calls.push(request);return {generation:7,data:{...turn.reply,
-   session_id:fresh,turn_id:turn.turn_id,input_version_id:turn.input_version_id,state:'completed',...(action==='continue'?{effective_input:turn.input.content,effective_scene:null,continuation:{candidate_group_id:request.body.displayed_group.candidate_group_id,candidate_id:null,version_id:null,effective_requirements:['简短一点'],effective_intent:{source:'draft_text'}}}:{})}}; }
+   session_id:fresh,turn_id:turn.turn_id,input_version_id:turn.input_version_id,state:'completed'}}; }
   if(request.path.endsWith('/assistant-sessions')&&request.method==='GET')return {generation:7,data:{
    sessions:[{session_id:f.sessionId,is_current:current===f.sessionId},{session_id:fresh,is_current:current===fresh}],current_session_id:current}};
   if(request.path.endsWith('/resume')){f.calls.push(request);current=f.sessionId;f.records.saved=old;f.records.history.session_id=f.sessionId;return {generation:7,data:{session_id:f.sessionId}};}
@@ -29,11 +28,10 @@ for(const action of ['replies','continue'])test(`生产Main与preload的${action
   await f.bridge.readSavedSession(f.scope);await f.bridge.enterWorkspace(f.scope);
   f.contacts.setDraft({...f.scope,text:'合成空闲后新输入'});
   if(action==='replies')await f.bridge.generate({...f.scope,newRequest:true,workspaceAction:'express'});
-  else await f.bridge.continueSession({...f.scope,sessionId:f.sessionId,instruction:'简短一点'});
   const state=await f.bridge.getState();
   assert.equal(state.savedSession.sessionId,fresh,'展示真实受理段');
   assert.equal(state.sessionCatalog.currentSessionId,fresh);
-  assert.ok(state.result,JSON.stringify({phase:state.phase,continuation:state.continuation,saved:state.savedSession,calls:f.calls.map(call=>call.path)}));
+  assert.ok(state.result,JSON.stringify({phase:state.phase,saved:state.savedSession,calls:f.calls.map(call=>call.path)}));
   assert.equal(state.result.assistantSessionId,fresh);
   assert.match(renderSession(state),/已开启新讨论/);
   assert.match(renderSession(state),/继续上一段/);

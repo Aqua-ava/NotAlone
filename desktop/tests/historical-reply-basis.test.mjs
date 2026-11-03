@@ -53,33 +53,8 @@ test('已确认source_deleted的旧生成重试立即清缓存，读取失败也
   assert.equal(f.contacts.getState().draft, '独立合成意图仍保留。');
 });
 
-test('明确继续确认来源删除时先撤下被引用旧候选，普通故障仍保留编辑', async () => {
-  for (const failure of [new ports.BackendRequestFailure('response', 409, 'assistant_session_rejected', 'source_deleted'),
-    new ports.BackendRequestFailure('response', 503, 'reply_unavailable', 'source_deleted'),
-    new ports.BackendRequestFailure('response', 404, 'route_not_found')]) {
-    const f = await historicalReplyFixture();
-    await f.bridge.readSavedSession(f.scope);
-    f.contacts.setDraft({ ...f.scope, text: '继续故障后独立保留的合成草稿。' });
-    await f.bridge.generate({ ...f.scope, newRequest: true });
-    await f.bridge.readSavedSession(f.scope);
-    await f.bridge.editCandidate({ ...f.scope, replyRequestId: f.requestId, candidateId: f.candidateId,
-      text: '继续故障前的合成候选编辑。' });
-    f.records.failure = (request) => request.path.endsWith('/continue/prepare') ? failure
-      : request.path.endsWith(`/assistant-sessions/${f.sessionId}`) ? new ports.BackendRequestFailure('connection') : undefined;
-    await f.bridge.continueSession({ ...f.scope, sessionId: f.sessionId,
-      instruction: '只缩短这次表达。', intentionUpdate: '当前意图仍然不作承诺。' });
-    const state = await f.bridge.getState();
-    if (failure.status === 409) {
-      assert.equal(state.result, null);
-      assert(!JSON.stringify(state.candidateVersions).includes('合成旧候选：先确认见面时间。'));
-      assert(state.savedSession.turns.every((turn) => turn.input === null && turn.reply === null));
-    } else assert.equal(state.result.candidates[0].editedText, '继续故障前的合成候选编辑。');
-    assert.equal(f.contacts.getState().draft, '继续故障后独立保留的合成草稿。');
-  }
-});
-
 test('迟到的明确删除响应仍撤下同来源候选，后续用户编辑不能复活已删正文', async () => {
-  for (const operation of ['continue', 'retry']) {
+  for (const operation of ['retry']) {
     const f = await historicalReplyFixture();
     await f.bridge.readSavedSession(f.scope);
     f.contacts.setDraft({ ...f.scope, text: '迟到删除后独立保留的合成草稿。' });
@@ -87,15 +62,13 @@ test('迟到的明确删除响应仍撤下同来源候选，后续用户编辑�
     await f.bridge.readSavedSession(f.scope);
     let release, reached;
     const held = new Promise((resolve) => { reached = resolve; });
-    const endpoint = operation === 'continue' ? '/continue/prepare' : '/replies/prepare';
+    const endpoint = '/replies/prepare';
     f.records.failure = (request) => request.path.endsWith(endpoint)
       ? new ports.BackendRequestFailure('response', 409, 'assistant_session_rejected', 'source_deleted')
       : request.path.endsWith(`/assistant-sessions/${f.sessionId}`) ? new ports.BackendRequestFailure('connection') : undefined;
     f.records.beforeFailure = (request) => request.path.endsWith(endpoint)
       ? new Promise((resolve) => { release = resolve; reached(); }) : undefined;
-    const rejected = operation === 'continue'
-      ? f.bridge.continueSession({ ...f.scope, sessionId: f.sessionId, instruction: '简短说明这次意图。' })
-      : f.bridge.generate({ ...f.scope, newRequest: false });
+    const rejected = f.bridge.generate({ ...f.scope, newRequest: false });
     await held;
     await f.bridge.editCandidate({ ...f.scope, replyRequestId: f.requestId, candidateId: f.candidateId,
       text: '响应途中仍在修改的合成旧候选。' });
@@ -108,7 +81,7 @@ test('迟到的明确删除响应仍撤下同来源候选，后续用户编辑�
 });
 
 test('迟到的旧引用删除不能撤下新输入生成的独立候选及后续编辑', async () => {
-  for (const operation of ['continue', 'retry']) {
+  for (const operation of ['retry']) {
     const f = await historicalReplyFixture();
     await f.bridge.readSavedSession(f.scope);
     f.contacts.setDraft({ ...f.scope, text: '旧轮合成草稿。' });
@@ -117,15 +90,12 @@ test('迟到的旧引用删除不能撤下新输入生成的独立候选及后�
     const oldKey = f.records.saved.turns[0].request_key;
     let release, reached;
     const held = new Promise((resolve) => { reached = resolve; });
-    const oldRequest = (request) => operation === 'continue' ? request.path.endsWith('/continue/prepare')
-      : request.path.endsWith('/replies/prepare') && request.body.idempotency_key === oldKey;
+    const oldRequest = (request) => request.path.endsWith('/replies/prepare') && request.body.idempotency_key === oldKey;
     f.records.failure = (request) => oldRequest(request)
       ? new ports.BackendRequestFailure('response', 409, 'assistant_session_rejected', 'source_deleted') : undefined;
     f.records.beforeFailure = (request) => oldRequest(request)
       ? new Promise((resolve) => { release = resolve; reached(); }) : undefined;
-    const older = operation === 'continue'
-      ? f.bridge.continueSession({ ...f.scope, sessionId: f.sessionId, instruction: '旧轮只缩短。' })
-      : f.bridge.generate({ ...f.scope, newRequest: false });
+    const older = f.bridge.generate({ ...f.scope, newRequest: false });
     await held;
     await f.bridge.editCandidate({ ...f.scope, replyRequestId: f.requestId, candidateId: f.candidateId,
       text: '旧轮响应途中暂改的合成正文。' });
@@ -308,28 +278,6 @@ test('确认来源删除后，迟到依据读取和旧恢复缓存不能复活�
   const html = renderSession(state);
   assert.match(html, /相关来源已删除/);
   assert(!html.includes('依据已变化'));
-});
-
-test('明确继续的结果迟到时，不能覆盖随后修改的当前候选', async () => {
-  const f = await historicalReplyFixture();
-  await f.bridge.readSavedSession(f.scope);
-  f.contacts.setDraft({ ...f.scope, text: '合成原生成草稿。' });
-  await f.bridge.generate({ ...f.scope, newRequest: true });
-  await f.bridge.readSavedSession(f.scope);
-  let release, reached;
-  const held = new Promise((resolve) => { reached = resolve; });
-  f.records.beforeResponse = (request) => request.path.endsWith('/continue')
-    ? new Promise((resolve) => { release = resolve; reached(); }) : undefined;
-  const generating = f.bridge.continueSession({ ...f.scope, sessionId: f.sessionId,
-    instruction: '第一条简短一点', intentionUpdate: '本次希望轻松说明，不作承诺。' });
-  await held;
-  await f.bridge.editCandidate({ ...f.scope, replyRequestId: f.requestId, candidateId: f.candidateId,
-    text: '明确继续之后用户又写的合成编辑。' });
-  release(); await generating;
-  const state = await f.bridge.getState();
-  assert.equal(state.result.replyRequestId, f.requestId);
-  assert.equal(state.result.candidates[0].editedText, '明确继续之后用户又写的合成编辑。');
-  assert.equal(state.continuation, undefined);
 });
 
 test('普通503、连接故障和未知404读取不能冒充来源删除或抹去当前编辑', async () => {

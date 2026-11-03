@@ -42,24 +42,6 @@ for (const transition of ['编辑场景', '切换联系人', '后端重连']) {
   });
 }
 
-test('自动方向讨论不沿用输入框旧场景，历史显式场景仍可读取', async () => {
-  const f = await replySceneFixture();
-  try {
-    await f.bridge.explore(f.scope());
-    await f.bridge.readSavedSession(f.scope());
-    assert.equal(f.replies.getState().savedSession.phase, 'ready');
-    await f.bridge.updateScene({ ...f.scope(), scene: '核对安排' });
-    await f.bridge.explore(f.scope());
-    await f.bridge.readSavedSession(f.scope());
-    const saved = f.replies.getState().savedSession;
-    assert.equal(saved.phase, 'ready');
-    assert.equal(saved.inputs.at(-1).content.skillScene, undefined);
-    f.records.discussions.at(-1).content.skill_scene = '历史明确场景';
-    await f.bridge.readSavedSession(f.scope());
-    assert.equal(f.replies.getState().savedSession.inputs.at(-1).content.skillScene, '历史明确场景');
-  } finally { await f.replies.beginGenerationClosing(() => {}); }
-});
-
 test('中断重试重建权威原场景并保留当前新输入，恢复请求不能夹带编辑场景', async () => {
   const f = await replySceneFixture();
   try {
@@ -76,23 +58,6 @@ test('中断重试重建权威原场景并保留当前新输入，恢复请求�
     const recovering = f.records.calls.filter(request => request.path.includes('/retry-interrupted'));
     assert.equal(recovering.length, 2);
     assert(recovering.every(request => !Object.hasOwn(request.body, 'scene')));
-  } finally { await f.replies.beginGenerationClosing(() => {}); }
-});
-
-test('连续修改沿权威原场景生成并展示，当前新场景不会套到旧输入', async () => {
-  const f = await replySceneFixture();
-  try {
-    await f.bridge.updateScene({ ...f.scope(), scene: '核对安排' });
-    await f.bridge.generate({ ...f.scope(), newRequest: false });
-    await f.bridge.readSavedSession(f.scope());
-    await f.bridge.updateScene({ ...f.scope(), scene: '问候近况' });
-    await f.bridge.continueSession({ ...f.scope(), sessionId: f.replies.getState().savedSession.sessionId, instruction: '简短一点' });
-    assert.equal(f.replies.getState().continuation.phase, 'completed');
-    assert.equal(f.replies.getState().result.input.scene, '核对安排');
-    assert.equal(f.replies.getState().scene, '问候近况');
-    const continuing = f.records.calls.filter(request => request.path.includes('/continue'));
-    assert.equal(continuing.length, 2);
-    assert(continuing.every(request => !Object.hasOwn(request.body, 'scene')));
   } finally { await f.replies.beginGenerationClosing(() => {}); }
 });
 
@@ -117,25 +82,6 @@ test('联系人往返恢复各自精确场景，后端重连先清缓存且未�
     assert.equal(f.replies.getState().scene, '');
     await assert.rejects(f.bridge.updateScene({ ...f.scope(), scene: '核对安排', owner_id: f.contactId }));
     await assert.rejects(f.bridge.updateScene({ ...f.scope(), scene: '长'.repeat(257) }));
-  } finally { await f.replies.beginGenerationClosing(() => {}); }
-});
-
-test('自动方向探索不将旧输入场景当成方法权限，编辑后重新建立探索任务', async () => {
-  const f = await replySceneFixture();
-  try {
-    await f.bridge.updateScene({ ...f.scope(), scene: '核对安排' });
-    await f.bridge.explore(f.scope());
-    const first = f.records.calls.find(request => request.path.endsWith('/explorations'));
-    assert.equal(Object.hasOwn(first.body.content, 'skill_scene'), false);
-    assert.equal(first.body.content.type, 'purpose_exploration');
-    assert.equal(f.replies.getState().exploration.phase, 'ready');
-    await f.bridge.updateScene({ ...f.scope(), scene: '问候近况' });
-    assert.equal(f.replies.getState().exploration.result, null);
-    await f.bridge.explore(f.scope());
-    const second = f.records.calls.filter(request => request.path.endsWith('/explorations')).at(-1);
-    assert.equal(Object.hasOwn(second.body.content, 'skill_scene'), false);
-    assert.notEqual(second.body.operation_key, first.body.operation_key);
-    assert.equal(second.body.previous_id, null);
   } finally { await f.replies.beginGenerationClosing(() => {}); }
 });
 

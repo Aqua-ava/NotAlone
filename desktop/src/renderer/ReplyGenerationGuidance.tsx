@@ -1,10 +1,5 @@
 import type { ReplySessionState } from '../shared/reply-bridge';
 
-export function needsDirectionClarification(state: ReplySessionState): boolean {
-  const result = state.exploration.result;
-  return Boolean(result && (result.question || result.ambiguities.length));
-}
-
 export function hasChangedReplyInput(state: ReplySessionState, currentDraft?: string): boolean {
   const input = state.result?.input;
   if (!input) return false;

@@ -29,30 +29,24 @@ export async function replyWorkspaceFixture() {
       if (request.path.endsWith('/assistant-session/default')) return { generation, data: { session_id: sessionId } };
       if (request.path.endsWith('/assistant-sessions')) return { generation, data: { sessions: [{ session_id: sessionId, is_current: true }], current_session_id: sessionId } };
       if (request.path.endsWith('/selections')) return { generation, data: { selection: null } };
-      if (request.path.endsWith('/continue/prepare') || request.path.endsWith('/retry-interrupted/prepare')) {
-        const recovering = request.path.endsWith('/retry-interrupted/prepare');
-        const key = recovering ? request.body.request_key : request.body.idempotency_key;
+      if (request.path.endsWith('/retry-interrupted/prepare')) {
+        const key = request.body.request_key;
         let entry = records.entries.find(item => item.key === key);
         if (!entry) {
-          const original = recovering ? records.entries.find(item => item.turnId === request.body.original_turn_id)
-            : records.entries.find(item => item.inputId === request.body.expected_input_version_id);
+          const original = records.entries.find(item => item.turnId === request.body.original_turn_id);
           entry = { key, turnId: randomUUID(), inputId: randomUUID(), completed: false, input: structuredClone(original.input),
-            reply: { reply_request_id: randomUUID(), candidates: [{ candidate_id: randomUUID(), text: '合成继续或恢复候选',
+            reply: { reply_request_id: randomUUID(), candidates: [{ candidate_id: randomUUID(), text: '合成恢复候选',
               basis: '原场景与明确本次意图', citation_ids: [], risk_notes: [] }], context_receipt: { evidence_ids: [], } } };
-          if (recovering) entry.input.continuation = { recovery: { original_turn_id: request.body.original_turn_id,
+          entry.input.continuation = { recovery: { original_turn_id: request.body.original_turn_id,
             original_input_version_id: request.body.original_input_version_id } };
-          else entry.continuation = { candidate_group_id: request.body.displayed_group.candidate_group_id,
-            candidate_id: null, version_id: null, effective_requirements: [], effective_intent: { source: 'purpose' } };
           records.entries.push(entry);
         }
         return { generation, data: receipt(entry) };
       }
-      if (request.path.endsWith('/continue') || request.path.endsWith('/retry-interrupted')) {
+      if (request.path.endsWith('/retry-interrupted')) {
         const entry = records.entries.find(item => item.key === (request.body.request_key ?? request.body.idempotency_key));
         entry.completed = true;
-        return { generation, data: { ...receipt(entry), ...entry.reply, ...(entry.continuation
-          ? { continuation: entry.continuation, effective_input: entry.input.content, effective_scene: entry.input.scene ?? null }
-          : { restored_input: entry.input }) } };
+        return { generation, data: { ...receipt(entry), ...entry.reply, restored_input: entry.input } };
       }
       if (request.path.endsWith('/replies/prepare') || request.path.endsWith('/replace/prepare')) {
         const body = request.body.replacement ?? request.body;
@@ -85,16 +79,6 @@ export async function replyWorkspaceFixture() {
           selected_version_id: null, versions: [{ version_id: candidate.candidate_id, version_number: 0, parent_version_id: null,
             text: candidate.text, messages: [{ message_id: randomUUID(), text: candidate.text }], requirements: null,
             created_at: '2026-10-15T01:00:00+00:00' }] } };
-      }
-      if (request.path.endsWith('/explorations')) {
-        const inputId = randomUUID();
-        records.discussions.push({ input_version_id: inputId, type: request.body.content.type, conversation_binding_id: bindingId,
-          turn_id: null, state: 'active', placeholder: null, content: { ...request.body.content, answer: '', confirmed_intent: records.confirmedIntent ?? '' } });
-        return { generation, data: { kind: 'directions', session_id: sessionId,
-        exploration_id: randomUUID(), input_version_id: inputId, understanding: '合成理解', ambiguities: [], evidence: [],
-        options: ['合成方向甲', '合成方向乙'].map(label => ({ suggestion_id: randomUUID(), label, intent: label,
-          reason: '由用户选择', citation_ids: [], recommended: false, pause: false })), citation_ids: [], question: null,
-        question_id: null, confirmed_intent: records.confirmedIntent ?? null, current_step: '', tradeoffs: [], used_skill: null, skill_choices: [] } };
       }
       assert.equal(request.method, 'GET'); assert.equal(request.path.endsWith(sessionId), true);
       return { generation, data: { session_id: sessionId, current_input_version_id: records.discussions.at(-1)?.input_version_id ?? records.entries.at(-1)?.inputId ?? null,

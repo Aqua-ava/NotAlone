@@ -1,72 +1,10 @@
 import type { ReplyInputSnapshot } from '../../shared/reply-bridge';
 import { generateReply, replaceReply, retryInterruptedReply, type InterruptedReplyOrigin } from './client';
-import { actOnExploration, prepareExplorationAction, type ExplorationAction, type ExplorationOutcome } from './exploration-client';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
-import { continueAssistantSession, type AssistantContinuationCommand } from './assistant-continuation';
 import type { AssistantGenerationOwner, AssistantGenerationReceipt } from './assistant-generation-jobs';
-import type { GenerationAdapter, GenerationProtocol } from './assistant-generation-execution';
+import type { GenerationAdapter } from './assistant-generation-execution';
 import { readAssistantSession } from './assistant-sessions';
-
-async function verifyReceivedFailure(backend: BackendHost, owner: AssistantGenerationOwner,
-  error: unknown, protocol: GenerationProtocol): Promise<undefined> {
-  if (!(error instanceof BackendRequestFailure) || error.kind !== 'response' || !protocol.receipt
-    || protocol.signal.aborted || owner.connectionGeneration !== backend.getConnectionGeneration()) return;
-  const receipt = protocol.receipt;
-  try {
-    const saved = await readAssistantSession(backend, owner.contactId, receipt.sessionId, protocol.signal);
-    const failed = saved.turns.find((turn) => turn.turnId === receipt.turnId
-      && turn.inputVersionId === receipt.inputVersionId && turn.requestKey === receipt.requestKey && turn.state === 'failed');
-    if (saved.generation === owner.connectionGeneration && saved.generation === backend.getConnectionGeneration()
-      && !protocol.signal.aborted && protocol.active && failed) {
-      protocol.observe({ kind: 'failed', canRetry: error.code === 'reply_timeout'
-        || error.code === 'assistant_session_save_failed' || (error.status ?? 0) >= 500, generationActive: failed.generationActive });
-    }
-  } catch { /* 未知读取不能证明失败，保留原停止身份。 */ }
-}
-
-export function continuationGeneration(backend: BackendHost, owner: AssistantGenerationOwner,
-  command: AssistantContinuationCommand): GenerationAdapter<Awaited<ReturnType<typeof continueAssistantSession>>> {
-  return {
-    async run(protocol) {
-      const value = await continueAssistantSession(backend, owner.contactId, owner.sessionId, command, protocol.signal,
-        protocol.prepared, protocol.requested, protocol.preparing,
-        (proof) => protocol.notReserved(proof, backend.getConnectionGeneration()));
-      if (value.phase === 'completed') return { value, outcome: 'completed' };
-      if (value.generation !== owner.connectionGeneration) return { value, outcome: 'unknown' };
-      if (protocol.receipt) throw new Error('本次澄清与实际领取状态不一致，请重新读取讨论。');
-      return { value, outcome: 'no_generation' };
-    },
-    verifyFailure: (error, protocol) => verifyReceivedFailure(backend, owner, error, protocol),
-  };
-}
-
-export function strategyGeneration(backend: BackendHost, owner: AssistantGenerationOwner,
-  request: ExplorationAction): GenerationAdapter<ExplorationOutcome> {
-  return {
-    async run(protocol) {
-      const prepared = await prepareExplorationAction(backend, request, protocol.signal);
-      if (prepared.kind !== 'prepared') return { value: prepared, outcome: 'no_generation' };
-      if (prepared.generation !== owner.connectionGeneration) throw new Error('本次候选准备归属尚未确认。');
-      await protocol.prepared(prepared.receipt);
-      if (protocol.signal.aborted || owner.connectionGeneration !== backend.getConnectionGeneration()) {
-        throw new BackendRequestFailure('cancelled');
-      }
-      const executing = actOnExploration(backend, request, protocol.signal, prepared.receipt);
-      protocol.requested();
-      const value = await executing;
-      if (value.kind !== 'generated' || value.taskId !== prepared.taskId) throw new Error('本次确认结果不属于原准备任务。');
-      return { value, outcome: 'completed' };
-    },
-    async verifyFailure(error, protocol) {
-      if (!protocol.job && !protocol.receipt && error instanceof BackendRequestFailure
-        && error.kind === 'response' && error.noGeneration) {
-        protocol.notReserved(error.noGeneration, backend.getConnectionGeneration());
-      }
-      return verifyReceivedFailure(backend, owner, error, protocol);
-    },
-  };
-}
 
 export interface OrdinaryGenerationAttempt {
   input: ReplyInputSnapshot;

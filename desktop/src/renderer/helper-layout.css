@@ -124,7 +124,7 @@
 .ime-pane .expression-preferences h3 { font-size: 14px; margin: 16px 0 10px; }
 .ime-pane .expression-preferences label { display: grid; gap: 8px; margin: 12px 0; font-size: 13px; }
 .ime-pane .expression-preferences label:has(input[type=checkbox]) { display: flex; align-items: center; }
-.ime-pane .expression-preferences button, .ime-pane .assistant-session-panel button:not(.generate-button):not(.compose-primary), .ime-pane .assistant-continuation-controls button, .ime-pane .reply-evidence > button { border: 1px solid #cbd9e1; padding: 8px 12px; border-radius: 7px; background: #fff; color: #346781; font-size: 12px; line-height: 1.6; margin: 4px 8px 4px 0; overflow-wrap: anywhere; text-align: left; }
+.ime-pane .expression-preferences button, .ime-pane .assistant-session-panel button:not(.generate-button):not(.compose-primary), .ime-pane .reply-evidence > button { border: 1px solid #cbd9e1; padding: 8px 12px; border-radius: 7px; background: #fff; color: #346781; font-size: 12px; line-height: 1.6; margin: 4px 8px 4px 0; overflow-wrap: anywhere; text-align: left; }
 .ime-pane .expression-preferences button:hover:not(:disabled), .ime-pane .assistant-session-panel button:hover:not(:disabled):not(.generate-button):not(.compose-primary) { background: #edf5fa; }
 .expression-preference-form { border-block: 1px solid #e0e8ed; padding: 4px 0 14px; margin: 14px 0; }
 .ime-pane .expression-preferences ul { list-style: none; padding: 0; display: grid; gap: 10px; }
@@ -174,10 +174,6 @@
 .ime-pane .reply-evidence > section > p, .evidence-help { font-size: 12px; color: #72838e; }
 .ime-pane .reply-evidence article { margin-top: 14px; padding: 12px; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); }
 .ime-pane .reply-evidence article p { margin: 6px 0; font-size: 13px; white-space: pre-wrap; }
-.ime-pane .assistant-continuation-controls { margin-top: 24px; padding: 20px; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); }
-.assistant-continuation-controls h3 { margin: 0 0 6px; font-size: 16px; }
-.ime-pane .assistant-continuation-controls > p, .assistant-continuation-controls header p { color: #70818d; font-size: 12px; margin: 8px 0; }
-.ime-pane .assistant-continuation-controls > label { display: grid; gap: 8px; margin: 14px 0; font-size: 13px; }
 @media (max-width: 700px) {
   .ime-pane .assistant-session-panel:not(.assistant-session-panel-sqlite), .ime-pane .reply-expression-settings { padding: 16px; }
 }
@@ -228,4 +224,4 @@
 .ime-pane .candidate-more-actions button { margin: 8px 8px 0 0; }
 
 /* 助手卡片标题与管理页共用色调，保留原有字号和排版。 */
-.compose-heading h2, .strategy-heading h2, .strategy-heading h3, .strategy-summary h3, .strategy-summary h4, .strategy-question h3, .strategy-question h4, .strategy-direction-header h4, .reply-expression-settings h2, .reply-candidate h3, .assistant-continuation-controls h3, .ime-pane .reply-results-heading h2, .ime-pane .expression-preferences > summary, .session-browser > summary, .session-browser > summary > span:first-child { color: var(--panel-heading); }
+.compose-heading h2, .strategy-heading h2, .strategy-heading h3, .strategy-summary h3, .strategy-summary h4, .strategy-question h3, .strategy-question h4, .strategy-direction-header h4, .reply-expression-settings h2, .reply-candidate h3, .ime-pane .reply-results-heading h2, .ime-pane .expression-preferences > summary, .session-browser > summary, .session-browser > summary > span:first-child { color: var(--panel-heading); }
