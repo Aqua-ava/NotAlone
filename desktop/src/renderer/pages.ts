@@ -1,15 +1,15 @@
 export const managerPages = {
-  skillLearning: {
-    title: 'Skill', icon: 'memory',
-    description: '管理已有 Skill，查看版本与启停状态。',
-    emptyTitle: '请先选择联系人', emptyDescription: '选择联系人后查看适用的 Skill 和待审核建议。', action: '选择联系人',
-  },
   contacts: {
     title: '联系人', icon: 'contacts',
     description: '查看联系人的聊天记录，管理已保存的资料。',
     emptyTitle: '联系人暂不可用',
     emptyDescription: '连接完成后，这里会显示你的联系人与消息、来源摘要。',
     action: '选择联系人',
+  },
+  skillLearning: {
+    title: 'Skill', icon: 'memory',
+    description: '管理已有 Skill，查看版本与启停状态。',
+    emptyTitle: '请先选择联系人', emptyDescription: '选择联系人后查看适用的 Skill 和待审核建议。', action: '选择联系人',
   },
   memory: {
     title: '记忆', icon: 'memory',
