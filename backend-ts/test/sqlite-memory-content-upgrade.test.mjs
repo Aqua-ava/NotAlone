@@ -16,15 +16,18 @@ test('图文引用迁移保留旧文字记忆、来源和核验资格，升级�
  t.after(()=>extraction.close());
  const run=await extraction.start('before-content-citation-upgrade');await extraction.waitForIdle();
  const management=new SqliteMemoryManagement(f.storage,owner);await management.importRun(run.runId);
- const candidate=(await management.read(scope)).candidates[0];assert.ok(candidate);assert.equal(candidate.verificationState,'verified');
+ assert.equal(f.storage.status.schemaVersion,31);
+ const snapshot=storage=>storage.execute('fixture.legacyContentSnapshot',{ownerId:owner,contactId});
+ const candidate=(await snapshot(f.storage)).candidates[0];assert.ok(candidate);assert.equal(candidate.verificationState,'verified');
  await management.decide({requestKey:'before-upgrade-accept',action:'accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]});
- const before=await management.read(scope);assert.equal(before.memories.length,1);assert.equal(before.memories[0].current.sources[0].quote,'我长期住在高雄。');
+ const before=await snapshot(f.storage);assert.equal(before.data.memory.length,1);assert.equal(before.ledger.length,31);
  await extraction.close();await f.storage.close();
  let reopened;
  try{
-  reopened=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:f.storage.status.databaseId});
+  reopened=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:f.storage.status.databaseId,registryModule:new URL('./fixtures/memory-sqlite/legacy-content-registry.mjs?mode=current',import.meta.url).href});
   assert.ok(reopened.status.schemaVersion>=33);assert.deepEqual(await reopened.check(),{integrity:'ok',foreignKeys:'ok'});
-  const next=new SqliteMemoryManagement(reopened,owner),after=await next.read(scope);assert.deepEqual(after,before);
+  const retained=await snapshot(reopened);assert.deepEqual(retained.data,before.data);assert.deepEqual(retained.ledger.slice(0,31),before.ledger);
+  const next=new SqliteMemoryManagement(reopened,owner),after=await next.read(scope);assert.equal(after.memories.length,1);assert.equal(after.memories[0].current.sources[0].quote,'我长期住在高雄。');assert.equal(after.memories[0].current.verificationState,'verified');
   const memory=after.memories[0];await next.decide({requestKey:'after-upgrade-edit',action:'correct',memoryId:memory.id,expectedVersionNo:memory.current.versionNo,expectedHeadRevision:memory.headRevision,body:'联系人长期住在高雄，旧文字证据保留。'});
   const changed=(await next.read(scope)).memories[0];assert.equal(changed.current.versionNo,'2');assert.equal(changed.current.sources[0].quote,'我长期住在高雄。');
   assert.deepEqual(await reopened.check(),{integrity:'ok',foreignKeys:'ok'});

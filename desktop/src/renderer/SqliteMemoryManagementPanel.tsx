@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
-import type {MemoryCandidateView,MemoryDecisionRequest,MemoryManagementOutcome,MemoryManagementSnapshot,MemorySource,MemoryVerificationState,MemoryVersionView,MemoryView,SqliteMemoryManagementBridge} from '../shared/sqlite-memory-management';
+import type {MemoryCandidateView,MemoryDecisionRequest,MemoryManagementOutcome,MemoryManagementSnapshot,MemoryManagementRead,MemoryHistorySnapshot,MemorySource,MemoryVerificationState,MemoryVersionView,MemoryView,SqliteMemoryManagementBridge} from '../shared/sqlite-memory-management';
 import {withdrawnProtectionVersion} from '../shared/sqlite-memory-management';
 import {SqliteMemoryDocumentsPanel} from './SqliteMemoryDocumentsPanel';
 import {useVisibleRefresh} from './use-visible-refresh';
@@ -59,16 +59,32 @@ function Version({version,current}:{version:MemoryVersionView;current:boolean}){
   {version.restoredFromVersionNo&&<p>恢复自版本 {version.restoredFromVersionNo}，原前驱为版本 {version.previousVersionNo}。</p>}
  </div>;
 }
-function MemoryHistory({memory}:{memory:MemoryView}){
- const [open,setOpen]=useState(false);
- return <details className="memory-version-history" onToggle={event=>setOpen(event.currentTarget.open)}>
+function MemoryHistory({memory,bridge,request,authority}:{memory:MemoryView;bridge:SqliteMemoryManagementBridge;request:MemoryManagementRead;authority:MemoryManagementSnapshot}){
+ const [open,setOpen]=useState(false),[loaded,setLoaded]=useState<{authority:MemoryManagementSnapshot;value:MemoryHistorySnapshot}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [previous,setPrevious]=useState<(string|undefined)[]>([]),active=useRef(true),generation=useRef(0),cursor=useRef<string|undefined>(undefined),latestAuthority=useRef(authority);
+ latestAuthority.current=authority;
+ useEffect(()=>{active.current=true;return()=>{active.current=false;generation.current++;};},[]);
+ async function load(next?:string){
+  if(!bridge.readHistory)return;const token=++generation.current;setLoaded(null);setBusy(true);setError('');
+  const current=()=>active.current&&generation.current===token&&latestAuthority.current===authority;
+  try{const value=await bridge.readHistory({...request,memoryId:memory.id,expectedHeadRevision:memory.headRevision,...(next?{cursor:next}:{})});if(current())setLoaded({authority,value});}
+  catch{if(current()){setLoaded(null);setError('历史资料已变化，请收起后重新展开。');}}
+  finally{if(current())setBusy(false);}
+ }
+ // 每次权威列表重读都撤下旧历史；运行时来源资格变化不一定会推进记忆头或页面修订。
+ useEffect(()=>{setLoaded(null);setError('');if(open)void load(cursor.current);return()=>{generation.current++;};},[authority,open]);
+ const snapshot=loaded?.authority===authority?loaded.value:null,history=bridge.readHistory?snapshot?.view:memory;
+ return <details className="memory-version-history" onToggle={event=>{const expanded=event.currentTarget.open;setOpen(expanded);if(!expanded){cursor.current=undefined;setPrevious([]);}}}>
   <summary>更新历史</summary>
-  {open&&<>{[...memory.versions].reverse().map(version=><Version key={version.versionNo} version={version} current={version.versionNo===memory.current?.versionNo}/>)}
-   <ol>{memory.decisions.map(decision=><li key={decision.id}>{decision.actorKind==='system'?'系统自动决定':'用户决定'} · {({auto_accept:'自动采纳',auto_update:'自动更新',auto_retire:'已并入合并资料',auto_noop:'跳过重复资料',...successMessages}[decision.action]??decision.action)} · {decision.outcome==='redacted'?'敏感材料已清除':'已生效'}</li>)}</ol>
+  {open&&<>{busy&&<p role="status">正在读取本页历史…</p>}{error&&<p role="alert">{error}</p>}
+   {history&&<>{[...history.versions].reverse().map(version=><Version key={version.versionNo} version={version} current={version.versionNo===memory.current?.versionNo}/>)}
+    <ol>{history.decisions.map(decision=><li key={decision.id}>{decision.actorKind==='system'?'系统自动决定':'用户决定'} · {({auto_accept:'自动采纳',auto_update:'自动更新',auto_retire:'已并入合并资料',auto_noop:'跳过重复资料',...successMessages}[decision.action]??decision.action)} · {decision.outcome==='redacted'?'敏感材料已清除':'已生效'}</li>)}</ol></>}
+   {snapshot&&<nav className="sqlite-memory-actions" aria-label="记忆历史分页"><button type="button" disabled={busy||!previous.length} onClick={()=>{const next=previous.at(-1);setPrevious(previous.slice(0,-1));cursor.current=next;void load(next);}}>较新的版本与决定</button>
+    <button type="button" disabled={busy||!snapshot.view.nextCursor} onClick={()=>{const next=snapshot.view.nextCursor!;setPrevious([...previous,cursor.current]);cursor.current=next;void load(next);}}>更早的版本与决定</button></nav>}
   </>}
  </details>;
 }
-function Memory({memory,busy,decide}:{memory:MemoryView;busy:boolean;decide:(request:Decision)=>void}){
+function Memory({memory,busy,decide,bridge,request:historyRequest,authority}:{memory:MemoryView;busy:boolean;decide:(request:Decision)=>void;bridge:SqliteMemoryManagementBridge;request:MemoryManagementRead;authority:MemoryManagementSnapshot}){
  const [editing,setEditing]=useState<'correct'|'change'|null>(null),[moreOpen,setMoreOpen]=useState(false),current=memory.current,withdrawnVersion=withdrawnProtectionVersion(memory);
  const request={memoryId:memory.id,expectedVersionNo:(current??withdrawnVersion)?.versionNo,expectedHeadRevision:memory.headRevision};
  const undoEligible=current?.adoptionMode==='auto'&&current.formationKind!=='restore';
@@ -94,7 +110,7 @@ function Memory({memory,busy,decide}:{memory:MemoryView;busy:boolean;decide:(req
      </div>}
      {undoEligible&&memory.manualProtection&&<p className="hint">撤销前须先明确解除当前人工保护。</p>}
      {withdrawnVersion&&<p className="hint">资料已撤回，仍可调整人工保护；开启后会阻止整组恢复。</p>}
-     {hasHistory&&<MemoryHistory memory={memory}/>}
+     {hasHistory&&<MemoryHistory memory={memory} bridge={bridge} request={historyRequest} authority={authority}/>}
     </>}
    </details>
   </div>
@@ -106,6 +122,7 @@ function Memory({memory,busy,decide}:{memory:MemoryView;busy:boolean;decide:(req
 export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,documentsRefreshKey=0,completedRunId=null,visible=true,releaseOnUnmount=true}:{bridge:SqliteMemoryManagementBridge;contactId:string|null;scopeRevision:number;documentsRefreshKey?:number;completedRunId?:string|null;visible?:boolean;releaseOnUnmount?:boolean}){
  const [scopeKind,setScopeKind]=useState<'contact'|'self'>('contact');
  const [level,setLevel]=useState<'L1'|'L2'|'L3'>('L1');
+ const pageCursor=useRef<string|undefined>(undefined),[previousPages,setPreviousPages]=useState<(string|undefined)[]>([]);
  const context=useRef({bridge,contactId,scopeRevision,scopeKind});
  if(context.current.bridge!==bridge||context.current.contactId!==contactId||context.current.scopeRevision!==scopeRevision||context.current.scopeKind!==scopeKind)context.current={bridge,contactId,scopeRevision,scopeKind};
  const accepted=context.current;
@@ -118,13 +135,13 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
  refresh.current=async(preserve=false,silent=false)=>{
   if(!readRequest||decisionPending.current||silent&&(busy||reading.current!==null||currentNotice?.error))return false;
   const token=++revision.current;reading.current=token;if(!preserve)setState(null);if(!silent){setBusy(true);setNotice(null);}
-  try{const next=await bridge.read(readRequest);if(active.current&&context.current===accepted&&token===revision.current){setState({context:accepted,snapshot:next});if(!decisionPending.current)setDocumentsBlocked(false);return true;}}
+  try{const next=await bridge.read({...readRequest,...(pageCursor.current?{cursor:pageCursor.current}:{})});if(active.current&&context.current===accepted&&token===revision.current){setState({context:accepted,snapshot:next});if(!decisionPending.current)setDocumentsBlocked(false);return true;}}
   catch{if(active.current&&context.current===accepted&&token===revision.current){setState(null);setDocumentsBlocked(true);setNotice({context:accepted,message:'来源或范围暂不可用，已撤下原资料，请重新读取。',error:true});}}
   finally{if(reading.current===token)reading.current=null;if(active.current&&context.current===accepted&&token===revision.current&&!silent)setBusy(false);}
   return false;
  };
  useEffect(()=>{
-  active.current=true;reading.current=null;decisionPending.current=false;completionRefreshPending.current=false;setState(null);setNotice(null);setBusy(false);setDocumentsBlocked(false);
+  active.current=true;pageCursor.current=undefined;setPreviousPages([]);reading.current=null;decisionPending.current=false;completionRefreshPending.current=false;setState(null);setNotice(null);setBusy(false);setDocumentsBlocked(false);
   const unsubscribe=bridge.onInvalidated(()=>{revision.current++;reading.current=null;decisionPending.current=false;completionRefreshPending.current=false;setState(null);setDocumentsBlocked(true);setBusy(false);setNotice({context:accepted,message:'资料资格或连接已变化，已撤下正文、依据和编辑，请重试读取。',error:true});});
   if(contactId)void refresh.current();
   return()=>{active.current=false;revision.current++;unsubscribe();};
@@ -133,12 +150,14 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
  useEffect(()=>()=>{if(releaseOnUnmount)void bridge.release().catch(()=>{});},[bridge,releaseOnUnmount]);
  useEffect(()=>{
   if(completedRunId!==lastCompletedRun.current){lastCompletedRun.current=completedRunId;if(completedRunId)completionRefreshPending.current=true;}
-  if(completionRefreshPending.current&&!busy&&contactId){completionRefreshPending.current=false;void refresh.current(true,true);}
+  if(completionRefreshPending.current&&!busy&&contactId){completionRefreshPending.current=false;pageCursor.current=undefined;setPreviousPages([]);void refresh.current(true,true);}
  },[completedRunId,busy,accepted]);
  // 页面切换保留已核验快照，重新显示时静默更新；隐藏时仍接收资格失效事件。
  const wasVisible=useRef(visible);
  useEffect(()=>{const reopened=visible&&!wasVisible.current;wasVisible.current=visible;if(reopened)void refresh.current(true,true);},[visible]);
- useVisibleRefresh(()=>refresh.current(true,true),visible&&!!contactId&&!busy&&!currentNotice?.error);
+ useVisibleRefresh(()=>refresh.current(true,true),visible&&level==='L1'&&!!contactId&&!busy&&!currentNotice?.error,current?.view.page?.preparing?1000:30000);
+ function restart(){pageCursor.current=undefined;setPreviousPages([]);void refresh.current();}
+ function changePage(next:string|undefined,previous:(string|undefined)[]){pageCursor.current=next;setPreviousPages(previous);void refresh.current();}
  async function decide(request:Decision){
   if(!current||!readRequest||busy)return;const snapshot=current,token=++revision.current;decisionPending.current=true;setDocumentsBlocked(true);setState(null);setBusy(true);setNotice(null);
   let outcome:MemoryManagementOutcome;
@@ -146,7 +165,7 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
   if(!active.current||context.current!==accepted||token!==revision.current){decisionPending.current=false;return;}
   decisionPending.current=false;
   if(outcome.status!=='applied'){setBusy(false);setNotice({context:accepted,message:outcomeMessages[outcome.status],error:true});return;}
-  const refreshed=await refresh.current();if(active.current&&context.current===accepted)setNotice({context:accepted,message:refreshed?(successMessages[request.action]??'决定已保存。'):'决定已保存，但当前资料暂不可读。已撤下原资料，请重新读取。',error:!refreshed});
+  pageCursor.current=undefined;setPreviousPages([]);const refreshed=await refresh.current();if(active.current&&context.current===accepted)setNotice({context:accepted,message:refreshed?(successMessages[request.action]??'决定已保存。'):'决定已保存，但当前资料暂不可读。已撤下原资料，请重新读取。',error:!refreshed});
  }
  return <section className="sqlite-memory-management memory-timeline-browser" aria-label="记忆候选与版本">
   <header className="memory-browser-toolbar"><p className="memory-browser-caption">相处的点滴</p><div className="memory-person-switch" role="group" aria-label="记忆对象">{(['contact','self'] as const).map(kind=><button key={kind} type="button" aria-pressed={scopeKind===kind} disabled={!contactId} onClick={()=>setScopeKind(kind)}>{kind==='contact'?'对方':'我'}</button>)}</div></header>
@@ -154,9 +173,16 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
   {!contactId?<p className="memory-browser-empty">请先从顶部选择联系人。</p>:<div className="memory-flat-content" key={`${scopeKind}:${contactId}:${scopeRevision}`}>
    {scopeKind==='self'&&<p className="hint memory-scope-hint">仅展示来源完整归属于当前联系人的本人资料。</p>}
    <div hidden={level!=='L1'}>
-   {currentNotice&&<p role={currentNotice.error?'alert':'status'}>{currentNotice.message}{currentNotice.error&&<button type="button" disabled={busy} onClick={()=>void refresh.current()}>重试读取记忆资料</button>}</p>}{busy&&<p role="status">正在核对记忆资料…</p>}
-   {current&&<><div className="memory-timeline-layout"><section className="memory-timeline-section" aria-label="正式记忆时间线"><h3 className="memory-collection-heading">正式记忆 <span>{current.view.memories.length} 条</span></h3>{current.view.memories.length===0?<p className="memory-browser-empty">当前范围没有可展示的正式记忆。</p>:<div className="memory-timeline-list">{memoriesBySourceTime(current.view.memories).map(memory=><Memory key={`${memory.id}:${memory.headRevision}`} memory={memory} busy={busy} decide={request=>void decide(request)}/>)}</div>}</section>
-    <aside className="memory-candidates-aside" aria-label="候选原稿"><h3 className="memory-collection-heading">候选原稿 <span>{current.view.candidates.length} 条</span></h3>{current.view.candidates.length===0?<p className="memory-browser-empty">当前范围没有可展示的候选。</p>:<div className="memory-candidate-list">{current.view.candidates.map(candidate=><Candidate key={`${candidate.id}:${candidate.stateRevision}`} candidate={candidate} busy={busy} decide={request=>void decide(request)}/>)}</div>}</aside></div><p className="memory-timeline-note">按已知聊天来源时间排列 · 日期以本机时区显示，不代表事件发生日。</p></>}
+   {currentNotice&&<p role={currentNotice.error?'alert':'status'}>{currentNotice.message}{currentNotice.error&&<button type="button" disabled={busy} onClick={restart}>重试读取记忆资料</button>}</p>}{busy&&<p role="status">正在核对记忆资料…</p>}
+   {current?.view.page?.preparing&&<p role="status">正在准备记忆列表，请稍候…</p>}
+   {current&&!current.view.page?.preparing&&<><div className="memory-timeline-layout"><section className="memory-timeline-section" aria-label="正式记忆时间线"><h3 className="memory-collection-heading">正式记忆 <span>{current.view.page?'本页 ':''}{current.view.memories.length} 条</span></h3>{current.view.memories.length===0?<p className="memory-browser-empty">本页没有可展示的正式记忆。</p>:<div className="memory-timeline-list">{memoriesBySourceTime(current.view.memories).map(memory=><Memory key={`${memory.id}:${memory.headRevision}`} memory={memory} busy={busy} bridge={bridge} request={readRequest!} authority={current} decide={request=>void decide(request)}/>)}</div>}</section>
+    <aside className="memory-candidates-aside" aria-label="候选原稿"><h3 className="memory-collection-heading">候选原稿 <span>{current.view.page?'本页 ':''}{current.view.candidates.length} 条</span></h3>{current.view.candidates.length===0?<p className="memory-browser-empty">本页没有可展示的候选。</p>:<div className="memory-candidate-list">{current.view.candidates.map(candidate=><Candidate key={`${candidate.id}:${candidate.stateRevision}`} candidate={candidate} busy={busy} decide={request=>void decide(request)}/>)}</div>}</aside></div><p className="memory-timeline-note">{current.view.page?'本页':''}按已知聊天来源时间排列 · 日期以本机时区显示，不代表事件发生日。</p></>}
+   <nav className="sqlite-memory-actions" aria-label="记忆列表分页">
+    <button type="button" disabled={busy||!previousPages.length} onClick={()=>changePage(previousPages.at(-1),previousPages.slice(0,-1))}>上一页记忆</button>
+    <span>第 {previousPages.length+1} 页</span>
+    <button type="button" disabled={busy||!current?.view.page?.nextCursor} onClick={()=>changePage(current!.view.page!.nextCursor!,[...previousPages,pageCursor.current])}>下一页记忆</button>
+    <button type="button" disabled={busy} onClick={restart}>重新读取第一页</button>
+   </nav>
    </div>
    <div hidden={level==='L1'}>{readRequest&&scopeKind==='contact'&&typeof bridge.readDocuments==='function'?<SqliteMemoryDocumentsPanel visible={visible&&level!=='L1'} bridge={bridge} request={readRequest} level={level==='L3'?'L3':'L2'} refreshKey={documentsRefreshKey} blocked={documentsBlocked} managementBusy={busy} retryManagement={()=>void refresh.current()}/>:<p className="memory-browser-empty">{scopeKind==='self'?(level==='L3'?'本人全局概览不在当前联系人页面展示。':'本人全局主题资料不在当前联系人页面展示。'):'当前连接暂不支持读取主题资料与长期概览。'}</p>}</div>
   </div>}

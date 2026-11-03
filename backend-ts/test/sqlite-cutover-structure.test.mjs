@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SqliteStorage } from '../src/storage/sqlite/client.ts';
+import { registry } from '../src/storage/sqlite/registry.ts';
 import { SqliteSkillLibrary } from '../src/skills/sqlite/library.ts';
 import { EXPECTED_TABLES, FORBIDDEN_TABLES, DEFERRED_DESIGN_TABLES, REPLACED_DESIGN_TABLES } from '../src/platform/cutover/structure.ts';
 import { dumpSchema, readBaseline } from './fixtures/cutover/build-structure-baseline.mjs';
@@ -20,7 +21,7 @@ async function fixture(t) {
   return { root, database: path.join(root, 'managed/sqlite/notalone.sqlite'), status };
 }
 
-test('实际 DDL 与 92 表结构基线逐表一致（含 CHECK、触发器 body、FK action、索引 SQL 与视图）', async t => {
+test('实际 DDL 与 95 表结构基线逐表一致（含 CHECK、触发器 body、FK action、索引 SQL 与视图）', async t => {
   const f = await fixture(t);
   const actual = dumpSchema(f.database);
   // sqliteVersion 随运行构建的 SQLite 版本变化，不参与结构等价；其余元数据必须逐项一致。
@@ -29,10 +30,10 @@ test('实际 DDL 与 92 表结构基线逐表一致（含 CHECK、触发器 body
   assert.match(actualSqliteVersion, /^\d+\.\d+\.\d+$/);
   if (baselineSqliteVersion !== undefined) assert.match(baselineSqliteVersion, /^\d+\.\d+\.\d+$/);
   assert.deepEqual(actualStable, baselineStable, '结构元数据与基线不一致');
-  assert.equal(actual.metadata.checkCount, 295);
-  assert.equal(actual.metadata.triggerCount, 99);
-  assert.deepEqual(actual.metadata.migrationVersions, Array.from({ length: 28 }, (_, index) => index + 1));
-  assert.equal(actual.metadata.userVersion, 28);
+  assert.equal(actual.metadata.checkCount, 301);
+  assert.equal(actual.metadata.triggerCount, 120);
+  assert.deepEqual(actual.metadata.migrationVersions, registry.migrations.map(migration => migration.version));
+  assert.equal(actual.metadata.userVersion, baseline.metadata.schemaVersion);
   assert.deepEqual(Object.keys(actual.tables), EXPECTED_TABLES, '实际表集合必须等于实现表基线');
   for (const [name, expected] of Object.entries(baseline.tables)) {
     const table = actual.tables[name];
@@ -65,14 +66,14 @@ test('迁移账本、结构版本与重开身份稳定', async t => {
   const db = new DatabaseSync(f.database, { readOnly: true });
   try {
     const ledger = db.prepare('SELECT version FROM schema_migration ORDER BY version').all().map(row => Number(row.version));
-    assert.deepEqual(ledger, Array.from({ length: 28 }, (_, index) => index + 1));
-    assert.equal(Number(db.prepare('PRAGMA user_version').all()[0].user_version), 28);
+    assert.deepEqual(ledger, registry.migrations.map(migration => migration.version));
+    assert.equal(Number(db.prepare('PRAGMA user_version').all()[0].user_version), baseline.metadata.schemaVersion);
     assert.equal(Number(db.prepare('SELECT COUNT(*) AS n FROM database_instance').all()[0].n), 1);
   } finally { db.close(); }
   const reopened = await SqliteStorage.open({ userData: f.root, intent: 'open', expectedDatabaseId: f.status.databaseId, role: 'test' });
   try {
     assert.equal(reopened.status.databaseId, f.status.databaseId);
-    assert.equal(reopened.status.schemaVersion, 28);
+    assert.equal(reopened.status.schemaVersion, baseline.metadata.schemaVersion);
     assert.deepEqual(await reopened.check(), { integrity: 'ok', foreignKeys: 'ok' });
     const ownerId = await reopened.execute('identity.resolveOwner', { proposedOwnerId: '11111111-1111-4111-8111-111111111111', at: 1 });
     const skillRoot = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-cutover-skill-root-')));
@@ -85,7 +86,7 @@ test('迁移账本、结构版本与重开身份稳定', async t => {
     const snapshot = await reopened.execute('cutover.snapshot', { ownerId });
     assert.deepEqual(snapshot.missingTables, []);
     assert.deepEqual(snapshot.unexpectedTables, []);
-    assert.equal(snapshot.tables.length, 92);
+    assert.equal(snapshot.tables.length, 95);
     assert.deepEqual(snapshot.media, { message_media: 0, current_files: 0, staged_files: 0, cleanup_pending: 0, attempts_running: 0 });
     assert.deepEqual(snapshot.skills, { packages: 1, revisions: 1, enabled: 1, unknown: 0 });
   } finally { await reopened.close(); }

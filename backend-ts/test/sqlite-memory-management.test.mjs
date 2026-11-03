@@ -36,7 +36,7 @@ test('记忆来源时间沿核验消息投影，未知时间不借用决定或�
   assert.ok(candidate.sources.length>0);assert.ok(candidate.sources.every(source=>source.contactId===contactId));
   for(const source of candidate.sources){assert.equal(source.sentAt,sentAt);assert.equal(source.timePrecision,timePrecision);}
   await f.management.decide({requestKey:`source-time-${contactId}`,action:'accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]});
-  const memory=(await f.management.read(scope)).memories[0];assert.ok(memory.decisions[0].createdAt);
+  const memory=(await f.management.read(scope)).memories[0];assert.ok((await f.management.readHistory(scope,memory.id)).decisions[0].createdAt);
   assert.deepEqual(memory.current.sources,candidate.sources);assert.deepEqual(memory.versions[0].sources,candidate.sources);
  }
 });
@@ -72,7 +72,7 @@ test('05来源删除清候选、版本及敏感决定，本人跨联系人闭包
  const {ActiveHolders}=await import('../src/storage/sqlite/deletion/holders.ts');const {ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
  const deletion=new DeletionService(f.storage,new ActiveHolders(),new ManagedFiles(f.root));
  const plan=await deletion.plan({ownerId:owner,requestKey:'delete-memory-source',scope:{kind:'source',contactId:f.a,sourceId:candidate.sources[0].recordId}});
- assert.deepEqual(await f.management.read(aScope),{candidates:[],memories:[]});
+ const clearing=await f.management.read(aScope);assert.deepEqual(clearing.candidates,[]);assert.deepEqual(clearing.memories,[]);assert.equal(clearing.page.nextCursor,null);
  const done=await deletion.advance({ownerId:owner,operationId:plan.operationId});assert.equal(done.state,'completed',JSON.stringify(done.checks));
  const after=await f.management.read(aScope);assert.equal(after.candidates.length,0);assert.equal(after.memories.find(m=>m.id===adopted.memoryId)?.current??null,null);assert.ok(after.memories.every(m=>m.versions.every(v=>v.body===null)));
  const selfAfter=await f.management.read(selfScope);assert.equal(selfAfter.candidates.length,0);assert.deepEqual(selfAfter.memories.flatMap(m=>m.current?[m.current.body]:[]),['独立手录仍然合法']);
@@ -93,7 +93,7 @@ test('新自动采纳可明确撤回，修正与变化保留不同版本来历�
  m=(await f.management.read(s)).memories.find(m=>m.id===manual.memoryId);
  await f.management.decide({requestKey:'change',action:'change',memoryId:m.id,expectedVersionNo:'2',expectedHeadRevision:m.headRevision,body:'后来发生变化'});
  m=(await f.management.read(s)).memories.find(m=>m.id===manual.memoryId);
- assert.equal(m.current.body,'后来发生变化');assert.deepEqual(m.versions.map(v=>v.formationKind),['manual','correction','change']);assert.equal(adopted.versionNo,'1');
+ assert.equal(m.current.body,'后来发生变化');assert.deepEqual((await f.management.readHistory(s,m.id)).versions.map(v=>v.formationKind),['manual','correction','change']);assert.equal(adopted.versionNo,'1');
 });
 
 test('正式知识读取只返回当前版，未确认独立标注并复验头修订、本人及联系人隔离',async t=>{
@@ -154,7 +154,7 @@ test('处理结束窄hook从07正常核验输出自动发布，重试不重复�
  extraction=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>extraction.accounting,supplier().respond),undefined,runId=>management.publishRun(runId));t.after(()=>extraction.close());
  const run=await extraction.start('normal-hook-auto');await extraction.waitForIdle();
  const before=await management.read({scopeKind:'contact',contactId});assert.equal(before.memories.length,1);assert.equal(before.memories[0].current.adoptionMode,'auto');assert.equal(before.candidates[0].state,'adopted');
- assert.equal(before.memories[0].decisions[0].actorKind,'system');await management.publishRun(run.runId);const after=await management.read({scopeKind:'contact',contactId});assert.deepEqual(after,before);
+ assert.equal((await management.readHistory({scopeKind:'contact',contactId},before.memories[0].id)).decisions[0].actorKind,'system');await management.publishRun(run.runId);const after=await management.read({scopeKind:'contact',contactId});assert.deepEqual(after,before);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 

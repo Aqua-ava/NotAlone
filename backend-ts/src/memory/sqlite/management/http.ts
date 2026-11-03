@@ -7,7 +7,11 @@ const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const fields=new Set(['requestKey','action','candidateIds','candidateRevisions','memoryId','expectedVersionNo','expectedHeadRevision','restoredFromVersionNo','expectedMergedParents','body','scope']);
 export function memoryManagementQueryAllowed(method:string|undefined,url:URL):boolean{
  const keys=[...url.searchParams.keys()],kind=url.searchParams.get('scope_kind'),contactId=url.searchParams.get('contact_id');
- return method==='GET'&&url.pathname==='/api/memory-management'&&new Set(keys).size===keys.length&&keys.every(k=>['scope_kind','contact_id'].includes(k))&&['self','contact'].includes(kind??'')&&(kind==='self'?contactId===null:uuid.test(contactId??''));
+ const history=url.pathname==='/api/memory-management/history';
+ return method==='GET'&&(url.pathname==='/api/memory-management'||history)&&new Set(keys).size===keys.length&&keys.every(k=>['scope_kind','contact_id','display_contact_id','cursor','memory_id',...history?[]:['candidate_id']].includes(k))
+  &&['self','contact'].includes(kind??'')&&(kind==='self'?contactId===null:uuid.test(contactId??''))
+  &&['display_contact_id','memory_id','candidate_id'].every(key=>!url.searchParams.has(key)||uuid.test(url.searchParams.get(key)!))
+  &&(!history||url.searchParams.has('memory_id'))&&(!url.searchParams.has('cursor')||/^[A-Za-z0-9_-]{1,4096}$/.test(url.searchParams.get('cursor')!));
 }
 function send(res:ServerResponse,status:number,value:unknown){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));}
 /** owner来自宿主，系统自动决定没有HTTP分支。 */
@@ -19,10 +23,17 @@ export class SqliteMemoryManagementHttp {
   const url=new URL(req.url??'/','http://localhost');if(!url.pathname.startsWith('/api/memory-management'))return false;
   if(!this.authorize(req)||req.headers.origin!==undefined){send(res,401,{error:'unauthorized'});return true;}
   try{
-   if(url.pathname==='/api/memory-management'&&req.method==='GET'){
+   if(['/api/memory-management','/api/memory-management/history'].includes(url.pathname)&&req.method==='GET'){
     const kind=url.searchParams.get('scope_kind'),contactId=url.searchParams.get('contact_id');
     if(!memoryManagementQueryAllowed(req.method,url))throw new StorageFailure('memory_request_invalid');
-    send(res,200,await this.service.read({scopeKind:kind as 'self'|'contact',contactId}));
+    const scope={scopeKind:kind as 'self'|'contact',contactId},query={
+     ...(url.searchParams.has('display_contact_id')?{displayContactId:url.searchParams.get('display_contact_id')!}:{}),
+     ...(url.searchParams.has('cursor')?{cursor:url.searchParams.get('cursor')!}:{}),
+    };
+    const controller=new AbortController(),cancel=()=>controller.abort();res.once('close',cancel);
+    try{send(res,200,url.pathname.endsWith('/history')?await this.service.readHistory(scope,url.searchParams.get('memory_id')!,query):await this.service.read(scope,{...query,
+     ...(url.searchParams.has('memory_id')?{memoryId:url.searchParams.get('memory_id')!}:{}),...(url.searchParams.has('candidate_id')?{candidateId:url.searchParams.get('candidate_id')!}:{}),
+    },{signal:controller.signal}));}finally{res.removeListener('close',cancel);}
    }else if(url.pathname==='/api/memory-management/decisions'&&req.method==='POST'&&!url.search){
     const request=JSON.parse((await readWechatHttpBody(req,65536,10000)).toString('utf8'));
     if(!request||Array.isArray(request)||Object.keys(request).some(k=>!fields.has(k))||!uuid.test(request.requestKey??'')||['auto_accept','auto_update','auto_retire','auto_noop'].includes(request.action)||request.scope&&Object.keys(request.scope).some(k=>!['scopeKind','contactId'].includes(k)))throw new StorageFailure('memory_request_invalid');

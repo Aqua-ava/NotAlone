@@ -175,7 +175,7 @@ for(const action of ['correct','change'])test(`有时间限制的记忆经${acti
  let view=await management.read(scope),editedMemory=view.memories.find(item=>item.id===memory.id);
  assert.equal(editedMemory.current.body,edited,'改写版仍须在管理页可回看');
  assert.equal(editedMemory.current.timeStatus,'needs_revalidation','未核验的新版本不可继承或洗掉已知旧期限');
- assert.equal(editedMemory.versions[0].timeStatus,'eligible','有明确期限的原版在到期前仍有效');
+ assert.equal((await management.readHistory(scope,memory.id)).versions[0].timeStatus,'eligible','有明确期限的原版在到期前仍有效');
  await management.decide({requestKey:`expiry-chain-${action}`,action:'change',memoryId:memory.id,expectedVersionNo:editedMemory.current.versionNo,expectedHeadRevision:editedMemory.headRevision,body:`${edited}再记录变化。`});
  editedMemory=(await management.read(scope)).memories.find(item=>item.id===memory.id);
  assert.equal(editedMemory.current.timeStatus,'needs_revalidation','连续改写仍依赖受限前驱');
@@ -186,7 +186,7 @@ for(const action of ['correct','change'])test(`有时间限制的记忆经${acti
  const afterExpiry=Date.parse(expiry)+1000;t.mock.timers.setTime(afterExpiry);await f.storage.execute('fixture.setTime',{time:afterExpiry});
  editedMemory=(await management.read(scope)).memories.find(item=>item.id===memory.id);
  assert.equal(editedMemory.current.timeStatus,'needs_revalidation','旧期限过后仍须核验新版本，而非把旧期限当作新事实');
- assert.equal(editedMemory.versions[0].timeStatus,'out_of_window');
+ assert.equal((await management.readHistory(scope,memory.id)).versions[0].timeStatus,'out_of_window');
  assert.ok(!(await f.storage.execute('fixture.knowledge',query)).some(item=>item.text.includes(expiredText)));
  // 没有已知受限前驱的独立手录及其修正保持未知，不因本门禁被排除。
  const manual=await management.decide({requestKey:`expiry-manual-${action}`,action:'manual',scope,body:'联系人喜欢合成麦茶。'});

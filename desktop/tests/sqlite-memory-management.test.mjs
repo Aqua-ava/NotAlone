@@ -18,6 +18,23 @@ async function fixture(t,handle){
  return {controller,calls,invalidations,state,change:()=>{generation++;controller.synchronize();}};
 }
 const scope={scopeKind:'self',contactId:null},read={scope,displayContactId:contact,scopeRevision:1};
+test('管理分页保留游标，后页决定按身份复验，历史只接受原头修订及同联系人来源',async t=>{
+ const revision='a'.repeat(64),historyCursor='synthetic_history_page',pageCursor='synthetic_list_page';let badHead=false;
+ const version={mergeParents:[],mergeParentCount:0,verificationState:'verified',timeStatus:'eligible',versionNo:'2',body:'后页的合成记忆',formationKind:'correction',adoptionMode:'user',previousVersionNo:'1',restoredFromVersionNo:null,contentState:'present',provenanceState:'eligible',decisionId:requestKey,sources:[source(contact)],contributingContactIds:[contact]};
+ const memory={id:candidate,scopeKind:'self',contactId:null,headRevision:'2',state:'active',manualProtection:false,current:version,versions:[version],decisions:[]};
+ const f=await fixture(t,async request=>{
+  const url=new URL(request.path,'http://local');
+  if(request.method==='POST')return {decisionId:requestKey,memoryId:candidate,versionNo:'3',action:'correct'};
+  if(url.pathname.endsWith('/history'))return {memoryId:candidate,headRevision:badHead?'3':'2',versions:[version],decisions:[],revision,nextCursor:historyCursor};
+  return {candidates:[],memories:url.searchParams.get('memory_id')===candidate||url.searchParams.get('cursor')===pageCursor?[memory]:[],page:{revision,nextCursor:pageCursor}};
+ });
+ const page=await f.controller.read({...read,cursor:pageCursor});assert.equal(page.view.memories[0].id,candidate);assert.deepEqual(page.view.page,{revision,nextCursor:pageCursor});
+ assert.equal(new URL(f.calls[0].path,'http://local').searchParams.get('display_contact_id'),contact);
+ const result=await f.controller.decide({...read,connectionGeneration:1,request:{requestKey,action:'correct',memoryId:candidate,expectedVersionNo:'2',expectedHeadRevision:'2',body:'修正后'}});
+ assert.equal(result.status,'applied');assert.ok(f.calls.some(call=>new URL(call.path,'http://local').searchParams.get('memory_id')===candidate));
+ const history=await f.controller.readHistory({...read,memoryId:candidate,expectedHeadRevision:'2'});assert.equal(history.view.nextCursor,historyCursor);
+ badHead=true;await assert.rejects(f.controller.readHistory({...read,memoryId:candidate,expectedHeadRevision:'2',cursor:historyCursor}));assert.equal(f.invalidations.length,1);
+});
 test('当前联系人页面不得读取全局本人主题与概览',async t=>{
  const f=await fixture(t,async()=>{throw new Error('本人全局概览不应请求');});
  await assert.rejects(f.controller.readDocuments(read));assert.equal(f.calls.length,0);

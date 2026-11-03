@@ -5,9 +5,9 @@ import {supplier} from './fixtures/memory-management/supplier.mjs';
 import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 
-async function prepared(t,{legacy=false,partialQuote=false,archive=false,modernNonreviewable=false,reuse=false}={}){
+async function prepared(t,{legacy=false,partialQuote=false,archive=false,modernNonreviewable=false,reuse=false,timeline=false}={}){
  const f=await fixture(t,{registryModule:new URL('./fixtures/memory-management/admission-registry.mjs',import.meta.url).href}),contactId=f.saved[0].contact_id;
- f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:legacy||modernNonreviewable?'我长期住在高雄吗？':partialQuote?'🙂旁白。我长期住在高雄。附带说明。':'我长期住在高雄。'}),record('2',{sender:'owner',text:'我长期偏好绿茶。'})],completedPartitions:['shard-a'],exhausted:true});
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:legacy||modernNonreviewable?'我长期住在高雄吗？':partialQuote?'🙂旁白。我长期住在高雄。附带说明。':'我长期住在高雄。',...(timeline?{sentAt:'1600000000000'}:{})}),record('2',{sender:'owner',text:'我长期偏好绿茶。',...(timeline?{sentAt:'1800000000000'}:{})}),...(timeline?[record('3',{text:'我长期喜欢慢跑。',sentAt:'1700000000000'})]:[])],completedPartitions:['shard-a'],exhausted:true});
  await f.service.synchronize(contactId);await f.contacts.setReading(false);
  const normal=supplier(),respond=async(request,input)=>{
   const result=await normal.respond(partialQuote?{...request,validateOutput:()=>{}}:request,input);
@@ -235,16 +235,29 @@ for(const scenario of ['active','withdrawn','replaced_memory_id','merged_memory_
  };
  const {SqliteMemoryAdjudication}=await import('../src/memory/sqlite/management/adjudication-service.ts'),{ActiveHolders}=await import('../src/storage/sqlite/deletion/holders.ts');
  const runtime=new SqliteMemoryAdjudication(f.storage,owner,modelPort(()=>extraction.accounting,respond),new ActiveHolders());t.after(()=>runtime.close());await runtime.initialize();await runtime.publishRun(run.runId);
- const view=await management.read(scope),after=view.memories[0];assert.equal(view.memories.length,1);assert.equal(after.versions.length,1);assert.deepEqual(after.current,memory.current);assert.equal(after.headRevision,memory.headRevision);assert.equal(after.manualProtection,memory.manualProtection);assert.equal(after.state,memory.state);
- if(malformed){assert.equal(view.candidates.find(c=>c.id===pending.id).state,'pending');assert.equal(after.decisions.filter(d=>d.action==='auto_noop').length,0);assert.deepEqual(purposes,['adjudication']);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});return;}
+ const view=await management.read(scope),after=view.memories[0],history=await management.readHistory(scope,after.id);assert.equal(view.memories.length,1);assert.equal(after.versions.length,1);assert.deepEqual(after.current,memory.current);assert.equal(after.headRevision,memory.headRevision);assert.equal(after.manualProtection,memory.manualProtection);assert.equal(after.state,memory.state);
+ if(malformed){assert.equal(view.candidates.find(c=>c.id===pending.id).state,'pending');assert.equal(history.decisions.filter(d=>d.action==='auto_noop').length,0);assert.deepEqual(purposes,['adjudication']);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});return;}
  assert.equal(view.candidates.find(c=>c.id===pending.id).state,'duplicate');assert.equal(view.candidates.filter(c=>c.state==='adopted').length,1);if(scenario==='withdrawn')assert.equal(after.current,null);
  const knowledge=await f.storage.execute('fixture.memoryKnowledge',{ownerId:owner,contactId,discussionId:`duplicate-${scenario}`});
  assert.ok(!knowledge.some(item=>item.kind==='memory_candidate'&&item.id===pending.id));assert.equal(knowledge.some(item=>item.kind==='memory'&&item.id===memory.id),scenario==='active');
- assert.deepEqual(purposes,['adjudication','relation_verification']);assert.equal(after.decisions.filter(d=>d.action==='auto_noop'&&d.actorKind==='system').length,1);
+ assert.deepEqual(purposes,['adjudication','relation_verification']);assert.equal(history.decisions.filter(d=>d.action==='auto_noop'&&d.actorKind==='system').length,1);
  const trace=await f.storage.execute('fixture.adjudicationTrace',{ownerId:owner}),noop=trace.decisions.find(d=>d.action==='auto_noop');assert.ok(noop.execution_id);assert.equal(noop.expected_version_no,1n);assert.equal(noop.expected_head_revision,BigInt(memory.headRevision));
  await runtime.publishRun(run.runId);assert.deepEqual(await management.read(scope),view);assert.equal(purposes.length,2);
  const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts'),{ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
  const deletion=new DeletionService(f.storage,new ActiveHolders(),new ManagedFiles(f.root)),source=pending.sources[0],plan=await deletion.plan({ownerId:owner,requestKey:`duplicate-source-${scenario}`,scope:{kind:'source',contactId,sourceId:source.recordId}});
  assert.equal((await deletion.advance({ownerId:owner,operationId:plan.operationId})).state,'completed');assert.equal((await management.read(scope)).candidates.length,0);assert.equal((await management.read(scope)).memories[0].current,null);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+
+test('旧整窗引文的分页时间序只按实际展示来源，不借用同窗较晚消息',{timeout:10000},async t=>{
+ const f=await prepared(t,{archive:true,timeline:true}),scope={scopeKind:'contact',contactId:f.contactId};
+ const candidates=(await f.management.read(scope)).candidates,city=candidates.find(candidate=>candidate.body.includes('高雄')),running=candidates.find(candidate=>candidate.body.includes('慢跑'));
+ const a=await f.management.decide({requestKey:'legacy-timeline-city',action:'accept',candidateIds:[city.id],candidateRevisions:[city.stateRevision]});
+ const b=await f.management.decide({requestKey:'legacy-timeline-running',action:'accept',candidateIds:[running.id],candidateRevisions:[running.stateRevision]});
+ await f.storage.execute('fixture.archiveWholeWindow',{ownerId:owner,candidateId:city.id,memoryId:a.memoryId});
+ const archived=await f.storage.execute('fixture.archiveState',{ownerId:owner});
+ const page=await f.management.read(scope);assert.deepEqual(page.memories.map(memory=>memory.id),[b.memoryId,a.memoryId]);
+ assert.deepEqual(page.memories.map(memory=>memory.current.sources.map(source=>source.sentAt)),[['1700000000000'],['1600000000000']]);
+ assert.deepEqual(await f.storage.execute('fixture.archiveState',{ownerId:owner}),archived,'重建排序不改原事件、引文和来源');
 });

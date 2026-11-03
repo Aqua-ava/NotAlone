@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 28,
+  "schemaVersion": 37,
   "migrationVersions": [
    1,
    2,
@@ -29,15 +29,24 @@
    25,
    26,
    27,
-   28
+   28,
+   29,
+   30,
+   31,
+   32,
+   33,
+   34,
+   35,
+   36,
+   37
   ],
-  "userVersion": 28,
+  "userVersion": 37,
   "sqliteVersion": "3.53.4",
-  "tableCount": 92,
-  "fieldCount": 914,
-  "foreignKeyGroups": 192,
-  "triggerCount": 99,
-  "checkCount": 295,
+  "tableCount": 95,
+  "fieldCount": 957,
+  "foreignKeyGroups": 195,
+  "triggerCount": 120,
+  "checkCount": 301,
   "viewCount": 0
  },
  "tables": {
@@ -878,6 +887,13 @@
      "notnull": 1,
      "dflt_value": "'active'",
      "pk": 0
+    },
+    {
+     "name": "management_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": "0",
+     "pk": 0
     }
    ],
    "foreignKeys": [
@@ -905,7 +921,7 @@
      "sql": null
     }
    ],
-   "sql": "CREATE TABLE contact ( owner_id TEXT NOT NULL, id TEXT NOT NULL, display_name TEXT, remark TEXT, selection_generation INTEGER NOT NULL DEFAULT 0 CHECK(selection_generation>=0), data_generation INTEGER NOT NULL DEFAULT 0 CHECK(data_generation>=0), source_revision INTEGER NOT NULL DEFAULT 0, memory_revision INTEGER NOT NULL DEFAULT 0, document_revision INTEGER NOT NULL DEFAULT 0, feedback_revision INTEGER NOT NULL DEFAULT 0, current_publication_id TEXT, state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active','deleting','deleted')), PRIMARY KEY(owner_id,id), FOREIGN KEY(owner_id) REFERENCES owner(owner_id) ) STRICT"
+   "sql": "CREATE TABLE contact ( owner_id TEXT NOT NULL, id TEXT NOT NULL, display_name TEXT, remark TEXT, selection_generation INTEGER NOT NULL DEFAULT 0 CHECK(selection_generation>=0), data_generation INTEGER NOT NULL DEFAULT 0 CHECK(data_generation>=0), source_revision INTEGER NOT NULL DEFAULT 0, memory_revision INTEGER NOT NULL DEFAULT 0, document_revision INTEGER NOT NULL DEFAULT 0, feedback_revision INTEGER NOT NULL DEFAULT 0, current_publication_id TEXT, state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active','deleting','deleted')), management_revision INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(owner_id,id), FOREIGN KEY(owner_id) REFERENCES owner(owner_id) ) STRICT"
   },
   "conversation_binding": {
    "columns": [
@@ -5034,6 +5050,334 @@
    ],
    "sql": "CREATE TABLE history_source_exclusion ( owner_id TEXT NOT NULL,conversation_id TEXT NOT NULL,scheme TEXT NOT NULL CHECK(scheme IN ('local','server')),external_key TEXT NOT NULL,operation_id TEXT NOT NULL, PRIMARY KEY(owner_id,conversation_id,scheme,external_key), FOREIGN KEY(owner_id,conversation_id) REFERENCES channel_conversation(owner_id,id) ) STRICT"
   },
+  "history_source_recertification": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "request_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "runtime_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "stage",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "failure_code",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "started_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "updated_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "finished_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "old_binding_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "new_binding_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "new_grant_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "old_token_json",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "token_json",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "target_json",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "support_json",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "guard_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "guard_state",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": "'none'",
+     "pk": 0
+    },
+    {
+     "name": "goal_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "preserved_message_count",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "old_fence_json",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "old_scope_json",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "old_lease_json",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "history_recertification_contact",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "started_at"
+     ],
+     "sql": "CREATE INDEX history_recertification_contact ON history_source_recertification(owner_id,contact_id,started_at)"
+    },
+    {
+     "name": "history_recertification_running",
+     "unique": 1,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id"
+     ],
+     "sql": "CREATE UNIQUE INDEX history_recertification_running ON history_source_recertification(owner_id,contact_id) WHERE state='running'"
+    },
+    {
+     "name": "sqlite_autoindex_history_source_recertification_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "request_key"
+     ],
+     "sql": null
+    },
+    {
+     "name": "sqlite_autoindex_history_source_recertification_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE history_source_recertification ( owner_id TEXT NOT NULL,id TEXT NOT NULL,contact_id TEXT NOT NULL,request_key TEXT NOT NULL,runtime_id TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('running','completed','failed','interrupted')), stage TEXT NOT NULL CHECK(stage IN ('metadata','history','activation','completed')), failure_code TEXT,started_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,finished_at INTEGER, old_binding_id TEXT NOT NULL,new_binding_id TEXT,new_grant_id TEXT,old_token_json TEXT NOT NULL, token_json TEXT,target_json TEXT,support_json TEXT,guard_id TEXT,guard_state TEXT NOT NULL DEFAULT 'none' CHECK(guard_state IN ('none','active','lost')), goal_id TEXT,preserved_message_count INTEGER NOT NULL,old_fence_json TEXT NOT NULL,old_scope_json TEXT,old_lease_json TEXT, PRIMARY KEY(owner_id,id),UNIQUE(owner_id,request_key),FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) ) STRICT"
+  },
+  "history_source_recertification_cancel": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "request_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "cancelled_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "history_recertification_cancel_contact",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id"
+     ],
+     "sql": "CREATE INDEX history_recertification_cancel_contact ON history_source_recertification_cancel(owner_id,contact_id)"
+    },
+    {
+     "name": "sqlite_autoindex_history_source_recertification_cancel_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "request_key"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE history_source_recertification_cancel ( owner_id TEXT NOT NULL,contact_id TEXT NOT NULL,request_key TEXT NOT NULL,cancelled_at INTEGER NOT NULL, PRIMARY KEY(owner_id,request_key),FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) ) STRICT"
+  },
   "history_source_terminal": {
    "columns": [
     {
@@ -5864,6 +6208,13 @@
      "notnull": 0,
      "dflt_value": null,
      "pk": 0
+    },
+    {
+     "name": "image_quality_evidence",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
     }
    ],
    "foreignKeys": [
@@ -6061,7 +6412,7 @@
      "sql": null
     }
    ],
-   "sql": "CREATE TABLE media_file ( owner_id TEXT NOT NULL,id TEXT NOT NULL,contact_id TEXT NOT NULL,message_id TEXT NOT NULL,produced_attempt_id TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('image_display','audio_source','audio_playback','video_playback')), image_quality TEXT NOT NULL CHECK(image_quality IN ('original','thumbnail','unknown','not_applicable')), quality_proof TEXT,format TEXT,mime_type TEXT,byte_size INTEGER CHECK(byte_size>0),content_digest TEXT, managed_locator TEXT,expected_file_identity TEXT,managed_address TEXT,parent_file_id TEXT, content_state TEXT NOT NULL CHECK(content_state IN ('present','erased')), publish_state TEXT NOT NULL CHECK(publish_state IN ('staged','current','retired','cleanup_pending')), container_valid INTEGER NOT NULL DEFAULT 0 CHECK(container_valid IN (0,1)), viewable INTEGER NOT NULL DEFAULT 0 CHECK(viewable IN (0,1)),playable INTEGER NOT NULL DEFAULT 0 CHECK(playable IN (0,1)), created_at INTEGER NOT NULL CHECK(created_at>=0),cleanup_operation_id TEXT, PRIMARY KEY(owner_id,id),UNIQUE(owner_id,contact_id,message_id,id),UNIQUE(owner_id,managed_locator), FOREIGN KEY(owner_id,contact_id,message_id) REFERENCES message_media(owner_id,contact_id,message_id) DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(owner_id,contact_id,message_id,produced_attempt_id) REFERENCES media_extraction_attempt(owner_id,contact_id,message_id,id) DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(owner_id,contact_id,message_id,parent_file_id) REFERENCES media_file(owner_id,contact_id,message_id,id) DEFERRABLE INITIALLY DEFERRED, CHECK((role='image_display' AND image_quality IN ('original','thumbnail','unknown')) OR (role<>'image_display' AND image_quality='not_applicable')), CHECK(content_state='erased' OR image_quality<>'original' OR quality_proof IS NOT NULL), CHECK(publish_state<>'current' OR (content_state='present' AND managed_locator IS NOT NULL AND expected_file_identity IS NOT NULL AND managed_address IS NOT NULL AND format IS NOT NULL AND mime_type IS NOT NULL AND byte_size IS NOT NULL AND content_digest IS NOT NULL AND container_valid=1)), CHECK(content_state<>'erased' OR (managed_locator IS NULL AND expected_file_identity IS NULL AND managed_address IS NULL AND content_digest IS NULL AND quality_proof IS NULL)) ) STRICT"
+   "sql": "CREATE TABLE media_file ( owner_id TEXT NOT NULL,id TEXT NOT NULL,contact_id TEXT NOT NULL,message_id TEXT NOT NULL,produced_attempt_id TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('image_display','audio_source','audio_playback','video_playback')), image_quality TEXT NOT NULL CHECK(image_quality IN ('original','thumbnail','unknown','not_applicable')), quality_proof TEXT,format TEXT,mime_type TEXT,byte_size INTEGER CHECK(byte_size>0),content_digest TEXT, managed_locator TEXT,expected_file_identity TEXT,managed_address TEXT,parent_file_id TEXT, content_state TEXT NOT NULL CHECK(content_state IN ('present','erased')), publish_state TEXT NOT NULL CHECK(publish_state IN ('staged','current','retired','cleanup_pending')), container_valid INTEGER NOT NULL DEFAULT 0 CHECK(container_valid IN (0,1)), viewable INTEGER NOT NULL DEFAULT 0 CHECK(viewable IN (0,1)),playable INTEGER NOT NULL DEFAULT 0 CHECK(playable IN (0,1)), created_at INTEGER NOT NULL CHECK(created_at>=0),cleanup_operation_id TEXT, image_quality_evidence TEXT CHECK(image_quality_evidence IS NULL OR (content_state<>'erased' AND role='image_display' AND length(image_quality_evidence)<=8192 AND json_valid(image_quality_evidence))), PRIMARY KEY(owner_id,id),UNIQUE(owner_id,contact_id,message_id,id),UNIQUE(owner_id,managed_locator), FOREIGN KEY(owner_id,contact_id,message_id) REFERENCES message_media(owner_id,contact_id,message_id) DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(owner_id,contact_id,message_id,produced_attempt_id) REFERENCES media_extraction_attempt(owner_id,contact_id,message_id,id) DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(owner_id,contact_id,message_id,parent_file_id) REFERENCES media_file(owner_id,contact_id,message_id,id) DEFERRABLE INITIALLY DEFERRED, CHECK((role='image_display' AND image_quality IN ('original','thumbnail','unknown')) OR (role<>'image_display' AND image_quality='not_applicable')), CHECK(content_state='erased' OR image_quality<>'original' OR quality_proof IS NOT NULL), CHECK(publish_state<>'current' OR (content_state='present' AND managed_locator IS NOT NULL AND expected_file_identity IS NOT NULL AND managed_address IS NOT NULL AND format IS NOT NULL AND mime_type IS NOT NULL AND byte_size IS NOT NULL AND content_digest IS NOT NULL AND container_valid=1)), CHECK(content_state<>'erased' OR (managed_locator IS NULL AND expected_file_identity IS NULL AND managed_address IS NULL AND content_digest IS NULL AND quality_proof IS NULL)) ) STRICT"
   },
   "memory": {
    "columns": [
@@ -6126,6 +6477,20 @@
      "type": "TEXT",
      "notnull": 0,
      "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "management_source_time",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "management_timeline_dirty",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": "1",
      "pk": 0
     }
    ],
@@ -6213,6 +6578,47 @@
    ],
    "indexes": [
     {
+     "name": "memory_management_timeline_dirty",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "scope_kind",
+      "contact_id",
+      "management_timeline_dirty",
+      "id"
+     ],
+     "sql": "CREATE INDEX memory_management_timeline_dirty ON memory(owner_id,scope_kind,contact_id,management_timeline_dirty,id)"
+    },
+    {
+     "name": "memory_management_timeline",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "scope_kind",
+      "contact_id",
+      null,
+      "id"
+     ],
+     "sql": "CREATE INDEX memory_management_timeline ON memory(owner_id,scope_kind,contact_id,(-coalesce(management_source_time,-1)),id)"
+    },
+    {
+     "name": "memory_management_page",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "scope_kind",
+      "contact_id",
+      "id"
+     ],
+     "sql": "CREATE INDEX memory_management_page ON memory(owner_id,scope_kind,contact_id,id)"
+    },
+    {
      "name": "memory_scope",
      "unique": 0,
      "partial": 0,
@@ -6237,7 +6643,7 @@
      "sql": null
     }
    ],
-   "sql": "CREATE TABLE memory ( owner_id TEXT NOT NULL,id TEXT NOT NULL,scope_kind TEXT NOT NULL CHECK(scope_kind IN ('self','contact')),contact_id TEXT, current_version_no INTEGER,head_revision INTEGER NOT NULL DEFAULT 0,state TEXT NOT NULL CHECK(state IN ('active','withdrawn','invalidated')), manual_protection INTEGER NOT NULL DEFAULT 0 CHECK(manual_protection IN (0,1)),protection_decision_id TEXT, PRIMARY KEY(owner_id,id),FOREIGN KEY(owner_id) REFERENCES owner(owner_id),FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id), FOREIGN KEY(owner_id,id,current_version_no) REFERENCES memory_version(owner_id,memory_id,version_no) DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(owner_id,protection_decision_id) REFERENCES memory_decision(owner_id,id) DEFERRABLE INITIALLY DEFERRED, CHECK((scope_kind='self' AND contact_id IS NULL) OR (scope_kind='contact' AND contact_id IS NOT NULL)),CHECK(state<>'active' OR current_version_no IS NOT NULL) ) STRICT"
+   "sql": "CREATE TABLE memory ( owner_id TEXT NOT NULL,id TEXT NOT NULL,scope_kind TEXT NOT NULL CHECK(scope_kind IN ('self','contact')),contact_id TEXT, current_version_no INTEGER,head_revision INTEGER NOT NULL DEFAULT 0,state TEXT NOT NULL CHECK(state IN ('active','withdrawn','invalidated')), manual_protection INTEGER NOT NULL DEFAULT 0 CHECK(manual_protection IN (0,1)),protection_decision_id TEXT, management_source_time INTEGER, management_timeline_dirty INTEGER NOT NULL DEFAULT 1 CHECK(management_timeline_dirty IN (0,1)), PRIMARY KEY(owner_id,id),FOREIGN KEY(owner_id) REFERENCES owner(owner_id),FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id), FOREIGN KEY(owner_id,id,current_version_no) REFERENCES memory_version(owner_id,memory_id,version_no) DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(owner_id,protection_decision_id) REFERENCES memory_decision(owner_id,id) DEFERRABLE INITIALLY DEFERRED, CHECK((scope_kind='self' AND contact_id IS NULL) OR (scope_kind='contact' AND contact_id IS NOT NULL)),CHECK(state<>'active' OR current_version_no IS NOT NULL) ) STRICT"
   },
   "memory_candidate": {
    "columns": [
@@ -6386,6 +6792,19 @@
    ],
    "indexes": [
     {
+     "name": "candidate_management_page",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "scope_kind",
+      "contact_id",
+      "id"
+     ],
+     "sql": "CREATE INDEX candidate_management_page ON memory_candidate(owner_id,scope_kind,contact_id,id)"
+    },
+    {
      "name": "candidate_producer",
      "unique": 0,
      "partial": 0,
@@ -6514,19 +6933,33 @@
     {
      "name": "span_start",
      "type": "INTEGER",
-     "notnull": 1,
+     "notnull": 0,
      "dflt_value": null,
      "pk": 0
     },
     {
      "name": "span_end",
      "type": "INTEGER",
-     "notnull": 1,
+     "notnull": 0,
      "dflt_value": null,
      "pk": 0
     },
     {
      "name": "explanation",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "content_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": "'text'",
+     "pk": 0
+    },
+    {
+     "name": "content_ref_json",
      "type": "TEXT",
      "notnull": 0,
      "dflt_value": null,
@@ -6627,6 +7060,19 @@
    ],
    "indexes": [
     {
+     "name": "memory_citation_message_timeline",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "source_contact_id",
+      "message_id",
+      "memory_id"
+     ],
+     "sql": "CREATE INDEX memory_citation_message_timeline ON memory_citation(owner_id,source_contact_id,message_id,memory_id)"
+    },
+    {
      "name": "memory_citation_candidate",
      "unique": 0,
      "partial": 0,
@@ -6673,7 +7119,7 @@
      "sql": null
     }
    ],
-   "sql": "CREATE TABLE memory_citation ( owner_id TEXT NOT NULL,id TEXT NOT NULL,candidate_id TEXT,memory_id TEXT,version_no INTEGER,source_contact_id TEXT NOT NULL,message_id TEXT NOT NULL,record_id TEXT NOT NULL, accepted_revision INTEGER NOT NULL,span_start INTEGER NOT NULL,span_end INTEGER NOT NULL,explanation TEXT, PRIMARY KEY(owner_id,id),FOREIGN KEY(owner_id,candidate_id) REFERENCES memory_candidate(owner_id,id),FOREIGN KEY(owner_id,memory_id,version_no) REFERENCES memory_version(owner_id,memory_id,version_no), FOREIGN KEY(owner_id,source_contact_id,record_id,message_id) REFERENCES capture_record(owner_id,contact_id,id,message_id),CHECK(span_start>=0 AND span_end>span_start), CHECK((candidate_id IS NOT NULL AND memory_id IS NULL AND version_no IS NULL) OR (candidate_id IS NULL AND memory_id IS NOT NULL AND version_no IS NOT NULL)) ) STRICT"
+   "sql": "CREATE TABLE \"memory_citation\" ( owner_id TEXT NOT NULL,id TEXT NOT NULL,candidate_id TEXT,memory_id TEXT,version_no INTEGER,source_contact_id TEXT NOT NULL,message_id TEXT NOT NULL,record_id TEXT NOT NULL, accepted_revision INTEGER NOT NULL,span_start INTEGER,span_end INTEGER,explanation TEXT, content_kind TEXT NOT NULL DEFAULT 'text',content_ref_json TEXT, PRIMARY KEY(owner_id,id),FOREIGN KEY(owner_id,candidate_id) REFERENCES memory_candidate(owner_id,id), FOREIGN KEY(owner_id,memory_id,version_no) REFERENCES memory_version(owner_id,memory_id,version_no), FOREIGN KEY(owner_id,source_contact_id,record_id,message_id) REFERENCES capture_record(owner_id,contact_id,id,message_id), CHECK((content_kind='text' AND span_start IS NOT NULL AND span_end IS NOT NULL AND span_start>=0 AND span_end>span_start AND content_ref_json IS NULL) OR (content_kind<>'text' AND length(content_kind)>0 AND span_start IS NULL AND span_end IS NULL AND content_ref_json IS NOT NULL AND json_valid(content_ref_json))), CHECK((candidate_id IS NOT NULL AND memory_id IS NULL AND version_no IS NULL) OR (candidate_id IS NULL AND memory_id IS NOT NULL AND version_no IS NOT NULL)) ) STRICT"
   },
   "memory_decision": {
    "columns": [
@@ -6872,6 +7318,19 @@
     }
    ],
    "indexes": [
+    {
+     "name": "decision_management_page",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "target_memory_id",
+      "created_at",
+      "id"
+     ],
+     "sql": "CREATE INDEX decision_management_page ON memory_decision(owner_id,target_memory_id,created_at,id)"
+    },
     {
      "name": "memory_decision_execution",
      "unique": 0,
@@ -9299,6 +9758,13 @@
      "notnull": 0,
      "dflt_value": null,
      "pk": 0
+    },
+    {
+     "name": "management_revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": "0",
+     "pk": 0
     }
    ],
    "foreignKeys": [],
@@ -9314,7 +9780,7 @@
      "sql": null
     }
    ],
-   "sql": "CREATE TABLE owner ( owner_id TEXT PRIMARY KEY, state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active','deleting','deleted')), read_enabled INTEGER NOT NULL DEFAULT 0 CHECK(read_enabled IN (0,1)), read_epoch INTEGER NOT NULL DEFAULT 0 CHECK(read_epoch>=0), created_at INTEGER NOT NULL, memory_revision INTEGER NOT NULL DEFAULT 0, preference_revision INTEGER NOT NULL DEFAULT 0, skill_revision INTEGER NOT NULL DEFAULT 0, document_revision INTEGER NOT NULL DEFAULT 0, feedback_revision INTEGER NOT NULL DEFAULT 0, current_publication_id TEXT ) STRICT"
+   "sql": "CREATE TABLE owner ( owner_id TEXT PRIMARY KEY, state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active','deleting','deleted')), read_enabled INTEGER NOT NULL DEFAULT 0 CHECK(read_enabled IN (0,1)), read_epoch INTEGER NOT NULL DEFAULT 0 CHECK(read_epoch>=0), created_at INTEGER NOT NULL, memory_revision INTEGER NOT NULL DEFAULT 0, preference_revision INTEGER NOT NULL DEFAULT 0, skill_revision INTEGER NOT NULL DEFAULT 0, document_revision INTEGER NOT NULL DEFAULT 0, feedback_revision INTEGER NOT NULL DEFAULT 0, current_publication_id TEXT , management_revision INTEGER NOT NULL DEFAULT 0) STRICT"
   },
   "processing_item": {
    "columns": [
@@ -12843,6 +13309,117 @@
    ],
    "sql": "CREATE TABLE run_contact ( owner_id TEXT NOT NULL,run_id TEXT NOT NULL,contact_id TEXT NOT NULL,grant_id TEXT NOT NULL, binding_id TEXT NOT NULL,accepted_selection_generation INTEGER NOT NULL,accepted_data_generation INTEGER NOT NULL, accepted_identity_generation INTEGER NOT NULL,accepted_account_revision INTEGER NOT NULL,accepted_source_generation TEXT NOT NULL, accepted_feedback_revision INTEGER NOT NULL,state TEXT NOT NULL CHECK(state IN ('active','revoked')), PRIMARY KEY(owner_id,run_id,contact_id),FOREIGN KEY(owner_id,run_id) REFERENCES processing_run(owner_id,id) ON DELETE CASCADE, FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id),FOREIGN KEY(owner_id,grant_id) REFERENCES read_grant(owner_id,id) ) STRICT"
   },
+  "run_content_input": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "run_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "input_no",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 3
+    },
+    {
+     "name": "plugin_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "plugin_version",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "content_kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "identity_json",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "run_input",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "run_input",
+     "from": "run_id",
+     "to": "run_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 2,
+     "table": "run_input",
+     "from": "input_no",
+     "to": "input_no",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "run_content_file",
+     "unique": 0,
+     "partial": 1,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      null
+     ],
+     "sql": "CREATE INDEX run_content_file ON run_content_input(owner_id,json_extract(identity_json,'$.fileId')) WHERE content_kind='image'"
+    },
+    {
+     "name": "sqlite_autoindex_run_content_input_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "run_id",
+      "input_no"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE run_content_input ( owner_id TEXT NOT NULL,run_id TEXT NOT NULL,input_no INTEGER NOT NULL, plugin_id TEXT NOT NULL,plugin_version TEXT NOT NULL,content_kind TEXT NOT NULL, identity_json TEXT NOT NULL CHECK(json_valid(identity_json)), PRIMARY KEY(owner_id,run_id,input_no), FOREIGN KEY(owner_id,run_id,input_no) REFERENCES run_input(owner_id,run_id,input_no) ON DELETE CASCADE ) STRICT"
+  },
   "run_input": {
    "columns": [
     {
@@ -14946,9 +15523,54 @@
    "sql": "CREATE TRIGGER memory_candidate_fixed BEFORE UPDATE OF proposed_body,produced_attempt_id,event_id,output_no,scope_kind,contact_id ON memory_candidate WHEN NOT (NEW.state='deleted' AND NEW.proposed_body IS NULL AND NEW.produced_attempt_id IS NULL AND NEW.event_id IS NULL) BEGIN SELECT RAISE(ABORT,'memory_candidate_immutable'); END"
   },
   {
+   "name": "memory_candidate_management_delete",
+   "table": "memory_candidate",
+   "sql": "CREATE TRIGGER memory_candidate_management_delete AFTER DELETE ON memory_candidate BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=OLD.owner_id AND OLD.scope_kind='self'; UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=OLD.owner_id AND id=OLD.contact_id AND OLD.scope_kind='contact'; END"
+  },
+  {
+   "name": "memory_candidate_management_insert",
+   "table": "memory_candidate",
+   "sql": "CREATE TRIGGER memory_candidate_management_insert AFTER INSERT ON memory_candidate BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND NEW.scope_kind='self'; UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id=NEW.contact_id AND NEW.scope_kind='contact'; END"
+  },
+  {
+   "name": "memory_candidate_management_update",
+   "table": "memory_candidate",
+   "sql": "CREATE TRIGGER memory_candidate_management_update AFTER UPDATE ON memory_candidate BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND NEW.scope_kind='self'; UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id=NEW.contact_id AND NEW.scope_kind='contact'; END"
+  },
+  {
    "name": "memory_citation_scope",
    "table": "memory_citation",
    "sql": "CREATE TRIGGER memory_citation_scope BEFORE INSERT ON memory_citation WHEN NOT EXISTS( SELECT 1 FROM memory_required_message r WHERE r.owner_id=NEW.owner_id AND r.candidate_id IS NEW.candidate_id AND r.memory_id IS NEW.memory_id AND r.version_no IS NEW.version_no AND r.source_contact_id=NEW.source_contact_id AND r.message_id=NEW.message_id) BEGIN SELECT RAISE(ABORT,'memory_citation_required_mismatch'); END"
+  },
+  {
+   "name": "memory_citation_timeline_delete",
+   "table": "memory_citation",
+   "sql": "CREATE TRIGGER memory_citation_timeline_delete AFTER DELETE ON memory_citation BEGIN UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=OLD.owner_id AND id=OLD.memory_id AND current_version_no=OLD.version_no ; END"
+  },
+  {
+   "name": "memory_citation_timeline_insert",
+   "table": "memory_citation",
+   "sql": "CREATE TRIGGER memory_citation_timeline_insert AFTER INSERT ON memory_citation BEGIN UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=NEW.owner_id AND id=NEW.memory_id AND current_version_no=NEW.version_no ; END"
+  },
+  {
+   "name": "memory_citation_timeline_update",
+   "table": "memory_citation",
+   "sql": "CREATE TRIGGER memory_citation_timeline_update AFTER UPDATE ON memory_citation BEGIN UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=OLD.owner_id AND id=OLD.memory_id AND current_version_no=OLD.version_no AND (OLD.owner_id<>NEW.owner_id OR OLD.memory_id IS NOT NEW.memory_id OR OLD.version_no IS NOT NEW.version_no); UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=NEW.owner_id AND id=NEW.memory_id AND current_version_no=NEW.version_no ; END"
+  },
+  {
+   "name": "memory_decision_management_delete",
+   "table": "memory_decision",
+   "sql": "CREATE TRIGGER memory_decision_management_delete AFTER DELETE ON memory_decision BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=OLD.owner_id AND EXISTS(SELECT 1 FROM memory m WHERE m.owner_id=OLD.owner_id AND m.id=OLD.target_memory_id AND m.scope_kind='self'); UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=OLD.owner_id AND id IN(SELECT contact_id FROM memory m WHERE m.owner_id=OLD.owner_id AND m.id=OLD.target_memory_id AND m.scope_kind='contact'); END"
+  },
+  {
+   "name": "memory_decision_management_insert",
+   "table": "memory_decision",
+   "sql": "CREATE TRIGGER memory_decision_management_insert AFTER INSERT ON memory_decision BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND EXISTS(SELECT 1 FROM memory m WHERE m.owner_id=NEW.owner_id AND m.id=NEW.target_memory_id AND m.scope_kind='self'); UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id IN(SELECT contact_id FROM memory m WHERE m.owner_id=NEW.owner_id AND m.id=NEW.target_memory_id AND m.scope_kind='contact'); END"
+  },
+  {
+   "name": "memory_decision_management_update",
+   "table": "memory_decision",
+   "sql": "CREATE TRIGGER memory_decision_management_update AFTER UPDATE ON memory_decision BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND EXISTS(SELECT 1 FROM memory m WHERE m.owner_id=NEW.owner_id AND m.id=NEW.target_memory_id AND m.scope_kind='self'); UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id IN(SELECT contact_id FROM memory m WHERE m.owner_id=NEW.owner_id AND m.id=NEW.target_memory_id AND m.scope_kind='contact'); END"
   },
   {
    "name": "memory_head_closure",
@@ -14961,9 +15583,29 @@
    "sql": "CREATE TRIGGER memory_incremental_baseline_immutable BEFORE UPDATE OF memory_incremental_baseline_display_no ON database_instance BEGIN SELECT RAISE(ABORT,'memory_incremental_baseline_immutable'); END"
   },
   {
+   "name": "memory_management_delete",
+   "table": "memory",
+   "sql": "CREATE TRIGGER memory_management_delete AFTER DELETE ON memory BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=OLD.owner_id AND OLD.scope_kind='self'; UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=OLD.owner_id AND id=OLD.contact_id AND OLD.scope_kind='contact'; END"
+  },
+  {
+   "name": "memory_management_insert",
+   "table": "memory",
+   "sql": "CREATE TRIGGER memory_management_insert AFTER INSERT ON memory BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND NEW.scope_kind='self'; UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id=NEW.contact_id AND NEW.scope_kind='contact'; END"
+  },
+  {
+   "name": "memory_management_update",
+   "table": "memory",
+   "sql": "CREATE TRIGGER memory_management_update AFTER UPDATE ON memory BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND NEW.scope_kind='self'; UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id=NEW.contact_id AND NEW.scope_kind='contact'; END"
+  },
+  {
    "name": "memory_required_scope",
    "table": "memory_required_message",
    "sql": "CREATE TRIGGER memory_required_scope BEFORE INSERT ON memory_required_message WHEN NOT EXISTS( SELECT 1 FROM (SELECT scope_kind,contact_id FROM memory_candidate WHERE owner_id=NEW.owner_id AND id=NEW.candidate_id UNION ALL SELECT scope_kind,contact_id FROM memory WHERE owner_id=NEW.owner_id AND id=NEW.memory_id) p WHERE p.scope_kind='self' OR p.contact_id=NEW.source_contact_id) BEGIN SELECT RAISE(ABORT,'memory_source_scope_mismatch'); END"
+  },
+  {
+   "name": "memory_timeline_update",
+   "table": "memory",
+   "sql": "CREATE TRIGGER memory_timeline_update AFTER UPDATE OF current_version_no,state ON memory BEGIN UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=NEW.owner_id AND id=NEW.id; END"
   },
   {
    "name": "memory_version_decision",
@@ -14976,9 +15618,44 @@
    "sql": "CREATE TRIGGER memory_version_fixed BEFORE UPDATE ON memory_version WHEN NOT (OLD.content_state='present' AND NEW.content_state='redacted' AND NEW.body IS NULL AND NEW.provenance_state='invalidated' AND NEW.owner_id=OLD.owner_id AND NEW.memory_id=OLD.memory_id AND NEW.version_no=OLD.version_no AND NEW.decision_id=OLD.decision_id AND NEW.formation_kind=OLD.formation_kind AND NEW.adoption_mode=OLD.adoption_mode AND NEW.previous_version_no IS OLD.previous_version_no AND NEW.restored_from_version_no IS OLD.restored_from_version_no AND NEW.protection_at_formation=OLD.protection_at_formation) BEGIN SELECT RAISE(ABORT,'memory_version_immutable'); END"
   },
   {
+   "name": "memory_version_management_delete",
+   "table": "memory_version",
+   "sql": "CREATE TRIGGER memory_version_management_delete AFTER DELETE ON memory_version BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=OLD.owner_id AND EXISTS(SELECT 1 FROM memory m WHERE m.owner_id=OLD.owner_id AND m.id=OLD.memory_id AND m.scope_kind='self'); UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=OLD.owner_id AND id IN(SELECT contact_id FROM memory m WHERE m.owner_id=OLD.owner_id AND m.id=OLD.memory_id AND m.scope_kind='contact'); END"
+  },
+  {
+   "name": "memory_version_management_insert",
+   "table": "memory_version",
+   "sql": "CREATE TRIGGER memory_version_management_insert AFTER INSERT ON memory_version BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND EXISTS(SELECT 1 FROM memory m WHERE m.owner_id=NEW.owner_id AND m.id=NEW.memory_id AND m.scope_kind='self'); UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id IN(SELECT contact_id FROM memory m WHERE m.owner_id=NEW.owner_id AND m.id=NEW.memory_id AND m.scope_kind='contact'); END"
+  },
+  {
+   "name": "memory_version_management_update",
+   "table": "memory_version",
+   "sql": "CREATE TRIGGER memory_version_management_update AFTER UPDATE ON memory_version BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND EXISTS(SELECT 1 FROM memory m WHERE m.owner_id=NEW.owner_id AND m.id=NEW.memory_id AND m.scope_kind='self'); UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id IN(SELECT contact_id FROM memory m WHERE m.owner_id=NEW.owner_id AND m.id=NEW.memory_id AND m.scope_kind='contact'); END"
+  },
+  {
+   "name": "memory_version_timeline_delete",
+   "table": "memory_version",
+   "sql": "CREATE TRIGGER memory_version_timeline_delete AFTER DELETE ON memory_version BEGIN UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=OLD.owner_id AND id=OLD.memory_id AND current_version_no=OLD.version_no ; END"
+  },
+  {
+   "name": "memory_version_timeline_insert",
+   "table": "memory_version",
+   "sql": "CREATE TRIGGER memory_version_timeline_insert AFTER INSERT ON memory_version BEGIN UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=NEW.owner_id AND id=NEW.memory_id AND current_version_no=NEW.version_no ; END"
+  },
+  {
+   "name": "memory_version_timeline_update",
+   "table": "memory_version",
+   "sql": "CREATE TRIGGER memory_version_timeline_update AFTER UPDATE ON memory_version BEGIN UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=OLD.owner_id AND id=OLD.memory_id AND current_version_no=OLD.version_no AND (OLD.owner_id<>NEW.owner_id OR OLD.memory_id IS NOT NEW.memory_id OR OLD.version_no IS NOT NEW.version_no); UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=NEW.owner_id AND id=NEW.memory_id AND current_version_no=NEW.version_no ; END"
+  },
+  {
    "name": "message_immutable",
    "table": "message",
    "sql": "CREATE TRIGGER message_immutable BEFORE UPDATE OF text_body,kind,sender_role,identity_scheme,external_key,binding_id,contact_id ON message BEGIN SELECT RAISE(ABORT,'message_immutable'); END"
+  },
+  {
+   "name": "message_timeline_time",
+   "table": "message",
+   "sql": "CREATE TRIGGER message_timeline_time AFTER UPDATE OF sent_at ON message BEGIN UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=NEW.owner_id AND id IN( SELECT citation.memory_id FROM memory_citation citation JOIN memory current ON current.owner_id=citation.owner_id AND current.id=citation.memory_id AND current.current_version_no=citation.version_no WHERE citation.owner_id=NEW.owner_id AND citation.source_contact_id=NEW.contact_id AND citation.message_id=NEW.id AND citation.memory_id IS NOT NULL ); END"
   },
   {
    "name": "model_call_identity_immutable",
@@ -15089,6 +15766,11 @@
    "name": "run_contact_immutable",
    "table": "run_contact",
    "sql": "CREATE TRIGGER run_contact_immutable BEFORE UPDATE OF grant_id,binding_id,accepted_selection_generation,accepted_data_generation,accepted_identity_generation,accepted_account_revision,accepted_source_generation,accepted_feedback_revision ON run_contact BEGIN SELECT RAISE(ABORT,'run_contact_immutable'); END"
+  },
+  {
+   "name": "run_content_input_immutable",
+   "table": "run_content_input",
+   "sql": "CREATE TRIGGER run_content_input_immutable BEFORE UPDATE ON run_content_input BEGIN SELECT RAISE(ABORT,'memory_content_input_immutable'); END"
   },
   {
    "name": "run_input_freeze",

@@ -5,6 +5,7 @@ import {SqliteMemoryExtraction} from '../../../src/memory/sqlite/service.ts';
 import {SqliteMemoryManagement} from '../../../src/memory/sqlite/management/service.ts';
 import {SqliteMemoryAdjudication} from '../../../src/memory/sqlite/management/adjudication-service.ts';
 import {ActiveHolders} from '../../../src/storage/sqlite/deletion/holders.ts';
+import {readAllManagement} from './read-all.mjs';
 export {owner};
 
 /** 仅合成供应商作语义选择；输入、具名核验、许可预约、回执及正式决定沿真实合同。 */
@@ -51,5 +52,5 @@ export async function adjudicationFixture(t,options={}){
   await management.importRun(run.runId);if(publish)await adjudication.publishRun(run.runId);return run.runId;
  }
  return {...f,owner,contactId,scope,management,extraction,adjudication,port,calls,failures,normal,extract,newRuntime,
-  setRespond(next){respond=next;},read:()=>management.read(scope),trace:()=>f.storage.execute('fixture.adjudicationTrace',{ownerId:owner})};
+  setRespond(next){respond=next;},read:()=>readAllManagement(management,scope),trace:()=>f.storage.execute('fixture.adjudicationTrace',{ownerId:owner})};
 }

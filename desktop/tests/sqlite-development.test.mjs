@@ -11,6 +11,7 @@ const built = await build({ entryPoints: ['src/main/startup/sqlite-development.t
 await writeFile(path.join(directory, 'subject.mjs'), built.outputFiles[0].text);
 const { SqliteDevelopmentProbe } = await import(path.join(directory, 'subject.mjs'));
 const project = path.resolve('..');
+const structureBaseline = JSON.parse(await readFile(path.join(project, 'backend-ts/test/fixtures/cutover/structure-baseline.json'), 'utf8'));
 
 async function fixture(name) {
   const userData = await realpath(await mkdtemp(path.join(tmpdir(), `notalone-${name}-`)));
@@ -25,7 +26,7 @@ test('正常开发入口默认创建同一新SQLite实例，重开沿用 databas
   const created = await probe.run(() => true);
   assert.equal(created.phase, 'ready');
   assert.equal(created.code, 'sqlite_ready');
-  assert.equal(created.schemaVersion, 24);
+  assert.equal(created.schemaVersion, structureBaseline.metadata.schemaVersion);
   assert.deepEqual(created.capabilities, ['contacts', 'skills', 'history', 'discussions', 'memory']);
   const configuration = await readFile(path.join(f.userData, 'sqlite-development.json'), 'utf8');
   const parsed = JSON.parse(configuration);

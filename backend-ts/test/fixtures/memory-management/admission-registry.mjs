@@ -19,7 +19,7 @@ export const registry={...base,actions:[...base.actions,...typed.actions.filter(
    for(const source of out.sources){
     const m=tx.get('SELECT text_body FROM message WHERE owner_id=? AND contact_id=? AND id=?',[i.ownerId,source.contactId,source.messageId]);
     if(!tx.get(`SELECT 1 FROM memory_required_message WHERE owner_id=? AND source_contact_id=? AND message_id=? AND ${p.candidateId?'candidate_id=?':'memory_id=? AND version_no=?'}`,p.candidateId?[i.ownerId,source.contactId,source.messageId,p.candidateId]:[i.ownerId,source.contactId,source.messageId,p.memoryId,p.versionNo]))tx.run('INSERT INTO memory_required_message VALUES(?,?,?,?,?,?,?)',[i.ownerId,randomUUID(),p.candidateId??null,p.memoryId??null,p.versionNo??null,source.contactId,source.messageId]);
-    tx.run('INSERT INTO memory_citation VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[i.ownerId,randomUUID(),p.candidateId??null,p.memoryId??null,p.versionNo??null,source.contactId,source.messageId,source.recordId,source.interpretationRevision,0n,BigInt([...m.text_body].length),null]);
+    tx.run('INSERT INTO memory_citation(owner_id,id,candidate_id,memory_id,version_no,source_contact_id,message_id,record_id,accepted_revision,span_start,span_end,explanation) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[i.ownerId,randomUUID(),p.candidateId??null,p.memoryId??null,p.versionNo??null,source.contactId,source.messageId,source.recordId,source.interpretationRevision,0n,BigInt([...m.text_body].length),null]);
    }
   }return true;
  }},

@@ -5,7 +5,7 @@ import {noArguments} from '../page-commands';
 import {isUuid} from '../uuid';
 import {memoryCandidateStates} from '../../shared/sqlite-memory-management';
 import type {MemoryCandidateView,MemoryDecisionRequest,MemoryManagementRead,MemoryManagementDecision,MemoryManagementSnapshot,
- MemoryManagementOutcome,MemoryManagementView,MemoryMergeParent,MemoryScope,MemorySource,MemoryVersionView,MemoryView,
+ MemoryManagementOutcome,MemoryManagementView,MemoryMergeParent,MemoryScope,MemorySource,MemoryVersionView,MemoryView,MemoryHistoryRead,MemoryHistorySnapshot,
  MemoryDocumentsSnapshot,MemoryDocumentsView,MemoryDocumentReference,MemoryDocumentStatement,MemoryDocumentView} from '../../shared/sqlite-memory-management';
 import {withdrawnProtectionVersion} from '../../shared/sqlite-memory-management';
 
@@ -34,12 +34,17 @@ function sources(raw:unknown):MemorySource[]{return array(raw).map(value=>{
 function contributingContacts(raw:unknown):string[]{const ids=array(raw).map(uuid);if(new Set(ids).size!==ids.length)throw invalid();return ids;}
 function mergeParents(raw:unknown):MemoryMergeParent[]{const values=array(raw);if(values.length>7)throw invalid();const parents=values.map(raw=>{const p=object(raw);exact(p,['memoryId','versionNo','headRevision']);const versionNo=decimal(p.versionNo);if(versionNo==='0')throw invalid();return {memoryId:uuid(p.memoryId),versionNo,headRevision:decimal(p.headRevision)};});if(new Set(parents.map(p=>p.memoryId)).size!==parents.length)throw invalid();return parents.sort((a,b)=>a.memoryId.localeCompare(b.memoryId));}
 function version(raw:unknown):MemoryVersionView{const v=object(raw),parents=mergeParents(v.mergeParents),count=mergeParentCount(v.mergeParentCount);if(count!==(parents.length?parents.length+1:0))throw invalid();return {timeStatus:v.timeStatus===undefined?'invalid':member(v.timeStatus,['eligible','out_of_window','invalid','needs_revalidation']),mergeParents:parents,mergeParentCount:count,verificationState:member(v.verificationState,['verified','pending']),versionNo:decimal(v.versionNo),body:v.body===null?null:text(v.body,48000),formationKind:member(v.formationKind,['adoption','correction','change','restore','manual']),adoptionMode:member(v.adoptionMode,['user','auto','manual']),previousVersionNo:v.previousVersionNo===null?null:decimal(v.previousVersionNo),restoredFromVersionNo:v.restoredFromVersionNo===null?null:decimal(v.restoredFromVersionNo),contentState:member(v.contentState,['present','redacted']),provenanceState:member(v.provenanceState,['eligible','pending_revalidation','invalidated']),decisionId:uuid(v.decisionId),sources:sources(v.sources),contributingContactIds:contributingContacts(v.contributingContactIds)};}
+function cursor(value:unknown):string|null{if(value===null)return null;if(typeof value!=='string'||!/^[A-Za-z0-9_-]{1,4096}$/.test(value))throw invalid();return value;}
+function pageRevision(value:unknown):string{if(typeof value!=='string'||!/^[a-f0-9]{64}$/.test(value))throw invalid();return value;}
+function decisions(raw:unknown):MemoryView['decisions']{return array(raw).map(raw=>{const d=object(raw);return {id:uuid(d.id),action:member(d.action,['accept','edit_accept','reject','auto_accept','auto_update','auto_retire','auto_noop','correct','change','restore','withdraw','protect','unprotect','manual']),actorKind:member(d.actorKind,['user','system']),createdAt:decimal(d.createdAt),expectedHeadRevision:d.expectedHeadRevision===null?null:decimal(d.expectedHeadRevision),expectedVersionNo:d.expectedVersionNo===null?null:decimal(d.expectedVersionNo),outcome:member(d.outcome,['applied','redacted'])};});}
 function readView(raw:unknown,s:MemoryScope,displayContactId:string):MemoryManagementView{
  const value=object(raw),owned=(items:MemorySource[])=>items.length>0&&items.every(x=>x.contactId===displayContactId);
  const ownsContribution=(ids:string[])=>ids.length===1&&ids[0]===displayContactId;
  const candidates:MemoryCandidateView[]=array(value.candidates).map(raw=>{const c=object(raw),cs=scope({scopeKind:c.scopeKind,contactId:c.contactId});if(!sameScope(cs,s))throw invalid();return {...cs,verificationState:member(c.verificationState,['verified','pending']),id:uuid(c.id),body:text(c.body,48000),state:member(c.state,memoryCandidateStates),stateRevision:decimal(c.stateRevision),eventId:uuid(c.eventId),sources:sources(c.sources),contributingContactIds:contributingContacts(c.contributingContactIds)};}).filter(c=>owned(c.sources)&&ownsContribution(c.contributingContactIds));
- const memories:MemoryView[]=array(value.memories).map(raw=>{const m=object(raw),ms=scope({scopeKind:m.scopeKind,contactId:m.contactId});if(!sameScope(ms,s)||typeof m.manualProtection!=='boolean')throw invalid();const versions=array(m.versions).map(version),current=m.current===null?null:version(m.current);if(current&&!versions.some(v=>JSON.stringify(v)===JSON.stringify(current))||versions.some(v=>v.mergeParents.some(p=>p.memoryId===uuid(m.id))))throw invalid();return {...ms,id:uuid(m.id),headRevision:decimal(m.headRevision),state:member(m.state,['active','withdrawn','invalidated']),manualProtection:m.manualProtection,current,versions,decisions:array(m.decisions).map(raw=>{const d=object(raw);return {id:uuid(d.id),action:member(d.action,['accept','edit_accept','reject','auto_accept','auto_update','auto_retire','auto_noop','correct','change','restore','withdraw','protect','unprotect','manual']),actorKind:member(d.actorKind,['user','system']),createdAt:decimal(d.createdAt),expectedHeadRevision:d.expectedHeadRevision===null?null:decimal(d.expectedHeadRevision),expectedVersionNo:d.expectedVersionNo===null?null:decimal(d.expectedVersionNo),outcome:member(d.outcome,['applied','redacted'])};})};}).filter(m=>s.scopeKind==='contact'?m.versions.every(v=>v.sources.every(source=>source.contactId===displayContactId)&&v.contributingContactIds.every(id=>id===displayContactId)):m.versions.some(v=>v.body!==null&&owned(v.sources)&&ownsContribution(v.contributingContactIds))&&m.versions.every(v=>v.body===null||owned(v.sources)&&ownsContribution(v.contributingContactIds)));
- return {candidates,memories};
+ const memories:MemoryView[]=array(value.memories).map(raw=>{const m=object(raw),ms=scope({scopeKind:m.scopeKind,contactId:m.contactId});if(!sameScope(ms,s)||typeof m.manualProtection!=='boolean')throw invalid();const versions=array(m.versions).map(version),current=m.current===null?null:version(m.current);if(current&&!versions.some(v=>JSON.stringify(v)===JSON.stringify(current))||versions.some(v=>v.mergeParents.some(p=>p.memoryId===uuid(m.id))))throw invalid();return {...ms,id:uuid(m.id),headRevision:decimal(m.headRevision),state:member(m.state,['active','withdrawn','invalidated']),manualProtection:m.manualProtection,current,versions,decisions:decisions(m.decisions)};}).filter(m=>s.scopeKind==='contact'?m.versions.every(v=>v.sources.every(source=>source.contactId===displayContactId)&&v.contributingContactIds.every(id=>id===displayContactId)):m.versions.some(v=>v.body!==null&&owned(v.sources)&&ownsContribution(v.contributingContactIds))&&m.versions.every(v=>v.body===null||owned(v.sources)&&ownsContribution(v.contributingContactIds)));
+ const page=value.page===undefined?undefined:object(value.page);
+ if(page?.preparing!==undefined&&(typeof page.preparing!=='boolean'||page.preparing&&(candidates.length||memories.length||page.nextCursor!==null)))throw invalid();
+ return {candidates,memories,...(page?{page:{revision:pageRevision(page.revision),nextCursor:cursor(page.nextCursor),...(page.preparing?{preparing:true}:{})}}:{})};
 }
 function readDocumentsView(raw:unknown,expected:MemoryScope):MemoryDocumentsView {
  const value=object(raw);if(!sameScope(scope(value.scope),expected))throw invalid();
@@ -83,11 +88,11 @@ export class SqliteMemoryManagementController {
  synchronize(){this.revision++;for(const request of this.requests)request.abort();this.requests.clear();this.publishInvalidated();}
  release(){this.synchronize();}
  private validate(input:unknown,decision=false):MemoryManagementRead{
-  const q=object(input);exact(q,decision?['scope','displayContactId','scopeRevision','connectionGeneration','request']:['scope','displayContactId','scopeRevision']);
+  const q=object(input);exact(q,decision?['scope','displayContactId','scopeRevision','connectionGeneration','request']:['scope','displayContactId','scopeRevision',...(Object.hasOwn(q,'cursor')?['cursor']:[])]);
   const s=scope(q.scope),displayContactId=uuid(q.displayContactId),current=this.contacts.getState();
   if(!Number.isSafeInteger(q.scopeRevision)||current.scopeRevision!==q.scopeRevision||current.selectedContactId!==displayContactId||s.scopeKind==='contact'&&s.contactId!==displayContactId)throw invalid();
   if(decision&&q.connectionGeneration!==this.backend.getConnectionGeneration())throw invalid();
-  return {scope:s,displayContactId,scopeRevision:q.scopeRevision as number};
+  return {scope:s,displayContactId,scopeRevision:q.scopeRevision as number,...(q.cursor===undefined?{}:{cursor:cursor(q.cursor)??undefined})};
  }
  private async request(path:string,method:'GET'|'POST',body?:unknown){
   const revision=this.revision,generation=this.backend.getConnectionGeneration();if(generation===undefined)throw invalid();const operation=new AbortController();this.requests.add(operation);
@@ -95,9 +100,31 @@ export class SqliteMemoryManagementController {
    if(operation.signal.aborted||revision!==this.revision||generation!==response.generation||generation!==this.backend.getConnectionGeneration())throw invalid();return response;
   }finally{this.requests.delete(operation);}
  }
+ private query(accepted:MemoryManagementRead):URLSearchParams {
+  const query=new URLSearchParams({scope_kind:accepted.scope.scopeKind,display_contact_id:accepted.displayContactId});
+  if(accepted.scope.contactId)query.set('contact_id',accepted.scope.contactId);if(accepted.cursor)query.set('cursor',accepted.cursor);return query;
+ }
+ private async readItem(accepted:MemoryManagementRead,selector?:{memoryId?:string;candidateId?:string}):Promise<MemoryManagementSnapshot>{
+  const query=this.query(accepted);if(selector?.memoryId)query.set('memory_id',selector.memoryId);if(selector?.candidateId)query.set('candidate_id',selector.candidateId);
+  const response=await this.request(`/api/memory-management?${query}`,'GET');this.validate(accepted);
+  return {connectionGeneration:response.generation,scope:accepted.scope,view:readView(response.data,accepted.scope,accepted.displayContactId)};
+ }
  async read(input:MemoryManagementRead):Promise<MemoryManagementSnapshot>{
-  const accepted=this.validate(input),revision=this.revision;try{const response=await this.request(`/api/memory-management?scope_kind=${accepted.scope.scopeKind}${accepted.scope.contactId?`&contact_id=${accepted.scope.contactId}`:''}`,'GET');this.validate(input);return {connectionGeneration:response.generation,scope:accepted.scope,view:readView(response.data,accepted.scope,accepted.displayContactId)};}
-  catch{if(revision===this.revision)this.synchronize();throw invalid();}
+  const accepted=this.validate(input),revision=this.revision;
+  try{return await this.readItem(accepted);}catch{if(revision===this.revision)this.synchronize();throw invalid();}
+ }
+ async readHistory(input:MemoryHistoryRead):Promise<MemoryHistorySnapshot>{
+  const raw=object(input),{memoryId:rawId,expectedHeadRevision:rawHead,...base}=raw;
+  const accepted=this.validate(base),memoryId=uuid(rawId),expectedHeadRevision=decimal(rawHead),revision=this.revision;
+  try{
+   const query=this.query(accepted);query.set('memory_id',memoryId);
+   const response=await this.request(`/api/memory-management/history?${query}`,'GET');this.validate(base);
+   const value=object(response.data),versions=array(value.versions).map(version);
+   if(uuid(value.memoryId)!==memoryId||decimal(value.headRevision)!==expectedHeadRevision||versions.some(v=>v.mergeParents.some(parent=>parent.memoryId===memoryId)))throw invalid();
+   const belongs=(v:MemoryVersionView)=>v.sources.every(source=>source.contactId===accepted.displayContactId)&&v.contributingContactIds.every(contact=>contact===accepted.displayContactId);
+   if(versions.some(v=>accepted.scope.scopeKind==='contact'?!belongs(v):v.body!==null&&(!belongs(v)||!v.sources.length||v.contributingContactIds.length!==1)))throw invalid();
+   return {connectionGeneration:response.generation,scope:accepted.scope,view:{memoryId,headRevision:expectedHeadRevision,versions,decisions:decisions(value.decisions),revision:pageRevision(value.revision),nextCursor:cursor(value.nextCursor)}};
+  }catch{if(revision===this.revision)this.synchronize();throw invalid();}
  }
  async readDocuments(input:MemoryManagementRead):Promise<MemoryDocumentsSnapshot>{
   const accepted=this.validate(input);if(accepted.scope.scopeKind==='self')throw invalid();
@@ -115,7 +142,7 @@ export class SqliteMemoryManagementController {
    else{clean.memoryId=uuid(request.memoryId);clean.expectedVersionNo=decimal(request.expectedVersionNo);clean.expectedHeadRevision=decimal(request.expectedHeadRevision);}
    if(['edit_accept','correct','change'].includes(action)){clean.body=text(request.body,48000);if(!clean.body.trim()||[...clean.body].length>12000)throw invalid();}
    if(action==='restore'){clean.restoredFromVersionNo=decimal(request.restoredFromVersionNo);clean.expectedMergedParents=mergeParents(request.expectedMergedParents);}
-   const snapshot=await this.read(accepted);this.validate(input,true);
+   const snapshot=await this.readItem(accepted,{...(clean.memoryId?{memoryId:clean.memoryId}:{candidateId:clean.candidateIds![0]})});this.validate(input,true);
    if(clean.candidateIds?.some(id=>!snapshot.view.candidates.some(c=>c.id===id)))return {status:'source_stale'};
    if(clean.memoryId&&!snapshot.view.memories.some(m=>m.id===clean.memoryId&&(m.state==='active'&&m.current!==null||['protect','unprotect'].includes(action)&&withdrawnProtectionVersion(m)?.versionNo===clean.expectedVersionNo)))return {status:'source_stale'};
    if(action==='restore'&&JSON.stringify(snapshot.view.memories.find(m=>m.id===clean.memoryId)?.current?.mergeParents)!==JSON.stringify(clean.expectedMergedParents))return {status:'conflict'};
@@ -138,6 +165,7 @@ export function installSqliteMemoryManagementBridge(commands:PageCommands,backen
     if(next===connectionGeneration)return;
     connectionGeneration=next;controller.synchronize();
   });
+ commands.handle('memory:history-read',(...args)=>{if(args.length!==1)throw invalid();return controller.readHistory(args[0] as MemoryHistoryRead);},'manager');
  commands.handle('memory:management-read',(...args)=>{if(args.length!==1)throw invalid();return controller.read(args[0] as MemoryManagementRead);},'manager');
  commands.handle('memory:documents-read',(...args)=>{if(args.length!==1)throw invalid();return controller.readDocuments(args[0] as MemoryManagementRead);},'manager');
  commands.handle('memory:management-decide',(...args)=>{if(args.length!==1)throw invalid();return controller.decide(args[0] as MemoryManagementDecision);},'manager');

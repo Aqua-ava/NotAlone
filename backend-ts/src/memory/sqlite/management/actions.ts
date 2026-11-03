@@ -3,7 +3,8 @@ import {randomUUID,createHash} from 'node:crypto';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {verifiedExtractionOutput} from '../outputs.ts';
 import {available,body,fail,id,integer,requireCandidate,requireAutomaticCandidate,requireSources,requireVersion,scope} from './qualification.ts';
-import {managementRead} from './read.ts';
+import {managementRead,managementHistory} from './read.ts';
+import {prepareManagementTimeline} from './timeline.ts';
 import type {MemoryDecisionResult,MemoryScope} from './contracts.ts';
 import {scheduleMemoryChange} from '../documents/later-schedule.ts';
 const seal=(v:unknown):string=>createHash('sha256').update(JSON.stringify(v,(_k,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.fromEntries(Object.entries(x).sort(([a],[b])=>a.localeCompare(b))):x)).digest('hex');
@@ -153,7 +154,7 @@ export function applyDecision(tx:StorageTransaction,input:unknown,system=false,a
   restored=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,m!.id,previous!.previous_version_no]);if(!restored)return fail('memory_restore_not_eligible');requireVersion(tx,ownerId,m!,restored);retiredParents=restorableMergedParents(tx,ownerId,m!,previous!,request.expectedMergedParents);
  }
  const noVersion=['reject','withdraw','protect','unprotect','auto_noop'].includes(action),memoryId=m?String(m.id):action==='reject'?null:randomUUID(),decisionId=randomUUID();
- if(!m&&memoryId)tx.run("INSERT INTO memory VALUES(?,?,?,?,NULL,0,'invalidated',0,NULL)",[ownerId,memoryId,s.scopeKind,s.contactId]);
+ if(!m&&memoryId)tx.run("INSERT INTO memory(owner_id,id,scope_kind,contact_id,current_version_no,head_revision,state,manual_protection,protection_decision_id) VALUES(?,?,?,?,NULL,0,'invalidated',0,NULL)",[ownerId,memoryId,s.scopeKind,s.contactId]);
  tx.run('INSERT INTO memory_decision VALUES(?,?,?,?,?,?,?,?,?,?,?,?,\'applied\')',[ownerId,decisionId,requestKey,fingerprint,action,system?'system':'user',system?authority?.executionId??candidates[0]!.produced_attempt_id:null,memoryId,previous?.version_no??null,m?.head_revision??null,restored?.version_no??null,Date.now()]);
  // 重复跳过由决定触发器原子消费，避免留下无候选的无版本决定。
  for(const c of action==='auto_noop'?[]:candidates){
@@ -207,4 +208,6 @@ export const memoryManagementActions:StorageAction[]=[
  {name:'memory.applyDecision',mode:'write',retryBusy:true,execute:(tx,input)=>applyDecision(tx,input)},
  {name:'memory.applyAutomaticDecision',mode:'write',retryBusy:true,execute:(tx,input)=>applyDecision(tx,input,true)},
  {name:'memory.read',mode:'read',retryBusy:false,execute:managementRead},
+ {name:'memory.prepareTimeline',mode:'write',retryBusy:true,execute:prepareManagementTimeline},
+ {name:'memory.history',mode:'read',retryBusy:false,execute:managementHistory},
 ];

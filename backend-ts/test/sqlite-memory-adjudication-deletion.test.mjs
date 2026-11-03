@@ -83,7 +83,7 @@ async function deleteWhileInFlight(f,self){
  void f.publication.then(()=>{published=true;});
  await bounded(f.aborted.promise,'来源删除触发模型中止');
  assert.equal(deleted,false,'删除必须等待供应商回调和裁决finally排空');assert.equal(published,false);
- assert.deepEqual(await f.management.read(f.scope),{candidates:[],memories:[]},'删除进行时立即撤下管理快照');
+ {const cleared=await f.management.read(f.scope);assert.deepEqual({candidates:cleared.candidates,memories:cleared.memories},{candidates:[],memories:[]},'删除进行时立即撤下管理快照');}
  f.release.resolve();await bounded(f.publication,'已中止裁决排空');
  const done=await bounded(deleting,'来源删除完成');assert.equal(done.state,'completed',JSON.stringify(done.checks));
  const after=await f.inspect();

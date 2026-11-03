@@ -392,7 +392,7 @@ test('取消勾选立即撤销该人提取与本人贡献资格，其他有效�
  assert.equal(view.candidates.filter(candidate=>candidate.contactId===f.ca).length,0,'已取消联系人不产生候选');
  assert.ok(view.candidates.some(candidate=>candidate.contactId===f.cb));
  const management=new SqliteMemoryManagement(f.storage,owner);
- assert.deepEqual(await management.read({scopeKind:'contact',contactId:f.ca}),{candidates:[],memories:[]});
+ {const cleared=await management.read({scopeKind:'contact',contactId:f.ca});assert.deepEqual({candidates:cleared.candidates,memories:cleared.memories},{candidates:[],memories:[]});}
  // 本人混合贡献冻结包含被取消联系人时不直接提交，状态给出明确固定原因。
  assert.equal(view.status,'blocked');assert.equal(view.statusReason,'owner_contribution_pending');
  assert.deepEqual(view.actions,[]);
@@ -495,7 +495,7 @@ test('05来源删除在途撤销提交资格，迟到结果不能恢复内容',a
  const done=await advancing;
  assert.equal(done.state,'completed',JSON.stringify(done.checks));
  const management=new SqliteMemoryManagement(f.storage,owner);
- assert.deepEqual(await management.read({scopeKind:'contact',contactId:f.ca}),{candidates:[],memories:[]},'删除后不因迟到结果恢复内容');
+ {const cleared=await management.read({scopeKind:'contact',contactId:f.ca});assert.deepEqual({candidates:cleared.candidates,memories:cleared.memories},{candidates:[],memories:[]},'删除后不因迟到结果恢复内容');}
  await assert.rejects(service.read(run.runId),error=>error instanceof StorageFailure&&error.code==='memory_extraction_not_found','删除后旧轮次不再可读');
  await assert.rejects(service.continue(run.runId,0,randomUUID()),error=>error instanceof StorageFailure&&error.code==='memory_extraction_not_found');
 });
@@ -586,7 +586,7 @@ test('清空聊天后旧模型结果与重试晚到不恢复内容，新消息�
  assert.equal(status.completed,true,JSON.stringify(status));
  assert.equal((await f.current.history.read(contact)).messages.length,0,'清空删除已保存聊天');
  const management=new SqliteMemoryManagement(f.current.storage,owner);
- assert.deepEqual(await management.read({scopeKind:'contact',contactId:contact}),{candidates:[],memories:[]},'旧模型晚到不恢复内容');
+ {const cleared=await management.read({scopeKind:'contact',contactId:contact});assert.deepEqual({candidates:cleared.candidates,memories:cleared.memories},{candidates:[],memories:[]},'旧模型晚到不恢复内容');}
  await assert.rejects(service.read(run.runId),error=>error instanceof StorageFailure&&error.code==='memory_extraction_not_found','清空后旧轮次不可读');
  await assert.rejects(management.importRun(run.runId),error=>error instanceof StorageFailure&&error.code==='memory_run_not_found','旧轮次重试晚到不能恢复内容');
  // 清空后新消息按新资格同步，且只在用户明确启动时处理。

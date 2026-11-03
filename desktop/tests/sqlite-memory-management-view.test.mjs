@@ -10,8 +10,8 @@ const candidate={id,scopeKind:'contact',contactId:contact,verificationState:'ver
 const view=()=>({connectionGeneration:1,scope:{scopeKind:'contact',contactId:contact},view:{candidates:[candidate],memories:[]}});
 async function refreshVisible(page){await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));}
 async function openMemoryMore(scope){const summary=scope.getByText('更多',{exact:true});await summary.waitFor();if(await summary.locator('..').getAttribute('open')===null)await summary.click();}
-async function panel(t,command,inspect,withDocuments=false,selectedContact=contact,release=async()=>{},{initialLevel=withDocuments?'L2':'L1',keepMounted=true}={}){
- const compiled=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {SqliteMemoryManagementPanel} from './src/renderer/SqliteMemoryManagementPanel';const listeners=new Set();window.invalidate=()=>{for(const fn of listeners)fn();};const bridge={read:(...args)=>window.command('read',...args),${withDocuments ? "readDocuments:(...args)=>window.command('readDocuments',...args)," : ''}decide:(...args)=>window.command('decide',...args),release:()=>window.release(),onInvalidated:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}};const root=createRoot(document.getElementById('root'));window.unmount=()=>root.unmount();let shown=true,selected='${selectedContact}',revision=1;const render=()=>root.render(${keepMounted?'':'shown&&'}<div hidden={!shown}><SqliteMemoryManagementPanel bridge={bridge} contactId={selected} scopeRevision={revision} visible={shown}/></div>);window.setPanelVisible=value=>{shown=value;render();};window.setPanelContact=value=>{selected=value;revision++;render();};render();`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
+async function panel(t,command,inspect,withDocuments=false,selectedContact=contact,release=async()=>{},{initialLevel=withDocuments?'L2':'L1',keepMounted=true,withHistory=false}={}){
+ const compiled=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {SqliteMemoryManagementPanel} from './src/renderer/SqliteMemoryManagementPanel';const listeners=new Set();window.invalidate=()=>{for(const fn of listeners)fn();};const bridge={read:(...args)=>window.command('read',...args),${withHistory ? "readHistory:(...args)=>window.command('readHistory',...args)," : ''}${withDocuments ? "readDocuments:(...args)=>window.command('readDocuments',...args)," : ''}decide:(...args)=>window.command('decide',...args),release:()=>window.release(),onInvalidated:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}};const root=createRoot(document.getElementById('root'));window.unmount=()=>root.unmount();let shown=true,selected='${selectedContact}',revision=1;const render=()=>root.render(${keepMounted?'':'shown&&'}<div hidden={!shown}><SqliteMemoryManagementPanel bridge={bridge} contactId={selected} scopeRevision={revision} visible={shown}/></div>);window.setPanelVisible=value=>{shown=value;render();};window.setPanelContact=value=>{selected=value;revision++;render();};render();`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
  const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(4000);await page.exposeFunction('command',command);await page.exposeFunction('release',release);await page.route('http://127.0.0.1/memory-management-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/memory-management-test');await page.addScriptTag({content:compiled.outputFiles[0].text});if(initialLevel!=='L1')await page.getByRole('button',{name:initialLevel,exact:true}).click();await inspect(page);
 }
 function flatDocuments(){
@@ -156,7 +156,7 @@ test('真实释放桥不会把正常对方与本人切换误报为资格失效�
  }},()=>{deliveries.push(publish());},{getState:()=>({selectedContactId:contact,scopeRevision:1})});
  await panel(t,async(method,input)=>{const result=await(method==='read'?controller.read(input):controller.readDocuments(input));if(method==='read'){reads.push(input.scope.scopeKind);if(result.view.candidates.length)completeOld();}return result;},async page=>{
   publish=()=>page.evaluate(()=>window.invalidate());
-  const section=page.getByRole('region',{name:'记忆候选与版本'}),empty=section.getByText('当前范围没有可展示的候选。',{exact:true});
+  const section=page.getByRole('region',{name:'记忆候选与版本'}),empty=section.getByText('本页没有可展示的候选。',{exact:true});
   await empty.waitFor();await section.getByRole('button',{name:'我',exact:true}).click();
   await Promise.all(deliveries);
   assert.deepEqual(await section.getByRole('alert').allTextContents(),[]);
@@ -546,4 +546,65 @@ test('主题资料预加载后切层与切页保留正文，隐藏层不轮询',
   await page.evaluate(()=>window.setPanelVisible(true));await page.getByRole('button',{name:'L2',exact:true}).click();
   assert.equal(await body.isVisible(),true);assert.equal(await page.getByText('正在核对主题资料…',{exact:true}).count(),0);
  },true);
+});
+
+
+test('记忆列表与展开历史逐页替换，未展开不读取旧版，末页禁用继续',{timeout:20000},async t=>{
+ const calls=[],revision='a'.repeat(64);
+ const current=index=>({mergeParents:[],mergeParentCount:0,verificationState:'verified',timeStatus:'eligible',versionNo:'43',body:`第${index+1}条合成记忆`,formationKind:'correction',adoptionMode:'user',previousVersionNo:'42',restoredFromVersionNo:null,contentState:'present',provenanceState:'eligible',decisionId:id,sources:[source],contributingContactIds:[contact]});
+ const memory=index=>({id:`${(index+1).toString(16).padStart(8,'0')}-3333-4333-8333-333333333333`,scopeKind:'contact',contactId:contact,headRevision:'43',state:'active',manualProtection:false,current:current(index),versions:[current(index)],decisions:[]});
+ await panel(t,async(method,input)=>{
+  calls.push({method,input});
+  if(method==='readHistory'){
+   const offset=Number(input.cursor?.slice(1)??0),numbers=Array.from({length:Math.min(20,43-offset)},(_,index)=>43-offset-index).reverse();
+   return {connectionGeneration:1,scope:input.scope,view:{memoryId:input.memoryId,headRevision:'43',revision,versions:numbers.map(n=>({...current(0),versionNo:String(n),body:`历史版本${n}`,previousVersionNo:n===1?null:String(n-1)})),decisions:[],nextCursor:offset+20<43?`h${offset+20}`:null}};
+  }
+  const offset=Number(input.cursor?.slice(1)??0);
+  return {...view(),view:{candidates:[],memories:Array.from({length:Math.min(20,45-offset)},(_,index)=>memory(offset+index)),page:{revision,nextCursor:offset+20<45?`p${offset+20}`:null}}};
+ },async page=>{
+  await page.getByText('第1条合成记忆',{exact:true}).waitFor();assert.equal(await page.getByRole('article',{name:'正式记忆',exact:true}).count(),20);assert.equal(calls.filter(call=>call.method==='readHistory').length,0);
+  await page.getByRole('button',{name:'下一页记忆',exact:true}).click();await page.getByText('第21条合成记忆',{exact:true}).waitFor();assert.equal(await page.getByText('第1条合成记忆',{exact:true}).count(),0);assert.equal(await page.getByRole('article',{name:'正式记忆',exact:true}).count(),20);
+  await page.getByRole('button',{name:'下一页记忆',exact:true}).click();await page.getByText('第41条合成记忆',{exact:true}).waitFor();assert.equal(await page.getByRole('article',{name:'正式记忆',exact:true}).count(),5);assert.equal(await page.getByRole('button',{name:'下一页记忆',exact:true}).isDisabled(),true);
+  await page.getByRole('button',{name:'上一页记忆',exact:true}).click();await page.getByText('第21条合成记忆',{exact:true}).waitFor();
+  await openMemoryMore(page.getByRole('article',{name:'正式记忆'}).first());assert.equal(calls.filter(call=>call.method==='readHistory').length,0);await page.getByText('更新历史',{exact:true}).first().click();await page.getByText('历史版本43',{exact:true}).waitFor();assert.equal(calls.filter(call=>call.method==='readHistory').length,1);assert.equal(await page.locator('.memory-version-history[open] .sqlite-memory-body').count(),20);
+  await page.getByRole('button',{name:'更早的版本与决定',exact:true}).click();await page.getByText('历史版本23',{exact:true}).waitFor();assert.equal(await page.getByText('历史版本43',{exact:true}).count(),0);
+  await page.getByRole('button',{name:'更早的版本与决定',exact:true}).click();await page.getByText('历史版本1',{exact:true}).waitFor();assert.equal(await page.locator('.memory-version-history[open] .sqlite-memory-body').count(),3);assert.equal(await page.getByRole('button',{name:'更早的版本与决定',exact:true}).isDisabled(),true);
+  for(const stylesheet of ['style.css','memory.css'])await page.addStyleTag({content:await readFile(new URL(`../src/renderer/${stylesheet}`,import.meta.url),'utf8')});
+  await page.setViewportSize({width:680,height:850});await page.locator('.sqlite-memory-management').screenshot({path:'/tmp/notalone-management-pagination-preview.png'});
+  await page.evaluate(()=>window.invalidate());await page.getByRole('alert').filter({hasText:'已撤下正文'}).waitFor();assert.equal(await page.getByText('历史版本1',{exact:true}).count(),0);
+ },false,contact,async()=>{},{withHistory:true});
+});
+
+
+test('目录准备明确显示进度并短间隔继续，不冒充当前范围为空',{timeout:10000},async t=>{
+ let reads=0;
+ await panel(t,async()=>++reads===1?{...view(),view:{candidates:[],memories:[],page:{revision:'a'.repeat(64),nextCursor:null,preparing:true}}}:view(),async page=>{
+  await page.getByRole('status').filter({hasText:'正在准备记忆列表'}).waitFor();assert.equal(await page.getByText('本页没有可展示的正式记忆。',{exact:true}).count(),0);
+  await page.getByText(candidate.body,{exact:true}).waitFor();assert.equal(reads,2);assert.equal(await page.getByRole('status').filter({hasText:'正在准备记忆列表'}).count(),0);
+ });
+});
+
+for(const redactedCurrent of [false,true])test(`同头版本列表刷新重新核验展开历史，迟到旧页不能恢复正文（当前版${redactedCurrent?'失效':'仍有效'}）`,{timeout:15000},async t=>{
+ const current={mergeParents:[],mergeParentCount:0,verificationState:'verified',timeStatus:'eligible',versionNo:'2',body:'独立的当前合成版本',formationKind:'correction',adoptionMode:'user',previousVersionNo:'1',restoredFromVersionNo:null,contentState:'present',provenanceState:'eligible',decisionId:id,sources:[source],contributingContactIds:[contact]};
+ const old={...current,versionNo:'1',body:'仅旧来源支持的合成历史',previousVersionNo:null};
+ const cleared={...old,body:null,contentState:'redacted',provenanceState:'invalidated',sources:[]};
+ let refreshed=false,historyReads=0,releaseLate;const cursors=[],late=new Promise(resolve=>{releaseLate=resolve;});
+ const historical=version=>({connectionGeneration:1,scope:{scopeKind:'contact',contactId:contact},view:{memoryId:id,headRevision:'2',revision:'a'.repeat(64),versions:[version],decisions:[],nextCursor:'older'}});
+ await panel(t,async(method,input)=>{
+  if(method==='readHistory'){cursors.push(input.cursor);historyReads++;if(historyReads===2)return late;return historical(refreshed?cleared:old);}
+  const latest=refreshed&&redactedCurrent?{...current,body:null,contentState:'redacted',provenanceState:'invalidated',sources:[]}:current;
+  return {...view(),view:{candidates:[],memories:[{id,scopeKind:'contact',contactId:contact,headRevision:'2',state:'active',manualProtection:false,current:latest.body===null?null:latest,versions:[latest],decisions:[]}],page:{revision:'a'.repeat(64),nextCursor:null}}};
+ },async page=>{
+  await page.getByText(current.body,{exact:true}).waitFor();assert.equal(historyReads,0);
+  await openMemoryMore(page);await page.getByText('更新历史',{exact:true}).click();await page.getByText(old.body,{exact:true}).waitFor();
+  await page.getByRole('button',{name:'更早的版本与决定',exact:true}).click();
+  refreshed=true;await refreshVisible(page);
+  await page.getByText('正文已清除或来源已失效。',{exact:true}).waitFor();
+  assert.equal(await page.getByText(old.body,{exact:true}).count(),0);assert.equal(historyReads,3);assert.deepEqual(cursors,[undefined,'older','older']);
+  releaseLate(historical(old));await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  assert.equal(await page.getByText(old.body,{exact:true}).count(),0);assert.equal(await page.getByText(current.body,{exact:true}).count(),redactedCurrent?0:1);
+  await page.getByText('更新历史',{exact:true}).click();await refreshVisible(page);await page.evaluate(()=>new Promise(requestAnimationFrame));assert.equal(historyReads,3,'折叠历史不因列表刷新请求旧版');
+  await page.getByText('更新历史',{exact:true}).click();await page.getByText('正文已清除或来源已失效。',{exact:true}).waitFor();assert.equal(historyReads,4);
+  await page.getByText('更多',{exact:true}).click();await refreshVisible(page);await page.evaluate(()=>new Promise(requestAnimationFrame));assert.equal(historyReads,4,'收起更多后不再读取已展开的历史');assert.equal(await page.getByText('正文已清除或来源已失效。',{exact:true}).count(),0);
+ },false,contact,async()=>{},{withHistory:true});
 });
