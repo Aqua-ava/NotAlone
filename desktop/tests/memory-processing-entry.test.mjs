@@ -66,7 +66,7 @@ async function withEntry(t, command, inspect, controller = false) {
         }
         const root = createRoot(document.getElementById('root'));
         let scopeKey = 'scope-a', revision = 0, contactId = '33333333-3333-4333-8333-333333333333', scopeRevision = 0;
-        const render = () => root.render(<MemoryProcessingEntry bridge={bridge} backend={backend} contactId={contactId} scopeRevision={scopeRevision} scopeKey={scopeKey}><LegacyBody/></MemoryProcessingEntry>);
+        const render = () => root.render(<MemoryProcessingEntry bridge={bridge} backend={backend} contactId={contactId} scopeKey={scopeKey}><LegacyBody/></MemoryProcessingEntry>);
         window.emitBackend = phase => {
           for (const listener of listeners) listener({phase, revision: ++revision, reused: false,
             canRetryConnection: false, canRetryShutdown: false, canSaveStartupPaths: false, canPrepareConfiguration: false});
@@ -119,106 +119,12 @@ test('明确 sqlite 后挂载固定范围处理，正文失效由面板处理且
     await panel.getByRole('status').filter({ hasText: '等待处理' }).waitFor();
     assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
     assert.equal(await page.evaluate(() => window.legacyMounts), 0);
+    assert.equal(await page.getByRole('region', { name: '历史聊天记忆处理' }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: '处理历史聊天', exact: true }).count(), 0);
     await page.evaluate(() => window.invalidate());
     await panel.getByRole('alert').filter({ hasText: '资料资格或连接已变化' }).waitFor();
     assert.equal(await panel.getByRole('status').count(), 0);
   });
-});
-
-test('历史入口点击才启动当前联系人，切换后迟到回执不影响新范围', {timeout:20000}, async t=>{
- const a='33333333-3333-4333-8333-333333333333',b='44444444-4444-4444-8444-444444444444';
- const started=deferred(),late=deferred(),calls=[];
- await withEntry(t,async(method,input)=>{
-  if(method==='readMode')return {connectionGeneration:1,mode:'sqlite'};
-  if(method==='readCurrent')return {...currentView(1,input.contactId===a?1:2),contactId:input.contactId};
-  if(method==='startHistory'){
-   calls.push(input);started.resolve();
-   if(input.contactId===a)return late.promise;
-   return {status:'started',view:{...currentView(1,2),contactId:b}};
-  }
- },async page=>{
-  const button=page.getByRole('button',{name:'处理历史聊天',exact:true});await button.waitFor();
-  assert.equal(calls.length,0,'打开页面只读取状态');await button.click();await started.promise;
-  assert.equal(calls[0].contactId,a);assert.equal(calls[0].scopeRevision,0);assert.match(calls[0].requestKey,/^[a-f0-9-]{36}$/);
-  assert.equal(await page.getByRole('button',{name:'正在启动…',exact:true}).isDisabled(),true);
-  await page.evaluate(id=>window.selectContact(id),b);
-  await page.getByText('提取与核验：已处理 2 / 2 条文字目标',{exact:true}).waitFor();
-  late.resolve({status:'started',view:{...currentView(1,1),contactId:a}});
-  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-  assert.equal(await page.getByText('已核对原任务，当前仍有处理阻碍。',{exact:true}).count(),0);
-  await button.click();await page.getByText('已核对原任务，当前仍有处理阻碍。',{exact:true}).waitFor();
-  assert.equal(calls.length,2);assert.equal(calls[1].contactId,b);assert.equal(calls[1].scopeRevision,1);
-  await page.evaluate(()=>window.selectContact(null));await button.waitFor();assert.equal(await button.isDisabled(),true);
- });
-});
-
-test('历史启动显示空资料和既有任务阻碍，失败重试保留原请求键', {timeout:20000},async t=>{
- let reason='no_pending_history';const keys=[];
- await withEntry(t,async(method,input)=>{
-  if(method==='readMode')return {connectionGeneration:1,mode:'sqlite'};
-  if(method==='readCurrent')return {...currentView(1,1),contactId:input.contactId};
-  if(method==='startHistory'){keys.push(input.requestKey);return {status:'unavailable',reason};}
- },async page=>{
-  const button=page.getByRole('button',{name:'处理历史聊天',exact:true});await button.click();
-  await page.getByText('当前联系人没有待处理的历史文字。',{exact:true}).waitFor();
-  reason='blocked';await button.click();
-  await page.getByText('当前联系人已有受阻或暂停的记忆任务，请先解决原任务的阻碍。',{exact:true}).waitFor();
-  assert.equal(keys[0],keys[1]);
- });
-});
-
-test('历史启动失败提示随资格失效事件撤下，重试保持原请求且不自动启动', {timeout:20000},async t=>{
- const keys=[];
- await withEntry(t,async(method,input)=>{
-  if(method==='readMode')return {connectionGeneration:1,mode:'sqlite'};
-  if(method==='readCurrent')return {...currentView(1,1),contactId:input.contactId};
-  if(method==='startHistory'){keys.push(input.requestKey);return {status:'unavailable',reason:'source_stale'};}
- },async page=>{
-  const panel=page.getByRole('region',{name:'历史聊天记忆处理'}),button=panel.getByRole('button',{name:'处理历史聊天',exact:true});
-  await button.click();await panel.getByRole('alert').waitFor();
-  assert.match(await panel.getByRole('alert').innerText(),/^上次启动/);
-  await page.evaluate(()=>window.invalidate());
-  await page.waitForFunction(()=>!document.querySelector('[aria-label="历史聊天记忆处理"] [role="alert"]'));
-  assert.equal(keys.length,1,'资格变化只撤下旧提示，不创建处理请求');
-  await button.click();await panel.getByRole('alert').waitFor();
-  assert.equal(keys.length,2);assert.equal(keys[0],keys[1],'结果不确定或失效后重试仍复用幂等键');
- });
-});
-
-test('历史启动在资格变化后忽略迟到回执，只有再次点击才重试原请求', {timeout:20000},async t=>{
- const late=deferred(),entered=deferred(),keys=[];
- await withEntry(t,async(method,input)=>{
-  if(method==='readMode')return {connectionGeneration:1,mode:'sqlite'};
-  if(method==='readCurrent')return {...currentView(1,1),contactId:input.contactId};
-  if(method==='startHistory'){
-   keys.push(input.requestKey);entered.resolve();
-   return keys.length===1?late.promise:{status:'unavailable',reason:'no_pending_history'};
-  }
- },async page=>{
-  const panel=page.getByRole('region',{name:'历史聊天记忆处理'});
-  await panel.getByRole('button',{name:'处理历史聊天',exact:true}).click();await entered.promise;
-  await page.evaluate(()=>window.invalidate());
-  late.resolve({status:'unavailable',reason:'source_stale'});
-  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-  assert.equal(await panel.getByRole('alert').count(),0,'旧资格下的失败回执不得回填');
-  assert.equal(keys.length,1);
-  await panel.getByRole('button',{name:'处理历史聊天',exact:true}).click();
-  await panel.getByText('当前联系人没有待处理的历史文字。',{exact:true}).waitFor();
-  assert.equal(keys[0],keys[1]);
- });
-});
-
-test('同键返回已完成任务时显示原任务结果，不宣称重新启动', {timeout:20000},async t=>{
- await withEntry(t,async(method,input)=>{
-  if(method==='readMode')return {connectionGeneration:1,mode:'sqlite'};
-  const view={...currentView(1,1),contactId:input?.contactId};
-  if(method==='readCurrent')return view;
-  if(method==='startHistory')return {status:'started',view:{...view,run:{...view.run,state:'completed',status:'completed',stage:'completed',laterStages:'completed'}}};
- },async page=>{
-  await page.getByRole('button',{name:'处理历史聊天',exact:true}).click();
-  await page.getByText('本次历史聊天已处理完成。',{exact:true}).waitFor();
-  assert.equal(await page.getByText('已开始处理当前联系人的历史聊天。',{exact:true}).count(),0);
- });
 });
 
 test('连接变化先撤下正文，旧连接晚到的模式不能盖过新连接核验', { timeout: 20000 }, async t => {
