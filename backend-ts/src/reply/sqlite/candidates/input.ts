@@ -1,3 +1,4 @@
+import {selectReplyKnowledge} from './knowledge-budget.ts';
 import {requireSkillRun} from '../../../skills/sqlite/storage.ts';
 import type {SkillRunRevision} from '../../../skills/sqlite/contracts.ts';
 import {StorageFailure,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
@@ -46,7 +47,9 @@ function sources(tx:StorageTransaction,ownerId:string,items:readonly ReplySource
   AND m.interpretation_revision=CAST(json_extract(i.value,'$[2]') AS INTEGER) AND m.availability='available'`,[rows,ownerId]);
  if(valid?.n!==BigInt(items.length))fail('reply_source_unavailable');
 }
-function knowledge(tx:StorageTransaction,scope:DiscussionScope,item:ReplyKnowledgeItem,reader:ReplyKnowledgeReader):void{
+function knowledge(tx:StorageTransaction,scope:DiscussionScope,items:readonly ReplyKnowledgeItem[],reader:ReplyKnowledgeReader):void{
+ if(!items.length)return;
+ for(const item of items){
  if(!['memory','memory_candidate','document'].includes(item.kind)||typeof item.id!=='string'||!item.id||typeof item.versionNo!=='bigint'||item.versionNo<1n
   ||!item.text?.trim()||item.text.length>100_000||!Array.isArray(item.sources)||item.sources.length>1000
   ||item.scopeKind==='owner'&&item.contactId!==null||item.scopeKind==='contact'&&item.contactId!==scope.contactId
@@ -55,9 +58,11 @@ function knowledge(tx:StorageTransaction,scope:DiscussionScope,item:ReplyKnowled
   ||item.kind==='memory_candidate'&&item.qualification!=='unconfirmed'
   ||item.kind==='memory'&&!['auto','confirmed'].includes(item.qualification))fail('reply_knowledge_invalid');
  if(item.scopeKind==='contact'&&item.sources.some(s=>s.contactId!==scope.contactId))fail('reply_knowledge_scope');
- reader.requireCurrent(tx,scope,item);sources(tx,scope.ownerId,item.sources);
+  sources(tx,scope.ownerId,item.sources);
+ }
+ if(reader.requireCurrentBatch)reader.requireCurrentBatch(tx,scope,items);else for(const item of items)reader.requireCurrent(tx,scope,item);
 }
-export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contextId:string;requestId:string;workspace?:ReplyWorkspaceSnapshot},reader:ReplyKnowledgeReader):FrozenReplyInput[]{
+export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contextId:string;requestId:string;workspace?:ReplyWorkspaceSnapshot;queryText?:string},reader:ReplyKnowledgeReader):FrozenReplyInput[]{
  requireDiscussion(tx,i);
  const includeRelatedData=!i.workspace||i.workspace.includeRelationshipContext&&i.workspace.excludedMessageIds.length===0;
  const items:Omit<FrozenReplyInput,'itemNo'>[]=[];
@@ -76,8 +81,10 @@ export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contex
   if(w.instruction.trim())items.push({kind:'entry',identity:{workspaceItem:'instruction'},text:`本次一次性写作要求：\n${w.instruction}`,sources:[]});
   if(w.contextText.trim())items.push({kind:'entry',identity:{workspaceItem:'supplemental_context'},text:`本次补充背景（独立于想法/草稿，仅作用本次）：\n${w.contextText}`,sources:[]});
  }
- for(const item of includeRelatedData?reader.read(tx,i):[]){
-  knowledge(tx,i,item,reader);
+ const query=i.workspace?[i.workspace.draftText,i.workspace.instruction,i.workspace.contextText,...items.filter(item=>item.kind==='message').map(item=>item.text)].filter(Boolean).join('\n'):[i.queryText??items.filter(item=>item.kind==='entry').at(-1)?.text??'',...items.filter(item=>item.kind==='message').map(item=>item.text)].join('\n');
+ const related=includeRelatedData?selectReplyKnowledge(reader.read(tx,i),query):[];
+ knowledge(tx,i,related,reader);
+ for(const item of related){
   items.push({kind:item.kind,identity:item,text:(item.qualification==='unconfirmed'?'【未确认候选，仅供参考】':'')+item.text,sources:item.sources});
  }
  const details=tx.get('SELECT * FROM reply_candidate_request WHERE owner_id=? AND request_id=?',[i.ownerId,i.requestId])??fail('reply_request_unavailable');
@@ -105,8 +112,9 @@ export function requireReplyInput(tx:StorageTransaction,scope:DiscussionScope,co
  const frozen=tx.get('SELECT * FROM reply_candidate_context WHERE owner_id=? AND context_id=?',[scope.ownerId,contextId])??fail('reply_source_unavailable');
  const owner=tx.get('SELECT memory_revision,document_revision FROM owner WHERE owner_id=?',[scope.ownerId])!,contact=tx.get('SELECT memory_revision,document_revision FROM contact WHERE owner_id=? AND id=?',[scope.ownerId,scope.contactId])!;
  if(frozen.owner_memory_revision!==owner.memory_revision||frozen.owner_document_revision!==owner.document_revision||frozen.contact_memory_revision!==contact.memory_revision||frozen.contact_document_revision!==contact.document_revision)fail('reply_input_stale');
- for(const item of tx.all('SELECT * FROM reply_candidate_input WHERE owner_id=? AND context_id=?',[scope.ownerId,contextId])){
-  if(['memory','memory_candidate','document'].includes(String(item.kind)))knowledge(tx,scope,decode(String(item.identity_json)),reader);
+ const inputs=tx.all('SELECT * FROM reply_candidate_input WHERE owner_id=? AND context_id=?',[scope.ownerId,contextId]);
+ knowledge(tx,scope,inputs.filter(item=>['memory','memory_candidate','document'].includes(String(item.kind))).map(item=>decode<ReplyKnowledgeItem>(String(item.identity_json))),reader);
+ for(const item of inputs){
   if(item.kind==='selection'){const id=decode<{selectionId:string}>(String(item.identity_json)).selectionId;requireSelection(tx,scope,id,reader);}
  }
  sources(tx,scope.ownerId,tx.all('SELECT * FROM reply_candidate_input_source WHERE owner_id=? AND context_id=?',[scope.ownerId,contextId]).map(s=>({contactId:String(s.source_contact_id),recordId:String(s.record_id),messageId:String(s.message_id),acceptedRevision:s.accepted_revision as bigint})));

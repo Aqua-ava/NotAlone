@@ -3,6 +3,7 @@ import {combinedKnowledgeReader} from '../../../src/memory/sqlite/documents/know
 // 产品回复及删除动作直接复用正式注册表；仅补隔离库只读断言和故障注入。
 export const registry={...base,actions:[...base.actions,
  {name:'fixture.documentKnowledge',mode:'read',retryBusy:false,execute:(tx,input)=>combinedKnowledgeReader.read(tx,input)},
+ {name:'fixture.documentBody',mode:'read',retryBusy:false,execute:(tx,input)=>combinedKnowledgeReader.readDocument(tx,input.scope,input.item,{startBlock:1,blockCount:1})},
  {name:'fixture.documentCurrent',mode:'read',retryBusy:false,execute(tx,input){combinedKnowledgeReader.requireCurrent(tx,input.scope,input.item);return true;}},
  {name:'fixture.replyDocumentSources',mode:'read',retryBusy:false,execute(tx,input){return tx.all(`SELECT i.identity_json,s.source_contact_id,s.record_id,s.message_id,s.accepted_revision
   FROM reply_candidate_input i JOIN reply_candidate_input_source s ON s.owner_id=i.owner_id AND s.context_id=i.context_id AND s.item_no=i.item_no

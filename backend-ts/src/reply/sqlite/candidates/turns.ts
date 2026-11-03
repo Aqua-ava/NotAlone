@@ -88,7 +88,7 @@ export class SqliteReplyTurns {
     return [...messages.map(m=>({kind:'message',sourceContactId:input.contactId,messageId:m.id,recordId:m.record_id,acceptedRevision:m.interpretation_revision})),...entries.map((e:any)=>({kind:'entry',entryId:e.id}))];
    };
    let items=await readItems();
-   const freeze=()=>o.storage.execute<FrozenReplyInput[]>('reply.freezeInput',{...attempt,contextId,skillRun:revision,items,workspace:workspaceSnapshot,at:Date.now()});
+   const freeze=()=>o.storage.execute<FrozenReplyInput[]>('reply.freezeInput',{...attempt,contextId,skillRun:revision,items,workspace:workspaceSnapshot,queryText:input.text,at:Date.now()});
    let frozen:FrozenReplyInput[];
    try{frozen=await freeze();}
    catch(error){

@@ -1,4 +1,5 @@
 /** 每轮仅开放官方 Skill 加载与本版本静态资料；不提供任意文件能力。 */
+import {RELATIONSHIP_DOCUMENT_TOOL} from './document-tool.ts';
 import type {Context} from '@deepseek-ai/cordis';
 import {defineTool} from '@deepseek-ai/dsh-tools';
 import type {SqliteSkillRun} from '../../skills/sqlite/provider.ts';
@@ -12,11 +13,12 @@ export function isSkillReadFailure(error:unknown):boolean{
  const code=(error as {code?:string})?.code;
  return typeof code==='string'&&/^skill_(reader_unavailable|directory_unavailable|directory_conflict|content_changed|package_invalid|run_invalidated|revision_unavailable|unverified|source_verification_required)$/.test(code);
 }
-export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check:()=>Promise<void>,failed:(error:unknown)=>void):void{
+export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check:()=>Promise<void>,failed:(error:unknown)=>void,documents=false):void{
  const allowed=!!run&&run.revision.eligible.length>0;
  ctx.tools.restrict({allow:allowed?['skill']:[]});
  let resources=0;
  ctx.tools.guard(exec=>{
+  if(documents&&exec.name===RELATIONSHIP_DOCUMENT_TOOL)return;
   if(!allowed)return 'discussion_tools_forbidden';
   if(exec.name==='skill_resource'){
    if(!run.loadedSkills.length||++resources>2){failed(new StorageFailure('discussion_resource_limit'));return 'discussion_resource_limit';}

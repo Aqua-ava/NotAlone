@@ -277,7 +277,8 @@ test('撤选B后下一轮本人整理不得沿用实际混合输入的旧文档'
  assert.ok(independentMemory);assert.deepEqual(new Set(independentMemory.sources.map(source=>source.contactId)),new Set([f.a]));
  const old=await f.documents.read({scopeKind:'self',contactId:null}),oldKnowledge=originalKnowledge.filter(item=>item.kind==='document'&&item.scopeKind==='owner');
  assert.equal(old.publication.members.length,2);assert.equal(oldKnowledge.length,2);
- assert.ok(oldKnowledge.every(item=>item.text.includes('音乐甲')&&!item.text.includes('绿茶乙')));
+ const oldBodies=await Promise.all(oldKnowledge.map(item=>item.projection?.kind==='directory'?f.storage.execute('fixture.documentBody',{scope,item}):item));
+ assert.ok(oldBodies.every(item=>item.text.includes('音乐甲')&&!item.text.includes('绿茶乙')));
  assert.ok(oldKnowledge.every(item=>new Set(item.sources.map(source=>source.contactId)).size===2&&item.sources.some(source=>source.contactId===f.a)&&item.sources.some(source=>source.contactId===f.b)));
  const provenance=await f.storage.execute('fixture.documentProvenance',{ownerId:f.owner,publicationId:old.publication.id});
  for(const item of oldKnowledge){const refs=provenance.filter(row=>row.document_id===item.id);assert.ok(refs.length);assert.deepEqual(new Set(refs.map(row=>row.source_contact_id)),new Set([f.a]));}

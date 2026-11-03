@@ -1,3 +1,4 @@
+import {hasReplyDocumentTool,readReplyDocument} from './document-input.ts';
 import {randomUUID} from 'node:crypto';
 import {StorageFailure,type StorageAction,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {readCoverage} from '../../../history/sqlite/read.ts';
@@ -5,7 +6,7 @@ import {discussionRequestActions,requireAttempt,decode} from '../requests.ts';
 import {discussionModelActions,dropSkillForCurrentCall} from '../model-actions.ts';
 import {requireDiscussion} from '../actions.ts';
 import {sanitizeDiscussionErrorCode} from '../failure.ts';
-import {emptyReplyKnowledge,type ReplyKnowledgeReader} from './contracts.ts';
+import {emptyReplyKnowledge,type ReplyKnowledgeItem,type ReplyKnowledgeReader} from './contracts.ts';
 import {freezeReplyInput,requireReplyInput,requireSelection,replySourceContacts,selectionSourceContacts} from './input.ts';
 import {insertModelCandidates,parseReplyOutput,readParts,requireCandidate,versionView} from './versions.ts';
 export const INCOMPLETE_HISTORY_WARNING='历史覆盖不完整：本次使用当前可用资料，可能缺少重要语境。';
@@ -72,12 +73,19 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
   const row=tx.get("SELECT r.id,c.id context_id,c.skill_run_json FROM runtime_copy x JOIN reply_request r ON r.owner_id=x.owner_id AND r.id=x.committed_request_id JOIN reply_context c ON c.owner_id=r.owner_id AND c.request_id=r.id WHERE x.owner_id=? AND x.id=? AND r.kind='reply' AND r.state='committed' AND c.state='active'",[i.ownerId,d.current_runtime_id]);
   if(!row)return null;requireReplyInput(tx,i,String(row.context_id),reader);return {requestId:String(row.id),revision:decode(String(row.skill_run_json))};
  }),
+ action('documentToolAvailable','read',(tx,i)=>hasReplyDocumentTool(tx,i,reader)),
+ action('readDocument','write',(tx,i)=>readReplyDocument(tx,i,reader)),
  action('assertInput','read',(tx,i)=>{requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader);return true;}),
  action('assertInputWithoutSkill','read',(tx,i)=>{requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader,{ignoreSkill:true});return true;}),
  action('dispatchCall','write',(tx,i,lease)=>{requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader);return dispatch.execute(tx,i,lease);}),
  action('dropSkill','write',(tx,i)=>{
   requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader,{ignoreSkill:true});
-  return dropSkillForCurrentCall(tx,i);
+  const result=dropSkillForCurrentCall(tx,i);
+  // 新运行副本没有旧工具事件；把仍保留并计入预算的实际正文重新放入输入。
+  const documentInputs=tx.all("SELECT item_no,identity_json,text_body FROM reply_candidate_input WHERE owner_id=? AND context_id=? AND kind='document' ORDER BY item_no",[i.ownerId,result.contextId])
+   .filter(row=>decode<ReplyKnowledgeItem>(String(row.identity_json)).projection?.kind==='blocks')
+   .map(row=>({itemNo:Number(row.item_no),text:String(row.text_body)}));
+  return {...result,documentInputs};
  }),
  action('commitCandidates','write',(tx,i,lease)=>{
   requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader);parseReplyOutput(i.text);

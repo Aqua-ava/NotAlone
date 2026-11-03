@@ -1,3 +1,4 @@
+import {RELATIONSHIP_BUDGET} from '../../../reply/sqlite/candidates/knowledge-budget.ts';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {DiscussionScope} from '../../../reply/sqlite/contracts.ts';
 import type {ReplyKnowledgeItem,ReplyKnowledgeReader} from '../../../reply/sqlite/candidates/contracts.ts';
@@ -42,20 +43,57 @@ function textOf(tx:StorageTransaction,ownerId:string,member:StorageRow):string {
  }
  return lines.join('\n');
 }
-function scopeItems(tx:StorageTransaction,scope:DiscussionScope,scopeKind:'self'|'contact'):DocumentKnowledgeItem[]{
+function projected(tx:StorageTransaction,ownerId:string,member:StorageRow,previous?:ReplyKnowledgeItem):Pick<ReplyKnowledgeItem,'text'|'projection'>|null {
+ if(previous&&!previous.projection)return {text:textOf(tx,ownerId,member)};
+ if(member.kind==='scene'&&previous?.projection?.kind!=='blocks'){
+  const blockCount=Number(tx.get('SELECT count(*) n FROM document_block WHERE owner_id=? AND document_id=? AND version_no=?',[ownerId,member.document_id,member.version_no])!.n);
+  return {projection:{kind:'directory',blockCount},text:`【主题目录】${String(member.title)}\n提示：${String(member.hint??'')}\n段落数：${blockCount}；正文须用本材料编号调用read_relationship_document。`};
+ }
+ if(previous?.projection?.kind==='directory')throw new StorageFailure('document_knowledge_stale');
+ const range=previous?.projection?.kind==='blocks'?previous.projection:null;
+ if(range&&(member.kind!=='scene'||!Number.isSafeInteger(range.startBlock)||range.startBlock<1||!Number.isSafeInteger(range.blockCount)||range.blockCount<1||range.blockCount>RELATIONSHIP_BUDGET.documentBlocks))throw new StorageFailure('reply_document_range_invalid');
+ const rows=tx.all(`SELECT s.*,b.heading FROM document_statement s JOIN document_block b ON b.owner_id=s.owner_id AND b.document_id=s.document_id AND b.version_no=s.version_no AND b.block_no=s.block_no
+  WHERE s.owner_id=? AND s.document_id=? AND s.version_no=?${range?' AND s.block_no>=? AND s.block_no<?':''} ORDER BY s.block_no,s.statement_no${range?'':' LIMIT ?'}`,
+  [ownerId,member.document_id,member.version_no,...(range?[range.startBlock,range.startBlock+range.blockCount]:[RELATIONSHIP_BUDGET.profileCount])]);
+ if(range){
+  if(new Set(rows.map(row=>String(row.block_no))).size!==range.blockCount)throw new StorageFailure('reply_document_range_invalid');
+  const text=[`【主题资料】${String(member.title)}`,...rows.map(statement)].join('\n');
+  if(Array.from(text).length>RELATIONSHIP_BUDGET.documentChars)throw new StorageFailure('reply_document_budget_exceeded');
+  return {text,projection:{kind:'blocks',startBlock:range.startBlock,blockCount:range.blockCount}};
+ }
+ const lines=[`【长期背景】${String(member.title)}`],statementNos:number[]=[];
+ let chars=Array.from(lines[0]!).length;
+ for(const [index,row] of rows.entries()){
+  const text=statement(row),size=Array.from(text).length+1;
+  if(chars+size>RELATIONSHIP_BUDGET.profileChars)continue;
+  lines.push(text);chars+=size;statementNos.push(index+1);
+ }
+ return statementNos.length?{text:lines.join('\n'),projection:{kind:'profile',statementNos}}:null;
+}
+function scopeItems(tx:StorageTransaction,scope:DiscussionScope,scopeKind:'self'|'contact',selected?:readonly ReplyKnowledgeItem[]):DocumentKnowledgeItem[]{
  const ownerId=scope.ownerId,contactId=scopeKind==='self'?null:scope.contactId;
  const current=scopeKind==='self'?tx.get('SELECT current_publication_id,document_revision FROM owner WHERE owner_id=?',[ownerId]):tx.get('SELECT current_publication_id,document_revision FROM contact WHERE owner_id=? AND id=?',[ownerId,contactId]);
  if(!current||current.current_publication_id===null)return [];
  try{
   const cache=new Map<string,ReplySource[]>(),publicationId=String(current.current_publication_id),members=publicationMembers(tx,ownerId,publicationId,scopeKind,contactId,cache);
-  // 完整集合复核后再一次返回：其中任何成员失效时不能把剩余成员当成当前集合。
-  return members.map(member=>{
+  // 完整集合只在本次调用内复核一次；同文档的目录与正文仍各自重建并比较。
+  const requested=new Map<string,ReplyKnowledgeItem[]>();
+  for(const item of selected??[])requested.set(item.id,[...(requested.get(item.id)??[]),item]);
+  return members.flatMap(member=>{
+   const projections=selected?requested.get(String(member.document_id))??[]:[undefined];if(!projections.length)return [];
    const sources=documentSources(tx,ownerId,String(member.document_id),member.version_no as bigint,new Set(),cache);
    if(scopeKind==='contact'&&sources.some(source=>source.contactId!==contactId))throw new StorageFailure('document_scope_stale');
-   return {kind:'document',id:String(member.document_id),versionNo:member.version_no as bigint,scopeKind:scopeKind==='self'?'owner':'contact',contactId,publicationId,
-    text:textOf(tx,ownerId,member),qualification:'published',sources,documentRevision:current.document_revision as bigint};
+   return projections.flatMap(previous=>{
+    const projection=projected(tx,ownerId,member,previous);if(!projection)return [];
+    return [{kind:'document' as const,id:String(member.document_id),versionNo:member.version_no as bigint,scopeKind:scopeKind==='self'?'owner' as const:'contact' as const,contactId,publicationId,
+     ...projection,qualification:'published' as const,sources,documentRevision:current.document_revision as bigint}];
+   });
   });
- }catch(error){if(error instanceof StorageFailure)return [];throw error;}
+ }catch(error){
+  // 来源失效时省略整个发布集合；精确复核随后因缺少原项而拒绝，工具范围／预算仍显式返回。
+  if(error instanceof StorageFailure&&!['reply_document_range_invalid','reply_document_budget_exceeded'].includes(error.code))return [];
+  throw error;
+ }
 }
 function items(tx:StorageTransaction,scope:DiscussionScope):DocumentKnowledgeItem[]{
  available(tx,scope.ownerId,{scopeKind:'contact',contactId:scope.contactId});
@@ -63,20 +101,41 @@ function items(tx:StorageTransaction,scope:DiscussionScope):DocumentKnowledgeIte
  return [...scopeItems(tx,scope,'self'),...scopeItems(tx,scope,'contact')];
 }
 function serialized(value:unknown):string{return JSON.stringify(value,(_key,v)=>typeof v==='bigint'?v.toString():v);}
+function requireDocuments(tx:StorageTransaction,scope:DiscussionScope,expected:readonly ReplyKnowledgeItem[]):void{
+ if(!expected.length)return;
+ available(tx,scope.ownerId,{scopeKind:'contact',contactId:scope.contactId});
+ if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed'",[scope.ownerId]))throw new StorageFailure('document_knowledge_stale');
+ const key=(item:ReplyKnowledgeItem)=>serialized([item.id,item.projection]);
+ for(const scopeKind of ['owner','contact'] as const){
+  const selected=expected.filter(item=>item.scopeKind===scopeKind);if(!selected.length)continue;
+  const current=new Map(scopeItems(tx,scope,scopeKind==='owner'?'self':'contact',selected).map(item=>[key(item),item]));
+  for(const item of selected){
+   const found=current.get(key(item)),previous=item as DocumentKnowledgeItem;
+   if(!found||item.kind!=='document'||found.scopeKind!==item.scopeKind||found.contactId!==item.contactId||found.versionNo!==item.versionNo||found.publicationId!==item.publicationId||found.documentRevision!==previous.documentRevision
+    ||serialized(found.projection)!==serialized(item.projection)||found.qualification!==item.qualification||found.text!==item.text||serialized(found.sources)!==serialized(item.sources))throw new StorageFailure('document_knowledge_stale');
+  }
+ }
+ if(expected.some(item=>!['owner','contact'].includes(item.scopeKind)))throw new StorageFailure('document_knowledge_stale');
+}
 export const documentKnowledgeReader:ReplyKnowledgeReader={
  read:items,
- requireCurrent(tx,scope,item){
-  const previous=item as DocumentKnowledgeItem;
-  available(tx,scope.ownerId,{scopeKind:'contact',contactId:scope.contactId});
-  if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed'",[scope.ownerId]))throw new StorageFailure('document_knowledge_stale');
-  const found=scopeItems(tx,scope,item.scopeKind==='owner'?'self':'contact').find(value=>value.id===item.id&&value.scopeKind===item.scopeKind&&value.contactId===item.contactId);
-  if(!found||item.kind!=='document'||found.versionNo!==item.versionNo||found.publicationId!==item.publicationId||found.documentRevision!==previous.documentRevision
-   ||found.qualification!==item.qualification||found.text!==item.text||serialized(found.sources)!==serialized(item.sources))throw new StorageFailure('document_knowledge_stale');
+ readDocument(tx,scope,item,range){
+  if(item.projection?.kind!=='directory'||!Number.isSafeInteger(range.startBlock)||range.startBlock<1||!Number.isSafeInteger(range.blockCount)||range.blockCount<1||range.blockCount>RELATIONSHIP_BUDGET.documentBlocks||range.startBlock+range.blockCount-1>item.projection.blockCount)throw new StorageFailure('reply_document_range_invalid');
+  documentKnowledgeReader.requireCurrent(tx,scope,item);
+  const found=scopeItems(tx,scope,item.scopeKind==='owner'?'self':'contact',[{...item,projection:{kind:'blocks',...range}}])[0];
+  if(!found)throw new StorageFailure('document_knowledge_stale');return found;
  },
+ requireCurrent:(tx,scope,item)=>requireDocuments(tx,scope,[item]),
+ requireCurrentBatch:requireDocuments,
 };
 /** 按kind分派已存在的08记忆读取与09完整文档集合，回复不加载长期表达偏好。 */
 export const combinedKnowledgeReader:ReplyKnowledgeReader={
  read(tx,scope){return [...memoryKnowledgeReader.read(tx,scope),...documentKnowledgeReader.read(tx,scope)];},
+ readDocument:(tx,scope,item,range)=>documentKnowledgeReader.readDocument!(tx,scope,item,range),
+ requireCurrentBatch(tx,scope,items){
+  documentKnowledgeReader.requireCurrentBatch!(tx,scope,items.filter(item=>item.kind==='document'));
+  for(const item of items.filter(item=>item.kind!=='document'))combinedKnowledgeReader.requireCurrent(tx,scope,item);
+ },
  requireCurrent(tx,scope,item){
   if(item.kind==='document')return documentKnowledgeReader.requireCurrent(tx,scope,item);
   if(item.kind==='memory'||item.kind==='memory_candidate')return memoryKnowledgeReader.requireCurrent(tx,scope,item);

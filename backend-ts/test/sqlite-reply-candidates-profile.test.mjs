@@ -55,7 +55,12 @@ test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双�
   for(const cleanup of cleanups.reverse())await cleanup();
   await assert.rejects(access(root),error=>error.code==='ENOENT');
  });
- const ids=f.saved.map(binding=>binding.contact_id),texts=['合成甲已确认下周见面。','合成乙已确认周末休息。'];
+ const ids=f.saved.map(binding=>binding.contact_id),texts=['我长期喜欢合成园艺。','合成乙已确认周末休息。'];
+ const {documentFixture}=await import('./fixtures/memory-documents/support.mjs');
+ const docs=await documentFixture({after:cleanup=>cleanups.push(cleanup)},{baseFixture:f,sceneBody:'正式资料工具专有正文：合成园艺需要耐心照料。'});
+ await docs.extraction.start('profile-bounded-documents');await docs.extraction.waitForIdle();
+ await docs.extraction.close();await docs.adjudication.close();await docs.documents.close();
+ await f.contacts.setReading(true);
  f.channel.page=async(scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[record('1',{text:texts[ids.indexOf(scope.token.contact_id)]}),record('2',{kind:'voice',text:'媒体占位不得作为正文输入'})],completedPartitions:['shard-a'],exhausted:true});
  for(const id of ids){await f.service.synchronize(id);assert.equal((await f.service.coverage(id)).phase,'complete');}
  await f.contacts.setReading(false);const databaseId=f.storage.status.databaseId;
@@ -69,8 +74,18 @@ test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双�
  supplier=createServer((req,res)=>{void(async()=>{
   assert.equal(req.url,'/anthropic/v1/messages');assert.equal(req.headers['x-api-key'],'synthetic-only');
   let raw='';for await(const part of req)raw+=part;const body=JSON.parse(raw);requests.push(body);
-  assert.equal(body.model,normal.model.model);assert.equal(body.max_tokens,normal.model.maxTokens);assert.ok(!body.tools?.length);
-  const events=[{type:'message_start',message:{id:randomUUID(),type:'message',role:'assistant',model:body.model,content:[],usage:{input_tokens:3,output_tokens:0}}},{type:'content_block_start',index:0,content_block:{type:'text',text:''}},{type:'content_block_delta',index:0,delta:{type:'text_delta',text:output}},{type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:8}},{type:'message_stop'}];
+  assert.equal(body.model,normal.model.model);assert.equal(body.max_tokens,normal.model.maxTokens);
+  if(requests.length===1){
+   assert.deepEqual(body.tools.map(tool=>tool.name),['read_relationship_document']);
+   const wire=JSON.stringify(body);assert.ok(!wire.includes('正式资料工具专有正文'));
+   const itemNo=Number(wire.match(/\[(\d+)\] document\\n【主题目录】/)[1]);
+   const events=[{type:'message_start',message:{id:randomUUID(),model:body.model,usage:{input_tokens:3,output_tokens:0}}},{type:'content_block_start',index:0,content_block:{type:'tool_use',id:randomUUID(),name:'read_relationship_document',input:{}}},{type:'content_block_delta',index:0,delta:{type:'input_json_delta',partial_json:JSON.stringify({itemNo,startBlock:1,blockCount:1})}},{type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:'tool_use'},usage:{output_tokens:8}},{type:'message_stop'}];
+   res.setHeader('Content-Type','text/event-stream');res.end(events.map(event=>`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''));return;
+  }
+  if(requests.length===2)assert.match(JSON.stringify(body),/正式资料工具专有正文/);
+  else assert.ok(!body.tools?.length);
+  const bodyOutput=requests.length===2?JSON.stringify({candidates:[{parts:['合成正式候选','第二条'],basis:[Number(JSON.stringify(body).match(/实际输入材料\[(\d+)\]/)[1])]}]}):output;
+  const events=[{type:'message_start',message:{id:randomUUID(),type:'message',role:'assistant',model:body.model,content:[],usage:{input_tokens:3,output_tokens:0}}},{type:'content_block_start',index:0,content_block:{type:'text',text:''}},{type:'content_block_delta',index:0,delta:{type:'text_delta',text:bodyOutput}},{type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:8}},{type:'message_stop'}];
   res.setHeader('Content-Type','text/event-stream');res.end(events.map(event=>`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''));
  })().catch(error=>{supplierErrors.push(error.message);res.destroy();});});
  supplier.listen(0,'127.0.0.1');await once(supplier,'listening',{signal:AbortSignal.timeout(2000)});
@@ -101,9 +116,9 @@ test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双�
   assert.equal((await api(`/api/contacts/${id}/assistant-sessions/${created.data.session_id}`)).data.runtime_recovery,'unchecked');
   const read=await api(path);assert.equal(read.status,200);assert.equal(read.data.coverage.phase,'complete');assert.equal(read.data.requests.length,1);
   const version=read.data.requests[0].candidates[0];versions.push({requestId:read.data.requests[0].requestId,...version});
-  assert.equal(version.versionNo,1);assert.deepEqual(version.parts,['合成正式候选','第二条']);assert.equal(version.basis[0].verification,'actual_input');assert.match(version.basis[0].text,new RegExp(texts[index]));
-  const wire=JSON.stringify(requests[index]);assert.ok(wire.includes(texts[index]));assert.ok(!wire.includes(texts[1-index]));assert.ok(!wire.includes('媒体占位不得作为正文输入'));
-  assert.equal((await api(path,{body:request})).data.replayed,true);assert.equal(requests.length,index+1);
+  assert.equal(version.versionNo,1);assert.deepEqual(version.parts,['合成正式候选','第二条']);assert.equal(version.basis[0].verification,'actual_input');assert.match(version.basis[0].text,new RegExp(index?texts[index]:'正式资料工具专有正文'));
+  const wire=JSON.stringify(requests[index?2:0]);assert.ok(wire.includes(texts[index]));assert.ok(!wire.includes(texts[1-index]));assert.ok(!wire.includes('媒体占位不得作为正文输入'));
+  assert.equal((await api(path,{body:request})).data.replayed,true);assert.equal(requests.length,index+2);
  }
  const first=versions[0],edited=await api(`${paths[0]}/${first.candidateId}/edit`,{body:{version_no:1,parts:['我修改后的合成正式候选','第二条仍保留']}});
  assert.equal(edited.status,200,JSON.stringify(edited.data));assert.equal(edited.data.versionNo,2);assert.equal(edited.data.parentVersionNo,1);assert.equal(edited.data.basis[0].verification,'inherited_unverified');
@@ -111,7 +126,7 @@ test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双�
  const original=await api(`${paths[0]}/${first.candidateId}/versions/1`);assert.deepEqual(original.data.parts,first.parts);
  assert.equal((await api(`${paths[1]}/${first.candidateId}/versions/1`)).status,409);
  assert.equal((await api(`${paths[1]}/${first.candidateId}/select`,{body:{version_no:2}})).status,409);
- assert.equal(requests.length,2);assert.deepEqual(supplierErrors,[]);
+ assert.equal(requests.length,3);assert.deepEqual(supplierErrors,[]);
  assert.equal((await readdir(join(root,'model-permits'))).length,1,'正常profile仅有一个共享模型宿主');
  await stop(home);home=await start();
  for(const [index,path] of paths.entries()){
@@ -119,15 +134,15 @@ test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双�
   assert.equal(row.requestId,versions[index].requestId);assert.equal(row.candidates[0].versionNo,index===0?2:1);
   if(index===0){assert.deepEqual(row.candidates[0].parts,edited.data.parts);assert.equal(row.selections.at(-1).id,chosen.data.id);assert.equal(row.selections.at(-1).versionNo,2);}
  }
- assert.equal(requests.length,2,'重开回看不发起模型调用');
+ assert.equal(requests.length,3,'重开回看不发起模型调用');
  await stop(home);
  const audit=(await readFile(auditPath,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
- assert.equal(audit.length,2);assert.ok(audit.every(item=>item.kind==='redirect'&&item.syntheticAuthentication&&item.officialPath==='/anthropic/v1/messages'));
+ assert.equal(audit.length,3);assert.ok(audit.every(item=>item.kind==='redirect'&&item.syntheticAuthentication&&item.officialPath==='/anthropic/v1/messages'));
  reopened=await SqliteStorage.open({userData:root,intent:'open',role:'test',expectedDatabaseId:databaseId});
  assert.deepEqual(await reopened.check(),{integrity:'ok',foreignKeys:'ok'});
  const discussions=new SqliteDiscussionService(reopened,owner);
  for(const [index,version] of versions.entries()){
-  const trace=await discussions.trace(ids[index],sessionIds[index],version.requestId);assert.equal(trace.calls.length,1);assert.equal(trace.calls[0].state,'succeeded');
+  const trace=await discussions.trace(ids[index],sessionIds[index],version.requestId);assert.equal(trace.calls.length,index?1:2);assert.equal(trace.calls[0].state,'succeeded');
   assert.ok(trace.events.some(event=>event.kind==='model_request'));assert.ok(trace.events.some(event=>event.kind==='assistant_message'));
  }
 });
