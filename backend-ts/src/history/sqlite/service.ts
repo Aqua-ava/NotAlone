@@ -238,7 +238,7 @@ export class SqliteHistoryService {
  }
  /** 记忆等派生处理只重验来源元数据并保留活守卫，不读取历史页或推进同步目标。 */
  async ensureSourceReady(contactId:string,signal?:AbortSignal):Promise<void>{
-  return this.withChannel(contactId,signal,async(scope,channel,controller,_register,armGuard)=>{
+  const revalidated=await this.withChannel(contactId,signal,async(scope,channel,controller,_register,armGuard)=>{
    const report=await channel.inspect(scope,controller.signal);await this.check(scope,controller);assertSupport(report);
    if(report.accountKey!==scope.accountKey||report.conversationKey!==scope.conversationKey||report.sourceGeneration!==scope.token.source_generation)throw new StorageFailure('history_external_scope_changed');
    const normalUse=report.continuity==='same-source-instances-normal-use-v1';
@@ -247,7 +247,10 @@ export class SqliteHistoryService {
    if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target,report}))throw new StorageFailure('history_source_continuity_unverified');
    await this.check(scope,controller);await this.storage.execute('history.guardAuthorize',{token:scope.token,guardId:armed.guardId});
    if(this.shared&&channel.park){await channel.park();const guard=this.guards.get(contactId);if(guard)guard.parked=true;}
+   return armed.revalidated;
   });
+  // 成功重验会使旧未完目标失效；释放租约后再交回首次历史，失败不派发完成唤醒。
+  if(revalidated)this.wakeFirstHistory(contactId);
  }
  support(contactId:string):Promise<HistorySupportReport>{return this.withChannel(contactId,undefined,async(scope,channel,controller)=>{const report=await channel.inspect(scope,controller.signal);await this.check(scope,controller);return report;});}
  read(contactId:string,options:{limit?:number;before?:string}={}):Promise<HistoryRead>{
@@ -262,7 +265,8 @@ export class SqliteHistoryService {
   const store=new SqliteQuoteStore(this.storage,this.contacts.ownerId),limit=10;
   const targets=await store.candidates(contactId,quoteParserVersion,limit);
   if(!targets.length)return {processed:0,more:false};
-  return this.withChannel(contactId,signal,async(scope,channel,controller,_register,armGuard)=>{
+  let revalidated=false;
+  const result=await this.withChannel(contactId,signal,async(scope,channel,controller,_register,armGuard)=>{
    if(!channel.readQuote)return {processed:0,more:false};
    const report=await channel.inspect(scope,controller.signal);await this.check(scope,controller);assertSupport(report);
    if(report.accountKey!==scope.accountKey||report.conversationKey!==scope.conversationKey||report.sourceGeneration!==scope.token.source_generation)throw new StorageFailure('history_external_scope_changed');
@@ -271,7 +275,7 @@ export class SqliteHistoryService {
    if(normalUse&&!this.shared&&(!guard?.bodyVerified||!guard.target||!guard.report||serializeSupport(guard.report)!==serializeSupport(report)))return {processed:0,more:false};
    const reusable=normalUse&&guard?.bodyVerified&&guard.target&&guard.report&&serializeSupport(guard.report)===serializeSupport(report);
    const target=reusable?guard!.target!:await channel.target(scope,controller.signal);await this.check(scope,controller);
-   await armGuard(normalUse&&!reusable?{report,target}:undefined);
+   const armed=await armGuard(normalUse&&!reusable?{report,target}:undefined);revalidated=armed.revalidated;
    if(normalUse&&!reusable&&!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target,report}))throw new StorageFailure('history_source_continuity_unverified');
    this.rememberBodySupport(contactId,report);let processed=0;
    for(const item of targets){
@@ -292,6 +296,9 @@ export class SqliteHistoryService {
    if(this.shared&&channel.park){await channel.park();const guard=this.guards.get(contactId);if(guard)guard.parked=true;}
    return {processed,more:targets.length===limit};
   });
+  // 引用来源重验也可能使未完历史目标失效；成功释放读取器后再接回首次历史。
+  if(revalidated)this.wakeFirstHistory(contactId);
+  return result;
  }
  async imageMedia(contactId:string,messageIds:readonly string[]):Promise<ReadonlyMap<string,HistoryImageMedia>>{
   if(this.closed)throw new StorageFailure('history_closed');
