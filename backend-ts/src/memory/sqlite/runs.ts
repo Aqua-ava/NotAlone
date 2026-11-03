@@ -142,6 +142,7 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string,conta
 /** 同现有手动入口一样复验当前来源；另外记录首个被接受的目标类型和采集时间。 */
 function currentMessageRows(tx:StorageTransaction,ownerId:string,contactId:string,includeUnavailable=false,pending?:'history'|'incremental'):StorageRow[]{
  const sourceOrder=acceptedCaptureOrder(tx),scopeCte=sourceScopeCTE(tx),quarantine=tableExists(tx,'history_message_quarantine')?`AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)`:'';
+ // 固定首个来源在消息表之前，避免 SQLite 为每条消息重新全扫首个来源结果。
  const rows=tx.all(`WITH ${scopeCte},current_records AS MATERIALIZED (
   SELECT source.message_id,min(source.id) record_id FROM capture_record source
   JOIN sync_capture capture ON capture.owner_id=source.owner_id AND capture.id=source.capture_id
@@ -159,7 +160,7 @@ function currentMessageRows(tx:StorageTransaction,ownerId:string,contactId:strin
  )
  SELECT m.*,r.record_id,p.id AS item_id,p.extraction_state,p.pipeline_state,f.first_goal_kind,f.first_captured_at,
   CASE WHEN p.id IS NOT NULL AND EXISTS(SELECT 1 FROM run_input assigned WHERE assigned.owner_id=p.owner_id AND assigned.item_id=p.id AND assigned.role='target') THEN 1 ELSE 0 END AS target_assigned
- FROM message m JOIN current_records r ON r.message_id=m.id JOIN first_source f ON f.message_id=m.id
+ FROM first_source f CROSS JOIN message m ON m.id=f.message_id JOIN current_records r ON r.message_id=m.id
  LEFT JOIN processing_item p ON p.owner_id=m.owner_id AND p.contact_id=m.contact_id AND p.message_id=m.id AND p.purpose='memory_extraction'
  WHERE m.owner_id=? AND m.contact_id=? AND m.availability='available'
   ${quarantine}
