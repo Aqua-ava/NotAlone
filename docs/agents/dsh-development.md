@@ -6,7 +6,7 @@
 
 NotAlone 通过 DSH 官方 profile 和薄插件装配普通 TypeScript 业务模块。通用执行机制优先复用官方插件；权限、联系人隔离、来源、事务、预算和删除由业务代码负责。普通业务模块无需全部插件化，产品回复 Skill 也不等同于 DSH 运行时插件。
 
-按任务只接入所需能力，并核对最终启用的插件树；依赖已安装不代表允许启用。沿用 ADR-102 的临时会话和版本固定要求，不因采用 DSH 扩大数据、工具或外部发送权限。若公开扩展接口不足，先给出源码证据和最小复现，再按仓库决策流程讨论；不得静默改 DSH 核心、维护分叉或另造绕过官方启动机制的 Harness。
+按任务只接入所需能力，并核对最终启用的插件树；依赖已安装不代表允许启用。版本固定要求沿用 ADR-102；候选回复助手会话按 [ADR-106](../../architecture/adr/106-persistent-assistant-conversations.md)保存受控持久运行记录，其他后台任务保持临时执行，范围与删除见[现行隐私规格](../../architecture/current/privacy-deletion.md#dsh-迁移的数据边界)。采用 DSH 不扩大数据、工具或外部发送权限。若公开扩展接口不足，先给出源码证据和最小复现，再按仓库决策流程讨论；不得静默改 DSH 核心、维护分叉或另造绕过官方启动机制的 Harness。
 
 ## 每次开发的步骤
 
@@ -40,7 +40,7 @@ node -p "JSON.stringify({version: require('./backend-ts/node_modules/@deepseek-a
 | profile 分层和启动 | [architecture](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/docs/architecture.md#L13)、[profile.ts](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/boot/app-boot/src/profile.ts#L1) | [launch.ts](../../backend-ts/src/launch.ts) 的 `--profile notalone` 启动与 [sqlite.patch.yml](../../backend-ts/profile/sqlite.patch.yml) 装配 |
 | 插件声明、注入和退出清理 | [Cordis primer](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/docs/cordis-primer.md#L7)：`inject`、`apply`、`ctx.effect` | [sqlite-host-plugin.ts](../../backend-ts/src/sqlite-host-plugin.ts) 的 `name`、`inject`、`apply`、`ctx.effect` |
 | Agent 创建与取消释放 | [CreateAgentOptions](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/core/agent/src/index.ts#L95)、[agent-loop 释放实现](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/core/agent-loop/src/index.ts#L550) | [generation.ts](../../backend-ts/src/reply/sqlite/generation.ts)：`setup`、`followup`、`whenIdle`、`cancel`、`dispose` |
-| 会话创建与状态 | [SessionStore.create](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/core/session/src/index.ts#L1111) | [正式 profile](../../backend-ts/profile/sqlite.patch.yml) 的 session/projection 装配；业务持久化边界沿 ADR-102 |
+| 会话创建与状态 | [SessionStore.create](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/core/session/src/index.ts#L1111) | [正式 profile](../../backend-ts/profile/sqlite.patch.yml) 的 session/projection 装配；候选回复持久化边界按 ADR-106，其他后台任务按 ADR-102 |
 | Tool 注册、范围与守卫 | [tools/index.ts](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/core/tools/src/index.ts#L1071)：`register`、`restrict`、`guard` | [generation.ts](../../backend-ts/src/reply/sqlite/generation.ts) 的 scoped 工具装配 |
 | 单次模型调用 | [llm/index.ts](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/llm/llm/src/index.ts#L956)：`prepareCall` | [模型运行时](../../backend-ts/src/host/sqlite-model-runtime.ts)及其调用的适配层 |
 | Skill provider | [skill/index.ts](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/skill/skill/src/index.ts#L390)：`registerProvider` | [provider.ts](../../backend-ts/src/skills/sqlite/provider.ts)、[library.ts](../../backend-ts/src/skills/sqlite/library.ts) |

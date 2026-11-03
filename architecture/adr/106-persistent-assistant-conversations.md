@@ -49,7 +49,7 @@ DSH 使用锁定并核验的官方本机持久化后端，保存于 NotAlone 管
 ## 对既有决定的修订
 
 - 局部替代 [ADR-102](102-dsh-typescript-backend-migration.md)中候选回复的“DSH 只承担临时运行、不另存长期会话日志、从业务记录重新开始”条款；TS、官方装配、数据库、权限、来源、预算及其他后台任务的责任保持。
-- 局部修订 [ADR-042](042-assistant-session-context-boundary.md)及其[历史草图](../drafts/assistant-session-context.md)的默认续用、过夜恢复和历史选择规则：空闲超过 12 小时后下次生成新开；回看不切换，明确继续才切换。产品讨论与单次候选回复任务的区分、完整历史、显式携入、预算和删除规则保持。
+- 局部修订 [ADR-042](042-assistant-session-context-boundary.md)及其[历史草图](../drafts/archive/assistant-session-context.md)的默认续用、过夜恢复和历史选择规则：空闲超过 12 小时后下次生成新开；回看不切换，明确继续才切换。产品讨论与单次候选回复任务的区分、完整历史、显式携入、预算和删除规则保持。
 - [ADR-091](091-retire-runtime-todos-and-auto-summary.md)的不增加运行计划或自动摘要、[ADR-048](048-memory-skill-evolution-lifecycle.md)及后续修订的来源与记忆边界保持。本决定不采纳会话自动压缩、跨会话自动检索或长期记忆自动扩权。
 
-产品决策来历见[会话持久化讨论记录](../drafts/assistant-session-persistence.md)。
+产品决策来历见[会话持久化讨论记录](../drafts/archive/assistant-session-persistence.md)。

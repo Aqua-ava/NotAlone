@@ -4,17 +4,20 @@
 
 ## 开始探索前
 
-先读 [架构索引](../../architecture/README.md)，再按任务分支读取；ADR 路径以索引为准。完成条件：所有受影响的已采纳约束和 ADR 均已核对。
+先读 [架构索引](../../architecture/README.md)，再按任务分支定位现行规格的相关章节。默认在 `architecture/current/` 和相关实现目录内检索；需要核验决策来源或复审取舍时，再读取具体 ADR 的有效条款及替代提示。完整 ADR 目录、归档、历史验收和旧任务仅在追溯时读取。完成条件：受影响的现行要求及明确引用的有效决策已核对，历史条款没有被当作新增要求。
 
 | 任务分支 | 必读材料 |
 | --- | --- |
-| 联系人、消息、来源、记忆或检索 | `current/domain-data.md`；涉及自动采纳或检索时再读 ADR-002/ADR-005 |
-| 导入、回复、删除或后台任务 | `current/core-flows.md`；涉及历史导入或 Worker 时再读 ADR-004/ADR-007 |
-| Mac 微信后台同步 | `current/core-flows.md`、`current/privacy-deletion.md`、ADR-023、ADR-025、ADR-030、ADR-089 |
-| 前台定位、OCR 或连续性 | `current/core-flows.md`、`current/privacy-deletion.md`、ADR-049、ADR-050、ADR-052，并沿其后续修订指针核对当前规则；追溯旧视觉方案时再读 ADR-001、ADR-003、ADR-017 |
+| 联系人、消息、来源、记忆或检索 | `current/domain-data.md`；涉及自动采纳或检索时再读 `current/core-flows.md` 的对应章节 |
+| 导入、回复、删除或后台任务 | `current/core-flows.md` 的对应章节；删除另读 `current/privacy-deletion.md` |
+| Mac 微信后台同步 | `current/core-flows.md` 的同步章节、`current/privacy-deletion.md` 的读取与删除边界 |
+| 前台定位、OCR 或连续性 | `current/core-flows.md` 的前台定位章节、`current/privacy-deletion.md` 的视觉边界；追溯旧视觉方案时才读取历史 ADR |
 | 隐私、外部模型或连接器 | `current/privacy-deletion.md` 及对应接入的相关 ADR |
-| 本机交付、首启或资料更新 | `current/privacy-deletion.md`、ADR-061、ADR-065、ADR-066、ADR-095；开发与发布门禁见工程工作流 |
-| Agent、Tool、MCP、RAG 或编排框架 | `drafts/agent-runtime.md`、ADR-006、ADR-009、ADR-102；后者已采纳 DSH／TS 迁移，实际实现与验收仍按任务核验 |
+| 本机交付、首启或资料更新 | `current/privacy-deletion.md` 的本机存储与生命周期、[桌面说明](../../desktop/README.md)；开发与发布门禁见工程工作流 |
+| 回复、助手会话、Agent、Tool 或编排框架 | `current/core-flows.md` 的回复与助手会话章节、`current/privacy-deletion.md` 的运行记录与删除边界；当前实现入口见 [后台说明](../../backend-ts/README.md)，涉及 DSH 开发再读 [源码查证流程](dsh-development.md) |
+| Skill 接入、发现、组合或生命周期 | `current/skill-library.md`；涉及 DSH 开发再读 [源码查证流程](dsh-development.md) |
+
+草案仅在讨论其尚未决定的设计问题时读取；已收束草案的旧路径只提供现行入口和归档链接。复审旧框架选型时才读取 ADR-006／009／010 及运行时归档，不将旧实现步骤列为正常开发前置条件。
 
 根目录 `CONTEXT.md` 存在时也要读取；缺失时继续任务，只在领域术语需要正式整理时使用 `domain-modeling` 创建。输出沿用其中已定义的名称；未定义的概念先判断是错误同义词，还是需通过 `domain-modeling` 补充的真实领域缺口。
 
@@ -33,7 +36,7 @@
 - `AGENTS.md` 中的产品范围、隐私和人工发送约束是当前最高优先级规则。
 - `architecture/` 是设计记录，不保证方案正确或已实现；已实现行为按根 `AGENTS.md` 的运行证据规则核验。
 - 标记为“草案”的内容只用于理解探索方向，不得当作实现约束。
-- 标记为“已采纳”的 ADR 是当前阶段性决定；新证据表明其不合适时，明确提出复审，通过新 ADR 修订或替代。提议与现有 ADR 冲突时必须明确指出，不得静默覆盖：
+- ADR 的采纳记录说明当时的决定；当前约束须结合“部分替代／已替代”状态和具体适用范围判断。新证据表明仍有效的决定不合适时，明确提出复审，通过新 ADR 修订或替代。提议与有效 ADR 条款冲突时必须明确指出，不得静默覆盖：
 
 > 与 ADR-XXX 冲突；重新讨论的原因是……
 
@@ -41,5 +44,6 @@
 
 - 确认设计变更时，检索同主题的现行规格、ADR、草案和相关任务引用；以明确采纳与替代范围判断有效性，文件日期或编号较新本身不构成替代。
 - 修订 ADR 时，新 ADR 说明替代哪些条款和保留哪些约束；旧 ADR 顶部补回链和适用范围，保留历史决定与原因。同步现行规格与阅读入口，草案标明后续正式入口。
+- 已收束草案正文移入 `architecture/drafts/archive/`；仍被历史任务引用的旧路径可保留简短跳转页，先指向现行规格。架构首页只维护阅读路由，完整 ADR 目录和阶段验收记录按需访问。
 - 决策状态、实现状态和验收证据分别记录；已采纳的目标不能写成已实现，历史测试也不能自动证明新方案可用。
 - 完成条件：受影响的现行要求一致，旧方案有明确的历史／替代提示，相关本地链接有效；无法从已确认决定消解的冲突列为待决问题，不静默选择一方。

@@ -17,7 +17,7 @@
 
 该决定选择受预算限制的短背景预加载与长文档按需读取，承认固定背景可能与本次话题无直接关系，需要评估输入成本和对回复的影响。没有选择固定加载全部 L1 或全部场景正文，也没有取消词法基线；具体预算和质量门槛在实现规格中以评测固化。
 
-完整流程、工程方向及整体确认记录见[联合设计方案](../drafts/layered-relationship-memory.md)。本决定不授权运行真实资料整理、执行迁移或外部模型调用，也不证明端到端能力已可用。
+完整流程、工程方向及整体确认记录见[联合设计方案](../drafts/archive/layered-relationship-memory.md)。本决定不授权运行真实资料整理、执行迁移或外部模型调用，也不证明端到端能力已可用。
 
 后续执行以[正式规格](../../.scratch/layered-relationship-memory/spec.md)为行为和验收入口；[11项粒度及依赖](../../.scratch/layered-relationship-memory/ticket-proposal.md)已获用户认可并逐张发布，真实执行状态见[任务索引](../../.scratch/layered-relationship-memory/planning.md)；任务状态不替代真实模型质量与自动使用资格。
 

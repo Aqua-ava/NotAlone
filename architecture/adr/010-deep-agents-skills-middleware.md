@@ -1,20 +1,19 @@
 # ADR-010：使用 Deep Agents SkillsMiddleware 加载回复 Skill
 
-> 局部替代：[ADR-136](136-multi-skill-reply-composition.md)取消每轮只可使用一个 Skill 的数量限制；本 ADR 其余受控只读、缓存修订与禁止扩权边界继续有效。
+> 状态：部分替代。下文保留历史决定与原因；当前要求见[Skill Library](../current/skill-library.md)与[核心流程](../current/core-flows.md)，实现及验收范围见[后台说明](../../backend-ts/README.md)。
 
-> 后续修订（2026-10-23）：[ADR-102](102-dsh-typescript-backend-migration.md)已采纳精简 DSH 与 TS 后端迁移。必须采用 SkillsMiddleware 的实现选择由 ADR-102 替代；受控目录、按包固定修订、失效和读取规则保持；每轮零或一个的上限由 ADR-136 替代，存储沿 ADR-096／098。 当前代码仍为旧实现，迁移及验收未完成。
+> 替代范围：[ADR-102](102-dsh-typescript-backend-migration.md)以 TypeScript／DSH 替代必须采用 `SkillsMiddleware` 的实现选择；[ADR-109](109-controlled-sqlite-storage-foundation.md)以受控 SQLite 替代 PostgreSQL 业务存储；[ADR-136](136-multi-skill-reply-composition.md)取消每轮零或一个 Skill 的上限。受控只读、来源与联系人隔离、按包固定修订、缓存失效、预算及禁止扩权边界继续有效，最终消息仍由用户亲自发送。
 
-> 后续局部替代：[ADR-096](096-directory-backed-reply-skills.md)采用目录文件保存已发布正文与资源，自动发现新增和修改；数据库只管理业务元数据。本文旧存储及仅手动导入表述保留历史，范围、审核、预算、删除和权限约束继续有效。
+> 存储与发现后继：[ADR-096](096-directory-backed-reply-skills.md)与 [ADR-098](098-skill-business-state-only.md)采用目录文件保存正文与资源，数据库只管理业务状态；当前发现、核验与启停按 [ADR-129](129-controlled-dsh-reply-skill-discovery.md)及 [ADR-135](135-default-enabled-localized-skill-library.md)执行。本文旧存储及仅手动导入表述保留历史，范围、自动学习审核、预算、删除和权限约束继续有效。
 
 > 后续修订：[ADR-091](091-retire-runtime-todos-and-auto-summary.md)明确不增加运行计划和自动过程摘要；本文对 ADR-009 单次运行机制的保留不再包含 Todo／摘要中间件要求。框架、Skill、预算、持续讨论与删除边界保持。
 
 > 2026-10-21 设计审查：下文“自动 Skill 尚未实现”为早期阶段状态；后续授权草稿、审核与发布已出现主线装配，见 [ADR-048](048-memory-skill-evolution-lifecycle.md)及[演进任务索引](../../.scratch/memory-skill-evolution/planning.md)。模型不能自行发布、Middleware 不扩大 Tool 权限等约束保持；自动使用数量由 ADR-136 更新，工程接线不等于质量或 App 验收。
 
-> 状态：已采纳
 > 2026-10-11 局部修订见 [ADR-043](043-conversation-scenarios-and-direction-exploration.md)；不改变既有只读、联系人隔离和禁止发送边界。
 > 日期：2026-08-16
 > 修订：ADR-009 第 3 节的 `load_skill` 实现和第 6 节的 Deep Agents 边界
-> 后续修订：ADR-019 修订 v1 supporting files 的范围；本 ADR 的单 Skill、只读读取、缓存和禁止扩权边界继续有效。
+> 早期修订：[ADR-019](019-controlled-reply-skill-resources.md)修订 v1 supporting files 的范围；只读读取、缓存和禁止扩权边界保留，单 Skill 上限已由 ADR-136 替代。
 
 ## 背景
 

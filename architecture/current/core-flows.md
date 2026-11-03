@@ -104,7 +104,7 @@ ADR-037 纳入独立、可删除的完整追踪；具体要求见 [记忆提取�
   -> 写入 local_wechat_observation（mode=cli_background）和该联系人的 message
 ```
 
-后台同步使用稳定外部会话定位标识，不使用展示名猜测联系人。按 [ADR-089](../adr/089-all-private-wechat-sync-scope.md)，默认仅所选会话沿用 ADR-030 的手动确认；全部私聊范围持久保存于当前 owner、渠道与账号内，周期发现当前及新增私聊并复用唯一有效渠道身份，否则创建独立联系人。同名不同账号保持分离，身份冲突不猜测，撤销或删除排除项不自动恢复。切回仅所选停止自动纳入，保留已有有效绑定；修改范围不切换总开关。同步正文仍限一对一文字消息；已授权范围内的图片消息按 [ADR-140](../adr/140-source-verified-viewable-chat-images.md)，在来源关联和完整实际解码通过后保存为应用受管副本；无法处理时保留消息和具体状态。图片保存与记忆派发分离；记忆任务的图文输入目标按 [ADR-153](../adr/153-joint-text-image-memory-input.md)组装。图片取图和占位替换按 [ADR-138](../adr/138-chat-image-original-extraction-and-placeholder.md)接入当前账号密钥准备、WXGF 解码和聊天专用状态，实际实现与验收以对应记录为准；群聊和视频、语音不在本决定范围。按 [ADR-100](../adr/100-authorized-private-history-sync.md)，每个授权私聊首次进入范围时同步本机当前可读的全部既有文字，再持续增量；新老用户使用同一规则，旧授权版本须明确扩展后才读取历史。该决定尚未实现，目标、迁移和验收见[规格](../../.scratch/authorized-private-history-sync/spec.md)。
+后台同步使用稳定外部会话定位标识，不使用展示名猜测联系人。按 [ADR-089](../adr/089-all-private-wechat-sync-scope.md)，默认仅所选会话沿用 ADR-030 的手动确认；全部私聊范围持久保存于当前 owner、渠道与账号内，周期发现当前及新增私聊并复用唯一有效渠道身份，否则创建独立联系人。同名不同账号保持分离，身份冲突不猜测，撤销或删除排除项不自动恢复。切回仅所选停止自动纳入，保留已有有效绑定；修改范围不切换总开关。同步正文仍限一对一文字消息；已授权范围内的图片消息按 [ADR-140](../adr/140-source-verified-viewable-chat-images.md)，在来源关联和完整实际解码通过后保存为应用受管副本；无法处理时保留消息和具体状态。图片保存与记忆派发分离；记忆任务的图文输入目标按 [ADR-153](../adr/153-joint-text-image-memory-input.md)组装。图片取图和占位替换按 [ADR-138](../adr/138-chat-image-original-extraction-and-placeholder.md)接入当前账号密钥准备、WXGF 解码和聊天专用状态，实际实现与验收以对应记录为准；群聊和视频、语音不在本决定范围。按 [ADR-100](../adr/100-authorized-private-history-sync.md)，每个授权私聊首次进入范围时同步本机当前可读的全部既有文字，再持续增量；新老用户使用同一规则，旧授权版本须明确扩展后才读取历史。实际支持范围与来源认证按 [ADR-113](../adr/113-sqlite-private-history-source-contract.md)及 [ADR-133](../adr/133-page-delta-private-history-sync.md)核验；历史目标与当时任务见[规格](../../.scratch/authorized-private-history-sync/spec.md)，不据历史任务状态推断当前渠道已完整验收。
 
 每个已确认联系人独立保存历史覆盖检查点和增量 cursor。首次进入授权范围时从本机可读最早文字分页读取到当前，历史读取期间的新事件同时进入同一去重与来源链；只有覆盖追平后才能标记完整，已有检查点在应用重启后恢复。关闭 App 或手动关闭总开关时不运行读取进程，重新开启后把可检测的缺口交给后台补齐，并保留来源、状态和进度。全局 session 事件流不可用时，按绑定集合做有界一次性轮询，不启动每联系人长 Follow。
 
@@ -198,7 +198,7 @@ CLI 可以在用户切回已绑定联系人时补读本地数据库中的历史�
 
 按 [ADR-068](../adr/068-direct-reply-candidates-with-user-selection.md)，候选生成后不追加模型语义复核；结构、范围、来源与引用检查继续由程序执行，候选的最终表达由用户选择和修改。来源引用有效不等于语义已核验。记忆入库、L2/L3 整理核验及离线质量资格独立保持。
 
-回复运行时保持确定性外壳 `validate_scope -> assess_request_risk -> assemble_initial_context -> bounded Agent Tool loop -> validate_agent_output -> persist_trace -> return_result`。当前实现按 ADR-102 使用精简DSH承担内部循环，旧LangChain／LangGraph已退役，领域接口不暴露框架类型。TS 业务代码负责范围、事务、预算、来源校验及确定性调度，原本单次模型调用不扩展为开放式循环。框架迁移不削减 ADR-006／009 的业务约束，也不授权新的工具或自动发送。实际范围以25／26记录为准；历史草案见 `../drafts/agent-runtime.md`。
+回复运行时保持确定性外壳 `validate_scope -> assess_request_risk -> assemble_initial_context -> bounded Agent Tool loop -> validate_agent_output -> persist_trace -> return_result`。当前实现按 ADR-102 使用精简DSH承担内部循环，旧LangChain／LangGraph已退役，领域接口不暴露框架类型。TS 业务代码负责范围、事务、预算、来源校验及确定性调度，原本单次模型调用不扩展为开放式循环。框架迁移不削减 ADR-006／009 的业务约束，也不授权新的工具或自动发送。实际范围以25／26记录为准；仅在追溯旧选型时读取[运行时归档](../drafts/archive/agent-runtime.md)。
 
 每次生成由调用方提供联系人范围内的幂等 `request_key`。同键同输入的已完成请求直接返回原候选；同键不同输入明确报冲突；有效租约内正在执行时返回“处理中”；失败或租约过期后可以复用同一请求身份重试，不得产生第二份请求或重复候选。
 

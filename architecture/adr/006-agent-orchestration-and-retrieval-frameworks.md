@@ -1,10 +1,10 @@
 # ADR-006：Agent 编排与检索框架边界
 
-> 局部替代：[ADR-136](136-multi-skill-reply-composition.md)取消每轮自动选择最多一个 Skill 的限制；其余目录摘要、按需读取、选择留痕及 Skill 不写入记忆的约束继续有效。
+> 状态：部分替代。下文保留历史决定与原因；当前要求见[核心流程](../current/core-flows.md)与[领域数据](../current/domain-data.md)，实现及验收范围见[后台说明](../../backend-ts/README.md)。
 
-> 后续修订（2026-10-23）：[ADR-102](102-dsh-typescript-backend-migration.md)已采纳精简 DSH 与 TS 后端迁移。框架选择由 ADR-102 替代；PostgreSQL 权威状态、检索隔离、确定性业务约束和权限规则保持。 当前代码仍为旧实现，迁移及验收未完成。
+> 替代范围：第 1、2、7 节及方案 A 先由 [ADR-009](009-langchain-create-agent-bounded-reply-loop.md)修订；框架选择后由 [ADR-102](102-dsh-typescript-backend-migration.md)改为 TypeScript／DSH，PostgreSQL 存储选择由 [ADR-109](109-controlled-sqlite-storage-foundation.md)改为受控 SQLite。[ADR-136](136-multi-skill-reply-composition.md)取消每轮自动选择最多一个 Skill 的限制。
 
-> 状态：已采纳；第 1、2、7 节及方案 A 由 ADR-009 修订
+> 继续有效：业务库权威、联系人与检索隔离、来源校验、确定性业务外壳、有界执行和权限控制，以及 Skill 按需读取、选择留痕和不写入记忆的边界；最终消息仍由用户亲自发送。具体适用要求由上述现行规格承接。
 > 决策日期：2026-08-12
 
 ## 背景
