@@ -10,6 +10,8 @@ const outcomeMessages={conflict:'资料已被其他操作修改，存在并发�
 const successMessages:Record<string,string>={accept:'采纳成功，已形成正式版本。',edit_accept:'修改采纳成功，固定模型原稿保留。',reject:'已拒绝候选。',correct:'错误修正成功，旧版不再作为当前事实。',change:'变化已记录，旧版不再作为当前事实。',protect:'已开启当前人工保护。',unprotect:'已解除当前人工保护。',restore:'自动更新已撤销，已新增恢复版本。',withdraw:'已撤销首次自动采纳，内容不再作为当前事实。'};
 const formationNames:Record<string,string>={adoption:'采纳',correction:'纠正错误',change:'记录变化',restore:'撤销恢复',manual:'手动补充'};
 const adoptionNames:Record<string,string>={auto:'自动采纳',user:'用户采纳',manual:'手动补充'};
+const memoryLevelNames={L1:'具体记忆',L2:'主题资料',L3:'长期概览'} as const;
+type MemoryLevel=keyof typeof memoryLevelNames;
 function SourceTime({sources}:{sources:MemorySource[]}){
  const time=memorySourceTime(sources);
  return <p className="memory-source-time">{time?<><span>聊天来源</span><time dateTime={new Date(time.start).toISOString()}>{memorySourceDateLabel(time)}</time>{!time.complete&&<span>部分日期未知</span>}</>:<span>聊天来源日期未知</span>}</p>;
@@ -124,7 +126,7 @@ function Memory({memory,busy,decide,bridge,request:historyRequest,authority}:{me
 /** 资格失效或顶部范围变化立即卸载正文、依据和未提交编辑，迟到结果不再挂回。 */
 export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,documentsRefreshKey=0,completedRunId=null,visible=true,releaseOnUnmount=true}:{bridge:SqliteMemoryManagementBridge;contactId:string|null;scopeRevision:number;documentsRefreshKey?:number;completedRunId?:string|null;visible?:boolean;releaseOnUnmount?:boolean}){
  const [scopeKind,setScopeKind]=useState<'contact'|'self'>('contact');
- const [level,setLevel]=useState<'L1'|'L2'|'L3'>('L1');
+ const [level,setLevel]=useState<MemoryLevel>('L1');
  const pageCursor=useRef<string|undefined>(undefined),[previousPages,setPreviousPages]=useState<(string|undefined)[]>([]);
  const context=useRef({bridge,contactId,scopeRevision,scopeKind});
  if(context.current.bridge!==bridge||context.current.contactId!==contactId||context.current.scopeRevision!==scopeRevision||context.current.scopeKind!==scopeKind)context.current={bridge,contactId,scopeRevision,scopeKind};
@@ -173,7 +175,7 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
  }
  return <section className="sqlite-memory-management memory-timeline-browser" aria-label="记忆候选与版本">
   <header className="memory-browser-toolbar"><p className="memory-browser-caption">相处的点滴</p><div className="memory-person-switch" role="group" aria-label="记忆对象">{(['contact','self'] as const).map(kind=><button key={kind} type="button" aria-pressed={scopeKind===kind} disabled={!contactId} onClick={()=>setScopeKind(kind)}>{kind==='contact'?'对方':'我'}</button>)}</div></header>
-  <div className="memory-level-tabs" role="group" aria-label="记忆层级">{(['L1','L2','L3'] as const).map(value=><button key={value} type="button" aria-label={value} aria-pressed={level===value} onClick={()=>setLevel(value)}><span>{value}</span><strong>{{L1:'具体记忆',L2:'主题资料',L3:'长期概览'}[value]}</strong></button>)}</div>
+  <div className="memory-level-tabs" role="group" aria-label="记忆层级">{(['L1','L2','L3'] as const).map(value=><button key={value} type="button" aria-pressed={level===value} onClick={()=>setLevel(value)}>{memoryLevelNames[value]}</button>)}</div>
   {!contactId?<p className="memory-browser-empty">请先从顶部选择联系人。</p>:<div className="memory-flat-content" key={`${scopeKind}:${contactId}:${scopeRevision}`}>
    {scopeKind==='self'&&<p className="hint memory-scope-hint">仅展示来源完整归属于当前联系人的本人资料。</p>}
    <div hidden={level!=='L1'}>
