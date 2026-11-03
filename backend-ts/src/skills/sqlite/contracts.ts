@@ -39,6 +39,16 @@ export interface LoadedSkill {
   name: string;
   resources: {relativePath: string; mediaType: string; bytes: number; payloadDigest: string}[];
 }
+/** 显式兼容入口与自动预加载集合分开记录来源，不把自动集合冒称为用户选择。 */
+export type SkillPreloadOrigin = 'explicit' | 'auto_preload';
+/** 本轮冻结的预加载选择：来源、目录快照及每个 anchor 的包身份与修订。 */
+export interface SkillPreloadSelection {
+  origin: SkillPreloadOrigin;
+  catalogRevision: string;
+  anchors: SkillAnchor[];
+}
+/** 已在打开运行前读取并写入实际输入事件的本轮 Skill 正文。 */
+export interface PreloadedSkill extends LoadedSkill { content: string }
 export interface SkillRunRevision {
   packages: {id: string; headRevision: bigint}[];
   eligible: SkillAnchor[];

@@ -30,7 +30,9 @@
 
 ## 官方加载与实际输入
 
-`openSqliteSkillRun(library, {contactId,callId}, protection, selectedPackageId?, signal?)` 冻结 owner/contact/call、目录修订及明确选择。未知、停用、未核验或来源失效不进入可加载目录。`run.mount(scopedContext)` 只接受官方独占 scope，调用现有 profile 中的 `ctx.skills.registerProvider`；宿主全局目录为空。正常自动回复可通过重复的官方 `ctx.skills.get` 按需读取多个 Skill；每个包固定一个当时当前的不可变修订。显式 `selectedPackageId` 兼容入口仍只定向并预加载一个包。辅助资源须在对应 Skill 正文成功读取后，按准确 Skill 名称和相对路径读取本修订清单内路径；一轮回复总计最多读取两份。只显示虚拟路径，不暴露物理文件能力。
+`openSqliteSkillRun(library, {contactId,callId}, protection, selectedPackageId?, signal?)` 冻结 owner/contact/call、目录修订及明确选择，保持旧的按需加载语义；第四个参数为字符串（或省略）时仍是显式单包兼容入口。未知、停用、未核验或来源失效不进入可加载目录。`run.mount(scopedContext)` 只接受官方独占 scope，调用现有 profile 中的 `ctx.skills.registerProvider`；宿主全局目录为空。正常按需路径可通过重复的官方 `ctx.skills.get` 读取多个 Skill；每个包固定一个当时当前的不可变修订。
+
+多 anchor 预加载入口为 `openSqliteSkillRun(library, request, protection, {selectedPackageId?|preloadPackageIds?, signal?})`（等价导出 `openSqliteSkillPreload`）。`planSkillPreload` 在冻结目录中只选 `enabled + verified + current`：显式 `selectedPackageId` 优先且只选指定单包（来源 `explicit`），否则缺省选全部 eligible（来源 `auto_preload`），也可由内部 `preloadPackageIds` 限定集合。打开前逐 anchor 独立复验 package、修订、目录身份、manifest digest 与 content digest，再读取全部正文并写入选择／实际输入事件；任一失败整体拒绝并关闭运行，不保留部分正文，由调用方沿既有整体无 Skill 降级处理。`run.preloadOrigin`、`run.preloadSelection`（来源、目录摘要、各精确修订）和 `run.preloadedSkills` 提供本轮可追溯输入；`run.selection` 只在显式或唯一预加载时保留单值兼容投影。辅助资源须在对应 Skill 正文成功读取后，按准确 Skill 名称和相对路径读取本修订清单内路径；一轮回复总计最多读取两份。只显示虚拟路径，不暴露物理文件能力。
 
 必需的 `SkillRunProtection` 是删除／讨论／候选域共同的受信任宿主边界，缺失时拒绝打开：
 
