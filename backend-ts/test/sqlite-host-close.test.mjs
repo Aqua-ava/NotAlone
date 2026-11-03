@@ -3,17 +3,33 @@ import assert from 'node:assert/strict';
 import {closeSqliteHostResources} from '../src/sqlite-host-plugin.ts';
 
 function deferred(){let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};}
-test('图片同步先排空，再关闭媒体文件服务和SQLite',async()=>{
+test('退出同时通知所有领域停读，先关闭者等待后关闭者释放租约也能完成',async()=>{
+ const firstStarted=deferred(),incrementalStopped=deferred(),historyStopped=deferred(),calls=[];
+ const closing=closeSqliteHostResources({
+  firstHistory:{close:async()=>{calls.push('first-start');firstStarted.resolve();await incrementalStopped.promise;calls.push('first-done');}},
+  incremental:{close:async()=>{calls.push('incremental-start');await historyStopped.promise;incrementalStopped.resolve();calls.push('incremental-done');}},
+  history:{close:async()=>{calls.push('history');historyStopped.resolve();}},
+  wechat:{close:async()=>{assert.ok(calls.includes('first-done'));assert.ok(calls.includes('incremental-done'));calls.push('wechat');}},
+  storage:{close:async()=>{calls.push('storage');}},
+ });
+ try{
+  await firstStarted.promise;
+  assert.ok(calls.includes('incremental-start'),'等待首次派发器排空时也必须已经通知增量协调器停读');
+  assert.ok(calls.includes('history'),'等待协调器排空时也必须已经通知底层历史读者释放');
+ }finally{historyStopped.resolve();incrementalStopped.resolve();await closing;}
+ assert.deepEqual(calls.slice(-2),['wechat','storage']);
+});
+test('图片同步与媒体同时停读，全部排空后才关闭SQLite',async()=>{
  const gate=deferred(),started=deferred(),calls=[];
  const closing=closeSqliteHostResources({imageSync:{close:async()=>{calls.push('image-start');started.resolve();await gate.promise;calls.push('image-done');}},media:{close:async()=>{calls.push('media');}},storage:{close:async()=>{calls.push('storage');}}});
- await started.promise;assert.deepEqual(calls,['image-start']);gate.resolve();await closing;
- assert.deepEqual(calls,['image-start','image-done','media','storage']);
+ await started.promise;assert.deepEqual(calls,['image-start','media']);gate.resolve();await closing;
+ assert.deepEqual(calls,['image-start','media','image-done','storage']);
 });
-test('退出先排空首次派发器，再关闭历史和共享存储',async()=>{
+test('退出同时停止首次派发器与历史读者，排空后再关闭共享存储',async()=>{
  const gate=deferred(),started=deferred(),calls=[];
  const closing=closeSqliteHostResources({firstHistory:{close:async()=>{calls.push('first-start');started.resolve();await gate.promise;calls.push('first-done');}},history:{close:async()=>{calls.push('history');}},contacts:{close:async()=>{calls.push('contacts');}},models:{close:async()=>{calls.push('models');}},storage:{close:async()=>{calls.push('storage');}}});
- await started.promise;assert.deepEqual(calls,['first-start']);gate.resolve();await closing;
- assert.deepEqual(calls,['first-start','first-done','history','contacts','models','storage']);
+ await started.promise;assert.deepEqual(calls,['first-start','history','contacts']);gate.resolve();await closing;
+ assert.deepEqual(calls,['first-start','history','contacts','first-done','models','storage']);
 });
 test('首次派发排空失败继续关闭其他领域，但保留共享模型和SQLite供重试',async()=>{
  let fail=true;const calls=[],failure=new Error('合成首次派发器未排空');
@@ -31,9 +47,9 @@ test('媒体关闭失败仍逐域排空历史和联系人，保留存储供同�
   storage:{close:async()=>{calls.push('storage');}},
  });
  const rejected=assert.rejects(closing,error=>error instanceof AggregateError&&error.errors.length===1&&error.errors[0]===mediaFailure);
- await historyStarted.promise;assert.deepEqual(calls,['media','history-start']);historyGate.resolve();
- await contactStarted.promise;assert.deepEqual(calls,['media','history-start','history-done','contacts-start']);contactGate.resolve();
- await rejected;assert.deepEqual(calls,['media','history-start','history-done','contacts-start','contacts-done']);
+ await historyStarted.promise;await contactStarted.promise;assert.deepEqual(calls,['media','history-start','contacts-start']);
+ historyGate.resolve();contactGate.resolve();
+ await rejected;assert.deepEqual(calls,['media','history-start','contacts-start','history-done','contacts-done']);
 });
 
 test('多个领域关闭失败全部保留，不能关闭仍可能被写入的存储',async()=>{

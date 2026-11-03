@@ -38,6 +38,7 @@ function safeError(error: unknown): string {
 }
 const bindingKey = (binding: IncrementalBinding) => JSON.stringify([binding.contact_id, binding.binding_id, binding.grant_id, binding.selection_generation]);
 const canContinueIncremental=(coverage:HistoryCoverage)=>coverage.phase==='complete'||Boolean(coverage.traversalComplete&&coverage.incremental?.cursorPresent&&['ready','incomplete'].includes(coverage.incremental.phase));
+const replacedCheckpointErrors=new Set(['history_snapshot_replaced','history_runtime_revalidated']);
 function notification() { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; }
 
 /**
@@ -147,6 +148,12 @@ export class IncrementalHistoryCoordinator {
         if(deadline?.key===key){
           if(this.#now()<deadline.timestamp)continue;
           this.#emptyProbeAt.delete(contactId);this.#attempted.delete(contactId);
+        }else if(this.#states.get(contactId)?.phase==='blocked'&&replacedCheckpointErrors.has(this.#states.get(contactId)?.lastError??'')){
+          // 新历史接续完成后绑定身份不变；以当前持久检查点解除旧快照的调度阻塞，不复用旧游标。
+          let coverage:HistoryCoverage;
+          try{coverage=await this.#history.coverage(contactId);}catch{continue;}
+          if(!coverage.traversalComplete||!coverage.incremental?.cursorPresent||!['ready','incomplete'].includes(coverage.incremental.phase))continue;
+          this.#attempted.delete(contactId);
         }else if(this.#states.get(contactId)?.phase==='blocked'&&this.#states.get(contactId)?.lastError==='history_incremental_unavailable'){
           // 只读本机持久覆盖，接住启动时旧empty目标先被看见、随后FirstHistory完成新证明的竞态。
           // 未出现明确证明时不触碰渠道，也不清除阻断。
@@ -170,7 +177,10 @@ export class IncrementalHistoryCoordinator {
       let coverage = await this.#history.coverage(job.contactId);
       if (!canContinueIncremental(coverage)) {
         // 正式宿主有独立 FirstHistoryCoordinator；不能与它并发启动同一联系人的首次历史。
-        if (this.#firstHistoryManagedExternally) throw new StorageFailure('history_incomplete');
+        if (this.#firstHistoryManagedExternally) {
+          await this.#history.requestFirstHistoryRecovery?.(job.contactId);
+          throw new StorageFailure('history_incomplete');
+        }
         coverage = await this.#history.synchronize(job.contactId, active.controller.signal);
         if (!canContinueIncremental(coverage)) throw new StorageFailure(coverage.failureCode ?? 'history_incomplete');
       }

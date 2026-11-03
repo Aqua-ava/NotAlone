@@ -55,6 +55,12 @@ export class SqliteHistoryService {
  }
  setFirstHistoryWake(callback:(contactId:string)=>void):void {this.firstHistoryWake=callback;}
  private wakeFirstHistory(contactId:string):void {try{this.firstHistoryWake?.(contactId);}catch{/* 唤醒失败不回滚已持久化的历史目标。 */}}
+ /** 空闲守卫的瞬时失效也须接回历史协调器；真实围栏和授权变化不进入自动恢复。 */
+ async requestFirstHistoryRecovery(contactId:string):Promise<void>{
+  if(this.closed||!this.firstHistoryWake)return;
+  const token=await this.contacts.eligibility(contactId);
+  if(await this.storage.execute<boolean>('history.normalUseRevalidationCandidate',{token}))this.wakeFirstHistory(contactId);
+ }
  private publishMessageChanges(contactId:string,ids:readonly string[]|undefined,kind:MessageChangeKind):void{
   if(this.onMessageChange)for(const messageId of ids??[])try{this.onMessageChange(contactId,messageId,kind);}catch{/* 通知失败不能回滚已提交的历史页。 */}
  }
@@ -432,7 +438,7 @@ export class SqliteHistoryService {
    await check();await this.storage.execute('history.guardAuthorize',{token:scope.token,guardId});this.rememberBodySupport(contactId,report);
    if(armed.revalidated||freshTarget){
     await this.storage.execute('history.begin',{token:scope.token,target:freshTarget,report,id:randomUUID(),at:Date.now()});
-    if(reportGrowth)wakeGrowth=true;
+    wakeGrowth=true;
     return await this.storage.execute<HistoryCoverage>('history.coverage',{ownerId:this.contacts.ownerId,contactId});
    }
    if(typeof channel.tail!=='function')throw new StorageFailure('history_tail_unsupported');

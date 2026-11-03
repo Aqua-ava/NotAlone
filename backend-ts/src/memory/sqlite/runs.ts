@@ -304,10 +304,14 @@ function hasOnlyLaterStageWaiting(tx:StorageTransaction,ownerId:string,contactId
  return true;
 }
 interface ContactQueueState {contactId:string;pendingCount:number;oldestAt:number|null;latestAt:number|null;lastStartedAt:number|null;blocked:boolean}
-function contactQueueState(tx:StorageTransaction,ownerId:string,contactId:string,incremental=true):ContactQueueState{
+function contactQueueBlocked(tx:StorageTransaction,ownerId:string,contactId:string,incremental=true):boolean{
  const latest=latestTargetRun(tx,ownerId,contactId);
  let blocked=hasUnresolvedContactBlocker(tx,ownerId,contactId,incremental);
  if(latest&&latest.state!=='completed'&&latest.state!=='revoked'&&!hasOnlyLaterStageWaiting(tx,ownerId,contactId,latest)&&!(incremental&&safeHistoryProgress(tx,ownerId,contactId,latest)))blocked=true;
+ return blocked;
+}
+function contactQueueState(tx:StorageTransaction,ownerId:string,contactId:string,incremental=true):ContactQueueState{
+ const blocked=contactQueueBlocked(tx,ownerId,contactId,incremental);
  const last=tx.get(`SELECT max(r.started_at) AS started_at FROM processing_run r JOIN run_contact rc ON rc.owner_id=r.owner_id AND rc.run_id=r.id
   WHERE rc.owner_id=? AND rc.contact_id=? AND rc.state='active' AND ${currentRunContactScope} AND coalesce(json_extract(r.policy_config,'$.intent'),'')<>'memory_document_later_stage' AND r.start_request_key NOT LIKE 'history-auto:%' AND r.start_request_key NOT LIKE 'history:%'
    AND EXISTS(SELECT 1 FROM run_input i WHERE i.owner_id=r.owner_id AND i.run_id=r.id AND i.source_contact_id=rc.contact_id AND i.role='target')`,[ownerId,contactId]);
@@ -344,10 +348,11 @@ function scheduleSummary(tx:StorageTransaction,ownerId:string,now:number,contact
 }
 /** 历史终页落库后即可处理；旧边界之前的增量资料归入历史补齐。 */
 function historyQueueStates(tx:StorageTransaction,ownerId:string,scope?:string){
- return validContacts(tx,ownerId,scope).map(c=>{
+ return validContacts(tx,ownerId,scope).flatMap(c=>{
   const contactId=String(c.id),latest=tx.get(`SELECT state FROM read_goal WHERE owner_id=? AND contact_id=? AND binding_id=? AND kind='history' ORDER BY ${hasColumn(tx,'read_goal','creation_no')?'creation_no':'created_at'} DESC,rowid DESC LIMIT 1`,[ownerId,contactId,c.binding_id]);
+  if(latest?.state!=='complete')return [];
   const stats=pendingIncrementalStats(tx,ownerId,contactId,true);
-  return {contactId,pending:stats.count,ready:latest?.state==='complete',blocked:contactQueueState(tx,ownerId,contactId,false).blocked};
+  return [{contactId,pending:stats.count,ready:true,blocked:contactQueueBlocked(tx,ownerId,contactId,false)}];
  }).filter(row=>row.pending>0);
 }
 function startHistoryBatch(tx:StorageTransaction,raw:unknown){

@@ -15,6 +15,8 @@ import { NarrowWechatClient } from '../src/history/wechat/native-client.ts';
 import { SqliteHistoryClearService } from '../src/history/sqlite/clear.ts';
 import { DeletionService } from '../src/storage/sqlite/deletion/service.ts';
 import { ManagedFiles } from '../src/storage/sqlite/deletion/managed-files.ts';
+import { FirstHistoryCoordinator } from '../src/history/sqlite/coordinator.ts';
+import { IncrementalHistoryCoordinator } from '../src/history/sqlite/incremental-coordinator.ts';
 
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const owner='00000000-0000-4000-8000-000000000091',account='synthetic-owner',conversation='synthetic-friend',generation='a'.repeat(64);
@@ -22,7 +24,7 @@ const statusCapabilityKeys=['programVersion','exactSchema','declaredLocalKey','a
 const capabilities=extra=>Object.fromEntries([...statusCapabilityKeys,...Object.keys(extra)].map(key=>[key,extra[key]??'unverified']));
 const schema={format:'wechat-message-schema-v1',status:'unverified',scopeDigest:hash(`${account}\0${conversation}`),sourceGeneration:generation,schemaFingerprint:'b'.repeat(64),
  tables:[{target:'c'.repeat(64),partition:'d'.repeat(64),role:'private_message',columns:[{name:'local_id',type:'INTEGER',notNull:false,primaryKey:1,hidden:0}],indexes:[],declaredPrimaryKey:['local_id'],autoIncrement:true,sqlFingerprint:'e'.repeat(64),triggerFingerprints:[],schemaVersion:'1',rootPage:'2'}],checkedPartitions:['d'.repeat(64)]};
-async function fixture(t,sharedMode=false,storageOptions={}){
+async function fixture(t,sharedMode=false,storageOptions={},contactCount=2){
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-wechat-channel-'))),artifact=join(root,'artifact');
  await mkdir(join(artifact,'bin'),{recursive:true});await mkdir(join(artifact,'lib'));await mkdir(join(root,'state'));
  const executable=join(artifact,'bin','wx-cli'),manifestPath=join(artifact,'manifest.json'),planFile=join(root,'plan'),logFile=join(root,'requests'),pidFile=join(root,'pid');
@@ -46,7 +48,7 @@ async function fixture(t,sharedMode=false,storageOptions={}){
    if(plan.mode==='blocked')return;
    const row={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:plan.serverId,sender:'contact',kind:'text',text:${sharedMode?"'合成历史正文:'+selected":"'合成历史正文'"},originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:plan.mode==='quarantine'?'unverified':'verified'};
    data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[row,{...row,localId:'2',serverId:'0',kind:'voice',text:plan.mode==='malicious'?'forbidden-body':null,originalType:'34'}],completedPartitions:schema.checkedPartitions,exhausted:true,...(plan.resumeCursor?{resumeCursor:plan.resumeCursor}:{})};
-   if(resumed)data.records=[];
+   if(resumed)data.records=plan.resumeRows||[];
   }else if(r.op==='tail')data={target:r.target,cursorIn:r.cursor,cursorOut:plan.tailCursorOut||'tail-'+tailSerial++,records:plan.tailRows||[],caughtUp:true,...(plan.tailExtra?{unexpectedBody:'forbidden'}:{})};
   else if(r.op==='boundary-snapshot'){
    data={format:'wechat-history-boundary-v1',scopeDigest:schema.scopeDigest,sourceGeneration:schema.sourceGeneration,schemaFingerprint:schema.schemaFingerprint,
@@ -62,7 +64,7 @@ async function fixture(t,sharedMode=false,storageOptions={}){
  const manifest={formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',cliSha256:hash(script),wcdbSha256:hash(wcdb),signing:'ad-hoc-development',realWechatVerified:false};
  await writeFile(manifestPath,JSON.stringify(manifest));
  const storage=await SqliteStorage.open({userData:join(root,'state'),intent:'create',role:'test',...storageOptions});
- const contacts=new SqliteContactService(storage,owner,{account:async()=>({externalKey:account,identityScheme:'wechat.account.v1',sourceGeneration:generation,assurance:'verified',supportProfile:'synthetic-metadata-v1'}),sessions:async()=>[conversation,...(sharedMode?['synthetic-second']:[])].map(externalKey=>({externalKey,displayName:externalKey,kind:'private',identityAssurance:'verified'}))});
+ const contacts=new SqliteContactService(storage,owner,{account:async()=>({externalKey:account,identityScheme:'wechat.account.v1',sourceGeneration:generation,assurance:'verified',supportProfile:'synthetic-metadata-v1'}),sessions:async()=>[conversation,...(sharedMode?Array.from({length:contactCount-1},(_,index)=>index===0?'synthetic-second':`synthetic-friend-${index+2}`):[])].map(externalKey=>({externalKey,displayName:externalKey,kind:'private',identityAssurance:'verified'}))});
  await contacts.initialize();const candidate=await contacts.detectAccount();await contacts.confirmAccount(candidate.candidate_token);await contacts.setReading(true);
  const snapshot=await contacts.candidates(true);await contacts.confirm(snapshot.snapshot_token,snapshot.sessions.map(s=>({locator:s.username,observed_display_name:s.display_name,expected_selection_generation:s.selection_generation})));
  const shared=sharedMode?new SharedWechatClient(()=>loadNarrowWechatOptions(executable)):undefined;
@@ -289,6 +291,31 @@ test('共享历史进程串行同步两位联系人，切回重验且正文与�
  assert.equal((await f.history.coverage(a.contact_id)).phase,'complete');
  assert.equal((await f.history.coverage(b.contact_id)).phase,'complete');
  await f.history.stop();await f.shared.stop();noProcess(pid);
+});
+
+test('八位联系人共享原生读取器并通过普通定时轮转持续保存后续消息，不停在被替换快照', {timeout:15000}, async t=>{
+ t.mock.timers.enable({apis:['setInterval']});
+ const cleanup=[],f=await fixture({after:callback=>cleanup.push(callback)},true,{},8);
+ const first=new FirstHistoryCoordinator(f.contacts,f.history),incremental=new IncrementalHistoryCoordinator(f.contacts,f.history,{intervalMs:30_000,firstHistoryManagedExternally:true});
+ f.history.setFirstHistoryWake(contactId=>first.wakeContact(contactId));
+ t.after(async()=>{await incremental.close();await first.close();for(const callback of cleanup.reverse())await callback();});
+ const caps=Object.fromEntries([...statusCapabilityKeys,'incrementalTail','durableIncremental'].map(key=>[key,'supported']));
+ await f.setPlan({capabilities:caps,resumeCursor:'synthetic-resume'});
+ first.wake();await first.waitForIdle();incremental.start();
+ for(let round=1;round<=2;round++){
+  const text=`合成轮转新消息${round}`;
+  const resumeRows=[{partition:'d'.repeat(64),table:'c'.repeat(64),localId:String(10+round),serverId:'0',sender:'contact',kind:'text',text,originalType:'1',sentAt:String(1700000000000+round*1000),timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:'verified'}];
+  await f.setPlan({capabilities:caps,resumeCursor:'synthetic-resume',resumeRows,tailRows:resumeRows});
+  t.mock.timers.tick(30_000);await incremental.waitForIdle();await first.waitForIdle();
+  for(const binding of f.bindings){
+   const result=await f.history.read(binding.contact_id);
+   assert.equal(result.coverage.phase,'complete','切回联系人建立新目标后必须自动接续首次读取');
+   assert.ok(result.messages.some(message=>message.text===text),'每一位已加入联系人都必须保存本轮消息');
+   assert.equal(result.messages.filter(message=>message.text===text).length,1,'同一来源轮转不得重复入库');
+  }
+ }
+ assert.equal((await requests(f.logFile)).filter(row=>row.op==='resolve').length>=16,true,'多个正常tick实际轮转全部联系人');
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
 test('共享独立通道重复关闭不能清除后来联系人的选择',async t=>{

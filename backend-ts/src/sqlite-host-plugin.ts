@@ -62,15 +62,16 @@ export function authorizeSqliteRequest(req: IncomingMessage, token: string): boo
 }
 
 interface SqliteHostResource { close(): Promise<void> }
-/** 逐域尝试真实排空；任何业务所有者未释放时保留共享模型与SQLite，允许原操作续清。 */
+/** 同时通知各领域停读并等待真实排空；业务所有者未释放时保留共享资源，允许原操作续清。 */
 export async function closeSqliteHostResources(resources: {
   firstHistory?: SqliteHostResource; incremental?: SqliteHostResource; imageSync?: SqliteHostResource; quoteSync?:SqliteHostResource; discussions?: SqliteHostResource; memory?: SqliteHostResource; media?: SqliteHostResource; history?: SqliteHostResource;
-  historyRecertify?: SqliteHostResource; historyClear?: SqliteHostResource; historyResync?: SqliteHostResource; foreground?: SqliteHostResource; contacts?: SqliteHostResource; wechat?:SqliteHostResource; models?: SqliteHostResource; storage?: SqliteHostResource;
+  historyRecertify?: SqliteHostResource; historyClear?: SqliteHostResource; historyResync?: SqliteHostResource; foreground?: SqliteHostResource; assistantReads?:SqliteHostResource; library?:SqliteHostResource; contacts?: SqliteHostResource; wechat?:SqliteHostResource; models?: SqliteHostResource; storage?: SqliteHostResource;
 }): Promise<void> {
   const failures: unknown[] = [];
-  for (const resource of [resources.firstHistory, resources.incremental, resources.imageSync, resources.quoteSync, resources.historyRecertify, resources.historyClear, resources.historyResync, resources.foreground, resources.discussions, resources.memory, resources.media, resources.history, resources.contacts]) {
-    try { await resource?.close(); } catch (error) { failures.push(error); }
-  }
+  // 不串行等待领域关闭：前一个读者可能正等待后一个领域释放共享CLI租约。
+  const closed = await Promise.allSettled([resources.firstHistory, resources.incremental, resources.imageSync, resources.quoteSync, resources.historyRecertify, resources.historyClear, resources.historyResync, resources.foreground, resources.assistantReads, resources.discussions, resources.memory, resources.media, resources.history, resources.contacts, resources.library]
+    .map(async resource => resource?.close()));
+  for (const result of closed) if (result.status === 'rejected') failures.push(result.reason);
   if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
   try { await resources.wechat?.close(); } catch (error) { failures.push(error); }
   if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
