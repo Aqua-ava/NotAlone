@@ -98,7 +98,7 @@ test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双�
   assert.equal((await api(path,{auth:false})).status,401);
   const request={request_key:randomUUID(),text:index?'帮我回应合成乙。':'帮我回应合成甲。',confirmed_contact:true};
   const generated=await api(path,{body:request});assert.equal(generated.status,200,JSON.stringify(generated.data));assert.equal(generated.data.session_id,created.data.session_id);
-  assert.equal((await api(`/api/contacts/${id}/assistant-sessions/${created.data.session_id}`)).data.runtime_recovery,'ready');
+  assert.equal((await api(`/api/contacts/${id}/assistant-sessions/${created.data.session_id}`)).data.runtime_recovery,'unchecked');
   const read=await api(path);assert.equal(read.status,200);assert.equal(read.data.coverage.phase,'complete');assert.equal(read.data.requests.length,1);
   const version=read.data.requests[0].candidates[0];versions.push({requestId:read.data.requests[0].requestId,...version});
   assert.equal(version.versionNo,1);assert.deepEqual(version.parts,['合成正式候选','第二条']);assert.equal(version.basis[0].verification,'actual_input');assert.match(version.basis[0].text,new RegExp(texts[index]));

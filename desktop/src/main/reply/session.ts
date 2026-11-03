@@ -745,11 +745,13 @@ export class ReplySession {
       this.lastAttempt = undefined;
       this.invalidateExploration(); this.derivedIntent = { direction: false, purpose: false };
       this.notifyInputChanged(); this.retainedContent.delete(selection.contactId);
-      // 首次建立 SQLite 会话时保留尚未提交的本地想法；切换已有会话仍清空输入。
-      const preserveInitialDraft = !viewOnly && !selection.sessionId && !carry
-        && this.state.savedSession?.phase === 'ready' && this.state.savedSession.sessionId === null
-        && saved.discussionEntries !== undefined;
-      if (!preserveInitialDraft) this.contacts.clearDraft(selection);
+      // 初次开始或读取失败后明确新开，只保留本联系人的独立想法；旧聊天输入和讨论材料仍清空。
+      const independentDraft = this.state.mode === 'rewrite_draft'
+        && (this.state.options.inputKind === undefined || this.state.options.inputKind === 'workspace');
+      const preserveLocalDraft = !viewOnly && !selection.sessionId && !carry && saved.discussionEntries !== undefined
+        && (this.state.savedSession?.phase === 'ready' && this.state.savedSession.sessionId === null
+          || this.state.savedSession?.phase === 'failed' && independentDraft);
+      if (!preserveLocalDraft) this.contacts.clearDraft(selection);
       const catalog = viewOnly ? await listAssistantSessions(this.backend, selection.contactId, pending.signal) : undefined;
       if (!current() || catalog && catalog.generation !== generation) return;
       const currentSessionId = viewOnly ? catalog!.currentSessionId : saved.sessionId;

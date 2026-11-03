@@ -92,7 +92,7 @@ export function App() {
     <div className="helper-context"><ForegroundPanel state={foreground} session={contactSession} permission={permission} /></div>
     {replies.state.contactId && replies.state.contactId === contactSession.state.selectedContactId
       && replies.state.savedSession?.phase === 'loading' && <p role="status" className="rewrite-privacy">
-        已切换联系人，正在恢复这位联系人的历史讨论与回复…
+        正在加载这位联系人的助手讨论…
       </p>}
     {replies.state.savedSession?.discussionEntries===undefined&&<UnifiedReplyWorkspace contacts={contactSession} replies={replies}
       historyCoverage={historyCoverage} media={window.notalone.media} />}

@@ -89,10 +89,20 @@ export function HelperContactPicker({ session, foreground }: { session: ContactS
 
 export function HelperDraft({ session, currentChat = false, workspace = false, disabled = false, restoreRevision, placeholder }: { session: ContactSessionView; currentChat?: boolean; workspace?: boolean; disabled?: boolean; restoreRevision?: number; placeholder?: string }) {
   const [text, setText] = useState(session.state.draft);
-  // 切换范围或收到删除完成通知时清除本地输入；普通在途回显不覆盖新按键。
-  useEffect(() => { setText(session.state.draft); }, [session.state.scopeRevision, session.state.draftClearRevision, restoreRevision]);
+  const pendingDraft = useRef<string | null>(null);
+  // 切换范围与明确删除必须清除输入；讨论恢复不得用尚未回显的旧值覆盖新按键。
+  useEffect(() => {
+    pendingDraft.current = null;
+    setText(session.state.draft);
+  }, [session.state.selectedContactId, session.state.scopeRevision, session.state.draftClearRevision]);
+  useEffect(() => {
+    if (pendingDraft.current === null) setText(session.state.draft);
+  }, [restoreRevision]);
+  useEffect(() => {
+    if (pendingDraft.current === session.state.draft) pendingDraft.current = null;
+  }, [session.state.draft]);
   return <textarea aria-label={workspace ? '有什么想说的' : currentChat ? '当前聊天文字' : '草稿'} rows={3} maxLength={65_536}
     value={text} disabled={disabled || !session.state.selectedContactId}
     placeholder={placeholder ?? (workspace ? '写下你的想法或草稿，也可以留空，点击「帮我想想」…' : currentChat ? '仅粘贴这位联系人的当前聊天文字，再填写你想表达的方向…' : '先确认联系人，再写下你的意思…')}
-    onChange={(event) => { setText(event.target.value); void session.setDraft(event.target.value); }} />;
+    onChange={(event) => { pendingDraft.current = event.target.value; setText(event.target.value); void session.setDraft(event.target.value); }} />;
 }

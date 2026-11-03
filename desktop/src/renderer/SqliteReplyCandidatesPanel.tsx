@@ -31,14 +31,16 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  const unresolved=!!retry.current&&!(progress?.phase==='failed'&&progress.retryable);
  function clear(){stopProgress.current?.();setProgress(null);++revision.current;operation.current=null;retry.current=null;qualifiedRequests.current=[];setPage(null);setDraft('');setOptions(defaultOptions());setCarry(undefined);setBusy(false);setError('');setNotice('');setEdits({});setInspected({});}
  useEffect(()=>{mounted.current=true;const off=bridge.onInvalidated(()=>{seeded.current=scopeKey;clear();if(contactId)onDraftChange?.('',{contactId,scopeRevision});});return()=>{mounted.current=false;stopProgress.current?.();++revision.current;operation.current=null;off();};},[bridge,scopeKey]);
- useEffect(()=>{clear();if(available){if(seeded.current!==scopeKey){seeded.current=scopeKey;setDraft(initialDraft);}void run({action:'read'});}},[scopeKey,bridge]);
- useEffect(()=>{if(disabled){++revision.current;operation.current=null;setBusy(false);setPage(null);setEdits({});setInspected({});}else if(available){if(seeded.current!==scopeKey){seeded.current=scopeKey;setDraft(initialDraft);}void run({action:'read'});}},[disabled]);
+ useEffect(()=>{clear();if(available)void run({action:'read'});},[scopeKey,bridge]);
+ useEffect(()=>{if(disabled){++revision.current;operation.current=null;setBusy(false);setPage(null);setEdits({});setInspected({});}else if(available)void run({action:'read'});},[disabled]);
+ // 讨论切换可能先于联系人草稿回显；空值不提前消费这次交接。
+ useEffect(()=>{if(available&&initialDraft&&seeded.current!==scopeKey){seeded.current=scopeKey;setDraft(initialDraft);}},[scopeKey,available,initialDraft]);
  type Command=SqliteCandidateOperation extends infer O?O extends SqliteCandidateOperation?Omit<O,'contactId'|'scopeRevision'|'sessionId'>:never:never;
  function showPage(next:SqliteCandidatePage,preserveEdits=false){
   // 仅保留无正文的来源标识，短暂读取失败后仍能核对旧草稿的资格。
   const readable=qualifiedRequests.current;
   if(readable.some(id=>!next.requests.some(r=>r.requestId===id&&r.sourceState==='available'))){
-   setDraft('');if(contactId)onDraftChange?.('',{contactId,scopeRevision});setCarry(undefined);retry.current=null;setNotice('');
+   seeded.current=scopeKey;setDraft('');if(contactId)onDraftChange?.('',{contactId,scopeRevision});setCarry(undefined);retry.current=null;setNotice('');
   }
   qualifiedRequests.current=next.requests.filter(r=>r.sourceState==='available'&&r.candidates.length).map(r=>r.requestId);
   setPage(next);
@@ -54,7 +56,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   const text=(error instanceof Error?error.message:'候选结果尚未确认，请重新读取。').replace(/^Error invoking remote method '[^']+': Error: /,'');
   setEdits({});setInspected({});setNotice('');
   if(/失效|已变化|已不可用|请先确认/.test(text)){
-   qualifiedRequests.current=[];setPage(null);setDraft('');if(contactId)onDraftChange?.('',{contactId,scopeRevision});setCarry(undefined);retry.current=null;
+   seeded.current=scopeKey;qualifiedRequests.current=[];setPage(null);setDraft('');if(contactId)onDraftChange?.('',{contactId,scopeRevision});setCarry(undefined);retry.current=null;
   }else setPage(old=>old?{coverage:old.coverage,requests:[]}:null);
   setError(text);
  }
@@ -138,7 +140,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  return <section aria-label="表达工作区" className="compose-panel unified-workspace sqlite-reply-candidates">
   <header className="compose-heading"><span className="section-eyebrow">一起想，把话说好</span><h2>有什么想说的？</h2><p>写下想法、方向或草稿；没有思路，也可以让我帮你想。</p></header>
   {!available&&<p role="status">请先选择本次联系人并打开当前助手会话。</p>}
-  <textarea aria-label="有什么想说的" rows={3} maxLength={65536} value={draft} placeholder="写下你的想法或草稿，也可以留空，点击「帮我想想」…" disabled={!available||busy} onChange={e=>{setDraft(e.target.value);if(contactId)onDraftChange?.(e.target.value,{contactId,scopeRevision});}} />
+  <textarea aria-label="有什么想说的" rows={3} maxLength={65536} value={draft} placeholder="写下你的想法或草稿，也可以留空，点击「帮我想想」…" disabled={!available||busy} onChange={e=>{seeded.current=scopeKey;setDraft(e.target.value);if(contactId)onDraftChange?.(e.target.value,{contactId,scopeRevision});}} />
   <div className="workspace-actions">
     <button className="generate-button" aria-label="帮我表达" disabled={!available||busy||unresolved||!page||!draft.trim()} onClick={()=>void generate('express')}><Icon name="write" size={18}/>帮我表达</button>
     <button className="compose-primary workspace-suggest" aria-label="帮我想想" disabled={!available||busy||unresolved||!page} onClick={()=>void generate('suggest')}><Icon name="sparkle" size={18}/>帮我想想</button>

@@ -2,7 +2,6 @@ import type {IncomingMessage,ServerResponse} from 'node:http';
 import {readWechatHttpBody,WechatHttpBodyError} from '../../sync/wechat-http-body.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {SqliteDiscussionService} from './service.ts';
-import type {SqliteDiscussionRuntime} from './runtime.ts';
 import type {SqliteDiscussionTurns} from './turns.ts';
 const uuid='[a-f0-9-]{36}';
 const route=new RegExp(`^/api/contacts/(${uuid})/assistant-sessions(?:/(${uuid})(?:/(resume|select|entries))?)?$`);
@@ -11,8 +10,8 @@ function respond(res:ServerResponse,status:number,value:unknown){res.writeHead(s
 function invalid():never{throw new StorageFailure('discussion_input_invalid');}
 /** 认证由唯一宿主注入，owner固定在服务；不接收SQL、路径、运行身份或资格证明。 */
 export class SqliteDiscussionHttp {
- private readonly service:SqliteDiscussionService;private readonly authorize:(req:IncomingMessage)=>boolean;private readonly runtime?:SqliteDiscussionRuntime;private readonly turns?:SqliteDiscussionTurns;private readonly candidateConfiguration?: (contactId:string,discussionId:string)=>Promise<string|null>;
- constructor(service:SqliteDiscussionService,authorize:(req:IncomingMessage)=>boolean,runtime?:SqliteDiscussionRuntime,turns?:SqliteDiscussionTurns,candidateConfiguration?:(contactId:string,discussionId:string)=>Promise<string|null>){this.service=service;this.authorize=authorize;this.runtime=runtime;this.turns=turns;this.candidateConfiguration=candidateConfiguration;}
+ private readonly service:SqliteDiscussionService;private readonly authorize:(req:IncomingMessage)=>boolean;private readonly turns?:SqliteDiscussionTurns;
+ constructor(service:SqliteDiscussionService,authorize:(req:IncomingMessage)=>boolean,turns?:SqliteDiscussionTurns){this.service=service;this.authorize=authorize;this.turns=turns;}
  async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
   const raw=req.url??'',url=new URL(raw,'http://localhost'),match=route.exec(url.pathname),fallback=defaultRoute.exec(url.pathname);
   if(!match&&!fallback)return false;
@@ -41,14 +40,10 @@ export class SqliteDiscussionHttp {
    }else if(req.method==='GET'){
     if(command==='binding'){await this.service.list(contactId);respond(res,200,{confirmed:true});}
     else if(discussionId&&!command){
-     let view=await this.service.view(contactId,discussionId);
-     let recovery='none';
-     if(view.discussion.currentRuntimeId){
-      recovery='blocked';
-      if(this.runtime&&this.turns)try{const expected=await this.candidateConfiguration?.(contactId,discussionId)??await this.turns.configurationFor(contactId,discussionId);await this.runtime.inspect(contactId,discussionId,view.discussion.currentRuntimeId,expected);recovery='ready';}catch{}
-     }
-     view=await this.service.view(contactId,discussionId);
-     respond(res,200,{mode:'sqlite',session_id:discussionId,entries:view.entries.map((e:any)=>({entry_id:e.id,position:String(e.position),role:e.role,text:e.body,request_id:e.origin_request_id,call_id:e.origin_call_id,content_state:e.content_state})),runtime_recovery:recovery});
+     // 回看只核验业务正文资格，运行副本是否可继续由显式生成入口另行核对。
+     const view=await this.service.view(contactId,discussionId),recovery=view.discussion.currentRuntimeId?'unchecked':'none';
+     // 撤下内容只规范化公开投影，原库的调用身份继续保留给审计与删除。
+     respond(res,200,{mode:'sqlite',session_id:discussionId,entries:view.entries.map((e:any)=>({entry_id:e.id,position:String(e.position),role:e.role,text:e.content_state==='cleared'?null:e.body,request_id:e.origin_request_id,call_id:e.content_state==='cleared'?null:e.origin_call_id,content_state:e.content_state})),runtime_recovery:recovery});
     }else if(!command){const catalog=await this.service.list(contactId);respond(res,200,{sessions:catalog.discussions.map(d=>({session_id:d.id,is_current:d.isCurrent,last_user_activity_at:new Date(Number(d.lastActivityAt)).toISOString()})),current_session_id:catalog.currentDiscussionId});}
     else respond(res,405,{error:'method_not_allowed'});
    }else respond(res,405,{error:'method_not_allowed'});

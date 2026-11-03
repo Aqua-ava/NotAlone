@@ -38,15 +38,15 @@ export function UnifiedReplyWorkspace({ contacts, replies, media }: { contacts: 
     contacts.state.selectedContactId, state.messages.phase]);
   const sameScope = Boolean(state.contactId) && state.contactId === contacts.state.selectedContactId
     && state.scopeRevision === contacts.state.scopeRevision;
-  // 新联系人尚无可读取会话时，只开放其独立本地草稿；不把旧输入迁移或授权为生成上下文。
-  const localDraftOnly = sameScope && Boolean(state.generationBlock) && state.savedSession?.phase === 'failed'
-    && state.savedSession.sessionId === null && state.mode === 'rewrite_draft' && state.options.inputKind === undefined
+  // 讨论加载与工作区准备期间保留独立想法；旧聊天输入仍须经过工作区迁移。
+  const localDraftOnly = sameScope && state.mode === 'rewrite_draft' && state.options.inputKind === undefined
     && !state.result && state.sessionCatalog?.phase !== 'loading' && !state.sessionCatalog?.selectionPending;
   const viewingHistory = Boolean(state.sessionCatalog) && Boolean(state.savedSession?.sessionId)
     && state.savedSession?.sessionId !== state.sessionCatalog?.currentSessionId;
-  const inputBlocked = viewingHistory || !sameScope || submitting || state.phase === 'waiting'
-    || state.savedSession?.phase === 'loading' || state.sessionCatalog?.phase === 'loading' || state.sessionCatalog?.selectionPending === true
-    || state.sourceAvailability !== undefined || state.sessionDeletion === 'deleting';
+  const operationBlocked = !sameScope || submitting || state.phase === 'waiting'
+    || state.sessionCatalog?.phase === 'loading' || state.sessionCatalog?.selectionPending === true
+    || state.sourceAvailability !== undefined || state.sessionDeletion === 'deleting' || state.sessionDeletion === 'failed';
+  const inputBlocked = viewingHistory || operationBlocked;
   const draftDisabled = inputBlocked || !workspaceReady && !localDraftOnly;
   const disabled = inputBlocked || !workspaceReady || Boolean(state.generationBlock)
     || state.savedSession?.phase !== 'ready' || !state.savedSession.sessionId;
@@ -83,11 +83,13 @@ export function UnifiedReplyWorkspace({ contacts, replies, media }: { contacts: 
       <h2>有什么想说的？</h2><p>写下想法、方向或草稿；没有思路，也可以让我帮你想。</p></header>
     {workspaceReady || localDraftOnly || !contacts.state.selectedContactId ? <HelperDraft
       key={`${contacts.state.selectedContactId}:${contacts.state.scopeRevision}`} session={contacts} workspace disabled={draftDisabled} restoreRevision={state.inputClearRevision} />
-      : <p role="status">正在恢复这位联系人的想法和聊天背景…</p>}
+      : null}
+    {sameScope && state.savedSession?.phase === 'loading' && <p role="status">正在加载上次的助手讨论…</p>}
     {state.workspaceMigrationNotice && <p role="status" className="rewrite-privacy">{state.workspaceMigrationNotice}</p>}
     {state.generationBlock && <p role="status" className="rewrite-privacy">生成前，请先在上方确认本次联系人。</p>}
-    {state.savedSession?.phase === 'failed' && <p role="alert">助手会话暂时无法读取，请重新核对。
-      <button onClick={() => void replies.readSavedSession()}>重新读取助手会话</button></p>}
+    {sameScope && state.savedSession?.phase === 'failed' && <p role="alert">上次的助手讨论暂时无法加载。可重试读取，或开始新讨论后继续。
+      <button disabled={operationBlocked} onClick={() => void replies.readSavedSession()}>重新读取助手会话</button>
+      <button disabled={operationBlocked || Boolean(state.generationBlock)} onClick={() => void replies.newSavedSession()}>开始新讨论</button></p>}
     <div className="workspace-actions">
       <button className="generate-button" aria-label="帮我表达" disabled={disabled || !contacts.state.draft.trim()}
         onClick={() => void generate('express')}><Icon name="write" size={18} />帮我表达</button>

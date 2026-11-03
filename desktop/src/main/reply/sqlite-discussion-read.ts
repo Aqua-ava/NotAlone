@@ -6,7 +6,7 @@ function invalid():never{throw new Error('已保存讨论暂不可用。');}
 /** 正文资格失败时整个新快照拒绝，不把历史候选拼成模型发言。 */
 export function readSqliteDiscussion(value:unknown,sessionId:string,generation:number){
  if(!isRecord(value)||value.mode!=='sqlite'||value.session_id!==sessionId||!Array.isArray(value.entries)
-  ||Object.keys(value).length!==4||!['none','ready','blocked'].includes(value.runtime_recovery as string))invalid();
+  ||Object.keys(value).length!==4||!['none','unchecked','ready','blocked'].includes(value.runtime_recovery as string))invalid();
  let last=0n;const known=new Set<string>();
  const entries:SqliteDiscussionEntry[]=value.entries.map((item:unknown)=>{
   if(!isRecord(item)||Object.keys(item).length!==7||!isUuid(item.entry_id)||!isUuid(item.request_id)

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
+import {createRequire} from 'node:module';
 import {mkdtemp,realpath,rm,mkdir,writeFile,access} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -22,6 +23,11 @@ import {installModelProvider} from '../src/platform/models/model-provider.ts';
 import {ModelPermitArbiter} from '../src/platform/models/model-permits.ts';
 const owner='00000000-0000-4000-8000-000000000001';
 const registryModule=new URL('./fixtures/sqlite/discussion-deletion-registry.mjs',import.meta.url).href;
+async function strictDiscussionReader(){
+ const {build}=createRequire(new URL('../../desktop/package.json',import.meta.url))('esbuild');
+ const output=await build({entryPoints:[new URL('../../desktop/src/main/reply/sqlite-discussion-read.ts',import.meta.url).pathname],bundle:true,platform:'node',format:'esm',write:false});
+ return (await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`)).readSqliteDiscussion;
+}
 async function fixture(t,options={}){
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-discussion-real-')));let storage=await SqliteStorage.open({userData:root,intent:'create',role:'test',registryModule});
  const contacts=new SqliteContactService(storage,owner,{account:async()=>({externalKey:'synthetic',identityScheme:'wechat.account.v1',sourceGeneration:'source-1',assurance:'verified',supportProfile:'synthetic-v1'}),sessions:async()=>['a','b'].map(externalKey=>({externalKey,displayName:'合成联系人',kind:'private',identityAssurance:'verified'}))});
@@ -140,11 +146,23 @@ test('旧preparing仅恢复清理身份，关闭不能覆盖新ready副本的cur
  await f.runtime.close();assert.equal((await f.service.view(f.ids[0],d.id)).discussion.currentRuntimeId,fresh);assert.equal((await f.storage.execute('runtime.inventory',{ownerId:owner})).find(c=>c.id===copyId).state,'blocked');assert.equal(f.requests.length,1);
 });
 
-test('正常HTTP核验当前配置后区分真实ready与资格变化后的恢复受阻',async t=>{
+test('回看助手讨论不恢复运行副本，配置变化后仍可读取有效发言',async t=>{
  const {SqliteDiscussionHttp}=await import('../src/reply/sqlite/http.ts');const f=await fixture(t);const d=await f.service.newDiscussion(f.ids[0]);await f.turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'恢复可用状态合成要求',confirmedContact:true});
- const http=new SqliteDiscussionHttp(f.service,()=>true,f.runtime,f.turns);const server=createServer((req,res)=>http.handle(req,res));server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));const url=`http://127.0.0.1:${server.address().port}/api/contacts/${f.ids[0]}/assistant-sessions/${d.id}`;
- assert.equal((await (await fetch(url)).json()).runtime_recovery,'ready');
- await mkdir(join(f.skillRoot,'changed'),{mode:0o700});await writeFile(join(f.skillRoot,'changed/SKILL.md'),'---\nname: changed\ndescription: 合成新方法\n---\n只用于资格改变的合成方法。\n',{mode:0o600});await f.library.discover('changed');assert.equal((await (await fetch(url)).json()).runtime_recovery,'blocked');assert.equal(f.requests.length,1);
+ const http=new SqliteDiscussionHttp(f.service,()=>true,f.turns);const server=createServer((req,res)=>http.handle(req,res));server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));const url=`http://127.0.0.1:${server.address().port}/api/contacts/${f.ids[0]}/assistant-sessions/${d.id}`;
+ const read=await strictDiscussionReader(),first=read(await (await fetch(url)).json(),d.id,1);
+ assert.equal(first.runtimeRecovery,'unchecked');assert.equal(first.discussionEntries[1].text,'实际环回返回的合成助手发言1');
+ await mkdir(join(f.skillRoot,'changed'),{mode:0o700});await writeFile(join(f.skillRoot,'changed/SKILL.md'),'---\nname: changed\ndescription: 合成新方法\n---\n只用于资格改变的合成方法。\n',{mode:0o600});await f.library.discover('changed');
+ const changed=read(await (await fetch(url)).json(),d.id,1);assert.equal(changed.runtimeRecovery,'unchecked');assert.equal(changed.discussionEntries[1].text,'实际环回返回的合成助手发言1');assert.equal(f.requests.length,1);
+});
+
+test('来源连续性失效后HTTP撤下助手正文，严格读取仍可展示当前讨论',async t=>{
+ const {SqliteDiscussionHttp}=await import('../src/reply/sqlite/http.ts');const f=await fixture(t),message=await sourceMessage(f),d=await f.service.newDiscussion(f.ids[0]);
+ await f.turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'引用已授权来源的合成要求',confirmedContact:true,contextMessageIds:[message.id]});
+ await f.storage.execute('history.markContinuityLost',{token:await f.contacts.eligibility(f.ids[0])});
+ const http=new SqliteDiscussionHttp(f.service,()=>true,f.turns),server=createServer((req,res)=>http.handle(req,res));server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const response=await fetch(`http://127.0.0.1:${server.address().port}/api/contacts/${f.ids[0]}/assistant-sessions/${d.id}`);assert.equal(response.status,200);
+ const read=await strictDiscussionReader(),saved=read(await response.json(),d.id,1),entry=saved.discussionEntries[1];
+ assert.equal(entry.role,'assistant');assert.equal(entry.contentState,'cleared');assert.equal(entry.text,null);assert.equal(entry.callId,null);assert.equal(f.requests.length,1);
 });
 
 test('十二小时分段或显式换段后，同原URL及请求键重送仍回原请求而不重发模型',async t=>{
