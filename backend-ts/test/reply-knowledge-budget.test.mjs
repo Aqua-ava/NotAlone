@@ -33,3 +33,13 @@ test('未确认候选沿用词法阈值，空查询和不相关资料不会进�
  assert.deepEqual(selectReplyKnowledge(candidates,'园艺'),[candidates[0]]);
  assert.deepEqual(selectReplyKnowledge(candidates,'羽毛球'),[]);
 });
+
+test('相关性相同时人工确认记忆优先，不因稳定ID排序被自动记忆挤出预算',()=>{
+ for(const scopeKind of ['contact','owner']){
+  const automatic=Array.from({length:6},(_,index)=>({...memory(`automatic-${index}`,scopeKind),qualification:'auto'}));
+  const confirmed=memory('z-confirmed',scopeKind);
+  const selected=selectReplyKnowledge([...automatic,confirmed],'园艺');
+  assert.equal(selected[0],confirmed,`${scopeKind}须在同分资料中优先使用人工确认记忆`);
+  assert.equal(selected.length,scopeKind==='contact'?5:3);
+ }
+});

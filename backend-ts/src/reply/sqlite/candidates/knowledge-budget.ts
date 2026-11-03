@@ -8,7 +8,11 @@ export function selectReplyKnowledge(items:ReplyKnowledgeItem[],query:string):Re
  for(const scopeKind of ['contact','owner','candidate'] as const){
   let chars=0,count=0;const maxCount=scopeKind==='candidate'?RELATIONSHIP_BUDGET.candidateCount:scopeKind==='contact'?RELATIONSHIP_BUDGET.contactCount:RELATIONSHIP_BUDGET.ownerCount,maxChars=scopeKind==='candidate'?RELATIONSHIP_BUDGET.candidateChars:scopeKind==='contact'?RELATIONSHIP_BUDGET.contactChars:RELATIONSHIP_BUDGET.ownerChars;
   const candidates=items.filter(item=>scopeKind==='candidate'?item.kind==='memory_candidate':item.kind==='memory'&&item.scopeKind===scopeKind);
-  for(const {item,relevance_score} of candidates.length&&tokens.length?rankMemories(candidates.map(item=>({item,text:item.text,memory_id:item.id,confidence:0,valid_at:null})),tokens,candidates.length):[]){
+  const ranked=candidates.length&&tokens.length?rankMemories(candidates.map(item=>({
+   item,text:item.text,...(item.kind==='memory_candidate'?{candidate_id:item.id}:{memory_id:item.id}),
+   adoption_method:item.qualification==='confirmed'?'manual':'auto',confidence:0,valid_at:null,
+  })),tokens,candidates.length):[];
+  for(const {item,relevance_score} of ranked){
    const size=Array.from(item.text).length;
    if(relevance_score<RELEVANCE_THRESHOLD||count>=maxCount||chars+size>maxChars)continue;
    selected.push(item);count++;chars+=size;
