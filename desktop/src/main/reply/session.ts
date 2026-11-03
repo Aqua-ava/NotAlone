@@ -10,6 +10,7 @@ import { isUuid } from '../uuid';
 import type { ContactSession } from '../contacts/session';
 import { captureAssistantGenerationStopping } from './assistant-generation-interruption';
 import { interruptedReplyInput, savedReplySkillChoice } from './assistant-interrupted-retry';
+import { isRetiredMessageExclusionError } from './pasted-input';
 import { checkPreparationFormat } from './preparation-format';
 import { newAssistantSessionWithCandidate } from './assistant-candidate-carry';
 import type { AssistantCandidateCarry } from '../../shared/reply-bridge';
@@ -48,7 +49,7 @@ export class ReplySession {
     return Boolean(this.state.result || this.heldResult || this.state.phase === 'waiting' || this.state.targetMessageId
       || this.state.direction || this.state.purpose || this.state.mode !== 'rewrite_draft' || this.state.options.instruction
       || this.state.options.tone !== 'original' || this.state.options.includeRelationshipContext || this.state.scene
-      || this.state.options.contextText || this.state.options.excludedMessageIds?.length);
+      || this.state.options.contextText);
   }
   private state: ReplySessionState = { revision: 0, scopeRevision: 0, contactId: null, generationBlock: null,
     options: defaults(), workspaceMigrationNotice: undefined, mode: 'rewrite_draft', scene: '', messages: { phase: 'idle', items: [], nextCursor: null },
@@ -248,10 +249,17 @@ export class ReplySession {
     const restoreResult = turn.state === 'completed' && turn.reply && !this.state.result;
     if (!retry && !restoreResult) return;
     const operation = this.operation;
-    const input = await interruptedReplyInput(this.backend, turn, {
-      contactId: selection.contactId,
-      displayName: this.contacts.getState().contacts.find((item) => item.contactId === selection.contactId)!.displayName,
-    }, signal, current);
+    let input: ReplyInputSnapshot;
+    try {
+      input = await interruptedReplyInput(this.backend, turn, {
+        contactId: selection.contactId,
+        displayName: this.contacts.getState().contacts.find((item) => item.contactId === selection.contactId)!.displayName,
+      }, signal, current);
+    } catch (error) {
+      // 旧输入含已退役的排除设置：不恢复为可比对新输入；旧候选回看仍由已保存轮次提供。
+      if (!isRetiredMessageExclusionError(error)) throw error;
+      return;
+    }
     if (!current() || operation !== this.operation || this.candidateSourceCheck) return;
     if (restoreResult && (input.scene ?? null) !== (this.state.scene || null)) return;
     if (retry) {
@@ -1132,8 +1140,7 @@ export class ReplySession {
         includeRelationshipContext: options.includeRelationshipContext,
         ...(options.inputKind === 'workspace' ? { inputKind: 'workspace', workspaceAction: options.workspaceAction,
           skillChoice: { ...this.state.skillChoice },
-          ...(options.contextText?.trim() ? { contextText: options.contextText.trim() } : {}),
-          ...(options.excludedMessageIds?.length ? { excludedMessageIds: [...options.excludedMessageIds] } : {}) } : {}),
+          ...(options.contextText?.trim() ? { contextText: options.contextText.trim() } : {}) } : {}),
         ...(options.inputKind === 'current_chat' ? { inputKind: 'current_chat', pastedDirection: options.pastedDirection!.trim() } : {}) }
       : this.state.mode === 'initiate_conversation'
         ? { ...common, mode: 'initiate_conversation', purpose: this.state.purpose.trim(), correction: this.state.correction.trim(), userInstruction: this.state.requirements.trim(), clarificationAnswer: this.state.clarificationAnswer.trim(), skillChoice: { ...this.state.skillChoice } }
@@ -1814,7 +1821,6 @@ export class ReplySession {
     if (!notice || generation === undefined || !sessionId || notice.sessionId !== sessionId
       || this.state.generationBlock || mode === 'rewrite_draft' && !workspace) throw new Error('请先核对当前联系人与新消息提醒。');
     if (workspace && !options.includeRelationshipContext) throw new Error('请先启用联系人上下文，再结合新消息。');
-    if (workspace && options.excludedMessageIds?.includes(notice.messageId)) throw new Error('这条新消息已从上下文排除，请先恢复选择。');
     const receipt = this.generationJobs.requestReceipt({ connectionGeneration: generation, contactId: selection.contactId, sessionId });
     if (this.state.phase === 'waiting' && !receipt) throw new Error('请等实际生成身份确认后再结合新消息。');
     // 已完成生成的本地展示可尚未加载讨论快照；随后仍须回读并核验权威 CURRENT。
@@ -1851,8 +1857,7 @@ export class ReplySession {
         userInstruction: [tones[options.tone], options.instruction.trim()].filter(Boolean).join('\n') || null,
         includeRelationshipContext: options.includeRelationshipContext,
         skillChoice: { ...this.state.skillChoice },
-        ...(options.contextText?.trim() ? { contextText: options.contextText.trim() } : {}),
-        ...(options.excludedMessageIds?.length ? { excludedMessageIds: [...options.excludedMessageIds] } : {}) }
+        ...(options.contextText?.trim() ? { contextText: options.contextText.trim() } : {}) }
       : mode === 'reply_to_message'
       ? { ...common, mode, target, direction: this.state.direction.trim() }
       : { ...common, mode, purpose: this.state.purpose.trim() };

@@ -48,7 +48,8 @@ function renderCandidates(usedSkill, restored = false) {
     messages: { phase: 'ready', items: [] }, candidateVersions: { phase: 'loading', items: [] },
     savedSession: restored ? { phase: 'ready', sessionId, currentInputVersionId: null, inputs: [], turns: [{
       turnId: 'synthetic-turn', inputVersionId: 'synthetic-input', requestKey: 'synthetic-key', state: 'completed',
-      interruptionReason: null, placeholder: null, input: { content: reply.input }, reply: savedReply,
+      interruptionReason: null, placeholder: null,
+      input: { content: { ...reply.input, excluded_message_ids: ['synthetic-retired-exclusion'] } }, reply: savedReply,
     }] } : { phase: 'idle', sessionId, turns: [], inputs: [], currentInputVersionId: null },
     result: restored ? null : currentReply };
   return view.renderToStaticMarkup(view.createElement(view.ReplyCandidates, { replies: { state } }));
@@ -76,13 +77,17 @@ test('未确认联系人或生成中不可触发新请求', () => {
   }
 });
 
-test('最近对话显示时间与可排除材料，不要求单选待回复消息', () => {
+test('最近对话只读展示时间与材料，不提供逐条勾选或排除提示', () => {
   const html = render({ messages: { phase: 'ready', nextCursor: null, items: [{ messageId: 'synthetic-message',
     speaker: 'contact', text: '今天忙完了', occurredAt: '2026-10-19T08:00:00Z' }] } });
   assert.match(html, /今天忙完了/);
-  assert.match(html, /type="checkbox"/);
-  assert.doesNotMatch(html, /type="radio"/);
   assert.match(html, /最近一条/);
+  assert.match(html, /参考最近聊天和相关关系资料/);
+  assert.match(html, /刷新最近聊天/);
+  assert.doesNotMatch(html, /type="radio"/);
+  // 仅保留关系背景总开关；消息级勾选、排除提示和恢复排除操作均已退役。
+  assert.equal((html.match(/type="checkbox"/g) ?? []).length, 1);
+  assert.doesNotMatch(html, /使用消息：|取消勾选|已排除/);
 });
 
 test('工作区候选直接展示理由，版本未核验前不开放编辑', () => {
@@ -111,6 +116,12 @@ test('当前与重开候选都直接展示实际Skill版本或通用流程', () 
   }
   assert.match(renderCandidates(null), /aria-label="本次回复方法"[^>]*>本次使用通用流程/);
   assert.match(renderCandidates(undefined, true), /aria-label="本次回复方法"[^>]*>本次快照未记录回复方法/);
+});
+
+test('历史候选记录含已退役排除字段时仍可回看，不再显示排除状态', () => {
+  const html = renderCandidates(null, true);
+  assert.match(html, /最近怎么样？/);
+  assert.doesNotMatch(html, /使用消息：|取消勾选|已排除/);
 });
 
 test('联系人已确认即可生成，历史未开始、同步中或不完整均不要求等待或额外确认', () => {

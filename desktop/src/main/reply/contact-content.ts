@@ -3,8 +3,9 @@ import type { BackendHost } from '../backend/host';
 import { readAssistantSession } from './assistant-sessions';
 import { readReplyMessages } from './messages';
 import { interruptedReplyInput } from './assistant-interrupted-retry';
+import { isRetiredMessageExclusionError, RETIRED_MESSAGE_EXCLUSION_MESSAGE } from './pasted-input';
 import { isUuid } from '../uuid';
-import type { ReplySessionState } from '../../shared/reply-bridge';
+import type { ReplyInputSnapshot, ReplySessionState } from '../../shared/reply-bridge';
 
 // 两个模式的输入分别保留来历，切换模式不能让独立输入继承另一字段的来源依赖。
 export type DerivedIntent = { direction: boolean; purpose: boolean };
@@ -109,18 +110,27 @@ export async function validateContactInput(backend: BackendHost, contactId: stri
   if (content.result) {
     const turn = saved.turns.find((turn) => turn.state === 'completed' && turn.reply?.replyRequestId === content.result!.replyRequestId);
     if (turn?.reply) {
-      const input = await interruptedReplyInput(backend, turn, { contactId, displayName: contactDisplayName }, signal, current);
+      let input: ReplyInputSnapshot | undefined;
+      try {
+        input = await interruptedReplyInput(backend, turn, { contactId, displayName: contactDisplayName }, signal, current);
+      } catch (error) {
+        // 旧输入含已退役的排除设置：不恢复成可比对新输入；候选仍按已保存轮次回看。
+        if (!isRetiredMessageExclusionError(error)) throw error;
+        notices.push(RETIRED_MESSAGE_EXCLUSION_MESSAGE);
+      }
       if (!current()) throw new Error('恢复范围已变化。');
-      update.result = { replyRequestId: turn.reply.replyRequestId, assistantSessionId: saved.sessionId!,
-        inputVersionId: turn.inputVersionId, input, contextEvidenceIds: turn.reply.contextEvidenceIds, expressionPreferenceIds: turn.reply.expressionPreferenceIds,
-        expressionPreferences: turn.reply.expressionPreferences,
-        usedSkill: turn.reply.usedSkill, inputBudget: turn.reply.inputBudget,
-        basisChanges: turn.basisChanges ?? turn.reply.basisChanges,
-        candidates: turn.reply.candidates.map((original) => ({ original,
-          editedText: content.result!.edits.find((edit) => edit.candidateId === original.candidateId)?.text ?? original.text })) };
-      update.selectedCandidateId = turn.reply.candidates.some((candidate) => candidate.candidateId === content.result!.selectedCandidateId)
-        ? content.result.selectedCandidateId : null;
-      update.phase = 'ready';
+      if (input) {
+        update.result = { replyRequestId: turn.reply.replyRequestId, assistantSessionId: saved.sessionId!,
+          inputVersionId: turn.inputVersionId, input, contextEvidenceIds: turn.reply.contextEvidenceIds, expressionPreferenceIds: turn.reply.expressionPreferenceIds,
+          expressionPreferences: turn.reply.expressionPreferences,
+          usedSkill: turn.reply.usedSkill, inputBudget: turn.reply.inputBudget,
+          basisChanges: turn.basisChanges ?? turn.reply.basisChanges,
+          candidates: turn.reply.candidates.map((original) => ({ original,
+            editedText: content.result!.edits.find((edit) => edit.candidateId === original.candidateId)?.text ?? original.text })) };
+        update.selectedCandidateId = turn.reply.candidates.some((candidate) => candidate.candidateId === content.result!.selectedCandidateId)
+          ? content.result.selectedCandidateId : null;
+        update.phase = 'ready';
+      }
     } else notices.push('原候选来源已不可用，相关编辑未恢复。');
   }
   update.contentRestoreNotice = notices.join(' ') || undefined;

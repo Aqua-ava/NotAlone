@@ -68,7 +68,6 @@ export function UnifiedReplyWorkspace({ contacts, replies, media }: { contacts: 
     const time = message.occurredAt;
     return time && (!value || Date.parse(time) > Date.parse(value)) ? time : value;
   }, null);
-  const excluded = options.excludedMessageIds ?? [];
   if (sameScope && state.savedSession?.phase === 'ready' && state.savedSession.sessionId === null) {
     return <section className="compose-panel unified-workspace" aria-label="表达工作区">
       <header className="compose-heading"><h2>有什么想说的？</h2><p>先开始这位联系人的助手会话，再生成候选。</p></header>
@@ -108,18 +107,13 @@ export function UnifiedReplyWorkspace({ contacts, replies, media }: { contacts: 
         {state.messages.phase === 'ready' && !state.messages.items.length && <p>暂无可用的最近聊天。可以补充上下文，或先写下想法。</p>}
         <button className="button" disabled={!sameScope || inputBlocked || state.messages.phase === 'loading'} onClick={() => void replies.loadMessages()}>{unknownMessageOrder ? '刷新聊天记录' : '刷新最近聊天'}</button>
         {state.messages.items.length > 0 && <>
-          <p className="rewrite-privacy">{unknownMessageOrder ? '以下按保存位置列出记录；' : '以下是最近记录；'}取消勾选可从本次生成中排除。实际使用的依据会随候选展示。</p>
+          <p className="rewrite-privacy">{unknownMessageOrder ? '以下按保存位置列出记录；' : '以下是最近记录；'}仅供查看，实际使用的依据会随候选展示。</p>
           {unknownMessageOrder && <p role="status" className="rewrite-privacy">部分记录的顺序未核验，以下按保存位置展示，不代表真实聊天先后。</p>}
-          {excluded.length > 0 && <p role="status" className="rewrite-privacy">已排除 {excluded.length} 条消息。本次自动背景只参考未排除的最近聊天和补充内容，避免关系资料带回已排除的内容。</p>}
           <div className="workspace-message-list" role="group" aria-label="最近聊天材料">
-            {state.messages.items.map(message => <div className="reply-message workspace-message-row" key={message.messageId}><label className="reply-message-selection">
-              <input type="checkbox" aria-label={`使用消息：${message.text ?? message.mediaPlaceholder ?? '无文字内容'}`}
-                checked={!excluded.includes(message.messageId)} disabled={disabled || !options.includeRelationshipContext}
-                onChange={event => update({ excludedMessageIds: event.target.checked
-                  ? excluded.filter(id => id !== message.messageId) : [...excluded, message.messageId] })} />
-              <span><small>{message.speaker === 'contact' ? '对方' : message.speaker === 'user' ? '我' : '系统'} · {message.occurredAt ? new Date(message.occurredAt).toLocaleString('zh-CN') : '时间未知'}{message.ordering === 'unknown' ? ' · 顺序未核验' : ''}</small>
-                <span className="reply-message-text">{message.text ?? message.mediaPlaceholder ?? '无文字内容'}</span></span>
-            </label>{state.contactId&&<MessageMediaPanel bridge={media} selection={{contactId:state.contactId,messageId:message.messageId,scopeRevision:state.scopeRevision}} messageType={message.messageType}/>}
+            {state.messages.items.map(message => <div className="reply-message workspace-message-row" key={message.messageId}>
+              <div className="reply-message-selection"><span><small>{message.speaker === 'contact' ? '对方' : message.speaker === 'user' ? '我' : '系统'} · {message.occurredAt ? new Date(message.occurredAt).toLocaleString('zh-CN') : '时间未知'}{message.ordering === 'unknown' ? ' · 顺序未核验' : ''}</small>
+                <span className="reply-message-text">{message.text ?? message.mediaPlaceholder ?? '无文字内容'}</span></span></div>
+              {state.contactId && <MessageMediaPanel bridge={media} selection={{contactId:state.contactId,messageId:message.messageId,scopeRevision:state.scopeRevision}} messageType={message.messageType}/>}
             </div>)}
           </div>
         </>}

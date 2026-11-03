@@ -63,16 +63,13 @@ function options(args: unknown[]): RewriteOptionsUpdate {
   const value = fields(args, ['contactId', 'scopeRevision', 'options']);
   const settings = value.options as Record<string, unknown> | undefined;
   if (!settings || typeof settings !== 'object' || Array.isArray(settings) || Object.keys(settings).length < 3
-    || !Object.keys(settings).every((key) => ['tone', 'instruction', 'includeRelationshipContext', 'inputKind', 'pastedDirection', 'workspaceAction', 'contextText', 'excludedMessageIds'].includes(key))
+    || !Object.keys(settings).every((key) => ['tone', 'instruction', 'includeRelationshipContext', 'inputKind', 'pastedDirection', 'workspaceAction', 'contextText'].includes(key))
     || !['original', 'warm', 'concise', 'polite'].includes(settings.tone as string)
     || typeof settings.instruction !== 'string' || !fitsReplyTextLimit(settings.instruction)
     || typeof settings.includeRelationshipContext !== 'boolean'
     || settings.inputKind !== undefined && !['draft', 'current_chat', 'workspace'].includes(settings.inputKind as string)
     || settings.workspaceAction !== undefined && !['express', 'suggest'].includes(settings.workspaceAction as string)
     || settings.contextText !== undefined && (typeof settings.contextText !== 'string' || settings.contextText.length > 65_536)
-    || settings.excludedMessageIds !== undefined && (!Array.isArray(settings.excludedMessageIds)
-      || settings.excludedMessageIds.length > 500 || !settings.excludedMessageIds.every(isUuid)
-      || new Set(settings.excludedMessageIds.map((id: string) => id.toLowerCase())).size !== settings.excludedMessageIds.length)
     || settings.pastedDirection !== undefined && (typeof settings.pastedDirection !== 'string' || !fitsReplyTextLimit(settings.pastedDirection))) throw new Error('本次改写要求不可用。');
   return { contactId: value.contactId as string, scopeRevision: value.scopeRevision as number, options: { ...settings } as unknown as RewriteOptions };
 }

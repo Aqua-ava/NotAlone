@@ -18,7 +18,6 @@ export interface RewriteOptions {
   inputKind?: 'draft' | 'current_chat' | 'workspace';
   workspaceAction?: WorkspaceAction;
   contextText?: string;
-  excludedMessageIds?: string[];
   pastedDirection?: string;
 }
 export interface RewriteOptionsUpdate extends ContactSelection { options: RewriteOptions; }
@@ -88,7 +87,6 @@ export interface RewriteSnapshot {
   inputKind?: 'draft' | 'current_chat' | 'workspace';
   workspaceAction?: WorkspaceAction;
   contextText?: string;
-  excludedMessageIds?: string[];
   pastedDirection?: string;
   skillChoice?: ReplySkillChoice;
 }

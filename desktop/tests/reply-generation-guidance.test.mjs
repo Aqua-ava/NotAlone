@@ -51,11 +51,12 @@ test('本次要求和语气按实际生成指令比较，未变更的非默认�
   assert.equal(view.hasChangedReplyInput(current, '先聊近况'), false);
 });
 
-test('帮我想想的问题变化也令旧建议过期，背景排除集合顺序不误报', () => {
+test('帮我想想的问题变化也令旧建议过期，已退役排除字段不参与比较', () => {
   const current = state();
   current.options.workspaceAction = current.result.input.workspaceAction = 'suggest';
-  current.options.excludedMessageIds = ['source-b', 'source-a'];
-  current.result.input.excludedMessageIds = ['source-a', 'source-b'];
+  // 旧状态残留的排除字段不再参与候选过期判断，也不重新产生排除提示。
+  current.options.excludedMessageIds = ['source-b'];
+  current.result.input.excludedMessageIds = [];
   assert.equal(view.hasChangedReplyInput(current, '先聊近况'), false);
   assert.equal(view.hasChangedReplyInput(current, '怎样聊设备'), true);
   current.options.contextText = '对方提到设备';

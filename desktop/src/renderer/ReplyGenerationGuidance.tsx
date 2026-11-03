@@ -12,8 +12,7 @@ export function hasChangedReplyInput(state: ReplySessionState, currentDraft?: st
       || (input.userInstruction ?? '').trim() !== instruction
       || input.workspaceAction !== state.options.workspaceAction
       || (input.contextText ?? '').trim() !== (state.options.contextText ?? '').trim()
-      || input.includeRelationshipContext !== state.options.includeRelationshipContext
-      || JSON.stringify([...(input.excludedMessageIds ?? [])].sort()) !== JSON.stringify([...(state.options.excludedMessageIds ?? [])].sort());
+      || input.includeRelationshipContext !== state.options.includeRelationshipContext;
   }
   return (input.mode === 'reply_to_message'
     ? input.target.messageId !== state.targetMessageId || input.direction.trim() !== state.direction.trim()

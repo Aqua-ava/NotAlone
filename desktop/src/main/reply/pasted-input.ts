@@ -1,19 +1,22 @@
 import type { RewriteSnapshot } from '../../shared/reply-bridge';
-import { isUuid } from '../uuid';
+// 旧输入可能包含用户主动排除的敏感消息；退役消息排除后按无排除项恢复会静默扩大资料范围。
+export const RETIRED_MESSAGE_EXCLUSION_MESSAGE = '旧输入使用了已退役的消息排除设置，请重新发起请求';
+export function isRetiredMessageExclusionError(error: unknown): boolean {
+  return error instanceof Error && error.message === RETIRED_MESSAGE_EXCLUSION_MESSAGE;
+}
 // 历史与中断恢复必须保留输入来历，不能把对方原文恢复成本人草稿。
-export function pastedInputFields(value: Record<string, unknown>): Pick<RewriteSnapshot, 'inputKind' | 'pastedDirection' | 'workspaceAction' | 'contextText' | 'excludedMessageIds'> {
+export function pastedInputFields(value: Record<string, unknown>): Pick<RewriteSnapshot, 'inputKind' | 'pastedDirection' | 'workspaceAction' | 'contextText'> {
+  if (value.excluded_message_ids !== undefined || value.excludedMessageIds !== undefined) {
+    throw new Error(RETIRED_MESSAGE_EXCLUSION_MESSAGE);
+  }
   if (value.input_kind === 'workspace') {
     if (!['express', 'suggest'].includes(value.workspace_action as string)
       || value.pasted_direction != null
-      || value.context_text != null && (typeof value.context_text !== 'string' || value.context_text.length > 65_536)
-      || value.excluded_message_ids != null && (!Array.isArray(value.excluded_message_ids)
-        || value.excluded_message_ids.length > 500 || !value.excluded_message_ids.every(isUuid)
-        || new Set(value.excluded_message_ids.map((id: string) => id.toLowerCase())).size !== value.excluded_message_ids.length)) {
+      || value.context_text != null && (typeof value.context_text !== 'string' || value.context_text.length > 65_536)) {
       throw new Error('历史工作区输入无效。');
     }
     return { inputKind: 'workspace', workspaceAction: value.workspace_action as 'express' | 'suggest',
-      ...(typeof value.context_text === 'string' ? { contextText: value.context_text } : {}),
-      ...(Array.isArray(value.excluded_message_ids) ? { excludedMessageIds: value.excluded_message_ids.map((id: string) => id.toLowerCase()) } : {}) };
+      ...(typeof value.context_text === 'string' ? { contextText: value.context_text } : {}) };
   }
   if (value.input_kind === undefined || value.input_kind === 'draft') {
     if (value.pasted_direction !== undefined && value.pasted_direction !== null) throw new Error('历史输入来历无效。');
