@@ -1,5 +1,6 @@
 {
  "safe-node": [
+  "tests/data-lifecycle.test.mjs",
   "tests/contact-avatar.test.mjs",
   "tests/memory-source-time.test.mjs",
     "tests/history-recertify.test.mjs",

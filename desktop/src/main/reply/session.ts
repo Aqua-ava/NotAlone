@@ -687,6 +687,26 @@ export class ReplySession {
     if (this.pendingOwnerContextChanges === 0) await this.revalidateDeletedSource('', { preserveInput: true });
   }
 
+  /** 清空聊天拥有独立的配对结算；通用本人资料复验不负责清理消息缓存。 */
+  beginHistoryClear(contactId: string): () => Promise<void> {
+    const generation = this.backend.getConnectionGeneration();
+    const withdrawMessages = () => {
+      if (generation !== this.backend.getConnectionGeneration()) return;
+      this.messageNotices.forget(contactId);
+      if (this.state.contactId !== contactId) return;
+      this.cancelMessagePage();
+      this.publish({ messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null });
+    };
+    this.beginOwnerContextChange();
+    withdrawMessages();
+    let settlement: Promise<void> | undefined;
+    return () => settlement ??= (async () => {
+      // 先撤销清空期间的读取，再解除本次读锁；复验早退或另一操作未结束也不能露出旧正文。
+      withdrawMessages();
+      await this.revalidateOwnerContextChange();
+    })();
+  }
+
   beginExpressionPreferenceDeletion(): void {
     this.sessionProjection.invalidateSource();
     ++this.pendingExpressionPreferenceDeletions;

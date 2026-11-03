@@ -1,4 +1,5 @@
 import {installSqliteMemoryManagementBridge} from './memory/sqlite-management';
+import { DesktopDataLifecycle } from './data-lifecycle';
 import { installMessageMediaBridge } from './media/bridge';
 import { UsageController } from './usage/controller';
 import { installUsageBridge } from './usage/bridge';
@@ -143,16 +144,6 @@ void app.whenReady().then(async () => {
   const sync = installSyncControlBridge(commands, backend, contacts, beginReadingScopeChange);
   const contactHistory = installContactHistoryBridge(commands, backend, contacts);
   const historyClear = installHistoryClearBridge(commands, backend, contacts);
-  let historyClearInProgress = false;
-  let resyncWasComplete = false;
-  historyClear.onStateChanged(state => {
-    const clearing = state.busy === 'clear';
-    if (clearing && !historyClearInProgress) contactHistory.invalidate('聊天记录正在清空，完成后可重新同步并刷新。');
-    historyClearInProgress = clearing;
-    const completed = state.resync?.completed === true;
-    if (completed && !resyncWasComplete && !clearing) void contactHistory.refreshCurrent();
-    resyncWasComplete = completed;
-  });
   const syncPriority = new SyncPriorityController(backend, contacts, sync);
   app.on('before-quit', () => { sync.dispose(); historyClear.dispose(); contactHistory.dispose(); void syncPriority.dispose(); });
   sync.onStateChanged((state) => foreground.setSyncControlState(state));
@@ -164,16 +155,6 @@ void app.whenReady().then(async () => {
   memory.onRecordDeletion((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   replies.onSessionDeletion((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   const candidateProvenance = installCandidateProvenanceBridge(commands, backend, contacts, replies);
-  coordinateHistoryRecertification(historyClear, {
-    withdraw: () => {
-      contactHistory.invalidate('来源正在重新认证，旧聊天资料已撤下；全部核验完成后会刷新。');
-      media.invalidate(); traces.invalidateSource(); candidateProvenance.invalidateSource();
-      sqliteDiscussion.synchronize(true); fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize();
-      replies.beginOwnerContextChange();
-    },
-    revalidate: () => replies.revalidateOwnerContextChange(),
-    refresh: contactId => contactHistory.refreshCurrent(contactId),
-  });
   const skillLearning = installSkillLearningBridge(commands, backend, contacts,()=>sqliteDiscussion.synchronize(true));
   const preferenceDeletion = coordinateSkillLearningDeletion(skillLearning, memory, replies,
     expressionPreferenceDeletion(traces, replies, candidateProvenance));
@@ -181,39 +162,44 @@ void app.whenReady().then(async () => {
     started: () => { sqliteDiscussion.synchronize(true); preferenceDeletion.started(); },
     settled: () => preferenceDeletion.settled(),
   });
+  const dataLifecycle = new DesktopDataLifecycle({history: contactHistory, media, traces, provenance: candidateProvenance,
+    skills: skillLearning, preferences, memory, processing: fixedMemoryProcessing, management: sqliteMemoryManagement, discussion: sqliteDiscussion, replies});
+  coordinateHistoryRecertification(historyClear, {
+    withdraw: () => { dataLifecycle.withdraw('recertification'); replies.beginOwnerContextChange(); },
+    revalidate: () => replies.revalidateOwnerContextChange(),
+    refresh: contactId => contactHistory.refreshCurrent(contactId),
+  });
+  let settleHistoryClear: (() => Promise<void>) | undefined;
+  let resyncWasComplete = false;
+  historyClear.onStateChanged(state => {
+    const clearing = state.busy === 'clear';
+    if (clearing && !settleHistoryClear && state.contactId) settleHistoryClear = dataLifecycle.beginHistoryClear(state.contactId);
+    if (!clearing && settleHistoryClear) {
+      const settle = settleHistoryClear; settleHistoryClear = undefined;
+      void settle().catch(() => {});
+    }
+    const completed = state.resync?.completed === true;
+    if (completed && !resyncWasComplete && !clearing) void contactHistory.refreshCurrent();
+    resyncWasComplete = completed;
+  });
   let candidateGenerationBlock=foreground.getGenerationBlock();
   foreground.onStateChanged(() => { replies.refreshGenerationEligibility(); const next=foreground.getGenerationBlock();
     if(next!==candidateGenerationBlock){candidateGenerationBlock=next;sqliteDiscussion.synchronize(true);} });
-  const sources = installSourceDeletionBridge(commands, backend, contacts, async (contactId) => {
-    traces.invalidateSource();
-    skillLearning.invalidate();
-    candidateProvenance.invalidateSource();
-    const checking = replies.revalidateDeletedSource(contactId);
-    const memoryChecking = memory.revalidateDeletedSource(contactId);
-    const preferenceChecking = preferences.invalidateSource(contactId);
-    await Promise.all([checking, memoryChecking, preferenceChecking]);
-    await contactHistory.refreshCurrent(contactId);
-  });
+  const sources = installSourceDeletionBridge(commands, backend, contacts, contactId => dataLifecycle.sourceChanged(contactId));
   coordinateSourceContextChanges(sources, replies);
   coordinateSkillLearningSourceDeletion(skillLearning, sources);
   sources.onDeletion((phase) => {
     memory.sourceDeletionChanged(phase);
-    if (phase === 'started') { contactHistory.invalidate('聊天记录来源正在删除，删除完成后会重新读取。'); media.invalidate(); sqliteDiscussion.synchronize(true); fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize(); }
+    if (phase === 'started') dataLifecycle.withdraw('source-deletion');
   });
   const contactDeletion = installContactDeletionBridge(commands, backend, contacts, beginReadingScopeChange, (contactId) => {
     if (contacts.getState().selectedContactId !== contactId) return;
-    contactHistory.invalidate('联系人正在删除，旧聊天与资料已停用。');
-    media.invalidate(); traces.invalidateSource(); skillLearning.invalidate(); candidateProvenance.invalidateSource();
-    sqliteDiscussion.synchronize(true); fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize();
+    dataLifecycle.withdraw('contact-deletion');
   });
   app.on('before-quit', () => contactDeletion.dispose());
   installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies,
     (selection, text) => candidateProvenance.recordCopied(selection, text)));
-  backend.setConnectionChangePreparation(async () => {
-    fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize();
-    sqliteDiscussion.synchronize(true);
-    await media.invalidateAndDrain(); await replies.prepareGenerationConnectionChange();
-  });
+  backend.setConnectionChangePreparation(() => dataLifecycle.connectionChanging());
   installSetupBridge(windows, new SetupController(backend));
   installWechatSetupBridge(commands, new WechatSetupController(backend));
   installBackendBridge(windows, backend, () => app.quit());
