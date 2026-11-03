@@ -206,14 +206,14 @@
 .sqlite-memory-management .memory-browser-caption { color: #647b85; font: 16px/1.5 "Songti SC", STSong, serif; letter-spacing: 1px; }
 .memory-person-switch { display: flex; gap: 4px; padding: 4px; border: 1px solid #d0d8d4; border-radius: 24px; }
 .sqlite-memory-management .memory-person-switch button { min-width: 52px; padding: 5px 15px; border: 0; border-radius: 20px; background: transparent; color: #71818a; font-size: 12px; cursor: pointer; }
-.sqlite-memory-management .memory-person-switch button[aria-pressed="true"] { background: #2c5874; color: #fffdf5; }
-.sqlite-memory-management .memory-person-switch button:hover:not(:disabled):not([aria-pressed="true"]) { background: #e7ece9; color: var(--accent); }
+.sqlite-memory-management .memory-person-switch button[aria-pressed="true"] { background: #dce9ee; color: #31495b; }
+.sqlite-memory-management .memory-person-switch button:hover:not(:disabled):not([aria-pressed="true"]) { background: #edf3f4; color: var(--accent); }
 .memory-level-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 30px; }
 .sqlite-memory-management .memory-level-tabs button { display: flex; align-items: center; gap: 7px; padding: 7px 16px; border: 1px solid #d0d8d4; border-radius: 22px; background: transparent; color: #6c7e87; cursor: pointer; }
 .memory-level-tabs button span { font-size: 10px; letter-spacing: .5px; opacity: .75; }
 .memory-level-tabs button strong { font-size: 12px; font-weight: 500; }
-.sqlite-memory-management .memory-level-tabs button[aria-pressed="true"] { border-color: #2c5874; background: #2c5874; color: #fffdf5; }
-.sqlite-memory-management .memory-level-tabs button:hover:not(:disabled):not([aria-pressed="true"]) { background: #e7ece9; }
+.sqlite-memory-management .memory-level-tabs button[aria-pressed="true"] { border-color: #b8ccd6; background: #dce9ee; color: #31495b; }
+.sqlite-memory-management .memory-level-tabs button:hover:not(:disabled):not([aria-pressed="true"]) { background: #edf3f4; }
 .sqlite-memory-management .memory-collection-heading { display: flex; align-items: center; gap: 9px; margin: 0 0 22px; color: var(--panel-heading); font-size: 13px; }
 .memory-collection-heading span { color: #71818a; font-size: 11px; font-weight: 400; }
 .memory-timeline-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 27%); align-items: start; gap: 34px; }
