@@ -3,33 +3,45 @@ import type { SkillLibraryBridge, SkillLibraryItem, SkillLibrarySnapshot, Sqlite
 
 const verificationLabels = { pending: '场景文件待核验', missing: '场景文件缺失，请恢复后刷新', conflict: '无法确认场景文件，请检查后刷新', invalid: '场景文件校验未通过，请检查后刷新' };
 
-export function SqliteSkillLibraryPage({ initial, bridge, onModeChange, onUnavailable }: {
+export function SqliteSkillLibraryPage({ initial, bridge, onModeChange, onUnavailable, visible = true }: {
   initial: SqliteSkillLibrarySnapshot;
   bridge: SkillLibraryBridge;
   onModeChange: (value: SkillLibrarySnapshot) => void;
   onUnavailable: () => void;
+  visible?: boolean;
 }) {
   const [view, setView] = useState(initial);
   const [busy, setBusy] = useState(false);
+  const [background, setBackground] = useState(false);
   const [error, setError] = useState('');
   const [stale, setStale] = useState(false);
   const [selectedTag, setSelectedTag] = useState('全部');
   const active = useRef(true);
+  const pending = useRef(false);
+  const lastLoadedAt = useRef(Date.now());
 
   useEffect(() => {
     active.current = true;
     return () => { active.current = false; };
   }, []);
 
-  async function perform(operation: () => Promise<SkillLibrarySnapshot>) {
-    if (busy) return;
+  // 只在再次进入且快照超过 30 秒时更新；后台更新、启停和手动刷新共用串行操作入口。
+  useEffect(() => {
+    if (visible && Date.now() - lastLoadedAt.current >= 30_000) void perform(() => bridge.readLibrary(), true);
+  }, [visible]);
+
+  async function perform(operation: () => Promise<SkillLibrarySnapshot>, silent = false) {
+    if (pending.current) return;
+    pending.current = true;
     setBusy(true);
+    setBackground(silent);
     setError('');
     try {
       const next = await operation();
       if (!active.current) return;
       if (next.mode !== 'sqlite') { onModeChange(next); return; }
       setView(next);
+      lastLoadedAt.current = Date.now();
       setStale(false);
       if (selectedTag !== '全部' && !next.skills.some((item) => item.tags.includes(selectedTag))) setSelectedTag('全部');
     } catch (reason) {
@@ -38,6 +50,7 @@ export function SqliteSkillLibraryPage({ initial, bridge, onModeChange, onUnavai
       setError(reason instanceof Error ? reason.message : 'Skill 状态暂不可用，请刷新后再操作。');
       onUnavailable();
     } finally {
+      pending.current = false;
       if (active.current) setBusy(false);
     }
   }
@@ -62,7 +75,7 @@ export function SqliteSkillLibraryPage({ initial, bridge, onModeChange, onUnavai
         <p>按场景查看回复方法。已启用的场景会在回复时按需加载。</p>
       </div>
       <button className="button" disabled={busy} onClick={() => void perform(() => bridge.readLibrary())}>
-        {busy ? '正在核对…' : '刷新状态'}
+        {busy && !background ? '正在核对…' : '刷新状态'}
       </button>
     </div>
     {error && <p role="alert">{error}</p>}

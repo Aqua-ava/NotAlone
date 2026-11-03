@@ -309,11 +309,14 @@ function ReadingSection<T>({ title, note, empty, state, retry, children }: {
 const memoryViews = { contact: '对方', owner: '我', pending: '待确认' } as const;
 type MemoryView = keyof typeof memoryViews;
 
-export function MemoryPage({ session, navigate }: { session: ContactSessionView; navigate: (page: ManagerPage) => void }) {
-  return <MemoryProcessingEntry bridge={window.notalone.fixedMemoryProcessing} backend={window.notalone.backend}
+export function MemoryPage({ session, navigate, visible = true }: { session: ContactSessionView; navigate: (page: ManagerPage) => void; visible?: boolean }) {
+  const processingBridge=window.notalone.fixedMemoryProcessing,managementBridge=window.notalone.sqliteMemoryManagement;
+  // 连接代次重挂子树时保留页面持有的桥，避免旧子树的迟到释放撤下新资料。
+  useEffect(()=>()=>{void processingBridge.release().catch(()=>{});void managementBridge.release().catch(()=>{});},[processingBridge,managementBridge]);
+  return <MemoryProcessingEntry releaseOnUnmount={false} visible={visible} bridge={processingBridge} backend={window.notalone.backend}
     contactId={session.state.selectedContactId}
     scopeKey={`${session.state.selectedContactId}:${session.state.scopeRevision}`}
-    sqliteChildren={(processingRevision,completedRunId)=><SqliteMemoryManagementPanel bridge={window.notalone.sqliteMemoryManagement} contactId={session.state.selectedContactId} scopeRevision={session.state.scopeRevision} documentsRefreshKey={processingRevision} completedRunId={completedRunId}/> }>
+    sqliteChildren={(processingRevision,completedRunId)=><SqliteMemoryManagementPanel releaseOnUnmount={false} visible={visible} bridge={managementBridge} contactId={session.state.selectedContactId} scopeRevision={session.state.scopeRevision} documentsRefreshKey={processingRevision} completedRunId={completedRunId}/> }>
     <LegacyMemoryPage session={session} navigate={navigate}/>
   </MemoryProcessingEntry>;
 }

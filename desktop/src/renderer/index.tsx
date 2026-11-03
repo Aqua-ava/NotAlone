@@ -156,8 +156,8 @@ export function App() {
             {advancedOpen && <DeveloperTraces session={contactSession} />}
           </details></>}
         {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} initialSelection={selectingWechatContacts} onSelectionClosed={() => setSelectingWechatContacts(false)} />}
-        {page === 'memory' && <MemoryPage session={contactSession} navigate={setPage} />}
-        {page === 'skillLearning' && <SkillLearningPage session={contactSession} />}
+        <div hidden={page !== 'memory'}><MemoryPage session={contactSession} navigate={setPage} visible={page === 'memory'} /></div>
+        <SkillLearningPage session={contactSession} visible={page === 'skillLearning'} />
         {page === 'sync' && <>
           {contactSession.state.contacts.length > 0 && <ContactSyncSettings key={contactSession.state.selectedContactId ?? ''} session={contactSession} navigate={setPage} />}
           <WechatSetupPanel bridge={window.notalone.wechatSetup} selectionOnly={consent.selectionOnly === true} onSelectContacts={selectWechatContacts}><SyncControlPanel bridge={window.notalone.syncControl} contacts={contactSession.state.contacts} currentContactId={contactSession.state.selectedContactId} /></WechatSetupPanel>

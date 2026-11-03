@@ -7,7 +7,7 @@ const run=()=>({runId:ids.run,state:'incomplete',total:1,succeeded:1,failed:0,un
  tasks:[{taskId:ids.task,scopeKind:'contact',contactId:ids.contact,state:'succeeded',total:1,succeeded:1,errorCode:null}],inputs:[],candidates:[]});
 async function withPanel(t,command,testPage){
  const compiled=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {FixedMemoryProcessingPanel} from './src/renderer/FixedMemoryProcessingPanel';
- const listeners=new Set();window.invalidate=()=>{for(const listener of listeners)listener();};const bridge=new Proxy({},{get:(_,method)=>method==='onInvalidated'?(listener)=>{listeners.add(listener);return()=>listeners.delete(listener);}:(...args)=>window.command(method,...args)});const root=createRoot(document.getElementById('root'));let contactId='${ids.contact}';window.show=visible=>root.render(visible?<FixedMemoryProcessingPanel bridge={bridge} contactId={contactId}/>:null);window.selectContact=id=>{contactId=id;window.show(true);};window.show(true);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
+ const listeners=new Set();window.invalidate=()=>{for(const listener of listeners)listener();};const bridge=new Proxy({},{get:(_,method)=>method==='onInvalidated'?(listener)=>{listeners.add(listener);return()=>listeners.delete(listener);}:(...args)=>window.command(method,...args)});const root=createRoot(document.getElementById('root'));let contactId='${ids.contact}',pageVisible=true;window.show=mounted=>root.render(mounted?<div hidden={!pageVisible}><FixedMemoryProcessingPanel bridge={bridge} contactId={contactId} visible={pageVisible}/></div>:null);window.setPageVisible=visible=>{pageVisible=visible;window.show(true);};window.selectContact=id=>{contactId=id;window.show(true);};window.show(true);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
  const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(4000);
  await page.exposeFunction('command',async(method,...args)=>{const value=await command(method,...args);return method==='readCurrent'&&value&&!Object.hasOwn(value,'contactId')?{...value,contactId:args[0]?.contactId}:value;});await page.route('http://127.0.0.1/fixed-memory-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/fixed-memory-test');await page.addScriptTag({content:compiled.outputFiles[0].text});await testPage(page);
 }
@@ -195,5 +195,17 @@ test('图文目标分别显示真实处理量，未就绪图片不计为已处�
   await page.getByText('图片：已处理 0 / 1 条',{exact:true}).waitFor();
   await page.getByText('图片尚未就绪 2 条，未计为已处理。',{exact:true}).waitFor();
   await page.screenshot({path:'/tmp/notalone-image-memory-progress.png'});
+ });
+});
+
+
+test('记忆页隐藏后暂停处理状态轮询，失效仍撤下且返回时重新读取',{timeout:20000},async t=>{
+ let reads=0;
+ await withPanel(t,async method=>{if(method==='readCurrent'){reads++;return {connectionGeneration:1,run:null};}},async page=>{
+  await page.getByText('暂无处理记录',{exact:true}).waitFor();
+  await page.evaluate(()=>window.setPageVisible(false));await page.evaluate(()=>new Promise(requestAnimationFrame));
+  const before=reads;await revisit(page);await page.evaluate(()=>new Promise(requestAnimationFrame));assert.equal(reads,before);
+  await page.evaluate(()=>window.invalidate());await page.evaluate(()=>new Promise(requestAnimationFrame));assert.equal(await page.getByText('暂无处理记录',{exact:true}).count(),0);
+  await page.evaluate(()=>window.setPageVisible(true));await page.getByText('暂无处理记录',{exact:true}).waitFor();assert.equal(reads,before+1);
  });
 });

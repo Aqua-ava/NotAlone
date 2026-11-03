@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { BackendBridge } from '../shared/backend-bridge';
 import type { FixedMemoryProcessingBridge, FixedProcessingMode, FixedProcessingRun } from '../shared/fixed-memory-processing';
 import { FixedMemoryProcessingPanel } from './FixedMemoryProcessingPanel';
 
 export interface MemoryProcessingEntryProps {
   bridge: FixedMemoryProcessingBridge;
-  backend: Pick<BackendBridge, 'onStateChanged'>;
+  backend: Pick<BackendBridge, 'onStateChanged'> & Partial<Pick<BackendBridge, 'getState'>>;
   scopeKey?: string | number;
   contactId?: string | null;
   children: ReactNode;
+  visible?: boolean;
+  releaseOnUnmount?: boolean;
   sqliteChildren?: ReactNode | ((processingRevision:number,completedRunId:string|null)=>ReactNode);
 }
 
@@ -18,7 +20,7 @@ type EntryState = { scope: EntryScope } & (
 );
 
 /** 模式经本机桥核验后才挂载对应的记忆页面。 */
-export function MemoryProcessingEntry({ bridge, backend, scopeKey, contactId = null, children, sqliteChildren }: MemoryProcessingEntryProps) {
+export function MemoryProcessingEntry({ bridge, backend, scopeKey, contactId = null, children, sqliteChildren, visible = true, releaseOnUnmount = true }: MemoryProcessingEntryProps) {
   const [state, setState] = useState<EntryState | null>(null);
   const [processingRevision,setProcessingRevision]=useState(0);
   const [completedRunId,setCompletedRunId]=useState<string|null>(null);
@@ -32,7 +34,7 @@ export function MemoryProcessingEntry({ bridge, backend, scopeKey, contactId = n
   const acceptedScope = scope.current;
   const reread = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
-    let active = true, revision = 0, connectionObserved = false, connected = true;
+    let active = true, revision = 0, connectionRevision = -1, connectionObserved = false, connected = false;
     const read = async () => {
       if (!active || !connected || scope.current !== acceptedScope) return;
       const accepted = ++revision;
@@ -48,21 +50,29 @@ export function MemoryProcessingEntry({ bridge, backend, scopeKey, contactId = n
         }
       }
     };
-    reread.current = read;
-    const unsubscribe = backend.onStateChanged(state => {
-      if (!active || scope.current !== acceptedScope) return;
+    const receive = (state: {phase:string;revision?:number}) => {
+      if (!active || scope.current !== acceptedScope || state.revision !== undefined && state.revision < connectionRevision) return;
+      if(state.revision !== undefined)connectionRevision=state.revision;
       connectionObserved = true;
+      const wasConnected = connected;
       connected = state.phase === 'connected';
-      if (connected) void read();
+      if (connected) { if (!wasConnected) void read(); }
       else { revision++; setState({ scope: acceptedScope, phase: 'disconnected' }); }
-    });
-    if (!connectionObserved) void read();
+    };
+    const readConnection = async () => {
+      try { if(backend.getState)receive(await backend.getState()); }
+      catch { if(active&&!connectionObserved)setState({scope:acceptedScope,phase:'failed'}); }
+    };
+    reread.current = () => connected ? read() : readConnection();
+    const unsubscribe = backend.onStateChanged(receive);
+    if(backend.getState)void readConnection();
+    else if(!connectionObserved){connected=true;void read();}
     return () => { active = false; revision++; unsubscribe(); reread.current = async () => {}; };
   }, [bridge, backend, acceptedScope]);
   const current = state?.scope === acceptedScope ? state : null;
   if (current?.phase === 'ready') {
-    if (current.mode.mode === 'legacy') return children;
-    if (current.mode.mode === 'sqlite') return <>{typeof sqliteChildren==='function'?sqliteChildren(processingRevision,completedRunId):sqliteChildren}<details className="memory-processing-disclosure"><summary>记忆处理状态</summary><FixedMemoryProcessingPanel bridge={bridge} contactId={contactId} scopeKey={scopeKey} onRunUpdated={onRunUpdated}/></details></>;
+    if (current.mode.mode === 'legacy') return visible ? children : null;
+    if (current.mode.mode === 'sqlite') return <Fragment key={current.mode.connectionGeneration}>{typeof sqliteChildren==='function'?sqliteChildren(processingRevision,completedRunId):sqliteChildren}<details className="memory-processing-disclosure"><summary>记忆处理状态</summary><FixedMemoryProcessingPanel releaseOnUnmount={releaseOnUnmount} visible={visible} bridge={bridge} contactId={contactId} scopeKey={scopeKey} onRunUpdated={onRunUpdated}/></details></Fragment>;
   }
   if (current?.phase === 'disconnected') return <p role="status">本机连接已变化，正在等待重新连接。</p>;
   if (current?.phase === 'failed') return <section aria-label="记忆处理模式">

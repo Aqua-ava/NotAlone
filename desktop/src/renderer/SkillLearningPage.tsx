@@ -15,18 +15,31 @@ const kinds = { create: '新建建议', update: '更新建议', merge: '合并�
 const materials: Record<string, string> = { assistant_discussion: '助手讨论', assistant_usage: '候选与使用痕迹',
   candidate_edit: '用户修改与纠正', candidate_selection: '明确候选选择', followup_observation: '任务后的有限观察' };
 
-export function SkillLearningPage({ session }: { session: ContactSessionView }) {
+export function SkillLearningPage({ session, visible = true }: { session: ContactSessionView; visible?: boolean }) {
+  // 管理窗口内保留已核对快照；隐藏时仍接收连接失效，不持久化到磁盘。
+  return <div hidden={!visible}><SkillLearningContent session={session} visible={visible} /></div>;
+}
+
+function SkillLearningContent({ session, visible }: { session: ContactSessionView; visible: boolean }) {
   const [library,setLibrary]=useState<SkillLibrarySnapshot|null>(null),[failure,setFailure]=useState(''),[attempt,setAttempt]=useState(0);
   const bridge=window.notalone.skillLearning;
   useEffect(()=>{
-    let active=true,request=0;
+    let active=true,request=0,connected=false,revision=-1;
     const read=()=>{const current=++request;setLibrary(null);setFailure('');void bridge.readLibrary().then(value=>{if(active&&current===request)setLibrary(value);},()=>{if(active&&current===request)setFailure('Skill 状态暂不可用，请重新读取。');});};
-    read();
-    const unsubscribe=window.notalone.backend?.onStateChanged(state=>{if(state.phase==='connected')read();else{++request;setLibrary(null);setFailure('本机连接已变化，请重新读取 Skill 状态。');}});
+    const receive=(state: {phase: string; revision?: number})=>{
+      if(!active || state.revision !== undefined && state.revision < revision)return;
+      if(state.revision !== undefined)revision=state.revision;
+      if(state.phase==='connected'){if(!connected)read();connected=true;}
+      else{connected=false;++request;setLibrary(null);setFailure('本机连接已变化，请重新读取 Skill 状态。');}
+    };
+    const backend=window.notalone.backend;
+    const unsubscribe=backend?.onStateChanged(receive);
+    if(backend?.getState)void backend.getState().then(receive,()=>{if(active&&revision<0)setFailure('本机连接状态暂不可用，请重新读取 Skill 状态。');});
+    else{connected=true;read();}
     return()=>{active=false;unsubscribe?.();};
   },[bridge,attempt]);
-  if(library?.mode==='sqlite')return <SqliteSkillLibraryPage initial={library} bridge={bridge} onModeChange={setLibrary} onUnavailable={()=>{setLibrary(null);setFailure('Skill 状态暂不可用，请重新读取。');}}/>;
-  if(library?.mode==='legacy')return <LegacySkillLearningPage session={session}/>;
+  if(library?.mode==='sqlite')return <SqliteSkillLibraryPage key={library.connectionGeneration} initial={library} visible={visible} bridge={bridge} onModeChange={setLibrary} onUnavailable={()=>{setLibrary(null);setFailure('Skill 状态暂不可用，请重新读取。');}}/>;
+  if(library?.mode==='legacy')return visible ? <LegacySkillLearningPage session={session}/> : null;
   return <section aria-label="Skill管理"><h2>已有 Skill</h2>{failure?<><p role="alert">{failure}</p><button className="button" onClick={()=>setAttempt(value=>value+1)}>重新读取 Skill 状态</button></>:<p role="status">正在核对 Skill 状态…</p>}</section>;
 }
 

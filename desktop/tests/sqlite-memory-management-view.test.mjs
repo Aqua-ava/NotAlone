@@ -9,8 +9,8 @@ const source={contactId:contact,messageId:id,recordId:id,acceptedRevision:'1',qu
 const candidate={id,scopeKind:'contact',contactId:contact,verificationState:'verified',body:'原始合成结论',state:'pending',stateRevision:'0',eventId:id,sources:[source],contributingContactIds:[contact]};
 const view=()=>({connectionGeneration:1,scope:{scopeKind:'contact',contactId:contact},view:{candidates:[candidate],memories:[]}});
 async function refreshVisible(page){await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));}
-async function panel(t,command,inspect,withDocuments=false,selectedContact=contact,release=async()=>{},{initialLevel=withDocuments?'L2':'L1'}={}){
- const compiled=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {SqliteMemoryManagementPanel} from './src/renderer/SqliteMemoryManagementPanel';const listeners=new Set();window.invalidate=()=>{for(const fn of listeners)fn();};const bridge={read:(...args)=>window.command('read',...args),${withDocuments ? "readDocuments:(...args)=>window.command('readDocuments',...args)," : ''}decide:(...args)=>window.command('decide',...args),release:()=>window.release(),onInvalidated:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}};const root=createRoot(document.getElementById('root'));window.unmount=()=>root.unmount();root.render(<SqliteMemoryManagementPanel bridge={bridge} contactId='${selectedContact}' scopeRevision={1}/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
+async function panel(t,command,inspect,withDocuments=false,selectedContact=contact,release=async()=>{},{initialLevel=withDocuments?'L2':'L1',keepMounted=true}={}){
+ const compiled=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {SqliteMemoryManagementPanel} from './src/renderer/SqliteMemoryManagementPanel';const listeners=new Set();window.invalidate=()=>{for(const fn of listeners)fn();};const bridge={read:(...args)=>window.command('read',...args),${withDocuments ? "readDocuments:(...args)=>window.command('readDocuments',...args)," : ''}decide:(...args)=>window.command('decide',...args),release:()=>window.release(),onInvalidated:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}};const root=createRoot(document.getElementById('root'));window.unmount=()=>root.unmount();let shown=true,selected='${selectedContact}',revision=1;const render=()=>root.render(${keepMounted?'':'shown&&'}<div hidden={!shown}><SqliteMemoryManagementPanel bridge={bridge} contactId={selected} scopeRevision={revision} visible={shown}/></div>);window.setPanelVisible=value=>{shown=value;render();};window.setPanelContact=value=>{selected=value;revision++;render();};render();`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
  const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(4000);await page.exposeFunction('command',command);await page.exposeFunction('release',release);await page.route('http://127.0.0.1/memory-management-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/memory-management-test');await page.addScriptTag({content:compiled.outputFiles[0].text});if(initialLevel!=='L1')await page.getByRole('button',{name:initialLevel,exact:true}).click();await inspect(page);
 }
 function flatDocuments(){
@@ -289,7 +289,7 @@ test('主题旧集合处理中可见，资格失效立即撤下正文和依据�
   await section.getByText('查看依据',{exact:true}).click();await section.getByText(`记忆 ${id} · 版本 1`,{exact:true}).waitFor();await section.getByText('正式合成记忆依据。',{exact:true}).waitFor();
   hold=true;await refreshVisible(page);await started;
   await page.evaluate(()=>window.invalidate());finish(documentView);
-  await section.getByRole('alert').filter({hasText:'已撤下'}).waitFor();
+  await section.getByRole('alert').filter({hasText:'资料资格尚未重新核验，已撤下正文和依据。'}).waitFor();
   assert.equal(await section.getByText('联系人喜欢合成园艺。',{exact:true}).count(),0);
   assert.equal(await section.getByText(`记忆 ${id} · 版本 1`,{exact:true}).count(),0);assert.equal(await section.getByText('正式合成记忆依据。',{exact:true}).count(),0);
  },true);
@@ -411,4 +411,64 @@ test('图片来源明确显示模型观察和固定版本，不伪装成文字�
   await page.getByText(`图片版本：${id}`,{exact:true}).waitFor();
   await page.screenshot({path:'/tmp/notalone-image-memory-evidence.png'});
  });
+});
+
+
+test('记忆页预加载后切回直接显示，隐藏时暂停刷新但持续撤下失效资料',{timeout:20000},async t=>{
+ let reads=0,hold=false,finish;
+ await panel(t,async method=>{
+  assert.equal(method,'read');reads++;
+  if(hold)return new Promise(resolve=>{finish=resolve;});
+  return view();
+ },async page=>{
+  const text=page.getByText(candidate.body,{exact:true});await text.waitFor();
+  await page.evaluate(()=>window.setPanelVisible(false));await page.evaluate(()=>new Promise(requestAnimationFrame));
+  const before=reads;await refreshVisible(page);await page.evaluate(()=>new Promise(requestAnimationFrame));
+  assert.equal(reads,before,'隐藏页面不继续读取');
+  hold=true;
+  const opened=await page.evaluate(async()=>{const start=performance.now();window.setPanelVisible(true);await new Promise(requestAnimationFrame);return {elapsed:performance.now()-start,loading:document.body.textContent.includes('正在核对记忆资料'),body:document.body.textContent.includes('原始合成结论')};});
+  assert.equal(opened.loading,false);assert.equal(opened.body,true);t.diagnostic(`预加载后切回首帧 ${opened.elapsed.toFixed(1)}ms，无核对提示`);
+  await page.evaluate(()=>new Promise(requestAnimationFrame));
+  assert.equal(await text.isVisible(),true);
+  await page.evaluate(()=>window.setPanelVisible(false));await page.evaluate(()=>window.invalidate());
+  assert.equal(await text.count(),0,'隐藏时失效也立即清除资料');
+  if(finish){hold=false;finish(view());}
+  await page.evaluate(()=>window.setPanelVisible(true));await page.evaluate(()=>new Promise(requestAnimationFrame));
+  assert.equal(await text.count(),0,'旧在途结果不能恢复失效资料');
+  await page.getByRole('button',{name:'重试读取记忆资料'}).click();await text.waitFor();
+  await page.evaluate(()=>{window.setPanelVisible(false);window.setPanelContact(null);});await page.evaluate(()=>new Promise(requestAnimationFrame));
+  assert.equal(await text.count(),0,'切换范围立即清除旧正文');
+ });
+});
+
+
+test('相同延迟下记忆切页复用首帧，不等待重新核对',{timeout:20000},async t=>{
+ const results=[];
+ for(const keepMounted of [false,true]){
+  await panel(t,async()=>{await new Promise(resolve=>setTimeout(resolve,200));return view();},async page=>{
+   const text=page.getByText(candidate.body,{exact:true});await text.waitFor();const samples=[];
+   for(let index=0;index<3;index++){
+    await page.evaluate(()=>window.setPanelVisible(false));await page.evaluate(()=>new Promise(requestAnimationFrame));
+    const first=await page.evaluate(async()=>{window.openedAt=performance.now();window.setPanelVisible(true);await new Promise(requestAnimationFrame);return {loading:document.body.textContent.includes('正在核对记忆资料'),body:document.body.textContent.includes('原始合成结论')};});
+    await text.waitFor();samples.push(await page.evaluate(()=>performance.now()-window.openedAt));
+    assert.equal(first.loading,!keepMounted);assert.equal(first.body,keepMounted);
+   }
+   results.push({keepMounted,samples:samples.map(value=>Number(value.toFixed(1)))});
+  },false,contact,async()=>{},{keepMounted});
+ }
+ t.diagnostic(`相同 200ms 只读桥延迟，三次切回可见耗时(ms)：${JSON.stringify(results)}`);
+});
+
+
+test('主题资料预加载后切层与切页保留正文，隐藏层不轮询',{timeout:20000},async t=>{
+ let reads=0;
+ await panel(t,async method=>{if(method==='readDocuments'){reads++;return flatDocuments();}return view();},async page=>{
+  const body=page.getByText('园艺主题的合成正文',{exact:true});await body.waitFor();
+  await page.getByRole('button',{name:'L1',exact:true}).click();const before=reads;
+  await refreshVisible(page);await page.evaluate(()=>new Promise(requestAnimationFrame));assert.equal(reads,before);
+  await page.evaluate(()=>window.setPanelVisible(false));await page.evaluate(()=>new Promise(requestAnimationFrame));
+  await refreshVisible(page);await page.evaluate(()=>new Promise(requestAnimationFrame));assert.equal(reads,before);
+  await page.evaluate(()=>window.setPanelVisible(true));await page.getByRole('button',{name:'L2',exact:true}).click();
+  assert.equal(await body.isVisible(),true);assert.equal(await page.getByText('正在核对主题资料…',{exact:true}).count(),0);
+ },true);
 });

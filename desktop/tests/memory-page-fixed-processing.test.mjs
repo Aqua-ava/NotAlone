@@ -77,12 +77,15 @@ test('真实记忆页面仅展示处理进度并自动刷新资料，资格失�
   await page.goto('http://127.0.0.1/memory-page-fixed-test');
   await page.addScriptTag({ content: compiled.outputFiles[0].text });
   const panel = page.getByRole('region', { name: '固定范围记忆处理' });
-  await panel.getByText('最近一批提取与核验：已处理 1 / 1 条文字目标', { exact: true }).waitFor();
+  await page.locator('details.memory-processing-disclosure > summary').click();
+  await panel.getByText('最近一批提取与核验：已处理 1 / 1 条消息目标', { exact: true }).waitFor();
   assert.equal(await panel.getByRole('button').count(), 0);
   assert.equal(await panel.getByText('合成记忆页面候选', { exact: true }).count(), 0);
   const documentPanel=page.getByRole('region',{name:'主题资料与长期概览'});
+  await page.getByRole('button',{name:'L2',exact:true}).click();
   await documentPanel.getByText('当前尚无已发布的主题资料。',{exact:true}).waitFor();
   const management=page.getByRole('region',{name:'记忆候选与版本'});
+  await page.getByRole('button',{name:'L1',exact:true}).click();
   await management.getByText('当前范围没有可展示的正式记忆。',{exact:true}).waitFor();
   const version={mergeParents:[],mergeParentCount:0,verificationState:'verified',versionNo:'1',body:'本轮新增的合成正式记忆',formationKind:'adoption',adoptionMode:'auto',previousVersionNo:null,restoredFromVersionNo:null,contentState:'present',provenanceState:'eligible',decisionId:ids.record,sources:[],contributingContactIds:[ids.contact]};
   memoryView={candidates:[],memories:[{id:ids.task,scopeKind:'contact',contactId:ids.contact,headRevision:'1',state:'active',manualProtection:false,current:version,versions:[version],decisions:[]}]};
@@ -90,7 +93,9 @@ test('真实记忆页面仅展示处理进度并自动刷新资料，资格失�
   run={...run,status:'completed',state:'completed',stage:'completed',laterStages:'completed'};
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await panel.getByRole('status').filter({hasText:'本轮已完成'}).waitFor();
+  await page.getByRole('button',{name:'L2',exact:true}).click();
   await documentPanel.getByText('发布后的合成主题正文',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'L1',exact:true}).click();
   await management.getByText('本轮新增的合成正式记忆',{exact:true}).first().waitFor();
   assert.equal(await page.getByRole('navigation', { name: '记忆分类' }).count(), 0);
   assert.equal(await panel.locator('pre, details').count(), 0);
@@ -102,4 +107,26 @@ test('真实记忆页面仅展示处理进度并自动刷新资料，资格失�
   assert.equal(await management.getByText('本轮新增的合成正式记忆',{exact:true}).count(),0);
   assert.deepEqual(await page.evaluate(() => window.legacyCalls), [], '旧版记忆读取、刷新和订阅均未执行');
   assert.deepEqual(errors, [], '页面没有 React 或桥接异常');
+});
+
+
+test('快速重连重新加载新代次，旧子树异步释放不能撤下新快照',{timeout:20000},async t=>{
+ const compiled=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{MemoryPage}from'./src/renderer/MemoryPage';
+ window.generation=1;window.memoryReads=0;window.memoryReleases=0;window.fixedReleases=0;
+ const connections=new Set(),memoryInvalidations=new Set(),fixedInvalidations=new Set();
+ const publish=listeners=>{for(const fn of listeners)fn();};
+ window.notalone={backend:{onStateChanged:fn=>{connections.add(fn);return()=>connections.delete(fn);}},fixedMemoryProcessing:{
+ readMode:async()=>({mode:'sqlite',connectionGeneration:window.generation}),readCurrent:async()=>({contactId:'contact',connectionGeneration:window.generation,run:null}),
+ release:async()=>{window.fixedReleases++;queueMicrotask(()=>publish(fixedInvalidations));},onInvalidated:fn=>{fixedInvalidations.add(fn);return()=>fixedInvalidations.delete(fn);}},
+ sqliteMemoryManagement:{read:async request=>{window.memoryReads++;return {connectionGeneration:window.generation,scope:request.scope,view:{memories:[],candidates:[]}};},
+ readDocuments:async request=>({connectionGeneration:window.generation,scope:request.scope,view:{status:'idle',publication:null,documents:[]}}),release:async()=>{window.memoryReleases++;queueMicrotask(()=>publish(memoryInvalidations));},onInvalidated:fn=>{memoryInvalidations.add(fn);return()=>memoryInvalidations.delete(fn);}}};
+ window.fastReconnect=()=>{window.generation=2;publish(memoryInvalidations);publish(fixedInvalidations);for(const fn of connections)fn({phase:'connecting',revision:1});for(const fn of connections)fn({phase:'connected',revision:2});};
+ const root=createRoot(document.getElementById('root'));window.unmount=()=>root.unmount();root.render(<MemoryPage session={{state:{selectedContactId:'contact',scopeRevision:1}}} navigate={()=>{}}/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false,logLevel:'silent'});
+ const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(3000);
+ await page.route('http://127.0.0.1/memory-page-reconnect-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/memory-page-reconnect-test');await page.addScriptTag({content:compiled.outputFiles[0].text});
+ const ready=page.getByText('当前范围没有可展示的正式记忆。',{exact:true});await ready.waitFor();
+ await page.evaluate(async()=>{window.fastReconnect();await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));});
+ await ready.waitFor();assert.equal(await page.getByRole('alert').count(),0);assert.equal(await page.evaluate(()=>window.memoryReads),2);
+ assert.deepEqual(await page.evaluate(()=>[window.memoryReleases,window.fixedReleases]),[0,0],'连接重挂不释放仍由页面持有的桥');
+ await page.evaluate(()=>window.unmount());assert.deepEqual(await page.evaluate(()=>[window.memoryReleases,window.fixedReleases]),[1,1],'页面真正卸载才释放两条桥');
 });

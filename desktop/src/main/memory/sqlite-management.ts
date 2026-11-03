@@ -130,7 +130,12 @@ export class SqliteMemoryManagementController {
 }
 export function installSqliteMemoryManagementBridge(commands:PageCommands,backend:BackendHost,contacts:Contacts){
  const controller=new SqliteMemoryManagementController(backend,()=>commands.publish('memory:management-invalidated',{},'manager'),contacts);
- backend.onStateChanged(()=>controller.synchronize());
+ let connectionGeneration=backend.getConnectionGeneration();
+  backend.onStateChanged(state=>{
+    const next=state.phase==='connected'?backend.getConnectionGeneration():undefined;
+    if(next===connectionGeneration)return;
+    connectionGeneration=next;controller.synchronize();
+  });
  commands.handle('memory:management-read',(...args)=>{if(args.length!==1)throw invalid();return controller.read(args[0] as MemoryManagementRead);},'manager');
  commands.handle('memory:documents-read',(...args)=>{if(args.length!==1)throw invalid();return controller.readDocuments(args[0] as MemoryManagementRead);},'manager');
  commands.handle('memory:management-decide',(...args)=>{if(args.length!==1)throw invalid();return controller.decide(args[0] as MemoryManagementDecision);},'manager');

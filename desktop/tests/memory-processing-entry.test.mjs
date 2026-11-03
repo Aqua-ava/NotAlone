@@ -24,7 +24,7 @@ async function modesSettled(page, count) {
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
-async function withEntry(t, command, inspect, controller = false, withBrowser = false, discloseProcessing = true) {
+async function withEntry(t, command, inspect, controller = false, withBrowser = false, discloseProcessing = true, initialBackendState = false) {
   const compiled = await build({
     stdin: {
       contents: `import React, {useEffect} from 'react';
@@ -57,7 +57,7 @@ async function withEntry(t, command, inspect, controller = false, withBrowser = 
             finally { if (method === 'readMode') window.modeSettled++; }
           };
         }});`}
-        const backend = {onStateChanged: listener => {
+        const backend = {${initialBackendState ? "getState:()=>window.command('backendState')," : ''}onStateChanged: listener => {
           listeners.add(listener); return () => listeners.delete(listener);
         }};
         function LegacyBody() {
@@ -196,7 +196,7 @@ test('模式读取失败撤下原页面，重试通过核验后才恢复对应�
     if (method === 'readCurrent') return currentView(2, 2);
   }, async page => {
     await page.getByRole('region', { name: '旧版记忆正文' }).waitFor();
-    await page.evaluate(() => window.emitBackend('connected'));
+    await page.evaluate(() => {window.emitBackend('connecting');window.emitBackend('connected');});
     await page.getByRole('alert').filter({ hasText: '记忆处理模式暂不可用' }).waitFor();
     assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
     assert.equal(await page.getByRole('region', { name: '固定范围记忆处理' }).count(), 0);
@@ -234,7 +234,7 @@ test('范围变化撤下快照并重新核验，旧范围和卸载后的模式�
     newScope.resolve({ connectionGeneration: 1, mode: 'sqlite' });
     await page.getByText('最近一批提取与核验：已处理 3 / 3 条消息目标', { exact: true }).waitFor();
     assert.equal(await page.getByText('最近一批提取与核验：已处理 1 / 1 条消息目标', { exact: true }).count(), 0);
-    await page.evaluate(() => window.emitBackend('connected'));
+    await page.evaluate(() => {window.emitBackend('connecting');window.emitBackend('connected');});
     await page.getByRole('status').filter({ hasText: '正在核对记忆处理模式' }).waitFor();
     await page.evaluate(() => window.hide());
     afterUnmount.resolve({ connectionGeneration: 1, mode: 'legacy' });
@@ -260,7 +260,7 @@ test('真实控制器在旧面板释放后仍能完成 connected 触发的合法
   }, async page => {
     const panel = page.getByRole('region', { name: '固定范围记忆处理' });
     await panel.getByRole('status').filter({ hasText: '等待处理' }).waitFor();
-    await page.evaluate(() => window.emitBackend('connected'));
+    await page.evaluate(() => {window.emitBackend('connecting');window.emitBackend('connected');});
     await panel.waitFor({ state: 'detached' });
     await page.getByRole('status').filter({ hasText: '正在核对记忆处理模式' }).waitFor();
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -303,4 +303,25 @@ test('恢复失败显示错误并重用操作号，切换联系人撤下旧轮�
     await page.evaluate(()=>window.selectContact('44444444-4444-4444-8444-444444444444'));
     await page.getByText('暂无处理记录',{exact:true}).waitFor();assert.equal(await button.count(),0);
   });
+});
+
+
+test('同一连接的状态通知不重新核对模式或卸载记忆页',{timeout:20000},async t=>{
+ let reads=0;
+ await withEntry(t,async method=>{if(method==='readMode'){reads++;return {connectionGeneration:1,mode:'sqlite'};}if(method==='readCurrent')return currentView(1,1);},async page=>{
+  const text=page.getByText('最近一批提取与核验：已处理 1 / 1 条消息目标',{exact:true});await text.waitFor();
+  await page.evaluate(()=>{window.emitBackend('connected');window.emitBackend('connected');});await page.evaluate(()=>new Promise(requestAnimationFrame));
+  assert.equal(reads,1);assert.equal(await text.isVisible(),true);assert.equal(await page.getByText('正在核对记忆处理模式…',{exact:true}).count(),0);
+ });
+});
+
+
+test('启动预加载等待真实连接，旧初始连接状态不能覆盖新连接',{timeout:20000},async t=>{
+ const initial=deferred();let reads=0;
+ await withEntry(t,async method=>{if(method==='backendState')return initial.promise;if(method==='readMode'){reads++;return {connectionGeneration:1,mode:'sqlite'};}if(method==='readCurrent')return currentView(1,1);},async page=>{
+  await page.getByText('正在核对记忆处理模式…',{exact:true}).waitFor();assert.equal(reads,0);
+  await page.evaluate(()=>window.emitBackend('connected'));await page.getByText('最近一批提取与核验：已处理 1 / 1 条消息目标',{exact:true}).waitFor();
+  initial.resolve({phase:'disconnected',revision:0});await page.evaluate(()=>new Promise(requestAnimationFrame));
+  assert.equal(reads,1);assert.equal(await page.getByText('最近一批提取与核验：已处理 1 / 1 条消息目标',{exact:true}).isVisible(),true);
+ },false,false,true,true);
 });

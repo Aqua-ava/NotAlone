@@ -93,14 +93,18 @@ function RecoveryControl({bridge,view,onSettled}:{bridge:FixedMemoryProcessingBr
 }
 
 /** 由记忆页面传入具名桥；scopeKey变化或失效事件先撤下全部本地快照。 */
-export function FixedMemoryProcessingPanel({ bridge, contactId, scopeKey = '', onRunUpdated }: { bridge: FixedMemoryProcessingBridge; contactId: string | null; scopeKey?: string | number; onRunUpdated?:(run:FixedProcessingRun|null)=>void }) {
+export function FixedMemoryProcessingPanel({ bridge, contactId, scopeKey = '', onRunUpdated, visible = true, releaseOnUnmount = true }: { bridge: FixedMemoryProcessingBridge; contactId: string | null; scopeKey?: string | number; onRunUpdated?:(run:FixedProcessingRun|null)=>void; visible?:boolean; releaseOnUnmount?:boolean }) {
   const [snapshot, setSnapshot] = useState<{ bridge: FixedMemoryProcessingBridge; contactId: string; scopeKey: string | number; view: FixedProcessingView } | null>(null);
   const [error, setError] = useState('');
   const refresh=useRef<()=>Promise<void>>(async()=>{});
+  const pageVisible = useRef(visible);
+  pageVisible.current = visible;
+  const visibilityChanged = useRef<()=>void>(()=>{});
+  useEffect(()=>{ visibilityChanged.current(); },[visible]);
   const updated = useRef(onRunUpdated);
   updated.current = onRunUpdated;
   const view = snapshot?.bridge === bridge && snapshot.contactId === contactId && snapshot.scopeKey === scopeKey ? snapshot.view : null;
-  useEffect(() => () => { void bridge.release().catch(() => {}); }, [bridge]);
+  useEffect(() => () => { if(releaseOnUnmount)void bridge.release().catch(() => {}); }, [bridge,releaseOnUnmount]);
   useEffect(() => {
     let active = true, revision = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -109,7 +113,7 @@ export function FixedMemoryProcessingPanel({ bridge, contactId, scopeKey = '', o
     if (!contactId) return;
     const schedule = (delay: number) => {
       clearTimeout(timer);
-      if (active && !document.hidden) timer = setTimeout(() => void read(), delay);
+      if (active && pageVisible.current && !document.hidden) timer = setTimeout(() => void read(), delay);
     };
     const read = async () => {
       clearTimeout(timer);
@@ -133,15 +137,17 @@ export function FixedMemoryProcessingPanel({ bridge, contactId, scopeKey = '', o
       setError('资料资格或连接已变化，正在重新核对处理状态。');
       schedule(2000);
     });
-    const visible = () => {
-      if (document.hidden) clearTimeout(timer);
+    const updateVisibility = () => {
+      if (document.hidden || !pageVisible.current) clearTimeout(timer);
       else void read();
     };
-    document.addEventListener('visibilitychange', visible);
+    visibilityChanged.current=updateVisibility;
+    document.addEventListener('visibilitychange', updateVisibility);
     void read();
     return () => {
       active = false; revision++; clearTimeout(timer); unsubscribe();
-      document.removeEventListener('visibilitychange', visible);
+      visibilityChanged.current=()=>{};
+      document.removeEventListener('visibilitychange', updateVisibility);
     };
   }, [bridge, contactId, scopeKey]);
   const run = view?.run ?? null;

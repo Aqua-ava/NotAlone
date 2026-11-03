@@ -79,3 +79,50 @@ test('Skill页自动核验更新并管理启停，不提供手动核验或添加
  await expect.poll(()=>page.evaluate(()=>window.failedLibraryCommands)).toBe(2);
  await expect(gentle).toContainText('新连接的合成说明');await expect(page.getByRole('alert')).toHaveCount(0);
 });
+
+test('Skill页预加载后反复进入保留快照和筛选，不重复核对或闪加载', {timeout:20000}, async t => {
+ const browser=await chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());
+ const page=await browser.newPage();
+ const compiled=await build({stdin:{contents:`import React,{useState} from 'react';import{createRoot}from'react-dom/client';import{SkillLearningPage}from'./src/renderer/SkillLearningPage';
+ window.skillReads=0;window.loadingFlashes=0;window.skillVisible=false;window.skillDelay=200;
+ const snapshot={mode:'sqlite',connectionGeneration:1,skills:[{packageId:'synthetic',name:'synthetic',title:'合成预加载场景',tags:['合成分类'],description:'合成说明',enabledState:'enabled',verificationState:'verified',verificationReason:null,headRevision:'1',currentRevisionNo:'1',revisions:[]}]};
+ window.skillSnapshot=snapshot;const listeners=new Set();window.notalone={backend:{getState:async()=>({phase:'connected',revision:1}),onStateChanged:listener=>{listeners.add(listener);return()=>listeners.delete(listener);}},skillLearning:{readLibrary:async()=>{window.skillReads++;if(window.skillDelay)await new Promise(resolve=>setTimeout(resolve,window.skillDelay));if(window.failSkillRead)throw new Error("owner_unavailable");return structuredClone(snapshot);}}};
+ window.connectionChanged=state=>listeners.forEach(listener=>listener(state));
+ new MutationObserver(()=>{if(window.skillVisible&&Array.from(document.querySelectorAll('[role="status"]')).some(node=>node.textContent.includes('正在核对 Skill')&&node.getClientRects().length))window.loadingFlashes++;}).observe(document.body,{childList:true,subtree:true});
+ function Harness(){const[visible,setVisible]=useState(false);return <><button onClick={()=>{window.skillVisible=!visible;setVisible(!visible);}}>切换页面</button><SkillLearningPage visible={visible} session={{state:{selectedContactId:null,scopeRevision:0}}}/></>;}createRoot(document.getElementById('root')).render(<Harness/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false});
+ await page.setContent('<div id="root"></div>');await page.addScriptTag({content:compiled.outputFiles[0].text});
+ const card=page.getByRole('article',{name:'回复场景：合成预加载场景'});
+ const times=[];
+ for(let index=0;index<4;index++){
+  if(index){await page.getByRole('button',{name:'切换页面'}).click();await expect(card).toBeHidden();}
+  const start=performance.now();await page.getByRole('button',{name:'切换页面'}).click();await expect(card).toBeVisible();times.push(Math.round(performance.now()-start));
+  if(!index)await page.getByRole('button',{name:'合成分类'}).click();
+ }
+ const observed=await page.evaluate(()=>({reads:window.skillReads,flashes:window.loadingFlashes}));
+ console.log('Skill 切页同负载（接口固定200ms）:',JSON.stringify({times,...observed}));
+ assert.equal(observed.reads,1,'同一连接重进不得重复读取');
+ await expect(page.getByRole('button',{name:'合成分类'})).toHaveAttribute('aria-pressed','true');
+ await page.evaluate(()=>window.connectionChanged({phase:'connected',revision:2}));
+ await expect(card).toBeVisible();assert.equal(await page.evaluate(()=>window.skillReads),1);
+ await page.getByRole('button',{name:'切换页面'}).click();
+ await page.evaluate(()=>window.connectionChanged({phase:'disconnected',revision:3}));
+ await page.getByRole('button',{name:'切换页面'}).click();await expect(card).toHaveCount(0);
+ await expect(page.getByRole('alert')).toContainText('本机连接已变化');
+ await page.evaluate(()=>window.connectionChanged({phase:'connected',revision:4}));await expect(card).toBeVisible();
+ assert.equal(await page.evaluate(()=>window.skillReads),2);
+ // 超过 30 秒再进入才静默更新；当前快照仍显示，刷新失败则撤下。
+ await page.getByRole('button',{name:'切换页面'}).click();
+ await page.evaluate(()=>{const now=Date.now();Date.now=()=>now+31_000;});
+ await page.getByRole('button',{name:'切换页面'}).click();await expect(card).toBeVisible();
+ await expect(page.getByRole('button',{name:'刷新状态',exact:true})).toBeDisabled();
+ assert.equal(await page.evaluate(()=>window.skillReads),3);
+ await expect(page.getByRole('button',{name:'刷新状态',exact:true})).toBeEnabled();
+ // 快速重连的批量 React 更新也必须换成新连接快照。
+ await page.evaluate(()=>{window.skillDelay=0;window.skillSnapshot.connectionGeneration=2;window.skillSnapshot.skills[0].description='新连接代次的说明';window.connectionChanged({phase:'disconnected',revision:5});window.connectionChanged({phase:'connected',revision:6});});
+ await expect(card).toContainText('新连接代次的说明');
+ await page.evaluate(()=>{window.skillDelay=200;});
+ await page.getByRole('button',{name:'切换页面'}).click();
+ await page.evaluate(()=>{const now=Date.now();Date.now=()=>now+31_000;window.failSkillRead=true;});
+ await page.getByRole('button',{name:'切换页面'}).click();await expect(card).toBeVisible();
+ await expect(card).toHaveCount(0);await expect(page.getByRole('alert')).toContainText('Skill 状态暂不可用');
+});

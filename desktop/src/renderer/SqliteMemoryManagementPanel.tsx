@@ -70,7 +70,7 @@ function Memory({memory,busy,decide}:{memory:MemoryView;busy:boolean;decide:(req
 }
 
 /** 资格失效或顶部范围变化立即卸载正文、依据和未提交编辑，迟到结果不再挂回。 */
-export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,documentsRefreshKey=0,completedRunId=null}:{bridge:SqliteMemoryManagementBridge;contactId:string|null;scopeRevision:number;documentsRefreshKey?:number;completedRunId?:string|null}){
+export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,documentsRefreshKey=0,completedRunId=null,visible=true,releaseOnUnmount=true}:{bridge:SqliteMemoryManagementBridge;contactId:string|null;scopeRevision:number;documentsRefreshKey?:number;completedRunId?:string|null;visible?:boolean;releaseOnUnmount?:boolean}){
  const [scopeKind,setScopeKind]=useState<'contact'|'self'>('contact');
  const [level,setLevel]=useState<'L1'|'L2'|'L3'>('L1');
  const context=useRef({bridge,contactId,scopeRevision,scopeKind});
@@ -97,12 +97,15 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
   return()=>{active.current=false;revision.current++;unsubscribe();};
  },[accepted]);
  // 范围切换由 context 撤下旧快照；释放桥会广播失效，只在面板卸载或桥更换时执行。
- useEffect(()=>()=>{void bridge.release().catch(()=>{});},[bridge]);
+ useEffect(()=>()=>{if(releaseOnUnmount)void bridge.release().catch(()=>{});},[bridge,releaseOnUnmount]);
  useEffect(()=>{
   if(completedRunId!==lastCompletedRun.current){lastCompletedRun.current=completedRunId;if(completedRunId)completionRefreshPending.current=true;}
   if(completionRefreshPending.current&&!busy&&contactId){completionRefreshPending.current=false;void refresh.current(true,true);}
  },[completedRunId,busy,accepted]);
- useVisibleRefresh(()=>refresh.current(true,true),!!contactId&&!busy&&!currentNotice?.error);
+ // 页面切换保留已核验快照，重新显示时静默更新；隐藏时仍接收资格失效事件。
+ const wasVisible=useRef(visible);
+ useEffect(()=>{const reopened=visible&&!wasVisible.current;wasVisible.current=visible;if(reopened)void refresh.current(true,true);},[visible]);
+ useVisibleRefresh(()=>refresh.current(true,true),visible&&!!contactId&&!busy&&!currentNotice?.error);
  async function decide(request:Decision){
   if(!current||!readRequest||busy)return;const snapshot=current,token=++revision.current;decisionPending.current=true;setDocumentsBlocked(true);setState(null);setBusy(true);setNotice(null);
   let outcome:MemoryManagementOutcome;
@@ -122,7 +125,7 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
    {current&&<><h3 className="memory-collection-heading">正式记忆 <span>{current.view.memories.length} 条</span></h3>{current.view.memories.length===0?<p className="memory-browser-empty">当前范围没有可展示的正式记忆。</p>:<div className="memory-flat-grid">{current.view.memories.map(memory=><Memory key={`${memory.id}:${memory.headRevision}`} memory={memory} busy={busy} decide={request=>void decide(request)}/>)}</div>}
     <h3 className="memory-collection-heading">候选原稿 <span>{current.view.candidates.length} 条</span></h3>{current.view.candidates.length===0?<p className="memory-browser-empty">当前范围没有可展示的候选。</p>:<div className="memory-flat-grid">{current.view.candidates.map(candidate=><Candidate key={`${candidate.id}:${candidate.stateRevision}`} candidate={candidate} busy={busy} decide={request=>void decide(request)}/>)}</div>}</>}
    </div>
-   <div hidden={level==='L1'}>{readRequest&&scopeKind==='contact'&&typeof bridge.readDocuments==='function'?<SqliteMemoryDocumentsPanel bridge={bridge} request={readRequest} level={level==='L3'?'L3':'L2'} refreshKey={documentsRefreshKey} blocked={documentsBlocked} managementBusy={busy} retryManagement={()=>void refresh.current()}/>:<p className="memory-browser-empty">{scopeKind==='self'?(level==='L3'?'本人全局概览不在当前联系人页面展示。':'本人全局主题资料不在当前联系人页面展示。'):'当前连接暂不支持读取主题资料与长期概览。'}</p>}</div>
+   <div hidden={level==='L1'}>{readRequest&&scopeKind==='contact'&&typeof bridge.readDocuments==='function'?<SqliteMemoryDocumentsPanel visible={visible&&level!=='L1'} bridge={bridge} request={readRequest} level={level==='L3'?'L3':'L2'} refreshKey={documentsRefreshKey} blocked={documentsBlocked} managementBusy={busy} retryManagement={()=>void refresh.current()}/>:<p className="memory-browser-empty">{scopeKind==='self'?(level==='L3'?'本人全局概览不在当前联系人页面展示。':'本人全局主题资料不在当前联系人页面展示。'):'当前连接暂不支持读取主题资料与长期概览。'}</p>}</div>
   </div>}
  </section>;
 }

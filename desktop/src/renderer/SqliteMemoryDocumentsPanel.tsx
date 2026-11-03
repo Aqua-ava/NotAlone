@@ -3,7 +3,7 @@ import type {MemoryDocumentsSnapshot,MemoryManagementRead,SqliteMemoryManagement
 import {useVisibleRefresh} from './use-visible-refresh';
 
 /** 一个范围只展示后端核验过的完整发布集合；失效事件先卸载快照。 */
-export function SqliteMemoryDocumentsPanel({bridge,request,level='L2',refreshKey=0,blocked=false,managementBusy=false,retryManagement}:{bridge:SqliteMemoryManagementBridge;request:MemoryManagementRead;level?:'L2'|'L3';refreshKey?:number;blocked?:boolean;managementBusy?:boolean;retryManagement?:()=>void}){
+export function SqliteMemoryDocumentsPanel({bridge,request,level='L2',refreshKey=0,blocked=false,managementBusy=false,retryManagement,visible=true}:{bridge:SqliteMemoryManagementBridge;request:MemoryManagementRead;level?:'L2'|'L3';refreshKey?:number;blocked?:boolean;managementBusy?:boolean;retryManagement?:()=>void;visible?:boolean}){
  const [snapshot,setSnapshot]=useState<MemoryDocumentsSnapshot|null>(null),[notice,setNotice]=useState<string|null>(null),[busy,setBusy]=useState(false);
  const active=useRef(false),revision=useRef(0),busyRef=useRef(false),refreshQueued=useRef(false),refresh=useRef<()=>Promise<void>>(async()=>{});
  refresh.current=async()=>{
@@ -23,7 +23,9 @@ export function SqliteMemoryDocumentsPanel({bridge,request,level='L2',refreshKey
   return()=>{active.current=false;revision.current++;busyRef.current=false;refreshQueued.current=false;unsubscribe();};
  },[bridge,request.scope.scopeKind,request.scope.contactId,request.displayContactId,request.scopeRevision,blocked]);
  useEffect(()=>{if(refreshKey)void refresh.current();},[refreshKey]);
- useVisibleRefresh(()=>refresh.current(),!notice&&!blocked,2000);
+ const wasVisible=useRef(visible);
+ useEffect(()=>{const reopened=visible&&!wasVisible.current;wasVisible.current=visible;if(reopened&&!notice)void refresh.current();},[visible]);
+ useVisibleRefresh(()=>refresh.current(),visible&&!notice&&!blocked,2000);
  const view=blocked?undefined:snapshot?.view;
  const documents=view?.publication?view.documents.filter(document=>document.kind===(level==='L2'?'scene':'profile')):[];
  const message=view?.status==='processing'?view.publication?'本轮处理中，当前仍可查看此前已发布资料。':'本轮处理中，尚无可用的发布集合。'

@@ -191,3 +191,20 @@ test('主进程保留图片来源类型、固定版本与模型观察，拒绝�
  assert.equal(actual.contentKind,'image');assert.equal(actual.contentRef.file_id,requestKey);assert.equal(actual.quote,'');assert.equal(actual.description,'日程卡中的每周六练习吉他');
  quote='把图片描述伪装成原话';await assert.rejects(f.controller.read(read));
 });
+
+
+test('记忆桥只在连接代次变化时撤下资料，同连接资格通知保留快照',async()=>{
+ const compiled=await build({stdin:{contents:"export {installSqliteMemoryManagementBridge} from './src/main/memory/sqlite-management';export {installFixedMemoryProcessingBridge} from './src/main/memory/fixed-processing';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
+ const module=await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
+ for(const install of [module.installSqliteMemoryManagementBridge,module.installFixedMemoryProcessingBridge]){
+  let generation=1,listener;const events=[];
+  const backend={getConnectionGeneration:()=>generation,onStateChanged:fn=>{listener=fn;return()=>{};}};
+  const controller=install({handle:()=>{},publish:event=>events.push(event)},backend,{getState:()=>({selectedContactId:contact,scopeRevision:1})});
+  listener({phase:'connected'});listener({phase:'connected'});assert.equal(events.length,0);
+  generation=undefined;listener({phase:'connecting'});assert.equal(events.length,1);
+  listener({phase:'connecting'});assert.equal(events.length,1);
+  generation=2;listener({phase:'connected'});assert.equal(events.length,2);
+  listener({phase:'connected'});assert.equal(events.length,2);
+  controller.synchronize();assert.equal(events.length,3,'来源失效不受连接去重影响');
+ }
+});

@@ -231,7 +231,12 @@ export class FixedMemoryProcessingController {
 /** 调用方将所有来源删除、联系人取消及连接变化接到同一 synchronize。 */
 export function installFixedMemoryProcessingBridge(commands: PageCommands, backend: BackendHost, contacts:ContactSelection): FixedMemoryProcessingController {
   const controller = new FixedMemoryProcessingController(backend, () => commands.publish('memory:fixed-processing-invalidated', {}, 'manager'),contacts);
-  backend.onStateChanged(() => controller.synchronize());
+  let connectionGeneration=backend.getConnectionGeneration();
+  backend.onStateChanged(state=>{
+    const next=state.phase==='connected'?backend.getConnectionGeneration():undefined;
+    if(next===connectionGeneration)return;
+    connectionGeneration=next;controller.synchronize();
+  });
   commands.handle('memory:fixed-processing-mode', (...args) => { noArguments(args); return controller.mode(); }, 'manager');
   commands.handle('memory:fixed-processing-current', (...args) => {
     if (args.length > 1) throw invalid(); return controller.read(args[0] as FixedProcessingRead | undefined);
