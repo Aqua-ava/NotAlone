@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import type {MemoryDocumentsSnapshot,MemoryManagementRead,SqliteMemoryManagementBridge} from '../shared/sqlite-memory-management';
+import {useVisibleRefresh} from './use-visible-refresh';
 
 /** 一个范围只展示后端核验过的完整发布集合；失效事件先卸载快照。 */
 export function SqliteMemoryDocumentsPanel({bridge,request,refreshKey=0}:{bridge:SqliteMemoryManagementBridge;request:MemoryManagementRead;refreshKey?:number}){
@@ -21,12 +22,7 @@ export function SqliteMemoryDocumentsPanel({bridge,request,refreshKey=0}:{bridge
   return()=>{active.current=false;revision.current++;busyRef.current=false;refreshQueued.current=false;unsubscribe();};
  },[bridge,request.scope.scopeKind,request.scope.contactId,request.displayContactId,request.scopeRevision]);
  useEffect(()=>{if(refreshKey)void refresh.current();},[refreshKey]);
- useEffect(()=>{
-  if(snapshot?.view.status!=='processing'&&!snapshot?.view.publication)return;
-  const refreshVisible=()=>{if(!document.hidden)void refresh.current();};
-  const timer=setInterval(refreshVisible,2000);document.addEventListener('visibilitychange',refreshVisible);
-  return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',refreshVisible);};
- },[snapshot?.view.status,snapshot?.view.publication?.id]);
+ useVisibleRefresh(()=>refresh.current(),!notice,2000);
  const view=snapshot?.view;
  const message=view?.status==='processing'?view.publication?'本轮处理中，当前仍可查看此前已发布资料。':'本轮处理中，尚无可用的发布集合。'
   :view?.status==='conflict'?view.publication?'本轮存在并发冲突；以下仍是当前可用的已发布资料。':'本轮存在并发冲突，请重新启动处理。'
@@ -35,9 +31,8 @@ export function SqliteMemoryDocumentsPanel({bridge,request,refreshKey=0}:{bridge
   :view?.status==='idle'?'当前尚无已发布的主题资料。':null;
  return <section className="sqlite-memory-documents" aria-label="主题资料与长期概览">
   <header><h2>主题资料与长期概览</h2><p className="hint">主题与长期背景来自同一份已核验的发布集合。</p></header>
-  <button type="button" disabled={busy} onClick={()=>void refresh.current()}>刷新主题资料</button>
   {busy&&!view&&<p role="status">正在核对主题资料…</p>}
-  {notice&&<p role="alert">{notice}</p>}
+  {notice&&<p role="alert">{notice}<button type="button" disabled={busy} onClick={()=>void refresh.current()}>重试读取主题资料</button></p>}
   {message&&<p role="status">{message}</p>}
   {view?.publication&&view.documents.length===0&&<p>当前发布集合没有可展示的资料。</p>}
   {view?.publication&&view.documents.map(document=><article className="sqlite-memory-card" key={`${document.id}:${document.versionNo}`} aria-label={document.kind==='scene'?'主题资料':'长期概览'}>

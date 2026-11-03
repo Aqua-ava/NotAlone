@@ -71,7 +71,8 @@ export class WechatSetupController {
   }
   private async read(operation: Operation, expectedAccount?: string | null): Promise<Report | undefined> {
     this.token = null;
-    this.publish({ phase: 'loading', accountId: null, failureCode: null });
+    // 已连接时后台查询保留可用展示，避免周期性卸载同步设置。
+    if (!['connected', 'needs_owner', 'needs_detection'].includes(this.state.phase)) this.publish({ phase: 'loading', accountId: null, failureCode: null });
     try {
       const result = await this.backend.requestJson({ method: 'GET', path: '/api/setup/wechat', maxResponseBytes: 4096 });
       const value = report(result.data);

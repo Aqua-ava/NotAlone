@@ -7,6 +7,7 @@ const contact='11111111-1111-4111-8111-111111111111',id='22222222-2222-4222-8222
 const source={contactId:contact,messageId:id,recordId:id,acceptedRevision:'1',quote:'合成原话证据'};
 const candidate={id,scopeKind:'contact',contactId:contact,verificationState:'verified',body:'原始合成结论',state:'pending',stateRevision:'0',eventId:id,sources:[source],contributingContactIds:[contact]};
 const view=()=>({connectionGeneration:1,scope:{scopeKind:'contact',contactId:contact},view:{candidates:[candidate],memories:[]}});
+async function refreshVisible(page){await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));}
 async function panel(t,command,inspect,withDocuments=false,selectedContact=contact,release=async()=>{}){
  const compiled=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {SqliteMemoryManagementPanel} from './src/renderer/SqliteMemoryManagementPanel';const listeners=new Set();window.invalidate=()=>{for(const fn of listeners)fn();};const bridge={read:(...args)=>window.command('read',...args),${withDocuments ? "readDocuments:(...args)=>window.command('readDocuments',...args)," : ''}decide:(...args)=>window.command('decide',...args),release:()=>window.release(),onInvalidated:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}};const root=createRoot(document.getElementById('root'));window.unmount=()=>root.unmount();root.render(<SqliteMemoryManagementPanel bridge={bridge} contactId='${selectedContact}' scopeRevision={1}/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
  const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(4000);await page.exposeFunction('command',command);await page.exposeFunction('release',release);await page.route('http://127.0.0.1/memory-management-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/memory-management-test');await page.addScriptTag({content:compiled.outputFiles[0].text});await inspect(page);
@@ -30,12 +31,12 @@ test('真实释放桥不会把正常对方与本人切换误报为资格失效�
   assert.deepEqual(await section.getByRole('alert').allTextContents(),[]);
   await empty.waitFor();await section.getByRole('button',{name:'对方',exact:true}).click();await empty.waitFor();
   await Promise.all(deliveries);assert.deepEqual(await section.getByRole('alert').allTextContents(),[]);assert.deepEqual(reads,['contact','self','contact']);assert.equal(releases,0);
-  holdContact=true;await section.getByRole('button',{name:'刷新记忆管理'}).click();await enteredOld;
+  holdContact=true;await refreshVisible(page);await enteredOld;
   await section.getByRole('button',{name:'我',exact:true}).click();await empty.waitFor();
   finishOld({candidates:[candidate],memories:[]});await oldCompleted;await page.evaluate(()=>new Promise(requestAnimationFrame));
   assert.equal(await section.getByText(candidate.body,{exact:true}).count(),0);assert.deepEqual(await section.getByRole('alert').allTextContents(),[]);await empty.waitFor();
   controller.synchronize();await Promise.all(deliveries);await section.getByRole('alert').filter({hasText:'资料资格或连接已变化'}).waitFor();
-  await section.getByRole('button',{name:'刷新记忆管理'}).click();await empty.waitFor();
+  await section.getByRole('button',{name:'重试读取记忆资料'}).click();await empty.waitFor();
   await page.evaluate(()=>window.unmount());await released;await Promise.all(deliveries);assert.equal(releases,1);
  },true,contact,async()=>{releases++;controller.release();finishRelease();});
 });
@@ -46,6 +47,40 @@ test('正常空提取完成后，主题资料页显示尚无发布而不是持�
   await section.getByText('当前尚无已发布的主题资料。',{exact:true}).waitFor();
   assert.equal(await section.getByText('本轮处理中，尚无可用的发布集合。',{exact:true}).count(),0);
  },true,f.contactId);
+});
+test('记忆自动读取保留未提交编辑，失败后撤下资料且仅显示重试',{timeout:20000},async t=>{
+ let calls=0,fail=false,finish,entered;const pending=new Promise(resolve=>{finish=resolve;}),started=new Promise(resolve=>{entered=resolve;});
+ await panel(t,async method=>{
+  assert.equal(method,'read');calls++;if(fail)throw new Error('synthetic_read_failure');
+  if(calls===2){entered();return pending;}return view();
+ },async page=>{
+  const section=page.getByRole('region',{name:'记忆候选与版本'});
+  await section.getByText(candidate.body,{exact:true}).waitFor();
+  assert.equal(await section.getByRole('button',{name:'刷新记忆管理'}).count(),0);
+  assert.equal(await section.getByRole('button',{name:'重试读取记忆资料'}).count(),0);
+  await section.getByRole('button',{name:'修改并采纳'}).click();const editor=section.getByLabel('修改候选正文');await editor.fill('仍在编辑的合成草稿');
+  await refreshVisible(page);await started;assert.equal(await editor.isEnabled(),true);assert.equal(await editor.inputValue(),'仍在编辑的合成草稿');
+  finish({...view(),view:{candidates:[candidate,{...candidate,id:'33333333-3333-4333-8333-333333333333',body:'自动到达的新候选'}],memories:[]}});
+  await section.getByText('自动到达的新候选',{exact:true}).waitFor();assert.equal(await editor.inputValue(),'仍在编辑的合成草稿');assert.equal(await editor.isEnabled(),true);
+  fail=true;await refreshVisible(page);await section.getByRole('alert').filter({hasText:'来源或范围暂不可用'}).waitFor();
+  assert.equal(await section.getByLabel('修改候选正文').count(),0);assert.equal(await section.getByText(candidate.body,{exact:true}).count(),0);
+  const before=calls;await refreshVisible(page);await page.evaluate(()=>new Promise(requestAnimationFrame));assert.equal(calls,before);
+  fail=false;await section.getByRole('button',{name:'重试读取记忆资料'}).click();await section.getByText(candidate.body,{exact:true}).waitFor();assert.equal(await section.getByRole('button',{name:'重试读取记忆资料'}).count(),0);
+ });
+});
+test('空主题资料也自动更新，读取失败时才显示主题重试',{timeout:20000},async t=>{
+ let calls=0,fail=false,published=false;
+ const documentView=()=>({connectionGeneration:1,scope:{scopeKind:'contact',contactId:contact},view:published?{status:'completed',publication:{id,members:[]},documents:[]}:{status:'idle',publication:null,documents:[]}});
+ await panel(t,async method=>{
+  if(method==='read')return view();assert.equal(method,'readDocuments');calls++;if(fail)throw new Error('synthetic_documents_failure');return documentView();
+ },async page=>{
+  const docs=page.getByRole('region',{name:'主题资料与长期概览'});await docs.getByText('当前尚无已发布的主题资料。',{exact:true}).waitFor();
+  assert.equal(await docs.getByRole('button',{name:'刷新主题资料'}).count(),0);assert.equal(await docs.getByRole('button',{name:'重试读取主题资料'}).count(),0);
+  published=true;await refreshVisible(page);await docs.getByText('主题资料与长期概览已完成发布。',{exact:true}).waitFor();
+  fail=true;await refreshVisible(page);await docs.getByRole('alert').filter({hasText:'来源或范围暂不可用'}).waitFor();
+  const before=calls;await refreshVisible(page);await page.evaluate(()=>new Promise(requestAnimationFrame));assert.equal(calls,before);
+  fail=false;await docs.getByRole('button',{name:'重试读取主题资料'}).click();await docs.getByText('主题资料与长期概览已完成发布。',{exact:true}).waitFor();assert.equal(await docs.getByRole('button',{name:'重试读取主题资料'}).count(),0);
+ },true);
 });
 test('候选保留固定原稿，修改采纳提交真实修订和编辑正文，失效撤下正文依据和草稿',{timeout:20000},async t=>{
  const decisions=[];await panel(t,async(method,input)=>{if(method==='read')return view();if(method==='decide'){decisions.push(input);return {status:'applied',result:{decisionId:id,memoryId:id,versionNo:'1',action:'edit_accept'}};}},async page=>{
@@ -86,8 +121,8 @@ test('并发冲突与来源失效各有反馈，失效后的迟到读取不能�
   if(mode==='late'){entered();return pending;}return view();
  },async page=>{
   const section=page.getByRole('region',{name:'记忆候选与版本'});await section.getByText('原始合成结论',{exact:true}).waitFor();await section.getByRole('button',{name:'采纳原稿'}).click();await section.getByRole('alert').filter({hasText:'并发冲突'}).waitFor();assert.equal(await section.getByText('原始合成结论',{exact:true}).count(),0);
-  mode='source';await section.getByRole('button',{name:'刷新记忆管理'}).click();await section.getByRole('button',{name:'拒绝候选'}).click();await section.getByRole('alert').filter({hasText:'来源或范围已失效'}).waitFor();
-  mode='late';await section.getByRole('button',{name:'刷新记忆管理'}).click();await started;await page.evaluate(()=>window.invalidate());finish(view());await section.getByRole('alert').filter({hasText:'已撤下正文'}).waitFor();assert.equal(await section.getByText('原始合成结论',{exact:true}).count(),0);
+  mode='source';await section.getByRole('button',{name:'重试读取记忆资料'}).click();await section.getByRole('button',{name:'拒绝候选'}).click();await section.getByRole('alert').filter({hasText:'来源或范围已失效'}).waitFor();
+  mode='late';await section.getByRole('button',{name:'重试读取记忆资料'}).click();await started;await page.evaluate(()=>window.invalidate());finish(view());await section.getByRole('alert').filter({hasText:'已撤下正文'}).waitFor();assert.equal(await section.getByText('原始合成结论',{exact:true}).count(),0);
  });
 });
 test('决定回执成功而随后读取失败时不冒报资料仍可用，原正文已撤下',{timeout:20000},async t=>{
@@ -157,7 +192,7 @@ test('真实页面保护父资料后恢复失败，解除并刷新后携带新�
   await secondary.getByRole('button',{name:'开启人工保护'}).click();await section.getByRole('status').filter({hasText:'已开启当前人工保护'}).waitFor();
   assert.equal(await secondary.getByRole('button',{name:'纠正错误'}).count(),0);assert.equal(await secondary.getByRole('button',{name:'记录变化'}).count(),0);assert.equal(await secondary.getByRole('button',{name:/撤销|恢复合并前资料/}).count(),0);
   await section.getByRole('button',{name:'恢复合并前资料（共2项）'}).click();await section.getByRole('alert').filter({hasText:'人工保护'}).waitFor();
-  await section.getByRole('button',{name:'刷新记忆管理'}).click();await secondary.getByRole('button',{name:'解除人工保护'}).click();await section.getByRole('status').filter({hasText:'已解除当前人工保护'}).waitFor();
+  await section.getByRole('button',{name:'重试读取记忆资料'}).click();await secondary.getByRole('button',{name:'解除人工保护'}).click();await section.getByRole('status').filter({hasText:'已解除当前人工保护'}).waitFor();
   await section.getByRole('button',{name:'恢复合并前资料（共2项）'}).click();await section.getByRole('status').filter({hasText:'已新增恢复版本'}).waitFor();
   assert.deepEqual(calls.filter(c=>c.action!=='restore').map(c=>[c.action,c.expectedVersionNo,c.expectedHeadRevision]),[['protect','1','2'],['unprotect','1','3']]);assert.equal(calls.at(-1).expectedMergedParents[0].headRevision,'4');assert.equal(primary.current.versionNo,'3');assert.equal(memory.current.versionNo,'2');
  });
@@ -195,7 +230,7 @@ test('主题旧集合处理中可见，资格失效立即撤下正文和依据�
   await section.getByText('联系人喜欢合成园艺。',{exact:true}).waitFor();
   await section.getByText('本轮处理中，当前仍可查看此前已发布资料。',{exact:true}).waitFor();
   await section.getByText('查看依据',{exact:true}).click();await section.getByText(`记忆 ${id} · 版本 1`,{exact:true}).waitFor();await section.getByText('正式合成记忆依据。',{exact:true}).waitFor();
-  hold=true;await section.getByRole('button',{name:'刷新主题资料'}).click();await started;
+  hold=true;await refreshVisible(page);await started;
   await page.evaluate(()=>window.invalidate());finish(documentView);
   await section.getByRole('alert').filter({hasText:'已撤下'}).waitFor();
   assert.equal(await section.getByText('联系人喜欢合成园艺。',{exact:true}).count(),0);
@@ -247,8 +282,8 @@ test('主题资料区分并发冲突和待核验，待核验时不显示旧集�
  const snapshot=()=>({connectionGeneration:1,scope:{scopeKind:'contact',contactId:contact},view:status!=='invalid'?{status:status==='waiting'?'needs_revalidation':status,publication:{id,members:[{documentId:docId,versionNo:'1'}]},documents:[{id:docId,versionNo:'1',scopeKind:'contact',contactId:contact,kind:'profile',title:'长期背景',statements:[{text:'旧集合仍有资格。',kind:'fact',basis:'旧版有依据。',section:'interests',uncertainty:'',temporalStatus:'stable',leftClaim:null,rightClaim:null,resolutionState:null,resolutionText:null,references:[{memoryId:id,versionNo:1,level:'contact',provenanceKind:'source_supported',memoryText:'合法旧版记忆依据。'}]}]}]}:{status:'needs_revalidation',publication:null,documents:[]}});
  await panel(t,async method=>method==='read'?view():snapshot(),async page=>{
   const section=page.getByRole('region',{name:'主题资料与长期概览'});await section.getByText('本轮存在并发冲突；以下仍是当前可用的已发布资料。',{exact:true}).waitFor();await section.getByText('旧集合仍有资格。',{exact:true}).waitFor();
-  status='waiting';await section.getByRole('button',{name:'刷新主题资料'}).click();await section.getByText('本轮资料待核验；以下仍是当前可用的已发布资料。',{exact:true}).waitFor();await section.getByText('旧集合仍有资格。',{exact:true}).waitFor();
-  status='invalid';await section.getByRole('button',{name:'刷新主题资料'}).click();await section.getByText('来源或资料已失效，等待重新核验。',{exact:true}).waitFor();assert.equal(await section.getByText('旧集合仍有资格。',{exact:true}).count(),0);assert.equal(await section.getByText('长期背景',{exact:true}).count(),0);
+  status='waiting';await refreshVisible(page);await section.getByText('本轮资料待核验；以下仍是当前可用的已发布资料。',{exact:true}).waitFor();await section.getByText('旧集合仍有资格。',{exact:true}).waitFor();
+  status='invalid';await refreshVisible(page);await section.getByText('来源或资料已失效，等待重新核验。',{exact:true}).waitFor();assert.equal(await section.getByText('旧集合仍有资格。',{exact:true}).count(),0);assert.equal(await section.getByText('长期背景',{exact:true}).count(),0);
  },true);
 });
 
@@ -265,7 +300,7 @@ test('改变记忆保护时立即撤下主题旧快照，晚到读取不能恢�
  },async page=>{
   const management=page.getByRole('region',{name:'记忆候选与版本'}),docs=page.getByRole('region',{name:'主题资料与长期概览'});
   await docs.getByText('旧主题正文',{exact:true}).waitFor();await docs.getByText('查看依据',{exact:true}).click();await docs.getByText('旧主题依据',{exact:true}).waitFor();
-  await docs.getByRole('button',{name:'刷新主题资料'}).click();await readStarted;
+  await refreshVisible(page);await readStarted;
   await management.getByRole('button',{name:'开启人工保护'}).click();await decisionStarted;
   assert.equal(await page.getByText('旧主题正文',{exact:true}).count(),0);assert.equal(await page.getByText('旧主题依据',{exact:true}).count(),0);
   releaseRead(old);assert.equal(await page.getByText('旧主题正文',{exact:true}).count(),0);

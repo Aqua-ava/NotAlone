@@ -93,7 +93,7 @@ export class SyncControlController {
     this.cancelRecovery(); this.cancelSnapshot();
     this.synchronizeScope();
     if (!this.scope || this.pending) return;
-    await this.perform('refresh', this.scope);
+    await this.perform('refresh', this.scope, this.state.phase === 'ready');
   }
   enable(request: SyncControlRequest): Promise<void> { return this.control(request, 'enable'); }
   disable(request: SyncControlRequest): Promise<void> { return this.control(request, 'disable'); }

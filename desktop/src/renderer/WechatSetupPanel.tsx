@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { WechatSetupBridge, WechatSetupState } from '../shared/wechat-setup-bridge';
 import { FirstFrameError } from './FirstFrameError';
+import { useVisibleRefresh } from './use-visible-refresh';
 import './bindings.css';
 const initial: WechatSetupState = { phase: 'offline', accountId: null, failureCode: null, revision: -1 };
 const toolFailureMessages: Record<string, string> = {
@@ -54,14 +55,17 @@ export function WechatSetupPanel({ bridge, children, selectionOnly: configuredSe
   async function operate(action: () => Promise<void>) {
     setError('');
     try { await action(); }
-    catch { selectingAfterConnection.current = false; if (active.current) setError('页面状态已变化，请刷新后重新核对微信账号。'); }
+    catch { selectingAfterConnection.current = false; if (active.current) setError('页面状态已变化，请重试读取后重新核对微信账号。'); }
   }
   const busy = ['loading', 'saving', 'restarting'].includes(state.phase);
   const blocked = ['tool_not_ready', 'tool_unavailable'].includes(state.phase);
+  // 待确认候选带主进程凭据；核对来源期间保留候选，不用后台查询替换它。
+  useVisibleRefresh(() => operate(() => bridge.refresh()), ['connected', 'needs_owner', 'needs_detection'].includes(state.phase) && !error && !readError);
+  const readFailed = state.phase === 'failed' && state.failureCode === 'status_unavailable';
   const canDetect = ['needs_detection', 'failed', 'tool_not_ready', 'tool_unavailable', 'conflict'].includes(state.phase);
   return <><section className="bindings-explanation" aria-label="首次连接微信">
     <div className="bindings-toolbar"><h2>{state.phase === 'connected' ? '微信账号已连接' : '连接微信'}</h2>
-      <button className="button" disabled={busy || state.phase === 'offline'} onClick={() => void operate(() => bridge.refresh())}>刷新微信连接状态</button></div>
+      {(readFailed || error) && <button className="button" disabled={busy} onClick={() => void operate(() => bridge.refresh())}>重试读取微信连接状态</button>}</div>
     {state.accountId && <p>{state.phase === 'ready' ? '读取工具配置的微信账号：' : state.phase === 'saving' ? '待连接的微信账号：' : '已关联的微信账号：'}<strong>{state.accountId}</strong></p>}
     {state.phase === 'needs_owner' && <p>请先到「设置」完成本机本人身份配置，再连接微信。</p>}
     {state.phase === 'needs_detection' && <p>先连接你的微信账号，再选择希望同步的联系人。</p>}
@@ -72,7 +76,7 @@ export function WechatSetupPanel({ bridge, children, selectionOnly: configuredSe
       {state.phase === 'conflict' && <p role="alert">{state.failureCode === 'identity_continuity_unverified'
         ? '本机微信数据来源已变化，暂时无法确认与原来源连续。旧读取授权尚未恢复；请先核验当前来源，再重新确认需要读取的会话。'
         : '微信账号与当前配置不一致，连接尚未完成。请核对本机微信读取配置后重新检测。'}</p>}
-      {state.phase === 'failed' && <p role="alert">微信连接状态暂时无法核验，请刷新状态或重新检测。</p>}
+      {state.phase === 'failed' && <p role="alert">微信连接状态暂时无法核验，请重试读取或重新检测。</p>}
       <p>检测只检查本机微信读取工具及配置账号，不读取会话列表或聊天正文，也不会开启同步。</p>
       <button className="button" onClick={() => void operate(() => bridge.detect())}>检测微信账号</button>
     </>}

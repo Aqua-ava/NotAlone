@@ -92,7 +92,7 @@ export function ContactHistoryCoverage({ coverages, contactId, bodyAvailable, co
       {row.incrementalFailureCode && <p role="status">
         {emptyHistory(row) && ['history_incremental_unavailable', 'history_tail_unsupported'].includes(row.incrementalFailureCode)
           ? '当前范围已核验无可读历史；出现新消息后需重新核验读取范围。'
-          : incrementalReasons[row.incrementalFailureCode] ?? reasons[row.incrementalFailureCode] ?? '新消息同步暂未继续，请稍后刷新状态或重新开启同步。'}
+          : incrementalReasons[row.incrementalFailureCode] ?? reasons[row.incrementalFailureCode] ?? '新消息同步暂未继续，请查看同步状态与来源核验结果。'}
       </p>}
     </div>)}
   </div>;
@@ -124,7 +124,7 @@ export function HistoryCoverageStatus({ coverages, contacts = [], currentContact
   const attentionCount = new Set([...incomplete, ...incrementalAttention].map(row => row.contactId)).size;
   return <>
     <section aria-label="聊天同步进度"><h3>聊天同步进度</h3>
-      {coverages === undefined ? <p>暂时无法获取同步进度，请刷新后查看。</p>
+      {coverages === undefined ? <p>同步进度暂不可用，状态会自动更新。</p>
         : coverages.length === 0 ? <p>暂无会话的历史同步进度。</p> : <>
           <p>已读完 {complete.length} / {coverages.length} 个会话的本机历史</p>
           <progress aria-label="本机历史读取进度" value={complete.length} max={coverages.length} />
@@ -136,7 +136,7 @@ export function HistoryCoverageStatus({ coverages, contacts = [], currentContact
           {awaitingMessages.length > 0 && <p>{awaitingMessages.length} 个会话已确认当前没有可读记录，等待新消息并定期检查。</p>}
           {incrementalAttention.length > 0 && <div role="status">
             <p>{bodyAvailable === false ? `${incrementalAttention.length} 个会话的读取能力核验需要关注。` : `${incrementalAttention.length} 个会话的新消息同步已停止或不完整。`}</p>
-            {incrementalAttention[0]?.incrementalFailureCode && <p>{incrementalReasons[incrementalAttention[0].incrementalFailureCode] ?? '请刷新状态查看原因。'}</p>}
+            {incrementalAttention[0]?.incrementalFailureCode && <p>{incrementalReasons[incrementalAttention[0].incrementalFailureCode] ?? '暂未获得具体原因。'}</p>}
           </div>}
         </>}
       <p>只读取这台电脑上微信能提供的聊天记录；图片只保存可确认的本机原图，取不到就保留记录，不保存缩略图、不驱动微信下载。已删除或仅在其他设备上的记录不包含在内。</p>

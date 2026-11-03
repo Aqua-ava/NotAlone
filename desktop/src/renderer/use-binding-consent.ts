@@ -68,7 +68,7 @@ export function useBindingConsent(contacts: ContactSessionView) {
   }
   async function refreshSaved() {
     try { await window.notalone.bindings.refreshSaved(); setError(''); }
-    catch { setError('联系人同步状态暂时无法刷新，请重试。'); }
+    catch { setError('联系人同步状态暂时无法读取，请重试。'); }
   }
   return { state, selection, setSelection, historyAuthorized, setHistoryAuthorized, error, readError, retryRead, revocation, setRevocation, refresh, refreshSaved, confirm, revoke };
 }

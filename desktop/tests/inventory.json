@@ -191,7 +191,9 @@
   "tests/sqlite-discussion-composer.test.mjs",
   "tests/sqlite-discussion-panel.test.mjs",
   "tests/sqlite-reply-candidates.test.mjs",
-  "tests/sqlite-memory-management-view.test.mjs"
+  "tests/sqlite-memory-management-view.test.mjs",
+  "tests/visible-refresh-view.test.mjs",
+  "tests/sync-auto-refresh-view.test.mjs"
  ],
  "isolated-http": [
   "tests/overview-reply-retrieval.test.mjs"

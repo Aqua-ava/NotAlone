@@ -2,9 +2,10 @@ import {useEffect,useRef,useState} from 'react';
 import type {MemoryCandidateView,MemoryDecisionRequest,MemoryManagementOutcome,MemoryManagementSnapshot,MemorySource,MemoryVerificationState,MemoryVersionView,MemoryView,SqliteMemoryManagementBridge} from '../shared/sqlite-memory-management';
 import {withdrawnProtectionVersion} from '../shared/sqlite-memory-management';
 import {SqliteMemoryDocumentsPanel} from './SqliteMemoryDocumentsPanel';
+import {useVisibleRefresh} from './use-visible-refresh';
 
 type Decision=Omit<MemoryDecisionRequest,'requestKey'>;
-const outcomeMessages={conflict:'资料已被其他操作修改，存在并发冲突。请刷新后重新决定。',source_stale:'来源或范围已失效，已撤下原资料。请重新读取。',protected:'当前记忆受人工保护，请刷新核对；撤销前须先明确解除保护。',unavailable:'本次决定暂未确认，请重新读取当前状态后再操作。'};
+const outcomeMessages={conflict:'资料已被其他操作修改，存在并发冲突。请重试读取后重新决定。',source_stale:'来源或范围已失效，已撤下原资料。请重试读取。',protected:'当前记忆受人工保护，请重试读取并核对；撤销前须先明确解除保护。',unavailable:'本次决定暂未确认，请重试读取当前状态后再操作。'};
 const successMessages:Record<string,string>={accept:'采纳成功，已形成正式版本。',edit_accept:'修改采纳成功，固定模型原稿保留。',reject:'已拒绝候选。',correct:'错误修正成功，旧版不再作为当前事实。',change:'变化已记录，旧版不再作为当前事实。',protect:'已开启当前人工保护。',unprotect:'已解除当前人工保护。',restore:'自动更新已撤销，已新增恢复版本。',withdraw:'已撤销首次自动采纳，内容不再作为当前事实。'};
 const formationNames:Record<string,string>={adoption:'采纳',correction:'纠正错误',change:'记录变化',restore:'撤销恢复',manual:'手动补充'};
 const adoptionNames:Record<string,string>={auto:'自动采纳',user:'用户采纳',manual:'手动补充'};
@@ -75,21 +76,22 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
  if(context.current.bridge!==bridge||context.current.contactId!==contactId||context.current.scopeRevision!==scopeRevision||context.current.scopeKind!==scopeKind)context.current={bridge,contactId,scopeRevision,scopeKind};
  const accepted=context.current;
  const [state,setState]=useState<{context:typeof accepted;snapshot:MemoryManagementSnapshot}|null>(null),[notice,setNotice]=useState<{context:typeof accepted;message:string;error:boolean}|null>(null),[busy,setBusy]=useState(false),[documentsBlocked,setDocumentsBlocked]=useState(false);
- const active=useRef(false),revision=useRef(0),refresh=useRef<(preserve?:boolean)=>Promise<boolean>>(async()=>false);
+ const active=useRef(false),revision=useRef(0),reading=useRef<number|null>(null),refresh=useRef<(preserve?:boolean,silent?:boolean)=>Promise<boolean>>(async()=>false);
  const decisionPending=useRef(false),lastCompletedRun=useRef(completedRunId),completionRefreshPending=useRef(false);
  const scope={scopeKind,contactId:scopeKind==='self'?null:contactId};
  const readRequest=contactId?{scope,displayContactId:contactId,scopeRevision}:null;
  const current=state?.context===accepted?state.snapshot:null,currentNotice=notice?.context===accepted?notice:null;
- refresh.current=async(preserve=false)=>{
-  if(!readRequest)return false;const token=++revision.current;if(!preserve)setState(null);setBusy(true);setNotice(null);
+ refresh.current=async(preserve=false,silent=false)=>{
+  if(!readRequest||decisionPending.current||silent&&(busy||reading.current!==null||currentNotice?.error))return false;
+  const token=++revision.current;reading.current=token;if(!preserve)setState(null);if(!silent){setBusy(true);setNotice(null);}
   try{const next=await bridge.read(readRequest);if(active.current&&context.current===accepted&&token===revision.current){setState({context:accepted,snapshot:next});if(!decisionPending.current)setDocumentsBlocked(false);return true;}}
   catch{if(active.current&&context.current===accepted&&token===revision.current){setState(null);setDocumentsBlocked(true);setNotice({context:accepted,message:'来源或范围暂不可用，已撤下原资料，请重新读取。',error:true});}}
-  finally{if(active.current&&context.current===accepted&&token===revision.current)setBusy(false);}
+  finally{if(reading.current===token)reading.current=null;if(active.current&&context.current===accepted&&token===revision.current&&!silent)setBusy(false);}
   return false;
  };
  useEffect(()=>{
-  active.current=true;decisionPending.current=false;completionRefreshPending.current=false;setState(null);setNotice(null);setBusy(false);setDocumentsBlocked(false);
-  const unsubscribe=bridge.onInvalidated(()=>{revision.current++;decisionPending.current=false;completionRefreshPending.current=false;setState(null);setDocumentsBlocked(true);setBusy(false);setNotice({context:accepted,message:'资料资格或连接已变化，已撤下正文、依据和编辑，请重新读取。',error:true});});
+  active.current=true;reading.current=null;decisionPending.current=false;completionRefreshPending.current=false;setState(null);setNotice(null);setBusy(false);setDocumentsBlocked(false);
+  const unsubscribe=bridge.onInvalidated(()=>{revision.current++;reading.current=null;decisionPending.current=false;completionRefreshPending.current=false;setState(null);setDocumentsBlocked(true);setBusy(false);setNotice({context:accepted,message:'资料资格或连接已变化，已撤下正文、依据和编辑，请重试读取。',error:true});});
   if(contactId)void refresh.current();
   return()=>{active.current=false;revision.current++;unsubscribe();};
  },[accepted]);
@@ -97,8 +99,9 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
  useEffect(()=>()=>{void bridge.release().catch(()=>{});},[bridge]);
  useEffect(()=>{
   if(completedRunId!==lastCompletedRun.current){lastCompletedRun.current=completedRunId;if(completedRunId)completionRefreshPending.current=true;}
-  if(completionRefreshPending.current&&!busy&&contactId){completionRefreshPending.current=false;void refresh.current(true);}
+  if(completionRefreshPending.current&&!busy&&contactId){completionRefreshPending.current=false;void refresh.current(true,true);}
  },[completedRunId,busy,accepted]);
+ useVisibleRefresh(()=>refresh.current(true,true),!!contactId&&!busy&&!currentNotice?.error);
  async function decide(request:Decision){
   if(!current||!readRequest||busy)return;const snapshot=current,token=++revision.current;decisionPending.current=true;setDocumentsBlocked(true);setState(null);setBusy(true);setNotice(null);
   let outcome:MemoryManagementOutcome;
@@ -110,16 +113,16 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
  }
  return <section className="sqlite-memory-management" aria-label="记忆候选与版本">
   <header><h2>记忆候选与版本</h2><p className="hint">查看固定原稿、来源和每次决定。编辑在提交后形成正式版本。</p></header>
-  <div className="sqlite-memory-actions" role="group" aria-label="记忆对象"><button type="button" aria-pressed={scopeKind==='contact'} onClick={()=>setScopeKind('contact')}>对方</button><button type="button" aria-pressed={scopeKind==='self'} onClick={()=>setScopeKind('self')}>我</button><button type="button" disabled={!contactId||busy} onClick={()=>void refresh.current()}>刷新记忆管理</button></div>
+  <div className="sqlite-memory-actions" role="group" aria-label="记忆对象"><button type="button" aria-pressed={scopeKind==='contact'} onClick={()=>setScopeKind('contact')}>对方</button><button type="button" aria-pressed={scopeKind==='self'} onClick={()=>setScopeKind('self')}>我</button></div>
   {!contactId?<p>请先从顶部选择联系人。</p>:<>
    {scopeKind==='self'&&<><p className="hint">记忆候选与版本仅展示完整贡献和来源均属于当前联系人的本人资料。</p><p className="hint">本人全局概览不在当前联系人页面展示。</p></>}
-   {currentNotice&&<p role={currentNotice.error?'alert':'status'}>{currentNotice.message}</p>}{busy&&<p role="status">正在核对记忆资料…</p>}
+   {currentNotice&&<p role={currentNotice.error?'alert':'status'}>{currentNotice.message}{currentNotice.error&&<button type="button" disabled={busy} onClick={()=>void refresh.current()}>重试读取记忆资料</button>}</p>}{busy&&<p role="status">正在核对记忆资料…</p>}
    {current&&<><h3>候选原稿</h3>{current.view.candidates.length===0?<p>当前范围没有可展示的候选。</p>:current.view.candidates.map(candidate=><Candidate key={`${candidate.id}:${candidate.stateRevision}`} candidate={candidate} busy={busy} decide={request=>void decide(request)}/>)}
     <h3>正式记忆</h3>{current.view.memories.length===0?<p>当前范围没有可展示的正式记忆。</p>:current.view.memories.map(memory=><Memory key={`${memory.id}:${memory.headRevision}`} memory={memory} busy={busy} decide={request=>void decide(request)}/>)}</>}
   </>}
   {readRequest&&scopeKind==='contact'&&typeof bridge.readDocuments==='function'&&(documentsBlocked?<section className="sqlite-memory-documents" aria-label="主题资料与长期概览">
    <h2>主题资料与长期概览</h2><p role={busy?'status':'alert'}>{busy?'正在核对更新后的主题资料…':'资料资格尚未重新核验，已撤下正文和依据。'}</p>
-   {!busy&&<button type="button" onClick={()=>void refresh.current()}>重新读取主题资料</button>}
+   {!busy&&<button type="button" onClick={()=>void refresh.current()}>重试读取主题资料</button>}
   </section>:<SqliteMemoryDocumentsPanel key={`${scopeKind}:${contactId}:${scopeRevision}`} bridge={bridge} request={readRequest} refreshKey={documentsRefreshKey}/>)}
  </section>;
 }

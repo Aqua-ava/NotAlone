@@ -3,6 +3,7 @@ import { syncScopeNotice } from './sync-scope-notice';
 import { useEffect, useState } from 'react';
 import type { SyncControlBridge, SyncControlState, SyncStatusReport } from '../shared/sync-control-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
+import { useVisibleRefresh } from './use-visible-refresh';
 import './bindings.css';
 
 const initial: SyncControlState = { revision: -1, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
@@ -49,9 +50,17 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
   async function operate(operation: () => Promise<void>) {
     const scopeRevision = latest.current.scopeRevision;
     try { await operation(); if (active.current && scopeRevision === latest.current.scopeRevision) setError(''); }
-    catch { if (active.current && scopeRevision === latest.current.scopeRevision) setError('本次同步范围已变化，请刷新状态后重试。'); }
+    catch { if (active.current && scopeRevision === latest.current.scopeRevision) setError('本次同步范围已变化，请重试读取状态后再操作。'); }
   }
+  async function retryStatus() {
+    await retry();
+    await operate(() => bridge.refresh());
+  }
+  const readFailed = !!error || !!state.errorCode || state.phase === 'failed' || state.phase === 'unavailable';
   const report = state.report;
+  // 有进度的运行状态已由主进程持续推送；这里只补齐关闭或尚无进度时的只读更新。
+  const hasAutomaticSnapshot = !!report?.enabled && (!!report.priority || report.syncScope === 'all_private' || !!report.historyCoverages?.length);
+  useVisibleRefresh(() => operate(() => bridge.refresh()), state.phase === 'ready' && state.busy === null && !readFailed && !hasAutomaticSnapshot);
   const scopeNotice = syncScopeNotice(report?.backgroundFailureCode);
   const selectionOnly = report?.selectionOnly === true;
   const bodyAvailable = report?.bodyAvailable !== false;
@@ -76,9 +85,9 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
   </section>;
   return <div className="bindings-page">
     <section className="bindings-explanation" aria-label="后台 CLI 同步">
-      <div className="bindings-toolbar"><h2>自动同步总开关</h2><button className="button"
-        disabled={state.phase === 'offline' || state.phase === 'loading' || state.busy !== null}
-        onClick={() => void operate(() => bridge.refresh())}>刷新同步状态</button></div>
+      <div className="bindings-toolbar"><h2>自动同步总开关</h2>
+        {readFailed && <button className="button" disabled={state.phase === 'loading' || state.busy !== null}
+          onClick={() => void retryStatus()}>重试读取同步状态</button>}</div>
       <p role="status">{!report ? '后台正文同步状态未确认' : !report.enabled ? '后台正文同步已关闭'
         : bodyAvailable ? '后台正文同步已开启' : '已开启同步，等待读取能力核验'}</p>
       <button className="button" disabled={!available} onClick={() => void switchSync()}>{state.busy === 'enable' ? '正在开启后台同步…'
@@ -116,17 +125,17 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
           <button className="button" disabled={!available} onClick={() => void decideHistory('accepted')}>允许读取历史</button>
         </>}
         {historyAuthorization === 'accepted' && <p role="status">已允许读取授权会话在这台电脑上的历史文字消息，并持续同步新消息。</p>}
-        {historyAuthorization === 'unknown' && <p>历史读取授权状态尚未确认，请刷新同步状态后重试。</p>}
+        {historyAuthorization === 'unknown' && <p>历史读取授权状态尚未确认，状态会自动更新；读取失败时可重试。</p>}
         {state.busy === 'history' && <p role="status">正在保存历史读取授权…</p>}
       </section>}
       {scopeNotice && <p role="alert">部分已授权会话暂停读取：{scopeNotice}</p>}
       {state.phase === 'loading' && <p role="status">正在确认同步状态…</p>}
       {state.phase === 'offline' && <p>连接本机服务后查看与控制后台同步。</p>}
-      {state.phase === 'unavailable' && <p role="alert">本次运行身份或同步宿主尚未就绪，请检查配置后刷新状态。</p>}
+      {state.phase === 'unavailable' && <p role="alert">本次运行身份或同步宿主尚未就绪，请检查配置后重试读取状态。</p>}
       {state.errorCode && <p role="alert">{state.errorCode === 'operation-unconfirmed'
-        ? '同步操作结果尚未确认，请刷新同步状态后再决定下一步。'
-        : '同步状态读取失败，请检查本机服务与 CLI 后刷新。'}</p>}
-      {error && <p role="alert">{error}<button className="button" onClick={() => void retry()}>重试读取</button></p>}
+        ? '同步操作结果尚未确认，请重试读取状态后再决定下一步。'
+        : '同步状态读取失败，请检查本机服务与 CLI 后重试。'}</p>}
+      {error && <p role="alert">{error}</p>}
       {report && <HistoryCoverageStatus coverages={report.historyCoverages} contacts={contacts} currentContactId={currentContactId} bodyAvailable={bodyAvailable} />}
       {bodyAvailable && report?.enabled && <SyncRecoveryStatus key={state.scopeRevision} report={report} />}
     </section>

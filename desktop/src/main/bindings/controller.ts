@@ -101,7 +101,8 @@ export class BindingConsentController {
     await this.load(operation, readSessions, preserveSessions);
   }
   private async load(operation: Operation, readSessions = this.state.sessionIssue !== 'not-requested', preserveSessions = false): Promise<void> {
-    this.publish({ phase: 'loading' });
+    // 只读已保存关联时保留当前展示；明确读取名单仍显示加载状态。
+    if (!preserveSessions || this.state.phase !== 'ready') this.publish({ phase: 'loading' });
     try {
       const setup = await this.backend.requestJson({ method: 'GET', path: '/api/setup/status', maxResponseBytes: 4096 });
       if (!this.current(operation)) return;
