@@ -37,8 +37,8 @@ test('Skill页自动核验更新并管理启停，不提供手动核验或添加
  const missing=page.getByRole('article',{name:'回复场景：轻量接话与延展话题',exact:true});
  const conflict=page.getByRole('article',{name:'回复场景：拒绝后维持日常往来',exact:true});
  const changed=page.getByRole('article',{name:'回复场景：商量长期关系与未来安排',exact:true});
- await expect(missing).toContainText('目录或文件缺失');
- await expect(conflict).toContainText('目录身份冲突');
+ await expect(missing).toContainText('场景文件缺失，请恢复后刷新');
+ await expect(conflict).toContainText('无法确认场景文件，请检查后刷新');
  await expect(changed).toContainText('待核验');
  assert.equal(calls.filter(c=>c.method==='POST').length,0);
  await expect(page.getByRole('button',{name:'待审核',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:/回滚|删除|经验整理/})).toHaveCount(0);
@@ -52,6 +52,10 @@ test('Skill页自动核验更新并管理启停，不提供手动核验或添加
  // 自动核验结果随列表读取返回，页面不再发送逐包 verify 请求。
  items[3].verification_state='verified';items[3].current_revision_no='1';items[3].revisions[0].availability='current';
  await page.getByRole('button',{name:'刷新状态',exact:true}).click();await expect(changed).toContainText('已开启');await expect(changed.getByRole('status')).toHaveCount(0);
+ items[3].verification_state='conflict';items[3].verification_reason='directory_content_changed';
+ await page.getByRole('button',{name:'刷新状态',exact:true}).click();
+ await expect(changed).toContainText('场景文件与上次核验不一致，请恢复后刷新');
+ items[3].verification_state='verified';items[3].verification_reason=null;
  assert.ok(!calls.some(c=>c.path.endsWith('/verify')));
  const discovered=make(5,'new-skill','新的合成回复场景',['接话与相互了解'],'unknown','pending');discovered.revisions=[];items.push(discovered);
  await page.getByRole('button',{name:'刷新状态',exact:true}).click();await expect(page.getByRole('article',{name:'回复场景：新的合成回复场景',exact:true})).toContainText('待核验');

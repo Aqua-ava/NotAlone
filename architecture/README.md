@@ -276,3 +276,5 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 155. [ADR-155：图片资源角色展示与缩略图复查](adr/155-image-variant-display-and-thumbnail-refresh.md)（已采纳，已实现；验证边界见分项记录）
 
 156. [ADR-156：授权范围内自动补查全部图片](adr/156-automatic-image-reconciliation.md)（已实现，真实全量受读取认证限制）
+
+157. [ADR-157：Skill 业务身份与可迁移物理定位分离](adr/157-portable-skill-directory-identity.md)

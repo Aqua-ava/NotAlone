@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,mkdir,writeFile,readFile,cp,rm,access,link} from 'node:fs/promises';
+import {mkdtemp,realpath,mkdir,writeFile,readFile,cp,rm,access,link,rename} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {runDefaultDatabaseStartup} from '../src/platform/cutover/startup.ts';
@@ -21,7 +21,7 @@ async function fixture(t) {
   }
   await cp(oldRoot,newRoot,{recursive:true});
   const ready=await runDefaultDatabaseStartup({userData,allowSyntheticAuthorization:true,capabilities:['contacts','skills'],skillPackageRoot:oldRoot});
-  assert.equal(ready.phase,'ready');
+  assert.equal(ready.phase,'ready',JSON.stringify({ready,checks:loadManifest(userData)?.checks?.filter(check=>check.state==='failed')}));
   storage=await SqliteStorage.open({userData,intent:'open',role:'test',expectedDatabaseId:ready.databaseId});
   const library=new SqliteSkillLibrary(storage,ready.ownerId,oldRoot);
   for(const item of await library.refresh())await library.setEnabled(item.id,item.headRevision,'enabled');
@@ -36,6 +36,94 @@ async function fixture(t) {
   return {userData,oldRoot,newRoot,open,ownerId:ready.ownerId,before};
 }
 const fieldsWithoutLocation=item=>{const {directoryIdentity,headRevision,...rest}=item;return rest;};
+
+test('旧根已消失的迁移仍核对最新登记摘要，保留停用和来源撤销',async t=>{
+  const f=await fixture(t),storage=await f.open(),gentle=f.before.find(i=>i.directoryName==='gentle');
+  await storage.execute('skills.setEnabled',{ownerId:f.ownerId,id:gentle.id,expectedHead:gentle.headRevision,enabledState:'disabled'});
+  const before=await storage.execute('skills.list',{ownerId:f.ownerId});await storage.close();
+  await rm(f.oldRoot,{recursive:true});
+  await prepareSkillRootRelocation(f.userData,f.newRoot);
+  const ready=await runDefaultDatabaseStartup({userData:f.userData});
+  assert.equal(ready.phase,'ready');assert.equal(ready.configuration.skillPackageRoot,f.newRoot);
+  const after=await (await f.open()).execute('skills.list',{ownerId:f.ownerId});
+  assert.deepEqual(after.map(fieldsWithoutLocation),before.map(fieldsWithoutLocation));
+  for(const old of before)assert.equal(after.find(i=>i.id===old.id).headRevision,old.headRevision+1n);
+});
+
+test('旧根物理目录重建后仍核对最新内容，不把迁移当作新的Skill安装',async t=>{
+  const f=await fixture(t),backup=f.oldRoot+'-backup';
+  await rename(f.oldRoot,backup);await cp(backup,f.oldRoot,{recursive:true});
+  await prepareSkillRootRelocation(f.userData,f.newRoot);
+  assert.equal((await runDefaultDatabaseStartup({userData:f.userData})).phase,'ready');
+  const after=await (await f.open()).execute('skills.list',{ownerId:f.ownerId});
+  assert.deepEqual(after.map(fieldsWithoutLocation),f.before.map(fieldsWithoutLocation));
+});
+
+test('迁移意图发布后旧根消失，重启仍能完成已登记内容的迁移',async t=>{
+  const f=await fixture(t);await prepareSkillRootRelocation(f.userData,f.newRoot);
+  await rm(f.oldRoot,{recursive:true});
+  assert.equal((await runDefaultDatabaseStartup({userData:f.userData})).phase,'ready');
+  assert.equal(loadStartupConfiguration(f.userData).skillPackageRoot,f.newRoot);
+  await assert.rejects(access(skillRootRelocationJournal(f.userData)),{code:'ENOENT'});
+});
+
+test('旧根消失时不能将更早历史版本当作迁移内容',async t=>{
+  const f=await fixture(t),storage=await f.open(),library=new SqliteSkillLibrary(storage,f.ownerId,f.oldRoot);
+  const gentle=f.before.find(i=>i.directoryName==='gentle');
+  await writeFile(join(f.oldRoot,'gentle/SKILL.md'),(await readFile(join(f.oldRoot,'gentle/SKILL.md'),'utf8'))+'\n新的合成方法。\n');
+  await library.verify(gentle.id,gentle.headRevision);
+  const before=await library.list();await storage.close();
+  await rm(f.oldRoot,{recursive:true});
+  await assert.rejects(prepareSkillRootRelocation(f.userData,f.newRoot),/skill_root_content_changed/);
+  assert.deepEqual(await (await f.open()).execute('skills.list',{ownerId:f.ownerId}),before);
+  await assert.rejects(access(skillRootRelocationJournal(f.userData)),{code:'ENOENT'});
+});
+
+for(const alreadyApplied of [false,true])test(`迁移${alreadyApplied?'数据库已提交':'尚未提交'}时目标物理目录重建，重启可完成并安全加载`,async t=>{
+  const f=await fixture(t),plan=await prepareSkillRootRelocation(f.userData,f.newRoot);
+  if(alreadyApplied){
+    const storage=await f.open();
+    await storage.execute('skills.relocateRoot',{ownerId:f.ownerId,packages:plan.packages.map(p=>({...p,expectedHead:BigInt(p.expectedHead)}))});
+    await storage.close();
+  }
+  await rename(f.newRoot,f.newRoot+'-backup');await cp(f.newRoot+'-backup',f.newRoot,{recursive:true});
+  await rm(f.oldRoot,{recursive:true});
+  const reopened=await runDefaultDatabaseStartup({userData:f.userData});
+  assert.equal(reopened.phase,'ready',JSON.stringify(reopened));
+  const library=new SqliteSkillLibrary(await f.open(),f.ownerId,f.newRoot),after=await library.inspect();
+  const gentle=after.find(i=>i.directoryName==='gentle');
+  assert.equal((await library.assertAnchor(skillAnchor(gentle))).pkg.name,'gentle');
+  const revoked=after.find(i=>i.directoryName==='revoked');
+  assert.equal(revoked.verificationReason,'source_qualification_changed');
+  await assert.rejects(library.verify(revoked.id,revoked.headRevision),{code:'skill_source_verification_required'});
+  await assert.rejects(access(skillRootRelocationJournal(f.userData)),{code:'ENOENT'});
+  const stable=await library.inspect();assert.deepEqual(stable,after);
+});
+
+test('旧根消失且没有历史核验摘要的包不能仅凭同名目标迁移',async t=>{
+  const f=await fixture(t),storage=await f.open();
+  for(const root of [f.oldRoot,f.newRoot]){
+    await mkdir(join(root,'unknown'));
+    await writeFile(join(root,'unknown/SKILL.md'),'---\nname: unknown\ndescription: 合成未核验包\n---\n未核验的合成内容。\n');
+  }
+  const library=new SqliteSkillLibrary(storage,f.ownerId,f.oldRoot);
+  await library.discover('unknown');const before=await library.list();await storage.close();
+  await rm(f.oldRoot,{recursive:true});
+  await assert.rejects(prepareSkillRootRelocation(f.userData,f.newRoot),/skill_root_revision_missing/);
+  assert.deepEqual(await (await f.open()).execute('skills.list',{ownerId:f.ownerId}),before);
+  await assert.rejects(access(skillRootRelocationJournal(f.userData)),{code:'ENOENT'});
+});
+
+test('来源撤销的包迁移也必须匹配最新登记摘要，不能仅凭两处文件相同通过',async t=>{
+  const f=await fixture(t);
+  for(const root of [f.oldRoot,f.newRoot]){
+    const file=join(root,'revoked/SKILL.md');
+    await writeFile(file,(await readFile(file,'utf8'))+'\n未经登记的合成修改。\n');
+  }
+  await assert.rejects(prepareSkillRootRelocation(f.userData,f.newRoot),/skill_root_content_changed/);
+  assert.deepEqual(await (await f.open()).execute('skills.list',{ownerId:f.ownerId}),f.before);
+  await assert.rejects(access(skillRootRelocationJournal(f.userData)),{code:'ENOENT'});
+});
 
 test('持久化迁移意图后重启，先切换目录身份再发布新配置，保留版本及来源撤销',async t=>{
   const f=await fixture(t),oldAnchor=skillAnchor(f.before.find(i=>i.directoryName==='gentle'));

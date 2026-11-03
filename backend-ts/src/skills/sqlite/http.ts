@@ -8,14 +8,14 @@ import romanceCatalog from '../../../../reply-skills/romance/catalog.json' with 
 const romancePresentation=new Map(romanceCatalog.entries.map(item=>[item.name,{title:item.title,tags:[item.category]}]));
 
 const enabledLabels={enabled:'已启用',disabled:'已停用',unknown:'待核验启停'};
-const verificationLabels={verified:'目录已核验',pending:'待核验',missing:'目录或文件缺失',conflict:'目录身份冲突',invalid:'文件校验失败'};
+const verificationLabels={verified:'场景文件已核验',pending:'场景文件待核验',missing:'场景文件缺失',conflict:'无法确认场景文件',invalid:'场景文件校验未通过'};
 /** 最小业务查询投影不含物理定位，也不冒充本次实际加载证据。 */
 export function skillManagementView(item: SkillPackageState) {
  const presentation=romancePresentation.get(item.directoryName);
  return {package_id:item.id,name:item.displayName,title:presentation?.title??item.displayName,tags:presentation?.tags??[],description:item.description,directory_name:item.directoryName,
   enabled_state:item.enabledState,verification_state:item.verificationState,verification_reason:item.verificationReason,
   head_revision:item.headRevision.toString(),current_revision_no:item.currentRevisionNo?.toString()??null,
-  state_label:`${enabledLabels[item.enabledState]} · ${verificationLabels[item.verificationState]}`,
+  state_label:`${enabledLabels[item.enabledState]} · ${item.verificationReason==='directory_content_changed'?'场景文件与上次核验不一致':verificationLabels[item.verificationState]}`,
   revisions:item.revisions.map(r=>({revision_no:r.revisionNo.toString(),manifest_digest:r.manifestDigest,content_digest:r.contentDigest,
    source_kind:r.sourceKind,availability:r.availability,verification_state:r.verificationState}))};
 }

@@ -10,7 +10,8 @@
 
 - `list/get` 查询已记录状态；`refresh`/`inspect` 自动发现并核验已启用包的有效更新，显示 unknown/enabled/disabled 与 verified/pending/missing/conflict/invalid 两组状态。停用包只检查目录身份，不读取正文；未知项通过完整核验后默认启用。
 - `setEnabled(id, expectedHead, state)` 只供明确用户操作，保留 `user_action` 来历并推进 head；显式停用优先于默认启用，来源资格失效不因技术核验恢复。
-- `verify(id, expectedHead)` 显式核验目录及内容，以 CAS 提交当前修订。目录身份为规范化物理定位和 dev/ino，拒绝任何路径段的符号链接；替换身份保持 conflict，不猜测关联。
+- `verify(id, expectedHead)` 显式核验目录及内容，以 CAS 提交当前修订。目录身份为当前物理定位和 dev/ino，拒绝任何路径段的符号链接；物理标记变化按下述完整核验恢复，不凭同名关联。
+- 目录标记变化或既有 conflict 在已授权根中重新安全读取完整快照。只有正文及全部资源的双摘要与最新历史修订一致时，`skills.rebindDirectory` 才在单个 CAS 事务中重建定位和新修订；保留包 ID、启停与来历，旧修订、旧运行锚点和迟到结果保持失效。停用项到显式重新启用时才读正文，来源撤销不可恢复；无核验历史、内容不符和历史降级仍拒绝。规则见 [ADR-157](../../../../architecture/adr/157-portable-skill-directory-identity.md)。
 - `requireVerification(id, expectedHead)` 供来源资格失效时封禁，标为 pending、撤销当前指针和旧修订可用性，但保留启停和原目录。此状态不允许只凭相同字节 `verify` 恢复；真实来源恢复合同待05接入。
 
 刷新在开始和返回前读取权威状态，目录发现复用本轮清单；已启用包的一次原生快照同时核对目录身份和全部内容，摘要未变化时不重复提交观察。停用或来源失效项目仍只检查目录身份。同一库实例只共享在途核验，不缓存已完成结果；显式管理操作开始与完成后均脱离旧一轮刷新，避免操作后的读取复用写入前状态。实际运行的版本、来源和输入核验保持独立执行。
@@ -23,7 +24,7 @@
 
 正常 `launchDsh` 使用 `profile/sqlite.patch.yml` 的官方 registry 和薄宿主；仅显式 `capabilities: [contacts, skills]` 配合宿主配置的 `skillPackageRoot` 开放管理，缺失或无效配置拒绝启动。Skill 根可位于 App 的 `userData` 之外，须为规范化绝对路径；仍拒绝将 App 数据根及其 `managed` 受管区作为 Skill 根。桌面启动探针与后台共用这一校验，不由模型或管理 HTTP 请求指定路径。握手位于 `managed/sqlite-backend.info`，与数据库维护目录分开。管理能力本身不产生模型请求，管理页状态不宣称回复已经加载 Skill。
 
-日常开发 App 的新实例默认直接读取仓库 `reply-skills/romance`，不再创建 App 数据目录里的内容副本；已有显式配置仍优先。已登记包切换根目录时，通过宿主维护入口 `prepareSkillRootRelocation` 先比较两处全部原生快照，再由 `recoverSkillRootRelocation` 以单事务更新定位和 head，保留包 ID、启停、修订及来源撤销。迁移意图保存在私有控制目录，正常启动会先恢复未完成切换再发现 Skill；不提供模型、HTTP 或通用文件管理入口。
+日常开发 App 的新实例默认直接读取仓库 `reply-skills/romance`，不再创建 App 数据目录里的内容副本；已有显式配置仍优先。已登记包切换根目录时，通过宿主维护入口 `prepareSkillRootRelocation` 核对目标安全快照与数据库最新历史摘要；旧根可读时额外比较两处内容，旧根已不存在时不阻断有完整基线的迁移。`recoverSkillRootRelocation` 以单事务更新定位和 head，保留包 ID、启停、修订及来源撤销。迁移意图保存在私有控制目录，正常启动先恢复未完成切换再发现 Skill；意图发布后目标磁盘标记变化时重新核验内容，完成配置后由正常刷新重建当前定位。不提供模型、HTTP 或通用文件管理入口。
 
 2026-10-29 的合成包管理页 App 验收是历史证据，覆盖启停、核验、目录缺失、身份冲突及重开持久化，不证明当前已取消的手动添加入口仍可用。当前界面与自动发现的验收以本轮任务记录为准；历史验收未读取真实微信或调用模型。
 
@@ -61,7 +62,7 @@
 
 ## 2026-10-31 受控发现与更新修订
 
-按 [ADR-129](../../../../architecture/adr/129-controlled-dsh-reply-skill-discovery.md)，内部 `discover` 仅由自动刷新登记授权根的直接子目录名/身份，初态为 `unknown + pending`、零可用修订。[ADR-135](../../../../architecture/adr/135-default-enabled-localized-skill-library.md) 修订默认启用：`refresh` 与 `inspect` 自动发现新目录，新包和既有未知项完整核验后默认启用；已启用包核验技术更新，停用项仅查目录身份，用户重新启用时核验最新正文。显式管理 `verify` 不隐式启用，来源撤销/身份冲突不经扫描恢复；应用核验的合法变化建立新修订，保留用户启停决定。
+按 [ADR-129](../../../../architecture/adr/129-controlled-dsh-reply-skill-discovery.md)，内部 `discover` 仅由自动刷新登记授权根的直接子目录名/身份，初态为 `unknown + pending`、零可用修订。[ADR-135](../../../../architecture/adr/135-default-enabled-localized-skill-library.md) 修订默认启用：`refresh` 与 `inspect` 自动发现新目录，新包和既有未知项完整核验后默认启用；已启用包核验技术更新，停用项仅查目录身份，用户重新启用时核验最新正文。显式管理 `verify` 不隐式启用；来源撤销不经扫描恢复，物理定位冲突按 [ADR-157](../../../../architecture/adr/157-portable-skill-directory-identity.md) 完整核验后恢复。应用核验的合法变化建立新修订，保留用户启停决定。
 
 SQLite 正常读取改用 [原生窄只读器](../../../../native/skill-read/README.md)及 `secure-directory.ts`。根身份在实例构造固定，读取前核包身份，逐段无链接目录 FD 读取和最终快照复验，实际返回字节参与摘要；服务缺失安全拒绝，不回落 Node。原 `skill-package.ts` 继续负责纯格式/大小/安全校验，未改变原目录只读和业务删除边界。
 

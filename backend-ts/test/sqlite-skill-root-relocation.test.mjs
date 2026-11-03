@@ -89,3 +89,11 @@ test('来源撤销随根重定位保留且不能由新目录摘要自动解除',
   manifestDigest:previous.manifestDigest,contentDigest:previous.contentDigest,verifiedAt:456n}),{code:'skill_source_verification_required'});
  assert.deepEqual(await storage.execute('skills.get',{ownerId,id:item.id}),relocated);
 });
+
+for(const mode of ['revoked','conflict'])for(const field of ['manifestDigest','contentDigest'])test(`重定位事务拒绝${mode==='revoked'?'来源撤销':'目录冲突'}包的错误${field}，不跳过最新历史摘要`,async t=>{
+ const storage=await fixture(t);let item=await seed(storage,'guarded',mode==='revoked'?'revoked':'enabled',1);
+ if(mode==='conflict')item=await storage.execute('skills.invalidate',{ownerId,id:item.id,expectedHead:item.headRevision,verificationState:'conflict',reason:'directory_identity_changed'});
+ const plan=planFor([item]);plan[0][field]='0'.repeat(64);
+ await assert.rejects(storage.execute('skills.relocateRoot',{ownerId,packages:plan}),{code:'skill_content_changed'});
+ assert.deepEqual(await storage.execute('skills.get',{ownerId,id:item.id}),item);
+});

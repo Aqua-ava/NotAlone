@@ -148,15 +148,17 @@ test('内容变化先使旧修订不可用，重新核验生成新锚点且保�
  await assert.rejects(library.assertAnchor(old),{code:'skill_run_invalidated'});
 });
 
-test('目录替换或缺失不会删除原件或洗成新身份，迟到核验不覆盖更晚停用',async t=>{
+test('相同内容目录重建保留包身份与停用，目录缺失不删除原件，迟到核验不覆盖停用',async t=>{
  const {library,root,bytes,storage}=await fixture(t);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');
  const stale=item.headRevision;item=await library.setEnabled(item.id,item.headRevision,'disabled');
  await assert.rejects(library.verify(item.id,stale),{code:'skill_revision_conflict'});
  const previous=item.revisions[0];
  await assert.rejects(storage.execute('skills.observe',{ownerId:'owner-a',id:item.id,expectedHead:stale,directoryName:item.directoryName,directoryIdentity:item.directoryIdentity,displayName:item.displayName,description:item.description,manifestDigest:previous.manifestDigest,contentDigest:previous.contentDigest,verifiedAt:BigInt(Date.now())}),{code:'skill_revision_conflict'});
  await rename(join(root,'gentle'),join(root,'retained-original'));await mkdir(join(root,'gentle'));await writeFile(join(root,'gentle','SKILL.md'),bytes);
- await assert.rejects(library.verify(item.id,item.headRevision),{code:'skill_directory_conflict'});
- item=await library.get(item.id);assert.equal(item.verificationState,'conflict');assert.equal(item.enabledState,'disabled');
+ const identity=item.directoryIdentity,id=item.id;
+ item=await library.verify(item.id,item.headRevision);
+ assert.equal(item.verificationState,'verified');assert.equal(item.enabledState,'disabled');assert.equal(item.id,id);
+ assert.notEqual(item.directoryIdentity,identity);assert.equal(item.currentRevisionNo,2n);
  assert.equal(await readFile(join(root,'retained-original','SKILL.md'),'utf8'),bytes);
  await rm(join(root,'gentle'),{recursive:true});await assert.rejects(library.verify(item.id,item.headRevision));
  assert.equal((await library.get(item.id)).verificationState,'missing');

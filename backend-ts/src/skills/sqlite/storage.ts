@@ -138,9 +138,8 @@ export const skillActions: StorageAction[] = [
       if(row.head_revision!==item.expectedHead)fail('skill_revision_conflict');
       if(row.directory_name!==item.directoryName || row.directory_identity!==item.expectedDirectoryIdentity)fail('skill_directory_conflict');
       const packageState=state(tx,i.ownerId,item.id);
-      const current=packageState.revisions.find(revision=>revision.revisionNo===packageState.currentRevisionNo);
-      if(packageState.verificationState==='verified' && current?.availability==='current' && current.verificationState==='verified'
-        && (current.manifestDigest!==item.manifestDigest || current.contentDigest!==item.contentDigest))fail('skill_content_changed');
+      const latest=packageState.revisions.at(-1);
+      if(latest && (latest.manifestDigest!==item.manifestDigest || latest.contentDigest!==item.contentDigest))fail('skill_content_changed');
     }
     // 先使用事务内唯一临时身份，避免合法身份交换触发表级唯一约束。
     const occupied=new Set([...rows.map(row=>row.directory_identity as string),...i.packages.map(item=>item.directoryIdentity)]);
@@ -179,6 +178,22 @@ export const skillActions: StorageAction[] = [
     tx.run("UPDATE skill_package_revision SET availability='unavailable' WHERE owner_id=? AND package_id=?",[i.ownerId,i.id]);
     tx.run("INSERT INTO skill_package_revision VALUES(?,?,?,?,?,'user_directory','verified',?,'current')",[i.ownerId,i.id,number,i.manifestDigest,i.contentDigest,i.verifiedAt]);
     tx.run("UPDATE skill_package SET display_name=?,description=?,verification_state='verified',verification_reason=NULL,current_revision_no=?,head_revision=head_revision+1 WHERE owner_id=? AND id=?",[i.displayName,i.description,number,i.ownerId,i.id]);
+    return state(tx,i.ownerId,i.id);
+  }},
+  {name:'skills.rebindDirectory',mode:'write',retryBusy:false,execute(tx,input){
+    const i=key(input) as SkillObservation & {expectedDirectoryIdentity:string},item=expected(tx,i);
+    for(const value of [i.directoryName,i.directoryIdentity,i.expectedDirectoryIdentity,i.displayName,i.description])text(value);
+    if(!/^[a-f0-9]{64}$/.test(i.manifestDigest)||!/^[a-f0-9]{64}$/.test(i.contentDigest)||typeof i.verifiedAt!=='bigint'||i.verifiedAt<0n)fail('skill_input_invalid');
+    if(item.verificationReason==='source_qualification_changed')fail('skill_source_verification_required');
+    if(item.directoryName!==i.directoryName || item.directoryIdentity!==i.expectedDirectoryIdentity)fail('skill_directory_conflict');
+    // 物理定位可以迁移，内容只认最后一次核验；不能借迁移回退到任意历史版本。
+    const latest=item.revisions.at(-1);
+    if(!latest)fail('skill_directory_conflict');
+    if(latest.manifestDigest!==i.manifestDigest || latest.contentDigest!==i.contentDigest)fail('skill_directory_content_changed');
+    const number=latest.revisionNo+1n;
+    tx.run("UPDATE skill_package_revision SET availability='unavailable' WHERE owner_id=? AND package_id=?",[i.ownerId,i.id]);
+    tx.run("INSERT INTO skill_package_revision VALUES(?,?,?,?,?,'user_directory','verified',?,'current')",[i.ownerId,i.id,number,i.manifestDigest,i.contentDigest,i.verifiedAt]);
+    tx.run("UPDATE skill_package SET directory_identity=?,display_name=?,description=?,verification_state='verified',verification_reason=NULL,current_revision_no=?,head_revision=head_revision+1 WHERE owner_id=? AND id=?",[i.directoryIdentity,i.displayName,i.description,number,i.ownerId,i.id]);
     return state(tx,i.ownerId,i.id);
   }},
   {name:'skills.setEnabled',mode:'write',retryBusy:false,execute(tx,input){

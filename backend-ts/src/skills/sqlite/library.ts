@@ -52,20 +52,24 @@ export class SqliteSkillLibrary {
     for(const name of this.directory.names())if(!known.has(name))catalog.push(await this.associateDirectory(name));
     for(const item of catalog) {
       try {
-        if(item.enabledState==='disabled' || item.verificationReason==='source_qualification_changed' || item.verificationState==='conflict') {
+        if(item.enabledState==='disabled' || item.verificationReason==='source_qualification_changed') {
           if(this.directory.directoryIdentity(item.directoryName)!==item.directoryIdentity)throw new SqliteSkillError('skill_directory_conflict');
           continue;
         }
         // 原生快照在读取正文前已核对目录身份，无需另起进程重复检查。
-        const snapshot=this.readDirectory(item.directoryName,item.directoryIdentity);
+        let snapshot: DirectorySnapshot;
+        try {snapshot=this.readDirectory(item.directoryName,item.directoryIdentity);}
+        catch(error) {
+          if((error as {code?:string})?.code!=='skill_directory_conflict')throw error;
+          await this.defaultEnable(await this.rebindDirectory(item));
+          continue;
+        }
         const current=item.revisions.find(revision=>revision.revisionNo===item.currentRevisionNo);
         if(item.enabledState==='enabled' && item.verificationState==='verified' && current?.availability==='current'
           && current.manifestDigest===snapshot.manifestDigest && current.contentDigest===snapshot.contentDigest)continue;
         const verified=await this.commitObservation(item.id,item.headRevision,snapshot);
         // 默认开启只适用于完整核验成功的未知项；CAS 保留并发显式停用优先级。
-        if(verified.enabledState==='unknown')await this.storage.execute('skills.defaultEnable',{
-          ownerId:this.ownerId,id:item.id,expectedHead:verified.headRevision,
-        });
+        await this.defaultEnable(verified);
       }catch(error){
         if((error as {code?:string})?.code==='skill_revision_conflict')continue;
         await this.recordProblem(item,error);
@@ -95,7 +99,11 @@ export class SqliteSkillLibrary {
       if(item.verificationReason==='source_qualification_changed')throw new SqliteSkillError('skill_source_verification_required');
       let snapshot: DirectorySnapshot;
       try {
-        snapshot=this.readDirectory(item.directoryName,item.directoryIdentity);
+        try {snapshot=this.readDirectory(item.directoryName,item.directoryIdentity);}
+        catch(error) {
+          if((error as {code?:string})?.code!=='skill_directory_conflict')throw error;
+          return await this.rebindDirectory(item);
+        }
         if(snapshot.directoryIdentity!==item.directoryIdentity)throw new SqliteSkillError('skill_directory_conflict');
       } catch(error) {await this.recordProblem(item,error);throw error;}
       return this.commitObservation(id,expectedHead,snapshot);
@@ -139,6 +147,22 @@ export class SqliteSkillLibrary {
       manifestDigest:snapshot.manifestDigest,contentDigest:snapshot.contentDigest,verifiedAt:BigInt(Date.now())};
     return this.storage.execute('skills.observe',input);
   }
+  private async defaultEnable(item: SkillPackageState): Promise<void> {
+    if(item.enabledState==='unknown')await this.storage.execute('skills.defaultEnable',{
+      ownerId:this.ownerId,id:item.id,expectedHead:item.headRevision,
+    });
+  }
+  /** 只在已授权根中读取当前快照；数据库原子复验最新摘要和资格后重建定位。 */
+  private rebindDirectory(item: SkillPackageState): Promise<SkillPackageState> {
+    const identity=this.directory.directoryIdentity(item.directoryName);
+    const snapshot=this.readDirectory(item.directoryName,identity);
+    return this.storage.execute('skills.rebindDirectory',{
+      ownerId:this.ownerId,id:item.id,expectedHead:item.headRevision,expectedDirectoryIdentity:item.directoryIdentity,
+      directoryName:snapshot.directoryName,directoryIdentity:snapshot.directoryIdentity,
+      displayName:snapshot.pkg.name,description:snapshot.pkg.description,
+      manifestDigest:snapshot.manifestDigest,contentDigest:snapshot.contentDigest,verifiedAt:BigInt(Date.now()),
+    });
+  }
   private readDirectory(directoryName: string,expectedIdentity:string): DirectorySnapshot {
     try {return this.readDirectorySnapshot(directoryName,expectedIdentity);}
     catch(error) {
@@ -156,9 +180,10 @@ export class SqliteSkillLibrary {
   private async recordProblem(item: SkillPackageState,error: unknown): Promise<void> {
     let code=(error as {code?:string})?.code;
     if(code==='ENOENT' || code==='EACCES' || code==='file_unavailable')code='skill_directory_unavailable';
-    const verificationState: SkillVerificationState=code==='skill_directory_unavailable'?'missing':code==='skill_directory_conflict'?'conflict':code==='skill_content_changed'?'pending':'invalid';
-    if(item.verificationState===verificationState && item.currentRevisionNo===null)return;
-    try {await this.storage.execute('skills.invalidate',{ownerId:this.ownerId,id:item.id,expectedHead:item.headRevision,verificationState,reason:verificationState==='missing'?'directory_unavailable':verificationState==='conflict'?'directory_identity_changed':verificationState==='pending'?'content_changed':'package_invalid'});}
+    const verificationState: SkillVerificationState=code==='skill_directory_unavailable'?'missing':code==='skill_directory_conflict'||code==='skill_directory_content_changed'?'conflict':code==='skill_content_changed'?'pending':'invalid';
+    const reason=item.verificationReason==='source_qualification_changed'?item.verificationReason:verificationState==='missing'?'directory_unavailable':code==='skill_directory_content_changed'?'directory_content_changed':verificationState==='conflict'?'directory_identity_changed':verificationState==='pending'?'content_changed':'package_invalid';
+    if(item.verificationState===verificationState && item.verificationReason===reason && item.currentRevisionNo===null)return;
+    try {await this.storage.execute('skills.invalidate',{ownerId:this.ownerId,id:item.id,expectedHead:item.headRevision,verificationState,reason});}
     catch(error){if((error as {code?:string}).code!=='skill_revision_conflict')throw error;}
   }
 }

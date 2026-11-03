@@ -30,7 +30,7 @@ test('正式profile隔离回归：Skill最小管理与官方加载、原目录�
  assert.equal((await request('/state')).body[0].enabledState,'enabled');
  assert.equal((await request('/api/skills')).body.skills[0].enabled_state,'enabled');
  assert.equal((await request('/api/skills/discover',{directory_name:'gentle',confirmed:true})).status,503);
- const discovered=(await request('/api/skills')).body.skills[0];assert.equal(discovered.enabled_state,'enabled');assert.match(discovered.state_label,/已启用 · 目录已核验/);
+ const discovered=(await request('/api/skills')).body.skills[0];assert.equal(discovered.enabled_state,'enabled');assert.match(discovered.state_label,/已启用 · 场景文件已核验/);
  let item=(await request('/discover',{name:'gentle'})).body;
  assert.equal(item.enabledState,'enabled');assert.equal((await request('/load',{id:item.id})).status,200);
  item=(await request('/enabled',{id:item.id,head:item.headRevision,state:'enabled'})).body;

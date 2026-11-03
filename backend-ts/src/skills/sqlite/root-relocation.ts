@@ -39,11 +39,20 @@ function sameSnapshot(a: {manifestDigest:string;contentDigest:string},b: {manife
   assert.equal(a.manifestDigest,b.manifestDigest,'skill_root_content_changed');
   assert.equal(a.contentDigest,b.contentDigest,'skill_root_content_changed');
 }
-function currentMatches(item: SkillPackageState,snapshot: {manifestDigest:string;contentDigest:string}): void {
-  if(item.currentRevisionNo===null)return;
-  const current=item.revisions.find(r=>r.revisionNo===item.currentRevisionNo);
-  assert.ok(current && item.verificationState==='verified' && current.availability==='current' && current.verificationState==='verified','skill_root_revision_invalid');
-  sameSnapshot(current,snapshot);
+function registeredMatches(item: SkillPackageState,snapshot: {manifestDigest:string;contentDigest:string},sourceAvailable: boolean): void {
+  // 失效来源和旧修订仍保留摘要；迁移只核对最后登记内容，不恢复其使用资格。
+  const latest=item.revisions.at(-1);
+  if(latest)sameSnapshot(latest,snapshot);
+  else assert.ok(sourceAvailable,'skill_root_revision_missing');
+}
+function optionalSource(root: string): SecureSkillDirectory|undefined {
+  try {lstatSync(root);}
+  catch(error) {if((error as NodeJS.ErrnoException).code==='ENOENT')return undefined;throw error;}
+  return new SecureSkillDirectory(root);
+}
+function sourceSnapshot(source: SecureSkillDirectory,item: {directoryName:string}) {
+  // 跨重启的物理身份只作旧定位；当前读取仍由原生 FD 快照固定并防止替换。
+  return readSkillDirectorySnapshot(source,item.directoryName,source.directoryIdentity(item.directoryName));
 }
 function syncDirectory(directory: string): void {
   const fd=openSync(directory,constants.O_RDONLY|constants.O_DIRECTORY|constants.O_NOFOLLOW);
@@ -106,16 +115,16 @@ export async function prepareSkillRootRelocation(userData: string,targetRoot: st
   }
   const fromRoot=canonicalRoot(configuration.skillPackageRoot!);
   if(fromRoot===toRoot)return undefined;
-  const source=new SecureSkillDirectory(fromRoot),target=new SecureSkillDirectory(toRoot);
+  const source=optionalSource(fromRoot),target=new SecureSkillDirectory(toRoot);
   const storage=await SqliteStorage.open({userData,intent:'open',role:'test',expectedDatabaseId:configuration.expectedDatabaseId});
   try {
     const items=await storage.execute<SkillPackageState[]>('skills.list',{ownerId});
-    sameNames(source.names(),items.map(i=>i.directoryName));sameNames(target.names(),items.map(i=>i.directoryName));
+    if(source)sameNames(source.names(),items.map(i=>i.directoryName));sameNames(target.names(),items.map(i=>i.directoryName));
     const packages=items.map(item=>{
-      const old=readSkillDirectorySnapshot(source,item.directoryName,item.directoryIdentity);
       const directoryIdentity=target.directoryIdentity(item.directoryName);
       const next=readSkillDirectorySnapshot(target,item.directoryName,directoryIdentity);
-      sameSnapshot(old,next);currentMatches(item,next);
+      registeredMatches(item,next,!!source);
+      if(source)sameSnapshot(sourceSnapshot(source,item),next);
       return {id:item.id,directoryName:item.directoryName,expectedHead:item.headRevision.toString(),expectedDirectoryIdentity:item.directoryIdentity,
         directoryIdentity,manifestDigest:next.manifestDigest,contentDigest:next.contentDigest};
     });
@@ -140,13 +149,15 @@ export async function recoverSkillRootRelocation(userData: string): Promise<Skil
     const original=items.every(i=>{const p=plan.packages.find(p=>p.id===i.id)!;return i.directoryIdentity===p.expectedDirectoryIdentity&&i.headRevision===BigInt(p.expectedHead);});
     const applied=items.every(i=>{const p=plan.packages.find(p=>p.id===i.id)!;return i.directoryIdentity===p.directoryIdentity&&i.headRevision===BigInt(p.expectedHead)+1n;});
     assert.ok(original||applied,'skill_root_relocation_conflict');
-    const target=new SecureSkillDirectory(plan.toRoot),source=original?new SecureSkillDirectory(plan.fromRoot):undefined;
+    const target=new SecureSkillDirectory(plan.toRoot),source=original?optionalSource(plan.fromRoot):undefined;
     sameNames(target.names(),plan.packages.map(p=>p.directoryName));if(source)sameNames(source.names(),plan.packages.map(p=>p.directoryName));
     for(const p of plan.packages){
-      const next=readSkillDirectorySnapshot(target,p.directoryName,p.directoryIdentity);sameSnapshot(next,p);
-      currentMatches(items.find(i=>i.id===p.id)!,next);
-      if(source)sameSnapshot(readSkillDirectorySnapshot(source,p.directoryName,p.expectedDirectoryIdentity),next);
+      // 计划可能跨重启；以当前 FD 快照核对计划字节，不把旧设备编号当作内容证明。
+      const next=readSkillDirectorySnapshot(target,p.directoryName,target.directoryIdentity(p.directoryName));sameSnapshot(next,p);
+      registeredMatches(items.find(i=>i.id===p.id)!,next,!!source || applied);
+      if(source)sameSnapshot(sourceSnapshot(source,p),next);
     }
+    // 提交仍使用已持久化的目标定位，确保崩溃后可识别 applied；启动后的库核验再原子重建当前定位。
     if(original)await storage.execute('skills.relocateRoot',{ownerId,packages:plan.packages.map(p=>({...p,expectedHead:BigInt(p.expectedHead)}))});
     const latest=loadStartupConfiguration(userData);
     assert.ok(latest?.expectedDatabaseId===plan.databaseId && [plan.fromRoot,plan.toRoot].includes(canonicalRoot(latest.skillPackageRoot!)),'skill_root_configuration_changed');

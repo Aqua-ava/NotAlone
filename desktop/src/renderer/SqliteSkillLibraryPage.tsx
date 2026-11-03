@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SkillLibraryBridge, SkillLibraryItem, SkillLibrarySnapshot, SqliteSkillLibrarySnapshot } from '../shared/skill-library-bridge';
 
-const verificationLabels = { pending: '待核验', missing: '目录或文件缺失', conflict: '目录身份冲突', invalid: '文件校验失败' };
+const verificationLabels = { pending: '场景文件待核验', missing: '场景文件缺失，请恢复后刷新', conflict: '无法确认场景文件，请检查后刷新', invalid: '场景文件校验未通过，请检查后刷新' };
 
 export function SqliteSkillLibraryPage({ initial, bridge, onModeChange, onUnavailable }: {
   initial: SqliteSkillLibrarySnapshot;
@@ -94,7 +94,7 @@ export function SqliteSkillLibraryPage({ initial, bridge, onModeChange, onUnavai
                   {item.tags.map((tag) => <span key={tag}>{tag}</span>)}
                 </div>
                 {item.verificationState !== 'verified' && <span className="sqlite-skill-verification" role="status">
-                  {verificationLabels[item.verificationState]}
+                  {item.verificationReason === 'directory_content_changed' ? '场景文件与上次核验不一致，请恢复后刷新' : verificationLabels[item.verificationState]}
                 </span>}
               </div>
               {item.verificationReason === 'source_qualification_changed' && <p className="sqlite-skill-note">来源资格待核验，不能仅凭相同文件恢复使用。</p>}

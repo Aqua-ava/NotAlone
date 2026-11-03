@@ -1,5 +1,7 @@
 # Skill Library（Skill 库）
 
+> 2026-11-03 可迁移性修订：[ADR-157](../adr/157-portable-skill-directory-identity.md) 将业务身份与物理目录定位分离；设备编号变化及迁移后，只在授权根中以最新已核验完整内容恢复定位，保留停用、来源资格及旧修订失效边界。
+
 > 2026-10-31 默认启用与中文管理修订：[ADR-135](../adr/135-default-enabled-localized-skill-library.md) 规定授权根内的新包和既有未知项在核验成功后默认启用，保留显式停用与来源失效边界；中文标题、场景标签与单个滑动开关用于管理。
 
 > 2026-10-31 发现与启用修订：[ADR-129](../adr/129-controlled-dsh-reply-skill-discovery.md)是目录发现、技术更新和新包启用的当前入口。用户已取消手动添加与手填目录入口，管理刷新自动发现，新增内容不要求用户填写安装或导入路径。当前 DSH/SQLite 实现使用官方 scoped registry 和业务受控 provider；下文旧 Python、数据库表及历史验收只描述当时状态，不能视为当前集成证据。
