@@ -1,4 +1,4 @@
-import {resolveBackgroundProcessingMode} from './host/sqlite-model-config.ts';
+import {resolveBackgroundProcessingMode,resolveImageProcessingMode} from './host/sqlite-model-config.ts';
 import {SqliteHistoryRecertifyService} from './history/sqlite/recertify.ts';
 import {SqliteMemoryManagement} from './memory/sqlite/management/service.ts';
 import {SqliteMemoryManagementHttp,memoryManagementQueryAllowed} from './memory/sqlite/management/http.ts';
@@ -93,6 +93,7 @@ export async function apply(ctx: Context) {
   const modelSetup=await SqliteModelSetup.open(config.envFilePath,process.env);
   const modelEnvironment=modelSetup.runtimeEnvironment();
   const backgroundProcessing=resolveBackgroundProcessingMode(modelEnvironment),automaticBackground=backgroundProcessing==='automatic';
+  const imageProcessing=resolveImageProcessingMode(modelEnvironment),automaticImages=imageProcessing==='automatic';
   const token = randomBytes(32).toString('base64url');
   let state: 'running' | 'stopping' | 'stopped' = 'running';
   let storage: SqliteStorage | undefined;
@@ -165,12 +166,12 @@ export async function apply(ctx: Context) {
       checkpointCache=new WechatHistoryCheckpointCache(storage,ownerId,deletionHolders,sqlite.wechatCliPath,contactId=>history?.stop(contactId)??Promise.resolve());
       await checkpointCache.initialize();
       history=new SqliteHistoryService(storage,contacts,createHistoryChannel,deletionHolders,
-        (contactId,messageId,kind)=>{events?.publish(`message.${kind}`,contactId,{message_id:messageId});if(automaticBackground)memory?.wake(contactId);},contactId=>{if(automaticBackground){imageSync?.wake(contactId);quoteSync?.wake(contactId);}},wechat);
+        (contactId,messageId,kind)=>{events?.publish(`message.${kind}`,contactId,{message_id:messageId});if(automaticBackground)memory?.wake(contactId);},contactId=>{if(automaticImages)imageSync?.wake(contactId);if(automaticBackground)quoteSync?.wake(contactId);},wechat);
       firstHistory=new FirstHistoryCoordinator(contacts,history);
       history.setFirstHistoryWake(contactId=>{if(automaticBackground)firstHistory?.wakeContact(contactId);});
       incremental=new IncrementalHistoryCoordinator(contacts,history,{firstHistoryManagedExternally:true});
       // 开启/重选只唤醒合法读取；关闭/取消/退出由 readStop 停止后续查询并等待在途释放。
-      contacts.setReadStart(()=>{if(!automaticBackground)return;firstHistory!.wake();incremental!.wake();imageSync?.wake();quoteSync?.wake();memory?.wake();});
+      contacts.setReadStart(()=>{if(automaticImages)imageSync?.wake();if(automaticBackground){firstHistory!.wake();incremental!.wake();quoteSync?.wake();memory?.wake();}});
     }
     if(history&&process.env.NOTALONE_SYNC_PROBE&&path.isAbsolute(process.env.NOTALONE_SYNC_PROBE)) foreground=SqliteForeground.create(ownerId,process.env.NOTALONE_SYNC_PROBE,sqlite.wechatCliPath??'',()=>contacts!.foregroundSnapshot(),proof=>contacts!.confirmForeground(proof),wechat);
     const historyHttp=history?new SqliteHistoryHttp(history):undefined;
@@ -217,7 +218,7 @@ export async function apply(ctx: Context) {
       ...(models?.shared?{model:{configuration:models.shared.configuration.model,provider:models.shared.provider,arbiter:models.shared.arbiter}}:{})});
     const deletions = new SqliteDeletionHttp(deletionService, ownerId);
     const ownership = { contacts: 'typescript', wechat: 'typescript',
-      deletion: 'typescript', media: 'typescript', mediaExtraction: 'unavailable', skills: skills?'typescript':'unavailable', skillLearning: 'unavailable', imports: 'unavailable',
+      deletion: 'typescript', media: 'typescript', mediaExtraction: originalImages?'typescript':'unavailable', skills: skills?'typescript':'unavailable', skillLearning: 'unavailable', imports: 'unavailable',
       taskApi: 'unavailable', taskManagement: 'unavailable', tasks: 'unavailable', crossDomainDeletion: 'typescript',
       wechatBodySync: history?'typescript':'unavailable', wechatIncremental: history?'typescript':'unavailable', wechatHistory: history?'typescript':'unavailable',
       foregroundLocation: foreground?'typescript':'unavailable', contactContext: 'unavailable', memory: memoryEnabled?'typescript':'unavailable', memoryManagement:memoryEnabled?'typescript':'unavailable', discussions:discussionsEnabled?'typescript':'unavailable',
@@ -236,7 +237,7 @@ export async function apply(ctx: Context) {
         const changesAuthority=req.method==='DELETE'||req.method==='POST'&&(/^\/api\/contacts\/[a-f0-9-]{36}\/history\/recertify(?:\/cancel)?$/.test(url.pathname)||/^\/api\/sync\/(enable|disable|cli-bindings\/(confirm|revoke))$/.test(url.pathname)||/^\/api\/setup\/wechat\//.test(url.pathname));
         if(changesAuthority&&foreground)releaseForeground=await foreground.beginChange();
         if (req.method === 'GET' && url.pathname === '/api/runtime/status') {
-          respond(200, { state, background_processing:backgroundProcessing, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', storageDiagnostic: storage?.failureDiagnostic ?? null, capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
+          respond(200, { state, background_processing:backgroundProcessing, image_processing:imageProcessing, image_sync:imageSync?.status()??null, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', storageDiagnostic: storage?.failureDiagnostic ?? null, capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
         }
         if (url.pathname === '/api/events') {
           if (req.method!=='GET') { respond(405,{error:'method_not_allowed'});return; }
@@ -327,7 +328,7 @@ export async function apply(ctx: Context) {
           await link(pending, config.infoPath); published = true;
         } finally { await rm(pending, { force: true }); }
       })();
-      void publication.then(()=>{if(state==='running'&&automaticBackground){firstHistory?.wake();incremental?.wake();incremental?.start();imageSync?.wake();quoteSync?.wake();}}).catch(() => ctx.appExit!(1));
+      void publication.then(()=>{if(state!=='running')return;if(automaticImages)imageSync?.wake();if(automaticBackground){firstHistory?.wake();incremental?.wake();incremental?.start();quoteSync?.wake();}}).catch(() => ctx.appExit!(1));
     });
   } catch {
     await close();

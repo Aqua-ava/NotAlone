@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,symlink,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {readSqliteModelEnvironment,resolveBackgroundProcessingMode} from '../src/host/sqlite-model-config.ts';
+import {readSqliteModelEnvironment,resolveBackgroundProcessingMode,resolveImageProcessingMode} from '../src/host/sqlite-model-config.ts';
 async function fixture(t){const root=await mkdtemp(join(tmpdir(),'notalone-model-config-11-'));t.after(()=>rm(root,{recursive:true,force:true}));return join(root,'model.env');}
 test('SQLite模型配置保留环境优先与首个dotenv值，只读取模型键',async t=>{
  const file=await fixture(t);await writeFile(file,'# 合成配置\nNOTALONE_DEEPSEEK_API_KEY="synthetic-only"\nNOTALONE_OPENCODE_API_KEY=synthetic-opencode-only\nNOTALONE_DEEPSEEK_MODEL=first\nNOTALONE_DEEPSEEK_MODEL=second\nPGPASSWORD=synthetic-pg-unused\n', {mode:0o600});
@@ -34,4 +34,14 @@ test('后台处理模式沿用明确env文件且环境优先，不读取其他�
 test('后台处理默认automatic，manual明确生效，非法值拒绝启动',()=>{
  assert.equal(resolveBackgroundProcessingMode({}),'automatic');assert.equal(resolveBackgroundProcessingMode({NOTALONE_BACKGROUND_PROCESSING:'manual'}),'manual');
  assert.throws(()=>resolveBackgroundProcessingMode({NOTALONE_BACKGROUND_PROCESSING:'typo'}),{code:'sqlite_background_configuration_invalid'});
+});
+
+
+test('图片处理默认继承后台模式，显式配置只覆盖图片且沿用环境优先级',async t=>{
+ const file=await fixture(t);await writeFile(file,'NOTALONE_BACKGROUND_PROCESSING=manual\nNOTALONE_IMAGE_PROCESSING=automatic\n',{mode:0o600});
+ const environment=await readSqliteModelEnvironment(file,{});
+ assert.equal(resolveBackgroundProcessingMode(environment),'manual');assert.equal(resolveImageProcessingMode(environment),'automatic');
+ assert.equal(resolveImageProcessingMode({}),'automatic');assert.equal(resolveImageProcessingMode({NOTALONE_BACKGROUND_PROCESSING:'manual'}),'manual');
+ assert.equal(resolveImageProcessingMode(await readSqliteModelEnvironment(file,{NOTALONE_IMAGE_PROCESSING:'manual'})),'manual');
+ assert.throws(()=>resolveImageProcessingMode({NOTALONE_IMAGE_PROCESSING:'typo'}),{code:'sqlite_image_configuration_invalid'});
 });

@@ -7,6 +7,7 @@ import type {ManagedAddress,DeletionSnapshot} from '../../storage/sqlite/deletio
 import {MediaFiles} from './files.ts';
 import type {AttemptHandle} from './actions.ts';
 import type {MediaAdapter,MediaGoal,MediaSnapshot,MediaPreview,MediaValidation,MediaContactPort,MediaSourcePort,MediaFileInput,MediaAttemptView} from './contracts.ts';
+import {automaticImageGeneration,ImagePreparationFailure} from './image-refresh.ts';
 export interface MediaServiceOptions {storage:SqliteStorage;contacts:MediaContactPort;history:MediaSourcePort;userData:string;adapters:readonly MediaAdapter[];holders?:ActiveHolders;deletion?:DeletionService;changed?:(contactId:string,messageId:string)=>void;ensureSourceReady?:(contactId:string,signal?:AbortSignal)=>Promise<void>}
 interface FileReference {fileId:string;generation:string;dataGeneration:string;address:ManagedAddress;mimeType:string;byteSize:string;digest:string;viewable:boolean;playable:boolean}
 interface Begin {reused:boolean;cleanupRequired?:boolean;attemptId:string;dataGeneration:string;leaseToken?:string;recordId?:string;inputFile?:{fileId:string;address:ManagedAddress;byteSize:string;digest:string}|null;token?:any}
@@ -55,10 +56,19 @@ export class SqliteMediaService {
   const adapter=this.options.adapters.find(a=>a.supports(kind,input.goal));if(!adapter)throw new StorageFailure('media_adapter_unavailable');
   // 重启后的手动取图先重验当前会话来源；不读取历史页或派发记忆任务。
   if(signal?.aborted)throw new StorageFailure('media_interrupted');
-  if(input.goal!=='audio_conversion')await this.options.ensureSourceReady?.(contactId,signal);
+  if(input.goal!=='audio_conversion')try{await this.options.ensureSourceReady?.(contactId,signal);}catch(error){
+   if(automaticImageGeneration(input.requestKey,messageId)!==null&&!signal?.aborted&&!this.closed){
+    try{
+     const token=await this.options.contacts.eligibility(contactId);
+     await this.options.storage.execute('media.imagePreparationFailed',{...scope,...input,token,requestedAt:Date.now(),code:error instanceof StorageFailure?error.code:'media_execution_failed'});
+    }catch(receiptError){throw new ImagePreparationFailure(receiptError instanceof StorageFailure?receiptError.code:'media_execution_failed');}
+    throw new ImagePreparationFailure(error instanceof StorageFailure?error.code:'media_execution_failed');
+   }
+   throw error;
+  }
   const state=await this.read(contactId,messageId);
   const token=input.goal==='audio_conversion'?null:await this.options.contacts.eligibility(contactId);
-  this.available();const begin=await this.options.storage.execute<Begin>('media.begin',{...scope,...input,token,adapterVersion:adapter.version});
+  this.available();const begin=await this.options.storage.execute<Begin>('media.begin',{...scope,...input,token,adapterVersion:adapter.version,requestedAt:Date.now()});
   if(begin.reused)return this.requestResult(contactId,messageId,input);
   if(begin.cleanupRequired){await this.resumeCleanup();if((await this.read(contactId,messageId)).cleanup)throw new StorageFailure('media_cleanup_pending');return this.runExtraction(contactId,messageId,input,signal);}
   const handle:AttemptHandle={...scope,attemptId:begin.attemptId,leaseToken:begin.leaseToken!};

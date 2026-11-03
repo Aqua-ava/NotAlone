@@ -93,7 +93,7 @@ test('清除图片时同时清除来源分类依据及文件引用',async t=>{
 });
 
 test('第31版只追加可空依据列，已有原图记录和证明保留且不会伪造新分类',()=>{
- assert.equal(registry.migrations.at(-1).version,31);
+ assert.equal(registry.migrations.find(m=>m.version===31)?.sql,mediaImageQualityEvidenceMigration(31).sql);
  const db=new DatabaseSync(':memory:');
  try{
   // 独立迁移夹具只建媒体表，关系闭包由正常存储服务用例验证。

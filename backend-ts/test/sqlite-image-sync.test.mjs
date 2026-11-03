@@ -26,16 +26,130 @@ function unknownQualityAdapter(onRead=()=>{}){
  }};
 }
 
-function resourceVariantAdapter(variant,onRead=()=>{}){
+function resourceVariantAdapter(variant,onRead=()=>{},contentOf=sourceVariant=>Buffer.from(sourceVariant==='thumbnail'?'合成缩略图':'合成主图')){
  return {version:'synthetic-resource-variant-v1',supports:(kind,goal)=>kind==='image'&&goal==='extract',async execute(context){
   onRead();await context.checkpoint();const sourceVariant=variant(),quality=sourceVariant==='thumbnail'?'thumbnail':'unknown';
-  const content=Buffer.from(sourceVariant==='thumbnail'?'合成缩略图':'合成主图'),digest=createHash('sha256').update(content).digest('hex');
+  const content=contentOf(sourceVariant),digest=createHash('sha256').update(content).digest('hex');
   await context.save({role:'image_display',expectedBytes:content.length,expectedSha256:digest,bytes:(async function*(){yield content;})(),
    validate:async()=>({format:'synthetic',mimeType:'image/png',containerValid:true,viewable:true,playable:false,imageQuality:quality,qualityProof:null,
     imageQualityEvidence:{protocol:'wechat-image-quality-v1',quality,sourceVariant,resourceInfoId:'10',resources:[{resourceId:'20',resourceTypeRaw:262145}],sourceSha256:digest,contentSha256:digest,originalProofDigest:null}})});
   return {association:{protocol:'media-association-v1',profileId:'synthetic-resource-variant-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-resource'}};
  }};
 }
+
+test('全部授权联系人旧未知图片自动补查来源，取得主图后重启不重读',async t=>{
+ let reads=0,known=false;const old=unknownQualityAdapter(()=>reads++),main=resourceVariantAdapter(()=> 'main',()=>reads++);
+ const adapter={...old,execute:context=>(known?main:old).execute(context)};
+ const f=await fixture(t,adapter),images=[];
+ for(const binding of f.saved){
+  if(binding.contact_id!==f.contact)await f.history.synchronize(binding.contact_id);
+  const image=(await f.history.read(binding.contact_id)).messages.find(m=>m.kind==='image');
+  await f.media.extract(binding.contact_id,image.id,{requestKey:`old-image-${image.id}`,goal:'extract'});
+  images.push({contact:binding.contact_id,id:image.id});
+ }
+ assert.equal(reads,2);known=true;
+ const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());
+ sync.wake();await sync.waitForIdle();assert.equal(reads,4);
+ for(const image of images)assert.equal((await f.media.read(image.contact,image.id)).files[0].imageQuality,'unknown');
+ await sync.close();const restarted=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>restarted.close());
+ restarted.wake();await restarted.waitForIdle();assert.equal(reads,4);
+});
+
+test('缺副本失败会持久退避并自动恢复，重复唤醒与重启不绕过等待',async t=>{
+ let reads=0,missing=true;const adapter=resourceVariantAdapter(()=> 'main'),extract=adapter.execute;
+ adapter.execute=async context=>{reads++;if(missing)throw new StorageFailure('media_local_file_missing');return extract(context);};
+ const f=await fixture(t,adapter),image=f.messages.find(m=>m.kind==='image');t.mock.timers.enable({apis:['setTimeout','Date']});
+ const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());
+ sync.wake();await sync.waitForIdle();assert.equal(reads,1);
+ sync.wake();await sync.waitForIdle();assert.equal(reads,1);
+ t.mock.timers.tick(60_000);await sync.waitForIdle();assert.equal(reads,2);await sync.close();
+ const next=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>next.close());
+ next.wake();await next.waitForIdle();assert.equal(reads,2);
+ t.mock.timers.tick(299_999);await next.waitForIdle();assert.equal(reads,2);
+ missing=false;t.mock.timers.tick(60_001);await next.waitForIdle();assert.equal(reads,3);
+ assert.equal((await f.media.read(f.contact,image.id)).files.length,1);
+ t.mock.timers.tick(86_400_000);await next.waitForIdle();assert.equal(reads,3);
+});
+
+test('连续失败逐级退避到每天重试，未到期唤醒不读图片',async t=>{
+ let reads=0;const adapter=unknownQualityAdapter();adapter.execute=async()=>{reads++;throw new StorageFailure('media_local_file_missing');};
+ const f=await fixture(t,adapter);t.mock.timers.enable({apis:['setTimeout','Date']});
+ const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());sync.wake();await sync.waitForIdle();
+ for(const delay of [60_000,300_000,1_800_000,21_600_000,86_400_000,86_400_000]){
+  const before=reads;t.mock.timers.tick(delay-1);await sync.waitForIdle();sync.wake();await sync.waitForIdle();assert.equal(reads,before);
+  t.mock.timers.tick(1);sync.wake();await sync.waitForIdle();assert.equal(reads,before+1);
+ }
+});
+
+test('存量图片超过一页时处理全部消息，不因前页退避漏掉后页',async t=>{
+ let reads=0;const f=await fixture(t,resourceVariantAdapter(()=> 'main',()=>reads++)),page=f.channel.page;
+ f.channel.page=async()=>{const old=await page();return {...old,records:[...old.records,...Array.from({length:130},(_,i)=>({...old.records[0],localId:String(i+10)}))]};};
+ await f.history.synchronize(f.contact);
+ const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());sync.wake();await sync.waitForIdle();
+ assert.equal(reads,131);sync.wake();await sync.waitForIdle();assert.equal(reads,131);
+});
+
+test('自动取图在来源准备期间遇到清除时，旧未知、缩略图和缺副本均不恢复',{timeout:15000},async t=>{
+ for(const variant of ['unknown','thumbnail','missing'])await t.test(variant,async t=>{
+  let blocked=false,reads=0;const started=Promise.withResolvers(),release=Promise.withResolvers();
+  const adapter=variant==='thumbnail'?resourceVariantAdapter(()=> 'thumbnail',()=>reads++):unknownQualityAdapter(()=>reads++);
+  let initialMissing=variant==='missing';const execute=adapter.execute;adapter.execute=context=>{if(initialMissing){reads++;throw new StorageFailure('media_local_file_missing');}return execute(context);};
+  const f=await fixture(t,adapter,{ensureSourceReady:async()=>{if(blocked){started.resolve();await release.promise;}}}),image=f.messages.find(m=>m.kind==='image');
+  if(variant==='missing')await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:'race-legacy-image',goal:'extract'}),{code:'media_local_file_missing'});
+  else await f.media.extract(f.contact,image.id,{requestKey:'race-legacy-image',goal:'extract'});
+  initialMissing=false;
+  t.mock.timers.enable({apis:['setTimeout','Date'],now:Date.now()+60_000});
+  const before=reads;blocked=true;const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());sync.wake();await started.promise;
+  try{await f.media.clear(f.contact,image.id,'clear-during-source-preparation');}finally{release.resolve();}await sync.waitForIdle();
+  assert.equal(reads,before);const state=await f.media.read(f.contact,image.id);assert.equal(state.state,'cleared');assert.deepEqual(state.files,[]);
+  sync.wake();await sync.waitForIdle();assert.equal(reads,before);
+ });
+});
+
+test('来源准备失败按联系人持久退避，重启不反复核验，恢复后自动处理所有图片',{timeout:15000},async t=>{
+ let prepares=0,unavailable=true,reads=0;const f=await fixture(t,resourceVariantAdapter(()=> 'main',()=>reads++),{ensureSourceReady:async()=>{prepares++;if(unavailable)throw new StorageFailure('history_support_unverified');}});
+ const page=f.channel.page;f.channel.page=async()=>{const old=await page();return {...old,records:[...old.records,{...old.records[0],localId:'10'}]};};await f.history.synchronize(f.contact);
+ t.mock.timers.enable({apis:['setTimeout','Date']});
+ const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());sync.wake();await sync.waitForIdle();assert.equal(prepares,1);assert.equal(reads,0);
+ sync.wake();await sync.waitForIdle();assert.equal(prepares,1);await sync.close();
+ const next=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>next.close());next.wake();await next.waitForIdle();assert.equal(prepares,1);
+ t.mock.timers.tick(60_000);await next.waitForIdle();assert.equal(prepares,2);assert.equal(next.status().last_failure_code,'history_support_unverified');
+ unavailable=false;t.mock.timers.tick(300_000);await next.waitForIdle();assert.equal(reads,2);assert.equal(prepares,4);
+ next.wake();await next.waitForIdle();assert.equal(prepares,4);
+});
+
+test('来源准备抛普通错误也停止该联系人本批，不回显私密错误正文',async t=>{
+ let prepares=0;const f=await fixture(t,unknownQualityAdapter(),{ensureSourceReady:async()=>{prepares++;throw new Error('synthetic-private-source-detail');}});
+ const page=f.channel.page;f.channel.page=async()=>{const old=await page();return {...old,records:[...old.records,{...old.records[0],localId:'10'}]};};await f.history.synchronize(f.contact);
+ const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());sync.wake();await sync.waitForIdle();
+ assert.equal(prepares,1);assert.equal(sync.status().last_failure_code,'media_execution_failed');sync.wake();await sync.waitForIdle();assert.equal(prepares,1);
+});
+
+test('旧未知图片补查无依据或失败保持原副本，清除后重启不恢复',async t=>{
+ let reads=0,failed=false;const adapter=unknownQualityAdapter(()=>reads++),extract=adapter.execute;
+ adapter.execute=async context=>{if(failed){reads++;throw new StorageFailure('media_local_file_missing');}return extract(context);};
+ const f=await fixture(t,adapter),image=f.messages.find(m=>m.kind==='image');
+ await f.media.extract(f.contact,image.id,{requestKey:'legacy-unknown',goal:'extract'});const old=(await f.media.read(f.contact,image.id)).files[0];
+ t.mock.timers.enable({apis:['setTimeout','Date']});const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());
+ sync.wake();await sync.waitForIdle();assert.equal(reads,2);assert.equal((await f.media.read(f.contact,image.id)).files[0].fileId,old.fileId);
+ failed=true;t.mock.timers.tick(60_000);await sync.waitForIdle();assert.equal(reads,3);
+ assert.equal((await f.media.read(f.contact,image.id)).files[0].fileId,old.fileId);
+ await f.media.clear(f.contact,image.id,'clear-reconcile-unknown');await sync.close();
+ const next=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>next.close());
+ next.wake();await next.waitForIdle();t.mock.timers.tick(86_400_000);await next.waitForIdle();assert.equal(reads,3);
+});
+
+test('旧未知图片不会被不同内容缩略图替换，同内容缩略图可补分类',async t=>{
+ let reads=0,thumbnail=false,same=false;const old=unknownQualityAdapter(()=>reads++),thumb=resourceVariantAdapter(()=> 'thumbnail',()=>reads++,()=>same?bytes:Buffer.from('不同内容缩略图'));
+ const adapter={...old,execute:context=>(thumbnail?thumb:old).execute(context)};
+ const f=await fixture(t,adapter),image=f.messages.find(m=>m.kind==='image');
+ await f.media.extract(f.contact,image.id,{requestKey:'legacy-thumbnail-unknown',goal:'extract'});const oldFile=(await f.media.read(f.contact,image.id)).files[0];
+ t.mock.timers.enable({apis:['setTimeout','Date']});thumbnail=true;
+ const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());sync.wake();await sync.waitForIdle();
+ assert.equal((await f.media.read(f.contact,image.id)).files[0].fileId,oldFile.fileId);
+ same=true;t.mock.timers.tick(60_000);await sync.waitForIdle();const classified=(await f.media.read(f.contact,image.id)).files[0];
+ assert.equal(classified.imageQuality,'thumbnail');assert.notEqual(classified.fileId,oldFile.fileId);assert.equal(reads,3);
+});
 
 test('已保存缩略图在后续自动复查取得主图后更新，主图不继续轮询',async t=>{
  let variant='thumbnail',reads=0;const f=await fixture(t,resourceVariantAdapter(()=>variant,()=>reads++));

@@ -9,6 +9,7 @@ import { SqliteStorage } from '../src/storage/sqlite/client.ts';
 import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 import { createWechatContactMetadata } from '../src/contacts/sqlite/wechat-metadata.ts';
 import { launchDsh } from '../src/launch.ts';
+import {png} from './visual-media-support.mjs';
 
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const account='synthetic-startup-owner',conversation='friend-a',generation='a'.repeat(64);
@@ -21,7 +22,7 @@ async function ready(probe,accept,message){
  do{const value=await probe();if(accept(value))return value;await delay(25);}while(Date.now()<deadline);
  throw new Error(message);
 }
-async function fixture(t){
+async function fixture(t,{images=false}={}){
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-history-startup-'))),artifact=join(root,'synthetic-artifact'),userData=join(root,'storage');
  await mkdir(join(artifact,'bin'),{recursive:true});await mkdir(join(artifact,'lib'));await mkdir(userData);
  const executable=join(artifact,'bin','wx-cli'),planFile=join(root,'synthetic-plan'),logFile=join(root,'synthetic-requests'),wcdbFile=join(artifact,'lib','libWCDB.dylib');
@@ -31,6 +32,7 @@ async function fixture(t){
 const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline');
 const hash=x=>crypto.createHash('sha256').update(x).digest('hex'),schema=${JSON.stringify(schema)};
 const cli=hash(fs.readFileSync(__filename)),wcdb=hash(fs.readFileSync(${JSON.stringify(wcdbFile)}));
+let selectedConversation='${conversation}';const imageBytes=Buffer.from('${png.toString('base64')}','base64'),imageDigest=hash(imageBytes);
 const account=()=>({format:'wechat-account-metadata-v1',status:'verified',reason:null,accountKey:'${account}',identityScheme:'wechat.account.v1',sourceGeneration:'${generation}',supportProfile:'wechat-4.0.6-29387-account-session-metadata-v1',programVersion:'4.0.6',build:'29387',artifactSha256:cli,wcdbSha256:wcdb,configuredAccount:'verified',continuity:'held-contact-session-instances',normalHistory:false});
 if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['notalone-history']))process.exit(91);
 readline.createInterface({input:process.stdin}).on('line',line=>{
@@ -38,20 +40,26 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
  if(r.op==='metadata-account')data=account();
  else if(r.op==='metadata-sessions')data={format:'wechat-private-session-metadata-v1',account:account(),sessions:[{username:'friend-a',displayName:'合成甲',kind:'private',identityAssurance:'verified'},{username:'friend-b',displayName:'合成乙',kind:'private',identityAssurance:'verified'}]};
  else if(r.op==='release-selection')data={released:true};
- else if(r.op==='resolve')data={accountKey:'${account}',conversationKey:'${conversation}',displayName:'合成甲',sourceGeneration:'${generation}'};
+ else if(r.op==='resolve'){selectedConversation=r.displayName;schema.scopeDigest=hash('${account}'+String.fromCharCode(0)+selectedConversation);data={accountKey:'${account}',conversationKey:selectedConversation,displayName:'合成甲',sourceGeneration:'${generation}'};}
  else if(r.op==='inspect')data=schema;
- else if(r.op==='support')data={protocol:'private-history-v1',profileId:'synthetic-startup-history-v1',adapterVersion:'1',status:plan.history,reason:plan.history==='supported'?null:'history_message_state_unverified',accountKey:'${account}',conversationKey:'${conversation}',sourceGeneration:'${generation}',programVersion:'4.0.6',build:'29387',artifactSha256:cli,schemaFingerprint:schema.schemaFingerprint,declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-final-status',continuity:'synthetic-fixed-source'};
+ else if(r.op==='support')data={protocol:'private-history-v1',profileId:'synthetic-startup-history-v1',adapterVersion:'1',status:plan.history,reason:plan.history==='supported'?null:'history_message_state_unverified',accountKey:'${account}',conversationKey:selectedConversation,sourceGeneration:'${generation}',programVersion:'4.0.6',build:'29387',artifactSha256:cli,schemaFingerprint:schema.schemaFingerprint,declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-final-status',continuity:'${images?'same-source-instances-normal-use-v1':'synthetic-fixed-source'}'};
  else if(r.op==='target')data={protocol:'private-history-v1',descriptor:'synthetic-startup-target',partitions:schema.checkedPartitions,tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'};
- else if(r.op==='page')data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[{partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'contact',kind:'text',text:'仅合成的启动首次历史',originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified',status:'0'}],completedPartitions:schema.checkedPartitions,exhausted:true};
+ else if(r.op==='page')data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[{partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'contact',kind:'${images?'image':'text'}',text:${images?'null':"'仅合成的启动首次历史'"},originalType:'${images?'3':'1'}',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified',status:'0'}],completedPartitions:schema.checkedPartitions,exhausted:true};
+ else if(r.op==='image-open'){
+ const qualityProof={kind:plan.classified?'wechat-message-image-content-v2':'wechat-message-image-content-v1',resourceInfoId:'10',matchingResourceIds:['20'],resourceSize:imageBytes.length,verifiedBytes:imageBytes.length,verifiedSha256:imageDigest,sourceSha256:imageDigest,conversion:'none',contentWidth:1,contentHeight:1,...(plan.classified?{sourceVariant:'main',matchingResources:[{resourceId:'20',resourceTypeRaw:262145}],originalProof:null}:{})};
+ data={protocol:'wechat-original-image-v1',resourceToken:'synthetic-startup-image',sourceGeneration:'${generation}',resourceSourceGeneration:'${generation}',target:r.target,partition:r.partition,table:r.table,localId:r.localId,serverId:r.serverId,sentAt:r.sentAt,resourceTable:'wechat-message-resource-v1',resourceId:'20',resourceTypeRaw:262145,variantCode:4,complete:true,quality:'unknown',qualityProof,expectedBytes:imageBytes.length,expectedSha256:imageDigest,mimeType:'image/png',envelope:'plain',sourceEnvelope:'plain'};
+ }
+ else if(r.op==='image-read'){const chunk=imageBytes.subarray(r.offset,Math.min(imageBytes.length,r.offset+65536));data={resourceToken:r.resourceToken,sourceGeneration:'${generation}',offset:r.offset,bytesRead:chunk.length,totalBytes:imageBytes.length,chunkBase64:chunk.toString('base64'),eof:r.offset+chunk.length===imageBytes.length,verifiedSha256:imageDigest};}
+ else if(r.op==='image-close')data={closed:true};
  if(data===undefined){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_operation_unsupported'}})+'\\n');return;}
  process.stdout.write(JSON.stringify({ok:true,data})+'\\n');
 });`;
  await writeFile(executable,script,{mode:0o700});const wcdb=Buffer.from('synthetic-startup-WCDB');await writeFile(wcdbFile,wcdb);
- await writeFile(join(artifact,'manifest.json'),JSON.stringify({formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',signing:'ad-hoc-development',realWechatVerified:false,sharedProcessProtocol:'wechat-shared-process-v1',cliSha256:hash(script),wcdbSha256:hash(wcdb)}));
+ await writeFile(join(artifact,'manifest.json'),JSON.stringify({formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',signing:'ad-hoc-development',realWechatVerified:false,sharedProcessProtocol:'wechat-shared-process-v1',...(images?{originalImageProtocol:'wechat-original-image-v1',originalImageQualityProof:'wechat-message-image-content-v2'}:{}),cliSha256:hash(script),wcdbSha256:hash(wcdb)}));
  const storage=await SqliteStorage.open({userData,intent:'create',role:'test'}),databaseId=storage.status.databaseId;await storage.close();
  const hosts=[],routes=[];
  t.after(async()=>{for(const host of hosts.reverse())await host.terminate();await rm(root,{recursive:true,force:true});});
- return {root,userData,executable,databaseId,logFile,hosts,routes,setSupport:status=>writeFile(planFile,JSON.stringify({history:status}))};
+ return {root,userData,executable,databaseId,logFile,hosts,routes,setSupport:status=>writeFile(planFile,JSON.stringify({history:status})),classifyImages:()=>writeFile(planFile,JSON.stringify({history:'supported',classified:true}))};
 }
 async function requests(f){try{return (await readFile(f.logFile,'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);}catch(error){if(error.code==='ENOENT')return [];throw error;}}
 async function start(f,options={}){
@@ -59,7 +67,7 @@ async function start(f,options={}){
  if(options.manual)await writeFile(join(f.root,'unused.env'),'NOTALONE_BACKGROUND_PROCESSING=manual\nNOTALONE_DEEPSEEK_API_KEY=\n',{mode:0o600});
  let nodeExecutable=process.execPath;
  if(options.manual){const quote=value=>"'"+value.replaceAll("'","'\\''")+"'";nodeExecutable=join(f.root,'synthetic-node');await writeFile(nodeExecutable,`#!/bin/sh\nexec ${quote(process.execPath)} \"$@\" 2>> ${quote(join(f.root,'manual.stderr'))}\n`,{mode:0o700});}
- const host=await launchDsh({nodeExecutable,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath:join(f.root,'unused.env'),infoPath,businessHome:f.root,environment:{},sqlite:{userData:f.userData,expectedDatabaseId:f.databaseId,role:'test',capabilities:options.memory?['contacts','history','memory']:['contacts','history'],wechatCliPath:f.executable}},()=>true);f.hosts.push(host);
+ const host=await launchDsh({nodeExecutable,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath:join(f.root,'unused.env'),infoPath,businessHome:f.root,environment:options.imageProcessing?{NOTALONE_IMAGE_PROCESSING:options.imageProcessing}:{},sqlite:{userData:f.userData,expectedDatabaseId:f.databaseId,role:'test',capabilities:options.memory?['contacts','history','memory']:['contacts','history'],wechatCliPath:f.executable}},()=>true);f.hosts.push(host);
  const info=await ready(async()=>{try{return Object.fromEntries((await readFile(infoPath,'utf8')).trim().split('\n').map(line=>{const index=line.indexOf('=');return [line.slice(0,index),line.slice(index+1)];}));}catch(error){if(error.code==='ENOENT')return null;throw error;}},value=>value?.address&&value?.token,'synthetic_host_appReady_timeout').catch(async error=>{if(options.manual)throw new Error(error.message+'; '+await readFile(join(f.root,'manual.stderr'),'utf8'));throw error;});
  const request=async(route,method='GET',body,headers={})=>{
   f.routes.push(route);const response=await fetch(`http://${info.address}`+route,{method,signal:AbortSignal.timeout(5000),headers:{authorization:`Bearer ${info.token}`,'content-type':'application/json',...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:response.status,body:await response.json()};
@@ -67,14 +75,14 @@ async function start(f,options={}){
  const runtime=await request('/api/runtime/status');assert.deepEqual(runtime.body.capabilities,options.memory?['contacts','history','memory']:['contacts','history']);
  return {host,request,shutdown:async()=>{assert.equal((await request('/api/runtime/shutdown','POST',{})).body.state,'stopped');assert.equal(await host.waitForExit(15000),true);}};
 }
-async function authorize(h){
+async function authorize(h,all=false){
  const setup=await h.request('/api/setup/status'),detected=await h.request('/api/setup/wechat/detect','POST',{});assert.equal(detected.status,200);assert.equal(detected.body.state,'ready');
  const connected=await h.request('/api/setup/wechat/confirm','POST',{candidate_token:detected.body.candidate_token,confirmed:true,mode:'selected',history_authorized:true});assert.equal(connected.status,200);
  const candidates=await h.request('/api/sync/cli-sessions','GET',undefined,{'x-notalone-metadata-consent':'selected-list'});assert.equal(candidates.status,200);
  const row=candidates.body.sessions.find(row=>row.username===conversation);
- const confirmed=await h.request('/api/sync/cli-bindings/confirm','POST',{snapshot_token:candidates.body.snapshot_token,selections:[{locator:row.username,observed_display_name:row.display_name,expected_selection_generation:row.selection_generation}],history_authorized:true});assert.equal(confirmed.status,200);
- const selected=await h.request('/api/sync/cli-bindings');assert.equal(selected.body.bindings.length,1);
- return {ownerId:setup.body.owner_id,contactId:selected.body.bindings[0].contact_id};
+ const confirmed=await h.request('/api/sync/cli-bindings/confirm','POST',{snapshot_token:candidates.body.snapshot_token,selections:(all?candidates.body.sessions:[row]).map(item=>({locator:item.username,observed_display_name:item.display_name,expected_selection_generation:item.selection_generation})),history_authorized:true});assert.equal(confirmed.status,200);
+ const selected=await h.request('/api/sync/cli-bindings');assert.equal(selected.body.bindings.length,all?2:1);
+ return {ownerId:setup.body.owner_id,contactId:selected.body.bindings[0].contact_id,bindings:selected.body.bindings};
 }
 async function coverage(h,contactId,predicate){return ready(async()=>{const response=await h.request('/api/sync/status');assert.equal(response.status,200);return response.body;},status=>predicate(status.cli_history_coverages.find(row=>row.contact_id===contactId)),'synthetic_first_history_timeout');}
 function noCliOrphans(rows){for(const pid of new Set(rows.map(row=>row.pid)))assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});}
@@ -129,4 +137,29 @@ test('manual正式profile不自动派发历史或记忆，重启后仍只执行�
  const old=(await reopened.request(`/api/memory-processing/runs/${started.body.run.runId}`)).body;
  assert.ok(old.inputs.every(input=>input.contactId===selected.contactId));assert.equal(old.calls.prepared+old.calls.sending+old.calls.succeeded+old.calls.unknown,0,'模型未配置时零外部调用');
  await reopened.shutdown();noCliOrphans(await requests(f));
+});
+
+
+test('正式profile可只自动处理全部已授权联系人图片，补查旧未知且不启动历史页或记忆',{timeout:45000},async t=>{
+ const f=await fixture(t,{images:true}),initial=await start(f,{imageProcessing:'manual'}),selected=await authorize(initial,true);
+ assert.equal((await initial.request('/api/sync/enable','POST',{})).status,200);
+ const messages=[];
+ for(const binding of selected.bindings){
+  await coverage(initial,binding.contact_id,row=>row?.phase==='complete');
+  const rows=(await initial.request(`/api/contacts/${binding.contact_id}/messages`)).body.messages;assert.equal(rows.length,1);assert.equal(rows[0].message_type,'image');
+  messages.push({contactId:binding.contact_id,messageId:rows[0].message_id});
+ }
+ const old=messages[0],seed=await initial.request(`/api/contacts/${old.contactId}/messages/${old.messageId}/media`,'POST',{request_key:randomUUID(),goal:'extract'});
+ assert.equal(seed.status,200);assert.equal(seed.body.files[0].imageQuality,'unknown');
+ await initial.shutdown();const before=(await requests(f)).length;await f.classifyImages();
+ const restarted=await start(f,{manual:true,memory:true,imageProcessing:'automatic'});
+ const runtime=(await restarted.request('/api/runtime/status')).body;assert.equal(runtime.background_processing,'manual');assert.equal(runtime.image_processing,'automatic');assert.equal(runtime.ownership.mediaExtraction,'typescript');assert.deepEqual(Object.keys(runtime.image_sync).sort(),['checked','failed','last_failure_code','processing']);
+ for(const item of messages){
+  const saved=await ready(async()=>(await restarted.request(`/api/contacts/${item.contactId}/history-messages?limit=20`)).body.messages?.find(row=>row.message_id===item.messageId),row=>row?.image_media?.image_variant==='main','synthetic_automatic_image_timeout').catch(async error=>{throw new Error(error.message+' '+JSON.stringify((await restarted.request(`/api/contacts/${item.contactId}/messages/${item.messageId}/media`)).body)+' '+JSON.stringify((await restarted.request('/api/runtime/status')).body.image_sync));});
+  assert.equal(saved.image_media.state,'available');
+ }
+ const rows=(await requests(f)).slice(before);assert.equal(rows.filter(row=>row.op==='image-open').length,2);assert.equal(rows.some(row=>row.op==='page'),false);
+ const progress=(await restarted.request('/api/runtime/status')).body.image_sync;assert.equal(progress.checked,2);assert.equal(progress.failed,0);assert.equal(progress.last_failure_code,null);
+ assert.equal((await restarted.request('/api/ledger/summary')).body.total_calls,0);
+ await restarted.shutdown();noCliOrphans(await requests(f));
 });

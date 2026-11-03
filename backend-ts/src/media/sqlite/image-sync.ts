@@ -1,20 +1,24 @@
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import type {SavedContactBinding} from '../../contacts/sqlite/contracts.ts';
 import type {SqliteMediaService} from './service.ts';
-import {imageRefreshIntervalMs,imageRefreshWindow} from './image-refresh.ts';
+import {imageRefreshIntervalMs,imageRefreshWindow,ImagePreparationFailure} from './image-refresh.ts';
+import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 
 interface ImageSyncDirectory {
  directory():Promise<{read_enabled:boolean;bindings:readonly Pick<SavedContactBinding,'contact_id'|'status'>[]}>;
 }
 interface ImageTarget {messageId:string;displayNo:string;requestKey:string}
 
-/** 消息提交后串行保存图片；仅已有缩略图按分钟复查本机资源，主图与普通失败仍持久去重。 */
+/** 遍历有效授权联系人补查存量与新图片；退避由持久回执决定，已有主图不重复读取。 */
 export class SqliteImageSyncCoordinator {
  readonly #storage:SqliteStorage;readonly #contacts:ImageSyncDirectory;readonly #media:SqliteMediaService;
  readonly #pending=new Set<string>();readonly #stoppedContacts=new Set<string>();#all=false;#paused=false;#closed=false;#work?:Promise<void>;
  #active?:{contactId:string;controller:AbortController;done:Promise<void>};
  #refreshTimer?:ReturnType<typeof setTimeout>;
+ #checked=0;#failed=0;#lastFailure:string|null=null;
  constructor(storage:SqliteStorage,contacts:ImageSyncDirectory,media:SqliteMediaService){this.#storage=storage;this.#contacts=contacts;this.#media=media;}
+ status(){return {processing:!!this.#work,checked:this.#checked,failed:this.#failed,last_failure_code:this.#lastFailure};}
+ #failure(error:unknown):void{this.#failed++;this.#lastFailure=error instanceof StorageFailure&&/^[-a-z0-9_]{1,80}$/.test(error.code)?error.code:'media_execution_failed';}
  wake(contactId?:string):void {
   if(this.#closed)return;
   if(contactId){if(this.#paused||this.#stoppedContacts.has(contactId))return;this.#pending.add(contactId);}
@@ -25,7 +29,7 @@ export class SqliteImageSyncCoordinator {
   if(this.#work||this.#closed)return;
   this.#work=this.#drain().finally(()=>{this.#work=undefined;if(!this.#closed&&(this.#all||this.#pending.size))this.#launch();});
   // 读取资格失效由原同步状态展示；不得把内部异常或来源内容写进普通日志。
-  void this.#work.catch(()=>{});
+  void this.#work.catch(error=>this.#failure(error));
  }
  #scheduleRefresh():void {
   if(this.#refreshTimer||this.#closed||this.#paused)return;
@@ -43,14 +47,14 @@ export class SqliteImageSyncCoordinator {
     const controller=new AbortController();let finish!:()=>void;const done=new Promise<void>(resolve=>{finish=resolve;});this.#active={contactId,controller,done};
     try{
      let after='0';
-     while(!this.#closed&&!controller.signal.aborted){
+     images:while(!this.#closed&&!controller.signal.aborted){
       const targets=await this.#storage.execute<ImageTarget[]>('media.imageSyncTargets',{ownerId:this.#media.ownerId,contactId,after,now:Date.now()});
       if(!targets.length)break;
       for(const target of targets){
        if(this.#closed||controller.signal.aborted)break;
        after=target.displayNo;
-       try{await this.#media.extract(contactId,target.messageId,{requestKey:target.requestKey,goal:'extract'},controller.signal);}
-       catch{/* 图片未保存也保留本次尝试，继续其余消息；所有实际读取仍由服务复验资格。 */}
+       try{await this.#media.extract(contactId,target.messageId,{requestKey:target.requestKey,goal:'extract'},controller.signal);this.#checked++;}
+       catch(error){this.#failure(error);if(error instanceof ImagePreparationFailure||error instanceof StorageFailure&&error.code.startsWith('history_'))break images;}
       }
      }
      if(!this.#closed&&!controller.signal.aborted&&await this.#storage.execute<boolean>('media.imageRefreshPending',{ownerId:this.#media.ownerId,contactId}))this.#scheduleRefresh();
