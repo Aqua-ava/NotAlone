@@ -98,6 +98,8 @@ export const historyActions:StorageAction[]=[
  action('history.scope','read',(tx,i)=>{assertReadEligibility(tx,i.token);const row=tx.get(`SELECT a.external_key AS account_key,c.external_key AS conversation_key FROM channel_account a JOIN channel_conversation c ON c.owner_id=a.owner_id AND c.account_id=a.id WHERE a.owner_id=? AND a.id=? AND c.id=?`,[i.token.owner_id,i.token.account_id,i.token.conversation_id])??fail('history_scope_invalid');return {token:i.token,accountKey:row.account_key,conversationKey:row.conversation_key};}),
  action('history.preflightGeneration','write',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);return preflightGeneration(tx,token);}),
  action('history.normalUseRevalidationCandidate','read',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);return normalUseRevalidationCandidate(tx,token);}),
+ // 同一事务决定正常来源的元数据重验或严格预检，避免跨认证完成时用旧false重造围栏。
+ action('history.readPreflight','write',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);const metadataRevalidation=normalUseRevalidationCandidate(tx,token);return {ok:metadataRevalidation||preflightGeneration(tx,token),metadataRevalidation};}),
  action('history.prepareNormalUseGuard','write',(tx,i)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertSupport(i.report);
   if(i.report.continuity!==normalUseContinuity||typeof i.guardId!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(i.guardId))return {ok:false,revalidated:false};

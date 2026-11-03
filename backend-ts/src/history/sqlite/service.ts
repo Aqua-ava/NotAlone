@@ -104,8 +104,8 @@ export class SqliteHistoryService {
   try{
    const previous=this.guards.get(contactId);if(previous?.failed)await previous.release();
    const token=await this.contacts.eligibility(contactId);const scope=await this.storage.execute<HistoryScope>('history.scope',{token});
-   const metadataRevalidation=await this.storage.execute<boolean>('history.normalUseRevalidationCandidate',{token});
-   if(!metadataRevalidation&&!await this.storage.execute<boolean>('history.preflightGeneration',{token}))throw new StorageFailure('history_source_continuity_unverified');
+   const {ok,metadataRevalidation}=await this.storage.execute<{ok:boolean;metadataRevalidation:boolean}>('history.readPreflight',{token});
+   if(!ok)throw new StorageFailure('history_source_continuity_unverified');
    await this.check(scope,controller);retained=this.guards.get(contactId);
    if(retained&&JSON.stringify(retained.token)!==JSON.stringify(token)){await retained.release();throw new StorageFailure('history_source_continuity_unverified');}
    channel=retained&&!retained.parked?retained.channel:this.createChannel();
