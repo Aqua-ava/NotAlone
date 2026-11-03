@@ -146,6 +146,68 @@ test('覆盖不完整可直接使用，明确未发送失败的新请求保留�
  await expect(draft).toHaveValue('');await expect(region.getByRole('checkbox',{name:'使用已同步部分继续',exact:true})).toHaveCount(0);
 });
 
+test('聊天读取恢复失败保留独立想法，撤下旧候选后可明确重试生成',{timeout:30000},async t=>{
+ let generated=0;
+ const f=await panel(t,async operation=>{
+  if(operation.action==='read')return pageData();
+  if(operation.action==='status')return {requestKey:operation.requestKey,phase:'failed',sent:false,errorCode:'reply_sources_not_ready',retryable:true,startedAt:1000,finishedAt:2000};
+  if(operation.action==='generate'){if(++generated===1)throw new Error('聊天读取暂未恢复，请重试生成。');return receipt(operation);}
+  throw new Error('未授权的合成页面操作');
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'}),draft=region.getByRole('textbox',{name:'有什么想说的',exact:true});
+ await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toBeVisible();
+ await draft.fill('我自己写下的独立想法');await region.getByRole('button',{name:'帮我表达',exact:true}).click();
+ await expect(region.getByRole('alert')).toHaveText('聊天读取暂未恢复，请重试生成。');
+ await expect(draft).toHaveValue('我自己写下的独立想法');
+ await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);
+ await expect(region.getByText('同联系人实际输入依据',{exact:true})).toHaveCount(0);
+ await expect(region.getByText('本次实际加载的合成Skill正文',{exact:true})).toHaveCount(0);
+ const retry=region.getByRole('button',{name:'重试生成',exact:true});await expect(retry).toBeEnabled();
+ assert.equal(generated,1,'准备失败后不能自动另发生成请求');
+ await retry.click();await expect.poll(()=>f.submitted.length).toBe(1);
+ const requests=f.commands.filter(c=>c.action==='generate');assert.equal(requests.length,2);assert.notEqual(requests[0].requestKey,requests[1].requestKey);assert.equal(requests[1].text,'我自己写下的独立想法');assert.equal(requests[1].carriedSelectionId,undefined);
+});
+
+test('聊天读取恢复失败不保留旧选稿及其派生草稿，新生成不再携入旧稿',{timeout:30000},async t=>{
+ let generated=0;
+ const f=await panel(t,async operation=>{
+  if(operation.action==='read')return pageData();
+  if(operation.action==='select')return {id:ids.selection};
+  if(operation.action==='status')return {requestKey:operation.requestKey,phase:'failed',sent:false,errorCode:'reply_sources_not_ready',retryable:true,startedAt:1000,finishedAt:2000};
+  if(operation.action==='generate'){if(++generated===1)throw new Error('聊天读取暂未恢复，请重试生成。');return receipt(operation);}
+  throw new Error('未授权的合成页面操作');
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'}),draft=region.getByRole('textbox',{name:'有什么想说的',exact:true});
+ await region.getByRole('button',{name:'以此版本继续',exact:true}).click();
+ await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();
+ await draft.fill('从旧选稿继续修改的想法');await region.getByRole('button',{name:'帮我表达',exact:true}).click();
+ await expect(region.getByRole('alert')).toHaveText('聊天读取暂未恢复，请重试生成。');
+ await expect(draft).toHaveValue('');await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);
+ await expect(region.getByRole('button',{name:'重试生成',exact:true})).toHaveCount(0);
+ await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);
+ await draft.fill('重新写下的独立想法');await region.getByRole('button',{name:'帮我表达',exact:true}).click();
+ await expect.poll(()=>f.submitted.length).toBe(1);
+ const requests=f.commands.filter(c=>c.action==='generate');assert.equal(requests[0].carriedSelectionId,ids.selection);assert.equal(requests[1].carriedSelectionId,undefined);assert.equal(requests[1].text,'重新写下的独立想法');
+});
+
+test('聊天恢复提示后仍按原请求核对，模型结果未知时不能换请求重发',{timeout:30000},async t=>{
+ const f=await panel(t,async operation=>{
+  if(operation.action==='read')return pageData();
+  if(operation.action==='status')return {requestKey:operation.requestKey,phase:'unknown',sent:true,errorCode:null,retryable:false,startedAt:1000,finishedAt:null};
+  if(operation.action==='generate')throw new Error('聊天读取暂未恢复，请重试生成。');
+  throw new Error('未授权的合成页面操作');
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'});
+ await region.getByRole('textbox',{name:'有什么想说的',exact:true}).fill('还不能另发的想法');
+ await region.getByRole('button',{name:'帮我表达',exact:true}).click();
+ await expect(region.getByRole('alert')).toContainText('结果暂未确认');
+ await expect(region.getByRole('button',{name:'重试生成',exact:true})).toHaveCount(0);
+ await expect(region.getByRole('button',{name:'帮我想想',exact:true})).toBeDisabled();
+ await region.getByRole('button',{name:'核对原请求',exact:true}).click();
+ await expect.poll(()=>f.commands.filter(c=>c.action==='status').length).toBe(2);
+ const request=f.commands.find(c=>c.action==='generate');assert.equal(f.commands.filter(c=>c.action==='generate').length,1);assert.ok(f.commands.filter(c=>c.action==='status').every(c=>c.requestKey===request.requestKey));
+});
+
 test('已确认联系人在历史未开始或后台读取中均能直接生成',{timeout:30000},async t=>{
  let phase='not_started';
  const f=await panel(t,async operation=>{

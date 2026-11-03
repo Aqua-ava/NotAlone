@@ -90,6 +90,7 @@ test('已知失败按安全中文状态映射，未知错误不将供应商正�
   ['discussion_request_conflict','本次输入或设置已改变，请用新请求重新生成。'],
   ['reply_input_invalid','本次工作区设置无效，请检查本次想法和背景内容。'],
   ['reply_input_stale','资料版本已变化，请重新读取。'],
+  ['reply_sources_not_ready','聊天读取暂未恢复，请重试生成。'],
   ['reply_source_unavailable','本次候选来源已失效，请重新读取。'],
   ['skill_run_invalidated','本次Skill资格已失效，请重新读取。'],
   ['history_source_not_available','本次候选来源已失效，请重新读取。'],

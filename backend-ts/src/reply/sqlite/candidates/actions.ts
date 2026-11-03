@@ -6,7 +6,7 @@ import {discussionModelActions,dropSkillForCurrentCall} from '../model-actions.t
 import {requireDiscussion} from '../actions.ts';
 import {sanitizeDiscussionErrorCode} from '../failure.ts';
 import {emptyReplyKnowledge,type ReplyKnowledgeReader} from './contracts.ts';
-import {freezeReplyInput,requireReplyInput,requireSelection} from './input.ts';
+import {freezeReplyInput,requireReplyInput,requireSelection,replySourceContacts,selectionSourceContacts} from './input.ts';
 import {insertModelCandidates,parseReplyOutput,readParts,requireCandidate,versionView} from './versions.ts';
 export const INCOMPLETE_HISTORY_WARNING='历史覆盖不完整：本次使用当前可用资料，可能缺少重要语境。';
 function fail(code:string):never{throw new StorageFailure(code);}
@@ -38,8 +38,12 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
   const phase=unknown?'unknown':row.request_state==='committed'?'committed':running?'preparing':'failed';
   return {requestKey:i.requestKey,phase,sent,errorCode:row.error_code===null?null:sanitizeDiscussionErrorCode(row.error_code),retryable:phase==='failed'&&!calls.some(c=>['sending','unknown'].includes(String(c.state))),startedAt:row.started_at===null?null:Number(row.started_at),finishedAt:row.finished_at===null?null:Number(row.finished_at)};
  }),
- action('failPreparation','write',(tx,i)=>{
-  requireAttempt(tx,i);
+ action('failPreparation','write',(tx,i,lease)=>{
+  // 仅结束原运行中且尚未创建模型调用的任务；来源变化不能让失败永远停在准备中。
+  const attempt=tx.get(`SELECT a.id FROM reply_attempt a JOIN reply_request r ON r.owner_id=a.owner_id AND r.id=a.request_id
+   WHERE a.owner_id=? AND a.id=? AND a.request_id=? AND a.lease_token=? AND r.contact_id=? AND r.discussion_id=?
+   AND a.accepted_runtime_id=? AND a.accepted_storage_epoch=? AND a.state='running' AND r.state='running'`,[i.ownerId,i.attemptId,i.requestId,i.leaseToken,i.contactId,i.discussionId,lease.runtimeId,lease.epoch]);
+  if(!attempt)return;
   if(tx.get('SELECT 1 FROM model_call WHERE owner_id=? AND reply_attempt_id=?',[i.ownerId,i.attemptId]))return;
   tx.run("UPDATE reply_attempt SET state='failed',finished_at=?,error_code=? WHERE owner_id=? AND id=?",[Date.now(),sanitizeDiscussionErrorCode(i.code),i.ownerId,i.attemptId]);
   tx.run("UPDATE reply_request SET state='cancelled' WHERE owner_id=? AND id=?",[i.ownerId,i.requestId]);
@@ -61,6 +65,8 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
   // 使用本次受理时冻结的覆盖事实，后台同步进展不阻断或改写当前请求。
   freeze.execute(tx,i,lease);return freezeReplyInput(tx,i,reader);
  }),
+ action('sourceContacts','read',(tx,i)=>{requireAttempt(tx,i);return replySourceContacts(tx,i,reader);}),
+ action('selectionSourceContacts','read',(tx,i)=>{requireDiscussion(tx,i);return selectionSourceContacts(tx,i);}),
  action('configuration','read',(tx,i)=>{
   const d=requireDiscussion(tx,i);if(!d.current_runtime_id)return null;
   const row=tx.get("SELECT r.id,c.id context_id,c.skill_run_json FROM runtime_copy x JOIN reply_request r ON r.owner_id=x.owner_id AND r.id=x.committed_request_id JOIN reply_context c ON c.owner_id=r.owner_id AND c.request_id=r.id WHERE x.owner_id=? AND x.id=? AND r.kind='reply' AND r.state='committed' AND c.state='active'",[i.ownerId,d.current_runtime_id]);

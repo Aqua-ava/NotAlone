@@ -18,7 +18,7 @@ import type {SqliteReplyCandidateService} from './service.ts';
 import {readReplyWorkspace,replyWorkspaceEntryText,replyWorkspaceFingerprint,type ReplyWorkspace,type ReplyWorkspaceSnapshot} from './workspace.ts';
 const systemPrompt='你是面向用户真实联系人的中文关系沟通回复助手。只围绕本次已确认联系人。依据本次输入和获准资料生成1至3组可编辑候选，不虚构经历、情绪、立场或承诺。事实、推测和未确认候选必须区分。workspace suggest动作只代表用户要可选思路；未提供或未确认的草稿、立场和关系意图保持未知，候选不得写成用户已采纳的主张或承诺。workspace express动作只围绕本次想法组织表达；草稿是用户对助手的任务描述，不一定是要逐句发送的私聊原文。补充背景、写作要求和最近聊天各自标注，不相互冒充。一次性写作要求仅作用本次，不读取或形成长期表达偏好。最终消息始终由用户选择、修改并亲自发送。只输出JSON：{"candidates":[{"parts":["第一条短消息","可选的第二条"],"basis":[实际输入材料编号]}]}。basis只能引用本次编号材料，必须至少一项；不得臆造资料或把Skill选择当作已加载。';
 export interface ReplyGenerationInput {contactId:string;discussionId:string;requestKey:string;text:string;confirmedContact:true;acceptIncomplete?:boolean;carriedSelectionId?:string;selectedPackageId?:string;contextMessageIds?:string[];workspace?:ReplyWorkspace;signal?:AbortSignal}
-interface Options {storage:SqliteStorage;service:SqliteReplyCandidateService;discussions:SqliteDiscussionService;runtime:SqliteDiscussionRuntime;model:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;library?:SqliteSkillLibrary;authorize:(contactId:string)=>Promise<void>}
+interface Options {storage:SqliteStorage;service:SqliteReplyCandidateService;discussions:SqliteDiscussionService;runtime:SqliteDiscussionRuntime;model:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;library?:SqliteSkillLibrary;authorize:(contactId:string)=>Promise<void>;prepareSources?:(contactId:string,signal?:AbortSignal)=>Promise<void>}
 /** 与11共享实际DSH执行、provider和arbiter；候选不创建第二套调用身份或账本。 */
 export class SqliteReplyTurns {
  private readonly options:Options;private stopping=false;private readonly pending=new Set<Promise<unknown>>();private readonly controllers=new Set<AbortController>();
@@ -48,7 +48,27 @@ export class SqliteReplyTurns {
   const requestText=workspace?replyWorkspaceEntryText(workspace):input.text;
   const workspaceFingerprint=workspace?replyWorkspaceFingerprint(workspace,input.selectedPackageId,input.carriedSelectionId):undefined;
   const workspaceSnapshot:ReplyWorkspaceSnapshot|undefined=workspace?{...workspace,selectedPackageId:input.selectedPackageId??null,carriedSelectionId:input.carriedSelectionId??null}:undefined;
-  const accepted=await o.service.begin({contactId:input.contactId,discussionId:input.discussionId,requestKey:input.requestKey,text:requestText,acceptIncomplete:input.acceptIncomplete,carriedSelectionId:input.carriedSelectionId,includeRelationshipContext:workspace?workspace.includeRelationshipContext&&workspace.excludedMessageIds.length===0:undefined,workspaceFingerprint,identity:{kind:'manual',confirmationId}}),attempt=accepted.attempt as DiscussionAttempt;
+  let recovered=false;
+  const prepareSources=async(contactIds:string[])=>{
+   if(recovered||!o.prepareSources||!contactIds.length)return false;
+   recovered=true;
+   const deadline=AbortSignal.timeout(15000),signal=input.signal?AbortSignal.any([input.signal,deadline]):deadline;
+   for(const contactId of contactIds){signal.throwIfAborted();await o.prepareSources(contactId,signal);}
+   signal.throwIfAborted();await o.authorize(input.contactId);return true;
+  };
+  const begin=()=>o.service.begin({contactId:input.contactId,discussionId:input.discussionId,requestKey:input.requestKey,text:requestText,acceptIncomplete:input.acceptIncomplete,carriedSelectionId:input.carriedSelectionId,includeRelationshipContext:workspace?workspace.includeRelationshipContext&&workspace.excludedMessageIds.length===0:undefined,workspaceFingerprint,identity:{kind:'manual',confirmationId}});
+  let accepted:Awaited<ReturnType<typeof begin>>;
+  try{accepted=await begin();}
+  catch(error){
+   if(!input.carriedSelectionId||!o.prepareSources||!(error instanceof StorageFailure)||!['history_source_not_available','reply_source_unavailable'].includes(error.code))throw error;
+   // 旧选稿在受理前已有严格检查；只恢复其实际来源，仍以原检查决定是否能继续。
+   try{
+    const contactIds=await o.storage.execute<string[]>('reply.selectionSourceContacts',{ownerId,contactId:input.contactId,discussionId:input.discussionId,selectionId:input.carriedSelectionId});
+    if(!await prepareSources(contactIds))throw error;
+    accepted=await begin();
+   }catch(recoveryError){if(input.signal?.aborted)throw recoveryError;throw error;}
+  }
+  const attempt=accepted.attempt as DiscussionAttempt;
   if(accepted.replayed)return {discussionId:attempt.discussionId,replayed:true,segmented:false};
   o.service.phase(input.contactId,attempt.discussionId,input.requestKey,'preparing');
   try{
@@ -57,14 +77,31 @@ export class SqliteReplyTurns {
    const eligible=catalog.filter(p=>p.enabledState==='enabled'&&p.verificationState==='verified'&&p.currentRevisionNo!==null&&(!input.selectedPackageId||p.id===input.selectedPackageId));
    if(input.selectedPackageId&&!eligible.some(p=>p.id===input.selectedPackageId))throw new StorageFailure('discussion_skill_unavailable');
    const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:o.library?eligible.map(skillAnchor):[]};
-   const entries=workspace?[]:(await o.discussions.view(input.contactId,attempt.discussionId)).entries.filter((e:any)=>e.content_state==='available');
-   const history=workspace
-    ?workspace.includeRelationshipContext?await o.storage.execute<any>('history.readRecent',{ownerId,contactId:input.contactId,limit:50}):null
-    :await o.storage.execute<any>('history.readChat',{ownerId,contactId:input.contactId,limit:20});
-   const recentIds=history?.messages.filter((m:any)=>m.kind==='text'&&!workspace?.excludedMessageIds.includes(m.id)).map((m:any)=>m.id)??[];
-   const messageIds=workspace?recentIds:input.contextMessageIds??recentIds;
-   const messages=await o.storage.execute<any[]>('discussion.messages',{...attempt,messageIds});
-   const frozen=await o.storage.execute<FrozenReplyInput[]>('reply.freezeInput',{...attempt,contextId,skillRun:revision,items:[...messages.map(m=>({kind:'message',sourceContactId:input.contactId,messageId:m.id,recordId:m.record_id,acceptedRevision:m.interpretation_revision})),...entries.map((e:any)=>({kind:'entry',entryId:e.id}))],workspace:workspaceSnapshot,at:Date.now()});
+   const readItems=async()=>{
+    const entries=workspace?[]:(await o.discussions.view(input.contactId,attempt.discussionId)).entries.filter((e:any)=>e.content_state==='available');
+    const history=workspace
+     ?workspace.includeRelationshipContext?await o.storage.execute<any>('history.readRecent',{ownerId,contactId:input.contactId,limit:50}):null
+     :await o.storage.execute<any>('history.readChat',{ownerId,contactId:input.contactId,limit:20});
+    const recentIds=history?.messages.filter((m:any)=>m.kind==='text'&&!workspace?.excludedMessageIds.includes(m.id)).map((m:any)=>m.id)??[];
+    const messageIds=workspace?recentIds:input.contextMessageIds??recentIds;
+    const messages=await o.storage.execute<any[]>('discussion.messages',{...attempt,messageIds});
+    return [...messages.map(m=>({kind:'message',sourceContactId:input.contactId,messageId:m.id,recordId:m.record_id,acceptedRevision:m.interpretation_revision})),...entries.map((e:any)=>({kind:'entry',entryId:e.id}))];
+   };
+   let items=await readItems();
+   const freeze=()=>o.storage.execute<FrozenReplyInput[]>('reply.freezeInput',{...attempt,contextId,skillRun:revision,items,workspace:workspaceSnapshot,at:Date.now()});
+   let frozen:FrozenReplyInput[];
+   try{frozen=await freeze();}
+   catch(error){
+    if(!(error instanceof StorageFailure)||error.code!=='history_source_not_available'||!o.prepareSources)throw error;
+    const sourceContacts=await o.storage.execute<string[]>('reply.sourceContacts',{...attempt,items,workspace:workspaceSnapshot});
+    if(!sourceContacts.length)throw error;
+    try{
+     if(!await prepareSources(sourceContacts))throw error;
+     input.signal?.throwIfAborted();
+     // 恢复后重新读取并冻结；不沿用失败事务的来源快照，也不重试任何模型调用。
+     items=await readItems();frozen=await freeze();
+    }catch(recoveryError){if(input.signal?.aborted)throw recoveryError;throw new StorageFailure('reply_sources_not_ready');}
+   }
    const requestIntent=workspace?workspace.action==='suggest'?'本次工作区动作：帮我想想。用户没有提供草稿时尚未确认任何立场，所有说法都只是可选思路。':'本次工作区动作：帮我表达。只按本次想法整理，不添加用户未确认的立场。':'本次明确请求：'+input.text;
    const prompt=requestIntent+'\n\n实际输入材料（编号用于basis）：\n'+frozen.map(item=>`[${item.itemNo}] ${item.kind}\n${item.text}`).join('\n\n');
    // 每次候选任务重建独立副本；旧候选只有显式选择才进入新输入。

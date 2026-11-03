@@ -12,6 +12,31 @@ import {toneLabel} from './workspace.ts';
 function fail(code:string):never{throw new StorageFailure(code);}
 function coverageSnapshot(value:string):unknown{const parsed=JSON.parse(value);return parsed?.kind==='reply_candidate_request_v1'?parsed.coverage:parsed;}
 export interface FrozenReplyInput {itemNo:number;kind:string;text:string;identity:object;sources:ReplySource[]}
+export function selectionSourceContacts(tx:StorageTransaction,i:DiscussionScope&{selectionId:string}):string[]{
+ const row=tx.get(`SELECT r.id FROM reply_selection s JOIN reply_candidate k ON k.owner_id=s.owner_id AND k.id=s.candidate_id
+  JOIN reply_request r ON r.owner_id=k.owner_id AND r.id=k.request_id JOIN reply_candidate_version v ON v.owner_id=s.owner_id AND v.candidate_id=s.candidate_id AND v.version_no=s.version_no
+  WHERE s.owner_id=? AND s.id=? AND r.contact_id=? AND r.discussion_id=? AND r.state='committed' AND v.content_state='available'`,[i.ownerId,i.selectionId,i.contactId,i.discussionId])??fail('reply_selection_unavailable');
+ return tx.all(`SELECT x.source_contact_id FROM reply_context c JOIN reply_context_item x ON x.owner_id=c.owner_id AND x.context_id=c.id
+  WHERE c.owner_id=? AND c.request_id=? AND x.kind='message' UNION SELECT x.source_contact_id FROM reply_context c
+  JOIN reply_candidate_input_source x ON x.owner_id=c.owner_id AND x.context_id=c.id WHERE c.owner_id=? AND c.request_id=?`,[i.ownerId,row.id,i.ownerId,row.id]).map(source=>String(source.source_contact_id));
+}
+/** 来源准备只涉及本次输入实际引用的联系人，不扫描或恢复整个联系人目录。 */
+export function replySourceContacts(tx:StorageTransaction,i:DiscussionScope&{requestId:string;items:{kind:string;sourceContactId?:string;entryId?:string}[];workspace?:ReplyWorkspaceSnapshot},reader:ReplyKnowledgeReader):string[]{
+ const contacts=new Set<string>();
+ for(const item of i.items){
+  if(item.kind==='message'&&item.sourceContactId===i.contactId)contacts.add(i.contactId);
+  if(item.kind==='entry'&&!i.workspace){
+   for(const source of tx.all(`SELECT DISTINCT x.source_contact_id FROM discussion_entry e JOIN reply_context c ON c.owner_id=e.owner_id AND c.request_id=e.origin_request_id
+    JOIN reply_context_item x ON x.owner_id=c.owner_id AND x.context_id=c.id WHERE e.owner_id=? AND e.contact_id=? AND e.discussion_id=? AND e.id=? AND x.kind='message'`,[i.ownerId,i.contactId,i.discussionId,item.entryId!]))contacts.add(String(source.source_contact_id));
+  }
+ }
+ if(!i.workspace||i.workspace.includeRelationshipContext&&i.workspace.excludedMessageIds.length===0){
+  for(const item of reader.read(tx,i))for(const source of item.sources)contacts.add(source.contactId);
+  const carried=tx.get('SELECT carried_selection_id FROM reply_candidate_request WHERE owner_id=? AND request_id=?',[i.ownerId,i.requestId]);
+  if(carried?.carried_selection_id)for(const contactId of selectionSourceContacts(tx,{...i,selectionId:String(carried.carried_selection_id)}))contacts.add(contactId);
+ }
+ return [...contacts];
+}
 function sources(tx:StorageTransaction,ownerId:string,items:readonly ReplySource[]):void{
  if(!items.length)return;
  assertSourcesEligibility(tx,items.map(s=>({owner_id:ownerId,contact_id:s.contactId,record_id:s.recordId,message_id:s.messageId})));

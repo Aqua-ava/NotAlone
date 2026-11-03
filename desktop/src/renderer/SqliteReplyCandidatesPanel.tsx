@@ -10,6 +10,7 @@ function statusFailure(status:SqliteCandidateStatus):string{
  if(status.phase==='unknown')return '模型请求已发出，结果暂未确认。请核对原请求。';
  if(status.phase==='not_found')return '尚未找到原请求，请稍后核对。';
  if(status.phase!=='failed')return '原请求仍在处理，请稍后核对。';
+ if(status.errorCode==='reply_sources_not_ready'&&!status.sent)return '聊天读取暂未恢复，请重试生成。';
  if(status.errorCode?.includes('timeout'))return status.sent?'本次生成超时，没有保存候选。':'整理资料超时，尚未发给模型。';
  if(status.errorCode&&/source|stale|knowledge|invalidated/.test(status.errorCode))return '本次参考资料发生变化，请重新生成。';
  return status.sent?'本次生成失败，没有保存候选。':'本次准备失败，尚未发给模型。';
@@ -68,7 +69,16 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   const readStatus=async(requestKey:string)=>{const status=readSqliteCandidateStatus(await bridge.candidates!.execute({...scope,action:'status',requestKey}));if(status.requestKey!==requestKey)throw new Error('候选状态不匹配。');return status;};
   const showStatus=async(status:SqliteCandidateStatus)=>{
    if(!current())return;setProgress(status);
-   if(status.phase!=='committed'){setError(statusFailure(status));return;}
+   if(status.phase!=='committed'){
+    if(status.phase==='failed'&&!status.sent&&status.errorCode==='reply_sources_not_ready'){
+     // 只保留用户独立输入；旧选稿及其派生草稿不能随恢复请求重新带入。
+     const carried=!!retry.current?.carry||!!carry;
+     qualifiedRequests.current=[];setCarry(undefined);setEdits({});setInspected({});
+     setPage(old=>old?{coverage:old.coverage,requests:[]}:null);
+     if(carried){seeded.current=scopeKey;setDraft('');onDraftChange?.('',{contactId,scopeRevision});retry.current=null;}
+    }
+    setError(statusFailure(status));return;
+   }
    const next=await bridge.candidates!.execute({...scope,action:'read'});if(!current())return;
    const original=retry.current;showPage(readSqliteCandidatePage(next));retry.current=null;setError('');setCarry(undefined);
    if(original&&draft===original.text){setDraft('');onDraftChange?.('',{contactId,scopeRevision});}
@@ -165,7 +175,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
     <label>本次要求<textarea aria-label="本次要求" rows={2} maxLength={4096} value={options.instruction} disabled={!available||busy} placeholder="例如：不要催促、简短一些…" onChange={e=>setOptions(v=>({...v,instruction:e.target.value}))}/></label>
   </div></details>
   {busy&&<p className="rewrite-privacy" aria-live="polite">{progress?progressLabel(progress.phase):'正在读取候选…'}</p>}
-  {retry.current&&!busy&&<button onClick={()=>void retryOriginal()}>{progress?.phase==='failed'&&progress.retryable?'重新生成':'核对原请求'}</button>}
+  {retry.current&&!busy&&<button onClick={()=>void retryOriginal()}>{progress?.phase==='failed'&&progress.retryable?progress.errorCode==='reply_sources_not_ready'?'重试生成':'重新生成':'核对原请求'}</button>}
   <button disabled={!available||busy} onClick={()=>void run({action:'read'})}>刷新候选</button>
   {carry&&<button disabled={busy} onClick={()=>{setCarry(undefined);setNotice('已取消本次候选继续。');}}>取消候选继续</button>}
   {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}

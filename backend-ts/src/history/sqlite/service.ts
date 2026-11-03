@@ -24,6 +24,16 @@ type MessageChangeKind='created'|'updated';
 type AcceptedPage=HistoryCoverage&{createdMessageIds?:string[];updatedMessageIds?:string[]};
 const bodyCapabilities=['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail'] as const;
 const recoverableGuardFailures=new Set(['history_native_timeout','history_native_unavailable','history_native_cancelled','history_snapshot_closed','history_snapshot_unavailable','history_snapshot_window_changed']);
+function waitForSourceReader(done:Promise<void>,signal:AbortSignal,remaining:number):Promise<void>{
+ if(signal.aborted)return Promise.reject(new StorageFailure('history_native_cancelled'));
+ if(remaining<=0)return Promise.reject(new StorageFailure('history_native_timeout'));
+ return new Promise((resolve,reject)=>{
+  const finish=(error?:unknown)=>{clearTimeout(timer);signal.removeEventListener('abort',abort);if(error)reject(error);else resolve();};
+  const abort=()=>finish(new StorageFailure('history_native_cancelled'));
+  const timer=setTimeout(()=>finish(new StorageFailure('history_native_timeout')),remaining);
+  signal.addEventListener('abort',abort,{once:true});done.then(()=>finish(),finish);
+ });
+}
 export const historyReaderHolderKey=(contactId:string,generation:string):string=>`history:read_${contactId}_${generation}`;
 /** 可认证的渠道跨批次保留守卫；删除、停读及finally等待真实读者释放。 */
 export class SqliteHistoryService {
@@ -39,6 +49,7 @@ export class SqliteHistoryService {
  private closed=false;
  private readonly shared?:SharedWechatClient;
  private readonly queued=new Map<string,{controller:AbortController;done:Promise<void>}>();
+ private readonly sourcePreparations=new Set<{contactId:string;controller:AbortController;done:Promise<void>}>();
  constructor(storage:SqliteStorage,contacts:HistoryContactGateway,channel:HistoryChannel|(()=>HistoryChannel),holders:ActiveHolders=new ActiveHolders(),onMessageChange?:(contactId:string,messageId:string,kind:MessageChangeKind)=>void,onAcceptedPage?:(contactId:string)=>void,shared?:SharedWechatClient){
   this.storage=storage;this.contacts=contacts;this.createChannel=typeof channel==='function'?channel:()=>channel;this.holders=holders;this.onMessageChange=onMessageChange;this.onAcceptedPage=onAcceptedPage;this.shared=shared;
  }
@@ -184,6 +195,37 @@ export class SqliteHistoryService {
  private rememberBodySupport(contactId:string,report:HistorySupportReport):void{
   const guard=this.guards.get(contactId);
   if(guard)guard.bodyVerified=report.status==='supported'&&bodyCapabilities.every(key=>report.capabilities?.[key]==='supported');
+ }
+ /** 复用活守卫；同联系人的读者结束后仅续证来源元数据，不重读正文。 */
+ async prepareSource(contactId:string,signal?:AbortSignal):Promise<void>{
+  if(this.closed)throw new StorageFailure('history_closed');
+  const controller=new AbortController(),combined=signal?AbortSignal.any([controller.signal,signal]):controller.signal;
+  let finish!:()=>void;const done=new Promise<void>(resolve=>{finish=resolve;});
+  const preparation={contactId,controller,done};this.sourcePreparations.add(preparation);
+  const deadline=Date.now()+15000;
+  let timedOut=false;const timeout=setTimeout(()=>{timedOut=true;controller.abort();},15000);
+  const check=()=>{if(this.closed)throw new StorageFailure('history_closed');if(timedOut||Date.now()>=deadline)throw new StorageFailure('history_native_timeout');if(combined.aborted)throw new StorageFailure('history_native_cancelled');};
+  try{
+   for(;;){
+    check();const token=await this.contacts.eligibility(contactId);check();
+    const guard=this.guards.get(contactId);
+    if(guard&&!guard.failed&&JSON.stringify(guard.token)===JSON.stringify(token)){
+     const valid=await this.storage.execute<boolean>('history.guardCheck',{token,guardId:guard.guardId});check();
+     if(valid)return;
+    }
+    const pending=this.queued.get(contactId)?.done??this.active.get(contactId)?.done;
+    if(pending){await waitForSourceReader(pending,combined,deadline-Date.now());continue;}
+    if(this.guards.get(contactId)!==guard)continue;
+    try{await this.ensureSourceReady(contactId,combined);check();return;}
+    catch(error){
+     if(!(error instanceof StorageFailure)||error.code!=='history_already_running')throw error;
+     const raced=this.queued.get(contactId)?.done??this.active.get(contactId)?.done;
+     if(!raced)throw error;
+     await waitForSourceReader(raced,combined,deadline-Date.now());
+    }
+   }
+  }catch(error){if(timedOut)throw new StorageFailure('history_native_timeout');throw error;}
+  finally{clearTimeout(timeout);this.sourcePreparations.delete(preparation);finish();}
  }
  /** 记忆等派生处理只重验来源元数据并保留活守卫，不读取历史页或推进同步目标。 */
  async ensureSourceReady(contactId:string,signal?:AbortSignal):Promise<void>{
@@ -430,6 +472,6 @@ export class SqliteHistoryService {
   }
   });}finally{if(wakeGrowth)this.wakeFirstHistory(contactId);}
  }
- async stop(contactId?:string):Promise<void>{const queued=[...this.queued.entries()].filter(([id])=>!contactId||id===contactId).map(([,entry])=>entry);for(const entry of queued)entry.controller.abort();const entries=[...this.active.entries()].filter(([id])=>!contactId||id===contactId).map(([,entry])=>entry);const guards=[...this.guards.entries()].filter(([id])=>!contactId||id===contactId).map(([,entry])=>entry);await Promise.all([...entries.map(entry=>entry.stop()),...guards.map(entry=>entry.release())]);await Promise.all([...entries.map(entry=>entry.done),...queued.map(entry=>entry.done)]);}
+ async stop(contactId?:string):Promise<void>{const preparations=[...this.sourcePreparations].filter(entry=>!contactId||entry.contactId===contactId);for(const entry of preparations)entry.controller.abort();const queued=[...this.queued.entries()].filter(([id])=>!contactId||id===contactId).map(([,entry])=>entry);for(const entry of queued)entry.controller.abort();const entries=[...this.active.entries()].filter(([id])=>!contactId||id===contactId).map(([,entry])=>entry);const guards=[...this.guards.entries()].filter(([id])=>!contactId||id===contactId).map(([,entry])=>entry);await Promise.all([...entries.map(entry=>entry.stop()),...guards.map(entry=>entry.release())]);await Promise.all([...entries.map(entry=>entry.done),...queued.map(entry=>entry.done),...preparations.map(entry=>entry.done)]);}
  async close():Promise<void>{this.closed=true;await this.stop();}
 }

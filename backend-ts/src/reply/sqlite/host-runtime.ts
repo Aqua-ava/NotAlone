@@ -19,6 +19,7 @@ import {SqliteDiscussionHttp} from './http.ts';
 export async function createSqliteDiscussionHost(options:{
  ctx:Context;storage:SqliteStorage;ownerId:string;userData:string;holders:ActiveHolders;
  authorizeRequest:(request:IncomingMessage)=>boolean;library?:SqliteSkillLibrary;
+ prepareSources?:(contactId:string,signal?:AbortSignal)=>Promise<void>;
  model?:{configuration:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter};
 }){
  const service=new SqliteDiscussionService(options.storage,options.ownerId);
@@ -30,7 +31,7 @@ export async function createSqliteDiscussionHost(options:{
   authorize:async()=>{if(stopping)throw new StorageFailure('discussion_runtime_closed');},
  }):undefined;
  const candidates=new SqliteReplyCandidateService(options.storage,options.ownerId);
- const candidateTurns=options.model?new SqliteReplyTurns({storage:options.storage,service:candidates,discussions:service,runtime,model:options.model.configuration,provider:options.model.provider,arbiter:options.model.arbiter,library:options.library,authorize:async()=>{if(stopping)throw new StorageFailure('reply_runtime_closed');}}):undefined;
+ const candidateTurns=options.model?new SqliteReplyTurns({storage:options.storage,service:candidates,discussions:service,runtime,model:options.model.configuration,provider:options.model.provider,arbiter:options.model.arbiter,library:options.library,prepareSources:options.prepareSources,authorize:async()=>{if(stopping)throw new StorageFailure('reply_runtime_closed');}}):undefined;
  const candidateHttp=new SqliteReplyCandidateHttp({storage:options.storage,service:candidates,turns:candidateTurns,authorize:options.authorizeRequest});
  const handler=new SqliteDiscussionHttp(service,options.authorizeRequest,turns),requests=new Set<Promise<boolean>>();
  const http={handle(request:IncomingMessage,response:ServerResponse):Promise<boolean>{
