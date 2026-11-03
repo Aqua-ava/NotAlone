@@ -14,6 +14,10 @@ export const hasMemoryContent=(tx:StorageTransaction):boolean=>!!tx.get("SELECT 
 export function currentContent(tx:StorageTransaction,ownerId:string,contactId:string,message:StorageRow):FrozenMemoryContent|null {
  return registry().snapshot(tx,{ownerId,contactId,message});
 }
+/** 调度与页面统计使用批量可用性，完整内容冻结仍沿原 snapshot 复验。 */
+export function currentContentAvailability(tx:StorageTransaction,ownerId:string,contactId:string,messages:readonly StorageRow[]):ReadonlySet<string> {
+ return registry().availability(tx,{ownerId,contactId,messages});
+}
 export function freezeContent(tx:StorageTransaction,ownerId:string,runId:string,inputNo:number,frozen:FrozenMemoryContent):void {
  if(!hasMemoryContent(tx))return;
  tx.run('INSERT INTO run_content_input VALUES(?,?,?,?,?,?,?)',[ownerId,runId,inputNo,frozen.pluginId,frozen.pluginVersion,frozen.kind,JSON.stringify(frozen.identity)]);

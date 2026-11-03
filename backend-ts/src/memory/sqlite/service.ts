@@ -2,6 +2,7 @@ import {createBuiltinMemoryContentRegistry} from '../content/builtins.ts';
 import type {MemoryContentRegistry,MemoryContentResources,FrozenMemoryContent} from '../content/registry.ts';
 import {assertMultimodalAdmission} from '../extraction/multimodal.ts';
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
+import type {MemoryScheduleSnapshot} from './scheduler.ts';
 import type {StorageRow} from '../../storage/sqlite/contracts.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import {ActiveHolders} from '../../storage/sqlite/deletion/holders.ts';
@@ -21,7 +22,7 @@ export interface ExtractionModelPort {
 }
 interface ClaimedStep {attemptId:string;stepId:string;taskId:string;runId:string;contactId:string;rows:StorageRow[];policyConfig:unknown;claim:ModelTaskClaim}
 export class SqliteMemoryExtraction {
- private afterRunSettled?:((runId:string)=>Promise<unknown>);
+ private afterRunSettled?:((runId:string,contactIds?:readonly string[])=>Promise<unknown>);
  private readonly ensureSourceReady?:((contactId:string)=>Promise<void>);
  private readonly content:{registry:MemoryContentRegistry;resources?:MemoryContentResources};
  private readonly afterStepSettled?:()=>Promise<void>;
@@ -31,7 +32,7 @@ export class SqliteMemoryExtraction {
  private turnTail:Promise<void>=Promise.resolve();
  private runs=new Map<string,Promise<void>>();private active=new Map<string,{abort:AbortController;done:Promise<void>}>();
  readonly accounting:ModelPermitAccounting;
- constructor(storage:SqliteStorage,ownerId:string,model:ExtractionModelPort,holders=new ActiveHolders(),afterRunSettled?:((runId:string)=>Promise<unknown>),ensureSourceReady?:((contactId:string)=>Promise<void>),afterStepSettled?:()=>Promise<void>,content?:{registry:MemoryContentRegistry;resources?:MemoryContentResources}){
+ constructor(storage:SqliteStorage,ownerId:string,model:ExtractionModelPort,holders=new ActiveHolders(),afterRunSettled?:((runId:string,contactIds?:readonly string[])=>Promise<unknown>),ensureSourceReady?:((contactId:string)=>Promise<void>),afterStepSettled?:()=>Promise<void>,content?:{registry:MemoryContentRegistry;resources?:MemoryContentResources}){
   this.content=content??{registry:createBuiltinMemoryContentRegistry()};
   this.storage=storage;this.ownerId=ownerId;this.model=model;this.holders=holders;this.afterRunSettled=afterRunSettled;this.ensureSourceReady=ensureSourceReady;this.afterStepSettled=afterStepSettled;
   this.accounting={reserve:async(receipt,claim)=>{await this.storage.execute(claim?.step_name==='extraction_verification'?'memoryExtraction.reserve':claim?.step_name==='document_scene'||claim?.step_name==='document_profile'?'memoryDocuments.reserve':'memoryAdjudication.reserve',{receipt,claim});},recordReserved:async receipt=>{await this.storage.execute('memoryExtraction.receipt',{receipt});},unconfirmedRequests:scope=>this.storage.execute('memoryExtraction.unconfirmed',scope)};
@@ -69,6 +70,9 @@ export class SqliteMemoryExtraction {
  nextDueAt(now=Date.now()):Promise<number|null>{this.available();return this.storage.execute('memoryExtraction.nextDueAt',{ownerId:this.ownerId,now});}
  /** 当前已满足阈值且安全门放行的联系人；实际建轮仍须在写事务内重新复验。 */
  dueContacts(now=Date.now()):Promise<string[]>{this.available();return this.storage.execute('memoryExtraction.dueContacts',{ownerId:this.ownerId,now});}
+ /** 调度只取有效联系人和有界摘要，不读取候选正文。 */
+ scheduleContacts():Promise<string[]>{return this.admit(()=>this.storage.execute('memoryExtraction.scheduleContacts',{ownerId:this.ownerId}));}
+ scanSchedule(now:number,contactIds:string[]):Promise<MemoryScheduleSnapshot>{return this.admit(()=>this.storage.execute('memoryExtraction.scanSchedule',{ownerId:this.ownerId,now,contactIds}));}
  /** 页面只读队列摘要；pending包含被同联系人阻碍而暂不能自动建轮的增量目标。 */
  readSchedule(now=Date.now()):Promise<{pending:number;nextDueAt:number|null;blockedContacts:number}>{this.available();return this.storage.execute('memoryExtraction.readSchedule',{ownerId:this.ownerId,now});}
  /** 内部按单联系人建立一个固定增量轮；此方法不暴露给HTTP。 */
@@ -146,13 +150,13 @@ export class SqliteMemoryExtraction {
   if(this.runs.has(runId)||this.stopped||!this.afterRunSettled)return false;
   const work=this.executeFollowup(runId).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});return true;
  }
- private async executeFollowup(runId:string,recovering=true):Promise<void>{
+ private async executeFollowup(runId:string,recovering=true,contactIds?:readonly string[]):Promise<void>{
   await this.turn(async()=>{
    if(this.stopped||!this.afterRunSettled)return;
    // 启动恢复必须整轮安全；本次正常收尾仍由各领域门禁隔离单联系人失败。
    const eligible=!recovering||await this.storage.execute<boolean>('memoryExtraction.followupEligible',{ownerId:this.ownerId,runId});
    if(!eligible||this.stopped)return;
-   try{await this.afterRunSettled(runId);}
+   try{await this.afterRunSettled(runId,contactIds);}
    finally{if(!this.stopped)await this.storage.execute('memoryExtraction.finishLater',{ownerId:this.ownerId,runId});}
   });
  }
@@ -211,7 +215,7 @@ export class SqliteMemoryExtraction {
   if(!this.stopped){
    // 后续文档阶段的暂停边界由09在领取动作内复验；提取层只保证不自动重试失败模型。
    await this.turn(async()=>{if(!this.stopped)await this.storage.execute('memoryExtraction.settleRun',{ownerId:this.ownerId,runId,laterWork:!!this.afterRunSettled});});
-   if(this.afterRunSettled&&!this.stopped)await this.executeFollowup(runId,false);
+   if(this.afterRunSettled&&!this.stopped)await this.executeFollowup(runId,false,before.tasks.filter((task:any)=>task.scopeKind==='contact').map((task:any)=>String(task.contactId)));
   }
  }
  private async process(batch:ClaimedStep,signal:AbortSignal){

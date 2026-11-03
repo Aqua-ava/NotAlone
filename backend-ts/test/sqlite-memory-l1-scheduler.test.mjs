@@ -45,7 +45,8 @@ test('只对首次增量来源计数；静默十分钟后进入联系人自己�
 
 test('增量页重见首次历史消息时仍不作为新的增量目标',async t=>{
  const {f,contactId,memory,at}=await incrementalFixture(t,{records:[record('1')]});
- assert.deepEqual(await memory.readSchedule(at+7*60*60_000),{pending:0,nextDueAt:null,blockedContacts:0});
+ // 历史内容仍在内容摘要中，不能因此成为新的增量目标。
+ assert.deepEqual(await memory.readSchedule(at+7*60*60_000),{pending:0,nextDueAt:null,blockedContacts:0,content:[{kind:'text',pending:1,unavailable:0}]});
  assert.deepEqual(await memory.dueContacts(at+7*60*60_000),[]);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

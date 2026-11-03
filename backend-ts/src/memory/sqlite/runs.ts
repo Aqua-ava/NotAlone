@@ -1,6 +1,6 @@
 import {currentContent,freezeContent,hasMemoryContent,readFrozenContent,installedMemoryContentKinds} from './content.ts';
 import {randomUUID} from 'node:crypto';
-import type {StorageAction,StorageTransaction,StorageRow} from '../../storage/sqlite/contracts.ts';
+import type {StorageAction,StorageTransaction,StorageRow,StorageLease} from '../../storage/sqlite/contracts.ts';
 import {assertContribution,assertInputs,assertTaskContributions,fail,inputRows,textId} from './qualification.ts';
 import {assertSourceEligibility} from '../../history/sqlite/source.ts';
 import {currentSourceScopeCTE,currentSourcePredicate} from '../../history/sqlite/current-scope.ts';
@@ -9,6 +9,7 @@ import {queueSummary as laterQueueSummary} from './documents/later-schedule.ts';
 import {projectControl} from './control.ts';
 import {backlogRecoveryActions,backlogRunRecoverable} from './backlog-recovery.ts';
 import {memoryIncrementalBaseline} from '../../storage/sqlite/message-order.ts';
+import {pendingMemoryInputStats,readScheduleInputRows,scheduleInputAvailability,withScheduleInputStats} from './schedule-inputs.ts';
 const number=(v:unknown):number=>{if(typeof v!=='bigint'||v<0n||v>BigInt(Number.MAX_SAFE_INTEGER))return fail('memory_extraction_count_invalid');return Number(v);};
 const minute=60_000,hour=60*minute,quietThreshold=10*minute,volumeThreshold=50,ageThreshold=6*hour,startCooldown=30*minute;
 const timeNumber=(v:unknown):number=>{if(typeof v!=='bigint'||v<0n||v>BigInt(Number.MAX_SAFE_INTEGER))return fail('memory_extraction_time_invalid');return Number(v);};
@@ -143,7 +144,9 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string,conta
 function currentMessageRows(tx:StorageTransaction,ownerId:string,contactId:string,includeUnavailable=false,pending?:'history'|'incremental'):StorageRow[]{
  const sourceOrder=acceptedCaptureOrder(tx),scopeCte=sourceScopeCTE(tx),quarantine=tableExists(tx,'history_message_quarantine')?`AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)`:'';
  // 固定首个来源在消息表之前，避免 SQLite 为每条消息重新全扫首个来源结果。
- const rows=tx.all(`WITH ${scopeCte},current_records AS MATERIALIZED (
+ const rows=tx.all(`WITH ${scopeCte},current_assigned_items AS MATERIALIZED (
+  SELECT DISTINCT item_id FROM run_input WHERE owner_id=? AND source_contact_id=? AND role='target' AND item_id IS NOT NULL
+ ),current_records AS MATERIALIZED (
   SELECT source.message_id,min(source.id) record_id FROM capture_record source
   JOIN sync_capture capture ON capture.owner_id=source.owner_id AND capture.id=source.capture_id
   JOIN read_goal g ON g.owner_id=capture.owner_id AND g.id=capture.goal_id
@@ -159,22 +162,18 @@ function currentMessageRows(tx:StorageTransaction,ownerId:string,contactId:strin
   SELECT message_id,first_goal_kind,first_captured_at FROM ranked_first_source WHERE position=1
  )
  SELECT m.*,r.record_id,p.id AS item_id,p.extraction_state,p.pipeline_state,f.first_goal_kind,f.first_captured_at,
-  CASE WHEN p.id IS NOT NULL AND EXISTS(SELECT 1 FROM run_input assigned WHERE assigned.owner_id=p.owner_id AND assigned.item_id=p.id AND assigned.role='target') THEN 1 ELSE 0 END AS target_assigned
+  CASE WHEN p.id IN (SELECT item_id FROM current_assigned_items) THEN 1 ELSE 0 END AS target_assigned
  FROM first_source f CROSS JOIN message m ON m.id=f.message_id JOIN current_records r ON r.message_id=m.id
  LEFT JOIN processing_item p ON p.owner_id=m.owner_id AND p.contact_id=m.contact_id AND p.message_id=m.id AND p.purpose='memory_extraction'
  WHERE m.owner_id=? AND m.contact_id=? AND m.availability='available'
   ${quarantine}
- ${pending?`AND (p.id IS NULL OR p.extraction_state='pending') AND NOT EXISTS(SELECT 1 FROM run_input assigned WHERE assigned.owner_id=p.owner_id AND assigned.item_id=p.id AND assigned.role='target') AND ${pending==='history'?"(f.first_goal_kind='history' OR m.display_no<="+memoryIncrementalBaseline(tx)+")":"f.first_goal_kind='incremental' AND m.display_no>"+memoryIncrementalBaseline(tx)}`:''}
- ORDER BY m.display_no`,[ownerId,contactId,contactId,ownerId,contactId,ownerId,contactId,ownerId,contactId]);
- return rows.filter(row=>(hasMemoryContent(tx)||row.kind==='text')&&installedMemoryContentKinds().includes(String(row.kind))&&(includeUnavailable||currentContent(tx,ownerId,contactId,row)!==null));
+ ${pending?`AND (p.id IS NULL OR p.extraction_state='pending') AND (p.id IS NULL OR p.id NOT IN (SELECT item_id FROM current_assigned_items)) AND ${pending==='history'?"(f.first_goal_kind='history' OR m.display_no<="+memoryIncrementalBaseline(tx)+")":"f.first_goal_kind='incremental' AND m.display_no>"+memoryIncrementalBaseline(tx)}`:''}
+ ORDER BY m.display_no`,[ownerId,contactId,contactId,ownerId,contactId,ownerId,contactId,ownerId,contactId,ownerId,contactId]);
+ const contentAvailable=hasMemoryContent(tx),kinds=installedMemoryContentKinds();
+ return rows.filter(row=>(contentAvailable||row.kind==='text')&&kinds.includes(String(row.kind))&&(includeUnavailable||currentContent(tx,ownerId,contactId,row)!==null));
 }
 function pendingIncrementalStats(tx:StorageTransaction,ownerId:string,contactId:string,history=false):{count:number;oldestAt:number|null;latestAt:number|null}{
- const baseline=memoryIncrementalBaseline(tx);
- const rows=currentMessageRows(tx,ownerId,contactId,false,history?'history':'incremental').filter(row=>(row.item_id===null||row.extraction_state==='pending')
-  && row.target_assigned!==1n && row.target_assigned!==1
-  && (history?row.first_goal_kind==='history'||(row.display_no as bigint)<=baseline:row.first_goal_kind==='incremental'&&(row.display_no as bigint)>baseline));
- const times=rows.map(row=>timeNumber(row.first_captured_at));
- return {count:rows.length,oldestAt:times.length?times.reduce((a,b)=>Math.min(a,b)):null,latestAt:times.length?times.reduce((a,b)=>Math.max(a,b)):null};
+ return pendingMemoryInputStats(tx,{ownerId,contactId,history,scopeCte:sourceScopeCTE(tx),sourceOrder:acceptedCaptureOrder(tx)});
 }
 // 仅持久撤销的授权或绑定退出当前进度门；临时来源守卫失证仍须正常恢复。
 const currentRunContactScope=`EXISTS(SELECT 1 FROM read_grant live_grant JOIN conversation_binding live_binding ON live_binding.owner_id=live_grant.owner_id AND live_binding.id=live_grant.binding_id
@@ -335,15 +334,21 @@ function queueStates(tx:StorageTransaction,ownerId:string,now:number,contactId?:
  return contacts.map(row=>{const state=contactQueueState(tx,ownerId,String(row.id));return {state,dueAt:triggerAt(state,now)};});
 }
 function scheduleSummary(tx:StorageTransaction,ownerId:string,now:number,contactId?:string){
- const states=queueStates(tx,ownerId,now,contactId),pending=states.reduce((sum,row)=>sum+row.state.pendingCount,0),due=states.map(row=>row.dueAt).filter((value):value is number=>value!==null);
  const counts=new Map<string,{kind:string;pending:number;unavailable:number}>();
- for(const contact of validContacts(tx,ownerId,contactId))for(const message of currentMessageRows(tx,ownerId,String(contact.id),true)){
-  if(message.kind!=='text'&&tx.get("SELECT 1 FROM message_media WHERE owner_id=? AND message_id=? AND state='cleared'",[ownerId,message.id]))continue;
-  const kind=String(message.kind),count=counts.get(kind)??{kind,pending:0,unavailable:0};
-  if(message.extraction_state==='succeeded'&&message.kind==='text'){counts.set(kind,count);continue;}
-  if(!currentContent(tx,ownerId,String(contact.id),message))count.unavailable++;else if(message.extraction_state!=='succeeded')count.pending++;
-  counts.set(kind,count);
+ for(const contact of validContacts(tx,ownerId,contactId)){
+  const id=String(contact.id),scope={ownerId,contactId:id,scopeCte:sourceScopeCTE(tx),sourceOrder:acceptedCaptureOrder(tx),pendingOnly:false};
+  const rows=readScheduleInputRows(tx,scope),available=scheduleInputAvailability(tx,scope);
+  const media=rows.filter(row=>row.kind!=='text');
+  const cleared=new Set(media.length?tx.all("SELECT message_id FROM message_media WHERE owner_id=? AND contact_id=? AND state='cleared' AND message_id IN (SELECT value FROM json_each(?))",[ownerId,id,JSON.stringify(media.map(row=>String(row.id)))]).map(row=>String(row.message_id)):[]);
+  for(const message of rows){
+   if(message.kind!=='text'&&cleared.has(String(message.id)))continue;
+   const kind=String(message.kind),count=counts.get(kind)??{kind,pending:0,unavailable:0};
+   if(message.extraction_state==='succeeded'&&message.kind==='text'){counts.set(kind,count);continue;}
+   if(!available.has(String(message.id)))count.unavailable++;else if(message.extraction_state!=='succeeded')count.pending++;
+   counts.set(kind,count);
+  }
  }
+ const states=queueStates(tx,ownerId,now,contactId),pending=states.reduce((sum,row)=>sum+row.state.pendingCount,0),due=states.map(row=>row.dueAt).filter((value):value is number=>value!==null);
  return {pending,nextDueAt:due.length?due.reduce((earliest,value)=>Math.min(earliest,value)):null,blockedContacts:states.filter(row=>row.state.pendingCount>0&&row.state.blocked).length,content:[...counts.values()]};
 }
 /** 历史终页落库后即可处理；旧边界之前的增量资料归入历史补齐。 */
@@ -411,7 +416,19 @@ function startRun(tx:StorageTransaction,raw:unknown,scheduled=false,history=fals
  if(contributing.length){const self=randomUUID();tx.run("INSERT INTO processing_task(owner_id,id,run_id,scope_kind,state) VALUES(?,?,?,'self','pending')",[ownerId,self,runId]);for(const c of contributing)tx.run('INSERT INTO task_contribution VALUES(?,?,?,?)',[ownerId,self,runId,c]);}
  tx.run("UPDATE processing_run SET state='pending' WHERE owner_id=? AND id=?",[ownerId,runId]);return snapshot(tx,ownerId,runId);
 }
-export const scheduleActions:StorageAction[]=[
+const schedulingActions:StorageAction[]=[
+ {name:'memoryExtraction.scheduleContacts',mode:'read',retryBusy:false,execute(tx,raw){
+  const ownerId=textId((raw as {ownerId:string}).ownerId);
+  return [...new Set(validContacts(tx,ownerId).map(row=>String(row.id)))];
+ }},
+ {name:'memoryExtraction.scanSchedule',mode:'read',retryBusy:false,execute(tx,raw){
+  const i=raw as {ownerId:string;now:number;contactIds:string[]},ownerId=textId(i.ownerId),now=checkedNow(i.now);
+  if(!Array.isArray(i.contactIds)||i.contactIds.length>32||i.contactIds.some(id=>typeof id!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)))fail('memory_extraction_input_invalid');
+  if(!i.contactIds.length)return {contacts:[]};
+  const wanted=new Set(i.contactIds),ids=[...new Set(validContacts(tx,ownerId).map(row=>String(row.id)))].filter(id=>wanted.has(id));
+  return {contacts:ids.map(contactId=>({contactId,incrementalDueAt:queueStates(tx,ownerId,now,contactId)[0]?.dueAt??null,
+   historyDue:historyQueueStates(tx,ownerId,contactId).some(row=>row.ready&&!row.blocked)}))};
+ }},
  {name:'memoryExtraction.dueHistoryContacts',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string};return historyQueueStates(tx,textId(i.ownerId)).filter(row=>row.ready&&!row.blocked).map(row=>row.contactId);}},
  {name:'memoryExtraction.nextHistoryDueAt',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;now:number};return historyQueueStates(tx,textId(i.ownerId)).some(row=>row.ready&&!row.blocked)?checkedNow(i.now):null;}},
  {name:'memoryExtraction.startHistoryBatch',mode:'write',retryBusy:true,execute:startHistoryBatch},
@@ -419,6 +436,8 @@ export const scheduleActions:StorageAction[]=[
  {name:'memoryExtraction.nextDueAt',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;now:number};const ownerId=textId(i.ownerId),now=checkedNow(i.now);let earliest:number|null=null;for(const row of queueStates(tx,ownerId,now)){if(row.dueAt!==null&&(earliest===null||row.dueAt<earliest))earliest=row.dueAt;}return earliest;}},
  {name:'memoryExtraction.readSchedule',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;now:number};return scheduleSummary(tx,textId(i.ownerId),checkedNow(i.now));}},
 ];
+export const scheduleActions:StorageAction[]=schedulingActions.map(action=>action.mode==='read'?{...action,
+ execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>withScheduleInputStats(tx,()=>action.execute(tx,input,lease))}:action);
 /** 联系人视图只读投影，不把全局最新轮次或本人资料混入当前联系人。 */
 function contactView(tx:StorageTransaction,raw:unknown){
  const input=raw as {ownerId:string;contactId:string},ownerId=textId(input.ownerId),contactId=textId(input.contactId);
@@ -432,7 +451,7 @@ function contactView(tx:StorageTransaction,raw:unknown){
   AND EXISTS(SELECT 1 FROM run_input i WHERE i.owner_id=r.owner_id AND i.run_id=r.id AND i.role='target' AND i.source_contact_id=?)
   ORDER BY r.started_at DESC,r.rowid DESC LIMIT 1`,[ownerId,contactId,contactId,contactId]);
  const now=Date.now();
- return {contactId,run:latest?snapshot(tx,ownerId,String(latest.id),contactId):null,queue:{...scheduleSummary(tx,ownerId,now,contactId),history:{pending:pendingIncrementalStats(tx,ownerId,contactId,true).count},later:laterQueueSummary(tx,ownerId,now,contactId)}};
+ return {contactId,run:latest?snapshot(tx,ownerId,String(latest.id),contactId):null,queue:withScheduleInputStats(tx,()=>({...scheduleSummary(tx,ownerId,now,contactId),history:{pending:pendingIncrementalStats(tx,ownerId,contactId,true).count},later:laterQueueSummary(tx,ownerId,now,contactId)}))};
 }
 /** 历史初始化是具名用户动作；新请求不能借新预算绕过未决调用、暂停或失败。 */
 function startHistory(tx:StorageTransaction,raw:unknown){
