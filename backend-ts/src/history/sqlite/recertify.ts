@@ -1,5 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
+import type {LegacyProofContext,LegacyTerminalProof} from './legacy-terminal-proof.ts';
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import {ActiveHolders} from '../../storage/sqlite/deletion/holders.ts';
 import type {HistoryClearChannelFactory,HistoryClearContactGateway} from './clear.ts';
@@ -34,9 +35,9 @@ export class SqliteHistoryRecertifyService {
  private readonly contacts:HistoryClearContactGateway;
  private readonly createChannel:HistoryClearChannelFactory;
  private readonly holders:ActiveHolders;
- private readonly options:{stopHistory?:(id:string)=>Promise<void>;onCompleted?:(id:string)=>void|Promise<void>;maxPages?:number};
+ private readonly options:{stopHistory?:(id:string)=>Promise<void>;onCompleted?:(id:string)=>void|Promise<void>;maxPages?:number;proveLegacyTerminals?:(context:LegacyProofContext,signal?:AbortSignal)=>Promise<LegacyTerminalProof>};
  constructor(storage:SqliteStorage,contacts:HistoryClearContactGateway,createChannel:HistoryClearChannelFactory,
-  holders:ActiveHolders=new ActiveHolders(),options:{stopHistory?:(id:string)=>Promise<void>;onCompleted?:(id:string)=>void|Promise<void>;maxPages?:number}={}) {
+  holders:ActiveHolders=new ActiveHolders(),options:{stopHistory?:(id:string)=>Promise<void>;onCompleted?:(id:string)=>void|Promise<void>;maxPages?:number;proveLegacyTerminals?:(context:LegacyProofContext,signal?:AbortSignal)=>Promise<LegacyTerminalProof>}={}) {
   this.storage=storage;this.contacts=contacts;this.createChannel=createChannel;this.holders=holders;this.options=options;
   this.initialized=storage.execute('history.recertifyInterruptStale',{ownerId:contacts.ownerId,at:Date.now()});
  }
@@ -117,6 +118,11 @@ export class SqliteHistoryRecertifyService {
    job.channel=this.createChannel();job.channelClose=undefined;
    const preview=await this.inspect(job.channel,oldScope,signal),previewTarget=await job.channel.target(oldScope,signal);
    await this.closeChannel(job);job.channel=undefined;job.channelClose=undefined;signal.throwIfAborted();
+   if(this.options.proveLegacyTerminals){
+    const candidates=await this.storage.execute<LegacyProofContext['candidates']>('history.recertifyLegacyCandidates',{token,id:job.id,target:previewTarget,report:preview});
+    if(candidates.length){const proof=await this.options.proveLegacyTerminals({token,report:preview,target:previewTarget,candidates},signal);
+     await this.contacts.validate(token);signal.throwIfAborted();await this.storage.execute('history.recertifyLegacyMapping',{token,id:job.id,target:previewTarget,report:preview,proof,at:Date.now()});}
+   }
    await this.storage.execute('history.recertifyRotate',{token,id:job.id,target:previewTarget,report:preview,bindingId:randomUUID(),verificationId:randomUUID(),grantId:randomUUID(),at:Date.now()});
    const current=await this.contacts.eligibility(job.contactId),scope=await this.storage.execute<HistoryScope>('history.scope',{token:current});
    signal.throwIfAborted();job.channel=this.createChannel();job.channelClose=undefined;const actual=job.channel,guardId=randomUUID();

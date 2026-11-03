@@ -284,3 +284,4 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 159. [ADR-159：前台联系人识别独立读取通道](adr/159-foreground-read-channel-isolation.md)（已采纳，实现与验收单独记录）
 
 160. [ADR-160：助手回看与 Skill 核验分离执行队列](adr/160-assistant-read-and-skill-worker-isolation.md)（已采纳，验证边界见记录）
+161. [ADR-161：旧读取器来源的有界抑制映射](adr/161-proved-legacy-source-suppression-mapping.md)（已采纳，验证边界见记录）

@@ -6,6 +6,8 @@ import type {HistorySupportReport,HistoryTarget} from './contracts.ts';
 import {assertRecertifyAccess} from './recertify-access.ts';
 import {assertHistoryReadBoundary} from './suppression.ts';
 import {normalUseContinuity} from './continuity.ts';
+import {completedLegacyPhysicalKeys} from './legacy-physical-suppression.ts';
+import {legacyRecallCandidates,legacyProofDigest,validateLegacyTerminalProof,type LegacyTerminalProof} from './legacy-terminal-proof.ts';
 
 const fail=(code:string):never=>{throw new StorageFailure(code);};
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>({name:`history.recertify${name}`,mode,retryBusy:true,execute});
@@ -35,22 +37,43 @@ function scopeReport(tx:StorageTransaction,token:ReadEligibility,report:HistoryS
  if(!row||row.account_key!==report.accountKey||row.conversation_key!==report.conversationKey||report.sourceGeneration!==token.source_generation)fail('history_recertify_source_changed');
 }
 /** 删除身份不能随绑定换代失效；无法映射的抑制使本次认证停下。 */
-function suppression(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,report:HistorySupportReport):{key:string;reason:string;generation:bigint}[] {
+function mappingProof(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,report:HistorySupportReport,op?:StorageRow):LegacyTerminalProof|undefined {
+ const audit=op?JSON.parse(String(op.old_fence_json)).legacy_terminal_mapping:undefined;if(!audit)return;
+ if(tx.get('SELECT 1 FROM history_source_exclusion WHERE owner_id=? AND conversation_id=? LIMIT 1',[token.owner_id,token.conversation_id])
+  ||tx.get('SELECT 1 FROM history_cutoff WHERE owner_id=? AND conversation_id=? LIMIT 1',[token.owner_id,token.conversation_id])
+  ||tx.get('SELECT 1 FROM history_deletion_fence WHERE owner_id=? AND contact_id=? LIMIT 1',[token.owner_id,token.contact_id])
+  ||tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' AND (scope_kind='account' OR contact_identity=?)",[token.owner_id,token.contact_id]))fail('history_recertify_legacy_proof_invalid');
+ const old=JSON.parse(String(op!.old_token_json)) as ReadEligibility;
+ if(!Array.isArray(audit.candidates)||audit.digest!==legacyProofDigest({proof:audit.proof,candidates:audit.candidates}))fail('history_recertify_legacy_proof_invalid');
+ validateLegacyTerminalProof({token:old,target,report,candidates:audit.candidates},audit.proof,Date.now(),false);return audit.proof;
+}
+function suppression(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,report:HistorySupportReport,op?:StorageRow):{key:string;reason:string;generation:bigint}[] {
  assertHistoryReadBoundary(tx,token,{kind:'history'});
+ const proof=mappingProof(tx,token,target,report,op);
  const valid=(key:unknown)=>{try{const k=JSON.parse(String(key));return Array.isArray(k)&&k.length===4&&k[0]===token.source_generation&&typeof k[3]==='string'&&target.tables.some(t=>t.partition===k[1]&&t.instance===k[2]);}catch{return false;}};
- for(const r of tx.all('SELECT scheme,external_key FROM history_source_exclusion WHERE owner_id=? AND conversation_id=?',[token.owner_id,token.conversation_id]))
-  if(r.scheme==='local'?!valid(r.external_key):r.scheme!=='server'||report.serverAliasSemantics!=='verified_within_scope')fail('history_recertify_suppression_unmapped');
- for(const r of tx.all(`SELECT m.external_key FROM history_cutoff_member m JOIN history_cutoff c ON c.owner_id=m.owner_id AND c.conversation_id=m.conversation_id AND c.barrier_generation=m.barrier_generation WHERE m.owner_id=? AND m.conversation_id=? AND c.state='verified'`,[token.owner_id,token.conversation_id]))if(!valid(r.external_key))fail('history_recertify_suppression_unmapped');
+ const mappedExclusions:{external_key:string;reason:string;accepted_data_generation:bigint}[]=[];
+ const normalize=(key:unknown,terminalReason?:string):string=>{
+  const original=String(key);if(valid(original))return original;
+  return completedLegacyPhysicalKeys(tx,{ownerId:token.owner_id,contactId:token.contact_id,conversationId:token.conversation_id,key:original,target,report,...(terminalReason?{terminalReason}:{})}).find(valid)??original;
+ };
+ const exclude=(key:unknown)=>{const mapped=normalize(key);if(!valid(mapped))fail('history_recertify_suppression_unmapped');
+  if(mapped!==key)mappedExclusions.push({external_key:mapped,reason:'source_absent',accepted_data_generation:BigInt(token.data_generation)});
+ };
+ for(const r of tx.all('SELECT scheme,external_key FROM history_source_exclusion WHERE owner_id=? AND conversation_id=?',[token.owner_id,token.conversation_id])){
+  if(r.scheme==='local')exclude(r.external_key);else if(r.scheme!=='server'||report.serverAliasSemantics!=='verified_within_scope')fail('history_recertify_suppression_unmapped');
+ }
+ for(const r of tx.all(`SELECT m.external_key FROM history_cutoff_member m JOIN history_cutoff c ON c.owner_id=m.owner_id AND c.conversation_id=m.conversation_id AND c.barrier_generation=m.barrier_generation WHERE m.owner_id=? AND m.conversation_id=? AND c.state='verified'`,[token.owner_id,token.conversation_id]))exclude(r.external_key);
  const terminals=tx.all(`SELECT t.external_key,t.reason,t.accepted_data_generation FROM history_source_terminal t JOIN conversation_binding b ON b.owner_id=t.owner_id AND b.id=t.binding_id WHERE t.owner_id=? AND t.contact_id=? AND b.conversation_id=?`,[token.owner_id,token.contact_id,token.conversation_id]);
  // 兼容只有来源终态或旧隔离审计的历史记录，不从正文或时间推断对象。
- terminals.push(...tx.all(`SELECT DISTINCT r.observed_key external_key,CASE WHEN r.reason_code='metadata_only' THEN 'source_system_replaced' ELSE r.reason_code END reason,g.accepted_data_generation FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id WHERE r.owner_id=? AND r.contact_id=? AND b.conversation_id=? AND ((r.state='excluded' AND r.reason_code IN ('source_recalled','source_system_replaced')) OR (r.state='quarantined' AND r.reason_code='metadata_only' AND json_extract(r.raw_payload,'$.originalType')='10000'))`,[token.owner_id,token.contact_id,token.conversation_id]));
+ terminals.push(...tx.all(`SELECT DISTINCT r.observed_scheme,r.observed_key external_key,CASE WHEN r.reason_code='metadata_only' THEN 'source_system_replaced' ELSE r.reason_code END reason,g.accepted_data_generation FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id WHERE r.owner_id=? AND r.contact_id=? AND b.conversation_id=? AND ((r.state='excluded' AND r.reason_code IN ('source_recalled','source_system_replaced')) OR (r.state='quarantined' AND r.reason_code='metadata_only' AND json_extract(r.raw_payload,'$.originalType')='10000'))`,[token.owner_id,token.contact_id,token.conversation_id]));
  terminals.push(...tx.all(`SELECT a.external_key,q.reason,min(g.accepted_data_generation) accepted_data_generation FROM history_message_quarantine q JOIN message_alias a ON a.owner_id=q.owner_id AND a.contact_id=q.contact_id AND a.message_id=q.message_id AND a.scheme='local' JOIN conversation_binding b ON b.owner_id=a.owner_id AND b.id=a.binding_id JOIN read_goal g ON g.owner_id=b.owner_id AND g.binding_id=b.id WHERE q.owner_id=? AND q.contact_id=? AND b.conversation_id=? AND q.reason IN ('source_recalled','source_system_replaced') GROUP BY a.external_key,q.reason`,[token.owner_id,token.contact_id,token.conversation_id]));
+ terminals.push(...mappedExclusions);
  const result=new Map<string,{key:string;reason:string;generation:bigint}>();
- for(const r of terminals){if(!valid(r.external_key))fail('history_recertify_suppression_unmapped');
+ for(const r of terminals){if(r.observed_scheme!==undefined&&r.observed_scheme!=='source-table-local-v1')fail('history_recertify_suppression_unmapped');const mapped=proof?.keys.find(k=>k.from===r.external_key&&k.reason===r.reason)?.to??normalize(r.external_key,String(r.reason));if(!valid(mapped))fail('history_recertify_suppression_unmapped');
   if(r.reason!=='source_absent'&&tx.get(`SELECT 1 FROM message_alias l JOIN message_alias s ON s.owner_id=l.owner_id AND s.contact_id=l.contact_id AND s.message_id=l.message_id AND s.scheme='server' JOIN conversation_binding b ON b.owner_id=l.owner_id AND b.id=l.binding_id WHERE l.owner_id=? AND l.contact_id=? AND b.conversation_id=? AND l.scheme='local' AND l.external_key=? LIMIT 1`,[token.owner_id,token.contact_id,token.conversation_id,r.external_key]))fail('history_recertify_terminal_alias_unmapped');
   if(r.reason!=='source_absent')for(const prior of tx.all(`SELECT json_extract(r.raw_payload,'$.serverId') server_id FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id WHERE r.owner_id=? AND r.contact_id=? AND b.conversation_id=? AND r.observed_key=? AND r.raw_payload IS NOT NULL`,[token.owner_id,token.contact_id,token.conversation_id,r.external_key]))
    if(typeof prior.server_id==='string'&&/^[1-9][0-9]{0,19}$/.test(prior.server_id)&&BigInt(prior.server_id)<=18446744073709551615n)fail('history_recertify_terminal_alias_unmapped');
-  const key=String(r.external_key),prior=result.get(key),reason=String(r.reason);if(!prior||prior.reason==='source_absent')result.set(key,{key,reason,generation:BigInt(String(r.accepted_data_generation))});}
+  const key=String(mapped),prior=result.get(key),reason=String(r.reason);if(!prior||prior.reason==='source_absent')result.set(key,{key,reason,generation:BigInt(String(r.accepted_data_generation))});}
  return [...result.values()];
 }
 function view(tx:StorageTransaction,contactId:string,op?:StorageRow) {
@@ -60,6 +83,21 @@ function view(tx:StorageTransaction,contactId:string,op?:StorageRow) {
  return {contact_id:contactId,request_key:op?String(op.request_key):null,state:op?String(op.state):'none',stage:op?String(op.stage):'none',completed:op?.state==='completed',failure_code:op?.failure_code??null,message_count:Number(counts?.texts??0),non_text_count:Number(counts?.media??0),page_count:Number(pages?.n??0),preserved_message_count:Number(op?.preserved_message_count??0),started_at:op?Number(op.started_at):null,finished_at:op?.finished_at===null||!op?null:Number(op.finished_at),goalState:goal?.state??null,goalFailure:goal?.failure_code??null,id:op?.id??null,new_binding_id:op?.new_binding_id??null};
 }
 export const historyRecertifyActions:StorageAction[]=[
+ action('LegacyCandidates','read',(tx,i:any)=>{
+  assertReadEligibility(tx,i.token);const op=pending(tx,{ownerId:i.token.owner_id,id:i.id});if(op.stage!=='metadata'||op.old_token_json!==json(i.token))fail('history_recertify_stale');
+  const candidates=legacyRecallCandidates(tx,i.token);
+  if(candidates.length&&candidates.every(c=>completedLegacyPhysicalKeys(tx,{ownerId:i.token.owner_id,contactId:i.token.contact_id,conversationId:i.token.conversation_id,key:c.key,terminalReason:'source_recalled',target:i.target,report:i.report}).some(key=>JSON.parse(key)[0]===i.token.source_generation)))return [];
+  return candidates;
+ }),
+ action('LegacyMapping','write',(tx,i:any)=>{
+  assertReadEligibility(tx,i.token);const op=pending(tx,{ownerId:i.token.owner_id,id:i.id});
+  if(op.stage!=='metadata'||op.old_token_json!==json(i.token)||op.new_binding_id!==null)fail('history_recertify_stale');
+  const candidates=legacyRecallCandidates(tx,i.token);validateLegacyTerminalProof({token:i.token,target:i.target,report:i.report,candidates},i.proof,i.at);
+  const archived=JSON.parse(String(op.old_fence_json));if(archived.legacy_terminal_mapping)fail('history_recertify_stale');
+  archived.legacy_terminal_mapping={digest:legacyProofDigest({proof:i.proof,candidates}),proof:i.proof,candidates};
+  mappingProof(tx,i.token,i.target,i.report,{...op,old_fence_json:json(archived)});
+  tx.run('UPDATE history_source_recertification SET old_fence_json=?,updated_at=? WHERE owner_id=? AND id=?',[json(archived),i.at,i.token.owner_id,i.id]);return true;
+ }),
  action('InterruptStale','write',(tx,i:any)=>{tx.run("UPDATE history_source_recertification SET state='interrupted',guard_state='lost',failure_code=CASE WHEN EXISTS(SELECT 1 FROM history_source_recertification_cancel c WHERE c.owner_id=history_source_recertification.owner_id AND c.request_key=history_source_recertification.request_key) THEN 'history_recertify_cancelled' ELSE coalesce(failure_code,'history_recertify_interrupted') END,updated_at=?,finished_at=? WHERE owner_id=? AND state='running' AND runtime_id<>?",[i.at,i.at,i.ownerId,runtime(tx)]);return true;}),
  action('Status','read',(tx,i:any)=>{
   const op=i.requestKey?tx.get('SELECT * FROM history_source_recertification WHERE owner_id=? AND request_key=?',[i.ownerId,i.requestKey]):tx.get("SELECT * FROM history_source_recertification WHERE owner_id=? AND contact_id=? ORDER BY (state='running') DESC,started_at DESC,rowid DESC LIMIT 1",[i.ownerId,i.contactId]);
@@ -108,7 +146,7 @@ export const historyRecertifyActions:StorageAction[]=[
    }
   }
   else if(Number(op.preserved_message_count)>0||tx.get('SELECT 1 FROM capture_record WHERE owner_id=? AND contact_id=? LIMIT 1',[token.owner_id,token.contact_id]))fail('history_recertify_source_unverified');
-  const terminals=suppression(tx,token,target,report);
+  const terminals=suppression(tx,token,target,report,op);
   const b=tx.get('SELECT * FROM conversation_binding WHERE owner_id=? AND id=? AND state=\'verified\'',[token.owner_id,token.binding_id])??fail('history_recertify_stale');
   tx.run("UPDATE read_grant SET revoked_at=?,reason='explicit_source_recertification' WHERE owner_id=? AND id=? AND revoked_at IS NULL",[i.at,token.owner_id,token.grant_id]);
   tx.run("UPDATE conversation_binding SET state='revoked' WHERE owner_id=? AND id=?",[token.owner_id,token.binding_id]);
@@ -126,14 +164,14 @@ export const historyRecertifyActions:StorageAction[]=[
   if(op.new_binding_id!==token.binding_id||op.new_grant_id!==token.grant_id||op.token_json!==json(token)||op.stage!=='metadata')fail('history_recertify_stale');
   scopeReport(tx,token,i.report);
   if(!exactPreviewPhysical(JSON.parse(String(op.target_json)),i.target)||json(i.report)!==op.support_json)fail('history_recertify_source_changed');
-  suppression(tx,token,i.target,i.report);
+  suppression(tx,token,i.target,i.report,op);
   tx.run("UPDATE history_source_recertification SET stage='history',token_json=?,target_json=?,guard_id=?,guard_state='active',updated_at=? WHERE owner_id=? AND id=?",[json(token),json(i.target),i.guardId,i.at,token.owner_id,i.id]);return true;
  }),
  action('Attach','write',(tx,i:any)=>{const op=assertRecertifyAccess(tx,i.token,i.id,i.guardId);const g=tx.get('SELECT * FROM read_goal WHERE owner_id=? AND id=?',[i.token.owner_id,i.goalId]);if(!g||g.eligibility_json!==op.token_json)fail('history_recertify_stale');tx.run('UPDATE history_source_recertification SET goal_id=?,updated_at=? WHERE owner_id=? AND id=?',[i.goalId,i.at,i.token.owner_id,i.id]);return true;}),
  action('Activate','write',(tx,i:any)=>{
   const token=i.token as ReadEligibility,op=assertRecertifyAccess(tx,token,i.id,i.guardId,i.target);assertHistoryReadBoundary(tx,token,{kind:'history'});
   const goal=tx.get("SELECT * FROM read_goal WHERE owner_id=? AND id=? AND state='complete' AND eligibility_json=?",[token.owner_id,op.goal_id,op.token_json])??fail('history_recertify_incomplete');
-  const target=JSON.parse(String(op.target_json)) as HistoryTarget,report=JSON.parse(String(op.support_json));suppression(tx,token,target,report);
+  const target=JSON.parse(String(op.target_json)) as HistoryTarget,report=JSON.parse(String(op.support_json));suppression(tx,token,target,report,op);
   const fence=tx.get('SELECT * FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id])!;
   const archived=JSON.parse(String(op.old_fence_json));if(fence.reason!==archived.reason)fail('history_recertify_stale');
   const scope=json({accountKey:report.accountKey,partitions:[...target.partitions].sort(),tables:target.tables.map(t=>[t.partition,t.instance]).sort((a,b)=>json(a).localeCompare(json(b))),...(target.checkedPartitions?{checkedPartitions:[...target.checkedPartitions].sort()}:{} )});

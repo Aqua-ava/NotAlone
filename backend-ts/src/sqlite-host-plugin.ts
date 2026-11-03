@@ -1,5 +1,6 @@
 import {resolveBackgroundProcessingMode,resolveImageProcessingMode} from './host/sqlite-model-config.ts';
 import {SqliteHistoryRecertifyService} from './history/sqlite/recertify.ts';
+import {loadHostLegacyProofProvider} from './history/sqlite/legacy-terminal-maintenance.ts';
 import {SqliteMemoryManagement} from './memory/sqlite/management/service.ts';
 import {SqliteMemoryManagementHttp,memoryManagementQueryAllowed} from './memory/sqlite/management/http.ts';
 import {createSqliteModelRuntime} from './host/sqlite-model-runtime.ts';
@@ -194,7 +195,10 @@ export async function apply(ctx: Context) {
     const deletionService = new DeletionService(storage, deletionHolders, new ManagedFiles(sqlite.userData),{reader:assistantReads});
     if(history){historyClear=new SqliteHistoryClearService(storage,contacts,createHistoryChannel,deletionService,deletionHolders);
       historyResync=new SqliteHistoryResyncService(storage,contacts,createHistoryChannel,deletionHolders);}
-    if(history)historyRecertify=new SqliteHistoryRecertifyService(storage,contacts,createHistoryChannel,deletionHolders,{stopHistory:id=>history!.stop(id),onCompleted:id=>{if(automaticBackground)firstHistory?.wakeContact(id);}});
+    if(history){
+      const proveLegacyTerminals=sqlite.wechatCliPath?await loadHostLegacyProofProvider({userData:sqlite.userData,databaseId:sqlite.expectedDatabaseId,currentExecutable:sqlite.wechatCliPath}):undefined;
+      historyRecertify=new SqliteHistoryRecertifyService(storage,contacts,createHistoryChannel,deletionHolders,{stopHistory:id=>history!.stop(id),onCompleted:id=>{if(automaticBackground)firstHistory?.wakeContact(id);},proveLegacyTerminals});
+    }
     const historyClearHttp=historyClear&&historyResync?new SqliteHistoryClearHttp(historyClear,historyResync,historyRecertify):undefined;
     // 图片同步装配来源可验证的图片入口；其他媒体沿已认证能力开放。
     const originalImages=history&&await supportsWechatOriginalImages(sqlite.wechatCliPath);
