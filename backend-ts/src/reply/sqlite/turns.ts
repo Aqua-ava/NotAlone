@@ -52,7 +52,7 @@ export class SqliteDiscussionTurns {
   if(accepted.replayed)return {replayed:true,discussionId:attempt.discussionId,segmented:false};
   try{
   const callId=randomUUID(),contextId=randomUUID();
-  const catalog=this.library?await this.library.refresh():await this.storage.execute<any[]>('skills.list',{ownerId});
+  const catalog=this.library?await this.library.refresh(input.signal):await this.storage.execute<any[]>('skills.list',{ownerId});
   const eligible=catalog.filter(p=>p.enabledState==='enabled'&&p.verificationState==='verified'&&p.currentRevisionNo!==null&&(!input.selectedPackageId||p.id===input.selectedPackageId));
   if(input.selectedPackageId&&!eligible.some(p=>p.id===input.selectedPackageId))throw new StorageFailure('discussion_skill_unavailable');
   const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:this.library?eligible.map(skillAnchor):[]};

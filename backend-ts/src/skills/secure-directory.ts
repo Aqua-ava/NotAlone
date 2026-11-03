@@ -18,10 +18,11 @@ export class SecureSkillDirectory {
   readonly root: string;
   private readonly rootIdentity: Identity;
   private readonly readerBinary: string;
-  constructor(root:string,readerBinary=binary) {
+  constructor(root:string,readerBinary=binary,expectedRootIdentity?:readonly[string,string]) {
     this.readerBinary=readerBinary;
     this.root=canonicalRoot(root);
     this.rootIdentity=identity(this.invoke('root','',undefined).identity);
+    if(expectedRootIdentity&&JSON.stringify(this.rootIdentity)!==JSON.stringify(identity(expectedRootIdentity)))throw new SecureSkillReadError('skill_directory_conflict');
   }
   names(): string[] {
     const value=this.invoke('list','');

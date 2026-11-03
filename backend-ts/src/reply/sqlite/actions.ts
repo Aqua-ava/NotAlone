@@ -1,11 +1,12 @@
 import {hasCurrentReplyDependencies} from './provenance.ts';
+import {createHash} from 'node:crypto';
 import {currentSourceScopeCTE,currentSourcePredicate} from '../../history/sqlite/current-scope.ts';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {Discussion,DiscussionScope,RuntimeCopy} from './contracts.ts';
 const fail=(code:string):never=>{throw new StorageFailure(code);};
 export const identifier=(value:unknown):string=>typeof value==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(value)?value:fail('discussion_input_invalid');
-export function requireDiscussionContact(tx:StorageTransaction,ownerId:string,contactId:string):StorageRow {
- const c=tx.get("SELECT c.* FROM contact c JOIN owner o ON o.owner_id=c.owner_id WHERE c.owner_id=? AND c.id=? AND c.state='active' AND o.state='active'",[identifier(ownerId),identifier(contactId)])??fail('discussion_unavailable');
+export function requireDiscussionContact(tx:StorageTransaction,ownerId:string,contactId:string,unavailableCode='discussion_unavailable'):StorageRow {
+ const c=tx.get("SELECT c.* FROM contact c JOIN owner o ON o.owner_id=c.owner_id WHERE c.owner_id=? AND c.id=? AND c.state='active' AND o.state='active'",[identifier(ownerId),identifier(contactId)])??fail(unavailableCode);
  if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' AND (scope_kind='account' OR (contact_identity=? AND scope_kind IN ('contact','contact_history')))",[ownerId,contactId]))fail('discussion_deletion_pending');
  return c;
 }
@@ -32,6 +33,16 @@ export function selectDiscussionForRequest(tx:StorageTransaction,i:any):{row:Sto
  return {row:requireDiscussion(tx,{...i,discussionId:String(row.id)}),segmented};
 }
 export const discussionActions:StorageAction[]=[
+ action('readBoundary','read',(tx,i)=>{
+  const contact=requireDiscussionContact(tx,i.ownerId,i.contactId,'assistant_read_scope_unavailable'),discussion=i.discussionId===undefined?undefined:requireDiscussion(tx,i);
+  const owner=tx.get('SELECT read_epoch,memory_revision,preference_revision,skill_revision,document_revision,feedback_revision,current_publication_id FROM owner WHERE owner_id=?',[i.ownerId]);
+  const revision={owner,contact:{selection:contact.selection_generation,data:contact.data_generation,source:contact.source_revision,memory:contact.memory_revision,document:contact.document_revision,feedback:contact.feedback_revision,publication:contact.current_publication_id},
+   discussion:discussion?{generation:discussion.generation,runtime:discussion.current_runtime_id}:null,
+   continuity:tx.get('SELECT conversation_id,source_generation,tables_json FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId])??null,
+   fence:tx.get('SELECT reason FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId])??null,
+   guard:tx.get('SELECT binding_id,conversation_id,source_generation,guard_id,runtime_id,state FROM history_guard_lease WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId])??null};
+  return {generation:contact.data_generation,revision:createHash('sha256').update(JSON.stringify(revision,(_key,value)=>typeof value==='bigint'?String(value):value)).digest('hex')};
+ }),
  action('metadata','read',(tx,i)=>discussionView(requireDiscussion(tx,i))),
  action('list','read',(tx,i)=>{requireDiscussionContact(tx,i.ownerId,i.contactId);const rows=tx.all("SELECT * FROM assistant_discussion WHERE owner_id=? AND contact_id=? AND state='active' ORDER BY created_at DESC,id",[i.ownerId,i.contactId]);return {currentDiscussionId:rows.find(r=>r.is_current===1n)?.id??null,discussions:rows.map(discussionView)};}),
  action('view','read',(tx,i)=>{

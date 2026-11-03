@@ -10,7 +10,9 @@ SQLite 是当前默认业务存储。正式装配使用 `sqlite-host-plugin.ts`�
 
 每个句柄仅拥有一个 Worker、一条连接。`execute(name,input,lease=status)` 通过消息串行调用；`check()` 分别执行 `integrity_check` 和 `foreign_key_check`；`close()` 排空此前请求并关闭连接。Worker 退出、错误或超时后全部未决请求失败，不自动重开、不自动重放，业务须核对幂等记录再人工继续。
 
-按 [ADR-159](../../../../architecture/adr/159-foreground-read-channel-isolation.md)，`openReader(actionNames)` 创建独立 Worker 的只读附属句柄，只接受可信装配声明且注册为 `read` 的具名动作。它沿用主句柄租约，不执行初始化、迁移或运行身份更新；每次短读结束后在事务外复验租约。主句柄故障、关闭或重开撤销旧读者。前台只声明 `identity.foregroundSnapshot`，由联系人元数据持有者负责删除排空及关闭，不与后台长查询共享执行队列。
+按 [ADR-159](../../../../architecture/adr/159-foreground-read-channel-isolation.md)，`openReader(actionNames)` 创建独立 Worker 的只读附属句柄，只接受可信装配声明且注册为 `read` 的具名动作。它沿用主句柄租约，不执行初始化、迁移或运行身份更新；每次短读结束后在事务外复验租约。主句柄故障、关闭或重开撤销旧读者。前台只声明 `identity.foregroundSnapshot`，由联系人元数据持有者负责删除排空及关闭，不与后台长查询共享执行队列。按 [ADR-160](../../../../architecture/adr/160-assistant-read-and-skill-worker-isolation.md)，助手目录、正文及候选回看使用另一附属读者，短读前后复核业务范围并参与删除排空；生成及最终提交继续使用主写者。
+
+`timingDiagnostic` 提供未决／排队数量、当前动作及最近 60 秒最慢的至多 3 项摘要；内部至多保留 64 项。排队时间取主线程投递至 Worker 实际开始，执行时间取 Worker 开始至完成，保持原执行超时预算。摘要仅含具名动作、毫秒和成功状态，不记录输入或 SQL；通过现有运行状态接口返回，不增设读取资料或执行动作的入口。
 
 ## 02 / 05 / 14 的扩展位置
 

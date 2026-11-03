@@ -73,7 +73,7 @@ export class SqliteReplyTurns {
   o.service.phase(input.contactId,attempt.discussionId,input.requestKey,'preparing');
   try{
    const callId=randomUUID(),contextId=randomUUID();
-   const catalog=o.library?await o.library.refresh():await o.storage.execute<any[]>('skills.list',{ownerId});
+   const catalog=o.library?await o.library.refresh(input.signal):await o.storage.execute<any[]>('skills.list',{ownerId});
    const eligible=catalog.filter(p=>p.enabledState==='enabled'&&p.verificationState==='verified'&&p.currentRevisionNo!==null&&(!input.selectedPackageId||p.id===input.selectedPackageId));
    if(input.selectedPackageId&&!eligible.some(p=>p.id===input.selectedPackageId))throw new StorageFailure('discussion_skill_unavailable');
    const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:o.library?eligible.map(skillAnchor):[]};

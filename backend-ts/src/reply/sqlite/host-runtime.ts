@@ -9,7 +9,7 @@ import type {SqliteSkillLibrary} from '../../skills/sqlite/library.ts';
 import type {HostReplyModelConfiguration} from '../../host/host-reply-config.ts';
 import type {installModelProvider} from '../../platform/models/model-provider.ts';
 import type {ModelPermitArbiter} from '../../platform/models/model-permits.ts';
-import {StorageFailure} from '../../storage/sqlite/contracts.ts';
+import {StorageFailure,type StorageReader} from '../../storage/sqlite/contracts.ts';
 import {SqliteDiscussionService} from './service.ts';
 import {SqliteDiscussionRuntime} from './runtime.ts';
 import {SqliteDiscussionTurns} from './turns.ts';
@@ -18,11 +18,12 @@ import {SqliteDiscussionHttp} from './http.ts';
 /** 宿主唯一装配点共享模型提供者与许可；讨论只拥有自己的官方运行副本。 */
 export async function createSqliteDiscussionHost(options:{
  ctx:Context;storage:SqliteStorage;ownerId:string;userData:string;holders:ActiveHolders;
+ reader?:StorageReader;
  authorizeRequest:(request:IncomingMessage)=>boolean;library?:SqliteSkillLibrary;
  prepareSources?:(contactId:string,signal?:AbortSignal)=>Promise<void>;
  model?:{configuration:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter};
 }){
- const service=new SqliteDiscussionService(options.storage,options.ownerId);
+ const service=new SqliteDiscussionService(options.storage,options.ownerId,Date.now,options.reader);
  const runtime=new SqliteDiscussionRuntime(options);
  try{await options.storage.execute('discussion.recover',{ownerId:options.ownerId});await runtime.initialize();}catch(error){await runtime.close().catch(()=>{});throw error;}
  let stopping=false,closing:Promise<void>|undefined;
@@ -30,7 +31,7 @@ export async function createSqliteDiscussionHost(options:{
   model:options.model.configuration,provider:options.model.provider,arbiter:options.model.arbiter,library:options.library,
   authorize:async()=>{if(stopping)throw new StorageFailure('discussion_runtime_closed');},
  }):undefined;
- const candidates=new SqliteReplyCandidateService(options.storage,options.ownerId);
+ const candidates=new SqliteReplyCandidateService(options.storage,options.ownerId,options.reader);
  const candidateTurns=options.model?new SqliteReplyTurns({storage:options.storage,service:candidates,discussions:service,runtime,model:options.model.configuration,provider:options.model.provider,arbiter:options.model.arbiter,library:options.library,prepareSources:options.prepareSources,authorize:async()=>{if(stopping)throw new StorageFailure('reply_runtime_closed');}}):undefined;
  const candidateHttp=new SqliteReplyCandidateHttp({storage:options.storage,service:candidates,turns:candidateTurns,authorize:options.authorizeRequest});
  const handler=new SqliteDiscussionHttp(service,options.authorizeRequest,turns),requests=new Set<Promise<boolean>>();
@@ -41,7 +42,7 @@ export async function createSqliteDiscussionHost(options:{
  return {service,runtime,turns,candidates,candidateTurns,http,
   close():Promise<void>{
    stopping=true;
-   return closing??=(async()=>{await Promise.all([turns?.close(),candidateTurns?.close()]);await runtime.close();await Promise.allSettled([...requests]);})().catch(error=>{closing=undefined;throw error;});
+   return closing??=(async()=>{await options.reader?.close();await Promise.all([turns?.close(),candidateTurns?.close()]);await runtime.close();await Promise.allSettled([...requests]);})().catch(error=>{closing=undefined;throw error;});
   },
  };
 }

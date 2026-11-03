@@ -14,18 +14,38 @@ export interface StorageFailureDiagnostic {
   queuedCount: number;
 }
 
+export interface StorageActionTiming {
+  action: string;
+  queuedMs: number;
+  executionMs: number;
+  totalMs: number;
+  ok: boolean;
+}
+const monotonicMs=()=>Number(process.hrtime.bigint())/1e6;
+const milliseconds=(value:number)=>Math.round(Math.max(0,value)*1000)/1000;
+const actionName=(value:string)=>/^[a-z][a-zA-Z0-9]*\.[a-zA-Z][a-zA-Z0-9]{0,95}$/.test(value)&&value.length<=128?value:'invalid_action';
+
 export class SqliteStorage {
   readonly status: StorageStatus;
   private nextId = 0;
   private failed = false;
   private closing?: Promise<void>;
   private diagnostic: Readonly<StorageFailureDiagnostic> | null = null;
-  private readonly pending = new Map<number, { name: string; started: boolean; resolve: (value: any) => void; reject: (error: Error) => void; timer?: NodeJS.Timeout }>();
+  private readonly pending = new Map<number, { name: string; started: boolean; enqueuedAt:number; startedAt?:number; resolve: (value: any) => void; reject: (error: Error) => void; timer?: NodeJS.Timeout }>();
+  private readonly timings:(StorageActionTiming&{finishedAt:number})[]=[];
   private readonly worker: Worker;
   private readonly readers=new Set<SqliteReadonlyReader>();
   private readonly files:ReturnType<typeof controlledFiles>;
   private readonly options:OpenStorageOptions;
   get failureDiagnostic(): Readonly<StorageFailureDiagnostic> | null { return this.diagnostic; }
+  get timingDiagnostic(): {pendingCount:number;queuedCount:number;active:{action:string;executionMs:number}|null;recent:StorageActionTiming[]} {
+    const now=monotonicMs(),pending=[...this.pending.values()],active=pending.find(row=>row.started);
+    // 只保留动作名称与时间；既不收集输入，也不扩大状态接口的运输预算。
+    return {pendingCount:pending.length,queuedCount:pending.filter(row=>!row.started).length,
+      active:active?{action:actionName(active.name),executionMs:milliseconds(now-(active.startedAt??now))}:null,
+      recent:this.timings.filter(row=>now-row.finishedAt<=60_000).sort((a,b)=>b.totalMs-a.totalMs).slice(0,3)
+        .map(({finishedAt:_,...row})=>({...row}))};
+  }
   private constructor(worker: Worker, status: StorageStatus,options:OpenStorageOptions) {
     this.worker = worker;
     this.options=options;
@@ -37,11 +57,18 @@ export class SqliteStorage {
       if (message.started === true) {
         if (!pending.started) {
           pending.started = true;
+          pending.startedAt=message.startedAt;
           pending.timer = setTimeout(() => { this.fail('action_timeout', pending.name); void this.worker.terminate(); }, 15_000);
         }
         return;
       }
       clearTimeout(pending.timer); this.pending.delete(message.id);
+      if(typeof message.startedAt==='number'&&typeof message.finishedAt==='number'){
+        this.timings.push({action:actionName(pending.name),queuedMs:milliseconds(message.startedAt-pending.enqueuedAt),
+          executionMs:milliseconds(message.finishedAt-message.startedAt),totalMs:milliseconds(message.finishedAt-pending.enqueuedAt),
+          ok:!message.code,finishedAt:message.finishedAt});
+        if(this.timings.length>64)this.timings.shift();
+      }
       if (message.code) pending.reject(new StorageFailure(message.code)); else pending.resolve(message.value);
     });
     worker.on('error', () => this.fail('worker_error'));
@@ -84,7 +111,7 @@ export class SqliteStorage {
   private request<T>(name: string, input: unknown, lease: StorageLease): Promise<T> {
     const id = ++this.nextId;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, {name, started: false, resolve, reject});
+      this.pending.set(id, {name, started: false, enqueuedAt:monotonicMs(), resolve, reject});
       try { this.worker.postMessage({id, name, input, lease}); }
       catch { this.fail('post_message_failed', name); }
     });

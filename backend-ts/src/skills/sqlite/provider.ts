@@ -21,9 +21,9 @@ export async function openSqliteSkillRun(library: SqliteSkillLibrary,request: {c
   if(!request.contactId || !request.callId || !protection?.assertCurrent || !protection.recordInput || !protection.recordSelection)throw new SqliteSkillError('skill_protection_required');
   const scope=Object.freeze({ownerId:library.ownerId,contactId:request.contactId,callId:request.callId});
   signal?.throwIfAborted();await protection.assertCurrent(scope,null,signal);
-  const items=await library.list();
+  const items=await library.list(signal);
   const available=items.filter(item=>item.enabledState==='enabled' && item.verificationState==='verified' && item.currentRevisionNo!==null);
-  for(const item of available)await library.assertAnchor(skillAnchor(item));
+  for(const item of available)await library.assertAnchor(skillAnchor(item),signal);
   const selected=selectedPackageId?available.find(item=>item.id===selectedPackageId):undefined;
   if(selectedPackageId && !selected)throw new SqliteSkillError('skill_selection_unavailable');
   const run=new SqliteSkillRun(library,scope,protection,items,selected?skillAnchor(selected):null,signal);
@@ -60,8 +60,8 @@ export class SqliteSkillRun {
     try {
       const combined=this.signal(signal);combined.throwIfAborted();
       await abortable(this.protection.assertCurrent(this.scope,this.frozenRevision(),combined),combined);
-      if(catalogRevision(await this.library.list())!==this.catalogIdentity)throw new SqliteSkillError('skill_run_invalidated');
-      for(const item of this.eligible())await this.library.assertAnchor(skillAnchor(item));
+      if(catalogRevision(await this.library.list(combined))!==this.catalogIdentity)throw new SqliteSkillError('skill_run_invalidated');
+      for(const item of this.eligible())await this.library.assertAnchor(skillAnchor(item),combined);
       await abortable(this.protection.assertCurrent(this.scope,this.frozenRevision(),combined),combined);
       combined.throwIfAborted();
     }catch(error){this.rememberFailure(error);this.close();throw error;}
@@ -82,7 +82,7 @@ export class SqliteSkillRun {
       try{validateResourcePath(relativePath);}catch{throw new SqliteSkillError('skill_path_invalid');}
       if(!loaded.resources.some(resource=>resource.relativePath===relativePath))throw new SqliteSkillError('skill_path_invalid');
       await this.validate(signal);
-      const snapshot=await this.library.assertAnchor(anchor);
+      const snapshot=await this.library.assertAnchor(anchor,this.signal(signal));
       const resource=snapshot.pkg.resources.find(r=>r.relative_path===relativePath);
       if(!resource)throw new SqliteSkillError('skill_path_invalid');
       return await this.record(anchor,relativePath,resource.content.toString('utf8'),signal);
@@ -117,7 +117,7 @@ export class SqliteSkillRun {
           const item=this.eligible().find(item=>item.id===trusted?.locator);
           if(!trusted || !item)throw new SqliteSkillError('skill_candidate_invalid');
           await this.validate(options.signal);
-          const anchor=skillAnchor(item),snapshot=await this.library.assertAnchor(anchor);
+          const anchor=skillAnchor(item),snapshot=await this.library.assertAnchor(anchor,this.signal(options.signal));
           if(!this.selected){
             try{await abortable(this.protection.recordSelection(this.scope,anchor,this.signal(options.signal)),this.signal(options.signal));}
             catch(error){this.close();throw error;}

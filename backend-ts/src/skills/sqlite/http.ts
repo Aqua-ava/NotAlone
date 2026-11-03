@@ -44,6 +44,8 @@ export class SqliteSkillHttp {
   const path=url.pathname,legacyLearning=/^\/api\/contacts\/[^/]+\/skill-learning(?:\/|$)/.test(path);
   if(path!=='/api/skills' && !path.startsWith('/api/skills/') && !legacyLearning)return false;
   if(!this.authorize(req)){respond(res,401,{error:'unauthorized'});return true;}
+  const controller=new AbortController(),abort=()=>controller.abort(new SqliteSkillError('skill_operation_cancelled'));
+  req.once('aborted',abort);res.once('close',abort);
   try {
    if(raw!==path)throw new SqliteSkillError('skill_request_invalid');
    if(legacyLearning){respond(res,503,{error:'sqlite_skill_operation_unavailable'});return true;}
@@ -51,7 +53,7 @@ export class SqliteSkillHttp {
    const query=path==='/api/skills';
    if(!query && !match){respond(res,503,{error:'sqlite_skill_operation_unavailable'});return true;}
    if(req.method!==(query?'GET':'POST')){respond(res,405,{error:'method_not_allowed'});return true;}
-   if(query){respond(res,200,{storage:'sqlite',mode:'minimal',skills:(await this.library.inspect()).map(skillManagementView)});return true;}
+   if(query){respond(res,200,{storage:'sqlite',mode:'minimal',skills:(await this.library.inspect(controller.signal)).map(skillManagementView)});return true;}
    let parsed: unknown;
    try {parsed=JSON.parse((await readWechatHttpBody(req,16_384,10_000)).toString('utf8'));}
    catch(error){if(error instanceof WechatHttpBodyError)throw error;throw new SqliteSkillError('skill_request_invalid');}
@@ -59,12 +61,12 @@ export class SqliteSkillHttp {
    exact(body,['expected_head_revision','confirmed']);
    if(body.confirmed!==true)throw new SqliteSkillError('skill_request_invalid');
    const [,id,action]=match!;const expectedHead=head(body.expected_head_revision);
-   const item=action==='verify'?await this.library.verify(id,expectedHead):await this.library.setEnabled(id,expectedHead,action==='enable'?'enabled':'disabled');
+   const item=action==='verify'?await this.library.verify(id,expectedHead,controller.signal):await this.library.setEnabled(id,expectedHead,action==='enable'?'enabled':'disabled',controller.signal);
    respond(res,200,{skill:skillManagementView(item)});
   }catch(error){
    const code=error instanceof StorageFailure || error instanceof SqliteSkillError?error.code:error instanceof WechatHttpBodyError?error.code:'skill_operation_failed';
-   respond(res,error instanceof WechatHttpBodyError?error.status:code==='skill_request_invalid'?400:409,{error:code});
-  }
+   if(!controller.signal.aborted)respond(res,error instanceof WechatHttpBodyError?error.status:code==='skill_request_invalid'?400:409,{error:code});
+  }finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
   return true;
  }
 }

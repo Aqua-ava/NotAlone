@@ -26,7 +26,7 @@ export class SqliteReplyCandidateHttp {
     respond(res,200,await o.service.status(contactId,discussionId,requestKey));
    }else if(req.method==='GET'&&!candidateId){
     const requests=await o.service.view(contactId,discussionId);
-    const history=await o.storage.execute<any>('history.readRecent',{ownerId:o.service.ownerId,contactId,limit:50});
+    const history=await o.service.recentHistory(contactId);
     const recentMessages=history.messages.map((m:any)=>({messageId:m.id,sender:m.sender,text:m.text,occurredAt:occurredAt(m.sentAt),timePrecision:m.timePrecision,displayPosition:m.displayPosition,ordering:m.ordering}));
     respond(res,200,{requests:requests.map(({ownerId:_owner,...r})=>r),coverage:history.coverage,recentMessages});
    }else if(req.method==='GET'&&command.startsWith('versions/'))respond(res,200,await o.service.version({...scope,candidateId,versionNo:Number(version)}));

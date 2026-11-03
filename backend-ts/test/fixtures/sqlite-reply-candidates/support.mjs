@@ -25,13 +25,14 @@ const report={protocol:'private-history-v1',profileId:'synthetic-v1',adapterVers
 /** 仅外部渠道和供应商使用合成边界；存储、来源、DSH与预算沿真实实现。 */
 export async function fixture(t,options={}){
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-reply-candidates-')));
- let storage,runtime,provider,history,ctx,server,closing;
+ let storage,runtime,provider,history,ctx,server,closing,library;
  const close=()=>closing??=(async()=>{
   await history?.close();
   await runtime?.close();
   await provider?.dispose();
   await ctx?.fiber.dispose();
   if(server?.listening){server.closeAllConnections();await new Promise((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+  await library?.close();
   await storage?.close();
   await rm(root,{recursive:true,force:true});
  })();
@@ -86,6 +87,6 @@ export async function fixture(t,options={}){
  const skillRoot=join(root,'user-skills');await mkdir(skillRoot,{mode:0o700});
  const discussions=new SqliteDiscussionService(storage,owner,options.clock??Date.now);
  runtime=new SqliteDiscussionRuntime({storage,ownerId:owner,userData:root,ctx,holders,fault:options.runtimeFault});await runtime.initialize();
- const arbiter=new ModelPermitArbiter(),library=new SqliteSkillLibrary(storage,owner,skillRoot);
+ const arbiter=new ModelPermitArbiter();library=new SqliteSkillLibrary(storage,owner,skillRoot,{readerBinary:options.skillReaderBinary});
  return {root,storage,contacts,ids,discussions,runtime,model,provider,arbiter,library,requests,owner,ctx,holders,history,channel,messages,skillRoot,supplierErrors,close};
 }

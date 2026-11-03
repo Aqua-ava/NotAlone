@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdir,writeFile,unlink,readdir,readFile} from 'node:fs/promises';
-import {join} from 'node:path';
+import {mkdir,writeFile,unlink,readdir,readFile,mkdtemp,realpath,rm} from 'node:fs/promises';
+import {join,resolve} from 'node:path';
+import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {fixture} from './fixtures/sqlite-reply-candidates/support.mjs';
 import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/service.ts';
@@ -113,13 +114,12 @@ test('请求取消在Skill工具返回前阻止续发与候选提交',async t=>{
 
 
 test('只读helper暂不可用时仅降级Skill，干净上下文继续且记录提示',async t=>{
- const child=await import('node:child_process'),{syncBuiltinESMExports}=await import('node:module');let unavailable=false;
- const original=child.default.spawnSync;
- const stub=t.mock.method(child.default,'spawnSync',(file,...args)=>unavailable&&String(file).endsWith('/skill-read')?{error:Object.assign(Error('synthetic helper unavailable'),{code:'ENOENT'})}:original(file,...args));syncBuiltinESMExports();
- try{
-  const f=await setup(t,(_f,res,_request,n)=>{if(n===1){unavailable=true;stream(res,'skill',{name:'gentle'});}else stream(res);});
-  await f.turns.generate(f.input);const view=await f.view();assert.equal(view.skillWarning,'回复策略暂不可用');assert.equal(view.candidates.length,1);assert.deepEqual(view.loadedSkills,[]);assert.equal(f.requests.length,2);
- }finally{stub.mock.restore();syncBuiltinESMExports();}
+ const dir=await realpath(await mkdtemp(join(tmpdir(),'notalone-skill-helper-unavailable-'))),reader=join(dir,'reader');
+ t.after(()=>rm(dir,{recursive:true,force:true}));
+ const quote=value=>"'"+value.replaceAll("'","'\\''")+"'";
+ await writeFile(reader,`#!/bin/sh\nexec ${quote(resolve('../native/skill-read/.build/skill-read'))} "$@"\n`,{mode:0o700});
+ const f=await setup(t,async(_f,res,_request,n)=>{if(n===1){await unlink(reader);stream(res,'skill',{name:'gentle'});}else stream(res);},{skillReaderBinary:reader});
+ await f.turns.generate(f.input);const view=await f.view();assert.equal(view.skillWarning,'回复策略暂不可用');assert.equal(view.candidates.length,1);assert.deepEqual(view.loadedSkills,[]);assert.equal(f.requests.length,2);
 });
 
 test('合法大资源沿1MiB导入限制和完整模型输入预算参与回复及回看',async t=>{

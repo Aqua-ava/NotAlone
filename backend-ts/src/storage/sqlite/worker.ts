@@ -131,11 +131,13 @@ try {
   port.postMessage({value: status});
   port.on('message', ({id, name, input, lease}) => {
     // 串行队列等待不消耗动作预算；主线程收到开始确认后监督本次同步执行。
-    port.postMessage({id, started: true});
+    const startedAt=Number(process.hrtime.bigint())/1e6;
+    const respond=(value:Record<string,unknown>)=>port.postMessage({id,...value,startedAt,finishedAt:Number(process.hrtime.bigint())/1e6});
+    port.postMessage({id, started: true, startedAt});
     try {
-      if (name === 'storage.close') { connection.close(); port.postMessage({id, value: null}); port.close(); return; }
+      if (name === 'storage.close') { connection.close(); respond({value: null}); port.close(); return; }
       files.verify();
-      if (name === 'storage.check') { const value = transaction(false, () => { assertLease(lease); return checks(); }); assertLease(lease); port.postMessage({id, value}); return; }
+      if (name === 'storage.check') { const value = transaction(false, () => { assertLease(lease); return checks(); }); assertLease(lease); respond({value}); return; }
       const action = actions.get(name);
       if (!action) throw new StorageFailure('action_unavailable');
       let result: unknown;
@@ -178,7 +180,7 @@ try {
           break;
         } catch (error) { if (code(error) !== 'storage_busy' || !action.retryBusy || attempt >= 2) throw error; }
       }
-      port.postMessage({id, value: result});
-    } catch (error) { port.postMessage({id, code: code(error)}); }
+      respond({value: result});
+    } catch (error) { respond({code: code(error)}); }
   });
 } catch (error) { try { db?.close(); } catch {} port.postMessage({code: code(error)}); port.close(); }

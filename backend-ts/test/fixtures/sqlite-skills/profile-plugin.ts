@@ -14,7 +14,7 @@ export async function apply(ctx: Context): Promise<void> {
  const dir=process.env.NOTALONE_SKILL_TEST_DIR!;
  const storage=await SqliteStorage.open({userData:dir,intent:'create',role:'test',registryModule:new URL('./registry.mjs',import.meta.url).href});
  await storage.execute('fixture.owner',{ownerId:'owner-a'});
- const library=new SqliteSkillLibrary(storage,'owner-a',join(dir,'originals'));
+ const library=new SqliteSkillLibrary(storage,'owner-a',join(dir,'originals'),{readerBinary:process.env.NOTALONE_SKILL_TEST_READER});
  const skills=new SqliteSkillHttp(library,req=>req.headers.authorization==='Bearer profile-only'&&!req.headers.origin);
  let sequence=0;
  const server=createServer(async(req,res)=>{
@@ -23,7 +23,8 @@ export async function apply(ctx: Context): Promise<void> {
   try {
    let raw='';for await(const part of req)raw+=part;const input=raw?JSON.parse(raw):{};
    let result: unknown;
-   if(req.url==='/state')result=await library.inspect();
+   if(req.url==='/cached-status')result={ready:true};
+   else if(req.url==='/state')result=await library.inspect();
    else if(req.url==='/discover')result=await library.discover(input.name);
    else if(req.url==='/enabled')result=await library.setEnabled(input.id,BigInt(input.head),input.state);
    else if(req.url==='/verify')result=await library.verify(input.id,BigInt(input.head));
@@ -53,6 +54,6 @@ export async function apply(ctx: Context): Promise<void> {
   }catch(error){res.statusCode=409;res.end(JSON.stringify({code:(error as {code?:string}).code??'fixture_denied'}));}
  });
  server.listen(0,'127.0.0.1');await once(server,'listening');
- ctx.effect(()=>()=>{server.closeAllConnections();server.close();void storage.close();});
+ ctx.effect(()=>async()=>{server.closeAllConnections();server.close();await library.close();await storage.close();});
  console.log(`SQLITE_SKILL_READY http://127.0.0.1:${(server.address() as {port:number}).port}`);
 }

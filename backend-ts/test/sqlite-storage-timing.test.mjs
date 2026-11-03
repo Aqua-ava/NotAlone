@@ -48,3 +48,30 @@ for(const [name,cause]of[['timing.exit','worker_exit'],['timing.error','worker_e
  assert.doesNotMatch(JSON.stringify(diagnostic),/私密|不得|private|SELECT|Error/);
  await storage.close();assert.deepEqual(storage.failureDiagnostic,diagnostic);
 });
+
+test('存储诊断区分排队和执行，只保留有界的具名动作计时',async t=>{
+ const userData=await realpath(await mkdtemp(join(tmpdir(),'notalone-storage-timing-')));
+ const storage=await SqliteStorage.open({userData,intent:'create',role:'test',registryModule:new URL('./fixtures/sqlite/readonly-registry.mjs',import.meta.url).href});
+ const barrier=new Int32Array(new SharedArrayBuffer(8));
+ t.after(async()=>{Atomics.store(barrier,1,1);Atomics.notify(barrier,1);await storage.close();await rm(userData,{recursive:true,force:true});});
+ const held=storage.execute('reader.hold',{barrier:barrier.buffer,privateText:'合成敏感正文不能进入诊断'});
+ await Atomics.waitAsync(barrier,0,0,5000).value;
+ assert.equal(Atomics.load(barrier,0),1);
+ const reading=storage.execute('reader.value',{});
+ // 固定占用一小段时间，验证真实 Worker 队列；不以轮询等待就绪。
+ await new Promise(resolve=>setTimeout(resolve,80));
+ Atomics.store(barrier,1,1);Atomics.notify(barrier,1);
+ assert.deepEqual(await Promise.all([held,reading]),[7n,7n]);
+ const diagnostic=storage.timingDiagnostic;
+ assert.ok(diagnostic,'应提供无正文的排队与执行诊断');
+ const execution=diagnostic.recent.find(row=>row.action==='reader.hold');
+ const queued=diagnostic.recent.find(row=>row.action==='reader.value');
+ assert.ok(execution.executionMs>=50,'占用记录应体现 Worker 执行时间');
+ assert.ok(queued.queuedMs>=50,'后续读取应体现排队时间');
+ assert.equal(diagnostic.pendingCount,0);
+ assert.equal(diagnostic.queuedCount,0);
+ assert.doesNotMatch(JSON.stringify(diagnostic),/合成敏感|privateText|barrier/);
+ for(let i=0;i<70;i++)await storage.execute('reader.value',{});
+ assert.ok(storage.timingDiagnostic.recent.length<=3,'状态接口只返回少量摘要');
+ assert.ok(JSON.stringify(storage.timingDiagnostic).length<1000,'计时摘要不可撑大受控状态响应');
+});

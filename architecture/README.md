@@ -282,3 +282,5 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 158. [ADR-158：显式选择联系人后继续前台跟随](adr/158-contact-selection-keeps-foreground-follow.md)（已采纳，实现与验收单独记录）
 
 159. [ADR-159：前台联系人识别独立读取通道](adr/159-foreground-read-channel-isolation.md)（已采纳，实现与验收单独记录）
+
+160. [ADR-160：助手回看与 Skill 核验分离执行队列](adr/160-assistant-read-and-skill-worker-isolation.md)（已采纳，验证边界见记录）

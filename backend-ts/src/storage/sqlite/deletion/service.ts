@@ -1,4 +1,4 @@
-import { StorageFailure } from '../contracts.ts';
+import { StorageFailure,type StorageReader } from '../contracts.ts';
 import type { SqliteStorage } from '../client.ts';
 import type { CheckResult, DeletionScope, DeletionSnapshot } from './contracts.ts';
 import type { ActiveHolders } from './holders.ts';
@@ -13,16 +13,17 @@ export class DeletionService {
   private readonly holders: ActiveHolders;
   private readonly files: ManagedFiles;
   private readonly options: {drainTimeoutMs: number};
-  constructor(storage: SqliteStorage, holders: ActiveHolders, files: ManagedFiles, options = {drainTimeoutMs: 5_000}) {
-    this.storage = storage; this.holders = holders; this.files = files; this.options = options;
+  private readonly reader:Pick<StorageReader,'execute'>;
+  constructor(storage: SqliteStorage, holders: ActiveHolders, files: ManagedFiles, options:{drainTimeoutMs?:number;reader?:Pick<StorageReader,'execute'>} = {}) {
+    this.storage = storage; this.holders = holders; this.files = files; this.options = {drainTimeoutMs:options.drainTimeoutMs??5_000};this.reader=options.reader??storage;
   }
   async plan(input: { ownerId: string; requestKey: string; scope: DeletionScope }): Promise<DeletionSnapshot> {
     const op = await this.storage.execute<DeletionSnapshot>('deletion.plan', input);
     this.holders.fence(op, op.targets.flatMap(t => t.target?.holderKeys ?? []));
     return op;
   }
-  status(input: Address): Promise<DeletionSnapshot> { return this.storage.execute('deletion.status', input); }
-  list(input: {ownerId: string; contactId?: string}): Promise<DeletionSnapshot[]> { return this.storage.execute('deletion.list', input); }
+  status(input: Address): Promise<DeletionSnapshot> { return this.reader.execute('deletion.status', input); }
+  list(input: {ownerId: string; contactId?: string}): Promise<DeletionSnapshot[]> { return this.reader.execute('deletion.list', input); }
   async advance(input: Address): Promise<DeletionSnapshot> {
     let op = await this.storage.execute<Claimed>('deletion.claim', input);
     if (!op.token) return op;

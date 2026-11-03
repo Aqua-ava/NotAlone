@@ -2,7 +2,8 @@ import { StorageFailure } from '../contracts.ts';
 import type { DeletionOperation } from './contracts.ts';
 
 // coversAllSources只用于声明可能持有该联系人任意来源的读者，其他领域默认不扩大匹配。
-export interface ActiveResource { key: string; ownerId: string; contactId?: string; coversAllContacts?: boolean; coversAllSources?: boolean; generation: bigint; close: () => Promise<void> }
+// scopeKeys把临时读者纳入既有删除闭包；每次持有者仍使用独立的唯一key。
+export interface ActiveResource { key: string; scopeKeys?: readonly string[]; ownerId: string; contactId?: string; coversAllContacts?: boolean; coversAllSources?: boolean; generation: bigint; close: () => Promise<void> }
 interface HeldResource extends ActiveResource { closing?: Promise<void> }
 const scopedKey = (owner: string, key: string) => JSON.stringify([owner, key]);
 // 先登记后使用；close回调必须等待官方dispose/close、finally和末次写入，不得仅发cancel。
@@ -37,7 +38,7 @@ export class ActiveHolders {
     if (op.scope.kind === 'source') advance(this.blockedSourceContacts, JSON.stringify([op.ownerId, op.scope.contactId]));
   }
   private matching(op: DeletionOperation, keys: string[]): HeldResource[] {
-    return [...this.held.values()].filter(r => r.ownerId === op.ownerId && (keys.includes(r.key) || op.scope.kind === 'account'
+    return [...this.held.values()].filter(r => r.ownerId === op.ownerId && (keys.includes(r.key) || r.scopeKeys?.some(key=>keys.includes(key)) || op.scope.kind === 'account'
       || (op.scope.kind === 'source' && r.coversAllSources === true && r.contactId === op.scope.contactId && r.generation < op.acceptedGeneration)
       || ((op.scope.kind === 'contact' || op.scope.kind === 'contact_history') && (r.coversAllContacts || (r.contactId === op.scope.contactId && r.generation < op.acceptedGeneration)))));
   }
