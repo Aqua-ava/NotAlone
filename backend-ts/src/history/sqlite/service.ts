@@ -378,7 +378,9 @@ export class SqliteHistoryService {
     goal=await this.storage.execute('history.begin',{token:scope.token,target,report,id:randomUUID(),at:Date.now()});}
    if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target:goal!.target,report}))throw new StorageFailure('history_source_continuity_unverified');
    registerGoal(goal!.id);
-   for(let index=0;index<1000;index++){
+   // 共享正常使用通道的未完成页尚无持久恢复点，停车会从头扫描；保留租约直到固定目标终页。
+   const retainSnapshot=normalUse&&Boolean(this.shared)&&typeof channel.park==='function';
+   for(let index=0;retainSnapshot||index<1000;index++){
     await check();if(guardId&&!await this.storage.execute<boolean>('history.guardCheck',{token:scope.token,guardId}))throw new StorageFailure('history_source_continuity_unverified');const page=await channel.page(scope,goal!.target,goal!.cursor,controller.signal);
     await this.quarantinePageStates(contactId,scope,goal!,page);
     await check();
@@ -393,6 +395,8 @@ export class SqliteHistoryService {
     const accepted=await this.storage.execute<AcceptedPage>('history.acceptPage',{token:scope.token,goalId:goal!.id,captureId:randomUUID(),page,at:Date.now(),runtimeToken:this.storage.status.runtimeId,guardId,notifyMessageChanges:true});
     const coverage=this.publishAcceptedMessages(contactId,accepted,false);
     if(page.exhausted)return coverage;goal!.cursor=page.cursorOut;
+    // 每1000页只让出事件循环；下一页照常核对取消、授权和守卫，不释放未完成的原生快照。
+    if(retainSnapshot&&(index+1)%1000===0)await new Promise<void>(resolve=>setImmediate(resolve));
    }
    return await this.storage.execute('history.interrupt',{token:scope.token,goalId:goal!.id,code:'history_page_budget_exhausted'});
   }catch(error){
