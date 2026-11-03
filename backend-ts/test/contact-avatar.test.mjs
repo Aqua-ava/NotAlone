@@ -38,6 +38,28 @@ test('头像按稳定绑定区分同名联系人，停读和其他 owner 不读�
  assert.equal(calls.length,2);
 });
 
+test('头像不请求全目录统计，专用范围查询继续复验 owner 与完整读取令牌',async t=>{
+ const {service,storage,directory}=await fixture(t);
+ const execute=storage.execute.bind(storage),actions=[];
+ storage.execute=async(name,input)=>{
+  actions.push(name);
+  if(name==='identity.directory')throw new Error('头像不得触发全目录消息统计');
+  return execute(name,input);
+ };
+ const binding=directory.bindings[0],image={mime_type:'image/png',base64:'synthetic'};
+ assert.deepEqual(await service.avatar(binding.contact_id,undefined,async()=>image),image);
+ assert.equal(actions.includes('identity.directory'),false);
+ const token=await service.eligibility(binding.contact_id);
+ const read=overrides=>storage.execute('identity.avatarScope',{ownerId:owner,token:{...token,...overrides}});
+ assert.deepEqual(await read({}),{accountKey:evidence.externalKey,identityScheme:evidence.identityScheme,sourceGeneration:evidence.sourceGeneration,conversationKey:binding.conversation_locator});
+ await assert.rejects(storage.execute('identity.avatarScope',{ownerId:'00000000-0000-4000-8000-000000000002',token}),{code:'read_not_authorized'});
+ for(const key of ['account_id','conversation_id','binding_id','grant_id','selection_generation','data_generation','scope_revision']){
+  await assert.rejects(read({[key]:key.endsWith('_id')?'00000000-0000-4000-8000-000000000099':'999'}),{code:'read_eligibility_stale'});
+ }
+ await service.setReading(false);
+ await assert.rejects(read({}),{code:'read_not_authorized'});
+});
+
 test('头像来源变代不发网络请求；下载期间撤销拒绝迟到结果',async t=>{
  const {service,metadata,directory}=await fixture(t);
  const binding=directory.bindings[0];let loaded=0;

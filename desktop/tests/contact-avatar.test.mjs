@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
 import { build } from 'esbuild';
-const bundle = await build({ stdin: { contents: "export * from './src/main/contacts/avatar';export { ContactSession } from './src/main/contacts/session';", resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false });
-const { parseContactAvatar, readContactAvatar, ContactSession } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
+const bundle = await build({ stdin: { contents: "export * from './src/main/contacts/avatar';export { ContactSession } from './src/main/contacts/session';export { JsonClient } from './src/main/backend/json-client';", resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false });
+const { parseContactAvatar, readContactAvatar, ContactSession, JsonClient } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 const payload = { avatar: { mime_type: 'image/png', base64: png.toString('base64') } };
 const contactId = '00000000-0000-4000-8000-000000000001';
@@ -51,4 +52,29 @@ test('连接、读取范围或联系人删除使未完成头像失效', async ()
     await invalidate(h); h.release();
     await assert.rejects(reading, /暂不可用/);
   }
+});
+
+test('头像在后台十秒期限内返回时，实际桌面 HTTP 客户端不会提前中断', { timeout: 20_000 }, async t => {
+  const requests = [];
+  const server = createServer((req, res) => {
+    requests.push({ method: req.method, path: req.url });
+    const timer = setTimeout(() => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(payload));
+    }, 9000);
+    res.once('close', () => clearTimeout(timer));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const port = server.address().port;
+  const client = new JsonClient({ address: `127.0.0.1:${port}`, port, token: 'synthetic-avatar-token', pid: process.pid });
+  t.after(() => client.cancelPending());
+  const contacts = new ContactSession(async () => ({ generation: 1,
+    contacts: [{ contactId, displayName: '合成联系人', messageCount: 0, sourceCount: 0 }] }));
+  contacts.setConnection(1); await contacts.refreshContacts();
+  const backend = { getConnectionGeneration: () => 1,
+    requestJson: async request => ({ generation: 1, data: (await client.perform(request)).data }) };
+  const avatar = await readContactAvatar(backend, contacts, { contactId, scopeRevision: contacts.getState().scopeRevision });
+  assert.deepEqual(avatar, { mimeType: 'image/png', dataBase64: png.toString('base64') });
+  assert.deepEqual(requests, [{ method: 'GET', path: `/api/contacts/${contactId}/avatar` }]);
 });

@@ -104,6 +104,16 @@ export const identityActions: StorageAction[] = [
   const owner=text(i.ownerId);
   return {bindings:bindings(tx,owner),read_enabled:tx.get('SELECT read_enabled FROM owner WHERE owner_id=?',[owner])?.read_enabled===1n};
  }),
+ action('identity.avatarScope','read',(tx,i)=>{
+  const owner=text(i.ownerId),token=i.token as ReadEligibility|undefined;
+  if(!token||token.owner_id!==owner)return fail('read_not_authorized');
+  assertReadEligibility(tx,token);
+  // 头像只取该有效绑定的账号与稳定会话身份，不读取目录或重算全联系人消息数。
+  const scope=one(tx,`SELECT a.external_key AS account_key,a.identity_scheme,a.source_generation,c.external_key AS conversation_locator
+   FROM channel_account a JOIN channel_conversation c ON c.owner_id=a.owner_id AND c.account_id=a.id
+   WHERE a.owner_id=? AND a.id=? AND c.id=?`,[owner,token.account_id,token.conversation_id]);
+  return {accountKey:String(scope.account_key),identityScheme:String(scope.identity_scheme),sourceGeneration:String(scope.source_generation),conversationKey:String(scope.conversation_locator)};
+ }),
  action('identity.directory','read',(tx,i)=>{
   const owner=text(i.ownerId),counts=visibleMessageCounts(tx,owner);
   return {contacts:tx.all("SELECT id AS contact_id,display_name,selection_generation,data_generation FROM contact WHERE owner_id=? AND state='active' ORDER BY id",[owner]).map(c=>({...c,selection_generation:String(c.selection_generation),data_generation:String(c.data_generation),data_status:{message_count:counts.get(String(c.contact_id))??0,source_count:0}})),bindings:bindings(tx,owner),account:tx.get("SELECT id,external_key,identity_scheme,source_generation,scope_revision FROM channel_account WHERE owner_id=? AND identity_state='verified'",[owner])??null,read_enabled:tx.get('SELECT read_enabled FROM owner WHERE owner_id=?',[owner])?.read_enabled===1n};

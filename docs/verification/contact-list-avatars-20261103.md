@@ -13,7 +13,7 @@
 - Node.js 24.22.1；`pnpm --dir backend-ts run typecheck`、`pnpm --dir desktop run typecheck` 通过。
 - `cd backend-ts && node --test test/contact-avatar.test.mjs test/sqlite-contact-binding.test.mjs test/sqlite-contact-close.test.mjs test/wechat-account-metadata.test.mjs`：69/69，通过身份隔离、同名联系人、停读、撤销、来源代次变化、关闭等待、下载限制及实际位图解码检查。
 - 桌面头像安全测试 3/3、头像与既有聊天时间线页面测试 3/3 通过，覆盖懒加载、失败兜底、显式刷新、迟到结果和 blob 释放。
-- 独立审查未发现阻断项；测试登记检查被并行任务未登记的 `workspace-draft-sqlite-handoff.test.mjs` 阻塞，头像两项已登记。
+- 独立审查未发现阻断项；初版检查时的测试登记缺项已由并行任务补齐，集成后的 `pnpm --dir desktop run test:inventory` 通过。
 
 ## 接口依据
 
@@ -29,4 +29,13 @@
 - 同步会话另在进行稳定验收，历史固定快照持有共享原生租约时头像可能排队；该吞吐取舍与本次目录重复扫描分别记录。其空会话来源围栏由同步会话处理，不属于头像修复。
 - 本轮闲置 Go 工具链及空临时目录已清理，新制品目录由约 275 MiB 降至 16 MiB；保留源码、制品、清单、升级证明及旧回滚版本。
 
-隔离候选的主仓集成和最终桌面复验等待同步验收稳定窗口释放后补充。
+## 加载优化集成
+
+- 同步协调者明确释放稳定窗口后，将两项隔离候选应用到主仓：头像使用 `identity.avatarScope` 精确查询有效绑定的账号与会话，避免逐头像重算全联系人消息数；桌面头像请求期限设为 15 秒，后台仍为 10 秒。
+- 专用查询在同一只读事务内复验 owner 与完整读取令牌，后续来源复验、停读、撤销、迟到结果拒绝与共享原生租约行为保持。新增回归明确禁止头像入口调用 `identity.directory`，并验证令牌字段变化和停读后的拒绝。
+- 主仓 `pnpm --dir backend-ts run typecheck`、`pnpm --dir desktop run typecheck` 均通过。
+- 主仓 `cd backend-ts && node --test test/contact-avatar.test.mjs test/sqlite-contact-binding.test.mjs test/sqlite-contact-close.test.mjs`：49/49 通过。
+- 主仓 `cd desktop && node --test tests/contact-avatar.test.mjs tests/contact-avatar-view.test.mjs`：5/5 通过；实际 JsonClient 与本机 HTTP 的 9 秒响应在 9028ms 返回，覆盖原有 8 秒提前中断的回归。
+- 集成后独立只读审查无阻断项，`git diff --check` 通过。并行迁移及联系人会话更新后复跑上述检查，仍为后台 49/49、桌面 5/5，两端类型检查通过。
+- 新 CLI 验收释放后复用 `pnpm run dev` 实例，保留 `resumable-history-20261103-v1` 配置；只读核对其头像源码与原制品一致。Computer Use 确认一次首屏六位联系人全部显示真实头像；另一次正式 HTTP 读取在 4107ms 返回有效头像。以上为实际样本，不代表全部联系人均有可用头像。
+- 最终刷新与滚动验收存在缺口：多次刷新检查被并行热更新中断，后续窗口出现空白页面，重新加载未恢复；未将这部分记为实机通过。懒加载、刷新重试、失败兜底和内存释放已有上述页面回归覆盖。没有为通过验收而改变同步授权、来源围栏或共享租约，也没有提交私人截图。

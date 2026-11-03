@@ -32,14 +32,13 @@ export class SqliteContactService {
   const controller=new AbortController();this.avatarReads.set(controller,contactId);
   const combined=AbortSignal.any([controller.signal,AbortSignal.timeout(10_000),...(signal?[signal]:[])]);
   try{return await this.readMetadata(async()=>{
-   const token=await this.eligibility(contactId),directory=await this.directory();
-   const account=directory.account,binding=directory.bindings.find(b=>b.binding_id===token.binding_id&&b.contact_id===contactId&&b.account_id===token.account_id&&b.status==='active');
-   if(!account||!binding||account.id!==token.account_id)return null;
+   const token=await this.eligibility(contactId);
+   const scope=await this.execute<{accountKey:string;identityScheme:string;sourceGeneration:string;conversationKey:string}>('identity.avatarScope',{token});
    combined.throwIfAborted();
    const evidence=await this.metadata.account(combined);
-   if(evidence.assurance!=='verified'||evidence.externalKey!==account.external_key||evidence.identityScheme!==account.identity_scheme||evidence.sourceGeneration!==account.source_generation)return null;
+   if(evidence.assurance!=='verified'||evidence.externalKey!==scope.accountKey||evidence.identityScheme!==scope.identityScheme||evidence.sourceGeneration!==scope.sourceGeneration)return null;
    await this.validate(token);combined.throwIfAborted();
-   const address=await this.metadata.avatarUrl!(evidence,binding.conversation_locator,combined);
+   const address=await this.metadata.avatarUrl!(evidence,scope.conversationKey,combined);
    await this.validate(token);combined.throwIfAborted();
    if(!address)return null;
    const avatar=await load(address,combined);

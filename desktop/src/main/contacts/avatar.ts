@@ -34,8 +34,9 @@ export async function readContactAvatar(backend: BackendHost, contacts: ContactS
       && state.contacts.some(contact => contact.contactId === selection.contactId);
   };
   if (!current()) throw unavailable();
+  // 后台头像读取允许等待十秒；桌面另留本机校验与传输时间。
   const response = await backend.requestJson({ method: 'GET', path: `/api/contacts/${selection.contactId}/avatar`,
-    maxResponseBytes: Math.ceil(maxAvatarBytes / 3) * 4 + 1024 });
+    timeoutMs: 15_000, maxResponseBytes: Math.ceil(maxAvatarBytes / 3) * 4 + 1024 });
   if (response.generation !== generation || !current()) throw unavailable();
   return parseContactAvatar(response.data);
 }
