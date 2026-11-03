@@ -92,3 +92,65 @@ test('历史分页保持锚点，增量与异步内容不打断阅读，回到�
   await expect(page.locator('[data-message-id]')).toHaveCount(1);
   await expect.poll(() => bottomGap(page)).toBeLessThan(2);
 });
+
+test('同联系人切页保留阅读锚点，隐藏期间来源失效不恢复旧位置', async t => {
+  const page = await mount(t);
+  await page.locator('.contact-chat-body').evaluate(element => { element.scrollTop = 200; });
+  await expect(page.getByRole('button', { name: '回到最新' })).toBeVisible();
+  const before = await page.locator('.contact-chat-body').evaluate(element => element.scrollTop);
+  await page.evaluate(() => window.showHistory(false));
+  await expect(page.locator('.contact-chat-body')).toHaveCount(0);
+  await page.evaluate(() => window.showHistory(true));
+  await expect(page.locator('[data-message-id]')).toHaveCount(40);
+  const after = await page.locator('.contact-chat-body').evaluate(element => element.scrollTop);
+  console.log('同联系人聊天返回位置', JSON.stringify({before, after}));
+  assert.ok(Math.abs(after - before) < 2, '切回同一联系人不跳回最新');
+  assert.equal(await page.evaluate(() => window.calls.length), 0, '复用现有历史，不重新读取');
+  await page.evaluate(() => window.showHistory(false));
+  await expect(page.locator('.contact-chat-body')).toHaveCount(0);
+  await page.evaluate(() => window.invalidateHistory());
+  await page.evaluate(() => window.replaceRows([{ messageId: 'replacement', speaker: 'contact', text: '新来源消息', messageType: 'text', occurredAt: null, ordering: 'verified' }]));
+  await page.evaluate(() => window.showHistory(true));
+  await expect(page.getByText('新来源消息', {exact:true})).toBeVisible();
+  await expect.poll(() => bottomGap(page)).toBeLessThan(2);
+});
+
+test('切页后聊天快照迟于渲染帧返回仍恢复阅读锚点', async t => {
+  const page = await mount(t);
+  await page.locator('.contact-chat-body').evaluate(element => { element.scrollTop = 200; });
+  await expect(page.getByRole('button', { name: '回到最新' })).toBeVisible();
+  const before = await page.locator('.contact-chat-body').evaluate(element => element.scrollTop);
+  await page.evaluate(() => window.showHistory(false));
+  await expect(page.locator('.contact-chat-body')).toHaveCount(0);
+  await page.evaluate(() => {
+    const read = window.notalone.contactHistory.getState;
+    window.notalone.contactHistory.getState = async () => {
+      await new Promise(resolve => { window.finishHistoryRead = resolve; });
+      return read();
+    };
+    window.showHistory(true);
+  });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(page.locator('[data-message-id]')).toHaveCount(0);
+  await page.evaluate(() => window.finishHistoryRead());
+  await expect(page.locator('[data-message-id]')).toHaveCount(40);
+  const after = await page.locator('.contact-chat-body').evaluate(element => element.scrollTop);
+  assert.ok(Math.abs(after - before) < 2, `空白等待帧不能覆盖阅读位置：${before} → ${after}`);
+  assert.equal(await page.evaluate(() => window.calls.length), 0);
+});
+
+test('隐藏期间权威聊天列表变空后，新内容跟随最新而不恢复旧锚点', async t => {
+  const page = await mount(t);
+  await page.locator('.contact-chat-body').evaluate(element => { element.scrollTop = 200; });
+  await expect(page.getByRole('button', { name: '回到最新' })).toBeVisible();
+  await page.evaluate(() => window.showHistory(false));
+  await expect(page.locator('.contact-chat-body')).toHaveCount(0);
+  await page.evaluate(() => window.replaceRows([]));
+  await page.evaluate(() => window.replaceRows(Array.from({length:40}, (_, index) => ({
+    messageId: `new-${index}`, speaker: 'contact', text: `全新来源消息 ${index}：这是一段与旧阅读位置无关的合成内容。`,
+    messageType: 'text', occurredAt: null, ordering: 'verified', displayPosition: String(40-index),
+  }))));
+  await page.evaluate(() => window.showHistory(true));
+  await expect(page.locator('[data-message-id]')).toHaveCount(40);
+  await expect.poll(() => bottomGap(page)).toBeLessThan(2);
+});

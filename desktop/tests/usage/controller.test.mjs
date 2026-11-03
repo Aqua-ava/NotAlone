@@ -16,8 +16,8 @@ function fixture() {
   let generation = 1, fail = false, response = summary(), pending;
   const calls = [], listeners = [];
   const backend = { getConnectionGeneration: () => generation, onStateChanged: fn => listeners.push(fn),
-    async requestJson(request) { calls.push(request); if (pending) await pending;
-      if (fail) throw Error('private-secret-canary'); return { generation: 1, data: response }; } };
+    async requestJson(request) { const acceptedGeneration = generation; calls.push(request); if (pending) await pending;
+      if (fail) throw Error('private-secret-canary'); return { generation: acceptedGeneration, data: response }; } };
   return { controller: new UsageController(backend), calls,
     fail: value => { fail = value; }, response: value => { response = value; },
     hold: value => { pending = value; }, replace: () => { ++generation; for (const fn of listeners) fn(); } };
@@ -50,4 +50,31 @@ test('坏响应不能把未知费用转成0或把授权未确认当已确认', a
     const f = fixture(), data = summary(); change(data); f.response(data); await f.controller.refresh();
     assert.equal(f.controller.getState().phase, 'error'); assert.equal(f.controller.getState().summary, null);
   }
+});
+
+test('同连接重新读取保留成功用量并合并在途请求，失败撤下旧值', async () => {
+  const f = fixture(); await f.controller.refresh();
+  let release; f.hold(new Promise(resolve => { release = resolve; }));
+  const first = f.controller.refresh(), second = f.controller.refresh();
+  assert.equal(f.controller.getState().summary?.totalCalls, 1, '后台更新不能清空已读取的统计');
+  assert.equal(f.calls.length, 2, '首次读取加一次共享刷新');
+  assert.equal(f.calls[1].signal.aborted, false, '第二位读取者复用正在进行的请求');
+  release(); await Promise.all([first, second]);
+  assert.equal(f.controller.getState().phase, 'ready');
+  f.hold(undefined); f.fail(true); await f.controller.refresh();
+  assert.equal(f.controller.getState().summary, null);
+  assert.equal(f.controller.getState().errorCode, 'usage_read_failed');
+});
+
+
+test('用量新连接不复用旧在途请求，旧回包不能覆盖新快照', async () => {
+  const f = fixture(); await f.controller.refresh();
+  let release; f.hold(new Promise(resolve => { release = resolve; }));
+  const old = f.controller.refresh(); f.replace();
+  assert.equal(f.controller.getState().summary, null);
+  f.hold(undefined); const next = summary(); next.total_calls = 2; f.response(next);
+  await f.controller.refresh(); assert.equal(f.calls.length, 3);
+  release(); await old;
+  assert.equal(f.controller.getState().summary.totalCalls, 2);
+  assert.equal(f.calls[1].signal.aborted, true);
 });

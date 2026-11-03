@@ -5,7 +5,7 @@ import type { MessageQuoteSnapshot } from '../shared/message-quote';
 import { useRevisionedSession } from './use-revisioned-session';
 import { HistoryImageBubble } from './HistoryImageBubble';
 import { ContactChatToolbar } from './ContactChatToolbar';
-import { useChatHistoryScroll } from './use-chat-history-scroll';
+import { useChatHistoryScroll, type ChatHistoryPosition } from './use-chat-history-scroll';
 
 const initialHistory: ContactHistoryState = { revision: -1, contactId: null, scopeRevision: 0,
   messages: { phase: 'idle', items: [], nextCursor: null }, error: null };
@@ -52,7 +52,7 @@ function quoteTypeLabel(messageType: string): string {
   return `引用类型：${numericLabels[String(base)] ?? `未知类型（${messageType}）`}`;
 }
 
-export function ContactChatHistory({ session, settings, actions, contactActions, syncStatus, syncIssue = false, settingsTargetContactId }: { syncStatus?: ReactNode; syncIssue?: boolean; actions?: ReactNode; settingsTargetContactId?: string | null; session: ContactSessionView; settings?: ReactNode; contactActions?: ReactNode }) {
+export function ContactChatHistory({ session, settings, actions, contactActions, readingPosition, syncStatus, syncIssue = false, settingsTargetContactId }: { syncStatus?: ReactNode; syncIssue?: boolean; actions?: ReactNode; settingsTargetContactId?: string | null; session: ContactSessionView; settings?: ReactNode; contactActions?: ReactNode; readingPosition?: ChatHistoryPosition }) {
   const bridge = window.notalone.contactHistory;
   const { state, error, setError, latest, active, retry } = useRevisionedSession(initialHistory, bridge);
   const contactId = session.state.selectedContactId;
@@ -67,7 +67,7 @@ export function ContactChatHistory({ session, settings, actions, contactActions,
   const messages = sameScope ? state.messages : initialHistory.messages;
   const loading = messages.phase === 'loading';
   const scope = `${contactId}:${scopeRevision}`;
-  const scroll = useChatHistoryScroll(scope, state.revision, messages.phase, messages.items.length > 0);
+  const scroll = useChatHistoryScroll(scope, state.revision, messages.phase, messages.items.length > 0, readingPosition);
   // 后台继续倒序分页，展示层按原有稳定顺序翻转，不重新猜测同时间消息的先后。
   const timeline = [...messages.items].reverse();
   async function load(older = false) {

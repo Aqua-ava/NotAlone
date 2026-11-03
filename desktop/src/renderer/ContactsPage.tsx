@@ -2,6 +2,7 @@ import { ContactHistoryCoverage } from './HistoryCoverageStatus';
 import { ContactSyncSettings } from './ContactSyncSettings';
 import { ContactHistoryClear } from './HistoryClearPanel';
 import { ContactChatHistory } from './ContactChatHistory';
+import type { ChatHistoryPosition } from './use-chat-history-scroll';
 import type { ContactSessionView } from './contact-session';
 import type { ManagerPage } from './pages';
 import './contacts.css';
@@ -15,7 +16,7 @@ import { ContactAvatar } from './ContactAvatar';
 
 const initialSync: SyncControlState = { revision: -1, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
 
-export function ContactsPage({ session, navigate, initialSelection = false, onSelectionClosed, syncDetailsContactId }: { syncDetailsContactId?: string | null; session: ContactSessionView; navigate: (page: ManagerPage) => void; initialSelection?: boolean; onSelectionClosed?: () => void }) {
+export function ContactsPage({ session, navigate, initialSelection = false, onSelectionClosed, readingPosition, syncDetailsContactId }: { syncDetailsContactId?: string | null; session: ContactSessionView; navigate: (page: ManagerPage) => void; initialSelection?: boolean; onSelectionClosed?: () => void; readingPosition?: ChatHistoryPosition }) {
   const { state } = session;
   const deletionBridge = window.notalone.contactDeletion;
   const deletion = useContactDeletion(deletionBridge);
@@ -85,7 +86,7 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
           </div>
         </div>
       </li>)}
-    </ul><ContactChatHistory session={session} settingsTargetContactId={syncDetailsContactId}
+    </ul><ContactChatHistory session={session} readingPosition={readingPosition} settingsTargetContactId={syncDetailsContactId}
       syncIssue={repairNeeded}
       actions={selected && <>
         <button className="button" onClick={() => navigate('memory')}>查看关系资料</button>

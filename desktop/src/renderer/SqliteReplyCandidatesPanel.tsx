@@ -18,7 +18,7 @@ function statusFailure(status:SqliteCandidateStatus):string{
 interface Props {bridge:SqliteDiscussionBridge;contactId:string|null;scopeRevision:number;sessionId:string|null;disabled?:boolean;initialDraft?:string;onInitialDraftTaken?:()=>void;onDraftChange?:(text:string,scope:{contactId:string;scopeRevision:number})=>void;onSubmitted?:(receipt:SqliteDiscussionReceipt)=>void}
 /** 草稿、候选、依据和实际Skill快照共用同一失效边界；迟到回包不能重新挂回旧正文。 */
 export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessionId,disabled=false,initialDraft='',onDraftChange,onSubmitted}:Props){
- const scopeKey=JSON.stringify([contactId,scopeRevision,sessionId]),latest=useRef({scopeKey,bridge,disabled});latest.current={scopeKey,bridge,disabled};
+ const scopeKey=JSON.stringify([contactId,scopeRevision,sessionId]),latest=useRef({scopeKey,bridge});latest.current={scopeKey,bridge};
  const revision=useRef(0),mounted=useRef(false),operation=useRef<object|null>(null);
  const retry=useRef<{fingerprint:string;requestKey:string;text:string;workspace:WorkspaceInput;carry?:string}|null>(null);
  const seeded=useRef<string|null>(null),stopProgress=useRef<(()=>void)|null>(null);
@@ -33,7 +33,8 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  function clear(){stopProgress.current?.();setProgress(null);++revision.current;operation.current=null;retry.current=null;qualifiedRequests.current=[];setPage(null);setDraft('');setOptions(defaultOptions());setCarry(undefined);setBusy(false);setError('');setNotice('');setEdits({});setInspected({});}
  useEffect(()=>{mounted.current=true;const off=bridge.onInvalidated(()=>{seeded.current=scopeKey;clear();if(contactId)onDraftChange?.('',{contactId,scopeRevision});});return()=>{mounted.current=false;stopProgress.current?.();++revision.current;operation.current=null;off();};},[bridge,scopeKey]);
  useEffect(()=>{clear();if(available)void run({action:'read'});},[scopeKey,bridge]);
- useEffect(()=>{if(disabled){++revision.current;operation.current=null;setBusy(false);setPage(null);setEdits({});setInspected({});}else if(available)void run({action:'read'});},[disabled]);
+ // 临时禁用只暂停新操作；来源及范围失效仍由订阅和scopeKey立即清除。
+ useEffect(()=>{if(available&&!page)void run({action:'read'});},[disabled]);
  // 讨论切换可能先于联系人草稿回显；空值不提前消费这次交接。
  useEffect(()=>{if(available&&initialDraft&&seeded.current!==scopeKey){seeded.current=scopeKey;setDraft(initialDraft);}},[scopeKey,available,initialDraft]);
  type Command=SqliteCandidateOperation extends infer O?O extends SqliteCandidateOperation?Omit<O,'contactId'|'scopeRevision'|'sessionId'>:never:never;
@@ -64,7 +65,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  async function run(command:Command,refreshContext=false){
   if(!available||!bridge.candidates||!contactId||!sessionId||operation.current)return;
   const token={},boundary=revision.current;operation.current=token;setBusy(true);setError('');
-  const current=()=>mounted.current&&operation.current===token&&revision.current===boundary&&latest.current.scopeKey===scopeKey&&latest.current.bridge===bridge&&!latest.current.disabled;
+  const current=()=>mounted.current&&operation.current===token&&revision.current===boundary&&latest.current.scopeKey===scopeKey&&latest.current.bridge===bridge;
   const scope={contactId,scopeRevision,sessionId};
   const readStatus=async(requestKey:string)=>{const status=readSqliteCandidateStatus(await bridge.candidates!.execute({...scope,action:'status',requestKey}));if(status.requestKey!==requestKey)throw new Error('候选状态不匹配。');return status;};
   const showStatus=async(status:SqliteCandidateStatus)=>{
@@ -142,7 +143,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   if(!options.includeRelationshipContext||options.excludedMessageIds.length)return;
   if(!available||!bridge.candidates||!contactId||!sessionId||operation.current)return;
   const token={},boundary=revision.current;operation.current=token;setBusy(true);setError('');
-  const current=()=>mounted.current&&operation.current===token&&revision.current===boundary&&latest.current.scopeKey===scopeKey&&latest.current.bridge===bridge&&!latest.current.disabled;
+  const current=()=>mounted.current&&operation.current===token&&revision.current===boundary&&latest.current.scopeKey===scopeKey&&latest.current.bridge===bridge;
   try{const result=await bridge.candidates.execute({contactId,scopeRevision,sessionId,action:'select',candidateId:v.candidateId,versionNo:v.versionNo}) as {id:string};if(current()){if(typeof result.id!=='string')throw new Error('选稿结果尚未确认。');setCarry(result.id);setNotice(`下一次明确请求将继续第${v.versionNo}版候选。`);}}
   catch(e){if(current())rejectOperation(e);}
   finally{if(current()){operation.current=null;setBusy(false);}}

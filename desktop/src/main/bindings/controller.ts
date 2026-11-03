@@ -67,6 +67,7 @@ export class BindingConsentController {
   private snapshotGenerations = new Map<string, string>();
   private generation: number | undefined;
   private epoch = 0;
+  private refreshing: { operation: Operation; readSessions: boolean; promise: Promise<void> } | undefined;
   private readonly listeners = new Set<(state: BindingConsentState) => void>();
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
     private readonly beginReadingScopeChange: () => (() => void) = () => () => {}) {
@@ -92,13 +93,19 @@ export class BindingConsentController {
   async refreshSaved(): Promise<void> {
     await this.refreshState(false, true);
   }
-  private async refreshState(readSessions: boolean, preserveSessions = false): Promise<void> {
-    if (this.state.busy) return;
+  private refreshState(readSessions: boolean, preserveSessions = false): Promise<void> {
+    if (this.state.busy) return Promise.resolve();
     const generation = this.backend.getConnectionGeneration();
-    if (generation === undefined) return;
+    if (generation === undefined) return Promise.resolve();
+    // 只合并当前代次的相同只读意图；名单读取、授权写入和重连各自核验。
+    const pending = this.refreshing;
+    if (pending && this.current(pending.operation) && pending.readSessions === readSessions) return pending.promise;
     const operation = { generation, epoch: ++this.epoch };
     this.publish({ errorCode: null, notice: null });
-    await this.load(operation, readSessions, preserveSessions);
+    const reading = { operation, readSessions, promise: this.load(operation, readSessions, preserveSessions) };
+    this.refreshing = reading;
+    void reading.promise.finally(() => { if (this.refreshing === reading) this.refreshing = undefined; });
+    return reading.promise;
   }
   private async load(operation: Operation, readSessions = this.state.sessionIssue !== 'not-requested', preserveSessions = false): Promise<void> {
     // 只读已保存关联时保留当前展示；明确读取名单仍显示加载状态。

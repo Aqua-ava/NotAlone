@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSettingsDraft } from './use-settings-draft';
 import { readInitialState } from './initial-read';
 import type { BackendState } from '../shared/backend-bridge';
 import type { DiagnosticPreview, StartupCode, StartupPaths, StartupState } from '../shared/startup-bridge';
@@ -116,25 +117,29 @@ function DiagnosticExport() {
 }
 
 function StartupPathSettings({ state, backend }: { state: StartupState; backend: BackendState }) {
-  const [paths, setPaths] = useState<StartupPaths>();
-  const [saving, setSaving] = useState(false);
+  const [savedPaths, setSavedPaths] = useState<StartupPaths>();
+  const [paths, setPaths, discardPaths, saving, saveDraft] = useSettingsDraft('startup-paths', savedPaths);
   const [preparing, setPreparing] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [pathReadPhase, setPathReadPhase] = useState<'reading' | 'ready' | 'failed'>('reading');
+  const [pathReadAttempt, setPathReadAttempt] = useState(0);
   useEffect(() => {
+    setPathReadPhase('reading');
+    if (saving && savedPaths) return;
     let active = true;
-    void window.notalone.startup.getPaths().then((value) => { if (active) setPaths(value); })
-      .catch(() => { if (active) setError('启动路径暂时无法读取，请重新打开设置。'); });
+    void window.notalone.startup.getPaths().then((value) => { if (active) { setSavedPaths(value); if (!saving) setPathReadPhase('ready'); } })
+      .catch(() => { if (active) { setPathReadPhase('failed'); setError('启动路径暂时无法读取，请重新打开设置。'); } });
     return () => { active = false; };
-  }, []);
+  }, [saving, pathReadAttempt]);
   const checking = state.phase === 'checking' || backend.phase === 'connecting';
-  const editable = backend.canSaveStartupPaths && !checking && !saving && !preparing;
+  const editable = backend.canSaveStartupPaths && !checking && !saving && !preparing && pathReadPhase === 'ready';
   async function save() {
     if (!paths || !editable) return;
-    setSaving(true);
-    try { await window.notalone.startup.savePaths(paths); setMessage('启动路径已保存。请重新检查并连接。'); setError(''); }
+    setPathReadPhase('reading');
+    try { await saveDraft(() => window.notalone.startup.savePaths(paths)); setSavedPaths(paths); discardPaths(); setMessage('启动路径已保存。请重新检查并连接。'); setError(''); }
     catch { setError('启动路径未能保存。请核对绝对路径，并先确认原服务已停止。'); }
-    finally { setSaving(false); }
+    finally { setPathReadAttempt(attempt => attempt + 1); }
   }
   async function retry() {
     try { setMessage(''); setError(''); await window.notalone.startup.retry(); }
@@ -144,6 +149,7 @@ function StartupPathSettings({ state, backend }: { state: StartupState; backend:
     <StartupDiagnostics state={state} />
     <h2>本机启动路径</h2>
     <p>这里只保存非秘密绝对路径。数据库连接与模型凭据保存在你选定的配置文件中，不在本页显示。</p>
+    {!saving && pathReadPhase === 'reading' && <p role="status">正在读取启动路径…</p>}
     {paths && <div className="startup-paths">
       {pathFields.map(([key, label]) => <label key={key} htmlFor={`startup-${key}`}>{label}
         <input id={`startup-${key}`} value={paths[key]} disabled={!editable} maxLength={1024} spellCheck={false}

@@ -8,12 +8,13 @@ export class UsageController {
   private generation: number | undefined;
   private request = 0;
   private pending: AbortController | undefined;
+  private refreshing: { generation: number | undefined; promise: Promise<void> } | undefined;
   constructor(private readonly backend: UsageBackend) {
     this.generation = backend.getConnectionGeneration();
     backend.onStateChanged(() => {
       const next = backend.getConnectionGeneration();
       if (next === this.generation) return;
-      this.generation = next; ++this.request; this.pending?.abort(); this.pending = undefined;
+      this.generation = next; ++this.request; this.pending?.abort(); this.pending = undefined; this.refreshing = undefined;
       this.publish({ phase: next === undefined ? 'offline' : 'idle', summary: null, errorCode: null });
     });
   }
@@ -21,12 +22,21 @@ export class UsageController {
   onStateChanged(listener: (state: UsageState) => void): () => void {
     this.listeners.add(listener); return () => this.listeners.delete(listener);
   }
-  async refresh(): Promise<void> {
+  refresh(): Promise<void> {
+    const generation = this.backend.getConnectionGeneration();
+    if (this.refreshing && this.refreshing.generation === generation) return this.refreshing.promise;
+    const reading = { generation, promise: this.read() };
+    this.refreshing = reading;
+    void reading.promise.finally(() => { if (this.refreshing === reading) this.refreshing = undefined; });
+    return reading.promise;
+  }
+  private async read(): Promise<void> {
     this.pending?.abort(); const pending = new AbortController(); this.pending = pending;
     const request = ++this.request, generation = this.backend.getConnectionGeneration();
     if (generation === undefined) { this.publish({ phase: 'offline', summary: null, errorCode: null }); return; }
     const current = () => request === this.request && generation === this.backend.getConnectionGeneration();
-    this.publish({ phase: 'loading', summary: null, errorCode: null });
+    // 同一连接保留成功快照，后台更新失败或连接变化仍立即撤下。
+    this.publish({ phase: 'loading', summary: this.state.summary, errorCode: null });
     try {
       const response = await this.backend.requestJson({ method: 'GET', path: '/api/ledger/summary', signal: pending.signal });
       if (!current()) return;

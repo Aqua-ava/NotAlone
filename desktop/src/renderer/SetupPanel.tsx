@@ -2,17 +2,20 @@ import { useEffect, useState } from 'react';
 import { isAiServiceBaseUrl } from '../shared/ai-service-configuration';
 import type { SetupState } from '../shared/setup-bridge';
 import { FirstFrameError } from './FirstFrameError';
+import { useSettingsDraft } from './use-settings-draft';
 import './setup.css';
 
 export function SetupPanel() {
   const [state, setState] = useState<SetupState>({ phase: 'offline', ownerReady: false, credentialsConfigured: false, revision: -1 });
-  const [name, setName] = useState('');
+  const [name = '', setName, discardName, savingName, saveName] = useSettingsDraft<string>('setup-owner-name', state.phase === 'needs-owner' ? '' : undefined);
+  useEffect(() => { if (state.ownerReady) discardName(); }, [state.ownerReady]);
   const [error, setError] = useState('');
   const [readError, setReadError] = useState('');
   const [readAttempt, setReadAttempt] = useState(0);
   const [key, setKey] = useState('');
-  const [baseUrl, setBaseUrl] = useState('https://api.deepseek.com');
-  useEffect(() => { setBaseUrl(state.baseUrl ?? 'https://api.deepseek.com'); setKey(''); }, [state.baseUrl]);
+  const [baseUrl = 'https://api.deepseek.com', setBaseUrl, discardBaseUrl, savingConfiguration, saveConfiguration] = useSettingsDraft('setup-base-url',
+    state.revision >= 0 && state.phase === 'ready' ? state.baseUrl ?? 'https://api.deepseek.com' : undefined);
+  useEffect(() => { setKey(''); }, [state.baseUrl]);
   useEffect(() => {
     let active = true;
     const receive = (next: SetupState) => {
@@ -54,26 +57,29 @@ export function SetupPanel() {
             }}>重新加载受控配置</button>}
             {state.phase === 'needs-owner' && <form onSubmit={(event) => {
               event.preventDefault(); setError('');
-              void window.notalone.setup.initializeOwner(name).catch(() => setError('本人初始化未完成，请重试。'));
+              if (savingName) return;
+              void saveName(() => window.notalone.setup.initializeOwner(name)).then(() => discardName()).catch(() => setError('本人初始化未完成，请重试。'));
             }}>
               <label htmlFor="owner-name">本人展示名称</label>
-              <input id="owner-name" autoComplete="off" maxLength={100} value={name} onChange={(event) => setName(event.target.value)} />
-              <button className="button primary" type="submit">初始化本人</button>
+              <input id="owner-name" autoComplete="off" maxLength={100} disabled={savingName} value={name} onChange={(event) => setName(event.target.value)} />
+              <button className="button primary" type="submit" disabled={savingName}>{savingName ? '正在初始化…' : '初始化本人'}</button>
             </form>}
             {state.phase === 'ready' && <form onSubmit={(event) => {
                 event.preventDefault();
+                if (savingConfiguration) return;
                 const submitted = {baseUrl: baseUrl.trim(), apiKey: key.trim()};
                 if (!isAiServiceBaseUrl(submitted.baseUrl) || !submitted.apiKey) return;
                 setKey(''); setError('');
-                void window.notalone.setup.saveDeepSeekConfiguration(submitted).catch(() => setError('AI 服务配置未能保存，请重新输入密钥后重试。'));
+                void saveConfiguration(() => window.notalone.setup.saveDeepSeekConfiguration(submitted)).then(() => discardBaseUrl())
+                  .catch(() => setError('AI 服务配置未能保存，请重新输入密钥后重试。'));
               }}>
                 <label htmlFor="deepseek-base-url">Base URL</label>
-                <input id="deepseek-base-url" type="url" autoComplete="off" spellCheck={false} maxLength={2048}
+                <input id="deepseek-base-url" type="url" autoComplete="off" spellCheck={false} maxLength={2048} disabled={savingConfiguration}
                   placeholder="https://api.deepseek.com" value={baseUrl} onChange={(event) => {setBaseUrl(event.target.value);setKey('');}} />
                 <label htmlFor="deepseek-key">API Key</label>
-                <input id="deepseek-key" type="password" autoComplete="off" spellCheck={false} maxLength={4096}
+                <input id="deepseek-key" type="password" autoComplete="off" spellCheck={false} maxLength={4096} disabled={savingConfiguration}
                   value={key} onChange={(event) => setKey(event.target.value)} />
-                <button className="button primary" type="submit" disabled={!isAiServiceBaseUrl(baseUrl.trim()) || !key.trim()}>保存 AI 服务配置</button>
+                <button className="button primary" type="submit" disabled={savingConfiguration || !isAiServiceBaseUrl(baseUrl.trim()) || !key.trim()}>{savingConfiguration ? '正在保存配置…' : '保存 AI 服务配置'}</button>
               </form>}
           </>}
     {state.errorCode === 'configuration-environment-override' && state.phase !== 'restart-failed' && <p role="alert">启动环境覆盖或禁止读取受控配置文件，本次更改未保存。请由启动方更新环境后重试。</p>}

@@ -86,31 +86,32 @@ export function UsageSummaryView({ summary }: { summary: UsageSummary }) {
     </section>
   </div>;
 }
-export function UsagePanel({ bridge = window.notalone.usage }: { bridge?: UsageBridge }) {
+export function UsagePanel({ bridge = window.notalone.usage, active = true }: { bridge?: UsageBridge; active?: boolean }) {
   const [state, setState] = useState<UsageState>({ revision: -1, phase: 'idle', summary: null, errorCode: null });
-  const [error, setError] = useState(false), latest = useRef(-1), active = useRef(false);
+  const [error, setError] = useState(false), latest = useRef(-1), mounted = useRef(false);
   async function refresh() {
-    try { await bridge.refresh(); if (active.current) setError(false); }
-    catch { if (active.current) setError(true); }
+    try { await bridge.refresh(); if (mounted.current) setError(false); }
+    catch { if (mounted.current) setError(true); }
   }
   useEffect(() => {
-    active.current = true; latest.current = -1;
+    mounted.current = true; latest.current = -1;
     const receive = (next: UsageState) => {
-      if (!active.current || next.revision <= latest.current) return;
+      if (!mounted.current || next.revision <= latest.current) return;
       latest.current = next.revision; setState(next); setError(false);
     };
     const unsubscribe = bridge.onStateChanged(receive);
-    void bridge.getState().then(receive).catch(() => { if (active.current) setError(true); });
-    void refresh();
-    return () => { active.current = false; unsubscribe(); };
+    void bridge.getState().then(receive).catch(() => { if (mounted.current) setError(true); });
+    return () => { mounted.current = false; unsubscribe(); };
   }, [bridge]);
+  // 隐藏时保留快照和失效订阅；再次显示才发起只读后台更新。
+  useEffect(() => { if (active) void refresh(); }, [bridge, active]);
   return <section className="usage-panel" aria-label="模型用量与调用记录">
     <header className="usage-header"><div><h2>模型用量与调用记录</h2>
     <p>当前账号 · 联系人及本人资料范围</p></div>
     <button className="button" disabled={state.phase === 'loading'} onClick={() => void refresh()}>
-      {state.phase === 'loading' ? '正在读取…' : '刷新用量'}</button></header>
+      {state.phase === 'loading' && !state.summary ? '正在读取…' : '刷新用量'}</button></header>
     {(error || state.phase === 'error') && <p role="alert">用量读取失败，请刷新重试。刷新只读取台账，不会重新调用模型。</p>}
     {state.phase === 'offline' && <p role="status">本机服务尚未连接，连接后可刷新用量。</p>}
-    {state.phase === 'ready' && state.summary && <UsageSummaryView summary={state.summary} />}
+    {state.summary && <UsageSummaryView summary={state.summary} />}
   </section>;
 }

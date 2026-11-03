@@ -1,15 +1,39 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import type { ContactHistoryBridge } from '../shared/contact-history-bridge';
+
+function emptyPosition(scope: string) {
+  return { scope, initialized: false, follow: true, older: false, top: 0,
+    anchor: null as { id: string; offset: number } | null };
+}
+export type ChatHistoryPosition = RefObject<ReturnType<typeof emptyPosition>>;
+
+// 管理窗口只保留当前范围的一处阅读锚点；隐藏期间也响应来源失效，不保存消息正文。
+export function useChatHistoryPosition(bridge: ContactHistoryBridge, enabled = true): ChatHistoryPosition {
+  const position = useMemo(() => ({ current: emptyPosition('') }), [bridge, enabled]);
+  useEffect(() => {
+    if (!enabled || !bridge) return;
+    const unsubscribe = bridge.onStateChanged(state => {
+      const scope = `${state.contactId}:${state.scopeRevision}`;
+      if (position.current.scope !== scope || state.messages.phase === 'idle' || state.messages.phase === 'failed'
+        || (state.messages.phase === 'ready' && state.messages.items.length === 0)) {
+        position.current = emptyPosition(scope);
+      }
+    });
+    return () => { unsubscribe(); position.current = emptyPosition(''); };
+  }, [bridge, enabled, position]);
+  return position;
+}
 
 // 用消息身份保持阅读位置；图片异步展开也沿用同一锚点。
-export function useChatHistoryScroll(scope: string, revision: number, phase: string, hasMessages: boolean) {
+export function useChatHistoryScroll(scope: string, revision: number, phase: string, hasMessages: boolean, readingPosition?: ChatHistoryPosition) {
   const body = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
-  const position = useRef({ scope, initialized: false, follow: true, older: false, top: 0,
-    anchor: null as { id: string; offset: number } | null });
+  const localPosition = useRef(emptyPosition(scope));
+  const position = readingPosition ?? localPosition;
   const [away, setAway] = useState(false);
   const remember = useCallback(() => {
     const element = body.current;
-    if (!element || position.current.scope !== scope) return;
+    if (!element || !hasMessages || position.current.scope !== scope) return;
     const top = element.getBoundingClientRect().top;
     const anchor = Array.from(element.querySelectorAll<HTMLElement>('[data-message-id]'))
       .find(message => message.getBoundingClientRect().bottom > top);
@@ -17,10 +41,10 @@ export function useChatHistoryScroll(scope: string, revision: number, phase: str
     position.current.follow = element.scrollHeight - element.scrollTop - element.clientHeight < 32;
     position.current.top = element.scrollTop;
     setAway(!position.current.follow);
-  }, [scope]);
+  }, [scope, position, hasMessages]);
   const restore = useCallback(() => {
     const element = body.current, saved = position.current;
-    if (!element || saved.scope !== scope) return;
+    if (!element || !hasMessages || saved.scope !== scope) return;
     if (saved.follow && !saved.older) element.scrollTop = element.scrollHeight;
     else if (saved.anchor) {
       const anchor = Array.from(element.querySelectorAll<HTMLElement>('[data-message-id]'))
@@ -28,10 +52,10 @@ export function useChatHistoryScroll(scope: string, revision: number, phase: str
       if (anchor) element.scrollTop += anchor.getBoundingClientRect().top - element.getBoundingClientRect().top - saved.anchor.offset;
     }
     remember();
-  }, [scope, remember]);
+  }, [scope, remember, position, hasMessages]);
   useLayoutEffect(() => {
     if (position.current.scope !== scope) {
-      position.current = { scope, initialized: false, follow: true, older: false, top: 0, anchor: null };
+      position.current = emptyPosition(scope);
       setAway(false);
       if (body.current) body.current.scrollTop = 0;
     }
@@ -45,9 +69,9 @@ export function useChatHistoryScroll(scope: string, revision: number, phase: str
       restore();
     }
     if (phase !== 'loading') position.current.older = false;
-  }, [scope, revision, phase, hasMessages, restore]);
+  }, [scope, revision, phase, hasMessages, restore, position]);
   useLayoutEffect(() => {
-    if (!content.current) return;
+    if (!content.current || !hasMessages) return;
     const observer = new ResizeObserver(restore);
     observer.observe(content.current);
     return () => observer.disconnect();

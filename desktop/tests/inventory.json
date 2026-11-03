@@ -156,6 +156,7 @@
   "tests/incremental-sync-status.test.mjs"
  ],
  "headless": [
+  "tests/usage/continuity-view.test.mjs",
   "tests/contact-avatar-view.test.mjs",
   "tests/workspace-draft-sqlite-handoff.test.mjs",
   "tests/history-recertify-view.test.mjs",

@@ -1,24 +1,21 @@
 import { useEffect, useState } from 'react';
 import type { DesktopSettings, ShortcutChangeError } from '../shared/desktop-bridge';
+import { useSettingsDraft } from './use-settings-draft';
 import './desktop-controls.css';
 
 export function DesktopControls() {
   const { settings, setSettings, error: loadError } = useDesktopSettings();
-  const [shortcut, setShortcut] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [shortcut = '', setShortcut, discardShortcut, saving, saveDraft] = useSettingsDraft('helper-shortcut', settings?.helperShortcut);
   const [error, setError] = useState('');
-  useEffect(() => { if (settings) setShortcut(settings.helperShortcut); }, [settings?.helperShortcut]);
 
   async function saveShortcut() {
     if (saving) return;
-    setSaving(true);
     try {
-      const result = await window.notalone.setHelperShortcut(shortcut);
+      const result = await saveDraft(() => window.notalone.setHelperShortcut(shortcut));
       setSettings(result.settings);
-      if (!result.error) setShortcut(result.settings.helperShortcut);
+      if (!result.error) discardShortcut();
       setError(result.error ? shortcutErrors[result.error] : '');
     } catch { setError('桌面设置暂时不可用，请重新打开管理后台。'); }
-    finally { setSaving(false); }
   }
 
   return <section className="desktop-controls" aria-label="桌面操作">

@@ -21,6 +21,7 @@ import { SetupPanel } from './SetupPanel';
 import { StartupReadiness, StartupSettings, useStartupState } from './StartupSettings';
 import { ContactPicker, HelperContactPicker, useContactSession } from './contact-session';
 import { ContactsPage } from './ContactsPage';
+import { useChatHistoryPosition } from './use-chat-history-scroll';
 import { ReplyCandidates, useReplySession } from './RewritePanel';
 import { UnifiedReplyWorkspace } from './UnifiedReplyWorkspace';
 import { MemoryPage } from './MemoryPage';
@@ -41,6 +42,7 @@ export function App() {
   const startup = startupRead.state;
   const permission = useScreenPermission();
   const contactSession = useContactSession();
+  const readingPosition = useChatHistoryPosition(window.notalone.contactHistory, !helper);
   const replies = useReplySession(helper);
   const { state: consent } = useRevisionedSession<BindingConsentState>({ revision: -1, scopeRevision: 0, phase: 'offline',
     sessions: [], bindings: [], syncEnabled: null, sessionIssue: 'not-requested', busy: null, errorCode: null, notice: null }, window.notalone.bindings, !helper);
@@ -162,7 +164,9 @@ export function App() {
         {!(page === 'config' && advancedOpen && diagnosticsOpen)
           && <StartupReadiness state={startup} backend={backend} onConfigure={showDiagnostics} />}
         {page === 'config' && <SetupPanel />}
-        {page === 'config' && <><QuarantinePanel /><UsagePanel /><ScreenPermissionPanel view={permission} /><DesktopControls />
+        {page === 'config' && <QuarantinePanel />}
+        <div hidden={page !== 'config'}><UsagePanel active={page === 'config'} /></div>
+        {page === 'config' && <><ScreenPermissionPanel view={permission} /><DesktopControls />
           <details className="startup-settings" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
             <summary>高级</summary>
             <p>手动文件导入入口已退役；已通过自动同步获取的资料无需重复导入。</p>
@@ -174,7 +178,7 @@ export function App() {
             </details>
             {advancedOpen && <DeveloperTraces session={contactSession} />}
           </details></>}
-        {page === 'contacts' && <ContactsPage session={contactSession} syncDetailsContactId={syncDetailsContactId} navigate={setPage} initialSelection={selectingWechatContacts} onSelectionClosed={() => setSelectingWechatContacts(false)} />}
+        {page === 'contacts' && <ContactsPage session={contactSession} syncDetailsContactId={syncDetailsContactId} readingPosition={readingPosition} navigate={setPage} initialSelection={selectingWechatContacts} onSelectionClosed={() => setSelectingWechatContacts(false)} />}
         <div hidden={page !== 'memory'}><MemoryPage session={contactSession} navigate={setPage} visible={page === 'memory'} /></div>
         <SkillLearningPage session={contactSession} visible={page === 'skillLearning'} />
         {page === 'sync' && <>

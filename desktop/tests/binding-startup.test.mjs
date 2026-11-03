@@ -289,3 +289,64 @@ test('SQLite撤销携带持久授权代次，直接撤销不补读微信列表',
  const request=f.requests.find(r=>r.path==='/api/sync/cli-bindings/revoke');assert.equal(request.body.expected_selection_generation,'7');
  assert.equal(f.requests.some(r=>r.path==='/api/sync/cli-sessions'),false);
 });
+
+function sharedReadFixture() {
+  let generation = 1, listener, hold;
+  const calls = [];
+  const binding = { binding_id: '11111111-1111-4111-8111-111111111111', contact_id: '22222222-2222-4222-8222-222222222222', conversation_locator: 'wxid_synthetic', display_name: '合成联系人', status: 'active' };
+  let active = [binding], revoked = [];
+  const backend = { getConnectionGeneration: () => generation, onStateChanged: fn => { listener = fn; }, async requestJson(request) {
+    const acceptedGeneration = generation; calls.push(request.path);
+    const data = request.path === '/api/setup/status' ? {runtime_owner_configured:true}
+      : request.path === '/api/sync/cli-bindings' ? {bindings:structuredClone(active),revoked_bindings:structuredClone(revoked)}
+      : request.path === '/api/sync/cli-sessions' ? {sessions:[]}
+      : request.path === '/api/sync/cli-bindings/revoke' ? (active=[],revoked=[{...binding,status:'revoked'}],revoked[0])
+      : {sync_enabled:false};
+    if(hold && request.path === '/api/sync/status') { const wait=hold;hold=undefined;wait.entered();await wait.promise; }
+    return {generation:acceptedGeneration,data};
+  }};
+  const controller = new BindingConsentController(backend,{getState:()=>({directoryPhase:'ready',contacts:[]}),refreshContacts:async()=>{}});
+  listener();
+  return {controller,calls,binding,holdNextStatus(){let release,entered;const waiting=new Promise(resolve=>{entered=resolve;});hold={promise:new Promise(resolve=>{release=resolve;}),entered};return {waiting,release};},disconnect(){generation=undefined;listener();},connect(value){generation=value;listener();}};
+}
+
+test('同身份已保存关联并发读取复用三个请求，不重启同一轮核对', async () => {
+  const f=sharedReadFixture();await f.controller.refreshSaved();f.calls.length=0;
+  const held=f.holdNextStatus(),first=f.controller.refreshSaved();await held.waiting;
+  const second=f.controller.refreshSaved();await new Promise(resolve=>setImmediate(resolve));
+  console.log(`已保存关联同负载并发读取：${f.calls.length} GET`);
+  assert.equal(f.calls.length,3,'两个读取者应共用 setup、bindings、status 三个GET');
+  held.release();await Promise.all([first,second]);assert.equal(f.controller.getState().phase,'ready');
+});
+
+
+test('已保存关联与明确微信名单读取不同意图，不能共享旧快照', async () => {
+  const f=sharedReadFixture();await f.controller.refreshSaved();f.calls.length=0;
+  const held=f.holdNextStatus(),saved=f.controller.refreshSaved();await held.waiting;
+  await f.controller.refresh();
+  assert.equal(f.calls.filter(path=>path==='/api/sync/cli-sessions').length,1);
+  assert.equal(f.calls.filter(path=>path==='/api/setup/status').length,2);
+  held.release();await saved;
+  assert.equal(f.controller.getState().sessionIssue,null);
+});
+
+test('已保存关联断线立即撤下，新代次自动与页面读取共享且不复用旧请求', async () => {
+  const f=sharedReadFixture();await f.controller.refreshSaved();f.calls.length=0;
+  const held=f.holdNextStatus(),old=f.controller.refreshSaved();await held.waiting;
+  f.disconnect();assert.equal(f.controller.getState().phase,'offline');assert.equal(f.controller.getState().bindings.length,0);
+  f.connect(2);await f.controller.refreshSaved();
+  assert.equal(f.calls.length,6,'旧代次三请求和新代次三请求，页面复用新代次自动读取');
+  held.release();await old;
+  assert.equal(f.controller.getState().phase,'ready');assert.equal(f.controller.getState().bindings.length,1);
+});
+
+test('撤销写入后不复用写入前的关联读取，旧回包不能恢复绑定', async () => {
+  const f=sharedReadFixture();await f.controller.refreshSaved();
+  const held=f.holdNextStatus(),old=f.controller.refreshSaved();await held.waiting;
+  await f.controller.revokeBinding({scopeRevision:f.controller.getState().scopeRevision,contactId:f.binding.contact_id,bindingId:f.binding.binding_id});
+  assert.equal(f.controller.getState().bindings.length,0);
+  const before=f.calls.length;await f.controller.refreshSaved();
+  assert.equal(f.calls.length-before,3,'已结算写入后的读取必须重新获取当前授权');
+  held.release();await old;assert.equal(f.controller.getState().bindings.length,0);
+  assert.equal(f.controller.getState().knownBindings[0].status,'revoked');
+});

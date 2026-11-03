@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ContactChatHistory } from '../../src/renderer/ContactChatHistory';
+import { useChatHistoryPosition } from '../../src/renderer/use-chat-history-scroll';
 import '../../src/renderer/contacts.css';
 
 const contacts = [{ contactId: 'a', displayName: '合成联系人甲' }, { contactId: 'b', displayName: '合成联系人乙' }];
@@ -37,5 +38,12 @@ Object.assign(window, {
     } }, media: {} },
 });
 const root = createRoot(document.getElementById('root')!);
-function render() { root.render(<ContactChatHistory session={{ state: selection } as any} settings={<p>合成资料设置</p>} />); }
+let visible = true;
+Object.assign(window, { showHistory(value: boolean) { visible = value; render(); },
+  invalidateHistory() { publish({ messages: { phase: 'failed', items: [], nextCursor: null }, error: '合成来源失效' }); } });
+function Harness() {
+  const readingPosition = useChatHistoryPosition(window.notalone.contactHistory);
+  return visible ? <ContactChatHistory session={{ state: selection } as any} readingPosition={readingPosition} settings={<p>合成资料设置</p>} /> : null;
+}
+function render() { root.render(<Harness />); }
 render();

@@ -196,7 +196,8 @@ export class ReplySession {
       this.publish({ phase: this.state.result ? 'ready' : 'idle', canRetry: false, errorCode: undefined });
     } else if (event === 'focused' && this.helperHidden) {
       this.helperHidden = false;
-      if (this.state.contactId) void this.readSavedSession({ contactId: this.state.contactId, scopeRevision: this.state.scopeRevision });
+      if (this.state.contactId) void this.readSavedSession(
+        { contactId: this.state.contactId, scopeRevision: this.state.scopeRevision }, true);
     }
   }
   pendingGenerationReceipts(): PendingAssistantGenerationReceipt[] { return this.generationJobs.pendingReceipts(); }
@@ -322,7 +323,7 @@ export class ReplySession {
         : turn?.generationActive === true ? 'prepared_context_running' : 'prepared_context_unconfirmed' });
   }
 
-  async readSavedSession(selection: ContactSelection): Promise<void> {
+  async readSavedSession(selection: ContactSelection, retainVerifiedDisplay = false): Promise<void> {
     this.assertScope(selection);
     this.cancelContactRestore();
     if (this.pendingExpressionPreferenceDeletions > 0 || this.pendingOwnerContextChanges > 0 || this.state.sessionDeletion === 'deleting'
@@ -334,7 +335,10 @@ export class ReplySession {
     const generation = this.backend.getConnectionGeneration();
     const content = this.pendingContent, inputOperation = this.operation;
     const heldSessionId = this.state.savedSession?.sessionId ?? content?.sessionId;
-    this.publish({ savedSession: { phase: 'loading', sessionId: heldSessionId ?? null, turns: [], inputs: [], currentInputVersionId: null } });
+    // 同范围重开小窗保留已核验展示；后台仍走完整恢复和来源核验，失效投影不参与保留。
+    if (!retainVerifiedDisplay || this.projectState().savedSession?.phase !== 'ready') {
+      this.publish({ savedSession: { phase: 'loading', sessionId: heldSessionId ?? null, turns: [], inputs: [], currentInputVersionId: null } });
+    }
     let projectionRead = this.sessionProjection.beginRead(this.projectionScope());
     const current = () => !pending.signal.aborted && selection.scopeRevision === this.state.scopeRevision
       && selection.contactId === this.state.contactId && generation === this.backend.getConnectionGeneration()

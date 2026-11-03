@@ -78,6 +78,61 @@ test('暂时失去生成资格保留想法，结果未知只核对原请求且�
  await expect(draft).toHaveValue('后来改写的新想法');
 });
 
+test('临时禁用再恢复保留候选编辑和展开依据，不重复读取候选',{timeout:30000},async t=>{
+ const f=await panel(t,async()=>pageData()),region=f.page.getByRole('region',{name:'表达工作区'});
+ const candidate=region.getByRole('textbox',{name:'候选第1条',exact:true});
+ await expect(candidate).toHaveValue('合成候选第一条');await candidate.fill('尚未保存的合成编辑');
+ await region.getByText('依据',{exact:true}).click();
+ await f.page.evaluate(()=>window.__setDisabled(true));await expect(candidate).toBeDisabled();
+ await expect(candidate).toHaveValue('尚未保存的合成编辑');
+ await f.page.evaluate(()=>window.__setDisabled(false));await expect(candidate).toBeEnabled();
+ await expect(candidate).toHaveValue('尚未保存的合成编辑');
+ await expect(region.getByText('同联系人实际输入依据',{exact:true})).toBeVisible();
+ assert.equal(f.commands.filter(c=>c.action==='read').length,1);
+ assert.equal(f.commands.filter(c=>c.action==='edit').length,0);
+});
+
+test('助手面板取消删除确认与刷新目录不丢候选编辑，也不重读候选',{timeout:30000},async t=>{
+ const f=await panel(t,async()=>pageData(),'',true),candidate=f.page.getByRole('textbox',{name:'候选第1条',exact:true});
+ await expect(candidate).toHaveValue('合成候选第一条');await candidate.fill('取消确认后仍保留的编辑');
+ await f.page.getByText('历史讨论',{exact:true}).click();
+ await f.page.getByRole('button',{name:'删除正在查看的会话',exact:true}).click();
+ await expect(f.page.getByRole('group',{name:'确认删除助手会话'})).toBeVisible();
+ await expect(candidate).toBeDisabled();await expect(candidate).toHaveValue('取消确认后仍保留的编辑');
+ await f.page.getByRole('button',{name:'取消删除会话',exact:true}).click();
+ await expect(candidate).toBeEnabled();await expect(candidate).toHaveValue('取消确认后仍保留的编辑');
+ await f.page.getByRole('button',{name:'刷新会话列表',exact:true}).click();
+ await expect(candidate).toBeDisabled();await expect(candidate).toHaveValue('取消确认后仍保留的编辑');
+ await f.page.evaluate(()=>window.__finishCatalog());await expect(candidate).toBeEnabled();
+ await expect(candidate).toHaveValue('取消确认后仍保留的编辑');
+ assert.equal(f.commands.filter(c=>c.action==='read').length,1);
+ assert.equal(f.commands.filter(c=>c.action==='edit').length,0);
+});
+
+test('候选首读在临时禁用中完成，恢复后可继续操作且不重复读取',{timeout:30000},async t=>{
+ const release=Promise.withResolvers();t.after(()=>release.resolve(pageData()));
+ const f=await panel(t,async operation=>operation.action==='read'?release.promise:original());
+ const region=f.page.getByRole('region',{name:'表达工作区'});
+ await expect.poll(()=>f.commands.length).toBe(1);
+ await f.page.evaluate(()=>window.__setDisabled(true));await expect(region.getByRole('button',{name:'刷新候选',exact:true})).toBeDisabled();
+ release.resolve(pageData());await expect.poll(()=>f.page.evaluate(()=>window.__settled)).toBe(1);
+ await f.page.evaluate(()=>window.__setDisabled(false));
+ const candidate=region.getByRole('textbox',{name:'候选第1条',exact:true});await expect(candidate).toBeEnabled();
+ await candidate.fill('首读完成后继续编辑');await expect(region.getByRole('button',{name:'保存修改',exact:true})).toBeEnabled();
+ assert.equal(f.commands.filter(c=>c.action==='read').length,1);
+});
+
+test('临时禁用期间真实来源失效仍立即撤下编辑及依据',{timeout:30000},async t=>{
+ const f=await panel(t,async()=>pageData()),region=f.page.getByRole('region',{name:'表达工作区'});
+ const candidate=region.getByRole('textbox',{name:'候选第1条',exact:true});
+ await expect(candidate).toHaveValue('合成候选第一条');await candidate.fill('已失效的合成编辑');
+ await f.page.evaluate(()=>window.__setDisabled(true));
+ await expect(region.getByRole('button',{name:'刷新候选',exact:true})).toBeDisabled();
+ await f.page.evaluate(()=>window.__invalidate());
+ await expect(candidate).toHaveCount(0);assert.doesNotMatch(await region.textContent(),/已失效的合成编辑|同联系人实际输入依据/);
+ assert.equal(f.commands.filter(c=>c.action==='read').length,1);
+});
+
 test('Skill自动选择无需手选，仅展示实际名称或不可用提示',{timeout:30000},async t=>{
  let data={...pageData(),availableSkills:[{packageId:ids.skill,name:'合成安慰策略',revisionNo:1}]};
  data.requests[0].loadedSkills[0].name='合成安慰策略';data.requests[0].loadedSkills.push({packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'references/large.md',text:'large'.repeat(25000)});
@@ -94,11 +149,17 @@ test('Skill自动选择无需手选，仅展示实际名称或不可用提示',{
 });
 
 /** 仅IPC业务边界为显式替身；实际React、浏览器事件及渲染均执行。 */
-async function panel(t,execute,initialDraft=''){
- const compiled=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{SqliteReplyCandidatesPanel}from'./src/renderer/SqliteReplyCandidatesPanel';
+async function panel(t,execute,initialDraft='',assistant=false){
+ const compiled=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{SqliteReplyCandidatesPanel}from'./src/renderer/SqliteReplyCandidatesPanel';import{AssistantSessionPanel}from'./src/renderer/AssistantSessionPanel';
   const listeners=new Set();const bridge={candidates:{execute:request=>window.__execute(request).finally(()=>{window.__settled=(window.__settled||0)+1;})},onInvalidated:listener=>{listeners.add(listener);return()=>listeners.delete(listener);}};
   const root=createRoot(document.getElementById('root'));let props={bridge,contactId:${JSON.stringify(ids.contact)},scopeRevision:1,sessionId:${JSON.stringify(ids.session)},initialDraft:${JSON.stringify(initialDraft)},onSubmitted:receipt=>window.__submitted(receipt)};
-  const render=()=>root.render(React.createElement(SqliteReplyCandidatesPanel,props));window.__invalidate=()=>{for(const listener of listeners)listener({revision:2,contactId:props.contactId,scopeRevision:props.scopeRevision});};
+  window.notalone={sqliteDiscussion:bridge};
+  let state={contactId:props.contactId,scopeRevision:props.scopeRevision,phase:'idle',generationBlock:null,generationJobs:[],exploration:{phase:'idle'},
+    savedSession:{phase:'ready',sessionId:props.sessionId,turns:[],inputs:[],currentInputVersionId:null,discussionEntries:[],runtimeRecovery:'ready'},
+    sessionCatalog:{phase:'ready',items:[{sessionId:props.sessionId,isCurrent:true}],currentSessionId:props.sessionId}};
+  const replies={listSavedSessions:async()=>{state={...state,sessionCatalog:{...state.sessionCatalog,phase:'loading'}};render();await new Promise(resolve=>window.__finishCatalog=resolve);state={...state,sessionCatalog:{...state.sessionCatalog,phase:'ready'}};render();},
+    readSavedSession:async()=>{},newSavedSession:async()=>{},deleteSavedSession:async()=>{},viewSavedSession:async()=>{},resumeSavedSession:async()=>{}};
+  const render=()=>root.render(${assistant}?React.createElement(AssistantSessionPanel,{replies:{...replies,state}}):React.createElement(SqliteReplyCandidatesPanel,props));window.__invalidate=()=>{for(const listener of listeners)listener({revision:2,contactId:props.contactId,scopeRevision:props.scopeRevision});};
   window.__setDisabled=disabled=>{props={...props,disabled};render();};window.__switch=()=>{props={...props,contactId:${JSON.stringify(ids.other)},scopeRevision:2,sessionId:${JSON.stringify(ids.otherSession)}};render();};render();`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
  const server=createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end('<div id="root"></div>');});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));
  const browser=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'});t.after(()=>browser.close());
