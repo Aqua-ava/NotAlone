@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm,readFile,rename,mkdir} from 'node:fs/promises';
+import {mkdtemp,rm,readFile,writeFile,rename,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {startModelHost,modelBackgroundConcurrency} from '../src/platform/models/model-host.ts';
@@ -26,13 +26,14 @@ test('许可目录稳定不含临时profile，正常关闭后可恢复',async t=
 });
 test('先拒绝排队并停止新调用，再等待真实在途结算，不因pause造成退出死锁',async t=>{
  const host=await startModelHost(await options(t));
- const active=await host.arbiter.acquire('background');
- const queued=host.arbiter.acquire('foreground');
- const rejected=assert.rejects(queued,/stopped/);
+ const foreground=await host.arbiter.acquire('foreground');
+ const background=await Promise.all(Array.from({length:3},()=>host.arbiter.acquire('background')));
+ const rejected=Promise.all(['foreground','background'].map(kind=>assert.rejects(host.arbiter.acquire(kind),/stopped/)));
  let notified=false,closed=false;
  const closing=host.close(async()=>{notified=true;await rejected;}).then(()=>closed=true);
  await turn();assert.equal(notified,true);assert.equal(closed,false);
- active.settle();await closing;
+ for(const permit of background)permit.settle();await turn();assert.equal(closed,false);
+ foreground.settle();await closing;
 });
 test('后续装配失败shutdown释放零调用新资源，保留稳定恢复记录',async t=>{
  const config=await options(t),host=await startModelHost(config);
@@ -62,4 +63,34 @@ test('许可journal末写失败后恢复原状态文件，同一关闭操作继�
  await rm(host.statePath,{recursive:true});await rename(backup,host.statePath);
  await host.close(async()=>{});
  const next=await startModelHost(config);assert.deepEqual(next.unknownSettlements(),[]);await next.close(async()=>{});
+});
+
+test('宿主默认同时容纳一前台三后台，journal保留四路身份且结算后可重启',async t=>{
+ const config=await options(t),host=await startModelHost(config);
+ t.after(()=>host.shutdown());
+ const permits=await Promise.all(['foreground','background','background','background'].map(kind=>host.arbiter.acquire(kind)));
+ const state=JSON.parse(await readFile(host.statePath,'utf8'));
+ assert.equal(state.active.filter(item=>item.kind==='foreground').length,1);
+ assert.equal(state.active.filter(item=>item.kind==='background').length,3);
+ assert.deepEqual(new Set(state.active.map(item=>item.id)),new Set(permits.map(item=>item.id)));
+ for(const permit of permits)permit.settle();await host.close(async()=>{});
+ const next=await startModelHost(config);assert.deepEqual(next.unknownSettlements(),[]);await next.close(async()=>{});
+});
+
+test('重启保留前后台未知调用记录，新许可与再次重启不能抹除未知结算',async t=>{
+ const config=await options(t),first=await startModelHost(config),path=first.statePath;
+ await first.close(async()=>{});
+ // 合成不存在的执行者；只有已证实原执行者消失，journal才允许恢复宿主。
+ const gone={pid:2147483647,parentPid:1,startedAt:'Tue Nov 3 00:00:00 2026',executable:process.execPath};
+ const active=['foreground','background'].map(kind=>({id:`synthetic-${kind}`,kind,worker:gone,attempt_id:`synthetic-${kind}-attempt`}));
+ await writeFile(path,JSON.stringify({version:1,host:gone,active,unknown:[]}));
+ const expected=active.map(item=>({...item,settlement:'unknown'})),host=await startModelHost(config);
+ t.after(()=>host.shutdown());
+ assert.deepEqual(host.unknownSettlements(),expected);
+ const permits=await Promise.all(['foreground','background'].map(kind=>host.arbiter.acquire(kind)));
+ assert.deepEqual(host.unknownSettlements(),expected);
+ assert.deepEqual(host.unconfirmedPermitIds().sort(),['synthetic-background','synthetic-foreground']);
+ for(const permit of permits)permit.settle();await host.close(async()=>{});
+ const next=await startModelHost(config);assert.deepEqual(next.unknownSettlements(),expected);await next.close(async()=>{});
+ assert.deepEqual(JSON.parse(await readFile(path,'utf8')).unknown,expected);
 });

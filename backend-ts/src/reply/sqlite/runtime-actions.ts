@@ -15,14 +15,14 @@ function requireRuntimeActive(tx:StorageTransaction,i:any):StorageRow{
  return row;
 }
 export function requireRuntimeCurrent(tx:StorageTransaction,i:any):StorageRow{
- const row=requireRuntimeActive(tx,i),c=requireDiscussionContact(tx,i.ownerId,i.contactId);
+ const row=requireRuntimeActive(tx,i);
  try{requireCurrentReplyDependencies(tx,{ownerId:i.ownerId,copyIds:[String(row.id)]});}
  catch(error){if(error instanceof StorageFailure&&error.code==='history_source_not_available')fail('discussion_runtime_invalidated');throw error;}
  for(const context of tx.all('SELECT c.*,r.provenance_state FROM runtime_context r JOIN reply_context c ON c.owner_id=r.owner_id AND c.id=r.context_id WHERE r.owner_id=? AND r.copy_id=?',[i.ownerId,i.copyId])){
   if(context.provenance_state!=='verified'||context.state!=='active')fail('discussion_runtime_invalidated');
   requireSkillRun(tx,i.ownerId,decode<SkillRunRevision>(String(context.skill_run_json)));
   const owner=tx.get('SELECT * FROM owner WHERE owner_id=?',[i.ownerId])!;
-  if(context.preference_revision!==owner.preference_revision||context.owner_memory_revision!==owner.memory_revision||context.contact_memory_revision!==c.memory_revision)fail('discussion_runtime_invalidated');
+  if(context.preference_revision!==owner.preference_revision)fail('discussion_runtime_invalidated');
  }
  return row;
 }

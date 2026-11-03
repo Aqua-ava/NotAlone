@@ -1,9 +1,9 @@
 import type {StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
-import {assertSourceEligibility} from '../../../history/sqlite/source.ts';
+import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
 import {fail} from './qualification.ts';
 /** 冻结贡献是资格依赖，和证据引句分开；消费者清理需覆盖两者。 */
-export function qualificationSources(tx:StorageTransaction,ownerId:string,parent:{candidateId?:string;memoryId?:string;versionNo?:bigint}):ReplySource[]{
+export function qualificationSources(tx:StorageTransaction,ownerId:string,parent:{candidateId?:string;memoryId?:string;versionNo?:bigint},sourceEligibility:SourceEligibility=assertSourceEligibility):ReplySource[]{
  const rows=tx.all(`WITH RECURSIVE versions(memory_id,version_no) AS (
  SELECT ?,? WHERE ? IS NOT NULL
  UNION SELECT v.memory_id,v.previous_version_no FROM memory_version v JOIN versions a ON a.memory_id=v.memory_id AND a.version_no=v.version_no WHERE v.owner_id=? AND v.previous_version_no IS NOT NULL
@@ -17,7 +17,7 @@ export function qualificationSources(tx:StorageTransaction,ownerId:string,parent
  ) SELECT DISTINCT * FROM sources ORDER BY source_contact_id,message_id,record_id`,[parent.memoryId??null,parent.versionNo??null,parent.memoryId??null,ownerId,ownerId,ownerId,parent.candidateId??null,parent.candidateId??null,ownerId,ownerId,ownerId]);
  return rows.map(r=>{
   const source={contactId:String(r.source_contact_id),messageId:String(r.message_id),recordId:String(r.record_id),acceptedRevision:r.accepted_interpretation_revision as bigint};
-  assertSourceEligibility(tx,{owner_id:ownerId,contact_id:source.contactId,message_id:source.messageId,record_id:source.recordId});
+  sourceEligibility(tx,{owner_id:ownerId,contact_id:source.contactId,message_id:source.messageId,record_id:source.recordId});
   if(!tx.get("SELECT 1 FROM message WHERE owner_id=? AND contact_id=? AND id=? AND interpretation_revision=? AND availability='available'",[ownerId,source.contactId,source.messageId,source.acceptedRevision]))fail('memory_source_stale');return source;
  });
 }

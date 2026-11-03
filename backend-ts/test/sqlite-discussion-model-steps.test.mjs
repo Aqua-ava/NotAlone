@@ -79,8 +79,8 @@ test('精确知识资料撤销时，降级不能建立新上下文',async t=>{
  const registryModule=new URL('./fixtures/sqlite-reply-candidates/knowledge-registry.mjs',import.meta.url).href;
  const f=await preparedReply(t,{registryModule,knowledge:true});
  await f.storage.execute('synthetic.invalidateReplyKnowledge',{ownerId:f.owner});
- await assert.rejects(f.storage.execute('reply.dropSkill',f.input),{code:'reply_input_stale'});
- assert.deepEqual((await f.discussions.trace(f.input.contactId,f.input.discussionId,f.input.requestId)).events,[]);
+ await assert.rejects(f.storage.execute('reply.dropSkill',f.input),{code:'synthetic_publication_unavailable'});
+ await assert.rejects(f.discussions.trace(f.input.contactId,f.input.discussionId,f.input.requestId),{code:'discussion_unavailable'});
  assert.equal(f.requests.length,0);
 });
 

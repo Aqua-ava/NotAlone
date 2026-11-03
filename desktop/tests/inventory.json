@@ -155,6 +155,7 @@
   "tests/incremental-sync-status.test.mjs"
  ],
  "headless": [
+  "tests/workspace-draft-sqlite-handoff.test.mjs",
   "tests/history-recertify-view.test.mjs",
   "tests/assistant-session-workspace.test.mjs",
   "tests/foreground-recovery-view.test.mjs",

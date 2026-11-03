@@ -54,11 +54,12 @@ test('当前请求多条实际来源中任意一条不可用都会拒绝，且�
  await assert.rejects(f.check({requestIds:[a.requestId]}),{code:'history_source_not_available'});
 });
 
-test('来源守卫丢失和单消息修订都能使冻结输入失效，无需联系人总版本变化',async t=>{
+test('来源守卫丢失保留本机快照，单消息修订仍使实际冻结依赖失效',async t=>{
  for(const mode of ['guardLost','messageChanged'])await t.test(mode,async t=>{
   const f=await fixture(t),a=await f.context(f.ids[0]);assert.equal(await f.check({requestIds:[a.requestId]}),true);
   await f.storage.execute(`provenanceTest.${mode}`,{ownerId,contactId:f.ids[0],messageId:a.messages[0].id});
-  await assert.rejects(f.check({requestIds:[a.requestId]}),{code:'history_source_not_available'});
+  if(mode==='guardLost')assert.equal(await f.check({requestIds:[a.requestId]}),true);
+  else await assert.rejects(f.check({requestIds:[a.requestId]}),{code:'history_source_not_available'});
  });
 });
 
@@ -78,6 +79,8 @@ test('本人记忆引用的另一联系人来源属于本次实际依赖，同�
  const next=await f.context(f.ids[0],{messageIds:[],candidate:true});
  assert.equal(await f.check({contextIds:[next.contextId]}),true);
  await f.storage.execute('provenanceTest.guardLost',{ownerId,contactId:f.ids[1]});
+ assert.equal(await f.check({contextIds:[next.contextId]}),true);
+ await f.storage.execute('synthetic.invalidateReplyKnowledge',{ownerId});
  await assert.rejects(f.check({contextIds:[next.contextId]}),{code:'history_source_not_available'});
 });
 
@@ -88,15 +91,15 @@ test('无关联系人增加失证的旧请求，不增加当前依赖校验读�
  let unrelated;
  for(let index=0;index<8;++index)unrelated=await f.context(f.ids[1]);
  await f.storage.execute('provenanceTest.guardLost',{ownerId,contactId:f.ids[1]});
- assert.equal((await f.storage.execute('provenanceTest.inspect',{ownerId,requestIds:[unrelated.requestId]})).current,false);
+ assert.equal((await f.storage.execute('provenanceTest.inspect',{ownerId,requestIds:[unrelated.requestId]})).current,true);
  const after=await read();assert.deepEqual(after,before);
 });
 
-test('旧讨论条目的实际来源失效会阻止后续复用，不能只检查当前直接聊天',async t=>{
+test('用户独立输入不继承同轮聊天事实依赖',async t=>{
  const f=await fixture(t),first=await f.context(f.ids[0]);
- const entry=(await f.discussions.view(f.ids[0],first.discussionId)).entries[0];
+ const entry=(await f.discussions.view(f.ids[0],first.discussionId)).entries[0];assert.equal(entry.role,'user');
  const next=await f.context(f.ids[0],{entryIds:[entry.id],messageIds:[]});
  assert.equal(await f.check({contextIds:[next.contextId]}),true);
  await f.storage.execute('provenanceTest.sourceUnavailable',{ownerId,contactId:f.ids[0],recordId:first.messages[0].record_id});
- await assert.rejects(f.check({contextIds:[next.contextId]}),{code:'history_source_not_available'});
+ assert.equal(await f.check({contextIds:[next.contextId]}),true);
 });

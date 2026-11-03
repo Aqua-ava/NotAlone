@@ -10,6 +10,7 @@ export interface ReplyKnowledgeItem {
 export interface ReplyKnowledgeReader {
  read(tx:StorageTransaction,scope:DiscussionScope):ReplyKnowledgeItem[];
  /** 核验精确版本、来源、保护修订及发布成员，不以替换来源延续旧证明。 */
+ requireFrozen?(tx:StorageTransaction,scope:DiscussionScope,item:ReplyKnowledgeItem):void;
  requireCurrent(tx:StorageTransaction,scope:DiscussionScope,item:ReplyKnowledgeItem):void;
 }
 export const emptyReplyKnowledge:ReplyKnowledgeReader={read:()=>[],requireCurrent(){throw new Error('reply_knowledge_unavailable');}};

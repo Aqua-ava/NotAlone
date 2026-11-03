@@ -2,11 +2,13 @@ import {StorageFailure,type StorageRow,type StorageTransaction} from '../../../s
 import type {DiscussionScope} from '../../../reply/sqlite/contracts.ts';
 import type {ReplyKnowledgeItem,ReplyKnowledgeReader} from '../../../reply/sqlite/candidates/contracts.ts';
 import {available} from '../management/qualification.ts';
-import {memoryKnowledgeReader} from '../management/knowledge.ts';
+import {memoryKnowledgeReader,createMemoryKnowledgeReader} from '../management/knowledge.ts';
+import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
+import {assertReplyLocalSource} from '../../../history/sqlite/reply-local-source.ts';
 import {documentSources,publicationMembers} from './basis.ts';
 import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 
-/** 发布修订也随实际输入冻结，空集合的切换由12的范围修订快照保护。 */
+/** 发布修订随实际输入冻结；在途仅复核实际冻结集合，后来新增资料留给下一次请求。 */
 export interface DocumentKnowledgeItem extends ReplyKnowledgeItem {documentRevision:bigint}
 
 const sections:Record<string,string>={basic_information:'基本资料',long_term_preferences:'长期偏好',life_context:'生活背景',interests:'兴趣',insights:'观察与推断',evolution:'变化',contradictions:'待厘清的矛盾'};
@@ -42,38 +44,39 @@ function textOf(tx:StorageTransaction,ownerId:string,member:StorageRow):string {
  }
  return lines.join('\n');
 }
-function scopeItems(tx:StorageTransaction,scope:DiscussionScope,scopeKind:'self'|'contact'):DocumentKnowledgeItem[]{
+function scopeItems(tx:StorageTransaction,scope:DiscussionScope,scopeKind:'self'|'contact',sourceEligibility:SourceEligibility,publicationIdOverride?:string):DocumentKnowledgeItem[]{
  const ownerId=scope.ownerId,contactId=scopeKind==='self'?null:scope.contactId;
  const current=scopeKind==='self'?tx.get('SELECT current_publication_id,document_revision FROM owner WHERE owner_id=?',[ownerId]):tx.get('SELECT current_publication_id,document_revision FROM contact WHERE owner_id=? AND id=?',[ownerId,contactId]);
- if(!current||current.current_publication_id===null)return [];
+ if(!current||current.current_publication_id===null&&!publicationIdOverride)return [];
  try{
-  const cache=new Map<string,ReplySource[]>(),publicationId=String(current.current_publication_id),members=publicationMembers(tx,ownerId,publicationId,scopeKind,contactId,cache);
+  const cache=new Map<string,ReplySource[]>(),publicationId=publicationIdOverride??String(current.current_publication_id),members=publicationMembers(tx,ownerId,publicationId,scopeKind,contactId,cache,sourceEligibility);
   // 完整集合复核后再一次返回：其中任何成员失效时不能把剩余成员当成当前集合。
   return members.map(member=>{
-   const sources=documentSources(tx,ownerId,String(member.document_id),member.version_no as bigint,new Set(),cache);
+   const sources=documentSources(tx,ownerId,String(member.document_id),member.version_no as bigint,new Set(),cache,sourceEligibility);
    if(scopeKind==='contact'&&sources.some(source=>source.contactId!==contactId))throw new StorageFailure('document_scope_stale');
    return {kind:'document',id:String(member.document_id),versionNo:member.version_no as bigint,scopeKind:scopeKind==='self'?'owner':'contact',contactId,publicationId,
     text:textOf(tx,ownerId,member),qualification:'published',sources,documentRevision:current.document_revision as bigint};
   });
  }catch(error){if(error instanceof StorageFailure)return [];throw error;}
 }
-function items(tx:StorageTransaction,scope:DiscussionScope):DocumentKnowledgeItem[]{
+function items(tx:StorageTransaction,scope:DiscussionScope,sourceEligibility:SourceEligibility):DocumentKnowledgeItem[]{
  available(tx,scope.ownerId,{scopeKind:'contact',contactId:scope.contactId});
  if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed'",[scope.ownerId]))return [];
- return [...scopeItems(tx,scope,'self'),...scopeItems(tx,scope,'contact')];
+ return [...scopeItems(tx,scope,'self',sourceEligibility),...scopeItems(tx,scope,'contact',sourceEligibility)];
 }
 function serialized(value:unknown):string{return JSON.stringify(value,(_key,v)=>typeof v==='bigint'?v.toString():v);}
-export const documentKnowledgeReader:ReplyKnowledgeReader={
- read:items,
- requireCurrent(tx,scope,item){
+export function createDocumentKnowledgeReader(sourceEligibility:SourceEligibility=assertSourceEligibility):ReplyKnowledgeReader {
+ const requireItem=(tx:StorageTransaction,scope:DiscussionScope,item:ReplyKnowledgeItem,frozen=false)=>{
   const previous=item as DocumentKnowledgeItem;
   available(tx,scope.ownerId,{scopeKind:'contact',contactId:scope.contactId});
   if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed'",[scope.ownerId]))throw new StorageFailure('document_knowledge_stale');
-  const found=scopeItems(tx,scope,item.scopeKind==='owner'?'self':'contact').find(value=>value.id===item.id&&value.scopeKind===item.scopeKind&&value.contactId===item.contactId);
-  if(!found||item.kind!=='document'||found.versionNo!==item.versionNo||found.publicationId!==item.publicationId||found.documentRevision!==previous.documentRevision
+  const found=scopeItems(tx,scope,item.scopeKind==='owner'?'self':'contact',sourceEligibility,frozen?item.publicationId??undefined:undefined).find(value=>value.id===item.id&&value.scopeKind===item.scopeKind&&value.contactId===item.contactId);
+  if(!found||item.kind!=='document'||found.versionNo!==item.versionNo||found.publicationId!==item.publicationId||!frozen&&found.documentRevision!==previous.documentRevision
    ||found.qualification!==item.qualification||found.text!==item.text||serialized(found.sources)!==serialized(item.sources))throw new StorageFailure('document_knowledge_stale');
- },
-};
+ };
+ return {read:(tx,scope)=>items(tx,scope,sourceEligibility),requireCurrent:requireItem,requireFrozen:(tx,scope,item)=>requireItem(tx,scope,item,true)};
+}
+export const documentKnowledgeReader=createDocumentKnowledgeReader();
 /** 按kind分派已存在的08记忆读取与09完整文档集合，回复不加载长期表达偏好。 */
 export const combinedKnowledgeReader:ReplyKnowledgeReader={
  read(tx,scope){return [...memoryKnowledgeReader.read(tx,scope),...documentKnowledgeReader.read(tx,scope)];},
@@ -83,3 +86,13 @@ export const combinedKnowledgeReader:ReplyKnowledgeReader={
   throw new StorageFailure('reply_knowledge_invalid');
  },
 };
+
+/** 回复专用可信装配；后台发布和记忆写入继续使用严格默认资格。 */
+export function createReplyLocalKnowledgeReader():ReplyKnowledgeReader {
+ const memory=createMemoryKnowledgeReader({includeUnconfirmed:false},assertReplyLocalSource),documents=createDocumentKnowledgeReader(assertReplyLocalSource);
+ const reader=(item:ReplyKnowledgeItem)=>item.kind==='document'?documents:memory;
+ return {read:(tx,scope)=>[...memory.read(tx,scope),...documents.read(tx,scope)],
+  requireCurrent:(tx,scope,item)=>reader(item).requireCurrent(tx,scope,item),
+  requireFrozen:(tx,scope,item)=>{const selected=reader(item);(selected.requireFrozen??selected.requireCurrent)(tx,scope,item);}};
+}
+export const replyLocalKnowledgeReader=createReplyLocalKnowledgeReader();

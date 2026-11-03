@@ -9,8 +9,8 @@ import {encode} from './requests.ts';
 function fail(code:string):never{throw new StorageFailure(code);}
 /** 只核验非Skill资料；精确记忆／文档资格由reply.dropSkill的正式reader先复验。 */
 export function requireSkillFallbackSources(tx:StorageTransaction,i:any,context:StorageRow):void{
- const contact=requireDiscussionContact(tx,i.ownerId,i.contactId),owner=tx.get('SELECT * FROM owner WHERE owner_id=?',[i.ownerId])!;
- if(context.preference_revision!==owner.preference_revision||context.owner_memory_revision!==owner.memory_revision||context.contact_memory_revision!==contact.memory_revision)fail('discussion_source_unavailable');
+ requireDiscussionContact(tx,i.ownerId,i.contactId);const owner=tx.get('SELECT * FROM owner WHERE owner_id=?',[i.ownerId])!;
+ if(context.preference_revision!==owner.preference_revision)fail('discussion_source_unavailable');
  if(!hasCurrentReplyDependencies(tx,{ownerId:i.ownerId,requestIds:[i.requestId]}))fail('discussion_source_unavailable');
  for(const item of tx.all('SELECT * FROM reply_context_item WHERE owner_id=? AND context_id=?',[i.ownerId,i.contextId])){
   if(item.kind==='entry'){

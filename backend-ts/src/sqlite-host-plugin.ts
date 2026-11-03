@@ -220,7 +220,6 @@ export async function apply(ctx: Context) {
     if(memoryEnabled&&automaticBackground)memory.startScheduling();
     const memoryDocumentsHttp=memoryEnabled&&memory.documents?new SqliteMemoryDocumentsHttp(memory.documents,req=>authorizeSqliteRequest(req,token)):undefined;
     discussions=await createSqliteDiscussionHost({ctx,storage,ownerId,userData:sqlite.userData,holders:deletionHolders,reader:assistantReads,library,authorizeRequest:req=>authorizeSqliteRequest(req,token),
-      ...(history?{prepareSources:(contactId:string,signal?:AbortSignal)=>history!.prepareSource(contactId,signal)}:{}),
       ...(models?.shared?{model:{configuration:models.shared.configuration.model,provider:models.shared.provider,arbiter:models.shared.arbiter}}:{})});
     const deletions = new SqliteDeletionHttp(deletionService, ownerId);
     const ownership = { contacts: 'typescript', wechat: 'typescript',

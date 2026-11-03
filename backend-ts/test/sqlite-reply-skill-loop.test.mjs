@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {fixture} from './fixtures/sqlite-reply-candidates/support.mjs';
 import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/service.ts';
+import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 import {SqliteReplyTurns} from '../src/reply/sqlite/candidates/turns.ts';
 const answer=JSON.stringify({candidates:[{parts:['合成候选仍可编辑。'],basis:[1]}]});
 function stream(res,name,args){
@@ -86,6 +87,19 @@ test('Skill在模型选中后缺失时清理旧会话与失效载荷，再用无
  const copies=await f.storage.execute('runtime.inventory',{ownerId:f.owner});assert.equal(copies.length,1);assert.equal(copies[0].state,'ready');assert.equal(copies[0].configurationDigest,await f.turns.configurationFor(f.input.contactId,f.input.discussionId));
  assert.equal((await readdir(join(f.root,'managed/runtime-copies'))).length,1);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('Skill失效降级时无关新增记忆不打断原冻结输入',async t=>{
+ const added='模型在途才新增的无关合成事实。';
+ const f=await setup(t,async(f,res,_request,n)=>{
+  if(n===1){
+   await new SqliteMemoryManagement(f.storage,f.owner).decide({requestKey:randomUUID(),action:'manual',scope:{scopeKind:'contact',contactId:f.ids[0]},body:added});
+   await unlink(join(f.skillRoot,'gentle/SKILL.md'));stream(res,'skill',{name:'gentle'});
+  }else stream(res);
+ });
+ await f.turns.generate(f.input);const view=await f.view();assert.equal(view.candidates.length,1);assert.equal(view.skillWarning,'回复策略暂不可用');
+ assert.equal(f.requests.length,2);assert.doesNotMatch(JSON.stringify(f.requests[1]),new RegExp(added));
+ assert.equal((await f.trace()).calls.length,2);
 });
 
 test('模型可不选择Skill，候选不展示策略名称或不可用提示',async t=>{

@@ -210,7 +210,7 @@ test('删除来源会排空空闲守卫，并使该来源不能自动续读',asy
  await assert.rejects(history.synchronize(contact),{code:'history_source_continuity_unverified'});assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('守卫失效后，跨联系人资料依赖的旧回复也失效',async t=>{
+test('旧守卫释放留下不明来源围栏时，跨联系人旧回复仍失效',async t=>{
  const f=await fixture(t,{registryModule:new URL('./fixtures/history/quarantine-registry.mjs',import.meta.url).href}),state={created:0,closed:0};
  const history=new SqliteHistoryService(f.storage,f.contacts,guardedChannelFactory(state));t.after(()=>history.close());const [a,b]=f.saved;
  await history.synchronize(a.contact_id);const message=(await history.read(a.contact_id)).messages[0];

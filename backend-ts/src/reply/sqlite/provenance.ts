@@ -1,5 +1,6 @@
+import {currentReplyKnowledgeReader} from './candidates/knowledge-context.ts';
 import {StorageFailure,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
-import {assertSourcesEligibility} from '../../history/sqlite/source.ts';
+import {assertReplyLocalSources} from '../../history/sqlite/reply-local-source.ts';
 import type {MessageSourceReference} from '../../history/sqlite/contracts.ts';
 
 export interface ReplyDependencyScope {ownerId:string;contextIds?:readonly string[];requestIds?:readonly string[];copyIds?:readonly string[]}
@@ -24,9 +25,16 @@ export function requireCurrentReplyDependencies(tx:StorageTransaction,scope:Repl
   }
  }
  for(const contextId of pending){
-  const context=tx.get('SELECT state,request_id FROM reply_context WHERE owner_id=? AND id=?',[ownerId,contextId]);
+  const context=tx.get('SELECT state,request_id,contact_id,discussion_id FROM reply_context WHERE owner_id=? AND id=?',[ownerId,contextId]);
   if(!context||context.state!=='active')unavailable();
   if(context.request_id!==null)includeRequest(String(context.request_id));
+  if(hasCandidateSources)for(const item of tx.all("SELECT identity_json FROM reply_candidate_input WHERE owner_id=? AND context_id=? AND kind IN ('memory','memory_candidate','document')",[ownerId,contextId])){
+   const identity=JSON.parse(String(item.identity_json),(_key,value)=>value&&typeof value==='object'&&Object.keys(value).length===1&&typeof value.$integer==='string'?BigInt(value.$integer):value);
+   try{
+    const reader=currentReplyKnowledgeReader();
+    (reader.requireFrozen??reader.requireCurrent)(tx,{ownerId,contactId:String(context.contact_id),discussionId:String(context.discussion_id)},identity);
+   }catch{unavailable();}
+  }
   const rows=tx.all(`SELECT source_contact_id,record_id,message_id,accepted_revision FROM reply_context_item WHERE owner_id=? AND context_id=? AND kind='message'
    ${hasCandidateSources?'UNION SELECT source_contact_id,record_id,message_id,accepted_revision FROM reply_candidate_input_source WHERE owner_id=? AND context_id=?':''}`,
    hasCandidateSources?[ownerId,contextId,ownerId,contextId]:[ownerId,contextId]);
@@ -35,10 +43,11 @@ export function requireCurrentReplyDependencies(tx:StorageTransaction,scope:Repl
    sources.set(JSON.stringify([source.contact_id,source.record_id,source.message_id,String(source.acceptedRevision)]),source);
   }
   // 旧讨论正文和明确携入的选稿也携带原请求的实际资料，不能当作新的无来源文字。
-  for(const entry of tx.all(`SELECT e.id,e.content_state,e.origin_request_id FROM reply_context_item x
+  for(const entry of tx.all(`SELECT e.id,e.role,e.content_state,e.origin_request_id FROM reply_context_item x
    LEFT JOIN discussion_entry e ON e.owner_id=x.owner_id AND e.id=x.entry_id
    WHERE x.owner_id=? AND x.context_id=? AND x.kind='entry'`,[ownerId,contextId])){
-   if(!entry.id||entry.content_state!=='available')unavailable();includeRequest(String(entry.origin_request_id));
+   if(!entry.id||entry.content_state!=='available')unavailable();
+   if(entry.role==='assistant')includeRequest(String(entry.origin_request_id));
   }
   if(hasCandidateSources)for(const item of tx.all("SELECT identity_json FROM reply_candidate_input WHERE owner_id=? AND context_id=? AND kind='selection'",[ownerId,contextId])){
    const identity=JSON.parse(String(item.identity_json)) as {selectionId?:unknown};
@@ -49,7 +58,7 @@ export function requireCurrentReplyDependencies(tx:StorageTransaction,scope:Repl
    if(!selected)unavailable();includeRequest(String(selected.request_id));
   }
  }
- const refs=[...sources.values()];assertSourcesEligibility(tx,refs);
+ const refs=[...sources.values()];assertReplyLocalSources(tx,refs);
  for(let offset=0;offset<refs.length;offset+=200){
   const batch=refs.slice(offset,offset+200);
   const invalid=tx.get(`WITH expected(contact_id,message_id,revision) AS (VALUES ${batch.map(()=>'(?,?,?)').join(',')})

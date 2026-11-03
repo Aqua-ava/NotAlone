@@ -1,3 +1,4 @@
+import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
 import type {StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {archivedExtractionOutput} from '../outputs.ts';
 interface Parent {candidateId?:string;memoryId?:string;versionNo?:bigint}
@@ -17,9 +18,9 @@ function candidateEvents(tx:StorageTransaction,ownerId:string,parent:Parent):Sto
   WHERE v.owner_id=?`,[parent.memoryId!,parent.versionNo!,ownerId,ownerId,ownerId,ownerId]);
 }
 /** 旧整窗引用只作为存档保留；展示和消费均沿原候选事实投影其真实来源范围。 */
-export function projectCitations(tx:StorageTransaction,ownerId:string,parent:Parent,rows:StorageRow[]):StorageRow[]{
+export function projectCitations(tx:StorageTransaction,ownerId:string,parent:Parent,rows:StorageRow[],sourceEligibility:SourceEligibility=assertSourceEligibility):StorageRow[]{
  const candidates=candidateEvents(tx,ownerId,parent);if(!candidates.length)return rows;
- const expected=candidates.flatMap(c=>{try{return archivedExtractionOutput(tx,{ownerId,eventId:String(c.event_id)}).citations;}catch{return [];}});
+ const expected=candidates.flatMap(c=>{try{return archivedExtractionOutput(tx,{ownerId,eventId:String(c.event_id)},sourceEligibility).citations;}catch{return [];}});
  const seen=new Set<string>();
  return expected.flatMap(c=>{
   const original=rows.find(r=>r.source_contact_id===c.contactId&&r.message_id===c.messageId&&r.record_id===c.recordId&&r.accepted_revision===c.interpretationRevision
@@ -30,15 +31,15 @@ export function projectCitations(tx:StorageTransaction,ownerId:string,parent:Par
  });
 }
 
-export function sourceVerificationState(tx:StorageTransaction,ownerId:string,parent:Parent):'verified'|'pending'{
+export function sourceVerificationState(tx:StorageTransaction,ownerId:string,parent:Parent,sourceEligibility:SourceEligibility=assertSourceEligibility):'verified'|'pending'{
  if(parent.memoryId){
   const version=tx.get('SELECT v.restored_from_version_no,d.action FROM memory_version v JOIN memory_decision d ON d.owner_id=v.owner_id AND d.id=v.decision_id WHERE v.owner_id=? AND v.memory_id=? AND v.version_no=?',[ownerId,parent.memoryId,parent.versionNo!]);
   if(!version||['edit_accept','correct','change','manual'].includes(String(version.action)))return 'pending';
   if(version.action==='restore'){
    if(typeof version.restored_from_version_no!=='bigint'||version.restored_from_version_no>=parent.versionNo!)return 'pending';
-   return sourceVerificationState(tx,ownerId,{memoryId:parent.memoryId,versionNo:version.restored_from_version_no});
+   return sourceVerificationState(tx,ownerId,{memoryId:parent.memoryId,versionNo:version.restored_from_version_no},sourceEligibility);
   }
  }
  const candidates=candidateEvents(tx,ownerId,parent);if(!candidates.length)return 'pending';
- try{return candidates.every(c=>c.legacy_unbound!==1n&&archivedExtractionOutput(tx,{ownerId,eventId:String(c.event_id)}).semanticVerification.state==='verified')?'verified':'pending';}catch{return 'pending';}
+ try{return candidates.every(c=>c.legacy_unbound!==1n&&archivedExtractionOutput(tx,{ownerId,eventId:String(c.event_id)},sourceEligibility).semanticVerification.state==='verified')?'verified':'pending';}catch{return 'pending';}
 }

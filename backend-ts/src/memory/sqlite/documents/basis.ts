@@ -3,7 +3,7 @@ import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 import type {L2ScenarioMemory,L2ScenarioReference,L2ScenarioVersion} from '../../scenarios/workspace.ts';
 import type {L3ProfileDocument,L3ProfileEntry} from '../../profiles/workspace.ts';
 import {createHash} from 'node:crypto';
-import {assertSourceEligibility} from '../../../history/sqlite/source.ts';
+import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
 import {qualificationSources,mergeKnowledgeSources} from '../management/dependencies.ts';
 import {sourceVerificationState} from '../management/evidence.ts';
 import {memoryTimeEligibility} from '../management/temporal.ts';
@@ -16,10 +16,10 @@ function fact(tx:StorageTransaction,ownerId:string,decisionId:string):Record<str
   JOIN execution_event e ON e.owner_id=c.owner_id AND e.id=c.event_id WHERE dc.owner_id=? AND dc.decision_id=? ORDER BY c.id LIMIT 1`,[ownerId,decisionId]);
  return row?JSON.parse(String(row.payload)).fact:null;
 }
-function memorySources(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow):ReplySource[] {
- const citations=requireVersion(tx,ownerId,m,v);
- if(v.adoption_mode==='auto'&&sourceVerificationState(tx,ownerId,{memoryId:String(m.id),versionNo:v.version_no as bigint})!=='verified')fail('document_memory_unverified');
- return mergeKnowledgeSources(qualificationSources(tx,ownerId,{memoryId:String(m.id),versionNo:v.version_no as bigint}),citations.map(r=>({contactId:String(r.source_contact_id),messageId:String(r.message_id),recordId:String(r.record_id),acceptedRevision:r.accepted_revision as bigint})));
+function memorySources(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow,sourceEligibility:SourceEligibility=assertSourceEligibility):ReplySource[] {
+ const citations=requireVersion(tx,ownerId,m,v,sourceEligibility);
+ if(v.adoption_mode==='auto'&&sourceVerificationState(tx,ownerId,{memoryId:String(m.id),versionNo:v.version_no as bigint},sourceEligibility)!=='verified')fail('document_memory_unverified');
+ return mergeKnowledgeSources(qualificationSources(tx,ownerId,{memoryId:String(m.id),versionNo:v.version_no as bigint},sourceEligibility),citations.map(r=>({contactId:String(r.source_contact_id),messageId:String(r.message_id),recordId:String(r.record_id),acceptedRevision:r.accepted_revision as bigint})));
 }
 export function memoryBasis(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow):{memory:L2ScenarioMemory;sources:ReplySource[]} {
  if(m.state!=='active'||m.current_version_no!==v.version_no)fail('document_memory_stale');
@@ -44,7 +44,7 @@ export function sourceStillValid(tx:StorageTransaction,ownerId:string,s:ReplySou
 }
 interface DocumentInspection {sources:ReplySource[];stale:boolean}
 /** 旧头修订可标为失效，但仍逐项核验历史版本及实际来源，不能掩盖缺失依据。 */
-function inspectActualInputs(tx:StorageTransaction,ownerId:string,actual:DocumentActualInput[],visited:Set<string>,cache:Map<string,DocumentInspection>):DocumentInspection {
+function inspectActualInputs(tx:StorageTransaction,ownerId:string,actual:DocumentActualInput[],visited:Set<string>,cache:Map<string,DocumentInspection>,sourceEligibility:SourceEligibility=assertSourceEligibility):DocumentInspection {
  const sources:ReplySource[]=[];let stale=false;
  for(const {row:i} of actual){
   if(i.kind==='memory'){
@@ -53,9 +53,9 @@ function inspectActualInputs(tx:StorageTransaction,ownerId:string,actual:Documen
    if(m!.state!=='active'||m!.current_version_no!==v!.version_no||m!.head_revision!==i.accepted_head_revision)stale=true;
    const time=memoryTimeEligibility(tx,ownerId,{memoryId:String(m!.id),versionNo:v!.version_no as bigint});
    if(time==='invalid')fail('document_time_invalid');if(time==='needs_revalidation')fail('document_time_pending');if(time==='out_of_window')stale=true;
-   sources.push(...memorySources(tx,ownerId,m!,v!));
+   sources.push(...memorySources(tx,ownerId,m!,v!,sourceEligibility));
   }else if(i.kind==='document'){
-   const dependency=inspectDocument(tx,ownerId,String(i.document_id),i.document_version_no as bigint,new Set(visited),cache);
+   const dependency=inspectDocument(tx,ownerId,String(i.document_id),i.document_version_no as bigint,new Set(visited),cache,sourceEligibility);
    stale||=dependency.stale;sources.push(...dependency.sources);
   }
  }
@@ -66,7 +66,7 @@ export function actualInputSources(tx:StorageTransaction,ownerId:string,actual:D
  const result=inspectActualInputs(tx,ownerId,actual,new Set(),new Map());if(result.stale)fail('document_memory_stale');return result.sources;
 }
 /** 同时核对历史图完整性和当前记忆资格；两者不能互相代替。 */
-function inspectDocument(tx:StorageTransaction,ownerId:string,documentId:string,versionNo:bigint,visited:Set<string>,cache:Map<string,DocumentInspection>):DocumentInspection {
+function inspectDocument(tx:StorageTransaction,ownerId:string,documentId:string,versionNo:bigint,visited:Set<string>,cache:Map<string,DocumentInspection>,sourceEligibility:SourceEligibility=assertSourceEligibility):DocumentInspection {
  const key=JSON.stringify([documentId,String(versionNo)]);if(visited.has(key))fail('document_dependency_cycle');visited.add(key);
  const cached=cache.get(key);if(cached){visited.delete(key);return cached;}
  const v=tx.get(`SELECT v.*,s.id AS step_id,s.state AS step_state,a.state AS attempt_state FROM memory_document_version v
@@ -86,7 +86,7 @@ function inspectDocument(tx:StorageTransaction,ownerId:string,documentId:string,
   const actual=documentActualInputs(tx,ownerId,String(v!.step_id),request);compare(String(event.id),actual);
   const outputs=tx.all("SELECT id FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND kind='document_output' AND originated_call_id=?",[ownerId,v!.produced_attempt_id,event.originated_call_id]);
   if(outputs.length!==1)fail('document_input_incomplete');compare(String(outputs[0]!.id),actual);
-  const inspected=inspectActualInputs(tx,ownerId,actual,visited,cache),expectedSources=inspected.sources,keys=expectedSources.map(source=>JSON.stringify([source.contactId,source.recordId])).sort();
+  const inspected=inspectActualInputs(tx,ownerId,actual,visited,cache,sourceEligibility),expectedSources=inspected.sources,keys=expectedSources.map(source=>JSON.stringify([source.contactId,source.recordId])).sort();
   stale||=inspected.stale;
   for(const id of [String(event.id),String(outputs[0]!.id)]){
    const saved=tx.all('SELECT source_contact_id,record_id FROM event_source WHERE owner_id=? AND event_id=?',[ownerId,id]).map(row=>JSON.stringify([String(row.source_contact_id),String(row.record_id)])).sort();
@@ -106,10 +106,10 @@ function inspectDocument(tx:StorageTransaction,ownerId:string,documentId:string,
  const result={sources:mergeKnowledgeSources(sources),stale};visited.delete(key);cache.set(key,result);return result;
 }
 /** 校验完成文档实际输入及其传递来源；不把重新选择的record替换为原证明。 */
-export function documentSources(tx:StorageTransaction,ownerId:string,documentId:string,versionNo:bigint,visited=new Set<string>(),cache=new Map<string,ReplySource[]>()):ReplySource[]{
+export function documentSources(tx:StorageTransaction,ownerId:string,documentId:string,versionNo:bigint,visited=new Set<string>(),cache=new Map<string,ReplySource[]>(),sourceEligibility:SourceEligibility=assertSourceEligibility):ReplySource[]{
  const key=JSON.stringify([documentId,String(versionNo)]);if(visited.has(key))fail('document_dependency_cycle');
  const cached=cache.get(key);if(cached)return cached;
- const inspected=new Map<string,DocumentInspection>(),result=inspectDocument(tx,ownerId,documentId,versionNo,visited,inspected);
+ const inspected=new Map<string,DocumentInspection>(),result=inspectDocument(tx,ownerId,documentId,versionNo,visited,inspected,sourceEligibility);
  if(result.stale)fail('document_memory_stale');
  for(const [id,value] of inspected)if(!value.stale)cache.set(id,value.sources);
  return result.sources;
@@ -128,10 +128,10 @@ function publicationStructure(tx:StorageTransaction,ownerId:string,publicationId
  for(const row of rows)if(row.scope_kind!==scopeKind||row.contact_id!==contactId||row.state!=='active'||row.content_state!=='present')fail('document_publication_unavailable');
  return {publication:p!,members:rows};
 }
-export function publicationMembers(tx:StorageTransaction,ownerId:string,publicationId:string,scopeKind:string,contactId:string|null,cache=new Map<string,ReplySource[]>()):StorageRow[]{
+export function publicationMembers(tx:StorageTransaction,ownerId:string,publicationId:string,scopeKind:string,contactId:string|null,cache=new Map<string,ReplySource[]>(),sourceEligibility:SourceEligibility=assertSourceEligibility):StorageRow[]{
  const {publication,members}=publicationStructure(tx,ownerId,publicationId,scopeKind,contactId);
  if(publication.availability!=='available')fail('document_publication_unavailable');
- for(const row of members)documentSources(tx,ownerId,String(row.document_id),row.version_no as bigint,new Set(),cache);
+ for(const row of members)documentSources(tx,ownerId,String(row.document_id),row.version_no as bigint,new Set(),cache,sourceEligibility);
  return members;
 }
 /** 先核验整个旧发布集合，再按本轮固定的联系人范围筛选可继承版本。 */
