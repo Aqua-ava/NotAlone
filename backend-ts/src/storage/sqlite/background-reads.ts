@@ -1,0 +1,99 @@
+import type {SqliteStorage} from './client.ts';
+import {StorageFailure,type StorageReader} from './contracts.ts';
+
+// 仅由宿主装配的后台目录与列表读取使用；页面、Tool 和任意调用方不能传入 SQL、动作名、连接或 reader。
+export const backgroundReadActions=[
+ 'media.imageSyncTargets','media.imageRefreshPending','memory.read','memory.history',
+] as const;
+const allowed=new Set<string>(backgroundReadActions);
+const terminal=new Set(['readonly_closed','stale_lease','storage_identity_changed','unsafe_storage_path','storage_missing','schema_drift','migration_drift','worker_failed']);
+type Options={storage:Pick<SqliteStorage,'openReader'>;ownerId:string};
+interface ReaderSlot {reader:StorageReader;controller:AbortController;closing?:Promise<void>}
+const cancelled=()=>new StorageFailure('background_read_cancelled');
+
+/** 独立 Worker 的后台只读通道；沿用主存储运行租约，不排队等待主写者。 */
+class BackgroundReadChannel implements StorageReader {
+ private readonly options:Options;
+ private slot?:ReaderSlot;
+ private opening?:Promise<ReaderSlot>;
+ private closed=false;
+ private version=0;
+ private closing?:Promise<void>;
+ private readonly pending=new Set<Promise<unknown>>();
+ private readonly retiring=new Set<ReaderSlot>();
+ constructor(options:Options){this.options=options;}
+ async ready():Promise<void>{await this.current();}
+ private current():Promise<ReaderSlot>{
+  if(this.closed)return Promise.reject(new StorageFailure('readonly_closed'));
+  if(this.slot)return Promise.resolve(this.slot);
+  if(this.opening)return this.opening;
+  const version=this.version;
+  const opening=this.options.storage.openReader([...backgroundReadActions]).then(async reader=>{
+   const slot={reader,controller:new AbortController()};
+   if(this.closed||version!==this.version){await this.retire(slot);throw cancelled();}
+   this.slot=slot;return slot;
+  }).finally(()=>{if(this.opening===opening)this.opening=undefined;});
+  this.opening=opening;return opening;
+ }
+ private assertCurrent(slot:ReaderSlot):void{if(this.closed||slot!==this.slot)throw cancelled();}
+ private read<T>(slot:ReaderSlot,name:string,input:unknown):Promise<T>{
+  const signal=slot.controller.signal;if(signal.aborted)return Promise.reject(cancelled());
+  return new Promise((resolve,reject)=>{
+   const abort=()=>{signal.removeEventListener('abort',abort);reject(cancelled());};
+   signal.addEventListener('abort',abort,{once:true});
+   try{slot.reader.execute<T>(name,input).then(value=>{signal.removeEventListener('abort',abort);resolve(value);},error=>{signal.removeEventListener('abort',abort);reject(error);});}
+   catch(error){signal.removeEventListener('abort',abort);reject(error);}
+  });
+ }
+ private retire(slot:ReaderSlot):Promise<void>{
+  if(this.slot===slot){this.slot=undefined;this.version++;}
+  slot.controller.abort();
+  if(!slot.closing){
+   // 退休后仍保留关闭责任；明确失败允许宿主退出重试，确认关闭才移除。
+   this.retiring.add(slot);
+   slot.closing=Promise.resolve().then(()=>slot.reader.close()).then(()=>{this.retiring.delete(slot);},error=>{slot.closing=undefined;throw error;});
+  }
+  return slot.closing;
+ }
+ execute<T=unknown>(name:string,input:unknown):Promise<T>{
+  if(this.closed)return Promise.reject(new StorageFailure('readonly_closed'));
+  if(!allowed.has(name))return Promise.reject(new StorageFailure('readonly_action_forbidden'));
+  if(!input||typeof input!=='object'||Array.isArray(input)||(input as {ownerId?:unknown}).ownerId!==this.options.ownerId)return Promise.reject(new StorageFailure('background_read_scope_invalid'));
+  const work=this.executeOwned<T>(name,input as Record<string,unknown>);this.pending.add(work);work.then(()=>this.pending.delete(work),()=>this.pending.delete(work));return work;
+ }
+ private async executeOwned<T>(name:string,input:Record<string,unknown>):Promise<T>{
+  let slot=await this.current();
+  for(let attempt=0;;attempt++){
+   try{
+    const value=await this.read<T>(slot,name,input);this.assertCurrent(slot);return value;
+   }catch(error){
+    const code=(error as {code?:string})?.code??'';
+    // 主写者完成删除后的 VACUUM 会推进 schema 版本；退役旧读者后重建一次，真实漂移仍如实上报。
+    const recoverable=attempt===0&&code==='schema_drift'&&!this.closed;
+    // 租约或存储身份失效后旧连接不再可发布结果；关闭失败仍如实上报。
+    if(terminal.has(code))await this.retire(slot);
+    if(recoverable&&!this.closed){slot=await this.current();continue;}
+    throw error;
+   }
+  }
+ }
+ close():Promise<void>{
+  this.closed=true;this.version++;
+  return this.closing??=(async()=>{
+   const slot=this.slot,opening=this.opening,attempts=new Set<Promise<unknown>>();
+   if(slot)attempts.add(this.retire(slot));
+   for(const retired of this.retiring)attempts.add(this.retire(retired));
+   if(opening)attempts.add(opening.then(current=>this.retire(current),()=>{}));
+   const results=await Promise.allSettled(attempts);
+   // 先撤销迟到结果并等待在途读取结算，再确认连接关闭；失败保留重试。
+   await Promise.allSettled([...this.pending]);
+   const failed=results.find(result=>result.status==='rejected');if(failed?.status==='rejected')throw failed.reason;
+   await Promise.all([...this.retiring].map(retired=>this.retire(retired)));
+  })().catch(error=>{this.closing=undefined;throw error;});
+ }
+}
+
+/** 宿主生命周期内的后台只读通道，只允许图片同步目录和记忆列表读取。 */
+export async function createBackgroundReads(options:Options):Promise<StorageReader>{
+ const channel=new BackgroundReadChannel(options);await channel.ready();return channel;
+}

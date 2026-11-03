@@ -18,6 +18,7 @@ import {loadSharedNarrowWechatOptions,supportsWechatImageKeyChannel,supportsWech
 import {enrichImageToolOptions} from './media/visual/image-tools.ts';
 import {SharedWechatClient} from './history/wechat/shared-client.ts';
 import { StorageFailure,type StorageReader } from './storage/sqlite/contracts.ts';
+import {createBackgroundReads} from './storage/sqlite/background-reads.ts';
 import type { Context } from '@deepseek-ai/cordis';
 import { exitOnStdinEnd } from '@deepseek-ai/dsh-cmdline';
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
@@ -69,11 +70,11 @@ interface SqliteHostResource { close(): Promise<void> }
 /** 同时通知各领域停读并等待真实排空；业务所有者未释放时保留共享资源，允许原操作续清。 */
 export async function closeSqliteHostResources(resources: {
   firstHistory?: SqliteHostResource; incremental?: SqliteHostResource; imageSync?: SqliteHostResource; quoteSync?:SqliteHostResource; discussions?: SqliteHostResource; memory?: SqliteHostResource; media?: SqliteHostResource; history?: SqliteHostResource;
-  historyRecertify?: SqliteHostResource; historyClear?: SqliteHostResource; historyResync?: SqliteHostResource; foreground?: SqliteHostResource; assistantReads?:SqliteHostResource; library?:SqliteHostResource; contacts?: SqliteHostResource; wechat?:SqliteHostResource; models?: SqliteHostResource; storage?: SqliteHostResource;
+  historyRecertify?: SqliteHostResource; historyClear?: SqliteHostResource; historyResync?: SqliteHostResource; foreground?: SqliteHostResource; assistantReads?:SqliteHostResource; backgroundReads?:SqliteHostResource; library?:SqliteHostResource; contacts?: SqliteHostResource; wechat?:SqliteHostResource; models?: SqliteHostResource; storage?: SqliteHostResource;
 }): Promise<void> {
   const failures: unknown[] = [];
   // 不串行等待领域关闭：前一个读者可能正等待后一个领域释放共享CLI租约。
-  const closed = await Promise.allSettled([resources.firstHistory, resources.incremental, resources.imageSync, resources.quoteSync, resources.historyRecertify, resources.historyClear, resources.historyResync, resources.foreground, resources.assistantReads, resources.discussions, resources.memory, resources.media, resources.history, resources.contacts, resources.library]
+  const closed = await Promise.allSettled([resources.firstHistory, resources.incremental, resources.imageSync, resources.quoteSync, resources.historyRecertify, resources.historyClear, resources.historyResync, resources.foreground, resources.assistantReads, resources.backgroundReads, resources.discussions, resources.memory, resources.media, resources.history, resources.contacts, resources.library]
     .map(async resource => resource?.close()));
   for (const result of closed) if (result.status === 'rejected') failures.push(result.reason);
   if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
@@ -131,6 +132,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
   let memory: Awaited<ReturnType<typeof createSqliteMemoryRuntime>> | undefined;
   let discussions: Awaited<ReturnType<typeof createSqliteDiscussionHost>> | undefined;
   let assistantReads:StorageReader|undefined;
+  let backgroundReads:StorageReader|undefined;
   let library:SqliteSkillLibrary|undefined;
   const requests=new Set<Promise<void>>();
   let server: Server | undefined;
@@ -144,7 +146,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
     readyDispose(); models?.stopAccepting(); events?.close();
     await publication?.catch(() => {});
     if (opening) { try { storage ??= await opening; } catch {} }
-    await closeSqliteHostResources({firstHistory,incremental,imageSync,quoteSync,historyRecertify,historyClear,historyResync,foreground,assistantReads,discussions,memory,media,history,contacts,library,wechat,models,storage:storage?{close:async()=>{await Promise.allSettled([...requests]);await storage!.close();}}:undefined});
+    await closeSqliteHostResources({firstHistory,incremental,imageSync,quoteSync,historyRecertify,historyClear,historyResync,foreground,assistantReads,backgroundReads,discussions,memory,media,history,contacts,library,wechat,models,storage:storage?{close:async()=>{await Promise.allSettled([...requests]);await storage!.close();}}:undefined});
     if (published) await rm(config.infoPath, { force: true });
   });
   const stopResources=()=>shutdown.stop();
@@ -174,6 +176,9 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
     await writeStartupDiagnostic(config.infoPath, 'modules');
     events = new PureTsEvents(ownerId);
     const deletionHolders = new ActiveHolders();
+    // 后台目录/列表读取使用宿主生命周期内的隔离读者；写路径仍唯一经过主存储 worker。
+    backgroundReads=await createBackgroundReads({storage,ownerId});
+    if (shutdown.state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
     if(sqlite.wechatCliPath)wechat=new SharedWechatClient(async()=>{
       const options=await loadSharedNarrowWechatOptions(sqlite.wechatCliPath!);
       return await supportsWechatImageKeyChannel(sqlite.wechatCliPath)?enrichImageToolOptions(options):options;
@@ -222,7 +227,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
       if(!history)throw new StorageFailure('media_source_unavailable');return history.source(contactId,recordId);
     }},...(history?{ensureSourceReady:(contactId:string,signal?:AbortSignal)=>history!.prepareSource(contactId,signal)}:{}),userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,changed:(contactId,messageId)=>{events?.publish('message.updated',contactId,{message_id:messageId});if(automaticBackground)memory?.wake(contactId);},adapters:originalImages?[new OriginalImageMediaAdapter(createWechatImageResourcePort(sqlite.wechatCliPath,wechat))]:[]});
     await media.initialize();
-    if(originalImages)imageSync=new SqliteImageSyncCoordinator(storage,syncDirectory,media);
+    if(originalImages)imageSync=new SqliteImageSyncCoordinator(backgroundReads,syncDirectory,media);
     if(history&&await supportsWechatQuotes(sqlite.wechatCliPath))quoteSync=new SqliteQuoteSyncCoordinator(syncDirectory,history);
     contacts.setReadStop(async contactId=>{await Promise.all([historyRecertify?.stop(contactId),imageSync?.stop(contactId),quoteSync?.stop(contactId),firstHistory?firstHistory.stop(contactId):history?.stop(contactId),incremental?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);if(contactId)await checkpointCache?.forget(contactId);else await wechat?.stop();});
     const mediaHttp = new SqliteMediaHttp(media);
@@ -231,7 +236,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
       accounting:{reserve:async(receipt,claim)=>{if(!memory)throw new StorageFailure('sqlite_model_producer_unavailable');await memory.service.accounting.reserve(receipt,claim);},
         recordReserved:async receipt=>{if(!memory)throw new StorageFailure('sqlite_model_producer_unavailable');await memory.service.accounting.recordReserved(receipt);},
         unconfirmedRequests:async scope=>{if(scope.owner_id!==ownerId)throw new StorageFailure('sqlite_model_owner_invalid');return [...new Set([...(memory?await memory.service.accounting.unconfirmedRequests!(scope):[]),...await storage!.execute<string[]>('discussion.unconfirmed',scope)])];}}});
-    const memoryManagement=new SqliteMemoryManagement(storage,ownerId);
+    const memoryManagement=new SqliteMemoryManagement(storage,ownerId,{reader:backgroundReads});
     const memoryManagementHttp=memoryEnabled?new SqliteMemoryManagementHttp(memoryManagement,req=>authorizeSqliteRequest(req,token),()=>{if(automaticBackground)memory?.wake();}):undefined;
     // 即使入口未开启，也恢复并持有旧副本的清理所有者，避免资料删除遗漏持久副本。
     memory=await createSqliteMemoryRuntime({ctx,storage,ownerId,userData:sqlite.userData,businessHome:config.businessHome,infoPath:config.infoPath,envFilePath:config.envFilePath,environment:modelEnvironment,contentResources:{readImage:input=>media!.readMemoryImage(input)},

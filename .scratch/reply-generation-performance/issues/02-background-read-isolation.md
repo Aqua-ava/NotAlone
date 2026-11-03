@@ -1,7 +1,7 @@
 # 后台图片与记忆读取隔离
 
 Triage: ready-for-agent
-State: open
+State: claimed
 
 Blocked by: none
 
