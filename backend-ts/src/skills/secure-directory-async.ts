@@ -8,7 +8,7 @@ type Pending={resolve:(value:any)=>void;reject:(error:unknown)=>void;cancelled:I
 /** 每个授权根使用独立只读线程；取消只丢弃读取，不产生迟到数据库操作。 */
 export class AsyncSecureSkillDirectory{
  private readonly root:string;private readonly readerBinary?:string;private readonly rootIdentity:readonly[string,string];
- private worker?:Worker;private nextId=0;private failed=false;private closing?:Promise<void>;
+ private worker?:Worker;private nextId=0;private retiring?:Promise<void>;private closing?:Promise<void>;
  private readonly pending=new Map<number,Pending>();
  constructor(root:string,readerBinary?:string){
   this.root=canonicalRoot(root);this.readerBinary=readerBinary;
@@ -26,8 +26,7 @@ export class AsyncSecureSkillDirectory{
  }
  close():Promise<void>{
   if(this.closing)return this.closing;
-  this.fail();
-  return this.closing=(async()=>{await this.worker?.terminate();})();
+  return this.closing=this.worker?this.retire(this.worker):Promise.resolve();
  }
  private start():Worker{
   if(this.worker)return this.worker;
@@ -36,20 +35,25 @@ export class AsyncSecureSkillDirectory{
   });
   this.worker=worker;
   worker.on('message',message=>{
-   if(message.fatal){this.fail(message.code);void worker.terminate();return;}
+   if(this.worker!==worker||this.retiring)return;
+   if(message.fatal){void this.retire(worker,message.code);return;}
    const pending=this.pending.get(message.id);if(!pending)return;
-   if(message.started){clearTimeout(pending.timer);pending.timer=setTimeout(()=>{this.fail();void worker.terminate();},6000);return;}
+   if(message.started){clearTimeout(pending.timer);pending.timer=setTimeout(()=>{void this.retire(worker);},6000);return;}
    this.pending.delete(message.id);clearTimeout(pending.timer);pending.detach();
    if(!Atomics.load(pending.cancelled,0)){
     if(message.code)pending.reject(new SecureSkillReadError(message.code));else pending.resolve(message.value);
    }
    if(!this.pending.size)worker.unref();
   });
-  worker.on('error',()=>this.fail());worker.on('exit',()=>this.fail());
+  worker.on('error',()=>{void this.retire(worker);});worker.on('exit',()=>{void this.retire(worker);});
   return worker;
  }
- private invoke<T>(operation:'names'|'identity'|'snapshot',name?:string,expectedIdentity?:string,signal?:AbortSignal):Promise<T>{
-  if(this.failed||this.closing)return Promise.reject(new SecureSkillReadError('skill_reader_unavailable'));
+ private async invoke<T>(operation:'names'|'identity'|'snapshot',name?:string,expectedIdentity?:string,signal?:AbortSignal):Promise<T>{
+  if(this.closing)throw new SecureSkillReadError('skill_reader_unavailable');
+  signal?.throwIfAborted();
+  // 故障实例确认终止后才可复用邮箱，并以构造时冻结的根身份重建线程。
+  if(this.retiring)await this.retiring;
+  if(this.closing)throw new SecureSkillReadError('skill_reader_unavailable');
   signal?.throwIfAborted();
   if(this.pending.size>=32)return Promise.reject(new SecureSkillReadError('skill_reader_busy'));
   const worker=this.start(),id=++this.nextId,cancelled=new Int32Array(new SharedArrayBuffer(4));
@@ -60,18 +64,24 @@ export class AsyncSecureSkillDirectory{
     // 已投递项仍占用额度和超时，收到线程完成确认后才释放真实邮箱位置。
     Atomics.store(cancelled,0,1);pending.detach();reject(signal!.reason);
    };
-   const pending:Pending={resolve,reject,cancelled,timer:setTimeout(()=>{this.fail();void worker.terminate();},10000),
+   const pending:Pending={resolve,reject,cancelled,timer:setTimeout(()=>{
+    // 排队超时只取消此项；线程确认跳过前仍占真实邮箱额度。
+    Atomics.store(cancelled,0,1);pending.detach();reject(new SecureSkillReadError('skill_reader_unavailable'));
+   },10000),
     detach:()=>signal?.removeEventListener('abort',abort)};
    this.pending.set(id,pending);signal?.addEventListener('abort',abort,{once:true});
    try{worker.postMessage({id,operation,name,expectedIdentity,cancelled:cancelled.buffer});}
-   catch{this.fail();void worker.terminate();}
+   catch{void this.retire(worker);}
   });
  }
- private fail(code='skill_reader_unavailable'):void{
-  if(this.failed)return;this.failed=true;
+ private retire(worker:Worker,code='skill_reader_unavailable'):Promise<void>{
+  if(this.worker!==worker)return Promise.resolve();
+  if(this.retiring)return this.retiring;
   for(const pending of this.pending.values()){
    Atomics.store(pending.cancelled,0,1);clearTimeout(pending.timer);pending.detach();pending.reject(new SecureSkillReadError(code));
   }
-  this.pending.clear();
+  return this.retiring=worker.terminate().then(()=>{
+   this.pending.clear();this.worker=undefined;this.retiring=undefined;
+  });
  }
 }

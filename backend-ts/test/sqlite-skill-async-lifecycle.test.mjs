@@ -81,6 +81,7 @@ test('首次异步扫描之前替换授权根也不能重新信任同字节目�
  await rename(f.root,f.root+'-retained');await mkdir(join(f.root,'gentle'),{recursive:true});
  await writeFile(join(f.root,'gentle/SKILL.md'),f.document);
  await assert.rejects(library.inspect(),{code:'skill_directory_conflict'});
+ await assert.rejects(library.inspect(),{code:'skill_directory_conflict'});
  assert.deepEqual(await f.library.get(f.item.id),f.item);
 });
 
@@ -125,4 +126,48 @@ test('取消洪泛仍受真实在途读取上限约束，确认排空后才能�
  for(const result of await Promise.all(cancelled))assert.equal(result.error,reason);
  assert.deepEqual(await draining,['gentle']);
  assert.deepEqual(await reader.names(),['gentle']);
+});
+
+
+test('Skill排队超时只取消对应读取，排空后同一读取器仍可用',async t=>{
+ const f=await fixture(t),reader=new AsyncSecureSkillDirectory(f.root,f.reader);t.after(()=>reader.close());
+ await writeFile(f.reader,`#!/bin/sh\nif [ "$1" = list ]; then /bin/sleep 0.75; fi\nexec ${quote(resolve('../native/skill-read/.build/skill-read'))} "$@"\n`,{mode:0o700});
+ const results=await Promise.allSettled(Array.from({length:16},()=>reader.names()));
+ assert.ok(results.some(result=>result.status==='rejected'),'排队超过期限必须结束对应调用者等待');
+ assert.ok(results.filter(result=>result.status==='fulfilled').length>=13,'排队超时不能终止尚在期限内执行的读取');
+ assert.deepEqual(await reader.names(),['gentle'],'同一读取器排空后必须仍可读取');
+});
+
+
+test('原生读取器暂时不可用不改变已核验Skill的内容资格',async t=>{
+ const f=await fixture(t);
+ await rename(f.reader,f.reader+'-retained');
+ await assert.rejects(f.library.assertAnchor(skillAnchor(f.item)),{code:'skill_reader_unavailable'});
+ assert.deepEqual(await f.library.get(f.item.id),f.item,'基础设施故障不能写成包内容无效');
+ await rename(f.reader+'-retained',f.reader);
+ assert.equal((await f.library.assertAnchor(skillAnchor(f.item))).contentDigest,f.item.revisions[0].contentDigest);
+});
+
+
+test('Skill文件线程启动失败后确认退休并恢复读取，仍固定原授权根身份',async t=>{
+ const f=await fixture(t),reader=new AsyncSecureSkillDirectory(f.root,f.reader);t.after(()=>reader.close());
+ await rename(f.reader,f.reader+'-retained');
+ await assert.rejects(reader.names(),{code:'skill_reader_unavailable'});
+ await rename(f.reader+'-retained',f.reader);
+ assert.deepEqual(await reader.names(),['gentle']);
+});
+
+
+test('排队期限已过但线程尚未确认跳过时仍保留全部32个邮箱位置',async t=>{
+ const f=await fixture(t),reader=new AsyncSecureSkillDirectory(f.root,f.reader);t.after(()=>reader.close());
+ await reader.names();
+ // 只推进主线程的排队时钟；真实Worker尚未有机会回传完成确认。
+ t.mock.timers.enable({apis:['setTimeout']});
+ const queued=Array.from({length:32},()=>reader.names());
+ t.mock.timers.tick(10000);
+ const results=await Promise.allSettled(queued);
+ assert.ok(results.every(result=>result.status==='rejected'&&result.reason.code==='skill_reader_unavailable'));
+ await assert.rejects(reader.names(),{code:'skill_reader_busy'});
+ t.mock.timers.reset();
+ await reader.close();
 });

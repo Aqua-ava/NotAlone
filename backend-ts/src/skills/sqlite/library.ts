@@ -210,6 +210,7 @@ export class SqliteSkillLibrary {
   }
   private directoryError(error: unknown): SqliteSkillError {
     const code=(error as {code?:string})?.code;
+    if(code==='skill_reader_busy'||code==='skill_reader_unavailable')return new SqliteSkillError(code);
     return new SqliteSkillError(code==='ENOENT'||code==='EACCES'||code==='file_unavailable'?'skill_directory_unavailable':'skill_package_invalid');
   }
   private async readDirectorySnapshot(directoryName: string,expectedIdentity:string,signal?:AbortSignal): Promise<DirectorySnapshot> {
@@ -218,7 +219,7 @@ export class SqliteSkillLibrary {
   private async recordProblem(item: SkillPackageState,error: unknown,signal?:AbortSignal): Promise<void> {
     this.active(signal);
     let code=(error as {code?:string})?.code;
-    if(code==='skill_reader_busy')throw error;
+    if(code==='skill_reader_busy'||code==='skill_reader_unavailable')throw error;
     if(code==='ENOENT' || code==='EACCES' || code==='file_unavailable')code='skill_directory_unavailable';
     const verificationState: SkillVerificationState=code==='skill_directory_unavailable'?'missing':code==='skill_directory_conflict'||code==='skill_directory_content_changed'?'conflict':code==='skill_content_changed'?'pending':'invalid';
     const reason=item.verificationReason==='source_qualification_changed'?item.verificationReason:verificationState==='missing'?'directory_unavailable':code==='skill_directory_content_changed'?'directory_content_changed':verificationState==='conflict'?'directory_identity_changed':verificationState==='pending'?'content_changed':'package_invalid';
