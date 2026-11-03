@@ -90,6 +90,13 @@
 - 旧讨论数量增加不会拖慢或在语义上影响新候选。
 - 跨联系人、失效来源和已删除正文均不能通过回看或继续恢复。
 
+## 实现任务
+
+- [01 新候选输入与旧讨论隔离](issues/01-fresh-candidate-input-isolation.md)
+- [02 历史回看与明确继续分离](issues/02-history-read-and-explicit-continue.md)
+- [03 桌面历史讨论回看与继续交互](issues/03-desktop-history-continue-ux.md)
+- [04 讨论删除、跨联系人与历史规模回归](issues/04-deletion-isolation-and-scaling-regression.md)
+
 ## 不在范围
 
 - 修改最近聊天的 50 条上限或其选择界面。
