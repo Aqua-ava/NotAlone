@@ -39,3 +39,55 @@ test('合成本人记忆消费者保留跨联系人真实来源，删除贡献�
  await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'结合本人资料表达',confirmedContact:true});assert.match((await service.view(contactId,d.id))[0].candidates[0].basis[0].text,/本人已采纳/);
  const deletion=new DeletionService(f.storage,f.holders,new ManagedFiles(f.root)),op=await deletion.plan({ownerId:f.owner,requestKey:randomUUID(),scope:{kind:'contact',contactId:sourceContact}}),done=await deletion.advance(op);assert.equal(done.state,'completed',JSON.stringify(done.checks));assert.deepEqual(await service.view(contactId,d.id),[]);assert.equal((await f.contacts.directory()).contacts.length,1);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
+
+test('多段历史讨论与同讨论旧发言不进入新候选，显式携入选稿仍按合同进入',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');const {SqliteDiscussionTurns}=await import('../src/reply/sqlite/turns.ts');
+ const f=await realFixture(t,{content:(_request,count)=>count<=3?`旧讨论助手正文-${count}`:JSON.stringify({candidates:[{parts:['基于本次输入的合成候选'],basis:[1]}]})}),contactId=f.ids[0];
+ const discussions=new SqliteDiscussionTurns({...f,authorize:async()=>{}});t.after(()=>discussions.close());
+ const oldA=await f.discussions.newDiscussion(contactId);await discussions.generate({contactId,discussionId:oldA.id,requestKey:randomUUID(),text:'旧讨论用户发言-甲',confirmedContact:true});
+ const oldB=await f.discussions.newDiscussion(contactId);await discussions.generate({contactId,discussionId:oldB.id,requestKey:randomUUID(),text:'旧讨论用户发言-乙',confirmedContact:true});
+ const current=await f.discussions.newDiscussion(contactId);await discussions.generate({contactId,discussionId:current.id,requestKey:randomUUID(),text:'当前讨论早前用户发言',confirmedContact:true});
+ assert.equal(f.requests.length,3);const before=await f.discussions.view(contactId,current.id),copiesBefore=await f.storage.execute('runtime.inventory',{ownerId:f.owner});assert.equal(copiesBefore.length,3);
+ const service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ const oldPattern=/旧讨论用户发言-甲|旧讨论用户发言-乙|当前讨论早前用户发言|旧讨论助手正文-[123]/;
+ // 候选装配不得读取讨论目录/正文；读取讨论 entry 应直接失败。
+ const originalView=f.discussions.view.bind(f.discussions);f.discussions.view=async()=>{throw new Error('候选不得读取讨论目录');};
+ try{await turns.generate({contactId,discussionId:current.id,requestKey:randomUUID(),text:'本次帮我表达',confirmedContact:true});}finally{f.discussions.view=originalView;}
+ assert.equal(f.requests.length,4);
+ assert.doesNotMatch(JSON.stringify(f.requests[3]),oldPattern,'新候选模型请求不得含旧讨论正文');
+ const page=(await service.view(contactId,current.id)).at(-1);assert.ok(page.candidates[0]);assert.doesNotMatch(JSON.stringify(page.candidates[0].basis),oldPattern,'候选依据不得指向旧讨论');
+ const after=await f.discussions.view(contactId,current.id),copiesAfter=await f.storage.execute('runtime.inventory',{ownerId:f.owner});
+ assert.equal(copiesAfter.length,4,'每次候选使用独立运行副本');assert.notEqual(after.discussion.currentRuntimeId,before.discussion.currentRuntimeId);
+ assert.ok(copiesAfter.some(copy=>copy.id===before.discussion.currentRuntimeId&&copy.state==='ready'),'旧讨论运行副本保留而不被复用或删除');
+ const selected=await service.select({contactId,discussionId:current.id,candidateId:page.candidates[0].candidateId,versionNo:1});
+ const workspace={action:'suggest',draftText:'',tone:'warm',instruction:'',contextText:'本次补充背景-显式携入检查',includeRelationshipContext:true,excludedMessageIds:[]};
+ await turns.generate({contactId,discussionId:current.id,requestKey:randomUUID(),text:'',workspace,confirmedContact:true,carriedSelectionId:selected.id});assert.equal(f.requests.length,5);
+ const carried=JSON.stringify(f.requests[4]);assert.match(carried,/用户明确选择继续的候选/);assert.match(carried,/基于本次输入的合成候选/);assert.match(carried,/本次补充背景-显式携入检查/);assert.doesNotMatch(carried,oldPattern);
+});
+
+test('旧输入合同显式携带讨论entry时在冻结输入中被过滤，当前请求正文仍保留',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');
+ const f=await realFixture(t,{content:JSON.stringify({candidates:[{parts:['合成候选'],basis:[1]}]})}),contactId=f.ids[0];
+ const d=await f.discussions.newDiscussion(contactId);
+ const legacyKey=randomUUID(),legacyConfirmation=await f.storage.execute('identity.manualConfirm',{ownerId:f.owner,contactId,contextToken:legacyKey,id:randomUUID(),at:Date.now()});
+ await f.discussions.begin(contactId,legacyKey,'旧输入合同的讨论发言正文-合成',{kind:'manual',confirmationId:legacyConfirmation});
+ const legacyEntry=(await f.discussions.view(contactId,d.id)).entries.find(entry=>entry.body==='旧输入合同的讨论发言正文-合成');assert.ok(legacyEntry);
+ const requestKey=randomUUID(),confirmationId=await f.storage.execute('identity.manualConfirm',{ownerId:f.owner,contactId,contextToken:requestKey,id:randomUUID(),at:Date.now()});
+ const service=new SqliteReplyCandidateService(f.storage,f.owner),accepted=await service.begin({contactId,discussionId:d.id,requestKey,text:'本次旧合同请求正文-合成',identity:{kind:'manual',confirmationId}});
+ const frozen=await f.storage.execute('reply.freezeInput',{...accepted.attempt,contextId:randomUUID(),skillRun:{packages:[],eligible:[]},items:[{kind:'entry',entryId:legacyEntry.id}],queryText:'本次旧合同请求正文-合成',at:Date.now()});
+ assert.ok(Array.isArray(frozen)&&frozen.length>0);assert.ok(!frozen.some(item=>item.text.includes('旧输入合同的讨论发言正文')),'讨论entry兼容路径必须被过滤');
+ assert.ok(frozen.some(item=>item.text.includes('本次旧合同请求正文-合成')),'本次请求正文仍进入冻结输入');assert.ok(frozen.every(item=>item.kind!=='entry'||item.identity.requestInput===true));
+});
+
+test('失败候选与另一联系人的旧讨论不进入后续新候选输入',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
+ const f=await realFixture(t,{content:(_request,count)=>count===1?'不是JSON的合成模型输出':JSON.stringify({candidates:[{parts:[`第${count}次合成候选`],basis:[1]}]})}),contactId=f.ids[0];
+ const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ await assert.rejects(turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'失败请求的合成用户正文',confirmedContact:true}));assert.equal(f.requests.length,1);
+ await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'第二次合成请求正文',confirmedContact:true});assert.equal(f.requests.length,2);
+ assert.doesNotMatch(JSON.stringify(f.requests[1]),/失败请求的合成用户正文/,'失败候选的旧正文不得进入后续候选');
+ const other=await f.discussions.newDiscussion(f.ids[1]);
+ await turns.generate({contactId:f.ids[1],discussionId:other.id,requestKey:randomUUID(),text:'另一联系人的合成请求正文',confirmedContact:true});assert.equal(f.requests.length,3);
+ assert.doesNotMatch(JSON.stringify(f.requests[2]),/失败请求的合成用户正文|第二次合成请求正文/);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});

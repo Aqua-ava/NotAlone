@@ -164,7 +164,7 @@ test('provider打开后Agent setup读取失败保留故障类别，并从干净�
  const confirmationId=await f.storage.execute('identity.manualConfirm',{ownerId:f.owner,contactId:f.input.contactId,contextToken:f.input.requestKey,id:randomUUID(),at:Date.now()});
  const {attempt}=await f.service.begin({...f.input,identity:{kind:'manual',confirmationId}}),callId=randomUUID(),contextId=randomUUID();
  const catalog=await f.library.list(),revision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:catalog.map(skillAnchor)};
- const view=await f.discussions.view(f.input.contactId,f.input.discussionId),items=await f.storage.execute('reply.freezeInput',{...attempt,contextId,skillRun:revision,items:view.entries.map(e=>({kind:'entry',entryId:e.id})),at:Date.now()});assert.equal(items[0].itemNo,1);
+ const items=await f.storage.execute('reply.freezeInput',{...attempt,contextId,skillRun:revision,items:[],queryText:f.input.text,at:Date.now()});assert.equal(items[0].itemNo,1);
  await f.storage.execute('discussion.prepareCall',{...attempt,contextId,callId,operationId:randomUUID(),provider:f.model.provider,requestKey:callId,inputSeal:'a'.repeat(64),model:f.model.model,configurationId:'b'.repeat(64),inputCap:8192,outputCap:f.model.maxTokens});
  const protection=new SqliteDiscussionSkillProtection({storage:f.storage,attempt,contextId,callId,authorize:async()=>{}}),run=await openSqliteSkillRun(f.library,{contactId:f.input.contactId,callId},protection);
  await unlink(join(f.skillRoot,'gentle/SKILL.md'));

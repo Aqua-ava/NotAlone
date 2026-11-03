@@ -21,15 +21,11 @@ export function selectionSourceContacts(tx:StorageTransaction,i:DiscussionScope&
   WHERE c.owner_id=? AND c.request_id=? AND x.kind='message' UNION SELECT x.source_contact_id FROM reply_context c
   JOIN reply_candidate_input_source x ON x.owner_id=c.owner_id AND x.context_id=c.id WHERE c.owner_id=? AND c.request_id=?`,[i.ownerId,row.id,i.ownerId,row.id]).map(source=>String(source.source_contact_id));
 }
-/** 来源准备只涉及本次输入实际引用的联系人，不扫描或恢复整个联系人目录。 */
-export function replySourceContacts(tx:StorageTransaction,i:DiscussionScope&{requestId:string;items:{kind:string;sourceContactId?:string;entryId?:string}[];workspace?:ReplyWorkspaceSnapshot},reader:ReplyKnowledgeReader):string[]{
+/** 来源准备只涉及本次输入实际引用的联系人，不扫描或恢复整个联系人目录；旧讨论 entry 不提供候选来源。 */
+export function replySourceContacts(tx:StorageTransaction,i:DiscussionScope&{requestId:string;items:{kind:string;sourceContactId?:string}[];workspace?:ReplyWorkspaceSnapshot},reader:ReplyKnowledgeReader):string[]{
  const contacts=new Set<string>();
  for(const item of i.items){
   if(item.kind==='message'&&item.sourceContactId===i.contactId)contacts.add(i.contactId);
-  if(item.kind==='entry'&&!i.workspace){
-   for(const source of tx.all(`SELECT DISTINCT x.source_contact_id FROM discussion_entry e JOIN reply_context c ON c.owner_id=e.owner_id AND c.request_id=e.origin_request_id
-    JOIN reply_context_item x ON x.owner_id=c.owner_id AND x.context_id=c.id WHERE e.owner_id=? AND e.contact_id=? AND e.discussion_id=? AND e.id=? AND x.kind='message'`,[i.ownerId,i.contactId,i.discussionId,item.entryId!]))contacts.add(String(source.source_contact_id));
-  }
  }
  if(!i.workspace||i.workspace.includeRelationshipContext&&i.workspace.excludedMessageIds.length===0){
   for(const item of reader.read(tx,i))for(const source of item.sources)contacts.add(source.contactId);
@@ -67,12 +63,14 @@ export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contex
  requireDiscussion(tx,i);
  const includeRelatedData=!i.workspace||i.workspace.includeRelationshipContext&&i.workspace.excludedMessageIds.length===0;
  const items:Omit<FrozenReplyInput,'itemNo'>[]=[];
- for(const row of tx.all('SELECT x.*,e.body,m.text_body,m.sender_role FROM reply_context_item x LEFT JOIN discussion_entry e ON e.owner_id=x.owner_id AND e.id=x.entry_id LEFT JOIN message m ON m.owner_id=x.owner_id AND m.id=x.message_id WHERE x.owner_id=? AND x.context_id=? ORDER BY x.item_no',[i.ownerId,i.contextId])){
-  if(row.kind==='skill')continue;
-  if(i.workspace&&row.kind==='entry')continue;
-  const sources:ReplySource[]=row.kind==='message'?[{contactId:String(row.source_contact_id),messageId:String(row.message_id),recordId:String(row.record_id),acceptedRevision:row.accepted_revision as bigint}]:[];
-  items.push({kind:String(row.kind),identity:{contextItemNo:row.item_no},text:String(row.kind==='message'?`${row.sender_role==='owner'?'我':'对方'}：${row.text_body}`:row.body),sources});
+ // 候选只冻结本次消息；entry 是旧讨论兼容槽，Skill 走独立受控读取，均不隐式成为候选材料，也不读取 discussion_entry 正文。
+ for(const row of tx.all('SELECT x.*,m.text_body,m.sender_role FROM reply_context_item x LEFT JOIN message m ON m.owner_id=x.owner_id AND m.id=x.message_id WHERE x.owner_id=? AND x.context_id=? ORDER BY x.item_no',[i.ownerId,i.contextId])){
+  if(row.kind!=='message')continue;
+  const sources:ReplySource[]=[{contactId:String(row.source_contact_id),messageId:String(row.message_id),recordId:String(row.record_id),acceptedRevision:row.accepted_revision as bigint}];
+  items.push({kind:'message',identity:{contextItemNo:row.item_no},text:`${row.sender_role==='owner'?'我':'对方'}：${row.text_body}`,sources});
  }
+ // 旧输入合同的文字兼容入口仍保留，但当前请求正文由本次具名请求直接冻结，不从 discussion_entry 回读。
+ if(!i.workspace&&typeof i.queryText==='string'&&i.queryText.trim())items.push({kind:'entry',identity:{requestInput:true},text:i.queryText,sources:[]});
  if(i.workspace){
   const w=i.workspace;
   items.push({kind:'entry',identity:{workspaceItem:'request',action:w.action,tone:w.tone,includeRelationshipContext:w.includeRelationshipContext,excludedMessageIds:w.excludedMessageIds,selectedPackageId:w.selectedPackageId,carriedSelectionId:w.carriedSelectionId},

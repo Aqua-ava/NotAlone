@@ -60,14 +60,14 @@ export class SqliteReplyTurns {
    if(input.selectedPackageId&&!eligible.some(p=>p.id===input.selectedPackageId))throw new StorageFailure('discussion_skill_unavailable');
    const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:o.library?eligible.map(skillAnchor):[]};
    const readItems=async()=>{
-    const entries=workspace?[]:(await o.discussions.view(input.contactId,attempt.discussionId)).entries.filter((e:any)=>e.content_state==='available');
+    // 候选只使用本次请求的显式消息；旧讨论 entry 兼容槽不参与候选装配，避免把助手讨论正文或来源带入新候选。
     const history=workspace
      ?workspace.includeRelationshipContext?await o.storage.execute<any[]>('discussion.localMessages',{...attempt,limit:50,knownTimeOnly:true}):[]
      :await o.storage.execute<any[]>('discussion.localMessages',{...attempt,limit:20});
     const recentIds=history.filter((m:any)=>!workspace?.excludedMessageIds.includes(m.id)).map((m:any)=>m.id);
     const messageIds=workspace?recentIds:input.contextMessageIds??recentIds;
     const messages=await o.storage.execute<any[]>('discussion.messages',{...attempt,messageIds});
-    return [...messages.map(m=>({kind:'message',sourceContactId:input.contactId,messageId:m.id,recordId:m.record_id,acceptedRevision:m.interpretation_revision})),...entries.map((e:any)=>({kind:'entry',entryId:e.id}))];
+    return messages.map(m=>({kind:'message',sourceContactId:input.contactId,messageId:m.id,recordId:m.record_id,acceptedRevision:m.interpretation_revision}));
    };
    const items=await readItems();
    const frozen=await o.storage.execute<FrozenReplyInput[]>('reply.freezeInput',{...attempt,contextId,skillRun:revision,items,workspace:workspaceSnapshot,queryText:input.text,at:Date.now()});
