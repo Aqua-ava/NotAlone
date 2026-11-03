@@ -92,6 +92,11 @@ export const identityActions: StorageAction[] = [
   tx.run("INSERT INTO binding_verification(owner_id,id,binding_id,identity_generation,method,proof_format,proof,verified_at) VALUES(?,?,?,?,'foreground_confirmation','identity-metadata-v1',?,?)",[i.ownerId,proof.observationId,current.binding_id,BigInt(current.identity_generation),evidence,i.at]);
   return {confirmed:true};
  }),
+ action('identity.syncDirectory','read',(tx,i)=>{
+  // 调度仅取授权名单；具体读取和接受仍在原资格门禁中复验。
+  const owner=text(i.ownerId);
+  return {bindings:bindings(tx,owner),read_enabled:tx.get('SELECT read_enabled FROM owner WHERE owner_id=?',[owner])?.read_enabled===1n};
+ }),
  action('identity.directory','read',(tx,i)=>{
   const owner=text(i.ownerId),counts=visibleMessageCounts(tx,owner);
   return {contacts:tx.all("SELECT id AS contact_id,display_name,selection_generation,data_generation FROM contact WHERE owner_id=? AND state='active' ORDER BY id",[owner]).map(c=>({...c,selection_generation:String(c.selection_generation),data_generation:String(c.data_generation),data_status:{message_count:counts.get(String(c.contact_id))??0,source_count:0}})),bindings:bindings(tx,owner),account:tx.get("SELECT id,external_key,identity_scheme,source_generation,scope_revision FROM channel_account WHERE owner_id=? AND identity_state='verified'",[owner])??null,read_enabled:tx.get('SELECT read_enabled FROM owner WHERE owner_id=?',[owner])?.read_enabled===1n};

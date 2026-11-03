@@ -48,6 +48,8 @@ export class FirstHistoryCoordinator {
   readonly #states = new Map<string, FirstHistoryCoordinatorState['contacts'][number]>();
   #changed = notification();
   #wakePending = false;
+  #wakeAllPending = false;
+  readonly #contactWakes = new Set<string>();
   #resetAttemptsOnStart = false;
   #revision = 0;
   #pump?: Promise<void>;
@@ -77,7 +79,7 @@ export class FirstHistoryCoordinator {
       if(this.#retryTimers.get(job.contactId)!==entry)return;this.#retryTimers.delete(job.contactId);
       if(this.#closed||this.#stoppedContacts.has(job.contactId))return;
       // 每次重探重新读取目录与授权；不复活其他已停止联系人或旧原生游标。
-      this.#attempted.delete(job.key);this.#wakePending=true;this.#notify();this.#startPump();
+      this.#attempted.delete(job.key);this.#contactWakes.add(job.contactId);this.#wakePending=true;this.#notify();this.#startPump();
     },delay)};
     entry.timer.unref();this.#retryTimers.set(job.contactId,entry);return true;
   }
@@ -88,6 +90,7 @@ export class FirstHistoryCoordinator {
     for (const key of this.#cancelledKeys) this.#attempted.delete(key);
     this.#cancelledKeys.clear(); this.#stoppedContacts.clear();
     this.#resetAttemptsOnStart = true;
+    this.#wakeAllPending = true;
     this.#wakePending = true; this.#notify(); this.#startPump();
   }
   /** 新增的delta历史仅重试指定联系人，不重试其他失败/已停止联系人。 */
@@ -97,6 +100,7 @@ export class FirstHistoryCoordinator {
     for(const key of this.#attempted)if(keyContact(key)===contactId)this.#attempted.delete(key);
     for(const key of this.#cancelledKeys)if(keyContact(key)===contactId){this.#cancelledKeys.delete(key);this.#attempted.delete(key);}
     this.#stoppedContacts.delete(contactId);++this.#wakeSerial;
+    this.#contactWakes.add(contactId);
     this.#wakePending=true;this.#notify();this.#startPump();
   }
   getState(): FirstHistoryCoordinatorState {
@@ -120,6 +124,9 @@ export class FirstHistoryCoordinator {
   }
   async #scan(): Promise<void> {
     const revision = this.#revision;
+    // 定点唤醒只限制覆盖查询；仍核对全部排队和在途读取的当前授权。
+    const focused = this.#wakeAllPending || !this.#contactWakes.size ? undefined : new Set(this.#contactWakes);
+    this.#wakeAllPending = false;this.#contactWakes.clear();
     let directory: Awaited<ReturnType<FirstHistoryDirectoryPort['directory']>>;
     try { directory = await this.#directory.directory(); }
     catch { this.#lastError = 'history_first_directory_failed'; await this.#cancel(); return; }
@@ -136,6 +143,7 @@ export class FirstHistoryCoordinator {
       const current = selected.get(contactId);
       if (!current || bindingKey(current) !== queued.key) {
         this.#queued.delete(contactId); this.#state(contactId, 'stopped');
+        if (current) focused?.add(contactId);
       }
     }
     for (const active of [...this.#active.values()]) {
@@ -143,12 +151,13 @@ export class FirstHistoryCoordinator {
       if (!current || bindingKey(current) !== active.key) {
         await this.#cancel(active.contactId);
         // 取消会使整个扫描修订失效；无论该人是否仍选中，都须处理其余新范围。
-        this.#wakePending = true;
+        this.#wakeAllPending = true;this.#wakePending = true;
       }
     }
     for (const binding of selected.values()) {
       if (this.#closed || revision !== this.#revision) return;
       const key = bindingKey(binding), contactId = binding.contact_id;
+      if (focused && !focused.has(contactId)) continue;
       if (this.#attempted.has(key) || this.#active.has(contactId) || this.#queued.has(contactId)) continue;
       try {
         const coverage = await this.#history.coverage(contactId);

@@ -1,4 +1,4 @@
-import {sourceDeletionIds} from './source-deletion.ts';
+import {sourceDeletionIds,sourceDeletionPhysicalKeys} from './source-deletion.ts';
 import { createHash } from 'node:crypto';
 import { StorageFailure, type StorageRow, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
 import type { DeletionDomain, DeletionOperation, RowDeletionTarget, CheckResult } from '../../storage/sqlite/deletion/contracts.ts';
@@ -92,7 +92,8 @@ export const historyDeletionDomain:DeletionDomain={
    const r=tx.get('SELECT r.observed_key,r.message_id,b.conversation_id FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id WHERE r.owner_id=? AND r.contact_id=? AND r.id=?',[ownerId,scope.contactId,scope.sourceId]);
    if(!r){if(tx.get("SELECT 1 FROM deletion_target WHERE operation_id=? AND domain='history'",[op.operationId]))return [];throw new StorageFailure('history_source_not_found');}
    if(r.observed_key){
-    tx.run('INSERT OR IGNORE INTO history_source_exclusion VALUES(?,?,?,?,?)',[ownerId,r.conversation_id,'local',r.observed_key,op.operationId]);
+    const physicalKeys=sourceDeletionPhysicalKeys(tx,op);
+    for(const key of physicalKeys.length?physicalKeys:[String(r.observed_key)])tx.run('INSERT OR IGNORE INTO history_source_exclusion VALUES(?,?,?,?,?)',[ownerId,r.conversation_id,'local',key,op.operationId]);
     if(r.message_id)for(const alias of tx.all('SELECT scheme,external_key FROM message_alias WHERE owner_id=? AND message_id=?',[ownerId,r.message_id]))
      tx.run('INSERT OR IGNORE INTO history_source_exclusion VALUES(?,?,?,?,?)',[ownerId,r.conversation_id,alias.scheme,alias.external_key,op.operationId]);
    }

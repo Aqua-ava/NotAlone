@@ -152,7 +152,12 @@ export class IncrementalHistoryCoordinator {
           // 新历史接续完成后绑定身份不变；以当前持久检查点解除旧快照的调度阻塞，不复用旧游标。
           let coverage:HistoryCoverage;
           try{coverage=await this.#history.coverage(contactId);}catch{continue;}
-          if(!coverage.traversalComplete||!coverage.incremental?.cursorPresent||!['ready','incomplete'].includes(coverage.incremental.phase))continue;
+          if(!coverage.traversalComplete||!coverage.incremental?.cursorPresent||!['ready','incomplete'].includes(coverage.incremental.phase)){
+            // 守卫后来失效时，旧增量阻塞也须让当前合法恢复资格接回首次读取。
+            if(this.#firstHistoryManagedExternally)try{await this.#history.requestFirstHistoryRecovery?.(contactId);}
+            catch{/* 本轮资格查询失败保留替换阻塞，下轮仍须重新经过持久资格门。 */}
+            continue;
+          }
           this.#attempted.delete(contactId);
         }else if(this.#states.get(contactId)?.phase==='blocked'&&this.#states.get(contactId)?.lastError==='history_incremental_unavailable'){
           // 只读本机持久覆盖，接住启动时旧empty目标先被看见、随后FirstHistory完成新证明的竞态。

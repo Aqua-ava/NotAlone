@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { fixture, record } from './fixtures/memory-sqlite/support.mjs';
 import { SqliteHistoryService } from '../src/history/sqlite/service.ts';
 import { IncrementalHistoryCoordinator } from '../src/history/sqlite/incremental-coordinator.ts';
+import { StorageFailure } from '../src/storage/sqlite/contracts.ts';
+import { FirstHistoryCoordinator } from '../src/history/sqlite/coordinator.ts';
 
 async function parkedFixture(t) {
   const cleanup = [], f = await fixture({ after: callback => cleanup.push(callback) });
@@ -92,4 +94,33 @@ test('空闲守卫瞬时退出后外置首次协调器仍会被唤醒，真实�
   await f.history.requestFirstHistoryRecovery(b.contact_id);
   assert.deepEqual(f.state.wakes, []);
   assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate', { token }), false);
+});
+
+for(const {code,failFirstRecovery} of [{code:'history_native_timeout'},{code:'history_source_changed'},{code:'history_native_timeout',failFirstRecovery:true}])test(`增量替换阻塞后守卫${code}按持久恢复资格决定是否唤醒首次${failFirstRecovery?'，恢复查询失败后下轮继续':''}`,async t=>{
+ t.mock.timers.enable({apis:['setInterval']});
+ const f=await parkedFixture(t),[a,b]=f.saved;
+ await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
+ const directory={directory:async()=>{const saved=await f.contacts.syncDirectory();return {...saved,bindings:saved.bindings.filter(row=>row.contact_id===a.contact_id)};}};
+ const incremental=new IncrementalHistoryCoordinator(directory,f.history,{intervalMs:30_000,firstHistoryManagedExternally:true});
+ const first=new FirstHistoryCoordinator(directory,f.history);t.after(async()=>{await incremental.close();await first.close();});
+ incremental.wake();await incremental.waitForIdle();
+ assert.equal(incremental.getState().contacts[0].lastError,'history_snapshot_replaced');
+ await f.history.synchronize(a.contact_id);
+ const guard=f.state.channels.at(-1);guard.code=code;guard.loss.resolve();
+ for(let index=0;index<12;index++)await Promise.resolve();await f.history.waitForReadIdle(a.contact_id);await f.storage.check();
+ const token=await f.contacts.eligibility(a.contact_id);
+ assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate',{token}),code==='history_native_timeout');
+ const wakes=[],channels=f.state.channels.length;f.history.setFirstHistoryWake(id=>{wakes.push(id);first.wakeContact(id);});
+ if(failFirstRecovery){
+  const execute=f.storage.execute.bind(f.storage);let injected=false;
+  f.storage.execute=(name,input,...rest)=>{if(name==='history.normalUseRevalidationCandidate'&&!injected){injected=true;return Promise.reject(new StorageFailure('storage_busy'));}return execute(name,input,...rest);};
+  incremental.start();t.mock.timers.tick(30_000);await incremental.waitForIdle();await first.waitForIdle();
+  assert.equal(injected,true);assert.deepEqual(wakes,[]);assert.equal(f.state.channels.length,channels,'查询失败不能绕过资格门启动读者');
+  assert.equal(incremental.getState().contacts[0].lastError,'history_snapshot_replaced','查询暂时失败不能吞掉下轮的替换恢复入口');
+ }
+ incremental.start();t.mock.timers.tick(30_000);await incremental.waitForIdle();await first.waitForIdle();
+ if(code==='history_native_timeout'){
+  assert.deepEqual(wakes,[a.contact_id],'旧增量blocked不能吞掉失守卫后的合法恢复请求');
+  assert.equal((await f.history.coverage(a.contact_id)).phase,'complete');
+ }else{assert.deepEqual(wakes,[]);assert.equal(f.state.channels.length,channels,'真实围栏不得创建恢复读取器');}
 });

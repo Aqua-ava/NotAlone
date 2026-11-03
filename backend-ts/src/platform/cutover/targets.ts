@@ -118,6 +118,36 @@ function importPending(userData: string): LegacyTarget[] {
   try { shape = JSON.parse(privateText(location, 256) ?? ''); } catch { shape = undefined; }
   return [target('legacy_import_pending', 'managed/import-pending.json', shape && typeof shape === 'object' ? 'confirmed' : 'unknown', 'legacy_import_marker')];
 }
+/** 只识别固定私有维护意图的归属；真实性与授权仍由宿主读取器及认证事务核验。 */
+function ownedHistoryMaintenance(userData:string):boolean {
+ try{
+  const directory=path.join(userData,'managed/maintenance'),entry=privateStat(directory,'directory');
+  if(!entry||entry==='unsafe'||(entry.mode&0o777n)!==0o700n)return false;
+  const names=readdirSync(directory);if(!names.length)return true;
+  if(names.length!==1||names[0]!=='legacy-terminal-proof.json')return false;
+  const location=path.join(directory,names[0]),file=privateStat(location,'file');
+  if(!file||file==='unsafe'||(file.mode&0o777n)!==0o600n)return false;
+  const row=JSON.parse(privateText(location,262144)??'');
+  if(!row||Array.isArray(row)||Object.keys(row).sort().join(',')!==['format','databaseId','ownerId','contactId','legacyExecutable','currentExecutable','proof','proofDigest'].sort().join(',')
+   ||row.format!=='notalone-legacy-terminal-maintenance-v1'||typeof row.databaseId!=='string'||!identifiers.test(row.databaseId)
+   ||typeof row.ownerId!=='string'||!UUID.test(row.ownerId)||typeof row.contactId!=='string'||!UUID.test(row.contactId)
+   ||typeof row.legacyExecutable!=='string'||!path.isAbsolute(row.legacyExecutable)||typeof row.currentExecutable!=='string'||!path.isAbsolute(row.currentExecutable)
+   ||typeof row.proofDigest!=='string'||!/^[a-f0-9]{64}$/.test(row.proofDigest))return false;
+  const proof=row.proof;
+  if(!proof||proof.format!=='notalone-legacy-recall-mapping-v1'||proof.token?.owner_id!==row.ownerId||proof.token?.contact_id!==row.contactId
+   ||!Number.isSafeInteger(proof.observedAt)||proof.observedAt<0||!Array.isArray(proof.keys)||!proof.keys.length||proof.keys.length>1024
+   ||[proof.legacy,proof.current].some(reader=>!reader||['scope','schema','report','target'].some(key=>!reader[key]||typeof reader[key]!=='object'||Array.isArray(reader[key]))))return false;
+  for(const mapping of proof.keys){
+   if(!mapping||mapping.reason!=='source_recalled'||typeof mapping.from!=='string'||typeof mapping.to!=='string')return false;
+   const from=JSON.parse(mapping.from),to=JSON.parse(mapping.to);
+   if(!Array.isArray(from)||from.length!==4||from.some(value=>typeof value!=='string'||!value)||!Array.isArray(to)||to.length!==4||to.some(value=>typeof value!=='string'||!value)
+    ||JSON.stringify(from)!==mapping.from||JSON.stringify(to)!==mapping.to||from[0]===to[0]||JSON.stringify(from.slice(1))!==JSON.stringify(to.slice(1))
+    ||!/^(0|[1-9][0-9]{0,19})$/.test(from[3])||BigInt(from[3])>18446744073709551615n)return false;
+  }
+  const canonical=JSON.stringify(proof,(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a<b?-1:a>b?1:0)):value);
+  return createHash('sha256').update(canonical).digest('hex')===row.proofDigest;
+ }catch{return false;}
+}
 /** 当前存储目录只接受已知 SQLite 与通用维护产物；未知对象保留现场，不解析或代为清除。 */
 export function unrecognizedManagedTargets(userData: string): LegacyTarget[] {
   const directory = path.join(userData, 'managed');
@@ -128,6 +158,7 @@ export function unrecognizedManagedTargets(userData: string): LegacyTarget[] {
   if (names.length > 1024) return [target('legacy_unrecognized_managed', 'managed', 'unknown', 'unexpected_entry_count')];
   const supported = new Set(['sqlite', 'media', 'runtime-copies', 'cache', 'updates', 'import-pending.json', 'backend.info', 'backend.info.dsh-lock',
     'sqlite-backend.info', 'sqlite-backend.info.dsh-lock']);
+  if(names.includes('maintenance')&&ownedHistoryMaintenance(userData))supported.add('maintenance');
   return names.filter(name => !supported.has(name)).map(name =>
     target('legacy_unrecognized_managed', `managed/${name}`, 'unknown', 'unsupported_managed_entry'));
 }

@@ -32,23 +32,24 @@ async function fixture(t,sharedMode=false,storageOptions={},contactCount=2){
  const script=`#!${process.execPath}
  const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline');
  const schema=${JSON.stringify(schema)},planFile=${JSON.stringify(planFile)},logFile=${JSON.stringify(logFile)};
- let resumed=false,tailSerial=2,selected='${conversation}';
+ let resumed=false,tailSerial=2,targetSerial=0,currentTarget=null,selected='${conversation}';
  fs.writeFileSync(${JSON.stringify(pidFile)},String(process.pid));
  if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['notalone-history']))process.exit(91);
  readline.createInterface({input:process.stdin}).on('line',line=>{
   const r=JSON.parse(line),plan=JSON.parse(fs.readFileSync(planFile));fs.appendFileSync(logFile,JSON.stringify(r)+'\\n');let data;
+  if(['page','quarantine-page','tail'].includes(r.op)&&r.target!==currentTarget){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_target_unverified'}})+'\\n');return;}
   if(r.op==='resolve'){selected=r.displayName;schema.scopeDigest=crypto.createHash('sha256').update('${account}\\0'+selected).digest('hex');}
   if(r.op==='release-selection'&&plan.mode==='release-fail'){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_account_changed'}})+'\\n');return;}
-  if(r.op==='release-selection')data={released:true};
+  if(r.op==='release-selection'){currentTarget=null;data={released:true};}
   else if(r.op==='resolve')data={accountKey:plan.mode==='wrong-account'?'synthetic-other':'${account}',conversationKey:plan.mode==='wrong-conversation'?'synthetic-other':selected,displayName:'只作展示',sourceGeneration:plan.mode==='wrong-generation'?'f'.repeat(64):'${generation}'};
   else if(r.op==='inspect')data=schema;
   else if(r.op==='support')data={protocol:'private-history-v1',profileId:'synthetic-history-v1',adapterVersion:'1',status:['unverified','quarantine','quarantine-forged'].includes(plan.mode)?'unverified':'supported',reason:['unverified','quarantine','quarantine-forged'].includes(plan.mode)?'history_message_state_unverified':null,accountKey:'${account}',conversationKey:selected,sourceGeneration:'${generation}',programVersion:'synthetic',build:'1',artifactSha256:crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'),schemaFingerprint:schema.schemaFingerprint,declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-final',continuity:${sharedMode?"'same-source-instances-normal-use-v1'":"'synthetic-fixed-source'"},...(plan.capabilities?{capabilities:plan.capabilities}:plan.mode.startsWith('quarantine')?{capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory'].map(k=>[k,['programVersion','exactSchema','declaredLocalKey'].includes(k)?'supported':'unverified']))}:{})};
-  else if((r.op==='target'||r.op==='quarantine-target'||r.op==='resume-target')){resumed=r.op==='resume-target';data={protocol:'private-history-v1',descriptor:'synthetic-target',partitions:schema.checkedPartitions,tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'};}
+  else if((r.op==='target'||r.op==='quarantine-target'||r.op==='resume-target')){resumed=r.op==='resume-target';currentTarget=${sharedMode?"'synthetic-target-'+(++targetSerial)":"'synthetic-target'"};data={protocol:'private-history-v1',descriptor:currentTarget,partitions:schema.checkedPartitions,tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'};}
   else if((r.op==='page'||r.op==='quarantine-page')){
    if(plan.mode==='blocked')return;
    const row={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:plan.serverId,sender:'contact',kind:'text',text:${sharedMode?"'合成历史正文:'+selected":"'合成历史正文'"},originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:plan.mode==='quarantine'?'unverified':'verified'};
    data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[row,{...row,localId:'2',serverId:'0',kind:'voice',text:plan.mode==='malicious'?'forbidden-body':null,originalType:'34'}],completedPartitions:schema.checkedPartitions,exhausted:true,...(plan.resumeCursor?{resumeCursor:plan.resumeCursor}:{})};
-   if(resumed)data.records=plan.resumeRows||[];
+   if(resumed)data.records=plan.resumeRows||[];else data.records.push(...(plan.extraRows||[]));
   }else if(r.op==='tail')data={target:r.target,cursorIn:r.cursor,cursorOut:plan.tailCursorOut||'tail-'+tailSerial++,records:plan.tailRows||[],caughtUp:true,...(plan.tailExtra?{unexpectedBody:'forbidden'}:{})};
   else if(r.op==='boundary-snapshot'){
    data={format:'wechat-history-boundary-v1',scopeDigest:schema.scopeDigest,sourceGeneration:schema.sourceGeneration,schemaFingerprint:schema.schemaFingerprint,
@@ -293,15 +294,20 @@ test('共享历史进程串行同步两位联系人，切回重验且正文与�
  await f.history.stop();await f.shared.stop();noProcess(pid);
 });
 
-test('八位联系人共享原生读取器并通过普通定时轮转持续保存后续消息，不停在被替换快照', {timeout:15000}, async t=>{
+for(const contactCount of [8,32])test(`${contactCount}位联系人共享原生读取器并通过普通定时轮转持续保存后续消息，不停在被替换快照`, {timeout:30000}, async t=>{
  t.mock.timers.enable({apis:['setInterval']});
- const cleanup=[],f=await fixture({after:callback=>cleanup.push(callback)},true,{},8);
- const first=new FirstHistoryCoordinator(f.contacts,f.history),incremental=new IncrementalHistoryCoordinator(f.contacts,f.history,{intervalMs:30_000,firstHistoryManagedExternally:true});
+ const cleanup=[],f=await fixture({after:callback=>cleanup.push(callback)},true,{},contactCount);
+ const calls={coverage:0,directory:0,syncDirectory:0},started=performance.now();
+ for(const [target,method,label]of [[f.history,'coverage','coverage'],[f.contacts,'directory','directory'],[f.contacts,'syncDirectory','syncDirectory']]){const original=target[method].bind(target);target[method]=(...args)=>{calls[label]++;return original(...args);};}
+ const directory={directory:()=>f.contacts.syncDirectory()};
+ let first=new FirstHistoryCoordinator(directory,f.history);const initial=first,incremental=new IncrementalHistoryCoordinator(directory,f.history,{intervalMs:30_000,firstHistoryManagedExternally:true});
  f.history.setFirstHistoryWake(contactId=>first.wakeContact(contactId));
- t.after(async()=>{await incremental.close();await first.close();for(const callback of cleanup.reverse())await callback();});
+ t.after(async()=>{await incremental.close();await first.close();if(first!==initial)await initial.close();for(const callback of cleanup.reverse())await callback();});
  const caps=Object.fromEntries([...statusCapabilityKeys,'incrementalTail','durableIncremental'].map(key=>[key,'supported']));
  await f.setPlan({capabilities:caps,resumeCursor:'synthetic-resume'});
- first.wake();await first.waitForIdle();incremental.start();
+ first.wake();await first.waitForIdle();
+ // 模拟启动时已经有complete持久覆盖；新协调器仍须按定点唤醒公平轮转。
+ first=new FirstHistoryCoordinator(directory,f.history);first.wake();await first.waitForIdle();incremental.start();
  for(let round=1;round<=2;round++){
   const text=`合成轮转新消息${round}`;
   const resumeRows=[{partition:'d'.repeat(64),table:'c'.repeat(64),localId:String(10+round),serverId:'0',sender:'contact',kind:'text',text,originalType:'1',sentAt:String(1700000000000+round*1000),timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:'verified'}];
@@ -314,8 +320,44 @@ test('八位联系人共享原生读取器并通过普通定时轮转持续保�
    assert.equal(result.messages.filter(message=>message.text===text).length,1,'同一来源轮转不得重复入库');
   }
  }
- assert.equal((await requests(f.logFile)).filter(row=>row.op==='resolve').length>=16,true,'多个正常tick实际轮转全部联系人');
+ assert.equal((await requests(f.logFile)).filter(row=>row.op==='resolve').length>=contactCount*2,true,'多个正常tick实际轮转全部联系人');
+ t.diagnostic(JSON.stringify({contacts:contactCount,elapsedMs:performance.now()-started,...calls}));
+ assert.equal(calls.directory,0,'协调器不得为了授权目录反复统计聊天正文');
+ assert.ok(calls.coverage<=contactCount*12,'定点唤醒不应随联系人数量平方放大覆盖查询');
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('32位联系人真实重开SQLite后首次与增量同时启动，严格新目标下连续两轮保存并去重', {timeout:30000}, async t=>{
+ t.mock.timers.enable({apis:['setInterval']});
+ const cleanup=[],f=await fixture({after:callback=>cleanup.push(callback)},true,{},32);
+ const caps=Object.fromEntries([...statusCapabilityKeys,'incrementalTail','durableIncremental'].map(key=>[key,'supported']));
+ await f.setPlan({capabilities:caps,resumeCursor:'synthetic-resume'});
+ const initial=new FirstHistoryCoordinator({directory:()=>f.contacts.syncDirectory()},f.history);
+ let storage,contacts,shared,history,first,incremental;
+ t.after(async()=>{await incremental?.close();await first?.close();await history?.close();await shared?.close();await contacts?.close();await storage?.close();await initial.close();for(const callback of cleanup.reverse())await callback();});
+ initial.wake();await initial.waitForIdle();await initial.close();await f.history.close();await f.shared.close();await f.contacts.close();await f.storage.close();
+ storage=await SqliteStorage.open({userData:join(f.root,'state'),intent:'open',expectedDatabaseId:f.storage.status.databaseId,role:'test'});
+ contacts=new SqliteContactService(storage,owner,{account:async()=>{throw Error('不应重新确认账号');},sessions:async()=>{throw Error('不应扩大已选范围');}});
+ await contacts.initialize();shared=new SharedWechatClient(()=>loadNarrowWechatOptions(f.executable));
+ history=new SqliteHistoryService(storage,contacts,()=>createWechatHistoryChannel(f.executable,undefined,shared),undefined,undefined,undefined,shared);
+ const directory={directory:()=>contacts.syncDirectory()};first=new FirstHistoryCoordinator(directory,history);incremental=new IncrementalHistoryCoordinator(directory,history,{intervalMs:30_000,firstHistoryManagedExternally:true});
+ history.setFirstHistoryWake(contactId=>first.wakeContact(contactId));
+ first.wake();incremental.wake();incremental.start();
+ await Promise.all([first.waitForIdle(),incremental.waitForIdle()]);await first.waitForIdle();
+ for(const binding of f.bindings)assert.equal((await history.coverage(binding.contact_id)).phase,'complete','冷启动后每位联系人都须完成当前运行时历史接续');
+ const records=[];
+ for(let round=1;round<=2;round++){
+  const text=`合成冷启动新消息${round}`;
+  records.push({partition:'d'.repeat(64),table:'c'.repeat(64),localId:String(30+round),serverId:'0',sender:'contact',kind:'text',text,originalType:'1',sentAt:String(1700000000000+round*1000),timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:'verified'});
+  await f.setPlan({capabilities:caps,resumeCursor:'synthetic-resume',resumeRows:records,tailRows:records,extraRows:records});
+  t.mock.timers.tick(30_000);await incremental.waitForIdle();await first.waitForIdle();
+  for(const binding of f.bindings){
+   const result=await history.read(binding.contact_id);assert.equal(result.coverage.phase,'complete');
+   for(const row of records)assert.equal(result.messages.filter(message=>message.text===row.text).length,1,'每位联系人的所有后续消息必须保存一次');
+   assert.ok(result.messages.filter(message=>message.text?.startsWith('合成历史正文:')).every(message=>message.text==='合成历史正文:'+binding.conversation_locator),'基础正文不跨联系人');
+  }
+ }
+ assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
 test('共享独立通道重复关闭不能清除后来联系人的选择',async t=>{

@@ -24,6 +24,7 @@ export class SqliteContactService {
  private execute<T=any>(name:string,input:object):Promise<T>{if(this.closed)fail('identity_closed');return this.storage.execute(name,{ownerId:this.ownerId,at:this.clock(),...input});}
  initialize(){return this.execute('identity.initialize',{});}
  directory(){return this.execute<Directory>('identity.directory',{});}
+ syncDirectory(){return this.execute<Pick<Directory,'read_enabled'|'bindings'>>('identity.syncDirectory',{});}
  foregroundSnapshot(){return this.execute<import('../../foreground/sqlite-foreground.ts').ForegroundSnapshot>('identity.foregroundSnapshot',{});}
  async confirmForeground(proof:import('../../foreground/sqlite-foreground.ts').ForegroundBindingConfirmation){await this.execute('identity.confirmForeground',{proof});}
  private readMetadata<T>(read:()=>Promise<T>):Promise<T>{

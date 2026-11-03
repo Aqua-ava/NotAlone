@@ -287,5 +287,6 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 160. [ADR-160：助手回看与 Skill 核验分离执行队列](adr/160-assistant-read-and-skill-worker-isolation.md)（已采纳，验证边界见记录）
 
+161. [ADR-161：旧读取器来源的有界抑制映射](adr/161-proved-legacy-source-suppression-mapping.md)（已采纳，验证边界见记录）
 162. [ADR-162：本机回复资料与独立模型并发](adr/162-local-reply-context-and-independent-model-lanes.md)（已采纳，实现与验证见记录）
 163. [ADR-163：退役未接入 SQLite 的旧回复流程](adr/163-retire-disconnected-reply-workflows.md)（已采纳，实现与验收单独记录）
