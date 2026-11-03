@@ -72,6 +72,7 @@ function Memory({memory,busy,decide}:{memory:MemoryView;busy:boolean;decide:(req
 /** 资格失效或顶部范围变化立即卸载正文、依据和未提交编辑，迟到结果不再挂回。 */
 export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,documentsRefreshKey=0,completedRunId=null}:{bridge:SqliteMemoryManagementBridge;contactId:string|null;scopeRevision:number;documentsRefreshKey?:number;completedRunId?:string|null}){
  const [scopeKind,setScopeKind]=useState<'contact'|'self'>('contact');
+ const [level,setLevel]=useState<'L1'|'L2'|'L3'>('L1');
  const context=useRef({bridge,contactId,scopeRevision,scopeKind});
  if(context.current.bridge!==bridge||context.current.contactId!==contactId||context.current.scopeRevision!==scopeRevision||context.current.scopeKind!==scopeKind)context.current={bridge,contactId,scopeRevision,scopeKind};
  const accepted=context.current;
@@ -112,17 +113,16 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
   const refreshed=await refresh.current();if(active.current&&context.current===accepted)setNotice({context:accepted,message:refreshed?(successMessages[request.action]??'决定已保存。'):'决定已保存，但当前资料暂不可读。已撤下原资料，请重新读取。',error:!refreshed});
  }
  return <section className="sqlite-memory-management" aria-label="记忆候选与版本">
-  <header><h2>记忆候选与版本</h2><p className="hint">查看固定原稿、来源和每次决定。编辑在提交后形成正式版本。</p></header>
-  <div className="sqlite-memory-actions" role="group" aria-label="记忆对象"><button type="button" aria-pressed={scopeKind==='contact'} onClick={()=>setScopeKind('contact')}>对方</button><button type="button" aria-pressed={scopeKind==='self'} onClick={()=>setScopeKind('self')}>我</button></div>
-  {!contactId?<p>请先从顶部选择联系人。</p>:<>
-   {scopeKind==='self'&&<><p className="hint">记忆候选与版本仅展示完整贡献和来源均属于当前联系人的本人资料。</p><p className="hint">本人全局概览不在当前联系人页面展示。</p></>}
+  <header className="memory-browser-toolbar"><div className="memory-person-switch" role="group" aria-label="记忆对象">{(['contact','self'] as const).map(kind=><button key={kind} type="button" aria-pressed={scopeKind===kind} disabled={!contactId} onClick={()=>setScopeKind(kind)}>{kind==='contact'?'对方':'我'}</button>)}</div></header>
+  <div className="memory-level-tabs" role="group" aria-label="记忆层级">{(['L1','L2','L3'] as const).map(value=><button key={value} type="button" aria-label={value} aria-pressed={level===value} onClick={()=>setLevel(value)}><span>{value}</span><strong>{{L1:'具体记忆',L2:'主题资料',L3:'长期概览'}[value]}</strong></button>)}</div>
+  {!contactId?<p className="memory-browser-empty">请先从顶部选择联系人。</p>:<div className="memory-flat-content" key={`${scopeKind}:${contactId}:${scopeRevision}`}>
+   {scopeKind==='self'&&<p className="hint memory-scope-hint">仅展示来源完整归属于当前联系人的本人资料。</p>}
+   <div hidden={level!=='L1'}>
    {currentNotice&&<p role={currentNotice.error?'alert':'status'}>{currentNotice.message}{currentNotice.error&&<button type="button" disabled={busy} onClick={()=>void refresh.current()}>重试读取记忆资料</button>}</p>}{busy&&<p role="status">正在核对记忆资料…</p>}
-   {current&&<><h3>候选原稿</h3>{current.view.candidates.length===0?<p>当前范围没有可展示的候选。</p>:current.view.candidates.map(candidate=><Candidate key={`${candidate.id}:${candidate.stateRevision}`} candidate={candidate} busy={busy} decide={request=>void decide(request)}/>)}
-    <h3>正式记忆</h3>{current.view.memories.length===0?<p>当前范围没有可展示的正式记忆。</p>:current.view.memories.map(memory=><Memory key={`${memory.id}:${memory.headRevision}`} memory={memory} busy={busy} decide={request=>void decide(request)}/>)}</>}
-  </>}
-  {readRequest&&scopeKind==='contact'&&typeof bridge.readDocuments==='function'&&(documentsBlocked?<section className="sqlite-memory-documents" aria-label="主题资料与长期概览">
-   <h2>主题资料与长期概览</h2><p role={busy?'status':'alert'}>{busy?'正在核对更新后的主题资料…':'资料资格尚未重新核验，已撤下正文和依据。'}</p>
-   {!busy&&<button type="button" onClick={()=>void refresh.current()}>重试读取主题资料</button>}
-  </section>:<SqliteMemoryDocumentsPanel key={`${scopeKind}:${contactId}:${scopeRevision}`} bridge={bridge} request={readRequest} refreshKey={documentsRefreshKey}/>)}
+   {current&&<><h3 className="memory-collection-heading">正式记忆 <span>{current.view.memories.length} 条</span></h3>{current.view.memories.length===0?<p className="memory-browser-empty">当前范围没有可展示的正式记忆。</p>:<div className="memory-flat-grid">{current.view.memories.map(memory=><Memory key={`${memory.id}:${memory.headRevision}`} memory={memory} busy={busy} decide={request=>void decide(request)}/>)}</div>}
+    <h3 className="memory-collection-heading">候选原稿 <span>{current.view.candidates.length} 条</span></h3>{current.view.candidates.length===0?<p className="memory-browser-empty">当前范围没有可展示的候选。</p>:<div className="memory-flat-grid">{current.view.candidates.map(candidate=><Candidate key={`${candidate.id}:${candidate.stateRevision}`} candidate={candidate} busy={busy} decide={request=>void decide(request)}/>)}</div>}</>}
+   </div>
+   <div hidden={level==='L1'}>{readRequest&&scopeKind==='contact'&&typeof bridge.readDocuments==='function'?<SqliteMemoryDocumentsPanel bridge={bridge} request={readRequest} level={level==='L3'?'L3':'L2'} refreshKey={documentsRefreshKey} blocked={documentsBlocked} managementBusy={busy} retryManagement={()=>void refresh.current()}/>:<p className="memory-browser-empty">{scopeKind==='self'?(level==='L3'?'本人全局概览不在当前联系人页面展示。':'本人全局主题资料不在当前联系人页面展示。'):'当前连接暂不支持读取主题资料与长期概览。'}</p>}</div>
+  </div>}
  </section>;
 }

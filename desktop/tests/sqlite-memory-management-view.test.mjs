@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
+import {readFile} from 'node:fs/promises';
 import {chromium} from '@playwright/test';
 import {emptyDocumentFixture} from '../../backend-ts/test/fixtures/memory-documents/empty-status-support.mjs';
 const contact='11111111-1111-4111-8111-111111111111',id='22222222-2222-4222-8222-222222222222';
@@ -8,10 +9,66 @@ const source={contactId:contact,messageId:id,recordId:id,acceptedRevision:'1',qu
 const candidate={id,scopeKind:'contact',contactId:contact,verificationState:'verified',body:'原始合成结论',state:'pending',stateRevision:'0',eventId:id,sources:[source],contributingContactIds:[contact]};
 const view=()=>({connectionGeneration:1,scope:{scopeKind:'contact',contactId:contact},view:{candidates:[candidate],memories:[]}});
 async function refreshVisible(page){await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));}
-async function panel(t,command,inspect,withDocuments=false,selectedContact=contact,release=async()=>{}){
+async function panel(t,command,inspect,withDocuments=false,selectedContact=contact,release=async()=>{},{initialLevel=withDocuments?'L2':'L1'}={}){
  const compiled=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {SqliteMemoryManagementPanel} from './src/renderer/SqliteMemoryManagementPanel';const listeners=new Set();window.invalidate=()=>{for(const fn of listeners)fn();};const bridge={read:(...args)=>window.command('read',...args),${withDocuments ? "readDocuments:(...args)=>window.command('readDocuments',...args)," : ''}decide:(...args)=>window.command('decide',...args),release:()=>window.release(),onInvalidated:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}};const root=createRoot(document.getElementById('root'));window.unmount=()=>root.unmount();root.render(<SqliteMemoryManagementPanel bridge={bridge} contactId='${selectedContact}' scopeRevision={1}/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
- const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(4000);await page.exposeFunction('command',command);await page.exposeFunction('release',release);await page.route('http://127.0.0.1/memory-management-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/memory-management-test');await page.addScriptTag({content:compiled.outputFiles[0].text});await inspect(page);
+ const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(4000);await page.exposeFunction('command',command);await page.exposeFunction('release',release);await page.route('http://127.0.0.1/memory-management-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/memory-management-test');await page.addScriptTag({content:compiled.outputFiles[0].text});if(initialLevel!=='L1')await page.getByRole('button',{name:initialLevel,exact:true}).click();await inspect(page);
 }
+function flatDocuments(){
+ const document=(documentId,kind,title,text)=>({id:documentId,versionNo:'1',scopeKind:'contact',contactId:contact,kind,title,statements:[{text,kind:'fact',basis:null,section:null,uncertainty:null,temporalStatus:null,leftClaim:null,rightClaim:null,resolutionState:null,resolutionText:null,references:[{memoryId:id,versionNo:1,level:'contact',provenanceKind:'source_supported',memoryText:'合成记忆依据'}]}]});
+ const documents=[document('33333333-3333-4333-8333-333333333333','scene','园艺主题','园艺主题的合成正文'),document('44444444-4444-4444-8444-444444444444','scene','周末活动','周末活动的合成正文'),document('55555555-5555-4555-8555-555555555555','profile','长期兴趣','长期兴趣的合成正文')];
+ return {connectionGeneration:1,scope:{scopeKind:'contact',contactId:contact},view:{status:'completed',publication:{id,members:documents.map(document=>({documentId:document.id,versionNo:document.versionNo}))},documents}};
+}
+async function captureFlatMemory(page,person){
+ for(const width of [1100,680]){
+  await page.setViewportSize({width,height:850});
+  assert.equal(await page.evaluate(()=>Math.max(document.documentElement.scrollWidth,document.body.scrollWidth)<=document.documentElement.clientWidth),true,`${person}在${width}px宽度没有水平溢出`);
+  await page.locator('.sqlite-memory-management').screenshot({path:`/tmp/notalone-flat-memory-${person==='self'?'self-':''}${width===680?'narrow-':''}preview.png`});
+ }
+ await page.setViewportSize({width:1100,height:850});
+}
+test('L1 L2 L3 互斥切换，所选层全部记忆直接平铺且人物保持隔离',{timeout:20000},async t=>{
+ const documentScopes=[];
+ await panel(t,async(method,input)=>{
+  if(method==='readDocuments'){documentScopes.push(input.scope.scopeKind);return flatDocuments();}
+  return {...view(),scope:input.scope,view:{candidates:[{...candidate,scopeKind:input.scope.scopeKind,contactId:input.scope.contactId,body:input.scope.scopeKind==='self'?'本人的独立合成结论':candidate.body},{...candidate,id:'66666666-6666-4666-8666-666666666666',scopeKind:input.scope.scopeKind,contactId:input.scope.contactId,body:'第二条合成记忆'}],memories:[]}};
+ },async page=>{
+  await page.setViewportSize({width:1100,height:850});
+  for(const stylesheet of ['style.css','memory.css'])await page.addStyleTag({content:await readFile(new URL(`../src/renderer/${stylesheet}`,import.meta.url),'utf8')});
+  await page.addStyleTag({content:'#root {padding:28px;max-width:1100px;margin:auto;}'});
+  const other=page.getByRole('button',{name:'对方',exact:true}),self=page.getByRole('button',{name:'我',exact:true}),levels=page.getByRole('group',{name:'记忆层级'});
+  await page.getByText(candidate.body,{exact:true}).waitFor();await page.getByText('第二条合成记忆',{exact:true}).waitFor();
+  assert.equal(await other.getAttribute('aria-pressed'),'true');assert.equal(await levels.getByRole('button',{name:'L1',exact:true}).getAttribute('aria-pressed'),'true');
+  assert.equal(await page.getByRole('article',{name:'记忆候选'}).count(),2);assert.equal(await page.locator('.memory-flat-content .sqlite-memory-body').evaluateAll(nodes=>nodes.every(node=>node.closest('details')===null)),true);
+  await captureFlatMemory(page,'contact');
+  await levels.getByRole('button',{name:'L2',exact:true}).click();await page.getByText('园艺主题的合成正文',{exact:true}).waitFor();await page.getByText('周末活动的合成正文',{exact:true}).waitFor();
+  assert.equal(await page.getByText(candidate.body,{exact:true}).isVisible(),false);assert.equal(await page.getByRole('article',{name:'主题资料'}).count(),2);assert.equal(await page.getByText('长期兴趣的合成正文',{exact:true}).count(),0);
+  await levels.getByRole('button',{name:'L3',exact:true}).click();await page.getByText('长期兴趣的合成正文',{exact:true}).waitFor();assert.equal(await page.getByText('园艺主题的合成正文',{exact:true}).count(),0);
+  for(const level of ['L1','L2','L3'])assert.equal(await levels.getByRole('button',{name:level,exact:true}).getAttribute('aria-pressed'),String(level==='L3'));
+  await self.click();assert.equal(await self.getAttribute('aria-pressed'),'true');await page.getByText('本人全局概览不在当前联系人页面展示。',{exact:true}).waitFor();assert.equal(await page.getByText('长期兴趣的合成正文',{exact:true}).count(),0);
+  await levels.getByRole('button',{name:'L2',exact:true}).click();await page.getByText('本人全局主题资料不在当前联系人页面展示。',{exact:true}).waitFor();
+  await levels.getByRole('button',{name:'L1',exact:true}).click();await page.getByText('本人的独立合成结论',{exact:true}).waitFor();assert.equal(await page.getByText(candidate.body,{exact:true}).count(),0);assert.ok(documentScopes.every(scope=>scope==='contact'));
+  await captureFlatMemory(page,'self');
+ },true,contact,async()=>{},{initialLevel:'L1'});
+});
+test('平铺层级切换与自动刷新保留未提交编辑，资格失效撤下正文',{timeout:20000},async t=>{
+ let calls=0,finish,entered;const pending=new Promise(resolve=>{finish=resolve;}),started=new Promise(resolve=>{entered=resolve;});
+ await panel(t,async()=>{if(++calls===2){entered();return pending;}return view();},async page=>{
+  await page.getByRole('button',{name:'修改并采纳'}).click();const editor=page.getByLabel('修改候选正文');await editor.fill('平铺记忆中的未提交草稿');
+  await page.getByRole('button',{name:'L2',exact:true}).click();assert.equal(await editor.isVisible(),false);await page.getByRole('button',{name:'L1',exact:true}).click();assert.equal(await editor.inputValue(),'平铺记忆中的未提交草稿');
+  await refreshVisible(page);await started;assert.equal(await editor.inputValue(),'平铺记忆中的未提交草稿');finish(view());await page.evaluate(()=>new Promise(requestAnimationFrame));assert.equal(await editor.inputValue(),'平铺记忆中的未提交草稿');
+  await page.evaluate(()=>window.invalidate());await page.getByRole('alert').filter({hasText:'已撤下正文'}).waitFor();assert.equal(await page.getByLabel('修改候选正文').count(),0);assert.equal(await page.getByText(candidate.body,{exact:true}).count(),0);
+ });
+});
+test('人物切换后旧范围迟到读取不能恢复平铺正文',{timeout:20000},async t=>{
+ let hold=false,finish,entered,complete;const pending=new Promise(resolve=>{finish=resolve;}),started=new Promise(resolve=>{entered=resolve;}),completed=new Promise(resolve=>{complete=resolve;});
+ await panel(t,async(_method,input)=>{
+  if(hold&&input.scope.scopeKind==='contact'){hold=false;entered();const result=await pending;complete();return result;}
+  return {...view(),scope:input.scope,view:{candidates:[{...candidate,scopeKind:input.scope.scopeKind,contactId:input.scope.contactId,body:input.scope.scopeKind==='self'?'本人范围的合成资料':candidate.body}],memories:[]}};
+ },async page=>{
+  await page.getByText(candidate.body,{exact:true}).waitFor();hold=true;await refreshVisible(page);await started;await page.getByRole('button',{name:'我',exact:true}).click();await page.getByText('本人范围的合成资料',{exact:true}).waitFor();
+  finish(view());await completed;await page.evaluate(()=>new Promise(requestAnimationFrame));assert.equal(await page.getByText(candidate.body,{exact:true}).count(),0);assert.equal(await page.getByRole('button',{name:'我',exact:true}).getAttribute('aria-pressed'),'true');
+ });
+});
 test('真实释放桥不会把正常对方与本人切换误报为资格失效，卸载仍释放读取',{timeout:20000},async t=>{
  const compiled=await build({entryPoints:['src/main/memory/sqlite-management.ts'],bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
  const {SqliteMemoryManagementController}=await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
@@ -38,7 +95,7 @@ test('真实释放桥不会把正常对方与本人切换误报为资格失效�
   controller.synchronize();await Promise.all(deliveries);await section.getByRole('alert').filter({hasText:'资料资格或连接已变化'}).waitFor();
   await section.getByRole('button',{name:'重试读取记忆资料'}).click();await empty.waitFor();
   await page.evaluate(()=>window.unmount());await released;await Promise.all(deliveries);assert.equal(releases,1);
- },true,contact,async()=>{releases++;controller.release();finishRelease();});
+ },true,contact,async()=>{releases++;controller.release();finishRelease();},{initialLevel:'L1'});
 });
 test('正常空提取完成后，主题资料页显示尚无发布而不是持续处理中',{timeout:20000},async t=>{
  const f=await emptyDocumentFixture(t),run=await f.runEmpty('empty-documents-page');assert.equal(run.status,'completed');
@@ -259,6 +316,7 @@ test('当前联系人本人视图不显示或请求全局本人概览',{timeout:
  },async page=>{
   const management=page.getByRole('region',{name:'记忆候选与版本'});
   await management.getByRole('button',{name:'我',exact:true}).click();
+  await management.getByRole('button',{name:'L3',exact:true}).click();
   await management.getByText('本人全局概览不在当前联系人页面展示。',{exact:true}).waitFor({timeout:3000});
   assert.equal(await page.getByRole('region',{name:'主题资料与长期概览'}).count(),0);
   assert.ok(scopes.every(kind=>kind==='contact'));
@@ -270,6 +328,7 @@ test('修正资料时间待核验时管理页可查看并标明不能用于生�
  const snapshot={connectionGeneration:1,scope:{scopeKind:'contact',contactId:contact},view:{candidates:[],memories:[{id,scopeKind:'contact',contactId:contact,headRevision:'1',state:'active',manualProtection:false,current:version,versions:[version],decisions:[]}]}};
  await panel(t,async method=>method==='read'?snapshot:{connectionGeneration:1,scope:snapshot.scope,view:{status:'idle',publication:null,documents:[]}},async page=>{
   const management=page.getByRole('region',{name:'记忆候选与版本'});
+  await management.getByRole('button',{name:'L1',exact:true}).click();
   // 同一版本同时作为当前版和历史版展示，两处都应带时间核验提示。
   await management.getByText('时间待核验，暂不用于生成。',{exact:true}).first().waitFor({timeout:3000});
   assert.equal(await management.getByText('时间待核验，暂不用于生成。',{exact:true}).count(),2);
@@ -281,6 +340,7 @@ test('主题资料区分并发冲突和待核验，待核验时不显示旧集�
  const docId='33333333-3333-4333-8333-333333333333';let status='conflict';
  const snapshot=()=>({connectionGeneration:1,scope:{scopeKind:'contact',contactId:contact},view:status!=='invalid'?{status:status==='waiting'?'needs_revalidation':status,publication:{id,members:[{documentId:docId,versionNo:'1'}]},documents:[{id:docId,versionNo:'1',scopeKind:'contact',contactId:contact,kind:'profile',title:'长期背景',statements:[{text:'旧集合仍有资格。',kind:'fact',basis:'旧版有依据。',section:'interests',uncertainty:'',temporalStatus:'stable',leftClaim:null,rightClaim:null,resolutionState:null,resolutionText:null,references:[{memoryId:id,versionNo:1,level:'contact',provenanceKind:'source_supported',memoryText:'合法旧版记忆依据。'}]}]}]}:{status:'needs_revalidation',publication:null,documents:[]}});
  await panel(t,async method=>method==='read'?view():snapshot(),async page=>{
+  await page.getByRole('button',{name:'L3',exact:true}).click();
   const section=page.getByRole('region',{name:'主题资料与长期概览'});await section.getByText('本轮存在并发冲突；以下仍是当前可用的已发布资料。',{exact:true}).waitFor();await section.getByText('旧集合仍有资格。',{exact:true}).waitFor();
   status='waiting';await refreshVisible(page);await section.getByText('本轮资料待核验；以下仍是当前可用的已发布资料。',{exact:true}).waitFor();await section.getByText('旧集合仍有资格。',{exact:true}).waitFor();
   status='invalid';await refreshVisible(page);await section.getByText('来源或资料已失效，等待重新核验。',{exact:true}).waitFor();assert.equal(await section.getByText('旧集合仍有资格。',{exact:true}).count(),0);assert.equal(await section.getByText('长期背景',{exact:true}).count(),0);
@@ -301,10 +361,12 @@ test('改变记忆保护时立即撤下主题旧快照，晚到读取不能恢�
   const management=page.getByRole('region',{name:'记忆候选与版本'}),docs=page.getByRole('region',{name:'主题资料与长期概览'});
   await docs.getByText('旧主题正文',{exact:true}).waitFor();await docs.getByText('查看依据',{exact:true}).click();await docs.getByText('旧主题依据',{exact:true}).waitFor();
   await refreshVisible(page);await readStarted;
+  await management.getByRole('button',{name:'L1',exact:true}).click();
   await management.getByRole('button',{name:'开启人工保护'}).click();await decisionStarted;
+  await management.getByRole('button',{name:'L2',exact:true}).click();
   assert.equal(await page.getByText('旧主题正文',{exact:true}).count(),0);assert.equal(await page.getByText('旧主题依据',{exact:true}).count(),0);
   releaseRead(old);assert.equal(await page.getByText('旧主题正文',{exact:true}).count(),0);
-  releaseDecision();await management.getByRole('status').filter({hasText:'已开启当前人工保护'}).waitFor();
+  releaseDecision();await management.getByRole('button',{name:'L1',exact:true}).click();await management.getByRole('status').filter({hasText:'已开启当前人工保护'}).waitFor();await management.getByRole('button',{name:'L2',exact:true}).click();
   await page.getByRole('region',{name:'主题资料与长期概览'}).getByText('来源或资料已失效，等待重新核验。',{exact:true}).waitFor();
   assert.equal(await page.getByText('旧主题正文',{exact:true}).count(),0);assert.equal(await page.getByText('旧主题依据',{exact:true}).count(),0);
  },true);
@@ -324,9 +386,11 @@ test('记忆决定失败或资格失效后的迟到回执不能恢复主题旧�
   },async page=>{
    const management=page.getByRole('region',{name:'记忆候选与版本'});
    await page.getByText('不可复活的旧主题',{exact:true}).waitFor();
+   await management.getByRole('button',{name:'L1',exact:true}).click();
    await management.getByRole('button',{name:'开启人工保护'}).click();await started;
    if(mode==='late'){await page.evaluate(()=>window.invalidate());release();}
    else await management.getByRole('alert').filter({hasText:'并发冲突'}).waitFor();
+   await management.getByRole('button',{name:'L2',exact:true}).click();
    await page.getByRole('region',{name:'主题资料与长期概览'}).getByText('资料资格尚未重新核验，已撤下正文和依据。',{exact:true}).waitFor();
    assert.equal(await page.getByText('不可复活的旧主题',{exact:true}).count(),0);
    assert.equal(await page.getByText('不可复活的旧依据',{exact:true}).count(),0);

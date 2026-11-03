@@ -62,7 +62,7 @@ export function MemoryProcessingEntry({ bridge, backend, scopeKey, contactId = n
   const current = state?.scope === acceptedScope ? state : null;
   if (current?.phase === 'ready') {
     if (current.mode.mode === 'legacy') return children;
-    if (current.mode.mode === 'sqlite') return <><FixedMemoryProcessingPanel bridge={bridge} contactId={contactId} scopeKey={scopeKey} onRunUpdated={onRunUpdated}/>{typeof sqliteChildren==='function'?sqliteChildren(processingRevision,completedRunId):sqliteChildren}</>;
+    if (current.mode.mode === 'sqlite') return <>{typeof sqliteChildren==='function'?sqliteChildren(processingRevision,completedRunId):sqliteChildren}<details className="memory-processing-disclosure"><summary>记忆处理状态</summary><FixedMemoryProcessingPanel bridge={bridge} contactId={contactId} scopeKey={scopeKey} onRunUpdated={onRunUpdated}/></details></>;
   }
   if (current?.phase === 'disconnected') return <p role="status">本机连接已变化，正在等待重新连接。</p>;
   if (current?.phase === 'failed') return <section aria-label="记忆处理模式">
