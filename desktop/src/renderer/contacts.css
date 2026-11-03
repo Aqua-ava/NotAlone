@@ -27,13 +27,16 @@
 .contact-management ul { padding-left: 18px; line-height: 1.8; }
 .contact-management .memory-section { margin-top: 12px; padding: 12px 0 0; border: 0; border-top: 1px solid #c3cfcf; border-radius: 0; background: transparent; }
 .contact-management .button { max-width: 100%; margin-top: 8px; padding: 7px 9px; font-size: 11px; white-space: normal; overflow-wrap: anywhere; }
-.contact-management-shortcuts { display: flex; flex-wrap: wrap; gap: 0 8px; }
 .contact-management .history-clear-actions { display: flex; flex-wrap: wrap; gap: 0 8px; }
 .contact-chat-settings { padding: 16px 20px; border-bottom: 1px solid var(--panel-border); background: #f0f5f3; }
 .contact-chat-settings > h3 { margin: 0; color: var(--panel-heading); font-size: 13px; font-weight: 500; }
 .contact-chat { min-width: 0; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); overflow: hidden; }
 .contact-chat-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--panel-border); }
 .contact-chat-header > div { min-width: 0; }
+.contact-chat-header { flex-wrap: wrap; }
+.contact-chat-header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+.contact-chat-header-actions > .button { padding: 7px 10px; font-size: 12px; }
+.contact-management .bindings-explanation { margin: 12px 0; padding: 0; border: 0; background: transparent; }
 .contact-chat-header h3 { margin: 0; color: var(--panel-heading); font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
 .contact-chat-header p { margin: 6px 0 0; color: #758184; font-size: 12px; overflow-wrap: anywhere; }
 .contact-chat-header .button { flex-shrink: 0; }

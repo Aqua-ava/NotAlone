@@ -58,13 +58,13 @@ export function ContactSyncSettings({ session, navigate }: {
     void window.notalone.syncControl.refresh().catch(() => {});
   }
   return <section className="bindings-explanation" aria-label="单个联系人同步">
-    <div className="bindings-toolbar"><h2>当前联系人同步</h2>
+    <div className="bindings-toolbar"><h3>自动同步</h3>
       {readFailed && <button className="button" disabled={!!consent.state.busy || consent.state.phase === 'loading'}
-        onClick={() => void refreshSaved()}>重试读取联系人同步状态</button>}</div>
+        onClick={() => void refreshSaved()}>重试加载同步状态</button>}</div>
     {selected ? <>
-      <p><b>{selected.displayName}</b></p>
-      {opening ? <p role="status">正在确认联系人同步状态…</p> : selecting ? <BindingConsentPage contacts={session} consent={consent} navigate={navigate}
-        targetContactId={selected.contactId} allPrivate={allPrivate} onClose={closeSelection} returnLabel="返回联系人同步" />
+      <p>管理与 <b>{selected.displayName}</b> 的聊天同步。停止后，已保存的聊天和关系资料仍会保留。</p>
+      {opening ? <p role="status">正在加载同步状态…</p> : selecting ? <BindingConsentPage contacts={session} consent={consent} navigate={navigate}
+        targetContactId={selected.contactId} allPrivate={allPrivate} onClose={closeSelection} returnLabel="返回同步设置" />
         : <ContactSyncDetails contactId={selected.contactId} consent={consent} allPrivate={allPrivate}
           onConnect={() => {
             if (openingPending.current) return;

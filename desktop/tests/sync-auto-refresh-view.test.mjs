@@ -62,7 +62,7 @@ test('联系人保存授权自动更新，选择会话期间暂停查询，失�
     const session={state:{contacts:[{contactId:'synthetic-contact',displayName:'合成联系人'}],selectedContactId:'synthetic-contact'}};
     createRoot(document.getElementById('root')).render(<ContactSyncSettings session={session} navigate={()=>{}}/>);`);
   await expect(page.getByRole('button', { name: '关联微信并开启同步' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /刷新联系人同步状态|重试读取联系人同步状态/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /刷新联系人同步状态|重试加载同步状态/ })).toHaveCount(0);
   const count = await page.evaluate(() => window.calls.filter(call => call === 'saved').length);
   await page.clock.runFor(5100);
   assert.equal(await page.evaluate(() => window.calls.filter(call => call === 'saved').length), count + 1);
@@ -74,10 +74,10 @@ test('联系人保存授权自动更新，选择会话期间暂停查询，失�
   await page.getByRole('button', { name: '返回同步设置' }).click();
   await page.evaluate(() => { window.failRead = true; });
   await page.clock.runFor(5100);
-  await expect(page.getByRole('button', { name: '重试读取联系人同步状态' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '重试加载同步状态' })).toBeVisible();
   await page.evaluate(() => { window.failRead = false; });
-  await page.getByRole('button', { name: '重试读取联系人同步状态' }).click();
-  await expect(page.getByRole('button', { name: '重试读取联系人同步状态' })).toHaveCount(0);
+  await page.getByRole('button', { name: '重试加载同步状态' }).click();
+  await expect(page.getByRole('button', { name: '重试加载同步状态' })).toHaveCount(0);
   assert.ok(!(await page.evaluate(() => window.calls)).includes('list'));
 });
 
@@ -186,5 +186,5 @@ for (const outcome of ['failure', 'scope', 'unmount']) test(`等待保存状态�
   if (outcome === 'unmount') await page.evaluate(() => window.unmount());
   await page.evaluate(failed => window.finishRead(failed), outcome === 'failure');
   await expect(page.getByRole('region', { name: '添加微信联系人', exact: true })).toHaveCount(0);
-  if (outcome === 'failure') await expect(page.getByRole('button', { name: '重试读取联系人同步状态' })).toBeVisible();
+  if (outcome === 'failure') await expect(page.getByRole('button', { name: '重试加载同步状态' })).toBeVisible();
 });

@@ -13,7 +13,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
     ];
     let selection = {selectedContactId:'a',scopeRevision:1,directoryPhase:'ready',contacts,draft:'',revision:1};
     let history = {revision:0,contactId:'a',scopeRevision:1,messages:{phase:'idle',items:[],nextCursor:null},error:null};
-    const listeners = new Set(); window.calls = [];
+    const listeners = new Set(); window.calls = []; window.actionCalls = [];
     window.publishHistory = patch => {
       history = {...history,...patch,revision:history.revision+1};
       listeners.forEach(listener => listener(history));
@@ -36,6 +36,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
     window.updateImage = (id,state)=>{const items=history.messages.items.map(item=>item.messageId===id?{...item,imageMedia:{state,
         fileId:state==='original'?originalFile:null,mimeType:state==='original'?'image/gif':null}}:item);window.publishHistory({messages:{...history.messages,items}});};
     window.notalone = {
+      openHelper:async()=>{window.actionCalls.push('helper');},
       contactHistory: {getState:async()=>history,onStateChanged:listener=>{listeners.add(listener);return()=>listeners.delete(listener);},
         load:async request=>{
           window.calls.push(request);
@@ -52,7 +53,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
     };
     window.notalone.media=media;
     const root = createRoot(document.getElementById('root'));
-    function render() { root.render(<ContactsPage session={{state:selection,refreshContacts:noop}} navigate={()=>{}}/>); }
+    function render() { root.render(<ContactsPage session={{state:selection,refreshContacts:noop,confirmManualContact:async id=>{window.actionCalls.push('confirm:'+id);return true;}}} navigate={page=>window.actionCalls.push('navigate:'+page)}/>); }
     window.selectContact = () => { selection={...selection,selectedContactId:'b',scopeRevision:2,revision:2};render(); };
     render();
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife',
@@ -97,30 +98,39 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await expect.poll(() => page.evaluate(() => window.mediaCalls.length)).toBe(2);
   await chat.locator('.contact-chat-order > summary').click();
   await expect(chat.getByText('按消息时间展示；同一时间或时间未知的消息先后未核验。')).toBeVisible();
-  await expect(page.locator('.contact-history-status')).toHaveCount(0);
+  await expect(page.locator('.contact-history-status')).toHaveText('本机历史已读完');
   const options = chat.getByLabel('聊天选项', { exact: true });
   await options.click();
-  const settingsButton = chat.getByRole('button', { name: '资料管理', exact: true });
+  const settingsButton = chat.getByRole('button', { name: '同步与资料', exact: true });
   const settings = chat.getByRole('region', { name: '当前联系人设置', includeHidden: true });
   await expect(settingsButton).toHaveAttribute('aria-expanded', 'false');
   await expect(settings).toBeHidden();
-  await expect(page.getByRole('list', { name: '联系人列表' }).getByText('资料管理')).toHaveCount(0);
-  await expect(chat.getByRole('button', { name: '刷新记录' })).toBeVisible();
+  await expect(page.getByRole('list', { name: '联系人列表' }).getByText('同步与资料')).toHaveCount(0);
+  await expect(chat.getByRole('button', { name: '刷新记录' })).toHaveCount(0);
+  await expect(chat.getByRole('button', { name: '重试加载聊天' })).toHaveCount(0);
+  await expect(chat.getByRole('button', { name: '处理同步问题' })).toHaveCount(0);
   await settingsButton.click();
   await expect(settings).toBeVisible();
-  await expect(settings.getByRole('button', { name: '清空聊天', exact: true })).toBeVisible();
-  await expect(settings.getByRole('button', { name: '重新同步历史', exact: true })).toBeVisible();
-  await expect(settings.getByRole('button', { name: '查看关系资料', exact: true })).toBeVisible();
-  await settings.getByRole('button', { name: '清空聊天', exact: true }).click();
+  await expect(settings.getByRole('button', { name: '清空已保存的聊天', exact: true })).toBeVisible();
+  await expect(settings.getByRole('button', { name: '重新同步历史', exact: true })).toHaveCount(0);
+  await expect(settings.getByRole('button', { name: '刷新清空状态', exact: true })).toHaveCount(0);
+  await expect(settings.getByRole('button', { name: '修复同步', exact: true })).toHaveCount(0);
+  await expect(settings.getByRole('button', { name: '查看关系资料', exact: true })).toHaveCount(0);
+  await expect(chat.getByRole('button', { name: '查看关系资料', exact: true })).toBeVisible();
+  await expect(chat.getByRole('button', { name: '打开助手', exact: true })).toBeVisible();
+  await settings.getByRole('button', { name: '清空已保存的聊天', exact: true }).click();
   await expect(settings.getByRole('dialog', { name: '确认清空聊天' })).toBeVisible();
   await settings.getByRole('button', { name: '取消', exact: true }).click();
-  await settings.getByRole('button', { name: '为这位联系人打开助手', exact: true }).focus();
+  await settings.getByRole('button', { name: '清空已保存的聊天', exact: true }).focus();
   await page.keyboard.press('Escape');
   await expect(settings).toBeHidden();
   await expect(settingsButton).toBeFocused();
   await settingsButton.click();
   await settingsButton.click();
   await expect(settings).toBeHidden();
+  await chat.getByRole('button', { name: '查看关系资料', exact: true }).click();
+  await chat.getByRole('button', { name: '打开助手', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.actionCalls)).toEqual(['navigate:memory','confirm:a','helper']);
   const columns = await page.locator('.contacts-columns').boundingBox();
   const sidebar = await page.getByRole('list', { name: '联系人列表' }).boundingBox();
   const right = await chat.boundingBox();
@@ -130,17 +140,21 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await chat.getByRole('button', { name: '加载更早记录' }).click();
   await expect(chat.getByText('更早的合成记录', { exact: true })).toBeVisible();
   assert.equal((await page.evaluate(() => window.calls)).at(-1).older, true);
-  await options.click();
-  await chat.getByRole('button', { name: '刷新记录' }).click();
-  await expect(chat.getByText('更早的合成记录', { exact: true })).toHaveCount(0);
-  await page.evaluate(() => { window.failLoad = true; });
-  await chat.getByRole('button', { name: '刷新记录' }).click();
+  await page.evaluate(() => {
+    window.failLoad = true;
+    window.publishHistory({messages:{phase:'failed',items:[],nextCursor:null},error:'合成读取失败，请重试。'});
+  });
   await expect(chat.getByRole('alert')).toContainText('合成读取失败');
   await expect(chat.getByText('合成聊天正文\n第二行', { exact: true })).toHaveCount(0);
+  await chat.getByRole('button', { name: '重试加载聊天', exact: true }).click();
+  await expect(chat.getByRole('alert')).toContainText('合成读取失败');
+  assert.deepEqual((await page.evaluate(() => window.calls)).at(-1), {contactId:'a',scopeRevision:1,older:false});
   await page.evaluate(() => { window.failLoad = false; });
-  await chat.getByRole('button', { name: '刷新记录' }).click();
+  await chat.getByRole('button', { name: '重试加载聊天', exact: true }).click();
   await expect(chat.getByText('合成聊天正文\n第二行', { exact: true })).toBeVisible();
   await expect(image).toBeVisible();
+  await expect(chat.getByRole('button', { name: '重试加载聊天', exact: true })).toHaveCount(0);
+  await options.click();
   await settingsButton.click();
   await page.evaluate(() => window.selectContact());
   await options.click();
@@ -150,7 +164,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await expect(image).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.mediaReleases.length)).toBe(3);
   assert.equal((await page.evaluate(() => window.mediaReleases[2])).src, null);
-  await expect(chat.getByRole('button', { name: '刷新记录' })).toBeDisabled();
+  await expect(chat.getByRole('button', { name: '重试加载聊天' })).toHaveCount(0);
   await page.evaluate(() => window.publishHistory({contactId:'b',scopeRevision:2,messages:{phase:'idle',items:[],nextCursor:null},error:null}));
   await expect(chat.getByText('还没有已保存的聊天记录', { exact: true })).toBeVisible();
   assert.deepEqual((await page.evaluate(() => window.calls)).at(-1), {contactId:'b',scopeRevision:2,older:false});

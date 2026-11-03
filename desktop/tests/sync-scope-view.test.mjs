@@ -190,12 +190,16 @@ test('联系人列表不展开诊断，详情可显示短状态且启停仍需�
  await expect(list).toContainText('200 条消息');
  await expect(list).toContainText('10 条消息');
  await expect(list).not.toContainText('同步');
- const settingsButton=directory.getByRole('button',{name:'查看同步',exact:true});
+ const options=directory.getByLabel('聊天选项',{exact:true});
+ const settingsButton=directory.getByRole('button',{name:'同步与资料',exact:true});
+ await expect(directory.getByRole('button',{name:'处理同步问题',exact:true})).toHaveCount(0);
+ await options.click();
  await settingsButton.click();
  await expect(directory.getByRole('button',{name:/停止.*的自动同步/})).toBeVisible();
  await expect(directory.getByRole('button',{name:'查看关系资料',exact:true})).toBeVisible();
  await page.evaluate(()=>window.select('b'));
  await expect(directory.getByRole('region',{name:'当前联系人设置',exact:true})).toHaveCount(0);
+ await options.click();
  await settingsButton.click();
  await expect(directory.getByRole('button',{name:/停止.*的自动同步/})).toBeVisible();
  for(const text of ['非文字占位','系统等元数据','已跟进','新消息同步暂未继续','图片：']) {
@@ -218,7 +222,7 @@ test('联系人列表不展开诊断，详情可显示短状态且启停仍需�
  await expect(settings.getByRole('region',{name:'添加微信联系人'})).toBeVisible();
  assert.equal(await page.evaluate(()=>window.listReads),0);
  assert.equal((await page.evaluate(()=>window.writes)).length,1);
- await settings.getByRole('button',{name:'返回联系人同步',exact:true}).click();
+ await settings.getByRole('button',{name:'返回同步设置',exact:true}).click();
  await expect(settings.getByRole('button',{name:'开启自动同步',exact:true})).toBeVisible();
  await page.evaluate(()=>window.select(null,'sync'));
  await expect(settings).toContainText('在顶部选择联系人后');
@@ -359,4 +363,70 @@ test('已关闭同步的临时失败仅展示保存状态，不承诺正在自�
  await expect(issues).toContainText('当前不会读取或自动重试');
  await expect(issues).not.toContainText('同步开启期间会自动重试');
  await expect(issues).not.toContainText('正在读取');
+});
+
+test('来源无法确认时才显示修复入口，健康、临时失败及暂停不提示修复', async t => {
+ const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const page=await browser.newPage();
+ await mount(page,`
+ import React from 'react';import {createRoot} from 'react-dom/client';import {ContactsPage} from './src/renderer/ContactsPage';
+ const noop=async()=>{};const listeners=new Set();const bindingListeners=new Set();
+ const binding={bindingId:'a1',contactId:'a',locator:'synthetic-a',displayName:'合成甲',status:'active'};
+ let bindings={revision:1,scopeRevision:1,phase:'ready',selectionOnly:true,knownBindings:[binding],bindings:[binding],sessions:[],sessionIssue:'not-requested',busy:null};
+ const contacts=[{contactId:'a',displayName:'合成甲',messageCount:1}];
+ let sync={revision:1,scopeRevision:1,phase:'ready',errorCode:null,busy:null,report:{enabled:true,bodyAvailable:true,
+  historyCoverages:[{bindingId:'a1',contactId:'a',phase:'complete',messageCount:1,pageCount:1,nonTextCount:0,failureCode:null}]}};
+ window.updateSync=(failureCode,enabled=true,contactId='a',phase='ready',incremental=false)=>{
+  sync={...sync,revision:sync.revision+1,phase,report:{...sync.report,enabled,historyCoverages:[{
+   ...sync.report.historyCoverages[0],contactId,failureCode:incremental?null:failureCode,incrementalFailureCode:incremental?failureCode:null,phase:failureCode&&!incremental?'incomplete':'complete'}]}};
+  listeners.forEach(listener=>listener(sync));
+ };
+ window.stopContact=()=>{
+  bindings={...bindings,revision:bindings.revision+1,bindings:[],knownBindings:[{...binding,status:'revoked'}]};
+  bindingListeners.forEach(listener=>listener(bindings));
+  return sync.report.enabled;
+ };
+ const subscription=state=>({getState:async()=>state,onStateChanged:()=>()=>{},refresh:noop,refreshSaved:noop});
+ window.notalone={
+  bindings:{getState:async()=>bindings,onStateChanged:listener=>{bindingListeners.add(listener);return()=>bindingListeners.delete(listener);},refresh:noop,refreshSaved:noop},
+  contactHistory:{...subscription({revision:1,contactId:'a',scopeRevision:1,messages:{phase:'ready',items:[],nextCursor:null},error:null}),load:noop},
+  historyClear:subscription({revision:1,contactId:'a',scopeRevision:1,phase:'ready',clear:null,resync:null,busy:null,error:null,
+   recertify:{contactId:'a',state:'none',stage:'none',completed:false,requestKey:null,failureCode:null}}),
+  syncControl:{getState:async()=>sync,onStateChanged:listener=>{listeners.add(listener);return()=>listeners.delete(listener);},refresh:noop}
+ };
+ createRoot(document.getElementById('root')).render(<ContactsPage session={{state:{contacts,selectedContactId:'a',scopeRevision:1,directoryPhase:'ready'},refreshContacts:noop}} navigate={()=>{}}/>);
+ `);
+ const entry=page.getByRole('button',{name:'处理同步问题',exact:true});
+ const repair=page.getByRole('button',{name:'修复同步',exact:true,includeHidden:true});
+ const status=page.locator('.contact-history-status');
+ await expect(page.getByRole('button',{name:'打开助手',exact:true})).toBeVisible();
+ await expect(status).toHaveText('本机历史已读完');
+ await expect(entry).toHaveCount(0);await expect(repair).toHaveCount(0);
+ await page.evaluate(()=>window.updateSync('cli_timeout'));
+ await expect(status).toHaveText('暂时读取失败');
+ await expect(entry).toHaveCount(0);await expect(repair).toHaveCount(0);
+ await page.evaluate(()=>window.updateSync('history_source_continuity_unverified',false));
+ await expect(status).toHaveText('自动同步已关闭');
+ await expect(entry).toHaveCount(0);await expect(repair).toHaveCount(0);
+ await page.evaluate(()=>window.updateSync('history_source_continuity_unverified',true,'b'));
+ await expect(status).toHaveText('历史覆盖待确认');
+ await expect(entry).toHaveCount(0);await expect(repair).toHaveCount(0);
+ await page.evaluate(()=>window.updateSync('history_source_continuity_unverified',true,'a','failed'));
+ await expect(status).toHaveText('历史覆盖待确认');
+ await expect(entry).toHaveCount(0);await expect(repair).toHaveCount(0);
+ await page.evaluate(()=>window.updateSync('history_source_continuity_unverified'));
+ await expect(entry).toBeVisible();await entry.click();await expect(repair).toBeVisible();
+ await repair.click();await expect(page.getByRole('dialog',{name:'确认修复同步',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'取消',exact:true}).click();
+ await page.evaluate(()=>window.updateSync(null));
+ await expect(status).toHaveText('本机历史已读完');
+ await expect(entry).toHaveCount(0);await expect(repair).toHaveCount(0);
+ await page.evaluate(()=>window.updateSync('history_source_continuity_unverified',true,'a','ready',true));
+ await expect(entry).toBeVisible();await expect(repair).toBeVisible();
+ await repair.click();await expect(page.getByRole('dialog',{name:'确认修复同步',exact:true})).toBeVisible();
+ assert.equal(await page.evaluate(()=>window.stopContact()),true);
+ await expect(page.getByRole('button',{name:'开启自动同步',exact:true})).toBeVisible();
+ await expect(status).toHaveText('聊天来源需要核验');
+ await expect(entry).toHaveCount(0);await expect(repair).toHaveCount(0);
+ await expect(page.getByRole('dialog',{name:'确认修复同步',exact:true})).toHaveCount(0);
 });

@@ -52,7 +52,7 @@ function quoteTypeLabel(messageType: string): string {
   return `引用类型：${numericLabels[String(base)] ?? `未知类型（${messageType}）`}`;
 }
 
-export function ContactChatHistory({ session, settings, contactActions, syncStatus, settingsTargetContactId }: { syncStatus?: ReactNode; settingsTargetContactId?: string | null; session: ContactSessionView; settings?: ReactNode; contactActions?: ReactNode }) {
+export function ContactChatHistory({ session, settings, actions, contactActions, syncStatus, syncIssue = false, settingsTargetContactId }: { syncStatus?: ReactNode; syncIssue?: boolean; actions?: ReactNode; settingsTargetContactId?: string | null; session: ContactSessionView; settings?: ReactNode; contactActions?: ReactNode }) {
   const bridge = window.notalone.contactHistory;
   const { state, error, setError, latest, active, retry } = useRevisionedSession(initialHistory, bridge);
   const contactId = session.state.selectedContactId;
@@ -77,13 +77,14 @@ export function ContactChatHistory({ session, settings, contactActions, syncStat
     try { await bridge.load({ contactId, scopeRevision, older }); }
     catch {
       if (active.current && latest.current.contactId === contactId && latest.current.scopeRevision === scopeRevision) {
-        setError('聊天记录暂时无法读取，请重试。');
+        setError('聊天暂时没加载出来，请重试。');
       }
     }
   }
   useEffect(() => {
     if (sameScope && messages.phase === 'idle' && !error) void load();
   }, [sameScope, contactId, scopeRevision, messages.phase, error]);
+  const historyFailed = sameScope && (messages.phase === 'failed' || !!state.error || !!error);
   const unknownOrder = messages.items.some(message => message.ordering === 'unknown');
   return <section className="contact-chat" aria-label="联系人聊天记录" onKeyDown={(event) => {
     if (event.key === 'Escape' && settingsOpen) {
@@ -94,22 +95,24 @@ export function ContactChatHistory({ session, settings, contactActions, syncStat
     }
   }}>
     <header className="contact-chat-header"><div><h3>{selected?.displayName ?? '聊天记录'}</h3>
-      {selected && syncStatus && <div className="contact-sync-summary">{syncStatus}<button className="button" onClick={() => setSettingsScope({ contactId: selected.contactId, scopeRevision })}>查看同步</button></div>}
+      {selected && syncStatus && <div className="contact-sync-summary">{syncStatus}{syncIssue && <button className="button" onClick={() => setSettingsScope({ contactId: selected.contactId, scopeRevision })}>处理同步问题</button>}</div>}
       {unknownOrder && <details className="contact-chat-order"><summary>部分顺序未核验</summary>
         <p>按消息时间展示；同一时间或时间未知的消息先后未核验。</p></details>}</div>
+      <div className="contact-chat-header-actions">
+      {actions}
       <ContactChatToolbar key={scope}>
-        <button className="button" disabled={!sameScope || loading} onClick={() => void load()}>刷新记录</button>
         {selected && settings && <button ref={settingsButton} className="button contact-chat-settings-toggle" type="button"
-          aria-label="资料管理" title="资料管理" aria-expanded={settingsOpen} aria-controls={settingsId}
+          aria-label="同步与资料" title="同步与资料" aria-expanded={settingsOpen} aria-controls={settingsId}
           onClick={() => setSettingsScope(settingsOpen ? null : { contactId: selected.contactId, scopeRevision })}>
-          资料管理
+          同步与资料
         </button>}
         {selected && contactActions}
       </ContactChatToolbar>
+      </div>
     </header>
     {/* 收起时保留操作状态，避免丢失结果尚未确认的重新同步请求。 */}
     {selected && settings && <section key={selected.contactId} id={settingsId} className="contact-management contact-chat-settings" aria-label="当前联系人设置" hidden={!settingsOpen}>
-      <h3>资料管理</h3>
+      <h3>同步与资料</h3>
       {settings}
     </section>}
     {!selected ? <div className="contact-chat-empty"><p>在顶部选择联系人后，查看你们已保存的聊天记录。</p></div>
@@ -119,7 +122,7 @@ export function ContactChatHistory({ session, settings, contactActions, syncStat
         {messages.nextCursor && <button className="button contact-chat-more" disabled={loading} onClick={() => void load(true)}>加载更早记录</button>}
         {(!sameScope || loading) && <p className="contact-chat-note" role="status">正在读取聊天记录…</p>}
         {sameScope && messages.phase === 'ready' && messages.items.length === 0 && <div className="contact-chat-empty"><p>还没有已保存的聊天记录</p><small>同步或导入这位联系人的资料后，会显示在这里。</small></div>}
-        {sameScope && (messages.phase === 'failed' || state.error) && <p role="alert" className="contact-chat-note">{state.error || '聊天记录暂时无法读取，请刷新重试。'}</p>}
+        {historyFailed && <p className="contact-chat-note" role="alert">{error || state.error || '聊天暂时没加载出来。'} <button className="button" disabled={loading} onClick={() => void load()}>重试加载聊天</button></p>}
         <ol className="contact-chat-messages" aria-label="已保存的聊天消息">
           {timeline.map((message, index) => {
             const time = messageTime(message.occurredAt);
@@ -163,6 +166,6 @@ export function ContactChatHistory({ session, settings, contactActions, syncStat
       </div>
         {scroll.away && <button className="button contact-chat-latest" onClick={scroll.scrollToLatest}>回到最新</button>}
       </div>}
-    {error && <p className="contact-chat-note" role="alert">{error}<button className="button" onClick={() => void retry()}>重新读取状态</button></p>}
+    {error && !sameScope && <p className="contact-chat-note" role="alert">聊天暂时没加载出来。<button className="button" onClick={() => void retry()}>重试加载聊天</button></p>}
   </section>;
 }

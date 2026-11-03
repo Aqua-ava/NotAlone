@@ -26,7 +26,8 @@ test('微信式时间线：正序、分段时间、消息详情及紧凑左右�
   assert.ok(await page.locator('[data-message-id="m40"]').evaluate(element => element.getBoundingClientRect().bottom <= innerHeight));
   await expect(page.getByRole('heading', { name: '合成联系人甲' })).toBeVisible();
   await expect(page.locator('.contact-chat-time')).toHaveCount(2);
-  await expect(page.getByRole('button', { name: '刷新记录' })).toBeHidden();
+  await expect(page.getByRole('button', { name: '刷新记录' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '重试加载聊天' })).toHaveCount(0);
   const own = page.locator('[data-message-id="m39"]');
   const other = page.locator('[data-message-id="m40"]');
   assert.ok((await own.locator('.contact-chat-bubble').boundingBox()).x > (await other.locator('.contact-chat-bubble').boundingBox()).x);
@@ -52,7 +53,7 @@ test('微信式时间线：正序、分段时间、消息详情及紧凑左右�
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 });
 
-test('历史分页保持锚点，增量与异步内容不打断阅读，刷新和切换正确定位', async t => {
+test('历史分页保持锚点，增量与异步内容不打断阅读，回到最新和切换正确定位', async t => {
   const page = await mount(t);
   await page.locator('.contact-chat-body').evaluate(element => { element.scrollTop = 0; });
   await expect(page.getByRole('button', { name: '回到最新' })).toBeVisible();
@@ -75,11 +76,11 @@ test('历史分页保持锚点，增量与异步内容不打断阅读，刷新�
   await page.locator('[data-message-id="m41"] .contact-chat-bubble').evaluate(element => { element.style.height = '160px'; });
   await expect.poll(() => bottomGap(page)).toBeLessThan(2);
   await page.locator('.contact-chat-body').evaluate(element => { element.scrollTop = 100; });
-  await page.getByLabel('聊天选项', { exact: true }).click();
-  await page.getByRole('button', { name: '刷新记录' }).click();
-  await expect(page.locator('[data-message-id]')).toHaveCount(40);
+  await page.getByRole('button', { name: '回到最新' }).click();
+  await expect(page.locator('[data-message-id]')).toHaveCount(52);
   await expect.poll(() => bottomGap(page)).toBeLessThan(2);
-  await page.getByRole('button', { name: '资料管理', exact: true }).click();
+  await page.getByLabel('聊天选项', { exact: true }).click();
+  await page.getByRole('button', { name: '同步与资料', exact: true }).click();
   await expect(page.getByText('合成资料设置')).toBeVisible();
   await page.evaluate(() => window.selectOther());
   await expect(page.locator('[data-message-id]')).toHaveCount(0);
