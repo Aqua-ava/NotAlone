@@ -31,6 +31,7 @@ const base = {
   cli_history_coverages: [{ binding_id: id, contact_id: id, phase: 'complete', failure_code: null, message_count: 2, non_text_count: 0, page_count: 1,
     incremental_phase: 'blocked', incremental_failure_code: 'history_tail_unsupported', incremental_last_accepted_at: 1700000000000, incremental_pages: 3 }],
   cli_incremental_phase: 'incomplete', cli_incremental_failure_code: 'history_tail_unsupported',
+  cli_incremental_identity_limit: 100000,
 };
 const coverage = changes => ({
   bindingId: id, contactId: id, phase: 'complete', failureCode: null, messageCount: 2, nonTextCount: 0, pageCount: 1,
@@ -45,6 +46,7 @@ test('增量状态解析：缺失字段不推断已同步，非法枚举整份�
   assert.equal(parsed.historyCoverages[0].incrementalLastAcceptedAt, 1700000000000);
   assert.equal(parsed.incrementalPhase, 'incomplete');
   assert.equal(parsed.incrementalFailureCode, 'history_tail_unsupported');
+  assert.equal(parsed.incrementalIdentityLimit, 100000);
   const legacy = Object.fromEntries(Object.entries(base).filter(([key]) => !key.startsWith('cli_incremental_')));
   const withoutIncremental = parseSyncReport({ ...legacy,
     cli_history_coverages: [{ binding_id: id, contact_id: id, phase: 'complete', failure_code: null, message_count: 2, non_text_count: 0, page_count: 1 }] });
@@ -105,6 +107,9 @@ test('界面单独展示增量已停止/不可用原因，不把不可用显示�
   assert.ok(unavailable.includes('尚未核验'));
   const noIncremental = renderContact(coverage({ incrementalPhase: undefined, incrementalFailureCode: undefined, incrementalPages: undefined }));
   assert.equal(noIncremental.includes('新消息同步'), false, '没有评估结果时不宣称增量状态');
+  const overLimit = renderContact(coverage({ incrementalPhase: 'blocked', incrementalFailureCode: 'history_tail_baseline_too_large' }));
+  assert.ok(overLimit.includes('超过当前增量上限'));
+  assert.ok(overLimit.includes('已保存内容仍保留'));
   const page = renderPage([coverage({ incrementalPhase: 'blocked', incrementalFailureCode: 'history_cursor_invalid' })]);
   assert.ok(page.includes('需要关注'));
   assert.ok(page.includes('查看并处理'));

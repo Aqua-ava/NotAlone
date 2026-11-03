@@ -100,6 +100,27 @@ test('重启后的旧核验响应不能覆盖再次变化的连接',async()=>{
  f.connect(undefined);release();await writing;
  assert.equal(f.controller.getState().phase,'offline');
 });
+test('已连接用户重检同账号成功后保留连接，不要求再次确认或授权',async()=>{
+ const f=fixture();f.control.status=status('connected');await f.controller.refresh();
+ f.control.detectResult=status('ready');await f.controller.detect();
+ assert.equal(f.controller.getState().phase,'connected');assert.equal(f.controller.getState().versionCheck,'passed');
+ assert.equal(f.requests.filter(r=>r.path.endsWith('/confirm')).length,0);
+});
+test('已连接用户可主动重检微信版本与来源，失败时保留已知账号并显示兼容范围',async()=>{
+ const f=fixture();f.control.status=status('connected');await f.controller.refresh();
+ f.control.detectResult={state:'tool_not_ready',account_id:null,candidate_token:null,failure_code:'history_program_version_uncertified',
+  wechat_compatibility:{detected_program_version:'4.0.7',detected_build:'30001',supported_program_version:'4.0.6',supported_build:'29387'}};
+ await f.controller.detect();
+ assert.equal(f.controller.getState().phase,'tool_not_ready');assert.equal(f.controller.getState().accountId,'synthetic-account');
+ assert.equal(f.controller.getState().compatibility.detectedProgramVersion,'4.0.7');
+});
+test('版本兼容诊断只透传受控版本字段和固定支持范围',async()=>{
+ const f=fixture();f.control.detectResult={state:'tool_not_ready',account_id:'synthetic-account',candidate_token:null,failure_code:'history_program_version_uncertified',
+  wechat_compatibility:{detected_program_version:'4.0.7',detected_build:'30001',supported_program_version:'4.0.6',supported_build:'29387'},summary:'synthetic-private-summary'};
+ await f.controller.detect();
+ assert.deepEqual(f.controller.getState().compatibility,{detectedProgramVersion:'4.0.7',detectedBuild:'30001',supportedProgramVersion:'4.0.6',supportedBuild:'29387'});
+ assert.ok(!JSON.stringify(f.controller.getState()).includes('synthetic-private-summary'));
+});
 test('确认时工具读取失败保留后端失败原因，不读回或误报账号变化',async()=>{
  const f=fixture();await f.controller.detect();
  f.control.confirmResult={state:'tool_not_ready',account_id:null,candidate_token:null,failure_code:'cli_unreadable'};

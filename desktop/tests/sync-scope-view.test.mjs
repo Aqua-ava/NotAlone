@@ -314,7 +314,7 @@ test('同步诊断分页按需挂载单人统计，删除或换范围后撤下�
  phase:'incomplete',failureCode:'history_source_continuity_unverified',messageCount:100+i,nonTextCount:70,pageCount:200,
  nonTextTypes:[{messageType:'image',label:'图片',count:70}],metadataOnlyCount:30,incrementalPhase:'blocked',incrementalPages:12}));
  const root=createRoot(document.getElementById('root'));
- const render=(rows=coverages,names=contacts)=>root.render(<HistoryCoverageDiagnostics coverages={rows} contacts={names} bodyAvailable enabled/>);
+ const render=(rows=coverages,names=contacts)=>root.render(<HistoryCoverageDiagnostics coverages={rows} contacts={names} bodyAvailable enabled incrementalIdentityLimit={100000}/>);
  window.removeSelected=()=>render(coverages.filter(row=>row.contactId!=='contact-22'),contacts.filter(contact=>contact.contactId!=='contact-22'));
  window.replace=()=>render([{...coverages[0],contactId:'new',bindingId:'new'}],[{contactId:'new',displayName:'新范围诊断联系人'}]);
  render();
@@ -322,6 +322,7 @@ test('同步诊断分页按需挂载单人统计，删除或换范围后撤下�
  const diagnostics=page.getByRole('region',{name:'同步诊断',exact:true});
  const list=diagnostics.getByRole('list',{name:'同步诊断联系人'});
  const detail=diagnostics.getByLabel('当前联系人消息历史覆盖');
+ await expect(diagnostics).toContainText('增量同步的消息身份基线上限为 100,000 条');
  await expect(list.getByRole('listitem')).toHaveCount(10);
  await expect(detail).toHaveCount(0);
  await expect(diagnostics).not.toContainText('70 条非文字占位');
@@ -334,6 +335,8 @@ test('同步诊断分页按需挂载单人统计，删除或换范围后撤下�
  await expect(detail).toContainText('已保存 122 条文字消息');
  await expect(detail).toContainText('图片：70 条');
  await expect(detail).toContainText('系统等元数据');
+ await expect(detail).toContainText('非文字占位只表示消息存在，不包含语音、视频、文件或表情正文');
+ await expect(detail).toContainText('图片即使已保存，也可能因本机文件缺失、缺密钥或来源未核验而无法查看');
  await page.evaluate(()=>window.removeSelected());
  await expect(detail).toHaveCount(0);
  await expect(diagnostics).not.toContainText('诊断合成联系人22');

@@ -20,6 +20,7 @@ interface ActiveRead extends QueuedRead { controller: AbortController; done: Pro
 const fatalCodes = new Set(['history_source_continuity_unverified', 'history_support_unverified', 'history_support_unsupported', 'history_support_changed',
   'history_external_scope_changed', 'history_cursor_invalid', 'history_cursor_scope_changed', 'history_suppression_unverified',
   'history_suppression_changed', 'history_incremental_unavailable', 'history_incremental_not_ready', 'history_tail_unsupported',
+  'history_tail_baseline_too_large',
   'history_target_unverified', 'history_target_invalid', 'history_scope_invalid', 'history_account_changed', 'history_source_changed',
   'history_scope_changed', 'read_not_authorized', 'read_eligibility_stale', 'history_contact_not_found', 'history_goal_closed',
   'history_goal_stale', 'history_page_invalid', 'history_capture_replay_conflict', 'history_deletion_in_progress']);

@@ -3,11 +3,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import { readWechatHttpBody, WechatHttpBodyError } from '../../sync/wechat-http-body.ts';
 import type { SqliteContactService } from './service.ts';
-import type { ContactSelection } from './contracts.ts';
+import type { ContactSelection, WechatVersionCompatibility } from './contracts.ts';
+import { INCREMENTAL_IDENTITY_LIMIT } from '../../history/limits.ts';
+type SetupExtra={wechat_compatibility?:WechatVersionCompatibility};
 function object(v:unknown):Record<string,unknown>{if(!v||typeof v!=='object'||Array.isArray(v))throw new StorageFailure('identity_request_invalid');return v as Record<string,unknown>;}
 function exact(v:Record<string,unknown>,keys:string[]){if(Object.keys(v).length!==keys.length||keys.some(k=>!Object.hasOwn(v,k)))throw new StorageFailure('identity_request_invalid');}
 const result=(res:ServerResponse,status:number,value:unknown)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value,(_k,v)=>typeof v==='bigint'?v.toString():v));};
-const setup=(state:string,account:string|null=null,token:string|null=null,code:string|null=null)=>({state,account_id:account,candidate_token:token,failure_code:code});
+type SetupInput={state:string;accountId?:string|null;token?:string|null;code?:string|null;extra?:SetupExtra};
+const setup=({state,accountId=null,token=null,code=null,extra={}}:SetupInput)=>({state,account_id:accountId,candidate_token:token,failure_code:code,...extra});
 // 只返回固定诊断码，底层错误文本可能包含本机路径或账号资料。
 const detectionFailures = new Set(['wechat_tool_unavailable', 'history_artifact_manifest_missing', 'history_artifact_unverified',
  'history_account_unavailable', 'history_program_version_uncertified', 'history_program_version_unavailable',
@@ -27,7 +30,7 @@ export class SqliteContactHttp {
    cli_backfill_phase:'not_required',cli_backfill_failure_code:null,cli_backfill_total_contacts:0,cli_backfill_completed_contacts:0,
    cli_backfill_succeeded_contacts:0,cli_backfill_skipped_contacts:0,cli_backfill_failed_contacts:0,cli_backfill_incomplete_contacts:0,
    cli_backfill_pending_contacts:0,cli_backfill_total_message_count:0,cli_backfill_total_non_text_count:0,
-   cli_history_coverages:directory.bindings.filter(b=>b.status==='active').map(b=>({binding_id:b.binding_id,contact_id:b.contact_id,phase:'not_started',failure_code:'wechat_body_unavailable',message_count:0,non_text_count:0,page_count:0}))};
+   cli_incremental_identity_limit:INCREMENTAL_IDENTITY_LIMIT,cli_history_coverages:directory.bindings.filter(b=>b.status==='active').map(b=>({binding_id:b.binding_id,contact_id:b.contact_id,phase:'not_started',failure_code:'wechat_body_unavailable',message_count:0,non_text_count:0,page_count:0}))};
  }
  async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
   const path=req.url??'';
@@ -47,20 +50,20 @@ export class SqliteContactHttp {
    else if(path==='/api/setup/status')value={runtime_owner_configured:true,owner_id:this.service.ownerId,storage:'sqlite',capabilities:['contacts']};
    else if(path==='/api/contacts')value={contacts:(await this.service.directory()).contacts};
    else if(avatar)value={avatar:await this.service.avatar(avatar[1],controller.signal)};
-   else if(path==='/api/setup/wechat'){const d=await this.service.directory();value=d.account?setup('connected',d.account.external_key):setup('needs_detection');}
+   else if(path==='/api/setup/wechat'){const d=await this.service.directory();value=d.account?setup({state:'connected',accountId:d.account.external_key}):setup({state:'needs_detection'});}
    else if(path.endsWith('/wechat/detect')){
     exact(body,[]);
-    try{const c=await this.service.detectAccount(controller.signal);value=c.verified?{...setup('ready',c.account_id,c.candidate_token),...(c.source_reconfirmation_required?{source_reconfirmation_required:true}:{})}:setup('tool_not_ready',c.account_id,null,c.failure_code&&detectionFailures.has(c.failure_code)?c.failure_code:'metadata_identity_unverified');}
+    try{const c=await this.service.detectAccount(controller.signal);const compatibility=c.wechat_compatibility?{wechat_compatibility:c.wechat_compatibility}:{};value=c.verified?{...setup({state:'ready',accountId:c.account_id,token:c.candidate_token,extra:compatibility}),...(c.source_reconfirmation_required?{source_reconfirmation_required:true}:{})}:setup({state:'tool_not_ready',accountId:c.account_id,code:c.failure_code&&detectionFailures.has(c.failure_code)?c.failure_code:'metadata_identity_unverified',extra:compatibility});}
     catch(error){
      const code=error instanceof StorageFailure&&detectionFailures.has(error.code)?error.code:'wechat_detection_failed';
-     value=setup(code==='wechat_tool_unavailable'?'tool_unavailable':'tool_not_ready',null,null,code);
+     value=setup({state:code==='wechat_tool_unavailable'?'tool_unavailable':'tool_not_ready',code});
     }
    }else if(path.endsWith('/wechat/confirm')){
     const reconfirmed=Object.hasOwn(body,'source_reconfirmed');
     exact(body,['candidate_token','confirmed','mode','history_authorized',...(reconfirmed?['source_reconfirmed']:[])]);
     if(reconfirmed&&(body.source_reconfirmed!==true||body.history_authorized!==false))throw new StorageFailure('identity_request_invalid');
     if(body.confirmed!==true||body.mode!=='selected'||typeof body.history_authorized!=='boolean'||typeof body.candidate_token!=='string')throw new StorageFailure('identity_request_invalid');
-    await this.service.confirmAccount(body.candidate_token,controller.signal,reconfirmed);const d=await this.service.directory();value=setup('connected',d.account!.external_key);
+    await this.service.confirmAccount(body.candidate_token,controller.signal,reconfirmed);const d=await this.service.directory();value=setup({state:'connected',accountId:d.account!.external_key});
    }else if(path==='/api/sync/cli-bindings'){
     const d=await this.service.syncDirectory();value={identity_protocol:'sqlite-selected-v1',sync_enabled:d.read_enabled,bindings:d.bindings.filter(b=>b.status==='active'),revoked_bindings:d.bindings.filter(b=>b.status==='revoked')};
    }else if(path==='/api/sync/cli-sessions'){

@@ -8,6 +8,7 @@ const labels: Record<HistoryCoveragePhase, string> = {
   not_started: '等待同步', syncing: '正在读取历史', complete: '本机历史已读完', incomplete: '历史尚未读完',
 };
 const unknownNonTextTypeLabel = '其他消息（未识别）';
+const incrementalBaselineLimitMessage = '此会话的消息身份基线超过当前增量上限，暂时不能继续增量读取；已保存内容仍保留。';
 const incrementalLabels: Record<HistoryIncrementalPhase, string> = {
   not_started: '新消息同步尚未开始', ready: '新消息同步待继续', syncing: '正在同步新消息',
   incomplete: '新消息同步暂时受阻', blocked: '新消息同步已停止', invalidated: '新消息同步检查点已失效',
@@ -31,6 +32,7 @@ const incrementalReasons: Record<string, string> = {
   history_suppression_changed: '历史截断状态已变化，增量读取已停止。',
   history_page_invalid: '读取返回了不一致的分页，增量读取已停止。',
   history_deletion_in_progress: '相关消息正在删除，本次增量读取未提交。',
+  history_tail_baseline_too_large: incrementalBaselineLimitMessage,
   history_identity_quarantined: '部分新消息的身份、状态或内容尚未核验，已隔离；其他已核验消息继续同步。',
   history_native_unavailable: '暂时无法读取微信，开启同步时会自动重试。',
   history_native_timeout: '读取微信暂时超时，开启同步时会自动重试。',
@@ -47,6 +49,7 @@ const reasons: Record<string, string> = {
   history_empty: '暂时没有读到聊天记录，还不能确认历史是否读完。',
   cli_message_table_missing: '暂时无法打开本机微信记录，开启同步时会自动重试。',
   history_page_stalled: '读取更早的聊天时暂时中断，开启同步时会自动重试。',
+  history_tail_baseline_too_large: incrementalBaselineLimitMessage,
   history_identity_quarantined: '部分消息的身份、状态或内容尚未核验，已隔离，不作为聊天或回复依据。已核验消息可正常读取。',
   history_support_unsupported: '当前微信结构明确不支持，正文读取保持关闭。',
   history_support_unverified: '当前微信读取能力尚未核验，正文读取保持关闭。',
@@ -84,6 +87,7 @@ export function ContactHistoryCoverage({ coverages, contactId, bodyAvailable, co
       {!!row.nonTextTypes?.length && <ul aria-label="非文字消息类型数量">
         {row.nonTextTypes.map(item => <li key={item.messageType}>{item.messageType === 'other' ? unknownNonTextTypeLabel : item.label}：{item.count} 条</li>)}
       </ul>}
+      {row.nonTextCount > 0 && <p>非文字占位只表示消息存在，不包含语音、视频、文件或表情正文，不作为聊天或回复依据。图片即使已保存，也可能因本机文件缺失、缺密钥或来源未核验而无法查看。</p>}
       {(row.metadataOnlyCount ?? 0) > 0 && <p>另保存 {row.metadataOnlyCount} 条系统等元数据记录，不含正文。</p>}
       {row.phase !== 'complete' && row.failureCode && <p role="status">{syncScopeNotice(row.failureCode) ?? reasons[row.failureCode] ?? '部分聊天暂时无法读取，请检查同步状态与来源核验结果。'}</p>}
       {row.incrementalAwaitingMessages === true && <p role="status">这台电脑上当前没有可读聊天记录，开启同步时会等待新消息并定期检查。</p>}
@@ -104,6 +108,7 @@ interface CoverageProps {
   contacts?: { contactId: string; displayName: string }[];
   bodyAvailable?: boolean;
   enabled?: boolean;
+  incrementalIdentityLimit?: number;
 }
 const pageSize = 10;
 
@@ -196,7 +201,7 @@ export function HistoryCoverageStatus({ coverages, contacts, bodyAvailable, enab
 }
 
 /** 仅展示已取得的状态；展开单人后才挂载详细统计，不触发读取或授权。 */
-export function HistoryCoverageDiagnostics({ coverages, contacts, bodyAvailable, enabled }: CoverageProps) {
+export function HistoryCoverageDiagnostics({ coverages, contacts, bodyAvailable, enabled, incrementalIdentityLimit }: CoverageProps) {
   const statuses = useMemo(() => buildSyncContacts(coverages, contacts), [coverages, contacts]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = statuses.find(contact => contact.contactId === selectedId);
@@ -205,6 +210,7 @@ export function HistoryCoverageDiagnostics({ coverages, contacts, bodyAvailable,
     <div className="sync-history-toolbar"><h3>同步诊断</h3>
       {selected && <button className="button" onClick={() => setSelectedId(null)}>返回诊断列表</button>}</div>
     <p>查看已保存的状态和消息数量，供故障排查使用。这里不会重新授权或触发聊天读取。</p>
+    {incrementalIdentityLimit !== undefined && <p>增量同步的消息身份基线上限为 {incrementalIdentityLimit.toLocaleString('zh-CN')} 条；超过上限的会话保留已保存内容，但不会继续增量读取。</p>}
     {selected ? <div className="sync-history-diagnostic-detail"><h4>{selected.displayName}</h4>
       <ContactHistoryCoverage coverages={selected.rows} contactId={selected.contactId} bodyAvailable={bodyAvailable} enabled={enabled} />
     </div> : coverages === undefined ? <p>同步状态暂不可用。</p>

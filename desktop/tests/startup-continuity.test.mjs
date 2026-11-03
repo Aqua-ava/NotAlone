@@ -61,6 +61,7 @@ test('运行就绪后不再展示环境检查卡，工具缺失也不阻挡普�
   const settings = renderToStaticMarkup(React.createElement(StartupSettings, { ...props, open: true }));
   assert.match(settings, /SQLite 存储诊断/);
   assert.match(settings, /结构版本 24/);
+  assert.match(settings, /当前业务数据库和本机资料尚未由应用层加密/);
 });
 
 test('高级故障排查默认折叠，明确展开后才展示诊断与路径操作', () => {

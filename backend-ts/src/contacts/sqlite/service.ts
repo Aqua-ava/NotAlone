@@ -1,12 +1,20 @@
 import { randomUUID } from 'node:crypto';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import type { SqliteStorage } from '../../storage/sqlite/client.ts';
-import type { AccountEvidence, ContactMetadataPort, ContactSelection, ReadEligibility, SavedContactBinding } from './contracts.ts';
+import type { AccountEvidence, ContactMetadataPort, ContactSelection, ReadEligibility, SavedContactBinding, WechatVersionCompatibility } from './contracts.ts';
+import { WECHAT_METADATA_SUPPORT } from '../../history/wechat/support-profile.ts';
 import { fetchContactAvatar, type ContactAvatar } from './avatar.ts';
 function fail(code:string):never {throw new StorageFailure(code);}
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
 const identity=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9_.@-]{1,255}$/.test(v);
-function assertAccountEvidence(evidence:AccountEvidence):void {if(!identity(evidence.externalKey)||!identity(evidence.identityScheme)||!identity(evidence.sourceGeneration)||!identity(evidence.supportProfile)||!['verified','unverified'].includes(evidence.assurance))fail('metadata_identity_unverified');}
+const version=(value:unknown):value is string=>typeof value==='string'&&/^[0-9]{1,3}(\.[0-9]{1,3}){1,3}$/.test(value);
+const build=(value:unknown):value is string=>typeof value==='string'&&/^[0-9]{1,12}$/.test(value);
+function compatibilityFor(evidence:AccountEvidence):WechatVersionCompatibility|undefined {
+ if(evidence.assurance!=='unverified'||!evidence.programVersion||!evidence.build)return undefined;
+ return {detected_program_version:evidence.programVersion,detected_build:evidence.build,
+  supported_program_version:WECHAT_METADATA_SUPPORT.programVersion,supported_build:WECHAT_METADATA_SUPPORT.build};
+}
+function assertAccountEvidence(evidence:AccountEvidence):void {if(!identity(evidence.externalKey)||!identity(evidence.identityScheme)||!identity(evidence.sourceGeneration)||!identity(evidence.supportProfile)||!['verified','unverified'].includes(evidence.assurance)||evidence.programVersion!==undefined&&!version(evidence.programVersion)||evidence.build!==undefined&&!build(evidence.build))fail('metadata_identity_unverified');}
 interface Directory { contacts: {contact_id:string;display_name:string;selection_generation:string;data_generation:string;data_status:{message_count:number;source_count:number}}[]; bindings:SavedContactBinding[];account:{id:string;external_key:string;identity_scheme:string;source_generation:string;scope_revision:bigint}|null;read_enabled:boolean }
 interface SourceReconfirmation {accountId:string;sourceGeneration:string;scopeRevision:string}
 interface Snapshot {at:number; evidence:AccountEvidence;accountId:string;scopeRevision:string;rows:Map<string,{displayName:string;generation:string;contactId?:string;verificationId:string;grantId:string;bindingId:string;conversationId:string;newContactId:string}>}
@@ -75,7 +83,8 @@ export class SqliteContactService {
   const sourceReconfirmation=evidence.assurance==='verified'?await this.execute<SourceReconfirmation|undefined>('identity.sourceReconfirmation',{evidence}):undefined;
   if(this.closed)fail('identity_closed');
   this.candidate={token:randomUUID(),evidence,at:this.clock(),sourceReconfirmation};
-  return {account_id:evidence.externalKey,candidate_token:this.candidate.token,verified:evidence.assurance==='verified',failure_code:evidence.assurance==='unverified'?evidence.unverifiedReason??'metadata_identity_unverified':null,...(sourceReconfirmation?{source_reconfirmation_required:true}:{})};
+  const compatibility=compatibilityFor(evidence);
+  return {account_id:evidence.externalKey,candidate_token:this.candidate.token,verified:evidence.assurance==='verified',failure_code:evidence.assurance==='unverified'?evidence.unverifiedReason??'metadata_identity_unverified':null,...(sourceReconfirmation?{source_reconfirmation_required:true}:{}),...(compatibility?{wechat_compatibility:compatibility}:{})};
  }
  async confirmAccount(token:string,signal?:AbortSignal,sourceReconfirmed=false){
   const c=this.candidate;if(!c||c.token!==token||this.clock()-c.at>120_000)fail('account_candidate_stale');

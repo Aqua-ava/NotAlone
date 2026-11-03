@@ -63,6 +63,10 @@ export function WechatSetupPanel({ bridge, children, selectionOnly: configuredSe
   useVisibleRefresh(() => operate(() => bridge.refresh()), ['connected', 'needs_owner', 'needs_detection'].includes(state.phase) && !error && !readError);
   const readFailed = state.phase === 'failed' && state.failureCode === 'status_unavailable';
   const canDetect = ['needs_detection', 'failed', 'tool_not_ready', 'tool_unavailable', 'conflict'].includes(state.phase);
+  const compatibility = state.compatibility;
+  const versionFailure = compatibility && state.failureCode === 'history_program_version_uncertified'
+    ? `检测到微信 ${compatibility.detectedProgramVersion}（${compatibility.detectedBuild}），当前读取器支持 ${compatibility.supportedProgramVersion}（${compatibility.supportedBuild}）。请更新微信读取适配器后再检测；不要关闭版本核验。`
+    : null;
   return <><section className="bindings-explanation" aria-label="首次连接微信">
     <div className="bindings-toolbar"><h2>{state.phase === 'connected' ? '微信账号已连接' : '连接微信'}</h2>
       {(readFailed || error) && <button className="button" disabled={busy} onClick={() => void operate(() => bridge.refresh())}>重试读取微信连接状态</button>}</div>
@@ -70,9 +74,15 @@ export function WechatSetupPanel({ bridge, children, selectionOnly: configuredSe
     {state.phase === 'needs_owner' && <p>请先到「设置」完成本机本人身份配置，再连接微信。</p>}
     {state.phase === 'needs_detection' && <p>先连接你的微信账号，再选择希望同步的联系人。</p>}
     {canDetect && <>
-      {blocked && <p role="alert">{toolFailureMessages[state.failureCode ?? ''] ?? (state.phase === 'tool_unavailable'
+      {blocked && <p role="alert">{versionFailure ?? toolFailureMessages[state.failureCode ?? ''] ?? (state.phase === 'tool_unavailable'
         ? toolFailureMessages.wechat_tool_unavailable
         : '暂时无法完成微信账号核验。请重新检测；若仍失败，请查看「设置」中的本机诊断。')}</p>}
+      {compatibility && state.failureCode !== 'history_program_version_uncertified' && <p>检测到的微信版本：{compatibility.detectedProgramVersion}（{compatibility.detectedBuild}）；当前读取器支持：{compatibility.supportedProgramVersion}（{compatibility.supportedBuild}）。</p>}
+      {(blocked || state.phase === 'needs_detection') && <details open={blocked}><summary>首次准备外置读取器</summary>
+        <p>请在「设置」中填写你自行安装且可信的本机微信读取器绝对路径，并确认读取器已配置可用账号和本机密钥。修改后重新加载本机服务，再回到这里检测。</p>
+        <p>可先用读取器自带的 <code>wechat-cli status --pretty</code>、<code>doctor</code> 和 <code>cache status</code> 核对实时读取是否正常，再让 NotAlone 检测账号。</p>
+        <p>上游 <code>wxkey bootstrap</code> 可能退出并重新打开微信、准备 ad-hoc 签名的微信副本，并要求管理员密码存入 macOS 钥匙串。是否接受该取舍由你决定；NotAlone 不执行该流程、不接收密码，也不会代为下载或重签名。</p>
+      </details>}
       {state.phase === 'conflict' && <p role="alert">{state.failureCode === 'identity_continuity_unverified'
         ? '本机微信数据来源已变化，暂时无法确认与原来源连续。旧读取授权尚未恢复；请先核验当前来源，再重新确认需要读取的会话。'
         : '微信账号与当前配置不一致，连接尚未完成。请核对本机微信读取配置后重新检测。'}</p>}
@@ -97,7 +107,12 @@ export function WechatSetupPanel({ bridge, children, selectionOnly: configuredSe
         {state.sourceReconfirmationRequired ? '重新核验并连接当前来源' : '确认账号并选择联系人'}
       </button>
     </>}
-    {state.phase === 'connected' && <p>账号已连接。你可以随时到「联系人」添加同步对象；没有确认的私聊不会获得读取授权。</p>}
+    {state.phase === 'connected' && <>
+      <p>账号已连接。你可以随时到「联系人」添加同步对象；没有确认的私聊不会获得读取授权。</p>
+      {state.versionCheck === 'passed' && <p role="status">当前微信版本与来源检查通过；连接和读取授权未改变。</p>}
+      <p>微信升级后先重新检测版本与来源。检测不读取会话名单或正文；失败时会按来源核验规则停止旧读取资格，直到重新核验。</p>
+      <button className="button" disabled={busy} onClick={() => void operate(() => bridge.detect())}>重新检测微信版本与来源</button>
+    </>}
     {(['restart_required', 'restart-failed'].includes(state.phase) || state.phase === 'offline' && state.failureCode === 'reload_failed') && <>
       <p role="status">授权已保存，需要重新加载本机服务以完成连接；无需再次授权。</p>
       <button className="button" onClick={() => void operate(() => bridge.retryRestart())}>重新加载连接</button>

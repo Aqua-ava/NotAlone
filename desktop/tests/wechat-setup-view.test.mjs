@@ -10,7 +10,7 @@ async function pageFixture(t, phase='needs_detection', selectionOnly=false, fail
  let state={phase:${JSON.stringify(phase)},accountId:null,failureCode:${JSON.stringify(failureCode)},revision:1};const listeners=new Set();window.calls=[];
  window.update=value=>{state={...state,...value,revision:state.revision+1};for(const fn of listeners)fn(state);};
  const bridge={getState:async()=>state,refresh:async()=>window.calls.push('refresh'),onStateChanged:fn=>{listeners.add(fn);return()=>listeners.delete(fn);},
- detect:async()=>{window.calls.push('detect');window.update({phase:'ready',accountId:'synthetic-account'});},
+ detect:async()=>{window.calls.push('detect');if(state.phase==='connected')window.update({phase:'connected',versionCheck:'passed'});else window.update({phase:'ready',accountId:'synthetic-account'});},
  confirm:async value=>{window.calls.push(value);window.update({phase:'connected'});},retryRestart:async()=>window.calls.push('retry')};
  createRoot(document.getElementById('root')).render(<WechatSetupPanel bridge={bridge} selectionOnly={${selectionOnly}} onSelectContacts={()=>window.calls.push('selectContacts')}><button>同步总开关</button></WechatSetupPanel>);
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',write:false,loader:{'.css':'empty'}});
@@ -135,6 +135,24 @@ test('首次连接成功直接进入联系人选择并读取会话名单，选�
   type:'binding-confirm',scopeRevision:1,historyAuthorized:true,startSync:true,
   selections:[{locator:'wxid_synthetic_friend',displayName:'林晓雨',contactId:null}]});
 });
+test('已连接用户可从当前页重新检测版本与来源',async t=>{
+ const page=await pageFixture(t,'connected');
+ await expect(page.getByText(/微信升级后先重新检测版本与来源/)).toBeVisible();
+ await page.getByRole('button',{name:'重新检测微信版本与来源',exact:true}).click();
+ await expect(page.getByText('当前微信版本与来源检查通过；连接和读取授权未改变。')).toBeVisible();
+ assert.deepEqual(await page.evaluate(()=>window.calls),['refresh','detect']);
+});
+
+test('微信版本不匹配时展示检测值、支持值和安全处理提示',async t=>{
+ const page=await pageFixture(t,'tool_not_ready',false,'history_program_version_uncertified');
+ await page.evaluate(()=>window.update({compatibility:{detectedProgramVersion:'4.0.7',detectedBuild:'30001',supportedProgramVersion:'4.0.6',supportedBuild:'29387'}}));
+ await expect(page.getByRole('alert')).toContainText('检测到微信 4.0.7（30001）');
+ await expect(page.getByRole('alert')).toContainText('当前读取器支持 4.0.6（29387）');
+ await expect(page.getByText(/不会代为下载或重签名/)).toBeVisible();
+ await expect(page.getByText(/管理员密码/)).toBeVisible();
+ await expect(page.getByRole('button',{name:'确认账号并选择联系人',exact:true})).toHaveCount(0);
+});
+
 test('未准备的工具不能伪装为连接成功，保存后只重试加载',async t=>{
  const page=await pageFixture(t,'tool_not_ready');
  await expect(page.getByText(/暂时无法完成微信账号核验/)).toBeVisible();

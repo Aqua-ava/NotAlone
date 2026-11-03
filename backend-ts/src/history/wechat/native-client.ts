@@ -9,6 +9,7 @@ import {readWechatQuotePayload,type WechatQuotePayload,type WechatQuoteSourceIde
 import type { HistoryPage, HistoryQuoteErrorCode,HistoryRecord, HistorySupportReport, HistoryTarget, HistoryTailPage } from '../sqlite/contracts.ts';
 import { boundaryProtocol, maxBoundaryMembers, membersManifestSha256, sourceLocalKey, type HistoryBoundaryCandidate } from '../sqlite/boundary.ts';
 import { isPartitionGrowthTargetChange, isSafePartitionGrowth, historyTargetTransition } from '../partition-growth.ts';
+import { WECHAT_METADATA_SUPPORT } from './support-profile.ts';
 
 export interface ResolvedWechatScope {
   accountKey: string; conversationKey: string; displayName: string; sourceGeneration: string;
@@ -429,13 +430,13 @@ function accountSchema(value: unknown): WechatAccountSchema {
 function accountMetadata(value: unknown, options: NarrowWechatClientOptions): WechatAccountMetadata {
   const row = object(value, ['format', 'status', 'reason', 'accountKey', 'identityScheme', 'sourceGeneration', 'supportProfile', 'programVersion', 'build', 'artifactSha256', 'wcdbSha256', 'configuredAccount', 'continuity', 'normalHistory']);
   if (row.format !== 'wechat-account-metadata-v1' || row.identityScheme !== 'wechat.account.v1'
-    || row.supportProfile !== 'wechat-4.0.6-29387-account-session-metadata-v1'
+    || row.supportProfile !== WECHAT_METADATA_SUPPORT.profileId
     || row.continuity !== 'held-contact-session-instances' || row.normalHistory !== false
     || hash(row.artifactSha256) !== options.expectedCliSha256 || hash(row.wcdbSha256) !== options.expectedWcdbSha256
     || typeof row.programVersion !== 'string' || !/^[0-9]{1,3}(\.[0-9]{1,3}){1,3}$/.test(row.programVersion)
     || typeof row.build !== 'string' || !/^[0-9]{1,12}$/.test(row.build)) return fail();
   if (row.status === 'verified') {
-    if (row.configuredAccount !== 'verified' || row.reason !== null || row.programVersion !== '4.0.6' || row.build !== '29387') return fail();
+    if (row.configuredAccount !== 'verified' || row.reason !== null || row.programVersion !== WECHAT_METADATA_SUPPORT.programVersion || row.build !== WECHAT_METADATA_SUPPORT.build) return fail();
   } else if (row.status !== 'unverified' || row.configuredAccount !== 'unverified'
     || !['history_metadata_profile_unverified', 'history_program_version_uncertified'].includes(row.reason as string)) return fail();
   return { format: 'wechat-account-metadata-v1', status: row.status as WechatAccountMetadata['status'], reason: row.reason as string | null,
@@ -479,7 +480,7 @@ function supportReport(value: unknown, scope: ResolvedWechatScope, artifact: str
   const declaredPrimaryKey = list(row.declaredPrimaryKey, 128, value => text(value)); unique(declaredPrimaryKey);
   const statusSemantics = text(row.statusSemantics, 512, row.status !== 'supported');
   const continuity = text(row.continuity, 512, row.status !== 'supported');
-  const absentTarget = row.profileId === absentPrivateTargetProfile && row.programVersion === '4.0.6' && row.build === '29387'
+  const absentTarget = row.profileId === absentPrivateTargetProfile && row.programVersion === WECHAT_METADATA_SUPPORT.programVersion && row.build === WECHAT_METADATA_SUPPORT.build
     && row.statusSemantics === 'no-message-table-v1' && row.continuity === 'same-source-instances-normal-use-v1';
   if (row.status === 'supported' && (reason !== null || !declaredPrimaryKey.length && !absentTarget
     || row.profileId === absentPrivateTargetProfile && (!absentTarget || declaredPrimaryKey.length > 0))) return fail();

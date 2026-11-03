@@ -50,6 +50,7 @@ export function StartupReadiness({ state, backend, onConfigure, showStorageDiagn
       : state.sqlite.phase === 'ready'
         ? state.sqlite.capabilities?.includes('history') ? 'SQLite 联系人与历史消息存储已就绪。' : state.sqlite.capabilities?.includes('skills') ? 'SQLite 联系人与 Skill 管理已就绪。' : state.sqlite.capabilities?.includes('contacts') ? 'SQLite 联系人存储已就绪。' : 'SQLite 底座已就绪，业务功能尚未切换。' : 'SQLite 底座检查未通过，已有资料现场已保留。'}</p>
     {state.sqlite.phase === 'ready' && <p>上次核验：结构版本 {state.sqlite.schemaVersion} · SQLite {state.sqlite.sqliteVersion}</p>}
+    <p>当前业务数据库和本机资料尚未由应用层加密；请依赖本机账户与磁盘保护，不要复制资料目录到不受信任的位置。</p>
     {state.sqlite.phase === 'blocked' && <p>诊断代码：{state.sqlite.code}</p>}
     {state.sqlite.phase === 'ready' && backend?.phase === 'connected' && <p>{state.sqlite.capabilities?.includes('history') ? '已开放联系人与历史消息查看；微信读取需先通过版本、状态与来源核验。' : state.sqlite.capabilities?.includes('skills') ? '当前开放联系人身份、逐人授权与 Skill 目录管理；正文同步、记忆和回复尚未开放。' : state.sqlite.capabilities?.includes('contacts') ? '当前仅开放联系人身份与逐人授权；正文同步、记忆和回复尚未开放。' : '此模式仅核验隔离存储，不开放联系人、同步、记忆或回复。'}</p>}
     <button className="button" disabled={!backend?.canRetryConnection || retrying} onClick={() => void retry()}>
@@ -159,6 +160,7 @@ function StartupPathSettings({ state, backend }: { state: StartupState; backend:
     <StartupDiagnostics state={state} />
     <h2>本机启动路径</h2>
     <p>这里只保存非秘密绝对路径。数据库连接与模型凭据保存在你选定的配置文件中，不在本页显示。</p>
+    <p>微信读取器须由你自行安装并通过绝对路径配置。App 不自动下载或重签名微信，也不保存管理员密码；微信升级后若版本核验失败，连接页会显示检测版本与当前支持范围。</p>
     {!saving && pathReadPhase === 'reading' && <p role="status">正在读取启动路径…</p>}
     {paths && <div className="startup-paths">
       {pathFields.map(([key, label]) => <label key={key} htmlFor={`startup-${key}`}>{label}

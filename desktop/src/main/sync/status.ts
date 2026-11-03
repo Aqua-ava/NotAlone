@@ -160,6 +160,7 @@ export function parseSyncReport(value: unknown): SyncStatusReport {
     foregroundFailureCode: failureCode(fields.foreground_failure_code), probeAvailable: fields.probe_available,
     wechatInFront: fields.wechat_in_front, backfill: backfillReport(fields),
     ...('cli_priority_contact_id' in fields ? { priority: priorityReport(fields) } : {}),
+    ...('cli_incremental_identity_limit' in fields ? { incrementalIdentityLimit: count(fields.cli_incremental_identity_limit) } : {}),
     ...(() => {
       const incrementalPhase = optionalBackgroundIncrementalPhase(fields.cli_incremental_phase);
       return {

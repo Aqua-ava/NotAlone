@@ -3,8 +3,21 @@ import { BackendRequestFailure } from '../backend/json-client';
 import { validWechatSetupConfirmation, type WechatSetupConfirmation, type WechatSetupState } from '../../shared/wechat-setup-bridge';
 
 type Operation = { generation: number; epoch: number };
-type Report = { state: WechatSetupState['phase']; account_id: string | null; candidate_token: string | null; failure_code: string | null; source_reconfirmation_required?: boolean };
+type Report = { state: WechatSetupState['phase']; account_id: string | null; candidate_token: string | null; failure_code: string | null; source_reconfirmation_required?: boolean;
+  wechat_compatibility?: { detected_program_version: string; detected_build: string; supported_program_version: string; supported_build: string } };
 const serverStates = new Set(['needs_detection', 'needs_owner', 'tool_unavailable', 'tool_not_ready', 'ready', 'connected', 'restart_required', 'conflict']);
+const versionPattern = /^[0-9]{1,3}(\.[0-9]{1,3}){1,3}$/;
+const buildPattern = /^[0-9]{1,12}$/;
+function validCompatibility(value: unknown): value is NonNullable<Report['wechat_compatibility']> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return Object.keys(row).length === 4
+    && Object.keys(row).every(key => ['detected_program_version', 'detected_build', 'supported_program_version', 'supported_build'].includes(key))
+    && typeof row.detected_program_version === 'string' && versionPattern.test(row.detected_program_version)
+    && typeof row.detected_build === 'string' && buildPattern.test(row.detected_build)
+    && typeof row.supported_program_version === 'string' && versionPattern.test(row.supported_program_version)
+    && typeof row.supported_build === 'string' && buildPattern.test(row.supported_build);
+}
 function report(data: unknown): Report {
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('微信连接状态无效');
   const value = data as Report;
@@ -14,6 +27,7 @@ function report(data: unknown): Report {
     || !(value.failure_code === null || typeof value.failure_code === 'string' && /^[a-z][a-z0-9_]{0,99}$/.test(value.failure_code))
     || value.source_reconfirmation_required !== undefined && typeof value.source_reconfirmation_required !== 'boolean'
     || value.source_reconfirmation_required === true && value.state !== 'ready'
+    || value.wechat_compatibility !== undefined && !validCompatibility(value.wechat_compatibility)
     || value.state === 'ready' && (!value.account_id || !value.candidate_token)
     || ['connected', 'restart_required'].includes(value.state) && !value.account_id) throw new Error('微信连接状态无效');
   return value;
@@ -38,7 +52,7 @@ export class WechatSetupController {
       this.token = null;
       if (this.busy && this.state.phase === 'restarting') return;
       this.pendingRestart = false;
-      this.publish({ phase: 'offline', accountId: null, failureCode: null, sourceReconfirmationRequired: false });
+      this.publish({ phase: 'offline', accountId: null, failureCode: null, sourceReconfirmationRequired: false, versionCheck: undefined });
       if (generation !== undefined) void this.refresh();
     });
   }
@@ -52,18 +66,29 @@ export class WechatSetupController {
     if (operation) await this.read(operation);
   }
   async detect(): Promise<void> {
-    if (this.busy || ['connected', 'restart_required', 'restart-failed', 'needs_owner'].includes(this.state.phase)) return;
+    if (this.busy || ['restart_required', 'restart-failed', 'needs_owner'].includes(this.state.phase)) return;
     const operation = this.begin();
     if (!operation) return;
     this.busy = true;
+    const previousAccount = this.state.accountId;
+    const previousPhase = this.state.phase;
     this.token = null;
-    this.publish({ phase: 'loading', accountId: null, failureCode: null });
+    this.publish({ phase: 'loading', accountId: null, failureCode: null, compatibility: undefined, versionCheck: undefined });
     try {
       const result = await this.backend.requestJson({ method: 'POST', path: '/api/setup/wechat/detect', body: {}, timeoutMs: 10_000, maxResponseBytes: 4096 });
       const value = report(result.data);
-      if (this.current(operation)) this.accept(value);
+      if (this.current(operation)) {
+        if (previousPhase === 'connected' && value.state === 'ready' && value.account_id === previousAccount
+          && value.source_reconfirmation_required !== true) {
+          this.accept({ state: 'connected', account_id: previousAccount, candidate_token: null, failure_code: null });
+          this.publish({ versionCheck: 'passed' });
+        } else {
+          const retained = value.account_id ?? (['tool_not_ready', 'tool_unavailable'].includes(value.state) ? previousAccount : null);
+          this.accept({ ...value, account_id: retained });
+        }
+      }
     } catch {
-      if (this.current(operation)) this.publish({ phase: 'failed', failureCode: 'detection_failed' });
+      if (this.current(operation)) this.publish({ phase: 'failed', accountId: previousAccount, failureCode: 'detection_failed' });
     } finally {
       this.busy = false;
       if (!this.current(operation) && this.getState().phase === 'offline' && this.backend.getConnectionGeneration() !== undefined) void this.refresh();
@@ -72,7 +97,7 @@ export class WechatSetupController {
   private async read(operation: Operation, expectedAccount?: string | null): Promise<Report | undefined> {
     this.token = null;
     // 已连接时后台查询保留可用展示，避免周期性卸载同步设置。
-    if (!['connected', 'needs_owner', 'needs_detection'].includes(this.state.phase)) this.publish({ phase: 'loading', accountId: null, failureCode: null });
+    if (!['connected', 'needs_owner', 'needs_detection'].includes(this.state.phase)) this.publish({ phase: 'loading', accountId: null, failureCode: null, compatibility: undefined });
     try {
       const result = await this.backend.requestJson({ method: 'GET', path: '/api/setup/wechat', maxResponseBytes: 4096 });
       const value = report(result.data);
@@ -90,8 +115,12 @@ export class WechatSetupController {
   private accept(value: Report): void {
     this.token = value.state === 'ready' ? value.candidate_token : null;
     this.pendingRestart = value.state === 'restart_required';
+    const compatibility = value.wechat_compatibility ? { detectedProgramVersion: value.wechat_compatibility.detected_program_version,
+      detectedBuild: value.wechat_compatibility.detected_build, supportedProgramVersion: value.wechat_compatibility.supported_program_version,
+      supportedBuild: value.wechat_compatibility.supported_build } : undefined;
     this.publish({ phase: value.state, accountId: value.account_id, failureCode: value.failure_code,
-      sourceReconfirmationRequired: value.source_reconfirmation_required === true });
+      sourceReconfirmationRequired: value.source_reconfirmation_required === true, compatibility,
+      ...(value.state === 'connected' ? {} : { versionCheck: undefined }) });
   }
   async confirm(request: WechatSetupConfirmation): Promise<void> {
     if (!validWechatSetupConfirmation(request) || request.revision !== this.state.revision) throw new Error('微信连接页面已变化，请重新核对');

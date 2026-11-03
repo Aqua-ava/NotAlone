@@ -303,6 +303,7 @@ test('账号变化、支持语义变化、游标失效、目标不连续或交�
     ['账号变化', f => { f.state.supportOverrides = { accountKey: 'other-account' }; }, 'history_external_scope_changed'],
     ['来源语义变化', f => { f.state.supportOverrides = { continuity: 'synthetic-source-2' }; }, 'history_support_changed'],
     ['游标失效', f => { f.state.tailHook = async () => { throw new StorageFailure('history_cursor_invalid'); }; }, 'history_cursor_invalid'],
+    ['增量身份基线超限', f => { f.state.tailHook = async () => { throw new StorageFailure('history_tail_baseline_too_large'); }; }, 'history_tail_baseline_too_large'],
     ['目标不连续', f => { f.state.tailHook = async (scope, target, cursor) => ({ target: 'synthetic:other-target', cursorIn: cursor, cursorOut: 'tail-9', caughtUp: true, records: [record('9')] }); }, 'history_page_invalid'],
   ];
   for (const [name, arrange, code] of scenarios) {

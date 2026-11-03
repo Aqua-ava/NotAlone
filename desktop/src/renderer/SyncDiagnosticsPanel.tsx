@@ -20,6 +20,7 @@ export function SyncDiagnosticsPanel({ bridge, contacts }: {
     <button className="button" disabled={state.phase === 'loading'} onClick={() => void refresh()}>刷新诊断状态</button>
     {failed && <p role="alert">同步诊断状态暂不可用，请刷新重试。</p>}
     <HistoryCoverageDiagnostics key={state.scopeRevision} coverages={failed ? undefined : state.report?.historyCoverages}
-      contacts={contacts} bodyAvailable={state.report?.bodyAvailable} enabled={state.report?.enabled} />
+      contacts={contacts} bodyAvailable={state.report?.bodyAvailable} enabled={state.report?.enabled}
+      incrementalIdentityLimit={state.report?.incrementalIdentityLimit} />
   </section>;
 }

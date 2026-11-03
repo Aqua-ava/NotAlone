@@ -153,6 +153,19 @@ test('低置信度、重复稳定身份和来源不连续均拒绝身份猜测',
 });
 import {createServer} from 'node:http';
 import {SqliteContactHttp} from '../src/contacts/sqlite/http.ts';
+test('账号检测只暴露精简的微信版本兼容诊断，不夹带渠道摘要',async t=>{
+ const {service,channel}=await fixture(t);
+ channel.account=async()=>({externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-1',assurance:'unverified',supportProfile:'synthetic-metadata-v1',unverifiedReason:'history_program_version_uncertified',programVersion:'4.0.7',build:'30001',summary:'synthetic-summary'});
+ const api=new SqliteContactHttp(service),server=createServer(async(req,res)=>{if(!await api.handle(req,res))res.writeHead(404).end();});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const response=await fetch(`http://127.0.0.1:${server.address().port}/api/setup/wechat/detect`,{method:'POST',body:'{}'});
+ const body=await response.json();
+ assert.equal(response.status,200);assert.equal(body.state,'tool_not_ready');assert.equal(body.failure_code,'history_program_version_uncertified');
+ assert.deepEqual(body.wechat_compatibility,{detected_program_version:'4.0.7',detected_build:'30001',supported_program_version:'4.0.6',supported_build:'29387'});
+ assert.equal(JSON.stringify(body).includes('synthetic-summary'),false);
+ channel.account=async()=>({externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-1',assurance:'verified',supportProfile:'synthetic-metadata-v1',programVersion:'4.0.6',build:'29387'});
+ const ready=await service.detectAccount();assert.equal(ready.wechat_compatibility,undefined);
+});
 import {authorizeSqliteRequest} from '../src/sqlite-host-plugin.ts';
 test('认证HTTP按旧页面合同读回选择及撤销，缺同意/跨owner字段/跳过历史均拒绝',async t=>{
  const {service}=await fixture(t);const api=new SqliteContactHttp(service);const token='synthetic-bearer';

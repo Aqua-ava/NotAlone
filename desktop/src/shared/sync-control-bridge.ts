@@ -73,6 +73,7 @@ export interface SyncStatusReport {
   priority?: SyncPriorityReport;
   incrementalPhase?: BackgroundIncrementalPhase;
   incrementalFailureCode?: string | null;
+  incrementalIdentityLimit?: number;
 }
 export interface SyncControlState {
   revision: number;

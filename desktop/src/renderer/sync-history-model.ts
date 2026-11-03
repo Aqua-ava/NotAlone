@@ -26,7 +26,7 @@ const reasonKinds: Readonly<Record<string, SyncIssueKind>> = {
   history_support_unsupported: 'capability', history_support_unverified: 'capability',
   history_message_state_unverified: 'capability', history_source_lifecycle_unverified: 'capability',
   history_snapshot_runtime_proof_required: 'capability', history_partition_coverage_runtime_proof_required: 'capability',
-  history_incremental_unavailable: 'capability', history_tail_unsupported: 'capability',
+  history_incremental_unavailable: 'capability', history_tail_unsupported: 'capability', history_tail_baseline_too_large: 'capability',
   local_history_deleted: 'local', local_history_empty: 'local', history_empty: 'local', history_partitions_missing: 'local',
   cli_timeout: 'temporary', cli_output_invalid: 'temporary', cli_freshness_unknown: 'temporary',
   cli_normalization_failed: 'temporary', cli_message_table_missing: 'temporary', history_page_stalled: 'temporary',

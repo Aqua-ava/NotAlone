@@ -1,11 +1,19 @@
 export type WechatSetupPhase = 'offline' | 'loading' | 'failed' | 'saving' | 'restarting' | 'restart-failed'
   | 'needs_detection' | 'needs_owner' | 'tool_unavailable' | 'tool_not_ready' | 'ready' | 'connected' | 'restart_required' | 'conflict';
+export interface WechatCompatibility {
+  detectedProgramVersion: string;
+  detectedBuild: string;
+  supportedProgramVersion: string;
+  supportedBuild: string;
+}
 export interface WechatSetupState {
   phase: WechatSetupPhase;
   accountId: string | null;
   failureCode: string | null;
   revision: number;
   sourceReconfirmationRequired?: boolean;
+  compatibility?: WechatCompatibility;
+  versionCheck?: 'passed';
 }
 export interface WechatSetupConfirmation {
   revision: number;

@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import { readWechatHttpBody, WechatHttpBodyError } from '../../sync/wechat-http-body.ts';
+import { INCREMENTAL_IDENTITY_LIMIT } from '../limits.ts';
 import type { HistoryCoverage, HistoryImageMedia, HistoryQuoteErrorCode, HistoryRead, StoredMessage } from './contracts.ts';
 import type { FirstHistoryCoordinatorState } from './coordinator.ts';
 import type { IncrementalHistoryCoordinatorState } from './incremental-coordinator.ts';
@@ -129,6 +130,7 @@ export function projectHistorySyncStatus(base: Record<string, unknown>, persiste
     cli_backfill_succeeded_contacts: completed, cli_backfill_skipped_contacts: 0, cli_backfill_failed_contacts: 0,
     cli_backfill_incomplete_contacts: incomplete, cli_backfill_pending_contacts: pending,
     cli_incremental_phase: incrementalOverallPhase, cli_incremental_failure_code: incrementalFailureCode,
+    cli_incremental_identity_limit: INCREMENTAL_IDENTITY_LIMIT,
     // 即时能力必须由宿主传入当前资格范围的受信任支持核验结果；覆盖数量、进度和缓存错误均不能推导正文能力。
     body_available: bodyCapabilityVerified === true,
     cli_sync_phase: backgroundPhase,

@@ -1,10 +1,19 @@
 /** 仅接收渠道适配器的核验证据；HTTP/renderer 无权提供这些字段。 */
+/** 只用于检测失败说明的版本兼容信息，不含账号、路径、摘要或正文。 */
+export interface WechatVersionCompatibility {
+  detected_program_version: string;
+  detected_build: string;
+  supported_program_version: string;
+  supported_build: string;
+}
 export interface AccountEvidence {
   externalKey: string;
   identityScheme: string;
   sourceGeneration: string;
   assurance: 'verified' | 'unverified';
   supportProfile: string;
+  programVersion?: string;
+  build?: string;
   /** 仅用于解释未通过的账号检测，不提升身份资格。 */
   unverifiedReason?: 'history_program_version_uncertified' | 'history_metadata_profile_unverified';
 }
