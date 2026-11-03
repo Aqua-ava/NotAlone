@@ -30,7 +30,8 @@ async function fixture() {
     ] };
   const selection = { selection_id: randomUUID(), selection_number: 1, session_id: sessionId,
     candidate_id: candidateId, version_id: versionId };
-  const records = { history, selection, failure: null, saved: { session_id: sessionId, current_input_version_id: inputVersionId,
+  const records = { history, selection, failure: null, messagePage: { messages: [], next_cursor: null },
+    saved: { session_id: sessionId, current_input_version_id: inputVersionId,
     turns: [{ turn_id: turnId, input_version_id: inputVersionId, request_key: randomUUID(), state: 'completed', interruption_reason: null,
       input: { content: { type: 'rewrite_draft', draft_text: '本次合成草稿。' } }, placeholder: null,
       reply: { reply_request_id: requestId, candidates: [{ candidate_id: candidateId, text: '本次合成原候选。',
@@ -1131,7 +1132,7 @@ test('同scope较新A读取接管后，迟到B的正式来源失效仍清同源�
   }
 });
 
-test('公开版本恢复404清除隐藏held结果，迟到依据成功不能恢复旧正文', async () => {
+test('公开版本恢复404清除隐藏held结果，迟到依据成功不能恢复旧正文', { timeout: 5_000 }, async () => {
   const f = await fixture();
   f.contacts.setDraft({ ...f.scope, text: '本次合成生成输入。' });
   await f.bridge.generate({ ...f.scope, newRequest: true });

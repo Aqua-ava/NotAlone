@@ -251,7 +251,7 @@ test('变化投影结构畸形时只报读取错误，保留合法当前编辑�
   }
 });
 
-test('确认来源删除后，迟到依据读取和旧恢复缓存不能复活已删正文', async () => {
+test('确认来源删除后，迟到依据读取和旧恢复缓存不能复活已删正文', { timeout: 5_000 }, async () => {
   const f = await historicalReplyFixture();
   await f.bridge.readSavedSession(f.scope);
   f.contacts.setDraft({ ...f.scope, text: '独立合成草稿仍保留。' });

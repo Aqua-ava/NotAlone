@@ -94,6 +94,7 @@ export async function historicalReplyFixture({ replyRequestId } = {}) {
         data: { sessions: [{ session_id: records.saved.session_id, is_current: true }], current_session_id: records.saved.session_id } };
       if (request.path.endsWith('/resume')) return { generation: records.generation, data: { session_id: request.path.split('/').at(-2) } };
       const data = request.path.endsWith('/assistant-session/default') ? { session_id: records.saved.session_id }
+        : request.path.includes('/history-messages?') ? { messages: [], next_cursor: null }
         : request.path.endsWith('/versions') ? records.history
           : request.path.endsWith('/selections') ? { selection: records.selection }
             : request.path.endsWith('/evidence') ? records.evidence
