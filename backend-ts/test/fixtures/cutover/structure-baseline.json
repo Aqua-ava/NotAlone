@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 38,
+  "schemaVersion": 39,
   "migrationVersions": [
    1,
    2,
@@ -39,9 +39,10 @@
    35,
    36,
    37,
-   38
+   38,
+   39
   ],
-  "userVersion": 38,
+  "userVersion": 39,
   "sqliteVersion": "3.53.4",
   "tableCount": 95,
   "fieldCount": 957,
@@ -6792,6 +6793,20 @@
     }
    ],
    "indexes": [
+    {
+     "name": "candidate_management_pending_page",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "scope_kind",
+      "contact_id",
+      "state",
+      "id"
+     ],
+     "sql": "CREATE INDEX candidate_management_pending_page ON memory_candidate(owner_id,scope_kind,contact_id,state,id)"
+    },
     {
      "name": "candidate_management_page",
      "unique": 0,
