@@ -25,7 +25,7 @@ export function readReplyDocument(tx:StorageTransaction,i:DiscussionAttempt&{con
  if(loaded.length>=RELATIONSHIP_BUDGET.documentReadCount)throw new StorageFailure('reply_document_budget_exceeded');
  if(loaded.some(row=>{const prior=decode<ReplyKnowledgeItem>(String(row.identity_json));return prior.id===directory.id&&prior.projection?.kind==='blocks'&&prior.projection.startBlock===i.startBlock&&prior.projection.blockCount===i.blockCount;}))throw new StorageFailure('reply_document_range_invalid');
  const item=reader.readDocument(tx,i,directory,{startBlock:i.startBlock,blockCount:i.blockCount});
- reader.requireCurrent(tx,i,item);
+ (reader.requireFrozen??reader.requireCurrent)(tx,i,item);
  const itemNo=Number(tx.get('SELECT COALESCE(MAX(item_no),0)+1 n FROM reply_candidate_input WHERE owner_id=? AND context_id=?',[i.ownerId,i.contextId])!.n);
  tx.run('INSERT INTO reply_candidate_input VALUES(?,?,?,?,?,?)',[i.ownerId,i.contextId,itemNo,'document',encode(item),item.text]);
  for(const s of item.sources)tx.run('INSERT INTO reply_candidate_input_source VALUES(?,?,?,?,?,?,?)',[i.ownerId,i.contextId,itemNo,s.contactId,s.recordId,s.messageId,s.acceptedRevision]);

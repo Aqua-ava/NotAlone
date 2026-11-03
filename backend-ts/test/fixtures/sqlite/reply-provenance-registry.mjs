@@ -1,7 +1,8 @@
-import {registry as base} from '../sqlite-reply-candidates/knowledge-registry.mjs';
+import {createReplyKnowledgeStorageRegistry} from '../../../src/reply/sqlite/candidates/knowledge-context.ts';
+import {registry as base,reader} from '../sqlite-reply-candidates/knowledge-registry.mjs';
 import {requireCurrentReplyDependencies,hasCurrentReplyDependencies} from '../../../src/reply/sqlite/provenance.ts';
 
-export const registry={migrations:base.migrations,actions:[...base.actions,
+export const registry=createReplyKnowledgeStorageRegistry({migrations:base.migrations,actions:[...base.actions,
  {name:'provenanceTest.check',mode:'read',retryBusy:false,execute(tx,i){
   requireCurrentReplyDependencies(tx,i);return true;
  }},
@@ -28,4 +29,4 @@ export const registry={migrations:base.migrations,actions:[...base.actions,
   const measured={run:tx.run.bind(tx),get(sql,args){const row=tx.get(sql,args);readRows+=row?1:0;return row;},all(sql,args){const rows=tx.all(sql,args);readRows+=rows.length;return rows;}};
   const current=hasCurrentReplyDependencies(measured,i);return {current,readRows};
  }},
-]};
+]},reader);

@@ -11,9 +11,11 @@ export interface ReplyKnowledgeItem {
 export interface ReplyKnowledgeReader {
  read(tx:StorageTransaction,scope:DiscussionScope):ReplyKnowledgeItem[];
  /** 核验精确版本、来源、保护修订及发布成员，不以替换来源延续旧证明。 */
+ requireFrozen?(tx:StorageTransaction,scope:DiscussionScope,item:ReplyKnowledgeItem):void;
  requireCurrent(tx:StorageTransaction,scope:DiscussionScope,item:ReplyKnowledgeItem):void;
  /** 仅共享本次调用内的完整集合资格，仍逐条复验投影；结果不缓存到下一次调用。 */
  requireCurrentBatch?(tx:StorageTransaction,scope:DiscussionScope,items:readonly ReplyKnowledgeItem[]):void;
+ requireFrozenBatch?(tx:StorageTransaction,scope:DiscussionScope,items:readonly ReplyKnowledgeItem[]):void;
  readDocument?(tx:StorageTransaction,scope:DiscussionScope,item:ReplyKnowledgeItem,range:{startBlock:number;blockCount:number}):ReplyKnowledgeItem;
 }
 export const emptyReplyKnowledge:ReplyKnowledgeReader={read:()=>[],requireCurrent(){throw new Error('reply_knowledge_unavailable');}};

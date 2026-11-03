@@ -1,5 +1,7 @@
 # ADR-099：提取任务内的批次流水线
 
+> 后续修订：[ADR-162](162-local-reply-context-and-independent-model-lanes.md)替代决定第 4 项的前后台互斥：回复固定一路与后台 N 路独立，后台默认 3、配置 1–4 保持；批序采纳、写入、水位及真实调用结算合同不变。
+
 > 状态：已采纳
 > 决策日期：2026-10-22
 > 规格与实现入口：[批次流水线规格](../../.scratch/parallel-batch-extraction/spec.md)。

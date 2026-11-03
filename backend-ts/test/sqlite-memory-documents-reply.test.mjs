@@ -148,7 +148,7 @@ for(const mode of ['member','input'])test(`完整发布集合${mode==='member'?'
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('零成员集合切换也撤销在途回复的旧范围快照',{timeout:20000},async t=>{
+test('零成员新发布不撤销在途回复的原冻结输入',{timeout:20000},async t=>{
  let entered,release;const ready=new Promise(resolve=>entered=resolve),waiting=new Promise(resolve=>release=resolve);
  const f=await fixture(t,{registryModule:new URL('./fixtures/memory-documents-reply/registry.mjs',import.meta.url).href,synchronizeHistory:false,
   content:async()=>{entered();await waiting;return JSON.stringify({candidates:[{parts:['空资料的合成候选'],basis:[1]}]});}});
@@ -167,7 +167,7 @@ test('零成员集合切换也撤销在途回复的旧范围快照',{timeout:200
   const secondRun=await extraction.start('second-empty-publication');await extraction.waitForIdle();assert.equal(secondRun.total,1);
   const second=await documents.read({scopeKind:'contact',contactId});assert.equal(second.publication.members.length,0);assert.notEqual(second.publication.id,first.publication.id);
  }finally{release();}
- await assert.rejects(pending);assert.ok((await service.view(contactId,discussion.id)).every(entry=>entry.candidates.length===0));
+ await pending;const entries=await service.view(contactId,discussion.id);assert.equal(entries[0].candidates.length,1);assert.deepEqual(entries[0].candidates[0].parts,['空资料的合成候选']);assert.doesNotMatch(JSON.stringify(f.requests[0]),/另一条合成聊天/);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 

@@ -1,6 +1,6 @@
 import {hasCurrentReplyDependencies} from './provenance.ts';
 import {createHash} from 'node:crypto';
-import {currentSourceScopeCTE,currentSourcePredicate} from '../../history/sqlite/current-scope.ts';
+import {savedSourceScopeCTE,currentSourcePredicate} from '../../history/sqlite/current-scope.ts';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {Discussion,DiscussionScope,RuntimeCopy} from './contracts.ts';
 const fail=(code:string):never=>{throw new StorageFailure(code);};
@@ -55,8 +55,19 @@ export const discussionActions:StorageAction[]=[
    return checked.get(id)?e:{...e,body:null,content_state:'cleared'};
   })};
  }),
- action('messages','read',(tx,i)=>{requireDiscussion(tx,i);if(!Array.isArray(i.messageIds)||i.messageIds.length>50||new Set(i.messageIds).size!==i.messageIds.length)throw new StorageFailure('discussion_context_invalid');if(!i.messageIds.length)return [];
-  const ids=i.messageIds.map(identifier),sources=tx.all(`WITH ${currentSourceScopeCTE} SELECT m.id,m.text_body,m.sender_role,m.interpretation_revision,r.id record_id
+ action('localMessages','read',(tx,i)=>{
+  requireDiscussion(tx,i);
+  const limit=i.limit===undefined?20:i.limit;if(!Number.isSafeInteger(limit)||limit<1||limit>50)fail('discussion_context_invalid');
+  return tx.all(`WITH ${savedSourceScopeCTE} SELECT m.id FROM message m WHERE m.owner_id=? AND m.contact_id=? AND m.availability='available'
+   AND m.kind='text' AND m.text_body IS NOT NULL AND length(m.text_body)>0 ${i.knownTimeOnly?'AND m.sent_at IS NOT NULL':''}
+   AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
+   AND EXISTS (SELECT 1 FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.contact_id=r.contact_id AND c.id=r.capture_id
+    JOIN read_goal g ON g.owner_id=c.owner_id AND g.contact_id=c.contact_id AND g.id=c.goal_id
+    WHERE r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available' AND ${currentSourcePredicate()})
+   ORDER BY m.sent_at IS NULL ASC,m.sent_at DESC,m.display_no DESC LIMIT ?`,[i.ownerId,i.contactId,i.contactId,i.ownerId,i.contactId,limit]);
+ }),
+ action('messages','read' ,(tx,i)=>{requireDiscussion(tx,i);if(!Array.isArray(i.messageIds)||i.messageIds.length>50||new Set(i.messageIds).size!==i.messageIds.length)throw new StorageFailure('discussion_context_invalid');if(!i.messageIds.length)return [];
+  const ids=i.messageIds.map(identifier),sources=tx.all(`WITH ${savedSourceScopeCTE} SELECT m.id,m.text_body,m.sender_role,m.interpretation_revision,r.id record_id
    FROM message m JOIN capture_record r ON r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id
    JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
    WHERE m.owner_id=? AND m.contact_id=? AND m.id IN (${ids.map(()=>'?').join(',')}) AND m.kind='text' AND m.availability='available'

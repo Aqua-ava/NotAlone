@@ -153,6 +153,7 @@
   "tests/incremental-sync-status.test.mjs"
  ],
  "headless": [
+  "tests/workspace-draft-sqlite-handoff.test.mjs",
   "tests/history-recertify-view.test.mjs",
   "tests/assistant-session-workspace.test.mjs",
   "tests/foreground-recovery-view.test.mjs",
@@ -189,7 +190,6 @@
   "tests/sqlite-discussion-composer.test.mjs",
   "tests/sqlite-discussion-panel.test.mjs",
   "tests/sqlite-reply-candidates.test.mjs",
-  "tests/workspace-draft-sqlite-handoff.test.mjs",
   "tests/sqlite-memory-management-view.test.mjs",
   "tests/visible-refresh-view.test.mjs",
   "tests/sync-auto-refresh-view.test.mjs"

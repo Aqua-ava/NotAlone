@@ -7,7 +7,7 @@ export interface ModelPermit {
   readonly id: string;
   /** 只在全部物理调用真正返回后调用；整轮前台跨工具轮次持有。 */
   settle(): void;
-  /** 丢失执行者时保留容量，必须由宿主停止整代执行者后重建仲裁。 */
+  /** 丢失执行者时保留容量并冻结同类；必须由宿主停止整代执行者后重建仲裁。 */
   orphan(): void;
 }
 export interface ModelPermitRecord { id: string; kind: ModelWorkKind; worker: ProcessIdentity; attempt_id?: string; }
@@ -87,13 +87,18 @@ export class ModelPermitArbiter {
     }
   }
   private dispatch(): void {
-    if (this.stopped || this.paused || [...this.active.values()].some(x => x.orphan || x.kind === 'foreground')) return;
-    const foreground = this.queue.findIndex(x => x.kind === 'foreground');
-    if (foreground >= 0) {
-      if (this.active.size === 0) this.grant(foreground);
-      return;
+    if (this.stopped || this.paused) return;
+    for (const kind of ['foreground', 'background'] as const) {
+      const active = [...this.active.values()].filter(item => item.kind === kind);
+      // 未知调用只冻结所属类别；前台固定一路，后台保留配置容量，互不借槽。
+      if (active.some(item => item.orphan)) continue;
+      const limit = kind === 'foreground' ? 1 : this.backgroundLimit;
+      for (let available = limit - active.length; available > 0 && !this.stopped && !this.paused; available--) {
+        const index = this.queue.findIndex(waiter => waiter.kind === kind);
+        if (index < 0) break;
+        this.grant(index);
+      }
     }
-    while (this.queue.length && this.active.size < this.backgroundLimit) this.grant(0);
   }
   private grant(index: number): void {
     const waiter = this.queue.splice(index, 1)[0];

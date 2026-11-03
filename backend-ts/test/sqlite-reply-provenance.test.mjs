@@ -33,13 +33,13 @@ async function fixture(t){
  });
  for(const id of ids)await history.synchronize(id);
  const discussions=new SqliteDiscussionService(storage,ownerId);
- async function context(contactId,{entryIds=[],messageIds,candidate=false}={}){
+ async function context(contactId,{entryIds=[],messageIds,candidate=false,queryText='本次合成表达要求'}={}){
   const requestKey=randomUUID(),confirmationId=await storage.execute('identity.manualConfirm',{ownerId,contactId,contextToken:requestKey,id:randomUUID(),at:Date.now()});
   const {attempt}=candidate
-   ?await new SqliteReplyCandidateService(storage,ownerId).begin({contactId,requestKey,text:'本次合成表达要求',identity:{kind:'manual',confirmationId},discussionId:(await discussions.forRequest(contactId)).discussion.id})
-   :await discussions.begin(contactId,requestKey,'本次合成表达要求',{kind:'manual',confirmationId});
+   ?await new SqliteReplyCandidateService(storage,ownerId).begin({contactId,requestKey,text:queryText,identity:{kind:'manual',confirmationId},discussionId:(await discussions.forRequest(contactId)).discussion.id})
+   :await discussions.begin(contactId,requestKey,queryText,{kind:'manual',confirmationId});
   const messages=await storage.execute('discussion.messages',{...attempt,messageIds:messageIds??(await history.read(contactId)).messages.map(m=>m.id)}),contextId=randomUUID();
-  await storage.execute(candidate?'reply.freezeInput':'discussion.freezeContext',{...attempt,contextId,skillRun:{packages:[],eligible:[]},items:[...messages.map(m=>({kind:'message',sourceContactId:contactId,messageId:m.id,recordId:m.record_id,acceptedRevision:m.interpretation_revision})),...entryIds.map(entryId=>({kind:'entry',entryId}))],at:Date.now()});
+  await storage.execute(candidate?'reply.freezeInput':'discussion.freezeContext',{...attempt,contextId,queryText,skillRun:{packages:[],eligible:[]},items:[...messages.map(m=>({kind:'message',sourceContactId:contactId,messageId:m.id,recordId:m.record_id,acceptedRevision:m.interpretation_revision})),...entryIds.map(entryId=>({kind:'entry',entryId}))],at:Date.now()});
   return {...attempt,contextId,messages};
  }
  return {storage,contacts,history,discussions,ids,context,check:scope=>storage.execute('provenanceTest.check',{ownerId,...scope})};
@@ -54,11 +54,12 @@ test('当前请求多条实际来源中任意一条不可用都会拒绝，且�
  await assert.rejects(f.check({requestIds:[a.requestId]}),{code:'history_source_not_available'});
 });
 
-test('来源守卫丢失和单消息修订都能使冻结输入失效，无需联系人总版本变化',async t=>{
+test('来源守卫丢失保留本机快照，单消息修订仍使实际冻结依赖失效',async t=>{
  for(const mode of ['guardLost','messageChanged'])await t.test(mode,async t=>{
   const f=await fixture(t),a=await f.context(f.ids[0]);assert.equal(await f.check({requestIds:[a.requestId]}),true);
   await f.storage.execute(`provenanceTest.${mode}`,{ownerId,contactId:f.ids[0],messageId:a.messages[0].id});
-  await assert.rejects(f.check({requestIds:[a.requestId]}),{code:'history_source_not_available'});
+  if(mode==='guardLost')assert.equal(await f.check({requestIds:[a.requestId]}),true);
+  else await assert.rejects(f.check({requestIds:[a.requestId]}),{code:'history_source_not_available'});
  });
 });
 
@@ -75,9 +76,11 @@ test('运行副本检查全部已接触的上下文，不遗漏较早纳入的�
 test('本人记忆引用的另一联系人来源属于本次实际依赖，同样必须核对',async t=>{
  const f=await fixture(t);
  await f.storage.execute('synthetic.publishReplyKnowledge',{ownerId,contactId:f.ids[0],sourceContactId:f.ids[1],mode:'owner'});
- const next=await f.context(f.ids[0],{messageIds:[],candidate:true});
+ const next=await f.context(f.ids[0],{messageIds:[],candidate:true,queryText:'喜欢安静散步'});
  assert.equal(await f.check({contextIds:[next.contextId]}),true);
  await f.storage.execute('provenanceTest.guardLost',{ownerId,contactId:f.ids[1]});
+ assert.equal(await f.check({contextIds:[next.contextId]}),true);
+ await f.storage.execute('synthetic.invalidateReplyKnowledge',{ownerId});
  await assert.rejects(f.check({contextIds:[next.contextId]}),{code:'history_source_not_available'});
 });
 
@@ -88,15 +91,15 @@ test('无关联系人增加失证的旧请求，不增加当前依赖校验读�
  let unrelated;
  for(let index=0;index<8;++index)unrelated=await f.context(f.ids[1]);
  await f.storage.execute('provenanceTest.guardLost',{ownerId,contactId:f.ids[1]});
- assert.equal((await f.storage.execute('provenanceTest.inspect',{ownerId,requestIds:[unrelated.requestId]})).current,false);
+ assert.equal((await f.storage.execute('provenanceTest.inspect',{ownerId,requestIds:[unrelated.requestId]})).current,true);
  const after=await read();assert.deepEqual(after,before);
 });
 
-test('旧讨论条目的实际来源失效会阻止后续复用，不能只检查当前直接聊天',async t=>{
+test('用户独立输入不继承同轮聊天事实依赖',async t=>{
  const f=await fixture(t),first=await f.context(f.ids[0]);
- const entry=(await f.discussions.view(f.ids[0],first.discussionId)).entries[0];
+ const entry=(await f.discussions.view(f.ids[0],first.discussionId)).entries[0];assert.equal(entry.role,'user');
  const next=await f.context(f.ids[0],{entryIds:[entry.id],messageIds:[]});
  assert.equal(await f.check({contextIds:[next.contextId]}),true);
  await f.storage.execute('provenanceTest.sourceUnavailable',{ownerId,contactId:f.ids[0],recordId:first.messages[0].record_id});
- await assert.rejects(f.check({contextIds:[next.contextId]}),{code:'history_source_not_available'});
+ assert.equal(await f.check({contextIds:[next.contextId]}),true);
 });

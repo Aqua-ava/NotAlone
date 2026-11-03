@@ -1,3 +1,4 @@
+import {createReplyKnowledgeStorageRegistry} from '../../reply/sqlite/candidates/knowledge-context.ts';
 import {createMemoryContentStorageRegistry} from '../../memory/content/storage.ts';
 import {builtinMemoryContentPlugins} from '../../memory/content/builtins.ts';
 import {memoryContentMigration} from '../../memory/sqlite/content-schema.ts';
@@ -16,7 +17,7 @@ import {memoryManagementMigration} from '../../memory/sqlite/management/schema.t
 import {memoryManagementActions} from '../../memory/sqlite/management/actions.ts';
 import {replyCandidateMigration} from '../../reply/sqlite/candidates/schema.ts';
 import {createReplyCandidateActions} from '../../reply/sqlite/candidates/actions.ts';
-import {combinedKnowledgeReader} from '../../memory/sqlite/documents/knowledge.ts';
+import {replyLocalKnowledgeReader} from '../../memory/sqlite/documents/knowledge.ts';
 import {discussionActions} from '../../reply/sqlite/actions.ts';
 import {discussionRequestActions} from '../../reply/sqlite/requests.ts';
 import {runtimeActions} from '../../reply/sqlite/runtime-actions.ts';
@@ -53,7 +54,7 @@ import { cutoverActions } from '../../platform/cutover/inspect.ts';
 import { modelUsageSummaryActions } from '../../platform/models/usage-summary.ts';
 
 // 已发布版本不可修改；后续业务票在此追加连续版本及具名动作。
-export const registry: StorageRegistry = createMemoryContentStorageRegistry({
+export const registry: StorageRegistry = createReplyKnowledgeStorageRegistry(createMemoryContentStorageRegistry({
   migrations: [{ version: 1, sql: `
 CREATE TABLE database_instance (
   slot INTEGER PRIMARY KEY CHECK(slot=1),
@@ -71,5 +72,5 @@ CREATE TABLE schema_migration (
   applied_at INTEGER NOT NULL CHECK(applied_at>=0)
 ) STRICT;
 ` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), mediaMigration(6), discussionMigration(7), memoryExtractionMigration(8), memoryExecutionMigration(9), replyCandidateMigration(10), memoryManagementMigration(11), memoryAdjudicationMigration(12), memoryDocumentsMigration(13), historyIncrementalMigration(14), historyClearMigration(15), historyContinuityMigration(16), historyStateMigration(17),historyGuardMigration(18),historyObservationIndexMigration(19),historyAcceptanceOrderMigration(20),historyTerminalMigration(21),historySingleTextCopyMigration(22),skillDefaultEnablementMigration,skillDefaultQualificationMigration,historyQuoteMigration(25),historyQuoteRevisionMigration(26),laterScheduleMigration(27),memoryIncrementalBaselineMigration(28),historyRecertifyMigration(29),historyRecertifyCancelMigration(30),mediaImageQualityEvidenceMigration(31),memoryContentMigration(32),memoryContentCitationMigration(33)],
-  actions: [...historyRecertifyActions,...memoryDocumentsLaterScheduleActions,...memoryDocumentsActions, ...memoryDocumentsStageActions, ...memoryDocumentsPublicationActions, ...memoryAdjudicationActions, ...memoryManagementActions, ...createReplyCandidateActions(combinedKnowledgeReader), ...discussionActions, ...discussionRequestActions, ...runtimeActions, ...discussionModelActions, ...runActions, ...executionActions, ...modelUsageSummaryActions, ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions, ...historyClearActions, ...historyQuoteActions, ...createMediaActions(installedDeletionRegistration), ...cutoverActions],
-},builtinMemoryContentPlugins);
+  actions: [...historyRecertifyActions,...memoryDocumentsLaterScheduleActions,...memoryDocumentsActions, ...memoryDocumentsStageActions, ...memoryDocumentsPublicationActions, ...memoryAdjudicationActions, ...memoryManagementActions, ...createReplyCandidateActions(replyLocalKnowledgeReader), ...discussionActions, ...discussionRequestActions, ...runtimeActions, ...discussionModelActions, ...runActions, ...executionActions, ...modelUsageSummaryActions, ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions, ...historyClearActions, ...historyQuoteActions, ...createMediaActions(installedDeletionRegistration), ...cutoverActions],
+},builtinMemoryContentPlugins),replyLocalKnowledgeReader);

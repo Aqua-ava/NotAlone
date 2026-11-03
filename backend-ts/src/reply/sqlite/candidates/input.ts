@@ -2,7 +2,7 @@ import {selectReplyKnowledge} from './knowledge-budget.ts';
 import {requireSkillRun} from '../../../skills/sqlite/storage.ts';
 import type {SkillRunRevision} from '../../../skills/sqlite/contracts.ts';
 import {StorageFailure,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
-import {assertSourcesEligibility} from '../../../history/sqlite/source.ts';
+import {assertReplyLocalSources} from '../../../history/sqlite/reply-local-source.ts';
 import {requireDiscussion} from '../actions.ts';
 import {hasCurrentReplyDependencies} from '../provenance.ts';
 import {decode,encode} from '../requests.ts';
@@ -40,14 +40,14 @@ export function replySourceContacts(tx:StorageTransaction,i:DiscussionScope&{req
 }
 function sources(tx:StorageTransaction,ownerId:string,items:readonly ReplySource[]):void{
  if(!items.length)return;
- assertSourcesEligibility(tx,items.map(s=>({owner_id:ownerId,contact_id:s.contactId,record_id:s.recordId,message_id:s.messageId})));
+ assertReplyLocalSources(tx,items.map(s=>({owner_id:ownerId,contact_id:s.contactId,record_id:s.recordId,message_id:s.messageId})));
  const rows=JSON.stringify(items.map(s=>[s.contactId,s.messageId,String(s.acceptedRevision)]));
  const valid=tx.get(`SELECT count(*) n FROM json_each(?) i JOIN message m ON m.owner_id=?
   AND m.contact_id=json_extract(i.value,'$[0]') AND m.id=json_extract(i.value,'$[1]')
   AND m.interpretation_revision=CAST(json_extract(i.value,'$[2]') AS INTEGER) AND m.availability='available'`,[rows,ownerId]);
  if(valid?.n!==BigInt(items.length))fail('reply_source_unavailable');
 }
-function knowledge(tx:StorageTransaction,scope:DiscussionScope,items:readonly ReplyKnowledgeItem[],reader:ReplyKnowledgeReader):void{
+function knowledge(tx:StorageTransaction,scope:DiscussionScope,items:readonly ReplyKnowledgeItem[],reader:ReplyKnowledgeReader,frozen=false):void{
  if(!items.length)return;
  for(const item of items){
  if(!['memory','memory_candidate','document'].includes(item.kind)||typeof item.id!=='string'||!item.id||typeof item.versionNo!=='bigint'||item.versionNo<1n
@@ -60,7 +60,8 @@ function knowledge(tx:StorageTransaction,scope:DiscussionScope,items:readonly Re
  if(item.scopeKind==='contact'&&item.sources.some(s=>s.contactId!==scope.contactId))fail('reply_knowledge_scope');
   sources(tx,scope.ownerId,item.sources);
  }
- if(reader.requireCurrentBatch)reader.requireCurrentBatch(tx,scope,items);else for(const item of items)reader.requireCurrent(tx,scope,item);
+ const batch=frozen?reader.requireFrozenBatch:reader.requireCurrentBatch;
+ if(batch)batch(tx,scope,items);else for(const item of items)(frozen&&reader.requireFrozen?reader.requireFrozen:reader.requireCurrent)(tx,scope,item);
 }
 export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contextId:string;requestId:string;workspace?:ReplyWorkspaceSnapshot;queryText?:string},reader:ReplyKnowledgeReader):FrozenReplyInput[]{
  requireDiscussion(tx,i);
@@ -109,11 +110,9 @@ export function requireReplyInput(tx:StorageTransaction,scope:DiscussionScope,co
  requireDiscussion(tx,scope);
  const context=tx.get("SELECT * FROM reply_context WHERE owner_id=? AND id=? AND contact_id=? AND discussion_id=? AND state='active'",[scope.ownerId,contextId,scope.contactId,scope.discussionId])??fail('reply_source_unavailable');
  if(!options.ignoreSkill)requireSkillRun(tx,scope.ownerId,decode<SkillRunRevision>(String(context.skill_run_json)));
- const frozen=tx.get('SELECT * FROM reply_candidate_context WHERE owner_id=? AND context_id=?',[scope.ownerId,contextId])??fail('reply_source_unavailable');
- const owner=tx.get('SELECT memory_revision,document_revision FROM owner WHERE owner_id=?',[scope.ownerId])!,contact=tx.get('SELECT memory_revision,document_revision FROM contact WHERE owner_id=? AND id=?',[scope.ownerId,scope.contactId])!;
- if(frozen.owner_memory_revision!==owner.memory_revision||frozen.owner_document_revision!==owner.document_revision||frozen.contact_memory_revision!==contact.memory_revision||frozen.contact_document_revision!==contact.document_revision)fail('reply_input_stale');
+ if(!tx.get('SELECT 1 FROM reply_candidate_context WHERE owner_id=? AND context_id=?',[scope.ownerId,contextId]))fail('reply_source_unavailable');
  const inputs=tx.all('SELECT * FROM reply_candidate_input WHERE owner_id=? AND context_id=?',[scope.ownerId,contextId]);
- knowledge(tx,scope,inputs.filter(item=>['memory','memory_candidate','document'].includes(String(item.kind))).map(item=>decode<ReplyKnowledgeItem>(String(item.identity_json))),reader);
+ knowledge(tx,scope,inputs.filter(item=>['memory','memory_candidate','document'].includes(String(item.kind))).map(item=>decode<ReplyKnowledgeItem>(String(item.identity_json))),reader,true);
  for(const item of inputs){
   if(item.kind==='selection'){const id=decode<{selectionId:string}>(String(item.identity_json)).selectionId;requireSelection(tx,scope,id,reader);}
  }

@@ -2,7 +2,7 @@ import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 import {installedDeletionRegistration} from '../../../src/storage/sqlite/deletion/registration.ts';
 import {createDeletionActions} from '../../../src/storage/sqlite/deletion/actions.ts';
 import {memoryDocumentsDeletionDomain} from '../../../src/memory/sqlite/documents/deletion.ts';
-import {documentKnowledgeReader} from '../../../src/memory/sqlite/documents/knowledge.ts';
+import {documentKnowledgeReader,replyLocalKnowledgeReader} from '../../../src/memory/sqlite/documents/knowledge.ts';
 import {memoryDeletionImpact} from '../../../src/memory/sqlite/deletion-impact.ts';
 const config={...installedDeletionRegistration,domains:[memoryDocumentsDeletionDomain,...installedDeletionRegistration.domains.filter(d=>d.id!=='memory_documents')],requiredDomains:[...new Set(['memory_documents',...installedDeletionRegistration.requiredDomains])]};
 const replacement=createDeletionActions(config),replaced=new Set(replacement.map(a=>a.name));
@@ -30,7 +30,17 @@ export const registry={...base,actions:[...base.actions.filter(a=>!replaced.has(
    basis:tx.get('SELECT count(*) AS n FROM document_basis WHERE owner_id=? AND document_id=? AND version_no=?',[ownerId,documentId,BigInt(versionNo)]).n,
    events:tx.get('SELECT count(*) AS n FROM execution_event WHERE owner_id=? AND step_attempt_id=?',[ownerId,attemptId]).n}));
  }},
- {name:'fixture.documentKnowledge',mode:'read',retryBusy:false,execute(tx,input){return documentKnowledgeReader.read(tx,input);}},
+ {name:'fixture.localReplyKnowledge',mode:'read',retryBusy:false,execute(tx,input){return replyLocalKnowledgeReader.read(tx,input);}},
+ {name:'fixture.localReplyCurrent',mode:'read',retryBusy:false,execute(tx,input){replyLocalKnowledgeReader.requireCurrent(tx,input.scope,input.item);return true;}},
+ {name:'fixture.localReplyFrozen',mode:'read',retryBusy:false,execute(tx,input){replyLocalKnowledgeReader.requireFrozen(tx,input.scope,input.item);return true;}},
+ {name:'fixture.localReplyGuardLost',mode:'write',retryBusy:false,execute(tx,{ownerId,contactId}){
+  tx.run(`INSERT INTO history_guard_lease(owner_id,contact_id,binding_id,conversation_id,source_generation,guard_id,runtime_id,state)
+   SELECT b.owner_id,b.contact_id,b.id,b.conversation_id,a.source_generation,'synthetic-guard',d.runtime_id,'lost'
+   FROM conversation_binding b JOIN channel_conversation c ON c.owner_id=b.owner_id AND c.id=b.conversation_id
+   JOIN channel_account a ON a.owner_id=c.owner_id AND a.id=c.account_id JOIN database_instance d ON d.slot=1
+   WHERE b.owner_id=? AND b.contact_id=? ON CONFLICT(owner_id,contact_id) DO UPDATE SET state='lost'`,[ownerId,contactId]);
+ }},
+ {name:'fixture.documentKnowledge' ,mode:'read',retryBusy:false,execute(tx,input){return documentKnowledgeReader.read(tx,input);}},
  {name:'fixture.documentCurrent',mode:'read',retryBusy:false,execute(tx,input){documentKnowledgeReader.requireCurrent(tx,input.scope,input.item);return true;}},
  {name:'fixture.documentTaskDiagnostics',mode:'read',retryBusy:false,execute(tx,{ownerId}){
   return tx.all(`SELECT t.id,t.state,t.error_code,t.document_basis_state,t.accepted_publication_id,t.run_id,r.state AS run_state,CAST(r.started_at AS TEXT) AS started_at,CAST(r.rowid AS TEXT) AS run_rowid
