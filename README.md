@@ -23,197 +23,114 @@
 
 ---
 
-有时难的不是写出一句话，而是对这个人、在这段关系里，找到合适的表达。
+**NotAlone 帮你把想说的话整理成可编辑的候选回复。** 确认本次联系人，补充聊天或自己的想法，结合获准的关系资料生成建议；查看依据、修改成自己的表达，最后亲自发送。
 
-**NotAlone 帮你把想说的话整理成可编辑的候选回复。** 先明确选择联系人，再粘贴对方的文字或写下自己的草稿；需要时，可以结合这位联系人的历史与关系资料，查看回复依据，修改成自己的表达，最后亲自发送。
-
-> **当前阶段：SQLite 开发版。** 默认业务存储已切换到本机 SQLite，本轮代码与合成验收已收尾。真实微信状态、来源连续性等尚未认证的能力保持关闭；首次使用引导、正式分发签名、公证与无开发环境机器验收仍待完成。
+> **当前使用源码开发版。** 桌面采用 Electron／React，后台采用 TypeScript／DSH 和本机 SQLite。各能力是否可用取决于当前配置、授权与来源核验；开发版能启动不代表独立安装包、完整首用或真实渠道已通过验收。
 
 ## 能做什么
 
-| 你想做的事 | NotAlone 如何帮助你 |
+| 你想做的事 | 当前使用方式 |
 | --- | --- |
-| **回应一段消息** | 补充这位联系人的聊天和可选表达方向；已有想法用“帮我表达”，想法留空也可点“帮我想想”。 |
-| **把草稿说得更自然** | 在统一工作区输入自己的想法或草稿，点击“帮我表达”；可关闭默认开启的关系语境。 |
-| **结合你们的关系背景** | 默认在已确认范围内使用同一联系人的资料，可关闭关系语境，并回看本轮实际参考。 |
-| **整理聊天里的关系资料** | 对已获准、来源可验证的单联系人历史保留来源并管理记忆；未核验文字使用独立本机隔离区，不进入检索、记忆或生成。 |
-
-每次回复都属于你明确选择的一位联系人。一次性的表达要求不会静默成为长期偏好，复制候选也不代表发送或采纳。
+| 整理自己的想法 | 在联系人工作区输入想法或草稿，点“帮我表达”。 |
+| 获得表达建议 | 补充聊天，或留空想法点“帮我想想”；候选不代表你已采纳其立场。 |
+| 结合关系背景 | 使用同一联系人合法的本机消息和记忆，可关闭背景或排除本次不适用消息，并查看实际依据。 |
+| 管理关系资料 | 查看、修正、删除资料；历史与增量按各自规则处理，图片与文字共同提供记忆证据。 |
 
 ### 一次回复，四个步骤
 
 | ① 确认联系人 | ② 说明本次输入 | ③ 查看并编辑 | ④ 亲自发送 |
 | :--- | :--- | :--- | :--- |
-| 在顶部搜索并明确选择一位联系人 | 补充聊天或自己的想法，也可留空点“帮我想想” | 比较候选、展开依据，改成自己的表达 | 复制最终文字，到聊天应用中发送 |
+| 明确选择，或核对有效前台名称匹配的已有联系人 | 填写想法、补充聊天或请求建议 | 比较候选，展开依据，修改成自己的表达 | 复制已保存版本，到聊天应用中发送 |
+
+新消息、联系人切换或打开窗口不自动生成。一次性要求、候选选择和复制都不会静默成为长期偏好；复制不等于发送。
 
 ## 快速开始
 
 ### 使用 App
 
-目前以源码开发模式为准，受管安装包和首次使用引导不属于本轮交付。已有已确认联系人的手动表达不依赖微信、CLI 或录屏权限；新建微信联系人仍须核验账号、会话及用户确认范围，不能用手动文件导入绕过身份绑定。
+1. 从下方源码入口启动，检查本机存储与后端连接。存储就绪不代表模型或微信读取已可用。
+2. 在「设置 → AI 服务」配置受支持的接收地址和对应密钥。保存配置不代表已经调用或验证模型；实际生效与兼容边界见[桌面说明](desktop/README.md)。
+3. 使用已确认联系人，或通过当前开放的微信连接流程确认账号及所选会话。工具准备、账号确认、读取授权和前台名称匹配是不同资格。
+4. 在统一工作区明确生成、查看依据、编辑并复制，最终亲自发送。已有联系人的合法本机资料不必等待微信、历史同步或记忆处理完成。
 
-1. **检查本机服务与存储。** 启动开发版后，在管理后台确认 SQLite 存储已就绪，并检查本机后端连接。存储就绪不代表模型或微信渠道已经可用。
-2. **选择本次联系人。** 使用已确认的联系人，并在使用模型前完成本机模型配置。「设置 → AI 服务」可填写 Base URL 和 API Key，保存并重启后使用所选 DeepSeek 兼容服务。首次使用流程尚未交付，不把空目录启动成功视为完整可用。
-3. **生成并修改候选。** 在统一表达工作区填写自己的想法和补充聊天；生成后查看依据、编辑和复制，最后亲自发送。
-4. **区分正常历史与隔离文字。** 微信历史和增量读取由实际支持档控制，未认证时保持关闭。“设置 → 未核验历史”可查看或删除独立隔离文字；这些文字不属于正常联系人资料，也不用于检索、记忆或生成。旧 JSONL 手动历史导入不作为当前 SQLite 入口。
+当前正常历史来自授权微信同步；手动历史文件导入是已采纳但尚未开放的目标合同，不能用它绕过联系人建联。独立隔离文字也不进入正常检索、记忆或回复。具体能力与操作入口见[桌面端说明](desktop/README.md)。
 
-更换版本前，请通过“NotAlone → 退出 NotAlone”正常退出旧版；仅关闭窗口会保留 App 运行。更多操作见 [桌面端说明](desktop/README.md#手动首版使用)。
+更换运行版本前通过“NotAlone → 退出 NotAlone”正常退出；只关闭窗口仍会保留 App。日常开发使用热更新实例，打包或运行打包版只在用户明确提出的发布任务中进行。
 
 ### 从源码运行
 
-源码开发使用 macOS、Node.js ≥ 24 和 pnpm 11.25.0；原生探针开发另需 Xcode / Swift。后端统一使用 TypeScript 与 DSH，默认业务存储为本机 SQLite；SQLite 使用 Node 的内置模块，不需要另装数据库服务。
+需要 macOS、Node.js ≥24 和锁定的 pnpm 版本（当前为 11.25.0，见 [package.json](package.json)）。原生路径面向 macOS 15+／Apple Silicon，探针编译还需匹配的 Xcode／Swift，见[原生说明](native/macos/README.md)。SQLite 使用 Node 内置模块，不另装数据库服务。
 
-先确认 Node.js ≥ 24 和 pnpm 11.25.0 可用。若尚未安装 pnpm，可使用 `npm install --global pnpm@11.25.0`；已安装时无需执行。然后在仓库根目录运行：
-
-```bash
-pnpm install --frozen-lockfile
-pnpm run dev:status
-# 状态为 stopped 时再启动
-pnpm run dev
-```
-
-启动后还需核对本机后端路径与模型配置。源码启动不等于已取得包含完整运行时的安装包；日常开发和验收使用 `pnpm run dev`。
-
-<details>
-<summary><strong>展开源码环境、首次连接与渠道研发配置</strong></summary>
-
-### 1. 准备依赖
-
-| 依赖 | 用途 |
-| --- | --- |
-| macOS 15+、Xcode 16.4 / Swift 6 | 原生截图、OCR 与会话定位探针；完整原生路径以 macOS 15+ 为基线。 |
-| Node.js ≥ 24、pnpm 11.25.0 | 安装锁定依赖，运行 TypeScript / DSH、SQLite 与 Electron 开发版。 |
-| 微信桌面版、外置 WeChat CLI / WCDB | 微信渠道研发另行准备；组件存在不等于真实读取能力已认证。 |
-| 模型供应商 API Key | 使用真实模型时配置；未配置则模型入口失败关闭。 |
-
-**关于 WeChat CLI：** 本仓库只保留调用外置工具的适配代码、配置接口和相关测试。`wechat-cli` 可执行文件、`libWCDB.dylib` 和独立 CLI 源码不随仓库或 App 提供；本机外置配置见 [桌面端说明](desktop/README.md#外置微信工具)。
-
-### 2. 准备后端与原生探针
-
-```bash
-pnpm install --frozen-lockfile
-```
-
-该命令只准备 workspace 依赖。原生探针按[原生开发说明](native/macos/README.md)单独构建；模型配置另行保留。
-
-依赖使用 `pnpm install --frozen-lockfile` 安装，开发版启动时受控初始化或重开 SQLite 实例，详见[默认切换与验证记录](docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。
-
-
-### 3. 准备并启动桌面端
-
-前后端统一由根目录 pnpm workspace 管理，版本锁定在根 `pnpm-lock.yaml`；`backend-ts/` 和 `desktop/` 各自声明依赖。请在仓库根目录安装，不使用 `npm install` 或 `npm ci` 安装项目依赖。运行脚本不会自动安装或修改锁文件；`pnpm run dev` 运行桌面开发入口。
-
-根目录可运行 `pnpm typecheck`、`pnpm test:backend`、`pnpm test:desktop`；`pnpm test` 串行执行两端测试。新增依赖用 `pnpm --filter ./backend-ts add <包名>` 或 `pnpm --filter ./desktop add <包名>`。
+在仓库根目录安装锁定依赖并检查已有开发实例：
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm run dev:status
-# 状态为 stopped 时再启动
+```
+
+已有本项目实例就复用；仅状态为 stopped 时运行：
+
+```bash
 pnpm run dev
 ```
 
-日常使用 `pnpm run dev`：React/CSS 保存后热更新，main、preload、共享代码与 TypeScript 后台变化后安全重启。`pnpm start` 等同于开发模式；仅构建用 `pnpm run build`。打包与运行打包版仅限用户明确发起的发布任务，`pnpm --dir desktop run package` 当前受发布门禁限制，详见[日常开发热更新](desktop/README.md#日常开发热更新)。
+React／CSS 保存后热更新，main、preload、共享代码和 TypeScript 后台的变更由监督器安全重启。启动后再次检查 `dev:status` 并在界面确认就绪。开发脚本的选项、后台启动和实例归属检查统一见[桌面开发说明](desktop/README.md#日常开发热更新)。
 
-### 4. 首次连接与使用
+依赖在根 workspace 安装，使用根 `pnpm-lock.yaml`，不在子项目另跑 `npm install` 或 `npm ci`。新增依赖使用 `pnpm --filter ./backend-ts add <包名>` 或 `pnpm --filter ./desktop add <包名>`。
 
-本机启动配置提供项目目录、模型配置与握手路径；SQLite 配置由开发启动探针交给正式宿主。默认启动只装配 SQLite 插件，缺少有效 SQLite 配置时停止连接。旧配置中的 `pythonExecutable` 仅作兼容读取并忽略。
-
-业务数据库位于当前 App `userData` 下的 `managed/sqlite/notalone.sqlite`。实例创建、重开和结构升级由受控启动流程管理；发现冲突或未确认清理时进入维护状态。模型配置、Skill 与外部原始资料继续保留。
-
-微信渠道需要显式的外置 CLI 配置、联系人授权和能力认证。前台定位探针的屏幕录制权限及签名归属见[权限说明](docs/guides/macos-app-permissions-and-errors.md)；OCR 不作为后台 CLI 同步的门禁。当前真实微信未认证能力保持关闭，代码和合成验证的完成不代替真实支持档。
-
-</details>
+微信渠道另需受支持的本机外置读取工具及授权；工具或动态库存在不证明真实读取能力通过。配置与版本限制见[外置微信工具](desktop/README.md#外置微信工具)，权限和安全诊断见[开发权限指南](docs/guides/macos-app-permissions-and-errors.md)。
 
 ## 当前进度
 
-| 模块 | 已有进展与验收范围 |
+| 范围 | 如何判断当前状态 |
 | --- | --- |
-| 桌面端 | Electron + React 管理窗口与小窗已接入主要业务流程，完整原生交付仍待验收。 |
-| TypeScript / DSH 后端 | 默认 SQLite 宿主已接入联系人、历史、任务、记忆、检索、候选与统一删除；代码、合成和已记录的开发 App 验证按本轮范围收尾，真实模型质量单独记录。 |
-| 微信文字同步 | 已实现变化页增量与本机持久检查点，日常同步不再每轮重扫历史行；当前授权范围已在开发实例恢复读取，首次索引与待补历史仍按实际进度展示。状态查询、消息事件流及验证边界见 [ADR-133](architecture/adr/133-page-delta-private-history-sync.md)，未认证能力继续关闭。 |
-| 前台 OCR | 仅承担当前微信会话定位；已改为窗口自动布局与名称局部 OCR，无需手填坐标；新版实机移动与缩放验收待完成，不作为后台 CLI 同步门禁。 |
-| 检索与记忆 | 生产检索使用 SQL / 全文路径，向量检索未启用；正常记忆维护默认启用逐项来源核验。记忆页的「历史聊天 → 处理历史聊天」可单独启动当前联系人已保存文字的处理，已成功目标跳过；历史维度放行台账不再是正常维护的前置条件。 |
-| 平台与分发 | 当前面向 macOS；Windows 微信适配未实现，桌面包尚未完成 Developer ID 分发与公证。 |
+| 桌面、后台与存储 | 正常入口使用 Electron／React、DSH／TypeScript 和受控 SQLite。模块能力与接口见[后端导航](backend-ts/src/README.md)。 |
+| 微信历史、增量、图片与前台定位 | 按当前来源认证与实际运行证据逐项判断；名称匹配不认证前台账号，OCR 不作为后台同步门禁。规则见[同步规格](architecture/current/wechat-sync.md)。 |
+| 记忆处理与检索 | 历史自动分批、增量独立调度，内容拒绝与技术故障分开；默认来源核验不依赖历史维度放行台账。规则见[记忆处理](architecture/current/memory-processing.md)与[回复规格](architecture/current/reply-generation.md)。 |
+| Skill | 授权根内核验后默认启用，可停用；正常回复按需组合多个有效包。学习／审核发布等目标与当前开放入口分开，见[Skill 规格](architecture/current/skill-library.md)。 |
+| 独立分发与平台 | 当前开发面向 macOS；独立机器首用、签名、公证、发布包和其他平台须按各自发布任务验收。 |
 
-本轮 SQLite 证据见[默认切换](docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)与[组合收尾记录](docs/verification/21-three-specs-integrated-acceptance.md)。[桌面端说明](desktop/README.md)、[后端说明](backend-ts/README.md)和旧验收记录包含历史阶段内容；架构设计和旧版本测试不代表当前真实能力已经认证。
+历史迁移、合成测试和真实模型样例只证明各自记录的版本与范围。验证材料从[文档索引](docs/README.md)按需查找，README 不维护重复的阶段通过数量。
 
 ## 隐私与控制
 
-- **先确认，再读取。** 一次历史导入只归属一位联系人；CLI 正文同步默认仅限主动选择并确认的绑定；按 [ADR-089](architecture/adr/089-all-private-wechat-sync-scope.md)明确开启全部私聊范围后，自动纳入当前账号现有及以后新增私聊，按稳定身份建联。关闭总开关或退出运行时后停读，重新开启只在已确认范围内恢复可检测缺口。
-- **发送由你决定。** 候选可编辑，最终消息由你亲自发送；产品没有外部聊天发送 Tool 或后台代发能力。
-- **清楚区分本机处理与模型调用。** 业务资料保存在本机 SQLite；调用真实模型会向配置的服务提供者发送本次必要文本。未核验文字使用独立隔离库，禁止进入检索、记忆或生成。原始视觉帧默认只在端侧内存中处理，不持久化或上传。
-- **资料有来源，也有删除路径。** 来源、联系人及聊天清空按统一删除流程处理相关派生资料；其他合法来源仍支持的消息保留。微信原聊天、外部原始文件与模型供应商副本分别处理，清空边界无法认证时显示待确认。
-- **完整追踪同样属于敏感资料。** 含正文的提取追踪同样受来源与删除规则约束。`.env`、私人聊天、追踪、备份和截图不应提交到 Git。
+- 联系人范围按稳定身份隔离；同步默认仅所选会话，明确全部私聊授权才允许纳入该账号现有及新增私聊。产品范围与当前实现开放能力分别核验，撤销或删除排除项不自动恢复。
+- 同步仅在 App 运行、开关开启且资格有效时读取；前台视觉仅处理唯一微信窗口的布局和名称区域，原始帧默认不保存或上传。
+- 业务资料保存在本机；模型调用会按配置与授权发送必要文字／图片等资料，不能把本机存储等同于没有外发。
+- 自动采纳保留来源、标记为自动且可撤销；用户可以查看、修正和删除。删除以实际依赖闭包及复核结果为准，外部原件与供应商副本另有边界。
+- 候选带依据、可编辑，最终消息由用户手动发送，产品不提供外部聊天发送 Tool。
 
-自动采纳必须带来源、标记为 `auto` 且可撤销；模型置信度与来源支持不等于真实准确率。[维度放行台账](docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md)保留历史评测与显式维度协议。默认自动采纳按 [ADR-085](architecture/adr/085-source-verified-automatic-adoption.md)：通过来源及适用检查后自动裁决，不以额外语用、置信度或风险标签制造人工待办；人工保护、删除及关系矛盾待定例外保留。
-
-主动收藏表达样本按[ADR-082](architecture/adr/082-retire-explicit-style-samples.md)退役；候选编辑、复制及用户明确管理的长期表达偏好保留。
+完整规则集中在[数据契约](architecture/current/domain-data.md)与[隐私及删除规格](architecture/current/privacy-deletion.md)。
 
 ## 开发与文档
 
-```text
-NotAlone/
-├── desktop/          Electron + React/TypeScript 桌面端
-├── backend-ts/       TypeScript 业务、DSH profile、SQLite 存储与 Node 测试
-├── native/macos/     Swift 原生截图、OCR 与会话定位探针
-├── website/          独立静态官网
-├── scripts/          安装与公开前检查
-├── docs/             工程、操作与验证说明
-└── architecture/     现行规格、设计草案与 ADR
+| 当前问题 | 入口 |
+| --- | --- |
+| 开发约定、任务工作流和最小验证 | [AGENTS.md](AGENTS.md)、[工程工作流](docs/agents/engineering.md) |
+| 当前产品设计与业务边界 | [架构阅读入口](architecture/README.md)、[领域语言](CONTEXT.md) |
+| 桌面运行、设置与原生验收 | [desktop/README.md](desktop/README.md)、[开发指南](docs/guides/README.md) |
+| 后台模块、接口与数据库 | [backend-ts/README.md](backend-ts/README.md)、[存储合同](backend-ts/src/storage/sqlite/README.md) |
+| 操作、评测、研究与历史记录 | [文档索引](docs/README.md) |
+| 官网预览 | [website/README.md](website/README.md) |
+
+产品规则以 `architecture/current/` 为现行入口；工程 README 负责实际命令和模块导航。历史 ADR、实验和旧验收按追溯需要读取，不能冒充当前实现或新任务要求。
+
+## 命令与验证
+
+根目录提供以下命令；先执行受影响的单用例或模块检查，再按影响范围扩大，具体要求见[工程工作流](docs/agents/engineering.md#测试与验证)。
+
+```bash
+pnpm typecheck
+pnpm test:backend
+pnpm test:desktop
 ```
 
-| 想了解什么 | 从这里开始 |
-| --- | --- |
-| 操作说明、评测与研究材料的分类入口 | [文档索引](docs/README.md) |
-| 桌面运行、构建与验收 | [desktop/README.md](desktop/README.md) |
-| 后端安装、HTTP 与 CLI | [backend-ts/README.md](backend-ts/README.md) |
-| 当前 SQLite 初始化、切换与验证 | [默认切换记录](docs/verification/20-sqlite-cutover-and-legacy-cleanup.md) · [SQLite 架构](architecture/adr/109-controlled-sqlite-storage-foundation.md) |
-| 原生探针与权限 | [native/macos/README.md](native/macos/README.md) · [权限与启动错误](docs/guides/macos-app-permissions-and-errors.md) |
-| 领域词汇与架构决策 | [CONTEXT.md](CONTEXT.md) · [架构索引](architecture/README.md) |
-| 记忆的来源、提取与删除 | [完整追踪](architecture/current/memory-extraction-trace.md) · [维度放行台账](docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md) |
-| 开发约定与任务工作流 | [AGENTS.md](AGENTS.md) · [工程工作流](docs/agents/engineering.md) |
-| 官网本地预览 | [website/README.md](website/README.md) |
+`pnpm test` 串行执行两端测试，`pnpm run build` 仅构建开发代码；构建和自动测试不替代实际 App、微信或真实模型验收。历史 Python 对照只从[历史测试说明](backend-ts/test/HISTORICAL.md)显式进入，不属于正常后台运行。
 
-TypeScript 后台、桌面端与原生探针分别管理依赖、构建和测试；领域逻辑留在普通后台模块。根目录 `.env` 和私人导入目录 `chat_exports/` 已由 Git 忽略。
-
-<details>
-<summary><strong>开发前：本地隐私检查</strong></summary>
-
-首次克隆后启用本地推送前隐私检查（需要 PATH 中可用的 Node.js）：
+首次克隆可启用本地推送前隐私检查：
 
 ```bash
 node scripts/install_git_hooks.mjs
 ```
 
-该命令将本仓库的 `core.hooksPath` 设为 `.githooks`；已有其他自定义钩子目录时会停止，避免覆盖。Git 默认 `.git/hooks/` 中的旧钩子保留在磁盘上，但启用后不再执行；有自定义钩子时应先合并。每个新克隆都需安装一次。本地检查针对本次推送的每个提交或标签及完整可达历史，发现问题或无法检查时阻止推送；删除远端引用不扫描。它只在端侧读取，输出问题位置，不输出命中的敏感值。浅克隆须补齐历史。
-
-本地钩子可被跳过，也不保证识别所有隐私。
-
-</details>
-
-## 命令与验证
-
-日常入口是 `pnpm run dev:status`，复用已有开发实例；没有实例才运行 `pnpm run dev`。后台由官方 DSH profile 装配 SQLite 业务插件，按当前 `userData` 和预期数据库身份重开同一实例，模型配置独立保留。
-
-```bash
-cd backend-ts
-npm run typecheck
-npm test
-# 显式查看固定 Git 树中的旧实现比较登记；不会默认启动历史Python
-npm run test:historical -- --list
-```
-
-```bash
-cd desktop
-npm run typecheck
-npm run test:inventory
-npm test
-```
-
-固定本地向量模型准备使用 `node scripts/prepare_memory_embedding.mjs`；已有缓存可用 `--offline` 验证，不读取聊天或业务配置。正常业务运行不会下载模型。
-
-SQLite 存储状态可在管理后台的“SQLite 存储诊断”查看。结构升级由当前注册的 SQLite 迁移和启动流程管理；旧 `schema-prepare-cli.ts` 已退役。
-
-历史 Python 后台及测试已从当前工作树清理，对照仍保存在固定 Git 提交与显式独立测试环境；登记及命令见 `backend-ts/test/historical-inventory.json`、`npm run test:historical -- --list`。`backend-ts/test/fixtures/` 下的合成 JSON／JSONL 夹具保留原始字节，现已归入 TypeScript 后台；冻结历史清单中的原路径仅用于来源追溯。历史结果不表示当前源码通过，正常测试不依赖 Conda 或 Python 后端。
-
-迁移本轮的固定采集为96/96成功、96次物理调用、0重试；用户明确跳过回复盲评和启动／内存对照，未评／未测不写为通过。历史证据标识为 `.scratch/dsh-ts-migration/final-acceptance-closeout/capture-summary.json`（未随当前检出提供），不作为可打开的当前文件链接；现存说明见[后台的数据与验收边界](backend-ts/README.md#数据与验收边界)。当前源码开发验证与旧安装包、发布验收分别记录。
+它配置 `.githooks`；已有自定义钩子目录时停止，避免覆盖。检查只在本机读取待公开提交及可达历史，不联网，也不保证发现所有隐私。公开前核查、命中归属和远端操作授权见[工程工作流](docs/agents/engineering.md#公开前检查)。

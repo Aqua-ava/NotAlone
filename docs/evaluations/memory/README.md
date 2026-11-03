@@ -14,4 +14,4 @@
 - [记忆提取评测骨架：24 条合成基线](memory-extraction-evaluation-baseline.md)
 - [记忆召回第一期评测基线](memory-recall-evaluation-baseline.md)
 
-这些基线保留当时的方法与结果。历史放行台账及旧 Python 命令不构成当前自动维护的准入条件或当前可运行入口；现行约束见[架构索引](../../../architecture/README.md)，运行入口见[TypeScript 后台说明](../../../backend-ts/README.md)。
+这些基线保留当时的方法与结果。历史放行台账及旧 Python 命令不构成当前自动维护的准入条件或当前可运行入口；现行处理、调度及失败边界见[记忆处理](../../../architecture/current/memory-processing.md)，数据对象见[数据契约](../../../architecture/current/domain-data.md)，运行入口见[TypeScript 后台说明](../../../backend-ts/README.md)。

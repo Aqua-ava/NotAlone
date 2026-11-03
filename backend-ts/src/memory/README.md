@@ -1,5 +1,7 @@
 # 记忆模块
 
+记忆生命周期与阶段状态见[记忆处理](../../../architecture/current/memory-processing.md)，实际输入与追踪见[执行追踪](../../../architecture/current/memory-extraction-trace.md)。这里按实现职责导航，不在子目录重复维护产品规则。
+
 当前业务由 SQLite 模块承载，模型调用、来源核验和事务提交分开处理。
 
 | 要处理的问题 | 从哪里开始 |

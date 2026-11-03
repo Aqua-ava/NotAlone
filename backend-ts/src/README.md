@@ -11,7 +11,7 @@
 | 职责 | 目录 |
 | --- | --- |
 | 联系人、稳定身份与绑定 | [contacts/sqlite/](contacts/sqlite/) |
-| 历史导入、来源连续性与增量同步 | [history/sqlite/](history/sqlite/) |
+| 历史消息、来源连续性与增量同步 | [history/sqlite/](history/sqlite/README.md) |
 | 记忆提取及执行 | [memory/sqlite/](memory/sqlite/) |
 | 记忆裁决与管理 | [memory/sqlite/management/](memory/sqlite/management/) |
 | 文档、来源与发布 | [memory/sqlite/documents/](memory/sqlite/documents/) |
@@ -22,4 +22,4 @@
 | 存储、事务与统一删除 | [storage/sqlite/](storage/sqlite/) |
 | 模型调用、切换与进程支持 | [platform/](platform/) |
 
-目录存在不代表所有功能已开放；能力以 SQLite 宿主的 ownership 和实际端到端验证为准。13 表达偏好、15 纠错诊断、18 语音保存转换和 19 真实媒体验收仍按原范围暂缓。
+目录存在不代表入口已开放。当前装配由 `sqlite-host-plugin.ts` 的 ownership 与运行能力报告确定；模块合成测试、正常 profile 接线、实际 App 和真实模型质量分别验证。产品流程从[现行架构](../../architecture/README.md)进入。

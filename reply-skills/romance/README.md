@@ -10,36 +10,19 @@
 
 ## 使用与核验
 
-内容采用标准 name/description frontmatter，不携带联系人资料、可执行脚本或外部读取能力。本项目开发 App 直接读取本目录，修改与运行共用这一份；总 `SOURCES.md` 留在包外同一父目录。应用在已配置的授权根内自动发现包，管理页沿用刷新、核验、启用和停用流程；不增加手动添加或路径输入入口。制作和核验不代表已经启用，具体状态以管理页为准。
+内容采用标准 name/description frontmatter，不携带联系人资料、可执行脚本或外部读取能力。日常开发新实例默认从本目录读取，已有显式配置仍优先；应用只在已授权根自动发现并完整核验，通过后默认启用，明确停用或来源失效不恢复。包修订、多 Skill 加载、资源预算和原目录只读规则统一见[现行 Skill 合同](../../architecture/current/skill-library.md)。运行检查脚本本身不改变 App 的启停决定。
 
-在仓库根目录使用 Node.js 24 运行：
+在仓库根目录使用 Node.js 24。只读内容核验与相关合成回归：
 
 ```sh
-node scripts/render_romance_reply_skills.mjs
 node scripts/validate_romance_reply_skills.mjs
 cd backend-ts
 node --test test/romance-source-material.test.mjs test/romance-chinese-localization.test.mjs test/romance-reply-skills.test.mjs test/sqlite-skill-profile.test.mjs test/sqlite-skill-resource-profile.test.mjs
 ```
 
-生成器只接受登记的原文行段及绑定来源摘要的中文翻译。校验器核对固定仓库与提交、源文件 Git blob／SHA-256、引用行号和片段哈希，并与另存的[源文件锁表](../romance-sources.lock.json)匹配；逐字节核对翻译清单、方法正文、案例和来源总文档中的许可声明。没有来源对应关系的译文、方法和示例都会校验失败。源快照和来源表是本次核对后留存的本地依据，校验不联网复查远端，也不验证原作者观点或教学情境的真实性。场景匹配、引用上下文和译文语义须人工判断，不能由哈希校验自动判定。
+需要根据已登记材料重建包时，显式运行 `node scripts/render_romance_reply_skills.mjs`；该命令会改写本目录的生成内容。生成器只接受原文行段及绑定来源摘要的中文译文。校验器核对固定仓库与提交、源文件 Git blob／SHA-256、引用行号和片段哈希，并与[源文件锁表](../romance-sources.lock.json)匹配；来源文档、许可、方法与示例须一起保持一致。
 
 技术加载回归使用隔离 SQLite、官方 DSH scoped registry 与产品 Skill provider，不调用外部模型，不改真实聊天或记忆。结构校验与加载成功不代表 92 个场景的实际回复效果均已验收。
-
-## 本轮验证
-
-2026-10-31：92 个包通过产品实际解析及内容安全校验；128 段方法和 89 段单列示例均与登记原文一致，39 个源文件符合独立锁表，零告警。
-
-2026-10-31 中文适配：为 33 段锁定英文摘录登记来源绑定的中文译文，渲染至 21 个 Skill 正文或案例；`romance-001-first-contact` 的方法、示例和常见回复均以自然中文呈现。原文快照、引用行号、英文 Skill 名称及包目录身份保持稳定。
-
-来源约束的 6 项测试通过：允许缺少单列示例、出处留在包外，拒绝额外编写的方法或示例、篡改行号，以及同时伪造源正文和全部自报哈希。另 3 项 SQLite／官方 DSH 回归通过：在隔离账号加载完整目录，每轮只加载一个正文及其同版本示例资源，拒绝第二个包及扩权读取。
-
-本机已有 92 个包已原位更新并逐一核验，保留目录身份和原有启停选择；更新后仍为 92 项待核验启停，没有自动启用。本次安装脚本仅写本套包文件及其管理版本、核验记录。
-
-通过 `pnpm run dev` 启动并复查监督器存活后，Computer Use 实际进入 Skill 页并刷新：92 张卡片均正常显示，无手动关联目录表单。页面保留在列表顶部供查看。未进行外部模型效果测试。
-
-同日整理许可文件：删除仓库与本机各 92 个包内 `references/LICENSES.txt`，原作者许可集中保存在两处总 `SOURCES.md` 中；生成器不再创建包内重复文件。方法及示例的全部字节保持不变。来源约束 6 项及更新后的 SQLite／DSH 加载回归 1 项通过，后者覆盖总来源文档不会被发现成 Skill。本机逐包重新核验后仍为 92 项待核验启停，当前修订 3。
-
-同日统一目录：日常 App 已直接读取仓库本目录，原 App 数据目录中的 92 个重复包及旧 `skill-packages` 根已删除。迁移逐项比较了完整文件树与原生内容摘要，保留包 ID、启停状态及原修订历史，只更新目录定位与运行锚点。根切换以私有意图文件支持中断恢复；新实例也默认使用仓库，不再创建 App 内副本。已完成 28 项后台相关回归、3 项桌面启动回归及两端类型检查，真实 App 重开显示 92 项已核验，原启停选择保留。
 
 ## 清单
 
@@ -137,3 +120,5 @@ node --test test/romance-source-material.test.mjs test/romance-chinese-localizat
 | 090 | [双方父母介入、探访和责任边界](romance-090-parents-boundaries/SKILL.md) | 长期恋爱与婚前家庭 | 对应场景方法 | 1 |
 | 091 | [重组家庭中前伴侣、孩子的往来边界](romance-091-blended-family/SKILL.md) | 长期恋爱与婚前家庭 | 对应场景方法 | 未单列 |
 | 092 | [提出并安排一次关系近况沟通](romance-092-relationship-checkin/SKILL.md) | 长期恋爱与婚前家庭 | 对应场景方法 | 2 |
+
+阶段实现和旧验收记录已移至[开发历史](../../docs/history/backend-development-history.md)；历史数字不表示当前版本通过。

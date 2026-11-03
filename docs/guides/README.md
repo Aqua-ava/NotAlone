@@ -1,10 +1,11 @@
-# 操作与排障记录
+# 操作与排障指南
 
-当前启动步骤见[项目 README](../../README.md#从源码运行)和[桌面端说明](../../desktop/README.md)，开发约束见[工程工作流](../agents/engineering.md)。日常开发使用 `npm run dev`，先核验并复用已有实例。
+当前开发使用 TypeScript／DSH、SQLite 和 Electron。先检查 `pnpm run dev:status`，复用已有开发实例；没有实例才启动 `pnpm run dev`。完整执行规则见[工程工作流](../agents/engineering.md)。
 
-| 问题 | 记录 |
+| 当前任务 | 入口 |
 | --- | --- |
-| macOS 权限、签名归属、原生探针或启动错误 | [macOS App 权限与启动错误记录](macos-app-permissions-and-errors.md)；按日期查对应版本的现象与验收范围 |
-| 全新环境启动遇到的工具链、下载或握手问题 | [2026-10-22 全新环境热启动记录](new-environment-hot-start.md)；其中 Python/Conda 步骤属于当时实现，当前后台以 TypeScript 说明为准 |
+| 新环境安装依赖、启动或恢复开发实例 | [新环境源码启动](new-environment-hot-start.md) → [根运行说明](../../README.md#从源码运行) |
+| macOS 权限、启动错误或停读失败 | [权限与启动指南](macos-app-permissions-and-errors.md) |
+| 首次连接微信、确认联系人与同步范围 | [现行微信同步](../../architecture/current/wechat-sync.md)；外置工具配置见[桌面说明](../../desktop/README.md#外置微信工具) |
 
-这些记录保留实际发生的问题和验证结果，历史成功记录不代表当前版本已通过相同验收。
+历史现场仅在核查相应日期、版本或失败原因时读取：[权限与验收记录](../history/macos-permissions-history.md)、[2026-10-22 新环境记录](../history/new-environment-hot-start-20261022.md)、[2026-10-23 微信首次接入记录](../history/wechat-first-run-troubleshooting-20261023.md)。这些记录保留旧命令和当时结论，不是默认开发步骤，也不证明当前版本已验收。

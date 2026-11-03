@@ -4,7 +4,7 @@
 
 ## 方法与验证记录
 
-以下材料包含历史 Python 实现与合成验证结果；它们不代表当前 TypeScript 后台或真实表达质量已通过验收。
+以下材料用于追溯真实表达研究，包含历史 Python 实现与合成验证结果；它们不代表当前 TypeScript 后台或真实表达质量已通过验收。当前回复输入、候选和用户确认规则见[回复生成](../../../architecture/current/reply-generation.md)，不从旧实验恢复产品门禁。
 
 - [真实表达统一接口的验证记录](authentic-expression-integration.md)
 

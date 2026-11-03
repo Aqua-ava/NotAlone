@@ -2,7 +2,7 @@
 
 [返回记忆评测索引](../README.md)
 
-按原始记录查固定候选核验、人物归属、核心事实保留、知识边界与产品提示对照。
+按原始记录查固定候选核验、人物归属、核心事实保留、知识边界与产品提示对照。现行来源、核验和采纳规则见[记忆处理](../../../../architecture/current/memory-processing.md)，不把冻结实验协议当作正常入口的额外门禁。
 
 - [记忆核心事实保留：重复测量对照结果（2026-10-05）](memory-claim-retention-repetition-pilot-result-20261005.md)
 - [核心事实保留复测（2026-10-02）](memory-core-claim-retention-20261002.md)
@@ -26,4 +26,14 @@
 
 ## 固定路径提案
 
-- [核心事实保留重复测量提案（2026-10-05）](../../../memory-claim-retention-repetition-pilot-proposal-20261005.md)：历史脚本按固定路径读取，冻结记录保存路径与摘要，因此原位保留；对应结果列在上方。
+- [核心事实保留重复测量提案（2026-10-05）](../../../memory-claim-retention-repetition-pilot-proposal-20261005.md)：历史脚本按固定路径读取，冻结记录保存路径与摘要，因此正文与路径原样保留；它是历史实验合同，原批准额度只属于该轮，不授权重跑。对应结果列在上方。
+
+该冻结提案保留了 7 处指向旧 `docs/` 根目录的相对引用。为保持摘要，不改提案正文；按原文件名从下表访问现位置：
+
+| 冻结提案中的文件名 | 现位置 |
+| --- | --- |
+| `memory-product-prompt-comparison-result-20261004.md` | [产品提示对照结果](memory-product-prompt-comparison-result-20261004.md) |
+| `memory-party-semantic-stability-pilot-proposal-20261004.md` | [语义稳定性提案](memory-party-semantic-stability-pilot-proposal-20261004.md) |
+| `memory-core-claim-retention-20261002.md` | [核心事实保留复测](memory-core-claim-retention-20261002.md) |
+| `memory-party-semantic-stability-pilot-result-20261004.md` | [语义稳定性结果](memory-party-semantic-stability-pilot-result-20261004.md) |
+| `memory-source-pragmatics-pilot-result-20261003.md` | [来源语用对照结果](../extraction/memory-source-pragmatics-pilot-result-20261003.md) |

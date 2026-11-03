@@ -2,7 +2,7 @@
 
 [返回记忆评测索引](../README.md)
 
-这里保留历史维度评测与显式策略台账。台账中的空表及逐类批准不再是正常自动维护的前置条件；替代关系以台账顶部说明及对应 ADR 为准。
+这里保留历史维度评测与显式策略台账。台账中的空表及逐类批准不再是正常自动维护的前置条件；替代关系以台账顶部说明及对应 ADR 为准。当前采纳、调度和执行条件见[记忆处理](../../../../architecture/current/memory-processing.md)，历史台账不构成新的运行授权。
 
 - [记忆维度自动采纳放行台账](memory-adoption-dimension-release-ledger.md)
 - [按维度放行的评测预算提案（票 03，2026-10-05）](memory-dimension-release-evaluation-proposal-20261005.md)

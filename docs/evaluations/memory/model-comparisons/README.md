@@ -2,7 +2,7 @@
 
 [返回记忆评测索引](../README.md)
 
-这里保留模型对照、方法复刻、140 例运行及腾讯提取层比较。原记录中的失败、提前停止和未完成范围保持，不因重新归类而扩大结论。
+这里保留模型对照、方法复刻、140 例运行及腾讯提取层比较。原记录中的失败、提前停止和未完成范围保持，不因重新归类而扩大结论。现行模型输入与处理合同见[记忆处理](../../../../architecture/current/memory-processing.md)；这里的模型选择、预算和结果仅属于各次历史实验，不授权重跑。
 
 - [官方Flash最高思考：首请求400与兼容修复](memory-deepseek-flash-max-compatibility-20261014.md)
 - [官方DeepSeek Flash最高思考：已批准的140例评测](memory-deepseek-flash-max-plan-20261014.md)

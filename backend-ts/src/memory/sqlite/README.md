@@ -1,17 +1,16 @@
-# SQLite固定范围记忆处理（07）
+# SQLite 固定范围记忆处理
+
+产品合同以[记忆处理](../../../../architecture/current/memory-processing.md)、[执行追踪](../../../../architecture/current/memory-extraction-trace.md)为准；本页只保留本模块的接口、装配和故障处理。
 
 ## 共享执行和实际追踪合同
 
 `schema.ts`导出`memoryExtractionMigration(version:number)`，`execution-schema.ts`导出`memoryExecutionMigration(version:number)`。公共宿主已注册discussion v7、memory v8、execution v9，保留media v6；已发布v1–v9不可改写，后续只追加增量迁移。所有时间为毫秒，整数由Worker读为bigint。领域动作不暴露任意SQL。
 
-07拥有`processing_run/run_contact/processing_item/run_input/processing_task/task_contribution/processing_step/step_input/step_attempt`以及通用`model_operation/operation_item/model_call/execution_event/execution_input/event_source`。记忆producer的`model_call`必须沿operation关联同一个step，event的原始call必须属于同attempt，实际input必须指向同step冻结输入，event_source必须在该步固定窗口内。来源固定引用`capture_record.id`，不是文本或旧PG来源ID。
+本模块拥有`processing_run/run_contact/processing_item/run_input/processing_task/task_contribution/processing_step/step_input/step_attempt`以及通用`model_operation/operation_item/model_call/execution_event/execution_input/event_source`。记忆producer的`model_call`必须沿operation关联同一个step，event的原始call必须属于同attempt，实际input必须指向同step冻结输入，event_source必须在该步固定窗口内。来源固定引用`capture_record.id`，不是文本或旧PG来源ID。
 
-11拥有已组合的讨论/回复父合同。共享表以互斥producer分支关联真实reply_request/reply_attempt/reply_context，约束实际材料、来源、原始call与助手正文；`reused_call_id`仅可复用同operation的已知成功回执，不创建第二次物理调用。来源删除的记忆分支由07负责，讨论分支由11的`discussion_calls`负责，清理后才删除各自父件。quality、正式候选/版本、文档等未开放分支由对应票增量加入。
+共享调用表以互斥 producer 分支关联真实 `reply_request/reply_attempt/reply_context`，约束实际材料、来源、原始 call 与助手正文；`reused_call_id` 仅可复用同 operation 的真实既有调用。记忆裁决、文档和回复扩展由各领域迁移及公共 registry 组合；不能伪造未安装的父表或用同名字段代替真实外键。
 
-点击固定集合`run_input`与实际执行子集`execution_input`分开，完整载荷及其全部传递来源在`execution_event/event_source`。过程正文不写普通日志。正式`memory_candidate`及memory/version/decision由08建立；07的verified_output仅是具有真实producer、逐项核验和冻结来源的不可变阶段产物，不能当作已经采纳的记忆。自动来历为auto，主题/概览未运行，整轮保持未完成。
-
-本合同初次仅证明DDL与存储重开；业务、删除和桌面证据在本票Answer按实际执行补齐，不能把结构通过当作渠道认证。
-
+请求固定集合 `run_input` 与实际执行子集 `execution_input` 分开，完整载荷及其传递来源保存在 `execution_event/event_source`，过程正文不写普通日志。提取核验通过的原稿经 `verifiedExtractionOutput` 交给管理域；采纳、裁决和主题／概览发布由后续领域执行，提取完成不等于所有阶段完成。候选级内容拒绝与正常跳过可以结束为 `no_new_memory`；技术或整轮协议故障保持受阻，详见现行记忆处理合同。
 
 ## 领域接入
 
@@ -21,20 +20,19 @@
 
 公共宿主调用`createSqliteMemoryRuntime`时注入`sharedModel: {configuration, provider, permit, resolveUserId}`。此分支只使用共享许可端点及adapter，匿名身份已由provider绑定，不另建ModelHost、arbiter、身份目录或provider，也不持有其关闭能力；close只排空本service。configuration必须来自宿主安全读取既有env文件后的正常解析，`NOTALONE_ENV_FILE`仅是路径，解析器不会自行加载。未注入的独立测试路径才自行安装/关闭资源。
 
-物理调用回执`ModelLedgerReceipt`没有purpose字段；用途通过真实`model_operation.purpose`和step生产者关系核验。07的accounting.reserve/recordReserved使用具名动作复验owner、call、请求及claim，不接受讨论调用；unconfirmedRequests仅返回extraction/verification。11自行提供discussion的具名未知查询，由唯一宿主合并，无需第二账本。官方provider请求purpose继续保持undefined，不能把领域用途塞入SDK协议。
+物理调用回执`ModelLedgerReceipt`没有purpose字段；用途通过真实`model_operation.purpose`和step生产者关系核验。本模块的 accounting.reserve/recordReserved使用具名动作复验owner、call、请求及claim，不接受讨论调用；unconfirmedRequests仅返回extraction/verification。讨论模块自行提供 discussion的具名未知查询，由唯一宿主合并，无需第二账本。官方provider请求purpose继续保持undefined，不能把领域用途塞入SDK协议。
 
-`http.ts`提供`SqliteMemoryExtractionHttp(service,authorize)`：认证POST `/api/memory-processing/runs`仅接受UUID `request_key`，GET `/runs/current`与`/runs/:id`读取固定轮次；POST `/runs/:id/pause|continue`仅空对象；GET `/tasks/:id/events`读取独立可删除追踪。owner、SQL、来源子集及任意模型配置均不接受HTTP输入，Origin拒绝，响应no-store。
+`SqliteMemoryExtractionHttp(service, authorize)` 在 `/api/memory-processing` 下提供：POST `/runs` 和 `/contacts/:id/history` 仅接受 UUID `request_key`；GET `/runs/current`、`/runs/:id`、`/contacts/:id/current`、`/schedule` 和 `/tasks/:id/events` 读取当前状态与真实追踪。POST `/runs/:id/pause|continue` 要求非负安全整数 `action_version` 与 UUID `operation_id`，拒绝空对象和未知字段。owner、固定输入与执行资格由认证宿主及业务事务确定。
 
-`outputs.ts`导出`verifiedExtractionOutput(tx,{ownerId,eventId})`，08在正式候选提交的同一短事务内调用。返回真实`producedAttemptId/outputNo`、scope、原fact、auto来历和全部实际来源。本人产物由独立self attempt产生，通过`execution_input`的`verified_contribution`事件材料分支，以同owner复合外键引用原联系人窗口的`verified_self_contribution`事件，并同时保存实际消息窗口和全部来源；不改写事实、不作裁决、不冒充用户确认。
+`outputs.ts`导出`verifiedExtractionOutput(tx,{ownerId,eventId})`，管理域在正式候选提交的同一短事务内调用。返回真实`producedAttemptId/outputNo`、scope、原fact、auto来历和全部实际来源。本人产物由独立self attempt产生，通过`execution_input`的`verified_contribution`事件材料分支，以同owner复合外键引用原联系人窗口的`verified_self_contribution`事件，并同时保存实际消息窗口和全部来源；不改写事实、不作裁决、不冒充用户确认。
 
-`registration.ts`提供本写者的精确`memoryExtractionDeletionAuthority`和`memoryExtractionDeletionRegistration()`。本分支显式装配memory_extraction→history→identity→skill_metadata，只开放实际source/contact/account；清空边界由06接续。公共宿主每增加讨论/媒体等真实写者都必须扩requiredDomains和精确authority，不能把本分支当作完整产品注册。`deletion.ts`来源闭包覆盖固定输入、实际前文和本人混合阶段；source保留封存无正文调用及原范围，contact/account连同此前封存调用清除。
+`registration.ts`提供本写者的精确`memoryExtractionDeletionAuthority`和`memoryExtractionDeletionRegistration()`。该最小工厂仅组合 memory_extraction → history → identity → skill_metadata，开放 source/contact/account；正常产品使用公共 `installedDeletionRegistration` 组合讨论、媒体、裁决、文档和聊天清空等全部实际写者。新增写者须同步扩 requiredDomains 与精确 authority，不能用最小工厂替代正式注册。`deletion.ts`来源闭包覆盖固定输入、实际前文和本人混合阶段；source保留封存无正文调用及原范围，contact/account连同此前封存调用清除。
 
-活动调用登记`memory:${taskId}`到与05相同的ActiveHolders，关闭回调取消并等待真实业务finally与末次写入。正常关闭共享同一Promise，等待已受理的SQLite准备、所有在途任务及模型端口；claim或代次读取晚返回时先检查停止状态，不能继续派发。释放失败仅清除关闭缓存供原对象重试，业务停止信号不恢复；成功关闭结果仍复用。原始资料、规范消息和外部微信不由本模块读写；完整追踪只进SQLite，不进普通日志或Git。
+活动调用登记`memory:${taskId}`到与统一删除相同的ActiveHolders，关闭回调取消并等待真实业务finally与末次写入。正常关闭共享同一Promise，等待已受理的SQLite准备、所有在途任务及模型端口；claim或代次读取晚返回时先检查停止状态，不能继续派发。释放失败仅清除关闭缓存供原对象重试，业务停止信号不恢复；成功关闭结果仍复用。原始资料、规范消息和外部微信不由本模块读写；完整追踪只进SQLite，不进普通日志或Git。
 
-`contracts.ts`给11提供已实现producer/input分支的TypeScript合同。每个工厂独立接收version，公共registry使用已发布的7/8/9组合；后续不可改写这些版本。本人阶段复用既有事件材料，不新增产物身份或正文表，旧owner工厂已删除。
+`contracts.ts` 向回复域提供已实现 producer/input 分支的 TypeScript 合同。迁移工厂独立接收版本，已发布 SQL 不可改写；公共 `registry.ts` 维护实际连续顺序。执行事件复用同一真实输入、调用及来源身份，不建立第二套正文或调用记录。
 
-
-## 图文内容插件（2026-11-03）
+## 图文内容插件与调度
 
 调度通过 `scheduleContacts` 获取当前有效联系人，再以 `scanSchedule(now, contactIds)` 每批最多 32 位返回历史到期与增量到期时间；一批共用同一轻量候选及可用性结果，不读取正文到宿主、不计算内容哈希。读取结果仅作短期调度提示；建轮仍在写事务内复验，启动、范围变化及每 30 秒兜底重新检查。联系人唤醒只重读该联系人，在途新增唤醒保留至下一轮；任务状态改变后重新读取，删除的联系人从提示中移除。
 
@@ -43,3 +41,5 @@
 [内容插件](../content/README.md)通过同一可信清单装配宿主与 Worker，追加迁移32冻结插件／文件身份，33保留旧文字引用并增加类型化内容引用。正常提取窗口将实际图片同时带入提取及来源核验；图片进度独立计数，未就绪与已清除图片不冒充成功目标。每批最多8张、原始总量32MiB，目标优先、上下文使用剩余额度。新模型路径不上传 Files API；实际模型请求图片的变换摘要进入可删除追踪。
 
 图片清除和旧版本替换从冻结文件引用进入精确删除闭包，依次排空在途任务、清理记忆及文档／回复／运行记录，再清文件。合法新主图可重新排队，用户清除及未知调用不会因此自动恢复。策略恢复复制原冻结内容身份，不扩大输入。验证边界见[接线记录](../../../../docs/verification/pluggable-image-memory-20261103.md)。
+
+阶段实现和旧验收记录已移至[开发历史](../../../../docs/history/backend-development-history.md)；历史数字不表示当前版本通过。

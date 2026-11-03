@@ -1,6 +1,6 @@
 # DSH 插件开发与源码查证
 
-涉及 DSH 启动、插件装配、模型、Agent、Tool、Skill、会话生命周期或依赖升级时使用本文。架构依据是 [ADR-102](../../architecture/adr/102-dsh-typescript-backend-migration.md)；本文把既有要求落实为开发步骤，不重新决定框架选型。
+涉及 DSH 启动、插件装配、模型、Agent、Tool、Skill、会话生命周期或依赖升级时使用本文。现行运行与资料边界见[候选回复规格](../../architecture/current/reply-generation.md)和[隐私规格](../../architecture/current/privacy-deletion.md#dsh-迁移的数据边界)，当前接线见[后台说明](../../backend-ts/README.md)；框架选型追溯至 [ADR-102](../../architecture/adr/102-dsh-typescript-backend-migration.md)。本文只把既有要求落实为开发步骤。
 
 ## 扩展边界
 

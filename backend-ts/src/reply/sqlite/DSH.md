@@ -1,5 +1,7 @@
 # SQLite 讨论的官方 DSH 适配依据
 
+回复行为和输入预算由[现行回复规格](../../../../architecture/current/reply-generation.md)及[Skill 规格](../../../../architecture/current/skill-library.md)维护；本页保存官方扩展接口的核对依据和资源释放细节。版本日期表示查证时点，依赖变化后须重新核对。
+
 本模块由正常 DSH profile 启动后的业务插件提供 `Context`，不创建另一套 Harness。`createDshRuntime` 只接受受信任宿主已排他创建并登记真实身份的私有副本根。业务范围、来源、请求、代次、ready 和统一删除账本由讨论服务管理；本适配层不能独立授予生成或删除资格。
 
 ## 锁定接口
@@ -22,13 +24,13 @@
 
 根目录在进入每个操作及收紧权限前核对 dev/ino/birthtime/uid。官方创建的 `session.lock` 实测可能为 0644；所有者排空后，仅遍历本副本，以不跟随链接的文件描述符复核并收紧目录到 0700、普通单链接文件到 0600，不改变全局 umask，不操作 Skill 原目录。释放或身份复核失败不提供成功关闭证明。完整受管文件清单及删除在讨论领域和统一删除流程执行。
 
-## 本票验证
+## 验证入口
 
-`node --test test/sqlite-discussion-dsh.test.mjs` 使用真实官方 Loader、Session、JSONL、AgentLoop 与临时受管目录，全部数据合成；未连接微信、未调用模型。覆盖非空事件重开、真实 Agent create/dispose/resume、close 期间末写、根目录身份替换、真实 scope finalizer 故障。上述测试不是正常产品 profile、真实模型质量或桌面验收的替代。
+`node --test test/sqlite-discussion-dsh.test.mjs` 使用官方 Loader、Session、JSONL、AgentLoop 与临时受管目录，数据均为合成。用例覆盖非空事件重开、Agent create/dispose/resume、close 期间末写、根目录身份替换和 scope finalizer 故障；不连接微信或调用真实模型，也不能替代实际 App 验收。
 
-## 有界回复与 Skill 工具（2026-10-31）
+## 有界回复与 Skill 工具
 
-`runSingleDiscussionTurn` 保留宿主准备的请求和逻辑调用身份，最多执行 5 次物理模型请求。自动模式可重复调用官方 `skill` 工具，按需加载多个当前有效 Skill，每个包固定一个本轮修订；每轮最多读取两份静态辅助资源，按准确 Skill 名称与相对路径定位，业务端再核对包身份及修订。模型请求、工具和继续共用原请求截止时间，供应商适配器不自动重试；每次物理发送都重新核验范围、固定资料、来源、所有 Skill 修订和完整请求预算，逐次保存实际输入及各自用量。Skill 正文和资源一同计入原模型上下文预算，不扩大输入上限。没有可用 Skill 时工具表为空。
+`runSingleDiscussionTurn` 复用宿主的请求、调用身份、截止时间和输入预算；每次物理发送重新核验冻结依赖并保存实际输入及用量。物理调用数、资源数与多包选择的统一上限见现行回复／Skill 规格，不在适配层建立另一套预算。没有可用 Skill 时工具表为空。
 
 直接依赖、锁文件及实际安装的 `dsh-tool-skill`、`dsh-working-directory`、`dsh-fs` 均为 `0.2.1-rc.2`。固定官方源码仍为上文 commit，所用合同与安装制品逐项核对；未作全量可复现制品比对：
 
@@ -41,4 +43,4 @@
 
 任一 Skill 纯读取故障后先停止并排空旧 Agent，登记未提交副本的持久清理意图，逐项核对 `ManagedAddress` 后擦除，恢复时继续该意图。旧运行副本完全清除后，正式事务重新核验所有非 Skill 输入并建立无 Skill 新 context，清除本轮所有 Skill 目录、正文和工具请求载荷，避免部分 Skill 内容残留；只保留无正文调用回执及不可用标记。新副本的配置摘要按新 revision 计算，可正常回看/恢复；联系人资料、授权或来源失效时不降级。
 
-验证入口：`sqlite-discussion-generation.test.mjs` 使用真实 DSH/HTTP/SSE，部分业务端口为明确替身；`sqlite-reply-skill-loop.test.mjs` 使用真实 SQLite、联系人、历史、回复入口及运行副本，仅供应商为环回合成替身，覆盖自动选择、无 Skill、资源、读取前/部分读取后失效、helper 故障、授权撤销、取消、大资源、清理中断恢复与实际输入/用量。正式 profile 及隔离 `pnpm run dev` 的实际 App 验收另见任务记录；没有真实模型质量或微信渠道声明。
+回归入口：`sqlite-discussion-generation.test.mjs` 覆盖 DSH／HTTP／SSE 路径，部分业务端口为替身；`sqlite-reply-skill-loop.test.mjs` 组合 SQLite、联系人、历史、回复入口和运行副本，供应商为环回合成替身。实际 App 和真实模型质量另行验证，旧任务结果不作为当前通过证明。

@@ -1,31 +1,29 @@
-# SQLite 候选回复与依据（实施12）
+# SQLite 候选回复与依据
+
+产品合同以[候选生成与来源资格](../../../../../architecture/current/reply-generation.md)、[联系人上下文](../../../../../architecture/current/domain-data.md)为准；本页只保留本模块的接口、装配和故障处理。
 
 生成期间的来源核验只沿本次输入及运行副本实际接触的依赖查找，不再计算整个用户的历史失证影响。聊天来源按实际联系人批量核验；旧讨论、显式选稿及本人资料引用的其他联系人来源仍须覆盖。完整候选输入在冻结、每次物理发送和最终保存时核验，发送核验与原有出站账本授权处于同一事务；Skill 与 Agent 中间步骤只核任务、取消和运行范围。真正删除资料时仍执行原删除依赖闭包，不新增资料版本号或数据库迁移。
 
 候选的 `status?request_key=…` 是无正文的轻量状态接口，区分整理、排队、模型处理中、保存、完成、失败及未知结果。页面只展示本轮阶段；失败保留安全错误码和是否已发送的状态。仅后端确认可以重试的终态失败允许用户新建请求；未知结果只能核对原请求，不能因超时换请求重发。
 
-候选准备遇到实际聊天来源失效时，正式宿主仅对本次引用的来源联系人恢复一次读取状态，总预算15秒；明确继续旧选稿时也只核其实际来源。来源服务复用活守卫，或等待已有读者后仅核验元数据，不读取历史页。恢复后重新读取并冻结材料；停读、撤销授权和真正来源变化仍拒绝，出站和保存前继续原子复验。没有聊天依赖、关闭关系背景和原请求回放不会因此新增读取。恢复不挂在反复执行的授权回调中，也不由列表刷新触发。
-
-准备阶段恢复失败记为 `reply_sources_not_ready`，完全没有模型调用时可明确重试；来源修订改变也能安全结束原准备任务。页面显示“聊天读取暂未恢复，请重试生成。”，仅保留用户独立输入，撤下旧候选、依据及携入内容。是否可重试以权威请求状态为准，未知模型结果仍只核对原请求。
-
-2026-11-03 性能核对：同一只读快照、同一组 50 条冻结来源，三次旧全局检查为 1625.63／1437.88／1423.88 ms，定向检查为 1.66／0.93／1.09 ms，来源不可用的判断一致；这是失效检查路径的局部对照，不代表整轮生成耗时。正常 `SqliteReplyTurns.generate` 在真实 SQLite、DSH 和环回合成供应商下，三轮受理到供应商收到请求为 123.8／25.4／23.8 ms，每轮一次物理请求；该组合仅一条聊天、空 Skill 目录且不含初始化，不认证真实网络或模型速度。
+普通生成从本机已有的合法资料冻结输入；不为首轮生成恢复来源、补历史或等待未完成的后台任务。实际已选依赖失效时拒绝沿用，不能把失效材料当作无资料继续；具体降级和重试语义见现行回复生成合同。
 
 `replyCandidateMigration(version)` 仅追加新版本。候选稳定身份不保存正文，模型原稿从 v1 起；手工编辑追加同候选父版本，多条消息分别按 `part_no` 保存。选稿是固定版本的追加事件，不证明复制或发送。
 
-`SqliteReplyCandidateService` 提供 begin/view/version/edit/select；`SqliteReplyTurns` 复用11的真实DSH运行、共享provider/arbiter及07调用账本。`reply.begin`复用11请求键、身份与unknown保护，保存真实触发发言和历史覆盖依据。联系人资格通过后可立即生成，历史未开始、同步中或不完整均不阻塞，也不要求额外确认；覆盖事实和当前可用资料限制进入冻结输入与输出依据，不将部分覆盖标成完整。旧 `accept_incomplete` 字段仅兼容已有调用，不授予读取或改变生成资格。原请求重试使用受理时的覆盖快照，不随后台历史进度改写或重复调用。任何重开、选稿、编辑和回看均不发送模型请求。
+`SqliteReplyCandidateService` 提供 begin/view/version/edit/select；`SqliteReplyTurns` 复用讨论域的真实DSH运行、共享provider/arbiter及共享调用账本。`reply.begin`复用讨论域请求键、身份与unknown保护，保存真实触发发言和历史覆盖依据。联系人资格通过后可立即生成，历史未开始、同步中或不完整均不阻塞，也不要求额外确认；覆盖事实和当前可用资料限制进入冻结输入与输出依据，不将部分覆盖标成完整。旧 `accept_incomplete` 字段仅兼容已有调用，不授予读取或改变生成资格。原请求重试使用受理时的覆盖快照，不随后台历史进度改写或重复调用。任何重开、选稿、编辑和回看均不发送模型请求。
 
-`contracts.ts` 的 `ReplyKnowledgeReader.read/requireCurrent` 是08/09消费者接点：两者均在当前SQLite短事务调用；输入由宿主注册，HTTP不能提供正文、版本资格、SQL或adapter。`ReplyKnowledgeItem` 固定真实版本、本人／联系人范围、资格、发布集合及精确 `capture_record.id` 来源。正式写者负责核验精确版本及publication成员；本票再核验范围、来源与解释修订。生产Worker已接入08的正式记忆读取器；缺少正式文档消费者时文档集合为空，不能把07提取原稿当成已采纳记忆。未确认候选有明确标注。13本轮暂缓，不读取或保存长期表达偏好。
+`ReplyKnowledgeReader.read/requireCurrent` 在当前 SQLite 短事务运行，HTTP 不能传正文、版本资格、SQL 或 adapter。`ReplyKnowledgeItem` 固定真实版本、本人／联系人范围、publication 成员和精确 `capture_record.id` 来源；写者复验所选版本，候选域复验范围、来源与解释修订。生产 Worker 安装 `replyLocalKnowledgeReader` 组合正式记忆与文档；未确认参考默认关闭，不把提取原稿视为已采纳记忆。一次性工作区要求不读取或保存长期表达偏好。
 
-`reply_candidate_context` 冻结本人／联系人memory/document修订，即使本次没有选择材料也保留。`reply_candidate_input` 是在11现有输入类型之外增量安装的真实候选输入快照；不重建或修改已发布的7版context表，也不伪造08/09父表。每项知识版本由消费者同事务验证，正文与全部来源不可改写。`reply_execution_input` 将这些快照绑定到真实model_request事件；`event_source_planned` 新迁移保留原三分支并追加这一真实输入分支。展示依据仅引用这次call的实际输入，不能替代完整来源闭包。
+`reply_candidate_context` 留存冻结时本人／联系人的 memory/document 修订作为快照信息；资格复验以本次实际选择的版本、publication 成员及完整来源为准，未改变这些依赖的其他记忆新增、主题或概览发布不使本轮失效。`reply_candidate_input` 在原 context 类型之外保存真实候选输入，不重写已发布表。`reply_execution_input` 将快照绑定真实 `model_request` 事件，`event_source_planned` 保存这一类型化来源分支。展示依据仅引用本次 call 的实际输入，不能替代删除依赖闭包。
 
-候选执行每次重建独立受管DSH副本，以避免未选择的旧候选通过SDK历史进入下一请求。只有同讨论的真实selection可以显式携入；携入固定正文版本及原始输入来源。Skill仍由14的官方provider读取，assertCurrent/recordSelection/recordInput及写事务requireSkillRun沿11真实合同，不以selected冒充loaded，不改变原目录。
+候选执行每次重建独立受管DSH副本，以避免未选择的旧候选通过SDK历史进入下一请求。只有同讨论的真实selection可以显式携入；携入固定正文版本及原始输入来源。Skill仍由 Skill 域的官方 provider读取，assertCurrent/recordSelection/recordInput及写事务requireSkillRun沿讨论域真实合同，不以selected冒充loaded，不改变原目录。
 
-`replyCandidateDeletionDomain` 必须列入requiredDomains，并在discussion_calls前释放候选FK；其余原有域顺序保持。来源闭包由11收集，增量纳入知识/选稿完整来源及后续显式携入请求。fence立即撤下候选正文与依据、不可逆清除版本资格；05排空持有者后清实际输入、选择、版本、调用追踪及11完整受管文件。候选域自身没有文件目标，不能声称只删本域即完成删除。
+`replyCandidateDeletionDomain` 必须列入requiredDomains，并在discussion_calls前释放候选FK；其余原有域顺序保持。来源闭包由讨论域收集，增量纳入知识/选稿完整来源及后续显式携入请求。fence立即撤下候选正文与依据、不可逆清除版本资格；统一删除排空持有者后清实际输入、选择、版本、调用追踪及讨论域完整受管文件。候选域自身没有文件目标，不能声称只删本域即完成删除。
 
-当前合成证据：`test/sqlite-reply-candidates.test.mjs`，外部渠道与供应商为明确本机合成边界，SQLite/历史服务/官方DSH/provider/arbiter/文件均为真实实现。认证HTTP及正常官方profile端到端已有独立合成回归，实际开发App完成生成、多条编辑、固定版本选稿、原版回看、重开与联系人切换；实际Skill停用后旧草稿、候选、依据及Skill快照共同撤下，权威重读不恢复。实际07→08发布→12读取→05跨联系人来源删除，以及08人工建立／修正／保护→12旧选稿失效已通过最小组合；这不证明08自动关系裁决已经完成。09正式文档写者组合仍是20切换前门禁，真实外部模型质量未验证。
-
-前台确认资格由正常ForegroundController同时注入候选主进程门禁和页面禁用/撤快照边界，不能只靠renderer传confirmed_contact。SQLite讨论已识别后隐藏旧PG候选与长期偏好入口。当前Skill选择只作用本次，页面展示的是实际加载事件；Skill库变更在请求开始即撤销旧快照，失败也不保留旧正文。
+正常前台将确认的联系人上下文同时用于主进程门禁和页面禁用／撤快照；不能只信任 renderer 的 `confirmed_contact`。当前上下文取得规则见领域合同。页面 Skill 名称仅来自真实 `skill_input`，策略只作用本次；选择、复制或编辑均不证明外部消息已发送。
 
 页面在失效事件、操作明确拒绝或权威重读发现旧请求失效时，清除候选、草稿、编辑、携入和Skill快照；短暂网络失败只保留原请求键、草稿及无正文的来源标识，后续权威确认失效时仍能撤下旧草稿。
 
 正常表达工作区通过可选 `workspace` 固定字段提交 express／suggest、原始想法、本次语气与要求、补充背景及自动资料开关；空 suggest 保持未确认立场。可读动作与想法作为本次讨论输入，设置指纹与覆盖事实用 `reply_candidate_request_v1` 版本格式保存在既有 JSON 元数据中，旧 plain coverage 保持兼容；只有真实覆盖和获准资料进入模型材料，内部指纹不进入用户历史或候选依据。同请求更改设置返回冲突，不重复物理调用。
+
+阶段实现和旧验收记录已移至[开发历史](../../../../../docs/history/backend-development-history.md)；历史数字不表示当前版本通过。

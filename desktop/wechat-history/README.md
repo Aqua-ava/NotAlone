@@ -1,66 +1,69 @@
 # 私聊历史窄读取开发适配层
 
-联系人列表头像使用独立 `metadata-avatar`，要求已核验账号、精确私聊身份和 `selected-contact-avatar-metadata-v1` 许可。仅查询该 contact 行的头像 URL，优先小图；缺失头像返回 null。地址限 `wx.qlogo.cn` / `thirdwx.qlogo.cn`，旧 HTTP 元数据在本机升级为 HTTPS。此命令不枚举联系人、不读取正文、不认证头像内容，也不授予历史读取资格；下载、位图校验和内存展示由联系人服务负责。共享历史读取租约被占用时，头像可能暂时不可用，列表保留首字并支持显式刷新。
+本目录在锁定上游 CLI 源码与严格只读补丁上维护 NotAlone 窄协议，提供选定联系人元数据、历史／增量、引用和受控媒体能力。当前产品读取、授权、去重与失效规则见[微信同步](../../architecture/current/wechat-sync.md)及[数据契约](../../architecture/current/domain-data.md)，接线见[正式窄客户端](../../backend-ts/src/history/wechat/native-client.ts)。协议或构建存在不证明真实渠道能力已认证。
 
-来源指纹和文件实例比较均不使用系统设备号。指纹保留指定名称、inode、创建时间及文件链接数，实例比较仍核对文件类型；目录链接数不参与身份。2026-10-31 的回归覆盖同一来源仅设备号变化时指纹与守卫均保持有效。该变更会改变既有指纹，旧账号基线、消息来源身份、检查点及已撤销授权的兼容恢复需另行核验，不能直接替换读取器后宣称全量同步恢复。
+## 构建与开发切换
 
-本次在隔离源码与合成资料中执行 `go test -json -race -count=1 -p 2 -run '(?i)notalone' ./cmd/wechat-cli ./internal/wcdb`，256 项通过，1 项既有真实安装程序版本检查跳过。未替换已安装读取器，未执行业务资料迁移或真实 App 全量同步验收。
+完整上游源码放在仓库根目录被 Git 忽略的 `local-tools/wx-cli/`；本项目扩展保留在当前目录，未提交的上游工作副本编辑不进入固定 Git 对象构建。输入来源与 Go 归档按 [wechat-sources.lock.json](../wechat-sources.lock.json)核验，WCDB 必须匹配构建器固定摘要。
 
-2026-10-31 后续恢复：读取器支持固定旁侧 `source-identity-aliases.json`，把已核验的无设备号指纹映射回既有不透明来源标识。文件须绑定当前制品摘要、配置账号和本机来源目录摘要，并通过所有者、0600、普通文件、大小、UTF-8、无重复 JSON 键及一对一映射检查；未知实例仍使用新指纹，记录缺失或不匹配不能自动扩大授权。运行期间不读取或比较设备号。
-
-本机恢复先完整备份并逐个获取新读取器的无正文目标：285 个既有会话中，284 个分片和表实例精确相同，1 个无消息、无来源记录的空会话单独核验。正常退出开发宿主后，在备份副本演练及单个事务中精确复验全部范围，仅撤销误报围栏并恢复已证明的来源命名空间；消息与来源身份、旧目标、删除和来源终止记录摘要保持一致，外键检查通过。随后切换兼容开发读取器，经正式元数据清单与批量确认接口恢复285个会话授权并重新补齐，不延用旧进程游标，不恢复另外已撤销的绑定，也不宣称未来新私聊自动纳入。兼容原生 race 为258项通过、1项既有真实安装程序版本检查跳过，覆盖账号复合指纹／分片别名、来源目录和重复JSON回归。
-
-2026-10-31 补齐完成核验：正常 `pnpm run dev` 宿主的正式同步接口返回 285 个历史完成、0 个待处理、0 个不完整，正文可用；保留原有 150649 条记录并补入 51 条。最终只读对照备份，旧消息身份、来源记录、删除围栏、排除项和来源终止记录均无缺失或身份变化，外键检查通过。一个本机空会话没有增量续读游标，仍明确报告 `history_incremental_unavailable`，不伪造可用状态。当前 tail 是完整快照重扫后比较差异，新进程也需重扫历史，不能称为仅读取新增行。
-
-最近聊天另按消息时间选取最新 50 条文字，预览与生成共用同一材料集合；已在实际 App 与微信核对最新可见时间，未发送外部消息。相关 Node 回归 95 项通过，后台与桌面类型检查通过，集成后的统一工作区单例回归通过。剩余界面限制：285 个范围的同步状态接口实测 16.3 秒返回，超过桌面状态读取的 12 秒超时，设置页可能显示读取失败；这是状态读取超时，不能解释为后台历史补齐失败。SQLite 宿主的 `/api/events` 仍返回能力不可用，小窗消息提醒流尚未接通，手动刷新与后台入库分别核验。
-
-最新日常开发读取器已修复 APFS 目录条目计数和系统信号中断导致的误停：旁车变化后重验数据库白名单，`kevent` 的 `EINTR` 重试，其余异常仍失败关闭。原生 race 为 222 pass、1 skip。App 已验证持久化、重启去重、空闲增量及正式新增来信自动入库与复扫去重，详见核验记录最新追加。
-
-该层叠加在锁定的官方 CLI 源码和既有严格只读补丁上，提供选定联系人元数据、目标结构检查、受状态与来源能力报告门控的普通历史及增量读取和受控快照诊断；不开放 SQL、任意路径、发送或密钥扫描。`notalone-history` 使用有界 JSONL，未知操作及未确认范围在打开来源前拒绝。
-
-共享进程协议 `wechat-shared-process-v1` 使用排他租约串行处理联系人。`release-selection` 必须携带当前 `account`、`conversation` 和 `consent='selected-metadata-v1'`；返回 `{released:true}` 前关闭会话快照、增量状态、双向测试观察基线与图片令牌，并清除目标及支持报告。随后才能重新 `resolve`。账号元数据、来源文件和微信进程守卫持续持有；账号级图片密钥通道随进程最终关闭时清理，不在每次切换时重新读取。关闭失败会取消整个会话，旧目标与图片令牌不能在切换回来后复活；切换不代表重新授予读取资格，App 仍须核验当前完整授权并走来源重验／检查点续读。
-
-`metadata-sessions-all` 使用单独的 `all-session-list-metadata-v1` 许可，只返回全部可见会话的身份、显示名和类型，用于前台名称匹配。请求显式账号及 `limit`（1–5000），可带最多255字节的 `keyword`。它不查询摘要或正文，不改变私聊正文授权；无联系人信息的群以稳定用户名展示，格式错误或重名身份记录失败关闭，不能靠丢弃候选制造唯一匹配。
-
-构建入口为 `desktop/scripts/build-history-cli.mjs`。输入必须是锁定源码、经摘要核验的 Go 归档及既有 WCDB 字节，输出只能是 `local-tools/wx-cli/.notalone-builds/` 的一个新直接子目录。构建先核验剩余空间，复制自有源码、补丁与测试，离线构建后只对新 CLI 作开发签名，并写入不含私人路径的 manifest。
-
-完整上游源码统一放在仓库根目录的 `local-tools/wx-cli/`，该目录由 Git 忽略，仅供本机使用，不提交或推送。历史 CLI 构建的命令行及程序调用均默认读取这里；需要隔离对照时仍可显式传入 `--source-directory`。旧组件构建入口 `prepare-wechat.mjs` 也从这里读取 CLI 源码，`--source-cache` 仅保留其他来源和依赖缓存；本地源码缺失时直接报错，不退回旧缓存或自动下载。两个入口继续核验锁定的 commit/tree，并从固定 Git 对象归档，工作副本中的未提交编辑不会进入构建；本项目扩展仍在 `desktop/wechat-history/` 维护。
-
-从仓库根目录构建时无需再传源码路径；Go 归档和 WCDB 库仍须显式指定，输出目录须尚不存在：
+从仓库根目录显式构建新制品，命令以 [build-history-cli.mjs](../scripts/build-history-cli.mjs) 为准：
 
 ```bash
 node desktop/scripts/build-history-cli.mjs \
-  --go-archive "/绝对路径/go1.26.5.darwin-arm64.tar.gz" \
+  --go-archive "/绝对路径/锁定Go归档.tar.gz" \
   --wcdb-library "/绝对路径/libWCDB.dylib" \
-  --output-directory "$(pwd)/local-tools/wx-cli/.notalone-builds/dev-local-source"
+  --output-directory "/绝对路径/NotAlone/local-tools/wx-cli/.notalone-builds/新的目录"
 ```
 
-App 使用的完整运行目录也保存在 `local-tools/wx-cli/.notalone-builds/` 下。当前 SQLite 开发模式不展示路径编辑表单：正常退出 App 后，修改本机 `backend-launch.json` 中的 `wechatCliPath`，指向选定运行目录的 `bin/wechat-cli`，再通过 `pnpm run dev` 启动。移动运行目录时须保留 `manifest.json`、同字节 WCDB 库及已有 `source-identity-aliases.json` 的内容和权限，并核对摘要。不把已有来源兼容文件复制给不同摘要的新 CLI；新构建的支持资格与兼容迁移仍须另行核验。完整源码和运行目录均不纳入 Git，源码子仓库也应在 `.git/info/exclude` 忽略 `.notalone-builds/`。
+默认源码即 `local-tools/wx-cli/`，隔离对照可明确指定 `--source-directory`；Go 和 WCDB 路径必填，输出须为 `.notalone-builds/` 下尚不存在的直接子目录。构建核对空间、来源及摘要，使用自有副本离线构建并开发签名，manifest 不保存私人路径。它不安装到 App 或恢复读取授权。
 
-原图开发组件的兼容升级使用 `desktop/scripts/upgrade-history-image-cli.mjs` 的 `prepareAliases`。它只接受已经审查的固定旧／新源码配对：复验构建链、二进制与 WCDB、完整源码树差异和身份算法，以及旧别名的账号、来源目录和制品绑定；通过后为新制品签发独立别名与升级凭证，拒绝覆盖已有输出。旧别名、业务数据库、读取授权和停读围栏均不修改。`prepared` 只表示制品与别名证明完成，不代表可以启用；仍须通过正式窄客户端，对现有授权范围逐项核验新旧账号、来源代次、结构、支持档及分片／表实例完全相同，再切换本机配置并重启开发宿主。只允许制品摘要和随机目标描述符变化，不复用旧制品游标，也不枚举或授权其他会话。
+App 运行目录也位于 `.notalone-builds/`。切换前先用 `pnpm run dev:status` 核对实例，并正常退出确认停读；仅在本机配置将 `wechatCliPath` 改为已核验制品的 `bin/wechat-cli`，随后通过 `pnpm run dev` 重启并再查状态。当前 SQLite 不展示旧路径编辑表单。移动目录须保留对应 manifest、同字节 WCDB 与合法来源兼容文件的权限和绑定，不能把旧别名复制到不同摘要的新制品。
 
-原生查询通过精确整数、有界行数和真实 sqlite3_interrupt 收敛；取消等待本次查询结束后才允许关闭连接。来源守卫核验直接子文件身份并监听目录及文件命名空间变化。结构检查只投影目标 schema、声明主键、索引与触发器指纹，实例身份包含 schema_version/rootpage/建表 SQL 摘要。正常使用重启按 ADR-127 重新核验账号、数据库文件、来源分片及表实例；只有支持报告明确给出 `continuity='same-source-instances-normal-use-v1'` 且全部身份相同时，新进程才从头完整重扫，保留已删除或排除的本地出现键，不复用旧进程的不透明游标。任何已检测变化、缺项或失证都持久停读。相同身份标识下无法辨认的原位回滚不在连续性保证内。
+旧组件构建器 `prepare-wechat.mjs` 的存在不恢复第三方组件捆绑分发或 App 发布权限。完整源码、运行目录和本机输出均不提交；App 打包仍按[发布门禁](../README.md#资源构建与发布边界)执行。
 
-快照原语在观察连接的共同 data_version 窗口内固定所有分片 reader，再通过声明的主键分页；持有期间的新提交不进入原快照。快照两分钟到期，关闭及取消先中断真实查询，再回收 reader。排序字段始终不冒充先后证据，server_id 非唯一时不签发别名。
+## 账号、许可与共享进程
 
-状态原值捕获和真实消息资格分开。`snapshot-opaque-v1` 只用于明确的合成原语验证或无正文的单条元数据诊断，不构成真实 status 或恢复证明；支持档缺证时保持 unverified。锁定的官方 622 构建已通过本机真实读取验证；App 侧集成验收仍在进行。
+`notalone-history` 使用有界 JSONL；未知操作、身份或许可不合法时在打开来源前拒绝，不开放 SQL、任意路径、发送或密钥扫描。操作字段与验证以 [notalone_protocol.go](cmd/notalone_protocol.go) 为准。
 
-正常 `pnpm run dev` App 已对一个获准会话验证正文持久化、读回和同进程 tail。全联系人扫描目前因 SQLite sidecar 变化被来源监测误报而暂停；App 新进程续读与稳定日常仍待验证，详见 `docs/verification/sqlite-private-history-support-03.md`。
+- `wechat-shared-process-v1` 以排他租约串行切换联系人。`release-selection` 必须带当前账号、会话与 `selected-metadata-v1`；返回 released 前关闭快照、增量状态、阶段观察基线与图片令牌，再允许 resolve。账号守卫与账号级图片密钥通道保留至进程结束；旧目标及令牌不能因切回恢复。
+- `metadata-sessions-all` 使用独立 `all-session-list-metadata-v1` 许可，仅返回账号内有界会话身份、显示名及类型，不查询摘要或正文，不扩大私聊授权。未知类型、格式错误与身份冲突不能通过丢弃候选制造唯一匹配。
+- `metadata-avatar` 需要已核验账号、精确私聊与 `selected-contact-avatar-metadata-v1`；只读取该 contact 的头像 URL，优先小图，缺失为 null。域名限 `wx.qlogo.cn`／`thirdwx.qlogo.cn`，旧 HTTP 元数据在本机提升为 HTTPS。它不枚举联系人、不认证图像内容或授予历史资格；下载和位图校验由联系人服务完成。
 
-普通读取的状态规则由本机受版本管理的 profile 提供，同时精确匹配完整 `local_type`、发送方向和原始状态；高位类型不会自动继承低32位类型的资格。规则值与 `StatusSemanticsVerified` 认证分开；只有已认证的 sent/received 文字及必要的服务端身份条件全部满足时才取正文。recalled、absent 和 unknown 只产生无正文状态，不阻断后续增量；未认证的 pending、failed、deleted 仍按 unknown 处理，不读取正文。支持范围只覆盖已核验的规则，不把单次样本推广为全部微信状态组合。
+产品全部私聊是用户明确授权的可选范围，读取器单次操作始终核验精确对象。元数据列表或协议可表达范围，不证明当前 SQLite 界面已开放全部私聊授权。
 
-当前4.0.6/29387普通文字规则为本人状态2／3和对方状态3／4，均要求正服务端标识；这些状态不代表“已读”。非文字只输出 `metadataOnly:true` 的类型、位置和原始状态，正文始终为空，不宣称送达状态。10000只表示系统记录，不直接认证为撤回；应用消息49家族仅文件子类型6显示为文件，其余保留原类型并使用其他占位，不读取XML或引用正文。固定来源中同键旧文字变系统的保护由接受事务执行。
+## 来源、快照与增量
 
-同一守卫进程内的增量使用不透明检查点：历史终页交付 `resumeCursor`，`tail` 按完整固定快照重扫并比较记录摘要，覆盖较小编号的新行和已有行变化，不把最大编号或时间当作水位。每页有界，未完成的一轮可在同一守卫中从检查点继续；只有完整扫描结束后才能判断旧身份消失，消失项仅输出未核验、无正文的记录。新进程不继承旧 history/tail cursor，而是在 ADR-127 的身份重验后完整重扫，再建立本进程内增量检查点。该路径需独立的 `incrementalTail` 能力认证。
+来源指纹与实例比较不使用系统设备号；指定文件名、inode、创建时间、链接数及文件类型各按来源合同核验，目录链接数不参与身份。守卫监听文件与命名空间变化，微信进程身份也须持续成立。
 
-`boundary-snapshot` 使用 `selected-history-boundary-v1` 许可，只枚举所选会话的完整本地身份集合，不查询正文或媒体。每分片保留独立 observer/reader 的实际 pre/post 取样和读完成证据，窗口变化只在有界次数内重新取样；集合超过上限或来源失证时拒绝返回完整边界。客户端复核范围、分片、精确成员及计数，并计算供 SQLite 原子接受的 manifest。此操作由独立的 `private-history-boundary-v1` 能力控制，未认证的真实清空仍显示边界待确认。
+`source-identity-aliases.json` 是已核验来源身份的受控兼容文件，须绑定当前制品摘要、配置账号和来源目录摘要，并核验所有者、0600、普通文件、大小、UTF-8、无重复键和一对一映射。缺失或不符不能自动扩大授权，也不证明新旧资料连续。
 
-定向原生测试需设置 `NOTALONE_TEST_WCDB` 指向被核验的现存 dylib，测试只创建合成临时数据库。验收证据见 `docs/verification/sqlite-private-history-support-03.md`；最终产品字节必须另行核对，开发构建 manifest 不宣称真实微信通过。
+[升级器](../scripts/upgrade-history-image-cli.mjs)的 `prepareAliases` 只接受已审查的固定旧／新配对并核验完整构建链、身份算法与旧别名绑定，产生独立凭证且拒绝覆盖。prepared 只表示制品与别名证明完成；启用前仍须逐项核验现有授权对象的新旧账号、来源、支持档及分片／表实例，不修改旧授权或围栏，不复用旧进程游标。
 
+快照在共同 `data_version` 窗口固定分片 reader，按声明主键分页；快照持有期间的新提交不混入。查询受精确整数、行数和真实 `sqlite3_interrupt` 限制，取消须等待查询结束再关闭连接；快照到期按既定协议处理，不把排序字段当成时间或身份连续性证明。
 
-`observe-metadata` 只在同一已解析目标及显式 `selected-message-metadata-v1` 下执行。每次固定全分片reader，仅按指定类型选择一条元数据；固定切面探针只投影常量，不额外取任意消息ID。输出不含正文、source/XML或媒体，字段、类型低32位与全部作用域均严格核验。无匹配返回NULL，未知状态始终unverified；观察不写正常捕获、不授予target/page或完整覆盖资格。取消、超时和Close仍等待真实读者释放。
+历史终页返回不透明 `resumeCursor`，同一守卫内 tail 完整重扫固定快照并比较变化，不能称为只读取新增行。新进程按 [ADR-127](../../architecture/adr/127-sqlite-history-normal-use-restart-rescan.md)重新核验账号、文件、分片及表实例，支持报告明确认证同源后重新扫描并建立新检查点；既有删除排除保留，旧 cursor 不继承。可检测变化和失证须停读，相同身份下不可辨认的原位回滚不在保证内。
 
-受控阶段观察按方向隔离：`observe-test-metadata` 使用 `selected-test-lifecycle-metadata-v1` 观察本人新增文字；`observe-received-test-metadata` 使用 `selected-received-test-lifecycle-metadata-v1` 观察已选联系人的新增文字。两者分别维护 arm/next/current 基线和锁定身份，响应 format 不同，不能互用许可或借用另一方向的基线。只在唯一新增文字及发送者映射可证时锁定，出现多条、错误方向或身份歧义即拒绝；已锁定行之后允许报告类型变化或缺失。每方向最多两条、二十次调用、十分钟，均复验同一微信进程与来源守卫，仍只返回未核验元数据，不发送外部消息或授予正常历史资格。
+`boundary-snapshot` 使用 `selected-history-boundary-v1`，只枚举所选会话的有界完整身份集合，不读正文或媒体。独立 observer／reader 的采样与读完成证据、精确成员及计数共同组成客户端复验的 manifest；未认证、超限或失证时不能宣称完整清空边界。
 
+## 消息类型与正文资格
 
-`quarantine-target` / `quarantine-page` 是另行明确授权的一次性隔离快照，consent 固定为 `selected-quarantine-history-v1`。它要求所选私聊、固定版本结构、声明主键、来源文件及微信进程守卫均可核验，允许将未知文字交给独立本机隔离仓；状态始终 unverified，非文字载荷不读取，不能供普通聊天、检索、记忆或生成使用。普通 target/page 的认证门禁保持独立。此隔离入口的来源守卫只检测本次持有期间的变化，不承担 ADR-127 的正常重启身份重验。
+状态原值、来源能力和真实语义认证分别管理；规则按完整 `local_type`、方向与状态匹配，高位子类型不能继承低位类型的资格。只有已核验支持档允许的消息才取正文，未知状态明确保持未知，数值本身不证明已读、送达或撤回。
+
+普通文字、引用回复和图片各用自己的受控能力。引用类型 `(57 << 32) | 49` 已有独立 [quote 适配](cmd/notalone_quote.go)与正常页内引用处理，不能再用“所有 49 家族均不读 XML／引用正文”的旧说明否定它；其他富消息和转发也不会因此获得任意正文展开权限。引用作者、实际正文与目标消息关系分别核验。
+
+非文字占位不冒充实际媒体。图片由 `image-open/read/close` 及正式能力报告控制，实际图文记忆输入遵守 ADR-153。微信侧撤回或消息缺失与本机已保存资料的保留、使用资格分别处理，当前规则见 [ADR-128](../../architecture/adr/128-deduplicated-wechat-message-storage.md)；系统类型 `10000` 不能单独证明撤回。
+
+## 显式诊断与隔离原型
+
+- `observe-metadata` 使用 `selected-message-metadata-v1`，只投影指定类型的单条元数据；无正文、XML、媒体或普通捕获写入，不授予真实状态或覆盖资格。
+- 两个方向的 `observe-test-metadata`／`observe-received-test-metadata` 分别持有基线、身份与许可，不能互借；仅在唯一新增文字及发送方可核验时锁定。它们不发送消息，也不授权普通历史读取。
+- `snapshot-opaque-v1` 只用于合成原语验证或无正文元数据诊断，不构成恢复证明。
+- `quarantine-target/page` 使用另行明确授权的 `selected-quarantine-history-v1`；未知文字仅进独立本机隔离仓，保持 unverified，不进入普通聊天、检索、记忆或生成，也不替代正常跨重启认证。
+
+原型结论见[来源续证实验](prototypes/fsevents-replay-notes.md)和[状态隔离原型](state-quarantine-prototype.md)，只覆盖各自当时实验。
+
+## 验证与历史证据
+
+定向 Go 测试在构建器准备的隔离源码中运行，`NOTALONE_TEST_WCDB` 仅指向已核验现存 dylib；只使用合成临时数据库。构建及测试前确认实际源码、来源锁、工具链与输出归属，不能直接把扩展补丁目录当成独立完整 Go 工程。
+
+既有测试与真实读取记录见[私聊历史支持核验](../../docs/verification/sqlite-private-history-support-03.md)及[历史读取器阶段记录](../../docs/history/desktop-development-history.md#历史读取器整理前记录)。旧累计条数、通过数、超时、暂停及单次恢复不描述当前运行状态，不证明新制品、全部联系人或完整 App 集成可用。本 README 整理未执行读取器切换、真实资料迁移或微信／模型调用。

@@ -1,6 +1,6 @@
 # NotAlone 官网
 
-已确认的单页官网，使用原生 HTML、CSS 和 JavaScript，无构建依赖。
+用于介绍产品和演示交互的单页静态官网，使用原生 HTML、CSS 和 JavaScript，无构建依赖。当前产品合同从[现行架构](../architecture/README.md)进入；官网演示不代表后台能力已接通。
 
 ## 本地预览
 
@@ -25,4 +25,6 @@ python3 -m http.server 4174 --bind 127.0.0.1 --directory website
 
 ## 验证
 
-JavaScript 使用 `node --check website/app.js` 检查语法。迁移前已通过浏览器验证回复与改写切换、候选编辑复制、架构节点说明。官网仅介绍模块职责，不代表所有产品集成已经端到端验收。
+JavaScript 语法检查使用 `node --check website/app.js`。涉及交互的改动须在浏览器检查回复／改写切换、编辑复制和架构节点说明；语法检查不能代替这些交互验证。
+
+阶段实现和旧验收记录已移至[开发历史](../docs/history/backend-development-history.md)；历史数字不表示当前版本通过。
