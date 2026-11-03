@@ -6,7 +6,12 @@ import {imageRefreshIntervalMs,imageRefreshRequestKey,imageReconcileRequestKey,i
 export const unclassifiedImageSql="f.image_quality='unknown' AND coalesce(CASE WHEN json_valid(f.image_quality_evidence) THEN json_extract(f.image_quality_evidence,'$.sourceVariant') END,'') NOT IN ('main','thumbnail')";
 const retryDelaySql=(alias:string)=>`CASE ${imageRetryDelaysMs.slice(0,-1).map((delay,index)=>`WHEN ${alias}.retry_count=${index+1} THEN ${delay}`).join(' ')} ELSE ${imageRetryDelaysMs.at(-1)} END`;
 // 只枚举待办消息身份；旧运行时守卫由媒体服务先合法重验，实际读取与发布仍逐条核验来源。
-const workSql=`WITH attempts AS (
+// legacy cutoff 只需按联系人计算一次；相关子查询会被 SQLite 按 preparation 的每一行重算，
+// 因此提升为一次性 CTE。导出仅用于回归测试与基准脚本读取实际查询计划，不参与产品装配。
+export const imageSyncWorkSql=`WITH legacy AS (
+ SELECT coalesce(max(s.rowid),0) cutoff FROM media_extraction_attempt s
+ WHERE s.owner_id=? AND s.contact_id=? AND s.adapter_version<>'${imagePreparationVersion}' AND s.goal IN ('extract','original_upgrade')
+), attempts AS (
  SELECT owner_id,message_id,accepted_media_generation,
   max(requested_at) last_attempt_at,
   count(CASE WHEN adapter_version<>'${imagePreparationVersion}' AND (request_key GLOB 'image_sync_v5_*' OR request_key GLOB '${imageReconcilePrefix}*') THEN 1 END) retry_count,
@@ -16,9 +21,10 @@ const workSql=`WITH attempts AS (
 ), preparation AS (
  -- 普通提取建立尝试时已通过来源核验；图片内容失败不继续阻塞同联系人的其余图片。
  SELECT p.owner_id,p.contact_id,count(*) retry_count,max(p.requested_at) last_retry_at FROM media_extraction_attempt p
+ CROSS JOIN legacy l
  JOIN message_media h ON h.owner_id=p.owner_id AND h.message_id=p.message_id AND h.state='active' AND h.media_generation=p.accepted_media_generation
  WHERE p.owner_id=? AND p.contact_id=? AND p.adapter_version='${imagePreparationVersion}'
- AND p.rowid>coalesce((SELECT max(s.rowid) FROM media_extraction_attempt s WHERE s.owner_id=p.owner_id AND s.contact_id=p.contact_id AND s.adapter_version<>'${imagePreparationVersion}' AND s.goal IN ('extract','original_upgrade')),0)
+ AND p.rowid>l.cutoff
  GROUP BY p.owner_id,p.contact_id
 ), work AS (
  SELECT m.id,m.display_no,coalesce(h.media_generation,0) media_generation,f.id file_id,f.image_quality,
@@ -42,19 +48,20 @@ const workSql=`WITH attempts AS (
  AND NOT EXISTS(SELECT 1 FROM history_continuity_fence f WHERE f.owner_id=m.owner_id AND f.contact_id=m.contact_id)
  AND NOT EXISTS(SELECT 1 FROM media_extraction_attempt a WHERE a.owner_id=m.owner_id AND a.message_id=m.id AND a.state IN ('pending','running'))
 ) `;
+/** 参数顺序必须与 imageSyncWorkSql 的占位符顺序一致：legacy→attempts→preparation→work。 */
 function scope(input:any):string[]{
  if(![input.ownerId,input.contactId].every(value=>typeof value==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(value)))throw new StorageFailure('media_request_invalid');
- return [input.ownerId,input.contactId,input.ownerId,input.contactId,input.ownerId,input.contactId];
+ return [input.ownerId,input.contactId,input.ownerId,input.contactId,input.ownerId,input.contactId,input.ownerId,input.contactId];
 }
 export function createImageSyncActions():StorageAction[]{return [
  {name:'media.imageSyncTargets',mode:'read',retryBusy:false,execute:(tx,input:any)=>{
   const parameters=scope(input),now=input.now??Date.now();
   if(typeof input.after!=='string'||!/^\d{1,20}$/.test(input.after)||!Number.isSafeInteger(now)||now<0)throw new StorageFailure('media_request_invalid');
-  const rows=tx.all(workSql+'SELECT * FROM work WHERE display_no>? AND next_due<=? ORDER BY display_no LIMIT 64',[...parameters,BigInt(input.after),BigInt(now)]);
+  const rows=tx.all(imageSyncWorkSql+'SELECT * FROM work WHERE display_no>? AND next_due<=? ORDER BY display_no LIMIT 64',[...parameters,BigInt(input.after),BigInt(now)]);
   return rows.map((row:StorageRow)=>({messageId:String(row.id),displayNo:String(row.display_no),requestKey:row.image_quality==='thumbnail'
    ?imageRefreshRequestKey(String(row.id),String(row.media_generation),now)
    :row.file_id===null&&row.last_attempt_at===null?`image_sync_v5_${row.id}_${row.media_generation}`
    :imageReconcileRequestKey(String(row.id),String(row.media_generation),now)}));
  }},
- {name:'media.imageRefreshPending',mode:'read',retryBusy:false,execute:(tx,input:any)=>!!tx.get(workSql+'SELECT 1 FROM work LIMIT 1',scope(input))},
+ {name:'media.imageRefreshPending',mode:'read',retryBusy:false,execute:(tx,input:any)=>!!tx.get(imageSyncWorkSql+'SELECT 1 FROM work LIMIT 1',scope(input))},
  ];}
