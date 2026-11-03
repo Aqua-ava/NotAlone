@@ -5,6 +5,7 @@ import { mergeContactHistoryMessages, readContactHistoryMessages } from './messa
 
 type Scope = { generation: number; contactId: string; scopeRevision: number };
 const emptyMessages = (): ContactHistoryState['messages'] => ({ phase: 'idle', items: [], nextCursor: null });
+const reconciliationIntervalMs = 5000;
 
 /** 管理窗口的联系人历史只读分页，不依赖回复会话或助手会话生命周期。 */
 export class ContactHistoryController {
@@ -14,6 +15,7 @@ export class ContactHistoryController {
   private refreshPending: AbortController | undefined;
   private stream: AbortController | undefined;
   private refreshTimer: NodeJS.Timeout | undefined;
+  private reconciliationTimer: NodeJS.Timeout | undefined;
   private refreshAfterLoad = false;
   private refreshNewestQueued = false;
   private readonly refreshMessageIds = new Set<string>();
@@ -131,12 +133,19 @@ export class ContactHistoryController {
 
   private startStream(scope: Scope): void {
     const stream = new AbortController(); this.stream = stream;
+    this.scheduleReconciliation(scope);
     const current = () => !stream.signal.aborted && this.stream === stream && this.scope === scope
       && scope.generation === this.backend.getConnectionGeneration();
     this.backend.subscribeMessages({
-      connected: () => {}, interrupted: () => {},
+      connected: () => {
+        if (current() && this.state.messages.phase !== 'idle') this.queueRefresh(scope);
+      },
+      interrupted: () => {
+        if (!current()) return;
+        stream.abort(); this.stream = undefined;
+      },
       message: event => {
-        if (!current() || event.contactId !== scope.contactId) return;
+        if (!current() || event.contactId !== scope.contactId || this.state.messages.phase === 'idle') return;
         const visibleRefreshableMessage = this.state.messages.items.some(message => message.messageId === event.messageId
           && (message.messageType === 'image' || message.messageType === 'quote' || message.quoted !== null));
         if (event.change === 'created') this.queueRefresh(scope);
@@ -145,9 +154,23 @@ export class ContactHistoryController {
     }, stream.signal);
   }
 
+  private scheduleReconciliation(scope: Scope): void {
+    if (this.reconciliationTimer || this.disposed || this.scope !== scope) return;
+    // 历史补齐不发布新来信事件；仅核对当前已打开联系人的最近一页，也恢复断流订阅。
+    this.reconciliationTimer = setTimeout(() => {
+      this.reconciliationTimer = undefined;
+      if (this.disposed || this.scope !== scope || scope.generation !== this.backend.getConnectionGeneration()) return;
+      if (!this.stream) this.startStream(scope);
+      if (this.state.messages.phase !== 'idle' && !this.refreshPending) this.queueRefresh(scope);
+      this.scheduleReconciliation(scope);
+    }, reconciliationIntervalMs);
+    this.reconciliationTimer.unref?.();
+  }
+
   private stopStream(): void {
     this.stream?.abort(); this.stream = undefined;
     clearTimeout(this.refreshTimer); this.refreshTimer = undefined; this.refreshAfterLoad = false;
+    clearTimeout(this.reconciliationTimer); this.reconciliationTimer = undefined;
     this.refreshNewestQueued = false; this.refreshMessageIds.clear();
   }
 
@@ -222,7 +245,9 @@ export class ContactHistoryController {
         for (const message of page.messages) this.messagePageCursors.set(message.messageId, page.before);
       }
       const items = mergeContactHistoryMessages(this.state.messages.items, incoming);
-      this.publish({ messages: { ...this.state.messages, phase: 'ready', items }, error: null });
+      const nextCursor = this.state.messages.phase === 'failed' ? pages.get('')?.nextCursor ?? this.state.messages.nextCursor
+        : this.state.messages.nextCursor;
+      this.publish({ messages: { phase: 'ready', items, nextCursor }, error: null });
     } catch {
       if (current()) this.publish({ error: '聊天记录更新暂时无法读取，请刷新后核对。' });
     } finally {

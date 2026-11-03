@@ -10,12 +10,16 @@ const { ContactHistoryController, installContactHistoryBridge, ContactSession } 
 
 function harness(requestJson) {
   let generation = 7;
+  let subscriptions = 0;
   const backendListeners = new Set();
   const messageListeners = new Set();
   const backend = { getConnectionGeneration: () => generation, requestJson,
     onStateChanged(listener) { backendListeners.add(listener); return () => backendListeners.delete(listener); },
-    subscribeMessages(callbacks, signal) { messageListeners.add(callbacks); signal.addEventListener('abort', () => messageListeners.delete(callbacks), { once: true }); },
+    subscribeMessages(callbacks, signal) { subscriptions++; messageListeners.add(callbacks); signal.addEventListener('abort', () => messageListeners.delete(callbacks), { once: true }); },
     emitMessage(event) { for (const listener of messageListeners) listener.message(event); },
+    emitConnected() { for (const listener of messageListeners) listener.connected(); },
+    interruptMessages() { for (const listener of messageListeners) listener.interrupted(); },
+    subscriptionCount: () => subscriptions,
     setGeneration(value) { generation = value; for (const listener of backendListeners) listener({}); } };
   const contactIds = [randomUUID(), randomUUID()];
   const contacts = new ContactSession(async () => ({ generation: 7, contacts: contactIds.map((contactId, i) => ({
@@ -33,6 +37,85 @@ function message(text, occurredAt = '2026-10-30T12:00:00.000Z') {
   return { message_id: randomUUID(), speaker: 'contact', message_type: 'text', text,
     media_placeholder: null, occurred_at: occurredAt, quoted: null };
 }
+const flush = async () => { for (let i = 0; i < 24; i++) await Promise.resolve(); };
+
+test('聊天事件断流后自动重订阅，连接及重连核对最新消息', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const old = message('旧消息'), newest = message('断流期间已入库的新消息', '2026-11-03T12:00:00Z');
+  let latest = old, reads = 0;
+  const setup = harness(async () => { reads++; return { generation: 7, data: { messages: [latest], next_cursor: null } }; });
+  await setup.select();
+  const history = new ContactHistoryController(setup.backend, setup.contacts); t.after(() => history.dispose());
+  const scope = setup.contacts.getState();
+  await history.load({ contactId: setup.contactIds[0], scopeRevision: scope.scopeRevision, older: false });
+  setup.backend.emitConnected(); t.mock.timers.tick(120); await flush();
+  assert.equal(reads, 2, '连接完成应主动核对加载期间遗漏的消息');
+  setup.backend.interruptMessages(); latest = newest;
+  t.mock.timers.tick(5000); await flush();
+  assert.equal(setup.backend.subscriptionCount(), 2, '断流后应重新建立事件订阅');
+  setup.backend.emitConnected(); t.mock.timers.tick(120); await flush();
+  assert.equal(history.getState().messages.items[0].messageId, newest.message_id);
+  assert.ok(history.getState().messages.items.some(item => item.messageId === old.message_id));
+});
+
+test('无新消息事件的历史补齐也定期核对最近一页，保留较早分页并响应即时事件', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const cursor = randomUUID(), old = message('较早分页'), initial = message('原最近消息', '2026-11-02T12:00:00Z');
+  const newest = message('没有事件的后台补齐', '2026-11-03T12:00:00Z');
+  let latest = [initial]; const calls = [];
+  const setup = harness(async input => {
+    calls.push(input);
+    return { generation: 7, data: input.path.includes('before=')
+      ? { messages: [old], next_cursor: null } : { messages: latest, next_cursor: cursor } };
+  });
+  await setup.select();
+  const history = new ContactHistoryController(setup.backend, setup.contacts); t.after(() => history.dispose());
+  const scope = setup.contacts.getState();
+  await history.load({ contactId: setup.contactIds[0], scopeRevision: scope.scopeRevision, older: false });
+  await history.load({ contactId: setup.contactIds[0], scopeRevision: scope.scopeRevision, older: true });
+  latest = [newest, initial];
+  t.mock.timers.tick(4999); await flush(); assert.equal(calls.length, 2);
+  t.mock.timers.tick(1); t.mock.timers.tick(120); await flush();
+  assert.equal(calls.length, 3, '每轮只读取最近20条，不扫描所有历史或联系人');
+  assert.deepEqual(history.getState().messages.items.map(item => item.messageId), [newest, initial, old].map(item => item.message_id));
+  assert.equal(history.getState().messages.nextCursor, null, '后台核对不能覆盖已加载较早页的游标');
+  const immediate = message('收到事件后立即更新', '2026-11-03T12:01:00Z'); latest = [immediate, ...latest];
+  setup.backend.emitMessage({ contactId: setup.contactIds[0], messageId: immediate.message_id, change: 'created' });
+  t.mock.timers.tick(120); await flush();
+  assert.equal(history.getState().messages.items[0].messageId, immediate.message_id);
+  assert.equal(calls.length, 4);
+  assert.ok(calls.every(call => call.method === 'GET' && /\/history-messages\?limit=20/.test(call.path)));
+});
+
+test('定期核对串行读取，切换联系人、来源失效或释放后停止旧范围核对', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let release, held = false; const calls = [];
+  const setup = harness(async input => {
+    calls.push(input);
+    if (held) await new Promise(resolve => { release = resolve; });
+    return { generation: 7, data: { messages: [message('合成范围消息')], next_cursor: null } };
+  });
+  await setup.select();
+  const history = new ContactHistoryController(setup.backend, setup.contacts); t.after(() => history.dispose());
+  let scope = setup.contacts.getState();
+  t.mock.timers.tick(5000); await flush(); assert.equal(calls.length, 0, '未打开聊天历史时不读取正文');
+  await history.load({ contactId: setup.contactIds[0], scopeRevision: scope.scopeRevision, older: false });
+  held = true; t.mock.timers.tick(5000); t.mock.timers.tick(120); await flush();
+  assert.equal(calls.length, 2);
+  t.mock.timers.tick(15_000); await flush();
+  assert.equal(calls.length, 2, '后台核对未返回时不得并发读取或反复取消');
+  assert.equal(calls[1].signal.aborted, false);
+  setup.contacts.selectContact({ contactId: setup.contactIds[1], scopeRevision: scope.scopeRevision });
+  assert.equal(calls[1].signal.aborted, true); held = false; release(); await flush();
+  assert.deepEqual(history.getState().messages.items, []);
+  t.mock.timers.tick(5000); await flush(); assert.equal(calls.length, 2);
+  scope = setup.contacts.getState();
+  await history.load({ contactId: setup.contactIds[1], scopeRevision: scope.scopeRevision, older: false });
+  history.invalidate('来源删除中'); t.mock.timers.tick(10_000); await flush();
+  assert.equal(calls.length, 3); assert.deepEqual(history.getState().messages.items, []);
+  await history.load({ contactId: setup.contactIds[1], scopeRevision: scope.scopeRevision, older: false });
+  history.dispose(); t.mock.timers.tick(10_000); await flush(); assert.equal(calls.length, 4);
+});
 
 test('联系人切换后迟到的旧范围页面不会重新显示旧联系人正文', async () => {
   let release;

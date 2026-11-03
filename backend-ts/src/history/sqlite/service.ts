@@ -17,12 +17,13 @@ export interface HistoryContactGateway {
  validate(token:ReadEligibility):Promise<unknown>;
 }
 interface ActiveHistoryRead { controller:AbortController; done:Promise<void>; stop():Promise<void> }
-interface RetainedGuard {channel:HistoryChannel; token:ReadEligibility; report?:HistorySupportReport; target?:HistoryTarget; guardId:string; failed:boolean; sourceLost:boolean; normalUse:boolean; bodyVerified:boolean; parked?:boolean; release:()=>Promise<void>}
+interface RetainedGuard {channel:HistoryChannel; token:ReadEligibility; report?:HistorySupportReport; target?:HistoryTarget; guardId:string; failed:boolean; failureCode?:string; sourceLost:boolean; normalUse:boolean; bodyVerified:boolean; parked?:boolean; release:()=>Promise<void>}
 interface GuardProof {report:HistorySupportReport;target:HistoryTarget}
 interface GuardResult {guardId?:string;revalidated:boolean}
 type MessageChangeKind='created'|'updated';
 type AcceptedPage=HistoryCoverage&{createdMessageIds?:string[];updatedMessageIds?:string[]};
 const bodyCapabilities=['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail'] as const;
+const recoverableGuardFailures=new Set(['history_native_timeout','history_native_unavailable','history_native_cancelled','history_snapshot_closed','history_snapshot_unavailable','history_snapshot_window_changed']);
 export const historyReaderHolderKey=(contactId:string,generation:string):string=>`history:read_${contactId}_${generation}`;
 /** 可认证的渠道跨批次保留守卫；删除、停读及finally等待真实读者释放。 */
 export class SqliteHistoryService {
@@ -97,7 +98,7 @@ export class SqliteHistoryService {
    const observeGuardLoss=(entry:RetainedGuard,transport:HistoryChannel)=>{
     const session=transport.guardSession;if(!session||!(session.loss instanceof Promise))throw new StorageFailure('history_guard_invalid');
     const lost=()=>{if(!entry.failed&&entry.channel===transport){entry.failed=true;if(!entry.parked)this.active.get(contactId)?.controller.abort();
-     const code=session.failureCode?.();entry.sourceLost=typeof code==='string'&&isSourceContinuityLost(new StorageFailure(code));
+     const code=session.failureCode?.();entry.failureCode=typeof code==='string'?code:undefined;entry.sourceLost=typeof code==='string'&&isSourceContinuityLost(new StorageFailure(code));
      const release=async()=>{if(entry.sourceLost)await this.storage.execute('history.markContinuityLost',{token:entry.token});await entry.release();};void release().catch(()=>{});}};
     void session.loss.then(lost,lost);
    };
@@ -140,6 +141,16 @@ export class SqliteHistoryService {
    const releaseNormalUseGuard=()=>{if(retained?.normalUse&&!retained.failed&&!retained.sourceLost)releaseGuardAfterSuccess=true;};
    try{const result=await run(scope,channel,controller,goalId=>register(`history:${goalId}`),armGuard,metadataRevalidation,Boolean(retained&&!retained.parked),releaseNormalUseGuard);if(retained?.failed)throw new StorageFailure('history_source_continuity_unverified');successful=true;return result;}
    catch(error){if(isSourceContinuityLost(error))await this.storage.execute('history.markContinuityLost',{token});throw error;}
+  }catch(error){
+   // 守卫失效可能抢在布尔检查或存储复验前完成；保留可恢复原始原因，避免把瞬时失败永久标成来源失证。
+   if(error instanceof StorageFailure&&['history_source_continuity_unverified','history_interrupted'].includes(error.code)
+    &&!signal?.aborted&&!this.closed&&retained?.failed&&retained.normalUse&&!retained.sourceLost
+    &&retained.failureCode&&recoverableGuardFailures.has(retained.failureCode)){
+    await retained.release();
+    // 只沿已核验的正常使用基线恢复；真实围栏、身份变化或旧授权仍保持停读。
+    if(await this.storage.execute<boolean>('history.normalUseRevalidationCandidate',{token:retained.token}))throw new StorageFailure(retained.failureCode);
+   }
+   throw error;
   }finally{
    let cleanupError:unknown;
    const intentionalRelease=successful&&releaseGuardAfterSuccess&&Boolean(retained?.normalUse&&!retained.failed&&!retained.sourceLost);
