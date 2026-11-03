@@ -103,11 +103,12 @@ export class SqliteDiscussionRuntime {
  }
  private async runOwned<T>(attempt:DiscussionAttempt,configurationDigest:string,work:(input:RuntimeWork)=>Promise<T>,signal?:AbortSignal,fresh=false):Promise<T>{
   if(this.stopping)fail('discussion_runtime_closed');signal?.throwIfAborted();
-  const discussion=await this.storage.execute<any>('discussion.view',attempt);if(this.stopping)fail('discussion_runtime_closed');
+  // 全新候选不恢复旧执行；恢复普通讨论也只先读取副本定位，不加载旧发言正文。
+  const discussion=fresh?null:await this.storage.execute<any>('discussion.metadata',attempt);if(this.stopping)fail('discussion_runtime_closed');
   let copy:RuntimeCopy|undefined;
-  if(!fresh&&discussion.discussion.currentRuntimeId){
+  if(discussion?.currentRuntimeId){
    try{
-    const candidate=await this.storage.execute<RuntimeCopy>('runtime.inspect',{...attempt,copyId:discussion.discussion.currentRuntimeId});
+    const candidate=await this.storage.execute<RuntimeCopy>('runtime.inspect',{...attempt,copyId:discussion.currentRuntimeId});
     if(candidate.state==='ready'&&candidate.configurationDigest===configurationDigest){await this.inspect(attempt.contactId,attempt.discussionId,candidate.id,configurationDigest);copy=candidate;}
    }catch(error){
     // 当前明确请求可从仍合法业务记录另建副本；旧定位和不合格文件继续保留在删除闭包。

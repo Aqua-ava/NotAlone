@@ -1,10 +1,9 @@
 import {randomUUID} from 'node:crypto';
 import {StorageFailure,type StorageTransaction,type StorageRow} from '../../storage/sqlite/contracts.ts';
-import {assertSourceEligibility} from '../../history/sqlite/source.ts';
 import {requireSkillRun} from '../../skills/sqlite/storage.ts';
 import type {SkillRunRevision} from '../../skills/sqlite/contracts.ts';
 import {requireDiscussionContact} from './actions.ts';
-import {invalidHistoryDiscussionImpact} from './deletion.ts';
+import {hasCurrentReplyDependencies} from './provenance.ts';
 import {encode} from './requests.ts';
 
 function fail(code:string):never{throw new StorageFailure(code);}
@@ -12,15 +11,11 @@ function fail(code:string):never{throw new StorageFailure(code);}
 export function requireSkillFallbackSources(tx:StorageTransaction,i:any,context:StorageRow):void{
  const contact=requireDiscussionContact(tx,i.ownerId,i.contactId),owner=tx.get('SELECT * FROM owner WHERE owner_id=?',[i.ownerId])!;
  if(context.preference_revision!==owner.preference_revision||context.owner_memory_revision!==owner.memory_revision||context.contact_memory_revision!==contact.memory_revision)fail('discussion_source_unavailable');
- const invalid=invalidHistoryDiscussionImpact(tx,i.ownerId);
- if(invalid.requests.has(i.requestId))fail('discussion_source_unavailable');
+ if(!hasCurrentReplyDependencies(tx,{ownerId:i.ownerId,requestIds:[i.requestId]}))fail('discussion_source_unavailable');
  for(const item of tx.all('SELECT * FROM reply_context_item WHERE owner_id=? AND context_id=?',[i.ownerId,i.contextId])){
-  if(item.kind==='message'){
-   assertSourceEligibility(tx,{owner_id:i.ownerId,contact_id:String(item.source_contact_id),record_id:String(item.record_id),message_id:String(item.message_id)});
-   if(!tx.get("SELECT 1 FROM message WHERE owner_id=? AND contact_id=? AND id=? AND interpretation_revision=? AND availability='available'",[i.ownerId,item.source_contact_id,item.message_id,item.accepted_revision]))fail('discussion_source_unavailable');
-  }else if(item.kind==='entry'){
+  if(item.kind==='entry'){
    const entry=tx.get("SELECT e.origin_request_id FROM discussion_entry e JOIN reply_request r ON r.owner_id=e.owner_id AND r.id=e.origin_request_id WHERE e.owner_id=? AND e.contact_id=? AND e.discussion_id=? AND e.id=? AND e.content_state='available' AND r.state<>'invalidated'",[i.ownerId,i.contactId,i.discussionId,item.entry_id]);
-   if(!entry||invalid.requests.has(String(entry.origin_request_id)))fail('discussion_source_unavailable');
+   if(!entry)fail('discussion_source_unavailable');
   }
  }
 }

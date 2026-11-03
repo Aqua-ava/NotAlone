@@ -6,6 +6,7 @@ import type {SqliteReplyCandidateService} from './service.ts';
 import type {SqliteReplyTurns} from './turns.ts';
 import {readReplyWorkspace} from './workspace.ts';
 const uuid='[a-f0-9-]{36}',route=new RegExp(`^/api/contacts/(${uuid})/assistant-sessions/(${uuid})/reply-candidates(?:/(${uuid})/(edit|select|versions/([1-9][0-9]{0,5})))?$`);
+const statusRoute=new RegExp(`^/api/contacts/(${uuid})/assistant-sessions/(${uuid})/reply-candidates/status$`);
 const id=(v:unknown):v is string=>typeof v==='string'&&new RegExp(`^${uuid}$`).test(v);
 function invalid():never{throw new StorageFailure('reply_input_invalid');}
 function respond(res:ServerResponse,status:number,value:unknown){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));}
@@ -14,17 +15,20 @@ export class SqliteReplyCandidateHttp {
  private readonly options:{storage:SqliteStorage;service:SqliteReplyCandidateService;turns?:SqliteReplyTurns;authorize:(request:IncomingMessage)=>boolean};
  constructor(options:SqliteReplyCandidateHttp['options']){this.options=options;}
  async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
-  const raw=req.url??'',url=new URL(raw,'http://localhost'),match=route.exec(url.pathname);if(!match)return false;
+  const raw=req.url??'',url=new URL(raw,'http://localhost'),statusMatch=statusRoute.exec(url.pathname),match=statusMatch??route.exec(url.pathname);if(!match)return false;
   const o=this.options;if(!o.authorize(req)){respond(res,401,{error:'unauthorized'});return true;}
   try{
-   if(raw!==url.pathname)invalid();
+   if(!statusMatch&&raw!==url.pathname)invalid();
    const [,contactId,discussionId,candidateId,command,version]=match,scope={contactId,discussionId};
-   if(req.method==='GET'&&!candidateId){
-    const requests=await o.service.view(contactId,discussionId),coverage=await o.storage.execute('history.coverage',{ownerId:o.service.ownerId,contactId});
-    const skills=await o.storage.execute<any[]>('skills.list',{ownerId:o.service.ownerId});
+   if(statusMatch){
+    const requestKey=url.searchParams.get('request_key');
+    if(req.method!=='GET'||!id(requestKey)||[...url.searchParams].length!==1||url.searchParams.has('request_key')===false)invalid();
+    respond(res,200,await o.service.status(contactId,discussionId,requestKey));
+   }else if(req.method==='GET'&&!candidateId){
+    const requests=await o.service.view(contactId,discussionId);
     const history=await o.storage.execute<any>('history.readRecent',{ownerId:o.service.ownerId,contactId,limit:50});
     const recentMessages=history.messages.map((m:any)=>({messageId:m.id,sender:m.sender,text:m.text,occurredAt:occurredAt(m.sentAt),timePrecision:m.timePrecision,displayPosition:m.displayPosition,ordering:m.ordering}));
-    respond(res,200,{requests:requests.map(({ownerId:_owner,...r})=>r),coverage,recentMessages,availableSkills:skills.filter(s=>s.enabledState==='enabled'&&s.verificationState==='verified'&&s.currentRevisionNo!==null).map(s=>({packageId:s.id,name:s.displayName,revisionNo:Number(s.currentRevisionNo)}))});
+    respond(res,200,{requests:requests.map(({ownerId:_owner,...r})=>r),coverage:history.coverage,recentMessages});
    }else if(req.method==='GET'&&command.startsWith('versions/'))respond(res,200,await o.service.version({...scope,candidateId,versionNo:Number(version)}));
    else if(req.method==='POST'){
     let v;try{v=JSON.parse((await readWechatHttpBody(req,610000,10000)).toString('utf8'));}catch(error){if(error instanceof WechatHttpBodyError)throw error;invalid();}

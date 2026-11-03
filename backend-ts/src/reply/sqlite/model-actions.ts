@@ -5,7 +5,7 @@ import type {SkillRunRevision} from '../../skills/sqlite/contracts.ts';
 import {requireAttempt,encode,decode} from './requests.ts';
 import {requireRuntimeCurrent} from './runtime-actions.ts';
 import {identifier} from './actions.ts';
-import {sanitizeDiscussionFailure} from './failure.ts';
+import {sanitizeDiscussionFailure,sanitizeDiscussionErrorCode} from './failure.ts';
 import {dropSkillContext} from './skill-fallback.ts';
 function fail(code:string):never{throw new StorageFailure(code);}
 function context(tx:StorageTransaction,i:any):StorageRow{
@@ -180,17 +180,18 @@ export const discussionModelActions:StorageAction[]=[
   const c=tx.get('SELECT * FROM model_call WHERE owner_id=? AND id=? AND reply_attempt_id=?',[i.ownerId,i.callId,i.attemptId]);if(!c)return;
   if(!['prepared','sending'].includes(String(c.state)))return;
   const failure=sanitizeDiscussionFailure(i.failure);
+  const errorCode=sanitizeDiscussionErrorCode(i.code);
   let unknown=false;
   for(const physical of tx.all("SELECT * FROM model_call WHERE owner_id=? AND operation_id=? AND state IN ('prepared','sending')",[i.ownerId,c.operation_id])){
    const receipt=physical.receipt?JSON.parse(String(physical.receipt)):{};
    const settled=physical.settlement_state==='settled'&&receipt.format==='dsh-physical-step-v1';
    const state=settled?'succeeded':physical.state==='sending'&&i.dispatched?'unknown':'failed';unknown||=state==='unknown';
    if(failure&&!settled)tx.run('UPDATE model_call SET receipt=? WHERE owner_id=? AND id=?',[JSON.stringify({...receipt,failure}),i.ownerId,physical.id]);
-   tx.run('UPDATE model_call SET state=?,error_code=?,settlement_state=? WHERE owner_id=? AND id=?',[state,settled?null:'discussion_call_failed',state==='unknown'?'unknown':'settled',i.ownerId,physical.id]);
+   tx.run('UPDATE model_call SET state=?,error_code=?,settlement_state=? WHERE owner_id=? AND id=?',[state,settled?null:errorCode,state==='unknown'?'unknown':'settled',i.ownerId,physical.id]);
   }
   tx.run('UPDATE model_operation SET state=? WHERE owner_id=? AND id=?',[unknown?'unknown':'failed',i.ownerId,c.operation_id]);
   tx.run('UPDATE operation_scope SET state=? WHERE owner_id=? AND operation_id=?',[unknown?'unknown':'released',i.ownerId,c.operation_id]);
-  tx.run("UPDATE reply_attempt SET state='failed',finished_at=?,error_code=? WHERE owner_id=? AND id=? AND state='running'",[Date.now(),'discussion_call_failed',i.ownerId,i.attemptId]);
+  tx.run("UPDATE reply_attempt SET state='failed',finished_at=?,error_code=? WHERE owner_id=? AND id=? AND state='running'",[Date.now(),errorCode,i.ownerId,i.attemptId]);
   tx.run("UPDATE reply_request SET state='cancelled' WHERE owner_id=? AND id=? AND state='running'",[i.ownerId,c.reply_attempt_id?i.requestId:null]);
  }),
 ];

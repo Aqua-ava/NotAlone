@@ -21,3 +21,7 @@ export interface ReplyCandidateView extends DiscussionScope {
  requestId:string;coverageWarning:string|null;candidates:ReplyCandidateVersion[];
  selections:{id:string;candidateId:string;versionNo:number;selectionNo:number}[];
 }
+export type ReplyGenerationPhase='not_found'|'preparing'|'queued'|'generating'|'saving'|'committed'|'failed'|'unknown';
+export interface ReplyGenerationStatus {
+ requestKey:string;phase:ReplyGenerationPhase;sent:boolean;errorCode:string|null;retryable:boolean;startedAt:number|null;finishedAt:number|null;
+}

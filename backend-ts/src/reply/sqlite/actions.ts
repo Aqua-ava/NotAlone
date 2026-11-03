@@ -1,4 +1,4 @@
-import {invalidHistoryDiscussionImpact} from './deletion.ts';
+import {hasCurrentReplyDependencies} from './provenance.ts';
 import {currentSourceScopeCTE,currentSourcePredicate} from '../../history/sqlite/current-scope.ts';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {Discussion,DiscussionScope,RuntimeCopy} from './contracts.ts';
@@ -32,8 +32,18 @@ export function selectDiscussionForRequest(tx:StorageTransaction,i:any):{row:Sto
  return {row:requireDiscussion(tx,{...i,discussionId:String(row.id)}),segmented};
 }
 export const discussionActions:StorageAction[]=[
+ action('metadata','read',(tx,i)=>discussionView(requireDiscussion(tx,i))),
  action('list','read',(tx,i)=>{requireDiscussionContact(tx,i.ownerId,i.contactId);const rows=tx.all("SELECT * FROM assistant_discussion WHERE owner_id=? AND contact_id=? AND state='active' ORDER BY created_at DESC,id",[i.ownerId,i.contactId]);return {currentDiscussionId:rows.find(r=>r.is_current===1n)?.id??null,discussions:rows.map(discussionView)};}),
- action('view','read',(tx,i)=>{const discussion=requireDiscussion(tx,i),affected=invalidHistoryDiscussionImpact(tx,i.ownerId);return {discussion:discussionView(discussion),entries:tx.all("SELECT e.id,e.position,e.role,CASE WHEN r.state='invalidated' THEN NULL ELSE e.body END body,e.origin_request_id,e.origin_call_id,CASE WHEN r.state='invalidated' THEN 'cleared' ELSE e.content_state END content_state FROM discussion_entry e JOIN reply_request r ON r.owner_id=e.owner_id AND r.id=e.origin_request_id WHERE e.owner_id=? AND e.contact_id=? AND e.discussion_id=? ORDER BY e.position",[i.ownerId,i.contactId,i.discussionId]).map(e=>e.role==='assistant'&&affected.requests.has(String(e.origin_request_id))?{...e,body:null,content_state:'cleared'}:e)};}),
+ action('view','read',(tx,i)=>{
+  const discussion=requireDiscussion(tx,i),checked=new Map<string,boolean>();
+  const entries=tx.all("SELECT e.id,e.position,e.role,CASE WHEN r.state='invalidated' THEN NULL ELSE e.body END body,e.origin_request_id,e.origin_call_id,CASE WHEN r.state='invalidated' THEN 'cleared' ELSE e.content_state END content_state FROM discussion_entry e JOIN reply_request r ON r.owner_id=e.owner_id AND r.id=e.origin_request_id WHERE e.owner_id=? AND e.contact_id=? AND e.discussion_id=? ORDER BY e.position",[i.ownerId,i.contactId,i.discussionId]);
+  return {discussion:discussionView(discussion),entries:entries.map(e=>{
+   if(e.role!=='assistant')return e;
+   const id=String(e.origin_request_id);
+   if(!checked.has(id))checked.set(id,hasCurrentReplyDependencies(tx,{ownerId:i.ownerId,requestIds:[id]}));
+   return checked.get(id)?e:{...e,body:null,content_state:'cleared'};
+  })};
+ }),
  action('messages','read',(tx,i)=>{requireDiscussion(tx,i);if(!Array.isArray(i.messageIds)||i.messageIds.length>50||new Set(i.messageIds).size!==i.messageIds.length)throw new StorageFailure('discussion_context_invalid');if(!i.messageIds.length)return [];
   const ids=i.messageIds.map(identifier),sources=tx.all(`WITH ${currentSourceScopeCTE} SELECT m.id,m.text_body,m.sender_role,m.interpretation_revision,r.id record_id
    FROM message m JOIN capture_record r ON r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id
@@ -42,7 +52,7 @@ export const discussionActions:StorageAction[]=[
    AND r.state='normalized' AND r.availability='available' AND ${currentSourcePredicate()}
    AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) ORDER BY r.id`,[i.ownerId,i.contactId,i.contactId,i.ownerId,i.contactId,...ids]);
   return ids.map((id:string)=>{const row=sources.find(source=>source.id===id);if(!row)throw new StorageFailure('discussion_source_unavailable');return row;});}),
- action('trace','read',(tx,i)=>{requireDiscussion(tx,i);if(invalidHistoryDiscussionImpact(tx,i.ownerId).requests.has(String(i.requestId)))throw new StorageFailure('discussion_unavailable');const request=tx.get("SELECT id,state FROM reply_request WHERE owner_id=? AND contact_id=? AND discussion_id=? AND id=? AND state<>'invalidated'",[i.ownerId,i.contactId,i.discussionId,i.requestId]);if(!request)throw new StorageFailure('discussion_unavailable');return {request,events:tx.all('SELECT e.id,e.event_no,e.kind,e.originated_call_id,e.payload FROM execution_event e JOIN reply_attempt a ON a.owner_id=e.owner_id AND a.id=e.reply_attempt_id WHERE a.owner_id=? AND a.request_id=? ORDER BY e.event_no',[i.ownerId,i.requestId]),calls:tx.all('SELECT c.id,c.provider,c.state,c.attempt_no,c.actual_budget_units,c.settlement_state,c.receipt FROM model_call c JOIN reply_attempt a ON a.owner_id=c.owner_id AND a.id=c.reply_attempt_id WHERE a.owner_id=? AND a.request_id=? ORDER BY c.attempt_no',[i.ownerId,i.requestId])};}),
+ action('trace','read',(tx,i)=>{requireDiscussion(tx,i);if(!hasCurrentReplyDependencies(tx,{ownerId:i.ownerId,requestIds:[String(i.requestId)]}))throw new StorageFailure('discussion_unavailable');const request=tx.get("SELECT id,state FROM reply_request WHERE owner_id=? AND contact_id=? AND discussion_id=? AND id=? AND state<>'invalidated'",[i.ownerId,i.contactId,i.discussionId,i.requestId]);if(!request)throw new StorageFailure('discussion_unavailable');return {request,events:tx.all('SELECT e.id,e.event_no,e.kind,e.originated_call_id,e.payload FROM execution_event e JOIN reply_attempt a ON a.owner_id=e.owner_id AND a.id=e.reply_attempt_id WHERE a.owner_id=? AND a.request_id=? ORDER BY e.event_no',[i.ownerId,i.requestId]),calls:tx.all('SELECT c.id,c.provider,c.state,c.attempt_no,c.actual_budget_units,c.settlement_state,c.receipt FROM model_call c JOIN reply_attempt a ON a.owner_id=c.owner_id AND a.id=c.reply_attempt_id WHERE a.owner_id=? AND a.request_id=? ORDER BY c.attempt_no',[i.ownerId,i.requestId])};}),
  action('new','write',(tx,i)=>discussionView(create(tx,i))),
  action('forRequest','write',(tx,i)=>{const selected=selectDiscussionForRequest(tx,i);return {discussion:discussionView(selected.row),segmented:selected.segmented};}),
  action('continue','write',(tx,i)=>{requireDiscussion(tx,i);at(i.at);tx.run('UPDATE assistant_discussion SET is_current=0 WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId]);tx.run('UPDATE assistant_discussion SET is_current=1,last_activity_at=? WHERE owner_id=? AND id=?',[i.at,i.ownerId,i.discussionId]);return discussionView(requireDiscussion(tx,i));}),

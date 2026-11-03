@@ -1,9 +1,9 @@
 import {requireSkillRun} from '../../../skills/sqlite/storage.ts';
 import type {SkillRunRevision} from '../../../skills/sqlite/contracts.ts';
 import {StorageFailure,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
-import {assertSourceEligibility} from '../../../history/sqlite/source.ts';
+import {assertSourcesEligibility} from '../../../history/sqlite/source.ts';
 import {requireDiscussion} from '../actions.ts';
-import {invalidHistoryDiscussionImpact} from '../deletion.ts';
+import {hasCurrentReplyDependencies} from '../provenance.ts';
 import {decode,encode} from '../requests.ts';
 import type {DiscussionScope} from '../contracts.ts';
 import type {ReplyKnowledgeItem,ReplyKnowledgeReader,ReplySource} from './contracts.ts';
@@ -12,9 +12,14 @@ import {toneLabel} from './workspace.ts';
 function fail(code:string):never{throw new StorageFailure(code);}
 function coverageSnapshot(value:string):unknown{const parsed=JSON.parse(value);return parsed?.kind==='reply_candidate_request_v1'?parsed.coverage:parsed;}
 export interface FrozenReplyInput {itemNo:number;kind:string;text:string;identity:object;sources:ReplySource[]}
-function source(tx:StorageTransaction,ownerId:string,s:ReplySource):void{
- assertSourceEligibility(tx,{owner_id:ownerId,contact_id:s.contactId,record_id:s.recordId,message_id:s.messageId});
- if(!tx.get("SELECT 1 FROM message WHERE owner_id=? AND contact_id=? AND id=? AND interpretation_revision=? AND availability='available'",[ownerId,s.contactId,s.messageId,s.acceptedRevision]))fail('reply_source_unavailable');
+function sources(tx:StorageTransaction,ownerId:string,items:readonly ReplySource[]):void{
+ if(!items.length)return;
+ assertSourcesEligibility(tx,items.map(s=>({owner_id:ownerId,contact_id:s.contactId,record_id:s.recordId,message_id:s.messageId})));
+ const rows=JSON.stringify(items.map(s=>[s.contactId,s.messageId,String(s.acceptedRevision)]));
+ const valid=tx.get(`SELECT count(*) n FROM json_each(?) i JOIN message m ON m.owner_id=?
+  AND m.contact_id=json_extract(i.value,'$[0]') AND m.id=json_extract(i.value,'$[1]')
+  AND m.interpretation_revision=CAST(json_extract(i.value,'$[2]') AS INTEGER) AND m.availability='available'`,[rows,ownerId]);
+ if(valid?.n!==BigInt(items.length))fail('reply_source_unavailable');
 }
 function knowledge(tx:StorageTransaction,scope:DiscussionScope,item:ReplyKnowledgeItem,reader:ReplyKnowledgeReader):void{
  if(!['memory','memory_candidate','document'].includes(item.kind)||typeof item.id!=='string'||!item.id||typeof item.versionNo!=='bigint'||item.versionNo<1n
@@ -25,7 +30,7 @@ function knowledge(tx:StorageTransaction,scope:DiscussionScope,item:ReplyKnowled
   ||item.kind==='memory_candidate'&&item.qualification!=='unconfirmed'
   ||item.kind==='memory'&&!['auto','confirmed'].includes(item.qualification))fail('reply_knowledge_invalid');
  if(item.scopeKind==='contact'&&item.sources.some(s=>s.contactId!==scope.contactId))fail('reply_knowledge_scope');
- reader.requireCurrent(tx,scope,item);for(const s of item.sources)source(tx,scope.ownerId,s);
+ reader.requireCurrent(tx,scope,item);sources(tx,scope.ownerId,item.sources);
 }
 export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contextId:string;requestId:string;workspace?:ReplyWorkspaceSnapshot},reader:ReplyKnowledgeReader):FrozenReplyInput[]{
  requireDiscussion(tx,i);
@@ -60,10 +65,11 @@ export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contex
  }
  const owner=tx.get('SELECT memory_revision,document_revision FROM owner WHERE owner_id=?',[i.ownerId])!,contact=tx.get('SELECT memory_revision,document_revision FROM contact WHERE owner_id=? AND id=?',[i.ownerId,i.contactId])!;
  tx.run('INSERT INTO reply_candidate_context VALUES(?,?,?,?,?,?)',[i.ownerId,i.contextId,owner.memory_revision,contact.memory_revision,owner.document_revision,contact.document_revision]);
+ sources(tx,i.ownerId,items.flatMap(item=>item.sources));
  return items.map((item,index)=>{
   const itemNo=index+1;
   tx.run('INSERT INTO reply_candidate_input VALUES(?,?,?,?,?,?)',[i.ownerId,i.contextId,itemNo,item.kind,encode(item.identity),item.text]);
-  for(const s of item.sources){source(tx,i.ownerId,s);tx.run('INSERT INTO reply_candidate_input_source VALUES(?,?,?,?,?,?,?)',[i.ownerId,i.contextId,itemNo,s.contactId,s.recordId,s.messageId,s.acceptedRevision]);}
+  for(const s of item.sources)tx.run('INSERT INTO reply_candidate_input_source VALUES(?,?,?,?,?,?,?)',[i.ownerId,i.contextId,itemNo,s.contactId,s.recordId,s.messageId,s.acceptedRevision]);
   return {...item,itemNo};
  });
 }
@@ -78,12 +84,12 @@ export function requireReplyInput(tx:StorageTransaction,scope:DiscussionScope,co
   if(['memory','memory_candidate','document'].includes(String(item.kind)))knowledge(tx,scope,decode(String(item.identity_json)),reader);
   if(item.kind==='selection'){const id=decode<{selectionId:string}>(String(item.identity_json)).selectionId;requireSelection(tx,scope,id,reader);}
  }
- for(const s of tx.all('SELECT * FROM reply_candidate_input_source WHERE owner_id=? AND context_id=?',[scope.ownerId,contextId]))source(tx,scope.ownerId,{contactId:String(s.source_contact_id),recordId:String(s.record_id),messageId:String(s.message_id),acceptedRevision:s.accepted_revision as bigint});
+ sources(tx,scope.ownerId,tx.all('SELECT * FROM reply_candidate_input_source WHERE owner_id=? AND context_id=?',[scope.ownerId,contextId]).map(s=>({contactId:String(s.source_contact_id),recordId:String(s.record_id),messageId:String(s.message_id),acceptedRevision:s.accepted_revision as bigint})));
  if(!tx.get("SELECT 1 FROM reply_request WHERE owner_id=? AND id=? AND state IN ('running','committed')",[scope.ownerId,context.request_id]))fail('reply_source_unavailable');
 }
 export function requireSelection(tx:StorageTransaction,scope:DiscussionScope,id:string,reader:ReplyKnowledgeReader){
  const row=tx.get(`SELECT s.*,v.part_count FROM reply_selection s JOIN reply_candidate k ON k.owner_id=s.owner_id AND k.id=s.candidate_id JOIN reply_request r ON r.owner_id=k.owner_id AND r.id=k.request_id JOIN reply_candidate_version v ON v.owner_id=s.owner_id AND v.candidate_id=s.candidate_id AND v.version_no=s.version_no WHERE s.owner_id=? AND s.id=? AND r.contact_id=? AND r.discussion_id=? AND r.state='committed' AND v.content_state='available'`,[scope.ownerId,id,scope.contactId,scope.discussionId])??fail('reply_selection_unavailable');
- if(invalidHistoryDiscussionImpact(tx,scope.ownerId).requests.has(String(row.request_id)))fail('reply_source_unavailable');
+ if(!hasCurrentReplyDependencies(tx,{ownerId:scope.ownerId,requestIds:[String(row.request_id)]}))fail('reply_source_unavailable');
  const parts=tx.all('SELECT part_no FROM reply_version_part WHERE owner_id=? AND candidate_id=? AND version_no=? ORDER BY part_no',[scope.ownerId,row.candidate_id,row.version_no]);
  if(BigInt(parts.length)!==row.part_count||parts.some((p,index)=>p.part_no!==BigInt(index+1)))fail('reply_content_unavailable');
  for(const c of tx.all('SELECT id FROM reply_context WHERE owner_id=? AND request_id=?',[scope.ownerId,row.request_id]))requireReplyInput(tx,scope,String(c.id),reader);

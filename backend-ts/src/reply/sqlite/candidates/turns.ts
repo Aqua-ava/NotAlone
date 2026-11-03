@@ -50,6 +50,7 @@ export class SqliteReplyTurns {
   const workspaceSnapshot:ReplyWorkspaceSnapshot|undefined=workspace?{...workspace,selectedPackageId:input.selectedPackageId??null,carriedSelectionId:input.carriedSelectionId??null}:undefined;
   const accepted=await o.service.begin({contactId:input.contactId,discussionId:input.discussionId,requestKey:input.requestKey,text:requestText,acceptIncomplete:input.acceptIncomplete,carriedSelectionId:input.carriedSelectionId,includeRelationshipContext:workspace?workspace.includeRelationshipContext&&workspace.excludedMessageIds.length===0:undefined,workspaceFingerprint,identity:{kind:'manual',confirmationId}}),attempt=accepted.attempt as DiscussionAttempt;
   if(accepted.replayed)return {discussionId:attempt.discussionId,replayed:true,segmented:false};
+  o.service.phase(input.contactId,attempt.discussionId,input.requestKey,'preparing');
   try{
    const callId=randomUUID(),contextId=randomUUID();
    const catalog=o.library?await o.library.refresh():await o.storage.execute<any[]>('skills.list',{ownerId});
@@ -70,15 +71,12 @@ export class SqliteReplyTurns {
    const configurationDigest=this.digest(attempt.requestId,revision);
    await o.storage.execute('discussion.prepareCall',{...attempt,contextId,callId,operationId:randomUUID(),provider:o.model.provider,requestKey:callId,inputSeal:createHash('sha256').update(prompt).digest('hex'),model:o.model.model,configurationId:configurationDigest,inputCap:o.model.budgetProfile.context_window_tokens-o.model.maxTokens-o.model.budgetProfile.safety_margin_tokens,outputCap:o.model.maxTokens});
    const base=new SqliteDiscussionSkillProtection({storage:o.storage,attempt,contextId,callId,authorize:()=>o.authorize(input.contactId)});
-   const assertInput=()=>o.storage.execute('reply.assertInput',{...attempt,contextId});
-   const protection:SkillRunProtection={
-    async assertCurrent(scope,runRevision,signal){await base.assertCurrent(scope,runRevision,signal);await assertInput();signal?.throwIfAborted();},
-    async recordSelection(scope,selected,signal){await assertInput();await base.recordSelection(scope,selected,signal);},
-    async recordInput(value,signal){await assertInput();await base.recordInput(value,signal);},
-   };
+   // Skill 的中间步骤只核任务及修订；候选实际出站和保存各自原子复验完整资料。
+   const protection:SkillRunProtection=base;
    const openSkillRun=o.library?()=>openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,input.selectedPackageId,input.signal):undefined;
-   await runSingleDiscussionTurn({runtime:o.runtime,storage:o.storage,attempt,contextId,callId,configurationDigest,prompt,rebuildPrompt:prompt,systemPrompt,model:o.model,provider:o.provider,arbiter:o.arbiter,skillRun:null,openSkillRun,skillProtection:protection,skillRevision:revision,commitAction:'reply.commitCandidates',configurationForRevision:revision=>this.digest(attempt.requestId,revision),assertAuthorized:()=>o.authorize(input.contactId),signal:input.signal});
+   await runSingleDiscussionTurn({runtime:o.runtime,storage:o.storage,attempt,contextId,callId,configurationDigest,prompt,rebuildPrompt:prompt,systemPrompt,model:o.model,provider:o.provider,arbiter:o.arbiter,skillRun:null,openSkillRun,skillProtection:protection,skillRevision:revision,commitAction:'reply.commitCandidates',dispatchAction:'reply.dispatchCall',onPhase:phase=>o.service.phase(input.contactId,attempt.discussionId,input.requestKey,phase),configurationForRevision:revision=>this.digest(attempt.requestId,revision),assertAuthorized:()=>o.authorize(input.contactId),signal:input.signal});
    return {discussionId:attempt.discussionId,replayed:false,segmented:accepted.segmented};
-  }catch(error){await o.storage.execute('discussion.cancel',{...attempt,at:Date.now()}).catch(()=>{});throw error;}
+  }catch(error){await o.storage.execute('reply.failPreparation',{...attempt,code:input.signal?.aborted?'discussion_generation_cancelled':error instanceof StorageFailure?error.code:'discussion_generation_failed'}).catch(()=>{});throw error;}
+  finally{o.service.phase(input.contactId,attempt.discussionId,input.requestKey,null);}
  }
 }

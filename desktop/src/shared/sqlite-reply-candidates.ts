@@ -3,6 +3,7 @@ export type SqliteWorkspaceTone='original'|'warm'|'concise'|'polite';
 export interface SqliteReplyWorkspace {action:'express'|'suggest';draftText:string;tone:SqliteWorkspaceTone;instruction:string;contextText:string;includeRelationshipContext:boolean;excludedMessageIds:string[]}
 export type SqliteCandidateOperation=SqliteCandidateScope & (
  | {action:'read'}
+ | {action:'status';requestKey:string}
  | {action:'generate';requestKey:string;text:string;acceptIncomplete:boolean;carriedSelectionId?:string;selectedPackageId?:string;workspace?:SqliteReplyWorkspace}
  | {action:'edit';candidateId:string;versionNo:number;parts:string[]}
  | {action:'select'|'version';candidateId:string;versionNo:number}
@@ -10,7 +11,7 @@ export type SqliteCandidateOperation=SqliteCandidateScope & (
 export interface SqliteCandidateVersion {candidateId:string;versionNo:number;origin:'model'|'manual';parentVersionNo:number|null;parts:string[];basis:{itemNo:number;kind:string;text:string;verification:'actual_input'|'inherited_unverified'}[]}
 export interface SqliteCandidateRequest {requestId:string;generationState?:'committed'|'running'|'failed'|'unknown'|'invalidated';coverageWarning:string|null;skillWarning?:string|null;sourceState:'available'|'unavailable';candidates:SqliteCandidateVersion[];selections:{id:string;candidateId:string;versionNo:number;selectionNo:number}[];loadedSkills:{packageId:string;name?:string;revisionNo:number;relativePath:string;text:string}[]}
 export interface SqliteCandidateRecentMessage {messageId:string;sender:'owner'|'contact'|'unknown';text:string;occurredAt:string|null;timePrecision:'millisecond'|'second'|null;displayPosition:string;ordering:'verified'|'unknown'}
-export interface SqliteCandidatePage {availableSkills?:{packageId:string;name:string;revisionNo:number}[];recentMessages?:SqliteCandidateRecentMessage[];requests:SqliteCandidateRequest[];coverage:{phase:'not_started'|'running'|'incomplete'|'complete'}}
+export interface SqliteCandidatePage {recentMessages?:SqliteCandidateRecentMessage[];requests:SqliteCandidateRequest[];coverage:{phase:'not_started'|'running'|'incomplete'|'complete'}}
 export interface SqliteReplyCandidatesBridge {execute(operation:SqliteCandidateOperation):Promise<unknown>}
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(v);
 function invalid():never{throw new Error('本次候选操作无效。');}
@@ -28,8 +29,9 @@ function validWorkspace(value:unknown):value is SqliteReplyWorkspace{
 export function readSqliteCandidateOperation(value:unknown):SqliteCandidateOperation{
  if(!value||typeof value!=='object'||Array.isArray(value))invalid();const v=value as Record<string,unknown>;
  const common=['contactId','scopeRevision','sessionId','action'];
- const extra=v.action==='read'?[]:v.action==='generate'?['requestKey','text','acceptIncomplete','carriedSelectionId','selectedPackageId','workspace']:v.action==='edit'?['candidateId','versionNo','parts']:v.action==='select'||v.action==='version'?['candidateId','versionNo']:invalid();
+ const extra=v.action==='read'?[]:v.action==='status'?['requestKey']:v.action==='generate'?['requestKey','text','acceptIncomplete','carriedSelectionId','selectedPackageId','workspace']:v.action==='edit'?['candidateId','versionNo','parts']:v.action==='select'||v.action==='version'?['candidateId','versionNo']:invalid();
  if(Object.keys(v).some(k=>![...common,...extra].includes(k))||!uuid(v.contactId)||!uuid(v.sessionId)||!Number.isSafeInteger(v.scopeRevision)||(v.scopeRevision as number)<0)invalid();
+ if(v.action==='status'&&!uuid(v.requestKey))invalid();
  if(v.action==='generate'&&(!uuid(v.requestKey)||typeof v.text!=='string'||v.text.length>100000||typeof v.acceptIncomplete!=='boolean'||v.carriedSelectionId!==undefined&&!uuid(v.carriedSelectionId)||v.selectedPackageId!==undefined&&!uuid(v.selectedPackageId)
   ||v.workspace!==undefined&&(!validWorkspace(v.workspace)||v.text!==v.workspace.draftText||v.carriedSelectionId!==undefined&&(!v.workspace.includeRelationshipContext||v.workspace.excludedMessageIds.length>0))
   ||v.workspace===undefined&&!v.text.trim()))invalid();
@@ -44,8 +46,19 @@ export function readSqliteCandidateVersion(value:unknown):SqliteCandidateVersion
 export function readSqliteCandidatePage(value:unknown):SqliteCandidatePage{
  if(!value||typeof value!=='object')invalid();const v=value as SqliteCandidatePage;
  if(!Array.isArray(v.requests)||!v.coverage||!['not_started','running','incomplete','complete'].includes(v.coverage.phase))invalid();
- if(v.availableSkills!==undefined&&(!Array.isArray(v.availableSkills)||v.availableSkills.some(s=>!s||!uuid(s.packageId)||typeof s.name!=='string'||s.name.length>4096||!Number.isSafeInteger(s.revisionNo)||s.revisionNo<1)))invalid();
  if(v.recentMessages!==undefined&&(!Array.isArray(v.recentMessages)||v.recentMessages.length>50||v.recentMessages.some(m=>!m||!uuid(m.messageId)||!['owner','contact','unknown'].includes(m.sender)||typeof m.text!=='string'||!m.text.trim()||m.text.length>100000||!(m.occurredAt===null||typeof m.occurredAt==='string'&&m.occurredAt.length<=64)||!(m.timePrecision===null||['second','millisecond'].includes(m.timePrecision))||typeof m.displayPosition!=='string'||m.displayPosition.length>64||!['verified','unknown'].includes(m.ordering))))invalid();
  for(const r of v.requests){if(!r||r.skillWarning!==undefined&&r.skillWarning!==null&&r.skillWarning!=='回复策略暂不可用'||!uuid(r.requestId)||!(r.coverageWarning===null||typeof r.coverageWarning==='string')||!['available','unavailable'].includes(r.sourceState)||!Array.isArray(r.candidates)||!Array.isArray(r.selections)||!Array.isArray(r.loadedSkills))invalid();r.candidates.forEach(readSqliteCandidateVersion);for(const s of r.selections)if(!uuid(s.id)||!uuid(s.candidateId)||!Number.isSafeInteger(s.versionNo)||!Number.isSafeInteger(s.selectionNo))invalid();for(const s of r.loadedSkills)if(s.name!==undefined&&(typeof s.name!=='string'||s.name.length>4096)||!uuid(s.packageId)||!Number.isSafeInteger(s.revisionNo)||typeof s.relativePath!=='string'||typeof s.text!=='string'||new TextEncoder().encode(s.text).byteLength>1024*1024)invalid();}
+ return v;
+}
+
+/** 进度只包含调用状态，不允许聊天、模型正文或诊断详情进入此通道。 */
+export interface SqliteCandidateStatus {requestKey:string;phase:'not_found'|'preparing'|'queued'|'generating'|'saving'|'committed'|'failed'|'unknown';sent:boolean;errorCode:string|null;retryable:boolean;startedAt:number|null;finishedAt:number|null}
+export function readSqliteCandidateStatus(value:unknown):SqliteCandidateStatus{
+ if(!value||typeof value!=='object'||Array.isArray(value))invalid();const v=value as SqliteCandidateStatus;
+ if(Object.keys(v).length!==7||Object.keys(v).some(k=>!['requestKey','phase','sent','errorCode','retryable','startedAt','finishedAt'].includes(k))
+  ||!uuid(v.requestKey)||!['not_found','preparing','queued','generating','saving','committed','failed','unknown'].includes(v.phase)
+  ||typeof v.sent!=='boolean'||typeof v.retryable!=='boolean'||v.retryable&&v.phase!=='failed'
+  ||!(v.errorCode===null||typeof v.errorCode==='string'&&/^[a-z][a-z0-9_]{0,79}$/.test(v.errorCode))
+  ||[v.startedAt,v.finishedAt].some(t=>t!==null&&(!Number.isSafeInteger(t)||t<0)))invalid();
  return v;
 }

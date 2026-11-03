@@ -26,7 +26,8 @@ export interface SingleDiscussionTurnOptions {
  prompt:string;rebuildPrompt?:string;systemPrompt:string;model:HostReplyModelConfiguration;
  provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;
  skillRun:SqliteSkillRun|null;openSkillRun?:()=>Promise<SqliteSkillRun>;skillProtection:SkillRunProtection;skillRevision:SkillRunRevision;
- commitAction?:'reply.commitCandidates';configurationForRevision?:(revision:SkillRunRevision)=>string;assertAuthorized?:()=>Promise<void>;signal?:AbortSignal;
+ commitAction?:'reply.commitCandidates';dispatchAction?:'reply.dispatchCall';onPhase?:(phase:'queued'|'preparing'|'generating'|'saving')=>void;
+ configurationForRevision?:(revision:SkillRunRevision)=>string;assertAuthorized?:()=>Promise<void>;signal?:AbortSignal;
 }
 export interface SingleDiscussionTurnResult {text:string;copyId:string;callId:string;sessionEvent:SessionEvent<'assistant/message'>}
 function fail(code='discussion_generation_failed'):never{throw new StorageFailure(code);}
@@ -48,7 +49,9 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
  let permit:Awaited<ReturnType<ModelPermitArbiter['acquire']>>|undefined;
  const signal=options.signal?AbortSignal.any([options.signal,deadline.signal]):deadline.signal;
  try{
+  options.onPhase?.('queued');
   permit=await options.arbiter.acquire('foreground',signal);
+  options.onPhase?.('preparing');
   timer=setTimeout(()=>deadline.abort(new StorageFailure('discussion_generation_timeout')),model.deadline_ms);
   for(;;){try{return await options.runtime.run(attempt,configurationDigest,async work=>{
    lastCopyId=work.copy.id;
@@ -60,8 +63,8 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
    if(skillRun)options.skillRun=skillRun;
    const requireCurrent=async()=>{
     combined.throwIfAborted();
-    await options.storage.execute('runtime.inspect',{...attempt,copyId:work.copy.id});
-    if(fallback){await options.assertAuthorized!();await options.storage.execute('discussion.assertSkillCall',{...attempt,contextId,callId,runRevision:skillRevision});if(options.commitAction)await options.storage.execute('reply.assertInput',{...attempt,contextId});}
+    await options.storage.execute('runtime.assertActive',{...attempt,copyId:work.copy.id});
+    if(fallback){await options.assertAuthorized!();await options.storage.execute('discussion.assertSkillCall',{...attempt,contextId,callId,runRevision:skillRevision});}
     else await options.skillProtection.assertCurrent(scope,skillRevision,combined);
     combined.throwIfAborted();
    };
@@ -83,13 +86,13 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
       if(request.provider!==binding.provider||request.model!==binding.model||request.maxTokens!==binding.maxTokens
        ||request.temperature!==binding.temperature||request.reasoningEffort!==binding.reasoningEffort||request.purpose!==undefined
        ||request.tools?.some(t=>!['skill','skill_resource'].includes(t.name)))fail('discussion_model_configuration_changed');
-      await skillRun?.validate(combined);
       const requestPayload=payload(request);
       lastPhysicalCallId=physicalCallId;
       call=options.provider.beginCall({sessionId:work.sessionId,attempt_id:physicalCallId,permit_id:permit!.id,binding,profile:model.budgetProfile,
        requireCurrent,beforeDispatch:async({budget})=>{
         await requireCurrent();await skillRun?.validate(combined);
-        await options.storage.execute('discussion.dispatchCall',{...attempt,copyId:work.copy.id,callId,contextId,requestPayload,budget,physicalCallId,skillRun:skillRevision});
+        await options.storage.execute(options.dispatchAction??'discussion.dispatchCall',{...attempt,copyId:work.copy.id,callId,contextId,requestPayload,budget,physicalCallId,skillRun:skillRevision});
+        options.onPhase?.('generating');
        }});
       for await(const chunk of next()){
        combined.throwIfAborted();
@@ -138,6 +141,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
     handle.agent.followup(createUserMessage({source:{kind:'user'},content:[{type:'text',text:work.restoring?options.prompt:options.rebuildPrompt??options.prompt}]}));
     await handle.agent.whenIdle();combined.throwIfAborted();if(failure)throw failure;
     if(streamCalls<1||!finished)fail('discussion_generation_failed');
+    options.onPhase?.('saving');
     await requireCurrent();await skillRun?.validate(combined);
     await handle.dispose();handle=undefined;
     const history=await work.driver.readHistory(work.sessionId);
@@ -150,14 +154,13 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
      ||event.data.message.content.some(block=>block.type==='tool-call'))fail('discussion_assistant_event_invalid');
     const text=event.data.message.content.filter(block=>block.type==='text').map(block=>block.text).join('');
     if(!text.trim()||text.length>100_000)fail('discussion_assistant_event_invalid');
-    await requireCurrent();
     await options.storage.execute(options.commitAction??'discussion.commitAssistant',{...attempt,copyId:work.copy.id,callId,physicalCallId:lastPhysicalCallId,contextId,text,sessionEvent:event,skillRun:skillRevision});
     committed=true;return {text,copyId:work.copy.id,callId,sessionEvent:event};
    }finally{
     combined.removeEventListener('abort',cancel);
     try{await handle?.dispose();}finally{disposeSkill?.();}
    }
-  },signal,!!options.skillRevision.eligible.length||fallback);}catch(error){
+  },signal,options.commitAction==='reply.commitCandidates'||!!options.skillRevision.eligible.length||fallback);}catch(error){
    const skillFailed=error instanceof ReplySkillUnavailable||isSkillReadFailure(error)||error instanceof StorageFailure&&error.code==='discussion_runtime_unavailable'&&isSkillReadFailure(options.skillRun?.failure);
    if(fallback||!skillFailed||totalCalls>=REPLY_MODEL_CALL_LIMIT||!options.runtime.discard||!options.assertAuthorized||!lastCopyId)throw error;
    signal.throwIfAborted();await options.assertAuthorized();
@@ -168,7 +171,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
    options.skillRun?.close();fallback=true;
   }}
  }catch(error){
-  const code=signal.aborted?'discussion_generation_cancelled':error instanceof StorageFailure?error.code:'discussion_generation_failed';
+  const code=deadline.signal.aborted?'discussion_generation_timeout':signal.aborted?'discussion_generation_cancelled':error instanceof StorageFailure?error.code:'discussion_generation_failed';
   if(!committed)await options.storage.execute('discussion.failCall',{...attempt,callId,dispatched,code,...(failureEvidence?{failure:failureEvidence}:{})});
   throw new StorageFailure(code);
  }finally{clearTimeout(timer);options.skillRun?.close();permit?.settle();}

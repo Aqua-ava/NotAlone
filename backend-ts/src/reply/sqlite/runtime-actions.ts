@@ -5,21 +5,24 @@ import {requireSkillRun} from '../../skills/sqlite/storage.ts';
 import type {SkillRunRevision} from '../../skills/sqlite/contracts.ts';
 import {requireDiscussion,requireDiscussionContact,runtimeView,identifier} from './actions.ts';
 import {requireAttempt,decode} from './requests.ts';
-import {invalidHistoryDiscussionImpact} from './deletion.ts';
+import {requireCurrentReplyDependencies} from './provenance.ts';
 const fail=(code:string):never=>{throw new StorageFailure(code);};
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any)=>unknown):StorageAction=>({name:`runtime.${name}`,mode,retryBusy:mode==='write',execute});
 function copy(tx:StorageTransaction,i:any):StorageRow{return tx.get('SELECT * FROM runtime_copy WHERE owner_id=? AND contact_id=? AND discussion_id=? AND id=?',[identifier(i.ownerId),identifier(i.contactId),identifier(i.discussionId),identifier(i.copyId)])??fail('discussion_runtime_unavailable');}
-export function requireRuntimeCurrent(tx:StorageTransaction,i:any):StorageRow{
+function requireRuntimeActive(tx:StorageTransaction,i:any):StorageRow{
  const row=copy(tx,i),d=requireDiscussion(tx,i),c=requireDiscussionContact(tx,i.ownerId,i.contactId);
- if(invalidHistoryDiscussionImpact(tx,i.ownerId).copies.has(String(row.id)))fail('discussion_runtime_invalidated');
  if(row.state!=='preparing'&&d.current_runtime_id!==row.id||!['dirty','ready','preparing'].includes(String(row.state))||row.write_generation!==d.generation||row.accepted_data_generation!==c.data_generation||row.source_revision!==c.source_revision||row.cleanup_operation_id!==null)fail('discussion_runtime_invalidated');
+ return row;
+}
+export function requireRuntimeCurrent(tx:StorageTransaction,i:any):StorageRow{
+ const row=requireRuntimeActive(tx,i),c=requireDiscussionContact(tx,i.ownerId,i.contactId);
+ try{requireCurrentReplyDependencies(tx,{ownerId:i.ownerId,copyIds:[String(row.id)]});}
+ catch(error){if(error instanceof StorageFailure&&error.code==='history_source_not_available')fail('discussion_runtime_invalidated');throw error;}
  for(const context of tx.all('SELECT c.*,r.provenance_state FROM runtime_context r JOIN reply_context c ON c.owner_id=r.owner_id AND c.id=r.context_id WHERE r.owner_id=? AND r.copy_id=?',[i.ownerId,i.copyId])){
   if(context.provenance_state!=='verified'||context.state!=='active')fail('discussion_runtime_invalidated');
   requireSkillRun(tx,i.ownerId,decode<SkillRunRevision>(String(context.skill_run_json)));
   const owner=tx.get('SELECT * FROM owner WHERE owner_id=?',[i.ownerId])!;
   if(context.preference_revision!==owner.preference_revision||context.owner_memory_revision!==owner.memory_revision||context.contact_memory_revision!==c.memory_revision)fail('discussion_runtime_invalidated');
-  for(const item of tx.all("SELECT * FROM reply_context_item WHERE owner_id=? AND context_id=? AND kind='message'",[i.ownerId,context.id]))if(!tx.get("SELECT 1 FROM capture_record r JOIN message m ON m.owner_id=r.owner_id AND m.id=r.message_id AND m.contact_id=r.contact_id WHERE r.owner_id=? AND r.contact_id=? AND r.id=? AND r.message_id=? AND r.availability='available' AND m.availability='available' AND m.interpretation_revision=?",[i.ownerId,item.source_contact_id,item.record_id,item.message_id,item.accepted_revision]))fail('discussion_runtime_invalidated');
-  for(const item of tx.all("SELECT * FROM reply_context_item WHERE owner_id=? AND context_id=? AND kind='entry'",[i.ownerId,context.id]))if(!tx.get("SELECT 1 FROM discussion_entry e JOIN reply_request r ON r.owner_id=e.owner_id AND r.id=e.origin_request_id WHERE e.owner_id=? AND e.id=? AND e.content_state='available' AND r.state<>'invalidated'",[i.ownerId,item.entry_id]))fail('discussion_runtime_invalidated');
  }
  return row;
 }
@@ -53,6 +56,7 @@ export const runtimeActions:StorageAction[]=[
  }),
  action('inventory','read',(tx,i)=>tx.all("SELECT * FROM runtime_copy WHERE owner_id=? AND state<>'deleted'",[identifier(i.ownerId)]).map(runtimeView)),
  action('inspect','read',(tx,i)=>runtimeView(requireRuntimeCurrent(tx,i))),
+ action('assertActive','read',(tx,i)=>{requireAttempt(tx,i);return runtimeView(requireRuntimeActive(tx,i));}),
  action('prepare','write',(tx,i)=>{
   requireAttempt(tx,i);const d=requireDiscussion(tx,i),c=requireDiscussionContact(tx,i.ownerId,i.contactId);
   identifier(i.copyId);identifier(i.sdkInstanceId);

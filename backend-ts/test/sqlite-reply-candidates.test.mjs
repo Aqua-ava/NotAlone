@@ -169,6 +169,22 @@ test('工作区suggest允许空草稿且关闭关系背景时只冻结本次输�
  await assert.rejects(turns.generate({...input,workspace:{...workspace,excludedMessageIds:[randomUUID()]}}),{code:'discussion_request_conflict'});assert.equal(f.requests.length,3);
 });
 
+test('旧候选来源失效后，关闭关系背景的新候选使用全新运行副本且可正常生成',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
+ const registryModule=new URL('./fixtures/sqlite/reply-provenance-registry.mjs',import.meta.url).href;
+ const f=await realFixture(t,{registryModule,content:JSON.stringify({candidates:[{parts:['只依据本次输入的合成候选'],basis:[1]}]})}),contactId=f.ids[0],discussion=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner);
+ const turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ await turns.generate({contactId,discussionId:discussion.id,requestKey:randomUUID(),text:'旧请求的合成要求',confirmedContact:true});
+ await f.storage.execute('provenanceTest.sourceUnavailable',{ownerId:f.owner,contactId,recordId:f.messages[0][0].sourceRecordIds[0]});
+ const metadata=await f.storage.execute('discussion.metadata',{ownerId:f.owner,contactId,discussionId:discussion.id});
+ assert.equal(metadata.id,discussion.id);assert.ok(metadata.currentRuntimeId);assert.equal('entries' in metadata,false);
+ const workspace={action:'suggest',draftText:'',tone:'original',instruction:'只写本次建议',contextText:'本次独立补充',includeRelationshipContext:false,excludedMessageIds:[]};
+ await turns.generate({contactId,discussionId:discussion.id,requestKey:randomUUID(),text:'',workspace,confirmedContact:true});
+ assert.equal(f.requests.length,2);
+ const request=JSON.stringify(f.requests[1]);assert.match(request,/本次独立补充/);assert.doesNotMatch(request,/旧请求的合成要求/);assert.ok(!request.includes(f.messages[0][0].text));
+ const newest=(await service.view(contactId,discussion.id)).at(-1);assert.equal(newest.candidates[0].parts[0],'只依据本次输入的合成候选');
+});
+
 test('候选HTTP接受明确的空suggest，要求express草稿与工作区输入一致',async t=>{
  const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');const {SqliteReplyCandidateHttp}=await import('../src/reply/sqlite/candidates/http.ts');const {createServer}=await import('node:http');
  const f=await realFixture(t,{content:JSON.stringify({candidates:[{parts:['合成建议'],basis:[1]}]})}),contactId=f.ids[0],d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());

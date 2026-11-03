@@ -4,6 +4,7 @@ import {readCoverage} from '../../../history/sqlite/read.ts';
 import {discussionRequestActions,requireAttempt,decode} from '../requests.ts';
 import {discussionModelActions,dropSkillForCurrentCall} from '../model-actions.ts';
 import {requireDiscussion} from '../actions.ts';
+import {sanitizeDiscussionErrorCode} from '../failure.ts';
 import {emptyReplyKnowledge,type ReplyKnowledgeReader} from './contracts.ts';
 import {freezeReplyInput,requireReplyInput,requireSelection} from './input.ts';
 import {insertModelCandidates,parseReplyOutput,readParts,requireCandidate,versionView} from './versions.ts';
@@ -22,10 +23,27 @@ function snapshotReplyCoverage(tx:StorageTransaction,ownerId:string,contactId:st
 const begin=discussionRequestActions.find((a):a is Extract<StorageAction,{mode:'read'|'write'}>=>a.name==='discussion.begin'&&a.mode!=='maintenance')!;
 const freeze=discussionRequestActions.find((a):a is Extract<StorageAction,{mode:'read'|'write'}>=>a.name==='discussion.freezeContext'&&a.mode!=='maintenance')!;
 const commit=discussionModelActions.find((a):a is Extract<StorageAction,{mode:'read'|'write'}>=>a.name==='discussion.commitAssistant'&&a.mode!=='maintenance')!;
+const dispatch=discussionModelActions.find((a):a is Extract<StorageAction,{mode:'read'|'write'}>=>a.name==='discussion.dispatchCall'&&a.mode!=='maintenance')!;
 /** 只由受信任注册表安装正式08/09消费者；HTTP不能指定适配器。 */
 export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyReplyKnowledge):StorageAction[]{
  const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any,lease:any)=>unknown):StorageAction=>({name:`reply.${name}`,mode,retryBusy:mode==='write',execute});
  return [
+ action('status','read',(tx,i)=>{
+  requireDiscussion(tx,i);
+  if(typeof i.requestKey!=='string'||!/^[a-f0-9-]{36}$/.test(i.requestKey))fail('reply_input_invalid');
+  const row=tx.get(`SELECT r.id,r.state request_state,a.id attempt_id,a.state attempt_state,a.started_at,a.finished_at,a.error_code FROM reply_request r LEFT JOIN reply_attempt a ON a.owner_id=r.owner_id AND a.request_id=r.id WHERE r.owner_id=? AND r.contact_id=? AND r.discussion_id=? AND r.request_key=? AND r.kind='reply' ORDER BY a.attempt_no DESC LIMIT 1`,[i.ownerId,i.contactId,i.discussionId,i.requestKey]);
+  if(!row)return {requestKey:i.requestKey,phase:'not_found',sent:false,errorCode:null,retryable:false,startedAt:null,finishedAt:null};
+  const calls=tx.all('SELECT state,sent_at FROM model_call WHERE owner_id=? AND reply_attempt_id=?',[i.ownerId,row.attempt_id]);
+  const sent=calls.some(c=>c.sent_at!==null),unknown=calls.some(c=>c.state==='unknown'),running=row.request_state==='running'&&row.attempt_state==='running';
+  const phase=unknown?'unknown':row.request_state==='committed'?'committed':running?'preparing':'failed';
+  return {requestKey:i.requestKey,phase,sent,errorCode:row.error_code===null?null:sanitizeDiscussionErrorCode(row.error_code),retryable:phase==='failed'&&!calls.some(c=>['sending','unknown'].includes(String(c.state))),startedAt:row.started_at===null?null:Number(row.started_at),finishedAt:row.finished_at===null?null:Number(row.finished_at)};
+ }),
+ action('failPreparation','write',(tx,i)=>{
+  requireAttempt(tx,i);
+  if(tx.get('SELECT 1 FROM model_call WHERE owner_id=? AND reply_attempt_id=?',[i.ownerId,i.attemptId]))return;
+  tx.run("UPDATE reply_attempt SET state='failed',finished_at=?,error_code=? WHERE owner_id=? AND id=?",[Date.now(),sanitizeDiscussionErrorCode(i.code),i.ownerId,i.attemptId]);
+  tx.run("UPDATE reply_request SET state='cancelled' WHERE owner_id=? AND id=?",[i.ownerId,i.requestId]);
+ }),
  action('begin','write',(tx,i,lease)=>{
   const {coverage,warning:capturedWarning}=snapshotReplyCoverage(tx,i.ownerId,i.contactId),warning=i.includeRelationshipContext===false?null:capturedWarning;
   const coverageJson=requestCoverageJson(coverage,i.workspaceFingerprint);
@@ -50,6 +68,7 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
  }),
  action('assertInput','read',(tx,i)=>{requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader);return true;}),
  action('assertInputWithoutSkill','read',(tx,i)=>{requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader,{ignoreSkill:true});return true;}),
+ action('dispatchCall','write',(tx,i,lease)=>{requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader);return dispatch.execute(tx,i,lease);}),
  action('dropSkill','write',(tx,i)=>{
   requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader,{ignoreSkill:true});
   return dropSkillForCurrentCall(tx,i);

@@ -62,18 +62,19 @@ test('关闭关系背景后撤销旧候选携入，生成不提交被后端禁�
  assert.equal(f.commands.find(c=>c.action==='generate').workspace.includeRelationshipContext,false);
 });
 
-test('暂时失去生成资格保留自己的想法，原请求重试不吞掉后来编辑',{timeout:30000},async t=>{
- let calls=0;
- const f=await panel(t,async operation=>{if(operation.action==='read')return pageData();if(++calls===1)throw new Error('候选结果尚未确认，请保留原请求重试核对。');return receipt(operation,true);});
+test('暂时失去生成资格保留想法，结果未知只核对原请求且保留后来编辑',{timeout:30000},async t=>{
+ let checks=0;
+ const f=await panel(t,async operation=>{if(operation.action==='read')return pageData();if(operation.action==='status')return {requestKey:operation.requestKey,phase:++checks===1?'unknown':'committed',sent:true,errorCode:null,retryable:false,startedAt:1000,finishedAt:2000};throw new Error('候选结果尚未确认，请保留原请求重试核对。');});
  const region=f.page.getByRole('region',{name:'表达工作区'}),draft=region.getByRole('textbox',{name:'有什么想说的',exact:true});
  await draft.fill('原请求的想法');
  await f.page.evaluate(()=>window.__setDisabled(true));await expect(draft).toBeDisabled();
  await f.page.evaluate(()=>window.__setDisabled(false));await expect(draft).toBeEnabled();await expect(draft).toHaveValue('原请求的想法');
  await region.getByRole('button',{name:'帮我表达',exact:true}).click();
- await expect(region.getByRole('alert')).toContainText('保留原请求');
- await draft.fill('后来改写的新想法');await region.getByRole('button',{name:'重试核对候选',exact:true}).click();
- await expect.poll(()=>f.commands.filter(c=>c.action==='generate').length).toBe(2);
- const generated=f.commands.filter(c=>c.action==='generate');assert.equal(generated[0].requestKey,generated[1].requestKey);assert.deepEqual(generated[0].workspace,generated[1].workspace);
+ await expect(region.getByRole('alert')).toContainText('结果暂未确认');
+ await expect(region.getByRole('button',{name:'帮我想想',exact:true})).toBeDisabled();
+ await draft.fill('后来改写的新想法');await region.getByRole('button',{name:'核对原请求',exact:true}).click();
+ await expect(region.getByText('已找到原请求保存的候选。',{exact:true})).toBeVisible();
+ const generated=f.commands.filter(c=>c.action==='generate'),checked=f.commands.filter(c=>c.action==='status');assert.equal(generated.length,1);assert.equal(checked.length,2);assert.ok(checked.every(c=>c.requestKey===generated[0].requestKey));
  await expect(draft).toHaveValue('后来改写的新想法');
 });
 
@@ -128,19 +129,20 @@ test('候选页面读取真实版本结构、保存多条编辑稿并选择具�
  await region.getByRole('button',{name:'回到最新版本',exact:true}).click();await expect(first).toHaveValue('手工修改后的第一条');await expect(second).toHaveValue('手工修改后的第二条');
 });
 
-test('覆盖不完整可直接使用，失败核对沿同请求键且显式选稿才携入',{timeout:30000},async t=>{
+test('覆盖不完整可直接使用，明确未发送失败的新请求保留显式选稿',{timeout:30000},async t=>{
  let generated=0;const f=await panel(t,async operation=>{
   if(operation.action==='read')return {...pageData(original(),'incomplete'),availableSkills:[{packageId:ids.skill,name:'合成明确选择的方法',revisionNo:1}]};
   if(operation.action==='select')return {id:ids.selection,candidateId:operation.candidateId,versionNo:operation.versionNo,selectionNo:1};
+  if(operation.action==='status')return {requestKey:operation.requestKey,phase:'failed',sent:false,errorCode:'discussion_generation_failed',retryable:true,startedAt:1000,finishedAt:2000};
   if(operation.action==='generate'){if(++generated===1)throw new Error('候选结果尚未确认，请保留原请求重试核对。');return receipt(operation,true);}
   throw new Error('未授权的合成页面操作');
  });
  const region=f.page.getByRole('region',{name:'表达工作区'}),draft=region.getByRole('textbox',{name:'有什么想说的',exact:true}),generate=region.getByRole('button',{name:'帮我表达',exact:true});
  await expect(region.getByRole('checkbox',{name:'使用已同步部分继续',exact:true})).toHaveCount(0);await draft.fill('合成本次表达要求');await expect(generate).toBeEnabled();assert.equal(generated,0);
  await region.getByRole('button',{name:'以此版本继续',exact:true}).click();await expect(region.getByRole('status')).toContainText('下一次明确请求');assert.equal(generated,0);
- await generate.click();await expect(region.getByRole('alert').filter({hasText:'候选结果尚未确认'})).toBeVisible();await expect(draft).toHaveValue('合成本次表达要求');
- await region.getByRole('button',{name:'重试核对候选',exact:true}).click();await expect.poll(()=>f.submitted.length).toBe(1);
- const requests=f.commands.filter(c=>c.action==='generate');assert.equal(requests.length,2);assert.equal(requests[0].acceptIncomplete,false);assert.equal(requests[0].selectedPackageId,undefined);assert.equal(requests[1].selectedPackageId,undefined);assert.equal(requests[0].carriedSelectionId,ids.selection);assert.equal(requests[1].requestKey,requests[0].requestKey);assert.equal(requests[1].text,requests[0].text);assert.equal(requests[1].carriedSelectionId,ids.selection);
+ await generate.click();await expect(region.getByRole('alert')).toContainText('尚未发给模型');await expect(draft).toHaveValue('合成本次表达要求');
+ await region.getByRole('button',{name:'重新生成',exact:true}).click();await expect.poll(()=>f.submitted.length).toBe(1);
+ const requests=f.commands.filter(c=>c.action==='generate');assert.equal(requests.length,2);assert.equal(requests[0].acceptIncomplete,false);assert.equal(requests[0].selectedPackageId,undefined);assert.equal(requests[1].selectedPackageId,undefined);assert.equal(requests[0].carriedSelectionId,ids.selection);assert.notEqual(requests[1].requestKey,requests[0].requestKey);assert.equal(requests[1].text,requests[0].text);assert.equal(requests[1].carriedSelectionId,ids.selection);
  await expect(draft).toHaveValue('');await expect(region.getByRole('checkbox',{name:'使用已同步部分继续',exact:true})).toHaveCount(0);
 });
 
@@ -253,4 +255,27 @@ test('首次会话带入已有想法并通过 SQLite 候选接口提交', {timeo
  await expect.poll(()=>f.submitted.length).toBe(1);
  const request=f.commands.find(command=>command.action==='generate');
  assert.equal(request.text,'合成的首次表达想法');assert.equal(request.contactId,ids.contact);assert.equal(request.sessionId,ids.session);
+});
+
+
+test('本轮进度独立于历史失败，轻量状态显示真实阶段且未发送失败可新请求重试',{timeout:30000},async t=>{
+ let phase='preparing',calls=0;const gate=Promise.withResolvers();
+ const f=await panel(t,async op=>{
+  if(op.action==='read')return {requests:[{requestId:ids.request,generationState:'failed',coverageWarning:null,sourceState:'unavailable',candidates:[],selections:[],loadedSkills:[]}],coverage:{phase:'complete'}};
+  if(op.action==='status')return {requestKey:op.requestKey,phase,sent:phase==='generating',errorCode:phase==='failed'?'discussion_preparation_timeout':null,retryable:phase==='failed',startedAt:1000,finishedAt:phase==='failed'?2000:null};
+  if(op.action==='generate'){if(++calls===1)return gate.promise;return receipt(op);}
+  throw new Error('未授权操作');
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'});
+ await expect(region.getByText('本次候选生成失败，没有可选正文。',{exact:true})).toBeVisible();
+ await region.getByRole('button',{name:'帮我想想',exact:true}).click();
+ await expect(region.getByText('正在整理本次资料…',{exact:true})).toBeVisible();
+ await expect(region.getByText('本次候选生成失败，没有可选正文。',{exact:true})).toHaveCount(0);
+ phase='generating';await expect(region.getByText('正在等待模型回复…',{exact:true})).toBeVisible();
+ assert.equal(f.commands.filter(c=>c.action==='read').length,1,'进度核对不拉整页聊天与历史');
+ phase='failed';gate.reject(new Error('合成运输失败'));
+ await expect(region.getByRole('alert')).toContainText('尚未发给模型');
+ await region.getByRole('button',{name:'重新生成',exact:true}).click();
+ await expect.poll(()=>f.commands.filter(c=>c.action==='generate').length).toBe(2);
+ const requests=f.commands.filter(c=>c.action==='generate');assert.notEqual(requests[0].requestKey,requests[1].requestKey);
 });

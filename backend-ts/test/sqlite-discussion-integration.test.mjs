@@ -125,7 +125,7 @@ test('真实调用在途时来源fence先撤旧正文，等待Agent排空后清�
 
 test('关闭等待尚未登记holder的真实SQLite获取阶段，返回后不再创建目录或模型调用',async t=>{
  const entered=Promise.withResolvers(),release=Promise.withResolvers();let gated=false;
- const f=await fixture(t,{runtimeStorageHook:async(storage,name,input,...args)=>{const result=await storage.execute(name,input,...args);if(name==='discussion.view'&&!gated){gated=true;entered.resolve();await release.promise;}return result;}});
+ const f=await fixture(t,{runtimeStorageHook:async(storage,name,input,...args)=>{const result=await storage.execute(name,input,...args);if(name==='discussion.metadata'&&!gated){gated=true;entered.resolve();await release.promise;}return result;}});
  const d=await f.service.newDiscussion(f.ids[0]);const pending=f.turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'关闭获取阶段合成要求',confirmedContact:true}).then(()=>({ok:true}),error=>({error}));
  await entered.promise;let closed=false;const closing=f.runtime.close().then(()=>{closed=true;});await new Promise(resolve=>setImmediate(resolve));assert.equal(closed,false);
  release.resolve();await closing;const result=await pending;assert.ok(result.error);assert.equal(f.requests.length,0);assert.deepEqual(await f.storage.execute('runtime.inventory',{ownerId:owner}),[]);

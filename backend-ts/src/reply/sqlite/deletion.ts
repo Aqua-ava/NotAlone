@@ -4,7 +4,6 @@ import {memoryDeletionImpact} from '../../memory/sqlite/deletion-impact.ts';
 import {collectMemoryDocumentDeletionReferences} from '../../memory/sqlite/documents/deletion.ts';
 import {createHash} from 'node:crypto';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
-import {currentSourceScopeCTE,currentSourcePredicate} from '../../history/sqlite/current-scope.ts';
 import type {CheckResult,DeletionAuthority,DeletionDomain,DeletionOperation,DeletionScope,DeletionTarget,FileDeletionTarget,ManagedAddress,RowDeletionTarget} from '../../storage/sqlite/deletion/contracts.ts';
 function fail(code:string):never{throw new StorageFailure(code);}
 const pass=(proof:string):CheckResult=>({result:'passed',proof});
@@ -98,31 +97,6 @@ function closure(tx:StorageTransaction,op:DeletionOperation,sourceKeys?:Readonly
   changed=count!==result.contexts.size+result.requests.size+result.copies.size;
  }
  return result;
-}
-/** 复用来源删除的依赖闭包，仅计算失证影响，不执行删除。 */
-export function invalidHistoryDiscussionImpact(tx:StorageTransaction,ownerId:string):Closure{
- const hasCandidateSources=Boolean(tx.get("SELECT 1 FROM sqlite_master WHERE name='reply_candidate_input_source'"));
- const sources=tx.all(`WITH ${currentSourceScopeCTE},used_sources AS MATERIALIZED (
-  SELECT source_contact_id contact_id,record_id FROM reply_context_item WHERE owner_id=? AND kind='message'
-  ${hasCandidateSources?'UNION SELECT source_contact_id,record_id FROM reply_candidate_input_source WHERE owner_id=?':''}
- ) SELECT DISTINCT r.contact_id,r.id FROM used_sources u JOIN capture_record r ON r.owner_id=? AND r.contact_id=u.contact_id AND r.id=u.record_id
- JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
- WHERE r.state='normalized' AND (
-  EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=r.owner_id AND q.contact_id=r.contact_id AND q.message_id=r.message_id)
-  OR EXISTS (SELECT 1 FROM history_continuity_fence f WHERE f.owner_id=r.owner_id AND f.contact_id=r.contact_id)
-  OR EXISTS (SELECT 1 FROM history_guard_lease l JOIN database_instance d ON d.slot=1 WHERE l.owner_id=r.owner_id AND l.contact_id=r.contact_id AND (l.state<>'active' OR l.runtime_id<>d.runtime_id))
-  OR NOT ${currentSourcePredicate()})`,[ownerId,null,null,ownerId,...(hasCandidateSources?[ownerId]:[]),ownerId]);
- // 重新认证只恢复新的消息解释；旧执行固定的来源版本不能因隔离解除而复活。
- const staleContexts=new Set(tx.all(`SELECT i.context_id FROM reply_context_item i LEFT JOIN message m
-  ON m.owner_id=i.owner_id AND m.contact_id=i.source_contact_id AND m.id=i.message_id
-  WHERE i.owner_id=? AND i.kind='message' AND (m.id IS NULL OR m.interpretation_revision<>i.accepted_revision)`,[ownerId]).map(row=>String(row.context_id)));
- if(hasCandidateSources)for(const row of tx.all(`SELECT i.context_id FROM reply_candidate_input_source i LEFT JOIN message m
-  ON m.owner_id=i.owner_id AND m.contact_id=i.source_contact_id AND m.id=i.message_id
-  WHERE i.owner_id=? AND (m.id IS NULL OR m.interpretation_revision<>i.accepted_revision)`,[ownerId]))staleContexts.add(String(row.context_id));
- if(!sources.length&&!staleContexts.size)return {contexts:new Set(),requests:new Set(),copies:new Set()};
- const sourceKeys=new Set(sources.map(source=>JSON.stringify([source.contact_id,source.id])));
- const op:DeletionOperation={operationId:'',ownerId,scope:{kind:'source',contactId:'',sourceId:''},acceptedGeneration:0n,planRevision:0n,state:'fenced',createdAt:'',completedAt:null};
- return closure(tx,op,sourceKeys,staleContexts);
 }
 export interface DiscussionDeletionImpact {contextIds:string[];requestIds:string[];attemptIds:string[];entryIds:string[];runtimeCopyIds:string[];discussionIds:string[];holderKeys:string[]}
 /** 07复用的无正文影响清单；与本域完全相同的实际输入及后续复用闭包。 */

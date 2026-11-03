@@ -1,4 +1,4 @@
-import {invalidHistoryDiscussionImpact} from './deletion.ts';
+import {hasCurrentReplyDependencies} from './provenance.ts';
 import {randomUUID} from 'node:crypto';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import {requireSkillRun} from '../../skills/sqlite/storage.ts';
@@ -74,7 +74,7 @@ export const discussionRequestActions:StorageAction[]=[
     tx.run('INSERT INTO reply_context_item VALUES(?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL)',[...values,item.sourceContactId,item.messageId,item.recordId,item.acceptedRevision]);
    }else if(item.kind==='entry'){
     const entry=tx.get("SELECT e.role,e.origin_request_id FROM discussion_entry e JOIN reply_request r ON r.owner_id=e.owner_id AND r.id=e.origin_request_id WHERE e.owner_id=? AND e.contact_id=? AND e.discussion_id=? AND e.id=? AND e.content_state='available' AND r.state<>'invalidated'",[i.ownerId,i.contactId,i.discussionId,item.entryId]);
-    if(!entry||entry.role==='assistant'&&invalidHistoryDiscussionImpact(tx,i.ownerId).requests.has(String(entry.origin_request_id)))fail('discussion_source_unavailable');
+    if(!entry||entry.role==='assistant'&&!hasCurrentReplyDependencies(tx,{ownerId:i.ownerId,requestIds:[String(entry.origin_request_id)]}))fail('discussion_source_unavailable');
     tx.run('INSERT INTO reply_context_item VALUES(?,?,?,?,?,?,NULL,NULL,NULL,NULL,?,NULL,NULL)',[...values,item.entryId]);
    }else if(item.kind==='skill'){
     if(!i.skillRun.eligible.some((a:any)=>a.packageId===item.packageId&&a.revisionNo===item.packageRevisionNo))fail('discussion_source_unavailable');

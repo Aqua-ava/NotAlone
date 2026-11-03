@@ -115,3 +115,16 @@ test('前台确认失效时主进程拒绝候选操作并撤销在途读取，�
  f.confirm(true);const gate=Promise.withResolvers();f.respond(()=>gate.promise);const pending=f.bridge.candidates.execute({...scope,action:'read'}),rejected=assert.rejects(pending,/请先确认本次联系人/);
  f.confirm(false,true);assert.equal(f.requests[0].signal.aborted,true);gate.resolve({generation:3,data:pageData()});await rejected;
 });
+
+
+test('候选状态沿固定只读路径返回无正文进度，拒绝夹带私密字段',async t=>{
+ const f=fixture(await modules());t.after(()=>f.controller.close());
+ const status={requestKey:ids.request,phase:'preparing',sent:false,errorCode:null,retryable:false,startedAt:1000,finishedAt:null};
+ f.respond(async()=>({generation:3,data:status}));
+ assert.deepEqual(await f.bridge.candidates.execute({...scope,action:'status',requestKey:ids.request}),status);
+ assert.equal(f.requests[0].method,'GET');
+ assert.equal(f.requests[0].path,`/api/contacts/${ids.contact}/assistant-sessions/${ids.session}/reply-candidates/status?request_key=${ids.request}`);
+ assert.equal(f.requests[0].timeoutMs,8000);assert.equal(f.requests[0].maxResponseBytes,4096);
+ f.respond(async()=>({generation:3,data:{...status,text:'不应进入IPC的合成私密正文'}}));
+ await assert.rejects(f.bridge.candidates.execute({...scope,action:'status',requestKey:ids.request}),/候选结果尚未确认/);
+});
