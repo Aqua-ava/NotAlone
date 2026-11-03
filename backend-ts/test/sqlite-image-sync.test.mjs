@@ -26,6 +26,67 @@ function unknownQualityAdapter(onRead=()=>{}){
  }};
 }
 
+function resourceVariantAdapter(variant,onRead=()=>{}){
+ return {version:'synthetic-resource-variant-v1',supports:(kind,goal)=>kind==='image'&&goal==='extract',async execute(context){
+  onRead();await context.checkpoint();const sourceVariant=variant(),quality=sourceVariant==='thumbnail'?'thumbnail':'unknown';
+  const content=Buffer.from(sourceVariant==='thumbnail'?'合成缩略图':'合成主图'),digest=createHash('sha256').update(content).digest('hex');
+  await context.save({role:'image_display',expectedBytes:content.length,expectedSha256:digest,bytes:(async function*(){yield content;})(),
+   validate:async()=>({format:'synthetic',mimeType:'image/png',containerValid:true,viewable:true,playable:false,imageQuality:quality,qualityProof:null,
+    imageQualityEvidence:{protocol:'wechat-image-quality-v1',quality,sourceVariant,resourceInfoId:'10',resources:[{resourceId:'20',resourceTypeRaw:262145}],sourceSha256:digest,contentSha256:digest,originalProofDigest:null}})});
+  return {association:{protocol:'media-association-v1',profileId:'synthetic-resource-variant-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-resource'}};
+ }};
+}
+
+test('已保存缩略图在后续自动复查取得主图后更新，主图不继续轮询',async t=>{
+ let variant='thumbnail',reads=0;const f=await fixture(t,resourceVariantAdapter(()=>variant,()=>reads++));
+ t.mock.timers.enable({apis:['setTimeout','Date']});
+ const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());
+ sync.wake();await sync.waitForIdle();
+ const image=f.messages.find(m=>m.kind==='image'),thumbnail=await f.media.read(f.contact,image.id);
+ assert.equal(thumbnail.files[0].imageQuality,'thumbnail');assert.equal(reads,1);
+ variant='main';t.mock.timers.tick(60_000);await sync.waitForIdle();
+ const main=await f.media.read(f.contact,image.id);
+ assert.equal(reads,2);assert.equal(main.files[0].imageQuality,'unknown');assert.notEqual(main.files[0].fileId,thumbnail.files[0].fileId);
+ t.mock.timers.tick(60_000);await sync.waitForIdle();assert.equal(reads,2);
+});
+
+test('复查仍是缩略图或读取失败时保留原副本，同一时间窗不重复读取',async t=>{
+ let reads=0,failed=false;const adapter=resourceVariantAdapter(()=> 'thumbnail',()=>reads++),execute=adapter.execute;
+ adapter.execute=async context=>{if(failed){reads++;throw new StorageFailure('media_local_file_missing');}return execute(context);};
+ const f=await fixture(t,adapter);t.mock.timers.enable({apis:['setTimeout','Date']});
+ const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());
+ sync.wake();await sync.waitForIdle();const image=f.messages.find(m=>m.kind==='image');
+ const saved=(await f.media.read(f.contact,image.id)).files[0];
+ t.mock.timers.tick(60_000);await sync.waitForIdle();assert.equal(reads,2);
+ assert.equal((await f.media.read(f.contact,image.id)).files[0].fileId,saved.fileId);
+ sync.wake();await sync.waitForIdle();assert.equal(reads,2);
+ failed=true;t.mock.timers.tick(60_000);await sync.waitForIdle();
+ const failure=await f.media.read(f.contact,image.id);assert.equal(reads,3);assert.equal(failure.latestAttempt.state,'failed');assert.equal(failure.files[0].fileId,saved.fileId);
+ sync.wake();await sync.waitForIdle();assert.equal(reads,3);
+ assert.equal((await readdir(join(f.root,'managed','media'))).length,1);
+});
+
+test('协调器重建后复用同一时间窗回执，下一时间窗仍会复查缩略图',async t=>{
+ let reads=0;const f=await fixture(t,resourceVariantAdapter(()=> 'thumbnail',()=>reads++));t.mock.timers.enable({apis:['setTimeout','Date']});
+ const first=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>first.close());
+ first.wake();await first.waitForIdle();t.mock.timers.tick(60_000);await first.waitForIdle();assert.equal(reads,2);await first.close();
+ const next=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>next.close());
+ next.wake();await next.waitForIdle();assert.equal(reads,2);
+ t.mock.timers.tick(60_000);await next.waitForIdle();assert.equal(reads,3);
+});
+
+test('关闭读取和退出会停止缩略图复查，清除后不自动恢复',async t=>{
+ let reads=0;const f=await fixture(t,resourceVariantAdapter(()=> 'thumbnail',()=>reads++));t.mock.timers.enable({apis:['setTimeout','Date']});
+ const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());
+ sync.wake();await sync.waitForIdle();assert.equal(reads,1);
+ await f.contacts.setReading(false);await sync.stop();t.mock.timers.tick(120_000);await sync.waitForIdle();assert.equal(reads,1);
+ await f.contacts.setReading(true);sync.wake();await sync.waitForIdle();assert.equal(reads,2);
+ const image=f.messages.find(m=>m.kind==='image');await f.media.clear(f.contact,image.id,'clear-refreshed-thumbnail');
+ t.mock.timers.tick(120_000);await sync.waitForIdle();sync.wake();await sync.waitForIdle();assert.equal(reads,2);
+ assert.deepEqual((await f.media.read(f.contact,image.id)).files,[]);
+ await sync.close();t.mock.timers.tick(120_000);assert.equal(reads,2);
+});
+
 test('自动图片同步以普通提取保存unknown文件，重复唤醒和清除后不重取',async t=>{
  let reads=0;const f=await fixture(t,unknownQualityAdapter(()=>reads++));
  const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());

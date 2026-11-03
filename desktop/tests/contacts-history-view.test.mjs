@@ -169,7 +169,10 @@ test('unknown质量的可查看聊天图片打开受管预览而不显示不可�
     const listeners=new Set();window.mediaCalls=[];
     const media={openHistoryImagePreview:async request=>{window.mediaCalls.push(request);return {sessionId:'00000000-0000-4000-8000-000000000024',mimeType:'image/png',dataBase64:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='};},
       releasePreview:async()=>{},onPreviewRevoking:listener=>{listeners.add(listener);return()=>listeners.delete(listener);}};
-    createRoot(document.getElementById('root')).render(<HistoryImageBubble media={media} imageMedia={{state:'available',fileId,mimeType:'image/png'}} selection={selection}/>);
+    const root=createRoot(document.getElementById('root'));
+    window.renderImageRole=(imageVariant='unknown',imageQuality='unknown')=>root.render(<HistoryImageBubble media={media}
+      imageMedia={{state:imageQuality==='original'?'original':'available',fileId,mimeType:'image/png',imageVariant,imageQuality}} selection={selection}/>);
+    window.renderImageRole();
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, logLevel: 'silent' });
   const browser = await chromium.launch({ headless: true, channel: 'chrome' });
   t.after(() => browser.close());
@@ -185,4 +188,12 @@ test('unknown质量的可查看聊天图片打开受管预览而不显示不可�
   });
   await expect(page.getByRole('status')).toHaveCount(0);
   await expect.poll(() => image.evaluate(element => element.complete && element.naturalWidth)).toBe(1);
+  await expect(page.getByText('图片版本未确认',{exact:true})).toBeVisible();
+  await page.evaluate(()=>window.renderImageRole('main'));
+  await expect(page.getByText('主图',{exact:true})).toBeVisible();
+  await expect(page.getByText('图片版本未确认',{exact:true})).toHaveCount(0);
+  await page.evaluate(()=>window.renderImageRole('thumbnail','thumbnail'));
+  await expect(page.getByText('缩略图',{exact:true})).toBeVisible();
+  await page.evaluate(()=>window.renderImageRole('main','original'));
+  await expect(page.getByText('原图',{exact:true})).toBeVisible();
 });

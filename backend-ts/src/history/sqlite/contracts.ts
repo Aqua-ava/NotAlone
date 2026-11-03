@@ -125,6 +125,7 @@ export type HistoryImageMediaState = 'pending' | 'original' | 'available' | 'thu
 export interface HistoryImageMedia {
   state: HistoryImageMediaState; fileId: string | null; mimeType: string | null; errorCode?: string | null;
   imageQuality?:'original'|'thumbnail'|'unknown';
+  imageVariant?:'main'|'thumbnail'|'unknown';
 }
 /** 仅供受信任派生服务固定实际来源；隔离记录不从此入口流出。 */
 export interface HistorySource {

@@ -20,7 +20,7 @@ function adapter(quality='thumbnail',proof=evidence(quality)){
   await context.save({role:'image_display',expectedBytes:bytes.length,expectedSha256:digest,
    bytes:(async function*(){yield bytes;})(),validate:async()=>({format:'synthetic',mimeType:'image/png',containerValid:true,
     viewable:true,playable:false,imageQuality:quality,qualityProof:quality==='original'?'synthetic-original-proof':null,
-    ...(proof===undefined?{}:{imageQualityEvidence:proof})})});
+    ...(proof==null?{}:{imageQualityEvidence:proof})})});
   return {association:{protocol:'media-association-v1',profileId:'synthetic-quality-evidence-v1',recordId:context.source.recordId,
    messageId:context.messageId,resourceIdentity:'synthetic-fixed-image'}};
  }};
@@ -33,9 +33,21 @@ test('相同字节的图片按已核验来源分类并持久化依据，不向�
   const proof=evidence(quality),f=await fixture(t,adapter(quality,proof)),message=f.messages.find(m=>m.kind==='image');
   const snapshot=await f.media.extract(f.contact,message.id,{requestKey:'same-content-source-quality',goal:'extract'});
   assert.equal(snapshot.files[0].imageQuality,quality);
+  const summary=(await f.history.imageMedia(f.contact,[message.id])).get(message.id);
+  assert.equal(summary.imageVariant,quality==='thumbnail'?'thumbnail':'main');
+  assert.equal(summary.imageQuality,quality);
+  assert.equal(JSON.stringify(summary).includes('resourceInfoId'),false);
   const rows=stored(f);assert.equal(rows.length,1);assert.deepEqual(JSON.parse(rows[0].image_quality_evidence),proof);
   assert.equal(rows[0].content_digest,digest);assert.equal(JSON.stringify(snapshot).includes('resourceInfoId'),false);
  });
+});
+
+test('旧未知图片没有来源角色依据时不猜测为主图',async t=>{
+ const f=await fixture(t,adapter('unknown',null)),message=f.messages.find(m=>m.kind==='image');
+ await f.media.extract(f.contact,message.id,{requestKey:'legacy-unknown-role',goal:'extract'});
+ const summary=(await f.history.imageMedia(f.contact,[message.id])).get(message.id);
+ assert.equal(summary.imageVariant,'unknown');
+ assert.equal(summary.imageQuality,'unknown');
 });
 
 test('拒绝与保存内容或分类不一致、越界及夹带额外字段的图片来源依据',async t=>{

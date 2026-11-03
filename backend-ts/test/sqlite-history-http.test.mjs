@@ -27,6 +27,11 @@ test('旧 /messages 路由的默认投影不追加图片状态字段',()=>{
  const image=projectHistoryMessages({messages:[message({kind:'image',text:null})],coverage,replyEligibility:'ready'},20).messages[0];
  assert.equal(image.media_placeholder,'[图片]');assert.equal('image_media' in image,false);
 });
+test('聊天HTTP投影分别传递主图角色和原图证明状态，只暴露安全枚举',()=>{
+ const media={state:'available',fileId:'00000000-0000-4000-8000-000000000010',mimeType:'image/png',imageQuality:'unknown',imageVariant:'main'};
+ const projected=projectHistoryMessages({messages:[message({kind:'image',text:null})],coverage,replyEligibility:'ready'},20,new Map([[id,media]]));
+ assert.deepEqual(projected.messages[0].image_media,{state:'available',file_id:media.fileId,mime_type:'image/png',image_quality:'unknown',image_variant:'main'});
+});
 test('聊天投影可显示原图并准确标记仅缩略图、缺图、失败及清除',()=>{
  const image=message({kind:'image',text:null});
  const other=message({id:'00000000-0000-4000-8000-000000000002',kind:'image',text:null});

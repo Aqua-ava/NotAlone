@@ -97,7 +97,7 @@ test('聊天专用HTTP把unknown质量的已保存图片投影为available文件
  let status,body;const res={writeHead:code=>{status=code;},end:value=>{body=JSON.parse(value);}};
  assert.equal(await http.handle(req,res),true);assert.equal(status,200);
  const projected=body.messages.find(item=>item.message_id===image.id);
- assert.deepEqual(projected.image_media,{state:'available',file_id:saved.files[0].fileId,mime_type:'image/png',image_quality:'unknown'});
+ assert.deepEqual(projected.image_media,{state:'available',file_id:saved.files[0].fileId,mime_type:'image/png',image_quality:'unknown',image_variant:'unknown'});
  assert.equal(projected.message_type,'image');assert.equal(projected.text,null);assert.equal(projected.media_placeholder,'[图片]');
 });
 

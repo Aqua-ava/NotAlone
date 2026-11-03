@@ -54,6 +54,19 @@ test('聊天历史桥保留可查看缩略图的来源分类', async () => {
   assert.deepEqual(page.messages[0].imageMedia, { state: 'available', fileId, mimeType: 'image/png', imageQuality: 'thumbnail' });
 });
 
+test('聊天历史桥分别保留主图角色与未知原图证明状态', async () => {
+  const response = { messages: [message({ state: 'available', file_id: fileId, mime_type: 'image/png', image_quality: 'unknown', image_variant: 'main' })], next_cursor: null };
+  const page = await readContactHistoryMessages({ requestJson: async () => ({ generation: 7, data: response }) },
+    contactId, null, new AbortController().signal);
+  assert.deepEqual(page.messages[0].imageMedia, { state: 'available', fileId, mimeType: 'image/png', imageQuality: 'unknown', imageVariant: 'main' });
+});
+
+test('聊天历史桥拒绝缩略图角色与原图证明冲突', async () => {
+  const response = { messages: [message({ state: 'original', file_id: fileId, mime_type: 'image/png', image_quality: 'original', image_variant: 'thumbnail' })], next_cursor: null };
+  await assert.rejects(readContactHistoryMessages({ requestJson: async () => ({ generation: 7, data: response }) },
+    contactId, null, new AbortController().signal));
+});
+
 test('仅缩略图状态不携带可预览文件', async () => {
   const response = { messages: [message({ state: 'thumbnail_only', file_id: null, mime_type: null, error_code: 'media_thumbnail_only' })], next_cursor: null };
   const page = await readContactHistoryMessages({ requestJson: async () => ({ generation: 7, data: response }) },

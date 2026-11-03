@@ -1,17 +1,19 @@
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import type {SavedContactBinding} from '../../contacts/sqlite/contracts.ts';
 import type {SqliteMediaService} from './service.ts';
+import {imageRefreshIntervalMs,imageRefreshWindow} from './image-refresh.ts';
 
 interface ImageSyncDirectory {
  directory():Promise<{read_enabled:boolean;bindings:readonly Pick<SavedContactBinding,'contact_id'|'status'>[]}>;
 }
 interface ImageTarget {messageId:string;displayNo:string;requestKey:string}
 
-/** 消息提交后唤醒；同一账号串行保存可查看图片，成功和失败结果均持久去重，不用定时扫描微信。 */
+/** 消息提交后串行保存图片；仅已有缩略图按分钟复查本机资源，主图与普通失败仍持久去重。 */
 export class SqliteImageSyncCoordinator {
  readonly #storage:SqliteStorage;readonly #contacts:ImageSyncDirectory;readonly #media:SqliteMediaService;
  readonly #pending=new Set<string>();readonly #stoppedContacts=new Set<string>();#all=false;#paused=false;#closed=false;#work?:Promise<void>;
  #active?:{contactId:string;controller:AbortController;done:Promise<void>};
+ #refreshTimer?:ReturnType<typeof setTimeout>;
  constructor(storage:SqliteStorage,contacts:ImageSyncDirectory,media:SqliteMediaService){this.#storage=storage;this.#contacts=contacts;this.#media=media;}
  wake(contactId?:string):void {
   if(this.#closed)return;
@@ -25,6 +27,12 @@ export class SqliteImageSyncCoordinator {
   // 读取资格失效由原同步状态展示；不得把内部异常或来源内容写进普通日志。
   void this.#work.catch(()=>{});
  }
+ #scheduleRefresh():void {
+  if(this.#refreshTimer||this.#closed||this.#paused)return;
+  const now=Date.now(),delay=(imageRefreshWindow(now)+1)*imageRefreshIntervalMs-now;
+  this.#refreshTimer=setTimeout(()=>{this.#refreshTimer=undefined;if(this.#closed||this.#paused)return;this.#all=true;this.#launch();},delay);
+  this.#refreshTimer.unref?.();
+ }
  async #drain():Promise<void>{
   while(!this.#closed&&(this.#all||this.#pending.size)){
    const all=this.#all,requested=new Set(this.#pending);this.#all=false;this.#pending.clear();
@@ -36,7 +44,7 @@ export class SqliteImageSyncCoordinator {
     try{
      let after='0';
      while(!this.#closed&&!controller.signal.aborted){
-      const targets=await this.#storage.execute<ImageTarget[]>('media.imageSyncTargets',{ownerId:this.#media.ownerId,contactId,after});
+      const targets=await this.#storage.execute<ImageTarget[]>('media.imageSyncTargets',{ownerId:this.#media.ownerId,contactId,after,now:Date.now()});
       if(!targets.length)break;
       for(const target of targets){
        if(this.#closed||controller.signal.aborted)break;
@@ -45,16 +53,17 @@ export class SqliteImageSyncCoordinator {
        catch{/* 图片未保存也保留本次尝试，继续其余消息；所有实际读取仍由服务复验资格。 */}
       }
      }
+     if(!this.#closed&&!controller.signal.aborted&&await this.#storage.execute<boolean>('media.imageRefreshPending',{ownerId:this.#media.ownerId,contactId}))this.#scheduleRefresh();
     }finally{finish();if(this.#active?.controller===controller)this.#active=undefined;}
    }
   }
  }
  async stop(contactId?:string):Promise<void>{
-  if(contactId){this.#stoppedContacts.add(contactId);this.#pending.delete(contactId);}else{this.#paused=true;this.#pending.clear();this.#all=false;}
+  if(contactId){this.#stoppedContacts.add(contactId);this.#pending.delete(contactId);}else{this.#paused=true;this.#pending.clear();this.#all=false;if(this.#refreshTimer)clearTimeout(this.#refreshTimer);this.#refreshTimer=undefined;}
   const active=this.#active;
   if(active&&(!contactId||active.contactId===contactId)){active.controller.abort();await active.done;}
   if(!contactId)await this.#work?.catch(()=>{});
  }
  async waitForIdle():Promise<void>{while(this.#work)await this.#work;}
- async close():Promise<void>{this.#closed=true;this.#pending.clear();this.#all=false;this.#active?.controller.abort();await this.#work?.catch(()=>{});}
+ async close():Promise<void>{this.#closed=true;this.#pending.clear();this.#all=false;if(this.#refreshTimer)clearTimeout(this.#refreshTimer);this.#refreshTimer=undefined;this.#active?.controller.abort();await this.#work?.catch(()=>{});}
 }

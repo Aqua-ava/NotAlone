@@ -333,7 +333,10 @@ export const historyActions:StorageAction[]=[
    ||new Set(i.messageIds).size!==i.messageIds.length)fail('history_request_invalid');
   if(!i.messageIds.length)return [];
   return tx.all(`WITH ${currentSourceScopeCTE} SELECT m.id message_id,mm.state media_state,a.state attempt_state,a.error_code,
-   f.id file_id,f.mime_type,f.image_quality FROM message m
+   f.id file_id,f.mime_type,f.image_quality,
+   CASE WHEN f.image_quality='original' THEN 'main' WHEN f.image_quality='thumbnail' THEN 'thumbnail'
+    WHEN f.image_quality='unknown' AND json_extract(f.image_quality_evidence,'$.sourceVariant')='main'
+     AND json_extract(f.image_quality_evidence,'$.quality')='unknown' THEN 'main' ELSE 'unknown' END image_variant FROM message m
    JOIN contact active_contact ON active_contact.owner_id=m.owner_id AND active_contact.id=m.contact_id AND active_contact.state='active'
    JOIN owner active_owner ON active_owner.owner_id=m.owner_id AND active_owner.state='active'
    LEFT JOIN message_media mm ON mm.owner_id=m.owner_id AND mm.contact_id=m.contact_id AND mm.message_id=m.id
