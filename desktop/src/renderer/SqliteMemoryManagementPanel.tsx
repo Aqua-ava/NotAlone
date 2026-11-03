@@ -3,12 +3,17 @@ import type {MemoryCandidateView,MemoryDecisionRequest,MemoryManagementOutcome,M
 import {withdrawnProtectionVersion} from '../shared/sqlite-memory-management';
 import {SqliteMemoryDocumentsPanel} from './SqliteMemoryDocumentsPanel';
 import {useVisibleRefresh} from './use-visible-refresh';
+import {memoriesBySourceTime,memorySourceDateLabel,memorySourceTime} from './memory-source-time';
 
 type Decision=Omit<MemoryDecisionRequest,'requestKey'>;
 const outcomeMessages={conflict:'资料已被其他操作修改，存在并发冲突。请重试读取后重新决定。',source_stale:'来源或范围已失效，已撤下原资料。请重试读取。',protected:'当前记忆受人工保护，请重试读取并核对；撤销前须先明确解除保护。',unavailable:'本次决定暂未确认，请重试读取当前状态后再操作。'};
 const successMessages:Record<string,string>={accept:'采纳成功，已形成正式版本。',edit_accept:'修改采纳成功，固定模型原稿保留。',reject:'已拒绝候选。',correct:'错误修正成功，旧版不再作为当前事实。',change:'变化已记录，旧版不再作为当前事实。',protect:'已开启当前人工保护。',unprotect:'已解除当前人工保护。',restore:'自动更新已撤销，已新增恢复版本。',withdraw:'已撤销首次自动采纳，内容不再作为当前事实。'};
 const formationNames:Record<string,string>={adoption:'采纳',correction:'纠正错误',change:'记录变化',restore:'撤销恢复',manual:'手动补充'};
 const adoptionNames:Record<string,string>={auto:'自动采纳',user:'用户采纳',manual:'手动补充'};
+function SourceTime({sources}:{sources:MemorySource[]}){
+ const time=memorySourceTime(sources);
+ return <p className="memory-source-time">{time?<><span>聊天来源</span><time dateTime={new Date(time.start).toISOString()}>{memorySourceDateLabel(time)}</time>{!time.complete&&<span>部分日期未知</span>}</>:<span>聊天来源日期未知</span>}</p>;
+}
 function Verification({state}:{state:MemoryVerificationState}){
  return <p className="hint">{state==='verified'?<strong>来源已核验</strong>:<><strong>来源待核验</strong>；可查看原话，但尚未确认来源支持这条资料。</>}</p>;
 }
@@ -27,7 +32,8 @@ function Editor({label,initial,submitLabel,busy,save,cancel}:{label:string;initi
 }
 function Candidate({candidate,busy,decide}:{candidate:MemoryCandidateView;busy:boolean;decide:(request:Decision)=>void}){
  const [editing,setEditing]=useState(false),request={candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]};
- return <article className="sqlite-memory-card" aria-label="记忆候选">
+ return <article className="sqlite-memory-card memory-candidate-item" aria-label="记忆候选">
+  <SourceTime sources={candidate.sources}/>
   <p><strong>固定模型原稿</strong> · {{pending:'待决定（未确认）',adopted:'已采纳',rejected:'已拒绝',duplicate:'已跳过重复资料'}[candidate.state]??'状态待核对'}</p>
   <Verification state={candidate.verificationState}/>
   <p className="sqlite-memory-body">{candidate.body}</p><Sources sources={candidate.sources}/>
@@ -39,7 +45,7 @@ function Candidate({candidate,busy,decide}:{candidate:MemoryCandidateView;busy:b
  </article>;
 }
 function Version({version,current}:{version:MemoryVersionView;current:boolean}){
- return <div className={current?'':'sqlite-memory-old'}><p>版本 {version.versionNo} · {formationNames[version.formationKind]??version.formationKind} · {adoptionNames[version.adoptionMode]??version.adoptionMode}{current?' · 当前版本':' · 不作为当前事实'}</p>
+ return <div className={current?'sqlite-memory-version':'sqlite-memory-old'}><p className="memory-version-meta">版本 {version.versionNo} · {formationNames[version.formationKind]??version.formationKind} · {adoptionNames[version.adoptionMode]??version.adoptionMode}{current?' · 当前版本':' · 不作为当前事实'}</p>
   {version.body===null?<p>正文已清除或来源已失效。</p>:<><Verification state={version.verificationState}/>
    {version.timeStatus==='needs_revalidation'&&<p>时间待核验，暂不用于生成。</p>}
    {version.timeStatus==='invalid'&&<p>时间资料异常，暂不用于生成。</p>}
@@ -52,9 +58,10 @@ function Memory({memory,busy,decide}:{memory:MemoryView;busy:boolean;decide:(req
  const [editing,setEditing]=useState<'correct'|'change'|null>(null),current=memory.current,withdrawnVersion=withdrawnProtectionVersion(memory);
  const request={memoryId:memory.id,expectedVersionNo:(current??withdrawnVersion)?.versionNo,expectedHeadRevision:memory.headRevision};
  const undoEligible=current?.adoptionMode==='auto'&&current.formationKind!=='restore';
- return <article className="sqlite-memory-card" aria-label="正式记忆">
-  <p><strong>正式记忆</strong> · {memory.manualProtection?'当前人工保护已开启':'当前人工保护未开启'}{memory.state==='withdrawn'?' · 已撤销':memory.state==='invalidated'?' · 已失效':''}</p>
-  {current?<Version version={current} current/>:<p>当前无可引用版本。</p>}
+ return <article className={`sqlite-memory-card memory-timeline-item${current?'':' memory-timeline-unavailable'}`} aria-label="正式记忆">
+  <SourceTime sources={current?.sources??[]}/>
+  {current?<Version version={current} current/>:<p className="memory-unavailable-body">当前无可引用版本。</p>}
+  <p className="memory-protection-status">{memory.manualProtection?'当前人工保护已开启':'当前人工保护未开启'}{memory.state==='withdrawn'?' · 已撤销':memory.state==='invalidated'?' · 已失效':''}</p>
   {current&&(editing?<Editor key={`${memory.headRevision}:${editing}`} label={editing==='correct'?'修正后的正文':'变化后的正文'} initial={current.body??''} submitLabel={editing==='correct'?'保存错误修正':'保存变化记录'} busy={busy} cancel={()=>setEditing(null)} save={body=>decide({...request,action:editing,body})}/>:<div className="sqlite-memory-actions">
    <button type="button" disabled={busy} onClick={()=>setEditing('correct')}>纠正错误</button>
    <button type="button" disabled={busy} onClick={()=>setEditing('change')}>记录变化</button>
@@ -63,7 +70,7 @@ function Memory({memory,busy,decide}:{memory:MemoryView;busy:boolean;decide:(req
   </div>)}
   {undoEligible&&memory.manualProtection&&<p className="hint">撤销前须先明确解除当前人工保护。</p>}
   {withdrawnVersion&&<div className="sqlite-memory-actions"><button type="button" disabled={busy} onClick={()=>decide({...request,action:memory.manualProtection?'unprotect':'protect'})}>{memory.manualProtection?'解除人工保护':'开启人工保护'}</button><p className="hint">资料已撤回，仍可调整人工保护；开启后会阻止整组恢复。</p></div>}
-  <details><summary>查看版本与决定历史</summary>{[...memory.versions].reverse().map(version=><Version key={version.versionNo} version={version} current={version.versionNo===current?.versionNo}/>)}
+  <details className="memory-version-history"><summary>查看版本与决定历史</summary>{[...memory.versions].reverse().map(version=><Version key={version.versionNo} version={version} current={version.versionNo===current?.versionNo}/>)}
    <ol>{memory.decisions.map(decision=><li key={decision.id}>{decision.actorKind==='system'?'系统自动决定':'用户决定'} · {({auto_accept:'自动采纳',auto_update:'自动更新',auto_retire:'已并入合并资料',auto_noop:'跳过重复资料',...successMessages}[decision.action]??decision.action)} · {decision.outcome==='redacted'?'敏感材料已清除':'已生效'}</li>)}</ol>
   </details>
  </article>;
@@ -115,15 +122,15 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
   if(outcome.status!=='applied'){setBusy(false);setNotice({context:accepted,message:outcomeMessages[outcome.status],error:true});return;}
   const refreshed=await refresh.current();if(active.current&&context.current===accepted)setNotice({context:accepted,message:refreshed?(successMessages[request.action]??'决定已保存。'):'决定已保存，但当前资料暂不可读。已撤下原资料，请重新读取。',error:!refreshed});
  }
- return <section className="sqlite-memory-management" aria-label="记忆候选与版本">
-  <header className="memory-browser-toolbar"><div className="memory-person-switch" role="group" aria-label="记忆对象">{(['contact','self'] as const).map(kind=><button key={kind} type="button" aria-pressed={scopeKind===kind} disabled={!contactId} onClick={()=>setScopeKind(kind)}>{kind==='contact'?'对方':'我'}</button>)}</div></header>
+ return <section className="sqlite-memory-management memory-timeline-browser" aria-label="记忆候选与版本">
+  <header className="memory-browser-toolbar"><p className="memory-browser-caption">相处的点滴</p><div className="memory-person-switch" role="group" aria-label="记忆对象">{(['contact','self'] as const).map(kind=><button key={kind} type="button" aria-pressed={scopeKind===kind} disabled={!contactId} onClick={()=>setScopeKind(kind)}>{kind==='contact'?'对方':'我'}</button>)}</div></header>
   <div className="memory-level-tabs" role="group" aria-label="记忆层级">{(['L1','L2','L3'] as const).map(value=><button key={value} type="button" aria-label={value} aria-pressed={level===value} onClick={()=>setLevel(value)}><span>{value}</span><strong>{{L1:'具体记忆',L2:'主题资料',L3:'长期概览'}[value]}</strong></button>)}</div>
   {!contactId?<p className="memory-browser-empty">请先从顶部选择联系人。</p>:<div className="memory-flat-content" key={`${scopeKind}:${contactId}:${scopeRevision}`}>
    {scopeKind==='self'&&<p className="hint memory-scope-hint">仅展示来源完整归属于当前联系人的本人资料。</p>}
    <div hidden={level!=='L1'}>
    {currentNotice&&<p role={currentNotice.error?'alert':'status'}>{currentNotice.message}{currentNotice.error&&<button type="button" disabled={busy} onClick={()=>void refresh.current()}>重试读取记忆资料</button>}</p>}{busy&&<p role="status">正在核对记忆资料…</p>}
-   {current&&<><h3 className="memory-collection-heading">正式记忆 <span>{current.view.memories.length} 条</span></h3>{current.view.memories.length===0?<p className="memory-browser-empty">当前范围没有可展示的正式记忆。</p>:<div className="memory-flat-grid">{current.view.memories.map(memory=><Memory key={`${memory.id}:${memory.headRevision}`} memory={memory} busy={busy} decide={request=>void decide(request)}/>)}</div>}
-    <h3 className="memory-collection-heading">候选原稿 <span>{current.view.candidates.length} 条</span></h3>{current.view.candidates.length===0?<p className="memory-browser-empty">当前范围没有可展示的候选。</p>:<div className="memory-flat-grid">{current.view.candidates.map(candidate=><Candidate key={`${candidate.id}:${candidate.stateRevision}`} candidate={candidate} busy={busy} decide={request=>void decide(request)}/>)}</div>}</>}
+   {current&&<><div className="memory-timeline-layout"><section className="memory-timeline-section" aria-label="正式记忆时间线"><h3 className="memory-collection-heading">正式记忆 <span>{current.view.memories.length} 条</span></h3>{current.view.memories.length===0?<p className="memory-browser-empty">当前范围没有可展示的正式记忆。</p>:<div className="memory-timeline-list">{memoriesBySourceTime(current.view.memories).map(memory=><Memory key={`${memory.id}:${memory.headRevision}`} memory={memory} busy={busy} decide={request=>void decide(request)}/>)}</div>}</section>
+    <aside className="memory-candidates-aside" aria-label="候选原稿"><h3 className="memory-collection-heading">候选原稿 <span>{current.view.candidates.length} 条</span></h3>{current.view.candidates.length===0?<p className="memory-browser-empty">当前范围没有可展示的候选。</p>:<div className="memory-candidate-list">{current.view.candidates.map(candidate=><Candidate key={`${candidate.id}:${candidate.stateRevision}`} candidate={candidate} busy={busy} decide={request=>void decide(request)}/>)}</div>}</aside></div><p className="memory-timeline-note">按已知聊天来源时间排列 · 日期以本机时区显示，不代表事件发生日。</p></>}
    </div>
    <div hidden={level==='L1'}>{readRequest&&scopeKind==='contact'&&typeof bridge.readDocuments==='function'?<SqliteMemoryDocumentsPanel visible={visible&&level!=='L1'} bridge={bridge} request={readRequest} level={level==='L3'?'L3':'L2'} refreshKey={documentsRefreshKey} blocked={documentsBlocked} managementBusy={busy} retryManagement={()=>void refresh.current()}/>:<p className="memory-browser-empty">{scopeKind==='self'?(level==='L3'?'本人全局概览不在当前联系人页面展示。':'本人全局主题资料不在当前联系人页面展示。'):'当前连接暂不支持读取主题资料与长期概览。'}</p>}</div>
   </div>}

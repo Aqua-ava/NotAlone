@@ -8,7 +8,7 @@ import {adjudicationFixture,adjudicationSupplier} from './fixtures/memory-manage
 
 async function prepared(t,options={}){
  const f=await fixture(t,{registryModule:options.registryModule??new URL('./fixtures/memory-management/registry.mjs',import.meta.url).href}),[a,b]=f.saved.map(x=>x.contact_id);
- f.channel.page=async scope=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:scope.token.contact_id===a?'我长期住在高雄。':'我长期住在台南。'}),record('2',{sender:'owner',text:'我长期偏好绿茶。'})],completedPartitions:['shard-a'],exhausted:true});
+ f.channel.page=async scope=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:scope.token.contact_id===a?'我长期住在高雄。':'我长期住在台南。',...options.contactTiming?.(scope.token.contact_id===a)}),record('2',{sender:'owner',text:'我长期偏好绿茶。'})],completedPartitions:['shard-a'],exhausted:true});
  for(const id of [a,b])await f.service.synchronize(id);await options.afterHistory?.(f,a,b);await f.contacts.setReading(false);
  let extraction;const external=supplier();extraction=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>extraction.accounting,external.respond));t.after(()=>extraction.close());
  const started=await extraction.start('management-normal-output');await extraction.waitForIdle();
@@ -26,6 +26,19 @@ test('正常核验原稿经真实修改采纳形成独立版本，原稿不变�
  assert.equal(after.candidates[0].body,candidate.body);assert.equal(after.candidates[0].state,'adopted');
  assert.equal(after.memories[0].current.body,request.body);assert.equal(after.memories[0].current.adoptionMode,'user');assert.equal(after.memories[0].current.versionNo,'1');
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('记忆来源时间沿核验消息投影，未知时间不借用决定或其他联系人日期',async t=>{
+ const f=await prepared(t,{contactTiming:isA=>isA?{sentAt:'1700000000123',timePrecision:'millisecond'}:{sentAt:null,timePrecision:null}});
+ await f.management.importRun(f.runId);
+ for(const [contactId,sentAt,timePrecision] of [[f.a,'1700000000123','millisecond'],[f.b,null,null]]){
+  const scope={scopeKind:'contact',contactId},before=await f.management.read(scope),candidate=before.candidates[0];
+  assert.ok(candidate.sources.length>0);assert.ok(candidate.sources.every(source=>source.contactId===contactId));
+  for(const source of candidate.sources){assert.equal(source.sentAt,sentAt);assert.equal(source.timePrecision,timePrecision);}
+  await f.management.decide({requestKey:`source-time-${contactId}`,action:'accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]});
+  const memory=(await f.management.read(scope)).memories[0];assert.ok(memory.decisions[0].createdAt);
+  assert.deepEqual(memory.current.sources,candidate.sources);assert.deepEqual(memory.versions[0].sources,candidate.sources);
+ }
 });
 
 test('自动更新撤销追加恢复版本，保护变化令旧CAS失败且不会恢复旧保护',async t=>{

@@ -7,6 +7,7 @@ import {available,citations,fail,id,requireCandidate,requireSources,requireVersi
 import type {MemoryCandidateView,MemoryManagementView,MemoryScope,MemorySource,MemoryVersionView} from './contracts.ts';
 import {citationContent} from '../content-citation.ts';
 export function sourceViews(rows:StorageRow[]):MemorySource[]{return rows.map(r=>({contactId:String(r.source_contact_id),messageId:String(r.message_id),recordId:String(r.record_id),acceptedRevision:String(r.accepted_revision),
+ sentAt:r.sent_at===null?null:String(r.sent_at),timePrecision:r.time_precision as MemorySource['timePrecision'],
  ...(r.content_kind==='image'?{quote:'',contentKind:'image' as const,contentRef:citationContent(r).contentRef!,description:String(r.explanation??'')}:{quote:[...String(r.text_body)].slice(Number(r.span_start),Number(r.span_end)).join('')})}));}
 function mergeParents(tx:StorageTransaction,ownerId:string,decisionId:string){
  return tx.all("SELECT m.id,m.current_version_no,m.head_revision FROM memory_decision r JOIN memory_decision d ON d.owner_id=r.owner_id AND d.execution_id=r.execution_id JOIN memory m ON m.owner_id=r.owner_id AND m.id=r.target_memory_id WHERE d.owner_id=? AND d.id=? AND d.action='auto_update' AND r.action='auto_retire' AND r.actor_kind='system' AND r.outcome='applied' ORDER BY m.id",[ownerId,decisionId]).map(m=>({memoryId:String(m.id),versionNo:String(m.current_version_no),headRevision:String(m.head_revision)}));

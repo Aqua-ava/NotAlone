@@ -26,6 +26,32 @@ async function captureFlatMemory(page,person){
  }
  await page.setViewportSize({width:1100,height:850});
 }
+test('相处时间线按直接来源排序，未知日期与候选独立展示，窄窗口不溢出',{timeout:20000},async t=>{
+ const version=(body,date)=>({mergeParents:[],mergeParentCount:0,verificationState:'verified',versionNo:'1',body,formationKind:'adoption',adoptionMode:'auto',previousVersionNo:null,restoredFromVersionNo:null,contentState:'present',provenanceState:'eligible',decisionId:id,sources:[{...source,sentAt:String(Date.parse(date)),timePrecision:'second'}],contributingContactIds:[contact]});
+ const memory=(key,current)=>({id:key,scopeKind:'contact',contactId:contact,headRevision:'1',state:'active',manualProtection:false,current,versions:current?[current]:[],decisions:[]});
+ const old=memory('older',version('一起逛过河边的旧书店。','2026-10-19T12:00:00Z'));
+ const recent=memory('newer',version('喝咖啡时喜欢换成燕麦奶，少糖。','2026-10-28T12:00:00Z'));
+ await panel(t,async()=>({...view(),view:{memories:[old,memory('unavailable',null),recent],candidates:[{...candidate,body:'最近想找时间去海边走走。'}]}}),async page=>{
+  await page.getByText(recent.current.body,{exact:true}).first().waitFor();
+  for(const stylesheet of ['style.css','memory.css'])await page.addStyleTag({content:await readFile(new URL(`../src/renderer/${stylesheet}`,import.meta.url),'utf8')});
+  await page.addStyleTag({content:'#root {padding:32px;max-width:1100px;margin:auto;}'});
+  const entries=page.locator('.memory-timeline-item');
+  assert.match(await entries.nth(0).innerText(),/燕麦奶/);assert.match(await entries.nth(1).innerText(),/旧书店/);
+  assert.match(await entries.nth(2).innerText(),/聊天来源日期未知[\s\S]*当前无可引用版本/);
+  assert.equal(await page.locator('.memory-candidates-aside').getByRole('article',{name:'记忆候选'}).count(),1);
+  await page.setViewportSize({width:1100,height:900});
+  const desktop=await page.locator('.memory-timeline-layout').evaluate(el=>{const [main,aside]=el.children;return {side:aside.getBoundingClientRect().left>=main.getBoundingClientRect().right};});
+  assert.equal(desktop.side,true);
+  await page.locator('.sqlite-memory-management').screenshot({path:'/tmp/notalone-memory-timeline-preview.png'});
+  await entries.nth(0).getByRole('button',{name:'纠正错误'}).click();await page.getByLabel('修正后的正文').fill('保留尚未提交的合成修正。');
+  for(const width of [680,380]){
+   await page.setViewportSize({width,height:900});
+   const bounds=await page.locator('.memory-timeline-layout').evaluate(el=>{const [main,aside]=el.children;return {stacked:aside.getBoundingClientRect().top>=main.getBoundingClientRect().bottom,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth};});
+   assert.deepEqual(bounds,{stacked:true,overflow:false});
+   assert.equal(await page.getByLabel('修正后的正文').inputValue(),'保留尚未提交的合成修正。');
+  }
+ });
+});
 test('L1 L2 L3 互斥切换，所选层全部记忆直接平铺且人物保持隔离',{timeout:20000},async t=>{
  const documentScopes=[];
  await panel(t,async(method,input)=>{

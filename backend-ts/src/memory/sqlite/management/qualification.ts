@@ -19,7 +19,7 @@ export function available(tx:StorageTransaction,ownerId:string,s:MemoryScope,wri
  if(write&&tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed'",[ownerId]))fail('memory_source_stale');
 }
 export function citations(tx:StorageTransaction,ownerId:string,parent:{candidateId?:string;memoryId?:string;versionNo?:bigint},sourceEligibility:SourceEligibility=assertSourceEligibility):StorageRow[]{
- const rows=tx.all(`SELECT c.*,m.text_body FROM memory_citation c JOIN message m ON m.owner_id=c.owner_id AND m.contact_id=c.source_contact_id AND m.id=c.message_id WHERE c.owner_id=? AND ${parent.candidateId?'c.candidate_id=?':'c.memory_id=? AND c.version_no=?'} ORDER BY c.source_contact_id,c.message_id,c.record_id`,parent.candidateId?[ownerId,parent.candidateId]:[ownerId,parent.memoryId!,parent.versionNo!]);
+ const rows=tx.all(`SELECT c.*,m.text_body,m.sent_at,m.time_precision FROM memory_citation c JOIN message m ON m.owner_id=c.owner_id AND m.contact_id=c.source_contact_id AND m.id=c.message_id WHERE c.owner_id=? AND ${parent.candidateId?'c.candidate_id=?':'c.memory_id=? AND c.version_no=?'} ORDER BY c.source_contact_id,c.message_id,c.record_id`,parent.candidateId?[ownerId,parent.candidateId]:[ownerId,parent.memoryId!,parent.versionNo!]);
  return projectCitations(tx,ownerId,parent,rows,sourceEligibility);
 }
 export function requireSources(tx:StorageTransaction,ownerId:string,parent:{candidateId?:string;memoryId?:string;versionNo?:bigint},manual=false,sourceEligibility:SourceEligibility=assertSourceEligibility):StorageRow[]{

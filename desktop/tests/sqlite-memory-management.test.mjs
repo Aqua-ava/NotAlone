@@ -29,6 +29,22 @@ test('主进程保留记忆时间资格并对缺失状态保守处理',async t=>
  assert.equal((await f.controller.read(read)).view.memories[0].current.timeStatus,'needs_revalidation');
  timeStatus=undefined;assert.equal((await f.controller.read(read)).view.memories[0].current.timeStatus,'invalid');
 });
+test('来源聊天时间经主进程校验并保留，缺失未知不回退决定时间且非法值不发布',async t=>{
+ let timing={sentAt:'1700000000123',timePrecision:'millisecond'};
+ const sourceWithTime=()=>({...source(contact),...timing});
+ const version=()=>({mergeParents:[],mergeParentCount:0,verificationState:'verified',timeStatus:'eligible',versionNo:'1',body:'合成时间来源记忆',formationKind:'adoption',adoptionMode:'user',previousVersionNo:null,restoredFromVersionNo:null,contentState:'present',provenanceState:'eligible',decisionId:requestKey,sources:[sourceWithTime()],contributingContactIds:[contact]});
+ const f=await fixture(t,async()=>({candidates:[item(candidate,[sourceWithTime()]),item(other,[{...source(other),sentAt:'1800000000000',timePrecision:'second'}])],memories:[{id:candidate,scopeKind:'self',contactId:null,headRevision:'1',state:'active',manualProtection:false,current:version(),versions:[version()],decisions:[{id:requestKey,action:'accept',actorKind:'user',createdAt:'1800000000000',expectedHeadRevision:null,expectedVersionNo:null,outcome:'applied'}]}]}));
+ for(const value of [{sentAt:'1700000000123',timePrecision:'millisecond'},{sentAt:'1700000000000',timePrecision:'second'},{sentAt:null,timePrecision:null},{}]){
+  timing=value;const view=(await f.controller.read(read)).view;assert.deepEqual(view.candidates.map(value=>value.id),[candidate]);
+  for(const sources of [view.candidates[0].sources,view.memories[0].current.sources,view.memories[0].versions[0].sources]){
+   assert.equal(sources[0].sentAt,value.sentAt??null);assert.equal(sources[0].timePrecision,value.timePrecision??null);
+  }
+ }
+ for(const value of [{sentAt:'invalid',timePrecision:'second'},{sentAt:1700000000000,timePrecision:'second'},{sentAt:'-1',timePrecision:'second'},{sentAt:'253402300800000',timePrecision:'second'},{sentAt:'1700000000000',timePrecision:null},{sentAt:null,timePrecision:'second'},{sentAt:'1700000000000',timePrecision:'day'}]){
+  timing=value;await assert.rejects(f.controller.read(read),{message:'记忆资料或范围已变化，请重新读取。'});
+ }
+});
+
 test('本人管理仅返回当前联系人独立来源，具名决定不接受跨范围对象',async t=>{
  const f=await fixture(t,async()=>({candidates:[item(candidate,[source(contact)]),item(other,[source(contact),source(other)])],memories:[]}));
  const value=await f.controller.read(read);assert.equal(value.connectionGeneration,1);assert.deepEqual(value.view.candidates.map(c=>c.id),[candidate]);

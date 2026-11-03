@@ -22,7 +22,9 @@ function member<T extends string>(value:unknown,values:readonly T[]):T{if(!value
 function scope(raw:unknown):MemoryScope{const s=object(raw);exact(s,['scopeKind','contactId']);const scopeKind=member(s.scopeKind,['self','contact']);if(scopeKind==='self'&&s.contactId!==null)throw invalid();return {scopeKind,contactId:scopeKind==='self'?null:uuid(s.contactId)};}
 const sameScope=(a:MemoryScope,b:MemoryScope)=>a.scopeKind===b.scopeKind&&a.contactId===b.contactId;
 function sources(raw:unknown):MemorySource[]{return array(raw).map(value=>{
- const s=object(value),base={contactId:uuid(s.contactId),messageId:uuid(s.messageId),recordId:uuid(s.recordId),acceptedRevision:decimal(s.acceptedRevision),quote:text(s.quote)};
+ const s=object(value),sentAt=s.sentAt==null?null:decimal(s.sentAt),timePrecision=s.timePrecision==null?null:member(s.timePrecision,['second','millisecond']);
+ if((sentAt===null)!==(timePrecision===null)||sentAt!==null&&BigInt(sentAt)>253402300799999n)throw invalid();
+ const base={contactId:uuid(s.contactId),messageId:uuid(s.messageId),recordId:uuid(s.recordId),acceptedRevision:decimal(s.acceptedRevision),sentAt,timePrecision,quote:text(s.quote)};
  if(s.contentKind===undefined)return base;
  if(s.contentKind!=='image'||s.quote!=='')throw invalid();
  const ref=object(s.contentRef),sha256=text(ref.sha256,64),mimeType=member(ref.mime_type,['image/png','image/jpeg','image/webp','image/gif']);

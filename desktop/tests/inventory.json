@@ -1,5 +1,6 @@
 {
  "safe-node": [
+  "tests/memory-source-time.test.mjs",
     "tests/history-recertify.test.mjs",
     "tests/message-stream.test.mjs",
     "tests/packaging/upgrade-history-image-cli.test.mjs",
