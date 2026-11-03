@@ -9,7 +9,7 @@ async function seed(f,count=1){await f.extract(Array.from({length:count},(_,inde
 
 test('07两条真实新事实逐候选冻结：首条空池add，第二条独立关系须两次真实记账',async t=>{
  const f=await adjudicationFixture(t),runId=await f.extract(['我长期住在高雄。','我长期偏好绿茶。']);await f.adjudication.publishRun(runId);
- const view=await f.read();assert.equal(view.memories.length,2);assert.ok(view.candidates.every(c=>c.state==='adopted'&&c.verificationState==='verified'));assert.ok(view.memories.every(m=>m.current.adoptionMode==='auto'));
+ const view=await f.read();assert.equal(view.memories.length,2);assert.equal(view.candidates.length,0);const originals=view.memories.flatMap(m=>m.versions.flatMap(v=>v.originalCandidates??[]));assert.equal(originals.length,2);assert.ok(originals.every(c=>c.state==='adopted'&&c.verificationState==='verified'));assert.ok(view.memories.every(m=>m.current.adoptionMode==='auto'));
  assert.deepEqual(f.calls.map(c=>c.purpose),['adjudication','relation_verification']);
  const trace=await f.trace();assert.equal(trace.calls.length,2);assert.ok(trace.calls.every(c=>c.state==='succeeded'&&c.settlement_state==='settled'&&c.operation_state==='applied'&&c.receipt.outcome==='succeeded'));
  assert.deepEqual(trace.steps.map(s=>s.kind).sort(),['adjudication','adjudication','relation_verification'].sort());

@@ -241,3 +241,22 @@ test('记忆桥只在连接代次变化时撤下资料，同连接资格通知�
   controller.synchronize();assert.equal(events.length,3,'来源失效不受连接去重影响');
  }
 });
+
+
+test('历史原稿解码保持范围和核验状态，拒绝串联系人、未采纳、清除版与超量原稿',async t=>{
+ const original={...item(candidate,[source(contact)]),state:'adopted'};
+ const version={mergeParents:[],mergeParentCount:0,verificationState:'verified',timeStatus:'eligible',versionNo:'1',body:'正式记忆',formationKind:'adoption',adoptionMode:'user',previousVersionNo:null,restoredFromVersionNo:null,contentState:'present',provenanceState:'eligible',decisionId:requestKey,sources:[source(contact)],contributingContactIds:[contact],originalCandidates:[original]};
+ let current=version;
+ const f=await fixture(t,async()=>({memoryId:candidate,headRevision:'1',versions:[current],decisions:[],revision:'a'.repeat(64),nextCursor:null}));
+ const input={...read,memoryId:candidate,expectedHeadRevision:'1'};
+ const actual=await f.controller.readHistory(input);assert.equal(actual.view.versions[0].originalCandidates[0].body,original.body);assert.equal(actual.view.versions[0].originalCandidates[0].verificationState,'verified');
+ for(const invalid of [
+  {...original,sources:[source(other)]}, {...original,contributingContactIds:[other]}, {...original,scopeKind:'contact',contactId:contact},
+  {...original,state:'pending'}, {...original,verificationState:'unknown'}
+ ]){current={...version,originalCandidates:[invalid]};await assert.rejects(f.controller.readHistory(input));}
+ for(const invalid of [
+  {...version,body:null,contentState:'redacted'}, {...version,originalCandidates:[original,original]},
+  {...version,originalCandidates:Array.from({length:101},(_,index)=>({...original,id:`${String(index).padStart(8,'0')}-1111-4111-8111-111111111111`}))}
+ ]){current=invalid;await assert.rejects(f.controller.readHistory(input));}
+ current={...version,originalCandidates:[]};assert.deepEqual((await f.controller.readHistory(input)).view.versions[0].originalCandidates,[]);
+});

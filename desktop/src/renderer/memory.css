@@ -216,7 +216,8 @@
 .sqlite-memory-management .memory-level-tabs button:hover:not(:disabled):not([aria-pressed="true"]) { background: #edf3f4; }
 .sqlite-memory-management .memory-collection-heading { display: flex; align-items: center; gap: 9px; margin: 0 0 22px; color: var(--panel-heading); font-size: 13px; }
 .memory-collection-heading span { color: #71818a; font-size: 11px; font-weight: 400; }
-.memory-timeline-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 27%); align-items: start; gap: 34px; }
+.memory-timeline-layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 34px; }
+.memory-timeline-with-pending { grid-template-columns: minmax(0, 1fr) minmax(220px, 27%); }
 .memory-timeline-section { min-width: 0; }
 .memory-timeline-list { margin-left: 5px; padding-left: 27px; border-left: 1px solid #c5d3d2; }
 .memory-timeline-list > .memory-timeline-item { position: relative; padding: 0 0 29px; border: 0; }
@@ -247,6 +248,9 @@
 .memory-timeline-browser details[open] > summary { margin-bottom: 9px; }
 .memory-timeline-browser .memory-version-history { margin-top: 8px; }
 .memory-version-history > .sqlite-memory-version, .memory-version-history > .sqlite-memory-old { border-left: 2px solid #d5ddda; padding-left: 13px; margin: 14px 0; }
+.memory-original-candidates { flex-basis: 100%; min-width: 0; color: #667b82; }
+.memory-original-candidates > article { margin: 12px 0; padding-left: 13px; border-left: 2px solid #d5ddda; }
+.memory-original-candidates .sqlite-memory-body { font-size: 14px; line-height: 1.85; color: var(--panel-heading); }
 .memory-timeline-browser textarea { padding: 10px; border: 1px solid #b8c5cc; border-radius: 7px; background: var(--panel-background); color: var(--panel-heading); font: inherit; line-height: 1.7; }
 .memory-candidates-aside { min-width: 0; padding: 19px 20px; border-radius: 14px; background: var(--panel-background); }
 .memory-candidates-aside .memory-collection-heading { margin-bottom: 15px; }

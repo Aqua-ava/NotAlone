@@ -37,10 +37,11 @@ function version(raw:unknown):MemoryVersionView{const v=object(raw),parents=merg
 function cursor(value:unknown):string|null{if(value===null)return null;if(typeof value!=='string'||!/^[A-Za-z0-9_-]{1,4096}$/.test(value))throw invalid();return value;}
 function pageRevision(value:unknown):string{if(typeof value!=='string'||!/^[a-f0-9]{64}$/.test(value))throw invalid();return value;}
 function decisions(raw:unknown):MemoryView['decisions']{return array(raw).map(raw=>{const d=object(raw);return {id:uuid(d.id),action:member(d.action,['accept','edit_accept','reject','auto_accept','auto_update','auto_retire','auto_noop','correct','change','restore','withdraw','protect','unprotect','manual']),actorKind:member(d.actorKind,['user','system']),createdAt:decimal(d.createdAt),expectedHeadRevision:d.expectedHeadRevision===null?null:decimal(d.expectedHeadRevision),expectedVersionNo:d.expectedVersionNo===null?null:decimal(d.expectedVersionNo),outcome:member(d.outcome,['applied','redacted'])};});}
+function candidate(raw:unknown,s:MemoryScope):MemoryCandidateView{const c=object(raw),cs=scope({scopeKind:c.scopeKind,contactId:c.contactId});if(!sameScope(cs,s))throw invalid();return {...cs,verificationState:member(c.verificationState,['verified','pending']),id:uuid(c.id),body:text(c.body,48000),state:member(c.state,memoryCandidateStates),stateRevision:decimal(c.stateRevision),eventId:uuid(c.eventId),sources:sources(c.sources),contributingContactIds:contributingContacts(c.contributingContactIds)};}
 function readView(raw:unknown,s:MemoryScope,displayContactId:string):MemoryManagementView{
  const value=object(raw),owned=(items:MemorySource[])=>items.length>0&&items.every(x=>x.contactId===displayContactId);
  const ownsContribution=(ids:string[])=>ids.length===1&&ids[0]===displayContactId;
- const candidates:MemoryCandidateView[]=array(value.candidates).map(raw=>{const c=object(raw),cs=scope({scopeKind:c.scopeKind,contactId:c.contactId});if(!sameScope(cs,s))throw invalid();return {...cs,verificationState:member(c.verificationState,['verified','pending']),id:uuid(c.id),body:text(c.body,48000),state:member(c.state,memoryCandidateStates),stateRevision:decimal(c.stateRevision),eventId:uuid(c.eventId),sources:sources(c.sources),contributingContactIds:contributingContacts(c.contributingContactIds)};}).filter(c=>owned(c.sources)&&ownsContribution(c.contributingContactIds));
+ const candidates:MemoryCandidateView[]=array(value.candidates).map(raw=>{return candidate(raw,s);}).filter(c=>owned(c.sources)&&ownsContribution(c.contributingContactIds));
  const memories:MemoryView[]=array(value.memories).map(raw=>{const m=object(raw),ms=scope({scopeKind:m.scopeKind,contactId:m.contactId});if(!sameScope(ms,s)||typeof m.manualProtection!=='boolean')throw invalid();const versions=array(m.versions).map(version),current=m.current===null?null:version(m.current);if(current&&!versions.some(v=>JSON.stringify(v)===JSON.stringify(current))||versions.some(v=>v.mergeParents.some(p=>p.memoryId===uuid(m.id))))throw invalid();return {...ms,id:uuid(m.id),headRevision:decimal(m.headRevision),state:member(m.state,['active','withdrawn','invalidated']),manualProtection:m.manualProtection,current,versions,decisions:decisions(m.decisions)};}).filter(m=>s.scopeKind==='contact'?m.versions.every(v=>v.sources.every(source=>source.contactId===displayContactId)&&v.contributingContactIds.every(id=>id===displayContactId)):m.versions.some(v=>v.body!==null&&owned(v.sources)&&ownsContribution(v.contributingContactIds))&&m.versions.every(v=>v.body===null||owned(v.sources)&&ownsContribution(v.contributingContactIds)));
  const page=value.page===undefined?undefined:object(value.page);
  if(page?.preparing!==undefined&&(typeof page.preparing!=='boolean'||page.preparing&&(candidates.length||memories.length||page.nextCursor!==null)))throw invalid();
@@ -119,7 +120,13 @@ export class SqliteMemoryManagementController {
   try{
    const query=this.query(accepted);query.set('memory_id',memoryId);
    const response=await this.request(`/api/memory-management/history?${query}`,'GET');this.validate(base);
-   const value=object(response.data),versions=array(value.versions).map(version);
+   const value=object(response.data),versions=array(value.versions).map(raw=>{
+    const parsed=version(raw),originals=object(raw).originalCandidates;
+    if(originals===undefined)return parsed;
+    const originalCandidates=array(originals).map(raw=>candidate(raw,accepted.scope));
+    if(originalCandidates.length>100||new Set(originalCandidates.map(c=>c.id)).size!==originalCandidates.length||parsed.body===null&&originalCandidates.length||originalCandidates.some(c=>c.state!=='adopted'||!c.sources.length||c.sources.some(source=>source.contactId!==accepted.displayContactId)||c.contributingContactIds.length!==1||c.contributingContactIds[0]!==accepted.displayContactId))throw invalid();
+    return {...parsed,originalCandidates};
+   });
    if(uuid(value.memoryId)!==memoryId||decimal(value.headRevision)!==expectedHeadRevision||versions.some(v=>v.mergeParents.some(parent=>parent.memoryId===memoryId)))throw invalid();
    const belongs=(v:MemoryVersionView)=>v.sources.every(source=>source.contactId===accepted.displayContactId)&&v.contributingContactIds.every(contact=>contact===accepted.displayContactId);
    if(versions.some(v=>accepted.scope.scopeKind==='contact'?!belongs(v):v.body!==null&&(!belongs(v)||!v.sources.length||v.contributingContactIds.length!==1)))throw invalid();

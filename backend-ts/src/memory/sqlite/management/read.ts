@@ -48,6 +48,21 @@ function summary(tx:StorageTransaction,ownerId:string,s:MemoryScope,m:StorageRow
  return {id:String(m.id),scopeKind:s.scopeKind,contactId:s.contactId,headRevision:String(m.head_revision),state:String(m.state),manualProtection:m.manual_protection===1n,current,versions:latest?[latest]:[],decisions:[]};
 }
 const maxPageBytes=6*1024*1024;
+/** 原稿只随展开的历史读取，按形成该版本的决定关联并重新核验；单次采纳最多 100 条。 */
+function originalCandidates(tx:StorageTransaction,ownerId:string,s:MemoryScope,display:string|null,version:MemoryVersionView):MemoryCandidateView[]{
+ if(version.body===null)return [];
+ const rows=tx.all("SELECT c.* FROM decision_candidate d JOIN memory_candidate c ON c.owner_id=d.owner_id AND c.id=d.candidate_id WHERE d.owner_id=? AND d.decision_id=? AND d.relation_kind='accepted' AND c.scope_kind=? AND c.contact_id IS ? ORDER BY c.id LIMIT 101",[ownerId,version.decisionId,s.scopeKind,s.contactId]);
+ if(rows.length>100)fail('memory_item_too_large');
+ const candidates:MemoryCandidateView[]=[];let bytes=Buffer.byteLength(JSON.stringify(version));
+ for(const row of rows){
+  if(row.state!=='adopted')continue;
+  const candidate=candidateView(tx,ownerId,s,row);
+  if(!candidate||!owned(s,display,candidate))continue;
+  bytes+=Buffer.byteLength(JSON.stringify(candidate));if(bytes>maxPageBytes)fail('memory_item_too_large');
+  candidates.push(candidate);
+ }
+ return candidates;
+}
 interface ListPosition {candidateAfter:string;memoryAfter:string;memoryTime:string|null;candidatesDone:boolean;memoriesDone:boolean}
 function listPosition(value:unknown):ListPosition {
  const p=value as ListPosition;
@@ -68,7 +83,7 @@ export function managementRead(tx:StorageTransaction,input:unknown):MemoryManage
   if(bytes+size>maxPageBytes)return false;items.push(value);bytes+=size;return true;
  };
  if(!position.candidatesDone&&q.memoryId===undefined){
-  const rows=q.candidateId===undefined?tx.all('SELECT * FROM memory_candidate WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND id>? ORDER BY id LIMIT ?',[ownerId,s.scopeKind,s.contactId,position.candidateAfter,managementPageSize+1])
+  const rows=q.candidateId===undefined?tx.all("SELECT * FROM memory_candidate WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND state='pending' AND id>? ORDER BY id LIMIT ?",[ownerId,s.scopeKind,s.contactId,position.candidateAfter,managementPageSize+1])
    :tx.all('SELECT * FROM memory_candidate WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND id=?',[ownerId,s.scopeKind,s.contactId,id(q.candidateId)]);
   let consumed=0;
   for(const row of rows.slice(0,managementPageSize)){
@@ -112,7 +127,9 @@ export function managementHistory(tx:StorageTransaction,input:unknown):MemoryHis
   const rows=tx.all(`SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? ${p.beforeVersion===null?'':'AND version_no<?'} ORDER BY version_no DESC LIMIT ?`,[ownerId,memoryId,...(p.beforeVersion===null?[]:[BigInt(p.beforeVersion)]),managementPageSize+1]);
   let consumed=0;
   for(const row of rows.slice(0,managementPageSize)){
-   const version=checkedVersion(tx,ownerId,m,row),size=Buffer.byteLength(JSON.stringify(version));if(size>maxPageBytes)fail('memory_item_too_large');
+   const version=checkedVersion(tx,ownerId,m,row);
+   if(version.body===null||owned(s,context.displayContactId,version))version.originalCandidates=originalCandidates(tx,ownerId,s,context.displayContactId,version);
+   const size=Buffer.byteLength(JSON.stringify(version));if(size>maxPageBytes)fail('memory_item_too_large');
    if(bytes+size>maxPageBytes)break;
    if(version.body===null||owned(s,context.displayContactId,version)){versions.push(version);bytes+=size;}
    p.beforeVersion=String(row.version_no);consumed++;

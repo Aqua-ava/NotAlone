@@ -100,7 +100,7 @@ test('旧候选与版本整窗citation只投影真实来源，原事件原稿req
  const adopted=await f.management.decide({requestKey:'archive-user-review',action:'accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]});
  await f.storage.execute('fixture.archiveWholeWindow',{ownerId:owner,candidateId:candidate.id,memoryId:adopted.memoryId});
  const original=await f.storage.execute('fixture.archiveState',{ownerId:owner});assert.ok(original.citations.length>=4);assert.ok(original.required.length>=4);
- const view=await f.management.read(scope);assert.deepEqual(view.candidates[0].sources.map(s=>s.quote),['我长期住在高雄。']);
+ const view=await f.management.read(scope);assert.equal(view.candidates.length,0);assert.deepEqual((await f.management.read(scope,{candidateId:candidate.id})).candidates[0].sources.map(s=>s.quote),['我长期住在高雄。']);
  assert.deepEqual(view.memories[0].current.sources.map(s=>s.quote),['我长期住在高雄。']);assert.equal(view.memories[0].current.verificationState,'pending');
  const item=(await f.storage.execute('fixture.memoryKnowledge',{ownerId:owner,contactId:f.contactId,discussionId:'archive-projection'})).find(i=>i.id===adopted.memoryId);assert.equal(item.citationSources.length,1);assert.equal(item.qualificationSources.length,2);
  assert.deepEqual(await f.storage.execute('fixture.archiveState',{ownerId:owner}),original);
@@ -185,10 +185,10 @@ test('取消后reconcile与重选保留contact/self已采纳和拒绝存档，pe
   const candidate=(await f.management.read(scope)).candidates[0];await f.management.decide({requestKey:`archived-${scopeKind}-${action}`,action,candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]});
   const before=await f.management.read(scope),binding=f.saved.find(s=>s.contact_id===f.contactId);await f.contacts.revoke(f.contactId,binding.binding_id,binding.selection_generation);
   await f.extraction.pause(f.runId);await f.extraction.continue(f.runId);await f.extraction.waitForIdle();
-  const after=await f.management.read(scope);assert.equal(after.candidates.length,1);assert.equal(after.candidates[0].state,action==='accept'?'adopted':'rejected');assert.equal(after.candidates[0].verificationState,'verified');assert.deepEqual(after.candidates[0].sources,before.candidates[0].sources);assert.equal((await f.management.read(other)).candidates.length,0);
+  const after=await f.management.read(scope),original=(await f.management.read(scope,{candidateId:candidate.id})).candidates[0];assert.equal(after.candidates.length,0);assert.equal(original.state,action==='accept'?'adopted':'rejected');assert.equal(original.verificationState,'verified');assert.deepEqual(original.sources,candidate.sources);assert.equal((await f.management.read(other)).candidates.length,0);
   if(action==='accept'){assert.equal(after.memories[0].current.verificationState,'verified');assert.deepEqual(after.memories[0].current.sources,before.memories[0].current.sources);}
   const snapshot=await f.contacts.candidates(true),choice=snapshot.sessions.find(s=>s.known_contact_id===f.contactId||s.bound_contact_id===f.contactId);assert.ok(choice);await f.contacts.confirm(snapshot.snapshot_token,[{locator:choice.username,observed_display_name:choice.display_name,expected_selection_generation:choice.selection_generation}]);
-  assert.equal((await f.management.read(scope)).candidates[0].verificationState,'verified');assert.equal((await f.management.read(other)).candidates.length,0);assert.equal(f.normal.purposes.length,2);
+  assert.equal((await f.management.read(scope,{candidateId:candidate.id})).candidates[0].verificationState,'verified');assert.equal((await f.management.read(other)).candidates.length,0);assert.equal(f.normal.purposes.length,2);
  });
 });
 
@@ -202,7 +202,7 @@ test('本人原A+B冻结任务保持混合归属，单事件A消息资格与存�
  const before=(await f.storage.execute('fixture.memoryKnowledge',{ownerId:owner,contactId:a,discussionId:'precise-source-mixed-owner'})).find(i=>i.id===candidate.id);assert.deepEqual(before.qualificationSources.map(s=>s.contactId),[a]);assert.deepEqual(before.citationSources.map(s=>s.contactId),[a]);
  const adopted=await management.decide({requestKey:'mixed-task-user-accept',action:'accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]});let version=(await management.read(self)).memories.find(m=>m.id===adopted.memoryId).current;assert.deepEqual(new Set(version.contributingContactIds),new Set([a,b]));
  const binding=f.saved.find(c=>c.contact_id===b);await f.contacts.revoke(b,binding.binding_id,binding.selection_generation);await extraction.pause(run.runId);await extraction.continue(run.runId);await extraction.waitForIdle();
- const archived=await management.read(self);assert.deepEqual(new Set(archived.candidates.find(c=>c.id===candidate.id).contributingContactIds),new Set([a,b]));version=archived.memories.find(m=>m.id===adopted.memoryId).current;assert.deepEqual(new Set(version.contributingContactIds),new Set([a,b]));
+ const archived=await management.read(self);assert.deepEqual(new Set((await management.read(self,{candidateId:candidate.id})).candidates[0].contributingContactIds),new Set([a,b]));version=archived.memories.find(m=>m.id===adopted.memoryId).current;assert.deepEqual(new Set(version.contributingContactIds),new Set([a,b]));
  await management.decide({requestKey:'mixed-task-correction',action:'correct',memoryId:adopted.memoryId,expectedVersionNo:version.versionNo,expectedHeadRevision:archived.memories.find(m=>m.id===adopted.memoryId).headRevision,body:'人工修正本人绿茶资料'});
  version=(await management.read(self)).memories.find(m=>m.id===adopted.memoryId).current;assert.equal(version.versionNo,'2');assert.deepEqual(new Set(version.contributingContactIds),new Set([a,b]));
  const after=(await f.storage.execute('fixture.memoryKnowledge',{ownerId:owner,contactId:a,discussionId:'precise-source-mixed-owner'})).find(i=>i.id===adopted.memoryId);assert.deepEqual(after.qualificationSources.map(s=>s.contactId),[a]);
@@ -237,7 +237,7 @@ for(const scenario of ['active','withdrawn','replaced_memory_id','merged_memory_
  const runtime=new SqliteMemoryAdjudication(f.storage,owner,modelPort(()=>extraction.accounting,respond),new ActiveHolders());t.after(()=>runtime.close());await runtime.initialize();await runtime.publishRun(run.runId);
  const view=await management.read(scope),after=view.memories[0],history=await management.readHistory(scope,after.id);assert.equal(view.memories.length,1);assert.equal(after.versions.length,1);assert.deepEqual(after.current,memory.current);assert.equal(after.headRevision,memory.headRevision);assert.equal(after.manualProtection,memory.manualProtection);assert.equal(after.state,memory.state);
  if(malformed){assert.equal(view.candidates.find(c=>c.id===pending.id).state,'pending');assert.equal(history.decisions.filter(d=>d.action==='auto_noop').length,0);assert.deepEqual(purposes,['adjudication']);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});return;}
- assert.equal(view.candidates.find(c=>c.id===pending.id).state,'duplicate');assert.equal(view.candidates.filter(c=>c.state==='adopted').length,1);if(scenario==='withdrawn')assert.equal(after.current,null);
+ assert.equal(view.candidates.length,0);assert.equal((await management.read(scope,{candidateId:pending.id})).candidates[0].state,'duplicate');assert.equal(history.versions.flatMap(version=>version.originalCandidates??[]).filter(c=>c.state==='adopted').length,1);if(scenario==='withdrawn')assert.equal(after.current,null);
  const knowledge=await f.storage.execute('fixture.memoryKnowledge',{ownerId:owner,contactId,discussionId:`duplicate-${scenario}`});
  assert.ok(!knowledge.some(item=>item.kind==='memory_candidate'&&item.id===pending.id));assert.equal(knowledge.some(item=>item.kind==='memory'&&item.id===memory.id),scenario==='active');
  assert.deepEqual(purposes,['adjudication','relation_verification']);assert.equal(history.decisions.filter(d=>d.action==='auto_noop'&&d.actorKind==='system').length,1);

@@ -76,7 +76,7 @@ test('首次记忆只展示当前内容，来源和修改可达且更多保留�
   for(const name of ['记录变化','开启人工保护','撤销首次自动采纳'])assert.equal(await card.getByRole('button',{name,exact:true}).isDisabled(),true);
   assert.equal(await page.getByLabel('修正后的正文').inputValue(),'尚未保存的合成修正');await page.getByRole('button',{name:'取消编辑'}).click();
   await card.getByText(version.body,{exact:true}).waitFor();assert.equal(calls.filter(call=>call.method==='decide').length,0);
-  await openMemoryMore(card);assert.equal(await card.getByText('更新历史',{exact:true}).count(),0);assert.equal(calls.filter(call=>call.method==='readHistory').length,0);
+  await openMemoryMore(card);await card.getByText('更新历史',{exact:true}).waitFor();assert.equal(calls.filter(call=>call.method==='readHistory').length,0);
   await card.getByRole('button',{name:'撤销首次自动采纳'}).click();await page.getByRole('status').filter({hasText:'已撤销首次自动采纳'}).waitFor();
   assert.equal(await card.getByText(version.body,{exact:true}).count(),0);
   const request=calls.find(call=>call.method==='decide').input.request;assert.equal(request.expectedVersionNo,'1');assert.equal(request.expectedHeadRevision,'1');assert.equal(request.memoryId,id);
@@ -93,7 +93,7 @@ test('首次记忆保护变更后仍可查看更新历史，未改变正文版�
   return {status:'applied',result:{decisionId:id,memoryId:id,versionNo:null,action:'protect'}};
  },async page=>{
   const card=page.getByRole('article',{name:'正式记忆'});
-  await card.getByText(version.body,{exact:true}).waitFor();await openMemoryMore(card);assert.equal(await card.getByText('更新历史',{exact:true}).count(),0);
+  await card.getByText(version.body,{exact:true}).waitFor();await openMemoryMore(card);await card.getByText('更新历史',{exact:true}).waitFor();
   await card.getByRole('button',{name:'开启人工保护'}).click();await page.getByRole('status').filter({hasText:'已开启当前人工保护'}).waitFor();
   assert.equal(memory.current.versionNo,'1');assert.equal(memory.headRevision,'2');assert.equal(calls[0].expectedHeadRevision,'1');
   await openMemoryMore(card);await card.getByText('更新历史',{exact:true}).click();
@@ -156,7 +156,7 @@ test('真实释放桥不会把正常对方与本人切换误报为资格失效�
  }},()=>{deliveries.push(publish());},{getState:()=>({selectedContactId:contact,scopeRevision:1})});
  await panel(t,async(method,input)=>{const result=await(method==='read'?controller.read(input):controller.readDocuments(input));if(method==='read'){reads.push(input.scope.scopeKind);if(result.view.candidates.length)completeOld();}return result;},async page=>{
   publish=()=>page.evaluate(()=>window.invalidate());
-  const section=page.getByRole('region',{name:'记忆候选与版本'}),empty=section.getByText('本页没有可展示的候选。',{exact:true});
+  const section=page.getByRole('region',{name:'记忆候选与版本'}),empty=section.getByText('本页没有可展示的正式记忆。',{exact:true});
   await empty.waitFor();await section.getByRole('button',{name:'我',exact:true}).click();
   await Promise.all(deliveries);
   assert.deepEqual(await section.getByRole('alert').allTextContents(),[]);
@@ -328,7 +328,7 @@ test('真实页面保护父资料后恢复失败，解除并刷新后携带新�
   assert.deepEqual(calls.filter(c=>c.action!=='restore').map(c=>[c.action,c.expectedVersionNo,c.expectedHeadRevision]),[['protect','1','2'],['unprotect','1','3']]);assert.equal(calls.at(-1).expectedMergedParents[0].headRevision,'4');assert.equal(primary.current.versionNo,'3');assert.equal(memory.current.versionNo,'2');
  });
 });
-test('真实decode到页面的重复终态不显示已采纳或操作按钮，已撤销目标无当前版本',{timeout:20000},async t=>{
+test('真实decode到页面只展示待确认候选，已处理原稿不占侧栏，已撤销目标无当前版本',{timeout:20000},async t=>{
  const compiled=await build({entryPoints:['src/main/memory/sqlite-management.ts'],bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
  const {SqliteMemoryManagementController}=await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
  const second='33333333-3333-4333-8333-333333333333',pendingId='44444444-4444-4444-8444-444444444444',adoptedId='55555555-5555-4555-8555-555555555555';
@@ -338,12 +338,9 @@ test('真实decode到页面的重复终态不显示已采纳或操作按钮，�
  const controller=new SqliteMemoryManagementController({getConnectionGeneration:()=>1,requestJson:async()=>({generation:1,data:{candidates,memories:[memory(id,'active'),memory(second,'withdrawn')]}})},()=>{},{getState:()=>({selectedContactId:contact,scopeRevision:1})});
  await panel(t,async(method,input)=>{assert.equal(method,'read');return controller.read(input);},async page=>{
   const section=page.getByRole('region',{name:'记忆候选与版本'});
-  for(const body of ['有效目标对应重复原稿','已撤销目标对应重复原稿']){
-   const duplicate=section.getByRole('article',{name:'记忆候选'}).filter({hasText:body});
-   await duplicate.getByText('已跳过重复资料',{exact:false}).waitFor();assert.equal(await duplicate.getByText('已采纳',{exact:false}).count(),0);assert.equal(await duplicate.getByRole('button').count(),0);
-  }
   const pending=section.getByRole('article',{name:'记忆候选'}).filter({hasText:'尚待决定的独立原稿'});await pending.getByRole('button',{name:'采纳原稿',exact:true}).waitFor();
-  const adopted=section.getByRole('article',{name:'记忆候选'}).filter({hasText:'以前明确采纳的原稿'});await adopted.getByText('已采纳',{exact:false}).waitFor();assert.equal(await adopted.getByRole('button').count(),0);
+  for(const body of ['有效目标对应重复原稿','已撤销目标对应重复原稿','以前明确采纳的原稿'])assert.equal(await section.getByText(body,{exact:true}).count(),0);
+  assert.equal(await section.getByRole('complementary',{name:'待确认记忆'}).getByRole('article',{name:'记忆候选'}).count(),1);
   const withdrawn=section.getByRole('article',{name:'正式记忆'}).filter({hasText:'已撤销'});await withdrawn.getByText('当前无可引用版本。已撤销。',{exact:true}).waitFor();assert.equal(await withdrawn.getByText('当前版本',{exact:false}).count(),0);
  });
 });
@@ -606,5 +603,39 @@ for(const redactedCurrent of [false,true])test(`同头版本列表刷新重新�
   await page.getByText('更新历史',{exact:true}).click();await refreshVisible(page);await page.evaluate(()=>new Promise(requestAnimationFrame));assert.equal(historyReads,3,'折叠历史不因列表刷新请求旧版');
   await page.getByText('更新历史',{exact:true}).click();await page.getByText('正文已清除或来源已失效。',{exact:true}).waitFor();assert.equal(historyReads,4);
   await page.getByText('更多',{exact:true}).click();await refreshVisible(page);await page.evaluate(()=>new Promise(requestAnimationFrame));assert.equal(historyReads,4,'收起更多后不再读取已展开的历史');assert.equal(await page.getByText('正文已清除或来源已失效。',{exact:true}).count(),0);
+ },false,contact,async()=>{},{withHistory:true});
+});
+
+
+test('已采纳原稿按需从首次记忆历史读取，无待确认项时主栏铺满且来源失效撤下原稿',{timeout:20000},async t=>{
+ const compiled=await build({entryPoints:['src/main/memory/sqlite-management.ts'],bundle:true,platform:'node',format:'esm',write:false,logLevel:'silent'});
+ const {SqliteMemoryManagementController}=await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
+ const version={mergeParents:[],mergeParentCount:0,verificationState:'verified',timeStatus:'eligible',versionNo:'1',body:'修改后的正式记忆',formationKind:'adoption',adoptionMode:'user',previousVersionNo:null,restoredFromVersionNo:null,contentState:'present',provenanceState:'eligible',decisionId:id,sources:[source],contributingContactIds:[contact]};
+ const original={...candidate,state:'adopted',body:'采纳前保留的合成原稿'};
+ const memory={id,scopeKind:'contact',contactId:contact,headRevision:'1',state:'active',manualProtection:false,current:version,versions:[version],decisions:[]};
+ let historyReads=0;
+ const controller=new SqliteMemoryManagementController({getConnectionGeneration:()=>1,requestJson:async request=>{
+  const history=request.path.startsWith('/api/memory-management/history?');if(history)historyReads++;
+  return {generation:1,data:history?{memoryId:id,headRevision:'1',revision:'a'.repeat(64),nextCursor:null,versions:[{...version,originalCandidates:[original]}],decisions:[]}:{candidates:[original],memories:[memory]}};
+ }},()=>{},{getState:()=>({selectedContactId:contact,scopeRevision:1})});
+ await panel(t,(method,input)=>method==='readHistory'?controller.readHistory(input):controller.read(input),async page=>{
+  const card=page.getByRole('article',{name:'正式记忆',exact:true});await card.getByText(version.body,{exact:true}).waitFor();
+  for(const stylesheet of ['style.css','memory.css'])await page.addStyleTag({content:await readFile(new URL(`../src/renderer/${stylesheet}`,import.meta.url),'utf8')});
+  await page.addStyleTag({content:'#root {padding:32px;max-width:1100px;margin:auto;}'});
+  assert.equal(await page.locator('.memory-candidates-aside').count(),0);assert.equal(await page.getByText(original.body,{exact:true}).count(),0);
+  assert.equal(historyReads,0);
+  for(const width of [1100,680,380]){
+   await page.setViewportSize({width,height:900});
+   const bounds=await page.locator('.memory-timeline-layout').evaluate(el=>({full:Math.abs(el.getBoundingClientRect().width-el.firstElementChild.getBoundingClientRect().width)<1,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth}));
+   assert.deepEqual(bounds,{full:true,overflow:false});
+  }
+  await page.setViewportSize({width:1100,height:900});await page.locator('.sqlite-memory-management').screenshot({path:'/tmp/notalone-memory-without-candidates.png'});
+  await openMemoryMore(card);assert.equal(historyReads,0);
+  await card.getByText('更新历史',{exact:true}).click();await card.getByText('提取原稿',{exact:true}).waitFor();assert.equal(historyReads,1);
+  await card.getByText('提取原稿',{exact:true}).click();const draft=card.getByRole('article',{name:'已采纳原稿',exact:true});await draft.getByText(original.body,{exact:true}).waitFor();
+  assert.equal(await draft.getByRole('button').count(),0);await draft.getByText('查看来源',{exact:true}).click();await draft.getByText(source.quote,{exact:true}).waitFor();
+  await page.locator('.sqlite-memory-management').screenshot({path:'/tmp/notalone-memory-original-in-history.png'});
+  await page.evaluate(()=>window.invalidate());await page.getByRole('alert').waitFor();
+  assert.equal(await page.getByText(original.body,{exact:true}).count(),0);assert.equal(await page.getByText(source.quote,{exact:true}).count(),0);
  },false,contact,async()=>{},{withHistory:true});
 });

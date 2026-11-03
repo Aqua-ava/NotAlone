@@ -23,7 +23,7 @@ test('正常核验原稿经真实修改采纳形成独立版本，原稿不变�
  const request={requestKey:'manual-adoption',action:'edit_accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision],body:'联系人说自己长期住在高雄。'};
  const result=await f.management.decide(request);const replay=await f.management.decide(request);assert.deepEqual(replay,result);
  const after=await f.management.read({scopeKind:'contact',contactId:f.a});
- assert.equal(after.candidates[0].body,candidate.body);assert.equal(after.candidates[0].state,'adopted');
+ assert.equal(after.candidates.length,0);const original=(await f.management.read({scopeKind:'contact',contactId:f.a},{candidateId:candidate.id})).candidates[0];assert.equal(original.body,candidate.body);assert.equal(original.state,'adopted');
  assert.equal(after.memories[0].current.body,request.body);assert.equal(after.memories[0].current.adoptionMode,'user');assert.equal(after.memories[0].current.versionNo,'1');
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
@@ -153,7 +153,7 @@ test('处理结束窄hook从07正常核验输出自动发布，重试不重复�
  const management=new SqliteMemoryManagement(f.storage,owner);let extraction;
  extraction=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>extraction.accounting,supplier().respond),undefined,runId=>management.publishRun(runId));t.after(()=>extraction.close());
  const run=await extraction.start('normal-hook-auto');await extraction.waitForIdle();
- const before=await management.read({scopeKind:'contact',contactId});assert.equal(before.memories.length,1);assert.equal(before.memories[0].current.adoptionMode,'auto');assert.equal(before.candidates[0].state,'adopted');
+ const before=await management.read({scopeKind:'contact',contactId});assert.equal(before.memories.length,1);assert.equal(before.memories[0].current.adoptionMode,'auto');assert.equal(before.candidates.length,0);assert.equal((await management.readHistory({scopeKind:'contact',contactId},before.memories[0].id)).versions[0].originalCandidates[0].state,'adopted');
  assert.equal((await management.readHistory({scopeKind:'contact',contactId},before.memories[0].id)).decisions[0].actorKind,'system');await management.publishRun(run.runId);const after=await management.read({scopeKind:'contact',contactId});assert.deepEqual(after,before);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
