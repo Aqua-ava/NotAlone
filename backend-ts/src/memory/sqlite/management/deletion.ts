@@ -2,12 +2,14 @@ import {createHash} from 'node:crypto';
 import type {StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {DeletionDomain,DeletionOperation,RowDeletionTarget,CheckResult} from '../../../storage/sqlite/deletion/contracts.ts';
 import {identityDeletionAuthority} from '../../../contacts/sqlite/deletion.ts';
+import {isMediaDeletionScope,mediaDeletionAuthority} from '../../../media/sqlite/deletion.ts';
 import {fail} from './qualification.ts';
 import {memoryDeletionImpact} from '../deletion-impact.ts';
 import {scheduleMemoryChange} from '../documents/later-schedule.ts';
 const domain='memory_management';
 const rowKinds:DeletionDomain['rowKinds']={memory_candidate:{keys:['owner_id','id'],ownerKey:'owner_id'},memory_version:{keys:['owner_id','memory_id','version_no'],ownerKey:'owner_id'},memory:{keys:['owner_id','id'],ownerKey:'owner_id'},memory_decision:{keys:['owner_id','id'],ownerKey:'owner_id'}};
-const allowed=(op:DeletionOperation)=>['source','contact_history','contact','account'].includes(op.scope.kind);
+const allowed=(op:DeletionOperation)=>isMediaDeletionScope(op.scope)||['source','contact_history','contact','account'].includes(op.scope.kind);
+const verifyFence=(tx:StorageTransaction,op:DeletionOperation)=>isMediaDeletionScope(op.scope)?mediaDeletionAuthority.verify(tx,op):identityDeletionAuthority.verify(tx,op);
 const identity=(kind:string,key:Record<string,string>)=>createHash('sha256').update(JSON.stringify([domain,kind,Object.entries(key).sort(([a],[b])=>a.localeCompare(b))])).digest('hex');
 function target(rowKind:string,key:Record<string,string>):RowDeletionTarget{return {kind:'row',domain,rowKind,key,identity:identity(rowKind,key),holderKeys:[]};}
 function collect(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget[]{
@@ -54,7 +56,7 @@ function eraseVersion(tx:StorageTransaction,op:DeletionOperation,memoryId:string
  redactDecision(tx,ownerId,String(v.decision_id));
  tx.run("UPDATE memory SET state='invalidated',head_revision=head_revision+1 WHERE owner_id=? AND id=? AND current_version_no=? AND state<>'invalidated'",[ownerId,memoryId,versionNo]);
  // 来源／历史删除后的正式资料确实失效，留下重整要求；删除联系人或账号时不创建新工作。
- if(head?.state==='active'&&head.current_version_no===versionNo&&['source','contact_history'].includes(op.scope.kind)){
+ if(head?.state==='active'&&head.current_version_no===versionNo&&(isMediaDeletionScope(op.scope)||['source','contact_history'].includes(op.scope.kind))){
   const scope={scopeKind:head.scope_kind as 'self'|'contact',contactId:head.contact_id as string|null};
   if(scope.scopeKind==='self')tx.run('UPDATE owner SET memory_revision=memory_revision+1 WHERE owner_id=?',[ownerId]);
   else tx.run('UPDATE contact SET memory_revision=memory_revision+1 WHERE owner_id=? AND id=?',[ownerId,scope.contactId]);
@@ -73,7 +75,7 @@ export const memoryManagementDeletionDomain:DeletionDomain={id:domain,rowKinds,
  },collect,
  clearRow(tx,op,t){
   if(!allowed(op)||t.domain!==domain||!Object.hasOwn(rowKinds,t.rowKind)||t.key.owner_id!==op.ownerId||Object.keys(t.key).sort().join()!==[...rowKinds[t.rowKind].keys].sort().join()||t.identity!==identity(t.rowKind,t.key))fail('memory_deletion_target_invalid');
-  if(identityDeletionAuthority.verify(tx,op).result!=='passed'||!tx.get('SELECT 1 FROM deletion_target WHERE operation_id=? AND domain=? AND expected_identity=?',[op.operationId,domain,JSON.stringify(t.identity)]))fail('memory_deletion_not_fenced');
+  if(verifyFence(tx,op).result!=='passed'||!tx.get('SELECT 1 FROM deletion_target WHERE operation_id=? AND domain=? AND expected_identity=?',[op.operationId,domain,JSON.stringify(t.identity)]))fail('memory_deletion_not_fenced');
   const ownerId=op.ownerId;
   if(t.rowKind==='memory_decision')redactDecision(tx,ownerId,t.key.id);
   else if(t.rowKind==='memory_candidate'){

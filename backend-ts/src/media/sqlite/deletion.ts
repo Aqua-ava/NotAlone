@@ -6,7 +6,8 @@ import type { CheckResult, DeletionAuthority, DeletionDomain, DeletionOperation,
 const fail = (code: string): never => { throw new StorageFailure(code); };
 const passed = (proof: string): CheckResult => ({result: 'passed', proof});
 const blocked = (proof: string): CheckResult => ({result: 'blocked', proof});
-const isMedia = (scope: DeletionScope): scope is Extract<DeletionScope, {messageId: string}> => scope.kind === 'media_result_clear' || scope.kind === 'media_result_replace';
+export const isMediaDeletionScope = (scope: DeletionScope): scope is Extract<DeletionScope, {messageId: string}> => scope.kind === 'media_result_clear' || scope.kind === 'media_result_replace';
+const isMedia=isMediaDeletionScope;
 const same = (left: unknown, right: unknown): boolean => canonical(left) === canonical(right);
 function canonical(value: unknown): string { return JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item); }
 const identity = (kind: string, key: Record<string, string>): string => createHash('sha256').update(canonical([kind, key])).digest('hex');
@@ -87,6 +88,11 @@ function select(tx: StorageTransaction, op: DeletionOperation): Selection {
       || !!tx.get("SELECT 1 FROM message WHERE owner_id=? AND id=? AND availability='deleting'", [ownerId, h.message_id]);
   });
   return {attempts: attempts.filter(a => chosenAttempts.has(String(a.id))), files: files.filter(f => chosenFiles.has(String(f.id))), heads: selectedHeads};
+}
+/** 依赖域只以本操作实际清除的文件版本为种子，不把媒体代次当联系人资料代次。 */
+export function mediaDeletionFileIds(tx:StorageTransaction,op:DeletionOperation):string[]{
+  if(!isMedia(op.scope))return [];
+  return select(tx,op).files.map(file=>String(file.id));
 }
 function holderKeys(a: StorageRow | undefined, fileId?: string): string[] {
   return [...(a ? [`mediaAttempt:${a.id}`] : []), ...(fileId ? [`mediaFile:${fileId}`,`mediaProbe:${fileId}`] : [])];
@@ -192,16 +198,19 @@ export const mediaDeletionDomain: DeletionDomain = {
 
 /** 公共宿主及发布事务共用同一完整注册；本域排在会删除来源/授权父行的领域之前。 */
 export function composeMediaDeletionRegistration(base: DeletionRegistration): DeletionRegistration {
-  return {authority: {
-    fence(tx, owner, scope) { return isMedia(scope) ? mediaDeletionAuthority.fence(tx, owner, scope) : base.authority.fence(tx, owner, scope); },
-    verify(tx, op) { return isMedia(op.scope) ? mediaDeletionAuthority.verify(tx, op) : base.authority.verify(tx, op); },
-  }, domains: [mediaDeletionDomain, ...base.domains.filter(d => d.id !== 'media').map(domain => ({...domain,
-    fence(tx: StorageTransaction, op: DeletionOperation) { return isMedia(op.scope) ? [] : domain.fence(tx, op); },
-    collect(tx: StorageTransaction, op: DeletionOperation) { return isMedia(op.scope) ? [] : domain.collect(tx, op); },
+  const contentDomains=new Set(['memory_documents','memory_management','reply_candidates','discussion_calls','memory_extraction','discussion']);
+  const domains=base.domains.filter(d => d.id !== 'media').map(domain => ({...domain,
+    fence(tx: StorageTransaction, op: DeletionOperation) { return isMedia(op.scope)&&!contentDomains.has(domain.id) ? [] : domain.fence(tx, op); },
+    collect(tx: StorageTransaction, op: DeletionOperation) { return isMedia(op.scope)&&!contentDomains.has(domain.id) ? [] : domain.collect(tx, op); },
     verify(tx: StorageTransaction, op: DeletionOperation) {
-      if (!isMedia(op.scope)) return domain.verify(tx, op);
+      if (!isMedia(op.scope)||contentDomains.has(domain.id)) return domain.verify(tx, op);
       const irrelevant = {result: 'not_applicable' as const, proof: 'single_media_scope_has_no_other_domain_changes'};
       return {database_rows: irrelevant, derived_eligibility: irrelevant, trace_payloads: irrelevant, request_replay: irrelevant, scope_suppression: irrelevant};
     },
-  }))], requiredDomains: ['media', ...base.requiredDomains.filter(d => d !== 'media')]};
+  }));
+  return {authority: {
+    fence(tx, owner, scope) { return isMedia(scope) ? mediaDeletionAuthority.fence(tx, owner, scope) : base.authority.fence(tx, owner, scope); },
+    verify(tx, op) { return isMedia(op.scope) ? mediaDeletionAuthority.verify(tx, op) : base.authority.verify(tx, op); },
+  }, domains: [...domains.filter(domain=>contentDomains.has(domain.id)),mediaDeletionDomain,...domains.filter(domain=>!contentDomains.has(domain.id))],
+   requiredDomains: ['media', ...base.requiredDomains.filter(d => d !== 'media')]};
 }

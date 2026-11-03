@@ -26,6 +26,7 @@ export interface FixedProcessingRun {
   /** 后续阶段合并等待的最早执行时间；到期仍须重新核验资格。 */
   nextDueAt?: number | null;
   controlVersion: number; pending: number; revoked: number; calls: FixedProcessingCallSummary;
+  contentCounts?: {kind:string;total:number;succeeded:number}[];
   inputs: FixedProcessingInput[]; candidates: FixedProcessingCandidate[];
 }
 export interface FixedProcessingEvent {
@@ -38,6 +39,7 @@ export interface FixedProcessingCall {
 }
 export interface FixedProcessingTrace { events: FixedProcessingEvent[]; calls: FixedProcessingCall[] }
 export interface FixedProcessingQueue {
+  content?: {kind:string;pending:number;unavailable:number}[];
   pending: number; nextDueAt: number | null; blockedContacts: number;
   history?: { pending: number };
   later?: { pending: number; nextDueAt: number | null; stage: 'document_scene' | 'document_profile' | null };

@@ -1,3 +1,6 @@
+import {createBuiltinMemoryContentRegistry} from '../content/builtins.ts';
+import type {MemoryContentRegistry,MemoryContentResources,FrozenMemoryContent} from '../content/registry.ts';
+import {assertMultimodalAdmission} from '../extraction/multimodal.ts';
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import type {StorageRow} from '../../storage/sqlite/contracts.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
@@ -20,6 +23,7 @@ interface ClaimedStep {attemptId:string;stepId:string;taskId:string;runId:string
 export class SqliteMemoryExtraction {
  private afterRunSettled?:((runId:string)=>Promise<unknown>);
  private readonly ensureSourceReady?:((contactId:string)=>Promise<void>);
+ private readonly content:{registry:MemoryContentRegistry;resources?:MemoryContentResources};
  private readonly afterStepSettled?:()=>Promise<void>;
  private storage:SqliteStorage;readonly ownerId:string;private model:ExtractionModelPort;readonly holders:ActiveHolders;
  private policy?:Promise<ExtractionPolicyVersion>;private initialized?:Promise<void>;private stopped=false;
@@ -27,7 +31,8 @@ export class SqliteMemoryExtraction {
  private turnTail:Promise<void>=Promise.resolve();
  private runs=new Map<string,Promise<void>>();private active=new Map<string,{abort:AbortController;done:Promise<void>}>();
  readonly accounting:ModelPermitAccounting;
- constructor(storage:SqliteStorage,ownerId:string,model:ExtractionModelPort,holders=new ActiveHolders(),afterRunSettled?:((runId:string)=>Promise<unknown>),ensureSourceReady?:((contactId:string)=>Promise<void>),afterStepSettled?:()=>Promise<void>){
+ constructor(storage:SqliteStorage,ownerId:string,model:ExtractionModelPort,holders=new ActiveHolders(),afterRunSettled?:((runId:string)=>Promise<unknown>),ensureSourceReady?:((contactId:string)=>Promise<void>),afterStepSettled?:()=>Promise<void>,content?:{registry:MemoryContentRegistry;resources?:MemoryContentResources}){
+  this.content=content??{registry:createBuiltinMemoryContentRegistry()};
   this.storage=storage;this.ownerId=ownerId;this.model=model;this.holders=holders;this.afterRunSettled=afterRunSettled;this.ensureSourceReady=ensureSourceReady;this.afterStepSettled=afterStepSettled;
   this.accounting={reserve:async(receipt,claim)=>{await this.storage.execute(claim?.step_name==='extraction_verification'?'memoryExtraction.reserve':claim?.step_name==='document_scene'||claim?.step_name==='document_profile'?'memoryDocuments.reserve':'memoryAdjudication.reserve',{receipt,claim});},recordReserved:async receipt=>{await this.storage.execute('memoryExtraction.receipt',{receipt});},unconfirmedRequests:scope=>this.storage.execute('memoryExtraction.unconfirmed',scope)};
  }
@@ -212,14 +217,21 @@ export class SqliteMemoryExtraction {
  private async process(batch:ClaimedStep,signal:AbortSignal){
   const policy=await this.version();const resolved=policy.resolve(batch.policyConfig);
   const requireCurrent=async()=>{signal.throwIfAborted();await policy.assertCurrent();await this.withSourceReady(batch.contactId,()=>this.storage.execute('memoryExtraction.current',{ownerId:this.ownerId,attemptId:batch.attemptId}));};
-  const rows=[...batch.rows].sort((a,b)=>a.sent_at!==null&&b.sent_at!==null?(a.sent_at as bigint)<(b.sent_at as bigint)?-1:(a.sent_at as bigint)>(b.sent_at as bigint)?1:Number(a.input_no)-Number(b.input_no):Number(a.input_no)-Number(b.input_no));
+  const rows=[...batch.rows].sort((a,b)=>a.sent_at!==null&&b.sent_at!==null&&a.sent_at!==b.sent_at?Number((a.sent_at as bigint)-(b.sent_at as bigint)):a.display_no!==undefined&&b.display_no!==undefined?Number((a.display_no as bigint)-(b.display_no as bigint)):Number(a.input_no)-Number(b.input_no));
   const actualNos=rows.map(row=>Number(row.input_no));
-  const window:ExtractionWindow={owner_id:this.ownerId,contact_id:batch.contactId,target_message_ids:rows.filter(r=>r.role==='target').map(r=>String(r.message_id)),messages:rows.map(r=>({message_id:String(r.message_id),text:String(r.text_body),sender:r.sender_role==='owner'?'self':'contact',occurred_at:r.sent_at===null?null:new Date(Number(r.sent_at)).toISOString(),text_representation:'text'}))};
+  const prepared=[];
+  for(const row of rows){
+   const frozen:FrozenMemoryContent=row.identity_json?{pluginId:String(row.plugin_id),pluginVersion:String(row.plugin_version),kind:String(row.content_kind),identity:JSON.parse(String(row.identity_json))}:
+    {pluginId:'notalone.text',pluginVersion:'1',kind:'text',identity:{}};
+   prepared.push(await this.content.registry.prepare({ownerId:this.ownerId,contactId:batch.contactId,message:{...row,id:row.message_id,kind:row.message_kind??'text'},frozen,resources:this.content.resources,signal,requireCurrent}));
+  }
+  const images=prepared.flatMap(part=>part.images??[]);
+  const window:ExtractionWindow={owner_id:this.ownerId,contact_id:batch.contactId,target_message_ids:rows.filter(r=>r.role==='target').map(r=>String(r.message_id)),messages:prepared.map(part=>part.message)};
   let commonFailure:string|null=null;let modelFailure:string|null=null;
   let verificationInputEventId:string|null=null,verificationCall:{callId:string;reused:boolean}|null=null;
   const verificationEvents=new Map<string,string>();
   const commonCodes=[...sharedFailureCodes];
-  const outcome=await runExtractionFlow({window,signal,mode:resolved.mode,verificationPolicy:resolved.verification,max_retries:0,requireCurrent,
+  const outcome=await runExtractionFlow({window,images,signal,mode:resolved.mode,verificationPolicy:resolved.verification,max_retries:0,requireCurrent,
    record:async e=>{
     const isVerification=e.stage==='verification';
     const eventId=await this.storage.execute<string>('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:e.stage,
@@ -231,12 +243,12 @@ export class SqliteMemoryExtraction {
    invoke:async request=>{
     const scope={owner_id:this.ownerId,contact_id:batch.contactId};
     let prepared:SqliteExtractionModelPreparation;try{prepared=await this.model.prepare(request,{scope,signal,requireCurrent});}catch(error){if(commonCodes.includes((error as any)?.code))commonFailure=(error as any).code;throw error;}
-    const serial={purpose:request.purpose,system:request.system,user:request.user,tool:request.tool};
+    const serial={purpose:request.purpose,system:request.system,user:request.user,tool:request.tool,...(request.images?.length?{images:request.images}:{})};
     const call=await this.storage.execute<any>('memoryExtraction.prepareCall',{ownerId:this.ownerId,attemptId:batch.attemptId,purpose:request.purpose,request:serial,provider:prepared.provider,model:prepared.model,configurationId:prepared.configurationId,inputCap:prepared.maxInputTokens,outputCap:prepared.maxOutputTokens,inputNos:actualNos});
     if(request.purpose==='verification')verificationCall={callId:call.callId,reused:call.reused};
     if(call.reused){await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'model_reused',payload:{state:'known_result'},reuseId:call.callId,inputNos:actualNos});return {blocks:call.blocks};}
     let result:{blocks:readonly unknown[]};
-    try{result=await this.model.invoke(request,{requestId:call.requestId,attemptId:call.callId,scope,claim:batch.claim,signal,requireCurrent,onReceipt:async receipt=>{await this.storage.execute('memoryExtraction.receipt',{receipt});}});}
+    try{result=await this.model.invoke(request,{requestId:call.requestId,attemptId:call.callId,scope,claim:batch.claim,signal,requireCurrent,onImageInputs:async manifests=>{await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'image_inputs',payload:{purpose:request.purpose,images:manifests},callId:call.callId,inputNos:actualNos});},onReceipt:async receipt=>{await this.storage.execute('memoryExtraction.receipt',{receipt});}});}
     catch(error){
      const value=error as {code?:unknown;provider_failure?:{code?:unknown;status?:unknown}};
      const code=typeof value?.code==='string'&&/^extraction_model_[a-z_]+$/.test(value.code)?value.code:'extraction_model_unavailable';
@@ -255,8 +267,9 @@ export class SqliteMemoryExtraction {
   // 逐条拒绝是内容结果：目标按“已处理、无新增”收尾并继续后续批次，不能升级为整批失败或整轮受阻。
   const verificationRefs:(CandidateVerificationReference|null)[]=outcome.accepted.map((fact,index)=>{
    const checked=outcome.verification.find(v=>v.fact===fact),candidateTraceId=outcome.candidate_trace_ids[index]!,eventId=verificationEvents.get(candidateTraceId);
-   if(resolved.verification.id!=='complete-claim-v1'||!checked||!eventId||!verificationInputEventId||!verificationCall)return null;
-   assertCompleteClaimAdmission(window,fact,checked.result);
+   if(!checked||!eventId||!verificationInputEventId||!verificationCall)return null;
+   if(checked.result.verification_mode==='multimodal-claim-v1')assertMultimodalAdmission(window,fact,checked.result);
+   else if(resolved.verification.id==='complete-claim-v1')assertCompleteClaimAdmission(window,fact,checked.result);else return null;
    return {eventId,candidateTraceId,inputEventId:verificationInputEventId,callId:verificationCall.callId,policyFingerprint:checked.result.claim_validation!.policy_fingerprint};
   });
   await this.withSourceReady(batch.contactId,()=>this.storage.execute('memoryExtraction.finish',{ownerId:this.ownerId,attemptId:batch.attemptId,outcome,verificationRefs,inputNos:actualNos}));

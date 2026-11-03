@@ -47,7 +47,7 @@ test('宿主显式配置覆盖DSH默认值，输出采用供应商上限，认�
   assert.equal(provider.connection.retryPolicy.mode, 'normal');
   assert.equal(provider.connection.retryPolicy.maxRetries, 0);
   assert.deepEqual(provider.connection.models, [{id: 'deepseek-flash', contextWindow: 1048576,
-    maxTokens: 393216, inputModalities: ['text']}]);
+    maxTokens: 393216, inputModalities: ['text','image'],imageMaxBytes:2097152}]);
   assert.deepEqual(await provider.resolveAuth(provider.connection), {headers: {'x-api-key': syntheticKey}});
   assert.ok(!JSON.stringify(result).includes(syntheticKey));
   await assert.rejects(provider.resolveAuth({...provider.connection, baseURL: 'https://untrusted.invalid'}),

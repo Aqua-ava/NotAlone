@@ -11,6 +11,7 @@ export interface DeepSeekStrictVerificationRequestInput {
   model:string;system:string;user:string;tool:DeepSeekStrictVerificationTool;
   maxTokens:number;temperature?:number;reasoningEffort:'off'|'low'|'high'|'max';
   endpoint?:string;
+  images?:readonly {mimeType:string;dataBase64:string}[];
 }
 export interface DeepSeekStrictVerificationRequest {
   endpoint:string;
@@ -96,7 +97,9 @@ export function buildDeepSeekStrictVerificationRequest(
   const body:Record<string,unknown>={
     model:input.model,
     stream:false,
-    messages:[{role:'system',content:input.system},{role:'user',content:input.user}],
+    messages:[{role:'system',content:input.system},{role:'user',content:input.images?.length
+      ? [{type:'text',text:input.user},...input.images.map(image=>({type:'image_url',image_url:{url:`data:${image.mimeType};base64,${image.dataBase64}`}}))]
+      : input.user}],
     max_tokens:input.maxTokens,
     thinking:{type:thinking},
     reasoning_effort:input.reasoningEffort==='off'?'none':input.reasoningEffort,

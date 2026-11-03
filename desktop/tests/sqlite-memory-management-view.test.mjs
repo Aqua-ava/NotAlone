@@ -299,3 +299,17 @@ test('记忆决定失败或资格失效后的迟到回执不能恢复主题旧�
   },true);
  });
 });
+
+test('图片来源明确显示模型观察和固定版本，不伪装成文字引文',async t=>{
+ const image={...source,quote:'',contentKind:'image',contentRef:{file_id:id,sha256:'a'.repeat(64),mime_type:'image/png',media_generation:'0'},description:'日程卡显示每周六练习吉他'};
+ await panel(t,async()=>({...view(),view:{candidates:[{...candidate,sources:[image]}],memories:[]}}),async page=>{
+  await page.getByText('原始合成结论',{exact:true}).waitFor();
+  await page.getByText('查看来源',{exact:true}).click();
+  await page.getByText('图片依据',{exact:true}).waitFor();
+  await page.getByText('模型观察：日程卡显示每周六练习吉他',{exact:true}).waitFor();
+  assert.equal(await page.locator('blockquote').count(),0);
+  await page.getByText('来源定位',{exact:true}).click();
+  await page.getByText(`图片版本：${id}`,{exact:true}).waitFor();
+  await page.screenshot({path:'/tmp/notalone-image-memory-evidence.png'});
+ });
+});

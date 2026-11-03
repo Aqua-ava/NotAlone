@@ -12,6 +12,11 @@ export interface MediaServiceOptions {storage:SqliteStorage;contacts:MediaContac
 interface FileReference {fileId:string;generation:string;dataGeneration:string;address:ManagedAddress;mimeType:string;byteSize:string;digest:string;viewable:boolean;playable:boolean}
 interface Begin {reused:boolean;cleanupRequired?:boolean;attemptId:string;dataGeneration:string;leaseToken?:string;recordId?:string;inputFile?:{fileId:string;address:ManagedAddress;byteSize:string;digest:string}|null;token?:any}
 interface PreviewSession {state:'active'|'revoking';release:()=>Promise<void>;ack:()=>void;contactId:string;messageId:string;fileId:string}
+/** 仅消费记忆轮次已冻结的合法副本；调用者持有记忆任务holder直到模型与本次读取结算。 */
+export interface MemoryImageInput {
+ contactId:string;messageId:string;fileId:string;sha256:string;mediaGeneration:string;mimeType:string;byteSize:number;
+ signal:AbortSignal;requireCurrent():Promise<void>;
+}
 export class SqliteMediaService {
  private readonly options:MediaServiceOptions;
  readonly holders:ActiveHolders;
@@ -145,6 +150,19 @@ export class SqliteMediaService {
  openPreview(contactId:string,messageId:string,fileId:string):Promise<MediaPreview>{
   const opening=this.acquirePreview(contactId,messageId,fileId);this.openings.add(opening);
   const settled=()=>{this.openings.delete(opening);};void opening.then(settled,settled);return opening;
+ }
+ readMemoryImage(input:MemoryImageInput):Promise<{mimeType:string;dataBase64:string}>{return this.track(this.acquireMemoryImage(input));}
+ private async acquireMemoryImage(input:MemoryImageInput):Promise<{mimeType:string;dataBase64:string}>{
+  const scope={ownerId:this.ownerId,contactId:input.contactId,messageId:input.messageId,fileId:input.fileId};
+  const checkpoint=async():Promise<FileReference>=>{
+   this.available();input.signal.throwIfAborted();await input.requireCurrent();
+   const file=await this.options.storage.execute<FileReference>('media.file',scope);
+   if(file.fileId!==input.fileId||file.digest!==input.sha256||file.generation!==input.mediaGeneration
+    ||file.mimeType!==input.mimeType||Number(file.byteSize)!==input.byteSize||!file.viewable||!file.mimeType.startsWith('image/'))throw new StorageFailure('memory_extraction_source_stale');
+   this.available();input.signal.throwIfAborted();return file;
+  };
+  const file=await checkpoint();const bytes=await this.files.preview(file.address,input.byteSize,input.sha256);await checkpoint();
+  return {mimeType:file.mimeType,dataBase64:bytes.toString('base64')};
  }
  private async acquirePreview(contactId:string,messageId:string,fileId:string):Promise<MediaPreview>{
   this.available();const scope={ownerId:this.ownerId,contactId,messageId,fileId};

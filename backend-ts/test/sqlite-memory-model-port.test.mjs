@@ -6,14 +6,26 @@ import {once} from 'node:events';
 import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
-import {randomUUID,createHash} from 'node:crypto';
+import {randomUUID,createHash,randomFillSync} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {startModelHost} from '../src/platform/models/model-host.ts';
 import {resolveHostReplyConfiguration} from '../src/host/host-reply-config.ts';
+import sharp from 'sharp';
 
 test('未配置模型不会建立提取端口或静默选择其他供应商',()=>{
   assert.throws(()=>createSqliteExtractionModelPort({configuration:{status:'unavailable',code:'reply_model_unconfigured'}}),
     error=>error.code==='extraction_model_unconfigured');
+});
+
+test('未声明图片能力的模型在授权和HTTP前阻碍，不把实际图片降成占位文字',async()=>{
+ const configuration=resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-only'});
+ configuration.provider.connection.models=configuration.provider.connection.models.map(model=>({...model,inputModalities:['text']}));
+ let authorized=false;
+ const port=createSqliteExtractionModelPort({ctx:{},configuration,provider:{},permit:{path:'/unused-synthetic-permit',token:'synthetic-only'},
+  authorizePurpose:async()=>{authorized=true;}});
+ const request={purpose:'extraction',system:'合成',user:'合成图片',tool:{name:'DirectMemoryExtractionOutput'},images:[{id:'synthetic',mimeType:'image/png',dataBase64:'eA=='}]};
+ await assert.rejects(port.prepare(request,{scope:{owner_id:randomUUID(),contact_id:randomUUID()},signal:new AbortController().signal,requireCurrent:async()=>{}}),{code:'extraction_model_image_unsupported'});
+ assert.equal(authorized,false);await port.close();
 });
 
 test('自有provider释放失败可重试同一端口，业务停止信号不恢复',async()=>{
@@ -25,7 +37,7 @@ test('自有provider释放失败可重试同一端口，业务停止信号不恢
 
 test('官方DSH和真实ModelHost端口：用途、凭据、最终预算、未知禁重发与迟到资格', {timeout:25000},async t=>{
   const directory=await mkdtemp(join(tmpdir(),'na-sqlite-model-port-'));
-  let host,child,exited,provider,failReceipt=false,rejectHTTP=false,requests=0;
+  let host,child,exited,provider,failReceipt=false,rejectHTTP=false,requests=0;const payloads=[];
   const reserved=new Map();
   t.after(async()=>{
     if(child&&child.exitCode===null&&child.signalCode===null)child.kill('SIGTERM');
@@ -40,7 +52,7 @@ test('官方DSH和真实ModelHost端口：用途、凭据、最终预算、未�
       unconfirmedRequests:async()=>[...reserved.keys()].sort(),
     }});
   provider=createServer(async(req,res)=>{
-    let raw='';for await(const chunk of req)raw+=chunk;requests++;
+    let raw='';for await(const chunk of req)raw+=chunk;requests++;payloads.push({path:req.url,body:JSON.parse(raw)});
     if(req.url==='/strict/chat/completions')assert.equal(req.headers.authorization,'Bearer synthetic-only');
     else assert.equal(req.headers['x-api-key'],'synthetic-only');
     if(rejectHTTP){rejectHTTP=false;res.writeHead(401,{'content-type':'application/json'});res.end(JSON.stringify({type:'error',error:{type:'authentication_error',message:'合成供应商原始正文不进入安全元数据'}}));return;}
@@ -86,11 +98,37 @@ test('官方DSH和真实ModelHost端口：用途、凭据、最终预算、未�
   assert.deepEqual(invalid.rejection,{originalBytes:invalid.rejection.originalBytes,originalBlockCount:1,truncated:false,
     capturedHash:createHash('sha256').update('{"results":[PRIVATE_SYNTHETIC_BROKEN').digest('hex'),enumerable:false,publicHasRaw:false});
   assert.ok(invalid.rejection.originalBytes>0);assert.doesNotMatch(JSON.stringify(invalid),/PRIVATE_SYNTHETIC_BROKEN|rejectedOutput/);
+  failReceipt=false;
+  const png=await sharp({create:{width:8,height:6,channels:4,background:{r:255,g:0,b:0,alpha:1}}}).png().toBuffer();
+  const imageId=randomUUID(),images=[{id:imageId,mimeType:'image/png',dataBase64:png.toString('base64')}];
+  const imageExtraction=await call({images});assert.equal(imageExtraction.receipt.outcome,'succeeded');assert.equal(requests,6);
+  const imageVerification=await call({images,verification:true});assert.equal(imageVerification.receipt.outcome,'succeeded');assert.equal(requests,7);
+  assert.deepEqual(imageExtraction.imageInputs,imageVerification.imageInputs);
+  const manifest=imageExtraction.imageInputs[0];assert.equal(manifest.id,imageId);
+  assert.equal(manifest.sourceSha256,createHash('sha256').update(png).digest('hex'));
+  assert.deepEqual({width:manifest.width,height:manifest.height,frame:manifest.frame},{width:8,height:6,frame:0});
+  const extractionImage=payloads[5].body.messages[0].content.find(block=>block.type==='image');
+  assert.equal(extractionImage.source.type,'base64');assert.equal(extractionImage.source.media_type,'image/png');
+  const actual=Buffer.from(extractionImage.source.data,'base64');
+  assert.equal(createHash('sha256').update(actual).digest('hex'),manifest.requestSha256);
+  const verificationImage=payloads[6].body.messages[1].content.find(block=>block.type==='image_url');
+  assert.equal(verificationImage.image_url.url,'data:image/png;base64,'+extractionImage.source.data);
+  assert.deepEqual(payloads.slice(5).map(payload=>payload.path),['/anthropic/v1/messages','/strict/chat/completions'],'图文调用不能产生Files API上传或额外HTTP重试');
+  const malformed=await call({images:[{...images[0],dataBase64:Buffer.from('合成损坏图片').toString('base64')}]});
+  assert.ok(malformed.error);assert.equal(requests,7,'坏图片在任何HTTP前失败');
+  const noisy=await sharp(randomFillSync(Buffer.alloc(256*256*3)),{raw:{width:256,height:256,channels:3}}).png().toBuffer();
+  const imageBudget=await call({images:[{id:randomUUID(),mimeType:'image/png',dataBase64:noisy.toString('base64')}]});
+  assert.equal(imageBudget.receipt.outcome,'succeeded');assert.equal(requests,8);
+  assert.ok(imageBudget.receipt.input_budget.serialized_bytes>131072,'完整实体仍包含所有真实图片字节');
+  assert.ok(imageBudget.receipt.input_budget.input_tokens<131072,'base64字节由已核对尺寸的视觉token替代，不能冒充文字token');
+  const repeated=await call({images:[...images,{...images[0],id:randomUUID()}]});assert.equal(requests,9);
+  assert.equal(repeated.receipt.outcome,'succeeded');assert.equal(repeated.imageInputs.length,2);
+  assert.equal(payloads[8].body.messages[0].content.filter(block=>block.type==='image').length,2,'同图在不同消息出现时分别保留所属引用');
   // 未知许可必须保守占用；先验证临时端口关闭，再由原端口派发，不能靠新scope绕过未知占用。
   failReceipt=true;
   const unknownContext={...context,requestId:randomUUID(),attemptId:randomUUID()};
-  const unknown=await call({context:unknownContext});assert.equal(unknown.error,'extraction_model_ack_unknown');assert.equal(requests,6,'关闭另一个提取端口后原端口仍复用宿主provider');
-  const retried=await call({context:{...unknownContext,attemptId:randomUUID()}});assert.equal(retried.error,'extraction_model_recovery_unknown');assert.equal(requests,6);
+  const unknown=await call({context:unknownContext});assert.equal(unknown.error,'extraction_model_ack_unknown');assert.equal(requests,10,'关闭另一个提取端口后原端口仍复用宿主provider');
+  const retried=await call({context:{...unknownContext,attemptId:randomUUID()}});assert.equal(retried.error,'extraction_model_recovery_unknown');assert.equal(requests,10);
   assert.equal((await call({close:true})).closed,true);
-  assert.equal((await call()).error,'extraction_model_closed');assert.equal(requests,6);
+  assert.equal((await call()).error,'extraction_model_closed');assert.equal(requests,10);
 });

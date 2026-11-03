@@ -34,17 +34,20 @@ export function apply(ctx:Context) {
     const input=JSON.parse(Buffer.concat(chunks).toString());
     deny=Boolean(input.deny);credentials=!input.noCredentials;current=true;
     const request={purpose:input.verification?'verification' as const:'extraction' as const,system:'合成提取提示',user:input.verification?'{}':input.oversized?'合成'.repeat(300000):'合成消息',
+      ...(input.images?{images:input.images}:{}),
       tool:input.verification?{name:'SourceVerificationOutput',description:'合成核验',parameters:{title:'SourceVerificationOutput',type:'object',properties:{results:{type:'array',items:{type:'object',properties:{}}}}}}:{name:DIRECT_EXTRACTION_SCHEMA.title,description:'合成提取',parameters:DIRECT_EXTRACTION_SCHEMA},
       validateOutput:(blocks:readonly unknown[])=>{if(input.invalidOutput)readExtractionToolArguments(blocks,'SourceVerificationOutput');}};
+    let imageInputs:unknown;
     const context={...input.context,signal:new AbortController().signal,
       requireCurrent:async()=>{if(!current)throw new Error('synthetic_scope_deleted');},
+      onImageInputs:async(value:unknown)=>{imageInputs=value;},
       onReceipt:async()=>{if(input.lateDeletion)current=false;}};
     try{
       if(input.close){await port.close();res.end(JSON.stringify({closed:true}));return;}
       if(input.sharedProbe){const probe=createPort();try{const result=await probe.invoke(request,context);res.end(JSON.stringify({text:result.text,sharedCalls}));}finally{await probe.close();}return;}
       if(input.prepare){res.end(JSON.stringify(await port.prepare(request,context)));return;}
       const result=await port.invoke(request,context);
-      res.end(JSON.stringify({text:result.text,receipt:result.receipt,sharedCalls}));
+      res.end(JSON.stringify({text:result.text,receipt:result.receipt,sharedCalls,...(imageInputs?{imageInputs}:{})}));
     }catch(error){
       const rejected=(error as {rejectedOutput?:{blocks:readonly {arguments?:string}[];truncated:boolean;originalBytes:number;originalBlockCount:number}})?.rejectedOutput;
       const rejection=rejected?{originalBytes:rejected.originalBytes,originalBlockCount:rejected.originalBlockCount,truncated:rejected.truncated,

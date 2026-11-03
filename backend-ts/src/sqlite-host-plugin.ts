@@ -195,7 +195,7 @@ export async function apply(ctx: Context) {
     const originalImages=history&&await supportsWechatOriginalImages(sqlite.wechatCliPath);
     media = new SqliteMediaService({storage,contacts,history:{source:(contactId,recordId)=>{
       if(!history)throw new StorageFailure('media_source_unavailable');return history.source(contactId,recordId);
-    }},...(history?{ensureSourceReady:(contactId:string,signal?:AbortSignal)=>history!.ensureSourceReady(contactId,signal)}:{}),userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,changed:(contactId,messageId)=>events?.publish('message.updated',contactId,{message_id:messageId}),adapters:originalImages?[new OriginalImageMediaAdapter(createWechatImageResourcePort(sqlite.wechatCliPath,wechat))]:[]});
+    }},...(history?{ensureSourceReady:(contactId:string,signal?:AbortSignal)=>history!.ensureSourceReady(contactId,signal)}:{}),userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,changed:(contactId,messageId)=>{events?.publish('message.updated',contactId,{message_id:messageId});if(automaticBackground)memory?.wake(contactId);},adapters:originalImages?[new OriginalImageMediaAdapter(createWechatImageResourcePort(sqlite.wechatCliPath,wechat))]:[]});
     await media.initialize();
     if(originalImages)imageSync=new SqliteImageSyncCoordinator(storage,contacts,media);
     if(history&&await supportsWechatQuotes(sqlite.wechatCliPath))quoteSync=new SqliteQuoteSyncCoordinator(contacts,history);
@@ -209,7 +209,7 @@ export async function apply(ctx: Context) {
     const memoryManagement=new SqliteMemoryManagement(storage,ownerId);
     const memoryManagementHttp=memoryEnabled?new SqliteMemoryManagementHttp(memoryManagement,req=>authorizeSqliteRequest(req,token),()=>{if(automaticBackground)memory?.wake();}):undefined;
     // 即使入口未开启，也恢复并持有旧副本的清理所有者，避免资料删除遗漏持久副本。
-    memory=await createSqliteMemoryRuntime({ctx,storage,ownerId,userData:sqlite.userData,businessHome:config.businessHome,infoPath:config.infoPath,envFilePath:config.envFilePath,environment:modelEnvironment,
+    memory=await createSqliteMemoryRuntime({ctx,storage,ownerId,userData:sqlite.userData,businessHome:config.businessHome,infoPath:config.infoPath,envFilePath:config.envFilePath,environment:modelEnvironment,contentResources:{readImage:input=>media!.readMemoryImage(input)},
       ...(models?.shared?{sharedModel:models.shared}:{}),holders:deletionHolders,authorize:req=>authorizeSqliteRequest(req,token),adjudicationEnabled:memoryEnabled,...(history?{ensureSourceReady:(contactId:string)=>history!.ensureSourceReady(contactId)}:{})});
     // 共享模型宿主的记账回调已可找到唯一 memory 实例，再受理自动调度。
     if(memoryEnabled&&automaticBackground)memory.startScheduling();

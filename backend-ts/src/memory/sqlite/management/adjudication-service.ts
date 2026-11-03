@@ -4,7 +4,7 @@ import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import {ActiveHolders} from '../../../storage/sqlite/deletion/holders.ts';
 import {DshMemoryAdjudicationRuntime,type StructuredAdjudicationCallInput} from '../../adoption/adjudication-dsh.ts';
 import type {SqliteAdjudicationModelPort,SqliteAdjudicationModelRequest} from './model-port.ts';
-import type {AdjudicationClaim} from './adjudication-actions.ts';
+import {requiresMultimodalRelationReview,type AdjudicationClaim} from './adjudication-actions.ts';
 import {SqliteMemoryManagement} from './service.ts';
 export class SqliteMemoryAdjudication {
  private readonly stopped=new AbortController();private pending=new Set<Promise<unknown>>();private active=new Map<string,Promise<unknown>>();private closing?:Promise<void>;
@@ -30,7 +30,7 @@ export class SqliteMemoryAdjudication {
     // 本人任务的每位冻结贡献者及历史pool依赖均注册；删除会先终止模型并等待排空。
     const generations=await this.storage.execute<{contactId:string;generation:string}[]>('memoryAdjudication.holders',{ownerId:this.ownerId,attemptId:first.attemptId});
     for(const c of generations)releases.push(this.holders.register({ownerId:this.ownerId,key:`memory-adjudication:${first.attemptId}:${c.contactId}`,contactId:c.contactId,coversAllSources:true,generation:BigInt(c.generation),close:async()=>{controller.abort();await drained;}}));
-    if(first.basis.item.similar.length){
+    if(first.basis.item.similar.length&&!requiresMultimodalRelationReview(first.basis.item)){
      if(!this.port)throw new StorageFailure('adjudication_model_unconfigured');
      for(let pageIndex=0;pageIndex<Math.ceil(first.basis.item.similar.length/8);pageIndex++){
       const pageItem={...first.basis.item,similar:first.basis.item.similar.slice(pageIndex*8,pageIndex*8+8)};

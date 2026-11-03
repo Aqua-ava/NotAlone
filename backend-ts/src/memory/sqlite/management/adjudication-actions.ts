@@ -7,7 +7,8 @@ import {assertTaskContributions} from '../qualification.ts';
 import {verifiedExtractionOutput} from '../outputs.ts';
 import {validateModelLedgerReceipt,type ModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
 import type {ModelTaskClaim} from '../../../platform/models/model-permit-server.ts';
-import type {AdjudicationItem,SimilarMemory} from '../../adoption/contracts.ts';
+import type {AdjudicationItem,AdjudicationSource,SimilarMemory} from '../../adoption/contracts.ts';
+import {requireImageCitation} from '../content-citation.ts';
 import {parseAdjudications,parseRelations,mergeResult} from '../../adoption/adjudication-dsh.ts';
 import {readExtractionToolArguments} from '../../extraction/arguments.ts';
 import {applyDecision,retireMergedParents} from './actions.ts';
@@ -25,9 +26,20 @@ function revision(tx:StorageTransaction,ownerId:string,scopeKind:string,contactI
  const r=scopeKind==='self'?tx.get('SELECT memory_revision FROM owner WHERE owner_id=?',[ownerId]):tx.get('SELECT memory_revision FROM contact WHERE owner_id=? AND id=?',[ownerId,contactId]);
  return r?.memory_revision as bigint??fail('memory_scope_stale');
 }
-function sources(tx:StorageTransaction,ownerId:string,parent:{candidateId?:string;memoryId?:string;versionNo?:bigint}) {
+function sources(tx:StorageTransaction,ownerId:string,parent:{candidateId?:string;memoryId?:string;versionNo?:bigint}):AdjudicationSource[] {
  const rows=requireSources(tx,ownerId,parent,!!parent.memoryId&&tx.get('SELECT adoption_mode FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,parent.memoryId,parent.versionNo!])?.adoption_mode==='manual');
- return rows.map(r=>({message_id:String(r.message_id),text:[...String(r.text_body)].slice(Number(r.span_start),Number(r.span_end)).join(''),occurred_at:tx.get('SELECT sent_at FROM message WHERE owner_id=? AND contact_id=? AND id=?',[ownerId,r.source_contact_id,r.message_id])?.sent_at as bigint|null})).map(r=>({...r,occurred_at:r.occurred_at===null?null:new Date(Number(r.occurred_at)).toISOString()}));
+ return rows.map(r=>{
+  const occurredAt=tx.get('SELECT sent_at FROM message WHERE owner_id=? AND contact_id=? AND id=?',[ownerId,r.source_contact_id,r.message_id])?.sent_at;
+  const base={message_id:String(r.message_id),occurred_at:occurredAt==null?null:new Date(Number(occurredAt)).toISOString()};
+  return r.content_kind==='image'?{...base,text:null,content_kind:'image' as const,
+   content_ref:requireImageCitation(tx,ownerId,String(r.source_contact_id),String(r.message_id),r.content_ref_json),
+   observation:{kind:'model_observation' as const,text:String(r.explanation??'')}}:
+   {...base,text:[...String(r.text_body)].slice(Number(r.span_start),Number(r.span_end)).join('')};
+ });
+}
+/** 旧关系核验只认证逐字文字；图像比较保留候选，不能把观察描述当原文签证。 */
+export function requiresMultimodalRelationReview(item:AdjudicationItem):boolean {
+ return item.similar.length>0&&[...item.candidate_source_texts,...item.similar.flatMap(parent=>parent.source_texts)].some(source=>source.content_kind==='image');
 }
 function versionFact(tx:StorageTransaction,ownerId:string,v:StorageRow):Record<string,any>|null {
  const event=tx.get(`SELECT e.payload FROM decision_candidate dc JOIN memory_candidate c ON c.owner_id=dc.owner_id AND c.id=dc.candidate_id JOIN execution_event e ON e.owner_id=c.owner_id AND e.id=c.event_id WHERE dc.owner_id=? AND dc.decision_id=? ORDER BY c.id LIMIT 1`,[ownerId,v.decision_id]);
@@ -106,7 +118,7 @@ function blocks(tx:StorageTransaction,ownerId:string,attemptId:string):readonly 
  if(!event)fail('memory_adjudication_output_unbound');return JSON.parse(String(event!.payload)).blocks;
 }
 function evidenceSupported(item:AdjudicationItem,evidence:readonly {message_id:string;quote:string}[]):boolean {
- const source=[...item.candidate_source_texts,...item.similar.flatMap(p=>p.source_texts)];return evidence.length>0&&evidence.every(e=>e.quote.trim()&&source.some(s=>s.message_id===e.message_id&&s.text.includes(e.quote)));
+ const source=[...item.candidate_source_texts,...item.similar.flatMap(p=>p.source_texts)];return evidence.length>0&&evidence.every(e=>e.quote.trim()&&source.some(s=>s.content_kind!=='image'&&s.message_id===e.message_id&&typeof s.text==='string'&&s.text.includes(e.quote)));
 }
 function relationCovered(item:AdjudicationItem,ids:readonly string[],evidence:readonly {message_id:string;quote:string}[]):boolean {
  if(!evidenceSupported(item,evidence))return false;
@@ -120,7 +132,9 @@ function finish(tx:StorageTransaction,raw:unknown,lease:StorageLease) {
  const stages=i.attemptIds.map(a=>({id:a,...current(tx,ownerId,id(a),lease)})),first=stages[0]!,basis=first.basis,item=basis.item;
  if(first.attempt.kind!=='adjudication'||stages.some(s=>digest({...s.basis,pageIndex:0})!==digest({...basis,pageIndex:0}))||new Set(stages.map(s=>`${s.attempt.kind}:${s.basis.pageIndex}`)).size!==stages.length)fail('memory_adjudication_stale');
  let action:'auto_accept'|'auto_update'|'auto_noop'='auto_accept',target:Basis['parents'][number]|undefined,text:string|undefined,formation:'adoption'|'change'|'correction'='adoption',parents:Basis['parents']=[],reason:string|null=null;
- const pageCount=Math.ceil(item.similar.length/8);
+ const mediaRelationPending=requiresMultimodalRelationReview(item);
+ if(mediaRelationPending)reason='memory_media_relation_pending';
+ const pageCount=mediaRelationPending?0:Math.ceil(item.similar.length/8);
  if(stages.filter(s=>s.attempt.kind==='adjudication').length!==Math.max(1,pageCount)||stages.some(s=>s.basis.pageIndex<0||s.basis.pageIndex>=Math.max(1,pageCount)))fail('memory_adjudication_output_unbound');
  for(let pageIndex=0;pageIndex<pageCount;pageIndex++){
   const item={...basis.item,similar:basis.item.similar.slice(pageIndex*8,pageIndex*8+8)};

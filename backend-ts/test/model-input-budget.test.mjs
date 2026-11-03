@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import { measureSerializedMessages, MESSAGES_MEASUREMENT_ID } from '../src/platform/models/model-input-budget.ts';
 const binding={provider:'deepseek-official',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off'};
 const profile={context_window_tokens:8192,safety_margin_tokens:512};
@@ -73,4 +74,20 @@ test('工具选择必须与授权绑定一致并纳入完整请求预算',()=>{
  assert.equal(measureSerializedMessages(named,{...binding,toolChoice:{name:'lookup'}},profile).serialized_bytes,Buffer.byteLength(JSON.stringify(named)));
  assert.throws(()=>measureSerializedMessages(named,{...binding,toolChoice:{name:'missing'}},profile),/unavailable/);
  assert.throws(()=>measureSerializedMessages({...named,tools:[]},{...binding,toolChoice:{name:'lookup'}},profile),/unavailable/);
+});
+
+test('图片按已核对版本的视觉容量计量，保留完整实体hash并拒绝漂移或超限',()=>{
+ const data=Buffer.alloc(64*1024,7),base64=data.toString('base64'),hash=createHash('sha256').update(data).digest('hex');
+ const image={id:'synthetic-image',sourceSha256:hash,attachmentSha256:hash,requestSha256:hash,requestMimeType:'image/png',width:544,height:544,bytes:data.length,frame:0};
+ const request=body();request.messages[0].content.push({type:'image',source:{type:'base64',media_type:'image/png',data:base64}});
+ const receipt=measureSerializedMessages(request,binding,profile,[image]);
+ assert.equal(receipt.serialized_bytes,Buffer.byteLength(JSON.stringify(request)));
+ assert.equal(receipt.request_sha256,createHash('sha256').update(JSON.stringify(request)).digest('hex'));
+ assert.ok(receipt.input_tokens<1500,'544×544的图片不能按64KiB的base64当成文字token');
+ assert.throws(()=>measureSerializedMessages(request,binding,profile),/unavailable/,'没有实际版本映射不能便宜计价');
+ assert.throws(()=>measureSerializedMessages(request,binding,profile,[{...image,requestSha256:'0'.repeat(64)}]),/unavailable/);
+ const many=body();many.messages[0].content=Array.from({length:8},()=>request.messages[0].content[1]);
+ const small={context_window_tokens:2640,safety_margin_tokens:128};
+ assert.doesNotThrow(()=>measureSerializedMessages(body(),binding,small));
+ assert.throws(()=>measureSerializedMessages(many,binding,small,Array.from({length:8},(_,index)=>({...image,id:String(index)}))),{code:'reply_budget_exceeded'});
 });

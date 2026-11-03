@@ -25,14 +25,16 @@ function evidence(tx:StorageTransaction,ownerId:string,parent:{candidateId?:stri
  const seen=new Set<string>();
  for(const r of rows){
   const key=String(r.message_id);if(!seen.has(key)){seen.add(key);tx.run('INSERT INTO memory_required_message VALUES(?,?,?,?,?,?,?)',[ownerId,randomUUID(),parent.candidateId??null,parent.memoryId??null,parent.versionNo??null,r.source_contact_id,r.message_id]);}
-  tx.run('INSERT INTO memory_citation VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[ownerId,randomUUID(),parent.candidateId??null,parent.memoryId??null,parent.versionNo??null,r.source_contact_id,r.message_id,r.record_id,r.accepted_revision,r.span_start,r.span_end,r.explanation??null]);
+  const values=[ownerId,randomUUID(),parent.candidateId??null,parent.memoryId??null,parent.versionNo??null,r.source_contact_id,r.message_id,r.record_id,r.accepted_revision,r.span_start,r.span_end,r.explanation??null];
+  if(r.content_kind&&r.content_kind!=='text')tx.run('INSERT INTO memory_citation(owner_id,id,candidate_id,memory_id,version_no,source_contact_id,message_id,record_id,accepted_revision,span_start,span_end,explanation,content_kind,content_ref_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[...values,r.content_kind,r.content_ref_json]);
+  else tx.run('INSERT INTO memory_citation(owner_id,id,candidate_id,memory_id,version_no,source_contact_id,message_id,record_id,accepted_revision,span_start,span_end,explanation) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',values);
  }
 }
 function importOutput(tx:StorageTransaction,ownerId:string,eventId:string):string{
  const prior=tx.get('SELECT id FROM memory_candidate WHERE owner_id=? AND event_id=?',[ownerId,eventId]);if(prior)return String(prior.id);
  const out=verifiedExtractionOutput(tx,{ownerId,eventId});const s={scopeKind:out.scopeKind,contactId:out.contactId};available(tx,ownerId,s,true);
  const candidateId=randomUUID();tx.run("INSERT INTO memory_candidate VALUES(?,?,?,?,?,?,?,?,'pending',0)",[ownerId,candidateId,out.scopeKind,out.contactId,out.proposedBody,out.producedAttemptId,eventId,out.outputNo]);
- evidence(tx,ownerId,{candidateId},out.citations.map(r=>({source_contact_id:r.contactId,message_id:r.messageId,record_id:r.recordId,accepted_revision:r.interpretationRevision,span_start:r.spanStart,span_end:r.spanEnd,explanation:r.explanation})));
+ evidence(tx,ownerId,{candidateId},out.citations.map(r=>({source_contact_id:r.contactId,message_id:r.messageId,record_id:r.recordId,accepted_revision:r.interpretationRevision,span_start:r.spanStart,span_end:r.spanEnd,explanation:r.explanation,...(r.contentKind?{content_kind:r.contentKind,content_ref_json:JSON.stringify(r.contentRef)}:{})})));
 
  return candidateId;
 }

@@ -1,3 +1,4 @@
+import {assertFrozenContent,contentRows} from './content.ts';
 import { StorageFailure,type StorageTransaction,type StorageRow,type StorageLease } from '../../storage/sqlite/contracts.ts';
 import { assertSourceEligibility } from '../../history/sqlite/source.ts';
 export const fail=(code:string):never=>{throw new StorageFailure(code);};
@@ -26,10 +27,10 @@ export function assertTaskContributions(tx:StorageTransaction,ownerId:string,run
  for(const contribution of contributions)assertContribution(tx,ownerId,runId,String(contribution.source_contact_id));
 }
 export function inputRows(tx:StorageTransaction,ownerId:string,stepId:string):StorageRow[]{
- return tx.all(`SELECT i.*,si.input_no AS planned_input_no,m.text_body,m.sender_role,m.sent_at FROM step_input si
+ return contentRows(tx,ownerId,tx.all(`SELECT i.*,si.input_no AS planned_input_no,m.text_body,m.sender_role,m.sent_at,m.kind AS message_kind,m.display_no FROM step_input si
  JOIN run_input i ON i.owner_id=si.owner_id AND i.run_id=si.run_id AND i.input_no=si.run_input_no
  JOIN message m ON m.owner_id=i.owner_id AND m.contact_id=i.source_contact_id AND m.id=i.message_id
- WHERE si.owner_id=? AND si.step_id=? ORDER BY si.input_no`,[ownerId,stepId]);
+ WHERE si.owner_id=? AND si.step_id=? ORDER BY si.input_no`,[ownerId,stepId]));
 }
 export function assertInputs(tx:StorageTransaction,ownerId:string,runId:string,rows:StorageRow[]):void {
  const r=tx.get('SELECT accepted_owner_feedback_revision FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);
@@ -38,8 +39,9 @@ export function assertInputs(tx:StorageTransaction,ownerId:string,runId:string,r
  for(const i of rows){
   assertContribution(tx,ownerId,runId,String(i.source_contact_id));
   assertSourceEligibility(tx,{owner_id:ownerId,contact_id:String(i.source_contact_id),record_id:String(i.record_id),message_id:String(i.message_id)});
-  const m=tx.get("SELECT interpretation_revision FROM message WHERE owner_id=? AND contact_id=? AND id=? AND kind='text' AND availability='available'",[ownerId,i.source_contact_id,i.message_id]);
+  const m=tx.get("SELECT * FROM message WHERE owner_id=? AND contact_id=? AND id=? AND availability='available'",[ownerId,i.source_contact_id,i.message_id]);
   if(!m||m.interpretation_revision!==i.accepted_interpretation_revision)fail('memory_extraction_source_stale');
+  assertFrozenContent(tx,ownerId,i,m!);
  }
 }
 export function currentAttempt(tx:StorageTransaction,ownerId:string,attemptId:string,lease:StorageLease):{attempt:StorageRow;task:StorageRow;rows:StorageRow[]} {

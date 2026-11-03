@@ -1,6 +1,6 @@
 import type {MemoryTimeEligibility} from './temporal.ts';
 export interface MemoryScope {scopeKind:'self'|'contact';contactId:string|null}
-export interface MemorySource {contactId:string;messageId:string;recordId:string;acceptedRevision:string;quote:string}
+export interface MemorySource {contactId:string;messageId:string;recordId:string;acceptedRevision:string;quote:string;contentKind?:'image';contentRef?:{file_id:string;sha256:string;mime_type:string;media_generation:string};description?:string}
 export interface MergedParentSnapshot {memoryId:string;versionNo:string;headRevision:string}
 export interface MemoryDecisionRequest {
  requestKey:string;action:'accept'|'edit_accept'|'reject'|'correct'|'change'|'restore'|'withdraw'|'protect'|'unprotect'|'manual';

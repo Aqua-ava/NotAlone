@@ -1,4 +1,5 @@
 import {sourceDeletionIds} from '../../history/sqlite/source-deletion.ts';
+import {isMediaDeletionScope,mediaDeletionFileIds} from '../../media/sqlite/deletion.ts';
 import type {StorageRow,StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {DeletionOperation,RowDeletionTarget} from '../../storage/sqlite/deletion/contracts.ts';
 
@@ -22,7 +23,21 @@ export function memoryDeletionImpact(tx:StorageTransaction,op:DeletionOperation)
  const planned=tx.all("SELECT target_payload FROM deletion_target WHERE operation_id=? AND domain IN ('memory_management','memory_extraction') AND target_payload IS NOT NULL",[op.operationId]).map(r=>JSON.parse(String(r.target_payload)) as RowDeletionTarget);
  const typed=!!tx.get("SELECT 1 FROM pragma_table_info('step_input') WHERE name='kind'");
  let inputs:StorageRow[]=[];
- if(scope.kind==='account'){
+ if(isMediaDeletionScope(scope)){
+  if(tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='run_content_input'")){
+   const files=mediaDeletionFileIds(tx,op);
+   inputs=tx.all(`SELECT i.* FROM run_input i JOIN run_content_input content
+    ON content.owner_id=i.owner_id AND content.run_id=i.run_id AND content.input_no=i.input_no
+    WHERE i.owner_id=? AND i.source_contact_id=? AND i.message_id=? AND content.content_kind='image'
+    AND json_extract(content.identity_json,'$.fileId') IN (SELECT value FROM json_each(?))`,[ownerId,scope.contactId,scope.messageId,deletionIds(files)]);
+   for(const input of inputs){
+    for(const row of tx.all('SELECT step_id,input_no FROM step_input WHERE owner_id=? AND run_id=? AND run_input_no=?',[ownerId,input.run_id,input.input_no]))add('input',row.step_id,row.input_no);
+    // 尚未创建步骤的冻结输入也必须停止；同轮独立成功步骤不因此扩散。
+    for(const task of tx.all(`SELECT t.id FROM processing_task t JOIN task_contribution c ON c.owner_id=t.owner_id AND c.task_id=t.id
+     WHERE t.owner_id=? AND t.run_id=? AND c.source_contact_id=? AND t.state IN ('pending','running','paused','failed','unknown','incomplete')`,[ownerId,input.run_id,input.source_contact_id]))add('task',task.id);
+   }
+  }
+ }else if(scope.kind==='account'){
   inputs=tx.all('SELECT * FROM run_input WHERE owner_id=?',[ownerId]);
   for(const t of tx.all('SELECT id FROM processing_task WHERE owner_id=?',[ownerId]))add('task',t.id);
   for(const s of tx.all('SELECT id FROM processing_step WHERE owner_id=?',[ownerId]))touchedSteps.add(String(s.id));

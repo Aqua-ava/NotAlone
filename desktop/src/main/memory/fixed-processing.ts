@@ -33,7 +33,7 @@ function decimal(value: unknown): string {
 }
 function array(value: unknown): unknown[] { if (!Array.isArray(value)) throw invalid(); return value; }
 function readQueue(raw: unknown): FixedProcessingQueue {
-  const queue = row(raw); exact(queue, ['pending','nextDueAt','blockedContacts',...(Object.hasOwn(queue,'later')?['later']:[]),...(Object.hasOwn(queue,'history')?['history']:[])]);
+  const queue = row(raw); exact(queue, ['pending','nextDueAt','blockedContacts',...(Object.hasOwn(queue,'content')?['content']:[]),...(Object.hasOwn(queue,'later')?['later']:[]),...(Object.hasOwn(queue,'history')?['history']:[])]);
   let history: FixedProcessingQueue['history'];
   if(Object.hasOwn(queue,'history')){const value=row(queue.history);exact(value,['pending']);history={pending:count(value.pending)};}
   let later: FixedProcessingQueue['later'];
@@ -42,7 +42,8 @@ function readQueue(raw: unknown): FixedProcessingQueue {
     if (value.stage!==null&&!['document_scene','document_profile'].includes(String(value.stage))) throw invalid();
     later={pending:count(value.pending),nextDueAt:value.nextDueAt===null?null:count(value.nextDueAt),stage:value.stage as 'document_scene'|'document_profile'|null};
   }
-  return {pending:count(queue.pending),blockedContacts:count(queue.blockedContacts),nextDueAt:queue.nextDueAt===null?null:count(queue.nextDueAt),...(later?{later}:{}),...(history?{history}:{})};
+  const content=queue.content===undefined?undefined:array(queue.content).map(raw=>{const item=row(raw);exact(item,['kind','pending','unavailable']);return {kind:text(item.kind,64),pending:count(item.pending),unavailable:count(item.unavailable)};});
+  return {...(content?{content}:{}),pending:count(queue.pending),blockedContacts:count(queue.blockedContacts),nextDueAt:queue.nextDueAt===null?null:count(queue.nextDueAt),...(later?{later}:{}),...(history?{history}:{})};
 }
 function scope(value: Record<string, unknown>) {
   if (value.scopeKind !== 'self' && value.scopeKind !== 'contact' || value.scopeKind === 'self' && value.contactId !== null) throw invalid();
@@ -91,7 +92,9 @@ export function readFixedProcessingRun(raw: unknown): FixedProcessingRun | null 
   });
   if (new Set(tasks.map(task => task.taskId)).size !== tasks.length || new Set(inputs.map(input => input.inputNo)).size !== inputs.length
     || new Set(candidates.map(candidate => candidate.id)).size !== candidates.length) throw invalid();
-  return { runId: id(value.runId), state: value.state as FixedProcessingRun['state'], total, succeeded, failed, unknown,
+  const contentCounts=value.contentCounts===undefined?undefined:array(value.contentCounts).map(raw=>{const item=row(raw);const total=count(item.total),succeeded=count(item.succeeded);if(succeeded>total)throw invalid();return {kind:text(item.kind,64),total,succeeded};});
+  if(contentCounts&&contentCounts.reduce((sum,item)=>sum+item.total,0)!==total)throw invalid();
+  return {...(contentCounts?{contentCounts}:{}), runId: id(value.runId), state: value.state as FixedProcessingRun['state'], total, succeeded, failed, unknown,
     stage: value.stage as FixedProcessingRun['stage'], laterStages: value.laterStages as FixedProcessingRun['laterStages'],
     status: value.status as FixedProcessingRun['status'],
     statusReason: value.statusReason as string | null, sharedFaultCode: (value.sharedFaultCode as string | null | undefined) ?? null, actions: value.actions as FixedProcessingRun['actions'],

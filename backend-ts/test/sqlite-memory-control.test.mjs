@@ -161,7 +161,7 @@ test('没有当前联系人处理记录时返回空；各联系人保留自己�
  const f=await fixture(t,{registryModule}),[a,b]=f.saved.map(binding=>binding.contact_id);
  f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'我长期喜欢合成园艺。'})],completedPartitions:['shard-a'],exhausted:true});
  const x=extractionFixture(f);t.after(()=>x.service.close());
- assert.deepEqual(await x.service.readContact(b),{contactId:b,run:null,queue:{pending:0,nextDueAt:null,blockedContacts:0,history:{pending:0},later:{pending:0,nextDueAt:null,stage:null}}});
+ assert.deepEqual(await x.service.readContact(b),{contactId:b,run:null,queue:{pending:0,nextDueAt:null,blockedContacts:0,content:[],history:{pending:0},later:{pending:0,nextDueAt:null,stage:null}}});
  await f.service.synchronize(a);const first=await x.service.start('contact-first-a');await x.service.waitForIdle(first.runId);
  assert.equal((await x.service.readContact(b)).run,null,'甲的记录不成为乙的最近记录');
  await f.service.synchronize(b);const second=await x.service.start('contact-second-b');await x.service.waitForIdle(second.runId);

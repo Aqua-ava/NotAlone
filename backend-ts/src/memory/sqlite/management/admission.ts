@@ -1,13 +1,17 @@
 import type {StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {canonicalJSON} from '../../evidence/canonical-json.ts';
 import {replayCompleteClaimVerification} from '../../extraction/verification/complete-claim.ts';
+import {replayMultimodalVerification} from '../../extraction/multimodal.ts';
+import type {ImageCitationReference} from '../content-citation.ts';
+import {readFrozenContent} from '../content.ts';
 
 export interface CandidateVerificationReference {eventId:string;candidateTraceId:string;policyFingerprint:string;callId:string;inputEventId:string;}
+export interface AdmissionEvidence {messageId:string;quote:string|null;contentKind?:'image';contentRef?:ImageCitationReference;description?:string}
 const same=(a:unknown,b:unknown)=>canonicalJSON(a)===canonicalJSON(b);
 const payload=(row:StorageRow)=>JSON.parse(String(row.payload));
 /** 新产物的逐事实引用必须沿具名事件和真实模型回执闭合；旧产物不推测补证。 */
-export function candidateAdmission(tx:StorageTransaction,ownerId:string,output:StorageRow,fact:Record<string,any>,inputs:StorageRow[],published=false){
- const pending=()=>({state:'pending' as const,eventId:null,mode:null,evidence:[] as {messageId:string;quote:string}[]});
+export function candidateAdmission(tx:StorageTransaction,ownerId:string,output:StorageRow,fact:Record<string,any>,inputs:StorageRow[],published=false):{state:'pending'|'verified';eventId:string|null;mode:'complete-claim-v1'|'multimodal-claim-v1'|null;evidence:AdmissionEvidence[]}{
+ const pending=()=>({state:'pending' as const,eventId:null,mode:null,evidence:[] as AdmissionEvidence[]});
  try{
   let producer=output;
   if(output.scope_kind==='self'){
@@ -25,7 +29,7 @@ export function candidateAdmission(tx:StorageTransaction,ownerId:string,output:S
   if(!event||(event.originated_call_id??event.reused_call_id)!==ref.callId)return pending();
   const checked=payload(event),result=checked.result;
   if(checked.candidateTraceId!==ref.candidateTraceId||checked.verificationInputEventId!==ref.inputEventId||checked.disposition!=='continue'
-   ||result?.verification_mode!=='complete-claim-v1'||result.verdict!=='supported'||result.claim_validation?.status!=='checked'
+   ||!['complete-claim-v1','multimodal-claim-v1'].includes(result?.verification_mode)||result.verdict!=='supported'||result.claim_validation?.status!=='checked'
    ||result.claim_validation.semantic_support!=='supported'||result.claim_validation.policy_fingerprint!==ref.policyFingerprint)return pending();
   if(!same({...checked.before,event:result.event,conditions:result.conditions},fact))return pending();
   const inputEvent=tx.get("SELECT * FROM execution_event WHERE owner_id=? AND id=? AND step_attempt_id=? AND kind='verification_input' AND event_no<?",[ownerId,ref.inputEventId,producer.step_attempt_id,event.event_no]);
@@ -38,8 +42,24 @@ export function candidateAdmission(tx:StorageTransaction,ownerId:string,output:S
   const responseEvent=tx.get("SELECT payload FROM execution_event WHERE owner_id=? AND originated_call_id=? AND kind='model_output'",[ownerId,ref.callId]);
   if(!requestEvent||!responseEvent)return pending();const request=payload(requestEvent),requestBody=JSON.parse(request.user);
   if(request.purpose!=='verification'||requestBody.request_fingerprint!==ref.policyFingerprint)return pending();
-  const replay=replayCompleteClaimVerification(prepared.window,prepared.facts,payload(responseEvent).blocks,ref.policyFingerprint,requestBody)[index];
+  const multimodal=result.verification_mode==='multimodal-claim-v1';
+  const replay=(multimodal?replayMultimodalVerification:replayCompleteClaimVerification)(prepared.window,prepared.facts,payload(responseEvent).blocks,ref.policyFingerprint,requestBody)[index];
   if(!replay?.admitted||!same(replay.result,result))return pending();
+  if(multimodal){
+   if(!Array.isArray(result.content_evidence)||!result.content_evidence.length)return pending();
+   const evidence:AdmissionEvidence[]=result.content_evidence.map((item:any)=>{
+    if(!inputs.some(input=>input.message_id===item.message_id)||!fact.source_message_ids.includes(item.message_id))throw new Error('memory_content_evidence_scope');
+    if(item.kind==='text')return {messageId:item.message_id,quote:item.quote};
+    const image=prepared.window.messages.find((message:any)=>message.message_id===item.message_id)?.image;
+    if(!image||image.file_id!==item.file_id||image.sha256!==item.sha256)throw new Error('memory_content_evidence_version');
+    const frozen=inputs.filter(input=>input.message_id===item.message_id).map(input=>readFrozenContent(tx,ownerId,input));
+    if(!frozen.length||frozen.some(content=>!content||content.kind!=='image'||content.identity.fileId!==image.file_id||content.identity.sha256!==image.sha256
+     ||content.identity.mimeType!==image.mime_type||content.identity.mediaGeneration!==image.media_generation))throw new Error('memory_content_evidence_unbound');
+    return {messageId:item.message_id,quote:null,contentKind:'image',contentRef:{file_id:image.file_id,sha256:image.sha256,mime_type:image.mime_type,media_generation:image.media_generation},description:item.description};
+   });
+   if(fact.source_message_ids.some((id:string)=>!evidence.some(item=>item.messageId===id)))return pending();
+   return {state:'verified' as const,eventId:ref.eventId,mode:'multimodal-claim-v1' as const,evidence};
+  }
   if(!Array.isArray(result.evidence)||!result.evidence.length||!Array.isArray(fact.source_message_ids)||!fact.source_message_ids.length)return pending();
   const evidence=result.evidence as {message_id:string;quote:string}[];
   if(evidence.some(e=>!fact.source_message_ids.includes(e.message_id)||!inputs.some(i=>i.message_id===e.message_id)||typeof e.quote!=='string'||!e.quote.length)

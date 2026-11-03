@@ -9,6 +9,7 @@ import type {ExtractionInvocation} from '../extraction/flow.ts';
 import {createExtractionModelCaller,type ExtractionPermitEndpoint} from '../extraction/model.ts';
 import {DIRECT_EXTRACTION_SCHEMA} from '../extraction/prompts.ts';
 import {DEEPSEEK_STRICT_VERIFICATION_TOOL} from '../extraction/verification/deepseek-strict.ts';
+import type {ModelImageManifest} from '../../platform/models/model-images.ts';
 
 export interface SqliteExtractionModelScope {owner_id:string;contact_id:string;}
 export interface SqliteExtractionModelInvocation {
@@ -17,6 +18,8 @@ export interface SqliteExtractionModelInvocation {
   requireCurrent():Promise<void>;
   /** SQLite 已有预约的回执持久化；成功前正常 caller 不会释放为已结算。 */
   onReceipt(receipt:ModelLedgerReceipt):Promise<void>;
+  /** 实际变换版本在HTTP前记录，原图版本仍由业务输入持有。 */
+  onImageInputs?(images:readonly ModelImageManifest[]):Promise<void>;
 }
 export interface SqliteExtractionModelPreparation {
   provider:string;model:string;configurationId:string;
@@ -71,6 +74,8 @@ export function createSqliteExtractionModelPort(options:SqliteExtractionModelPor
       ||request.tool.name!==(request.purpose==='extraction'?DIRECT_EXTRACTION_SCHEMA.title:DEEPSEEK_STRICT_VERIFICATION_TOOL))
       fail('extraction_model_purpose_invalid');
     await input.requireCurrent();
+    if(request.images?.length&&!providerConfiguration.connection.models.find(entry=>entry.id===binding.model)?.inputModalities?.includes('image'))
+      fail('extraction_model_image_unsupported');
     await options.authorizePurpose({purpose:request.purpose,scope:{...input.scope}},input.signal);
     const auth=await providerConfiguration.resolveAuth(providerConfiguration.connection);
     if(!auth||!auth.headers||!Object.entries(auth.headers).some(([name,value])=>
@@ -82,9 +87,9 @@ export function createSqliteExtractionModelPort(options:SqliteExtractionModelPor
   }
   function invoke(request:ExtractionInvocation,input:SqliteExtractionModelInvocation) {
     // 同一发送沿固定请求副本；后续 UI 或调用者更改对象不会扩大已授权输入。
-    const frozenRequest={...request,tool:structuredClone(request.tool)};
+    const frozenRequest={...request,tool:structuredClone(request.tool),images:request.images?structuredClone(request.images):undefined};
     const scope={...input.scope},claim={...input.claim};
-    const {requestId,attemptId,requireCurrent,onReceipt}=input;
+    const {requestId,attemptId,requireCurrent,onReceipt,onImageInputs}=input;
     const signal=AbortSignal.any([input.signal,stopped.signal,AbortSignal.timeout(model.deadline_ms)]);
     const current=async()=>{
       signal.throwIfAborted();await requireCurrent();
@@ -92,10 +97,11 @@ export function createSqliteExtractionModelPort(options:SqliteExtractionModelPor
     };
     const work=(async()=>{
       await prepare(frozenRequest,{scope,signal,requireCurrent});
-      return caller.call({request_id:requestId,attempt_id:attemptId,...scope,claim,binding,profile,
-        signal,requireCurrent:current,onReceipt,
-        messages:[{role:'user',content:[{type:'text',text:frozenRequest.user}]}],system:frozenRequest.system,
+      const invoke=(images:Parameters<Parameters<typeof provider.withImages>[2]>[0])=>caller.call({request_id:requestId,attempt_id:attemptId,...scope,claim,binding,profile,
+        signal,requireCurrent:current,onReceipt,onImageInputs,
+        messages:[{role:'user',content:[{type:'text',text:frozenRequest.user},...images]}],system:frozenRequest.system,
         tools:[frozenRequest.tool],validateOutput:frozenRequest.validateOutput});
+      return frozenRequest.images?.length?provider.withImages(frozenRequest.images,signal,invoke):invoke([]);
     })();
     active.add(work);void work.then(()=>active.delete(work),()=>active.delete(work));
     return work;

@@ -4,7 +4,7 @@
 
 > 2026-11-03 图片资源：[ADR-155](adr/155-image-variant-display-and-thumbnail-refresh.md)将主图／缩略图角色与原图证明分别展示；已保存缩略图在有效同步范围内按分钟有界复查，主图可用后更新副本。旧未知版本不猜测回填，已清除图片不自动恢复；已实现，验证范围见[分项记录](../docs/verification/image-variant-refresh-20261103.md)。
 
-> 2026-11-02 图文记忆：[ADR-153](adr/153-joint-text-image-memory-input.md)确认聊天文字与实际图片共同进入记忆处理，替代记忆输入只能是文字的旧限制。图文接线尚未实现；记忆正文与检索表示仍为文字。
+> 2026-11-02 图文记忆：[ADR-153](adr/153-joint-text-image-memory-input.md)确认聊天文字与实际图片共同进入记忆处理，替代记忆输入只能是文字的旧限制。文字／图片插件及图文接线已实现；真实识图已确认，来源核验尚未通过在线验收，工程与真实模型验收范围见[接线记录](../docs/verification/pluggable-image-memory-20261103.md)；记忆正文与检索表示仍为文字。
 
 > 2026-11-02 记忆处理：[ADR-152](adr/152-history-and-incremental-memory-processing.md)已采纳历史导入后自动小批处理与积压补齐，增量独立调度并优先安排；候选待决定和后续整理不单独阻止新 L1。局部替代 ADR-143 的历史手动条款，实现及验收进行中。
 
@@ -271,7 +271,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 150. [ADR-150：发生时间标注降级为可选信息](adr/150-optional-event-time.md)
 
 152. [ADR-152：历史与增量记忆分开自动处理](adr/152-history-and-incremental-memory-processing.md)（已采纳，实现及验收进行中）
-153. [ADR-153：图文共同参与记忆处理](adr/153-joint-text-image-memory-input.md)（已采纳，图文接线尚未实现）
+153. [ADR-153：图文共同参与记忆处理](adr/153-joint-text-image-memory-input.md)（已采纳，文字／图片插件及图文接线已实现；验收范围见接线记录）
 154. [ADR-154：按微信资源来源记录图片版本](adr/154-source-grounded-image-versions.md)
 155. [ADR-155：图片资源角色展示与缩略图复查](adr/155-image-variant-display-and-thumbnail-refresh.md)（已采纳，已实现；验证边界见分项记录）
 

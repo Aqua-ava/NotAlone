@@ -6,6 +6,7 @@ import {createConnection} from 'node:net';
 import {createInterface} from 'node:readline';
 import {randomUUID} from 'node:crypto';
 import type {installModelProvider} from '../../platform/models/model-provider.ts';
+import type {ModelImageManifest} from '../../platform/models/model-images.ts';
 import {modelLedgerInputBudget, validateModelLedgerReceipt, type ModelLedgerReceipt, type ModelLedgerCost, type ModelLedgerUsage} from '../../platform/models/model-ledger-contract.ts';
 import type {MessagesBudgetBinding, MessagesBudgetProfile} from '../../platform/models/model-input-budget.ts';
 import type {ModelTaskClaim} from '../../platform/models/model-permit-server.ts';
@@ -109,6 +110,7 @@ export interface ExtractionModelInput {
   costForUsage?(usage:ModelLedgerUsage):ModelLedgerCost;
   /** 存储确认receipt后持久化最小关联；回调成功前不settle，失败保留journal未知。 */
   onReceipt?(receipt:ModelLedgerReceipt):Promise<void>;
+  onImageInputs?(images:readonly ModelImageManifest[]):Promise<void>;
 }
 export function createExtractionModelCaller(options:{ctx:Context;provider:ReturnType<typeof installModelProvider>;permit:ExtractionPermitEndpoint}) {
   return {async call(input:ExtractionModelInput):Promise<{text:string;blocks:ContentBlock[];receipt:ModelLedgerReceipt}> {
@@ -126,7 +128,7 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
       if(input.messages.length!==1||input.messages[0]?.role!=='user'||!Array.isArray(input.messages[0].content))
         throw new ExtractionModelError('extraction_model_tool_invalid');
       const text=input.messages[0].content.filter(block=>block.type==='text').map(block=>block.text).join('');
-      if(!text||input.messages[0].content.some(block=>block.type!=='text'))throw new ExtractionModelError('extraction_model_tool_invalid');
+      if(!text||input.messages[0].content.some(block=>block.type!=='text'&&block.type!=='image'))throw new ExtractionModelError('extraction_model_tool_invalid');
       return text;
     })():null;
     const config={...input.binding,reasoningEffort:ReasoningEffortId(input.binding.reasoningEffort),stop:input.binding.stop?[...input.binding.stop]:undefined};
@@ -143,7 +145,7 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
       const sessionId=SessionId(randomUUID());
       // 预约只保存110物理身份；确认HTTP后的终态才由既有账本事务建立010外键。
       const base:ModelLedgerReceipt={attempt_id:input.attempt_id,permit_id:granted.permit_id,request_id:input.request_id,owner_id:input.owner_id,contact_id:input.contact_id,scope_kind:input.contact_id===null?'owner_memory':'contact',provider:input.binding.provider,model:input.binding.model,called_at:new Date(started).toISOString(),latency_ms:null,dispatch:'authorized_unconfirmed',outcome:'pending',usage:null,cost:{status:'unknown',amount:null,currency:null,pricing_version:null}};
-      const registration={sessionId,attempt_id:input.attempt_id,permit_id:granted.permit_id,binding:input.binding,profile:input.profile,requireCurrent:input.requireCurrent,beforeDispatch:async(value:{attempt_id:string;permit_id:string;budget:Parameters<typeof modelLedgerInputBudget>[0];dispatch:'authorized_unconfirmed'})=>{
+      const registration={sessionId,attempt_id:input.attempt_id,permit_id:granted.permit_id,binding:input.binding,profile:input.profile,requireCurrent:input.requireCurrent,onImageInputs:input.onImageInputs,beforeDispatch:async(value:{attempt_id:string;permit_id:string;budget:Parameters<typeof modelLedgerInputBudget>[0];dispatch:'authorized_unconfirmed'})=>{
         receipt={...base,input_budget:modelLedgerInputBudget(value.budget)};
         uncertain=true;const state=await connection.exchange({op:'reserve',receipt,claim:input.claim});
         if(state.state!=='reserved'){uncertain=false;throw new ExtractionModelError('extraction_model_reservation_rejected');}
@@ -154,7 +156,7 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
       strictCall=strictVerification?options.provider.beginStrictVerificationCall(registration):undefined;
       try {
         if(strictCall&&strictVerification&&strictUser!==null){
-          const result=await strictCall.send({system:input.system??'',user:strictUser,
+          const result=await strictCall.send({system:input.system??'',user:strictUser,images:input.messages[0]!.content.filter(block=>block.type==='image'),
             tool:{name:DEEPSEEK_STRICT_VERIFICATION_TOOL,description:strictVerification.description,parameters:strictVerification.parameters},signal:input.signal});
           blocks.push(...structuredClone(result.blocks) as ContentBlock[]);
           text=result.blocks.filter(block=>block.type==='text').map(block=>block.text).join('');

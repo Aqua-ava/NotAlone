@@ -2,10 +2,11 @@ import {createHash} from 'node:crypto';
 import {StorageFailure,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {CheckResult,DeletionDomain,DeletionOperation,RowDeletionTarget} from '../../storage/sqlite/deletion/contracts.ts';
 import {collectDiscussionDeletionImpact} from './deletion.ts';
+import {isMediaDeletionScope} from '../../media/sqlite/deletion.ts';
 const domain='discussion_calls';
 const rowKinds:DeletionDomain['rowKinds']={event_source:{keys:['owner_id','event_id','record_id'],ownerKey:'owner_id'},execution_input:{keys:['owner_id','event_id','input_no'],ownerKey:'owner_id'},execution_event:{keys:['owner_id','id'],ownerKey:'owner_id'},model_call:{keys:['owner_id','id'],ownerKey:'owner_id'},operation_scope:{keys:['owner_id','operation_id','source_contact_id','effect_kind'],ownerKey:'owner_id'},model_operation:{keys:['owner_id','id'],ownerKey:'owner_id'}};
 const eraseLedger=(op:DeletionOperation)=>['contact','account'].includes(op.scope.kind);
-const supported=(op:DeletionOperation)=>['discussion','source','contact_history','contact','account'].includes(op.scope.kind);
+const supported=(op:DeletionOperation)=>isMediaDeletionScope(op.scope)||['discussion','source','contact_history','contact','account'].includes(op.scope.kind);
 const identity=(kind:string,key:Record<string,string>)=>createHash('sha256').update(JSON.stringify([kind,Object.entries(key).sort()])).digest('hex');
 const minimalReceipt='{"format":"minimal-discussion-call-v1"}';
 function closure(tx:StorageTransaction,op:DeletionOperation){

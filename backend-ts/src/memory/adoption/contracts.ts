@@ -52,6 +52,13 @@ export interface MergeVerification {
  evidence:{message_id:string;quote:string}[];
  usage?:ModelUsage|null;
 }
+/** 图片描述是已经核验的观察记录，不是可作逐字引文的聊天原文。 */
+export interface AdjudicationSource {
+ message_id:string;text:string|null;occurred_at:string|null;
+ content_kind?:'image';
+ content_ref?:{file_id:string;sha256:string;mime_type:string;media_generation:string};
+ observation?:{kind:'model_observation';text:string};
+}
 export interface SimilarMemory {
  memory_id:string;
  revision:number|string;
@@ -61,7 +68,7 @@ export interface SimilarMemory {
  subject:string;
  adoption_method:'auto'|'manual';
  source_message_ids:string[];
- source_texts:{message_id:string;text:string;occurred_at:string|null}[];
+ source_texts:AdjudicationSource[];
  statement_time:string|null;
  valid_at:string|null;
  invalid_at:string|null;
@@ -75,7 +82,7 @@ export interface AdjudicationItem {
  candidate_index:number;
  candidate:AdoptionFact;
  candidate_source_receipt:string;
- candidate_source_texts:{message_id:string;text:string;occurred_at:string|null}[];
+ candidate_source_texts:AdjudicationSource[];
  relation_source_receipt:string;
  similar:SimilarMemory[];
 }

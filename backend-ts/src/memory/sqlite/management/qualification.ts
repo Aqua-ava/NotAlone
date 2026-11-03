@@ -1,5 +1,6 @@
 import {qualificationSources} from './dependencies.ts';
 import {projectCitations} from './evidence.ts';
+import {requireImageCitation} from '../content-citation.ts';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {assertSourceEligibility} from '../../../history/sqlite/source.ts';
 import {verifiedExtractionOutput} from '../outputs.ts';
@@ -33,7 +34,9 @@ export function requireSources(tx:StorageTransaction,ownerId:string,parent:{cand
  for(const r of rows){
   assertSourceEligibility(tx,{owner_id:ownerId,contact_id:String(r.source_contact_id),message_id:String(r.message_id),record_id:String(r.record_id)});
   const m=tx.get('SELECT interpretation_revision,text_body FROM message WHERE owner_id=? AND contact_id=? AND id=?',[ownerId,r.source_contact_id,r.message_id]);
-  if(!m||m.interpretation_revision!==r.accepted_revision||typeof m.text_body!=='string'||BigInt([...m.text_body].length)<(r.span_end as bigint))fail('memory_source_stale');
+  if(!m||m.interpretation_revision!==r.accepted_revision)fail('memory_source_stale');
+  if(r.content_kind==='image')requireImageCitation(tx,ownerId,String(r.source_contact_id),String(r.message_id),r.content_ref_json);
+  else if(r.content_kind&&r.content_kind!=='text'||typeof m!.text_body!=='string'||typeof r.span_start!=='bigint'||typeof r.span_end!=='bigint'||BigInt([...m!.text_body].length)<r.span_end)fail('memory_source_stale');
  }
  return rows;
 }
@@ -42,7 +45,8 @@ export function requireCandidate(tx:StorageTransaction,ownerId:string,c:StorageR
  const output=verifiedExtractionOutput(tx,{ownerId,eventId:String(c.event_id)});
  if(output.proposedBody!==c.proposed_body||output.producedAttemptId!==c.produced_attempt_id||output.scopeKind!==c.scope_kind||output.contactId!==c.contact_id||output.outputNo!==c.output_no)fail('memory_candidate_stale');
  const actual=requireSources(tx,ownerId,{candidateId:String(c.id)});
- if(output.semanticVerification.state==='verified'&&(actual.length!==output.citations.length||output.citations.some(expected=>!actual.some(row=>row.source_contact_id===expected.contactId&&row.message_id===expected.messageId&&row.record_id===expected.recordId&&row.accepted_revision===expected.interpretationRevision&&row.span_start===expected.spanStart&&row.span_end===expected.spanEnd))))fail('memory_candidate_stale');
+ if(output.semanticVerification.state==='verified'&&(actual.length!==output.citations.length||output.citations.some(expected=>!actual.some(row=>row.source_contact_id===expected.contactId&&row.message_id===expected.messageId&&row.record_id===expected.recordId&&row.accepted_revision===expected.interpretationRevision&&row.span_start===expected.spanStart&&row.span_end===expected.spanEnd
+  &&(row.content_kind??'text')===(expected.contentKind??'text')&&(expected.contentRef?JSON.stringify(JSON.parse(String(row.content_ref_json)))===JSON.stringify(expected.contentRef):true)))))fail('memory_candidate_stale');
  return output.semanticVerification;
 }
 export function requireAutomaticCandidate(tx:StorageTransaction,ownerId:string,c:StorageRow):void{

@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {CheckResult,DeletionDomain,DeletionOperation,RowDeletionTarget} from '../../storage/sqlite/deletion/contracts.ts';
 import {identityDeletionAuthority} from '../../contacts/sqlite/deletion.ts';
+import {isMediaDeletionScope,mediaDeletionAuthority} from '../../media/sqlite/deletion.ts';
 import {memoryDeletionImpact,deletionRows,deletionIds} from './deletion-impact.ts';
 import {minimalModelReceipt} from './execution.ts';
 
@@ -25,7 +26,8 @@ const rowKinds:DeletionDomain['rowKinds']={
   processing_item:{keys:['owner_id','id'],ownerKey:'owner_id'},
   processing_run:{keys:['owner_id','id'],ownerKey:'owner_id'},
 };
-const allowed=(op:DeletionOperation)=>['source','contact_history','contact','account'].includes(op.scope.kind);
+const allowed=(op:DeletionOperation)=>isMediaDeletionScope(op.scope)||['source','contact_history','contact','account'].includes(op.scope.kind);
+const verifyFence=(tx:StorageTransaction,op:DeletionOperation)=>isMediaDeletionScope(op.scope)?mediaDeletionAuthority.verify(tx,op):identityDeletionAuthority.verify(tx,op);
 const eraseLedger=(op:DeletionOperation)=>op.scope.kind==='contact'||op.scope.kind==='account';
 // 删除来源只撤销提交资格；未决发送的逐消息效果身份仍须阻止换来源或换轮重发。
 function preserveUnknownOccupation(tx:StorageTransaction,op:DeletionOperation,row:StorageRow):boolean {
@@ -38,7 +40,7 @@ const pass=(proof:string):CheckResult=>({result:'passed',proof});
 const check=(ok:boolean,proof:string):CheckResult=>({result:ok?'passed':'blocked',proof});
 const address=(kind:string,key:Record<string,string>)=>createHash('sha256').update(JSON.stringify([kind,Object.entries(key).sort(([a],[b])=>a.localeCompare(b))])).digest('hex');
 function fenced(tx:StorageTransaction,op:DeletionOperation):void {
-  if(identityDeletionAuthority.verify(tx,op).result!=='passed')fail('memory_deletion_not_fenced');
+  if(verifyFence(tx,op).result!=='passed')fail('memory_deletion_not_fenced');
 }
 function oldTargets(tx:StorageTransaction,op:DeletionOperation):Map<string,RowDeletionTarget> {
   const found=new Map<string,RowDeletionTarget>();
@@ -164,9 +166,16 @@ export const memoryExtractionDeletionDomain:DeletionDomain={
     }else if(target.rowKind==='processing_item'&&!eraseLedger(op)){
       const item=tx.get(`SELECT * FROM processing_item WHERE ${where}`,args);if(!item)return;
       const preserved=tx.get("SELECT 1 FROM capture_record WHERE owner_id=? AND contact_id=? AND message_id=? AND availability='available' AND state='normalized'",[op.ownerId,item.contact_id,item.message_id]);
-      if(preserved)tx.run(`UPDATE processing_item SET extraction_state='invalidated' WHERE ${where}`,args);
+      // 换图只撤销旧文件的执行；合法新副本仍是该消息待处理工作。未知发送的效果占用不能借换图重发。
+      const replacement=op.scope.kind==='media_result_replace'&&op.scope.contactId===item.contact_id&&op.scope.messageId===item.message_id
+        &&tx.get("SELECT 1 FROM media_file f JOIN message_media h ON h.owner_id=f.owner_id AND h.contact_id=f.contact_id AND h.message_id=f.message_id WHERE f.owner_id=? AND f.contact_id=? AND f.message_id=? AND f.role='image_display' AND f.publish_state='current' AND f.content_state='present' AND f.container_valid=1 AND f.viewable=1 AND h.state<>'cleared'",[op.ownerId,item.contact_id,item.message_id])
+        &&!tx.get("SELECT 1 FROM operation_item WHERE owner_id=? AND item_id=? AND state='unknown'",[op.ownerId,item.id]);
+      if(preserved)tx.run(`UPDATE processing_item SET extraction_state=? WHERE ${where}`,[replacement?'pending':'invalidated',...args]);
       else tx.run(`UPDATE processing_item SET message_id=NULL,extraction_state='deleted',pipeline_state='deleted',completion_attempt_id=NULL WHERE ${where}`,args);
-    }else tx.run(`DELETE FROM ${target.rowKind} WHERE ${where}`,args);
+    }else{
+      if(target.rowKind==='run_input'&&tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='run_content_input'"))tx.run('DELETE FROM run_content_input WHERE owner_id=? AND run_id=? AND input_no=?',[op.ownerId,target.key.run_id,BigInt(target.key.input_no)]);
+      tx.run(`DELETE FROM ${target.rowKind} WHERE ${where}`,args);
+    }
   },
   authorizeFile(){fail('memory_extraction_has_no_managed_files');},
   fileCleared(){fail('memory_extraction_has_no_managed_files');},
@@ -180,6 +189,6 @@ export const memoryExtractionDeletionDomain:DeletionDomain={
     return {database_rows:check(empty,'memory_deletion_rows'),derived_eligibility:check(!late,'memory_old_writers_revoked'),
       trace_payloads:check(remaining.events.length===0,'memory_process_payloads_cleared'),
       request_replay:check(!haveRequests||tombstones!==0n,'memory_start_requests_tombstoned'),
-      scope_suppression:identityDeletionAuthority.verify(tx,op).result==='passed'?pass('memory_identity_fence_current'):{result:'blocked',proof:'memory_identity_fence_missing'}};
+      scope_suppression:verifyFence(tx,op).result==='passed'?pass('memory_identity_fence_current'):{result:'blocked',proof:'memory_identity_fence_missing'}};
   },
 };

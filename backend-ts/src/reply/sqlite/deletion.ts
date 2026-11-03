@@ -1,4 +1,7 @@
 import {sourceDeletionIds} from '../../history/sqlite/source-deletion.ts';
+import {isMediaDeletionScope} from '../../media/sqlite/deletion.ts';
+import {memoryDeletionImpact} from '../../memory/sqlite/deletion-impact.ts';
+import {collectMemoryDocumentDeletionReferences} from '../../memory/sqlite/documents/deletion.ts';
 import {createHash} from 'node:crypto';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import {currentSourceScopeCTE,currentSourcePredicate} from '../../history/sqlite/current-scope.ts';
@@ -7,7 +10,7 @@ function fail(code:string):never{throw new StorageFailure(code);}
 const pass=(proof:string):CheckResult=>({result:'passed',proof});
 const canonical=(value:unknown):string=>JSON.stringify(value,(_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
 const hash=(value:unknown):string=>createHash('sha256').update(canonical(value)).digest('hex');
-const supported=(scope:DeletionScope)=>['discussion','source','contact_history','contact','account'].includes(scope.kind);
+const supported=(scope:DeletionScope)=>isMediaDeletionScope(scope)||['discussion','source','contact_history','contact','account'].includes(scope.kind);
 const wholeDiscussion=(scope:DeletionScope)=>['discussion','contact','account'].includes(scope.kind);
 /** 精确讨论的屏障只推进该讨论，不撤销同联系人的独立资料资格。 */
 export const discussionDeletionAuthority:DeletionAuthority={
@@ -49,17 +52,30 @@ function closure(tx:StorageTransaction,op:DeletionOperation,sourceKeys?:Readonly
  const incorporations=tx.all('SELECT * FROM runtime_context WHERE owner_id=?',[op.ownerId]);
  const attempts=tx.all('SELECT id,request_id FROM reply_attempt WHERE owner_id=?',[op.ownerId]);
  const preparing=tx.all("SELECT id,preparing_attempt_id FROM runtime_copy WHERE owner_id=? AND state<>'deleted'",[op.ownerId]);
+ const mediaImpact=isMediaDeletionScope(op.scope)?memoryDeletionImpact(tx,op):null;
+ const selectedSourceKeys=sourceKeys??(mediaImpact?new Set(mediaImpact.inputs.map(input=>JSON.stringify([input.source_contact_id,input.record_id]))):undefined);
  if(wholeDiscussion(op.scope)){
   for(const c of contexts)if(ds.has(String(c.discussion_id)))result.contexts.add(String(c.id));
   for(const r of requests)if(ds.has(String(r.discussion_id)))result.requests.add(String(r.id));
   for(const c of tx.all("SELECT id,discussion_id FROM runtime_copy WHERE owner_id=? AND state<>'deleted'",[op.ownerId]))if(ds.has(String(c.discussion_id)))result.copies.add(String(c.id));
  }else{
   const scope=op.scope;
-  for(const item of items)if(item.kind==='message'&&(sourceKeys?sourceKeys.has(JSON.stringify([item.source_contact_id,item.record_id])):'contactId' in scope&&item.source_contact_id===scope.contactId&&(scope.kind!=='source'||deletionSources.has(String(item.record_id)))))result.contexts.add(String(item.context_id));
+  for(const item of items)if(item.kind==='message'&&(selectedSourceKeys?selectedSourceKeys.has(JSON.stringify([item.source_contact_id,item.record_id])):'contactId' in scope&&item.source_contact_id===scope.contactId&&(scope.kind!=='source'||deletionSources.has(String(item.record_id)))))result.contexts.add(String(item.context_id));
  }
  if(tx.get("SELECT 1 FROM sqlite_master WHERE name='reply_candidate_input_source'")){
   const scope=op.scope;
-  if(sourceKeys||scope.kind==='source'||scope.kind==='contact_history'||scope.kind==='contact')for(const item of tx.all('SELECT * FROM reply_candidate_input_source WHERE owner_id=?',[op.ownerId]))if(sourceKeys?sourceKeys.has(JSON.stringify([item.source_contact_id,item.record_id])):'contactId' in scope&&item.source_contact_id===scope.contactId&&(scope.kind!=='source'||deletionSources.has(String(item.record_id))))result.contexts.add(String(item.context_id));
+  if(selectedSourceKeys||scope.kind==='source'||scope.kind==='contact_history'||scope.kind==='contact')for(const item of tx.all('SELECT * FROM reply_candidate_input_source WHERE owner_id=?',[op.ownerId]))if(selectedSourceKeys?selectedSourceKeys.has(JSON.stringify([item.source_contact_id,item.record_id])):'contactId' in scope&&item.source_contact_id===scope.contactId&&(scope.kind!=='source'||deletionSources.has(String(item.record_id))))result.contexts.add(String(item.context_id));
+  if(mediaImpact){
+   const documents=collectMemoryDocumentDeletionReferences(tx,op);
+   const version=(raw:unknown):string=>raw&&typeof raw==='object'&&'$integer' in raw?String((raw as {$integer:unknown}).$integer):String(raw);
+   for(const item of tx.all("SELECT context_id,kind,identity_json FROM reply_candidate_input WHERE owner_id=? AND kind IN ('memory','memory_candidate','document')",[op.ownerId])){
+    const identity=JSON.parse(String(item.identity_json));
+    const selected=item.kind==='memory_candidate'?mediaImpact.candidates.includes(String(identity.id)):
+     item.kind==='memory'?mediaImpact.memories.includes(String(identity.id))||mediaImpact.versions.some(ref=>ref.memoryId===identity.id&&String(ref.versionNo)===version(identity.versionNo)):
+     documents.publications.includes(String(identity.publicationId))||documents.versions.some(ref=>ref.documentId===identity.id&&String(ref.versionNo)===version(identity.versionNo));
+    if(selected)result.contexts.add(String(item.context_id));
+   }
+  }
  }
  // request_tombstone是05同操作持久闭包；清context后仍能找到尚待清理的请求。
  if(!sourceKeys)for(const r of tx.all(`SELECT r.id FROM reply_request r JOIN request_tombstone t ON t.owner_identity=r.owner_id AND t.request_key=r.request_key

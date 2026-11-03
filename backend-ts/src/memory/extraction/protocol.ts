@@ -3,6 +3,8 @@ import {parseProofProposal,verifyBoundedProof,type ProofProposal,type ProofVerif
 /** direct E 与 legacy-v4 V 的确定性边界；模型调用、许可、重试和写入由宿主负责。 */
 export interface ExtractionMessage {
   message_id: string; text: string; sender: 'self'|'contact'; occurred_at: string|null;
+  content_kind?:string;
+  image?:{id:string;file_id:string;sha256:string;mime_type:string;media_generation:string};
   text_representation?: string; message_snapshot?: Record<string, unknown>;
   source_snapshots?: Record<string, unknown>[];
 }
@@ -25,7 +27,8 @@ export interface ExtractedFact {
 }
 export interface SourceVerificationResult {
   candidate_index:number;verdict:'supported'|'uncertain'|'unsupported';issues:string[];
-  evidence:{message_id:string;quote:string}[];verification_mode:'legacy-v4'|'nullable-proof-v3'|'complete-claim-v1';
+  evidence:{message_id:string;quote:string}[];verification_mode:'legacy-v4'|'nullable-proof-v3'|'complete-claim-v1'|'multimodal-claim-v1';
+  content_evidence?:{message_id:string;kind:'text'|'image';quote:string|null;file_id:string|null;sha256:string|null;description:string|null}[];
   model_verdict:'supported'|'uncertain'|'unsupported';model_issues:string[];event:MemoryEvent|null;conditions:MemoryConditions|null;
   proof:ProofProposal|null;proof_verification:ProofVerification|null;
   /** 发生时间标注（event）可选：核验不可采纳时丢弃 event 并置真，不参与整条候选的准入；不覆盖 valid_at/invalid_at。 */
@@ -72,7 +75,13 @@ export function validateExtractionWindow(window:ExtractionWindow):void {
   uuid(window.owner_id);uuid(window.contact_id);
   requireValid(Array.isArray(window.messages)&&window.messages.length>0);
   let last:bigint|null=null;
-  for(const message of window.messages){uuid(message.message_id);text(message.text);choices(message.sender,['self','contact']);
+  for(const message of window.messages){uuid(message.message_id);
+    if(message.image){
+      uuid(message.image.file_id);requireValid(message.image.id===message.image.file_id&&/^[a-f0-9]{64}$/.test(message.image.sha256)
+        &&['image/png','image/jpeg','image/webp','image/gif'].includes(message.image.mime_type)&&/^(0|[1-9][0-9]*)$/.test(message.image.media_generation)
+        &&typeof message.text==='string'&&message.content_kind==='image');
+    }else text(message.text);
+    choices(message.sender,['self','contact']);
     when(message.occurred_at);if(message.occurred_at!==null){const time=instantMicros(message.occurred_at);requireValid(last===null||time>=last);last=time;}}
   if(window.target_message_ids!=null){requireValid(Array.isArray(window.target_message_ids)&&window.target_message_ids.length>0&&window.target_message_ids.length<=20);
     const ids=new Set(window.messages.map(m=>uuid(m.message_id)));for(const id of window.target_message_ids)requireValid(ids.has(uuid(id)));}

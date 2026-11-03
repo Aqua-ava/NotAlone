@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {CheckResult,DeletionDomain,DeletionOperation,RowDeletionTarget} from '../../../storage/sqlite/deletion/contracts.ts';
 import {identityDeletionAuthority} from '../../../contacts/sqlite/deletion.ts';
+import {isMediaDeletionScope,mediaDeletionAuthority} from '../../../media/sqlite/deletion.ts';
 import {memoryDeletionImpact} from '../deletion-impact.ts';
 import {minimalModelReceipt} from '../execution.ts';
 
@@ -16,7 +17,8 @@ const rowKinds:DeletionDomain['rowKinds']={
  memory_document_later_run_requirement:{keys:['owner_id','run_id','scope_key'],ownerKey:'owner_id'},
  memory_document_later_cursor:{keys:['owner_id','scope_key'],ownerKey:'owner_id'},
 };
-const allowed=(op:DeletionOperation)=>['source','contact_history','contact','account'].includes(op.scope.kind);
+const allowed=(op:DeletionOperation)=>isMediaDeletionScope(op.scope)||['source','contact_history','contact','account'].includes(op.scope.kind);
+const verifyFence=(tx:StorageTransaction,op:DeletionOperation)=>isMediaDeletionScope(op.scope)?mediaDeletionAuthority.verify(tx,op):identityDeletionAuthority.verify(tx,op);
 const eraseLedger=(op:DeletionOperation)=>op.scope.kind==='contact'||op.scope.kind==='account';
 const installed=(tx:StorageTransaction)=>!!tx.get('SELECT 1 FROM schema_migration WHERE version=13');
 const fail=(code:string):never=>{throw new StorageFailure(code);};
@@ -44,7 +46,7 @@ function closure(tx:StorageTransaction,op:DeletionOperation):Closure {
   for(const d of tx.all('SELECT id FROM memory_document WHERE owner_id=?',[ownerId]))out.documents.add(String(d.id));
   for(const v of tx.all('SELECT document_id,version_no FROM memory_document_version WHERE owner_id=?',[ownerId]))addVersion(v.document_id,v.version_no);
   for(const p of tx.all('SELECT id FROM document_publication WHERE owner_id=?',[ownerId]))addPublication(p.id);
- }else if('contactId' in scope){
+ }else if('contactId' in scope&&!isMediaDeletionScope(scope)){
   const sourceWhere=scope.kind==='source'?'i.record_id IN (SELECT value FROM json_each(?))':'g.accepted_data_generation<?';
   const args=scope.kind==='source'?[ownerId,scope.contactId,JSON.stringify(sourceDeletionIds(tx,op))]:[ownerId,scope.contactId,op.acceptedGeneration];
   for(const s of tx.all(`SELECT DISTINCT s.id FROM step_input i JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id
@@ -64,9 +66,12 @@ function closure(tx:StorageTransaction,op:DeletionOperation):Closure {
    for(const p of tx.all("SELECT id FROM document_publication WHERE owner_id=? AND scope_kind='contact' AND contact_id=?",[ownerId,scope.contactId]))addPublication(p.id);
    for(const s of tx.all("SELECT s.id FROM processing_step s JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE s.owner_id=? AND t.scope_kind='contact' AND t.contact_id=? AND s.kind IN ('document_scene','document_profile')",[ownerId,scope.contactId]))addStep(s.id);
   }
-  // 08 的版本祖先闭包还可能经合并或恢复传递来源。
-  for(const v of memoryDeletionImpact(tx,op).versions)for(const s of tx.all(`SELECT DISTINCT s.id FROM step_input i JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id WHERE i.owner_id=? AND i.kind='memory' AND i.memory_id=? AND i.memory_version_no=? AND s.kind IN ('document_scene','document_profile') AND (s.state<>'succeeded' OR EXISTS(SELECT 1 FROM execution_input x JOIN execution_event e ON e.owner_id=x.owner_id AND e.id=x.event_id WHERE x.owner_id=i.owner_id AND x.planned_step_id=i.step_id AND x.planned_input_no=i.input_no AND e.kind='document_input'))`,[ownerId,v.memoryId,v.versionNo]))addStep(s.id);
  }
+ // 图片清除只沿精确内容输入及派生版本传播，不使用联系人资料代次。
+ const memoryImpact=memoryDeletionImpact(tx,op);
+ if(isMediaDeletionScope(scope))for(const id of memoryImpact.steps)if(tx.get("SELECT 1 FROM processing_step WHERE owner_id=? AND id=? AND kind IN ('document_scene','document_profile')",[ownerId,id]))addStep(id);
+ // 08 的版本祖先闭包还可能经合并或恢复传递来源。
+ for(const v of memoryImpact.versions)for(const s of tx.all(`SELECT DISTINCT s.id FROM step_input i JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id WHERE i.owner_id=? AND i.kind='memory' AND i.memory_id=? AND i.memory_version_no=? AND s.kind IN ('document_scene','document_profile') AND (s.state<>'succeeded' OR EXISTS(SELECT 1 FROM execution_input x JOIN execution_event e ON e.owner_id=x.owner_id AND e.id=x.event_id WHERE x.owner_id=i.owner_id AND x.planned_step_id=i.step_id AND x.planned_input_no=i.input_no AND e.kind='document_input'))`,[ownerId,v.memoryId,v.versionNo]))addStep(s.id);
  let changed=true;
  while(changed){
   const before=out.steps.size+out.documents.size+out.versions.size+out.publications.size+out.tasks.size;
@@ -97,6 +102,16 @@ function closure(tx:StorageTransaction,op:DeletionOperation):Closure {
   changed=before!==out.steps.size+out.documents.size+out.versions.size+out.publications.size+out.tasks.size;
  }
  return out;
+}
+/** 回复删除读取同一版本闭包；已清除的行仍由本次固定计划保留身份。 */
+export function collectMemoryDocumentDeletionReferences(tx:StorageTransaction,op:DeletionOperation):{versions:{documentId:string;versionNo:bigint}[];publications:string[]}{
+ if(!allowed(op)||!installed(tx))return {versions:[],publications:[]};
+ const affected=closure(tx,op),versions=new Map(affected.versions),publications=new Set(affected.publications);
+ for(const target of planned(tx,op)){
+  if(target.rowKind==='memory_document_version')versions.set(pair(target.key.document_id,target.key.version_no),{documentId:target.key.document_id,versionNo:BigInt(target.key.version_no)});
+  if(target.rowKind==='document_publication')publications.add(target.key.id);
+ }
+ return {versions:[...versions.values()],publications:[...publications]};
 }
 function holderKeys(tx:StorageTransaction,ownerId:string,stepId:string):string[]{
  return tx.all(`SELECT a.id AS attempt_id,c.source_contact_id FROM processing_step selected JOIN processing_step s ON s.owner_id=selected.owner_id AND s.task_id=selected.task_id AND s.kind IN ('document_scene','document_profile') JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id JOIN task_contribution c ON c.owner_id=s.owner_id AND c.task_id=s.task_id WHERE selected.owner_id=? AND selected.id=? ORDER BY a.id,c.source_contact_id`,[ownerId,stepId]).map(r=>`memoryDocuments:${r.attempt_id}_${r.source_contact_id}`);
@@ -136,7 +151,7 @@ function clearGraph(tx:StorageTransaction,op:DeletionOperation):void {
  for(const target of laterSchedules)tx.run('DELETE FROM memory_document_later_schedule WHERE owner_id=? AND scope_key=? AND generation=?',[ownerId,target.key.scope_key,BigInt(target.key.generation)]);
  for(const target of laterCursors)tx.run('DELETE FROM memory_document_later_cursor WHERE owner_id=? AND scope_key=?',[ownerId,target.key.scope_key]);
  // 来源删除撤销的stage任务在删除门关闭后按新版本重排；unknown永远保持锁定。
- if((op.scope.kind==='source'||op.scope.kind==='contact_history')&&tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='memory_document_later_schedule'")){
+ if((isMediaDeletionScope(op.scope)||op.scope.kind==='source'||op.scope.kind==='contact_history')&&tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='memory_document_later_schedule'")){
   const now=Date.now();
   for(const row of tx.all("SELECT * FROM memory_document_later_schedule WHERE owner_id=? AND state='running' AND task_id IN (SELECT value FROM json_each(?))",[ownerId,taskIds])){
    const unknown=!!tx.get("SELECT 1 FROM processing_step s LEFT JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id LEFT JOIN model_call c ON c.owner_id=a.owner_id AND c.step_attempt_id=a.id WHERE s.owner_id=? AND s.task_id=? AND (s.state='unknown' OR a.state='unknown' OR c.state='unknown') LIMIT 1",[ownerId,row.task_id]);
@@ -229,7 +244,7 @@ function clearGraph(tx:StorageTransaction,op:DeletionOperation):void {
 export const memoryDocumentsDeletionDomain:DeletionDomain={id:domain,rowKinds,
  fence(tx,op){
   if(!allowed(op)||!installed(tx))return [];
-  if(identityDeletionAuthority.verify(tx,op).result!=='passed')fail('document_deletion_not_fenced');
+  if(verifyFence(tx,op).result!=='passed')fail('document_deletion_not_fenced');
   const c=closure(tx,op),now=Date.now();
   for(const publicationId of c.publications){
    const p=tx.get('SELECT * FROM document_publication WHERE owner_id=? AND id=?',[op.ownerId,publicationId]);if(!p)continue;
@@ -253,7 +268,7 @@ export const memoryDocumentsDeletionDomain:DeletionDomain={id:domain,rowKinds,
  },collect,
  clearRow(tx,op,t){
   if(!allowed(op)||t.domain!==domain||!Object.hasOwn(rowKinds,t.rowKind)||t.key.owner_id!==op.ownerId||Object.keys(t.key).sort().join()!==[...rowKinds[t.rowKind].keys].sort().join()||t.identity!==identity(t.rowKind,t.key))fail('document_deletion_target_invalid');
-  if(identityDeletionAuthority.verify(tx,op).result!=='passed'||!tx.get('SELECT 1 FROM deletion_target WHERE operation_id=? AND domain=? AND row_kind=? AND expected_identity=? AND target_payload IS NOT NULL',[op.operationId,domain,t.rowKind,JSON.stringify(t.identity)]))fail('document_deletion_not_fenced');
+  if(verifyFence(tx,op).result!=='passed'||!tx.get('SELECT 1 FROM deletion_target WHERE operation_id=? AND domain=? AND row_kind=? AND expected_identity=? AND target_payload IS NOT NULL',[op.operationId,domain,t.rowKind,JSON.stringify(t.identity)]))fail('document_deletion_not_fenced');
   clearGraph(tx,op);
  },
  authorizeFile(){fail('document_deletion_has_no_files');},fileCleared(){fail('document_deletion_has_no_files');},

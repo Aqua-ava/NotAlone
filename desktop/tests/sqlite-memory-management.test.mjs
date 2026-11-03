@@ -182,3 +182,12 @@ test('主题只读桥只接受一个范围请求且不暴露发布写入',async 
  await bridge.readDocuments(input);assert.deepEqual(calls,[['memory:documents-read',input]]);
  await assert.rejects(bridge.readDocuments());await assert.rejects(bridge.readDocuments(input,{}));assert.equal('publish' in bridge,false);assert.equal(calls.length,1);
 });
+
+test('主进程保留图片来源类型、固定版本与模型观察，拒绝伪造图像引文',async t=>{
+ let quote='';
+ const image=()=>({...source(contact),quote,contentKind:'image',contentRef:{file_id:requestKey,sha256:'a'.repeat(64),mime_type:'image/png',media_generation:'0'},description:'日程卡中的每周六练习吉他'});
+ const f=await fixture(t,async()=>({candidates:[item(candidate,[image()])],memories:[]}));
+ const value=await f.controller.read(read),actual=value.view.candidates[0].sources[0];
+ assert.equal(actual.contentKind,'image');assert.equal(actual.contentRef.file_id,requestKey);assert.equal(actual.quote,'');assert.equal(actual.description,'日程卡中的每周六练习吉他');
+ quote='把图片描述伪装成原话';await assert.rejects(f.controller.read(read));
+});

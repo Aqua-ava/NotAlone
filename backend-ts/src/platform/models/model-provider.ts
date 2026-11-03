@@ -1,9 +1,10 @@
 /** 普通调用沿用官方DeepSeekAdapter；来源核验另用同供应商的专用strict Beta传输。 */
 import type { Context } from '@deepseek-ai/cordis';
 import {AsyncLocalStorage} from 'node:async_hooks';
-import {LlmError} from '@deepseek-ai/dsh-llm';
+import {LlmError,type ImageBlock,type TextBlock} from '@deepseek-ai/dsh-llm';
 import {bindDiagnosticProblemBudget} from '../../diagnostics/diagnostic-problem-budget.ts';
-import { DeepSeekAdapter, PUBLIC_BASE_URL, type DeepSeekConnectionOptions, type DeepSeekAdapterOptions } from '@deepseek-ai/dsh-llm-deepseek';
+import { DeepSeekAdapter, DeepSeekFileStore,resolveRequestImageTarget, PUBLIC_BASE_URL, type DeepSeekConnectionOptions, type DeepSeekAdapterOptions } from '@deepseek-ai/dsh-llm-deepseek';
+import {ModelImageAttachments,type ModelImageInput,type ModelImageManifest} from './model-images.ts';
 import {
   prepareBoundMessagesRequest,measureSerializedMessages,measureSerializedStrictChatCompletion,ModelInputBudgetError,
   type MessagesBudgetBinding,type MessagesBudgetProfile,type MessagesBudgetReceipt,
@@ -16,6 +17,7 @@ export interface ModelProviderCall {
   sessionId: string; attempt_id: string; permit_id: string;
   binding: MessagesBudgetBinding; profile: MessagesBudgetProfile;
   requireCurrent(): Promise<void>;
+  onImageInputs?(images:readonly ModelImageManifest[]):Promise<void>;
   /** HTTP发送前强制持久化授权。此时发送仍可能被signal阻止，不能记成已发。 */
   beforeDispatch(value: {attempt_id:string;permit_id:string;budget:MessagesBudgetReceipt;dispatch:'authorized_unconfirmed';
     /** 最终序列化HTTP实体的Unicode字符数；不携带正文。 */
@@ -41,6 +43,7 @@ export interface ModelProviderConfiguration {
 }
 export interface StrictVerificationSendInput {
   system:string;user:string;tool:{name:'SourceVerificationOutput';description:string;parameters:Record<string,unknown>};
+  images?:readonly ImageBlock[];
   signal:AbortSignal;
 }
 function freeze<T>(value:T):T {
@@ -75,6 +78,9 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
   }
   const calls=new Map<string,{call:ModelProviderCall;observation:ModelProviderObservation;prepared:boolean}>();
   const dispatchContext=new AsyncLocalStorage<{observation:ModelProviderObservation}>();
+  let images:ModelImageAttachments|undefined;
+  // 官方store的公开transport接点强制零上传HTTP，触发官方inline fallback；不产生远端文件与重试。
+  const inlineFiles=new DeepSeekFileStore({fetch:async()=>{throw new Error('model_image_files_disabled');}});
   const adapter=new DeepSeekAdapter({
     options:()=>connection,
     resolveAuth:configuration.resolveAuth,
@@ -83,7 +89,8 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
       const current=dispatchContext.getStore();if(current)current.observation.fetch_started=true;
       return configuration.resolveUserId();
     },
-    // 不挂载attachment/files resolver：当前业务只允许文字，禁止文件重试扩大物理次数。
+    resolveAttachments:()=>images,
+    resolveFiles:()=>inlineFiles,
     prepareExtensions:async request=>{
       const current=request.sessionId ? calls.get(request.sessionId) : undefined;
       if(!current||request.purpose!==undefined||current.prepared)throw new Error('model_provider_call_not_authorized');
@@ -93,8 +100,10 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
       request.signal.throwIfAborted();
       let budget:MessagesBudgetReceipt;
       const prepared=prepareBoundMessagesRequest(request.body,current.call.binding);
-      try{budget=measureSerializedMessages(prepared.body,current.call.binding,current.call.profile);}
+      const imageInputs=images?.manifest()??[];
+      try{budget=measureSerializedMessages(prepared.body,current.call.binding,current.call.profile,imageInputs);}
       catch(error){if(error instanceof ModelInputBudgetError)current.observation.budget_rejection={code:error.code,receipt:error.receipt};throw error;}
+      if(imageInputs.length)await current.call.onImageInputs?.(imageInputs);
       const checkDiagnosticDispatch=diagnosticBudget?.reserve();
       current.observation.before_dispatch_started=true;
       await current.call.beforeDispatch({attempt_id:current.call.attempt_id,permit_id:current.call.permit_id,budget,dispatch:'authorized_unconfirmed',
@@ -115,6 +124,10 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
     return registered;
   }
   return {
+    withImages<T>(input:readonly ModelImageInput[],signal:AbortSignal,work:(blocks:(TextBlock|ImageBlock)[])=>Promise<T>):Promise<T>{
+      // 附件是该provider内部的调用适配，不改变整个profile的可选依赖树。
+      return (images??=new ModelImageAttachments(ctx.isolate('attachments'))).withImages(input,signal,work);
+    },
     /** 只反映安装时成功绑定；不表示尚有额度，不暴露账本身份或重读env。 */
     get diagnosticProblemBudgetBound():boolean {return diagnosticBudget!==null;},
     beginCall(call: ModelProviderCall) {
@@ -139,17 +152,26 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
           input.signal.throwIfAborted();
           await registered.call.requireCurrent();input.signal.throwIfAborted();
           if(!strictEndpoint)throw new LlmError('DeepSeek strict endpoint is not configured for this route.','INVALID_REQUEST');
+          const model=connection.models.find(model=>model.id===registered.call.binding.model);
+          if(input.images?.length&&model?.inputModalities?.includes('image')!==true)throw new LlmError('This model has no declared image input.','UNSUPPORTED_CONTENT');
+          const encoded=[];
+          for(const image of input.images??[]){
+            const version=await images!.readImageRequest(image.attachment,resolveRequestImageTarget(model!,image.attachment),input.signal);
+            encoded.push({mimeType:version.mediaType,dataBase64:Buffer.from(version.data).toString('base64')});
+          }
           const request=buildDeepSeekStrictVerificationRequest({
             model:registered.call.binding.model,system:input.system,user:input.user,tool:input.tool,
             maxTokens:registered.call.binding.maxTokens,temperature:registered.call.binding.temperature,
-            reasoningEffort:registered.call.binding.reasoningEffort,endpoint:strictEndpoint,
+            reasoningEffort:registered.call.binding.reasoningEffort,endpoint:strictEndpoint,images:encoded,
           });
           let budget:MessagesBudgetReceipt;
-          try{budget=measureSerializedStrictChatCompletion(request.body,registered.call.binding,registered.call.profile);}
+          const imageInputs=images?.manifest()??[];
+          try{budget=measureSerializedStrictChatCompletion(request.body,registered.call.binding,registered.call.profile,imageInputs);}
           catch(error){
             if(error instanceof ModelInputBudgetError)registered.observation.budget_rejection={code:error.code,receipt:error.receipt};
             throw error;
           }
+          if(imageInputs.length)await registered.call.onImageInputs?.(imageInputs);
           const auth=await configuration.resolveAuth(connection),headers:Record<string,string>={
             'content-type':'application/json','accept':'application/json',
             'x-deepseek-harness-user-id':configuration.resolveUserId(),
@@ -184,6 +206,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
     },
     async dispose() {
       if(calls.size)throw new Error('model_provider_calls_not_settled');
+      images?.assertIdle();
       await dispose();
     },
   };

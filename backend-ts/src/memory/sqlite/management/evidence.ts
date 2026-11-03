@@ -22,7 +22,8 @@ export function projectCitations(tx:StorageTransaction,ownerId:string,parent:Par
  const expected=candidates.flatMap(c=>{try{return archivedExtractionOutput(tx,{ownerId,eventId:String(c.event_id)}).citations;}catch{return [];}});
  const seen=new Set<string>();
  return expected.flatMap(c=>{
-  const original=rows.find(r=>r.source_contact_id===c.contactId&&r.message_id===c.messageId&&r.record_id===c.recordId&&r.accepted_revision===c.interpretationRevision);
+  const original=rows.find(r=>r.source_contact_id===c.contactId&&r.message_id===c.messageId&&r.record_id===c.recordId&&r.accepted_revision===c.interpretationRevision
+   &&(c.contentKind?(r.content_kind===c.contentKind&&r.content_ref_json===JSON.stringify(c.contentRef)):(r.content_kind??'text')==='text'));
   const key=JSON.stringify([c.contactId,c.messageId,c.recordId,String(c.spanStart),String(c.spanEnd)]);
   if(!original||seen.has(key))return [];seen.add(key);
   return [{...original,span_start:c.spanStart,span_end:c.spanEnd,explanation:c.explanation}];

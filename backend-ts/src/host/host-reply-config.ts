@@ -119,7 +119,7 @@ export function resolveHostReplyConfiguration(
     maxTokens: outputTokens,
     defaultContextWindow: contextWindowTokens,
     models: [{id: model, contextWindow: contextWindowTokens,
-      maxTokens: outputTokens, inputModalities: ['text']}],
+      maxTokens: outputTokens, inputModalities: model==='deepseek-flash'?['text','image']:['text']}],
     // 单次流空闲仍为60秒；前台循环另由业务signal约束全部步骤与保存。
     streamIdleTimeoutMs: 60000,
     retryPolicy: {mode: 'normal', maxRetries: 0},

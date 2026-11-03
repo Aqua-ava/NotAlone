@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import type {FixedHistoryFailureReason,FixedMemoryProcessingBridge} from '../shared/fixed-memory-processing';
 
 const reasons:Record<FixedHistoryFailureReason,string>={
-  no_pending_history:'当前联系人没有待处理的历史文字。',
+  no_pending_history:'当前联系人没有待处理的历史消息。',
   busy:'当前联系人已有记忆任务正在处理或等待后续整理，请等待本轮完成。',
   blocked:'当前联系人已有受阻或暂停的记忆任务，请先解决原任务的阻碍。',
   scope_changed:'联系人或处理请求已变化，请重新核对后启动。',
@@ -55,7 +55,7 @@ export function HistoryMemoryProcessingPanel({bridge,contactId,scopeRevision,onS
   };
   return <section className="memory-processing-card memory-history-processing" aria-label="历史聊天记忆处理">
     <h3>历史聊天</h3>
-    <p className="memory-section-note">历史导入完成后会自动分批处理；增量文字独立排队。手动启动同样会跳过已完成内容。</p>
+    <p className="memory-section-note">历史导入完成后会自动分批处理；增量消息独立排队。手动启动同样会跳过已完成内容。</p>
     <button className="button primary" type="button" disabled={!contactId||current?.phase==='starting'} onClick={()=>void start()}>{current?.phase==='starting'?'正在启动…':'处理历史聊天'}</button>
     {!contactId&&<p>请先选择联系人。</p>}
     {current?.phase==='started'&&<p role="status">{current.message}</p>}

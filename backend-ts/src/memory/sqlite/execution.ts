@@ -1,3 +1,4 @@
+import {boundContentInputs} from './content.ts';
 import {candidateAdmission,type CandidateVerificationReference} from './management/admission.ts';
 import {finalizeOwnerContributions} from './owner-contribution.ts';
 import {createHash,randomUUID} from 'node:crypto';
@@ -74,7 +75,7 @@ function prepareStep(tx:StorageTransaction,i:{ownerId:string;runId:string;taskId
   s=tx.get("SELECT * FROM processing_step WHERE owner_id=? AND task_id=? AND state IN ('failed','pending') ORDER BY step_no LIMIT 1",[i.ownerId,i.taskId]);
  }
  if(!s){
-  const rows=tx.all(`SELECT i.* FROM run_input i JOIN processing_item p ON p.owner_id=i.owner_id AND p.id=i.item_id
+  let rows=tx.all(`SELECT i.* FROM run_input i JOIN processing_item p ON p.owner_id=i.owner_id AND p.id=i.item_id
    WHERE i.owner_id=? AND i.run_id=? AND i.source_contact_id=? AND i.role='target' AND p.extraction_state<>'succeeded'
    AND NOT EXISTS(SELECT 1 FROM step_input si JOIN processing_step ps ON ps.owner_id=si.owner_id AND ps.id=si.step_id WHERE si.owner_id=i.owner_id AND si.run_id=i.run_id AND si.run_input_no=i.input_no AND ps.task_id=? AND ps.state<>'revoked') ORDER BY i.input_no LIMIT 20`,[i.ownerId,i.runId,t.contact_id,i.taskId]);
   if(!rows.length){
@@ -84,7 +85,8 @@ function prepareStep(tx:StorageTransaction,i:{ownerId:string;runId:string;taskId
     AND NOT EXISTS(SELECT 1 FROM step_input si JOIN processing_step ps ON ps.owner_id=si.owner_id AND ps.id=si.step_id WHERE si.owner_id=i.owner_id AND si.run_id=i.run_id AND si.run_input_no=i.input_no AND ps.task_id=? AND ps.state='succeeded')`,[i.ownerId,i.runId,t.contact_id,i.taskId]);
    tx.run('UPDATE processing_task SET state=?,error_code=? WHERE owner_id=? AND id=?',[elsewhere?'incomplete':'succeeded',elsewhere?'targets_completed_elsewhere':null,i.ownerId,i.taskId]);return null;
   }
-  const context=tx.all("SELECT * FROM run_input WHERE owner_id=? AND run_id=? AND source_contact_id=? AND role='context' ORDER BY input_no LIMIT 8",[i.ownerId,i.runId,t.contact_id]);
+  let context=tx.all("SELECT * FROM run_input WHERE owner_id=? AND run_id=? AND source_contact_id=? AND role='context' ORDER BY input_no LIMIT 8",[i.ownerId,i.runId,t.contact_id]);
+  ({targets:rows,context}=boundContentInputs(tx,i.ownerId,rows,context));
   const id=randomUUID();const n=tx.get('SELECT coalesce(max(step_no),0)+1 AS n FROM processing_step WHERE owner_id=? AND task_id=?',[i.ownerId,i.taskId])!.n;
   tx.run("INSERT INTO processing_step(owner_id,id,task_id,step_no,kind,state,input_state,successful_attempt_id) VALUES(?,?,?,?,'extraction_verification','pending','frozen',NULL)",[i.ownerId,id,i.taskId,n]);
   for(const [index,row] of [...context,...rows].entries())tx.run('INSERT INTO step_input(owner_id,step_id,input_no,run_id,run_input_no) VALUES(?,?,?,?,?)',[i.ownerId,id,index+1,i.runId,row.input_no]);

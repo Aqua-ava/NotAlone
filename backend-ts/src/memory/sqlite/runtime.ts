@@ -1,3 +1,5 @@
+import {MemoryContentRegistry,memoryContentPlugin,type MemoryContentResources} from '../content/registry.ts';
+import {builtinMemoryContentPlugins} from '../content/builtins.ts';
 import {randomUUID} from 'node:crypto';
 import {SqliteMemoryAdjudication} from './management/adjudication-service.ts';
 import {createSqliteAdjudicationModelPort} from './management/model-port.ts';
@@ -29,7 +31,9 @@ export interface SqliteMemorySharedModel {
  resolveUserId:()=>string;
 }
 /** environment须由宿主安全加载env文件；configuration可复用该宿主已冻结的同一解析结果。 */
-export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:SqliteStorage;ownerId:string;userData:string;businessHome:string;infoPath:string;envFilePath:string;environment:Readonly<NodeJS.ProcessEnv>;sharedModel?:SqliteMemorySharedModel;holders:ActiveHolders;authorize(req:IncomingMessage):boolean;afterRunSettled?:(runId:string)=>Promise<unknown>;adjudicationEnabled?:boolean;ensureSourceReady?:(contactId:string)=>Promise<void>}){
+export async function createSqliteMemoryRuntime(options:{ctx:Context;contentResources?:MemoryContentResources;contentRegistry?:MemoryContentRegistry;storage:SqliteStorage;ownerId:string;userData:string;businessHome:string;infoPath:string;envFilePath:string;environment:Readonly<NodeJS.ProcessEnv>;sharedModel?:SqliteMemorySharedModel;holders:ActiveHolders;authorize(req:IncomingMessage):boolean;afterRunSettled?:(runId:string)=>Promise<unknown>;adjudicationEnabled?:boolean;ensureSourceReady?:(contactId:string)=>Promise<void>}){
+ const contentRegistry=options.contentRegistry??new MemoryContentRegistry();
+ if(!options.contentRegistry)await options.ctx.plugin(memoryContentPlugin,{registry:contentRegistry,plugins:builtinMemoryContentPlugins});
  const configuration=options.sharedModel?.configuration??resolveHostReplyConfiguration(options.environment);
  let service:SqliteMemoryExtraction;let adjudication:SqliteMemoryAdjudication|undefined;let documents:SqliteMemoryDocuments|undefined;
  let l1Scheduler:SqliteMemoryL1Scheduler|undefined;let laterWorker:SqliteMemoryLaterWorker|undefined;let schedulingStarted=false;let incrementalAdmissionDirty=true;
@@ -66,7 +70,7 @@ export async function createSqliteMemoryRuntime(options:{ctx:Context;storage:Sql
     if(!schedulingStarted)break;
     try{await service.startContact(contactId,randomUUID());}catch{/* 单人资格变化不阻断其他已到期联系人。 */}
    }
-  });await service.initialize();
+  },{registry:contentRegistry,resources:options.contentResources});await service.initialize();
   if(adjudication&&documents){
    l1Scheduler=new SqliteMemoryL1Scheduler({
     recoverBacklog:()=>service.recoverBacklog({wait:false}),

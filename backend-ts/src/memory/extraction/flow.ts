@@ -9,9 +9,11 @@ import type {ExtractionWindow,ExtractedFact,SourceVerificationResult} from './pr
 import {boundedExtractionInput,boundedExtractionPrompt,boundedExtractionSchema,bindBoundedFact,compileGroundedLabels,normalizeBoundedWindow,prepareBoundedForAdoption,sourceUnits} from './bounded.ts';
 import {verificationFailureDiagnostic} from './verification/diagnostics.ts';
 import {prepareSourceVerification,type PreparedVerificationPolicy,type VerificationAdmission} from './verification/complete-claim.ts';
+import {prepareMultimodalVerification} from './multimodal.ts';
 
 export interface ExtractionInvocation {
  purpose:'extraction'|'verification';system:string;user:string;tool:{name:string;description:string;parameters:Record<string,unknown>};
+ images?:readonly {id:string;mimeType:'image/png'|'image/jpeg'|'image/webp'|'image/gif';dataBase64:string}[];
  validateOutput(blocks:readonly unknown[]):void|Promise<void>;
 }
 export interface ExtractionFlowOutcome {
@@ -22,6 +24,7 @@ export interface ExtractionFlowOutcome {
 }
 export interface ExtractionFlowOptions {
  window:ExtractionWindow;signal:AbortSignal;mode?:'legacy'|'bounded-runtime-v1';max_retries?:number;retry_delay_ms?:number;
+ images?:ExtractionInvocation['images'];
  verificationPolicy?:PreparedVerificationPolicy;
  requireCurrent():Promise<void>;
  /** 外部模型端口；每次调用必须独立许可和记账，同批身份由调用者绑定。 */
@@ -47,7 +50,7 @@ function directExtractionInput(window:ExtractionWindow):string {
  return JSON.stringify({
   target_message_ids:window.target_message_ids??window.messages.map(message=>message.message_id),
   messages:window.messages.map(message=>({message_id:message.message_id,sender:message.sender,
-   occurred_at:message.occurred_at,text:message.text,
+   occurred_at:message.occurred_at,...(message.image?{content_kind:'image',image_id:message.image.id,file_id:message.image.file_id,sha256:message.image.sha256,mime_type:message.image.mime_type,media_generation:message.image.media_generation}:{text:message.text}),
    source_calendar_at:sourceCalendarPayload(message),text_length:Array.from(message.text).length})),
  });
 }
@@ -95,6 +98,11 @@ function rawCandidates(payload:unknown){
 }
 
 export async function runExtractionFlow(options:ExtractionFlowOptions):Promise<ExtractionFlowOutcome>{
+ if(options.window.messages.some(message=>message.image)){
+  prepareMultimodalVerification({window:options.window,facts:[],images:options.images??[],requireCurrent:options.requireCurrent});
+  return runLegacyExtractionFlow({...options,mode:'legacy'});
+ }
+ if(options.images?.length)throw new ExtractionProtocolError('图片必须属于本次固定消息窗口。');
  if(options.mode==='bounded-runtime-v1')return runBoundedExtractionFlow(options);
  return runLegacyExtractionFlow(options);
 }
@@ -109,10 +117,11 @@ async function runLegacyExtractionFlow(options:ExtractionFlowOptions):Promise<Ex
   let error:unknown,raw:readonly unknown[]|undefined;
   try{
    options.signal.throwIfAborted();await options.requireCurrent();
-   raw=(await options.invoke(invocation('extraction',DIRECT_EXTRACTION_PROMPT,DIRECT_EXTRACTION_SCHEMA,user,blocks=>{
+   const request=invocation('extraction',DIRECT_EXTRACTION_PROMPT+(options.images?.length?'\n附图与消息中的image_id逐一对应。结合实际图片及相邻文字理解，不把发送者自动当作图片中的人或物品所有者；没有来源支持的身份、偏好、疾病和动机不得提取。图片观察与文字共同作为source_message_ids，不将占位文案或模型观察描述冒充聊天原文。图片不能提供文字字符位置，不能给它编造event或conditions的字符证据。':''),DIRECT_EXTRACTION_SCHEMA,user,blocks=>{
     const decoded=readExtractionToolArguments(blocks,DIRECT_EXTRACTION_SCHEMA.title,{repair:true,allow_text_json:true,field_names:[...directFields,'scenes','scene_name','memories']});
     if(!Array.isArray(decoded.value.scenes))throw new ExtractionArgumentsError();
-   }),options.signal)).blocks;
+   });
+   raw=(await options.invoke({...request,...(options.images?{images:options.images}:{})},options.signal)).blocks;
    const decoded=readExtractionToolArguments(raw,DIRECT_EXTRACTION_SCHEMA.title,{repair:true,allow_text_json:true,field_names:[...directFields,'scenes','scene_name','memories']});
    if(!Array.isArray(decoded.value.scenes))throw new ExtractionArgumentsError();candidates=rawCandidates(decoded.value);
    await options.record({stage:'extraction_return',payload:{blocks:raw,repaired:decoded.repaired,
@@ -146,7 +155,8 @@ async function runLegacyExtractionFlow(options:ExtractionFlowOptions):Promise<Ex
  }
  let admissions:VerificationAdmission[];
  try{
-  const preparedVerification=prepareSourceVerification({window:options.window,facts,policy:options.verificationPolicy,
+  const preparedVerification=options.images?.length?prepareMultimodalVerification({window:options.window,facts,images:options.images,
+   ruleVersion:options.verificationPolicy?.rule_version,requireCurrent:options.requireCurrent,record:options.record}):prepareSourceVerification({window:options.window,facts,policy:options.verificationPolicy,
    requireCurrent:options.requireCurrent,record:options.record});
   const request=preparedVerification.request;
   if(!request)return {accepted:facts,candidate_trace_ids:facts.map(fact=>traceIds.get(fact)!),rejected_count:parsedRejections,

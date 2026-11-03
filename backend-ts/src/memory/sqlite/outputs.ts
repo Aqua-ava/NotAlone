@@ -3,7 +3,8 @@ import {candidateAdmission,quoteSpan} from './management/admission.ts';
 import type {StorageRow,StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {VerifiedExtractionOutputReference} from './contracts.ts';
 import {assertInputs,assertTaskContributions,fail,textId} from './qualification.ts';
-interface OutputCitation {contactId:string;recordId:string;messageId:string;interpretationRevision:bigint;spanStart:bigint;spanEnd:bigint;explanation:string|null}
+import {requireImageCitation,type ImageCitationReference} from './content-citation.ts';
+interface OutputCitation {contactId:string;recordId:string;messageId:string;interpretationRevision:bigint;spanStart:bigint|null;spanEnd:bigint|null;explanation:string|null;contentKind?:'image';contentRef?:ImageCitationReference}
 /** 08须在创建正式候选的同一短事务调用；阶段产物不授予自动采纳资格。 */
 function extractionOutput(tx:StorageTransaction,ref:VerifiedExtractionOutputReference,published=false){
  const ownerId=textId(ref.ownerId),eventId=textId(ref.eventId);
@@ -26,8 +27,12 @@ function extractionOutput(tx:StorageTransaction,ref:VerifiedExtractionOutputRefe
  if(sources.length!==expected.size||sources.some(s=>!expected.has(JSON.stringify([s.source_contact_id,s.record_id]))))fail('memory_extraction_output_not_eligible');
  let semanticVerification=candidateAdmission(tx,ownerId,e,payload.fact,inputs,published);
  const frozen:StorageRow[]=inputs.map(i=>({...i,text_body:tx.get('SELECT text_body FROM message WHERE owner_id=? AND contact_id=? AND id=?',[ownerId,i.source_contact_id,i.message_id])?.text_body??null}));
- const verifiedCitations:OutputCitation[]=semanticVerification.evidence.flatMap(reference=>frozen.filter(i=>i.message_id===reference.messageId).flatMap(i=>{
-  const span=typeof i.text_body==='string'?quoteSpan(i.text_body,reference.quote):null;
+ const verifiedCitations:OutputCitation[]=semanticVerification.evidence.flatMap(reference=>frozen.filter(i=>i.message_id===reference.messageId).flatMap<OutputCitation>(i=>{
+  if(reference.contentKind==='image'){
+   const contentRef=requireImageCitation(tx,ownerId,String(i.source_contact_id),String(i.message_id),reference.contentRef);
+   return [{contactId:String(i.source_contact_id),recordId:String(i.record_id),messageId:String(i.message_id),interpretationRevision:i.accepted_interpretation_revision as bigint,spanStart:null,spanEnd:null,explanation:reference.description??null,contentKind:'image' as const,contentRef}];
+  }
+  const span=typeof i.text_body==='string'&&typeof reference.quote==='string'?quoteSpan(i.text_body,reference.quote):null;
   return span?[{contactId:String(i.source_contact_id),recordId:String(i.record_id),messageId:String(i.message_id),interpretationRevision:i.accepted_interpretation_revision as bigint,spanStart:span.start,spanEnd:span.end,explanation:null}]:[];
  }));
  if(semanticVerification.state==='verified'&&semanticVerification.evidence.some(reference=>!verifiedCitations.some(c=>c.messageId===reference.messageId)))semanticVerification={state:'pending',eventId:null,mode:null,evidence:[]};
