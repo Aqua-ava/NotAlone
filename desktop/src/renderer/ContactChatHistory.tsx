@@ -4,9 +4,21 @@ import type { ContactHistoryState } from '../shared/contact-history-bridge';
 import type { MessageQuoteSnapshot } from '../shared/message-quote';
 import { useRevisionedSession } from './use-revisioned-session';
 import { HistoryImageBubble } from './HistoryImageBubble';
+import { ContactChatToolbar } from './ContactChatToolbar';
+import { useChatHistoryScroll } from './use-chat-history-scroll';
 
 const initialHistory: ContactHistoryState = { revision: -1, contactId: null, scopeRevision: 0,
   messages: { phase: 'idle', items: [], nextCursor: null }, error: null };
+
+function messageTime(value: string | null): Date | null {
+  const date = value ? new Date(value) : null;
+  return date && Number.isFinite(date.getTime()) ? date : null;
+}
+
+function startsTimeGroup(current: Date | null, previous: Date | null): boolean {
+  if (!current || !previous) return current !== previous;
+  return current.toDateString() !== previous.toDateString() || current.getTime() - previous.getTime() >= 5 * 60_000;
+}
 
 function quoteAuthorLabel(quote: MessageQuoteSnapshot, contactName: string): string {
   if (quote.senderRole === 'owner') return '引用·我';
@@ -54,8 +66,13 @@ export function ContactChatHistory({ session, settings, contactActions }: { sess
   const sameScope = Boolean(selected) && state.contactId === contactId && state.scopeRevision === scopeRevision;
   const messages = sameScope ? state.messages : initialHistory.messages;
   const loading = messages.phase === 'loading';
+  const scope = `${contactId}:${scopeRevision}`;
+  const scroll = useChatHistoryScroll(scope, state.revision, messages.phase, messages.items.length > 0);
+  // 后台继续倒序分页，展示层按原有稳定顺序翻转，不重新猜测同时间消息的先后。
+  const timeline = [...messages.items].reverse();
   async function load(older = false) {
     if (!contactId || !sameScope) return;
+    scroll.prepareLoad(older);
     setError('');
     try { await bridge.load({ contactId, scopeRevision, older }); }
     catch {
@@ -70,22 +87,24 @@ export function ContactChatHistory({ session, settings, contactActions }: { sess
   const unknownOrder = messages.items.some(message => message.ordering === 'unknown');
   return <section className="contact-chat" aria-label="联系人聊天记录" onKeyDown={(event) => {
     if (event.key === 'Escape' && settingsOpen) {
-      setSettingsScope(null); settingsButton.current?.focus(); event.stopPropagation();
+      setSettingsScope(null);
+      const menu = settingsButton.current?.closest('details');
+      if (menu) menu.open = true;
+      settingsButton.current?.focus(); event.stopPropagation();
     }
   }}>
-    <header className="contact-chat-header"><div><h3>聊天记录</h3><p>{selected?.displayName ?? '请在顶部选择联系人'}</p></div>
-      <div className="contact-chat-actions">
+    <header className="contact-chat-header"><div><h3>{selected?.displayName ?? '聊天记录'}</h3>
+      {unknownOrder && <details className="contact-chat-order"><summary>部分顺序未核验</summary>
+        <p>按消息时间展示；同一时间或时间未知的消息先后未核验。</p></details>}</div>
+      <ContactChatToolbar key={scope}>
         <button className="button" disabled={!sameScope || loading} onClick={() => void load()}>刷新记录</button>
-        {selected && contactActions}
         {selected && settings && <button ref={settingsButton} className="button contact-chat-settings-toggle" type="button"
           aria-label="资料管理" title="资料管理" aria-expanded={settingsOpen} aria-controls={settingsId}
           onClick={() => setSettingsScope(settingsOpen ? null : { contactId: selected.contactId, scopeRevision })}>
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="m9 3-.6 3a7 7 0 0 0-1.5.9L4 6l-3 5 2.3 2a7 7 0 0 0 0 1.8L1 17l3 5 2.9-.9a7 7 0 0 0 1.5.9l.6 3h6l.6-3a7 7 0 0 0 1.5-.9l2.9.9 3-5-2.3-2.2a7 7 0 0 0 0-1.8L23 11l-3-5-2.9.9a7 7 0 0 0-1.5-.9L15 3Z" transform="translate(2 0) scale(.83)" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
+          资料管理
         </button>}
-      </div>
+        {selected && contactActions}
+      </ContactChatToolbar>
     </header>
     {/* 收起时保留操作状态，避免丢失结果尚未确认的重新同步请求。 */}
     {selected && settings && <section key={selected.contactId} id={settingsId} className="contact-management contact-chat-settings" aria-label="当前联系人设置" hidden={!settingsOpen}>
@@ -93,20 +112,27 @@ export function ContactChatHistory({ session, settings, contactActions }: { sess
       {settings}
     </section>}
     {!selected ? <div className="contact-chat-empty"><p>在顶部选择联系人后，查看你们已保存的聊天记录。</p></div>
-      : <div className="contact-chat-body" aria-busy={loading}>
-        {messages.items.length > 0 && <p className="contact-chat-note">{unknownOrder
-          ? '按消息时间展示；同一时间或时间未知的消息先后未核验。' : '最近消息在前。'}</p>}
+      : <div className="contact-chat-viewport">
+        <div ref={scroll.body} className="contact-chat-body" aria-busy={loading} onScroll={scroll.onScroll}>
+        <div ref={scroll.content}>
+        {messages.nextCursor && <button className="button contact-chat-more" disabled={loading} onClick={() => void load(true)}>加载更早记录</button>}
         {(!sameScope || loading) && <p className="contact-chat-note" role="status">正在读取聊天记录…</p>}
         {sameScope && messages.phase === 'ready' && messages.items.length === 0 && <div className="contact-chat-empty"><p>还没有已保存的聊天记录</p><small>同步或导入这位联系人的资料后，会显示在这里。</small></div>}
         {sameScope && (messages.phase === 'failed' || state.error) && <p role="alert" className="contact-chat-note">{state.error || '聊天记录暂时无法读取，请刷新重试。'}</p>}
         <ol className="contact-chat-messages" aria-label="已保存的聊天消息">
-          {messages.items.map(message => {
+          {timeline.map((message, index) => {
+            const time = messageTime(message.occurredAt);
+            const showTime = index === 0 || startsTimeGroup(time, messageTime(timeline[index - 1].occurredAt));
+            const sender = message.speaker === 'user' ? '我' : message.speaker === 'system' ? '系统' : selected.displayName;
             const quoted = message.quoted ?? (message.messageType === 'quote'
               ? { text: '[引用内容不可用]', targetMessageId: null, senderRole: 'unknown' as const, state: 'unavailable' as const }
               : null);
-            return <li key={message.messageId} className="contact-chat-message" data-speaker={message.speaker}>
-              <div className="contact-chat-meta"><span>{message.speaker === 'user' ? '我' : message.speaker === 'system' ? '系统' : selected.displayName}</span>
-                {message.occurredAt ? <time dateTime={message.occurredAt}>{new Date(message.occurredAt).toLocaleString('zh-CN')}</time> : <span>时间未知</span>}</div>
+            return <li key={message.messageId} className="contact-chat-message" data-speaker={message.speaker} data-message-id={message.messageId} aria-label={`${sender}的消息`}>
+              {showTime && <div className="contact-chat-time">{time
+                ? <time dateTime={message.occurredAt!}>{time.toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</time>
+                : <span>时间未知</span>}</div>}
+              <div className="contact-chat-message-row">
+              {message.speaker !== 'system' && <span className="contact-chat-avatar" aria-hidden="true" title={sender}>{Array.from(sender)[0]}</span>}
               <div className="contact-chat-bubble">
                 {quoted && <blockquote className="contact-chat-quote" aria-label="引用内容"
                   data-quote-state={quoted.state ?? 'legacy'}>
@@ -123,10 +149,18 @@ export function ContactChatHistory({ session, settings, contactActions }: { sess
                   imageMedia={message.imageMedia} selection={{ contactId: contactId!, messageId: message.messageId, scopeRevision }} />
                   : (message.text !== null || !quoted) && <p>{message.text ?? message.mediaPlaceholder ?? '无文字内容'}</p>}
               </div>
+              <details className="contact-chat-message-details"><summary aria-label="消息详情" title="消息详情">⋯</summary>
+                <div className="contact-chat-meta"><span>{sender}</span>
+                  {time ? <time dateTime={message.occurredAt!}>{time.toLocaleString('zh-CN')}</time> : <span>时间未知</span>}
+                  {message.ordering === 'unknown' && <span>同时间或时间未知的消息先后未核验</span>}</div>
+              </details>
+              </div>
             </li>;
           })}
         </ol>
-        {messages.nextCursor && <button className="button contact-chat-more" disabled={loading} onClick={() => void load(true)}>加载更早记录</button>}
+        </div>
+      </div>
+        {scroll.away && <button className="button contact-chat-latest" onClick={scroll.scrollToLatest}>回到最新</button>}
       </div>}
     {error && <p className="contact-chat-note" role="alert">{error}<button className="button" onClick={() => void retry()}>重新读取状态</button></p>}
   </section>;

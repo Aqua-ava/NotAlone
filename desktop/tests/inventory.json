@@ -159,6 +159,7 @@
   "tests/assistant-session-workspace.test.mjs",
   "tests/foreground-recovery-view.test.mjs",
   "tests/contacts-history-view.test.mjs",
+  "tests/contact-chat-timeline-view.test.mjs",
   "tests/contact-history-quote-view.test.mjs",
   "tests/fixed-memory-processing-view.test.mjs",
   "tests/memory-page-fixed-processing.test.mjs",

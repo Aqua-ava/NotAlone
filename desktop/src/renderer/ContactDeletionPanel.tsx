@@ -29,10 +29,11 @@ const phaseLabel: Record<ContactDeletionItem['phase'], string> = {
 };
 
 export function ContactDeletionMenu({
-  bridge, state, selected, contacts, scopeRevision,
+  bridge, state, selected, contacts, scopeRevision, inline = false,
 }: {
   bridge: ContactDeletionBridge; state: ContactDeletionState; selected: ContactSummary; contacts: ContactSummary[];
   scopeRevision: number;
+  inline?: boolean;
 }) {
   const [menu, setMenu] = useState<{ contactId: string; scopeRevision: number; connectionRevision: number } | null>(null);
   const [confirmation, setConfirmation] = useState<{ contactId: string; displayName: string; scopeRevision: number; connectionRevision: number } | null>(null);
@@ -61,7 +62,7 @@ export function ContactDeletionMenu({
     return () => { if (element.open) element.close(); trigger.current?.focus(); };
   }, [validConfirmation]);
   function askToDelete() {
-    if (!validMenu || state.phase !== 'ready' || state.busyId) return;
+    if ((!inline && !validMenu) || state.phase !== 'ready' || state.busyId) return;
     setMenu(null);
     setConfirmation({ contactId: selected.contactId, displayName: selected.displayName, scopeRevision, connectionRevision: state.scopeRevision });
   }
@@ -78,9 +79,11 @@ export function ContactDeletionMenu({
     catch { await bridge.refresh().catch(() => {}); }
   }
   return <div className="contact-deletion-menu">
-    <button ref={trigger} className="button contact-deletion-trigger" type="button" aria-label="联系人更多操作" title="联系人更多操作"
+    {inline ? <button ref={trigger} className="button contact-deletion-inline" type="button"
+      disabled={state.phase !== 'ready' || Boolean(state.busyId)} onClick={askToDelete}>删除联系人</button>
+    : <button ref={trigger} className="button contact-deletion-trigger" type="button" aria-label="联系人更多操作" title="联系人更多操作"
       aria-haspopup="menu" aria-expanded={Boolean(validMenu)} disabled={state.phase !== 'ready' || Boolean(state.busyId)}
-      onClick={() => setMenu(validMenu ? null : { contactId: selected.contactId, scopeRevision, connectionRevision: state.scopeRevision })}>⋯</button>
+      onClick={() => setMenu(validMenu ? null : { contactId: selected.contactId, scopeRevision, connectionRevision: state.scopeRevision })}>⋯</button>}
     {validMenu && <div className="contact-deletion-popover" role="menu" aria-label="联系人更多操作菜单"
       onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setMenu(null); trigger.current?.focus(); } }}>
       <button ref={menuItem} className="contact-deletion-menuitem" type="button" role="menuitem" onClick={askToDelete}>删除联系人</button>

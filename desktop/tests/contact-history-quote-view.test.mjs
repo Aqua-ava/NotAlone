@@ -67,6 +67,7 @@ test('联系人聊天把引用作者与回复正文分开显示，并在切换�
   const chat = page.getByRole('region', { name: '联系人聊天记录' });
   const reply = chat.locator('.contact-chat-message').filter({ has: page.getByText('回复甲正文', { exact: true }) });
   const quote = reply.getByLabel('引用内容');
+  await reply.getByLabel('消息详情', { exact: true }).click();
   await expect(reply.locator('.contact-chat-meta')).toContainText('我');
   await expect(quote).toContainText('找不到原消息但保留的引用快照');
   await expect(quote).toContainText('引用类型：图片');

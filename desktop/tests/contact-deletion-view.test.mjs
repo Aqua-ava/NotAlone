@@ -3,6 +3,12 @@ import { test } from 'node:test';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
 
+async function openOptions(page) {
+  if (!await page.locator('.contact-chat-options').evaluate(element => element.open)) {
+    await page.getByLabel('聊天选项', { exact: true }).click();
+  }
+}
+
 async function mount(t, options = {}) {
   const browser = await chromium.launch({ headless: true, channel: 'chrome' });
   t.after(() => browser.close());
@@ -48,8 +54,8 @@ test('删除菜单须经二次确认；同名联系人显示内部标识且仅�
   const page = await mount(t);
   await expect(page.getByRole('region', { name: '联系人删除任务' })).toHaveCount(0);
   const details = page.getByRole('region', { name: '联系人聊天记录' });
-  await page.getByRole('button', { name: '联系人更多操作', exact: true }).click();
-  await page.getByRole('menuitem', { name: '删除联系人', exact: true }).click();
+  await openOptions(page);
+  await page.getByRole('button', { name: '删除联系人', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '确认删除联系人', exact: true });
   await expect(dialog.locator('h3')).toHaveText('删除「王小明」？');
   await expect(dialog.locator('p').first()).toHaveText('将停止同步并删除此人在 NotAlone 的全部资料。无法撤销，微信好友/原聊天不变。');
@@ -59,23 +65,23 @@ test('删除菜单须经二次确认；同名联系人显示内部标识且仅�
   assert.deepEqual(await page.evaluate(() => window.calls), []);
   await dialog.getByRole('button', { name: '取消', exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  await page.getByRole('button', { name: '联系人更多操作', exact: true }).click();
-  await page.getByRole('menuitem', { name: '删除联系人', exact: true }).click();
+  await openOptions(page);
+  await page.getByRole('button', { name: '删除联系人', exact: true }).click();
   await page.getByRole('dialog', { name: '确认删除联系人', exact: true }).getByRole('button', { name: '删除联系人', exact: true }).click();
   assert.deepEqual(await page.evaluate(() => window.calls), [{ contactId: 'contact-001', scopeRevision: 7, confirmed: true }]);
 });
 
 test('切换联系人会关闭旧确认框，之后的确认只针对当前选择', async t => {
   const page = await mount(t);
-  await page.getByRole('button', { name: '联系人更多操作', exact: true }).click();
-  await page.getByRole('menuitem', { name: '删除联系人', exact: true }).click();
+  await openOptions(page);
+  await page.getByRole('button', { name: '删除联系人', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '确认删除联系人', exact: true });
   await expect(dialog).toBeVisible();
   await page.evaluate(() => window.selectContact('contact-002'));
   await expect(dialog).toHaveCount(0);
   assert.deepEqual(await page.evaluate(() => window.calls), []);
-  await page.getByRole('button', { name: '联系人更多操作', exact: true }).click();
-  await page.getByRole('menuitem', { name: '删除联系人', exact: true }).click();
+  await openOptions(page);
+  await page.getByRole('button', { name: '删除联系人', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '确认删除联系人', exact: true })).toContainText('联系人标识：contact-002');
   await page.getByRole('dialog', { name: '确认删除联系人', exact: true }).getByRole('button', { name: '删除联系人', exact: true }).click();
   assert.deepEqual(await page.evaluate(() => window.calls), [{ contactId: 'contact-002', scopeRevision: 8, confirmed: true }]);
@@ -83,8 +89,8 @@ test('切换联系人会关闭旧确认框，之后的确认只针对当前选�
 
 test('删除服务重载换代会关闭尚未确认的对话框', async t => {
   const page = await mount(t);
-  await page.getByRole('button', { name: '联系人更多操作', exact: true }).click();
-  await page.getByRole('menuitem', { name: '删除联系人', exact: true }).click();
+  await openOptions(page);
+  await page.getByRole('button', { name: '删除联系人', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '确认删除联系人', exact: true });
   await expect(dialog).toBeVisible();
   await page.evaluate(() => window.publishDeletion({ scopeRevision: 8 }));
@@ -94,16 +100,14 @@ test('删除服务重载换代会关闭尚未确认的对话框', async t => {
 
 test('菜单和原生确认框支持键盘关闭、焦点圈定与返回', async t => {
   const page = await mount(t);
-  const trigger = page.getByRole('button', { name: '联系人更多操作', exact: true });
+  const trigger = page.getByLabel('聊天选项', { exact: true });
   await trigger.click();
-  const menuItem = page.getByRole('menuitem', { name: '删除联系人', exact: true });
-  await expect(menuItem).toBeFocused();
+  await expect(page.getByRole('button', { name: '删除联系人', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('menu', { name: '联系人更多操作菜单' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '删除联系人', exact: true })).toBeHidden();
   await expect(trigger).toBeFocused();
-
   await trigger.click();
-  await page.getByRole('menuitem', { name: '删除联系人', exact: true }).click();
+  await page.getByRole('button', { name: '删除联系人', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '确认删除联系人', exact: true });
   const cancel = dialog.getByRole('button', { name: '取消', exact: true });
   const confirm = dialog.getByRole('button', { name: '删除联系人', exact: true });
@@ -114,7 +118,7 @@ test('菜单和原生确认框支持键盘关闭、焦点圈定与返回', async
   await expect(cancel).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
-  await expect(trigger).toBeFocused();
+  await expect(page.getByRole('button', { name: '删除联系人', exact: true })).toBeFocused();
   assert.deepEqual(await page.evaluate(() => window.calls), []);
 });
 
@@ -123,7 +127,8 @@ test('删除状态离线或加载时禁用联系人更多操作', async t => {
     const page = await mount(t, { deletionState: {
       revision: 1, scopeRevision: 7, phase, busyId: null, error: null, operations: [],
     } });
-    await expect(page.getByRole('button', { name: '联系人更多操作', exact: true })).toBeDisabled();
+    await openOptions(page);
+    await expect(page.getByRole('button', { name: '删除联系人', exact: true })).toBeDisabled();
     await page.close();
   }
 });
@@ -154,7 +159,8 @@ test('受阻任务只按删除任务标识重试，busyId期间禁止重复操�
   await page.evaluate(() => window.calls.length = 0);
   await page.evaluate(() => window.publishDeletion({ busyId: 'delete-001' }));
   await expect(retry).toBeDisabled();
-  await expect(page.getByRole('button', { name: '联系人更多操作', exact: true })).toBeDisabled();
+  await openOptions(page);
+  await expect(page.getByRole('button', { name: '删除联系人', exact: true })).toBeDisabled();
   assert.deepEqual(await page.evaluate(() => window.calls), []);
 });
 
@@ -181,8 +187,8 @@ test('删除结果未知时明确保留可重试入口', async t => {
 
 test('窄屏下删除确认与操作按钮保持可见且页面不横向溢出', async t => {
   const page = await mount(t, { viewport: { width: 360, height: 740 } });
-  await page.getByRole('button', { name: '联系人更多操作', exact: true }).click();
-  await page.getByRole('menuitem', { name: '删除联系人', exact: true }).click();
+  await openOptions(page);
+  await page.getByRole('button', { name: '删除联系人', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '确认删除联系人', exact: true });
   const bounds = await dialog.boundingBox();
   assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 360);

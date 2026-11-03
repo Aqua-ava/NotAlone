@@ -77,7 +77,7 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
         </div>
       </li>)}
     </ul><ContactChatHistory session={session} contactActions={selected && deletionBridge && <ContactDeletionMenu
-      bridge={deletionBridge} state={deletion.state} selected={selected} contacts={state.contacts} scopeRevision={state.scopeRevision} />}
+      bridge={deletionBridge} state={deletion.state} selected={selected} contacts={state.contacts} scopeRevision={state.scopeRevision} inline />}
       settings={selected && <>
       <ContactHistoryClear session={session} />
       <div className="contact-management-shortcuts">

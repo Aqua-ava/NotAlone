@@ -95,16 +95,17 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','original'));
   await expect(image).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.mediaCalls.length)).toBe(2);
+  await chat.locator('.contact-chat-order > summary').click();
   await expect(chat.getByText('按消息时间展示；同一时间或时间未知的消息先后未核验。')).toBeVisible();
   await expect(page.locator('.contact-history-status')).toHaveCount(0);
+  const options = chat.getByLabel('聊天选项', { exact: true });
+  await options.click();
   const settingsButton = chat.getByRole('button', { name: '资料管理', exact: true });
   const settings = chat.getByRole('region', { name: '当前联系人设置', includeHidden: true });
   await expect(settingsButton).toHaveAttribute('aria-expanded', 'false');
   await expect(settings).toBeHidden();
   await expect(page.getByRole('list', { name: '联系人列表' }).getByText('资料管理')).toHaveCount(0);
-  const refreshButton = await chat.getByRole('button', { name: '刷新记录' }).boundingBox();
-  const settingsBox = await settingsButton.boundingBox();
-  assert.ok(settingsBox.x >= refreshButton.x + refreshButton.width);
+  await expect(chat.getByRole('button', { name: '刷新记录' })).toBeVisible();
   await settingsButton.click();
   await expect(settings).toBeVisible();
   await expect(settings.getByRole('button', { name: '清空聊天', exact: true })).toBeVisible();
@@ -129,6 +130,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await chat.getByRole('button', { name: '加载更早记录' }).click();
   await expect(chat.getByText('更早的合成记录', { exact: true })).toBeVisible();
   assert.equal((await page.evaluate(() => window.calls)).at(-1).older, true);
+  await options.click();
   await chat.getByRole('button', { name: '刷新记录' }).click();
   await expect(chat.getByText('更早的合成记录', { exact: true })).toHaveCount(0);
   await page.evaluate(() => { window.failLoad = true; });
@@ -141,6 +143,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await expect(image).toBeVisible();
   await settingsButton.click();
   await page.evaluate(() => window.selectContact());
+  await options.click();
   await expect(settingsButton).toHaveAttribute('aria-expanded', 'false');
   await expect(settings).toBeHidden();
   await expect(chat.getByText('合成聊天正文\n第二行', { exact: true })).toHaveCount(0);
