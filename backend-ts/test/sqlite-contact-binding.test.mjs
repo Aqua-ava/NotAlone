@@ -34,6 +34,22 @@ test('空库不预选，同名渠道身份分别建立联系人，重复确认�
  const contacts=(await service.directory()).contacts;
  assert.equal(contacts.length,2);assert.notEqual(contacts[0].contact_id,contacts[1].contact_id);
 });
+test('逐批确认加入的联系人默认获得同步资格，新增不恢复其他联系人的暂停',async t=>{
+ const {service,channel}=await fixture(t);await connect(service);await service.setReading(true);
+ const add=async locator=>{
+  const snapshot=await service.candidates(true),row=snapshot.sessions.find(item=>item.username===locator);
+  return (await service.confirm(snapshot.snapshot_token,[{locator,observed_display_name:row.display_name,expected_selection_generation:row.selection_generation}])).bindings.find(item=>item.conversation_locator===locator);
+ };
+ const a=await add('friend-a'),b=await add('friend-b');
+ for(const binding of [a,b])assert.equal((await service.eligibility(binding.contact_id)).binding_id,binding.binding_id);
+ await service.revoke(a.contact_id,a.binding_id,a.selection_generation);
+ const sessions=await channel.sessions();channel.sessions=async()=>[...sessions,{externalKey:'friend-c',displayName:'新增合成联系人',kind:'private',identityAssurance:'verified'}];
+ const c=await add('friend-c');
+ for(const binding of [b,c])assert.equal((await service.eligibility(binding.contact_id)).binding_id,binding.binding_id);
+ await assert.rejects(service.eligibility(a.contact_id),{code:'read_not_authorized'});
+ await service.setReading(false);
+ for(const binding of [b,c])await assert.rejects(service.eligibility(binding.contact_id),{code:'read_not_authorized'});
+});
 test('仅身份旧基线未安装历史表时目录合法返回零消息，不要求正文能力',async t=>{
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-identity-only-count-'))),module=join(root,'identity-only.mjs');
  await writeFile(module,`import {registry as production} from ${JSON.stringify(new URL('../src/storage/sqlite/registry.ts',import.meta.url).href)};export const registry={migrations:production.migrations.filter(m=>m.version<=3),actions:production.actions.filter(a=>a.name.startsWith('identity.'))};`);

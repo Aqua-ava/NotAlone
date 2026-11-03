@@ -167,12 +167,12 @@ export async function apply(ctx: Context) {
     await contacts.initialize();
     if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
     const createHistoryChannel=()=>createWechatHistoryChannel(sqlite.wechatCliPath,scope=>checkpointCache?.track(scope)??Promise.resolve(),wechat);
+    const syncDirectory={directory:contacts.syncDirectory.bind(contacts)};
     if(capabilities.capabilities.some(capability=>capability==='history')){
       checkpointCache=new WechatHistoryCheckpointCache(storage,ownerId,deletionHolders,sqlite.wechatCliPath,contactId=>history?.stop(contactId)??Promise.resolve());
       await checkpointCache.initialize();
       history=new SqliteHistoryService(storage,contacts,createHistoryChannel,deletionHolders,
         (contactId,messageId,kind)=>{events?.publish(`message.${kind}`,contactId,{message_id:messageId});if(automaticBackground)memory?.wake(contactId);},contactId=>{if(automaticImages)imageSync?.wake(contactId);if(automaticBackground)quoteSync?.wake(contactId);},wechat);
-      const syncDirectory={directory:contacts.syncDirectory.bind(contacts)};
       firstHistory=new FirstHistoryCoordinator(syncDirectory,history);
       history.setFirstHistoryWake(contactId=>{if(automaticBackground)firstHistory?.wakeContact(contactId);});
       incremental=new IncrementalHistoryCoordinator(syncDirectory,history,{firstHistoryManagedExternally:true});
@@ -183,7 +183,7 @@ export async function apply(ctx: Context) {
     const historyHttp=history?new SqliteHistoryHttp(history):undefined;
     let historyStatusInFlight:Promise<Record<string,unknown>>|undefined;
     const readHistoryStatus=async()=>{
-      const directory=await contacts!.directory();
+      const directory=await contacts!.syncDirectory();
       const coverage=await readStatusCoverages(directory.bindings,contactId=>history!.coverage(contactId),contactIds=>history!.coverages(contactIds));
       return projectHistorySyncStatus(await contacts!.syncStatus(),coverage,firstHistory?.getState(),incremental?.getState(),
         await history!.bodyAvailable(coverage.map(row=>row.contactId)));
@@ -207,8 +207,8 @@ export async function apply(ctx: Context) {
       if(!history)throw new StorageFailure('media_source_unavailable');return history.source(contactId,recordId);
     }},...(history?{ensureSourceReady:(contactId:string,signal?:AbortSignal)=>history!.ensureSourceReady(contactId,signal)}:{}),userData:sqlite.userData,holders:deletionHolders,deletion:deletionService,changed:(contactId,messageId)=>{events?.publish('message.updated',contactId,{message_id:messageId});if(automaticBackground)memory?.wake(contactId);},adapters:originalImages?[new OriginalImageMediaAdapter(createWechatImageResourcePort(sqlite.wechatCliPath,wechat))]:[]});
     await media.initialize();
-    if(originalImages)imageSync=new SqliteImageSyncCoordinator(storage,contacts,media);
-    if(history&&await supportsWechatQuotes(sqlite.wechatCliPath))quoteSync=new SqliteQuoteSyncCoordinator(contacts,history);
+    if(originalImages)imageSync=new SqliteImageSyncCoordinator(storage,syncDirectory,media);
+    if(history&&await supportsWechatQuotes(sqlite.wechatCliPath))quoteSync=new SqliteQuoteSyncCoordinator(syncDirectory,history);
     contacts.setReadStop(async contactId=>{await Promise.all([historyRecertify?.stop(contactId),imageSync?.stop(contactId),quoteSync?.stop(contactId),firstHistory?firstHistory.stop(contactId):history?.stop(contactId),incremental?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);if(contactId)await checkpointCache?.forget(contactId);else await wechat?.stop();});
     const mediaHttp = new SqliteMediaHttp(media);
     const discussionsEnabled=capabilities.capabilities.includes('discussions'),memoryEnabled=capabilities.capabilities.includes('memory');

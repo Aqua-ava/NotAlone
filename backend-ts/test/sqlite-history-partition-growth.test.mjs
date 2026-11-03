@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SqliteStorage } from '../src/storage/sqlite/client.ts';
 import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
+import { FirstHistoryCoordinator } from '../src/history/sqlite/coordinator.ts';
 import { SqliteHistoryService } from '../src/history/sqlite/service.ts';
 import { fixture, owner, record } from './fixtures/memory-sqlite/support.mjs';
 
@@ -211,4 +212,15 @@ test('安全表增长候选中旧表被替换时仍建立连续性围栏', async
   await assert.rejects(f.service.synchronizeIncremental(contactId), { code: 'history_source_continuity_unverified' });
   assert.equal(await f.storage.execute('history.preflightGeneration', { token: await f.contacts.eligibility(contactId) }), false);
   assert.equal((await f.service.read(contactId)).messages.length, 1, '新表消息不能入库到已围栏联系人');
+});
+
+test('首次协调器在生产历史分页发现增长后自动接住服务finally的定点唤醒',async t=>{
+ const cleanup=[],f=await fixture({after:callback=>cleanup.push(callback)}),contactId=f.saved[0].contact_id,state=installGrowthChannel(f);
+ const directory={directory:async()=>{const saved=await f.contacts.syncDirectory();return {...saved,bindings:saved.bindings.filter(row=>row.contact_id===contactId)};}};
+ const first=new FirstHistoryCoordinator(directory,f.service);f.service.setFirstHistoryWake(id=>{state.wakeups.push(id);first.wakeContact(id);});
+ t.after(async()=>{await first.close();for(const clean of cleanup.reverse())await clean();});
+ state.pageHook=async(_scope,target,cursor)=>{state.growing=true;state.pageHook=null;return {target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[],completedPartitions:target.partitions,exhausted:true,resumeCursor:'synthetic-before-growth'};};
+ first.wake();await first.waitForIdle();
+ assert.equal(state.wakeups.length,1);assert.equal((await f.service.coverage(contactId)).phase,'complete','服务在本次任务finally发出的真实增长唤醒必须接续');
+ assert.equal(state.pages.length,2,'新目标完成后不得继续重复读取');
 });

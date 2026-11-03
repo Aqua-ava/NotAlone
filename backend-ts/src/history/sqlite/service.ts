@@ -360,13 +360,19 @@ export class SqliteHistoryService {
      this.rememberBodySupport(contactId,report);return coverage;
     }
    }
-   const pendingOnRetainedGuard=normalUse&&retainedGuardAvailable&&!metadataRevalidation&&!reportGrowth
+   const retainedPending=normalUse&&retainedGuardAvailable&&!metadataRevalidation&&!reportGrowth
     ?await this.storage.execute<PendingGoal|null>('history.pending',{token:scope.token,report})??undefined:undefined;
-   const freshTarget=normalUse&&!pendingOnRetainedGuard?await this.resumeOrTarget(scope,channel,report,controller.signal):undefined;
+   const retainedTarget=retainedPending?this.guards.get(contactId)?.target:undefined;
+   // 持久任务只有与当前原生目标完全相同时才能接续；来源准备也可能已替换保留守卫的目标。
+   const pendingOnRetainedGuard=retainedPending&&retainedTarget&&JSON.stringify(retainedPending.target)===JSON.stringify(retainedTarget)
+    ?retainedPending:undefined;
+   const freshTarget=normalUse&&!pendingOnRetainedGuard
+    ?retainedTarget??await this.resumeOrTarget(scope,channel,report,controller.signal):undefined;
    if(freshTarget)await check();
    const armed=await armGuard(normalUse&&!pendingOnRetainedGuard?{report,target:freshTarget!}:undefined),guardId=armed.guardId;
    await check();await this.storage.execute('history.guardAuthorize',{token:scope.token,guardId});this.rememberBodySupport(contactId,report);
-   goal=armed.revalidated||reportGrowth?undefined:pendingOnRetainedGuard??await this.storage.execute<PendingGoal|null>('history.pending',{token:scope.token,report})??undefined;
+   // 新原生目标必须建立对应历史任务，不能再从数据库取回已经被替换的旧目标。
+   goal=armed.revalidated||reportGrowth||freshTarget?undefined:pendingOnRetainedGuard??await this.storage.execute<PendingGoal|null>('history.pending',{token:scope.token,report})??undefined;
    if(!goal){const target=freshTarget??await channel.target(scope,controller.signal);await check();
     if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target,report}))throw new StorageFailure('history_source_continuity_unverified');
     goal=await this.storage.execute('history.begin',{token:scope.token,target,report,id:randomUUID(),at:Date.now()});}
