@@ -226,12 +226,19 @@
 .sqlite-memory-management .memory-source-time { display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 8px; margin: 0 0 9px; color: #637b85; font-size: 11px; line-height: 1.8; }
 .memory-source-time time { font-variant-numeric: tabular-nums; }
 .sqlite-memory-version { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 12px; }
-.sqlite-memory-version > .sqlite-memory-body { order: -1; flex-basis: 100%; margin: 0 0 10px; color: var(--panel-heading); font-family: "Songti SC", STSong, serif; font-size: 17px; line-height: 1.8; }
+.memory-current-content > .sqlite-memory-body, .sqlite-memory-version > .sqlite-memory-body { order: -1; flex-basis: 100%; margin: 0 0 10px; color: var(--panel-heading); font-family: "Songti SC", STSong, serif; font-size: 17px; line-height: 1.8; }
 .sqlite-memory-version > .sqlite-memory-sources[open] { flex-basis: 100%; }
 .sqlite-memory-version > .memory-version-meta { color: #667b82; font-size: 11px; }
 .sqlite-memory-version > .hint { color: #667b82; font-size: 11px; }
 .sqlite-memory-version > .hint strong { font-weight: 400; }
-.sqlite-memory-management .memory-protection-status { margin: 5px 0 0; color: #6f7d81; font-size: 11px; }
+.memory-card-tools { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; }
+.memory-card-tools > .memory-origin, .memory-card-tools > .memory-protection-status { color: #667b82; font-size: 11px; }
+.memory-card-tools > .memory-origin { padding: 2px 7px; border-radius: 4px; background: #e8ede7; }
+.sqlite-memory-management .memory-card-tools > button { padding: 0; border: 0; background: transparent; color: #426f8a; font-size: 11px; line-height: 1.8; cursor: pointer; }
+.memory-timeline-browser .memory-card-tools > details { margin: 0; }
+.memory-card-tools > details[open] { flex-basis: 100%; }
+.memory-card-tools > .memory-more[open] { padding: 10px 12px; border-left: 2px solid #d5ddda; background: #fffdf540; }
+.memory-current-content > .hint { font-size: 12px; }
 .sqlite-memory-management .memory-unavailable-body { color: #61747c; font-size: 15px; margin: 4px 0 8px; }
 .memory-timeline-browser .sqlite-memory-actions { gap: 6px; margin: 10px 0; }
 .memory-timeline-browser .sqlite-memory-actions button { padding: 5px 9px; border-radius: 6px; border-color: #d4dcd8; background: #fffdf580; font-size: 11px; }

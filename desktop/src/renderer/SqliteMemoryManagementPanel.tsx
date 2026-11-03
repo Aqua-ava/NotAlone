@@ -17,8 +17,8 @@ function SourceTime({sources}:{sources:MemorySource[]}){
 function Verification({state}:{state:MemoryVerificationState}){
  return <p className="hint">{state==='verified'?<strong>来源已核验</strong>:<><strong>来源待核验</strong>；可查看原话，但尚未确认来源支持这条资料。</>}</p>;
 }
-function Sources({sources}:{sources:MemorySource[]}){
- return <details className="sqlite-memory-sources"><summary>查看来源</summary>{sources.length===0?<p>无可展示的来源。</p>:<ol>{sources.map((source,index)=><li key={`${source.recordId}:${index}`}>
+function Sources({sources,verification}:{sources:MemorySource[];verification?:MemoryVerificationState}){
+ return <details className="sqlite-memory-sources"><summary>查看来源</summary>{verification&&<Verification state={verification}/>}{sources.length===0?<p>无可展示的来源。</p>:<ol>{sources.map((source,index)=><li key={`${source.recordId}:${index}`}>
   {source.contentKind==='image'?<><p>图片依据</p>{source.description&&<p>模型观察：{source.description}</p>}</>:<blockquote>{source.quote}</blockquote>}<details><summary>来源定位</summary><p>消息：{source.messageId}</p><p>来源记录：{source.recordId}</p><p>解释修订：{source.acceptedRevision}</p>{source.contentRef&&<p>图片版本：{source.contentRef.file_id}</p>}</details>
  </li>)}</ol>}</details>;
 }
@@ -44,35 +44,61 @@ function Candidate({candidate,busy,decide}:{candidate:MemoryCandidateView;busy:b
   </div>)}
  </article>;
 }
+function MemoryBody({version,current}:{version:MemoryVersionView;current:boolean}){
+ return version.body===null?<p>正文已清除或来源已失效。</p>:<>
+  {version.timeStatus==='needs_revalidation'&&<p className="hint">时间待核验，暂不用于生成。</p>}
+  {version.timeStatus==='invalid'&&<p className="hint">时间资料异常，暂不用于生成。</p>}
+  {version.timeStatus==='out_of_window'&&<p className="hint">不在有效时间内，不再引用。</p>}
+  <p className="sqlite-memory-body">{current&&version.timeStatus!=='out_of_window'?version.body:<s>{version.body}</s>}</p>
+ </>;
+}
 function Version({version,current}:{version:MemoryVersionView;current:boolean}){
  return <div className={current?'sqlite-memory-version':'sqlite-memory-old'}><p className="memory-version-meta">版本 {version.versionNo} · {formationNames[version.formationKind]??version.formationKind} · {adoptionNames[version.adoptionMode]??version.adoptionMode}{current?' · 当前版本':' · 不作为当前事实'}</p>
-  {version.body===null?<p>正文已清除或来源已失效。</p>:<><Verification state={version.verificationState}/>
-   {version.timeStatus==='needs_revalidation'&&<p>时间待核验，暂不用于生成。</p>}
-   {version.timeStatus==='invalid'&&<p>时间资料异常，暂不用于生成。</p>}
-   {version.timeStatus==='out_of_window'&&<p>不在有效时间内，不再引用。</p>}
-   <p className="sqlite-memory-body">{current&&version.timeStatus!=='out_of_window'?version.body:<s>{version.body}</s>}</p><Sources sources={version.sources}/></>}
+  <MemoryBody version={version} current={current}/>
+  {version.body!==null&&<Sources sources={version.sources} verification={version.verificationState}/>}
   {version.restoredFromVersionNo&&<p>恢复自版本 {version.restoredFromVersionNo}，原前驱为版本 {version.previousVersionNo}。</p>}
  </div>;
 }
+function MemoryHistory({memory}:{memory:MemoryView}){
+ const [open,setOpen]=useState(false);
+ return <details className="memory-version-history" onToggle={event=>setOpen(event.currentTarget.open)}>
+  <summary>更新历史</summary>
+  {open&&<>{[...memory.versions].reverse().map(version=><Version key={version.versionNo} version={version} current={version.versionNo===memory.current?.versionNo}/>)}
+   <ol>{memory.decisions.map(decision=><li key={decision.id}>{decision.actorKind==='system'?'系统自动决定':'用户决定'} · {({auto_accept:'自动采纳',auto_update:'自动更新',auto_retire:'已并入合并资料',auto_noop:'跳过重复资料',...successMessages}[decision.action]??decision.action)} · {decision.outcome==='redacted'?'敏感材料已清除':'已生效'}</li>)}</ol>
+  </>}
+ </details>;
+}
 function Memory({memory,busy,decide}:{memory:MemoryView;busy:boolean;decide:(request:Decision)=>void}){
- const [editing,setEditing]=useState<'correct'|'change'|null>(null),current=memory.current,withdrawnVersion=withdrawnProtectionVersion(memory);
+ const [editing,setEditing]=useState<'correct'|'change'|null>(null),[moreOpen,setMoreOpen]=useState(false),current=memory.current,withdrawnVersion=withdrawnProtectionVersion(memory);
  const request={memoryId:memory.id,expectedVersionNo:(current??withdrawnVersion)?.versionNo,expectedHeadRevision:memory.headRevision};
  const undoEligible=current?.adoptionMode==='auto'&&current.formationKind!=='restore';
+ const hasHistory=!current||BigInt(memory.headRevision)>1n||BigInt(current.versionNo)>1n||memory.versions.some(version=>version.versionNo!==current.versionNo);
  return <article className={`sqlite-memory-card memory-timeline-item${current?'':' memory-timeline-unavailable'}`} aria-label="正式记忆">
   <SourceTime sources={current?.sources??[]}/>
-  {current?<Version version={current} current/>:<p className="memory-unavailable-body">当前无可引用版本。</p>}
-  <p className="memory-protection-status">{memory.manualProtection?'当前人工保护已开启':'当前人工保护未开启'}{memory.state==='withdrawn'?' · 已撤销':memory.state==='invalidated'?' · 已失效':''}</p>
-  {current&&(editing?<Editor key={`${memory.headRevision}:${editing}`} label={editing==='correct'?'修正后的正文':'变化后的正文'} initial={current.body??''} submitLabel={editing==='correct'?'保存错误修正':'保存变化记录'} busy={busy} cancel={()=>setEditing(null)} save={body=>decide({...request,action:editing,body})}/>:<div className="sqlite-memory-actions">
-   <button type="button" disabled={busy} onClick={()=>setEditing('correct')}>纠正错误</button>
-   <button type="button" disabled={busy} onClick={()=>setEditing('change')}>记录变化</button>
-   <button type="button" disabled={busy} onClick={()=>decide({...request,action:memory.manualProtection?'unprotect':'protect'})}>{memory.manualProtection?'解除人工保护':'开启人工保护'}</button>
-   {undoEligible&&<button type="button" disabled={busy||memory.manualProtection} onClick={()=>decide({...request,action:current.previousVersionNo===null?'withdraw':'restore',...(current.previousVersionNo===null?{}:{restoredFromVersionNo:current.previousVersionNo,expectedMergedParents:current.mergeParents.map(parent=>({...parent}))})})}>{current.mergeParentCount>1?`恢复合并前资料（共${current.mergeParentCount}项）`:current.previousVersionNo===null?'撤销首次自动采纳':'撤销自动更新'}</button>}
-  </div>)}
-  {undoEligible&&memory.manualProtection&&<p className="hint">撤销前须先明确解除当前人工保护。</p>}
-  {withdrawnVersion&&<div className="sqlite-memory-actions"><button type="button" disabled={busy} onClick={()=>decide({...request,action:memory.manualProtection?'unprotect':'protect'})}>{memory.manualProtection?'解除人工保护':'开启人工保护'}</button><p className="hint">资料已撤回，仍可调整人工保护；开启后会阻止整组恢复。</p></div>}
-  <details className="memory-version-history"><summary>查看版本与决定历史</summary>{[...memory.versions].reverse().map(version=><Version key={version.versionNo} version={version} current={version.versionNo===current?.versionNo}/>)}
-   <ol>{memory.decisions.map(decision=><li key={decision.id}>{decision.actorKind==='system'?'系统自动决定':'用户决定'} · {({auto_accept:'自动采纳',auto_update:'自动更新',auto_retire:'已并入合并资料',auto_noop:'跳过重复资料',...successMessages}[decision.action]??decision.action)} · {decision.outcome==='redacted'?'敏感材料已清除':'已生效'}</li>)}</ol>
-  </details>
+  {current?<div className="memory-current-content"><MemoryBody version={current} current/>
+   {current.body!==null&&current.verificationState!=='verified'&&<Verification state={current.verificationState}/>}
+  </div>:<p className="memory-unavailable-body">当前无可引用版本。{memory.state==='withdrawn'?'已撤销。':memory.state==='invalidated'?'已失效。':''}</p>}
+  <div className="memory-card-tools">
+   {current&&<><span className="memory-origin">{{auto:'系统添加',user:'已确认',manual:'手动添加'}[current.adoptionMode]??'来历待核对'}</span>
+    {memory.manualProtection&&<span className="memory-protection-status">已保护</span>}
+    {current.body!==null&&<Sources sources={current.sources} verification={current.verificationState}/>}
+    {!editing&&<button type="button" disabled={busy} onClick={()=>setEditing('correct')}>修改</button>}
+   </>}
+   <details className="memory-more" onToggle={event=>setMoreOpen(event.currentTarget.open)}>
+    <summary>更多</summary>
+    {moreOpen&&<>
+     {(current||withdrawnVersion)&&<div className="sqlite-memory-actions">
+      {current&&<button type="button" disabled={busy||editing!==null} onClick={()=>setEditing('change')}>记录变化</button>}
+      <button type="button" disabled={busy||editing!==null} onClick={()=>decide({...request,action:memory.manualProtection?'unprotect':'protect'})}>{memory.manualProtection?'解除人工保护':'开启人工保护'}</button>
+      {current&&undoEligible&&<button type="button" disabled={busy||editing!==null||memory.manualProtection} onClick={()=>decide({...request,action:current.previousVersionNo===null?'withdraw':'restore',...(current.previousVersionNo===null?{}:{restoredFromVersionNo:current.previousVersionNo,expectedMergedParents:current.mergeParents.map(parent=>({...parent}))})})}>{current.mergeParentCount>1?`恢复合并前资料（共${current.mergeParentCount}项）`:current.previousVersionNo===null?'撤销首次自动采纳':'撤销自动更新'}</button>}
+     </div>}
+     {undoEligible&&memory.manualProtection&&<p className="hint">撤销前须先明确解除当前人工保护。</p>}
+     {withdrawnVersion&&<p className="hint">资料已撤回，仍可调整人工保护；开启后会阻止整组恢复。</p>}
+     {hasHistory&&<MemoryHistory memory={memory}/>}
+    </>}
+   </details>
+  </div>
+  {current&&editing&&<Editor key={`${memory.headRevision}:${editing}`} label={editing==='correct'?'修正后的正文':'变化后的正文'} initial={current.body??''} submitLabel={editing==='correct'?'保存错误修正':'保存变化记录'} busy={busy} cancel={()=>setEditing(null)} save={body=>decide({...request,action:editing,body})}/>}
  </article>;
 }
 
