@@ -1,6 +1,6 @@
 # NotAlone 架构文档
 
-> 2026-11-03 全部图片补查：[ADR-156](adr/156-automatic-image-reconciliation.md)将当前有效授权范围内所有联系人的旧未知图片、缺副本及失败纳入持续自动补查和持久退避；保留主图／原图证明，清除项不恢复，图片任务不直接调用模型。已实现；实机微信版本未认证，真实全量未完成，见[验收记录](../docs/verification/automatic-image-reconciliation-20261103.md)。
+> 2026-11-03 全部图片补查：[ADR-156](adr/156-automatic-image-reconciliation.md)将当前有效授权范围内所有联系人的旧未知图片、缺副本及失败纳入持续自动补查和持久退避；保留主图／原图证明，清除项不恢复，图片任务不直接调用模型。已实现；换回微信 4.0.6 后版本检查通过，图片关联及部分来源连续性核验仍失败，真实全量未完成，见[验收记录](../docs/verification/automatic-image-reconciliation-20261103.md)。
 
 > 2026-11-03 图片资源：[ADR-155](adr/155-image-variant-display-and-thumbnail-refresh.md)将主图／缩略图角色与原图证明分别展示；已保存缩略图在有效同步范围内按分钟有界复查，主图可用后更新副本。旧未知版本不猜测回填，已清除图片不自动恢复；已实现，验证范围见[分项记录](../docs/verification/image-variant-refresh-20261103.md)。
 

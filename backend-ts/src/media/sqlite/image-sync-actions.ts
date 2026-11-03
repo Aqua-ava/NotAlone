@@ -9,19 +9,20 @@ const retryDelaySql=(alias:string)=>`CASE ${imageRetryDelaysMs.slice(0,-1).map((
 const workSql=`WITH attempts AS (
  SELECT owner_id,message_id,accepted_media_generation,
   max(requested_at) last_attempt_at,
-  count(CASE WHEN request_key GLOB 'image_sync_v5_*' OR request_key GLOB '${imageReconcilePrefix}*' THEN 1 END) retry_count,
-  max(CASE WHEN request_key GLOB 'image_sync_v5_*' OR request_key GLOB '${imageReconcilePrefix}*' THEN requested_at END) last_retry_at
+  count(CASE WHEN adapter_version<>'${imagePreparationVersion}' AND (request_key GLOB 'image_sync_v5_*' OR request_key GLOB '${imageReconcilePrefix}*') THEN 1 END) retry_count,
+  max(CASE WHEN adapter_version<>'${imagePreparationVersion}' AND (request_key GLOB 'image_sync_v5_*' OR request_key GLOB '${imageReconcilePrefix}*') THEN requested_at END) last_retry_at
  FROM media_extraction_attempt WHERE owner_id=? AND contact_id=? AND goal='extract'
  GROUP BY owner_id,message_id,accepted_media_generation
 ), preparation AS (
+ -- 普通提取建立尝试时已通过来源核验；图片内容失败不继续阻塞同联系人的其余图片。
  SELECT p.owner_id,p.contact_id,count(*) retry_count,max(p.requested_at) last_retry_at FROM media_extraction_attempt p
  JOIN message_media h ON h.owner_id=p.owner_id AND h.message_id=p.message_id AND h.state='active' AND h.media_generation=p.accepted_media_generation
  WHERE p.owner_id=? AND p.contact_id=? AND p.adapter_version='${imagePreparationVersion}'
- AND p.rowid>coalesce((SELECT max(s.rowid) FROM media_extraction_attempt s WHERE s.owner_id=p.owner_id AND s.contact_id=p.contact_id AND s.state='completed'),0)
+ AND p.rowid>coalesce((SELECT max(s.rowid) FROM media_extraction_attempt s WHERE s.owner_id=p.owner_id AND s.contact_id=p.contact_id AND s.adapter_version<>'${imagePreparationVersion}' AND s.goal IN ('extract','original_upgrade')),0)
  GROUP BY p.owner_id,p.contact_id
 ), work AS (
  SELECT m.id,m.display_no,coalesce(h.media_generation,0) media_generation,f.id file_id,f.image_quality,
-  coalesce(a.retry_count,0) retry_count,
+  coalesce(a.retry_count,0) retry_count,a.last_attempt_at,
   max(CASE WHEN f.image_quality='thumbnail' THEN coalesce((a.last_attempt_at/${imageRefreshIntervalMs}+1)*${imageRefreshIntervalMs},0)
    WHEN coalesce(a.retry_count,0)=0 THEN 0 ELSE a.last_retry_at+${retryDelaySql('a')} END,
    coalesce(p.last_retry_at+${retryDelaySql('p')},0)) next_due
@@ -52,7 +53,7 @@ export function createImageSyncActions():StorageAction[]{return [
   const rows=tx.all(workSql+'SELECT * FROM work WHERE display_no>? AND next_due<=? ORDER BY display_no LIMIT 64',[...parameters,BigInt(input.after),BigInt(now)]);
   return rows.map((row:StorageRow)=>({messageId:String(row.id),displayNo:String(row.display_no),requestKey:row.image_quality==='thumbnail'
    ?imageRefreshRequestKey(String(row.id),String(row.media_generation),now)
-   :row.file_id===null&&row.retry_count===0n?`image_sync_v5_${row.id}_${row.media_generation}`
+   :row.file_id===null&&row.last_attempt_at===null?`image_sync_v5_${row.id}_${row.media_generation}`
    :imageReconcileRequestKey(String(row.id),String(row.media_generation),now)}));
  }},
  {name:'media.imageRefreshPending',mode:'read',retryBusy:false,execute:(tx,input:any)=>!!tx.get(workSql+'SELECT 1 FROM work LIMIT 1',scope(input))},

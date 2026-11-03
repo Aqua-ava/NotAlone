@@ -118,6 +118,31 @@ test('来源准备失败按联系人持久退避，重启不反复核验，恢�
  next.wake();await next.waitForIdle();assert.equal(prepares,4);
 });
 
+test('来源恢复后首张图片内容失败也解除联系人准备退避，其余图片立即自动处理',async t=>{
+ let unavailable=true,firstImage,reads=0;const adapter=resourceVariantAdapter(()=> 'main'),execute=adapter.execute;
+ adapter.execute=async context=>{reads++;if(context.messageId===firstImage)throw new StorageFailure('media_local_file_missing');return execute(context);};
+ const f=await fixture(t,adapter,{ensureSourceReady:async()=>{if(unavailable)throw new StorageFailure('history_support_unverified');}});
+ const page=f.channel.page;f.channel.page=async()=>{const old=await page();return {...old,records:[...old.records,{...old.records[0],localId:'10'}]};};await f.history.synchronize(f.contact);
+ const images=(await f.history.read(f.contact)).messages.filter(m=>m.kind==='image');firstImage=f.messages.find(m=>m.kind==='image').id;
+ t.mock.timers.enable({apis:['setTimeout','Date']});
+ const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());sync.wake();await sync.waitForIdle();assert.equal(reads,0);
+ unavailable=false;
+ await assert.rejects(f.media.extract(f.contact,firstImage,{requestKey:`image_reconcile_v1_${firstImage}_0_${Math.floor(Date.now()/60_000)}`,goal:'extract'}),{code:'media_local_file_missing'});
+ sync.wake();await sync.waitForIdle();
+ assert.equal((await f.media.read(f.contact,images.find(m=>m.id!==firstImage).id)).files.length,1);assert.equal(reads,2);
+});
+
+test('来源准备回执不叠加单图失败退避，恢复后的图片失败按首轮一分钟自动重试',async t=>{
+ let unavailable=true,missing=true,reads=0;const adapter=resourceVariantAdapter(()=> 'main'),execute=adapter.execute;
+ adapter.execute=async context=>{reads++;if(missing)throw new StorageFailure('media_local_file_missing');return execute(context);};
+ const f=await fixture(t,adapter,{ensureSourceReady:async()=>{if(unavailable)throw new StorageFailure('history_support_unverified');}}),image=f.messages.find(m=>m.kind==='image');
+ t.mock.timers.enable({apis:['setTimeout','Date']});
+ const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());sync.wake();await sync.waitForIdle();assert.equal(reads,0);
+ unavailable=false;t.mock.timers.tick(60_000);await sync.waitForIdle();assert.equal(reads,1);await sync.close();
+ const restarted=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>restarted.close());restarted.wake();await restarted.waitForIdle();assert.equal(reads,1);
+ missing=false;t.mock.timers.tick(60_000);await restarted.waitForIdle();assert.equal(reads,2);assert.equal((await f.media.read(f.contact,image.id)).files.length,1);
+});
+
 test('来源准备抛普通错误也停止该联系人本批，不回显私密错误正文',async t=>{
  let prepares=0;const f=await fixture(t,unknownQualityAdapter(),{ensureSourceReady:async()=>{prepares++;throw new Error('synthetic-private-source-detail');}});
  const page=f.channel.page;f.channel.page=async()=>{const old=await page();return {...old,records:[...old.records,{...old.records[0],localId:'10'}]};};await f.history.synchronize(f.contact);
