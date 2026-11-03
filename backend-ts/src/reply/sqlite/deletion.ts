@@ -38,17 +38,61 @@ function discussions(tx:StorageTransaction,op:DeletionOperation):StorageRow[]{
   s.kind==='account'?[op.ownerId]:s.kind==='discussion'?[op.ownerId,s.contactId,s.discussionId]:[op.ownerId,s.contactId]);
 }
 interface Closure {contexts:Set<string>;requests:Set<string>;copies:Set<string>}
+/** 每条依赖只沿前沿传播一次；同副本只扩展尚未访问的后缀，保留跨联系人本人资料依赖。 */
+function expandClosure(result:Closure,rows:{contexts:StorageRow[];items:StorageRow[];entries:StorageRow[];attempts:StorageRow[];preparing:StorageRow[];incorporations:StorageRow[];carried:StorageRow[]}):void{
+ const append=(map:Map<string,string[]>,key:string,value:string)=>{const values=map.get(key);if(values)values.push(value);else map.set(key,[value]);};
+ const contextRequests=new Map<string,string>(),requestContexts=new Map<string,string[]>(),requestEntries=new Map<string,string[]>(),requestCopies=new Map<string,string[]>(),carriedRequests=new Map<string,string[]>();
+ for(const row of rows.contexts)if(row.request_id!==null){const request=String(row.request_id),context=String(row.id);contextRequests.set(context,request);append(requestContexts,request,context);}
+ const entryRequests=new Map(rows.entries.filter(row=>row.origin_request_id!==null).map(row=>[String(row.id),String(row.origin_request_id)]));
+ for(const row of rows.items)if(row.kind==='entry'){const request=entryRequests.get(String(row.entry_id));if(request)append(requestEntries,request,String(row.context_id));}
+ const attemptRequests=new Map(rows.attempts.map(row=>[String(row.id),String(row.request_id)]));
+ for(const row of rows.preparing)if(row.preparing_attempt_id!==null){const request=attemptRequests.get(String(row.preparing_attempt_id));if(request)append(requestCopies,request,String(row.id));}
+ for(const row of rows.carried)append(carriedRequests,String(row.origin_request),String(row.request_id));
+ type Incorporation={contextId:string;copyId:string;position:bigint;index:number};
+ const byContext=new Map<string,Incorporation[]>(),byCopy=new Map<string,Incorporation[]>(),visitedSuffix=new Map<string,number>();
+ for(const row of rows.incorporations){
+  const item:Incorporation={contextId:String(row.context_id),copyId:String(row.copy_id),position:row.incorporation_no as bigint,index:0};
+  const contexts=byContext.get(item.contextId);if(contexts)contexts.push(item);else byContext.set(item.contextId,[item]);
+  const copies=byCopy.get(item.copyId);if(copies)copies.push(item);else byCopy.set(item.copyId,[item]);
+ }
+ for(const [copyId,items] of byCopy){
+  items.sort((a,b)=>a.position<b.position?-1:a.position>b.position?1:0);
+  let first=0;for(let index=0;index<items.length;index++){if(index&&items[index].position!==items[index-1].position)first=index;items[index].index=first;}
+  visitedSuffix.set(copyId,items.length);
+ }
+ const queue:Array<{kind:'context'|'request';id:string}>=[...[...result.contexts].map(id=>({kind:'context' as const,id})),...[...result.requests].map(id=>({kind:'request' as const,id}))];
+ const add=(kind:'context'|'request',id:string)=>{const set=kind==='context'?result.contexts:result.requests;if(!set.has(id)){set.add(id);queue.push({kind,id});}};
+ for(let cursor=0;cursor<queue.length;cursor++){
+  const current=queue[cursor];
+  if(current.kind==='request'){
+   for(const context of requestContexts.get(current.id)??[])add('context',context);
+   for(const context of requestEntries.get(current.id)??[])add('context',context);
+   for(const request of carriedRequests.get(current.id)??[])add('request',request);
+   for(const copy of requestCopies.get(current.id)??[])result.copies.add(copy);
+  }else{
+   const request=contextRequests.get(current.id);if(request)add('request',request);
+   for(const item of byContext.get(current.id)??[]){
+    result.copies.add(item.copyId);
+    const end=visitedSuffix.get(item.copyId)!;
+    if(item.index>=end)continue;
+    visitedSuffix.set(item.copyId,item.index);
+    const copies=byCopy.get(item.copyId)!;
+    for(let index=item.index;index<end;index++)add('context',copies[index].contextId);
+   }
+  }
+ }
+}
 /** 反查实际输入；后续复用同副本的上下文也确实接触过先前输入，按纳入顺序传播。 */
 function closure(tx:StorageTransaction,op:DeletionOperation,sourceKeys?:ReadonlySet<string>,staleContexts?:ReadonlySet<string>):Closure{
  const deletionSources=new Set(sourceDeletionIds(tx,op));
  const result:Closure={contexts:new Set(staleContexts),requests:new Set(),copies:new Set()};
  if(!supported(op.scope))return result;
  const ds=new Set(sourceKeys?[]:discussions(tx,op).map(d=>String(d.id)));
- const contexts=tx.all('SELECT * FROM reply_context WHERE owner_id=?',[op.ownerId]);
- const requests=tx.all('SELECT * FROM reply_request WHERE owner_id=?',[op.ownerId]);
- const items=tx.all('SELECT * FROM reply_context_item WHERE owner_id=?',[op.ownerId]);
+ const contexts=tx.all('SELECT id,discussion_id,request_id FROM reply_context WHERE owner_id=?',[op.ownerId]);
+ const requests=tx.all('SELECT id,discussion_id FROM reply_request WHERE owner_id=?',[op.ownerId]);
+ const items=tx.all('SELECT context_id,kind,source_contact_id,record_id,entry_id FROM reply_context_item WHERE owner_id=?',[op.ownerId]);
  const entries=tx.all('SELECT id,origin_request_id FROM discussion_entry WHERE owner_id=?',[op.ownerId]);
- const incorporations=tx.all('SELECT * FROM runtime_context WHERE owner_id=?',[op.ownerId]);
+ const incorporations=tx.all('SELECT context_id,copy_id,incorporation_no FROM runtime_context WHERE owner_id=?',[op.ownerId]);
  const attempts=tx.all('SELECT id,request_id FROM reply_attempt WHERE owner_id=?',[op.ownerId]);
  const preparing=tx.all("SELECT id,preparing_attempt_id FROM runtime_copy WHERE owner_id=? AND state<>'deleted'",[op.ownerId]);
  const mediaImpact=isMediaDeletionScope(op.scope)?memoryDeletionImpact(tx,op):null;
@@ -80,22 +124,9 @@ function closure(tx:StorageTransaction,op:DeletionOperation,sourceKeys?:Readonly
  if(!sourceKeys)for(const r of tx.all(`SELECT r.id FROM reply_request r JOIN request_tombstone t ON t.owner_identity=r.owner_id AND t.request_key=r.request_key
   WHERE r.owner_id=? AND t.deletion_operation_id=? AND t.request_namespace GLOB '*:discussion.begin'`,[op.ownerId,op.operationId]))result.requests.add(String(r.id));
  if(!sourceKeys)for(const c of tx.all('SELECT id FROM runtime_copy WHERE owner_id=? AND cleanup_operation_id=?',[op.ownerId,op.operationId]))result.copies.add(String(c.id));
- let changed=true;
- while(changed){
-  const count=result.contexts.size+result.requests.size+result.copies.size;
-  for(const c of contexts)if(result.contexts.has(String(c.id))&&c.request_id!==null)result.requests.add(String(c.request_id));
-  for(const c of contexts)if(c.request_id!==null&&result.requests.has(String(c.request_id)))result.contexts.add(String(c.id));
-  if(tx.get("SELECT 1 FROM sqlite_master WHERE name='reply_candidate_request'"))for(const carried of tx.all('SELECT d.request_id,s.request_id origin_request FROM reply_candidate_request d JOIN reply_selection s ON s.owner_id=d.owner_id AND s.id=d.carried_selection_id WHERE d.owner_id=?',[op.ownerId]))if(result.requests.has(String(carried.origin_request)))result.requests.add(String(carried.request_id));
-  const affectedAttempts=new Set(attempts.filter(a=>result.requests.has(String(a.request_id))).map(a=>String(a.id)));
-  for(const copy of preparing)if(copy.preparing_attempt_id!==null&&affectedAttempts.has(String(copy.preparing_attempt_id)))result.copies.add(String(copy.id));
-  const affectedEntries=new Set(entries.filter(e=>result.requests.has(String(e.origin_request_id))).map(e=>String(e.id)));
-  for(const item of items)if(item.kind==='entry'&&affectedEntries.has(String(item.entry_id)))result.contexts.add(String(item.context_id));
-  for(const i of incorporations)if(result.contexts.has(String(i.context_id))){
-   result.copies.add(String(i.copy_id));
-   for(const later of incorporations)if(later.copy_id===i.copy_id&&(later.incorporation_no as bigint)>=(i.incorporation_no as bigint))result.contexts.add(String(later.context_id));
-  }
-  changed=count!==result.contexts.size+result.requests.size+result.copies.size;
- }
+ const carried=tx.get("SELECT 1 FROM sqlite_master WHERE name='reply_candidate_request'")
+  ?tx.all('SELECT d.request_id,s.request_id origin_request FROM reply_candidate_request d JOIN reply_selection s ON s.owner_id=d.owner_id AND s.id=d.carried_selection_id WHERE d.owner_id=?',[op.ownerId]):[];
+ expandClosure(result,{contexts,items,entries,attempts,preparing,incorporations,carried});
  return result;
 }
 export interface DiscussionDeletionImpact {contextIds:string[];requestIds:string[];attemptIds:string[];entryIds:string[];runtimeCopyIds:string[];discussionIds:string[];holderKeys:string[]}
