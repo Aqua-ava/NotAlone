@@ -37,6 +37,14 @@ function message(text, occurredAt = '2026-10-30T12:00:00.000Z') {
   return { message_id: randomUUID(), speaker: 'contact', message_type: 'text', text,
     media_placeholder: null, occurred_at: occurredAt, quoted: null };
 }
+function historyPage(available, input) {
+  const before = new URLSearchParams(input.path.split('?')[1]).get('before');
+  const start = before ? available.findIndex(item => item.message_id === before) + 1 : 0;
+  const messages = available.slice(start, start + 20);
+  return { generation: 7, data: { messages,
+    next_cursor: available.length > start + 20 ? messages.at(-1).message_id : null } };
+}
+
 const flush = async () => { for (let i = 0; i < 24; i++) await Promise.resolve(); };
 
 test('聊天事件断流后自动重订阅，连接及重连核对最新消息', async t => {
@@ -85,6 +93,111 @@ test('无新消息事件的历史补齐也定期核对最近一页，保留较�
   assert.equal(history.getState().messages.items[0].messageId, immediate.message_id);
   assert.equal(calls.length, 4);
   assert.ok(calls.every(call => call.method === 'GET' && /\/history-messages\?limit=20/.test(call.path)));
+});
+
+for (const initialCount of [0, 3, 20]) test(`初始${initialCount}条历史自动补齐后恢复更早消息分页`, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const complete = Array.from({ length: 40 }, (_, index) => message(`补齐消息${index}`,
+    `2026-11-03T12:${String(59 - index).padStart(2, '0')}:00Z`));
+  let available = complete.slice(0, initialCount);
+  const setup = harness(async input => historyPage(available, input));
+  await setup.select();
+  const history = new ContactHistoryController(setup.backend, setup.contacts); t.after(() => history.dispose());
+  const scope = setup.contacts.getState();
+  const request = { contactId: setup.contactIds[0], scopeRevision: scope.scopeRevision, older: false };
+  await history.load(request);
+  assert.equal(history.getState().messages.nextCursor, null);
+  available = complete;
+  t.mock.timers.tick(5000); t.mock.timers.tick(120); await flush();
+  assert.equal(history.getState().messages.items.length, 20);
+  assert.equal(history.getState().messages.nextCursor, complete[19].message_id);
+  await history.load({ ...request, older: true });
+  assert.deepEqual(history.getState().messages.items.map(item => item.messageId), complete.map(item => item.message_id));
+  assert.equal(history.getState().messages.nextCursor, null);
+});
+
+test('已翻到底后刷新重叠首页不重复分页，超过一页的新消息仍可补齐缺口', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const complete = Array.from({ length: 70 }, (_, index) => ({ ...message(`连续消息${index}`),
+    ordering: 'verified', display_position: String(70 - index) }));
+  let available = complete.slice(30); const calls = [];
+  const setup = harness(async input => { calls.push(input); return historyPage(available, input); });
+  await setup.select();
+  const history = new ContactHistoryController(setup.backend, setup.contacts); t.after(() => history.dispose());
+  const scope = setup.contacts.getState();
+  const request = { contactId: setup.contactIds[0], scopeRevision: scope.scopeRevision, older: false };
+  await history.load(request); await history.load({ ...request, older: true });
+  assert.equal(history.getState().messages.nextCursor, null);
+
+  available = complete.slice(25);
+  t.mock.timers.tick(5000); t.mock.timers.tick(120); await flush();
+  assert.equal(history.getState().messages.nextCursor, null, '重叠页可以沿已读边界证明仍已到底');
+  const reads = calls.length;
+  await history.load({ ...request, older: true });
+  assert.equal(calls.length, reads, '已到底不应重新请求已加载旧页');
+
+  available = complete;
+  t.mock.timers.tick(5000); t.mock.timers.tick(120); await flush();
+  assert.equal(history.getState().messages.nextCursor, complete[19].message_id, '不重叠的最近页必须保留中间缺口入口');
+  await history.load({ ...request, older: true });
+  assert.equal(history.getState().messages.nextCursor, null, '补读与旧范围重叠后复用其已到底证据');
+  assert.deepEqual(history.getState().messages.items.map(item => item.messageId), complete.map(item => item.message_id));
+});
+
+test('较早历史插入超过一页后沿新边界补齐缺口并保留已加载最旧消息', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const complete = Array.from({ length: 70 }, (_, index) => ({ ...message(`历史消息${index}`),
+    ordering: 'verified', display_position: String(70 - index) }));
+  let available = [...complete.slice(0, 10), ...complete.slice(40)];
+  const setup = harness(async input => historyPage(available, input));
+  await setup.select();
+  const history = new ContactHistoryController(setup.backend, setup.contacts); t.after(() => history.dispose());
+  const scope = setup.contacts.getState();
+  const request = { contactId: setup.contactIds[0], scopeRevision: scope.scopeRevision, older: false };
+  await history.load(request); await history.load({ ...request, older: true });
+  available = complete;
+  t.mock.timers.tick(5000); t.mock.timers.tick(120); await flush();
+  assert.equal(history.getState().messages.nextCursor, complete[19].message_id);
+  assert.ok(history.getState().messages.items.some(item => item.messageId === complete[69].message_id));
+  await history.load({ ...request, older: true });
+  assert.equal(history.getState().messages.nextCursor, complete[39].message_id);
+  await history.load({ ...request, older: true });
+  assert.equal(history.getState().messages.nextCursor, null);
+  assert.deepEqual(history.getState().messages.items.map(item => item.messageId), complete.map(item => item.message_id));
+});
+
+for (const allLoaded of [false, true]) test(`未知时间补齐后${allLoaded ? '已到底不循环' : '仍能访问尚未加载的旧页'}`, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const knownCount = allLoaded ? 40 : 20;
+  const known = Array.from({ length: knownCount }, (_, index) => ({ ...message(`有时间消息${index}`,
+    `2026-11-03T12:${String(59 - index).padStart(2, '0')}:00Z`),
+    ordering: 'verified', display_position: String(knownCount - index) }));
+  const unknown = Array.from({ length: allLoaded ? 1 : 41 }, (_, index) => ({ ...message(`未知时间消息${index}`, null),
+    ordering: 'unknown', display_position: String(100 - index) }));
+  let available = [...known, ...unknown];
+  const setup = harness(async input => historyPage(available, input));
+  await setup.select();
+  const history = new ContactHistoryController(setup.backend, setup.contacts); t.after(() => history.dispose());
+  const request = { contactId: setup.contactIds[0], scopeRevision: setup.contacts.getState().scopeRevision, older: false };
+  await history.load(request); await history.load({ ...request, older: true });
+  if (allLoaded) await history.load({ ...request, older: true });
+  assert.equal(history.getState().messages.items.length, allLoaded ? 41 : 40);
+
+  const moved = unknown[allLoaded ? 0 : 10];
+  available = [{ ...moved, occurred_at: '2026-11-03T13:00:00Z', ordering: 'verified' },
+    ...known, ...unknown.filter(item => item !== moved)];
+  t.mock.timers.tick(5000); t.mock.timers.tick(120); await flush();
+  assert.equal(history.getState().messages.items[0].messageId, moved.message_id);
+  const visited = new Set();
+  for (let page = 0; page < 4 && history.getState().messages.nextCursor !== null; page++) {
+    const cursor = history.getState().messages.nextCursor;
+    assert.ok(!visited.has(cursor), '时间补齐后不能反复请求同一更早页');
+    visited.add(cursor);
+    await history.load({ ...request, older: true });
+  }
+  assert.equal(history.getState().messages.nextCursor, null);
+  assert.deepEqual(history.getState().messages.items.map(item => item.messageId), available.map(item => item.message_id),
+    '应读到所有旧消息，不能将环伪装为已到底而隐藏未读范围');
 });
 
 test('定期核对串行读取，切换联系人、来源失效或释放后停止旧范围核对', async t => {
