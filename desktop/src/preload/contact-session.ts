@@ -9,6 +9,7 @@ export function createContactSessionBridge(ipcRenderer: PageTransport): ContactS
     refreshContacts: (...args: unknown[]) => withoutArguments('contacts:refresh', args),
     selectContact: (selection: ContactSelection) => ipcRenderer.invoke('contacts:select', selection),
     createContact: (creation: ContactCreation) => ipcRenderer.invoke('contacts:create', creation),
+    readAvatar: (selection: ContactSelection) => ipcRenderer.invoke('contacts:read-avatar', selection),
     confirmManualContact: (selection: ContactSelection) => ipcRenderer.invoke('contacts:confirm-manual', selection),
     setDraft: (draft: ContactDraft) => ipcRenderer.invoke('contacts:set-draft', draft),
     onStateChanged: (listener: (state: ContactSessionUpdate) => void) => {

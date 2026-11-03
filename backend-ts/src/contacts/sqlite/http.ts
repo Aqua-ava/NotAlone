@@ -33,7 +33,9 @@ export class SqliteContactHttp {
   const path=req.url??'';
   const methods=new Map([['/api/setup/status','GET'],['/api/contacts','GET'],['/api/setup/wechat','GET'],['/api/setup/wechat/detect','POST'],['/api/setup/wechat/confirm','POST'],['/api/sync/cli-bindings','GET'],['/api/sync/cli-sessions','GET'],['/api/sync/cli-bindings/confirm','POST'],['/api/sync/cli-bindings/revoke','POST'],['/api/sync/status','GET'],['/api/sync/enable','POST'],['/api/sync/disable','POST']]);
   const manual=/^\/api\/contacts\/([a-f0-9-]{36})\/manual-confirmation$/.exec(path);
+  const avatar=/^\/api\/contacts\/([a-f0-9-]{36})\/avatar$/.exec(path);
   if(manual)methods.set(path,'POST');
+  if(avatar)methods.set(path,'GET');
   if(!methods.has(path))return false;
   if(methods.get(path)!==req.method){result(res,405,{error:'method_not_allowed'});return true;}
   const controller=new AbortController();const abort=()=>controller.abort();req.once('aborted',abort);
@@ -44,6 +46,7 @@ export class SqliteContactHttp {
    if(manual){exact(body,[]);const contact=(await this.service.directory()).contacts.find(c=>c.contact_id===manual[1]);if(!contact)throw new StorageFailure('identity_not_found');value={confirmed:true,manual_confirmation_id:await this.service.manualConfirm(manual[1],`${this.manualContext}:${manual[1]}:${contact.data_generation}`)};}
    else if(path==='/api/setup/status')value={runtime_owner_configured:true,owner_id:this.service.ownerId,storage:'sqlite',capabilities:['contacts']};
    else if(path==='/api/contacts')value={contacts:(await this.service.directory()).contacts};
+   else if(avatar)value={avatar:await this.service.avatar(avatar[1],controller.signal)};
    else if(path==='/api/setup/wechat'){const d=await this.service.directory();value=d.account?setup('connected',d.account.external_key):setup('needs_detection');}
    else if(path.endsWith('/wechat/detect')){
     exact(body,[]);

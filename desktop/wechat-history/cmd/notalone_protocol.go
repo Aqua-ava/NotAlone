@@ -633,6 +633,10 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		if r.Consent != "private-session-list-metadata-v1" || !notaloneIdentity.MatchString(r.Account) || r.Conversation != "" || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
 			return nil, notaloneFailure("history_request_invalid")
 		}
+	case "metadata-avatar":
+		if r.Consent != "selected-contact-avatar-metadata-v1" || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" || r.Partition != "" || r.Table != "" || r.LocalID != "" || r.ServerID != "" || r.SentAt != "" || r.ResourceToken != "" || r.Offset != 0 || r.ImageKeySupplied {
+			return nil, notaloneFailure("history_request_invalid")
+		}
 	case "release-selection":
 		if r.Consent != "selected-metadata-v1" || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" || r.Kind != "" || r.Partition != "" || r.Table != "" || r.LocalID != "" || r.ServerID != "" || r.SentAt != "" || r.ResourceToken != "" || r.Offset != 0 || r.ImageKeySupplied {
 			return nil, notaloneFailure("history_request_invalid")
@@ -737,6 +741,12 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 			return nil, notaloneFailure("history_scope_unverified")
 		}
 		return h.metadataSessions(ctx)
+	}
+	if r.Operation == "metadata-avatar" {
+		if r.Account != h.server.cfg.Wxid {
+			return nil, notaloneFailure("history_scope_unverified")
+		}
+		return h.metadataAvatar(ctx, r.Conversation)
 	}
 	if r.Operation == "resolve" {
 		return h.bindMetadata(ctx, r.DisplayName)

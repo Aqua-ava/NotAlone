@@ -373,6 +373,25 @@ const imageQualityPolicy=Object.freeze({
  identityAlgorithmSha256:"bf1c53644693cbadc354d5b93caf5bf11d21839520d355700f705bc4143dbc49"
 });
 
+// 只增加逐位联系人的头像元数据；消息、来源守卫、身份算法及已有图片协议逐字保持。
+const contactAvatarPolicy = Object.freeze({
+ ...imageQualityPolicy, oldName:'image-quality-20261102-v1', newName:'avatar-20261103-v1',
+ oldCliSha256:'8c2711c5ec49221ac293c1bf79785d735f72960602b2cd124a4c4c873ce8f7fe',
+ newCliSha256:'3c197629240df0670fae2c4629107d1f4f433a576df6448d7f1d72048f85bc30',
+ oldOverlaySha256:'0226344fc635b1599cfce677dadaf59f9f171a3d1c86909d592a211eacb003aa',
+ newOverlaySha256:'c9f6b9e1f773359e3d10385715707b4b09f2a271b063b51491ce8e403390a8fa',
+ oldImageQualityProof:'wechat-message-image-content-v2', newImageQualityProof:'wechat-message-image-content-v2',
+ oldImageSha256:imageQualityPolicy.imageSha256, oldImageTestSha256:imageQualityPolicy.imageTestSha256,
+ protocolOldSha256:'e57b08c66dea2a5c6ee63c0122ac64ca1008b8b78b54b2d51d8e8619cd16de83',
+ protocolNewSha256:'b8044f55c6c20ed20eb2993a0d7e50e7209f18f5108d5cd75216db9d835b964d',
+ newAvatarMetadataProtocol:'wechat-contact-avatar-metadata-v1',
+ sourceChanges:Object.freeze({
+  'cmd/wechat-cli/notalone_contact_avatar.go':{old:null,new:'e8113eeb5bbe58084c27b3496c1c8e1b491be131b3f732c7e87090e298ac7d3e'},
+  'cmd/wechat-cli/notalone_contact_avatar_test.go':{old:null,new:'bc989d2355e7e1f72d63b233a8f83d3aac4263d47fd4e5ab417c2bb6f0570192'},
+ }),
+ identityAlgorithmSha256:'06acb080edb80c8f81b241fc68a54b1aca1aea1c8a11e513162fd474104c397e',
+});
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -545,7 +564,8 @@ function assertSourcePair(oldFiles, newFiles, policy) {
     // 内联同步只额外开放固定页／增量投影文件；每份仍绑定旧、新摘要，不接受任意身份源码变化。
     const allowed=/^cmd\/wechat-cli\/notalone_quote(?:_[a-z0-9]+)*\.go$/.test(name)
       ||policy.newQuoteInline==='wechat-quote-inline-sync-v1'&&/^cmd\/wechat-cli\/notalone_(?:snapshot|tail)(?:_test)?\.go$/.test(name)
-      ||policy.newSharedProcessProtocol==='wechat-shared-process-v1'&&/^cmd\/wechat-cli\/notalone_(?:account_metadata|selection)(?:_test)?\.go$/.test(name);
+      ||policy.newSharedProcessProtocol==='wechat-shared-process-v1'&&/^cmd\/wechat-cli\/notalone_(?:account_metadata|selection)(?:_test)?\.go$/.test(name)
+      ||policy.newAvatarMetadataProtocol==='wechat-contact-avatar-metadata-v1'&&/^cmd\/wechat-cli\/notalone_contact_avatar(?:_test)?\.go$/.test(name);
     if(!allowed||!isObject(pair)
       ||!(pair.old===null||hashPattern.test(pair.old))||!hashPattern.test(pair.new)
       ||(oldFiles.get(name)??null)!==pair.old||newFiles.get(name)!==pair.new)fail('history_image_upgrade_source_mismatch');
@@ -783,7 +803,10 @@ const quoteTailCloseTools=createUpgradeImageCliTools({repositoryRoot,policy:quot
 const quoteInlineTools=createUpgradeImageCliTools({repositoryRoot,policy:quoteInlinePolicy});
 const sharedProcessTools=createUpgradeImageCliTools({repositoryRoot,policy:sharedProcessPolicy});
 const imageQualityTools=createUpgradeImageCliTools({repositoryRoot,policy:imageQualityPolicy});
-export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageQualityPolicy.oldName)
+const contactAvatarTools=createUpgradeImageCliTools({repositoryRoot,policy:contactAvatarPolicy});
+export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',contactAvatarPolicy.oldName)
+ &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',contactAvatarPolicy.newName)
+ ?contactAvatarTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageQualityPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageQualityPolicy.newName)
  ?imageQualityTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',sharedProcessPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',sharedProcessPolicy.newName)

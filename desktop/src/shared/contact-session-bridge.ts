@@ -55,12 +55,17 @@ export function createContactSessionReceiver() {
   };
 }
 export interface ContactCreation { displayName: string; scopeRevision: number; }
+export interface ContactAvatarData {
+  mimeType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
+  dataBase64: string;
+}
 
 export interface ContactSessionBridge {
   getState(): Promise<ContactSessionState>;
   refreshContacts(): Promise<void>;
   selectContact(selection: ContactSelection): Promise<ContactSessionState>;
   createContact(creation: ContactCreation): Promise<ContactSessionState>;
+  readAvatar?(selection: ContactSelection): Promise<ContactAvatarData | null>;
   confirmManualContact(selection: ContactSelection): Promise<ContactSessionState>;
   setDraft(draft: ContactDraft): Promise<ContactDraftUpdate>;
   onStateChanged(listener: (state: ContactSessionUpdate) => void): () => void;

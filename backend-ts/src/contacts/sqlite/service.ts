@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import type { SqliteStorage } from '../../storage/sqlite/client.ts';
 import type { AccountEvidence, ContactMetadataPort, ContactSelection, ReadEligibility, SavedContactBinding } from './contracts.ts';
+import { fetchContactAvatar, type ContactAvatar } from './avatar.ts';
 function fail(code:string):never {throw new StorageFailure(code);}
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
 const identity=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9_.@-]{1,255}$/.test(v);
@@ -15,6 +16,7 @@ export class SqliteContactService {
  private readonly snapshots=new Map<string,Snapshot>();
  private closed=false;
  private readonly pendingMetadata=new Set<Promise<unknown>>();
+ private readonly avatarReads=new Map<AbortController,string>();
  private closing?:Promise<void>;
  private readonly storage:SqliteStorage;
  readonly ownerId:string;
@@ -24,6 +26,27 @@ export class SqliteContactService {
  private execute<T=any>(name:string,input:object):Promise<T>{if(this.closed)fail('identity_closed');return this.storage.execute(name,{ownerId:this.ownerId,at:this.clock(),...input});}
  initialize(){return this.execute('identity.initialize',{});}
  directory(){return this.execute<Directory>('identity.directory',{});}
+ async avatar(contactId:string,signal?:AbortSignal,load=fetchContactAvatar):Promise<ContactAvatar|null>{
+  if(!uuid(contactId))fail('identity_request_invalid');
+  if(!this.metadata.avatarUrl||this.closed)return null;
+  const controller=new AbortController();this.avatarReads.set(controller,contactId);
+  const combined=AbortSignal.any([controller.signal,AbortSignal.timeout(10_000),...(signal?[signal]:[])]);
+  try{return await this.readMetadata(async()=>{
+   const token=await this.eligibility(contactId),directory=await this.directory();
+   const account=directory.account,binding=directory.bindings.find(b=>b.binding_id===token.binding_id&&b.contact_id===contactId&&b.account_id===token.account_id&&b.status==='active');
+   if(!account||!binding||account.id!==token.account_id)return null;
+   combined.throwIfAborted();
+   const evidence=await this.metadata.account(combined);
+   if(evidence.assurance!=='verified'||evidence.externalKey!==account.external_key||evidence.identityScheme!==account.identity_scheme||evidence.sourceGeneration!==account.source_generation)return null;
+   await this.validate(token);combined.throwIfAborted();
+   const address=await this.metadata.avatarUrl!(evidence,binding.conversation_locator,combined);
+   await this.validate(token);combined.throwIfAborted();
+   if(!address)return null;
+   const avatar=await load(address,combined);
+   await this.validate(token);combined.throwIfAborted();
+   return avatar;
+  });}catch{return null;}finally{this.avatarReads.delete(controller);}
+ }
  syncDirectory(){return this.execute<Pick<Directory,'read_enabled'|'bindings'>>('identity.syncDirectory',{});}
  foregroundSnapshot(){return this.execute<import('../../foreground/sqlite-foreground.ts').ForegroundSnapshot>('identity.foregroundSnapshot',{});}
  async confirmForeground(proof:import('../../foreground/sqlite-foreground.ts').ForegroundBindingConfirmation){await this.execute('identity.confirmForeground',{proof});}
@@ -115,13 +138,14 @@ export class SqliteContactService {
   if(signal?.aborted||this.closed)fail('identity_cancelled');
   return this.execute<{bindings:SavedContactBinding[];sync_enabled:boolean}>('identity.confirm',{accountId:snapshot.accountId,scopeRevision:snapshot.scopeRevision,sourceGeneration:evidence.sourceGeneration,supportProfile:evidence.supportProfile,choices});
  }
- revoke(contactId:string,bindingId:string,expectedGeneration:string){if(!uuid(contactId)||!uuid(bindingId))fail('identity_request_invalid');return this.execute('identity.revoke',{contactId,bindingId,expectedGeneration});}
- setReading(enabled:boolean){return this.execute('identity.setReading',{enabled});}
+ revoke(contactId:string,bindingId:string,expectedGeneration:string){if(!uuid(contactId)||!uuid(bindingId))fail('identity_request_invalid');for(const [read,id] of this.avatarReads)if(id===contactId)read.abort();return this.execute('identity.revoke',{contactId,bindingId,expectedGeneration});}
+ setReading(enabled:boolean){if(!enabled)for(const read of this.avatarReads.keys())read.abort();return this.execute('identity.setReading',{enabled});}
  eligibility(contactId:string){return this.execute<ReadEligibility>('identity.eligibility',{contactId});}
  validate(token:ReadEligibility){if(token.owner_id!==this.ownerId)fail('read_not_authorized');return this.execute('identity.validate',{token});}
  manualConfirm(contactId:string,contextToken:string){if(!uuid(contactId))fail('identity_request_invalid');return this.execute<string>('identity.manualConfirm',{contactId,contextToken,id:randomUUID()});}
  close():Promise<void>{
   this.closed=true;this.snapshots.clear();this.candidate=undefined;
+  for(const read of this.avatarReads.keys())read.abort();
   return this.closing??=(async()=>{
    await this.metadata.close?.();
    // 端口close/abort返回不证明读取已结算；未结束的读取继续阻止删除完成。

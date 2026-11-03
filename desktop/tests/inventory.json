@@ -1,5 +1,6 @@
 {
  "safe-node": [
+  "tests/contact-avatar.test.mjs",
   "tests/memory-source-time.test.mjs",
     "tests/history-recertify.test.mjs",
     "tests/message-stream.test.mjs",
@@ -154,6 +155,7 @@
   "tests/incremental-sync-status.test.mjs"
  ],
  "headless": [
+  "tests/contact-avatar-view.test.mjs",
   "tests/workspace-draft-sqlite-handoff.test.mjs",
   "tests/history-recertify-view.test.mjs",
   "tests/assistant-session-workspace.test.mjs",

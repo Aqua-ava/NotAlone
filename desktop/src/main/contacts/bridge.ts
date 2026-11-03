@@ -6,6 +6,7 @@ import { normalizeUuid } from '../uuid';
 import { readContactDirectory } from './directory';
 import { ContactSession } from './session';
 import { randomUUID } from 'node:crypto';
+import { readContactAvatar } from './avatar';
 
 export function selectionArguments(args: unknown[], withDraft = false): ContactSelection | ContactDraft {
   const value = args[0];
@@ -37,6 +38,9 @@ export function installContactSessionBridge(commands: PageCommands, backend: Bac
   commands.handle('contacts:select', (...args: unknown[]) => {
     return contacts.selectContact(selectionArguments(args));
   });
+  commands.handle('contacts:read-avatar', (...args: unknown[]) => {
+    return readContactAvatar(backend, contacts, selectionArguments(args));
+  }, 'manager');
   let creating = false;
   let creation: { name: string; id: string } | undefined;
   commands.handle('contacts:create', async (...args: unknown[]) => {

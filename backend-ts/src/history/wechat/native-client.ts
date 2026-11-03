@@ -48,6 +48,10 @@ export interface WechatPrivateSessionMetadata {
   format: 'wechat-private-session-metadata-v1'; account: WechatAccountMetadata;
   sessions: {username: string; displayName: string; kind: 'private'; identityAssurance: 'verified'}[];
 }
+export interface WechatContactAvatarMetadata {
+  format: 'wechat-contact-avatar-metadata-v1'; account: WechatAccountMetadata;
+  username: string; avatarUrl: string | null;
+}
 export interface WechatMessageMetadataRecord {
   partition: string; table: string; localId: string | null; serverId: string | null;
   originalType: string | null; status: string | null;
@@ -820,6 +824,29 @@ export class NarrowWechatClient {
       if (this.#account.status !== 'verified') return fail('history_metadata_profile_unverified');
       const account = this.#account;
       return this.#request({op:'metadata-sessions',account:account.accountKey,consent:'private-session-list-metadata-v1'}, value => privateSessionMetadata(value, account, this.#options), 4 * 1024 * 1024);
+    }, signal);
+  }
+  /** 精确读取一位已确认联系人的展示头像；不枚举名单、不创建正文资格。 */
+  contactAvatarMetadata(evidence: WechatAccountMetadata, username: string, signal?: AbortSignal): Promise<WechatContactAvatarMetadata> {
+    try { signalValid(signal); accountMetadata(evidence, this.#options); accountIdentity(username);
+      if (systemConversations.has(username) || username === evidence.accountKey || username.startsWith('@') || username.startsWith('gh_') || username.startsWith('biz_')
+        || ['@chatroom', '@weclaw', '@openim', '@stranger'].some(suffix => username.endsWith(suffix))
+        || ['brandsessionholder', 'brandservicesessionholder'].includes(username)) fail('history_request_invalid');
+    } catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
+    return this.#enqueue(() => {
+      if (!this.#account || this.#account.status !== 'verified' || JSON.stringify(evidence) !== JSON.stringify(this.#account)) return fail('history_scope_unverified');
+      return this.#request({op: 'metadata-avatar', account: evidence.accountKey, conversation: username, consent: 'selected-contact-avatar-metadata-v1'}, value => {
+        const row = object(value, ['format', 'account', 'username', 'avatarUrl']);
+        const account = accountMetadata(row.account, this.#options);
+        if (row.format !== 'wechat-contact-avatar-metadata-v1' || JSON.stringify(account) !== JSON.stringify(evidence) || row.username !== username) return fail();
+        if (row.avatarUrl !== null) {
+          if (typeof row.avatarUrl !== 'string' || Buffer.byteLength(row.avatarUrl) > 2048 || /[\s\\\u0000-\u001f\u007f]/.test(row.avatarUrl)) return fail();
+          let url: URL; try { url = new URL(row.avatarUrl); } catch { return fail(); }
+          if (url.protocol !== 'https:' || !['wx.qlogo.cn', 'thirdwx.qlogo.cn'].includes(url.hostname) || url.username || url.password || url.port || url.hash
+            || !row.avatarUrl.startsWith(`https://${url.hostname}/`)) return fail();
+        }
+        return {format: 'wechat-contact-avatar-metadata-v1', account, username, avatarUrl: row.avatarUrl as string | null};
+      }, 16 * 1024);
     }, signal);
   }
   /** 仅释放会话资源；账号级来源守卫与一次性图片密钥通道继续属于当前进程。 */

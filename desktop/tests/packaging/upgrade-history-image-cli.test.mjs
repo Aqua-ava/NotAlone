@@ -67,7 +67,7 @@ function overlaySha(files) {
   return hash(JSON.stringify(rows));
 }
 
-async function syntheticUpgradeFixture({ existingImage = false, quotes = false, quoteTail = false, quoteInline = false, sharedProcess = false } = {}) {
+async function syntheticUpgradeFixture({ existingImage = false, quotes = false, quoteTail = false, quoteInline = false, sharedProcess = false, contactAvatar = false } = {}) {
   const repositoryRoot = await mkdtemp(path.join(process.cwd(), '.tmp-notalone-image-upgrade-'));
   const buildsRoot = path.join(repositoryRoot, 'local-tools/wx-cli/.notalone-builds');
   const oldName = existingImage ? 'original-image-20261031-v1' : 'true-delta-20261031-c2';
@@ -119,6 +119,7 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
   }
   if(quoteInline)newFiles['cmd/wechat-cli/notalone_snapshot.go']='snapshot with bounded inline quote projection';
   if(sharedProcess){newFiles['cmd/wechat-cli/notalone_account_metadata.go']='account identity unchanged plus bounded all-session metadata';newFiles['cmd/wechat-cli/notalone_selection_test.go']='selection isolation regression';}
+  if(contactAvatar){newFiles['cmd/wechat-cli/notalone_contact_avatar.go']='exact private contact avatar metadata';newFiles['cmd/wechat-cli/notalone_contact_avatar_test.go']='avatar scope and URL regression';}
   const write = async (file, data, mode = 0o600) => {
     await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
     await writeFile(file, data, { mode });
@@ -160,6 +161,7 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
   const protocolNewSha256 = hash(newProtocol);
   const inlineSourceChanges=quoteInline?{'cmd/wechat-cli/notalone_snapshot.go':{old:hash(oldFiles['cmd/wechat-cli/notalone_snapshot.go']),new:hash(newFiles['cmd/wechat-cli/notalone_snapshot.go'])}}:{};
   const sharedSourceChanges=sharedProcess?Object.fromEntries(['cmd/wechat-cli/notalone_account_metadata.go','cmd/wechat-cli/notalone_selection_test.go'].map(name=>[name,{old:oldFiles[name]?hash(oldFiles[name]):null,new:hash(newFiles[name])}])):{};
+  const avatarSourceChanges=contactAvatar?Object.fromEntries(['cmd/wechat-cli/notalone_contact_avatar.go','cmd/wechat-cli/notalone_contact_avatar_test.go'].map(name=>[name,{old:null,new:hash(newFiles[name])}])):{};
   const updates=Object.entries({...inlineSourceChanges,...sharedSourceChanges}).filter(([name])=>Object.hasOwn(identityFiles,name)).sort(([a],[b])=>a.localeCompare(b));
   const identityAlgorithmSha256 = hash(JSON.stringify({ files: Object.entries(identityFiles).sort((left, right) => left[0].localeCompare(right[0])),
     protocol: [protocolOldSha256, protocolNewSha256],...(updates.length?{updates}:{}) }));
@@ -168,6 +170,7 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
     ...(quoteTail?{oldQuoteProtocol:'wechat-quote-message-v1',newQuoteReader:'wechat-quote-normal-tail-v2'}:{}),
     ...(quoteInline?{newQuoteInline:'wechat-quote-inline-sync-v1'}:{}),
     ...(sharedProcess?{newSharedProcessProtocol:'wechat-shared-process-v1'}:{}),
+    ...(contactAvatar?{newAvatarMetadataProtocol:'wechat-contact-avatar-metadata-v1',sourceChanges:avatarSourceChanges}:{}),
     oldCliSha256, newCliSha256, oldOverlaySha256: overlaySha(oldFiles), newOverlaySha256: overlaySha(newFiles),
     newImageProtocol: 'wechat-original-image-v1', identityFiles, identityAlgorithmSha256,
     protocolOldSha256, protocolNewSha256, imageSha256: hash(newImage), imageTestSha256: hash(newImageTest),
@@ -427,3 +430,17 @@ test('拒绝预先存在的输出sidecar', async t => {
  await writeFile(path.join(invalid.toRoot,'source/cmd/wechat-cli/notalone_history.go'),'unreviewed identity change');
  await assert.rejects(invalid.tools.prepareAliases(invalid),/history_image_upgrade_source_mismatch/);
  });
+
+test('头像升级只新增固定窄元数据文件，沿用全部原来源别名', async t => {
+ const f=await syntheticUpgradeFixture({existingImage:true,contactAvatar:true});t.after(()=>rm(f.repositoryRoot,{recursive:true,force:true}));
+ assert.equal((await f.tools.prepareAliases(f)).status,'prepared');
+ assert.deepEqual(JSON.parse(await readFile(path.join(f.toRoot,'source-identity-aliases.json'),'utf8')).aliases,f.aliases);
+ for(const change of ['missing-protocol','avatar-bytes','identity-bytes']){
+  const invalid=await syntheticUpgradeFixture({existingImage:true,contactAvatar:true});t.after(()=>rm(invalid.repositoryRoot,{recursive:true,force:true}));
+  if(change==='missing-protocol'){
+   delete invalid.policy.newAvatarMetadataProtocol;
+   invalid.tools=createUpgradeImageCliTools({repositoryRoot:invalid.repositoryRoot,policy:invalid.policy});
+  }else await writeFile(path.join(invalid.toRoot,'source/cmd/wechat-cli',change==='avatar-bytes'?'notalone_contact_avatar.go':'notalone_identity_aliases.go'),'unreviewed change');
+  await assert.rejects(invalid.tools.prepareAliases(invalid),/history_image_upgrade_source_mismatch/);
+ }
+});

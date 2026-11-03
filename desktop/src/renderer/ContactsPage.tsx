@@ -9,6 +9,7 @@ import { useRevisionedSession } from './use-revisioned-session';
 import { useBindingConsent } from './use-binding-consent';
 import { BindingConsentPage, BindingFeedback } from './BindingConsentPage';
 import { ContactDeletionMenu, ContactDeletionStatus, useContactDeletion } from './ContactDeletionPanel';
+import { ContactAvatar } from './ContactAvatar';
 
 const initialSync: SyncControlState = { revision: -1, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
 
@@ -18,6 +19,7 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
   const deletion = useContactDeletion(deletionBridge);
   const [addingWechat, setAddingWechat] = useState(initialSelection), [targetContactId, setTargetContactId] = useState<string>();
   const [startSync, setStartSync] = useState(initialSelection);
+  const [avatarRefresh, setAvatarRefresh] = useState(0);
   const consent = useBindingConsent(session);
   const { state: sync } = useRevisionedSession(initialSync, window.notalone.syncControl);
   useEffect(() => {
@@ -41,6 +43,7 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
   }
   async function refreshContacts() {
     await Promise.allSettled([session.refreshContacts(), consent.refreshSaved(), window.notalone.syncControl.refresh()]);
+    setAvatarRefresh(revision => revision + 1);
   }
   const selected = state.contacts.find((contact) => contact.contactId === state.selectedContactId);
   const visibleContacts = selected ? [selected, ...state.contacts.filter(contact => contact.contactId !== selected.contactId)] : state.contacts;
@@ -69,7 +72,8 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
     {state.contacts.length > 0 && <div className="contacts-columns"><ul className="contact-list" aria-label="联系人列表">
       {visibleContacts.map((contact) => <li key={contact.contactId} className="contact-card" data-current={state.selectedContactId === contact.contactId}>
         <div className="contact-row">
-          <span className="contact-avatar" aria-hidden="true">{Array.from(contact.displayName)[0]}</span>
+          <ContactAvatar contactId={contact.contactId} displayName={contact.displayName}
+            scopeRevision={state.scopeRevision} bridge={window.notalone.contacts} refreshKey={avatarRefresh} />
           <div className="contact-row-copy"><div className="contact-row-name"><b>{contact.displayName}</b>
             {state.selectedContactId === contact.contactId && <span className="contact-row-choice">当前</span>}</div>
             <small>{contact.messageCount} 条消息</small>

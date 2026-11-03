@@ -36,6 +36,12 @@ if(s.mode==='no-config'){console.log(JSON.stringify({ok:false,error:{code:'histo
 if(s.mode==='unverified-source'){console.log(JSON.stringify({ok:false,error:{code:'history_source_unverified'}}));return;}
 if(s.mode==='explicit-config'&&(process.env.WECHAT_CLI_CONFIG!==stateFile||process.env.HOME!==s.expectedHome||process.env.NOTALONE_UNRELATED_SECRET)){console.log(JSON.stringify({ok:false,error:{code:'history_account_unavailable'}}));return;}
 if(r.op==='metadata-account'){data=account(s);if(s.mode==='account-body')data.body='BODY_SENTINEL';if(s.mode==='account-promoted')data.normalHistory=true;if(s.mode==='account-artifact')data.artifactSha256='f'.repeat(64);}
+if(r.op==='metadata-avatar'){
+ data={format:'wechat-contact-avatar-metadata-v1',account:account(s),username:r.conversation,avatarUrl:s.mode==='avatar-null'?null:'https://wx.qlogo.cn/mmhead/synthetic/132'};
+ if(s.mode==='avatar-other')data.username='friend-b';if(s.mode==='avatar-body')data.summary='BODY_SENTINEL';
+ if(s.mode==='avatar-account')data.account.accountKey='another-owner';
+ if(s.mode.startsWith('avatar-url:'))data.avatarUrl=s.mode.slice(11);
+}
 if(r.op==='metadata-sessions-all')data={format:'wechat-all-session-metadata-v1',account:account(s),sessions:[{username:'friend-a',displayName:'合成甲',kind:'private'},{username:'room@chatroom',displayName:'合成群',kind:'group'},...['folded','bot','official_account','corp_im','stranger'].map(kind=>({username:'synthetic-'+kind,displayName:'合成其他类型',kind}))]};
 if(r.op==='metadata-sessions'){
  if(s.mode==='cancel')return;
@@ -74,6 +80,31 @@ async function requested(f, op) {
   });
 }
 function noProcess(pid) { assert.throws(()=>process.kill(pid,0),{code:'ESRCH'}); }
+
+test('单联系人头像仅使用显式身份与独立许可，不枚举名单或读取正文', async t => {
+ const f=await fixture(t), account=await f.client.accountMetadata();
+ const result=await f.client.contactAvatarMetadata(account,'friend-a');
+ assert.equal(result.username,'friend-a');assert.equal(result.avatarUrl,'https://wx.qlogo.cn/mmhead/synthetic/132');
+ assert.deepEqual(await requests(f),[
+  {op:'metadata-account',consent:'account-session-metadata-v1'},
+  {op:'metadata-avatar',account:accountKey,conversation:'friend-a',consent:'selected-contact-avatar-metadata-v1'},
+ ]);
+});
+
+test('头像协议拒绝身份替换、夹带正文和非白名单HTTPS地址',async t=>{
+ for(const mode of ['avatar-other','avatar-body','avatar-account',...['http://wx.qlogo.cn/x','https://example.invalid/x','https://wx.qlogo.cn.evil.invalid/x','https://user@wx.qlogo.cn/x','https://wx.qlogo.cn:444/x','https://wx.qlogo.cn/x#fragment','https://wx.qlogo.cn','https://wx.qlogo.cn:443/x'].map(url=>'avatar-url:'+url)]){
+  const f=await fixture(t,mode),account=await f.client.accountMetadata();
+  await assert.rejects(f.client.contactAvatarMetadata(account,'friend-a'),{code:'history_protocol_invalid'});
+ }
+});
+
+test('缺失头像保持null；未证明账号与非私聊输入不会启动头像读取',async t=>{
+ const f=await fixture(t,'avatar-null'),account=await f.client.accountMetadata();
+ assert.equal((await f.client.contactAvatarMetadata(account,'friend-a')).avatarUrl,null);
+ for(const username of ['filehelper','room@chatroom','gh_service','',accountKey])await assert.rejects(f.client.contactAvatarMetadata(account,username),{code:'history_request_invalid'});
+ await assert.rejects(f.client.contactAvatarMetadata({...account,sourceGeneration:'b'.repeat(64)},'friend-a'),{code:'history_scope_unverified'});
+ assert.equal((await requests(f)).filter(row=>row.op==='metadata-avatar').length,1);
+});
 
 test('正式metadata factory与联系人服务从空库完成检测、账号确认、名单确认和grant',async t=>{
   const f=await fixture(t),metadata=createWechatContactMetadata(f.executable);
