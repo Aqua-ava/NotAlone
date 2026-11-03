@@ -64,7 +64,7 @@ export function ContactSyncSettings({ session, navigate }: {
     {selected ? <>
       <p><b>{selected.displayName}</b></p>
       {opening ? <p role="status">正在确认联系人同步状态…</p> : selecting ? <BindingConsentPage contacts={session} consent={consent} navigate={navigate}
-        targetContactId={selected.contactId} allPrivate={allPrivate} onClose={closeSelection} returnLabel="返回同步设置" />
+        targetContactId={selected.contactId} allPrivate={allPrivate} onClose={closeSelection} returnLabel="返回联系人同步" />
         : <ContactSyncDetails contactId={selected.contactId} consent={consent} allPrivate={allPrivate}
           onConnect={() => {
             if (openingPending.current) return;

@@ -94,45 +94,32 @@ test('拒绝历史读取保留增量说明，之后仍可明确允许',async t=>
  assert.deepEqual((await page.evaluate(()=>window.calls)).at(-1),{scopeRevision:4,decision:'accepted',confirmed:true});
 });
 
-test('消息历史覆盖按联系人显示四态、当前进度和汇总，关系资料独立说明', async t => {
+test('同步总览保留进度和异常入口，默认不展开联系人或技术统计', async t => {
  const browser = await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
  const page = await browser.newPage();
  await mount(page, `
  import React from 'react';import {createRoot} from 'react-dom/client';import {SyncControlPanel} from './src/renderer/SyncControlPanel';
  const historyCoverages=['not_started','syncing','complete','incomplete'].map((phase,i)=>({bindingId:'binding-'+i,contactId:'contact-'+i,phase,
  failureCode:i===3?'cli_timeout':null,messageCount:i*100,pageCount:i,nonTextCount:0}));
- let state={revision:1,scopeRevision:4,phase:'ready',busy:null,errorCode:null,report:{enabled:true,backgroundPhase:'active',confirmedBindingCount:4,
+ let state={revision:1,scopeRevision:4,phase:'ready',busy:null,errorCode:null,report:{enabled:true,bodyAvailable:true,backgroundPhase:'active',confirmedBindingCount:4,
  historyCoverages,backfill:{phase:'complete'}}};
  const listeners=new Set();const bridge={getState:async()=>state,refresh:async()=>{},onStateChanged:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}};
  const root=createRoot(document.getElementById('root'));
- const render=current=>root.render(<SyncControlPanel bridge={bridge} currentContactId={current}
+ root.render(<SyncControlPanel bridge={bridge} currentContactId="contact-1"
  contacts={historyCoverages.map((c,i)=>({contactId:c.contactId,displayName:'合成联系人'+i}))}/>);
  window.update=()=>{state={...state,revision:2,report:{...state.report,historyCoverages:historyCoverages.map((c,i)=>i===1?{...c,phase:'complete',messageCount:250,pageCount:5}:c)}};
- for(const fn of listeners)fn(state);render('contact-2');};render('contact-1');
+ for(const fn of listeners)fn(state);};
  `);
  const section=page.getByRole('region',{name:'聊天同步进度',exact:true});
- await expect(section.getByText('合成联系人3',{exact:true})).toBeVisible();
- await expect(section.getByText('读取暂时超时，开启同步时会自动重试。',{exact:true})).toBeVisible();
- await expect(section.getByText('合成联系人2',{exact:true})).not.toBeVisible();
- await expect(section.getByText('当前联系人：合成联系人1',{exact:true})).not.toBeVisible();
- await expect(section.getByText('已读完 1 / 4 个会话的本机历史',{exact:true})).toBeVisible();
  await expect(section.getByRole('progressbar')).toHaveAttribute('value','1');
- await expect(section).not.toContainText('水位');
- await expect(section).not.toContainText('页');
- await expect(page.getByRole('region',{name:'关系资料处理',exact:true})).toContainText('聊天读完后，还需要整理关系资料');
- await section.getByText('查看正在读取和等待同步的会话（2）',{exact:true}).click();
- await expect(section.getByText('当前联系人：合成联系人1',{exact:true})).toBeVisible();
- await expect(section.getByText('等待同步',{exact:true})).toBeVisible();
- await section.getByText('查看已读完的会话（1）',{exact:true}).click();
- await expect(section.getByText('合成联系人2',{exact:true})).toBeVisible();
+ await expect(section.getByRole('progressbar')).toHaveAttribute('max','4');
+ await expect(section.getByRole('button',{name:'查看并处理',exact:true})).toBeVisible();
+ await expect(section).not.toContainText('合成联系人');
+ await expect(section).not.toContainText('非文字占位');
+ await expect(section).not.toContainText('读取暂时超时');
  await page.evaluate(()=>window.update());
- await expect(section.getByText('当前联系人：合成联系人2',{exact:true})).toBeVisible();
- await expect(section.getByText('本机历史已读完 · 已保存 250 条文字消息、0 条非文字占位',{exact:true})).toBeVisible();
- await expect(section.getByText('已读完 2 / 4 个会话的本机历史',{exact:true})).toBeVisible();
  await expect(section.getByRole('progressbar')).toHaveAttribute('value','2');
- await section.getByText('查看已读完的会话（2）',{exact:true}).click();
- await expect(section.getByText('当前联系人：合成联系人2',{exact:true})).not.toBeVisible();
- await expect(section.getByText('合成联系人3',{exact:true})).toBeVisible();
+ await expect(section).not.toContainText('已保存 250');
 });
 
 test('会话类型冲突与范围未核验明确显示已停读，不暗示仍在读取正文', async t => {
@@ -146,9 +133,12 @@ test('会话类型冲突与范围未核验明确显示已停读，不暗示仍�
  contacts={coverages.map((row,i)=>({contactId:row.contactId,displayName:'合成联系人'+i}))}/>);
  `);
  const section=page.getByRole('region',{name:'聊天同步进度',exact:true});
- await expect(section.getByRole('status').filter({hasText:'会话类型与私聊授权不一致，已停止读取；请在联系人中核对关联。'})).toBeVisible();
- await expect(section.getByRole('status').filter({hasText:'暂时无法确认会话属于已授权私聊，已停止读取；核验通过后再继续。'})).toBeVisible();
- await expect(section).not.toContainText('正在自动重试');
+ await section.getByRole('button',{name:'查看并处理',exact:true}).click();
+ const issues=page.getByRole('region',{name:'同步问题',exact:true});
+ await issues.getByRole('button',{name:/聊天来源需要核验.*2/}).click();
+ await expect(issues).toContainText('相关读取已暂停');
+ await expect(issues).toContainText('联系人的同步设置');
+ await expect(page.locator('body')).not.toContainText('正在自动重试');
 });
 
 test('旧增量授权没有历史行时，后台及当前联系人仍明确显示范围停读原因', async t => {
@@ -167,7 +157,7 @@ test('旧增量授权没有历史行时，后台及当前联系人仍明确显�
  await expect(page.getByLabel('当前联系人同步状态')).toContainText('会话类型与私聊授权不一致，已停止读取；请在联系人中核对关联。');
 });
 
-test('联系人列表省略同步标签，单个联系人的启停统一在同步设置管理', async t => {
+test('联系人列表不展开诊断，详情可显示短状态且启停仍需原授权流程', async t => {
  const browser = await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
  const page = await browser.newPage();
  await mount(page, `
@@ -200,15 +190,15 @@ test('联系人列表省略同步标签，单个联系人的启停统一在同�
  await expect(list).toContainText('200 条消息');
  await expect(list).toContainText('10 条消息');
  await expect(list).not.toContainText('同步');
- const settingsButton=directory.getByRole('button',{name:'资料管理',exact:true});
+ const settingsButton=directory.getByRole('button',{name:'查看同步',exact:true});
  await settingsButton.click();
- await expect(directory.getByRole('button',{name:/停止.*的自动同步/})).toHaveCount(0);
+ await expect(directory.getByRole('button',{name:/停止.*的自动同步/})).toBeVisible();
  await expect(directory.getByRole('button',{name:'查看关系资料',exact:true})).toBeVisible();
  await page.evaluate(()=>window.select('b'));
- await expect(settingsButton).toHaveAttribute('aria-expanded','false');
+ await expect(directory.getByRole('region',{name:'当前联系人设置',exact:true})).toHaveCount(0);
  await settingsButton.click();
- await expect(directory.getByRole('button',{name:/停止.*的自动同步/})).toHaveCount(0);
- for(const text of ['历史读取受阻','本机历史已读完','非文字占位','系统等元数据','已跟进','新消息同步暂未继续','图片：','微信关联与同步','已关联微信','核对会话标识','联系人标识','synthetic-a','synthetic-b']) {
+ await expect(directory.getByRole('button',{name:/停止.*的自动同步/})).toBeVisible();
+ for(const text of ['非文字占位','系统等元数据','已跟进','新消息同步暂未继续','图片：']) {
   await expect(directory).not.toContainText(text);
  }
  await page.evaluate(()=>window.select('a','sync'));
@@ -228,7 +218,7 @@ test('联系人列表省略同步标签，单个联系人的启停统一在同�
  await expect(settings.getByRole('region',{name:'添加微信联系人'})).toBeVisible();
  assert.equal(await page.evaluate(()=>window.listReads),0);
  assert.equal((await page.evaluate(()=>window.writes)).length,1);
- await settings.getByRole('button',{name:'返回同步设置',exact:true}).click();
+ await settings.getByRole('button',{name:'返回联系人同步',exact:true}).click();
  await expect(settings.getByRole('button',{name:'开启自动同步',exact:true})).toBeVisible();
  await page.evaluate(()=>window.select(null,'sync'));
  await expect(settings).toContainText('在顶部选择联系人后');
@@ -255,4 +245,118 @@ test('SQLite总开关先核验读取能力，关闭或未就绪时不误报功�
  assert.deepEqual(await page.evaluate(()=>window.calls),[{scopeRevision:4}]);
  await expect(page.getByText('已开启同步，等待读取能力核验',{exact:true})).toBeVisible();
  await expect(page.getByText('后台正文同步已开启',{exact:true})).toHaveCount(0);
+});
+
+test('大量同步异常按原因去重，搜索分页有界且查看联系人不重放授权', async t => {
+ const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const page=await browser.newPage();
+ await mount(page, `
+ import React from 'react';import {createRoot} from 'react-dom/client';
+ import {HistoryCoverageStatus} from './src/renderer/HistoryCoverageStatus';
+ const contacts=Array.from({length:200},(_,i)=>({contactId:'contact-'+i,displayName:'合成联系人'+String(i).padStart(3,'0')}));
+ const coverages=contacts.map((contact,i)=>({bindingId:'binding-'+i,contactId:contact.contactId,
+ phase:i<189?'incomplete':'complete',failureCode:i<189?'history_source_continuity_unverified':null,
+ messageCount:2000,nonTextCount:70,pageCount:200,metadataOnlyCount:30,
+ incrementalPhase:i<192?'blocked':'ready',incrementalFailureCode:i<189?'history_incomplete':i<192?'history_tail_unsupported':null}));
+ coverages.push({...coverages[0],bindingId:'duplicate-binding',failureCode:'cli_timeout'});
+ window.calls=[];
+ const root=createRoot(document.getElementById('root'));
+ const render=(rows=coverages,names=contacts)=>root.render(<HistoryCoverageStatus coverages={rows} contacts={names} bodyAvailable enabled
+ onOpenContact={id=>window.calls.push({contactId:id})} onOpenDiagnostics={()=>window.calls.push({diagnostics:true})}/>);
+ window.replace=()=>render([{...coverages[0],contactId:'replacement',bindingId:'replacement'}],[{contactId:'replacement',displayName:'新范围联系人'}]);
+ render();
+ `);
+ const overview=page.getByRole('region',{name:'聊天同步进度',exact:true});
+ await expect(overview).toContainText('192 位联系人同步需要关注');
+ await expect(overview).not.toContainText('合成联系人');
+ await expect(page.getByRole('list',{name:'需关注的联系人'})).toHaveCount(0);
+ await expect(overview).not.toContainText('非文字占位');
+ await overview.getByRole('button',{name:'查看并处理',exact:true}).click();
+ const issues=page.getByRole('region',{name:'同步问题',exact:true});
+ await expect(issues).toContainText('192 位联系人需要关注');
+ await expect(issues).not.toContainText('合成联系人');
+ await issues.getByRole('button',{name:/聊天来源需要核验.*189/}).click();
+ const list=issues.getByRole('list',{name:'需关注的联系人'});
+ await expect(list.getByRole('listitem')).toHaveCount(10);
+ await expect(list).toContainText('合成联系人000');
+ await expect(list).not.toContainText('非文字占位');
+ await issues.getByRole('button',{name:'下一页',exact:true}).click();
+ await expect(list.getByRole('listitem')).toHaveCount(10);
+ await expect(list).toContainText('合成联系人010');
+ await expect(list).not.toContainText('合成联系人000');
+ await issues.getByRole('searchbox',{name:'搜索联系人'}).fill('188');
+ await expect(list.getByRole('listitem')).toHaveCount(1);
+ await expect(list).toContainText('合成联系人188');
+ await expect(issues.getByRole('button',{name:'上一页',exact:true})).toBeDisabled();
+ await list.getByRole('button',{name:'查看联系人',exact:true}).click();
+ assert.deepEqual(await page.evaluate(()=>window.calls),[{contactId:'contact-188'}]);
+ await issues.getByRole('searchbox',{name:'搜索联系人'}).fill('');
+ await page.evaluate(()=>window.replace());
+ await expect(list.getByRole('listitem')).toHaveCount(1);
+ await expect(list).toContainText('新范围联系人');
+ await expect(issues).not.toContainText('合成联系人');
+ await issues.getByRole('button',{name:'打开同步诊断',exact:true}).click();
+ assert.deepEqual(await page.evaluate(()=>window.calls),[{contactId:'contact-188'},{diagnostics:true}]);
+});
+
+test('同步诊断分页按需挂载单人统计，删除或换范围后撤下旧详情', async t => {
+ const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const page=await browser.newPage();
+ await mount(page, `
+ import React from 'react';import {createRoot} from 'react-dom/client';
+ import {HistoryCoverageDiagnostics} from './src/renderer/HistoryCoverageStatus';
+ const contacts=Array.from({length:23},(_,i)=>({contactId:'contact-'+i,displayName:'诊断合成联系人'+String(i).padStart(2,'0')}));
+ const coverages=contacts.map((contact,i)=>({bindingId:'binding-'+i,contactId:contact.contactId,
+ phase:'incomplete',failureCode:'history_source_continuity_unverified',messageCount:100+i,nonTextCount:70,pageCount:200,
+ nonTextTypes:[{messageType:'image',label:'图片',count:70}],metadataOnlyCount:30,incrementalPhase:'blocked',incrementalPages:12}));
+ const root=createRoot(document.getElementById('root'));
+ const render=(rows=coverages,names=contacts)=>root.render(<HistoryCoverageDiagnostics coverages={rows} contacts={names} bodyAvailable enabled/>);
+ window.removeSelected=()=>render(coverages.filter(row=>row.contactId!=='contact-22'),contacts.filter(contact=>contact.contactId!=='contact-22'));
+ window.replace=()=>render([{...coverages[0],contactId:'new',bindingId:'new'}],[{contactId:'new',displayName:'新范围诊断联系人'}]);
+ render();
+ `);
+ const diagnostics=page.getByRole('region',{name:'同步诊断',exact:true});
+ const list=diagnostics.getByRole('list',{name:'同步诊断联系人'});
+ const detail=diagnostics.getByLabel('当前联系人消息历史覆盖');
+ await expect(list.getByRole('listitem')).toHaveCount(10);
+ await expect(detail).toHaveCount(0);
+ await expect(diagnostics).not.toContainText('70 条非文字占位');
+ await diagnostics.getByRole('button',{name:'下一页',exact:true}).click();
+ await expect(list).toContainText('诊断合成联系人10');
+ await diagnostics.getByRole('button',{name:'下一页',exact:true}).click();
+ await expect(list.getByRole('listitem')).toHaveCount(3);
+ await list.getByRole('listitem').filter({hasText:'诊断合成联系人22'}).getByRole('button',{name:'查看明细'}).click();
+ await expect(list).toHaveCount(0);
+ await expect(detail).toContainText('已保存 122 条文字消息');
+ await expect(detail).toContainText('图片：70 条');
+ await expect(detail).toContainText('系统等元数据');
+ await page.evaluate(()=>window.removeSelected());
+ await expect(detail).toHaveCount(0);
+ await expect(diagnostics).not.toContainText('诊断合成联系人22');
+ await expect(list.getByRole('listitem')).toHaveCount(10);
+ await diagnostics.getByRole('searchbox',{name:'搜索联系人'}).fill('21');
+ await expect(list.getByRole('listitem')).toHaveCount(1);
+ await list.getByRole('button',{name:'查看明细'}).click();
+ await expect(detail).toContainText('已保存 121 条文字消息');
+ await page.evaluate(()=>window.replace());
+ await expect(detail).toHaveCount(0);
+ await expect(diagnostics).not.toContainText('诊断合成联系人');
+ await expect(list).toContainText('新范围诊断联系人');
+});
+
+test('已关闭同步的临时失败仅展示保存状态，不承诺正在自动重试', async t => {
+ const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const page=await browser.newPage();
+ await mount(page, `
+ import React from 'react';import {createRoot} from 'react-dom/client';
+ import {HistoryCoverageStatus} from './src/renderer/HistoryCoverageStatus';
+ createRoot(document.getElementById('root')).render(<HistoryCoverageStatus enabled={false} bodyAvailable
+ coverages={[{bindingId:'b',contactId:'c',phase:'incomplete',failureCode:'cli_timeout',messageCount:1,nonTextCount:0,pageCount:1}]}/>);
+ `);
+ await page.getByRole('button',{name:'查看并处理',exact:true}).click();
+ const issues=page.getByRole('region',{name:'同步问题',exact:true});
+ await issues.getByRole('button',{name:/暂时读取失败/}).click();
+ await expect(issues).toContainText('当前不会读取或自动重试');
+ await expect(issues).not.toContainText('同步开启期间会自动重试');
+ await expect(issues).not.toContainText('正在读取');
 });

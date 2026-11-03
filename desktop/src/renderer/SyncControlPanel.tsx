@@ -41,7 +41,7 @@ function SyncRecoveryStatus({ report }: { report: SyncStatusReport }) {
   </div>;
 }
 
-export function SyncControlPanel({ bridge, manualRelease = false, contacts, currentContactId }: { bridge: SyncControlBridge; manualRelease?: boolean; contacts?: { contactId: string; displayName: string }[]; currentContactId?: string | null }) {
+export function SyncControlPanel({ bridge, manualRelease = false, contacts, currentContactId, onOpenContact, onOpenDiagnostics }: { onOpenContact?: (contactId: string) => void; onOpenDiagnostics?: () => void; bridge: SyncControlBridge; manualRelease?: boolean; contacts?: { contactId: string; displayName: string }[]; currentContactId?: string | null }) {
   const { state, latest, active, error, setError, retry } = useRevisionedSession(initial, bridge);
   useEffect(() => {
     // 连接时报告可能还未播种；进入页面只刷新一次缓存状态，不触发正文周期。
@@ -92,21 +92,25 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
         : bodyAvailable ? '后台正文同步已开启' : '已开启同步，等待读取能力核验'}</p>
       <button className="button" disabled={!available} onClick={() => void switchSync()}>{state.busy === 'enable' ? '正在开启后台同步…'
         : state.busy === 'disable' ? '正在关闭后台同步…' : report?.enabled ? '关闭后台同步' : '开启后台同步'}</button>
-      {bodyAvailable ? <p>{allPrivate ? '开启后自动关联并同步全部微信私聊的聊天记录，包括以后新增的会话；已单独停止的会话保持排除。' : '开启后自动同步已授权联系人的聊天记录。'}图片保存本机可读取的版本，包括缩略图；依据微信资源来源标记图片版本，取不到就保留消息和处理状态。关闭或退出 App 会停止读取；重新开启后，会自动同步遗漏消息。</p>
-        : <p>开启后会先核验微信账号和聊天来源，通过后读取已授权会话的历史与新消息。关闭或退出 App 会停止读取。</p>}
+      <p>关闭同步或退出 App 后停止读取；重新开启只补齐有效授权范围内的遗漏消息。</p>
+      <details className="sync-backfill-details"><summary>同步说明</summary>
+        {bodyAvailable ? <p>{allPrivate ? '开启后自动关联并同步全部微信私聊的聊天记录，包括以后新增的会话；已单独停止的会话保持排除。' : '开启后自动同步已授权联系人的聊天记录。'}图片保存本机可读取的版本，包括缩略图；依据微信资源来源标记图片版本，取不到就保留消息和处理状态。</p>
+          : <p>开启后会先核验微信账号和聊天来源，通过后读取已授权会话的历史与新消息。</p>}
+        <p>只读取这台电脑上微信能提供的聊天记录，不驱动微信下载；已删除或仅在其他设备上的记录不包含在内。聊天同步与关系资料整理分别进行。</p>
+      </details>
       <section aria-label="微信私聊同步范围">
         <h3>同步范围</h3>
         <p role="status">{report ? allPrivate ? '当前范围：全部微信私聊（包括以后新增的会话）' : '当前范围：仅已关联并授权的会话' : '同步范围尚未确认'}</p>
         {selectionOnly ? <p>请到「联系人」逐人确认私聊；每次确认包含该会话本机可读的历史文字和后续新消息，新私聊不会自动纳入。</p> : allPrivate ? <>
           <p>已有和以后新增的微信私聊会自动建立对应联系人并同步，无需逐个确认。不会按同名合并不同微信账号。</p>
           {!report?.enabled && <p>总开关已关闭；范围已保存，开启后台同步后开始自动关联并读取。</p>}
-          <p>改回仅同步已关联会话后，不再自动添加新会话；已有授权仍保留。停止某个人的同步，请在顶部选择联系人后，在本页操作。</p>
+          <p>改回仅同步已关联会话后，不再自动添加新会话；已有授权仍保留。停止某个人的同步，请到「联系人」的资料管理中操作。</p>
           <button className="button" disabled={!available} onClick={() => void changeScope('selected')}>改为仅同步已关联会话</button>
         </> : <>
           <p><strong>同步全部微信私聊，包括以后新增的会话</strong></p>
           <p>确认后，开启后台同步时会自动创建或复用对应联系人，读取现有及以后新增的微信私聊文字，不再逐个询问。群聊不在此范围；已单独停止的会话保持排除。</p>
           <button className="button primary" disabled={!available} onClick={() => void changeScope('all_private')}>确认同步全部微信私聊</button>
-          <p>添加同步对象请到「联系人」确认；停止单个联系人的同步可在本页操作。</p>
+          <p>添加同步对象请到「联系人」确认；停止单个联系人的同步可到「联系人」的资料管理中操作。</p>
         </>}
         {state.busy === 'scope' && <p role="status">正在保存同步范围…</p>}
         {!selectionOnly && report?.syncScopeFailureCode && <div role="alert"><p>自动关联微信私聊暂时受阻。请确认微信可用后重试；存在身份冲突的会话需要到「联系人」核对，已停止的会话不会自动恢复。</p>
@@ -136,7 +140,7 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
         ? '同步操作结果尚未确认，请重试读取状态后再决定下一步。'
         : '同步状态读取失败，请检查本机服务与 CLI 后重试。'}</p>}
       {error && <p role="alert">{error}</p>}
-      {report && <HistoryCoverageStatus coverages={report.historyCoverages} contacts={contacts} currentContactId={currentContactId} bodyAvailable={bodyAvailable} />}
+      {report && <HistoryCoverageStatus key={`coverage:${state.scopeRevision}`} coverages={readFailed ? undefined : report.historyCoverages} contacts={contacts} currentContactId={currentContactId} bodyAvailable={bodyAvailable} enabled={report.enabled} onOpenContact={onOpenContact} onOpenDiagnostics={onOpenDiagnostics} />}
       {bodyAvailable && report?.enabled && <SyncRecoveryStatus key={state.scopeRevision} report={report} />}
     </section>
   </div>;

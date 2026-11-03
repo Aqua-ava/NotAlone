@@ -20,7 +20,7 @@ export const managerPages = {
   },
   sync: {
     title: '同步设置', icon: 'sync',
-    description: '管理同步总开关、单个联系人的同步与微信私聊范围；遗漏消息会自动补齐。',
+    description: '管理同步总开关和微信私聊范围，查看同步进度与需要处理的问题。',
     emptyTitle: '同步尚未就绪',
     emptyDescription: '尚未连接，无法查询读取状态。连接完成后，由你确认会话范围。',
     action: '确认同步范围',

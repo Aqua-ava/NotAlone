@@ -1,3 +1,5 @@
+import { ContactHistoryCoverage } from './HistoryCoverageStatus';
+import { ContactSyncSettings } from './ContactSyncSettings';
 import { ContactHistoryClear } from './HistoryClearPanel';
 import { ContactChatHistory } from './ContactChatHistory';
 import type { ContactSessionView } from './contact-session';
@@ -13,7 +15,7 @@ import { ContactAvatar } from './ContactAvatar';
 
 const initialSync: SyncControlState = { revision: -1, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
 
-export function ContactsPage({ session, navigate, initialSelection = false, onSelectionClosed }: { session: ContactSessionView; navigate: (page: ManagerPage) => void; initialSelection?: boolean; onSelectionClosed?: () => void }) {
+export function ContactsPage({ session, navigate, initialSelection = false, onSelectionClosed, syncDetailsContactId }: { syncDetailsContactId?: string | null; session: ContactSessionView; navigate: (page: ManagerPage) => void; initialSelection?: boolean; onSelectionClosed?: () => void }) {
   const { state } = session;
   const deletionBridge = window.notalone.contactDeletion;
   const deletion = useContactDeletion(deletionBridge);
@@ -80,9 +82,13 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
           </div>
         </div>
       </li>)}
-    </ul><ContactChatHistory session={session} contactActions={selected && deletionBridge && <ContactDeletionMenu
+    </ul><ContactChatHistory session={session} settingsTargetContactId={syncDetailsContactId}
+      syncStatus={selected && <ContactHistoryCoverage contactId={selected.contactId} compact
+        coverages={sync.phase === 'ready' && !sync.errorCode ? sync.report?.historyCoverages : undefined}
+        bodyAvailable={sync.report?.bodyAvailable} enabled={sync.report?.enabled} />} contactActions={selected && deletionBridge && <ContactDeletionMenu
       bridge={deletionBridge} state={deletion.state} selected={selected} contacts={state.contacts} scopeRevision={state.scopeRevision} inline />}
       settings={selected && <>
+      <ContactSyncSettings session={session} navigate={navigate} />
       <ContactHistoryClear session={session} />
       <div className="contact-management-shortcuts">
         <button className="button" onClick={() => navigate('memory')}>查看关系资料</button>

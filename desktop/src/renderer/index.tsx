@@ -25,7 +25,7 @@ import { ReplyCandidates, useReplySession } from './RewritePanel';
 import { UnifiedReplyWorkspace } from './UnifiedReplyWorkspace';
 import { MemoryPage } from './MemoryPage';
 import { SyncControlPanel } from './SyncControlPanel';
-import { ContactSyncSettings } from './ContactSyncSettings';
+import { SyncDiagnosticsPanel } from './SyncDiagnosticsPanel';
 import { SkillLearningPage } from './SkillLearningPage';
 import { PrioritySyncStatus } from './PrioritySyncStatus';
 import { DeveloperTraces } from './DeveloperTraces';
@@ -64,14 +64,28 @@ export function App() {
   const [selectingWechatContacts, setSelectingWechatContacts] = useState(false);
   function selectWechatContacts() { setSelectingWechatContacts(true); setPage('contacts'); }
   useEffect(() => { if (page !== 'contacts') setSelectingWechatContacts(false); }, [page]);
+  const [syncDetailsContactId, setSyncDetailsContactId] = useState<string | null>(null);
+  useEffect(() => { if (page !== 'contacts') setSyncDetailsContactId(null); }, [page]);
+  async function showContactSync(contactId: string) {
+    await contactSession.selectContact(contactId);
+    setSyncDetailsContactId(contactId); setPage('contacts');
+  }
+  const [syncDiagnosticsOpen, setSyncDiagnosticsOpen] = useState(false);
+  const syncDiagnostics = useRef<HTMLDetailsElement>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const diagnostics = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (page === 'config' && advancedOpen && diagnosticsOpen) diagnostics.current?.scrollIntoView({ block: 'start' });
   }, [page, advancedOpen, diagnosticsOpen]);
+  useEffect(() => {
+    if (page === 'config' && advancedOpen && syncDiagnosticsOpen) syncDiagnostics.current?.scrollIntoView({ block: 'start' });
+  }, [page, advancedOpen, syncDiagnosticsOpen]);
+  function showSyncDiagnostics() {
+    setPage('config'); setAdvancedOpen(true); setDiagnosticsOpen(false); setSyncDiagnosticsOpen(true);
+  }
   function showDiagnostics() {
-    setPage('config'); setAdvancedOpen(true); setDiagnosticsOpen(true);
+    setPage('config'); setAdvancedOpen(true); setDiagnosticsOpen(true); setSyncDiagnosticsOpen(false);
   }
   async function operate(operation: () => Promise<void>) {
     try { await operation(); setError(''); }
@@ -153,14 +167,18 @@ export function App() {
             <summary>高级</summary>
             <p>手动文件导入入口已退役；已通过自动同步获取的资料无需重复导入。</p>
             <div ref={diagnostics}><StartupSettings state={startup} backend={backend} open={diagnosticsOpen} onOpenChange={setDiagnosticsOpen} /></div>
+            <details ref={syncDiagnostics} className="startup-settings sync-diagnostics-entry" open={syncDiagnosticsOpen}
+              onToggle={event => setSyncDiagnosticsOpen(event.currentTarget.open)}>
+              <summary>同步诊断</summary>
+              {advancedOpen && syncDiagnosticsOpen && <SyncDiagnosticsPanel bridge={window.notalone.syncControl} contacts={contactSession.state.contacts} />}
+            </details>
             {advancedOpen && <DeveloperTraces session={contactSession} />}
           </details></>}
-        {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} initialSelection={selectingWechatContacts} onSelectionClosed={() => setSelectingWechatContacts(false)} />}
+        {page === 'contacts' && <ContactsPage session={contactSession} syncDetailsContactId={syncDetailsContactId} navigate={setPage} initialSelection={selectingWechatContacts} onSelectionClosed={() => setSelectingWechatContacts(false)} />}
         <div hidden={page !== 'memory'}><MemoryPage session={contactSession} navigate={setPage} visible={page === 'memory'} /></div>
         <SkillLearningPage session={contactSession} visible={page === 'skillLearning'} />
         {page === 'sync' && <>
-          {contactSession.state.contacts.length > 0 && <ContactSyncSettings key={contactSession.state.selectedContactId ?? ''} session={contactSession} navigate={setPage} />}
-          <WechatSetupPanel bridge={window.notalone.wechatSetup} selectionOnly={consent.selectionOnly === true} onSelectContacts={selectWechatContacts}><SyncControlPanel bridge={window.notalone.syncControl} contacts={contactSession.state.contacts} currentContactId={contactSession.state.selectedContactId} /></WechatSetupPanel>
+          <WechatSetupPanel bridge={window.notalone.wechatSetup} selectionOnly={consent.selectionOnly === true} onSelectContacts={selectWechatContacts}><SyncControlPanel bridge={window.notalone.syncControl} contacts={contactSession.state.contacts} currentContactId={contactSession.state.selectedContactId} onOpenContact={contactId => void showContactSync(contactId)} onOpenDiagnostics={showSyncDiagnostics} /></WechatSetupPanel>
         </>}
         {page !== 'config' && page !== 'contacts' && page !== 'memory' && page !== 'sync' && page !== 'skillLearning' && <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>

@@ -50,7 +50,7 @@ test('消息解析拒绝缺少顺序声明或非法展示位置，保留旧消�
 
 test('已保存历史可独立刷新，不要求助手生成资格',()=>{
  const html=render([], {generationBlock:'contact_unconfirmed',savedSession:{phase:'failed',sessionId:null}});
- assert.match(html,/<button>刷新最近聊天<\/button>/);
+ assert.match(html,/<button(?![^>]*\bdisabled)[^>]*>刷新最近聊天<\/button>/);
 });
 
 test('系统等独立元数据单独计数，不误称为空历史或聊天正文',()=>{

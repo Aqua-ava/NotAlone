@@ -8,11 +8,11 @@ const bundled = await build({ stdin: { contents: `
   import { renderToStaticMarkup } from 'react-dom/server';
   import { ContactHistoryCoverage, HistoryCoverageStatus } from './src/renderer/HistoryCoverageStatus';
   export { parseSyncReport } from './src/main/sync/status';
-  export function renderContact(coverage, bodyAvailable) {
-    return renderToStaticMarkup(React.createElement(ContactHistoryCoverage, { coverages: [coverage], contactId: coverage.contactId, bodyAvailable }));
+  export function renderContact(coverage, bodyAvailable, compact = false) {
+    return renderToStaticMarkup(React.createElement(ContactHistoryCoverage, { coverages: [coverage], contactId: coverage.contactId, bodyAvailable, compact }));
   }
-  export function renderPage(coverages, bodyAvailable) {
-    return renderToStaticMarkup(React.createElement(HistoryCoverageStatus, { coverages, contacts: [], bodyAvailable }));
+  export function renderPage(coverages, bodyAvailable, enabled = true) {
+    return renderToStaticMarkup(React.createElement(HistoryCoverageStatus, { coverages, contacts: [], bodyAvailable, enabled }));
   }`, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'node', format: 'cjs', write: false,
   loader: { '.css': 'empty' } });
 const loaded = { exports: {} };
@@ -106,8 +106,9 @@ test('界面单独展示增量已停止/不可用原因，不把不可用显示�
   const noIncremental = renderContact(coverage({ incrementalPhase: undefined, incrementalFailureCode: undefined, incrementalPages: undefined }));
   assert.equal(noIncremental.includes('新消息同步'), false, '没有评估结果时不宣称增量状态');
   const page = renderPage([coverage({ incrementalPhase: 'blocked', incrementalFailureCode: 'history_cursor_invalid' })]);
-  assert.ok(page.includes('新消息同步已停止或不完整'));
-  assert.ok(page.includes('重新授权后可重试'));
+  assert.ok(page.includes('需要关注'));
+  assert.ok(page.includes('查看并处理'));
+  assert.equal(page.includes('重新授权后可重试'), false, '总览不铺开技术原因或暗示一键恢复授权');
 });
 
 test('未建立覆盖的会话也显示首次历史支持核验阻断原因', () => {
@@ -133,8 +134,8 @@ test('已认证空目标显示等待新消息且不计入需要关注',()=>{
  assert.equal(parsed.historyCoverages[0].incrementalAwaitingMessages,true);
  assert.equal(parsed.historyCoverages[0].incrementalFailureCode,null);
  const markup=renderPage(parsed.historyCoverages,false);
- assert.ok(markup.includes('等待新消息并定期检查'));
- assert.ok(markup.includes('需要关注：0 个'));
+ assert.ok(markup.includes('当前没有需要关注的同步问题'));
+ assert.equal(markup.includes('查看并处理'), false, '等待新消息不属于异常');
  assert.ok(!markup.includes('新消息同步不可用'));
  assert.throws(()=>parseSyncReport({...raw,cli_history_coverages:[{...raw.cli_history_coverages[0],incremental_waiting_for_messages:'yes'}]}));
 });
@@ -145,10 +146,44 @@ test('正文未开放时如实显示能力核验进度，失败联系人不计�
     coverage({ contactId: '20000000-0000-4000-8000-000000000002', phase: 'not_started', failureCode: 'history_support_unverified', incrementalPhase: 'unavailable', incrementalFailureCode: 'history_support_unverified' }),
     coverage({ contactId: '30000000-0000-4000-8000-000000000003', phase: 'not_started', incrementalPhase: 'not_started' }),
   ], false);
-  assert.ok(markup.includes('正在核验读取能力：1 个会话'));
-  assert.ok(markup.includes('等待核验：1 个 · 需要关注：1 个'));
+  assert.ok(markup.includes('等待或核验读取能力'));
+  assert.ok(markup.includes('1 位联系人同步需要关注'));
   assert.equal(markup.includes('正在读取 1 个'), false);
   assert.equal(markup.includes('正在同步 1 个会话的新消息'), false);
   assert.equal(markup.includes('查看正在读取和等待同步的会话（2）'), false);
-  assert.ok(markup.includes('当前微信读取能力尚未核验'));
+  assert.ok(markup.includes('查看并处理'));
+  assert.equal(markup.includes('当前微信读取能力尚未核验'), false, '具体原因留在问题面板');
+});
+
+
+test('总览历史与增量异常按联系人并集计数，多绑定不增加总数', () => {
+  const rows = Array.from({length: 200}, (_, i) => coverage({
+    bindingId: 'binding-' + i, contactId: 'contact-' + i,
+    phase: i < 189 ? 'incomplete' : 'complete',
+    failureCode: i < 189 ? 'history_source_continuity_unverified' : null,
+    incrementalPhase: i < 192 ? 'blocked' : 'ready',
+    incrementalFailureCode: i < 189 ? 'history_incomplete' : i < 192 ? 'history_tail_unsupported' : null,
+  }));
+  rows.push({...rows[0], bindingId:'another-binding', failureCode:'cli_timeout'});
+  const markup = renderPage(rows, true);
+  assert.match(markup, /192 位联系人同步需要关注/);
+  assert.match(markup, /value="11" max="200"/);
+  assert.doesNotMatch(markup, /189|条文字消息|非文字占位|已跟进/);
+});
+
+test('关闭同步时历史与增量旧运行状态不冒充当前正在读取', () => {
+  const markup = renderPage([coverage({phase:'syncing', incrementalPhase:'syncing'})], true, false);
+  assert.match(markup, /自动同步已关闭/);
+  assert.doesNotMatch(markup, /正在读取|正在同步|正在自动重试/);
+});
+
+
+test('联系人简短状态在缺少等待新消息标记时仍识别空历史，有元数据则不误判为空', () => {
+  const empty = coverage({messageCount:0, nonTextCount:0, metadataOnlyCount:0, incrementalAwaitingMessages:undefined});
+  const markup = renderContact(empty, true, true);
+  assert.match(markup, /本机暂无可读记录/);
+  assert.doesNotMatch(markup, /本机历史已读完/);
+  const metadata = renderContact({...empty, metadataOnlyCount:1}, true, true);
+  assert.match(metadata, /本机历史已读完/);
+  assert.doesNotMatch(metadata, /本机暂无可读记录/);
 });

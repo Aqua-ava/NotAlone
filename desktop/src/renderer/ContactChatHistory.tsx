@@ -52,7 +52,7 @@ function quoteTypeLabel(messageType: string): string {
   return `引用类型：${numericLabels[String(base)] ?? `未知类型（${messageType}）`}`;
 }
 
-export function ContactChatHistory({ session, settings, contactActions }: { session: ContactSessionView; settings?: ReactNode; contactActions?: ReactNode }) {
+export function ContactChatHistory({ session, settings, contactActions, syncStatus, settingsTargetContactId }: { syncStatus?: ReactNode; settingsTargetContactId?: string | null; session: ContactSessionView; settings?: ReactNode; contactActions?: ReactNode }) {
   const bridge = window.notalone.contactHistory;
   const { state, error, setError, latest, active, retry } = useRevisionedSession(initialHistory, bridge);
   const contactId = session.state.selectedContactId;
@@ -61,7 +61,7 @@ export function ContactChatHistory({ session, settings, contactActions }: { sess
   const settingsButton = useRef<HTMLButtonElement>(null);
   const [settingsScope, setSettingsScope] = useState<{ contactId: string; scopeRevision: number } | null>(null);
   const settingsOpen = settingsScope !== null && settingsScope.contactId === contactId && settingsScope.scopeRevision === scopeRevision;
-  useEffect(() => { setSettingsScope(null); }, [contactId, scopeRevision]);
+  useEffect(() => { setSettingsScope(settingsTargetContactId && settingsTargetContactId === contactId ? { contactId, scopeRevision } : null); }, [contactId, scopeRevision, settingsTargetContactId]);
   const selected = session.state.contacts.find(contact => contact.contactId === contactId);
   const sameScope = Boolean(selected) && state.contactId === contactId && state.scopeRevision === scopeRevision;
   const messages = sameScope ? state.messages : initialHistory.messages;
@@ -94,6 +94,7 @@ export function ContactChatHistory({ session, settings, contactActions }: { sess
     }
   }}>
     <header className="contact-chat-header"><div><h3>{selected?.displayName ?? '聊天记录'}</h3>
+      {selected && syncStatus && <div className="contact-sync-summary">{syncStatus}<button className="button" onClick={() => setSettingsScope({ contactId: selected.contactId, scopeRevision })}>查看同步</button></div>}
       {unknownOrder && <details className="contact-chat-order"><summary>部分顺序未核验</summary>
         <p>按消息时间展示；同一时间或时间未知的消息先后未核验。</p></details>}</div>
       <ContactChatToolbar key={scope}>

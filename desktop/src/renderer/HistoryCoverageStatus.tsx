@@ -1,5 +1,8 @@
 import type { HistoryCoverage, HistoryCoveragePhase, HistoryIncrementalPhase } from '../shared/sync-control-bridge';
+import { useEffect, useMemo, useState } from 'react';
 import { syncScopeNotice } from './sync-scope-notice';
+import { buildSyncContacts, syncContactLabel, syncIssueGroups, type SyncContactStatus, type SyncIssueKind } from './sync-history-model';
+import './sync-history.css';
 
 const labels: Record<HistoryCoveragePhase, string> = {
   not_started: '等待同步', syncing: '正在读取历史', complete: '本机历史已读完', incomplete: '历史尚未读完',
@@ -29,9 +32,9 @@ const incrementalReasons: Record<string, string> = {
   history_page_invalid: '读取返回了不一致的分页，增量读取已停止。',
   history_deletion_in_progress: '相关消息正在删除，本次增量读取未提交。',
   history_identity_quarantined: '部分新消息的身份、状态或内容尚未核验，已隔离；其他已核验消息继续同步。',
-  history_native_unavailable: '暂时无法读取微信，稍后会自动重试。',
-  history_native_timeout: '读取微信暂时超时，稍后会自动重试。',
-  history_interrupted: '本次新消息读取已中断，稍后会自动重试。',
+  history_native_unavailable: '暂时无法读取微信，开启同步时会自动重试。',
+  history_native_timeout: '读取微信暂时超时，开启同步时会自动重试。',
+  history_interrupted: '本次新消息读取已中断，开启同步时会自动重试。',
   history_incomplete: '历史尚未读完，新消息同步会先补齐历史。',
 };
 const reasons: Record<string, string> = {
@@ -58,8 +61,8 @@ const reasons: Record<string, string> = {
   history_interrupted: '本次历史读取已中断，已保存部分不代表完整历史。',
 };
 
-export function ContactHistoryCoverage({ coverages, contactId, bodyAvailable, compact = false }: {
-  coverages?: HistoryCoverage[]; contactId: string; bodyAvailable?: boolean; compact?: boolean;
+export function ContactHistoryCoverage({ coverages, contactId, bodyAvailable, compact = false, enabled }: {
+  coverages?: HistoryCoverage[]; contactId: string; bodyAvailable?: boolean; compact?: boolean; enabled?: boolean;
 }) {
   const rows = coverages?.filter(item => item.contactId === contactId);
   const emptyHistory = (row: HistoryCoverage) => row.phase === 'complete' && row.messageCount === 0 && row.nonTextCount === 0 && (row.metadataOnlyCount ?? 0) === 0;
@@ -73,84 +76,138 @@ export function ContactHistoryCoverage({ coverages, contactId, bodyAvailable, co
     blocked: '读取能力核验受阻', invalidated: '读取能力核验已失效', unavailable: '正文同步能力不可用', stopped: '读取能力核验已停止',
   } satisfies Record<HistoryIncrementalPhase, string>)[phase] : incrementalLabels[phase];
   if (compact) return <small className="contact-history-status">
-    {!rows?.length ? '历史覆盖待确认' : rows.map(row => <span key={row.bindingId}>
-      {historyLabel(row)}{row.incrementalPhase && row.incrementalPhase !== 'not_started' ? ` · ${incrementalLabel(row.incrementalPhase)}` : ''}
-    </span>)}
+    {!rows?.length ? '历史覆盖待确认' : syncContactLabel(buildSyncContacts(rows)[0], bodyAvailable, enabled)}
   </small>;
-  return <div aria-label="当前联系人消息历史覆盖">
+  return <div role="region" aria-label="当前联系人消息历史覆盖">
     {!rows?.length ? <p>暂时还不知道历史聊天是否读完。</p> : rows.map(row => <div key={row.bindingId}>
-      <p><strong>{historyLabel(row)}</strong> · 已保存 {row.messageCount} 条文字消息、{row.nonTextCount} 条非文字占位</p>
+      <p><strong>{enabled === false ? '自动同步已关闭' : historyLabel(row)}</strong> · 已保存 {row.messageCount} 条文字消息、{row.nonTextCount} 条非文字占位</p>
       {!!row.nonTextTypes?.length && <ul aria-label="非文字消息类型数量">
         {row.nonTextTypes.map(item => <li key={item.messageType}>{item.messageType === 'other' ? unknownNonTextTypeLabel : item.label}：{item.count} 条</li>)}
       </ul>}
       {(row.metadataOnlyCount ?? 0) > 0 && <p>另保存 {row.metadataOnlyCount} 条系统等元数据记录，不含正文。</p>}
-      {row.phase !== 'complete' && row.failureCode && <p role="status">{syncScopeNotice(row.failureCode) ?? reasons[row.failureCode] ?? '部分聊天暂时无法读取，开启同步时会自动重试。'}</p>}
-      {row.incrementalAwaitingMessages === true && <p role="status">这台电脑上当前没有可读聊天记录，系统会等待新消息并定期检查。</p>}
+      {row.phase !== 'complete' && row.failureCode && <p role="status">{syncScopeNotice(row.failureCode) ?? reasons[row.failureCode] ?? '部分聊天暂时无法读取，请检查同步状态与来源核验结果。'}</p>}
+      {row.incrementalAwaitingMessages === true && <p role="status">这台电脑上当前没有可读聊天记录，开启同步时会等待新消息并定期检查。</p>}
       {row.incrementalPhase !== undefined && (row.incrementalPhase !== 'not_started' || row.incrementalFailureCode) && <p role="status">
-        <strong>{incrementalLabel(row.incrementalPhase)}</strong>{bodyAvailable !== false && typeof row.incrementalPages === 'number' ? ` · 已跟进 ${row.incrementalPages} 次` : ''}
+        <strong>{enabled === false ? '新消息同步已暂停' : incrementalLabel(row.incrementalPhase)}</strong>{bodyAvailable !== false && typeof row.incrementalPages === 'number' ? ` · 已跟进 ${row.incrementalPages} 次` : ''}
       </p>}
       {row.incrementalFailureCode && <p role="status">
         {emptyHistory(row) && ['history_incremental_unavailable', 'history_tail_unsupported'].includes(row.incrementalFailureCode)
           ? '当前范围已核验无可读历史；出现新消息后需重新核验读取范围。'
-          : incrementalReasons[row.incrementalFailureCode] ?? reasons[row.incrementalFailureCode] ?? '新消息同步暂未继续，请查看同步状态与来源核验结果。'}
+          : syncScopeNotice(row.incrementalFailureCode) ?? incrementalReasons[row.incrementalFailureCode] ?? reasons[row.incrementalFailureCode] ?? '新消息同步暂未继续，请查看同步状态与来源核验结果。'}
       </p>}
     </div>)}
   </div>;
 }
 
-export function HistoryCoverageStatus({ coverages, contacts = [], currentContactId, bodyAvailable }: {
+interface CoverageProps {
   coverages?: HistoryCoverage[];
   contacts?: { contactId: string; displayName: string }[];
-  currentContactId?: string | null;
   bodyAvailable?: boolean;
+  enabled?: boolean;
+}
+const pageSize = 10;
+
+function ContactStatusList({ contacts, bodyAvailable, enabled, onOpenContact, diagnostic = false }: {
+  contacts: SyncContactStatus[]; bodyAvailable?: boolean; enabled?: boolean;
+  onOpenContact?: (contactId: string) => void; diagnostic?: boolean;
 }) {
-  const names = new Map(contacts.map(contact => [contact.contactId, contact.displayName]));
-  const ids = [...new Set(coverages?.map(row => row.contactId))];
-  const renderContacts = (rows: HistoryCoverage[]) => [...new Set(rows.map(row => row.contactId))].map(contactId => <div key={contactId}>
-    <h4>{contactId === currentContactId ? '当前联系人：' : ''}{names.get(contactId) ?? '未命名联系人'}</h4>
-    <ContactHistoryCoverage coverages={rows} contactId={contactId} bodyAvailable={bodyAvailable} />
-  </div>);
-  const incomplete = coverages?.filter(row => row.phase === 'incomplete' || row.phase !== 'complete' && Boolean(row.failureCode || row.incrementalFailureCode)) ?? [];
-  const verificationRows = bodyAvailable === false ? coverages?.filter(row => !row.failureCode && !row.incrementalFailureCode
-    && (row.phase === 'syncing' || row.incrementalPhase === 'syncing')) ?? [] : [];
-  const verificationIds = new Set(verificationRows.map(row => row.contactId));
-  const pending = coverages?.filter(row => (row.phase === 'syncing' || row.phase === 'not_started') && !row.failureCode && !row.incrementalFailureCode
-    && !(bodyAvailable === false && verificationIds.has(row.contactId))) ?? [];
-  const complete = coverages?.filter(row => row.phase === 'complete') ?? [];
-  const incrementalAttention = coverages?.filter(row => row.incrementalFailureCode || ['blocked', 'incomplete', 'invalidated', 'unavailable'].includes(row.incrementalPhase ?? '')) ?? [];
-  const incrementalBusy = bodyAvailable === false ? [] : coverages?.filter(row => row.incrementalPhase === 'syncing' && !row.incrementalFailureCode) ?? [];
-  const awaitingMessages = coverages?.filter(row => row.incrementalAwaitingMessages === true) ?? [];
-  const activeHistoryCount = coverages?.filter(row => row.phase === 'syncing' && !row.failureCode && !row.incrementalFailureCode).length ?? 0;
-  const attentionCount = new Set([...incomplete, ...incrementalAttention].map(row => row.contactId)).size;
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0);
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const filtered = contacts.filter(contact => contact.displayName.toLocaleLowerCase().includes(normalizedQuery));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount - 1);
+  const visible = filtered.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
   return <>
-    <section aria-label="聊天同步进度"><h3>聊天同步进度</h3>
-      {coverages === undefined ? <p>同步进度暂不可用，状态会自动更新。</p>
-        : coverages.length === 0 ? <p>暂无会话的历史同步进度。</p> : <>
-          <p>已读完 {complete.length} / {coverages.length} 个会话的本机历史</p>
-          <progress aria-label="本机历史读取进度" value={complete.length} max={coverages.length} />
-          {bodyAvailable === false
-            ? <p>{awaitingMessages.length > 0 ? `等待新消息：${awaitingMessages.length} 个会话 · 正在核验：${verificationIds.size} 个 · 等待核验：${pending.length} 个 · 需要关注：${attentionCount} 个`
-              : `正在核验读取能力：${verificationIds.size} 个会话 · 等待核验：${pending.length} 个 · 需要关注：${attentionCount} 个`}</p>
-            : <p>正在读取 {activeHistoryCount} 个 · 等待同步 {pending.length} 个 · 需要关注 {attentionCount} 个</p>}
-          {incrementalBusy.length > 0 && <p role="status">正在同步 {incrementalBusy.length} 个会话的新消息…</p>}
-          {awaitingMessages.length > 0 && <p>{awaitingMessages.length} 个会话已确认当前没有可读记录，等待新消息并定期检查。</p>}
-          {incrementalAttention.length > 0 && <div role="status">
-            <p>{bodyAvailable === false ? `${incrementalAttention.length} 个会话的读取能力核验需要关注。` : `${incrementalAttention.length} 个会话的新消息同步已停止或不完整。`}</p>
-            {incrementalAttention[0]?.incrementalFailureCode && <p>{incrementalReasons[incrementalAttention[0].incrementalFailureCode] ?? '暂未获得具体原因。'}</p>}
-          </div>}
-        </>}
-      <p>只读取这台电脑上微信能提供的聊天记录；图片只保存可确认的本机原图，取不到就保留记录，不保存缩略图、不驱动微信下载。已删除或仅在其他设备上的记录不包含在内。</p>
-      {currentContactId && !ids.includes(currentContactId) && <p>当前联系人的同步进度暂时未知。</p>}
-      {incomplete.length > 0 && <div><h4>需要关注的会话（{incomplete.length}）</h4>{renderContacts(incomplete)}</div>}
-      {pending.length > 0 && <details className="sync-backfill-details">
-        <summary>{bodyAvailable === false ? `查看等待核验能力的会话（${pending.length}）` : `查看正在读取和等待同步的会话（${pending.length}）`}</summary>{renderContacts(pending)}
-      </details>}
-      {complete.length > 0 && <details className="sync-backfill-details">
-        <summary>查看已读完的会话（{complete.length}）</summary>{renderContacts(complete)}
-      </details>}
-    </section>
-    <section aria-label="关系资料处理"><h3>关系资料处理</h3>
-      <p>聊天读完后，还需要整理关系资料。整理进度可到「关系资料」查看。</p>
-    </section>
+    <label className="sync-history-search">搜索联系人
+      <input type="search" value={query} onChange={event => { setQuery(event.target.value); setPage(0); }} placeholder="输入联系人名称" />
+    </label>
+    <p className="sync-history-count">共 {filtered.length} 位联系人，每页最多 {pageSize} 位</p>
+    {visible.length ? <ul className="sync-history-contact-list" aria-label={diagnostic ? '同步诊断联系人' : '需关注的联系人'}>
+      {visible.map(contact => <li key={contact.contactId}>
+        <div><strong title={contact.displayName}>{contact.displayName}</strong><small>{syncContactLabel(contact, bodyAvailable, enabled)}</small></div>
+        {onOpenContact && <button className="button" onClick={() => onOpenContact(contact.contactId)}>{diagnostic ? '查看明细' : '查看联系人'}</button>}
+      </li>)}
+    </ul> : <p role="status">没有符合条件的联系人。</p>}
+    <nav className="sync-history-pagination" aria-label="同步联系人分页">
+      <button className="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>上一页</button>
+      <span>第 {currentPage + 1} / {pageCount} 页</span>
+      <button className="button" disabled={currentPage + 1 >= pageCount} onClick={() => setPage(currentPage + 1)}>下一页</button>
+    </nav>
   </>;
+}
+
+function SyncIssuePanel({ contacts, bodyAvailable, enabled, onClose, onOpenContact, onOpenDiagnostics }: {
+  contacts: SyncContactStatus[]; bodyAvailable?: boolean; enabled?: boolean; onClose: () => void;
+  onOpenContact?: (contactId: string) => void; onOpenDiagnostics?: () => void;
+}) {
+  const [selectedKind, setSelectedKind] = useState<SyncIssueKind | null>(null);
+  const issues = contacts.filter(contact => contact.issue !== null);
+  const group = syncIssueGroups.find(item => item.kind === selectedKind);
+  const selected = issues.filter(contact => contact.issue === selectedKind);
+  return <section className="sync-history-panel" aria-label="同步问题">
+    <div className="sync-history-toolbar"><h3>{group ? group.title : '同步问题'}</h3>
+      <button className="button" onClick={group ? () => setSelectedKind(null) : onClose}>{group ? '返回问题分类' : '返回同步概览'}</button></div>
+    {enabled === false && <p role="status">自动同步已关闭。以下为已保存的状态，当前不会读取或自动重试。</p>}
+    {group ? <>
+      <p>{group.description}{group.kind === 'temporary' && enabled === true ? '同步开启期间会自动重试。' : ''}</p>
+      <ContactStatusList key={group.kind} contacts={selected} bodyAvailable={bodyAvailable} enabled={enabled} onOpenContact={onOpenContact} />
+    </> : <>
+      <p>{issues.length ? `${issues.length} 位联系人需要关注，按主要原因归类，每位联系人只计一次。` : '当前没有需要关注的同步问题。'}</p>
+      <div className="sync-history-groups">{syncIssueGroups.map(item => {
+        const count = issues.filter(contact => contact.issue === item.kind).length;
+        return count > 0 && <button className="sync-history-group" key={item.kind} onClick={() => setSelectedKind(item.kind)}>
+          <strong>{item.title}</strong><span>{count} 位联系人<span aria-hidden="true"> ›</span></span>
+        </button>;
+      })}</div>
+    </>}
+    {onOpenDiagnostics && <button className="button sync-history-diagnostics-link" onClick={onOpenDiagnostics}>打开同步诊断</button>}
+  </section>;
+}
+
+export function HistoryCoverageStatus({ coverages, contacts, bodyAvailable, enabled, onOpenContact, onOpenDiagnostics }: CoverageProps & {
+  currentContactId?: string | null;
+  onOpenContact?: (contactId: string) => void;
+  onOpenDiagnostics?: () => void;
+}) {
+  const [showIssues, setShowIssues] = useState(false);
+  useEffect(() => { if (coverages === undefined) setShowIssues(false); }, [coverages]);
+  const statuses = useMemo(() => buildSyncContacts(coverages, contacts), [coverages, contacts]);
+  const complete = statuses.filter(contact => contact.complete).length;
+  const attention = statuses.filter(contact => contact.issue !== null).length;
+  const reading = statuses.filter(contact => contact.reading).length;
+  const following = statuses.filter(contact => contact.following).length;
+  if (showIssues && coverages !== undefined) return <SyncIssuePanel contacts={statuses} bodyAvailable={bodyAvailable} enabled={enabled}
+    onClose={() => setShowIssues(false)} onOpenContact={onOpenContact} onOpenDiagnostics={onOpenDiagnostics} />;
+  return <section className="sync-history-summary" aria-label="聊天同步进度">
+    <h3>聊天同步进度</h3>
+    {coverages === undefined ? <p>同步进度暂不可用，状态会自动更新。</p>
+      : statuses.length === 0 ? <p>暂无联系人的历史同步进度。</p> : <>
+        <p>{bodyAvailable === false ? '已保存的历史读取进度' : '本机历史已读完'}：{complete} / {statuses.length} 位联系人</p>
+        <progress aria-label="本机历史读取进度" value={complete} max={statuses.length} />
+        <p role="status">{enabled === false ? '自动同步已关闭，已保存的进度会保留。'
+          : bodyAvailable === false ? '正文读取尚未开放，正在等待或核验读取能力。'
+          : reading > 0 ? `正在读取 ${reading} 位联系人的历史。` : following > 0 ? `正在同步 ${following} 位联系人的新消息。`
+          : '已保存当前同步进度。'}</p>
+        <div className="sync-history-toolbar"><p>{attention ? `${attention} 位联系人同步需要关注` : '当前没有需要关注的同步问题'}</p>
+          {attention > 0 && <button className="button" onClick={() => setShowIssues(true)}>查看并处理</button>}</div>
+      </>}
+  </section>;
+}
+
+/** 仅展示已取得的状态；展开单人后才挂载详细统计，不触发读取或授权。 */
+export function HistoryCoverageDiagnostics({ coverages, contacts, bodyAvailable, enabled }: CoverageProps) {
+  const statuses = useMemo(() => buildSyncContacts(coverages, contacts), [coverages, contacts]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = statuses.find(contact => contact.contactId === selectedId);
+  useEffect(() => { if (!selected) setSelectedId(null); }, [selected]);
+  return <section className="sync-history-diagnostics" aria-label="同步诊断">
+    <div className="sync-history-toolbar"><h3>同步诊断</h3>
+      {selected && <button className="button" onClick={() => setSelectedId(null)}>返回诊断列表</button>}</div>
+    <p>查看已保存的状态和消息数量，供故障排查使用。这里不会重新授权或触发聊天读取。</p>
+    {selected ? <div className="sync-history-diagnostic-detail"><h4>{selected.displayName}</h4>
+      <ContactHistoryCoverage coverages={selected.rows} contactId={selected.contactId} bodyAvailable={bodyAvailable} enabled={enabled} />
+    </div> : coverages === undefined ? <p>同步状态暂不可用。</p>
+      : <ContactStatusList contacts={statuses} bodyAvailable={bodyAvailable} enabled={enabled} onOpenContact={setSelectedId} diagnostic />}
+  </section>;
 }
