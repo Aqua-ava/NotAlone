@@ -424,7 +424,9 @@ export class SqliteHistoryService {
    };
    let report=await inspect();
    const emptyCandidate=await this.storage.execute<{goalId:string;report:HistorySupportReport;target:HistoryTarget}|null>('history.emptyTargetProbeCandidate',{token:scope.token});
-   if(emptyCandidate&&!isPartitionGrowthTargetChange(emptyCandidate.report,report)){
+   // 正常失守卫后报告变化须先走当前目标与守卫重验；报告未变时仍只探测空目标元数据。
+   const emptyReportNeedsRevalidation=metadataRevalidation&&emptyCandidate&&serializeSupport(report)!==serializeSupport(emptyCandidate.report);
+   if(emptyCandidate&&!emptyReportNeedsRevalidation&&!isPartitionGrowthTargetChange(emptyCandidate.report,report)){
     if(serializeSupport(report)!==serializeSupport(emptyCandidate.report))throw new StorageFailure('history_support_changed');
     const emptyTarget=await channel.target(scope,controller.signal);await check();
     const afterTarget=await inspect();
