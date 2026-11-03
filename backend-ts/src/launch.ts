@@ -7,6 +7,7 @@ import { createServer } from 'node:net';
 import { constants } from 'node:fs';
 import { processIdentityState, type ProcessIdentity } from './platform/process/process-identity.ts';
 import type { SqliteCapabilitiesConfiguration } from './sqlite-capabilities.ts';
+import { finishStartupDiagnostic, writeStartupDiagnostic } from './startup-diagnostics.ts';
 
 export interface SqliteLaunchConfiguration extends SqliteCapabilitiesConfiguration {
   userData: string; expectedDatabaseId: string; role: 'test'; wechatCliPath?: string;
@@ -168,12 +169,13 @@ export async function launchDsh(config: LaunchConfiguration, canStart: () => boo
     }
     environment.NOTALONE_BACKEND_INFO = config.infoPath;
     environment.NOTALONE_ENV_FILE = config.envFilePath;
+    await writeStartupDiagnostic(config.infoPath, 'runtime');
     child = spawn(config.nodeExecutable, [path.join(backend,'node_modules/@deepseek-ai/dsh/lib/bin.js'),'--profile','notalone'], {cwd:home, env:environment, stdio:['pipe','ignore','ignore']});
     const exited = new Promise<void>(resolve => { child!.once('error', resolve); child!.once('exit', resolve); });
     // 启动记录完成后才允许退出清理，避免快速退出与锁更新互相覆盖。
     let finishRecording!: () => void;
     const recording = new Promise<void>(resolve => { finishRecording = resolve; });
-    stopped = exited.then(async () => { await recording; await release(); });
+    stopped = exited.then(async () => { await recording; await finishStartupDiagnostic(config.infoPath, 'process_exit'); await release(); });
     void stopped.catch(() => {});
     try {
       await new Promise<void>((resolve,reject) => { child!.once('spawn',resolve); child!.once('error',reject); });

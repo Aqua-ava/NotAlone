@@ -1,6 +1,7 @@
 import { rm } from 'node:fs/promises';
 import type { BackendState } from '../../shared/backend-bridge';
 import { BackendFailure, readConnection } from './connection';
+import { startupErrorCode } from '../../../../backend-ts/src/startup-diagnostics';
 import { RetiredBackendRuntime, RuntimeClient } from './runtime-client';
 import { loadBackendConfiguration, type BackendConfiguration } from './config';
 import { OwnedBackendProcess, type OwnedProcess } from './process';
@@ -337,7 +338,7 @@ export class BackendHost {
       }
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    throw new BackendFailure('backend_connection_failed');
+    throw new BackendFailure(await startupErrorCode(config.infoPath, this.ownedChild.isRunning() ? 'timeout' : 'process_exit') ?? 'backend_connection_failed');
   }
 
   private async shutdown(): Promise<boolean> {

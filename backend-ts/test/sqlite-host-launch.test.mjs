@@ -8,6 +8,40 @@ import { SqliteStorage } from '../src/storage/sqlite/client.ts';
 import { launchDsh } from '../src/launch.ts';
 import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 
+test('官方profile启动失败保留脱敏阶段诊断，清理临时home且成功重试清除旧诊断', {timeout:30000}, async t => {
+  const {writeFile} = await import('node:fs/promises');
+  const root = await realpath(await mkdtemp(path.join(tmpdir(),'notalone-startup-diagnostic-')));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test'});
+  const databaseId=storage.status.databaseId;await storage.close();
+  const infoPath=path.join(root,'managed/sqlite-backend.info'),envFilePath=path.join(root,'private-synthetic.env');
+  const secret='synthetic-credential-must-not-be-retained';
+  const config={nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,
+    envFilePath,infoPath,businessHome:root,environment:{},
+    sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts']}};
+  for(const stage of ['configuration','storage']) {
+    await writeFile(envFilePath,`NOTALONE_DEEPSEEK_API_KEY=${secret}\nNOTALONE_BACKGROUND_PROCESSING=${stage==='configuration'?secret:'manual'}\n`,{mode:0o600});
+    const host=await launchDsh({...config,sqlite:{...config.sqlite,expectedDatabaseId:stage==='storage'?'wrong-synthetic-instance':databaseId}},()=>true);
+    t.after(()=>host.terminate());
+    const lock=JSON.parse(await readFile(infoPath+'.dsh-lock','utf8'));
+    assert.equal(await host.waitForExit(10000),true);
+    const raw=await readFile(infoPath+'.startup-diagnostic.json','utf8'),diagnostic=JSON.parse(raw);
+    assert.equal(diagnostic.stage,stage);
+    assert.equal(diagnostic.cause,stage==='configuration'?'configuration_invalid':'storage_mismatch');
+    assert.deepEqual(Object.keys(diagnostic).sort(),['cause','recordedAt','stage','version']);
+    assert.ok(Buffer.byteLength(raw)<=512);
+    for(const privateValue of [secret,envFilePath,root,databaseId])assert.ok(!raw.includes(privateValue));
+    await assert.rejects(access(lock.home),{code:'ENOENT'});
+    await assert.rejects(access(infoPath+'.dsh-lock'),{code:'ENOENT'});
+  }
+  const host=await launchDsh(config,()=>true);t.after(()=>host.terminate());
+  const info=await handshake(host,infoPath);
+  await assert.rejects(access(infoPath+'.startup-diagnostic.json'),{code:'ENOENT'});
+  await fetch(`http://${info.address}/api/runtime/shutdown`,{method:'POST',headers:{Authorization:`Bearer ${info.token}`}});
+  assert.equal(await host.waitForExit(10000),true);
+  await assert.rejects(access(infoPath+'.startup-diagnostic.json'),{code:'ENOENT'});
+});
+
 async function handshake(host, infoPath) {
   const until = Date.now() + 15000;
   while (Date.now() < until && host.isRunning()) {

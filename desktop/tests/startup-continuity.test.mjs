@@ -99,6 +99,18 @@ test('启动失败显示简明原因、重试与诊断入口，未确认可重�
   assert.match(recovery, /重试停读并退出/);
 });
 
+test('本机服务启动失败按阶段显示安全说明并保留重试和诊断入口',()=>{
+  const phrases={runtime:'运行组件未能启动',configuration:'启动配置未通过检查',storage:'数据库未能打开或通过检查',modules:'业务模块初始化失败',handshake:'连接准备未完成'};
+  for(const [stage,phrase] of Object.entries(phrases)){
+    const html=renderToStaticMarkup(React.createElement(BackendConnectionNote,{
+      state:{phase:'disconnected',errorCode:`backend_startup_${stage}_failed`,canRetryConnection:true},
+      startup:{phase:'ready'},onDiagnose() {},
+    }));
+    assert.ok(html.includes(phrase));
+    assert.match(html,/>重试连接<\/button>/);assert.match(html,/>查看诊断<\/button>/);
+  }
+});
+
 test('配置读取在诊断前失败时仍提供恢复入口，不会一直显示连接中', () => {
   const html = renderToStaticMarkup(React.createElement(StartupReadiness, {
     state: { phase: 'idle', revision: 0, helperWarnings: [] },

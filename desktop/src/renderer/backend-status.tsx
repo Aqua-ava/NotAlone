@@ -44,7 +44,15 @@ export function BackendConnectionNote({ state, startup, onDiagnose }: {
   const failedStop = state.phase === 'shutdown-failed';
   const title = failedStop ? '后端关闭未获确认'
     : state.phase === 'stopping' ? '正在停止本次后台读取' : '本机服务尚未连接';
+  const startupMessages: Partial<Record<NonNullable<BackendState['errorCode']>, string>> = {
+    backend_startup_runtime_failed: '本机服务运行组件未能启动，请检查安装组件后重试。',
+    backend_startup_configuration_failed: '本机服务启动配置未通过检查，请查看诊断并检查设置。',
+    backend_startup_storage_failed: '本机数据库未能打开或通过检查，请查看诊断，保留现有资料。',
+    backend_startup_modules_failed: '本机服务业务模块初始化失败，请查看诊断后重试。',
+    backend_startup_handshake_failed: '本机服务连接准备未完成，请查看诊断后重试。',
+  };
   const message = failedStop ? '后端关闭未获确认，请重试停读。'
+      : state.errorCode && startupMessages[state.errorCode] ? startupMessages[state.errorCode]
       : state.errorCode === 'backend_handshake_invalid' ? '本机服务连接信息无效，请检查后重试。'
         : state.errorCode === 'backend_connection_failed' ? '本机服务连接失败，请重试。'
           : state.phase === 'stopping' ? '停止期间暂停业务操作，请等待真实结果。' : '联系人、资料与生成暂时不可用。';

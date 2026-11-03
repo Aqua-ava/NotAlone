@@ -10,7 +10,7 @@ await writeFile(path.join(directory, 'host.mjs'), built.outputFiles[0].text);
 const { BackendHost } = await import(path.join(directory, 'host.mjs'));
 after(() => rm(directory, { recursive: true, force: true }));
 const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
-async function subject(name, delay) {
+async function subject(name, delay, failureStage) {
   const userData = path.join(directory, name), resources = path.join(userData, 'resources');
   const root = path.join(resources, 'notalone-runtime'), marker = path.join(userData, 'owned-pid');
   await mkdir(path.join(root, 'project/backend-ts/src'), { recursive: true });
@@ -30,6 +30,11 @@ fs.writeFileSync(${JSON.stringify(marker + '.environment')},JSON.stringify({
  apiKeyPresent:process.env.NOTALONE_DEEPSEEK_API_KEY!==undefined,
 }));
 let server;
+const failureStage=${JSON.stringify(failureStage) ?? 'undefined'};
+if(failureStage){
+ fs.writeFileSync(info+'.startup-diagnostic.json',JSON.stringify({version:1,stage:failureStage,cause:'unexpected_failure',recordedAt:Date.now()}),{mode:0o600});
+ process.exit(1);
+}
 const timer=setTimeout(()=>{
  server=http.createServer((req,res)=>{
   if(req.headers.authorization!=='Bearer synthetic_token'){res.writeHead(401);res.end('{}');return;}
@@ -53,6 +58,19 @@ async function ownedPid(marker) {
   while (!(value = await readFile(marker, 'utf8').catch(() => '')) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
   assert.ok(Number(value) > 1); return Number(value);
 }
+
+test('真实启动失败从有界诊断公开具体阶段，临时运行目录清理后原因仍可查询',async()=>{
+  for(const stage of ['runtime','configuration','storage','modules','handshake']){
+    const {host,marker}=await subject(`failure-${stage}`,0,stage);
+    try {
+      await host.connect();
+      assert.equal(host.getState().phase,'disconnected');
+      assert.equal(host.getState().errorCode,`backend_startup_${stage}_failed`);
+      assert.equal(host.getState().canRetryConnection,true);
+      assert.equal(alive(Number(await readFile(marker,'utf8'))),false);
+    }finally{await host.stop();}
+  }
+});
 
 test('桌面启动真实子进程时保留显式诊断预算绑定，不传递模型凭据环境', async t => {
   const names = ['NOTALONE_PROBLEM_BUDGET', 'NOTALONE_PROBLEM_ROUND', 'NOTALONE_DEEPSEEK_API_KEY'];
