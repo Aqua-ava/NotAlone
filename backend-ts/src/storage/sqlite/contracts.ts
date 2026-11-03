@@ -3,6 +3,10 @@ import type { SQLInputValue, SQLOutputValue } from 'node:sqlite';
 export type SqliteRole = 'business' | 'test';
 export interface StorageLease { databaseId: string; runtimeId: string; epoch: bigint }
 export interface StorageStatus extends StorageLease { schemaVersion: number; sqliteVersion: string; role: SqliteRole }
+export interface StorageReader {
+  execute<T = unknown>(name: string, input: unknown): Promise<T>;
+  close(): Promise<void>;
+}
 export interface OpenStorageOptions {
   userData: string;
   intent: 'create' | 'open' | 'reset';

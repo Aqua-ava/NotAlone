@@ -10,6 +10,8 @@ SQLite 是当前默认业务存储。正式装配使用 `sqlite-host-plugin.ts`�
 
 每个句柄仅拥有一个 Worker、一条连接。`execute(name,input,lease=status)` 通过消息串行调用；`check()` 分别执行 `integrity_check` 和 `foreign_key_check`；`close()` 排空此前请求并关闭连接。Worker 退出、错误或超时后全部未决请求失败，不自动重开、不自动重放，业务须核对幂等记录再人工继续。
 
+按 [ADR-159](../../../../architecture/adr/159-foreground-read-channel-isolation.md)，`openReader(actionNames)` 创建独立 Worker 的只读附属句柄，只接受可信装配声明且注册为 `read` 的具名动作。它沿用主句柄租约，不执行初始化、迁移或运行身份更新；每次短读结束后在事务外复验租约。主句柄故障、关闭或重开撤销旧读者。前台只声明 `identity.foregroundSnapshot`，由联系人元数据持有者负责删除排空及关闭，不与后台长查询共享执行队列。
+
 ## 02 / 05 / 14 的扩展位置
 
 在 `registry.ts` 导入本票模块，并向 `registry.migrations` 追加连续 `{version,sql}`；已发布 SQL 不修改。`schema_migration(version,checksum,applied_at)` 使用 SHA-256，所有待升级 DDL、账本与 `user_version` 在同一事务提交。未知高版本、checksum 或结构摘要漂移拒绝打开。初始版本 1 建立 `database_instance`、`schema_migration`；后续领域 DDL 按 `registry.ts` 的连续迁移追加，当前版本以注册表为准。

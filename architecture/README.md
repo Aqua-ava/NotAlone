@@ -280,3 +280,5 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 157. [ADR-157：Skill 业务身份与可迁移物理定位分离](adr/157-portable-skill-directory-identity.md)
 
 158. [ADR-158：显式选择联系人后继续前台跟随](adr/158-contact-selection-keeps-foreground-follow.md)（已采纳，实现与验收单独记录）
+
+159. [ADR-159：前台联系人识别独立读取通道](adr/159-foreground-read-channel-isolation.md)（已采纳，实现与验收单独记录）

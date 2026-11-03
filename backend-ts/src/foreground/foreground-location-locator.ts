@@ -135,7 +135,13 @@ export class ForegroundLocator {
         if(active.length!==1||binding.owner_id.toLowerCase()!==this.options.ownerId||binding.channel!=='wechat'||binding.account_scope!==this.options.accountScope||binding.status!=='active'||normalize(binding.display_name)!==normalize(candidate.display_name)||!uuid(binding.binding_id)||!uuid(binding.contact_id))return failure('manual-required','unmatched_requires_selection');
         if((this.options.clock??Date.now)()-captured>=5000)return result('unavailable','observation_timeout');
         return {...result('confirmed',decision.method==='exact'&&quality.display_name_confidence>=0.9?'confirmed_active_binding':'confirmed_active_binding_name_match',preview),binding_id:binding.binding_id,contact_id:binding.contact_id};
-      } catch(error) {check();await this.options.probe.close();return failure('unavailable','binding_verification_unavailable');}
+      } catch(error) {
+        check();
+        // 查询暂时失败不代表 OCR 进程失效；只保留模型，每轮仍重新采帧及核验身份。
+        const code=(error as {code?:string}).code;
+        if(code==='foreground_scope_unavailable'||code==='history_scope_changed'||code==='history_account_changed'||code==='history_source_changed')await this.options.probe.close();
+        return failure('unavailable','binding_verification_unavailable');
+      }
     } catch(error) {await this.options.probe.close();throw error;}
   }
 }

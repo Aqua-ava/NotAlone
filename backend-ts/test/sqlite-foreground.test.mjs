@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';import {SqliteForeground} from '../src/foreground/sqlite-foreground.ts';
 import {NativeForegroundProbe} from '../src/foreground/foreground-location-probe.ts';
+import {ForegroundLocator} from '../src/foreground/foreground-location-locator.ts';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';import {tmpdir} from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';
 function fixture(options={}){
  const owner=randomUUID(),contact=randomUUID(),binding=randomUUID(),account={id:randomUUID(),key:'synthetic-account',sourceGeneration:'generation-1',revision:'1'};
@@ -70,4 +71,42 @@ test('权限恢复后重试真实探针，但仍由新观察决定联系人',asy
   const result=await foreground.observe();
   assert.notEqual(result.reason,'screen_capture_permission_missing');assert.equal(result.contact_id,null);
  }finally{await foreground.close();await rm(dir,{recursive:true,force:true});}
+});
+
+for(const failingStage of ['sessions','bindings'])test(`前台${failingStage}查询暂时失败后复用OCR进程，但下一轮必须重新采帧`,async()=>{
+ const worker=fileURLToPath(new URL('./foreground-location-probe.fixture.mjs',import.meta.url));
+ const probe=new NativeForegroundProbe({executable:process.execPath,args:[worker,'normal']}),names=[];
+ const observe=probe.observe.bind(probe);let attempt=0;
+ probe.observe=async options=>{const value=await observe(options);names.push(value.display_name);return value;};
+ const ownerId=randomUUID(),contactId=randomUUID(),bindingId=randomUUID();
+ const locator=new ForegroundLocator({ownerId,accountScope:'synthetic-account',probe,
+  sessions:async()=>{attempt++;if(failingStage==='sessions'&&attempt===1)throw new Error('synthetic_metadata_unavailable');return [{username:'synthetic-person',display_name:names.at(-1),chat_type:'private'}];},
+  bindings:async()=>{if(failingStage==='bindings'&&attempt===1)throw new Error('synthetic_snapshot_unavailable');return [{owner_id:ownerId,contact_id:contactId,binding_id:bindingId,channel:'wechat',account_scope:'synthetic-account',conversation_locator:'synthetic-person',display_name:names.at(-1),status:'active'}];}});
+ try{
+  const failed=await locator.observe({enabled:true});
+  assert.equal(failed.reason,'binding_verification_unavailable');assert.equal(failed.contact_id,null);assert.equal(failed.recognized_name,null);
+  const recovered=await locator.observe({enabled:true});
+  assert.equal(recovered.phase,'confirmed');assert.equal(recovered.contact_id,contactId);
+  assert.match(names[0],/^合成\d+-1$/);
+  assert.equal(names[1],names[0].replace(/-1$/,'-2'));
+ }finally{await locator.close();}
+});
+
+
+test('账号或来源变化仍回收OCR进程，下一轮不能复用旧观察',async()=>{
+ for(const code of ['foreground_scope_unavailable','history_scope_changed','history_account_changed','history_source_changed']){
+  const worker=fileURLToPath(new URL('./foreground-location-probe.fixture.mjs',import.meta.url));
+  const probe=new NativeForegroundProbe({executable:process.execPath,args:[worker,'normal']}),names=[];
+  const observe=probe.observe.bind(probe);let attempt=0;
+  probe.observe=async options=>{const value=await observe(options);names.push(value.display_name);return value;};
+  const ownerId=randomUUID(),contactId=randomUUID(),bindingId=randomUUID();
+  const locator=new ForegroundLocator({ownerId,accountScope:'synthetic-account',probe,
+   sessions:async()=>{if(attempt++===0)throw Object.assign(new Error('synthetic_scope_changed'),{code});return [{username:'synthetic-person',display_name:names.at(-1),chat_type:'private'}];},
+   bindings:async()=>[{owner_id:ownerId,contact_id:contactId,binding_id:bindingId,channel:'wechat',account_scope:'synthetic-account',conversation_locator:'synthetic-person',display_name:names.at(-1),status:'active'}]});
+  try{
+   const failed=await locator.observe({enabled:true});assert.equal(failed.contact_id,null);assert.equal(failed.recognized_name,null);
+   assert.equal((await locator.observe({enabled:true})).phase,'confirmed');
+   assert.match(names[1],/^合成\d+-1$/);assert.notEqual(names[1],names[0],code);
+  }finally{await locator.close();}
+ }
 });

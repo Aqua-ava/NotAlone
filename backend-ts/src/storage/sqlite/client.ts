@@ -1,7 +1,11 @@
 import { Worker } from 'node:worker_threads';
+import {statSync} from 'node:fs';
 import { sqliteOpenTimeoutMs } from './timeouts.ts';
-import { StorageFailure, type OpenStorageOptions, type StorageLease, type StorageStatus } from './contracts.ts';
+import {controlledFiles} from './files.ts';
+import {SqliteReadonlyReader} from './readonly-client.ts';
+import { StorageFailure, type OpenStorageOptions, type StorageLease, type StorageStatus, type StorageReader } from './contracts.ts';
 export type { OpenStorageOptions, StorageStatus, StorageLease } from './contracts.ts';
+export type {StorageReader} from './contracts.ts';
 
 export interface StorageFailureDiagnostic {
   cause: 'action_timeout' | 'worker_error' | 'worker_exit' | 'post_message_failed';
@@ -18,10 +22,15 @@ export class SqliteStorage {
   private diagnostic: Readonly<StorageFailureDiagnostic> | null = null;
   private readonly pending = new Map<number, { name: string; started: boolean; resolve: (value: any) => void; reject: (error: Error) => void; timer?: NodeJS.Timeout }>();
   private readonly worker: Worker;
+  private readonly readers=new Set<SqliteReadonlyReader>();
+  private readonly files:ReturnType<typeof controlledFiles>;
+  private readonly options:OpenStorageOptions;
   get failureDiagnostic(): Readonly<StorageFailureDiagnostic> | null { return this.diagnostic; }
-  private constructor(worker: Worker, status: StorageStatus) {
+  private constructor(worker: Worker, status: StorageStatus,options:OpenStorageOptions) {
     this.worker = worker;
+    this.options=options;
     this.status = Object.freeze(status);
+    this.files=controlledFiles(options.userData,false);
     worker.on('message', message => {
       const pending = this.pending.get(message.id);
       if (!pending) return;
@@ -40,24 +49,34 @@ export class SqliteStorage {
   }
   static async open(options: OpenStorageOptions): Promise<SqliteStorage> {
     const worker = new Worker(new URL('./worker.ts', import.meta.url), {workerData: options, execArgv: ['--experimental-strip-types']});
-    return new Promise((resolve, reject) => {
+    const status=await new Promise<StorageStatus>((resolve, reject) => {
       const timer = setTimeout(() => { void worker.terminate(); reject(new StorageFailure('storage_timeout')); }, sqliteOpenTimeoutMs);
       const fail = () => { clearTimeout(timer); reject(new StorageFailure('worker_failed')); };
       worker.once('error', fail); worker.once('exit', fail);
       worker.once('message', message => {
         clearTimeout(timer); worker.off('error', fail); worker.off('exit', fail);
         if (message.code) { void worker.terminate(); reject(new StorageFailure(message.code)); }
-        else resolve(new SqliteStorage(worker, message.value));
+        else resolve(message.value);
       });
-    });
+    }).catch(async error=>{await worker.terminate();throw error;});
+    try{return new SqliteStorage(worker,status,{...options});}catch(error){await worker.terminate();throw error;}
   }
   execute<T = unknown>(name: string, input: unknown, lease: StorageLease = this.status): Promise<T> {
     if (this.failed || this.closing) return Promise.reject(new StorageFailure('worker_failed'));
     return this.request(name, input, lease);
   }
   check(): Promise<{ integrity: 'ok'; foreignKeys: 'ok' }> { return this.execute('storage.check', {}); }
+  async openReader(actions:readonly string[]):Promise<StorageReader>{
+    if(this.failed||this.closing)throw new StorageFailure('worker_failed');
+    this.files.verify();const identity=statSync(this.files.database);
+    const reader=new SqliteReadonlyReader({userData:this.options.userData,registryModule:this.options.registryModule,status:this.status,actions:[...actions],fileIdentity:{dev:identity.dev,ino:identity.ino}},()=>{this.readers.delete(reader);});
+    this.readers.add(reader);
+    try{await reader.ready;if(this.failed||this.closing)throw new StorageFailure('worker_failed');return reader;}
+    catch(error){await reader.close();throw error;}
+  }
   close(): Promise<void> {
     return this.closing ??= (async () => {
+      await Promise.all([...this.readers].map(reader=>reader.close()));
       try { if (!this.failed) await this.request('storage.close', {}, this.status); }
       finally { this.fail(); await this.worker.terminate(); }
     })();
@@ -78,6 +97,7 @@ export class SqliteStorage {
         pendingCount: this.pending.size, queuedCount: [...this.pending.values()].filter(pending => !pending.started).length});
     }
     this.failed = true;
+    for(const reader of this.readers)void reader.close().catch(()=>{});
     for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new StorageFailure('worker_failed')); }
     this.pending.clear();
   }

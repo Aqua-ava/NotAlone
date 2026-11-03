@@ -1,0 +1,66 @@
+import {parentPort,workerData} from 'node:worker_threads';
+import {DatabaseSync,type SQLInputValue} from 'node:sqlite';
+import {statSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {controlledFiles} from './files.ts';
+import {registry as defaultRegistry} from './registry.ts';
+import {StorageFailure,type StorageRegistry,type StorageTransaction} from './contracts.ts';
+import type {ReadonlyWorkerOptions} from './readonly-client.ts';
+
+const port=parentPort!,options=workerData as ReadonlyWorkerOptions;
+const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
+const failureCode=(error:unknown):string=>{
+  if(error instanceof StorageFailure)return error.code;
+  const value=error as {code?:string;errcode?:number};
+  if(value.code==='ENOENT')return 'storage_missing';
+  if(value.errcode!==undefined&&(value.errcode&0xff)===5)return 'storage_busy';
+  return 'storage_failed';
+};
+let connection:DatabaseSync|undefined;
+try{
+  const registry:StorageRegistry=options.registryModule?(await import(options.registryModule)).registry:defaultRegistry;
+  const actions=new Map(registry.actions.map(action=>[action.name,action]));
+  if(!Array.isArray(options.actions)||!options.actions.length||options.actions.some(name=>actions.get(name)?.mode!=='read'))throw new StorageFailure('readonly_action_forbidden');
+  const allowed=new Set(options.actions),status=options.status;
+  const files=controlledFiles(options.userData,false),identity=statSync(files.database);
+  if(identity.dev!==options.fileIdentity.dev||identity.ino!==options.fileIdentity.ino)throw new StorageFailure('storage_identity_changed');
+  connection=new DatabaseSync(files.database,{readOnly:true,enableForeignKeyConstraints:true,allowExtension:false,timeout:100});
+  const db=connection;
+  db.exec('PRAGMA query_only=ON; PRAGMA foreign_keys=ON; PRAGMA trusted_schema=OFF; PRAGMA temp_store=MEMORY;');
+  const all=(sql:string,values:SQLInputValue[]=[]):Record<string,any>[]=>{
+    if(values.some(value=>typeof value==='number'&&(!Number.isFinite(value)||Number.isInteger(value)&&!Number.isSafeInteger(value))))throw new StorageFailure('storage_value_invalid');
+    const statement=db.prepare(sql);statement.setReadBigInts(true);return statement.all(...values);
+  };
+  const get=(sql:string,values:SQLInputValue[]=[])=>all(sql,values)[0];
+  const schemaVersion=get('PRAGMA schema_version').schema_version;
+  const assertLease=()=>{
+    files.verify();
+    const current=get('SELECT database_id,runtime_id,epoch,role,format_family,schema_digest FROM database_instance WHERE slot=1');
+    if(!current||current.database_id!==status.databaseId||current.runtime_id!==status.runtimeId||current.epoch!==status.epoch||current.role!==status.role||current.format_family!=='notalone-sqlite-v1')throw new StorageFailure('stale_lease');
+    if(get('PRAGMA user_version').user_version!==BigInt(status.schemaVersion)||get('PRAGMA schema_version').schema_version!==schemaVersion)throw new StorageFailure('schema_drift');
+    return current;
+  };
+  const initial=assertLease();
+  const actualDigest=digest(JSON.stringify(all("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name")));
+  if(initial.schema_digest!==actualDigest)throw new StorageFailure('schema_drift');
+  const ledger=all('SELECT version,checksum FROM schema_migration ORDER BY version');
+  if(ledger.length!==status.schemaVersion||ledger.length!==registry.migrations.length||ledger.some((row,index)=>row.version!==BigInt(index+1)||row.checksum!==digest(registry.migrations[index].sql)))throw new StorageFailure('migration_drift');
+  assertLease();port.postMessage({ready:true});
+  port.on('message',({id,name,input})=>{
+    try{
+      const action=actions.get(name);
+      if(!allowed.has(name)||action?.mode!=='read')throw new StorageFailure('readonly_action_forbidden');
+      let active=true;
+      const permitted=()=>{if(!active)throw new StorageFailure('transaction_expired');};
+      const tx:StorageTransaction={all(sql,values){permitted();return all(sql,values);},get(sql,values){permitted();return get(sql,values);},run(){permitted();throw new StorageFailure('readonly_write_forbidden');}};
+      db.exec('BEGIN');let value:unknown;
+      try{
+        assertLease();value=action.execute(tx,input,{databaseId:status.databaseId,runtimeId:status.runtimeId,epoch:status.epoch});
+        if(value&&typeof(value as Promise<unknown>).then==='function'){void Promise.resolve(value).catch(()=>{});throw new StorageFailure('async_transaction_forbidden');}
+        value=structuredClone(value);db.exec('COMMIT');
+      }catch(error){if(db.isTransaction)db.exec('ROLLBACK');throw error;}finally{active=false;}
+      // COMMIT 后重新读取，避免 WAL 事务旧快照掩盖主运行租约变化。
+      assertLease();port.postMessage({id,value});
+    }catch(error){port.postMessage({id,code:failureCode(error)});}
+  });
+}catch(error){try{connection?.close();}catch{}port.postMessage({code:failureCode(error)});port.close();}

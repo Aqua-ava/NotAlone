@@ -11,10 +11,31 @@ type StopReaders=(contactId?:string)=>Promise<void>;
 class ControlledContactService extends SqliteContactService {
   private readonly stopReaders:StopReaders;
   private readonly startReaders:()=>void;
-  constructor(storage:SqliteStorage,ownerId:string,metadata:ContactMetadataPort,stopReaders:StopReaders,startReaders:()=>void){super(storage,ownerId,metadata);this.stopReaders=stopReaders;this.startReaders=startReaders;}
+  private readonly snapshotStorage:SqliteStorage;
+  private foregroundReader?:ReturnType<SqliteStorage['openReader']>;
+  private snapshotStopped=false;
+  private snapshotClosing?:Promise<void>;
+  constructor(storage:SqliteStorage,ownerId:string,metadata:ContactMetadataPort,stopReaders:StopReaders,startReaders:()=>void){super(storage,ownerId,metadata);this.snapshotStorage=storage;this.stopReaders=stopReaders;this.startReaders=startReaders;}
+  override async foregroundSnapshot():Promise<import('../../../foreground/sqlite-foreground.ts').ForegroundSnapshot>{
+    if(this.snapshotStopped)throw new StorageFailure('identity_closed');
+    const reader=await(this.foregroundReader??=this.snapshotStorage.openReader(['identity.foregroundSnapshot']));
+    if(this.snapshotStopped)throw new StorageFailure('identity_closed');
+    const snapshot=await reader.execute<import('../../../foreground/sqlite-foreground.ts').ForegroundSnapshot>('identity.foregroundSnapshot',{ownerId:this.ownerId});
+    if(this.snapshotStopped)throw new StorageFailure('identity_closed');
+    return snapshot;
+  }
   override async confirm(...args:Parameters<SqliteContactService['confirm']>){const result=await super.confirm(...args);this.startReaders();return result;}
   override async setReading(enabled:boolean){const result=await super.setReading(enabled);if(enabled)this.startReaders();else await this.stopReaders();return result;}
   override async revoke(contactId:string,bindingId:string,generation:string){const result=await super.revoke(contactId,bindingId,generation);await this.stopReaders(contactId);return result;}
+  override close():Promise<void>{
+    this.snapshotStopped=true;
+    return this.snapshotClosing??=(async()=>{
+      // 名单删除和退出必须一并排空附属读者，不能只关闭原来的渠道预览。
+      const results=await Promise.allSettled([super.close(),this.foregroundReader?.then(reader=>reader.close(),()=>{})]);
+      const failures=results.filter((result):result is PromiseRejectedResult=>result.status==='rejected');
+      if(failures.length)throw new AggregateError(failures.map(result=>result.reason),'FOREGROUND_READER_CLOSE_FAILED');
+    })().catch(error=>{this.snapshotClosing=undefined;throw error;});
+  }
 }
 /** 名单包含多位联系人；删除先关闭整个旧预览，再按持久资格重新创建空服务。 */
 export class ContactMetadataLifetime {
