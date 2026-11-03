@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -21,18 +22,19 @@ type notaloneCheckpointIdentity struct {
 	Entry    notaloneTailBaselineEntry `json:"entry"`
 }
 type notaloneCheckpoint struct {
-	Format       string                             `json:"format"`
-	Scope        string                             `json:"scope"`
-	Root         string                             `json:"root"`
-	Generation   string                             `json:"generation"`
-	Schema       string                             `json:"schema"`
-	Profile      string                             `json:"profile"`
-	Artifact     string                             `json:"artifact"`
-	Target       notaloneSnapshotTarget             `json:"target"`
-	Cursor       string                             `json:"cursor"`
-	Baseline     []notaloneCheckpointIdentity       `json:"baseline"`
-	States       map[string]notaloneDeltaShardState `json:"states"`
-	TableSchemas map[string]string                  `json:"tableSchemas,omitempty"`
+	Format         string                             `json:"format"`
+	Scope          string                             `json:"scope"`
+	Root           string                             `json:"root"`
+	Generation     string                             `json:"generation"`
+	Schema         string                             `json:"schema"`
+	Profile        string                             `json:"profile"`
+	Artifact       string                             `json:"artifact"`
+	Target         notaloneSnapshotTarget             `json:"target"`
+	Cursor         string                             `json:"cursor"`
+	Baseline       []notaloneCheckpointIdentity       `json:"baseline"`
+	States         map[string]notaloneDeltaShardState `json:"states"`
+	TableSchemas   map[string]string                  `json:"tableSchemas,omitempty"`
+	PendingAbsence []notaloneTailIdentity             `json:"pendingAbsence,omitempty"`
 }
 
 type notaloneSignedCheckpoint struct {
@@ -177,7 +179,7 @@ func (h *notaloneHistorySession) loadCheckpoint(report notaloneSupportReport, pr
 	if e != nil || len(computed) != 32 || !hmac.Equal(computed, provided) {
 		return nil, notaloneFailure("history_checkpoint_invalid")
 	}
-	if value.Format != expected.Format || value.Scope != expected.Scope || value.Root != expected.Root || value.Generation != expected.Generation || value.Profile != expected.Profile || value.Artifact != expected.Artifact || value.Cursor != token || value.Target.Descriptor != target || len(value.Baseline) > notaloneTailIdentityLimit || len(value.States) > 128 || len(value.TableSchemas) > 128 {
+	if value.Format != expected.Format || value.Scope != expected.Scope || value.Root != expected.Root || value.Generation != expected.Generation || value.Profile != expected.Profile || value.Artifact != expected.Artifact || value.Cursor != token || value.Target.Descriptor != target || len(value.Baseline)+len(value.PendingAbsence) > notaloneTailIdentityLimit || len(value.States) > 128 || len(value.TableSchemas) > 128 {
 		return nil, notaloneFailure("history_checkpoint_invalid")
 	}
 	added, growthOK := notaloneSafeTargetGrowth(value.Target, currentTarget, value.TableSchemas, h.inspected.Tables)
@@ -211,10 +213,17 @@ func (h *notaloneHistorySession) loadCheckpoint(report notaloneSupportReport, pr
 		}
 		seen[id] = true
 	}
+	for _, id := range value.PendingAbsence {
+		number, err := strconv.ParseInt(id.LocalID, 10, 64)
+		if tables[id.Partition] != id.Table || id.Table == "" || err != nil || number < 0 || strconv.FormatInt(number, 10) != id.LocalID || seen[id] {
+			return nil, notaloneFailure("history_checkpoint_invalid")
+		}
+		seen[id] = true
+	}
 	return &value, nil
 }
 
-func (h *notaloneHistorySession) saveCheckpoint(report notaloneSupportReport, profile notaloneReadProfile, target notaloneSnapshotTarget, cursor string, baseline map[notaloneTailIdentity]notaloneTailBaselineEntry, states map[string]notaloneDeltaShardState) error {
+func (h *notaloneHistorySession) saveCheckpoint(report notaloneSupportReport, profile notaloneReadProfile, target notaloneSnapshotTarget, cursor string, baseline map[notaloneTailIdentity]notaloneTailBaselineEntry, states map[string]notaloneDeltaShardState, pendingAbsence ...map[notaloneTailIdentity]bool) error {
 	if h.checkpointDirectory == "" {
 		return nil
 	}
@@ -255,6 +264,21 @@ func (h *notaloneHistorySession) saveCheckpoint(report notaloneSupportReport, pr
 	for identity, entry := range baseline {
 		value.Baseline = append(value.Baseline, notaloneCheckpointIdentity{identity, entry})
 	}
+	if len(pendingAbsence) > 1 {
+		return notaloneFailure("history_checkpoint_invalid")
+	}
+	if len(pendingAbsence) == 1 {
+		for identity := range pendingAbsence[0] {
+			if _, exists := baseline[identity]; exists || tableInstances[identity.Partition] != identity.Table {
+				return notaloneFailure("history_checkpoint_invalid")
+			}
+			value.PendingAbsence = append(value.PendingAbsence, identity)
+		}
+	}
+	if len(value.Baseline)+len(value.PendingAbsence) > notaloneTailIdentityLimit {
+		return notaloneFailure("history_checkpoint_invalid")
+	}
+	sort.Slice(value.PendingAbsence, func(i, j int) bool { return notaloneTailIdentityLess(value.PendingAbsence[i], value.PendingAbsence[j]) })
 	sort.Slice(value.Baseline, func(i, j int) bool {
 		return notaloneTailIdentityLess(value.Baseline[i].Identity, value.Baseline[j].Identity)
 	})
@@ -300,25 +324,32 @@ func (h *notaloneHistorySession) saveCheckpoint(report notaloneSupportReport, pr
 	if e != nil {
 		return notaloneFailure("history_checkpoint_unavailable")
 	}
-	// 保留最新两份交接点：本次响应尚未被业务事务接受时，上一已接受点仍可恢复。
+	h.checkpointOffered, h.checkpointOfferedCursor = cursor, cursor
+	// 新响应只表示已提供；恢复请求或下一页才证明宿主选择了前次恢复点。
+	// 多次未接受的尝试不能按修改时间淘汰最后一个已接受的父点。
 	entries, _ := os.ReadDir(h.checkpointDirectory)
-	type saved struct {
-		name string
-		at   int64
+	parent := ""
+	if h.checkpointParent != "" {
+		parent = filepath.Base(h.checkpointPath(value.Scope, h.checkpointParent))
 	}
-	files := []saved{}
 	for _, entry := range entries {
 		if !strings.HasPrefix(entry.Name(), value.Scope+"-") || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
 		}
+		if entry.Name() == filepath.Base(final) || entry.Name() == parent {
+			continue
+		}
 		st, e := entry.Info()
 		if e == nil && st.Mode().IsRegular() && st.Mode().Perm() == 0600 {
-			files = append(files, saved{entry.Name(), st.ModTime().UnixNano()})
+			_ = os.Remove(filepath.Join(h.checkpointDirectory, entry.Name()))
 		}
 	}
-	sort.Slice(files, func(i, j int) bool { return files[i].at > files[j].at })
-	for index := 2; index < len(files); index++ {
-		_ = os.Remove(filepath.Join(h.checkpointDirectory, files[index].name))
-	}
 	return nil
+}
+
+func (h *notaloneHistorySession) acceptCheckpointInput(cursor string) {
+	if cursor != "" && cursor == h.checkpointOfferedCursor {
+		h.checkpointParent = h.checkpointOffered
+		h.checkpointOffered, h.checkpointOfferedCursor = "", ""
+	}
 }

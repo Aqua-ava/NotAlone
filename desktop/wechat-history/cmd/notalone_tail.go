@@ -254,6 +254,7 @@ func (h *notaloneHistorySession) tailPage(ctx context.Context, request notaloneH
 	if request.Cursor != tail.expectedCursor {
 		return empty, notaloneFailure("history_cursor_invalid")
 	}
+	h.acceptCheckpointInput(request.Cursor)
 	cursorOut, err := notaloneSnapshotNonce()
 	if err != nil {
 		return empty, err

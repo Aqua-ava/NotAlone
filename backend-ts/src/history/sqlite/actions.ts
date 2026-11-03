@@ -12,7 +12,7 @@ import { clearBoundaryExclusion, completeRestoreGoal, restoreOperationForGoal } 
 import { assertHistoryCursor, historyCursorScheme, historyCursorScopeDigest } from './cursor.ts';
 import { isPartitionGrowthReportChange, isPartitionGrowthTargetChange } from '../partition-growth.ts';
 import { assertHistoryReadBoundary } from './suppression.ts';
-import { assertSourceContinuity, assertLiveGuard, fenceContinuity, normalUseContinuity, normalUseRevalidationCandidate, prepareNormalUseTarget, preflightGeneration, preflightTarget } from './continuity.ts';
+import { assertSourceContinuity, assertCheckpointSourceContinuity, assertLiveGuard, fenceContinuity, normalUseContinuity, normalUseRevalidationCandidate, prepareNormalUseTarget, preflightGeneration, preflightTarget } from './continuity.ts';
 const fail:(code:string)=>never=(code)=>{throw new StorageFailure(code);};
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any)=>unknown):StorageAction=>({name,mode,retryBusy:true,execute});
 export const serializeSupport=(report:HistorySupportReport):string=>JSON.stringify(Object.fromEntries(Object.entries(report).sort(([a],[b])=>a.localeCompare(b))));
@@ -152,11 +152,14 @@ export const historyActions:StorageAction[]=[
  action('history.resumeCheckpoint','read',(tx,i)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertSupport(i.report);
   if(i.report.continuity!==normalUseContinuity||i.report.capabilities?.durableIncremental!=='supported')return null;
+  const durableHistory=i.report.capabilities?.durableHistory==='supported';
+  // 正常守卫换代废弃旧任务，不能同时丢弃它已接受的恢复点；删除、撤权和其他失效原因不获此例外。
+  const partialStates=durableHistory?"(state IN ('running','incomplete') OR (state='invalidated' AND failure_code='history_runtime_revalidated'))":"state IN ('running','incomplete')";
   const goal=tx.get(`SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND binding_id=? AND grant_id=?
    AND accepted_data_generation=? AND accepted_barrier_generation=? AND creation_no IS NOT NULL AND cursor_scope_digest IS NOT NULL
    AND ((kind='incremental' AND cursor IS NOT NULL AND state IN ('running','incomplete'))
-   OR (kind='history' AND state='complete' AND resume_cursor IS NOT NULL)
-   OR (kind='history' AND state IN ('running','incomplete') AND cursor IS NOT NULL))
+   OR (kind='history' AND (state IN ('complete','incomplete') OR (state='invalidated' AND failure_code='history_runtime_revalidated')) AND cursor IS NULL AND resume_cursor IS NOT NULL)
+   OR (kind='history' AND ${partialStates} AND cursor IS NOT NULL ${durableHistory?'AND resume_cursor IS NOT NULL':''}))
    ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1`,[token.owner_id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation)]);
   if(!goal)return null;
   let previousReport:HistorySupportReport;
@@ -165,10 +168,14 @@ export const historyActions:StorageAction[]=[
   const supportGrowth=!supportSame&&isPartitionGrowthReportChange(previousReport,i.report);
   if(!supportSame&&!supportGrowth)return null;
   const target=targetOf(JSON.parse(String(goal.target_json)),token,previousReport);
+  if(goal.kind==='history'&&goal.cursor===null){
+   let completed:unknown;try{completed=JSON.parse(String(goal.completed_partitions));}catch{return null;}
+   if(!Array.isArray(completed)||!target.partitions.every(partition=>completed.includes(partition)))return null;
+  }
   if(supportGrowth&&target.checkedPartitions===undefined)return null;
-  assertHistoryReadBoundary(tx,token,{kind:'history'});assertSourceContinuity(tx,token,target,i.report.accountKey);
+  assertHistoryReadBoundary(tx,token,{kind:'history'});assertCheckpointSourceContinuity(tx,token,target,i.report.accountKey,supportGrowth);
   if(historyCursorScopeDigest(token,previousReport,target)!==goal.cursor_scope_digest)return null;
-  return {target,cursor:assertHistoryCursor(goal.kind==='history'&&goal.state==='complete'?goal.resume_cursor:goal.cursor,'history_cursor_invalid')};
+  return {target,cursor:assertHistoryCursor(goal.kind==='history'&&(goal.cursor===null||durableHistory)?goal.resume_cursor:goal.cursor,'history_cursor_invalid')};
  }),
  action('history.partitionGrowthCandidate','read',(tx,i)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertSupport(i.report);
@@ -213,7 +220,9 @@ export const historyActions:StorageAction[]=[
   if(page?.target!==goal.target_descriptor||page.cursorIn!==goal.cursor||!Array.isArray(page.records)||page.records.length>1000||!Array.isArray(page.completedPartitions)||page.completedPartitions.some(p=>!target.partitions.includes(p))||typeof page.exhausted!=='boolean'||page.exhausted&&page.cursorOut!==null||!page.exhausted&&(typeof page.cursorOut!=='string'||!page.cursorOut||page.cursorOut===page.cursorIn))fail('history_page_invalid');
   const resumeCursor=page.resumeCursor===undefined||page.resumeCursor===null?null:assertHistoryCursor(page.resumeCursor,'history_page_invalid');
   if(resumeCursor!==null&&!page.exhausted)fail('history_page_invalid');
-  if(verifiedAbsentTarget(report)&&(page.records.length!==0||resumeCursor!==null))fail('history_page_invalid');
+  const checkpointCursor=page.checkpointCursor===undefined?null:assertHistoryCursor(page.checkpointCursor,'history_page_invalid');
+  if(checkpointCursor!==null&&(page.exhausted||report.continuity!==normalUseContinuity||report.capabilities?.durableHistory!=='supported'||report.capabilities?.durableIncremental!=='supported'))fail('history_page_invalid');
+  if(verifiedAbsentTarget(report)&&(page.records.length!==0||resumeCursor!==null||checkpointCursor!==null))fail('history_page_invalid');
   tx.run("INSERT INTO sync_capture(owner_id,id,contact_id,goal_id,read_epoch,runtime_token,captured_at,adapter_version,cursor_in,cursor_out,state,response_digest,acceptance_no) VALUES(?,?,?,?,?,?,?,?,?,?,'accepted',?,(SELECT coalesce(max(acceptance_no),0)+1 FROM sync_capture WHERE acceptance_no IS NOT NULL))",[token.owner_id,i.captureId,token.contact_id,goal.id,BigInt(token.read_epoch),i.runtimeToken,i.at,report.adapterVersion,page.cursorIn,page.cursorOut,digest]);
   const restoreOperationId=restoreOperationForGoal(tx,token.owner_id,String(goal.id))??null;
   const {quarantined,createdMessageIds,updatedMessageIds}=ingestRecords({tx,token,report,target,captureId:i.captureId,at:i.at,records:page.records,
@@ -226,6 +235,8 @@ export const historyActions:StorageAction[]=[
   const state=complete?'complete':page.exhausted?'incomplete':'running';const code=unresolved?'history_identity_quarantined':page.exhausted&&!complete?'history_partitions_missing':null;
   if(quarantined)tx.run("UPDATE sync_capture SET state='quarantined',error_code='history_identity_quarantined' WHERE owner_id=? AND id=?",[token.owner_id,i.captureId]);
   tx.run('UPDATE read_goal SET cursor=?,completed_partitions=?,state=?,coverage_state=?,failure_code=? WHERE owner_id=? AND id=?',[page.cursorOut,JSON.stringify([...partitions]),state,complete?'complete':'partial',code,token.owner_id,goal.id]);
+  // 后续普通页不能覆盖最后已接受片段；终页先清除部分检查点，再由增量交接写入自己的证明。
+  if(checkpointCursor!==null||page.exhausted)tx.run('UPDATE read_goal SET resume_cursor=? WHERE owner_id=? AND id=?',[checkpointCursor,token.owner_id,goal.id]);
   // 历史终页与增量交接在同一事务：先固定保守续读游标及完整作用域证据，再原子创建增量目标，窗口内无缺口。
   if((complete||traversalComplete&&report.continuity===normalUseContinuity)&&resumeCursor!==null){
    const scopeDigest=historyCursorScopeDigest(token,report,target);

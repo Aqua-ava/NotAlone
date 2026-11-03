@@ -32,7 +32,8 @@ async function fixture(t,sharedMode=false,storageOptions={},contactCount=2){
  const script=`#!${process.execPath}
  const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline');
  const schema=${JSON.stringify(schema)},planFile=${JSON.stringify(planFile)},logFile=${JSON.stringify(logFile)};
- let resumed=false,tailSerial=2,targetSerial=0,currentTarget=null,selected='${conversation}';
+ let resumed=false,tailSerial=2,targetSerial=0,currentTarget=null,selected='${conversation}',sliceIndex=0,sliceCursor=null;
+ const checkpointFile=${JSON.stringify(join(root,'slice-checkpoints'))};
  fs.writeFileSync(${JSON.stringify(pidFile)},String(process.pid));
  if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['notalone-history']))process.exit(91);
  readline.createInterface({input:process.stdin}).on('line',line=>{
@@ -44,12 +45,26 @@ async function fixture(t,sharedMode=false,storageOptions={},contactCount=2){
   else if(r.op==='resolve')data={accountKey:plan.mode==='wrong-account'?'synthetic-other':'${account}',conversationKey:plan.mode==='wrong-conversation'?'synthetic-other':selected,displayName:'只作展示',sourceGeneration:plan.mode==='wrong-generation'?'f'.repeat(64):'${generation}'};
   else if(r.op==='inspect')data=schema;
   else if(r.op==='support')data={protocol:'private-history-v1',profileId:'synthetic-history-v1',adapterVersion:'1',status:['unverified','quarantine','quarantine-forged'].includes(plan.mode)?'unverified':'supported',reason:['unverified','quarantine','quarantine-forged'].includes(plan.mode)?'history_message_state_unverified':null,accountKey:'${account}',conversationKey:selected,sourceGeneration:'${generation}',programVersion:'synthetic',build:'1',artifactSha256:crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'),schemaFingerprint:schema.schemaFingerprint,declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-final',continuity:${sharedMode?"'same-source-instances-normal-use-v1'":"'synthetic-fixed-source'"},...(plan.capabilities?{capabilities:plan.capabilities}:plan.mode.startsWith('quarantine')?{capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory'].map(k=>[k,['programVersion','exactSchema','declaredLocalKey'].includes(k)?'supported':'unverified']))}:{})};
-  else if((r.op==='target'||r.op==='quarantine-target'||r.op==='resume-target')){resumed=r.op==='resume-target';currentTarget=${sharedMode?"'synthetic-target-'+(++targetSerial)":"'synthetic-target'"};data={protocol:'private-history-v1',descriptor:currentTarget,partitions:schema.checkedPartitions,tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'};}
+  else if((r.op==='target'||r.op==='quarantine-target'||r.op==='resume-target')){resumed=r.op==='resume-target';currentTarget=${sharedMode?"'synthetic-target-'+(++targetSerial)":"'synthetic-target'"};
+   if(plan.mode==='slices'){
+    const checkpoints=fs.existsSync(checkpointFile)?JSON.parse(fs.readFileSync(checkpointFile)):{};
+    const checkpoint=resumed?checkpoints[r.cursor]:null;
+    if(resumed&&(!checkpoint||checkpoint.conversation!==selected||checkpoint.target!==r.target)){process.stdout.write(JSON.stringify({ok:true,data:null})+'\\n');return;}
+    sliceIndex=checkpoint?.index||0;sliceCursor=null;currentTarget+='-'+process.pid;
+   }
+   data={protocol:'private-history-v1',descriptor:currentTarget,partitions:schema.checkedPartitions,tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'};}
   else if((r.op==='page'||r.op==='quarantine-page')){
    if(plan.mode==='blocked')return;
    const row={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:plan.serverId,sender:'contact',kind:'text',text:${sharedMode?"'合成历史正文:'+selected":"'合成历史正文'"},originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:plan.mode==='quarantine'?'unverified':'verified'};
    data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[row,{...row,localId:'2',serverId:'0',kind:'voice',text:plan.mode==='malicious'?'forbidden-body':null,originalType:'34'}],completedPartitions:schema.checkedPartitions,exhausted:true,...(plan.resumeCursor?{resumeCursor:plan.resumeCursor}:{})};
    if(resumed)data.records=plan.resumeRows||[];else data.records.push(...(plan.extraRows||[]));
+   if(plan.mode==='slices'){
+    if((r.cursor||null)!==sliceCursor){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_cursor_invalid'}})+'\\n');return;}
+    const index=++sliceIndex,exhausted=index>=(selected==='${conversation}'?80:1),proof=currentTarget+'.proof-'+index;
+    if(r.checkpoint||exhausted){const checkpoints=fs.existsSync(checkpointFile)?JSON.parse(fs.readFileSync(checkpointFile)):{};checkpoints[proof]={conversation:selected,target:currentTarget,index};fs.writeFileSync(checkpointFile,JSON.stringify(checkpoints));}
+    sliceCursor=exhausted?null:currentTarget+'.session-'+index;
+    data={target:r.target,cursorIn:r.cursor||null,cursorOut:sliceCursor,records:[{...row,localId:String(index),text:'合成片段:'+selected+':'+index}],completedPartitions:exhausted?schema.checkedPartitions:[],exhausted,...(exhausted?{resumeCursor:proof}:r.checkpoint?{checkpointCursor:proof}:{})};
+   }
   }else if(r.op==='tail')data={target:r.target,cursorIn:r.cursor,cursorOut:plan.tailCursorOut||'tail-'+tailSerial++,records:plan.tailRows||[],caughtUp:true,...(plan.tailExtra?{unexpectedBody:'forbidden'}:{})};
   else if(r.op==='boundary-snapshot'){
    data={format:'wechat-history-boundary-v1',scopeDigest:schema.scopeDigest,sourceGeneration:schema.sourceGeneration,schemaFingerprint:schema.schemaFingerprint,
@@ -80,6 +95,22 @@ async function waitForPage(file){return new Promise((resolve,reject)=>{
  const check=()=>requests(file).then(rows=>{if(rows.some(row=>row.op==='page')){clearTimeout(timer);watcher.close();resolve();}});
  const watcher=watch(join(file,'..'),check),timer=setTimeout(()=>{watcher.close();reject(new Error('synthetic_page_missing'));},5000);check();
 });}
+
+test('正式共享子进程有界让出并在进程重启后接续已接受历史片段',async t=>{
+ const f=await fixture(t,true),large=f.bindings.find(row=>row.conversation_locator===conversation),other=f.bindings.find(row=>row.contact_id!==large.contact_id);
+ await f.setPlan({mode:'slices',capabilities:capabilities({...Object.fromEntries(statusCapabilityKeys.map(key=>[key,'supported'])),incrementalTail:'supported',durableIncremental:'supported',durableHistory:'supported'})});
+ const [first,small]=await Promise.all([f.history.synchronize(large.contact_id),f.history.synchronize(other.contact_id)]);
+ assert.equal(first.phase,'running');assert.equal(first.failureCode,null);assert.ok(first.pageCount>0&&first.pageCount<=32);assert.equal(small.phase,'complete');
+ const oldPid=Number(await readFile(f.pidFile,'utf8'));await f.history.stop();await f.shared.stop();noProcess(oldPid);
+ let latest=first;for(let attempt=0;attempt<10&&latest.phase!=='complete';attempt++)latest=await f.history.synchronize(large.contact_id);
+ assert.equal(latest.phase,'complete');assert.equal((await f.history.read(large.contact_id)).coverage.messageCount,80);
+ assert.notEqual(Number(await readFile(f.pidFile,'utf8')),oldPid);
+ const rows=await requests(f.logFile),pages=rows.filter(row=>row.op==='page'&&row.conversation===conversation);
+ assert.equal(pages.length,80);assert.ok(pages.some(row=>row.checkpoint===true));
+ assert.equal(rows.filter(row=>row.op==='target'&&row.conversation===conversation).length,1,'重启不能退回完整历史');
+ assert.ok(rows.filter(row=>row.op==='resume-target').every(row=>row.cursor.includes('.proof-')),'会话内分页游标不可冒充持久检查点');
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
 
 test('正式受控渠道驱动联系人历史服务入库，非文字空正文且serverId补齐保留消息身份',async t=>{
  const f=await fixture(t),contact=f.binding.contact_id;assert.deepEqual((await f.history.read(contact)).messages,[]);

@@ -213,6 +213,16 @@ export function assertSourceContinuity(tx: StorageTransaction, token: ReadEligib
   const scope=tx.get('SELECT * FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
   if(!scope||scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation||!matchesStored(String(scope.tables_json),target,accountKey,accountKey!==undefined))throw new StorageFailure(reason);
 }
+/** 仅用于寻找旧恢复点：已核验范围可包含旧目标之后新增的表；后续原生目标与页提交仍走严格连续性核验。 */
+export function assertCheckpointSourceContinuity(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,accountKey:string,acceptedGrowth:boolean):void {
+ if(!acceptedGrowth){assertSourceContinuity(tx,token,target,accountKey);return;}
+ if(tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]))throw new StorageFailure(reason);
+ const scope=tx.get('SELECT * FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
+ if(!scope||scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation)throw new StorageFailure(reason);
+ if(matchesStored(String(scope.tables_json),target,accountKey,true))return;
+ const current=storedTarget(String(scope.tables_json),token.source_generation);
+ if(!current||current.accountKey!==accountKey||historyTargetTransition(target,current.target,true)!=='growth')throw new StorageFailure(reason);
+}
 /** 如已登记活守卫，页提交必须持有当前运行代次和同一守卫。 */
 export function assertLiveGuard(tx:StorageTransaction,token:ReadEligibility,guardId:unknown):void{
   const guard=tx.get('SELECT * FROM history_guard_lease WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);

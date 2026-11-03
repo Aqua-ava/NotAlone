@@ -161,3 +161,4 @@
 - [ADR-161：旧读取器来源的有界抑制映射](161-proved-legacy-source-suppression-mapping.md)
 - [ADR-162：本机回复资料与独立模型并发](162-local-reply-context-and-independent-model-lanes.md)
 - [ADR-163：退役未接入 SQLite 的旧回复流程](163-retire-disconnected-reply-workflows.md)
+- [ADR-164：大历史分段恢复与联系人公平轮转](164-resumable-history-slices.md)

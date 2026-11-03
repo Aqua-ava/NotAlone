@@ -41,7 +41,7 @@ App 运行目录也位于 `.notalone-builds/`。切换前先用 `pnpm run dev:st
 
 快照在共同 `data_version` 窗口固定分片 reader，按声明主键分页；快照持有期间的新提交不混入。查询受精确整数、行数和真实 `sqlite3_interrupt` 限制，取消须等待查询结束再关闭连接；快照到期按既定协议处理，不把排序字段当成时间或身份连续性证明。
 
-历史终页返回不透明 `resumeCursor`，同一守卫内 tail 完整重扫固定快照并比较变化，不能称为只读取新增行。新进程按 [ADR-127](../../architecture/adr/127-sqlite-history-normal-use-restart-rescan.md)重新核验账号、文件、分片及表实例，支持报告明确认证同源后重新扫描并建立新检查点；既有删除排除保留，旧 cursor 不继承。可检测变化和失证须停读，相同身份下不可辨认的原位回滚不在保证内。
+历史终页返回不透明 `resumeCursor`，后续按 [ADR-133](../../architecture/adr/133-page-delta-private-history-sync.md)的变化页和持久检查点补差，不能描述为每轮完整重扫正文。声明 `durableHistory` 的读取器另支持 [ADR-164](../../architecture/adr/164-resumable-history-slices.md)：`page` 请求 `checkpoint: true` 可在非终页返回独立 `checkpointCursor`，应用同事务接受后才允许切片和恢复。部分点不表示历史完整；恢复重新核验来源并建立新快照，补读未完成身份、已读行变化及待核对缺失。最后未持久片段可能安全回放，旧进程内分页游标不继承；相同身份下不可辨认的原位回滚仍不在保证内。
 
 `boundary-snapshot` 使用 `selected-history-boundary-v1`，只枚举所选会话的有界完整身份集合，不读正文或媒体。独立 observer／reader 的采样与读完成证据、精确成员及计数共同组成客户端复验的 manifest；未认证、超限或失证时不能宣称完整清空边界。
 

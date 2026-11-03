@@ -55,6 +55,17 @@ function installGrowthChannel(f) {
   return state;
 }
 
+test('新增表目标尚无检查点就中断时，仍能从已核验旧分片的恢复点接续',async t=>{
+ const f=await fixture(t),contactId=f.saved[0].contact_id,state=installGrowthChannel(f);
+ await f.service.synchronize(contactId);state.growing=true;
+ await f.service.synchronizeIncremental(contactId);await f.service.close();
+ const restarted=new SqliteHistoryService(f.storage,f.contacts,()=>f.channel);t.after(()=>restarted.close());
+ const result=await restarted.synchronize(contactId);assert.equal(result.phase,'complete');
+ assert.equal(state.resumes.length,2);assert.ok(state.resumes.every(row=>row.cursor==='resume-v1'));
+ assert.deepEqual((await restarted.read(contactId)).messages.map(row=>row.text).sort(),['合成table-v1-1','合成table-v2-1']);
+ await restarted.close();
+});
+
 test('已接受单分片历史遇到安全表增长时从原游标建立新目标，只收新表消息', async t => {
   const f = await fixture(t);
   const contactId = f.saved[0].contact_id;

@@ -62,6 +62,8 @@ export interface HistoryPage {
   completedPartitions: readonly string[]; exhausted: boolean;
   // 终页可提供保守续读游标（允许重叠、不得跳项），供历史→增量无缺口交接；缺失表示该适配器不能证明交接。
   resumeCursor?: string | null;
+  // 未终页的持久恢复证明；只有与该页同事务接受后才可跨选择或重启使用。
+  checkpointCursor?: string;
 }
 export interface HistoryTailPage {
   target: string; cursorIn: string; cursorOut: string;
@@ -76,7 +78,7 @@ export interface HistoryChannel {
   target(scope: HistoryScope, signal?: AbortSignal): Promise<HistoryTarget>;
   // 只接续业务事务已接受且作用域未变的本机检查点；缺失返回 null，不能猜测水位。
   resumeTarget?(scope: HistoryScope, previous: HistoryTarget, cursor: string, signal?: AbortSignal): Promise<HistoryTarget | null>;
-  page(scope: HistoryScope, target: HistoryTarget, cursor: string | null, signal?: AbortSignal): Promise<HistoryPage>;
+  page(scope: HistoryScope, target: HistoryTarget, cursor: string | null, signal?: AbortSignal, options?: {checkpoint?:boolean}): Promise<HistoryPage>;
   /** 仅受信任渠道对已验证的单条引用来源做有限解析，不返回原始 XML。 */
   readQuote?(scope: HistoryScope, target: HistoryTarget, source: HistorySource, signal?: AbortSignal): Promise<HistoryQuoteContent & {proofDigest: string}>;
   // 可选增量尾部能力：只由支持档声明 incrementalTail=supported 的已认证适配器提供。

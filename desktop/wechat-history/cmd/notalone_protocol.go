@@ -38,6 +38,7 @@ type notaloneHistoryRequest struct {
 	ResourceToken    string `json:"resourceToken,omitempty"`
 	Offset           int64  `json:"offset,omitempty"`
 	ImageKeySupplied bool   `json:"imageKeySupplied,omitempty"`
+	Checkpoint       bool   `json:"checkpoint,omitempty"`
 }
 type notaloneResolved struct {
 	Account          string `json:"accountKey"`
@@ -65,32 +66,35 @@ type notaloneMetadataReport struct {
 	Record            *notaloneMetadataObservation `json:"record"`
 }
 type notaloneHistorySession struct {
-	server               *server
-	selected             *notaloneResolved
-	guards               []*notaloneSourceGuard
-	life                 context.Context
-	cancel               context.CancelFunc
-	snapshot             *notaloneSnapshot
-	snapshotMode         string
-	tail                 *notaloneTailSession
-	messageGuard         *notaloneSourceGuard
-	messageMonitor       *notaloneSourceGuard
-	guardLost            chan struct{}
-	guardLostOnce        sync.Once
-	inspected            *notaloneInspection
-	supportReport        *notaloneSupportReport
-	supportProfile       *notaloneReadProfile
-	program              func(context.Context) (notaloneProgramVersion, error)
-	sourceProcess        func(context.Context) (notaloneProcessIdentity, error)
-	certify              func(notaloneProgramVersion, []notaloneTableSchema) notaloneProfileCertification
-	testMetadata         *notaloneTestMetadataWatch
-	receivedTestMetadata *notaloneReceivedTestMetadataWatch
-	imageMu              sync.Mutex
-	openImages           map[string]*notaloneOpenImage
-	imageRuntimeConfig   *config.Config
-	accountGeneration    string
-	checkpointDirectory  string
-	supportTargetChanged bool
+	server                  *server
+	selected                *notaloneResolved
+	guards                  []*notaloneSourceGuard
+	life                    context.Context
+	cancel                  context.CancelFunc
+	snapshot                *notaloneSnapshot
+	snapshotMode            string
+	tail                    *notaloneTailSession
+	messageGuard            *notaloneSourceGuard
+	messageMonitor          *notaloneSourceGuard
+	guardLost               chan struct{}
+	guardLostOnce           sync.Once
+	inspected               *notaloneInspection
+	supportReport           *notaloneSupportReport
+	supportProfile          *notaloneReadProfile
+	program                 func(context.Context) (notaloneProgramVersion, error)
+	sourceProcess           func(context.Context) (notaloneProcessIdentity, error)
+	certify                 func(notaloneProgramVersion, []notaloneTableSchema) notaloneProfileCertification
+	testMetadata            *notaloneTestMetadataWatch
+	receivedTestMetadata    *notaloneReceivedTestMetadataWatch
+	imageMu                 sync.Mutex
+	openImages              map[string]*notaloneOpenImage
+	imageRuntimeConfig      *config.Config
+	accountGeneration       string
+	checkpointDirectory     string
+	checkpointParent        string
+	checkpointOffered       string
+	checkpointOfferedCursor string
+	supportTargetChanged    bool
 }
 
 func newNotaloneHistorySession(s *server) *notaloneHistorySession {
@@ -165,6 +169,7 @@ func (h *notaloneHistorySession) releaseSelection() error {
 	h.supportReport = nil
 	h.supportProfile = nil
 	h.supportTargetChanged = false
+	h.checkpointParent, h.checkpointOffered, h.checkpointOfferedCursor = "", "", ""
 	if failure != nil {
 		h.cancel()
 		return notaloneFailure("history_snapshot_close_failed")
@@ -562,6 +567,7 @@ func (h *notaloneHistorySession) supportWithRefresh(ctx context.Context, refresh
 	result.Continuity = "same-source-instances-normal-use-v1"
 	if !emptyTarget && h.checkpointDirectory != "" {
 		result.Capabilities["durableIncremental"] = "supported"
+		result.Capabilities["durableHistory"] = "supported"
 	}
 	result.Reason = nil
 	h.snapshot = snapshot
@@ -603,6 +609,9 @@ func cloneNotaloneReadProfile(value *notaloneReadProfile) *notaloneReadProfile {
 	return &clone
 }
 func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRequest) (any, error) {
+	if r.Checkpoint && r.Operation != "page" {
+		return nil, notaloneFailure("history_request_invalid")
+	}
 	if r.Operation != "metadata-sessions-all" && (r.Limit != 0 || r.Keyword != "") {
 		return nil, notaloneFailure("history_request_invalid")
 	}
@@ -937,6 +946,11 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 			_ = snapshot.Close()
 			return nil, initErr
 		}
+		if restoreErr := snapshot.restorePendingHistory(checkpoint.PendingAbsence); restoreErr != nil {
+			_ = snapshot.Close()
+			return nil, restoreErr
+		}
+		h.checkpointParent, h.checkpointOffered, h.checkpointOfferedCursor = checkpoint.Cursor, "", ""
 		h.snapshot = snapshot
 		h.snapshotMode = "normal"
 		h.supportTargetChanged = false
@@ -1029,6 +1043,21 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		_ = h.snapshot.Close()
 		h.snapshot = nil
 		return nil, err
+	}
+	h.acceptCheckpointInput(r.Cursor)
+	if r.Operation == "page" && r.Checkpoint && !page.Exhausted {
+		if report.Capabilities["durableHistory"] != "supported" || h.snapshot.deltaStates == nil {
+			return nil, notaloneFailure("history_checkpoint_unavailable")
+		}
+		checkpoint, checkpointErr := notaloneSnapshotNonce()
+		if checkpointErr != nil {
+			return nil, checkpointErr
+		}
+		if saveErr := h.saveCheckpoint(report, *profile, h.snapshot.Target(), checkpoint, h.snapshot.identityDigests, h.snapshot.deltaStates, h.snapshot.deltaMissing); saveErr != nil {
+			return nil, saveErr
+		}
+		h.checkpointOfferedCursor = *page.CursorOut
+		page.CheckpointCursor = &checkpoint
 	}
 	if r.Operation == "page" && page.Exhausted && profile.IncrementalTailVerified && report.Capabilities["incrementalTail"] == "supported" {
 		if h.snapshot.identityDigests == nil {

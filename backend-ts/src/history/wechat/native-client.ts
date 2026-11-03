@@ -485,7 +485,7 @@ function supportReport(value: unknown, scope: ResolvedWechatScope, artifact: str
     || row.profileId === absentPrivateTargetProfile && (!absentTarget || declaredPrimaryKey.length > 0))) return fail();
   let capabilities: Record<string, 'supported' | 'unsupported' | 'unverified'> | undefined;
   if (hasCapabilities) {
-    const extras = ['incrementalTail', 'durableIncremental', 'partitionGrowth', boundaryProtocol].filter(key => Object.hasOwn(row.capabilities as object, key));
+    const extras = ['incrementalTail', 'durableIncremental', 'durableHistory', 'partitionGrowth', boundaryProtocol].filter(key => Object.hasOwn(row.capabilities as object, key));
     const keys = ['programVersion', 'exactSchema', 'declaredLocalKey', 'automaticAllocation', 'serverIdUniqueConstraint', 'statusColumn', 'statusSemantics', 'sourceLifecycle', 'restartContinuity', 'recoveryMapping', 'snapshotBarrier', 'partitionCoverage', 'normalHistory', ...extras];
     const reported = object(row.capabilities, keys);
     capabilities = Object.fromEntries(keys.map(key => {
@@ -586,17 +586,19 @@ function historyRecord(value: unknown, target: HistoryTarget, mode: 'normal' | '
 function historyMetadataKind(originalType:string):HistoryRecord['kind'] {
   return (BigInt(originalType)&0xffffffffn)===49n ? BigInt(originalType)>>32n===6n?'file':'other' : metadataKind(originalType);
 }
-function historyPage(value: unknown, target: HistoryTarget, cursor: string | null, mode: 'normal' | 'quarantine' = 'normal',inlineQuoteScope?:InlineQuoteScope): HistoryPage {
+function historyPage(value: unknown, target: HistoryTarget, cursor: string | null, mode: 'normal' | 'quarantine' = 'normal',inlineQuoteScope?:InlineQuoteScope,checkpointRequested=false): HistoryPage {
   const hasResume = !!value && typeof value === 'object' && Object.hasOwn(value, 'resumeCursor');
-  const row = object(value, ['target', 'cursorIn', 'cursorOut', 'records', 'completedPartitions', 'exhausted', ...(hasResume ? ['resumeCursor'] : [])]);
+  const hasCheckpoint=!!value&&typeof value==='object'&&Object.hasOwn(value,'checkpointCursor');
+  const row = object(value, ['target', 'cursorIn', 'cursorOut', 'records', 'completedPartitions', 'exhausted', ...(hasResume ? ['resumeCursor'] : []),...(hasCheckpoint?['checkpointCursor']:[])]);
   if (row.target !== target.descriptor || row.cursorIn !== cursor) return fail();
   const cursorOut = row.cursorOut === null ? null : opaque(row.cursorOut), exhausted = bool(row.exhausted);
   if (exhausted ? cursorOut !== null : cursorOut === null || cursorOut === cursor) return fail();
   const completedPartitions = list(row.completedPartitions, 128, hash); unique(completedPartitions);
   if (completedPartitions.some(partition => !target.partitions.includes(partition))) return fail();
   if (hasResume && (mode !== 'normal' || !exhausted || row.resumeCursor === null)) return fail();
+  if(hasCheckpoint&&(mode!=='normal'||exhausted||!checkpointRequested)||checkpointRequested&&!exhausted&&!hasCheckpoint)return fail();
   return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target, mode,inlineQuoteScope)), completedPartitions, exhausted,
-    ...(hasResume ? { resumeCursor: opaque(row.resumeCursor) } : {}) };
+    ...(hasResume ? { resumeCursor: opaque(row.resumeCursor) } : {}),...(hasCheckpoint?{checkpointCursor:opaque(row.checkpointCursor)}:{}) };
 }
 function historyTailPage(value: unknown, target: HistoryTarget, cursor: string,inlineQuoteScope?:InlineQuoteScope): HistoryTailPage {
   const row = object(value, ['target', 'cursorIn', 'cursorOut', 'records', 'caughtUp']);
@@ -1138,18 +1140,22 @@ export class NarrowWechatClient {
       });
     },signal);
   }
-  pageSelected(target: HistoryTarget, cursor: string | null, signal?: AbortSignal): Promise<HistoryPage> {
-    try { signalValid(signal); if (cursor !== null) opaque(cursor); }
+  pageSelected(target: HistoryTarget, cursor: string | null, signal?: AbortSignal, options?:{checkpoint?:boolean}): Promise<HistoryPage> {
+    try { signalValid(signal); if (cursor !== null) opaque(cursor);
+      if(options!==undefined&&(!options||typeof options!=='object'||Array.isArray(options)||Object.keys(options).some(key=>key!=='checkpoint')||options.checkpoint!==undefined&&typeof options.checkpoint!=='boolean'))return fail('history_request_invalid');
+    }
     catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
     return this.#enqueue(async () => {
       const scope = this.#readableScope();
+      const checkpoint=options?.checkpoint===true;
+      if(checkpoint&&(this.#support?.capabilities?.durableHistory!=='supported'||this.#support?.capabilities?.durableIncremental!=='supported'))return fail('history_request_invalid');
       let parsed: HistoryTarget;
       try { parsed = historyTarget(target, scope, this.#schema); } catch { return fail('history_target_unverified'); }
       if (!this.#target || JSON.stringify(parsed) !== JSON.stringify(this.#target)) return fail('history_target_unverified');
       const accepted = this.#target;
-      return this.#request({ op: 'page', account: scope.accountKey, conversation: scope.conversationKey, consent: 'selected-history-v1', target: accepted.descriptor, cursor: cursor ?? '' }, value => {
+      return this.#request({ op: 'page', account: scope.accountKey, conversation: scope.conversationKey, consent: 'selected-history-v1', target: accepted.descriptor, cursor: cursor ?? '',...(checkpoint?{checkpoint:true}:{}) }, value => {
         const inlineQuoteScope=this.#options.inlineQuotes?scope:undefined;
-        const page = historyPage(value, accepted, cursor,'normal',inlineQuoteScope);
+        const page = historyPage(value, accepted, cursor,'normal',inlineQuoteScope,checkpoint);
         if (page.resumeCursor && this.#support?.capabilities?.incrementalTail !== 'supported') return fail();
         if (page.resumeCursor) this.#tailCursor = page.resumeCursor;
         return page;

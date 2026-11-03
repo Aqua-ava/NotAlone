@@ -85,6 +85,7 @@ async function fixture(t,mode='normal',extraOptions={}) {
    if(mode==='empty-target-ordinary-profile')data={...data,profileId:'synthetic-profile-v1',declaredPrimaryKey:['local_id']};
    if(mode==='empty-target-false-tail')data.capabilities.incrementalTail='supported';
    if(mode.startsWith('durable-')||mode.startsWith('inline-quotes'))data.capabilities=Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','durableIncremental'].map(key=>[key,'supported']));
+   if(mode.startsWith('durable-history'))data.capabilities.durableHistory='supported';
    if(mode.startsWith('growth-')){
     data.schemaFingerprint=schema.schemaFingerprint;
     data.capabilities=Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','durableIncremental','partitionGrowth'].map(key=>[key,'supported']));
@@ -181,6 +182,9 @@ async function fixture(t,mode='normal',extraOptions={}) {
   if(r.op==='page'||r.op==='quarantine-page'){
    const row={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'contact',kind:'text',text:'合成分页文字',originalType:'1',sentAt:'1000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:'verified'};
    data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[row],completedPartitions:['d'.repeat(64)],exhausted:true};
+   if(mode.startsWith('durable-history'))data={...data,cursorOut:'session-only-page',completedPartitions:[],exhausted:false,...(r.checkpoint||mode==='durable-history-unsolicited'?{checkpointCursor:'durable-history-proof'}:{})};
+   if(mode==='durable-history-missing')delete data.checkpointCursor;
+   if(mode==='durable-history-final')data={...data,cursorOut:null,completedPartitions:['d'.repeat(64)],exhausted:true};
    if(mode.startsWith('quarantine-kind-')){const originalType=mode.slice('quarantine-kind-'.length);data.records=[{...row,originalType,kind:originalType==='25769803825'?'file':'other',text:null,stateAssurance:'unverified'}];}
    if(mode==='empty-target')data={...data,records:[],completedPartitions:target.partitions};
    if(mode==='page-cancel')return;
@@ -658,6 +662,28 @@ test('原生读取只接受无正文、类型一致的非文字元数据',async 
  });
 });
 
+
+test('持久历史片段通过真实子进程交换独立检查点，不能作为增量游标',async t=>{
+ const f=await fixture(t,'durable-history');await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();const target=await f.client.targetSelected();
+ const page=await f.client.pageSelected(target,null,undefined,{checkpoint:true});
+ assert.equal(page.checkpointCursor,'durable-history-proof');assert.equal(page.cursorOut,'session-only-page');assert.equal(page.resumeCursor,undefined);
+ const request=JSON.parse((await readFile(f.logFile,'utf8')).trim().split('\n').at(-1));assert.equal(request.checkpoint,true);
+ await assert.rejects(f.client.tailSelected(target,page.checkpointCursor),{code:'history_cursor_invalid'});
+});
+
+test('片段协议拒绝缺失、终页混入及未经请求的持久证明',async t=>{
+ for(const mode of ['durable-history-missing','durable-history-final','durable-history-unsolicited'])await t.test(mode,async t=>{
+  const f=await fixture(t,mode);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();const target=await f.client.targetSelected();
+  await assert.rejects(f.client.pageSelected(target,null,undefined,mode==='durable-history-unsolicited'?undefined:{checkpoint:true}),{code:'history_protocol_invalid'});
+ });
+});
+
+test('旧读取器不接收持久片段请求，普通分页保持原协议',async t=>{
+ const f=await fixture(t,'durable-available');await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();const target=await f.client.targetSelected();
+ await assert.rejects(f.client.pageSelected(target,null,undefined,{checkpoint:true}),{code:'history_request_invalid'});
+ assert.equal((await readFile(f.logFile,'utf8')).trim().split('\n').map(JSON.parse).some(row=>row.op==='page'),false);
+ assert.equal((await f.client.pageSelected(target,null)).exhausted,true);
+});
 
 test('持久增量目标只接受当前作用域和明确可用的检查点',async t=>{
  for(const mode of ['durable-available','durable-missing','durable-wrong-source'])await t.test(mode,async t=>{

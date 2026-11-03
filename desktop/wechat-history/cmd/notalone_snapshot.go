@@ -173,6 +173,7 @@ type notaloneSnapshotPage struct {
 	CursorIn            *string                  `json:"cursorIn"`
 	CursorOut           *string                  `json:"cursorOut"`
 	ResumeCursor        *string                  `json:"resumeCursor,omitempty"`
+	CheckpointCursor    *string                  `json:"checkpointCursor,omitempty"`
 	Records             []notaloneSnapshotRecord `json:"records"`
 	CompletedPartitions []string                 `json:"completedPartitions"`
 	Exhausted           bool                     `json:"exhausted"`
@@ -609,7 +610,7 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string, inlineQuotes
 		if n.deltaOnly {
 			exhausted = deltaEnd == len(n.deltaIDs[shard.partition])
 		}
-		if !exhausted {
+		if len(rows) > remaining {
 			rows = rows[:remaining]
 		}
 		var inlineQuote *notaloneInlineQuoteContext
@@ -664,6 +665,7 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string, inlineQuotes
 		}
 		for len(page.Records) < 16 && n.deltaRemovedIndex < len(n.deltaRemoved) {
 			page.Records = append(page.Records, notaloneTailTombstone(n.deltaRemoved[n.deltaRemovedIndex], n.profile.VerifiedTerminalAbsence))
+			delete(n.deltaMissing, n.deltaRemoved[n.deltaRemovedIndex])
 			n.deltaRemovedIndex++
 		}
 		page.Exhausted = n.deltaRemovedIndex == len(n.deltaRemoved)

@@ -1,6 +1,6 @@
 import type { SavedContactBinding } from '../../contacts/sqlite/contracts.ts';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
-import type { SqliteHistoryService } from './service.ts';
+import { resumableHistorySlice,type SqliteHistoryService } from './service.ts';
 
 type FirstHistoryBinding = Pick<SavedContactBinding, 'contact_id' | 'binding_id' | 'grant_id' | 'selection_generation' | 'status'>;
 export interface FirstHistoryDirectoryPort {
@@ -12,7 +12,7 @@ export interface FirstHistoryCoordinatorState {
   lastError: string | null;
   contacts: { contactId: string; phase: FirstHistoryContactPhase; lastError: string | null }[];
 }
-interface QueuedRead { contactId: string; key: string; continuationCursor?: string }
+interface QueuedRead { contactId: string; key: string; continuationCursor?: string; resumableSlice?:boolean }
 interface ActiveRead extends QueuedRead { cancelledAtWake?: number; controller: AbortController; done: Promise<void> }
 const allowedErrors = new Set(['history_source_continuity_unverified', 'history_support_unverified', 'history_support_unsupported', 'history_support_changed',
   'history_snapshot_window_changed',
@@ -179,8 +179,8 @@ export class FirstHistoryCoordinator {
       else if (coverage.phase === 'complete') {this.#clearRetry(job.contactId);this.#state(job.contactId, 'complete');}
       else if (!this.#closed && !coverage.traversalComplete && typeof coverage.cursor === 'string'
         && coverage.cursor.length > 0 && coverage.cursor !== job.continuationCursor) {
-        // 单轮预算只让出执行权；已打开的固定快照优先接续，避免等待新会话时空闲过期。
-        this.#queued.set(job.contactId, { ...job, continuationCursor: coverage.cursor });
+        // 持久片段进入队尾；旧读取器的进程内快照仍优先接续，避免等待时过期。
+        this.#queued.set(job.contactId, { ...job, continuationCursor: coverage.cursor, resumableSlice:coverage[resumableHistorySlice]===true });
         this.#state(job.contactId, 'queued');
       }
       else {const code=safeError(new StorageFailure(coverage.failureCode??'history_incomplete'));this.#retry(job,code);this.#state(job.contactId,'incomplete',code);}
@@ -197,7 +197,7 @@ export class FirstHistoryCoordinator {
     while (!this.#closed) {
       if (this.#wakePending) { this.#wakePending = false; await this.#scan(); }
       if (this.#closed) break;
-      const queued = [...this.#queued.values()].sort((a, b) => Number(b.continuationCursor !== undefined) - Number(a.continuationCursor !== undefined));
+      const queued = [...this.#queued.values()].sort((a, b) => Number(b.continuationCursor !== undefined&&!b.resumableSlice) - Number(a.continuationCursor !== undefined&&!a.resumableSlice));
       for (const job of queued) { if (this.#active.size >= 2) break; this.#run(job); }
       if (this.#wakePending) continue;
       if (!this.#active.size && !this.#queued.size) break;

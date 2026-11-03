@@ -93,10 +93,10 @@ class WechatHistoryChannel implements HistoryChannel {
   if(!this.#executable)return reject('history_support_unverified');
   return this.#run(scope,signal,async native=>{const target=await native.resumeTargetSelected(previous,cursor,signal);if(target)this.#targetIssued=true;return target;});
  }
- async page(scope:HistoryScope,target:HistoryTarget,cursor:string|null,signal?:AbortSignal){
+ async page(scope:HistoryScope,target:HistoryTarget,cursor:string|null,signal?:AbortSignal,options?:{checkpoint?:boolean}){
   if(!this.#executable)return reject('history_support_unverified');
   return this.#run(scope,signal,async native=>{
-   try{return await native.pageSelected(target,cursor,signal);}
+   try{return await native.pageSelected(target,cursor,signal,options);}
    catch(error){if(!this.#targetIssued&&error instanceof StorageFailure&&error.code==='history_target_unverified')return reject('history_cursor_invalid');throw error;}
   });
  }

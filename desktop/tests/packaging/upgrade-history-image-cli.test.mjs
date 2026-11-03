@@ -67,7 +67,7 @@ function overlaySha(files) {
   return hash(JSON.stringify(rows));
 }
 
-async function syntheticUpgradeFixture({ existingImage = false, quotes = false, quoteTail = false, quoteInline = false, sharedProcess = false, contactAvatar = false } = {}) {
+async function syntheticUpgradeFixture({ existingImage = false, quotes = false, quoteTail = false, quoteInline = false, sharedProcess = false, contactAvatar = false, durableHistory = false } = {}) {
   const repositoryRoot = await mkdtemp(path.join(process.cwd(), '.tmp-notalone-image-upgrade-'));
   const buildsRoot = path.join(repositoryRoot, 'local-tools/wx-cli/.notalone-builds');
   const oldName = existingImage ? 'original-image-20261031-v1' : 'true-delta-20261031-c2';
@@ -120,6 +120,11 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
   if(quoteInline)newFiles['cmd/wechat-cli/notalone_snapshot.go']='snapshot with bounded inline quote projection';
   if(sharedProcess){newFiles['cmd/wechat-cli/notalone_account_metadata.go']='account identity unchanged plus bounded all-session metadata';newFiles['cmd/wechat-cli/notalone_selection_test.go']='selection isolation regression';}
   if(contactAvatar){newFiles['cmd/wechat-cli/notalone_contact_avatar.go']='exact private contact avatar metadata';newFiles['cmd/wechat-cli/notalone_contact_avatar_test.go']='avatar scope and URL regression';}
+  if(durableHistory){
+    oldFiles['cmd/wechat-cli/notalone_checkpoint.go']='complete checkpoint only';
+    newFiles['cmd/wechat-cli/notalone_checkpoint.go']='partial checkpoint with accepted parent';
+    newFiles['cmd/wechat-cli/notalone_history_resume_test.go']='partial restart regression';
+  }
   const write = async (file, data, mode = 0o600) => {
     await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
     await writeFile(file, data, { mode });
@@ -162,6 +167,7 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
   const inlineSourceChanges=quoteInline?{'cmd/wechat-cli/notalone_snapshot.go':{old:hash(oldFiles['cmd/wechat-cli/notalone_snapshot.go']),new:hash(newFiles['cmd/wechat-cli/notalone_snapshot.go'])}}:{};
   const sharedSourceChanges=sharedProcess?Object.fromEntries(['cmd/wechat-cli/notalone_account_metadata.go','cmd/wechat-cli/notalone_selection_test.go'].map(name=>[name,{old:oldFiles[name]?hash(oldFiles[name]):null,new:hash(newFiles[name])}])):{};
   const avatarSourceChanges=contactAvatar?Object.fromEntries(['cmd/wechat-cli/notalone_contact_avatar.go','cmd/wechat-cli/notalone_contact_avatar_test.go'].map(name=>[name,{old:null,new:hash(newFiles[name])}])):{};
+  const historySourceChanges=durableHistory?Object.fromEntries(['cmd/wechat-cli/notalone_checkpoint.go','cmd/wechat-cli/notalone_history_resume_test.go'].map(name=>[name,{old:oldFiles[name]?hash(oldFiles[name]):null,new:hash(newFiles[name])}])):{};
   const updates=Object.entries({...inlineSourceChanges,...sharedSourceChanges}).filter(([name])=>Object.hasOwn(identityFiles,name)).sort(([a],[b])=>a.localeCompare(b));
   const identityAlgorithmSha256 = hash(JSON.stringify({ files: Object.entries(identityFiles).sort((left, right) => left[0].localeCompare(right[0])),
     protocol: [protocolOldSha256, protocolNewSha256],...(updates.length?{updates}:{}) }));
@@ -171,6 +177,7 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
     ...(quoteInline?{newQuoteInline:'wechat-quote-inline-sync-v1'}:{}),
     ...(sharedProcess?{newSharedProcessProtocol:'wechat-shared-process-v1'}:{}),
     ...(contactAvatar?{newAvatarMetadataProtocol:'wechat-contact-avatar-metadata-v1',sourceChanges:avatarSourceChanges}:{}),
+    ...(durableHistory?{newDurableHistoryProtocol:'wechat-partial-history-checkpoint-v1',sourceChanges:historySourceChanges}:{}),
     oldCliSha256, newCliSha256, oldOverlaySha256: overlaySha(oldFiles), newOverlaySha256: overlaySha(newFiles),
     newImageProtocol: 'wechat-original-image-v1', identityFiles, identityAlgorithmSha256,
     protocolOldSha256, protocolNewSha256, imageSha256: hash(newImage), imageTestSha256: hash(newImageTest),
@@ -442,5 +449,55 @@ test('头像升级只新增固定窄元数据文件，沿用全部原来源别�
    invalid.tools=createUpgradeImageCliTools({repositoryRoot:invalid.repositoryRoot,policy:invalid.policy});
   }else await writeFile(path.join(invalid.toRoot,'source/cmd/wechat-cli',change==='avatar-bytes'?'notalone_contact_avatar.go':'notalone_identity_aliases.go'),'unreviewed change');
   await assert.rejects(invalid.tools.prepareAliases(invalid),/history_image_upgrade_source_mismatch/);
+ }
+});
+
+// 恢复协议的源码配对仍精确绑定，不允许夹带未审查的账号或来源身份改写。
+test('分段历史恢复升级核验固定检查点源码并保留旧别名', async t => {
+ const f=await syntheticUpgradeFixture({durableHistory:true});
+ t.after(()=>rm(f.repositoryRoot,{recursive:true,force:true}));
+ await f.tools.prepareAliases({fromRoot:f.fromRoot,toRoot:f.toRoot,accountKey:f.accountKey,dbRoot:f.dbRoot});
+ const record=JSON.parse(await readFile(path.join(f.toRoot,'source-identity-aliases.json'),'utf8'));
+ assert.deepEqual(record.aliases,f.aliases);
+ assert.deepEqual(await readFile(f.oldAliasPath),f.oldAliasBytes);
+ assert.equal(await readFile(path.join(f.dbRoot,'business.sqlite'),'utf8'),'must remain unchanged');
+});
+
+test('分段恢复scope比较仅允许明确声明的新能力，不放宽已有来源合同', () => {
+ const before=scopeEvidence('d'.repeat(64)),after=scopeEvidence('e'.repeat(64));
+ for(const row of before.scopes)row.support.capabilities.durableIncremental='supported';
+ for(const row of after.scopes){row.support.capabilities.durableIncremental='supported';row.support.capabilities.durableHistory='supported';}
+ assert.throws(()=>compareUpgradeScopeEvidence(before,after),/history_image_upgrade_scope_mismatch/);
+ assert.deepEqual(compareUpgradeScopeEvidence(before,after,{durableHistoryUpgrade:true}),{status:'verified',scopeCount:3});
+ after.scopes[0].support.capabilities.incrementalTail='unsupported';
+ assert.throws(()=>compareUpgradeScopeEvidence(before,after,{durableHistoryUpgrade:true}),/history_image_upgrade_scope_mismatch/);
+});
+
+
+test('分段恢复升级对照混合普通与空会话，仅已有持久增量能力的范围新增能力', () => {
+ const before=scopeEvidence('d'.repeat(64)),after=scopeEvidence('e'.repeat(64));
+ for(const row of before.scopes.filter(row=>row.target.tables.length))row.support.capabilities.durableIncremental='supported';
+ for(const row of after.scopes.filter(row=>row.target.tables.length)){
+  row.support.capabilities.durableIncremental='supported';row.support.capabilities.durableHistory='supported';
+ }
+ const original=structuredClone(after),options={durableHistoryUpgrade:true};
+ assert.deepEqual(compareUpgradeScopeEvidence(before,after,options),{status:'verified',scopeCount:3});
+ assert.deepEqual(after,original,'升级比较不能改写输入证据');
+ const reordered=structuredClone(after);reordered.scopes.reverse();
+ assert.deepEqual(compareUpgradeScopeEvidence(before,reordered,options),{status:'verified',scopeCount:3});
+ for(const unsupported of ['unsupported','unverified']){
+  const previous=structuredClone(before),next=structuredClone(after);
+  previous.scopes[2].support.capabilities.durableIncremental=unsupported;
+  next.scopes[2].support.capabilities.durableIncremental=unsupported;
+  assert.deepEqual(compareUpgradeScopeEvidence(previous,next,options),{status:'verified',scopeCount:3});
+ }
+ for(const mutate of [
+  evidence=>{evidence.scopes[2].support.capabilities.durableHistory='supported';},
+  evidence=>{delete evidence.scopes[0].support.capabilities.durableHistory;},
+  evidence=>{evidence.scopes[0].support.capabilities.durableIncremental='unsupported';},
+  evidence=>{evidence.scopes[2].support.capabilities.incrementalTail='unsupported';},
+ ]){
+  const invalid=structuredClone(after);mutate(invalid);
+  assert.throws(()=>compareUpgradeScopeEvidence(before,invalid,options),/history_image_upgrade_scope_mismatch/);
  }
 });
