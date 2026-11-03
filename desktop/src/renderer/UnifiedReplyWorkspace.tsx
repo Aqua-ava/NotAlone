@@ -74,7 +74,7 @@ export function UnifiedReplyWorkspace({ contacts, replies, media }: { contacts: 
       <header className="compose-heading"><h2>有什么想说的？</h2><p>先开始这位联系人的助手会话，再生成候选。</p></header>
       <HelperDraft key={`${state.contactId}:${state.scopeRevision}`} session={contacts} workspace disabled={inputBlocked} placeholder="写下你的想法或草稿…" />
       {state.generationBlock && <p role="status">请先在上方确认本次联系人。</p>}
-      <button disabled={inputBlocked || Boolean(state.generationBlock)} onClick={() => void replies.newSavedSession()}>开始助手会话</button>
+      <button className="button" disabled={inputBlocked || Boolean(state.generationBlock)} onClick={() => void replies.newSavedSession()}>开始助手会话</button>
       <p>已写下的想法会保留到新会话。</p>
     </section>;
   }
@@ -88,8 +88,8 @@ export function UnifiedReplyWorkspace({ contacts, replies, media }: { contacts: 
     {state.workspaceMigrationNotice && <p role="status" className="rewrite-privacy">{state.workspaceMigrationNotice}</p>}
     {state.generationBlock && <p role="status" className="rewrite-privacy">生成前，请先在上方确认本次联系人。</p>}
     {sameScope && state.savedSession?.phase === 'failed' && <p role="alert">上次的助手讨论暂时无法加载。可重试读取，或开始新讨论后继续。
-      <button disabled={operationBlocked} onClick={() => void replies.readSavedSession()}>重新读取助手会话</button>
-      <button disabled={operationBlocked || Boolean(state.generationBlock)} onClick={() => void replies.newSavedSession()}>开始新讨论</button></p>}
+      <button className="button" disabled={operationBlocked} onClick={() => void replies.readSavedSession()}>重新读取助手会话</button>
+      <button className="button" disabled={operationBlocked || Boolean(state.generationBlock)} onClick={() => void replies.newSavedSession()}>开始新讨论</button></p>}
     <div className="workspace-actions">
       <button className="generate-button" aria-label="帮我表达" disabled={disabled || !contacts.state.draft.trim()}
         onClick={() => void generate('express')}><Icon name="write" size={18} />帮我表达</button>
@@ -106,7 +106,7 @@ export function UnifiedReplyWorkspace({ contacts, replies, media }: { contacts: 
         {state.messages.phase === 'loading' && <p role="status">正在读取最近聊天…</p>}
         {state.messages.phase === 'failed' && <p role="status">最近聊天暂时无法读取，可以刷新或补充聊天内容。</p>}
         {state.messages.phase === 'ready' && !state.messages.items.length && <p>暂无可用的最近聊天。可以补充上下文，或先写下想法。</p>}
-        <button disabled={!sameScope || inputBlocked || state.messages.phase === 'loading'} onClick={() => void replies.loadMessages()}>{unknownMessageOrder ? '刷新聊天记录' : '刷新最近聊天'}</button>
+        <button className="button" disabled={!sameScope || inputBlocked || state.messages.phase === 'loading'} onClick={() => void replies.loadMessages()}>{unknownMessageOrder ? '刷新聊天记录' : '刷新最近聊天'}</button>
         {state.messages.items.length > 0 && <>
           <p className="rewrite-privacy">{unknownMessageOrder ? '以下按保存位置列出记录；' : '以下是最近记录；'}取消勾选可从本次生成中排除。实际使用的依据会随候选展示。</p>
           {unknownMessageOrder && <p role="status" className="rewrite-privacy">部分记录的顺序未核验，以下按保存位置展示，不代表真实聊天先后。</p>}
@@ -141,6 +141,6 @@ export function UnifiedReplyWorkspace({ contacts, replies, media }: { contacts: 
       </div>
     </details>
     <p className="rewrite-privacy">候选供你选择和修改，由你亲自发送。想法和要求只作用于本次生成。</p>
-    {state.canRetry && <button disabled={disabled} onClick={() => void replies.generate()}>重试同一次生成</button>}
+    {state.canRetry && <button className="button" disabled={disabled} onClick={() => void replies.generate()}>重试同一次生成</button>}
   </section>;
 }

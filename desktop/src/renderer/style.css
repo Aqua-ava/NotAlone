@@ -11,6 +11,17 @@
   --panel-border: #c9d6d6;
   --panel-background: #fffdf5;
   --panel-heading: #31495b;
+  --button-radius: 8px;
+  --button-background: #fffdf6;
+  --button-text: #456b87;
+  --button-border: #b8c5cc;
+  --button-hover-background: #edf3f4;
+  --button-active-background: #dce9ee;
+  --button-active-text: #31495b;
+  --button-active-border: #b8ccd6;
+  --button-disabled-background: #eeece5;
+  --button-disabled-text: #7c8488;
+  --button-disabled-border: #d2d0c4;
   -webkit-font-smoothing: antialiased;
 }
 * { box-sizing: border-box; }
@@ -21,11 +32,11 @@ button { border: 0; background: transparent; cursor: pointer; }
 button:disabled { cursor: default; color: #7c8488; }
 button:focus-visible { outline: 2px solid #5391b4; outline-offset: 3px; }
 svg { flex-shrink: 0; vertical-align: middle; }
-.button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 14px; border: 1px solid #b8c5cc; border-radius: 3px 6px 4px 5px; background: #fffdf6; color: #456b87; font-size: 12px; white-space: nowrap; }
-.button:hover:not(:disabled) { background: #edf3f4; }
-.button.primary { background: linear-gradient(115deg, #24517e, #337ba4 76%, #2f688f); border-color: #316385; color: #fffdf3; box-shadow: 0 2px 3px #1f476019; }
-.button.primary:hover { background: #24587f; }
-.button:disabled { background: #eeece5; border-color: #d2d0c4; }
+/* 操作按钮共用外观与交互；保留旧 primary 类时也沿用同一套样式。 */
+:is(.button, .generate-button, .compose-primary) { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 14px; border: 1px solid var(--button-border); border-radius: var(--button-radius); background: var(--button-background); color: var(--button-text); box-shadow: none; font-size: 12px; white-space: nowrap; }
+:is(.button, .generate-button, .compose-primary):hover:not(:disabled) { background: var(--button-hover-background); }
+:is(.button, .generate-button, .compose-primary):active:not(:disabled) { background: var(--button-active-background); border-color: var(--button-active-border); color: var(--button-active-text); }
+:is(.button, .generate-button, .compose-primary):disabled { background: var(--button-disabled-background); border-color: var(--button-disabled-border); color: var(--button-disabled-text); box-shadow: none; opacity: 1; }
 .status-dot { display: inline-block; width: 6px; height: 6px; background: #aaa69c; border-radius: 50%; flex-shrink: 0; }
 
 /* 大窗口沿用米白纸张、水彩蓝与边缘拼贴，业务区域保持清楚。 */
@@ -85,7 +96,7 @@ html:has(.admin-layout)::-webkit-scrollbar { display: none; }
 .ime-input { display: flex; align-items: center; gap: 8px; padding: 5px 2px 7px; }
 .ime-input textarea { width: 100%; height: 36px; min-width: 0; resize: none; padding: 6px 9px; font-size: 13px; line-height: 22px; background: #fffdf6; border: 1px solid #c6cfcd; border-radius: 2px 4px 3px 5px; }
 .ime-input textarea::placeholder { color: #7c8587; }
-.generate-button { display: flex; align-items: center; justify-content: center; gap: 4px; flex-shrink: 0; min-width: 33px; height: 33px; padding: 0 7px; border-radius: 4px; background: #e3eef1; }
+.generate-button { display: flex; align-items: center; justify-content: center; gap: 4px; flex-shrink: 0; min-width: 33px; height: 33px; padding: 0 7px; }
 .ime-status { padding: 2px 5px 8px; font-size: 10px; color: #7a7e7c; }
 .horizontal-candidates { display: flex; align-items: center; gap: 19px; min-height: 39px; padding: 6px 8px; margin: 0 2px 5px; background: #ecefeb66; border-radius: 2px 5px 3px 4px; }
 .horizontal-candidates p { font-size: 12px; color: #758189; }

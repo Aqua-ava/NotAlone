@@ -1,14 +1,14 @@
 .memory-page { display: grid; gap: 19px; }
 .memory-navigation { position: sticky; top: 0; z-index: 2; display: grid; gap: 12px; padding: 14px 0; background: #f4f1e8; border-bottom: 1px solid #c5cecb; }
 .memory-tabs { display: flex; flex-wrap: wrap; gap: 7px; }
-.memory-tabs button { min-width: 76px; padding: 9px 18px; border: 1px solid #b8c5cc; border-radius: 3px 6px 4px 5px; background: #fffdf6; color: #456b87; font: inherit; font-size: 14px; }
-.memory-tabs button[aria-pressed="true"] { border-color: #8ca5b5; color: #31495b; box-shadow: inset 0 -2px 0 #8ca5b5; }
-.memory-tabs button:hover { background: #edf3f4; }
+.memory-tabs button { min-width: 76px; padding: 9px 18px; border: 1px solid var(--button-border); border-radius: var(--button-radius); background: var(--button-background); color: var(--button-text); font: inherit; font-size: 14px; }
+.memory-tabs button[aria-pressed="true"] { border-color: var(--button-active-border); background: var(--button-active-background); color: var(--button-active-text); }
+.memory-tabs button:hover:not(:disabled):not(:active):not([aria-pressed="true"]) { background: var(--button-hover-background); }
+.memory-tabs button:active:not(:disabled) { background: var(--button-active-background); border-color: var(--button-active-border); color: var(--button-active-text); }
 .memory-tabs button:focus-visible { outline: 2px solid #426f8a; outline-offset: 2px; }
 .memory-list { display: grid; gap: 14px; margin-top: 14px; }
 .memory-pagination { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; scroll-margin-top: 130px; color: #627985; font-size: 12px; }
 .memory-pagination > div { display: flex; gap: 8px; }
-.memory-pagination .button:disabled { opacity: .45; cursor: default; }
 .memory-history, .memory-trace-target { scroll-margin-top: 130px; }
 .memory-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .memory-toolbar label { display: flex; align-items: center; gap: 12px; color: #4e758a; font-size: 12px; }
@@ -183,10 +183,11 @@
 .sqlite-memory-management [role="alert"] { color: #99594e; }
 .sqlite-memory-management header .hint { margin-top: 9px; }
 .sqlite-memory-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
-.sqlite-memory-management button { padding: 9px 14px; border: 1px solid #b8c5cc; border-radius: 3px 6px 4px 5px; background: #fffdf6; color: #456b87; font-size: 12px; }
-.sqlite-memory-management button:hover:not(:disabled) { background: #edf3f4; }
-.sqlite-memory-management button:disabled { background: #eeece5; border-color: #d2d0c4; color: #7c8488; }
-.sqlite-memory-actions button[aria-pressed="true"] { background: #dce9ee; border-color: #8ca5b5; color: #31495b; }
+.sqlite-memory-management button { padding: 9px 14px; border: 1px solid var(--button-border); border-radius: var(--button-radius); background: var(--button-background); color: var(--button-text); font-size: 12px; }
+.sqlite-memory-management button:hover:not(:disabled) { background: var(--button-hover-background); }
+.sqlite-memory-management button:active:not(:disabled) { background: var(--button-active-background); border-color: var(--button-active-border); color: var(--button-active-text); }
+.sqlite-memory-management button:disabled { background: var(--button-disabled-background); border-color: var(--button-disabled-border); color: var(--button-disabled-text); }
+.sqlite-memory-actions button[aria-pressed="true"] { background: var(--button-active-background); border-color: var(--button-active-border); color: var(--button-active-text); }
 .sqlite-memory-documents > button { margin: 10px 0; }
 .sqlite-memory-card { min-width: 0; padding: 14px 0; border-top: 1px solid #dce1d8; }
 .sqlite-memory-body, .sqlite-memory-sources blockquote, .sqlite-memory-sources p { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -204,16 +205,17 @@
 .manager-content:has(> div:not([hidden]) .memory-timeline-browser) .manager-title::after { content: none; }
 .memory-browser-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .sqlite-memory-management .memory-browser-caption { color: #647b85; font: 16px/1.5 "Songti SC", STSong, serif; letter-spacing: 1px; }
-.memory-person-switch { display: flex; gap: 4px; padding: 4px; border: 1px solid #d0d8d4; border-radius: 24px; }
-.sqlite-memory-management .memory-person-switch button { min-width: 52px; padding: 5px 15px; border: 0; border-radius: 20px; background: transparent; color: #71818a; font-size: 12px; cursor: pointer; }
-.sqlite-memory-management .memory-person-switch button[aria-pressed="true"] { background: #dce9ee; color: #31495b; }
-.sqlite-memory-management .memory-person-switch button:hover:not(:disabled):not([aria-pressed="true"]) { background: #edf3f4; color: var(--accent); }
+.memory-person-switch { display: flex; gap: 4px; padding: 4px; border: 1px solid #d0d8d4; border-radius: calc(var(--button-radius) + 4px); }
+.sqlite-memory-management .memory-person-switch button { min-width: 52px; padding: 5px 15px; border: 0; border-radius: var(--button-radius); background: transparent; color: #71818a; font-size: 12px; cursor: pointer; }
+.sqlite-memory-management .memory-person-switch button[aria-pressed="true"] { background: var(--button-active-background); color: var(--button-active-text); }
+.sqlite-memory-management .memory-person-switch button:hover:not(:disabled):not(:active):not([aria-pressed="true"]) { background: var(--button-hover-background); color: var(--accent); }
 .memory-level-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 30px; }
-.sqlite-memory-management .memory-level-tabs button { display: flex; align-items: center; gap: 7px; padding: 7px 16px; border: 1px solid #d0d8d4; border-radius: 22px; background: transparent; color: #6c7e87; cursor: pointer; }
+.sqlite-memory-management .memory-level-tabs button { display: flex; align-items: center; gap: 7px; padding: 7px 16px; border: 1px solid #d0d8d4; border-radius: var(--button-radius); background: transparent; color: #6c7e87; cursor: pointer; }
 .memory-level-tabs button span { font-size: 10px; letter-spacing: .5px; opacity: .75; }
 .memory-level-tabs button strong { font-size: 12px; font-weight: 500; }
-.sqlite-memory-management .memory-level-tabs button[aria-pressed="true"] { border-color: #b8ccd6; background: #dce9ee; color: #31495b; }
-.sqlite-memory-management .memory-level-tabs button:hover:not(:disabled):not([aria-pressed="true"]) { background: #edf3f4; }
+.sqlite-memory-management .memory-level-tabs button[aria-pressed="true"] { border-color: var(--button-active-border); background: var(--button-active-background); color: var(--button-active-text); }
+.sqlite-memory-management .memory-level-tabs button:hover:not(:disabled):not(:active):not([aria-pressed="true"]) { background: var(--button-hover-background); }
+.memory-tabs button:disabled, .sqlite-memory-management :is(.memory-person-switch, .memory-level-tabs) button:disabled { background: var(--button-disabled-background); border-color: var(--button-disabled-border); color: var(--button-disabled-text); cursor: default; }
 .sqlite-memory-management .memory-collection-heading { display: flex; align-items: center; gap: 9px; margin: 0 0 22px; color: var(--panel-heading); font-size: 13px; }
 .memory-collection-heading span { color: #71818a; font-size: 11px; font-weight: 400; }
 .memory-timeline-layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 34px; }
@@ -242,7 +244,7 @@
 .memory-current-content > .hint { font-size: 12px; }
 .sqlite-memory-management .memory-unavailable-body { color: #61747c; font-size: 15px; margin: 4px 0 8px; }
 .memory-timeline-browser .sqlite-memory-actions { gap: 6px; margin: 10px 0; }
-.memory-timeline-browser .sqlite-memory-actions button { padding: 5px 9px; border-radius: 6px; border-color: #d4dcd8; background: #fffdf580; font-size: 11px; }
+.memory-timeline-browser .sqlite-memory-actions button { padding: 5px 9px; font-size: 11px; }
 .memory-timeline-browser .sqlite-memory-sources { margin: 6px 0; }
 .memory-timeline-browser summary { width: fit-content; font-size: 11px; line-height: 1.8; }
 .memory-timeline-browser details[open] > summary { margin-bottom: 9px; }

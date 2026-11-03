@@ -75,7 +75,8 @@ test('历史讨论失败且联系人待确认时允许重读，但不允许新�
   const html = render({ savedSession: { phase: 'failed', sessionId: 'historical-session' },
     sessionCatalog: { phase: 'ready', currentSessionId: 'current-session', selectionPending: false } });
   verify(html, false);
-  assert.match(html, /<button>重新读取助手会话<\/button>/);
+  const reread = html.match(/<button\b[^>]*>重新读取助手会话<\/button>/)?.[0];
+  assert(reread); assert.doesNotMatch(reread, /\bdisabled=/);
   assert.match(html, /<button\b[^>]*disabled[^>]*>开始新讨论<\/button>/);
 });
 test('只有读取中的讨论显示加载提示，输入仍可编辑', () => {
