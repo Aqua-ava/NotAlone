@@ -10,6 +10,7 @@ import { sqliteStartupTimeoutMs } from '../../../../backend-ts/src/storage/sqlit
 
 type ReadyResult = { phase: 'ready'; code: 'sqlite_ready' | 'sqlite_reopened'; databaseId: string; ownerId: string; schemaVersion: number; sqliteVersion: string;
   created: boolean; configuration: { capabilities: SqliteLaunchConfiguration['capabilities']; skillPackageRoot?: string } };
+type PreparedResult = {phase: 'prepared'; code: 'sqlite_prepared'; databaseId: string; ownerId: string; configuration: ReadyResult['configuration']};
 type MaintenanceResult = { phase: 'maintenance'; code: string; detail?: string; manifestRevision?: number };
 const failureCodes = new Set(['database_cutover_required', 'database_maintenance', 'cutover_manifest_invalid', 'cutover_authorization_required',
   'cutover_authorization_invalid', 'cutover_legacy_target_unclassified', 'cutover_legacy_writer_running', 'cutover_cleanup_failed',
@@ -30,15 +31,15 @@ export class SqliteDevelopmentProbe {
   async run(canStart: () => boolean): Promise<SqliteDevelopmentState | undefined> {
     this.contactConfiguration = undefined;
     if (!canStart()) return blocked('sqlite_cancelled');
-    let result: ReadyResult | MaintenanceResult;
+    let result: ReadyResult | PreparedResult | MaintenanceResult;
     try { result = await this.probe(await this.isolatedRoot()); }
     catch { return blocked('sqlite_diagnostic_failed'); }
     if (!canStart()) return blocked('sqlite_cancelled');
     if (result.phase === 'maintenance') return blocked(typeof result.code === 'string' && failureCodes.has(result.code) ? result.code : 'cutover_storage_failed');
     const capabilities = result.configuration ? readSqliteCapabilities(result.configuration.capabilities, result.configuration.skillPackageRoot, this.userData) : undefined;
     if (!capabilities || !result.configuration) return blocked('cutover_configuration_conflict');
-    this.contactConfiguration = { userData: this.userData, expectedDatabaseId: result.databaseId, role: 'test', ...capabilities };
-    return { phase: 'ready', code: result.code, schemaVersion: result.schemaVersion, sqliteVersion: result.sqliteVersion,
+    this.contactConfiguration = { userData: this.userData, expectedDatabaseId: result.databaseId, expectedOwnerId: result.ownerId, role: 'test', ...capabilities };
+    return { phase: result.phase, code: result.code, ...(result.phase === 'ready' ? {schemaVersion: result.schemaVersion, sqliteVersion: result.sqliteVersion} : {}),
       capabilities: result.configuration.capabilities };
   }
 
@@ -51,12 +52,12 @@ export class SqliteDevelopmentProbe {
     } catch { return false; }
   }
 
-  private probe(allowSyntheticAuthorization: boolean): Promise<ReadyResult | MaintenanceResult> {
+  private probe(allowSyntheticAuthorization: boolean): Promise<ReadyResult | PreparedResult | MaintenanceResult> {
     const moduleUrl = pathToFileURL(path.join(this.projectDirectory, 'backend-ts/src/platform/cutover/startup.ts')).href;
     // 与开发宿主同一 Node；切换检查只读写 SQLite 与受控目录，不启动 DSH、微信或模型。
     const program = `(async()=>{ try {
-      const {runDefaultDatabaseStartup}=await import(${JSON.stringify(moduleUrl)});
-      const result=await runDefaultDatabaseStartup({userData:${JSON.stringify(this.userData)},skillPackageRoot:${JSON.stringify(path.join(this.projectDirectory, 'reply-skills/romance'))},allowSyntheticAuthorization:${allowSyntheticAuthorization}});
+      const {prepareDefaultDatabaseStartup}=await import(${JSON.stringify(moduleUrl)});
+      const result=await prepareDefaultDatabaseStartup({userData:${JSON.stringify(this.userData)},skillPackageRoot:${JSON.stringify(path.join(this.projectDirectory, 'reply-skills/romance'))},allowSyntheticAuthorization:${allowSyntheticAuthorization}});
       console.log(JSON.stringify(result));
     } catch(error) { console.log(JSON.stringify({phase:'maintenance',code:'cutover_storage_failed',detail:'probe_failed'})); } })();`;
     return new Promise((resolve, reject) => {
@@ -86,10 +87,11 @@ export class SqliteDevelopmentProbe {
           if (stopped || code !== 0) throw new Error();
           const value = JSON.parse(output);
           if (value?.phase === 'maintenance' && typeof value.code === 'string') { resolve(value); return; }
-          if (value?.phase !== 'ready' || typeof value.databaseId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(value.databaseId)
+          if (!['ready', 'prepared'].includes(value?.phase) || typeof value.databaseId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(value.databaseId)
             || typeof value.ownerId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(value.ownerId)
-            || !Number.isSafeInteger(value.schemaVersion) || value.schemaVersion < 1
-            || typeof value.sqliteVersion !== 'string' || !/^\d+\.\d+\.\d+$/.test(value.sqliteVersion)
+            || value.phase === 'ready' && (!Number.isSafeInteger(value.schemaVersion) || value.schemaVersion < 1
+            || typeof value.sqliteVersion !== 'string' || !/^\d+\.\d+\.\d+$/.test(value.sqliteVersion))
+            || value.phase === 'prepared' && value.code !== 'sqlite_prepared'
             || !value.configuration || !Array.isArray(value.configuration.capabilities)) throw new Error();
           resolve(value);
         } catch (error) { reject(error); }

@@ -78,6 +78,35 @@ test('高级故障排查默认折叠，明确展开后才展示诊断与路径�
   assert.equal(renderToStaticMarkup(React.createElement(BackendConnectionNote, { state: props.backend, startup: props.state })), '');
 });
 
+test('仅定位本机资料时不冒称存储已核验，服务连接后不保留等待提示', () => {
+  const state = { phase: 'ready', revision: 1, helperWarnings: [], sqlite: { phase: 'prepared', capabilities: ['contacts', 'history'] } };
+  const render = phase => renderToStaticMarkup(React.createElement(StartupReadiness, {
+    state, backend: { phase, canRetryConnection: false }, showStorageDiagnostics: true,
+  }));
+  const preparing = render('connecting');
+  assert.match(preparing, /已找到本机资料，正在由本机服务核验/);
+  assert.doesNotMatch(preparing, /role="alert"|检查未通过|存储已就绪|已开放|结构版本/);
+  const connected = render('connected');
+  assert.match(connected, /本机服务已连接，资料核验已完成/);
+  assert.doesNotMatch(connected, /role="alert"|正在由本机服务核验|结构版本/);
+});
+
+test('存储诊断在连接中或停读后不宣称功能开放，恢复连接后才显示可用', () => {
+  for (const storagePhase of ['prepared', 'ready']) {
+    const state={phase:'ready',revision:1,helperWarnings:[],sqlite:{phase:storagePhase,schemaVersion:24,sqliteVersion:'3.53.4',capabilities:['contacts','history']}};
+    const render=phase=>renderToStaticMarkup(React.createElement(StartupReadiness,{state,backend:{phase,canRetryConnection:false},showStorageDiagnostics:true}));
+    for (const [phase,expected] of [
+      ['connecting','正在由本机服务核验'],['disconnected','本机服务当前未连接'],
+      ['stopping','正在停止本次后台读取'],['stopped','本次后台读取已停止'],['shutdown-failed','后台停读尚未获确认'],
+    ]) {
+      const html=render(phase);assert.ok(html.includes(expected),`${storagePhase}/${phase}应说明实际连接状态`);
+      assert.doesNotMatch(html,/存储已就绪|资料核验已完成|已开放联系人/);
+    }
+    const connected=render('connected');assert.match(connected,/存储已就绪|资料核验已完成/);
+    assert.doesNotMatch(connected,/当前未连接|正在停止|已停止|尚未获确认/);
+  }
+});
+
 test('启动失败显示简明原因、重试与诊断入口，未确认可重试时保持禁用', () => {
   const props = {
     state: { mode: 'external', phase: 'blocked', code: 'runtime_components_unavailable', revision: 1, helperWarnings: [] },
@@ -92,11 +121,55 @@ test('启动失败显示简明原因、重试与诊断入口，未确认可重�
   const blocked = renderToStaticMarkup(React.createElement(StartupReadiness, {
     ...props, backend: { phase: 'shutdown-failed', canRetryConnection: false },
   }));
-  assert.match(blocked, /disabled=""[^>]*>重试连接<\/button>/);
+  assert.equal(blocked, '', '停读失败由连接状态卡提供恢复入口，不显示启动重试');
   const recovery = renderToStaticMarkup(React.createElement(BackendConnectionNote, {
     state: { phase: 'shutdown-failed', canRetryShutdown: true }, startup: props.state,
   }));
   assert.match(recovery, /重试停读并退出/);
+});
+
+test('启动诊断未就绪且连接已断开时仍保留原目标停读恢复入口', () => {
+  for (const phase of ['checking', 'blocked']) {
+    const startup = { phase, revision: 2, helperWarnings: [] };
+    const state = { phase: 'disconnected', canRetryConnection: false, canRetryShutdown: true };
+    const html = renderToStaticMarkup(React.createElement(BackendConnectionNote, { state, startup }));
+    assert.match(html, />重试停读并退出<\/button>/, `${phase}不得隐藏原目标停读恢复入口`);
+    assert.doesNotMatch(html, />重试连接<\/button>/);
+    assert.equal(renderToStaticMarkup(React.createElement(BackendConnectionNote, {
+      state: { ...state, canRetryShutdown: false }, startup,
+    })), '', '没有停读恢复能力时继续复用启动诊断提示');
+  }
+});
+
+test('存储就绪而后台仍在启动时持续显示连接中，不误报失联', () => {
+  const backend = { phase: 'connecting', revision: 1, canRetryConnection: false };
+  for (const phase of ['checking', 'ready']) {
+    const startup = { phase, revision: 1, helperWarnings: [] };
+    const html = renderToStaticMarkup(React.createElement(React.Fragment, null,
+      React.createElement(BackendConnectionNote, { state: backend, startup, onDiagnose() {} }),
+      React.createElement(StartupReadiness, { state: startup, backend })));
+    assert.match(html, /正在连接本机服务/);
+    assert.doesNotMatch(html, /尚未连接|连接失败|等待重新连接|>重试连接<\/button>/);
+  }
+});
+
+test('连接已经完成或开始停读后不再显示启动提示，停读失败只保留停读恢复', () => {
+  for (const startupPhase of ['checking', 'ready']) {
+    for (const [phase, expected] of [
+      ['connected', ''], ['stopping', '正在停止本次后台读取'],
+      ['stopped', '本次后台读取已停止'], ['shutdown-failed', '后端关闭未获确认'],
+    ]) {
+      const startup = { phase: startupPhase, revision: 2, helperWarnings: [] };
+      const backend = { phase, canRetryConnection: false, canRetryShutdown: phase === 'shutdown-failed' };
+      const html = renderToStaticMarkup(React.createElement(React.Fragment, null,
+        React.createElement(BackendConnectionNote, { state: backend, startup, onDiagnose() {} }),
+        React.createElement(StartupReadiness, { state: startup, backend })));
+      assert.ok(html.includes(expected));
+      assert.doesNotMatch(html, /正在启动 NotAlone|正在连接本机服务|尚未连接|>重试连接<\/button>/);
+      if (phase === 'connected') assert.equal(html, '');
+      if (phase === 'shutdown-failed') assert.match(html, /重试停读并退出/);
+    }
+  }
 });
 
 test('本机服务启动失败按阶段显示安全说明并保留重试和诊断入口',()=>{

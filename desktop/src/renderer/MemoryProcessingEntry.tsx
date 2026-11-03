@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import type { BackendBridge } from '../shared/backend-bridge';
+import type { BackendBridge, BackendPhase } from '../shared/backend-bridge';
 import type { FixedMemoryProcessingBridge, FixedProcessingMode, FixedProcessingRun } from '../shared/fixed-memory-processing';
 import { FixedMemoryProcessingPanel } from './FixedMemoryProcessingPanel';
 
@@ -16,7 +16,7 @@ export interface MemoryProcessingEntryProps {
 
 type EntryScope = Pick<MemoryProcessingEntryProps, 'bridge' | 'backend' | 'scopeKey'>;
 type EntryState = { scope: EntryScope } & (
-  { phase: 'pending' | 'disconnected' | 'failed' } | { phase: 'ready'; mode: FixedProcessingMode }
+  { phase: 'pending' | 'failed' | 'connection-read-failed' | Exclude<BackendPhase, 'connected'> } | { phase: 'ready'; mode: FixedProcessingMode }
 );
 
 /** 模式经本机桥核验后才挂载对应的记忆页面。 */
@@ -50,18 +50,18 @@ export function MemoryProcessingEntry({ bridge, backend, scopeKey, contactId = n
         }
       }
     };
-    const receive = (state: {phase:string;revision?:number}) => {
+    const receive = (state: {phase:BackendPhase;revision?:number}) => {
       if (!active || scope.current !== acceptedScope || state.revision !== undefined && state.revision < connectionRevision) return;
       if(state.revision !== undefined)connectionRevision=state.revision;
       connectionObserved = true;
       const wasConnected = connected;
       connected = state.phase === 'connected';
-      if (connected) { if (!wasConnected) void read(); }
-      else { revision++; setState({ scope: acceptedScope, phase: 'disconnected' }); }
+      if (state.phase === 'connected') { if (!wasConnected) void read(); }
+      else { revision++; setState({ scope: acceptedScope, phase: state.phase }); }
     };
     const readConnection = async () => {
       try { if(backend.getState)receive(await backend.getState()); }
-      catch { if(active&&!connectionObserved)setState({scope:acceptedScope,phase:'failed'}); }
+      catch { if(active&&!connectionObserved)setState({scope:acceptedScope,phase:'connection-read-failed'}); }
     };
     reread.current = () => connected ? read() : readConnection();
     const unsubscribe = backend.onStateChanged(receive);
@@ -74,10 +74,18 @@ export function MemoryProcessingEntry({ bridge, backend, scopeKey, contactId = n
     if (current.mode.mode === 'legacy') return visible ? children : null;
     if (current.mode.mode === 'sqlite') return <Fragment key={current.mode.connectionGeneration}>{typeof sqliteChildren==='function'?sqliteChildren(processingRevision,completedRunId):sqliteChildren}<details className="memory-processing-disclosure"><summary>记忆处理状态</summary><FixedMemoryProcessingPanel releaseOnUnmount={releaseOnUnmount} visible={visible} bridge={bridge} contactId={contactId} scopeKey={scopeKey} onRunUpdated={onRunUpdated}/></details></Fragment>;
   }
-  if (current?.phase === 'disconnected') return <p role="status">本机连接已变化，正在等待重新连接。</p>;
+  if (current?.phase === 'connecting') return <p role="status">正在连接本机服务，连接后可查看记忆。</p>;
+  if (current?.phase === 'disconnected') return <p role="status">本机服务尚未连接，连接后可查看记忆。</p>;
+  if (current?.phase === 'stopping') return <p role="status">正在停止本次后台读取，记忆页面暂不可用。</p>;
+  if (current?.phase === 'stopped') return <p role="status">本次后台读取已停止。</p>;
+  if (current?.phase === 'shutdown-failed') return <p role="alert">后台停读尚未获确认，请重试停读或查看诊断。</p>;
+  if (current?.phase === 'connection-read-failed') return <section aria-label="记忆页连接状态">
+    <p role="alert">本机连接状态读取失败，请重试。</p>
+    <button type="button" onClick={() => void reread.current()}>重新读取连接状态</button>
+  </section>;
   if (current?.phase === 'failed') return <section aria-label="记忆处理模式">
     <p role="alert">记忆处理模式暂不可用，请重新读取。</p>
     <button type="button" onClick={() => void reread.current()}>重新读取记忆模式</button>
   </section>;
-  return <p role="status">正在核对记忆处理模式…</p>;
+  return <p role="status">{!current && backend.getState ? '正在读取本机连接状态…' : '正在核对记忆处理模式…'}</p>;
 }

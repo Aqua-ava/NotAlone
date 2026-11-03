@@ -53,6 +53,7 @@ import {readWechatHttpBody} from './sync/wechat-http-body.ts';
 import {PureTsEvents} from './host/pure-ts-events.ts';
 import {WechatHistoryCheckpointCache} from './history/wechat/checkpoint-cache.ts';
 import { clearStartupDiagnostic, finishStartupDiagnostic, startupFailureCause, writeStartupDiagnostic } from './startup-diagnostics.ts';
+import {SqliteHostShutdown} from './host/sqlite-shutdown.ts';
 
 export const name = 'notalone-sqlite-host';
 export const inject = ['appReady', 'appExit','skills','llm'];
@@ -101,6 +102,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
   const capabilities=sqlite&&typeof sqlite.userData==='string'?readSqliteCapabilities(sqlite.capabilities,sqlite.skillPackageRoot,sqlite.userData):undefined;
   if (process.ppid !== config.parentPid || !sqlite || sqlite.role !== 'test'
     || !path.isAbsolute(sqlite.userData) || !/^[A-Za-z0-9_-]{1,128}$/.test(sqlite.expectedDatabaseId)
+    || sqlite.expectedOwnerId !== undefined && (typeof sqlite.expectedOwnerId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(sqlite.expectedOwnerId))
     || !capabilities
     || sqlite.wechatCliPath !== undefined && !path.isAbsolute(sqlite.wechatCliPath)
     || config.infoPath !== path.join(sqlite.userData, 'managed/sqlite-backend.info')) throw new Error('SQLITE_HOST_CONFIGURATION_INVALID');
@@ -109,7 +111,6 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
   const backgroundProcessing=resolveBackgroundProcessingMode(modelEnvironment),automaticBackground=backgroundProcessing==='automatic';
   const imageProcessing=resolveImageProcessingMode(modelEnvironment),automaticImages=imageProcessing==='automatic';
   const token = randomBytes(32).toString('base64url');
-  let state: 'running' | 'stopping' | 'stopped' = 'running';
   let storage: SqliteStorage | undefined;
   let opening: Promise<SqliteStorage> | undefined;
   let events: PureTsEvents | undefined;
@@ -136,17 +137,17 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
   let published = false;
   let readyDispose = () => {};
   let publication: Promise<void> | undefined;
-  let stopping: Promise<void> | undefined;
+  let confirmStopOnStatus=false;
   let serverClosing: Promise<void> | undefined;
   let closing: Promise<void> | undefined;
-  const stopResources = () => stopping ??= (async () => {
-    state = 'stopping'; readyDispose(); models?.stopAccepting(); events?.close();
+  const shutdown = new SqliteHostShutdown(async () => {
+    readyDispose(); models?.stopAccepting(); events?.close();
     await publication?.catch(() => {});
     if (opening) { try { storage ??= await opening; } catch {} }
     await closeSqliteHostResources({firstHistory,incremental,imageSync,quoteSync,historyRecertify,historyClear,historyResync,foreground,assistantReads,discussions,memory,media,history,contacts,library,wechat,models,storage:storage?{close:async()=>{await Promise.allSettled([...requests]);await storage!.close();}}:undefined});
     if (published) await rm(config.infoPath, { force: true });
-    state = 'stopped';
-  })().catch(error=>{stopping=undefined;throw error;});
+  });
+  const stopResources=()=>shutdown.stop();
   const closeServer = () => serverClosing ??= (async () => {
     if (server) { server.closeAllConnections(); await new Promise<void>(resolve => server!.close(() => resolve())); }
   })();
@@ -162,13 +163,14 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
   process.once('exit', exitCleanup);
   ctx.effect(() => () => { if (process.ppid === config.parentPid) process.removeListener('exit', exitCleanup); }, 'notalone-sqlite-exit');
   try {
-    if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
+    if (shutdown.state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
     await writeStartupDiagnostic(config.infoPath, 'storage');
     opening = SqliteStorage.open({ userData: sqlite.userData, intent: 'open', expectedDatabaseId: sqlite.expectedDatabaseId, role: sqlite.role });
     storage = await opening;
-    if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
-    const ownerId = await storage.execute<string>('identity.resolveOwner', { proposedOwnerId: randomUUID(), at: Date.now() });
-    if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
+    if (shutdown.state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
+    const ownerId = await storage.execute<string>('identity.resolveOwner', { proposedOwnerId: randomUUID(), expectedOwnerId:sqlite.expectedOwnerId, at: Date.now() });
+    if(sqlite.expectedOwnerId!==undefined&&ownerId!==sqlite.expectedOwnerId)throw new StorageFailure('instance_mismatch');
+    if (shutdown.state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
     await writeStartupDiagnostic(config.infoPath, 'modules');
     events = new PureTsEvents(ownerId);
     const deletionHolders = new ActiveHolders();
@@ -178,7 +180,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
     });
     contacts = new ContactMetadataLifetime(storage, ownerId, deletionHolders, () => createWechatContactMetadata(sqlite.wechatCliPath,wechat));
     await contacts.initialize();
-    if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
+    if (shutdown.state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
     const createHistoryChannel=()=>createWechatHistoryChannel(sqlite.wechatCliPath,scope=>checkpointCache?.track(scope)??Promise.resolve(),wechat);
     const syncDirectory={directory:contacts.syncDirectory.bind(contacts)};
     if(capabilities.capabilities.some(capability=>capability==='history')){
@@ -260,7 +262,10 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
         const changesAuthority=req.method==='DELETE'||req.method==='POST'&&(/^\/api\/contacts\/[a-f0-9-]{36}\/history\/recertify(?:\/cancel)?$/.test(url.pathname)||/^\/api\/sync\/(enable|disable|cli-bindings\/(confirm|revoke))$/.test(url.pathname)||/^\/api\/setup\/wechat\//.test(url.pathname));
         if(changesAuthority&&foreground)releaseForeground=await foreground.beginChange();
         if (req.method === 'GET' && url.pathname === '/api/runtime/status') {
-          respond(200, { state, background_processing:backgroundProcessing, image_processing:imageProcessing, image_sync:imageSync?.status()??null, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', storageDiagnostic: storage?.failureDiagnostic ?? null, storageTiming:storage?.timingDiagnostic??null, capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
+          let available=false;
+          if(shutdown.state==='running')try{storage!.verifyIdentity();available=true;}catch{/* 仍保留原认证目标供明确停读。 */}
+          if(confirmStopOnStatus&&shutdown.state==='stopped')res.once('finish',()=>ctx.appExit!(0));
+          respond(200, { state:shutdown.state, shutdownProtocol:'poll-v1', shutdownFailed:shutdown.shutdownFailed, storageIdentity:{databaseId:storage!.status.databaseId,ownerId,available}, background_processing:backgroundProcessing, image_processing:imageProcessing, image_sync:imageSync?.status()??null, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', storageDiagnostic: storage?.failureDiagnostic ?? null, storageTiming:storage?.timingDiagnostic??null, capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
         }
         if (url.pathname === '/api/events') {
           if (req.method!=='GET') { respond(405,{error:'method_not_allowed'});return; }
@@ -269,9 +274,14 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
         }
         if (req.method === 'POST' && url.pathname === '/api/runtime/shutdown') {
           await stopResources();
-          res.once('finish', () => ctx.appExit!(0)); respond(200, { state, runtime: 'dsh' }); return;
+          res.once('finish', () => ctx.appExit!(0)); respond(200, { state:shutdown.state, runtime: 'dsh' }); return;
         }
-        if (state !== 'running') { respond(503, { error: 'runtime_stopping' }); return; }
+        if(req.method==='POST'&&url.pathname==='/api/runtime/shutdown/begin'){
+          confirmStopOnStatus=true;shutdown.begin();
+          if(shutdown.state==='stopped')res.once('finish',()=>ctx.appExit!(0));
+          respond(shutdown.state==='stopped'?200:202,{state:shutdown.state,runtime:'dsh'});return;
+        }
+        if (shutdown.state !== 'running') { respond(503, { error: 'runtime_stopping' }); return; }
         if(req.method==='GET'&&url.pathname==='/api/setup/status'){
           respond(200,{...modelSetup.status(),owner_id:ownerId,storage:'sqlite',capabilities:capabilities.capabilities});return;
         }
@@ -334,17 +344,17 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
     };
     await writeStartupDiagnostic(config.infoPath, 'handshake');
     server=createServer((req,res)=>{
-      const pending=handleRequest(req,res),lifecycle=req.url==='/api/runtime/status'||req.url==='/api/runtime/shutdown';
+      const pending=handleRequest(req,res),lifecycle=req.url==='/api/runtime/status'||req.url==='/api/runtime/shutdown'||req.url==='/api/runtime/shutdown/begin';
       if(!lifecycle){requests.add(pending);const release=()=>requests.delete(pending);pending.then(release,release);}
       void pending.catch(()=>{if(!res.headersSent){res.writeHead(503,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({error:'sqlite_operation_unavailable'}));}else res.destroy();});
     });
     server.requestTimeout = 15_000; server.headersTimeout = 10_000;
     await new Promise<void>((resolve, reject) => { server!.once('error', reject); server!.listen(0, '127.0.0.1', () => { server!.removeListener('error', reject); resolve(); }); });
-    if (state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
+    if (shutdown.state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('SQLITE_HOST_LISTEN_FAILED');
     readyDispose = ctx.appReady!.onReady(() => {
-      if (state !== 'running') return;
+      if (shutdown.state !== 'running') return;
       publication = (async () => {
         const pending = `${config.infoPath}.${randomUUID()}.pending`;
         try {
@@ -353,7 +363,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
           await clearStartupDiagnostic(config.infoPath);
         } finally { await rm(pending, { force: true }); }
       })();
-      void publication.then(()=>{if(state!=='running')return;if(automaticImages)imageSync?.wake();if(automaticBackground){firstHistory?.wake();incremental?.wake();incremental?.start();quoteSync?.wake();}}).catch(async error => {await finishStartupDiagnostic(config.infoPath, startupFailureCause(error));ctx.appExit!(1);});
+      void publication.then(()=>{if(shutdown.state!=='running')return;if(automaticImages)imageSync?.wake();if(automaticBackground){firstHistory?.wake();incremental?.wake();incremental?.start();quoteSync?.wake();}}).catch(async error => {await finishStartupDiagnostic(config.infoPath, startupFailureCause(error));ctx.appExit!(1);});
     });
   } catch (error) {
     await finishStartupDiagnostic(config.infoPath, startupFailureCause(error));

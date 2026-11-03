@@ -6,7 +6,8 @@ import type { SqliteCapabilitiesConfiguration } from '../../sqlite-capabilities.
 import { installedDeletionScopes } from '../../storage/sqlite/deletion/registration.ts';
 import { recoverSkillRootRelocation } from '../../skills/sqlite/root-relocation.ts';
 import { SqliteStorage } from '../../storage/sqlite/client.ts';
-import type { CutoverCheckRecord, CutoverCode, CutoverManifest, CutoverResult, CutoverStorage, CutoverStorageFactory,
+import { controlledFiles } from '../../storage/sqlite/files.ts';
+import type { CutoverCheckRecord, CutoverCode, CutoverManifest, CutoverReady, CutoverResult, CutoverStorage, CutoverStorageFactory,
   LegacyTarget, LegacyTargetKind } from './contracts.ts';
 import { CUTOVER_FORMAT_VERSION, CUTOVER_STARTUP_CONFIG } from './contracts.ts';
 import { authorizationDigest, cutoverDirectory, CutoverControlError, databaseFile, loadAuthorization, loadManifest, loadStartupConfiguration,
@@ -68,6 +69,26 @@ function check(name: CutoverCheckRecord['name'], state: CutoverCheckRecord['stat
 
 /** 主要入口：返回 ready 或 maintenance；仅使用 SQLite，不清理未授权对象，不创建第二个空库。 */
 export async function runDefaultDatabaseStartup(options: DefaultDatabaseOptions): Promise<CutoverResult> {
+  return runDatabaseStartup(options, reopenCompleted);
+}
+
+export interface PreparedDatabaseStartup {
+  phase: 'prepared'; code: 'sqlite_prepared'; databaseId: string; ownerId: string;
+  configuration: SqliteCapabilitiesConfiguration; manifestRevision: number;
+}
+
+/** 桌面只准备已有目标；正式宿主仍须打开同一实例、核验完整性与本人身份后才能连接。 */
+export async function prepareDefaultDatabaseStartup(options: DefaultDatabaseOptions): Promise<PreparedDatabaseStartup | CutoverResult> {
+  return runDatabaseStartup(options, async (userData, manifest) => {
+    const configuration = completedConfiguration(userData, manifest);
+    controlledFiles(userData, false).verify();
+    return {phase: 'prepared', code: 'sqlite_prepared', databaseId: configuration.expectedDatabaseId,
+      ownerId: manifest.target!.ownerId, configuration: configuredCapabilities(configuration), manifestRevision: manifest.revision};
+  });
+}
+
+async function runDatabaseStartup<T extends CutoverReady | PreparedDatabaseStartup>(options: DefaultDatabaseOptions,
+  completed: (userData: string, manifest: CutoverManifest, options: DefaultDatabaseOptions) => Promise<T>): Promise<T | CutoverResult> {
   const userData = path.resolve(options.userData);
   const now = () => options.now?.() ?? Date.now();
   let manifest: CutoverManifest | undefined;
@@ -82,7 +103,7 @@ export async function runDefaultDatabaseStartup(options: DefaultDatabaseOptions)
     if (manifest?.phase === 'completed') {
       try { await recoverSkillRootRelocation(userData); }
       catch { return {phase:'maintenance',code:'cutover_configuration_conflict',detail:'skill_root_relocation_pending',manifestRevision:manifest.revision}; }
-      return await reopenCompleted(userData, manifest, options);
+      return await completed(userData, manifest, options);
     }
     return await switchDatabase(userData, manifest ?? initialManifest(now()), options);
   } catch (error) {
@@ -97,7 +118,7 @@ export async function runDefaultDatabaseStartup(options: DefaultDatabaseOptions)
   }
 }
 
-async function reopenCompleted(userData: string, manifest: CutoverManifest, options: DefaultDatabaseOptions): Promise<CutoverResult> {
+function completedConfiguration(userData: string, manifest: CutoverManifest): StartupConfiguration {
   const configuration = loadStartupConfiguration(userData);
   if (!configuration) throw new Blocked('cutover_configuration_conflict', 'startup_configuration_missing', manifest);
   if (!manifest.target || configuration.expectedDatabaseId !== manifest.target.databaseId) throw new Blocked('cutover_configuration_conflict', 'startup_configuration_identity_mismatch', manifest);
@@ -106,15 +127,21 @@ async function reopenCompleted(userData: string, manifest: CutoverManifest, opti
     const saved = saveManifest(userData, { ...manifest, phase: 'blocked', blockedCode: 'cutover_legacy_writer_running' });
     throw new Blocked('cutover_legacy_writer_running', writers.map(record => `${record.name}:${record.state}`).join(','), saved);
   }
+  return configuration;
+}
+function configuredCapabilities(configuration: StartupConfiguration): SqliteCapabilitiesConfiguration {
+  return {capabilities: configuration.capabilities, ...(configuration.skillPackageRoot ? {skillPackageRoot: configuration.skillPackageRoot} : {})};
+}
+async function reopenCompleted(userData: string, manifest: CutoverManifest, options: DefaultDatabaseOptions): Promise<CutoverReady> {
+  const configuration = completedConfiguration(userData, manifest);
   const factory = options.storageFactory ?? defaultFactory;
   let storage: CutoverStorage | undefined;
   try {
     storage = await factory.open({ userData, intent: 'open', expectedDatabaseId: configuration.expectedDatabaseId, role: 'test' });
-    const ownerId = await storage.execute<string>('identity.resolveOwner', { proposedOwnerId: randomUUID(), at: Date.now() });
-    if (ownerId !== manifest.target.ownerId) throw new Blocked('cutover_checks_failed', 'target_owner_mismatch', manifest);
+    const ownerId = await storage.execute<string>('identity.resolveOwner', { proposedOwnerId: randomUUID(), expectedOwnerId: manifest.target!.ownerId, at: Date.now() });
+    if (ownerId !== manifest.target!.ownerId) throw new Blocked('cutover_checks_failed', 'target_owner_mismatch', manifest);
     return { phase: 'ready', code: 'sqlite_reopened', databaseId: storage.status.databaseId, ownerId, schemaVersion: storage.status.schemaVersion,
-      sqliteVersion: storage.status.sqliteVersion, created: false, configuration: { capabilities: configuration.capabilities,
-        ...(configuration.skillPackageRoot ? { skillPackageRoot: configuration.skillPackageRoot } : {}) }, manifestRevision: manifest.revision };
+      sqliteVersion: storage.status.sqliteVersion, created: false, configuration: configuredCapabilities(configuration), manifestRevision: manifest.revision };
   } catch (error) {
     if (error instanceof Blocked) throw error;
     throw error;
@@ -202,7 +229,11 @@ async function switchDatabase(userData: string, manifest: CutoverManifest, optio
   manifest = ensured.manifest;
   const storage = ensured.storage;
   try {
-    const ownerId = await storage.execute<string>('identity.resolveOwner', { proposedOwnerId: randomUUID(), at: Date.now() });
+    const expectedOwnerId = manifest.target!.ownerId;
+    // 失败重试和接管已有配置仍沿用原本人；仅尚未完成首次初始化的新目标允许创建。
+    const createIfMissing = manifest.targetOrigin === 'created' && !expectedOwnerId && !loadStartupConfiguration(userData);
+    const ownerId = await storage.execute<string>('identity.resolveOwner', { proposedOwnerId: randomUUID(), createIfMissing,
+      ...(expectedOwnerId ? {expectedOwnerId} : {}), at: Date.now() });
     manifest = saveManifest(userData, { ...manifest, phase: 'target_ready', target: { ...manifest.target!, ownerId } });
     manifest = await verifyTarget(userData, manifest, storage, ownerId);
     // 清理完成到配置切换之间再次核验旧写入者，防止清理后重新出现的旧进程被新配置掩盖。

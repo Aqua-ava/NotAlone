@@ -58,3 +58,42 @@ test('本机embedding惰性打开、并发复用，关闭先排空在途推理�
   &&error.cause?.message==='embedding_host_closed');
  assert.equal(opens,1);
 });
+
+test('本机embedding释放失败保留原模型，明确重试只释放一次且不再接收推理',async()=>{
+ let opens=0,closes=0;
+ const failure=new Error('合成释放失败');
+ const lifecycle=createLocalEmbeddingLifecycle(async()=>{
+  opens++;
+  return {embed:async()=>[[1]],close:async()=>{if(++closes===1)throw failure;}};
+ });
+ await lifecycle.embed(['合成']);
+ const first=lifecycle.close();
+ assert.equal(lifecycle.close(),first);
+ await assert.rejects(first,error=>error===failure);
+ assert.equal(lifecycle.opened(),true);
+ await assert.rejects(lifecycle.embed(['关闭后']),error=>error.cause?.message==='embedding_host_closed');
+ await lifecycle.close();
+ await lifecycle.close();
+ assert.equal(closes,2);
+ assert.equal(opens,1);
+ assert.equal(lifecycle.opened(),false);
+});
+
+test('本机embedding打开期间退出保留迟到模型，释放失败必须报告并允许重试',async()=>{
+ let resolveOpen,opens=0,embeds=0,closes=0;
+ const opened=new Promise(resolve=>{resolveOpen=resolve;});
+ const failure=new Error('合成迟到资源释放失败');
+ const lifecycle=createLocalEmbeddingLifecycle(()=>{opens++;return opened;});
+ const embedding=lifecycle.embed(['合成']).then(()=>assert.fail('退出后不能开始推理'),error=>error);
+ const closing=lifecycle.close();
+ resolveOpen({embed:async()=>{embeds++;return [[1]];},close:async()=>{if(++closes===1)throw failure;}});
+ await assert.rejects(closing,error=>error===failure);
+ assert.equal((await embedding).cause?.message,'embedding_host_closed');
+ assert.equal(lifecycle.opened(),true);
+ await assert.rejects(lifecycle.embed(['关闭后']),error=>error.cause?.message==='embedding_host_closed');
+ await lifecycle.close();
+ assert.equal(opens,1);
+ assert.equal(embeds,0);
+ assert.equal(closes,2);
+ assert.equal(lifecycle.opened(),false);
+});

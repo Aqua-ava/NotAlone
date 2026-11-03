@@ -9,8 +9,8 @@ import { useVisibleRefresh } from './use-visible-refresh';
 
 const initialSync: SyncControlState = { revision: -1, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
 
-export function ContactSyncSettings({ session, navigate }: {
-  session: ContactSessionView; navigate: (page: ManagerPage) => void;
+export function ContactSyncSettings({ session, navigate, visible = true }: {
+  session: ContactSessionView; navigate: (page: ManagerPage) => void; visible?: boolean;
 }) {
   const consent = useBindingConsent(session);
   const { state: sync } = useRevisionedSession(initialSync, window.notalone.syncControl);
@@ -36,12 +36,15 @@ export function ContactSyncSettings({ session, navigate }: {
     }
   }
   useEffect(() => {
-    active.current = true; void refreshSaved();
+    active.current = true;
     return () => { active.current = false; openingPending.current = false; };
   }, []);
+  useEffect(() => {
+    if (visible && !selecting && !opening && !consent.revocation) void refreshSaved();
+  }, [visible]);
   const readFailed = consent.state.phase === 'failed' || consent.state.phase === 'unavailable' || !!consent.state.errorCode || !!consent.error;
   // 选择和撤销确认期间不刷新名单或扰动用户正在核对的范围。
-  useVisibleRefresh(() => refreshSaved(), consent.state.phase === 'ready' && !consent.state.busy
+  useVisibleRefresh(() => refreshSaved(), visible && consent.state.phase === 'ready' && !consent.state.busy
     && !selecting && !opening && !savedReadPending && !consent.revocation && !readFailed && !consent.readError);
   useEffect(() => {
     if (!opening) return;

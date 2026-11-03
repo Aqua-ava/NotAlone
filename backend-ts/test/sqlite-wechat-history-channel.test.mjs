@@ -40,6 +40,7 @@ async function fixture(t,sharedMode=false,storageOptions={},contactCount=2){
   const r=JSON.parse(line),plan=JSON.parse(fs.readFileSync(planFile));fs.appendFileSync(logFile,JSON.stringify(r)+'\\n');let data;
   if(['page','quarantine-page','tail'].includes(r.op)&&r.target!==currentTarget){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_target_unverified'}})+'\\n');return;}
   if(r.op==='resolve'){selected=r.displayName;schema.scopeDigest=crypto.createHash('sha256').update('${account}\\0'+selected).digest('hex');}
+  if(r.op==='release-selection'&&plan.mode==='release-blocked')return;
   if(r.op==='release-selection'&&plan.mode==='release-fail'){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_account_changed'}})+'\\n');return;}
   if(r.op==='release-selection'){currentTarget=null;data={released:true};}
   else if(r.op==='resolve')data={accountKey:plan.mode==='wrong-account'?'synthetic-other':'${account}',conversationKey:plan.mode==='wrong-conversation'?'synthetic-other':selected,displayName:'只作展示',sourceGeneration:plan.mode==='wrong-generation'?'f'.repeat(64):'${generation}'};
@@ -91,10 +92,11 @@ async function fixture(t,sharedMode=false,storageOptions={},contactCount=2){
 }
 async function requests(file){try{return (await readFile(file,'utf8')).trim().split('\n').map(JSON.parse);}catch(error){if(error.code==='ENOENT')return [];throw error;}}
 function noProcess(pid){assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});}
-async function waitForPage(file){return new Promise((resolve,reject)=>{
- const check=()=>requests(file).then(rows=>{if(rows.some(row=>row.op==='page')){clearTimeout(timer);watcher.close();resolve();}});
- const watcher=watch(join(file,'..'),check),timer=setTimeout(()=>{watcher.close();reject(new Error('synthetic_page_missing'));},5000);check();
+async function waitForOperation(file,operation){return new Promise((resolve,reject)=>{
+ const check=()=>requests(file).then(rows=>{if(rows.some(row=>row.op===operation)){clearTimeout(timer);watcher.close();resolve();}});
+ const watcher=watch(join(file,'..'),check),timer=setTimeout(()=>{watcher.close();reject(new Error('synthetic_operation_missing'));},5000);check();
 });}
+const waitForPage=file=>waitForOperation(file,'page');
 
 test('正式共享子进程有界让出并在进程重启后接续已接受历史片段',async t=>{
  const f=await fixture(t,true),large=f.bindings.find(row=>row.conversation_locator===conversation),other=f.bindings.find(row=>row.contact_id!==large.contact_id);
@@ -443,6 +445,45 @@ test('共享独立通道释放协议失败仍解锁，后续读者不会永久�
  await f.setPlan({mode:'release-fail'});await assert.rejects(channel.close(),{code:'history_account_changed'});
  await f.setPlan({});await f.history.synchronize(binding.contact_id);
  assert.equal((await f.history.read(binding.contact_id)).messages.length,2);
+});
+
+for(const method of ['park','close'])test(`共享通道${method}失败确认原进程停止后，宿主重试只续清原资源`,async t=>{
+ const {closeSqliteHostResources}=await import('../src/sqlite-host-plugin.ts');
+ const f=await fixture(t,true),binding=f.bindings[0],scope={token:await f.contacts.eligibility(binding.contact_id),accountKey:account,conversationKey:binding.conversation_locator};
+ const channel=createWechatHistoryChannel(f.executable,undefined,f.shared);await channel.inspect(scope);
+ const pid=Number(await readFile(f.pidFile,'utf8')),released=[];
+ const resources={history:{close:()=>channel[method]()},wechat:f.shared,
+  models:{close:async()=>{released.push('models');}},storage:{close:async()=>{released.push('storage');}}};
+ await f.setPlan({mode:'release-fail'});
+ await assert.rejects(closeSqliteHostResources(resources),error=>error instanceof AggregateError&&error.errors.some(item=>item.code==='history_account_changed'));
+ noProcess(pid);assert.deepEqual(released,[],'关闭未确认时不先释放共享模型与存储');
+ await assert.rejects(channel.inspect(scope),{code:'history_native_closed'});
+ const before=await requests(f.logFile);
+ await f.setPlan({});await closeSqliteHostResources(resources);
+ assert.deepEqual(released,['models','storage']);
+ assert.deepEqual(await requests(f.logFile),before,'仅完成原停读与租约收尾，不重开或重新选择联系人');
+ assert.equal(Number(await readFile(f.pidFile,'utf8')),pid);noProcess(pid);
+ await assert.rejects(channel.inspect(scope),{code:'history_native_closed'});
+});
+
+test('共享通道未收到释放回执且原进程仍存活时，宿主不能确认收尾',async t=>{
+ const {closeSqliteHostResources}=await import('../src/sqlite-host-plugin.ts');
+ const f=await fixture(t,true),binding=f.bindings[0],scope={token:await f.contacts.eligibility(binding.contact_id),accountKey:account,conversationKey:binding.conversation_locator};
+ const channel=createWechatHistoryChannel(f.executable,undefined,f.shared);await channel.inspect(scope);
+ const pid=Number(await readFile(f.pidFile,'utf8')),released=[];
+ const resources={history:channel,wechat:f.shared,storage:{close:async()=>{released.push('storage');}}};
+ await f.setPlan({mode:'release-blocked'});
+ let settled=false;
+ const closing=closeSqliteHostResources(resources).finally(()=>{settled=true;});
+ const rejected=assert.rejects(closing,error=>error instanceof AggregateError);
+ try{
+  await waitForOperation(f.logFile,'release-selection');
+  assert.doesNotThrow(()=>process.kill(pid,0));
+  assert.equal(settled,false);assert.deepEqual(released,[]);
+  await assert.rejects(channel.inspect(scope),{code:'history_native_closed'});
+ }finally{process.kill(pid,'SIGKILL');await rejected;}
+ noProcess(pid);assert.deepEqual(released,[],'失联结果本身不能当作成功回执');
+ await closeSqliteHostResources(resources);assert.deepEqual(released,['storage']);
 });
 
 

@@ -148,6 +148,32 @@ test('SQLite 记忆浏览先行，处理状态默认收起并可手动展开', {
   }, false, true, false);
 });
 
+test('记忆页区分连接与停读状态，只在真实连接后读取正文', { timeout: 20000 }, async t => {
+  let reads = 0;
+  await withEntry(t, async method => {
+    if (method === 'backendState') return { phase: 'connecting', revision: 0 };
+    if (method === 'readMode') { reads++; return { connectionGeneration: 1, mode: 'legacy' }; }
+  }, async page => {
+    await page.getByRole('status').filter({ hasText: '正在连接本机服务' }).waitFor();
+    for (const [phase, role, text] of [
+      ['disconnected', 'status', '本机服务尚未连接'],
+      ['stopping', 'status', '正在停止本次后台读取'],
+      ['stopped', 'status', '本次后台读取已停止'],
+      ['shutdown-failed', 'alert', '后台停读尚未获确认'],
+      ['connecting', 'status', '正在连接本机服务'],
+    ]) {
+      await page.evaluate(value => window.emitBackend(value), phase);
+      await page.getByRole(role).filter({ hasText: text }).waitFor();
+      assert.equal(await page.getByText('本机连接已变化，正在等待重新连接。', { exact: true }).count(), 0);
+      assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
+      assert.equal(reads, 0, '连接未就绪时不读取记忆模式或正文');
+    }
+    await page.evaluate(() => window.emitBackend('connected'));
+    await page.getByRole('region', { name: '旧版记忆正文' }).waitFor();
+    assert.equal(reads, 1);
+  }, false, false, false, true);
+});
+
 test('连接变化先撤下正文，旧连接晚到的模式不能盖过新连接核验', { timeout: 20000 }, async t => {
   const oldMode = deferred(), newMode = deferred();
   let reads = 0, generation = 1;
@@ -160,13 +186,13 @@ test('连接变化先撤下正文，旧连接晚到的模式不能盖过新连�
   }, async page => {
     await page.getByText('最近一批提取与核验：已处理 1 / 1 条消息目标', { exact: true }).waitFor();
     await page.evaluate(() => window.emitBackend('disconnected'));
-    await page.getByRole('status').filter({ hasText: '等待重新连接' }).waitFor();
+    await page.getByRole('status').filter({ hasText: '本机服务尚未连接' }).waitFor();
     assert.equal(await page.getByText('最近一批提取与核验：已处理 1 / 1 条消息目标', { exact: true }).count(), 0);
     assert.equal(await page.getByRole('region', { name: '固定范围记忆处理' }).count(), 0);
     await page.evaluate(() => window.emitBackend('connected'));
     await page.getByRole('status').filter({ hasText: '正在核对记忆处理模式' }).waitFor();
     await page.evaluate(() => window.emitBackend('stopping'));
-    await page.getByRole('status').filter({ hasText: '等待重新连接' }).waitFor();
+    await page.getByRole('status').filter({ hasText: '正在停止本次后台读取' }).waitFor();
     await page.evaluate(() => window.emitBackend('connected'));
     await page.getByRole('status').filter({ hasText: '正在核对记忆处理模式' }).waitFor();
     oldMode.resolve({ connectionGeneration: 2, mode: 'legacy' });
@@ -178,7 +204,7 @@ test('连接变化先撤下正文，旧连接晚到的模式不能盖过新连�
     newMode.resolve({ connectionGeneration: 3, mode: 'sqlite' });
     await page.getByText('最近一批提取与核验：已处理 3 / 3 条消息目标', { exact: true }).waitFor();
     await page.evaluate(() => window.emitBackend('connecting'));
-    await page.getByRole('status').filter({ hasText: '等待重新连接' }).waitFor();
+    await page.getByRole('status').filter({ hasText: '正在连接本机服务' }).waitFor();
     assert.equal(await page.getByText('最近一批提取与核验：已处理 3 / 3 条消息目标', { exact: true }).count(), 0);
   });
 });
@@ -316,10 +342,29 @@ test('同一连接的状态通知不重新核对模式或卸载记忆页',{timeo
 });
 
 
+test('本机连接状态读取失败时可重新读取，核验通过前不读取记忆', { timeout: 20000 }, async t => {
+  const initial = deferred();
+  let connectionReads = 0, modeReads = 0;
+  await withEntry(t, async method => {
+    if (method === 'backendState') return ++connectionReads === 1 ? initial.promise : { phase: 'connected', revision: 1 };
+    if (method === 'readMode') { modeReads++; return { connectionGeneration: 1, mode: 'legacy' }; }
+  }, async page => {
+    await page.getByRole('status').filter({ hasText: '正在读取本机连接状态' }).waitFor();
+    initial.reject(new Error('合成读取失败'));
+    await page.getByRole('alert').filter({ hasText: '本机连接状态读取失败' }).waitFor();
+    assert.equal(modeReads, 0);
+    assert.equal(await page.getByText('本机连接已变化，正在等待重新连接。', { exact: true }).count(), 0);
+    await page.getByRole('button', { name: '重新读取连接状态', exact: true }).click();
+    await page.getByRole('region', { name: '旧版记忆正文' }).waitFor();
+    assert.equal(modeReads, 1);
+    assert.equal(await page.getByRole('alert').count(), 0);
+  }, false, false, false, true);
+});
+
 test('启动预加载等待真实连接，旧初始连接状态不能覆盖新连接',{timeout:20000},async t=>{
  const initial=deferred();let reads=0;
  await withEntry(t,async method=>{if(method==='backendState')return initial.promise;if(method==='readMode'){reads++;return {connectionGeneration:1,mode:'sqlite'};}if(method==='readCurrent')return currentView(1,1);},async page=>{
-  await page.getByText('正在核对记忆处理模式…',{exact:true}).waitFor();assert.equal(reads,0);
+  await page.getByText('正在读取本机连接状态…',{exact:true}).waitFor();assert.equal(reads,0);
   await page.evaluate(()=>window.emitBackend('connected'));await page.getByText('最近一批提取与核验：已处理 1 / 1 条消息目标',{exact:true}).waitFor();
   initial.resolve({phase:'disconnected',revision:0});await page.evaluate(()=>new Promise(requestAnimationFrame));
   assert.equal(reads,1);assert.equal(await page.getByText('最近一批提取与核验：已处理 1 / 1 条消息目标',{exact:true}).isVisible(),true);

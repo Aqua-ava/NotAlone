@@ -96,10 +96,10 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
         coverages={sync.phase === 'ready' && !sync.errorCode ? sync.report?.historyCoverages : undefined}
         bodyAvailable={sync.report?.bodyAvailable} enabled={sync.report?.enabled} />} contactActions={selected && deletionBridge && <ContactDeletionMenu
       bridge={deletionBridge} state={deletion.state} selected={selected} contacts={state.contacts} scopeRevision={state.scopeRevision} inline />}
-      settings={selected && <>
-      <ContactSyncSettings session={session} navigate={navigate} />
+      settings={selected && (visible => <>
+      <ContactSyncSettings session={session} navigate={navigate} visible={visible} />
       <ContactHistoryClear session={session} repairNeeded={repairNeeded} />
-    </>} /></div>}
+    </>)} /></div>}
     {session.error && <p className="contacts-note" role="alert">{session.error}</p>}
   </section>;
 }

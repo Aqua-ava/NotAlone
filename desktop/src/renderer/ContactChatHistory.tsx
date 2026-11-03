@@ -52,7 +52,7 @@ function quoteTypeLabel(messageType: string): string {
   return `引用类型：${numericLabels[String(base)] ?? `未知类型（${messageType}）`}`;
 }
 
-export function ContactChatHistory({ session, settings, actions, contactActions, readingPosition, syncStatus, syncIssue = false, settingsTargetContactId }: { syncStatus?: ReactNode; syncIssue?: boolean; actions?: ReactNode; settingsTargetContactId?: string | null; session: ContactSessionView; settings?: ReactNode; contactActions?: ReactNode; readingPosition?: ChatHistoryPosition }) {
+export function ContactChatHistory({ session, settings, actions, contactActions, readingPosition, syncStatus, syncIssue = false, settingsTargetContactId }: { syncStatus?: ReactNode; syncIssue?: boolean; actions?: ReactNode; settingsTargetContactId?: string | null; session: ContactSessionView; settings?: ReactNode | ((visible: boolean) => ReactNode); contactActions?: ReactNode; readingPosition?: ChatHistoryPosition }) {
   const bridge = window.notalone.contactHistory;
   const { state, error, setError, latest, active, retry } = useRevisionedSession(initialHistory, bridge);
   const contactId = session.state.selectedContactId;
@@ -113,7 +113,7 @@ export function ContactChatHistory({ session, settings, actions, contactActions,
     {/* 收起时保留操作状态，避免丢失结果尚未确认的重新同步请求。 */}
     {selected && settings && <section key={selected.contactId} id={settingsId} className="contact-management contact-chat-settings" aria-label="当前联系人设置" hidden={!settingsOpen}>
       <h3>同步与资料</h3>
-      {settings}
+      {typeof settings === 'function' ? settings(settingsOpen) : settings}
     </section>}
     {!selected ? <div className="contact-chat-empty"><p>在顶部选择联系人后，查看你们已保存的聊天记录。</p></div>
       : <div className="contact-chat-viewport">

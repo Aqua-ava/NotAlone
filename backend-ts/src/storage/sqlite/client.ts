@@ -93,6 +93,11 @@ export class SqliteStorage {
     return this.request(name, input, lease);
   }
   check(): Promise<{ integrity: 'ok'; foreignKeys: 'ok' }> { return this.execute('storage.check', {}); }
+  /** 运行状态只核验当前句柄及文件身份；不排队查询或重复全库完整性检查。 */
+  verifyIdentity():void {
+    if(this.failed||this.closing)throw new StorageFailure('worker_failed');
+    this.files.verify();
+  }
   async openReader(actions:readonly string[]):Promise<StorageReader>{
     if(this.failed||this.closing)throw new StorageFailure('worker_failed');
     this.files.verify();const identity=statSync(this.files.database);

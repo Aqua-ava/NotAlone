@@ -10,6 +10,8 @@ SQLite 是当前默认业务存储。正式装配使用 `sqlite-host-plugin.ts`�
 
 `status` 包含 `databaseId,runtimeId,epoch:bigint,schemaVersion,sqliteVersion,role`。每次成功打开推进持久 `epoch` 并更换 `runtimeId`；`StorageLease` 为前三个字段。重开撤销旧运行租约；业务自己的读取、联系人、来源、任务代次仍须在具名动作内分别复验，不可用该租约代替业务资格。
 
+`verifyIdentity()` 同步检查句柄可用性及受控文件元数据，供连接状态快速拒绝文件被替换、关闭或 Worker 故障；不执行 SQL、不重复全库扫描，也不替代正式打开与业务动作中的实例租约、本人及范围复验。
+
 每个句柄仅拥有一个 Worker、一条连接。`execute(name,input,lease=status)` 通过消息串行调用；`check()` 分别执行 `integrity_check` 和 `foreign_key_check`；`close()` 排空此前请求并关闭连接。Worker 退出、错误或超时后全部未决请求失败，不自动重开、不自动重放，业务须核对幂等记录再人工继续。
 
 按 [ADR-159](../../../../architecture/adr/159-foreground-read-channel-isolation.md)，`openReader(actionNames)` 创建独立 Worker 的只读附属句柄，只接受可信装配声明且注册为 `read` 的具名动作。它沿用主句柄租约，不执行初始化、迁移或运行身份更新；每次短读结束后在事务外复验租约。主句柄故障、关闭或重开撤销旧读者。前台只声明 `identity.foregroundSnapshot`，由联系人元数据持有者负责删除排空及关闭，不与后台长查询共享执行队列。按 [ADR-160](../../../../architecture/adr/160-assistant-read-and-skill-worker-isolation.md)，助手目录、正文及候选回看使用另一附属读者，短读前后复核业务范围并参与删除排空；生成及最终提交继续使用主写者。
@@ -34,7 +36,7 @@ SQLite 是当前默认业务存储。正式装配使用 `sqlite-host-plugin.ts`�
 
 领域迁移在公共 registry 串行确定连续版本。各模块只追加独立迁移，不并发改写已发布 SQL，不按导入排序动态重编号；升级始终从原实例沿已发布链追加。隔离合成库的结果不能替代用户实例迁移证据。
 
-固定故障以 `StorageFailure.code` 传递，不传异常原文或文件路径。约束失败或事务失败回滚；`storage_busy` 不证明外部动作未发送。进程崩溃时 SQLite 回滚未提交升级，重开先执行完整性及 FK 检查，再核验版本与身份并撤销旧运行租约。创建中断留下的未初始化文件须人工诊断，不自动删除。
+固定故障以 `StorageFailure.code` 传递，不传异常原文或文件路径。约束失败或事务失败回滚；`storage_busy` 不证明外部动作未发送。进程崩溃时 SQLite 回滚未提交升级，重开先核验身份、结构和迁移账本，再在同一写锁快照中完成完整性及 FK 检查后才升级或更新运行租约；实际升级保留前后完整性检查。创建中断留下的未初始化文件须人工诊断，不自动删除。
 
 ## API 依据
 

@@ -52,6 +52,82 @@ async function handshake(host, infoPath) {
   assert.fail('官方 SQLite 联系人宿主未在有界时间内就绪');
 }
 
+test('认证停读先接纳，等待在途请求排空后由原状态接口确认退出', {timeout:20000},async t=>{
+ const {request:httpRequest}=await import('node:http');
+ const root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-shutdown-confirm-')));
+ let host,pendingRequest;
+ t.after(async()=>{pendingRequest?.destroy();await host?.terminate();await rm(root,{recursive:true,force:true});});
+ const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test'}),databaseId=storage.status.databaseId;await storage.close();
+ const infoPath=path.join(root,'managed/sqlite-backend.info');
+ host=await launchDsh({nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,
+  envFilePath:path.join(root,'unused.env'),infoPath,businessHome:root,environment:{},
+  sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts']}},()=>true);
+ const info=await handshake(host,infoPath),base=`http://${info.address}`,headers={Authorization:`Bearer ${info.token}`};
+ const request=(route,method='GET')=>fetch(base+route,{method,headers,signal:AbortSignal.timeout(1500)});
+ const ready=await (await request('/api/runtime/status')).json();assert.equal(ready.shutdownProtocol,'poll-v1');
+ assert.equal((await fetch(base+'/api/runtime/shutdown/begin',{method:'POST'})).status,401);
+ const continued=Promise.withResolvers(),response=Promise.withResolvers();
+ pendingRequest=httpRequest(base+'/api/setup/credentials',{method:'POST',headers:{...headers,'Content-Length':'2',Expect:'100-continue'}},res=>{res.resume();res.on('end',()=>response.resolve(res.statusCode));});
+ pendingRequest.on('error',error=>{continued.reject(error);response.reject(error);});
+ void response.promise.catch(()=>{});pendingRequest.once('continue',()=>continued.resolve());pendingRequest.flushHeaders();await continued.promise;pendingRequest.write('{');
+ for(let i=0;i<2;i++){
+  const accepted=await request('/api/runtime/shutdown/begin','POST');assert.equal(accepted.status,202);assert.equal((await accepted.json()).state,'stopping');
+ }
+ const stopping=await (await request('/api/runtime/status')).json();assert.equal(stopping.state,'stopping');assert.equal(stopping.shutdownFailed,false);
+ assert.equal((await request('/api/contacts')).status,503,'停读过程中拒绝新的业务读取');
+ pendingRequest.end('}');assert.equal(await response.promise,400);
+ let stopped=false;
+ for(let i=0;i<30;i++){
+  const status=await (await request('/api/runtime/status')).json();
+  if(status.state==='stopped'){stopped=true;break;}
+  await delay(20);
+ }
+ assert.equal(stopped,true,'只接受原认证状态接口的真实stopped');
+ assert.equal(await host.waitForExit(5000),true);await assert.rejects(access(infoPath),{code:'ENOENT'});
+});
+
+test('正式宿主复验预检本人身份，不匹配时保留原库并拒绝业务握手', {timeout:20000},async t=>{
+ const root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-startup-owner-')));let host;
+ t.after(async()=>{await host?.terminate();await rm(root,{recursive:true,force:true});});
+ const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test'}),databaseId=storage.status.databaseId;
+ const ownerId=await storage.execute('identity.resolveOwner',{proposedOwnerId:'00000000-0000-4000-8000-000000000041',at:Date.now()});await storage.close();
+ const infoPath=path.join(root,'managed/sqlite-backend.info');
+ const config={nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,
+  envFilePath:path.join(root,'unused.env'),infoPath,businessHome:root,environment:{},
+  sqlite:{userData:root,expectedDatabaseId:databaseId,expectedOwnerId:'00000000-0000-4000-8000-000000000042',role:'test',capabilities:['contacts']}};
+ host=await launchDsh(config,()=>true);assert.equal(await host.waitForExit(5000),true);
+ await assert.rejects(access(infoPath),{code:'ENOENT'});
+ const diagnostic=JSON.parse(await readFile(infoPath+'.startup-diagnostic.json','utf8'));
+ assert.equal(diagnostic.stage,'storage');assert.equal(diagnostic.cause,'storage_mismatch');
+ host=await launchDsh({...config,sqlite:{...config.sqlite,expectedOwnerId:ownerId}},()=>true);
+ const info=await handshake(host,infoPath),headers={Authorization:`Bearer ${info.token}`};
+ const setup=await(await fetch(`http://${info.address}/api/setup/status`,{headers})).json();assert.equal(setup.owner_id,ownerId);
+ const status=await(await fetch(`http://${info.address}/api/runtime/status`,{headers})).json();
+ assert.deepEqual(status.storageIdentity,{databaseId,ownerId,available:true});
+ const {rename,writeFile}=await import('node:fs/promises'),file=path.join(root,'managed/sqlite/notalone.sqlite'),original=file+'.original';
+ await rename(file,original);await writeFile(file,'合成替换文件',{mode:0o600});
+ try{
+  const changed=await(await fetch(`http://${info.address}/api/runtime/status`,{headers})).json();
+  assert.equal(changed.state,'running');assert.deepEqual(changed.storageIdentity,{databaseId,ownerId,available:false});
+ }finally{await rm(file);await rename(original,file);}
+ await fetch(`http://${info.address}/api/runtime/shutdown`,{method:'POST',headers});assert.equal(await host.waitForExit(5000),true);
+});
+
+test('预检已有本人在原库缺失时拒绝启动，不静默创建新本人', {timeout:10000},async t=>{
+ const root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-startup-missing-owner-')));let host;
+ t.after(async()=>{await host?.terminate();await rm(root,{recursive:true,force:true});});
+ const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test'}),databaseId=storage.status.databaseId;await storage.close();
+ const infoPath=path.join(root,'managed/sqlite-backend.info'),owner='00000000-0000-4000-8000-000000000041';
+ host=await launchDsh({nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,
+  envFilePath:path.join(root,'unused.env'),infoPath,businessHome:root,environment:{},
+  sqlite:{userData:root,expectedDatabaseId:databaseId,expectedOwnerId:owner,role:'test',capabilities:['contacts']}},()=>true);
+ assert.equal(await host.waitForExit(5000),true);await assert.rejects(access(infoPath),{code:'ENOENT'});
+ const diagnostic=JSON.parse(await readFile(infoPath+'.startup-diagnostic.json','utf8'));assert.equal(diagnostic.cause,'storage_mismatch');
+ const reopened=await SqliteStorage.open({userData:root,intent:'open',expectedDatabaseId:databaseId,role:'test'});
+ try{assert.equal(await reopened.execute('identity.resolveOwner',{proposedOwnerId:owner,at:1}),owner,'失败启动不能在空本人表插入随机身份');}
+ finally{await reopened.close();}
+});
+
 test('显式SQLite联系人使用官方DSH最小profile，认证、关闭和重开不启动PG或模型', async t => {
   const root = await realpath(await mkdtemp(path.join(tmpdir(),'notalone-sqlite-host-')));
   t.after(()=>rm(root,{recursive:true,force:true}));

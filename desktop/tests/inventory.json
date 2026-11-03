@@ -3,12 +3,12 @@
   "tests/data-lifecycle.test.mjs",
   "tests/contact-avatar.test.mjs",
   "tests/memory-source-time.test.mjs",
-    "tests/history-recertify.test.mjs",
-    "tests/message-stream.test.mjs",
-    "tests/packaging/upgrade-history-image-cli.test.mjs",
-    "tests/sqlite-first-session-regression.test.mjs",
-    "tests/history-image-message.test.mjs",
-    "tests/quarantine-controller.test.mjs",
+  "tests/history-recertify.test.mjs",
+  "tests/message-stream.test.mjs",
+  "tests/packaging/upgrade-history-image-cli.test.mjs",
+  "tests/sqlite-first-session-regression.test.mjs",
+  "tests/history-image-message.test.mjs",
+  "tests/quarantine-controller.test.mjs",
   "tests/diagnostic-export.test.mjs",
   "tests/usage/bridge.test.mjs",
   "tests/usage/controller.test.mjs",
@@ -153,7 +153,8 @@
   "tests/sqlite-source-deletion-contract.test.mjs",
   "tests/sqlite-reply-candidate-bridge.test.mjs",
   "tests/sqlite-memory-management.test.mjs",
-  "tests/incremental-sync-status.test.mjs"
+  "tests/incremental-sync-status.test.mjs",
+  "tests/backend-shutdown-confirmation.test.mjs"
  ],
  "headless": [
   "tests/usage/continuity-view.test.mjs",
@@ -197,7 +198,9 @@
   "tests/sqlite-reply-candidates.test.mjs",
   "tests/sqlite-memory-management-view.test.mjs",
   "tests/visible-refresh-view.test.mjs",
-  "tests/sync-auto-refresh-view.test.mjs"
+  "tests/sync-auto-refresh-view.test.mjs",
+  "tests/usage/connection-view.test.mjs",
+  "tests/first-frame-state-view.test.mjs"
  ],
  "isolated-http": [
   "tests/overview-reply-retrieval.test.mjs"

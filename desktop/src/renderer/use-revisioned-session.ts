@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { readInitialState } from './initial-read';
+import { initialReadError, readInitialState } from './initial-read';
 
 type RevisionedSession = { revision: number; scopeRevision: number };
 type SessionSubscription<State, Update> = {
@@ -15,11 +15,14 @@ export function useRevisionedSession<State extends RevisionedSession, Update ext
   const latest = useRef(state);
   const active = useRef(true);
   const reading = useRef(false);
+  const stateVersion = useRef(0);
   const receive = useCallback((update: State | Update) => {
     if (!active.current) return;
     const next = reduce ? reduce(latest.current, update) : update as State;
     if (!active.current || next.revision <= latest.current.revision) return;
+    stateVersion.current++;
     if (next.scopeRevision !== latest.current.scopeRevision) setError('');
+    else setError(previous => previous === initialReadError ? '' : previous);
     latest.current = next;
     setState(next);
   }, [reduce]);
@@ -30,6 +33,7 @@ export function useRevisionedSession<State extends RevisionedSession, Update ext
     reportError: setError,
     isActive: () => active.current,
     busy: reading,
+    getStateVersion: () => stateVersion.current,
   }), [bridge, receive]);
 
   useEffect(() => {

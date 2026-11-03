@@ -555,10 +555,14 @@ test('已认证的同编号文字变为系统消息时撤下旧文字，页失�
  await assert.rejects(service.synchronize(contact),{code:'history_page_invalid'});assert.deepEqual((await service.read(contact)).messages.map(m=>m.text),['合成正文2']);
 });
 test('页返回时同步已关闭，已观察的未知状态仍保护旧消息',async t=>{
- const {service,channel,saved,target,contacts}=await fixture(t);const contact=saved[0].contact_id;
- channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true});await service.synchronize(contact);
- channel.page=async()=>{await contacts.setReading(false);return {target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{status:'99',stateAssurance:'unverified',sender:'unknown',text:null})],completedPartitions:['shard-a'],exhausted:true};};
- await assert.rejects(service.synchronize(contact),{code:'read_not_authorized'});assert.equal((await service.read(contact)).messages.length,0);
+ const {service,channel,saved,target,contacts}=await fixture(t);const contact=saved[0].contact_id,other=saved[1].contact_id;
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true});await service.synchronize(contact);await service.synchronize(other);
+ channel.page=async()=>{await contacts.setReading(false);return {target:target.descriptor,cursorIn:null,cursorOut:'未接纳的后续游标',records:[record('1',{status:'99',stateAssurance:'unverified',sender:'unknown',text:null}),record('2',{text:'关闭后不得接纳的新正文'})],completedPartitions:[],exhausted:false};};
+ await assert.rejects(service.synchronize(contact),{code:'read_not_authorized'});
+ const after=await service.read(contact);assert.equal(after.messages.length,0,'已观察的未知状态撤下旧消息，迟到的新正文不能被接纳');
+ assert.equal(after.coverage.pageCount,0,'关闭后不接纳该页');assert.equal(after.coverage.cursor,null,'关闭后不推进后续游标');
+ assert.equal((await contacts.syncDirectory()).read_enabled,false,'保护旧消息不能恢复同步开关');
+ assert.equal((await service.read(other)).messages.length,1,'无关联系人合法资料保持可读');
 });
 test('失证来源影响跨联系人本人资料的实际依赖，不影响无关讨论',async t=>{
  const f=await fixture(t,{registryModule:new URL('./fixtures/history/quarantine-registry.mjs',import.meta.url).href}),[a,b]=f.saved;

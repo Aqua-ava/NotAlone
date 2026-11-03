@@ -111,7 +111,7 @@ export function UsagePanel({ bridge = window.notalone.usage, active = true }: { 
     <button className="button" disabled={state.phase === 'loading'} onClick={() => void refresh()}>
       {state.phase === 'loading' && !state.summary ? '正在读取…' : '刷新用量'}</button></header>
     {(error || state.phase === 'error') && <p role="alert">用量读取失败，请刷新重试。刷新只读取台账，不会重新调用模型。</p>}
-    {state.phase === 'offline' && <p role="status">本机服务尚未连接，连接后可刷新用量。</p>}
+    {state.phase === 'offline' && <p role="status">当前暂时无法读取用量。</p>}
     {state.summary && <UsageSummaryView summary={state.summary} />}
   </section>;
 }

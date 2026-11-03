@@ -61,7 +61,7 @@ test('未识别的 managed 存储进入维护态，即使有授权也不覆盖�
     assert.equal(created.phase, 'ready');
     assert.equal(created.code, 'sqlite_ready');
     const reopened = await new SqliteDevelopmentProbe(userData, project).run(() => true);
-    assert.equal(reopened.phase, 'ready');
+    assert.equal(reopened.phase, 'prepared');
     assert.equal(reopened.databaseId, created.databaseId);
   }
 });
@@ -88,7 +88,7 @@ test('已完成的SQLite实例重开时也阻断新出现的未识别managed存�
 
   await rm(path.dirname(legacyStore), { recursive: true, force: true });
   const reopened = await probe.run(() => true);
-  assert.equal(reopened.phase, 'ready');
-  assert.equal(reopened.code, 'sqlite_reopened');
+  assert.equal(reopened.phase, 'prepared');
+  assert.equal(reopened.code, 'sqlite_prepared');
   assert.equal(reopened.databaseId, created.databaseId);
 });

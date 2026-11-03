@@ -10,14 +10,18 @@ export function useStartupState(): { state: StartupState; error: string; retry: 
   const [error, setError] = useState('');
   const [readAttempt, setReadAttempt] = useState(0);
   const reading = useRef(false);
+  const latestRevision = useRef(-1);
+  const stateVersion = useRef(0);
   useEffect(() => {
     let active = true;
     const receive = (next: StartupState) => {
-      if (active) setState((previous) => next.revision >= previous.revision ? next : previous);
+      if (!active || next.revision < latestRevision.current) return;
+      latestRevision.current = next.revision; stateVersion.current++;
+      setError(''); setState(next);
     };
     const unsubscribe = window.notalone.startup.onStateChanged(receive);
     void readInitialState({ read: () => window.notalone.startup.getState(), receive, reportError: setError,
-      isActive: () => active, busy: reading });
+      isActive: () => active, busy: reading, getStateVersion: () => stateVersion.current });
     return () => { active = false; unsubscribe(); };
   }, [readAttempt]);
   return { state, error, retry: () => setReadAttempt((value) => value + 1) };
@@ -37,17 +41,23 @@ export function StartupReadiness({ state, backend, onConfigure, showStorageDiagn
   }
   if (state.sqlite && showStorageDiagnostics) return <section className="startup-readiness" aria-label="SQLite 存储诊断">
     <h2>SQLite 存储诊断</h2>
-    <p role={state.sqlite.phase === 'ready' ? 'status' : 'alert'}>{state.sqlite.phase === 'ready'
-      ? state.sqlite.capabilities?.includes('history') ? 'SQLite 联系人与历史消息存储已就绪。' : state.sqlite.capabilities?.includes('skills') ? 'SQLite 联系人与 Skill 管理已就绪。' : state.sqlite.capabilities?.includes('contacts') ? 'SQLite 联系人存储已就绪。' : 'SQLite 底座已就绪，业务功能尚未切换。' : 'SQLite 底座检查未通过，已有资料现场已保留。'}</p>
-    {state.sqlite.phase === 'ready' && <p>结构版本 {state.sqlite.schemaVersion} · SQLite {state.sqlite.sqliteVersion}</p>}
+    <p role={state.sqlite.phase === 'blocked' || backend?.phase === 'shutdown-failed' ? 'alert' : 'status'}>{backend?.phase === 'stopping'
+      ? '正在停止本次后台读取，资料暂不可用。' : backend?.phase === 'stopped' ? '本次后台读取已停止。'
+      : backend?.phase === 'shutdown-failed' ? '后台停读尚未获确认，请重试停读或查看诊断。'
+      : state.sqlite.phase === 'blocked' ? 'SQLite 底座检查未通过，已有资料现场已保留。'
+      : backend?.phase !== 'connected' ? backend?.phase === 'connecting' ? '已找到本机资料，正在由本机服务核验。' : '已找到本机资料，本机服务当前未连接。'
+      : state.sqlite.phase === 'prepared' ? '本机服务已连接，资料核验已完成。'
+      : state.sqlite.phase === 'ready'
+        ? state.sqlite.capabilities?.includes('history') ? 'SQLite 联系人与历史消息存储已就绪。' : state.sqlite.capabilities?.includes('skills') ? 'SQLite 联系人与 Skill 管理已就绪。' : state.sqlite.capabilities?.includes('contacts') ? 'SQLite 联系人存储已就绪。' : 'SQLite 底座已就绪，业务功能尚未切换。' : 'SQLite 底座检查未通过，已有资料现场已保留。'}</p>
+    {state.sqlite.phase === 'ready' && <p>上次核验：结构版本 {state.sqlite.schemaVersion} · SQLite {state.sqlite.sqliteVersion}</p>}
     {state.sqlite.phase === 'blocked' && <p>诊断代码：{state.sqlite.code}</p>}
-    <p>{state.sqlite.capabilities?.includes('history') ? '已开放联系人与历史消息查看；微信读取需先通过版本、状态与来源核验。' : state.sqlite.capabilities?.includes('skills') ? '当前开放联系人身份、逐人授权与 Skill 目录管理；正文同步、记忆和回复尚未开放。' : state.sqlite.capabilities?.includes('contacts') ? '当前仅开放联系人身份与逐人授权；正文同步、记忆和回复尚未开放。' : '此模式仅核验隔离存储，不开放联系人、同步、记忆或回复。'}</p>
+    {state.sqlite.phase === 'ready' && backend?.phase === 'connected' && <p>{state.sqlite.capabilities?.includes('history') ? '已开放联系人与历史消息查看；微信读取需先通过版本、状态与来源核验。' : state.sqlite.capabilities?.includes('skills') ? '当前开放联系人身份、逐人授权与 Skill 目录管理；正文同步、记忆和回复尚未开放。' : state.sqlite.capabilities?.includes('contacts') ? '当前仅开放联系人身份与逐人授权；正文同步、记忆和回复尚未开放。' : '此模式仅核验隔离存储，不开放联系人、同步、记忆或回复。'}</p>}
     <button className="button" disabled={!backend?.canRetryConnection || retrying} onClick={() => void retry()}>
       {retrying ? '正在检查…' : '重新检查存储'}
     </button>
     {error && <p role="alert">{error}</p>}
   </section>;
-  if (state.phase === 'ready') return null;
+  if (state.phase === 'ready' || backend && ['connected', 'stopping', 'stopped', 'shutdown-failed'].includes(backend.phase)) return null;
   const blocked = state.phase === 'blocked' || (backend?.phase === 'disconnected' && !!backend.errorCode);
   return <section className="startup-readiness" aria-label="启动状态">
     <h2>{blocked ? '启动遇到问题' : '正在启动 NotAlone'}</h2>

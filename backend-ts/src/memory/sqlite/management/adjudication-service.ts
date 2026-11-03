@@ -62,5 +62,5 @@ export class SqliteMemoryAdjudication {
   const result=await this.port!.invoke(request,{scope,signal,requireCurrent,claim:stage.claim,requestId:call.requestId,attemptId:call.callId,onReceipt:async receipt=>{await this.storage.execute('memoryExtraction.receipt',{receipt});}});
   await requireCurrent();await this.storage.execute('memoryAdjudication.output',{ownerId:this.ownerId,attemptId:stage.attemptId,callId:call.callId,blocks:result.blocks});return result;
  }
- close():Promise<void>{return this.closing??=(async()=>{this.stopped.abort();await Promise.allSettled([...this.pending]);await this.port?.close();})();}
+ close():Promise<void>{return this.closing??=(async()=>{this.stopped.abort();await Promise.allSettled([...this.pending]);await this.port?.close();})().catch(error=>{this.closing=undefined;throw error;});}
 }

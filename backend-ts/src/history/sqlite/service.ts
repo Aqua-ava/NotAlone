@@ -396,10 +396,10 @@ export class SqliteHistoryService {
     await check();if(guardId&&!await this.storage.execute<boolean>('history.guardCheck',{token:scope.token,guardId}))throw new StorageFailure('history_source_continuity_unverified');
     const checkpoint=resumableSlice&&(index>=31||performance.now()-sliceStarted>=1000);
     const page=await channel.page(scope,goal!.target,goal!.cursor,controller.signal,checkpoint?{checkpoint:true}:undefined);
-    await check();
-    if(checkpoint&&!page.exhausted&&!page.checkpointCursor)throw new StorageFailure('history_page_invalid');
+    // 已返回页先保护被观察为未知状态的旧资料；停读后仍不接纳新正文或推进游标。
     await this.quarantinePageStates(contactId,scope,goal!,page);
     await check();
+    if(checkpoint&&!page.exhausted&&!page.checkpointCursor)throw new StorageFailure('history_page_invalid');
     const currentReport=await inspect();
     if(serializeSupport(currentReport)!==serializeSupport(report)){
      if(isPartitionGrowthTargetChange(report,currentReport)){

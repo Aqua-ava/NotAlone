@@ -151,3 +151,29 @@ test('外键损坏与页面完整性分别核验，FK失败不能被integrity通
  assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok');db.close();
  await assert.rejects(SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id}),{code:'foreign_keys_failed'});
 });
+
+test('重开和升级先拒绝原有外键损坏，不让后续迁移掩盖损坏资料',async t=>{
+ const options={...await fixture(t),registryModule};
+ const first=await SqliteStorage.open(options),id=first.status.databaseId;await first.close();
+ const db=new DatabaseSync(databasePath(options));
+ db.exec("PRAGMA foreign_keys=OFF; INSERT INTO fact VALUES('missing','contact','invalid',NULL,'unknown',NULL)");db.close();
+ const before=await readFile(databasePath(options));
+ await assert.rejects(SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id}),{code:'foreign_keys_failed'});
+ const repairFile=join(options.userData,'invalid-repair.mjs');
+ await writeFile(repairFile,`import {registry as base} from ${JSON.stringify(registryModule)};export const registry={...base,migrations:[...base.migrations,{version:base.migrations.length+1,sql:"DELETE FROM fact WHERE owner_id='missing'"}]};`);
+ await assert.rejects(SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id,registryModule:new URL(`file://${repairFile}`).href}),{code:'foreign_keys_failed'});
+ assert.deepEqual(await readFile(databasePath(options)),before);
+});
+
+test('升级后完整性失败仍回滚，旧版本及既有资料保持可用',async t=>{
+ const options={...await fixture(t),registryModule};
+ const first=await SqliteStorage.open(options),id=first.status.databaseId;
+ await first.execute('facts.addScope',['owner','contact']);await first.close();
+ const migrationFile=join(options.userData,'invalid-check.mjs');
+ const sql="PRAGMA ignore_check_constraints=ON; INSERT INTO fact VALUES('owner','contact','invalid',NULL,'known',NULL); PRAGMA ignore_check_constraints=OFF;";
+ await writeFile(migrationFile,`import {registry as base} from ${JSON.stringify(registryModule)};export const registry={...base,migrations:[...base.migrations,{version:base.migrations.length+1,sql:${JSON.stringify(sql)}}]};`);
+ await assert.rejects(SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id,registryModule:new URL(`file://${migrationFile}`).href}),{code:'integrity_failed'});
+ const reopened=await SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id});
+ try{assert.equal(reopened.status.schemaVersion,baseRegistry.migrations.length+1);assert.deepEqual(await reopened.execute('facts.list',['owner','contact']),[]);}
+ finally{await reopened.close();}
+});

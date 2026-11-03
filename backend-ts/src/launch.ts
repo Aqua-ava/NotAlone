@@ -10,7 +10,7 @@ import type { SqliteCapabilitiesConfiguration } from './sqlite-capabilities.ts';
 import { finishStartupDiagnostic, writeStartupDiagnostic } from './startup-diagnostics.ts';
 
 export interface SqliteLaunchConfiguration extends SqliteCapabilitiesConfiguration {
-  userData: string; expectedDatabaseId: string; role: 'test'; wechatCliPath?: string;
+  userData: string; expectedDatabaseId: string; expectedOwnerId?: string; role: 'test'; wechatCliPath?: string;
 }
 export interface LaunchConfiguration {
   nodeExecutable: string; projectDirectory: string; envFilePath: string; infoPath: string;

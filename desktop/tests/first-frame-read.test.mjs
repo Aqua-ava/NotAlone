@@ -80,3 +80,15 @@ test('首帧成功后不再重复清空错误之外的状态，读取入口可�
   assert.deepEqual(f.calls.errors, ['']);
   assert.deepEqual(f.calls.received, [{ revision: 3, scopeRevision: 1 }]);
 });
+
+test('首帧读取期间已有有效状态事件时迟到失败不再报告，后续真实读取失败仍可见', async () => {
+  let rejectRead, version=0;
+  const errors=[];
+  const options={receive(){},reportError:message=>errors.push(message),isActive:()=>true,busy:{current:false},getStateVersion:()=>version};
+  const pending=readInitialState({...options,read:()=>new Promise((_,reject)=>{rejectRead=reject;})});
+  version++;
+  rejectRead(new Error('合成迟到读取失败'));
+  assert.equal(await pending,'superseded');assert.deepEqual(errors,[]);
+  assert.equal(await readInitialState({...options,read:async()=>{throw new Error('合成后续读取失败');}}),'failed');
+  assert.deepEqual(errors,[initialReadError]);
+});

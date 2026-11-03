@@ -7,7 +7,7 @@ export interface QuarantinePresentation {
   focus(): void;
   close(): Promise<void>;
 }
-type OpenSnapshot = { id: string; vault: QuarantineVault; window: QuarantinePresentation };
+type OpenSnapshot = { id: string; vault: QuarantineVault; window: QuarantinePresentation; releasing?: boolean };
 
 /** 独立窗口只持有一个隔离仓，不读取联系人、后端或生成服务。 */
 export class QuarantineController {
@@ -29,7 +29,7 @@ export class QuarantineController {
     if (this.stopping) return Promise.reject(new Error('隔离历史窗口正在关闭。'));
     return this.enqueue(async () => {
       if (this.stopping) throw new Error('隔离历史窗口正在关闭。');
-      if (this.current?.id === id) { this.current.window.focus(); return; }
+      if (this.current?.id === id && !this.current.releasing) { this.current.window.focus(); return; }
       await this.release();
       const vault = await this.library.open(id);
       let window: QuarantinePresentation;
@@ -54,10 +54,11 @@ export class QuarantineController {
   }
   private async release(): Promise<void> {
     const current = this.current;
-    this.current = undefined;
     if (current) {
-      try { await current.window.close(); }
-      finally { current.vault.close(); }
+      current.releasing = true;
+      current.vault.close();
+      await current.window.close();
+      if (this.current === current) this.current = undefined;
     }
   }
 }

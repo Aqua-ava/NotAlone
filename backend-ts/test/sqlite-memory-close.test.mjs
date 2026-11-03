@@ -2,6 +2,29 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,owner,modelPort} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
+import {SqliteMemoryDocuments} from '../src/memory/sqlite/documents/service.ts';
+import {SqliteMemoryAdjudication} from '../src/memory/sqlite/management/adjudication-service.ts';
+import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
+
+for(const [name,Service] of [['后续文档',SqliteMemoryDocuments],['记忆裁决',SqliteMemoryAdjudication]]){
+ test(`${name}关闭失败后可重试释放，已停止的业务不重新受理`,async t=>{
+  const f=await fixture(t);let closes=0;
+  const service=new Service(f.storage,owner,{prepare:async()=>{throw Error('不得调用');},invoke:async()=>{throw Error('不得调用');},close:async()=>{if(++closes===1)throw Error('合成模型释放失败');}},new ActiveHolders());
+  await assert.rejects(service.close(),/合成模型释放失败/);
+  await assert.rejects(service.publishRun('no-reopen-after-close-error'));
+  await service.close();await service.close();assert.equal(closes,2);
+ });
+ test(`${name}并发关闭共同等待释放，不把重试当作已经完成`,async t=>{
+  const f=await fixture(t),entered=Promise.withResolvers(),release=Promise.withResolvers();let closes=0;
+  const service=new Service(f.storage,owner,{prepare:async()=>{throw Error('不得调用');},invoke:async()=>{throw Error('不得调用');},close:async()=>{closes++;entered.resolve();await release.promise;}},new ActiveHolders());
+  t.after(async()=>{release.resolve();await service.close();});
+  let firstDone=false,secondDone=false;
+  const first=service.close().then(()=>{firstDone=true;});await entered.promise;
+  const second=service.close().then(()=>{secondDone=true;});await new Promise(setImmediate);
+  assert.equal(firstDone,false);assert.equal(secondDone,false);assert.equal(closes,1);
+  release.resolve();await Promise.all([first,second]);
+ });
+}
 
 test('关闭失败后沿原service重试模型释放，已停止的业务不能重新受理',async t=>{
  const f=await fixture(t);let closes=0;

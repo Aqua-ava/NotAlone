@@ -8,6 +8,11 @@ import { setSyncEnabled } from '../sync/status';
 import { isBindingIdentifier, isConversationLocator } from './validation';
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
+function savedSyncEnabled(value: unknown): boolean | undefined {
+  if (!record(value) || !Object.hasOwn(value, 'sync_enabled')) return undefined;
+  if (typeof value.sync_enabled !== 'boolean') throw new Error('同步开关不可用。');
+  return value.sync_enabled;
+}
 const selectionGeneration = (value: unknown): string | undefined => {
   if (value === undefined) return;
   if (typeof value !== 'string' || !/^(0|[1-9][0-9]{0,17})$/.test(value)) throw new Error('授权代次不可用。');
@@ -67,7 +72,7 @@ export class BindingConsentController {
   private snapshotGenerations = new Map<string, string>();
   private generation: number | undefined;
   private epoch = 0;
-  private refreshing: { operation: Operation; readSessions: boolean; promise: Promise<void> } | undefined;
+  private pendingRead: { operation: Operation; readSessions: boolean; promise: Promise<void> } | undefined;
   private readonly listeners = new Set<(state: BindingConsentState) => void>();
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
     private readonly beginReadingScopeChange: () => (() => void) = () => () => {}) {
@@ -93,19 +98,22 @@ export class BindingConsentController {
   async refreshSaved(): Promise<void> {
     await this.refreshState(false, true);
   }
-  private refreshState(readSessions: boolean, preserveSessions = false): Promise<void> {
-    if (this.state.busy) return Promise.resolve();
+  private async refreshState(readSessions: boolean, preserveSessions = false): Promise<void> {
+    if (this.state.busy) return;
     const generation = this.backend.getConnectionGeneration();
-    if (generation === undefined) return Promise.resolve();
-    // 只合并当前代次的相同只读意图；名单读取、授权写入和重连各自核验。
-    const pending = this.refreshing;
-    if (pending && this.current(pending.operation) && pending.readSessions === readSessions) return pending.promise;
+    if (generation === undefined) return;
+    const pending = this.pendingRead;
+    // 保存状态可等待已获同意的名单读取；明确名单刷新不能被普通保存状态读取替代。
+    if (pending && this.current(pending.operation) && (!readSessions || pending.readSessions)) return pending.promise;
     const operation = { generation, epoch: ++this.epoch };
+    const promise = Promise.resolve().then(() => {
+      if (this.current(operation)) return this.load(operation, readSessions, preserveSessions);
+    });
+    const reading = { operation, readSessions, promise };
+    this.pendingRead = reading;
     this.publish({ errorCode: null, notice: null });
-    const reading = { operation, readSessions, promise: this.load(operation, readSessions, preserveSessions) };
-    this.refreshing = reading;
-    void reading.promise.finally(() => { if (this.refreshing === reading) this.refreshing = undefined; });
-    return reading.promise;
+    try { await promise; }
+    finally { if (this.pendingRead === reading) this.pendingRead = undefined; }
   }
   private async load(operation: Operation, readSessions = this.state.sessionIssue !== 'not-requested', preserveSessions = false): Promise<void> {
     // 只读已保存关联时保留当前展示；明确读取名单仍显示加载状态。
@@ -121,11 +129,14 @@ export class BindingConsentController {
       this.identityProtocol = record(directory.data) && directory.data.identity_protocol === 'sqlite-selected-v1';
       let active = bindings(directory.data);
       let known = knownBindings(directory.data, active);
+      let enabled = savedSyncEnabled(directory.data);
       const list = await Promise.allSettled([
         // 启动和重连只读本机已保存状态；微信元数据须由用户明确刷新。
         readSessions ? this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-sessions', metadataConsent: true })
           : Promise.resolve({ data: { sessions: [] } }),
-        this.backend.requestJson({ method: 'GET', path: '/api/sync/status' }),
+        // 旧后台未提供目录开关时才兼容读取原报告，保留原运输预算。
+        enabled === undefined ? this.backend.requestJson({ method: 'GET', path: '/api/sync/status' })
+          : Promise.resolve({ data: { sync_enabled: enabled } }),
       ]);
       if (!this.current(operation)) return;
       let sessionList: CliSessionSummary[] = preserveSessions ? this.state.sessions : [];
@@ -145,10 +156,11 @@ export class BindingConsentController {
         const currentDirectory = await this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-bindings' });
         if (!this.current(operation)) return;
         active = bindings(currentDirectory.data); known = knownBindings(currentDirectory.data, active);
+        enabled = savedSyncEnabled(currentDirectory.data) ?? enabled;
       }
       const status = list[1].status === 'fulfilled' ? list[1].value.data : null;
       this.publish({ phase: 'ready', selectionOnly: this.identityProtocol, bindings: active, knownBindings: known, sessions: sessionList, sessionIssue,
-        syncEnabled: record(status) && typeof status.sync_enabled === 'boolean' ? status.sync_enabled : null });
+        syncEnabled: enabled ?? (record(status) && typeof status.sync_enabled === 'boolean' ? status.sync_enabled : null) });
     } catch (error) {
       if (!this.current(operation)) return;
       const unavailable = error instanceof BackendRequestFailure && error.code === 'sync_unavailable';

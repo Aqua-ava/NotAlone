@@ -21,7 +21,7 @@ export interface StartupPaths {
 }
 export interface SqliteDevelopmentState {
   capabilities?: ('contacts'|'skills'|'history'|'discussions'|'memory')[];
-  phase: 'ready' | 'blocked';
+  phase: 'prepared' | 'ready' | 'blocked';
   code: string;
   schemaVersion?: number;
   sqliteVersion?: string;

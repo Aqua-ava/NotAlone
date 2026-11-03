@@ -81,6 +81,44 @@ test('联系人保存授权自动更新，选择会话期间暂停查询，失�
   assert.ok(!(await page.evaluate(() => window.calls)).includes('list'));
 });
 
+test('收起的联系人设置不重复读取，切换联系人后首次展开才刷新', async t => {
+  const page = await mount(t, `${entry}
+    import {ContactsPage} from './src/renderer/ContactsPage';
+    const contacts=[{contactId:'a',displayName:'合成甲',messageCount:0},{contactId:'b',displayName:'合成乙',messageCount:0}];
+    let state={revision:1,scopeRevision:1,phase:'ready',selectionOnly:true,sessions:[],bindings:[],knownBindings:[],syncEnabled:false,sessionIssue:'not-requested',busy:null,errorCode:null,notice:null};
+    const listeners=new Set();window.savedReads=0;window.listReads=0;
+    window.notalone={bindings:{getState:async()=>state,onStateChanged:fn=>{listeners.add(fn);return()=>listeners.delete(fn);},
+      refreshSaved:async()=>{window.savedReads++;state={...state,revision:state.revision+1};listeners.forEach(fn=>fn(state));},refresh:async()=>{window.listReads++;}},
+      historyClear:{getState:async()=>({revision:1,contactId:null,scopeRevision:1,phase:'idle',clear:null,resync:null,busy:null,error:null}),onStateChanged:()=>()=>{},refresh:async()=>{}},
+      contactHistory:{getState:async()=>({revision:1,contactId:null,scopeRevision:1,messages:{phase:'idle',items:[],nextCursor:null},error:null}),onStateChanged:()=>()=>{}},
+      syncControl:{getState:async()=>({revision:1,scopeRevision:1,phase:'ready',report:{selectionOnly:true,enabled:false},busy:null,errorCode:null}),onStateChanged:()=>()=>{},refresh:async()=>{}}};
+    const root=createRoot(document.getElementById('root'));let scopeRevision=0;
+    window.select=id=>root.render(<ContactsPage session={{state:{contacts,selectedContactId:id,scopeRevision:++scopeRevision,directoryPhase:'ready'},refreshContacts:async()=>{}}} navigate={()=>{}}/>);
+    window.select('a');`);
+  await expect(page.getByRole('heading', { name: '合成甲', exact: true })).toBeVisible();
+  assert.equal(await page.evaluate(() => window.savedReads), 1, '目录初读只需一次，收起设置不再重复读取');
+  await page.clock.runFor(10100);
+  assert.equal(await page.evaluate(() => window.savedReads), 1);
+  await page.evaluate(() => window.select('b'));
+  await expect(page.getByRole('heading', { name: '合成乙', exact: true })).toBeVisible();
+  await page.clock.runFor(5100);
+  assert.equal(await page.evaluate(() => window.savedReads), 1, '切换联系人但未打开设置不读取全局授权');
+  const toggle = async () => {
+    const button = page.getByRole('button', { name: '同步与资料', exact: true });
+    if (!await button.isVisible()) await page.getByLabel('聊天选项', { exact: true }).click();
+    await button.click();
+  };
+  await toggle();
+  await expect(page.getByRole('region', { name: '单个联系人同步' })).toBeVisible();
+  assert.equal(await page.evaluate(() => window.savedReads), 2, '首次打开仍核对当前保存授权');
+  await page.clock.runFor(5100);
+  assert.equal(await page.evaluate(() => window.savedReads), 3, '展开期间继续更新');
+  await toggle();
+  await page.clock.runFor(10100);
+  assert.equal(await page.evaluate(() => window.savedReads), 3, '再次收起停止定时读取');
+  assert.equal(await page.evaluate(() => window.listReads), 0, '保存状态刷新不读取微信名单');
+});
+
 test('同步关闭时也自动更新总开关，查询失败才提供只读重试，不重放开关操作', async t => {
   const page = await mount(t, `${entry}
     import {SyncControlPanel} from './src/renderer/SyncControlPanel';

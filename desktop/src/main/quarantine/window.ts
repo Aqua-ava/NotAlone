@@ -22,7 +22,7 @@ export async function presentQuarantine(vault: QuarantineVault): Promise<Quarant
     if (window && !window.isDestroyed()) window.destroy();
     await viewer.close();
     await isolated.clearStorageData();
-  })();
+  })().catch(error => { stopped = undefined; throw error; });
   try {
     window = new BrowserWindow({width:880,height:720,minWidth:560,minHeight:420,show:false,
       title:'NotAlone · 未核验历史',backgroundColor:'#f7f7f4',

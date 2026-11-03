@@ -80,6 +80,62 @@ test('Skill页自动核验更新并管理启停，不提供手动核验或添加
  await expect(gentle).toContainText('新连接的合成说明');await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
+test('Skill页连接与停读阶段不误报读取失败，重复通知与旧代次结果不触发重读', {timeout:20000}, async t => {
+ const browser=await chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());const page=await browser.newPage();
+ const compiled=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
+  import React from 'react';import{createRoot}from'react-dom/client';import{SkillLearningPage}from'./src/renderer/SkillLearningPage';
+  let state={phase:'connecting',revision:0};const listeners=new Set();window.stateReads=0;window.libraryReads=[];window.settled=0;
+  window.notalone={backend:{getState:async()=>{window.stateReads++;return {...state};},onStateChanged:listener=>{listeners.add(listener);return()=>listeners.delete(listener);}},
+    skillLearning:{readLibrary:()=>new Promise((resolve,reject)=>window.libraryReads.push({resolve,reject})).finally(()=>window.settled++)}};
+  window.emit=phase=>{state={phase,revision:state.revision+1};listeners.forEach(listener=>listener(state));};
+  window.resolveLibrary=(index,generation)=>window.libraryReads[index].resolve({mode:'sqlite',connectionGeneration:generation,skills:[{
+    packageId:'synthetic',name:'synthetic',title:'合成状态场景',tags:[],description:'代次'+generation,enabledState:'enabled',verificationState:'verified',
+    verificationReason:null,headRevision:'1',currentRevisionNo:'1',revisions:[]}]});
+  createRoot(document.getElementById('root')).render(<SkillLearningPage session={{state:{selectedContactId:null,scopeRevision:0}}}/>);
+ `},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false});
+ await page.setContent('<div id="root"></div>');await page.addScriptTag({content:compiled.outputFiles[0].text});
+ await expect(page.getByRole('status')).toContainText('正在连接本机服务');
+ for(const[phase,text]of [['stopping','正在停止本次后台读取'],['stopped','本次后台读取已停止'],['shutdown-failed','后台停读尚未获确认'],['disconnected','本机服务尚未连接'],['connecting','正在连接本机服务']]){
+  await page.evaluate(phase=>window.emit(phase),phase);await expect(page.getByRole(phase==='shutdown-failed'?'alert':'status')).toContainText(text);
+  await expect(page.getByRole('button',{name:'重新读取 Skill 状态',exact:true})).toHaveCount(0);
+ }
+ assert.equal(await page.evaluate(()=>window.libraryReads.length),0);
+ await page.evaluate(()=>window.emit('connected'));await page.waitForFunction(()=>window.libraryReads.length===1);
+ await page.evaluate(()=>window.emit('connected'));assert.equal(await page.evaluate(()=>window.libraryReads.length),1);
+ assert.equal(await page.evaluate(()=>window.stateReads),1);
+ await page.evaluate(()=>{window.emit('connecting');window.emit('connected');});await page.waitForFunction(()=>window.libraryReads.length===2);
+ await page.evaluate(()=>window.resolveLibrary(1,2));const card=page.getByRole('article',{name:'回复场景：合成状态场景'});await expect(card).toContainText('代次2');
+ await page.evaluate(()=>window.resolveLibrary(0,1));await page.waitForFunction(()=>window.settled===2);await expect(card).toContainText('代次2');
+ await page.evaluate(()=>{window.emit('connecting');window.emit('connected');});await page.waitForFunction(()=>window.libraryReads.length===3);
+ await page.evaluate(()=>window.libraryReads[2].reject(new Error('合成读取失败')));
+ await expect(page.getByRole('alert')).toContainText('Skill 状态暂不可用');
+ await page.getByRole('button',{name:'重新读取 Skill 状态',exact:true}).click();await page.waitForFunction(()=>window.libraryReads.length===4);
+ await page.evaluate(()=>window.resolveLibrary(3,3));await expect(card).toContainText('代次3');await expect(page.getByRole('alert')).toHaveCount(0);
+ assert.equal(await page.evaluate(()=>window.stateReads),2);
+});
+
+test('Skill页首读失败后有效连接事件恢复，迟到首读失败不覆盖状态', {timeout:20000}, async t => {
+ const browser=await chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());
+ const compiled=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
+  import React from 'react';import{createRoot}from'react-dom/client';import{SkillLearningPage}from'./src/renderer/SkillLearningPage';
+  const listeners=new Set();window.libraryReads=0;window.stateSettled=false;
+  window.notalone={backend:{getState:()=>new Promise((resolve,reject)=>{window.rejectInitial=reject;}).finally(()=>{window.stateSettled=true;}),onStateChanged:listener=>{listeners.add(listener);return()=>listeners.delete(listener);}},
+    skillLearning:{readLibrary:()=>{window.libraryReads++;return new Promise(()=>{});}}};
+  window.emit=phase=>listeners.forEach(listener=>listener({phase}));
+  createRoot(document.getElementById('root')).render(<SkillLearningPage session={{state:{selectedContactId:null,scopeRevision:0}}}/>);
+ `},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false});
+ for(const late of [false,true]){
+  const page=await browser.newPage();await page.setContent('<div id="root"></div>');await page.addScriptTag({content:compiled.outputFiles[0].text});
+  await page.waitForFunction(()=>typeof window.rejectInitial==='function');
+  if(late)await page.evaluate(()=>window.emit('connecting'));
+  await page.evaluate(()=>window.rejectInitial(new Error('合成连接状态读取失败')));await page.waitForFunction(()=>window.stateSettled);
+  if(!late){await expect(page.getByRole('alert')).toContainText('本机连接状态暂不可用');await expect(page.getByRole('button',{name:'重新读取 Skill 状态'})).toBeVisible();await page.evaluate(()=>window.emit('connecting'));}
+  await expect(page.getByRole('status')).toContainText('正在连接本机服务');await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'重新读取 Skill 状态'})).toHaveCount(0);
+  assert.equal(await page.evaluate(()=>window.libraryReads),0);await page.close();
+ }
+});
+
 test('Skill页预加载后反复进入保留快照和筛选，不重复核对或闪加载', {timeout:20000}, async t => {
  const browser=await chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());
  const page=await browser.newPage();
@@ -107,7 +163,8 @@ test('Skill页预加载后反复进入保留快照和筛选，不重复核对或
  await page.getByRole('button',{name:'切换页面'}).click();
  await page.evaluate(()=>window.connectionChanged({phase:'disconnected',revision:3}));
  await page.getByRole('button',{name:'切换页面'}).click();await expect(card).toHaveCount(0);
- await expect(page.getByRole('alert')).toContainText('本机连接已变化');
+ await expect(page.getByRole('status')).toContainText('本机服务尚未连接');
+ await expect(page.getByRole('button',{name:'重新读取 Skill 状态'})).toHaveCount(0);
  await page.evaluate(()=>window.connectionChanged({phase:'connected',revision:4}));await expect(card).toBeVisible();
  assert.equal(await page.evaluate(()=>window.skillReads),2);
  // 超过 30 秒再进入才静默更新；当前快照仍显示，刷新失败则撤下。

@@ -61,7 +61,14 @@ function eligibility(tx: StorageTransaction, owner: string, contact: string): Re
  return Object.fromEntries(Object.entries(row).map(([k,v])=>[k,String(v)])) as unknown as ReadEligibility;
 }
 export const identityActions: StorageAction[] = [
- action('identity.resolveOwner','write',(tx,i)=>{const owners=tx.all('SELECT owner_id FROM owner');if(owners.length>1)fail('owner_ambiguous');if(owners.length)return owners[0].owner_id;tx.run('INSERT INTO owner(owner_id,created_at) VALUES(?,?)',[text(i.proposedOwnerId),i.at]);return i.proposedOwnerId;}),
+ action('identity.resolveOwner','write',(tx,i)=>{
+  const owners=tx.all('SELECT owner_id FROM owner');
+  // 已有目标的本人资格只复验；缺失或漂移不能用新身份补齐。
+  if(i.expectedOwnerId!==undefined){const expected=text(i.expectedOwnerId);if(owners.length!==1||owners[0].owner_id!==expected)fail('instance_mismatch');return owners[0].owner_id;}
+  if(owners.length>1)fail('owner_ambiguous');if(owners.length)return owners[0].owner_id;
+  if(i.createIfMissing===false)fail('instance_mismatch');
+  tx.run('INSERT INTO owner(owner_id,created_at) VALUES(?,?)',[text(i.proposedOwnerId),i.at]);return i.proposedOwnerId;
+ }),
  action('identity.initialize','write',(tx,i)=>{text(i.ownerId);tx.run('INSERT INTO owner(owner_id,created_at) VALUES(?,?) ON CONFLICT(owner_id) DO NOTHING',[i.ownerId,i.at]);return i.ownerId;}),
  action('identity.foregroundSnapshot','read',(tx,i)=>{
   const owner=text(i.ownerId),row=tx.get("SELECT read_enabled,read_epoch FROM owner WHERE owner_id=? AND state='active'",[owner]);

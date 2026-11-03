@@ -62,8 +62,7 @@ try {
     catch (error) { if (connection.isTransaction) connection.exec('ROLLBACK'); throw error; }
   };
   const verifyExisting = () => {
-    // 在任何升级、运行代次或WAL配置写入前核验已有实例。
-    checks();
+    // 先核验固定身份与结构；完整性在同一写锁快照内核验后才允许改动。
     const instance = get('SELECT * FROM database_instance WHERE slot=1');
     if (!instance || instance.database_id !== options.expectedDatabaseId || instance.role !== options.role
       || instance.format_family !== 'notalone-sqlite-v1') throw new StorageFailure('instance_mismatch');
@@ -75,7 +74,12 @@ try {
   };
   if (options.intent === 'open') verifyExisting();
   const initiallyApplied = options.intent === 'create' ? 0 : Number(get('SELECT COUNT(*) AS n FROM schema_migration')!.n);
-  const journal = get('PRAGMA journal_mode=WAL');
+  let journal = get('PRAGMA journal_mode');
+  if (journal?.journal_mode !== 'wal') {
+    // 已有非WAL库转换前仍完整核验，不能让损坏库先产生配置写入。
+    if (options.intent === 'open') checks();
+    journal = get('PRAGMA journal_mode=WAL');
+  }
   if (journal?.journal_mode !== 'wal') throw new StorageFailure('wal_unavailable');
   connection.exec('PRAGMA wal_autocheckpoint=1000; PRAGMA journal_size_limit=0;');
   const databaseId = options.intent === 'create' ? randomUUID() : options.expectedDatabaseId!;
@@ -88,7 +92,7 @@ try {
       if (get('PRAGMA foreign_keys')?.foreign_keys !== 0n) throw new StorageFailure('foreign_keys_disable_failed');
     }
     transaction(true, () => {
-      if (options.intent === 'open') verifyExisting();
+      if (options.intent === 'open') { verifyExisting(); checks(); }
       const applied = options.intent === 'create' ? 0 : Number(get('SELECT COUNT(*) AS n FROM schema_migration')!.n);
       for (const migration of registry.migrations.slice(applied)) {
         if (migration.rebuild) {
@@ -109,7 +113,8 @@ try {
       const epoch = get('SELECT epoch FROM database_instance WHERE slot=1')!.epoch as bigint;
       if (epoch >= 9223372036854775807n) throw new StorageFailure('epoch_exhausted');
       connection.prepare('UPDATE database_instance SET runtime_id=?,epoch=epoch+1,schema_digest=? WHERE slot=1').run(runtimeId, schemaDigest());
-      checks();
+      // 普通重开只更新已核验的运行租约；实际升级仍在提交前检查变更后的全库。
+      if (options.intent === 'create' || applied < registry.migrations.length) checks();
     });
   } finally {
     if (rebuildPending) {

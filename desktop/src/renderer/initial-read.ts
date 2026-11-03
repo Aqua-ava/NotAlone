@@ -3,7 +3,7 @@
 
 export const initialReadError = '状态读取失败，请重试。';
 
-export type InitialReadResult = 'received' | 'failed' | 'inactive' | 'busy';
+export type InitialReadResult = 'received' | 'failed' | 'inactive' | 'busy' | 'superseded';
 
 export type InitialReadOptions<State> = {
   read: () => Promise<State>;
@@ -11,11 +11,13 @@ export type InitialReadOptions<State> = {
   reportError: (message: string) => void;
   isActive: () => boolean;
   busy: { current: boolean };
+  getStateVersion?: () => number;
 };
 
-export function readInitialState<State>({ read, receive, reportError, isActive, busy }: InitialReadOptions<State>): Promise<InitialReadResult> {
+export function readInitialState<State>({ read, receive, reportError, isActive, busy, getStateVersion }: InitialReadOptions<State>): Promise<InitialReadResult> {
   if (busy.current) return Promise.resolve('busy');
   busy.current = true;
+  const version = getStateVersion?.();
   return read().then(
     (state) => {
       if (!isActive()) return 'inactive';
@@ -26,6 +28,7 @@ export function readInitialState<State>({ read, receive, reportError, isActive, 
     },
     () => {
       if (!isActive()) return 'inactive';
+      if (getStateVersion && getStateVersion() !== version) return 'superseded';
       reportError(initialReadError);
       return 'failed';
     },

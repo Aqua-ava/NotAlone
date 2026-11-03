@@ -55,7 +55,7 @@ export class StartupDiagnostics {
     if (!canStart() || this.closing) return;
     if (sqlite) {
       const contacts = this.sqliteDevelopment?.getContactConfiguration();
-      if (sqlite.phase === 'ready' && contacts) {
+      if ((sqlite.phase === 'ready' || sqlite.phase === 'prepared') && contacts) {
         config.sqlite = { ...contacts, ...(config.wechatCliPath ? { wechatCliPath: config.wechatCliPath } : {}) };
         config.infoPath = path.join(this.userData, 'managed/sqlite-backend.info');
         config.runtime = 'dsh';

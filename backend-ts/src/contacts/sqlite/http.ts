@@ -62,7 +62,7 @@ export class SqliteContactHttp {
     if(body.confirmed!==true||body.mode!=='selected'||typeof body.history_authorized!=='boolean'||typeof body.candidate_token!=='string')throw new StorageFailure('identity_request_invalid');
     await this.service.confirmAccount(body.candidate_token,controller.signal,reconfirmed);const d=await this.service.directory();value=setup('connected',d.account!.external_key);
    }else if(path==='/api/sync/cli-bindings'){
-    const d=await this.service.directory();value={identity_protocol:'sqlite-selected-v1',bindings:d.bindings.filter(b=>b.status==='active'),revoked_bindings:d.bindings.filter(b=>b.status==='revoked')};
+    const d=await this.service.syncDirectory();value={identity_protocol:'sqlite-selected-v1',sync_enabled:d.read_enabled,bindings:d.bindings.filter(b=>b.status==='active'),revoked_bindings:d.bindings.filter(b=>b.status==='revoked')};
    }else if(path==='/api/sync/cli-sessions'){
     // 此请求只由用户明确同意的刷新操作发出；普通状态/重开不调用它。
     if(req.headers['x-notalone-metadata-consent']!=='selected-list')throw new StorageFailure('metadata_consent_required');

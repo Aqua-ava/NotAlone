@@ -89,6 +89,14 @@ void app.whenReady().then(async () => {
   const resourcesDirectory = app.isPackaged ? process.resourcesPath : undefined;
   const diagnostics = new StartupDiagnostics(app.getPath('userData'), resourcesDirectory, development?.projectDirectory);
   const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart), resourcesDirectory);
+  if(development){
+    const startedAt=performance.now();let previousPhase:string|undefined;
+    const logPhase=(state:ReturnType<BackendHost['getState']>)=>{
+      if(state.phase===previousPhase)return;previousPhase=state.phase;
+      console.info('[notalone-dev-backend]',JSON.stringify({phase:state.phase,elapsedMs:Math.round(performance.now()-startedAt),at:new Date().toISOString()}));
+    };
+    logPhase(backend.getState());app.once('will-quit',backend.onStateChanged(logPhase));
+  }
   installUsageBridge(windows, new UsageController(backend));
   const commands = electronPageCommands(windows);
   const quarantine = new QuarantineController(new QuarantineLibrary(resolveQuarantineRoot(

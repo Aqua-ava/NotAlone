@@ -129,9 +129,10 @@ class WechatHistoryChannel implements HistoryChannel {
   this.#closed=true;
   return this.#parking=(async()=>{
    try{await this.#opening;}catch{/* 初始化失败仍须排空；不重开读者。 */}
-   try{if(this.#native&&!this.#native.stoppedReason)await this.#native.releaseSelection();}
+   // 停读标记先于进程退出确认；重试仍须等待原生关闭，不能只凭标记跳过。
+   try{if(this.#native?.stoppedReason)await this.#native.close();else await this.#native?.releaseSelection();}
    finally{await this.#lease?.release();}
-  })();
+  })().catch(error=>{this.#parking=undefined;throw error;});
  }
  close():Promise<void>{
   if(this.#closing)return this.#closing;
@@ -141,7 +142,7 @@ class WechatHistoryChannel implements HistoryChannel {
    await this.#native?.close();
    try{await this.#opening;}catch{/* 初始化失败仍须排空；不重开读者。 */}
    await this.#native?.close();
-  })();
+  })().catch(error=>{this.#closing=undefined;throw error;});
  }
 
 }

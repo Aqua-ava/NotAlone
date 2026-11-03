@@ -302,7 +302,8 @@ export class BackendHost {
     if (connection) {
       // 原自建进程仍存活时不移交另一实例；退出仍须回收本 App 已持有的运行时。
       if (this.ownedChild?.isRunning() && connection.pid !== this.ownedChild.pid) throw new BackendFailure('backend_handshake_invalid');
-      const client = new RuntimeClient(connection, config.runtime);
+      const client = new RuntimeClient(connection, config.runtime, config.sqlite?.expectedOwnerId
+        ? {databaseId: config.sqlite.expectedDatabaseId, ownerId: config.sqlite.expectedOwnerId} : undefined);
       try {
         if (await client.status() !== 'running') throw new BackendFailure('backend_connection_failed');
       } catch (error) {
@@ -330,7 +331,8 @@ export class BackendHost {
       const started = await readConnection(config.infoPath);
       if (started) {
         if (started.pid !== this.ownedChild.pid) throw new BackendFailure('backend_handshake_invalid');
-        const client = new RuntimeClient(started, config.runtime);
+        const client = new RuntimeClient(started, config.runtime, config.sqlite?.expectedOwnerId
+          ? {databaseId: config.sqlite.expectedDatabaseId, ownerId: config.sqlite.expectedOwnerId} : undefined);
         if (await client.status() !== 'running') throw new BackendFailure('backend_connection_failed');
         this.target = client;
         if (!this.closing) this.publish({ phase: 'connected', reused: false, errorCode: undefined, canRetryConnection: false });
@@ -357,7 +359,7 @@ export class BackendHost {
       return false;
     }
     try {
-      // 成功 POST 只有 stop 完成后才产生；服务可能随后关闭，不能强求第二次 GET。
+      // 客户端只有取得原实例的 stopped 确认才返回；服务可能随后退出，不再强求一次 GET。
       if (await this.target.shutdown() !== 'stopped') throw new BackendFailure('backend_shutdown_unconfirmed');
     } catch {
       try {

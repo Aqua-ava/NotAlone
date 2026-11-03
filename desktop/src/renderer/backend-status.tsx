@@ -11,14 +11,18 @@ export function useBackendState(): { state: BackendState; error: string; retry: 
   const [error, setError] = useState('');
   const [readAttempt, setReadAttempt] = useState(0);
   const reading = useRef(false);
+  const latestRevision = useRef(initial.revision);
+  const stateVersion = useRef(0);
   useEffect(() => {
     let active = true;
     const receive = (next: BackendState) => {
-      if (active) setState((previous) => next.revision >= previous.revision ? next : previous);
+      if (!active || next.revision < latestRevision.current) return;
+      latestRevision.current = next.revision; stateVersion.current++;
+      setError(''); setState(next);
     };
     const unsubscribe = window.notalone.backend.onStateChanged(receive);
     void readInitialState({ read: () => window.notalone.backend.getState(), receive, reportError: setError,
-      isActive: () => active, busy: reading });
+      isActive: () => active, busy: reading, getStateVersion: () => stateVersion.current });
     return () => { active = false; unsubscribe(); };
   }, [readAttempt]);
   return { state, error, retry: () => setReadAttempt((value) => value + 1) };
@@ -40,10 +44,11 @@ export function BackendConnectionNote({ state, startup, onDiagnose }: {
     void operation().catch(() => setActionError(message));
   };
   if (state.phase === 'connected') return null;
-  if (startup && startup.phase !== 'ready' && state.phase !== 'shutdown-failed' && !state.canRetryShutdown) return null;
+  if (startup && startup.phase !== 'ready' && !state.canRetryShutdown && (state.phase === 'connecting' || state.phase === 'disconnected')) return null;
   const failedStop = state.phase === 'shutdown-failed';
-  const title = failedStop ? '后端关闭未获确认'
-    : state.phase === 'stopping' ? '正在停止本次后台读取' : '本机服务尚未连接';
+  const title = state.phase === 'connecting' ? '正在连接本机服务' : failedStop ? '后端关闭未获确认'
+    : state.phase === 'stopping' ? '正在停止本次后台读取'
+      : state.phase === 'stopped' ? '本次后台读取已停止' : '本机服务尚未连接';
   const startupMessages: Partial<Record<NonNullable<BackendState['errorCode']>, string>> = {
     backend_startup_runtime_failed: '本机服务运行组件未能启动，请检查安装组件后重试。',
     backend_startup_configuration_failed: '本机服务启动配置未通过检查，请查看诊断并检查设置。',
@@ -51,7 +56,9 @@ export function BackendConnectionNote({ state, startup, onDiagnose }: {
     backend_startup_modules_failed: '本机服务业务模块初始化失败，请查看诊断后重试。',
     backend_startup_handshake_failed: '本机服务连接准备未完成，请查看诊断后重试。',
   };
-  const message = failedStop ? '后端关闭未获确认，请重试停读。'
+  const message = state.phase === 'connecting' ? '本机服务正在启动，完成后即可使用联系人、资料与生成。'
+      : failedStop ? '后端关闭未获确认，请重试停读。'
+      : state.phase === 'stopped' ? '后台读取已停止，联系人、资料与生成暂时不可用。'
       : state.errorCode && startupMessages[state.errorCode] ? startupMessages[state.errorCode]
       : state.errorCode === 'backend_handshake_invalid' ? '本机服务连接信息无效，请检查后重试。'
         : state.errorCode === 'backend_connection_failed' ? '本机服务连接失败，请重试。'

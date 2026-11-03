@@ -17,7 +17,7 @@ function syncReport(enabled) { return { sync_mode: 'cli_background', sync_enable
   foreground_phase: enabled ? 'unavailable' : 'sync_disabled', cli_bound_count: 0 }; }
 
 function fixture({ withBinding = false, revokeFails = false, sqlite = false, initiallyEnabled = false,
-  enableFails = false, confirmBarrier } = {}) {
+  enableFails = false, confirmBarrier, lightweightStatus = false, beforeRead } = {}) {
   let snapshotNumber = 0;
   let generation, listener;
   let enabled = initiallyEnabled;
@@ -34,6 +34,7 @@ function fixture({ withBinding = false, revokeFails = false, sqlite = false, ini
       requests.push(request);
       const { path } = request;
       calls.push(path);
+      if (beforeRead) await beforeRead(request);
       if (path === '/api/sync/cli-bindings/revoke') {
         if (revokeFails) throw new Error('合成撤销失败');
         active = []; revoked = [{ ...binding, status: 'revoked' }];
@@ -50,7 +51,7 @@ function fixture({ withBinding = false, revokeFails = false, sqlite = false, ini
         return { generation, data: syncReport(enabled) };
       }
       const data = path === '/api/setup/status' ? { runtime_owner_configured: true }
-        : path === '/api/sync/cli-bindings' ? { bindings: active, revoked_bindings: revoked, ...(sqlite ? { identity_protocol: 'sqlite-selected-v1' } : {}) }
+        : path === '/api/sync/cli-bindings' ? { bindings: active, revoked_bindings: revoked, ...(sqlite ? { identity_protocol: 'sqlite-selected-v1' } : {}), ...(lightweightStatus ? { sync_enabled: enabled } : {}) }
         : path === '/api/sync/cli-sessions' ? { ...(sqlite ? { snapshot_token: `snapshot-${++snapshotNumber}` } : {}), sessions: [{ username: 'wxid_synthetic', display_name: '合成联系人', last_timestamp: null, bound_contact_id: null, ...(sqlite ? { selection_generation: snapshotNumber === 1 ? '0' : '2', known_contact_id: null } : {}) }] }
         : syncReport(enabled);
       return { generation, data };
@@ -80,6 +81,54 @@ test('启动、重连和新宿主不主动读取微信会话，仍加载已保�
     assert.equal(controller.getState().sessionIssue, 'not-requested');
     assert.equal(calls.filter((path) => path === '/api/sync/cli-bindings').length, 2);
   }
+});
+
+test('授权目录携带开关时不读取全量历史报告，明确名单刷新仍保留同意边界', async () => {
+  for (const initiallyEnabled of [false, true]) {
+    const f = fixture({ sqlite: true, lightweightStatus: true, initiallyEnabled });
+    await f.connect(1);
+    await f.controller.refreshSaved();
+    assert.equal(f.controller.getState().syncEnabled, initiallyEnabled);
+    assert.equal(f.calls.filter(path => path === '/api/sync/status').length, 0);
+    assert.equal(f.calls.filter(path => path === '/api/sync/cli-sessions').length, 0);
+    await f.controller.refresh();
+    assert.equal(f.calls.filter(path => path === '/api/sync/status').length, 0);
+    assert.equal(f.requests.filter(request => request.path === '/api/sync/cli-sessions' && request.metadataConsent === true).length, 1);
+  }
+});
+
+test('授权目录非法开关保持失败，不借旧报告猜测或额外查询', async () => {
+  for (const initiallyEnabled of [null, 'true', 1]) {
+    const f = fixture({ sqlite: true, lightweightStatus: true, initiallyEnabled });
+    await f.connect(1);
+    assert.equal(f.controller.getState().phase, 'failed');
+    assert.equal(f.controller.getState().syncEnabled, null);
+    assert.equal(f.calls.filter(path => path === '/api/sync/status').length, 0);
+  }
+});
+
+test('已保存授权并行读取只合并同代次，重连及明确名单读取不复用旧请求', async t => {
+  let hold = false;
+  const releases = [];
+  const f = fixture({ sqlite: true, lightweightStatus: true, beforeRead: request => {
+    if (hold && request.path === '/api/sync/cli-bindings') return new Promise(resolve => releases.push(resolve));
+  } });
+  t.after(() => { hold = false; for (const release of releases) release(); });
+  await f.connect(1);f.calls.length = 0;hold = true;
+  const first = f.controller.refreshSaved();await new Promise(resolve => setImmediate(resolve));
+  const second = f.controller.refreshSaved();await new Promise(resolve => setImmediate(resolve));
+  assert.equal(releases.length, 1, '同代次保存状态读取须等待同一请求');
+  await f.connect(2);
+  assert.equal(releases.length, 2, '重连必须另读新代次');
+  const explicit = f.controller.refresh();await new Promise(resolve => setImmediate(resolve));
+  assert.equal(releases.length, 3, '明确名单刷新不能被保存状态请求吞掉');
+  const duringExplicit = f.controller.refreshSaved();await new Promise(resolve => setImmediate(resolve));
+  assert.equal(releases.length, 3, '后台保存状态刷新不打断用户已同意的名单读取');
+  hold = false;releases[2]();await Promise.all([explicit,duringExplicit]);
+  const accepted = f.controller.getState();
+  releases[0]();releases[1]();await Promise.all([first,second]);await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(f.controller.getState(), accepted, '迟到旧请求不能覆盖明确名单结果');
+  assert.equal(f.calls.filter(path => path === '/api/sync/cli-sessions').length, 1);
 });
 
 test('明确刷新才读取微信列表，重连后清除旧列表且不自动再读取', async () => {

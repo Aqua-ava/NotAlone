@@ -154,5 +154,5 @@ export class SqliteMemoryDocuments {
  }
  readTask(taskId:string){return this.storage.execute<any>('memoryDocuments.readTask',{ownerId:this.ownerId,taskId});}
  read(scope:MemoryScope){return this.storage.execute<any>('memoryDocuments.read',{ownerId:this.ownerId,scope});}
- close():Promise<void>{return this.closing??=(async()=>{this.stop.abort();await Promise.allSettled([...this.pending]);await this.model?.close?.();})();}
+ close():Promise<void>{return this.closing??=(async()=>{this.stop.abort();await Promise.allSettled([...this.pending]);await this.model?.close?.();})().catch(error=>{this.closing=undefined;throw error;});}
 }

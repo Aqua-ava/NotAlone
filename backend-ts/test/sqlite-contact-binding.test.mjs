@@ -173,7 +173,12 @@ test('认证HTTP按旧页面合同读回选择及撤销，缺同意/跨owner字�
  assert.equal((await request('/api/sync/cli-bindings/confirm',{...body,owner_id:'other-owner'})).status,400);
  assert.equal((await request('/api/sync/cli-bindings/confirm',{...body,history_authorized:false})).status,400);
  assert.equal((await request('/api/sync/cli-bindings/confirm',body)).status,200);
- const binding=(await request('/api/sync/cli-bindings')).body.bindings[0];
+ const saved=(await request('/api/sync/cli-bindings')).body;
+ assert.equal(saved.sync_enabled,false,'保存授权目录直接提供当前开关，不需查询全量历史报告');
+ const binding=saved.bindings[0];
+ await service.setReading(true);
+ assert.equal((await request('/api/sync/cli-bindings')).body.sync_enabled,true);
+ await service.setReading(false);
  assert.equal((await request('/api/contacts')).body.contacts.length,1);
  assert.equal((await request('/api/sync/cli-bindings/revoke',{contact_id:binding.contact_id,binding_id:binding.binding_id,expected_selection_generation:binding.selection_generation})).status,200);
  const manual=await request(`/api/contacts/${binding.contact_id}/manual-confirmation`,{});assert.equal(manual.status,200);assert.equal(manual.body.confirmed,true);

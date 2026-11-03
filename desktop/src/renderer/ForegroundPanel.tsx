@@ -10,15 +10,19 @@ export function useForegroundState(bridge: ForegroundBridge, enabled: boolean): 
   const [error, setError] = useState('');
   const [readAttempt, setReadAttempt] = useState(0);
   const reading = useRef(false);
+  const latestRevision = useRef(initialForegroundState.revision);
+  const stateVersion = useRef(0);
   useEffect(() => {
     if (!enabled) return;
     let active = true;
     const receive = (next: ForegroundState) => {
-      if (active) setState((previous) => next.revision >= previous.revision ? next : previous);
+      if (!active || next.revision < latestRevision.current) return;
+      latestRevision.current = next.revision; stateVersion.current++;
+      setError(''); setState(next);
     };
     const unsubscribe = bridge.onStateChanged(receive);
     void readInitialState({ read: () => bridge.getState(), receive, reportError: setError,
-      isActive: () => active, busy: reading });
+      isActive: () => active, busy: reading, getStateVersion: () => stateVersion.current });
     return () => { active = false; unsubscribe(); };
   }, [bridge, enabled, readAttempt]);
   return { state, error, retry: () => setReadAttempt((value) => value + 1) };

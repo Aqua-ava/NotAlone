@@ -31,13 +31,11 @@ export function createLocalEmbeddingLifecycle(
   const modelFor=async():Promise<LocalEmbedding>=>{
     if(closed)throw new EmbeddingUnavailableError(new Error('embedding_host_closed'));
     if(model)return model;
-    opening??=open().then(async value=>{
-      if(!closed){
-        model=value;
-        return value;
-      }
-      await value.close();
-      throw new EmbeddingUnavailableError(new Error('embedding_host_closed'));
+    opening??=open().then(value=>{
+      // 迟到的模型也交给关闭路径释放；失败时保留引用供明确重试。
+      model=value;
+      if(closed)throw new EmbeddingUnavailableError(new Error('embedding_host_closed'));
+      return value;
     }).finally(()=>{opening=undefined;});
     return opening;
   };
@@ -53,8 +51,8 @@ export function createLocalEmbeddingLifecycle(
       closed=true;
       while(opening||active.size)await Promise.allSettled([...(opening?[opening]:[]),...active]);
       const current=model;
-      model=undefined;
       await current?.close();
-    })(),
+      model=undefined;
+    })().catch(error=>{closing=undefined;throw error;}),
   };
 }

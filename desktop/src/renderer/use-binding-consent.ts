@@ -17,14 +17,16 @@ export function useBindingConsent(contacts: ContactSessionView) {
   const [revocation, setRevocation] = useState<BindingSummary | null>(null);
   const active = useRef(true);
   const reading = useRef(false);
+  const stateVersion = useRef(0);
   const receive = useCallback((next: BindingConsentState) => {
     if (!active.current || next.revision < latest.current.revision) return;
+    stateVersion.current++; setReadError('');
     if (next.scopeRevision !== latest.current.scopeRevision) { setSelection({}); setRevocation(null); setError(''); }
     latest.current = next; setState(next);
   }, []);
   const retryRead = useCallback(() => readInitialState({
     read: () => window.notalone.bindings.getState(), receive, reportError: setReadError,
-    isActive: () => active.current, busy: reading,
+    isActive: () => active.current, busy: reading, getStateVersion: () => stateVersion.current,
   }), [receive]);
   useEffect(() => {
     active.current = true;
