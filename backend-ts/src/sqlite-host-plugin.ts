@@ -172,9 +172,10 @@ export async function apply(ctx: Context) {
       await checkpointCache.initialize();
       history=new SqliteHistoryService(storage,contacts,createHistoryChannel,deletionHolders,
         (contactId,messageId,kind)=>{events?.publish(`message.${kind}`,contactId,{message_id:messageId});if(automaticBackground)memory?.wake(contactId);},contactId=>{if(automaticImages)imageSync?.wake(contactId);if(automaticBackground)quoteSync?.wake(contactId);},wechat);
-      firstHistory=new FirstHistoryCoordinator(contacts,history);
+      const syncDirectory={directory:contacts.syncDirectory.bind(contacts)};
+      firstHistory=new FirstHistoryCoordinator(syncDirectory,history);
       history.setFirstHistoryWake(contactId=>{if(automaticBackground)firstHistory?.wakeContact(contactId);});
-      incremental=new IncrementalHistoryCoordinator(contacts,history,{firstHistoryManagedExternally:true});
+      incremental=new IncrementalHistoryCoordinator(syncDirectory,history,{firstHistoryManagedExternally:true});
       // 开启/重选只唤醒合法读取；关闭/取消/退出由 readStop 停止后续查询并等待在途释放。
       contacts.setReadStart(()=>{if(automaticImages)imageSync?.wake();if(automaticBackground){firstHistory!.wake();incremental!.wake();quoteSync?.wake();memory?.wake();}});
     }

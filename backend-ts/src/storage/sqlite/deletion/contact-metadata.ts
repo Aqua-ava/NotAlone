@@ -84,6 +84,7 @@ export class ContactMetadataLifetime {
   async eligibility(contactId:string){return (await this.current()).eligibility(contactId);}
   async validate(token:ReadEligibility){return (await this.current()).validate(token);}
   async directory(){return (await this.current()).directory();}
+  async syncDirectory(){return (await this.current()).syncDirectory();}
   async foregroundSnapshot(){return (await this.current()).foregroundSnapshot();}
   async confirmForeground(proof:import('../../../foreground/sqlite-foreground.ts').ForegroundBindingConfirmation){await (await this.current()).confirmForeground(proof);}
   async syncStatus(){await this.current();return this.http!.syncStatus();}

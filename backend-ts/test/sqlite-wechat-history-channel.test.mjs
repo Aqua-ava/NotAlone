@@ -293,15 +293,20 @@ test('共享历史进程串行同步两位联系人，切回重验且正文与�
  await f.history.stop();await f.shared.stop();noProcess(pid);
 });
 
-test('八位联系人共享原生读取器并通过普通定时轮转持续保存后续消息，不停在被替换快照', {timeout:15000}, async t=>{
+for(const contactCount of [8,32])test(`${contactCount}位联系人共享原生读取器并通过普通定时轮转持续保存后续消息，不停在被替换快照`, {timeout:30000}, async t=>{
  t.mock.timers.enable({apis:['setInterval']});
- const cleanup=[],f=await fixture({after:callback=>cleanup.push(callback)},true,{},8);
- const first=new FirstHistoryCoordinator(f.contacts,f.history),incremental=new IncrementalHistoryCoordinator(f.contacts,f.history,{intervalMs:30_000,firstHistoryManagedExternally:true});
+ const cleanup=[],f=await fixture({after:callback=>cleanup.push(callback)},true,{},contactCount);
+ const calls={coverage:0,directory:0,syncDirectory:0},started=performance.now();
+ for(const [target,method,label]of [[f.history,'coverage','coverage'],[f.contacts,'directory','directory'],[f.contacts,'syncDirectory','syncDirectory']]){const original=target[method].bind(target);target[method]=(...args)=>{calls[label]++;return original(...args);};}
+ const directory={directory:()=>f.contacts.syncDirectory()};
+ let first=new FirstHistoryCoordinator(directory,f.history);const initial=first,incremental=new IncrementalHistoryCoordinator(directory,f.history,{intervalMs:30_000,firstHistoryManagedExternally:true});
  f.history.setFirstHistoryWake(contactId=>first.wakeContact(contactId));
- t.after(async()=>{await incremental.close();await first.close();for(const callback of cleanup.reverse())await callback();});
+ t.after(async()=>{await incremental.close();await first.close();if(first!==initial)await initial.close();for(const callback of cleanup.reverse())await callback();});
  const caps=Object.fromEntries([...statusCapabilityKeys,'incrementalTail','durableIncremental'].map(key=>[key,'supported']));
  await f.setPlan({capabilities:caps,resumeCursor:'synthetic-resume'});
- first.wake();await first.waitForIdle();incremental.start();
+ first.wake();await first.waitForIdle();
+ // 模拟启动时已经有complete持久覆盖；新协调器仍须按定点唤醒公平轮转。
+ first=new FirstHistoryCoordinator(directory,f.history);first.wake();await first.waitForIdle();incremental.start();
  for(let round=1;round<=2;round++){
   const text=`合成轮转新消息${round}`;
   const resumeRows=[{partition:'d'.repeat(64),table:'c'.repeat(64),localId:String(10+round),serverId:'0',sender:'contact',kind:'text',text,originalType:'1',sentAt:String(1700000000000+round*1000),timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:'verified'}];
@@ -314,7 +319,10 @@ test('八位联系人共享原生读取器并通过普通定时轮转持续保�
    assert.equal(result.messages.filter(message=>message.text===text).length,1,'同一来源轮转不得重复入库');
   }
  }
- assert.equal((await requests(f.logFile)).filter(row=>row.op==='resolve').length>=16,true,'多个正常tick实际轮转全部联系人');
+ assert.equal((await requests(f.logFile)).filter(row=>row.op==='resolve').length>=contactCount*2,true,'多个正常tick实际轮转全部联系人');
+ t.diagnostic(JSON.stringify({contacts:contactCount,elapsedMs:performance.now()-started,...calls}));
+ assert.equal(calls.directory,0,'协调器不得为了授权目录反复统计聊天正文');
+ assert.ok(calls.coverage<=contactCount*12,'定点唤醒不应随联系人数量平方放大覆盖查询');
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
