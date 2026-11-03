@@ -12,6 +12,7 @@ const bundle = await build({ stdin: { contents: `
  export { ForegroundPanel } from './src/renderer/ForegroundPanel';
  export { foregroundObservation } from './src/main/foreground/observation';
  export { BackendRequestFailure } from './src/main/backend/json-client';
+ export { ContactSession } from './src/main/contacts/session';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false,
  banner: { js: `import { createRequire } from 'node:module'; const require = createRequire(${JSON.stringify(path.join(process.cwd(), 'package.json'))});` } });
 const dir = await mkdtemp(path.join(tmpdir(), 'notalone-manual-resume-'));
@@ -85,75 +86,66 @@ test('未知后端错误仅发布固定识别服务失败，不泄漏任意原�
  assert.doesNotMatch(panel, /private_internal_error|传输失败|连接中断/);
 });
 
-test('权限恢复通知后台清除旧阻断，手动模式下不启动前台采集', async t => {
+test('权限恢复在小窗获焦时不采集，显式选人不增加暂停模式', async t => {
  const f=fixture(t),calls=[];
- await f.enterManual();
+ f.foreground.notifyHelperLifecycle('focused'); await f.enterManual();
  f.setObservation(async request=>{calls.push(request.path);return {generation:1,data:{ok:true}};});
  await f.foreground.screenPermissionRestored();
  assert.deepEqual(calls,['/api/sync/foreground/permission-restored']);
- assert.equal(f.foreground.getState().manualInput,true);
+ assert.equal(f.foreground.getState().confirmation,'manual-confirmed');
+ assert.equal(Object.hasOwn(f.foreground.getState(),'manualInput'),false);
 });
 
-test('手动确认后通过公开恢复按钮退出手动模式，保留草稿与聚焦暂停', async t => {
+test('显式选择只确认本次联系人，保留草稿并在离开小窗后立即继续观察', async t => {
  const f = fixture(t); f.foreground.startContinuous(); f.foreground.notifyHelperLifecycle('focused');
  await f.enterManual(); assert.equal(f.isManual(), true);
- let pending;
- const session = { state: f.state, resumeForeground: revision => {
-  pending = f.bridge.resume({ ...f.selection(), foregroundRevision: revision }); return pending; } };
- const panel = ports.ForegroundPanel({ state: f.foreground.getState(), session, manualInput: false });
- const resume = buttons(panel).find(button => button.props.children === '恢复微信会话识别');
- assert.ok(resume, '回应消息界面应提供可点击恢复入口');
- resume.props.onClick(); await pending;
- assert.equal(f.roles.get('foreground:resume'), 'helper');
- assert.equal(f.foreground.getState().manualInput, false);
- assert.equal(f.foreground.getGenerationBlock(), 'foreground-confirmation-required');
- assert.equal(f.isManual(), false);
+ const panel = ports.ForegroundPanel({ state: f.foreground.getState(), session: { state: f.state } });
+ assert.doesNotMatch(JSON.stringify(panel), /手动输入模式|恢复微信会话识别|切换为手动输入/);
+ assert.match(JSON.stringify(panel), /本次联系人已由你选择.*切回微信后自动识别/);
+ assert.equal(f.foreground.getGenerationBlock(), null);
  assert.equal(f.state.draft, '保留的合成草稿'); assert.equal(f.state.selectedContactId, id);
  assert.equal(f.scheduled.size, 0, '助手获焦时不能启动观察');
  f.foreground.notifyHelperLifecycle('blurred'); assert.equal(f.scheduled.size, 1);
+ assert.equal(f.scheduled.values().next().value.delayMs, 0, '无需恢复操作即可立即复查');
+ assert.equal(f.roles.has('foreground:resume'), false);
+ assert.equal('resume' in f.bridge, false);
 });
 
-test('受管模式和改写输入均可主动恢复识别，过期确认不得恢复', async t => {
- const f = fixture(t); await f.enterManual();
- for (const options of [{ manualRelease: true }, { manualInput: true }]) {
-  const panel = ports.ForegroundPanel({ state: f.foreground.getState(), session: { state: f.state }, ...options });
-  assert.equal(buttons(panel).some(button => button.props.children === '恢复微信会话识别'), true);
- }
- for (const change of [{ contactScopeRevision: 0 }, { foregroundRevision: -1 },
-   { contactId: '20000000-0000-4000-8000-000000000002' }, { extra: true }]) {
-  await assert.rejects(f.bridge.resume({ ...f.selection(), ...change }));
-  assert.equal(f.foreground.getState().manualInput, true); assert.equal(f.isManual(), true);
+test('过期或越界的本次联系人选择不能取得资格', async t => {
+ for (const change of [{ scopeRevision: 0 }, { contactId: '20000000-0000-4000-8000-000000000002' }, { extra: true }]) {
+  const f = fixture(t);
+  await assert.rejects(f.handlers.get('contacts:confirm-manual')({ contactId: id, scopeRevision: 1, ...change }));
+  assert.notEqual(f.foreground.getGenerationBlock(), null);
+  assert.equal(f.isManual(), false);
  }
 });
 
-test('恢复后丢弃手动确认前的在途观察，不沿用旧生成资格', async t => {
+test('显式选择丢弃此前在途观察，不把迟到结果当成新的微信识别', async t => {
  const f = fixture(t); let resolve;
  f.setObservation(() => new Promise(done => { resolve = done; }));
  const old = f.foreground.observeBeforeShow(); await f.enterManual();
- await f.bridge.resume(f.selection());
  resolve({ generation: 1, data: { observation_id: id, observed_at: new Date().toISOString(),
   phase: 'confirmed', reason: 'confirmed_active_binding', probe_available: true,
   wechat_in_front: true, binding_id: id, contact_id: id } });
  await old;
- assert.equal(f.foreground.getState().manualInput, false);
  assert.equal(f.foreground.getState().recognizedName, null);
- assert.equal(f.foreground.getGenerationBlock(), 'foreground-confirmation-required');
+ assert.equal(f.foreground.getState().confirmation, 'manual-confirmed');
+ assert.equal(f.foreground.getGenerationBlock(), null);
+ assert.equal(f.isManual(), true, '迟到的旧观察不得清除用户后来的明确选择');
 });
 
-
-test('前台识别说明等待微信或同步关闭，保留切回手动入口', () => {
+test('等待微信或同步关闭时说明实际状态，不提供模式切换按钮', () => {
  const session = {state:{selectedContactId:id, contacts:[]}};
  for (const [reason, expected] of [['wechat_not_in_front', '等待微信切到前台'], ['sync_disabled', '同步总开关已关闭']]) {
   const panel = ports.ForegroundPanel({state:{phase:'paused', reason}, session});
   assert.match(JSON.stringify(panel), new RegExp(expected));
-  assert.ok(buttons(panel).some(button => button.props.children === '切换为手动输入'));
+  assert.doesNotMatch(JSON.stringify(buttons(panel)), /切换为手动输入|恢复微信会话识别/);
  }
 });
 
-
-test('恢复后微信可靠观察授予资格，进入助手暂停采集但仍可使用该联系人', async t => {
+test('选人后微信可靠观察授予资格，进入助手暂停采集但仍可使用该联系人', async t => {
  const f = fixture(t); f.foreground.startContinuous(); f.foreground.notifyHelperLifecycle('focused');
- await f.enterManual(); await f.bridge.resume(f.selection());
+ await f.enterManual();
  let observations = 0;
  f.setObservation(async () => { observations += 1; return { generation: 1, data: {
   observation_id: id, observed_at: new Date().toISOString(), phase: 'confirmed',
@@ -196,7 +188,7 @@ test('群聊暂停进入助手再离开后立即复查私聊，重复失焦不�
 });
 
 
-test('真正离开助手也保留技术失败退避与手动模式门禁', async t => {
+test('真正离开助手保留技术失败退避，显式选人不停止后续观察', async t => {
  const f = fixture(t); f.foreground.startContinuous();
  f.setObservation(async () => ({ generation: 1, data: { observation_id: id,
   observed_at: new Date().toISOString(), phase: 'unavailable', reason: 'probe_timeout',
@@ -206,7 +198,8 @@ test('真正离开助手也保留技术失败退避与手动模式门禁', async
  assert.equal(f.scheduled.values().next().value.delayMs, 4000);
  f.foreground.notifyHelperLifecycle('focused'); await f.enterManual();
  f.foreground.notifyHelperLifecycle('blurred');
- assert.equal(f.scheduled.size, 0, '手动输入仍不观察');
+ assert.equal(f.scheduled.size, 1, '显式选人后仍安排观察');
+ assert.equal(f.scheduled.values().next().value.delayMs, 4000, '选人不绕过已有技术失败退避');
 });
 
 test('OCR预热只暂缓本轮，不留下人工确认门', async t => {
@@ -314,11 +307,16 @@ test('当前完整绑定核验成功可恢复歧义、超时和不可用的混�
  }
 });
 
-test('明确手动输入模式不会因自动识别成功而退出', async t => {
+test('显式选人不停止微信识别，新鲜成功自动接管同一联系人的归属', async t => {
  for (const confirmedReason of ['confirmed_active_binding', 'confirmed_active_binding_name_match', 'confirmed_active_binding_emoji_fallback']) {
   const f = fixture(t); await f.enterManual();
   let calls = 0; f.setObservation(async () => { ++calls; return observationResponse('confirmed', confirmedReason, id); });
-  await f.foreground.observeBeforeShow(); assert.equal(calls, 0); assert.equal(f.foreground.getState().manualInput, true);
+  await f.foreground.observeBeforeShow();
+  assert.equal(calls, 1, '选过联系人后仍须读取新的正式观察');
+  assert.equal(f.foreground.getState().confirmation, 'verified-binding');
+  assert.equal(f.foreground.getGenerationBlock(), null);
+  assert.equal(f.isManual(), false, '自动成功后不继续携带手动确认通道标记');
+  assert.equal(Object.hasOwn(f.foreground.getState(), 'manualInput'), false);
  }
 });
 
@@ -370,4 +368,49 @@ test('离开群聊后等待重新识别时不再把旧群聊当成当前会话',
  const panel = JSON.stringify(ports.ForegroundPanel({ state, session: { state: f.state } }));
  assert.match(panel, /等待微信切到前台/);
  assert.doesNotMatch(panel, /群聊暂不支持/);
+});
+
+
+test('显式选人后的识别失败撤销本次资格与宿主标记，后续新鲜成功可恢复', async t => {
+ for (const [phase, reason] of [['unavailable', 'probe_timeout'], ['manual-required', 'ambiguous_requires_selection'], ['paused', 'group_chat_unsupported'], ['paused', 'sync_disabled']]) {
+  const f=fixture(t); await f.enterManual();
+  f.setObservation(async()=>observationResponse(phase,reason));
+  await f.foreground.observeBeforeShow();
+  assert.notEqual(f.foreground.getGenerationBlock(),null,reason);
+  assert.equal(f.isManual(),false,reason);
+  f.setObservation(async()=>observationResponse('confirmed','confirmed_active_binding',id));
+  await f.foreground.observeBeforeShow();
+  assert.equal(f.foreground.getState().confirmation,'verified-binding');
+  assert.equal(f.foreground.getGenerationBlock(),null);
+ }
+});
+
+test('真实联系人会话在显式选人后继续跟随，旧观察不覆盖新选择或留下其他人的确认标记', async t => {
+ const otherId='20000000-0000-4000-8000-000000000002';
+ const contacts=new ports.ContactSession(async()=>({generation:1,contacts:[id,otherId].map(contactId=>({contactId,displayName:'合成联系人',messageCount:0,sourceCount:0}))}));
+ contacts.setConnection(1); await contacts.refreshContacts();
+ const manual=new Set(),handlers=new Map(); let read;
+ const backend={getConnectionGeneration:()=>1,onStateChanged:()=>()=>{},
+  confirmManualInput:contactId=>manual.add(contactId),clearManualInput:contactId=>manual.delete(contactId),
+  requestJson:async request=>request.path.endsWith('/manual-confirmation')?{generation:1}:read()};
+ const foreground=ports.installForegroundBridge({handle:(name,handler)=>handlers.set(name,handler),publish(){}},backend,contacts);
+ t.after(()=>foreground.dispose());
+ const choose=contactId=>handlers.get('contacts:confirm-manual')({contactId,scopeRevision:contacts.getState().scopeRevision});
+ await choose(id); assert.deepEqual([...manual],[id]);
+ let release; read=()=>new Promise(resolve=>{release=resolve;});
+ const old=foreground.observeBeforeShow();
+ await choose(otherId);
+ assert.deepEqual([...manual],[otherId],'切换明确选择时清除前一人的通道标记');
+ release(observationResponse('confirmed','confirmed_active_binding',id)); await old;
+ assert.equal(contacts.getState().selectedContactId,otherId);
+ assert.equal(foreground.getState().confirmation,'manual-confirmed');
+ read=async()=>observationResponse('confirmed','confirmed_active_binding',id);
+ await foreground.observeBeforeShow();
+ assert.equal(contacts.getState().selectedContactId,id,'下一轮新鲜微信观察自动更新联系人');
+ assert.equal(foreground.getState().confirmation,'verified-binding');
+ assert.deepEqual([...manual],[],'自动切换后不能保留任一旧选择的通道标记');
+ await choose(otherId);
+ const finish=foreground.beginReadingScopeChange(); finish();
+ assert.equal(foreground.getGenerationBlock(),'foreground-confirmation-required');
+ assert.deepEqual([...manual],[],'读取范围失效同步清除宿主标记');
 });

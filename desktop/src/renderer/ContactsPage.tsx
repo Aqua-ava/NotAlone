@@ -82,7 +82,7 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
       <ContactHistoryClear session={session} />
       <div className="contact-management-shortcuts">
         <button className="button" onClick={() => navigate('memory')}>查看关系资料</button>
-        <button className="button primary" onClick={() => { void session.confirmManualContact(selected.contactId).then((confirmed) => { if (confirmed) return window.notalone.openHelper(); }); }}>手动输入本次聊天</button>
+        <button className="button primary" onClick={() => { void session.confirmManualContact(selected.contactId).then((confirmed) => { if (confirmed) return window.notalone.openHelper(); }); }}>为这位联系人打开助手</button>
       </div>
     </>} /></div>}
     {session.error && <p className="contacts-note" role="alert">{session.error}</p>}

@@ -19,7 +19,6 @@ export interface ForegroundState {
   wechatInFront: boolean | null;
   suspendedByHelperFocus: boolean;
   unsupportedConversation: boolean;
-  manualInput?: boolean;
   confirmation: 'required' | 'manual-confirmed' | 'verified-binding';
   confirmedContactId: string | null;
   suggestedContactId: string | null;
@@ -35,6 +34,5 @@ export const initialForegroundState: ForegroundState = Object.freeze({
 export interface ForegroundBridge {
   getState(): Promise<ForegroundState>;
   confirm(selection: ForegroundConfirmation): Promise<ContactSessionState>;
-  resume(selection: ForegroundConfirmation): Promise<ForegroundState>;
   onStateChanged(listener: (state: ForegroundState) => void): () => void;
 }

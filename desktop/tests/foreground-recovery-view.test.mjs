@@ -12,7 +12,7 @@ async function fixture(t) {
     import { ForegroundPanel, useForegroundState } from './src/renderer/ForegroundPanel';
     import { useContactSession, HelperContactPicker } from './src/renderer/contact-session';
     import { initialForegroundState } from './src/shared/foreground-bridge';
-    let contacts = { revision: 1, scopeRevision: 1, directoryPhase: 'ready', contacts: [{ contactId: 'contact-a', displayName: '合成联系人', messageCount: 0, sourceCount: 0 }], selectedContactId: 'contact-a', draft: '' };
+    let contacts = { revision: 1, scopeRevision: 1, directoryPhase: 'ready', contacts: [{ contactId: 'contact-a', displayName: '合成联系人', messageCount: 0, sourceCount: 0 }, { contactId: 'contact-b', displayName: '另一位合成联系人', messageCount: 0, sourceCount: 0 }], selectedContactId: 'contact-a', draft: '' };
     let foreground = { ...initialForegroundState, revision: 1, foregroundRevision: 1, phase: 'manual-required', reason: 'unmatched_requires_selection', recognizedName: '合成联系人', recognitionConfidence: .98, observedAt: new Date().toISOString(), wechatInFront: true };
     const contactListeners = new Set(), foregroundListeners = new Set();
     window.publishForeground = update => { foreground = { ...foreground, ...update, revision: foreground.revision + 1, foregroundRevision: foreground.foregroundRevision + 1 }; for (const fn of foregroundListeners) fn(foreground); };
@@ -21,7 +21,7 @@ async function fixture(t) {
     window.errorCode = 'foreground_confirmation_stale'; window.deferConfirmation = false;
     window.notalone = {
       contacts: { getState: async () => contacts, onStateChanged: fn => { contactListeners.add(fn); return () => contactListeners.delete(fn); },
-        confirmManualContact: async selection => { window.manualSelections.push(selection); window.publishScope(selection.contactId); window.publishForeground({ manualInput: true, confirmation: 'manual-confirmed', generationBlock: null }); return contacts; } },
+        confirmManualContact: async selection => { window.manualSelections.push(selection); window.publishScope(selection.contactId); window.publishForeground({ phase: 'idle', reason: 'contact_selected', confirmation: 'manual-confirmed', confirmedContactId: selection.contactId, generationBlock: null }); return contacts; } },
       foreground: { getState: async () => foreground, onStateChanged: fn => { foregroundListeners.add(fn); return () => foregroundListeners.delete(fn); },
         confirm: async () => { if (window.deferConfirmation) await new Promise(resolve => window.finishConfirmation = resolve); throw new Error(window.errorCode); } },
     };
@@ -74,13 +74,33 @@ test('未取得确认凭据说明当前证据不足，不误报已过期', async
   assert.doesNotMatch(await page.getByLabel('确认错误').textContent(), /已过期|重新打开小窗/);
 });
 
-test('匹配不唯一时可直接手选已有联系人，不依赖旧读取授权或桌面回执', async t => {
+test('匹配不唯一时直接选择本次联系人，保留自动跟随且无需切换模式', async t => {
   const page = await fixture(t);
   await page.evaluate(() => { window.publishScope(null); window.publishForeground({ reason: 'ambiguous_requires_selection' }); });
   await expect(page.getByRole('status').first()).toContainText('选择');
   await page.getByRole('combobox', { name: '本次联系人' }).click();
   await page.getByRole('option', { name: '合成联系人', exact: true }).click();
-  await expect(page.getByRole('status').first()).toContainText('本次联系人已由你确认');
+  await expect(page.getByRole('status').first()).toContainText('本次联系人已由你选择；切回微信后自动识别当前会话');
+  await expect(page.getByRole('status').first()).not.toContainText('已识别');
+  await expect(page.getByRole('button', { name: '恢复微信会话识别', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '切换为手动输入', exact: true })).toHaveCount(0);
+  await expect(page.getByText('手动输入模式', { exact: false })).toHaveCount(0);
   assert.deepEqual(await page.evaluate(() => window.manualSelections), [{ contactId: 'contact-a', scopeRevision: 2 }]);
   await expect(page.getByLabel('确认错误')).toBeEmpty();
+  await page.evaluate(() => window.publishForeground({ phase: 'unavailable', reason: 'probe_timeout', recognizedName: null,
+    confirmation: 'required', confirmedContactId: null, generationBlock: 'foreground-confirmation-required' }));
+  await expect(page.getByText('正式探针执行超时，等待自动重试；也可在上方选择本次联系人')).toBeVisible();
+  await expect(page.getByRole('combobox', { name: '本次联系人' })).toHaveValue('合成联系人');
+  await expect(page.getByText('当前联系人未确认；以下保留内容属于合成联系人，请明确选择后再生成。')).toBeVisible();
+  await expect(page.getByText('本次联系人已由你选择', { exact: false })).toHaveCount(0);
+  await page.evaluate(() => {
+    window.publishScope('contact-b');
+    window.publishForeground({ phase: 'confirmed', reason: 'confirmed_active_binding_name_match', confirmation: 'verified-binding', generationBlock: null,
+      confirmedContactId: 'contact-b', recognizedName: '另一位合成联系人', recognitionConfidence: .30, observedAt: new Date().toISOString() });
+  });
+  await expect(page.getByRole('combobox', { name: '本次联系人' })).toHaveValue('另一位合成联系人');
+  await expect(page.getByRole('status').first()).toContainText('已识别');
+  await expect(page.getByText('已按会话名称匹配到配置账号的已有联系人。')).toBeVisible();
+  await expect(page.getByText('本次联系人已由你选择', { exact: false })).toHaveCount(0);
+  assert.equal(await page.evaluate(() => window.manualSelections.length), 1, '新的可靠观察不需要再次手选或点击恢复');
 });

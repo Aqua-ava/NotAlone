@@ -211,7 +211,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 - 数据隔离键为 `owner_id + contact_id`；`contact_id` 由 NotAlone 创建，昵称、备注和微信来源标识不能替代它。
 - 记忆输入按 [ADR-153](adr/153-joint-text-image-memory-input.md)共同使用聊天文字与实际图片；记忆正文与检索表示仍为文字，前台名称OCR及独立转写保留各自用途。
 - Mac 前台 OCR 按 ADR-052 仅识别顶部 display name，再按 ADR-076／132 结合有界全类型会话元数据、唯一已知私聊及已有稳定绑定匹配联系人；CLI 独立同步用户主动选择并确认的联系人及我方文字增量，首次不预选会话。CLI 的外部会话标识不能替代 `contact_id`，同步范围与停止/恢复规则见 ADR-030。
-- 持续前台定位按 ADR-050 采用每轮单帧，进入助手或其他 App 后暂停；一个助手窗口按联系人恢复输入和编辑，切换不取消原生成。约束见[正式规格](../.scratch/foreground-contact-follow/spec.md)，实施进度统一见[任务索引](../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录；任务关闭不表示其他渠道或交付任务已通过验收。ADR-049 的双帧复查仅保留为历史决定。
+- 持续前台定位按 ADR-050 采用每轮单帧，进入助手或其他 App 后暂停；按 [ADR-158](adr/158-contact-selection-keeps-foreground-follow.md)，显式选人仅确认本次归属，不停止自动跟随，不提供独立模式或恢复开关；一个助手窗口按联系人恢复输入和编辑，切换不取消原生成。约束见[正式规格](../.scratch/foreground-contact-follow/spec.md)，实施进度统一见[任务索引](../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录；任务关闭不表示其他渠道或交付任务已通过验收。ADR-049 的双帧复查仅保留为历史决定。
 - 生成只使用已选联系人及用户本人范围内的有界上下文；模型提取的记忆必须带来源、标记 `auto` 且可撤销。
 - 正常自动记忆按 ADR-070 与 [ADR-085](adr/085-source-verified-automatic-adoption.md) 使用逐项来源核验，通过适用检查后自动裁决，不以额外语用、置信度或风险标签转入人工待办。来源、人工保护、删除及 ADR-081 的关系矛盾待定例外保持；旧评测结果不因此变成达标。
 - 记忆处理按 [ADR-152](adr/152-history-and-incremental-memory-processing.md)区分历史与增量：历史导入完成后自动分批处理，已有旧文字积压纳入历史；增量仍按[ADR-143](adr/143-hybrid-memory-processing-schedule.md)安排 read_goal.kind=incremental；新文字先持久保存为待处理，联系人静默 10 分钟、待处理 50 条或最早待处理 6 小时后可启动 L1，且同联系人两次增量 L1 启动至少相隔 30 分钟。有效正式记忆变化从首个变化起合并 1 小时触发 L2；主题正文变化后 L3 同范围最多每 24 小时启动一次，首次有效主题正文允许初始化。L2/L3 延迟不阻止独立到期的 L1；采纳策略、来源核验与完整集合发布合同不变。实现及合成验收见[验证记录](../docs/verification/hybrid-memory-scheduling-20261101.md)；该记录只证明原增量调度，新增历史自动处理与积压恢复的实际结果单独核验。
@@ -278,3 +278,5 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 156. [ADR-156：授权范围内自动补查全部图片](adr/156-automatic-image-reconciliation.md)（已实现，真实全量受读取认证限制）
 
 157. [ADR-157：Skill 业务身份与可迁移物理定位分离](adr/157-portable-skill-directory-identity.md)
+
+158. [ADR-158：显式选择联系人后继续前台跟随](adr/158-contact-selection-keeps-foreground-follow.md)（已采纳，实现与验收单独记录）

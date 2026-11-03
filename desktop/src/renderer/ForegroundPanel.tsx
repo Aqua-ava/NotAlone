@@ -24,14 +24,8 @@ export function useForegroundState(bridge: ForegroundBridge, enabled: boolean): 
   return { state, error, retry: () => setReadAttempt((value) => value + 1) };
 }
 
-export function ForegroundPanel({ state, session, permission, manualRelease = false, manualInput = false }: { state: ForegroundState; session?: ContactSessionView; permission?: ScreenPermissionView; manualRelease?: boolean; manualInput?: boolean }) {
-  if (state.manualInput || manualRelease || manualInput) return <section aria-label="手动输入联系人确认"><p role="status">手动输入模式 · {state.manualInput && state.confirmation === 'manual-confirmed' ? '本次联系人已由你确认' : '请明确选择本次联系人'}</p>
-    <p>粘贴内容只用于本次候选与助手讨论，不会自动成为长期关系记忆。消息由你亲自发送。</p>
-    {(!state.manualInput || state.generationBlock) && session?.state.selectedContactId && <button onClick={() => void session.confirmManualContact(session.state.selectedContactId!)}>确认手动输入联系人</button>}
-    {state.manualInput && session?.state.selectedContactId && <button
-      onClick={() => void session.resumeForeground(state.foregroundRevision)}>恢复微信会话识别</button>}
-    {session?.error && <p role="alert">{session.error}</p>}
-  </section>;
+export function ForegroundPanel({ state, session, permission }: { state: ForegroundState; session?: ContactSessionView; permission?: ScreenPermissionView }) {
+  const selectionConfirmed = state.confirmation === 'manual-confirmed' && state.generationBlock === null;
   const failure = foregroundFailureReason(state.reason);
   const paused = state.phase === 'paused' || state.suspendedByHelperFocus && state.phase !== 'unavailable';
   const currentGroup = isUnsupportedForegroundConversation(state.reason);
@@ -42,31 +36,31 @@ export function ForegroundPanel({ state, session, permission, manualRelease = fa
     : state.reason === 'probe_warmup_timeout' ? '微信 OCR 引擎准备超时，正在等待下一次重试'
     : (state.phase === 'manual-required' || state.phase === 'unavailable' && state.unsupportedConversation) && failure
       && !['unmatched_requires_selection', 'ambiguous_requires_selection', 'manual_confirmation_required'].includes(state.reason ?? '')
-      ? `${failure.message}；切回微信后会自动重试，也可切换为手动输入`
+      ? `${failure.message}；切回微信后会自动重试，也可在上方选择本次联系人`
     : state.unsupportedConversation ? '正在重新识别当前会话，请保持微信窗口在前台'
     : state.reason === 'unmatched_requires_selection' ? '当前会话未匹配到已确认绑定，请在上方选择联系人'
     : paused ? '前台定位已暂停' : state.phase === 'observing' ? '正在定位前台会话'
     : state.phase === 'confirmed' ? '已识别采集时的微信会话'
-    : state.phase === 'manual-required' ? (state.recognizedName ? '已读到微信会话，请选择对应联系人' : '请手动确认本次联系人')
+    : state.phase === 'manual-required' ? (state.recognizedName ? '已读到微信会话，请选择对应联系人' : '请在上方选择本次联系人')
     : state.phase === 'unavailable' && isTransientForegroundContextChange(state.reason)
       ? '微信前台或窗口发生变化，等待重新识别'
     : state.phase === 'unavailable' && state.reason === 'foreground_observation_busy'
       ? '本轮观察繁忙，等待重新识别'
     : state.phase === 'unavailable' && state.reason === 'foreground_application_unavailable'
-      ? '系统前台状态未知，请手动选择本次联系人'
+      ? '系统前台状态未知，等待自动重试；也可在上方选择本次联系人'
     : state.phase === 'unavailable' && state.reason === 'screen_capture_permission_missing'
       ? '缺少屏幕录制权限，授权后可重新识别微信会话'
     : state.phase === 'unavailable' && failure && ['foreground_scope_unavailable', 'foreground_observation_unavailable', 'observation_unavailable', 'observation_timeout'].includes(state.reason ?? '')
       ? failure.message
-    : state.phase === 'unavailable' && failure ? `${failure.message}，请手动选择本次联系人`
-    : state.phase === 'unavailable' ? '前台定位暂不可用，请手动选择联系人' : '前台定位尚未观察';
+    : state.phase === 'unavailable' && failure ? `${failure.message}，等待自动重试；也可在上方选择本次联系人`
+    : state.phase === 'unavailable' ? '前台定位暂不可用，等待自动重试；也可在上方选择联系人' : '前台定位尚未观察';
   return <section aria-label="前台会话定位">
-    <p role="status">{message}</p>
+    <p role="status">{selectionConfirmed ? '本次联系人已由你选择；切回微信后自动识别当前会话。' : message}</p>
+    {selectionConfirmed && (failure || state.phase === 'unavailable' || currentGroup) && <p>{message}</p>}
     {state.reason === 'sync_disabled' && <p>请在管理后台的“同步设置”开启已有授权范围的同步，再回到微信会话。</p>}
-    {session?.state.selectedContactId && <button onClick={() => void session.confirmManualContact(session.state.selectedContactId!)}>切换为手动输入</button>}
     {permission && (state.reason === 'screen_capture_permission_missing' || permission.state.phase === 'missing')
       && <ScreenPermissionPanel view={permission} compact />}
-    {!paused && !state.unsupportedConversation && state.recognizedName && <p>
+    {!selectionConfirmed && !paused && !state.unsupportedConversation && state.recognizedName && <p>
       微信会话：{state.recognizedName}
       {state.recognitionConfidence !== null && <small> · 识别置信度 {Math.round(state.recognitionConfidence * 100)}%</small>}
     </p>}
@@ -78,14 +72,13 @@ export function ForegroundPanel({ state, session, permission, manualRelease = fa
       onClick={() => void session.confirmManualContact(session.state.selectedContactId!)}>
       确认本次联系人
     </button>}
-    {state.confirmation === 'manual-confirmed' && <p>本次联系人已由你确认。</p>}
     {state.confirmation === 'verified-binding' && <p>已按会话名称匹配到配置账号的已有联系人。</p>}
     {(state.reason === 'confirmed_active_binding_name_match' || state.reason === 'confirmed_active_binding_emoji_fallback')
       && <p>上方是原始 OCR 分数；低分本身不阻止名单中的唯一匹配。</p>}
-    {(state.phase === 'confirmed' || state.suggestedContactId || state.recognizedName) && state.observedAt && <p>
+    {!selectionConfirmed && (state.phase === 'confirmed' || state.suggestedContactId || state.recognizedName) && state.observedAt && <p>
       识别结果对应 <time dateTime={state.observedAt}>{new Date(state.observedAt).toLocaleTimeString('zh-CN', { hour12: false })}</time> 采集时的会话；之后的切换可能尚未反映。
     </p>}
-    {session && state.suggestedContactId && <p>
+    {!selectionConfirmed && session && state.suggestedContactId && <p>
       采集时的微信会话对应{session.state.contacts.find((item) => item.contactId === state.suggestedContactId)?.displayName}，已有编辑已保留。
       <button onClick={() => void session.confirmManualContact(state.suggestedContactId!)}>
         确认微信会话对应联系人
@@ -93,5 +86,6 @@ export function ForegroundPanel({ state, session, permission, manualRelease = fa
     </p>}
     {session?.error && <p role="alert">{session.error}</p>}
     {state.suspendedByHelperFocus && <p>小窗在前台，暂停新的前台定位；已确认范围的后台同步独立运行。</p>}
+    <p>粘贴内容只用于本次候选与助手讨论，不会自动成为长期关系记忆。消息由你亲自发送。</p>
   </section>;
 }

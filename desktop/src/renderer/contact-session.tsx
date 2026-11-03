@@ -43,26 +43,14 @@ export function useContactSession() {
     } catch (error) {
       if (active.current && latestForegroundRevision.current === foregroundRevision && latest.current.scopeRevision === contactScopeRevision) {
         const message = error instanceof Error && error.message.includes('foreground_binding_required')
-        ? '当前联系人没有与本次微信观察一致的有效绑定，请到同步设置重新确认会话，或切换为手动输入。'
+        ? '当前联系人没有与本次微信观察一致的有效绑定，请到同步设置重新确认会话，或在上方选择本次联系人。'
         : error instanceof Error && error.message.includes('foreground_confirmation_unavailable')
-        ? '尚未取得可确认的微信会话，请切回目标私聊等待自动识别，或切换为手动输入。'
+        ? '尚未取得可确认的微信会话，请切回目标私聊等待自动识别，或在上方选择本次联系人。'
         : error instanceof Error && error.message.includes('foreground_confirmation_stale')
         ? '微信识别结果已过期，请切回目标私聊等待自动重新识别，再选择联系人。'
         : '联系人确认已失效，请重新选择本次联系人。';
         setConfirmationError({ message, foregroundRevision, scopeRevision: contactScopeRevision });
       }
-    }
-  }
-
-  async function resumeForeground(foregroundRevision: number) {
-    const { selectedContactId, scopeRevision } = latest.current;
-    if (!selectedContactId) return;
-    try {
-      await window.notalone.foreground.resume({ contactId: selectedContactId,
-        contactScopeRevision: scopeRevision, foregroundRevision });
-      if (active.current) setError('');
-    } catch {
-      if (active.current) setError('微信会话识别暂时无法恢复，请重新选择本次联系人。');
     }
   }
 
@@ -89,12 +77,12 @@ export function useContactSession() {
     } catch { if (active.current) setError('本次联系人未确认，请刷新目录后重新选择。'); return false; }
   }
 
-  return { state, error, retryRead: retry, selectContact, confirmContact, confirmManualContact, resumeForeground, setDraft, refreshContacts };
+  return { state, error, retryRead: retry, selectContact, confirmContact, confirmManualContact, setDraft, refreshContacts };
 }
 
 export type ContactSessionView = ReturnType<typeof useContactSession>;
 
-export function HelperContactPicker({ session, foreground }: { session: ContactSessionView; foreground?: ForegroundState; manualRelease?: boolean; manualInput?: boolean }) {
+export function HelperContactPicker({ session, foreground }: { session: ContactSessionView; foreground?: ForegroundState }) {
   // 用户明确选择只确认本次表达对象，不依赖前台回执，也不恢复微信读取授权。
   return <ContactPicker session={session} disabled={!foreground} onSelect={session.confirmManualContact} />;
 }

@@ -60,13 +60,13 @@ export class ForegroundController {
       const generation = backend.getConnectionGeneration();
       if (generation === this.generation) return;
       this.generation = generation; this.syncPermit = undefined; ++this.captureAuthorityRevision;
-      this.qualification = undefined;
+      this.clearQualification();
       this.invalidatePending();
       this.clearObservation('unavailable', 'connection_changed'); this.scheduleNext();
     }), contacts.onStateChanged((state) => {
       if (state.scopeRevision !== this.scopeRevision) {
         this.scopeRevision = state.scopeRevision;
-        this.qualification = undefined;
+        this.clearQualification();
         if (!this.selectingObservedContact) {
           ++this.captureAuthorityRevision;
           this.invalidatePending(); this.clearObservation('idle', 'contact_changed');
@@ -103,7 +103,7 @@ export class ForegroundController {
     const generation = this.backend.getConnectionGeneration();
     const observed = this.state.observedAt;
     const capturedAt = Date.parse(observed ?? '');
-    if (!this.continuous || this.disposed || this.stopped || this.state.manualInput || this.state.suspendedByHelperFocus
+    if (!this.continuous || this.disposed || this.stopped || this.state.suspendedByHelperFocus
       || this.readingScopeChanges > 0 || generation === undefined || !this.syncPermit
       || this.syncPermit.generation !== generation
       || !['ready', 'loading'].includes(contact.directoryPhase) || this.state.wechatInFront !== true
@@ -119,6 +119,11 @@ export class ForegroundController {
       else this.changePending = false;
     });
   }
+  // 只清除宿主本次确认标记，不删除历史请求所依赖的确认记录。
+  private clearQualification(): void {
+    if (this.qualification?.kind === 'manual-confirmed') this.backend.clearManualInput(this.qualification.contactId);
+    this.qualification = undefined;
+  }
   getGenerationBlock(): GenerationBlock {
     const contact = this.contacts.getState();
     const qualified = this.qualification;
@@ -131,33 +136,17 @@ export class ForegroundController {
     const generation = this.backend.getConnectionGeneration();
     if (this.disposed || this.stopped || generation === undefined) throw new Error('本次联系人确认不可用。');
     this.cancelScheduled(); this.invalidatePending(); ++this.epoch; ++this.captureAuthorityRevision;
+    this.clearQualification();
     const selected = this.contacts.selectContact(selection);
-    this.state = { ...this.state, manualInput: true, unsupportedConversation: false };
+    this.backend.confirmManualInput(selection.contactId, generation);
+    this.state = { ...this.state, unsupportedConversation: false };
     this.qualification = { generation, scopeRevision: selected.scopeRevision, contactId: selection.contactId, kind: 'manual-confirmed' };
-    this.publish({ phase: 'paused', reason: 'manual_input', recognizedName: null, recognitionConfidence: null,
-      observedAt: null, suggestedContactId: null, wechatInFront: null, probeAvailable: null });
+    this.confirmationObservation = undefined;
+    this.publish({ phase: this.state.suspendedByHelperFocus ? 'paused' : 'idle', reason: 'contact_selected',
+      recognizedName: null, recognitionConfidence: null, observedAt: null,
+      suggestedContactId: null, wechatInFront: null, probeAvailable: null });
+    this.scheduleNext();
     return selected;
-  }
-  // 仅由 helper 的明确恢复操作调用，不授予联系人或桌面会话资格。
-  resume(selection: ForegroundConfirmation): ForegroundState {
-    const contact = this.contacts.getState();
-    const generation = this.backend.getConnectionGeneration();
-    if (this.disposed || this.stopped || !this.state.manualInput || this.readingScopeChanges > 0
-      || generation === undefined || generation !== this.generation
-      || selection.foregroundRevision !== this.state.foregroundRevision
-      || selection.contactScopeRevision !== contact.scopeRevision
-      || selection.contactId !== contact.selectedContactId || contact.directoryPhase !== 'ready') {
-      throw new Error('前台识别恢复已失效，请重新选择本次联系人。');
-    }
-    this.cancelScheduled(); this.invalidatePending(); ++this.epoch;
-    this.qualification = undefined;
-    this.backend.clearManualInput(selection.contactId);
-    this.state = { ...this.state, manualInput: false };
-    // 恢复宿主已有观察调度，不把手动输入确认转换成桌面会话资格。
-    this.clearObservation(this.state.suspendedByHelperFocus ? 'paused' : 'idle',
-      this.state.suspendedByHelperFocus ? 'helper_focused' : null);
-    this.scheduleNext(); this.updateChangeSource();
-    return this.getState();
   }
   // 异步核验绑定前后均检查同一身份，过时操作不能读取或确认新范围。
   checkConfirmation(selection: ForegroundConfirmation): number {
@@ -187,7 +176,6 @@ export class ForegroundController {
     const contact = this.contacts.getState();
     this.invalidatePending(); ++this.epoch; ++this.captureAuthorityRevision;
     const selected = this.contacts.selectContact({ contactId: selection.contactId, scopeRevision: contact.scopeRevision });
-    this.state = { ...this.state, manualInput: false };
     this.qualification = { generation, scopeRevision: selected.scopeRevision, contactId: selection.contactId, kind: 'manual-confirmed' };
     this.publish({ foregroundRevision: this.state.foregroundRevision + 1, suggestedContactId: null,
       observedAt: null, wechatInFront: null, recognizedName: null, recognitionConfidence: null });
@@ -203,11 +191,11 @@ export class ForegroundController {
   }
   // 仅可信宿主的无身份变化提示；真实失败的退避不受事件风暴影响。
   notifyForegroundChange(): void {
-    if (!this.continuous || this.disposed || this.stopped || this.state.manualInput || this.state.suspendedByHelperFocus
+    if (!this.continuous || this.disposed || this.stopped || this.state.suspendedByHelperFocus
       || this.readingScopeChanges > 0 || this.backend.getConnectionGeneration() === undefined) return;
     this.measure('change_received');
     // 顶部变化只撤销旧生成资格，不携带或授予新联系人身份。
-    this.qualification = undefined;
+    this.clearQualification();
     this.publish({ foregroundRevision: this.state.foregroundRevision + 1 });
     if (this.flight) { this.changePending = true; this.measure('change_queued'); return; }
     if (this.failures > 0) return;
@@ -216,7 +204,7 @@ export class ForegroundController {
   }
   stopContinuous(): void {
     this.continuous = false; this.stopped = true;
-    this.cancelScheduled(); this.qualification = undefined;
+    this.cancelScheduled(); this.clearQualification();
     this.invalidatePending('paused'); ++this.epoch;
     this.clearObservation('paused', 'observation_stopped');
   }
@@ -225,7 +213,7 @@ export class ForegroundController {
     this.scheduled = undefined;
   }
   private scheduleNext(): void {
-    if (!this.continuous || this.disposed || this.flight || this.state.manualInput || this.state.suspendedByHelperFocus
+    if (!this.continuous || this.disposed || this.flight || this.state.suspendedByHelperFocus
       || this.readingScopeChanges > 0 || this.scheduled !== undefined) return;
     // 周期观察间隔2秒；真正离开助手可立即复查，技术失败仍退避至最多8秒。
     const delay = this.refreshAfterHelperFocus && this.failures === 0 ? 0 : Math.min(8000, 2000 * 2 ** this.failures);
@@ -249,7 +237,7 @@ export class ForegroundController {
     await this.observeBeforeShow();
   }
   observeBeforeShow(): Promise<void> {
-    if (this.disposed || this.stopped || this.state.manualInput || this.state.suspendedByHelperFocus) return Promise.resolve();
+    if (this.disposed || this.stopped || this.state.suspendedByHelperFocus) return Promise.resolve();
     if (this.readingScopeChanges > 0) {
       this.clearObservation('manual-required', 'reading_scope_changed'); return Promise.resolve();
     }
@@ -301,19 +289,20 @@ export class ForegroundController {
         || (observation.phase === 'manual-required' && observation.reason === 'unmatched_requires_selection');
       const unsupportedConversation = isUnsupportedForegroundConversation(observation.reason)
         || (this.state.unsupportedConversation && !privateVerified);
-      // 失败撤销当轮资格；新的完整绑定核验可独立恢复。明确手动模式在观察入口停采。
+      // 失败撤销当轮资格；显式选择不停止观察，新的完整绑定核验可独立恢复。
       if (unsupportedConversation || observation.phase === 'manual-required'
-        || observation.phase === 'unavailable' || observation.reason === 'sync_disabled') this.qualification = undefined;
+        || observation.phase === 'unavailable' || observation.reason === 'sync_disabled') this.clearQualification();
       this.state = { ...this.state, unsupportedConversation };
       // 消费前先废弃flight，内部选择不能把已消费的观察当异步旧结果。
       ++this.epoch;
       let changedContact = false;
       if (observation.contactId) {
+        this.clearQualification();
         const contact = this.contacts.getState();
         changedContact = contact.selectedContactId !== observation.contactId;
         if (contact.directoryPhase !== 'ready'
           || !contact.contacts.some((item) => item.contactId === observation.contactId)) {
-          this.qualification = undefined;
+          this.clearQualification();
           this.clearObservation('manual-required', 'contact_unavailable'); return;
         }
         this.selectingObservedContact = true;
@@ -395,13 +384,14 @@ export class ForegroundController {
   }
   private invalidateReadingScope(): void {
     ++this.captureAuthorityRevision;
-    this.qualification = undefined;
+    this.clearQualification();
     this.invalidatePending(); ++this.epoch;
     this.clearObservation('manual-required', 'reading_scope_changed');
   }
   dispose(): void {
     if (this.disposed) return;
     this.changeSource?.dispose(); this.changeSource = undefined; this.changePending = false;
+    this.clearQualification();
     this.cancelScheduled(); this.disposed = true; ++this.epoch; this.flight?.abort.abort();
     this.confirmationObservation = undefined;
     clearTimeout(this.nameExpiry); this.nameExpiry = undefined;
@@ -411,7 +401,7 @@ export class ForegroundController {
   }
   private clearObservation(phase: ForegroundState['phase'], reason: string | null): void {
     if (reason !== 'helper_focused') this.confirmationObservation = undefined;
-    if (phase === 'manual-required' || phase === 'unavailable') this.qualification = undefined;
+    if (phase === 'manual-required' || phase === 'unavailable') this.clearQualification();
     this.publish({ phase, reason, observedAt: null, probeAvailable: null, wechatInFront: null,
       recognizedName: null, recognitionConfidence: null,
       foregroundRevision: this.state.foregroundRevision + 1, suggestedContactId: null });

@@ -114,7 +114,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await settings.getByRole('button', { name: '清空聊天', exact: true }).click();
   await expect(settings.getByRole('dialog', { name: '确认清空聊天' })).toBeVisible();
   await settings.getByRole('button', { name: '取消', exact: true }).click();
-  await settings.getByRole('button', { name: '手动输入本次聊天', exact: true }).focus();
+  await settings.getByRole('button', { name: '为这位联系人打开助手', exact: true }).focus();
   await page.keyboard.press('Escape');
   await expect(settings).toBeHidden();
   await expect(settingsButton).toBeFocused();

@@ -49,14 +49,11 @@ export function installForegroundBridge(commands: PageCommands, backend: Backend
     controller.desktopConfirmation(confirmation);
     const data = response.data;
     if (!data || typeof data !== 'object' || Object.keys(data).length !== 1 || !('confirmed' in data) || data.confirmed !== true) {
-      throw new Error('微信绑定暂时无法核验，请重试或切换为手动输入。');
+      throw new Error('微信绑定暂时无法核验，请重试或明确选择本次联系人。');
     }
     const selected = controller.confirm(confirmation);
     backend.clearManualInput(confirmation.contactId);
     return selected;
-  }, 'helper');
-  commands.handle('foreground:resume', (...args: unknown[]) => {
-    return controller.resume(confirmationArguments(args));
   }, 'helper');
   commands.handle('contacts:confirm-manual', async (...args: unknown[]) => {
     const selection = selectionArguments(args);
@@ -66,7 +63,6 @@ export function installForegroundBridge(commands: PageCommands, backend: Backend
     const response = await backend.requestJson({ method: 'POST', path: `/api/contacts/${selection.contactId}/manual-confirmation`, body: {}, maxResponseBytes: 4096 });
     if (response.generation !== generation || backend.getConnectionGeneration() !== generation
       || selection.scopeRevision !== contacts.getState().scopeRevision) throw new Error('联系人选择已失效。');
-    backend.confirmManualInput(selection.contactId, generation);
     return controller.confirmManual(selection);
   });
   return controller;
