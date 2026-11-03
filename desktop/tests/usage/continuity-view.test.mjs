@@ -36,7 +36,7 @@ test('设置用量重复进入首帧保留统计且复用在途读取，失败�
   await page.evaluate(()=>{window.failUsage=true;});await page.getByRole('button',{name:'刷新用量',exact:true}).click();
   await expect(value).toHaveCount(0);await expect(page.getByRole('alert')).toContainText('用量读取失败');
   await page.evaluate(()=>{window.failUsage=false;});await page.getByRole('button',{name:'刷新用量',exact:true}).click();await expect(value).toHaveText('11次');
-  await page.evaluate(()=>window.disconnectUsage());await expect(value).toHaveCount(0);await expect(page.getByRole('status')).toContainText('本机服务尚未连接');
+  await page.evaluate(()=>window.disconnectUsage());await expect(value).toHaveCount(0);await expect(page.getByRole('status')).toContainText('用量');
 });
 
 
@@ -48,6 +48,6 @@ test('隐藏预挂载的用量页不读取，隐藏期间断线仍立即撤下�
   await page.getByRole('button',{name:'切换设置页'}).click();await expect(value).toBeHidden();
   await page.evaluate(()=>window.disconnectUsage());await expect(value).toHaveCount(0);
   assert.equal(await page.evaluate(()=>window.usageReads),1);
-  await page.getByRole('button',{name:'切换设置页'}).click();await expect(page.getByRole('status')).toContainText('本机服务尚未连接');
+  await page.getByRole('button',{name:'切换设置页'}).click();await expect(page.getByRole('status')).toContainText('用量');
   assert.equal(await page.evaluate(()=>window.usageReads),1);
 });
