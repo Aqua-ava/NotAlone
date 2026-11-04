@@ -157,7 +157,9 @@ export function unrecognizedManagedTargets(userData: string): LegacyTarget[] {
   const names = readdirSync(directory).sort();
   if (names.length > 1024) return [target('legacy_unrecognized_managed', 'managed', 'unknown', 'unexpected_entry_count')];
   const supported = new Set(['sqlite', 'media', 'runtime-copies', 'cache', 'updates', 'import-pending.json', 'backend.info', 'backend.info.dsh-lock',
-    'sqlite-backend.info', 'sqlite-backend.info.dsh-lock']);
+    'sqlite-backend.info', 'sqlite-backend.info.dsh-lock',
+    // 启动失败时由后台写入的固定诊断记录（见 startup-diagnostics.ts）；不认识它会让一次失败的启动永久阻断之后的启动。
+    'backend.info.startup-diagnostic.json', 'sqlite-backend.info.startup-diagnostic.json']);
   if(names.includes('maintenance')&&ownedHistoryMaintenance(userData))supported.add('maintenance');
   return names.filter(name => !supported.has(name)).map(name =>
     target('legacy_unrecognized_managed', `managed/${name}`, 'unknown', 'unsupported_managed_entry'));
