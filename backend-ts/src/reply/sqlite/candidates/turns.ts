@@ -12,6 +12,7 @@ import type {SqliteDiscussionRuntime} from '../runtime.ts';
 import type {DiscussionAttempt} from '../contracts.ts';
 import {SqliteDiscussionSkillProtection} from '../skill-protection.ts';
 import {runSingleDiscussionTurn} from '../generation.ts';
+import {isSkillReadFailure} from '../skill-loop.ts';
 import {encode} from '../requests.ts';
 import type {FrozenReplyInput} from './input.ts';
 import type {SqliteReplyCandidateService} from './service.ts';
@@ -55,10 +56,20 @@ export class SqliteReplyTurns {
   o.service.phase(input.contactId,attempt.discussionId,input.requestKey,'preparing');
   try{
    const callId=randomUUID(),contextId=randomUUID();
-   const catalog=o.library?await o.library.refresh(input.signal):await o.storage.execute<any[]>('skills.list',{ownerId});
+   let skillDegraded=false,catalog:any[];
+   if(o.library){
+    try{catalog=await o.library.refresh(input.signal);}
+    catch(error){
+     if(input.selectedPackageId||!isSkillReadFailure(error))throw error;
+     skillDegraded=true;catalog=await o.storage.execute<any[]>('skills.list',{ownerId});
+    }
+   }else catalog=await o.storage.execute<any[]>('skills.list',{ownerId});
    const eligible=catalog.filter(p=>p.enabledState==='enabled'&&p.verificationState==='verified'&&p.currentRevisionNo!==null&&(!input.selectedPackageId||p.id===input.selectedPackageId));
    if(input.selectedPackageId&&!eligible.some(p=>p.id===input.selectedPackageId))throw new StorageFailure('discussion_skill_unavailable');
-   const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:o.library?eligible.map(skillAnchor):[]};
+   // 任一已启用策略缺失、未核验或当前修订不可用时整体撤下，不带其余策略继续。
+   if(!input.selectedPackageId&&catalog.some(p=>p.enabledState==='enabled'&&(p.verificationState!=='verified'||p.currentRevisionNo===null)))skillDegraded=true;
+   const runnable=skillDegraded?[]:eligible;
+   const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:o.library?runnable.map(skillAnchor):[]};
    const readItems=async()=>{
     // 候选只使用本次请求的显式消息；旧讨论 entry 兼容槽不参与候选装配，避免把助手讨论正文或来源带入新候选。
     const history=workspace
@@ -76,10 +87,12 @@ export class SqliteReplyTurns {
    // 每次候选任务重建独立副本；旧候选只有显式选择才进入新输入。
    const configurationDigest=this.digest(attempt.requestId,revision);
    await o.storage.execute('discussion.prepareCall',{...attempt,contextId,callId,operationId:randomUUID(),provider:o.model.provider,requestKey:callId,inputSeal:createHash('sha256').update(prompt).digest('hex'),model:o.model.model,configurationId:configurationDigest,inputCap:o.model.budgetProfile.context_window_tokens-o.model.maxTokens-o.model.budgetProfile.safety_margin_tokens,outputCap:o.model.maxTokens});
+   if(skillDegraded)await o.storage.execute('discussion.skillUnavailable',{...attempt,contextId,callId});
    const base=new SqliteDiscussionSkillProtection({storage:o.storage,attempt,contextId,callId,authorize:()=>o.authorize(input.contactId)});
    // Skill 的中间步骤只核任务及修订；候选实际出站和保存各自原子复验完整资料。
    const protection:SkillRunProtection=base;
-   const openSkillRun=o.library?()=>openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,input.selectedPackageId,input.signal):undefined;
+   // 正常候选在Agent创建前预载全部符合资格的策略正文；显式兼容入口仍优先生效。
+   const openSkillRun=o.library&&!skillDegraded?()=>openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,{selectedPackageId:input.selectedPackageId,signal:input.signal}):undefined;
    await runSingleDiscussionTurn({runtime:o.runtime,storage:o.storage,attempt,contextId,callId,configurationDigest,prompt,rebuildPrompt:prompt,systemPrompt,model:o.model,provider:o.provider,arbiter:o.arbiter,skillRun:null,openSkillRun,skillProtection:protection,skillRevision:revision,commitAction:'reply.commitCandidates',dispatchAction:'reply.dispatchCall',onPhase:phase=>o.service.phase(input.contactId,attempt.discussionId,input.requestKey,phase),configurationForRevision:revision=>this.digest(attempt.requestId,revision),assertAuthorized:()=>o.authorize(input.contactId),signal:input.signal});
    return {discussionId:attempt.discussionId,replayed:false,segmented:accepted.segmented};
   }catch(error){await o.storage.execute('reply.failPreparation',{...attempt,code:input.signal?.aborted?'discussion_generation_cancelled':error instanceof StorageFailure?error.code:'discussion_generation_failed'}).catch(()=>{});throw error;}

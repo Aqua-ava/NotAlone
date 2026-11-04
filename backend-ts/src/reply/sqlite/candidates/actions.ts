@@ -12,6 +12,20 @@ import {insertModelCandidates,parseReplyOutput,readParts,requireCandidate,versio
 export const INCOMPLETE_HISTORY_WARNING='历史覆盖不完整：本次使用当前可用资料，可能缺少重要语境。';
 function fail(code:string):never{throw new StorageFailure(code);}
 function storedWorkspaceFingerprint(value:string):string|null{const parsed=JSON.parse(value);return parsed?.kind==='reply_candidate_request_v1'&&typeof parsed.workspaceFingerprint==='string'?parsed.workspaceFingerprint:null;}
+function revisionNumber(value:unknown):number{const n=Number((value as {$integer?:unknown})?.$integer??value);return Number.isSafeInteger(n)&&n>0?n:0;}
+/** 只从真实 skill_input 事件投影已预加载身份和实际进入模型的正文/资源。 */
+function skillViews(tx:StorageTransaction,ownerId:string,requestId:string){
+ const rows=tx.all("SELECT e.payload FROM execution_event e JOIN reply_attempt a ON a.owner_id=e.owner_id AND a.id=e.reply_attempt_id WHERE e.owner_id=? AND a.request_id=? AND e.kind='skill_input' ORDER BY e.event_no",[ownerId,requestId]).map(e=>JSON.parse(String(e.payload)));
+ const loaded=rows.map(p=>{
+  const storedName=typeof p.name==='string'&&p.name?p.name:null;
+  const name=storedName??tx.get('SELECT display_name FROM skill_package WHERE owner_id=? AND id=?',[ownerId,p.loaded.packageId])?.display_name;
+  const origin=p.preload&&['explicit','auto_preload'].includes(p.preload.origin)?p.preload.origin:null;
+  const catalogRevision=p.preload&&typeof p.preload.catalogRevision==='string'?p.preload.catalogRevision:null;
+  return {packageId:String(p.loaded.packageId),...(name?{name:String(name)}:{}),revisionNo:revisionNumber(p.loaded.revisionNo),relativePath:String(p.relativePath),text:String(p.text),origin,catalogRevision};
+ });
+ const preloaded=loaded.filter((skill,index)=>rows[index].relativePath==='SKILL.md'&&rows[index].preload&&skill.origin!==null&&skill.catalogRevision!==null).map(skill=>({packageId:skill.packageId,...(skill.name?{name:skill.name}:{}),revisionNo:skill.revisionNo,origin:skill.origin!,catalogRevision:skill.catalogRevision!}));
+ return {loadedSkills:loaded,preloadedSkills:preloaded};
+}
 function requestCoverageJson(coverage:unknown,workspaceFingerprint:unknown):string{
  if(workspaceFingerprint===undefined)return JSON.stringify(coverage);
  if(typeof workspaceFingerprint!=='string'||!/^[a-f0-9]{64}$/.test(workspaceFingerprint))fail('reply_input_invalid');
@@ -102,7 +116,8 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
    const candidates=tx.all('SELECT id FROM reply_candidate WHERE owner_id=? AND request_id=? ORDER BY candidate_no',[i.ownerId,r.id]).map(k=>{
     try{const v=requireCandidate(tx,{...i,candidateId:String(k.id)},reader);return versionView(tx,i.ownerId,String(k.id),v.version.version_no as bigint);}catch{return null;}
    }).filter(Boolean);
-   return {...i,requestId:r.id,generationState:tx.get("SELECT 1 FROM model_call c JOIN reply_attempt a ON a.owner_id=c.owner_id AND a.id=c.reply_attempt_id WHERE a.owner_id=? AND a.request_id=? AND c.state='unknown'",[i.ownerId,r.id])?'unknown':r.state==='cancelled'?'failed':r.state,coverageWarning:r.coverage_warning,skillWarning:candidates.length&&tx.get("SELECT 1 FROM execution_event e JOIN reply_attempt a ON a.owner_id=e.owner_id AND a.id=e.reply_attempt_id WHERE e.owner_id=? AND a.request_id=? AND e.kind='skill_unavailable'",[i.ownerId,r.id])?'回复策略暂不可用':null,candidates,sourceState:candidates.length?'available':'unavailable',loadedSkills:candidates.length?tx.all("SELECT e.payload FROM execution_event e JOIN reply_attempt a ON a.owner_id=e.owner_id AND a.id=e.reply_attempt_id WHERE e.owner_id=? AND a.request_id=? AND e.kind='skill_input' ORDER BY e.event_no",[i.ownerId,r.id]).map(e=>{const p=JSON.parse(String(e.payload));return {packageId:p.loaded.packageId,name:tx.get('SELECT display_name FROM skill_package WHERE owner_id=? AND id=?',[i.ownerId,p.loaded.packageId])?.display_name,revisionNo:Number(p.loaded.revisionNo?.$integer??p.loaded.revisionNo),relativePath:p.relativePath,text:p.text};}):[],selections:candidates.length?tx.all('SELECT * FROM reply_selection WHERE owner_id=? AND request_id=? ORDER BY selection_no',[i.ownerId,r.id]).map(s=>({id:s.id,candidateId:s.candidate_id,versionNo:Number(s.version_no),selectionNo:Number(s.selection_no)})):[]};
+   const skills=candidates.length?skillViews(tx,i.ownerId,String(r.id)):{loadedSkills:[],preloadedSkills:[]};
+   return {...i,requestId:r.id,generationState:tx.get("SELECT 1 FROM model_call c JOIN reply_attempt a ON a.owner_id=c.owner_id AND a.id=c.reply_attempt_id WHERE a.owner_id=? AND a.request_id=? AND c.state='unknown'",[i.ownerId,r.id])?'unknown':r.state==='cancelled'?'failed':r.state,coverageWarning:r.coverage_warning,skillWarning:candidates.length&&tx.get("SELECT 1 FROM execution_event e JOIN reply_attempt a ON a.owner_id=e.owner_id AND a.id=e.reply_attempt_id WHERE e.owner_id=? AND a.request_id=? AND e.kind='skill_unavailable'",[i.ownerId,r.id])?'回复策略暂不可用':null,candidates,sourceState:candidates.length?'available':'unavailable',loadedSkills:skills.loadedSkills,preloadedSkills:skills.preloadedSkills,selections:candidates.length?tx.all('SELECT * FROM reply_selection WHERE owner_id=? AND request_id=? ORDER BY selection_no',[i.ownerId,r.id]).map(s=>({id:s.id,candidateId:s.candidate_id,versionNo:Number(s.version_no),selectionNo:Number(s.selection_no)})):[]};
   });
  }),
  action('version','read',(tx,i)=>{const v=requireCandidate(tx,i,reader);return versionView(tx,i.ownerId,i.candidateId,v.version.version_no as bigint);}),

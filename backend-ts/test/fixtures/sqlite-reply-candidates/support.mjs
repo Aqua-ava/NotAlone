@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
+import {Readable} from 'node:stream';
 import {mkdtemp,realpath,rm,mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -63,8 +64,8 @@ export async function fixture(t,options={}){
  const messages=await Promise.all(ids.map(async contactId=>(await history.read(contactId)).messages));
  ctx=new Context();
  await ctx.plugin(Loader);await ctx.plugin(Llm);await ctx.plugin(Skills);
- const requests=[],supplierErrors=[];
- server=createServer((req,res)=>{void (async()=>{
+ const requests=[],supplierErrors=[],inProcessModel=options.inProcessModel??process.env.NOTALLONE_TEST_IN_PROCESS_MODEL==='1';
+ const respond=async(req,res)=>{
   let body='';for await(const part of req)body+=part;
   const request=JSON.parse(body);requests.push(request);
   if(options.onRequest&&await options.onRequest(req,res,request,requests.length)===true)return;
@@ -80,9 +81,25 @@ export async function fixture(t,options={}){
   ];
   res.setHeader('content-type','text/event-stream');
   res.end(events.map(event=>`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''));
- })().catch(error=>{supplierErrors.push(error);res.destroy(error);});});
- server.listen(0,'127.0.0.1');await once(server,'listening');
- provider=installModelProvider(ctx,{provider:'synthetic-official',connection:resolveAdapterOptions({baseURL:`http://127.0.0.1:${server.address().port}/anthropic`,thinking:'disabled',maxTokens:512,retryPolicy:{mode:'normal',maxRetries:0}}),resolveAuth:async()=>({headers:{}}),resolveUserId:()=> 'synthetic-anonymous'});
+ };
+ let baseURL;
+ if(inProcessModel){
+  const originalFetch=globalThis.fetch;
+  globalThis.fetch=async(_input,init)=>{
+   let body='';for await(const part of init.body??[])body+=typeof part==='string'?part:Buffer.from(part).toString();
+   let status=200,headers=new Headers({}),ended=false,signalEnd;
+   const done=new Promise(resolve=>{signalEnd=resolve;});
+   const req=Object.assign(Readable.from([body]),{url:'/anthropic/v1/messages',headers:init.headers??{}});const res={setHeader(name,value){headers.set(name,String(value));},end(value=''){if(ended)return;ended=true;signalEnd(new Response(String(value),{status,headers}));},destroy(error){if(ended)return;ended=true;signalEnd(Promise.reject(error));}};
+   const signal=init.signal;let onAbort;const aborted=new Promise((_,reject)=>{if(!signal)return;if(signal.aborted){reject(signal.reason);return;}onAbort=()=>reject(signal.reason);signal.addEventListener('abort',onAbort,{once:true});});
+   try{const handling=respond(req,res).then(()=>{if(!ended)throw new Error('synthetic fetch response did not end');return done;});return await Promise.race([handling,aborted]);}catch(error){supplierErrors.push(error);throw error;}finally{if(signal&&onAbort)signal.removeEventListener('abort',onAbort);}
+  };
+  t.after(()=>{globalThis.fetch=originalFetch;});
+  baseURL='http://in-process.invalid/anthropic';
+ }else{
+  server=createServer((req,res)=>{void respond(req,res).catch(error=>{supplierErrors.push(error);res.destroy(error);});});
+  server.listen(0,'127.0.0.1');await once(server,'listening');baseURL=`http://127.0.0.1:${server.address().port}/anthropic`;
+ }
+ provider=installModelProvider(ctx,{provider:'synthetic-official',connection:resolveAdapterOptions({baseURL,thinking:'disabled',maxTokens:512,retryPolicy:{mode:'normal',maxRetries:0}}),resolveAuth:async()=>({headers:{}}),resolveUserId:()=> 'synthetic-anonymous'});
  const model={provider:'synthetic-official',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off',physical_limit:1,deadline_ms:5000,warning_ratio:0.8,budgetProfile:{context_window_tokens:8192,safety_margin_tokens:512}};
  const skillRoot=join(root,'user-skills');await mkdir(skillRoot,{mode:0o700});
  const discussions=new SqliteDiscussionService(storage,owner,options.clock??Date.now);
