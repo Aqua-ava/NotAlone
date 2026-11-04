@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import net from 'node:net';
 import { mkdtemp, access, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -63,6 +66,37 @@ test('孤立宿主不算热更新可用，首次编译阶段也只允许一个�
   } finally { await first?.close(); await next?.close(); await rm(project, { recursive: true, force: true }); }
 });
 
+test('开发租约遇到无人监听的残留 socket 时清除并接管，未知占用者不动', async () => {
+  const { acquireDevelopmentLease } = await import('../scripts/development-lease.mjs');
+  const project = await mkdtemp(path.join(tmpdir(), 'notalone-dev-stale-'));
+  const key = createHash('sha256').update(path.resolve(project)).digest('hex').slice(0, 24);
+  const socket = path.join(tmpdir(), `notalone-dev-${key}.sock`);
+  let lease, stranger;
+  try {
+    // 制造残留：监听后不 unlink 地让进程"死亡"——用子进程被强杀留下 socket 文件。
+    const child = spawn(process.execPath, ['-e',
+      `require('node:net').createServer().listen(${JSON.stringify(socket)}, () => process.stdout.write('up'))`],
+      { stdio: ['ignore', 'pipe', 'inherit'] });
+    await new Promise(resolve => child.stdout.once('data', resolve));
+    child.kill('SIGKILL');
+    await new Promise(resolve => child.once('exit', resolve));
+    assert.ok(existsSync(socket));
+    lease = await acquireDevelopmentLease(project);
+    assert.ok(lease, '残留 socket 应被清除并获得租约');
+    assert.equal(await acquireDevelopmentLease(project), undefined, '租约在线时第二份应复用');
+    await lease.close(); lease = undefined;
+    // 未知占用者：接受连接但回复不同内容，必须报错且不删除。
+    stranger = net.createServer(client => client.end('other\n'));
+    await new Promise(resolve => stranger.listen(socket, resolve));
+    await assert.rejects(acquireDevelopmentLease(project), /响应无效/);
+    assert.ok(existsSync(socket));
+  } finally {
+    await lease?.close();
+    await new Promise(resolve => stranger ? stranger.close(resolve) : resolve());
+    await rm(project, { recursive: true, force: true });
+    await rm(socket, { force: true });
+  }
+});
 
 test('开发 CDP 只在明确选择独立资料目录时开放随机回环端口', () => {
   assert.deepEqual(developmentDebugArguments(undefined, undefined), []);
