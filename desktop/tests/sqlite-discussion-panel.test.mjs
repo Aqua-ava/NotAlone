@@ -14,7 +14,7 @@ const contactId = '11111111-1111-4111-8111-111111111111';
 const sessionId = '33333333-3333-4333-8333-333333333333';
 const nextSessionId = '44444444-4444-4444-8444-444444444444';
 
-test('正式讨论面板按当前段和资料资格提交，分段回执重新读取权威讨论与目录', { timeout: 30_000 }, async t => {
+test('正式讨论面板从历史回看显式继续，分段回执重新读取权威讨论与目录', { timeout: 30_000 }, async t => {
   const compiled = await build({ stdin: { contents: `
     import React from 'react'; import { createRoot } from 'react-dom/client';
     import { AssistantSessionPanel } from './src/renderer/AssistantSessionPanel';
@@ -49,7 +49,10 @@ test('正式讨论面板按当前段和资料资格提交，分段回执重新�
   t.after(() => browser.close()); const page = await browser.newPage(); const submissions = [];
   await page.exposeFunction('__submit', async request => { submissions.push(request); return { sessionId: submissions.length === 1 ? nextSessionId : sessionId, segmented: submissions.length === 1, replayed: submissions.length > 1, requestKey: request.requestKey }; });
   await page.goto(`http://127.0.0.1:${server.address().port}`); await page.addScriptTag({ content: compiled.outputFiles[0].text });
+  await expect(page.getByRole('region', { name: '助手讨论发言', exact: true })).toHaveCount(0);
+  await page.locator('summary').filter({ hasText: '与助手讨论' }).click();
   await expect(page.getByRole('region', { name: '助手讨论发言', exact: true })).toContainText('合成已保存助手发言');
+  await expect(page.getByText('历史讨论仅回看，不会自动加入新候选；继续此讨论后才切换当前讨论。', { exact: true })).toBeVisible();
   const input = page.getByRole('textbox', { name: '讨论内容' });
   await expect(input).toBeDisabled();
   await page.getByText('历史讨论', { exact: true }).click();
@@ -57,9 +60,9 @@ test('正式讨论面板按当前段和资料资格提交，分段回执重新�
   await expect(input).toBeEnabled(); assert.equal(submissions.length, 0);
   await page.evaluate(() => window.__patch({generationBlock:'foreground-confirmation-required'}));
   await expect(input).toBeEnabled();
-  for (const patch of [{sourceAvailability:'checking'}, {sourceAvailability:'failed'}, {sessionDeletion:'deleting'}, {sessionDeletion:'failed'}, {phase:'waiting'}, {exploration:{phase:'waiting'}}]) {
-    await page.evaluate(patch => window.__patch(patch), patch); await expect(input).toBeDisabled();
-    await page.evaluate(() => window.__patch({sourceAvailability:undefined,sessionDeletion:undefined,phase:'idle',generationBlock:null,exploration:{phase:'idle'}})); await expect(input).toBeEnabled();
+  for (const [label, patch] of [['source-checking',{sourceAvailability:'checking'}], ['source-failed',{sourceAvailability:'failed'}], ['deleting',{sessionDeletion:'deleting'}], ['delete-failed',{sessionDeletion:'failed'}], ['waiting',{phase:'waiting'}]]) {
+    await page.evaluate(patch => window.__patch(patch), patch); await expect(input, label).toBeDisabled();
+    await page.evaluate(() => window.__patch({sourceAvailability:undefined,sessionDeletion:undefined,phase:'idle',generationBlock:null,exploration:{phase:'idle'}})); await expect(input, `${label} reset`).toBeEnabled();
   }
   await page.evaluate(() => window.__savedPhase('loading')); await expect(input).toBeDisabled();
   await page.evaluate(() => window.__savedPhase('ready')); await expect(input).toBeEnabled();
@@ -81,7 +84,7 @@ test('正式讨论面板按当前段和资料资格提交，分段回执重新�
   await expect(page.getByRole('region', { name: '已保存的讨论', exact: true })).toContainText('当前会话还没有讨论');
 });
 
-test('正式preload只暴露具名讨论提交和失效订阅，拒绝额外权限字段', async t => {
+test('正式preload只暴露具名讨论、候选操作和失效订阅，拒绝额外权限字段', async t => {
   const owned = await mkdtemp(join(tmpdir(), 'notalone-discussion-preload-'));
   t.after(() => rm(owned, { recursive: true, force: true }));
   const calls = [], listeners = new Map(); let bridge;
@@ -97,7 +100,7 @@ test('正式preload只暴露具名讨论提交和失效订阅，拒绝额外权�
       plugin.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: `export const {ipcRenderer,contextBridge}=globalThis[${JSON.stringify(token)}];` }));
     } }] });
   await import(pathToFileURL(outfile).href);
-  assert.deepEqual(Object.keys(bridge.sqliteDiscussion).sort(), ['onInvalidated', 'submit']);
+  assert.deepEqual(Object.keys(bridge.sqliteDiscussion).sort(), ['candidates', 'onInvalidated', 'submit']);
   assert.ok(Object.isFrozen(bridge)); assert.ok(bridge.media);
   const request = { contactId, scopeRevision: 7, sessionId, requestKey: randomUUID(), text: '合成正式入口讨论' };
   await bridge.sqliteDiscussion.submit(request);

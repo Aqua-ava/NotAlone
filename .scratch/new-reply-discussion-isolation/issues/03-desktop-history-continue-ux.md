@@ -54,3 +54,5 @@ Blocked by: 02
 - 验证明细：通过临时依赖布局执行当前源与测试，未修改任何 `node_modules`；`assistant-history-layout`、`workspace-session-switch`、`sqlite-discussion-session`、`assistant-idle-rollover`、`assistant-session-catalog`、`assistant-session-deletion-guards`、`assistant-session-catalog-read` 合计 34/34 通过。
 - 未执行：本机 Playwright/Electron 实际界面验收需要监听端口和启动 App，本会话沙箱禁止监听且用户明确禁止启动 App；现有 `sqlite-discussion-panel.test.mjs` 已完成按钮文案适配但未运行。Remove Exclusion 冲突见上，合并时需同步其共享测试选择器。
 - State 保持 `claimed`，等待主会话独立审查与集成。
+
+- 2026-11-04 集成校正：`sqlite-discussion-panel` 原断言仍假设历史正文在默认折叠时可见、preload 只有 `submit/onInvalidated`，与“历史仅回看、显式继续”和受控候选端口集成后的现行合同不一致。RED 为 61/63；将测试改为先确认历史发言不在默认可访问树、展开“与助手讨论”后才可回看，目录仍要求显式“继续此讨论”，并允许 preload 固定 `candidates` 端口；GREEN 63/63。没有放宽拒绝额外字段、来源失效、迟到回包或候选操作白名单断言。
