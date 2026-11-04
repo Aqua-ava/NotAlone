@@ -219,7 +219,7 @@ function decodeVerificationRows(raw:Row,window:ExtractionWindow,facts:ExtractedF
 /** 存档消费者重放原模型回复的同一确定性校验，不能以JSON准入标志代替。 */
 export function replayCompleteClaimVerification(window:ExtractionWindow,facts:ExtractedFact[],blocks:readonly unknown[],fingerprint:string,requestBody:unknown):VerificationAdmission[]{
  if(digest(requestBody)!==digest({...verificationPayload(window,facts,true),request_fingerprint:fingerprint}))fail('stored_request_mismatch');
- const raw=readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:true,field_names:repairFields,root_array_key:'results'}).value as Row;
+ const raw=readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:true,field_names:repairFields,root_array_key:'results',drop_stray_closers:true}).value as Row;
  return decodeVerificationRows(raw,window,facts,{id:'complete-claim-v1'},fingerprint);
 }
 
@@ -256,7 +256,7 @@ export function prepareSourceVerification(options:{
   await options.requireCurrent();
   if(!selection.length){if(blocks.length)fail('unexpected_response');return {items:allFacts.map((_,candidate_index)=>({candidate_index,admitted:true,result:null}))};}
   try{
-  const raw=readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:true,field_names:repairFields,root_array_key:'results'}).value as Row;
+  const raw=readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:true,field_names:repairFields,root_array_key:'results',drop_stray_closers:true}).value as Row;
   const currentDigest=digest(raw);
   if(responseDigest!==undefined&&responseDigest!==currentDigest)fail('response_changed');
   if(!decoded){

@@ -127,6 +127,24 @@ test('prepared decode 幂等并隔离返回值，不能在验证后交换另一�
   await assert.rejects(prepared.decode(blocks(prepared, example, 'uncertain')), /response_changed/);
 });
 
+test('响应末尾多余的收尾括号被丢弃，核验结论与逐字来源检查不变', async () => {
+  const example = mechanism.cases[1], {window, facts} = scenario(example);
+  const prepared = prepareSourceVerification({window, facts, policy, requireCurrent: async () => {}});
+  const clean = blocks(prepared, example);
+  const baseline = await prepared.decode(clean);
+  for (const tail of ['}', ']}']) {
+    const stray = [{...clean[0], arguments: clean[0].arguments + tail}];
+    await prepared.request.validateOutput(stray);
+    assert.deepEqual(await prepared.decode(stray), baseline);
+  }
+  // 丢弃尾部不会放过内容问题：引文不是逐字来源时仍拒绝，其他尾随内容仍判为非 JSON。
+  const forged = blocks(prepared, example, 'supported', {evidence: [{message_id: message, quote: '来源里没有的虚构引文'}]});
+  forged[0].arguments += '}';
+  await assert.rejects(prepared.decode(forged), error => error.code !== 'extraction_arguments_invalid');
+  const extra = [{...clean[0], arguments: clean[0].arguments + '}x'}];
+  await assert.rejects(prepared.decode(extra), {code: 'extraction_arguments_invalid'});
+});
+
 test('全文漏核、facet 缺项或未定、归属 unresolved 均不能被顶层 supported 覆盖', async () => {
   const example = mechanism.cases[1];
   for (const failure of ['gap', 'missing', 'uncertain', 'unresolved', 'scope']) {

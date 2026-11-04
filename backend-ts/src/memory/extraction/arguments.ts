@@ -59,9 +59,21 @@ function parse(raw:string,allowControls:boolean):unknown {
  };
  const result=value();whitespace();if(index!==raw.length)fail('end');return result;
 }
-function argumentValue(raw:string,options:{repair:boolean;field_names:readonly string[]}):{value:unknown;repaired:boolean}{
+/**
+ * 完整值之后仅剩至多三个收尾括号（可夹空白）时，丢弃这段尾部。被丢弃的部分不含数据，已解析的值原样保留；
+ * 结构校验、重复键检查与来源核验仍照常执行。空尾部（如字符串未结束）与任何其他尾随内容都不匹配。
+ */
+function strayClosersAt(text:string,error:SyntaxFailure):number|null{
+ return error.expected==='end'&&/^\s*[\]}](?:\s*[\]}]){0,2}\s*$/.test(text.slice(error.position))?error.position:null;
+}
+function argumentValue(raw:string,options:{repair:boolean;field_names:readonly string[];drop_stray_closers:boolean}):{value:unknown;repaired:boolean}{
  try{return {value:parse(raw,false),repaired:false};}
- catch(error){if(!(error instanceof SyntaxFailure)||!options.repair)throw new ExtractionArgumentsError();}
+ catch(error){
+  if(!(error instanceof SyntaxFailure))throw new ExtractionArgumentsError();
+  const cut=options.drop_stray_closers?strayClosersAt(raw,error):null;
+  if(cut!==null)try{return {value:parse(raw.slice(0,cut),false),repaired:true};}catch{throw new ExtractionArgumentsError();}
+  if(!options.repair)throw new ExtractionArgumentsError();
+ }
  let fixed=raw.trim();
  if(fixed.startsWith('```json\n')&&fixed.endsWith('```'))fixed=fixed.slice(8,-3).trim();
  else if(fixed.startsWith('```\n')&&fixed.endsWith('```'))fixed=fixed.slice(4,-3).trim();
@@ -69,6 +81,8 @@ function argumentValue(raw:string,options:{repair:boolean;field_names:readonly s
   try{return {value:parse(fixed,true),repaired:true};}
   catch(error){
    if(!(error instanceof SyntaxFailure)||attempt===8)throw new ExtractionArgumentsError();
+   const cut=options.drop_stray_closers?strayClosersAt(fixed,error):null;
+   if(cut!==null){fixed=fixed.slice(0,cut);continue;}
    const position=error.position,match=fixed.slice(position).match(/^([A-Za-z_][A-Za-z_0-9]*)"\s*:/);
    if(error.expected==='key'&&match&&options.field_names.includes(match[1]!)){fixed=fixed.slice(0,position)+'"'+fixed.slice(position);continue;}
    const prefix=fixed.slice(0,position).trimEnd();
@@ -80,7 +94,7 @@ function argumentValue(raw:string,options:{repair:boolean;field_names:readonly s
  }
  throw new ExtractionArgumentsError();
 }
-export function readExtractionToolArguments(blocks:readonly unknown[],name:string,options:{repair?:boolean;field_names?:readonly string[];root_array_key?:string;allow_text_json?:boolean}={}):{value:Record<string,unknown>;repaired:boolean}{
+export function readExtractionToolArguments(blocks:readonly unknown[],name:string,options:{repair?:boolean;field_names?:readonly string[];root_array_key?:string;allow_text_json?:boolean;drop_stray_closers?:boolean}={}):{value:Record<string,unknown>;repaired:boolean}{
  const calls=blocks.filter((block):block is Record<string,unknown>=>Boolean(block&&typeof block==='object'&&(block as Record<string,unknown>).type==='tool-call'));
  let raw:string,textJson=false;
  if(calls.length===0&&options.allow_text_json===true){
@@ -92,7 +106,7 @@ export function readExtractionToolArguments(blocks:readonly unknown[],name:strin
   if(calls.length!==1||calls[0]!.name!==name||typeof calls[0]!.arguments!=='string')throw new ExtractionArgumentsError();
   raw=calls[0]!.arguments;
  }
- const decoded=argumentValue(raw,{repair:options.repair??false,field_names:options.field_names??[]});
+ const decoded=argumentValue(raw,{repair:options.repair??false,field_names:options.field_names??[],drop_stray_closers:options.drop_stray_closers??false});
  if(Array.isArray(decoded.value)&&options.root_array_key)
   return {value:{[options.root_array_key]:decoded.value},repaired:true};
  if(!decoded.value||typeof decoded.value!=='object'||Array.isArray(decoded.value))throw new ExtractionArgumentsError();
@@ -100,7 +114,7 @@ export function readExtractionToolArguments(blocks:readonly unknown[],name:strin
 }
 /** 私有身份协议使用同一严格解码器，绝不启用模型输出修复。 */
 export function decodeExtractionArguments(raw:string):Record<string,unknown>{
- const value=argumentValue(raw,{repair:false,field_names:[]}).value;
+ const value=argumentValue(raw,{repair:false,field_names:[],drop_stray_closers:false}).value;
  if(!value||typeof value!=='object'||Array.isArray(value))throw new ExtractionArgumentsError();
  return value as Record<string,unknown>;
 }

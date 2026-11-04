@@ -37,7 +37,7 @@ function text(value:unknown,max=8192):value is string{return typeof value==='str
 /** 只收拢已观察到的无语义空槽及唯一末尾闭合缺失；语义字段和额外非空信息不删改。 */
 function argumentsEnvelope(blocks:readonly unknown[]):{value:Record<string,unknown>;repairs:string[]}{
  const repairs:string[]=[];let value:Record<string,unknown>;
- try{value=readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:false}).value;}
+ try{value=readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:false,drop_stray_closers:true}).value;}
  catch(error){
   if(!(error instanceof ExtractionArgumentsError))throw error;
   const calls=blocks.filter((block):block is Row=>!!block&&typeof block==='object'&&(block as Row).type==='tool-call');
@@ -145,7 +145,7 @@ export function replayMultimodalVerification(window:ExtractionWindow,facts:reado
  const format=requestBody&&typeof requestBody==='object'?(requestBody as Row).check_format:undefined;
  if(format!==undefined&&format!=='flat-fields-v2')fail('stored_request_mismatch');
  if(digest(requestBody)!==digest({...payload(window,facts,format??'nested-v1'),request_fingerprint:fingerprint}))fail('stored_request_mismatch');
- return format==='flat-fields-v2'?decodeFlat(readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:false}).value,window,facts,fingerprint):
+ return format==='flat-fields-v2'?decodeFlat(readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:false,drop_stray_closers:true}).value,window,facts,fingerprint):
   decodeNested(argumentsEnvelope(blocks).value,window,facts,fingerprint);
 }
 export function prepareMultimodalVerification(options:{window:ExtractionWindow;facts:readonly ExtractedFact[];images:NonNullable<ExtractionInvocation['images']>;ruleVersion?:string;requireCurrent():Promise<void>;record?(event:{stage:string;payload:unknown}):Promise<void>}):PreparedVerification{
@@ -158,7 +158,7 @@ export function prepareMultimodalVerification(options:{window:ExtractionWindow;f
  const requestBody={...body,request_fingerprint:fingerprint};
  let responseSha:string|undefined;
  const decodeResponse=async(blocks:readonly unknown[])=>{
-  await options.requireCurrent();const raw=readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:false}).value;
+  await options.requireCurrent();const raw=readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:false,drop_stray_closers:true}).value;
   const sha=digest(raw);if(responseSha&&sha!==responseSha)fail('response_changed');responseSha=sha;
   const items=decodeFlat(raw,window,facts,fingerprint);
   for(const item of items)if(item.admitted&&item.result){const fact=facts[item.candidate_index]!;boundResults.set(item.result,{window:digest(window),fact:digest({...fact,event:item.result.event,conditions:item.result.conditions}),result:digest(item.result)});}
