@@ -1,7 +1,7 @@
 # 图片同步查询线性化
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 
 Blocked by: none
 
@@ -23,7 +23,7 @@ Blocked by: none
 
 ## Answer
 
-实现已完成并自测通过；State 保持 claimed，等待 Lead 安排的独立 Standards／Spec 审查。
+实现已完成并自测通过；当时 State 保持 `claimed`，等待独立 Standards／Spec 审查，后由最终验收改为 `resolved`。
 
 ### 实现摘要
 

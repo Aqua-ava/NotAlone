@@ -1,7 +1,7 @@
 # 后台图片与记忆读取隔离
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 
 Blocked by: none
 
@@ -37,7 +37,7 @@ Blocked by: none
 - `backend-ts/src/sqlite-host-plugin.ts`
 - `backend-ts/src/storage/sqlite/README.md`
 - 补充提交 `5443871ad` 修改 `background-reads.ts`、README 与新增回归
-- `.scratch/reply-generation-performance/issues/02-background-read-isolation.md`（State: claimed）
+- `.scratch/reply-generation-performance/issues/02-background-read-isolation.md`（当时 State: claimed，后为 resolved）
 
 ### RED / GREEN 证据
 
