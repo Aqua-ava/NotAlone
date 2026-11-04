@@ -74,14 +74,14 @@ async function openSqliteSkillRunOnDemand(library: SqliteSkillLibrary,request: S
   signal?.throwIfAborted();await protection.assertCurrent(scope,null,signal);
   const items=await library.list(signal);
   const available=items.filter(item=>item.enabledState==='enabled' && item.verificationState==='verified' && item.currentRevisionNo!==null);
-  await library.assertAnchors(available.map(skillAnchor),signal,items);
   const selected=selectedPackageId?available.find(item=>item.id===selectedPackageId):undefined;
   if(selectedPackageId && !selected)throw new SqliteSkillError('skill_selection_unavailable');
   const run=new SqliteSkillRun(library,scope,protection,items,{selected:selected?skillAnchor(selected):null},signal);
   try {
-    await run.validate();
+    // 打开只做数据库资格复验；目录字节在每次读取、每次模型发送和候选提交前复验，不在此重复读取全部目录。
+    await run.validateQualification();
+    // 选择事件在写事务内复验调用与冻结修订，无需再追加一次分离的资格检查。
     await protection.recordSelection(scope,run.selection,signal);
-    await run.validate();
     return run;
   }catch(error){run.close();throw error;}
 }
@@ -139,17 +139,29 @@ export class SqliteSkillRun {
   /** 一次批量复验目录与全部anchor；返回的快照同时供预加载正文使用，避免逐Skill四重复读。 */
   private async inspect(signal?: AbortSignal): Promise<VerifiedSkillSnapshot[]> {
     const combined=this.signal(signal);combined.throwIfAborted();
+    // assertCurrent 在同一短事务核验包集合、head 与全部冻结 anchor（合同见 SkillRunProtection），
+    // 前后各一次夹住目录字节读取；冻结目录与其一致，无需再读目录列表或重复分离复验。
     await abortable(this.protection.assertCurrent(this.scope,this.frozenRevision(),combined),combined);
-    const catalog=await this.library.list(combined);
-    if(catalogRevision(catalog)!==this.catalogIdentity)throw new SqliteSkillError('skill_run_invalidated');
-    const verified=await this.library.assertAnchors(this.eligible().map(skillAnchor),combined,catalog);
+    const verified=await this.library.readAnchorSnapshots(this.eligible().map(skillAnchor),combined,this.catalog);
     await abortable(this.protection.assertCurrent(this.scope,this.frozenRevision(),combined),combined);
     combined.throwIfAborted();return verified;
+  }
+  /** 仅数据库资格复验：授权、调用与冻结修订，不读目录字节。 */
+  private async qualify(signal?: AbortSignal): Promise<void> {
+    const combined=this.signal(signal);combined.throwIfAborted();
+    await abortable(this.protection.assertCurrent(this.scope,this.frozenRevision(),combined),combined);
+    combined.throwIfAborted();
   }
   /** 每次实际模型发送和业务提交前，12必须复验；registry缓存不是资格凭证。 */
   async validate(signal?: AbortSignal): Promise<void> {
     try {
       await this.inspect(signal);
+    }catch(error){this.rememberFailure(error);this.close();throw error;}
+  }
+  /** 仅数据库资格复验，不读目录字节；用于读取前后等不出站的步骤，出站与提交仍须 validate。 */
+  async validateQualification(signal?: AbortSignal): Promise<void> {
+    try {
+      await this.qualify(signal);
     }catch(error){this.rememberFailure(error);this.close();throw error;}
   }
   mount(context: Context): ()=>void {
@@ -167,7 +179,7 @@ export class SqliteSkillRun {
       if(!loaded || JSON.stringify(loaded.anchor,bigintJson)!==JSON.stringify(anchor,bigintJson))throw new SqliteSkillError('skill_body_required');
       try{validateResourcePath(relativePath);}catch{throw new SqliteSkillError('skill_path_invalid');}
       if(!loaded.resources.some(resource=>resource.relativePath===relativePath))throw new SqliteSkillError('skill_path_invalid');
-      await this.validate(signal);
+      await this.validateQualification(signal);
       const snapshot=await this.library.assertAnchor(anchor,this.signal(signal));
       const resource=snapshot.pkg.resources.find(r=>r.relative_path===relativePath);
       if(!resource)throw new SqliteSkillError('skill_path_invalid');
@@ -243,13 +255,13 @@ export class SqliteSkillRun {
       path:`${virtualRoot}/${item.displayName}/SKILL.md`,resourceBase:{kind:'opaque',description:'仅允许本次修订清单内的只读文字资源'},
       invocation:{modelInvocable:true,userInvocable:false},locator:item.id}));
     return {name:providerName,
-      list:async options=>{await this.validate(options.signal);return candidates;},
+      list:async options=>{await this.validateQualification(options.signal);return candidates;},
       get:async(candidate,options)=>{
         try{
           const trusted=candidates.find(item=>item===candidate);
           const item=this.eligible().find(item=>item.id===trusted?.locator);
           if(!trusted || !item)throw new SqliteSkillError('skill_candidate_invalid');
-          await this.validate(options.signal);
+          await this.validateQualification(options.signal);
           const preloaded=this.preloadedByName.get(trusted.name);
           if(preloaded){
             this.signal(options.signal).throwIfAborted();
@@ -269,10 +281,11 @@ export class SqliteSkillRun {
   }
   private async record(anchor: SkillAnchor,name: string,relativePath: string,text: string,signal?: AbortSignal,preload?: SkillPreloadTrace): Promise<string> {
     try {
-      await this.validate(signal);
+      await this.validateQualification(signal);
       const combined=this.signal(signal);
+      // 输入记录在写事务内复验调用、联系人、来源与冻结修订（合同见 SkillRunProtection.recordInput）。
       await abortable(this.protection.recordInput({scope:this.scope,runRevision:this.frozenRevision(),selected:{...anchor},loaded:{...anchor},relativePath,text,payloadDigest:sha256(text),name,...(preload?{preload:{...preload}}:{})},combined),combined);
-      await this.validate(signal);
+      combined.throwIfAborted();
       return text;
     }catch(error){this.rememberFailure(error);this.close();throw error;}
   }

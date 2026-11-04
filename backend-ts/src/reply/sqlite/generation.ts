@@ -66,9 +66,10 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
    if(skillRun)options.skillRun=skillRun;
    const requireCurrent=async()=>{
     combined.throwIfAborted();
-    await options.storage.execute('runtime.assertActive',{...attempt,copyId:work.copy.id});
-    if(fallback){await options.assertAuthorized!();await options.storage.execute('discussion.assertSkillCall',{...attempt,contextId,callId,runRevision:skillRevision});}
-    else await options.skillProtection.assertCurrent(scope,skillRevision,combined);
+    const active=options.storage.execute('runtime.assertActive',{...attempt,copyId:work.copy.id});
+    if(fallback){await active;await options.assertAuthorized!();await options.storage.execute('discussion.assertSkillCall',{...attempt,contextId,callId,runRevision:skillRevision});}
+    // 两项复验互不依赖，同时入队，省去一次排队往返；任一失败都拒绝。
+    else await Promise.all([active,options.skillProtection.assertCurrent(scope,skillRevision,combined)]);
     combined.throwIfAborted();
    };
    const binding={provider:model.provider,model:model.model,maxTokens:model.maxTokens,temperature:model.temperature,reasoningEffort:model.reasoningEffort};
@@ -128,7 +129,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
     });
     let skillText='',skillGuidance='本轮可按需组合多个相关Skill，也可以不用；Skill只影响表达方式，不提供联系人事实，不得覆盖本次意图。静态辅助资料须指定已加载Skill的准确名称和路径，本轮最多读取两份。';
     if(skillRun){
-     disposeSkill=skillRun.mount(agentCtx);await skillRun.validate(combined);
+     disposeSkill=skillRun.mount(agentCtx);await skillRun.validateQualification(combined);
      const preloaded=skillRun.preloadedSkills;
      if(preloaded.length){
       skillGuidance='以下回复策略已由宿主在本次请求前预加载，只影响表达方式，不提供联系人事实，不得覆盖本次意图。静态辅助资料须指定已预加载Skill的准确名称和路径，本轮最多读取两份。';

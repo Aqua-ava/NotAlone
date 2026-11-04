@@ -179,6 +179,17 @@ export class SqliteSkillLibrary {
     this.active(signal);
     if(!Array.isArray(anchors))throw new SqliteSkillError('skill_input_invalid');
     await this.execute('skills.assertRevisions',{ownerId:this.ownerId,anchors},signal);
+    const verified=await this.readAnchorSnapshots(anchors,signal,catalog);
+    await this.execute('skills.assertRevisions',{ownerId:this.ownerId,anchors},signal);
+    return verified;
+  }
+  /**
+   * 只读取目录字节并与锚点比对，不含数据库复验：调用方须在其前后用同一冻结修订做原子资格复验
+   * （SkillRunProtection.assertCurrent 在同一短事务核验包集合、head 与全部 anchor）。
+   * 读取失败沿用 assertAnchors 的记录与抛出语义。
+   */
+  async readAnchorSnapshots(anchors: readonly SkillAnchor[],signal?:AbortSignal,catalog?:readonly SkillPackageState[]): Promise<VerifiedSkillSnapshot[]> {
+    this.active(signal);
     const items=catalog??await this.list(signal),byId=new Map(items.map(item=>[item.id,item])),verified:VerifiedSkillSnapshot[]=[];
     for(const anchor of anchors){
       const item=byId.get(anchor.packageId);
@@ -191,7 +202,6 @@ export class SqliteSkillLibrary {
       }catch(error){this.active(signal);await this.change(()=>this.recordProblem(item,error,signal));throw error;}
       verified.push({item,anchor:{...anchor},snapshot});
     }
-    await this.execute('skills.assertRevisions',{ownerId:this.ownerId,anchors},signal);
     return verified;
   }
   private commitObservation(id: string,expectedHead: bigint,snapshot: DirectorySnapshot,signal?:AbortSignal): Promise<SkillPackageState> {
