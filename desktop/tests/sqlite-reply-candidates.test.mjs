@@ -137,7 +137,7 @@ test('临时禁用期间真实来源失效仍立即撤下编辑及依据',{timeo
  assert.equal(f.commands.filter(c=>c.action==='read').length,1);
 });
 
-test('候选不展示预加载清单和历史覆盖提示，仍可按需核验实际模型输入',{timeout:30000},async t=>{
+test('候选不展示Skill清单、正文及历史覆盖提示，仍可编辑回复',{timeout:30000},async t=>{
  let data={...pageData()};
  data.requests[0].coverageWarning='历史覆盖不完整：本次使用当前可用资料，可能缺少重要语境。';
  data.requests[0].loadedSkills=[
@@ -154,10 +154,8 @@ test('候选不展示预加载清单和历史覆盖提示，仍可按需核验�
  await expect(region.getByRole('combobox')).toHaveCount(0);
  await expect(region.getByText(/本次预加载的 Skill/)).toHaveCount(0);
  await expect(region.getByText(/历史覆盖不完整/)).toHaveCount(0);
- await expect(region.getByRole('group',{name:'实际进入模型输入的 Skill 内容'})).not.toBeVisible();
- await region.getByText('实际进入模型输入的 Skill 内容',{exact:true}).click();
- await expect(region.getByRole('group',{name:'实际进入模型输入的 Skill 内容'})).toBeVisible();
- await expect(region.getByText('合成安慰策略 · 第1版 · references/example.md',{exact:true})).toBeVisible();
+ await expect(region.getByText('实际进入模型输入的 Skill 内容',{exact:true})).toHaveCount(0);
+ await expect(region.getByText(/先回应感受。|再说明边界。|辅助案例。/)).toHaveCount(0);
  data={...data,requests:[{...data.requests[0],loadedSkills:[],preloadedSkills:[],skillWarning:'回复策略暂不可用'}]};
  await region.getByRole('button',{name:'刷新候选',exact:true}).click();
  await expect(region.getByText('回复策略暂不可用',{exact:true})).toBeVisible();
@@ -167,33 +165,19 @@ test('候选不展示预加载清单和历史覆盖提示，仍可按需核验�
  await expect(region.getByRole('button',{name:'保存修改',exact:true})).toBeEnabled();
 });
 
-test('Skill正文不在候选页预载，展开详情时才按页读取',{timeout:30000},async t=>{
+test('候选保留请求分页提示，刷新时不读取Skill正文',{timeout:30000},async t=>{
  const base=pageData(),metadata={packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'SKILL.md',origin:'auto_preload'};
  const data={...base,hasMoreRequests:true,requests:[{...base.requests[0],loadedSkills:[metadata]}]};
  const f=await panel(t,async operation=>{
-  if(operation.action==='read')return data;
-  if(operation.action==='skills'){assert.equal(operation.requestId,ids.request);assert.equal(operation.offset,0);return {items:[{...metadata,text:'展开后才读取的合成Skill正文'}],nextOffset:null,total:1};}
-  throw new Error('未授权的合成页面操作');
+  assert.equal(operation.action,'read');
+  return data;
  });
  const region=f.page.getByRole('region',{name:'表达工作区'});
  await expect(region.getByText('仅显示最近20次候选请求；更早记录未加载。',{exact:true})).toBeVisible();
- await region.getByText('实际进入模型输入的 Skill 内容',{exact:true}).click();
- await expect(region.getByText('展开后才读取的合成Skill正文',{exact:true})).toBeVisible();
- assert.equal(f.commands.filter(command=>command.action==='skills').length,1);
-});
-
-test('Skill详情确定性超限显示明确提示且不保留无效重试',{timeout:30000},async t=>{
- const base=pageData(),metadata={packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'SKILL.md',origin:'auto_preload'};
- const data={...base,requests:[{...base.requests[0],loadedSkills:[metadata]}]};
- const f=await panel(t,async operation=>{
-  if(operation.action==='read')return data;
-  if(operation.action==='skills')throw new Error('本次Skill输入超出可显示范围。');
-  throw new Error('未授权的合成页面操作');
- });
- const region=f.page.getByRole('region',{name:'表达工作区'});
- await region.getByText('实际进入模型输入的 Skill 内容',{exact:true}).click();
- await expect(region.getByRole('alert')).toHaveText('本次Skill输入超出可显示范围。');
- await expect(region.getByRole('button',{name:/加载更多 Skill 正文/})).toHaveCount(0);
+ await expect(region.getByText('实际进入模型输入的 Skill 内容',{exact:true})).toHaveCount(0);
+ await region.getByRole('button',{name:'刷新候选',exact:true}).click();
+ await expect.poll(()=>f.commands.filter(command=>command.action==='read').length).toBe(2);
+ assert.equal(f.commands.filter(command=>command.action==='skills').length,0);
 });
 
 /** 仅IPC业务边界为显式替身；实际React、浏览器事件及渲染均执行。 */
@@ -227,7 +211,7 @@ test('候选页面读取真实版本结构、保存多条编辑稿并选择具�
  });
  const region=f.page.getByRole('region',{name:'表达工作区'}),first=region.getByRole('textbox',{name:'候选第1条',exact:true}),second=region.getByRole('textbox',{name:'候选第2条',exact:true});
  await expect(first).toHaveValue('合成候选第一条');await expect(second).toHaveValue('合成候选第二条');
- await region.getByText('依据',{exact:true}).click();await expect(region.getByText('同联系人实际输入依据',{exact:true})).toBeVisible();await region.getByText('实际进入模型输入的 Skill 内容',{exact:true}).click();await expect(region.getByText('本次实际加载的合成Skill正文',{exact:true})).toBeVisible();
+ await region.getByText('依据',{exact:true}).click();await expect(region.getByText('同联系人实际输入依据',{exact:true})).toBeVisible();await expect(region.getByText('实际进入模型输入的 Skill 内容',{exact:true})).toHaveCount(0);
  await first.fill('手工修改后的第一条');await second.fill('手工修改后的第二条');await region.getByRole('button',{name:'保存修改',exact:true}).click();
  await expect.poll(()=>f.commands.filter(c=>c.action==='edit').length).toBe(1);
  const edit=f.commands.find(c=>c.action==='edit');assert.equal(edit.candidateId,ids.candidate);assert.equal(edit.versionNo,1);assert.deepEqual(edit.parts,['手工修改后的第一条','手工修改后的第二条']);
