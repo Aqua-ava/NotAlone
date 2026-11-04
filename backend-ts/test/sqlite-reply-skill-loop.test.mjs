@@ -105,6 +105,19 @@ test('92个默认启用Skill的本地预加载P95和最大值保持秒级', {tim
  assert.equal(trace.events.filter(event=>event.kind==='skill_input').length,92);
 });
 
+test('257个eligible Skill超过预载上限时整体无Skill降级', {timeout:30_000}, async t=>{
+ const f=await setup(t,(_f,res)=>stream(res));
+ f.model.budgetProfile.context_window_tokens=1_000_000;
+ const catalog=await addScaleSkills(f,256);
+ assert.equal(catalog.length,257);
+ await f.turns.generate({...f.input,requestKey:randomUUID()});
+ const view=await f.view();
+ assert.equal(f.requests.length,1,'超限必须只发起一次无 Skill 模型调用');
+ assert.deepEqual(toolNames(f.requests[0]),[]);
+ assert.equal(view.skillWarning,'回复策略暂不可用');
+ assert.deepEqual(view.loadedSkills,[]);assert.deepEqual(view.preloadedSkills,[]);
+});
+
 test('显式selectedPackageId只预加载指定单包并保持优先',async t=>{
  const f=await setup(t,(_f,res)=>stream(res));await addClearSkill(f);
  await f.turns.generate({...f.input,selectedPackageId:f.skill.id});

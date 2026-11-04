@@ -66,3 +66,5 @@ Blocked by: 01, 02, 03
 - 2026-11-04 上限补齐：新增 `skill_resource` 第三次调用真实集成回归。前两次读取成功，第三次在下一次模型请求前被硬拒绝，随后只发起一次无 Skill 降级请求；最终候选保留，`skillWarning` 为“回复策略暂不可用”，`loadedSkills/preloadedSkills` 清空，没有残留第三次资源正文。候选 Skill loop 16/16。
 
 - 2026-11-04 规模化实际 App 缺口修复：92 个默认启用 Skill 时，旧实现每个 Skill 的 `record()` 前后都执行整套 `run.validate()`，导致 17,296 次 `assertAnchor` 和约 24 秒本地准备。现增加 `skills.assertRevisions`／`library.assertAnchors` 批量复验、`discussion.skillPreload` 单事务选择与输入记录，并移除预加载入口的重复验证；正式候选保护一次记录全部 selection/input。同一合成 92 Skill 链路 3 样本为 593/573/585ms，P95=max=593ms；Skill/候选/profile 相关回归 34+17+15+9 全部通过。
+
+- 2026-11-04 上限边界：批量事件与上下文保留单轮最多 256 个 eligible Skill 的硬上限；257 个时抛 `skill_preload_limit`，整体无 Skill 降级而不是加载部分集合。新增 257 Skill 真实候选回归：仅 1 次无工具模型调用，`skillWarning=回复策略暂不可用`，loaded/preloaded 均清空。

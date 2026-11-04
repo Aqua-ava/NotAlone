@@ -8,6 +8,7 @@ import {SqliteSkillLibrary,SqliteSkillError,skillAnchor,type VerifiedSkillSnapsh
 import type {LoadedSkill,PreloadedSkill,SkillAnchor,SkillPackageState,SkillPreloadInput,SkillPreloadOrigin,SkillPreloadSelection,SkillPreloadTrace,SkillRunProtection,SkillRunRevision,SkillRunScope} from './contracts.ts';
 
 const providerName='notalone-sqlite-skills';
+export const SKILL_PRELOAD_LIMIT=256;
 const virtualRoot='/notalone/reply-skills';
 const catalogRevision=(items: SkillPackageState[])=>JSON.stringify(items.map(i=>[i.id,i.headRevision.toString()]));
 async function abortable<T>(work: Promise<T>,signal: AbortSignal): Promise<T> {
@@ -48,6 +49,8 @@ export function planSkillPreload(items: SkillPackageState[],options: Pick<Sqlite
       if(chosen.length!==ids.size)throw new SqliteSkillError('skill_preload_unavailable');
     }else chosen=available;
   }
+  // 保留单事务事件和上下文规模的硬边界；超限不能只加载一部分，由调用方整体降级为无 Skill。
+  if(chosen.length>SKILL_PRELOAD_LIMIT)throw new SqliteSkillError('skill_preload_limit');
   return {origin,catalogRevision:catalogSnapshot,anchors:chosen.map(item=>skillAnchor(item))};
 }
 /**

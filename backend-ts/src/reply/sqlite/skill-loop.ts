@@ -11,7 +11,7 @@ export class ReplySkillUnavailable extends Error {
 }
 export function isSkillReadFailure(error:unknown):boolean{
  const code=(error as {code?:string})?.code;
- return typeof code==='string'&&(/^skill_(reader_unavailable|directory_unavailable|directory_conflict|content_changed|package_invalid|run_invalidated|revision_unavailable|unverified|source_verification_required)$/.test(code)||['discussion_resource_limit','discussion_skill_tool_failed'].includes(code));
+ return typeof code==='string'&&(/^skill_(reader_unavailable|directory_unavailable|directory_conflict|content_changed|package_invalid|run_invalidated|revision_unavailable|unverified|source_verification_required|preload_limit)$/.test(code)||['discussion_resource_limit','discussion_skill_tool_failed'].includes(code));
 }
 export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check:()=>Promise<void>,failed:(error:unknown)=>void,documents=false):void{
  const active=run;
