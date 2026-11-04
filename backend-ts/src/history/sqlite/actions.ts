@@ -296,6 +296,8 @@ export const historyActions:StorageAction[]=[
   const {quarantined,createdMessageIds,updatedMessageIds}=ingestRecords({tx,token,report,target,captureId:i.captureId,at:i.at,records:page.records,
    exclude:observed=>observed.localKey&&clearBoundaryExclusion(tx,{ownerId:token.owner_id,conversationId:token.conversation_id,externalKey:observed.localKey,restoreOperationId:incrementalRestoreId})?'clear_excluded':null});
   if(quarantined)tx.run("UPDATE sync_capture SET state='quarantined',error_code='history_identity_quarantined' WHERE owner_id=? AND id=?",[token.owner_id,i.captureId]);
+  // 增量空页每个目标只留最新一条：游标已随目标保存，旧空页不被任何记录、来源或覆盖统计引用。
+  if(!quarantined&&page.records.length===0)tx.run("DELETE FROM sync_capture WHERE owner_id=? AND goal_id=? AND id<>? AND state='accepted' AND NOT EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=sync_capture.owner_id AND r.capture_id=sync_capture.id)",[token.owner_id,goal.id,i.captureId]);
   // 成功接受的一页同时恢复目标为运行态：此前的中断原因不再代表当前状态。
   tx.run("UPDATE read_goal SET cursor=?,pages_accepted=pages_accepted+1,last_accepted_at=?,coverage_state=?,state=?,failure_code=? WHERE owner_id=? AND id=?",[cursorOut,BigInt(i.at),quarantined?'partial':page.caughtUp?'caught_up':'partial',quarantined?'incomplete':'running',quarantined?'history_identity_quarantined':null,token.owner_id,goal.id]);
   const coverage=readCoverage(tx,token.owner_id,token.contact_id);

@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 39,
+  "schemaVersion": 40,
   "migrationVersions": [
    1,
    2,
@@ -40,9 +40,10 @@
    36,
    37,
    38,
-   39
+   39,
+   40
   ],
-  "userVersion": 39,
+  "userVersion": 40,
   "sqliteVersion": "3.53.4",
   "tableCount": 95,
   "fieldCount": 957,
@@ -15126,6 +15127,17 @@
     }
    ],
    "indexes": [
+    {
+     "name": "sync_capture_goal",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "goal_id"
+     ],
+     "sql": "CREATE INDEX sync_capture_goal ON sync_capture(owner_id,goal_id)"
+    },
     {
      "name": "sync_capture_acceptance_order",
      "unique": 1,
