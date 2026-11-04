@@ -2,7 +2,7 @@
 
 产品合同以[Skill 生命周期与授权](../../../../architecture/current/skill-library.md)、[外部原包与受管副本删除](../../../../architecture/current/privacy-deletion.md)为准；本页只保留本模块的接口、装配和故障处理。
 
-使用官方 DSH Skill provider、包／修订身份和业务查询，不创建学习、审核发布或方法级策略表。应用在授权根自动发现 Skill，核验成功后默认启用；用户可明确启用或停用，回复时在可用范围内按需组合零个或多个相关版本；每包使用本轮固定的当前修订。管理页不提供手动添加、填写目录名或安装路径；原 Skill 目录始终只读。
+使用官方 DSH Skill provider、包／修订身份和业务查询，不创建学习、审核发布或方法级策略表。应用在授权根自动发现 Skill，核验成功后默认启用；用户可明确启用或停用，正常候选在首次模型调用前预加载可用范围内全部 eligible 版本；每包使用本轮固定的当前修订，资源仍按需读取。管理页不提供手动添加、填写目录名或安装路径；原 Skill 目录始终只读。
 
 ## 迁移与查询
 
@@ -37,10 +37,10 @@
 必需的 `SkillRunProtection` 是删除／讨论／候选域共同的受信任宿主边界，缺失时拒绝打开：
 
 1. `assertCurrent(scope, frozenRevision|null, signal)` 在同一短事务调用 `requireSkillRun(tx, scope.ownerId, frozenRevision)`（非null时）并复验已确认联系人、调用、读取／资料／来源／删除代次、模型用途和出站范围；Skill不能赋予这些资格。
-2. `recordSelection(scope, selected)` 记录每次实际选中的包修订；自动模式对各包分别记录，显式定向预加载则记录其指定修订。事件本身不表示正文已读取或内容已进入模型。
-3. `recordInput(input, signal)` 分别保存每份实际返回的正文或资源文字、payloadDigest、selected/loaded 精确包修订、Skill 名称、相对路径及 scope，登记来源与受管副本删除关系。写入事务必须复验上述业务资格，并调用导出的 `requireSkillRun(tx, ownerId, input.runRevision)` 与 `requireSkillRevision(tx, ownerId, input.loaded)`。SkillRunRevision带本轮全部包head及可载入锚点；最后一面不能单独异步检查，避免检查另一面时被撤销。单独事务外检查不够。
+2. `recordSelection(scope, selected, signal?, trace?)` 记录每次实际选中的包修订；自动模式对各包分别记录，显式定向预加载则记录其指定修订。`trace` 记录读取时冻结的 Skill 名称、`origin` 与目录快照；事件本身不表示正文已读取或内容已进入模型。
+3. `recordInput(input, signal)` 分别保存每份实际返回的正文或资源文字、payloadDigest、selected/loaded 精确包修订、Skill 名称、相对路径、预加载来源与目录快照及 scope，登记来源与受管副本删除关系。写入事务必须复验上述业务资格，并调用导出的 `requireSkillRun(tx, ownerId, input.runRevision)` 与 `requireSkillRevision(tx, ownerId, input.loaded)`。SkillRunRevision带本轮全部包head及可载入锚点；最后一面不能单独异步检查，避免检查另一面时被撤销。单独事务外检查不够。
 
-候选域必须在物理模型发送和业务提交前再次 `run.validate()`，记录真正发出的完整模型输入和模型回执。本模块的读取事件仅证明官方provider读取了该正文，不能当作模型实际发送或成功回复的证据。DSH目录缓存不能替代业务与文件核验；每次读取及返回前均重验，启停或核验变更、来源失效、scope释放及AbortSignal会拒绝迟到结果。
+正常候选域在首次物理模型发送前预加载全部 eligible 正文、隐藏目录工具并保留受控资源读取；仍必须在物理模型发送和业务提交前再次 `run.validate()`，记录真正发出的完整模型输入和模型回执。本模块的读取事件仅证明官方provider读取了该正文，不能当作模型实际发送或成功回复的证据。DSH目录缓存不能替代业务与文件核验；每次读取及返回前均重验，启停或核验变更、来源失效、scope释放及AbortSignal会拒绝迟到结果。
 
 ## 删除接入边界
 
