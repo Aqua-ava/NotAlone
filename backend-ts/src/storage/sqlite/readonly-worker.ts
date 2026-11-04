@@ -3,6 +3,7 @@ import {DatabaseSync,type SQLInputValue} from 'node:sqlite';
 import {statSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {controlledFiles} from './files.ts';
+import {statementCache} from './statement-cache.ts';
 import {registry as defaultRegistry} from './registry.ts';
 import {StorageFailure,type StorageRegistry,type StorageTransaction} from './contracts.ts';
 import type {ReadonlyWorkerOptions} from './readonly-client.ts';
@@ -27,9 +28,10 @@ try{
   connection=new DatabaseSync(files.database,{readOnly:true,enableForeignKeyConstraints:true,allowExtension:false,timeout:100});
   const db=connection;
   db.exec('PRAGMA query_only=ON; PRAGMA foreign_keys=ON; PRAGMA trusted_schema=OFF; PRAGMA temp_store=MEMORY;');
+  const prepared=statementCache(db);
   const all=(sql:string,values:SQLInputValue[]=[]):Record<string,any>[]=>{
     if(values.some(value=>typeof value==='number'&&(!Number.isFinite(value)||Number.isInteger(value)&&!Number.isSafeInteger(value))))throw new StorageFailure('storage_value_invalid');
-    const statement=db.prepare(sql);statement.setReadBigInts(true);return statement.all(...values);
+    return prepared(sql).all(...values);
   };
   const get=(sql:string,values:SQLInputValue[]=[])=>all(sql,values)[0];
   const schemaVersion=get('PRAGMA schema_version').schema_version;

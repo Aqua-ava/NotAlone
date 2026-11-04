@@ -2,6 +2,7 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { createHash, randomUUID } from 'node:crypto';
 import { controlledFiles } from './files.ts';
+import { statementCache } from './statement-cache.ts';
 import { registry as defaultRegistry } from './registry.ts';
 import { memoryAdjudicationMigration, memoryAdjudicationRebuildPolicy, memoryAdjudicationRebuildChecksum, memoryAdjudicationUpgradeSteps } from '../../memory/sqlite/management/adjudication-schema.ts';
 import { memoryDocumentsMigration, memoryDocumentsRebuildPolicy, memoryDocumentsRebuildChecksum, memoryDocumentsUpgradeSteps } from '../../memory/sqlite/documents/schema.ts';
@@ -48,7 +49,9 @@ try {
     if (values.some(v => typeof v === 'number' && (!Number.isFinite(v) || (Number.isInteger(v) && !Number.isSafeInteger(v))))) throw new StorageFailure('storage_value_invalid');
     return values;
   };
-  const all = (sql: string, values: SQLInputValue[] = []) => { const s = connection.prepare(sql); s.setReadBigInts(true); return s.all(...bindings(values)); };
+  // 同一条 SQL 反复执行（如核验链上的上千次小查询）时复用预编译语句。
+  const prepared = statementCache(connection);
+  const all = (sql: string, values: SQLInputValue[] = []) => prepared(sql).all(...bindings(values));
   const get = (sql: string, values: SQLInputValue[] = []) => all(sql, values)[0];
   const schemaDigest = () => digest(JSON.stringify(all("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name")));
   const checks = () => {
@@ -162,7 +165,7 @@ try {
                 ...files.inspectSidecars()}; },
             };
             const tx: StorageTransaction = {
-              run(sql, values = []) { permitted(); connection.prepare(sql).run(...bindings(values)); },
+              run(sql, values = []) { permitted(); prepared(sql).run(...bindings(values)); },
               get(sql, values) { permitted(); return get(sql, values); },
               all(sql, values) { permitted(); return all(sql, values); },
             };
