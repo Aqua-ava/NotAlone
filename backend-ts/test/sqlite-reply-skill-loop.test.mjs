@@ -1,12 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdir,writeFile,unlink,readdir,readFile,mkdtemp,realpath,rm} from 'node:fs/promises';
-import {join,resolve} from 'node:path';
-import {tmpdir} from 'node:os';
+import {mkdir,writeFile,unlink,readdir} from 'node:fs/promises';
+import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {fixture} from './fixtures/sqlite-reply-candidates/support.mjs';
 import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/service.ts';
-import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 import {SqliteReplyTurns} from '../src/reply/sqlite/candidates/turns.ts';
 const answer=JSON.stringify({candidates:[{parts:['合成候选仍可编辑。'],basis:[1]}]});
 function stream(res,name,args){
@@ -15,8 +13,9 @@ function stream(res,name,args){
  const events=[{type:'message_start',message:{id:randomUUID(),model:'synthetic-model',usage:{input_tokens:3,output_tokens:0}}},...content.flatMap((content_block,index)=>[{type:'content_block_start',index,content_block},{type:'content_block_stop',index}]),{type:'message_delta',delta:{stop_reason:tool?'tool_use':'end_turn'},usage:{output_tokens:8}},{type:'message_stop'}];
  res.setHeader('content-type','text/event-stream');res.end(events.map(e=>`event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join(''));
 }
+function toolNames(request){return (request.tools??[]).map(tool=>tool.name);}
 async function setup(t,onRequest,options={}){
- const f=await fixture(t,{...options,onRequest:async(req,res,request,n)=>{await onRequest(f,res,request,n);return true;}});
+ const f=await fixture(t,{...options,inProcessModel:true,onRequest:async(req,res,request,n)=>{await onRequest(f,res,request,n);return true;}});
  await mkdir(join(f.skillRoot,'gentle/references'),{recursive:true});
  await writeFile(join(f.skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 安慰时可用的合成策略\n---\n先回应感受，再参考 references/example.md。\n');
  await writeFile(join(f.skillRoot,'gentle/references/example.md'),'辅助资料的唯一合成教学句。');
@@ -33,141 +32,159 @@ async function addClearSkill(f){
  const skill=await f.library.discover('clear');return f.library.setEnabled(skill.id,skill.headRevision,'enabled');
 }
 
-test('正常回复可自动选择正文再按需读取同修订资源，实际输入和逐次用量可回看',async t=>{
- const f=await setup(t,(_f,res,_request,n)=>n===1?stream(res,'skill',{name:'gentle'}):n===2?stream(res,'skill_resource',{name:'gentle',path:'references/example.md'}):stream(res));
- await f.turns.generate(f.input);const view=await f.view();assert.equal(view.candidates.length,1);assert.equal(view.loadedSkills[0].name,'gentle');
- assert.deepEqual(view.loadedSkills.map(s=>s.relativePath),['SKILL.md','references/example.md']);
- assert.ok(!JSON.stringify(f.requests[0]).includes('辅助资料的唯一合成教学句。'));assert.ok(JSON.stringify(f.requests[2]).includes('辅助资料的唯一合成教学句。'));
- const trace=await f.trace();assert.equal(trace.calls.length,3);assert.ok(trace.calls.every(c=>c.state==='succeeded'&&c.actual_budget_units===11n));
- assert.equal(trace.events.filter(e=>e.kind==='model_request').length,3);assert.deepEqual(f.supplierErrors,[]);
+test('正常候选在首次请求前预加载单个Skill正文，物理模型调用一次',async t=>{
+ let firstAt=0;const f=await setup(t,(_f,res)=>{if(!firstAt)firstAt=performance.now();stream(res);});
+ const started=performance.now();await f.turns.generate(f.input);
+ t.diagnostic(`model_calls=${f.requests.length} first_request_bytes=${Buffer.byteLength(JSON.stringify(f.requests[0]),'utf8')} local_prepare_ms=${(firstAt-started).toFixed(1)}`);
+ const wire=f.requests[0].system,view=await f.view(),trace=await f.trace();
+ assert.equal(f.requests.length,1);assert.equal(trace.calls.length,1);
+ assert.match(wire,/<skill_content name="gentle">/);assert.match(wire,/先回应感受/);
+ assert.ok(!wire.includes('辅助资料的唯一合成教学句。'),'资源正文不得随Skill预加载');
+ assert.ok(!wire.includes('available_skills'),'预加载路径不得发布可调用目录');
+ assert.deepEqual(toolNames(f.requests[0]),['skill_resource']);
+ assert.deepEqual(view.loadedSkills.map(skill=>[skill.name,skill.relativePath]),[['gentle','SKILL.md']]);
+ assert.deepEqual(f.supplierErrors,[]);
 });
 
-test('同次回复可组合多个 Skill，分别读取同名案例并在候选与调用依据中保留所有实际输入',async t=>{
- const names=['gentle','clear'];
- const f=await setup(t,(_f,res,_request,n)=>n===1
-  ?stream(res,names.map(name=>({name:'skill',args:{name}})))
-  :n===2?stream(res,names.map(name=>({name:'skill_resource',args:{name,path:'references/example.md'}}))):stream(res));
- const clear=await addClearSkill(f);
+test('多个enabled+verified+current Skill正文全部进入首次请求，物理模型调用一次',async t=>{
+ const f=await setup(t,(_f,res)=>stream(res));await addClearSkill(f);
  await f.turns.generate(f.input);
- const view=await f.view();assert.equal(view.candidates.length,1);assert.equal(view.skillWarning,null);
- assert.deepEqual(view.loadedSkills.map(skill=>[skill.name,skill.relativePath]),[
-  ['gentle','SKILL.md'],['clear','SKILL.md'],['gentle','references/example.md'],['clear','references/example.md'],
- ]);
- assert.equal(view.loadedSkills[2].text,'辅助资料的唯一合成教学句。');assert.equal(view.loadedSkills[3].text,'clear 的独立合成案例。');
- assert.equal(view.loadedSkills[2].packageId,f.skill.id);assert.equal(view.loadedSkills[3].packageId,clear.id);
- assert.ok(!JSON.stringify(f.requests[0]).includes('清晰说明边界，参考'));
- assert.ok(JSON.stringify(f.requests[1]).includes('先回应感受，再参考'));assert.ok(JSON.stringify(f.requests[1]).includes('清晰说明边界，参考'));
- assert.ok(JSON.stringify(f.requests[2]).includes('辅助资料的唯一合成教学句。'));assert.ok(JSON.stringify(f.requests[2]).includes('clear 的独立合成案例。'));
- const trace=await f.trace();assert.equal(trace.calls.length,3);assert.equal(trace.events.filter(event=>event.kind==='skill_input').length,4);
- assert.deepEqual(trace.events.filter(event=>event.kind==='skill_selection').map(event=>JSON.parse(event.payload).selected?.packageId??null),[null,f.skill.id,clear.id]);
- assert.equal(await f.turns.configurationFor(f.input.contactId,f.input.discussionId),(await f.storage.execute('runtime.inventory',{ownerId:f.owner}))[0].configurationDigest);
- assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});assert.deepEqual(f.supplierErrors,[]);
+ const wire=f.requests[0].system,view=await f.view(),trace=await f.trace();
+ assert.equal(f.requests.length,1);assert.equal(trace.calls.length,1);
+ assert.match(wire,/<skill_content name="gentle">/);assert.match(wire,/<skill_content name="clear">/);
+ assert.ok(!wire.includes('available_skills'));assert.ok(!toolNames(f.requests[0]).includes('skill'));
+ assert.deepEqual(view.loadedSkills.map(skill=>skill.name).sort(),['clear','gentle']);
+ assert.deepEqual(view.preloadedSkills.map(skill=>[skill.name,skill.revisionNo,skill.origin]).sort(),[['clear',1,'auto_preload'],['gentle',1,'auto_preload']]);
+ assert.ok(view.preloadedSkills.every(skill=>typeof skill.catalogRevision==='string'&&skill.catalogRevision.length>0));
+ const selections=trace.events.filter(event=>event.kind==='skill_selection').map(event=>JSON.parse(event.payload));
+ assert.equal(selections.length,2);assert.ok(selections.every(item=>item.name&&item.preload?.origin==='auto_preload'&&typeof item.preload.catalogRevision==='string'&&item.preload.catalogRevision.length>0));
+ const inputs=trace.events.filter(event=>event.kind==='skill_input').map(event=>JSON.parse(event.payload));
+ assert.ok(inputs.every(item=>item.name&&item.preload?.origin==='auto_preload'&&item.loaded.manifestDigest&&item.loaded.contentDigest&&item.loaded.headRevision));
+ assert.deepEqual(f.supplierErrors,[]);
 });
 
-test('已组合多个 Skill 后任一版本失效，降级清除所有旧正文、案例目录和实际输入',async t=>{
- const f=await setup(t,async(f,res,_request,n)=>{
-  if(n===1)stream(res,['gentle','clear'].map(name=>({name:'skill',args:{name}})));
-  else if(n===2){await unlink(join(f.skillRoot,'clear/SKILL.md'));stream(res,'skill_resource',{name:'gentle',path:'references/example.md'});}
-  else stream(res);
- });
- await addClearSkill(f);await f.turns.generate(f.input);
- const view=await f.view();assert.equal(view.candidates.length,1);assert.equal(view.skillWarning,'回复策略暂不可用');assert.deepEqual(view.loadedSkills,[]);
- assert.equal(f.requests.length,3);assert.ok(JSON.stringify(f.requests[1]).includes('清晰说明边界'));
- const fallback=JSON.stringify(f.requests[2]);for(const text of ['gentle','clear','先回应感受','清晰说明边界','references/example.md','tool_result'])assert.ok(!fallback.includes(text));
- const trace=await f.trace();assert.ok(!trace.events.some(event=>event.kind==='skill_input'||event.kind==='skill_selection'));
- assert.equal(trace.events.filter(event=>event.kind==='model_request').length,1);assert.equal(trace.calls.length,3);
- assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});assert.deepEqual(f.supplierErrors,[]);
+test('没有eligible Skill时仍只调用一次模型且不暴露Skill工具',async t=>{
+ const f=await setup(t,(_f,res)=>stream(res));await f.library.setEnabled(f.skill.id,f.skill.headRevision,'disabled');
+ await f.turns.generate(f.input);
+ const request=JSON.stringify(f.requests[0]),view=await f.view();
+ assert.equal(f.requests.length,1);assert.deepEqual(toolNames(f.requests[0]),[]);
+ assert.ok(!request.includes('<skill_content'));assert.ok(!request.includes('available_skills'));
+ assert.deepEqual(view.loadedSkills,[]);assert.equal(view.skillWarning,null);assert.equal((await f.trace()).calls.length,1);
 });
 
-test('Skill在模型选中后缺失时清理旧会话与失效载荷，再用无Skill上下文继续',async t=>{
- const f=await setup(t,async(f,res,_request,n)=>{if(n===1){await unlink(join(f.skillRoot,'gentle/SKILL.md'));stream(res,'skill',{name:'gentle'});}else stream(res);});
- await f.turns.generate(f.input);const view=await f.view();assert.equal(view.candidates.length,1);assert.equal(view.skillWarning,'回复策略暂不可用');assert.deepEqual(view.loadedSkills,[]);
- assert.equal(f.requests.length,2);const fallback=JSON.stringify(f.requests[1]);assert.ok(!fallback.includes('available_skills'));assert.ok(!fallback.includes('gentle'));assert.ok(!fallback.includes('tool_result'));
- const trace=await f.trace();assert.equal(trace.calls.length,2);assert.ok(trace.events.some(e=>e.kind==='skill_unavailable'));assert.ok(!trace.events.some(e=>e.kind==='skill_input'));
- const copies=await f.storage.execute('runtime.inventory',{ownerId:f.owner});assert.equal(copies.length,1);assert.equal(copies[0].state,'ready');assert.equal(copies[0].configurationDigest,await f.turns.configurationFor(f.input.contactId,f.input.discussionId));
- assert.equal((await readdir(join(f.root,'managed/runtime-copies'))).length,1);
+test('显式selectedPackageId只预加载指定单包并保持优先',async t=>{
+ const f=await setup(t,(_f,res)=>stream(res));await addClearSkill(f);
+ await f.turns.generate({...f.input,selectedPackageId:f.skill.id});
+ const request=JSON.stringify(f.requests[0]),trace=await f.trace();
+ assert.equal(f.requests.length,1);assert.match(request,/先回应感受/);assert.doesNotMatch(request,/清晰说明边界/);
+ const inputs=trace.events.filter(event=>event.kind==='skill_input').map(event=>JSON.parse(event.payload));
+ assert.deepEqual(inputs.map(item=>item.loaded.packageId),[f.skill.id]);
+ assert.equal(inputs[0].preload.origin,'explicit');assert.ok(!toolNames(f.requests[0]).includes('skill'));
+ assert.deepEqual((await f.view()).preloadedSkills.map(skill=>[skill.name,skill.origin]),[['gentle','explicit']]);
+});
+
+test('skill_resource按已预加载身份读取两份资源，只增加一次额外模型往返',async t=>{
+ const f=await setup(t,(_f,res,_request,n)=>n===1?stream(res,[
+  {name:'skill_resource',args:{name:'gentle',path:'references/example.md'}},
+  {name:'skill_resource',args:{name:'gentle',path:'references/example.md'}},
+ ]):stream(res));
+ await f.turns.generate(f.input);
+ const view=await f.view(),trace=await f.trace();
+ assert.equal(f.requests.length,2,'资源读取只允许一次额外模型往返');
+ assert.deepEqual(toolNames(f.requests[0]),['skill_resource']);
+ assert.ok(!toolNames(f.requests[0]).includes('skill'));
+ assert.equal(view.loadedSkills.filter(skill=>skill.relativePath==='references/example.md').length,2);
+ assert.equal(view.loadedSkills.filter(skill=>skill.relativePath==='SKILL.md').length,1);
+ assert.equal(view.preloadedSkills.length,1);assert.equal(view.preloadedSkills[0].name,'gentle');
+ assert.ok(view.loadedSkills.every(skill=>skill.origin==='auto_preload'&&skill.catalogRevision===view.preloadedSkills[0].catalogRevision));
+ assert.equal(trace.calls.length,2);assert.equal(trace.events.filter(event=>event.kind==='skill_input').length,3);
+ assert.ok(!JSON.stringify(f.requests[0]).includes('辅助资料的唯一合成教学句。'));
+ assert.ok(JSON.stringify(f.requests[1]).includes('辅助资料的唯一合成教学句。'));
+});
+
+test('预加载读取失败整体无Skill降级，首次且唯一物理调用不含残缺正文',async t=>{
+ const f=await setup(t,(_f,res)=>stream(res));await unlink(join(f.skillRoot,'gentle/SKILL.md'));
+ await f.turns.generate(f.input);
+ const view=await f.view(),trace=await f.trace(),request=JSON.stringify(f.requests[0]);
+ assert.equal(f.requests.length,1);assert.equal(trace.calls.length,1);assert.equal(view.skillWarning,'回复策略暂不可用');
+ assert.deepEqual(view.loadedSkills,[]);assert.ok(!request.includes('gentle'));assert.ok(!request.includes('先回应感受'));
+ assert.ok(!trace.events.some(event=>['skill_input','skill_selection'].includes(event.kind)));
+ assert.ok(trace.events.some(event=>event.kind==='skill_unavailable'));
+});
+
+test('Skill正文导致完整请求预算超限时整体撤下并一次无Skill调用',async t=>{
+ const f=await setup(t,(_f,res)=>stream(res));
+ await writeFile(join(f.skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 安慰时可用的合成策略\n---\n'+('超长合成策略正文'.repeat(400))+'\n');
+ await f.turns.generate(f.input);
+ const view=await f.view(),trace=await f.trace(),request=JSON.stringify(f.requests[0]);
+ assert.equal(f.requests.length,1,'预算拒绝不得形成额外物理调用');assert.equal(trace.calls.length,1);
+ assert.equal(view.skillWarning,'回复策略暂不可用');assert.deepEqual(view.loadedSkills,[]);
+ assert.ok(!request.includes('超长合成策略正文'));assert.ok(!request.includes('available_skills'));
+ assert.equal(trace.events.filter(event=>event.kind==='model_request').length,1);
+});
+
+test('Skill在预加载后失效时清除已读正文并以无Skill上下文继续',async t=>{
+ const f=await setup(t,async(f,res,_request,n)=>{if(n===1){await unlink(join(f.skillRoot,'gentle/SKILL.md'));stream(res,'skill_resource',{name:'gentle',path:'references/example.md'});}else stream(res);});
+ await f.turns.generate(f.input);
+ const view=await f.view(),trace=await f.trace();
+ assert.equal(f.requests.length,2);assert.equal(view.skillWarning,'回复策略暂不可用');assert.deepEqual(view.loadedSkills,[]);
+ const fallback=JSON.stringify(f.requests[1]);for(const text of ['gentle','先回应感受','references/example.md','tool_result'])assert.ok(!fallback.includes(text));
+ assert.ok(!trace.events.some(event=>['skill_input','skill_selection'].includes(event.kind)));
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('Skill失效降级时无关新增记忆不打断原冻结输入',async t=>{
- const added='模型在途才新增的无关合成事实。';
- const f=await setup(t,async(f,res,_request,n)=>{
-  if(n===1){
-   await new SqliteMemoryManagement(f.storage,f.owner).decide({requestKey:randomUUID(),action:'manual',scope:{scopeKind:'contact',contactId:f.ids[0]},body:added});
-   await unlink(join(f.skillRoot,'gentle/SKILL.md'));stream(res,'skill',{name:'gentle'});
-  }else stream(res);
- });
- await f.turns.generate(f.input);const view=await f.view();assert.equal(view.candidates.length,1);assert.equal(view.skillWarning,'回复策略暂不可用');
- assert.equal(f.requests.length,2);assert.doesNotMatch(JSON.stringify(f.requests[1]),new RegExp(added));
- assert.equal((await f.trace()).calls.length,2);
-});
-
-test('模型可不选择Skill，候选不展示策略名称或不可用提示',async t=>{
- const f=await setup(t,(_f,res)=>stream(res));await f.turns.generate(f.input);const view=await f.view();assert.equal(view.candidates.length,1);assert.deepEqual(view.loadedSkills,[]);assert.equal(view.skillWarning,null);assert.equal(f.requests.length,1);
+test('请求取消在预加载或首次模型调用前阻止候选提交',async t=>{
+ const controller=new AbortController();const f=await setup(t,(_f,res)=>stream(res));controller.abort();
+ await assert.rejects(f.turns.generate({...f.input,signal:controller.signal}));assert.equal(f.requests.length,0);assert.deepEqual((await f.view())?.candidates??[],[]);
 });
 
 
-test('资源部分加载后失效会销毁包含旧正文的会话，降级请求不含旧Skill或工具结果',async t=>{
- const f=await setup(t,async(f,res,_request,n)=>{if(n===1)stream(res,'skill',{name:'gentle'});else if(n===2){await writeFile(join(f.skillRoot,'gentle/references/example.md'),'替换后的不可信资料。');stream(res,'skill_resource',{name:'gentle',path:'references/example.md'});}else stream(res);});
- await f.turns.generate(f.input);const view=await f.view();assert.equal(view.skillWarning,'回复策略暂不可用');assert.deepEqual(view.loadedSkills,[]);assert.equal(f.requests.length,3);
- const last=JSON.stringify(f.requests.at(-1));assert.ok(!last.includes('先回应感受'));assert.ok(!last.includes('references/example.md'));assert.ok(!last.includes('tool_result'));
- const trace=await f.trace();assert.equal(trace.calls.length,3);assert.ok(!trace.events.some(e=>e.payload.includes('先回应感受')));assert.equal(trace.events.filter(e=>e.kind==='model_request').length,1);
+test('预加载后当前修订在发送前变化时整体降级，唯一物理调用不含旧正文',{timeout:6000},async t=>{
+ const f=await setup(t,(_f,res)=>stream(res));const original=f.provider.beginCall.bind(f.provider);let changed=false;
+ f.provider.beginCall=call=>original({...call,beforeDispatch:async value=>{if(!changed){changed=true;await writeFile(join(f.skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 安慰时可用的合成策略\n---\n已变化的合成正文。\n');}return call.beforeDispatch(value);}});
+ await f.turns.generate(f.input);
+ const view=await f.view(),trace=await f.trace(),wire=JSON.stringify(f.requests[0]);
+ assert.equal(f.requests.length,1);assert.equal(trace.calls.length,1);assert.equal(view.skillWarning,'回复策略暂不可用');assert.deepEqual(view.loadedSkills,[]);
+ assert.ok(!wire.includes('先回应感受'));assert.ok(!wire.includes('已变化的合成正文'));assert.ok(!wire.includes('available_skills'));
 });
 
-test('Skill失败伴随本次出站授权撤销时停止，不用降级绕过授权',async t=>{
- let revoked=false;
- const f=await setup(t,async(f,res)=>{revoked=true;await unlink(join(f.skillRoot,'gentle/SKILL.md'));stream(res,'skill',{name:'gentle'});});
- await f.turns.close();const turns=new SqliteReplyTurns({...f,service:f.service,authorize:async()=>{if(revoked)throw Error('synthetic authorization revoked');}});t.after(()=>turns.close());
- await assert.rejects(turns.generate(f.input));assert.equal(f.requests.length,1);assert.equal((await f.view()).candidates.length,0);
+test('模型超时发生在预加载后的首请求时取消候选且不自动重送',{timeout:6000},async t=>{
+ const f=await setup(t,async()=>new Promise(()=>{}));f.model.deadline_ms=1000;
+ await assert.rejects(f.turns.generate(f.input),error=>error?.code==='discussion_generation_timeout');
+ assert.equal(f.requests.length,1);assert.deepEqual((await f.view())?.candidates??[],[]);
+ const trace=await f.trace();assert.equal(trace.calls.length,1);assert.equal(trace.calls[0].state,'unknown');
 });
 
-test('请求取消在Skill工具返回前阻止续发与候选提交',async t=>{
- const controller=new AbortController();const f=await setup(t,(_f,res)=>{controller.abort();stream(res,'skill',{name:'gentle'});});
- await assert.rejects(f.turns.generate({...f.input,signal:controller.signal}));assert.equal(f.requests.length,1);assert.equal((await f.view()).candidates.length,0);
-});
-
-
-test('只读helper暂不可用时仅降级Skill，干净上下文继续且记录提示',async t=>{
- const dir=await realpath(await mkdtemp(join(tmpdir(),'notalone-skill-helper-unavailable-'))),reader=join(dir,'reader');
- t.after(()=>rm(dir,{recursive:true,force:true}));
- const quote=value=>"'"+value.replaceAll("'","'\\''")+"'";
- await writeFile(reader,`#!/bin/sh\nexec ${quote(resolve('../native/skill-read/.build/skill-read'))} "$@"\n`,{mode:0o700});
- const f=await setup(t,async(_f,res,_request,n)=>{if(n===1){await unlink(reader);stream(res,'skill',{name:'gentle'});}else stream(res);},{skillReaderBinary:reader});
- await f.turns.generate(f.input);const view=await f.view();assert.equal(view.skillWarning,'回复策略暂不可用');assert.equal(view.candidates.length,1);assert.deepEqual(view.loadedSkills,[]);assert.equal(f.requests.length,2);
-});
-
-test('合法大资源沿1MiB导入限制和完整模型输入预算参与回复及回看',async t=>{
- const f=await setup(t,(_f,res,_request,n)=>n===1?stream(res,'skill',{name:'gentle'}):n===2?stream(res,'skill_resource',{name:'gentle',path:'references/example.md'}):stream(res));
- const text='large-resource-template '.repeat(6000);assert.ok(text.length>100000);await writeFile(join(f.skillRoot,'gentle/references/example.md'),text);
- f.model.budgetProfile.context_window_tokens=1_048_576;
- await f.turns.generate(f.input);const view=await f.view();assert.equal(view.candidates.length,1);assert.equal(view.loadedSkills[1].text,text);assert.ok(JSON.stringify(f.requests[2]).includes(text));
-});
-
-test('清理最后文件后中断可从持久意图恢复，失效Skill会话不能重新执行',async t=>{
- const f=await setup(t,async(f,res,_request,n)=>{if(n===1){await unlink(join(f.skillRoot,'gentle/SKILL.md'));stream(res,'skill',{name:'gentle'});}else stream(res);},{runtimeFault:point=>{if(point==='beforeDiscardCommit')throw Error('synthetic crash after erasure');}});
- await assert.rejects(f.turns.generate(f.input));await f.runtime.close();
- const interrupted=await f.storage.execute('runtime.inventory',{ownerId:f.owner});assert.equal(interrupted.length,1);assert.equal(interrupted[0].state,'blocked');assert.ok(interrupted[0].cleanupOperationId.startsWith('skill-discard:'));
- const {SqliteDiscussionRuntime}=await import('../src/reply/sqlite/runtime.ts'),reopened=new SqliteDiscussionRuntime({storage:f.storage,ownerId:f.owner,userData:f.root,ctx:f.ctx,holders:f.holders});
- try{await reopened.initialize();assert.deepEqual(await f.storage.execute('runtime.inventory',{ownerId:f.owner}),[]);assert.deepEqual(await readdir(join(f.root,'managed/runtime-copies')),[]);assert.equal((await f.view()).candidates.length,0);assert.equal(f.requests.length,1);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});}finally{await reopened.close();}
+test('关闭候选运行会中止预加载后的在途首请求并拒绝迟到正文',{timeout:6000},async t=>{
+ const entered=Promise.withResolvers(),release=Promise.withResolvers();
+ const f=await setup(t,async(_f,res)=>{entered.resolve();await release.promise;stream(res);});
+ const pending=f.turns.generate(f.input);await entered.promise;assert.equal(f.requests.length,1);
+ await f.turns.close();await assert.rejects(pending);assert.deepEqual((await f.view())?.candidates??[],[]);
+ release.resolve();assert.equal(f.supplierErrors.length>=0,true);
 });
 
 
-test('Skill在本轮准备和打开provider之间缺失时也可安全降级',async t=>{
- let f,removed=false;
- f=await setup(t,(_f,res)=>stream(res),{runtimeFault:async point=>{if(point==='beforeDirectory'&&!removed){removed=true;await unlink(join(f.skillRoot,'gentle/SKILL.md'));}}});
- await f.turns.generate(f.input);const view=await f.view();assert.equal(view.skillWarning,'回复策略暂不可用');assert.equal(view.candidates.length,1);assert.equal(f.requests.length,1);assert.ok(!JSON.stringify(f.requests[0]).includes('gentle'));
+test('停用 Skill 不进入自动集合，也不阻断其余 eligible Skill',async t=>{
+ const f=await setup(t,(_f,res)=>stream(res));const clear=await addClearSkill(f);await f.library.setEnabled(clear.id,clear.headRevision,'disabled');
+ await f.turns.generate(f.input);
+ const wire=f.requests[0].system,view=await f.view();
+ assert.equal(f.requests.length,1);assert.match(wire,/先回应感受/);assert.doesNotMatch(wire,/清晰说明边界/);
+ assert.deepEqual(view.preloadedSkills.map(skill=>skill.name),['gentle']);assert.equal(view.skillWarning,null);
 });
 
+test('已启用 Skill 来源资格失效时整体无 Skill 降级并保留可解释状态',async t=>{
+ const f=await setup(t,(_f,res)=>stream(res));await f.library.requireVerification(f.skill.id,f.skill.headRevision);
+ await f.turns.generate(f.input);
+ const view=await f.view(),trace=await f.trace(),wire=JSON.stringify(f.requests[0]);
+ assert.equal(f.requests.length,1);assert.equal(trace.calls.length,1);assert.equal(view.skillWarning,'回复策略暂不可用');
+ assert.deepEqual(view.loadedSkills,[]);assert.deepEqual(view.preloadedSkills,[]);assert.ok(!wire.includes('先回应感受'));
+ assert.ok(trace.events.some(event=>event.kind==='skill_unavailable'));
+});
 
-test('provider打开后Agent setup读取失败保留故障类别，并从干净上下文继续',async t=>{
- const f=await setup(t,(_f,res)=>stream(res)),{skillAnchor}=await import('../src/skills/sqlite/library.ts'),{openSqliteSkillRun}=await import('../src/skills/sqlite/provider.ts'),{SqliteDiscussionSkillProtection}=await import('../src/reply/sqlite/skill-protection.ts'),{runSingleDiscussionTurn}=await import('../src/reply/sqlite/generation.ts');
- const confirmationId=await f.storage.execute('identity.manualConfirm',{ownerId:f.owner,contactId:f.input.contactId,contextToken:f.input.requestKey,id:randomUUID(),at:Date.now()});
- const {attempt}=await f.service.begin({...f.input,identity:{kind:'manual',confirmationId}}),callId=randomUUID(),contextId=randomUUID();
- const catalog=await f.library.list(),revision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:catalog.map(skillAnchor)};
- const items=await f.storage.execute('reply.freezeInput',{...attempt,contextId,skillRun:revision,items:[],queryText:f.input.text,at:Date.now()});assert.equal(items[0].itemNo,1);
- await f.storage.execute('discussion.prepareCall',{...attempt,contextId,callId,operationId:randomUUID(),provider:f.model.provider,requestKey:callId,inputSeal:'a'.repeat(64),model:f.model.model,configurationId:'b'.repeat(64),inputCap:8192,outputCap:f.model.maxTokens});
- const protection=new SqliteDiscussionSkillProtection({storage:f.storage,attempt,contextId,callId,authorize:async()=>{}}),run=await openSqliteSkillRun(f.library,{contactId:f.input.contactId,callId},protection);
- await unlink(join(f.skillRoot,'gentle/SKILL.md'));
- await runSingleDiscussionTurn({runtime:f.runtime,storage:f.storage,attempt,callId,contextId,configurationDigest:'b'.repeat(64),configurationForRevision:()=> 'c'.repeat(64),prompt:'[1] 合成请求，请只输出JSON候选。',systemPrompt:'只输出JSON候选，basis引用1。',model:f.model,provider:f.provider,arbiter:f.arbiter,skillRun:run,skillProtection:protection,skillRevision:revision,assertAuthorized:async()=>{},commitAction:'reply.commitCandidates'});
- const result=await f.view();assert.equal(result.skillWarning,'回复策略暂不可用');assert.equal(result.candidates.length,1);assert.deepEqual(result.loadedSkills,[]);assert.equal(f.requests.length,1);assert.ok(!JSON.stringify(f.requests[0]).includes('gentle'));
+test('预加载路径仍保持调用预算和单一运行副本',async t=>{
+ const f=await setup(t,(_f,res)=>stream(res));await f.turns.generate(f.input);
+ const copies=await f.storage.execute('runtime.inventory',{ownerId:f.owner});
+ assert.equal(copies.length,1);assert.equal(copies[0].state,'ready');
+ assert.equal(copies[0].configurationDigest,await f.turns.configurationFor(f.input.contactId,f.input.discussionId));
+ assert.equal((await readdir(join(f.root,'managed/runtime-copies'))).length,1);
 });

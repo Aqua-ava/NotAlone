@@ -11,23 +11,30 @@ export class ReplySkillUnavailable extends Error {
 }
 export function isSkillReadFailure(error:unknown):boolean{
  const code=(error as {code?:string})?.code;
- return typeof code==='string'&&/^skill_(reader_unavailable|directory_unavailable|directory_conflict|content_changed|package_invalid|run_invalidated|revision_unavailable|unverified|source_verification_required)$/.test(code);
+ return typeof code==='string'&&(/^skill_(reader_unavailable|directory_unavailable|directory_conflict|content_changed|package_invalid|run_invalidated|revision_unavailable|unverified|source_verification_required)$/.test(code)||['discussion_resource_limit','discussion_skill_tool_failed'].includes(code));
 }
 export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check:()=>Promise<void>,failed:(error:unknown)=>void,documents=false):void{
- const allowed=!!run&&run.revision.eligible.length>0;
- ctx.tools.restrict({allow:allowed?['skill']:[]});
+ const preloaded=!!run&&run.preloadOrigin!==null;
+ const loaded=!!run&&run.loadedSkills.length>0;
+ const legacyCatalog=!!run&&!preloaded&&run.revision.eligible.length>0;
+ // 预加载路径隐藏官方目录工具；默认DSH目录与本工具可见性绑定，隐藏后不再发布摘要目录。
+ ctx.tools.restrict({allow:preloaded?[]:legacyCatalog?['skill']:[]});
  let resources=0;
  ctx.tools.guard(exec=>{
   if(documents&&exec.name===RELATIONSHIP_DOCUMENT_TOOL)return;
-  if(!allowed)return 'discussion_tools_forbidden';
+  if(!run)return 'discussion_tools_forbidden';
   if(exec.name==='skill_resource'){
-   if(!run.loadedSkills.length||++resources>2){failed(new StorageFailure('discussion_resource_limit'));return 'discussion_resource_limit';}
-  }else if(exec.name==='skill'){
+   if(!loaded||++resources>2){failed(new StorageFailure('discussion_resource_limit'));return 'discussion_resource_limit';}
    return;
-  }else{failed(new StorageFailure('discussion_tools_forbidden'));return 'discussion_tools_forbidden';}
+  }
+  if(exec.name==='skill'){
+   if(preloaded||!legacyCatalog)return 'discussion_tools_forbidden';
+   return;
+  }
+  failed(new StorageFailure('discussion_tools_forbidden'));return 'discussion_tools_forbidden';
  });
- if(!allowed)return;
- ctx.tools.register(defineTool({name:'skill_resource',description:'仅在已加载Skill明确需要补充资料时，按资源目录中的相对路径读取本版本静态文字。最多两次。',
+ if(!loaded&&!legacyCatalog)return;
+ if(loaded)ctx.tools.register(defineTool({name:'skill_resource',description:'仅在已预加载Skill明确需要补充资料时，按资源目录中的相对路径读取本版本静态文字。最多两次。',
   parameters:{name:{type:'string',required:true,description:'已成功加载正文的准确Skill名称。'},path:{type:'string',required:true,description:'该Skill资源目录中的准确references/或assets/相对路径。'}},
   async execute(args,exec){await check();return {text:await run.readLoadedResource(args.name,args.path,exec.signal)};},
   output:{schema:{type:'object',additionalProperties:false,properties:{text:{type:'string',required:true}}},render:(_args,value)=>[{type:'text',text:value.text}]},
@@ -39,10 +46,10 @@ export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check
    return next();
   }
   await check();
-  const loaded=exec.name==='skill'?run.loadedSkills.find(skill=>skill.name===(exec.arguments as {name?:unknown})?.name):undefined;
-  if(loaded){
+  const selected=exec.name==='skill'?run.loadedSkills.find(skill=>skill.name===(exec.arguments as {name?:unknown})?.name):undefined;
+  if(selected){
    const decision=await next();if(decision.kind!=='accept')return decision;
-   return {kind:'accept',content:[...result.content,{type:'text',text:'本版本可按需读取的静态资料：'+JSON.stringify({name:loaded.name,resources:loaded.resources.map(r=>({path:r.relativePath,bytes:r.bytes}))}) }]};
+   return {kind:'accept',content:[...result.content,{type:'text',text:'本版本可按需读取的静态资料：'+JSON.stringify({name:selected.name,resources:selected.resources.map(r=>({path:r.relativePath,bytes:r.bytes}))}) }]};
   }
   return next();
  });

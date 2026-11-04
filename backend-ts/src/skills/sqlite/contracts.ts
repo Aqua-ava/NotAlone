@@ -41,6 +41,9 @@ export interface LoadedSkill {
 }
 /** 显式兼容入口与自动预加载集合分开记录来源，不把自动集合冒称为用户选择。 */
 export type SkillPreloadOrigin = 'explicit' | 'auto_preload';
+export interface SkillPreloadTrace { origin: SkillPreloadOrigin; catalogRevision: string }
+/** 可选追踪补充；名称在读取时冻结，来源与目录快照只由受控预加载链路提供。 */
+export interface SkillTrace { name?: string; preload?: SkillPreloadTrace }
 /** 本轮冻结的预加载选择：来源、目录快照及每个 anchor 的包身份与修订。 */
 export interface SkillPreloadSelection {
   origin: SkillPreloadOrigin;
@@ -61,6 +64,8 @@ export interface SkillInput {
   relativePath: string;
   text: string;
   payloadDigest: string;
+  name?: string;
+  preload?: SkillPreloadTrace;
 }
 /**
  * 必须由受信任宿主提供，缺失时禁止运行；不能以 Skill 内容产生授权。
@@ -73,6 +78,6 @@ export interface SkillInput {
  */
 export interface SkillRunProtection {
   assertCurrent(scope: SkillRunScope, runRevision: SkillRunRevision | null, signal?: AbortSignal): Promise<void>;
-  recordSelection(scope: SkillRunScope, selected: SkillAnchor | null, signal?: AbortSignal): Promise<void>;
+  recordSelection(scope: SkillRunScope, selected: SkillAnchor | null, signal?: AbortSignal, trace?: SkillTrace): Promise<void>;
   recordInput(input: SkillInput, signal?: AbortSignal): Promise<void>;
 }

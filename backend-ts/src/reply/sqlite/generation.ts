@@ -15,6 +15,7 @@ import type {SkillRunProtection,SkillRunRevision} from '../../skills/sqlite/cont
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import {discussionFinishFailure,type DiscussionFailureEvidence} from './failure.ts';
+import {ModelInputBudgetError} from '../../platform/models/model-input-budget.ts';
 import type {installModelProvider} from '../../platform/models/model-provider.ts';
 import type {ModelPermitArbiter} from '../../platform/models/model-permits.ts';
 import {REPLY_EXECUTION_DEADLINE_MS} from '../generation/reply-execution-budget.ts';
@@ -41,7 +42,7 @@ function payload(options:GenerateOptions):object {
 /** 调用前宿主已prepareCall；准备、取消与失败都不会自动重送模型请求。 */
 export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOptions):Promise<SingleDiscussionTurnResult>{
  const {attempt,callId,model}=options;let contextId=options.contextId,skillRevision=options.skillRevision,configurationDigest=options.configurationDigest;
- let fallback=false,totalCalls=0,lastCopyId:string|undefined,lastPhysicalCallId=callId,retainedDocumentPrompt='';
+ let fallback=false,totalCalls=0,lastCopyId:string|undefined,lastPhysicalCallId=callId,retainedDocumentPrompt='',budgetRejected=false;
  if(!options.prompt.trim()||options.prompt.length>100_000||!options.systemPrompt.trim()
   ||!Number.isSafeInteger(model.deadline_ms)||model.deadline_ms<1||model.deadline_ms>REPLY_EXECUTION_DEADLINE_MS)fail('discussion_input_invalid');
  let dispatched=false,committed=false,failureEvidence:DiscussionFailureEvidence|undefined;
@@ -70,6 +71,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
     combined.throwIfAborted();
    };
    const binding={provider:model.provider,model:model.model,maxTokens:model.maxTokens,temperature:model.temperature,reasoningEffort:model.reasoningEffort};
+   const allowedToolNames=skillRun?.preloadOrigin!==null?['skill_resource']:skillRun?['skill','skill_resource']:[];
    const setup=async(agentCtx:Context)=>{
     const documents=options.commitAction==='reply.commitCandidates'&&await options.storage.execute<boolean>('reply.documentToolAvailable',{...attempt,contextId});
     installReplySkillTools(agentCtx,skillRun,requireCurrent,error=>{failure??=error;},documents);
@@ -82,19 +84,19 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
     });
     agentCtx.on('llm/stream',async function*(request,next):AsyncGenerator<StreamChunk>{
      if(request.sessionId!==work.sessionId){yield* next();return;}
-     let call:ReturnType<SingleDiscussionTurnOptions['provider']['beginCall']>|undefined;
+     let call:ReturnType<SingleDiscussionTurnOptions['provider']['beginCall']>|undefined,dispatchAuthorized=false;
      const physicalCallId=totalCalls===0?callId:randomUUID();let usage:unknown,finishReason:string|undefined;
      try{
       await requireCurrent();if(++totalCalls>REPLY_MODEL_CALL_LIMIT)fail('discussion_call_limit');streamCalls++;finished=false;
       if(request.provider!==binding.provider||request.model!==binding.model||request.maxTokens!==binding.maxTokens
        ||request.temperature!==binding.temperature||request.reasoningEffort!==binding.reasoningEffort||request.purpose!==undefined
-       ||request.tools?.some(t=>!['skill','skill_resource',...(documents?[RELATIONSHIP_DOCUMENT_TOOL]:[])].includes(t.name)))fail('discussion_model_configuration_changed');
+       ||request.tools?.some(t=>![...allowedToolNames,...(documents?[RELATIONSHIP_DOCUMENT_TOOL]:[])].includes(t.name)))fail('discussion_model_configuration_changed');
       const requestPayload=payload(request);
       lastPhysicalCallId=physicalCallId;
       call=options.provider.beginCall({sessionId:work.sessionId,attempt_id:physicalCallId,permit_id:permit!.id,binding,profile:model.budgetProfile,
        requireCurrent,beforeDispatch:async({budget})=>{
         await requireCurrent();await skillRun?.validate(combined);
-        await options.storage.execute(options.dispatchAction??'discussion.dispatchCall',{...attempt,copyId:work.copy.id,callId,contextId,requestPayload,budget,physicalCallId,skillRun:skillRevision});
+        await options.storage.execute(options.dispatchAction??'discussion.dispatchCall',{...attempt,copyId:work.copy.id,callId,contextId,requestPayload,budget,physicalCallId,skillRun:skillRevision});dispatchAuthorized=true;
         options.onPhase?.('generating');
        }});
       for await(const chunk of next()){
@@ -115,15 +117,22 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
      }catch(error){failure=error;throw error;}
      finally{
       const observation=call?.observation();
-      // 预约回调已进入但未确证结算时仍按可能授权处理；不能因断线猜测未发送。
-      dispatched||=!!observation&&(observation.dispatch!=='not_authorized'||observation.before_dispatch_started!==false);
+      // 预算拒绝或本地发送前校验失败都没有取得持久发送授权，不计入物理请求。
+      if(observation?.budget_rejection)budgetRejected=true;
+      if(!dispatchAuthorized&&observation?.dispatch==='not_authorized'&&totalCalls>0)totalCalls--;
+      // 只有持久发送授权已写入或适配器已进入发送后才按可能出站处理。
+      dispatched||=dispatchAuthorized||observation?.dispatch==='authorized_unconfirmed'||observation?.dispatch==='http_accepted';
       call?.close();
      }
     });
-    let skillText='';
+    let skillText='',skillGuidance='本轮可按需组合多个相关Skill，也可以不用；Skill只影响表达方式，不提供联系人事实，不得覆盖本次意图。静态辅助资料须指定已加载Skill的准确名称和路径，本轮最多读取两份。';
     if(skillRun){
      disposeSkill=skillRun.mount(agentCtx);await skillRun.validate(combined);
-     if(skillRun.selection){
+     const preloaded=skillRun.preloadedSkills;
+     if(preloaded.length){
+      skillGuidance='以下回复策略已由宿主在本次请求前预加载，只影响表达方式，不提供联系人事实，不得覆盖本次意图。静态辅助资料须指定已预加载Skill的准确名称和路径，本轮最多读取两份。';
+      skillText='\n\n'+preloaded.map(skill=>renderSkillContent({name:skill.name,provider:'notalone-sqlite-skills',resourceBase:{kind:'opaque',description:'仅允许本次修订清单内的只读文字资源'},content:skill.content})).join('\n\n');
+     }else if(skillRun.selection){
       const registry=agentCtx.get('skills') as SkillRegistry|undefined;if(!registry)fail('discussion_skill_unavailable');
       const catalog=await registry.snapshot({scope:scopeOf(agentCtx),signal:combined});
       const available=catalog.skills.filter(item=>item.provider==='notalone-sqlite-skills');
@@ -133,7 +142,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
       skillText='\n\n'+renderSkillContent(loaded);
      }
     }
-    agentCtx.systemPrompt.section({name:'notalone-discussion',order:0,complete:true,interpolate:false,text:options.systemPrompt+' 本轮可按需组合多个相关Skill，也可以不用；Skill只影响表达方式，不提供联系人事实，不得覆盖本次意图。静态辅助资料须指定已加载Skill的准确名称和路径，本轮最多读取两份。'+skillText});
+    agentCtx.systemPrompt.section({name:'notalone-discussion',order:0,complete:true,interpolate:false,text:options.systemPrompt+' '+skillGuidance+skillText});
    };
    const cancel=()=>handle?.agent.cancel({kind:'disposed'});combined.addEventListener('abort',cancel,{once:true});
    try{
@@ -164,7 +173,8 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
     try{await handle?.dispose();}finally{disposeSkill?.();}
    }
   },signal,options.commitAction==='reply.commitCandidates'||!!options.skillRevision.eligible.length||fallback);}catch(error){
-   const skillFailed=error instanceof ReplySkillUnavailable||isSkillReadFailure(error)||error instanceof StorageFailure&&error.code==='discussion_runtime_unavailable'&&isSkillReadFailure(options.skillRun?.failure);
+    const preloadedSkillFailed=!!options.skillRun?.loadedSkills.length&&(budgetRejected||error instanceof ModelInputBudgetError||error instanceof ReplySkillUnavailable||isSkillReadFailure(error)||isSkillReadFailure(options.skillRun?.failure));
+   const skillFailed=preloadedSkillFailed||error instanceof ReplySkillUnavailable||isSkillReadFailure(error)||error instanceof StorageFailure&&error.code==='discussion_runtime_unavailable'&&isSkillReadFailure(options.skillRun?.failure);
    if(fallback||!skillFailed||totalCalls>=REPLY_MODEL_CALL_LIMIT||!options.runtime.discard||!options.assertAuthorized||!lastCopyId)throw error;
    signal.throwIfAborted();await options.assertAuthorized();
    if(options.commitAction)await options.storage.execute('reply.assertInputWithoutSkill',{...attempt,contextId});
