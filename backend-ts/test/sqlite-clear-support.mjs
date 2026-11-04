@@ -118,6 +118,8 @@ export async function fixture(t, options = {}) {
   const { channel, state } = options.channel ? { channel: options.channel, state: options.state } : createChannel();
   const ctx = { root, channel, state, maxBoundaryAttempts: options.maxBoundaryAttempts, registryModule: options.registryModule };
   const storage = await SqliteStorage.open({ userData: root, intent: 'create', role: 'test', ...(options.registryModule ? { registryModule: options.registryModule } : {}) });
+  // 产品默认关闭记忆自动处理；本夹具用于验证记忆提取与相关链路，创建后明确开启。
+  await storage.execute('memoryExtraction.setAutomatic', { enabled: true });
   const current = await attach(ctx, storage);
   await current.contacts.initialize();
   const candidate = await current.contacts.detectAccount();

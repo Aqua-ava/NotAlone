@@ -3,7 +3,7 @@ import type { PageCommands } from '../page-commands';
 import { noArguments } from '../page-commands';
 import { isUuid } from '../uuid';
 import type { FixedProcessingCall, FixedProcessingControl, FixedProcessingEvent, FixedProcessingRun,
-  FixedProcessingStart, FixedProcessingTrace, FixedProcessingTraceRequest, FixedProcessingView, FixedProcessingMode, FixedProcessingQueue, FixedProcessingRead, FixedProcessingHistoryStart, FixedProcessingHistoryResult, FixedHistoryFailureReason } from '../../shared/fixed-memory-processing';
+  FixedProcessingStart, FixedProcessingTrace, FixedProcessingTraceRequest, FixedProcessingView, FixedProcessingMode, FixedProcessingQueue, FixedProcessingRead, FixedProcessingHistoryStart, FixedProcessingHistoryResult, FixedHistoryFailureReason, FixedProcessingAutomatic } from '../../shared/fixed-memory-processing';
 
 type ContactSelection = {getState():{selectedContactId:string|null;scopeRevision:number}};
 const historyFailures:Record<string,FixedHistoryFailureReason>={
@@ -198,6 +198,24 @@ export class FixedMemoryProcessingController {
       return {connectionGeneration:response.generation,contactId,run,queue:readQueue(value.queue)};
     }catch{this.synchronize();throw invalid();}
   }
+  private automatic(response: {generation: number; data: unknown}): FixedProcessingAutomatic {
+    try {
+      const value = row(response.data); exact(value, ['enabled']);
+      if (typeof value.enabled !== 'boolean') throw invalid();
+      return { connectionGeneration: response.generation, enabled: value.enabled };
+    } catch { this.synchronize(); throw invalid(); }
+  }
+  async readAutomatic(): Promise<FixedProcessingAutomatic> {
+    return this.automatic(await this.request('/api/memory-processing/automatic', 'GET'));
+  }
+  /** 总开关只传布尔值；成功后让所有持有页面重新核对处理状态。 */
+  async setAutomatic(input: unknown): Promise<FixedProcessingAutomatic> {
+    const value = this.generation(input, ['enabled', 'connectionGeneration']);
+    if (typeof value.enabled !== 'boolean') throw invalid();
+    const result = this.automatic(await this.request('/api/memory-processing/automatic', 'POST', { enabled: value.enabled }, value.connectionGeneration as number));
+    this.invalidateBody();
+    return result;
+  }
   async startHistory(input:FixedProcessingHistoryStart):Promise<FixedProcessingHistoryResult> {
     const value=this.generation(input,['contactId','scopeRevision','requestKey','connectionGeneration']),contactId=id(value.contactId),requestKey=id(value.requestKey);
     const scopeRevision=count(value.scopeRevision),selected=this.contacts?.getState();
@@ -238,6 +256,10 @@ export function installFixedMemoryProcessingBridge(commands: PageCommands, backe
     connectionGeneration=next;controller.synchronize();
   });
   commands.handle('memory:fixed-processing-mode', (...args) => { noArguments(args); return controller.mode(); }, 'manager');
+  commands.handle('memory:fixed-processing-automatic', (...args) => { noArguments(args); return controller.readAutomatic(); }, 'manager');
+  commands.handle('memory:fixed-processing-set-automatic', (...args) => {
+    if (args.length !== 1) throw invalid(); return controller.setAutomatic(args[0]);
+  }, 'manager');
   commands.handle('memory:fixed-processing-current', (...args) => {
     if (args.length > 1) throw invalid(); return controller.read(args[0] as FixedProcessingRead | undefined);
   }, 'manager');

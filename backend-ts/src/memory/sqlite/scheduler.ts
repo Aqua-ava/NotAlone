@@ -14,6 +14,8 @@ export interface MemoryL1SchedulerPort {
  startHistoryBatch?(contactId:string,requestKey:string,now:number):Promise<unknown|null>;
 }
 export interface MemoryL1SchedulerOptions {
+ /** 记忆自动处理总开关；关闭时不扫描、不建轮、不留定时器，开启后由 wake 重新扫描。 */
+ enabled?:()=>boolean;
  now?:()=>number;
  setTimeout?:(callback:()=>void,delayMs:number)=>unknown;
  clearTimeout?:(timer:unknown)=>void;
@@ -23,6 +25,7 @@ export interface MemoryL1SchedulerOptions {
 export class SqliteMemoryL1Scheduler {
  readonly #port:MemoryL1SchedulerPort;
  readonly #now:()=>number;
+ readonly #enabled:()=>boolean;
  readonly #setTimeout:(callback:()=>void,delayMs:number)=>unknown;
  readonly #clearTimeout:(timer:unknown)=>void;
  #timer:unknown|null=null;
@@ -38,7 +41,7 @@ export class SqliteMemoryL1Scheduler {
  readonly #dirtyContacts=new Set<string>();
  #retryAt=0;
  constructor(port:MemoryL1SchedulerPort,options:MemoryL1SchedulerOptions={}){
-  this.#port=port;this.#now=options.now??Date.now;
+  this.#port=port;this.#now=options.now??Date.now;this.#enabled=options.enabled??(()=>true);
   this.#setTimeout=options.setTimeout??((callback,delay)=>setTimeout(callback,delay));
   this.#clearTimeout=options.clearTimeout??(timer=>clearTimeout(timer as ReturnType<typeof setTimeout>));
  }
@@ -66,6 +69,7 @@ export class SqliteMemoryL1Scheduler {
   this.#timer=this.#setTimeout(()=>{this.#timer=null;if(!this.#closed)void this.scan().catch(()=>{});},Math.max(0,Math.min(delayMs,2_147_483_647)));
  }
  private async scanOnce():Promise<void>{
+  if(!this.#enabled()){this.clearTimer();return;}
   if(this.#port.scheduleContacts&&this.#port.scanSchedule)return this.scanUnifiedOnce();
   this.clearTimer();if(this.#closed)return;
   let started=0,failed=false;

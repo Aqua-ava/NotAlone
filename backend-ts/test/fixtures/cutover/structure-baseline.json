@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 41,
+  "schemaVersion": 42,
   "migrationVersions": [
    1,
    2,
@@ -42,15 +42,16 @@
    38,
    39,
    40,
-   41
+   41,
+   42
   ],
-  "userVersion": 41,
+  "userVersion": 42,
   "sqliteVersion": "3.53.4",
   "tableCount": 95,
-  "fieldCount": 957,
+  "fieldCount": 958,
   "foreignKeyGroups": 195,
   "triggerCount": 120,
-  "checkCount": 301,
+  "checkCount": 302,
   "viewCount": 0
  },
  "tables": {
@@ -1139,6 +1140,13 @@
      "notnull": 1,
      "dflt_value": "0",
      "pk": 0
+    },
+    {
+     "name": "memory_auto_processing",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": "0",
+     "pk": 0
     }
    ],
    "foreignKeys": [],
@@ -1154,7 +1162,7 @@
      "sql": null
     }
    ],
-   "sql": "CREATE TABLE database_instance ( slot INTEGER PRIMARY KEY CHECK(slot=1), database_id TEXT NOT NULL UNIQUE, format_family TEXT NOT NULL CHECK(format_family='notalone-sqlite-v1'), role TEXT NOT NULL CHECK(role IN ('business','test')), created_at INTEGER NOT NULL CHECK(created_at>=0), runtime_id TEXT NOT NULL, epoch INTEGER NOT NULL CHECK(epoch>=0), schema_digest TEXT NOT NULL , memory_incremental_baseline_display_no INTEGER NOT NULL DEFAULT 0 CHECK(memory_incremental_baseline_display_no>=0)) STRICT"
+   "sql": "CREATE TABLE database_instance ( slot INTEGER PRIMARY KEY CHECK(slot=1), database_id TEXT NOT NULL UNIQUE, format_family TEXT NOT NULL CHECK(format_family='notalone-sqlite-v1'), role TEXT NOT NULL CHECK(role IN ('business','test')), created_at INTEGER NOT NULL CHECK(created_at>=0), runtime_id TEXT NOT NULL, epoch INTEGER NOT NULL CHECK(epoch>=0), schema_digest TEXT NOT NULL , memory_incremental_baseline_display_no INTEGER NOT NULL DEFAULT 0 CHECK(memory_incremental_baseline_display_no>=0), memory_auto_processing INTEGER NOT NULL DEFAULT 0 CHECK(memory_auto_processing IN (0,1))) STRICT"
   },
   "decision_candidate": {
    "columns": [

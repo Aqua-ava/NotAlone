@@ -17,6 +17,18 @@ export class SqliteMemoryExtractionHttp {
    if(req.method!=='GET'||url.search){send(res,400,{error:'memory_extraction_request_invalid'});return true;}
    try{send(res,200,await this.schedule());}catch{send(res,409,{error:'memory_extraction_schedule_unavailable'});}return true;
   }
+  if(url.pathname==='/api/memory-processing/automatic'){
+   // 记忆自动处理总开关：GET 读取当前值，POST 以唯一布尔字段设置；owner 与范围不由请求指定。
+   try{
+    if(url.search)throw new StorageFailure('memory_extraction_request_invalid');
+    if(req.method==='GET'){send(res,200,this.service.readAutomatic());return true;}
+    if(req.method!=='POST')throw new StorageFailure('memory_extraction_request_invalid');
+    const body=JSON.parse((await readWechatHttpBody(req,512,10_000)).toString('utf8')||'null');
+    if(!body||Array.isArray(body)||typeof body!=='object'||Object.keys(body).join(',')!=='enabled'||typeof body.enabled!=='boolean')throw new StorageFailure('memory_extraction_request_invalid');
+    send(res,200,await this.service.setAutomatic(body.enabled));
+   }catch(error){const code=error instanceof StorageFailure?error.code:'memory_extraction_request_invalid';send(res,code==='memory_extraction_request_invalid'?400:409,{error:code});}
+   return true;
+  }
   const contact=/^\/api\/memory-processing\/contacts\/([a-f0-9-]{36})\/(current|history)$/.exec(url.pathname);
   const task=/^\/api\/memory-processing\/tasks\/([a-f0-9-]{36})\/events$/.exec(url.pathname);
   const run=/^\/api\/memory-processing\/runs(?:\/(current|[a-f0-9-]{36})(?:\/(pause|continue))?)?$/.exec(url.pathname);

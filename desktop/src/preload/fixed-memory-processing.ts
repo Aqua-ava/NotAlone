@@ -1,10 +1,12 @@
 import type { PageTransport } from './transport';
-import type { FixedMemoryProcessingBridge, FixedProcessingControl, FixedProcessingStart, FixedProcessingTraceRequest, FixedProcessingRead, FixedProcessingHistoryStart } from '../shared/fixed-memory-processing';
+import type { FixedMemoryProcessingBridge, FixedProcessingControl, FixedProcessingStart, FixedProcessingTraceRequest, FixedProcessingRead, FixedProcessingHistoryStart, FixedProcessingAutomaticSet } from '../shared/fixed-memory-processing';
 
 export function createFixedMemoryProcessingBridge(transport: PageTransport): FixedMemoryProcessingBridge {
   const fail = () => Promise.reject(new Error('记忆处理操作不可用。'));
   return Object.freeze({
     readMode: (...args: unknown[]) => args.length === 0 ? transport.invoke('memory:fixed-processing-mode') : fail(),
+    readAutomatic: (...args: unknown[]) => args.length === 0 ? transport.invoke('memory:fixed-processing-automatic') : fail(),
+    setAutomatic: (...args: [FixedProcessingAutomaticSet]) => args.length === 1 ? transport.invoke('memory:fixed-processing-set-automatic', args[0]) : fail(),
     readCurrent: (...args: [FixedProcessingRead?]) => args.length <= 1 ? transport.invoke('memory:fixed-processing-current', ...args) : fail(),
     start: (...args: [FixedProcessingStart]) => args.length === 1 ? transport.invoke('memory:fixed-processing-start', args[0]) : fail(),
     startHistory: (...args: [FixedProcessingHistoryStart]) => args.length === 1 ? transport.invoke('memory:fixed-processing-history-start', args[0]) : fail(),

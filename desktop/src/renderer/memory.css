@@ -88,6 +88,8 @@
 
 .memory-processing-card { padding: 10px 14px; margin: 0; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); }
 .memory-processing-card p { margin: 6px 0; }
+/* 总开关卡片位于页面顶部，与下方浏览区保持间距。 */
+.memory-automatic-switch { margin-bottom: 16px; }
 .fixed-memory-processing { min-width: 0; }
 .memory-history-processing { margin-top: 16px; }
 .fixed-memory-processing .memory-processing-bar { flex-wrap: wrap; }

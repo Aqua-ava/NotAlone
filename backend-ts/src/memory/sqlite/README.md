@@ -24,6 +24,8 @@
 
 `SqliteMemoryExtractionHttp(service, authorize)` 在 `/api/memory-processing` 下提供：POST `/runs` 和 `/contacts/:id/history` 仅接受 UUID `request_key`；GET `/runs/current`、`/runs/:id`、`/contacts/:id/current`、`/schedule` 和 `/tasks/:id/events` 读取当前状态与真实追踪。POST `/runs/:id/pause|continue` 要求非负安全整数 `action_version` 与 UUID `operation_id`，拒绝空对象和未知字段。owner、固定输入与执行资格由认证宿主及业务事务确定。
 
+记忆自动处理总开关（[ADR-166](../../../../architecture/adr/166-memory-auto-processing-switch.md)）：`auto-processing.ts` 提供迁移 42 与 `memoryExtraction.readAutomatic|setAutomatic` 动作，开关存于 `database_instance.memory_auto_processing`，默认 0（关闭）。服务 `initialize()` 读入内存镜像，`start|startHistory|continue` 在关闭时抛 `memory_auto_processing_disabled`，`startContact|startHistoryBatch|recoverBacklog|resumeFollowups` 与 `launch` 在关闭时不建轮、不恢复；调度器经 `enabled()` 停止扫描，后续整理 worker 在关闭时不取到期阶段。`setAutomatic(false)` 对在途轮次施加内部暂停（步骤边界停止），`setAutomatic(true)` 只继续由它暂停的轮次。GET／POST `/api/memory-processing/automatic` 读取与设置，`/schedule` 附带 `automatic` 字段。测试夹具创建库后须显式开启（`memory-sqlite/support.mjs` 的 `automatic:false` 选项可保留默认关闭）。
+
 `outputs.ts`导出`verifiedExtractionOutput(tx,{ownerId,eventId})`，管理域在正式候选提交的同一短事务内调用。返回真实`producedAttemptId/outputNo`、scope、原fact、auto来历和全部实际来源。本人产物由独立self attempt产生，通过`execution_input`的`verified_contribution`事件材料分支，以同owner复合外键引用原联系人窗口的`verified_self_contribution`事件，并同时保存实际消息窗口和全部来源；不改写事实、不作裁决、不冒充用户确认。
 
 `registration.ts`提供本写者的精确`memoryExtractionDeletionAuthority`和`memoryExtractionDeletionRegistration()`。该最小工厂仅组合 memory_extraction → history → identity → skill_metadata，开放 source/contact/account；正常产品使用公共 `installedDeletionRegistration` 组合讨论、媒体、裁决、文档和聊天清空等全部实际写者。新增写者须同步扩 requiredDomains 与精确 authority，不能用最小工厂替代正式注册。`deletion.ts`来源闭包覆盖固定输入、实际前文和本人混合阶段；source保留封存无正文调用及原范围，contact/account连同此前封存调用清除。

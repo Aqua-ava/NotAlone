@@ -155,3 +155,22 @@ test('最后合法小批收尾不清除用户暂停，已完成阶段仍可如�
  const f=await fixture(t,async()=>data),view=await f.controller.read();
  assert.equal(view.run.status,'paused');assert.equal(view.run.state,'paused');assert.equal(view.run.laterStages,'completed');
 });
+
+test('记忆自动处理总开关：读取与设置只传一个布尔值，拒绝额外字段、非布尔值和旧连接',async t=>{
+ let enabled=false;
+ const f=await fixture(t,async req=>{
+  if(req.path!=='/api/memory-processing/automatic')throw new Error('未约定的合成请求');
+  if(req.method==='POST')enabled=req.body.enabled;
+  return {enabled};
+ });
+ assert.deepEqual(await f.controller.readAutomatic(),{connectionGeneration:1,enabled:false});
+ const before=f.invalidations.length;
+ assert.deepEqual(await f.controller.setAutomatic({enabled:true,connectionGeneration:1}),{connectionGeneration:1,enabled:true});
+ assert.deepEqual(f.calls.at(-1),{...f.calls.at(-1),path:'/api/memory-processing/automatic',method:'POST',body:{enabled:true}});
+ assert.ok(f.invalidations.length>before,'设置成功后所有持有页面重新核对处理状态');
+ const count=f.calls.length;
+ for(const bad of [{enabled:'yes',connectionGeneration:1},{enabled:true,connectionGeneration:1,owner:'x'},{connectionGeneration:1},{enabled:true,connectionGeneration:9},null])
+  await assert.rejects(f.controller.setAutomatic(bad));
+ assert.equal(f.calls.length,count,'非法输入与旧连接不出站');
+ enabled='maybe';await assert.rejects(f.controller.readAutomatic(),'后端返回非布尔值时拒绝，不猜测开关状态');
+});

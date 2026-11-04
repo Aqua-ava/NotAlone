@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } fr
 import type { BackendBridge, BackendPhase } from '../shared/backend-bridge';
 import type { FixedMemoryProcessingBridge, FixedProcessingMode, FixedProcessingRun } from '../shared/fixed-memory-processing';
 import { FixedMemoryProcessingPanel } from './FixedMemoryProcessingPanel';
+import { MemoryAutomaticSwitch } from './MemoryAutomaticSwitch';
 
 export interface MemoryProcessingEntryProps {
   bridge: FixedMemoryProcessingBridge;
@@ -72,7 +73,7 @@ export function MemoryProcessingEntry({ bridge, backend, scopeKey, contactId = n
   const current = state?.scope === acceptedScope ? state : null;
   if (current?.phase === 'ready') {
     if (current.mode.mode === 'legacy') return visible ? children : null;
-    if (current.mode.mode === 'sqlite') return <Fragment key={current.mode.connectionGeneration}>{typeof sqliteChildren==='function'?sqliteChildren(processingRevision,completedRunId):sqliteChildren}<details className="memory-processing-disclosure"><summary>记忆处理状态</summary><FixedMemoryProcessingPanel releaseOnUnmount={releaseOnUnmount} visible={visible} bridge={bridge} contactId={contactId} scopeKey={scopeKey} onRunUpdated={onRunUpdated}/></details></Fragment>;
+    if (current.mode.mode === 'sqlite') return <Fragment key={current.mode.connectionGeneration}><MemoryAutomaticSwitch bridge={bridge}/>{typeof sqliteChildren==='function'?sqliteChildren(processingRevision,completedRunId):sqliteChildren}<details className="memory-processing-disclosure"><summary>记忆处理状态</summary><FixedMemoryProcessingPanel releaseOnUnmount={releaseOnUnmount} visible={visible} bridge={bridge} contactId={contactId} scopeKey={scopeKey} onRunUpdated={onRunUpdated}/></details></Fragment>;
   }
   if (current?.phase === 'connecting') return <p role="status">正在连接本机服务，连接后可查看记忆。</p>;
   if (current?.phase === 'disconnected') return <p role="status">本机服务尚未连接，连接后可查看记忆。</p>;

@@ -32,6 +32,7 @@ test('真实记忆页面仅展示处理进度并自动刷新资料，资格失�
       window.notalone = {
         fixedMemoryProcessing: {
           readMode: () => controller.mode(), readCurrent: request => controller.read(request),
+          readAutomatic: async () => ({connectionGeneration: 1, enabled: true}), setAutomatic: async request => ({connectionGeneration: 1, enabled: request.enabled}),
           start: request => controller.start(request), pause: request => controller.control('pause', request),
           continue: request => controller.control('continue', request), trace: request => controller.trace(request),
           release: async () => controller.release(),
@@ -116,7 +117,7 @@ test('快速重连重新加载新代次，旧子树异步释放不能撤下新�
  const connections=new Set(),memoryInvalidations=new Set(),fixedInvalidations=new Set();
  const publish=listeners=>{for(const fn of listeners)fn();};
  window.notalone={backend:{onStateChanged:fn=>{connections.add(fn);return()=>connections.delete(fn);}},fixedMemoryProcessing:{
- readMode:async()=>({mode:'sqlite',connectionGeneration:window.generation}),readCurrent:async()=>({contactId:'contact',connectionGeneration:window.generation,run:null}),
+ readAutomatic:async()=>({connectionGeneration:window.generation,enabled:true}),setAutomatic:async request=>({connectionGeneration:window.generation,enabled:request.enabled}),readMode:async()=>({mode:'sqlite',connectionGeneration:window.generation}),readCurrent:async()=>({contactId:'contact',connectionGeneration:window.generation,run:null}),
  release:async()=>{window.fixedReleases++;queueMicrotask(()=>publish(fixedInvalidations));},onInvalidated:fn=>{fixedInvalidations.add(fn);return()=>fixedInvalidations.delete(fn);}},
  sqliteMemoryManagement:{read:async request=>{window.memoryReads++;return {connectionGeneration:window.generation,scope:request.scope,view:{memories:[],candidates:[]}};},
  readDocuments:async request=>({connectionGeneration:window.generation,scope:request.scope,view:{status:'idle',publication:null,documents:[]}}),release:async()=>{window.memoryReleases++;queueMicrotask(()=>publish(memoryInvalidations));},onInvalidated:fn=>{memoryInvalidations.add(fn);return()=>memoryInvalidations.delete(fn);}}};

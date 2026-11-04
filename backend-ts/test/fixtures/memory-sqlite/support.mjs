@@ -13,6 +13,12 @@ export async function fixture(t,options={}){
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-history-')));
  const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test',...options});
  t.after(async()=>{await storage.close();await rm(root,{recursive:true,force:true});});
+ // 产品默认关闭记忆自动处理；本夹具验证提取与调度行为，创建后明确开启。开关本身由专门用例覆盖。
+ if(storage.status.schemaVersion<42){
+  // 迁移 42 之前的旧结构夹具没有开关列（正式库总是先迁移再打开）；按开关出现前的行为让旧结构上的提取照常运行。
+  const execute=storage.execute.bind(storage);
+  storage.execute=(name,input,...rest)=>name==='memoryExtraction.readAutomatic'?Promise.resolve({enabled:true}):execute(name,input,...rest);
+ }else if(options.automatic!==false)await storage.execute('memoryExtraction.setAutomatic',{enabled:true});
  const metadata={account:async()=>({externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-1',assurance:'verified',supportProfile:'synthetic-metadata-v1'}),sessions:async()=>[{externalKey:'friend-a',displayName:'合成甲',kind:'private',identityAssurance:'verified'},{externalKey:'friend-b',displayName:'合成乙',kind:'private',identityAssurance:'verified'}]};
  const contacts=new SqliteContactService(storage,owner,metadata);await contacts.initialize();
  const candidate=await contacts.detectAccount();await contacts.confirmAccount(candidate.candidate_token);await contacts.setReading(true);

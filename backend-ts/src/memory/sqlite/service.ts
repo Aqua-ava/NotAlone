@@ -28,6 +28,7 @@ export class SqliteMemoryExtraction {
  private readonly afterStepSettled?:()=>Promise<void>;
  private storage:SqliteStorage;readonly ownerId:string;private model:ExtractionModelPort;readonly holders:ActiveHolders;
  private policy?:Promise<ExtractionPolicyVersion>;private initialized?:Promise<void>;private stopped=false;
+ private automatic=false;private readonly pausedBySwitch=new Set<string>();private onAutomaticChanged?:(enabled:boolean)=>void;
  private closing?:Promise<void>;private pending=new Set<Promise<unknown>>();
  private turnTail:Promise<void>=Promise.resolve();
  private runs=new Map<string,Promise<void>>();private active=new Map<string,{abort:AbortController;done:Promise<void>}>();
@@ -49,7 +50,43 @@ export class SqliteMemoryExtraction {
   const next=this.turnTail.then(work);this.turnTail=next.then(()=>{},()=>{});return next;
  }
  private version(){return this.policy??=createExtractionPolicyVersion();}
- initialize(){this.available();return this.initialized??=this.admit(async()=>{await this.storage.execute('memoryExtraction.recover',{ownerId:this.ownerId});});}
+ initialize(){this.available();return this.initialized??=this.admit(async()=>{
+  await this.storage.execute('memoryExtraction.recover',{ownerId:this.ownerId});
+  this.automatic=(await this.storage.execute<{enabled:boolean}>('memoryExtraction.readAutomatic',{ownerId:this.ownerId})).enabled;
+ });}
+ /** 记忆自动处理总开关的内存镜像；真实值在库内，调度与领取入口都以它为门。 */
+ get automaticEnabled():boolean{return this.automatic;}
+ /** 宿主登记开关变化后的唤醒回调（重扫调度、后续整理）；只唤醒，不在回调内同步建轮。 */
+ setAutomaticListener(listener:(enabled:boolean)=>void):void{this.onAutomaticChanged=listener;}
+ private requireAutomatic(){if(!this.automatic)throw new StorageFailure('memory_auto_processing_disabled');}
+ readAutomatic():{enabled:boolean}{this.available();return {enabled:this.automatic};}
+ /**
+  * 关闭：不再建轮、不领取新步骤，并把正在执行的轮次按用户暂停语义停在步骤边界；
+  * 开启：只继续由关闭动作本身暂停的轮次，用户手动暂停和中断状态保持原样。
+  */
+ async setAutomatic(enabled:boolean):Promise<{enabled:boolean}>{
+  if(typeof enabled!=='boolean')throw new StorageFailure('memory_extraction_request_invalid');
+  return this.admit(async()=>{
+   await this.initialize();this.available();
+   const was=this.automatic;
+   const result=await this.storage.execute<{enabled:boolean}>('memoryExtraction.setAutomatic',{ownerId:this.ownerId,enabled});
+   this.automatic=result.enabled;
+   if(was&&!result.enabled){
+    for(const runId of [...this.runs.keys()]){
+     try{const paused=await this.storage.execute<{replayed:boolean}>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'pause'});if(!paused.replayed)this.pausedBySwitch.add(runId);}
+     catch{/* 已结束或不可暂停的轮次保持原状；不影响开关本身。 */}
+    }
+   }else if(!was&&result.enabled){
+    for(const runId of [...this.pausedBySwitch]){
+     this.pausedBySwitch.delete(runId);
+     try{await this.storage.execute('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'continue'});this.launch(runId);}
+     catch{/* 状态已被用户或其他动作改变时不强行继续。 */}
+    }
+   }
+   try{this.onAutomaticChanged?.(result.enabled);}catch{/* 唤醒失败由持久调度的周期重扫兜底。 */}
+   return {enabled:result.enabled};
+  });
+ }
  private available(){if(this.stopped)throw new StorageFailure('memory_extraction_closed');}
  /** 关闭也等待已受理但尚未进入run的SQLite工作，防止宿主先释放存储。 */
  private admit<T>(work:()=>Promise<T>):Promise<T>{
@@ -58,7 +95,7 @@ export class SqliteMemoryExtraction {
  }
  async start(requestKey:string){
   return this.admit(async()=>{
-  await this.initialize();const policy=await this.version();await policy.assertCurrent();this.available();
+  await this.initialize();this.requireAutomatic();const policy=await this.version();await policy.assertCurrent();this.available();
   const prior=await this.storage.execute<any>('memoryExtraction.findRequest',{ownerId:this.ownerId,requestKey});
   this.available();
   if(prior)return prior;
@@ -78,7 +115,7 @@ export class SqliteMemoryExtraction {
  /** 内部按单联系人建立一个固定增量轮；此方法不暴露给HTTP。 */
  async startContact(contactId:string,requestKey:string,now=Date.now()){
   return this.admit(async()=>{
-   await this.initialize();const policy=await this.version();await policy.assertCurrent();this.available();
+   await this.initialize();if(!this.automatic)return null;const policy=await this.version();await policy.assertCurrent();this.available();
    const prior=await this.storage.execute<any>('memoryExtraction.findRequest',{ownerId:this.ownerId,requestKey});this.available();
    if(prior)return prior;
    const run=await this.withSourceReady(contactId,()=>this.storage.execute<any>('memoryExtraction.startContact',{ownerId:this.ownerId,contactId,requestKey,now,
@@ -91,7 +128,7 @@ export class SqliteMemoryExtraction {
  nextHistoryDueAt(now=Date.now()):Promise<number|null>{this.available();return this.storage.execute('memoryExtraction.nextHistoryDueAt',{ownerId:this.ownerId,now});}
  async startHistoryBatch(contactId:string,requestKey:string,now=Date.now()){
   return this.admit(async()=>{
-   await this.initialize();const policy=await this.version();await policy.assertCurrent();this.available();
+   await this.initialize();if(!this.automatic)return null;const policy=await this.version();await policy.assertCurrent();this.available();
    const start=()=>this.storage.execute<any>('memoryExtraction.startHistoryBatch',{ownerId:this.ownerId,contactId,requestKey,now,policyConfig:policy.newTaskConfig(),followupStages:this.afterRunSettled!==undefined});
    let run;
    try{run=await start();}catch(error){
@@ -104,7 +141,7 @@ export class SqliteMemoryExtraction {
  /** 已知失败只自动恢复一次；次数沿原任务持久保存，暂停和未知调用不受理。 */
  async recoverBacklog(options:{wait?:boolean}={}):Promise<number>{
   return this.admit(async()=>{
-   await this.initialize();const policy=await this.version();await policy.assertCurrent();
+   await this.initialize();if(!this.automatic)return 0;const policy=await this.version();await policy.assertCurrent();
    const candidates=await this.storage.execute<{runId:string;controlVersion:number}[]>('memoryExtraction.recoverableBacklog',{ownerId:this.ownerId});let recovered=0;
    for(const candidate of candidates){
     if(this.stopped||recovered>0)break;
@@ -127,7 +164,7 @@ export class SqliteMemoryExtraction {
  /** 用户显式初始化当前联系人的已保存文字，沿正常提取、核验和后续整理链执行。 */
  async startHistory(contactId:string,requestKey:string){
   return this.admit(async()=>{
-   await this.initialize();const policy=await this.version();await policy.assertCurrent();this.available();
+   await this.initialize();this.requireAutomatic();const policy=await this.version();await policy.assertCurrent();this.available();
    const start=()=>this.storage.execute<any>('memoryExtraction.startHistory',{ownerId:this.ownerId,contactId,requestKey,policyConfig:policy.newTaskConfig(),followupStages:this.afterRunSettled!==undefined});
    let result;
    try{result=await start();}catch(error){
@@ -141,18 +178,18 @@ export class SqliteMemoryExtraction {
  /** 重启时只恢复持久标记为pending且L1已安全结束的后续登记，不再领取提取目标。 */
  async resumeFollowups():Promise<number>{
   this.available();if(!this.afterRunSettled)return 0;
-  await this.initialize();this.available();
+  await this.initialize();this.available();if(!this.automatic)return 0;
   const runIds=await this.storage.execute<string[]>('memoryExtraction.pendingFollowups',{ownerId:this.ownerId});let started=0;
   for(const runId of runIds)if(this.launchFollowup(runId))started++;
   return started;
  }
  private launchFollowup(runId:string):boolean{
-  if(this.runs.has(runId)||this.stopped||!this.afterRunSettled)return false;
+  if(this.runs.has(runId)||this.stopped||!this.afterRunSettled||!this.automatic)return false;
   const work=this.executeFollowup(runId).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});return true;
  }
  private async executeFollowup(runId:string,recovering=true,contactIds?:readonly string[]):Promise<void>{
   await this.turn(async()=>{
-   if(this.stopped||!this.afterRunSettled)return;
+   if(this.stopped||!this.afterRunSettled||!this.automatic)return;
    // 启动恢复必须整轮安全；本次正常收尾仍由各领域门禁隔离单联系人失败。
    const eligible=!recovering||await this.storage.execute<boolean>('memoryExtraction.followupEligible',{ownerId:this.ownerId,runId});
    if(!eligible||this.stopped)return;
@@ -167,7 +204,7 @@ export class SqliteMemoryExtraction {
  /** 用户暂停带控制修订CAS；共享故障的宿主内暂停不带版本，仍走同一事务状态机。 */
  async pause(runId:string,actionVersion?:number,operationId?:string){return this.admit(()=>this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'pause',...(actionVersion===undefined?{}:{actionVersion,operationId})}));}
  async continue(runId:string,actionVersion:number,operationId:string){return this.admit(async()=>{
-  await this.initialize();this.available();const policy=await this.version();await policy.assertCurrent();
+  await this.initialize();this.available();this.requireAutomatic();const policy=await this.version();await policy.assertCurrent();
   const oldPolicy=await this.storage.execute<unknown>('memoryExtraction.readPolicy',{ownerId:this.ownerId,runId});
   try{policy.resolve(oldPolicy);}catch(error){
    if((error as {code?:string}).code!=='extraction_policy_source_unavailable')throw error;
@@ -176,7 +213,7 @@ export class SqliteMemoryExtraction {
   }
   const run=await this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'continue',actionVersion,operationId});this.launch(runId);return run;
  });}
- private launch(runId:string){if(this.runs.has(runId)||this.stopped)return;const work=this.executeRun(runId).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});}
+ private launch(runId:string){if(this.runs.has(runId)||this.stopped||!this.automatic)return;const work=this.executeRun(runId).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});}
  async waitForIdle(runId?:string){if(runId!==undefined){await this.runs.get(runId);return;}await Promise.all([...this.runs.values()]);}
  private async executeRun(runId:string){
   const before=await this.read(runId);

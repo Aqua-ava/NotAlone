@@ -40,6 +40,7 @@ async function withEntry(t, command, inspect, controller = false, withBrowser = 
         listeners.add(() => controller.synchronize());
         const bridge = {
           readMode: async () => { try { return await controller.mode(); } finally { window.modeSettled++; } },
+          readAutomatic: async () => ({connectionGeneration: 1, enabled: true}), setAutomatic: async request => ({connectionGeneration: 1, enabled: request.enabled}),
           readCurrent: request => controller.read(request),
           start: request => controller.start(request),
           startHistory: request => controller.startHistory(request),
@@ -52,6 +53,8 @@ async function withEntry(t, command, inspect, controller = false, withBrowser = 
           if (method === 'onInvalidated') return listener => {
             invalidations.add(listener); return () => invalidations.delete(listener);
           };
+          if (method === 'readAutomatic') return async () => ({connectionGeneration: 1, enabled: true});
+          if (method === 'setAutomatic') return async request => ({connectionGeneration: 1, enabled: request.enabled});
           return async (...args) => {
             try { const value = await window.command(method, ...args); return method === 'readCurrent' && value ? {...value,contactId:args[0]?.contactId} : value; }
             finally { if (method === 'readMode') window.modeSettled++; }
@@ -143,7 +146,7 @@ test('SQLite 记忆浏览先行，处理状态默认收起并可手动展开', {
     assert.equal(await page.locator('[aria-label="固定范围记忆处理"]').isVisible(),false);
     await disclosure.locator(':scope > summary').click();
     await page.getByRole('region', { name: '固定范围记忆处理' }).waitFor();
-    assert.deepEqual(await page.getByRole('region').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label'))), ['记忆层级浏览', '固定范围记忆处理']);
+    assert.deepEqual(await page.getByRole('region').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label'))), ['记忆自动处理开关', '记忆层级浏览', '固定范围记忆处理']);
     assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
   }, false, true, false);
 });

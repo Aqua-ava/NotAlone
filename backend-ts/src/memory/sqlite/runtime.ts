@@ -82,7 +82,7 @@ export async function createSqliteMemoryRuntime(options:{ctx:Context;contentReso
    // 历史轮等待模型期间没有新的timer；已知到期联系人也须在步骤间重新读库准入。
    const now=Date.now();
    for(const [contactId,dueAt] of incrementalAdmissionDue)if(dueAt<=now)incrementalAdmissionContacts.add(contactId);
-   if(!schedulingStarted||!l1Scheduler||!incrementalAdmissionAll&&!incrementalAdmissionContacts.size)return;
+   if(!schedulingStarted||!service.automaticEnabled||!l1Scheduler||!incrementalAdmissionAll&&!incrementalAdmissionContacts.size)return;
    const all=incrementalAdmissionAll,dirty=[...incrementalAdmissionContacts];
    incrementalAdmissionAll=false;incrementalAdmissionContacts.clear();
    // 不等待scheduler.scan或新轮结束：当前scan可能正等本历史轮，等待会形成自锁。
@@ -110,10 +110,21 @@ export async function createSqliteMemoryRuntime(options:{ctx:Context;contentReso
     // 步骤和裁决由service的FIFO串行；等待自己轮次不阻止既有大轮在步骤间让出。
     startContact:async(contactId,requestKey,now)=>{const run=await service.startContact(contactId,requestKey,now);if(run)await service.waitForIdle(run.runId);return run;},
     startHistoryBatch:async(contactId,requestKey,now)=>{const run=await service.startHistoryBatch(contactId,requestKey,now);if(run)await service.waitForIdle(run.runId);return run;},
-   });
-   laterWorker=new SqliteMemoryLaterWorker(documents,()=>console.error('MEMORY_LATER_SCHEDULER_FAILED'));
+   },{enabled:()=>service.automaticEnabled});
+   // 总开关关闭时主题／概览整理同样不发起模型调用；到期事实留在持久队列，开启后重新唤醒。
+   laterWorker=new SqliteMemoryLaterWorker({
+    nextDueAt:()=>service.automaticEnabled?documents!.nextDueAt():Promise.resolve(null),
+    runDueStages:now=>service.automaticEnabled?documents!.runDueStages(now):Promise.resolve(null),
+   },()=>console.error('MEMORY_LATER_SCHEDULER_FAILED'));
   }
-  const http=new SqliteMemoryExtractionHttp(service,options.authorize,async()=>({...await service.readSchedule(),...(documents?{later:await documents.queueSummary()}:{})}));let closing:Promise<void>|undefined;
+  service.setAutomaticListener(enabled=>{
+   if(!schedulingStarted)return;
+   if(!enabled)return;
+   // 开启后沿原进度续跑：恢复可安全续跑的积压与后续登记，再唤醒调度与后续整理。
+   markAdmissionDirty();
+   void service.recoverBacklog({wait:false}).then(()=>service.resumeFollowups()).catch(()=>console.error('MEMORY_FOLLOWUP_RECOVERY_FAILED')).finally(()=>{void l1Scheduler?.wake();laterWorker?.wake();});
+  });
+  const http=new SqliteMemoryExtractionHttp(service,options.authorize,async()=>({...await service.readSchedule(),automatic:service.automaticEnabled,...(documents?{later:await documents.queueSummary()}:{})}));let closing:Promise<void>|undefined;
   return {service,http,documents,configurationState:configuration.status,
    startScheduling(){if(schedulingStarted)return;schedulingStarted=true;void service.recoverBacklog({wait:false}).then(()=>service.resumeFollowups()).catch(()=>console.error('MEMORY_FOLLOWUP_RECOVERY_FAILED')).finally(()=>{if(schedulingStarted){void l1Scheduler?.start();laterWorker?.start();}});},
    wake(contactId?:string){if(!schedulingStarted)return;markAdmissionDirty(contactId);void l1Scheduler?.wake(contactId);laterWorker?.wake();},

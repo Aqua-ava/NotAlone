@@ -8,6 +8,8 @@ import {SqliteMediaService} from '../src/media/sqlite/service.ts';
 export async function fixture(t,adapter=null,{onAcceptedPage,onMediaChanged,ensureSourceReady}={}){
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-media-')));
  const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test',registryModule:new URL('./fixtures/media/registry.mjs',import.meta.url).href});
+ // 产品默认关闭记忆自动处理；本夹具用于验证记忆提取与相关链路，创建后明确开启。
+ await storage.execute('memoryExtraction.setAutomatic',{enabled:true});
  const owner='00000000-0000-4000-8000-000000000001';
  const metadata={account:async()=>({externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-1',assurance:'verified',supportProfile:'synthetic-metadata-v1'}),sessions:async()=>[{externalKey:'friend-a',displayName:'合成甲',kind:'private',identityAssurance:'verified'},{externalKey:'friend-b',displayName:'合成乙',kind:'private',identityAssurance:'verified'}]};
  const contacts=new SqliteContactService(storage,owner,metadata);await contacts.initialize();const candidate=await contacts.detectAccount();await contacts.confirmAccount(candidate.candidate_token);await contacts.setReading(true);const snapshot=await contacts.candidates(true);const saved=await contacts.confirm(snapshot.snapshot_token,snapshot.sessions.map(s=>({locator:s.username,observed_display_name:s.display_name,expected_selection_generation:s.selection_generation})));

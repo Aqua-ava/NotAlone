@@ -46,6 +46,9 @@ export interface FixedProcessingQueue {
 }
 export interface FixedProcessingView { connectionGeneration: number; contactId?: string; run: FixedProcessingRun | null; queue?: FixedProcessingQueue }
 export interface FixedProcessingRead { contactId: string }
+/** 记忆自动处理总开关：库内持久偏好，默认关闭。 */
+export interface FixedProcessingAutomatic { connectionGeneration: number; enabled: boolean }
+export interface FixedProcessingAutomaticSet { enabled: boolean; connectionGeneration: number }
 export interface FixedProcessingMode { connectionGeneration: number; mode: 'sqlite' | 'legacy' }
 export interface FixedProcessingStart { requestKey: string; connectionGeneration: number }
 export interface FixedProcessingHistoryStart extends FixedProcessingStart { contactId: string; scopeRevision: number }
@@ -55,6 +58,8 @@ export interface FixedProcessingControl { runId: string; controlVersion: number;
 export interface FixedProcessingTraceRequest { taskId: string; connectionGeneration: number }
 export interface FixedMemoryProcessingBridge {
   readMode(): Promise<FixedProcessingMode>;
+  readAutomatic(): Promise<FixedProcessingAutomatic>;
+  setAutomatic(request: FixedProcessingAutomaticSet): Promise<FixedProcessingAutomatic>;
   readCurrent(request?: FixedProcessingRead): Promise<FixedProcessingView>;
   start(request: FixedProcessingStart): Promise<FixedProcessingView>;
   startHistory(request: FixedProcessingHistoryStart): Promise<FixedProcessingHistoryResult>;
