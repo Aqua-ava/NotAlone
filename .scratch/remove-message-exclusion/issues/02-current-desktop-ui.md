@@ -1,7 +1,7 @@
 # 当前 SQLite 表达工作区移除逐条消息选择
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 Blocked by: 01
 
 规格：[删除逐条消息选择与排除功能](../spec.md)。
@@ -43,3 +43,5 @@ Blocked by: 01
 - GREEN：同一 bridge 命令 7/7 通过；用 esbuild 对 `SqliteReplyCandidatesPanel`、当前共享契约及实际 React 依赖做浏览器 bundle，输出 `bundle ok: 1242879 bytes`。当前工作树没有 `desktop/node_modules`，因此通过外部只读依赖目录与 Node ESM resolver 运行测试，未写入 `node_modules`。
 - 自动化缺口：已尝试运行 `tests/sqlite-reply-candidates.test.mjs` 的只读列表用例，但 Playwright 启动本机 Chrome 时在当前沙箱内以 `SIGABRT` 结束，未进入页面断言；因此该浏览器用例只完成编译，可见工作区尚未由自动化证明。未启动或重启 App。
 - 风险：关系背景关闭时列表仍可见但不会进入请求，语义由开关和 bridge 合同控制；真实 App 中的复选框消失、提示消失、只读列表及按钮状态仍需桌面验收。未改后端、旧桌面回复链路或 `SqliteMemoryManagementPanel.tsx`。
+
+- 2026-11-04 最终实际 App 验收：表达工作区最近聊天显示 3 条合成消息、0 个逐条复选框、0 个排除／恢复操作；页面与生成请求均无 `excludedMessageIds`／`excluded_message_ids`。关系背景开启时聊天进入模型输入，关闭时不带入聊天正文；切换状态后仍可正常生成候选。

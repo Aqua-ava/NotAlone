@@ -1,7 +1,7 @@
 # 当前 SQLite 工作区合同与后端移除排除消息
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 
 规格：[删除逐条消息选择与排除功能](../spec.md)。
 
@@ -39,4 +39,4 @@ State: claimed
 - 实现：SQLite 工作区合同删除 `excludedMessageIds`，只接受 action、草稿、语气、一次性要求、补充背景和关系背景开关；工作区指纹升为 `version: 2`。HTTP 与工作区解析对 `excludedMessageIds`／`excluded_message_ids` 均按 `reply_input_invalid` 拒绝，不创建请求。
 - 行为：关系背景开启时按消息时间自动冻结当前联系人最近 50 条，不再按排除集合过滤；关闭时不带自动聊天和派生资料。携入选稿只受关系背景开关约束，不再因排除数组被额外禁用。测试适配仅移除已退役字段，未改变联系人、来源、预算、删除或失败语义。
 - 验证：`cd backend-ts && node --test test/sqlite-reply-workspace-exclusion-contract.test.mjs test/sqlite-reply-candidate-input-regressions.test.mjs test/sqlite-reply-candidates.test.mjs test/sqlite-reply-bounded-knowledge.test.mjs test/sqlite-reply-source-recovery.test.mjs` → 42 pass / 0 fail；`node node_modules/typescript/bin/tsc --noEmit` → exit 0；`node scripts/check_public_history.mjs --ref HEAD --working-tree` → issues 0。
-- 状态：实现与最小后端验证完成，State 保持 `claimed`，等待独立 Standards／Spec 审查后再改 `resolved`。桌面 UI 与旧桌面链路分别由 02、03 完成。
+- 状态：实现与最小后端验证完成；当时 State 保持 `claimed`，等待独立 Standards／Spec 审查与桌面票收口；最终状态为 `resolved`。桌面 UI 与旧桌面链路分别由 02、03 完成。

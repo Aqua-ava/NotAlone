@@ -1,7 +1,7 @@
 # 旧桌面回复链路移除排除字段与勾选
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 Blocked by: 01
 
 规格：[删除逐条消息选择与排除功能](../spec.md)。
@@ -44,4 +44,4 @@ Blocked by: 01
 - RED：先写失败回归，`cd desktop && node --test tests/reply-workspace.test.mjs tests/workspace-message-adoption-client.test.mjs tests/unified-workspace-view.test.mjs tests/reply-generation-guidance.test.mjs` 有 7 项失败（旧字段仍被接受、排除字段仍进入请求正文、历史载荷未拒绝恢复、历史完成候选被恢复成新输入、工作区仍渲染消息级 checkbox、过期判断仍比较排除集合）。
 - GREEN：同一命令 29/29 通过；`cd desktop && node node_modules/typescript/bin/tsc --noEmit` 通过。相邻回归通过：`workspace-session-switch`、`workspace-local-draft`、`workspace-draft-sqlite-handoff`、`workspace-local-draft-transition`、`workspace-submission`、`history-reply-warning-view`、`sqlite-history-messages`、`sqlite-first-session-regression`（后四类 headless 以 `NOTALONE_TEST_CHROMIUM_PATH` 指向本机 Chrome 运行）以及 `contact-restore-coalescing`、`manual-confirm-session-recovery`、`reply-candidates-rejected`、`data-lifecycle`、`reply-contract`（30 项）。环境说明：按 Lead 指定用 `/tmp/notalone-node/bin` 的 Node 运行（默认 Node 因签名限制无法加载 sharp，属环境既有问题）；Playwright 浏览器缓存未安装，headless 用例改用本机 Chrome 路径。
 - 风险：旧完成候选不再恢复为 `state.result`，因此不展示当次「生成输入」详情，候选经已保存轮次回看，这是「不把旧载荷静默当空数组」的保守取舍；旧排除键的拒绝同时覆盖 snake_case 与 camelCase 历史键，空数组也会被拒绝。未改 backend、当前 SQLite 工作区（C01/C02）与用户既有修改；未启动或重启 App、未做桌面交互验收。
-- 复核（2026-11-04）：重跑 `reply-workspace`、`workspace-message-adoption-client`、`unified-workspace-view`、`reply-generation-guidance` 共 29/29 通过；核对共享候选装配与 Discussion 未见冲突，旧完成候选仍从已保存轮次回看、旧排除载荷拒绝恢复且不创建请求、消息列表只读。无需追加代码修改；State 保持 `claimed` 等待审查。
+- 复核（2026-11-04）：重跑 `reply-workspace`、`workspace-message-adoption-client`、`unified-workspace-view`、`reply-generation-guidance` 共 29/29 通过；核对共享候选装配与 Discussion 未见冲突，旧完成候选仍从已保存轮次回看、旧排除载荷拒绝恢复且不创建请求、消息列表只读。无需追加代码修改；当时 State 保持 `claimed` 等待审查，后由最终验收改为 `resolved`。
