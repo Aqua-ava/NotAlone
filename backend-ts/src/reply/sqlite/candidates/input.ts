@@ -34,14 +34,24 @@ export function replySourceContacts(tx:StorageTransaction,i:DiscussionScope&{req
  }
  return [...contacts];
 }
+/** 校验已冻结来源仍是同一接纳修订的可用消息；按 (owner,contact,id) 键逐行查找。 */
+export function replySourceValidationSql(rows:number):string{
+ return `WITH expected(contact_id,message_id,revision) AS (VALUES ${Array.from({length:rows},()=>'(?,?,?)').join(',')})
+  SELECT count(*) n FROM expected e JOIN message m ON m.owner_id=? AND m.contact_id=e.contact_id AND m.id=e.message_id
+  AND m.interpretation_revision=e.revision AND m.availability='available'`;
+}
 function sources(tx:StorageTransaction,ownerId:string,items:readonly ReplySource[]):void{
  if(!items.length)return;
  assertReplyLocalSources(tx,items.map(s=>({owner_id:ownerId,contact_id:s.contactId,record_id:s.recordId,message_id:s.messageId})));
- const rows=JSON.stringify(items.map(s=>[s.contactId,s.messageId,String(s.acceptedRevision)]));
- const valid=tx.get(`SELECT count(*) n FROM json_each(?) i JOIN message m ON m.owner_id=?
-  AND m.contact_id=json_extract(i.value,'$[0]') AND m.id=json_extract(i.value,'$[1]')
-  AND m.interpretation_revision=CAST(json_extract(i.value,'$[2]') AS INTEGER) AND m.availability='available'`,[rows,ownerId]);
- if(valid?.n!==BigInt(items.length))fail('reply_source_unavailable');
+ // 用 VALUES 常量表逐行按 (owner,contact,id) 主键查找；json_each 加 json_extract 的写法会让规划器退化为按 owner 全表扫描（约16万行消息上每次约1.6秒）。
+ let valid=0n;
+ for(let offset=0;offset<items.length;offset+=200){
+  const batch=items.slice(offset,offset+200);
+  const row=tx.get(replySourceValidationSql(batch.length),
+   [...batch.flatMap(s=>[s.contactId,s.messageId,BigInt(s.acceptedRevision)]),ownerId]);
+  valid+=typeof row?.n==='bigint'?row.n:0n;
+ }
+ if(valid!==BigInt(items.length))fail('reply_source_unavailable');
 }
 function knowledge(tx:StorageTransaction,scope:DiscussionScope,items:readonly ReplyKnowledgeItem[],reader:ReplyKnowledgeReader,frozen=false):void{
  if(!items.length)return;
