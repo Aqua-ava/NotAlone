@@ -58,3 +58,5 @@ Blocked by: 02
 - 2026-11-04 集成校正：`sqlite-discussion-panel` 原断言仍假设历史正文在默认折叠时可见、preload 只有 `submit/onInvalidated`，与“历史仅回看、显式继续”和受控候选端口集成后的现行合同不一致。RED 为 61/63；将测试改为先确认历史发言不在默认可访问树、展开“与助手讨论”后才可回看，目录仍要求显式“继续此讨论”，并允许 preload 固定 `candidates` 端口；GREEN 63/63。没有放宽拒绝额外字段、来源失效、迟到回包或候选操作白名单断言。
 
 - 2026-11-04 Standards P2 修复：`AssistantSessionPanel` 原先声明但未解构/透传 `onInitialDraftTaken`，候选面板也未调用，联系人级草稿在切换讨论或重新挂载后可能再次注入。现由会话面板透传到 `SqliteReplyCandidatesPanel`，仅在首次成功播种当前 scope 的初始草稿后调用一次；用户已编辑时 `seeded.current` 阻止旧草稿覆盖。新增实际浏览器回归覆盖首次注入、用户编辑保留、切换讨论不重复；讨论面板 3/3、草稿交接 5/5、桌面 typecheck 通过。
+
+- 2026-11-04 Spec 复审补充：同步 React 状态的回归未覆盖真实异步草稿清空；若 `setDraft('')` IPC 返回前切换讨论，含 sessionId 的 scopeKey 会再次播种旧草稿。RED 在延迟清空夹具下复现为切换后文本仍为旧草稿。现用 `contactId + scopeRevision + initialDraft` 记录已消费交接，并在草稿清空后释放记录，不再以 sessionId 判重；同一延迟清空回归 GREEN。扩大桌面回归 69/69，typecheck 通过。

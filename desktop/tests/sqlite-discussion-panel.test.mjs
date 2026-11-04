@@ -127,13 +127,15 @@ test('正式会话面板消费联系人初始草稿且用户编辑后不会重�
     function View() {
       const [draft,setDraft]=useState('联系人初始草稿'),[session,setSession]=useState(sessionId),[taken,setTaken]=useState(0);
       window.__taken = () => taken;
+      window.__finishClear = () => window.__clearDraftResolve?.();
       const state = {contactId:${JSON.stringify(contactId)},scopeRevision:7,phase:'idle',generationBlock:null,generationJobs:[],
         savedSession:{phase:'ready',sessionId:session,turns:[],inputs:[],currentInputVersionId:null,discussionEntries:[],runtimeRecovery:'ready'},
         sessionCatalog:{phase:'ready',items:[{sessionId:session,isCurrent:true}],currentSessionId:session}};
       return React.createElement(React.Fragment, null,
         React.createElement('button', { onClick: () => setSession(nextSessionId) }, '切换讨论'),
         React.createElement(AssistantSessionPanel, { replies: { state, ...methods }, initialDraft: draft, onDraftChange: () => {},
-          onInitialDraftTaken: () => { setTaken(value => value + 1); setDraft(''); } }));
+          onInitialDraftTaken: () => { setTaken(value => value + 1);
+            window.__clearDraft = new Promise(resolve => { window.__clearDraftResolve = resolve; }).then(() => setDraft('')); } }));
     }
     createRoot(document.getElementById('root')).render(React.createElement(View));
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false, logLevel: 'silent' });
@@ -145,10 +147,11 @@ test('正式会话面板消费联系人初始草稿且用户编辑后不会重�
   const input = page.getByRole('textbox', { name: '有什么想说的', exact: true });
   await expect(input).toHaveValue('联系人初始草稿');
   await expect.poll(() => page.evaluate(() => window.__taken())).toBe(1);
-  await input.fill('用户编辑后的新草稿');
-  await expect(input).toHaveValue('用户编辑后的新草稿');
-  await expect.poll(() => page.evaluate(() => window.__taken())).toBe(1);
   await page.getByRole('button', { name: '切换讨论', exact: true }).click();
   await expect(input).toHaveValue('');
+  await expect.poll(() => page.evaluate(() => window.__taken())).toBe(1);
+  await page.evaluate(() => window.__finishClear());
+  await input.fill('用户编辑后的新草稿');
+  await expect(input).toHaveValue('用户编辑后的新草稿');
   await expect.poll(() => page.evaluate(() => window.__taken())).toBe(1);
 });

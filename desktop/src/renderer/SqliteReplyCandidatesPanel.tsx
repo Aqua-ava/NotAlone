@@ -21,7 +21,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  const scopeKey=JSON.stringify([contactId,scopeRevision,sessionId]),latest=useRef({scopeKey,bridge});latest.current={scopeKey,bridge};
  const revision=useRef(0),mounted=useRef(false),operation=useRef<object|null>(null);
  const retry=useRef<{fingerprint:string;requestKey:string;text:string;workspace:WorkspaceInput;carry?:string}|null>(null);
- const seeded=useRef<string|null>(null),stopProgress=useRef<(()=>void)|null>(null);
+ const seeded=useRef<string|null>(null),consumedHandoff=useRef<string|null>(null),stopProgress=useRef<(()=>void)|null>(null);
  const [progress,setProgress]=useState<SqliteCandidateStatus|null>(null);
  const qualifiedRequests=useRef<string[]>([]);
  const [page,setPage]=useState<SqliteCandidatePage|null>(null),[draft,setDraft]=useState(''),[carry,setCarry]=useState<string|undefined>();
@@ -36,7 +36,14 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  // 临时禁用只暂停新操作；来源及范围失效仍由订阅和scopeKey立即清除。
  useEffect(()=>{if(available&&!page)void run({action:'read'});},[disabled]);
  // 讨论切换可能先于联系人草稿回显；空值不提前消费这次交接。
- useEffect(()=>{if(available&&initialDraft&&seeded.current!==scopeKey){seeded.current=scopeKey;setDraft(initialDraft);onInitialDraftTaken?.();}},[scopeKey,available,initialDraft,onInitialDraftTaken]);
+ // 联系人草稿的异步清空可能晚于讨论切换；按联系人/范围/内容消费一次，不能用含 sessionId 的 scopeKey 去重。
+ const handoffKey=JSON.stringify([contactId,scopeRevision,initialDraft]);
+ useEffect(()=>{
+  if(!initialDraft){consumedHandoff.current=null;return;}
+  if(available&&seeded.current!==scopeKey&&consumedHandoff.current!==handoffKey){
+   consumedHandoff.current=handoffKey;seeded.current=scopeKey;setDraft(initialDraft);onInitialDraftTaken?.();
+  }
+ },[scopeKey,available,initialDraft,handoffKey,onInitialDraftTaken]);
  type Command=SqliteCandidateOperation extends infer O?O extends SqliteCandidateOperation?Omit<O,'contactId'|'scopeRevision'|'sessionId'>:never:never;
  function showPage(next:SqliteCandidatePage,preserveEdits=false){
   // 仅保留无正文的来源标识，短暂读取失败后仍能核对旧草稿的资格。
