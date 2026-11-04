@@ -64,7 +64,8 @@ export async function fixture(t,options={}){
  const messages=await Promise.all(ids.map(async contactId=>(await history.read(contactId)).messages));
  ctx=new Context();
  await ctx.plugin(Loader);await ctx.plugin(Llm);await ctx.plugin(Skills);
- const requests=[],supplierErrors=[],inProcessModel=options.inProcessModel??process.env.NOTALLONE_TEST_IN_PROCESS_MODEL==='1';
+const requests=[],supplierErrors=[],inProcessModel=options.inProcessModel??process.env.NOTALLONE_TEST_IN_PROCESS_MODEL==='1';
+ const inProcessProvider=options.providerTransport==='in-process';
  const respond=async(req,res)=>{
   let body='';for await(const part of req)body+=part;
   const request=JSON.parse(body);requests.push(request);
@@ -95,6 +96,8 @@ export async function fixture(t,options={}){
   };
   t.after(()=>{globalThis.fetch=originalFetch;});
   baseURL='http://in-process.invalid/anthropic';
+ }else if(inProcessProvider){
+  baseURL='http://synthetic-provider.invalid/anthropic';
  }else{
   server=createServer((req,res)=>{void respond(req,res).catch(error=>{supplierErrors.push(error);res.destroy(error);});});
   server.listen(0,'127.0.0.1');await once(server,'listening');baseURL=`http://127.0.0.1:${server.address().port}/anthropic`;

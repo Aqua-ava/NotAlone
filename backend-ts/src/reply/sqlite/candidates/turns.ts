@@ -19,11 +19,13 @@ import type {SqliteReplyCandidateService} from './service.ts';
 import {readReplyWorkspace,replyWorkspaceEntryText,replyWorkspaceFingerprint,type ReplyWorkspace,type ReplyWorkspaceSnapshot} from './workspace.ts';
 const systemPrompt='你是面向用户真实联系人的中文关系沟通回复助手。只围绕本次已确认联系人。依据本次输入和获准资料生成1至3组可编辑候选，不虚构经历、情绪、立场或承诺。事实、推测和未确认候选必须区分。workspace suggest动作只代表用户要可选思路；未提供或未确认的草稿、立场和关系意图保持未知，候选不得写成用户已采纳的主张或承诺。workspace express动作只围绕本次想法组织表达；草稿是用户对助手的任务描述，不一定是要逐句发送的私聊原文。补充背景、写作要求和最近聊天各自标注，不相互冒充。一次性写作要求仅作用本次，不读取或形成长期表达偏好。最终消息始终由用户选择、修改并亲自发送。只输出JSON：{"candidates":[{"parts":["第一条短消息","可选的第二条"],"basis":[实际输入材料编号]}]}。basis只能引用本次编号材料，必须至少一项；不得臆造资料或把Skill选择当作已加载。';
 export interface ReplyGenerationInput {contactId:string;discussionId:string;requestKey:string;text:string;confirmedContact:true;acceptIncomplete?:boolean;carriedSelectionId?:string;selectedPackageId?:string;contextMessageIds?:string[];workspace?:ReplyWorkspace;signal?:AbortSignal}
-interface Options {storage:SqliteStorage;service:SqliteReplyCandidateService;discussions:SqliteDiscussionService;runtime:SqliteDiscussionRuntime;model:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;library?:SqliteSkillLibrary;authorize:(contactId:string)=>Promise<void>}
+export type ReplyPreparationStage='accepted'|'context-frozen'|'runtime-available';
+interface Options {storage:SqliteStorage;service:SqliteReplyCandidateService;discussions:SqliteDiscussionService;runtime:SqliteDiscussionRuntime;model:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;library?:SqliteSkillLibrary;authorize:(contactId:string)=>Promise<void>;onPreparationStage?:(stage:ReplyPreparationStage)=>void}
 /** 与11共享实际DSH执行、provider和arbiter；候选不创建第二套调用身份或账本。 */
 export class SqliteReplyTurns {
  private readonly options:Options;private stopping=false;private readonly pending=new Set<Promise<unknown>>();private readonly controllers=new Set<AbortController>();
  constructor(options:Options){this.options=options;}
+ private stage(stage:ReplyPreparationStage):void{try{this.options.onPreparationStage?.(stage);}catch{}}
  private digest(requestId:string,revision:SkillRunRevision){return createHash('sha256').update(encode({format:1,systemPrompt,model:this.options.model,revision,requestId})).digest('hex');}
  async configurationFor(contactId:string,discussionId:string):Promise<string|null>{
   const o=this.options,scope={ownerId:o.service.ownerId,contactId,discussionId};
@@ -53,6 +55,7 @@ export class SqliteReplyTurns {
   const accepted=await begin();
   const attempt=accepted.attempt as DiscussionAttempt;
   if(accepted.replayed)return {discussionId:attempt.discussionId,replayed:true,segmented:false};
+  this.stage('accepted');
   o.service.phase(input.contactId,attempt.discussionId,input.requestKey,'preparing');
   try{
    const callId=randomUUID(),contextId=randomUUID();
@@ -82,6 +85,7 @@ export class SqliteReplyTurns {
    };
    const items=await readItems();
    const frozen=await o.storage.execute<FrozenReplyInput[]>('reply.freezeInput',{...attempt,contextId,skillRun:revision,items,workspace:workspaceSnapshot,queryText:input.text,at:Date.now()});
+   this.stage('context-frozen');
    const requestIntent=workspace?workspace.action==='suggest'?'本次工作区动作：帮我想想。用户没有提供草稿时尚未确认任何立场，所有说法都只是可选思路。':'本次工作区动作：帮我表达。只按本次想法整理，不添加用户未确认的立场。':'本次明确请求：'+input.text;
    const prompt=requestIntent+'\n\n实际输入材料（编号用于basis）：\n'+frozen.map(item=>`[${item.itemNo}] ${item.kind}\n${item.text}`).join('\n\n');
    // 每次候选任务重建独立副本；旧候选只有显式选择才进入新输入。
@@ -91,9 +95,9 @@ export class SqliteReplyTurns {
    const base=new SqliteDiscussionSkillProtection({storage:o.storage,attempt,contextId,callId,authorize:()=>o.authorize(input.contactId)});
    // Skill 的中间步骤只核任务及修订；候选实际出站和保存各自原子复验完整资料。
    const protection:SkillRunProtection=base;
-   // 正常候选在Agent创建前预载全部符合资格的策略正文；显式兼容入口仍优先生效。
-   const openSkillRun=o.library&&!skillDegraded?()=>openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,{selectedPackageId:input.selectedPackageId,signal:input.signal}):undefined;
-   await runSingleDiscussionTurn({runtime:o.runtime,storage:o.storage,attempt,contextId,callId,configurationDigest,prompt,rebuildPrompt:prompt,systemPrompt,model:o.model,provider:o.provider,arbiter:o.arbiter,skillRun:null,openSkillRun,skillProtection:protection,skillRevision:revision,commitAction:'reply.commitCandidates',dispatchAction:'reply.dispatchCall',onPhase:phase=>o.service.phase(input.contactId,attempt.discussionId,input.requestKey,phase),configurationForRevision:revision=>this.digest(attempt.requestId,revision),assertAuthorized:()=>o.authorize(input.contactId),signal:input.signal});
+  // 正常候选在Agent创建前预载全部符合资格的策略正文；显式兼容入口仍优先生效。
+  const openSkillRun=o.library&&!skillDegraded?()=>openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,{selectedPackageId:input.selectedPackageId,signal:input.signal}):undefined;
+  await runSingleDiscussionTurn({runtime:o.runtime,storage:o.storage,attempt,contextId,callId,configurationDigest,prompt,rebuildPrompt:prompt,systemPrompt,model:o.model,provider:o.provider,arbiter:o.arbiter,skillRun:null,openSkillRun,skillProtection:protection,skillRevision:revision,commitAction:'reply.commitCandidates',dispatchAction:'reply.dispatchCall',onPhase:phase=>o.service.phase(input.contactId,attempt.discussionId,input.requestKey,phase),onRuntimeAvailable:()=>this.stage('runtime-available'),configurationForRevision:revision=>this.digest(attempt.requestId,revision),assertAuthorized:()=>o.authorize(input.contactId),signal:input.signal});
    return {discussionId:attempt.discussionId,replayed:false,segmented:accepted.segmented};
   }catch(error){await o.storage.execute('reply.failPreparation',{...attempt,code:input.signal?.aborted?'discussion_generation_cancelled':error instanceof StorageFailure?error.code:'discussion_generation_failed'}).catch(()=>{});throw error;}
   finally{o.service.phase(input.contactId,attempt.discussionId,input.requestKey,null);}

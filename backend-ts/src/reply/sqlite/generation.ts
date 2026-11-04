@@ -28,7 +28,7 @@ export interface SingleDiscussionTurnOptions {
  prompt:string;rebuildPrompt?:string;systemPrompt:string;model:HostReplyModelConfiguration;
  provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;
  skillRun:SqliteSkillRun|null;openSkillRun?:()=>Promise<SqliteSkillRun>;skillProtection:SkillRunProtection;skillRevision:SkillRunRevision;
- commitAction?:'reply.commitCandidates';dispatchAction?:'reply.dispatchCall';onPhase?:(phase:'queued'|'preparing'|'generating'|'saving')=>void;
+ commitAction?:'reply.commitCandidates';dispatchAction?:'reply.dispatchCall';onPhase?:(phase:'queued'|'preparing'|'generating'|'saving')=>void;onRuntimeAvailable?:()=>void;
  configurationForRevision?:(revision:SkillRunRevision)=>string;assertAuthorized?:()=>Promise<void>;signal?:AbortSignal;
 }
 export interface SingleDiscussionTurnResult {text:string;copyId:string;callId:string;sessionEvent:SessionEvent<'assistant/message'>}
@@ -56,6 +56,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
   options.onPhase?.('preparing');
   timer=setTimeout(()=>deadline.abort(new StorageFailure('discussion_generation_timeout')),model.deadline_ms);
   for(;;){try{return await options.runtime.run(attempt,configurationDigest,async work=>{
+   options.onRuntimeAvailable?.();
    lastCopyId=work.copy.id;
    const combined=AbortSignal.any([signal,work.signal]);
    await options.storage.execute('runtime.incorporate',{...attempt,copyId:work.copy.id,contextId});
