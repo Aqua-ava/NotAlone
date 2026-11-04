@@ -164,3 +164,4 @@
 - [ADR-164：大历史分段恢复与联系人公平轮转](164-resumable-history-slices.md)
 - [ADR-165：退役逐条消息排除，固定关系背景自动上下文](165-remove-message-exclusion.md)
 - [ADR-166：记忆自动处理总开关，默认关闭](166-memory-auto-processing-switch.md)
+- [ADR-167：记忆页在读取授权暂时不可用时继续显示已保存记忆](167-memory-page-saved-source-display.md)

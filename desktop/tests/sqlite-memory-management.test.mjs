@@ -260,3 +260,13 @@ test('历史原稿解码保持范围和核验状态，拒绝串联系人、未�
  ]){current=invalid;await assert.rejects(f.controller.readHistory(input));}
  current={...version,originalCandidates:[]};assert.deepEqual((await f.controller.readHistory(input)).view.versions[0].originalCandidates,[]);
 });
+
+test('主进程保留待重新核验标记，只接受 true，其余值按非法响应拒绝',async t=>{
+ let flag;
+ const version=()=>({mergeParents:[],mergeParentCount:0,verificationState:'verified',timeStatus:'eligible',versionNo:'1',body:'授权暂不可用时仍显示的合成记忆',formationKind:'correction',adoptionMode:'user',previousVersionNo:null,restoredFromVersionNo:null,contentState:'present',provenanceState:'eligible',decisionId:requestKey,sources:[source(contact)],contributingContactIds:[contact],...(flag===undefined?{}:{sourcePendingRecheck:flag})});
+ const f=await fixture(t,async()=>({candidates:[],memories:[{id:candidate,scopeKind:'self',contactId:null,headRevision:'1',state:'active',manualProtection:false,current:version(),versions:[version()],decisions:[]}]}));
+ assert.equal(Object.hasOwn((await f.controller.read(read)).view.memories[0].current,'sourcePendingRecheck'),false,'缺省时不带标记');
+ flag=true;const shown=(await f.controller.read(read)).view.memories[0];
+ assert.equal(shown.current.sourcePendingRecheck,true);assert.equal(shown.versions[0].sourcePendingRecheck,true);
+ for(const bad of [false,'true',1,null]){flag=bad;await assert.rejects(f.controller.read(read),`${String(bad)} 不是合法标记`);}
+});

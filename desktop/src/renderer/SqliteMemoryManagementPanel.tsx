@@ -98,6 +98,7 @@ function Memory({memory,busy,decide,bridge,request:historyRequest,authority}:{me
   <SourceTime sources={current?.sources??[]}/>
   {current?<div className="memory-current-content"><MemoryBody version={current} current/>
    {current.body!==null&&current.verificationState!=='verified'&&<Verification state={current.verificationState}/>}
+   {current.sourcePendingRecheck&&<p className="hint" role="status"><strong>来源待重新核验</strong>；读取授权恢复前仍可查看已保存的资料，修改前会重新核验来源。</p>}
   </div>:<p className="memory-unavailable-body">当前无可引用版本。{memory.state==='withdrawn'?'已撤销。':memory.state==='invalidated'?'已失效。':''}</p>}
   <div className="memory-card-tools">
    {current&&<><span className="memory-origin">{{auto:'系统添加',user:'已确认',manual:'手动添加'}[current.adoptionMode]??'来历待核对'}</span>

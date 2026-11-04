@@ -9,7 +9,9 @@ export interface MemoryDecisionRequest {
  restoredFromVersionNo?:string;expectedMergedParents?:MergedParentSnapshot[];body?:string;scope?:MemoryScope;
 }
 export interface MemoryCandidateView extends MemoryScope {verificationState:'verified'|'pending';id:string;body:string;state:'pending'|'adopted'|'rejected'|'duplicate';stateRevision:string;eventId:string;contributingContactIds:string[];sources:MemorySource[]}
-export interface MemoryVersionView {timeStatus:MemoryTimeEligibility;mergeParents:MergedParentSnapshot[];mergeParentCount:number;verificationState:'verified'|'pending';versionNo:string;body:string|null;formationKind:string;adoptionMode:string;previousVersionNo:string|null;restoredFromVersionNo:string|null;contentState:string;provenanceState:string;decisionId:string;contributingContactIds:string[];sources:MemorySource[];originalCandidates?:MemoryCandidateView[]}
+export interface MemoryVersionView {timeStatus:MemoryTimeEligibility;mergeParents:MergedParentSnapshot[];mergeParentCount:number;verificationState:'verified'|'pending';versionNo:string;body:string|null;formationKind:string;adoptionMode:string;previousVersionNo:string|null;restoredFromVersionNo:string|null;contentState:string;provenanceState:string;decisionId:string;contributingContactIds:string[];sources:MemorySource[];originalCandidates?:MemoryCandidateView[];
+ /** 仅在读取授权暂时不可用、正文按已保存来源的资格显示时出现；授权恢复后重新实时核验，此标记消失。 */
+ sourcePendingRecheck?:true}
 export interface MemoryView extends MemoryScope {id:string;headRevision:string;state:string;manualProtection:boolean;current:MemoryVersionView|null;versions:MemoryVersionView[];decisions:{id:string;action:string;actorKind:string;createdAt:string;expectedHeadRevision:string|null;expectedVersionNo:string|null;outcome:string}[]}
 export interface MemoryManagementQuery {cursor?:string;displayContactId?:string;memoryId?:string;candidateId?:string}
 export interface MemoryManagementView {candidates:MemoryCandidateView[];memories:MemoryView[];page?:{revision:string;nextCursor:string|null;preparing?:boolean}}

@@ -30,15 +30,31 @@ async function expectedTime(storage,memoryId){
  return snapshot;
 }
 
-test('临时守卫失效不永久清空目录时间，期间正文仍不可读，续证后可见来源时间保持一致',async t=>{
+test('临时守卫失效不永久清空目录时间，期间仍显示已保存正文并标注待重新核验，续证后标记消失且来源时间一致',async t=>{
  const f=await guardedSource(t);await f.service.close();
- const hidden=await f.management.read(f.scope);
- assert.equal(hidden.memories[0].current,null);assert.equal(hidden.memories[0].versions[0].body,null);assert.deepEqual(hidden.memories[0].versions[0].sources,[]);
+ const pending=await f.management.read(f.scope);
+ assert.equal(pending.memories[0].current.body,'合成可恢复来源资料','读取授权暂不可用时仍显示已保存的记忆正文');
+ assert.equal(pending.memories[0].current.sourcePendingRecheck,true);
+ assert.equal(pending.memories[0].current.sources[0].sentAt,'1700000000000','来源日期同样可见');
+ assert.equal(pending.memories[0].versions[0].sourcePendingRecheck,true);
  await expectedTime(f.storage,f.memoryId);
  const token=await f.contacts.eligibility(f.contactId);await revalidate(f,f.storage,token);
  const restored=await f.management.read(f.scope);
- assert.equal(restored.memories[0].current.body,'合成可恢复来源资料');
+ assert.equal(restored.memories[0].current.body,'合成可恢复来源资料');assert.equal(Object.hasOwn(restored.memories[0].current,'sourcePendingRecheck'),false,'实时核验通过后不再带待重新核验标记');
  assert.equal(restored.memories[0].current.sources[0].sentAt,'1700000000000');await expectedTime(f.storage,f.memoryId);
+});
+
+test('授权暂不可用期间只放宽显示：来源被真实删除仍隐藏正文，依赖来源的修改仍被拒绝',async t=>{
+ const f=await guardedSource(t);await f.service.close();
+ const shown=await f.management.read(f.scope);const current=shown.memories[0].current;
+ assert.equal(current.sourcePendingRecheck,true);
+ // 写入入口仍要求实时核验：不能借显示放宽修改或纠错。
+ await assert.rejects(f.management.decide({requestKey:'guard-write',action:'correct',scope:f.scope,memoryId:f.memoryId,expectedHeadRevision:shown.memories[0].headRevision,expectedVersionNo:current.versionNo,body:'合成改写'}),error=>['history_source_not_available','memory_source_stale'].includes(error.code));
+ // 来源真实失效（删除中）时本地资格同样不通过，正文继续隐藏。
+ await f.storage.execute('fixture.markSourceDeleting',{ownerId:owner,contactId:f.contactId});
+ const hidden=await f.management.read(f.scope);
+ assert.equal(hidden.memories[0].current,null);assert.equal(hidden.memories[0].versions[0].body,null);assert.deepEqual(hidden.memories[0].versions[0].sources,[]);
+ assert.equal(Object.hasOwn(hidden.memories[0].versions[0],'sourcePendingRecheck'),false);
 });
 
 test('已应用37的守卫失效空时间由后续迁移排队重建，旧账本不修改',async t=>{
@@ -51,7 +67,7 @@ test('已应用37的守卫失效空时间由后续迁移排队重建，旧账本
  const upgraded=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:f.storage.status.databaseId,registryModule:registryModule('current')});
  f.beforeCleanup.push(()=>upgraded.close());assert.equal(upgraded.status.schemaVersion,registry.migrations.at(-1).version);assert.ok(upgraded.status.schemaVersion>37);
  const management=new SqliteMemoryManagement(upgraded,owner);
- const hidden=await management.read(f.scope);assert.equal(hidden.memories[0].current,null);assert.equal(hidden.memories[0].versions[0].body,null);
+ const pending=await management.read(f.scope);assert.equal(pending.memories[0].current.body,'合成可恢复来源资料');assert.equal(pending.memories[0].current.sourcePendingRecheck,true);
  const after=await expectedTime(upgraded,f.memoryId);assert.deepEqual(after.ledger.slice(0,37),before.ledger);
  await revalidate(f,upgraded,token);
  const restored=await management.read(f.scope);assert.equal(restored.memories[0].current.body,'合成可恢复来源资料');
