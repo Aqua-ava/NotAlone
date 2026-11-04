@@ -102,6 +102,16 @@ test('skill_resource按已预加载身份读取两份资源，只增加一次额
  assert.ok(JSON.stringify(f.requests[1]).includes('辅助资料的唯一合成教学句。'));
 });
 
+test('skill_resource第三次读取硬拒绝并整体降级为无Skill请求',async t=>{
+ const f=await setup(t,(_f,res,_request,n)=>n<4?stream(res,[{name:'skill_resource',args:{name:'gentle',path:'references/example.md'}}]):stream(res));
+ await f.turns.generate(f.input);
+ const view=await f.view();
+ assert.equal(f.requests.length,4,'第三次资源读取被拒绝后只允许一次无 Skill 降级请求');
+ assert.deepEqual(f.requests.map(toolNames),[['skill_resource'],['skill_resource'],['skill_resource'],[]]);
+ assert.equal(view.skillWarning,'回复策略暂不可用');
+ assert.deepEqual(view.loadedSkills,[]);assert.deepEqual(view.preloadedSkills,[]);
+});
+
 test('预加载读取失败整体无Skill降级，首次且唯一物理调用不含残缺正文',async t=>{
  const f=await setup(t,(_f,res)=>stream(res));await unlink(join(f.skillRoot,'gentle/SKILL.md'));
  await f.turns.generate(f.input);

@@ -62,3 +62,5 @@ Blocked by: 01, 02, 03
 
 - 2026-11-04：按规格创建，依赖 01、02、03。
 - 2026-11-04：单次调用、失效、预算、正式 profile 与性能对照完成；HTTP/Playwright 受沙箱限制的项已明确留待可运行环境与 ticket 05。保持 `claimed`。
+
+- 2026-11-04 上限补齐：新增 `skill_resource` 第三次调用真实集成回归。前两次读取成功，第三次在下一次模型请求前被硬拒绝，随后只发起一次无 Skill 降级请求；最终候选保留，`skillWarning` 为“回复策略暂不可用”，`loadedSkills/preloadedSkills` 清空，没有残留第三次资源正文。候选 Skill loop 16/16。

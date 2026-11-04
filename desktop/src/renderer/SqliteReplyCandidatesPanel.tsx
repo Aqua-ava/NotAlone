@@ -17,7 +17,7 @@ function statusFailure(status:SqliteCandidateStatus):string{
 }
 interface Props {bridge:SqliteDiscussionBridge;contactId:string|null;scopeRevision:number;sessionId:string|null;disabled?:boolean;initialDraft?:string;onInitialDraftTaken?:()=>void;onDraftChange?:(text:string,scope:{contactId:string;scopeRevision:number})=>void;onSubmitted?:(receipt:SqliteDiscussionReceipt)=>void}
 /** 草稿、候选、依据和实际Skill快照共用同一失效边界；迟到回包不能重新挂回旧正文。 */
-export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessionId,disabled=false,initialDraft='',onDraftChange,onSubmitted}:Props){
+export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessionId,disabled=false,initialDraft='',onInitialDraftTaken,onDraftChange,onSubmitted}:Props){
  const scopeKey=JSON.stringify([contactId,scopeRevision,sessionId]),latest=useRef({scopeKey,bridge});latest.current={scopeKey,bridge};
  const revision=useRef(0),mounted=useRef(false),operation=useRef<object|null>(null);
  const retry=useRef<{fingerprint:string;requestKey:string;text:string;workspace:WorkspaceInput;carry?:string}|null>(null);
@@ -36,7 +36,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  // 临时禁用只暂停新操作；来源及范围失效仍由订阅和scopeKey立即清除。
  useEffect(()=>{if(available&&!page)void run({action:'read'});},[disabled]);
  // 讨论切换可能先于联系人草稿回显；空值不提前消费这次交接。
- useEffect(()=>{if(available&&initialDraft&&seeded.current!==scopeKey){seeded.current=scopeKey;setDraft(initialDraft);}},[scopeKey,available,initialDraft]);
+ useEffect(()=>{if(available&&initialDraft&&seeded.current!==scopeKey){seeded.current=scopeKey;setDraft(initialDraft);onInitialDraftTaken?.();}},[scopeKey,available,initialDraft,onInitialDraftTaken]);
  type Command=SqliteCandidateOperation extends infer O?O extends SqliteCandidateOperation?Omit<O,'contactId'|'scopeRevision'|'sessionId'>:never:never;
  function showPage(next:SqliteCandidatePage,preserveEdits=false){
   // 仅保留无正文的来源标识，短暂读取失败后仍能核对旧草稿的资格。

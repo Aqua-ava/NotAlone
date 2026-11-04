@@ -108,7 +108,7 @@ export function AssistantSessionBudgetNotice({ replies }: { replies: ReplySessio
     : <AssistantInputBudgetNotice budget={budget} />;
 }
 
-export function AssistantSessionPanel({ replies, initialDraft = '', onDraftChange }: {
+export function AssistantSessionPanel({ replies, initialDraft = '', onInitialDraftTaken, onDraftChange }: {
   replies: ReplySessionView; initialDraft?: string; onInitialDraftTaken?: () => void;
   onDraftChange?: (text: string, scope: { contactId: string; scopeRevision: number }) => void;
 }) {
@@ -211,7 +211,7 @@ export function AssistantSessionPanel({ replies, initialDraft = '', onDraftChang
     {sqliteDiscussion && <>
       {window.notalone.sqliteDiscussion.candidates&&<SqliteReplyCandidatesPanel bridge={window.notalone.sqliteDiscussion} contactId={replies.state.contactId}
         scopeRevision={replies.state.scopeRevision} sessionId={saved.sessionId} disabled={discussionDisabled} initialDraft={initialDraft}
-        onDraftChange={onDraftChange} onSubmitted={discussionSubmitted} />}
+        onInitialDraftTaken={onInitialDraftTaken} onDraftChange={onDraftChange} onSubmitted={discussionSubmitted} />}
       <details className="sqlite-discussion-details">
         <summary>与助手讨论</summary>
         <SqliteDiscussionEntries entries={saved.discussionEntries!} recovery={saved.runtimeRecovery} />

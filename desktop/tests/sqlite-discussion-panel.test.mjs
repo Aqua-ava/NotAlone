@@ -111,3 +111,44 @@ test('正式preload只暴露具名讨论、候选操作和失效订阅，拒绝�
   const event = { contactId, scopeRevision: 7, revision: 1 }; listeners.get('sqlite-discussion:invalidated')({}, event);
   assert.deepEqual(received, event); off(); assert.equal(listeners.size, 0);
 });
+
+test('正式会话面板消费联系人初始草稿且用户编辑后不会重复注入', { timeout: 30_000 }, async t => {
+  const compiled = await build({ stdin: { contents: `
+    import React, { useState } from 'react'; import { createRoot } from 'react-dom/client';
+    import { AssistantSessionPanel } from './src/renderer/AssistantSessionPanel';
+    const sessionId=${JSON.stringify(sessionId)},nextSessionId=${JSON.stringify(nextSessionId)};
+    window.notalone = { sqliteDiscussion: {
+      candidates: { execute: async () => ({ coverage: { phase: 'complete' }, requests: [] }) },
+      submit: async () => ({}),
+      onInvalidated: () => () => {}
+    }};
+    const methods = {listSavedSessions:async()=>{},viewSavedSession:async()=>{},resumeSavedSession:async()=>{},
+      readSavedSession:async()=>{},newSavedSession:async()=>{},deleteSavedSession:async()=>{}};
+    function View() {
+      const [draft,setDraft]=useState('联系人初始草稿'),[session,setSession]=useState(sessionId),[taken,setTaken]=useState(0);
+      window.__taken = () => taken;
+      const state = {contactId:${JSON.stringify(contactId)},scopeRevision:7,phase:'idle',generationBlock:null,generationJobs:[],
+        savedSession:{phase:'ready',sessionId:session,turns:[],inputs:[],currentInputVersionId:null,discussionEntries:[],runtimeRecovery:'ready'},
+        sessionCatalog:{phase:'ready',items:[{sessionId:session,isCurrent:true}],currentSessionId:session}};
+      return React.createElement(React.Fragment, null,
+        React.createElement('button', { onClick: () => setSession(nextSessionId) }, '切换讨论'),
+        React.createElement(AssistantSessionPanel, { replies: { state, ...methods }, initialDraft: draft, onDraftChange: () => {},
+          onInitialDraftTaken: () => { setTaken(value => value + 1); setDraft(''); } }));
+    }
+    createRoot(document.getElementById('root')).render(React.createElement(View));
+  `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false, logLevel: 'silent' });
+  const server = createServer((_req, res) => { res.setHeader('content-type', 'text/html'); res.end('<div id="root"></div>'); });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening'); t.after(() => new Promise(resolve => server.close(resolve)));
+  const browser = await chromium.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
+  t.after(() => browser.close()); const page = await browser.newPage();
+  await page.goto(`http://127.0.0.1:${server.address().port}`); await page.addScriptTag({ content: compiled.outputFiles[0].text });
+  const input = page.getByRole('textbox', { name: '有什么想说的', exact: true });
+  await expect(input).toHaveValue('联系人初始草稿');
+  await expect.poll(() => page.evaluate(() => window.__taken())).toBe(1);
+  await input.fill('用户编辑后的新草稿');
+  await expect(input).toHaveValue('用户编辑后的新草稿');
+  await expect.poll(() => page.evaluate(() => window.__taken())).toBe(1);
+  await page.getByRole('button', { name: '切换讨论', exact: true }).click();
+  await expect(input).toHaveValue('');
+  await expect.poll(() => page.evaluate(() => window.__taken())).toBe(1);
+});

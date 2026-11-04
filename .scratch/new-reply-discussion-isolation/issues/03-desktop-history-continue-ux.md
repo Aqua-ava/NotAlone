@@ -56,3 +56,5 @@ Blocked by: 02
 - State 保持 `claimed`，等待主会话独立审查与集成。
 
 - 2026-11-04 集成校正：`sqlite-discussion-panel` 原断言仍假设历史正文在默认折叠时可见、preload 只有 `submit/onInvalidated`，与“历史仅回看、显式继续”和受控候选端口集成后的现行合同不一致。RED 为 61/63；将测试改为先确认历史发言不在默认可访问树、展开“与助手讨论”后才可回看，目录仍要求显式“继续此讨论”，并允许 preload 固定 `candidates` 端口；GREEN 63/63。没有放宽拒绝额外字段、来源失效、迟到回包或候选操作白名单断言。
+
+- 2026-11-04 Standards P2 修复：`AssistantSessionPanel` 原先声明但未解构/透传 `onInitialDraftTaken`，候选面板也未调用，联系人级草稿在切换讨论或重新挂载后可能再次注入。现由会话面板透传到 `SqliteReplyCandidatesPanel`，仅在首次成功播种当前 scope 的初始草稿后调用一次；用户已编辑时 `seeded.current` 阻止旧草稿覆盖。新增实际浏览器回归覆盖首次注入、用户编辑保留、切换讨论不重复；讨论面板 3/3、草稿交接 5/5、桌面 typecheck 通过。
