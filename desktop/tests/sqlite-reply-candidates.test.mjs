@@ -100,12 +100,12 @@ test('助手面板取消删除确认与刷新目录不丢候选编辑，也不�
  const f=await panel(t,async()=>pageData(),'',true),candidate=f.page.getByRole('textbox',{name:'候选第1条',exact:true});
  await expect(candidate).toHaveValue('合成候选第一条');await candidate.fill('取消确认后仍保留的编辑');
  await f.page.getByText('历史讨论',{exact:true}).click();
- await f.page.getByRole('button',{name:'删除正在查看的会话',exact:true}).click();
- await expect(f.page.getByRole('group',{name:'确认删除助手会话'})).toBeVisible();
+ await f.page.getByRole('button',{name:'删除正在查看的讨论',exact:true}).click();
+ await expect(f.page.getByRole('group',{name:'确认删除助手讨论'})).toBeVisible();
  await expect(candidate).toBeDisabled();await expect(candidate).toHaveValue('取消确认后仍保留的编辑');
- await f.page.getByRole('button',{name:'取消删除会话',exact:true}).click();
+ await f.page.getByRole('button',{name:'取消删除',exact:true}).click();
  await expect(candidate).toBeEnabled();await expect(candidate).toHaveValue('取消确认后仍保留的编辑');
- await f.page.getByRole('button',{name:'刷新会话列表',exact:true}).click();
+ await f.page.getByRole('button',{name:'刷新讨论列表',exact:true}).click();
  await expect(candidate).toBeDisabled();await expect(candidate).toHaveValue('取消确认后仍保留的编辑');
  await f.page.evaluate(()=>window.__finishCatalog());await expect(candidate).toBeEnabled();
  await expect(candidate).toHaveValue('取消确认后仍保留的编辑');

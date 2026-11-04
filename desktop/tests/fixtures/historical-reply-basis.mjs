@@ -92,7 +92,7 @@ export async function historicalReplyFixture({ replyRequestId } = {}) {
       if (request.path.startsWith('/api/deletions?')) return { generation: records.generation, data: { operations: [] } };
       if (request.path.endsWith('/assistant-sessions') && request.method === 'GET') return { generation: records.generation,
         data: { sessions: [{ session_id: records.saved.session_id, is_current: true }], current_session_id: records.saved.session_id } };
-      if (request.path.endsWith('/resume')) return { generation: records.generation, data: { session_id: request.path.split('/').at(-2) } };
+      if (request.path.endsWith('/continue')) return { generation: records.generation, data: { session_id: request.path.split('/').at(-2) } };
       const data = request.path.endsWith('/assistant-session/default') ? { session_id: records.saved.session_id }
         : request.path.includes('/history-messages?') ? { messages: [], next_cursor: null }
         : request.path.endsWith('/versions') ? records.history

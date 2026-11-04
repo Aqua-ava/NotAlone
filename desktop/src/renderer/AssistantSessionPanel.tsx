@@ -24,6 +24,16 @@ const backgroundGenerationStatusText: Partial<Record<ReplyGenerationJobState['ph
   stopping: '正在停止另一助手会话中的后台生成。',
 };
 
+export function AssistantSessionDeletionConfirmation({ busy, onConfirm, onCancel }: {
+  busy: boolean; onConfirm: () => void; onCancel: () => void;
+}) {
+  return <div className="session-confirmation" role="group" aria-label="确认删除助手讨论">
+    <p>删除这段助手讨论、候选版本和运行使用痕迹后无法恢复。联系人、原始微信聊天、关系记忆和本人记忆不会删除。</p>
+    <button className="button" disabled={busy} onClick={onConfirm}>确认删除讨论</button>
+    <button className="button" onClick={onCancel}>取消删除</button>
+  </div>;
+}
+
 function SavedTurn({ turn, index, retry, busy, showPreferences }: {
   turn: SavedAssistantTurn; index: number; retry?: () => void; busy: boolean; showPreferences: boolean;
 }) {
@@ -172,11 +182,8 @@ export function AssistantSessionPanel({ replies, initialDraft = '', onDraftChang
     {catalog?.phase === 'loading' && <p role="status">正在核对助手会话…</p>}
     {catalog?.selectionPending && catalog.phase !== 'loading' && <p role="alert">助手会话操作尚未确认，请刷新列表后明确选择会话。</p>}
     {catalog?.phase === 'failed' && !catalog.selectionPending && <p role="alert">助手会话列表暂不可用，请刷新重试。</p>}
-    {confirmation && <div className="session-confirmation" role="group" aria-label="确认删除助手会话">
-      <p>删除这段助手讨论、候选和使用痕迹后无法恢复。独立聊天来源、联系人关系记忆和本人记忆仍会保留。</p>
-      <button disabled={catalog?.phase === 'loading' || catalog?.selectionPending} onClick={confirmDelete}>确认删除会话</button>
-      <button onClick={() => setConfirmation(null)}>取消删除会话</button>
-    </div>}
+    {confirmation && <AssistantSessionDeletionConfirmation busy={catalog?.phase === 'loading' || Boolean(catalog?.selectionPending)}
+      onConfirm={confirmDelete} onCancel={() => setConfirmation(null)} />}
     {deleting && <p role="status">正在删除并核对助手会话…</p>}
     {replies.state.sessionDeletion === 'failed' && <p role="alert">助手会话删除尚未确认完成，请重试。
       <button disabled={!saved?.sessionId} onClick={() => void replies.deleteSavedSession({ contactId: replies.state.contactId!,
@@ -208,44 +215,49 @@ export function AssistantSessionPanel({ replies, initialDraft = '', onDraftChang
       <details className="sqlite-discussion-details">
         <summary>与助手讨论</summary>
         <SqliteDiscussionEntries entries={saved.discussionEntries!} recovery={saved.runtimeRecovery} />
-        {catalog?.phase === 'ready' && !currentDiscussion && <p role="status">正在回看历史讨论，请先明确继续此会话后再提交。</p>}
+        {catalog?.phase === 'ready' && currentDiscussion && <p className="session-view-state session-view-state-current" role="status">当前讨论：后续助手讨论会使用这段内容。</p>}
+        {catalog?.phase === 'ready' && !currentDiscussion && <p className="session-view-state session-view-state-history" role="status">历史讨论仅回看，不会自动加入新候选；继续此讨论后才切换当前讨论。</p>}
         <SqliteDiscussionComposer bridge={window.notalone.sqliteDiscussion} contactId={replies.state.contactId}
           scopeRevision={replies.state.scopeRevision} sessionId={saved.sessionId} disabled={discussionDisabled}
           onSubmitted={discussionSubmitted} />
       </details>
     </>}
     <details className="session-browser">
-      <summary><span>历史讨论</span><small>新开、切换或回看助手讨论</small>
+      <summary><span>历史讨论</span><small>仅回看，不会自动加入新候选</small>
         {saved?.phase === 'ready' && saved.turns.some((turn) => turn.state === 'failed')
           && <span className="session-attention">历史中有未完成的生成，请展开查看</span>}
       </summary>
       <div className="session-browser-content">
         <div className="session-actions" role="group" aria-label="助手会话操作">
-    <button disabled={!replies.state.contactId || busy} onClick={() => void replies.newSavedSession()}>
-      新开助手会话
+    <button className="button" disabled={!replies.state.contactId || busy} onClick={() => void replies.newSavedSession()}>
+      新开讨论
     </button>
-    <button disabled={!replies.state.contactId || busy} onClick={() => void replies.listSavedSessions()}>刷新会话列表</button>
+    <button className="button" disabled={!replies.state.contactId || busy} onClick={() => void replies.listSavedSessions()}>刷新讨论列表</button>
         </div>
     {catalog?.phase === 'ready' && <ul className="session-catalog" aria-label="助手会话目录">
       {!catalog.items.length && <li>这位联系人还没有助手会话。</li>}
-      {catalog.items.map((item, index) => <li className="session-catalog-item" key={item.sessionId}>
-        <button aria-label={`查看会话 ${item.sessionId}`} disabled={busy} onClick={() => void replies.viewSavedSession(item.sessionId)}>查看讨论 {index + 1}</button>
-        {item.isCurrent && <span> 当前会话</span>}
-        {!item.isCurrent && <button disabled={busy} onClick={() => void replies.resumeSavedSession(item.sessionId)}>继续此会话</button>}
-        {item.sessionId === saved?.sessionId && <span> 正在查看</span>}
+      {catalog.items.map((item, index) => <li className={`session-catalog-item ${item.isCurrent ? 'session-catalog-current' : 'session-catalog-history'}`} key={item.sessionId}>
+        <button className="button" aria-label={`查看会话 ${item.sessionId}`} aria-pressed={item.sessionId === saved?.sessionId}
+          disabled={busy} onClick={() => void replies.viewSavedSession(item.sessionId)}>查看讨论 {index + 1}</button>
+        {item.isCurrent
+          ? <span className="session-state session-state-current">当前讨论</span>
+          : <span className="session-state session-state-history">历史讨论 · 仅回看</span>}
+        {!item.isCurrent && <button className="button" disabled={busy} onClick={() => void replies.resumeSavedSession(item.sessionId)}>继续此讨论</button>}
+        {item.sessionId === saved?.sessionId && <span className="session-state session-state-viewing">正在回看</span>}
         <details className="session-metadata"><summary>讨论详情</summary><p>会话编号：{item.sessionId}</p></details>
       </li>)}
     </ul>}
         <div className="session-actions" role="group" aria-label="正在查看的讨论操作">
-    {saved?.sessionId && <button disabled={busy} onClick={() => void replies.resumeSavedSession(saved.sessionId!)}>
-      {catalog?.phase === 'failed' ? '重试继续此会话' : '继续此会话'}
+    {saved?.sessionId && (replies.state.errorCode === 'resume_required' || catalog?.phase === 'failed' || catalog?.phase === 'ready' && !currentDiscussion)
+      && <button className="button" disabled={busy} onClick={() => void replies.resumeSavedSession(saved.sessionId!)}>
+      {catalog?.phase === 'failed' ? '重试继续此讨论' : '继续此讨论'}
     </button>}
-    <button disabled={!replies.state.contactId || saved?.phase === 'loading' || deleting || catalog?.phase === 'loading' || catalog?.selectionPending} onClick={() => void replies.readSavedSession()}>
+    <button className="button" disabled={!replies.state.contactId || saved?.phase === 'loading' || deleting || catalog?.phase === 'loading' || catalog?.selectionPending} onClick={() => void replies.readSavedSession()}>
       {saved?.phase === 'failed' ? '重试读取已保存讨论' : '查看已保存讨论'}
     </button>
-    <button disabled={!saved?.sessionId || saved.phase === 'loading' || deleting || catalog?.phase === 'loading' || catalog?.selectionPending}
+    <button className="button" disabled={!saved?.sessionId || saved.phase === 'loading' || deleting || catalog?.phase === 'loading' || catalog?.selectionPending}
       onClick={() => setConfirmation({ contactId: replies.state.contactId!, scopeRevision: replies.state.scopeRevision,
-        sessionId: saved!.sessionId!, confirmed: true })}>删除正在查看的会话</button>
+        sessionId: saved!.sessionId!, confirmed: true })}>删除正在查看的讨论</button>
         </div>
     {saved?.phase === 'ready' && !sqliteDiscussion && <section className="session-history" aria-label="已保存的讨论" onCopy={noteHistoricalCopy}>
       {!saved.inputs.length && <p>当前会话还没有讨论。</p>}

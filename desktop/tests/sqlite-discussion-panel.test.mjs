@@ -53,7 +53,7 @@ test('正式讨论面板按当前段和资料资格提交，分段回执重新�
   const input = page.getByRole('textbox', { name: '讨论内容' });
   await expect(input).toBeDisabled();
   await page.getByText('历史讨论', { exact: true }).click();
-  await page.getByRole('group', { name: '正在查看的讨论操作' }).getByRole('button', { name: '继续此会话', exact: true }).click();
+  await page.getByRole('group', { name: '正在查看的讨论操作' }).getByRole('button', { name: '继续此讨论', exact: true }).click();
   await expect(input).toBeEnabled(); assert.equal(submissions.length, 0);
   await page.evaluate(() => window.__patch({generationBlock:'foreground-confirmation-required'}));
   await expect(input).toBeEnabled();

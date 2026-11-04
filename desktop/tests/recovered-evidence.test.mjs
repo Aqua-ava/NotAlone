@@ -22,7 +22,7 @@ async function fixture() {
       return { generation: f.records.generation, data: r.method === 'POST' ? { session_id: emptyId }
         : { current_session_id: selected, sessions: [f.sessionId, emptyId].map(session_id => ({ session_id, is_current: session_id === selected })) } };
     }
-    if (r.path.endsWith('/resume')) {
+    if (r.path.endsWith('/continue')) {
       selected = r.path.split('/').at(-2);
       f.records.saved = structuredClone(selected === f.sessionId ? original : empty);
       return { generation: f.records.generation, data: { session_id: selected } };

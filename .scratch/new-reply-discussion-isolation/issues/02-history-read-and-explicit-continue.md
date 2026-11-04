@@ -1,7 +1,7 @@
 # 历史回看与明确继续分离
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Blocked by: 01
 
 ## 目标
@@ -41,3 +41,16 @@ Blocked by: 01
 - 自动继续、自动摘要或自动迁移旧讨论。
 
 ## Comments
+
+## Answer
+
+- 历史目录与单段正文仍只走助手只读通道；新增回归固定列表/正文读取不改变 `is_current`、活跃时间、运行副本、请求数或模型调用数。
+- 明确继续改为专用 `POST /api/contacts/:contactId/assistant-sessions/:discussionId/continue`，桌面主进程同步改用该动作；旧 `/resume`、`/select` 不再作为隐式或兼容切换入口。
+- `discussion.continue` 只切换目标讨论：首次切换清旧 current、把目标设为 current 并续期；重复继续同一目标是无写入幂等操作。它不创建请求、不调用模型、不恢复或改写运行副本，也不合并其他讨论正文。
+- 继续前按 `owner_id + contact_id + discussion_id` 复验目标讨论及其全部实际请求依赖；跨联系人返回 `discussion_unavailable`，失效请求/来源返回 `discussion_source_unavailable`，且不改变原 current。
+- 变更文件：`backend-ts/src/reply/sqlite/actions.ts`、`backend-ts/src/reply/sqlite/http.ts`、`desktop/src/main/reply/assistant-session-catalog.ts`、`backend-ts/test/sqlite-discussion-history-continue.test.mjs`（新增）、`backend-ts/test/fixtures/sqlite/discussion-history-registry.mjs`（新增）、`backend-ts/test/sqlite-discussion-host.test.mjs`，以及既有桌面会话测试/fixture 的 continue 路径适配。
+- RED：实现前同一边界 2 个业务断言失败（重复继续刷新活跃时间；失效来源仍可继续）；原 HTTP 用例使用本机 `listen`，在当前沙箱直接 `EPERM`，已改为同进程调用公开 `SqliteDiscussionHttp.handle`，不使用无界等待掩盖失败。
+- GREEN：`node --test --test-timeout=20000 test/sqlite-discussion-history-continue.test.mjs` 4/4；桌面会话切换/目录/空闲分段/恢复证据相关 5 个文件 24/24。`git diff --check` 通过。
+- 未执行：`sqlite-discussion-host.test.mjs` 与既有讨论集成/候选回归需要监听本机 HTTP，本会话沙箱返回 `EPERM`；工作树没有安装 `node_modules`，测试通过只读复用主仓库依赖并屏蔽未使用的 `sharp` 原生模块，完整正式 typecheck 未作为本票通过证据。
+
+State 保持 `claimed`，等待独立审查与本票提交后的 03 集成。

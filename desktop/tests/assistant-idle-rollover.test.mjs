@@ -20,7 +20,7 @@ for(const action of ['replies'])test(`生产Main与preload的${action}以分段�
    session_id:fresh,turn_id:turn.turn_id,input_version_id:turn.input_version_id,state:'completed'}}; }
   if(request.path.endsWith('/assistant-sessions')&&request.method==='GET')return {generation:7,data:{
    sessions:[{session_id:f.sessionId,is_current:current===f.sessionId},{session_id:fresh,is_current:current===fresh}],current_session_id:current}};
-  if(request.path.endsWith('/resume')){f.calls.push(request);current=f.sessionId;f.records.saved=old;f.records.history.session_id=f.sessionId;return {generation:7,data:{session_id:f.sessionId}};}
+  if(request.path.endsWith('/continue')){f.calls.push(request);current=f.sessionId;f.records.saved=old;f.records.history.session_id=f.sessionId;return {generation:7,data:{session_id:f.sessionId}};}
   if(request.path.endsWith('/'+f.sessionId))return {generation:7,data:old};
   return original(request);
  };

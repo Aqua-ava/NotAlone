@@ -238,7 +238,7 @@ export function ReplyCandidates({ replies, currentDraft, historyCoverage, onInit
     {state.sourceAvailability === 'failed' && <p role="alert">删除后的依据尚未确认，原候选暂不可用。<button onClick={() => void replies.retrySourceValidation()}>重新核对依据</button></p>}
     {state.phase === 'waiting' && <p className="reply-note" role="status">正在等待本次生成结果…</p>}
     {state.phase === 'failed' && <p className="reply-note" role="alert">{state.errorCode === 'connection' ? '未收到生成结果，请用同一次请求重试。'
-      : state.errorCode === 'resume_required' ? '请先在已保存讨论中点击“继续此会话”，再发起生成。'
+      : state.errorCode === 'resume_required' ? '请先在已保存讨论中点击“继续此讨论”，再发起生成。'
       : state.errorCode === 'deletion_pending' ? '资料清理未完成，暂时不能生成。请先完成或重试资料删除。'
       : state.errorCode === 'save_failed' ? '本次结果未可靠保存，尚不能确认可恢复。请重试同一次生成。'
       : state.errorCode === 'timeout' ? '本次生成超时，请重试同一次生成。'
