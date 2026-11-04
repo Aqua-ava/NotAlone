@@ -9,18 +9,50 @@ export interface ForegroundBindingConfirmation {
  observationId:string;observedAt:string;contactId:string;bindingId:string;readEpoch:string;
  accountId:string;sourceGeneration:string;scopeRevision:string;grantId:string;selectionGeneration:string;dataGeneration:string;barrierGeneration:string;
 }
-/** 前台独占只读元数据进程，不与后台正文同步共用租约。 */
+/**
+ * 前台独占只读元数据进程，不与后台正文同步共用租约。
+ * 全量名单耗时随会话数线性增长（约 1.8ms/个，近 500 个会话约 1 秒），远超单轮观察预算；
+ * 因此读取不受观察期限取消，完成后按账号证据短期缓存，后续每轮只做账号复验。
+ */
+const sessionCacheTtlMs=30_000,sessionReadTimeoutMs=15_000;
 export class ForegroundSessionList {
  private client?:NarrowWechatClient;
  private closed=false;
  private lifetime=new AbortController();
  private readonly active=new Set<Promise<unknown>>();
+ private cache?:{key:string;evidence:string;at:number;rows:ForegroundSession[]};
+ private inflight?:{key:string;promise:Promise<ForegroundSession[]>};
  private readonly executable:string;
- constructor(executable:string){this.executable=executable;}
+ private readonly ttlMs:number;
+ private readonly clock:()=>number;
+ constructor(executable:string,options:{ttlMs?:number;clock?:()=>number}={}){this.executable=executable;this.ttlMs=options.ttlMs??sessionCacheTtlMs;this.clock=options.clock??Date.now;}
  async sessions(account:NonNullable<ForegroundSnapshot['account']>,options:{signal:AbortSignal;timeoutMs:number;limit:number;keyword?:string}):Promise<ForegroundSession[]>{
   if(this.closed||options.signal.aborted)throw new ForegroundLocationError('foreground_observation_cancelled');
-  const signal=AbortSignal.any([options.signal,this.lifetime.signal,AbortSignal.timeout(Math.max(1,Math.floor(options.timeoutMs)))]);
+  const caller=AbortSignal.any([options.signal,AbortSignal.timeout(Math.max(1,Math.floor(options.timeoutMs)))]);
+  const key=JSON.stringify([account.key,account.sourceGeneration,options.limit,options.keyword??null]);
+  const prior=this.inflight;
+  const promise=prior?.key===key?prior.promise:prior?prior.promise.then(()=>{},()=>{}).then(()=>this.start(account,key,options)):this.start(account,key,options);
+  return this.wait(promise,caller,options.signal);
+ }
+ /** 调用方到期只停止等待；读取继续完成并写入缓存，供下一轮复用。 */
+ private wait<T>(work:Promise<T>,caller:AbortSignal,external:AbortSignal):Promise<T>{
+  return new Promise<T>((resolve,reject)=>{
+   const stop=()=>reject(new ForegroundLocationError(external.aborted||this.closed?'foreground_observation_cancelled':'observation_timeout'));
+   if(caller.aborted)return stop();
+   caller.addEventListener('abort',stop,{once:true});
+   void work.then(resolve,reject).finally(()=>caller.removeEventListener('abort',stop));
+  });
+ }
+ private start(account:NonNullable<ForegroundSnapshot['account']>,key:string,options:{limit:number;keyword?:string}):Promise<ForegroundSession[]>{
+  const signal=AbortSignal.any([this.lifetime.signal,AbortSignal.timeout(sessionReadTimeoutMs)]);
   const read=async(client:NarrowWechatClient)=>{
+   const cached=this.cache;
+   if(cached?.key===key&&this.clock()-cached.at<this.ttlMs){
+    // 缓存期内仍逐轮复验实时账号证据（约十几毫秒），账号或来源变化立即拒绝旧名单。
+    const live=await client.accountMetadata(signal);
+    if(JSON.stringify(live)!==cached.evidence)throw new ForegroundLocationError('foreground_scope_unavailable');
+    return cached.rows;
+   }
    const before=await client.accountMetadata(signal);
    if(before.status!=='verified'||before.accountKey!==account.key||before.sourceGeneration!==account.sourceGeneration)throw new ForegroundLocationError('foreground_scope_unavailable');
    const sessions=await client.allSessionMetadata(before,{limit:options.limit,keyword:options.keyword},signal);
@@ -28,15 +60,19 @@ export class ForegroundSessionList {
    const rows:ForegroundSession[]=sessions.map(row=>({username:row.username,display_name:row.displayName,chat_type:row.kind}));
    const after=await client.accountMetadata(signal);
    if(JSON.stringify(before)!==JSON.stringify(after))throw new ForegroundLocationError('foreground_scope_unavailable');
+   this.cache={key,evidence:JSON.stringify(before),at:this.clock(),rows};
    return rows;
   };
   const work=(async()=>{
    this.client??=new NarrowWechatClient(await loadNarrowWechatOptions(this.executable));
-   try{return await read(this.client);}catch(error){const old=this.client;this.client=undefined;await old?.close();throw error;}
+   const client=this.client;
+   try{return await read(client);}catch(error){this.cache=undefined;if(this.client===client)this.client=undefined;await client.close();throw error;}
   })();
-  this.active.add(work);try{return await work;}finally{this.active.delete(work);}
+  const entry={key,promise:work};this.inflight=entry;
+  this.active.add(work);void work.then(()=>{},()=>{}).finally(()=>{this.active.delete(work);if(this.inflight===entry)this.inflight=undefined;});
+  return work;
  }
- async reset(){this.lifetime.abort();await Promise.allSettled([...this.active]);const old=this.client;this.client=undefined;await old?.close();if(!this.closed)this.lifetime=new AbortController();}
+ async reset(){this.cache=undefined;this.lifetime.abort();await Promise.allSettled([...this.active]);const old=this.client;this.client=undefined;await old?.close();if(!this.closed)this.lifetime=new AbortController();}
  async close(){this.closed=true;await this.reset();}
 }
 

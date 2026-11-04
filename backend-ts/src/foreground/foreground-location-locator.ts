@@ -113,7 +113,7 @@ export class ForegroundLocator {
         !normalize(title)||quality.display_name_confidence<0.9||(quality.selected_row_name_confidence??0)<0.9||normalize(title)!==normalize(observation.selected_row_name);
       let sessions:readonly ForegroundSession[],bindings:readonly ForegroundBinding[];
       try {
-        check();sessions=await this.options.sessions({signal,timeoutMs:Math.min(250,deadline-performance.now()),limit:header?5000:51,...(!header?{keyword:normalize(title.replace(suffix,''))||normalize(title)}:{})});check();
+        check();sessions=await this.options.sessions({signal,timeoutMs:deadline-performance.now(),limit:header?5000:51,...(!header?{keyword:normalize(title.replace(suffix,''))||normalize(title)}:{})});check();
         if(sessions.length>=(header?5000:51))return failure('manual-required','session_candidates_truncated');
         if(qualityFailure){if(sessions.some(row=>row.chat_type==='group'&&normalize(row.display_name)===normalize(title)))return result('paused','group_chat_unsupported');return failure('manual-required','quality_unverified');}
         if(hasSuffix&&sessions.some(row=>row.chat_type==='group'&&[canonicalSessionName(title),canonicalSessionName(title.replace(suffix,''))].includes(canonicalSessionName(row.display_name))))return result('paused','group_chat_suspected');
@@ -139,6 +139,7 @@ export class ForegroundLocator {
         check();
         // 查询暂时失败不代表 OCR 进程失效；只保留模型，每轮仍重新采帧及核验身份。
         const code=(error as {code?:string}).code;
+        if(code==='observation_timeout')return result('unavailable','observation_timeout');
         if(code==='foreground_scope_unavailable'||code==='history_scope_changed'||code==='history_account_changed'||code==='history_source_changed')await this.options.probe.close();
         return failure('unavailable','binding_verification_unavailable');
       }

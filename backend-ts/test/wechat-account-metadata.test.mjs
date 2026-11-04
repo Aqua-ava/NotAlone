@@ -61,6 +61,7 @@ if(r.op==='inspect-account-schema'){
  const table=(role,n)=>({target:String(n).repeat(64),partition:String(n+2).repeat(64),role,columns:[{name:'username',type:'TEXT',notNull:false,primaryKey:1,hidden:0}],indexes:[],declaredPrimaryKey:['username'],autoIncrement:false,sqlFingerprint:'e'.repeat(64),triggerFingerprints:[],schemaVersion:'1',rootPage:String(n)});
  data={format:'wechat-account-schema-v1',status:'unverified',accountKey:s.account,sourceGeneration:s.generation,schemaFingerprint:'b'.repeat(64),tables:[table('session',1),table('contact',2)],normalHistory:false};if(s.mode==='schema-body')data.records=['BODY_SENTINEL'];
 }
+if(s.mode==='slow-all'&&r.op==='metadata-sessions-all'){setTimeout(()=>console.log(JSON.stringify({ok:true,data})),400);return;}
 if(data===undefined){console.log(JSON.stringify({ok:false,error:{code:'history_operation_unsupported'}}));return;}console.log(JSON.stringify({ok:true,data}));
 });`;
   await writeFile(executable, script, {mode:0o700}); await writeFile(join(root,'lib','libWCDB.dylib'), 'synthetic-wcdb');
@@ -343,4 +344,29 @@ test('前台专用名单的账号变化仍拒绝旧范围，关闭及重置排�
  await assert.rejects(foreground.sessions(account,options),{code:'history_scope_changed'});noProcess(currentPid);
  await foreground.close();
  await assert.rejects(foreground.sessions(account,options),{code:'foreground_observation_cancelled'});
+});
+
+test('前台名单读取慢于观察期限时，读取继续完成并缓存，下一轮不再重读且仍复验账号',async t=>{
+ const f=await fixture(t,'slow-all'),foreground=new ForegroundSessionList(f.executable);
+ f.cleanups.push(()=>foreground.close());
+ const account={id:'synthetic-id',key:accountKey,sourceGeneration:generation,revision:'1'},call=timeoutMs=>foreground.sessions(account,{signal:new AbortController().signal,timeoutMs,limit:100});
+ const lists=async()=>(await requests(f)).filter(row=>row.op==='metadata-sessions-all').length;
+ await assert.rejects(call(100),{code:'observation_timeout'});await requested(f,'metadata-sessions-all');
+ const pid=Number(await readFile(f.pidFile,'utf8'));assert.doesNotThrow(()=>process.kill(pid,0));
+ const rows=await call(5000);assert.equal(rows[0].username,'friend-a');assert.equal(await lists(),1);
+ const accounts=(await requests(f)).filter(row=>row.op==='metadata-account').length;
+ assert.deepEqual(await call(100),rows);assert.equal(await lists(),1);
+ assert.equal((await requests(f)).filter(row=>row.op==='metadata-account').length,accounts+1);
+ await f.update({account:'different-configured-owner'});
+ await assert.rejects(call(5000),{code:'history_scope_changed'});noProcess(pid);
+});
+
+test('前台名单缓存过期后重新读取，重置立即丢弃缓存',async t=>{
+ const f=await fixture(t),now={value:1000},foreground=new ForegroundSessionList(f.executable,{ttlMs:50,clock:()=>now.value});
+ f.cleanups.push(()=>foreground.close());
+ const account={id:'synthetic-id',key:accountKey,sourceGeneration:generation,revision:'1'},call=()=>foreground.sessions(account,{signal:new AbortController().signal,timeoutMs:5000,limit:100});
+ const lists=async()=>(await requests(f)).filter(row=>row.op==='metadata-sessions-all').length;
+ await call();await call();assert.equal(await lists(),1);
+ now.value+=60;await call();assert.equal(await lists(),2);
+ await foreground.reset();await call();assert.equal(await lists(),3);
 });
