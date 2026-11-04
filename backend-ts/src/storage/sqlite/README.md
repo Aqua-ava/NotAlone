@@ -12,7 +12,7 @@ SQLite 是当前默认业务存储。正式装配使用 `sqlite-host-plugin.ts`�
 
 `verifyIdentity()` 同步检查句柄可用性及受控文件元数据，供连接状态快速拒绝文件被替换、关闭或 Worker 故障；不执行 SQL、不重复全库扫描，也不替代正式打开与业务动作中的实例租约、本人及范围复验。
 
-每个句柄仅拥有一个 Worker、一条连接。`execute(name,input,lease=status)` 通过消息串行调用；`check()` 分别执行 `integrity_check` 和 `foreign_key_check`；`close()` 排空此前请求并关闭连接。Worker 退出、错误或超时后全部未决请求失败，不自动重开、不自动重放，业务须核对幂等记录再人工继续。
+每个句柄仅拥有一个 Worker、一条连接。`execute(name,input,lease=status)` 通过消息串行调用；`check()` 分别执行 `integrity_check` 和 `foreign_key_check`；普通打开（`intent: 'open'`）只做 `quick_check`，迁移、升级与显式 `check()` 仍做完整 `integrity_check`；`close()` 排空此前请求并关闭连接。Worker 退出、错误或超时后全部未决请求失败，不自动重开、不自动重放，业务须核对幂等记录再人工继续。
 
 按 [ADR-159](../../../../architecture/adr/159-foreground-read-channel-isolation.md)，`openReader(actionNames)` 创建独立 Worker 的只读附属句柄，只接受可信装配声明且注册为 `read` 的具名动作。它沿用主句柄租约，不执行初始化、迁移或运行身份更新；每次短读结束后在事务外复验租约。主句柄故障、关闭或重开撤销旧读者。前台只声明 `identity.foregroundSnapshot`，由联系人元数据持有者负责删除排空及关闭，不与后台长查询共享执行队列。按 [ADR-160](../../../../architecture/adr/160-assistant-read-and-skill-worker-isolation.md)，助手目录、正文及候选回看使用另一附属读者，短读前后复核业务范围并参与删除排空；生成及最终提交继续使用主写者。
 

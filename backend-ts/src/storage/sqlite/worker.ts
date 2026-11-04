@@ -54,8 +54,10 @@ try {
   const all = (sql: string, values: SQLInputValue[] = []) => prepared(sql).all(...bindings(values));
   const get = (sql: string, values: SQLInputValue[] = []) => all(sql, values)[0];
   const schemaDigest = () => digest(JSON.stringify(all("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name")));
-  const checks = () => {
-    if (all('PRAGMA integrity_check').some(r => r.integrity_check !== 'ok')) throw new StorageFailure('integrity_failed');
+  // 普通打开用 quick_check（不核对索引内容与 UNIQUE，大库约快一半）；迁移、升级与显式 check() 仍做完整 integrity_check。
+  const checks = (quick = false) => {
+    const pragma = quick ? 'quick_check' : 'integrity_check';
+    if (all(`PRAGMA ${pragma}`).some(r => r[pragma] !== 'ok')) throw new StorageFailure('integrity_failed');
     if (all('PRAGMA foreign_key_check').length) throw new StorageFailure('foreign_keys_failed');
     return {integrity: 'ok', foreignKeys: 'ok'} as const;
   };
@@ -80,7 +82,7 @@ try {
   let journal = get('PRAGMA journal_mode');
   if (journal?.journal_mode !== 'wal') {
     // 已有非WAL库转换前仍完整核验，不能让损坏库先产生配置写入。
-    if (options.intent === 'open') checks();
+    if (options.intent === 'open') checks(true);
     journal = get('PRAGMA journal_mode=WAL');
   }
   if (journal?.journal_mode !== 'wal') throw new StorageFailure('wal_unavailable');
@@ -95,7 +97,7 @@ try {
       if (get('PRAGMA foreign_keys')?.foreign_keys !== 0n) throw new StorageFailure('foreign_keys_disable_failed');
     }
     transaction(true, () => {
-      if (options.intent === 'open') { verifyExisting(); checks(); }
+      if (options.intent === 'open') { verifyExisting(); checks(true); }
       const applied = options.intent === 'create' ? 0 : Number(get('SELECT COUNT(*) AS n FROM schema_migration')!.n);
       for (const migration of registry.migrations.slice(applied)) {
         if (migration.rebuild) {
