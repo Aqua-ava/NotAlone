@@ -41,7 +41,7 @@ HTTP支持`Idempotency-Key`标识一次明确请求，账户删除必须提供�
 
 `ActiveHolders.register({key,ownerId,contactId?,generation,close})`必须在首次读写前执行。key为`domain:稳定副本ID`；generation为对应资料资格快照。业务仍须在DB动作内复验身份与媒体资格，内存持有者登记不授予权限。返回的释放函数会等待close；不能手工移除尚未关闭的引用。close回调必须等待官方AgentHandle.dispose、读写handle.close、业务finally、预览/播放释放及末次写入。只有cancel不构成释放证明；超时/异常保持blocked，不能因此删文件。不同owner同名key不互相封禁；新的合法资料代次可登记新副本，不复活已封禁的旧key。
 
-正常宿主已通过`ContactMetadataLifetime`登记联系人域当前账号候选与跨联系人名单预览（`coversAllContacts:true`），不再用空holders作证明。联系人删除关闭整个旧预览，清候选/快照并等待所有metadata读取实际结算；旧SQL等待后的缓存回填同样拒绝。只在owner仍active且该owner全部删除操作completed时，后续请求才创建空的新服务，不自动读渠道；账号删除后保持关闭，普通重读/再次检测不能重装旧预览。账号范围排空全部owner持有者，不比较不同领域的联系人代次与账号epoch。
+正常宿主已通过`ContactMetadataLifetime`登记联系人域当前账号候选与跨联系人名单预览（`coversAllContacts:true`），并把同一`ActiveHolders`传给后台只读通道；后台读取先取owner/contact删除代次，再以`background-read:<uuid>`登记，联系人读取按`coversAllSources:true`纳入来源删除闭包。联系人删除关闭整个旧预览，清候选/快照并等待所有metadata读取实际结算；旧SQL等待后的缓存回填同样拒绝。只在owner仍active且该owner全部删除操作completed时，后续请求才创建空的新服务，不自动读渠道；账号删除后保持关闭，普通重读/再次检测不能重装旧预览。账号范围排空全部owner持有者，不比较不同领域的联系人代次与账号epoch。
 
 `ManagedFiles`只允许`managed/runtime-copies`、`managed/media`、`managed/cache`三个固定区。`prepareArea`只建空私有区；`capture(area,locator,kind)`取得实际dev/ino/birthtimeNs/uid与每级父目录身份。locator是受限相对定位，不能是绝对路径、点段或符号链接。文件必须为当前用户拥有、私有权限且nlink=1；目录目标只用rmdir删除空目录。数据库、Skill原目录、模型密钥、微信原件和用户外部原文件不属于这些可删区。
 

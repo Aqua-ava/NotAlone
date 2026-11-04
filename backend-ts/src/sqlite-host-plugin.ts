@@ -177,7 +177,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
     events = new PureTsEvents(ownerId);
     const deletionHolders = new ActiveHolders();
     // 后台目录/列表读取使用宿主生命周期内的隔离读者；写路径仍唯一经过主存储 worker。
-    backgroundReads=await createBackgroundReads({storage,ownerId});
+    backgroundReads=await createBackgroundReads({storage,ownerId,holders:deletionHolders});
     if (shutdown.state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
     if(sqlite.wechatCliPath)wechat=new SharedWechatClient(async()=>{
       const options=await loadSharedNarrowWechatOptions(sqlite.wechatCliPath!);

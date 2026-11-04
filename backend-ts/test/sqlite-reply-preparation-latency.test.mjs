@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {performance} from 'node:perf_hooks';
 import {createBackgroundReads} from '../src/storage/sqlite/background-reads.ts';
+import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
 import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/service.ts';
 import {SqliteReplyTurns} from '../src/reply/sqlite/candidates/turns.ts';
 import {fixture,owner} from './fixtures/sqlite-reply-candidates/support.mjs';
@@ -55,7 +56,7 @@ test('后台图片和记忆长读期间候选从受理到 provider 收到请求�
  const f=await fixture(t,{registryModule:slowReadRegistry,providerTransport:'in-process'});
  const contactId=f.ids[0],scope={scopeKind:'contact',contactId};
  await f.storage.execute('memory.applyDecision',{ownerId:owner,request:{requestKey:`latency-memory-${randomUUID()}`,action:'manual',scope,body:'合成长期资料，用于后台慢读。'}});
- const background=await createBackgroundReads({storage:f.storage,ownerId:owner});t.after(()=>background.close());
+ const background=await createBackgroundReads({storage:f.storage,ownerId:owner,holders:new ActiveHolders()});t.after(()=>background.close());
  const service=new SqliteReplyCandidateService(f.storage,owner);
  let stages=[];
  // Skill 预载不在本规格内；保留候选真实存储、运行时和 provider 链路。
