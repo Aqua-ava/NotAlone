@@ -177,7 +177,7 @@ export class SqliteSkillLibrary {
   /** 先在一个短事务中复验全部anchor，再逐个读取目录，最后再次原子复验；避免逐Skill放大主worker往返。 */
   async assertAnchors(anchors: readonly SkillAnchor[],signal?:AbortSignal,catalog?:readonly SkillPackageState[]): Promise<VerifiedSkillSnapshot[]> {
     this.active(signal);
-    if(!Array.isArray(anchors)||anchors.length>256)throw new SqliteSkillError('skill_input_invalid');
+    if(!Array.isArray(anchors))throw new SqliteSkillError('skill_input_invalid');
     await this.execute('skills.assertRevisions',{ownerId:this.ownerId,anchors},signal);
     const items=catalog??await this.list(signal),byId=new Map(items.map(item=>[item.id,item])),verified:VerifiedSkillSnapshot[]=[];
     for(const anchor of anchors){

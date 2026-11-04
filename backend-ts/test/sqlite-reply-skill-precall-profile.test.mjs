@@ -9,7 +9,7 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {createSyntheticProfile} from './profile-support.mjs';
 const quote=value=>"'"+value.replaceAll("'","'\\''")+"'";
-test('正式 DSH profile 预加载 Skill 正文并由首请求完成一次物理模型调用',{timeout:30000},async t=>{
+test('正式 DSH profile 首请求仅含简介，官方工具载入选定Skill后生成候选',{timeout:30000},async t=>{
  const require=createRequire(import.meta.url);
  for(const name of ['@deepseek-ai/dsh','@deepseek-ai/dsh-skill','@deepseek-ai/dsh-tool-skill']){const pkg=JSON.parse(await readFile(require.resolve(name+'/package.json'),'utf8'));assert.equal(pkg.version,'0.2.1-rc.2');}
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-skill-precall-profile-')));t.after(()=>rm(root,{recursive:true,force:true}));
@@ -26,10 +26,11 @@ test('正式 DSH profile 预加载 Skill 正文并由首请求完成一次物理
   child.stdout.on('data',()=>{const match=output.match(/PRECALL_PROFILE_RESULT (\{[^\n]+\})/);if(match){clearTimeout(timer);resolveValue(JSON.parse(match[1]));}});
  });
  const calls=output.split('\n').filter(line=>line.startsWith('PRECALL_MODEL_CALL ')).map(line=>JSON.parse(line.slice('PRECALL_MODEL_CALL '.length)));
- assert.equal(calls.length,1,'正式 profile 单 Skill 正常路径只能有一次物理模型调用');
- assert.equal(calls[0].hasSkillBody,true);assert.equal(calls[0].hasSkillCatalog,false);assert.deepEqual(calls[0].tools,['skill_resource']);
- assert.equal(result.candidates,1);assert.equal(result.preloadedSkills.length,1);assert.equal(result.preloadedSkills[0].origin,'auto_preload');
- assert.deepEqual(result.loadedSkills.map(skill=>[skill.name,skill.relativePath,skill.origin]),[['gentle','SKILL.md','auto_preload']]);
+ assert.equal(calls.length,2,'正式 profile 先经官方工具读取Skill，再生成候选');
+ assert.equal(calls[0].hasSkillBody,false);assert.equal(calls[0].hasSkillCatalog,true);assert.deepEqual(calls[0].tools.sort(),['skill','skill_resource']);
+ assert.equal(calls[1].hasSkillBody,true);
+ assert.equal(result.candidates,1);assert.deepEqual(result.preloadedSkills,[]);
+ assert.deepEqual(result.loadedSkills.map(skill=>[skill.name,skill.relativePath]),[['gentle','SKILL.md']]);
  assert.ok(result.finishedAt-result.startedAt>=0);assert.ok(calls[0].bytes>0);
  child.kill('SIGTERM');await exited;t.diagnostic(`model_calls=${calls.length} first_request_bytes=${calls[0].bytes} local_prepare_ms=${(calls[0].at-result.startedAt).toFixed(1)}`);
 });

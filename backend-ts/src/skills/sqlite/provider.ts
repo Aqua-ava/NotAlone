@@ -55,26 +55,26 @@ export function planSkillPreload(items: SkillPackageState[],options: Pick<Sqlite
 }
 /**
  * 打开一次 Skill 运行。
- * 第四个参数传字符串（或省略）时保持旧的显式单包兼容入口；传参数对象时进入多 anchor
+ * 第四个参数传字符串（或省略）时发布官方按需目录；传参数对象时进入多 anchor
  * 预加载入口：全部正文读取并写入实际输入后才返回，任一 anchor 失效即整体失败。
  */
 export function openSqliteSkillRun(library: SqliteSkillLibrary,request: SqliteSkillRunRequest,protection: SkillRunProtection,selectedPackageId?: string,signal?: AbortSignal): Promise<SqliteSkillRun>;
 export function openSqliteSkillRun(library: SqliteSkillLibrary,request: SqliteSkillRunRequest,protection: SkillRunProtection,options: SqliteSkillPreloadOptions): Promise<SqliteSkillRun>;
 export async function openSqliteSkillRun(library: SqliteSkillLibrary,request: SqliteSkillRunRequest,protection: SkillRunProtection,selection?: string|SqliteSkillPreloadOptions,signal?: AbortSignal): Promise<SqliteSkillRun> {
   if(selection!==undefined && typeof selection==='object')return openSqliteSkillPreload(library,request,protection,selection);
-  return openSqliteSkillRunLegacy(library,request,protection,selection,signal);
+  return openSqliteSkillRunOnDemand(library,request,protection,selection,signal);
 }
 /** 多 anchor 预加载的显式入口；与 openSqliteSkillRun 的对象参数形式等价。 */
 export function openSqliteSkillPreload(library: SqliteSkillLibrary,request: SqliteSkillRunRequest,protection: SkillRunProtection,options: SqliteSkillPreloadOptions={}): Promise<SqliteSkillRun> {
   return openPreloadedRun(library,request,protection,options);
 }
-async function openSqliteSkillRunLegacy(library: SqliteSkillLibrary,request: SqliteSkillRunRequest,protection: SkillRunProtection,selectedPackageId?: string,signal?: AbortSignal): Promise<SqliteSkillRun> {
+async function openSqliteSkillRunOnDemand(library: SqliteSkillLibrary,request: SqliteSkillRunRequest,protection: SkillRunProtection,selectedPackageId?: string,signal?: AbortSignal): Promise<SqliteSkillRun> {
   if(!request.contactId || !request.callId || !protection?.assertCurrent || !protection.recordInput || !protection.recordSelection)throw new SqliteSkillError('skill_protection_required');
   const scope=Object.freeze({ownerId:library.ownerId,contactId:request.contactId,callId:request.callId});
   signal?.throwIfAborted();await protection.assertCurrent(scope,null,signal);
   const items=await library.list(signal);
   const available=items.filter(item=>item.enabledState==='enabled' && item.verificationState==='verified' && item.currentRevisionNo!==null);
-  for(const item of available)await library.assertAnchor(skillAnchor(item),signal);
+  await library.assertAnchors(available.map(skillAnchor),signal,items);
   const selected=selectedPackageId?available.find(item=>item.id===selectedPackageId):undefined;
   if(selectedPackageId && !selected)throw new SqliteSkillError('skill_selection_unavailable');
   const run=new SqliteSkillRun(library,scope,protection,items,{selected:selected?skillAnchor(selected):null},signal);
@@ -123,9 +123,9 @@ export class SqliteSkillRun {
   get selection(): SkillAnchor|null {return this.selected?{...this.selected}:null;}
   /** 本轮冻结目录快照的摘要，用于追踪自动/显式来源的同一目录。 */
   get catalogRevision(): string {return this.catalogIdentity;}
-  /** 预加载来源；旧兼容入口不预加载正文时为 null。 */
+  /** 预加载来源；按需目录入口不预加载正文时为 null。 */
   get preloadOrigin(): SkillPreloadOrigin|null {return this.preloadPlan?.origin??null;}
-  /** 本轮完整预加载选择；旧兼容入口不预加载正文时为 null。 */
+  /** 本轮完整预加载选择；按需目录入口不预加载正文时为 null。 */
   get preloadSelection(): SkillPreloadSelection|null {
     if(!this.preloadPlan)return null;
     return {origin:this.preloadPlan.origin,catalogRevision:this.catalogIdentity,anchors:this.preloadPlan.anchors.map(anchor=>({...anchor}))};

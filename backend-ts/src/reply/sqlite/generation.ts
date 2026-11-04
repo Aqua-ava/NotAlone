@@ -72,7 +72,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
     combined.throwIfAborted();
    };
    const binding={provider:model.provider,model:model.model,maxTokens:model.maxTokens,temperature:model.temperature,reasoningEffort:model.reasoningEffort};
-   const allowedToolNames=skillRun?.preloadOrigin!==null?['skill_resource']:skillRun?['skill','skill_resource']:[];
+   const allowedToolNames=skillRun?skillRun.preloadOrigin!==null?['skill_resource']:['skill','skill_resource']:[];
    const setup=async(agentCtx:Context)=>{
     const documents=options.commitAction==='reply.commitCandidates'&&await options.storage.execute<boolean>('reply.documentToolAvailable',{...attempt,contextId});
     installReplySkillTools(agentCtx,skillRun,requireCurrent,error=>{failure??=error;},documents);
@@ -174,8 +174,8 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
     try{await handle?.dispose();}finally{disposeSkill?.();}
    }
   },signal,options.commitAction==='reply.commitCandidates'||!!options.skillRevision.eligible.length||fallback);}catch(error){
-    const preloadedSkillFailed=!!options.skillRun?.loadedSkills.length&&(budgetRejected||error instanceof ModelInputBudgetError||error instanceof ReplySkillUnavailable||isSkillReadFailure(error)||isSkillReadFailure(options.skillRun?.failure));
-   const skillFailed=preloadedSkillFailed||error instanceof ReplySkillUnavailable||isSkillReadFailure(error)||error instanceof StorageFailure&&error.code==='discussion_runtime_unavailable'&&isSkillReadFailure(options.skillRun?.failure);
+   const skillBudgetFailed=!!options.skillRun?.revision.eligible.length&&(budgetRejected||error instanceof ModelInputBudgetError);
+   const skillFailed=skillBudgetFailed||error instanceof ReplySkillUnavailable||isSkillReadFailure(error)||isSkillReadFailure(options.skillRun?.failure);
    if(fallback||!skillFailed||totalCalls>=REPLY_MODEL_CALL_LIMIT||!options.runtime.discard||!options.assertAuthorized||!lastCopyId)throw error;
    signal.throwIfAborted();await options.assertAuthorized();
    if(options.commitAction)await options.storage.execute('reply.assertInputWithoutSkill',{...attempt,contextId});

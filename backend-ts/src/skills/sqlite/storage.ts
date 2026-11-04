@@ -219,7 +219,7 @@ export const skillActions: StorageAction[] = [
   }},
   {name:'skills.assertRevisions',mode:'read',retryBusy:false,execute(tx,input){
     const i=input as {ownerId:string;anchors:SkillAnchor[]};
-    if(!Array.isArray(i.anchors)||i.anchors.length>256)throw new StorageFailure('skill_input_invalid');
+    if(!Array.isArray(i.anchors))throw new StorageFailure('skill_input_invalid');
     for(const anchor of i.anchors)requireSkillRevision(tx,i.ownerId,anchor);
     return true;
   }},

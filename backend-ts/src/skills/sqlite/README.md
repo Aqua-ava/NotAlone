@@ -2,7 +2,7 @@
 
 产品合同以[Skill 生命周期与授权](../../../../architecture/current/skill-library.md)、[外部原包与受管副本删除](../../../../architecture/current/privacy-deletion.md)为准；本页只保留本模块的接口、装配和故障处理。
 
-使用官方 DSH Skill provider、包／修订身份和业务查询，不创建学习、审核发布或方法级策略表。应用在授权根自动发现 Skill，核验成功后默认启用；用户可明确启用或停用，正常候选在首次模型调用前预加载可用范围内全部 eligible 版本；每包使用本轮固定的当前修订，资源仍按需读取。管理页不提供手动添加、填写目录名或安装路径；原 Skill 目录始终只读。
+使用官方 DSH Skill provider、包／修订身份和业务查询，不创建学习、审核发布或方法级策略表。应用在授权根自动发现 Skill，核验成功后默认启用；用户可明确启用或停用。正常候选由已安装的官方 `dsh-tool-skill` 先发布可用范围内的名称与简介，模型需要哪个再通过 `skill` 工具加载哪个的全文；每包使用本轮固定的当前修订，资源仍按需读取。管理页不提供手动添加、填写目录名或安装路径；原 Skill 目录始终只读。
 
 ## 迁移与查询
 
@@ -30,17 +30,19 @@
 
 ## 官方加载与实际输入
 
-`openSqliteSkillRun(library, {contactId,callId}, protection, selectedPackageId?, signal?)` 冻结 owner/contact/call、目录修订及明确选择，保持旧的按需加载语义；第四个参数为字符串（或省略）时仍是显式单包兼容入口。未知、停用、未核验或来源失效不进入可加载目录。`run.mount(scopedContext)` 只接受官方独占 scope，调用现有 profile 中的 `ctx.skills.registerProvider`；宿主全局目录为空。正常按需路径可通过重复的官方 `ctx.skills.get` 读取多个 Skill；每个包固定一个当时当前的不可变修订。
+`openSqliteSkillRun(library, {contactId,callId}, protection, selectedPackageId?, signal?)` 冻结 owner/contact/call、目录修订及明确选择；正常候选不传预加载 options 对象，保留官方按需加载路径。未知、停用、未核验或来源失效不进入可加载目录。`run.mount(scopedContext)` 只接受官方独占 scope，调用现有 profile 中的 `ctx.skills.registerProvider`；宿主全局目录为空。已挂载的 `@deepseek-ai/dsh-tool-skill` 负责名称与简介目录及 `skill` 加载工具，工具经官方 `ctx.skills.get` 读取所选正文，可在一轮中按需读取多个 Skill；每个包固定一个当时当前的不可变修订。目录发布本身不生成正文输入记录。
 
-多 anchor 预加载入口为 `openSqliteSkillRun(library, request, protection, {selectedPackageId?|preloadPackageIds?, signal?})`（等价导出 `openSqliteSkillPreload`）。`planSkillPreload` 在冻结目录中只选 `enabled + verified + current`：显式 `selectedPackageId` 优先且只选指定单包（来源 `explicit`），否则缺省选全部 eligible（来源 `auto_preload`），也可由内部 `preloadPackageIds` 限定集合。打开时先用 `skills.assertRevisions` 在一个短事务批量复验全部 anchor 的 package、修订、目录身份、manifest digest 与 content digest，再一次性读取全部正文；正式保护通过 `recordPreload`/`discussion.skillPreload` 在一个事务写入全部选择／实际输入事件。任一失败整体拒绝并关闭运行，不保留部分正文，由调用方沿既有整体无 Skill 降级处理。`run.preloadOrigin`、`run.preloadSelection`（来源、目录摘要、各精确修订）和 `run.preloadedSkills` 提供本轮可追溯输入；`run.selection` 只在显式或唯一预加载时保留单值兼容投影。辅助资源须在对应 Skill 正文成功读取后，按准确 Skill 名称和相对路径读取本修订清单内路径；一轮回复总计最多读取两份。只显示虚拟路径，不暴露物理文件能力。
+兼容的多 anchor 预加载辅助入口为 `openSqliteSkillRun(library, request, protection, {selectedPackageId?|preloadPackageIds?, signal?})`（等价导出 `openSqliteSkillPreload`），正常自动候选不使用该入口。显式 `selectedPackageId` 仍通过该入口定向预加载一个包（来源 `explicit`）；`planSkillPreload` 也保留供内部受信任调用方使用的批量模式，从冻结目录中选择 `enabled + verified + current`。批量辅助入口仍以 `skills.assertRevisions` 在短事务中复验全部 anchor 的 package、修订、目录身份、manifest digest 与 content digest，再一次性读取所选正文，并经 `recordPreload`/`discussion.skillPreload` 原子记录全部选择／实际输入。任一失败整体拒绝并关闭运行，不保留部分正文。其 `run.preloadOrigin`、`run.preloadSelection` 和 `run.preloadedSkills` 保留可追溯输入，不把兼容预加载投影当作正常按需目录的读取证据。
+
+正常路径仅在官方 `skill` 工具成功加载正文后记录实际读取；对应的辅助资源通过 `skill_resource` 按准确 Skill 名称和相对路径读取本修订清单内路径。一轮回复总计最多读取两份静态辅助资源，只显示虚拟路径，不暴露物理文件能力。
 
 必需的 `SkillRunProtection` 是删除／讨论／候选域共同的受信任宿主边界，缺失时拒绝打开：
 
 1. `assertCurrent(scope, frozenRevision|null, signal)` 在同一短事务调用 `requireSkillRun(tx, scope.ownerId, frozenRevision)`（非null时）并复验已确认联系人、调用、读取／资料／来源／删除代次、模型用途和出站范围；Skill不能赋予这些资格。
 2. `recordSelection(scope, selected, signal?, trace?)` 记录每次实际选中的包修订；自动模式对各包分别记录，显式定向预加载则记录其指定修订。`trace` 记录读取时冻结的 Skill 名称、`origin` 与目录快照；事件本身不表示正文已读取或内容已进入模型。
-3. `recordPreload(input, signal)` 是正式多 anchor 路径的原子追踪入口，在一次事务中保存全部 selection/input、payloadDigest、精确包修订、名称、相对路径、预加载来源与目录快照；`recordInput(input, signal)` 继续保存旧按需路径和后续资源读取。两者都登记来源与受管副本删除关系。写入事务必须复验上述业务资格，并调用导出的 `requireSkillRun(tx, ownerId, input.runRevision)` 与 `requireSkillRevision(tx, ownerId, input.loaded)`。SkillRunRevision带本轮全部包head及可载入锚点；最后一面不能单独异步检查，避免检查另一面时被撤销。单独事务外检查不够。
+3. `recordInput(input, signal)` 保存正常按需正文及后续资源读取；`recordPreload(input, signal)` 保留兼容预加载路径的原子追踪，在一次事务中保存所选包的全部 selection/input、payloadDigest、精确包修订、名称、相对路径、预加载来源与目录快照。两者都登记来源与受管副本删除关系。写入事务必须复验上述业务资格，并调用导出的 `requireSkillRun(tx, ownerId, input.runRevision)` 与 `requireSkillRevision(tx, ownerId, input.loaded)`。SkillRunRevision带本轮全部包head及可载入锚点；最后一面不能单独异步检查，避免检查另一面时被撤销。单独事务外检查不够。
 
-正常候选域在首次物理模型发送前预加载全部 eligible 正文、隐藏目录工具并保留受控资源读取；多 Skill 预加载先用 `skills.assertRevisions` 在一个短事务复验全部 anchor，再批量读取目录快照并再次复验，随后通过 `discussion.skillPreload` 在同一事务写入全部 selection／input 事件，避免逐 Skill 触发整套 `run.validate()`。单轮 eligible 上限为 256；超限不截取部分 Skill，而是按 `skill_preload_limit` 整体降级为无 Skill 调用。仍必须在物理模型发送和业务提交前再次 `run.validate()`，记录真正发出的完整模型输入和模型回执。本模块的读取事件仅证明官方provider读取了该正文，不能当作模型实际发送或成功回复的证据。DSH目录缓存不能替代业务与文件核验；每次读取及返回前均重验，启停或核验变更、来源失效、scope释放及AbortSignal会拒绝迟到结果。
+正常候选首次物理模型请求只包含官方 Skill 简介目录，不附带目录中全部正文；后续工具结果只加入模型实际请求的正文与资源。端侧发现及安全核验仍可读取完整包，不等于正文已发送。正常目录按最终序列化请求的完整输入预算约束，不设置 256 包数量门槛，也不截取部分目录；兼容批量预加载辅助入口仍保留 256 包上限及 `skill_preload_limit` 整体无 Skill 降级。每次物理模型发送和业务提交前继续 `run.validate()`，记录真正发出的完整模型输入和模型回执。本模块的读取事件仅证明官方 provider 读取了该正文，不能当作模型实际发送或成功回复的证据。DSH 目录缓存不能替代业务与文件核验；每次读取及返回前均重验，启停或核验变更、来源失效、scope释放及AbortSignal会拒绝迟到结果。
 
 ## 删除接入边界
 

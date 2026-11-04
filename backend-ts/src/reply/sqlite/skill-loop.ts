@@ -17,9 +17,9 @@ export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check
  const active=run;
  const preloaded=!!active&&active.preloadOrigin!==null;
  const loaded=()=>!!active&&active.loadedSkills.length>0;
- const legacyCatalog=!!active&&!preloaded&&active.revision.eligible.length>0;
+ const demandCatalog=!!active&&!preloaded&&active.revision.eligible.length>0;
  // 预加载路径隐藏官方目录工具；默认DSH目录与本工具可见性绑定，隐藏后不再发布摘要目录。
- ctx.tools.restrict({allow:preloaded?[]:legacyCatalog?['skill']:[]});
+ ctx.tools.restrict({allow:demandCatalog?['skill']:[]});
  let resources=0;
  ctx.tools.guard(exec=>{
   if(documents&&exec.name===RELATIONSHIP_DOCUMENT_TOOL)return;
@@ -29,14 +29,14 @@ export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check
    return;
   }
   if(exec.name==='skill'){
-   if(preloaded||!legacyCatalog)return 'discussion_tools_forbidden';
+   if(!demandCatalog)return 'discussion_tools_forbidden';
    return;
   }
   failed(new StorageFailure('discussion_tools_forbidden'));return 'discussion_tools_forbidden';
  });
- if(!active||(!loaded()&&!legacyCatalog))return;
- // 旧式按需 Skill 在正文载入前也需要可见受控资源工具；guard 仍拒绝未加载身份。
- ctx.tools.register(defineTool({name:'skill_resource',description:'仅在已预加载Skill明确需要补充资料时，按资源目录中的相对路径读取本版本静态文字。最多两次。',
+ if(!active||(!loaded()&&!demandCatalog))return;
+ // 按需路径在正文载入前也展示资源工具；guard 仍拒绝未加载身份。
+ ctx.tools.register(defineTool({name:'skill_resource',description:'仅在已加载Skill明确需要补充资料时，按资源目录中的相对路径读取本版本静态文字。最多两次。',
   parameters:{name:{type:'string',required:true,description:'已成功加载正文的准确Skill名称。'},path:{type:'string',required:true,description:'该Skill资源目录中的准确references/或assets/相对路径。'}},
   async execute(args,exec){await check();return {text:await active.readLoadedResource(args.name,args.path,exec.signal)};},
   output:{schema:{type:'object',additionalProperties:false,properties:{text:{type:'string',required:true}}},render:(_args,value)=>[{type:'text',text:value.text}]},
