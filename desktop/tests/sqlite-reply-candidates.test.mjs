@@ -28,23 +28,27 @@ test('SQLite恢复原表达工作区，两种动作及背景和语气设置真�
  await region.getByRole('textbox',{name:'本次要求',exact:true}).fill('简短一些');
  await draft.fill('想问问下班了吗');await express.click();
  await expect.poll(()=>f.commands.filter(c=>c.action==='generate').length).toBe(2);
- assert.deepEqual(f.commands.filter(c=>c.action==='generate')[1].workspace,{action:'express',draftText:'想问问下班了吗',tone:'concise',instruction:'简短一些',contextText:'对方：今天有些忙',includeRelationshipContext:false,excludedMessageIds:[]});
+ assert.deepEqual(f.commands.filter(c=>c.action==='generate')[1].workspace,{action:'express',draftText:'想问问下班了吗',tone:'concise',instruction:'简短一些',contextText:'对方：今天有些忙',includeRelationshipContext:false});
  await expect(draft).toHaveValue('');
 });
 
-test('近期消息可排除且刷新背景保留未保存的候选编辑',{timeout:30000},async t=>{
+test('最近聊天只读展示，刷新保留编辑且生成请求不再携带排除字段',{timeout:30000},async t=>{
  const message='99999999-9999-4999-8999-999999999999';
  const f=await panel(t,async operation=>operation.action==='generate'?receipt(operation):{...pageData(),recentMessages:[{messageId:message,sender:'contact',text:'本次可用的合成聊天',occurredAt:null,timePrecision:null,displayPosition:'1',ordering:'unknown'}]});
  const region=f.page.getByRole('region',{name:'表达工作区'});
  await region.getByRole('textbox',{name:'候选第1条',exact:true}).fill('尚未保存的候选编辑');
  await region.getByText('最近聊天 · 查看／补充',{exact:true}).click();
- await region.getByRole('checkbox',{name:'使用消息：本次可用的合成聊天',exact:true}).uncheck();
- await expect(region.getByRole('button',{name:'以此版本继续',exact:true})).toBeDisabled();
+ await expect(region.getByRole('checkbox',{name:'使用消息：本次可用的合成聊天',exact:true})).toHaveCount(0);
+ await expect(region.getByText(/取消勾选|已排除 \d+ 条消息/)).toHaveCount(0);
+ await expect(region.getByText('本次可用的合成聊天',{exact:true})).toBeVisible();
+ await expect(region.getByRole('button',{name:'以此版本继续',exact:true})).toBeEnabled();
  await region.getByRole('button',{name:'刷新最近聊天',exact:true}).click();
  await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveValue('尚未保存的候选编辑');
+ await expect(region.getByText('本次可用的合成聊天',{exact:true})).toBeVisible();
  await region.getByRole('button',{name:'帮我想想',exact:true}).click();
  await expect.poll(()=>f.commands.filter(c=>c.action==='generate').length).toBe(1);
- assert.deepEqual(f.commands.find(c=>c.action==='generate').workspace.excludedMessageIds,[message]);
+ assert.deepEqual(f.commands.find(c=>c.action==='generate').workspace,{action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true});
+ assert.equal(Object.hasOwn(f.commands.find(c=>c.action==='generate').workspace,'excludedMessageIds'),false);
 });
 
 test('关闭关系背景后撤销旧候选携入，生成不提交被后端禁止的组合',{timeout:30000},async t=>{
