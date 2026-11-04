@@ -1,7 +1,7 @@
 # 讨论删除、跨联系人与历史规模回归
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 Blocked by: 01, 02
 
 ## 目标
@@ -49,5 +49,7 @@ Blocked by: 01, 02
 - 新增规模回归比较 1 段与 40 段历史讨论：均为 3 项实际候选材料（同一条近期聊天与两项本次输入），读取动作集合均为 `discussion.localMessages`、`discussion.messages`、`reply.freezeInput`，未调用 `discussion.list` 或 `discussion.view`。不作为毫秒性能结论。
 - 变更文件：`backend-ts/test/sqlite-discussion-isolation-regressions.test.mjs`（新增）、`backend-ts/test/fixtures/sqlite/discussion-isolation-registry.mjs`（新增）、`backend-ts/test/sqlite-discussion-deletion.test.mjs`。未修改 Skill Precall 使用的 `support.mjs` 或候选生产文件。
 - GREEN：`sqlite-discussion-history-continue`、`sqlite-discussion-isolation-regressions`、`sqlite-discussion-deletion`、`discussion-deletion-scaling` 合计 15/15。RED 证据是来源删除用例首次运行时继续动作仍成功，但状态检查确认删除闭包已完全移除旧请求和正文；据此把断言修正为“继续后仍为空”，没有把空讨论误判为失效 ID。
-- 未执行：需要使用本机 HTTP/Playwright 的候选跨联系人完整协议和实际 App 桌面删除流程；本会话沙箱不能监听端口且禁止启动 App。真实数据未使用，全部为合成夹具。
-- State 保持 `claimed`，等待主会话独立审查与集成。
+- 历史阶段记录（后由最终验收取代）：未执行：需要使用本机 HTTP/Playwright 的候选跨联系人完整协议和实际 App 桌面删除流程；本会话沙箱不能监听端口且禁止启动 App。真实数据未使用，全部为合成夹具。
+- 历史阶段记录（后由最终验收改为 `resolved`）：当时 State 保持 `claimed`，等待主会话独立审查与集成。
+
+- 2026-11-04 最终实际 App 边界复核：在合成甲／乙联系人中，合成乙新开讨论并执行删除；确认文案明确只删除讨论、候选版本和运行痕迹，不删除联系人、原始聊天、关系记忆和本人记忆。首次确认显示“助手会话删除尚未确认完成，请重试”，重试后显示“当前助手会话已删除”；数据库复核为合成乙讨论 `deleted`、`reply_requests=0`，合成甲讨论仍 `active` 且为 current，两位联系人各有 1 条原始聊天保留。首次确认的事务排空反馈与合成夹具退出时的 destroyed-window teardown 错误保留为 UI／清理风险，不改变删除闭包与跨联系人隔离结论。

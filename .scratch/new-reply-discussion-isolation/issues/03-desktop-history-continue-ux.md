@@ -1,7 +1,7 @@
 # 桌面历史讨论回看与继续交互
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 Blocked by: 02
 
 ## 目标
@@ -52,11 +52,13 @@ Blocked by: 02
 - 删除确认抽成 `AssistantSessionDeletionConfirmation`，明确删除讨论、候选版本和运行使用痕迹，保留联系人、原始微信聊天、关系记忆和本人记忆；确认和取消按钮均复用 `.button`。
 - RED：新增 SSR UI 测试在实现前因缺少“仅回看，不会自动加入新候选”失败；删除确认测试先因公开组件不存在而构建失败。GREEN 后 `assistant-history-layout.test.mjs` 4/4。
 - 验证明细：通过临时依赖布局执行当前源与测试，未修改任何 `node_modules`；`assistant-history-layout`、`workspace-session-switch`、`sqlite-discussion-session`、`assistant-idle-rollover`、`assistant-session-catalog`、`assistant-session-deletion-guards`、`assistant-session-catalog-read` 合计 34/34 通过。
-- 未执行：本机 Playwright/Electron 实际界面验收需要监听端口和启动 App，本会话沙箱禁止监听且用户明确禁止启动 App；现有 `sqlite-discussion-panel.test.mjs` 已完成按钮文案适配但未运行。Remove Exclusion 冲突见上，合并时需同步其共享测试选择器。
-- State 保持 `claimed`，等待主会话独立审查与集成。
+- 历史阶段记录（后由最终桌面验收取代）：本机 Playwright/Electron 实际界面验收当时受沙箱限制；现有 `sqlite-discussion-panel.test.mjs` 已完成按钮文案适配但未运行。Remove Exclusion 冲突见上，合并时需同步其共享测试选择器。
+- 历史阶段记录（后由最终验收改为 `resolved`）：当时 State 保持 `claimed`，等待主会话独立审查与集成。
 
 - 2026-11-04 集成校正：`sqlite-discussion-panel` 原断言仍假设历史正文在默认折叠时可见、preload 只有 `submit/onInvalidated`，与“历史仅回看、显式继续”和受控候选端口集成后的现行合同不一致。RED 为 61/63；将测试改为先确认历史发言不在默认可访问树、展开“与助手讨论”后才可回看，目录仍要求显式“继续此讨论”，并允许 preload 固定 `candidates` 端口；GREEN 63/63。没有放宽拒绝额外字段、来源失效、迟到回包或候选操作白名单断言。
 
 - 2026-11-04 Standards P2 修复：`AssistantSessionPanel` 原先声明但未解构/透传 `onInitialDraftTaken`，候选面板也未调用，联系人级草稿在切换讨论或重新挂载后可能再次注入。现由会话面板透传到 `SqliteReplyCandidatesPanel`，仅在首次成功播种当前 scope 的初始草稿后调用一次；用户已编辑时 `seeded.current` 阻止旧草稿覆盖。新增实际浏览器回归覆盖首次注入、用户编辑保留、切换讨论不重复；讨论面板 3/3、草稿交接 5/5、桌面 typecheck 通过。
 
 - 2026-11-04 Spec 复审补充：同步 React 状态的回归未覆盖真实异步草稿清空；若 `setDraft('')` IPC 返回前切换讨论，含 sessionId 的 scopeKey 会再次播种旧草稿。RED 在延迟清空夹具下复现为切换后文本仍为旧草稿。现用 `contactId + scopeRevision + initialDraft` 记录已消费交接，并在草稿清空后释放记录，不再以 sessionId 判重；同一延迟清空回归 GREEN。扩大桌面回归 69/69，typecheck 通过。
+
+- 2026-11-04 最终桌面验收：在隔离合成 App 中打开合成甲的讨论后，页面只显示甲的讨论；切换到合成乙后显示“这位联系人还没有助手会话”，未出现甲的讨论，证明实际 UI 的回看与联系人切换没有跨联系人泄漏。历史目录仍要求显式“继续此讨论”，回看没有自动生成候选。

@@ -1,7 +1,7 @@
 # 历史回看与明确继续分离
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 Blocked by: 01
 
 ## 目标
@@ -51,6 +51,6 @@ Blocked by: 01
 - 变更文件：`backend-ts/src/reply/sqlite/actions.ts`、`backend-ts/src/reply/sqlite/http.ts`、`desktop/src/main/reply/assistant-session-catalog.ts`、`backend-ts/test/sqlite-discussion-history-continue.test.mjs`（新增）、`backend-ts/test/fixtures/sqlite/discussion-history-registry.mjs`（新增）、`backend-ts/test/sqlite-discussion-host.test.mjs`，以及既有桌面会话测试/fixture 的 continue 路径适配。
 - RED：实现前同一边界 2 个业务断言失败（重复继续刷新活跃时间；失效来源仍可继续）；原 HTTP 用例使用本机 `listen`，在当前沙箱直接 `EPERM`，已改为同进程调用公开 `SqliteDiscussionHttp.handle`，不使用无界等待掩盖失败。
 - GREEN：`node --test --test-timeout=20000 test/sqlite-discussion-history-continue.test.mjs` 4/4；桌面会话切换/目录/空闲分段/恢复证据相关 5 个文件 24/24。`git diff --check` 通过。
-- 未执行：`sqlite-discussion-host.test.mjs` 与既有讨论集成/候选回归需要监听本机 HTTP，本会话沙箱返回 `EPERM`；工作树没有安装 `node_modules`，测试通过只读复用主仓库依赖并屏蔽未使用的 `sharp` 原生模块，完整正式 typecheck 未作为本票通过证据。
+- 历史阶段记录（后由最终验收取代）：未执行：`sqlite-discussion-host.test.mjs` 与既有讨论集成/候选回归需要监听本机 HTTP，本会话沙箱返回 `EPERM`；工作树没有安装 `node_modules`，测试通过只读复用主仓库依赖并屏蔽未使用的 `sharp` 原生模块，完整正式 typecheck 未作为本票通过证据。
 
-State 保持 `claimed`，等待独立审查与本票提交后的 03 集成。
+历史阶段记录（后由最终验收改为 `resolved`）：当时 State 保持 `claimed`，等待独立审查与本票提交后的 03 集成。

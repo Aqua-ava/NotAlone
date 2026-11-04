@@ -1,7 +1,7 @@
 # 新候选输入与旧讨论隔离
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 
 ## 目标
 
@@ -55,5 +55,5 @@ State: claimed
 
 ## Comments
 
-- 2026-11-04：`State: claimed`，开始 A01；审计候选输入装配入口并先写 RED 合成回归。
-- 2026-11-04：实现与合成回归完成（RED→GREEN、相关后端测试与 typecheck 通过），提交后保持 `claimed` 等待独立 Standards／Spec 审查。
+- 2026-11-04：当时 `State: claimed`，开始 A01；审计候选输入装配入口并先写 RED 合成回归。
+- 2026-11-04：实现与合成回归完成（RED→GREEN、相关后端测试与 typecheck 通过），提交后当时保持 `claimed` 等待独立 Standards／Spec 审查，后由最终验收改为 `resolved`。
