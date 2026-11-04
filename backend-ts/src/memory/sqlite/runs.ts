@@ -235,7 +235,8 @@ function safeHistoryProgress(tx:StorageTransaction,ownerId:string,contactId:stri
  if(!['pending','running','incomplete'].includes(String(run.state))||run.pause_requested_at!==null)return false;
  const runId=String(run.id);
  if(tx.get("SELECT 1 FROM processing_task WHERE owner_id=? AND run_id=? AND state IN ('failed','paused','unknown','revoked') LIMIT 1",[ownerId,runId]))return false;
- if(tx.get(`SELECT 1 FROM processing_step s JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
+ // CROSS JOIN 固定先按本轮任务取步骤；否则 SQLite 会先扫全部步骤，每次约 0.5 秒。
+ if(tx.get(`SELECT 1 FROM processing_task t CROSS JOIN processing_step s ON t.owner_id=s.owner_id AND t.id=s.task_id
   WHERE t.owner_id=? AND t.run_id=? AND (s.state IN ('failed','running','unknown')
    OR EXISTS(SELECT 1 FROM step_attempt a WHERE a.owner_id=s.owner_id AND a.step_id=s.id AND a.state IN ('running','unknown'))
    OR EXISTS(SELECT 1 FROM model_operation o WHERE o.owner_id=s.owner_id AND o.memory_step_id=s.id AND o.state IN ('prepared','in_flight','unknown'))
