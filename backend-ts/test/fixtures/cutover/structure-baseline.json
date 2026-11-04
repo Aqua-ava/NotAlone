@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 40,
+  "schemaVersion": 41,
   "migrationVersions": [
    1,
    2,
@@ -41,9 +41,10 @@
    37,
    38,
    39,
-   40
+   40,
+   41
   ],
-  "userVersion": 40,
+  "userVersion": 41,
   "sqliteVersion": "3.53.4",
   "tableCount": 95,
   "fieldCount": 957,
@@ -491,6 +492,18 @@
     }
    ],
    "indexes": [
+    {
+     "name": "capture_record_capture",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "capture_id"
+     ],
+     "sql": "CREATE INDEX capture_record_capture ON capture_record(owner_id,contact_id,capture_id)"
+    },
     {
      "name": "capture_record_quarantined_source",
      "unique": 0,

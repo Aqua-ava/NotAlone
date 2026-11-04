@@ -8,3 +8,12 @@ import type {StorageMigration} from '../../storage/sqlite/contracts.ts';
 export const historyEmptyCaptureMigration=(version:number):StorageMigration=>({version,sql:`
 CREATE INDEX sync_capture_goal ON sync_capture(owner_id,goal_id);
 `});
+
+/**
+ * capture_record 指向 sync_capture 的外键 (owner_id, contact_id, capture_id) 此前没有子表索引：
+ * 每删除一行 sync_capture，外键检查都要全表扫描 capture_record（真实库约 18.5 万行，
+ * 在副本上删除 50 个目标要 29 秒）。补上索引后删除空页与清理旧目标都只需索引查找。
+ */
+export const historyCaptureRecordForeignKeyIndexMigration=(version:number):StorageMigration=>({version,sql:`
+CREATE INDEX capture_record_capture ON capture_record(owner_id,contact_id,capture_id);
+`});
