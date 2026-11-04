@@ -7,6 +7,8 @@ export const registry={migrations:base.migrations,actions:[
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,input.milliseconds);
   return input.sequence;
  }},
+ // 名称落在前台回复白名单内，用于验证前台通道优先出队；不读写业务表。
+ {name:'discussion.timingProbe',mode:'read',retryBusy:false,execute(_tx,input){return input.sequence;}},
  {name:'timing.exit',mode:'read',retryBusy:false,execute(){process.exit(42);}},
  {name:'timing.error',mode:'read',retryBusy:false,execute(){process.nextTick(()=>{throw new Error('合成私密错误，不得投影');});return null;}},
 ]};

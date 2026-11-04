@@ -23,6 +23,11 @@ export interface StorageActionTiming {
 }
 const monotonicMs=()=>Number(process.hrtime.bigint())/1e6;
 const milliseconds=(value:number)=>Math.round(Math.max(0,value)*1000)/1000;
+/**
+ * 前台回复链路的动作：与后台提取、同步共用唯一写者线程，但优先出队。
+ * 白名单只含回复、助手讨论、运行副本、Skill 核验与手动确认；其余一律走后台通道，未知动作不会插队。
+ */
+const foregroundAction=/^(?:reply|discussion|runtime|skills)\.|^identity\.manualConfirm$/;
 const actionName=(value:string)=>/^[a-z][a-zA-Z0-9]*\.[a-zA-Z][a-zA-Z0-9]{0,95}$/.test(value)&&value.length<=128?value:'invalid_action';
 
 export class SqliteStorage {
@@ -31,7 +36,11 @@ export class SqliteStorage {
   private failed = false;
   private closing?: Promise<void>;
   private diagnostic: Readonly<StorageFailureDiagnostic> | null = null;
-  private readonly pending = new Map<number, { name: string; started: boolean; enqueuedAt:number; startedAt?:number; resolve: (value: any) => void; reject: (error: Error) => void; timer?: NodeJS.Timeout }>();
+  private readonly pending = new Map<number, { name: string; input: unknown; lease: StorageLease; started: boolean; enqueuedAt:number; startedAt?:number; resolve: (value: any) => void; reject: (error: Error) => void; timer?: NodeJS.Timeout }>();
+  // 一次只放一个动作进入 Worker，其余在此按通道排队：前台动作最多等待当前正在执行的那一个。
+  private readonly foregroundQueue:number[]=[];
+  private readonly backgroundQueue:number[]=[];
+  private inFlight:number|undefined;
   private readonly timings:(StorageActionTiming&{finishedAt:number})[]=[];
   private readonly worker: Worker;
   private readonly readers=new Set<SqliteReadonlyReader>();
@@ -63,6 +72,11 @@ export class SqliteStorage {
         return;
       }
       clearTimeout(pending.timer); this.pending.delete(message.id);
+      if(this.inFlight===message.id){
+        this.inFlight=undefined;
+        // 延到本轮微任务之后再出队，让刚完成动作的调用方先入队其紧随的下一次前台请求。
+        setImmediate(()=>this.pump());
+      }
       if(typeof message.startedAt==='number'&&typeof message.finishedAt==='number'){
         this.timings.push({action:actionName(pending.name),queuedMs:milliseconds(message.startedAt-pending.enqueuedAt),
           executionMs:milliseconds(message.finishedAt-message.startedAt),totalMs:milliseconds(message.finishedAt-pending.enqueuedAt),
@@ -116,10 +130,24 @@ export class SqliteStorage {
   private request<T>(name: string, input: unknown, lease: StorageLease): Promise<T> {
     const id = ++this.nextId;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, {name, started: false, enqueuedAt:monotonicMs(), resolve, reject});
-      try { this.worker.postMessage({id, name, input, lease}); }
-      catch { this.fail('post_message_failed', name); }
+      this.pending.set(id, {name, input, lease, started: false, enqueuedAt:monotonicMs(), resolve, reject});
+      (foregroundAction.test(name) ? this.foregroundQueue : this.backgroundQueue).push(id);
+      this.pump();
     });
+  }
+  /** Worker 空闲时取下一项：前台通道优先，各通道内保持先进先出。 */
+  private pump(): void {
+    if (this.failed || this.inFlight !== undefined) return;
+    for (;;) {
+      const id = this.foregroundQueue.shift() ?? this.backgroundQueue.shift();
+      if (id === undefined) return;
+      const pending = this.pending.get(id);
+      if (!pending) continue;
+      this.inFlight = id;
+      try { this.worker.postMessage({id, name: pending.name, input: pending.input, lease: pending.lease}); }
+      catch { this.fail('post_message_failed', pending.name); }
+      return;
+    }
   }
   private fail(cause?: StorageFailureDiagnostic['cause'], action?: string): void {
     if (this.failed) return;
@@ -129,6 +157,7 @@ export class SqliteStorage {
         pendingCount: this.pending.size, queuedCount: [...this.pending.values()].filter(pending => !pending.started).length});
     }
     this.failed = true;
+    this.foregroundQueue.length = 0; this.backgroundQueue.length = 0; this.inFlight = undefined;
     for(const reader of this.readers)void reader.close().catch(()=>{});
     for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new StorageFailure('worker_failed')); }
     this.pending.clear();

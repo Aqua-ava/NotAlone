@@ -24,6 +24,22 @@ test('串行慢动作总排队超过15秒时，每个动作按实际执行起点
  assert.equal(storage.failureDiagnostic,null);
 });
 
+test('前台回复动作优先于已排队的后台动作，且各通道内保持先进先出',async t=>{
+ const storage=await fixture(t),order=[];
+ const track=(label,work)=>work.then(value=>{order.push(label);return value;});
+ // 首个动作在调用时即进入 Worker，其后的请求必然排在它后面。
+ const work=[track('running',storage.execute('timing.block',{milliseconds:150,sequence:'running'})),
+  track('background-1',storage.execute('timing.block',{milliseconds:10,sequence:'background-1'})),
+  track('background-2',storage.execute('timing.block',{milliseconds:10,sequence:'background-2'})),
+  track('foreground-1',storage.execute('discussion.timingProbe',{sequence:'foreground-1'})),
+  track('foreground-2',storage.execute('discussion.timingProbe',{sequence:'foreground-2'}))];
+ await Promise.all(work);
+ assert.deepEqual(order,['running','foreground-1','foreground-2','background-1','background-2']);
+ const diagnostic=storage.timingDiagnostic;
+ assert.equal(diagnostic.pendingCount,0);assert.equal(diagnostic.queuedCount,0);
+ assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
 test('单个动作超过15秒仍关闭Worker并拒绝其后排队动作',async t=>{
  const storage=await fixture(t),started=performance.now();
  const results=await Promise.allSettled([
