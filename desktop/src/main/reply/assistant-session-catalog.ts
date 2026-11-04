@@ -38,7 +38,7 @@ export async function newAssistantSession(backend: BackendHost, contactId: strin
 
 export async function selectAssistantSession(backend: BackendHost, contactId: string, sessionId: string, signal: AbortSignal) {
   const response = await backend.requestJson({ method: 'POST',
-    path: `/api/contacts/${contactId}/assistant-sessions/${sessionId}/resume`, body: {}, signal });
+    path: `/api/contacts/${contactId}/assistant-sessions/${sessionId}/continue`, body: {}, signal });
   if (!isRecord(response.data) || Object.keys(response.data).some(key => !['session_id', 'context_refresh'].includes(key))
     || response.data.context_refresh !== undefined && (!isRecord(response.data.context_refresh)
       || Object.keys(response.data.context_refresh).length !== 1 || response.data.context_refresh.changed !== true) || response.data.session_id !== sessionId) {

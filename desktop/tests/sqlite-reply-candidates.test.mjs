@@ -5,7 +5,7 @@ import {once} from 'node:events';
 import {build} from 'esbuild';
 import {chromium,expect} from '@playwright/test';
 
-const ids={contact:'11111111-1111-4111-8111-111111111111',other:'22222222-2222-4222-8222-222222222222',session:'33333333-3333-4333-8333-333333333333',otherSession:'44444444-4444-4444-8444-444444444444',candidate:'55555555-5555-4555-8555-555555555555',request:'66666666-6666-4666-8666-666666666666',selection:'77777777-7777-4777-8777-777777777777',skill:'88888888-8888-4888-8888-888888888888'};
+const ids={contact:'11111111-1111-4111-8111-111111111111',other:'22222222-2222-4222-8222-222222222222',session:'33333333-3333-4333-8333-333333333333',otherSession:'44444444-4444-4444-8444-444444444444',candidate:'55555555-5555-4555-8555-555555555555',request:'66666666-6666-4666-8666-666666666666',selection:'77777777-7777-4777-8777-777777777777',skill:'88888888-8888-4888-8888-888888888888',otherSkill:'99999999-9999-4999-8999-999999999999'};
 const original=()=>({candidateId:ids.candidate,versionNo:1,origin:'model',parentVersionNo:null,parts:['合成候选第一条','合成候选第二条'],basis:[{itemNo:1,kind:'message',text:'同联系人实际输入依据',verification:'actual_input'}]});
 const pageData=(version=original(),phase='complete')=>({requests:[{requestId:ids.request,coverageWarning:null,sourceState:'available',candidates:[version],selections:[],loadedSkills:[{packageId:ids.skill,revisionNo:1,relativePath:'SKILL.md',text:'本次实际加载的合成Skill正文'}]}],coverage:{phase}});
 const receipt=(request,replayed=false)=>({session_id:request.sessionId,request_key:request.requestKey,segmented:false,replayed});
@@ -28,23 +28,27 @@ test('SQLite恢复原表达工作区，两种动作及背景和语气设置真�
  await region.getByRole('textbox',{name:'本次要求',exact:true}).fill('简短一些');
  await draft.fill('想问问下班了吗');await express.click();
  await expect.poll(()=>f.commands.filter(c=>c.action==='generate').length).toBe(2);
- assert.deepEqual(f.commands.filter(c=>c.action==='generate')[1].workspace,{action:'express',draftText:'想问问下班了吗',tone:'concise',instruction:'简短一些',contextText:'对方：今天有些忙',includeRelationshipContext:false,excludedMessageIds:[]});
+ assert.deepEqual(f.commands.filter(c=>c.action==='generate')[1].workspace,{action:'express',draftText:'想问问下班了吗',tone:'concise',instruction:'简短一些',contextText:'对方：今天有些忙',includeRelationshipContext:false});
  await expect(draft).toHaveValue('');
 });
 
-test('近期消息可排除且刷新背景保留未保存的候选编辑',{timeout:30000},async t=>{
+test('最近聊天只读展示，刷新保留编辑且生成请求不再携带排除字段',{timeout:30000},async t=>{
  const message='99999999-9999-4999-8999-999999999999';
  const f=await panel(t,async operation=>operation.action==='generate'?receipt(operation):{...pageData(),recentMessages:[{messageId:message,sender:'contact',text:'本次可用的合成聊天',occurredAt:null,timePrecision:null,displayPosition:'1',ordering:'unknown'}]});
  const region=f.page.getByRole('region',{name:'表达工作区'});
  await region.getByRole('textbox',{name:'候选第1条',exact:true}).fill('尚未保存的候选编辑');
  await region.getByText('最近聊天 · 查看／补充',{exact:true}).click();
- await region.getByRole('checkbox',{name:'使用消息：本次可用的合成聊天',exact:true}).uncheck();
- await expect(region.getByRole('button',{name:'以此版本继续',exact:true})).toBeDisabled();
+ await expect(region.getByRole('checkbox',{name:'使用消息：本次可用的合成聊天',exact:true})).toHaveCount(0);
+ await expect(region.getByText(/取消勾选|已排除 \d+ 条消息/)).toHaveCount(0);
+ await expect(region.getByText('本次可用的合成聊天',{exact:true})).toBeVisible();
+ await expect(region.getByRole('button',{name:'以此版本继续',exact:true})).toBeEnabled();
  await region.getByRole('button',{name:'刷新最近聊天',exact:true}).click();
  await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveValue('尚未保存的候选编辑');
+ await expect(region.getByText('本次可用的合成聊天',{exact:true})).toBeVisible();
  await region.getByRole('button',{name:'帮我想想',exact:true}).click();
  await expect.poll(()=>f.commands.filter(c=>c.action==='generate').length).toBe(1);
- assert.deepEqual(f.commands.find(c=>c.action==='generate').workspace.excludedMessageIds,[message]);
+ assert.deepEqual(f.commands.find(c=>c.action==='generate').workspace,{action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true});
+ assert.equal(Object.hasOwn(f.commands.find(c=>c.action==='generate').workspace,'excludedMessageIds'),false);
 });
 
 test('关闭关系背景后撤销旧候选携入，生成不提交被后端禁止的组合',{timeout:30000},async t=>{
@@ -96,12 +100,12 @@ test('助手面板取消删除确认与刷新目录不丢候选编辑，也不�
  const f=await panel(t,async()=>pageData(),'',true),candidate=f.page.getByRole('textbox',{name:'候选第1条',exact:true});
  await expect(candidate).toHaveValue('合成候选第一条');await candidate.fill('取消确认后仍保留的编辑');
  await f.page.getByText('历史讨论',{exact:true}).click();
- await f.page.getByRole('button',{name:'删除正在查看的会话',exact:true}).click();
- await expect(f.page.getByRole('group',{name:'确认删除助手会话'})).toBeVisible();
+ await f.page.getByRole('button',{name:'删除正在查看的讨论',exact:true}).click();
+ await expect(f.page.getByRole('group',{name:'确认删除助手讨论'})).toBeVisible();
  await expect(candidate).toBeDisabled();await expect(candidate).toHaveValue('取消确认后仍保留的编辑');
- await f.page.getByRole('button',{name:'取消删除会话',exact:true}).click();
+ await f.page.getByRole('button',{name:'取消删除',exact:true}).click();
  await expect(candidate).toBeEnabled();await expect(candidate).toHaveValue('取消确认后仍保留的编辑');
- await f.page.getByRole('button',{name:'刷新会话列表',exact:true}).click();
+ await f.page.getByRole('button',{name:'刷新讨论列表',exact:true}).click();
  await expect(candidate).toBeDisabled();await expect(candidate).toHaveValue('取消确认后仍保留的编辑');
  await f.page.evaluate(()=>window.__finishCatalog());await expect(candidate).toBeEnabled();
  await expect(candidate).toHaveValue('取消确认后仍保留的编辑');
@@ -133,17 +137,29 @@ test('临时禁用期间真实来源失效仍立即撤下编辑及依据',{timeo
  assert.equal(f.commands.filter(c=>c.action==='read').length,1);
 });
 
-test('Skill自动选择无需手选，仅展示实际名称或不可用提示',{timeout:30000},async t=>{
- let data={...pageData(),availableSkills:[{packageId:ids.skill,name:'合成安慰策略',revisionNo:1}]};
- data.requests[0].loadedSkills[0].name='合成安慰策略';data.requests[0].loadedSkills.push({packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'references/large.md',text:'large'.repeat(25000)});
+test('Skill自动预加载无需手选，区分预加载身份与实际模型输入',{timeout:30000},async t=>{
+ let data={...pageData()};
+ data.requests[0].loadedSkills=[
+  {packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'SKILL.md',text:'先回应感受。'},
+  {packageId:ids.otherSkill,name:'合成边界策略',revisionNo:2,relativePath:'SKILL.md',text:'再说明边界。'},
+  {packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'references/example.md',text:'辅助案例。'},
+ ];
+ data.requests[0].preloadedSkills=[
+  {packageId:ids.skill,name:'合成安慰策略',revisionNo:1,origin:'auto_preload',catalogRevision:'[["skill","1"]]'},
+  {packageId:ids.otherSkill,name:'合成边界策略',revisionNo:2,origin:'auto_preload',catalogRevision:'[["skill","1"]]'},
+ ];
  const f=await panel(t,async()=>data),region=f.page.getByRole('region',{name:'表达工作区'});
  await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toBeVisible();
  await expect(region.getByRole('combobox')).toHaveCount(0);
- await expect(region.getByText('本次策略：合成安慰策略',{exact:true})).toBeVisible();
- data={...data,requests:[{...data.requests[0],loadedSkills:[],skillWarning:'回复策略暂不可用'}]};
+ await expect(region.getByText('本次预加载的 Skill：合成安慰策略（第1版）、合成边界策略（第2版）',{exact:true})).toBeVisible();
+ await region.getByText('实际进入模型输入的 Skill 内容',{exact:true}).click();
+ await expect(region.getByRole('group',{name:'实际进入模型输入的 Skill 内容'})).toBeVisible();
+ await expect(region.getByText('合成安慰策略 · 第1版 · references/example.md',{exact:true})).toBeVisible();
+ data={...data,requests:[{...data.requests[0],loadedSkills:[],preloadedSkills:[],skillWarning:'回复策略暂不可用'}]};
  await region.getByRole('button',{name:'刷新候选',exact:true}).click();
  await expect(region.getByText('回复策略暂不可用',{exact:true})).toBeVisible();
- await expect(region.getByText('本次策略：合成安慰策略',{exact:true})).toHaveCount(0);
+ await expect(region.getByText(/本次预加载的 Skill/)).toHaveCount(0);
+ await expect(region.getByRole('group',{name:'实际进入模型输入的 Skill 内容'})).toHaveCount(0);
  await region.getByRole('textbox',{name:'候选第1条',exact:true}).fill('失效策略后的候选仍可编辑');
  await expect(region.getByRole('button',{name:'保存修改',exact:true})).toBeEnabled();
 });
@@ -179,7 +195,7 @@ test('候选页面读取真实版本结构、保存多条编辑稿并选择具�
  });
  const region=f.page.getByRole('region',{name:'表达工作区'}),first=region.getByRole('textbox',{name:'候选第1条',exact:true}),second=region.getByRole('textbox',{name:'候选第2条',exact:true});
  await expect(first).toHaveValue('合成候选第一条');await expect(second).toHaveValue('合成候选第二条');
- await region.getByText('依据',{exact:true}).click();await expect(region.getByText('同联系人实际输入依据',{exact:true})).toBeVisible();await region.getByText('本次实际载入的 Skill',{exact:true}).click();await expect(region.getByText('本次实际加载的合成Skill正文',{exact:true})).toBeVisible();
+ await region.getByText('依据',{exact:true}).click();await expect(region.getByText('同联系人实际输入依据',{exact:true})).toBeVisible();await region.getByText('实际进入模型输入的 Skill 内容',{exact:true}).click();await expect(region.getByText('本次实际加载的合成Skill正文',{exact:true})).toBeVisible();
  await first.fill('手工修改后的第一条');await second.fill('手工修改后的第二条');await region.getByRole('button',{name:'保存修改',exact:true}).click();
  await expect.poll(()=>f.commands.filter(c=>c.action==='edit').length).toBe(1);
  const edit=f.commands.find(c=>c.action==='edit');assert.equal(edit.candidateId,ids.candidate);assert.equal(edit.versionNo,1);assert.deepEqual(edit.parts,['手工修改后的第一条','手工修改后的第二条']);

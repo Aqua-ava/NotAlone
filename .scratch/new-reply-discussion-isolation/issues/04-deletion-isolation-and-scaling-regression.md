@@ -1,7 +1,7 @@
 # 讨论删除、跨联系人与历史规模回归
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Blocked by: 01, 02
 
 ## 目标
@@ -40,3 +40,14 @@ Blocked by: 01, 02
 - 远端发布、打包或外部消息测试。
 
 ## Comments
+
+## Answer
+
+- 新增真实 SQLite 公开回归：先同步一条真实聊天、手工建立联系人记忆和本人记忆，再让候选冻结实际消息来源并在模型出站前受控失败；精确删除讨论后，请求、上下文、候选输入和失效发言闭包清空，兄弟讨论仍可读，聊天、关系记忆和本人记忆正文保持不变。
+- 新增来源删除回归：候选实际来源删除后，聊天正文、候选输入和关联讨论发言均不可恢复；回看只剩空讨论，显式继续后仍为空，不会复活旧正文。
+- 既有精确讨论删除用例补充断言：删除中的讨论不能回看，也不能通过继续动作恢复；联系人/账号删除、运行副本身份清理、错误联系人删除范围和副本规模回归继续通过。
+- 新增规模回归比较 1 段与 40 段历史讨论：均为 3 项实际候选材料（同一条近期聊天与两项本次输入），读取动作集合均为 `discussion.localMessages`、`discussion.messages`、`reply.freezeInput`，未调用 `discussion.list` 或 `discussion.view`。不作为毫秒性能结论。
+- 变更文件：`backend-ts/test/sqlite-discussion-isolation-regressions.test.mjs`（新增）、`backend-ts/test/fixtures/sqlite/discussion-isolation-registry.mjs`（新增）、`backend-ts/test/sqlite-discussion-deletion.test.mjs`。未修改 Skill Precall 使用的 `support.mjs` 或候选生产文件。
+- GREEN：`sqlite-discussion-history-continue`、`sqlite-discussion-isolation-regressions`、`sqlite-discussion-deletion`、`discussion-deletion-scaling` 合计 15/15。RED 证据是来源删除用例首次运行时继续动作仍成功，但状态检查确认删除闭包已完全移除旧请求和正文；据此把断言修正为“继续后仍为空”，没有把空讨论误判为失效 ID。
+- 未执行：需要使用本机 HTTP/Playwright 的候选跨联系人完整协议和实际 App 桌面删除流程；本会话沙箱不能监听端口且禁止启动 App。真实数据未使用，全部为合成夹具。
+- State 保持 `claimed`，等待主会话独立审查与集成。

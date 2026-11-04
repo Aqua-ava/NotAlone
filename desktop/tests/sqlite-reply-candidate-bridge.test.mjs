@@ -16,7 +16,7 @@ function modules(){return loaded??=(async()=>{
 const ids={contact:'11111111-1111-4111-8111-111111111111',other:'22222222-2222-4222-8222-222222222222',session:'33333333-3333-4333-8333-333333333333',candidate:'44444444-4444-4444-8444-444444444444',request:'55555555-5555-4555-8555-555555555555',selection:'66666666-6666-4666-8666-666666666666',skill:'77777777-7777-4777-8777-777777777777',message:'88888888-8888-4888-8888-888888888888'};
 const scope={contactId:ids.contact,scopeRevision:1,sessionId:ids.session};
 const version=()=>({candidateId:ids.candidate,versionNo:1,origin:'model',parentVersionNo:null,parts:['合成候选第一条','合成候选第二条'],basis:[{itemNo:1,kind:'message',text:'合成同联系人依据',verification:'actual_input'}]});
-const pageData=()=>({requests:[{requestId:ids.request,generationState:'committed',coverageWarning:null,sourceState:'available',candidates:[version()],selections:[],loadedSkills:[{packageId:ids.skill,revisionNo:1,relativePath:'SKILL.md',text:'合成实际载入Skill正文'}]}],recentMessages:[{messageId:ids.message,sender:'contact',text:'合成最近聊天',occurredAt:'2026-10-31T10:00:00.000Z',timePrecision:'second',displayPosition:'2',ordering:'unknown'}],coverage:{phase:'complete'}});
+const pageData=()=>({requests:[{requestId:ids.request,generationState:'committed',coverageWarning:null,sourceState:'available',candidates:[version()],selections:[],loadedSkills:[{packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'SKILL.md',text:'合成实际载入Skill正文',origin:'auto_preload',catalogRevision:'[["skill","1"]]'}],preloadedSkills:[{packageId:ids.skill,name:'合成安慰策略',revisionNo:1,origin:'auto_preload',catalogRevision:'[["skill","1"]]'}]}],recentMessages:[{messageId:ids.message,sender:'contact',text:'合成最近聊天',occurredAt:'2026-10-31T10:00:00.000Z',timePrecision:'second',displayPosition:'2',ordering:'unknown'}],coverage:{phase:'complete'}});
 function fixture(api){
  let generation=3,selected=ids.contact,scopeRevision=1,confirmed=true;const contactListeners=new Set(),backendListeners=new Set(),requests=[],handlers=new Map(),invocations=[];
  let respond=async()=>({generation,data:pageData()});
@@ -36,7 +36,7 @@ test('候选preload与主进程将五种操作映射到固定SQLite HTTP路径',
  const base=`/api/contacts/${ids.contact}/assistant-sessions/${ids.session}/reply-candidates`;
  f.respond(async request=>({generation:3,data:request.path.endsWith('/edit')?{...version(),versionNo:2,parentVersionNo:1,origin:'manual'}:request.path.endsWith('/select')?{id:ids.selection,candidateId:ids.candidate,versionNo:1,selectionNo:1}:request.path.includes('/versions/')?version():request.method==='POST'?{session_id:ids.session,request_key:ids.request,segmented:false,replayed:false}:pageData()}));
  assert.deepEqual(await f.bridge.candidates.execute({...scope,action:'read'}),pageData());
- const workspace={action:'express',draftText:'本次合成表达要求',tone:'warm',instruction:'简洁些',contextText:'本次补充情况',includeRelationshipContext:true,excludedMessageIds:[ids.message]};
+ const workspace={action:'express',draftText:'本次合成表达要求',tone:'warm',instruction:'简洁些',contextText:'本次补充情况',includeRelationshipContext:true};
  await f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:workspace.draftText,acceptIncomplete:true,workspace});
  assert.equal((await f.bridge.candidates.execute({...scope,action:'edit',candidateId:ids.candidate,versionNo:1,parts:['手改第一条','手改第二条']})).versionNo,2);
  assert.equal((await f.bridge.candidates.execute({...scope,action:'select',candidateId:ids.candidate,versionNo:1})).id,ids.selection);
@@ -59,9 +59,13 @@ test('preload及主进程均拒绝通用owner、路径、SQL字段和额外参�
   await assert.rejects(handler({...read,...extra}),/无效/);
  }
  await assert.rejects(f.bridge.candidates.execute(read,'extra'),/无效/);await assert.rejects(handler(read,'extra'),/无效/);
- const workspace={action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:false,excludedMessageIds:[]};
+ const workspace={action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:false};
  await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'伪造的既定立场',acceptIncomplete:false,workspace}),/无效/);
  await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'',acceptIncomplete:false,workspace:{...workspace,tone:'firm'}}),/无效/);
+ for(const key of ['excludedMessageIds','excluded_message_ids']){
+  await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'',acceptIncomplete:false,workspace:{...workspace,[key]:[]}}),/无效/);
+  await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'',acceptIncomplete:false,[key]:[]}),/无效/);
+ }
  await assert.rejects(f.bridge.candidates.execute({...read,contactId:ids.other}),/失效/);
  assert.equal(f.requests.length,0);assert.equal(f.invocations.length,1,'只有格式合法但范围错误的请求可到达主进程');
 });

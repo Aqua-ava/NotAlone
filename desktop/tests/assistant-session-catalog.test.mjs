@@ -31,7 +31,7 @@ test('显式新开与选择只发送空对象并核验返回的会话 ID', async
   assert.deepEqual(await selectAssistantSession(backend, contactId, sessionId, signal), { sessionId, generation: 7 });
   assert.deepEqual(backend.calls.map(({ method, path, body }) => ({ method, path, body })), [
     { method: 'POST', path: `/api/contacts/${contactId}/assistant-sessions`, body: {} },
-    { method: 'POST', path: `/api/contacts/${contactId}/assistant-sessions/${sessionId}/resume`, body: {} },
+    { method: 'POST', path: `/api/contacts/${contactId}/assistant-sessions/${sessionId}/continue`, body: {} },
   ]);
   await assert.rejects(selectAssistantSession(transport({ session_id: randomUUID() }), contactId, sessionId, signal));
 });

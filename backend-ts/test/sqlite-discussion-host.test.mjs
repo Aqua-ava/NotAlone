@@ -50,7 +50,7 @@ test('讨论正式profile从同一SQLite读取真实用户发言，重开与明�
   assert.equal((await request('/api/contacts/'+ids[1]+'/assistant-sessions/'+first.id)).status,404);
   assert.deepEqual((await request('/api/contacts/'+ids[1]+'/assistant-sessions/'+other.id)).data.entries,[]);
   const created=await request(prefix,'POST',{});assert.equal(created.status,200);assert.notEqual(created.data.session_id,first.id);
-  assert.equal((await request(prefix+'/'+first.id+'/resume','POST',{})).status,200);
+  assert.equal((await request(prefix+'/'+first.id+'/continue','POST',{})).status,200);
   assert.equal((await request(prefix)).data.current_session_id,first.id);
   const unavailable=await request(prefix+'/'+first.id+'/entries','POST',{request_key:randomUUID(),text:'无模型配置时不发送',confirmed_contact:true});
   assert.equal(unavailable.status,409);assert.equal(unavailable.data.error,'discussion_model_unavailable');

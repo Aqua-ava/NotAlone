@@ -6,7 +6,7 @@ import type {SkillCandidate,SkillProvider,SkillProviderControl} from '@deepseek-
 import {sha256,validateResourcePath} from '../skill-package.ts';
 import {SqliteSkillLibrary,SqliteSkillError,skillAnchor} from './library.ts';
 import type {DirectorySnapshot} from './library.ts';
-import type {LoadedSkill,PreloadedSkill,SkillAnchor,SkillPackageState,SkillPreloadOrigin,SkillPreloadSelection,SkillRunProtection,SkillRunRevision,SkillRunScope} from './contracts.ts';
+import type {LoadedSkill,PreloadedSkill,SkillAnchor,SkillPackageState,SkillPreloadOrigin,SkillPreloadSelection,SkillPreloadTrace,SkillRunProtection,SkillRunRevision,SkillRunScope} from './contracts.ts';
 
 const providerName='notalone-sqlite-skills';
 const virtualRoot='/notalone/reply-skills';
@@ -167,7 +167,8 @@ export class SqliteSkillRun {
       const snapshot=await this.library.assertAnchor(anchor,this.signal(signal));
       const resource=snapshot.pkg.resources.find(r=>r.relative_path===relativePath);
       if(!resource)throw new SqliteSkillError('skill_path_invalid');
-      return await this.record(anchor,relativePath,resource.content.toString('utf8'),signal);
+      const preload=this.preloadedByName.has(loaded.name)&&this.preloadPlan?{origin:this.preloadPlan.origin,catalogRevision:this.catalogIdentity}:undefined;
+      return await this.record(anchor,loaded.name,relativePath,resource.content.toString('utf8'),signal,preload);
     }catch(error){this.rememberFailure(error);throw error;}
   }
   async readLoadedResource(name: string,relativePath: string,signal?: AbortSignal): Promise<string> {
@@ -196,10 +197,11 @@ export class SqliteSkillRun {
       this.signal(signal).throwIfAborted();
     }catch(error){this.rememberFailure(error);this.close();throw error;}
     const preloaded: PreloadedSkill[]=[];
+    const trace:SkillPreloadTrace={origin:this.preloadPlan.origin,catalogRevision:this.catalogIdentity};
     try {
-      for(const target of snapshots)await this.protection.recordSelection(this.scope,{...target.anchor},this.signal(signal));
+      for(const target of snapshots)await this.protection.recordSelection(this.scope,{...target.anchor},this.signal(signal),{name:target.name,preload:trace});
       for(const target of snapshots){
-        const content=await this.record(target.anchor,'SKILL.md',target.snapshot.pkg.content,signal);
+        const content=await this.record(target.anchor,target.name,'SKILL.md',target.snapshot.pkg.content,signal,trace);
         preloaded.push({anchor:{...target.anchor},name:target.name,content,
           resources:target.snapshot.pkg.resources.map(resource=>({relativePath:resource.relative_path,mediaType:resource.media_type,bytes:resource.content.length,payloadDigest:resource.content_sha256}))});
       }
@@ -249,18 +251,18 @@ export class SqliteSkillRun {
             try{await abortable(this.protection.recordSelection(this.scope,anchor,this.signal(options.signal)),this.signal(options.signal));}
             catch(error){this.close();throw error;}
           }
-          const content=await this.record(anchor,'SKILL.md',snapshot.pkg.content,options.signal);
+          const content=await this.record(anchor,trusted.name,'SKILL.md',snapshot.pkg.content,options.signal);
           this.signal(options.signal).throwIfAborted();
           this.loadedByName.set(trusted.name,{anchor:{...anchor},name:trusted.name,resources:snapshot.pkg.resources.map(resource=>({relativePath:resource.relative_path,mediaType:resource.media_type,bytes:resource.content.length,payloadDigest:resource.content_sha256}))});
           return {name:trusted.name,description:trusted.description,provider:providerName,source:'notalone',path:trusted.path,resourceBase:trusted.resourceBase,invocation:trusted.invocation,content};
         }catch(error){this.rememberFailure(error);throw error;}
       }};
   }
-  private async record(anchor: SkillAnchor,relativePath: string,text: string,signal?: AbortSignal): Promise<string> {
+  private async record(anchor: SkillAnchor,name: string,relativePath: string,text: string,signal?: AbortSignal,preload?: SkillPreloadTrace): Promise<string> {
     try {
       await this.validate(signal);
       const combined=this.signal(signal);
-      await abortable(this.protection.recordInput({scope:this.scope,runRevision:this.frozenRevision(),selected:{...anchor},loaded:{...anchor},relativePath,text,payloadDigest:sha256(text)},combined),combined);
+      await abortable(this.protection.recordInput({scope:this.scope,runRevision:this.frozenRevision(),selected:{...anchor},loaded:{...anchor},relativePath,text,payloadDigest:sha256(text),name,...(preload?{preload:{...preload}}:{})},combined),combined);
       await this.validate(signal);
       return text;
     }catch(error){this.rememberFailure(error);this.close();throw error;}
