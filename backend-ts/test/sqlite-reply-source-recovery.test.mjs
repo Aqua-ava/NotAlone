@@ -6,7 +6,7 @@ import {SqliteReplyTurns} from '../src/reply/sqlite/candidates/turns.ts';
 import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/service.ts';
 const registryModule=new URL('./fixtures/sqlite/reply-source-recovery-registry.mjs',import.meta.url).href;
 const content=JSON.stringify({candidates:[{parts:['合成本机候选'],basis:[1]}]});
-const workspace=()=>({action:'express',draftText:'我想说晚点再聊',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true,excludedMessageIds:[]});
+const workspace=()=>({action:'express',draftText:'我想说晚点再聊',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true});
 
 for(const state of ['lost','old-runtime','binding-unverified'])test(`本机回复忽略 ${state}，挂起的微信恢复器不被调用且回放不重复生成`,{timeout:10000},async t=>{
  const f=await fixture(t,{registryModule,content}),contactId=f.ids[0],discussion=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner);

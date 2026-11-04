@@ -60,7 +60,7 @@ test('多段历史讨论与同讨论旧发言不进入新候选，显式携入�
  assert.equal(copiesAfter.length,4,'每次候选使用独立运行副本');assert.notEqual(after.discussion.currentRuntimeId,before.discussion.currentRuntimeId);
  assert.ok(copiesAfter.some(copy=>copy.id===before.discussion.currentRuntimeId&&copy.state==='ready'),'旧讨论运行副本保留而不被复用或删除');
  const selected=await service.select({contactId,discussionId:current.id,candidateId:page.candidates[0].candidateId,versionNo:1});
- const workspace={action:'suggest',draftText:'',tone:'warm',instruction:'',contextText:'本次补充背景-显式携入检查',includeRelationshipContext:true,excludedMessageIds:[]};
+ const workspace={action:'suggest',draftText:'',tone:'warm',instruction:'',contextText:'本次补充背景-显式携入检查',includeRelationshipContext:true};
  await turns.generate({contactId,discussionId:current.id,requestKey:randomUUID(),text:'',workspace,confirmedContact:true,carriedSelectionId:selected.id});assert.equal(f.requests.length,5);
  const carried=JSON.stringify(f.requests[4]);assert.match(carried,/用户明确选择继续的候选/);assert.match(carried,/基于本次输入的合成候选/);assert.match(carried,/本次补充背景-显式携入检查/);assert.doesNotMatch(carried,oldPattern);
 });

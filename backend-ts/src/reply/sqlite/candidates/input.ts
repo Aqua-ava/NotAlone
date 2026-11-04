@@ -27,7 +27,7 @@ export function replySourceContacts(tx:StorageTransaction,i:DiscussionScope&{req
  for(const item of i.items){
   if(item.kind==='message'&&item.sourceContactId===i.contactId)contacts.add(i.contactId);
  }
- if(!i.workspace||i.workspace.includeRelationshipContext&&i.workspace.excludedMessageIds.length===0){
+ if(!i.workspace||i.workspace.includeRelationshipContext){
   for(const item of reader.read(tx,i))for(const source of item.sources)contacts.add(source.contactId);
   const carried=tx.get('SELECT carried_selection_id FROM reply_candidate_request WHERE owner_id=? AND request_id=?',[i.ownerId,i.requestId]);
   if(carried?.carried_selection_id)for(const contactId of selectionSourceContacts(tx,{...i,selectionId:String(carried.carried_selection_id)}))contacts.add(contactId);
@@ -61,7 +61,7 @@ function knowledge(tx:StorageTransaction,scope:DiscussionScope,items:readonly Re
 }
 export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contextId:string;requestId:string;workspace?:ReplyWorkspaceSnapshot;queryText?:string},reader:ReplyKnowledgeReader):FrozenReplyInput[]{
  requireDiscussion(tx,i);
- const includeRelatedData=!i.workspace||i.workspace.includeRelationshipContext&&i.workspace.excludedMessageIds.length===0;
+ const includeRelatedData=!i.workspace||i.workspace.includeRelationshipContext;
  const items:Omit<FrozenReplyInput,'itemNo'>[]=[];
  // 候选只冻结本次消息；entry 是旧讨论兼容槽，Skill 走独立受控读取，均不隐式成为候选材料，也不读取 discussion_entry 正文。
  for(const row of tx.all('SELECT x.*,m.text_body,m.sender_role FROM reply_context_item x LEFT JOIN message m ON m.owner_id=x.owner_id AND m.id=x.message_id WHERE x.owner_id=? AND x.context_id=? ORDER BY x.item_no',[i.ownerId,i.contextId])){
@@ -73,7 +73,7 @@ export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contex
  if(!i.workspace&&typeof i.queryText==='string'&&i.queryText.trim())items.push({kind:'entry',identity:{requestInput:true},text:i.queryText,sources:[]});
  if(i.workspace){
   const w=i.workspace;
-  items.push({kind:'entry',identity:{workspaceItem:'request',action:w.action,tone:w.tone,includeRelationshipContext:w.includeRelationshipContext,excludedMessageIds:w.excludedMessageIds,selectedPackageId:w.selectedPackageId,carriedSelectionId:w.carriedSelectionId},
+  items.push({kind:'entry',identity:{workspaceItem:'request',action:w.action,tone:w.tone,includeRelationshipContext:w.includeRelationshipContext,selectedPackageId:w.selectedPackageId,carriedSelectionId:w.carriedSelectionId},
    text:`本次工作区请求：${w.action==='suggest'?'用户请求帮我想想；尚未确认任何立场，候选只是可选建议。':'用户请求帮我表达；请忠实组织本次想法，不补写未提供的立场。'}\n语气要求：${toneLabel(w.tone)}\n关系背景：${w.includeRelationshipContext?'已启用':'已关闭；不依据自动聊天、旧讨论或关系资料'}`,
    sources:[]});
   if(w.draftText.trim())items.push({kind:'entry',identity:{workspaceItem:'draft'},text:`本次想法/草稿（独立于补充背景）：\n${w.draftText}`,sources:[]});

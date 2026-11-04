@@ -42,13 +42,13 @@ export class SqliteReplyTurns {
   const o=this.options,ownerId=o.service.ownerId;
   if(input.confirmedContact!==true)throw new StorageFailure('discussion_identity_required');
   const workspace=input.workspace===undefined?undefined:readReplyWorkspace(input.workspace);
-  if(workspace&&(input.text!==workspace.draftText||input.contextMessageIds!==undefined||input.carriedSelectionId!==undefined&&(!workspace.includeRelationshipContext||workspace.excludedMessageIds.length>0)))throw new StorageFailure('reply_input_invalid');
+  if(workspace&&(input.text!==workspace.draftText||input.contextMessageIds!==undefined||input.carriedSelectionId!==undefined&&!workspace.includeRelationshipContext))throw new StorageFailure('reply_input_invalid');
   await o.authorize(input.contactId);input.signal?.throwIfAborted();
   const confirmationId=await o.storage.execute<string>('identity.manualConfirm',{ownerId,contactId:input.contactId,contextToken:input.requestKey,id:randomUUID(),at:Date.now()});
   const requestText=workspace?replyWorkspaceEntryText(workspace):input.text;
   const workspaceFingerprint=workspace?replyWorkspaceFingerprint(workspace,input.selectedPackageId,input.carriedSelectionId):undefined;
   const workspaceSnapshot:ReplyWorkspaceSnapshot|undefined=workspace?{...workspace,selectedPackageId:input.selectedPackageId??null,carriedSelectionId:input.carriedSelectionId??null}:undefined;
-  const begin=()=>o.service.begin({contactId:input.contactId,discussionId:input.discussionId,requestKey:input.requestKey,text:requestText,acceptIncomplete:input.acceptIncomplete,carriedSelectionId:input.carriedSelectionId,includeRelationshipContext:workspace?workspace.includeRelationshipContext&&workspace.excludedMessageIds.length===0:undefined,workspaceFingerprint,identity:{kind:'manual',confirmationId}});
+  const begin=()=>o.service.begin({contactId:input.contactId,discussionId:input.discussionId,requestKey:input.requestKey,text:requestText,acceptIncomplete:input.acceptIncomplete,carriedSelectionId:input.carriedSelectionId,includeRelationshipContext:workspace?workspace.includeRelationshipContext:undefined,workspaceFingerprint,identity:{kind:'manual',confirmationId}});
   const accepted=await begin();
   const attempt=accepted.attempt as DiscussionAttempt;
   if(accepted.replayed)return {discussionId:attempt.discussionId,replayed:true,segmented:false};
@@ -64,7 +64,7 @@ export class SqliteReplyTurns {
     const history=workspace
      ?workspace.includeRelationshipContext?await o.storage.execute<any[]>('discussion.localMessages',{...attempt,limit:50,knownTimeOnly:true}):[]
      :await o.storage.execute<any[]>('discussion.localMessages',{...attempt,limit:20});
-    const recentIds=history.filter((m:any)=>!workspace?.excludedMessageIds.includes(m.id)).map((m:any)=>m.id);
+    const recentIds=history.map((m:any)=>m.id);
     const messageIds=workspace?recentIds:input.contextMessageIds??recentIds;
     const messages=await o.storage.execute<any[]>('discussion.messages',{...attempt,messageIds});
     return messages.map(m=>({kind:'message',sourceContactId:input.contactId,messageId:m.id,recordId:m.record_id,acceptedRevision:m.interpretation_revision}));

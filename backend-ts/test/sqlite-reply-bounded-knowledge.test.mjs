@@ -143,7 +143,7 @@ test('空suggest不以工作区提示模板召回记忆，完整条目超字符�
  const management=new SqliteMemoryManagement(f.storage,f.owner);
  for(const [index,body] of ['工作区动作帮我想想关系背景已启用尚未确认立场。','园艺'+ '甲'.repeat(599),'园艺短条目完整结束。'].entries())await management.decide({requestKey:`query-${index}`,action:'manual',scope:{scopeKind:'contact',contactId},body});
  const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
- const workspace={action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true,excludedMessageIds:[]};
+ const workspace={action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true};
  await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'',confirmedContact:true,workspace});
  assert.ok(!JSON.stringify(f.requests[0]).includes('记忆'));assert.ok(!JSON.stringify(f.requests[0]).includes('园艺短条目完整结束'));
  await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'园艺',confirmedContact:true});
