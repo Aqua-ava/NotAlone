@@ -36,7 +36,7 @@ test('SQLite讨论切换甲乙再回甲不读取旧候选选择端口，独立�
   if(request.path.startsWith('/api/deletions?'))data={operations:[]};
   else if(request.path.endsWith('/assistant-sessions')&&request.method==='POST'){sessionIds[index]=randomUUID();emptySessions.add(sessionIds[index]);data={session_id:sessionIds[index]};}
   else if(request.path.endsWith('/assistant-sessions'))data={sessions:[{session_id:sessionIds[index],is_current:true}],current_session_id:sessionIds[index]};
-  else if(request.path.endsWith('/select')||request.path.endsWith('/resume'))data={session_id:sessionIds[index]};
+  else if(request.path.endsWith('/continue'))data={session_id:sessionIds[index]};
   else if(request.path.endsWith('/assistant-session/binding'))data={confirmed:true};
   else if(request.path.includes('/history-messages?'))data={messages:[],next_cursor:null};
   else if(request.path.endsWith('/assistant-sessions/'+sessionIds[index]))data={mode:'sqlite',session_id:sessionIds[index],runtime_recovery:'ready',entries:emptySessions.has(sessionIds[index])?[]:[

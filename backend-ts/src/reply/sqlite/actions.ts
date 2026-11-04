@@ -1,4 +1,4 @@
-import {hasCurrentReplyDependencies} from './provenance.ts';
+import {hasCurrentReplyDependencies,requireCurrentReplyDependencies} from './provenance.ts';
 import {createHash} from 'node:crypto';
 import {savedSourceScopeCTE,currentSourcePredicate} from '../../history/sqlite/current-scope.ts';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
@@ -31,6 +31,13 @@ export function selectDiscussionForRequest(tx:StorageTransaction,i:any):{row:Sto
  const segmented=!!row&&BigInt(i.at)-(row.last_activity_at as bigint)>43_200_000n;
  if(!row||segmented)row=create(tx,i);else tx.run('UPDATE assistant_discussion SET last_activity_at=? WHERE owner_id=? AND id=?',[i.at,i.ownerId,row.id]);
  return {row:requireDiscussion(tx,{...i,discussionId:String(row.id)}),segmented};
+}
+function requireDiscussionSources(tx:StorageTransaction,i:any):void {
+ const requests=tx.all('SELECT DISTINCT origin_request_id request_id FROM discussion_entry WHERE owner_id=? AND contact_id=? AND discussion_id=? ORDER BY origin_request_id',[i.ownerId,i.contactId,i.discussionId]);
+ for(const request of requests){
+  try{requireCurrentReplyDependencies(tx,{ownerId:i.ownerId,requestIds:[String(request.request_id)]});}
+  catch(error){if(error instanceof StorageFailure&&error.code==='history_source_not_available')throw new StorageFailure('discussion_source_unavailable');throw error;}
+ }
 }
 export const discussionActions:StorageAction[]=[
  action('readBoundary','read',(tx,i)=>{
@@ -77,5 +84,12 @@ export const discussionActions:StorageAction[]=[
  action('trace','read',(tx,i)=>{requireDiscussion(tx,i);if(!hasCurrentReplyDependencies(tx,{ownerId:i.ownerId,requestIds:[String(i.requestId)]}))throw new StorageFailure('discussion_unavailable');const request=tx.get("SELECT id,state FROM reply_request WHERE owner_id=? AND contact_id=? AND discussion_id=? AND id=? AND state<>'invalidated'",[i.ownerId,i.contactId,i.discussionId,i.requestId]);if(!request)throw new StorageFailure('discussion_unavailable');return {request,events:tx.all('SELECT e.id,e.event_no,e.kind,e.originated_call_id,e.payload FROM execution_event e JOIN reply_attempt a ON a.owner_id=e.owner_id AND a.id=e.reply_attempt_id WHERE a.owner_id=? AND a.request_id=? ORDER BY e.event_no',[i.ownerId,i.requestId]),calls:tx.all('SELECT c.id,c.provider,c.state,c.attempt_no,c.actual_budget_units,c.settlement_state,c.receipt FROM model_call c JOIN reply_attempt a ON a.owner_id=c.owner_id AND a.id=c.reply_attempt_id WHERE a.owner_id=? AND a.request_id=? ORDER BY c.attempt_no',[i.ownerId,i.requestId])};}),
  action('new','write',(tx,i)=>discussionView(create(tx,i))),
  action('forRequest','write',(tx,i)=>{const selected=selectDiscussionForRequest(tx,i);return {discussion:discussionView(selected.row),segmented:selected.segmented};}),
- action('continue','write',(tx,i)=>{requireDiscussion(tx,i);at(i.at);tx.run('UPDATE assistant_discussion SET is_current=0 WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId]);tx.run('UPDATE assistant_discussion SET is_current=1,last_activity_at=? WHERE owner_id=? AND id=?',[i.at,i.ownerId,i.discussionId]);return discussionView(requireDiscussion(tx,i));}),
+ action('continue','write',(tx,i)=>{
+  const target=requireDiscussion(tx,i);at(i.at);requireDiscussionSources(tx,i);
+  if(target.is_current===1n)return discussionView(target);
+  // 只有从未激活状态明确切换时续期；重复继续同一讨论是无副作用幂等操作。
+  tx.run("UPDATE assistant_discussion SET is_current=0 WHERE owner_id=? AND contact_id=? AND is_current=1 AND id<>?",[i.ownerId,i.contactId,i.discussionId]);
+  tx.run('UPDATE assistant_discussion SET is_current=1,last_activity_at=? WHERE owner_id=? AND contact_id=? AND id=?',[i.at,i.ownerId,i.contactId,i.discussionId]);
+  return discussionView(requireDiscussion(tx,i));
+ }),
 ];

@@ -56,7 +56,7 @@ test('历史目录刷新失败仍要求明确继续，Main和工作区都保持�
     await assert.rejects(f.bridge.generate({ ...f.scope, newRequest: true }), /明确继续/);
     await f.bridge.resumeSavedSession({ ...f.scope, sessionId: f.sessionId });
     assert.equal((await f.bridge.getState()).sessionCatalog.currentSessionId, f.sessionId);
-    assert.equal(f.calls.filter(call => call.path.endsWith('/resume')).length, 1);
+    assert.equal(f.calls.filter(call => call.path.endsWith('/continue')).length, 1);
   } finally { await f.replies.beginGenerationClosing(() => {}); }
 });
 
@@ -66,7 +66,7 @@ test('生产Main与preload的历史查看只读，明确继续才切换当前', 
   f.backend.requestJson = async request => request.path.endsWith('/assistant-sessions') && request.method === 'GET'
     ? { generation: f.records.generation, data: { sessions: [{ session_id: f.sessionId, is_current: false },
       { session_id: currentId, is_current: true }], current_session_id: currentId } }
-    : request.path.endsWith('/resume') ? (f.calls.push(request), { generation: f.records.generation,
+    : request.path.endsWith('/continue') ? (f.calls.push(request), { generation: f.records.generation,
       data: { session_id: f.sessionId } }) : originalRequest(request);
   try {
     await f.bridge.readSavedSession(f.scope);
@@ -75,12 +75,12 @@ test('生产Main与preload的历史查看只读，明确继续才切换当前', 
     assert.equal(f.replies.getState().savedSession.sessionId, f.sessionId);
     assert.equal(f.replies.getState().sessionCatalog.currentSessionId, currentId);
     assert.equal(f.calls.some(call => call.method === 'POST'), false, '回看不能创建默认会话或切换当前');
-    assert.match(renderSession(f.replies.getState()), /继续此会话/);
-    await assert.rejects(f.bridge.generate({ ...f.scope, newRequest: true, workspaceAction: 'suggest' }), /明确继续此会话/);
+    assert.match(renderSession(f.replies.getState()), /继续此讨论/);
+    await assert.rejects(f.bridge.generate({ ...f.scope, newRequest: true, workspaceAction: 'suggest' }), /明确继续此讨论/);
     await f.bridge.resumeSavedSession({ ...f.scope, sessionId: f.sessionId });
     assert.equal(f.replies.getState().sessionCatalog.currentSessionId, f.sessionId);
-    assert.equal(f.calls.filter(call => call.path.endsWith('/resume')).length, 1);
-    assert.equal(f.calls.some(call => /\/(replies|continue)$/.test(call.path)), false);
+    assert.equal(f.calls.filter(call => call.path.endsWith('/continue')).length, 1);
+    assert.equal(f.calls.some(call => /\/replies(?:\/prepare)?$/.test(call.path)), false, '明确继续不能自动生成候选');
   } finally { await f.replies.beginGenerationClosing(() => {}); }
 });
 
@@ -146,6 +146,23 @@ test('工作区明确继续只附在本次生成请求，不成为后续默认�
   } finally { await f.replies.beginGenerationClosing(() => {}); }
 });
 
+test('点击候选动作不读取或切换历史讨论', async () => {
+  const f = await historicalReplyFixture(), historyId = randomUUID(), originalRequest = f.backend.requestJson;
+  f.backend.requestJson = async request => request.path.endsWith('/assistant-sessions') && request.method === 'GET'
+    ? { generation: f.records.generation, data: { sessions: [
+      { session_id: f.sessionId, is_current: true }, { session_id: historyId, is_current: false },
+    ], current_session_id: f.sessionId } }
+    : originalRequest(request);
+  try {
+    await f.bridge.readSavedSession(f.scope); await f.bridge.listSavedSessions(f.scope); await f.bridge.enterWorkspace(f.scope);
+    f.contacts.setDraft({ ...f.scope, text: '只按当前讨论和本次输入生成的合成想法' });
+    await f.bridge.generate({ ...f.scope, newRequest: true, workspaceAction: 'suggest' });
+    assert.equal(f.calls.some(call => call.path.endsWith('/continue')), false, '候选动作不能明确继续历史讨论');
+    assert.equal(f.calls.some(call => call.path.endsWith('/' + historyId)), false, '候选动作不能读取历史讨论正文');
+    assert.equal((await f.bridge.getState()).sessionCatalog.currentSessionId, f.sessionId);
+  } finally { await f.replies.beginGenerationClosing(() => {}); }
+});
+
 test('恢复助手对话后保留当时的不完整历史警告', async () => {
   const f = await historicalReplyFixture();
   try {
@@ -158,7 +175,7 @@ test('恢复助手对话后保留当时的不完整历史警告', async () => {
 test('生产Main与preload继续旧讨论显示无正文的背景更新提示，回看其他讨论清除提示', async () => {
   const f = await historicalReplyFixture(), original = f.backend.requestJson, other = randomUUID();
   f.backend.requestJson = async request => {
-    if (request.path.endsWith('/resume')) return { generation: f.records.generation,
+    if (request.path.endsWith('/continue')) return { generation: f.records.generation,
       data: { session_id: f.sessionId, context_refresh: { changed: true } } };
     if (request.path.endsWith('/' + other)) return { generation: f.records.generation,
       data: { session_id: other, current_input_version_id: null, turns: [], inputs: [] } };
@@ -183,7 +200,7 @@ test('当前旧段被要求明确继续时入口可达，继续失败后仍可�
       throw new ports.BackendRequestFailure('response', 409, 'assistant_session_rejected', 'resume_required', undefined,
         { contactId: f.scope.contactId, sessionId: f.sessionId, requestKey: request.body.idempotency_key, state: 'not_reserved' });
     }
-    if (request.path.endsWith('/resume')) {
+    if (request.path.endsWith('/continue')) {
       f.calls.push(request);
       if (failResume) throw new ports.BackendRequestFailure('response', 503, 'unavailable');
       resumed = true;
@@ -195,10 +212,10 @@ test('当前旧段被要求明确继续时入口可达，继续失败后仍可�
     f.contacts.setDraft({ ...f.scope, text: '合成旧段本次明确输入' });
     await f.bridge.generate({ ...f.scope, newRequest: true, workspaceAction: 'express' });
     assert.equal((await f.bridge.getState()).errorCode, 'resume_required');
-    assert.match(renderSession(await f.bridge.getState()), />继续此会话<\/button>/, '当前旧段也须有明确继续入口');
+    assert.match(renderSession(await f.bridge.getState()), />继续此讨论<\/button>/, '当前旧段也须有明确继续入口');
     await f.bridge.resumeSavedSession({ ...f.scope, sessionId: f.sessionId });
     assert.equal((await f.bridge.getState()).sessionCatalog.phase, 'failed');
-    assert.match(renderSession(await f.bridge.getState()), />重试继续此会话<\/button>/, '失败目录不能移除唯一恢复操作');
+    assert.match(renderSession(await f.bridge.getState()), />重试继续此讨论<\/button>/, '失败目录不能移除唯一恢复操作');
     failResume = false; await f.bridge.resumeSavedSession({ ...f.scope, sessionId: f.sessionId });
     assert.equal((await f.bridge.getState()).sessionCatalog.currentSessionId, f.sessionId);
     assert.equal((await f.bridge.getState()).sessionCatalog.phase, 'ready');

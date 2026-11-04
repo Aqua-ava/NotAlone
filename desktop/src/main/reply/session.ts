@@ -1719,7 +1719,7 @@ export class ReplySession {
   private assertCurrentSession(): void {
     const saved = this.state.savedSession?.sessionId, catalog = this.state.sessionCatalog;
     if (saved && catalog && saved !== catalog.currentSessionId) {
-      throw new Error('请先明确继续此会话，或返回当前会话后生成。');
+      throw new Error('请先明确继续此讨论，或返回当前讨论后生成。');
     }
   }
   private assertSessionSelection(allowFailedDeletionStop = false): void {
@@ -1732,7 +1732,7 @@ export class ReplySession {
     }
     if (this.candidateSourceCheck) throw new Error('请等待相关来源核验完成。');
     if (this.catalogPending || this.state.sessionCatalog?.selectionPending) {
-      throw new Error('请刷新会话列表并明确选择本次助手会话。');
+      throw new Error('请刷新讨论列表并明确选择本次助手讨论。');
     }
   }
   private cancelContactRestore(): void {

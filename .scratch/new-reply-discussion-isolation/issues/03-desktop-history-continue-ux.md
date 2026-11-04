@@ -1,7 +1,7 @@
 # 桌面历史讨论回看与继续交互
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Blocked by: 02
 
 ## 目标
@@ -41,3 +41,16 @@ Blocked by: 02
 - 修改 Skill、最近聊天或关系资料入口。
 
 ## Comments
+
+- 2026-11-04 冲突：Remove Exclusion 工作树已修改 `desktop/tests/sqlite-reply-candidates.test.mjs`；本票把按钮改为“删除正在查看的讨论”“刷新讨论列表”后，该测试中的旧选择器也需要同步。为避免跨工作树强改，共享测试文件保持未修改，留给主会话集成时适配；其余 UI、状态和删除确认测试不涉及该冲突文件。
+
+## Answer
+
+- 历史折叠区固定显示“仅回看，不会自动加入新候选”；SQLite 讨论区按目录状态显示“当前讨论：后续助手讨论会使用这段内容”或“历史讨论仅回看，不会自动加入新候选；继续此讨论后才切换当前讨论”。
+- 目录项区分“当前讨论”“历史讨论 · 仅回看”“正在回看”，查看按钮带 `aria-pressed`。只有历史项提供“继续此讨论”；当前项仅在真实 `resume_required` 或目录失败时保留明确重试入口。候选动作回归另行断言不会读取历史正文或调用 continue。
+- 操作按钮复用 `.button`；新增状态徽标和只读提示只使用 `--button-*`、`--panel-*` 既有变量，未新增第二套按钮样式或历史讨论背景选项。
+- 删除确认抽成 `AssistantSessionDeletionConfirmation`，明确删除讨论、候选版本和运行使用痕迹，保留联系人、原始微信聊天、关系记忆和本人记忆；确认和取消按钮均复用 `.button`。
+- RED：新增 SSR UI 测试在实现前因缺少“仅回看，不会自动加入新候选”失败；删除确认测试先因公开组件不存在而构建失败。GREEN 后 `assistant-history-layout.test.mjs` 4/4。
+- 验证明细：通过临时依赖布局执行当前源与测试，未修改任何 `node_modules`；`assistant-history-layout`、`workspace-session-switch`、`sqlite-discussion-session`、`assistant-idle-rollover`、`assistant-session-catalog`、`assistant-session-deletion-guards`、`assistant-session-catalog-read` 合计 34/34 通过。
+- 未执行：本机 Playwright/Electron 实际界面验收需要监听端口和启动 App，本会话沙箱禁止监听且用户明确禁止启动 App；现有 `sqlite-discussion-panel.test.mjs` 已完成按钮文案适配但未运行。Remove Exclusion 冲突见上，合并时需同步其共享测试选择器。
+- State 保持 `claimed`，等待主会话独立审查与集成。
