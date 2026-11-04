@@ -361,12 +361,33 @@ test('前台名单读取慢于观察期限时，读取继续完成并缓存，�
  await assert.rejects(call(5000),{code:'history_scope_changed'});noProcess(pid);
 });
 
-test('前台名单缓存过期后重新读取，重置立即丢弃缓存',async t=>{
- const f=await fixture(t),now={value:1000},foreground=new ForegroundSessionList(f.executable,{ttlMs:50,clock:()=>now.value});
+const until=async(check,message='synthetic_condition_timeout')=>{for(let i=0;i<100;i++){if(await check())return;await new Promise(resolve=>setTimeout(resolve,50));}throw new Error(message);};
+
+test('前台名单有缓存时每轮直接返回，超过刷新间隔只在后台重读且不阻塞当前观察',async t=>{
+ const f=await fixture(t,'slow-all'),now={value:1000},foreground=new ForegroundSessionList(f.executable,{refreshAfterMs:50,refreshGapMs:0,clock:()=>now.value});
  f.cleanups.push(()=>foreground.close());
  const account={id:'synthetic-id',key:accountKey,sourceGeneration:generation,revision:'1'},call=()=>foreground.sessions(account,{signal:new AbortController().signal,timeoutMs:5000,limit:100});
  const lists=async()=>(await requests(f)).filter(row=>row.op==='metadata-sessions-all').length;
- await call();await call();assert.equal(await lists(),1);
- now.value+=60;await call();assert.equal(await lists(),2);
+ const rows=await call();assert.equal(await lists(),1);
+ assert.deepEqual(await call(),rows);assert.equal(await lists(),1);
+ now.value+=60;
+ const started=performance.now();assert.deepEqual(await call(),rows);
+ assert.ok(performance.now()-started<300,'缓存命中不应等待400ms的后台重读');
+ await until(async()=>await lists()===2);
+ // 重读期间继续观察仍直接命中缓存，不再叠加新的重读。
+ assert.deepEqual(await call(),rows);
+});
+
+test('名称未命中请求重读受最小间隔限制，重置立即丢弃缓存，缓存超龄后等待重读',async t=>{
+ const f=await fixture(t),now={value:1000},foreground=new ForegroundSessionList(f.executable,{refreshAfterMs:60_000,refreshGapMs:5000,clock:()=>now.value});
+ f.cleanups.push(()=>foreground.close());
+ const account={id:'synthetic-id',key:accountKey,sourceGeneration:generation,revision:'1'},call=()=>foreground.sessions(account,{signal:new AbortController().signal,timeoutMs:5000,limit:100});
+ const lists=async()=>(await requests(f)).filter(row=>row.op==='metadata-sessions-all').length;
+ foreground.requestRefresh();await new Promise(resolve=>setTimeout(resolve,100));assert.equal(await lists(),0,'没有缓存时不凭空读取');
+ await call();assert.equal(await lists(),1);
+ foreground.requestRefresh();await new Promise(resolve=>setTimeout(resolve,150));assert.equal(await lists(),1,'最小间隔内不重读');
+ now.value+=6000;foreground.requestRefresh();await until(async()=>await lists()===2);
+ foreground.requestRefresh();await new Promise(resolve=>setTimeout(resolve,150));assert.equal(await lists(),2,'刚重读过不再叠加');
  await foreground.reset();await call();assert.equal(await lists(),3);
+ now.value+=301_000;await call();assert.equal(await lists(),4,'超龄缓存不可直接使用');
 });

@@ -8,7 +8,7 @@ function fixture(options={}){
  const rows=[{username:'synthetic-person',display_name:'合成联系人',chat_type:'private'}];
  const probe={observe:async()=>({wechat_in_front:true,display_name:'合成联系人',captured_at:new Date().toISOString(),capture_version:'automatic-header-v4',quality:{layout_verified:true,display_name_confidence:.98,name_complete:true}}),close:async()=>{},dispose:async()=>{}};
  const confirmations=[];
- const foreground=new SqliteForeground({ownerId:owner,probe,snapshot:async()=>structuredClone(snapshot),sessions:async()=>rows,closeSessions:async()=>{},confirmBinding:options.confirmBinding??(async proof=>{confirmations.push(proof);})});
+ const foreground=new SqliteForeground({ownerId:owner,probe,snapshot:async()=>structuredClone(snapshot),sessions:async()=>rows,closeSessions:async()=>{},confirmBinding:options.confirmBinding??(async proof=>{confirmations.push(proof);}),requestSessionRefresh:options.requestSessionRefresh});
  return {foreground,snapshot,rows,contact,probe,confirmations};
 }
 test('已绑定唯一私聊直接关联，同名群聊仍不能误认',async()=>{
@@ -109,4 +109,20 @@ test('账号或来源变化仍回收OCR进程，下一轮不能复用旧观察',
    assert.match(names[1],/^合成\d+-1$/);assert.notEqual(names[1],names[0],code);
   }finally{await locator.close();}
  }
+});
+
+test('名称在名单中未命中或有歧义时请求后台重读，命中时不请求',async()=>{
+ let refreshes=0;
+ const f=fixture({requestSessionRefresh:()=>{refreshes++;}});
+ try{
+  assert.equal((await f.foreground.observe()).phase,'confirmed');assert.equal(refreshes,0);
+  const known=f.rows.splice(0,f.rows.length);
+  const missing=await f.foreground.observe();
+  assert.equal(missing.phase,'manual-required');assert.equal(refreshes,1);
+  f.rows.push(...known,{...known[0],username:'synthetic-duplicate'});
+  const ambiguous=await f.foreground.observe();
+  assert.equal(ambiguous.phase,'manual-required');assert.equal(refreshes,2);
+  f.rows.splice(0,f.rows.length,...known);
+  assert.equal((await f.foreground.observe()).phase,'confirmed');assert.equal(refreshes,2);
+ }finally{await f.foreground.close();}
 });

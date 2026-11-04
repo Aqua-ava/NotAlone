@@ -11,28 +11,48 @@ export interface ForegroundBindingConfirmation {
 }
 /**
  * 前台独占只读元数据进程，不与后台正文同步共用租约。
- * 全量名单耗时随会话数线性增长（约 1.8ms/个，近 500 个会话约 1 秒），远超单轮观察预算；
- * 因此读取不受观察期限取消，完成后按账号证据短期缓存，后续每轮只做账号复验。
+ * 全量名单耗时随会话数线性增长（约 1.8ms/个，近 500 个会话约 1 秒），远超单轮观察预算。
+ * 因此：已有缓存时每轮只用常驻进程复验实时账号（约十几毫秒）并直接返回缓存；
+ * 名单由一次性的独立进程在后台刷新，刷新不排队阻塞复验，也不受观察期限取消。
  */
-const sessionCacheTtlMs=30_000,sessionReadTimeoutMs=15_000;
+const sessionRefreshAfterMs=30_000,sessionMaxAgeMs=300_000,sessionRefreshGapMs=5_000,sessionReadTimeoutMs=15_000;
+const scopeFailureCodes=new Set(['foreground_scope_unavailable','history_scope_changed','history_account_changed','history_source_changed']);
+type SessionParams={limit:number;keyword?:string};
+type SessionAccount=NonNullable<ForegroundSnapshot['account']>;
+type SessionCache={key:string;account:SessionAccount;params:SessionParams;evidence:string;at:number;rows:ForegroundSession[]};
 export class ForegroundSessionList {
  private client?:NarrowWechatClient;
  private closed=false;
  private lifetime=new AbortController();
  private readonly active=new Set<Promise<unknown>>();
- private cache?:{key:string;evidence:string;at:number;rows:ForegroundSession[]};
+ private cache?:SessionCache;
  private inflight?:{key:string;promise:Promise<ForegroundSession[]>};
+ private lastRefreshAt=-Infinity;
  private readonly executable:string;
- private readonly ttlMs:number;
+ private readonly refreshAfterMs:number;
+ private readonly refreshGapMs:number;
  private readonly clock:()=>number;
- constructor(executable:string,options:{ttlMs?:number;clock?:()=>number}={}){this.executable=executable;this.ttlMs=options.ttlMs??sessionCacheTtlMs;this.clock=options.clock??Date.now;}
- async sessions(account:NonNullable<ForegroundSnapshot['account']>,options:{signal:AbortSignal;timeoutMs:number;limit:number;keyword?:string}):Promise<ForegroundSession[]>{
+ constructor(executable:string,options:{refreshAfterMs?:number;refreshGapMs?:number;clock?:()=>number}={}){
+  this.executable=executable;this.refreshAfterMs=options.refreshAfterMs??sessionRefreshAfterMs;this.refreshGapMs=options.refreshGapMs??sessionRefreshGapMs;this.clock=options.clock??Date.now;
+ }
+ async sessions(account:SessionAccount,options:{signal:AbortSignal;timeoutMs:number;limit:number;keyword?:string}):Promise<ForegroundSession[]>{
   if(this.closed||options.signal.aborted)throw new ForegroundLocationError('foreground_observation_cancelled');
   const caller=AbortSignal.any([options.signal,AbortSignal.timeout(Math.max(1,Math.floor(options.timeoutMs)))]);
-  const key=JSON.stringify([account.key,account.sourceGeneration,options.limit,options.keyword??null]);
-  const prior=this.inflight;
-  const promise=prior?.key===key?prior.promise:prior?prior.promise.then(()=>{},()=>{}).then(()=>this.start(account,key,options)):this.start(account,key,options);
-  return this.wait(promise,caller,options.signal);
+  const params:SessionParams={limit:options.limit,keyword:options.keyword},key=JSON.stringify([account.key,account.sourceGeneration,options.limit,options.keyword??null]);
+  const cached=this.cache;
+  if(cached?.key===key&&this.clock()-cached.at<sessionMaxAgeMs){
+   const rows=await this.wait(this.verify(cached),caller,options.signal);
+   if(this.clock()-cached.at>=this.refreshAfterMs)this.refreshInBackground();
+   return rows;
+  }
+  return this.wait(this.refresh(account,key,params),caller,options.signal);
+ }
+ /** 名称在缓存中找不到时调用：名单可能已过期，尽快后台重读（有最小间隔，不阻塞当前观察）。 */
+ requestRefresh():void{this.refreshInBackground();}
+ private refreshInBackground():void{
+  const cached=this.cache;
+  if(this.closed||!cached||this.inflight||this.clock()-this.lastRefreshAt<this.refreshGapMs)return;
+  this.refresh(cached.account,cached.key,cached.params).catch(()=>{});
  }
  /** 调用方到期只停止等待；读取继续完成并写入缓存，供下一轮复用。 */
  private wait<T>(work:Promise<T>,caller:AbortSignal,external:AbortSignal):Promise<T>{
@@ -43,34 +63,56 @@ export class ForegroundSessionList {
    void work.then(resolve,reject).finally(()=>caller.removeEventListener('abort',stop));
   });
  }
- private start(account:NonNullable<ForegroundSnapshot['account']>,key:string,options:{limit:number;keyword?:string}):Promise<ForegroundSession[]>{
+ private track<T>(work:Promise<T>):Promise<T>{
+  this.active.add(work);void work.then(()=>{},()=>{}).finally(()=>this.active.delete(work));
+  return work;
+ }
+ /** 缓存期内逐轮复验实时账号证据；账号或来源变化立即丢弃旧名单与进程。 */
+ private verify(cached:SessionCache):Promise<ForegroundSession[]>{
   const signal=AbortSignal.any([this.lifetime.signal,AbortSignal.timeout(sessionReadTimeoutMs)]);
-  const read=async(client:NarrowWechatClient)=>{
-   const cached=this.cache;
-   if(cached?.key===key&&this.clock()-cached.at<this.ttlMs){
-    // 缓存期内仍逐轮复验实时账号证据（约十几毫秒），账号或来源变化立即拒绝旧名单。
-    const live=await client.accountMetadata(signal);
-    if(JSON.stringify(live)!==cached.evidence)throw new ForegroundLocationError('foreground_scope_unavailable');
-    return cached.rows;
-   }
-   const before=await client.accountMetadata(signal);
-   if(before.status!=='verified'||before.accountKey!==account.key||before.sourceGeneration!==account.sourceGeneration)throw new ForegroundLocationError('foreground_scope_unavailable');
-   const sessions=await client.allSessionMetadata(before,{limit:options.limit,keyword:options.keyword},signal);
-   if(sessions.length>=options.limit)throw new ForegroundLocationError('foreground_scope_unavailable');
-   const rows:ForegroundSession[]=sessions.map(row=>({username:row.username,display_name:row.displayName,chat_type:row.kind}));
-   const after=await client.accountMetadata(signal);
-   if(JSON.stringify(before)!==JSON.stringify(after))throw new ForegroundLocationError('foreground_scope_unavailable');
-   this.cache={key,evidence:JSON.stringify(before),at:this.clock(),rows};
-   return rows;
-  };
-  const work=(async()=>{
+  return this.track((async()=>{
    this.client??=new NarrowWechatClient(await loadNarrowWechatOptions(this.executable));
    const client=this.client;
-   try{return await read(client);}catch(error){this.cache=undefined;if(this.client===client)this.client=undefined;await client.close();throw error;}
-  })();
-  const entry={key,promise:work};this.inflight=entry;
-  this.active.add(work);void work.then(()=>{},()=>{}).finally(()=>{this.active.delete(work);if(this.inflight===entry)this.inflight=undefined;});
-  return work;
+   try{
+    const live=await client.accountMetadata(signal);
+    if(JSON.stringify(live)!==cached.evidence)throw new ForegroundLocationError('history_scope_changed');
+    return cached.rows;
+   }catch(error){
+    if(this.cache===cached)this.cache=undefined;
+    if(this.client===client)this.client=undefined;
+    await client.close();throw error;
+   }
+  })());
+ }
+ /** 一次性独立进程读取全量名单，同一时刻只有一个读取；完成后写入缓存并退出进程。 */
+ private refresh(account:SessionAccount,key:string,params:SessionParams):Promise<ForegroundSession[]>{
+  const prior=this.inflight;
+  if(prior?.key===key)return prior.promise;
+  const run=()=>{
+   this.lastRefreshAt=this.clock();
+   const signal=AbortSignal.any([this.lifetime.signal,AbortSignal.timeout(sessionReadTimeoutMs)]);
+   const work=(async()=>{
+    const client=new NarrowWechatClient(await loadNarrowWechatOptions(this.executable));
+    try{
+     const before=await client.accountMetadata(signal);
+     if(before.status!=='verified'||before.accountKey!==account.key||before.sourceGeneration!==account.sourceGeneration)throw new ForegroundLocationError('foreground_scope_unavailable');
+     const sessions=await client.allSessionMetadata(before,{limit:params.limit,keyword:params.keyword},signal);
+     if(sessions.length>=params.limit)throw new ForegroundLocationError('foreground_scope_unavailable');
+     const rows:ForegroundSession[]=sessions.map(row=>({username:row.username,display_name:row.displayName,chat_type:row.kind}));
+     const after=await client.accountMetadata(signal);
+     if(JSON.stringify(before)!==JSON.stringify(after))throw new ForegroundLocationError('foreground_scope_unavailable');
+     this.cache={key,account,params,evidence:JSON.stringify(before),at:this.clock(),rows};
+     return rows;
+    }catch(error){
+     if(scopeFailureCodes.has((error as {code?:string}).code??''))this.cache=undefined;
+     throw error;
+    }finally{await client.close();}
+   })();
+   const entry={key,promise:work};this.inflight=entry;
+   void work.then(()=>{},()=>{}).finally(()=>{if(this.inflight===entry)this.inflight=undefined;});
+   return this.track(work);
+  };
+  return prior?prior.promise.then(()=>{},()=>{}).then(run):run();
  }
  async reset(){this.cache=undefined;this.lifetime.abort();await Promise.allSettled([...this.active]);const old=this.client;this.client=undefined;await old?.close();if(!this.closed)this.lifetime=new AbortController();}
  async close(){this.closed=true;await this.reset();}
@@ -85,9 +127,9 @@ export class SqliteForeground {
  private active?:Promise<ForegroundObservation>;
  private confirming?:Promise<{confirmed:true}>;
  private pendingConfirmation?:{snapshot:string;proof:ForegroundBindingConfirmation};
- private readonly options:{ownerId:string;probe:ForegroundProbe;snapshot:()=>Promise<ForegroundSnapshot>;sessions:(account:NonNullable<ForegroundSnapshot['account']>,options:{signal:AbortSignal;timeoutMs:number;limit:number;keyword?:string})=>Promise<ForegroundSession[]>;closeSessions:()=>Promise<void>;invalidateSessions?:()=>Promise<void>;confirmBinding?:(proof:ForegroundBindingConfirmation)=>Promise<void>};
+ private readonly options:{ownerId:string;probe:ForegroundProbe;snapshot:()=>Promise<ForegroundSnapshot>;sessions:(account:NonNullable<ForegroundSnapshot['account']>,options:{signal:AbortSignal;timeoutMs:number;limit:number;keyword?:string})=>Promise<ForegroundSession[]>;closeSessions:()=>Promise<void>;invalidateSessions?:()=>Promise<void>;confirmBinding?:(proof:ForegroundBindingConfirmation)=>Promise<void>;requestSessionRefresh?:()=>void};
  constructor(options:SqliteForeground['options']){this.options=options;}
- static create(ownerId:string,probePath:string,cliPath:string,snapshot:()=>Promise<ForegroundSnapshot>,confirmBinding?:(proof:ForegroundBindingConfirmation)=>Promise<void>){const list=new ForegroundSessionList(cliPath);return new SqliteForeground({ownerId,probe:new NativeForegroundProbe({executable:probePath}),snapshot,sessions:(a,o)=>list.sessions(a,o),closeSessions:()=>list.close(),invalidateSessions:()=>list.reset(),confirmBinding});}
+ static create(ownerId:string,probePath:string,cliPath:string,snapshot:()=>Promise<ForegroundSnapshot>,confirmBinding?:(proof:ForegroundBindingConfirmation)=>Promise<void>){const list=new ForegroundSessionList(cliPath);return new SqliteForeground({ownerId,probe:new NativeForegroundProbe({executable:probePath}),snapshot,sessions:(a,o)=>list.sessions(a,o),closeSessions:()=>list.close(),invalidateSessions:()=>list.reset(),confirmBinding,requestSessionRefresh:()=>list.requestRefresh()});}
  observe(signal?:AbortSignal):Promise<ForegroundObservation>{
   if(this.closed||this.changing)throw new ForegroundLocationError('foreground_observation_cancelled');
   if(this.active||this.confirming)throw new ForegroundLocationError('foreground_observation_busy');
@@ -102,6 +144,8 @@ export class SqliteForeground {
     sessions:o=>this.options.sessions(account,o),bindings:async(_signal,check)=>{const current=await this.options.snapshot();check();if(JSON.stringify(current)!==JSON.stringify(before))throw new ForegroundLocationError('foreground_scope_unavailable');return current.bindings.map(b=>({...b,owner_id:this.options.ownerId,channel:'wechat',account_scope:account.key}));}});}
    const result=await this.locator.observe({enabled:true,signal});const after=await this.options.snapshot();
    if(this.closed||this.changing||signal?.aborted||JSON.stringify(before)!==JSON.stringify(after))throw new ForegroundLocationError('foreground_observation_cancelled');
+   // 名称在缓存名单里找不到或有歧义时，名单可能已过期：只触发后台重读，不影响本轮结果。
+   if(result.phase==='manual-required'&&(result.reason==='unmatched_requires_selection'||result.reason==='ambiguous_requires_selection'))this.options.requestSessionRefresh?.();
    const age=Date.now()-Date.parse(result.observed_at);if(result.phase==='confirmed'&&(!Number.isFinite(age)||age< -1000||age>=5000))throw new ForegroundLocationError('observation_timeout');
    // SQLite只提供稳定绑定；名称识别成功后直接关联已有联系人，不创建或改写身份/读取授权。
    if(result.phase==='confirmed'){
