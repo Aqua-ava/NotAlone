@@ -1,6 +1,6 @@
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
-import type {SkillRunProtection,SkillRunScope,SkillRunRevision,SkillAnchor,SkillInput,SkillTrace} from '../../skills/sqlite/contracts.ts';
+import type {SkillRunProtection,SkillRunScope,SkillRunRevision,SkillAnchor,SkillInput,SkillPreloadInput,SkillTrace} from '../../skills/sqlite/contracts.ts';
 import type {DiscussionAttempt} from './contracts.ts';
 /** 真实调用/联系人/来源与Skill修订的具名短事务边界；原目录从不成为删除目标。 */
 export class SqliteDiscussionSkillProtection implements SkillRunProtection {
@@ -10,4 +10,5 @@ export class SqliteDiscussionSkillProtection implements SkillRunProtection {
  async assertCurrent(scope:SkillRunScope,runRevision:SkillRunRevision|null,signal?:AbortSignal){const input=this.check(scope,signal);await this.authorize(scope);signal?.throwIfAborted();await this.storage.execute('discussion.assertSkillCall',{...input,runRevision});signal?.throwIfAborted();}
  async recordSelection(scope:SkillRunScope,selected:SkillAnchor|null,signal?:AbortSignal,trace?:SkillTrace){const input=this.check(scope,signal);await this.storage.execute('discussion.skillSelection',{...input,selected,...(trace?.name?{name:trace.name}:{}),...(trace?.preload?{preload:trace.preload}:{})});signal?.throwIfAborted();}
  async recordInput(input:SkillInput,signal?:AbortSignal){const scope=this.check(input.scope,signal);await this.storage.execute('discussion.skillInput',{...scope,...input});signal?.throwIfAborted();}
+ async recordPreload(input:SkillPreloadInput,signal?:AbortSignal){const scope=this.check(input.scope,signal);await this.storage.execute('discussion.skillPreload',{...scope,runRevision:input.runRevision,preload:input.preload,entries:input.entries});signal?.throwIfAborted();}
 }

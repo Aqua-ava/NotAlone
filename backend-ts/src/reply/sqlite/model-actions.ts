@@ -120,6 +120,30 @@ export const discussionModelActions:StorageAction[]=[
   const id=event(tx,i,'skill_input',{selected:i.selected,loaded:i.loaded,relativePath:i.relativePath,text:i.text,payloadDigest:i.payloadDigest,...(i.name===undefined?{}:{name:i.name}),...(i.preload===undefined?{}:{preload:i.preload})});
   tx.run('INSERT INTO execution_input(owner_id,event_id,input_no,role,presentation_no,reply_context_id,context_item_no) VALUES(?,?,1,?,?,?,?)',[i.ownerId,id,'loaded_skill',next,i.contextId,next]);
  }),
+ action('skillPreload','write',(tx,i)=>{
+  call(tx,i);const frozen=decode<SkillRunRevision>(String(context(tx,i).skill_run_json));revision(tx,i,frozen);
+  const preload=i.preload,entries=Array.isArray(i.entries)?i.entries:[];
+  if(!preload||!['explicit','auto_preload'].includes(preload.origin)||typeof preload.catalogRevision!=='string'||!preload.catalogRevision||preload.catalogRevision.length>65536)fail('discussion_skill_trace_invalid');
+  if(!entries.length||entries.length>256||entries.length!==frozen.eligible.length)fail('discussion_skill_preload_invalid');
+  const expected=frozen.eligible.map(anchor=>encode(anchor)).sort(),actual=entries.map((entry:any)=>encode(entry?.loaded)).sort();
+  if(JSON.stringify(expected)!==JSON.stringify(actual))fail('discussion_skill_revision_conflict');
+  for(const entry of entries){
+   if(!entry||encode(entry.selected)!==encode(entry.loaded)||entry.relativePath!=='SKILL.md'
+    ||typeof entry.name!=='string'||!entry.name||entry.name.length>4096
+    ||typeof entry.text!=='string'||Buffer.byteLength(entry.text,'utf8')>1024*1024
+    ||typeof entry.payloadDigest!=='string'||createHash('sha256').update(entry.text).digest('hex')!==entry.payloadDigest)fail('discussion_skill_input_invalid');
+   requireSkillRevision(tx,i.ownerId,entry.loaded);
+  }
+  if(!tx.get("SELECT 1 FROM runtime_context x JOIN runtime_copy r ON r.owner_id=x.owner_id AND r.id=x.copy_id WHERE x.owner_id=? AND x.context_id=? AND x.provenance_state='verified' AND r.state='dirty'",[i.ownerId,i.contextId]))fail('discussion_runtime_unavailable');
+  for(const entry of entries)event(tx,i,'skill_selection',{selected:entry.selected,name:entry.name,preload});
+  let next=tx.get('SELECT COALESCE(MAX(item_no),0) n FROM reply_context_item WHERE owner_id=? AND context_id=?',[i.ownerId,i.contextId])!.n as bigint;
+  for(const entry of entries){
+   next+=1n;
+   tx.run("INSERT INTO reply_context_item(owner_id,context_id,item_no,kind,role,presentation_no,package_id,package_revision_no) VALUES(?,?,?,'skill','loaded_skill',?,?,?)",[i.ownerId,i.contextId,next,next,entry.loaded.packageId,entry.loaded.revisionNo]);
+   const id=event(tx,i,'skill_input',{selected:entry.selected,loaded:entry.loaded,relativePath:entry.relativePath,text:entry.text,payloadDigest:entry.payloadDigest,name:entry.name,preload});
+   tx.run('INSERT INTO execution_input(owner_id,event_id,input_no,role,presentation_no,reply_context_id,context_item_no) VALUES(?,?,1,?,?,?,?)',[i.ownerId,id,'loaded_skill',next,i.contextId,next]);
+  }
+ }),
  action('dispatchCall','write',(tx,i)=>{
   const c=call(tx,i);revision(tx,i,i.skillRun);requireRuntimeCurrent(tx,i);
   const physicalCallId=identifier(i.physicalCallId??i.callId),first=physicalCallId===i.callId;

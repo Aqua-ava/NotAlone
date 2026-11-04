@@ -32,6 +32,15 @@ async function addClearSkill(f){
  const skill=await f.library.discover('clear');return f.library.setEnabled(skill.id,skill.headRevision,'enabled');
 }
 
+async function addScaleSkills(f,count=91){
+ for(let index=1;index<=count;index++){
+  const name=`bulk-${String(index).padStart(3,'0')}`;
+  await mkdir(join(f.skillRoot,name),{recursive:true});
+  await writeFile(join(f.skillRoot,name,'SKILL.md'),`---\nname: ${name}\ndescription: 第${index}个合成规模化回复策略\n---\n这是第${index}个合成规模化策略正文。\n`);
+ }
+ return f.library.refresh();
+}
+
 test('正常候选在首次请求前预加载单个Skill正文，物理模型调用一次',async t=>{
  let firstAt=0;const f=await setup(t,(_f,res)=>{if(!firstAt)firstAt=performance.now();stream(res);});
  const started=performance.now();await f.turns.generate(f.input);
@@ -70,6 +79,30 @@ test('没有eligible Skill时仍只调用一次模型且不暴露Skill工具',as
  assert.equal(f.requests.length,1);assert.deepEqual(toolNames(f.requests[0]),[]);
  assert.ok(!request.includes('<skill_content'));assert.ok(!request.includes('available_skills'));
  assert.deepEqual(view.loadedSkills,[]);assert.equal(view.skillWarning,null);assert.equal((await f.trace()).calls.length,1);
+});
+
+test('92个默认启用Skill的本地预加载P95和最大值保持秒级', {timeout:30_000}, async t=>{
+ let firstAt=0;
+ const f=await setup(t,(_f,res)=>{if(!firstAt)firstAt=performance.now();stream(res);});
+ // 规模化用例保留全部正文进入一次请求，使用足够大的合成上下文测量最坏预加载路径。
+ f.model.budgetProfile.context_window_tokens=1_000_000;
+ const catalog=await addScaleSkills(f);
+ assert.equal(catalog.length,92);
+ const samples=[];
+ for(let index=1;index<=3;index++){
+  firstAt=0;const started=performance.now();
+  await f.turns.generate({...f.input,requestKey:randomUUID(),text:`第${index}次合成规模化候选请求`});
+  assert.ok(firstAt>0);samples.push(firstAt-started);
+ }
+ const sorted=[...samples].sort((a,b)=>a-b),p95=sorted[Math.ceil(sorted.length*.95)-1],max=sorted.at(-1);
+ t.diagnostic(JSON.stringify({skills:catalog.length,samplesMs:samples.map(value=>+value.toFixed(1)),p95Ms:+p95.toFixed(1),maxMs:+max.toFixed(1)}));
+ assert.equal(f.requests.length,3,'规模化预加载不得增加物理模型调用');
+ assert.ok(p95<=1000,`规模化预加载 P95 ${p95.toFixed(1)}ms 超过 1000ms`);
+ assert.ok(max<=2000,`规模化预加载 max ${max.toFixed(1)}ms 超过 2000ms`);
+ const view=await f.view(),trace=await f.trace();
+ assert.equal(view.preloadedSkills.length,92);
+ assert.equal(trace.events.filter(event=>event.kind==='skill_selection').length,92);
+ assert.equal(trace.events.filter(event=>event.kind==='skill_input').length,92);
 });
 
 test('显式selectedPackageId只预加载指定单包并保持优先',async t=>{

@@ -19,6 +19,11 @@ export interface DirectorySnapshot {
   contentDigest: string;
   pkg: SkillPackage;
 }
+export interface VerifiedSkillSnapshot {
+  item: SkillPackageState;
+  anchor: SkillAnchor;
+  snapshot: DirectorySnapshot;
+}
 type RefreshWork={controller:AbortController;promise:Promise<SkillPackageState[]>;waiters:number;settled:boolean};
 /** 管理核验与显式根迁移共用同一原生快照和摘要规则。 */
 export function readSkillDirectorySnapshot(directory: SecureSkillDirectory,name: string,expectedIdentity: string): DirectorySnapshot {
@@ -167,16 +172,27 @@ export class SqliteSkillLibrary {
     finally {this.refreshInFlight=undefined;}
   }
   async assertAnchor(anchor: SkillAnchor,signal?:AbortSignal): Promise<DirectorySnapshot> {
-    await this.execute('skills.assertRevision',{ownerId:this.ownerId,anchor},signal);
-    const item=await this.get(anchor.packageId,signal);
-    let snapshot: DirectorySnapshot;
-    try {
-      snapshot=await this.readDirectory(item.directoryName,item.directoryIdentity,signal);
-      if(snapshot.directoryIdentity!==anchor.directoryIdentity)throw new SqliteSkillError('skill_directory_conflict');
-      if(snapshot.manifestDigest!==anchor.manifestDigest || snapshot.contentDigest!==anchor.contentDigest)throw new SqliteSkillError('skill_content_changed');
-    }catch(error){this.active(signal);await this.change(()=>this.recordProblem(item,error,signal));throw error;}
-    await this.execute('skills.assertRevision',{ownerId:this.ownerId,anchor},signal);
-    return snapshot;
+    return (await this.assertAnchors([anchor],signal))[0]!.snapshot;
+  }
+  /** 先在一个短事务中复验全部anchor，再逐个读取目录，最后再次原子复验；避免逐Skill放大主worker往返。 */
+  async assertAnchors(anchors: readonly SkillAnchor[],signal?:AbortSignal,catalog?:readonly SkillPackageState[]): Promise<VerifiedSkillSnapshot[]> {
+    this.active(signal);
+    if(!Array.isArray(anchors)||anchors.length>256)throw new SqliteSkillError('skill_input_invalid');
+    await this.execute('skills.assertRevisions',{ownerId:this.ownerId,anchors},signal);
+    const items=catalog??await this.list(signal),byId=new Map(items.map(item=>[item.id,item])),verified:VerifiedSkillSnapshot[]=[];
+    for(const anchor of anchors){
+      const item=byId.get(anchor.packageId);
+      if(!item)throw new SqliteSkillError('skill_run_invalidated');
+      let snapshot: DirectorySnapshot;
+      try {
+        snapshot=await this.readDirectory(item.directoryName,item.directoryIdentity,signal);
+        if(snapshot.directoryIdentity!==anchor.directoryIdentity)throw new SqliteSkillError('skill_directory_conflict');
+        if(snapshot.manifestDigest!==anchor.manifestDigest || snapshot.contentDigest!==anchor.contentDigest)throw new SqliteSkillError('skill_content_changed');
+      }catch(error){this.active(signal);await this.change(()=>this.recordProblem(item,error,signal));throw error;}
+      verified.push({item,anchor:{...anchor},snapshot});
+    }
+    await this.execute('skills.assertRevisions',{ownerId:this.ownerId,anchors},signal);
+    return verified;
   }
   private commitObservation(id: string,expectedHead: bigint,snapshot: DirectorySnapshot,signal?:AbortSignal): Promise<SkillPackageState> {
     const input: SkillObservation={ownerId:this.ownerId,id,expectedHead,directoryName:snapshot.directoryName,

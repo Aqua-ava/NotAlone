@@ -4,9 +4,8 @@ import {scopeOf} from '@deepseek-ai/dsh-scope';
 import type SkillRegistry from '@deepseek-ai/dsh-skill';
 import type {SkillCandidate,SkillProvider,SkillProviderControl} from '@deepseek-ai/dsh-skill';
 import {sha256,validateResourcePath} from '../skill-package.ts';
-import {SqliteSkillLibrary,SqliteSkillError,skillAnchor} from './library.ts';
-import type {DirectorySnapshot} from './library.ts';
-import type {LoadedSkill,PreloadedSkill,SkillAnchor,SkillPackageState,SkillPreloadOrigin,SkillPreloadSelection,SkillPreloadTrace,SkillRunProtection,SkillRunRevision,SkillRunScope} from './contracts.ts';
+import {SqliteSkillLibrary,SqliteSkillError,skillAnchor,type VerifiedSkillSnapshot} from './library.ts';
+import type {LoadedSkill,PreloadedSkill,SkillAnchor,SkillPackageState,SkillPreloadInput,SkillPreloadOrigin,SkillPreloadSelection,SkillPreloadTrace,SkillRunProtection,SkillRunRevision,SkillRunScope} from './contracts.ts';
 
 const providerName='notalone-sqlite-skills';
 const virtualRoot='/notalone/reply-skills';
@@ -89,14 +88,11 @@ async function openPreloadedRun(library: SqliteSkillLibrary,request: SqliteSkill
   signal?.throwIfAborted();await protection.assertCurrent(scope,null,signal);
   const items=await library.list(signal);
   const plan=planSkillPreload(items,options);
-  // 每个 anchor 独立复验 package、修订、目录身份及 manifest/content digest；任一失败不读正文。
-  for(const anchor of plan.anchors)await library.assertAnchor(anchor,signal);
   const projection=plan.origin==='explicit'||plan.anchors.length===1?plan.anchors[0]??null:null;
   const run=new SqliteSkillRun(library,scope,protection,items,{selected:projection,preload:{origin:plan.origin,anchors:plan.anchors}},signal);
   try {
-    await run.validate();
     await run.preload(signal);
-    await run.validate();
+    await run.validate(signal);
     return run;
   }catch(error){run.close();throw error;}
 }
@@ -137,15 +133,20 @@ export class SqliteSkillRun {
   get revision(): SkillRunRevision {return this.frozenRevision();}
   /** 官方 Tool 可能归一化异常；保留原始失败供宿主区分授权失效和策略不可读。 */
   get failure(): unknown|null {return this.failureReason;}
+  /** 一次批量复验目录与全部anchor；返回的快照同时供预加载正文使用，避免逐Skill四重复读。 */
+  private async inspect(signal?: AbortSignal): Promise<VerifiedSkillSnapshot[]> {
+    const combined=this.signal(signal);combined.throwIfAborted();
+    await abortable(this.protection.assertCurrent(this.scope,this.frozenRevision(),combined),combined);
+    const catalog=await this.library.list(combined);
+    if(catalogRevision(catalog)!==this.catalogIdentity)throw new SqliteSkillError('skill_run_invalidated');
+    const verified=await this.library.assertAnchors(this.eligible().map(skillAnchor),combined,catalog);
+    await abortable(this.protection.assertCurrent(this.scope,this.frozenRevision(),combined),combined);
+    combined.throwIfAborted();return verified;
+  }
   /** 每次实际模型发送和业务提交前，12必须复验；registry缓存不是资格凭证。 */
   async validate(signal?: AbortSignal): Promise<void> {
     try {
-      const combined=this.signal(signal);combined.throwIfAborted();
-      await abortable(this.protection.assertCurrent(this.scope,this.frozenRevision(),combined),combined);
-      if(catalogRevision(await this.library.list(combined))!==this.catalogIdentity)throw new SqliteSkillError('skill_run_invalidated');
-      for(const item of this.eligible())await this.library.assertAnchor(skillAnchor(item),combined);
-      await abortable(this.protection.assertCurrent(this.scope,this.frozenRevision(),combined),combined);
-      combined.throwIfAborted();
+      await this.inspect(signal);
     }catch(error){this.rememberFailure(error);this.close();throw error;}
   }
   mount(context: Context): ()=>void {
@@ -184,25 +185,30 @@ export class SqliteSkillRun {
   async preload(signal?: AbortSignal): Promise<void> {
     if(!this.preloadPlan || this.preloadStarted || this.controller.signal.aborted)throw new SqliteSkillError('skill_run_invalidated');
     this.preloadStarted=true;
-    const anchors=this.preloadPlan.anchors;
-    const snapshots: {anchor: SkillAnchor;name: string;snapshot: DirectorySnapshot}[]=[];
-    try {
-      for(const anchor of anchors){
-        const item=this.eligible().find(entry=>entry.id===anchor.packageId);
-        if(!item)throw new SqliteSkillError('skill_candidate_invalid');
-        // 独立复验 package、revision、目录身份、manifest digest 和 content digest。
-        const snapshot=await this.library.assertAnchor(anchor,this.signal(signal));
-        snapshots.push({anchor:{...anchor},name:item.displayName,snapshot});
-      }
-      this.signal(signal).throwIfAborted();
-    }catch(error){this.rememberFailure(error);this.close();throw error;}
-    const preloaded: PreloadedSkill[]=[];
     const trace:SkillPreloadTrace={origin:this.preloadPlan.origin,catalogRevision:this.catalogIdentity};
+    let verified: VerifiedSkillSnapshot[];
+    try {verified=await this.inspect(signal);}
+    catch(error){this.rememberFailure(error);this.close();throw error;}
+    const runRevision=this.frozenRevision();
+    const entries=verified.map(target=>({selected:{...target.anchor},loaded:{...target.anchor},name:target.item.displayName,
+      relativePath:'SKILL.md' as const,text:target.snapshot.pkg.content,payloadDigest:sha256(target.snapshot.pkg.content)}));
+    const preloaded: PreloadedSkill[]=[];
     try {
-      for(const target of snapshots)await this.protection.recordSelection(this.scope,{...target.anchor},this.signal(signal),{name:target.name,preload:trace});
-      for(const target of snapshots){
-        const content=await this.record(target.anchor,target.name,'SKILL.md',target.snapshot.pkg.content,signal,trace);
-        preloaded.push({anchor:{...target.anchor},name:target.name,content,
+      if(entries.length){
+        const combined=this.signal(signal);
+        if(this.protection.recordPreload){
+          const input:SkillPreloadInput={scope:this.scope,runRevision,preload:trace,entries};
+          await abortable(this.protection.recordPreload(input,combined),combined);
+        }else{
+          // 兼容仅实现逐项合同的受信任测试/集成替身；正式宿主使用单事务批量记录。
+          for(const entry of entries)await this.protection.recordSelection(this.scope,entry.selected,combined,{name:entry.name,preload:trace});
+          for(const entry of entries)await this.protection.recordInput({scope:this.scope,runRevision,selected:entry.selected,loaded:entry.loaded,
+            relativePath:entry.relativePath,text:entry.text,payloadDigest:entry.payloadDigest,name:entry.name,preload:trace},combined);
+        }
+      }
+      for(const target of verified){
+        const content=target.snapshot.pkg.content;
+        preloaded.push({anchor:{...target.anchor},name:target.item.displayName,content,
           resources:target.snapshot.pkg.resources.map(resource=>({relativePath:resource.relative_path,mediaType:resource.media_type,bytes:resource.content.length,payloadDigest:resource.content_sha256}))});
       }
     }catch(error){this.rememberFailure(error);this.close();throw error;}

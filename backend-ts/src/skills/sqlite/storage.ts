@@ -217,6 +217,12 @@ export const skillActions: StorageAction[] = [
     tx.run('UPDATE skill_package SET verification_state=?,verification_reason=?,current_revision_no=NULL,head_revision=head_revision+1 WHERE owner_id=? AND id=?',[i.verificationState,reason,i.ownerId,i.id]);
     return state(tx,i.ownerId,i.id);
   }},
+  {name:'skills.assertRevisions',mode:'read',retryBusy:false,execute(tx,input){
+    const i=input as {ownerId:string;anchors:SkillAnchor[]};
+    if(!Array.isArray(i.anchors)||i.anchors.length>256)throw new StorageFailure('skill_input_invalid');
+    for(const anchor of i.anchors)requireSkillRevision(tx,i.ownerId,anchor);
+    return true;
+  }},
   {name:'skills.assertRevision',mode:'read',retryBusy:false,execute(tx,input){
     const i=input as {ownerId:string;anchor:SkillAnchor}; requireSkillRevision(tx,i.ownerId,i.anchor);return true;
   }},

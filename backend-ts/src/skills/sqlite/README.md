@@ -40,7 +40,7 @@
 2. `recordSelection(scope, selected, signal?, trace?)` 记录每次实际选中的包修订；自动模式对各包分别记录，显式定向预加载则记录其指定修订。`trace` 记录读取时冻结的 Skill 名称、`origin` 与目录快照；事件本身不表示正文已读取或内容已进入模型。
 3. `recordInput(input, signal)` 分别保存每份实际返回的正文或资源文字、payloadDigest、selected/loaded 精确包修订、Skill 名称、相对路径、预加载来源与目录快照及 scope，登记来源与受管副本删除关系。写入事务必须复验上述业务资格，并调用导出的 `requireSkillRun(tx, ownerId, input.runRevision)` 与 `requireSkillRevision(tx, ownerId, input.loaded)`。SkillRunRevision带本轮全部包head及可载入锚点；最后一面不能单独异步检查，避免检查另一面时被撤销。单独事务外检查不够。
 
-正常候选域在首次物理模型发送前预加载全部 eligible 正文、隐藏目录工具并保留受控资源读取；仍必须在物理模型发送和业务提交前再次 `run.validate()`，记录真正发出的完整模型输入和模型回执。本模块的读取事件仅证明官方provider读取了该正文，不能当作模型实际发送或成功回复的证据。DSH目录缓存不能替代业务与文件核验；每次读取及返回前均重验，启停或核验变更、来源失效、scope释放及AbortSignal会拒绝迟到结果。
+正常候选域在首次物理模型发送前预加载全部 eligible 正文、隐藏目录工具并保留受控资源读取；多 Skill 预加载先用 `skills.assertRevisions` 在一个短事务复验全部 anchor，再批量读取目录快照并再次复验，随后通过 `discussion.skillPreload` 在同一事务写入全部 selection／input 事件，避免逐 Skill 触发整套 `run.validate()`。仍必须在物理模型发送和业务提交前再次 `run.validate()`，记录真正发出的完整模型输入和模型回执。本模块的读取事件仅证明官方provider读取了该正文，不能当作模型实际发送或成功回复的证据。DSH目录缓存不能替代业务与文件核验；每次读取及返回前均重验，启停或核验变更、来源失效、scope释放及AbortSignal会拒绝迟到结果。
 
 ## 删除接入边界
 

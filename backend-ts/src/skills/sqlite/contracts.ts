@@ -67,6 +67,20 @@ export interface SkillInput {
   name?: string;
   preload?: SkillPreloadTrace;
 }
+export interface SkillPreloadEntry {
+  selected: SkillAnchor;
+  loaded: SkillAnchor;
+  name: string;
+  relativePath: 'SKILL.md';
+  text: string;
+  payloadDigest: string;
+}
+export interface SkillPreloadInput {
+  scope: SkillRunScope;
+  runRevision: SkillRunRevision;
+  preload: SkillPreloadTrace;
+  entries: SkillPreloadEntry[];
+}
 /**
  * 必须由受信任宿主提供，缺失时禁止运行；不能以 Skill 内容产生授权。
  * recordInput 须在实际追踪写事务内复验调用/联系人/来源/删除代次，并调用
@@ -80,4 +94,6 @@ export interface SkillRunProtection {
   assertCurrent(scope: SkillRunScope, runRevision: SkillRunRevision | null, signal?: AbortSignal): Promise<void>;
   recordSelection(scope: SkillRunScope, selected: SkillAnchor | null, signal?: AbortSignal, trace?: SkillTrace): Promise<void>;
   recordInput(input: SkillInput, signal?: AbortSignal): Promise<void>;
+  /** 多 anchor 预加载的原子追踪入口；缺失时受控运行时使用逐项兼容路径。 */
+  recordPreload?(input: SkillPreloadInput, signal?: AbortSignal): Promise<void>;
 }
