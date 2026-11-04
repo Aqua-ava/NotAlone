@@ -178,7 +178,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
   {page?.requests.map(request=><div key={request.requestId} className="sqlite-candidate-request">
    {request.skillWarning&&<p role="status">{request.skillWarning}</p>}
-   {request.loadedSkills.find(s=>s.relativePath==='SKILL.md')?.name&&<p>本次策略：{request.loadedSkills.find(s=>s.relativePath==='SKILL.md')!.name}</p>}
+   {!!request.preloadedSkills?.length&&<p>本次预加载的 Skill：{request.preloadedSkills.map(skill=>`${skill.name??skill.packageId}（第${skill.revisionNo}版）`).join('、')}</p>}
    {request.coverageWarning&&<p role="status">{request.coverageWarning}</p>}
    {request.generationState==='unknown'&&<p role="status">本次模型调用结果未知，请核对原请求，不能换身份重发。</p>}
    {request.generationState==='failed'&&!progress&&!busy&&<p role="status">本次候选生成失败，没有可选正文。</p>}
@@ -193,7 +193,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
     {v.versionNo!==candidate.versionNo&&<button className="button" disabled={busy} onClick={()=>{setInspected(old=>{const next={...old};delete next[v.candidateId];return next;});setEdits({});}}>回到最新版本</button>}
     <details><summary>依据</summary>{v.basis.map(b=><div key={b.itemNo}><p>{b.verification==='inherited_unverified'?'继承原依据，手工修改尚未重新核验':'产生此模型版本的实际输入'} · {({message:'聊天原文',entry:'本次讨论',memory:'已采纳记忆',memory_candidate:'未确认记忆',document:'已发布资料',selection:'明确选稿',coverage:'历史覆盖'} as Record<string,string>)[b.kind]??'实际资料'}</p><p className="discussion-entry-text">{b.text}</p></div>)}</details>
    </article>;})}
-   {!!request.loadedSkills.length&&<details><summary>本次实际载入的 Skill</summary>{request.loadedSkills.map((s,index)=><div key={index}><p>第{s.revisionNo}版 · {s.relativePath}</p><p>{s.text}</p></div>)}</details>}
+   {!!request.loadedSkills.length&&<details><summary>实际进入模型输入的 Skill 内容</summary><div role="group" aria-label="实际进入模型输入的 Skill 内容">{request.loadedSkills.map((s,index)=><div key={index}><p>{s.name?`${s.name} · `:''}第{s.revisionNo}版 · {s.relativePath}</p><p>{s.text}</p></div>)}</div></details>}
    {!!request.selections.length&&<p>已记录{request.selections.length}次选稿，最近选用第{request.selections.at(-1)!.versionNo}版。</p>}
   </div>)}
  </section>;
