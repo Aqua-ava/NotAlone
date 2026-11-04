@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {Icon} from './icons';
 import type {RewriteTone} from '../shared/reply-bridge';
 import type {SqliteDiscussionBridge,SqliteDiscussionReceipt} from '../shared/sqlite-discussion-bridge';
-import {readSqliteCandidatePage,readSqliteCandidateVersion,readSqliteCandidateStatus,type SqliteCandidateStatus,type SqliteCandidatePage,type SqliteCandidateVersion,type SqliteCandidateOperation} from '../shared/sqlite-reply-candidates';
+import {readSqliteCandidatePage,readSqliteCandidateSkillPage,readSqliteCandidateVersion,readSqliteCandidateStatus,type SqliteCandidateStatus,type SqliteCandidatePage,type SqliteCandidateVersion,type SqliteCandidateOperation,type SqliteCandidateLoadedSkill} from '../shared/sqlite-reply-candidates';
 type WorkspaceInput={action:'express'|'suggest';draftText:string;tone:RewriteTone;instruction:string;contextText:string;includeRelationshipContext:boolean};
 const defaultOptions=()=>({tone:'original' as RewriteTone,instruction:'',contextText:'',includeRelationshipContext:true});
 const progressLabel=(phase:SqliteCandidateStatus['phase'])=>({not_found:'正在接纳本次请求…',preparing:'正在整理本次资料…',queued:'正在等待生成…',generating:'正在等待模型回复…',saving:'正在保存候选…',committed:'正在读取已保存候选…',failed:'正在核对本次结果…',unknown:'正在核对本次结果…'}[phase]);
@@ -14,6 +14,19 @@ function statusFailure(status:SqliteCandidateStatus):string{
  if(status.errorCode?.includes('timeout'))return status.sent?'本次生成超时，没有保存候选。':'整理资料超时，尚未发给模型。';
  if(status.errorCode&&/source|stale|knowledge|invalidated/.test(status.errorCode))return '本次参考资料发生变化，请重新生成。';
  return status.sent?'本次生成失败，没有保存候选。':'本次准备失败，尚未发给模型。';
+}
+function LoadedSkillInputs({bridge,contactId,scopeRevision,sessionId,requestId,skills}:{bridge:SqliteDiscussionBridge;contactId:string;scopeRevision:number;sessionId:string;requestId:string;skills:SqliteCandidateLoadedSkill[]}){
+ const inline=skills.every(skill=>typeof skill.text==='string');
+ const alive=useRef(true),[items,setItems]=useState<(SqliteCandidateLoadedSkill&{text:string})[]>(inline?skills as (SqliteCandidateLoadedSkill&{text:string})[]:[]);
+ const [nextOffset,setNextOffset]=useState<number|null>(inline?null:0),[total,setTotal]=useState(skills.length),[loading,setLoading]=useState(false),[error,setError]=useState('');
+ useEffect(()=>()=>{alive.current=false;},[]);
+ const load=async(offset:number)=>{if(loading||!bridge.candidates)return;setLoading(true);setError('');try{const page=readSqliteCandidateSkillPage(await bridge.candidates.execute({contactId,scopeRevision,sessionId,action:'skills',requestId,offset}));if(!alive.current)return;setItems(old=>[...old,...page.items]);setNextOffset(page.nextOffset);setTotal(page.total);}catch{if(alive.current)setError('Skill 正文暂不可读取，请重试。');}finally{if(alive.current)setLoading(false);}};
+ return <details onToggle={event=>{if(event.currentTarget.open&&!inline&&!items.length&&nextOffset!==null)void load(nextOffset);}}><summary>实际进入模型输入的 Skill 内容</summary>
+  {error&&<p role="alert">{error}</p>}{loading&&!items.length&&<p role="status">正在读取 Skill 正文…</p>}
+  {!!items.length&&<div role="group" aria-label="实际进入模型输入的 Skill 内容">{items.map((skill,index)=><div key={`${skill.packageId}:${skill.revisionNo}:${skill.relativePath}:${index}`}><p>{skill.name?`${skill.name} · `:''}第{skill.revisionNo}版 · {skill.relativePath}</p><p>{skill.text}</p></div>)}</div>}
+  {!loading&&!items.length&&!error&&nextOffset===null&&<p>未找到实际进入本次请求的 Skill 正文。</p>}
+  {nextOffset!==null&&<button className="button" disabled={loading} onClick={()=>void load(nextOffset)}>{loading?'正在读取…':`加载更多 Skill 正文（${items.length}/${total}）`}</button>}
+ </details>;
 }
 interface Props {bridge:SqliteDiscussionBridge;contactId:string|null;scopeRevision:number;sessionId:string|null;disabled?:boolean;initialDraft?:string;onInitialDraftTaken?:()=>void;onDraftChange?:(text:string,scope:{contactId:string;scopeRevision:number})=>void;onSubmitted?:(receipt:SqliteDiscussionReceipt)=>void}
 /** 草稿、候选、依据和实际Skill快照共用同一失效边界；迟到回包不能重新挂回旧正文。 */
@@ -183,6 +196,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   <button className="button" disabled={!available||busy} onClick={()=>void run({action:'read'})}>刷新候选</button>
   {carry&&<button className="button" disabled={busy} onClick={()=>{setCarry(undefined);setNotice('已取消本次候选继续。');}}>取消候选继续</button>}
   {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
+  {page?.hasMoreRequests&&<p role="status">仅显示最近20次候选请求；更早记录未加载。</p>}
   {page?.requests.map(request=><div key={request.requestId} className="sqlite-candidate-request">
    {request.skillWarning&&<p role="status">{request.skillWarning}</p>}
    {!!request.preloadedSkills?.length&&<p>本次预加载的 Skill：{request.preloadedSkills.map(skill=>`${skill.name??skill.packageId}（第${skill.revisionNo}版）`).join('、')}</p>}
@@ -200,7 +214,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
     {v.versionNo!==candidate.versionNo&&<button className="button" disabled={busy} onClick={()=>{setInspected(old=>{const next={...old};delete next[v.candidateId];return next;});setEdits({});}}>回到最新版本</button>}
     <details><summary>依据</summary>{v.basis.map(b=><div key={b.itemNo}><p>{b.verification==='inherited_unverified'?'继承原依据，手工修改尚未重新核验':'产生此模型版本的实际输入'} · {({message:'聊天原文',entry:'本次讨论',memory:'已采纳记忆',memory_candidate:'未确认记忆',document:'已发布资料',selection:'明确选稿',coverage:'历史覆盖'} as Record<string,string>)[b.kind]??'实际资料'}</p><p className="discussion-entry-text">{b.text}</p></div>)}</details>
    </article>;})}
-   {!!request.loadedSkills.length&&<details><summary>实际进入模型输入的 Skill 内容</summary><div role="group" aria-label="实际进入模型输入的 Skill 内容">{request.loadedSkills.map((s,index)=><div key={index}><p>{s.name?`${s.name} · `:''}第{s.revisionNo}版 · {s.relativePath}</p><p>{s.text}</p></div>)}</div></details>}
+   {!!request.loadedSkills.length&&contactId&&sessionId&&<LoadedSkillInputs bridge={bridge} contactId={contactId} scopeRevision={scopeRevision} sessionId={sessionId} requestId={request.requestId} skills={request.loadedSkills}/>}
    {!!request.selections.length&&<p>已记录{request.selections.length}次选稿，最近选用第{request.selections.at(-1)!.versionNo}版。</p>}
   </div>)}
  </section>;

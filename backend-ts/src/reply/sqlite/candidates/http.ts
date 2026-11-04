@@ -7,28 +7,47 @@ import type {SqliteReplyTurns} from './turns.ts';
 import {readReplyWorkspace} from './workspace.ts';
 const uuid='[a-f0-9-]{36}',route=new RegExp(`^/api/contacts/(${uuid})/assistant-sessions/(${uuid})/reply-candidates(?:/(${uuid})/(edit|select|versions/([1-9][0-9]{0,5})))?$`);
 const statusRoute=new RegExp(`^/api/contacts/(${uuid})/assistant-sessions/(${uuid})/reply-candidates/status$`);
+const skillsRoute=new RegExp(`^/api/contacts/(${uuid})/assistant-sessions/(${uuid})/reply-candidates/(${uuid})/skills$`);
 const id=(v:unknown):v is string=>typeof v==='string'&&new RegExp(`^${uuid}$`).test(v);
+/** 宿主只放行候选状态和详情页的固定查询，禁止借 URL query 扩大读取范围。 */
+export function replyCandidateQueryAllowed(method:string|undefined,url:URL):boolean{
+ if(method!=='GET')return false;
+ const entries=[...url.searchParams];
+ if(statusRoute.test(url.pathname))return entries.length===1&&entries[0][0]==='request_key'&&id(entries[0][1]);
+ if(!skillsRoute.test(url.pathname))return false;
+ return entries.length===0||entries.length===1&&entries[0][0]==='offset'&&/^(?:0|[1-9][0-9]{0,5})$/.test(entries[0][1]);
+}
 function invalid():never{throw new StorageFailure('reply_input_invalid');}
 function respond(res:ServerResponse,status:number,value:unknown){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));}
 function occurredAt(value:string|null):string|null{if(value===null)return null;const timestamp=Number(value);if(!Number.isSafeInteger(timestamp))return null;const date=new Date(timestamp);return Number.isFinite(date.valueOf())?date.toISOString():null;}
+const requestWindowLimit=20,pageMaxBytes=1_800_000;
 export class SqliteReplyCandidateHttp {
  private readonly options:{storage:SqliteStorage;service:SqliteReplyCandidateService;turns?:SqliteReplyTurns;authorize:(request:IncomingMessage)=>boolean};
  constructor(options:SqliteReplyCandidateHttp['options']){this.options=options;}
  async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
-  const raw=req.url??'',url=new URL(raw,'http://localhost'),statusMatch=statusRoute.exec(url.pathname),match=statusMatch??route.exec(url.pathname);if(!match)return false;
+  const raw=req.url??'',url=new URL(raw,'http://localhost'),statusMatch=statusRoute.exec(url.pathname),skillsMatch=skillsRoute.exec(url.pathname),match=statusMatch??skillsMatch??route.exec(url.pathname);if(!match)return false;
   const o=this.options;if(!o.authorize(req)){respond(res,401,{error:'unauthorized'});return true;}
   try{
-   if(!statusMatch&&raw!==url.pathname)invalid();
+   if(!statusMatch&&!skillsMatch&&raw!==url.pathname)invalid();
    const [,contactId,discussionId,candidateId,command,version]=match,scope={contactId,discussionId};
-   if(statusMatch){
+   if(skillsMatch){
+    const offset=url.searchParams.get('offset')??'0',entries=[...url.searchParams];
+    if(req.method!=='GET'||!Number.isSafeInteger(Number(offset))||Number(offset)<0||Number(offset)>1_000_000||entries.some(([key])=>key!=='offset')||entries.length>1)invalid();
+    respond(res,200,await o.service.skillInputs({...scope,requestId:skillsMatch[3],offset:Number(offset)}));
+   }else if(statusMatch){
     const requestKey=url.searchParams.get('request_key');
     if(req.method!=='GET'||!id(requestKey)||[...url.searchParams].length!==1||url.searchParams.has('request_key')===false)invalid();
     respond(res,200,await o.service.status(contactId,discussionId,requestKey));
    }else if(req.method==='GET'&&!candidateId){
-    const requests=await o.service.view(contactId,discussionId);
+    const requests=await o.service.view(contactId,discussionId,{includeSkillText:false,limit:requestWindowLimit+1});
     const history=await o.service.recentHistory(contactId);
     const recentMessages=history.messages.map((m:any)=>({messageId:m.id,sender:m.sender,text:m.text,occurredAt:occurredAt(m.sentAt),timePrecision:m.timePrecision,displayPosition:m.displayPosition,ordering:m.ordering}));
-    respond(res,200,{requests:requests.map(({ownerId:_owner,...r})=>r),coverage:history.coverage,recentMessages});
+    const compact=(request:any)=>{const {ownerId:_owner,loadedSkills=[],preloadedSkills,...rest}=request;return {...rest,loadedSkills:loadedSkills.map(({text:_text,catalogRevision:_catalogRevision,...skill}:any)=>skill),...(preloadedSkills===undefined?{}:{preloadedSkills:preloadedSkills.map(({catalogRevision:_catalogRevision,...skill}:any)=>skill)})};};
+    let visible=requests.slice(-requestWindowLimit),hasMoreRequests=requests.length>requestWindowLimit;
+    const build=()=>({requests:visible.map(compact),coverage:history.coverage,recentMessages,hasMoreRequests});
+    while(visible.length>1&&Buffer.byteLength(JSON.stringify(build()),'utf8')>pageMaxBytes){visible=visible.slice(1);hasMoreRequests=true;}
+    if(Buffer.byteLength(JSON.stringify(build()),'utf8')>pageMaxBytes)throw new StorageFailure('reply_page_too_large');
+    respond(res,200,build());
    }else if(req.method==='GET'&&command.startsWith('versions/'))respond(res,200,await o.service.version({...scope,candidateId,versionNo:Number(version)}));
    else if(req.method==='POST'){
     let v;try{v=JSON.parse((await readWechatHttpBody(req,610000,10000)).toString('utf8'));}catch(error){if(error instanceof WechatHttpBodyError)throw error;invalid();}

@@ -8,7 +8,8 @@ export class SqliteReplyCandidateService {
  begin(input:{contactId:string;discussionId:string;requestKey:string;text:string;identity:{kind:'manual';confirmationId:string}|{kind:'binding';bindingId:string;verificationId:string};acceptIncomplete?:boolean;carriedSelectionId?:string;includeRelationshipContext?:boolean;workspaceFingerprint?:string}){
   return this.storage.execute<any>('reply.begin',{...input,ownerId:this.ownerId,expectedDiscussionId:input.discussionId,at:Date.now()});
  }
- view(contactId:string,discussionId:string){return this.reader.execute<any[]>('reply.view',{ownerId:this.ownerId,contactId,discussionId});}
+ view(contactId:string,discussionId:string,options:{includeSkillText?:boolean;limit?:number}={}){return this.reader.execute<any[]>('reply.view',{ownerId:this.ownerId,contactId,discussionId,...options});}
+ skillInputs(input:{contactId:string;discussionId:string;requestId:string;offset:number}){return this.reader.execute<any>('reply.skillInputs',{...input,ownerId:this.ownerId});}
  recentHistory(contactId:string){return this.reader.execute<any>('history.readRecent',{ownerId:this.ownerId,contactId,limit:50});}
  phase(contactId:string,discussionId:string,requestKey:string,phase:ReplyGenerationPhase|null):void{
   const key=JSON.stringify([contactId,discussionId,requestKey]);if(phase===null)this.phases.delete(key);else this.phases.set(key,phase);

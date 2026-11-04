@@ -8,6 +8,7 @@ import {SqliteModelSetup} from './host/sqlite-model-setup.ts';
 import {createSqliteMemoryRuntime} from './memory/sqlite/runtime.ts';
 import {SqliteMemoryDocumentsHttp,memoryDocumentsQueryAllowed} from './memory/sqlite/documents/http.ts';
 import {createSqliteDiscussionHost} from './reply/sqlite/host-runtime.ts';
+import {replyCandidateQueryAllowed} from './reply/sqlite/candidates/http.ts';
 import {createAssistantReadChannel} from './reply/sqlite/read-channel.ts';
 import { SqliteMediaService } from './media/sqlite/service.ts';
 import { SqliteMediaHttp } from './media/sqlite/http.ts';
@@ -259,7 +260,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
       let url: URL;
       try { url = new URL(req.url ?? '', 'http://localhost'); }
       catch { respond(400, { error: 'invalid_request' }); return; }
-      if (req.url !== url.pathname && (req.url !== url.pathname + url.search || !(deletionQueryAllowed(req.method, url)||history&&historyQueryAllowed(req.method,url)||memoryManagementHttp&&memoryManagementQueryAllowed(req.method,url)||memoryDocumentsHttp&&memoryDocumentsQueryAllowed(req.method,url)||historyClearHttp&&clearQueryAllowed(req.method,url)))) { respond(400, { error: 'invalid_request' }); return; }
+      if (req.url !== url.pathname && (req.url !== url.pathname + url.search || !(deletionQueryAllowed(req.method, url)||history&&historyQueryAllowed(req.method,url)||memoryManagementHttp&&memoryManagementQueryAllowed(req.method,url)||memoryDocumentsHttp&&memoryDocumentsQueryAllowed(req.method,url)||historyClearHttp&&clearQueryAllowed(req.method,url)||replyCandidateQueryAllowed(req.method,url)))) { respond(400, { error: 'invalid_request' }); return; }
       const changesMemoryScope=req.method==='DELETE'||req.method==='POST'&&(/^\/api\/deletions\//.test(url.pathname)||/^\/api\/contacts\/[a-f0-9-]{36}\/history\/(clear|resync)$/.test(url.pathname)||/^\/api\/sync\/(enable|disable|cli-bindings\/(confirm|revoke))$/.test(url.pathname));
       if(changesMemoryScope)res.once('finish',()=>{if(automaticBackground&&res.statusCode>=200&&res.statusCode<300)memory?.wake();});
       let releaseForeground:(()=>void)|undefined;

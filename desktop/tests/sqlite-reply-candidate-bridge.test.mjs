@@ -133,3 +133,19 @@ test('候选状态沿固定只读路径返回无正文进度，拒绝夹带私�
  f.respond(async()=>({generation:3,data:{...status,text:'不应进入IPC的合成私密正文'}}));
  await assert.rejects(f.bridge.candidates.execute({...scope,action:'status',requestKey:ids.request}),/候选结果尚未确认/);
 });
+
+test('候选页的Skill身份与正文分离，详情只按固定分页路径读取',async t=>{
+ const f=fixture(await modules());t.after(()=>f.controller.close());
+ const metadata={packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'SKILL.md',origin:'auto_preload'};
+ const detail={...metadata,text:'只在详情页返回的合成Skill正文'};
+ f.respond(async request=>request.path.includes('/skills?')?{generation:3,data:{items:[detail],nextOffset:null,total:1}}:{generation:3,data:{...pageData(),requests:[{...pageData().requests[0],loadedSkills:[metadata],preloadedSkills:[{packageId:ids.skill,name:'合成安慰策略',revisionNo:1,origin:'auto_preload'}]}]}});
+ const page=await f.bridge.candidates.execute({...scope,action:'read'});
+ assert.deepEqual(page.requests[0].loadedSkills,[metadata]);
+ assert.deepEqual(await f.bridge.candidates.execute({...scope,action:'skills',requestId:ids.request,offset:0}),{items:[detail],nextOffset:null,total:1});
+ assert.deepEqual(f.requests.map(({method,path})=>({method,path})),[
+  {method:'GET',path:`/api/contacts/${ids.contact}/assistant-sessions/${ids.session}/reply-candidates`},
+  {method:'GET',path:`/api/contacts/${ids.contact}/assistant-sessions/${ids.session}/reply-candidates/${ids.request}/skills?offset=0`},
+ ]);
+ assert.equal(f.requests[1].timeoutMs,120000);assert.equal(f.requests[1].maxResponseBytes,2_000_000);
+ for(const extra of [{text:'不应由调用方指定'},{ownerId:ids.other},{offset:1.5},{offset:-1},{requestId:'not-a-uuid'}])await assert.rejects(f.bridge.candidates.execute({...scope,action:'skills',requestId:ids.request,offset:0,...extra}),/无效/);
+});

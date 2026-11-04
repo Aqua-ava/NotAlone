@@ -164,6 +164,21 @@ test('Skill自动预加载无需手选，区分预加载身份与实际模型输
  await expect(region.getByRole('button',{name:'保存修改',exact:true})).toBeEnabled();
 });
 
+test('Skill正文不在候选页预载，展开详情时才按页读取',{timeout:30000},async t=>{
+ const base=pageData(),metadata={packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'SKILL.md',origin:'auto_preload'};
+ const data={...base,hasMoreRequests:true,requests:[{...base.requests[0],loadedSkills:[metadata]}]};
+ const f=await panel(t,async operation=>{
+  if(operation.action==='read')return data;
+  if(operation.action==='skills'){assert.equal(operation.requestId,ids.request);assert.equal(operation.offset,0);return {items:[{...metadata,text:'展开后才读取的合成Skill正文'}],nextOffset:null,total:1};}
+  throw new Error('未授权的合成页面操作');
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'});
+ await expect(region.getByText('仅显示最近20次候选请求；更早记录未加载。',{exact:true})).toBeVisible();
+ await region.getByText('实际进入模型输入的 Skill 内容',{exact:true}).click();
+ await expect(region.getByText('展开后才读取的合成Skill正文',{exact:true})).toBeVisible();
+ assert.equal(f.commands.filter(command=>command.action==='skills').length,1);
+});
+
 /** 仅IPC业务边界为显式替身；实际React、浏览器事件及渲染均执行。 */
 async function panel(t,execute,initialDraft='',assistant=false){
  const compiled=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{SqliteReplyCandidatesPanel}from'./src/renderer/SqliteReplyCandidatesPanel';import{AssistantSessionPanel}from'./src/renderer/AssistantSessionPanel';
