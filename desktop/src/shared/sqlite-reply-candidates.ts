@@ -1,6 +1,6 @@
 export interface SqliteCandidateScope {contactId:string;scopeRevision:number;sessionId:string}
 export type SqliteWorkspaceTone='original'|'warm'|'concise'|'polite';
-export interface SqliteReplyWorkspace {action:'express'|'suggest';draftText:string;tone:SqliteWorkspaceTone;instruction:string;contextText:string;includeRelationshipContext:boolean;excludedMessageIds:string[]}
+export interface SqliteReplyWorkspace {action:'express'|'suggest';draftText:string;tone:SqliteWorkspaceTone;instruction:string;contextText:string;includeRelationshipContext:boolean}
 export type SqliteCandidateOperation=SqliteCandidateScope & (
  | {action:'read'}
  | {action:'status';requestKey:string}
@@ -17,13 +17,12 @@ const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}(?:-[0-9a-
 function invalid():never{throw new Error('本次候选操作无效。');}
 function validWorkspace(value:unknown):value is SqliteReplyWorkspace{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;const w=value as Record<string,unknown>;
- if(Object.keys(w).some(k=>!['action','draftText','tone','instruction','contextText','includeRelationshipContext','excludedMessageIds'].includes(k))
+ if(Object.keys(w).some(k=>!['action','draftText','tone','instruction','contextText','includeRelationshipContext'].includes(k))
   ||!['express','suggest'].includes(String(w.action))||typeof w.draftText!=='string'||w.draftText.length>100000
   ||w.draftText.length+(typeof w.instruction==='string'?w.instruction.length:0)+(typeof w.contextText==='string'?w.contextText.length:0)>99744
   ||w.action==='express'&&!w.draftText.trim()||!['original','warm','concise','polite'].includes(String(w.tone))
   ||typeof w.instruction!=='string'||w.instruction.length>100000||typeof w.contextText!=='string'||w.contextText.length>100000
-  ||typeof w.includeRelationshipContext!=='boolean'||!Array.isArray(w.excludedMessageIds)||w.excludedMessageIds.length>50
-  ||w.excludedMessageIds.some(id=>!uuid(id))||new Set(w.excludedMessageIds).size!==w.excludedMessageIds.length)return false;
+  ||typeof w.includeRelationshipContext!=='boolean')return false;
  return true;
 }
 export function readSqliteCandidateOperation(value:unknown):SqliteCandidateOperation{
@@ -33,7 +32,7 @@ export function readSqliteCandidateOperation(value:unknown):SqliteCandidateOpera
  if(Object.keys(v).some(k=>![...common,...extra].includes(k))||!uuid(v.contactId)||!uuid(v.sessionId)||!Number.isSafeInteger(v.scopeRevision)||(v.scopeRevision as number)<0)invalid();
  if(v.action==='status'&&!uuid(v.requestKey))invalid();
  if(v.action==='generate'&&(!uuid(v.requestKey)||typeof v.text!=='string'||v.text.length>100000||typeof v.acceptIncomplete!=='boolean'||v.carriedSelectionId!==undefined&&!uuid(v.carriedSelectionId)||v.selectedPackageId!==undefined&&!uuid(v.selectedPackageId)
-  ||v.workspace!==undefined&&(!validWorkspace(v.workspace)||v.text!==v.workspace.draftText||v.carriedSelectionId!==undefined&&(!v.workspace.includeRelationshipContext||v.workspace.excludedMessageIds.length>0))
+  ||v.workspace!==undefined&&(!validWorkspace(v.workspace)||v.text!==v.workspace.draftText||v.carriedSelectionId!==undefined&&!v.workspace.includeRelationshipContext)
   ||v.workspace===undefined&&!v.text.trim()))invalid();
  if(['edit','select','version'].includes(String(v.action))&&(!uuid(v.candidateId)||!Number.isSafeInteger(v.versionNo)||(v.versionNo as number)<1))invalid();
  if(v.action==='edit'&&(!Array.isArray(v.parts)||!v.parts.length||v.parts.length>8||v.parts.some(p=>typeof p!=='string'||!p.trim()||p.length>10000)||v.parts.join('').length>30000))invalid();
