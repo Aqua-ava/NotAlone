@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import type {StorageAction,StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {assertInputs,assertTaskContributions,fail,textId} from '../qualification.ts';
 import {available,scope as readScope} from '../management/qualification.ts';
-import {memoryBasis,publicationMembers,renderDocuments} from './basis.ts';
+import {memoryBasis,publicationMembers,renderDocuments,withSourceMemo} from './basis.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import {laterStagesState as scheduledLaterStagesState,type LaterStagesProjection} from './later-schedule.ts';
 
@@ -106,7 +106,7 @@ const action=(name:string,mode:'read'|'write',fn:(tx:StorageTransaction,input:an
 export const memoryDocumentsActions:StorageAction[]=[
  action('tasks','read',(tx,i)=>tx.all('SELECT id FROM processing_task WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[textId(i.ownerId),textId(i.runId)]).map(row=>String(row.id))),
  action('readTask','read',(tx,i)=>taskView(tx,textId(i.ownerId),textId(i.taskId))),
- action('read','read',(tx,i)=>{
+ action('read','read',(tx,i)=>withSourceMemo(()=>{
   const ownerId=textId(i.ownerId),s=readScope(i.scope);available(tx,ownerId,s);
   const scope={scopeKind:s.scopeKind,contactId:s.contactId};
   if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed'",[ownerId]))return {scope,publication:null,documents:[],status:'needs_revalidation'};
@@ -132,5 +132,5 @@ export const memoryDocumentsActions:StorageAction[]=[
    const publishedStatus=(unchanged==='idle'&&status==='idle')||(!conflict&&view?.outcome==='completed'&&p.basis_task_id===latest?.id)?'completed':status;
    return {scope,publication:{id:String(p.id),members},documents:rendered.documents,status:publishedStatus};
   }catch(error){if(error instanceof StorageFailure)return {scope,publication:null,documents:[],status:'needs_revalidation'};throw error;}
- }),
+ })),
 ];

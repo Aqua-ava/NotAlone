@@ -16,7 +16,23 @@ function fact(tx:StorageTransaction,ownerId:string,decisionId:string):Record<str
   JOIN execution_event e ON e.owner_id=c.owner_id AND e.id=c.event_id WHERE dc.owner_id=? AND dc.decision_id=? ORDER BY c.id LIMIT 1`,[ownerId,decisionId]);
  return row?JSON.parse(String(row.payload)).fact:null;
 }
+/**
+ * 只读动作内的单次读取记忆：同一事务快照里，同一记忆版本的来源核验结果相同，多篇文档共享记忆时不再逐篇重算。
+ * 仅在 `withSourceMemo` 作用域内、使用默认资格核验时生效；写事务不启用，Worker 动作同步执行故作用域不会交叉。
+ */
+let sourceMemo:Map<string,ReplySource[]>|undefined;
+export function withSourceMemo<T>(run:()=>T):T {
+ const outer=sourceMemo;sourceMemo=new Map();
+ try{return run();}finally{sourceMemo=outer;}
+}
 function memorySources(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow,sourceEligibility:SourceEligibility=assertSourceEligibility):ReplySource[] {
+ const key=sourceMemo&&sourceEligibility===assertSourceEligibility?JSON.stringify([ownerId,String(m.id),String(v.version_no)]):undefined;
+ const hit=key===undefined?undefined:sourceMemo!.get(key);if(hit)return hit;
+ const sources=memorySourcesUncached(tx,ownerId,m,v,sourceEligibility);
+ if(key!==undefined)sourceMemo!.set(key,sources);
+ return sources;
+}
+function memorySourcesUncached(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow,sourceEligibility:SourceEligibility):ReplySource[] {
  const citations=requireVersion(tx,ownerId,m,v,sourceEligibility);
  if(v.adoption_mode==='auto'&&sourceVerificationState(tx,ownerId,{memoryId:String(m.id),versionNo:v.version_no as bigint},sourceEligibility)!=='verified')fail('document_memory_unverified');
  return mergeKnowledgeSources(qualificationSources(tx,ownerId,{memoryId:String(m.id),versionNo:v.version_no as bigint},sourceEligibility),citations.map(r=>({contactId:String(r.source_contact_id),messageId:String(r.message_id),recordId:String(r.record_id),acceptedRevision:r.accepted_revision as bigint})));
