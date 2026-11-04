@@ -6,6 +6,8 @@
 
 > 后续修订：[ADR-070](070-automatic-memory-maintenance.md) 将正常记忆维护改为默认逐项核验后自动处理；原评测结论不变，旧资料升级功能退役。
 
+> 后续局部修订：[ADR-046](046-source-bound-dimension-evidence.md)修订单键优先判定；原语用、0.7、风险、默认空放行表及逐类批准要求不变。
+
 > 2026-10-22 运维回退语义修订：[ADR-097](097-dimension-gate-rollback-keeps-source-verification.md) 规定 `NOTALONE_MEMORY_DIMENSION_GATE=0` 只关闭逐维白名单；带 `verified_sources` 的装配仍要求同次来源核验，本文第 5 条按此解释，历史评测合同不变。
 
 > 状态：已采纳

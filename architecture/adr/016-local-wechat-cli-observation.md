@@ -5,6 +5,8 @@
 
 > 后续修订：仅前台读取限制已由 ADR-023 的双通道替代，恢复补齐由 ADR-025 规定；当前授权边界和首次手动选择见 [ADR-030](030-confirmed-contact-background-sync-consent.md)。本文保留历史决定。
 
+> 后续局部替代：[ADR-017](017-selected-session-metadata-matching.md)替代“头像作为主要视觉确认条件”的部分；CLI 主消息来源和联系人隔离边界继续有效。
+
 NotAlone 的前台同步需要识别当前微信会话，但用 OCR 解析每条消息的正文、说话人、时间和分行会带来不必要的错误。决定采用混合路径：用户自行安装并初始化只读微信 CLI；OCR 只识别当前前台窗口顶部的 `display name`，CLI 通过解析后的 `talker`/`username` 按会话读取文字消息。
 
 ## 决策
