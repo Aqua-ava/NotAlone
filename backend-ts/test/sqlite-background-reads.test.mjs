@@ -32,7 +32,8 @@ test('后台只读通道固定声明四个动作并拒绝写者、维护和任�
  await assert.rejects(channel.execute('memory.read',{ownerId:randomUUID(),scope:{scopeKind:'self',contactId:null}}),{code:'background_read_scope_invalid'});
  await assert.rejects(channel.execute('memory.read',null),{code:'background_read_scope_invalid'});
  await assert.rejects(channel.execute('memory.read',{}),{code:'background_read_scope_invalid'});
- const view=await channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null}});
+ await assert.rejects(channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null}}),{code:'background_read_scope_invalid'});
+ const view=await channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null},displayContactId:f.saved[0].contact_id});
  assert.deepEqual(view.candidates,[]);assert.deepEqual(view.memories,[]);
 });
 
@@ -84,13 +85,13 @@ test('记忆 read/readHistory 走隔离读者，prepareTimeline 与决定写入�
 test('后台读者关闭排空在途读取且不交付迟到结果，关闭失败保留重试',async t=>{
  const f=await fixture(t),entered=Promise.withResolvers(),release=Promise.withResolvers(),gated=gatedStorage(f.storage,'memory.read',entered,release,{failCloses:1});
  const channel=await createBackgroundReads({storage:gated,ownerId:owner,holders:new ActiveHolders()});
- const reading=channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null}});
+ const reading=channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null},displayContactId:f.saved[0].contact_id});
  await entered.promise;
  const closing=channel.close();
  await assert.rejects(closing,/合成后台读者关闭失败/);
  await assert.rejects(reading,{code:'background_read_cancelled'});
  release.resolve();
- await assert.rejects(channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null}}),{code:'readonly_closed'});
+ await assert.rejects(channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null},displayContactId:f.saved[0].contact_id}),{code:'readonly_closed'});
  await channel.close();
  assert.equal(gated.closeAttempts,2,'确认关闭后的重试不得丢失退休读者');
 });
@@ -100,8 +101,8 @@ test('后台读取遇到租约失效关闭旧读者，下次读取重建且不�
  const storage={openReader:async actions=>{const current=++attempts;opens.push(current);const actual=await f.storage.openReader(actions);
   return {execute:async(name,input)=>{if(current===1&&name==='memory.read')throw new StorageFailure('stale_lease');return actual.execute(name,input);},close:()=>actual.close()};}};
  const channel=await createBackgroundReads({storage,ownerId:owner,holders:new ActiveHolders()});t.after(()=>channel.close());
- await assert.rejects(channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null}}),{code:'stale_lease'});
- const view=await channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null}});
+ await assert.rejects(channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null},displayContactId:f.saved[0].contact_id}),{code:'stale_lease'});
+ const view=await channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null},displayContactId:f.saved[0].contact_id});
  assert.deepEqual(view.candidates,[]);assert.equal(attempts,2,'失效读者关闭后应重建附属读者');
 });
 
@@ -110,7 +111,7 @@ test('后台读取遇到维护推进的 schema 版本时重建读者，不交付
  const storage={openReader:async actions=>{const current=++attempts,actual=await f.storage.openReader(actions);
   return {execute:async(name,input)=>{if(current===1&&name==='memory.read')throw new StorageFailure('schema_drift');return actual.execute(name,input);},close:()=>actual.close()};}};
  const channel=await createBackgroundReads({storage,ownerId:owner,holders:new ActiveHolders()});t.after(()=>channel.close());
- const view=await channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null}});
+ const view=await channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null},displayContactId:f.saved[0].contact_id});
  assert.deepEqual(view.candidates,[]);assert.equal(attempts,2,'schema 版本推进后应重建附属读者');
 });
 
@@ -122,10 +123,10 @@ test('维护退役窗口内被撤销的并发后台读重试一次，不向调�
    if(current===1&&name==='memory.read'){entered.resolve();await release.promise;}
    return actual.execute(name,input);},close:()=>actual.close()};}};
  const channel=await createBackgroundReads({storage,ownerId:owner,holders:new ActiveHolders()});t.after(()=>channel.close());
- const victim=channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null}});
+ const victim=channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null},displayContactId:f.saved[0].contact_id});
  await entered.promise;
  try{
-  await assert.rejects(channel.execute('memory.history',{ownerId:owner,scope:{scopeKind:'self',contactId:null},memoryId:'00000000-0000-4000-8000-000000000001'}),{code:'stale_lease'});
+  await assert.rejects(channel.execute('memory.history',{ownerId:owner,scope:{scopeKind:'self',contactId:null},displayContactId:f.saved[0].contact_id,memoryId:'00000000-0000-4000-8000-000000000001'}),{code:'stale_lease'});
   // 旧读者退役撤销了并发在途读取；通道应在重建后的读者上重试而不是把取消交给调用方。
   const view=await victim;
   assert.deepEqual(view.candidates,[]);assert.equal(attempts,2);
@@ -189,6 +190,32 @@ test('后台读取已取得旧结果后删除必须排空且迟到结果不能�
  try{
   const cancelledEarly=await Promise.race([reading.then(()=>false,()=>true),new Promise(resolve=>setTimeout(()=>resolve(false),150))]);
   assert.equal(cancelledEarly,true,'删除 fence 必须撤销已取得旧结果但尚未返回的后台读取');
+  release.resolve();
+  await assert.rejects(reading,{code:'background_read_cancelled'});
+  const done=await advancing;assert.equal(done.state,'completed');
+ }finally{release.resolve();await reading.catch(()=>{});}
+});
+
+test('“我”视图按显示联系人排空来源删除并拒绝迟到正文',async t=>{
+ const f=await fixture(t),contactId=f.saved[0].contact_id;
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'合成本人记忆来源'})],completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(contactId);
+ const sourceId=(await f.service.read(contactId)).messages[0].sourceRecordIds[0];
+ const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts');
+ const {ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
+ const holders=new ActiveHolders();
+ const entered=Promise.withResolvers(),release=Promise.withResolvers();
+ const storage={openReader:async actions=>{const actual=await f.storage.openReader(actions);
+  return {execute:async(name,input)=>{const value=await actual.execute(name,input);if(name==='memory.read'){entered.resolve();await release.promise;}return value;},close:()=>actual.close()};}};
+ const channel=await createBackgroundReads({storage,ownerId:owner,holders});t.after(()=>channel.close());
+ const reading=channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null},displayContactId:contactId});
+ await entered.promise;
+ const deletion=new DeletionService(f.storage,holders,new ManagedFiles(f.root));
+ const plan=await deletion.plan({ownerId:owner,requestKey:`deletion-self-late-read-${randomUUID()}`,scope:{kind:'source',contactId,sourceId}});
+ const advancing=deletion.advance({ownerId:owner,operationId:plan.operationId});
+ try{
+  const cancelledEarly=await Promise.race([reading.then(()=>false,()=>true),new Promise(resolve=>setTimeout(()=>resolve(false),150))]);
+  assert.equal(cancelledEarly,true,'显示联系人的本人视图必须被来源删除 fence 撤销');
   release.resolve();
   await assert.rejects(reading,{code:'background_read_cancelled'});
   const done=await advancing;assert.equal(done.state,'completed');

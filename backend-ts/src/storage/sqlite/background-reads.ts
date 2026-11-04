@@ -76,16 +76,23 @@ class BackgroundReadChannel implements StorageReader {
  private async executeOwned<T>(name:string,input:Record<string,unknown>):Promise<T>{
   const rawScope=input.scope&&typeof input.scope==='object'&&!Array.isArray(input.scope)?input.scope as Record<string,unknown>:undefined;
   const contactId=typeof input.contactId==='string'?input.contactId:typeof rawScope?.contactId==='string'?rawScope.contactId:undefined;
+  if(input.displayContactId!==undefined&&(typeof input.displayContactId!=='string'||!input.displayContactId))throw new StorageFailure('background_read_scope_invalid');
+  const displayContactId=typeof input.displayContactId==='string'?input.displayContactId:undefined;
+  if(contactId&&displayContactId&&contactId!==displayContactId)throw new StorageFailure('background_read_scope_invalid');
+  // “我”视图按当前显示联系人过滤本人记忆；没有联系人来源覆盖时不能走共享后台读者。
+  const memoryRead=name==='memory.read'||name==='memory.history';
+  if(memoryRead&&rawScope?.scopeKind==='self'&&!displayContactId)throw new StorageFailure('background_read_scope_invalid');
+  const boundaryContactId=contactId??(memoryRead?displayContactId:undefined);
   for(let attempt=0;;attempt++){
    const slot=await this.current();
    let release:(()=>Promise<void>)|undefined;
    let finished=false,invalidated=false;
    try{
     // 边界与业务读取共用一次恢复周期；删除完成的 VACUUM 也可能先让边界动作本身失效。
-    const boundary=await this.read<{generation:bigint}>(slot,'background.readBoundary',{ownerId:this.options.ownerId,...(contactId?{contactId}:{})});this.assertCurrent(slot);
+    const boundary=await this.read<{generation:bigint}>(slot,'background.readBoundary',{ownerId:this.options.ownerId,...(boundaryContactId?{contactId:boundaryContactId}:{})});this.assertCurrent(slot);
     release=this.options.holders.register({
      key:'background-read:'+randomUUID(),ownerId:this.options.ownerId,generation:boundary.generation,
-     ...(contactId?{contactId,coversAllSources:true}:{coversAllContacts:true}),
+     ...(boundaryContactId?{contactId:boundaryContactId,coversAllSources:true}:{coversAllContacts:true}),
      close:async()=>{if(!finished)invalidated=true;if(invalidated)await this.retire(slot);},
     });
     const value=await this.read<T>(slot,name,input);this.assertCurrent(slot);if(invalidated)throw cancelled();return value;

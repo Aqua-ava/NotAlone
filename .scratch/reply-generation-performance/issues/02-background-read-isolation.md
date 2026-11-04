@@ -69,3 +69,11 @@ Blocked by: none
 - RED：旧实现下新增“后台读取已取得旧结果后删除必须排空且迟到结果不能返回”失败，读取在删除 fence 后仍保持未决，未进入撤销/关闭路径；修复 holder 后该用例通过。随后发现删除完成后的边界 `schema_drift` 不在恢复路径，删除排空回归失败；把边界与业务读取合并到同一重试/释放生命周期后转绿。
 - GREEN：`sqlite-background-reads.test.mjs` 11/11；后台读取、候选延迟、Skill loop、host launch、cutover structure 合计 40/40；backend typecheck 通过。删除排空测试确认旧读取被提前以 `background_read_cancelled` 拒绝，删除完成且独立手录不被来源删除误删；删除后读取仍可重建并返回仅剩的合法资料。
 - 数据影响：仅增加内存 holder 与只读边界查询，不新增持久字段、不扩大资料范围、不缓存正文；读取仍按 `owner_id + contact_id` 隔离，迟到结果继续拒绝。
+
+
+### 2026-11-04 self 显示范围删除排空
+
+- Spec Review 发现“我”视图使用 `scopeKind=self`、`contactId=null`，另以 `displayContactId` 过滤当前联系人；旧实现只登记 `coversAllContacts`，来源删除无法匹配该 holder。合成复现可在来源删除完成后返回旧本人记忆正文。
+- 修复：`memory.read`／`memory.history` 以 `displayContactId` 对应联系人读取 `data_generation` 并登记 `coversAllSources:true` holder；contact scope 的 contactId 与 displayContactId 不一致时拒绝。没有 `displayContactId` 的全局本人读取不再允许走共享后台通道，返回 `background_read_scope_invalid`。
+- RED：新增“我视图按显示联系人排空来源删除并拒绝迟到正文”，旧实现 150ms 内未被删除 fence 撤销，测试失败。GREEN 后该读取提前以 `background_read_cancelled` 拒绝，删除 completed；后台读取 12/12。
+- 数据影响：不扩大读取范围；本人视图仍只展示当前显示联系人来源，owner/contact 隔离与删除闭包保持。

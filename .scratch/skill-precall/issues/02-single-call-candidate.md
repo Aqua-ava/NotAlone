@@ -63,3 +63,6 @@ Blocked by: 01
 
 - 2026-11-04：按规格创建，依赖 01。
 - 2026-11-04：预加载正常入口、工具隐藏、预算/读取/失效整体降级与合成回归完成，等待独立 Standards／Spec 审查；保持 `claimed`。
+
+- 2026-11-04 Spec Review 修复：旧式按需路径原先在安装 guard 时缓存 `loadedSkills.length===0`，官方 `skill` 工具后续载入正文后 `skill_resource` 仍被拒绝。现 guard 每次执行实时检查当前运行已加载正文；只有加载后才能读取该版本声明资源，次数计数与两次上限不变。
+- RED：真实官方 DSH／环回模型集成中，首次 `skill` 载入正文后连续两次 `skill_resource` 均返回 `discussion_resource_limit`。GREEN：4 次物理请求完成“载入正文 → 资源 1 → 资源 2 → 最终候选”，输入追踪为 `SKILL.md` 与两份资源，`discussion-generation` 8/8、候选 Skill loop 15/15、正式 profile 1/1，backend typecheck 通过。
