@@ -1,7 +1,7 @@
 # 02 — 正常候选入口改为单次模型调用
 
 Type: task
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: 01
 
@@ -21,13 +21,13 @@ Blocked by: 01
 
 ## Acceptance Criteria
 
-- [ ] 正常入口存在一个或多个已启用 Skill 时，物理 `model_call` 数量为 1。
-- [ ] 首次模型请求已包含全部预加载 Skill 正文。
-- [ ] 首次请求不出现可调用的 Skill 摘要目录，不产生 `skill` 工具调用。
-- [ ] 没有 Skill 时仍只调用一次模型。
-- [ ] `skill_resource` 仍受已预加载身份、资源路径和两次上限约束。
-- [ ] Skill 失效、预算超限和读取失败均可解释地降级，不静默截断。
-- [ ] 显式指定 Skill 的兼容行为保持。
+- [x] 正常入口存在一个或多个已启用 Skill 时，物理 `model_call` 数量为 1。
+- [x] 首次模型请求已包含全部预加载 Skill 正文。
+- [x] 首次请求不出现可调用的 Skill 摘要目录，不产生 `skill` 工具调用。
+- [x] 没有 Skill 时仍只调用一次模型。
+- [x] `skill_resource` 仍受已预加载身份、资源路径和两次上限约束。
+- [x] Skill 失效、预算超限和读取失败均可解释地降级，不静默截断。
+- [x] 显式指定 Skill 的兼容行为保持。
 
 ## Tests
 
@@ -62,7 +62,7 @@ Blocked by: 01
 ## Comments
 
 - 2026-11-04：按规格创建，依赖 01。
-- 2026-11-04：预加载正常入口、工具隐藏、预算/读取/失效整体降级与合成回归完成，等待独立 Standards／Spec 审查；保持 `claimed`。
+- 2026-11-04：预加载正常入口、工具隐藏、预算/读取/失效整体降级与合成回归完成，等待独立 Standards／Spec 审查；当时保持 `claimed`，最终由审查与桌面验收改为 `resolved`。
 
 - 2026-11-04 Spec Review 修复：旧式按需路径原先在安装 guard 时缓存 `loadedSkills.length===0`，官方 `skill` 工具后续载入正文后 `skill_resource` 仍被拒绝。现 guard 每次执行实时检查当前运行已加载正文；只有加载后才能读取该版本声明资源，次数计数与两次上限不变。
 - RED：真实官方 DSH／环回模型集成中，首次 `skill` 载入正文后连续两次 `skill_resource` 均返回 `discussion_resource_limit`。GREEN：4 次物理请求完成“载入正文 → 资源 1 → 资源 2 → 最终候选”，输入追踪为 `SKILL.md` 与两份资源，`discussion-generation` 8/8、候选 Skill loop 15/15、正式 profile 1/1，backend typecheck 通过。

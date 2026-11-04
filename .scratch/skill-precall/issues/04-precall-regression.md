@@ -1,7 +1,7 @@
 # 04 — 单次调用、失效与预算回归
 
 Type: task
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: 01, 02, 03
 
@@ -21,13 +21,13 @@ Blocked by: 01, 02, 03
 
 ## Acceptance Criteria
 
-- [ ] 正常路径 Skill 不再产生第二次模型调用。
-- [ ] 所有 Skill 读取与来源失效路径均 fail closed 或整体无 Skill 降级。
-- [ ] 预算超限不截断 Skill 正文。
-- [ ] 资源工具只能访问已预加载 Skill 的允许资源。
-- [ ] 正式 profile 装配与 DSH 官方插件行为有可定位验证。
-- [ ] 相关后端测试、桌面测试和 typecheck 通过，剩余失败有归属。
-- [ ] 修改前后对照数据写入 ticket Answer。
+- [x] 正常路径 Skill 不再产生第二次模型调用。
+- [x] 所有 Skill 读取与来源失效路径均 fail closed 或整体无 Skill 降级。
+- [x] 预算超限不截断 Skill 正文。
+- [x] 资源工具只能访问已预加载 Skill 的允许资源。
+- [x] 正式 profile 装配与 DSH 官方插件行为有可定位验证。
+- [x] 相关后端测试、桌面测试和 typecheck 通过，剩余失败有归属。
+- [x] 修改前后对照数据写入 ticket Answer。
 
 ## Tests
 
@@ -61,10 +61,12 @@ Blocked by: 01, 02, 03
 ## Comments
 
 - 2026-11-04：按规格创建，依赖 01、02、03。
-- 2026-11-04：单次调用、失效、预算、正式 profile 与性能对照完成；HTTP/Playwright 受沙箱限制的项已明确留待可运行环境与 ticket 05。保持 `claimed`。
+- 2026-11-04：单次调用、失效、预算、正式 profile 与性能对照完成；HTTP/Playwright 受沙箱限制的项已明确留待可运行环境与 ticket 05。当时保持 `claimed`，后由最终验收改为 `resolved`。
 
 - 2026-11-04 上限补齐：新增 `skill_resource` 第三次调用真实集成回归。前两次读取成功，第三次在下一次模型请求前被硬拒绝，随后只发起一次无 Skill 降级请求；最终候选保留，`skillWarning` 为“回复策略暂不可用”，`loadedSkills/preloadedSkills` 清空，没有残留第三次资源正文。候选 Skill loop 16/16。
 
 - 2026-11-04 规模化实际 App 缺口修复：92 个默认启用 Skill 时，旧实现每个 Skill 的 `record()` 前后都执行整套 `run.validate()`，导致 17,296 次 `assertAnchor` 和约 24 秒本地准备。现增加 `skills.assertRevisions`／`library.assertAnchors` 批量复验、`discussion.skillPreload` 单事务选择与输入记录，并移除预加载入口的重复验证；正式候选保护一次记录全部 selection/input。同一合成 92 Skill 链路 3 样本为 593/573/585ms，P95=max=593ms；Skill/候选/profile 相关回归 34+17+15+9 全部通过。
 
 - 2026-11-04 上限边界：批量事件与上下文保留单轮最多 256 个 eligible Skill 的硬上限；257 个时抛 `skill_preload_limit`，整体无 Skill 降级而不是加载部分集合。新增 257 Skill 真实候选回归：仅 1 次无工具模型调用，`skillWarning=回复策略暂不可用`，loaded/preloaded 均清空。
+
+- 2026-11-04 Standards P3 收口：92 Skill 性能门禁改为 2 次预热 + 20 个有效样本，nearest-rank P95 不再退化为最大值，同时保留 P95≤1000ms、max≤2000ms。项目测试入口定向运行 22/22；并发负载下 P95 743.3ms、max 906.8ms，独立运行 P95 677.4ms、max 683.1ms。

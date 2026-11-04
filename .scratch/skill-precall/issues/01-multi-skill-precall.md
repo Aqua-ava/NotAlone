@@ -1,7 +1,7 @@
 # 01 — 支持多 Skill 正文预加载与冻结复验
 
 Type: task
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: 无
 
@@ -19,12 +19,12 @@ Blocked by: 无
 
 ## Acceptance Criteria
 
-- [ ] 能一次预加载一个或多个已启用且核验通过的 Skill。
-- [ ] 显式 `selectedPackageId` 仍只预加载指定单包。
-- [ ] 任一 anchor 失效时整轮预加载失败，不保留其他 Skill 正文。
-- [ ] 预加载集合和实际输入可追溯到精确 revision。
-- [ ] 联系人、owner、删除和迟到结果边界保持不变。
-- [ ] 现有 Skill、候选和删除回归不退化。
+- [x] 能一次预加载一个或多个已启用且核验通过的 Skill。
+- [x] 显式 `selectedPackageId` 仍只预加载指定单包。
+- [x] 任一 anchor 失效时整轮预加载失败，不保留其他 Skill 正文。
+- [x] 预加载集合和实际输入可追溯到精确 revision。
+- [x] 联系人、owner、删除和迟到结果边界保持不变。
+- [x] 现有 Skill、候选和删除回归不退化。
 
 ## Tests
 
@@ -55,4 +55,4 @@ Blocked by: 无
 ## Comments
 
 - 2026-11-04：按规格创建，等待实现。
-- 2026-11-04：实现与合成回归完成，等待独立 Standards／Spec 审查；审查通过前保持 `claimed`。
+- 2026-11-04：实现与合成回归完成，等待独立 Standards／Spec 审查；当时保持 `claimed`，审查通过后改为 `resolved`。

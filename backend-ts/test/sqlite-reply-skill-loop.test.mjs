@@ -83,22 +83,25 @@ test('没有eligible Skill时仍只调用一次模型且不暴露Skill工具',as
  assert.deepEqual(view.loadedSkills,[]);assert.equal(view.skillWarning,null);assert.equal((await f.trace()).calls.length,1);
 });
 
-test('92个默认启用Skill的本地预加载P95和最大值保持秒级', {timeout:30_000}, async t=>{
+test('92个默认启用Skill的本地预加载P95和最大值保持秒级', {timeout:90_000}, async t=>{
  let firstAt=0;
  const f=await setup(t,(_f,res)=>{if(!firstAt)firstAt=performance.now();stream(res);});
  // 规模化用例保留全部正文进入一次请求，使用足够大的合成上下文测量最坏预加载路径。
  f.model.budgetProfile.context_window_tokens=1_000_000;
  const catalog=await addScaleSkills(f);
  assert.equal(catalog.length,92);
- const samples=[];
- for(let index=1;index<=3;index++){
+ const run=async label=>{
   firstAt=0;const started=performance.now();
-  await f.turns.generate({...f.input,requestKey:randomUUID(),text:`第${index}次合成规模化候选请求`});
-  assert.ok(firstAt>0);samples.push(firstAt-started);
- }
+  await f.turns.generate({...f.input,requestKey:randomUUID(),text:label});
+  assert.ok(firstAt>0);return firstAt-started;
+ };
+ // 预热不计入门禁；20 个有效样本使 nearest-rank P95 具有统计意义，而不是退化为最大值。
+ for(let index=1;index<=2;index++)await run(`第${index}次合成规模化预热请求`);
+ const samples=[];
+ for(let index=1;index<=20;index++)samples.push(await run(`第${index}次合成规模化候选请求`));
  const sorted=[...samples].sort((a,b)=>a-b),p95=sorted[Math.ceil(sorted.length*.95)-1],max=sorted.at(-1);
  t.diagnostic(JSON.stringify({skills:catalog.length,samplesMs:samples.map(value=>+value.toFixed(1)),p95Ms:+p95.toFixed(1),maxMs:+max.toFixed(1)}));
- assert.equal(f.requests.length,3,'规模化预加载不得增加物理模型调用');
+ assert.equal(f.requests.length,22,'规模化预加载不得增加物理模型调用');
  assert.ok(p95<=1000,`规模化预加载 P95 ${p95.toFixed(1)}ms 超过 1000ms`);
  assert.ok(max<=2000,`规模化预加载 max ${max.toFixed(1)}ms 超过 2000ms`);
  const view=await f.view(),trace=await f.trace();
