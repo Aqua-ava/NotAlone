@@ -37,7 +37,7 @@ async function addScaleSkills(f,count=91,bodyPadding=0){
  for(let index=1;index<=count;index++){
   const name=`bulk-${String(index).padStart(3,'0')}`;
   await mkdir(join(f.skillRoot,name),{recursive:true});
-  const padding='synthetic-skill-padding '.repeat(Math.ceil(bodyPadding/24));
+  const padding='a'.repeat(bodyPadding);
   await writeFile(join(f.skillRoot,name,'SKILL.md'),`---\nname: ${name}\ndescription: 第${index}个合成规模化回复策略\n---\n这是第${index}个合成规模化策略正文。${padding.slice(0,bodyPadding)}\n`);
  }
  return f.library.refresh();
@@ -109,8 +109,8 @@ test('92个默认启用Skill的本地预加载P95和最大值保持秒级', {tim
 
 test('92个Skill的三次候选页保持有限Skill身份并在详情按需加载正文', {timeout:30_000}, async t=>{
  const f=await setup(t,(_f,res)=>stream(res));
- f.model.budgetProfile.context_window_tokens=1_000_000;
- await addScaleSkills(f,91,9000);
+ f.model.budgetProfile.context_window_tokens=3_000_000;
+ await addScaleSkills(f,91,16000);
  for(let index=1;index<=3;index++)await f.turns.generate({...f.input,requestKey:randomUUID(),text:`第${index}次合成规模化候选请求`});
  assert.equal(f.requests.length,3);
  const view=await f.view();
@@ -129,6 +129,9 @@ test('92个Skill的三次候选页保持有限Skill身份并在详情按需加�
  const details=await read(`${base}/${view.requestId}/skills?offset=0`),detailWire=details.body;
  assert.equal(details.status,200);assert.ok(Buffer.byteLength(detailWire,'utf8')<2_000_000);
  const detailBody=JSON.parse(detailWire);assert.equal(detailBody.total,92);assert.ok(detailBody.items.some(skill=>skill.text.includes('合成规模化策略正文')));
+ assert.ok(detailBody.nextOffset>0&&detailBody.nextOffset<detailBody.total,'详情页必须真正跨页');
+ const next=await read(`${base}/${view.requestId}/skills?offset=${detailBody.nextOffset}`),nextBody=JSON.parse(next.body);
+ assert.equal(next.status,200);assert.equal(nextBody.nextOffset,null);assert.equal(detailBody.items.length+nextBody.items.length,detailBody.total);
 });
 
 test('257个eligible Skill超过预载上限时整体无Skill降级', {timeout:30_000}, async t=>{

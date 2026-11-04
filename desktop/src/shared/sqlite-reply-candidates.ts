@@ -11,7 +11,7 @@ export type SqliteCandidateOperation=SqliteCandidateScope & (
 );
 export interface SqliteCandidateVersion {candidateId:string;versionNo:number;origin:'model'|'manual';parentVersionNo:number|null;parts:string[];basis:{itemNo:number;kind:string;text:string;verification:'actual_input'|'inherited_unverified'}[]}
 export interface SqliteCandidateLoadedSkill {packageId:string;name?:string;revisionNo:number;relativePath:string;text?:string;origin?:'explicit'|'auto_preload'|null;catalogRevision?:string|null}
-export interface SqliteCandidateRequest {requestId:string;generationState?:'committed'|'running'|'failed'|'unknown'|'invalidated';coverageWarning:string|null;skillWarning?:string|null;sourceState:'available'|'unavailable';candidates:SqliteCandidateVersion[];selections:{id:string;candidateId:string;versionNo:number;selectionNo:number}[];loadedSkills:SqliteCandidateLoadedSkill[];preloadedSkills?:{packageId:string;name?:string;revisionNo:number;origin:'explicit'|'auto_preload';catalogRevision?:string}[];hasMoreRequests?:boolean}
+export interface SqliteCandidateRequest {requestId:string;generationState?:'committed'|'running'|'failed'|'unknown'|'invalidated';coverageWarning:string|null;skillWarning?:string|null;sourceState:'available'|'unavailable';candidates:SqliteCandidateVersion[];selections:{id:string;candidateId:string;versionNo:number;selectionNo:number}[];loadedSkills:SqliteCandidateLoadedSkill[];preloadedSkills?:{packageId:string;name?:string;revisionNo:number;origin:'explicit'|'auto_preload';catalogRevision?:string}[]}
 export interface SqliteCandidateRecentMessage {messageId:string;sender:'owner'|'contact'|'unknown';text:string;occurredAt:string|null;timePrecision:'millisecond'|'second'|null;displayPosition:string;ordering:'verified'|'unknown'}
 export interface SqliteCandidatePage {recentMessages?:SqliteCandidateRecentMessage[];requests:SqliteCandidateRequest[];coverage:{phase:'not_started'|'running'|'incomplete'|'complete'};hasMoreRequests?:boolean}
 export interface SqliteCandidateSkillPage {items:(SqliteCandidateLoadedSkill&{text:string})[];nextOffset:number|null;total:number}
@@ -42,23 +42,61 @@ export function readSqliteCandidateOperation(value:unknown):SqliteCandidateOpera
  if(v.action==='edit'&&(!Array.isArray(v.parts)||!v.parts.length||v.parts.length>8||v.parts.some(p=>typeof p!=='string'||!p.trim()||p.length>10000)||v.parts.join('').length>30000))invalid();
  return v as unknown as SqliteCandidateOperation;
 }
+function object(value:unknown):Record<string,unknown>{if(!value||typeof value!=='object'||Array.isArray(value))invalid();return value as Record<string,unknown>;}
+function exact(value:Record<string,unknown>,required:string[],optional:string[]=[]):void{
+ if(required.some(key=>!(key in value))||Object.keys(value).some(key=>!required.includes(key)&&!optional.includes(key)))invalid();
+}
+function validLoadedSkill(value:unknown,requireText:boolean):SqliteCandidateLoadedSkill&{text?:string}{
+ const s=object(value),required=['packageId','revisionNo','relativePath',...(requireText?['text']:[])],optional=['name','origin','catalogRevision','text'];
+ exact(s,required,optional);
+ if(!uuid(s.packageId)||!Number.isSafeInteger(s.revisionNo)||!(s.revisionNo as number>0)||typeof s.relativePath!=='string'||!s.relativePath||s.relativePath.length>4096
+  ||s.name!==undefined&&(typeof s.name!=='string'||!s.name||s.name.length>4096)
+  ||s.origin!==undefined&&s.origin!==null&&!['explicit','auto_preload'].includes(String(s.origin))
+  ||s.catalogRevision!==undefined&&s.catalogRevision!==null&&(typeof s.catalogRevision!=='string'||!s.catalogRevision||s.catalogRevision.length>65536)
+  ||s.text!==undefined&&(typeof s.text!=='string'||!s.text||new TextEncoder().encode(s.text).byteLength>1024*1024))invalid();
+ return s as unknown as SqliteCandidateLoadedSkill&{text?:string};
+}
 export function readSqliteCandidateVersion(value:unknown):SqliteCandidateVersion{
- if(!value||typeof value!=='object')invalid();const v=value as SqliteCandidateVersion;
- if(!uuid(v.candidateId)||!Number.isSafeInteger(v.versionNo)||v.versionNo<1||!['model','manual'].includes(v.origin)||!(v.parentVersionNo===null||Number.isSafeInteger(v.parentVersionNo)&&v.parentVersionNo>=1&&v.parentVersionNo<v.versionNo)||!Array.isArray(v.parts)||!v.parts.length||v.parts.length>8||v.parts.some(p=>typeof p!=='string'||!p.trim()||p.length>10000)||!Array.isArray(v.basis)||v.basis.length>50||v.basis.some(b=>!b||!Number.isSafeInteger(b.itemNo)||b.itemNo<1||typeof b.kind!=='string'||typeof b.text!=='string'||b.text.length>100000||!['actual_input','inherited_unverified'].includes(b.verification)))invalid();return v;
+ const v=object(value);exact(v,['candidateId','versionNo','origin','parentVersionNo','parts','basis']);
+ if(!uuid(v.candidateId)||!Number.isSafeInteger(v.versionNo)||(v.versionNo as number)<1||!['model','manual'].includes(String(v.origin))
+  ||!(v.parentVersionNo===null||Number.isSafeInteger(v.parentVersionNo)&&(v.parentVersionNo as number)>=1&&(v.parentVersionNo as number)<(v.versionNo as number))
+  ||!Array.isArray(v.parts)||!v.parts.length||v.parts.length>8||v.parts.some(p=>typeof p!=='string'||!p.trim()||p.length>10000)
+  ||!Array.isArray(v.basis)||v.basis.length>50)invalid();
+ for(const basis of v.basis){const b=object(basis);exact(b,['itemNo','kind','text','verification']);if(!Number.isSafeInteger(b.itemNo)||(b.itemNo as number)<1||typeof b.kind!=='string'||typeof b.text!=='string'||!b.text||b.text.length>100000||!['actual_input','inherited_unverified'].includes(String(b.verification)))invalid();}
+ return v as unknown as SqliteCandidateVersion;
 }
 export function readSqliteCandidatePage(value:unknown):SqliteCandidatePage{
- if(!value||typeof value!=='object')invalid();const v=value as SqliteCandidatePage;
- if(!Array.isArray(v.requests)||!v.coverage||!['not_started','running','incomplete','complete'].includes(v.coverage.phase))invalid();
+ const v=object(value);exact(v,['requests','coverage'],['recentMessages','hasMoreRequests']);
+ if(!Array.isArray(v.requests))invalid();
  if(v.hasMoreRequests!==undefined&&typeof v.hasMoreRequests!=='boolean')invalid();
- if(v.recentMessages!==undefined&&(!Array.isArray(v.recentMessages)||v.recentMessages.length>50||v.recentMessages.some(m=>!m||!uuid(m.messageId)||!['owner','contact','unknown'].includes(m.sender)||typeof m.text!=='string'||!m.text.trim()||m.text.length>100000||!(m.occurredAt===null||typeof m.occurredAt==='string'&&m.occurredAt.length<=64)||!(m.timePrecision===null||['second','millisecond'].includes(m.timePrecision))||typeof m.displayPosition!=='string'||m.displayPosition.length>64||!['verified','unknown'].includes(m.ordering))))invalid();
- for(const r of v.requests){if(!r||r.skillWarning!==undefined&&r.skillWarning!==null&&r.skillWarning!=='回复策略暂不可用'||!uuid(r.requestId)||!(r.coverageWarning===null||typeof r.coverageWarning==='string')||!['available','unavailable'].includes(r.sourceState)||!Array.isArray(r.candidates)||!Array.isArray(r.selections)||!Array.isArray(r.loadedSkills)||r.preloadedSkills!==undefined&&!Array.isArray(r.preloadedSkills))invalid();r.candidates.forEach(readSqliteCandidateVersion);for(const s of r.selections)if(!uuid(s.id)||!uuid(s.candidateId)||!Number.isSafeInteger(s.versionNo)||!Number.isSafeInteger(s.selectionNo))invalid();for(const s of r.loadedSkills)if(s.name!==undefined&&(typeof s.name!=='string'||s.name.length>4096)||s.origin!==undefined&&s.origin!==null&&!['explicit','auto_preload'].includes(s.origin)||s.catalogRevision!==undefined&&s.catalogRevision!==null&&(typeof s.catalogRevision!=='string'||!s.catalogRevision||s.catalogRevision.length>65536)||!uuid(s.packageId)||!Number.isSafeInteger(s.revisionNo)||typeof s.relativePath!=='string'||s.text!==undefined&&(typeof s.text!=='string'||new TextEncoder().encode(s.text).byteLength>1024*1024))invalid();for(const s of r.preloadedSkills??[])if(s.name!==undefined&&(typeof s.name!=='string'||s.name.length>4096)||!uuid(s.packageId)||!Number.isSafeInteger(s.revisionNo)||!['explicit','auto_preload'].includes(s.origin)||s.catalogRevision!==undefined&&(typeof s.catalogRevision!=='string'||!s.catalogRevision||s.catalogRevision.length>65536))invalid();}
- return v;
+ const coverage=object(v.coverage);exact(coverage,['phase']);if(!['not_started','running','incomplete','complete'].includes(String(coverage.phase)))invalid();
+ if(v.recentMessages!==undefined){
+  if(!Array.isArray(v.recentMessages)||v.recentMessages.length>50)invalid();
+  for(const value of v.recentMessages){const m=object(value);exact(m,['messageId','sender','text','occurredAt','timePrecision','displayPosition','ordering']);
+   if(!uuid(m.messageId)||!['owner','contact','unknown'].includes(String(m.sender))||typeof m.text!=='string'||!m.text.trim()||m.text.length>100000
+    ||!(m.occurredAt===null||typeof m.occurredAt==='string'&&m.occurredAt.length<=64)||!(m.timePrecision===null||['second','millisecond'].includes(String(m.timePrecision)))
+    ||typeof m.displayPosition!=='string'||m.displayPosition.length>64||!['verified','unknown'].includes(String(m.ordering)))invalid();}
+ }
+ for(const value of v.requests){const r=object(value);exact(r,['requestId','coverageWarning','sourceState','candidates','selections','loadedSkills'],['generationState','skillWarning','preloadedSkills']);
+  if(!uuid(r.requestId)||!(r.coverageWarning===null||typeof r.coverageWarning==='string')||!['available','unavailable'].includes(String(r.sourceState))
+   ||r.generationState!==undefined&&!['committed','running','failed','unknown','invalidated'].includes(String(r.generationState))
+   ||r.skillWarning!==undefined&&r.skillWarning!==null&&r.skillWarning!=='回复策略暂不可用'
+   ||!Array.isArray(r.candidates)||!Array.isArray(r.selections)||!Array.isArray(r.loadedSkills)||r.preloadedSkills!==undefined&&!Array.isArray(r.preloadedSkills))invalid();
+  r.candidates.forEach(readSqliteCandidateVersion);
+  for(const value of r.selections){const s=object(value);exact(s,['id','candidateId','versionNo','selectionNo']);if(!uuid(s.id)||!uuid(s.candidateId)||!Number.isSafeInteger(s.versionNo)||(s.versionNo as number)<1||!Number.isSafeInteger(s.selectionNo)||(s.selectionNo as number)<1)invalid();}
+  for(const skill of r.loadedSkills)validLoadedSkill(skill,false);
+  for(const value of r.preloadedSkills??[]){const s=object(value);exact(s,['packageId','revisionNo','origin'],['name','catalogRevision']);if(!uuid(s.packageId)||!Number.isSafeInteger(s.revisionNo)||(s.revisionNo as number)<1||!['explicit','auto_preload'].includes(String(s.origin))
+   ||s.name!==undefined&&(typeof s.name!=='string'||!s.name||s.name.length>4096)||s.catalogRevision!==undefined&&(typeof s.catalogRevision!=='string'||!s.catalogRevision||s.catalogRevision.length>65536))invalid();}
+ }
+ return v as unknown as SqliteCandidatePage;
 }
-export function readSqliteCandidateSkillPage(value:unknown):SqliteCandidateSkillPage{
- if(!value||typeof value!=='object'||Array.isArray(value))invalid();const v=value as SqliteCandidateSkillPage;
- if(Object.keys(v).some(k=>!['items','nextOffset','total'].includes(k))||!Array.isArray(v.items)||!Number.isSafeInteger(v.total)||v.total<0||!(v.nextOffset===null||Number.isSafeInteger(v.nextOffset)&&v.nextOffset>=v.items.length&&v.nextOffset<=v.total))invalid();
- for(const s of v.items){if(!s||s.name!==undefined&&(typeof s.name!=='string'||s.name.length>4096)||s.origin!==undefined&&s.origin!==null&&!['explicit','auto_preload'].includes(s.origin)||s.catalogRevision!==undefined&&s.catalogRevision!==null&&(typeof s.catalogRevision!=='string'||!s.catalogRevision||s.catalogRevision.length>65536)||!uuid(s.packageId)||!Number.isSafeInteger(s.revisionNo)||typeof s.relativePath!=='string'||typeof s.text!=='string'||new TextEncoder().encode(s.text).byteLength>1024*1024)invalid();}
- return v;
+export function readSqliteCandidateSkillPage(value:unknown,offset:number):SqliteCandidateSkillPage{
+ const v=object(value);exact(v,['items','nextOffset','total']);
+ if(!Number.isSafeInteger(offset)||offset<0||!Array.isArray(v.items)||!Number.isSafeInteger(v.total)||(v.total as number)<0||!(v.nextOffset===null||Number.isSafeInteger(v.nextOffset)))invalid();
+ const nextOffset=v.nextOffset as number|null,end=offset+v.items.length;
+ if(end>(v.total as number)||end===offset&&offset<(v.total as number)||(nextOffset===null?end!==v.total:nextOffset!==end))invalid();
+ for(const skill of v.items)validLoadedSkill(skill,true);
+ return v as unknown as SqliteCandidateSkillPage;
 }
 
 /** 进度只包含调用状态，不允许聊天、模型正文或诊断详情进入此通道。 */

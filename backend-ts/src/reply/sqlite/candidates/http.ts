@@ -42,9 +42,19 @@ export class SqliteReplyCandidateHttp {
     const requests=await o.service.view(contactId,discussionId,{includeSkillText:false,limit:requestWindowLimit+1});
     const history=await o.service.recentHistory(contactId);
     const recentMessages=history.messages.map((m:any)=>({messageId:m.id,sender:m.sender,text:m.text,occurredAt:occurredAt(m.sentAt),timePrecision:m.timePrecision,displayPosition:m.displayPosition,ordering:m.ordering}));
-    const compact=(request:any)=>{const {ownerId:_owner,loadedSkills=[],preloadedSkills,...rest}=request;return {...rest,loadedSkills:loadedSkills.map(({text:_text,catalogRevision:_catalogRevision,...skill}:any)=>skill),...(preloadedSkills===undefined?{}:{preloadedSkills:preloadedSkills.map(({catalogRevision:_catalogRevision,...skill}:any)=>skill)})};};
+    const compact=(request:any)=>({
+     requestId:request.requestId,
+     ...(request.generationState===undefined?{}:{generationState:request.generationState}),
+     coverageWarning:request.coverageWarning,
+     ...(request.skillWarning===undefined?{}:{skillWarning:request.skillWarning}),
+     sourceState:request.sourceState,
+     candidates:request.candidates,
+     selections:request.selections,
+     loadedSkills:(request.loadedSkills??[]).map(({text:_text,catalogRevision:_catalogRevision,...skill}:any)=>skill),
+     ...(request.preloadedSkills===undefined?{}:{preloadedSkills:request.preloadedSkills.map(({catalogRevision:_catalogRevision,...skill}:any)=>skill)}),
+    });
     let visible=requests.slice(-requestWindowLimit),hasMoreRequests=requests.length>requestWindowLimit;
-    const build=()=>({requests:visible.map(compact),coverage:history.coverage,recentMessages,hasMoreRequests});
+    const build=()=>({requests:visible.map(compact),coverage:{phase:history.coverage.phase},recentMessages,hasMoreRequests});
     while(visible.length>1&&Buffer.byteLength(JSON.stringify(build()),'utf8')>pageMaxBytes){visible=visible.slice(1);hasMoreRequests=true;}
     if(Buffer.byteLength(JSON.stringify(build()),'utf8')>pageMaxBytes)throw new StorageFailure('reply_page_too_large');
     respond(res,200,build());

@@ -98,6 +98,8 @@ test('已知失败按安全中文状态映射，未知错误不将供应商正�
   ['reply_source_unavailable','本次候选来源已失效，请重新读取。'],
   ['skill_run_invalidated','本次Skill资格已失效，请重新读取。'],
   ['history_source_not_available','本次候选来源已失效，请重新读取。'],
+  ['reply_page_too_large','本次候选记录超出可显示范围，请先处理较早记录后重试。'],
+  ['reply_skill_page_too_large','本次Skill输入超出可显示范围。'],
   ['synthetic_provider_unknown','候选结果尚未确认，请保留原请求重试核对。'],
  ]){
   f.respond(async()=>{throw Object.assign(new Error('合成供应商私密正文与诊断'),{code});});
@@ -148,4 +150,24 @@ test('候选页的Skill身份与正文分离，详情只按固定分页路径读
  ]);
  assert.equal(f.requests[1].timeoutMs,120000);assert.equal(f.requests[1].maxResponseBytes,2_000_000);
  for(const extra of [{text:'不应由调用方指定'},{ownerId:ids.other},{offset:1.5},{offset:-1},{requestId:'not-a-uuid'}])await assert.rejects(f.bridge.candidates.execute({...scope,action:'skills',requestId:ids.request,offset:0,...extra}),/无效/);
+});
+
+test('候选IPC拒绝内部查询字段、未知字段和不一致分页',async t=>{
+ const f=fixture(await modules());t.after(()=>f.controller.close());
+ const metadata={packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'SKILL.md',origin:'auto_preload'},detail={...metadata,text:'合成Skill正文',catalogRevision:null};
+ for(const data of [
+  {...pageData(),requests:[{...pageData().requests[0],contactId:ids.contact}]},
+  {...pageData(),requests:[{...pageData().requests[0],unknownField:'不应穿过IPC'}]},
+  {...pageData(),unknownField:'不应穿过IPC'},
+ ]){
+  f.respond(async()=>({generation:3,data}));await assert.rejects(f.bridge.candidates.execute({...scope,action:'read'}),/候选结果尚未确认/);
+ }
+ for(const data of [
+  {items:[{...detail,unknownField:'不应穿过IPC'}],nextOffset:null,total:1},
+  {items:[detail],nextOffset:null,total:2},
+  {items:[],nextOffset:0,total:1},
+  {items:[detail],nextOffset:2,total:1},
+ ]){
+  f.respond(async()=>({generation:3,data}));await assert.rejects(f.bridge.candidates.execute({...scope,action:'skills',requestId:ids.request,offset:0}),/候选结果尚未确认/);
+ }
 });

@@ -19,7 +19,7 @@ export function installSqliteReplyCandidateCommands(commands:PageCommands,backen
    current();if(controller.signal.aborted||response.generation!==generation)throw new Error('联系人或来源范围已失效，请重新读取。');
    if(op.action==='status'){const status=readSqliteCandidateStatus(response.data);if(status.requestKey!==op.requestKey)throw new Error('候选状态不匹配。');return status;}
    if(op.action==='read')return readSqliteCandidatePage(response.data);
-   if(op.action==='skills')return readSqliteCandidateSkillPage(response.data);
+   if(op.action==='skills')return readSqliteCandidateSkillPage(response.data,op.offset);
    if(op.action==='version'||op.action==='edit')return readSqliteCandidateVersion(response.data);
    return response.data;
   }catch(error){current();const code=(error as {code?:string}).code;throw new Error(code&&messages[code]?messages[code]:'候选结果尚未确认，请保留原请求重试核对。');}

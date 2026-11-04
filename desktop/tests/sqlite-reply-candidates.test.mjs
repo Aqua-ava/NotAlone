@@ -179,6 +179,20 @@ test('Skill正文不在候选页预载，展开详情时才按页读取',{timeou
  assert.equal(f.commands.filter(command=>command.action==='skills').length,1);
 });
 
+test('Skill详情确定性超限显示明确提示且不保留无效重试',{timeout:30000},async t=>{
+ const base=pageData(),metadata={packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'SKILL.md',origin:'auto_preload'};
+ const data={...base,requests:[{...base.requests[0],loadedSkills:[metadata]}]};
+ const f=await panel(t,async operation=>{
+  if(operation.action==='read')return data;
+  if(operation.action==='skills')throw new Error('本次Skill输入超出可显示范围。');
+  throw new Error('未授权的合成页面操作');
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'});
+ await region.getByText('实际进入模型输入的 Skill 内容',{exact:true}).click();
+ await expect(region.getByRole('alert')).toHaveText('本次Skill输入超出可显示范围。');
+ await expect(region.getByRole('button',{name:/加载更多 Skill 正文/})).toHaveCount(0);
+});
+
 /** 仅IPC业务边界为显式替身；实际React、浏览器事件及渲染均执行。 */
 async function panel(t,execute,initialDraft='',assistant=false){
  const compiled=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{SqliteReplyCandidatesPanel}from'./src/renderer/SqliteReplyCandidatesPanel';import{AssistantSessionPanel}from'./src/renderer/AssistantSessionPanel';
@@ -223,7 +237,7 @@ test('候选页面读取真实版本结构、保存多条编辑稿并选择具�
 
 test('覆盖不完整可直接使用，明确未发送失败的新请求保留显式选稿',{timeout:30000},async t=>{
  let generated=0;const f=await panel(t,async operation=>{
-  if(operation.action==='read')return {...pageData(original(),'incomplete'),availableSkills:[{packageId:ids.skill,name:'合成明确选择的方法',revisionNo:1}]};
+  if(operation.action==='read')return pageData(original(),'incomplete');
   if(operation.action==='select')return {id:ids.selection,candidateId:operation.candidateId,versionNo:operation.versionNo,selectionNo:1};
   if(operation.action==='status')return {requestKey:operation.requestKey,phase:'failed',sent:false,errorCode:'discussion_generation_failed',retryable:true,startedAt:1000,finishedAt:2000};
   if(operation.action==='generate'){if(++generated===1)throw new Error('候选结果尚未确认，请保留原请求重试核对。');return receipt(operation,true);}
@@ -363,7 +377,7 @@ test('切换联系人撤下旧草稿与快照，旧读取迟到不能跨范围�
 
 test('候选继续被后端判定失效时同时清草稿、旧携入及实际Skill快照',{timeout:30000},async t=>{
  let selected=0;const f=await panel(t,async operation=>{
-  if(operation.action==='read')return {...pageData(),availableSkills:[{packageId:ids.skill,name:'将失效的合成方法',revisionNo:1}]};
+  if(operation.action==='read')return pageData();
   if(operation.action==='select'){if(++selected===1)return {id:ids.selection};throw new Error('本次候选来源已失效，请重新读取。');}
   throw new Error('未授权的合成页面操作');
  });
