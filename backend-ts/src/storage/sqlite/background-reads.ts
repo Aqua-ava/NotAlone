@@ -69,7 +69,8 @@ class BackgroundReadChannel implements StorageReader {
    }catch(error){
     const code=(error as {code?:string})?.code??'';
     // 主写者完成删除后的 VACUUM 会推进 schema 版本；退役旧读者后重建一次，真实漂移仍如实上报。
-    const recoverable=attempt===0&&code==='schema_drift'&&!this.closed;
+    // 同一退役窗口内被撤销的在途读取也重试一次；显式关闭仍以 background_read_cancelled 拒绝。
+    const recoverable=attempt===0&&!this.closed&&(code==='schema_drift'||code==='background_read_cancelled'&&slot!==this.slot);
     // 租约或存储身份失效后旧连接不再可发布结果；关闭失败仍如实上报。
     if(terminal.has(code))await this.retire(slot);
     if(recoverable&&!this.closed){slot=await this.current();continue;}

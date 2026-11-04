@@ -113,6 +113,24 @@ test('后台读取遇到维护推进的 schema 版本时重建读者，不交付
  assert.deepEqual(view.candidates,[]);assert.equal(attempts,2,'schema 版本推进后应重建附属读者');
 });
 
+test('维护退役窗口内被撤销的并发后台读重试一次，不向调用方泄漏取消',async t=>{
+ const f=await fixture(t),entered=Promise.withResolvers(),release=Promise.withResolvers();let attempts=0;
+ const storage={openReader:async actions=>{const current=++attempts,actual=await f.storage.openReader(actions);
+  return {execute:async(name,input)=>{
+   if(current===1&&name==='memory.history')throw new StorageFailure('stale_lease');
+   if(current===1&&name==='memory.read'){entered.resolve();await release.promise;}
+   return actual.execute(name,input);},close:()=>actual.close()};}};
+ const channel=await createBackgroundReads({storage,ownerId:owner});t.after(()=>channel.close());
+ const victim=channel.execute('memory.read',{ownerId:owner,scope:{scopeKind:'self',contactId:null}});
+ await entered.promise;
+ try{
+  await assert.rejects(channel.execute('memory.history',{ownerId:owner,scope:{scopeKind:'self',contactId:null},memoryId:'00000000-0000-4000-8000-000000000001'}),{code:'stale_lease'});
+  // 旧读者退役撤销了并发在途读取；通道应在重建后的读者上重试而不是把取消交给调用方。
+  const view=await victim;
+  assert.deepEqual(view.candidates,[]);assert.equal(attempts,2);
+ }finally{release.resolve();await victim.catch(()=>{});}
+});
+
 test('隔离读者上的记忆读取仍受删除排空保护，独立手录不因来源删除误删',async t=>{
  const f=await fixture(t),contactId=f.saved[0].contact_id,scope={scopeKind:'contact',contactId};
  f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'合成待删除来源'})],completedPartitions:['shard-a'],exhausted:true});
