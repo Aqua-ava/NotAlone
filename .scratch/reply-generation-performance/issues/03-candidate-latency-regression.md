@@ -1,7 +1,7 @@
 # 候选准备延迟回归
 
 Triage: ready-for-agent
-State: open
+State: claimed
 
 Blocked by: 01, 02
 
