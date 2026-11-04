@@ -12,7 +12,8 @@ export function readParts(value:unknown):string[]{
 }
 export function parseReplyOutput(text:string):{parts:string[];basis:number[]}[]{
  let result;try{result=JSON.parse(text);}catch{fail('reply_output_invalid');}
- if(!result||Object.keys(result).length!==1||!Array.isArray(result.candidates)||!result.candidates.length||result.candidates.length>5)fail('reply_output_invalid');
+ // 顶层多出的说明字段（如 note）不入库、不展示，直接忽略；候选内部字段仍严格校验。
+ if(!result||typeof result!=='object'||Array.isArray(result)||!Array.isArray(result.candidates)||!result.candidates.length||result.candidates.length>5)fail('reply_output_invalid');
  return result.candidates.map((c:any)=>{
   if(!c||Object.keys(c).sort().join(',')!=='basis,parts'||!Array.isArray(c.basis)||!c.basis.length||c.basis.length>50||c.basis.some((n:any)=>!Number.isSafeInteger(n)||n<1)||new Set(c.basis).size!==c.basis.length)fail('reply_output_invalid');
   return {parts:readParts(c.parts),basis:c.basis};
