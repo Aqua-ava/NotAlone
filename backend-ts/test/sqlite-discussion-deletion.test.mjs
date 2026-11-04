@@ -20,6 +20,7 @@ test('精确讨论删除只推进本段代次，其他讨论及联系人数据�
  const f=await fixture(t),first=await f.discussion().newDiscussion('a'),sibling=await f.discussion().newDiscussion('a'),other=await f.discussion().newDiscussion('b');
  const op=await f.deletion().plan({ownerId:'o',requestKey:'delete-discussion',scope:{kind:'discussion',contactId:'a',discussionId:first.id}});
  await assert.rejects(f.discussion().view('a',first.id),{code:'discussion_unavailable'});
+ await assert.rejects(f.discussion().continueDiscussion('a',first.id),{code:'discussion_unavailable'});
  assert.equal((await f.discussion().view('a',sibling.id)).discussion.id,sibling.id);
  assert.equal((await f.discussion().view('b',other.id)).discussion.id,other.id);
  const done=await f.deletion().advance(op);assert.equal(done.state,'completed');
