@@ -199,8 +199,6 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   {page?.hasMoreRequests&&<p role="status">仅显示最近20次候选请求；更早记录未加载。</p>}
   {page?.requests.map(request=><div key={request.requestId} className="sqlite-candidate-request">
    {request.skillWarning&&<p role="status">{request.skillWarning}</p>}
-   {!!request.preloadedSkills?.length&&<p>本次预加载的 Skill：{request.preloadedSkills.map(skill=>`${skill.name??skill.packageId}（第${skill.revisionNo}版）`).join('、')}</p>}
-   {request.coverageWarning&&<p role="status">{request.coverageWarning}</p>}
    {request.generationState==='unknown'&&<p role="status">本次模型调用结果未知，请核对原请求，不能换身份重发。</p>}
    {request.generationState==='failed'&&!progress&&!busy&&<p role="status">本次候选生成失败，没有可选正文。</p>}
    {request.sourceState==='unavailable'&&(!request.generationState||request.generationState==='committed'||request.generationState==='invalidated')&&<p role="status">这次候选的来源已失效，正文与依据已撤下。</p>}

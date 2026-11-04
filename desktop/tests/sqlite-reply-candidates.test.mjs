@@ -137,8 +137,9 @@ test('临时禁用期间真实来源失效仍立即撤下编辑及依据',{timeo
  assert.equal(f.commands.filter(c=>c.action==='read').length,1);
 });
 
-test('Skill自动预加载无需手选，区分预加载身份与实际模型输入',{timeout:30000},async t=>{
+test('候选不展示预加载清单和历史覆盖提示，仍可按需核验实际模型输入',{timeout:30000},async t=>{
  let data={...pageData()};
+ data.requests[0].coverageWarning='历史覆盖不完整：本次使用当前可用资料，可能缺少重要语境。';
  data.requests[0].loadedSkills=[
   {packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'SKILL.md',text:'先回应感受。'},
   {packageId:ids.otherSkill,name:'合成边界策略',revisionNo:2,relativePath:'SKILL.md',text:'再说明边界。'},
@@ -151,7 +152,9 @@ test('Skill自动预加载无需手选，区分预加载身份与实际模型输
  const f=await panel(t,async()=>data),region=f.page.getByRole('region',{name:'表达工作区'});
  await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toBeVisible();
  await expect(region.getByRole('combobox')).toHaveCount(0);
- await expect(region.getByText('本次预加载的 Skill：合成安慰策略（第1版）、合成边界策略（第2版）',{exact:true})).toBeVisible();
+ await expect(region.getByText(/本次预加载的 Skill/)).toHaveCount(0);
+ await expect(region.getByText(/历史覆盖不完整/)).toHaveCount(0);
+ await expect(region.getByRole('group',{name:'实际进入模型输入的 Skill 内容'})).not.toBeVisible();
  await region.getByText('实际进入模型输入的 Skill 内容',{exact:true}).click();
  await expect(region.getByRole('group',{name:'实际进入模型输入的 Skill 内容'})).toBeVisible();
  await expect(region.getByText('合成安慰策略 · 第1版 · references/example.md',{exact:true})).toBeVisible();
