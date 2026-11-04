@@ -8,11 +8,11 @@ export function qualificationSources(tx:StorageTransaction,ownerId:string,parent
  SELECT ?,? WHERE ? IS NOT NULL
  UNION SELECT v.memory_id,v.previous_version_no FROM memory_version v JOIN versions a ON a.memory_id=v.memory_id AND a.version_no=v.version_no WHERE v.owner_id=? AND v.previous_version_no IS NOT NULL
  UNION SELECT v.memory_id,v.restored_from_version_no FROM memory_version v JOIN versions a ON a.memory_id=v.memory_id AND a.version_no=v.version_no WHERE v.owner_id=? AND v.restored_from_version_no IS NOT NULL
- UNION SELECT i.memory_id,i.memory_version_no FROM memory_version v JOIN versions a ON a.memory_id=v.memory_id AND a.version_no=v.version_no JOIN memory_decision d ON d.owner_id=v.owner_id AND d.id=v.decision_id JOIN step_attempt sa ON sa.owner_id=d.owner_id AND sa.id=d.execution_id JOIN step_input i ON i.owner_id=sa.owner_id AND i.step_id=sa.step_id AND i.kind='memory' WHERE v.owner_id=?
+ UNION SELECT i.memory_id,i.memory_version_no FROM versions a CROSS JOIN memory_version v ON a.memory_id=v.memory_id AND a.version_no=v.version_no JOIN memory_decision d ON d.owner_id=v.owner_id AND d.id=v.decision_id JOIN step_attempt sa ON sa.owner_id=d.owner_id AND sa.id=d.execution_id JOIN step_input i ON i.owner_id=sa.owner_id AND i.step_id=sa.step_id AND i.kind='memory' WHERE v.owner_id=?
  ), candidates(candidate_id) AS (
  SELECT ? WHERE ? IS NOT NULL UNION SELECT dc.candidate_id FROM decision_candidate dc JOIN memory_version v ON v.owner_id=dc.owner_id AND v.decision_id=dc.decision_id JOIN versions a ON a.memory_id=v.memory_id AND a.version_no=v.version_no WHERE dc.owner_id=?
  ), sources(source_contact_id,message_id,record_id,accepted_interpretation_revision) AS (
- SELECT i.source_contact_id,i.message_id,i.record_id,i.accepted_interpretation_revision FROM candidates c JOIN memory_candidate mc ON mc.owner_id=? AND mc.id=c.candidate_id JOIN execution_input x ON x.owner_id=mc.owner_id AND x.event_id=mc.event_id JOIN step_input si ON si.owner_id=x.owner_id AND si.step_id=x.planned_step_id AND si.input_no=x.planned_input_no JOIN run_input i ON i.owner_id=si.owner_id AND i.run_id=si.run_id AND i.input_no=si.run_input_no
+ SELECT i.source_contact_id,i.message_id,i.record_id,i.accepted_interpretation_revision FROM candidates c CROSS JOIN memory_candidate mc ON mc.owner_id=? AND mc.id=c.candidate_id CROSS JOIN execution_input x ON x.owner_id=mc.owner_id AND x.event_id=mc.event_id JOIN step_input si ON si.owner_id=x.owner_id AND si.step_id=x.planned_step_id AND si.input_no=x.planned_input_no JOIN run_input i ON i.owner_id=si.owner_id AND i.run_id=si.run_id AND i.input_no=si.run_input_no
  UNION SELECT i.source_contact_id,i.message_id,i.record_id,i.accepted_revision FROM versions a JOIN memory_version v ON v.owner_id=? AND v.memory_id=a.memory_id AND v.version_no=a.version_no JOIN memory_decision d ON d.owner_id=v.owner_id AND d.id=v.decision_id JOIN step_attempt sa ON sa.owner_id=d.owner_id AND sa.id=d.execution_id JOIN step_input i ON i.owner_id=sa.owner_id AND i.step_id=sa.step_id AND i.kind='message'
  ) SELECT DISTINCT * FROM sources ORDER BY source_contact_id,message_id,record_id`,[parent.memoryId??null,parent.versionNo??null,parent.memoryId??null,ownerId,ownerId,ownerId,parent.candidateId??null,parent.candidateId??null,ownerId,ownerId,ownerId]);
  return rows.map(r=>{
@@ -29,11 +29,11 @@ export function frozenContributingContactIds(tx:StorageTransaction,ownerId:strin
   SELECT ?,? WHERE ? IS NOT NULL
   UNION SELECT v.memory_id,v.previous_version_no FROM memory_version v JOIN versions a ON a.memory_id=v.memory_id AND a.version_no=v.version_no WHERE v.owner_id=? AND v.previous_version_no IS NOT NULL
   UNION SELECT v.memory_id,v.restored_from_version_no FROM memory_version v JOIN versions a ON a.memory_id=v.memory_id AND a.version_no=v.version_no WHERE v.owner_id=? AND v.restored_from_version_no IS NOT NULL
-  UNION SELECT i.memory_id,i.memory_version_no FROM memory_version v JOIN versions a ON a.memory_id=v.memory_id AND a.version_no=v.version_no
+  UNION SELECT i.memory_id,i.memory_version_no FROM versions a CROSS JOIN memory_version v ON a.memory_id=v.memory_id AND a.version_no=v.version_no
    JOIN memory_decision d ON d.owner_id=v.owner_id AND d.id=v.decision_id JOIN step_attempt sa ON sa.owner_id=d.owner_id AND sa.id=d.execution_id
    JOIN step_input i ON i.owner_id=sa.owner_id AND i.step_id=sa.step_id AND i.kind='memory' WHERE v.owner_id=? AND (
     NOT EXISTS(SELECT 1 FROM execution_event e WHERE e.owner_id=sa.owner_id AND e.step_attempt_id=sa.id AND e.kind='adjudication_result')
-    OR EXISTS(SELECT 1 FROM execution_event e JOIN execution_input x ON x.owner_id=e.owner_id AND x.event_id=e.id WHERE e.owner_id=sa.owner_id AND e.step_attempt_id=sa.id AND e.kind='adjudication_result' AND x.role='parent_memory' AND x.planned_step_id=i.step_id AND x.planned_input_no=i.input_no))
+    OR EXISTS(SELECT 1 FROM execution_event e CROSS JOIN execution_input x ON x.owner_id=e.owner_id AND x.event_id=e.id WHERE e.owner_id=sa.owner_id AND e.step_attempt_id=sa.id AND e.kind='adjudication_result' AND x.role='parent_memory' AND x.planned_step_id=i.step_id AND x.planned_input_no=i.input_no))
  ), candidates(candidate_id) AS (
   SELECT ? WHERE ? IS NOT NULL UNION SELECT dc.candidate_id FROM decision_candidate dc JOIN memory_version v ON v.owner_id=dc.owner_id AND v.decision_id=dc.decision_id
    JOIN versions a ON a.memory_id=v.memory_id AND a.version_no=v.version_no WHERE dc.owner_id=?)

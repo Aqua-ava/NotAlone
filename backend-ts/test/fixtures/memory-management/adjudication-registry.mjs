@@ -1,7 +1,19 @@
 import {registry as base} from './registry.mjs';
+import {projectCitations} from '../../../src/memory/sqlite/management/evidence.ts';
+import {frozenContributingContactIds} from '../../../src/memory/sqlite/management/dependencies.ts';
 
 /** 只读观察正式流水线；候选、决定、版本、执行和账本均由生产动作写入。 */
-export const registry={...base,actions:[...base.actions,{
+/** 观察版本闭包递归查询的真实执行计划；SQL 与参数由生产函数发出，这里只追加 EXPLAIN。 */
+const versionClosurePlans={name:'fixture.versionClosurePlans',mode:'read',retryBusy:false,execute(tx,{ownerId,memoryId,versionNo}){
+ const plans=[],spy={run:(sql,values)=>tx.run(sql,values),get:(sql,values)=>tx.get(sql,values),all(sql,values){
+  if(/^\s*WITH RECURSIVE versions/.test(sql))plans.push(tx.all(`EXPLAIN QUERY PLAN ${sql}`,values).map(r=>String(r.detail)));
+  return tx.all(sql,values);
+ }};
+ const parent={memoryId,versionNo:BigInt(versionNo)};
+ projectCitations(spy,ownerId,parent,[]);frozenContributingContactIds(spy,ownerId,parent);
+ return plans;
+}};
+export const registry={...base,actions:[...base.actions,versionClosurePlans,{
  name:'fixture.adjudicationTrace',mode:'read',retryBusy:false,execute(tx,{ownerId}){
   return {
    steps:tx.all("SELECT s.*,a.id AS attempt_id,a.state AS attempt_state,a.error_code FROM processing_step s LEFT JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id WHERE s.owner_id=? AND s.kind<>'extraction_verification' ORDER BY s.task_id,s.step_no",[ownerId]),

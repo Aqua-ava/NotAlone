@@ -6,11 +6,11 @@ function candidateEvents(tx:StorageTransaction,ownerId:string,parent:Parent):Sto
  return parent.candidateId?tx.all('SELECT event_id FROM memory_candidate WHERE owner_id=? AND id=?',[ownerId,parent.candidateId]):tx.all(`WITH RECURSIVE versions(memory_id,version_no) AS (
   SELECT ?,? UNION SELECT v.memory_id,v.previous_version_no FROM memory_version v JOIN versions a ON a.memory_id=v.memory_id AND a.version_no=v.version_no WHERE v.owner_id=? AND v.previous_version_no IS NOT NULL
   UNION SELECT v.memory_id,v.restored_from_version_no FROM memory_version v JOIN versions a ON a.memory_id=v.memory_id AND a.version_no=v.version_no WHERE v.owner_id=? AND v.restored_from_version_no IS NOT NULL
-  UNION SELECT i.memory_id,i.memory_version_no FROM memory_version v JOIN versions a ON a.memory_id=v.memory_id AND a.version_no=v.version_no
+  UNION SELECT i.memory_id,i.memory_version_no FROM versions a CROSS JOIN memory_version v ON a.memory_id=v.memory_id AND a.version_no=v.version_no
   JOIN memory_decision d ON d.owner_id=v.owner_id AND d.id=v.decision_id JOIN step_attempt sa ON sa.owner_id=d.owner_id AND sa.id=d.execution_id
   JOIN step_input i ON i.owner_id=sa.owner_id AND i.step_id=sa.step_id AND i.kind='memory' WHERE v.owner_id=? AND (
    NOT EXISTS(SELECT 1 FROM execution_event e WHERE e.owner_id=sa.owner_id AND e.step_attempt_id=sa.id AND e.kind='adjudication_result')
-   OR EXISTS(SELECT 1 FROM execution_event e JOIN execution_input x ON x.owner_id=e.owner_id AND x.event_id=e.id WHERE e.owner_id=sa.owner_id AND e.step_attempt_id=sa.id AND e.kind='adjudication_result' AND x.role='parent_memory' AND x.planned_step_id=i.step_id AND x.planned_input_no=i.input_no)))
+   OR EXISTS(SELECT 1 FROM execution_event e CROSS JOIN execution_input x ON x.owner_id=e.owner_id AND x.event_id=e.id WHERE e.owner_id=sa.owner_id AND e.step_attempt_id=sa.id AND e.kind='adjudication_result' AND x.role='parent_memory' AND x.planned_step_id=i.step_id AND x.planned_input_no=i.input_no)))
   SELECT DISTINCT c.event_id,CASE WHEN EXISTS(SELECT 1 FROM versions old JOIN memory_version ov ON ov.owner_id=v.owner_id AND ov.memory_id=old.memory_id AND ov.version_no=old.version_no
    JOIN memory_decision od ON od.owner_id=ov.owner_id AND od.id=ov.decision_id JOIN step_attempt oa ON oa.owner_id=od.owner_id AND oa.id=od.execution_id JOIN processing_step os ON os.owner_id=oa.owner_id AND os.id=oa.step_id
    WHERE os.kind IN ('adjudication','relation_verification','merge_verification') AND NOT EXISTS(SELECT 1 FROM execution_event e WHERE e.owner_id=oa.owner_id AND e.step_attempt_id=oa.id AND e.kind='adjudication_result')) THEN 1 ELSE 0 END AS legacy_unbound FROM memory_version v JOIN versions a ON a.memory_id=v.memory_id AND a.version_no=v.version_no
