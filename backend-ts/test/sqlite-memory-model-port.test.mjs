@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createSqliteExtractionModelPort} from '../src/memory/sqlite/model-port.ts';
 import {createServer} from 'node:http';
+import {createServer as createPermitSocketServer} from 'node:net';
+import {createInterface} from 'node:readline';
 import {once} from 'node:events';
 import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -11,6 +13,45 @@ import {spawn} from 'node:child_process';
 import {startModelHost} from '../src/platform/models/model-host.ts';
 import {resolveHostReplyConfiguration} from '../src/host/host-reply-config.ts';
 import sharp from 'sharp';
+
+for(const stop of ['调用取消','端口关闭'])test(`排队等待后台许可时${stop}会结束模型调用，不挂住停读`,{timeout:4000},async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'na-memory-permit-cancel-'));
+ const path=join(directory,'p.sock'),sockets=new Set(),queued=Promise.withResolvers(),operations=[];let queuedSocket;
+ const server=createPermitSocketServer(socket=>{
+  sockets.add(socket);socket.on('error',()=>{});socket.on('close',()=>sockets.delete(socket));
+  const lines=createInterface({input:socket});
+  lines.on('line',line=>{
+   const request=JSON.parse(line);operations.push(request.op);
+   if(request.op==='unconfirmed_requests')socket.write(JSON.stringify({state:'unconfirmed_requests',request_ids:[],next_cursor:null})+'\n');
+   else if(request.op==='acquire'){queuedSocket=socket;queued.resolve();}
+  });
+  socket.on('close',()=>lines.close());
+ });
+ server.listen(path);await once(server,'listening');
+ t.after(async()=>{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});});
+ const configuration=resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-only'});
+ let physicalCalls=0;
+ const port=createSqliteExtractionModelPort({ctx:{llm:{prepareCall:async config=>({config,stream(){throw Error('排队期间不得发送模型请求');}})}},configuration,
+  provider:{beginCall(){physicalCalls++;throw Error('排队期间不得预约模型请求');}},permit:{path,token:'synthetic-only'},authorizePurpose:async()=>{}});
+ const controller=new AbortController();
+ const invocation=port.invoke({purpose:'extraction',system:'合成提取要求',user:'合成聊天',tool:{name:'DirectMemoryExtractionOutput'}},
+  {requestId:randomUUID(),attemptId:randomUUID(),scope:{owner_id:randomUUID(),contact_id:randomUUID()},
+   claim:{task_id:randomUUID(),step_id:randomUUID(),step_name:'extract_memory',worker_id:randomUUID(),lease_generation:1},
+   signal:controller.signal,requireCurrent:async()=>{},onReceipt:async()=>{throw Error('未获许可不能生成回执');}});
+ const outcome=invocation.then(()=>({unexpectedSuccess:true}),error=>({error}));
+ await queued.promise;
+ const disconnected=once(queuedSocket,'close');
+ const closing=stop==='端口关闭'?port.close():undefined;if(stop==='调用取消')controller.abort();
+ await disconnected;
+ let timer;
+ const result=await Promise.race([outcome,new Promise(resolve=>{timer=setTimeout(()=>resolve({timedOut:true}),800);})]);
+ clearTimeout(timer);
+ assert.equal(result.timedOut,undefined,'取消已经关闭许可连接，但等待许可的模型调用仍未退出');
+ assert.equal(result.unexpectedSuccess,undefined);
+ assert.match(result.error.code,/^extraction_model_(cancelled|ack_unknown)$/);
+ await (closing??port.close());
+ assert.equal(physicalCalls,0);assert.deepEqual(operations,['unconfirmed_requests','acquire']);
+});
 
 test('未配置模型不会建立提取端口或静默选择其他供应商',()=>{
   assert.throws(()=>createSqliteExtractionModelPort({configuration:{status:'unavailable',code:'reply_model_unconfigured'}}),

@@ -61,10 +61,12 @@ export class ExtractionModelError extends Error {
 }
 function connect(endpoint:ExtractionPermitEndpoint, signal?:AbortSignal) {
   let cancellable=true;
-  const socket=createConnection(endpoint.path), lines=createInterface({input:socket})[Symbol.asyncIterator]();
+  const socket=createConnection(endpoint.path), reader=createInterface({input:socket}), lines=reader[Symbol.asyncIterator]();
   // error由迭代器处理；不允许认证/连接失败退回本地许可。
   socket.on('error',()=>{});
-  const abort=()=>socket.destroy(); signal?.addEventListener('abort',abort,{once:true});
+  // destroy 不保证触发输入 end；显式结束读行，排队许可的 next() 才会退出。
+  socket.once('close',()=>reader.close());
+  const abort=()=>{reader.close();socket.destroy();}; signal?.addEventListener('abort',abort,{once:true});
   async function exchange(value:unknown,timeout=10000):Promise<State> {
     if(cancellable&&signal?.aborted)throw new ExtractionModelError('extraction_model_cancelled');
     socket.write(JSON.stringify(value)+'\n');
@@ -76,7 +78,7 @@ function connect(endpoint:ExtractionPermitEndpoint, signal?:AbortSignal) {
     } catch {throw new ExtractionModelError('extraction_model_ack_unknown');}
     finally {clearTimeout(timer);}
   }
-  return {socket,exchange,detachCancellation(){cancellable=false;signal?.removeEventListener('abort',abort);},close(){signal?.removeEventListener('abort',abort);socket.destroy();}};
+  return {socket,exchange,detachCancellation(){cancellable=false;signal?.removeEventListener('abort',abort);},close(){signal?.removeEventListener('abort',abort);reader.close();socket.destroy();}};
 }
 /** 仅重发同一精确receipt的记账ACK；不得据存储已知解除journal未知或重发模型。 */
 export async function recordExtractionModelReceipt(endpoint:ExtractionPermitEndpoint,receipt:ModelLedgerReceipt):Promise<void> {
