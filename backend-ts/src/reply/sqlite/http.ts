@@ -4,7 +4,7 @@ import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {SqliteDiscussionService} from './service.ts';
 import type {SqliteDiscussionTurns} from './turns.ts';
 const uuid='[a-f0-9-]{36}';
-const route=new RegExp(`^/api/contacts/(${uuid})/assistant-sessions(?:/(${uuid})(?:/(resume|select|entries))?)?$`);
+const route=new RegExp(`^/api/contacts/(${uuid})/assistant-sessions(?:/(${uuid})(?:/(continue|entries))?)?$`);
 const defaultRoute=new RegExp(`^/api/contacts/(${uuid})/assistant-session/(default|binding)$`);
 function respond(res:ServerResponse,status:number,value:unknown){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));}
 function invalid():never{throw new StorageFailure('discussion_input_invalid');}
@@ -32,7 +32,7 @@ export class SqliteDiscussionHttp {
      try{const result=await this.turns.generate({contactId,discussionId:discussionId!,requestKey:value.request_key,text:value.text,confirmedContact:true,selectedPackageId:value.selected_package_id,signal:controller.signal});respond(res,200,{session_id:result.discussionId,segmented:result.segmented,replayed:result.replayed,request_key:value.request_key});}
      finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
     }else if(Object.keys(value).length)invalid();
-    else if(command==='resume'||command==='select'){await this.service.continueDiscussion(contactId,discussionId!);respond(res,200,{session_id:discussionId});}
+    else if(command==='continue'){await this.service.continueDiscussion(contactId,discussionId!);respond(res,200,{session_id:discussionId});}
     else if(!discussionId&&!command||command==='default'){
      const catalog=command==='default'?await this.service.list(contactId):undefined;
      const id=catalog?.currentDiscussionId??(await this.service.newDiscussion(contactId)).id;respond(res,200,{session_id:id});

@@ -56,7 +56,7 @@ test('历史目录刷新失败仍要求明确继续，Main和工作区都保持�
     await assert.rejects(f.bridge.generate({ ...f.scope, newRequest: true }), /明确继续/);
     await f.bridge.resumeSavedSession({ ...f.scope, sessionId: f.sessionId });
     assert.equal((await f.bridge.getState()).sessionCatalog.currentSessionId, f.sessionId);
-    assert.equal(f.calls.filter(call => call.path.endsWith('/resume')).length, 1);
+    assert.equal(f.calls.filter(call => call.path.endsWith('/continue')).length, 1);
   } finally { await f.replies.beginGenerationClosing(() => {}); }
 });
 
@@ -66,7 +66,7 @@ test('生产Main与preload的历史查看只读，明确继续才切换当前', 
   f.backend.requestJson = async request => request.path.endsWith('/assistant-sessions') && request.method === 'GET'
     ? { generation: f.records.generation, data: { sessions: [{ session_id: f.sessionId, is_current: false },
       { session_id: currentId, is_current: true }], current_session_id: currentId } }
-    : request.path.endsWith('/resume') ? (f.calls.push(request), { generation: f.records.generation,
+    : request.path.endsWith('/continue') ? (f.calls.push(request), { generation: f.records.generation,
       data: { session_id: f.sessionId } }) : originalRequest(request);
   try {
     await f.bridge.readSavedSession(f.scope);
@@ -79,8 +79,8 @@ test('生产Main与preload的历史查看只读，明确继续才切换当前', 
     await assert.rejects(f.bridge.generate({ ...f.scope, newRequest: true, workspaceAction: 'suggest' }), /明确继续此会话/);
     await f.bridge.resumeSavedSession({ ...f.scope, sessionId: f.sessionId });
     assert.equal(f.replies.getState().sessionCatalog.currentSessionId, f.sessionId);
-    assert.equal(f.calls.filter(call => call.path.endsWith('/resume')).length, 1);
-    assert.equal(f.calls.some(call => /\/(replies|continue)$/.test(call.path)), false);
+    assert.equal(f.calls.filter(call => call.path.endsWith('/continue')).length, 1);
+    assert.equal(f.calls.some(call => /\/replies(?:\/prepare)?$/.test(call.path)), false, '明确继续不能自动生成候选');
   } finally { await f.replies.beginGenerationClosing(() => {}); }
 });
 
@@ -158,7 +158,7 @@ test('恢复助手对话后保留当时的不完整历史警告', async () => {
 test('生产Main与preload继续旧讨论显示无正文的背景更新提示，回看其他讨论清除提示', async () => {
   const f = await historicalReplyFixture(), original = f.backend.requestJson, other = randomUUID();
   f.backend.requestJson = async request => {
-    if (request.path.endsWith('/resume')) return { generation: f.records.generation,
+    if (request.path.endsWith('/continue')) return { generation: f.records.generation,
       data: { session_id: f.sessionId, context_refresh: { changed: true } } };
     if (request.path.endsWith('/' + other)) return { generation: f.records.generation,
       data: { session_id: other, current_input_version_id: null, turns: [], inputs: [] } };
@@ -183,7 +183,7 @@ test('当前旧段被要求明确继续时入口可达，继续失败后仍可�
       throw new ports.BackendRequestFailure('response', 409, 'assistant_session_rejected', 'resume_required', undefined,
         { contactId: f.scope.contactId, sessionId: f.sessionId, requestKey: request.body.idempotency_key, state: 'not_reserved' });
     }
-    if (request.path.endsWith('/resume')) {
+    if (request.path.endsWith('/continue')) {
       f.calls.push(request);
       if (failResume) throw new ports.BackendRequestFailure('response', 503, 'unavailable');
       resumed = true;

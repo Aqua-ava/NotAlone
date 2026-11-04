@@ -42,6 +42,6 @@ test('正常讨论HTTP复用目录与继续入口，认证前不读正文且响�
  const made=await request('','POST',{});assert.equal(made.status,200);
  const list=await request();assert.equal(list.body.current_session_id,made.body.session_id);
  const view=await request(`/${made.body.session_id}`);assert.equal(view.body.mode,'sqlite');assert.deepEqual(view.body.entries,[]);assert.equal(JSON.stringify(view.body).includes('managed_locator'),false);
- assert.equal((await request(`/${made.body.session_id}/resume`,'POST',{})).body.session_id,made.body.session_id);
+ assert.equal((await request(`/${made.body.session_id}/continue`,'POST',{})).body.session_id,made.body.session_id);
  assert.equal((await request('','POST',{owner_id:'other'})).status,400);
 });
