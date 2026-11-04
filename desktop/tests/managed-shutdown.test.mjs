@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm, access } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:http';
+import { spawnSync } from 'node:child_process';
 const directory = await mkdtemp(path.join(tmpdir(), 'notalone-runtime-shutdown-'));
 const built = await build({ stdin: { contents: `export { SetupController } from './src/main/setup/controller'; export { RuntimeClient } from './src/main/backend/runtime-client'; export { OwnedBackendProcess } from './src/main/backend/process'; export { BackendHost } from './src/main/backend/host'; export { BackendConnectionNote } from './src/renderer/backend-status'; export { renderToStaticMarkup } from 'react-dom/server'; export { createElement } from 'react';`, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', write: false });
 await writeFile(path.join(directory, 'subject.cjs'), built.outputFiles[0].text);
@@ -98,6 +99,37 @@ test('已认证旧DSH只保留停读入口，拒绝业务复用并在退出时�
     await assert.rejects(host.requestJson({method:'GET',path:'/api/setup/status'}));
     assert.equal(shutdowns,0);assert.equal(await host.stop(),true);assert.equal(shutdowns,1);
   }finally{await host.stop();await new Promise(resolve=>server.close(resolve));}
+});
+
+test('已退出后台的遗留握手交由受控启动器复核，不永久阻断重新连接', async () => {
+  const project = path.join(directory, 'stale-project'), userData = path.join(directory, 'stale-user');
+  const executable = path.join(project, 'backend-ts/node_modules/@deepseek-ai/dsh/lib/bin.js');
+  await mkdir(path.dirname(executable), { recursive: true });
+  await mkdir(path.join(project, 'backend-ts/src'), { recursive: true });
+  await mkdir(path.join(project, 'backend-ts/profile'), { recursive: true });
+  await mkdir(userData);
+  await writeFile(path.join(project, 'backend-ts/src/launch.ts'), '// 合成入口\n');
+  await writeFile(path.join(project, 'backend-ts/profile/sqlite.patch.yml'), '[]\n');
+  await writeFile(executable, `const fs=require('node:fs'),http=require('node:http'),info=process.env.NOTALONE_BACKEND_INFO;
+const server=http.createServer((req,res)=>{
+ if(req.headers.authorization!=='Bearer synthetic_token'){res.writeHead(401);res.end('{}');return;}
+ const stopping=req.url==='/api/runtime/shutdown';
+ res.writeHead(200,{'Content-Type':'application/json'});
+ res.end(JSON.stringify(stopping?{state:'stopped',runtime:'dsh'}:${JSON.stringify(runningStatus)}));
+ if(stopping){fs.rmSync(info,{force:true});server.close(()=>process.exit(0));}
+});server.listen(0,'127.0.0.1',()=>fs.writeFileSync(info,'address=127.0.0.1:'+server.address().port+'\\ntoken=synthetic_token\\npid='+process.pid+'\\n',{mode:0o600}));`);
+  const previous = spawnSync(process.execPath, ['-e', ''], { timeout: 5000 });
+  assert.equal(previous.status, 0);
+  assert.throws(() => process.kill(previous.pid, 0), { code: 'ESRCH' });
+  const infoPath = path.join(userData, 'backend.info');
+  await writeFile(infoPath, `address=127.0.0.1:1\ntoken=synthetic_token\npid=${previous.pid}\n`, { mode: 0o600 });
+  await writeFile(path.join(userData, 'backend-launch.json'), JSON.stringify({ projectDirectory: project, backendInfoPath: infoPath }));
+  const host = sqliteHost(userData);
+  try {
+    await host.connect();
+    assert.equal(host.getState().phase, 'connected');
+    assert.equal(host.getState().reused, false);
+  } finally { assert.equal(await host.stop(), true); }
 });
 
 test('唯一已有本人仅在明确确认后恢复配置，认证重启后沿用原身份', async () => {

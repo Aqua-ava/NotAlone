@@ -19,7 +19,7 @@ import { installScreenPermissionBridge } from './screen-permission/bridge';
 import path from 'node:path';
 import { electronPageCommands } from './electron-page-commands';
 import { installResources } from './resources';
-import { readDevelopmentServer } from './development';
+import { notifyDevelopmentReady, readDevelopmentServer } from './development';
 import { AppWindows } from './windows';
 import { BackendHost } from './backend/host';
 import { installBackendBridge } from './backend/bridge';
@@ -273,7 +273,7 @@ void app.whenReady().then(async () => {
     ] },
   ]));
   void windows.open('manager', { background: development?.background }).then(async () => {
-    if (development) process.send?.({ type: 'notalone-dev-ready' });
+    if (development) notifyDevelopmentReady(() => app.quit());
     const config = await loadBackendConfiguration(app.getPath('userData'), resourcesDirectory).catch(() => undefined);
     if (config?.source === 'external') await screenPermission.startup();
   }).catch(() => {

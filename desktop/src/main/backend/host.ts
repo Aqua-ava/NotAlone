@@ -14,6 +14,11 @@ import { sqliteStartupTimeoutMs } from '../../../../backend-ts/src/storage/sqlit
 
 export interface MediaPreviewConnection {status(): Promise<'active' | 'revoking'>; release(): Promise<void>}
 
+function backendProcessHasExited(pid: number): boolean {
+  try { process.kill(pid, 0); return false; }
+  catch (error) { return (error as NodeJS.ErrnoException).code === 'ESRCH'; }
+}
+
 export class BackendHost {
   private state: BackendState = { phase: 'disconnected', reused: false, revision: 0, canRetryConnection: true, canRetryShutdown: false,
     canSaveStartupPaths: true, canPrepareConfiguration: false };
@@ -299,7 +304,8 @@ export class BackendHost {
     }
     const connection = await readConnection(config.infoPath);
     if (!canStart()) return;
-    if (connection) {
+    // 仅明确已退出的旧进程交给受控启动器；它会在互斥内再次核对并回收遗留握手。
+    if (connection && !backendProcessHasExited(connection.pid)) {
       // 原自建进程仍存活时不移交另一实例；退出仍须回收本 App 已持有的运行时。
       if (this.ownedChild?.isRunning() && connection.pid !== this.ownedChild.pid) throw new BackendFailure('backend_handshake_invalid');
       const client = new RuntimeClient(connection, config.runtime, config.sqlite?.expectedOwnerId

@@ -138,6 +138,60 @@ test('开发命令提供受认证的本机 Vite，限制文件范围并为热更
   } finally { await running.server.close(); await rm(forbidden, { recursive: true, force: true }); }
 });
 
+for (const race of [false, true]) test(`开发窗口${race ? '发送期间' : '就绪前'} IPC 已断开时正常请求退出，不抛出 ERR_IPC_CHANNEL_CLOSED`, async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'notalone-dev-disconnect-'));
+  const executable = path.join(directory, 'app.mjs');
+  await writeFile(executable, `import { notifyDevelopmentReady } from ${JSON.stringify(new URL('../src/main/development.ts', import.meta.url).href)};
+process.on('disconnect', () => {
+  notifyDevelopmentReady(() => process.stdout.write('quit-requested\\n'), ${race ? '{ connected: true, send: process.send.bind(process) }' : 'process'});
+  setImmediate(() => process.exit(0));
+});
+process.send({ type: 'fixture-ready' });`);
+  const child = spawn(process.execPath, [executable], { stdio: ['ignore', 'pipe', 'pipe', 'ipc'], timeout: 5000 });
+  let stdout = '', stderr = '';
+  child.stdout.on('data', data => { stdout += data; });
+  child.stderr.on('data', data => { stderr += data; });
+  const closed = new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', (code, signal) => resolve({ code, signal }));
+  });
+  child.once('message', () => child.disconnect());
+  try {
+    const result = await closed;
+    assert.equal(result.code, 0, stderr);
+    assert.equal(result.signal, null);
+    assert.match(stdout, /quit-requested/);
+    assert.doesNotMatch(stderr, /ERR_IPC_CHANNEL_CLOSED|Unhandled|Uncaught/);
+  } finally {
+    if (child.connected) child.disconnect();
+    await closed;
+    child.stdout.destroy(); child.stderr.destroy();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('开发就绪通知处理发送期间断开与同步失败，连接正常时不请求退出', async () => {
+  const { notifyDevelopmentReady } = await import('../src/main/development.ts');
+  let quits = 0, sent;
+  const quit = () => { quits++; };
+  notifyDevelopmentReady(quit, { connected: true, send: (message, callback) => {
+    sent = message; callback(null); return true;
+  } });
+  assert.deepEqual(sent, { type: 'notalone-dev-ready' });
+  assert.equal(quits, 0);
+  notifyDevelopmentReady(quit, { connected: true, send: (_message, callback) => {
+    queueMicrotask(() => callback(Object.assign(new Error('Channel closed'), { code: 'ERR_IPC_CHANNEL_CLOSED' })));
+    return false;
+  } });
+  await new Promise(resolve => queueMicrotask(resolve));
+  assert.equal(quits, 1);
+  notifyDevelopmentReady(quit, { connected: true, send: () => { throw new Error('Channel closed'); } });
+  assert.equal(quits, 2);
+  notifyDevelopmentReady(quit, { connected: false, send: () => assert.fail('已断开不能发送') });
+  notifyDevelopmentReady(quit, { connected: false });
+  assert.equal(quits, 4);
+});
+
 test('保存多次只在旧进程正常退出后重启，退出未确认时保留现场', async () => {
   const { superviseDevelopmentApp } = await import('../scripts/development-app.mjs');
   const directory = await mkdtemp(path.join(tmpdir(), 'notalone-dev-process-'));

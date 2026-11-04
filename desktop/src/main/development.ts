@@ -2,6 +2,14 @@ import path from 'node:path';
 
 export type DevelopmentServer = { origin: string; token: string };
 
+export function notifyDevelopmentReady(onDisconnect: () => void, channel: Pick<NodeJS.Process, 'send' | 'connected'> = process): void {
+  if (!channel.connected || !channel.send) { onDisconnect(); return; }
+  try {
+    // 连接检查后仍可能断开；回调接管异步发送错误，继续走认证退出。
+    channel.send({ type: 'notalone-dev-ready' }, error => { if (error) onDisconnect(); });
+  } catch { onDisconnect(); }
+}
+
 export function validateDevelopmentServer(value: unknown): DevelopmentServer {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('开发服务配置无效');
   const { origin, token } = value as Record<string, unknown>;
