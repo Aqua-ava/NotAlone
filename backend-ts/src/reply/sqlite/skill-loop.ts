@@ -34,7 +34,8 @@ export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check
   failed(new StorageFailure('discussion_tools_forbidden'));return 'discussion_tools_forbidden';
  });
  if(!loaded&&!legacyCatalog)return;
- if(loaded)ctx.tools.register(defineTool({name:'skill_resource',description:'仅在已预加载Skill明确需要补充资料时，按资源目录中的相对路径读取本版本静态文字。最多两次。',
+ // 旧式按需 Skill 在正文载入前也需要可见受控资源工具；guard 仍拒绝未加载身份。
+ ctx.tools.register(defineTool({name:'skill_resource',description:'仅在已预加载Skill明确需要补充资料时，按资源目录中的相对路径读取本版本静态文字。最多两次。',
   parameters:{name:{type:'string',required:true,description:'已成功加载正文的准确Skill名称。'},path:{type:'string',required:true,description:'该Skill资源目录中的准确references/或assets/相对路径。'}},
   async execute(args,exec){await check();return {text:await run.readLoadedResource(args.name,args.path,exec.signal)};},
   output:{schema:{type:'object',additionalProperties:false,properties:{text:{type:'string',required:true}}},render:(_args,value)=>[{type:'text',text:value.text}]},
