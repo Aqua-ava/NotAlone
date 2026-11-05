@@ -97,6 +97,21 @@ function locatedSpan(value:unknown,text:string):{start:number;end:number;text:st
  if(!located.trim())fail('mention_invalid');
  return {start:span.start,end:span.end,text:located};
 }
+const pronounsByKind:Record<string,readonly string[]>={first_person:['我们','咱们','本人','我'],second_person:['你们','你','您']};
+const allPronouns=new Set(Object.values(pronounsByKind).flat());
+const relocationTolerance=2;
+/** 所报位置本身就是人称词时不改动；否则只在容差内且唯一时改用真实人称词，位置不明确不猜。 */
+function relocatedPronoun(kind:string,quote:string,reported:{start:number;end:number;text:string}):{start:number;end:number;text:string}|null{
+ if(allPronouns.has(reported.text))return null;
+ const words=pronounsByKind[kind];if(!words)return null;
+ const points=[...quote],found:{start:number;end:number;text:string}[]=[];
+ for(let index=0;index<points.length;index++){
+  const word=words.find(candidate=>[...candidate].every((point,offset)=>points[index+offset]===point));
+  if(word){found.push({start:index,end:index+[...word].length,text:word});index+=[...word].length-1;}
+ }
+ const near=found.filter(item=>Math.abs(item.start-reported.start)<=relocationTolerance);
+ return near.length===1?near[0]!:null;
+}
 function groundedAttribution(row:Row,part:Row,fact:ExtractedFact,evidence:SourceVerificationResult['evidence'],window:ExtractionWindow):boolean{
  if(!Array.isArray(row.subject_mentions)||row.subject_mentions.length>8)fail('mention_invalid');
  const actors=new Set<string>();
@@ -105,7 +120,9 @@ function groundedAttribution(row:Row,part:Row,fact:ExtractedFact,evidence:Source
   if(!['first_person','second_person','literal_subject'].includes(mention.kind)||!Number.isSafeInteger(mention.evidence_index)
    ||!row.evidence_indices.includes(mention.evidence_index))fail('mention_invalid');
   const ref=evidence[mention.evidence_index];if(!ref)fail('mention_invalid');
-  const source=locatedSpan(mention.source_span,ref.quote),candidate=locatedSpan(mention.candidate_span,fact.text);
+  const reported=locatedSpan(mention.source_span,ref.quote),candidate=locatedSpan(mention.candidate_span,fact.text);
+  // 模型常把码点位置数错一两位：所报位置不是任何人称词时，改用引文中同种类、邻近且唯一的真实人称词；归属仍须与发送者一致。
+  const source=mention.kind==='literal_subject'?reported:relocatedPronoun(mention.kind,ref.quote,reported)??reported;
   if(candidate.start<part.start||candidate.end>part.end)fail('mention_invalid');
   const message=window.messages.find(message=>uuid(message.message_id)===ref.message_id);if(!message)fail('mention_invalid');
   const quoteStart=message.text.indexOf(ref.quote);
