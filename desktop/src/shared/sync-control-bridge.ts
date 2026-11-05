@@ -6,6 +6,8 @@ export interface HistoryCoverage {
   contactId: string;
   phase: HistoryCoveragePhase;
   failureCode: string | null;
+  /** 仅展示：已保存的本机历史是否已完整读取；缺失表示旧后台未提供，不能推断为已完成。不参与任何读取或资格判断。 */
+  savedHistoryComplete?: boolean;
   messageCount: number;
   nonTextCount: number;
   nonTextTypes?: { messageType: string; label: string; count: number }[];

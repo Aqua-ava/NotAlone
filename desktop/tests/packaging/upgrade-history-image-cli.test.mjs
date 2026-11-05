@@ -67,7 +67,7 @@ function overlaySha(files) {
   return hash(JSON.stringify(rows));
 }
 
-async function syntheticUpgradeFixture({ existingImage = false, quotes = false, quoteTail = false, quoteInline = false, sharedProcess = false, contactAvatar = false, durableHistory = false } = {}) {
+async function syntheticUpgradeFixture({ existingImage = false, quotes = false, quoteTail = false, quoteInline = false, sharedProcess = false, contactAvatar = false, durableHistory = false, imageOpenIsolation = false } = {}) {
   const repositoryRoot = await mkdtemp(path.join(process.cwd(), '.tmp-notalone-image-upgrade-'));
   const buildsRoot = path.join(repositoryRoot, 'local-tools/wx-cli/.notalone-builds');
   const oldName = existingImage ? 'original-image-20261031-v1' : 'true-delta-20261031-c2';
@@ -149,7 +149,8 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
       ...(quotes&&(root===toRoot||quoteTail)?{quoteProtocol:'wechat-quote-message-v1'}:{}),
       ...(quoteTail&&root===toRoot?{quoteReader:'wechat-quote-normal-tail-v2'}:{}),
       ...(quoteInline&&root===toRoot?{quoteInline:'wechat-quote-inline-sync-v1'}:{}),
-      ...(sharedProcess&&root===toRoot?{sharedProcessProtocol:'wechat-shared-process-v1'}:{}) };
+      ...(sharedProcess&&root===toRoot?{sharedProcessProtocol:'wechat-shared-process-v1'}:{}),
+      ...(imageOpenIsolation&&root===toRoot?{imageOpenIsolation:'wechat-image-open-local-v1'}:{}) };
     await write(path.join(root, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   }
   const rootScope = hash(`${accountKey}\0${path.resolve(dbRoot)}`);
@@ -176,6 +177,7 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
     ...(quoteTail?{oldQuoteProtocol:'wechat-quote-message-v1',newQuoteReader:'wechat-quote-normal-tail-v2'}:{}),
     ...(quoteInline?{newQuoteInline:'wechat-quote-inline-sync-v1'}:{}),
     ...(sharedProcess?{newSharedProcessProtocol:'wechat-shared-process-v1'}:{}),
+    ...(imageOpenIsolation?{newImageOpenIsolation:'wechat-image-open-local-v1'}:{}),
     ...(contactAvatar?{newAvatarMetadataProtocol:'wechat-contact-avatar-metadata-v1',sourceChanges:avatarSourceChanges}:{}),
     ...(durableHistory?{newDurableHistoryProtocol:'wechat-partial-history-checkpoint-v1',sourceChanges:historySourceChanges}:{}),
     oldCliSha256, newCliSha256, oldOverlaySha256: overlaySha(oldFiles), newOverlaySha256: overlaySha(newFiles),
@@ -437,6 +439,19 @@ test('拒绝预先存在的输出sidecar', async t => {
  await writeFile(path.join(invalid.toRoot,'source/cmd/wechat-cli/notalone_history.go'),'unreviewed identity change');
  await assert.rejects(invalid.tools.prepareAliases(invalid),/history_image_upgrade_source_mismatch/);
  });
+
+test('单图隔离升级：新制品清单声明隔离协议才通过，缺失或不同声明被拒绝，别名原样保留', async t => {
+ const f=await syntheticUpgradeFixture({existingImage:true,imageOpenIsolation:true});t.after(()=>rm(f.repositoryRoot,{recursive:true,force:true}));
+ assert.equal((await f.tools.prepareAliases(f)).status,'prepared');
+ assert.deepEqual(JSON.parse(await readFile(path.join(f.toRoot,'source-identity-aliases.json'),'utf8')).aliases,f.aliases);
+ for(const change of ['missing','other','old-side']){
+  const invalid=await syntheticUpgradeFixture({existingImage:true,imageOpenIsolation:true});t.after(()=>rm(invalid.repositoryRoot,{recursive:true,force:true}));
+  const target=path.join(change==='old-side'?invalid.fromRoot:invalid.toRoot,'manifest.json'),manifest=JSON.parse(await readFile(target,'utf8'));
+  if(change==='missing')delete manifest.imageOpenIsolation;else manifest.imageOpenIsolation=change==='other'?'wechat-image-open-local-v2':'wechat-image-open-local-v1';
+  await writeFile(target,`${JSON.stringify(manifest,null,2)}\n`,{mode:0o600});
+  await assert.rejects(invalid.tools.prepareAliases(invalid),/history_image_upgrade_/);
+ }
+});
 
 test('头像升级只新增固定窄元数据文件，沿用全部原来源别名', async t => {
  const f=await syntheticUpgradeFixture({existingImage:true,contactAvatar:true});t.after(()=>rm(f.repositoryRoot,{recursive:true,force:true}));

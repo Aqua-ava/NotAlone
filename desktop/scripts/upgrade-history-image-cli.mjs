@@ -477,6 +477,23 @@ const imageStandardPolicy=Object.freeze({
  identityAlgorithmSha256:'8760712e95bf21129c8e14719d1d206d31bec26793c5ce77aebe4406412ad71e',
 });
 
+// 单张图片取不到时只拒绝该次 image-open（错误码按影响范围区分，见 notalone_image.go 与 native-client 的封闭可恢复集合）。
+// 新旧源码只差图片读取与其测试；协议文件与五个来源身份文件逐字不变，故无来源身份更新；清单新增 imageOpenIsolation 声明。
+const imageOpenLocalPolicy=Object.freeze({
+ ...imageStandardPolicy,
+ oldName:'image-pick-standard-20261105-v1',
+ newName:'image-open-local-20261105-v1',
+ oldCliSha256:'b444b725b6469f76249f253a55e380d106770911ba7f878d727caa4ef7ca4265',
+ newCliSha256:'e788c3b184df782fbc6f6521494ec627ae1346631d0e6dd909433c5e51cd23ff',
+ oldOverlaySha256:'350d3fdc659d6a3d81b42dd172109d1544a8ab4628a68f8fc29683ed1dc88d3e',
+ newOverlaySha256:'49069c6b51fa054940b40885c5c0eac4b1eb72db664e4e0a9bc33142ceaad54b',
+ oldImageSha256:imageStandardPolicy.imageSha256,
+ oldImageTestSha256:imageStandardPolicy.imageTestSha256,
+ imageSha256:'eea2cdb8b94582332844147905faf290e1bcf850f2942dc3f4f56ce70b7c1389',
+ imageTestSha256:'4a979b7bc8610bdbd17dc75246b705f7cbc07db51e636632336d7293e2e828e8',
+ newImageOpenIsolation:'wechat-image-open-local-v1',
+});
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -737,7 +754,8 @@ function manifestForSide(policy, side) {
     ...((isNew?policy.newQuoteProtocol:policy.oldQuoteProtocol)?{quoteProtocol:isNew?policy.newQuoteProtocol:policy.oldQuoteProtocol}:{}),
     ...((isNew?policy.newQuoteReader:policy.oldQuoteReader)?{quoteReader:isNew?policy.newQuoteReader:policy.oldQuoteReader}:{}),
     ...((isNew?policy.newQuoteInline:policy.oldQuoteInline)?{quoteInline:isNew?policy.newQuoteInline:policy.oldQuoteInline}:{}),
-    ...((isNew?policy.newSharedProcessProtocol:policy.oldSharedProcessProtocol)?{sharedProcessProtocol:isNew?policy.newSharedProcessProtocol:policy.oldSharedProcessProtocol}:{}) };
+    ...((isNew?policy.newSharedProcessProtocol:policy.oldSharedProcessProtocol)?{sharedProcessProtocol:isNew?policy.newSharedProcessProtocol:policy.oldSharedProcessProtocol}:{}),
+    ...((isNew?policy.newImageOpenIsolation:policy.oldImageOpenIsolation)?{imageOpenIsolation:isNew?policy.newImageOpenIsolation:policy.oldImageOpenIsolation}:{}) };
 }
 
 export function createUpgradeImageCliTools({ repositoryRoot, policy, afterReceiptPublished } = {}) {
@@ -892,7 +910,10 @@ const imageQualityTools=createUpgradeImageCliTools({repositoryRoot,policy:imageQ
 const contactAvatarTools=createUpgradeImageCliTools({repositoryRoot,policy:contactAvatarPolicy});
 const resumableHistoryTools=createUpgradeImageCliTools({repositoryRoot,policy:resumableHistoryPolicy});
 const imageStandardTools=createUpgradeImageCliTools({repositoryRoot,policy:imageStandardPolicy});
-export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageStandardPolicy.oldName)
+const imageOpenLocalTools=createUpgradeImageCliTools({repositoryRoot,policy:imageOpenLocalPolicy});
+export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageOpenLocalPolicy.oldName)
+ &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageOpenLocalPolicy.newName)
+ ?imageOpenLocalTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageStandardPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageStandardPolicy.newName)
  ?imageStandardTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',resumableHistoryPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',resumableHistoryPolicy.newName)

@@ -83,7 +83,7 @@ test('旧读取组件没有声明原图协议时不启用自动取图',async t=>
  assert.equal(await supportsWechatOriginalImages(undefined),false);
 });
 
-async function fixture(t,{proof:proofOverride,nativeError=null,dataLength=70_000,openAudit={},representativeId=resourceId,capability='wechat-cdn-big-hd-exact-content-v4'}={}){
+async function fixture(t,{proof:proofOverride,nativeError=null,otherError=null,manifestExtra={},dataLength=70_000,openAudit={},representativeId=resourceId,capability='wechat-cdn-big-hd-exact-content-v4'}={}){
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-wechat-image-resource-'))),artifact=join(root,'artifact');
  await mkdir(join(artifact,'bin'),{recursive:true});await mkdir(join(artifact,'lib'));
  const executable=join(artifact,'bin','wx-cli'),requestsFile=join(root,'requests'),pidFile=join(root,'pid'),keySeenFile=join(root,'key-seen');
@@ -99,9 +99,10 @@ const hash=value=>crypto.createHash('sha256').update(value).digest('hex'),scopeD
 fs.writeFileSync(pidFile,String(process.pid));if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['notalone-history']))process.exit(91);
 const schema={format:'wechat-message-schema-v1',status:'unverified',scopeDigest,sourceGeneration:generation,schemaFingerprint:fingerprint,tables:[{target:table,partition,role:'private_message',columns:[{name:'local_id',type:'INTEGER',notNull:false,primaryKey:1,hidden:0}],indexes:[],declaredPrimaryKey:['local_id'],autoIncrement:true,sqlFingerprint:'e'.repeat(64),triggerFingerprints:[],schemaVersion:'1',rootPage:'2'}],checkedPartitions:[partition]};
 const support={protocol:'private-history-v1',profileId:'synthetic-history-v1',adapterVersion:'1',status:'supported',reason:null,accountKey:account,conversationKey:conversation,sourceGeneration:generation,programVersion:'synthetic',build:'1',artifactSha256:hash(fs.readFileSync(process.argv[1])),schemaFingerprint:fingerprint,declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-v1',continuity:'synthetic-fixed-source-v1'};
-const proof=${JSON.stringify(proof)},nativeError=${JSON.stringify(nativeError)};
+const proof=${JSON.stringify(proof)},nativeError=${JSON.stringify(nativeError)},otherError=${JSON.stringify(otherError)};
 readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line);fs.appendFileSync(log,JSON.stringify(r)+'\\n');let value;
 if(r.op==='image-open'&&nativeError&&imageAttempts++===0){console.log(JSON.stringify({ok:false,error:{code:nativeError}}));return;}
+if(otherError&&r.op===otherError.op){console.log(JSON.stringify({ok:false,error:{code:otherError.code}}));return;}
 if(r.op==='image-open'&&r.serverId==='999'){console.log(JSON.stringify({ok:false,error:{code:'history_image_original_unavailable'}}));return;}
 if(r.op==='resolve'){conversation=r.displayName;schema.scopeDigest=hash(account+'\\0'+conversation);support.conversationKey=conversation;value={accountKey:account,conversationKey:conversation,displayName:'合成甲',sourceGeneration:generation};}
 else if(r.op==='inspect')value=schema;
@@ -117,7 +118,7 @@ console.log(JSON.stringify({ok:true,data:value}));});`;
  await writeFile(join(artifact,'manifest.json'),JSON.stringify({formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,
   sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',
   signing:'ad-hoc-development',realWechatVerified:false,cliSha256:hash(script),wcdbSha256:hash(wcdb),
-  originalImageProtocol:'wechat-original-image-v1',originalImageQualityProof:capability}));
+  originalImageProtocol:'wechat-original-image-v1',originalImageQualityProof:capability,...manifestExtra}));
  t.after(()=>rm(root,{recursive:true,force:true}));
  return {root,executable,requestsFile,pidFile,keySeenFile,bytes,expectedSha256,resourceSourceGeneration};
 }
@@ -332,4 +333,76 @@ test('共享图片资源持有完整流租约，关闭后下一资源复用同�
  for await(const chunk of second.bytes)assert.ok(chunk.length>0);
  await second.close();assert.doesNotThrow(()=>process.kill(pid,0));
  await shared.close();assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});
+});
+
+
+// 单图 image-open 失败的进程隔离：仅声明 imageOpenIsolation 的制品、仅 image-open、仅封闭集合内的错误码才保留进程。
+const isolationManifest={imageOpenIsolation:'wechat-image-open-local-v1'};
+const openIdentity={partition,table,localId:'123',serverId:'456',sentAt:'1700000000000'};
+async function openedClient(f){
+ const client=new NarrowWechatClient(await loadNarrowWechatOptions(f.executable));
+ await client.resolveSelected(conversation);await client.inspectSelected();await client.supportSelected();
+ return {client,target:await client.targetSelected()};
+}
+const pidOf=async f=>Number(await readFile(f.pidFile,'utf8'));
+const alive=pid=>{try{process.kill(pid,0);return true;}catch{return false;}};
+
+test('已声明单图隔离的制品：封闭集合内的 image-open 错误只拒绝本次请求，进程和选择保留',async t=>{
+ for(const code of ['history_image_association_unverified','history_image_local_file_missing','history_image_quality_unverified','history_image_format_unsupported','history_image_decoder_unavailable'])await t.test(code,async t=>{
+  const f=await fixture(t,{nativeError:code,manifestExtra:isolationManifest}),{client,target}=await openedClient(f);
+  t.after(()=>client.close());
+  const pid=await pidOf(f);
+  await assert.rejects(client.openImageSelected(target,openIdentity),{code});
+  assert.equal(client.stoppedReason,null);assert.equal(alive(pid),true);
+  const opened=await client.openImageSelected(target,openIdentity);
+  assert.equal(opened.sourceGeneration,generation);assert.equal(client.stoppedReason,null);assert.equal(await pidOf(f),pid);
+  const ops=(await requests(f)).map(row=>row.op);
+  assert.deepEqual(ops,['resolve','inspect','support','target','image-open','image-open'],'失败后不得重新 resolve 或重建进程');
+ });
+});
+
+test('单图隔离不放行来源、会话、资源状态与未知错误，这些仍终止读取',async t=>{
+ for(const code of ['history_image_source_changed','history_image_read_failed','history_image_request_invalid','history_image_too_large','history_image_token_invalid',
+  'history_image_offset_invalid','history_image_resource_invalid','history_image_metadata_invalid','history_image_original_unavailable','history_image_thumbnail_only',
+  'history_source_changed','history_source_unverified','history_target_unverified','history_target_ambiguous','history_scope_unverified','history_support_unverified',
+  'history_snapshot_closed','history_account_changed','history_scope_changed','sensitive-arbitrary-native-value'])await t.test(code,async t=>{
+  const f=await fixture(t,{nativeError:code,manifestExtra:isolationManifest}),{client,target}=await openedClient(f);
+  t.after(()=>client.close());
+  const pid=await pidOf(f),expected=code==='sensitive-arbitrary-native-value'?'history_protocol_invalid':code;
+  await assert.rejects(client.openImageSelected(target,openIdentity),{code:expected});
+  assert.equal(client.stoppedReason,expected);
+  await new Promise(resolve=>setTimeout(resolve,50));assert.equal(alive(pid),false);
+ });
+});
+
+test('旧制品没有声明单图隔离时，同样的 image-open 错误仍终止读取',async t=>{
+ const f=await fixture(t,{nativeError:'history_image_association_unverified'}),{client,target}=await openedClient(f);
+ t.after(()=>client.close());
+ const pid=await pidOf(f);
+ assert.equal((await loadNarrowWechatOptions(f.executable)).imageOpenIsolation,undefined);
+ const forced=new NarrowWechatClient({...await loadNarrowWechatOptions(f.executable),imageOpenIsolation:true});
+ await assert.rejects(forced.resolveSelected(conversation),{code:'history_artifact_unverified'});await forced.close();
+ await assert.rejects(client.openImageSelected(target,openIdentity),{code:'history_image_association_unverified'});
+ assert.equal(client.stoppedReason,'history_image_association_unverified');
+ await new Promise(resolve=>setTimeout(resolve,50));assert.equal(alive(pid),false);
+});
+
+test('未知或不同的隔离声明不启用单图隔离',async t=>{
+ for(const value of ['unverified','wechat-image-open-local-v2',true,1]){
+  const f=await fixture(t,{manifestExtra:{imageOpenIsolation:value}});
+  assert.equal((await loadNarrowWechatOptions(f.executable)).imageOpenIsolation,undefined,String(value));
+ }
+ const f=await fixture(t,{manifestExtra:isolationManifest});
+ assert.equal((await loadNarrowWechatOptions(f.executable)).imageOpenIsolation,true);
+});
+
+test('image-read 与 image-close 不因错误码相同而获得可恢复资格',async t=>{
+ for(const op of ['image-read','image-close'])await t.test(op,async t=>{
+  const f=await fixture(t,{otherError:{op,code:'history_image_association_unverified'},manifestExtra:isolationManifest}),{client,target}=await openedClient(f);
+  t.after(()=>client.close());
+  const pid=await pidOf(f),opened=await client.openImageSelected(target,openIdentity);
+  await assert.rejects(op==='image-read'?client.readImageSelected(opened.resourceToken,0):client.closeImageSelected(opened.resourceToken),{code:'history_image_association_unverified'});
+  assert.equal(client.stoppedReason,'history_image_association_unverified');
+  await new Promise(resolve=>setTimeout(resolve,50));assert.equal(alive(pid),false);
+ });
 });

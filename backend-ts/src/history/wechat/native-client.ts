@@ -81,6 +81,8 @@ export interface NarrowWechatClientOptions {
   environment?: Record<string, string | undefined>;
   imageKeyChannel?: true;
   inlineQuotes?:true;
+  /** 仅当制品清单声明已审查的单图失败隔离协议时启用；旧制品不能因 TS 升级获得该资格。 */
+  imageOpenIsolation?:true;
 }
 export interface WechatImageSourceIdentity {
   partition: string; table: string; localId: string; serverId: string; sentAt: string;
@@ -139,6 +141,15 @@ const stderrLimit = 64 * 1024;
 const recoverableQuoteErrors = new Set([
   'history_quote_unavailable', 'history_quote_metadata_invalid', 'history_quote_too_large',
   'history_quote_state_unverified', 'history_quote_association_unverified', 'history_quote_read_failed',
+]);
+/**
+ * 单图 image-open 的封闭可恢复集合：只含读取程序在“本张图片的关联、文件、内容或解码”环节返回、
+ * 且已逐个核对不影响账号、会话、来源守卫与固定快照的错误。不得按 history_image_ 前缀放行；
+ * source_changed、read_failed、request_invalid、token/offset、resource_invalid、too_large 等资源或来源状态错误不在其中。
+ */
+const recoverableImageOpenErrors = new Set([
+  'history_image_association_unverified', 'history_image_local_file_missing', 'history_image_quality_unverified',
+  'history_image_format_unsupported', 'history_image_decoder_unavailable',
 ]);
 const digest = (input: string | Buffer) => createHash('sha256').update(input).digest('hex');
 const fail = (code = 'history_protocol_invalid'): never => { throw new StorageFailure(code); };
@@ -747,6 +758,7 @@ async function verifyArtifacts(options: NarrowWechatClientOptions): Promise<void
       || manifest.readonlyPatchSha256 !== 'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa'
       || manifest.signing !== 'ad-hoc-development' || manifest.realWechatVerified !== false
       || options.imageKeyChannel===true&&(manifest.originalImageProtocol!=='wechat-original-image-v1'||!['wechat-cdn-big-hd-exact-content-v4','wechat-message-image-content-v1','wechat-message-image-content-v2'].includes(manifest.originalImageQualityProof as string))
+      || options.imageOpenIsolation===true&&(manifest.imageOpenIsolation!=='wechat-image-open-local-v1'||manifest.originalImageProtocol!=='wechat-original-image-v1')
       || manifest.cliSha256 !== options.expectedCliSha256 || manifest.wcdbSha256 !== options.expectedWcdbSha256
       || digest(cli) !== options.expectedCliSha256 || digest(wcdb) !== options.expectedWcdbSha256) fail('history_artifact_unverified');
   } catch { fail('history_artifact_unverified'); }
@@ -754,10 +766,11 @@ async function verifyArtifacts(options: NarrowWechatClientOptions): Promise<void
 function validatedOptions(options: NarrowWechatClientOptions): NarrowWechatClientOptions {
   try {
     if (!options || typeof options !== 'object' || Array.isArray(options)
-      || Object.keys(options).some(key => !['executable', 'expectedCliSha256', 'expectedWcdbSha256', 'environment', 'imageKeyChannel','inlineQuotes'].includes(key))
+      || Object.keys(options).some(key => !['executable', 'expectedCliSha256', 'expectedWcdbSha256', 'environment', 'imageKeyChannel','inlineQuotes','imageOpenIsolation'].includes(key))
       || typeof options.executable !== 'string' || typeof options.expectedCliSha256 !== 'string' || typeof options.expectedWcdbSha256 !== 'string') fail('history_request_invalid');
     if(options.imageKeyChannel!==undefined&&options.imageKeyChannel!==true)fail('history_request_invalid');
     if(options.inlineQuotes!==undefined&&options.inlineQuotes!==true)fail('history_request_invalid');
+    if(options.imageOpenIsolation!==undefined&&options.imageOpenIsolation!==true)fail('history_request_invalid');
     if (options.environment !== undefined && (!options.environment || typeof options.environment !== 'object' || Array.isArray(options.environment)
       || Object.entries(options.environment).some(([key, value]) => !key.length || /[=\u0000]/.test(key) || value !== undefined && (typeof value !== 'string' || value.includes('\0'))))) fail('history_request_invalid');
     return { ...options, ...(options.environment ? { environment: { ...options.environment } } : {}) };
@@ -1084,7 +1097,7 @@ export class NarrowWechatClient {
         target:accepted.descriptor,partition:source.partition,table:source.table,localId:source.localId,serverId:source.serverId,sentAt:source.sentAt};
       if(this.#imageKeySupplied)request.imageKeySupplied=true;
       const opened=await this.#request(request,
-        value=>imageOpen(value,scope,accepted,source,32*1024*1024));
+        value=>imageOpen(value,scope,accepted,source,32*1024*1024),undefined,this.#options.imageOpenIsolation?recoverableImageOpenErrors:undefined);
       this.#activeImage={token:opened.resourceToken,sourceGeneration:opened.sourceGeneration,expectedBytes:opened.expectedBytes,expectedSha256:opened.expectedSha256,nextOffset:0};
       return opened;
     },signal);
@@ -1304,7 +1317,8 @@ export class NarrowWechatClient {
         if(code==='history_image_key_unavailable'&&this.#options.imageKeyChannel){
           native.output=Buffer.alloc(0);this.#pending=undefined;pending.reject(new StorageFailure(code));return;
         }
-        if(pending.operation==='quote-read'&&pending.recoverableErrors?.has(code)){
+        // 单图隔离：只有当前明确登记的 image-open 收到合法回执才局部失败，进程、选择范围与其他守卫保持有效。
+        if((pending.operation==='quote-read'||pending.operation==='image-open')&&pending.recoverableErrors?.has(code)){
           native.output=Buffer.alloc(0);this.#pending=undefined;pending.reject(new StorageFailure(code));return;
         }
         void this.#stop(code); return;

@@ -100,14 +100,14 @@ test('同步总览保留进度和异常入口，默认不展开联系人或技�
  await mount(page, `
  import React from 'react';import {createRoot} from 'react-dom/client';import {SyncControlPanel} from './src/renderer/SyncControlPanel';
  const historyCoverages=['not_started','syncing','complete','incomplete'].map((phase,i)=>({bindingId:'binding-'+i,contactId:'contact-'+i,phase,
- failureCode:i===3?'cli_timeout':null,messageCount:i*100,pageCount:i,nonTextCount:0}));
+ failureCode:i===3?'cli_timeout':null,savedHistoryComplete:phase==='complete',messageCount:i*100,pageCount:i,nonTextCount:0}));
  let state={revision:1,scopeRevision:4,phase:'ready',busy:null,errorCode:null,report:{enabled:true,bodyAvailable:true,backgroundPhase:'active',confirmedBindingCount:4,
  historyCoverages,backfill:{phase:'complete'}}};
  const listeners=new Set();const bridge={getState:async()=>state,refresh:async()=>{},onStateChanged:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}};
  const root=createRoot(document.getElementById('root'));
  root.render(<SyncControlPanel bridge={bridge} currentContactId="contact-1"
  contacts={historyCoverages.map((c,i)=>({contactId:c.contactId,displayName:'合成联系人'+i}))}/>);
- window.update=()=>{state={...state,revision:2,report:{...state.report,historyCoverages:historyCoverages.map((c,i)=>i===1?{...c,phase:'complete',messageCount:250,pageCount:5}:c)}};
+ window.update=()=>{state={...state,revision:2,report:{...state.report,historyCoverages:historyCoverages.map((c,i)=>i===1?{...c,phase:'complete',savedHistoryComplete:true,messageCount:250,pageCount:5}:c)}};
  for(const fn of listeners)fn(state);};
  `);
  const section=page.getByRole('region',{name:'聊天同步进度',exact:true});

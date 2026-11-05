@@ -923,12 +923,16 @@ func notaloneVerifyImageContent(source, data []byte, conversion string) (notalon
 
 func (h *notaloneHistorySession) openImage(ctx context.Context, request notaloneHistoryRequest) (notaloneImageOpenResponse, error) {
 	failed := notaloneImageOpenResponse{}
-	if h.selected == nil || h.selected.Account != request.Account || h.selected.Conversation != request.Conversation ||
-		h.selected.SourceGeneration == "" || h.snapshotMode != "normal" && (h.tail == nil || h.tail.target.Descriptor != request.Target) {
-		return failed, notaloneFailure("history_image_association_unverified")
+	// 错误码按影响范围区分：会话、目标、来源与守卫类错误保持原码并终止读取；
+	// 只有 history_image_association_unverified 等单图码才允许调用方保留进程继续（见 native-client 的可恢复集合）。
+	if h.selected == nil || h.selected.Account != request.Account || h.selected.Conversation != request.Conversation || h.selected.SourceGeneration == "" {
+		return failed, notaloneFailure("history_scope_unverified")
+	}
+	if h.snapshotMode != "normal" && (h.tail == nil || h.tail.target.Descriptor != request.Target) {
+		return failed, notaloneFailure("history_target_unverified")
 	}
 	if err := h.ensureMessageGuard(); err != nil {
-		return failed, notaloneFailure("history_image_association_unverified")
+		return failed, err
 	}
 	localID, _ := strconv.ParseInt(request.LocalID, 10, 64)
 	serverID, _ := strconv.ParseInt(request.ServerID, 10, 64)
@@ -1018,8 +1022,9 @@ func (h *notaloneHistorySession) openImage(ctx context.Context, request notalone
 		h.openImages = map[string]*notaloneOpenImage{}
 	}
 	if len(h.openImages) >= 2 {
+		// 同时打开的图片数超限是调用协议或资源状态异常，不是这张图片过大，不属于单图失败。
 		h.imageMu.Unlock()
-		return failed, notaloneFailure("history_image_too_large")
+		return failed, notaloneFailure("history_image_request_invalid")
 	}
 	h.openImages[resourceToken] = opened
 	h.imageMu.Unlock()
@@ -1055,35 +1060,47 @@ func (h *notaloneHistorySession) openImageMessage(ctx context.Context, request n
 		snapshot = h.tail.snapshot
 		if snapshot == nil {
 			if h.supportProfile == nil || h.inspected == nil {
-				return message, target, notaloneFailure("history_image_association_unverified")
+				return message, target, notaloneFailure("history_support_unverified")
 			}
 			var err error
 			snapshot, err = newNotaloneSnapshot(ctx, h.server, *h.selected, *h.inspected, *h.supportProfile)
-			if err != nil || !notaloneSameSnapshotInstances(target, snapshot.Target()) {
+			if err != nil {
 				if snapshot != nil {
 					_ = snapshot.Close()
 				}
-				return message, target, notaloneFailure("history_image_association_unverified")
+				return message, target, err
+			}
+			if !notaloneSameSnapshotInstances(target, snapshot.Target()) {
+				_ = snapshot.Close()
+				return message, target, notaloneFailure("history_source_changed")
 			}
 			temporary = true
 		}
 	}
-	if snapshot == nil || target.Descriptor != request.Target || target.SourceGeneration != h.selected.SourceGeneration || snapshot.Check() != nil {
+	// 目标不匹配、来源代次变化和快照失效是会话级问题，各自保留准确错误码。
+	closeTemporary := func() {
 		if temporary && snapshot != nil {
 			_ = snapshot.Close()
 		}
-		return message, target, notaloneFailure("history_image_association_unverified")
 	}
-	defer func() {
-		if temporary {
-			_ = snapshot.Close()
-		}
-	}()
+	if snapshot == nil || target.Descriptor != request.Target {
+		closeTemporary()
+		return message, target, notaloneFailure("history_target_unverified")
+	}
+	if target.SourceGeneration != h.selected.SourceGeneration {
+		closeTemporary()
+		return message, target, notaloneFailure("history_source_changed")
+	}
+	if err := snapshot.Check(); err != nil {
+		closeTemporary()
+		return message, target, err
+	}
+	defer closeTemporary()
 	matched := -1
 	for index, shard := range snapshot.shards {
 		if shard.partition == request.Partition && shard.instance == request.Table {
 			if matched >= 0 {
-				return message, target, notaloneFailure("history_image_association_unverified")
+				return message, target, notaloneFailure("history_target_ambiguous")
 			}
 			matched = index
 		}
@@ -1093,8 +1110,11 @@ func (h *notaloneHistorySession) openImageMessage(ctx context.Context, request n
 	}
 	snapshot.mu.Lock()
 	defer snapshot.mu.Unlock()
-	if snapshot.checkLocked() != nil || matched >= len(snapshot.shards) {
-		return message, target, notaloneFailure("history_image_association_unverified")
+	if err := snapshot.checkLocked(); err != nil {
+		return message, target, err
+	}
+	if matched >= len(snapshot.shards) {
+		return message, target, notaloneFailure("history_target_unverified")
 	}
 	shard := snapshot.shards[matched]
 	query := "SELECT local_id,server_id,local_type,create_time,CASE WHEN (local_type & 4294967295)=3 THEN CASE WHEN length(CAST(packed_info_data AS BLOB))<=? THEN packed_info_data ELSE NULL END ELSE NULL END AS image_message_packed_info,CASE WHEN (local_type & 4294967295)=3 THEN length(CAST(packed_info_data AS BLOB)) ELSE 0 END AS image_message_packed_info_length,CASE WHEN (local_type & 4294967295)=3 AND length(CAST(message_content AS BLOB))<=? THEN message_content ELSE NULL END AS image_message_content"
@@ -1103,7 +1123,11 @@ func (h *notaloneHistorySession) openImageMessage(ctx context.Context, request n
 	}
 	query += " FROM " + quoteIdent(snapshot.table) + " WHERE local_id=? LIMIT 2"
 	rows, err := shard.reader.QueryBounded(ctx, 2, query, int64(notaloneImagePackedInfoByteLimit), int64(notaloneImageXMLByteLimit), localID)
-	if err != nil || len(rows) != 1 {
+	if err != nil {
+		// 查询失败（含取消）无法证明只影响这张图片，按读取失败终止。
+		return message, target, notaloneFailure("history_image_read_failed")
+	}
+	if len(rows) != 1 {
 		return message, target, notaloneFailure("history_image_association_unverified")
 	}
 	row := rows[0]
@@ -1119,7 +1143,7 @@ func (h *notaloneHistorySession) openImageMessage(ctx context.Context, request n
 	}
 	resourcePath, err := h.server.validatedDBPath("message", "message_resource.db")
 	if err != nil {
-		return message, target, notaloneFailure("history_image_association_unverified")
+		return message, target, notaloneFailure("history_image_source_changed")
 	}
 	// 分类只使用同一稳定消息的有界元数据；缺失、损坏或不匹配不得阻断可查看图片。
 	var originalMetadata *notaloneOriginalImageMetadata
@@ -1167,7 +1191,7 @@ func (h *notaloneHistorySession) findMessageImageResource(ctx context.Context, m
 	resource := notaloneImageResourceRecord{}
 	resourcePath := message.resourceDBPath
 	if filepath.Clean(resourcePath) != resourcePath || !filepath.IsAbs(resourcePath) {
-		return resource, nil, notaloneFailure("history_image_association_unverified")
+		return resource, nil, notaloneFailure("history_image_source_changed")
 	}
 	resourceGuard, err := h.newImageGuard(filepath.Dir(resourcePath), []string{resourcePath})
 	if err != nil {
@@ -1181,7 +1205,7 @@ func (h *notaloneHistorySession) findMessageImageResource(ctx context.Context, m
 	}()
 	db, err := h.server.openDBNoRefresh("message", "message_resource.db")
 	if err != nil {
-		return resource, nil, notaloneFailure("history_image_association_unverified")
+		return resource, nil, notaloneFailure("history_image_read_failed")
 	}
 	defer db.Close()
 	if resourceGuard.Check() != nil {
@@ -1189,7 +1213,10 @@ func (h *notaloneHistorySession) findMessageImageResource(ctx context.Context, m
 	}
 	infoQuery := `SELECT i.message_id,CASE WHEN length(CAST(i.packed_info AS BLOB))<=? THEN i.packed_info ELSE NULL END AS info_packed_info,length(CAST(i.packed_info AS BLOB)) AS info_packed_info_length FROM MessageResourceInfo i JOIN ChatName2Id c ON c.rowid=i.chat_id WHERE c.user_name=? AND i.message_local_type=? AND i.message_create_time=? AND i.message_local_id=? AND i.message_svr_id=? ORDER BY i.message_id DESC LIMIT 3`
 	infoRows, err := db.QueryBounded(ctx, 3, infoQuery, int64(notaloneImagePackedInfoByteLimit), h.selected.Conversation, message.localType, message.createTime, message.localID, message.serverID)
-	if err != nil || len(infoRows) != 1 {
+	if err != nil {
+		return resource, nil, notaloneFailure("history_image_read_failed")
+	}
+	if len(infoRows) != 1 {
 		return resource, nil, notaloneFailure("history_image_association_unverified")
 	}
 	infoRow := infoRows[0]
@@ -1203,7 +1230,10 @@ func (h *notaloneHistorySession) findMessageImageResource(ctx context.Context, m
 	infoPackedSHA := sha256.Sum256(infoPackedInfo)
 	detailQuery := `SELECT resource_id,type AS resource_type_raw,size AS resource_size,status AS resource_status,data_index AS resource_data_index,create_time AS resource_create_time,access_time AS resource_access_time,CASE WHEN length(CAST(packed_info AS BLOB))<=? THEN packed_info ELSE NULL END AS detail_packed_info,length(CAST(packed_info AS BLOB)) AS detail_packed_info_length FROM MessageResourceDetail WHERE message_id=? AND (type & 65535)=1 ORDER BY resource_id LIMIT 33`
 	detailRows, err := db.QueryBounded(ctx, 33, detailQuery, int64(notaloneImagePackedInfoByteLimit), messageID)
-	if err != nil || len(detailRows) == 0 || len(detailRows) > 32 {
+	if err != nil {
+		return resource, nil, notaloneFailure("history_image_read_failed")
+	}
+	if len(detailRows) == 0 || len(detailRows) > 32 {
 		return resource, nil, notaloneFailure("history_image_association_unverified")
 	}
 	resource.InfoID = messageID
@@ -1323,6 +1353,10 @@ func (h *notaloneHistorySession) readMessageImage(ctx context.Context, message n
 			viewable, conversion, decodeErr := notaloneDecodeImageContent(ctx, decoded)
 			if decodeErr != nil {
 				_ = guard.Close()
+				if ctx.Err() != nil {
+					// 取消或超时不能冒充“这张图格式不支持”，必须保持终止语义。
+					return nil, "", nil, emptyProof, "", notaloneFailure("history_image_read_failed")
+				}
 				decoderFailure = decodeErr.Error()
 				continue
 			}

@@ -178,7 +178,11 @@ export function HistoryCoverageStatus({ coverages, contacts, bodyAvailable, enab
   const [showIssues, setShowIssues] = useState(false);
   useEffect(() => { if (coverages === undefined) setShowIssues(false); }, [coverages]);
   const statuses = useMemo(() => buildSyncContacts(coverages, contacts), [coverages, contacts]);
-  const complete = statuses.filter(contact => contact.complete).length;
+  // 已保存的历史进度（展示）与当前读取资格（phase）分开：旧后台缺字段时不推断，显示“进度待确认”。
+  const savedKnown = statuses.every(contact => contact.savedComplete !== undefined);
+  const saved = statuses.filter(contact => contact.savedComplete === true).length;
+  // 已读完历史但当前来源资格待重验的联系人；真实来源失效同样落在这里，仍计入“需要关注”。
+  const reverifying = statuses.filter(contact => contact.savedComplete === true && !contact.complete && contact.issue === 'source').length;
   const attention = statuses.filter(contact => contact.issue !== null).length;
   const reading = statuses.filter(contact => contact.reading).length;
   const following = statuses.filter(contact => contact.following).length;
@@ -188,12 +192,14 @@ export function HistoryCoverageStatus({ coverages, contacts, bodyAvailable, enab
     <h3>聊天同步进度</h3>
     {coverages === undefined ? <p>同步进度暂不可用，状态会自动更新。</p>
       : statuses.length === 0 ? <p>暂无联系人的历史同步进度。</p> : <>
-        <p>{bodyAvailable === false ? '已保存的历史读取进度' : '本机历史已读完'}：{complete} / {statuses.length} 位联系人</p>
-        <progress aria-label="本机历史读取进度" value={complete} max={statuses.length} />
+        <p>{savedKnown ? `已保存本机历史：${saved} / ${statuses.length} 位联系人` : '已保存本机历史：进度待确认'}</p>
+        {savedKnown && <progress aria-label="已保存本机历史进度" value={saved} max={statuses.length} />}
         <p role="status">{enabled === false ? '自动同步已关闭，已保存的进度会保留。'
           : bodyAvailable === false ? '正文读取尚未开放，正在等待或核验读取能力。'
-          : reading > 0 ? `正在读取 ${reading} 位联系人的历史。` : following > 0 ? `正在同步 ${following} 位联系人的新消息。`
-          : '已保存当前同步进度。'}</p>
+          : [reading > 0 ? `正在读取 ${reading} 位联系人的历史。` : null,
+            following > 0 ? `正在同步 ${following} 位联系人的新消息。` : null,
+            reverifying > 0 ? `${reverifying} 位联系人的聊天来源待重新核验，已保存的聊天不受影响。` : null]
+            .filter(Boolean).join('') || (savedKnown ? '已保存当前同步进度。' : '后台尚未报告已保存的历史进度，状态会自动更新。')}</p>
         <div className="sync-history-toolbar"><p>{attention ? `${attention} 位联系人同步需要关注` : '当前没有需要关注的同步问题'}</p>
           {attention > 0 && <button className="button" onClick={() => setShowIssues(true)}>查看并处理</button>}</div>
       </>}

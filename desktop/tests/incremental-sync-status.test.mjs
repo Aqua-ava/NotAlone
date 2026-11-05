@@ -8,6 +8,7 @@ const bundled = await build({ stdin: { contents: `
   import { renderToStaticMarkup } from 'react-dom/server';
   import { ContactHistoryCoverage, HistoryCoverageStatus } from './src/renderer/HistoryCoverageStatus';
   export { parseSyncReport } from './src/main/sync/status';
+  export { historyReplyEligibility } from './src/shared/history-reply-eligibility';
   export function renderContact(coverage, bodyAvailable, compact = false) {
     return renderToStaticMarkup(React.createElement(ContactHistoryCoverage, { coverages: [coverage], contactId: coverage.contactId, bodyAvailable, compact }));
   }
@@ -17,7 +18,7 @@ const bundled = await build({ stdin: { contents: `
   loader: { '.css': 'empty' } });
 const loaded = { exports: {} };
 new Function('require', 'module', 'exports', bundled.outputFiles[0].text)(createRequire(import.meta.url), loaded, loaded.exports);
-const { parseSyncReport, renderContact, renderPage } = loaded.exports;
+const { parseSyncReport, renderContact, renderPage, historyReplyEligibility } = loaded.exports;
 
 const id = '10000000-0000-4000-8000-000000000001';
 const base = {
@@ -33,10 +34,14 @@ const base = {
   cli_incremental_phase: 'incomplete', cli_incremental_failure_code: 'history_tail_unsupported',
   cli_incremental_identity_limit: 100000,
 };
-const coverage = changes => ({
-  bindingId: id, contactId: id, phase: 'complete', failureCode: null, messageCount: 2, nonTextCount: 0, pageCount: 1,
-  incrementalPhase: 'ready', incrementalFailureCode: null, incrementalLastAcceptedAt: 1700000000000, incrementalPages: 3, ...changes,
-});
+const coverage = changes => {
+  const row = {
+    bindingId: id, contactId: id, phase: 'complete', failureCode: null, messageCount: 2, nonTextCount: 0, pageCount: 1,
+    incrementalPhase: 'ready', incrementalFailureCode: null, incrementalLastAcceptedAt: 1700000000000, incrementalPages: 3, ...changes,
+  };
+  // 新后台总会报告已保存标记；默认与当前读完状态一致，需要时由用例显式覆盖。
+  return { savedHistoryComplete: row.phase === 'complete', ...row };
+};
 
 test('增量状态解析：缺失字段不推断已同步，非法枚举整份失败', () => {
   const parsed = parseSyncReport(base);
@@ -191,4 +196,47 @@ test('联系人简短状态在缺少等待新消息标记时仍识别空历史�
   const metadata = renderContact({...empty, metadataOnlyCount:1}, true, true);
   assert.match(metadata, /本机历史已读完/);
   assert.doesNotMatch(metadata, /本机暂无可读记录/);
+});
+
+test('saved_history_complete 解析：布尔值保留，缺失（旧后台）不推断，非法类型整份失败', () => {
+  const parsed = parseSyncReport({ ...base, cli_history_coverages: [{ ...base.cli_history_coverages[0], saved_history_complete: true }] });
+  assert.equal(parsed.historyCoverages[0].savedHistoryComplete, true);
+  const legacy = parseSyncReport(base);
+  assert.equal('savedHistoryComplete' in legacy.historyCoverages[0], false, '旧后台缺字段不得推断为已保存完成');
+  for (const invalid of ['true', 1, null]) {
+    assert.throws(() => parseSyncReport({ ...base, cli_history_coverages: [{ ...base.cli_history_coverages[0], saved_history_complete: invalid }] }));
+  }
+});
+
+test('进度文案区分已保存的历史与当前连接：历史完成但来源待重验仍计入已保存并保留来源警示', () => {
+  const rows = [
+    coverage({ contactId: 'c1', bindingId: 'b1' }),
+    coverage({ contactId: 'c2', bindingId: 'b2', phase: 'incomplete', failureCode: 'history_source_continuity_unverified', savedHistoryComplete: true,
+      incrementalPhase: 'invalidated', incrementalFailureCode: 'history_source_continuity_unverified' }),
+    coverage({ contactId: 'c3', bindingId: 'b3', phase: 'syncing', savedHistoryComplete: false, incrementalPhase: 'not_started' }),
+    coverage({ contactId: 'c4', bindingId: 'b4', phase: 'not_started', savedHistoryComplete: false, incrementalPhase: 'not_started' }),
+  ];
+  const markup = renderPage(rows, true);
+  assert.match(markup, /已保存本机历史：2 \/ 4 位联系人/);
+  assert.match(markup, /value="2" max="4"/);
+  assert.match(markup, /1 位联系人的聊天来源待重新核验，已保存的聊天不受影响/);
+  assert.match(markup, /1 位联系人同步需要关注/, '真实来源失效的警示不因已保存标记而消失');
+  assert.doesNotMatch(markup, /本机历史已读完：/);
+});
+
+test('旧后台缺少 saved_history_complete 时显示进度待确认，不画进度条也不推断完成', () => {
+  const legacyRow = row => { const { savedHistoryComplete, ...rest } = row; return rest; };
+  const markup = renderPage([legacyRow(coverage({})), legacyRow(coverage({ contactId: 'c2', bindingId: 'b2' }))], true);
+  assert.match(markup, /已保存本机历史：进度待确认/);
+  assert.doesNotMatch(markup, /<progress/);
+  assert.doesNotMatch(markup, /\d+ \/ \d+ 位联系人/);
+  assert.match(markup, /后台尚未报告已保存的历史进度/);
+  assert.doesNotMatch(markup, /已保存当前同步进度/);
+});
+
+test('展示字段不改变回复资格：已保存完成但当前 phase 未完成时，资格仍按 phase 判断', () => {
+  const stale = coverage({ phase: 'incomplete', failureCode: 'history_source_continuity_unverified', savedHistoryComplete: true });
+  const report = { historyAuthorizationState: 'accepted', historyCoverages: [stale] };
+  assert.equal(historyReplyEligibility(report, id), 'incomplete');
+  assert.equal(historyReplyEligibility({ ...report, historyCoverages: [{ ...stale, savedHistoryComplete: false }] }, id), 'incomplete');
 });

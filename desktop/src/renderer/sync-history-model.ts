@@ -7,7 +7,7 @@ export interface SyncIssueGroup {
   description: string;
 }
 export const syncIssueGroups: readonly SyncIssueGroup[] = [
-  { kind: 'source', title: '聊天来源需要核验', description: '暂时无法确认聊天来源或读取范围，相关读取已暂停。请查看联系人的同步设置与来源核验状态。' },
+  { kind: 'source', title: '聊天来源需要核验', description: '暂时无法确认聊天来源或读取范围，相关读取已暂停；已保存的聊天仍保留。请查看联系人的同步设置与来源核验状态。' },
   { kind: 'identity', title: '部分消息需要核验', description: '部分消息的身份或状态尚未确认，暂不作为回复依据。可在故障排查中查看原因。' },
   { kind: 'capability', title: '读取能力需要核验', description: '当前微信读取能力尚未通过核验，相关读取保持关闭。可在故障排查中查看原因。' },
   { kind: 'local', title: '本机记录暂不可读取', description: '这台电脑可能没有对应历史记录，或部分历史已被删除。请查看联系人的具体状态。' },
@@ -42,6 +42,8 @@ export interface SyncContactStatus {
   rows: HistoryCoverage[];
   issue: SyncIssueKind | null;
   complete: boolean;
+  /** 已保存的本机历史是否读完；任一记录缺少该字段（旧后台）时为 undefined，不推断为已完成。仅用于进度展示。 */
+  savedComplete: boolean | undefined;
   reading: boolean;
   following: boolean;
   awaitingMessages: boolean;
@@ -71,6 +73,7 @@ export function buildSyncContacts(coverages: readonly HistoryCoverage[] = [], co
     return {
       contactId, displayName: names.get(contactId) ?? '未命名联系人', rows, issue: issues[0] ?? null,
       complete: rows.every(row => row.phase === 'complete'),
+      savedComplete: rows.some(row => row.savedHistoryComplete === undefined) ? undefined : rows.every(row => row.savedHistoryComplete === true),
       reading: rows.some(row => row.phase === 'syncing' && !row.failureCode && !row.incrementalFailureCode),
       following: rows.some(row => row.incrementalPhase === 'syncing' && !row.failureCode && !row.incrementalFailureCode),
       awaitingMessages: rows.every(row => row.incrementalAwaitingMessages === true),
