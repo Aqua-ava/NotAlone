@@ -209,3 +209,99 @@ test('真实SQLite联系人删除HTTP投影被main接受，重放旧ID幂等且�
     '删除请求不能超过运输层单次时限');
   assert.equal((await direct('GET', '/api/contacts')).body.contacts.length, 0);
 });
+
+// 真实后端删除进行中名单服务已按 deletion.metadataAdmission 只读重建：桌面侧的目录/授权读取
+// 应能拿到其他联系人与有效绑定，被删对象不可见；早开读者不能阻塞后续清理与删除结算。
+async function earlyOpenFixture(t) {
+  const userData = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-early-open-data-')));
+  const ownerId = '00000000-0000-4000-8000-000000000055';
+  const evidence = { externalKey: 'synthetic-account', identityScheme: 'wechat.account.v1',
+    sourceGeneration: 'source-1', assurance: 'verified', supportProfile: 'synthetic-metadata-v1' };
+  let server;
+  let storage;
+  let metadata;
+  t.after(async () => {
+    if (server) {
+      server.closeAllConnections();
+      await new Promise(resolve => server.close(resolve));
+    }
+    await metadata?.close();
+    await storage?.close();
+    await rm(userData, { recursive: true, force: true });
+  });
+  storage = await SqliteStorage.open({ userData, intent: 'create', role: 'test' });
+  const holders = new ActiveHolders();
+  let closed = 0;
+  metadata = new ContactMetadataLifetime(storage, ownerId, holders, () => ({
+    account: async () => evidence,
+    sessions: async () => [
+      { externalKey: 'synthetic-a', displayName: '合成甲', kind: 'private', identityAssurance: 'verified' },
+      { externalKey: 'synthetic-b', displayName: '合成乙', kind: 'private', identityAssurance: 'verified' },
+    ],
+    close: async () => { closed++; },
+  }));
+  await metadata.initialize();
+  let slowSeal = false;
+  const executeStorage = storage.execute.bind(storage);
+  // 放慢清理阶段，让读取发生在删除请求尚未结算、名单服务已按准入重建之后。
+  storage.execute = async (name, input, lease) => {
+    if (slowSeal && name === 'deletion.sealTargets') await new Promise(resolve => setTimeout(resolve, 1200));
+    return executeStorage(name, input, lease);
+  };
+  const deletion = new DeletionService(storage, holders, new ManagedFiles(userData), { drainTimeoutMs: 100 });
+  const deletionHttp = new SqliteDeletionHttp(deletion, ownerId);
+  server = createServer(async (req, res) => {
+    if (req.headers.authorization !== 'Bearer synthetic-http-test') { res.writeHead(401).end(); return; }
+    if (!await deletionHttp.handle(req, res) && !await metadata.handle(req, res)) res.writeHead(404).end();
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  const endpoint = `http://127.0.0.1:${server.address().port}`;
+  const direct = async (method, route, body, headers = {}) => {
+    const response = await fetch(endpoint + route, { method,
+      headers: { authorization: 'Bearer synthetic-http-test', 'content-type': 'application/json', ...headers },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    return { status: response.status, body: await response.json() };
+  };
+  const candidate = (await direct('POST', '/api/setup/wechat/detect', {})).body;
+  assert.equal((await direct('POST', '/api/setup/wechat/confirm', { candidate_token: candidate.candidate_token,
+    confirmed: true, mode: 'selected', history_authorized: false })).status, 200);
+  const snapshot = (await direct('GET', '/api/sync/cli-sessions', undefined,
+    { 'x-notalone-metadata-consent': 'selected-list' })).body;
+  assert.equal((await direct('POST', '/api/sync/cli-bindings/confirm', { snapshot_token: snapshot.snapshot_token,
+    history_authorized: true, selections: snapshot.sessions.map(row => ({ locator: row.username,
+      observed_display_name: row.display_name, expected_selection_generation: row.selection_generation })) })).status, 200);
+  const contacts = (await direct('GET', '/api/contacts')).body.contacts;
+  assert.equal(contacts.length, 2);
+  return { direct, contacts, setSlowSeal: value => { slowSeal = value; }, closed: () => closed };
+}
+
+test('删除进行中名单服务已只读重建，其他联系人目录与授权绑定可读且被删对象不可见', async t => {
+  const f = await earlyOpenFixture(t);
+  const first = f.contacts.find(row => row.display_name === '合成甲');
+  const sibling = f.contacts.find(row => row.display_name === '合成乙');
+  f.setSlowSeal(true);
+  const deleting = f.direct('DELETE', `/api/contacts/${first.contact_id}`, { confirmed: true, confirm_contact_id: first.contact_id });
+  let roster;
+  for (let i = 0; i < 300; i++) {
+    roster = await f.direct('GET', '/api/contacts');
+    // 旧名单服务已关闭、重建后的只读名单服务能回答 200，才证明读取发生在早开准入之后。
+    if (roster.status === 200 && f.closed() >= 1) break;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  assert.equal(roster.status, 200, `删除进行中目录读取应已重建，实际 ${roster.status} ${JSON.stringify(roster.body)}`);
+  assert.ok(f.closed() >= 1, '重建前旧名单服务已关闭');
+  assert.deepEqual(roster.body.contacts.map(row => row.contact_id), [sibling.contact_id], '被删对象不可见，其他联系人可读');
+  assert.ok(f.closed() >= 1, '重建前旧名单服务已关闭');
+  const bindings = await f.direct('GET', '/api/sync/cli-bindings');
+  assert.equal(bindings.status, 200, '删除进行中授权目录读取应可用');
+  assert.ok(bindings.body.bindings.every(row => row.contact_id !== first.contact_id), '被删对象的绑定不可见');
+  assert.ok(bindings.body.bindings.some(row => row.contact_id === sibling.contact_id), '其他联系人绑定保持可读');
+  const deleted = await deleting;
+  assert.equal(deleted.status, 202, JSON.stringify(deleted.body));
+  assert.equal((await f.direct('GET', `/api/deletions/${deleted.body.operation_id}`)).body.state, 'completed',
+    '早开的名单读者不能阻塞删除结算');
+  f.setSlowSeal(false);
+  const after = await f.direct('GET', '/api/contacts');
+  assert.equal(after.status, 200);
+  assert.deepEqual(after.body.contacts.map(row => row.contact_id), [sibling.contact_id]);
+});

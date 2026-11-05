@@ -63,6 +63,9 @@ function sessions(value: unknown): CliSessionSummary[] {
 }
 type Operation = { generation: number; epoch: number };
 class SelectionStale extends Error {}
+/** 删除窗口内授权读取失败后的有界重试间隔；用尽后按普通读取暴露失败，真实 App 有可见重试入口。 */
+const defaultQuietRetryDelaysMs = [2_000, 4_000, 8_000, 15_000, 30_000];
+export interface BindingConsentOptions { quietRetryDelaysMs?: number[] }
 
 // 认证传输复用 BackendHost，读取范围始终由服务端的运行身份决定。
 export class BindingConsentController {
@@ -73,71 +76,121 @@ export class BindingConsentController {
   private snapshotGenerations = new Map<string, string>();
   private generation: number | undefined;
   private epoch = 0;
-  private pendingRead: { operation: Operation; readSessions: boolean; promise: Promise<void> } | undefined;
+  private pendingRead: { operation: Operation; readSessions: boolean; promise: Promise<boolean> } | undefined;
+  private disposed = false;
+  private quietRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  private quietRetryAttempt = 0;
+  private readonly quietRetryDelaysMs: number[];
+  private readonly unsubscribeState: () => void;
   private readonly listeners = new Set<(state: BindingConsentState) => void>();
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
     private readonly beginReadingScopeChange: () => (() => void) = () => () => {},
-    private readonly quiet: ContactDeletionQuiet = new ContactDeletionQuiet()) {
-    backend.onStateChanged(() => {
+    private readonly quiet: ContactDeletionQuiet = new ContactDeletionQuiet(),
+    options: BindingConsentOptions = {}) {
+    this.quietRetryDelaysMs = options.quietRetryDelaysMs ?? defaultQuietRetryDelaysMs;
+    const unsubscribe = backend.onStateChanged(() => {
+      if (this.disposed) return;
       const generation = backend.getConnectionGeneration();
       if (generation === this.generation) return;
       this.generation = generation; ++this.epoch; this.snapshotToken = undefined; this.snapshotGenerations.clear();
+      // 连接代次变化后旧代次的读取重试作废，由新连接的自动读取重新开始。
+      this.cancelQuietRetry();
       this.publish({ phase: 'offline', sessions: [], bindings: [], knownBindings: [], syncEnabled: null, sessionIssue: 'not-requested',
         busy: null, errorCode: null, notice: null,
         scopeRevision: this.state.scopeRevision + 1 });
       if (generation === undefined) return;
-      // 删除窗口内不发起自动读取：登记窗口结束后的补读，避免失败后停在加载态。
-      if (this.quiet.defer(this.silentRefresh)) return;
+      // 删除窗口内也照常发起自动读取；失败时保留旧授权、登记窗口结束补读并按有界间隔重试。
       void this.refreshState(false);
     });
+    this.unsubscribeState = typeof unsubscribe === 'function' ? unsubscribe : () => {};
   }
   getState(): BindingConsentState { return { ...this.state, sessions: this.state.sessions.map((item) => ({ ...item })),
     bindings: this.state.bindings.map((item) => ({ ...item })),
     knownBindings: this.state.knownBindings?.map((item) => ({ ...item })) }; }
   onStateChanged(listener: (state: BindingConsentState) => void): () => void {
-    this.listeners.add(listener); return () => this.listeners.delete(listener);
+    this.listeners.add(listener); return () => { this.listeners.delete(listener); };
+  }
+  dispose(): void {
+    this.disposed = true;
+    this.cancelQuietRetry();
+    this.unsubscribeState();
+    this.pendingRead = undefined;
+    ++this.epoch;
+    this.listeners.clear();
   }
   async refresh(): Promise<void> {
     await this.refreshState(true);
   }
   async refreshSaved(): Promise<void> {
-    // 删除期间授权目录不可读：暂停本次读取，结束后静默补读一次；旧授权状态仍然有效。
-    if (this.quiet.defer(this.silentRefresh)) return;
+    // 删除窗口内授权目录也可能可读：照常尝试；失败时保留上一次成功状态，窗口结束补读并继续有界重试。
     await this.refreshState(false, true);
   }
   /** 删除结束后的补读：保留上一次成功状态，失败不显示“不能确认授权范围”。 */
-  private readonly silentRefresh = () => { void this.refreshState(false, true, true); };
-  private async refreshState(readSessions: boolean, preserveSessions = false, quietFailure = false): Promise<void> {
-    if (this.state.busy) return;
+  private readonly silentRefresh = () => {
+    // 窗口结束补读接管当前失败链：重新开始一次有界重试，避免与旧定时器叠加。
+    this.cancelQuietRetry();
+    void this.refreshState(false, true, true);
+  };
+  /** 删除窗口内读取失败后的有界重试；用尽后按普通读取暴露失败，保证用户有可见重试入口。 */
+  private cancelQuietRetry(): void {
+    clearTimeout(this.quietRetryTimer);
+    this.quietRetryTimer = undefined;
+    this.quietRetryAttempt = 0;
+  }
+  private scheduleQuietRetry(): void {
+    if (this.disposed || this.quietRetryTimer !== undefined) return;
+    if (this.quietRetryAttempt >= this.quietRetryDelaysMs.length) {
+      // 有界重试已用尽：按普通读取暴露失败；真实 App 有可见的重试入口。
+      this.quietRetryTimer = setTimeout(() => {
+        this.quietRetryTimer = undefined;
+        if (!this.disposed) void this.refreshState(false, true, false, true);
+      }, 0);
+      this.quietRetryTimer.unref?.();
+      return;
+    }
+    const delay = this.quietRetryDelaysMs[this.quietRetryAttempt++];
+    this.quietRetryTimer = setTimeout(() => {
+      this.quietRetryTimer = undefined;
+      if (this.disposed) return;
+      void this.refreshState(false, true, true);
+    }, delay);
+    this.quietRetryTimer.unref?.();
+  }
+  private async refreshState(readSessions: boolean, preserveSessions = false, quietFailure = false,
+    exposeFailure = false): Promise<boolean> {
+    if (this.disposed || this.state.busy) return false;
     const generation = this.backend.getConnectionGeneration();
-    if (generation === undefined) return;
+    if (generation === undefined) return false;
     const pending = this.pendingRead;
     // 保存状态可等待已获同意的名单读取；明确名单刷新不能被普通保存状态读取替代。
     if (pending && this.current(pending.operation) && (!readSessions || pending.readSessions)) return pending.promise;
     const operation = { generation, epoch: ++this.epoch };
     const phaseBefore = this.state.phase;
     const promise = Promise.resolve().then(() => {
-      if (this.current(operation)) return this.load(operation, readSessions, preserveSessions, phaseBefore, quietFailure);
+      if (this.current(operation)) return this.load(operation, readSessions, preserveSessions, phaseBefore, quietFailure, exposeFailure);
+      return false;
     });
     const reading = { operation, readSessions, promise };
     this.pendingRead = reading;
     this.publish({ errorCode: null, notice: null });
-    try { await promise; }
+    try { return await promise; }
     finally { if (this.pendingRead === reading) this.pendingRead = undefined; }
   }
   private async load(operation: Operation, readSessions = this.state.sessionIssue !== 'not-requested',
     preserveSessions = false, phaseBefore: BindingConsentState['phase'] = this.state.phase,
-    quietFailure = false): Promise<void> {
+    quietFailure = false, exposeFailure = false): Promise<boolean> {
     // 只读已保存关联时保留当前展示；明确读取名单仍显示加载状态。
     if (!preserveSessions || this.state.phase !== 'ready') this.publish({ phase: 'loading' });
     try {
       const setup = await this.backend.requestJson({ method: 'GET', path: '/api/setup/status', maxResponseBytes: 4096 });
-      if (!this.current(operation)) return;
+      if (!this.current(operation)) return false;
       if (!runtimeOwnerConfigured(setup.data)) {
-        this.publish({ phase: 'owner-unconfigured', sessions: [], bindings: [], knownBindings: [], syncEnabled: null }); return;
+        this.publish({ phase: 'owner-unconfigured', sessions: [], bindings: [], knownBindings: [], syncEnabled: null });
+        this.cancelQuietRetry();
+        return true;
       }
       const directory = await this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-bindings' });
-      if (!this.current(operation)) return;
+      if (!this.current(operation)) return false;
       this.identityProtocol = record(directory.data) && directory.data.identity_protocol === 'sqlite-selected-v1';
       let active = bindings(directory.data);
       let known = knownBindings(directory.data, active);
@@ -150,7 +203,7 @@ export class BindingConsentController {
         enabled === undefined ? this.backend.requestJson({ method: 'GET', path: '/api/sync/status' })
           : Promise.resolve({ data: { sync_enabled: enabled } }),
       ]);
-      if (!this.current(operation)) return;
+      if (!this.current(operation)) return false;
       let sessionList: CliSessionSummary[] = preserveSessions ? this.state.sessions : [];
       let sessionIssue: BindingConsentState['sessionIssue'] = preserveSessions ? this.state.sessionIssue : readSessions ? null : 'not-requested';
       if (readSessions && list[0].status === 'fulfilled') {
@@ -166,22 +219,28 @@ export class BindingConsentController {
       // 元数据核验可能撤销改名/冲突绑定，发布前重读同一持久授权。
       if (readSessions && this.identityProtocol) {
         const currentDirectory = await this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-bindings' });
-        if (!this.current(operation)) return;
+        if (!this.current(operation)) return false;
         active = bindings(currentDirectory.data); known = knownBindings(currentDirectory.data, active);
         enabled = savedSyncEnabled(currentDirectory.data) ?? enabled;
       }
       const status = list[1].status === 'fulfilled' ? list[1].value.data : null;
       this.publish({ phase: 'ready', selectionOnly: this.identityProtocol, bindings: active, knownBindings: known, sessions: sessionList, sessionIssue,
         syncEnabled: enabled ?? (record(status) && typeof status.sync_enabled === 'boolean' ? status.sync_enabled : null) });
+      this.cancelQuietRetry();
+      return true;
     } catch (error) {
-      if (!this.current(operation)) return;
-      // 删除期间名单服务整体关闭：撤回加载态并保留上一次可展示状态，不把读取失败显示成授权范围不明。
-      if (quietFailure || this.quiet.deleting) {
+      if (!this.current(operation)) return false;
+      // 删除窗口内名单服务可能整体关闭：撤回加载态并保留上一次可展示状态，不把读取失败显示成授权范围不明。
+      // 登记窗口结束补读并按有界间隔重试；用尽后仍按普通读取暴露失败，保证有可见的重试入口。
+      if (!exposeFailure && (quietFailure || this.quiet.deleting)) {
         if (this.state.phase === 'loading') this.publish({ phase: phaseBefore });
-        return;
+        if (this.quiet.deleting) this.quiet.defer(this.silentRefresh);
+        this.scheduleQuietRetry();
+        return false;
       }
       const unavailable = error instanceof BackendRequestFailure && error.code === 'sync_unavailable';
       this.publish({ phase: unavailable ? 'unavailable' : 'failed', sessions: [], bindings: [], knownBindings: [], syncEnabled: null });
+      return false;
     }
   }
   async confirmSelections(confirmation: BindingConfirmation): Promise<void> {

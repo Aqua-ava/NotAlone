@@ -37,7 +37,7 @@ function revocation(args: unknown[]): BindingRevocation {
 }
 
 export function installBindingConsentBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession,
-  beginReadingScopeChange?: () => (() => void), quiet?: ContactDeletionQuiet): void {
+  beginReadingScopeChange?: () => (() => void), quiet?: ContactDeletionQuiet): BindingConsentController {
   const bindings = new BindingConsentController(backend, contacts, beginReadingScopeChange, quiet);
   bindings.onStateChanged((state) => commands.publish('bindings:state-changed', state));
   commands.handle('bindings:get-state', (...args: unknown[]) => {
@@ -55,4 +55,5 @@ export function installBindingConsentBridge(commands: PageCommands, backend: Bac
   commands.handle('bindings:revoke-binding', (...args: unknown[]) => {
     return bindings.revokeBinding(revocation(args));
   }, 'manager');
+  return bindings;
 }

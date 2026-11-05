@@ -1,5 +1,6 @@
 import type { ContactDraft, ContactSelection, ContactSessionState, ContactSummary } from '../../shared/contact-session-bridge';
 import { contactDraftUpdate, type ContactDraftUpdate } from '../../shared/contact-session-bridge';
+import type { ContactDeletionQuiet } from './deletion-quiet';
 
 export type ContactDirectoryResult = {
   generation: number;
@@ -16,7 +17,14 @@ export class ContactSession {
   private directoryRequest = 0;
   private readonly listeners = new Set<(state: ContactSessionState, kind: 'full' | 'draft') => void>();
 
-  constructor(private readonly readDirectory: () => Promise<ContactDirectoryResult>) {}
+  constructor(private readonly readDirectory: () => Promise<ContactDirectoryResult>,
+    private readonly quiet?: ContactDeletionQuiet) {
+    // 联系人目录没有独立的 dispose：应用生命周期内跟随删除窗口，窗口结束时统一补读一次。
+    quiet?.onSettled(() => {
+      if (this.state.directoryPhase === 'ready') void this.refreshContactsInBackground();
+      else void this.refreshContacts();
+    });
+  }
 
   getState(): ContactSessionState {
     return { ...this.state, contacts: this.state.contacts.map((contact) => ({ ...contact })) };
@@ -52,6 +60,7 @@ export class ContactSession {
     const generation = this.generation;
     if (generation === undefined || (background && this.state.directoryPhase !== 'ready')) return false;
     const request = ++this.directoryRequest;
+    const phaseBefore = this.state.directoryPhase;
     if (!background) this.publish({ directoryPhase: 'loading' });
     const current = () => generation === this.generation && request === this.directoryRequest;
     try {
@@ -69,7 +78,12 @@ export class ContactSession {
       });
       return true;
     } catch {
-      if (current() && !background) this.clearDirectory('error');
+      if (current() && !background) {
+        if (this.quiet?.deleting) {
+          // 删除窗口内名单服务可能整体关闭：恢复加载前状态并保留目录、选择与草稿，窗口结束统一补读。
+          this.publish({ directoryPhase: phaseBefore === 'loading' ? 'unavailable' : phaseBefore });
+        } else this.clearDirectory('error');
+      }
       return false;
     }
   }

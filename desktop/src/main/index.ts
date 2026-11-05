@@ -103,7 +103,10 @@ void app.whenReady().then(async () => {
   const quarantine = new QuarantineController(new QuarantineLibrary(resolveQuarantineRoot(
     app.getPath('appData'), app.getPath('userData'), selectedDataPath)),presentQuarantine);
   installQuarantineBridge(commands, quarantine);
-  const contacts = installContactSessionBridge(commands, backend);
+  // 联系人删除窗口先于所有读取方创建：联系人目录、授权目录与同步状态读取在窗口内照常尝试，
+  // 失败静默保留旧状态，窗口结束时各自补读一次。
+  const contactDeletionQuiet = new ContactDeletionQuiet();
+  const contacts = installContactSessionBridge(commands, backend, contactDeletionQuiet);
   const media = installMessageMediaBridge(commands, backend, contacts);
   const foreground = installForegroundBridge(commands, backend, contacts);
   const screenPermission = new ScreenPermissionController({
@@ -149,20 +152,18 @@ void app.whenReady().then(async () => {
       finishForeground();
     };
   };
-  // 联系人删除期间后端整体关闭名单服务：授权目录与同步状态读取暂停，结束后静默补读。
-  // 删除控制器先于其他读取方构造，重连时先打开窗口，后续读取才会登记补读而不是报失败。
-  const contactDeletionQuiet = new ContactDeletionQuiet();
+  // 删除控制器先于授权与同步控制器构造：重连时先打开窗口，后续读取才会按窗口规则保留旧状态并补读。
   let dataLifecycle: DesktopDataLifecycle;
   const contactDeletion = installContactDeletionBridge(commands, backend, contacts, beginReadingScopeChange, (contactId) => {
     if (dataLifecycle && contacts.getState().selectedContactId === contactId) dataLifecycle.withdraw('contact-deletion');
   }, contactDeletionQuiet);
   app.on('before-quit', () => contactDeletion.dispose());
-  installBindingConsentBridge(commands, backend, contacts, beginReadingScopeChange, contactDeletionQuiet);
+  const bindings = installBindingConsentBridge(commands, backend, contacts, beginReadingScopeChange, contactDeletionQuiet);
   const sync = installSyncControlBridge(commands, backend, contacts, beginReadingScopeChange, contactDeletionQuiet);
   const contactHistory = installContactHistoryBridge(commands, backend, contacts);
   const historyClear = installHistoryClearBridge(commands, backend, contacts);
   const syncPriority = new SyncPriorityController(backend, contacts, sync);
-  app.on('before-quit', () => { sync.dispose(); historyClear.dispose(); contactHistory.dispose(); void syncPriority.dispose(); });
+  app.on('before-quit', () => { bindings.dispose(); sync.dispose(); historyClear.dispose(); contactHistory.dispose(); void syncPriority.dispose(); });
   sync.onStateChanged((state) => foreground.setSyncControlState(state));
   foreground.setSyncControlState(sync.getState());
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());

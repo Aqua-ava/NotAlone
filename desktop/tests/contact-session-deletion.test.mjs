@@ -116,3 +116,58 @@ test('补读抛错不影响其他补读或窗口结束', () => {
   assert.equal(quiet.deleting, false);
   assert.deepEqual(reads, ['另一读取']);
 });
+
+test('删除窗口内完整刷新失败保留目录、选择与草稿，窗口结束时后台补读一次', async t => {
+  const quiet = new ContactDeletionQuiet();
+  let closed = false, reads = 0;
+  const session = new ContactSession(async () => {
+    reads++;
+    if (closed) throw new Error('synthetic_roster_closed');
+    return { generation: 7, contacts: directory() };
+  }, quiet);
+  t.after(() => session.setConnection(undefined));
+  session.setConnection(7);
+  await session.refreshContacts();
+  session.selectContact({ contactId: b, scopeRevision: session.getState().scopeRevision });
+  session.setDraft({ contactId: b, scopeRevision: session.getState().scopeRevision, text: '合成草稿乙' });
+  const before = session.getState();
+  const finish = quiet.begin();
+  closed = true;
+  await session.refreshContacts();
+  await flush();
+  const during = session.getState();
+  assert.equal(during.directoryPhase, 'ready', '删除窗口内失败恢复可展示状态，不清空目录');
+  assert.deepEqual(during.contacts.map(contact => contact.contactId), [a, b, c]);
+  assert.equal(during.selectedContactId, b);
+  assert.equal(during.draft, '合成草稿乙');
+  assert.equal(during.scopeRevision, before.scopeRevision);
+  // 窗口结束前重新取基线，确认窗口结束的补读确实发生。
+  const baseline = reads;
+  closed = false;
+  finish();
+  await flush();
+  assert.equal(reads, baseline + 1, '窗口结束时后台补读一次');
+  assert.equal(session.getState().directoryPhase, 'ready');
+});
+
+test('删除窗口结束且目录尚未可读时做完整刷新恢复目录', async t => {
+  const quiet = new ContactDeletionQuiet();
+  let closed = true, reads = 0;
+  const session = new ContactSession(async () => {
+    reads++;
+    if (closed) throw new Error('synthetic_roster_closed');
+    return { generation: 7, contacts: directory() };
+  }, quiet);
+  t.after(() => session.setConnection(undefined));
+  session.setConnection(7);
+  await flush();
+  assert.equal(session.getState().directoryPhase, 'error');
+  const finish = quiet.begin();
+  closed = false;
+  const baseline = reads;
+  finish();
+  await flush();
+  assert.equal(reads, baseline + 1, '非 ready 时窗口结束做一次完整刷新');
+  assert.equal(session.getState().directoryPhase, 'ready');
+  assert.deepEqual(session.getState().contacts.map(contact => contact.contactId), [a, b, c]);
+});

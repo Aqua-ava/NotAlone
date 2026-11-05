@@ -54,8 +54,7 @@ export class SyncControlController {
       this.snapshotTimer = undefined;
       if (this.disposed || this.pending || scope !== this.scope
         || scope.generation !== this.backend.getConnectionGeneration()) return;
-      // 删除期间名单服务整体关闭：暂停只读快照，结束后补读一次。
-      if (this.quiet.defer(this.silentRefresh)) return;
+      // 删除窗口内也照常尝试读取；失败时保留上一次报告、登记窗口结束补读并有界恢复。
       void this.perform('refresh', scope, true);
     }, 3000);
     this.snapshotTimer.unref?.();
@@ -69,7 +68,7 @@ export class SyncControlController {
       this.recoveryTimer = undefined;
       if (this.disposed || this.pending || scope !== this.scope
         || scope.generation !== this.backend.getConnectionGeneration()) return;
-      if (this.quiet.defer(this.silentRefresh)) return;
+      // 删除窗口内恢复定时器也照常尝试读取；失败继续按退避恢复。
       void this.perform('refresh', scope);
     }, delay);
     this.recoveryTimer.unref?.();
@@ -97,8 +96,7 @@ export class SyncControlController {
   }
   async refresh(): Promise<void> {
     if (this.disposed) return;
-    // 删除期间名单服务整体关闭：暂停同步状态读取，结束后静默补读一次并保留上次报告。
-    if (this.quiet.defer(this.silentRefresh)) return;
+    // 删除窗口内也照常尝试读取；失败时保留上一次报告，登记窗口结束补读并按退避恢复。
     this.cancelRecovery(); this.cancelSnapshot();
     this.synchronizeScope();
     if (!this.scope || this.pending) return;
@@ -147,6 +145,10 @@ export class SyncControlController {
   private async perform(operation: Operation, scope: Scope, background = false, mode?: SyncScope,
     historyDecision?: HistoryAuthorizationDecision, preserveOnFailure = false): Promise<void> {
     const enabledBefore = this.state.report?.enabled;
+    // 窗口内只读刷新失败时恢复这次读取前的展示，不能停在“正在读取”。
+    const phaseBefore = this.state.phase;
+    const reportBefore = this.state.report;
+    const errorCodeBefore = this.state.errorCode;
     const epoch = ++this.epoch;
     const pending = new AbortController();
     this.pending = pending;
@@ -182,24 +184,36 @@ export class SyncControlController {
       if (!current()) return;
       const unavailable = error instanceof BackendRequestFailure
         && ['sync_unavailable', 'sync_status_unavailable'].includes(error.code ?? '');
-      // 删除期间名单服务整体关闭：只读刷新保留上一次成功报告，不显示“同步状态读取失败”。
+      // 删除窗口内或静默补读失败：只读刷新保留上一次成功报告，不显示“同步状态读取失败”。
       if (preserveOnFailure || operation === 'refresh' && this.quiet.deleting) {
         if (operation === 'refresh') {
+          if (!background && this.state.phase === 'loading') {
+            this.publish({ phase: phaseBefore, report: reportBefore, errorCode: errorCodeBefore });
+          }
+          // 窗口结束补读一次；补读失败后继续按退避有界恢复（含存储繁忙的真实 503）。
           if (this.quiet.deleting) this.quiet.defer(this.silentRefresh);
-          // 补读仍遇服务未就绪时继续原有退避自动恢复；窗口内到的定时器会在窗口结束时再补读。
-          if (error instanceof BackendRequestFailure && error.kind === 'response'
-            && error.status === 503 && error.code === 'sync_status_unavailable') this.scheduleRecovery(scope);
+          if (this.transientReadFailure(error)) this.scheduleRecovery(scope);
         }
         return;
       }
       this.publish({ phase: unavailable ? 'unavailable' : 'failed', report: null,
         errorCode: operation === 'refresh' ? 'status-unconfirmed' : 'operation-unconfirmed' });
-      if (operation === 'refresh' && error instanceof BackendRequestFailure && error.kind === 'response'
-        && error.status === 503 && error.code === 'sync_status_unavailable') this.scheduleRecovery(scope);
+      if (operation === 'refresh' && this.transientReadFailure(error)) this.scheduleRecovery(scope);
     } finally {
       if (this.pending === pending) { this.pending = undefined; this.snapshotRefreshing = false; }
       if (current()) { this.publish({ busy: null }); this.scheduleSnapshot(scope); }
     }
+  }
+  /**
+   * 只读状态读取的瞬时失败：连接中断、存储繁忙/压缩独占（真实后端为 503 sqlite_contact_operation_failed）、
+   * 状态快照未就绪（旧后台 sync_status_unavailable）都按退避自动恢复；未配置宿主的 sync_unavailable 不重试。
+   */
+  private transientReadFailure(error: unknown): boolean {
+    if (!(error instanceof BackendRequestFailure)) return false;
+    if (error.kind === 'connection') return true;
+    if (error.kind !== 'response' || error.status === undefined) return false;
+    if (error.status === 409 || error.status === 429 || error.status >= 500) return error.code !== 'sync_unavailable';
+    return false;
   }
   private refreshContactDirectory(scope: Scope, count: number): void {
     if (this.directoryRefresh || this.knownBindingCount === count) return;

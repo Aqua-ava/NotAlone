@@ -15,6 +15,9 @@ type Operation = { generation: number; epoch: number };
 export interface ContactDeletionOptions {
   autoRetryDelaysMs?: number[]; autoResume?: boolean; contactPollMs?: number;
   operationWaitMs?: number; operationPollMs?: number; discoverPollMs?: number; discoverTimeoutMs?: number;
+  /** 本地未知回执（未取得任务编号）时确认后端已无可推进删除的有界探针间隔。 */
+  settleProbeDelaysMs?: number[]; /** 删除窗口兜底上限：超时强制结束窗口并补读一次。 */
+  quietMaxMs?: number;
 }
 const defaultAutoRetryDelaysMs = [1_000, 3_000, 8_000];
 /** 覆盖规格要求的“不低于 10 分钟、随库增长”维护预算，并给清理与状态读取留余量；超时后保留原任务。 */
@@ -26,6 +29,10 @@ const defaultDiscoverTimeoutMs = 90_000;
 /** 请求已超时后再给一轮短暂发现，覆盖计划排队、原任务在超时后才建立或才可读的情况。 */
 const recoveryDiscoverTimeoutMs = 30_000;
 const discoverRequestMs = 5_000;
+/** 回执丢失且名单暂时读不到原任务时，按有界间隔确认后端是否仍有未完成删除；用尽后强制恢复无关读取。 */
+const defaultSettleProbeDelaysMs = [2_000, 5_000, 10_000, 20_000, 30_000];
+/** 窗口兜底：即使本地状态一直无法确认，也不能无限期保留删除窗口。 */
+const defaultQuietMaxMs = 10 * 60_000;
 class ScopeMismatch extends Error {}
 /** 只外露后端已分类的机器错误码，未知失败统一为结果未知。 */
 function failureCode(error: unknown): string {
@@ -52,6 +59,11 @@ export class ContactDeletionController {
   private pending: AbortController | undefined;
   private disposed = false;
   private quietWindow: (() => void) | undefined;
+  private quietMaxTimer: ReturnType<typeof setTimeout> | undefined;
+  private settleProbeTimer: ReturnType<typeof setTimeout> | undefined;
+  /** 有界探针尚未给出结论时窗口保持；与 quietProbe（重连探针）共用“读取完成前不提前恢复”的语义。 */
+  private settleProbeHolding = false;
+  private settleProbeAttempt = 0;
   /** 重连时打开的窗口要等新连接的删除状态读取给出结论，不能只凭旧连接状态结束。 */
   private quietProbe = false;
   private readonly resumed = new Set<string>();
@@ -62,6 +74,8 @@ export class ContactDeletionController {
   private readonly operationPollMs: number;
   private readonly discoverPollMs: number;
   private readonly discoverTimeoutMs: number;
+  private readonly settleProbeDelaysMs: number[];
+  private readonly quietMaxMs: number;
   private readonly listeners = new Set<(state: ContactDeletionState) => void>();
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
     private readonly beginReadingScopeChange: () => (() => void) = () => () => {},
@@ -75,6 +89,8 @@ export class ContactDeletionController {
     this.operationPollMs = options.operationPollMs ?? defaultOperationPollMs;
     this.discoverPollMs = options.discoverPollMs ?? defaultDiscoverPollMs;
     this.discoverTimeoutMs = options.discoverTimeoutMs ?? defaultDiscoverTimeoutMs;
+    this.settleProbeDelaysMs = options.settleProbeDelaysMs ?? defaultSettleProbeDelaysMs;
+    this.quietMaxMs = options.quietMaxMs ?? defaultQuietMaxMs;
     backend.onStateChanged(() => this.synchronize());
     this.synchronize();
   }
@@ -85,20 +101,100 @@ export class ContactDeletionController {
   dispose(): void { this.disposed = true; this.cancel(); this.endQuietWindow(); this.listeners.clear(); }
   /**
    * 后端只要还有未完成的联系人删除就整体关闭名单服务，因此窗口覆盖整个未完成期间，而不只是单次请求。
-   * 删除被重试、续跑或重连打断时继续保留窗口；全部完成或确认没有未完成任务后才恢复无关读取。
+   * 删除被重试、续跑或重连打断时继续保留窗口；全部完成、确认没有未完成任务或兜底超时后才恢复无关读取。
    */
   private beginQuietWindow(): void {
-    this.quietWindow ??= this.quiet.begin();
+    if (this.quietWindow) return;
+    this.quietWindow = this.quiet.begin();
+    this.armQuietMax();
   }
   private endQuietWindow(): void {
+    this.cancelQuietMax();
+    this.cancelSettleProbe();
     const finish = this.quietWindow;
     this.quietWindow = undefined;
     finish?.();
   }
+  /** 窗口兜底：超过 quietMaxMs 仍无法确认删除结束时强制恢复无关读取并在结束时补读一次。 */
+  private armQuietMax(): void {
+    this.cancelQuietMax();
+    if (this.quietMaxMs <= 0) return;
+    this.quietMaxTimer = setTimeout(() => {
+      this.quietMaxTimer = undefined;
+      this.forceEndQuietWindow();
+    }, this.quietMaxMs);
+    this.quietMaxTimer.unref?.();
+  }
+  private cancelQuietMax(): void {
+    clearTimeout(this.quietMaxTimer); this.quietMaxTimer = undefined;
+  }
+  private forceEndQuietWindow(): void {
+    this.quietProbe = false;
+    this.cancelSettleProbe();
+    this.cancelQuietMax();
+    this.endQuietWindow();
+  }
   private endQuietWindowIfSettled(): void {
-    // 重连探针尚未给出结论时不能提前恢复读取，否则重连瞬间的读取仍会撞上关闭的名单服务。
-    if (this.quietProbe) return;
-    if (this.state.busyId || this.state.operations.some(item => item.phase !== 'completed')) return;
+    // 重连探针或有界结算探针尚未给出结论时不能提前恢复读取，否则读取仍会撞上关闭的名单服务。
+    if (this.quietProbe || this.settleProbeHolding) return;
+    // 已知任务编号且未完成：后端仍在删除，继续保持窗口，由运行、重试、自动续跑或兜底超时结束。
+    if (this.state.operations.some(item => item.operationId !== null && item.phase !== 'completed')) return;
+    // 本地未知回执（回执丢失/未取得编号）不能证明后端仍在删除：有界探针确认无未完成任务后结束。
+    if (this.state.operations.some(item => item.operationId === null && item.phase !== 'completed')) {
+      if (this.quietWindow) this.scheduleSettleProbe();
+      return;
+    }
+    this.endQuietWindow();
+  }
+  /**
+   * 本地未知回执的有界结算探针：按 settleProbeDelaysMs 定时读取权威删除列表。
+   * 读取成功且没有未完成任务编号后结束窗口并补读；读取失败保持窗口继续下一档；用尽后强制结束。
+   */
+  private scheduleSettleProbe(): void {
+    if (this.disposed || this.settleProbeHolding || this.settleProbeDelaysMs.length === 0) return;
+    this.settleProbeHolding = true;
+    this.settleProbeAttempt = 0;
+    this.armSettleProbe();
+  }
+  private armSettleProbe(): void {
+    if (this.disposed || !this.settleProbeHolding) return;
+    if (this.settleProbeAttempt >= this.settleProbeDelaysMs.length) { this.forceEndQuietWindow(); return; }
+    const delay = this.settleProbeDelaysMs[this.settleProbeAttempt++];
+    this.settleProbeTimer = setTimeout(() => {
+      this.settleProbeTimer = undefined;
+      void this.probeSettledBackend();
+    }, delay);
+    this.settleProbeTimer.unref?.();
+  }
+  private cancelSettleProbe(): void {
+    this.settleProbeHolding = false;
+    this.settleProbeAttempt = 0;
+    clearTimeout(this.settleProbeTimer);
+    this.settleProbeTimer = undefined;
+  }
+  private async probeSettledBackend(): Promise<void> {
+    const generation = this.generation;
+    if (this.disposed || !this.settleProbeHolding || generation === undefined) {
+      this.cancelSettleProbe();
+      return;
+    }
+    if (generation !== this.generation || generation !== this.backend.getConnectionGeneration()) {
+      this.cancelSettleProbe();
+      return;
+    }
+    // 状态读取允许，不重放删除；刷新成功后由 refresh 按权威列表结束或保持窗口。
+    const settled = await this.refresh();
+    if (this.disposed || !this.settleProbeHolding) return;
+    if (generation !== this.generation || generation !== this.backend.getConnectionGeneration()) {
+      this.cancelSettleProbe();
+      return;
+    }
+    if (!this.quiet.deleting) { this.cancelSettleProbe(); return; }
+    if (!settled) { this.armSettleProbe(); return; }
+    // 权威读取成功：列表里已没有可推进的任务编号，窗口可以结束并补读；已知未完成则由运行/重试继续。
+    const knownUnfinished = this.state.operations.some(item => item.operationId !== null && item.phase !== 'completed');
+    this.settleProbeHolding = false;
+    if (knownUnfinished) { this.endQuietWindowIfSettled(); return; }
     this.endQuietWindow();
   }
   private synchronize(): boolean {
@@ -110,15 +206,17 @@ export class ContactDeletionController {
     this.cancel(); this.generation = generation;
     // 重连时先保留窗口，等新连接的删除状态读取完成后再决定是否恢复无关读取。
     this.quietProbe = generation !== undefined;
+    // 旧的本地结算探针结论随连接代次作废；窗口若延续由新连接的权威读取重新判定。
+    this.cancelSettleProbe();
     if (generation !== undefined) this.beginQuietWindow(); else this.endQuietWindow();
     this.publish({ phase: generation === undefined ? 'offline' : 'loading', scopeRevision: this.state.scopeRevision + 1,
       operations: [], busyId: null, error: null });
     if (generation !== undefined) void this.refresh();
     return true;
   }
-  async refresh(): Promise<void> {
-    if (this.synchronize()) return;
-    if (this.disposed || this.generation === undefined || this.state.busyId) return;
+  async refresh(): Promise<boolean> {
+    if (this.synchronize()) return false;
+    if (this.disposed || this.generation === undefined || this.state.busyId) return false;
     this.cancel();
     const operation = { generation: this.generation, epoch: this.epoch };
     const pending = new AbortController(); this.pending = pending;
@@ -126,7 +224,7 @@ export class ContactDeletionController {
     try {
       if (!this.ownerId) {
         const identity = await this.backend.requestJson({ method: 'GET', path: '/api/setup/status', signal: pending.signal, maxResponseBytes: 4096 });
-        if (!this.current(operation) || identity.generation !== operation.generation) return;
+        if (!this.current(operation) || identity.generation !== operation.generation) return false;
         const owner = identity.data as { runtime_owner_configured?: unknown; owner_id?: unknown } | null;
         if (!owner || owner.runtime_owner_configured !== true || !isUuid(owner.owner_id)) throw new Error('本人删除范围尚未核验。');
         this.ownerId = owner.owner_id.toLowerCase();
@@ -134,7 +232,7 @@ export class ContactDeletionController {
         this.previousScope = undefined;
       }
       const result = await this.backend.requestJson({ method: 'GET', path: '/api/deletions', signal: pending.signal, maxResponseBytes: 2_000_000 });
-      if (!this.current(operation) || result.generation !== operation.generation) return;
+      if (!this.current(operation) || result.generation !== operation.generation) return false;
       const previous = this.state.operations;
       const found = new Set<string>();
       const items = deletionOperations(result.data).flatMap(item => {
@@ -148,15 +246,28 @@ export class ContactDeletionController {
       for (const old of previous) if (!found.has(old.id) && !items.some(item => item.id === old.id)) items.push(old);
       this.publish({ phase: 'ready', operations: items, error: null });
       this.quietProbe = false;
-      if (items.some(item => item.phase !== 'completed')) this.beginQuietWindow();
-      else this.endQuietWindowIfSettled();
+      const unfinished = items.filter(item => item.phase !== 'completed');
+      if (unfinished.some(item => item.operationId !== null)) {
+        // 权威列表里仍有可继续推进的任务编号：后端仍在删除，继续保持窗口。
+        this.cancelSettleProbe();
+        this.beginQuietWindow();
+      } else if (unfinished.some(item => item.operationId === null) && this.quietWindow) {
+        // 本地未知回执：即使本次列表为空，也不能排除旧连接在途请求尚未建立任务；保持窗口等有界探针二次确认。
+        this.scheduleSettleProbe();
+      } else {
+        // 权威列表已读到且没有未完成任务：本地未知回执不再需要保持窗口，结束并补读。
+        this.cancelSettleProbe();
+        this.endQuietWindow();
+      }
       this.autoResume();
+      return true;
     } catch {
       if (this.current(operation)) {
         this.publish({ phase: 'failed', error: '删除任务状态暂时无法读取，请刷新重试。' });
-        // 重连探针失败不长期暂停无关读取；下次成功读取再按实际任务决定。
+        // 重连探针失败不长期暂停无关读取；已知未完成任务或本地未知回执由窗口生命周期与有界探针收敛。
         if (this.quietProbe) { this.quietProbe = false; this.endQuietWindowIfSettled(); }
       }
+      return false;
     } finally { if (this.pending === pending) this.pending = undefined; }
   }
   async delete(request: ContactDeletionRequest): Promise<void> {
@@ -184,8 +295,9 @@ export class ContactDeletionController {
   }
   private async run(item: ContactDeletionItem): Promise<void> {
     this.cancel();
-    // 名单服务在删除期间整体关闭：无关的授权与同步状态读取暂停，结束后补读一次。
-    // 本次运行接管窗口生命周期，重连探针的结论由本任务完成后统一给出。
+    // 名单服务在删除期间整体关闭：读取方仍尝试读取，失败保留旧状态，窗口结束时补读一次。
+    // 本次运行接管窗口生命周期，旧的本地未知探针与重连探针结论由本任务完成后统一给出。
+    this.cancelSettleProbe();
     this.quietProbe = false;
     this.beginQuietWindow();
     const operation = { generation: this.generation!, epoch: this.epoch };
@@ -282,7 +394,7 @@ export class ContactDeletionController {
         try { finish(); }
         finally {
           if (this.pending === pending) this.pending = undefined;
-          // 任务全部完成才恢复无关读取；未知、受阻或仍需续跑时继续保留窗口。
+          // 已知未完成任务继续保留窗口；本地未知回执转入有界结算探针；确认无未完成任务后结束并补读。
           this.endQuietWindowIfSettled();
         }
       }

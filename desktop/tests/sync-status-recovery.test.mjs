@@ -18,9 +18,9 @@ function report() {
   ...Object.fromEntries(['total_contacts','completed_contacts','succeeded_contacts','skipped_contacts','failed_contacts',
    'incomplete_contacts','pending_contacts','total_message_count','total_non_text_count'].map(key=>[`cli_backfill_${key}`,0])) };
 }
-function fixture(t, failures = 1, priority = false, quiet) {
+function fixture(t, failures = 1, priority = false, quiet, failureCode = 'sync_status_unavailable') {
  t.mock.timers.enable({ apis: ['setTimeout'] });
- const control = { failures, failureCode:'sync_status_unavailable', mutationFailure:false, barrier:undefined,
+ const control = { failures, failureCode, mutationFailure:false, barrier:undefined,
   extra:priority?{cli_priority_contact_id:id,cli_priority_last_success_at:'2026-10-19T06:00:00+00:00',
    cli_priority_last_duration_ms:100,cli_priority_last_cli_duration_ms:70,cli_priority_last_store_duration_ms:20,
    cli_priority_last_failure_code:null,cli_priority_queue_wait_ms:10}:{} };
@@ -134,57 +134,45 @@ test('用户关闭同步可取消在途只读轮询，迟到结果不能恢复�
  assert.equal(f.sync.getState().report.enabled,false);
 });
 
-test('删除期间暂停同步状态读取，结束后静默补读一次并保留报告', async t=>{
+test('删除窗口内同步状态刷新照常读取，成功后窗口结束不重复补读', async t=>{
  const quiet=new ports.ContactDeletionQuiet();
  const f=fixture(t,0,false,quiet);await flush();
  assert.equal(f.sync.getState().phase,'ready');
  const before=f.sync.getState();
- const reads=f.requests.filter(request=>request.path==='/api/sync/status').length;
+ const reads=()=>f.requests.filter(request=>request.path==='/api/sync/status').length;
+ const count=reads();
  const finish=quiet.begin();
  await f.sync.refresh();await flush();
- assert.equal(f.requests.filter(request=>request.path==='/api/sync/status').length,reads,'删除窗口内不读取同步状态');
- assert.deepEqual(f.sync.getState(),before,'窗口内保留上一次成功报告');
- finish();await flush();
- assert.equal(f.requests.filter(request=>request.path==='/api/sync/status').length,reads+1,'窗口结束后静默补读一次');
+ assert.equal(reads(),count+1,'窗口内照常读取同步状态，不再跳过');
  assert.equal(f.sync.getState().phase,'ready');
  assert.deepEqual(f.sync.getState().report,before.report);
  assert.equal(f.sync.getState().errorCode,null);
-});
-
-test('删除期间自动只读轮询暂停，结束后补读一次', async t=>{
- const quiet=new ports.ContactDeletionQuiet();
- const f=fixture(t,0,true,quiet);await flush();
- assert.equal(f.sync.getState().phase,'ready');
- const reads=f.requests.filter(request=>request.path==='/api/sync/status').length;
- const finish=quiet.begin();
- t.mock.timers.tick(3000);await flush();
- assert.equal(f.requests.filter(request=>request.path==='/api/sync/status').length,reads,'窗口内不发起只读轮询');
- assert.equal(f.sync.getState().phase,'ready');
  finish();await flush();
- assert.equal(f.requests.filter(request=>request.path==='/api/sync/status').length,reads+1,'窗口结束后仅补读一次');
+ assert.equal(reads(),count+1,'成功读取后窗口结束不再重复补读');
  assert.equal(f.sync.getState().phase,'ready');
 });
 
-test('删除窗口内在途只读刷新失败保留上一次报告，不显示读取失败', async t=>{
+test('删除窗口内只读快照失败保留旧报告与空错误码，窗口结束补读一次', async t=>{
  const quiet=new ports.ContactDeletionQuiet();
  const f=fixture(t,0,true,quiet);await flush();
+ assert.equal(f.sync.getState().phase,'ready');
  const before=f.sync.getState();
- let release;
- f.control.barrier=new Promise(resolve=>{release=resolve;});
+ const reads=()=>f.requests.filter(request=>request.path==='/api/sync/status').length;
+ const count=reads();
+ const finish=quiet.begin();
  f.control.failures=1;
  t.mock.timers.tick(3000);await flush();
- assert.equal(f.requests.filter(request=>request.path==='/api/sync/status').length,2,'只读快照已发出并在等回执');
- const finish=quiet.begin();
- release();await flush();
+ assert.equal(reads(),count+1,'窗口内只读快照照常请求');
  assert.equal(f.sync.getState().phase,'ready');
- assert.deepEqual(f.sync.getState().report,before.report);
+ assert.deepEqual(f.sync.getState().report,before.report,'窗口内失败保留上一次成功报告');
+ assert.equal(f.sync.getState().errorCode,null,'原错误码为空时失败不写入新的读取错误');
  finish();await flush();
+ assert.equal(reads(),count+2,'窗口结束静默补读一次');
  assert.equal(f.sync.getState().phase,'ready');
  assert.equal(f.sync.getState().errorCode,null);
- assert.equal(f.requests.filter(request=>request.path==='/api/sync/status').length,3,'窗口结束后补读一次');
 });
 
-test('删除结束补读仍失败时保留旧态并继续原有退避恢复', async t=>{
+test('删除窗口内恢复定时器照常尝试读取，失败保留旧态并继续退避恢复', async t=>{
  const quiet=new ports.ContactDeletionQuiet();
  const f=fixture(t,20,false,quiet);await flush();
  const reads=()=>f.requests.filter(request=>request.path==='/api/sync/status').length;
@@ -192,18 +180,18 @@ test('删除结束补读仍失败时保留旧态并继续原有退避恢复', as
  assert.equal(reads(),1);
  const finish=quiet.begin();
  t.mock.timers.tick(1000);await flush();
- assert.equal(reads(),1,'窗口内到的恢复定时不发起读取');
+ assert.equal(reads(),2,'窗口内恢复定时器照常尝试读取');
  assert.equal(f.sync.getState().phase,'unavailable');
  finish();await flush();
- assert.equal(reads(),2,'窗口结束补读一次');
+ assert.equal(reads(),3,'窗口结束补读一次');
  assert.equal(f.sync.getState().phase,'unavailable','补读失败保留旧态');
  t.mock.timers.tick(1000);await flush();
- assert.equal(reads(),3,'补读失败后继续按原有退避自动恢复');
+ assert.equal(reads(),4,'补读失败后继续按退避自动恢复');
 });
 
 test('删除结束补读成功清除上一次读取错误码', async t=>{
  const quiet=new ports.ContactDeletionQuiet();
- const f=fixture(t,1,false,quiet);await flush();
+ const f=fixture(t,2,false,quiet);await flush();
  assert.equal(f.sync.getState().phase,'unavailable');
  assert.equal(f.sync.getState().errorCode,'status-unconfirmed');
  const finish=quiet.begin();
@@ -214,4 +202,24 @@ test('删除结束补读成功清除上一次读取错误码', async t=>{
  assert.equal(f.sync.getState().phase,'ready');
  assert.equal(f.sync.getState().errorCode,null,'补读成功后不再显示旧读取错误');
  assert.ok(f.sync.getState().report);
+});
+
+test('真实503存储繁忙的窗口内失败保留旧报告，窗口结束补读失败后继续恢复请求', async t=>{
+ const quiet=new ports.ContactDeletionQuiet();
+ const f=fixture(t,20,false,quiet,'sqlite_contact_operation_failed');await flush();
+ const reads=()=>f.requests.filter(request=>request.path==='/api/sync/status').length;
+ const before=f.sync.getState();
+ assert.equal(before.phase,'failed');
+ assert.equal(before.errorCode,'status-unconfirmed');
+ const count=reads();
+ const finish=quiet.begin();
+ await f.sync.refresh();await flush();
+ assert.equal(reads(),count+1,'窗口内照常尝试读取');
+ assert.equal(f.sync.getState().phase,'failed','窗口内失败保留旧态');
+ assert.equal(f.sync.getState().errorCode,'status-unconfirmed');
+ finish();await flush();
+ const afterFinish=reads();
+ assert.equal(afterFinish,count+2,'窗口结束补读一次');
+ t.mock.timers.tick(1000);await flush();
+ assert.ok(reads()>afterFinish,'真实 sqlite_contact_operation_failed 的补读失败后仍有后续恢复请求');
 });

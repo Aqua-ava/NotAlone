@@ -17,7 +17,7 @@ function syncReport(enabled) { return { sync_mode: 'cli_background', sync_enable
   foreground_phase: enabled ? 'unavailable' : 'sync_disabled', cli_bound_count: 0 }; }
 
 function fixture({ withBinding = false, revokeFails = false, sqlite = false, initiallyEnabled = false,
-  enableFails = false, confirmBarrier, lightweightStatus = false, beforeRead, quiet } = {}) {
+  enableFails = false, confirmBarrier, lightweightStatus = false, beforeRead, quiet, retryDelaysMs } = {}) {
   let snapshotNumber = 0;
   let generation, listener;
   let enabled = initiallyEnabled;
@@ -29,7 +29,7 @@ function fixture({ withBinding = false, revokeFails = false, sqlite = false, ini
   let revoked = [];
   const backend = {
     getConnectionGeneration: () => generation,
-    onStateChanged: (callback) => { listener = callback; },
+    onStateChanged: (callback) => { listener = callback; return () => { listener = undefined; }; },
     async requestJson(request) {
       requests.push(request);
       const { path } = request;
@@ -62,7 +62,7 @@ function fixture({ withBinding = false, revokeFails = false, sqlite = false, ini
   const contacts = { getState: () => ({ directoryPhase: 'ready', contacts: [] }), refreshContacts: async () => {} };
   const controller = new BindingConsentController(backend, contacts, () => {
     changes.push('started'); return () => changes.push('settled');
-  }, quiet);
+  }, quiet, retryDelaysMs === undefined ? {} : { quietRetryDelaysMs: retryDelaysMs });
   async function connect(value) {
     generation = value; listener();
     await new Promise((resolve) => setImmediate(resolve));
@@ -401,94 +401,92 @@ test('撤销写入后不复用写入前的关联读取，旧回包不能恢复�
   assert.equal(f.controller.getState().knownBindings[0].status,'revoked');
 });
 
-test('删除期间暂停已保存授权读取，结束后静默补读一次', async () => {
+const flushReads = async (count = 20) => { for (let i = 0; i < count; i++) await new Promise((resolve) => setImmediate(resolve)); };
+const bindingReads = (calls) => calls.filter((path) => path === '/api/sync/cli-bindings').length;
+
+test('删除窗口内已保存授权读取照常发起，失败保留旧状态并在窗口结束时补读一次', async t => {
   const quiet = new ContactDeletionQuiet();
   const f = fixture({ quiet });
   await f.connect(1);
-  await new Promise(resolve => setImmediate(resolve));
+  await flushReads();
   const before = f.controller.getState();
   assert.equal(before.phase, 'ready');
-  const reads = f.calls.filter(path => path === '/api/sync/cli-bindings').length;
+  const reads = bindingReads(f.calls);
   const finish = quiet.begin();
+  f.control.failBindings = true;
   await f.controller.refreshSaved();
-  assert.equal(f.calls.filter(path => path === '/api/sync/cli-bindings').length, reads, '删除窗口内不发起授权读取');
-  assert.deepEqual(f.controller.getState(), before, '窗口内保留上一次成功状态');
+  await flushReads(4);
+  assert.equal(bindingReads(f.calls), reads + 1, '窗口内照常发起授权读取，不再直接跳过');
+  const failed = f.controller.getState();
+  assert.equal(failed.phase, 'ready', '失败保留窗口前的可展示状态');
+  assert.equal(failed.errorCode, null);
+  assert.deepEqual(failed.bindings, before.bindings);
+  // 窗口结束前重新取基线，确认补读确实发生在失败请求之后（L1：不能把在途失败请求算成补读）。
+  f.control.failBindings = false;
+  await flushReads(4);
+  const baseline = bindingReads(f.calls);
+  const failedReads = failed.revision;
   finish();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(f.calls.filter(path => path === '/api/sync/cli-bindings').length, reads + 1, '窗口结束后静默补读一次');
+  await flushReads();
+  assert.equal(bindingReads(f.calls), baseline + 1, '窗口结束补读一次');
   assert.equal(f.controller.getState().phase, 'ready');
+  assert.ok(f.controller.getState().revision > failedReads);
+  assert.deepEqual(f.controller.getState().bindings, before.bindings);
+  t.after(() => f.controller.dispose());
 });
 
-test('删除窗口内在途授权读取失败保留上一次成功状态，不发布授权范围不明', async () => {
+test('删除窗口内重连自动读取失败恢复加载前阶段，窗口结束补读后恢复授权', async t => {
   const quiet = new ContactDeletionQuiet();
-  let release;
-  let gate;
-  const f = fixture({ quiet, beforeRead: request => request.path === '/api/sync/cli-bindings' ? gate : undefined });
+  const f = fixture({ withBinding: true, quiet });
   await f.connect(1);
-  await new Promise(resolve => setImmediate(resolve));
-  const before = f.controller.getState();
-  assert.equal(before.phase, 'ready');
-  const reads = f.calls.filter(path => path === '/api/sync/cli-bindings').length;
-  gate = new Promise(resolve => { release = resolve; });
+  await flushReads();
+  assert.equal(f.controller.getState().phase, 'ready');
+  const reads = bindingReads(f.calls);
+  const finish = quiet.begin();
   f.control.failBindings = true;
-  const reading = f.controller.refreshSaved();
-  await new Promise(resolve => setImmediate(resolve));
-  const finish = quiet.begin();
-  release();
-  await reading;
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(f.controller.getState().phase, 'ready');
-  assert.equal(f.controller.getState().errorCode, null);
-  assert.deepEqual(f.controller.getState().bindings, before.bindings);
-  assert.deepEqual(f.controller.getState().knownBindings, before.knownBindings);
-  // 删除结束后的补读也可能遇到服务尚未恢复；仍保留旧授权，不显示“不能确认授权范围”。
-  finish();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(f.calls.filter(path => path === '/api/sync/cli-bindings').length, reads + 1, '窗口结束后补读一次');
-  assert.equal(f.controller.getState().phase, 'ready');
-  assert.deepEqual(f.controller.getState().bindings, before.bindings);
-});
-
-test('删除窗口内重连不发起自动授权读取，窗口结束后补读一次', async () => {
-  const quiet = new ContactDeletionQuiet();
-  const f = fixture({ quiet });
-  await f.connect(1);
-  await new Promise(resolve => setImmediate(resolve));
-  const reads = f.calls.filter(path => path === '/api/sync/cli-bindings').length;
-  const finish = quiet.begin();
   await f.connect(2);
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(f.calls.filter(path => path === '/api/sync/cli-bindings').length, reads, '窗口内重连不读取授权目录');
-  assert.equal(f.controller.getState().phase, 'offline');
-  assert.deepEqual(f.controller.getState().bindings, []);
+  await flushReads();
+  assert.equal(bindingReads(f.calls), reads + 1, '重连窗口内仍发起自动授权读取');
+  assert.equal(f.controller.getState().phase, 'offline', '失败恢复加载前阶段，不卡在正在读取');
+  assert.notEqual(f.controller.getState().phase, 'loading');
+  const failedReads = bindingReads(f.calls);
+  // 窗口结束补读成功：授权目录恢复，离开不可重试的 offline。
+  f.control.failBindings = false;
+  await flushReads(4);
+  const baseline = bindingReads(f.calls);
+  assert.equal(baseline, failedReads, '窗口结束前没有额外读取');
   finish();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(f.calls.filter(path => path === '/api/sync/cli-bindings').length, reads + 1, '窗口结束后只补读一次');
+  await flushReads();
+  assert.equal(bindingReads(f.calls), baseline + 1, '窗口结束补读一次');
   assert.equal(f.controller.getState().phase, 'ready');
+  assert.equal(f.controller.getState().bindings.length, 1);
+  t.after(() => f.controller.dispose());
 });
 
-test('删除窗口内在途刷新失败不会停在加载态', async () => {
+test('删除窗口内读取持续失败按有界间隔重试，超限后暴露失败并可重新读取', async t => {
   const quiet = new ContactDeletionQuiet();
-  let release;
-  let gate;
-  const f = fixture({ quiet, beforeRead: request => request.path === '/api/sync/cli-bindings' ? gate : undefined });
+  const f = fixture({ withBinding: true, quiet, retryDelaysMs: [1, 1, 1] });
   await f.connect(1);
-  await new Promise(resolve => setImmediate(resolve));
+  await flushReads();
   const before = f.controller.getState();
   assert.equal(before.phase, 'ready');
-  gate = new Promise(resolve => { release = resolve; });
-  f.control.failBindings = true;
-  const reading = f.controller.refresh();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(f.controller.getState().phase, 'loading');
   const finish = quiet.begin();
-  release();
-  await reading;
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(f.controller.getState().phase, before.phase, '删除窗口内失败撤回加载态，不卡在正在读取');
-  assert.equal(f.controller.getState().errorCode, null);
+  f.control.failBindings = true;
+  await f.controller.refreshSaved();
+  assert.equal(f.controller.getState().phase, 'ready');
+  // 窗口内失败会登记窗口结束补读并安排有界重试；重试用尽后按普通读取暴露失败。
+  for (let i = 0; i < 100 && f.controller.getState().phase === 'ready'; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
+  assert.equal(f.controller.getState().phase, 'failed', '有界重试用尽后暴露失败供用户重试');
+  assert.deepEqual(f.controller.getState().bindings, []);
+  // 超限后的普通读取成功后恢复授权，离开失败态。
+  f.control.failBindings = false;
+  await f.controller.refreshSaved();
+  await flushReads();
+  assert.equal(f.controller.getState().phase, 'ready');
+  assert.equal(f.controller.getState().bindings.length, 1);
   finish();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(f.controller.getState().phase, before.phase);
-  assert.equal(f.controller.getState().errorCode, null);
+  await flushReads();
+  f.controller.dispose();
 });

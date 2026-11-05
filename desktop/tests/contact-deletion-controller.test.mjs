@@ -112,6 +112,7 @@ async function fixture(t, options = {}) {
   await controller.refresh();
   for (let i = 0; i < 100 && controller.getState().phase === 'loading'; i++) await new Promise(resolve => setImmediate(resolve));
   return { controller, backend, contacts, requests, notifications, refreshes, quiet,
+    setListFails(value) { listFails = value; },
     select(contactId) { selection = { ...selection, selectedContactId: contactId, scopeRevision: selection.scopeRevision + 1 }; },
     reconnect({ differentOwner = false, failList = false } = {}) {
       listFails = failList;
@@ -516,4 +517,85 @@ test('删除预加载与正式IPC拒绝隐式确认、跨范围字段和额外�
   await preload.delete({ contactId: a, scopeRevision: 1, confirmed: true });
   assert.equal(calls.at(-1)[0], 'contact-deletion:delete');
   controller.dispose();
+});
+
+test('删除窗口打开后删除状态读取照常发起，不被窗口阻止', async t => {
+  const f = await fixture(t);
+  const flushes = [];
+  const finish = f.quiet.begin();
+  assert.equal(f.quiet.defer(() => flushes.push('read')), true);
+  const before = f.requests.length;
+  await f.controller.refresh();
+  assert.ok(f.requests.length > before, '窗口内仍发起删除状态读取，而不是被 defer 阻止');
+  assert.equal(f.controller.getState().phase, 'ready');
+  finish();
+  assert.deepEqual(flushes, ['read'], '窗口结束仍执行登记的补读');
+});
+
+test('本地未知回执经有界结算探针确认后端无未完成任务后结束窗口并补读', async t => {
+  const f = await fixture(t, { lostDelete: true, controller: { settleProbeDelaysMs: [1, 1] } });
+  const flushes = [];
+  await f.controller.delete(f.request());
+  const unknown = f.controller.getState().operations[0];
+  assert.equal(unknown.operationId, null);
+  assert.equal(unknown.phase, 'unconfirmed');
+  assert.equal(f.quiet.deleting, true, '回执丢失时先保持窗口');
+  assert.equal(f.quiet.defer(() => flushes.push('read')), true);
+  for (let i = 0; i < 500 && f.quiet.deleting; i++) await new Promise(resolve => setTimeout(resolve, 1));
+  assert.equal(f.quiet.deleting, false, '探针确认后端无未完成任务后结束窗口');
+  assert.deepEqual(flushes, ['read'], '窗口结束补读一次');
+  assert.equal(f.controller.getState().operations[0].phase, 'unconfirmed', '本地未知意图仍保留供用户明确重试');
+});
+
+test('重连后已知未完成删除任务继续保持窗口，重试完成后结束并补读', async t => {
+  const f = await fixture(t, { recovered: publicOperation('blocked') });
+  assert.equal(f.quiet.deleting, true, '已知未完成任务一出现即保持窗口');
+  const flushes = [];
+  assert.equal(f.quiet.defer(() => flushes.push('read')), true);
+  f.reconnect();
+  for (let i = 0; i < 200 && f.controller.getState().phase !== 'ready'; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.quiet.deleting, true, '重连后已知未完成任务继续保持窗口');
+  const pending = f.controller.getState().operations.find(item => item.phase !== 'completed');
+  await f.controller.retry({ id: pending.id, scopeRevision: f.controller.getState().scopeRevision, confirmed: true });
+  assert.equal(f.controller.getState().operations[0].phase, 'completed');
+  assert.equal(f.quiet.deleting, false, '任务完成后结束窗口');
+  assert.deepEqual(flushes, ['read']);
+});
+
+test('重连后本地未知回执经有界结算探针确认后结束窗口并补读', async t => {
+  const f = await fixture(t, { lostDelete: true, controller: { settleProbeDelaysMs: [1, 1] } });
+  await f.controller.delete(f.request());
+  assert.equal(f.controller.getState().operations[0].operationId, null);
+  assert.equal(f.quiet.deleting, true);
+  const flushes = [];
+  assert.equal(f.quiet.defer(() => flushes.push('read')), true);
+  f.reconnect();
+  for (let i = 0; i < 500 && f.quiet.deleting; i++) await new Promise(resolve => setTimeout(resolve, 1));
+  assert.equal(f.quiet.deleting, false, '重连的权威读取与结算探针共同确认后结束窗口');
+  assert.deepEqual(flushes, ['read'], '窗口结束补读一次');
+});
+
+test('本地未知回执的结算探针在读取失败用尽后强制结束窗口并补读', async t => {
+  const f = await fixture(t, { lostDelete: true, controller: { settleProbeDelaysMs: [1] } });
+  await f.controller.delete(f.request());
+  assert.equal(f.quiet.deleting, true);
+  const flushes = [];
+  assert.equal(f.quiet.defer(() => flushes.push('read')), true);
+  f.setListFails(true);
+  for (let i = 0; i < 500 && f.quiet.deleting; i++) await new Promise(resolve => setTimeout(resolve, 1));
+  assert.equal(f.quiet.deleting, false, '结算探针用尽后强制结束窗口，不无限期保持');
+  assert.deepEqual(flushes, ['read'], '强制结束也补读一次');
+});
+
+test('删除窗口超过 quietMaxMs 兜底强制结束并补读，任务入口仍保留', async t => {
+  const f = await fixture(t, { finalPhase: 'blocked', controller: { quietMaxMs: 5 } });
+  await f.controller.delete(f.request());
+  assert.equal(f.controller.getState().operations[0].phase, 'blocked');
+  assert.equal(f.quiet.deleting, true, '已知未完成任务保持窗口');
+  const flushes = [];
+  assert.equal(f.quiet.defer(() => flushes.push('read')), true);
+  for (let i = 0; i < 500 && f.quiet.deleting; i++) await new Promise(resolve => setTimeout(resolve, 1));
+  assert.equal(f.quiet.deleting, false, '兜底超时后强制结束窗口');
+  assert.deepEqual(flushes, ['read'], '兜底结束也补读一次');
+  assert.equal(f.controller.getState().operations[0].phase, 'blocked', '受阻任务仍保留用户重试入口');
 });
