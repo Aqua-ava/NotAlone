@@ -80,7 +80,8 @@ export function ContactDeletionMenu({
   }
   return <div className="contact-deletion-menu">
     {inline ? <button ref={trigger} className="button contact-deletion-inline" type="button"
-      disabled={state.phase !== 'ready' || Boolean(state.busyId)} onClick={askToDelete}>删除联系人</button>
+      disabled={state.phase !== 'ready' || Boolean(state.busyId)} onClick={askToDelete}
+      title={state.busyId ? '正在后台删除另一位联系人，完成后可继续' : undefined}>删除联系人</button>
     : <button ref={trigger} className="button contact-deletion-trigger" type="button" aria-label="联系人更多操作" title="联系人更多操作"
       aria-haspopup="menu" aria-expanded={Boolean(validMenu)} disabled={state.phase !== 'ready' || Boolean(state.busyId)}
       onClick={() => setMenu(validMenu ? null : { contactId: selected.contactId, scopeRevision, connectionRevision: state.scopeRevision })}>⋯</button>}
@@ -120,22 +121,23 @@ export function ContactDeletionMenu({
   </div>;
 }
 
+/** 删除由后台自动推进并静默结束；只有需要用户处理（结果未知、受阻或自动续跑后仍未完成）时才显示。 */
 export function ContactDeletionStatus({ bridge, state }: { bridge: ContactDeletionBridge; state: ContactDeletionState }) {
-  const hasTask = state.operations.length > 0;
+  const unfinished = state.operations.filter(item => item.phase !== 'completed');
   const needsRefresh = state.phase === 'failed' || Boolean(state.error);
-  if (!hasTask && !needsRefresh) return null;
+  if (state.busyId || (unfinished.length === 0 && !needsRefresh)) return null;
   return <section className="contact-deletion-status" aria-label="联系人删除任务" aria-live="polite">
     <div className="contact-deletion-status-heading"><h3>联系人删除</h3>
-      {needsRefresh && <button className="button" disabled={Boolean(state.busyId)} onClick={() => void bridge.refresh().catch(() => {})}>刷新删除状态</button>}
+      {needsRefresh && <button className="button" onClick={() => void bridge.refresh().catch(() => {})}>刷新删除状态</button>}
     </div>
     {needsRefresh && <p role="alert">删除任务状态暂不可用，请刷新后确认结果。</p>}
-    {hasTask && <ul>{state.operations.map(item => <li key={item.id} data-phase={item.phase}>
+    {unfinished.length > 0 && <ul>{unfinished.map(item => <li key={item.id} data-phase={item.phase}>
       <div className="contact-deletion-operation-copy">
-        <span>{item.phase === 'completed' ? phaseLabel.completed : phaseLabel[item.phase]}</span>
-        {item.phase !== 'completed' && item.displayName && <small>{item.displayName}</small>}
+        <span>{phaseLabel[item.phase]}</span>
+        {item.displayName && <small>{item.displayName}</small>}
       </div>
       {(item.phase === 'blocked' || item.phase === 'unconfirmed' || ['fenced', 'cleaning', 'verifying'].includes(item.phase))
-        && <button className="button" type="button" disabled={Boolean(state.busyId)}
+        && <button className="button" type="button"
           onClick={() => void bridge.retry({ id: item.id, scopeRevision: state.scopeRevision, confirmed: true }).catch(() => {})}>
           {item.phase === 'blocked' || item.phase === 'unconfirmed' ? '重试删除' : '继续删除'}
         </button>}

@@ -54,6 +54,7 @@ async function fixture(t, options = {}) {
         return { generation: accepted, data: { operation_id: opId, state: 'completed' } };
       }
       if (request.method === 'POST') {
+        if (options.retryBlocked && options.retryBlocked-- > 0) { serverOperation = publicOperation('blocked'); return { generation: accepted, data: serverOperation }; }
         serverOperation = publicOperation();
         return { generation: accepted, data: serverOperation };
       }
@@ -63,7 +64,8 @@ async function fixture(t, options = {}) {
     },
   };
   const controller = new ContactDeletionController(backend, contacts,
-    () => { notifications.push('started'); return () => notifications.push('settled'); }, id => notifications.push(id));
+    () => { notifications.push('started'); return () => notifications.push('settled'); }, id => notifications.push(id),
+    options.auto ?? { autoRetryDelaysMs: [], autoResume: false, contactPollMs: 0 });
   t.after(() => controller.dispose());
   await controller.refresh();
   return { controller, backend, contacts, requests, notifications,
@@ -198,6 +200,64 @@ test('其他联系人的错误任务回执不会成为后续POST重试的权限'
   await f.controller.retry({ id: pending.id, scopeRevision: f.controller.getState().scopeRevision, confirmed: true });
   assert.equal(f.requests.filter(request => request.method === 'POST').length, 0);
   assert.ok(f.requests.filter(request => request.method === 'DELETE').every(request => request.path === `/api/contacts/${a}`));
+});
+
+test('确认一次后后台自动续跑原任务直至完成，不需要用户再点任何按钮', async t => {
+  const f = await fixture(t, { finalPhase: 'cleaning', retryBlocked: 1, auto: { autoRetryDelaysMs: [0, 0, 0], autoResume: false, contactPollMs: 0 } });
+  await f.controller.delete(f.request());
+  const posts = f.requests.filter(request => request.method === 'POST');
+  assert.deepEqual(posts.map(request => request.path), [`/api/deletions/${opId}/retry`, `/api/deletions/${opId}/retry`]);
+  assert.ok(posts.every(request => request.body.confirmed === true));
+  assert.equal(f.requests.filter(request => request.method === 'DELETE').length, 1);
+  assert.equal(f.controller.getState().operations[0].phase, 'completed');
+  assert.equal(f.controller.getState().busyId, null);
+});
+
+test('自动续跑次数有限，仍未完成时保留原任务交给用户明确重试', async t => {
+  const f = await fixture(t, { finalPhase: 'blocked', retryBlocked: 99, auto: { autoRetryDelaysMs: [0, 0], autoResume: false, contactPollMs: 0 } });
+  await f.controller.delete(f.request());
+  assert.equal(f.requests.filter(request => request.method === 'POST').length, 2);
+  const state = f.controller.getState();
+  assert.equal(state.operations[0].phase, 'blocked');
+  assert.equal(state.operations[0].operationId, opId);
+  assert.equal(state.busyId, null);
+});
+
+test('重连或重开后自动续跑已有任务编号的未完成任务，每个连接只续跑一次且不重放删除', async t => {
+  const f = await fixture(t, { recovered: publicOperation('cleaning'), auto: { autoRetryDelaysMs: [], autoResume: true, contactPollMs: 0 } });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(f.requests.filter(request => request.method === 'POST').map(request => request.path), [`/api/deletions/${opId}/retry`]);
+  assert.equal(f.requests.filter(request => request.method === 'DELETE').length, 0);
+  assert.equal(f.controller.getState().operations[0].phase, 'completed');
+  await f.controller.refresh();
+  assert.equal(f.requests.filter(request => request.method === 'POST').length, 1);
+});
+
+test('没有回执的删除意图不会被自动重放', async t => {
+  const f = await fixture(t, { lostDelete: true, auto: { autoRetryDelaysMs: [0, 0], autoResume: true, contactPollMs: 0 } });
+  await f.controller.delete(f.request());
+  await f.controller.refresh();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.requests.filter(request => request.method === 'DELETE').length, 1);
+  assert.equal(f.requests.filter(request => request.method === 'POST').length, 0);
+  assert.equal(f.controller.getState().operations[0].phase, 'unconfirmed');
+});
+
+test('删除请求等待清理期间轮询名单，联系人封禁后尽早离开列表', async t => {
+  let release;
+  const wait = new Promise(resolve => { release = resolve; });
+  const f = await fixture(t, { beforeDelete: () => wait, auto: { autoRetryDelaysMs: [], autoResume: false, contactPollMs: 5 } });
+  let refreshes = 0;
+  const original = f.contacts.refreshContacts;
+  f.contacts.refreshContacts = async () => { refreshes++; return original(); };
+  const deleting = f.controller.delete(f.request());
+  await new Promise(resolve => setTimeout(resolve, 40));
+  assert.ok(refreshes >= 2, `期间应反复读取名单，实际 ${refreshes} 次`);
+  release(); await deleting;
+  const settled = refreshes;
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.ok(refreshes <= settled + 1, '完成后应停止轮询');
 });
 
 test('删除预加载与正式IPC拒绝隐式确认、跨范围字段和额外身份参数', async () => {

@@ -129,20 +129,31 @@ test('删除状态离线或加载时禁用删除联系人', async t => {
   }
 });
 
-test('目录移除联系人后删除结果仍保留；完成项不显示姓名或联系人标识', async t => {
+test('已完成的删除静默结束，不留任务面板，也不泄露姓名或联系人标识', async t => {
   const page = await mount(t, { deletionState: {
     revision: 1, scopeRevision: 7, phase: 'ready', busyId: null, error: null,
     operations: [{ id: 'delete-001', operationId: 'operation-001', contactId: null, displayName: null, phase: 'completed', errorCode: null }],
   } });
-  const status = page.getByRole('region', { name: '联系人删除任务' });
-  await expect(status).toContainText('联系人删除已完成');
+  await expect(page.getByRole('region', { name: '联系人删除任务' })).toHaveCount(0);
   await page.evaluate(() => window.removeContactFromDirectory('contact-001'));
   await expect(page.getByRole('list', { name: '联系人列表' }).getByText('王小明')).toHaveCount(1);
-  await expect(status).toContainText('联系人删除已完成');
-  await expect(status.getByText(/contact-001|王小明/)).toHaveCount(0);
+  await expect(page.getByText(/contact-001|operation-001|联系人删除已完成/)).toHaveCount(0);
 });
 
-test('受阻任务只按删除任务标识重试，busyId期间禁止重复操作', async t => {
+test('后台推进期间不显示任务面板，需要用户处理时才出现', async t => {
+  const operation = { id: 'delete-001', operationId: 'operation-001', contactId: 'contact-001', displayName: '王小明', phase: 'cleaning', errorCode: null };
+  const page = await mount(t, { deletionState: {
+    revision: 1, scopeRevision: 7, phase: 'ready', busyId: 'delete-001', error: null, operations: [operation],
+  } });
+  await expect(page.getByRole('region', { name: '联系人删除任务' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '删除联系人', exact: true })).toBeDisabled();
+  await page.evaluate(() => window.publishDeletion({ busyId: null }));
+  const status = page.getByRole('region', { name: '联系人删除任务' });
+  await expect(status).toContainText('正在清理此联系人的本机资料');
+  await expect(status.getByRole('button', { name: '继续删除', exact: true })).toBeVisible();
+});
+
+test('受阻任务只按删除任务标识重试，busyId期间面板隐藏且删除入口禁用', async t => {
   const operation = { id: 'delete-001', operationId: 'operation-001', contactId: 'contact-001', displayName: '王小明', phase: 'blocked', errorCode: 'cleanup_failed' };
   const page = await mount(t, { selectedContactId: 'contact-002', deletionState: {
     revision: 1, scopeRevision: 7, phase: 'ready', busyId: null, error: null, operations: [operation],
@@ -154,7 +165,7 @@ test('受阻任务只按删除任务标识重试，busyId期间禁止重复操�
   assert.deepEqual(await page.evaluate(() => window.calls), [{ id: 'delete-001', scopeRevision: 7, confirmed: true }]);
   await page.evaluate(() => window.calls.length = 0);
   await page.evaluate(() => window.publishDeletion({ busyId: 'delete-001' }));
-  await expect(retry).toBeDisabled();
+  await expect(status).toHaveCount(0);
   await expect(page.getByRole('button', { name: '删除联系人', exact: true })).toBeDisabled();
   assert.deepEqual(await page.evaluate(() => window.calls), []);
 });
