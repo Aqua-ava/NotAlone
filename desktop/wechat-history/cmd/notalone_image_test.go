@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"image"
@@ -475,6 +476,114 @@ func TestNotAloneImageOpenRejectsUnprovenCacheIdentityAndSize(t *testing.T) {
 				t.Fatalf("unproven image resource should fail with %s, got %v", test.wantCode, err)
 			}
 		})
+	}
+}
+
+// 来源、会话、目标与快照类错误必须保留真实错误码；只有单图关联缺失才使用 history_image_association_unverified，
+// 否则调用方无法区分“这张图取不到”和“读取来源已失效”。
+func TestNotAloneImageOpenKeepsRealScopeAndSourceErrors(t *testing.T) {
+	imageBytes := notaloneTinyPNG(t, 3, 2)
+	open := func(t *testing.T, mutate func(*notaloneImageProtocolFixture, *notaloneHistoryRequest)) error {
+		t.Helper()
+		fixture := newNotaloneImageProtocolFixture(t, notaloneImageXML(imageBytes, len(imageBytes), 3, 2, true))
+		request := fixture.request
+		mutate(&fixture, &request)
+		_, err := fixture.history.handle(context.Background(), request)
+		return err
+	}
+	cases := []struct {
+		name   string
+		mutate func(*notaloneImageProtocolFixture, *notaloneHistoryRequest)
+		want   string
+	}{
+		{"message guard invalidated", func(f *notaloneImageProtocolFixture, _ *notaloneHistoryRequest) {
+			f.history.messageGuard.mu.Lock()
+			f.history.messageGuard.invalid = true
+			f.history.messageGuard.mu.Unlock()
+		}, "history_source_changed"},
+		{"message guard cannot be rebuilt", func(f *notaloneImageProtocolFixture, _ *notaloneHistoryRequest) {
+			_ = f.history.messageGuard.Close()
+			f.history.messageGuard = nil
+			f.history.sourceProcess = func(context.Context) (notaloneProcessIdentity, error) {
+				return notaloneProcessIdentity{}, errors.New("process lookup failed")
+			}
+		}, "history_source_unverified"},
+		{"fixed snapshot already closed", func(f *notaloneImageProtocolFixture, _ *notaloneHistoryRequest) {
+			_ = f.history.snapshot.Close()
+		}, "history_snapshot_closed"},
+		{"account differs from selection", func(_ *notaloneImageProtocolFixture, r *notaloneHistoryRequest) {
+			r.Account = "another-account"
+		}, "history_scope_unverified"},
+		{"target differs from fixed snapshot", func(_ *notaloneImageProtocolFixture, r *notaloneHistoryRequest) {
+			r.Target = strings.Repeat("0", 64)
+		}, "history_target_unverified"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			err := open(t, test.mutate)
+			if err == nil || err.Error() != test.want {
+				t.Fatalf("expected %s without being rewritten as a single-image failure, got %v", test.want, err)
+			}
+		})
+	}
+}
+
+func notaloneOpenDescriptorCount(t *testing.T) int {
+	t.Helper()
+	entries, err := os.ReadDir("/dev/fd")
+	if err != nil {
+		t.Skipf("cannot enumerate descriptors: %v", err)
+	}
+	return len(entries)
+}
+
+// 单图关联失败只拒绝这一次请求：不留下图片令牌、资源守卫或句柄，仍有效的消息守卫与固定快照保持可用。
+func TestNotAloneImageOpenSingleImageFailureLeavesSessionUsable(t *testing.T) {
+	imageBytes := notaloneTinyPNG(t, 3, 2)
+	fixture := newNotaloneImageProtocolFixture(t, notaloneImageXML(imageBytes, len(imageBytes), 3, 2, true))
+	wrong := fixture.request
+	wrong.ServerID = "1"
+	// 先做一次预热，避免首次分配的缓存句柄被误计为泄漏。
+	if _, err := fixture.history.handle(context.Background(), wrong); err == nil || err.Error() != "history_image_association_unverified" {
+		t.Fatalf("expected single-image association failure, got %v", err)
+	}
+	before := notaloneOpenDescriptorCount(t)
+	for index := 0; index < 30; index++ {
+		if _, err := fixture.history.handle(context.Background(), wrong); err == nil || err.Error() != "history_image_association_unverified" {
+			t.Fatalf("attempt %d: expected single-image association failure, got %v", index, err)
+		}
+	}
+	if after := notaloneOpenDescriptorCount(t); after > before {
+		t.Fatalf("failed image opens leaked descriptors: before=%d after=%d", before, after)
+	}
+	fixture.history.imageMu.Lock()
+	open := len(fixture.history.openImages)
+	fixture.history.imageMu.Unlock()
+	if open != 0 {
+		t.Fatalf("failed image opens must not leave resource tokens, got %d", open)
+	}
+	if err := fixture.history.messageGuard.Check(); err != nil {
+		t.Fatalf("single-image failure must not invalidate the message guard: %v", err)
+	}
+	if err := fixture.history.snapshot.Check(); err != nil {
+		t.Fatalf("single-image failure must not close the fixed snapshot: %v", err)
+	}
+	if _, err := fixture.history.handle(context.Background(), fixture.request); err != nil {
+		t.Fatalf("the same session must still open a valid image after a single-image failure: %v", err)
+	}
+}
+
+// 同时打开的图片数超限是调用协议问题，不能沿用“图片过大”的单图语义。
+func TestNotAloneImageOpenSlotLimitIsNotAnImageSizeFailure(t *testing.T) {
+	imageBytes := notaloneTinyPNG(t, 3, 2)
+	fixture := newNotaloneImageProtocolFixture(t, notaloneImageXML(imageBytes, len(imageBytes), 3, 2, true))
+	for index := 0; index < 2; index++ {
+		if _, err := fixture.history.handle(context.Background(), fixture.request); err != nil {
+			t.Fatalf("open %d: %v", index, err)
+		}
+	}
+	if _, err := fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != "history_image_request_invalid" {
+		t.Fatalf("exceeding the open-image limit must not look like an oversized image, got %v", err)
 	}
 }
 
