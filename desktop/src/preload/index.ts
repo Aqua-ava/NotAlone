@@ -24,49 +24,62 @@ import { createSyncControlBridge } from './sync-control';
 import type { DesktopSettings } from '../shared/desktop-bridge';
 import { createBackgroundTaskBridge } from './background-tasks';
 import { createHistoryClearBridge } from './history-clear';
+import { createHistoryRecertifyBatchBridge } from './history-recertify-batch';
 import { createContactHistoryBridge } from './contact-history';
 import { createContactDeletionBridge } from './contact-deletion';
 import { createQuarantineBridge } from './quarantine';
 
-const bridge: AppBridge = {
-  usage: createUsageBridge(ipcRenderer),
-  media: createMessageMediaBridge(ipcRenderer),
-  backend: createBackendBridge(ipcRenderer),
-  setup: createSetupBridge(),
-  wechatSetup: createWechatSetupBridge(ipcRenderer),
-  startup: createStartupBridge(ipcRenderer),
-  screenPermission: createScreenPermissionBridge(ipcRenderer),
-  contacts: createContactSessionBridge(ipcRenderer),
-  replies: createReplyBridge(ipcRenderer),
-  sqliteDiscussion: createSqliteDiscussionBridge(ipcRenderer),
-  candidateProvenance: createCandidateProvenanceBridge(ipcRenderer),
-  expressionPreferences: createExpressionPreferenceBridge(ipcRenderer),
-  skillLearning: createSkillLearningBridge(ipcRenderer),
-  candidateCopy: createCandidateCopyBridge(ipcRenderer),
-  sources: createSourceDeletionBridge(ipcRenderer),
-  memory: createMemoryBridge(ipcRenderer),
-  fixedMemoryProcessing: createFixedMemoryProcessingBridge(ipcRenderer),
-  sqliteMemoryManagement: createSqliteMemoryManagementBridge(ipcRenderer),
-  backgroundTasks: createBackgroundTaskBridge(ipcRenderer),
-  traces: createTraceBridge(ipcRenderer),
-  bindings: createBindingConsentBridge(ipcRenderer),
-  foreground: createForegroundBridge(ipcRenderer),
-  syncControl: createSyncControlBridge(ipcRenderer),
-  historyClear: createHistoryClearBridge(ipcRenderer),
-  contactHistory: createContactHistoryBridge(ipcRenderer),
-  contactDeletion: createContactDeletionBridge(ipcRenderer),
-  quarantine: createQuarantineBridge(ipcRenderer),
-  openManager: () => ipcRenderer.invoke('window:open-manager'),
-  openHelper: () => ipcRenderer.invoke('window:open-helper'),
-  hideWindow: () => ipcRenderer.invoke('window:hide'),
-  getDesktopSettings: () => ipcRenderer.invoke('desktop:get-settings'),
-  setHelperShortcut: (accelerator) => ipcRenderer.invoke('desktop:set-shortcut', accelerator),
-  setHelperPinned: (pinned) => ipcRenderer.invoke('desktop:set-helper-pinned', pinned),
-  onDesktopSettingsChanged: (listener) => {
-    const changed = (_event: IpcRendererEvent, settings: DesktopSettings) => listener(settings);
-    ipcRenderer.on('desktop:settings-changed', changed);
-    return () => { ipcRenderer.removeListener('desktop:settings-changed', changed); };
-  },
-};
+type RendererTransport = typeof ipcRenderer;
+/** 主进程在加载页面前登记开发态查询；打包宿主不暴露批量入口。 */
+function developmentHost(renderer: RendererTransport): boolean {
+  try {
+    const sendSync = (renderer as { sendSync?: (channel: string) => unknown }).sendSync;
+    return typeof sendSync === 'function' && sendSync.call(renderer, 'notalone:host-mode') === 'development';
+  } catch { return false; }
+}
+export function createAppBridge(renderer: RendererTransport, development = developmentHost(renderer)): AppBridge {
+  return {
+    usage: createUsageBridge(renderer),
+    media: createMessageMediaBridge(renderer),
+    backend: createBackendBridge(renderer),
+    setup: createSetupBridge(),
+    wechatSetup: createWechatSetupBridge(renderer),
+    startup: createStartupBridge(renderer),
+    screenPermission: createScreenPermissionBridge(renderer),
+    contacts: createContactSessionBridge(renderer),
+    replies: createReplyBridge(renderer),
+    sqliteDiscussion: createSqliteDiscussionBridge(renderer),
+    candidateProvenance: createCandidateProvenanceBridge(renderer),
+    expressionPreferences: createExpressionPreferenceBridge(renderer),
+    skillLearning: createSkillLearningBridge(renderer),
+    candidateCopy: createCandidateCopyBridge(renderer),
+    sources: createSourceDeletionBridge(renderer),
+    memory: createMemoryBridge(renderer),
+    fixedMemoryProcessing: createFixedMemoryProcessingBridge(renderer),
+    sqliteMemoryManagement: createSqliteMemoryManagementBridge(renderer),
+    backgroundTasks: createBackgroundTaskBridge(renderer),
+    traces: createTraceBridge(renderer),
+    bindings: createBindingConsentBridge(renderer),
+    foreground: createForegroundBridge(renderer),
+    syncControl: createSyncControlBridge(renderer),
+    historyClear: createHistoryClearBridge(renderer),
+    ...(development ? { historyRecertifyBatch: createHistoryRecertifyBatchBridge(renderer) } : {}),
+    contactHistory: createContactHistoryBridge(renderer),
+    contactDeletion: createContactDeletionBridge(renderer),
+    quarantine: createQuarantineBridge(renderer),
+    openManager: () => renderer.invoke('window:open-manager'),
+    openHelper: () => renderer.invoke('window:open-helper'),
+    hideWindow: () => renderer.invoke('window:hide'),
+    getDesktopSettings: () => renderer.invoke('desktop:get-settings'),
+    setHelperShortcut: (accelerator) => renderer.invoke('desktop:set-shortcut', accelerator),
+    setHelperPinned: (pinned) => renderer.invoke('desktop:set-helper-pinned', pinned),
+    onDesktopSettingsChanged: (listener) => {
+      const changed = (_event: IpcRendererEvent, settings: DesktopSettings) => listener(settings);
+      renderer.on('desktop:settings-changed', changed);
+      return () => { renderer.removeListener('desktop:settings-changed', changed); };
+    },
+  };
+}
+const bridge = createAppBridge(ipcRenderer);
 contextBridge.exposeInMainWorld('notalone', Object.freeze(bridge));
 import { createTraceBridge } from './traces';

@@ -23,6 +23,7 @@ import type { SyncControlBridge } from './sync-control-bridge';
 import type { SkillLearningBridge } from './skill-learning-bridge';
 import type { BackgroundTaskBridge } from './background-task-bridge';
 import type { HistoryClearBridge } from './history-clear-bridge';
+import type { HistoryRecertifyBatchBridge } from './history-recertify-batch-bridge';
 import type { ContactHistoryBridge } from './contact-history-bridge';
 import type { ContactDeletionBridge } from './contact-deletion-bridge';
 import type { QuarantineBridge } from './quarantine-bridge';
@@ -42,6 +43,8 @@ export type AppBridge = WindowBridge & DesktopBridge & {
   sqliteMemoryManagement: SqliteMemoryManagementBridge;
   backgroundTasks: BackgroundTaskBridge;
   historyClear: HistoryClearBridge;
+  /** 仅开发宿主由 preload 暴露；打包宿主没有此入口。 */
+  historyRecertifyBatch?: HistoryRecertifyBatchBridge;
   contactHistory: ContactHistoryBridge;
   contactDeletion: ContactDeletionBridge;
   quarantine: QuarantineBridge;

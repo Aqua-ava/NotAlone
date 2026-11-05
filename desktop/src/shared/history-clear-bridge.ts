@@ -92,3 +92,8 @@ export interface HistoryClearBridge {
   cancelRecertify(request: HistoryRecertifyCancelRequest): Promise<void>;
   onStateChanged(listener: (state: HistoryClearState) => void): () => void;
 }
+/** 单个联系人的历史操作是否正在占用共享读取进程；批量修复开始前用它拒绝同时操作。 */
+export function historyClearSingleOperationActive(state: HistoryClearState): boolean {
+  return state.busy !== null || state.pendingRecertifyKey !== null || state.recertifyStoppingKey !== null
+    || state.recertify?.state === 'running';
+}

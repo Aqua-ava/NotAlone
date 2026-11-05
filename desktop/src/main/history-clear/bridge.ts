@@ -3,6 +3,7 @@ import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { noArguments, type PageCommands } from '../page-commands';
 import { isUuid } from '../uuid';
+import type { HistoryActivityMutex } from './activity';
 import { HistoryClearController } from './controller';
 
 function request(args: unknown[]): HistoryClearRequest {
@@ -24,8 +25,8 @@ function resyncRequest(args: unknown[], message = '重新同步需要明确确�
   }
   return { ...request([{ contactId: fields.contactId, scopeRevision: fields.scopeRevision }]), requestKey: fields.requestKey, confirmed: true };
 }
-export function installHistoryClearBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession): HistoryClearController {
-  const controller = new HistoryClearController(backend, contacts);
+export function installHistoryClearBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession, activity?: HistoryActivityMutex): HistoryClearController {
+  const controller = new HistoryClearController(backend, contacts, activity);
   controller.onStateChanged(state => commands.publish('history-clear:state-changed', state));
   commands.handle('history-clear:get-state', (...args: unknown[]) => { noArguments(args); return controller.getState(); }, 'manager');
   commands.handle('history-clear:refresh', (...args: unknown[]) => controller.refresh(request(args)), 'manager');

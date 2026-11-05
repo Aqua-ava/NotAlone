@@ -157,7 +157,10 @@
   "tests/incremental-sync-status.test.mjs",
   "tests/backend-shutdown-confirmation.test.mjs",
   "tests/backend-lost-connection.test.mjs",
-  "tests/contact-session-deletion.test.mjs"
+  "tests/contact-session-deletion.test.mjs",
+  "tests/history-recertify-batch.test.mjs",
+  "tests/history-recertify-batch-safety.test.mjs",
+  "tests/history-recertify-batch-bridge.test.mjs"
  ],
  "headless": [
   "tests/usage/continuity-view.test.mjs",
@@ -203,7 +206,9 @@
   "tests/visible-refresh-view.test.mjs",
   "tests/sync-auto-refresh-view.test.mjs",
   "tests/usage/connection-view.test.mjs",
-  "tests/first-frame-state-view.test.mjs"
+  "tests/first-frame-state-view.test.mjs",
+  "tests/memory-automatic-switch.test.mjs",
+  "tests/sqlite-memory-source-recheck.test.mjs"
  ],
  "isolated-http": [
   "tests/overview-reply-retrieval.test.mjs"
