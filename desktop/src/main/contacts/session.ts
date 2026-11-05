@@ -74,6 +74,20 @@ export class ContactSession {
     }
   }
 
+  /**
+   * 删除请求发出后立即从内存目录撤下该联系人，不等后端名单服务恢复。
+   * 只让这一位失效：其他联系人的选中项和草稿保持不变；被删联系人仍在加载中时用现有列表收敛为可读状态。
+   */
+  removeContact(contactId: string): void {
+    if (!this.state.contacts.some((contact) => contact.contactId === contactId)) return;
+    // 丢弃发出前已开始的目录读取，避免删除期间的迟到结果把对象重新加回。
+    ++this.directoryRequest;
+    const selected = this.state.selectedContactId === contactId;
+    this.publish({ directoryPhase: this.state.directoryPhase === 'loading' ? 'ready' : this.state.directoryPhase,
+      contacts: this.state.contacts.filter((contact) => contact.contactId !== contactId),
+      ...(selected ? { selectedContactId: null, draft: '', scopeRevision: this.state.scopeRevision + 1 } : {}) });
+  }
+
   selectContact(selection: ContactSelection): ContactSessionState {
     if (!this.isCurrent(selection) || !this.state.contacts.some((contact) => contact.contactId === selection.contactId)) {
       throw new Error('联系人选择已失效，请刷新后重新确认。');

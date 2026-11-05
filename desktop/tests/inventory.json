@@ -156,7 +156,8 @@
   "tests/sqlite-memory-management.test.mjs",
   "tests/incremental-sync-status.test.mjs",
   "tests/backend-shutdown-confirmation.test.mjs",
-  "tests/backend-lost-connection.test.mjs"
+  "tests/backend-lost-connection.test.mjs",
+  "tests/contact-session-deletion.test.mjs"
  ],
  "headless": [
   "tests/usage/continuity-view.test.mjs",

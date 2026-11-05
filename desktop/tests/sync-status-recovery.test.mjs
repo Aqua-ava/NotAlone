@@ -4,6 +4,7 @@ import { build } from 'esbuild';
 
 const built = await build({ stdin: { contents: `
  export { SyncControlController } from './src/main/sync/controller';
+ export { ContactDeletionQuiet } from './src/main/contacts/deletion-quiet';
  export { ForegroundController } from './src/main/foreground/controller';
  export { BackendRequestFailure } from './src/main/backend/json-client';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false });
@@ -17,7 +18,7 @@ function report() {
   ...Object.fromEntries(['total_contacts','completed_contacts','succeeded_contacts','skipped_contacts','failed_contacts',
    'incomplete_contacts','pending_contacts','total_message_count','total_non_text_count'].map(key=>[`cli_backfill_${key}`,0])) };
 }
-function fixture(t, failures = 1, priority = false) {
+function fixture(t, failures = 1, priority = false, quiet) {
  t.mock.timers.enable({ apis: ['setTimeout'] });
  const control = { failures, failureCode:'sync_status_unavailable', mutationFailure:false, barrier:undefined,
   extra:priority?{cli_priority_contact_id:id,cli_priority_last_success_at:'2026-10-19T06:00:00+00:00',
@@ -41,7 +42,7 @@ function fixture(t, failures = 1, priority = false) {
   selectContact:()=>contact};
  const foreground=new ports.ForegroundController(backend,contacts,{schedule:()=>1,cancel:()=>{}});
  const permits=[];foreground.attachChangeSource({update:permit=>permits.push(permit),dispose(){}});
- const sync=new ports.SyncControlController(backend,contacts);
+ const sync=new ports.SyncControlController(backend,contacts,undefined,quiet);
  const unsubscribe=sync.onStateChanged(state=>foreground.setSyncControlState(state));
  foreground.setSyncControlState(sync.getState());foreground.startContinuous();
  const connect=value=>{generation=value;for(const listener of listeners)listener();};
@@ -131,4 +132,54 @@ test('用户关闭同步可取消在途只读轮询，迟到结果不能恢复�
  assert.equal(f.requests.filter(request=>request.path==='/api/sync/disable').length,1);
  assert.equal(f.requests.filter(request=>request.path==='/api/sync/status').length,2);
  assert.equal(f.sync.getState().report.enabled,false);
+});
+
+test('删除期间暂停同步状态读取，结束后静默补读一次并保留报告', async t=>{
+ const quiet=new ports.ContactDeletionQuiet();
+ const f=fixture(t,0,false,quiet);await flush();
+ assert.equal(f.sync.getState().phase,'ready');
+ const before=f.sync.getState();
+ const reads=f.requests.filter(request=>request.path==='/api/sync/status').length;
+ const finish=quiet.begin();
+ await f.sync.refresh();await flush();
+ assert.equal(f.requests.filter(request=>request.path==='/api/sync/status').length,reads,'删除窗口内不读取同步状态');
+ assert.deepEqual(f.sync.getState(),before,'窗口内保留上一次成功报告');
+ finish();await flush();
+ assert.equal(f.requests.filter(request=>request.path==='/api/sync/status').length,reads+1,'窗口结束后静默补读一次');
+ assert.equal(f.sync.getState().phase,'ready');
+ assert.deepEqual(f.sync.getState().report,before.report);
+ assert.equal(f.sync.getState().errorCode,null);
+});
+
+test('删除期间自动只读轮询暂停，结束后补读一次', async t=>{
+ const quiet=new ports.ContactDeletionQuiet();
+ const f=fixture(t,0,true,quiet);await flush();
+ assert.equal(f.sync.getState().phase,'ready');
+ const reads=f.requests.filter(request=>request.path==='/api/sync/status').length;
+ const finish=quiet.begin();
+ t.mock.timers.tick(3000);await flush();
+ assert.equal(f.requests.filter(request=>request.path==='/api/sync/status').length,reads,'窗口内不发起只读轮询');
+ assert.equal(f.sync.getState().phase,'ready');
+ finish();await flush();
+ assert.equal(f.requests.filter(request=>request.path==='/api/sync/status').length,reads+1,'窗口结束后仅补读一次');
+ assert.equal(f.sync.getState().phase,'ready');
+});
+
+test('删除窗口内在途只读刷新失败保留上一次报告，不显示读取失败', async t=>{
+ const quiet=new ports.ContactDeletionQuiet();
+ const f=fixture(t,0,true,quiet);await flush();
+ const before=f.sync.getState();
+ let release;
+ f.control.barrier=new Promise(resolve=>{release=resolve;});
+ f.control.failures=1;
+ t.mock.timers.tick(3000);await flush();
+ assert.equal(f.requests.filter(request=>request.path==='/api/sync/status').length,2,'只读快照已发出并在等回执');
+ const finish=quiet.begin();
+ release();await flush();
+ assert.equal(f.sync.getState().phase,'ready');
+ assert.deepEqual(f.sync.getState().report,before.report);
+ finish();await flush();
+ assert.equal(f.sync.getState().phase,'ready');
+ assert.equal(f.sync.getState().errorCode,null);
+ assert.equal(f.requests.filter(request=>request.path==='/api/sync/status').length,3,'窗口结束后补读一次');
 });

@@ -6,10 +6,10 @@ import path from 'node:path';
 import { build } from 'esbuild';
 
 const directory = await mkdtemp(path.join(tmpdir(), 'notalone-binding-startup-'));
-const result = await build({ stdin: { contents: `export {BindingConsentController} from './src/main/bindings/controller'; export {installBindingConsentBridge} from './src/main/bindings/bridge'; export {createBindingConsentBridge} from './src/preload/binding-consent';`, resolveDir: process.cwd() }, bundle: true,
+const result = await build({ stdin: { contents: `export {BindingConsentController} from './src/main/bindings/controller'; export {ContactDeletionQuiet} from './src/main/contacts/deletion-quiet'; export {installBindingConsentBridge} from './src/main/bindings/bridge'; export {createBindingConsentBridge} from './src/preload/binding-consent';`, resolveDir: process.cwd() }, bundle: true,
   platform: 'node', format: 'esm', write: false });
 await writeFile(path.join(directory, 'controller.mjs'), result.outputFiles[0].text);
-const { BindingConsentController, installBindingConsentBridge, createBindingConsentBridge } = await import(path.join(directory, 'controller.mjs'));
+const { BindingConsentController, ContactDeletionQuiet, installBindingConsentBridge, createBindingConsentBridge } = await import(path.join(directory, 'controller.mjs'));
 after(() => rm(directory, { recursive: true, force: true }));
 
 function syncReport(enabled) { return { sync_mode: 'cli_background', sync_enabled: enabled, cli_available: false,
@@ -17,11 +17,11 @@ function syncReport(enabled) { return { sync_mode: 'cli_background', sync_enable
   foreground_phase: enabled ? 'unavailable' : 'sync_disabled', cli_bound_count: 0 }; }
 
 function fixture({ withBinding = false, revokeFails = false, sqlite = false, initiallyEnabled = false,
-  enableFails = false, confirmBarrier, lightweightStatus = false, beforeRead } = {}) {
+  enableFails = false, confirmBarrier, lightweightStatus = false, beforeRead, quiet } = {}) {
   let snapshotNumber = 0;
   let generation, listener;
   let enabled = initiallyEnabled;
-  const calls = [], requests = [];
+  const calls = [], requests = [], control = { failBindings: false };
   const binding = { binding_id: '11111111-1111-4111-8111-111111111111',
     contact_id: '22222222-2222-4222-8222-222222222222',
     conversation_locator: 'wxid_synthetic', display_name: '合成联系人', status: 'active', ...(sqlite ? { selection_generation: '7' } : {}) };
@@ -35,6 +35,7 @@ function fixture({ withBinding = false, revokeFails = false, sqlite = false, ini
       const { path } = request;
       calls.push(path);
       if (beforeRead) await beforeRead(request);
+      if (control.failBindings && path === '/api/sync/cli-bindings') throw new Error('合成授权目录不可用');
       if (path === '/api/sync/cli-bindings/revoke') {
         if (revokeFails) throw new Error('合成撤销失败');
         active = []; revoked = [{ ...binding, status: 'revoked' }];
@@ -61,12 +62,12 @@ function fixture({ withBinding = false, revokeFails = false, sqlite = false, ini
   const contacts = { getState: () => ({ directoryPhase: 'ready', contacts: [] }), refreshContacts: async () => {} };
   const controller = new BindingConsentController(backend, contacts, () => {
     changes.push('started'); return () => changes.push('settled');
-  });
+  }, quiet);
   async function connect(value) {
     generation = value; listener();
     await new Promise((resolve) => setImmediate(resolve));
   }
-  return { controller, calls, connect, changes, requests };
+  return { controller, calls, connect, changes, requests, control };
 }
 
 test('启动、重连和新宿主不主动读取微信会话，仍加载已保存授权', async () => {
@@ -398,4 +399,50 @@ test('撤销写入后不复用写入前的关联读取，旧回包不能恢复�
   assert.equal(f.calls.length-before,3,'已结算写入后的读取必须重新获取当前授权');
   held.release();await old;assert.equal(f.controller.getState().bindings.length,0);
   assert.equal(f.controller.getState().knownBindings[0].status,'revoked');
+});
+
+test('删除期间暂停已保存授权读取，结束后静默补读一次', async () => {
+  const quiet = new ContactDeletionQuiet();
+  const f = fixture({ quiet });
+  await f.connect(1);
+  await new Promise(resolve => setImmediate(resolve));
+  const before = f.controller.getState();
+  assert.equal(before.phase, 'ready');
+  const reads = f.calls.filter(path => path === '/api/sync/cli-bindings').length;
+  const finish = quiet.begin();
+  await f.controller.refreshSaved();
+  assert.equal(f.calls.filter(path => path === '/api/sync/cli-bindings').length, reads, '删除窗口内不发起授权读取');
+  assert.deepEqual(f.controller.getState(), before, '窗口内保留上一次成功状态');
+  finish();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.calls.filter(path => path === '/api/sync/cli-bindings').length, reads + 1, '窗口结束后静默补读一次');
+  assert.equal(f.controller.getState().phase, 'ready');
+});
+
+test('删除窗口内在途授权读取失败保留上一次成功状态，不发布授权范围不明', async () => {
+  const quiet = new ContactDeletionQuiet();
+  let release;
+  let gate;
+  const f = fixture({ quiet, beforeRead: request => request.path === '/api/sync/cli-bindings' ? gate : undefined });
+  await f.connect(1);
+  await new Promise(resolve => setImmediate(resolve));
+  const before = f.controller.getState();
+  assert.equal(before.phase, 'ready');
+  gate = new Promise(resolve => { release = resolve; });
+  f.control.failBindings = true;
+  const reading = f.controller.refreshSaved();
+  await new Promise(resolve => setImmediate(resolve));
+  const finish = quiet.begin();
+  release();
+  await reading;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.controller.getState().phase, 'ready');
+  assert.equal(f.controller.getState().errorCode, null);
+  assert.deepEqual(f.controller.getState().bindings, before.bindings);
+  assert.deepEqual(f.controller.getState().knownBindings, before.knownBindings);
+  // 删除结束后的补读也可能遇到服务尚未恢复；仍保留旧授权，不显示“不能确认授权范围”。
+  finish();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.controller.getState().phase, 'ready');
+  assert.deepEqual(f.controller.getState().bindings, before.bindings);
 });

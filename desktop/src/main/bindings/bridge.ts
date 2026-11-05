@@ -2,6 +2,7 @@ import { noArguments, type PageCommands } from '../page-commands';
 import type { BackendHost } from '../backend/host';
 import { BindingConsentController } from './controller';
 import { validBindingHistoryChoice, type BindingConfirmation, type BindingRevocation } from '../../shared/binding-consent-bridge';
+import type { ContactDeletionQuiet } from '../contacts/deletion-quiet';
 import type { ContactSession } from '../contacts/session';
 import { isBindingIdentifier, isConversationLocator } from './validation';
 
@@ -36,8 +37,8 @@ function revocation(args: unknown[]): BindingRevocation {
 }
 
 export function installBindingConsentBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession,
-  beginReadingScopeChange?: () => (() => void)): void {
-  const bindings = new BindingConsentController(backend, contacts, beginReadingScopeChange);
+  beginReadingScopeChange?: () => (() => void), quiet?: ContactDeletionQuiet): void {
+  const bindings = new BindingConsentController(backend, contacts, beginReadingScopeChange, quiet);
   bindings.onStateChanged((state) => commands.publish('bindings:state-changed', state));
   commands.handle('bindings:get-state', (...args: unknown[]) => {
     noArguments(args); return bindings.getState();

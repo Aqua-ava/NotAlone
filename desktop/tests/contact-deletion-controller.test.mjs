@@ -9,12 +9,13 @@ const temporary = await mkdtemp(path.join(tmpdir(), 'notalone-contact-deletion-c
 after(() => rm(temporary, { recursive: true, force: true }));
 const output = await build({ stdin: { contents: `
 export {ContactDeletionController} from './src/main/contact-deletion/controller';
+export {ContactDeletionQuiet} from './src/main/contacts/deletion-quiet';
 export {installContactDeletionBridge} from './src/main/contact-deletion/bridge';
 export {createContactDeletionBridge} from './src/preload/contact-deletion';
 export {BackendRequestFailure, requestTimeoutLimitMs} from './src/main/backend/json-client';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false });
 await writeFile(path.join(temporary, 'controller.mjs'), output.outputFiles[0].text);
-const { ContactDeletionController, installContactDeletionBridge, createContactDeletionBridge, BackendRequestFailure, requestTimeoutLimitMs } = await import(path.join(temporary, 'controller.mjs'));
+const { ContactDeletionController, ContactDeletionQuiet, installContactDeletionBridge, createContactDeletionBridge, BackendRequestFailure, requestTimeoutLimitMs } = await import(path.join(temporary, 'controller.mjs'));
 const a = '11111111-1111-4111-8111-111111111111';
 const b = '22222222-2222-4222-8222-222222222222';
 const opId = '33333333-3333-4333-8333-333333333333';
@@ -33,11 +34,25 @@ async function fixture(t, options = {}) {
   let selection = { revision: 1, scopeRevision: 7, directoryPhase: 'ready', selectedContactId: a,
     contacts: [{ contactId: a, displayName: '合成甲' }, { contactId: b, displayName: '合成乙' }] };
   let lostDelete = options.lostDelete ?? false;
+  const refreshes = { full: 0, background: 0 };
+  const reconcile = () => {
+    if (!serverOperation) return;
+    selection = { ...selection, contacts: selection.contacts.filter(item => item.contactId !== a),
+      ...(selection.selectedContactId === a ? { selectedContactId: null, scopeRevision: selection.scopeRevision + 1 } : {}) };
+  };
   const contacts = {
     getState: () => structuredClone(selection),
-    async refreshContacts() {
-      if (serverOperation) selection = { ...selection, contacts: selection.contacts.filter(item => item.contactId !== a),
-        ...(selection.selectedContactId === a ? { selectedContactId: null, scopeRevision: selection.scopeRevision + 1 } : {}) };
+    removeContact(contactId) {
+      if (!selection.contacts.some(item => item.contactId === contactId)) return;
+      selection = { ...selection, contacts: selection.contacts.filter(item => item.contactId !== contactId),
+        ...(selection.selectedContactId === contactId ? { selectedContactId: null, draft: '', scopeRevision: selection.scopeRevision + 1 } : {}) };
+    },
+    async refreshContacts() { refreshes.full++; reconcile(); },
+    async refreshContactsInBackground() {
+      refreshes.background++;
+      if (options.backgroundRefreshFails) return false;
+      reconcile();
+      return true;
     },
   };
   const backend = {
@@ -89,12 +104,13 @@ async function fixture(t, options = {}) {
   };
   // 合成时序：超时发现/轮询用毫秒级预算，避免测试等待生产有界等待窗口。
   const timing = { operationWaitMs: 200, operationPollMs: 1, discoverPollMs: 1, discoverTimeoutMs: 20 };
+  const quiet = options.quiet ?? new ContactDeletionQuiet();
   const controller = new ContactDeletionController(backend, contacts,
-    () => { notifications.push('started'); return () => notifications.push('settled'); }, id => notifications.push(id),
+    () => { notifications.push('started'); return () => notifications.push('settled'); }, id => notifications.push(id), quiet,
     { ...timing, ...(options.auto ?? { autoRetryDelaysMs: [], autoResume: false, contactPollMs: 0 }), ...(options.controller ?? {}) });
   t.after(() => controller.dispose());
   await controller.refresh();
-  return { controller, backend, contacts, requests, notifications,
+  return { controller, backend, contacts, requests, notifications, refreshes, quiet,
     select(contactId) { selection = { ...selection, selectedContactId: contactId, scopeRevision: selection.scopeRevision + 1 }; },
     reconnect({ differentOwner = false, failList = false } = {}) {
       listFails = failList;
@@ -270,20 +286,53 @@ test('没有回执的删除意图不会被自动重放', async t => {
   assert.equal(f.controller.getState().operations[0].phase, 'unconfirmed');
 });
 
-test('删除请求等待清理期间轮询名单，联系人封禁后尽早离开列表', async t => {
+test('删除请求发出即从内存目录撤下目标联系人，不等名单服务恢复', async t => {
   let release;
   const wait = new Promise(resolve => { release = resolve; });
-  const f = await fixture(t, { beforeDelete: () => wait, auto: { autoRetryDelaysMs: [], autoResume: false, contactPollMs: 5 } });
-  let refreshes = 0;
-  const original = f.contacts.refreshContacts;
-  f.contacts.refreshContacts = async () => { refreshes++; return original(); };
+  let atRequest;
+  const f = await fixture(t, { beforeDelete: () => { atRequest = f.contacts.getState(); }, auto: { autoRetryDelaysMs: [], autoResume: false, contactPollMs: 0 } });
+  const deleting = f.controller.delete(f.request());
+  for (let i = 0; i < 100 && !f.requests.some(request => request.method === 'DELETE'); i++) await new Promise(resolve => setTimeout(resolve, 1));
+  assert.ok(f.requests.some(request => request.method === 'DELETE'));
+  // 删除请求还在等待清理回执时，目录已撤下这一位联系人。
+  assert.deepEqual(atRequest.contacts.map(contact => contact.contactId), [b]);
+  assert.equal(atRequest.selectedContactId, null);
+  release(); await deleting;
+});
+
+test('删除请求期间的名单读取与收尾都走失败保留的后台刷新，不使用会清空目录的路径', async t => {
+  let release;
+  const wait = new Promise(resolve => { release = resolve; });
+  const f = await fixture(t, { beforeDelete: () => wait, backgroundRefreshFails: true,
+    auto: { autoRetryDelaysMs: [], autoResume: false, contactPollMs: 5 } });
   const deleting = f.controller.delete(f.request());
   await new Promise(resolve => setTimeout(resolve, 40));
-  assert.ok(refreshes >= 2, `期间应反复读取名单，实际 ${refreshes} 次`);
+  assert.ok(f.refreshes.background >= 2, `期间应反复后台读取，实际 ${f.refreshes.background} 次`);
+  assert.equal(f.refreshes.full, 0, '轮询不能使用会清空界面的完整刷新');
   release(); await deleting;
-  const settled = refreshes;
-  await new Promise(resolve => setTimeout(resolve, 30));
-  assert.ok(refreshes <= settled + 1, '完成后应停止轮询');
+  assert.equal(f.refreshes.full, 0, '收尾也必须使用保留式后台刷新');
+  assert.ok(f.refreshes.background >= 3);
+  assert.deepEqual(f.contacts.getState().contacts.map(contact => contact.contactId), [b], '名单读取失败仍保留本地撤下结果');
+  assert.equal(f.contacts.getState().selectedContactId, null);
+});
+
+test('删除运行期间标记名单服务不可用窗口，运行结束才恢复无关读取', async t => {
+  const events = [];
+  let duringRequest = false;
+  const quiet = {
+    deleting: false,
+    defer: () => false,
+    begin() {
+      events.push('begin'); this.deleting = true;
+      let finished = false;
+      return () => { if (finished) return; finished = true; this.deleting = false; events.push('end'); };
+    },
+  };
+  const f = await fixture(t, { quiet, beforeDelete: () => { duringRequest = quiet.deleting; } });
+  await f.controller.delete(f.request());
+  assert.equal(duringRequest, true, '删除请求期间应处于名单服务不可用窗口');
+  assert.deepEqual(events, ['begin', 'end']);
+  assert.equal(quiet.deleting, false);
 });
 
 test('删除请求在运输层超时后找回原任务并轮询到完成，不误报结果未知', async t => {

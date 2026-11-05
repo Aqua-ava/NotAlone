@@ -1,6 +1,7 @@
 import type { HistoryAuthorizationDecision, HistoryAuthorizationRequest, SyncControlState, SyncControlRequest, SyncScopeRequest, SyncScope } from '../../shared/sync-control-bridge';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
+import { ContactDeletionQuiet } from '../contacts/deletion-quiet';
 import type { ContactSession } from '../contacts/session';
 import { readSyncStatus, setSyncEnabled, controlBackfill, setSyncScope, setHistoryAuthorization } from './status';
 
@@ -23,7 +24,8 @@ export class SyncControlController {
   private readonly listeners = new Set<(state: SyncControlState) => void>();
 
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
-    private readonly beginReadingScopeChange: () => (() => void) = () => () => {}) {
+    private readonly beginReadingScopeChange: () => (() => void) = () => () => {},
+    private readonly quiet: ContactDeletionQuiet = new ContactDeletionQuiet()) {
     this.unsubscribe = [backend.onStateChanged(() => this.synchronizeScope()),
       contacts.onStateChanged(() => this.synchronizeScope())];
     this.synchronizeScope();
@@ -50,8 +52,11 @@ export class SyncControlController {
       || this.state.phase !== 'ready' || !this.state.report?.enabled || (!this.state.report.priority && this.state.report.syncScope !== 'all_private' && !this.state.report.historyCoverages?.length)) return;
     this.snapshotTimer = setTimeout(() => {
       this.snapshotTimer = undefined;
-      if (!this.disposed && !this.pending && scope === this.scope
-        && scope.generation === this.backend.getConnectionGeneration()) void this.perform('refresh', scope, true);
+      if (this.disposed || this.pending || scope !== this.scope
+        || scope.generation !== this.backend.getConnectionGeneration()) return;
+      // 删除期间名单服务整体关闭：暂停只读快照，结束后补读一次。
+      if (this.quiet.defer(this.silentRefresh)) return;
+      void this.perform('refresh', scope, true);
     }, 3000);
     this.snapshotTimer.unref?.();
   }
@@ -62,8 +67,10 @@ export class SyncControlController {
     // 只重读初始化快照；不开启同步，也不重放开关或补齐操作。
     this.recoveryTimer = setTimeout(() => {
       this.recoveryTimer = undefined;
-      if (!this.disposed && !this.pending && scope === this.scope
-        && scope.generation === this.backend.getConnectionGeneration()) void this.perform('refresh', scope);
+      if (this.disposed || this.pending || scope !== this.scope
+        || scope.generation !== this.backend.getConnectionGeneration()) return;
+      if (this.quiet.defer(this.silentRefresh)) return;
+      void this.perform('refresh', scope);
     }, delay);
     this.recoveryTimer.unref?.();
   }
@@ -90,11 +97,21 @@ export class SyncControlController {
   }
   async refresh(): Promise<void> {
     if (this.disposed) return;
+    // 删除期间名单服务整体关闭：暂停同步状态读取，结束后静默补读一次并保留上次报告。
+    if (this.quiet.defer(this.silentRefresh)) return;
     this.cancelRecovery(); this.cancelSnapshot();
     this.synchronizeScope();
     if (!this.scope || this.pending) return;
     await this.perform('refresh', this.scope, this.state.phase === 'ready');
   }
+  /** 删除结束后的补读：不显示加载态，失败保留上一次成功报告。 */
+  private readonly silentRefresh = () => {
+    if (this.disposed) return;
+    this.cancelRecovery(); this.cancelSnapshot();
+    this.synchronizeScope();
+    if (!this.scope) return;
+    void this.perform('refresh', this.scope, true, undefined, undefined, true).catch(() => {});
+  };
   enable(request: SyncControlRequest): Promise<void> { return this.control(request, 'enable'); }
   disable(request: SyncControlRequest): Promise<void> { return this.control(request, 'disable'); }
   pause(request: SyncControlRequest): Promise<void> { return this.control(request, 'pause'); }
@@ -128,7 +145,7 @@ export class SyncControlController {
     finally { finish?.(); }
   }
   private async perform(operation: Operation, scope: Scope, background = false, mode?: SyncScope,
-    historyDecision?: HistoryAuthorizationDecision): Promise<void> {
+    historyDecision?: HistoryAuthorizationDecision, preserveOnFailure = false): Promise<void> {
     const enabledBefore = this.state.report?.enabled;
     const epoch = ++this.epoch;
     const pending = new AbortController();
@@ -163,6 +180,9 @@ export class SyncControlController {
       if (result.report.syncScope === 'all_private') this.refreshContactDirectory(scope, result.report.confirmedBindingCount);
     } catch (error) {
       if (!current()) return;
+      // 删除期间名单服务整体关闭：只读刷新保留上一次成功报告，不显示“同步状态读取失败”。
+      if (preserveOnFailure) return;
+      if (operation === 'refresh' && this.quiet.deleting) { this.quiet.defer(this.silentRefresh); return; }
       const unavailable = error instanceof BackendRequestFailure
         && ['sync_unavailable', 'sync_status_unavailable'].includes(error.code ?? '');
       this.publish({ phase: unavailable ? 'unavailable' : 'failed', report: null,

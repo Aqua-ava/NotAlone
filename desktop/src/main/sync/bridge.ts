@@ -1,5 +1,6 @@
 import type { HistoryAuthorizationRequest, SyncControlRequest, SyncScopeRequest } from '../../shared/sync-control-bridge';
 import type { BackendHost } from '../backend/host';
+import type { ContactDeletionQuiet } from '../contacts/deletion-quiet';
 import type { ContactSession } from '../contacts/session';
 import { noArguments, type PageCommands } from '../page-commands';
 import { SyncControlController } from './controller';
@@ -32,8 +33,8 @@ function historyAuthorizationRequest(args: unknown[]): HistoryAuthorizationReque
   return { ...controlRequest([{ scopeRevision: fields.scopeRevision }]), decision: fields.decision, confirmed: true };
 }
 export function installSyncControlBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession,
-  beginReadingScopeChange?: () => (() => void)): SyncControlController {
-  const sync = new SyncControlController(backend, contacts, beginReadingScopeChange);
+  beginReadingScopeChange?: () => (() => void), quiet?: ContactDeletionQuiet): SyncControlController {
+  const sync = new SyncControlController(backend, contacts, beginReadingScopeChange, quiet);
   sync.onStateChanged((state) => commands.publish('sync-control:state-changed', state));
   commands.handle('sync-control:get-state', (...args: unknown[]) => { noArguments(args); return sync.getState(); }, ['manager','helper']);
   commands.handle('sync-control:refresh', (...args: unknown[]) => { noArguments(args); return sync.refresh(); }, ['manager','helper']);

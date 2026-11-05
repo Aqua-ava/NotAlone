@@ -27,6 +27,7 @@ import { installQuitLifecycle } from './backend/quit';
 import { interruptAssistantGeneration, recoverAssistantGenerationReceipt } from './reply/assistant-generation-interruption';
 import { installDesktopControls, installWindowActivation } from './desktop-controls';
 import { installContactSessionBridge } from './contacts/bridge';
+import { ContactDeletionQuiet } from './contacts/deletion-quiet';
 import { installReplyBridge } from './reply/bridge';
 import { installSqliteDiscussionBridge } from './reply/sqlite-discussion-bridge';
 import { installCandidateProvenanceBridge } from './candidate-provenance/bridge';
@@ -148,8 +149,10 @@ void app.whenReady().then(async () => {
       finishForeground();
     };
   };
-  installBindingConsentBridge(commands, backend, contacts, beginReadingScopeChange);
-  const sync = installSyncControlBridge(commands, backend, contacts, beginReadingScopeChange);
+  // 联系人删除期间后端整体关闭名单服务：授权目录与同步状态读取暂停，结束后静默补读。
+  const contactDeletionQuiet = new ContactDeletionQuiet();
+  installBindingConsentBridge(commands, backend, contacts, beginReadingScopeChange, contactDeletionQuiet);
+  const sync = installSyncControlBridge(commands, backend, contacts, beginReadingScopeChange, contactDeletionQuiet);
   const contactHistory = installContactHistoryBridge(commands, backend, contacts);
   const historyClear = installHistoryClearBridge(commands, backend, contacts);
   const syncPriority = new SyncPriorityController(backend, contacts, sync);
@@ -203,7 +206,7 @@ void app.whenReady().then(async () => {
   const contactDeletion = installContactDeletionBridge(commands, backend, contacts, beginReadingScopeChange, (contactId) => {
     if (contacts.getState().selectedContactId !== contactId) return;
     dataLifecycle.withdraw('contact-deletion');
-  });
+  }, contactDeletionQuiet);
   app.on('before-quit', () => contactDeletion.dispose());
   installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies,
     (selection, text) => candidateProvenance.recordCopied(selection, text)));

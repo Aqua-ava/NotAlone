@@ -3,6 +3,7 @@ import type { ContactDeletionItem, ContactDeletionRequest, ContactDeletionRetry,
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure, requestTimeoutLimitMs } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
+import { ContactDeletionQuiet } from '../contacts/deletion-quiet';
 import { deletionOperation, deletionOperations, deletionReceipt } from './read';
 import { isUuid } from '../uuid';
 
@@ -62,6 +63,7 @@ export class ContactDeletionController {
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
     private readonly beginReadingScopeChange: () => (() => void) = () => () => {},
     private readonly invalidateContact: (contactId: string) => void = () => {},
+    private readonly quiet: ContactDeletionQuiet = new ContactDeletionQuiet(),
     options: ContactDeletionOptions = {}) {
     this.autoRetryDelaysMs = options.autoRetryDelaysMs ?? defaultAutoRetryDelaysMs;
     this.autoResumeEnabled = options.autoResume ?? true;
@@ -151,16 +153,22 @@ export class ContactDeletionController {
   }
   private async run(item: ContactDeletionItem): Promise<void> {
     this.cancel();
+    // 名单服务在删除期间整体关闭：无关的授权与同步状态读取暂停，结束后补读一次。
+    const finishQuiet = this.quiet.begin();
     const operation = { generation: this.generation!, epoch: this.epoch };
     const pending = new AbortController(); this.pending = pending;
     if (item.operationId) this.resumed.add(`${operation.generation}:${item.operationId}`);
     let finish = () => {};
     let stopPolling = () => {};
-    this.publish({ phase: 'ready', busyId: item.id, error: null });
     try {
+      this.publish({ phase: 'ready', busyId: item.id, error: null });
       finish = this.beginReadingScopeChange();
-      if (item.contactId) this.invalidateContact(item.contactId);
-      // 原请求要等清理结束才返回；期间轮询名单，让后端封禁后的联系人尽早离开列表。
+      if (item.contactId) {
+        this.invalidateContact(item.contactId);
+        // 删除请求发出即撤下该联系人，不等名单服务恢复；其他联系人的选择与草稿保持不变。
+        this.contacts.removeContact(item.contactId);
+      }
+      // 原请求要等清理结束才返回；期间只做保留式后台刷新，名单服务关闭时不清空界面。
       if (!item.operationId && item.contactId) stopPolling = this.pollContacts(operation);
       const advance = await this.startAdvance(item, operation, pending);
       if (!advance || !this.current(operation)) return;
@@ -231,13 +239,15 @@ export class ContactDeletionController {
       }
     } finally {
       stopPolling();
-      try { finish(); }
-      finally {
+      try {
         if (this.current(operation)) {
-          // 范围封禁后联系人可先离开目录，但任务仍由本控制器保留并核验。
-          try { await this.contacts.refreshContacts(); }
+          // 范围封禁后联系人已先从内存撤下；收尾对账用保留式后台刷新，失败也不清空目录。
+          try { await this.contacts.refreshContactsInBackground(); }
           finally { if (this.current(operation)) this.publish({ busyId: null }); }
         }
+      } finally {
+        try { finish(); }
+        finally { finishQuiet(); }
         if (this.pending === pending) this.pending = undefined;
       }
     }
@@ -364,7 +374,8 @@ export class ContactDeletionController {
     const timer = setInterval(() => {
       if (running || !this.current(operation)) return;
       running = true;
-      void Promise.resolve(this.contacts.refreshContacts()).catch(() => {}).finally(() => { running = false; });
+      // 名单服务在删除期间关闭：只做失败保留现有目录的后台刷新，不进入错误态。
+      void Promise.resolve(this.contacts.refreshContactsInBackground()).catch(() => {}).finally(() => { running = false; });
     }, this.contactPollMs);
     return () => clearInterval(timer);
   }

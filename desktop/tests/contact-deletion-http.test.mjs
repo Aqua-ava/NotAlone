@@ -137,7 +137,7 @@ test('真实SQLite联系人删除HTTP投影被main接受，重放旧ID幂等且�
   assert.ok(first && sibling);
   contacts.selectContact({ contactId: first.contactId, scopeRevision: initial.scopeRevision });
 
-  const controller = new ContactDeletionController(backend, contacts, undefined, undefined,
+  const controller = new ContactDeletionController(backend, contacts, undefined, undefined, undefined,
     { operationWaitMs: 10_000, operationPollMs: 25, discoverPollMs: 10, discoverTimeoutMs: 200 });
   t.after(() => controller.dispose());
   await controller.refresh();

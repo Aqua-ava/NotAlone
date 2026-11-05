@@ -3,6 +3,7 @@ import type { BindingConfirmation, BindingConsentState, BindingRevocation, Bindi
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import { runtimeOwnerConfigured } from '../contacts/directory';
+import { ContactDeletionQuiet } from '../contacts/deletion-quiet';
 import type { ContactSession } from '../contacts/session';
 import { setSyncEnabled } from '../sync/status';
 import { isBindingIdentifier, isConversationLocator } from './validation';
@@ -75,7 +76,8 @@ export class BindingConsentController {
   private pendingRead: { operation: Operation; readSessions: boolean; promise: Promise<void> } | undefined;
   private readonly listeners = new Set<(state: BindingConsentState) => void>();
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
-    private readonly beginReadingScopeChange: () => (() => void) = () => () => {}) {
+    private readonly beginReadingScopeChange: () => (() => void) = () => () => {},
+    private readonly quiet: ContactDeletionQuiet = new ContactDeletionQuiet()) {
     backend.onStateChanged(() => {
       const generation = backend.getConnectionGeneration();
       if (generation === this.generation) return;
@@ -96,9 +98,13 @@ export class BindingConsentController {
     await this.refreshState(true);
   }
   async refreshSaved(): Promise<void> {
+    // 删除期间授权目录不可读：暂停本次读取，结束后静默补读一次；旧授权状态仍然有效。
+    if (this.quiet.defer(this.silentRefresh)) return;
     await this.refreshState(false, true);
   }
-  private async refreshState(readSessions: boolean, preserveSessions = false): Promise<void> {
+  /** 删除结束后的补读：保留上一次成功状态，失败不显示“不能确认授权范围”。 */
+  private readonly silentRefresh = () => { void this.refreshState(false, true, true); };
+  private async refreshState(readSessions: boolean, preserveSessions = false, preserveOnFailure = false): Promise<void> {
     if (this.state.busy) return;
     const generation = this.backend.getConnectionGeneration();
     if (generation === undefined) return;
@@ -107,7 +113,7 @@ export class BindingConsentController {
     if (pending && this.current(pending.operation) && (!readSessions || pending.readSessions)) return pending.promise;
     const operation = { generation, epoch: ++this.epoch };
     const promise = Promise.resolve().then(() => {
-      if (this.current(operation)) return this.load(operation, readSessions, preserveSessions);
+      if (this.current(operation)) return this.load(operation, readSessions, preserveSessions, preserveOnFailure);
     });
     const reading = { operation, readSessions, promise };
     this.pendingRead = reading;
@@ -115,7 +121,8 @@ export class BindingConsentController {
     try { await promise; }
     finally { if (this.pendingRead === reading) this.pendingRead = undefined; }
   }
-  private async load(operation: Operation, readSessions = this.state.sessionIssue !== 'not-requested', preserveSessions = false): Promise<void> {
+  private async load(operation: Operation, readSessions = this.state.sessionIssue !== 'not-requested',
+    preserveSessions = false, preserveOnFailure = false): Promise<void> {
     // 只读已保存关联时保留当前展示；明确读取名单仍显示加载状态。
     if (!preserveSessions || this.state.phase !== 'ready') this.publish({ phase: 'loading' });
     try {
@@ -163,6 +170,8 @@ export class BindingConsentController {
         syncEnabled: enabled ?? (record(status) && typeof status.sync_enabled === 'boolean' ? status.sync_enabled : null) });
     } catch (error) {
       if (!this.current(operation)) return;
+      // 删除期间名单服务整体关闭：保留上一次成功状态，不把读取失败显示成授权范围不明。
+      if (preserveOnFailure || this.quiet.deleting) return;
       const unavailable = error instanceof BackendRequestFailure && error.code === 'sync_unavailable';
       this.publish({ phase: unavailable ? 'unavailable' : 'failed', sessions: [], bindings: [], knownBindings: [], syncEnabled: null });
     }
