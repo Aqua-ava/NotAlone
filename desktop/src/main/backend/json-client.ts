@@ -6,6 +6,9 @@ import type { AssistantInputBudget } from '../../shared/assistant-input-budget';
 import { readInputBudgetFailure } from '../reply/input-budget-read';
 import { readAssistantNoGenerationProof, type AssistantNoGenerationProof } from '../../shared/assistant-no-generation';
 
+/** 通用运输层单次请求上限；调用方不得传入更长时限，长任务应由业务入口拆分或轮询。 */
+export const requestTimeoutLimitMs = 120_000;
+
 export interface JsonRequest {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
@@ -126,7 +129,7 @@ export class JsonClient {
     const preview = method === 'POST' && previewRoute?.slice(1).every(isUuid)
       && options.body !== null && typeof options.body === 'object' && !Array.isArray(options.body) && Object.keys(options.body).length === 0;
     if (!/^\/api\/[A-Za-z0-9_/?=&.%:-]+$/.test(path) || path.includes('..')
-      || !Number.isFinite(timeout) || timeout < 1 || timeout > 120_000
+      || !Number.isFinite(timeout) || timeout < 1 || timeout > requestTimeoutLimitMs
       || options.idempotencyKey !== undefined && !isUuid(options.idempotencyKey)
       || !Number.isSafeInteger(limit) || limit < 1 || limit > (preview ? 45 * 1024 * 1024 : 8_388_608)) {
       return Promise.reject(new BackendRequestFailure('response'));

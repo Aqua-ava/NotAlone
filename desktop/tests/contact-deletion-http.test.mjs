@@ -18,9 +18,10 @@ const bundled = await build({ stdin: { contents: `
 export {ContactDeletionController} from './src/main/contact-deletion/controller';
 export {ContactSession} from './src/main/contacts/session';
 export {readContactDirectory} from './src/main/contacts/directory';
+export {BackendRequestFailure, requestTimeoutLimitMs} from './src/main/backend/json-client';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false });
 await (await import('node:fs/promises')).writeFile(path.join(temporary, 'main.mjs'), bundled.outputFiles[0].text);
-const { ContactDeletionController, ContactSession, readContactDirectory } = await import(path.join(temporary, 'main.mjs'));
+const { ContactDeletionController, ContactSession, readContactDirectory, BackendRequestFailure, requestTimeoutLimitMs } = await import(path.join(temporary, 'main.mjs'));
 
 test('真实SQLite联系人删除HTTP投影被main接受，重放旧ID幂等且保留其他联系人', async t => {
   const userData = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-contact-deletion-data-')));
@@ -51,6 +52,13 @@ test('真实SQLite联系人删除HTTP投影被main接受，重放旧ID幂等且�
     close: async () => { closed++; },
   }));
   await metadata.initialize();
+  let slowAdvance = false;
+  const executeStorage = storage.execute.bind(storage);
+  // 合成慢清理：在已 claim 的清理阶段（sealTargets）加延迟，让客户端在服务端清理结束前超时。
+  storage.execute = async (name, input, lease) => {
+    if (slowAdvance && name === 'deletion.sealTargets') await new Promise(resolve => setTimeout(resolve, 300));
+    return executeStorage(name, input, lease);
+  };
   const deletion = new DeletionService(storage, holders, new ManagedFiles(userData), { drainTimeoutMs: 100 });
   const deletionHttp = new SqliteDeletionHttp(deletion, ownerId);
   server = createServer(async (req, res) => {
@@ -64,20 +72,36 @@ test('真实SQLite联系人删除HTTP投影被main接受，重放旧ID幂等且�
   let generation = 1;
   const endpoint = `http://127.0.0.1:${server.address().port}`;
   const requests = [];
-  let loseNextDeleteResponse = false;
+  let loseNextDeleteResponse = false, timeoutNextDelete = false, hideDiscovery = false;
   // 保留 BackendHost 的 generation / listener / JSON 调用边界，只替换已认证的 loopback HTTP 传输。
   const backend = {
     getConnectionGeneration: () => generation,
     onStateChanged() { return () => {}; },
     async requestJson(request) {
       const acceptedGeneration = generation;
-      requests.push({ method: request.method, path: request.path });
-      const response = await fetch(endpoint + request.path, {
+      requests.push({ method: request.method, path: request.path, timeoutMs: request.timeoutMs });
+      // 合成“发现窗口不可用”：回执丢失后名单暂时读不到原任务，必须保守标记未知。
+      if (hideDiscovery && request.method === 'GET' && request.path === '/api/deletions') {
+        return { generation: acceptedGeneration, data: { operations: [] } };
+      }
+      const send = (signal) => fetch(endpoint + request.path, {
         method: request.method,
         headers: { authorization: 'Bearer synthetic-http-test', 'content-type': 'application/json', ...request.headers },
         ...(request.body === undefined ? {} : { body: JSON.stringify(request.body) }),
-        ...(request.signal ? { signal: request.signal } : {}),
+        ...(signal ? { signal } : {}),
       });
+      let response;
+      if (request.method === 'DELETE' && timeoutNextDelete) {
+        timeoutNextDelete = false;
+        // 客户端在服务端清理结束前超时：连接断开，但服务端继续推进原任务。
+        const local = new AbortController();
+        const timer = setTimeout(() => local.abort(), 50);
+        try { response = await send(request.signal ? AbortSignal.any([request.signal, local.signal]) : local.signal); }
+        catch { throw new BackendRequestFailure('connection'); }
+        finally { clearTimeout(timer); }
+      } else {
+        response = await send(request.signal);
+      }
       const data = await response.json();
       if (!response.ok) throw new Error(`synthetic backend HTTP ${response.status}: ${data.error ?? 'unknown'}`);
       if (request.method === 'DELETE' && loseNextDeleteResponse) {
@@ -113,9 +137,11 @@ test('真实SQLite联系人删除HTTP投影被main接受，重放旧ID幂等且�
   assert.ok(first && sibling);
   contacts.selectContact({ contactId: first.contactId, scopeRevision: initial.scopeRevision });
 
-  const controller = new ContactDeletionController(backend, contacts);
+  const controller = new ContactDeletionController(backend, contacts, undefined, undefined,
+    { operationWaitMs: 10_000, operationPollMs: 25, discoverPollMs: 10, discoverTimeoutMs: 200 });
   t.after(() => controller.dispose());
   await controller.refresh();
+  hideDiscovery = true;
   loseNextDeleteResponse = true;
   await controller.delete({ contactId: first.contactId, scopeRevision: contacts.getState().scopeRevision, confirmed: true });
 
@@ -141,4 +167,26 @@ test('真实SQLite联系人删除HTTP投影被main接受，重放旧ID幂等且�
   ]);
   assert.equal((await direct('GET', `/api/deletions/${completed.operationId}`)).body.state, 'completed');
   assert.deepEqual((await direct('GET', '/api/contacts')).body.contacts.map(row => row.contact_id), [sibling.contactId]);
+
+  // 第二次删除：客户端在运输层超时，服务端仍推进原任务；控制器必须按原任务轮询到 completed，不误报未知。
+  hideDiscovery = false;
+  slowAdvance = true;
+  contacts.selectContact({ contactId: sibling.contactId, scopeRevision: contacts.getState().scopeRevision });
+  timeoutNextDelete = true;
+  const postsBeforeTimeoutDelete = requests.filter(request => request.method === 'POST').length;
+  await controller.delete({ contactId: sibling.contactId, scopeRevision: contacts.getState().scopeRevision, confirmed: true });
+  const second = controller.getState().operations[0];
+  assert.equal(controller.getState().error, null);
+  assert.equal(controller.getState().busyId, null);
+  assert.equal(second.phase, 'completed');
+  assert.equal(second.contactId, null);
+  assert.deepEqual(contacts.getState().contacts, []);
+  assert.deepEqual(requests.filter(request => request.method === 'DELETE').map(request => request.path), [
+    `/api/contacts/${first.contactId}`, `/api/contacts/${first.contactId}`, `/api/contacts/${sibling.contactId}`,
+  ]);
+  // 服务端仍在推进时应靠状态轮询收尾，不用续跑请求制造并发。
+  assert.equal(requests.filter(request => request.method === 'POST').length, postsBeforeTimeoutDelete);
+  assert.ok(requests.every(request => request.timeoutMs === undefined || request.timeoutMs <= requestTimeoutLimitMs),
+    '删除请求不能超过运输层单次时限');
+  assert.equal((await direct('GET', '/api/contacts')).body.contacts.length, 0);
 });

@@ -11,9 +11,10 @@ const output = await build({ stdin: { contents: `
 export {ContactDeletionController} from './src/main/contact-deletion/controller';
 export {installContactDeletionBridge} from './src/main/contact-deletion/bridge';
 export {createContactDeletionBridge} from './src/preload/contact-deletion';
+export {BackendRequestFailure, requestTimeoutLimitMs} from './src/main/backend/json-client';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false });
 await writeFile(path.join(temporary, 'controller.mjs'), output.outputFiles[0].text);
-const { ContactDeletionController, installContactDeletionBridge, createContactDeletionBridge } = await import(path.join(temporary, 'controller.mjs'));
+const { ContactDeletionController, installContactDeletionBridge, createContactDeletionBridge, BackendRequestFailure, requestTimeoutLimitMs } = await import(path.join(temporary, 'controller.mjs'));
 const a = '11111111-1111-4111-8111-111111111111';
 const b = '22222222-2222-4222-8222-222222222222';
 const opId = '33333333-3333-4333-8333-333333333333';
@@ -27,6 +28,8 @@ const publicOperation = (phase = 'completed', contactId = a) => ({ operation_id:
 async function fixture(t, options = {}) {
   const requests = [], notifications = [], listeners = new Set();
   let generation = 1, ownerId = owner, serverOperation = options.recovered ?? null, statusFailures = options.statusFailures ?? 0, listFails = false;
+  let statusReads = 0, retryTimedOut = false, deleteTimedOut = false, retryBusy = false;
+  let transientStatusFailures = options.transientStatusFailures ?? 0, statusConflictFailures = options.statusConflictFailures ?? 0;
   let selection = { revision: 1, scopeRevision: 7, directoryPhase: 'ready', selectedContactId: a,
     contacts: [{ contactId: a, displayName: '合成甲' }, { contactId: b, displayName: '合成乙' }] };
   let lostDelete = options.lostDelete ?? false;
@@ -45,27 +48,50 @@ async function fixture(t, options = {}) {
       if (request.path === '/api/setup/status') return { generation: accepted, data: { runtime_owner_configured: true, owner_id: ownerId } };
       if (request.path === '/api/deletions') {
         if (listFails) throw new Error('synthetic_list_unavailable');
-        return { generation: accepted, data: { operations: serverOperation ? [serverOperation] : [] } };
+        // 已完成任务不返回联系人标识，发现路径只能看到未完成原任务。
+        const visible = serverOperation && serverOperation.state !== 'completed' && !options.hideDiscovery
+          && (!options.discoverAfterTimeout || deleteTimedOut);
+        return { generation: accepted, data: { operations: visible ? [serverOperation] : [] } };
       }
       if (request.method === 'DELETE') {
         if (options.beforeDelete) await options.beforeDelete();
-        serverOperation = publicOperation(options.finalPhase ?? 'completed');
+        const timeoutOnce = options.transportTimeout === true && !deleteTimedOut;
+        if (timeoutOnce) deleteTimedOut = true;
+        serverOperation = publicOperation(timeoutOnce ? 'cleaning' : options.finalPhase ?? 'completed');
         if (lostDelete) { lostDelete = false; throw new Error('synthetic_lost_response'); }
+        if (options.rejectDelete) throw options.rejectDelete;
+        if (timeoutOnce) throw new BackendRequestFailure('connection');
         return { generation: accepted, data: { operation_id: opId, state: 'completed' } };
       }
       if (request.method === 'POST') {
+        if (options.retryBusyOnce && !retryBusy) {
+          retryBusy = true; serverOperation = publicOperation('cleaning');
+          throw new BackendRequestFailure('response', 409, 'deletion_busy');
+        }
         if (options.retryBlocked && options.retryBlocked-- > 0) { serverOperation = publicOperation('blocked'); return { generation: accepted, data: serverOperation }; }
+        if (options.retryTransportTimeout && !retryTimedOut) {
+          retryTimedOut = true; serverOperation = publicOperation('cleaning');
+          throw new BackendRequestFailure('connection');
+        }
         serverOperation = publicOperation();
         return { generation: accepted, data: serverOperation };
       }
+      if (statusConflictFailures-- > 0) throw new BackendRequestFailure('response', 409, 'deletion_busy');
+      if (transientStatusFailures-- > 0) throw new BackendRequestFailure('connection');
       if (statusFailures-- > 0) throw new Error('synthetic_status_unavailable');
+      if (serverOperation?.state === 'cleaning' && options.completeAfterStatusReads !== undefined
+        && statusReads++ >= options.completeAfterStatusReads) {
+        serverOperation = publicOperation('completed');
+      }
       return { generation: accepted, data: options.unverified ? { ...serverOperation, checks: [] }
         : options.foreignStatus ? publicOperation('blocked', b) : serverOperation };
     },
   };
+  // 合成时序：超时发现/轮询用毫秒级预算，避免测试等待生产有界等待窗口。
+  const timing = { operationWaitMs: 200, operationPollMs: 1, discoverPollMs: 1, discoverTimeoutMs: 20 };
   const controller = new ContactDeletionController(backend, contacts,
     () => { notifications.push('started'); return () => notifications.push('settled'); }, id => notifications.push(id),
-    options.auto ?? { autoRetryDelaysMs: [], autoResume: false, contactPollMs: 0 });
+    { ...timing, ...(options.auto ?? { autoRetryDelaysMs: [], autoResume: false, contactPollMs: 0 }), ...(options.controller ?? {}) });
   t.after(() => controller.dispose());
   await controller.refresh();
   return { controller, backend, contacts, requests, notifications,
@@ -258,6 +284,129 @@ test('删除请求等待清理期间轮询名单，联系人封禁后尽早离�
   const settled = refreshes;
   await new Promise(resolve => setTimeout(resolve, 30));
   assert.ok(refreshes <= settled + 1, '完成后应停止轮询');
+});
+
+test('删除请求在运输层超时后找回原任务并轮询到完成，不误报结果未知', async t => {
+  const f = await fixture(t, { transportTimeout: true, completeAfterStatusReads: 2 });
+  await f.controller.delete(f.request());
+  const state = f.controller.getState();
+  assert.equal(state.error, null);
+  assert.equal(state.busyId, null);
+  assert.equal(state.operations[0].phase, 'completed');
+  assert.equal(state.operations[0].operationId, opId);
+  // 同一确认只发出一次删除；超时后靠原任务轮询收尾，不重复删除。
+  assert.equal(f.requests.filter(request => request.method === 'DELETE').length, 1);
+  assert.equal(f.requests.filter(request => request.method === 'POST').length, 0);
+  assert.ok(f.requests.some(request => request.method === 'GET' && request.path === '/api/deletions'));
+  assert.ok(f.requests.some(request => request.path === `/api/deletions/${opId}`));
+  assert.ok(f.requests.every(request => request.timeoutMs === undefined || request.timeoutMs <= requestTimeoutLimitMs),
+    '删除请求不能超过运输层单次时限');
+});
+
+test('删除请求超时但名单里找不到原任务时保守标记未知，重试只重放原旧联系人ID', async t => {
+  const f = await fixture(t, { transportTimeout: true, hideDiscovery: true });
+  await f.controller.delete(f.request());
+  let unknown = f.controller.getState().operations[0];
+  assert.equal(unknown.phase, 'unconfirmed');
+  assert.equal(unknown.operationId, null);
+  f.select(b);
+  await f.controller.retry({ id: unknown.id, scopeRevision: f.controller.getState().scopeRevision, confirmed: true });
+  assert.deepEqual(f.requests.filter(request => request.method === 'DELETE').map(request => request.path), [`/api/contacts/${a}`, `/api/contacts/${a}`]);
+  assert.equal(f.controller.getState().operations[0].phase, 'completed');
+});
+
+test('轮询期间状态读取的连接中断按瞬时失败重试，最终确认完成', async t => {
+  const f = await fixture(t, { transportTimeout: true, transientStatusFailures: 2, completeAfterStatusReads: 1 });
+  await f.controller.delete(f.request());
+  const state = f.controller.getState();
+  assert.equal(state.error, null);
+  assert.equal(state.busyId, null);
+  assert.equal(state.operations[0].phase, 'completed');
+  assert.equal(f.requests.filter(request => request.method === 'DELETE').length, 1);
+});
+
+test('轮询期间压缩造成的瞬时409按瞬时失败重试，不误报未知', async t => {
+  const f = await fixture(t, { transportTimeout: true, statusConflictFailures: 1, completeAfterStatusReads: 1 });
+  await f.controller.delete(f.request());
+  const state = f.controller.getState();
+  assert.equal(state.error, null);
+  assert.equal(state.operations[0].phase, 'completed');
+});
+
+test('后端明确拒绝删除时立即保守标记未知，不等待发现窗口', async t => {
+  const started = Date.now();
+  const f = await fixture(t, { rejectDelete: new BackendRequestFailure('response', 400, 'deletion_confirmation_required'),
+    controller: { discoverTimeoutMs: 5_000 } });
+  await f.controller.delete(f.request());
+  const state = f.controller.getState();
+  assert.equal(state.operations[0].phase, 'unconfirmed');
+  assert.equal(state.operations[0].operationId, null);
+  assert.equal(state.operations[0].errorCode, 'deletion_confirmation_required');
+  assert.ok(state.error);
+  assert.ok(Date.now() - started < 1_000, '明确拒绝不应等待发现窗口');
+});
+
+test('重试原任务的请求超时后同样按原任务轮询到完成，不重放删除', async t => {
+  const f = await fixture(t, { recovered: publicOperation('blocked'), retryTransportTimeout: true, completeAfterStatusReads: 1 });
+  f.select(b);
+  const recovered = f.controller.getState().operations[0];
+  await f.controller.retry({ id: recovered.id, scopeRevision: f.controller.getState().scopeRevision, confirmed: true });
+  const state = f.controller.getState();
+  assert.equal(state.error, null);
+  assert.equal(state.operations[0].phase, 'completed');
+  assert.equal(f.requests.filter(request => request.method === 'DELETE').length, 0);
+  assert.equal(f.requests.filter(request => request.method === 'POST').length, 1);
+  assert.ok(f.requests.every(request => request.timeoutMs === undefined || request.timeoutMs <= requestTimeoutLimitMs),
+    '续跑请求不能超过运输层单次时限');
+});
+
+test('有界轮询到期后保留清理态与继续入口，不误报结果未知', async t => {
+  const f = await fixture(t, { transportTimeout: true, completeAfterStatusReads: 1_000_000,
+    controller: { operationWaitMs: 40, operationPollMs: 1 } });
+  await f.controller.delete(f.request());
+  const state = f.controller.getState();
+  assert.equal(state.error, null);
+  assert.equal(state.busyId, null);
+  assert.equal(state.operations[0].phase, 'cleaning');
+  assert.equal(state.operations[0].operationId, opId);
+  // 到期时任务可能仍由后端推进，不用额外续跑请求制造并发。
+  assert.equal(f.requests.filter(request => request.method === 'POST').length, 0);
+  assert.ok(f.requests.some(request => request.path === `/api/deletions/${opId}`));
+});
+
+test('超时前名单读不到、超时后才可发现原任务时仍自动完成', async t => {
+  const f = await fixture(t, { transportTimeout: true, discoverAfterTimeout: true, completeAfterStatusReads: 1 });
+  await f.controller.delete(f.request());
+  const state = f.controller.getState();
+  assert.equal(state.error, null);
+  assert.equal(state.busyId, null);
+  assert.equal(state.operations[0].phase, 'completed');
+  assert.equal(f.requests.filter(request => request.method === 'DELETE').length, 1);
+});
+
+test('自动续跑请求超时后转入原任务轮询，不静默停在旧阶段', async t => {
+  const f = await fixture(t, { recovered: publicOperation('blocked'), retryBlocked: 1, retryTransportTimeout: true,
+    completeAfterStatusReads: 1, auto: { autoRetryDelaysMs: [0, 0], autoResume: false, contactPollMs: 0 } });
+  f.select(b);
+  const recovered = f.controller.getState().operations[0];
+  await f.controller.retry({ id: recovered.id, scopeRevision: f.controller.getState().scopeRevision, confirmed: true });
+  const state = f.controller.getState();
+  assert.equal(state.error, null);
+  assert.equal(state.operations[0].phase, 'completed');
+  assert.equal(f.requests.filter(request => request.method === 'POST').length, 2);
+  assert.equal(f.requests.filter(request => request.method === 'DELETE').length, 0);
+});
+
+test('续跑遇到409 busy按瞬时失败继续轮询原任务', async t => {
+  const f = await fixture(t, { recovered: publicOperation('blocked'), retryBusyOnce: true, completeAfterStatusReads: 1 });
+  f.select(b);
+  const recovered = f.controller.getState().operations[0];
+  await f.controller.retry({ id: recovered.id, scopeRevision: f.controller.getState().scopeRevision, confirmed: true });
+  const state = f.controller.getState();
+  assert.equal(state.error, null);
+  assert.equal(state.operations[0].phase, 'completed');
+  assert.equal(f.requests.filter(request => request.method === 'DELETE').length, 0);
+  assert.equal(f.requests.filter(request => request.method === 'POST').length, 1);
 });
 
 test('删除预加载与正式IPC拒绝隐式确认、跨范围字段和额外身份参数', async () => {
