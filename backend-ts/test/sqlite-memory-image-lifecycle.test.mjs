@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {mainImageQuality} from './fixtures/media/main-image-quality.mjs';
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
 import {fixture,owner,record,modelPort} from './fixtures/memory-sqlite/support.mjs';
@@ -20,7 +21,7 @@ function imageAdapter(){let revision=0;return {version:'synthetic-memory-image-v
  async execute(context){
   const bytes=Buffer.concat([imageBytes,Buffer.from(String(++revision))]);
   await context.save({role:'image_display',expectedBytes:bytes.length,expectedSha256:createHash('sha256').update(bytes).digest('hex'),
-   bytes:(async function*(){yield bytes;})(),validate:async()=>({format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false,imageQuality:'unknown',qualityProof:null})});
+   bytes:(async function*(){yield bytes;})(),validate:async()=>({format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false,...mainImageQuality(bytes)})});
   return {association:{protocol:'media-association-v1',profileId:'synthetic-memory-image-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-memory-image'}};
  }};}
 function documentItem(value){

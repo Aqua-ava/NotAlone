@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {createHash} from 'node:crypto';
+import {mainImageQuality} from './fixtures/media/main-image-quality.mjs';
 import {join} from 'node:path';
 import {fixture as mediaFixture} from './media-support.mjs';
 import {createBuiltinMemoryContentRegistry} from '../src/memory/content/builtins.ts';
@@ -48,7 +49,7 @@ test('图片批量可用性保留最新文件及逐条来源资格，混合失�
  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64');
  const adapter={version:'synthetic-content-availability-v1',supports:kind=>kind==='image',async execute(context){
   await context.save({role:'image_display',bytes:(async function*(){yield png;})(),expectedBytes:png.length,expectedSha256:createHash('sha256').update(png).digest('hex'),
-   validate:async()=>({format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false,imageQuality:'thumbnail',qualityProof:null})});
+   validate:async()=>({format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false,...mainImageQuality(png)})});
   return {association:{protocol:'media-association-v1',profileId:'synthetic-content-availability-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-image'}};
  }};
  const f=await mediaFixture(t,adapter);

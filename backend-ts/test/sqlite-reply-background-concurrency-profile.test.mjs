@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {mainImageQuality} from './fixtures/media/main-image-quality.mjs';
 import sharp from 'sharp';
 import assert from 'node:assert/strict';
 import {watch} from 'node:fs';
@@ -73,7 +74,7 @@ test('正式SQLite profile的图文后台在途时前台已到共享供应商，
  for(const contactId of [frontContact,backContact])await f.service.synchronize(contactId);
  const frontMessages=(await f.service.read(frontContact)).messages,backMessages=(await f.service.read(backContact)).messages,image=backMessages.find(message=>message.kind==='image');
  const adapter={version:'synthetic-concurrency-image-v1',supports:kind=>kind==='image',async execute(context){
-  await context.save({role:'image_display',bytes:(async function*(){yield png;})(),expectedBytes:png.length,expectedSha256:createHash('sha256').update(png).digest('hex'),validate:async()=>({format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false,imageQuality:'thumbnail',qualityProof:null})});
+  await context.save({role:'image_display',bytes:(async function*(){yield png;})(),expectedBytes:png.length,expectedSha256:createHash('sha256').update(png).digest('hex'),validate:async()=>({format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false,...mainImageQuality(png)})});
   return {association:{protocol:'media-association-v1',profileId:'synthetic-concurrency-image-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-concurrency-image'}};
  }};
  media=new SqliteMediaService({storage:f.storage,contacts:f.contacts,history:f.service,userData:root,adapters:[adapter]});await media.initialize();
