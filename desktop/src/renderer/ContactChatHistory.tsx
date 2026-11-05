@@ -52,7 +52,7 @@ function quoteTypeLabel(messageType: string): string {
   return `引用类型：${numericLabels[String(base)] ?? `未知类型（${messageType}）`}`;
 }
 
-export function ContactChatHistory({ session, settings, actions, contactActions, readingPosition, syncStatus, syncIssue = false, settingsTargetContactId }: { syncStatus?: ReactNode; syncIssue?: boolean; actions?: ReactNode; settingsTargetContactId?: string | null; session: ContactSessionView; settings?: ReactNode | ((visible: boolean) => ReactNode); contactActions?: ReactNode; readingPosition?: ChatHistoryPosition }) {
+export function ContactChatHistory({ session, settings, actions, readingPosition, syncStatus, syncIssue = false, settingsTargetContactId }: { syncStatus?: ReactNode; syncIssue?: boolean; actions?: ReactNode; settingsTargetContactId?: string | null; session: ContactSessionView; settings?: ReactNode | ((visible: boolean) => ReactNode); readingPosition?: ChatHistoryPosition }) {
   const bridge = window.notalone.contactHistory;
   const { state, error, setError, latest, active, retry } = useRevisionedSession(initialHistory, bridge);
   const contactId = session.state.selectedContactId;
@@ -106,7 +106,6 @@ export function ContactChatHistory({ session, settings, actions, contactActions,
           onClick={() => setSettingsScope(settingsOpen ? null : { contactId: selected.contactId, scopeRevision })}>
           同步与资料
         </button>}
-        {selected && contactActions}
       </ContactChatToolbar>
       </div>
     </header>

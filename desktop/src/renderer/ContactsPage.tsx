@@ -61,10 +61,12 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
   </section>;
   return <section className="contacts-panel" aria-label="联系人目录">
     {deletionBridge && <ContactDeletionStatus bridge={deletionBridge} state={deletion.state} />}
-    <div className="contacts-toolbar"><div><h2>联系人</h2><p>在顶部切换联系人，查看聊天记录与资料。</p></div><div>
+    <div className="contacts-toolbar"><div><h2>联系人</h2><p>点击左侧联系人或在顶部切换，查看聊天记录与资料。</p></div><div>
       <button className="button primary" disabled={!!consent.state.busy || state.directoryPhase !== 'ready'} onClick={() => addWechat()}>{allPrivate ? '管理单个微信会话' : '添加微信联系人'}</button>
       <button className="button" disabled={state.directoryPhase === 'unavailable' || state.directoryPhase === 'loading'}
-        onClick={() => void refreshContacts()}>刷新联系人</button></div></div>
+        onClick={() => void refreshContacts()}>刷新联系人</button>
+      {selected && deletionBridge && <ContactDeletionMenu bridge={deletionBridge} state={deletion.state} selected={selected}
+        contacts={state.contacts} scopeRevision={state.scopeRevision} inline />}</div></div>
     {allPrivate && <p className="contacts-note" role="status">现有及以后新增的微信私聊会自动关联，无需逐个添加；已单独停止的会话保持排除。<button className="button" onClick={() => navigate('sync')}>查看同步范围</button></p>}
     {enabled === false && <p className="contacts-note" role="status">所有联系人同步已暂停：总开关已关闭，已有授权仍保留。<button className="button" onClick={() => navigate('sync')}>前往同步设置</button></p>}
     <BindingFeedback consent={consent} />
@@ -77,14 +79,16 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
       <p>{selectionOnly ? '逐人确认微信私聊后加入联系人；未选中的会话和以后新增的私聊不会获得读取授权。' : allPrivate ? '开启后台同步后会自动关联微信私聊；联系人出现后，可在顶部搜索本次对象。' : '首次使用可到同步设置连接微信，默认仅同步你选择并确认的私聊；也可以明确选择全部私聊。'}</p><button className="button primary" onClick={() => navigate('sync')}>前往同步设置连接微信</button></div>}
     {state.contacts.length > 0 && <div className="contacts-columns"><ul className="contact-list" aria-label="联系人列表">
       {visibleContacts.map((contact) => <li key={contact.contactId} className="contact-card" data-current={state.selectedContactId === contact.contactId}>
-        <div className="contact-row">
+        <button type="button" className="contact-row" aria-label={`选择${contact.displayName}`}
+          aria-pressed={state.selectedContactId === contact.contactId}
+          onClick={() => { if (state.selectedContactId !== contact.contactId) void session.selectContact(contact.contactId); }}>
           <ContactAvatar contactId={contact.contactId} displayName={contact.displayName}
             scopeRevision={state.scopeRevision} bridge={window.notalone.contacts} refreshKey={avatarRefresh} />
           <div className="contact-row-copy"><div className="contact-row-name"><b>{contact.displayName}</b>
             {state.selectedContactId === contact.contactId && <span className="contact-row-choice">当前</span>}</div>
             <small>{contact.messageCount} 条消息</small>
           </div>
-        </div>
+        </button>
       </li>)}
     </ul><ContactChatHistory session={session} readingPosition={readingPosition} settingsTargetContactId={syncDetailsContactId}
       syncIssue={repairNeeded}
@@ -94,8 +98,7 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
       </>}
       syncStatus={selected && <ContactHistoryCoverage contactId={selected.contactId} compact
         coverages={sync.phase === 'ready' && !sync.errorCode ? sync.report?.historyCoverages : undefined}
-        bodyAvailable={sync.report?.bodyAvailable} enabled={sync.report?.enabled} />} contactActions={selected && deletionBridge && <ContactDeletionMenu
-      bridge={deletionBridge} state={deletion.state} selected={selected} contacts={state.contacts} scopeRevision={state.scopeRevision} inline />}
+        bodyAvailable={sync.report?.bodyAvailable} enabled={sync.report?.enabled} />}
       settings={selected && (visible => <>
       <ContactSyncSettings session={session} navigate={navigate} visible={visible} />
       <ContactHistoryClear session={session} repairNeeded={repairNeeded} />

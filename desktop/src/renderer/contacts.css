@@ -7,7 +7,9 @@
 .contact-list { list-style: none; margin: 0; padding: 0; display: grid; align-content: start; gap: 6px; }
 .contact-card { min-width: 0; padding: 8px 10px; border: 1px solid var(--panel-border); border-radius: 10px; background: var(--panel-background); }
 .contact-card[data-current="true"] { background: #e9f2f3; border-color: #8cabbe; }
-.contact-row { display: flex; align-items: center; gap: 8px; text-align: left; }
+.contact-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.contact-card:has(> .contact-row:hover):not([data-current="true"]) { background: #f1f6f4; }
+.contact-row:focus-visible { outline: 2px solid #8cabbe; outline-offset: 4px; border-radius: 6px; }
 .contact-avatar { flex-shrink: 0; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 4px; background: #d9e8e9; color: #547b8c; font-size: 12px; }
 .contact-avatar img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 .contact-row-copy { min-width: 0; flex: 1; display: grid; gap: 2px; }
@@ -48,6 +50,7 @@
 .contact-chat-options-menu .button { width: 100%; padding: 9px 12px; border: 0; background: transparent; text-align: left; font-size: 12px; }
 .contact-chat-options-menu .button:hover:not(:disabled) { background: #eaf1ed; }
 .contact-chat-options-menu .contact-deletion-inline { color: #99594e; }
+.contacts-toolbar .contact-deletion-inline { color: #99594e; }
 .contact-chat-order { margin-top: 4px; color: #758184; font-size: 10px; }
 .contact-chat-order summary { cursor: pointer; }
 .contact-chat-header .contact-chat-order p { margin: 5px 0 0; max-width: 360px; font-size: 11px; }
