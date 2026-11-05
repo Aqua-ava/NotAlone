@@ -1,6 +1,6 @@
 # ADR-173：开发者批量来源重新认证
 
-状态：提议，待用户确认（2026-11-05）。本 ADR 尚未采纳，不代表入口已实现；用户确认前不开始写对应产品代码。已由用户确认的只有两点：批量入口只放在开发者调试区，批量范围为全部被围栏联系人；其余条款均为待确认的提议内容。背景与计数证据见本次任务的方案文档（`.scratch/fenced-contact-repair/spec.md` 第 6.10 节；`.scratch` 已被 Git 忽略，未入库）。
+状态：已采纳（2026-11-05）；尚未实现，实现与验收状态另行记录。本 ADR 不代表入口已实现。用户已明确确认采纳本决定：批量入口只放在开发者调试区，批量范围为全部被围栏联系人。背景与计数证据见本次任务的方案文档（`.scratch/fenced-contact-repair/spec.md` 第 6.10 节；`.scratch` 已被 Git 忽略，未入库）。
 
 2026-11-05 的只读计数显示，281 位活跃联系人中有 279 位带有 `history_continuity_fence`（原因码均为 `history_source_continuity_unverified`，且都有有效读取授权）。围栏会停掉这些联系人的新内容读取，并使图片补查工作集排除它们；解除围栏只有逐位“修复同步”一条路径，即 [ADR-144](144-preserved-history-source-recertification.md) 的独立来源重新认证。逐位手动确认并等待每位重新读取全部可读历史不现实，也容易在长时间过程中反复中断。决定提供一个只在开发者调试区出现的批量入口：它替用户按序发起现有的逐位重新认证，认证本身与逐位入口完全相同。
 
@@ -12,4 +12,4 @@
 
 未采纳的方案：直接删除围栏行或改写守卫来“修复”，理由是这样等于把失证来源宣称为连续，绕过 ADR-144 的来源认证与删除保护；自动静默修复，即在没有用户当前确认时重读全部历史，理由是它改变 ADR-144 的“用户明确选择”前提，需要另行修改规格；并发修复多个联系人，理由是共享读取进程本以独占租约串行，并发没有收益，且会把单点故障放大成多位同时失败。
 
-本提议不改变 [ADR-113](113-sqlite-private-history-source-contract.md)、[ADR-127](127-sqlite-history-normal-use-restart-rescan.md)、[ADR-133](133-page-delta-private-history-sync.md) 的普通来源认证与续证规则，也不替代 [ADR-130](130-explicit-wechat-source-reconfirmation.md) 的账号来源重新关联；与上述有效 ADR 无条款冲突。ADR 采纳须由用户确认，确认后另行更新本状态、现行规格与任务依赖；本记录不表示实现或验收已经完成。
+本决定不改变 [ADR-113](113-sqlite-private-history-source-contract.md)、[ADR-127](127-sqlite-history-normal-use-restart-rescan.md)、[ADR-133](133-page-delta-private-history-sync.md) 的普通来源认证与续证规则，也不替代 [ADR-130](130-explicit-wechat-source-reconfirmation.md) 的账号来源重新关联；与上述有效 ADR 无条款冲突。实现与验收状态另行记录，本记录不表示功能已实现或验收已经完成。
