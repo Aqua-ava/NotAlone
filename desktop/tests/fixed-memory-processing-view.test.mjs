@@ -209,3 +209,26 @@ test('记忆页隐藏后暂停处理状态轮询，失效仍撤下且返回时�
   await page.evaluate(()=>window.setPageVisible(true));await page.getByText('暂无处理记录',{exact:true}).waitFor();assert.equal(reads,before+1);
  });
 });
+
+test('裁决类未知回执提供放弃重试：需二次确认，确认后携带控制修订与操作标识', {timeout:20000},async t=>{
+ const unknownRun={...run(),status:'blocked',statusReason:'model_receipt_unknown',unknown:1,actions:['abandon_unknown'],controlVersion:3,calls:{prepared:0,sending:0,succeeded:0,failed:0,unknown:1}};
+ let current=unknownRun;const abandoned=[];
+ await withPanel(t,async(method,input)=>{
+  if(method==='readCurrent')return {connectionGeneration:2,run:current};
+  if(method==='abandonUnknown'){abandoned.push(input);current={...unknownRun,statusReason:'later_stages_pending',unknown:0,actions:[],controlVersion:4,calls:{...unknownRun.calls,unknown:0,failed:1}};return {connectionGeneration:2,run:current};}
+ },async page=>{
+  const panel=page.getByRole('region',{name:'固定范围记忆处理'});
+  await panel.getByText('调用结果待核实',{exact:true}).waitFor();
+  assert.equal(await panel.getByRole('button',{name:'恢复本轮处理'}).count(),0,'只发布放弃动作时不显示继续');
+  await panel.getByText('费用仍记为未知',{exact:false}).waitFor();
+  await panel.getByRole('button',{name:'放弃未知调用并重试'}).click();
+  assert.equal(abandoned.length,0,'首次点击只进入确认');
+  await panel.getByRole('button',{name:'取消'}).click();
+  await panel.getByRole('button',{name:'放弃未知调用并重试'}).click();
+  await panel.getByRole('button',{name:'确认放弃并重试'}).click();
+  await panel.getByRole('button').first().waitFor({state:'detached'});
+  assert.equal(abandoned.length,1);
+  assert.equal(abandoned[0].runId,ids.run);assert.equal(abandoned[0].controlVersion,3);assert.equal(abandoned[0].connectionGeneration,2);
+  assert.match(abandoned[0].operationId,/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+ });
+});

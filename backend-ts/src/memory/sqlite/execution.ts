@@ -7,6 +7,7 @@ import {validateModelLedgerReceipt,type ModelLedgerReceipt} from '../../platform
 import type {ModelTaskClaim} from '../../platform/models/model-permit-server.ts';
 import {assertContribution,assertInputs,currentAttempt,inputRows,fail,textId} from './qualification.ts';
 import {applyControl,takeOverExpiredAttempt} from './control.ts';
+import {abandonUnknownAdjudication} from './unknown-recovery.ts';
 import {hasRunFollowupState,snapshot} from './runs.ts';
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>unknown):StorageAction=>({name:`memoryExtraction.${name}`,mode,retryBusy:mode==='write',execute} as StorageAction);
 const budgetNumbers=['input_tokens','max_output_tokens','context_window_tokens','safety_margin_tokens','serialized_bytes'] as const;
@@ -211,6 +212,16 @@ export const executionActions:StorageAction[]=[
   reconcile(tx,textId(input.ownerId),textId(input.runId));
   const applied=applyControl(tx,input);
   return {...snapshot(tx,applied.ownerId,applied.runId),replayed:applied.replayed};
+ }),
+ /** 用户放弃裁决类未知调用并重试：先释放占位，再按继续语义推进控制修订；原请求不重发。 */
+ action('abandonUnknown','write',(tx,raw)=>{
+  const input=raw as {ownerId:string;runId:string;actionVersion?:number;operationId?:string};
+  reconcile(tx,textId(input.ownerId),textId(input.runId));
+  abandonUnknownAdjudication(tx,input);
+  const applied=applyControl(tx,{ownerId:input.ownerId,runId:input.runId,action:'continue'});
+  // 运行态已是继续中时 continue 为空操作，仍须推进修订才能让重新裁决领取新尝试。
+  if(applied.replayed)tx.run('UPDATE processing_run SET intent_revision=intent_revision+1 WHERE owner_id=? AND id=?',[applied.ownerId,applied.runId]);
+  return {...snapshot(tx,applied.ownerId,applied.runId),replayed:false};
  }),
  action('settleRun','write',(tx,raw,lease)=>{
   const i=raw as {ownerId:string;runId:string;laterWork?:boolean};reconcile(tx,i.ownerId,i.runId);

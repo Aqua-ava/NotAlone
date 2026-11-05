@@ -136,7 +136,7 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string,conta
  // 只有整轮联系人及输入来源均属于当前联系人才可恢复，包含本轮相关本人整理；混合轮次仍不可从局部视图控制。
  const exclusiveContact=contactId!==undefined&&!tx.get("SELECT 1 FROM processing_task WHERE owner_id=? AND run_id=? AND scope_kind='contact' AND contact_id<>? LIMIT 1",[ownerId,runId,contactId])&&!tx.get("SELECT 1 FROM run_input WHERE owner_id=? AND run_id=? AND source_contact_id<>? LIMIT 1",[ownerId,runId,contactId]);
  const actions=contactId===undefined?control.actions:exclusiveContact
-  ?projectControl(tx,ownerId,storedRun,{taskStates,laterStages:laterStagesState(tx,ownerId,runId).state}).actions.filter(action=>action==='continue'):[];
+  ?projectControl(tx,ownerId,storedRun,{taskStates,laterStages:laterStagesState(tx,ownerId,runId).state}).actions.filter(action=>action==='continue'||action==='abandon_unknown'):[];
  const superseded=!!tx.get('SELECT 1 FROM processing_run WHERE owner_id=? AND start_request_key=?',[ownerId,`policy-recovery:${runId}`]);
  return {...result,...control,actions:superseded?[]:actions};
 }

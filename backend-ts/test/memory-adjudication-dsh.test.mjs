@@ -79,3 +79,10 @@ test('DSH结构化裁决：坏字段和错误候选索引在记账前被拒绝',
   /adjudication_model_output_invalid|extraction_arguments_invalid/);
  assert.equal(calls,1);
 });
+
+test('端口抛出的稳定错误码保留原因，无稳定码的异常才归为调用失败',async()=>{
+ const run=error=>new DshMemoryAdjudicationRuntime({batchKey:'cause',port:{call:async()=>{throw error;}}}).adjudicate([item],AbortSignal.timeout(1000));
+ await assert.rejects(run(Object.assign(new Error('占位冲突'),{code:'memory_adjudication_receipt_unknown'})),e=>e.code==='memory_adjudication_receipt_unknown'&&e.cause.code==='memory_adjudication_receipt_unknown');
+ await assert.rejects(run(new Error('网络断开')),{code:'adjudication_model_call_failed'});
+ await assert.rejects(run(Object.assign(new Error('含空格'),{code:'Some Message With Spaces'})),{code:'adjudication_model_call_failed'});
+});

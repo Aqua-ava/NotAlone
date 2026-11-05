@@ -51,7 +51,7 @@ function scope(value: Record<string, unknown>) {
 }
 const runStates = ['pending', 'running', 'paused', 'failed', 'incomplete', 'revoked', 'completed'];
 const statuses = ['waiting', 'processing', 'paused', 'blocked', 'completed'];
-const controlActions = ['pause', 'continue'];
+const controlActions = ['pause', 'continue', 'abandon_unknown'];
 const reasonCode = /^[a-z][a-z0-9_]{0,63}$/;
 const callStates = ['prepared', 'sending', 'succeeded', 'failed', 'unknown'];
 export function readFixedProcessingRun(raw: unknown): FixedProcessingRun | null {
@@ -231,7 +231,7 @@ export class FixedMemoryProcessingController {
     const value = this.generation(input, ['requestKey', 'connectionGeneration']), requestKey = id(value.requestKey);
     return this.view(await this.request('/api/memory-processing/runs', 'POST', { request_key: requestKey }, value.connectionGeneration as number));
   }
-  async control(action: 'pause' | 'continue', input: FixedProcessingControl): Promise<FixedProcessingView> {
+  async control(action: 'pause' | 'continue' | 'abandon-unknown', input: FixedProcessingControl): Promise<FixedProcessingView> {
     const value = this.generation(input, ['runId', 'controlVersion', 'operationId', 'connectionGeneration']), runId = id(value.runId);
     const actionVersion = count(value.controlVersion);
     const view = this.view(await this.request(`/api/memory-processing/runs/${runId}/${action}`, 'POST',
@@ -269,7 +269,7 @@ export function installFixedMemoryProcessingBridge(commands: PageCommands, backe
   commands.handle('memory:fixed-processing-history-start',(...args)=>{
     if(args.length!==1)throw invalid();return controller.startHistory(args[0] as FixedProcessingHistoryStart);
   },'manager');
-  for (const action of ['pause', 'continue'] as const) commands.handle(`memory:fixed-processing-${action}`, (...args) => {
+  for (const action of ['pause', 'continue', 'abandon-unknown'] as const) commands.handle(`memory:fixed-processing-${action}`, (...args) => {
     if (args.length !== 1) throw invalid(); return controller.control(action, args[0] as FixedProcessingControl);
   }, 'manager');
   commands.handle('memory:fixed-processing-trace', (...args) => {

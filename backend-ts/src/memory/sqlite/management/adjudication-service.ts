@@ -6,6 +6,13 @@ import {DshMemoryAdjudicationRuntime,type StructuredAdjudicationCallInput} from 
 import type {SqliteAdjudicationModelPort,SqliteAdjudicationModelRequest} from './model-port.ts';
 import {requiresMultimodalRelationReview,type AdjudicationClaim} from './adjudication-actions.ts';
 import {SqliteMemoryManagement} from './service.ts';
+/** 只取供应商失败的稳定分类（名称、码、HTTP 状态），不带上游消息、cause 或请求标识。 */
+function providerFailureOf(error:unknown):{name:string;code:string;status?:number}|undefined {
+ const source=(error as {cause?:{provider_failure?:unknown}}|null)?.cause?.provider_failure??(error as {provider_failure?:unknown}|null)?.provider_failure;
+ const v=source as {name?:unknown;code?:unknown;status?:unknown}|null|undefined;
+ if(!v||typeof v!=='object'||typeof v.name!=='string'||typeof v.code!=='string')return undefined;
+ return {name:v.name,code:v.code,...(typeof v.status==='number'?{status:v.status}:{})};
+}
 export class SqliteMemoryAdjudication {
  private readonly stopped=new AbortController();private pending=new Set<Promise<unknown>>();private active=new Map<string,Promise<unknown>>();private closing?:Promise<void>;
  private storage:SqliteStorage;readonly ownerId:string;private port:SqliteAdjudicationModelPort|undefined;private holders:ActiveHolders;
@@ -22,7 +29,12 @@ export class SqliteMemoryAdjudication {
    if(this.stopped.signal.aborted)break;
    let first:AdjudicationClaim|null;
    try{first=await this.storage.execute('memoryAdjudication.claim',{ownerId:this.ownerId,candidateId});}
-   catch(error){if(error instanceof StorageFailure&&['memory_candidate_stale','memory_source_stale','memory_extraction_scope_stale','memory_extraction_source_stale','memory_extraction_output_not_eligible'].includes(error.code))continue;throw error;}
+   catch(error){
+    if(error instanceof StorageFailure&&['memory_candidate_stale','memory_source_stale','memory_extraction_scope_stale','memory_extraction_source_stale','memory_extraction_output_not_eligible'].includes(error.code))continue;
+    // 未知回执尚未核实：本轮裁决整体停止，不再为其余候选制造注定失败的尝试；候选保持待处理。
+    if(error instanceof StorageFailure&&error.code==='memory_adjudication_receipt_unknown')break;
+    throw error;
+   }
    if(!first)continue;
    const claims=[first],controller=new AbortController(),signal=AbortSignal.any([controller.signal,this.stopped.signal]);
    let done!:()=>void;const drained=new Promise<void>(r=>done=r);const releases:(()=>Promise<void>)[]=[];
@@ -47,7 +59,8 @@ export class SqliteMemoryAdjudication {
     signal.throwIfAborted();results.push(await this.storage.execute('memoryAdjudication.finish',{ownerId:this.ownerId,attemptIds:claims.map(c=>c.attemptId)}));
    }catch(error){
     const code=typeof (error as any)?.code==='string'?(error as any).code:'memory_adjudication_failed';
-    await this.storage.execute('memoryAdjudication.fail',{ownerId:this.ownerId,attemptIds:claims.map(c=>c.attemptId),code});
+    const providerFailure=providerFailureOf(error);
+    await this.storage.execute('memoryAdjudication.fail',{ownerId:this.ownerId,attemptIds:claims.map(c=>c.attemptId),code,...(providerFailure?{providerFailure}:{})});
     if(code==='adjudication_model_unconfigured')break;
    }finally{done();await Promise.all(releases.map(release=>release()));}
   }

@@ -2,7 +2,8 @@
 export type FixedProcessingRunState = 'pending' | 'running' | 'paused' | 'failed' | 'incomplete' | 'revoked' | 'completed';
 /** 统一轮次状态：待处理、处理中、暂停、受阻、完成；历史失败不得冒充当前状态。 */
 export type FixedProcessingStatus = 'waiting' | 'processing' | 'paused' | 'blocked' | 'completed';
-export type FixedProcessingControlAction = 'pause' | 'continue';
+/** abandon_unknown 仅在裁决类未知回执时由后端发布；执行后账本成本仍记为未知。 */
+export type FixedProcessingControlAction = 'pause' | 'continue' | 'abandon_unknown';
 export interface FixedProcessingCallSummary {
   prepared: number; sending: number; succeeded: number; failed: number; unknown: number;
 }
@@ -65,6 +66,7 @@ export interface FixedMemoryProcessingBridge {
   startHistory(request: FixedProcessingHistoryStart): Promise<FixedProcessingHistoryResult>;
   pause(request: FixedProcessingControl): Promise<FixedProcessingView>;
   continue(request: FixedProcessingControl): Promise<FixedProcessingView>;
+  abandonUnknown(request: FixedProcessingControl): Promise<FixedProcessingView>;
   trace(request: FixedProcessingTraceRequest): Promise<FixedProcessingTrace>;
   release(): Promise<void>;
   onInvalidated(listener: () => void): () => void;

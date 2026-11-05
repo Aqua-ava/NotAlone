@@ -1,10 +1,13 @@
 import type {StorageRow,StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import {assertTaskContributions,fail,textId} from './qualification.ts';
 import {setRunSchedulePaused,resumeRunSchedule} from './documents/later-schedule.ts';
+import {abandonableUnknown} from './unknown-recovery.ts';
 
 /** 轮次控制投影：只读派生，不新增业务状态，也不把数量换算成百分比。 */
 export type ControlStatus='waiting'|'processing'|'paused'|'blocked'|'completed';
 export type ControlAction='pause'|'continue';
+/** 投影可提供的动作；abandon_unknown 仅用于裁决类未知回执，由专用入口执行。 */
+export type ProjectedControlAction=ControlAction|'abandon_unknown';
 export type LaterStagesState='pending'|'scheduled'|'running'|'unknown'|'completed'|'failed'|'revoked';
 
 /** 通用模型配置故障；单人资料失败不在其中，不能据此暂停整轮。 */
@@ -25,7 +28,7 @@ export const isSharedFailure=(code:unknown):boolean=>typeof code==='string'&&sha
 
 export interface ControlCallSummary {prepared:number;sending:number;succeeded:number;failed:number;unknown:number}
 export interface ControlProjection {
- status:ControlStatus;statusReason:string|null;actions:ControlAction[];controlVersion:number;
+ status:ControlStatus;statusReason:string|null;actions:ProjectedControlAction[];controlVersion:number;
  pending:number;revoked:number;sharedFaultCode:string|null;calls:ControlCallSummary;
 }
 export interface ControlInput {ownerId:string;runId:string;action:ControlAction;actionVersion?:number;operationId?:string}
@@ -136,10 +139,11 @@ export function projectControl(tx:StorageTransaction,ownerId:string,run:StorageR
  const controlVersion=count(run.intent_revision);
  const base={controlVersion,pending:classes.pending,revoked:classes.revoked,sharedFaultCode:sharedFault,calls:callsSummary};
  if(state==='revoked')return {...base,status:'blocked',statusReason:'run_revoked',actions:[]};
- if(laterStages==='unknown')return {...base,status:'blocked',statusReason:'model_receipt_unknown',actions:[]};
+ const abandon:ProjectedControlAction[]=(laterStages==='unknown'||anyUnknown)&&abandonableUnknown(tx,ownerId,runId)?['abandon_unknown']:[];
+ if(laterStages==='unknown')return {...base,status:'blocked',statusReason:'model_receipt_unknown',actions:abandon};
  if(laterStages==='completed'&&(pauseRequested||state==='paused'))return {...base,status:'paused',statusReason:null,actions:['continue']};
  if(state==='completed'||laterStages==='completed')return {...base,status:'completed',statusReason:null,actions:[]};
- if(anyUnknown)return {...base,status:'blocked',statusReason:'model_receipt_unknown',actions:retryable?['continue']:[]};
+ if(anyUnknown)return {...base,status:'blocked',statusReason:'model_receipt_unknown',actions:[...(retryable?['continue' as const]:[]),...abandon]};
  if(interruptedKnown)return {...base,status:'blocked',statusReason:'interrupted_known_receipts',actions:['continue']};
  if(sharedFault)return {...base,status:'blocked',statusReason:sharedFault,actions:retryable?['continue']:[]};
  if(!taskRows.length)return {...base,status:'blocked',statusReason:'no_pending_inputs',actions:[]};

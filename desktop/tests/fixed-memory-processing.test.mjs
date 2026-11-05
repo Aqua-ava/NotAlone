@@ -89,6 +89,20 @@ test('控制动作携带控制修订与操作标识，旧版本不覆盖并撤�
  await assert.rejects(f.controller.control('continue',{runId:ids.run,controlVersion:0,operationId:'not-a-uuid',connectionGeneration:1}));
 });
 
+test('放弃未知调用走独立路径并接受后端发布的 abandon_unknown，非法动作名拒绝',async t=>{
+ const operation='66666666-6666-4666-8666-666666666666';
+ let data={...snapshot(),state:'failed',succeeded:0,status:'blocked',statusReason:'model_receipt_unknown',unknown:1,actions:['abandon_unknown'],controlVersion:2,pending:0,calls:{prepared:0,sending:0,succeeded:0,failed:0,unknown:1}};
+ const f=await fixture(t,async req=>{
+  if(req.path.endsWith('/abandon-unknown')){assert.deepEqual(req.body,{action_version:2,operation_id:operation});data={...data,statusReason:'later_stages_pending',unknown:0,actions:[],controlVersion:3,calls:{...data.calls,unknown:0,failed:1}};}
+  return data;
+ });
+ assert.deepEqual((await f.controller.read()).run.actions,['abandon_unknown']);
+ const view=await f.controller.control('abandon-unknown',{runId:ids.run,controlVersion:2,operationId:operation,connectionGeneration:1});
+ assert.equal(f.calls.at(-1).method,'POST');assert.equal(f.calls.at(-1).path,`/api/memory-processing/runs/${ids.run}/abandon-unknown`);
+ assert.equal(view.run.controlVersion,3);assert.deepEqual(view.run.actions,[]);
+ data={...data,actions:['abandon_all']};await assert.rejects(f.controller.read());
+});
+
 test('共用故障原因码可展示，非法原因码拒绝且不撤下正在显示的原因',async t=>{
  let data={...snapshot(),sharedFaultCode:'document_model_unconfigured'};
  const f=await fixture(t,async()=>data);

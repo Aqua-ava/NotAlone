@@ -23,6 +23,12 @@ export const registry={...base,actions:[...base.actions,versionClosurePlans,{
    eventInputs:tx.all("SELECT e.kind AS event_kind,i.event_id,i.input_no,i.planned_step_id,i.planned_input_no,s.kind,s.candidate_id,s.memory_id,s.source_contact_id,s.message_id,s.record_id FROM execution_input i JOIN execution_event e ON e.owner_id=i.owner_id AND e.id=i.event_id JOIN step_input s ON s.owner_id=i.owner_id AND s.step_id=i.planned_step_id AND s.input_no=i.planned_input_no WHERE i.owner_id=? AND e.kind IN ('adjudication_basis','adjudication_input','adjudication_output') ORDER BY i.event_id,i.input_no",[ownerId]),
    decisions:tx.all('SELECT * FROM memory_decision WHERE owner_id=? ORDER BY rowid',[ownerId]),
    memories:tx.all('SELECT * FROM memory WHERE owner_id=? ORDER BY id',[ownerId]),
+   items:tx.all('SELECT effect_kind,state,count(*) AS n FROM operation_item WHERE owner_id=? GROUP BY effect_kind,state ORDER BY effect_kind,state',[ownerId]),
   };
+ },
+},{
+ // 状态注入：把提取核验步骤置为 unknown，用来验证放弃动作只处理裁决类未知。
+ name:'fixture.markExtractionStepUnknown',mode:'write',retryBusy:false,execute(tx,{ownerId,runId}){
+  return tx.run("UPDATE processing_step SET state='unknown' WHERE owner_id=? AND kind='extraction_verification' AND id=(SELECT s.id FROM processing_step s JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE s.owner_id=? AND t.run_id=? AND s.kind='extraction_verification' ORDER BY s.step_no LIMIT 1)",[ownerId,ownerId,runId]);
  },
 }]};

@@ -22,6 +22,19 @@ const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value,(
 interface Basis {pageIndex:number;candidateId:string;candidateRevision:string;runId:string;taskId:string;scopeKind:'self'|'contact';contactId:string|null;memoryRevision:string;intentRevision:string;item:AdjudicationItem;parents:{id:string;versionNo:string;headRevision:string;protected:boolean}[];}
 export interface AdjudicationClaim {attemptId:string;stepId:string;basis:Basis;claim:ModelTaskClaim;}
 const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>unknown):StorageAction=>({name:`memoryAdjudication.${name}`,mode,retryBusy:mode==='write',execute} as StorageAction);
+/** 本任务目标资料是否仍被未知回执的裁决类调用占位；占位按整轮目标资料登记，与具体候选无关。 */
+function unknownOccupancy(tx:StorageTransaction,ownerId:string,taskId:string):boolean {
+ return !!tx.get(`SELECT 1 FROM task_contribution t JOIN run_input i ON i.owner_id=t.owner_id AND i.run_id=t.run_id AND i.source_contact_id=t.source_contact_id AND i.role='target'
+  JOIN operation_item oi ON oi.owner_id=i.owner_id AND oi.item_id=i.item_id AND oi.state='unknown' AND oi.effect_kind IN ('adjudication','relation_verification','merge_verification')
+  WHERE t.owner_id=? AND t.task_id=? LIMIT 1`,[ownerId,taskId]);
+}
+/** 失败事件只保留供应商失败的稳定分类；形状不符时直接忽略，不让诊断信息阻断失败收尾。 */
+function failureProvider(value:unknown):{name:string;code:string;status?:number}|undefined {
+ const v=value as {name?:unknown;code?:unknown;status?:unknown}|null|undefined;
+ if(!v||typeof v!=='object'||(v.name!=='LlmError'&&v.name!=='LlmFailure')||typeof v.code!=='string'||!/^[A-Za-z0-9_.:-]{1,80}$/.test(v.code))return undefined;
+ const status=typeof v.status==='number'&&Number.isSafeInteger(v.status)&&v.status>=100&&v.status<=599?v.status:undefined;
+ return {name:v.name,code:v.code,...(status===undefined?{}:{status})};
+}
 function revision(tx:StorageTransaction,ownerId:string,scopeKind:string,contactId:string|null):bigint {
  const r=scopeKind==='self'?tx.get('SELECT memory_revision FROM owner WHERE owner_id=?',[ownerId]):tx.get('SELECT memory_revision FROM contact WHERE owner_id=? AND id=?',[ownerId,contactId]);
  return r?.memory_revision as bigint??fail('memory_scope_stale');
@@ -190,7 +203,10 @@ export const memoryAdjudicationActions:StorageAction[]=[
   const i=raw as {ownerId:string;candidateId:string};id(i.ownerId);id(i.candidateId);
   const prior=tx.all(`SELECT s.state,e.payload FROM step_input i JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id JOIN execution_event e ON e.owner_id=a.owner_id AND e.step_attempt_id=a.id AND e.kind='adjudication_basis' WHERE i.owner_id=? AND i.candidate_id=? AND s.kind='adjudication' ORDER BY s.step_no DESC`,[i.ownerId,i.candidateId]);
   if(prior.some(p=>p.state==='running'||p.state==='unknown'))return null;
-  try{const basis=freeze(tx,i.ownerId,i.candidateId);if(prior.length&&BigInt(basis.intentRevision)<=BigInt((JSON.parse(String(prior[0]!.payload)) as Basis).intentRevision))return null;return makeStep(tx,i.ownerId,basis,'adjudication',lease);} catch(error){if(error instanceof StorageFailure&&['memory_conditions_pending','memory_verification_pending','memory_withdrawn_scope_pending','memory_adjudication_pool_limit','memory_adjudication_paused'].includes(error.code))return null;throw error;}
+  try{const basis=freeze(tx,i.ownerId,i.candidateId);if(prior.length&&BigInt(basis.intentRevision)<=BigInt((JSON.parse(String(prior[0]!.payload)) as Basis).intentRevision))return null;
+  // 同一任务的目标资料已被未知裁决调用占位：继续领取只会在建调用前撞唯一索引，改为明确停止。
+  if(unknownOccupancy(tx,i.ownerId,basis.taskId))fail('memory_adjudication_receipt_unknown');
+  return makeStep(tx,i.ownerId,basis,'adjudication',lease);} catch(error){if(error instanceof StorageFailure&&['memory_conditions_pending','memory_verification_pending','memory_withdrawn_scope_pending','memory_adjudication_pool_limit','memory_adjudication_paused'].includes(error.code))return null;throw error;}
  }),
  act('stage','write',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string;purpose:SqliteAdjudicationModelPurpose;pageIndex:number};if(!purposes.includes(i.purpose)||!Number.isSafeInteger(i.pageIndex)||i.pageIndex<0)fail('memory_adjudication_purpose_invalid');const {basis}=current(tx,i.ownerId,i.attemptId,lease);if(i.pageIndex>=Math.max(1,Math.ceil(basis.item.similar.length/8)))fail('memory_adjudication_purpose_invalid');return makeStep(tx,i.ownerId,{...basis,pageIndex:i.pageIndex},i.purpose,lease);}),
  act('holders','read',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string};const {attempt}=current(tx,i.ownerId,i.attemptId,lease);return tx.all("SELECT c.id AS contactId,c.data_generation AS generation FROM step_input i JOIN contact c ON c.owner_id=i.owner_id AND c.id=i.source_contact_id WHERE i.owner_id=? AND i.step_id=? AND i.kind='message' UNION SELECT c.id AS contactId,c.data_generation AS generation FROM task_contribution tc JOIN contact c ON c.owner_id=tc.owner_id AND c.id=tc.source_contact_id WHERE tc.owner_id=? AND tc.task_id=?",[i.ownerId,attempt.step_id,i.ownerId,attempt.task_id]).map(r=>({contactId:String(r.contactId),generation:String(r.generation)}));}),
@@ -217,8 +233,8 @@ export const memoryAdjudicationActions:StorageAction[]=[
  act('output','write',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string;callId:string;blocks:readonly unknown[]};current(tx,i.ownerId,i.attemptId,lease);if(!tx.get("SELECT 1 FROM model_call WHERE owner_id=? AND id=? AND step_attempt_id=? AND state='succeeded'",[i.ownerId,i.callId,i.attemptId]))fail('memory_adjudication_output_unbound');const eventId=record(tx,i.ownerId,i.attemptId,'adjudication_output',{blocks:i.blocks},i.callId,false,true);for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='released' WHERE owner_id=? AND operation_id=(SELECT operation_id FROM model_call WHERE owner_id=? AND id=?)`,[i.ownerId,i.ownerId,i.callId]);return eventId;}),
  act('finish','write',finish),
  act('fail','write',(tx,raw)=>{
-  const i=raw as {ownerId:string;attemptIds:string[];code:string};for(const attemptId of i.attemptIds){const a=tx.get("SELECT step_id,state FROM step_attempt WHERE owner_id=? AND id=? AND state IN ('running','aborted')",[i.ownerId,attemptId]);if(!a)continue;
-   if(a.state==='running'&&!tx.get("SELECT 1 FROM model_operation WHERE owner_id=? AND memory_step_id=? AND state='sealed'",[i.ownerId,a.step_id]))record(tx,i.ownerId,attemptId,'adjudication_failure',{code:id(i.code)});
+  const i=raw as {ownerId:string;attemptIds:string[];code:string;providerFailure?:unknown},provider=failureProvider(i.providerFailure);for(const attemptId of i.attemptIds){const a=tx.get("SELECT step_id,state FROM step_attempt WHERE owner_id=? AND id=? AND state IN ('running','aborted')",[i.ownerId,attemptId]);if(!a)continue;
+   if(a.state==='running'&&!tx.get("SELECT 1 FROM model_operation WHERE owner_id=? AND memory_step_id=? AND state='sealed'",[i.ownerId,a.step_id]))record(tx,i.ownerId,attemptId,'adjudication_failure',{code:id(i.code),...(provider?{provider_failure:provider}:{})});
    tx.run("UPDATE model_call SET state='unknown',settlement_state='unknown' WHERE owner_id=? AND step_attempt_id=? AND state='sending'",[i.ownerId,attemptId]);tx.run("UPDATE model_call SET state='failed',settlement_state='settled',error_code='not_dispatched' WHERE owner_id=? AND step_attempt_id=? AND state='prepared'",[i.ownerId,attemptId]);
    const unknown=!!tx.get("SELECT 1 FROM model_call WHERE owner_id=? AND step_attempt_id=? AND state='unknown'",[i.ownerId,attemptId]);
    for(const o of tx.all('SELECT operation_id,state FROM model_call WHERE owner_id=? AND step_attempt_id=?',[i.ownerId,attemptId])){tx.run("UPDATE model_operation SET state=? WHERE owner_id=? AND id=? AND state<>'sealed'",[o.state==='unknown'?'unknown':'failed',i.ownerId,o.operation_id]);for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state=? WHERE owner_id=? AND operation_id=?`,[o.state==='unknown'?'unknown':'released',i.ownerId,o.operation_id]);}

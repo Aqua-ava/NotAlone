@@ -243,8 +243,14 @@ export class DshMemoryAdjudicationRuntime implements AdjudicationRuntime {
  private async call(input:StructuredAdjudicationCallInput):Promise<StructuredAdjudicationCallResult>{
   input.signal.throwIfAborted();
   try{return await this.port.call(input);}
-  catch(error){if(error instanceof AdjudicationModelError)throw error;throw new AdjudicationModelError('adjudication_model_call_failed',error);}
+  catch(error){if(error instanceof AdjudicationModelError)throw error;throw new AdjudicationModelError(callFailureCode(error),error);}
  }
+}
+const stableCode=/^[a-z][a-z0-9_]{2,95}$/;
+/** 端口抛出的稳定错误码（存储、许可、占位、供应商）原样保留；只有无稳定码的异常才归为调用失败。 */
+function callFailureCode(error:unknown):string{
+ const code=(error as {code?:unknown}|null)?.code;
+ return typeof code==='string'&&stableCode.test(code)?code:'adjudication_model_call_failed';
 }
 function relationsOnlyPrompt():string{
  return '判断拟合并正文是否得到全部给定来源的逐字支持。只输出结构化核验，不重写正文；任何新增、主体错置、否定反转、条件丢失或旧事实误当现状均返回 supported=false。';

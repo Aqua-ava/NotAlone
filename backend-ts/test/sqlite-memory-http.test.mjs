@@ -66,3 +66,18 @@ test('联系人历史只有显式POST才启动，严格请求范围且重复同�
  const mismatch=await post(b,{request_key:key});assert.equal(mismatch.status,409);assert.equal((await mismatch.json()).error,'memory_extraction_request_scope_mismatch');
  assert.equal((await (await fetch(`${base}/${b}/current`,{headers})).json()).run,null);assert.equal(port.calls,1);
 });
+
+test('放弃未知调用路由只接受固定版本与操作标识，其余请求拒绝',async t=>{
+ const calls=[],service={abandonUnknown:async(...args)=>{calls.push(args);return {runId:args[0],ok:true};}};
+ const handler=new SqliteMemoryExtractionHttp(service,req=>authorizeSqliteRequest(req,'synthetic-abandon-token'));
+ const server=createServer(async(req,res)=>{if(!await handler.handle(req,res)){res.writeHead(404);res.end();}});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const run=randomUUID(),operation=randomUUID(),url=`http://127.0.0.1:${server.address().port}/api/memory-processing/runs/${run}/abandon-unknown`;
+ const headers={authorization:'Bearer synthetic-abandon-token','content-type':'application/json'};
+ assert.equal((await fetch(url,{method:'POST',body:JSON.stringify({action_version:2,operation_id:operation})})).status,401);
+ assert.equal((await fetch(url,{headers})).status,400,'只接受 POST');
+ assert.equal((await fetch(url,{method:'POST',headers,body:JSON.stringify({action_version:2})})).status,400);
+ assert.equal((await fetch(url,{method:'POST',headers,body:JSON.stringify({action_version:2,operation_id:operation,owner_id:randomUUID()})})).status,400,'不接受额外字段');
+ assert.equal(calls.length,0);
+ const ok=await fetch(url,{method:'POST',headers,body:JSON.stringify({action_version:2,operation_id:operation})});
+ assert.equal(ok.status,200);assert.deepEqual(calls,[[run,2,operation]]);
+});

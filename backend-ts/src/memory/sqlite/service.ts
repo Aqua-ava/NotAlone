@@ -213,6 +213,12 @@ export class SqliteMemoryExtraction {
   }
   const run=await this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'continue',actionVersion,operationId});this.launch(runId);return run;
  });}
+ /** 用户放弃裁决类未知调用后重试：账本成本仍记未知，原请求不重发；其余候选重新裁决。 */
+ async abandonUnknown(runId:string,actionVersion:number,operationId:string){return this.admit(async()=>{
+  await this.initialize();this.available();this.requireAutomatic();
+  const run=await this.storage.execute<any>('memoryExtraction.abandonUnknown',{ownerId:this.ownerId,runId,actionVersion,operationId});
+  this.launch(runId);return run;
+ });}
  private launch(runId:string){if(this.runs.has(runId)||this.stopped||!this.automatic)return;const work=this.executeRun(runId).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});}
  async waitForIdle(runId?:string){if(runId!==undefined){await this.runs.get(runId);return;}await Promise.all([...this.runs.values()]);}
  private async executeRun(runId:string){

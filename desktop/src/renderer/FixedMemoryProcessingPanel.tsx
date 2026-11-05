@@ -69,26 +69,40 @@ function statusText(run: FixedProcessingRun | null, queue?: FixedProcessingQueue
 
 /** 只使用后端发布的恢复资格；回执后重新读取，不把接纳当作已完成。 */
 function RecoveryControl({bridge,view,onSettled}:{bridge:FixedMemoryProcessingBridge;view:FixedProcessingView;onSettled:()=>Promise<void>}) {
-  const [pending,setPending]=useState(false),[error,setError]=useState('');
-  const busy=useRef(false),alive=useRef(true),attempt=useRef<{version:number;id:string}|null>(null);
+  const [pending,setPending]=useState<'continue'|'abandon'|null>(null),[error,setError]=useState(''),[confirming,setConfirming]=useState(false);
+  const busy=useRef(false),alive=useRef(true),attempt=useRef<{kind:string;version:number;id:string}|null>(null);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
   const run=view.run;
-  if(!run || !run.actions.includes('continue') || !['blocked','paused'].includes(run.status))return null;
-  const recover=async()=>{
+  const canContinue=!!run&&run.actions.includes('continue')&&['blocked','paused'].includes(run.status);
+  const canAbandon=!!run&&run.actions.includes('abandon_unknown')&&run.status==='blocked';
+  if(!run||(!canContinue&&!canAbandon))return null;
+  const act=async(kind:'continue'|'abandon')=>{
     if(busy.current)return;
-    busy.current=true;setPending(true);setError('');
-    if(attempt.current?.version!==run.controlVersion)attempt.current={version:run.controlVersion,id:crypto.randomUUID()};
+    busy.current=true;setPending(kind);setError('');
+    if(attempt.current?.kind!==kind||attempt.current.version!==run.controlVersion)attempt.current={kind,version:run.controlVersion,id:crypto.randomUUID()};
+    const request={runId:run.runId,controlVersion:run.controlVersion,operationId:attempt.current.id,connectionGeneration:view.connectionGeneration};
     try{
-      await bridge.continue({runId:run.runId,controlVersion:run.controlVersion,operationId:attempt.current.id,connectionGeneration:view.connectionGeneration});
-      if(alive.current)attempt.current=null;
-    }catch{if(alive.current)setError('恢复结果暂未确认，请核对最新状态后重试。');}
+      await (kind==='continue'?bridge.continue(request):bridge.abandonUnknown(request));
+      if(alive.current){attempt.current=null;setConfirming(false);}
+    }catch{if(alive.current)setError(kind==='continue'?'恢复结果暂未确认，请核对最新状态后重试。':'放弃重试的结果暂未确认，请核对最新状态后重试。');}
     finally{
-      if(alive.current){await onSettled();if(alive.current){busy.current=false;setPending(false);}}
+      if(alive.current){await onSettled();if(alive.current){busy.current=false;setPending(null);}}
     }
   };
   return <div className="memory-processing-actions">
-    <button className="button primary" type="button" disabled={pending} onClick={()=>void recover()}>{pending?'正在恢复…':'恢复本轮处理'}</button>
-    <p className="memory-section-note">恢复本轮提取与相关本人资料整理；已完成内容会跳过。</p>
+    {canContinue&&<>
+      <button className="button primary" type="button" disabled={pending!==null} onClick={()=>void act('continue')}>{pending==='continue'?'正在恢复…':'恢复本轮处理'}</button>
+      <p className="memory-section-note">恢复本轮提取与相关本人资料整理；已完成内容会跳过。</p>
+    </>}
+    {canAbandon&&<>
+      <p className="memory-section-note">有一次整理调用已发出但结果无法确认，原请求不会自动重发。放弃后将重新整理相关候选，该次调用的费用仍记为未知，可能重复计费。</p>
+      {confirming
+        ?<>
+          <button className="button" type="button" disabled={pending!==null} onClick={()=>void act('abandon')}>{pending==='abandon'?'正在重试…':'确认放弃并重试'}</button>
+          <button className="button" type="button" disabled={pending!==null} onClick={()=>setConfirming(false)}>取消</button>
+        </>
+        :<button className="button" type="button" disabled={pending!==null} onClick={()=>setConfirming(true)}>放弃未知调用并重试</button>}
+    </>}
     {error&&<p role="alert">{error}</p>}
   </div>;
 }
