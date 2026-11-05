@@ -22,6 +22,16 @@ const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value,(
 interface Basis {pageIndex:number;candidateId:string;candidateRevision:string;runId:string;taskId:string;scopeKind:'self'|'contact';contactId:string|null;memoryRevision:string;intentRevision:string;item:AdjudicationItem;parents:{id:string;versionNo:string;headRevision:string;protected:boolean}[];}
 export interface AdjudicationClaim {attemptId:string;stepId:string;basis:Basis;claim:ModelTaskClaim;}
 const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>unknown):StorageAction=>({name:`memoryAdjudication.${name}`,mode,retryBusy:mode==='write',execute} as StorageAction);
+/** 候选最近一次已记录裁决结果所依据的冻结快照，与当前快照（忽略控制修订与分页）是否一致。 */
+function decidedWithSameBasis(tx:StorageTransaction,ownerId:string,candidateId:string,basis:Basis):boolean {
+ const prior=tx.get(`SELECT b.payload FROM execution_event r JOIN step_attempt a ON a.owner_id=r.owner_id AND a.id=r.step_attempt_id
+  JOIN step_input i ON i.owner_id=a.owner_id AND i.step_id=a.step_id AND i.candidate_id=?
+  JOIN execution_event b ON b.owner_id=a.owner_id AND b.step_attempt_id=a.id AND b.kind='adjudication_basis'
+  WHERE r.owner_id=? AND r.kind='adjudication_result' ORDER BY r.created_at DESC,r.rowid DESC LIMIT 1`,[candidateId,ownerId]);
+ if(!prior)return false;
+ const normalize=(value:Basis)=>digest({...value,intentRevision:'0',pageIndex:0});
+ return normalize(JSON.parse(String(prior.payload)) as Basis)===normalize(basis);
+}
 /** 本任务目标资料是否仍被未知回执的裁决类调用占位；占位按整轮目标资料登记，与具体候选无关。 */
 function unknownOccupancy(tx:StorageTransaction,ownerId:string,taskId:string):boolean {
  return !!tx.get(`SELECT 1 FROM task_contribution t JOIN run_input i ON i.owner_id=t.owner_id AND i.run_id=t.run_id AND i.source_contact_id=t.source_contact_id AND i.role='target'
@@ -208,6 +218,8 @@ export const memoryAdjudicationActions:StorageAction[]=[
   const prior=tx.all(`SELECT s.state,e.payload FROM step_input i JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id JOIN execution_event e ON e.owner_id=a.owner_id AND e.step_attempt_id=a.id AND e.kind='adjudication_basis' WHERE i.owner_id=? AND i.candidate_id=? AND s.kind='adjudication' ORDER BY s.step_no DESC`,[i.ownerId,i.candidateId]);
   if(prior.some(p=>p.state==='running'||p.state==='unknown'))return null;
   try{const basis=freeze(tx,i.ownerId,i.candidateId);if(prior.length&&BigInt(basis.intentRevision)<=BigInt((JSON.parse(String(prior[0]!.payload)) as Basis).intentRevision))return null;
+  // 已有完成裁决且依据（候选、同范围记忆版本、对比池）完全未变：控制修订推进（继续／放弃重试）不重复发送模型请求。
+  if(prior.length&&decidedWithSameBasis(tx,i.ownerId,i.candidateId,basis))return null;
   // 同一任务的目标资料已被未知裁决调用占位：继续领取只会在建调用前撞唯一索引，改为明确停止。
   if(unknownOccupancy(tx,i.ownerId,basis.taskId))fail('memory_adjudication_receipt_unknown');
   return makeStep(tx,i.ownerId,basis,'adjudication',lease);} catch(error){if(error instanceof StorageFailure&&['memory_conditions_pending','memory_verification_pending','memory_withdrawn_scope_pending','memory_adjudication_pool_limit','memory_adjudication_paused'].includes(error.code))return null;throw error;}

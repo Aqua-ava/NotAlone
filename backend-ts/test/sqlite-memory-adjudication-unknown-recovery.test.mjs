@@ -74,3 +74,27 @@ test('失败原因保留稳定错误码与供应商失败快照，不带上游�
  const event=trace.events.find(e=>e.kind==='adjudication_failure');
  assert.deepEqual(event.payload,{code:'extraction_model_call_failed',provider_failure:{name:'LlmError',code:'http_error',status:503}});
 });
+
+test('已成功裁决且依据未变的候选，控制修订推进后不重复裁决；依据变化才重新裁决',async t=>{
+ const f=await adjudicationFixture(t);
+ await f.extract(['我长期保留合成事项1。'],{publish:true});
+ const first=(await f.read()).memories[0];
+ await f.management.decide({requestKey:'withdraw-for-rerun',action:'withdraw',memoryId:first.id,expectedVersionNo:'1',expectedHeadRevision:first.headRevision});
+ f.setRespond(adjudicationSupplier({action:'update',select:parents=>parents.filter(p=>p.memory_id===first.id)}));
+ const runId=await f.extract(['我声称要改变旧事项。']);await f.adjudication.publishRun(runId);
+ assert.ok((await f.read()).candidates.some(c=>c.state==='pending'),'前置：候选因保护停在待处理');
+ const callsBefore=f.calls.length,stepsBefore=adjudicationSteps(await f.trace()).length;
+ assert.ok(callsBefore>0);
+ // 用真实控制动作推进整轮修订：暂停后继续。
+ const paused=await f.extraction.pause(runId,(await f.extraction.read(runId)).controlVersion,randomUUID());
+ await f.extraction.continue(runId,paused.controlVersion,randomUUID());await f.extraction.waitForIdle(runId);
+ await f.adjudication.publishRun(runId);
+ assert.equal(f.calls.length,callsBefore,'依据未变，不得重复发送模型请求');
+ assert.equal(adjudicationSteps(await f.trace()).length,stepsBefore,'不新增裁决尝试');
+ // 同范围记忆发生变化后依据即不同，必须重新裁决。
+ await f.management.decide({requestKey:'manual-after-decision',action:'manual',scope:f.scope,body:'依据变化后新增的人工资料'});
+ const again=await f.extraction.pause(runId,(await f.extraction.read(runId)).controlVersion,randomUUID());
+ await f.extraction.continue(runId,again.controlVersion,randomUUID());await f.extraction.waitForIdle(runId);
+ await f.adjudication.publishRun(runId);
+ assert.ok(f.calls.length>callsBefore,'依据变化后应重新裁决');
+});
