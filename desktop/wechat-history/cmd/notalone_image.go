@@ -1258,24 +1258,18 @@ func (h *notaloneHistorySession) readMessageImage(ctx context.Context, message n
 		record   notaloneImageResourceDetail
 		matching []notaloneImageResourceDetail
 	}
-	var verified []verifiedCandidate
+	var selected *verifiedCandidate
 	var foundCandidate, foundAssociation, associationUnverified, qualityUnverified, keyUnavailable bool
 	var decoderFailure string
 	for _, suffixes := range [][]string{{".dat", "_h.dat"}, {"_t.dat"}} {
 		for _, suffix := range suffixes {
 			if err := ctx.Err(); err != nil {
-				for _, candidate := range verified {
-					_ = candidate.guard.Close()
-				}
 				return nil, "", nil, emptyProof, "", notaloneFailure("history_image_read_failed")
 			}
 			candidate := filepath.Join(baseDir, resource.CacheMD5+suffix)
 			guard, resolved, err := h.guardImageCandidate(candidate)
 			if err != nil {
 				if err.Error() == "history_image_source_changed" {
-					for _, candidate := range verified {
-						_ = candidate.guard.Close()
-					}
 					return nil, "", nil, emptyProof, "", err
 				}
 				continue
@@ -1286,9 +1280,6 @@ func (h *notaloneHistorySession) readMessageImage(ctx context.Context, message n
 				_ = guard.Close()
 				switch err.Error() {
 				case "history_image_source_changed", "history_image_read_failed":
-					for _, candidate := range verified {
-						_ = candidate.guard.Close()
-					}
 					return nil, "", nil, emptyProof, "", err
 				case "history_image_local_file_missing":
 					foundCandidate = false
@@ -1343,9 +1334,6 @@ func (h *notaloneHistorySession) readMessageImage(ctx context.Context, message n
 			}
 			if guard.Check() != nil {
 				_ = guard.Close()
-				for _, candidate := range verified {
-					_ = candidate.guard.Close()
-				}
 				return nil, "", nil, emptyProof, "", notaloneFailure("history_image_source_changed")
 			}
 			proof.SourceVariant = "main"
@@ -1370,29 +1358,18 @@ func (h *notaloneHistorySession) readMessageImage(ctx context.Context, message n
 				proof.OriginalProof.MatchingResourceIDs = append([]string(nil), proof.MatchingResourceIDs...)
 				proof.OriginalProof.ResourceSize = proof.ResourceSize
 			}
-			verified = append(verified, verifiedCandidate{data: viewable, envelope: envelope, guard: guard, proof: proof,
-				mimeType: mimeType, record: matching[0], matching: matching})
+			// 标准图与高清图各自独立核验并可能解码出不同内容；按 .dat、_h.dat 的顺序取第一张核验通过的，
+			// 不比较内容、不因并存失败，也不再读取后面的候选。
+			selected = &verifiedCandidate{data: viewable, envelope: envelope, guard: guard, proof: proof,
+				mimeType: mimeType, record: matching[0], matching: matching}
+			break
 		}
-		// 继续检查同级别的别名以发现冲突。已有合法非缩略图候选时不读取缩略图。
-		if len(verified) > 0 {
+		// 已有标准图或高清图时不读取缩略图；二者都不可用才进入缩略图档。
+		if selected != nil {
 			break
 		}
 	}
-	if len(verified) > 1 {
-		for _, candidate := range verified[1:] {
-			if !bytes.Equal(verified[0].data, candidate.data) {
-				for _, accepted := range verified {
-					_ = accepted.guard.Close()
-				}
-				return nil, "", nil, emptyProof, "", notaloneFailure("history_image_quality_unverified")
-			}
-		}
-	}
-	if len(verified) > 0 {
-		selected := verified[0]
-		for _, candidate := range verified[1:] {
-			_ = candidate.guard.Close()
-		}
+	if selected != nil {
 		resource.ID, resource.TypeRaw, resource.Size, resource.Status = selected.record.ID, selected.record.TypeRaw, selected.record.Size, selected.record.Status
 		resource.DataIndex, resource.CreateTime, resource.AccessTime = selected.record.DataIndex, selected.record.CreateTime, selected.record.AccessTime
 		resource.PackedInfoLength, resource.PackedInfoSHA256 = selected.record.PackedInfoLength, selected.record.PackedInfoSHA256

@@ -168,3 +168,4 @@
 - [ADR-168：受管文件身份不含系统设备号](168-managed-file-identity-without-device.md)
 - [ADR-169：记忆只带入确认不是缩略图的图片](169-memory-uses-confirmed-non-thumbnail-images.md)
 - [ADR-170：不保存缩略图，取消原图分类机制](170-no-thumbnail-storage-and-no-original-classification.md)
+- [ADR-171：同一张图有标准图和高清图时取一张保存，不再比较内容](171-image-pick-standard-over-high-definition.md)

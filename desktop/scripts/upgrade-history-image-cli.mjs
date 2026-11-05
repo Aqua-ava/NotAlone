@@ -450,6 +450,33 @@ const resumableHistoryPolicy=Object.freeze({
   "identityAlgorithmSha256": "c836c97211347b069c7896eb4bfb24cc6ad85843595f05b02b87a98050b23a27"
 });
 
+// 同一张图标准图与高清图并存时取第一张核验通过的（标准图优先），不再比较内容（ADR-171）。
+// 新旧源码只差图片读取与其测试；五个来源身份文件逐字不变，故以旧制品的最终摘要为基准且无来源身份更新。
+const imageStandardPolicy=Object.freeze({
+ ...resumableHistoryPolicy,
+ oldName:'resumable-history-20261103-v1',
+ newName:'image-pick-standard-20261105-v1',
+ oldCliSha256:'23ee5c75bb1a83af4c475370e0028813f9743a0300f15bd986f4fd1bc9d8e1f6',
+ newCliSha256:'b444b725b6469f76249f253a55e380d106770911ba7f878d727caa4ef7ca4265',
+ oldOverlaySha256:'f037a58df6ba002726411c5a9894f3dc1772ca37380eb5811417a2a99710af7f',
+ newOverlaySha256:'350d3fdc659d6a3d81b42dd172109d1544a8ab4628a68f8fc29683ed1dc88d3e',
+ oldImageSha256:'2b2ba7ec17510eb9f46fa7967d629a34efefcd62a324415abb084a93f61843aa',
+ oldImageTestSha256:'a3664eb970f705722e87faa752f888a22020717cfcad560f08031b9257098bbc',
+ imageSha256:'c9de2f10582e6a8d01dd302597fca2fcae03a6467ae0d83eab640c8012d42bc9',
+ imageTestSha256:'19e60a52de426aeee7db030c3e5b41f98a2696fc9511360466a3815b4967bbc4',
+ protocolOldSha256:'1e83eabc77d3b26c31829932fa829d7fe02e9b1e6294483ef6bcb3f8668d211a',
+ protocolNewSha256:'1e83eabc77d3b26c31829932fa829d7fe02e9b1e6294483ef6bcb3f8668d211a',
+ identityFiles:Object.freeze({
+  'cmd/wechat-cli/notalone_identity_aliases.go':'a2060c261101e537a477b16e8ea706c7ccb1e90bbc1c99ebb203b23c9681193c',
+  'cmd/wechat-cli/notalone_watch_darwin.go':'697b69668348c4f26fa79d0612b579258ff5667c32dbc5a73e21851f95e294df',
+  'cmd/wechat-cli/notalone_history.go':'735ea75af0e2202e40d7cce08a2501b9e4bd5bf855077427bb8337ff34d4ca4f',
+  'cmd/wechat-cli/notalone_snapshot.go':'5bccfa1c28d8ccd2ca0cf9f2725792af2e82b12f34f422d4f2bd10004553ffa7',
+  'cmd/wechat-cli/notalone_account_metadata.go':'934b33f197171a3eb4b0ccaf38ed0bf43996efd0fb761343360f7926acb1a78d',
+ }),
+ sourceChanges:Object.freeze({}),
+ identityAlgorithmSha256:'8760712e95bf21129c8e14719d1d206d31bec26793c5ce77aebe4406412ad71e',
+});
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -864,7 +891,10 @@ const sharedProcessTools=createUpgradeImageCliTools({repositoryRoot,policy:share
 const imageQualityTools=createUpgradeImageCliTools({repositoryRoot,policy:imageQualityPolicy});
 const contactAvatarTools=createUpgradeImageCliTools({repositoryRoot,policy:contactAvatarPolicy});
 const resumableHistoryTools=createUpgradeImageCliTools({repositoryRoot,policy:resumableHistoryPolicy});
-export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',resumableHistoryPolicy.oldName)
+const imageStandardTools=createUpgradeImageCliTools({repositoryRoot,policy:imageStandardPolicy});
+export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageStandardPolicy.oldName)
+ &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageStandardPolicy.newName)
+ ?imageStandardTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',resumableHistoryPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',resumableHistoryPolicy.newName)
  ?resumableHistoryTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',contactAvatarPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',contactAvatarPolicy.newName)

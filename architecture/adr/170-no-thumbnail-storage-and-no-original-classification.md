@@ -11,7 +11,7 @@
 4. **记忆收图资格** 为“当前可查看的已保存图片”（现行副本、已完整解码、仍有来源核验）。库里不再有缩略图副本，因此无需再按质量或来源依据过滤。仅缩略图或从未取图的消息保持“未就绪”，文字消息照常处理。
 5. **聊天与界面不再显示版本标签。** 聊天投影不再传递 `image_quality`／`image_variant`，状态 `original` 并入 `available`；界面删除“原图／主图／缩略图／图片版本未确认”标签。“仅缩略图”状态保留占位提示，并说明会自动补取。
 6. **数据库只停止使用旧列，不迁移。** `media_file.image_quality`、`quality_proof`、`image_quality_evidence`，`media_extraction_attempt.goal='original_upgrade'` 与 `result_outcome='quality_unknown'` 是已发布迁移（第 6、31 版）中的列与 CHECK 约束，重建 `STRICT` 表风险大于收益。保留列与约束，代码不再写入也不再读取：新图片行固定保持 `allocate` 写入的占位取值（图片 `unknown`、其他 `not_applicable`），`quality_proof` 与依据为空；旧库的 `quality_unknown` 回执对外按 `full` 展示。清除、擦除路径仍清空两个旧列，以满足既有 CHECK。
-7. **Go 层留待以后。** Go 程序仍会输出 `wechat-message-image-content-v2` 内嵌的原图证明（`wechat-cdn-big-hd-exact-content-v4` 形态），并在 `.dat` 与 `_h.dat` 内容不同时整条失败 `history_image_quality_unverified`、都不行才读 `_t.dat`。TypeScript 客户端必须继续解析并校验这份协议响应，因此协议解析与制品清单检查本次不动；后台只使用其中的“缩略图／非缩略图”结果。去掉缩略图一档、并存冲突改为挑一个，属于后续的 Go 层改动，需要重建固定制品，不在本次范围。
+7. **Go 层留待以后。** Go 程序仍会输出 `wechat-message-image-content-v2` 内嵌的原图证明（`wechat-cdn-big-hd-exact-content-v4` 形态），并在 `.dat` 与 `_h.dat` 内容不同时整条失败 `history_image_quality_unverified`、都不行才读 `_t.dat`。TypeScript 客户端必须继续解析并校验这份协议响应，因此协议解析与制品清单检查本次不动；后台只使用其中的“缩略图／非缩略图”结果。去掉缩略图一档、并存冲突改为挑一个，属于后续的 Go 层改动，需要重建固定制品，不在本次范围。该 Go 层改动已由 [ADR-171](171-image-pick-standard-over-high-definition.md) 完成（并存时取标准图、不再比较内容；缩略图一档保留）。
 8. 适配器版本由 `chat-image-v2` 升至 `chat-image-v3`，便于区分尝试回执所依据的规则。
 
 ## 取舍

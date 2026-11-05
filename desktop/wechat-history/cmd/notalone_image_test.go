@@ -809,11 +809,20 @@ func TestNotAloneImageOpenCanDecodeBoundThumbnailBytes(t *testing.T) {
 	}
 }
 
-func TestNotAloneImageOpenPrefersNonThumbnailAndRejectsSameTierConflicts(t *testing.T) {
+func TestNotAloneImageOpenPrefersStandardThenHighDefinitionThenThumbnail(t *testing.T) {
 	primary := notaloneTinyPNG(t, 3, 2)
 	other := notaloneTinyPNGWithBaseColor(t, 3, 2, color.RGBA{R: 180, G: 10, B: 40, A: 255})
 	if len(primary) != len(other) || bytes.Equal(primary, other) {
 		t.Fatalf("candidate conflict fixture must be valid, distinct, and same-sized: primary=%d other=%d", len(primary), len(other))
+	}
+	wantSHA := func(data []byte) string { return fmt.Sprintf("%x", sha256.Sum256(data)) }
+	openedImage := func(t *testing.T, fixture notaloneImageProtocolFixture) notaloneImageOpenResponse {
+		t.Helper()
+		value, err := fixture.history.handle(context.Background(), fixture.request)
+		if err != nil {
+			t.Fatalf("可查看的标准图或高清图存在时必须保存其中一张: %v", err)
+		}
+		return value.(notaloneImageOpenResponse)
 	}
 	t.Run("non-thumbnail beats conflicting thumbnail without reading it", func(t *testing.T) {
 		fixture := newNotaloneImageProtocolFixtureWithImage(t, `<msg><img /></msg>`, primary)
@@ -821,23 +830,71 @@ func TestNotAloneImageOpenPrefersNonThumbnailAndRejectsSameTierConflicts(t *test
 		if err := os.WriteFile(thumbnail, other, 0600); err != nil {
 			t.Fatal(err)
 		}
-		value, err := fixture.history.handle(context.Background(), fixture.request)
-		if err != nil {
-			t.Fatalf("valid bound .dat candidate should win before thumbnail: %v", err)
-		}
-		opened := value.(notaloneImageOpenResponse)
-		if opened.ExpectedSHA256 != fmt.Sprintf("%x", sha256.Sum256(primary)) {
+		opened := openedImage(t, fixture)
+		if opened.ExpectedSHA256 != wantSHA(primary) {
 			t.Fatalf("selected bytes must come from the non-thumbnail candidate: %#v", opened)
 		}
 	})
-	t.Run("conflicting non-thumbnail aliases fail closed", func(t *testing.T) {
+	t.Run("标准图与高清图并存且内容不同时取标准图", func(t *testing.T) {
 		fixture := newNotaloneImageProtocolFixtureWithImage(t, `<msg><img /></msg>`, primary)
 		hdCandidate := strings.TrimSuffix(fixture.path, ".dat") + "_h.dat"
 		if err := os.WriteFile(hdCandidate, other, 0600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != "history_image_quality_unverified" {
-			t.Fatalf("conflicting candidates in the same priority tier must not be guessed between, got %v", err)
+		opened := openedImage(t, fixture)
+		if opened.ExpectedSHA256 != wantSHA(primary) || opened.QualityProof.SourceVariant != "main" {
+			t.Fatalf("两张都核验通过时必须固定取标准图，不比较内容: %#v", opened)
+		}
+	})
+	t.Run("标准图失败时回退高清图", func(t *testing.T) {
+		for _, tc := range []struct {
+			name     string
+			standard []byte
+		}{
+			{"标准图大小与消息资源不符", primary[:len(primary)-1]},
+			{"标准图大小相符但无法解码", bytes.Repeat([]byte{0x5a}, len(primary))},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				fixture := newNotaloneImageProtocolFixtureWithImage(t, `<msg><img /></msg>`, primary)
+				hdCandidate := strings.TrimSuffix(fixture.path, ".dat") + "_h.dat"
+				if err := os.WriteFile(hdCandidate, other, 0600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(fixture.path, tc.standard, 0600); err != nil {
+					t.Fatal(err)
+				}
+				opened := openedImage(t, fixture)
+				if opened.ExpectedSHA256 != wantSHA(other) || opened.QualityProof.SourceVariant != "main" || opened.Quality == "thumbnail" {
+					t.Fatalf("标准图不可用时必须取高清图: %#v", opened)
+				}
+			})
+		}
+	})
+	t.Run("只有高清图时取高清图", func(t *testing.T) {
+		fixture := newNotaloneImageProtocolFixtureWithImage(t, `<msg><img /></msg>`, primary)
+		if err := os.Rename(fixture.path, strings.TrimSuffix(fixture.path, ".dat")+"_h.dat"); err != nil {
+			t.Fatal(err)
+		}
+		opened := openedImage(t, fixture)
+		if opened.ExpectedSHA256 != wantSHA(primary) || opened.Quality == "thumbnail" {
+			t.Fatalf("只有高清图也必须保存: %#v", opened)
+		}
+	})
+	t.Run("标准图与高清图都不可用时仍按缩略图返回", func(t *testing.T) {
+		fixture := newNotaloneImageProtocolFixtureWithImage(t, `<msg><img /></msg>`, primary)
+		base := strings.TrimSuffix(fixture.path, ".dat")
+		if err := os.WriteFile(fixture.path, primary[:len(primary)-1], 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(base+"_h.dat", bytes.Repeat([]byte{0x5a}, len(primary)), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(base+"_t.dat", other, 0600); err != nil {
+			t.Fatal(err)
+		}
+		opened := openedImage(t, fixture)
+		if opened.Quality != "thumbnail" || opened.QualityProof.SourceVariant != "thumbnail" || opened.ExpectedSHA256 != wantSHA(other) {
+			t.Fatalf("只有缩略图可用时必须带缩略图分类返回，由后台决定是否保存: %#v", opened)
 		}
 	})
 }
