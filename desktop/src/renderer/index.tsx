@@ -30,7 +30,6 @@ import { SyncDiagnosticsPanel } from './SyncDiagnosticsPanel';
 import { SkillLearningPage } from './SkillLearningPage';
 import { PrioritySyncStatus } from './PrioritySyncStatus';
 import { DeveloperTraces } from './DeveloperTraces';
-import { QuarantinePanel } from './QuarantinePanel';
 
 const helper = window.location.hash === '#helper';
 document.title = helper ? 'NotAlone · 输入小窗' : 'NotAlone · 管理后台';
@@ -164,7 +163,6 @@ export function App() {
         {!(page === 'config' && advancedOpen && diagnosticsOpen)
           && <StartupReadiness state={startup} backend={backend} onConfigure={showDiagnostics} />}
         {page === 'config' && <SetupPanel />}
-        {page === 'config' && <QuarantinePanel />}
         <div hidden={page !== 'config'}><UsagePanel active={page === 'config'} /></div>
         {page === 'config' && <><ScreenPermissionPanel view={permission} /><DesktopControls />
           <details className="startup-settings" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
