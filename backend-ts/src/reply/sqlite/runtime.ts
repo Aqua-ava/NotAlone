@@ -7,6 +7,7 @@ import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import type {ActiveHolders} from '../../storage/sqlite/deletion/holders.ts';
 import {ManagedFiles} from '../../storage/sqlite/deletion/managed-files.ts';
+import {sameManagedAddress} from '../../storage/sqlite/deletion/file-identity.ts';
 import type {ManagedAddress} from '../../storage/sqlite/deletion/contracts.ts';
 import type {DiscussionAttempt,RuntimeCopy} from './contracts.ts';
 import {createDshRuntime,type DshRuntimeDriver,type DshEventBoundary} from './dsh-runtime.ts';
@@ -14,7 +15,7 @@ interface HeldCopy {copy:RuntimeCopy;controller:AbortController;driver?:DshRunti
 export interface RuntimeWork {copy:RuntimeCopy;driver:DshRuntimeDriver;sessionId:SessionId;restoring:boolean;signal:AbortSignal}
 type Fault=(point:'beforeDirectory'|'afterDirectory'|'beforeIdentity'|'afterIdentity'|'afterBusinessCommit'|'beforeClose'|'afterClose'|'beforeReady'|'afterDiscardFile'|'beforeDiscardCommit')=>void|Promise<void>;
 function fail(code:string):never{throw new StorageFailure(code);}
-const same=(a:ManagedAddress,b:ManagedAddress)=>JSON.stringify(a)===JSON.stringify(b);
+const same=sameManagedAddress;
 /** 每副本独占所有者；所有文件操作均在SQLite短事务外进行。 */
 export class SqliteDiscussionRuntime {
  private readonly storage:SqliteStorage;private readonly ownerId:string;private readonly userData:string;private readonly ctx:Context;private readonly holders:ActiveHolders;private readonly files:ManagedFiles;private readonly held=new Map<string,HeldCopy>();private stopping=false;private readonly pending=new Set<Promise<unknown>>();private closing?:Promise<void>;private readonly fault?:Fault;

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { validFileIdentity } from './file-identity.ts';
 import { StorageFailure, type StorageAction, type StorageLease, type StorageRow, type StorageTransaction } from '../contracts.ts';
 import { checkKinds, type CheckKind, type CheckResult, type DeletionOperation, type DeletionRegistration, type DeletionScope, type DeletionSnapshot, type DeletionTarget } from './contracts.ts';
 
@@ -68,7 +69,7 @@ function validateTarget(config: DeletionRegistration, target: DeletionTarget, ow
       || !['file', 'directory'].includes(target.address.kind) || !Array.isArray(target.address.ancestors)) fail('deletion_target_invalid');
     const parts = target.address.locator.split('/');
     if (!parts.length || parts.length > 32 || parts.some(p => !/^[a-zA-Z0-9_.-]{1,128}$/.test(p) || p === '.' || p === '..') || target.address.ancestors.length !== parts.length) fail('deletion_target_invalid');
-    for (const item of [target.address.identity, ...target.address.ancestors]) if (!item || ['dev', 'ino', 'birthtimeNs', 'uid'].some(k => !/^\d+$/.test((item as unknown as Record<string, string>)[k]))) fail('deletion_target_invalid');
+    for (const item of [target.address.identity, ...target.address.ancestors]) if (!validFileIdentity(item)) fail('deletion_target_invalid');
   } else fail('deletion_target_invalid');
 }
 function refresh(tx: StorageTransaction, row: StorageRow, config: DeletionRegistration, lease: StorageLease): boolean {

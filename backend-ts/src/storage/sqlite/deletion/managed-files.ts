@@ -2,14 +2,15 @@ import { lstatSync, mkdirSync, realpathSync, unlinkSync, rmdirSync, openSync, cl
 import path from 'node:path';
 import { StorageFailure } from '../contracts.ts';
 import type { FileIdentity, ManagedAddress, ManagedArea } from './contracts.ts';
+import { sameFileIdentity } from './file-identity.ts';
 
 const names = { runtime: 'runtime-copies', media: 'media', cache: 'cache' } as const;
-const same = (a: FileIdentity, b: FileIdentity) => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs && a.uid === b.uid;
+const same = sameFileIdentity;
 function inspect(location: string, directory: boolean, privateMode = true): FileIdentity {
   const s = lstatSync(location, {bigint: true});
   if (s.isSymbolicLink() || (directory ? !s.isDirectory() : !s.isFile()) || s.uid !== BigInt(process.getuid!())
     || (s.mode & (privateMode ? 0o077n : 0o022n)) !== 0n || (!directory && s.nlink !== 1n)) throw new StorageFailure('deletion_file_ownership');
-  return { dev: String(s.dev), ino: String(s.ino), birthtimeNs: String(s.birthtimeNs), uid: String(s.uid) };
+  return { ino: String(s.ino), birthtimeNs: String(s.birthtimeNs), uid: String(s.uid) };
 }
 // 固定受管区；不接受外部根、绝对locator、SQLite目录、Skill或凭据目录。
 export class ManagedFiles {

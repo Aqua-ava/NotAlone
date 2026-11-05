@@ -4,16 +4,16 @@ import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import {ManagedFiles} from '../../storage/sqlite/deletion/managed-files.ts';
+import {sameManagedAddress} from '../../storage/sqlite/deletion/file-identity.ts';
 import type {ManagedAddress} from '../../storage/sqlite/deletion/contracts.ts';
 
-const equal=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
 /** 只创建应用独立副本；无rename、链接或外部路径导入入口。 */
 export class MediaFiles {
  readonly managed:ManagedFiles;
  private readonly root:string;
  constructor(userData:string){this.managed=new ManagedFiles(userData);this.managed.prepareArea('media');this.root=path.join(userData,'managed','media');}
  location(address:ManagedAddress):string {
-  if(address.area!=='media'||address.kind!=='file'||!equal(this.managed.capture('media',address.locator),address))throw new StorageFailure('media_file_identity_changed');
+  if(address.area!=='media'||address.kind!=='file'||!sameManagedAddress(this.managed.capture('media',address.locator),address))throw new StorageFailure('media_file_identity_changed');
   return path.join(this.root,address.locator);
  }
  async create(locator:string,identify:(address:ManagedAddress)=>Promise<void>,checkpoint:()=>Promise<void>,bytes:AsyncIterable<Uint8Array>,expected:{bytes:number;digest:string},validate:(location:string)=>Promise<unknown>):Promise<{address:ManagedAddress;bytes:number;digest:string;validation:unknown}> {

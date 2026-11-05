@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {ManagedAddress} from '../../storage/sqlite/deletion/contracts.ts';
+import {sameManagedAddress,validFileIdentity} from '../../storage/sqlite/deletion/file-identity.ts';
 import {requireSkillRun} from '../../skills/sqlite/storage.ts';
 import type {SkillRunRevision} from '../../skills/sqlite/contracts.ts';
 import {requireDiscussion,requireDiscussionContact,runtimeView,identifier} from './actions.ts';
@@ -30,7 +31,7 @@ function address(value:ManagedAddress,row:StorageRow,root=false):void{
  if(!value||value.area!=='runtime'||(root?value.locator!==row.managed_locator||value.kind!=='directory':value.locator!==row.managed_locator&&!value.locator.startsWith(`${row.managed_locator}/`)))fail('discussion_runtime_identity_conflict');
  const parts=value.locator.split('/');
  if(!parts.every(p=>/^[a-zA-Z0-9_.-]{1,128}$/.test(p)&&p!=='.'&&p!=='..')||value.ancestors.length!==parts.length)fail('discussion_runtime_identity_conflict');
- for(const id of [value.identity,...value.ancestors])if(!id||!['dev','ino','birthtimeNs','uid'].every(k=>/^\d+$/.test((id as any)[k])))fail('discussion_runtime_identity_conflict');
+ for(const id of [value.identity,...value.ancestors])if(!validFileIdentity(id))fail('discussion_runtime_identity_conflict');
 }
 export const runtimeActions:StorageAction[]=[
  action('beginDiscard','write',(tx,i)=>{
@@ -66,7 +67,7 @@ export const runtimeActions:StorageAction[]=[
  }),
  action('attach','write',(tx,i)=>{
   const row=copy(tx,i);address(i.address,row,true);
-  if(row.address_json!==null&&row.address_json!==JSON.stringify(i.address))fail('discussion_runtime_identity_conflict');
+  if(row.address_json!==null&&!sameManagedAddress(JSON.parse(String(row.address_json)),i.address))fail('discussion_runtime_identity_conflict');
   if(row.state==='preparing'&&i.cleanupOnly===true){tx.run("UPDATE runtime_copy SET address_json=?,state='blocked' WHERE owner_id=? AND id=?",[JSON.stringify(i.address),i.ownerId,i.copyId]);}
   else if(row.state==='preparing'){requireAttempt(tx,i);if(row.preparing_attempt_id!==i.attemptId)fail('discussion_runtime_preparation_stale');requireRuntimeCurrent(tx,i);tx.run("UPDATE runtime_copy SET address_json=?,state='dirty' WHERE owner_id=? AND id=?",[JSON.stringify(i.address),i.ownerId,i.copyId]);tx.run('UPDATE assistant_discussion SET current_runtime_id=? WHERE owner_id=? AND id=?',[i.copyId,i.ownerId,i.discussionId]);}
   else if(['deleting','blocked'].includes(String(row.state)))tx.run('UPDATE runtime_copy SET address_json=? WHERE owner_id=? AND id=?',[JSON.stringify(i.address),i.ownerId,i.copyId]);
@@ -85,7 +86,7 @@ export const runtimeActions:StorageAction[]=[
   for(const a of i.files){address(a,row);if(locators.has(a.locator))fail('discussion_runtime_manifest_invalid');locators.add(a.locator);}
   // 每次官方close后替换工程身份索引；05已有计划中的身份永不覆盖。
   if(row.cleanup_operation_id!==null&&tx.get('SELECT 1 FROM deletion_target WHERE operation_id=? AND domain=\'discussion\' AND storage_kind=\'file\'',[row.cleanup_operation_id])){
-   for(const a of i.files){const old=tx.all('SELECT address_json FROM runtime_file WHERE owner_id=? AND copy_id=?',[i.ownerId,i.copyId]).find(f=>JSON.parse(String(f.address_json)).locator===a.locator);if(old&&old.address_json!==JSON.stringify(a))fail('discussion_runtime_identity_conflict');}
+   for(const a of i.files){const old=tx.all('SELECT address_json FROM runtime_file WHERE owner_id=? AND copy_id=?',[i.ownerId,i.copyId]).find(f=>JSON.parse(String(f.address_json)).locator===a.locator);if(old&&!sameManagedAddress(JSON.parse(String(old.address_json)),a))fail('discussion_runtime_identity_conflict');}
   }else tx.run('DELETE FROM runtime_file WHERE owner_id=? AND copy_id=?',[i.ownerId,i.copyId]);
   for(const a of i.files){const fileId=createHash('sha256').update(JSON.stringify([i.copyId,a])).digest('hex');tx.run('INSERT OR IGNORE INTO runtime_file(owner_id,copy_id,file_id,address_json) VALUES(?,?,?,?)',[i.ownerId,i.copyId,fileId,JSON.stringify(a)]);}
   tx.run('UPDATE runtime_copy SET manifest_complete=1 WHERE owner_id=? AND id=?',[i.ownerId,i.copyId]);

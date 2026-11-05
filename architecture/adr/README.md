@@ -165,3 +165,4 @@
 - [ADR-165：退役逐条消息排除，固定关系背景自动上下文](165-remove-message-exclusion.md)
 - [ADR-166：记忆自动处理总开关，默认关闭](166-memory-auto-processing-switch.md)
 - [ADR-167：记忆页在读取授权暂时不可用时继续显示已保存记忆](167-memory-page-saved-source-display.md)
+- [ADR-168：受管文件身份不含系统设备号](168-managed-file-identity-without-device.md)

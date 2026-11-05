@@ -18,7 +18,8 @@ export type CheckKind = typeof checkKinds[number];
 export interface CheckResult { result: 'passed' | 'blocked' | 'not_applicable'; proof: string }
 export type DomainChecks = Record<'database_rows' | 'derived_eligibility' | 'trace_payloads' | 'request_replay' | 'scope_suppression', CheckResult>;
 export interface InvalidatedRequest { namespace: string; key: string }
-export interface FileIdentity { dev: string; ino: string; birthtimeNs: string; uid: string }
+// 身份不含系统设备号：设备号会随重启或重新挂载变化。dev 仅可能出现在旧记录中，比较与校验一律忽略。
+export interface FileIdentity { dev?: string; ino: string; birthtimeNs: string; uid: string }
 export type ManagedArea = 'runtime' | 'media' | 'cache';
 export interface ManagedAddress {
   area: ManagedArea; locator: string; identity: FileIdentity;

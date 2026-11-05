@@ -1,5 +1,6 @@
 import {sourceDeletionIds} from '../../history/sqlite/source-deletion.ts';
 import { createHash } from 'node:crypto';
+import { sameFileIdentity } from '../../storage/sqlite/deletion/file-identity.ts';
 import { StorageFailure, type StorageRow, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
 import type { CheckResult, DeletionAuthority, DeletionDomain, DeletionOperation, DeletionRegistration, DeletionScope, DeletionTarget, FileDeletionTarget, ManagedAddress, RowDeletionTarget } from '../../storage/sqlite/deletion/contracts.ts';
 
@@ -105,7 +106,7 @@ function address(file: StorageRow): ManagedAddress | null {
   if (!file.managed_address) return null;
   let result: ManagedAddress;
   try { result = JSON.parse(String(file.managed_address)) as ManagedAddress; } catch { return fail('media_file_identity_unverified'); }
-  if (result.area !== 'media' || result.kind !== 'file' || result.locator !== file.managed_locator || !same(result.identity, JSON.parse(String(file.expected_file_identity)))) return fail('media_file_identity_unverified');
+  if (result.area !== 'media' || result.kind !== 'file' || result.locator !== file.managed_locator || !sameFileIdentity(result.identity, JSON.parse(String(file.expected_file_identity)))) return fail('media_file_identity_unverified');
   return result;
 }
 function collect(tx: StorageTransaction, op: DeletionOperation): DeletionTarget[] {
