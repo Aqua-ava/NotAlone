@@ -3,6 +3,7 @@ import {isMediaDeletionScope} from '../../media/sqlite/deletion.ts';
 import {memoryDeletionImpact} from '../../memory/sqlite/deletion-impact.ts';
 import {collectMemoryDocumentDeletionReferences} from '../../memory/sqlite/documents/deletion.ts';
 import {createHash} from 'node:crypto';
+import {sameManagedAddress} from '../../storage/sqlite/deletion/file-identity.ts';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {CheckResult,DeletionAuthority,DeletionDomain,DeletionOperation,DeletionScope,DeletionTarget,FileDeletionTarget,ManagedAddress,RowDeletionTarget} from '../../storage/sqlite/deletion/contracts.ts';
 function fail(code:string):never{throw new StorageFailure(code);}
@@ -176,7 +177,7 @@ function requireCopy(tx:StorageTransaction,op:DeletionOperation,id:string):Stora
 function requireManifest(tx:StorageTransaction,copy:StorageRow):void{
  if(copy.manifest_complete!==1n)fail('discussion_runtime_manifest_incomplete');
  const files=tx.all('SELECT address_json FROM runtime_file WHERE owner_id=? AND copy_id=?',[copy.owner_id,copy.id]);
- if(copy.address_json!==null&&!files.some(f=>canonical(JSON.parse(String(f.address_json)))===canonical(JSON.parse(String(copy.address_json)))))fail('discussion_runtime_manifest_incomplete');
+ if(copy.address_json!==null&&!files.some(f=>sameManagedAddress(JSON.parse(String(f.address_json)),JSON.parse(String(copy.address_json)))))fail('discussion_runtime_manifest_incomplete');
  if(copy.address_json===null&&files.length)fail('discussion_runtime_manifest_conflict');
 }
 function removeCopy(tx:StorageTransaction,copy:StorageRow):void{

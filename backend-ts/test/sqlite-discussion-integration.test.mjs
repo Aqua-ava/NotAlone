@@ -208,3 +208,27 @@ test('讨论宿主关闭等待普通HTTP权威读取，不向已关闭存储补�
  let closed=false;const closing=host.close().then(()=>{closed=true;});await new Promise(resolve=>setImmediate(resolve));const before=closed;
  release.resolve();const response=await request;assert.equal(response.status,200);await response.json();await closing;assert.equal(before,false);
 });
+
+test('旧记录里带设备号的运行副本在停读时也能关闭：manifest 与已保存地址按忽略设备号的规则比较',async t=>{
+ const {DatabaseSync}=await import('node:sqlite');
+ const f=await fixture(t);const d=await f.service.newDiscussion(f.ids[0]);
+ await f.turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'生成一个运行副本',confirmedContact:true});
+ assert.equal((await f.storage.execute('runtime.inventory',{ownerId:owner})).length,1);
+ // 复现旧版本落盘的现场：已保存的副本根地址与文件清单都带有 dev（设备号随重启会变，所以只作为历史字段存在）。
+ const withDevice=text=>{const value=JSON.parse(text);const add=id=>({dev:'16777234',...id});return JSON.stringify({...value,ancestors:value.ancestors.map(add),identity:add(value.identity)});};
+ const database=new DatabaseSync(join(f.root,'managed/sqlite/notalone.sqlite'));
+ try{
+  for(const table of ['runtime_copy','runtime_file'])for(const row of database.prepare(`SELECT rowid,address_json FROM ${table} WHERE address_json IS NOT NULL`).all())
+   database.prepare(`UPDATE ${table} SET address_json=? WHERE rowid=?`).run(withDevice(String(row.address_json)),row.rowid);
+ }finally{database.close();}
+ await f.reopen();
+ // 重开后副本由 initialize 重新绑定；停读时官方 close 之后重新捕获并写入清单，不能因旧记录带设备号而每次被拒。
+ await f.runtime.close();
+ const [copy]=await f.storage.execute('runtime.inventory',{ownerId:owner});
+ assert.equal(copy.state,'ready');assert.equal(copy.manifestComplete,true);
+ // 同一副本之后仍可被讨论删除按完整清单清理：删除侧核对清单时同样忽略旧设备号。
+ const service=await deletion(f),op=await service.plan({ownerId:owner,requestKey:randomUUID(),scope:{kind:'discussion',contactId:f.ids[0],discussionId:d.id}});
+ const done=await service.advance(op);assert.equal(done.state,'completed',JSON.stringify(done.checks));
+ assert.deepEqual((await f.storage.execute('runtime.inventory',{ownerId:owner})).filter(c=>c.state!=='deleted'),[]);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});

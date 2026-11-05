@@ -80,7 +80,7 @@ export const runtimeActions:StorageAction[]=[
   if(i.rootAbsent){if(row.address_json!==null||i.files.length)fail('discussion_runtime_identity_conflict');}
   else{
    if(!row.address_json)fail('discussion_runtime_identity_conflict');
-   if(!i.files.some((a:ManagedAddress)=>JSON.stringify(a)===row.address_json))fail('discussion_runtime_manifest_invalid');
+   if(!i.files.some((a:ManagedAddress)=>sameManagedAddress(JSON.parse(String(row.address_json)),a)))fail('discussion_runtime_manifest_invalid');
   }
   const locators=new Set();
   for(const a of i.files){address(a,row);if(locators.has(a.locator))fail('discussion_runtime_manifest_invalid');locators.add(a.locator);}
