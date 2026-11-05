@@ -176,15 +176,22 @@ export class SyncControlController {
         }
       }
       this.cancelRecovery();
-      this.publish({ phase: 'ready', report: result.report });
+      this.publish({ phase: 'ready', report: result.report, errorCode: null });
       if (result.report.syncScope === 'all_private') this.refreshContactDirectory(scope, result.report.confirmedBindingCount);
     } catch (error) {
       if (!current()) return;
-      // 删除期间名单服务整体关闭：只读刷新保留上一次成功报告，不显示“同步状态读取失败”。
-      if (preserveOnFailure) return;
-      if (operation === 'refresh' && this.quiet.deleting) { this.quiet.defer(this.silentRefresh); return; }
       const unavailable = error instanceof BackendRequestFailure
         && ['sync_unavailable', 'sync_status_unavailable'].includes(error.code ?? '');
+      // 删除期间名单服务整体关闭：只读刷新保留上一次成功报告，不显示“同步状态读取失败”。
+      if (preserveOnFailure || operation === 'refresh' && this.quiet.deleting) {
+        if (operation === 'refresh') {
+          if (this.quiet.deleting) this.quiet.defer(this.silentRefresh);
+          // 补读仍遇服务未就绪时继续原有退避自动恢复；窗口内到的定时器会在窗口结束时再补读。
+          if (error instanceof BackendRequestFailure && error.kind === 'response'
+            && error.status === 503 && error.code === 'sync_status_unavailable') this.scheduleRecovery(scope);
+        }
+        return;
+      }
       this.publish({ phase: unavailable ? 'unavailable' : 'failed', report: null,
         errorCode: operation === 'refresh' ? 'status-unconfirmed' : 'operation-unconfirmed' });
       if (operation === 'refresh' && error instanceof BackendRequestFailure && error.kind === 'response'

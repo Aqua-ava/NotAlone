@@ -428,6 +428,7 @@ test('删除窗口内在途授权读取失败保留上一次成功状态，不�
   await new Promise(resolve => setImmediate(resolve));
   const before = f.controller.getState();
   assert.equal(before.phase, 'ready');
+  const reads = f.calls.filter(path => path === '/api/sync/cli-bindings').length;
   gate = new Promise(resolve => { release = resolve; });
   f.control.failBindings = true;
   const reading = f.controller.refreshSaved();
@@ -443,6 +444,51 @@ test('删除窗口内在途授权读取失败保留上一次成功状态，不�
   // 删除结束后的补读也可能遇到服务尚未恢复；仍保留旧授权，不显示“不能确认授权范围”。
   finish();
   await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.calls.filter(path => path === '/api/sync/cli-bindings').length, reads + 1, '窗口结束后补读一次');
   assert.equal(f.controller.getState().phase, 'ready');
   assert.deepEqual(f.controller.getState().bindings, before.bindings);
+});
+
+test('删除窗口内重连不发起自动授权读取，窗口结束后补读一次', async () => {
+  const quiet = new ContactDeletionQuiet();
+  const f = fixture({ quiet });
+  await f.connect(1);
+  await new Promise(resolve => setImmediate(resolve));
+  const reads = f.calls.filter(path => path === '/api/sync/cli-bindings').length;
+  const finish = quiet.begin();
+  await f.connect(2);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.calls.filter(path => path === '/api/sync/cli-bindings').length, reads, '窗口内重连不读取授权目录');
+  assert.equal(f.controller.getState().phase, 'offline');
+  assert.deepEqual(f.controller.getState().bindings, []);
+  finish();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.calls.filter(path => path === '/api/sync/cli-bindings').length, reads + 1, '窗口结束后只补读一次');
+  assert.equal(f.controller.getState().phase, 'ready');
+});
+
+test('删除窗口内在途刷新失败不会停在加载态', async () => {
+  const quiet = new ContactDeletionQuiet();
+  let release;
+  let gate;
+  const f = fixture({ quiet, beforeRead: request => request.path === '/api/sync/cli-bindings' ? gate : undefined });
+  await f.connect(1);
+  await new Promise(resolve => setImmediate(resolve));
+  const before = f.controller.getState();
+  assert.equal(before.phase, 'ready');
+  gate = new Promise(resolve => { release = resolve; });
+  f.control.failBindings = true;
+  const reading = f.controller.refresh();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.controller.getState().phase, 'loading');
+  const finish = quiet.begin();
+  release();
+  await reading;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.controller.getState().phase, before.phase, '删除窗口内失败撤回加载态，不卡在正在读取');
+  assert.equal(f.controller.getState().errorCode, null);
+  finish();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.controller.getState().phase, before.phase);
+  assert.equal(f.controller.getState().errorCode, null);
 });

@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { build } from 'esbuild';
 
-const built = await build({ stdin: { contents: `export { ContactSession } from './src/main/contacts/session';`,
+const built = await build({ stdin: { contents: `export { ContactSession } from './src/main/contacts/session';
+export { ContactDeletionQuiet } from './src/main/contacts/deletion-quiet';`,
   resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false });
-const { ContactSession } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+const { ContactSession, ContactDeletionQuiet } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
 const a = '11111111-1111-4111-8111-111111111111';
 const b = '22222222-2222-4222-8222-222222222222';
@@ -86,4 +87,32 @@ test('删除期间迟到的目录读取不能把已撤下的联系人重新加�
   await flush();
   assert.deepEqual(session.getState().contacts.map(contact => contact.contactId), [b, c], '迟到读取不能恢复已撤下的对象');
   assert.equal(session.getState().directoryPhase, 'ready');
+});
+
+test('删除窗口只在最后一个窗口结束时补读一次，重复结束不重复补读', () => {
+  const quiet = new ContactDeletionQuiet();
+  const reads = [];
+  assert.equal(quiet.defer(() => reads.push('window外')), false);
+  const endOuter = quiet.begin();
+  const endInner = quiet.begin();
+  const read = () => reads.push('补读');
+  assert.equal(quiet.defer(read), true);
+  assert.equal(quiet.defer(read), true);
+  endInner(); endInner();
+  assert.equal(quiet.deleting, true);
+  assert.deepEqual(reads, []);
+  endOuter();
+  assert.equal(quiet.deleting, false);
+  assert.deepEqual(reads, ['补读'], '同一读取函数在一个窗口内只补读一次');
+});
+
+test('补读抛错不影响其他补读或窗口结束', () => {
+  const quiet = new ContactDeletionQuiet();
+  const reads = [];
+  const end = quiet.begin();
+  quiet.defer(() => { throw new Error('合成补读失败'); });
+  quiet.defer(() => reads.push('另一读取'));
+  end();
+  assert.equal(quiet.deleting, false);
+  assert.deepEqual(reads, ['另一读取']);
 });

@@ -110,6 +110,7 @@ async function fixture(t, options = {}) {
     { ...timing, ...(options.auto ?? { autoRetryDelaysMs: [], autoResume: false, contactPollMs: 0 }), ...(options.controller ?? {}) });
   t.after(() => controller.dispose());
   await controller.refresh();
+  for (let i = 0; i < 100 && controller.getState().phase === 'loading'; i++) await new Promise(resolve => setImmediate(resolve));
   return { controller, backend, contacts, requests, notifications, refreshes, quiet,
     select(contactId) { selection = { ...selection, selectedContactId: contactId, scopeRevision: selection.scopeRevision + 1 }; },
     reconnect({ differentOwner = false, failList = false } = {}) {
@@ -316,23 +317,64 @@ test('删除请求期间的名单读取与收尾都走失败保留的后台刷�
   assert.equal(f.contacts.getState().selectedContactId, null);
 });
 
-test('删除运行期间标记名单服务不可用窗口，运行结束才恢复无关读取', async t => {
-  const events = [];
-  let duringRequest = false;
-  const quiet = {
-    deleting: false,
-    defer: () => false,
-    begin() {
-      events.push('begin'); this.deleting = true;
-      let finished = false;
-      return () => { if (finished) return; finished = true; this.deleting = false; events.push('end'); };
-    },
-  };
-  const f = await fixture(t, { quiet, beforeDelete: () => { duringRequest = quiet.deleting; } });
+test('删除运行期间开启名单服务窗口，完成后恢复无关读取并补读一次', async t => {
+  let duringRequest;
+  const flushes = [];
+  const f = await fixture(t, { beforeDelete: () => {
+    duringRequest = f.quiet.deleting;
+    f.quiet.defer(() => flushes.push('read'));
+  } });
+  assert.equal(f.quiet.deleting, false);
   await f.controller.delete(f.request());
   assert.equal(duringRequest, true, '删除请求期间应处于名单服务不可用窗口');
-  assert.deepEqual(events, ['begin', 'end']);
-  assert.equal(quiet.deleting, false);
+  assert.equal(f.quiet.deleting, false, '任务完成后窗口结束');
+  assert.deepEqual(flushes, ['read'], '窗口结束补读一次');
+});
+
+test('删除未完成时保持名单服务窗口，任务完成后才恢复读取', async t => {
+  const f = await fixture(t, { finalPhase: 'blocked', auto: { autoRetryDelaysMs: [], autoResume: false, contactPollMs: 0 } });
+  await f.controller.delete(f.request());
+  assert.equal(f.controller.getState().operations[0].phase, 'blocked');
+  assert.equal(f.quiet.deleting, true, '未完成任务期间继续关闭名单服务窗口');
+  const flushes = [];
+  assert.equal(f.quiet.defer(() => flushes.push('read')), true);
+  const pending = f.controller.getState().operations[0];
+  await f.controller.retry({ id: pending.id, scopeRevision: f.controller.getState().scopeRevision, confirmed: true });
+  assert.equal(f.controller.getState().operations[0].phase, 'completed');
+  assert.equal(f.quiet.deleting, false, '确认全部完成后窗口结束');
+  assert.deepEqual(flushes, ['read']);
+});
+
+test('重连读取删除状态完成前保持窗口，确认无未完成任务后才恢复读取', async t => {
+  const f = await fixture(t, { auto: { autoRetryDelaysMs: [], autoResume: false, contactPollMs: 0 } });
+  const flushes = [];
+  f.reconnect();
+  assert.equal(f.quiet.deleting, true, '重连探针期间保持窗口');
+  assert.equal(f.quiet.defer(() => flushes.push('read')), true);
+  for (let i = 0; i < 200 && f.quiet.deleting; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.quiet.deleting, false, '删除状态确认无未完成任务后恢复读取');
+  assert.deepEqual(flushes, ['read']);
+});
+
+test('重连保留未确认删除意图期间继续关闭窗口，重试完成后补读', async t => {
+  let release;
+  const wait = new Promise(resolve => { release = resolve; });
+  const f = await fixture(t, { beforeDelete: () => wait, auto: { autoRetryDelaysMs: [], autoResume: false, contactPollMs: 0 } });
+  const deleting = f.controller.delete(f.request());
+  for (let i = 0; i < 100 && !f.requests.some(request => request.method === 'DELETE'); i++) await new Promise(resolve => setTimeout(resolve, 1));
+  f.reconnect();
+  release();
+  await deleting;
+  const pending = f.controller.getState().operations[0];
+  assert.equal(pending.phase, 'unconfirmed');
+  assert.equal(f.quiet.deleting, true, '同本人未确认意图保留期间窗口不提前结束');
+  const flushes = [];
+  assert.equal(f.quiet.defer(() => flushes.push('read')), true);
+  f.select(b);
+  await f.controller.retry({ id: pending.id, scopeRevision: f.controller.getState().scopeRevision, confirmed: true });
+  assert.equal(f.controller.getState().operations[0].phase, 'completed');
+  assert.equal(f.quiet.deleting, false);
+  assert.deepEqual(flushes, ['read']);
 });
 
 test('删除请求在运输层超时后找回原任务并轮询到完成，不误报结果未知', async t => {

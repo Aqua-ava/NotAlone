@@ -150,7 +150,13 @@ void app.whenReady().then(async () => {
     };
   };
   // 联系人删除期间后端整体关闭名单服务：授权目录与同步状态读取暂停，结束后静默补读。
+  // 删除控制器先于其他读取方构造，重连时先打开窗口，后续读取才会登记补读而不是报失败。
   const contactDeletionQuiet = new ContactDeletionQuiet();
+  let dataLifecycle: DesktopDataLifecycle;
+  const contactDeletion = installContactDeletionBridge(commands, backend, contacts, beginReadingScopeChange, (contactId) => {
+    if (dataLifecycle && contacts.getState().selectedContactId === contactId) dataLifecycle.withdraw('contact-deletion');
+  }, contactDeletionQuiet);
+  app.on('before-quit', () => contactDeletion.dispose());
   installBindingConsentBridge(commands, backend, contacts, beginReadingScopeChange, contactDeletionQuiet);
   const sync = installSyncControlBridge(commands, backend, contacts, beginReadingScopeChange, contactDeletionQuiet);
   const contactHistory = installContactHistoryBridge(commands, backend, contacts);
@@ -173,7 +179,7 @@ void app.whenReady().then(async () => {
     started: () => { sqliteDiscussion.synchronize(true); preferenceDeletion.started(); },
     settled: () => preferenceDeletion.settled(),
   });
-  const dataLifecycle = new DesktopDataLifecycle({history: contactHistory, media, traces, provenance: candidateProvenance,
+  dataLifecycle = new DesktopDataLifecycle({history: contactHistory, media, traces, provenance: candidateProvenance,
     skills: skillLearning, preferences, memory, processing: fixedMemoryProcessing, management: sqliteMemoryManagement, discussion: sqliteDiscussion, replies});
   coordinateHistoryRecertification(historyClear, {
     withdraw: () => { dataLifecycle.withdraw('recertification'); replies.beginOwnerContextChange(); },
@@ -203,11 +209,6 @@ void app.whenReady().then(async () => {
     memory.sourceDeletionChanged(phase);
     if (phase === 'started') dataLifecycle.withdraw('source-deletion');
   });
-  const contactDeletion = installContactDeletionBridge(commands, backend, contacts, beginReadingScopeChange, (contactId) => {
-    if (contacts.getState().selectedContactId !== contactId) return;
-    dataLifecycle.withdraw('contact-deletion');
-  }, contactDeletionQuiet);
-  app.on('before-quit', () => contactDeletion.dispose());
   installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies,
     (selection, text) => candidateProvenance.recordCopied(selection, text)));
   backend.setConnectionChangePreparation(() => dataLifecycle.connectionChanging());

@@ -136,6 +136,13 @@ test('真实SQLite联系人删除HTTP投影被main接受，重放旧ID幂等且�
   const sibling = initial.contacts.find(row => row.displayName === '合成乙');
   assert.ok(first && sibling);
   contacts.selectContact({ contactId: first.contactId, scopeRevision: initial.scopeRevision });
+  // 删除路径不能再用会清空界面的完整刷新；这里记录两类读取的实际调用。
+  const refreshes = { full: 0, background: 0 };
+  const fullRefresh = contacts.refreshContacts.bind(contacts);
+  contacts.refreshContacts = async () => { refreshes.full++; return fullRefresh(); };
+  const backgroundRefresh = contacts.refreshContactsInBackground.bind(contacts);
+  contacts.refreshContactsInBackground = async () => { refreshes.background++; return backgroundRefresh(); };
+  const refreshesBeforeDelete = { ...refreshes };
 
   const controller = new ContactDeletionController(backend, contacts, undefined, undefined, undefined,
     { operationWaitMs: 10_000, operationPollMs: 25, discoverPollMs: 10, discoverTimeoutMs: 200 });
@@ -143,7 +150,13 @@ test('真实SQLite联系人删除HTTP投影被main接受，重放旧ID幂等且�
   await controller.refresh();
   hideDiscovery = true;
   loseNextDeleteResponse = true;
-  await controller.delete({ contactId: first.contactId, scopeRevision: contacts.getState().scopeRevision, confirmed: true });
+  const deleting = controller.delete({ contactId: first.contactId, scopeRevision: contacts.getState().scopeRevision, confirmed: true });
+  // 删除请求仍在等回执、后端名单服务已关闭时，本地目录已经撤下这一位，其他联系人保持。
+  assert.deepEqual(contacts.getState().contacts.map(row => row.contactId), [sibling.contactId]);
+  assert.equal(contacts.getState().selectedContactId, null);
+  await deleting;
+  assert.equal(refreshes.full, refreshesBeforeDelete.full, '删除期间不使用会清空界面的完整刷新');
+  assert.ok(refreshes.background > refreshesBeforeDelete.background, '删除期间与收尾使用保留式后台刷新');
 
   let unknown = controller.getState().operations.find(item => item.contactId === first.contactId);
   assert.ok(unknown);
@@ -174,7 +187,13 @@ test('真实SQLite联系人删除HTTP投影被main接受，重放旧ID幂等且�
   contacts.selectContact({ contactId: sibling.contactId, scopeRevision: contacts.getState().scopeRevision });
   timeoutNextDelete = true;
   const postsBeforeTimeoutDelete = requests.filter(request => request.method === 'POST').length;
-  await controller.delete({ contactId: sibling.contactId, scopeRevision: contacts.getState().scopeRevision, confirmed: true });
+  const refreshesBeforeSecond = { ...refreshes };
+  const secondDeleting = controller.delete({ contactId: sibling.contactId, scopeRevision: contacts.getState().scopeRevision, confirmed: true });
+  assert.deepEqual(contacts.getState().contacts, [], '第二次删除发出即撤下最后一位联系人');
+  assert.equal(contacts.getState().selectedContactId, null);
+  await secondDeleting;
+  assert.equal(refreshes.full, refreshesBeforeSecond.full, '第二次删除期间同样不使用完整刷新');
+  assert.ok(refreshes.background > refreshesBeforeSecond.background);
   const second = controller.getState().operations[0];
   assert.equal(controller.getState().error, null);
   assert.equal(controller.getState().busyId, null);

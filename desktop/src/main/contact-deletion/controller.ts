@@ -51,6 +51,9 @@ export class ContactDeletionController {
   private epoch = 0;
   private pending: AbortController | undefined;
   private disposed = false;
+  private quietWindow: (() => void) | undefined;
+  /** 重连时打开的窗口要等新连接的删除状态读取给出结论，不能只凭旧连接状态结束。 */
+  private quietProbe = false;
   private readonly resumed = new Set<string>();
   private readonly autoRetryDelaysMs: number[];
   private readonly autoResumeEnabled: boolean;
@@ -79,7 +82,25 @@ export class ContactDeletionController {
   onStateChanged(listener: (state: ContactDeletionState) => void): () => void {
     this.listeners.add(listener); return () => { this.listeners.delete(listener); };
   }
-  dispose(): void { this.disposed = true; this.cancel(); this.listeners.clear(); }
+  dispose(): void { this.disposed = true; this.cancel(); this.endQuietWindow(); this.listeners.clear(); }
+  /**
+   * 后端只要还有未完成的联系人删除就整体关闭名单服务，因此窗口覆盖整个未完成期间，而不只是单次请求。
+   * 删除被重试、续跑或重连打断时继续保留窗口；全部完成或确认没有未完成任务后才恢复无关读取。
+   */
+  private beginQuietWindow(): void {
+    this.quietWindow ??= this.quiet.begin();
+  }
+  private endQuietWindow(): void {
+    const finish = this.quietWindow;
+    this.quietWindow = undefined;
+    finish?.();
+  }
+  private endQuietWindowIfSettled(): void {
+    // 重连探针尚未给出结论时不能提前恢复读取，否则重连瞬间的读取仍会撞上关闭的名单服务。
+    if (this.quietProbe) return;
+    if (this.state.busyId || this.state.operations.some(item => item.phase !== 'completed')) return;
+    this.endQuietWindow();
+  }
   private synchronize(): boolean {
     const generation = this.backend.getConnectionGeneration();
     if (this.disposed || generation === this.generation) return false;
@@ -87,6 +108,9 @@ export class ContactDeletionController {
       ? { ...item, phase: 'unconfirmed', errorCode: 'deletion_unconfirmed' } : item) };
     this.ownerId = undefined;
     this.cancel(); this.generation = generation;
+    // 重连时先保留窗口，等新连接的删除状态读取完成后再决定是否恢复无关读取。
+    this.quietProbe = generation !== undefined;
+    if (generation !== undefined) this.beginQuietWindow(); else this.endQuietWindow();
     this.publish({ phase: generation === undefined ? 'offline' : 'loading', scopeRevision: this.state.scopeRevision + 1,
       operations: [], busyId: null, error: null });
     if (generation !== undefined) void this.refresh();
@@ -123,9 +147,16 @@ export class ContactDeletionController {
       // 名单缺项不能证明删除完成，响应丢失的原意图保留至明确核验或重试。
       for (const old of previous) if (!found.has(old.id) && !items.some(item => item.id === old.id)) items.push(old);
       this.publish({ phase: 'ready', operations: items, error: null });
+      this.quietProbe = false;
+      if (items.some(item => item.phase !== 'completed')) this.beginQuietWindow();
+      else this.endQuietWindowIfSettled();
       this.autoResume();
     } catch {
-      if (this.current(operation)) this.publish({ phase: 'failed', error: '删除任务状态暂时无法读取，请刷新重试。' });
+      if (this.current(operation)) {
+        this.publish({ phase: 'failed', error: '删除任务状态暂时无法读取，请刷新重试。' });
+        // 重连探针失败不长期暂停无关读取；下次成功读取再按实际任务决定。
+        if (this.quietProbe) { this.quietProbe = false; this.endQuietWindowIfSettled(); }
+      }
     } finally { if (this.pending === pending) this.pending = undefined; }
   }
   async delete(request: ContactDeletionRequest): Promise<void> {
@@ -154,7 +185,9 @@ export class ContactDeletionController {
   private async run(item: ContactDeletionItem): Promise<void> {
     this.cancel();
     // 名单服务在删除期间整体关闭：无关的授权与同步状态读取暂停，结束后补读一次。
-    const finishQuiet = this.quiet.begin();
+    // 本次运行接管窗口生命周期，重连探针的结论由本任务完成后统一给出。
+    this.quietProbe = false;
+    this.beginQuietWindow();
     const operation = { generation: this.generation!, epoch: this.epoch };
     const pending = new AbortController(); this.pending = pending;
     if (item.operationId) this.resumed.add(`${operation.generation}:${item.operationId}`);
@@ -247,8 +280,11 @@ export class ContactDeletionController {
         }
       } finally {
         try { finish(); }
-        finally { finishQuiet(); }
-        if (this.pending === pending) this.pending = undefined;
+        finally {
+          if (this.pending === pending) this.pending = undefined;
+          // 任务全部完成才恢复无关读取；未知、受阻或仍需续跑时继续保留窗口。
+          this.endQuietWindowIfSettled();
+        }
       }
     }
     if (this.current(operation)) this.autoResume();
