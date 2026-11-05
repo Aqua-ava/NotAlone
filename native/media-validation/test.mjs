@@ -46,8 +46,6 @@ test('图片末尾截短不能因ImageIO宽松解码而冒充完整',async()=>{
  }
 });
 test('JPEG按段结构接受至多32字节尾随，拒绝截断、超限与拼接第二张图',async()=>{
- const selftest=execFileSync('bash',[join(nativeRoot,'build-fixtures.sh'),'--selftest'],{stdio:'pipe',timeout:60_000});
- assert.match(selftest.toString(),/selftest ok/);
  const bytes=await readFile(join(directory,'jpeg'));
  const withTail=size=>Buffer.concat([bytes,Buffer.alloc(size,0x5a)]);
  for(const size of [1,24,32]){
@@ -108,6 +106,28 @@ test('拒绝损坏或无法完整解码的WXGF，不输出部分图片',async()=
   const result=await decodeWxgf(input);assert.equal(result.status,1,name);assert.equal(result.stdout.length,0,name);
   assert.match(result.stderr.toString(),/^media_(image_invalid|format_unsupported)\n$/);
  }
+});
+test('合成夹具自测覆盖JPEG容器与HEVC双帧分类、分组和透明度合成',()=>{
+ const result=execFileSync('bash',[join(nativeRoot,'build-fixtures.sh'),'--selftest'],{stdio:'pipe',timeout:60_000});
+ assert.match(result.toString(),/selftest ok/);
+});
+test('WXGF双帧彩色加单色透明度输出alpha PNG，透明度不可用时退回不透明彩色图',async()=>{
+ const plain=await decodeWxgf(join(directory,'wxgf'));
+ assert.equal(plain.status,0,plain.stderr?.toString());
+ const dual=await decodeWxgf(join(directory,'wxgf.dual-frame'));
+ assert.equal(dual.status,0,dual.stderr?.toString());
+ assert.deepEqual([...dual.stdout.subarray(0,8)],[137,80,78,71,13,10,26,10]);
+ assert.equal(dual.stdout[25],6,'彩色帧加透明度应输出带alpha的PNG');
+ const alphaOutput=join(directory,'wxgf.dual-frame.png');await writeFile(alphaOutput,dual.stdout);
+ assert.deepEqual(await validate(alphaOutput,'image',signal()),{format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false});
+ const broken=await decodeWxgf(join(directory,'wxgf.dual-frame-broken-alpha'));
+ assert.equal(broken.status,0,broken.stderr?.toString());
+ assert.equal(broken.stdout[25],2,'透明度解码失败时应退回不透明PNG');
+ assert.ok(broken.stdout.equals(plain.stdout),'透明度解码失败时应退回与单帧彩色一致的不透明图');
+ const unsupported=await decodeWxgf(join(directory,'wxgf.dual-frame-two-color'));
+ assert.equal(unsupported.status,1);
+ assert.equal(unsupported.stdout.length,0);
+ assert.match(unsupported.stderr.toString(),/^media_format_unsupported\n$/);
 });
 test('MP4 H264及AAC实际解码全轨，拒绝HEVC、截断与外部引用',async()=>{
  for(const name of ['h264.mp4','h264-aac.mp4'])assert.deepEqual(await validate(join(directory,name),'video',signal()),{format:'mp4',mimeType:'video/mp4',containerValid:true,viewable:false,playable:true});

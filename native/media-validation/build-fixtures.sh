@@ -17,7 +17,7 @@ if (( available < 15*1024*1024 || temporary < 15*1024*1024 )); then
   echo '媒体夹具构建空间不足15GiB' >&2
   exit 1
 fi
-sources=(fixtures.swift shared.swift image-container.swift)
+sources=(fixtures.swift shared.swift image-container.swift hevc.swift wxgf.swift)
 rebuild=false
 if [[ ! -x .build/fixtures ]]; then
   rebuild=true

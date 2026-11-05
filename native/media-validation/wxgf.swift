@@ -11,59 +11,6 @@ private let wxgfHeaderPrefixLimit=4096
 private let wxgfOutputLimit=32*1024*1024
 private let wxgfPixelLimit=40_000_000
 
-private struct AnnexNAL {
-    let type:Int
-    let bytes:Data
-}
-
-private func annexBStarts(_ bytes:[UInt8]) throws -> [(offset:Int,length:Int)] {
-    var starts:[(offset:Int,length:Int)]=[]
-    var cursor=0
-    while cursor+3<bytes.count {
-        if bytes[cursor]==0 && bytes[cursor+1]==0 && bytes[cursor+2]==0 && bytes[cursor+3]==1 {
-            starts.append((cursor,4));cursor+=4
-        } else if bytes[cursor]==0 && bytes[cursor+1]==0 && bytes[cursor+2]==1 {
-            starts.append((cursor,3));cursor+=3
-        } else {cursor+=1}
-        guard starts.count<=8192 else {throw Failure("media_resource_limit")}
-    }
-    return starts
-}
-
-private func annexBNAL(_ bytes:[UInt8],_ starts:[(offset:Int,length:Int)],at index:Int) throws -> AnnexNAL {
-    let start=starts[index].offset+starts[index].length
-    var end=index+1<starts.count ? starts[index+1].offset:bytes.count
-    while end>start && bytes[end-1]==0 {end-=1}
-    guard end-start>=2 else {throw Failure("media_image_invalid")}
-    let unit=Data(bytes[start..<end])
-    let type=(Int(unit[0])>>1)&0x3f
-    guard unit[0]&0x80==0,unit[1]&0x07 != 0 else {throw Failure("media_image_invalid")}
-    return AnnexNAL(type:type,bytes:unit)
-}
-
-private func annexBUnits(_ data:Data) throws -> [AnnexNAL] {
-    let bytes=[UInt8](data)
-    let starts=try annexBStarts(bytes)
-    guard starts.count>=4,starts.count<=8192 else {throw Failure("media_image_invalid")}
-    var result:[AnnexNAL]=[]
-    result.reserveCapacity(starts.count)
-    for index in starts.indices {
-        result.append(try annexBNAL(bytes,starts,at:index))
-    }
-    return result
-}
-
-private func hasOrderedHEVCFrameUnits(_ units:[AnnexNAL]) -> Bool {
-    var vps=false,sps=false,pps=false
-    for unit in units {
-        if unit.type==32 && !vps {vps=true}
-        else if unit.type==33 && vps && !sps {sps=true}
-        else if unit.type==34 && sps && !pps {pps=true}
-        else if (0...31).contains(unit.type) {return pps}
-    }
-    return false
-}
-
 private func wxgfHeaderRecoveryPayload(_ data:Data) throws -> Data? {
     let bytes=[UInt8](data)
     let starts=try annexBStarts(bytes)
@@ -137,7 +84,7 @@ private final class DecodedFrames: @unchecked Sendable {
     }
 }
 
-private func decodeHEVC(_ units:[AnnexNAL]) throws -> CGImage {
+private func decodeHEVCPixelBuffer(_ units:[AnnexNAL],pixelFormat:OSType) throws -> CVPixelBuffer {
     let parameterSets=units.filter{(32...34).contains($0.type)}
     let slices=units.filter{(0...31).contains($0.type)}
     guard parameterSets.count>=3,parameterSets.contains(where:{$0.type==32}),
@@ -196,7 +143,7 @@ private func decodeHEVC(_ units:[AnnexNAL]) throws -> CGImage {
     guard sampleStatus==noErr,let sample,CMSampleBufferDataIsReady(sample) else {throw Failure("media_image_invalid")}
 
     let attributes:[CFString:Any]=[
-        kCVPixelBufferPixelFormatTypeKey:kCVPixelFormatType_32BGRA,
+        kCVPixelBufferPixelFormatTypeKey:pixelFormat,
         kCVPixelBufferWidthKey:Int(dimensions.width),kCVPixelBufferHeightKey:Int(dimensions.height),
         kCVPixelBufferIOSurfacePropertiesKey:[:]
     ]
@@ -218,12 +165,102 @@ private func decodeHEVC(_ units:[AnnexNAL]) throws -> CGImage {
           Int64(CVPixelBufferGetWidth(frame))*Int64(CVPixelBufferGetHeight(frame))<=Int64(wxgfPixelLimit) else {
         throw Failure("media_image_invalid")
     }
+    return frame
+}
+
+private func decodeHEVC(_ units:[AnnexNAL]) throws -> CGImage {
+    let frame=try decodeHEVCPixelBuffer(units,pixelFormat:kCVPixelFormatType_32BGRA)
+    let width=Int(CVPixelBufferGetWidth(frame)),height=Int(CVPixelBufferGetHeight(frame))
     var cgImage:CGImage?
     guard VTCreateCGImageFromCVPixelBuffer(frame,options:nil,imageOut:&cgImage)==noErr,
-          let cgImage,cgImage.width==Int(dimensions.width),cgImage.height==Int(dimensions.height) else {
+          let cgImage,cgImage.width==width,cgImage.height==height else {
         throw Failure("media_image_invalid")
     }
     return cgImage
+}
+
+func rgbaPixels(_ image:CGImage) throws -> [UInt8] {
+    let width=image.width,height=image.height
+    let (pixels,overflow)=width.multipliedReportingOverflow(by:height)
+    guard width>0,height>0,!overflow,pixels<=wxgfPixelLimit else {throw Failure("media_resource_limit")}
+    let (count,countOverflow)=pixels.multipliedReportingOverflow(by:4)
+    guard !countOverflow else {throw Failure("media_resource_limit")}
+    var bytes=[UInt8](repeating:0,count:count)
+    let drawn=bytes.withUnsafeMutableBytes { raw -> Bool in
+        guard let base=raw.baseAddress,
+              let context=CGContext(data:base,width:width,height:height,bitsPerComponent:8,bytesPerRow:width*4,
+                                    space:CGColorSpaceCreateDeviceRGB(),
+                                    bitmapInfo:CGImageAlphaInfo.premultipliedLast.rawValue) else {return false}
+        context.draw(image,in:CGRect(x:0,y:0,width:width,height:height))
+        return true
+    }
+    guard drawn else {throw Failure("media_image_invalid")}
+    return bytes
+}
+
+struct LumaPlane {
+    let width:Int
+    let height:Int
+    let values:[UInt8]
+}
+
+// 单色帧直接解码为单通道像素，避免经过色彩管理污染透明度数值。
+private func decodeHEVCLuma(_ units:[AnnexNAL]) throws -> LumaPlane {
+    let frame=try decodeHEVCPixelBuffer(units,pixelFormat:kCVPixelFormatType_OneComponent8)
+    guard CVPixelBufferGetPixelFormatType(frame)==kCVPixelFormatType_OneComponent8 else {throw Failure("media_image_invalid")}
+    let width=Int(CVPixelBufferGetWidth(frame)),height=Int(CVPixelBufferGetHeight(frame))
+    guard width>0,height>0,Int64(width)*Int64(height)<=Int64(wxgfPixelLimit),
+          CVPixelBufferLockBaseAddress(frame,.readOnly)==kCVReturnSuccess else {throw Failure("media_image_invalid")}
+    defer {CVPixelBufferUnlockBaseAddress(frame,.readOnly)}
+    guard let base=CVPixelBufferGetBaseAddress(frame) else {throw Failure("media_image_invalid")}
+    let bytesPerRow=CVPixelBufferGetBytesPerRow(frame),source=base.assumingMemoryBound(to:UInt8.self)
+    var values=[UInt8](repeating:0,count:width*height)
+    for y in 0..<height {for x in 0..<width {values[y*width+x]=source[y*bytesPerRow+x]}}
+    return LumaPlane(width:width,height:height,values:values)
+}
+
+// 把彩色像素按单色帧亮度预乘，输出带alpha的PNG。
+// 不把254放大到255：半透明区域不能被误判为不透明。
+func compositeAlpha(_ color:CGImage,_ alpha:LumaPlane) throws -> CGImage {
+    guard color.width>0,color.height>0,color.width==alpha.width,color.height==alpha.height,
+          alpha.values.count==alpha.width*alpha.height else {
+        throw Failure("media_image_invalid")
+    }
+    let width=color.width,height=color.height
+    let colorPixels=try rgbaPixels(color)
+    let (count,overflow)=width.multipliedReportingOverflow(by:height*4)
+    guard !overflow else {throw Failure("media_resource_limit")}
+    var output=[UInt8](repeating:0,count:count)
+    for index in stride(from:0,to:count,by:4) {
+        let value=alpha.values[index/4]
+        let factor=Int(value)
+        output[index]=UInt8((Int(colorPixels[index])*factor+127)/255)
+        output[index+1]=UInt8((Int(colorPixels[index+1])*factor+127)/255)
+        output[index+2]=UInt8((Int(colorPixels[index+2])*factor+127)/255)
+        output[index+3]=value
+    }
+    guard let provider=CGDataProvider(data:Data(output) as CFData),
+          let image=CGImage(width:width,height:height,bitsPerComponent:8,bitsPerPixel:32,bytesPerRow:width*4,
+                            space:CGColorSpaceCreateDeviceRGB(),
+                            bitmapInfo:CGBitmapInfo(rawValue:CGImageAlphaInfo.premultipliedLast.rawValue),
+                            provider:provider,decode:nil,shouldInterpolate:false,intent:.defaultIntent) else {
+        throw Failure("media_image_invalid")
+    }
+    return image
+}
+
+// 已核验形态为一帧彩色加一帧同尺寸单色透明度；透明度不可用时退回不透明彩色图，不整张丢弃。
+private func decodeHEVCDualFrames(_ frames:[[AnnexNAL]]) throws -> Data {
+    let classified=try classifyDualHEVCFrames(frames)
+    let colorImage=try decodeHEVC(classified.color.units)
+    guard let alpha=try? decodeHEVCLuma(classified.alpha.units),
+          alpha.width==colorImage.width,alpha.height==colorImage.height else {
+        return try png(colorImage)
+    }
+    guard let composed=try? compositeAlpha(colorImage,alpha),let output=try? png(composed) else {
+        return try png(colorImage)
+    }
+    return output
 }
 
 func decodeWxgf(_ data:Data) throws -> Data {
@@ -238,6 +275,11 @@ func decodeWxgf(_ data:Data) throws -> Data {
     }
     if let hevcUnits,hevcUnits.contains(where:{$0.type==32}),hevcUnits.contains(where:{$0.type==33}),
        hevcUnits.contains(where:{$0.type==34}),hevcUnits.contains(where:{(0...31).contains($0.type)}) {
+        if let frames=try? splitHEVCFrames(hevcUnits) {
+            if frames.count==1 {return try png(decodeHEVC(frames[0]))}
+            if frames.count==2 {return try decodeHEVCDualFrames(frames)}
+            throw Failure("media_format_unsupported")
+        }
         return try png(decodeHEVC(hevcUnits))
     }
     if let range=payload.range(of:jpeg) {

@@ -10,6 +10,6 @@ if (( available < 15*1024*1024 || temporary < 15*1024*1024 )); then
 fi
 binary=$(mktemp .build/media-validation.XXXXXX)
 trap 'rm -f "$binary"' EXIT
-xcrun swiftc -parse-as-library -target arm64-apple-macosx15.0 -O main.swift shared.swift image-container.swift wxgf.swift -o "$binary"
+xcrun swiftc -parse-as-library -target arm64-apple-macosx15.0 -O main.swift shared.swift image-container.swift hevc.swift wxgf.swift -o "$binary"
 chmod 700 "$binary"
 mv -f "$binary" .build/media-validation

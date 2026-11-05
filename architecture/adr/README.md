@@ -169,3 +169,4 @@
 - [ADR-169：记忆只带入确认不是缩略图的图片](169-memory-uses-confirmed-non-thumbnail-images.md)
 - [ADR-170：不保存缩略图，取消原图分类机制](170-no-thumbnail-storage-and-no-original-classification.md)
 - [ADR-171：同一张图有标准图和高清图时取一张保存，不再比较内容](171-image-pick-standard-over-high-definition.md)
+- [ADR-172：JPEG 结束标记后允许少量尾随，WXGF 支持彩色加透明度双帧](172-jpeg-trailing-bytes-and-wxgf-alpha-frames.md)

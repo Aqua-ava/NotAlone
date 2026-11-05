@@ -73,6 +73,116 @@ func images(_ root:String) {
         check(CGImageDestinationFinalize(destination))
     }
 }
+private struct TestBitWriter {
+    var bytes:[UInt8]=[]
+    var bitCount=0
+    mutating func append(_ value:Int,_ count:Int) {
+        for shift in stride(from:count-1,through:0,by:-1) {
+            let bit=(value>>shift)&1
+            if bitCount%8==0 {bytes.append(0)}
+            if bit==1 {bytes[bytes.count-1]|=UInt8(1<<(7-bitCount%8))}
+            bitCount+=1
+        }
+    }
+    mutating func ue(_ value:Int) {
+        let encoded=value+1,bits=64-encoded.leadingZeroBitCount
+        append(0,bits-1)
+        append(encoded,bits)
+    }
+}
+private func addEmulationPrevention(_ bytes:[UInt8]) -> [UInt8] {
+    var result:[UInt8]=[]
+    var zeros=0
+    for byte in bytes {
+        if zeros==2 && byte<=3 {result.append(3);zeros=0}
+        result.append(byte)
+        zeros=byte==0 ? zeros+1:0
+    }
+    return result
+}
+// 只构造到尺寸字段的SPS；用于纯函数测试，不参与真实解码。
+private func syntheticSPS(chroma:Int,width:Int,height:Int) -> Data {
+    var writer=TestBitWriter()
+    writer.append(0,4)
+    writer.append(0,3)
+    writer.append(1,1)
+    writer.append(0,88)
+    writer.append(30,8)
+    writer.ue(0)
+    writer.ue(chroma)
+    if chroma==3 {writer.append(0,1)}
+    writer.ue(width)
+    writer.ue(height)
+    writer.append(0,1)
+    writer.append(1,1)
+    return Data([0x42,0x01]+addEmulationPrevention(writer.bytes))
+}
+private func testNAL(_ type:Int,_ sps:Data?=nil) -> AnnexNAL {
+    if let sps {return AnnexNAL(type:type,bytes:sps)}
+    return AnnexNAL(type:type,bytes:Data([UInt8(type<<1),0x01]))
+}
+private func testFrame(chroma:Int,width:Int=16,height:Int=16) -> [AnnexNAL] {
+    [testNAL(32),testNAL(33,syntheticSPS(chroma:chroma,width:width,height:height)),testNAL(34),testNAL(1)]
+}
+private func testImage(_ pixels:[UInt8],width:Int,height:Int) throws -> CGImage {
+    guard let provider=CGDataProvider(data:Data(pixels) as CFData),
+          let image=CGImage(width:width,height:height,bitsPerComponent:8,bitsPerPixel:32,bytesPerRow:width*4,
+                            space:CGColorSpaceCreateDeviceRGB(),
+                            bitmapInfo:CGBitmapInfo(rawValue:CGImageAlphaInfo.premultipliedLast.rawValue),
+                            provider:provider,decode:nil,shouldInterpolate:false,intent:.defaultIntent) else {
+        throw FixtureFailure("image_create")
+    }
+    return image
+}
+func hevcSelfTest() {
+    func expectUnsupported(_ frames:[[AnnexNAL]],_ name:String) {
+        do {_=try classifyDualHEVCFrames(frames);selfCheck(false,name+"应被拒绝")}
+        catch let failure as Failure {selfCheck(failure.code=="media_format_unsupported",name+"："+failure.code)}
+        catch {selfCheck(false,name+"：未知错误")}
+    }
+    let color=testFrame(chroma:1),mono=testFrame(chroma:0),otherSize=testFrame(chroma:0,width:32)
+    do {
+        let single=try classifyHEVCFrame(color)
+        selfCheck(single.sps.chromaFormatIDC==1 && single.sps.width==16 && single.sps.height==16,"彩色帧分类")
+        let dual=try classifyDualHEVCFrames([mono,color])
+        selfCheck(dual.color.sps.chromaFormatIDC==1 && dual.alpha.sps.chromaFormatIDC==0,"单色在前时分出彩色与透明度帧")
+        let reversed=try classifyDualHEVCFrames([color,mono])
+        selfCheck(reversed.alpha.sps.chromaFormatIDC==0 && reversed.color.sps.chromaFormatIDC==1,"彩色在前时同样分类")
+    } catch let failure as Failure {selfCheck(false,"双帧分类抛出："+failure.code)}
+    catch {selfCheck(false,"双帧分类未知错误")}
+    expectUnsupported([color,color],"两帧都是彩色")
+    expectUnsupported([mono,mono],"两帧都是单色")
+    expectUnsupported([mono,otherSize],"尺寸不一致")
+    expectUnsupported([mono,color,mono],"三帧")
+    do {
+        let composed=try compositeAlpha(try testImage([10,20,30,255,40,50,60,255,70,80,90,255,100,110,120,255],width:2,height:2),
+                                        LumaPlane(width:2,height:2,values:[0,128,255,254]))
+        selfCheck(try rgbaPixels(composed)==[0,0,0,0,20,25,30,128,70,80,90,255,100,110,120,254],"透明度合成预乘结果")
+    } catch let failure as Failure {selfCheck(false,"透明度合成："+failure.code)}
+    catch {selfCheck(false,"透明度合成未知错误")}
+    do {
+        let frames=try splitHEVCFrames(mono+color)
+        selfCheck(frames.count==2 && frames[0].count==4 && frames[1].count==4,"按VPS切分双帧")
+        selfCheck(try splitHEVCFrames(color).count==1,"单帧保持一帧")
+        do {
+            _=try splitHEVCFrames([testNAL(33),testNAL(1)])
+            selfCheck(false,"首单元不是VPS应被拒绝")
+        } catch let failure as Failure {selfCheck(failure.code=="media_image_invalid","首单元不是VPS："+failure.code)}
+        var stream=Data()
+        for unit in mono+color {stream.append(contentsOf:[0,0,0,1]);stream.append(unit.bytes)}
+        selfCheck(try splitHEVCFrames(annexBUnits(stream)).count==2,"Annex B解析后仍按VPS切分")
+    } catch let failure as Failure {selfCheck(false,"分组："+failure.code)}
+    catch {selfCheck(false,"分组未知错误")}
+    for chroma in 0...3 {
+        guard let sps=hevcSPSInfo(syntheticSPS(chroma:chroma,width:320,height:240)) else {
+            selfCheck(false,"SPS chroma="+String(chroma)+"解析失败");continue
+        }
+        selfCheck(sps.chromaFormatIDC==chroma && sps.width==320 && sps.height==240,"SPS chroma="+String(chroma))
+    }
+    selfCheck(hevcSPSInfo(Data(syntheticSPS(chroma:1,width:16,height:16).prefix(16)))==nil,"截短SPS应返回nil")
+    selfCheck(hevcSPSInfo(Data([0x42,0x01,0x00]))==nil,"极短SPS应返回nil")
+}
+
 func audioSample() -> CMSampleBuffer {
     var stream=AudioStreamBasicDescription(mSampleRate:48_000,mFormatID:kAudioFormatLinearPCM,mFormatFlags:kAudioFormatFlagIsSignedInteger|kAudioFormatFlagIsPacked,mBytesPerPacket:2,mFramesPerPacket:1,mBytesPerFrame:2,mChannelsPerFrame:1,mBitsPerChannel:16,mReserved:0)
     var description:CMAudioFormatDescription?
@@ -116,6 +226,73 @@ private final class EncodedFrame: @unchecked Sendable {
 private let captureHevcFrame:VTCompressionOutputCallback={context,_,status,_,sample in
     guard let context else {return}
     Unmanaged<EncodedFrame>.fromOpaque(context).takeUnretainedValue().receive(sample,status:status)
+}
+// 必须显式指定单色profile：默认HEVC Main即使输入单通道也会编码成4:2:0，SPS chroma_format_idc不会是0。
+func monoHEVC(_ alpha:[UInt8]) throws -> (annexB:Data,sets:[Data],slices:[Data]) {
+    let width=16,height=16
+    guard alpha.count==width*height else {throw FixtureFailure("mono_alpha_size")}
+    let attributes:[CFString:Any]=[kCVPixelBufferPixelFormatTypeKey:kCVPixelFormatType_OneComponent8,
+        kCVPixelBufferWidthKey:width,kCVPixelBufferHeightKey:height,kCVPixelBufferIOSurfacePropertiesKey:[:]]
+    var pixel:CVPixelBuffer?
+    guard CVPixelBufferCreate(kCFAllocatorDefault,width,height,kCVPixelFormatType_OneComponent8,attributes as CFDictionary,&pixel)==kCVReturnSuccess,
+          let pixel else {throw FixtureFailure("mono_pixel")}
+    CVPixelBufferLockBaseAddress(pixel,[])
+    guard let base=CVPixelBufferGetBaseAddress(pixel)?.assumingMemoryBound(to:UInt8.self) else {
+        CVPixelBufferUnlockBaseAddress(pixel,[]);throw FixtureFailure("mono_base")
+    }
+    let rowBytes=CVPixelBufferGetBytesPerRow(pixel)
+    for y in 0..<height {for x in 0..<width {base[y*rowBytes+x]=alpha[y*width+x]}}
+    CVPixelBufferUnlockBaseAddress(pixel,[])
+
+    let encoded=EncodedFrame()
+    var session:VTCompressionSession?
+    guard VTCompressionSessionCreate(allocator:kCFAllocatorDefault,width:Int32(width),height:Int32(height),codecType:kCMVideoCodecType_HEVC,encoderSpecification:nil,imageBufferAttributes:attributes as CFDictionary,compressedDataAllocator:nil,outputCallback:captureHevcFrame,refcon:Unmanaged.passUnretained(encoded).toOpaque(),compressionSessionOut:&session)==noErr,
+          let session else {throw FixtureFailure("mono_encoder")}
+    defer {VTCompressionSessionInvalidate(session)}
+    guard VTSessionSetProperty(session,key:kVTCompressionPropertyKey_ProfileLevel,value:kVTProfileLevel_HEVC_Monochrome_AutoLevel)==noErr,
+          VTSessionSetProperty(session,key:kVTCompressionPropertyKey_MaxKeyFrameInterval,value:1 as CFNumber)==noErr,
+          VTCompressionSessionPrepareToEncodeFrames(session)==noErr else {throw FixtureFailure("mono_setup")}
+    var encodeFlags=VTEncodeInfoFlags()
+    guard VTCompressionSessionEncodeFrame(session,imageBuffer:pixel,presentationTimeStamp:.zero,duration:CMTime(value:1,timescale:30),frameProperties:nil,sourceFrameRefcon:nil,infoFlagsOut:&encodeFlags)==noErr,
+          VTCompressionSessionCompleteFrames(session,untilPresentationTimeStamp:.invalid)==noErr else {throw FixtureFailure("mono_encode")}
+    let (sample,status)=encoded.get()
+    guard status==noErr,let sample,let description=CMSampleBufferGetFormatDescription(sample),
+          let block=CMSampleBufferGetDataBuffer(sample) else {throw FixtureFailure("mono_sample")}
+    var setCount=0
+    guard CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(description,parameterSetIndex:0,parameterSetPointerOut:nil,parameterSetSizeOut:nil,parameterSetCountOut:&setCount,nalUnitHeaderLengthOut:nil)==noErr,
+          setCount>=3,setCount<=16 else {throw FixtureFailure("mono_parameter_set_count")}
+    var sets:[Data]=[]
+    for index in 0..<setCount {
+        var pointer:UnsafePointer<UInt8>?
+        var size=0
+        guard CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(description,parameterSetIndex:index,parameterSetPointerOut:&pointer,parameterSetSizeOut:&size,parameterSetCountOut:nil,nalUnitHeaderLengthOut:nil)==noErr,
+              let pointer,size>2,size<=1_000_000 else {throw FixtureFailure("mono_parameter_set_fetch")}
+        let unit=Data(bytes:pointer,count:size)
+        if (32...34).contains((Int(unit[0])>>1)&0x3f) {sets.append(unit)}
+    }
+    let length=CMBlockBufferGetDataLength(block)
+    guard length>0,length<=32*1024*1024 else {throw FixtureFailure("mono_sample_size")}
+    var bytes=Data(count:length)
+    let copy=bytes.withUnsafeMutableBytes { raw -> OSStatus in
+        guard let base=raw.baseAddress else {return OSStatus(paramErr)}
+        return CMBlockBufferCopyDataBytes(block,atOffset:0,dataLength:length,destination:base.assumingMemoryBound(to:Int8.self))
+    }
+    guard copy==kCMBlockBufferNoErr else {throw FixtureFailure("mono_sample_copy")}
+    var slices:[Data]=[]
+    var cursor=0
+    while cursor<bytes.count {
+        guard bytes.count-cursor>=4 else {throw FixtureFailure("mono_nal_length")}
+        let count=(Int(bytes[cursor])<<24)|(Int(bytes[cursor+1])<<16)|(Int(bytes[cursor+2])<<8)|Int(bytes[cursor+3])
+        cursor+=4
+        guard count>2,count<=bytes.count-cursor else {throw FixtureFailure("mono_nal_size")}
+        let unit=Data(bytes[cursor..<cursor+count])
+        if (Int(unit[0])>>1)&0x3f < 32 {slices.append(unit)}
+        cursor+=count
+    }
+    guard sets.count>=3,!slices.isEmpty else {throw FixtureFailure("mono_units")}
+    var annexB=Data()
+    for unit in sets+slices {annexB.append(contentsOf:[0,0,0,1]);annexB.append(unit)}
+    return (annexB,sets,slices)
 }
 func wxgf(_ root:String) throws {
     let attributes:[CFString:Any]=[kCVPixelBufferPixelFormatTypeKey:kCVPixelFormatType_32ARGB,kCVPixelBufferWidthKey:16,kCVPixelBufferHeightKey:16,kCVPixelBufferIOSurfacePropertiesKey:[:]]
@@ -183,6 +360,19 @@ func wxgf(_ root:String) throws {
         return result
     }
     let output=stream(repeats:1),multiple=stream(repeats:2)
+    let alphaValues=(0..<256).map{UInt8((($0%16)*255)/15)}
+    let mono=try monoHEVC(alphaValues)
+    let alphaFrame=mono.annexB
+    func frameData(_ sets:[Data],_ slices:[Data]) -> Data {
+        var result=Data()
+        for unit in sets+slices {result.append(contentsOf:[0,0,0,1]);result.append(unit)}
+        return result
+    }
+    let colorFrame=frameData(sets,slices)
+    let brokenAlphaFrame=frameData(mono.sets,mono.slices.map{Data($0.prefix(2))})
+    var dualFrame=Data("wxgf".utf8);dualFrame.append(alphaFrame);dualFrame.append(colorFrame)
+    var dualBrokenAlpha=Data("wxgf".utf8);dualBrokenAlpha.append(brokenAlphaFrame);dualBrokenAlpha.append(colorFrame)
+    var dualTwoColor=Data("wxgf".utf8);dualTwoColor.append(colorFrame);dualTwoColor.append(colorFrame)
     var headerPreamble=Data("wxgf".utf8)
     headerPreamble.append(contentsOf:[0,0,0,1,0x80,0x01])
     for unit in sets+slices {headerPreamble.append(contentsOf:[0,0,0,1]);headerPreamble.append(unit)}
@@ -191,16 +381,44 @@ func wxgf(_ root:String) throws {
     headerBeyondBound.append(contentsOf:[0,0,0,1,0x80,0x01])
     for unit in sets+slices {headerBeyondBound.append(contentsOf:[0,0,0,1]);headerBeyondBound.append(unit)}
     guard output.count>4,output.count<=32*1024*1024,multiple.count<=32*1024*1024,
-          headerPreamble.count<=32*1024*1024,headerBeyondBound.count<=32*1024*1024 else {throw FixtureFailure("wxgf_size")}
+          headerPreamble.count<=32*1024*1024,headerBeyondBound.count<=32*1024*1024,
+          dualFrame.count<=32*1024*1024,dualBrokenAlpha.count<=32*1024*1024,dualTwoColor.count<=32*1024*1024 else {throw FixtureFailure("wxgf_size")}
     try output.write(to:URL(fileURLWithPath:root+"/wxgf"))
     try multiple.write(to:URL(fileURLWithPath:root+"/wxgf.multiframe"))
     try headerPreamble.write(to:URL(fileURLWithPath:root+"/wxgf.header-preamble"))
     try headerBeyondBound.write(to:URL(fileURLWithPath:root+"/wxgf.header-over-limit"))
+    try dualFrame.write(to:URL(fileURLWithPath:root+"/wxgf.dual-frame"))
+    try dualBrokenAlpha.write(to:URL(fileURLWithPath:root+"/wxgf.dual-frame-broken-alpha"))
+    try dualTwoColor.write(to:URL(fileURLWithPath:root+"/wxgf.dual-frame-two-color"))
+    try verifyWxgfFixtures(root)
+}
+// 夹具生成后立即走一遍真实解码，验证透明度合成与降级，而不是只依赖文件存在。
+private func verifyWxgfFixtures(_ root:String) throws {
+    func decode(_ name:String) throws -> Data {try decodeWxgf(try Data(contentsOf:URL(fileURLWithPath:root+"/"+name)))}
+    let plain=try decode("wxgf")
+    let dual=try decode("wxgf.dual-frame")
+    guard dual.count>26,dual[25]==6 else {throw FixtureFailure("dual_alpha_png")}
+    guard let source=CGImageSourceCreateWithData(dual as CFData,nil),
+          let image=CGImageSourceCreateImageAtIndex(source,0,nil) else {throw FixtureFailure("dual_png_decode")}
+    guard image.width==16,image.height==16 else {throw FixtureFailure("dual_png_size")}
+    let pixels=try rgbaPixels(image)
+    for x in 0..<16 {
+        // HEVC有损压缩会让单色帧亮度有少量偏差，允许±6。
+        let expected=Int((x*255)/15),actual=Int(pixels[x*4+3])
+        guard abs(actual-expected)<=6 else {throw FixtureFailure("dual_alpha_value")}
+    }
+    guard try decode("wxgf.dual-frame-broken-alpha")==plain else {throw FixtureFailure("broken_alpha_fallback")}
+    do {
+        _=try decode("wxgf.dual-frame-two-color")
+        throw FixtureFailure("two_color_accepted")
+    } catch let failure as Failure {
+        guard failure.code=="media_format_unsupported" else {throw FixtureFailure("two_color_error")}
+    }
 }
 @main struct Fixtures {
     static func main() async throws {
         let root=CommandLine.arguments[1]
-        if root=="--selftest" {jpegSelfTest();print("selftest ok");return}
+        if root=="--selftest" {jpegSelfTest();hevcSelfTest();print("selftest ok");return}
         images(root)
         try await video(root+"/h264.mp4",codec:.h264,audio:false)
         try await video(root+"/h264-aac.mp4",codec:.h264,audio:true)
