@@ -79,3 +79,23 @@ test('所有CLI使用者排空后才关闭共享进程，随后关闭模型与�
  await closeSqliteHostResources({foreground:resource('foreground'),media:resource('media'),history:resource('history'),contacts:resource('contacts'),wechat:resource('wechat'),models:resource('models'),storage:resource('storage')});
  assert.deepEqual(calls,['foreground','media','history','contacts','wechat','models','storage']);
 });
+test('停读失败只给出拒绝关闭的资源键，其余资源照常排空且不继续关闭共享存储',async()=>{
+ const calls=[];
+ await assert.rejects(closeSqliteHostResources({
+  imageSync:{close:async()=>{calls.push('image');throw new Error('合成私密失败原因');}},
+  media:{close:async()=>{calls.push('media');}},
+  memory:{close:async()=>{calls.push('memory');throw new Error('另一个合成失败');}},
+  wechat:{close:async()=>{calls.push('wechat');}},
+  storage:{close:async()=>{calls.push('storage');}},
+ }),error=>{
+  assert.equal(error.message,'SQLITE_HOST_RESOURCE_CLOSE_FAILED');assert.equal(error.errors.length,2);
+  assert.deepEqual([...error.resources],['imageSync','memory']);
+  assert.doesNotMatch(JSON.stringify(error.resources),/合成/);
+  return true;
+ });
+ assert.deepEqual(calls.sort(),['image','media','memory']);
+});
+test('后段资源关闭失败同样记录资源键',async()=>{
+ await assert.rejects(closeSqliteHostResources({wechat:{close:async()=>{throw new Error('x');}},storage:{close:async()=>{}}}),error=>[...error.resources].join()==='wechat');
+ await assert.rejects(closeSqliteHostResources({storage:{close:async()=>{throw new Error('x');}}}),error=>[...error.resources].join()==='storage');
+});

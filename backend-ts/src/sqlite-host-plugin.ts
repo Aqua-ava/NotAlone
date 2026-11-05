@@ -67,6 +67,11 @@ export function authorizeSqliteRequest(req: IncomingMessage, token: string): boo
   return req.headers.origin === undefined && authCount === 1 && supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
+/** 停读时哪些领域资源拒绝关闭；名称取自固定的资源键，不含任何业务内容，只用于诊断。 */
+export class SqliteHostResourceCloseFailure extends AggregateError {
+  readonly resources: readonly string[];
+  constructor(errors: unknown[], resources: string[]) { super(errors, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED'); this.resources = [...resources]; }
+}
 interface SqliteHostResource { close(): Promise<void> }
 /** 同时通知各领域停读并等待真实排空；业务所有者未释放时保留共享资源，允许原操作续清。 */
 export async function closeSqliteHostResources(resources: {
@@ -74,17 +79,22 @@ export async function closeSqliteHostResources(resources: {
   historyRecertify?: SqliteHostResource; historyClear?: SqliteHostResource; historyResync?: SqliteHostResource; foreground?: SqliteHostResource; assistantReads?:SqliteHostResource; backgroundReads?:SqliteHostResource; library?:SqliteHostResource; contacts?: SqliteHostResource; wechat?:SqliteHostResource; models?: SqliteHostResource; storage?: SqliteHostResource;
 }): Promise<void> {
   const failures: unknown[] = [];
+  const failed: string[] = [];
+  const fail = () => new SqliteHostResourceCloseFailure(failures, failed);
   // 不串行等待领域关闭：前一个读者可能正等待后一个领域释放共享CLI租约。
-  const closed = await Promise.allSettled([resources.firstHistory, resources.incremental, resources.imageSync, resources.quoteSync, resources.historyRecertify, resources.historyClear, resources.historyResync, resources.foreground, resources.assistantReads, resources.backgroundReads, resources.discussions, resources.memory, resources.media, resources.history, resources.contacts, resources.library]
-    .map(async resource => resource?.close()));
-  for (const result of closed) if (result.status === 'rejected') failures.push(result.reason);
-  if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
-  try { await resources.wechat?.close(); } catch (error) { failures.push(error); }
-  if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
-  try { await resources.models?.close(); } catch (error) { failures.push(error); }
-  if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
-  try { await resources.storage?.close(); } catch (error) { failures.push(error); }
-  if (failures.length) throw new AggregateError(failures, 'SQLITE_HOST_RESOURCE_CLOSE_FAILED');
+  const domains = ([['firstHistory', resources.firstHistory], ['incremental', resources.incremental], ['imageSync', resources.imageSync], ['quoteSync', resources.quoteSync],
+    ['historyRecertify', resources.historyRecertify], ['historyClear', resources.historyClear], ['historyResync', resources.historyResync], ['foreground', resources.foreground],
+    ['assistantReads', resources.assistantReads], ['backgroundReads', resources.backgroundReads], ['discussions', resources.discussions], ['memory', resources.memory],
+    ['media', resources.media], ['history', resources.history], ['contacts', resources.contacts], ['library', resources.library]] as const);
+  const closed = await Promise.allSettled(domains.map(async ([, resource]) => resource?.close()));
+  closed.forEach((result, index) => { if (result.status === 'rejected') { failures.push(result.reason); failed.push(domains[index][0]); } });
+  if (failures.length) throw fail();
+  try { await resources.wechat?.close(); } catch (error) { failures.push(error); failed.push('wechat'); }
+  if (failures.length) throw fail();
+  try { await resources.models?.close(); } catch (error) { failures.push(error); failed.push('models'); }
+  if (failures.length) throw fail();
+  try { await resources.storage?.close(); } catch (error) { failures.push(error); failed.push('storage'); }
+  if (failures.length) throw fail();
 }
 
 /** 显式开发能力分支；领域事实及资格仍由联系人服务与受控动作负责。 */
@@ -271,7 +281,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
           let available=false;
           if(shutdown.state==='running')try{storage!.verifyIdentity();available=true;}catch{/* 仍保留原认证目标供明确停读。 */}
           if(confirmStopOnStatus&&shutdown.state==='stopped')res.once('finish',()=>ctx.appExit!(0));
-          respond(200, { state:shutdown.state, shutdownProtocol:'poll-v1', shutdownFailed:shutdown.shutdownFailed, storageIdentity:{databaseId:storage!.status.databaseId,ownerId,available}, background_processing:backgroundProcessing, image_processing:imageProcessing, image_sync:imageSync?.status()??null, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', storageDiagnostic: storage?.failureDiagnostic ?? null, storageTiming:storage?.timingDiagnostic??null, capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
+          respond(200, { state:shutdown.state, shutdownProtocol:'poll-v1', shutdownFailed:shutdown.shutdownFailed, shutdownFailedResources:shutdown.failedResources, storageIdentity:{databaseId:storage!.status.databaseId,ownerId,available}, background_processing:backgroundProcessing, image_processing:imageProcessing, image_sync:imageSync?.status()??null, runtime: 'dsh', hostRuntime: 'typescript', pid: process.pid, storage: 'sqlite', storageDiagnostic: storage?.failureDiagnostic ?? null, storageTiming:storage?.timingDiagnostic??null, capabilities: capabilities.capabilities, deletion_scopes: installedDeletionScopes, ownership }); return;
         }
         if (url.pathname === '/api/events') {
           if (req.method!=='GET') { respond(405,{error:'method_not_allowed'});return; }

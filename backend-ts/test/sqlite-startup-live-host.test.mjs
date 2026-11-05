@@ -32,6 +32,8 @@ test('真实SQLite宿主存活时：重连预检不改写清单，也不放行�
   const info = await handshake(host, infoPath);
   const status = async () => (await fetch(`http://${info.address}/api/runtime/status`, { headers: { Authorization: `Bearer ${info.token}` } })).json();
   assert.equal((await status()).storageIdentity.available, true);
+  // 停读诊断字段：未失败时为空数组，失败时只列固定资源键。
+  assert.deepEqual((await status()).shutdownFailedResources, []);
   const before = loadManifest(root);
 
   // 宿主自己的握手与启动锁都真实存在且存活；重连预检必须仍然准备原目标。

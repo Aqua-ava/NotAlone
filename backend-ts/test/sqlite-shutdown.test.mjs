@@ -20,3 +20,17 @@ test('停读失败保留失败状态，查询不重放关闭，明确重试才�
  shutdown.begin();assert.equal(shutdown.shutdownFailed,false);await shutdown.stop();
  assert.equal(shutdown.state,'stopped');assert.equal(calls,2);
 });
+
+test('停读失败暴露固定的资源键供状态诊断，重试开始即清空，成功后保持为空',async()=>{
+ let calls=0;
+ const failure=Object.assign(new Error('SQLITE_HOST_RESOURCE_CLOSE_FAILED'),{resources:['imageSync','合成私密名称','memory']});
+ const shutdown=new SqliteHostShutdown(async()=>{if(++calls===1)throw failure;});
+ assert.deepEqual(shutdown.failedResources,[]);
+ await assert.rejects(shutdown.stop());
+ assert.deepEqual([...shutdown.failedResources],['imageSync','memory'],'只保留符合固定名称形状的键');
+ shutdown.begin();assert.deepEqual(shutdown.failedResources,[]);await shutdown.stop();
+ assert.equal(shutdown.state,'stopped');assert.deepEqual(shutdown.failedResources,[]);
+ // 未知形状的错误不产生资源键。
+ const other=new SqliteHostShutdown(async()=>{throw new Error('任意错误');});
+ await assert.rejects(other.stop());assert.deepEqual(other.failedResources,[]);
+});
