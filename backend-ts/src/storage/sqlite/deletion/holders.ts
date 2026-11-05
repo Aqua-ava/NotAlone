@@ -3,7 +3,9 @@ import type { DeletionOperation } from './contracts.ts';
 
 // coversAllSources只用于声明可能持有该联系人任意来源的读者，其他领域默认不扩大匹配。
 // scopeKeys把临时读者纳入既有删除闭包；每次持有者仍使用独立的唯一key。
-export interface ActiveResource { key: string; scopeKeys?: readonly string[]; ownerId: string; contactId?: string; coversAllContacts?: boolean; coversAllSources?: boolean; generation: bigint; close: () => Promise<void> }
+// admittedDeletionIds只由可信的名单 lifetime 登记：这些联系人删除已封禁对应身份，名单读者只读活跃联系人，
+// 因此不进入该操作后续的 drain/verify 闭包；未登记准入的旧读者仍按原规则关闭。
+export interface ActiveResource { key: string; scopeKeys?: readonly string[]; ownerId: string; contactId?: string; coversAllContacts?: boolean; coversAllSources?: boolean; admittedDeletionIds?: readonly string[]; generation: bigint; close: () => Promise<void> }
 interface HeldResource extends ActiveResource { closing?: Promise<void> }
 const scopedKey = (owner: string, key: string) => JSON.stringify([owner, key]);
 // 先登记后使用；close回调必须等待官方dispose/close、finally和末次写入，不得仅发cancel。
@@ -37,8 +39,11 @@ export class ActiveHolders {
     if (op.scope.kind === 'contact' || op.scope.kind === 'contact_history') advance(this.blockedContacts, JSON.stringify([op.ownerId, op.scope.contactId]));
     if (op.scope.kind === 'source') advance(this.blockedSourceContacts, JSON.stringify([op.ownerId, op.scope.contactId]));
   }
+  private admitted(r: HeldResource, op: DeletionOperation): boolean {
+    return op.scope.kind === 'contact' && r.coversAllContacts === true && r.admittedDeletionIds?.includes(op.operationId) === true;
+  }
   private matching(op: DeletionOperation, keys: string[]): HeldResource[] {
-    return [...this.held.values()].filter(r => r.ownerId === op.ownerId && (keys.includes(r.key) || r.scopeKeys?.some(key=>keys.includes(key)) || op.scope.kind === 'account'
+    return [...this.held.values()].filter(r => r.ownerId === op.ownerId && !this.admitted(r, op) && (keys.includes(r.key) || r.scopeKeys?.some(key=>keys.includes(key)) || op.scope.kind === 'account'
       || (op.scope.kind === 'source' && r.coversAllSources === true && r.contactId === op.scope.contactId && r.generation < op.acceptedGeneration)
       || ((op.scope.kind === 'contact' || op.scope.kind === 'contact_history') && (r.coversAllContacts || (r.contactId === op.scope.contactId && r.generation < op.acceptedGeneration)))));
   }

@@ -116,6 +116,61 @@ test('未完成联系人或账号删除仍关闭身份元数据服务（安全�
   }
 });
 
+test('宿主级正例：联系人已封禁的未完成删除跨重启后名单只读可读且被删对象不可见', async t => {
+  const f = await fixture(t);
+  const ownerId = owner;
+  const contactId = f.saved[0].contact_id;
+  await f.storage.close();
+  const db = new DatabaseSync(path.join(f.root, 'managed/sqlite/notalone.sqlite'));
+  try {
+    db.prepare("UPDATE contact SET state='deleting' WHERE owner_id=? AND id=?").run(ownerId, contactId);
+    db.prepare("INSERT INTO deletion_operation(operation_id,owner_identity,request_namespace,request_key,scope_kind,contact_identity,accepted_generation,state,plan_revision,domain_manifest,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
+      .run('early-open-contact-operation', ownerId, 'metadata_host_early', 'early-open-contact-key', 'contact', contactId, 1, 'cleaning', 1, '{}', 1);
+  } finally { db.close(); }
+  const infoPath = path.join(f.root, 'managed/sqlite-backend.info');
+  const host = await launchDsh({ nodeExecutable: process.execPath, projectDirectory: new URL('../../', import.meta.url).pathname,
+    envFilePath: path.join(f.root, 'unused.env'), infoPath, businessHome: f.root, environment: {},
+    sqlite: { userData: f.root, expectedDatabaseId: databaseId(f.root), role: 'test', capabilities: ['contacts'] } }, () => true);
+  t.after(() => host.terminate());
+  const info = await handshake(host, infoPath);
+  const request = async (route, method = 'GET', body) => {
+    const response = await fetch(`http://${info.address}${route}`, { method, headers: { Authorization: `Bearer ${info.token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    return { status: response.status, body: await response.json().catch(() => null) };
+  };
+  const contacts = await request('/api/contacts');
+  assert.equal(contacts.status, 200, JSON.stringify(contacts));
+  assert.ok(contacts.body.contacts.every(row => row.contact_id !== contactId), '已封禁联系人不能出现在目录');
+  const bindings = await request('/api/sync/cli-bindings');
+  assert.equal(bindings.status, 200, JSON.stringify(bindings));
+  assert.equal((await request('/api/sync/status')).status, 200);
+  const write = await request('/api/sync/enable', 'POST', {});
+  assert.equal(write.status, 409); assert.equal(write.body.error, 'identity_closed');
+  const sessions = await request('/api/sync/cli-sessions');
+  assert.equal(sessions.status, 409); assert.equal(sessions.body.error, 'identity_closed');
+});
+
+test('宿主级负例：未完成账户删除跨重启仍关闭名单读取', async t => {
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-metadata-host-account-')));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const storage = await SqliteStorage.open({ userData: root, intent: 'create', role: 'test' });
+  const ownerId = await storage.execute('identity.resolveOwner', { proposedOwnerId: '33333333-3333-4333-8333-333333333333', at: 1 });
+  await storage.close();
+  const db = new DatabaseSync(path.join(root, 'managed/sqlite/notalone.sqlite'));
+  try {
+    db.prepare("INSERT INTO deletion_operation(operation_id,owner_identity,request_namespace,request_key,scope_kind,accepted_generation,state,plan_revision,domain_manifest,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)")
+      .run('early-account-operation', ownerId, 'metadata_host_account', 'early-account-key', 'account', 1, 'blocked', 1, '{}', 1);
+  } finally { db.close(); }
+  const infoPath = path.join(root, 'managed/sqlite-backend.info');
+  const host = await launchDsh({ nodeExecutable: process.execPath, projectDirectory: new URL('../../', import.meta.url).pathname,
+    envFilePath: path.join(root, 'unused.env'), infoPath, businessHome: root, environment: {},
+    sqlite: { userData: root, expectedDatabaseId: databaseId(root), role: 'test', capabilities: ['contacts'] } }, () => true);
+  t.after(() => host.terminate());
+  const info = await handshake(host, infoPath);
+  const response = await fetch(`http://${info.address}/api/contacts`, { headers: { Authorization: `Bearer ${info.token}` } });
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error, 'identity_closed');
+});
+
 function databaseId(root) {
   const db = new DatabaseSync(path.join(root, 'managed/sqlite/notalone.sqlite'), { readOnly: true });
   try { return db.prepare('SELECT database_id FROM database_instance WHERE slot=1').all()[0].database_id; }

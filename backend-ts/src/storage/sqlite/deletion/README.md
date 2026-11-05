@@ -39,9 +39,9 @@ HTTP支持`Idempotency-Key`标识一次明确请求，账户删除必须提供�
 
 共用宿主仅对`GET /api/deletions?contact_id=...&scope_kind=discussion`及`GET /api/tasks/status?contact_id=...&task_id=...`放行严格查询形状，其他查询继续拒绝。公开操作状态的checks只包含种类、领域、结果和有限机器证明，不返回路径、文件身份或正文。正常DSH握手位于`managed/sqlite-backend.info`，不放进数据库辅助文件目录；账号删除的存储复核由同一维护流程执行，未知文件检查不得放宽。
 
-`ActiveHolders.register({key,ownerId,contactId?,generation,close})`必须在首次读写前执行。key为`domain:稳定副本ID`；generation为对应资料资格快照。业务仍须在DB动作内复验身份与媒体资格，内存持有者登记不授予权限。返回的释放函数会等待close；不能手工移除尚未关闭的引用。close回调必须等待官方AgentHandle.dispose、读写handle.close、业务finally、预览/播放释放及末次写入。只有cancel不构成释放证明；超时/异常保持blocked，不能因此删文件。不同owner同名key不互相封禁；新的合法资料代次可登记新副本，不复活已封禁的旧key。
+`ActiveHolders.register({key,ownerId,contactId?,generation,close})`必须在首次读写前执行。key为`domain:稳定副本ID`；generation为对应资料资格快照。名单lifetime可对已封禁联系人的删除操作额外声明`admittedDeletionIds`：匹配只跳过这些操作的`coversAllContacts`读者，显式key、scopeKeys、账户、来源与contact_history闭包不变；未声明准入的旧读者仍被关闭。业务仍须在DB动作内复验身份与媒体资格，内存持有者登记不授予权限。返回的释放函数会等待close；不能手工移除尚未关闭的引用。close回调必须等待官方AgentHandle.dispose、读写handle.close、业务finally、预览/播放释放及末次写入。只有cancel不构成释放证明；超时/异常保持blocked，不能因此删文件。不同owner同名key不互相封禁；新的合法资料代次可登记新副本，不复活已封禁的旧key。
 
-正常宿主已通过`ContactMetadataLifetime`登记联系人域当前账号候选与跨联系人名单预览（`coversAllContacts:true`），并把同一`ActiveHolders`传给后台只读通道；后台读取先取owner/contact删除代次，再以`background-read:<uuid>`登记，联系人读取按`coversAllSources:true`纳入来源删除闭包。联系人删除关闭整个旧预览，清候选/快照并等待所有metadata读取实际结算；旧SQL等待后的缓存回填同样拒绝。只在owner仍active且该owner全部删除操作completed时，后续请求才创建空的新服务，不自动读渠道；账号删除后保持关闭，普通重读/再次检测不能重装旧预览。账号范围排空全部owner持有者，不比较不同领域的联系人代次与账号epoch。
+正常宿主已通过`ContactMetadataLifetime`登记联系人域当前账号候选与跨联系人名单预览（`coversAllContacts:true`），并把同一`ActiveHolders`传给后台只读通道；后台读取先取owner/contact删除代次，再以`background-read:<uuid>`登记，联系人读取按`coversAllSources:true`纳入来源删除闭包。联系人删除先关闭整个旧预览并等待所有metadata读取实际结算，旧SQL等待后的缓存回填同样拒绝；plan事务封禁联系人后，名单服务按`deletion.metadataAdmission`只读重建：重建读者登记`admittedDeletionIds`，只查询活跃联系人，不进入这些已封禁操作的drain/verify闭包，身份写入与可能重新列出已删对象的名单预览仍关闭到completed。账户删除、尚未封禁或缺失联系人的任务仍关闭名单；账号删除后保持关闭，普通重读/再次检测不能重装旧预览。账号范围排空全部owner持有者，不比较不同领域的联系人代次与账号epoch。
 
 `ManagedFiles`只允许`managed/runtime-copies`、`managed/media`、`managed/cache`三个固定区。`prepareArea`只建空私有区；`capture(area,locator,kind)`取得实际dev/ino/birthtimeNs/uid与每级父目录身份。locator是受限相对定位，不能是绝对路径、点段或符号链接。文件必须为当前用户拥有、私有权限且nlink=1；目录目标只用rmdir删除空目录。数据库、Skill原目录、模型密钥、微信原件和用户外部原文件不属于这些可删区。
 

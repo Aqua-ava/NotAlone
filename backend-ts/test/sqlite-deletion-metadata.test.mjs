@@ -117,3 +117,74 @@ test('联系人删除清掉账号候选与跨联系人预览，重建空服务�
  assert.ok(afterReplay.some(row=>row.contact_id===restored.contact_id));
  assert.ok(afterReplay.some(row=>row.contact_id===sibling));
 });
+
+async function seeded(f) {
+ const candidate=(await f.request('/api/setup/wechat/detect','POST',{})).body;
+ await f.request('/api/setup/wechat/confirm','POST',{candidate_token:candidate.candidate_token,confirmed:true,mode:'selected',history_authorized:false});
+ const snapshot=(await f.request('/api/sync/cli-sessions','GET',undefined,{'x-notalone-metadata-consent':'selected-list'})).body;
+ await f.request('/api/sync/cli-bindings/confirm','POST',{snapshot_token:snapshot.snapshot_token,selections:snapshot.sessions.map(row=>({locator:row.username,observed_display_name:row.display_name,expected_selection_generation:'0'})),history_authorized:true});
+ const contacts=(await f.request('/api/contacts')).body.contacts;
+ return {contact:contacts.find(row=>row.display_name==='合成甲').contact_id,sibling:contacts.find(row=>row.display_name==='合成乙').contact_id};
+}
+
+test('名单准入只在联系人已封禁后提前放行，封禁前与账户删除仍关闭', async t => {
+ const f=await fixture(t,()=>({account:async()=>evidence,sessions:async()=>[
+  {externalKey:'synthetic-a',displayName:'合成甲',kind:'private',identityAssurance:'verified'},
+  {externalKey:'synthetic-b',displayName:'合成乙',kind:'private',identityAssurance:'verified'}],close:async()=>{}}));
+ const {contact}=await seeded(f);
+ const admission=()=>f.storage.execute('deletion.metadataAdmission',{ownerId});
+ const strict=()=>f.storage.execute('deletion.metadataAvailable',{ownerId});
+ assert.deepEqual(await admission(),{available:true,writable:true,admittedOperations:[]});
+ assert.equal(await strict(),true);
+ const op=await f.deletion.plan({ownerId,requestKey:'admission-contact',scope:{kind:'contact',contactId:contact}});
+ // 严格门禁仍把未完成的联系人删除视为不可用；读侧准入因联系人已置 deleting 提前放行。
+ assert.equal(await strict(),false);
+ assert.deepEqual(await admission(),{available:true,writable:false,admittedOperations:[op.operationId]});
+ assert.equal((await f.deletion.advance(op)).state,'completed');
+ assert.deepEqual(await admission(),{available:true,writable:true,admittedOperations:[]});
+ assert.equal(await strict(),true);
+ await f.deletion.plan({ownerId,requestKey:'admission-account',scope:{kind:'account'}});
+ const account=await admission();
+ assert.equal(account.available,false);assert.equal(account.writable,false);
+ assert.equal(await strict(),false);
+});
+
+test('联系人封禁后名单服务立即重建，兄弟联系人可读且删除闭包不受早开读者阻塞', async t => {
+ let closed=0,created=0;
+ const f=await fixture(t,()=>{created++;return {account:async()=>evidence,sessions:async()=>[
+  {externalKey:'synthetic-a',displayName:'合成甲',kind:'private',identityAssurance:'verified'},
+  {externalKey:'synthetic-b',displayName:'合成乙',kind:'private',identityAssurance:'verified'}],close:async()=>{closed++;}};});
+ const {contact,sibling}=await seeded(f);
+ const base=f.storage.execute.bind(f.storage);
+ let release,stepped=false;const gate=new Promise(resolve=>{release=resolve;});
+ f.storage.execute=(name,input,...rest)=>{
+  if(name==='deletion.clearTarget'&&!stepped){stepped=true;return gate.then(()=>base(name,input,...rest));}
+  return base(name,input,...rest);
+ };
+ const op=await f.deletion.plan({ownerId,requestKey:'early-open-contact',scope:{kind:'contact',contactId:contact}});
+ const advancing=f.deletion.advance(op);
+ for(let i=0;i<500&&!stepped;i++)await new Promise(resolve=>setImmediate(resolve));
+ assert.ok(stepped,'清理未开始');
+ for(let i=0;i<500&&closed===0;i++)await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(closed,1,'旧名单服务应在清理前关闭');
+ // 清理仍被挡住时重建名单服务：只读可读、被删联系人不可见、身份写入与敏感预览仍拒绝。
+ const roster=await f.request('/api/contacts');
+ assert.equal(roster.status,200);assert.deepEqual(roster.body.contacts.map(row=>row.contact_id),[sibling]);
+ assert.equal(created,2,'名单服务应在封禁后重建');
+ const bindings=await f.request('/api/sync/cli-bindings');
+ assert.equal(bindings.status,200);assert.ok(bindings.body.bindings.every(row=>row.contact_id===sibling));
+ assert.equal((await f.request('/api/sync/status')).status,200);
+ const write=await f.request('/api/sync/enable','POST',{});
+ assert.equal(write.status,409);assert.equal(write.body.error,'identity_closed');
+ const sessions=await f.request('/api/sync/cli-sessions','GET',undefined,{'x-notalone-metadata-consent':'selected-list'});
+ assert.equal(sessions.status,409);assert.equal(sessions.body.error,'identity_closed');
+ const admitted=await f.storage.execute('deletion.metadataAdmission',{ownerId});
+ assert.deepEqual(admitted.admittedOperations,[op.operationId]);
+ release();
+ const done=await advancing;
+ assert.equal(done.state,'completed','早开的名单读者不能阻塞删除闭包');
+ const after=await f.request('/api/contacts');
+ assert.equal(after.status,200);assert.deepEqual(after.body.contacts.map(row=>row.contact_id),[sibling]);
+ assert.equal((await f.storage.execute('deletion.metadataAdmission',{ownerId})).writable,true);
+ assert.equal((await f.request('/api/sync/enable','POST',{})).status,200);
+});

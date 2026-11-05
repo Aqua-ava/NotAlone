@@ -50,3 +50,11 @@ test('联系人删除排空前台读者，在途识别不接受旧身份且其�
  assert.equal(current.bindings.some(row=>row.contact_id===f.binding.contact_id),false);
  assert.equal(current.bindings.length,1,'删除其他联系人后仍能重新读取现有名单');
 });
+
+test('压缩推进schema版本后早开名单的前台reader自动重建',{timeout:30_000},async t=>{
+ const f=await foregroundFixture(t);
+ assert.equal((await f.contacts.foregroundSnapshot()).bindings.length,2,'首次读取打开前台reader');
+ await f.storage.execute('deletion.compact',{});
+ const after=await f.contacts.foregroundSnapshot();
+ assert.equal(after.bindings.length,2,'压缩使旧reader失效后应重建一次并继续读取');
+});
