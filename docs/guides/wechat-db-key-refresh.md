@@ -25,7 +25,18 @@ PY
 
 只缺 `migrate/unspportmsg.db` 与取图无关。缺 `message/message_resource.db` 就需要补。`wxkey doctor` 也能给出同样的覆盖率，它只读、不扫描内存；其输出“DB 文件: 0 个”表示运行它的环境读不到微信数据目录（见下文）。
 
-## 补取流程
+## 推荐：一条命令
+
+`desktop/scripts/refresh-wechat-db-keys.mjs` 把下面的补取流程做成了脚本，由**用户本人在终端运行**，不属于产品运行时，Agent 不得代替用户运行补取模式：
+
+```bash
+node desktop/scripts/refresh-wechat-db-keys.mjs --check   # 只读：列出缺密钥的库，缺目标库时退出码为 2
+node desktop/scripts/refresh-wechat-db-keys.mjs           # 补取 message/message_resource.db 的密钥
+```
+
+补取模式先打印将要做的事并要求输入“确认补取”（非交互终端一律拒绝），再依次：备份配置，核对开发 App 与正式微信都已退出，启动影子微信，等你登录并打开有图片的聊天（检测到目标库被打开才继续），把真实配置挪开后运行 `wxkey setup`，只合并缺失的盐，核对覆盖，并在任何失败或中断时放回原配置。输出会隐藏长十六进制串，不打印密钥值；只想补其他库时用 `--database <相对路径>`。你需要做的只有：确认、必要时输入管理员密码、扫码登录、点开一个有图片的聊天，最后 Cmd+Q 退出影子微信并重新打开正常微信。脚本没有在真实微信上完整跑过，首次使用以实际结果为准；失败时按下面的手工流程和“已验证的坑”处理。
+
+## 补取流程（手工，脚本的依据）
 
 外置 `wxkey` 在 `~/Library/Application Support/NotAloneDesktop/wechat-tool/bin/wxkey`。微信官方安装包带强化运行时，`wxkey` 对它读取内存会被系统拒绝（`task_for_pid kr=5`），所以必须读取它自带的**影子微信副本**（临时签名，位于 `~/Library/Application Support/wx-mcp/WeChat-shadow.app`）。仍保持系统完整性保护开启，不用 `resign-wechat`（会改你正式安装的微信）。
 
