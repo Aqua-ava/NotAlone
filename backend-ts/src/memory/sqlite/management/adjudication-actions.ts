@@ -77,7 +77,11 @@ function freeze(tx:StorageTransaction,ownerId:string,candidateId:string):Basis {
   similar.push({memory_id:String(m.id),revision:String(v!.version_no),text:String(v!.body),category:prior?.category??'user_memory',topic:prior?.topic??'',subject:scopeKind==='self'?'self':'contact',adoption_method:v!.adoption_mode==='auto'&&m.state==='active'&&sourceVerificationState(tx,ownerId,{memoryId:String(m.id),versionNo:v!.version_no as bigint})==='verified'?'auto':'manual',source_message_ids:[...new Set(textSources.map(s=>s.message_id))],source_texts:textSources,statement_time:textSources.map(s=>s.occurred_at).filter((s):s is string=>s!==null).sort().at(-1)??null,valid_at:prior?.valid_at??null,invalid_at:prior?.invalid_at??null,event:prior?.event??null,conditions:prior?.conditions??null,source_receipt:digest(textSources),source_dependency_mode:prior?.source_dependency_mode??'all',requires_all_sources:prior?.requires_all_sources??true});
  }
  const candidateSources=sources(tx,ownerId,{candidateId});
- const item:AdjudicationItem={candidate_index:0,candidate:fact,candidate_source_receipt:digest(candidateSources),candidate_source_texts:candidateSources,relation_source_receipt:digest({candidateSources,similar}),similar};
+ // 关系核验只认证逐字文字：文字候选不与“主题明确不同”的图片来源记忆比较，免得池里一条图片记忆拦下之后所有候选；
+ // 候选自身含图片，或主题相同、缺失而无法证明无关时，仍保留比较并交由待确认。
+ const candidateHasImage=candidateSources.some(source=>source.content_kind==='image');
+ const comparable=candidateHasImage?similar:similar.filter(memory=>!memory.source_texts.some(source=>source.content_kind==='image')||!memory.topic||!fact.topic||memory.topic===fact.topic);
+ const item:AdjudicationItem={candidate_index:0,candidate:fact,candidate_source_receipt:digest(candidateSources),candidate_source_texts:candidateSources,relation_source_receipt:digest({candidateSources,similar:comparable}),similar:comparable};
  return {pageIndex:0,candidateId,candidateRevision:String(c!.state_revision),runId:String(task.run_id),taskId:String(task.id),scopeKind,contactId,memoryRevision:String(revision(tx,ownerId,scopeKind,contactId)),intentRevision:String(task.intent_revision),item,parents};
 }
 function record(tx:StorageTransaction,ownerId:string,attemptId:string,kind:string,payload:unknown,callId?:string,reused=false,pageOnly=false):string {

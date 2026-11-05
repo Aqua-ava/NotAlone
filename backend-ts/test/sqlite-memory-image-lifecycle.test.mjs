@@ -59,7 +59,7 @@ test('记忆只读取已冻结的实际图片副本，关闭同步仍可读且�
 });
 
 const fields=['category','topic','scene_name','alternatives','interpretation_reason','valid_at','invalid_at','speech_act','assertion_status','figurative_type','event','conditions'];
-function contentSupplier({imageFact=false}={}){
+function contentSupplier({imageFact=false,imageTopic='other'}={}){
  const normal=supplier(),messages=new Map(),requests=[];
  return {requests,async respond(request,input){
   requests.push(request);const body=JSON.parse(request.user);
@@ -69,7 +69,7 @@ function contentSupplier({imageFact=false}={}){
    const image=body.messages.find(message=>message.content_kind==='image'&&body.target_message_ids.includes(message.message_id));
    if(!imageFact||!image)return response;
    const value=JSON.parse(response.blocks[0].arguments);
-   value.scenes[0].memories.push({text:'聊天图片中有一个蓝色杯子。',subject:'contact',category:'common_fact',topic:'other',source_message_ids:[image.message_id],
+   value.scenes[0].memories.push({text:'聊天图片中有一个蓝色杯子。',subject:'contact',category:'common_fact',topic:imageTopic,source_message_ids:[image.message_id],
     confidence:0.8,risk_flags:[],valid_at:null,invalid_at:null,speech_act:'assertion',assertion_status:'asserted',figurative_type:'literal',alternatives:[],
     interpretation_reason:'仅保留合成图片中的可见物体，不推断归属。',event:null,conditions:null});
    const blocks=[{type:'tool-call',name:request.tool.name,arguments:JSON.stringify(value)}];await request.validateOutput(blocks);return {blocks};
@@ -198,6 +198,24 @@ test('图片记忆无旧资料时可自动采纳，后续图文关系比较保�
  const imageSources=[];const visit=value=>{if(!value||typeof value!=='object')return;if(value.content_kind==='image'&&value.content_ref)imageSources.push(value);for(const child of Object.values(value))visit(child);};
  for(const event of trace.events.filter(item=>item.kind==='adjudication_basis'))visit(event.payload);
  assert.ok(imageSources.length);assert.ok(imageSources.every(source=>source.text===null&&source.content_ref.file_id===file.fileId&&source.observation.kind==='model_observation'));
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('图片记忆与文字候选主题不同时不拦截自动裁决，主题相同才保留待确认',async t=>{
+ const f=await memoryFixture(t,{imageFact:true,imageTopic:'travel'});await saveImage(f);const run=await f.extract('automatic-image-memory-topic');
+ const adjudication=new SqliteMemoryAdjudication(f.storage,owner,undefined,f.holders);t.after(()=>adjudication.close());
+ await adjudication.publishRun(run.runId);
+ const initial=await f.management.read(f.scope),imageMemory=initial.memories.find(item=>item.current?.body==='聊天图片中有一个蓝色杯子。');
+ assert.ok(imageMemory);
+ await f.sync([record('3',{text:'我长期喜欢合成木雕。'})]);const next=await f.extract('image-topic-differs');
+ await adjudication.publishRun(next.runId);
+ const after=await f.management.read(f.scope),retained=after.memories.find(item=>item.id===imageMemory.id);
+ assert.equal(retained.current.versionNo,'1');assert.equal(retained.current.body,imageMemory.current.body,'图片记忆不被改动');
+ const wood=after.memories.find(item=>item.current?.body==='联系人长期喜欢合成木雕。');
+ assert.ok(wood,'主题不同的文字候选应自动采纳');assert.equal(wood.current.adoptionMode,'auto');
+ assert.equal(after.candidates.filter(item=>item.state==='pending').length,0);
+ const trace=await f.extraction.trace(next.tasks.find(task=>task.scopeKind==='contact').taskId);
+ assert.ok(!trace.events.some(event=>event.kind==='adjudication_result'&&event.payload.reason==='memory_media_relation_pending'));
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
