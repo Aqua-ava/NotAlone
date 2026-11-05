@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { historyRecertifyFailureMessage, type HistoryClearState, type HistoryClearView, type HistoryRecertifyView } from '../shared/history-clear-bridge';
 import type { ContactSessionView } from './contact-session';
+import { useHistoryRecertifyBatch } from './use-history-recertify-batch';
 
 const initial: HistoryClearState = { revision: -1, contactId: null, scopeRevision: 0, phase: 'idle', clear: null, resync: null, recertify: null, pendingRecertifyKey: null, recertifyStoppingKey: null, recertifyCancelBusy: false, busy: null, error: null };
 const boundaryReasons: Record<string, string> = {
@@ -49,6 +50,8 @@ function recertifySummary(view: HistoryRecertifyView): string | null {
 }
 type Confirmation = { action: 'clear' | 'recertify'; contactId: string; scopeRevision: number };
 export function ContactHistoryClear({ session, repairNeeded = false }: { session: ContactSessionView; repairNeeded?: boolean }) {
+  const recertifyBatch = useHistoryRecertifyBatch();
+  const batchActive = recertifyBatch.active;
   const [state, setState] = useState(initial);
   const [confirming, setConfirming] = useState<Confirmation | null>(null);
   const [localError, setLocalError] = useState('');
@@ -77,6 +80,7 @@ export function ContactHistoryClear({ session, repairNeeded = false }: { session
     catch { if (current.current === scope) setLocalError('暂时读不到操作进度，请重试。'); }
   }
   function confirm(action: Confirmation['action']) {
+    if (batchActive) return;
     if (selectedContactId && (action !== 'recertify' || repairNeeded)) setConfirming({ action, contactId: selectedContactId, scopeRevision });
   }
   const confirmation = confirming?.contactId === selectedContactId && confirming.scopeRevision === scopeRevision
@@ -133,7 +137,7 @@ export function ContactHistoryClear({ session, repairNeeded = false }: { session
     return () => clearTimeout(timer);
   }, [visible, selectedContactId, scopeRevision, progressActive, state.revision, state.phase, hasError, busy]);
   const contactName = session.state.contacts.find(entry => entry.contactId === selectedContactId)?.displayName;
-  const actionsDisabled = !visible || !selectedContactId || state.phase !== 'ready' || !!busy || recertifyActive;
+  const actionsDisabled = !visible || !selectedContactId || state.phase !== 'ready' || !!busy || recertifyActive || batchActive;
   const continueClear = clear?.phase === 'boundary_pending' || clear?.phase === 'cleanup_blocked' || clear?.phase === 'cleaning';
   const friendlyError = Object.entries(repairReasons).find(([code]) => historyRecertifyFailureMessage(code) === state.error)?.[1] ?? state.error;
   const errorMessage = localError || (state.phase === 'failed' ? '暂时读不到操作进度，请重试。' : stoppingRecertify
@@ -142,6 +146,7 @@ export function ContactHistoryClear({ session, repairNeeded = false }: { session
   return <>
     <section aria-label="清理聊天资料" className="memory-section">
       <h3>清理聊天资料</h3>
+      {batchActive && <p role="status">开发者批量修复正在进行：完成或停止批量修复前，不能对单个联系人修复同步、清空聊天或重新同步。</p>}
       {visible && state.phase === 'loading' && !clear && <p role="status">正在读取资料状态…</p>}
       {!visible && !localError && <p>选择联系人后，可管理保存的聊天资料。</p>}
       {summary && busy !== 'clear' && <p role="status">{summary}</p>}

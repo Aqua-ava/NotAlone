@@ -208,7 +208,8 @@
   "tests/usage/connection-view.test.mjs",
   "tests/first-frame-state-view.test.mjs",
   "tests/memory-automatic-switch.test.mjs",
-  "tests/sqlite-memory-source-recheck.test.mjs"
+  "tests/sqlite-memory-source-recheck.test.mjs",
+  "tests/history-recertify-batch-view.test.mjs"
  ],
  "isolated-http": [
   "tests/overview-reply-retrieval.test.mjs"
