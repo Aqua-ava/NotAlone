@@ -19,7 +19,7 @@ test('只接受单条已核验媒体消息，未安装类型明确不可执行�
 const imageBytes=Buffer.from('synthetic-image-payload');
 function imageAdapter(options={}){return {version:'synthetic-media-v1',supports:(kind,goal)=>kind==='image'&&goal!=='audio_conversion',execute:async context=>{
  const {createHash}=await import('node:crypto');
- await context.save({role:'image_display',expectedBytes:imageBytes.length,expectedSha256:createHash('sha256').update(imageBytes).digest('hex'),bytes:(async function*(){yield imageBytes;})(),validate:async localPath=>{const {readFile}=await import('node:fs/promises');assert.deepEqual(await readFile(localPath),imageBytes);return {format:'synthetic',mimeType:'image/png',containerValid:true,viewable:true,playable:false,imageQuality:options.quality??'thumbnail',qualityProof:options.quality==='original'?'synthetic-original-proof':null};}});
+ await context.save({role:'image_display',expectedBytes:imageBytes.length,expectedSha256:createHash('sha256').update(imageBytes).digest('hex'),bytes:(async function*(){yield imageBytes;})(),validate:async localPath=>{const {readFile}=await import('node:fs/promises');assert.deepEqual(await readFile(localPath),imageBytes);return {format:'synthetic',mimeType:'image/png',containerValid:true,viewable:true,playable:false};}});
  return {association:{protocol:'media-association-v1',profileId:'synthetic-media-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-resource-one'}};
  }};}
 test('重开媒体时跳过来源已失效的副本，仍拒绝预览且其他联系人可用',async t=>{
@@ -43,7 +43,7 @@ test('重开媒体时跳过来源已失效的副本，仍拒绝预览且其他�
 
 test('明确单消息保存真实独立文件、可查看状态、幂等及清除保留占位',async t=>{
  const f=await fixture(t,imageAdapter());const m=f.messages.find(m=>m.kind==='image');
- const value=await f.media.extract(f.contact,m.id,{requestKey:'save-one',goal:'extract'});assert.equal(value.latestAttempt.state,'completed');assert.equal(value.latestAttempt.outcome,'full');assert.equal(value.files.length,1);assert.equal(value.files[0].imageQuality,'thumbnail');
+ const value=await f.media.extract(f.contact,m.id,{requestKey:'save-one',goal:'extract'});assert.equal(value.latestAttempt.state,'completed');assert.equal(value.latestAttempt.outcome,'full');assert.equal(value.files.length,1);
  const repeated=await f.media.extract(f.contact,m.id,{requestKey:'save-one',goal:'extract'});assert.equal(repeated.latestAttempt.attemptId,value.latestAttempt.attemptId);assert.equal(repeated.files[0].fileId,value.files[0].fileId);
  const {readdir}=await import('node:fs/promises');assert.equal((await readdir(join(f.root,'managed','media'))).length,1);
  const cleared=await f.media.clear(f.contact,m.id,'clear-one');assert.equal(cleared.state,'cleared');assert.deepEqual(cleared.files,[]);assert.equal((await readdir(join(f.root,'managed','media'))).length,0);
@@ -59,15 +59,6 @@ test('关闭读取后旧请求只返回原结果，重新选中不受旧尝试�
  await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'new-read-off',goal:'extract'}),{code:'read_not_authorized'});
  assert.equal((await f.media.read(f.contact,m.id)).files.length,1);
  await f.contacts.setReading(true);assert.equal((await f.media.read(f.contact,m.id)).capabilities.extract,true);
-});
-
-test('旧原图升级请求没有原图证据时保留合法原图，只清本次临时文件',async t=>{
- const adapter=imageAdapter({quality:'original'});const f=await fixture(t,adapter);const m=f.messages.find(m=>m.kind==='image');
- const first=await f.media.extract(f.contact,m.id,{requestKey:'original',goal:'extract'});assert.equal(first.latestAttempt.outcome,'full');const original=first.files[0].fileId;
- adapter.execute=imageAdapter().execute;
- await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'degrade',goal:'original_upgrade'}),{code:'media_original_unavailable'});
- const after=await f.media.read(f.contact,m.id);assert.equal(after.files[0].fileId,original);assert.equal(after.latestAttempt.state,'failed');assert.equal(after.latestAttempt.outcome,'no_result');
- const {readdir}=await import('node:fs/promises');assert.equal((await readdir(join(f.root,'managed','media'))).length,1);
 });
 
 test('读取关闭或取消勾选在分段读后拒绝发布，旧合法结果仍可查看',async t=>{
@@ -139,7 +130,7 @@ test('语音原始件有限保存，本地重转在关闭读取时可执行且�
  const adapter={version:'synthetic-voice-v1',supports:kind=>kind==='voice',execute:async context=>{
   if(context.goal==='extract'){reads++;assert.ok(context.source);assert.ok(context.token);}else{assert.equal(context.source,null);assert.equal(context.token,null);assert.ok(context.input);conversionSignal=context.signal;enteredConversion();await Promise.race([gate,new Promise(resolve=>context.signal.addEventListener('abort',resolve,{once:true}))]);}
   const bytes=Buffer.from(context.goal==='extract'?'synthetic-silk':'synthetic-wav');
-  await context.save({role:context.goal==='extract'?'audio_source':'audio_playback',...(context.input?{parentFileId:context.input.fileId}:{}),expectedBytes:bytes.length,expectedSha256:createHash('sha256').update(bytes).digest('hex'),bytes:(async function*(){yield bytes;})(),validate:async()=>({format:context.goal==='extract'?'synthetic-silk':'synthetic-wav',mimeType:context.goal==='extract'?'audio/silk':'audio/wav',containerValid:true,viewable:false,playable:context.goal!=='extract',imageQuality:'not_applicable',qualityProof:null})});
+  await context.save({role:context.goal==='extract'?'audio_source':'audio_playback',...(context.input?{parentFileId:context.input.fileId}:{}),expectedBytes:bytes.length,expectedSha256:createHash('sha256').update(bytes).digest('hex'),bytes:(async function*(){yield bytes;})(),validate:async()=>({format:context.goal==='extract'?'synthetic-silk':'synthetic-wav',mimeType:context.goal==='extract'?'audio/silk':'audio/wav',containerValid:true,viewable:false,playable:context.goal!=='extract'})});
   return {association:context.source?{protocol:'media-association-v1',profileId:'synthetic-voice-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-voice'}:null,...(context.goal==='extract'?{errorCode:'synthetic_conversion_unavailable'}:{})};
  }};
  const f=await fixture(t,adapter);const m=f.messages.find(m=>m.kind==='voice');const first=await f.media.extract(f.contact,m.id,{requestKey:'silk',goal:'extract'});assert.equal(first.latestAttempt.outcome,'limited');assert.equal(first.files[0].playable,false);
@@ -151,7 +142,7 @@ test('语音原始件有限保存，本地重转在关闭读取时可执行且�
 test('转换器空间不足及类型验证后文件被改动均停止新增发布，保留合法旧件',async t=>{
  const adapter=imageAdapter();const f=await fixture(t,adapter);const m=f.messages.find(m=>m.kind==='image');const first=await f.media.extract(f.contact,m.id,{requestKey:'space-old',goal:'extract'});
  const {createHash}=await import('node:crypto');const {writeFile,readdir}=await import('node:fs/promises');let tamper=false;
- adapter.execute=async context=>{await context.save({role:'image_display',expectedBytes:imageBytes.length,expectedSha256:createHash('sha256').update(imageBytes).digest('hex'),bytes:(async function*(){yield imageBytes;})(),validate:async location=>{if(!tamper)throw Object.assign(new Error('合成转换器空间故障'),{code:'ENOSPC'});await writeFile(location,'tampered');return {format:'synthetic',mimeType:'image/png',containerValid:true,viewable:true,playable:false,imageQuality:'thumbnail',qualityProof:null};}});return {association:null};};
+ adapter.execute=async context=>{await context.save({role:'image_display',expectedBytes:imageBytes.length,expectedSha256:createHash('sha256').update(imageBytes).digest('hex'),bytes:(async function*(){yield imageBytes;})(),validate:async location=>{if(!tamper)throw Object.assign(new Error('合成转换器空间故障'),{code:'ENOSPC'});await writeFile(location,'tampered');return {format:'synthetic',mimeType:'image/png',containerValid:true,viewable:true,playable:false};}});return {association:null};};
  await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'space-failure',goal:'extract'}),{code:'media_space_insufficient'});assert.equal((await f.media.read(f.contact,m.id)).files[0].fileId,first.files[0].fileId);assert.equal((await readdir(join(f.root,'managed','media'))).length,1);
  tamper=true;await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'tampered-validation',goal:'extract'}),{code:'media_file_identity_changed'});assert.equal((await f.media.read(f.contact,m.id)).files[0].fileId,first.files[0].fileId);assert.equal((await readdir(join(f.root,'managed','media'))).length,1);
 });
@@ -180,7 +171,7 @@ test('活动引用使用联系人资料代次而非媒体代次，较新合法�
 test('适配器遗漏await也须排空已启动文件探针，关闭不能提前释放在途句柄',async t=>{
  const {createHash}=await import('node:crypto');const {open}=await import('node:fs/promises');let started,continueRead,settled=false;const ready=new Promise(resolve=>{started=resolve;});const continueGate=new Promise(resolve=>{continueRead=resolve;});let background;
  const adapter={version:'synthetic-early-return-v1',supports:kind=>kind==='image',execute:async context=>{
-  background=context.save({role:'image_display',expectedBytes:imageBytes.length,expectedSha256:createHash('sha256').update(imageBytes).digest('hex'),bytes:(async function*(){yield imageBytes;})(),validate:async location=>{const held=await open(location);started();try{await continueGate;await held.readFile();return {format:'synthetic',mimeType:'image/png',containerValid:true,viewable:true,playable:false,imageQuality:'thumbnail',qualityProof:null};}finally{await held.close();settled=true;}}});void background.catch(()=>{});
+  background=context.save({role:'image_display',expectedBytes:imageBytes.length,expectedSha256:createHash('sha256').update(imageBytes).digest('hex'),bytes:(async function*(){yield imageBytes;})(),validate:async location=>{const held=await open(location);started();try{await continueGate;await held.readFile();return {format:'synthetic',mimeType:'image/png',containerValid:true,viewable:true,playable:false};}finally{await held.close();settled=true;}}});void background.catch(()=>{});
   await ready;return {association:{protocol:'media-association-v1',profileId:'synthetic-media-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-early'}};
  }};
  const f=await fixture(t,adapter);const m=f.messages.find(m=>m.kind==='image');const extracting=f.media.extract(f.contact,m.id,{requestKey:'unawaited-save',goal:'extract'});void extracting.catch(()=>{});await ready;for(let step=0;step<10;step++)await f.storage.check();
@@ -194,7 +185,7 @@ test('旧请求重送返回原尝试回执，不能把后来的失败解释为�
 });
 
 test('语音播放件不能脱离合法原始SILK父件单独发布',async t=>{
- const {createHash}=await import('node:crypto');const adapter={version:'synthetic-no-source-v1',supports:kind=>kind==='voice',execute:async context=>{const bytes=Buffer.from('synthetic-wav');await context.save({role:'audio_playback',expectedBytes:bytes.length,expectedSha256:createHash('sha256').update(bytes).digest('hex'),bytes:(async function*(){yield bytes;})(),validate:async()=>({format:'synthetic-wav',mimeType:'audio/wav',containerValid:true,viewable:false,playable:true,imageQuality:'not_applicable',qualityProof:null})});return {association:{protocol:'media-association-v1',profileId:'synthetic-voice',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-wave'}};}};
+ const {createHash}=await import('node:crypto');const adapter={version:'synthetic-no-source-v1',supports:kind=>kind==='voice',execute:async context=>{const bytes=Buffer.from('synthetic-wav');await context.save({role:'audio_playback',expectedBytes:bytes.length,expectedSha256:createHash('sha256').update(bytes).digest('hex'),bytes:(async function*(){yield bytes;})(),validate:async()=>({format:'synthetic-wav',mimeType:'audio/wav',containerValid:true,viewable:false,playable:true})});return {association:{protocol:'media-association-v1',profileId:'synthetic-voice',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-wave'}};}};
  const f=await fixture(t,adapter);const m=f.messages.find(m=>m.kind==='voice');await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'without-silk',goal:'extract'}),{code:'media_audio_source_required'});assert.deepEqual((await f.media.read(f.contact,m.id)).files,[]);
 });
 

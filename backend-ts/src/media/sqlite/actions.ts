@@ -5,37 +5,13 @@ import type {ReadEligibility} from '../../contacts/sqlite/contracts.ts';
 import {assertSourceEligibility} from '../../history/sqlite/source.ts';
 import {planDeletion, requestAllowed} from '../../storage/sqlite/deletion/actions.ts';
 import type {DeletionRegistration, ManagedAddress} from '../../storage/sqlite/deletion/contracts.ts';
-import type {MediaGoal, MediaKind, MediaSnapshot, MediaValidation, MediaAssociationProof, MediaAttemptView} from './contracts.ts';
-import {imageRefreshPrefix,imageReconcilePrefix,imagePreparationVersion,automaticImageGeneration} from './image-refresh.ts';
-import {createImageSyncActions,unclassifiedImageSql} from './image-sync-actions.ts';
+import type {MediaKind, MediaSnapshot, MediaValidation, MediaAssociationProof, MediaAttemptView} from './contracts.ts';
+import {imageReconcilePrefix,imagePreparationVersion,automaticImageGeneration} from './image-refresh.ts';
+import {createImageSyncActions} from './image-sync-actions.ts';
 
 const fail=(code:string):never=>{throw new StorageFailure(code);};
 const id=(v:unknown):string=>typeof v==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(v)?v:fail('media_request_invalid');
 const one=(tx:StorageTransaction,sql:string,args:(string|bigint)[],code='media_message_not_found'):StorageRow=>tx.get(sql,args)??fail(code);
-function qualityEvidence(validation:MediaValidation,digest:string,role:unknown):string|null {
- const value=validation.imageQualityEvidence;
- if(value===undefined)return null;
- const invalid=()=>fail('media_validation_invalid');
- if(!value||typeof value!=='object'||Array.isArray(value)||role!=='image_display'
-  ||Object.keys(value).sort().join(',')!=='contentSha256,originalProofDigest,protocol,quality,resourceInfoId,resources,sourceSha256,sourceVariant')return invalid();
- const resourceId=(v:unknown):v is string=>typeof v==='string'&&/^[1-9][0-9]{0,18}$/.test(v)&&BigInt(v)<=9223372036854775807n;
- const sha=(v:unknown):v is string=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
- if(value.protocol!=='wechat-image-quality-v1'||value.quality!==validation.imageQuality
-  ||!['original','thumbnail','unknown'].includes(value.quality)||!['main','thumbnail'].includes(value.sourceVariant)
-  ||!resourceId(value.resourceInfoId)||!sha(value.sourceSha256)||!sha(value.contentSha256)||value.contentSha256!==digest
-  ||value.originalProofDigest!==null&&!sha(value.originalProofDigest)
-  ||!Array.isArray(value.resources)||value.resources.length<1||value.resources.length>32)return invalid();
- if(value.sourceVariant==='thumbnail'?(value.quality!=='thumbnail'||value.originalProofDigest!==null)
-  :value.quality!==(value.originalProofDigest===null?'unknown':'original'))return invalid();
- let previous=0n;
- for(const resource of value.resources){
-  if(!resource||typeof resource!=='object'||Array.isArray(resource)||Object.keys(resource).sort().join(',')!=='resourceId,resourceTypeRaw'
-   ||!resourceId(resource.resourceId)||BigInt(resource.resourceId)<=previous||!Number.isSafeInteger(resource.resourceTypeRaw)
-   ||resource.resourceTypeRaw<1||resource.resourceTypeRaw%65536!==1)return invalid();
-  previous=BigInt(resource.resourceId);
- }
- const serialized=JSON.stringify(value);if(serialized.length>8192)return invalid();return serialized;
-}
 export interface AttemptHandle {ownerId:string;contactId:string;messageId:string;attemptId:string;leaseToken:string}
 function assertAutomaticImageGeneration(tx:StorageTransaction,i:{ownerId:string;messageId:string;requestKey:string;goal:string}):void{
  const generation=automaticImageGeneration(i.requestKey,i.messageId);if(generation===null)return;
@@ -75,8 +51,10 @@ function assertAttempt(tx:StorageTransaction,i:AttemptHandle,lease:StorageLease,
  if(renew)tx.run('UPDATE media_extraction_attempt SET lease_expires_at=? WHERE owner_id=? AND id=?',[Date.now()+120_000,i.ownerId,i.attemptId]);
  return a;
 }
+// 旧库的 quality_unknown 回执也是已保存可查看的结果，对外按 full 展示。
+const outcomeView=(value:unknown):MediaAttemptView['outcome']=>value==='quality_unknown'?'full':value as MediaAttemptView['outcome'];
 function attemptView(a:StorageRow):MediaAttemptView {
- return {attemptId:String(a.id),state:a.state as MediaAttemptView['state'],outcome:a.result_outcome as MediaAttemptView['outcome'],errorCode:a.error_code?String(a.error_code):null};
+ return {attemptId:String(a.id),state:a.state as MediaAttemptView['state'],outcome:outcomeView(a.result_outcome),errorCode:a.error_code?String(a.error_code):null};
 }
 function snapshot(tx:StorageTransaction,i:{ownerId:string;contactId:string;messageId:string}):MediaSnapshot {
  const m=message(tx,i),h=tx.get('SELECT * FROM message_media WHERE owner_id=? AND message_id=?',[i.ownerId,i.messageId]);
@@ -95,9 +73,9 @@ function snapshot(tx:StorageTransaction,i:{ownerId:string;contactId:string;messa
  AND a.scope_mode='selected' AND v.identity_generation=b.identity_generation`,[i.ownerId,i.contactId]);
  const cleanup=unfinished(tx,i);const busy=!!cleanup||a?.state==='pending'||a?.state==='running';
  return {contactId:i.contactId,messageId:i.messageId,kind:m.kind as MediaKind,state:(h?.state??'available') as MediaSnapshot['state'],generation:String(h?.media_generation??0),headRevision:String(h?.head_revision??0),
- latestAttempt:a?{attemptId:String(a.id),state:a.state as NonNullable<MediaSnapshot['latestAttempt']>['state'],outcome:a.result_outcome as NonNullable<MediaSnapshot['latestAttempt']>['outcome'],errorCode:a.error_code?String(a.error_code):null}:null,
- files:files.map(f=>({fileId:String(f.id),role:f.role as MediaSnapshot['files'][number]['role'],imageQuality:f.image_quality as MediaSnapshot['files'][number]['imageQuality'],format:String(f.format),mimeType:String(f.mime_type),byteSize:String(f.byte_size),viewable:f.viewable===1n,playable:f.playable===1n})),
- capabilities:{extract:local&&read&&!busy,originalUpgrade:false,audioConversion:local&&!busy&&m.kind==='voice'&&files.some(f=>f.role==='audio_source'),reason:cleanup?'media_cleanup_pending':busy?'media_already_running':!local?'media_contact_not_selected':!read?'read_not_authorized':null},
+ latestAttempt:a?attemptView(a):null,
+ files:files.map(f=>({fileId:String(f.id),role:f.role as MediaSnapshot['files'][number]['role'],format:String(f.format),mimeType:String(f.mime_type),byteSize:String(f.byte_size),viewable:f.viewable===1n,playable:f.playable===1n})),
+ capabilities:{extract:local&&read&&!busy,audioConversion:local&&!busy&&m.kind==='voice'&&files.some(f=>f.role==='audio_source'),reason:cleanup?'media_cleanup_pending':busy?'media_already_running':!local?'media_contact_not_selected':!read?'read_not_authorized':null},
  cleanup:cleanup?{operationId:String(cleanup.operation_id),state:String(cleanup.state)}:null};
 }
 function cleanup(tx:StorageTransaction,lease:StorageLease,registration:DeletionRegistration,a:StorageRow):void {
@@ -117,7 +95,7 @@ export function createMediaActions(registration:DeletionRegistration):StorageAct
   if(old&&(old.contact_id!==i.contactId||old.message_id!==i.messageId||old.goal!==i.goal))fail('media_request_conflict');return old?attemptView(old):null;
  }),
  action('begin','write',(tx,i,lease)=>{
-  message(tx,i);id(i.requestKey);if(!['extract','original_upgrade','audio_conversion'].includes(i.goal))fail('media_request_invalid');
+  message(tx,i);id(i.requestKey);if(!['extract','audio_conversion'].includes(i.goal))fail('media_request_invalid');
   const requestedAt=i.requestedAt??Date.now();if(!Number.isSafeInteger(requestedAt)||requestedAt<0)fail('media_request_invalid');
   if(!requestAllowed(tx,lease,i.ownerId,'media.extract',i.requestKey))fail('media_request_revoked');
   const old=tx.get('SELECT * FROM media_extraction_attempt WHERE owner_id=? AND request_key=?',[i.ownerId,i.requestKey]);
@@ -128,9 +106,9 @@ export function createMediaActions(registration:DeletionRegistration):StorageAct
   if(active){if(active.runtime_id===lease.runtimeId&&BigInt(String(active.lease_expires_at))>=BigInt(Date.now()))fail('media_already_running');
    tx.run("UPDATE media_extraction_attempt SET state='interrupted',lease_token=NULL,lease_expires_at=NULL,finished_at=?,error_code='media_lease_expired' WHERE owner_id=? AND id=?",[Date.now(),i.ownerId,active.id]);cleanup(tx,lease,registration,active);if(unfinished(tx,i))return {reused:false,cleanupRequired:true,attemptId:String(active.id)};}
   const p=selected(tx,i.ownerId,i.contactId),m=message(tx,i);
-  if(i.requestKey.startsWith(imageRefreshPrefix)&&!tx.get("SELECT 1 FROM media_file WHERE owner_id=? AND contact_id=? AND message_id=? AND role='image_display' AND publish_state='current' AND content_state='present' AND image_quality='thumbnail' AND container_valid=1 AND viewable=1",[i.ownerId,i.contactId,i.messageId]))fail('media_refresh_not_required');
-  if(i.requestKey.startsWith(imageReconcilePrefix)&&(m.kind!=='image'||i.goal!=='extract'||tx.get(`SELECT 1 FROM media_file f WHERE f.owner_id=? AND f.contact_id=? AND f.message_id=? AND f.role='image_display' AND f.publish_state='current' AND f.content_state='present' AND f.container_valid=1 AND f.viewable=1 AND NOT (f.image_quality='thumbnail' OR (${unclassifiedImageSql}))`,[i.ownerId,i.contactId,i.messageId])))fail('media_refresh_not_required');
-  if(i.goal==='original_upgrade'&&m.kind!=='image'||i.goal==='audio_conversion'&&m.kind!=='voice')fail('media_goal_invalid');
+  // 补查只在消息还没有可查看的已保存图片时进行；已保存的图片不再重复读取。
+  if(i.requestKey.startsWith(imageReconcilePrefix)&&(m.kind!=='image'||i.goal!=='extract'||tx.get("SELECT 1 FROM media_file f WHERE f.owner_id=? AND f.contact_id=? AND f.message_id=? AND f.role='image_display' AND f.publish_state='current' AND f.content_state='present' AND f.container_valid=1 AND f.viewable=1",[i.ownerId,i.contactId,i.messageId])))fail('media_refresh_not_required');
+  if(i.goal==='audio_conversion'&&m.kind!=='voice')fail('media_goal_invalid');
   let token:ReadEligibility|null=null,record:string|null=null,input:StorageRow|undefined;
   if(i.goal==='audio_conversion'){
    input=one(tx,"SELECT * FROM media_file WHERE owner_id=? AND contact_id=? AND message_id=? AND role='audio_source' AND publish_state='current' AND content_state='present' AND container_valid=1",[i.ownerId,i.contactId,i.messageId],'media_input_unavailable');
@@ -182,15 +160,15 @@ export function createMediaActions(registration:DeletionRegistration):StorageAct
  }),
  action('uncreated','write',(tx,i,lease)=>{
   const a=one(tx,'SELECT runtime_id FROM media_extraction_attempt WHERE owner_id=? AND id=?',[i.ownerId,i.attemptId],'media_attempt_not_found');if(a.runtime_id!==lease.runtimeId)fail('media_execution_stale');
-  tx.run("UPDATE media_file SET content_state='erased',managed_locator=NULL,image_quality_evidence=NULL WHERE owner_id=? AND id=? AND produced_attempt_id=? AND managed_address IS NULL AND expected_file_identity IS NULL AND publish_state IN ('staged','cleanup_pending')",[i.ownerId,i.fileId,i.attemptId]);
+  tx.run("UPDATE media_file SET content_state='erased',managed_locator=NULL WHERE owner_id=? AND id=? AND produced_attempt_id=? AND managed_address IS NULL AND expected_file_identity IS NULL AND publish_state IN ('staged','cleanup_pending')",[i.ownerId,i.fileId,i.attemptId]);
  }),
  action('validated','write',(tx,i,lease)=>{
   assertAttempt(tx,i,lease);const v=i.validation as MediaValidation;
   if(!v||v.containerValid!==true||typeof v.format!=='string'||!/^[-a-zA-Z0-9_]{1,40}$/.test(v.format)||typeof v.mimeType!=='string'||!/^[-a-z0-9.+]+\/[-a-z0-9.+]+$/.test(v.mimeType)||!Number.isSafeInteger(i.byteSize)||i.byteSize<1||!/^[a-f0-9]{64}$/.test(i.digest))fail('media_validation_invalid');
   const f=one(tx,"SELECT * FROM media_file WHERE owner_id=? AND id=? AND produced_attempt_id=? AND publish_state='staged' AND content_state='present' AND managed_address IS NOT NULL",[i.ownerId,id(i.fileId),i.attemptId],'media_file_not_found');
-  if(f.role==='image_display'&&(!v.viewable||!['original','thumbnail','unknown'].includes(v.imageQuality))||f.role==='video_playback'&&!v.playable||f.role==='audio_playback'&&!v.playable||f.role!=='image_display'&&v.imageQuality!=='not_applicable'||v.imageQuality==='original'&&(!v.qualityProof||!/^[-a-zA-Z0-9_:]{1,128}$/.test(v.qualityProof)))fail('media_validation_invalid');
-  const evidence=qualityEvidence(v,i.digest,f.role);
-  tx.run('UPDATE media_file SET format=?,mime_type=?,byte_size=?,content_digest=?,container_valid=1,viewable=?,playable=?,image_quality=?,quality_proof=?,image_quality_evidence=? WHERE owner_id=? AND id=?',[v.format,v.mimeType,i.byteSize,i.digest,v.viewable?1:0,v.playable?1:0,v.imageQuality,v.qualityProof,evidence,i.ownerId,i.fileId]);return true;
+  if(f.role==='image_display'&&!v.viewable||f.role==='video_playback'&&!v.playable||f.role==='audio_playback'&&!v.playable)fail('media_validation_invalid');
+  // image_quality 等旧分类列不再写入或读取：图片行保持 allocate 时的占位取值。
+  tx.run('UPDATE media_file SET format=?,mime_type=?,byte_size=?,content_digest=?,container_valid=1,viewable=?,playable=? WHERE owner_id=? AND id=?',[v.format,v.mimeType,i.byteSize,i.digest,v.viewable?1:0,v.playable?1:0,i.ownerId,i.fileId]);return true;
  }),
  action('discardPlayback','write',(tx,i,lease)=>{
   const a=assertAttempt(tx,i,lease);if(a.goal!=='extract'||message(tx,i).kind!=='voice')fail('media_failure_mode_invalid');
@@ -208,23 +186,15 @@ export function createMediaActions(registration:DeletionRegistration):StorageAct
   if(!fresh.length||fresh.some(f=>f.container_valid!==1n||!f.managed_address||!f.content_digest)||new Set(fresh.map(f=>f.role)).size!==fresh.length)fail('media_result_invalid');
   const current=tx.all("SELECT * FROM media_file WHERE owner_id=? AND message_id=? AND publish_state='current' AND content_state='present'",[i.ownerId,i.messageId]);
   const kind=message(tx,i).kind;
-  const freshMain=fresh.some(f=>f.role==='image_display'&&(f.image_quality==='original'||f.image_quality_evidence&&JSON.parse(String(f.image_quality_evidence)).sourceVariant==='main'));
-  const oldImage=current.find(f=>f.role==='image_display');
-  const classifiedSameThumbnail=oldImage?.image_quality==='unknown'&&fresh.some(f=>f.role==='image_display'&&f.image_quality==='thumbnail'&&f.content_digest===oldImage.content_digest);
-  const automaticRefresh=[imageRefreshPrefix,imageReconcilePrefix].some(prefix=>String(a.request_key).startsWith(prefix));
-  const retainImage=kind==='image'&&automaticRefresh&&!!oldImage&&!freshMain&&!classifiedSameThumbnail;
-  const keep=a.goal==='audio_conversion'?current.filter(f=>f.id===a.input_file_id):retainImage?current:[];
-  const publish=retainImage?[]:fresh;
-  if(retainImage)for(const f of fresh)tx.run("UPDATE media_file SET publish_state='cleanup_pending' WHERE owner_id=? AND id=?",[i.ownerId,f.id]);
-  const combination=[...publish,...keep];
+  const keep=a.goal==='audio_conversion'?current.filter(f=>f.id===a.input_file_id):[];
+  const combination=[...fresh,...keep];
   if(kind==='voice'){const original=combination.find(f=>f.role==='audio_source');const originalId=original?.id??fail('media_audio_source_required');if(combination.some(f=>f.role==='audio_playback'&&f.parent_file_id!==originalId))fail('media_audio_parent_invalid');}
   const full=(files:StorageRow[])=>kind==='image'?files.some(f=>f.role==='image_display'&&f.container_valid===1n&&f.viewable===1n):kind==='video'?files.some(f=>f.role==='video_playback'&&f.playable===1n):files.some(f=>f.role==='audio_source')&&files.some(f=>f.role==='audio_playback'&&f.playable===1n);
   if(full(current)&&!full(combination))fail('media_result_would_degrade');
-  if(kind==='image'&&a.goal==='original_upgrade'&&!combination.some(f=>f.role==='image_display'&&f.image_quality==='original'&&f.container_valid===1n&&f.viewable===1n))fail('media_original_unavailable');
-  const outcome=full(combination)?'full':kind==='image'&&combination.some(f=>f.image_quality==='unknown')?'quality_unknown':'limited';
+  const outcome=full(combination)?'full':'limited';
   const keepIds=new Set(keep.map(f=>f.id));
   for(const f of current)if(!keepIds.has(f.id))tx.run("UPDATE media_file SET publish_state='cleanup_pending' WHERE owner_id=? AND id=?",[i.ownerId,f.id]);
-  for(const f of publish)tx.run("UPDATE media_file SET publish_state='current' WHERE owner_id=? AND id=?",[i.ownerId,f.id]);
+  for(const f of fresh)tx.run("UPDATE media_file SET publish_state='current' WHERE owner_id=? AND id=?",[i.ownerId,f.id]);
   tx.run("UPDATE media_extraction_attempt SET state='completed',result_outcome=?,lease_token=NULL,lease_expires_at=NULL,finished_at=?,association_proof_format=?,association_proof=?,error_code=? WHERE owner_id=? AND id=?",[outcome,Date.now(),proof?'media-association-v1':null,proof?JSON.stringify(proof):null,i.errorCode??null,i.ownerId,i.attemptId]);
   tx.run('UPDATE message_media SET head_revision=head_revision+1 WHERE owner_id=? AND message_id=?',[i.ownerId,i.messageId]);
   if(current.some(f=>!keepIds.has(f.id))||tx.get("SELECT 1 FROM media_file WHERE owner_id=? AND message_id=? AND publish_state IN ('retired','cleanup_pending') AND content_state='present'",[i.ownerId,i.messageId]))planDeletion(tx,lease,registration,{ownerId:i.ownerId,requestKey:`${i.attemptId}-replace`,scope:{kind:'media_result_replace',contactId:i.contactId,messageId:i.messageId}});

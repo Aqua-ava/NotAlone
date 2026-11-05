@@ -1,21 +1,20 @@
 import type { ContactSelection } from './contact-session-bridge';
 
-export type MediaGoal = 'extract' | 'original_upgrade' | 'audio_conversion';
+export type MediaGoal = 'extract' | 'audio_conversion';
 export interface MessageMediaSelection extends ContactSelection { messageId: string; }
 export interface MediaAttempt {
   attemptId: string; state: 'pending' | 'running' | 'completed' | 'failed' | 'interrupted' | 'revoked';
-  outcome: 'full' | 'limited' | 'quality_unknown' | 'no_result'; errorCode: string | null;
+  outcome: 'full' | 'limited' | 'no_result'; errorCode: string | null;
 }
 export interface MediaFile {
   fileId: string; role: 'image_display' | 'video_playback' | 'audio_source' | 'audio_playback';
-  imageQuality: 'original' | 'thumbnail' | 'unknown' | 'not_applicable';
   format: string; mimeType: string; byteSize: string; viewable: boolean; playable: boolean;
 }
 export interface MediaSnapshot {
   contactId: string; messageId: string; kind: 'image' | 'video' | 'voice';
   state: 'available' | 'active' | 'cleared' | 'invalidated' | 'deleting'; generation: string; headRevision: string;
   latestAttempt: MediaAttempt | null; requestedAttempt?: MediaAttempt; files: MediaFile[];
-  capabilities: { extract: boolean; originalUpgrade: boolean; audioConversion: boolean; reason: string | null };
+  capabilities: { extract: boolean; audioConversion: boolean; reason: string | null };
   cleanup: { operationId: string; state: 'fenced' | 'cleaning' | 'verifying' | 'blocked' | 'completed' } | null;
 }
 export interface MediaPreview {

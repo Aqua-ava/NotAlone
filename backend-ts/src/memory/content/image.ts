@@ -2,9 +2,7 @@ import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import {assertSourceEligibility,eligibleSourceReferences} from '../../history/sqlite/source.ts';
 import type {MemoryContentPlugin} from './registry.ts';
 const imageMime=new Set(['image/png','image/jpeg','image/webp','image/gif']);
-/** 记忆只用已确认不是缩略图的图片：原图，或来源依据明确为标准图。缩略图与来源未确认的图片不进入模型。 */
-const confirmedNotThumbnail=`(f.image_quality='original' OR (f.image_quality='unknown' AND json_valid(f.image_quality_evidence)
-   AND json_extract(f.image_quality_evidence,'$.sourceVariant')='main'))`;
+// 记忆只用当前可查看的已保存图片：图片提取不保存缩略图，已保存的一律是标准图或高清图，无需再分级。
 export const imageMemoryContent:MemoryContentPlugin={
  id:'notalone.image',version:'1',kinds:['image'],
  modelInputCost:identity=>({images:1,bytes:Number(identity.byteSize)}),
@@ -15,7 +13,7 @@ export const imageMemoryContent:MemoryContentPlugin={
    JOIN media_extraction_attempt a ON a.owner_id=f.owner_id AND a.id=f.produced_attempt_id
    WHERE f.owner_id=? AND f.contact_id=? AND f.message_id=? AND f.role='image_display'
    AND f.content_state='present' AND f.publish_state='current' AND f.container_valid=1 AND f.viewable=1
-   AND ${confirmedNotThumbnail} AND h.state<>'cleared' ORDER BY f.created_at DESC,f.id LIMIT 1`,[ownerId,contactId,message.id]);
+   AND h.state<>'cleared' ORDER BY f.created_at DESC,f.id LIMIT 1`,[ownerId,contactId,message.id]);
   if(!file||!imageMime.has(String(file.mime_type))||typeof file.content_digest!=='string'||!Number.isSafeInteger(Number(file.byte_size)))return null;
   try{assertSourceEligibility(tx,{owner_id:ownerId,contact_id:contactId,message_id:String(message.id),record_id:String(file.record_id)});}catch{return null;}
   return {fileId:String(file.id),sha256:file.content_digest,mediaGeneration:String(file.media_generation),mimeType:String(file.mime_type),byteSize:Number(file.byte_size)};
@@ -28,7 +26,7 @@ export const imageMemoryContent:MemoryContentPlugin={
    FROM media_file f JOIN message_media h ON h.owner_id=f.owner_id AND h.contact_id=f.contact_id AND h.message_id=f.message_id
    JOIN media_extraction_attempt a ON a.owner_id=f.owner_id AND a.id=f.produced_attempt_id
    WHERE f.owner_id=? AND f.contact_id=? AND f.message_id IN (SELECT value FROM json_each(?)) AND f.role='image_display'
-    AND f.content_state='present' AND f.publish_state='current' AND f.container_valid=1 AND f.viewable=1 AND ${confirmedNotThumbnail} AND h.state<>'cleared'
+    AND f.content_state='present' AND f.publish_state='current' AND f.container_valid=1 AND f.viewable=1 AND h.state<>'cleared'
   ) SELECT message_id,mime_type,content_digest,byte_size,record_id FROM ranked_files WHERE position=1`,
    [ownerId,contactId,JSON.stringify(messages.map(message=>String(message.id)))]);
   const refs=files.filter(file=>imageMime.has(String(file.mime_type))&&typeof file.content_digest==='string'&&Number.isSafeInteger(Number(file.byte_size)))

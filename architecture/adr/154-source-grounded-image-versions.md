@@ -1,5 +1,7 @@
 # ADR-154：按微信资源来源记录图片版本
 
+> 取消分类修订（2026-11-05）：[ADR-170](170-no-thumbnail-storage-and-no-original-classification.md)取消 `original`／`thumbnail`／`unknown` 三层分类与来源分类依据（`image_quality_evidence`）的写入和读取，缩略图不保存；下文分类条款保留为历史决定，旧列因已发布迁移保留但不再使用。
+
 > 自动补查修订（2026-11-03）：[ADR-156](156-automatic-image-reconciliation.md)替代第 6 条中旧未知版本不自动重读的限制，要求在当前有效授权范围内自动重新核验缺少资源角色依据的旧图；仍不得猜测回填，已有原图证明保留。
 
 > 展示与复查补充（2026-11-03）：[ADR-155](155-image-variant-display-and-thumbnail-refresh.md)将资源角色与原图证明分别表达，已确认 `main` 而缺原图证明的图片显示“主图”；已保存缩略图允许在有效同步范围内有界复查。下文 `image_quality` 分类、既有证明保留和旧未知版本不猜测回填的规则保持。

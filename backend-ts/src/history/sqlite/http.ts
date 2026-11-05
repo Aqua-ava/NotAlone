@@ -37,7 +37,7 @@ export function projectHistoryMessages(read: HistoryRead, limit: number, imageMe
     messages: selected.map(message => {
       const type=displayMessageType(message),quote=message.quote;
       const image = imageMedia && message.kind === 'image' ? imageMedia.get(message.id) ?? {state:'pending' as const,fileId:null,mimeType:null} : null;
-      const safeImage = (image?.state === 'original'||image?.state==='available') && uuid.test(image.fileId??'') && image.mimeType && /^image\/[a-z0-9.+-]{1,64}$/.test(image.mimeType)
+      const safeImage = image?.state==='available' && uuid.test(image.fileId??'') && image.mimeType && /^image\/[a-z0-9.+-]{1,64}$/.test(image.mimeType)
         ? image : image ? {...image,fileId:null,mimeType:null} : null;
       const quoted=type==='quote'&&quote?{
         text:quote?.referencedText||'引用内容暂不可用',target_message_id:quote?.targetMessageId??null,
@@ -51,8 +51,6 @@ export function projectHistoryMessages(read: HistoryRead, limit: number, imageMe
         occurred_at: isoTime(message), quoted,
         ordering: message.ordering, display_position: message.displayPosition, source_record_ids: message.sourceRecordIds,
         ...(safeImage ? {image_media:{state:safeImage.state,file_id:safeImage.fileId,mime_type:safeImage.mimeType,
-          ...(safeImage.imageQuality?{image_quality:safeImage.imageQuality}:{}),
-          ...(safeImage.imageVariant?{image_variant:safeImage.imageVariant}:{}),
           ...('errorCode' in safeImage&&safeImage.errorCode?{error_code:safeImage.errorCode}:{})}} : {}),
       };
     }),

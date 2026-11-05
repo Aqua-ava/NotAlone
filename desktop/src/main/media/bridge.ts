@@ -14,7 +14,7 @@ function selection(args:unknown[],extra?:'goal'|'fileId'|'historyImage'):
     || !Number.isSafeInteger(input.scopeRevision) || (input.scopeRevision as number)<0
     || (extra==='fileId'||extra==='historyImage')&&!isUuid(input.fileId)
     || extra==='historyImage'&&!['image/png','image/jpeg','image/gif','image/bmp'].includes(input.mimeType as string)
-    || extra==='goal'&&!['extract','original_upgrade','audio_conversion'].includes(input.goal as string))throw new Error('媒体操作不可用。');
+    || extra==='goal'&&!['extract','audio_conversion'].includes(input.goal as string))throw new Error('媒体操作不可用。');
   return {contactId:input.contactId.toLowerCase(),messageId:input.messageId.toLowerCase(),scopeRevision:input.scopeRevision as number,
     ...(extra==='goal'?{goal:input.goal as MediaGoal}:{}),
     ...(extra==='fileId'||extra==='historyImage'?{fileId:(input.fileId as string).toLowerCase()}:{ }),

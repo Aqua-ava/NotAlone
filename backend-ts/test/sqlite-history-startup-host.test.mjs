@@ -46,7 +46,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
  else if(r.op==='target')data={protocol:'private-history-v1',descriptor:'synthetic-startup-target',partitions:schema.checkedPartitions,tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'};
  else if(r.op==='page')data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[{partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'contact',kind:'${images?'image':'text'}',text:${images?'null':"'仅合成的启动首次历史'"},originalType:'${images?'3':'1'}',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified',status:'0'}],completedPartitions:schema.checkedPartitions,exhausted:true};
  else if(r.op==='image-open'){
- const qualityProof={kind:plan.classified?'wechat-message-image-content-v2':'wechat-message-image-content-v1',resourceInfoId:'10',matchingResourceIds:['20'],resourceSize:imageBytes.length,verifiedBytes:imageBytes.length,verifiedSha256:imageDigest,sourceSha256:imageDigest,conversion:'none',contentWidth:1,contentHeight:1,...(plan.classified?{sourceVariant:'main',matchingResources:[{resourceId:'20',resourceTypeRaw:262145}],originalProof:null}:{})};
+ const qualityProof={kind:'wechat-message-image-content-v2',resourceInfoId:'10',matchingResourceIds:['20'],resourceSize:imageBytes.length,verifiedBytes:imageBytes.length,verifiedSha256:imageDigest,sourceSha256:imageDigest,conversion:'none',contentWidth:1,contentHeight:1,sourceVariant:'main',matchingResources:[{resourceId:'20',resourceTypeRaw:262145}],originalProof:null};
  data={protocol:'wechat-original-image-v1',resourceToken:'synthetic-startup-image',sourceGeneration:'${generation}',resourceSourceGeneration:'${generation}',target:r.target,partition:r.partition,table:r.table,localId:r.localId,serverId:r.serverId,sentAt:r.sentAt,resourceTable:'wechat-message-resource-v1',resourceId:'20',resourceTypeRaw:262145,variantCode:4,complete:true,quality:'unknown',qualityProof,expectedBytes:imageBytes.length,expectedSha256:imageDigest,mimeType:'image/png',envelope:'plain',sourceEnvelope:'plain'};
  }
  else if(r.op==='image-read'){const chunk=imageBytes.subarray(r.offset,Math.min(imageBytes.length,r.offset+65536));data={resourceToken:r.resourceToken,sourceGeneration:'${generation}',offset:r.offset,bytesRead:chunk.length,totalBytes:imageBytes.length,chunkBase64:chunk.toString('base64'),eof:r.offset+chunk.length===imageBytes.length,verifiedSha256:imageDigest};}
@@ -59,7 +59,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
  const storage=await SqliteStorage.open({userData,intent:'create',role:'test'}),databaseId=storage.status.databaseId;await storage.close();
  const hosts=[],routes=[];
  t.after(async()=>{for(const host of hosts.reverse())await host.terminate();await rm(root,{recursive:true,force:true});});
- return {root,userData,executable,databaseId,logFile,hosts,routes,setSupport:status=>writeFile(planFile,JSON.stringify({history:status})),classifyImages:()=>writeFile(planFile,JSON.stringify({history:'supported',classified:true}))};
+ return {root,userData,executable,databaseId,logFile,hosts,routes,setSupport:status=>writeFile(planFile,JSON.stringify({history:status}))};
 }
 async function requests(f){try{return (await readFile(f.logFile,'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);}catch(error){if(error.code==='ENOENT')return [];throw error;}}
 async function start(f,options={}){
@@ -140,7 +140,7 @@ test('manual正式profile不自动派发历史或记忆，重启后仍只执行�
 });
 
 
-test('正式profile可只自动处理全部已授权联系人图片，补查旧未知且不启动历史页或记忆',{timeout:45000},async t=>{
+test('正式profile可只自动处理全部已授权联系人图片，已保存的不重读且不启动历史页或记忆',{timeout:45000},async t=>{
  const f=await fixture(t,{images:true}),initial=await start(f,{imageProcessing:'manual'}),selected=await authorize(initial,true);
  assert.equal((await initial.request('/api/sync/enable','POST',{})).status,200);
  const messages=[];
@@ -150,16 +150,16 @@ test('正式profile可只自动处理全部已授权联系人图片，补查旧�
   messages.push({contactId:binding.contact_id,messageId:rows[0].message_id});
  }
  const old=messages[0],seed=await initial.request(`/api/contacts/${old.contactId}/messages/${old.messageId}/media`,'POST',{request_key:randomUUID(),goal:'extract'});
- assert.equal(seed.status,200);assert.equal(seed.body.files[0].imageQuality,'unknown');
- await initial.shutdown();const before=(await requests(f)).length;await f.classifyImages();
+ assert.equal(seed.status,200);assert.equal(seed.body.files.length,1);
+ await initial.shutdown();const before=(await requests(f)).length;
  const restarted=await start(f,{manual:true,memory:true,imageProcessing:'automatic'});
  const runtime=(await restarted.request('/api/runtime/status')).body;assert.equal(runtime.background_processing,'manual');assert.equal(runtime.image_processing,'automatic');assert.equal(runtime.ownership.mediaExtraction,'typescript');assert.deepEqual(Object.keys(runtime.image_sync).sort(),['checked','failed','last_failure_code','processing']);
  for(const item of messages){
-  const saved=await ready(async()=>(await restarted.request(`/api/contacts/${item.contactId}/history-messages?limit=20`)).body.messages?.find(row=>row.message_id===item.messageId),row=>row?.image_media?.image_variant==='main','synthetic_automatic_image_timeout').catch(async error=>{throw new Error(error.message+' '+JSON.stringify((await restarted.request(`/api/contacts/${item.contactId}/messages/${item.messageId}/media`)).body)+' '+JSON.stringify((await restarted.request('/api/runtime/status')).body.image_sync));});
+  const saved=await ready(async()=>(await restarted.request(`/api/contacts/${item.contactId}/history-messages?limit=20`)).body.messages?.find(row=>row.message_id===item.messageId),row=>row?.image_media?.state==='available','synthetic_automatic_image_timeout').catch(async error=>{throw new Error(error.message+' '+JSON.stringify((await restarted.request(`/api/contacts/${item.contactId}/messages/${item.messageId}/media`)).body)+' '+JSON.stringify((await restarted.request('/api/runtime/status')).body.image_sync));});
   assert.equal(saved.image_media.state,'available');
  }
- const rows=(await requests(f)).slice(before);assert.equal(rows.filter(row=>row.op==='image-open').length,2);assert.equal(rows.some(row=>row.op==='page'),false);
- const progress=(await restarted.request('/api/runtime/status')).body.image_sync;assert.equal(progress.checked,2);assert.equal(progress.failed,0);assert.equal(progress.last_failure_code,null);
+ const rows=(await requests(f)).slice(before);assert.equal(rows.filter(row=>row.op==='image-open').length,1);assert.equal(rows.some(row=>row.op==='page'),false);
+ const progress=(await restarted.request('/api/runtime/status')).body.image_sync;assert.equal(progress.checked,1);assert.equal(progress.failed,0);assert.equal(progress.last_failure_code,null);
  assert.equal((await restarted.request('/api/ledger/summary')).body.total_calls,0);
  await restarted.shutdown();noCliOrphans(await requests(f));
 });

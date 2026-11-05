@@ -7,12 +7,10 @@ export interface ContactHistoryRequest {
 }
 
 export interface ContactHistoryImageMedia {
-  state: 'pending' | 'original' | 'available' | 'thumbnail_only' | 'unavailable' | 'failed' | 'cleared';
+  state: 'pending' | 'available' | 'thumbnail_only' | 'unavailable' | 'failed' | 'cleared';
   fileId: string | null;
   mimeType: string | null;
   errorCode?: string | null;
-  imageQuality?:'original'|'thumbnail'|'unknown';
-  imageVariant?:'main'|'thumbnail'|'unknown';
 }
 export interface ContactHistoryMessage {
   messageId: string;

@@ -36,7 +36,7 @@ export class SqliteMediaHttp {
     }else if(req.method==='GET')send(res,200,await this.service.read(contactId,messageId));
     else if(req.method==='POST'){
      const value=await body(req);
-     if(Object.keys(value).sort().join(',')!=='goal,request_key'||typeof value.request_key!=='string'||!uuid.test(value.request_key)||!['extract','original_upgrade','audio_conversion'].includes(String(value.goal)))throw new StorageFailure('media_request_invalid');
+     if(Object.keys(value).sort().join(',')!=='goal,request_key'||typeof value.request_key!=='string'||!uuid.test(value.request_key)||!['extract','audio_conversion'].includes(String(value.goal)))throw new StorageFailure('media_request_invalid');
      const controller=new AbortController(),abort=()=>controller.abort();req.once('aborted',abort);
      try{send(res,200,await this.service.extract(contactId,messageId,{requestKey:value.request_key,goal:value.goal as MediaGoal},controller.signal));}finally{req.removeListener('aborted',abort);}
     }else if(req.method==='DELETE'){

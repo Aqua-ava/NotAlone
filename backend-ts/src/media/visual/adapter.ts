@@ -37,13 +37,6 @@ async function collect(context:VisualRequest,resource:VisualResource):Promise<Bu
   return Buffer.concat(chunks,length);
   } finally {for(const chunk of chunks)chunk.fill(0);}
 }
-function quality(resource:VisualResource):VisualResource['quality'] {
-  const value=resource.quality;
-  if(!value||!['original','thumbnail','unknown'].includes(value.kind))return {kind:'unknown',proof:null};
-  if(value.kind==='thumbnail'||value.kind==='unknown')return {kind:value.kind,proof:null,...(value.evidence?{evidence:value.evidence}:{})};
-  if(typeof value.proof==='string'&&/^[a-zA-Z0-9_:-]{1,128}$/.test(value.proof))return value;
-  return {kind:'unknown',proof:null};
-}
 /** 类型处理不定位微信路径；只消费认证端口固定的一条完整资源。 */
 export class VisualMediaAdapter implements MediaAdapter {
   readonly version='visual-media-v1';
@@ -53,7 +46,7 @@ export class VisualMediaAdapter implements MediaAdapter {
   private readonly executions=new Set<Promise<unknown>>();
   private closing=false;
   constructor(resources:VisualResourcePort,validate:VisualValidator=validateVisual){this.resources=resources;this.validate=validate;}
-  supports(kind:MediaKind,goal:MediaGoal):boolean{return kind==='image'&&(goal==='extract'||goal==='original_upgrade')||kind==='video'&&goal==='extract';}
+  supports(kind:MediaKind,goal:MediaGoal):boolean{return (kind==='image'||kind==='video')&&goal==='extract';}
   execute(execution:MediaExecution){
     if(this.closing)return Promise.reject(new StorageFailure('media_closed'));
     const operation=this.run(execution);this.executions.add(operation);
@@ -64,7 +57,7 @@ export class VisualMediaAdapter implements MediaAdapter {
     if(!this.supports(execution.kind,execution.goal)||!execution.source||!execution.token)throw new StorageFailure('media_association_unverified');
     if(execution.source.support.status!=='supported'||execution.source.contactId!==execution.contactId||execution.source.messageId!==execution.messageId||execution.source.raw.kind!==execution.kind||execution.source.support.sourceGeneration!==execution.token.source_generation)throw new StorageFailure('media_association_unverified');
     // 预期与端口输入分开持有；端口不能同时改写被验证对象和预期。
-    const context:VisualRequest=Object.freeze({contactId:execution.contactId,messageId:execution.messageId,kind:execution.kind as 'image'|'video',goal:execution.goal as 'extract'|'original_upgrade',source:fixedData(execution.source),token:fixedData(execution.token),signal:execution.signal,checkpoint:execution.checkpoint});
+    const context:VisualRequest=Object.freeze({contactId:execution.contactId,messageId:execution.messageId,kind:execution.kind as 'image'|'video',goal:'extract' as const,source:fixedData(execution.source),token:fixedData(execution.token),signal:execution.signal,checkpoint:execution.checkpoint});
     await context.checkpoint();
     const request:VisualRequest=Object.freeze({...context,source:fixedData(context.source),token:fixedData(context.token)});
     const opened=await this.resources.open(request);
@@ -80,11 +73,9 @@ export class VisualMediaAdapter implements MediaAdapter {
       // 长度/摘要/质量/关联均固定于打开回执，不能由后来的流补造或替换。
       const resource:VisualResource=Object.freeze({association:fixedData(opened.association),authority:fixedData(opened.authority),
         envelope:opened.envelope,expectedBytes:opened.expectedBytes,expectedSha256:opened.expectedSha256,complete:opened.complete,
-        quality:fixedData(opened.quality),bytes:opened.bytes,withImageKey:opened.withImageKey?.bind(opened),close});
+        bytes:opened.bytes,withImageKey:opened.withImageKey?.bind(opened),close});
       await context.checkpoint();proof(context,resource);
       if(context.kind==='video'&&resource.envelope!=='plain')throw new StorageFailure('unsupported');
-      const imageQuality=context.kind==='image'?quality(resource):null;
-      if(context.goal==='original_upgrade'&&imageQuality?.kind!=='original')throw new StorageFailure('media_original_unavailable');
       input=await collect(context,resource);await context.checkpoint();
       const usesV2=resource.envelope==='wechat_dat'&&input.subarray(0,6).equals(Buffer.from([7,8,86,50,8,7]));
       if(resource.envelope==='wechat_dat'){
@@ -110,8 +101,7 @@ export class VisualMediaAdapter implements MediaAdapter {
           }
           await context.checkpoint();
           if(validation.containerValid!==true||validation.viewable!==(context.kind==='image')||validation.playable!==(context.kind==='video'))throw new StorageFailure('media_validation_failed');
-          return {...validation,imageQuality:imageQuality?.kind??'not_applicable',qualityProof:imageQuality?.proof??null,
-            ...(imageQuality?.evidence?{imageQualityEvidence:imageQuality.evidence}:{})};
+          return validation;
         }});
       await context.checkpoint();
       return {association:resource.association};

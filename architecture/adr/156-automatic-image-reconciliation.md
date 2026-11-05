@@ -1,5 +1,7 @@
 # ADR-156：授权范围内自动补查全部图片
 
+> 简化修订（2026-11-05）：[ADR-170](170-no-thumbnail-storage-and-no-original-classification.md)取消旧未知版本补查与缩略图复查，自动补查只针对“没有可查看的已保存图片”的消息，持久退避（1 分钟至 24 小时）、授权复验和不恢复已清除结果保持；下文相应条款保留为历史决定。
+
 > 状态：已采纳（2026-11-03），已实现；合成与正式 profile 回归通过，实机已开启并记录读取失败后的持久退避。换回微信 4.0.6 后版本检查通过，但图片关联及部分来源连续性核验仍失败，真实全量未完成，边界见[验收记录](../../docs/verification/automatic-image-reconciliation-20261103.md)。
 > 局部替代 [ADR-154](154-source-grounded-image-versions.md)第 6 条、[ADR-155](155-image-variant-display-and-thumbnail-refresh.md)第 2／3 条以及 [ADR-140](140-source-verified-viewable-chat-images.md)的旧未知版本不自动重读、普通失败只补一轮条款。按来源分类、原图证明独立、联系人隔离、已有证明和删除边界保持。
 

@@ -286,10 +286,10 @@ test('当前聊天中的图片状态变更通过消息事件刷新历史投影',
   const history = new ContactHistoryController(setup.backend, setup.contacts);
   const scope = setup.contacts.getState();
   await history.load({ contactId: setup.contactIds[0], scopeRevision: scope.scopeRevision, older: false });
-  current = { state: 'original', file_id: randomUUID(), mime_type: 'image/png' };
+  current = { state: 'available', file_id: randomUUID(), mime_type: 'image/png' };
   setup.backend.emitMessage({ contactId: setup.contactIds[0], messageId, change: 'updated' });
   await new Promise(resolve => setTimeout(resolve, 180));
-  assert.equal(history.getState().messages.items[0].imageMedia.state, 'original');
+  assert.equal(history.getState().messages.items[0].imageMedia.state, 'available');
   history.dispose();
 });
 
@@ -333,13 +333,13 @@ test('已加载的较早页中图片状态变化时按该页游标刷新并保�
   const scope = setup.contacts.getState();
   await history.load({ contactId: setup.contactIds[0], scopeRevision: scope.scopeRevision, older: false });
   await history.load({ contactId: setup.contactIds[0], scopeRevision: scope.scopeRevision, older: true });
-  imageState = { state: 'original', file_id: randomUUID(), mime_type: 'image/png' };
+  imageState = { state: 'available', file_id: randomUUID(), mime_type: 'image/png' };
   setup.backend.emitMessage({ contactId: setup.contactIds[0], messageId: targetId, change: 'updated' });
   await new Promise(resolve => setTimeout(resolve, 180));
   assert.ok(calls.at(-1).path.endsWith(`&before=${cursor}`));
   const items = history.getState().messages.items;
   assert.equal(items.length, 21);
-  assert.equal(items.find(item => item.messageId === targetId).imageMedia.state, 'original');
+  assert.equal(items.find(item => item.messageId === targetId).imageMedia.state, 'available');
   assert.ok(items.findIndex(item => item.messageId === targetId) > items.findIndex(item => item.messageId === newest[0].message_id));
   history.dispose();
 });
@@ -374,12 +374,12 @@ test('首页新增多条消息后仍按图片原始游标刷新较早页', async
   assert.equal(afterInsert.length, 60);
   assert.ok(afterInsert.findIndex(item => item.messageId === targetId) >= 40);
 
-  imageState = { state: 'original', file_id: randomUUID(), mime_type: 'image/png' };
+  imageState = { state: 'available', file_id: randomUUID(), mime_type: 'image/png' };
   setup.backend.emitMessage({ contactId: setup.contactIds[0], messageId: targetId, change: 'updated' });
   await new Promise(resolve => setTimeout(resolve, 180));
   assert.ok(calls.at(-1).path.endsWith(`&before=${firstCursor}`));
   const refreshed = history.getState().messages.items;
-  assert.equal(refreshed.find(item => item.messageId === targetId).imageMedia.state, 'original');
+  assert.equal(refreshed.find(item => item.messageId === targetId).imageMedia.state, 'available');
   assert.equal(refreshed.length, 60);
   assert.equal(refreshed[0].messageId, insertedHome[0].message_id);
   history.dispose();

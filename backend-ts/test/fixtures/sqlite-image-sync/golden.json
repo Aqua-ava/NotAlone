@@ -1,8 +1,8 @@
 {
- "note": "P01 修改前通过公开存储动作采集的结果黄金样例；messageId 已归一为 <message>。由 backend-ts/scripts/perf/image-sync-query-baseline.mjs --emit-golden 生成。",
+ "note": "ADR-170（不保存缩略图、取消原图分类）之后通过公开存储动作采集的结果黄金样例：已有可查看图片的消息不再入选；messageId 已归一为 <message>。由 backend-ts/scripts/perf/image-sync-query-baseline.mjs --emit-golden 生成。",
  "scenarioNow": 1800000000000,
  "source": {
-  "workSql": "pre-linearization correlated subquery",
+  "workSql": "linearized work query after ADR-170",
   "action": "media.imageSyncTargets / media.imageRefreshPending"
  },
  "edge": {
@@ -294,14 +294,6 @@
     "requestKey": "image_sync_v5_<message>_0"
    },
    {
-    "displayNo": "1108",
-    "requestKey": "image_refresh_v1_<message>_0_30000000"
-   },
-   {
-    "displayNo": "1109",
-    "requestKey": "image_reconcile_v1_<message>_0_30000000"
-   },
-   {
     "displayNo": "1111",
     "requestKey": "image_reconcile_v1_<message>_1_30000000"
    },
@@ -346,14 +338,6 @@
    {
     "displayNo": "1101",
     "requestKey": "image_sync_v5_<message>_0"
-   },
-   {
-    "displayNo": "1108",
-    "requestKey": "image_refresh_v1_<message>_0_30000001"
-   },
-   {
-    "displayNo": "1109",
-    "requestKey": "image_reconcile_v1_<message>_0_30000001"
    },
    {
     "displayNo": "1111",
@@ -679,10 +663,6 @@
     "requestKey": "image_reconcile_v1_<message>_0_30000000"
    },
    {
-    "displayNo": "3023",
-    "requestKey": "image_refresh_v1_<message>_0_30000000"
-   },
-   {
     "displayNo": "3024",
     "requestKey": "image_reconcile_v1_<message>_0_30000000"
    },
@@ -745,10 +725,6 @@
    {
     "displayNo": "3045",
     "requestKey": "image_reconcile_v1_<message>_0_30000000"
-   },
-   {
-    "displayNo": "3046",
-    "requestKey": "image_refresh_v1_<message>_0_30000000"
    },
    {
     "displayNo": "3047",
@@ -815,10 +791,6 @@
     "requestKey": "image_reconcile_v1_<message>_0_30000000"
    },
    {
-    "displayNo": "3069",
-    "requestKey": "image_refresh_v1_<message>_0_30000000"
-   },
-   {
     "displayNo": "3070",
     "requestKey": "image_reconcile_v1_<message>_0_30000000"
    },
@@ -853,9 +825,7 @@
    {
     "displayNo": "3080",
     "requestKey": "image_reconcile_v1_<message>_0_30000000"
-   }
-  ],
-  "large/second-page": [
+   },
    {
     "displayNo": "3081",
     "requestKey": "image_reconcile_v1_<message>_0_30000000"
@@ -867,7 +837,9 @@
    {
     "displayNo": "3083",
     "requestKey": "image_reconcile_v1_<message>_0_30000000"
-   },
+   }
+  ],
+  "large/second-page": [
    {
     "displayNo": "3084",
     "requestKey": "image_reconcile_v1_<message>_0_30000000"
@@ -887,10 +859,6 @@
    {
     "displayNo": "3091",
     "requestKey": "image_reconcile_v1_<message>_0_30000000"
-   },
-   {
-    "displayNo": "3092",
-    "requestKey": "image_refresh_v1_<message>_0_30000000"
    },
    {
     "displayNo": "3094",
@@ -957,10 +925,6 @@
     "requestKey": "image_reconcile_v1_<message>_0_30000000"
    },
    {
-    "displayNo": "3115",
-    "requestKey": "image_refresh_v1_<message>_0_30000000"
-   },
-   {
     "displayNo": "3117",
     "requestKey": "image_reconcile_v1_<message>_0_30000000"
    },
@@ -1023,10 +987,6 @@
    {
     "displayNo": "3137",
     "requestKey": "image_reconcile_v1_<message>_0_30000000"
-   },
-   {
-    "displayNo": "3138",
-    "requestKey": "image_refresh_v1_<message>_0_30000000"
    },
    {
     "displayNo": "3139",
@@ -1093,10 +1053,6 @@
     "requestKey": "image_reconcile_v1_<message>_0_30000000"
    },
    {
-    "displayNo": "3161",
-    "requestKey": "image_refresh_v1_<message>_0_30000000"
-   },
-   {
     "displayNo": "3162",
     "requestKey": "image_reconcile_v1_<message>_0_30000000"
    },
@@ -1110,6 +1066,34 @@
    },
    {
     "displayNo": "3165",
+    "requestKey": "image_reconcile_v1_<message>_0_30000000"
+   },
+   {
+    "displayNo": "3166",
+    "requestKey": "image_reconcile_v1_<message>_0_30000000"
+   },
+   {
+    "displayNo": "3167",
+    "requestKey": "image_reconcile_v1_<message>_0_30000000"
+   },
+   {
+    "displayNo": "3168",
+    "requestKey": "image_reconcile_v1_<message>_0_30000000"
+   },
+   {
+    "displayNo": "3169",
+    "requestKey": "image_reconcile_v1_<message>_0_30000000"
+   },
+   {
+    "displayNo": "3173",
+    "requestKey": "image_reconcile_v1_<message>_0_30000000"
+   },
+   {
+    "displayNo": "3175",
+    "requestKey": "image_reconcile_v1_<message>_0_30000000"
+   },
+   {
+    "displayNo": "3176",
     "requestKey": "image_reconcile_v1_<message>_0_30000000"
    }
   ],
@@ -1195,10 +1179,6 @@
     "requestKey": "image_reconcile_v1_<message>_0_30000001"
    },
    {
-    "displayNo": "3023",
-    "requestKey": "image_refresh_v1_<message>_0_30000001"
-   },
-   {
     "displayNo": "3024",
     "requestKey": "image_reconcile_v1_<message>_0_30000001"
    },
@@ -1261,10 +1241,6 @@
    {
     "displayNo": "3045",
     "requestKey": "image_reconcile_v1_<message>_0_30000001"
-   },
-   {
-    "displayNo": "3046",
-    "requestKey": "image_refresh_v1_<message>_0_30000001"
    },
    {
     "displayNo": "3047",
@@ -1335,10 +1311,6 @@
     "requestKey": "image_reconcile_v1_<message>_0_30000001"
    },
    {
-    "displayNo": "3069",
-    "requestKey": "image_refresh_v1_<message>_0_30000001"
-   },
-   {
     "displayNo": "3070",
     "requestKey": "image_reconcile_v1_<message>_0_30000001"
    },
@@ -1369,6 +1341,18 @@
    {
     "displayNo": "3079",
     "requestKey": "image_reconcile_v1_<message>_0_30000001"
+   },
+   {
+    "displayNo": "3080",
+    "requestKey": "image_reconcile_v1_<message>_0_30000001"
+   },
+   {
+    "displayNo": "3081",
+    "requestKey": "image_reconcile_v1_<message>_0_30000001"
+   },
+   {
+    "displayNo": "3082",
+    "requestKey": "image_sync_v5_<message>_0"
    }
   ],
   "large/refresh-after": [
@@ -1419,10 +1403,6 @@
    {
     "displayNo": "3067",
     "requestKey": "image_reconcile_v1_<message>_0_30000001"
-   },
-   {
-    "displayNo": "3069",
-    "requestKey": "image_refresh_v1_<message>_0_30000001"
    },
    {
     "displayNo": "3070",
@@ -1493,10 +1473,6 @@
     "requestKey": "image_reconcile_v1_<message>_0_30000001"
    },
    {
-    "displayNo": "3092",
-    "requestKey": "image_refresh_v1_<message>_0_30000001"
-   },
-   {
     "displayNo": "3094",
     "requestKey": "image_reconcile_v1_<message>_0_30000001"
    },
@@ -1565,10 +1541,6 @@
     "requestKey": "image_reconcile_v1_<message>_0_30000001"
    },
    {
-    "displayNo": "3115",
-    "requestKey": "image_refresh_v1_<message>_0_30000001"
-   },
-   {
     "displayNo": "3117",
     "requestKey": "image_reconcile_v1_<message>_0_30000001"
    },
@@ -1627,10 +1599,22 @@
    {
     "displayNo": "3135",
     "requestKey": "image_reconcile_v1_<message>_0_30000001"
+   },
+   {
+    "displayNo": "3137",
+    "requestKey": "image_reconcile_v1_<message>_0_30000001"
+   },
+   {
+    "displayNo": "3139",
+    "requestKey": "image_reconcile_v1_<message>_0_30000001"
+   },
+   {
+    "displayNo": "3140",
+    "requestKey": "image_reconcile_v1_<message>_0_30000001"
    }
   ],
   "large/traversal": {
-   "count": 931,
+   "count": 884,
    "displayNos": [
     "3001",
     "3002",
@@ -1652,7 +1636,6 @@
     "3020",
     "3021",
     "3022",
-    "3023",
     "3024",
     "3025",
     "3026",
@@ -1669,7 +1652,6 @@
     "3042",
     "3044",
     "3045",
-    "3046",
     "3047",
     "3048",
     "3049",
@@ -1686,7 +1668,6 @@
     "3065",
     "3066",
     "3067",
-    "3069",
     "3070",
     "3071",
     "3072",
@@ -1704,7 +1685,6 @@
     "3089",
     "3090",
     "3091",
-    "3092",
     "3094",
     "3096",
     "3097",
@@ -1721,7 +1701,6 @@
     "3110",
     "3112",
     "3113",
-    "3115",
     "3117",
     "3118",
     "3120",
@@ -1738,7 +1717,6 @@
     "3134",
     "3135",
     "3137",
-    "3138",
     "3139",
     "3140",
     "3141",
@@ -1755,7 +1733,6 @@
     "3157",
     "3158",
     "3160",
-    "3161",
     "3162",
     "3163",
     "3164",
@@ -1774,7 +1751,6 @@
     "3181",
     "3182",
     "3183",
-    "3184",
     "3188",
     "3189",
     "3191",
@@ -1791,7 +1767,6 @@
     "3202",
     "3205",
     "3206",
-    "3207",
     "3208",
     "3210",
     "3211",
@@ -1807,7 +1782,6 @@
     "3226",
     "3227",
     "3229",
-    "3230",
     "3231",
     "3233",
     "3234",
@@ -1826,7 +1800,6 @@
     "3250",
     "3251",
     "3252",
-    "3253",
     "3254",
     "3256",
     "3257",
@@ -1842,7 +1815,6 @@
     "3273",
     "3274",
     "3275",
-    "3276",
     "3277",
     "3278",
     "3280",
@@ -1860,7 +1832,6 @@
     "3295",
     "3297",
     "3298",
-    "3299",
     "3300",
     "3302",
     "3303",
@@ -1877,7 +1848,6 @@
     "3317",
     "3320",
     "3321",
-    "3322",
     "3324",
     "3325",
     "3326",
@@ -1894,7 +1864,6 @@
     "3338",
     "3339",
     "3343",
-    "3345",
     "3346",
     "3347",
     "3349",
@@ -1914,7 +1883,6 @@
     "3365",
     "3366",
     "3367",
-    "3368",
     "3369",
     "3373",
     "3375",
@@ -1947,7 +1915,6 @@
     "3411",
     "3412",
     "3413",
-    "3414",
     "3415",
     "3416",
     "3417",
@@ -1982,7 +1949,6 @@
     "3455",
     "3457",
     "3458",
-    "3460",
     "3461",
     "3462",
     "3463",
@@ -1998,7 +1964,6 @@
     "3479",
     "3480",
     "3482",
-    "3483",
     "3484",
     "3485",
     "3486",
@@ -2018,7 +1983,6 @@
     "3503",
     "3504",
     "3505",
-    "3506",
     "3507",
     "3508",
     "3509",
@@ -2035,7 +1999,6 @@
     "3525",
     "3526",
     "3528",
-    "3529",
     "3531",
     "3533",
     "3534",
@@ -2054,7 +2017,6 @@
     "3548",
     "3549",
     "3550",
-    "3552",
     "3553",
     "3554",
     "3556",
@@ -2072,7 +2034,6 @@
     "3572",
     "3573",
     "3574",
-    "3575",
     "3576",
     "3577",
     "3579",
@@ -2089,7 +2050,6 @@
     "3594",
     "3596",
     "3597",
-    "3598",
     "3599",
     "3600",
     "3601",
@@ -2107,7 +2067,6 @@
     "3617",
     "3618",
     "3619",
-    "3621",
     "3622",
     "3623",
     "3624",
@@ -2126,7 +2085,6 @@
     "3641",
     "3642",
     "3643",
-    "3644",
     "3647",
     "3648",
     "3649",
@@ -2143,7 +2101,6 @@
     "3661",
     "3662",
     "3664",
-    "3667",
     "3668",
     "3669",
     "3670",
@@ -2161,7 +2118,6 @@
     "3685",
     "3686",
     "3687",
-    "3690",
     "3691",
     "3692",
     "3693",
@@ -2181,7 +2137,6 @@
     "3710",
     "3711",
     "3712",
-    "3713",
     "3715",
     "3716",
     "3717",
@@ -2200,7 +2155,6 @@
     "3733",
     "3734",
     "3735",
-    "3736",
     "3737",
     "3738",
     "3739",
@@ -2217,7 +2171,6 @@
     "3756",
     "3757",
     "3758",
-    "3759",
     "3761",
     "3762",
     "3763",
@@ -2252,7 +2205,6 @@
     "3802",
     "3803",
     "3804",
-    "3805",
     "3807",
     "3808",
     "3809",
@@ -2270,7 +2222,6 @@
     "3825",
     "3826",
     "3827",
-    "3828",
     "3829",
     "3830",
     "3831",
@@ -2287,7 +2238,6 @@
     "3846",
     "3847",
     "3849",
-    "3851",
     "3852",
     "3853",
     "3854",
@@ -2324,7 +2274,6 @@
     "3894",
     "3895",
     "3896",
-    "3897",
     "3898",
     "3900",
     "3902",
@@ -2342,7 +2291,6 @@
     "3916",
     "3917",
     "3919",
-    "3920",
     "3921",
     "3922",
     "3923",
@@ -2360,7 +2308,6 @@
     "3940",
     "3941",
     "3942",
-    "3943",
     "3944",
     "3945",
     "3947",
@@ -2376,7 +2323,6 @@
     "3963",
     "3964",
     "3965",
-    "3966",
     "3967",
     "3968",
     "3970",
@@ -2396,7 +2342,6 @@
     "3984",
     "3985",
     "3987",
-    "3989",
     "3990",
     "3991",
     "3993",
@@ -2415,7 +2360,6 @@
     "4009",
     "4010",
     "4011",
-    "4012",
     "4013",
     "4014",
     "4016",
@@ -2433,7 +2377,6 @@
     "4031",
     "4033",
     "4034",
-    "4035",
     "4038",
     "4039",
     "4040",
@@ -2451,7 +2394,6 @@
     "4055",
     "4056",
     "4057",
-    "4058",
     "4059",
     "4061",
     "4062",
@@ -2469,7 +2411,6 @@
     "4078",
     "4079",
     "4080",
-    "4081",
     "4082",
     "4084",
     "4086",
@@ -2488,7 +2429,6 @@
     "4100",
     "4101",
     "4103",
-    "4104",
     "4106",
     "4107",
     "4108",
@@ -2504,7 +2444,6 @@
     "4124",
     "4125",
     "4126",
-    "4127",
     "4128",
     "4129",
     "4130",
@@ -2523,7 +2462,6 @@
     "4146",
     "4148",
     "4149",
-    "4150",
     "4151",
     "4152",
     "4153",
@@ -2559,12 +2497,11 @@
     "4193",
     "4194",
     "4195",
-    "4196",
     "4198",
     "4199",
     "4200"
    ],
-   "sha256": "6471ea67fa8596c9e58fd39e3e16d71027e6306cf3c88d72b12cd8eade5b3705"
+   "sha256": "96320b3b7bead0eac1ff6160d4ce183def99b2fac9bf32776c06773e7f602e57"
   },
   "large/pending": true
  }

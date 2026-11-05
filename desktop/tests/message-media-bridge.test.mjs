@@ -6,7 +6,7 @@ const {installMessageMediaBridge,createMessageMediaBridge}=await import(`data:te
 const contactId='00000000-0000-4000-8000-000000000001',messageId='00000000-0000-4000-8000-000000000002',selection={contactId,messageId,scopeRevision:1};
 test('具名桌面桥拒绝批量和任意字段，只向已选联系人单消息路由传递业务请求',async()=>{
  const handlers=new Map(),calls=[],events=new Map();
- const backend={releaseUnhandedMediaPreviews:async()=>{},getConnectionGeneration:()=>1,onStateChanged:()=>()=>{},requestJson:async input=>{calls.push(input);return {generation:1,data:{contactId,messageId,kind:'voice',state:'available',generation:'0',headRevision:'0',latestAttempt:null,files:[],capabilities:{extract:false,originalUpgrade:false,audioConversion:false,reason:'media_adapter_unavailable'},cleanup:null}};}};
+ const backend={releaseUnhandedMediaPreviews:async()=>{},getConnectionGeneration:()=>1,onStateChanged:()=>()=>{},requestJson:async input=>{calls.push(input);return {generation:1,data:{contactId,messageId,kind:'voice',state:'available',generation:'0',headRevision:'0',latestAttempt:null,files:[],capabilities:{extract:false,audioConversion:false,reason:'media_adapter_unavailable'},cleanup:null}};}};
  const contacts={getState:()=>({selectedContactId:contactId,scopeRevision:1,directoryPhase:'ready',contacts:[{contactId}]}),onStateChanged:()=>()=>{}};
  installMessageMediaBridge({handle:(channel,handler,role)=>{assert.deepEqual(role,['manager','helper']);handlers.set(channel,handler);},publish:(channel,state)=>events.get(channel)?.({},state)},backend,contacts);
  const transport={invoke:async(channel,...args)=>handlers.get(channel)(...args),on:(channel,listener)=>events.set(channel,listener),removeListener:channel=>events.delete(channel)};

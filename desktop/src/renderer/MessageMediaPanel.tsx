@@ -12,6 +12,7 @@ const processingErrors:Record<string,string>={
   media_image_invalid:'图片内容或实际解码校验失败，本次未保存新结果。',
   media_video_invalid:'视频容器不完整或无法完整解码，本次未保存新结果。',
   media_resource_incomplete:'资源完整读取或复制证明不符，本次未保存新结果。',
+  media_thumbnail_only:'本机目前只有缩略图，太小看不清，没有保存；消息记录仍保留，微信下载标准图后会自动补取。',
   media_original_unavailable:'本次图片提取未完成；消息记录和先前合法文件仍保留。',
   media_metadata_invalid:'图片元数据或标记无法核验，未保存该文件；消息记录仍保留。',
   media_local_file_missing:'本机没有找到对应图片文件，本次没有保存图片；消息记录仍保留。',
@@ -41,14 +42,13 @@ function resultLabel(snapshot:MediaSnapshot):string {
   if(snapshot.state==='deleting')return '正在清除媒体，尚未完成';
   const attempt=snapshot.latestAttempt;
   if(snapshot.kind==='image'){
-    if(snapshot.files.some(file=>file.role==='image_display'&&file.imageQuality==='original'))return '原图已保存';
     if(snapshot.files.some(file=>file.role==='image_display'&&file.viewable))return '图片已保存';
     if(attempt&&['pending','running'].includes(attempt.state))return stateLabels[attempt.state];
     return attempt?'图片提取未完成，消息记录已保留':'尚未提取图片，消息记录已保留';
   }
   if(!attempt)return '尚未提取';
   if(attempt.state==='completed'&&snapshot.kind==='voice'&&snapshot.files.some(f=>f.role==='audio_source')&&!snapshot.files.some(f=>f.role==='audio_playback'&&f.playable))return '语音已保存，暂不可播放';
-  if(attempt.state==='completed')return attempt.outcome==='limited'?'已保存有限结果':attempt.outcome==='quality_unknown'?'已保存，质量未核验':'已保存完整结果';
+  if(attempt.state==='completed')return attempt.outcome==='limited'?'已保存有限结果':'已保存完整结果';
   return stateLabels[attempt.state];
 }
 
@@ -133,7 +133,7 @@ function MediaDetails({bridge,selection,messageType}:{bridge:MessageMediaBridge;
       {snapshot.latestAttempt?.errorCode&&<p className="rewrite-privacy">{processingErrors[snapshot.latestAttempt.errorCode]??'本次处理有未完成步骤，请根据文件状态核对结果。'}</p>}
       {snapshot.cleanup&&snapshot.cleanup.state!=='completed'&&<p role="status">{snapshot.cleanup.state==='blocked'?'清理尚未完成，可继续原清理操作。':'文件清理尚在复核中。'}</p>}
       {snapshot.files.length>0&&<ul className="message-media-files">{snapshot.files.map(file=><li key={file.fileId}>
-        <span><span>{file.role==='image_display'?(file.imageQuality==='original'?'原图':'已存图片'):
+        <span><span>{file.role==='image_display'?'已存图片':
           file.role==='audio_source'?'原始语音文件':file.role==='audio_playback'?'语音播放文件':'视频播放文件'}</span> · {file.format.toUpperCase()} · {file.byteSize} 字节</span>
         {file.role==='audio_source'&&!snapshot.files.some(f=>f.role==='audio_playback'&&f.playable)&&<span> · 尚不可播放</span>}
         {(file.viewable||file.playable)&&<button type="button" disabled={busy} onClick={()=>void open(file.fileId)}>{file.viewable?'查看文件':'播放文件'}</button>}

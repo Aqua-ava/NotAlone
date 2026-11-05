@@ -20,7 +20,7 @@ async function localBytes(location:string, maximum:number):Promise<Buffer> {
     return data;
   } finally {await file.close();}
 }
-const validation=(playable:boolean):MediaValidation=>({format:playable?'wav':'silk',mimeType:playable?'audio/wav':'audio/silk',containerValid:true,viewable:false,playable,imageQuality:'not_applicable',qualityProof:null});
+const validation=(playable:boolean):MediaValidation=>({format:playable?'wav':'silk',mimeType:playable?'audio/wav':'audio/silk',containerValid:true,viewable:false,playable});
 type VoiceResult=Awaited<ReturnType<MediaAdapter['execute']>>;
 export class VoiceMediaAdapter implements MediaAdapter {
   readonly version='voice-silk-wasm-3.7.1-v1';

@@ -79,7 +79,7 @@ export class MessageMediaController {
   }
   async extract(input: MessageMediaSelection & { goal: MediaGoal }): Promise<void> {
     const scope=this.select(input),snapshot=this.state.snapshot;
-    const capability={extract:'extract',original_upgrade:'originalUpgrade',audio_conversion:'audioConversion'} as const;
+    const capability={extract:'extract',audio_conversion:'audioConversion'} as const;
     if (this.state.busy || !snapshot || !snapshot.capabilities[capability[input.goal]]) throw new Error('当前媒体操作不可用，请读取状态后重试。');
     this.request={scope,goal:input.goal,key:randomUUID()};await this.submit(scope);
   }

@@ -53,9 +53,9 @@
 
 ### 受管图片与联系人头像
 
-- 授权范围内的聊天图片须核验消息来源、唯一资源关联和完整实际解码，再保存为应用受管副本；合法缩略图可保存，原图身份不作为可查看门槛。只对来源已核准且明确缺钥的图片，通过外置 wxkey 在当前账号范围准备并内存复用密钥，不调用 bootstrap、不注入或修改微信进程、不驱动远端下载。最小来源元数据、消息 ID 与每联系人水位保持。[ADR-138](../adr/138-chat-image-original-extraction-and-placeholder.md)、[ADR-140](../adr/140-source-verified-viewable-chat-images.md)
+- 授权范围内的聊天图片须核验消息来源、唯一资源关联和完整实际解码，再保存为应用受管副本；只保存标准图或高清图，缩略图太小看不清，不保存（资源端口关闭句柄并以仅缩略图失败，聊天保持占位），已保存图片不再分原图等级。只对来源已核准且明确缺钥的图片，通过外置 wxkey 在当前账号范围准备并内存复用密钥，不调用 bootstrap、不注入或修改微信进程、不驱动远端下载。最小来源元数据、消息 ID 与每联系人水位保持。[ADR-138](../adr/138-chat-image-original-extraction-and-placeholder.md)、[ADR-140](../adr/140-source-verified-viewable-chat-images.md)、[ADR-170](../adr/170-no-thumbnail-storage-and-no-original-classification.md)
 - 受管文件（图片、运行副本）的身份只核对 inode、创建时间、属主及父目录，不含系统设备号，避免重启或重新挂载后误判已存文件失效；旧记录中的设备号忽略。依据见 [ADR-168](../adr/168-managed-file-identity-without-device.md)。
-- 图片保存、补查和记忆调度分离：取图任务本身不调用记忆、OCR 或外部模型；记忆任务按图文输入合同独立处理。全部有效授权联系人的旧未知图片、缺副本和失败消息由串行任务补查，已确认缩略图按 60 秒窗口复查，未知及缺副本用持久退避，重复唤醒和重启不重置。读取与发布均复验授权和来源；“全部”不扩大同步范围。保留已有主图／原图及失败前可查看副本，关闭同步、退出、撤权或删除停任务，已清除图片不恢复。[ADR-155](../adr/155-image-variant-display-and-thumbnail-refresh.md)、[ADR-156](../adr/156-automatic-image-reconciliation.md)
+- 图片保存、补查和记忆调度分离：取图任务本身不调用记忆、OCR 或外部模型；记忆任务按图文输入合同独立处理。全部有效授权联系人中没有可查看已保存图片的消息（缺副本、仅缩略图、取失败）由串行任务补查，使用持久退避（1 分钟至 24 小时），重复唤醒和重启不重置。读取与发布均复验授权和来源；“全部”不扩大同步范围。已保存的图片不再复查，失败前可查看副本保留，关闭同步、退出、撤权或删除停任务，已清除图片不恢复。[ADR-156](../adr/156-automatic-image-reconciliation.md)、[ADR-170](../adr/170-no-thumbnail-storage-and-no-original-classification.md)
 - 联系人列表头像仅为可见的已确认联系人，按稳定绑定查询微信 contact 表单行并核验账号、授权及来源代次。总开关关闭或撤销时停止新读取并取消在途请求；仅向 `wx.qlogo.cn`／`thirdwx.qlogo.cn` 的 HTTPS 原地址请求，禁止重定向，不携带聊天、姓名或模型凭据。位图有界解码为缩略图，只驻本机内存；页面卸载、范围切换或联系人删除时释放，不进入记忆、模型或业务库。
 
 ## 模型适配器约束

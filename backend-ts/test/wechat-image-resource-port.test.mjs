@@ -27,24 +27,29 @@ function classifiedImageProof(sourceVariant='thumbnail',original=false){
  return proof;
 }
 
-test('微信图片按绑定资源版本保留分类和依据，像素尺寸不决定类别',async t=>{
- for(const [name,proof,quality] of [
-  ['小尺寸原图',classifiedImageProof('main',true),'original'],
-  ['大尺寸缩略图',{...classifiedImageProof(),contentWidth:3000,contentHeight:2000},'thumbnail'],
-  ['普通图缺原图证明',classifiedImageProof('main'),'unknown'],
+test('标准图和高清图可读取；缩略图关闭句柄并以仅缩略图失败，不读字节，像素尺寸不决定类别',async t=>{
+ for(const [name,proof,quality,saved] of [
+  ['小尺寸高清图',classifiedImageProof('main',true),'original',true],
+  ['普通标准图',classifiedImageProof('main'),'unknown',true],
+  ['大尺寸缩略图',{...classifiedImageProof(),contentWidth:3000,contentHeight:2000},'thumbnail',false],
  ])await t.test(name,async t=>{
   const f=await fixture(t,{proof,capability:proof.kind,openAudit:{quality,resourceTypeRaw:65537,variantCode:1}});
+  if(!saved){
+   await assert.rejects(createWechatImageResourcePort(f.executable).open(selection()),{code:'media_thumbnail_only'});
+   const operations=(await requests(f)).map(row=>row.op);
+   assert.ok(operations.includes('image-open'));assert.ok(operations.includes('image-close'));assert.equal(operations.includes('image-read'),false);
+   const pid=Number(await readFile(f.pidFile,'utf8'));assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});
+   return;
+  }
   const resource=await createWechatImageResourcePort(f.executable).open(selection());
   try{
-   assert.equal(resource.quality.kind,quality);
-   assert.deepEqual(resource.quality.evidence,{protocol:'wechat-image-quality-v1',quality,sourceVariant:proof.sourceVariant,
-    resourceInfoId,resources:proof.matchingResources,sourceSha256:proof.sourceSha256,contentSha256:proof.verifiedSha256,
-    originalProofDigest:proof.originalProof?hash(JSON.stringify(proof.originalProof)):null});
+   assert.equal('quality' in resource,false);assert.equal(resource.complete,true);assert.equal(resource.expectedBytes,70_000);
+   const chunks=[];for await(const chunk of resource.bytes)chunks.push(Buffer.from(chunk));assert.deepEqual(Buffer.concat(chunks),imageBytes(70_000));
   }finally{await resource.close();}
  });
 });
 
-test('微信图片分类拒绝变造或不一致的资源依据',async t=>{
+test('微信图片资源依据变造或不一致时拒绝',async t=>{
  const original=classifiedImageProof('main',true),thumbnail=classifiedImageProof();
  for(const [name,proof,quality,audit] of [
   ['缩略图冒充原图',thumbnail,'original',{}],
@@ -121,13 +126,13 @@ async function waitForOperation(f,op){
  const has=async()=>{try{return (await requests(f)).some(row=>row.op===op);}catch{return false;}};if(await has())return;
  await new Promise((resolve,reject)=>{let watcher;const timer=setTimeout(()=>{watcher?.close();reject(new Error('synthetic_request_missing'));},5000);const check=async()=>{if(await has()){clearTimeout(timer);watcher?.close();resolve();}};watcher=watch(f.requestsFile,()=>void check());void check();});
 }
-const selection=(signal=new AbortController().signal)=>({contactId:token.contact_id,messageId:'00000000-0000-4000-8000-000000000098',kind:'image',goal:'original_upgrade',token:{...token},source:{recordId:'00000000-0000-4000-8000-000000000099',contactId:token.contact_id,messageId:'00000000-0000-4000-8000-000000000098',captureId:'00000000-0000-4000-8000-000000000100',goalId:'history-goal',itemNo:1,capturedAt:'2026-10-31T00:00:00.000Z',adapterVersion:'synthetic-v1',normalizerVersion:'synthetic-v1',cursorIn:null,cursorOut:null,
+const selection=(signal=new AbortController().signal)=>({contactId:token.contact_id,messageId:'00000000-0000-4000-8000-000000000098',kind:'image',goal:'extract',token:{...token},source:{recordId:'00000000-0000-4000-8000-000000000099',contactId:token.contact_id,messageId:'00000000-0000-4000-8000-000000000098',captureId:'00000000-0000-4000-8000-000000000100',goalId:'history-goal',itemNo:1,capturedAt:'2026-10-31T00:00:00.000Z',adapterVersion:'synthetic-v1',normalizerVersion:'synthetic-v1',cursorIn:null,cursorOut:null,
  raw:{partition,table,localId:'123',serverId:'456',sender:'contact',kind:'image',text:null,originalType:'3',sentAt:'1700000000000',timePrecision:'millisecond',orderScheme:null,orderKey:null,status:null,stateAssurance:'verified'},support:{protocol:'private-history-v1',profileId:'synthetic-history-v1',adapterVersion:'1',status:'supported',reason:null,accountKey:account,conversationKey:conversation,sourceGeneration:generation,programVersion:'synthetic',build:'1',artifactSha256:'0'.repeat(64),schemaFingerprint,declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-v1',continuity:'synthetic-fixed-source-v1'}},signal,checkpoint:async()=>{}});
 
 test('已授权图片资源按原始来源元组读取并校验完整原图',async t=>{
  const f=await fixture(t),request=selection(),port=createWechatImageResourcePort(f.executable),resource=await port.open(request);
  assert.equal(resource.envelope,'plain');assert.equal(resource.complete,true);assert.equal(resource.expectedBytes,f.bytes.length);assert.equal(resource.expectedSha256,f.expectedSha256);
- assert.equal(resource.quality.kind,'original');assert.match(resource.quality.proof,/^wechat-cdn-big-hd-exact-content-v1:/);assert.deepEqual(resource.authority,token);
+ assert.equal('quality' in resource,false);assert.deepEqual(resource.authority,token);
  assert.equal(resource.association.protocol,'media-association-v1');assert.equal(resource.association.recordId,request.source.recordId);assert.equal(resource.association.messageId,request.messageId);
  const chunks=[];for await(const chunk of resource.bytes)chunks.push(Buffer.from(chunk));assert.deepEqual(Buffer.concat(chunks),f.bytes);
  await resource.close();const rows=await requests(f);
@@ -152,18 +157,15 @@ test('v4仅在选定账号遇到缺图密钥后通过一次性fd3传递密钥并
  await client.closeImageSelected(opened.resourceToken);
 });
 
-test('v2证明允许原文未声明尺寸并将实读尺寸纳入质量证明',async t=>{
+test('v2证明允许原文未声明尺寸',async t=>{
  const proof={kind:'wechat-cdn-big-hd-exact-content-v2',messageMd5:'f'.repeat(32),hdLength:70_000,hdWidth:null,hdHeight:null,
   bigImageUrlPresent:true,resourceSize:70_000,verifiedBytes:70_000,verifiedSha256:hash(Buffer.from(Array.from({length:70_000},(_,index)=>index%251))),contentWidth:280,contentHeight:250};
  const f=await fixture(t,{proof}),resource=await createWechatImageResourcePort(f.executable).open(selection());
- assert.equal(resource.quality.kind,'original');
- const proofFields=[proof.kind,proof.messageMd5,proof.hdLength,proof.hdWidth,proof.hdHeight,proof.contentWidth,proof.contentHeight,
-  proof.bigImageUrlPresent,proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256];
- assert.equal(resource.quality.proof,`${proof.kind}:${hash(JSON.stringify(proofFields))}`);
+ assert.equal(resource.expectedBytes,70_000);
  await resource.close();
 });
 
-test('v2声明尺寸伪造或证明字段不完整时拒绝原图',async t=>{
+test('v2声明尺寸伪造或证明字段不完整时拒绝',async t=>{
  const base={kind:'wechat-cdn-big-hd-exact-content-v2',messageMd5:'f'.repeat(32),hdLength:70_000,hdWidth:null,hdHeight:null,
   bigImageUrlPresent:true,resourceSize:70_000,verifiedBytes:70_000,verifiedSha256:hash(Buffer.from(Array.from({length:70_000},(_,index)=>index%251))),contentWidth:280,contentHeight:250};
  for(const proof of [
@@ -179,15 +181,12 @@ test('v2声明尺寸伪造或证明字段不完整时拒绝原图',async t=>{
  }
 });
 
-test('v3验证封装长度与明文长度分离，并以Info和匹配detail集合建立质量与资源身份',async t=>{
+test('v3验证封装长度与明文长度分离，并以Info和匹配detail集合建立资源身份',async t=>{
  const bytes=imageBytes(41_987),proof={kind:'wechat-cdn-big-hd-exact-content-v3',messageMd5:'f'.repeat(32),hdLength:bytes.length,hdWidth:null,hdHeight:null,
   bigImageUrlPresent:true,resourceSize:42_018,verifiedBytes:bytes.length,verifiedSha256:hash(bytes),contentWidth:280,contentHeight:250,
   resourceInfoId,matchingResourceIds};
  const f=await fixture(t,{proof,dataLength:bytes.length}),resource=await createWechatImageResourcePort(f.executable).open(selection());
- assert.equal(resource.expectedBytes,41_987);assert.equal(resource.quality.kind,'original');
- const fields=[proof.kind,proof.messageMd5,proof.hdLength,proof.hdWidth,proof.hdHeight,proof.contentWidth,proof.contentHeight,
-  proof.resourceInfoId,proof.matchingResourceIds,proof.bigImageUrlPresent,proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256];
- assert.equal(resource.quality.proof,`${proof.kind}:${hash(JSON.stringify(fields))}`);
+ assert.equal(resource.expectedBytes,41_987);
  const chunks=[];for await(const chunk of resource.bytes)chunks.push(Buffer.from(chunk));assert.deepEqual(Buffer.concat(chunks),bytes);
  await resource.close();
 
@@ -197,18 +196,14 @@ test('v3验证封装长度与明文长度分离，并以Info和匹配detail集�
  await alternateResource.close();
 });
 
-test('v4质量证明覆盖WXGF源摘要和转换，并把两者纳入资源关联身份',async t=>{
+test('v4证明覆盖WXGF源摘要和转换，并把两者纳入资源关联身份',async t=>{
  const bytes=imageBytes(41_987),shared={kind:'wechat-cdn-big-hd-exact-content-v4',messageMd5:'f'.repeat(32),hdWidth:null,hdHeight:null,
   bigImageUrlPresent:true,resourceSize:42_018,verifiedBytes:bytes.length,verifiedSha256:hash(bytes),contentWidth:280,contentHeight:250,
   resourceInfoId,matchingResourceIds};
  const plain={...shared,hdLength:bytes.length,sourceSha256:hash(bytes),conversion:'none'};
  const plainFixture=await fixture(t,{proof:plain,dataLength:bytes.length}),plainResource=await createWechatImageResourcePort(plainFixture.executable).open(selection());
- const plainFields=[plain.kind,plain.messageMd5,plain.hdLength,plain.hdWidth,plain.hdHeight,plain.contentWidth,plain.contentHeight,
-  plain.resourceInfoId,plain.matchingResourceIds,plain.bigImageUrlPresent,plain.resourceSize,plain.verifiedBytes,plain.verifiedSha256,plain.sourceSha256,plain.conversion];
- assert.equal(plainResource.quality.proof,`${plain.kind}:${hash(JSON.stringify(plainFields))}`);
  const converted={...shared,hdLength:41_123,sourceSha256:hash(Buffer.from('synthetic decrypted WXGF source')),conversion:'wxgf-to-png-v1'};
  const convertedFixture=await fixture(t,{proof:converted,dataLength:bytes.length}),convertedResource=await createWechatImageResourcePort(convertedFixture.executable).open(selection());
- assert.notEqual(convertedResource.quality.proof,plainResource.quality.proof);
  assert.notEqual(convertedResource.association.resourceIdentity,plainResource.association.resourceIdentity);
  await plainResource.close();await convertedResource.close();
 });
@@ -291,14 +286,14 @@ test('取消在途原图读取会关闭原生客户端',async t=>{
 });
 
 
-test('已关联图片无需原图字段也可按完整内容读取，不冒充原图',async t=>{
+test('已关联图片按完整内容读取',async t=>{
  const bytes=imageBytes(70_000),sha=hash(bytes);
  const proof={kind:'wechat-message-image-content-v1',resourceInfoId,matchingResourceIds,resourceSize:70_000,
   verifiedBytes:70_000,verifiedSha256:sha,sourceSha256:sha,conversion:'none',contentWidth:280,contentHeight:250};
  const f=await fixture(t,{proof,openAudit:{quality:'unknown'},capability:proof.kind});
  const request={...selection(),goal:'extract'},resource=await createWechatImageResourcePort(f.executable).open(request);
  try{
-  assert.deepEqual(resource.quality,{kind:'unknown',proof:null});
+  assert.equal('quality' in resource,false);
   const chunks=[];for await(const chunk of resource.bytes)chunks.push(Buffer.from(chunk));
   assert.deepEqual(Buffer.concat(chunks),bytes);
   assert.equal(resource.association.recordId,request.source.recordId);
@@ -306,7 +301,7 @@ test('已关联图片无需原图字段也可按完整内容读取，不冒充�
 });
 
 
-test('图片取消原图门槛后仍拒绝传输摘要和来源资源集合不一致',async t=>{
+test('仍拒绝传输摘要和来源资源集合不一致',async t=>{
  const sha=hash(imageBytes(70_000));
  const valid={kind:'wechat-message-image-content-v1',resourceInfoId,matchingResourceIds,resourceSize:70_000,
   verifiedBytes:70_000,verifiedSha256:sha,sourceSha256:sha,conversion:'none',contentWidth:280,contentHeight:250};

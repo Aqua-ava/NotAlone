@@ -20,7 +20,7 @@ test('生产CSP页面经具名桥和认证SQLite保存单条图片，真实显�
   executions++;await context.checkpoint();
   await context.save({role:'image_display',expectedBytes:png.length,expectedSha256:createHash('sha256').update(png).digest('hex'),
    bytes:(async function*(){yield png.subarray(0,20);await context.checkpoint();yield png.subarray(20);})(),
-   validate:async localPath=>{assert.deepEqual(await readFile(localPath),png);return {format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false,imageQuality:'thumbnail',qualityProof:null};}});
+   validate:async localPath=>{assert.deepEqual(await readFile(localPath),png);return {format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false,qualityProof:null};}});
   return {association:{protocol:'media-association-v1',profileId:'synthetic-page-png-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-page-png-one'}};
  }};
  const cleanups=[];

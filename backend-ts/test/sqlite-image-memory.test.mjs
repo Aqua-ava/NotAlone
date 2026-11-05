@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {Context} from '@deepseek-ai/cordis';
 import {fixture} from './media-support.mjs';
-import {mainImageQuality} from './fixtures/media/main-image-quality.mjs';
 import {fixture as memoryFixture,record} from './fixtures/memory-sqlite/support.mjs';
 import {fileMemoryContent} from './fixtures/memory-content/file-plugin.mjs';
 import {modelPort} from './fixtures/memory-sqlite/support.mjs';
@@ -14,7 +13,7 @@ import {createBuiltinMemoryContentRegistry} from '../src/memory/content/builtins
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64');
 const adapter={version:'synthetic-image-input-v1',supports:kind=>kind==='image',async execute(context){
  await context.save({role:'image_display',bytes:(async function*(){yield png;})(),expectedBytes:png.length,expectedSha256:createHash('sha256').update(png).digest('hex'),
-  validate:async()=>({format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false,...mainImageQuality(png)})});
+  validate:async()=>({format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false})});
  return {association:{protocol:'media-association-v1',profileId:'synthetic-image-input-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-image-one'}};
 }};
 function extraction(t,f,requests){

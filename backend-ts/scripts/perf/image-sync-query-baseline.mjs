@@ -13,6 +13,9 @@
  *   node backend-ts/scripts/perf/image-sync-query-baseline.mjs --label=after --runs=12
  *
  * 只读本地合成数据库；不启动 App、不访问网络、不读取真实聊天资料。
+ *
+ * ADR-170 之后：冻结的修改前 SQL 仅用于对照耗时与查询计划；它仍把缩略图／未知分类图片当作待办，
+ * 因此 `firstPageAgainstFrozenLegacy` 预期为 false，不再表示回归。
  */
 import {readFile,writeFile} from 'node:fs/promises';
 import {DatabaseSync} from 'node:sqlite';
@@ -199,9 +202,9 @@ async function main(){
 
    if(emitGolden){
     const golden={
-     note:'P01 修改前通过公开存储动作采集的结果黄金样例；messageId 已归一为 <message>。由 backend-ts/scripts/perf/image-sync-query-baseline.mjs --emit-golden 生成。',
+     note:'ADR-170（不保存缩略图、取消原图分类）之后通过公开存储动作采集的结果黄金样例：已有可查看图片的消息不再入选；messageId 已归一为 <message>。由 backend-ts/scripts/perf/image-sync-query-baseline.mjs --emit-golden 生成。',
      scenarioNow:SCENARIO_NOW,
-     source:{workSql:'pre-linearization correlated subquery',action:'media.imageSyncTargets / media.imageRefreshPending'},
+     source:{workSql:'linearized work query after ADR-170',action:'media.imageSyncTargets / media.imageRefreshPending'},
      edge:edgeResults,
      large:largeResults,
     };

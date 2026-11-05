@@ -27,21 +27,21 @@ test('旧 /messages 路由的默认投影不追加图片状态字段',()=>{
  const image=projectHistoryMessages({messages:[message({kind:'image',text:null})],coverage,replyEligibility:'ready'},20).messages[0];
  assert.equal(image.media_placeholder,'[图片]');assert.equal('image_media' in image,false);
 });
-test('聊天HTTP投影分别传递主图角色和原图证明状态，只暴露安全枚举',()=>{
- const media={state:'available',fileId:'00000000-0000-4000-8000-000000000010',mimeType:'image/png',imageQuality:'unknown',imageVariant:'main'};
+test('聊天HTTP投影只传递已保存图片的状态与引用，不带版本标签',()=>{
+ const media={state:'available',fileId:'00000000-0000-4000-8000-000000000010',mimeType:'image/png',imageQuality:'original',imageVariant:'main'};
  const projected=projectHistoryMessages({messages:[message({kind:'image',text:null})],coverage,replyEligibility:'ready'},20,new Map([[id,media]]));
- assert.deepEqual(projected.messages[0].image_media,{state:'available',file_id:media.fileId,mime_type:'image/png',image_quality:'unknown',image_variant:'main'});
+ assert.deepEqual(projected.messages[0].image_media,{state:'available',file_id:media.fileId,mime_type:'image/png'});
 });
-test('聊天投影可显示原图并准确标记仅缩略图、缺图、失败及清除',()=>{
+test('聊天投影可显示已保存图片并准确标记仅缩略图、缺图、失败及清除',()=>{
  const image=message({kind:'image',text:null});
  const other=message({id:'00000000-0000-4000-8000-000000000002',kind:'image',text:null});
  const imageMedia=new Map([
-  [id,{state:'original',fileId:'00000000-0000-4000-8000-000000000010',mimeType:'image/png'}],
+  [id,{state:'available',fileId:'00000000-0000-4000-8000-000000000010',mimeType:'image/png'}],
   [other.id,{state:'thumbnail_only',fileId:null,mimeType:null,errorCode:'media_thumbnail_only'}],
  ]);
  const projected=projectHistoryMessages({messages:[image,other],coverage,replyEligibility:'ready'},20,imageMedia);
  assert.equal(projected.messages[0].message_id,id);
- assert.deepEqual(projected.messages[0].image_media,{state:'original',file_id:'00000000-0000-4000-8000-000000000010',mime_type:'image/png'});
+ assert.deepEqual(projected.messages[0].image_media,{state:'available',file_id:'00000000-0000-4000-8000-000000000010',mime_type:'image/png'});
  assert.equal(projected.messages[1].image_media.state,'thumbnail_only');
  assert.equal(projected.messages[1].image_media.file_id,null);
  assert.equal(projected.messages[0].media_placeholder,'[图片]');

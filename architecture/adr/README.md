@@ -167,3 +167,4 @@
 - [ADR-167：记忆页在读取授权暂时不可用时继续显示已保存记忆](167-memory-page-saved-source-display.md)
 - [ADR-168：受管文件身份不含系统设备号](168-managed-file-identity-without-device.md)
 - [ADR-169：记忆只带入确认不是缩略图的图片](169-memory-uses-confirmed-non-thumbnail-images.md)
+- [ADR-170：不保存缩略图，取消原图分类机制](170-no-thumbnail-storage-and-no-original-classification.md)

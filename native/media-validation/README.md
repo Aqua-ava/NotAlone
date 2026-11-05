@@ -1,6 +1,6 @@
 # 图片与视频窄校验器
 
-媒体获取、资源角色、图文记忆与删除的现行合同见[数据契约](../../architecture/current/domain-data.md#消息去重与图文来源)和[隐私规格](../../architecture/current/privacy-deletion.md)。本页只描述原生格式／解码接口；图片取得与来源认证由正式媒体服务负责。
+媒体获取、图文记忆与删除的现行合同见[数据契约](../../architecture/current/domain-data.md#消息去重与图文来源)和[隐私规格](../../architecture/current/privacy-deletion.md)。本页只描述原生格式／解码接口；图片取得与来源认证由正式媒体服务负责。
 
 只读受信任媒体保存服务已登记的文件描述符3，不接受路径、URL、XML或密钥；标准输出只有固定格式与可用性字段或有限错误码。`native.ts` 从受管路径以 `O_NOFOLLOW` 打开、核验独立普通文件身份、传递FD，并在退出后复核；32MiB、10秒墙钟、有界4096字节输出，取消后等待子进程退出。缺制品返回 `media_validator_unavailable`，运行时不编译、不联网或安装。
 

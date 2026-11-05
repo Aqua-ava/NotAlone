@@ -1,5 +1,7 @@
 # ADR-138：聊天图片原图提取与占位替换
 
+> 取消原图分类修订（2026-11-05）：[ADR-170](170-no-thumbnail-storage-and-no-original-classification.md)取消原图补提（`original_upgrade`）目标与原图证明门槛，并规定缩略图不保存；下文相应条款保留为历史决定，以 ADR-170 为准。
+
 > 图文输入修订（2026-11-02）：[ADR-153](153-joint-text-image-memory-input.md)。第9条的图文组装方向已由用户确认为当前记忆输入目标，原“本轮不接入”只保留为当时取图实现的范围记录。
 
 > 后续修订：[ADR-140](140-source-verified-viewable-chat-images.md)已按用户要求取消原图证明门槛；来源已核验且完整可解码的本机图片（包括已绑定缩略图）可以保存和显示。下文原图限制保留为历史决定，其他来源、停读和删除规则继续适用。

@@ -50,7 +50,7 @@ async function file(f,attempt,role='image_display',parentFileId){
  await f.storage.execute('media.identify',{...attempt,...reserved,address});
  // 合成类型校验结果仅用于生命周期；不认证图片/视频/语音格式支持。
  const bytes=Buffer.from('synthetic media bytes');await fd.writeFile(bytes);await fd.sync();await fd.close();
- await f.storage.execute('media.validated',{...attempt,fileId:reserved.fileId,byteSize:bytes.length,digest:createHash('sha256').update(bytes).digest('hex'),validation:{format:'synthetic',mimeType:role==='image_display'?'image/x-synthetic':'audio/x-synthetic',containerValid:true,viewable:role==='image_display',playable:role==='audio_playback',imageQuality:role==='image_display'?'thumbnail':'not_applicable',qualityProof:null}});
+ await f.storage.execute('media.validated',{...attempt,fileId:reserved.fileId,byteSize:bytes.length,digest:createHash('sha256').update(bytes).digest('hex'),validation:{format:'synthetic',mimeType:role==='image_display'?'image/x-synthetic':'audio/x-synthetic',containerValid:true,viewable:role==='image_display',playable:role==='audio_playback'}});
  return {...reserved,address,location};
 }
 async function publish(f,attempt){return f.storage.execute('media.publish',{...attempt,association:attempt.recordId?{protocol:'media-association-v1',profileId:'synthetic-v1',recordId:attempt.recordId,messageId:f.message.id,resourceIdentity:'synthetic-resource-1'}:null});}

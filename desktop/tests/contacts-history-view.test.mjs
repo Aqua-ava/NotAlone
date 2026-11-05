@@ -22,8 +22,8 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
       mediaPlaceholder:null,occurredAt:'2026-01-01T12:00:00Z',quoted:null,ordering:'unknown',displayPosition:'1'});
     const originalFile='00000000-0000-4000-8000-000000000011';
     const image=(id,state,fileId=null)=>({...message(id,null,'user'),messageType:'image',mediaPlaceholder:'[图片]',
-      imageMedia:{state,fileId:state==='original'?fileId:null,mimeType:state==='original'?'image/gif':null}});
-    const page = [message('one','合成聊天正文\\n第二行'),image('00000000-0000-4000-8000-000000000012','original',originalFile),
+      imageMedia:{state,fileId:state==='available'?fileId:null,mimeType:state==='available'?'image/gif':null}});
+    const page = [message('one','合成聊天正文\\n第二行'),image('00000000-0000-4000-8000-000000000012','available',originalFile),
       image('00000000-0000-4000-8000-000000000013','thumbnail_only')];
     const noop = async () => {};
     const subscription = state => ({getState:async()=>state,onStateChanged:()=>()=>{},refresh:noop,refreshSaved:noop});
@@ -34,7 +34,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
       onPreviewRevoking:listener=>{mediaListeners.add(listener);return()=>mediaListeners.delete(listener);} };
     window.revokeImagePreview = id=>mediaListeners.forEach(listener=>listener(id));
     window.updateImage = (id,state)=>{const items=history.messages.items.map(item=>item.messageId===id?{...item,imageMedia:{state,
-        fileId:state==='original'?originalFile:null,mimeType:state==='original'?'image/gif':null}}:item);window.publishHistory({messages:{...history.messages,items}});};
+        fileId:state==='available'?originalFile:null,mimeType:state==='available'?'image/gif':null}}:item);window.publishHistory({messages:{...history.messages,items}});};
     window.notalone = {
       openHelper:async()=>{window.actionCalls.push('helper');},
       contactHistory: {getState:async()=>history,onStateChanged:listener=>{listeners.add(listener);return()=>listeners.delete(listener);},
@@ -71,7 +71,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await expect(chat.getByText('合成聊天正文\n第二行', { exact: true })).toBeVisible();
   const image = chat.getByRole('img', { name: '聊天图片' });
   await expect(image).toBeVisible();
-  await expect(chat.getByText('仅有缩略图，原图未取得', { exact: true })).toBeVisible();
+  await expect(chat.getByText('仅有缩略图，暂未取得图片', { exact: true })).toBeVisible();
   await expect.poll(() => image.evaluate(element => element.naturalWidth)).toBe(1);
   assert.match(await image.getAttribute('src'), /^blob:/);
   assert.equal((await page.evaluate(() => window.mediaCalls)).length, 1);
@@ -81,7 +81,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   assert.equal((await page.evaluate(() => window.mediaReleases[0])).src, null);
   await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','thumbnail_only'));
   await expect(image).toHaveCount(0);
-  await expect(chat.getByText('仅有缩略图，原图未取得', { exact: true })).toHaveCount(2);
+  await expect(chat.getByText('仅有缩略图，暂未取得图片', { exact: true })).toHaveCount(2);
   await expect.poll(() => page.evaluate(() => window.mediaReleases.length)).toBe(1);
   assert.equal((await page.evaluate(() => window.mediaReleases[0])).src, null);
   assert.equal((await page.evaluate(() => window.mediaCalls)).length, 1);
@@ -93,7 +93,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await expect(chat.getByText('[图片已清除]', { exact: true })).toBeVisible();
   await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','pending'));
   await expect(chat.getByText('图片加载中', { exact: true })).toBeVisible();
-  await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','original'));
+  await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','available'));
   await expect(image).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.mediaCalls.length)).toBe(2);
   await chat.locator('.contact-chat-order > summary').click();
@@ -177,7 +177,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 });
 
-test('unknown质量的可查看聊天图片打开受管预览而不显示不可用占位', async t => {
+test('已保存的可查看聊天图片打开受管预览，不显示占位也不显示版本标签', async t => {
   const bundle = await build({ stdin: { contents: `
     import React from 'react'; import { createRoot } from 'react-dom/client';
     import { HistoryImageBubble } from './src/renderer/HistoryImageBubble';
@@ -187,9 +187,7 @@ test('unknown质量的可查看聊天图片打开受管预览而不显示不可�
     const media={openHistoryImagePreview:async request=>{window.mediaCalls.push(request);return {sessionId:'00000000-0000-4000-8000-000000000024',mimeType:'image/png',dataBase64:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='};},
       releasePreview:async()=>{},onPreviewRevoking:listener=>{listeners.add(listener);return()=>listeners.delete(listener);}};
     const root=createRoot(document.getElementById('root'));
-    window.renderImageRole=(imageVariant='unknown',imageQuality='unknown')=>root.render(<HistoryImageBubble media={media}
-      imageMedia={{state:imageQuality==='original'?'original':'available',fileId,mimeType:'image/png',imageVariant,imageQuality}} selection={selection}/>);
-    window.renderImageRole();
+    root.render(<HistoryImageBubble media={media} imageMedia={{state:'available',fileId,mimeType:'image/png'}} selection={selection}/>);
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, logLevel: 'silent' });
   const browser = await chromium.launch({ headless: true, channel: 'chrome' });
   t.after(() => browser.close());
@@ -205,12 +203,5 @@ test('unknown质量的可查看聊天图片打开受管预览而不显示不可�
   });
   await expect(page.getByRole('status')).toHaveCount(0);
   await expect.poll(() => image.evaluate(element => element.complete && element.naturalWidth)).toBe(1);
-  await expect(page.getByText('图片版本未确认',{exact:true})).toBeVisible();
-  await page.evaluate(()=>window.renderImageRole('main'));
-  await expect(page.getByText('主图',{exact:true})).toBeVisible();
-  await expect(page.getByText('图片版本未确认',{exact:true})).toHaveCount(0);
-  await page.evaluate(()=>window.renderImageRole('thumbnail','thumbnail'));
-  await expect(page.getByText('缩略图',{exact:true})).toBeVisible();
-  await page.evaluate(()=>window.renderImageRole('main','original'));
-  await expect(page.getByText('原图',{exact:true})).toBeVisible();
+  for (const label of ['图片版本未确认', '主图', '缩略图', '原图']) await expect(page.getByText(label, { exact: true })).toHaveCount(0);
 });

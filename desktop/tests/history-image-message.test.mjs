@@ -29,40 +29,27 @@ test('聊天时间相同时以精确保存位置稳定分页，未知时间排�
   assert.deepEqual(mergeContactHistoryMessages([unknown, microsecond, known], [same]), [same, known, microsecond, unknown]);
 });
 
-test('聊天历史读取使用专用投影并保留原图状态和引用', async () => {
+test('聊天历史读取使用专用投影并保留已保存图片的状态和引用', async () => {
   const calls = [];
-  const response = { messages: [message({ state: 'original', file_id: fileId, mime_type: 'image/png' })], next_cursor: null };
+  const response = { messages: [message({ state: 'available', file_id: fileId, mime_type: 'image/png' })], next_cursor: null };
   const page = await readContactHistoryMessages({ requestJson: async input => { calls.push(input); return { generation: 7, data: response }; } },
     contactId, null, new AbortController().signal);
   assert.equal(calls[0].path, `/api/contacts/${contactId}/history-messages?limit=20`);
-  assert.deepEqual(page.messages[0].imageMedia, { state: 'original', fileId, mimeType: 'image/png' });
-  assert.equal(page.messages[0].mediaPlaceholder, '[图片]');
-});
-
-test('聊天历史桥保留可查看的unknown质量文件为available', async () => {
-  const response = { messages: [message({ state: 'available', file_id: fileId, mime_type: 'image/png' })], next_cursor: null };
-  const page = await readContactHistoryMessages({ requestJson: async () => ({ generation: 7, data: response }) },
-    contactId, null, new AbortController().signal);
   assert.deepEqual(page.messages[0].imageMedia, { state: 'available', fileId, mimeType: 'image/png' });
   assert.equal(page.messages[0].mediaPlaceholder, '[图片]');
 });
 
-test('聊天历史桥保留可查看缩略图的来源分类', async () => {
-  const response = { messages: [message({ state: 'available', file_id: fileId, mime_type: 'image/png', image_quality: 'thumbnail' })], next_cursor: null };
-  const page = await readContactHistoryMessages({ requestJson: async () => ({ generation: 7, data: response }) },
-    contactId, null, new AbortController().signal);
-  assert.deepEqual(page.messages[0].imageMedia, { state: 'available', fileId, mimeType: 'image/png', imageQuality: 'thumbnail' });
+test('聊天历史桥不再接受图片版本标签字段', async () => {
+  for (const extra of [{ image_quality: 'thumbnail' }, { image_variant: 'main' }]) {
+    const response = { messages: [message({ state: 'available', file_id: fileId, mime_type: 'image/png', ...extra })], next_cursor: null };
+    const page = await readContactHistoryMessages({ requestJson: async () => ({ generation: 7, data: response }) },
+      contactId, null, new AbortController().signal);
+    assert.deepEqual(page.messages[0].imageMedia, { state: 'available', fileId, mimeType: 'image/png' });
+  }
 });
 
-test('聊天历史桥分别保留主图角色与未知原图证明状态', async () => {
-  const response = { messages: [message({ state: 'available', file_id: fileId, mime_type: 'image/png', image_quality: 'unknown', image_variant: 'main' })], next_cursor: null };
-  const page = await readContactHistoryMessages({ requestJson: async () => ({ generation: 7, data: response }) },
-    contactId, null, new AbortController().signal);
-  assert.deepEqual(page.messages[0].imageMedia, { state: 'available', fileId, mimeType: 'image/png', imageQuality: 'unknown', imageVariant: 'main' });
-});
-
-test('聊天历史桥拒绝缩略图角色与原图证明冲突', async () => {
-  const response = { messages: [message({ state: 'original', file_id: fileId, mime_type: 'image/png', image_quality: 'original', image_variant: 'thumbnail' })], next_cursor: null };
+test('聊天历史桥拒绝已废弃的original图片状态', async () => {
+  const response = { messages: [message({ state: 'original', file_id: fileId, mime_type: 'image/png' })], next_cursor: null };
   await assert.rejects(readContactHistoryMessages({ requestJson: async () => ({ generation: 7, data: response }) },
     contactId, null, new AbortController().signal));
 });
@@ -74,8 +61,8 @@ test('仅缩略图状态不携带可预览文件', async () => {
   assert.deepEqual(page.messages[0].imageMedia, { state: 'thumbnail_only', fileId: null, mimeType: null, errorCode: 'media_thumbnail_only' });
 });
 
-test('聊天历史图片投影拒绝不完整的原图身份', async () => {
-  const response = { messages: [message({ state: 'original', file_id: null, mime_type: null })], next_cursor: null };
+test('聊天历史图片投影拒绝不完整的已保存图片身份', async () => {
+  const response = { messages: [message({ state: 'available', file_id: null, mime_type: null })], next_cursor: null };
   await assert.rejects(readContactHistoryMessages({ requestJson: async () => ({ generation: 7, data: response }) },
     contactId, null, new AbortController().signal));
 });

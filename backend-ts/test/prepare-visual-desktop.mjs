@@ -15,7 +15,7 @@ const source=await mkdtemp(join(tmpdir(),'notalone-visual-desktop-source-'));
 const cleanups=[];let f;
 try {
   execFileSync('bash',[join(project,'native/media-validation/build-fixtures.sh'),source],{stdio:'pipe'});
-  const options={data:png,quality:{kind:'thumbnail',proof:'synthetic-desktop-thumbnail-v1'}};
+  const options={data:png};
   f=await fixture({after:close=>cleanups.push(close)},new VisualMediaAdapter(resourcePort(options)));
   const image=f.messages.find(message=>message.kind==='image'),video=f.messages.find(message=>message.kind==='video');
   await f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'});

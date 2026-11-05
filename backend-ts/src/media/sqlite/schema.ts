@@ -1,6 +1,9 @@
 import type { StorageMigration } from '../../storage/sqlite/contracts.ts';
 
 // 版本由串行集成决定；已发布后不得修改SQL。
+// ADR-170：media_file.image_quality、quality_proof、image_quality_evidence 与 goal='original_upgrade'、
+// result_outcome='quality_unknown' 为已停用的历史列／取值，只因已发布迁移与 CHECK 约束保留；代码不再写入也不再读取，
+// 图片行固定保持 allocate 写入的占位取值（图片 'unknown'，其他 'not_applicable'）。
 export const mediaMigration = (version: number): StorageMigration => ({version, sql: `
 CREATE TABLE message_media (
  owner_id TEXT NOT NULL,message_id TEXT NOT NULL,contact_id TEXT NOT NULL,
@@ -81,7 +84,7 @@ CREATE TRIGGER media_attempt_identity_immutable BEFORE UPDATE OF owner_id,id,con
  BEGIN SELECT RAISE(ABORT,'media_attempt_immutable'); END;
 `});
 
-/** 历史图片保留原分类与证明，仅新保存结果可附带资源分类依据。 */
+/** 已停用（ADR-170）：列因已发布迁移保留，不再写入或读取。 */
 export const mediaImageQualityEvidenceMigration = (version: number): StorageMigration => ({version, sql: `
 ALTER TABLE media_file ADD COLUMN image_quality_evidence TEXT CHECK(image_quality_evidence IS NULL OR
  (content_state<>'erased' AND role='image_display' AND length(image_quality_evidence)<=8192 AND json_valid(image_quality_evidence)));

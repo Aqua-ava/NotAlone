@@ -48,7 +48,6 @@ export class SqliteMediaService {
   for(const file of state.files)await this.verifyFile(contactId,messageId,file.fileId);
   state=await this.options.storage.execute<MediaSnapshot>('media.read',scope);this.available();
   for(const [key,goal] of [['extract','extract'],['audioConversion','audio_conversion']] as const)state.capabilities[key]&&=this.options.adapters.some(a=>a.supports(state.kind,goal));
-  state.capabilities.originalUpgrade=false;
   if(!state.capabilities.reason&&!this.options.adapters.some(a=>a.supports(state.kind,'extract')))state.capabilities.reason='media_adapter_unavailable';return state;
  }
  extract(contactId:string,messageId:string,input:{requestKey:string;goal:MediaGoal},signal?:AbortSignal):Promise<MediaSnapshot>{

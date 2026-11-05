@@ -8,32 +8,18 @@ const optionalText = (value: unknown): value is string | null => value === null 
 const imageMimes = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/bmp']);
 
 function imageMedia(value: unknown): ContactHistoryImageMedia {
-  if (!isRecord(value) || !['pending', 'original', 'available', 'thumbnail_only', 'unavailable', 'failed', 'cleared'].includes(value.state as string)
+  if (!isRecord(value) || !['pending', 'available', 'thumbnail_only', 'unavailable', 'failed', 'cleared'].includes(value.state as string)
     || !Object.hasOwn(value, 'file_id') || !Object.hasOwn(value, 'mime_type')
     || !(value.file_id === null || isUuid(value.file_id))
     || !(value.mime_type === null || typeof value.mime_type === 'string' && imageMimes.has(value.mime_type))
-    || ('image_quality' in value && !['original','thumbnail','unknown'].includes(value.image_quality as string))
-    || ('image_variant' in value && !['main','thumbnail','unknown'].includes(value.image_variant as string))
     || ('error_code' in value && !(value.error_code === null || typeof value.error_code === 'string' && /^[-a-z0-9_]{1,80}$/.test(value.error_code)))) {
     throw new Error('聊天图片状态无效。');
   }
   const state = value.state as ContactHistoryImageMedia['state'];
-  if (state === 'original' || state === 'available' ? value.file_id === null || value.mime_type === null : value.file_id !== null || value.mime_type !== null) {
+  if (state === 'available' ? value.file_id === null || value.mime_type === null : value.file_id !== null || value.mime_type !== null) {
     throw new Error('聊天图片引用无效。');
   }
-  if ('image_quality' in value && (state !== 'original' && state !== 'available'
-    || (state === 'original') !== (value.image_quality === 'original'))) {
-    throw new Error('聊天图片版本与状态不一致。');
-  }
-  if ('image_variant' in value && (state !== 'original' && state !== 'available'
-    || (state === 'original' || value.image_quality === 'original') && value.image_variant !== 'main'
-    || value.image_quality === 'thumbnail' && value.image_variant !== 'thumbnail'
-    || value.image_quality === 'unknown' && value.image_variant === 'thumbnail')) {
-    throw new Error('聊天图片资源角色与状态不一致。');
-  }
   return { state, fileId: value.file_id === null ? null : (value.file_id as string).toLowerCase(), mimeType: value.mime_type as string | null,
-    ...('image_quality' in value ? { imageQuality: value.image_quality as ContactHistoryImageMedia['imageQuality'] } : {}),
-    ...('image_variant' in value ? { imageVariant: value.image_variant as ContactHistoryImageMedia['imageVariant'] } : {}),
     ...('error_code' in value ? { errorCode: value.error_code as string | null } : {}) };
 }
 

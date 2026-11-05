@@ -1,5 +1,7 @@
 # ADR-169：记忆只带入确认不是缩略图的图片
 
+> 资格简化修订（2026-11-05）：[ADR-170](170-no-thumbnail-storage-and-no-original-classification.md)后库里不再保存缩略图，记忆收图资格改为“当前可查看的已保存图片”，不再按 `image_quality` 或来源依据过滤；“缩略图不进入记忆”的结果不变。
+
 状态：已采纳并实现（2026-11-05）。用户明确要求：提取图片的目的是让图片消息不再是占位，而是带着能看清的图片进入记忆；缩略图太小看不清，不应用于记忆。局部替代 [ADR-140](140-source-verified-viewable-chat-images.md)、[ADR-155](155-image-variant-display-and-thumbnail-refresh.md) 中“已核验的缩略图可供后续图文记忆使用”的含义，并收窄 [ADR-153](153-joint-text-image-memory-input.md) 的图片范围。
 
 ## 决定

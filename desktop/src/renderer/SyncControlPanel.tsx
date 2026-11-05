@@ -94,7 +94,7 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
         : state.busy === 'disable' ? '正在关闭后台同步…' : report?.enabled ? '关闭后台同步' : '开启后台同步'}</button>
       <p>关闭同步或退出 App 后停止读取；重新开启只补齐有效授权范围内的遗漏消息。</p>
       <details className="sync-backfill-details"><summary>同步说明</summary>
-        {bodyAvailable ? <p>{allPrivate ? '开启后自动关联并同步全部微信私聊的聊天记录，包括以后新增的会话；已单独停止的会话保持排除。' : '开启后自动同步已授权联系人的聊天记录。'}图片保存本机可读取的版本，包括缩略图；依据微信资源来源标记图片版本，取不到就保留消息和处理状态。</p>
+        {bodyAvailable ? <p>{allPrivate ? '开启后自动关联并同步全部微信私聊的聊天记录，包括以后新增的会话；已单独停止的会话保持排除。' : '开启后自动同步已授权联系人的聊天记录。'}图片只保存本机可读取的标准图或高清图；仅有缩略图时不保存，消息保持占位并按间隔自动重试，取不到就保留消息和处理状态。</p>
           : <p>开启后会先核验微信账号和聊天来源，通过后读取已授权会话的历史与新消息。</p>}
         <p>只读取这台电脑上微信能提供的聊天记录，不驱动微信下载；已删除或仅在其他设备上的记录不包含在内。聊天同步与关系资料整理分别进行。</p>
       </details>

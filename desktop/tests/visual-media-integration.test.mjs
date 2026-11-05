@@ -95,14 +95,17 @@ function missingKeyDat(){
 }
 
 test('真实图片类型经HTTP和具名桥保存可查看文件及失败，撤下预览后才完成清除',{timeout:25000},async t=>{
- const options={data:datV4(png),envelope:'wechat_dat',quality:{kind:'thumbnail',proof:'synthetic-thumbnail-v1'}};
+ const options={data:datV4(png),envelope:'wechat_dat',thumbnailOnly:true};
  const h=await visualPage(t,'image',options),{page,f,message}=h;
+ // 仅有缩略图：不保存任何文件，聊天保持占位，界面给出明确原因。
+ await page.getByRole('button',{name:'保存这条图片',exact:true}).click();await expect(page.getByRole('alert')).toContainText('媒体操作结果尚未确认');
+ await page.getByRole('button',{name:'刷新媒体状态',exact:true}).click();
+ await expect(page.getByText('本机目前只有缩略图，太小看不清，没有保存；消息记录仍保留，微信下载标准图后会自动补取。',{exact:true})).toBeVisible();
+ const thumbnailOnly=await f.media.read(f.contact,message.id);assert.deepEqual(thumbnailOnly.files,[]);assert.equal(thumbnailOnly.latestAttempt.errorCode,'media_thumbnail_only');
+ options.thumbnailOnly=false;
  await page.getByRole('button',{name:'保存这条图片',exact:true}).click();
  await expect(page.getByText('图片已保存',{exact:true})).toBeVisible();await expect(page.getByText('已存图片',{exact:true})).toBeVisible();
- const thumbnail=await f.media.read(f.contact,message.id);assert.equal(thumbnail.latestAttempt.outcome,'full');assert.equal(thumbnail.files[0].imageQuality,'thumbnail');
- options.quality={kind:'original',proof:'synthetic-original-v1'};
- await page.getByRole('button',{name:'保存这条图片',exact:true}).click();await expect(page.getByText('原图',{exact:true})).toBeVisible();
- const original=await f.media.read(f.contact,message.id);assert.equal(original.latestAttempt.outcome,'full');assert.notEqual(original.files[0].fileId,thumbnail.files[0].fileId);
+ const original=await f.media.read(f.contact,message.id);assert.equal(original.latestAttempt.outcome,'full');assert.equal(original.files.length,1);
  options.data=missingKeyDat();options.envelope='wechat_dat';
  await page.getByRole('button',{name:'保存这条图片',exact:true}).click();await expect(page.getByRole('alert')).toContainText('媒体操作结果尚未确认');
  await page.getByRole('button',{name:'刷新媒体状态',exact:true}).click();
@@ -131,9 +134,9 @@ test('真实图片类型经HTTP和具名桥保存可查看文件及失败，撤�
  assert.equal((await lstat(location)).isFile(),true);h.release.resolve();await expect(page.getByText('已清除，消息记录仍保留',{exact:true})).toBeVisible();
  assert.equal((await f.media.deletion.status({ownerId:f.owner,operationId:receipt.operationId})).state,'completed');await assert.rejects(lstat(location),{code:'ENOENT'});
  assert.ok((await f.history.read(f.contact)).messages.some(item=>item.id===message.id));
- options.data=png;options.envelope='plain';options.quality={kind:'unknown',proof:null};
+ options.data=png;options.envelope='plain';
  await page.getByRole('button',{name:'保存这条图片',exact:true}).click();await expect(page.getByText('图片已保存',{exact:true})).toBeVisible();await expect(page.getByText('已存图片',{exact:true})).toBeVisible();
- const unknown=await f.media.read(f.contact,message.id);assert.equal(unknown.latestAttempt.outcome,'full');assert.equal(unknown.files[0].imageQuality,'unknown');
+ const resaved=await f.media.read(f.contact,message.id);assert.equal(resaved.latestAttempt.outcome,'full');assert.equal(resaved.files.length,1);
  await page.getByRole('button',{name:'清除这条媒体',exact:true}).click();await expect(page.getByText('已清除，消息记录仍保留',{exact:true})).toBeVisible();
  assert.equal(h.opens(),8);assert.deepEqual(h.publicationFailures,[]);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
@@ -144,7 +147,7 @@ test('真实视频类型经正常页面播放H264与AAC，拒绝未知编码及�
  // 显式测试准备，仅生成合成资料；产品运行时不编译、下载或写入外部原件。
  await promisify(execFile)('bash',[fileURLToPath(new URL('../../native/media-validation/build-fixtures.sh',import.meta.url)),sourceRoot],{timeout:20000,maxBuffer:64*1024});
  const video=await readFile(join(sourceRoot,'h264-aac.mp4')),hevc=await readFile(join(sourceRoot,'hevc.mp4'));
- const options={data:video,quality:{kind:'unknown',proof:null}},h=await visualPage(t,'video',options),{page,f,message}=h;
+ const options={data:video},h=await visualPage(t,'video',options),{page,f,message}=h;
  await page.getByRole('button',{name:'保存这条视频',exact:true}).click();await expect(page.getByText('已保存完整结果',{exact:true})).toBeVisible();
  const saved=await f.media.read(f.contact,message.id);assert.equal(saved.files[0].playable,true);assert.equal(saved.files[0].format,'mp4');
  options.data=hevc;

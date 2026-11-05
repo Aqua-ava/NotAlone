@@ -53,7 +53,10 @@ export class SqliteImageSyncCoordinator {
        if(this.#closed||controller.signal.aborted)break;
        after=target.displayNo;
        try{await this.#media.extract(contactId,target.messageId,{requestKey:target.requestKey,goal:'extract'},controller.signal);this.#checked++;}
-       catch(error){this.#failure(error);if(error instanceof ImagePreparationFailure||error instanceof StorageFailure&&error.code.startsWith('history_'))break images;}
+       catch(error){
+        // 仅缩略图是预期结果（不保存，按持久退避重试），不计入同步失败。
+        if(error instanceof StorageFailure&&error.code==='media_thumbnail_only'){this.#checked++;continue;}
+        this.#failure(error);if(error instanceof ImagePreparationFailure||error instanceof StorageFailure&&error.code.startsWith('history_'))break images;}
       }
      }
      if(!this.#closed&&!controller.signal.aborted&&await this.#reads.execute<boolean>('media.imageRefreshPending',{ownerId:this.#media.ownerId,contactId}))this.#scheduleRefresh();

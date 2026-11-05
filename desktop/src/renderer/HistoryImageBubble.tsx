@@ -20,7 +20,7 @@ export function HistoryImageBubble({ media, imageMedia, selection }: Props) {
   const state = imageMedia?.state ?? 'pending';
   const fileId = imageMedia?.fileId;
   const mimeType = imageMedia?.mimeType;
-  const imageAvailable = state === 'original' || state === 'available';
+  const imageAvailable = state === 'available';
   const container = useRef<HTMLDivElement>(null);
   const image = useRef<HTMLImageElement>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -99,7 +99,7 @@ export function HistoryImageBubble({ media, imageMedia, selection }: Props) {
   }, [media, selection.contactId, selection.messageId, selection.scopeRevision, state, fileId, mimeType, visible, imageAvailable]);
 
   let status: string | null = null;
-  if (state === 'thumbnail_only') status = '仅有缩略图，原图未取得';
+  if (state === 'thumbnail_only') status = '仅有缩略图，暂未取得图片';
   else if (state === 'unavailable') status = '图片资源不可用';
   else if (state === 'failed' || failed) status = '图片暂不可用';
   else if (state === 'cleared') status = '[图片已清除]';
@@ -113,7 +113,5 @@ export function HistoryImageBubble({ media, imageMedia, selection }: Props) {
         setFailed(true);
         void media.releasePreview(preview.sessionId).catch(() => {});
       }} />}
-    {!status && preview && <span className="contact-chat-image-status">{imageMedia?.imageVariant==='thumbnail'||imageMedia?.imageQuality==='thumbnail'?'缩略图'
-      :imageMedia?.imageQuality==='original'||state==='original'?'原图':imageMedia?.imageVariant==='main'?'主图':'图片版本未确认'}</span>}
   </div>;
 }

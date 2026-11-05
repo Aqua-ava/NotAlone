@@ -10,25 +10,22 @@ import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 test.before(()=>{execFileSync('bash',[fileURLToPath(new URL('../../native/media-validation/build.sh',import.meta.url))],{stdio:'pipe'});});
 
-test('正常媒体服务经图片类型适配器保存可实际解码的独立缩略图',async t=>{
+test('正常媒体服务经图片类型适配器保存可实际解码的独立图片文件',async t=>{
  let closed=0;const f=await fixture(t,new VisualMediaAdapter(resourcePort({closed:()=>closed++})));
  const image=f.messages.find(m=>m.kind==='image');
  const value=await f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'});
- assert.equal(value.latestAttempt.outcome,'full');assert.equal(value.files[0].imageQuality,'thumbnail');
+ assert.equal(value.latestAttempt.outcome,'full');
  assert.equal(value.files[0].viewable,true);assert.equal(value.files[0].format,'png');assert.equal(closed,1);
  const preview=await f.media.openPreview(f.contact,image.id,value.files[0].fileId);
  assert.deepEqual(Buffer.from(preview.dataBase64,'base64'),png);await f.media.releasePreview(preview.sessionId);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
-test('原图补提只接受可靠原图证据，失败或未知质量不替换合法结果',async t=>{
- const options={quality:{kind:'original',proof:'synthetic-original-v1'}};
- const f=await fixture(t,new VisualMediaAdapter(resourcePort(options))),image=f.messages.find(m=>m.kind==='image');
- const first=await f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'});
- assert.equal(first.latestAttempt.outcome,'full');
- options.quality={kind:'unknown',proof:null};
- await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'original_upgrade'}),{code:'media_original_unavailable'});
- const current=await f.media.read(f.contact,image.id);
- assert.equal(current.files[0].fileId,first.files[0].fileId);assert.equal(current.latestAttempt.state,'failed');
+test('原图补提目标已删除：适配器不再支持，也不接受该目标',async t=>{
+ const adapter=new VisualMediaAdapter(resourcePort());
+ assert.equal(adapter.supports('image','original_upgrade'),false);
+ const f=await fixture(t,adapter),image=f.messages.find(m=>m.kind==='image');
+ await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'original_upgrade'}),{code:'media_adapter_unavailable'});
+ assert.deepEqual((await f.media.read(f.contact,image.id)).files,[]);
 });
 test('V2正确padding但实际图片不匹配时明确需要密钥，已有图片保留',async t=>{
  const key=Buffer.from('synthetic-key17!'),options={data:png};
@@ -67,18 +64,18 @@ test('读取前拒绝错误账号或代次及无完整快照证明，不消费�
  await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'}),{code:'media_resource_too_large'});
  assert.deepEqual((await f.media.read(f.contact,image.id)).files,[]);
 });
-test('复制完整性与图片质量独立，缺原图质量证明时仍保存并标记unknown',async t=>{
- const options={quality:{kind:'unknown',proof:null}};
+test('完整性校验失败不替换合法结果，仅缩略图的资源端口不保存任何文件',async t=>{
+ const options={};
  const f=await fixture(t,new VisualMediaAdapter(resourcePort(options))),image=f.messages.find(m=>m.kind==='image');
- const value=await f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'});assert.equal(value.latestAttempt.outcome,'full');assert.equal(value.files[0].viewable,true);assert.equal(value.files[0].imageQuality,'unknown');
- options.quality={kind:'original',proof:null};
- const downgraded=await f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'});
- assert.equal(downgraded.latestAttempt.outcome,'full');assert.equal(downgraded.files[0].imageQuality,'unknown');
- options.quality={kind:'unknown',proof:null};options.expectedSha256='0'.repeat(64);
+ const value=await f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'});assert.equal(value.latestAttempt.outcome,'full');assert.equal(value.files[0].viewable,true);
+ options.expectedSha256='0'.repeat(64);
  await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'}),{code:'media_resource_incomplete'});
  delete options.expectedSha256;options.expectedBytes=png.length+1;
  await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'}),{code:'media_resource_incomplete'});
- assert.equal((await f.media.read(f.contact,image.id)).files[0].fileId,downgraded.files[0].fileId);
+ delete options.expectedBytes;options.thumbnailOnly=true;
+ await assert.rejects(f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'}),{code:'media_thumbnail_only'});
+ const current=await f.media.read(f.contact,image.id);
+ assert.equal(current.files[0].fileId,value.files[0].fileId);assert.equal(current.latestAttempt.errorCode,'media_thumbnail_only');
 });
 test('来源删除等待真实类型资源读者结算，旧在途图片不能复活',async t=>{
  let started,aborted,releaseClose,delay=false;

@@ -1,11 +1,14 @@
 import {createHash,createCipheriv} from 'node:crypto';
+import {StorageFailure} from '../src/storage/sqlite/contracts.ts';
 export const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64');
+/** 合成资源端口只提供“完整的标准图／高清图”；options.thumbnailOnly 模拟真实端口遇到仅缩略图时关闭句柄并失败。 */
 export function resourcePort(options={}) {
  return {open:async context=>{
+  if(options.thumbnailOnly){options.closed?.();throw new StorageFailure('media_thumbnail_only');}
   const data=options.data??png;
   return {association:{protocol:'media-association-v1',profileId:'synthetic-visual-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-visual-resource'},
    authority:{...context.token,...options.authority},complete:options.complete??true,
-   envelope:options.envelope??'plain',quality:options.quality??{kind:'thumbnail',proof:'synthetic-thumbnail-v1'},
+   envelope:options.envelope??'plain',
    expectedBytes:options.expectedBytes??data.length,expectedSha256:options.expectedSha256??createHash('sha256').update(data).digest('hex'),
    bytes:(async function*(){yield data.subarray(0,20);await options.afterChunk?.(context);if(data.length>20)yield data.subarray(20);})(),
    withImageKey:options.withImageKey,close:async()=>{await options.onClose?.();options.closed?.();}};
