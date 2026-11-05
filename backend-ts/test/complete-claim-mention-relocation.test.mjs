@@ -41,11 +41,11 @@ test('模型把人称词的码点位置数错一位时，按引文中真实的�
   assert.equal(second.admitted, true, '第二人称：联系人说“你”指用户本人');
 });
 
-test('重定位不放宽归属：发送者对不上、种类不符、位置太远、复数、没有人称提及均仍拒绝', async () => {
+test('重定位不放宽归属：发送者对不上、种类不符、位置太远、复数、无提及且发送者对不上均仍拒绝', async () => {
   const rejected = item => {assert.equal(item.admitted, false);assert.ok(item.result.issues.includes('subject'));};
   rejected(await verify('我现在住在海城。', '用户本人现在住在海城。', {mentions: [mention('first_person', 1, 2)], subject: 'self', actor: 'self'}));
   rejected(await verify('你现在住在海城。', '联系人现在住在海城。', {mentions: [mention('first_person', 1, 2)]}));
   rejected(await verify('我现在住在海城，目前没有搬家。', '联系人现在住在海城。', {mentions: [mention('first_person', 8, 9)]}));
   rejected(await verify('我们现在住在海城。', '联系人现在住在海城。', {mentions: [mention('first_person', 1, 2)]}));
-  rejected(await verify('现在住在海城。', '联系人现在住在海城。', {mentions: []}));
+  rejected(await verify('现在住在海城。', '联系人现在住在海城。', {mentions: [], sender: 'self'}));
 });

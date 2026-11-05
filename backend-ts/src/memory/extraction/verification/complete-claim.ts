@@ -68,7 +68,7 @@ confidence、risk_flags、requires_all_sources、source_dependency_mode、timing
 claim_check.parts按Unicode码点覆盖完整正文（包括空白与标点），默认一段覆盖全文，最多四段，连续、不重叠、不遗漏。
 每段分别判断归属、对象与关系、时间与认知模态；evidence_indices只引用本项evidence的0起索引。每个supported facet必须有逐字依据。资料scope_subject只取self/contact；原shared共同事实仍属contact关系范围，actor_kind可为shared或third_party，不能把亲友或转述中的人物变成说话人本人。
 听成、理解为、猜测与获悉确定消息不同；不能新增原文未明示的对象、信息确证事件或先后关系。event=null仍须核对正文时间与模态，不以消息时间证明得知或事件发生。来源明确表达尚未确定时，忠实保留该未知可supported。
-归属supported还须提供subject_mentions：evidence_index指向本项evidence，source_span按Unicode码点定位该引文内实际承担语义主体的提及，candidate_span定位本段候选中对应的主体。用于主体定位的引文须在对应原消息中唯一，重复时扩大引文；不得裁掉复数限定。first_person仅用于原话中的我/本人/我们/咱们，second_person仅用于你/您/你们；在已定位的人称提及基础上，才能结合sender判断归属，sender本身不证明省略的主体。literal_subject用于原话和候选均逐字保留的第三方主体或对象；不能凭没有命中人称词就断定它是名字，也不能把宾语、所有者或任意重合字当主体。共同主体逐个列出提及，或定位明确的复数人称。指代链须保留上下文中的真实先行主体及对应候选位置；仍有多解时用unresolved/uncertain。省略主体且无实际指代依据时subject_mentions留空，不能把对事物的评价扩成发言者的状态，更不能签explicit。
+归属supported还须提供subject_mentions：evidence_index指向本项evidence，source_span按Unicode码点定位该引文内实际承担语义主体的提及，candidate_span定位本段候选中对应的主体。用于主体定位的引文须在对应原消息中唯一，重复时扩大引文；不得裁掉复数限定。first_person仅用于原话中的我/本人/我们/咱们，second_person仅用于你/您/你们；在已定位的人称提及基础上，才能结合sender判断归属，sender本身不证明省略的主体；唯一例外是程序侧的省略主语兜底：全部引文来自同一发送者、引文不含你/您或复数人称词、且你判定的主体恰为该发送者时，可以subject_mentions留空并填resolution=unique_context（actor_kind取该发送者），程序再按消息发送者核对；含你/您、复数、第三方或共同主体仍须逐字提及。literal_subject用于原话和候选均逐字保留的第三方主体或对象；不能凭没有命中人称词就断定它是名字，也不能把宾语、所有者或任意重合字当主体。共同主体逐个列出提及，或定位明确的复数人称。指代链须保留上下文中的真实先行主体及对应候选位置；仍有多解时用unresolved/uncertain。省略主体且无实际指代依据时subject_mentions留空，不能把对事物的评价扩成发言者的状态，更不能签explicit（上述兜底只用resolution=unique_context）。
 subject_mentions只列实际出现的主体词，不是每条evidence必须填写一次的清单。多条引文共同支持一个候选时，可以只有一条含真实主体词；其他引文仍可支持谓词，但不得给它们虚构人称提及。例如候选“联系人住在海城，目前没有搬家。”，引文0“我住在海城。”、引文1“目前没有搬家。”：若上下文确实支持同一主体，只列引文0的first_person、source_span={start:0,end:1}、candidate_span={start:0,end:3}；不能给引文1也标first_person并把“目”当成“我”。仍须逐项核验后句与该主体的实际关系；没有真实主体依据时继续用unresolved/uncertain。
 归属无法唯一消解用unresolved/uncertain，不根据单个代词猜主体。引文存在与结构完整都不证明含义成立；任何facet未定或无支持不能由顶层supported覆盖。所有结论仅表示来源支持，不认证现实世界真值。`;
 
@@ -112,8 +112,25 @@ function relocatedPronoun(kind:string,quote:string,reported:{start:number;end:nu
  const near=found.filter(item=>Math.abs(item.start-reported.start)<=relocationTolerance);
  return near.length===1?near[0]!:null;
 }
+/**
+ * 省略主语兜底（中文聊天常见零人称句）：没有任何主体提及时，引文全部来自同一发送者、不含你／您或复数人称词、
+ * 且模型判定的主体恰为该发送者才成立；explicit 必须有逐字提及，不能凭发送者自签；
+ * 第三方、共同主体、含你／您的句子仍须逐字提及。
+ */
+function senderAnchored(row:Row,evidence:SourceVerificationResult['evidence'],window:ExtractionWindow):boolean{
+ if(row.resolution!=='unique_context')return false;
+ const senders=new Set<string>();
+ for(const index of row.evidence_indices){
+  const ref=evidence[index];if(!ref||typeof ref.quote!=='string'||/[你您]|我们|咱们/.test(ref.quote))return false;
+  const message=window.messages.find(message=>uuid(message.message_id)===ref.message_id);if(!message)return false;
+  senders.add(message.sender);
+ }
+ const [sender]=[...senders];
+ return senders.size===1&&(sender==='self'||sender==='contact')&&row.actor_kind===sender;
+}
 function groundedAttribution(row:Row,part:Row,fact:ExtractedFact,evidence:SourceVerificationResult['evidence'],window:ExtractionWindow):boolean{
  if(!Array.isArray(row.subject_mentions)||row.subject_mentions.length>8)fail('mention_invalid');
+ if(!row.subject_mentions.length)return senderAnchored(row,evidence,window);
  const actors=new Set<string>();
  for(const value of row.subject_mentions){
   const mention=object(value,['kind','evidence_index','source_span','candidate_span']);
