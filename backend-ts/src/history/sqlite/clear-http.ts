@@ -46,8 +46,11 @@ function send(res: ServerResponse, status: number, value: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(value));
 }
-/** 宿主查询门：只放行这两条固定路径，避免任意路由穿越。 */
+/** 宿主查询门：只放行固定只读路径，避免任意路由穿越。 */
 export function clearQueryAllowed(method: string | undefined, url: URL): boolean {
+  // 候选聚合只读整个授权范围，路径不带联系人；单联系人复核只允许一个精确 contact_id。
+  if (url.pathname === '/api/history/recertify/candidates') return method === 'GET'
+    && (!url.search || url.searchParams.size === 1 && url.searchParams.has('contact_id') && uuid.test(url.searchParams.get('contact_id') ?? ''));
   if (!/^\/api\/contacts\/[a-f0-9-]{36}\/history\/(clear|resync|recertify(?:\/cancel)?)$/.test(url.pathname)) return false;
   if(method==='GET'&&url.pathname.endsWith('/recertify'))return !url.search||url.searchParams.size===1&&url.searchParams.has('request_key')&&requestKey.test(url.searchParams.get('request_key')??'');
   if (method === 'GET') return !url.search&&!url.pathname.endsWith('/cancel');
@@ -57,10 +60,23 @@ export function clearQueryAllowed(method: string | undefined, url: URL): boolean
 export class SqliteHistoryClearHttp {
   private readonly clear: ClearHttpService;
   private readonly resync: ResyncHttpService;
-  private readonly recertify?:Pick<SqliteHistoryRecertifyService,'status'|'admit'|'cancel'>;
-  constructor(clear: ClearHttpService, resync: ResyncHttpService,recertify?:Pick<SqliteHistoryRecertifyService,'status'|'admit'|'cancel'>) { this.clear = clear; this.resync = resync;this.recertify=recertify; }
+  private readonly recertify?:Pick<SqliteHistoryRecertifyService,'status'|'admit'|'cancel'|'candidates'>;
+  constructor(clear: ClearHttpService, resync: ResyncHttpService,recertify?:Pick<SqliteHistoryRecertifyService,'status'|'admit'|'cancel'|'candidates'>) { this.clear = clear; this.resync = resync;this.recertify=recertify; }
   async handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const url = new URL(req.url ?? '/', 'http://localhost');
+    if (url.pathname === '/api/history/recertify/candidates') {
+      if (req.method !== 'GET') { send(res, 405, { error: 'method_not_allowed' }); return true; }
+      if (!this.recertify) { send(res, 503, { error: 'history_recertify_unavailable' }); return true; }
+      if (!clearQueryAllowed(req.method, url)) { send(res, 400, { error: 'history_request_invalid' }); return true; }
+      try { send(res, 200, await this.recertify.candidates(url.searchParams.get('contact_id')?.toLowerCase() ?? undefined)); }
+      catch (error) {
+        const code = error instanceof StorageFailure ? error.code : 'history_recertify_candidates_failed';
+        if (code === 'history_request_invalid' || code === 'history_recertify_candidate_invalid') send(res, 400, { error: code });
+        else if (/not_authorized|unavailable/.test(code)) send(res, 503, { error: code });
+        else send(res, 409, { error: code });
+      }
+      return true;
+    }
     const route = /^\/api\/contacts\/([a-f0-9-]{36})\/history\/(clear|resync|recertify(?:\/cancel)?)$/.exec(url.pathname);
     if (!route) return false;
     if (!uuid.test(route[1]!)) { send(res, 400, { error: 'history_request_invalid' }); return true; }

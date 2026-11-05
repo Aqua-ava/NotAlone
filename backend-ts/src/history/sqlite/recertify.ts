@@ -14,9 +14,15 @@ export interface HistoryRecertifyView {
  message_count:number;non_text_count:number;page_count:number;preserved_message_count:number;started_at:number|null;finished_at:number|null;
 }
 interface InternalView extends HistoryRecertifyView {id:string|null;goalState:string|null;goalFailure:string|null}
+export interface HistoryRecertifyCandidate {contact_id:string;fenced:boolean;eligible:boolean;stored_message_count:number;image_message_count:number;image_unsaved_count:number}
+export interface HistoryRecertifyCandidates {read_enabled:boolean;fenced_total:number;contacts:HistoryRecertifyCandidate[];total:number;with_unsaved_images:number;message_total:number;image_unsaved_total:number}
 const fail=(code:string):never=>{throw new StorageFailure(code);};
-export const projectRecertifyStatus=(value:HistoryRecertifyView):HistoryRecertifyView=>Object.fromEntries(
- ['contact_id','request_key','state','stage','completed','failure_code','message_count','non_text_count','page_count','preserved_message_count','started_at','finished_at'].map(key=>[key,value[key as keyof HistoryRecertifyView]])) as unknown as HistoryRecertifyView;
+/** 终态形状必须完整：取消早于接纳时持久记录只有最少字段，页面与批量解析都需要固定键集。 */
+export const projectRecertifyStatus=(value:Partial<HistoryRecertifyView>&Pick<HistoryRecertifyView,'contact_id'|'state'|'stage'>):HistoryRecertifyView=>({
+ contact_id:value.contact_id,request_key:value.request_key??null,state:value.state,stage:value.stage,
+ completed:value.completed===true,failure_code:value.failure_code??null,
+ message_count:Number(value.message_count??0),non_text_count:Number(value.non_text_count??0),page_count:Number(value.page_count??0),
+ preserved_message_count:Number(value.preserved_message_count??0),started_at:value.started_at??null,finished_at:value.finished_at??null});
 
 interface ActiveRecertify {
  id:string;contactId:string;requestKey:string;controller:AbortController;done:Promise<void>;finish:()=>void;
@@ -42,8 +48,15 @@ export class SqliteHistoryRecertifyService {
   this.initialized=storage.execute('history.recertifyInterruptStale',{ownerId:contacts.ownerId,at:Date.now()});
  }
  private key(value:unknown):asserts value is string {if(typeof value!=='string'||!/^[A-Za-z0-9_.:@-]{1,200}$/.test(value))fail('history_request_invalid');}
+ private contact(value:unknown):asserts value is string {if(typeof value!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value))fail('history_request_invalid');}
  private read(contactId:string,requestKey?:string){return this.storage.execute<InternalView>('history.recertifyStatus',{ownerId:this.contacts.ownerId,contactId,...(requestKey?{requestKey}:{})});}
  async status(contactId:string,requestKey?:string):Promise<HistoryRecertifyView>{await this.initialized;if(requestKey!==undefined)this.key(requestKey);return projectRecertifyStatus(await this.read(contactId,requestKey));}
+ /** 只读候选复核：批量启动取快照，也用于每位处理前确认是否仍被围栏。 */
+ async candidates(contactId?:string):Promise<HistoryRecertifyCandidates>{
+  await this.initialized;if(this.closed)fail('history_closed');
+  if(contactId!==undefined)this.contact(contactId);
+  return await this.storage.execute<HistoryRecertifyCandidates>(contactId===undefined?'history.recertifyCandidates':'history.recertifyCandidateState',{ownerId:this.contacts.ownerId,...(contactId===undefined?{}:{contactId})});
+ }
  private async inspect(channel:HistoryChannel,scope:HistoryScope,signal:AbortSignal):Promise<HistorySupportReport>{
   signal.throwIfAborted();await this.contacts.validate(scope.token);
   if(!channel.guardSession||!(channel.guardSession.loss instanceof Promise))fail('history_recertify_guard_required');

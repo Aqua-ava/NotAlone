@@ -150,3 +150,20 @@ test('成功通知接真实FirstHistory及SQLite续证，普通增量恢复且�
  incremental.wake();await incremental.waitForIdle();assert.deepEqual(tailReads,[f.contactA]);assert.equal((await history.coverage(f.contactA)).incremental.phase,'ready');const after=await f.snapshot();assert.equal(after.operations.length,1);assert.equal((await f.current.contacts.eligibility(f.contactA)).binding_id,token.binding_id);assert.equal(after.messages.length,before.messages.length);assert.equal(after.captures.length,before.captures.length);
  }finally{await first.close();await incremental.close();await history.close();}
 });
+
+test('取消早于接纳的终态也返回固定完整形状，页面与批量解析不会因缺键失败', {timeout:5000},async t=>{
+ const f=await setup(t);
+ const cancelled=await f.service.cancel(f.contactA,{requestKey:'cancel-shape-before-admission'});
+ const keys=['contact_id','request_key','state','stage','completed','failure_code','message_count','non_text_count','page_count','preserved_message_count','started_at','finished_at'];
+ assert.deepEqual(Object.keys(cancelled).sort(),[...keys].sort());
+ assert.equal(cancelled.state,'interrupted');assert.equal(cancelled.completed,false);assert.equal(cancelled.stage,'metadata');
+ assert.equal(cancelled.failure_code,'history_recertify_cancelled');assert.equal(cancelled.page_count,0);
+ assert.equal(cancelled.preserved_message_count,0);assert.ok(cancelled.started_at!==null);assert.ok(cancelled.finished_at!==null);
+ const http=new SqliteHistoryClearHttp(f.current.clear,f.current.resync,f.service);
+ const server=createServer((req,res)=>{void http.handle(req,res);});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const response=await fetch(`http://127.0.0.1:${server.address().port}/api/contacts/${f.contactA}/history/recertify?request_key=cancel-shape-before-admission`);
+ assert.equal(response.status,200);const body=await response.json();
+ assert.deepEqual(Object.keys(body).sort(),[...keys].sort());
+ assert.equal(body.state,'interrupted');assert.equal(body.failure_code,'history_recertify_cancelled');
+});

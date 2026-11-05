@@ -8,6 +8,7 @@ import {assertHistoryReadBoundary} from './suppression.ts';
 import {normalUseContinuity} from './continuity.ts';
 import {completedLegacyPhysicalKeys} from './legacy-physical-suppression.ts';
 import {legacyRecallCandidates,legacyProofDigest,validateLegacyTerminalProof,type LegacyTerminalProof} from './legacy-terminal-proof.ts';
+import {historyRecertifyCandidatesActions} from './recertify-candidates.ts';
 
 const fail=(code:string):never=>{throw new StorageFailure(code);};
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>({name:`history.recertify${name}`,mode,retryBusy:true,execute});
@@ -103,7 +104,7 @@ export const historyRecertifyActions:StorageAction[]=[
   const op=i.requestKey?tx.get('SELECT * FROM history_source_recertification WHERE owner_id=? AND request_key=?',[i.ownerId,i.requestKey]):tx.get("SELECT * FROM history_source_recertification WHERE owner_id=? AND contact_id=? ORDER BY (state='running') DESC,started_at DESC,rowid DESC LIMIT 1",[i.ownerId,i.contactId]);
   const cancel=i.requestKey?tx.get('SELECT * FROM history_source_recertification_cancel WHERE owner_id=? AND request_key=?',[i.ownerId,i.requestKey]):tx.get('SELECT * FROM history_source_recertification_cancel WHERE owner_id=? AND contact_id=? ORDER BY cancelled_at DESC,rowid DESC LIMIT 1',[i.ownerId,i.contactId]);
   if(op&&op.contact_id!==i.contactId||cancel&&cancel.contact_id!==i.contactId)fail('history_recertify_request_conflict');
-  return view(tx,i.contactId,op&&(!cancel||i.requestKey||op.state==='running'||op.request_key===cancel.request_key||Number(op.started_at)>=Number(cancel.cancelled_at))?op:cancel?{...cancel,state:'interrupted',stage:'metadata',failure_code:'history_recertify_cancelled',started_at:cancel.cancelled_at,finished_at:cancel.cancelled_at}:undefined);
+  return view(tx,i.contactId,op&&(!cancel||i.requestKey||op.state==='running'||op.request_key===cancel.request_key||Number(op.started_at)>=Number(cancel.cancelled_at))?op:cancel?{contact_id:i.contactId,request_key:String(cancel.request_key),state:'interrupted',stage:'metadata',completed:false,failure_code:'history_recertify_cancelled',message_count:0,non_text_count:0,page_count:0,preserved_message_count:0,started_at:Number(cancel.cancelled_at),finished_at:Number(cancel.cancelled_at)} as unknown as StorageRow:undefined);
  }),
  action('Cancel','write',(tx,i:any)=>{
   const op=tx.get('SELECT * FROM history_source_recertification WHERE owner_id=? AND request_key=?',[i.ownerId,i.requestKey]);
@@ -194,4 +195,5 @@ export const historyRecertifyActions:StorageAction[]=[
  }),
  action('NoteFailure','write',(tx,i:any)=>{const op=operation(tx,i.ownerId,i.id);if(op.state!=='running')return false;tx.run("UPDATE history_source_recertification SET failure_code=?,guard_state='lost',updated_at=? WHERE owner_id=? AND id=?",[typeof i.code==='string'&&/^[a-z][a-z0-9_]{0,127}$/.test(i.code)?i.code:'history_recertify_failed',i.at,i.ownerId,i.id]);if(op.new_binding_id)tx.run("UPDATE history_guard_lease SET state='lost' WHERE owner_id=? AND contact_id=? AND binding_id=?",[i.ownerId,op.contact_id,op.new_binding_id]);return true;}),
  action('Fail','write',(tx,i:any)=>{const op=operation(tx,i.ownerId,i.id);if(op.state!=='running')return false;const code=typeof i.code==='string'&&/^[a-z][a-z0-9_]{0,127}$/.test(i.code)?i.code:'history_recertify_failed';tx.run("UPDATE history_source_recertification SET state=?,stage=?,failure_code=?,guard_state='lost',updated_at=?,finished_at=? WHERE owner_id=? AND id=?",[i.interrupted?'interrupted':'failed',i.stage??op.stage,code,i.at,i.at,i.ownerId,i.id]);tx.run('INSERT OR IGNORE INTO history_continuity_fence VALUES(?,?,?)',[i.ownerId,op.contact_id,'history_source_continuity_unverified']);if(op.new_binding_id)tx.run("UPDATE history_guard_lease SET state='lost' WHERE owner_id=? AND contact_id=? AND binding_id=?",[i.ownerId,op.contact_id,op.new_binding_id]);return true;}),
+ ...historyRecertifyCandidatesActions,
 ];
