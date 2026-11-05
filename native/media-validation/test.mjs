@@ -45,6 +45,20 @@ test('图片末尾截短不能因ImageIO宽松解码而冒充完整',async()=>{
   }
  }
 });
+test('JPEG按段结构接受至多32字节尾随，拒绝截断、超限与拼接第二张图',async()=>{
+ const selftest=execFileSync('bash',[join(nativeRoot,'build-fixtures.sh'),'--selftest'],{stdio:'pipe',timeout:60_000});
+ assert.match(selftest.toString(),/selftest ok/);
+ const bytes=await readFile(join(directory,'jpeg'));
+ const withTail=size=>Buffer.concat([bytes,Buffer.alloc(size,0x5a)]);
+ for(const size of [1,24,32]){
+  const file=join(directory,'jpeg-tail-'+size);await writeFile(file,withTail(size));
+  assert.deepEqual(await validate(file,'image',signal()),{format:'jpeg',mimeType:'image/jpeg',containerValid:true,viewable:true,playable:false},'尾随'+size);
+ }
+ for(const [name,payload] of [['jpeg-tail-33',withTail(33)],['jpeg-tail-image',Buffer.concat([bytes,Buffer.from([0xff,0xd8,0xff,0xd9])])],['jpeg-no-eoi',bytes.subarray(0,-2)]]){
+  const file=join(directory,name);await writeFile(file,payload);
+  await assert.rejects(validate(file,'image',signal()),{code:'media_image_invalid'},name);
+ }
+});
 test('支持PNG JPEG BMP及完整GIF每帧，明确拒绝未支持容器',async()=>{
  for(const name of ['png','jpeg','gif','bmp']) {
   const result=await validate(join(directory,name),'image',signal());assert.equal(result.format,name);assert.equal(result.viewable,true);

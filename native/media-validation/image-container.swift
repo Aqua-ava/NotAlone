@@ -1,5 +1,52 @@
 import Foundation
 
+// JPEG按段结构定位真正的结束标记：EXIF内嵌缩略图也带FFD9，不能搜索文件末尾的最后一个结束标记。
+// 微信部分JPEG在结束标记后仍有固定少量非图像字节，允许至多32字节尾随，但尾随区内不允许再出现图像起始标记。
+private func jpegContainer(_ data:Data) throws -> Int {
+    func fail() throws -> Never {throw Failure("media_image_invalid")}
+    guard data.count>=4,data[0]==0xff,data[1]==0xd8 else {try fail()}
+    var cursor=2
+    var endOfImage:Int?
+    while cursor<data.count {
+        guard data[cursor]==0xff else {try fail()}
+        while cursor<data.count,data[cursor]==0xff {cursor+=1}
+        guard cursor<data.count else {try fail()}
+        let marker=Int(data[cursor]);cursor+=1
+        guard marker != 0x00 else {try fail()}
+        if marker==0xd9 {endOfImage=cursor;break}
+        // 文件内再次出现SOI表明多图拼接，尾部也不能用第二张图伪装成尾随字节。
+        guard marker != 0xd8 else {try fail()}
+        if marker==0x01 || (0xd0...0xd7).contains(marker) {continue}
+        guard cursor+2<=data.count else {try fail()}
+        let length=(Int(data[cursor])<<8)|Int(data[cursor+1])
+        guard length>=2,cursor+length<=data.count else {try fail()}
+        if marker==0xda {
+            // 熵编码数据内只认非00、非重启标记的FF；它们代表下一个段或结束标记。
+            var scan=cursor+length
+            var nextMarker:Int?
+            while scan<data.count {
+                guard data[scan]==0xff else {scan+=1;continue}
+                var probe=scan+1
+                while probe<data.count,data[probe]==0xff {probe+=1}
+                guard probe<data.count else {try fail()}
+                let byte=Int(data[probe])
+                if byte==0x00 || (0xd0...0xd7).contains(byte) {scan=probe+1;continue}
+                nextMarker=scan;break
+            }
+            guard let nextMarker else {try fail()}
+            cursor=nextMarker
+            continue
+        }
+        cursor+=length
+    }
+    guard let endOfImage else {try fail()}
+    guard data.count-endOfImage<=32 else {try fail()}
+    if data.count-endOfImage>1 {
+        for index in endOfImage..<(data.count-1) where data[index]==0xff && data[index+1]==0xd8 {try fail()}
+    }
+    return 1
+}
+
 // ImageIO允许部分截短文件；先检查已支持容器的完整字节边界，再实际解码。
 func imageContainer(_ data:Data,format:String) throws -> Int? {
     func fail() throws -> Never {throw Failure("media_image_invalid")}
@@ -33,10 +80,7 @@ func imageContainer(_ data:Data,format:String) throws -> Int? {
         }
         try fail()
     }
-    if format=="jpeg" {
-        guard data.count>=4,data[0]==0xff,data[1]==0xd8,data[data.count-2]==0xff,data[data.count-1]==0xd9 else {try fail()}
-        return 1
-    }
+    if format=="jpeg" {return try jpegContainer(data)}
     if format=="gif" {
         guard data.count>=14,["GIF87a","GIF89a"].contains(String(data:data.prefix(6),encoding:.ascii) ?? "") else {try fail()}
         var cursor=13

@@ -6,12 +6,10 @@ import CoreMedia
 import VideoToolbox
 import Darwin
 
-struct Failure: Error { let code: String; init(_ code: String) {self.code=code} }
 func emit(_ object: [String:Any], status: Int32=0) -> Never {
     if let data=try? JSONSerialization.data(withJSONObject:object,options:[.sortedKeys]) {FileHandle.standardOutput.write(data)}
     exit(status)
 }
-let maxBytes=32*1024*1024
 func inputData(allowUnlinked: Bool = false) throws -> Data {
     var info=stat()
     guard fstat(3,&info)==0, (info.st_mode&S_IFMT)==S_IFREG,

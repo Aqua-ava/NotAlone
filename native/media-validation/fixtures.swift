@@ -6,6 +6,56 @@ import AVFoundation
 import CoreMedia
 
 func check(_ condition:Bool) {precondition(condition,"合成夹具生成失败")}
+func selfCheck(_ condition:Bool,_ message:String) {
+    if !condition {FileHandle.standardError.write(Data(("自测失败："+message+"\n").utf8));exit(1)}
+}
+private func be16(_ value:Int) -> [UInt8] {[UInt8((value>>8)&0xff),UInt8(value&0xff)]}
+private func jpegSegment(_ marker:UInt8,_ payload:[UInt8]) -> [UInt8] {[0xff,marker]+be16(payload.count+2)+payload}
+// 渐进式与EXIF内嵌缩略图无法由本机编码器稳定合成，用字节结构直接验证容器检查。
+private func syntheticJPEG(scans:Int,embeddedThumbnail:Bool,tail:[UInt8]) -> Data {
+    var bytes:[UInt8]=[0xff,0xd8]
+    if embeddedThumbnail {
+        var payload:[UInt8]=Array("Exif".utf8)+[0,0]
+        payload+=[0xff,0xd8,0xff,0xdb,0x00,0x04,0xff,0xd9]
+        bytes+=jpegSegment(0xe1,payload)
+    }
+    bytes+=jpegSegment(0xdb,[0x00]+Array(repeating:1,count:64))
+    bytes+=jpegSegment(scans>1 ? 0xc2:0xc0,[8]+be16(1)+be16(1)+[1,1,0x11,0])
+    bytes+=jpegSegment(0xc4,[0x00]+Array(repeating:0,count:16))
+    for _ in 0..<scans {
+        bytes+=jpegSegment(0xda,[1,1,0x00,0,63,0])
+        bytes+=[0x12,0xff,0x00,0x34,0xff,0xd0,0x56]
+    }
+    bytes+=[0xff,0xd9]
+    bytes+=tail
+    return Data(bytes)
+}
+func jpegSelfTest() {
+    func expectValid(_ data:Data,_ name:String) {
+        do {selfCheck(try imageContainer(data,format:"jpeg")==1,name+"应通过")}
+        catch let failure as Failure {selfCheck(false,name+"："+failure.code)}
+        catch {selfCheck(false,name+"：未知错误")}
+    }
+    func expectInvalid(_ data:Data,_ name:String) {
+        do {_=try imageContainer(data,format:"jpeg");selfCheck(false,name+"应被拒绝")}
+        catch let failure as Failure {selfCheck(failure.code=="media_image_invalid",name+"："+failure.code)}
+        catch {selfCheck(false,name+"：未知错误")}
+    }
+    let baseline=syntheticJPEG(scans:1,embeddedThumbnail:false,tail:[])
+    expectValid(baseline,"普通JPEG")
+    expectValid(syntheticJPEG(scans:2,embeddedThumbnail:false,tail:[]),"渐进式JPEG多扫描")
+    expectValid(syntheticJPEG(scans:1,embeddedThumbnail:true,tail:[]),"EXIF内嵌缩略图JPEG")
+    expectValid(syntheticJPEG(scans:1,embeddedThumbnail:true,tail:Array(repeating:0x5a,count:24)),"24字节尾随")
+    expectValid(syntheticJPEG(scans:2,embeddedThumbnail:false,tail:Array(repeating:0x5a,count:32)),"32字节尾随")
+    expectInvalid(syntheticJPEG(scans:1,embeddedThumbnail:false,tail:Array(repeating:0x5a,count:33)),"33字节尾随")
+    expectInvalid(syntheticJPEG(scans:1,embeddedThumbnail:false,tail:[0xff,0xd8,0xff,0xd9]),"尾随区内拼接第二张JPEG")
+    expectInvalid(Data(baseline.dropLast(2)),"缺少结束标记")
+    expectInvalid(Data(baseline.dropLast(1)),"结束标记不完整")
+    var embeddedOnly:[UInt8]=[0xff,0xd8]
+    embeddedOnly+=jpegSegment(0xe1,Array("Exif".utf8)+[0,0,0xff,0xd8,0xff,0xd9])
+    expectInvalid(Data(embeddedOnly),"只有缩略图结束标记")
+    expectInvalid(Data([0xff,0xd8,0xd8,0xd9]),"标记位置出现非标记字节")
+}
 struct FixtureFailure:Error {
     let message:String
     init(_ message:String) {self.message=message}
@@ -150,6 +200,7 @@ func wxgf(_ root:String) throws {
 @main struct Fixtures {
     static func main() async throws {
         let root=CommandLine.arguments[1]
+        if root=="--selftest" {jpegSelfTest();print("selftest ok");return}
         images(root)
         try await video(root+"/h264.mp4",codec:.h264,audio:false)
         try await video(root+"/h264-aac.mp4",codec:.h264,audio:true)
