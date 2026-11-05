@@ -17,6 +17,7 @@ import { DeletionService } from '../src/storage/sqlite/deletion/service.ts';
 import { ManagedFiles } from '../src/storage/sqlite/deletion/managed-files.ts';
 import { FirstHistoryCoordinator } from '../src/history/sqlite/coordinator.ts';
 import { IncrementalHistoryCoordinator } from '../src/history/sqlite/incremental-coordinator.ts';
+import {projectHistorySyncStatus} from '../src/history/sqlite/http.ts';
 
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const owner='00000000-0000-4000-8000-000000000091',account='synthetic-owner',conversation='synthetic-friend',generation='a'.repeat(64);
@@ -648,4 +649,54 @@ for(const contactCount of [10,100])test(`对照 ${contactCount}位联系人：�
  t.diagnostic(JSON.stringify({contacts:contactCount,imageFailures:1,before,after}));
  assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});
  assert.deepEqual([after.complete,after.unverified],[0,contactCount],'一张图失败使全部联系人退回待重验');
+});
+
+
+// 已保存的历史进度与当前来源资格分开表示：saved_history_complete 只读展示，不改变 phase、正文资格或任何读取判断。
+test('历史读完后连接失守卫：saved_history_complete 保持为真，phase 仍表示当前资格，正文资格不因展示字段恢复',async t=>{
+ const f=await fixture(t,true),[a,b]=f.bindings;
+ await f.setPlan({capabilities:supportedCapabilities()});
+ const notStarted=await f.history.coverage(a.contact_id);
+ assert.deepEqual([notStarted.phase,notStarted.savedHistoryComplete],['not_started',false],'尚未读取的联系人不是已保存');
+ await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
+ for(const binding of [a,b]){const row=await f.history.coverage(binding.contact_id);assert.deepEqual([row.phase,row.savedHistoryComplete,row.failureCode],['complete',true,null]);}
+ const live=rows=>projectHistorySyncStatus({body_available:true},rows,{phase:'idle',lastError:null,contacts:[]});
+ const projected=live(await Promise.all([a,b].map(binding=>f.history.coverage(binding.contact_id))));
+ assert.deepEqual(projected.cli_history_coverages.map(row=>[row.phase,row.saved_history_complete]),[['complete',true],['complete',true]]);
+ // 原生进程失守卫：与旧版图片失败后的状态相同。
+ await f.shared.stop();
+ assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),false);
+ for(const binding of [a,b]){
+  const row=await f.history.coverage(binding.contact_id);
+  assert.deepEqual([row.phase,row.failureCode,row.savedHistoryComplete],['incomplete','history_source_continuity_unverified',true],'保存的历史仍显示完成，但当前资格待重验');
+ }
+ const stale=live(await Promise.all([a,b].map(binding=>f.history.coverage(binding.contact_id))));
+ assert.deepEqual(stale.cli_history_coverages.map(row=>[row.phase,row.failure_code,row.saved_history_complete]),
+  [['incomplete','history_source_continuity_unverified',true],['incomplete','history_source_continuity_unverified',true]]);
+ assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),false,'展示字段不使正文重新可用');
+ // 正式重验后恢复，两个字段一致。
+ await f.history.synchronize(a.contact_id);
+ const recovered=await f.history.coverage(a.contact_id);
+ assert.deepEqual([recovered.phase,recovered.savedHistoryComplete],['complete',true]);
+});
+
+test('真实来源围栏保留警示：saved_history_complete 不清除围栏，也不恢复读取',async t=>{
+ const f=await fixture(t,true),[a]=f.bindings;
+ await f.setPlan({capabilities:supportedCapabilities()});
+ await f.history.synchronize(a.contact_id);
+ await f.storage.execute('history.markContinuityLost',{token:await f.contacts.eligibility(a.contact_id)});
+ const row=await f.history.coverage(a.contact_id);
+ assert.deepEqual([row.phase,row.failureCode,row.savedHistoryComplete],['incomplete','history_source_continuity_unverified',true]);
+ assert.equal(await f.history.bodyAvailable([a.contact_id]),false);
+});
+
+test('历史只读了一部分时 saved_history_complete 为假，读完前不显示已保存完成',async t=>{
+ const f=await fixture(t,true),large=f.bindings.find(row=>row.conversation_locator===conversation);
+ await f.setPlan({mode:'slices',capabilities:capabilities({...Object.fromEntries(statusCapabilityKeys.map(key=>[key,'supported'])),incrementalTail:'supported',durableIncremental:'supported',durableHistory:'supported'})});
+ const first=await f.history.synchronize(large.contact_id);
+ assert.equal(first.phase,'running');
+ const row=await f.history.coverage(large.contact_id);
+ assert.deepEqual([row.phase,row.savedHistoryComplete],['running',false]);
+ let latest=first;for(let attempt=0;attempt<10&&latest.phase!=='complete';attempt++)latest=await f.history.synchronize(large.contact_id);
+ assert.deepEqual([latest.phase,(await f.history.coverage(large.contact_id)).savedHistoryComplete],['complete',true]);
 });

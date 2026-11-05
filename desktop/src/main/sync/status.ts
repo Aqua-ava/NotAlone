@@ -122,6 +122,8 @@ function historyCoverages(value: unknown): HistoryCoverage[] | undefined {
     const incrementalFailureCode = item.incremental_failure_code === undefined ? undefined : failureCode(item.incremental_failure_code);
     if(item.incremental_waiting_for_messages!==undefined&&typeof item.incremental_waiting_for_messages!=='boolean')throw new Error('同步报告不可用。');
     const incrementalAwaitingMessages=item.incremental_waiting_for_messages as boolean|undefined;
+    if(item.saved_history_complete!==undefined&&typeof item.saved_history_complete!=='boolean')throw new Error('同步报告不可用。');
+    const savedHistoryComplete=item.saved_history_complete as boolean|undefined;
     const incrementalLastAcceptedAt = item.incremental_last_accepted_at === undefined || item.incremental_last_accepted_at === null ? null : count(item.incremental_last_accepted_at);
     const incrementalPages = item.incremental_pages === undefined ? undefined : count(item.incremental_pages);
     const messageCount = count(item.message_count);
@@ -129,6 +131,7 @@ function historyCoverages(value: unknown): HistoryCoverage[] | undefined {
     const parsedNonTextTypes = nonTextTypes(item.non_text_types, nonTextCount);
     return { bindingId: item.binding_id.toLowerCase(), contactId: item.contact_id.toLowerCase(),
       phase: item.phase as HistoryCoveragePhase, failureCode: failureCode(item.failure_code),
+      ...(savedHistoryComplete === undefined ? {} : { savedHistoryComplete }),
       messageCount, nonTextCount, pageCount: count(item.page_count),
       ...(parsedNonTextTypes === undefined ? {} : { nonTextTypes: parsedNonTextTypes }),
       ...(item.metadata_only_count === undefined ? {} : { metadataOnlyCount: count(item.metadata_only_count) }),

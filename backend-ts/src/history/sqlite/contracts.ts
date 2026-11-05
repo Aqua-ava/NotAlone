@@ -106,6 +106,8 @@ export interface HistoryCoverage {
   metadataOnlyCount?: number;
   // 固定目标已全部遍历；未知消息仍可使 phase=incomplete，不能据此宣称内容已全部核验。
   traversalComplete?: boolean;
+  /** 仅展示：当前作用域内最新历史目标已完整保存；不代表来源连续性资格，不得用于读取、检索、记忆或回复判断。 */
+  savedHistoryComplete?: boolean;
   incremental?: HistoryIncrementalCoverage;
 }
 export interface StoredMessage {

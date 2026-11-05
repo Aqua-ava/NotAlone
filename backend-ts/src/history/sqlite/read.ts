@@ -113,21 +113,25 @@ export function readCoverage(tx:StorageTransaction,owner:string,contact:string):
     &&isCertifiedEmptyTarget(tx,token,report,target);
   }catch{/* 没有完整且当前可验证的空目标证明时仍保留普通不可用状态。 */}
  }
- let traversalComplete=false;
- if((!continuityBlocked||emptyTargetAwaitingMessages)&&!legacyAmbiguous&&goal?.cursor===null&&['complete','incomplete'].includes(String(goal.state))){
+ // 当前绑定、授权和数据代次内的最新历史目标是否已有完整遍历记录；不含来源连续性资格，仅供展示“已保存”进度。
+ let storedTraversalComplete=false;
+ if(!legacyAmbiguous&&goal?.cursor===null&&['complete','incomplete'].includes(String(goal.state))){
   try{
    const target=JSON.parse(String(goal.target_json)),completed=JSON.parse(String(goal.completed_partitions));
-   traversalComplete=Array.isArray(target.partitions)&&target.partitions.length>0&&Array.isArray(completed)
+   storedTraversalComplete=Array.isArray(target.partitions)&&target.partitions.length>0&&Array.isArray(completed)
     &&target.partitions.every((partition:unknown)=>completed.includes(partition));
   }catch{/* 缺少可核验的目标或覆盖记录时不推断遍历已完成。 */}
  }
+ const traversalComplete=(!continuityBlocked||emptyTargetAwaitingMessages)&&storedTraversalComplete;
  let normalUseTraversal=false;
  if(traversalComplete)try{normalUseTraversal=JSON.parse(String(goal?.support_json)).continuity==='same-source-instances-normal-use-v1';}catch{/* 未知支持档沿用保守状态。 */}
  // 后续认证可补齐已经遍历完毕的历史，但不能掩盖分片缺失或读取中断。
  const resolvedGoal=traversalComplete&&!stateQuarantined&&goal?.state==='incomplete'&&goal.failure_code==='history_identity_quarantined'
   ?{...goal,state:'complete',failure_code:null}:goal;
  const effectiveContinuityBlocked=continuityBlocked&&!emptyTargetAwaitingMessages;
- return {goalId:goal?String(goal.id):null,contactId:contact,bindingId:goal?String(goal.binding_id):blockedBinding?String(blockedBinding.id):null,traversalComplete,
+ // 只读展示字段：不参与正文读取、检索、记忆、回复出站或守卫判断；phase 仍表达当前业务资格。
+ const savedHistoryComplete=storedTraversalComplete&&!stateQuarantined&&resolvedGoal?.state==='complete'&&!resolvedGoal.failure_code;
+ return {goalId:goal?String(goal.id):null,contactId:contact,bindingId:goal?String(goal.binding_id):blockedBinding?String(blockedBinding.id):null,traversalComplete,savedHistoryComplete,
   phase:effectiveContinuityBlocked||stateQuarantined?'incomplete':!resolvedGoal?'not_started':resolvedGoal.state==='running'?'running':resolvedGoal.state==='complete'?'complete':'incomplete',
   failureCode:effectiveContinuityBlocked?'history_source_continuity_unverified':stateQuarantined?'history_identity_quarantined':resolvedGoal?.failure_code?String(resolvedGoal.failure_code):null,cursor:goal?.cursor?String(goal.cursor):null,
   messageCount:safeCount(counts.messages),nonTextCount:safeCount(counts.nontext),nonTextTypes,pageCount:safeCount(pages),quarantinedCount:quarantined,metadataOnlyCount:summary.metadataOnly,
