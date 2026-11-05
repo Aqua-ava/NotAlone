@@ -124,6 +124,14 @@ test('WXGF双帧彩色加单色透明度输出alpha PNG，透明度不可用时�
  assert.equal(broken.status,0,broken.stderr?.toString());
  assert.equal(broken.stdout[25],2,'透明度解码失败时应退回不透明PNG');
  assert.ok(broken.stdout.equals(plain.stdout),'透明度解码失败时应退回与单帧彩色一致的不透明图');
+ for(const name of ['wxgf.dual-frame-sei','wxgf.dual-frame-sei-leading']){
+  const result=await decodeWxgf(join(directory,name));
+  assert.equal(result.status,0,name+':'+(result.stderr?.toString()??''));
+  assert.ok(result.stdout.equals(dual.stdout),name+'应与无SEI双帧输出一致');
+ }
+ const singleSei=await decodeWxgf(join(directory,'wxgf.sei'));
+ assert.equal(singleSei.status,0,singleSei.stderr?.toString());
+ assert.ok(singleSei.stdout.equals(plain.stdout),'单帧带SEI输出应与无SEI单帧一致');
  const unsupported=await decodeWxgf(join(directory,'wxgf.dual-frame-two-color'));
  assert.equal(unsupported.status,1);
  assert.equal(unsupported.stdout.length,0);

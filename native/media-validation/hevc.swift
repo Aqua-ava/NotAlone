@@ -54,16 +54,28 @@ func hasOrderedHEVCFrameUnits(_ units:[AnnexNAL]) -> Bool {
     return false
 }
 
+// AUD、填充与SEI不改变画面内容；分类时忽略，但仍要求参数集与切片的已核验顺序。
+func isAuxiliaryHEVCNAL(_ type:Int) -> Bool {type==35 || type==38 || type==39 || type==40}
+
 // 按VPS起点切帧：每帧自带参数集与切片，保持单帧流的原有解码路径。
+// 首个VPS之前只允许附加信息单元，它们并入第一帧；其余前置单元仍拒绝。
 func splitHEVCFrames(_ units:[AnnexNAL]) throws -> [[AnnexNAL]] {
-    guard let first=units.first,first.type==32 else {throw Failure("media_image_invalid")}
     var frames:[[AnnexNAL]]=[]
     var current:[AnnexNAL]=[]
+    var started=false
     for unit in units {
-        if unit.type==32,!current.isEmpty {frames.append(current);current=[]}
-        current.append(unit)
+        if unit.type==32 {
+            if started,!current.isEmpty {frames.append(current);current=[]}
+            current.append(unit);started=true
+        } else if started {
+            current.append(unit)
+        } else {
+            guard isAuxiliaryHEVCNAL(unit.type) else {throw Failure("media_image_invalid")}
+            current.append(unit)
+        }
     }
-    if !current.isEmpty {frames.append(current)}
+    guard started,!current.isEmpty else {throw Failure("media_image_invalid")}
+    frames.append(current)
     return frames
 }
 
@@ -160,12 +172,14 @@ struct HEVCFrameInfo {
 // 多帧变体只接受已核验形态：VPS、SPS、PPS依次在前，随后是切片，且只有一个SPS/PPS。
 func classifyHEVCFrame(_ units:[AnnexNAL]) throws -> HEVCFrameInfo {
     func unsupported() throws -> Never {throw Failure("media_format_unsupported")}
-    guard units.first?.type==32,
-          units.filter({$0.type==32}).count==1,
-          units.filter({$0.type==33}).count==1,
-          units.filter({$0.type==34}).count==1 else {try unsupported()}
+    // 附加信息单元（SEI等）不参与分类，但其余单元必须仍然刚好是VPS、SPS、PPS与切片。
+    let meaningful=units.filter{!isAuxiliaryHEVCNAL($0.type)}
+    guard meaningful.first?.type==32,
+          meaningful.filter({$0.type==32}).count==1,
+          meaningful.filter({$0.type==33}).count==1,
+          meaningful.filter({$0.type==34}).count==1 else {try unsupported()}
     var phase=0
-    for unit in units {
+    for unit in meaningful {
         switch unit.type {
         case 32:
             guard phase==0 else {try unsupported()}
@@ -180,7 +194,7 @@ func classifyHEVCFrame(_ units:[AnnexNAL]) throws -> HEVCFrameInfo {
             guard (0...31).contains(unit.type),phase==3 else {try unsupported()}
         }
     }
-    guard phase==3,let spsUnit=units.first(where:{$0.type==33}),let sps=hevcSPSInfo(spsUnit.bytes) else {try unsupported()}
+    guard phase==3,let spsUnit=meaningful.first(where:{$0.type==33}),let sps=hevcSPSInfo(spsUnit.bytes) else {try unsupported()}
     return HEVCFrameInfo(units:units,sps:sps)
 }
 

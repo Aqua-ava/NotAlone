@@ -121,6 +121,8 @@ private func testNAL(_ type:Int,_ sps:Data?=nil) -> AnnexNAL {
     if let sps {return AnnexNAL(type:type,bytes:sps)}
     return AnnexNAL(type:type,bytes:Data([UInt8(type<<1),0x01]))
 }
+// 真实样本里每帧多带一个SEI；只用于验证分类容忍附加信息单元。
+private func seiUnit() -> Data {Data([0x4e,0x01,0x05,0x02,0x00,0x00,0x80])}
 private func testFrame(chroma:Int,width:Int=16,height:Int=16) -> [AnnexNAL] {
     [testNAL(32),testNAL(33,syntheticSPS(chroma:chroma,width:width,height:height)),testNAL(34),testNAL(1)]
 }
@@ -154,6 +156,19 @@ func hevcSelfTest() {
     expectUnsupported([mono,mono],"两帧都是单色")
     expectUnsupported([mono,otherSize],"尺寸不一致")
     expectUnsupported([mono,color,mono],"三帧")
+    let sei=AnnexNAL(type:39,bytes:Data([0x4e,0x01,0x80]))
+    do {
+        let tolerated=try classifyHEVCFrame([sei]+color+[sei])
+        selfCheck(tolerated.sps.chromaFormatIDC==1,"SEI不影响彩色帧分类")
+        let leading=try splitHEVCFrames([sei]+mono+[sei]+color)
+        selfCheck(leading.count==2 && leading[0].first?.type==39,"首VPS前的SEI并入第一帧")
+        selfCheck(try classifyHEVCFrame(leading[0]).sps.chromaFormatIDC==0,"带SEI的单色帧仍可分类")
+        do {
+            _=try classifyHEVCFrame(color+[testNAL(41)])
+            selfCheck(false,"未知NCL单元应被拒绝")
+        } catch let failure as Failure {selfCheck(failure.code=="media_format_unsupported","未知单元："+failure.code)}
+    } catch let failure as Failure {selfCheck(false,"SEI容忍："+failure.code)}
+    catch {selfCheck(false,"SEI容忍未知错误")}
     do {
         let composed=try compositeAlpha(try testImage([10,20,30,255,40,50,60,255,70,80,90,255,100,110,120,255],width:2,height:2),
                                         LumaPlane(width:2,height:2,values:[0,128,255,254]))
@@ -373,6 +388,13 @@ func wxgf(_ root:String) throws {
     var dualFrame=Data("wxgf".utf8);dualFrame.append(alphaFrame);dualFrame.append(colorFrame)
     var dualBrokenAlpha=Data("wxgf".utf8);dualBrokenAlpha.append(brokenAlphaFrame);dualBrokenAlpha.append(colorFrame)
     var dualTwoColor=Data("wxgf".utf8);dualTwoColor.append(colorFrame);dualTwoColor.append(colorFrame)
+    let sei=seiUnit()
+    var dualSei=Data("wxgf".utf8)
+    dualSei.append(frameData(mono.sets+[sei],mono.slices));dualSei.append(frameData(sets+[sei],slices))
+    var dualSeiLeading=Data("wxgf".utf8)
+    dualSeiLeading.append(contentsOf:[0,0,0,1]);dualSeiLeading.append(sei)
+    dualSeiLeading.append(alphaFrame);dualSeiLeading.append(colorFrame)
+    var singleSei=Data("wxgf".utf8);singleSei.append(frameData(sets+[sei],slices))
     var headerPreamble=Data("wxgf".utf8)
     headerPreamble.append(contentsOf:[0,0,0,1,0x80,0x01])
     for unit in sets+slices {headerPreamble.append(contentsOf:[0,0,0,1]);headerPreamble.append(unit)}
@@ -382,7 +404,8 @@ func wxgf(_ root:String) throws {
     for unit in sets+slices {headerBeyondBound.append(contentsOf:[0,0,0,1]);headerBeyondBound.append(unit)}
     guard output.count>4,output.count<=32*1024*1024,multiple.count<=32*1024*1024,
           headerPreamble.count<=32*1024*1024,headerBeyondBound.count<=32*1024*1024,
-          dualFrame.count<=32*1024*1024,dualBrokenAlpha.count<=32*1024*1024,dualTwoColor.count<=32*1024*1024 else {throw FixtureFailure("wxgf_size")}
+          dualFrame.count<=32*1024*1024,dualBrokenAlpha.count<=32*1024*1024,dualTwoColor.count<=32*1024*1024,
+          dualSei.count<=32*1024*1024,dualSeiLeading.count<=32*1024*1024,singleSei.count<=32*1024*1024 else {throw FixtureFailure("wxgf_size")}
     try output.write(to:URL(fileURLWithPath:root+"/wxgf"))
     try multiple.write(to:URL(fileURLWithPath:root+"/wxgf.multiframe"))
     try headerPreamble.write(to:URL(fileURLWithPath:root+"/wxgf.header-preamble"))
@@ -390,6 +413,9 @@ func wxgf(_ root:String) throws {
     try dualFrame.write(to:URL(fileURLWithPath:root+"/wxgf.dual-frame"))
     try dualBrokenAlpha.write(to:URL(fileURLWithPath:root+"/wxgf.dual-frame-broken-alpha"))
     try dualTwoColor.write(to:URL(fileURLWithPath:root+"/wxgf.dual-frame-two-color"))
+    try dualSei.write(to:URL(fileURLWithPath:root+"/wxgf.dual-frame-sei"))
+    try dualSeiLeading.write(to:URL(fileURLWithPath:root+"/wxgf.dual-frame-sei-leading"))
+    try singleSei.write(to:URL(fileURLWithPath:root+"/wxgf.sei"))
     try verifyWxgfFixtures(root)
 }
 // 夹具生成后立即走一遍真实解码，验证透明度合成与降级，而不是只依赖文件存在。
@@ -408,6 +434,10 @@ private func verifyWxgfFixtures(_ root:String) throws {
         guard abs(actual-expected)<=6 else {throw FixtureFailure("dual_alpha_value")}
     }
     guard try decode("wxgf.dual-frame-broken-alpha")==plain else {throw FixtureFailure("broken_alpha_fallback")}
+    for name in ["wxgf.dual-frame-sei","wxgf.dual-frame-sei-leading"] {
+        guard try decode(name)==dual else {throw FixtureFailure("dual_sei_output")}
+    }
+    guard try decode("wxgf.sei")==plain else {throw FixtureFailure("single_sei_output")}
     do {
         _=try decode("wxgf.dual-frame-two-color")
         throw FixtureFailure("two_color_accepted")
