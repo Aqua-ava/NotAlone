@@ -6,6 +6,7 @@ import {mkdtemp,mkdir,readFile,writeFile,realpath,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createWechatImageResourcePort} from '../src/media/visual/wechat.ts';
+import {resetDatabaseKeyDiagnosis} from '../src/media/visual/database-keys.ts';
 import {loadNarrowWechatOptions,supportsWechatImageKeyChannel,supportsWechatOriginalImages} from '../src/history/wechat/artifacts.ts';
 import {SharedWechatClient} from '../src/history/wechat/shared-client.ts';
 import {NarrowWechatClient} from '../src/history/wechat/native-client.ts';
@@ -262,6 +263,28 @@ test('原生图片获取阶段错误保留为明确媒体状态',async t=>{
  }
 });
 
+
+test('读取程序报关联失败且资源库缺当前盐的密钥时，单独报告缺密钥',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'notalone-port-key-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const accountRoot=join(root,'account'),salt=Buffer.from('0123456789abcdef0123456789abcdef','hex');
+ await mkdir(join(accountRoot,'db_storage/message'),{recursive:true});
+ const page=Buffer.alloc(4096);salt.copy(page,0);await writeFile(join(accountRoot,'db_storage/message/message_resource.db'),page);
+ const config=join(root,'config.json'),previous=process.env.NOTALONE_WECHAT_CONFIG;
+ t.after(()=>{if(previous===undefined)delete process.env.NOTALONE_WECHAT_CONFIG;else process.env.NOTALONE_WECHAT_CONFIG=previous;resetDatabaseKeyDiagnosis();});
+ process.env.NOTALONE_WECHAT_CONFIG=config;
+ for(const [name,keys,expected] of [
+  ['缺盐',{['f'.repeat(32)]:'0'.repeat(64)},'media_database_key_missing'],
+  ['盐已覆盖，仍是原来的关联失败',{[salt.toString('hex')]:'0'.repeat(64)},'media_association_unverified'],
+ ]){
+  await writeFile(config,JSON.stringify({schema_version:2,wxid:'synthetic',db_root:accountRoot,keys}),{mode:0o600});resetDatabaseKeyDiagnosis();
+  const f=await fixture(t,{nativeError:'history_image_association_unverified'});
+  await assert.rejects(createWechatImageResourcePort(f.executable).open(selection()),{code:expected},name);
+ }
+ // 其他失败原因即使缺密钥也保持原样，不被覆盖。
+ await writeFile(config,JSON.stringify({schema_version:2,wxid:'synthetic',db_root:accountRoot,keys:{['f'.repeat(32)]:'0'.repeat(64)}}),{mode:0o600});resetDatabaseKeyDiagnosis();
+ const other=await fixture(t,{nativeError:'history_image_local_file_missing'});
+ await assert.rejects(createWechatImageResourcePort(other.executable).open(selection()),{code:'media_local_file_missing'});
+});
 
 test('原图缺失返回媒体获取失败并释放原生客户端',async t=>{
  const f=await fixture(t),request=selection();request.source.raw.serverId='999';const port=createWechatImageResourcePort(f.executable);

@@ -33,7 +33,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
       releasePreview:async sessionId=>{window.mediaReleases.push({sessionId,src:document.querySelector('.contact-chat-image')?.getAttribute('src')??null});},
       onPreviewRevoking:listener=>{mediaListeners.add(listener);return()=>mediaListeners.delete(listener);} };
     window.revokeImagePreview = id=>mediaListeners.forEach(listener=>listener(id));
-    window.updateImage = (id,state)=>{const items=history.messages.items.map(item=>item.messageId===id?{...item,imageMedia:{state,
+    window.updateImage = (id,state,errorCode)=>{const items=history.messages.items.map(item=>item.messageId===id?{...item,imageMedia:{state,...(errorCode?{errorCode}:{}),
         fileId:state==='available'?originalFile:null,mimeType:state==='available'?'image/gif':null}}:item);window.publishHistory({messages:{...history.messages,items}});};
     window.notalone = {
       openHelper:async()=>{window.actionCalls.push('helper');},
@@ -89,6 +89,8 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await expect(chat.getByText('图片资源不可用', { exact: true })).toBeVisible();
   await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','failed'));
   await expect(chat.getByText('图片暂不可用', { exact: true })).toBeVisible();
+  await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','failed','media_database_key_missing'));
+  await expect(chat.getByText('图片暂不可用：缺少微信数据库密钥', { exact: true })).toBeVisible();
   await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','cleared'));
   await expect(chat.getByText('[图片已清除]', { exact: true })).toBeVisible();
   await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','pending'));

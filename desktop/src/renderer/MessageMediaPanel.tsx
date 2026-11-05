@@ -21,6 +21,7 @@ const processingErrors:Record<string,string>={
   media_resource_limit:'媒体超过当前尺寸、帧数或时长上限，本次未保存新结果。',
   media_validator_unavailable:'本机媒体校验组件尚未就绪，当前不可提取。',
   media_association_unverified:'消息与资源尚未唯一核验，未读取图片；消息记录仍保留。',
+  media_database_key_missing:'缺少微信图片资源库的数据库密钥（微信重建数据库后会换密钥），暂时取不到图片；补取密钥后会自动重试，消息记录仍保留。',
   media_resource_too_large:'文件超过当前单文件32MiB上限，本次未保存；已有文件保留。',
   media_space_insufficient:'本次空间不足，已停止新增写入。请清理本机空间；先前合法保存的媒体仍保留。',
     voice_decode_failed:'语音解码失败；语音处理本轮暂缓，先前合法文件保留。',

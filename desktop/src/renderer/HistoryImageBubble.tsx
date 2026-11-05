@@ -101,6 +101,7 @@ export function HistoryImageBubble({ media, imageMedia, selection }: Props) {
   let status: string | null = null;
   if (state === 'thumbnail_only') status = '仅有缩略图，暂未取得图片';
   else if (state === 'unavailable') status = '图片资源不可用';
+  else if (imageMedia?.errorCode === 'media_database_key_missing') status = '图片暂不可用：缺少微信数据库密钥';
   else if (state === 'failed' || failed) status = '图片暂不可用';
   else if (state === 'cleared') status = '[图片已清除]';
   else if (!imageAvailable || !fileId || !mimeType || !visible || !preview) status = '图片加载中';

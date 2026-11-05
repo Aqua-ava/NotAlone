@@ -7,6 +7,7 @@ import {loadNarrowWechatOptions,supportsWechatImageKeyChannel} from '../../histo
 import {NarrowWechatClient, type WechatImageOpenResult, type WechatImageSourceIdentity} from '../../history/wechat/native-client.ts';
 import type {VisualRequest, VisualResource, VisualResourcePort} from './contracts.ts';
 import {enrichImageToolOptions,prepareImageRuntimeKey} from './image-tools.ts';
+import {resourceDatabaseKeyMissing} from './database-keys.ts';
 
 const eligibilityKeys=['owner_id','contact_id','account_id','conversation_id','binding_id','grant_id','verification_id','read_epoch',
   'selection_generation','data_generation','identity_generation','scope_revision','barrier_generation','source_generation'] as const;
@@ -188,7 +189,11 @@ export function createWechatImageResourcePort(executable?:string,shared?:SharedW
       });
       transferred=true;
       return resource;
-    }catch(error){throw mapped(error);}
+    }catch(error){
+      // 读取程序打不开图片资源库时统一报关联失败；缺该库当前盐的密钥是可明确判定的真实原因，单独报告。
+      if(error instanceof StorageFailure&&error.code==='history_image_association_unverified'&&await resourceDatabaseKeyMissing())throw new StorageFailure('media_database_key_missing');
+      throw mapped(error);
+    }
     finally{
       if(client&&!transferred){
         if(opened&&!client.stoppedReason)try{await client.closeImageSelected(opened.resourceToken);}catch{/* 关闭进程会释放已打开的本机资源。 */}
