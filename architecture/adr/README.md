@@ -170,4 +170,4 @@
 - [ADR-170：不保存缩略图，取消原图分类机制](170-no-thumbnail-storage-and-no-original-classification.md)
 - [ADR-171：同一张图有标准图和高清图时取一张保存，不再比较内容](171-image-pick-standard-over-high-definition.md)
 - [ADR-172：JPEG 结束标记后允许少量尾随，WXGF 支持彩色加透明度双帧](172-jpeg-trailing-bytes-and-wxgf-alpha-frames.md)
-- [ADR-173：开发者批量来源重新认证](173-developer-batch-source-recertification.md)（已采纳（2026-11-05）；未实现）
+- [ADR-173：开发者批量来源重新认证](173-developer-batch-source-recertification.md)（已采纳（2026-11-05）；已实现并验收（2026-11-06，仅开发模式））
