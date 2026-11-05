@@ -1,6 +1,6 @@
 import { Worker } from 'node:worker_threads';
 import {statSync} from 'node:fs';
-import { sqliteOpenTimeoutMs } from './timeouts.ts';
+import { sqliteActionTimeoutMs, sqliteMaintenanceTimeoutMs, sqliteOpenTimeoutMs } from './timeouts.ts';
 import {controlledFiles} from './files.ts';
 import {SqliteReadonlyReader} from './readonly-client.ts';
 import { StorageFailure, type OpenStorageOptions, type StorageLease, type StorageStatus, type StorageReader } from './contracts.ts';
@@ -67,7 +67,8 @@ export class SqliteStorage {
         if (!pending.started) {
           pending.started = true;
           pending.startedAt=message.startedAt;
-          pending.timer = setTimeout(() => { this.fail('action_timeout', pending.name); void this.worker.terminate(); }, 15_000);
+          pending.timer = setTimeout(() => { this.fail('action_timeout', pending.name); void this.worker.terminate(); },
+            message.maintenance === true ? this.maintenanceBudget() : sqliteActionTimeoutMs);
         }
         return;
       }
@@ -101,6 +102,13 @@ export class SqliteStorage {
       });
     }).catch(async error=>{await worker.terminate();throw error;});
     try{return new SqliteStorage(worker,status,{...options});}catch(error){await worker.terminate();throw error;}
+  }
+  /** 维护动作预算：按动作开始时的库与 WAL 体积估算；读取失败时退回固定下限，不影响动作本身。 */
+  private maintenanceBudget(): number {
+    if (this.options.maintenanceTimeoutMs !== undefined) return this.options.maintenanceTimeoutMs;
+    let bytes = 0;
+    for (const suffix of ['', '-wal']) { try { bytes += statSync(this.files.database + suffix).size; } catch { /* 缺失的旁路文件不计入。 */ } }
+    return sqliteMaintenanceTimeoutMs(bytes);
   }
   execute<T = unknown>(name: string, input: unknown, lease: StorageLease = this.status): Promise<T> {
     if (this.failed || this.closing) return Promise.reject(new StorageFailure('worker_failed'));

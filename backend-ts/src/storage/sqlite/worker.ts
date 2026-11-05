@@ -143,7 +143,8 @@ try {
     // 串行队列等待不消耗动作预算；主线程收到开始确认后监督本次同步执行。
     const startedAt=Number(process.hrtime.bigint())/1e6;
     const respond=(value:Record<string,unknown>)=>port.postMessage({id,...value,startedAt,finishedAt:Number(process.hrtime.bigint())/1e6});
-    port.postMessage({id, started: true, startedAt});
+    // 开始确认带上动作模式：主线程据此选择执行预算，维护动作与普通动作不共用15秒上限。
+    port.postMessage({id, started: true, startedAt, maintenance: actions.get(name)?.mode === 'maintenance'});
     try {
       if (name === 'storage.close') { connection.close(); respond({value: null}); port.close(); return; }
       files.verify();

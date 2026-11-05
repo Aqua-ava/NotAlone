@@ -91,3 +91,29 @@ test('存储诊断区分排队和执行，只保留有界的具名动作计时',
  assert.ok(storage.timingDiagnostic.recent.length<=3,'状态接口只返回少量摘要');
  assert.ok(JSON.stringify(storage.timingDiagnostic).length<1000,'计时摘要不可撑大受控状态响应');
 });
+
+test('维护动作不受普通15秒预算限制：长压缩期间状态保持可用，排队动作等其结束',async t=>{
+ const storage=await fixture(t),started=performance.now();
+ const maintaining=storage.execute('timing.maintain',{milliseconds:17_000,sequence:'compact'});
+ const queued=storage.execute('timing.block',{milliseconds:1,sequence:'after'});
+ // 越过普通动作的15秒点后，句柄仍应可用，诊断指出正在执行的是维护动作。
+ await new Promise(resolve=>setTimeout(resolve,15_800));
+ assert.doesNotThrow(()=>storage.verifyIdentity());
+ assert.equal(storage.failureDiagnostic,null);
+ assert.equal(storage.timingDiagnostic.active.action,'timing.maintain');
+ assert.deepEqual(await Promise.all([maintaining,queued]),[{result:'passed',proof:'compact'},'after']);
+ assert.ok(performance.now()-started>=16_500);
+ assert.equal(storage.failureDiagnostic,null);
+ assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('维护动作仍有上限：超过自己的预算关闭Worker并保留诊断',async t=>{
+ const userData=await realpath(await mkdtemp(join(tmpdir(),'notalone-sqlite-maintenance-')));
+ const storage=await SqliteStorage.open({userData,intent:'create',role:'test',maintenanceTimeoutMs:400,registryModule:new URL('./fixtures/sqlite/timing-registry.mjs',import.meta.url).href});
+ t.after(async()=>{await storage.close();await rm(userData,{recursive:true,force:true});});
+ const started=performance.now();
+ await assert.rejects(storage.execute('timing.maintain',{milliseconds:3_000,sequence:'hung'}),{code:'worker_failed'});
+ assert.ok(performance.now()-started>=350);assert.ok(performance.now()-started<2_500);
+ assert.deepEqual(storage.failureDiagnostic,{cause:'action_timeout',action:'timing.maintain',pendingCount:1,queuedCount:0});
+ assert.throws(()=>storage.verifyIdentity(),{code:'worker_failed'});
+});

@@ -14,6 +14,8 @@ export interface OpenStorageOptions {
   role: SqliteRole;
   // 仅受信任的构建装配代码使用；不接受HTTP/Tool或界面传入模块。
   registryModule?: string;
+  // 仅供测试与诊断缩短维护动作预算；缺省按库体积计算，见 timeouts.ts。
+  maintenanceTimeoutMs?: number;
 }
 export type StorageRow = Record<string, SQLOutputValue>;
 export interface StorageTransaction {

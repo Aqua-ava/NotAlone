@@ -9,6 +9,12 @@ export const registry={migrations:base.migrations,actions:[
  }},
  // 名称落在前台回复白名单内，用于验证前台通道优先出队；不读写业务表。
  {name:'discussion.timingProbe',mode:'read',retryBusy:false,execute(_tx,input){return input.sequence;}},
+ // 模拟压缩这类无法中途打断的同步维护动作：与 VACUUM 一样占满 Worker，只在结束时返回。
+ {name:'timing.maintain',mode:'maintenance',retryBusy:false,execute(_maintenance,input){
+  if(!Number.isSafeInteger(input.milliseconds)||input.milliseconds<0||input.milliseconds>20_000)throw new Error('invalid_synthetic_duration');
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,input.milliseconds);
+  return {result:'passed',proof:input.sequence};
+ }},
  {name:'timing.exit',mode:'read',retryBusy:false,execute(){process.exit(42);}},
  {name:'timing.error',mode:'read',retryBusy:false,execute(){process.nextTick(()=>{throw new Error('合成私密错误，不得投影');});return null;}},
 ]};

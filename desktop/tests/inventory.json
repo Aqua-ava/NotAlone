@@ -154,7 +154,8 @@
   "tests/sqlite-reply-candidate-bridge.test.mjs",
   "tests/sqlite-memory-management.test.mjs",
   "tests/incremental-sync-status.test.mjs",
-  "tests/backend-shutdown-confirmation.test.mjs"
+  "tests/backend-shutdown-confirmation.test.mjs",
+  "tests/backend-lost-connection.test.mjs"
  ],
  "headless": [
   "tests/usage/continuity-view.test.mjs",

@@ -8,7 +8,7 @@ import { recoverSkillRootRelocation } from '../../skills/sqlite/root-relocation.
 import { SqliteStorage } from '../../storage/sqlite/client.ts';
 import { controlledFiles } from '../../storage/sqlite/files.ts';
 import type { CutoverCheckRecord, CutoverCode, CutoverManifest, CutoverReady, CutoverResult, CutoverStorage, CutoverStorageFactory,
-  LegacyTarget, LegacyTargetKind } from './contracts.ts';
+  LegacyTarget, LegacyTargetKind, WriterCheckRecord } from './contracts.ts';
 import { CUTOVER_FORMAT_VERSION, CUTOVER_STARTUP_CONFIG } from './contracts.ts';
 import { authorizationDigest, cutoverDirectory, CutoverControlError, databaseFile, loadAuthorization, loadManifest, loadStartupConfiguration,
   saveManifest, saveStartupConfiguration, type StartupConfiguration } from './control.ts';
@@ -19,6 +19,10 @@ const DEFAULT_CAPABILITIES: SqliteCapabilitiesConfiguration['capabilities'] = ['
 const BUSINESS_TARGETS: readonly LegacyTargetKind[] = ['legacy_update_backup',
   'legacy_assistant_runtime', 'legacy_import_pending'];
 const RUNTIME_TARGETS: readonly LegacyTargetKind[] = ['legacy_writer_handshake', 'legacy_launch_lock', 'runtime_handshake', 'runtime_launch_lock'];
+// 本 App 自己启动的 SQLite 宿主留下的握手与启动锁属于当前运行时，不是旧写入者。
+// 单实例由启动器的互斥与握手核验负责；预检不打开数据库，因此宿主存活不构成冲突。
+const CURRENT_RUNTIME_WRITERS: readonly WriterCheckRecord['name'][] = ['runtime_launch_lock', 'new_host_handshake'];
+const currentRuntime = (record: WriterCheckRecord): boolean => CURRENT_RUNTIME_WRITERS.includes(record.name);
 const REQUIRED_DELETION_SCOPES = ['source', 'contact', 'contact_history', 'account', 'media_result_clear', 'media_result_replace', 'discussion'] as const;
 const REQUIRED_EMPTY_MEDIA = (snapshot: CutoverSnapshot) => snapshot.media.message_media === 0 && snapshot.media.current_files === 0
   && snapshot.media.staged_files === 0 && snapshot.media.cleanup_pending === 0 && snapshot.media.attempts_running === 0;
@@ -69,7 +73,7 @@ function check(name: CutoverCheckRecord['name'], state: CutoverCheckRecord['stat
 
 /** 主要入口：返回 ready 或 maintenance；仅使用 SQLite，不清理未授权对象，不创建第二个空库。 */
 export async function runDefaultDatabaseStartup(options: DefaultDatabaseOptions): Promise<CutoverResult> {
-  return runDatabaseStartup(options, reopenCompleted);
+  return runDatabaseStartup(options, 'reopen', reopenCompleted);
 }
 
 export interface PreparedDatabaseStartup {
@@ -79,15 +83,15 @@ export interface PreparedDatabaseStartup {
 
 /** 桌面只准备已有目标；正式宿主仍须打开同一实例、核验完整性与本人身份后才能连接。 */
 export async function prepareDefaultDatabaseStartup(options: DefaultDatabaseOptions): Promise<PreparedDatabaseStartup | CutoverResult> {
-  return runDatabaseStartup(options, async (userData, manifest) => {
-    const configuration = completedConfiguration(userData, manifest);
+  return runDatabaseStartup(options, 'prepare', async (userData, manifest) => {
+    const configuration = completedConfiguration(userData, manifest, 'prepare');
     controlledFiles(userData, false).verify();
     return {phase: 'prepared', code: 'sqlite_prepared', databaseId: configuration.expectedDatabaseId,
       ownerId: manifest.target!.ownerId, configuration: configuredCapabilities(configuration), manifestRevision: manifest.revision};
   });
 }
 
-async function runDatabaseStartup<T extends CutoverReady | PreparedDatabaseStartup>(options: DefaultDatabaseOptions,
+async function runDatabaseStartup<T extends CutoverReady | PreparedDatabaseStartup>(options: DefaultDatabaseOptions, mode: StartupMode,
   completed: (userData: string, manifest: CutoverManifest, options: DefaultDatabaseOptions) => Promise<T>): Promise<T | CutoverResult> {
   const userData = path.resolve(options.userData);
   const now = () => options.now?.() ?? Date.now();
@@ -105,6 +109,8 @@ async function runDatabaseStartup<T extends CutoverReady | PreparedDatabaseStart
       catch { return {phase:'maintenance',code:'cutover_configuration_conflict',detail:'skill_root_relocation_pending',manifestRevision:manifest.revision}; }
       return await completed(userData, manifest, options);
     }
+    // 旧缺陷曾把存活宿主自己的运行锁写成阻断；宿主仍存活时只准备原目标，宿主退出后再走切换自愈。
+    if (mode === 'prepare' && manifest && blockedByOwnRuntime(userData, manifest)) return await completed(userData, manifest, options);
     return await switchDatabase(userData, manifest ?? initialManifest(now()), options);
   } catch (error) {
     if (error instanceof Blocked) return { phase: 'maintenance', code: error.code, detail: error.detail, manifestRevision: error.manifest.revision };
@@ -118,22 +124,38 @@ async function runDatabaseStartup<T extends CutoverReady | PreparedDatabaseStart
   }
 }
 
-function completedConfiguration(userData: string, manifest: CutoverManifest): StartupConfiguration {
+type StartupMode = 'prepare' | 'reopen';
+function completedConfiguration(userData: string, manifest: CutoverManifest, mode: StartupMode): StartupConfiguration {
   const configuration = loadStartupConfiguration(userData);
   if (!configuration) throw new Blocked('cutover_configuration_conflict', 'startup_configuration_missing', manifest);
   if (!manifest.target || configuration.expectedDatabaseId !== manifest.target.databaseId) throw new Blocked('cutover_configuration_conflict', 'startup_configuration_identity_mismatch', manifest);
-  const writers = checkLegacyWriters(userData).filter(record => record.state !== 'stopped');
-  if (writers.length) {
+  const running = checkLegacyWriters(userData).filter(record => record.state !== 'stopped');
+  const describe = (records: WriterCheckRecord[]) => records.map(record => `${record.name}:${record.state}`).join(',');
+  const legacy = running.filter(record => !currentRuntime(record));
+  if (legacy.length) {
     const saved = saveManifest(userData, { ...manifest, phase: 'blocked', blockedCode: 'cutover_legacy_writer_running' });
-    throw new Blocked('cutover_legacy_writer_running', writers.map(record => `${record.name}:${record.state}`).join(','), saved);
+    throw new Blocked('cutover_legacy_writer_running', describe(legacy), saved);
   }
+  // 重开会打开数据库并推进实例租约，不能与存活宿主并行；这是暂时占用，不改写已完成的切换清单。
+  const live = running.filter(currentRuntime);
+  if (live.length && mode === 'reopen') throw new Blocked('cutover_legacy_writer_running', describe(live), manifest);
   return configuration;
+}
+/** 清单曾因自有运行锁被写成阻断，且身份与启动配置仍一致：宿主存活时不应再走会打开数据库的切换。 */
+function blockedByOwnRuntime(userData: string, manifest: CutoverManifest): boolean {
+  if (manifest.phase !== 'blocked' || manifest.blockedCode !== 'cutover_legacy_writer_running' || !manifest.target?.ownerId) return false;
+  try {
+    const configuration = loadStartupConfiguration(userData);
+    if (!configuration || configuration.expectedDatabaseId !== manifest.target.databaseId) return false;
+    const running = checkLegacyWriters(userData).filter(record => record.state !== 'stopped');
+    return running.some(currentRuntime) && !running.some(record => !currentRuntime(record));
+  } catch { return false; }
 }
 function configuredCapabilities(configuration: StartupConfiguration): SqliteCapabilitiesConfiguration {
   return {capabilities: configuration.capabilities, ...(configuration.skillPackageRoot ? {skillPackageRoot: configuration.skillPackageRoot} : {})};
 }
 async function reopenCompleted(userData: string, manifest: CutoverManifest, options: DefaultDatabaseOptions): Promise<CutoverReady> {
-  const configuration = completedConfiguration(userData, manifest);
+  const configuration = completedConfiguration(userData, manifest, 'reopen');
   const factory = options.storageFactory ?? defaultFactory;
   let storage: CutoverStorage | undefined;
   try {

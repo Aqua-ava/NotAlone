@@ -361,8 +361,13 @@ export class BackendHost {
     }
     if (!this.target) {
       if (!this.ownedChild) return this.finishShutdown();
-      this.publish({ phase: 'shutdown-failed', errorCode: 'backend_shutdown_unconfirmed', canRetryShutdown: true });
-      return false;
+      // 没有认证目标却仍持有自有子进程（启动中途失联或回收未完成）：无法请求优雅停读，
+      // 只能按启动器约定 SIGTERM→SIGKILL 回收该子进程；回收确认后才算收尾，失败仍保留重试入口。
+      if (!await this.ownedChild.terminate().catch(() => false)) {
+        this.publish({ phase: 'shutdown-failed', errorCode: 'backend_shutdown_unconfirmed', canRetryShutdown: true });
+        return false;
+      }
+      return this.finishShutdown();
     }
     try {
       // 客户端只有取得原实例的 stopped 确认才返回；服务可能随后退出，不再强求一次 GET。
