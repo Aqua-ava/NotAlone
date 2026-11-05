@@ -230,6 +230,8 @@ test('旧后台缺少 saved_history_complete 时显示进度待确认，不画�
   assert.match(markup, /已保存本机历史：进度待确认/);
   assert.doesNotMatch(markup, /<progress/);
   assert.doesNotMatch(markup, /\d+ \/ \d+ 位联系人/);
+  assert.match(markup, /后台尚未报告已保存的历史进度/);
+  assert.doesNotMatch(markup, /已保存当前同步进度/);
 });
 
 test('展示字段不改变回复资格：已保存完成但当前 phase 未完成时，资格仍按 phase 判断', () => {

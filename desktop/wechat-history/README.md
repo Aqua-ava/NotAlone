@@ -26,6 +26,7 @@ App 运行目录也位于 `.notalone-builds/`。切换前先用 `pnpm run dev:st
 `notalone-history` 使用有界 JSONL；未知操作、身份或许可不合法时在打开来源前拒绝，不开放 SQL、任意路径、发送或密钥扫描。操作字段与验证以 [notalone_protocol.go](cmd/notalone_protocol.go) 为准。
 
 - `wechat-shared-process-v1` 以排他租约串行切换联系人。`release-selection` 必须带当前账号、会话与 `selected-metadata-v1`；返回 released 前关闭快照、增量状态、阶段观察基线与图片令牌，再允许 resolve。账号守卫与账号级图片密钥通道保留至进程结束；旧目标及令牌不能因切回恢复。
+- `imageOpenIsolation: wechat-image-open-local-v1` 声明 `image-open` 按影响范围返回错误码：会话、目标、来源代次、快照与守卫失效保持 `history_scope_unverified`、`history_target_*`、`history_source_changed`、`history_snapshot_*` 等原码；并发打开超限为 `history_image_request_invalid`，查询失败与解码被取消为 `history_image_read_failed`；只有本张图片的关联缺失、本机文件缺失、内容核验、格式与解码失败使用单图码。TS 客户端仅对声明该协议的制品，把这五个单图码当作当次 `image-open` 的局部失败：保留进程、选择范围与其他联系人的守卫；`image-read`、`image-close`、其余错误码、超时、取消和非法回执仍终止读取。旧制品不因 TS 升级获得该资格。
 - `metadata-sessions-all` 使用独立 `all-session-list-metadata-v1` 许可，仅返回账号内有界会话身份、显示名及类型，不查询摘要或正文，不扩大私聊授权。未知类型、格式错误与身份冲突不能通过丢弃候选制造唯一匹配。
 - `metadata-avatar` 需要已核验账号、精确私聊与 `selected-contact-avatar-metadata-v1`；只读取该 contact 的头像 URL，优先小图，缺失为 null。域名限 `wx.qlogo.cn`／`thirdwx.qlogo.cn`，旧 HTTP 元数据在本机提升为 HTTPS。它不枚举联系人、不认证图像内容或授予历史资格；下载和位图校验由联系人服务完成。
 

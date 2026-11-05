@@ -199,7 +199,7 @@ export function HistoryCoverageStatus({ coverages, contacts, bodyAvailable, enab
           : [reading > 0 ? `正在读取 ${reading} 位联系人的历史。` : null,
             following > 0 ? `正在同步 ${following} 位联系人的新消息。` : null,
             reverifying > 0 ? `${reverifying} 位联系人的聊天来源待重新核验，已保存的聊天不受影响。` : null]
-            .filter(Boolean).join('') || '已保存当前同步进度。'}</p>
+            .filter(Boolean).join('') || (savedKnown ? '已保存当前同步进度。' : '后台尚未报告已保存的历史进度，状态会自动更新。')}</p>
         <div className="sync-history-toolbar"><p>{attention ? `${attention} 位联系人同步需要关注` : '当前没有需要关注的同步问题'}</p>
           {attention > 0 && <button className="button" onClick={() => setShowIssues(true)}>查看并处理</button>}</div>
       </>}
