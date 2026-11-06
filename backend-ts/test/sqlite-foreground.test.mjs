@@ -84,7 +84,7 @@ for(const failingStage of ['sessions','bindings'])test(`前台${failingStage}查
   bindings:async()=>{if(failingStage==='bindings'&&attempt===1)throw new Error('synthetic_snapshot_unavailable');return [{owner_id:ownerId,contact_id:contactId,binding_id:bindingId,channel:'wechat',account_scope:'synthetic-account',conversation_locator:'synthetic-person',display_name:names.at(-1),status:'active'}];}});
  try{
   const failed=await locator.observe({enabled:true});
-  assert.equal(failed.reason,'binding_verification_unavailable');assert.equal(failed.contact_id,null);assert.equal(failed.recognized_name,null);
+  assert.equal(failed.reason,failingStage==='sessions'?'binding_session_list_failed':'binding_verification_unavailable');assert.equal(failed.contact_id,null);assert.equal(failed.recognized_name,null);
   const recovered=await locator.observe({enabled:true});
   assert.equal(recovered.phase,'confirmed');assert.equal(recovered.contact_id,contactId);
   assert.match(names[0],/^合成\d+-1$/);
@@ -104,7 +104,7 @@ test('账号或来源变化仍回收OCR进程，下一轮不能复用旧观察',
    sessions:async()=>{if(attempt++===0)throw Object.assign(new Error('synthetic_scope_changed'),{code});return [{username:'synthetic-person',display_name:names.at(-1),chat_type:'private'}];},
    bindings:async()=>[{owner_id:ownerId,contact_id:contactId,binding_id:bindingId,channel:'wechat',account_scope:'synthetic-account',conversation_locator:'synthetic-person',display_name:names.at(-1),status:'active'}]});
   try{
-   const failed=await locator.observe({enabled:true});assert.equal(failed.contact_id,null);assert.equal(failed.recognized_name,null);
+   const failed=await locator.observe({enabled:true});assert.equal(failed.contact_id,null);assert.equal(failed.recognized_name,null);assert.equal(failed.reason,'binding_scope_changed',code);
    assert.equal((await locator.observe({enabled:true})).phase,'confirmed');
    assert.match(names[1],/^合成\d+-1$/);assert.notEqual(names[1],names[0],code);
   }finally{await locator.close();}

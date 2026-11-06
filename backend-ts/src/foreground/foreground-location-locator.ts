@@ -111,7 +111,7 @@ export class ForegroundLocator {
       if(tail&&suffix.test(tail.text))return result('paused','group_chat_suspected');
       const qualityFailure=header?(quality.name_complete!==true||/…|⋯|\.\.\./u.test(title)||!tail&&quality.display_name_confidence<0.3):
         !normalize(title)||quality.display_name_confidence<0.9||(quality.selected_row_name_confidence??0)<0.9||normalize(title)!==normalize(observation.selected_row_name);
-      let sessions:readonly ForegroundSession[],bindings:readonly ForegroundBinding[];
+      let sessions:readonly ForegroundSession[],bindings:readonly ForegroundBinding[],stage:'sessions'|'bindings'='sessions';
       try {
         check();sessions=await this.options.sessions({signal,timeoutMs:deadline-performance.now(),limit:header?5000:51,...(!header?{keyword:normalize(title.replace(suffix,''))||normalize(title)}:{})});check();
         if(sessions.length>=(header?5000:51))return failure('manual-required','session_candidates_truncated');
@@ -129,6 +129,7 @@ export class ForegroundLocator {
         if(hasSuffix&&(decision.method!=='exact'||quality.display_name_confidence<0.9))return result('paused','group_chat_suspected');
         const candidate=sessions[decision.candidateIndex];
         if(!candidate.username.trim()||sessions.filter(row=>row.username===candidate.username).length!==1||trailingWhitespace.test(candidate.display_name))return failure('manual-required','unmatched_requires_selection');
+        stage='bindings';
         bindings=await this.options.bindings(signal,check);check();
         const active=bindings.filter(row=>row.conversation_locator===candidate.username);
         const binding=active[0];
@@ -140,7 +141,11 @@ export class ForegroundLocator {
         // 查询暂时失败不代表 OCR 进程失效；只保留模型，每轮仍重新采帧及核验身份。
         const code=(error as {code?:string}).code;
         if(code==='observation_timeout')return result('unavailable','observation_timeout');
-        if(code==='foreground_scope_unavailable'||code==='history_scope_changed'||code==='history_account_changed'||code==='history_source_changed')await this.options.probe.close();
+        const scopeChanged=code==='foreground_scope_unavailable'||code==='history_scope_changed'||code==='history_account_changed'||code==='history_source_changed';
+        if(scopeChanged)await this.options.probe.close();
+        // 按失败阶段拆分固定原因码，便于区分范围抖动、名单读取失败与绑定快照失败；不透出原始错误文本。
+        if(scopeChanged)return failure('unavailable','binding_scope_changed');
+        if(stage==='sessions')return failure('unavailable','binding_session_list_failed');
         return failure('unavailable','binding_verification_unavailable');
       }
     } catch(error) {await this.options.probe.close();throw error;}

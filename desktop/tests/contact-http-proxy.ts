@@ -7,7 +7,7 @@ export function foregroundAcceptanceProjection(status: number | undefined, bytes
   const value = foregroundObservation(JSON.parse(bytes.toString('utf8')));
   const reasons = ['confirmed_active_binding', 'sync_disabled', 'wechat_not_in_front', 'quality_unverified',
     'session_candidates_truncated', 'ambiguous_requires_selection', 'unmatched_requires_selection',
-    'binding_verification_unavailable', 'observation_timeout', 'minimal_region_unavailable',
+    'binding_verification_unavailable', 'binding_scope_changed', 'binding_session_list_failed', 'observation_timeout', 'minimal_region_unavailable',
     'probe_not_found', 'probe_timeout', 'probe_warming', 'probe_warmup_timeout',
     'probe_output_invalid', 'screen_capture_permission_missing', 'probe_failed'];
   if (!reasons.includes(value.reason) || (value.contactId !== null && value.contactId !== contactId)) throw new Error('foreground_observation_invalid');
