@@ -6,11 +6,29 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
+/** 测试注入 codesign 执行替身，用于统计核验执行次数；生产路径始终用真实 codesign。 */
+let codesignExecutor: typeof execute = execute;
+export const testCodesignExecutor = (replacement: typeof execute | undefined): void => {
+  codesignExecutor = replacement ?? execute;
+};
 const layout = { directory: 'notalone-probe', entry: 'notalone-sync-probe',
   headerChange: 'notalone-header-change-source', library: 'libNotAloneSyncCore.dylib' } as const;
 const executableIdentifiers = { 'notalone-sync-probe': 'com.notalone.sync-probe.cli',
   'notalone-header-change-source': 'com.notalone.sync-probe.header-change' } as const;
 type BundledRuntime = { probe: string; headerChange?: string };
+/** 同一次启动进程内按资源目录记忆完整核验结果（成功与失败都记忆）；不做跨进程或跨启动缓存。 */
+const verifiedRuntimes = new Map<string, Promise<BundledRuntime | undefined>>();
+
+async function verifiedBundledRuntime(resourcesDirectory: string | undefined): Promise<BundledRuntime | undefined> {
+  if (!resourcesDirectory || !path.isAbsolute(resourcesDirectory)) return undefined;
+  const existing = verifiedRuntimes.get(resourcesDirectory);
+  if (existing) return existing;
+  const pending = (async () => {
+    try { return await verifyBundledRuntime(resourcesDirectory); } catch { return undefined; }
+  })();
+  verifiedRuntimes.set(resourcesDirectory, pending);
+  return pending;
+}
 
 export async function resolveSyncProbePath(resourcesDirectory: string | undefined, configuredPath?: string): Promise<string | undefined> {
   const bundledRuntime = async () => (await verifiedBundledRuntime(resourcesDirectory))?.probe;
@@ -36,7 +54,7 @@ export async function resolveHeaderChangeSourcePath(resourcesDirectory: string |
 }
 
 // 仅核对包内清单和字节完整性，不运行输入、加载动态库或宣称发行者可信。
-async function verifiedBundledRuntime(resourcesDirectory: string | undefined): Promise<BundledRuntime | undefined> {
+async function verifyBundledRuntime(resourcesDirectory: string | undefined): Promise<BundledRuntime | undefined> {
   if (!resourcesDirectory || !path.isAbsolute(resourcesDirectory)) return undefined;
   try {
     const resources = await realpath(resourcesDirectory);
@@ -99,8 +117,8 @@ async function verifiedBundledRuntime(resourcesDirectory: string | undefined): P
       const options = { timeout: Math.max(1, Math.min(2000, deadline - Date.now())), maxBuffer: 32_768,
         env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } };
       if (Date.now() >= deadline) return undefined;
-      await execute('/usr/bin/codesign', ['--verify', '--strict', path.join(root, name)], options);
-      const { stderr } = await execute('/usr/bin/codesign', ['--display', '--verbose=2', path.join(root, name)], options);
+      await codesignExecutor('/usr/bin/codesign', ['--verify', '--strict', path.join(root, name)], options);
+      const { stderr } = await codesignExecutor('/usr/bin/codesign', ['--display', '--verbose=2', path.join(root, name)], options);
       const declared = stderr.split(/\r?\n/).filter(line => line.startsWith('Identifier='));
       if (declared.length !== 1 || declared[0] !== `Identifier=${executableIdentifiers[name]}`) return undefined;
     }
