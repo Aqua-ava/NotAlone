@@ -18,7 +18,7 @@ NotAlone 是面向用户真实联系人的中文关系感知回复助手。产�
 - **工作流**：涉及功能、Bug、架构或测试改动时，先读 [Agent 工作流](docs/agents/workflow.md)。讨论模式分析并按需隔离复现；实现模式连续推进；决策模式仅在真正的范围、架构或高风险决策不明确时暂停询问。主 Agent 可主动使用子 Agent，按该文档的“子 Agent 协作”执行，无需逐次确认。
 - **工程操作**：修改仓库文件、运行项目、安装依赖、设计或执行测试、解读验证结论或准备部署前，读 [工程工作流](docs/agents/engineering.md)，遵循其中的环境、第三方 API 查证、验证、桌面验收和 Git 规则。
 - **DSH 底座**：NotAlone 按 ADR-102 通过官方 profile 和薄插件使用 DSH。涉及 DSH 启动、插件、模型、Agent、Tool、Skill、会话或依赖升级前，必须执行 [DSH 源码查证流程](docs/agents/dsh-development.md)：核对锁定与安装版本，阅读对应源码、类型和示例，记录依据后再实现；接口未知时先查证，不臆造 API 或绕过官方扩展机制。
-- **领域变更**：修改联系人、导入、消息、记忆、检索、回复、同步、隐私、删除、后台任务、Agent/Tool/MCP 或 ADR 前，按[领域文档](docs/agents/domain.md)定位现行规格的相关章节。产品按本机应用设计；术语见 `CONTEXT.md`，当前要求见 `architecture/current/`。仅在解释不足、冲突或复审取舍时查具体 ADR，历史协议与归档不作默认必读。
+- **领域变更**：修改联系人、导入、消息、记忆、检索、回复、同步、隐私、删除、后台任务、Agent/Tool/MCP 前，按[领域文档](docs/agents/domain.md)定位现行规格的相关章节。产品按本机应用设计；术语见 `CONTEXT.md`，当前要求见 `architecture/current/`。ADR 已冻结为只读历史：仅在解释不足、冲突或复审取舍时查阅，不再为实现细节新增；规则变化直接改现行规格，细则见[决策与文档记录](docs/agents/workflow.md#决策与文档记录)。历史协议与归档不作默认必读。
 - **任务与规格**：创建、发布、读取或处理 `.scratch/` 中的 Local Markdown 任务与规格时，读 [Issue tracker](docs/agents/issue-tracker.md)；评估下一步处理状态时，读 [Triage 标签](docs/agents/triage-labels.md)，使用其中的五个默认标签。
 
 ## 通用工作规则
