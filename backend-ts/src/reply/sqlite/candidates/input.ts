@@ -69,8 +69,34 @@ function knowledge(tx:StorageTransaction,scope:DiscussionScope,items:readonly Re
  const batch=frozen?reader.requireFrozenBatch:reader.requireCurrentBatch;
  if(batch)batch(tx,scope,items);else for(const item of items)(frozen&&reader.requireFrozen?reader.requireFrozen:reader.requireCurrent)(tx,scope,item);
 }
-export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contextId:string;requestId:string;workspace?:ReplyWorkspaceSnapshot;queryText?:string},reader:ReplyKnowledgeReader):FrozenReplyInput[]{
+const DAY_MS=86_400_000;
+const sourceDate=new Intl.DateTimeFormat('sv-SE',{year:'numeric',month:'2-digit',day:'2-digit'});
+/** 相对冻结时刻的粗略距离，只作展示提示；不判断旧状态今天是否仍成立。 */
+function ageLabel(end:number,at:number):string{
+ const days=Math.floor((at-end)/DAY_MS);
+ if(days<0)return '';
+ if(days<30)return '近30天内';
+ if(days<365)return `约${Math.floor(days/30)}个月前`;
+ return `约${Math.floor(days/365)}年前`;
+}
+/**
+ * 记忆的来源聊天发送时间随输入附给模型，时间不写进记忆正文：取直接来源消息的 sent_at，
+ * 缺失保持未知，不用保存、提取或采纳时间补造。冻结在本次输入文字里，之后不随当前资料改写。
+ */
+export function memorySourceTimeLabel(tx:StorageTransaction,ownerId:string,sources:readonly ReplySource[],at:number):string{
+ const times:number[]=[];
+ for(const source of sources){
+  const row=tx.get('SELECT sent_at FROM message WHERE owner_id=? AND contact_id=? AND id=?',[ownerId,source.contactId,source.messageId]);
+  const value=row?.sent_at;
+  if(typeof value==='bigint'&&value>=0n&&value<=BigInt(Number.MAX_SAFE_INTEGER)&&Number.isFinite(new Date(Number(value)).getTime()))times.push(Number(value));
+ }
+ if(!times.length)return '（聊天时间未知）';
+ const start=Math.min(...times),end=Math.max(...times),first=sourceDate.format(start),last=sourceDate.format(end),age=ageLabel(end,at);
+ return `（聊天时间：${first===last?first:`${first} 至 ${last}`}${age?`，${age}`:''}${times.length<sources.length?'，部分来源时间未知':''}）`;
+}
+export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contextId:string;requestId:string;workspace?:ReplyWorkspaceSnapshot;queryText?:string;at?:number},reader:ReplyKnowledgeReader):FrozenReplyInput[]{
  requireDiscussion(tx,i);
+ const frozenAt=typeof i.at==='number'&&Number.isSafeInteger(i.at)?i.at:Date.now();
  const includeRelatedData=!i.workspace||i.workspace.includeRelationshipContext;
  const items:Omit<FrozenReplyInput,'itemNo'>[]=[];
  // 候选只冻结本次消息；entry 是旧讨论兼容槽，Skill 走独立受控读取，均不隐式成为候选材料，也不读取 discussion_entry 正文。
@@ -94,7 +120,9 @@ export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contex
  const related=includeRelatedData?selectReplyKnowledge(reader.read(tx,i),query):[];
  knowledge(tx,i,related,reader);
  for(const item of related){
-  items.push({kind:item.kind,identity:item,text:(item.qualification==='unconfirmed'?'【未确认候选，仅供参考】':'')+item.text,sources:item.sources});
+  // 记忆／候选末尾附来源聊天时间；文档是多来源整理，不在此处标注。
+  const timeLabel=item.kind==='document'?'':memorySourceTimeLabel(tx,i.ownerId,item.sources,frozenAt);
+  items.push({kind:item.kind,identity:item,text:(item.qualification==='unconfirmed'?'【未确认候选，仅供参考】':'')+item.text+timeLabel,sources:item.sources});
  }
  const details=tx.get('SELECT * FROM reply_candidate_request WHERE owner_id=? AND request_id=?',[i.ownerId,i.requestId])??fail('reply_request_unavailable');
  if(details.coverage_warning&&includeRelatedData)items.push({kind:'coverage',identity:{coverage:coverageSnapshot(String(details.coverage_json))},text:String(details.coverage_warning),sources:[]});

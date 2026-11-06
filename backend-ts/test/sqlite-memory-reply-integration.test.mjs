@@ -19,6 +19,7 @@ test('真实08写者与12消费者同事务冻结正式版本，删除本人贡�
  await turns.generate({contactId:b,discussionId:d.id,requestKey:randomUUID(),text:'结合当前本人资料表达',confirmedContact:true});
  const before=await service.view(b,d.id);assert.equal(before[0].candidates[0].basis[0].verification,'actual_input');
  assert.match(JSON.stringify(f.requests[0]),/用户长期偏好绿茶/);assert.equal(f.requests.length,1);
+ assert.match(JSON.stringify(f.requests[0]),/用户长期偏好绿茶[^"]*（聊天时间：\d{4}-\d{2}-\d{2}，约\d+年前）/,'记忆随输入附来源聊天时间，而不是只给正文');
  const frozenKnowledge=await f.storage.execute('fixture.memoryKnowledge',{ownerId:f.owner,contactId:b,discussionId:d.id}),affectedSelf=new Set(frozenKnowledge.filter(k=>k.scopeKind==='owner'&&k.sources.some(s=>s.contactId===a)).map(k=>k.id));
  const deletion=new DeletionService(f.storage,f.holders,new ManagedFiles(f.root)),plan=await deletion.plan({ownerId:f.owner,requestKey:randomUUID(),scope:{kind:'contact',contactId:a}}),done=await deletion.advance(plan);
  assert.equal(done.state,'completed',JSON.stringify(done.checks));assert.deepEqual(await service.view(b,d.id),[]);
