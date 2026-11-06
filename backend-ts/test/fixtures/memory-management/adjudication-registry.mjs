@@ -26,7 +26,10 @@ export const registry={...base,actions:[...base.actions,versionClosurePlans,{
    items:tx.all('SELECT effect_kind,state,count(*) AS n FROM operation_item WHERE owner_id=? GROUP BY effect_kind,state ORDER BY effect_kind,state',[ownerId]),
   };
  },
-},{
+ },{ name:'fixture.extractionTrace',mode:'read',retryBusy:false,execute(tx,{ownerId}){
+  // 提取核验事件单独回传：验证 time_unverified 等候选层证据时不需要放宽主追踪过滤。
+  return tx.all("SELECT e.kind,e.payload FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE e.owner_id=? AND s.kind='extraction_verification' ORDER BY e.rowid",[ownerId]).map(e=>({...e,payload:JSON.parse(e.payload)}));
+ }},{
  // 状态注入：把提取核验步骤置为 unknown，用来验证放弃动作只处理裁决类未知。
  name:'fixture.markExtractionStepUnknown',mode:'write',retryBusy:false,execute(tx,{ownerId,runId}){
   return tx.run("UPDATE processing_step SET state='unknown' WHERE owner_id=? AND kind='extraction_verification' AND id=(SELECT s.id FROM processing_step s JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE s.owner_id=? AND t.run_id=? AND s.kind='extraction_verification' ORDER BY s.step_no LIMIT 1)",[ownerId,ownerId,runId]);

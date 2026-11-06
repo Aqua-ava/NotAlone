@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {adjudicationFixture,adjudicationSupplier} from './fixtures/memory-management/adjudication-support.mjs';
+import {adjudicationFixture,adjudicationSupplier,owner} from './fixtures/memory-management/adjudication-support.mjs';
+import {AMBIGUITY_NOTE} from '../src/memory/extraction/bounded.ts';
 const seed=async(f,count=1)=>{await f.extract(Array.from({length:count},(_,i)=>`我长期保留合成事项${i}。`),{publish:true});f.calls.length=0;};
 const modify=(result,tool,transform)=>{const value=JSON.parse(result.blocks[0].arguments);transform(value);return {blocks:[{type:'tool-call',name:tool,arguments:JSON.stringify(value)}]};};
 for(const side of ['new','old'])test(`关系核验仅引用${side==='new'?'新':'旧'}来源不得发布更新`,async t=>{
@@ -71,4 +72,42 @@ test('部分父合并只核验所选父，未选C的引句不能成为隐含依�
  const f=await adjudicationFixture(t);await seed(f,3);const original=(await f.read()).memories,selected=original.slice(0,2).map(m=>m.id),unselected=original[2],normal=adjudicationSupplier({action:'merge',select:parents=>parents.filter(p=>selected.includes(p.memory_id))});let requestParents=[];
  f.setRespond(async(request,input)=>{const result=await normal(request,input);if(request.purpose!=='merge_verification')return result;const payload=JSON.parse(request.user).candidate_and_parents;requestParents=payload.sources.prior.map(p=>p.memory_id);return modify(result,request.tool.name,value=>{value.evidence.push(...unselected.current.sources.map(s=>({message_id:s.messageId,quote:s.quote})));});});
  await f.extract(['我补充所选两项。'],{publish:true});assert.deepEqual(new Set(requestParents),new Set(selected));assert.deepEqual((await f.read()).memories,original);assert.equal((await f.trace()).events.filter(e=>e.kind==='adjudication_result').at(-1).payload.reason,'memory_merge_pending');
+});
+
+test('alternatives 自由文本不再拦截，采纳事件记录 adopted_with_alternatives',async t=>{
+ const f=await adjudicationFixture(t);await seed(f);
+ f.setExtractionTransform(memory=>{memory.alternatives=['该动作用到工具，本窗未提到具体对象。'];});
+ await f.extract(['我补充一条带未写细节的合成事项。'],{publish:true});
+ const view=await f.read();assert.equal(view.memories.length,2);
+ const latest=(await f.trace()).events.filter(e=>e.kind==='adjudication_result').at(-1);
+ assert.equal(latest.payload.reason,null);assert.equal(latest.payload.action,'auto_accept');
+ assert.deepEqual(latest.payload.adopted_with_alternatives,['该动作用到工具，本窗未提到具体对象。']);
+});
+
+test('alternatives 全为未决指代标注时仍待确认',async t=>{
+ const f=await adjudicationFixture(t);await seed(f);
+ f.setExtractionTransform(memory=>{memory.alternatives=[AMBIGUITY_NOTE];});
+ await f.extract(['我提到那个合成的安排。'],{publish:true});
+ const view=await f.read();assert.equal(view.memories.length,1);
+ assert.ok(view.candidates.some(c=>c.state==='pending'));
+ assert.ok((await f.trace()).events.filter(e=>e.kind==='adjudication_result').length<2,'冻结门槛失败时不得产生新的裁决结果');
+});
+
+test('事件标注未核实时丢弃标注正文继续，核验结果记 time_unverified',async t=>{
+ const f=await adjudicationFixture(t);await seed(f);
+ f.setExtractionTransform(memory=>{memory.event={version:1,stage:'planned',stage_evidence:[],occurrence_start:null,occurrence_end:null,occurrence_evidence:[]};});
+ await f.extract(['我计划近期完成一项合成事项。'],{publish:true});
+ const view=await f.read();assert.equal(view.memories.length,2);
+ const contract=(await f.storage.execute('fixture.extractionTrace',{ownerId:owner})).filter(e=>e.kind==='verification_contract').at(-1);
+ assert.ok(contract.payload.results[0].time_unverified,JSON.stringify(contract.payload));
+ const latest=(await f.trace()).events.filter(e=>e.kind==='adjudication_result').at(-1);
+ assert.equal(latest.payload.reason,null);assert.equal(latest.payload.action,'auto_accept');
+});
+
+test('条件无来源支持的候选在核验层被拒，不进入采纳',async t=>{
+ const f=await adjudicationFixture(t);await seed(f);
+ f.setExtractionTransform(memory=>{memory.conditions={version:1,items:[{text:'若无其他安排则维持',evidence:[]}]};});
+ await f.extract(['我在条件允许时完成一项合成事项。'],{publish:true});
+ const view=await f.read();assert.equal(view.memories.length,1);
+ assert.ok(!view.candidates.some(c=>c.state==='pending'),JSON.stringify(await f.read()));
 });

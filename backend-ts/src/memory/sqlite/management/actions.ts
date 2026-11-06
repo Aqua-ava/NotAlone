@@ -2,6 +2,7 @@ import {qualificationSources} from './dependencies.ts';
 import {randomUUID,createHash} from 'node:crypto';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {verifiedExtractionOutput} from '../outputs.ts';
+import {AMBIGUITY_NOTE} from '../../extraction/bounded.ts';
 import {available,body,fail,id,integer,requireCandidate,requireAutomaticCandidate,requireSources,requireVersion,scope} from './qualification.ts';
 import {managementRead,managementHistory} from './read.ts';
 import {prepareManagementTimeline} from './timeline.ts';
@@ -126,7 +127,20 @@ export function applyDecision(tx:StorageTransaction,input:unknown,system=false,a
  if(action==='auto_accept'&&!authority&&tx.get('SELECT 1 FROM memory WHERE owner_id=? AND scope_kind=? AND contact_id IS ?',[ownerId,s.scopeKind,s.contactId]))fail('memory_relationship_pending');
  if(system){
   const fact=verifiedExtractionOutput(tx,{ownerId,eventId:String(candidates[0]!.event_id)}).fact;
-  if(Array.isArray(fact.alternatives)&&fact.alternatives.length||fact.invalid_at&&Date.parse(fact.invalid_at)<=Date.now()||fact.conditions?.items.some((item:any)=>item.source_supported!==true)||fact.event&&(!fact.event.stage_verified||!fact.event.occurrence_verified&&fact.event.occurrence_start!==null))fail('memory_conditions_pending');
+  // 与裁决前置门槛同一口径：整组未决指代、过期事实、条件无来源支持整体拦截；
+  // 自由文本 alternatives 降级放行，未核实的事件标注按现行规格丢弃并留痕，都不再变成待确认。
+  const eventTimeUnverified=!!fact.event&&(!fact.event.stage_verified||!fact.event.occurrence_verified&&fact.event.occurrence_start!==null);
+  if(Array.isArray(fact.alternatives)&&fact.alternatives.length&&fact.alternatives.every((entry:unknown)=>entry===AMBIGUITY_NOTE)||fact.invalid_at&&Date.parse(fact.invalid_at)<=Date.now()||fact.conditions?.items.some((item:any)=>item.source_supported!==true))fail('memory_conditions_pending');
+  if(!authority){
+   const attemptId=String(candidates[0]!.produced_attempt_id);
+   const trace=(kind:string,payload:Record<string,unknown>)=>{
+    const attempt=tx.get('SELECT step_id FROM step_attempt WHERE owner_id=? AND id=?',[ownerId,attemptId]);if(!attempt)return;
+    const n=tx.get('SELECT coalesce(max(event_no),0)+1 AS n FROM execution_event WHERE owner_id=? AND step_attempt_id=?',[ownerId,attemptId])!.n;
+    tx.run('INSERT INTO execution_event(owner_id,id,step_attempt_id,event_no,kind,originated_call_id,reused_call_id,payload,created_at) VALUES(?,?,?,?,?,NULL,NULL,?,?)',[ownerId,randomUUID(),attemptId,n,kind,JSON.stringify(payload),Date.now()]);
+   };
+   if(eventTimeUnverified)trace('time_unverified',{candidateId:candidates[0]!.id});
+   if(Array.isArray(fact.alternatives)&&fact.alternatives.length)trace('adopted_with_alternatives',{candidateId:candidates[0]!.id,alternatives:[...fact.alternatives]});
+  }
  }
  if(candidates.some(c=>c.scope_kind!==s.scopeKind||c.contact_id!==s.contactId))fail('memory_scope_mismatch');
  if(action==='auto_noop'){

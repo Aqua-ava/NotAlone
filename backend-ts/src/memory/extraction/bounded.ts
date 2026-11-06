@@ -36,7 +36,8 @@ const PERIOD_KINDS=new Set(['plan','hypothesis']);
 const CONDITION=/^(?:如果|假如|要是|倘若|若)/u;
 const KNOWN_INTERPRETATION='按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。';
 const COMPLETED_INTERPRETATION='原文完成问答明确表示动作已完成，程序据此保留历史动作，不设置当天失效。';
-const AMBIGUITY_NOTE='原文指代在本窗口无法唯一确定，保留原句。';
+/** bounded 路径的未决指代标注：整组非此即拒收，采纳门槛据此区分真歧义与自由文本不确定性。 */
+export const AMBIGUITY_NOTE='原文指代在本窗口无法唯一确定，保留原句。';
 
 const GROUNDED_V2_PROMPT=`对同一联系人的原文分句进行结构化标注。只返回工具结构，不改写正文。
 units是按工具预设字段填写的对象，每个target字段必填，不再输出unit编号；context 仅供理解，不单独输出。不能删除分句来掩盖不知道或未决定。

@@ -10,6 +10,7 @@ import type {AdjudicationItem,AdjudicationSource,SimilarMemory} from '../../adop
 import {requireImageCitation} from '../content-citation.ts';
 import {parseAdjudications,parseRelations,mergeResult} from '../../adoption/adjudication-dsh.ts';
 import {readExtractionToolArguments} from '../../extraction/arguments.ts';
+import {AMBIGUITY_NOTE} from '../../extraction/bounded.ts';
 import {applyDecision,retireMergedParents} from './actions.ts';
 import {sourceVerificationState} from './evidence.ts';
 import {memoryTimeEligibility} from './temporal.ts';
@@ -18,7 +19,7 @@ import {qualificationSources,mergeKnowledgeSources} from './dependencies.ts';
 import type {SqliteAdjudicationModelPurpose} from './model-port.ts';
 const purposes=['adjudication','relation_verification','merge_verification'] as const;
 const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value,(_key,v)=>typeof v==='bigint'?v.toString():v)).digest('hex');
-interface Basis {pageIndex:number;candidateId:string;candidateRevision:string;runId:string;taskId:string;scopeKind:'self'|'contact';contactId:string|null;memoryRevision:string;intentRevision:string;item:AdjudicationItem;parents:{id:string;versionNo:string;headRevision:string;protected:boolean}[];}
+interface Basis {pageIndex:number;candidateId:string;candidateRevision:string;runId:string;taskId:string;scopeKind:'self'|'contact';contactId:string|null;memoryRevision:string;intentRevision:string;eventTimeUnverified?:1;item:AdjudicationItem;parents:{id:string;versionNo:string;headRevision:string;protected:boolean}[];}
 export interface AdjudicationClaim {attemptId:string;stepId:string;basis:Basis;claim:ModelTaskClaim;}
 const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>unknown):StorageAction=>({name:`memoryAdjudication.${name}`,mode,retryBusy:mode==='write',execute} as StorageAction);
 /** 候选最近一次已记录裁决结果所依据的冻结快照，与当前快照（忽略控制修订与分页）是否一致。 */
@@ -74,7 +75,12 @@ function freeze(tx:StorageTransaction,ownerId:string,candidateId:string):Basis {
  if(task.pause_requested_at!==null)fail('memory_adjudication_paused');
  const scopeKind=c!.scope_kind as 'self'|'contact',contactId=c!.contact_id as string|null;available(tx,ownerId,{scopeKind,contactId},true);
  const fact=output.fact;
- if(memoryTimeEligibility(tx,ownerId,{candidateId})!=='eligible'||fact.alternatives?.length||fact.conditions?.items.some((x:any)=>x.source_supported!==true)||fact.event&&(!fact.event.stage_verified||!fact.event.occurrence_verified&&fact.event.occurrence_start!==null))fail('memory_conditions_pending');
+ // 事件标注不可核实属可选信息：丢弃标注、正文继续（现行规格第 4 条），并在采纳历史留 time_unverified 痕。
+ const eventTimeUnverified=fact.event&&(!fact.event.stage_verified||!fact.event.occurrence_verified&&fact.event.occurrence_start!==null)?1:undefined;
+ const effectiveFact=eventTimeUnverified?{...fact,event:null}:fact;
+ // 前置门槛只保证数据正确性：时间不合格、整组都是未决指代、条件无来源支持；
+ // 自由文本 alternatives 属不确定性表达，不再新增人工审核门，采纳时留 adopted_with_alternatives 痕。
+ if(memoryTimeEligibility(tx,ownerId,{candidateId})!=='eligible'||effectiveFact.alternatives?.length&&effectiveFact.alternatives.every((x:any)=>x===AMBIGUITY_NOTE)||effectiveFact.conditions?.items.some((x:any)=>x.source_supported!==true))fail('memory_conditions_pending');
  const memories=tx.all("SELECT * FROM memory WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND state IN ('active','withdrawn') ORDER BY id",[ownerId,scopeKind,contactId]);
  const parents:Basis['parents']=[],similar:SimilarMemory[]=[];
  for(const m of memories){
@@ -90,8 +96,8 @@ function freeze(tx:StorageTransaction,ownerId:string,candidateId:string):Basis {
  // 候选自身含图片，或主题相同、缺失而无法证明无关时，仍保留比较并交由待确认。
  const candidateHasImage=candidateSources.some(source=>source.content_kind==='image');
  const comparable=candidateHasImage?similar:similar.filter(memory=>!memory.source_texts.some(source=>source.content_kind==='image')||!memory.topic||!fact.topic||memory.topic===fact.topic);
- const item:AdjudicationItem={candidate_index:0,candidate:fact,candidate_source_receipt:digest(candidateSources),candidate_source_texts:candidateSources,relation_source_receipt:digest({candidateSources,similar:comparable}),similar:comparable};
- return {pageIndex:0,candidateId,candidateRevision:String(c!.state_revision),runId:String(task.run_id),taskId:String(task.id),scopeKind,contactId,memoryRevision:String(revision(tx,ownerId,scopeKind,contactId)),intentRevision:String(task.intent_revision),item,parents};
+ const item:AdjudicationItem={candidate_index:0,candidate:effectiveFact,candidate_source_receipt:digest(candidateSources),candidate_source_texts:candidateSources,relation_source_receipt:digest({candidateSources,similar:comparable}),similar:comparable};
+ return {pageIndex:0,candidateId,candidateRevision:String(c!.state_revision),runId:String(task.run_id),taskId:String(task.id),scopeKind,contactId,memoryRevision:String(revision(tx,ownerId,scopeKind,contactId)),intentRevision:String(task.intent_revision),...(eventTimeUnverified?{eventTimeUnverified}:{}),item,parents};
 }
 function record(tx:StorageTransaction,ownerId:string,attemptId:string,kind:string,payload:unknown,callId?:string,reused=false,pageOnly=false):string {
  const a=tx.get('SELECT step_id FROM step_attempt WHERE owner_id=? AND id=?',[ownerId,attemptId]);if(!a)fail('memory_adjudication_stale');
@@ -212,7 +218,10 @@ function finish(tx:StorageTransaction,raw:unknown,lease:StorageLease) {
  }
  let result=null;
  // 先记录真实裁决；采纳与完成仍在同一事务，任何CAS或来源失败会全部回滚。
- record(tx,ownerId,first.id,'adjudication_result',{candidateId:basis.candidateId,reason,action:reason?'pending':action,parentMemoryIds:parents.map(p=>p.id),text:text??item.candidate.text});
+ // 采纳留痕：未核实事件标注与自由文本不确定性都记入裁决结果事件，不新增持久字段。
+ const notice:Record<string,unknown>={};
+ if(!reason){if(basis.eventTimeUnverified)notice.time_unverified=true;const alternatives=item.candidate.alternatives;if(Array.isArray(alternatives)&&alternatives.length)notice.adopted_with_alternatives=[...alternatives];}
+ record(tx,ownerId,first.id,'adjudication_result',{candidateId:basis.candidateId,reason,action:reason?'pending':action,parentMemoryIds:parents.map(p=>p.id),text:text??item.candidate.text,...notice});
  if(!reason&&skippedSources)record(tx,ownerId,first.id,'skipped_duplicate',{candidateId:basis.candidateId,...skippedSources});
  if(!reason){
   result=applyDecision(tx,{ownerId,request:{requestKey:`memory:adjudication:${String(first.attempt.step_id)}`,action,candidateIds:[basis.candidateId],candidateRevisions:[basis.candidateRevision],...(target?{memoryId:target.id,expectedVersionNo:target.versionNo,expectedHeadRevision:target.headRevision}:{})}},true,{executionId:first.id,body:text,formation,parents:parents.map(p=>({memoryId:p.id,versionNo:BigInt(p.versionNo)}))});

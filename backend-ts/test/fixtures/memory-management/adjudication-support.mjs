@@ -33,10 +33,19 @@ export async function adjudicationFixture(t,options={}){
  const contactId=f.saved[0].contact_id,scope={scopeKind:'contact',contactId},management=new SqliteMemoryManagement(f.storage,owner),records=[],calls=[],failures=[];
  let nextRecord=0,extraction,respond=options.respond??adjudicationSupplier();
  const normal=supplier();
+ // 提取与裁决走两个端口；提取端可被注入候选改写，验证门槛降级等依赖候选字段的行为。
+ let extractionTransform=null;
  const extractionPort=modelPort(()=>extraction.accounting,async(request,input)=>{
   if(request.purpose!=='extraction')return normal.respond(request,input);
   const payload=JSON.parse(request.user);
-  return normal.respond({...request,user:JSON.stringify({...payload,messages:payload.messages.filter(m=>payload.target_message_ids.includes(m.message_id))})},input);
+  let result=await normal.respond({...request,user:JSON.stringify({...payload,messages:payload.messages.filter(m=>payload.target_message_ids.includes(m.message_id))})},input);
+  if(extractionTransform){
+   const value=JSON.parse(result.blocks[0].arguments);
+   for(const memory of value.scenes[0].memories)extractionTransform(memory);
+   await request.validateOutput(result.blocks);
+   result={blocks:[{type:'tool-call',name:request.tool.name,arguments:JSON.stringify(value)}]};
+  }
+  return result;
  });
  extraction=new SqliteMemoryExtraction(f.storage,owner,extractionPort);t.after(()=>extraction.close());
  const port={...modelPort(()=>extraction.accounting,async(request,input)=>{calls.push({purpose:request.purpose,payload:JSON.parse(request.user),claim:{...input.claim}});return respond(request,input);}),close:async()=>{}};
@@ -52,5 +61,5 @@ export async function adjudicationFixture(t,options={}){
   await management.importRun(run.runId);if(publish)await adjudication.publishRun(run.runId);return run.runId;
  }
  return {...f,owner,contactId,scope,management,extraction,adjudication,port,calls,failures,normal,extract,newRuntime,
-  setRespond(next){respond=next;},read:()=>readAllManagement(management,scope),trace:()=>f.storage.execute('fixture.adjudicationTrace',{ownerId:owner})};
+  setRespond(next){respond=next;},setExtractionTransform(next){extractionTransform=next;},read:()=>readAllManagement(management,scope),trace:()=>f.storage.execute('fixture.adjudicationTrace',{ownerId:owner})};
 }
