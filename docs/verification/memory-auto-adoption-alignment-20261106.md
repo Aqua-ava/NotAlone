@@ -62,3 +62,56 @@
 - 后端存量失败（与本任务无关，已基线对照）：`sqlite-memory-runtime` 2 条（模型装配）、`sqlite-memory-unknown-deletion` 1 条（未知占用）、`sqlite-memory-hybrid-upgrade` 1 条（storage_invalid）、跨文件偶发的 `old-source_stamp`/`跨 memory`/`38升级39` 组合失败。
 - 桌面 `npm test` 24/1371 失败（回复冻结策略、偏好、同步优先级、仓库探针等区），与本任务改动文件无交集，疑为环境干扰（待基线复核确认；本任务相关套件全绿）。
 - **桌面运行验收缺口**：CUA 助手缺少系统辅助功能授权，本会话未能用 Computer Use 操作真实 App 记忆页；自动化视图测试与类型检查已覆盖分栏与原因文案的渲染行为。授权补齐后按任务 05 工单的桌面验收补执行。
+
+## R2 补充：核验拒绝细分（任务 A）
+
+口径：总拒绝数取 `execution_event(kind=stage_result)` 的 `rejected` 求和（基线 4、R2 三 run 合计 9）；细分取 `kind=verification` 事件，每条候选一行，按 `candidateTraceId` 去重（未发现重试或重用造成的重复）。R2 的 9 条中 2 条在解析阶段即 `structure_rejected`、未进入核验，细分记 unknown。
+
+### verdict
+
+| verdict | 基线 | R2 三 run |
+| --- | --- | --- |
+| `continue` | 18 | 15 |
+| `unverified_rejected` | 3 | 7 |
+| `unsupported_rejected` | 1 | 0 |
+| 未核验（结构拒绝，unknown） | 0 | 2 |
+| 拒绝合计（= `stage_result.rejected` 求和） | 4 | 9 |
+| 原始候选数（`candidate_raw`） | 22 | 24 |
+| 进入核验的候选数（`verification` 事件） | 22 | 22 |
+
+### issues（拒绝候选主因，互斥）
+
+| issues 主因 | 基线 | R2 三 run |
+| --- | --- | --- |
+| `subject` | 3 | 5 |
+| `meaning` | 1 | 2 |
+| `insufficient_evidence` | 0 | 0 |
+| 其他 | 0 | 0 |
+| 未核验（unknown） | 0 | 2 |
+
+附加 issue 出现次数：基线 `insufficient_evidence` 1；R2 `time` 1、`pragmatics` 1。
+
+### 候选是否由合并产生
+
+| 维度 | 基线 | R2 三 run |
+| --- | --- | --- |
+| 合并（来源消息 ≥ 2） | 2 | 7 |
+| 单句（来源消息 = 1） | 2 | 2 |
+| unknown | 0 | 0 |
+
+### 归属
+
+| 归属 | 基线 | R2 三 run |
+| --- | --- | --- |
+| 联系人（含 shared 归入 contact 1 条） | 3 | 6 |
+| 用户本人 | 1 | 3 |
+| unknown | 0 | 0 |
+
+### 主体被拒的发送者兜底
+
+| 项 | 基线 | R2 三 run |
+| --- | --- | --- |
+| 主体被拒（issues 含 `subject`） | 3 | 5 |
+| 其中走了发送者兜底（`subject_mentions` 为空且 `resolution=unique_context`） | 0 | 0 |
+
+一句话结论：新增 5 条拒绝中 2 条是未进入核验的解析结构拒绝、3 条是核验拒绝增量（`subject` 2 条、`meaning` 1 条，同时 `unsupported` 由 1 降为 0），5 条全部落在合并候选而单句拒绝数不变，但合并与单句两组拒绝率同时上升、且主体被拒 0 条走发送者兜底（主体提及均为显式），故不能归因于合并或发送者兜底。
