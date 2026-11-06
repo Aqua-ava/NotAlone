@@ -3,6 +3,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {verifiedExtractionOutput} from '../outputs.ts';
 import {AMBIGUITY_NOTE} from '../../extraction/bounded.ts';
+import {AMBIGUITY_UNCONFIRMED,unconfirmedAmbiguity} from '../../extraction/ambiguity-guard.ts';
 import {available,body,fail,id,integer,requireCandidate,requireAutomaticCandidate,requireSources,requireVersion,scope} from './qualification.ts';
 import {managementRead,managementHistory} from './read.ts';
 import {prepareManagementTimeline} from './timeline.ts';
@@ -18,6 +19,14 @@ function advance(tx:StorageTransaction,ownerId:string,s:MemoryScope,formalChange
  if(s.scopeKind==='self')tx.run('UPDATE owner SET memory_revision=memory_revision+1 WHERE owner_id=?',[ownerId]);
  else tx.run('UPDATE contact SET memory_revision=memory_revision+1 WHERE owner_id=? AND id=?',[ownerId,s.contactId]);
  if(formalChanged){const at=Date.now();scheduleMemoryChange(tx,ownerId,s,at,runIds[0]);for(const runId of runIds.slice(1))scheduleMemoryChange(tx,ownerId,s,at,runId);}
+}
+/** 门槛失败时向候选的提取 attempt 留痕，读取层据此把「真待确认」从「未完成」里分开；同 attempt 同 kind 只记一次。 */
+export function recordCandidateGate(tx:StorageTransaction,ownerId:string,candidateId:unknown,kind:string,detail:Record<string,unknown>={}):void{
+ const candidate=tx.get('SELECT produced_attempt_id FROM memory_candidate WHERE owner_id=? AND id=?',[ownerId,String(candidateId)]);if(!candidate)return;
+ const attemptId=String(candidate.produced_attempt_id);
+ if(tx.get('SELECT 1 FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND kind=?',[ownerId,attemptId,kind]))return;
+ const n=tx.get('SELECT coalesce(max(event_no),0)+1 AS n FROM execution_event WHERE owner_id=? AND step_attempt_id=?',[ownerId,attemptId])!.n;
+ tx.run('INSERT INTO execution_event(owner_id,id,step_attempt_id,event_no,kind,originated_call_id,reused_call_id,payload,created_at) VALUES(?,?,?,?,?,NULL,NULL,?,?)',[ownerId,randomUUID(),attemptId,n,kind,JSON.stringify({candidateId:String(candidateId),...detail}),Date.now()]);
 }
 function result(tx:StorageTransaction,ownerId:string,d:StorageRow):MemoryDecisionResult{
  const v=tx.get('SELECT memory_id,version_no FROM memory_version WHERE owner_id=? AND decision_id=?',[ownerId,d.id]);
@@ -131,6 +140,10 @@ export function applyDecision(tx:StorageTransaction,input:unknown,system=false,a
   // 自由文本 alternatives 降级放行，未核实的事件标注按现行规格丢弃并留痕，都不再变成待确认。
   const eventTimeUnverified=!!fact.event&&(!fact.event.stage_verified||!fact.event.occurrence_verified&&fact.event.occurrence_start!==null);
   if(Array.isArray(fact.alternatives)&&fact.alternatives.length&&fact.alternatives.every((entry:unknown)=>entry===AMBIGUITY_NOTE)||fact.invalid_at&&Date.parse(fact.invalid_at)<=Date.now()||fact.conditions?.items.some((item:any)=>item.source_supported!==true))fail('memory_conditions_pending');
+  // 代码层兜底：只拦自动路径（system 且无裁决授权）——正文含未标注的易歧义结构且 alternatives 为空时降级待确认；
+  // 用户手动决定（memory.applyDecision，system=false）不经过这里，仍可按原逻辑采纳或修改；不改动已有原因码的含义。
+  const ambiguity=system&&!authority?unconfirmedAmbiguity({text:String(fact.text??''),interpretationReason:fact.interpretation_reason,alternatives:fact.alternatives}):null;
+  if(ambiguity){recordCandidateGate(tx,ownerId,candidates[0]!.id,AMBIGUITY_UNCONFIRMED,{rule:ambiguity.rule,token:ambiguity.token});fail(AMBIGUITY_UNCONFIRMED);}
   if(!authority){
    const attemptId=String(candidates[0]!.produced_attempt_id);
    const trace=(kind:string,payload:Record<string,unknown>)=>{
@@ -215,7 +228,7 @@ export const memoryManagementActions:StorageAction[]=[
   for(const candidateId of imported.candidateIds){
    const c=tx.get("SELECT * FROM memory_candidate WHERE owner_id=? AND id=? AND state='pending'",[ownerId,candidateId]);if(!c)continue;
    try{results.push(applyDecision(tx,{ownerId,request:{requestKey:`memory:auto:${String(c.event_id)}`,action:'auto_accept',candidateIds:[candidateId],candidateRevisions:[String(c.state_revision)]}},true));}
-   catch(error){if(!(error instanceof StorageFailure)||!['memory_relationship_pending','memory_conditions_pending','memory_verification_pending'].includes(error.code))throw error;}
+   catch(error){if(!(error instanceof StorageFailure)||!['memory_relationship_pending','memory_conditions_pending','memory_verification_pending',AMBIGUITY_UNCONFIRMED].includes(error.code))throw error;}
   }
   return {candidateIds:imported.candidateIds,decisions:results};
  }},

@@ -27,8 +27,8 @@ function pendingDerivation(tx:StorageTransaction,ownerId:string,c:StorageRow):{s
  if(result){const value=JSON.parse(String(result.payload));return value.reason?{stage:'decision_pending',reason:String(value.reason)}:{stage:'processing_incomplete',reason:null};}
  const passed=tx.get(`SELECT 1 FROM step_input i JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id WHERE i.owner_id=? AND i.kind='candidate' AND i.candidate_id=? AND s.kind='adjudication' LIMIT 1`,[ownerId,String(c.id)]);
  if(passed)return {stage:'processing_incomplete',reason:null};
- const gate=tx.get("SELECT 1 FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND kind='memory_conditions_pending' LIMIT 1",[ownerId,String(c.produced_attempt_id)]);
- if(gate)return {stage:'decision_pending',reason:'memory_conditions_pending'};
+ const gate=tx.get("SELECT kind FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND kind IN ('memory_conditions_pending','memory_ambiguity_unconfirmed') ORDER BY event_no LIMIT 1",[ownerId,String(c.produced_attempt_id)]);
+ if(gate)return {stage:'decision_pending',reason:String(gate.kind)};
  return {stage:'processing_incomplete',reason:null};
 }
 function candidateView(tx:StorageTransaction,ownerId:string,s:MemoryScope,c:StorageRow):MemoryCandidateView|null {

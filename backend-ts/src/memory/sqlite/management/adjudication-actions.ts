@@ -11,7 +11,8 @@ import {requireImageCitation} from '../content-citation.ts';
 import {parseAdjudications,parseRelations,mergeResult} from '../../adoption/adjudication-dsh.ts';
 import {readExtractionToolArguments} from '../../extraction/arguments.ts';
 import {AMBIGUITY_NOTE} from '../../extraction/bounded.ts';
-import {applyDecision,retireMergedParents} from './actions.ts';
+import {AMBIGUITY_UNCONFIRMED,unconfirmedAmbiguity} from '../../extraction/ambiguity-guard.ts';
+import {applyDecision,recordCandidateGate,retireMergedParents} from './actions.ts';
 import {sourceVerificationState} from './evidence.ts';
 import {memoryTimeEligibility} from './temporal.ts';
 import {available,fail,id,requireAutomaticCandidate,requireVersion,requireSources} from './qualification.ts';
@@ -44,14 +45,6 @@ function failureProvider(value:unknown):{name:string;code:string;status?:number}
  if(!v||typeof v!=='object'||(v.name!=='LlmError'&&v.name!=='LlmFailure')||typeof v.code!=='string'||!/^[A-Za-z0-9_.:-]{1,80}$/.test(v.code))return undefined;
  const status=typeof v.status==='number'&&Number.isSafeInteger(v.status)&&v.status>=100&&v.status<=599?v.status:undefined;
  return {name:v.name,code:v.code,...(status===undefined?{}:{status})};
-}
-/** 冻结前置门槛失败时向候选的提取 attempt 留痕，读取层据此把「真待确认」从「未完成」里分开。 */
-function recordGatePending(tx:StorageTransaction,ownerId:string,candidateId:bigint|string):void {
- const candidate=tx.get('SELECT produced_attempt_id FROM memory_candidate WHERE owner_id=? AND id=?',[ownerId,String(candidateId)]);if(!candidate)return;
- const attemptId=String(candidate.produced_attempt_id);
- if(tx.get("SELECT 1 FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND kind='memory_conditions_pending'",[ownerId,attemptId]))return;
- const n=tx.get('SELECT coalesce(max(event_no),0)+1 AS n FROM execution_event WHERE owner_id=? AND step_attempt_id=?',[ownerId,attemptId])!.n;
- tx.run('INSERT INTO execution_event(owner_id,id,step_attempt_id,event_no,kind,originated_call_id,reused_call_id,payload,created_at) VALUES(?,?,?,?,?,?,NULL,NULL,?,?)',[ownerId,randomUUID(),attemptId,n,'memory_conditions_pending',JSON.stringify({candidateId:String(candidateId)}),Date.now()]);
 }
 function revision(tx:StorageTransaction,ownerId:string,scopeKind:string,contactId:string|null):bigint {
  const r=scopeKind==='self'?tx.get('SELECT memory_revision FROM owner WHERE owner_id=?',[ownerId]):tx.get('SELECT memory_revision FROM contact WHERE owner_id=? AND id=?',[ownerId,contactId]);
@@ -89,6 +82,9 @@ function freeze(tx:StorageTransaction,ownerId:string,candidateId:string):Basis {
  // 前置门槛只保证数据正确性：时间不合格、整组都是未决指代、条件无来源支持；
  // 自由文本 alternatives 属不确定性表达，不再新增人工审核门，采纳时留 adopted_with_alternatives 痕。
  if(memoryTimeEligibility(tx,ownerId,{candidateId})!=='eligible'||effectiveFact.alternatives?.length&&effectiveFact.alternatives.every((x:any)=>x===AMBIGUITY_NOTE)||effectiveFact.conditions?.items.some((x:any)=>x.source_supported!==true))fail('memory_conditions_pending');
+ // 代码层兜底：模型没有标注 alternatives、正文却含易歧义结构时，不再进入裁决与自动采纳，直接降级待确认。
+ const ambiguity=unconfirmedAmbiguity({text:String(effectiveFact.text??''),interpretationReason:effectiveFact.interpretation_reason,alternatives:effectiveFact.alternatives});
+ if(ambiguity)fail(AMBIGUITY_UNCONFIRMED);
  const memories=tx.all("SELECT * FROM memory WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND state IN ('active','withdrawn') ORDER BY id",[ownerId,scopeKind,contactId]);
  const parents:Basis['parents']=[],similar:SimilarMemory[]=[];
  for(const m of memories){
@@ -252,7 +248,7 @@ export const memoryAdjudicationActions:StorageAction[]=[
   if(prior.length&&decidedWithSameBasis(tx,i.ownerId,i.candidateId,basis))return null;
   // 同一任务的目标资料已被未知裁决调用占位：继续领取只会在建调用前撞唯一索引，改为明确停止。
   if(unknownOccupancy(tx,i.ownerId,basis.taskId))fail('memory_adjudication_receipt_unknown');
-  return makeStep(tx,i.ownerId,basis,'adjudication',lease);} catch(error){if(error instanceof StorageFailure&&['memory_conditions_pending','memory_verification_pending','memory_withdrawn_scope_pending','memory_adjudication_pool_limit','memory_adjudication_paused'].includes(error.code)){try{if(error.code==='memory_conditions_pending')recordGatePending(tx,i.ownerId,id(i.candidateId));}catch{/* 留痕失败不改变原有门槛失败语义 */}return null;}throw error;}
+  return makeStep(tx,i.ownerId,basis,'adjudication',lease);} catch(error){if(error instanceof StorageFailure&&['memory_conditions_pending','memory_verification_pending','memory_withdrawn_scope_pending','memory_adjudication_pool_limit','memory_adjudication_paused',AMBIGUITY_UNCONFIRMED].includes(error.code)){try{if(error.code==='memory_conditions_pending'||error.code===AMBIGUITY_UNCONFIRMED)recordCandidateGate(tx,i.ownerId,id(i.candidateId),error.code);}catch{/* 留痕失败不改变原有门槛失败语义 */}return null;}throw error;}
  }),
  act('stage','write',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string;purpose:SqliteAdjudicationModelPurpose;pageIndex:number};if(!purposes.includes(i.purpose)||!Number.isSafeInteger(i.pageIndex)||i.pageIndex<0)fail('memory_adjudication_purpose_invalid');const {basis}=current(tx,i.ownerId,i.attemptId,lease);if(i.pageIndex>=Math.max(1,Math.ceil(basis.item.similar.length/8)))fail('memory_adjudication_purpose_invalid');return makeStep(tx,i.ownerId,{...basis,pageIndex:i.pageIndex},i.purpose,lease);}),
  act('holders','read',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string};const {attempt}=current(tx,i.ownerId,i.attemptId,lease);return tx.all("SELECT c.id AS contactId,c.data_generation AS generation FROM step_input i JOIN contact c ON c.owner_id=i.owner_id AND c.id=i.source_contact_id WHERE i.owner_id=? AND i.step_id=? AND i.kind='message' UNION SELECT c.id AS contactId,c.data_generation AS generation FROM task_contribution tc JOIN contact c ON c.owner_id=tc.owner_id AND c.id=tc.source_contact_id WHERE tc.owner_id=? AND tc.task_id=?",[i.ownerId,attempt.step_id,i.ownerId,attempt.task_id]).map(r=>({contactId:String(r.contactId),generation:String(r.generation)}));}),

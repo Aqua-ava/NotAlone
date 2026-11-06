@@ -171,3 +171,11 @@ Computer Use 实测（复用现有 `pnpm run dev` 实例，未打包、未起第
 口径说明：任务书里的「范围变化／名单读取失败／绑定读取失败」是前台定位原因码（`binding_scope_changed`／`binding_session_list_failed`／`binding_verification_unavailable`），不在记忆管理页；记忆页的拆分码是 `relation_conflict`／`evidence_incomplete`／`unsupported`／`inconsistent`。
 
 未覆盖：真库上的候选分栏、真实原因码文案、自动采纳记忆的来源与撤销入口无实测证据（源资格阻断）；撤销真实执行未做（会改真实数据）；前台定位三条码的真实故障场景未构造；`test:app` 隔离实例未使用。
+
+## 代码层兜底：易歧义结构且 alternatives 为空（任务 C 级别 3）
+
+R3 独立判定 unknown 且探针中 2/5 真两读空 `alternatives` 仍被自动采纳后，按 followup 第 4 节第 3 级增加确定性兜底。新模块 `backend-ts/src/memory/extraction/ambiguity-guard.ts`（原因码 `memory_ambiguity_unconfirmed`）：只识别两类字面结构（数量词省略单位、指代词无同条所指），仅在 `alternatives` 为空时命中；命中在裁决领取前置门槛（不建裁决步骤、不发起模型调用）、系统自动采纳/发布入口与 `memory.applyAutomaticDecision` 处降级为待确认，不删除候选、不调用模型；用户手动决定不受影响，已有原因码语义不变。
+
+离线验证（0 外发，只读隔离副本）：合成探针真两读空 `alternatives` 捕获 2/2；细节没说误报 0/5（进入候选口径 0/4）；真实窗口进入候选触发 2/43（4.7%），两条均为 R2 已知真歧义信号，已采纳候选命中 0/8，进入候选口径未观察到误伤（原始候选口径 1/73 为已被核验拒绝的边界指代）。测试：新增 `sqlite-memory-ambiguity-guard` 12/12；相关回归 35/35、18/18；`tsc` 通过；`sqlite-memory-candidate-admission` 3 条存量失败在无本改动的 HEAD 同样失败，非回归。
+
+限制与待办：规则在 R3 同源小样本上调参，存在过拟合风险，只做过离线验证、未做真实小批模型验证；界面原因码文案映射位于用户遗留未提交文件 `desktop/src/renderer/SqliteMemoryManagementPanel.tsx`，本次未触碰，新码暂走未知码兜底文案；回滚方式见 `.scratch/memory-auto-adoption-alignment/evidence/07-ambiguity-guard-offline.md`。
