@@ -20,6 +20,24 @@ test('E坏结构按原业务上限重试，V只请求一次，非支持结果不
  assert.ok(events.some(event=>event.stage==='extraction_recovery'));
 });
 
+test('低把握候选解析后记 low_value_dropped 丢弃，不进核验也不影响批次完成',async()=>{
+ const events=[];
+ const kept={...fact,confidence:0.5,text:'联系人有事爱直接打电话'};
+ const result=await runExtractionFlow({window,signal:new AbortController().signal,retry_delay_ms:0,
+  requireCurrent:async()=>{},record:async event=>{events.push(event);},
+  invoke:async request=>request.purpose==='extraction'
+   ?reply('DirectMemoryExtractionOutput',JSON.stringify({scenes:[{scene_name:'闲聊',memories:[{...fact,confidence:0.2,text:'联系人也说了一些零碎的话。'},kept]}]}))
+   :reply('SourceVerificationOutput',JSON.stringify({results:[{candidate_index:0,verdict:'supported',issues:[],evidence:[{message_id:message,quote:'有事爱直接打电话'}]}]}))});
+ const dropped=events.filter(event=>event.stage==='low_value_dropped');
+ assert.equal(dropped.length,1);
+ assert.equal(dropped[0].payload.threshold,0.5);assert.equal(dropped[0].payload.confidence,0.2);
+ const traceId=text=>events.find(event=>event.stage==='candidate_raw'&&event.payload.fields.text===text)?.candidate_trace_id;
+ assert.equal(dropped[0].candidate_trace_id,traceId('联系人也说了一些零碎的话。'));
+ assert.deepEqual(events.find(event=>event.stage==='verification_input').payload.candidate_trace_ids,[traceId('联系人有事爱直接打电话')]);
+ assert.deepEqual(result.accepted.map(item=>item.confidence),[0.5]);
+ assert.equal(result.rejected_count,0);assert.equal(result.extraction_completed,true);
+});
+
 test('追踪故障直接终止本批，不转成模型非法输出或重新调用',async()=>{
  let calls=0,records=0;
  await assert.rejects(runExtractionFlow({window,signal:new AbortController().signal,retry_delay_ms:0,

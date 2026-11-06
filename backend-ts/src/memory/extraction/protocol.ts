@@ -116,6 +116,9 @@ function parseEvent(value:unknown):MemoryEvent|null {
     occurrence_start:start,occurrence_end:end,occurrence_evidence:positions(raw.occurrence_evidence),occurrence_verified:false,occurrence_precision:precision,
     occurrence_expression:expression,anchor_message_id:raw.anchor_message_id==null?null:uuid(raw.anchor_message_id)};
 }
+/** 低把握候选的最低置信度（对齐腾讯偏好类阈值）：低于此线在解析后丢弃并记 low_value_dropped，不影响批次完成。 */
+export const LOW_VALUE_EXTRACTION_CONFIDENCE=0.5;
+
 /** malformed scene 拒绝一项；malformed memory 逐项拒绝；顶层缺 scenes 属整次输出错误。 */
 export function parseDirectExtraction(payload:unknown,window:ExtractionWindow):{accepted:ExtractedFact[];rejected_count:number;extraction_completed:true} {
   validateExtractionWindow(window);

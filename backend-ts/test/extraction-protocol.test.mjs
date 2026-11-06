@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseDirectExtraction, parseSourceVerification, validateSourceVerification, ExtractionProtocolError} from '../src/memory/extraction/protocol.ts';
+import {parseDirectExtraction, parseSourceVerification, validateSourceVerification, ExtractionProtocolError, LOW_VALUE_EXTRACTION_CONFIDENCE} from '../src/memory/extraction/protocol.ts';
+import {DIRECT_EXTRACTION_PROMPT,DIRECT_EXTRACTION_SCHEMA} from '../src/memory/extraction/prompts.ts';
+
+test('提取合同对齐宁缺毋滥、独立完整与归纳合并，alternatives 只记真实歧义，低把握候选按阈值丢弃',()=>{
+ assert.match(DIRECT_EXTRACTION_PROMPT,/宁缺毋滥：寒暄、只推进本次对话的一次性指令和没有后续价值的零碎感叹不输出/);
+ assert.match(DIRECT_EXTRACTION_PROMPT,/独立完整：每条记忆离开当前对话仍能读懂/);
+ assert.match(DIRECT_EXTRACTION_PROMPT,/归纳合并：同一话题的连续多句（因果、前因后果，或同一计划的几个侧面）合并为一条完整记忆/);
+ const alternativeDescription=String(DIRECT_EXTRACTION_SCHEMA.properties.scenes.items.properties.memories.items.properties.alternatives.description);
+ assert.match(alternativeDescription,/不得写入 alternatives/);
+ assert.match(alternativeDescription,/只在两种真实歧义下必须非空/);
+ assert.match(String(DIRECT_EXTRACTION_SCHEMA.properties.scenes.items.properties.memories.items.properties.confidence.description),/低于 0\.5 的候选会被丢弃并记入追踪/);
+ assert.equal(LOW_VALUE_EXTRACTION_CONFIDENCE,0.5);
+});
 
 const id='11111111-1111-4111-8111-111111111111', other='22222222-2222-4222-8222-222222222222';
 const window={owner_id:id,contact_id:other,messages:[{message_id:id,text:'有事爱直接打电话',sender:'contact',occurred_at:'2024-02-01T00:00:00Z',text_representation:'text'}],target_message_ids:[id]};

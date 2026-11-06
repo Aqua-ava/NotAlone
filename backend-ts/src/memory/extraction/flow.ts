@@ -3,7 +3,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {randomUUID} from 'node:crypto';
 import {DIRECT_EXTRACTION_PROMPT,DIRECT_EXTRACTION_SCHEMA} from './prompts.ts';
 import {readExtractionToolArguments,ExtractionArgumentsError} from './arguments.ts';
-import {parseDirectExtraction,parseSourceVerification,ExtractionProtocolError,validateExtractionWindow} from './protocol.ts';
+import {parseDirectExtraction,parseSourceVerification,ExtractionProtocolError,validateExtractionWindow,LOW_VALUE_EXTRACTION_CONFIDENCE} from './protocol.ts';
 import {buildSourceVerificationContract,buildSourceVerificationPayload,sourceCalendarPayload} from './contract.ts';
 import type {ExtractionWindow,ExtractedFact,SourceVerificationResult} from './protocol.ts';
 import {boundedExtractionInput,boundedExtractionPrompt,boundedExtractionSchema,bindBoundedFact,compileGroundedLabels,normalizeBoundedWindow,prepareBoundedForAdoption,sourceUnits} from './bounded.ts';
@@ -151,6 +151,12 @@ async function runLegacyExtractionFlow(options:ExtractionFlowOptions):Promise<Ex
   await options.record({stage:'parse',candidate_trace_id:candidate.candidate_trace_id,payload:fact?
    {status:'accepted',before:candidate.fields,after:fact}:
    {status:'rejected',disposition:'structure_rejected',not_executed:['verification','adoption','write']}});
+  // 低把握候选（寒暄、零碎表达）解析后丢弃：只记追踪折事件，不算结构拒绝，也不影响批次与水位完成。
+  if(fact&&fact.confidence<LOW_VALUE_EXTRACTION_CONFIDENCE){
+   await options.record({stage:'low_value_dropped',candidate_trace_id:candidate.candidate_trace_id,
+    payload:{confidence:fact.confidence,threshold:LOW_VALUE_EXTRACTION_CONFIDENCE,disposition:'low_value_dropped',not_executed:['verification','adoption','write']}});
+   continue;
+  }
   if(fact){facts.push(fact);traceIds.set(fact,candidate.candidate_trace_id);}
  }
  let admissions:VerificationAdmission[];
