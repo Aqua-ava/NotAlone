@@ -115,3 +115,13 @@
 | 其中走了发送者兜底（`subject_mentions` 为空且 `resolution=unique_context`） | 0 | 0 |
 
 一句话结论：新增 5 条拒绝中 2 条是未进入核验的解析结构拒绝、3 条是核验拒绝增量（`subject` 2 条、`meaning` 1 条，同时 `unsupported` 由 1 降为 0），5 条全部落在合并候选而单句拒绝数不变，但合并与单句两组拒绝率同时上升、且主体被拒 0 条走发送者兜底（主体提及均为显式），故不能归因于合并或发送者兜底。
+
+## 绑定状态、读取与删除核对（任务 B）
+
+结论 A（设计如此）：被报告为「重复导入」的一位联系人 9436 条消息分属 revoked 与 verified 两个绑定，是 ADR-144 来源重新认证后「旧绑定保留、新绑定重读」的预期存储事实；读取、提取目标、回复上下文、媒体与统计均经当前 verified 绑定过滤（`backend-ts/src/history/sqlite/current-scope.ts:7-21`、`:37-39`，`backend-ts/src/memory/sqlite/runs.ts:145-172`、`:178-181`，`backend-ts/src/reply/sqlite/requests.ts:15-30`，`backend-ts/src/media/sqlite/image-sync-actions.ts:35-40`），不存在按正文搜索消息的路径。
+
+删除闭包覆盖 revoked 绑定（`architecture/current/privacy-deletion.md:118-133`；`backend-ts/src/contacts/sqlite/deletion.ts:55-95`，`backend-ts/src/history/sqlite/deletion.ts:39-107`，`backend-ts/src/history/sqlite/source-deletion.ts:24-42`）。合成夹具（用真实认证流程复刻双绑定结构，纯合成数据）32/32 断言通过：读/提取/覆盖/目录均只计 1 条可见消息；整联系人删除后 message/capture/read_goal/binding_verification 均为 0，两绑定留 revoked 墓碑；单一来源删除同时清除跨绑定两份副本并登记无正文排除。真实库未做任何修改。
+
+附加发现（类 B，仅开发者调试面板）：`backend-ts/src/history/sqlite/recertify-candidates.ts:25`、`:47-53` 按联系人统计 message 行时未按绑定过滤，已完成认证后再被围栏的联系人，「预计需重新读取消息」会显示约两倍（合成验证：面板 2 vs 可见 1）。该入口只在开发模式渲染（ADR-173），不进入读取/提取/删除/模型路径；已另开修复任务。
+
+缺口：媒体在旧的 revoked 绑定下的真实可读性未实测（代码核对通过）；账户级删除与「再次认证产生第三代绑定」的删除闭包未合成实测。
