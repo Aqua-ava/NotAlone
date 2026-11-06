@@ -6,6 +6,7 @@ import {identityDeletionAuthority} from '../../../contacts/sqlite/deletion.ts';
 import {isMediaDeletionScope,mediaDeletionAuthority} from '../../../media/sqlite/deletion.ts';
 import {memoryDeletionImpact} from '../deletion-impact.ts';
 import {minimalModelReceipt} from '../execution.ts';
+import {deletionTargetKey} from '../../../storage/sqlite/deletion/actions.ts';
 
 const domain='memory_documents';
 const rowKinds:DeletionDomain['rowKinds']={
@@ -268,7 +269,7 @@ export const memoryDocumentsDeletionDomain:DeletionDomain={id:domain,rowKinds,
  },collect,
  clearRow(tx,op,t){
   if(!allowed(op)||t.domain!==domain||!Object.hasOwn(rowKinds,t.rowKind)||t.key.owner_id!==op.ownerId||Object.keys(t.key).sort().join()!==[...rowKinds[t.rowKind].keys].sort().join()||t.identity!==identity(t.rowKind,t.key))fail('document_deletion_target_invalid');
-  if(verifyFence(tx,op).result!=='passed'||!tx.get('SELECT 1 FROM deletion_target WHERE operation_id=? AND domain=? AND row_kind=? AND expected_identity=? AND target_payload IS NOT NULL',[op.operationId,domain,t.rowKind,JSON.stringify(t.identity)]))fail('document_deletion_not_fenced');
+  if(verifyFence(tx,op).result!=='passed'||!tx.get('SELECT 1 FROM deletion_target WHERE operation_id=? AND domain=? AND target_key=? AND target_payload IS NOT NULL',[op.operationId,domain,deletionTargetKey(t)]))fail('document_deletion_not_fenced');
   clearGraph(tx,op);
  },
  authorizeFile(){fail('document_deletion_has_no_files');},fileCleared(){fail('document_deletion_has_no_files');},

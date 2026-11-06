@@ -54,6 +54,17 @@ test('单个动作超过15秒仍关闭Worker并拒绝其后排队动作',async t
  const first=storage.failureDiagnostic;await storage.close();assert.deepEqual(storage.failureDiagnostic,first);
 });
 
+test('离线维护工具可经 actionTimeoutMs 放宽单动作预算，缺省仍按15秒',async t=>{
+ const userData=await realpath(await mkdtemp(join(tmpdir(),'notalone-sqlite-timing-')));
+ const registryModule=new URL('./fixtures/sqlite/timing-registry.mjs',import.meta.url).href;
+ const created=await SqliteStorage.open({userData,intent:'create',role:'test',registryModule});
+ const databaseId=created.status.databaseId;await created.close();
+ t.after(()=>rm(userData,{recursive:true,force:true}));
+ const relaxed=await SqliteStorage.open({userData,intent:'open',role:'test',expectedDatabaseId:databaseId,registryModule,actionTimeoutMs:60_000});
+ try{assert.equal(await relaxed.execute('timing.block',{milliseconds:16_000,sequence:'长动作'}),'长动作');assert.equal(relaxed.failureDiagnostic,null);}
+ finally{await relaxed.close();}
+});
+
 for(const [name,cause]of[['timing.exit','worker_exit'],['timing.error','worker_error']])test(`Worker异常只保留首个非敏感诊断：${cause}`,async t=>{
  const storage=await fixture(t);
  await Promise.allSettled([storage.execute(name,{private:'不得出现在诊断'}),storage.execute('timing.block',{milliseconds:100,sequence:'私密'})]);

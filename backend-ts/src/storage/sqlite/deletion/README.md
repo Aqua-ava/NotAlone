@@ -53,6 +53,8 @@ HTTP支持`Idempotency-Key`标识一次明确请求，账户删除必须提供�
 
 `advance`领取绑定当前runtime的runner及planRevision，排空持有者，在事务外逐文件复验/精确删除，再短事务确认进度。任何迟到确认使用旧runner、实例或修订都拒绝。当前runtime重复领取返回busy；重开同实例可接管旧runtime未完成操作，不自动调用模型。
 
+`advanceBatch(operations)`逐个完成领取、排空、清除与封存，随后只做一次`deletion.compact`，再逐个`verify`结案；核验时闭包出现新目标（`fenced`）的操作沿原任务单独`advance`。压缩耗时随库体积增长而与联系人大小无关，批量让N个操作只付一次；规格的“结案前必须完成压缩”不变，因为每个操作的核验使用的是其最后一次清除之后才开始的压缩结果。中途崩溃时已封存未核验的操作停在清理态，沿原任务再次`advance`或`advanceBatch`即可补齐。HTTP入口仍逐个`advance`；批量只用于[离线维护工具](../../../../scripts/maintenance/delete-contacts-batch.mjs)（App与后台完全退出后运行，复用同一服务和请求键，只输出联系人ID前8位与耗时，必须显式传`--confirm-delete=<数量>`）。
+
 行/文件失败保留同一操作及逐目标尝试进度。清理完后先确认文件及活动引用，再清除账本中的敏感定位/文件证明，最后执行checkpoint → VACUUM → checkpoint → integrity/FK及维护inspect。维护结果包含空闲页、WAL/SHM/journal大小、内存临时存储、secure_delete与未知辅助文件计数；WAL未截断、checkpoint busy或未知文件均不能完成。当前连接仍存活时SHM为SQLite共享索引元数据，记录大小并核归属，不在活动连接下强删SHM。inspect快照不替代领域/SDK/长读者排空，相关持有者必须另证；长读者实际阻塞checkpoint的反例已覆盖。
 
 所有当前计划的必需面通过、目标清除且闭包复查无新增后才completed。新目标先推进planRevision，旧检查失效，调用方沿同操作再次advance。维护中断或失败保持未完成；重试再次维护，不能仅凭DB行已删宣告跨存储原子成功。本合同不承诺SSD底层、外部备份或模型服务商副本的法证擦除。

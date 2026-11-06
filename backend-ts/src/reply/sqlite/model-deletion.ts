@@ -19,8 +19,10 @@ function closure(tx:StorageTransaction,op:DeletionOperation){
  if(eraseLedger(op))for(const s of tx.all('SELECT operation_id,source_contact_id FROM operation_scope WHERE owner_id=?',[op.ownerId]))if(op.scope.kind==='account'||'contactId'in op.scope&&s.source_contact_id===op.scope.contactId)operationIds.add(String(s.operation_id));
  const operations=tx.all("SELECT * FROM model_operation WHERE owner_id=? AND purpose='discussion'",[op.ownerId]).filter(r=>op.scope.kind==='account'||requests.has(String(r.reply_request_id))||operationIds.has(String(r.id)));
  const ids=new Set(operations.map(r=>String(r.id)));
- const calls=tx.all('SELECT * FROM model_call WHERE owner_id=?',[op.ownerId]).filter(c=>ids.has(String(c.operation_id)));
- const events=tx.all('SELECT * FROM execution_event WHERE owner_id=?',[op.ownerId]).filter(e=>attempts.has(String(e.reply_attempt_id)));
+ // 没有命中任何讨论调用/尝试时，下面的整 owner 扫描只会被空集合过滤掉，直接跳过（行集合不变）；
+ // 无讨论的联系人在计划、领任务、重新收集、核验中各付一次这些扫描，真实库上合计约 2 秒。
+ const calls=ids.size?tx.all('SELECT * FROM model_call WHERE owner_id=?',[op.ownerId]).filter(c=>ids.has(String(c.operation_id))):[];
+ const events=attempts.size?tx.all('SELECT * FROM execution_event WHERE owner_id=?',[op.ownerId]).filter(e=>attempts.has(String(e.reply_attempt_id))):[];
  return {impact,operations,calls,events};
 }
 function collect(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget[]{
@@ -28,7 +30,7 @@ function collect(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget[]
  const c=closure(tx,op),targets:RowDeletionTarget[]=[];
  const add=(kind:string,row:Record<string,unknown>)=>{const key=Object.fromEntries(rowKinds[kind].keys.map(k=>[k,String(row[k])]));targets.push({kind:'row',domain,rowKind:kind,key,identity:identity(kind,key),holderKeys:c.impact.holderKeys});};
  const eventIds=new Set(c.events.map(e=>String(e.id)));
- for(const kind of ['event_source','execution_input'])for(const row of tx.all(`SELECT * FROM ${kind} WHERE owner_id=?`,[op.ownerId]))if(eventIds.has(String(row.event_id)))add(kind,row);
+ if(eventIds.size)for(const kind of ['event_source','execution_input'])for(const row of tx.all(`SELECT * FROM ${kind} WHERE owner_id=?`,[op.ownerId]))if(eventIds.has(String(row.event_id)))add(kind,row);
  for(const row of c.events)add('execution_event',row);
  for(const row of c.calls)if(eraseLedger(op)||row.reply_attempt_id!==null||row.reply_context_id!==null||row.receipt!==minimalReceipt)add('model_call',row);
  const ids=new Set(c.operations.map(o=>String(o.id)));

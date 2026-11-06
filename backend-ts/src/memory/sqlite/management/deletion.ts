@@ -6,6 +6,7 @@ import {isMediaDeletionScope,mediaDeletionAuthority} from '../../../media/sqlite
 import {fail} from './qualification.ts';
 import {memoryDeletionImpact} from '../deletion-impact.ts';
 import {scheduleMemoryChange} from '../documents/later-schedule.ts';
+import {deletionTargetKey} from '../../../storage/sqlite/deletion/actions.ts';
 const domain='memory_management';
 const rowKinds:DeletionDomain['rowKinds']={memory_candidate:{keys:['owner_id','id'],ownerKey:'owner_id'},memory_version:{keys:['owner_id','memory_id','version_no'],ownerKey:'owner_id'},memory:{keys:['owner_id','id'],ownerKey:'owner_id'},memory_decision:{keys:['owner_id','id'],ownerKey:'owner_id'}};
 const allowed=(op:DeletionOperation)=>isMediaDeletionScope(op.scope)||['source','contact_history','contact','account'].includes(op.scope.kind);
@@ -75,7 +76,7 @@ export const memoryManagementDeletionDomain:DeletionDomain={id:domain,rowKinds,
  },collect,
  clearRow(tx,op,t){
   if(!allowed(op)||t.domain!==domain||!Object.hasOwn(rowKinds,t.rowKind)||t.key.owner_id!==op.ownerId||Object.keys(t.key).sort().join()!==[...rowKinds[t.rowKind].keys].sort().join()||t.identity!==identity(t.rowKind,t.key))fail('memory_deletion_target_invalid');
-  if(verifyFence(tx,op).result!=='passed'||!tx.get('SELECT 1 FROM deletion_target WHERE operation_id=? AND domain=? AND expected_identity=?',[op.operationId,domain,JSON.stringify(t.identity)]))fail('memory_deletion_not_fenced');
+  if(verifyFence(tx,op).result!=='passed'||!tx.get('SELECT 1 FROM deletion_target WHERE operation_id=? AND domain=? AND target_key=?',[op.operationId,domain,deletionTargetKey(t)]))fail('memory_deletion_not_fenced');
   const ownerId=op.ownerId;
   if(t.rowKind==='memory_decision')redactDecision(tx,ownerId,t.key.id);
   else if(t.rowKind==='memory_candidate'){

@@ -6,6 +6,7 @@ import {identityDeletionAuthority} from '../../contacts/sqlite/deletion.ts';
 import {isMediaDeletionScope,mediaDeletionAuthority} from '../../media/sqlite/deletion.ts';
 import {memoryDeletionImpact,deletionRows,deletionIds} from './deletion-impact.ts';
 import {minimalModelReceipt} from './execution.ts';
+import {deletionTargetKey} from '../../storage/sqlite/deletion/actions.ts';
 
 const domain='memory_extraction';
 const rowKinds:DeletionDomain['rowKinds']={
@@ -151,8 +152,9 @@ export const memoryExtractionDeletionDomain:DeletionDomain={
       ||Object.keys(target.key).sort().join()!==[...rowKinds[target.rowKind].keys].sort().join()
       ||target.identity!==address(target.rowKind,target.key))fail('memory_deletion_target_invalid');
     fenced(tx,op);
-    if(!tx.get('SELECT 1 FROM deletion_target WHERE operation_id=? AND domain=? AND row_kind=? AND expected_identity=? AND target_payload IS NOT NULL',
-      [op.operationId,domain,target.rowKind,JSON.stringify(target.identity)]))fail('memory_deletion_target_unplanned');
+    // 按账本唯一键（operation_id,domain,target_key）点查：旧写法按 expected_identity 无索引扫描本操作的全部目标，目标数 N 时总量是 N 的平方。
+    if(!tx.get('SELECT 1 FROM deletion_target WHERE operation_id=? AND domain=? AND target_key=? AND target_payload IS NOT NULL',
+      [op.operationId,domain,deletionTargetKey(target)]))fail('memory_deletion_target_unplanned');
     const keys=rowKinds[target.rowKind].keys,where=keys.map(k=>`${k}=?`).join(' AND '),args=keys.map(k=>target.key[k]);
     if(target.rowKind==='model_call'&&!eraseLedger(op)){
       const call=tx.get(`SELECT receipt FROM model_call WHERE ${where}`,args);

@@ -16,6 +16,8 @@ export interface OpenStorageOptions {
   registryModule?: string;
   // 仅供测试与诊断缩短维护动作预算；缺省按库体积计算，见 timeouts.ts。
   maintenanceTimeoutMs?: number;
+  // 仅供离线维护工具放宽普通动作的 15 秒预算（例如十几万目标的联系人删除计划）；产品装配不传，缺省仍为 15 秒。
+  actionTimeoutMs?: number;
 }
 export type StorageRow = Record<string, SQLOutputValue>;
 export interface StorageTransaction {

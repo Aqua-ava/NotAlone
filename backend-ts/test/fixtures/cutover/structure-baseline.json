@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 43,
+  "schemaVersion": 44,
   "migrationVersions": [
    1,
    2,
@@ -44,9 +44,10 @@
    40,
    41,
    42,
-   43
+   43,
+   44
   ],
-  "userVersion": 43,
+  "userVersion": 44,
   "sqliteVersion": "3.53.4",
   "tableCount": 95,
   "fieldCount": 958,
@@ -3461,6 +3462,18 @@
     }
    ],
    "indexes": [
+    {
+     "name": "execution_input_planned_step",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "planned_step_id",
+      "planned_input_no"
+     ],
+     "sql": "CREATE INDEX execution_input_planned_step ON execution_input(owner_id,planned_step_id,planned_input_no)"
+    },
     {
      "name": "execution_input_producer",
      "unique": 0,

@@ -19,6 +19,8 @@ const proof = (value: CheckResult): CheckResult => {
 const canonical = (v: unknown): string => JSON.stringify(v, (_k, value) => value && typeof value === 'object' && !Array.isArray(value)
   ? Object.fromEntries(Object.keys(value).sort().map(k => [k, value[k]])) : value);
 const hash = (v: unknown) => createHash('sha256').update(canonical(v)).digest('hex');
+/** 目标在账本中的唯一键（operation_id, domain, target_key 有唯一索引）；领域用它按点查询“是否为本计划目标”，不必扫描或解析全部目标。 */
+export const deletionTargetKey = (target: DeletionTarget): string => hash(target.kind === 'row' ? [target.rowKind, target.key, target.identity] : [target.fileId, target.generation]);
 function scope(value: DeletionScope): DeletionScope {
   if (!value || !['source', 'contact', 'contact_history', 'account', 'discussion', 'media_result_clear', 'media_result_replace'].includes(value.kind)) return fail('deletion_input_invalid');
   const fields = value.kind === 'account' ? [] : value.kind === 'source' ? ['contactId', 'sourceId'] : value.kind === 'discussion' ? ['contactId', 'discussionId'] : value.kind.startsWith('media_') ? ['contactId', 'messageId'] : ['contactId'];
@@ -81,7 +83,7 @@ function refresh(tx: StorageTransaction, row: StorageRow, config: DeletionRegist
     for (const target of synchronous(domain.collect(tx, op))) {
       if (target.domain !== domain.id) fail('deletion_target_invalid');
       validateTarget(config, target, op.ownerId);
-      const key = hash(target.kind === 'row' ? [target.rowKind, target.key, target.identity] : [target.fileId, target.generation]);
+      const key = deletionTargetKey(target);
       const old = tx.get('SELECT * FROM deletion_target WHERE operation_id=? AND domain=? AND target_key=?', [op.operationId, domain.id, key]);
       if (old) {
         if (old.target_payload !== canonical(target)) fail('deletion_target_conflict');

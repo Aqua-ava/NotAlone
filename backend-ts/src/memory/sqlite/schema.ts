@@ -257,3 +257,14 @@ CREATE INDEX execution_input_producer ON execution_input(owner_id,producer_event
 CREATE INDEX run_inputs_source ON run_input(owner_id,source_contact_id,record_id);
 CREATE INDEX event_sources_record ON event_source(owner_id,source_contact_id,record_id);
 `});
+
+/**
+ * 迁移 44：execution_input 对 step_input 的复合外键子列索引。
+ * execution_input(owner_id,planned_step_id,planned_input_no) 引用 step_input(owner_id,step_id,input_no)，
+ * 子表一侧此前没有任何索引；每删除一行 step_input，SQLite 都要全表扫描 execution_input 核验没有子行
+ * （真实库 14.3 万行，单次约 5 毫秒；一个步骤有数千输入时单个 clearTarget 超过 15 秒动作预算而被终止，
+ * 该联系人无法删除）。只建索引，不改数据，删除计划的目标集合与顺序不变。
+ */
+export const memoryExecutionPlannedStepIndexMigration=(version:number):StorageMigration=>({version,sql:`
+CREATE INDEX execution_input_planned_step ON execution_input(owner_id,planned_step_id,planned_input_no);
+`});

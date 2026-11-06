@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { StorageFailure, type StorageRow, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
 import type { DeletionDomain, DeletionOperation, RowDeletionTarget, CheckResult } from '../../storage/sqlite/deletion/contracts.ts';
 import { verifiedCutoffForOperation } from './clear-actions.ts';
+import { deletionTargetKey } from '../../storage/sqlite/deletion/actions.ts';
 const rowKinds=Object.fromEntries(['capture_record','message_alias','message','sync_capture','read_goal'].map(kind=>[kind,{keys:['owner_id','id'],ownerKey:'owner_id'}]));
 rowKinds.history_quote={keys:['owner_id','id'],ownerKey:'owner_id'};
 rowKinds.history_quote_dependency={keys:['owner_id','id'],ownerKey:'owner_id'};
@@ -109,13 +110,17 @@ export const historyDeletionDomain:DeletionDomain={
    const contacts=scope.kind==='account'?tx.all('SELECT id FROM contact WHERE owner_id=?',[ownerId]).map(r=>String(r.id)):[scope.contactId];
    for(const contact of contacts){
     tx.run('INSERT OR IGNORE INTO history_deletion_fence VALUES(?,?,?)',[ownerId,contact,op.operationId]);
-    tx.run(`UPDATE message SET availability='deleting' WHERE owner_id=? AND contact_id=? AND id IN (SELECT r.message_id FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id WHERE g.owner_id=?${scope.kind==='account'?'':' AND g.accepted_data_generation<?'})`,scope.kind==='account'?[ownerId,contact,ownerId]:[ownerId,contact,ownerId,op.acceptedGeneration]);
+    // 逐条消息按 capture_record_message 索引做存在性判断：旧写法的 IN 子查询先物化整个 owner 的全部消息 ID
+    // （36.9 万条 capture_record 关联 sync_capture 与 read_goal），联系人再小每次也要约 6 秒，且计划、领任务、
+    // 重新收集、核验各执行一次。选中的行集合不变：capture_record 带 message_id 的行与该消息同 contact_id（复合外键）。
+    tx.run(`UPDATE message SET availability='deleting' WHERE owner_id=? AND contact_id=? AND availability<>'deleting' AND EXISTS (SELECT 1 FROM capture_record r INDEXED BY capture_record_message JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id WHERE r.owner_id=message.owner_id AND r.contact_id=message.contact_id AND r.message_id=message.id${scope.kind==='account'?'':' AND g.accepted_data_generation<?'})`,scope.kind==='account'?[ownerId,contact]:[ownerId,contact,op.acceptedGeneration]);
    }
   }
   const older=scope.kind==='account'?'':' AND accepted_data_generation<?';
   const args=scope.kind==='account'?[ownerId]:[ownerId,scope.contactId,op.acceptedGeneration];
   const contacts=scope.kind==='account'?'':' AND contact_id=?';
-  tx.run(`UPDATE capture_record SET availability='deleting' WHERE owner_id=?${scope.kind==='source'?' AND contact_id=? AND id IN (SELECT value FROM json_each(?))':contacts} AND capture_id IN (SELECT c.id FROM sync_capture c JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id WHERE g.owner_id=?${older})`,scope.kind==='source'?[ownerId,scope.contactId,JSON.stringify(sourceDeletionIds(tx,op)),ownerId,op.acceptedGeneration]:scope.kind==='account'?[ownerId,ownerId]:[ownerId,scope.contactId,ownerId,op.acceptedGeneration]);
+  // 同上改为逐条记录的存在性判断：旧 IN 子查询每次物化全部 owner 的 sync_capture（含已退役目标）。
+  tx.run(`UPDATE capture_record SET availability='deleting' WHERE owner_id=?${scope.kind==='source'?' AND contact_id=? AND id IN (SELECT value FROM json_each(?))':contacts} AND availability<>'deleting' AND EXISTS (SELECT 1 FROM sync_capture c JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id WHERE c.owner_id=capture_record.owner_id AND c.id=capture_record.capture_id${scope.kind==='account'?'':' AND g.accepted_data_generation<?'})`,scope.kind==='source'?[ownerId,scope.contactId,JSON.stringify(sourceDeletionIds(tx,op)),op.acceptedGeneration]:scope.kind==='account'?[ownerId]:[ownerId,scope.contactId,op.acceptedGeneration]);
   tx.run(`UPDATE read_goal SET state='invalidated',failure_code='history_deleted' WHERE owner_id=?${contacts}${older} AND state<>'invalidated'`,args);
   return [];
  },
@@ -123,7 +128,9 @@ export const historyDeletionDomain:DeletionDomain={
  clearRow(tx,op,t){
   if(t.domain!=='history'||!Object.hasOwn(rowKinds,t.rowKind)||t.key.owner_id!==op.ownerId||t.identity!==identity(t.rowKind,t.key))throw new StorageFailure('history_deletion_target_invalid');
   // 依赖行先清除后，原计划身份仍由同一删除账本固定，不能扩展到任意新行。
-  const planned=tx.all('SELECT target_payload FROM deletion_target WHERE operation_id=?',[op.operationId]).some(r=>{const p=JSON.parse(String(r.target_payload));return p.domain==='history'&&p.identity===t.identity;});
+  // 按账本唯一键（operation_id,domain,target_key）点查：旧写法每清一个目标就读出并解析本操作的全部目标，
+  // 目标数 N 时总量是 N 的平方（3 万目标的联系人清除需要数小时）。目标本身取自账本，键由同样的字段计算。
+  const planned=tx.get("SELECT 1 FROM deletion_target WHERE operation_id=? AND domain='history' AND target_key=? AND target_payload IS NOT NULL",[op.operationId,deletionTargetKey(t)]);
   if(!planned)throw new StorageFailure('history_deletion_target_invalid');
   const keys=rowKinds[t.rowKind]!.keys;
   if(t.rowKind==='history_quote_dependency'){

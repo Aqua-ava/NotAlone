@@ -68,7 +68,7 @@ export class SqliteStorage {
           pending.started = true;
           pending.startedAt=message.startedAt;
           pending.timer = setTimeout(() => { this.fail('action_timeout', pending.name); void this.worker.terminate(); },
-            message.maintenance === true ? this.maintenanceBudget() : sqliteActionTimeoutMs);
+            message.maintenance === true ? this.maintenanceBudget() : (this.options.actionTimeoutMs ?? sqliteActionTimeoutMs));
         }
         return;
       }
