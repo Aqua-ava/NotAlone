@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {memorySourceTimeLabel} from '../src/reply/sqlite/candidates/input.ts';
+import {memorySourceTimeLabel,messageTimePrefix} from '../src/reply/sqlite/candidates/input.ts';
 
 const DAY=86_400_000;
 const format=new Intl.DateTimeFormat('sv-SE',{year:'numeric',month:'2-digit',day:'2-digit'});
@@ -42,4 +42,15 @@ test('距离档位：30天内、按月、按年；来源晚于冻结时刻时不
  assert.match(memorySourceTimeLabel(tx(one),'o1',[source('m1')],base+95*DAY),/，约3个月前）$/);
  assert.match(memorySourceTimeLabel(tx(one),'o1',[source('m1')],base+800*DAY),/，约2年前）$/);
  assert.equal(memorySourceTimeLabel(tx(one),'o1',[source('m1')],base-DAY),`（聊天时间：${format.format(base)}）`);
+});
+
+test('聊天消息按发送时间标注到分钟，时间未知或异常时不补造',()=>{
+ const minute=new Intl.DateTimeFormat('sv-SE',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+ assert.equal(messageTimePrefix(BigInt(base)),`（${minute.format(base)}）`);
+ assert.match(messageTimePrefix(BigInt(base)),/^（\d{4}-\d{2}-\d{2} \d{2}:\d{2}）$/);
+ assert.equal(messageTimePrefix(null),'');
+ assert.equal(messageTimePrefix(undefined),'');
+ assert.equal(messageTimePrefix(-1n),'');
+ assert.equal(messageTimePrefix(BigInt(Number.MAX_SAFE_INTEGER)),'');
+ assert.equal(messageTimePrefix(Number(base)),'','非整数库值类型不当作时间');
 });
