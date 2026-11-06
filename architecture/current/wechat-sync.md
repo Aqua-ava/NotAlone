@@ -40,7 +40,7 @@
 - 同步数据提交成功后才发布事件。事件本身只有标识，界面按当前联系人读正文；消息入库与记忆处理分离，记忆失败不回滚同步。
 - 历史未开始、同步中或不完整都不阻塞已确认联系人使用当前合法本机资料生成；实际覆盖进入依据，不额外索要“接受不完整”确认。
 
-来源无法独立认证时停读；来源重新关联、重新认证与一般重试分别处理。旧失证资料保持原围栏，新来源或新代次不能补签旧证明；删除／清空排除及终态抑制须延续。无法可靠映射时继续停读，不能用清库、改身份或解除围栏代替认证。该规则与回复读取已接纳本机资料的资格分开。已采纳（ADR-173）并在开发模式实现、验收（2026-11-06）的开发者批量重新认证入口仅开发者调试区可见，不进入打包版，范围为全部当前被围栏且在有效读取范围内的联系人；它仍逐位执行同一认证并由后端逐位复验，不改变本节任何保护。见 [ADR-173](../adr/173-developer-batch-source-recertification.md)及[验收记录](../../docs/verification/fenced-contact-batch-repair-20261106.md)。
+来源无法独立认证时停读；来源重新关联、重新认证与一般重试分别处理。旧失证资料保持原围栏，新来源或新代次不能补签旧证明；删除／清空排除及终态抑制须延续。核验时旧代次撤回记录若当前代次已在同一分片、同一物理表实例、同一本地键位置独立记录为撤回，可按 [ADR-161](../adr/161-proved-legacy-source-suppression-mapping.md)的窄规则映射到当前代次；未覆盖的旧键仍须独立证明，位置相同但原因不是撤回不算覆盖，不据正文、时间或昵称猜测。无法可靠映射时继续停读，不能用清库、改身份或解除围栏代替认证。该规则与回复读取已接纳本机资料的资格分开。已采纳（ADR-173）并在开发模式实现、验收（2026-11-06）的开发者批量重新认证入口仅开发者调试区可见，不进入打包版，范围为全部当前被围栏且在有效读取范围内的联系人；它仍逐位执行同一认证并由后端逐位复验，不改变本节任何保护。见 [ADR-173](../adr/173-developer-batch-source-recertification.md)及[验收记录](../../docs/verification/fenced-contact-batch-repair-20261106.md)。
 
 依据：[首次历史](../adr/100-authorized-private-history-sync.md)、[来源合同](../adr/113-sqlite-private-history-source-contract.md)、[变化页](../adr/133-page-delta-private-history-sync.md)、[共享读取进程](../adr/151-shared-wechat-cli-process.md)、[重新认证](../adr/144-preserved-history-source-recertification.md)。旧 `sessions --follow`／逐次 tail 与固定轮询参数保留为[历史实现说明](../history/core-flow-implementation-notes.md)，不作为新读取器的强制接口。
 

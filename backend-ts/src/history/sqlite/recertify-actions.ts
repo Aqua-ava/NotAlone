@@ -6,8 +6,8 @@ import type {HistorySupportReport,HistoryTarget} from './contracts.ts';
 import {assertRecertifyAccess} from './recertify-access.ts';
 import {assertHistoryReadBoundary} from './suppression.ts';
 import {normalUseContinuity} from './continuity.ts';
-import {completedLegacyPhysicalKeys} from './legacy-physical-suppression.ts';
-import {legacyRecallCandidates,legacyProofDigest,validateLegacyTerminalProof,type LegacyTerminalProof} from './legacy-terminal-proof.ts';
+import {auditedCoverageKey,completedLegacyPhysicalKeys,coveredRecallKey,recallCoverageDigest,uncoveredLegacyRecallCandidates,type RecallCoverageMapping} from './legacy-physical-suppression.ts';
+import {legacyProofDigest,validateLegacyTerminalProof,type LegacyTerminalProof} from './legacy-terminal-proof.ts';
 import {historyRecertifyCandidatesActions} from './recertify-candidates.ts';
 
 const fail=(code:string):never=>{throw new StorageFailure(code);};
@@ -48,14 +48,32 @@ function mappingProof(tx:StorageTransaction,token:ReadEligibility,target:History
  if(!Array.isArray(audit.candidates)||audit.digest!==legacyProofDigest({proof:audit.proof,candidates:audit.candidates}))fail('history_recertify_legacy_proof_invalid');
  validateLegacyTerminalProof({token:old,target,report,candidates:audit.candidates},audit.proof,Date.now(),false);return audit.proof;
 }
-function suppression(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,report:HistorySupportReport,op?:StorageRow):{key:string;reason:string;generation:bigint}[] {
+/** 本操作在Rotate写入的独立覆盖审计；只复用键映射，不等同ADR-161双读取器物理证明。 */
+function archivedCoverage(op?:StorageRow):RecallCoverageMapping[]|undefined {
+ if(!op)return;
+ try{
+  const audit=JSON.parse(String(op.old_fence_json)).covered_terminal_mapping;
+  if(!audit||!Array.isArray(audit.mappings)||audit.digest!==recallCoverageDigest(audit.mappings))return;
+  return audit.mappings as RecallCoverageMapping[];
+ }catch{return;}
+}
+function suppression(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,report:HistorySupportReport,op?:StorageRow):{terminals:{key:string;reason:string;generation:bigint}[];covered:RecallCoverageMapping[]} {
  assertHistoryReadBoundary(tx,token,{kind:'history'});
- const proof=mappingProof(tx,token,target,report,op);
+ const proof=mappingProof(tx,token,target,report,op),audit=archivedCoverage(op);
  const valid=(key:unknown)=>{try{const k=JSON.parse(String(key));return Array.isArray(k)&&k.length===4&&k[0]===token.source_generation&&typeof k[3]==='string'&&target.tables.some(t=>t.partition===k[1]&&t.instance===k[2]);}catch{return false;}};
- const mappedExclusions:{external_key:string;reason:string;accepted_data_generation:bigint}[]=[];
+ const mappedExclusions:{external_key:string;reason:string;accepted_data_generation:bigint}[]=[],covered=new Map<string,RecallCoverageMapping>();
  const normalize=(key:unknown,terminalReason?:string):string=>{
   const original=String(key);if(valid(original))return original;
-  return completedLegacyPhysicalKeys(tx,{ownerId:token.owner_id,contactId:token.contact_id,conversationId:token.conversation_id,key:original,target,report,...(terminalReason?{terminalReason}:{})}).find(valid)??original;
+  const mapped=completedLegacyPhysicalKeys(tx,{ownerId:token.owner_id,contactId:token.contact_id,conversationId:token.conversation_id,key:original,target,report,...(terminalReason?{terminalReason}:{})}).find(valid);
+  if(mapped)return mapped;
+  if(terminalReason!=='source_recalled')return original;
+  // 窄规则：只有当前代次在同一分片、同一表实例、同一行号独立记为撤回，才把旧撤回键映射到当前代次。
+  const remembered=auditedCoverageKey(audit,original,target,token.source_generation,terminalReason);
+  if(remembered&&valid(remembered))return remembered;
+  const live=coveredRecallKey(tx,{ownerId:token.owner_id,contactId:token.contact_id,conversationId:token.conversation_id,key:original,target,report});
+  if(!live||!valid(live))return original;
+  covered.set(original,{from:original,to:live,reason:'source_recalled'});
+  return live;
  };
  const exclude=(key:unknown)=>{const mapped=normalize(key);if(!valid(mapped))fail('history_recertify_suppression_unmapped');
   if(mapped!==key)mappedExclusions.push({external_key:mapped,reason:'source_absent',accepted_data_generation:BigInt(token.data_generation)});
@@ -75,7 +93,7 @@ function suppression(tx:StorageTransaction,token:ReadEligibility,target:HistoryT
   if(r.reason!=='source_absent')for(const prior of tx.all(`SELECT json_extract(r.raw_payload,'$.serverId') server_id FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id WHERE r.owner_id=? AND r.contact_id=? AND b.conversation_id=? AND r.observed_key=? AND r.raw_payload IS NOT NULL`,[token.owner_id,token.contact_id,token.conversation_id,r.external_key]))
    if(typeof prior.server_id==='string'&&/^[1-9][0-9]{0,19}$/.test(prior.server_id)&&BigInt(prior.server_id)<=18446744073709551615n)fail('history_recertify_terminal_alias_unmapped');
   const key=String(mapped),prior=result.get(key),reason=String(r.reason);if(!prior||prior.reason==='source_absent')result.set(key,{key,reason,generation:BigInt(String(r.accepted_data_generation))});}
- return [...result.values()];
+ return {terminals:[...result.values()],covered:[...covered.values()].sort((a,b)=>a.from.localeCompare(b.from))};
 }
 function view(tx:StorageTransaction,contactId:string,op?:StorageRow) {
  const goal=op?.goal_id?tx.get('SELECT state,failure_code FROM read_goal WHERE owner_id=? AND id=?',[op.owner_id,op.goal_id]):undefined;
@@ -86,14 +104,14 @@ function view(tx:StorageTransaction,contactId:string,op?:StorageRow) {
 export const historyRecertifyActions:StorageAction[]=[
  action('LegacyCandidates','read',(tx,i:any)=>{
   assertReadEligibility(tx,i.token);const op=pending(tx,{ownerId:i.token.owner_id,id:i.id});if(op.stage!=='metadata'||op.old_token_json!==json(i.token))fail('history_recertify_stale');
-  const candidates=legacyRecallCandidates(tx,i.token);
+  const candidates=uncoveredLegacyRecallCandidates(tx,i.token,i.target,i.report);
   if(candidates.length&&candidates.every(c=>completedLegacyPhysicalKeys(tx,{ownerId:i.token.owner_id,contactId:i.token.contact_id,conversationId:i.token.conversation_id,key:c.key,terminalReason:'source_recalled',target:i.target,report:i.report}).some(key=>JSON.parse(key)[0]===i.token.source_generation)))return [];
   return candidates;
  }),
  action('LegacyMapping','write',(tx,i:any)=>{
   assertReadEligibility(tx,i.token);const op=pending(tx,{ownerId:i.token.owner_id,id:i.id});
   if(op.stage!=='metadata'||op.old_token_json!==json(i.token)||op.new_binding_id!==null)fail('history_recertify_stale');
-  const candidates=legacyRecallCandidates(tx,i.token);validateLegacyTerminalProof({token:i.token,target:i.target,report:i.report,candidates},i.proof,i.at);
+  const candidates=uncoveredLegacyRecallCandidates(tx,i.token,i.target,i.report);validateLegacyTerminalProof({token:i.token,target:i.target,report:i.report,candidates},i.proof,i.at);
   const archived=JSON.parse(String(op.old_fence_json));if(archived.legacy_terminal_mapping)fail('history_recertify_stale');
   archived.legacy_terminal_mapping={digest:legacyProofDigest({proof:i.proof,candidates}),proof:i.proof,candidates};
   mappingProof(tx,i.token,i.target,i.report,{...op,old_fence_json:json(archived)});
@@ -147,7 +165,8 @@ export const historyRecertifyActions:StorageAction[]=[
    }
   }
   else if(Number(op.preserved_message_count)>0||tx.get('SELECT 1 FROM capture_record WHERE owner_id=? AND contact_id=? LIMIT 1',[token.owner_id,token.contact_id]))fail('history_recertify_source_unverified');
-  const terminals=suppression(tx,token,target,report,op);
+  const suppressed=suppression(tx,token,target,report,op),archived=JSON.parse(String(op.old_fence_json));
+  if(suppressed.covered.length)archived.covered_terminal_mapping={digest:recallCoverageDigest(suppressed.covered),mappings:suppressed.covered};
   const b=tx.get('SELECT * FROM conversation_binding WHERE owner_id=? AND id=? AND state=\'verified\'',[token.owner_id,token.binding_id])??fail('history_recertify_stale');
   tx.run("UPDATE read_grant SET revoked_at=?,reason='explicit_source_recertification' WHERE owner_id=? AND id=? AND revoked_at IS NULL",[i.at,token.owner_id,token.grant_id]);
   tx.run("UPDATE conversation_binding SET state='revoked' WHERE owner_id=? AND id=?",[token.owner_id,token.binding_id]);
@@ -156,9 +175,9 @@ export const historyRecertifyActions:StorageAction[]=[
   tx.run("INSERT INTO conversation_binding(owner_id,id,contact_id,conversation_id,identity_generation,state) VALUES(?,?,?,?,0,'verified')",[token.owner_id,i.bindingId,token.contact_id,token.conversation_id]);
   tx.run("INSERT INTO binding_verification VALUES(?,?,?,0,'channel_metadata','identity-metadata-v1',?,?)",[token.owner_id,i.verificationId,i.bindingId,json({support_profile:report.profileId,source_generation:report.sourceGeneration,account_id:report.accountKey,conversation_key:report.conversationKey}),i.at]);
   tx.run('INSERT INTO read_grant(owner_id,id,contact_id,binding_id,verification_id,selection_generation,granted_at) VALUES(?,?,?,?,?,?,?)',[token.owner_id,i.grantId,token.contact_id,i.bindingId,i.verificationId,selection,i.at]);
-  for(const terminal of terminals)tx.run('INSERT INTO history_source_terminal VALUES(?,?,?,?,?,?,?)',[token.owner_id,randomUUID(),token.contact_id,i.bindingId,terminal.key,terminal.reason,terminal.generation]);
+  for(const terminal of suppressed.terminals)tx.run('INSERT INTO history_source_terminal VALUES(?,?,?,?,?,?,?)',[token.owner_id,randomUUID(),token.contact_id,i.bindingId,terminal.key,terminal.reason,terminal.generation]);
   const expectedToken={...token,binding_id:i.bindingId,grant_id:i.grantId,verification_id:i.verificationId,selection_generation:String(selection),identity_generation:'0'};
-  tx.run('UPDATE history_source_recertification SET new_binding_id=?,new_grant_id=?,token_json=?,target_json=?,support_json=?,updated_at=? WHERE owner_id=? AND id=?',[i.bindingId,i.grantId,json(expectedToken),json(target),json(report),i.at,token.owner_id,i.id]);return true;
+  tx.run('UPDATE history_source_recertification SET new_binding_id=?,new_grant_id=?,token_json=?,target_json=?,support_json=?,old_fence_json=?,updated_at=? WHERE owner_id=? AND id=?',[i.bindingId,i.grantId,json(expectedToken),json(target),json(report),json(archived),i.at,token.owner_id,i.id]);return true;
  }),
  action('Guard','write',(tx,i:any)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);const op=pending(tx,{ownerId:token.owner_id,id:i.id});
