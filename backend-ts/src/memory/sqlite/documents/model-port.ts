@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {sha256} from '../../../platform/sha256.ts';
 import type {Context} from '@deepseek-ai/cordis';
 import type {GenerateOptions} from '@deepseek-ai/dsh-llm';
 import type {HostReplyConfiguration} from '../../../host/host-reply-config.ts';
@@ -14,7 +14,7 @@ export function createSqliteDocumentsModelPort(options:{ctx:Context;configuratio
  const binding={provider:model.provider,model:model.model,maxTokens:model.maxTokens,temperature:model.temperature,reasoningEffort:model.reasoningEffort};
  const profile=structuredClone(model.budgetProfile);
  if(!options.provider||provider.provider!==binding.provider||!Number.isSafeInteger(binding.maxTokens)||binding.maxTokens<1||!Number.isSafeInteger(profile.context_window_tokens)||!Number.isSafeInteger(profile.safety_margin_tokens)||profile.context_window_tokens<=binding.maxTokens+profile.safety_margin_tokens||!Number.isSafeInteger(model.deadline_ms)||model.deadline_ms<1)throw new StorageFailure('document_model_configuration_invalid');
- const preparation={provider:binding.provider,model:binding.model,configurationId:createHash('sha256').update(JSON.stringify({binding,profile,baseURL:provider.connection.baseURL,deadline:model.deadline_ms})).digest('hex'),maxInputTokens:profile.context_window_tokens-binding.maxTokens-profile.safety_margin_tokens,maxOutputTokens:binding.maxTokens,contextWindowTokens:profile.context_window_tokens,safetyMarginTokens:profile.safety_margin_tokens};
+ const preparation={provider:binding.provider,model:binding.model,configurationId:sha256(JSON.stringify({binding,profile,baseURL:provider.connection.baseURL,deadline:model.deadline_ms})),maxInputTokens:profile.context_window_tokens-binding.maxTokens-profile.safety_margin_tokens,maxOutputTokens:binding.maxTokens,contextWindowTokens:profile.context_window_tokens,safetyMarginTokens:profile.safety_margin_tokens};
  const caller=createExtractionModelCaller({ctx:options.ctx,provider:options.provider,permit:options.permit}),stopped=new AbortController(),active=new Set<Promise<unknown>>();let closing:Promise<void>|undefined;
  const track=<T>(work:Promise<T>)=>{active.add(work);void work.then(()=>active.delete(work),()=>active.delete(work));return work;};
  const signalFor=(signal:AbortSignal)=>AbortSignal.any([signal,stopped.signal,AbortSignal.timeout(model.deadline_ms)]);

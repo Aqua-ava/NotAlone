@@ -1,4 +1,5 @@
-import {createHash,randomUUID} from 'node:crypto';
+import {randomUUID} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import {constants} from 'node:fs';
 import {lstat,mkdir,open,readdir,rename,unlink} from 'node:fs/promises';
 import path from 'node:path';
@@ -7,7 +8,7 @@ import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import type {ActiveHolders} from '../../storage/sqlite/deletion/holders.ts';
 import type {HistoryScope} from '../sqlite/contracts.ts';
 
-const hash=(...parts:string[])=>createHash('sha256').update(parts.join('\0')).digest('hex');
+const hash=(...parts:string[])=>sha256(parts.join('\0'));
 const digest=/^[a-f0-9]{64}$/;
 const uuid=/^[a-f0-9-]{36}$/;
 const fail=():never=>{throw new StorageFailure('history_checkpoint_invalid');};

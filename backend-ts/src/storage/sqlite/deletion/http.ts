@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createHash } from 'node:crypto';
+import { sha256 } from '../../../platform/sha256.ts';
 import { StorageFailure } from '../contracts.ts';
 import { readWechatHttpBody, WechatHttpBodyError } from '../../../sync/wechat-http-body.ts';
 import type { DeletionService } from './service.ts';
@@ -91,7 +91,7 @@ export class SqliteDeletionHttp {
       if (requestKey !== undefined && typeof requestKey !== 'string') invalid();
       // 旧来源/讨论/联系人ID删除后不得复用；账户可形成新资料，必须区分新请求。
       if (scope.kind === 'account' && requestKey === undefined) throw new StorageFailure('deletion_request_key_required');
-      const key = typeof requestKey === 'string' ? identifier(requestKey) : createHash('sha256').update(JSON.stringify(scope)).digest('hex');
+      const key = typeof requestKey === 'string' ? identifier(requestKey) : sha256(JSON.stringify(scope));
       const planned = await this.service.plan({ownerId: this.ownerId, requestKey: key, scope});
       const op = await this.run(planned.operationId);
       respond(202, source ? {task_id: op.operationId, operation_id: op.operationId, status: publicOperation(op).status} : {operation_id: op.operationId, state: op.state});

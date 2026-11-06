@@ -1,13 +1,12 @@
 import {constants} from 'node:fs';
 import {open} from 'node:fs/promises';
-import {createHash} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import {isDeepStrictEqual} from 'node:util';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {MediaAdapter,MediaExecution,MediaValidation} from '../sqlite/contracts.ts';
 import type {VoiceResourcePort,VoiceDecoder} from './contracts.ts';
 import {inspectSilk,inspectWav,pcmToWav,voiceLimits} from './format.ts';
 
-const sha256 = (data:Uint8Array):string => createHash('sha256').update(data).digest('hex');
 async function localBytes(location:string, maximum:number):Promise<Buffer> {
   const file = await open(location,constants.O_RDONLY|constants.O_NOFOLLOW);
   try {

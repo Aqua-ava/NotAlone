@@ -1,4 +1,5 @@
-import {createHash,randomUUID} from 'node:crypto';
+import {randomUUID} from 'node:crypto';
+import {sha256} from '../../../platform/sha256.ts';
 import type {StorageAction,StorageLease,StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
@@ -19,7 +20,7 @@ function runPaused(tx:StorageTransaction,ownerId:string,runId:string):boolean {
  const run=tx.get('SELECT pause_requested_at FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);
  return !run||run.pause_requested_at!==null;
 }
-const digest=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
+const digest=(v:unknown)=>sha256(JSON.stringify(v));
 function laterStage(tx:StorageTransaction,ownerId:string,t:StorageRow):string|null {
  const row=tx.get('SELECT policy_config FROM processing_run WHERE owner_id=? AND id=?',[ownerId,t.run_id]);if(!row)return null;
  try{const policy=JSON.parse(String(row.policy_config));return policy?.intent==='memory_document_later_stage'&&['document_scene','document_profile'].includes(policy.stage)?String(policy.stage):null;}catch{return null;}

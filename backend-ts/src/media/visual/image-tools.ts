@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import {execFile} from 'node:child_process';
 import {constants} from 'node:fs';
 import {lstat,open,realpath} from 'node:fs/promises';
@@ -10,7 +10,6 @@ import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 
 export interface ImageRuntimeKey {accountKey:string;rootSha256:string;aesKey:Uint8Array;xorKey:number}
 interface ProviderOptions {configPath:string;keyTool:string}
-const sha=(bytes:Uint8Array|string)=>createHash('sha256').update(bytes).digest('hex');
 const userHome=userInfo().homedir;
 const decoder=fileURLToPath(new URL('../../../../native/media-validation/.build/media-validation',import.meta.url));
 
@@ -33,7 +32,7 @@ export async function enrichImageToolOptions(options:NarrowWechatClientOptions):
  if(!options.environment&&process.env.NOTALONE_WECHAT_CONFIG)environment.WECHAT_CLI_CONFIG=process.env.NOTALONE_WECHAT_CONFIG;
  try {
   const bytes=await regular(decoder,32*1024*1024,true);
-  environment.NOTALONE_IMAGE_DECODER=decoder;environment.NOTALONE_IMAGE_DECODER_SHA256=sha(bytes);
+  environment.NOTALONE_IMAGE_DECODER=decoder;environment.NOTALONE_IMAGE_DECODER_SHA256=sha256(bytes);
  }catch{/* 普通图片仍可提取；WXGF 明确报告解码组件不可用。 */}
  return {...options,environment,imageKeyChannel:true};
 }
@@ -50,7 +49,7 @@ async function imageConfig(file:string,accountKey:string) {
   const value=JSON.parse(bytes.toString('utf8'));
   if(value.wxid!==accountKey||typeof value.db_root!=='string'||!path.isAbsolute(value.db_root))throw new Error('image_account_mismatch');
   const root=await realpath(value.db_root);
-  return {root,rootSha256:sha(root),fingerprint:sha(bytes),configuredKey:aes(value.image_key),xorKey:value.image_xor_key};
+  return {root,rootSha256:sha256(root),fingerprint:sha256(bytes),configuredKey:aes(value.image_key),xorKey:value.image_xor_key};
  }finally{bytes.fill(0);}
 }
 
@@ -71,7 +70,7 @@ export function createImageRuntimeKeyProvider(options:ProviderOptions) {
      config.configuredKey?.fill(0);
      let stdout:Buffer|undefined,stderr:Buffer|undefined;
      try {
-      const tool=await regular(options.keyTool,32*1024*1024,true),toolDigest=sha(tool);
+      const tool=await regular(options.keyTool,32*1024*1024,true),toolDigest=sha256(tool);
       const output=await new Promise<{stdout:Buffer;stderr:Buffer}>((resolve,reject)=>{
        execFile(options.keyTool,['image-key','--quiet','--root',config.root],{encoding:'buffer',maxBuffer:64*1024,timeout:8_000,signal,
         env:{...Object.fromEntries(['PATH','TMPDIR','LANG','LC_ALL'].filter(key=>process.env[key]!==undefined).map(key=>[key,process.env[key]])),HOME:userHome}},
@@ -86,7 +85,7 @@ export function createImageRuntimeKeyProvider(options:ProviderOptions) {
       const current=await imageConfig(options.configPath,accountKey);current.configuredKey?.fill(0);
       const reportedRoot=typeof value.scan_root==='string'?await realpath(value.scan_root):config.root;
       if(current.fingerprint!==config.fingerprint||current.root!==config.root||reportedRoot!==config.root||
-       value.wxid!==undefined&&value.wxid!==accountKey||sha(await regular(options.keyTool,32*1024*1024,true))!==toolDigest){key.fill(0);return null;}
+       value.wxid!==undefined&&value.wxid!==accountKey||sha256(await regular(options.keyTool,32*1024*1024,true))!==toolDigest){key.fill(0);return null;}
       return {accountKey,rootSha256:config.rootSha256,aesKey:key,xorKey:xor};
      }catch{return null;}finally{stdout?.fill(0);stderr?.fill(0);}
     })();

@@ -1,6 +1,7 @@
 import {constants} from 'node:fs';
 import {open,statfs} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import path from 'node:path';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import {ManagedFiles} from '../../storage/sqlite/deletion/managed-files.ts';
@@ -58,6 +59,6 @@ export class MediaFiles {
  async preview(address:ManagedAddress,size:number,digest:string):Promise<Buffer>{
   if(!Number.isSafeInteger(size)||size>32*1024*1024)throw new StorageFailure('media_preview_too_large');
   await this.verify(address,size,digest);const handle=await open(this.location(address),constants.O_RDONLY|constants.O_NOFOLLOW);
-  try{const data=await handle.readFile();if(data.length!==size||createHash('sha256').update(data).digest('hex')!==digest)throw new StorageFailure('media_copy_incomplete');this.location(address);return data;}finally{await handle.close();}
+  try{const data=await handle.readFile();if(data.length!==size||sha256(data)!==digest)throw new StorageFailure('media_copy_incomplete');this.location(address);return data;}finally{await handle.close();}
  }
 }

@@ -1,6 +1,6 @@
 /** 已确认归属对象的精确清理；未知归属、符号链接或结构变化一律失败并保留现场。 */
 import { closeSync, fsyncSync, lstatSync, openSync, readdirSync, readFileSync, unlinkSync, mkdirSync, rmdirSync, constants } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { sha256 } from '../../platform/sha256.ts';
 import path from 'node:path';
 import type { LegacyTarget } from './contracts.ts';
 
@@ -60,7 +60,7 @@ function verifyHash(location: string): string {
   assertPrivateFile(location);
   const value = lstatSync(location, { bigint: true });
   if (value.size > 64n * 1024n * 1024n) throw new CutoverCleanupError('archive_too_large');
-  return createHash('sha256').update(readFileSync(location)).digest('hex');
+  return sha256(readFileSync(location));
 }
 
 /** 执行一个已授权且归属确认的目标清理；返回非敏感明细。 */

@@ -1,6 +1,6 @@
 /** SQLite 记忆裁决的独立模型端口；复用宿主唯一 provider、许可和物理账本。 */
 import type {Context} from '@deepseek-ai/cordis';
-import {createHash} from 'node:crypto';
+import {sha256} from '../../../platform/sha256.ts';
 import type {HostReplyConfiguration} from '../../../host/host-reply-config.ts';
 import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
 import type {ModelTaskClaim} from '../../../platform/models/model-permit-server.ts';
@@ -62,8 +62,8 @@ export function createSqliteAdjudicationModelPort(options:SqliteAdjudicationMode
     ||profile.context_window_tokens<=binding.maxTokens+profile.safety_margin_tokens
     ||providerConfiguration.provider!==binding.provider||!positive(model.deadline_ms))fail('adjudication_model_configuration_invalid');
   const preparation:SqliteAdjudicationModelPreparation={provider:binding.provider,model:binding.model,
-    configurationId:createHash('sha256').update(JSON.stringify({binding,profile,
-      baseURL:providerConfiguration.connection.baseURL,deadline:model.deadline_ms})).digest('hex'),
+    configurationId:sha256(JSON.stringify({binding,profile,
+      baseURL:providerConfiguration.connection.baseURL,deadline:model.deadline_ms})),
     maxInputTokens:profile.context_window_tokens-binding.maxTokens-profile.safety_margin_tokens,
     maxOutputTokens:binding.maxTokens,contextWindowTokens:profile.context_window_tokens,safetyMarginTokens:profile.safety_margin_tokens};
   const caller=createExtractionModelCaller({ctx:options.ctx,provider:options.provider,permit:options.permit});

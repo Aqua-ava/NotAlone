@@ -1,5 +1,6 @@
 import {assertRecertifyAccess} from './recertify-access.ts';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { sha256 } from '../../platform/sha256.ts';
 import { StorageFailure, type StorageAction, type StorageTransaction, type StorageRow } from '../../storage/sqlite/contracts.ts';
 import { assertReadEligibility } from '../../contacts/sqlite/actions.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
@@ -213,7 +214,7 @@ export const historyActions:StorageAction[]=[
   const token=i.token as ReadEligibility;const goal=currentGoal(tx,token,i.goalId);const page=i.page as HistoryPage;
   if(i.recertifyId)assertRecertifyAccess(tx,token,i.recertifyId,i.guardId,JSON.parse(String(goal.target_json)));else assertLiveGuard(tx,token,i.guardId);
   if(goal.kind!=='history')fail('history_goal_kind_invalid');
-  const digest=createHash('sha256').update(JSON.stringify(page)).digest('hex');
+  const digest=sha256(JSON.stringify(page));
   const prior=tx.get('SELECT response_digest,contact_id,goal_id,read_epoch,cursor_in,cursor_out FROM sync_capture WHERE owner_id=? AND id=?',[token.owner_id,i.captureId]);
   if(prior){assertCaptureReplay(prior,token,goal,digest,page?.cursorIn,page?.cursorOut);return readCoverage(tx,token.owner_id,token.contact_id);}
   if(goal.state!=='running'&&goal.state!=='incomplete')fail('history_goal_closed');
@@ -284,7 +285,7 @@ export const historyActions:StorageAction[]=[
   const token=i.token as ReadEligibility;const goal=currentGoal(tx,token,i.goalId);const page=i.page as HistoryTailPage;
   assertLiveGuard(tx,token,i.guardId);
   if(goal.kind!=='incremental')fail('history_goal_kind_invalid');
-  const digest=createHash('sha256').update(JSON.stringify(page)).digest('hex');
+  const digest=sha256(JSON.stringify(page));
   const prior=tx.get('SELECT response_digest,contact_id,goal_id,read_epoch,cursor_in,cursor_out FROM sync_capture WHERE owner_id=? AND id=?',[token.owner_id,i.captureId]);
   if(prior){const cursorOut=assertHistoryCursor(page?.cursorOut,'history_page_invalid');assertCaptureReplay(prior,token,goal,digest,page?.cursorIn,cursorOut);return readCoverage(tx,token.owner_id,token.contact_id);}
   if(goal.state!=='running'&&goal.state!=='incomplete')fail('history_goal_closed');

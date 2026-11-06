@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {sha256} from '../../../platform/sha256.ts';
 import type {StorageMigration} from '../../../storage/sqlite/contracts.ts';
 
 // 以已发布12的固定定义生成；后续只追加迁移，不修改既有账本。
@@ -13,5 +13,5 @@ export const memoryDocumentsUpgradeSteps = Object.freeze([
  {phase:"check",sql:"SELECT 1;"},
 ].map(step=>Object.freeze(step))) as readonly {phase:'prepare'|'create'|'copy'|'drop'|'rename'|'recreate'|'check';sql:string}[];
 const sql=memoryDocumentsUpgradeSteps.map(step=>step.sql).join('\n');
-export const memoryDocumentsRebuildChecksum=createHash('sha256').update(sql).digest('hex');
+export const memoryDocumentsRebuildChecksum=sha256(sql);
 export const memoryDocumentsMigration=(version:number):StorageMigration=>({version,sql,rebuild:memoryDocumentsRebuildPolicy});

@@ -1,5 +1,6 @@
 /** 官方持久化适配层；目录身份及业务提交资格由讨论服务在调用前后核验。 */
-import {createHash,randomUUID} from 'node:crypto';
+import {randomUUID} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import {lstat,realpath,readdir,open} from 'node:fs/promises';
 import {constants,type BigIntStats} from 'node:fs';
 import path from 'node:path';
@@ -27,7 +28,7 @@ export interface DshRuntimeDriver {
 const failure=()=>new StorageFailure('discussion_runtime_unavailable');
 function boundary(events:readonly SessionEvent[]):DshEventBoundary {
  return {formatVersion:SESSION_FORMAT_VERSION,eventCount:events.length,lastSeq:events.at(-1)?.seq??null,
-  eventSha256:createHash('sha256').update(JSON.stringify(events)).digest('hex')};
+  eventSha256:sha256(JSON.stringify(events))};
 }
 
 /** 只接受受信任宿主已排他创建、登记真实身份的私有副本根；本层不创建或接管根。 */

@@ -2,7 +2,7 @@ import type {StorageRow,StorageTransaction} from '../../../storage/sqlite/contra
 import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 import type {L2ScenarioMemory,L2ScenarioReference,L2ScenarioVersion} from '../../scenarios/workspace.ts';
 import type {L3ProfileDocument,L3ProfileEntry} from '../../profiles/workspace.ts';
-import {createHash} from 'node:crypto';
+import {sha256} from '../../../platform/sha256.ts';
 import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
 import {qualificationSources,mergeKnowledgeSources} from '../management/dependencies.ts';
 import {sourceVerificationState} from '../management/evidence.ts';
@@ -98,7 +98,7 @@ function inspectDocument(tx:StorageTransaction,ownerId:string,documentId:string,
  };
  for(const event of events){
   const request=JSON.parse(String(event.payload));
-  if(createHash('sha256').update(JSON.stringify(request)).digest('hex')!==event.input_seal)fail('document_input_incomplete');
+  if(sha256(JSON.stringify(request))!==event.input_seal)fail('document_input_incomplete');
   const actual=documentActualInputs(tx,ownerId,String(v!.step_id),request);compare(String(event.id),actual);
   const outputs=tx.all("SELECT id FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND kind='document_output' AND originated_call_id=?",[ownerId,v!.produced_attempt_id,event.originated_call_id]);
   if(outputs.length!==1)fail('document_input_incomplete');compare(String(outputs[0]!.id),actual);
@@ -132,7 +132,7 @@ export function documentSources(tx:StorageTransaction,ownerId:string,documentId:
 }
 export function publicationDigest(members:readonly {documentId:string;versionNo:bigint}[]):string {
  const sorted=members.map(m=>[m.documentId,String(m.versionNo)]).sort((a,b)=>a[0]!.localeCompare(b[0]!));
- return createHash('sha256').update(JSON.stringify(sorted)).digest('hex');
+ return sha256(JSON.stringify(sorted));
 }
 function publicationStructure(tx:StorageTransaction,ownerId:string,publicationId:string,scopeKind:string,contactId:string|null):{publication:StorageRow;members:StorageRow[]} {
  const p=tx.get('SELECT * FROM document_publication WHERE owner_id=? AND id=? AND scope_kind=? AND contact_id IS ?',[ownerId,publicationId,scopeKind,contactId]);

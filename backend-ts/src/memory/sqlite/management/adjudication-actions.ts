@@ -1,5 +1,6 @@
 /** 裁决只消费被冻结的候选、正式版本和消息；模型结果本身不授予写入资格。 */
-import {createHash,randomUUID} from 'node:crypto';
+import {randomUUID} from 'node:crypto';
+import {sha256} from '../../../platform/sha256.ts';
 import {StorageFailure,type StorageAction,type StorageLease,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {assertSourceEligibility} from '../../../history/sqlite/source.ts';
 import {assertTaskContributions} from '../qualification.ts';
@@ -19,7 +20,7 @@ import {available,fail,id,requireAutomaticCandidate,requireVersion,requireSource
 import {qualificationSources,mergeKnowledgeSources} from './dependencies.ts';
 import type {SqliteAdjudicationModelPurpose} from './model-port.ts';
 const purposes=['adjudication','relation_verification','merge_verification'] as const;
-const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value,(_key,v)=>typeof v==='bigint'?v.toString():v)).digest('hex');
+const digest=(value:unknown)=>sha256(JSON.stringify(value,(_key,v)=>typeof v==='bigint'?v.toString():v));
 interface Basis {pageIndex:number;candidateId:string;candidateRevision:string;runId:string;taskId:string;scopeKind:'self'|'contact';contactId:string|null;memoryRevision:string;intentRevision:string;eventTimeUnverified?:1;item:AdjudicationItem;parents:{id:string;versionNo:string;headRevision:string;protected:boolean}[];}
 export interface AdjudicationClaim {attemptId:string;stepId:string;basis:Basis;claim:ModelTaskClaim;}
 const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>unknown):StorageAction=>({name:`memoryAdjudication.${name}`,mode,retryBusy:mode==='write',execute} as StorageAction);

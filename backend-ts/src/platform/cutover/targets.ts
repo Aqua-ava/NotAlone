@@ -1,7 +1,7 @@
 /** 旧目标识别：只把结构可证明归属的 userData 内对象标为 confirmed；其余保持 unknown 并阻断切换。 */
 import { constants } from 'node:fs';
 import { lstatSync, openSync, closeSync, readSync, readdirSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { sha256 } from '../../platform/sha256.ts';
 import path from 'node:path';
 import type { LegacyTarget, LegacyTargetKind, Ownership, WriterCheckRecord } from './contracts.ts';
 
@@ -43,7 +43,7 @@ function privateText(location: string, limit: number): string | undefined {
   } finally { closeSync(fd); }
 }
 export function targetId(kind: LegacyTargetKind, locator: string): string {
-  return createHash('sha256').update(`${kind}:${locator}`).digest('hex').slice(0, 32);
+  return sha256(`${kind}:${locator}`).slice(0, 32);
 }
 function target(kind: LegacyTargetKind, locator: string, ownership: Ownership, evidence: string): LegacyTarget {
   return { id: targetId(kind, locator), kind, locator, ownership, evidence, state: 'pending', attempts: 0 };
@@ -145,7 +145,7 @@ function ownedHistoryMaintenance(userData:string):boolean {
     ||!/^(0|[1-9][0-9]{0,19})$/.test(from[3])||BigInt(from[3])>18446744073709551615n)return false;
   }
   const canonical=JSON.stringify(proof,(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a<b?-1:a>b?1:0)):value);
-  return createHash('sha256').update(canonical).digest('hex')===row.proofDigest;
+  return sha256(canonical)===row.proofDigest;
  }catch{return false;}
 }
 /** 当前存储目录只接受已知 SQLite 与通用维护产物；未知对象保留现场，不解析或代为清除。 */

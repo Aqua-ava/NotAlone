@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { constants, closeSync, fstatSync, lstatSync, openSync, readSync, readdirSync, realpathSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
 import { parseDocument, visit, isScalar } from 'yaml';
+import { sha256 as sharedSha256 } from '../platform/sha256.ts';
 
 export const MAX_RESOURCE_BYTES = 1024 * 1024;
 export class SkillPackageError extends Error {
@@ -13,7 +14,7 @@ export class SkillPackageError extends Error {
 export class SkillPackageReadError extends Error { readonly code='file_unavailable'; constructor(){super('Skill 包暂不可读。');this.name='SkillPackageReadError';} }
 export interface SkillResource { relative_path: string; resource_kind: 'reference' | 'asset'; media_type: string; content: Buffer; content_sha256: string }
 export interface SkillPackage { name: string; description: string; content: string; content_sha256: string; package_sha256: string; resources: SkillResource[]; warnings: string[] }
-export const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+export const sha256 = sharedSha256;
 /** Python 按 Unicode 码点排序；UTF-8 字节序保持相同顺序，避免非 BMP 路径改变旧哈希。 */
 export const compareText = (a:string,b:string):number => Buffer.compare(Buffer.from(a),Buffer.from(b));
 /** 保留 Python splitlines(keepends=True) 的全部分隔符及原始正文。 */

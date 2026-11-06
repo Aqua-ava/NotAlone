@@ -1,7 +1,8 @@
 /** 宿主唯一的 TS 模型许可；稳定状态不随临时DSH profile销毁。 */
 import { mkdir, lstat, rmdir } from 'node:fs/promises';
 import { join, resolve, isAbsolute } from 'node:path';
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
+import { sha256 } from '../../platform/sha256.ts';
 import { ModelPermitArbiter } from './model-permits.ts';
 import { startModelPermitServer, type ModelPermitAccounting } from './model-permit-server.ts';
 export interface ModelHostOptions {
@@ -43,7 +44,7 @@ function modelHostPaths(options:ModelHostIdentityOptions) {
   for (const path of [options.businessHome,options.infoPath,options.envFilePath]) if (!isAbsolute(path)||/[\0\r\n]/.test(path)) throw new Error('model_host_configuration_invalid');
   const managed = options.runtimeEnvironment.NOTALONE_MANAGED_USER_DATA;
   if (managed !== undefined && (!isAbsolute(managed)||/[\0\r\n]/.test(managed))) throw new Error('model_host_configuration_invalid');
-  const identity = createHash('sha256').update(JSON.stringify([resolve(options.infoPath),resolve(options.envFilePath)])).digest('hex').slice(0,24);
+  const identity = sha256(JSON.stringify([resolve(options.infoPath),resolve(options.envFilePath)])).slice(0,24);
   const base = managed ?? join(options.businessHome,'.notalone');
   const directory = join(base,'model-permits',identity);
   const socketDirectory = join('/tmp',`na-model-${process.getuid?.() ?? 'local'}-${identity}`);

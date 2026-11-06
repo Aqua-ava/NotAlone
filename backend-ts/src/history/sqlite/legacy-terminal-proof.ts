@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import {StorageFailure,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {ReadEligibility} from '../../contacts/sqlite/contracts.ts';
 import type {HistorySupportReport,HistoryTarget} from './contracts.ts';
@@ -7,7 +7,7 @@ import type {ResolvedWechatScope,WechatSchemaInspection} from '../wechat/native-
 const fail=():never=>{throw new StorageFailure('history_recertify_legacy_proof_invalid');};
 const canonical=(v:any):string=>JSON.stringify(v,(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)
  ?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a<b?-1:a>b?1:0)):typeof value==='bigint'?String(value):value);
-export const legacyProofDigest=(proof:unknown)=>createHash('sha256').update(canonical(proof)).digest('hex');
+export const legacyProofDigest=(proof:unknown)=>sha256(canonical(proof));
 const physical=(target:HistoryTarget)=>canonical({generation:target.sourceGeneration,partitions:[...target.partitions].sort(),
  tables:target.tables.map(t=>[t.partition,t.instance]).sort(),checked:target.checkedPartitions?[...target.checkedPartitions].sort():null});
 export const legacyTargetDigest=(target:HistoryTarget)=>legacyProofDigest(physical(target));

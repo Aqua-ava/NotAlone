@@ -1,7 +1,7 @@
 import {parentPort,workerData} from 'node:worker_threads';
 import {DatabaseSync,type SQLInputValue} from 'node:sqlite';
 import {statSync} from 'node:fs';
-import {createHash} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import {controlledFiles} from './files.ts';
 import {statementCache} from './statement-cache.ts';
 import {registry as defaultRegistry} from './registry.ts';
@@ -9,7 +9,6 @@ import {StorageFailure,type StorageRegistry,type StorageTransaction} from './con
 import type {ReadonlyWorkerOptions} from './readonly-client.ts';
 
 const port=parentPort!,options=workerData as ReadonlyWorkerOptions;
-const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
 const failureCode=(error:unknown):string=>{
   if(error instanceof StorageFailure)return error.code;
   const value=error as {code?:string;errcode?:number};
@@ -43,10 +42,10 @@ try{
     return current;
   };
   const initial=assertLease();
-  const actualDigest=digest(JSON.stringify(all("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name")));
+  const actualDigest=sha256(JSON.stringify(all("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name")));
   if(initial.schema_digest!==actualDigest)throw new StorageFailure('schema_drift');
   const ledger=all('SELECT version,checksum FROM schema_migration ORDER BY version');
-  if(ledger.length!==status.schemaVersion||ledger.length!==registry.migrations.length||ledger.some((row,index)=>row.version!==BigInt(index+1)||row.checksum!==digest(registry.migrations[index].sql)))throw new StorageFailure('migration_drift');
+  if(ledger.length!==status.schemaVersion||ledger.length!==registry.migrations.length||ledger.some((row,index)=>row.version!==BigInt(index+1)||row.checksum!==sha256(registry.migrations[index].sql)))throw new StorageFailure('migration_drift');
   assertLease();port.postMessage({ready:true});
   port.on('message',({id,name,input})=>{
     try{

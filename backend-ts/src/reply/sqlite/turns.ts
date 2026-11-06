@@ -1,4 +1,5 @@
-import {createHash,randomUUID} from 'node:crypto';
+import {randomUUID} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import {SqliteSkillLibrary,skillAnchor} from '../../skills/sqlite/library.ts';
@@ -19,7 +20,7 @@ export class SqliteDiscussionTurns {
  private stopping=false;private readonly pending=new Set<Promise<unknown>>();private readonly controllers=new Set<AbortController>();private closing?:Promise<void>;
  private readonly storage:SqliteStorage;private readonly discussions:SqliteDiscussionService;private readonly runtime:SqliteDiscussionRuntime;private readonly model:HostReplyModelConfiguration;private readonly provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;private readonly arbiter:ModelPermitArbiter;private readonly library?:SqliteSkillLibrary;private readonly authorize:(contactId:string)=>Promise<void>;
  constructor(options:{storage:SqliteStorage;discussions:SqliteDiscussionService;runtime:SqliteDiscussionRuntime;model:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;library?:SqliteSkillLibrary;authorize:(contactId:string)=>Promise<void>}){this.storage=options.storage;this.discussions=options.discussions;this.runtime=options.runtime;this.model=options.model;this.provider=options.provider;this.arbiter=options.arbiter;this.library=options.library;this.authorize=options.authorize;}
- private digest(revision:SkillRunRevision):string{return createHash('sha256').update(encode({format:1,systemPrompt,model:this.model,revision})).digest('hex');}
+ private digest(revision:SkillRunRevision):string{return sha256(encode({format:1,systemPrompt,model:this.model,revision}));}
  async configurationFor(contactId:string,discussionId:string):Promise<string>{
   const view=await this.discussions.view(contactId,discussionId),last=[...view.entries].reverse().find((e:any)=>e.role==='assistant'&&e.content_state==='available');
   let selected:string|undefined;
@@ -60,7 +61,7 @@ export class SqliteDiscussionTurns {
   const entries=view.entries.filter((e:any)=>e.content_state==='available');
   const messages=await this.storage.execute<any[]>('discussion.messages',{...attempt,messageIds:input.contextMessageIds??[]});
   await this.storage.execute('discussion.freezeContext',{...attempt,contextId,skillRun:revision,items:[...messages.map(m=>({kind:'message',sourceContactId:input.contactId,messageId:m.id,recordId:m.record_id,acceptedRevision:m.interpretation_revision})),...entries.map((e:any)=>({kind:'entry',entryId:e.id}))],at:Date.now()});
-  const inputSeal=createHash('sha256').update(encode({contextId,text:input.text,model:this.model,revision})).digest('hex');
+  const inputSeal=sha256(encode({contextId,text:input.text,model:this.model,revision}));
   const configurationDigest=this.digest(revision);
   await this.storage.execute('discussion.prepareCall',{...attempt,contextId,callId,operationId:randomUUID(),provider:this.model.provider,requestKey:callId,inputSeal,
    model:this.model.model,configurationId:configurationDigest,inputCap:this.model.budgetProfile.context_window_tokens-this.model.maxTokens-this.model.budgetProfile.safety_margin_tokens,outputCap:this.model.maxTokens});

@@ -1,4 +1,5 @@
-import {createHash,randomUUID} from 'node:crypto';
+import {randomUUID} from 'node:crypto';
+import {sha256} from '../../../platform/sha256.ts';
 import type {SqliteStorage} from '../../../storage/sqlite/client.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import type {HostReplyModelConfiguration} from '../../../host/host-reply-config.ts';
@@ -26,7 +27,7 @@ export class SqliteReplyTurns {
  private readonly options:Options;private stopping=false;private readonly pending=new Set<Promise<unknown>>();private readonly controllers=new Set<AbortController>();
  constructor(options:Options){this.options=options;}
  private stage(stage:ReplyPreparationStage):void{try{this.options.onPreparationStage?.(stage);}catch{}}
- private digest(requestId:string,revision:SkillRunRevision){return createHash('sha256').update(encode({format:1,systemPrompt,model:this.options.model,revision,requestId})).digest('hex');}
+ private digest(requestId:string,revision:SkillRunRevision){return sha256(encode({format:1,systemPrompt,model:this.options.model,revision,requestId}));}
  async configurationFor(contactId:string,discussionId:string):Promise<string|null>{
   const o=this.options,scope={ownerId:o.service.ownerId,contactId,discussionId};
   const read=()=>o.storage.execute<{requestId:string;revision:SkillRunRevision}|null>('reply.configuration',scope);
@@ -90,7 +91,7 @@ export class SqliteReplyTurns {
    const prompt=requestIntent+'\n\n实际输入材料（编号用于basis）：\n'+frozen.map(item=>`[${item.itemNo}] ${item.kind}\n${item.text}`).join('\n\n');
    // 每次候选任务重建独立副本；旧候选只有显式选择才进入新输入。
    const configurationDigest=this.digest(attempt.requestId,revision);
-   await o.storage.execute('discussion.prepareCall',{...attempt,contextId,callId,operationId:randomUUID(),provider:o.model.provider,requestKey:callId,inputSeal:createHash('sha256').update(prompt).digest('hex'),model:o.model.model,configurationId:configurationDigest,inputCap:o.model.budgetProfile.context_window_tokens-o.model.maxTokens-o.model.budgetProfile.safety_margin_tokens,outputCap:o.model.maxTokens});
+   await o.storage.execute('discussion.prepareCall',{...attempt,contextId,callId,operationId:randomUUID(),provider:o.model.provider,requestKey:callId,inputSeal:sha256(prompt),model:o.model.model,configurationId:configurationDigest,inputCap:o.model.budgetProfile.context_window_tokens-o.model.maxTokens-o.model.budgetProfile.safety_margin_tokens,outputCap:o.model.maxTokens});
    if(skillDegraded)await o.storage.execute('discussion.skillUnavailable',{...attempt,contextId,callId});
    const base=new SqliteDiscussionSkillProtection({storage:o.storage,attempt,contextId,callId,authorize:()=>o.authorize(input.contactId)});
    // Skill 的中间步骤只核任务及修订；候选实际出站和保存各自原子复验完整资料。

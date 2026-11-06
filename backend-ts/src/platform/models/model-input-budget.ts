@@ -1,5 +1,5 @@
 /** 在官方 Messages 序列化之后估算完整JSON；不重写provider，也不声称精确token计量。 */
-import { createHash } from 'node:crypto';
+import { sha256 } from '../../platform/sha256.ts';
 import { isDeepStrictEqual } from 'node:util';
 import {deepSeekImageTokens} from '@deepseek-ai/dsh-llm-deepseek';
 import type {ModelImageManifest} from './model-images.ts';
@@ -57,7 +57,7 @@ function requireTextBlocks(blocks: unknown): void {
 function imageTokenAdjustment(sources:readonly {mimeType:string;data:string}[],images:readonly ModelImageManifest[]):number{
   const remaining=[...images];let adjustment=0;
   for(const source of sources){
-    const bytes=Buffer.from(source.data,'base64'),hash=createHash('sha256').update(bytes).digest('hex');
+    const bytes=Buffer.from(source.data,'base64'),hash=sha256(bytes);
     const index=remaining.findIndex(image=>image.requestSha256===hash&&image.requestMimeType===source.mimeType&&image.bytes===bytes.length);
     if(index<0)unavailable();const image=remaining.splice(index,1)[0]!;
     if(![image.width,image.height].every(value=>Number.isSafeInteger(value)&&value>0))unavailable();
@@ -110,7 +110,7 @@ export function measureSerializedMessages(body: unknown, binding: MessagesBudget
   const inputTokens=bytes+imageTokenAdjustment(sources,images);
   const receipt:MessagesBudgetReceipt={...binding,measurement_id:sources.length?MESSAGES_IMAGE_MEASUREMENT_ID:MESSAGES_MEASUREMENT_ID,measurement_kind:'approximate',input_tokens:inputTokens,
     context_window_tokens:profile.context_window_tokens,safety_margin_tokens:profile.safety_margin_tokens,
-    serialized_bytes:bytes,request_sha256:createHash('sha256').update(serialized).digest('hex'),covered_components:['messages','system','tools','controls']};
+    serialized_bytes:bytes,request_sha256:sha256(serialized),covered_components:['messages','system','tools','controls']};
   // UTF-8字节数是本地估算策略，不是供应商tokenizer或已验证上界；必须另留正安全余量。
   if(inputTokens+binding.maxTokens+profile.safety_margin_tokens>profile.context_window_tokens)throw new ModelInputBudgetError('reply_budget_exceeded',receipt);
   return receipt;
@@ -155,7 +155,7 @@ export function measureSerializedStrictChatCompletion(body: unknown, binding: Me
   const inputTokens=bytes+imageTokenAdjustment(sources,images);
   const receipt:MessagesBudgetReceipt={...binding,measurement_id:sources.length?STRICT_CHAT_IMAGE_MEASUREMENT_ID:STRICT_CHAT_MEASUREMENT_ID,measurement_kind:'approximate',input_tokens:inputTokens,
     context_window_tokens:profile.context_window_tokens,safety_margin_tokens:profile.safety_margin_tokens,
-    serialized_bytes:bytes,request_sha256:createHash('sha256').update(serialized).digest('hex'),covered_components:['messages','system','tools','controls']};
+    serialized_bytes:bytes,request_sha256:sha256(serialized),covered_components:['messages','system','tools','controls']};
   if(inputTokens+binding.maxTokens+profile.safety_margin_tokens>profile.context_window_tokens)throw new ModelInputBudgetError('reply_budget_exceeded',receipt);
   return receipt;
 }

@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {sha256} from '../../../platform/sha256.ts';
 import type {StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {MemoryScope} from './contracts.ts';
 import {available,fail,id} from './qualification.ts';
@@ -14,7 +14,7 @@ export function pageScope(tx:StorageTransaction,ownerId:string,scope:MemoryScope
  const contact=scope.contactId??display;
  const source=contact===null?null:tx.get('SELECT source_revision,selection_generation,data_generation FROM contact WHERE owner_id=? AND id=?',[ownerId,contact]);
  const owner=tx.get('SELECT read_epoch,state FROM owner WHERE owner_id=?',[ownerId]);
- const revision=createHash('sha256').update(JSON.stringify([memory,source,owner],(_key,value)=>typeof value==='bigint'?String(value):value)).digest('hex');
+ const revision=sha256(JSON.stringify([memory,source,owner],(_key,value)=>typeof value==='bigint'?String(value):value));
  return {ownerId,scope,displayContactId:display,revision};
 }
 export function encodePage(scope:ManagementPageScope,kind:string,position:unknown):string {

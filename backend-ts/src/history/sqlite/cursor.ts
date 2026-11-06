@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256 } from '../../platform/sha256.ts';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistorySupportReport, HistoryTarget } from './contracts.ts';
@@ -42,5 +42,5 @@ export function historyCursorScopeDigest(token: ReadEligibility, report: History
     capabilities: sortedCapabilities(report),
     cursorScheme: historyCursorScheme,
   };
-  return createHash('sha256').update(JSON.stringify(scope)).digest('hex');
+  return sha256(JSON.stringify(scope));
 }

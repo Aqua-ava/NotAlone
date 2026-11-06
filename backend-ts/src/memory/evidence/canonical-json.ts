@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256 } from '../../platform/sha256.ts';
 
 export type Evidence = Record<string, any>;
 export class UnavailableEvidence extends Error {}
@@ -42,4 +42,4 @@ export function canonicalJSON(value: unknown, spaced = false, ascii = false): st
   return ascii ? result.replace(/[\u007f-\uffff]/g, character => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`) : result;
 }
 export function digest(value: unknown): string { return sha(canonicalJSON(value)); }
-export function sha(value: string): string { return createHash('sha256').update(value).digest('hex'); }
+export function sha(value: string): string { return sha256(value); }

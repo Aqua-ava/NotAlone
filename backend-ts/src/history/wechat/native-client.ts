@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams, type StdioOptions } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { sha256 } from '../../platform/sha256.ts';
 import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
@@ -151,7 +151,6 @@ const recoverableImageOpenErrors = new Set([
   'history_image_association_unverified', 'history_image_local_file_missing', 'history_image_quality_unverified',
   'history_image_format_unsupported', 'history_image_decoder_unavailable',
 ]);
-const digest = (input: string | Buffer) => createHash('sha256').update(input).digest('hex');
 const fail = (code = 'history_protocol_invalid'): never => { throw new StorageFailure(code); };
 const hashPattern = /^[a-f0-9]{64}$/;
 const absentPrivateTargetProfile = 'wechat-4.0.6-29387-absent-private-target-v1';
@@ -415,7 +414,7 @@ function table(value: unknown): WechatTableSchema {
 function inspection(value: unknown, scope: ResolvedWechatScope): WechatSchemaInspection {
   const row = object(value, ['format', 'status', 'scopeDigest', 'sourceGeneration', 'schemaFingerprint', 'tables', 'checkedPartitions']);
   if (row.format !== 'wechat-message-schema-v1' || row.status !== 'unverified') return fail();
-  if (hash(row.scopeDigest) !== digest(`${scope.accountKey}\0${scope.conversationKey}`) || hash(row.sourceGeneration) !== scope.sourceGeneration) return fail();
+  if (hash(row.scopeDigest) !== sha256(`${scope.accountKey}\0${scope.conversationKey}`) || hash(row.sourceGeneration) !== scope.sourceGeneration) return fail();
   const checkedPartitions = list(row.checkedPartitions, 128, hash, 1); unique(checkedPartitions);
   const tables = list(row.tables, 128, table); unique(tables.map(item => item.target));
   if (tables.some(item => !checkedPartitions.includes(item.partition))) return fail();
@@ -692,7 +691,7 @@ function metadataRecord(value: unknown, schema: WechatSchemaInspection): WechatM
 function metadataObservation(value: unknown, scope: ResolvedWechatScope, schema: WechatSchemaInspection, kind: HistoryRecord['kind']): WechatMessageMetadataObservation {
   const row = object(value, ['format', 'status', 'scopeDigest', 'sourceGeneration', 'schemaFingerprint', 'kind', 'checkedPartitions', 'record']);
   if (row.format !== 'wechat-message-metadata-observation-v1' || row.status !== 'unverified' || row.kind !== kind
-    || hash(row.scopeDigest) !== digest(`${scope.accountKey}\0${scope.conversationKey}`)
+    || hash(row.scopeDigest) !== sha256(`${scope.accountKey}\0${scope.conversationKey}`)
     || row.sourceGeneration !== scope.sourceGeneration || row.schemaFingerprint !== schema.schemaFingerprint) return fail();
   const checkedPartitions = list(row.checkedPartitions, 128, hash, 1); unique(checkedPartitions);
   if (JSON.stringify([...checkedPartitions].sort()) !== JSON.stringify([...schema.checkedPartitions].sort())) return fail();
@@ -704,7 +703,7 @@ function metadataObservation(value: unknown, scope: ResolvedWechatScope, schema:
 function testMetadataObservation(value: unknown, scope: ResolvedWechatScope, schema: WechatSchemaInspection, action: WechatTestMetadataAction): WechatTestMetadataObservation {
   const row = object(value, ['format', 'status', 'scopeDigest', 'sourceGeneration', 'schemaFingerprint', 'action', 'checkedPartitions', 'lockedCount', 'records']);
   if (row.format !== 'wechat-test-metadata-observation-v1' || row.status !== 'unverified' || row.action !== action) return fail();
-  if (hash(row.scopeDigest) !== digest(`${scope.accountKey}\0${scope.conversationKey}`) || hash(row.sourceGeneration) !== scope.sourceGeneration) return fail('history_source_changed');
+  if (hash(row.scopeDigest) !== sha256(`${scope.accountKey}\0${scope.conversationKey}`) || hash(row.sourceGeneration) !== scope.sourceGeneration) return fail('history_source_changed');
   if (hash(row.schemaFingerprint) !== schema.schemaFingerprint) return fail('history_schema_changed');
   const checkedPartitions = list(row.checkedPartitions, 128, hash, 1); unique(checkedPartitions);
   if (JSON.stringify([...checkedPartitions].sort()) !== JSON.stringify([...schema.checkedPartitions].sort())) return fail('history_source_changed');
@@ -716,7 +715,7 @@ function testMetadataObservation(value: unknown, scope: ResolvedWechatScope, sch
 function receivedTestMetadataObservation(value: unknown, scope: ResolvedWechatScope, schema: WechatSchemaInspection, action: WechatTestMetadataAction): WechatReceivedTestMetadataObservation {
   const row = object(value, ['format', 'status', 'scopeDigest', 'sourceGeneration', 'schemaFingerprint', 'action', 'checkedPartitions', 'lockedCount', 'records']);
   if (row.format !== 'wechat-received-test-metadata-observation-v1' || row.status !== 'unverified' || row.action !== action) return fail();
-  if (hash(row.scopeDigest) !== digest(`${scope.accountKey}\0${scope.conversationKey}`) || hash(row.sourceGeneration) !== scope.sourceGeneration) return fail();
+  if (hash(row.scopeDigest) !== sha256(`${scope.accountKey}\0${scope.conversationKey}`) || hash(row.sourceGeneration) !== scope.sourceGeneration) return fail();
   if (hash(row.schemaFingerprint) !== schema.schemaFingerprint) return fail();
   const checkedPartitions = list(row.checkedPartitions, 128, hash, 1); unique(checkedPartitions);
   if (JSON.stringify([...checkedPartitions].sort()) !== JSON.stringify([...schema.checkedPartitions].sort())) return fail();
@@ -760,7 +759,7 @@ async function verifyArtifacts(options: NarrowWechatClientOptions): Promise<void
       || options.imageKeyChannel===true&&(manifest.originalImageProtocol!=='wechat-original-image-v1'||!['wechat-cdn-big-hd-exact-content-v4','wechat-message-image-content-v1','wechat-message-image-content-v2'].includes(manifest.originalImageQualityProof as string))
       || options.imageOpenIsolation===true&&(manifest.imageOpenIsolation!=='wechat-image-open-local-v1'||manifest.originalImageProtocol!=='wechat-original-image-v1')
       || manifest.cliSha256 !== options.expectedCliSha256 || manifest.wcdbSha256 !== options.expectedWcdbSha256
-      || digest(cli) !== options.expectedCliSha256 || digest(wcdb) !== options.expectedWcdbSha256) fail('history_artifact_unverified');
+      || sha256(cli) !== options.expectedCliSha256 || sha256(wcdb) !== options.expectedWcdbSha256) fail('history_artifact_unverified');
   } catch { fail('history_artifact_unverified'); }
 }
 function validatedOptions(options: NarrowWechatClientOptions): NarrowWechatClientOptions {

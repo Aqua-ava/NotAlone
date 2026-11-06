@@ -1,4 +1,5 @@
-import {randomUUID,createHash} from 'node:crypto';
+import {randomUUID} from 'node:crypto';
+import {sha256} from '../../../platform/sha256.ts';
 import type {StorageAction,StorageMigration,StorageTransaction,StorageRow,StorageLease} from '../../../storage/sqlite/contracts.ts';
 import type {MemoryScope} from '../management/contracts.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
@@ -367,12 +368,12 @@ function claimDue(tx:StorageTransaction,ownerId:string,now:number):unknown {
 }
 function bodyDigest(tx:StorageTransaction,ownerId:string,scope:MemoryScope):string {
  const base=scopeRow(tx,ownerId,scope),publicationId=base?.current_publication_id;
- if(publicationId===null||publicationId===undefined)return createHash('sha256').update('[]').digest('hex');
+ if(publicationId===null||publicationId===undefined)return sha256('[]');
  const docs=tx.all(`SELECT d.id FROM publication_member m JOIN memory_document d ON d.owner_id=m.owner_id AND d.id=m.document_id
   WHERE m.owner_id=? AND m.publication_id=? AND d.kind='scene' ORDER BY d.id`,[ownerId,publicationId]);
  const bodies=docs.map(doc=>tx.all('SELECT s.body FROM document_statement s JOIN publication_member m ON m.owner_id=s.owner_id AND m.document_id=s.document_id AND m.version_no=s.version_no WHERE m.owner_id=? AND m.publication_id=? AND s.document_id=? ORDER BY s.block_no,s.statement_no',[ownerId,publicationId,doc.id]).map(row=>String(row.body)));
  bodies.sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
- return createHash('sha256').update(JSON.stringify(bodies)).digest('hex');
+ return sha256(JSON.stringify(bodies));
 }
 /** 旧入口可能仍发布完整双阶段任务；只有真实当前publication且版本完全匹配时才结清同版队列。 */
 function finishLegacyFullPublication(tx:StorageTransaction,ownerId:string,taskId:string,now:number):boolean {

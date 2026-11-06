@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {sha256} from '../../../platform/sha256.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 
 export type ReplyWorkspaceTone='original'|'warm'|'concise'|'polite';
@@ -34,7 +34,7 @@ export function replyWorkspaceEntryText(workspace:ReplyWorkspace):string{
   `关系背景：${workspace.includeRelationshipContext?'已启用':'已关闭'}`].join('\n\n');
 }
 export function replyWorkspaceFingerprint(workspace:ReplyWorkspace,selectedPackageId?:string,carriedSelectionId?:string):string{
- return createHash('sha256').update(JSON.stringify({version:2,workspace,selectedPackageId:selectedPackageId??null,carriedSelectionId:carriedSelectionId??null})).digest('hex');
+ return sha256(JSON.stringify({version:2,workspace,selectedPackageId:selectedPackageId??null,carriedSelectionId:carriedSelectionId??null}));
 }
 export function toneLabel(tone:ReplyWorkspaceTone):string{
  return ({original:'保持本次原意',warm:'温和自然',concise:'简洁',polite:'礼貌'} as const)[tone];

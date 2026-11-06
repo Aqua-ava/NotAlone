@@ -1,7 +1,8 @@
 /** 控制面持久化：只在 userData 的 database-cutover 目录内读写，不放在待删除目标里。 */
 import { constants } from 'node:fs';
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from 'node:fs';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { sha256 } from '../../platform/sha256.ts';
 import path from 'node:path';
 import type { SqliteCapabilitiesConfiguration } from '../../sqlite-capabilities.ts';
 import { CUTOVER_AUTHORIZATION, CUTOVER_DIRECTORY, CUTOVER_FORMAT_VERSION, CUTOVER_MANIFEST, CUTOVER_STARTUP_CONFIG,
@@ -139,7 +140,7 @@ export function loadAuthorization(userData: string): CutoverAuthorization | unde
 export function authorizationDigest(authorization: CutoverAuthorization): string {
   const canonical = { formatVersion: authorization.formatVersion, approvedAt: authorization.approvedAt, scope: authorization.scope,
     targets: [...authorization.targets].sort((a, b) => a.id.localeCompare(b.id)) };
-  return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
+  return sha256(JSON.stringify(canonical));
 }
 
 export interface StartupConfiguration extends SqliteCapabilitiesConfiguration { formatVersion: 1; intent: 'open'; role: 'test'; expectedDatabaseId: string }

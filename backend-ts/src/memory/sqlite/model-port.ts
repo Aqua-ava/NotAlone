@@ -1,6 +1,6 @@
 /** 固定范围提取的模型端口；沿正式 DSH provider 和许可合同。 */
 import type {Context} from '@deepseek-ai/cordis';
-import {createHash} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import type {HostReplyConfiguration} from '../../host/host-reply-config.ts';
 import type {ModelLedgerReceipt} from '../../platform/models/model-ledger-contract.ts';
 import type {ModelTaskClaim} from '../../platform/models/model-permit-server.ts';
@@ -56,8 +56,8 @@ export function createSqliteExtractionModelPort(options:SqliteExtractionModelPor
     ||providerConfiguration.provider!==binding.provider||!positive(model.deadline_ms)
     ||typeof options.authorizePurpose!=='function'||!options.provider&&typeof options.resolveUserId!=='function')fail('extraction_model_configuration_invalid');
   const preparation:SqliteExtractionModelPreparation={provider:binding.provider,model:binding.model,
-    configurationId:createHash('sha256').update(JSON.stringify({binding,profile,
-      baseURL:providerConfiguration.connection.baseURL,deadline:model.deadline_ms})).digest('hex'),
+    configurationId:sha256(JSON.stringify({binding,profile,
+      baseURL:providerConfiguration.connection.baseURL,deadline:model.deadline_ms})),
     maxInputTokens:profile.context_window_tokens-binding.maxTokens-profile.safety_margin_tokens,
     maxOutputTokens:binding.maxTokens,contextWindowTokens:profile.context_window_tokens,safetyMarginTokens:profile.safety_margin_tokens};
   const ownsProvider=!options.provider;

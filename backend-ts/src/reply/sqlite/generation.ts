@@ -1,6 +1,7 @@
 import {installRelationshipDocumentTool,RELATIONSHIP_DOCUMENT_TOOL} from './document-tool.ts';
 /** 一次明确讨论的执行壳；SQL资格、实际输入及发言提交均走具名业务动作。 */
-import {createHash,randomUUID} from 'node:crypto';
+import {randomUUID} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import type {Context} from '@deepseek-ai/cordis';
 import type {AgentHandle} from '@deepseek-ai/dsh-agent';
 import {createUserMessage,ReasoningEffortId,type GenerateOptions,type StreamChunk} from '@deepseek-ai/dsh-llm';
@@ -183,7 +184,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
    await options.runtime.discard(attempt,lastCopyId);
    const dropped=await options.storage.execute<{contextId:string;newRevision:SkillRunRevision;documentInputs?:{itemNo:number;text:string}[]}>(options.commitAction?'reply.dropSkill':'discussion.dropSkill',{...attempt,contextId,callId});
    retainedDocumentPrompt=dropped.documentInputs?.length?'\n\n已读取的实际输入材料（编号保持，用于basis）：\n'+dropped.documentInputs.map(item=>`[${item.itemNo}] document\n${item.text}`).join('\n\n'):'';
-   contextId=dropped.contextId;skillRevision=dropped.newRevision;configurationDigest=options.configurationForRevision?.(skillRevision)??createHash('sha256').update(options.configurationDigest+'no-skill').digest('hex');
+   contextId=dropped.contextId;skillRevision=dropped.newRevision;configurationDigest=options.configurationForRevision?.(skillRevision)??sha256(options.configurationDigest+'no-skill');
    options.skillRun?.close();fallback=true;
   }}
  }catch(error){

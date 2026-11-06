@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {ManagedAddress} from '../../storage/sqlite/deletion/contracts.ts';
 import {sameManagedAddress,validFileIdentity} from '../../storage/sqlite/deletion/file-identity.ts';
@@ -88,7 +88,7 @@ export const runtimeActions:StorageAction[]=[
   if(row.cleanup_operation_id!==null&&tx.get('SELECT 1 FROM deletion_target WHERE operation_id=? AND domain=\'discussion\' AND storage_kind=\'file\'',[row.cleanup_operation_id])){
    for(const a of i.files){const old=tx.all('SELECT address_json FROM runtime_file WHERE owner_id=? AND copy_id=?',[i.ownerId,i.copyId]).find(f=>JSON.parse(String(f.address_json)).locator===a.locator);if(old&&!sameManagedAddress(JSON.parse(String(old.address_json)),a))fail('discussion_runtime_identity_conflict');}
   }else tx.run('DELETE FROM runtime_file WHERE owner_id=? AND copy_id=?',[i.ownerId,i.copyId]);
-  for(const a of i.files){const fileId=createHash('sha256').update(JSON.stringify([i.copyId,a])).digest('hex');tx.run('INSERT OR IGNORE INTO runtime_file(owner_id,copy_id,file_id,address_json) VALUES(?,?,?,?)',[i.ownerId,i.copyId,fileId,JSON.stringify(a)]);}
+  for(const a of i.files){const fileId=sha256(JSON.stringify([i.copyId,a]));tx.run('INSERT OR IGNORE INTO runtime_file(owner_id,copy_id,file_id,address_json) VALUES(?,?,?,?)',[i.ownerId,i.copyId,fileId,JSON.stringify(a)]);}
   tx.run('UPDATE runtime_copy SET manifest_complete=1 WHERE owner_id=? AND id=?',[i.ownerId,i.copyId]);
  }),
  action('dirty','write',(tx,i)=>{requireAttempt(tx,i);const row=requireRuntimeCurrent(tx,i);if(row.state!=='ready')fail('discussion_runtime_recovery_blocked');tx.run('DELETE FROM runtime_file WHERE owner_id=? AND copy_id=?',[i.ownerId,i.copyId]);tx.run("UPDATE runtime_copy SET state='dirty',manifest_complete=0 WHERE owner_id=? AND id=?",[i.ownerId,i.copyId]);}),

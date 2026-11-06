@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256 } from '../../platform/sha256.ts';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import type { HistoryRecord, HistoryScope, HistorySupportReport, HistoryTarget } from './contracts.ts';
 
@@ -51,7 +51,6 @@ export class HistoryBoundaryInvalid extends Error {
 const fail = (reason: string, retryable = false): never => { throw new HistoryBoundaryInvalid(reason, retryable); };
 const text = (value: unknown, max = maxIdentifier): value is string => typeof value === 'string' && value.length > 0 && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value);
 const exactInteger = (value: unknown): value is string => typeof value === 'string' && /^(0|[1-9][0-9]{0,19})$/.test(value) && BigInt(value) <= 18446744073709551615n;
-const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
 export function canonicalJson(value: unknown): string {
   return JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.keys(item).sort().map(key => [key, (item as Record<string, unknown>)[key]])) : item);

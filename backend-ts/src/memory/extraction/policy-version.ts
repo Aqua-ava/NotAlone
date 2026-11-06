@@ -1,6 +1,6 @@
 /** 新任务的显式核验策略、实际 A 源码闭包及统一版本身份。 */
 import {readFile} from 'node:fs/promises';
-import {createHash} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import {resolve,dirname,extname,relative,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {canonicalJSON,digest} from '../evidence/canonical-json.ts';
@@ -95,12 +95,12 @@ export async function createExtractionPolicyVersion(options:{rootDirectory?:stri
     if(!extname(path)){visited.delete(path);return visit(path+'.ts');}
     return unavailable();
    }
-   files.push({path:relative(root,path).split(sep).join('/'),sha256:createHash('sha256').update(content).digest('hex')});
+   files.push({path:relative(root,path).split(sep).join('/'),sha256:sha256(content)});
    if(/\.(?:ts|js|mjs)$/.test(path))for(const dependency of dependencies(content.toString('utf8')))await visit(resolve(dirname(path),dependency));
   }
   for(const entry of entries)await visit(resolve(root,entry));
   for(const path of metadata){let content:Buffer;try{content=await readFile(path);}catch{return unavailable();}
-   files.push({path:relative(root,path).split(sep).join('/'),sha256:createHash('sha256').update(content).digest('hex')});}
+   files.push({path:relative(root,path).split(sep).join('/'),sha256:sha256(content)});}
   return digest({version:1,files:files.sort((a,b)=>a.path.localeCompare(b.path,'en'))});
  }
  const sourceStamp=await capture();

@@ -1,6 +1,6 @@
 /** 图文共同核验：图片引用实际文件版本，观察描述不冒充逐字原文。 */
 import {digest} from '../evidence/canonical-json.ts';
-import {createHash} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import {ExtractionArgumentsError,readExtractionToolArguments} from './arguments.ts';
 import {ExtractionProtocolError,validateExtractionWindow,uuid,type ExtractionWindow,type ExtractedFact,type SourceVerificationResult} from './protocol.ts';
 import type {ExtractionInvocation} from './flow.ts';
@@ -152,7 +152,7 @@ export function prepareMultimodalVerification(options:{window:ExtractionWindow;f
  const window=structuredClone(options.window),facts=structuredClone([...options.facts]);validateExtractionWindow(window);
  const images=structuredClone(options.images),expected=window.messages.flatMap(message=>message.image?[message.image]:[]);
  if(!expected.length||expected.length!==images.length||new Set(images.map(image=>image.id)).size!==images.length
-  ||expected.some(image=>!images.some(actual=>actual.id===image.id&&actual.mimeType===image.mime_type&&createHash('sha256').update(Buffer.from(actual.dataBase64,'base64')).digest('hex')===image.sha256)))fail('images_missing');
+  ||expected.some(image=>!images.some(actual=>actual.id===image.id&&actual.mimeType===image.mime_type&&sha256(Buffer.from(actual.dataBase64,'base64'))===image.sha256)))fail('images_missing');
  const system=prompt;
  const body=payload(window,facts),fingerprint=digest({policy:policyId,rule_version:options.ruleVersion??null,window,facts,prompt:system,schema});
  const requestBody={...body,request_fingerprint:fingerprint};

@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {sha256} from '../platform/sha256.ts';
 import type {HistoryRecord, HistoryTarget} from './sqlite/contracts.ts';
 import type {NarrowWechatClient} from './wechat/native-client.ts';
 import {QuarantineVault} from './quarantine-vault.ts';
@@ -22,7 +22,7 @@ export async function importSelectedQuarantine(client:QuarantineClient,options:{
   if(support.capabilities?.programVersion!=='supported'||support.capabilities?.exactSchema!=='supported'||support.capabilities?.declaredLocalKey!=='supported')throw failure('quarantine_scope_invalid');
   const target=await client.quarantineTargetSelected(options.signal);
   if(target.sourceGeneration!==scope.sourceGeneration)throw failure('quarantine_scope_invalid');
-  const scopeDigest=createHash('sha256').update(JSON.stringify([scope.accountKey,scope.conversationKey,scope.sourceGeneration])).digest('hex');
+  const scopeDigest=sha256(JSON.stringify([scope.accountKey,scope.conversationKey,scope.sourceGeneration]));
   vault=await QuarantineVault.create(options.root,{scopeDigest,displayName:options.displayName});options.onVault?.(vault);
   vault.begin({expectedPartitions:target.partitions});
   const completed=new Set<string>(),seen=new Set<string>();let cursor:string|null=null;

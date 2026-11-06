@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {MediaAdapter, MediaExecution, MediaGoal, MediaKind} from '../sqlite/contracts.ts';
 import type {VisualRequest, VisualResource, VisualResourcePort, VisualValidator} from './contracts.ts';
@@ -91,7 +92,7 @@ export class VisualMediaAdapter implements MediaAdapter {
       await context.checkpoint();
       const bytes=output;
       await execution.save({role:context.kind==='image'?'image_display':'video_playback',expectedBytes:bytes.length,
-        expectedSha256:createHash('sha256').update(bytes).digest('hex'),bytes:(async function*(){
+        expectedSha256:sha256(bytes),bytes:(async function*(){
           for(let offset=0;offset<bytes.length;offset+=65536){await context.checkpoint();yield bytes.subarray(offset,offset+65536);await context.checkpoint();}
         })(),validate:async(localPath,signal)=>{
           await context.checkpoint();let validation;

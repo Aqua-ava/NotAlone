@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {sha256} from '../../../platform/sha256.ts';
 import type {StorageMigration} from '../../../storage/sqlite/contracts.ts';
 import {memoryExtractionMigration} from '../schema.ts';
 import {discussionMigration} from '../../../reply/sqlite/schema.ts';
@@ -173,6 +173,6 @@ CREATE INDEX operation_scopes_source ON operation_scope(owner_id,source_contact_
  {phase:'check',sql:'SELECT 1;'},
 ].map(step=>Object.freeze(step))) as readonly {phase:AdjudicationUpgradePhase;sql:string}[];
 const sql=memoryAdjudicationUpgradeSteps.map(step=>step.sql).join('\n');
-export const memoryAdjudicationRebuildChecksum=createHash('sha256').update(sql).digest('hex');
+export const memoryAdjudicationRebuildChecksum=sha256(sql);
 /** 版本12的受信任固定重建；Worker再核SQL与checksum，不能由RPC关闭FK。 */
 export const memoryAdjudicationMigration=(version:number):StorageMigration=>({version,sql,rebuild:memoryAdjudicationRebuildPolicy});

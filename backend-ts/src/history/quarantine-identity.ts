@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256 } from '../platform/sha256.ts';
 import type { NarrowWechatClient } from './wechat/native-client.ts';
 import { QuarantineVault } from './quarantine-vault.ts';
 
@@ -24,9 +24,7 @@ export async function verifyQuarantineIdentity(client: IdentityClient, root: str
     if (scope.displayName !== displayName || scope.accountKey !== account.accountKey
       || scope.sourceGeneration !== account.sourceGeneration) throw failure();
 
-    const scopeDigest = createHash('sha256')
-      .update(JSON.stringify([scope.accountKey, scope.conversationKey, scope.sourceGeneration]))
-      .digest('hex');
+    const scopeDigest = sha256(JSON.stringify([scope.accountKey, scope.conversationKey, scope.sourceGeneration]));
     const verified = await QuarantineVault.inspect(root, { scopeDigest });
     if (verified.displayName !== displayName) throw failure();
     return { identity: 'matched', normalHistory: false, stateAssurance: 'unverified', continuity: 'not_verified_across_restarts' };

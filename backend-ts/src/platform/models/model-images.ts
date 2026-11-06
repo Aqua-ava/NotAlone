@@ -1,6 +1,6 @@
 /** 正式模型图片只在调用内存中派生；不写附件缓存，不上传 Files API。 */
 import {AsyncLocalStorage} from 'node:async_hooks';
-import {createHash} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import type {Context} from '@deepseek-ai/cordis';
 import {AttachmentStore,AttachmentId,ImageVariantId,type ImageAttachmentRef,type ImageRequestTarget,type ImageMediaType,type RequestImageAttachment,type SaveImageAttachment,type StoredImageAttachment} from '@deepseek-ai/dsh-attachment';
 import type {TextBlock,ImageBlock} from '@deepseek-ai/dsh-llm';
@@ -13,7 +13,6 @@ export interface ModelImageManifest {
 }
 interface Entry {id:string;sourceSha256:string;ref:ImageAttachmentRef;data:Buffer;request?:RequestImageAttachment}
 interface ImageScope {entries:Entry[];signal:AbortSignal}
-const digest=(bytes:Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
 const mediaTypes=['image/png','image/jpeg','image/webp','image/gif'] as const;
 const formats={png:'image/png',jpeg:'image/jpeg',webp:'image/webp',gif:'image/gif'} as const;
 const failure=()=>new Error('extraction_model_image_invalid');
@@ -48,7 +47,7 @@ export class ModelImageAttachments extends AttachmentStore {
    if(data.length>target.maxBytes)throw new Error('extraction_model_image_budget_exceeded');
    const output=await sharp(data).metadata();
    if(output.depth!=='uchar'||output.space!=='srgb')throw failure();
-   entry.request={variantId:ImageVariantId(digest(data)),attachment:structuredClone(ref),data,mediaType:'image/png',bytes:data.length,
+   entry.request={variantId:ImageVariantId(sha256(data)),attachment:structuredClone(ref),data,mediaType:'image/png',bytes:data.length,
     width:info.width,height:info.height,depth:'uchar',space:'srgb',hasAlpha:output.hasAlpha};
    for(const duplicate of this.scopes.getStore()!.entries)if(duplicate.ref.attachmentId===ref.attachmentId)duplicate.request=entry.request;
    return entry.request;
@@ -57,7 +56,7 @@ export class ModelImageAttachments extends AttachmentStore {
  manifest():ModelImageManifest[]{
   return (this.scopes.getStore()?.entries??[]).map(entry=>{
    const image=entry.request;if(!image)throw failure();
-   return {id:entry.id,sourceSha256:entry.sourceSha256,attachmentSha256:String(entry.ref.attachmentId),requestSha256:digest(image.data),
+   return {id:entry.id,sourceSha256:entry.sourceSha256,attachmentSha256:String(entry.ref.attachmentId),requestSha256:sha256(image.data),
     requestMimeType:image.mediaType,width:image.width,height:image.height,bytes:image.bytes,frame:0};
   });
  }
@@ -84,8 +83,8 @@ export class ModelImageAttachments extends AttachmentStore {
      try{
       signal.throwIfAborted();
       if(data.length>this.imageLimits.maxImageBytes)throw failure();
-      const ref:ImageAttachmentRef={attachmentId:AttachmentId(digest(data)),mediaType:'image/png',bytes:data.length,width:info.width,height:info.height};
-      scope.entries.push({id:input.id,sourceSha256:digest(raw),ref,data});
+      const ref:ImageAttachmentRef={attachmentId:AttachmentId(sha256(data)),mediaType:'image/png',bytes:data.length,width:info.width,height:info.height};
+      scope.entries.push({id:input.id,sourceSha256:sha256(raw),ref,data});
      }catch(error){data.fill(0);throw error;}
     }finally{raw.fill(0);}
    }

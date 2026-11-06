@@ -1,6 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { sha256 } from '../../platform/sha256.ts';
 import { controlledFiles } from './files.ts';
 import { statementCache } from './statement-cache.ts';
 import { registry as defaultRegistry } from './registry.ts';
@@ -10,7 +11,6 @@ import { StorageFailure, type OpenStorageOptions, type StorageRegistry, type Sto
 
 const port = parentPort!;
 const options = workerData as OpenStorageOptions;
-const digest = (text: string) => createHash('sha256').update(text).digest('hex');
 const code = (error: unknown): string => {
   if (error instanceof StorageFailure) return error.code;
   const e = error as {code?: string; errcode?: number};
@@ -35,9 +35,9 @@ try {
     if (migration.sql === memoryDocumentsMigration(13).sql && migration.rebuild !== memoryDocumentsRebuildPolicy) throw new StorageFailure('migration_rebuild_forbidden');
     if (migration.rebuild !== undefined) {
       const allowed = migration.rebuild === memoryAdjudicationRebuildPolicy && migration.version === 12
-        && migration.sql === memoryAdjudicationMigration(12).sql && digest(migration.sql) === memoryAdjudicationRebuildChecksum
+        && migration.sql === memoryAdjudicationMigration(12).sql && sha256(migration.sql) === memoryAdjudicationRebuildChecksum
         || migration.rebuild === memoryDocumentsRebuildPolicy && migration.version === 13
-        && migration.sql === memoryDocumentsMigration(13).sql && digest(migration.sql) === memoryDocumentsRebuildChecksum;
+        && migration.sql === memoryDocumentsMigration(13).sql && sha256(migration.sql) === memoryDocumentsRebuildChecksum;
       if (!allowed) throw new StorageFailure('migration_rebuild_forbidden');
     }
   }
@@ -53,7 +53,7 @@ try {
   const prepared = statementCache(connection);
   const all = (sql: string, values: SQLInputValue[] = []) => prepared(sql).all(...bindings(values));
   const get = (sql: string, values: SQLInputValue[] = []) => all(sql, values)[0];
-  const schemaDigest = () => digest(JSON.stringify(all("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name")));
+  const schemaDigest = () => sha256(JSON.stringify(all("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name")));
   // 普通打开用 quick_check（不核对索引内容与 UNIQUE，大库约快一半）；迁移、升级与显式 check() 仍做完整 integrity_check。
   const checks = (quick = false) => {
     const pragma = quick ? 'quick_check' : 'integrity_check';
@@ -75,7 +75,7 @@ try {
     const ledger = all('SELECT version,checksum FROM schema_migration ORDER BY version');
     if (ledger.length > registry.migrations.length) throw new StorageFailure('schema_too_new');
     if (get('PRAGMA user_version')?.user_version !== BigInt(ledger.length)
-      || ledger.some((m, i) => m.version !== BigInt(i + 1) || m.checksum !== digest(registry.migrations[i].sql))) throw new StorageFailure('migration_drift');
+      || ledger.some((m, i) => m.version !== BigInt(i + 1) || m.checksum !== sha256(registry.migrations[i].sql))) throw new StorageFailure('migration_drift');
   };
   if (options.intent === 'open') verifyExisting();
   const initiallyApplied = options.intent === 'create' ? 0 : Number(get('SELECT COUNT(*) AS n FROM schema_migration')!.n);
@@ -112,7 +112,7 @@ try {
           }
         } else connection.exec(migration.sql);
         if (migration.version === 1 && options.intent === 'create') connection.prepare(`INSERT INTO database_instance VALUES(1,?,'notalone-sqlite-v1',?,?,?,0,'')`).run(databaseId, options.role, Date.now(), runtimeId);
-        connection.prepare('INSERT INTO schema_migration VALUES(?,?,?)').run(migration.version, digest(migration.sql), Date.now());
+        connection.prepare('INSERT INTO schema_migration VALUES(?,?,?)').run(migration.version, sha256(migration.sql), Date.now());
         connection.exec(`PRAGMA user_version=${migration.version}`);
       }
       const epoch = get('SELECT epoch FROM database_instance WHERE slot=1')!.epoch as bigint;

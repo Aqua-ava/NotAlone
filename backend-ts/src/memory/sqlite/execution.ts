@@ -1,7 +1,8 @@
 import {boundContentInputs} from './content.ts';
 import {candidateAdmission,type CandidateVerificationReference} from './management/admission.ts';
 import {finalizeOwnerContributions} from './owner-contribution.ts';
-import {createHash,randomUUID} from 'node:crypto';
+import {randomUUID} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import type {StorageAction,StorageTransaction,StorageRow,StorageLease} from '../../storage/sqlite/contracts.ts';
 import {validateModelLedgerReceipt,type ModelLedgerReceipt} from '../../platform/models/model-ledger-contract.ts';
 import type {ModelTaskClaim} from '../../platform/models/model-permit-server.ts';
@@ -116,7 +117,7 @@ export const executionActions:StorageAction[]=[
   const {attempt,task,rows}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
   if(!['extraction','verification'].includes(i.purpose)||!Number.isSafeInteger(i.inputCap)||i.inputCap<1||!Number.isSafeInteger(i.outputCap)||i.outputCap<1)fail('memory_extraction_model_configuration_invalid');
   if(rows.some(row=>row.role==='target'&&tx.get("SELECT 1 FROM processing_item WHERE owner_id=? AND id=? AND extraction_state='succeeded'",[i.ownerId,row.item_id])))fail('memory_extraction_targets_completed_elsewhere');
-  const seal=createHash('sha256').update(JSON.stringify(i.request)).digest('hex');
+  const seal=sha256(JSON.stringify(i.request));
   let operation=tx.get('SELECT * FROM model_operation WHERE owner_id=? AND memory_step_id=? AND purpose=? AND slot=0',[i.ownerId,attempt.step_id,i.purpose]);
   if(operation){
    if(operation.input_seal!==seal||operation.commit_forbidden_at!==null)fail('memory_extraction_operation_changed');

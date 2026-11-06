@@ -1,5 +1,5 @@
 import {hasCurrentReplyDependencies,requireCurrentReplyDependencies} from './provenance.ts';
-import {createHash} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import {savedSourceScopeCTE,currentSourcePredicate} from '../../history/sqlite/current-scope.ts';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {Discussion,DiscussionScope,RuntimeCopy} from './contracts.ts';
@@ -48,7 +48,7 @@ export const discussionActions:StorageAction[]=[
    continuity:tx.get('SELECT conversation_id,source_generation,tables_json FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId])??null,
    fence:tx.get('SELECT reason FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId])??null,
    guard:tx.get('SELECT binding_id,conversation_id,source_generation,guard_id,runtime_id,state FROM history_guard_lease WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId])??null};
-  return {generation:contact.data_generation,revision:createHash('sha256').update(JSON.stringify(revision,(_key,value)=>typeof value==='bigint'?String(value):value)).digest('hex')};
+  return {generation:contact.data_generation,revision:sha256(JSON.stringify(revision,(_key,value)=>typeof value==='bigint'?String(value):value))};
  }),
  action('metadata','read',(tx,i)=>discussionView(requireDiscussion(tx,i))),
  action('list','read',(tx,i)=>{requireDiscussionContact(tx,i.ownerId,i.contactId);const rows=tx.all("SELECT * FROM assistant_discussion WHERE owner_id=? AND contact_id=? AND state='active' ORDER BY created_at DESC,id",[i.ownerId,i.contactId]);return {currentDiscussionId:rows.find(r=>r.is_current===1n)?.id??null,discussions:rows.map(discussionView)};}),

@@ -1,5 +1,6 @@
 import {qualificationSources} from './dependencies.ts';
-import {randomUUID,createHash} from 'node:crypto';
+import {randomUUID} from 'node:crypto';
+import {sha256} from '../../../platform/sha256.ts';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {verifiedExtractionOutput} from '../outputs.ts';
 import {AMBIGUITY_NOTE} from '../../extraction/bounded.ts';
@@ -9,7 +10,7 @@ import {managementRead,managementHistory} from './read.ts';
 import {prepareManagementTimeline} from './timeline.ts';
 import type {MemoryDecisionResult,MemoryScope} from './contracts.ts';
 import {scheduleMemoryChange} from '../documents/later-schedule.ts';
-const seal=(v:unknown):string=>createHash('sha256').update(JSON.stringify(v,(_k,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.fromEntries(Object.entries(x).sort(([a],[b])=>a.localeCompare(b))):x)).digest('hex');
+const seal=(v:unknown):string=>sha256(JSON.stringify(v,(_k,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.fromEntries(Object.entries(x).sort(([a],[b])=>a.localeCompare(b))):x));
 function executionRun(tx:StorageTransaction,ownerId:string,attemptId:unknown):string|undefined{
  if(typeof attemptId!=='string')return;
  const task=tx.get('SELECT t.run_id FROM step_attempt a JOIN processing_step ps ON ps.owner_id=a.owner_id AND ps.id=a.step_id JOIN processing_task t ON t.owner_id=ps.owner_id AND t.id=ps.task_id WHERE a.owner_id=? AND a.id=?',[ownerId,attemptId]);

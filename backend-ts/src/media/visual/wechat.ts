@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {sha256} from '../../platform/sha256.ts';
 import type {SharedWechatClient} from '../../history/wechat/shared-client.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {ReadEligibility} from '../../contacts/sqlite/contracts.ts';
@@ -78,8 +79,8 @@ function association(opened:WechatImageOpenResult,source:HistorySource,messageId
   const proof=opened.qualityProof;
   if(proof.kind==='wechat-message-image-content-v2')return Object.freeze({protocol:'media-association-v1' as const,
     profileId:'wechat-message-image-v2',recordId:source.recordId,messageId,
-    resourceIdentity:'wechat-message-image-v2:'+createHash('sha256').update(JSON.stringify([
-      opened.resourceSourceGeneration,proof,opened.partition,opened.table,opened.localId,opened.serverId,opened.sentAt])).digest('hex')});
+    resourceIdentity:'wechat-message-image-v2:'+sha256(JSON.stringify([
+      opened.resourceSourceGeneration,proof,opened.partition,opened.table,opened.localId,opened.serverId,opened.sentAt]))});
   const identitySource=proof.kind==='wechat-cdn-big-hd-exact-content-v4'||proof.kind==='wechat-message-image-content-v1'
     ?[opened.resourceSourceGeneration,proof.resourceInfoId,proof.matchingResourceIds,proof.resourceSize,proof.verifiedBytes,proof.verifiedSha256,
       proof.sourceSha256,proof.conversion,opened.partition,opened.table,opened.localId,opened.serverId,opened.sentAt]
@@ -88,7 +89,7 @@ function association(opened:WechatImageOpenResult,source:HistorySource,messageId
       opened.partition,opened.table,opened.localId,opened.serverId,opened.sentAt]
     :[opened.resourceSourceGeneration,opened.resourceTable,opened.resourceId,opened.resourceTypeRaw,opened.variantCode,
       opened.partition,opened.table,opened.localId,opened.serverId,opened.sentAt];
-  const identity=createHash('sha256').update(JSON.stringify(identitySource)).digest('hex');
+  const identity=sha256(JSON.stringify(identitySource));
   const profileId=proof.kind==='wechat-message-image-content-v1'?'wechat-message-image-v1':'wechat-image-original-v1';
   return Object.freeze({protocol:'media-association-v1' as const,profileId,recordId:source.recordId,
     messageId,resourceIdentity:profileId+':'+identity});
