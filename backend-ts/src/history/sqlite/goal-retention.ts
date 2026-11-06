@@ -27,8 +27,8 @@ export function purgeStaleGoals(tx:StorageTransaction,ownerId:string,contactId:s
    FROM read_goal WHERE owner_id=? AND contact_id=? AND creation_no IS NOT NULL) k ON k.id=g.id
   WHERE g.owner_id=? AND g.contact_id=? AND g.kind IN ('history','incremental') AND (
     (g.state='invalidated' AND g.created_at<CASE WHEN g.kind='incremental' AND g.failure_code='history_snapshot_replaced' AND g.pages_accepted=0 THEN ? ELSE ? END)
-    -- 共用读取器轮转产生的无进展历史目标：开始后未结束的孤儿，或已被后继完成目标取代的空历史目标。
-    OR (g.kind='history' AND g.state IN ('running','complete') AND g.cursor IS NULL AND g.created_at<?
+    -- 共用读取器轮转产生的无进展历史目标：开始后未结束的孤儿，或已被后继完成目标取代的空历史目标（含运行代次换代时作废的）。
+    OR (g.kind='history' AND g.cursor IS NULL AND g.created_at<? AND (g.state IN ('running','complete') OR (g.state='invalidated' AND g.failure_code='history_runtime_revalidated'))
      AND EXISTS (SELECT 1 FROM read_goal n WHERE n.owner_id=g.owner_id AND n.contact_id=g.contact_id AND n.kind='history'
       AND n.creation_no>g.creation_no AND n.state='complete' AND n.failure_code IS NULL AND n.cursor IS NULL AND n.resume_cursor IS NOT NULL
       AND n.cursor_scope_digest IS NOT NULL AND n.binding_id=g.binding_id AND n.grant_id=g.grant_id

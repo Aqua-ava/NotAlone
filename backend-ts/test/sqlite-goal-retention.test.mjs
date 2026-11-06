@@ -156,6 +156,7 @@ test('共用读取器轮转产生的无进展目标：孤儿 running、被后继
   const history = { kind: 'history', ageDays: 0.1, markers: { cursor: null, failure_code: null } };
   const orphans = seedGoals(f, goalId, 3, { ...history, state: 'running', markers: { ...history.markers, resume_cursor: null } });
   const superseded = seedGoals(f, goalId, 3, { ...history, state: 'complete', markers: { ...history.markers, resume_cursor: 'tail-old' } });
+  const revalidated = seedGoals(f, goalId, 3, { ...history, state: 'invalidated', markers: { ...history.markers, failure_code: 'history_runtime_revalidated', resume_cursor: 'tail-old' } });
   const replacedIncremental = seedGoals(f, goalId, 3, { kind: 'incremental', ageDays: 0.1, markers: { failure_code: 'history_snapshot_replaced', pages_accepted: 0 } });
   seedGoals(f, goalId, 1, { kind: 'incremental', ageDays: 0 }); // 同类型最新目标受保护，其余被取代的才可清理
   const recentOrphan = seedGoals(f, goalId, 1, { ...history, ageDays: 0, state: 'running', markers: { ...history.markers, resume_cursor: null } });
@@ -167,6 +168,7 @@ test('共用读取器轮转产生的无进展目标：孤儿 running、被后继
   const alive = id => count(f, 'SELECT COUNT(*) n FROM read_goal WHERE id=?', id) === 1;
   assert.ok(orphans.every(id => !alive(id)), '后继已完成的孤儿 running 目标被清理');
   assert.ok(superseded.every(id => !alive(id)), '被更新完成目标取代的空 complete 目标被清理');
+  assert.ok(revalidated.every(id => !alive(id)), '已有更新完成目标时，运行代次换代作废的空历史目标一小时后清理');
   assert.ok(replacedIncremental.every(id => !alive(id)), '被新快照取代且无进展的增量目标一小时后清理');
   assert.ok(alive(latestComplete[0]), '没有更新完成目标的 complete 目标是检查点候选，保留');
   assert.ok(alive(newerRunning[0]) && alive(recentOrphan[0]), '一小时内的目标保留');
