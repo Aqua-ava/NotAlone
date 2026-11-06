@@ -76,14 +76,33 @@ test('来源元数据成功重验释放租约后仅唤醒首次协调器，协�
  // 仅刷新已有活来源不应再派发重复历史任务。
  wakes.length=0;f.history.setFirstHistoryWake(id=>wakes.push(id));await f.history.ensureSourceReady(f.a.contact_id);assert.deepEqual(wakes,[]);
 });
-for(const mode of ['source_changed','revoked','park_failed'])test(`来源准备${mode}失败不发完成唤醒或读取正文`,async t=>{
- const f=await pendingFixture(t);await lose(f,mode==='source_changed'?'history_source_changed':'history_native_timeout');
+for(const mode of ['revoked','park_failed'])test(`来源准备${mode}失败不发完成唤醒或读取正文`,async t=>{
+ const f=await pendingFixture(t);await lose(f,'history_native_timeout');
  if(mode==='revoked')await f.contacts.revoke(f.a.contact_id,f.a.binding_id,f.a.selection_generation);
  if(mode==='park_failed')f.state.parkFailure='history_native_unavailable';
  const wakes=[],pages=f.state.pages.length;f.history.setFirstHistoryWake(id=>wakes.push(id));
  await assert.rejects(f.history.ensureSourceReady(f.a.contact_id));
  assert.deepEqual(wakes,[]);assert.equal(f.state.pages.length,pages);assert.equal((await f.history.coverage(f.a.contact_id)).goalId,f.pending.goalId);
  f.state.parkFailure=null;
+});
+
+test('空闲守卫收到共享进程来源错误码时来源准备先完整重验，真实来源变化才围栏',async t=>{
+ const f=await pendingFixture(t);await lose(f,'history_source_changed');
+ const wakes=[],pages=f.state.pages.length;f.history.setFirstHistoryWake(id=>wakes.push(id));
+ // 共享读取进程整体停止的错误码不能把空闲联系人的来源准备变成永久失效，须用当前读取器完整重验元数据。
+ await f.history.ensureSourceReady(f.a.contact_id);
+ // 完整重验后只允许唤醒首次协调器补齐旧未完目标；正文页仍不由来源准备读取。
+ assert.deepEqual(wakes,[f.a.contact_id]);assert.equal(f.state.pages.length,pages,'来源准备本身不读取正文页');
+ const token=await f.contacts.eligibility(f.a.contact_id);
+ // 重验成功后守卫已续租为活守卫；不得借此建立新的正文目标或推进旧目标。
+ assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate',{token}),false);
+ assert.equal((await f.history.coverage(f.a.contact_id)).goalId,f.pending.goalId);
+ const originalInspect=f.channel.inspect;
+ f.channel.inspect=async scope=>({...await originalInspect(scope),conversationKey:'synthetic-changed-conversation'});
+ try{
+  await assert.rejects(f.history.ensureSourceReady(f.a.contact_id),{code:'history_external_scope_changed'});
+ }finally{f.channel.inspect=originalInspect;}
+ assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate',{token}),false,'完整重验发现真实来源变化后须停读');
 });
 
 async function hostPreparations(history){

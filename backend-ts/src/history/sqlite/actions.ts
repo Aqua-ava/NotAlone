@@ -135,7 +135,9 @@ export const historyActions:StorageAction[]=[
   const guard=tx.get('SELECT * FROM history_guard_lease WHERE owner_id=? AND contact_id=? AND binding_id=? AND conversation_id=? AND source_generation=? AND guard_id=?',[token.owner_id,token.contact_id,token.binding_id,token.conversation_id,token.source_generation,i.guardId]);
   if(!guard)return false;
   tx.run("UPDATE history_guard_lease SET state='lost' WHERE owner_id=? AND contact_id=? AND guard_id=?",[token.owner_id,token.contact_id,i.guardId]);
-  if(i.normalUse!==true||i.sourceLost===true)fenceContinuity(tx,token);return true;
+  // 共享读取进程整体停止时，错误码不能证明每个空闲联系人来源失证：deferVerification 只把守卫降级为
+  // lost，下一次读取仍须用当前读取器完整重验来源元数据，重验失败才由预检/续证重新围栏。
+  if(i.deferVerification!==true&&(i.normalUse!==true||i.sourceLost===true))fenceContinuity(tx,token);return true;
  }),
  action('history.markContinuityLost','write',(tx,i)=>{const token=i.token as ReadEligibility;
   if(!tx.get("SELECT 1 FROM conversation_binding WHERE owner_id=? AND contact_id=? AND id=? AND state='verified'",[token.owner_id,token.contact_id,token.binding_id]))return false;

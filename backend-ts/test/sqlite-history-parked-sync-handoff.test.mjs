@@ -63,7 +63,7 @@ test('共享读取器切换联系人后增量新目标唤醒首次补齐，旧�
   assert.equal((await f.history.read(a.contact_id)).messages.length, 1, '换目标补齐不重复建立历史消息');
 });
 
-test('空闲守卫瞬时退出后外置首次协调器仍会被唤醒，真实来源变化不借此恢复', async t => {
+test('空闲守卫瞬时退出后外置首次协调器仍会被唤醒，共享进程错误码须完整重验后才判围栏', async t => {
   const f = await parkedFixture(t), [a, b] = f.saved;
   await f.history.synchronize(a.contact_id);
   await f.history.synchronize(b.contact_id);
@@ -87,13 +87,23 @@ test('空闲守卫瞬时退出后外置首次协调器仍会被唤醒，真实�
   assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate', { token }), true);
   await f.history.synchronize(b.contact_id);
   f.state.wakes.length = 0;
-  const changed = f.state.channels.at(-1);
-  changed.code = 'history_source_changed'; changed.loss.resolve();
+  // 共享读取进程整体停止会把同一来源错误码送达所有空闲守卫；错误码本身不能证明该联系人来源变化。
+  const stopped = f.state.channels.at(-1);
+  stopped.code = 'history_source_changed'; stopped.loss.resolve();
   for (let i = 0; i < 12; i++) await Promise.resolve();
   await f.storage.check();
+  assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate', { token }), true);
   await f.history.requestFirstHistoryRecovery(b.contact_id);
-  assert.deepEqual(f.state.wakes, []);
-  assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate', { token }), false);
+  assert.deepEqual(f.state.wakes, [b.contact_id], '空闲守卫只能触发完整重验，不能据共享进程错误码永久停读');
+  // 只有当前读取器完整重验发现真实来源身份变化时才建立围栏。
+  const originalInspect = f.channel.inspect;
+  f.channel.inspect = async scope => ({...await originalInspect(scope), conversationKey: 'synthetic-changed-conversation'});
+  try {
+    await assert.rejects(f.history.synchronize(b.contact_id), {code: 'history_external_scope_changed'});
+  } finally {
+    f.channel.inspect = originalInspect;
+  }
+  assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate', { token }), false, '完整重验发现真实来源变化后才保持围栏');
 });
 
 for(const {code,failFirstRecovery} of [{code:'history_native_timeout'},{code:'history_source_changed'},{code:'history_native_timeout',failFirstRecovery:true}])test(`增量替换阻塞后守卫${code}按持久恢复资格决定是否唤醒首次${failFirstRecovery?'，恢复查询失败后下轮继续':''}`,async t=>{
@@ -109,7 +119,8 @@ for(const {code,failFirstRecovery} of [{code:'history_native_timeout'},{code:'hi
  const guard=f.state.channels.at(-1);guard.code=code;guard.loss.resolve();
  for(let index=0;index<12;index++)await Promise.resolve();await f.history.waitForReadIdle(a.contact_id);await f.storage.check();
  const token=await f.contacts.eligibility(a.contact_id);
- assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate',{token}),code==='history_native_timeout');
+ // 共享读取器整体停止带来的错误码只降级守卫，恢复门要求下一次读取完整重验而非永久停读。
+ assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate',{token}),true);
  const wakes=[],channels=f.state.channels.length;f.history.setFirstHistoryWake(id=>{wakes.push(id);first.wakeContact(id);});
  if(failFirstRecovery){
   const execute=f.storage.execute.bind(f.storage);let injected=false;
@@ -119,8 +130,28 @@ for(const {code,failFirstRecovery} of [{code:'history_native_timeout'},{code:'hi
   assert.equal(incremental.getState().contacts[0].lastError,'history_snapshot_replaced','查询暂时失败不能吞掉下轮的替换恢复入口');
  }
  incremental.start();t.mock.timers.tick(30_000);await incremental.waitForIdle();await first.waitForIdle();
- if(code==='history_native_timeout'){
-  assert.deepEqual(wakes,[a.contact_id],'旧增量blocked不能吞掉失守卫后的合法恢复请求');
-  assert.equal((await f.history.coverage(a.contact_id)).phase,'complete');
- }else{assert.deepEqual(wakes,[]);assert.equal(f.state.channels.length,channels,'真实围栏不得创建恢复读取器');}
+ assert.deepEqual(wakes,[a.contact_id],'旧增量blocked不能吞掉失守卫后的合法恢复请求');
+ assert.equal((await f.history.coverage(a.contact_id)).phase,'complete','完整重验后须自动恢复同步');
+});
+
+test('真实来源围栏不进入自动恢复门，也不创建恢复读取器', async t => {
+  t.mock.timers.enable({apis: ['setInterval']});
+  const f = await parkedFixture(t), [a] = f.saved;
+  await f.history.synchronize(a.contact_id);
+  const token = await f.contacts.eligibility(a.contact_id);
+  await f.storage.execute('history.markContinuityLost', {token});
+  assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate', {token}), false);
+  const directory = {directory: async () => {
+    const saved = await f.contacts.syncDirectory();
+    return {...saved, bindings: saved.bindings.filter(row => row.contact_id === a.contact_id)};
+  }};
+  const incremental = new IncrementalHistoryCoordinator(directory, f.history, {intervalMs: 30_000, firstHistoryManagedExternally: true});
+  const first = new FirstHistoryCoordinator(directory, f.history);
+  t.after(async () => { await incremental.close(); await first.close(); });
+  const wakes = [], channels = f.state.channels.length;
+  f.history.setFirstHistoryWake(id => { wakes.push(id); first.wakeContact(id); });
+  incremental.start(); t.mock.timers.tick(30_000); await incremental.waitForIdle(); await first.waitForIdle();
+  assert.deepEqual(wakes, [], '真实围栏不得触发首次恢复唤醒');
+  assert.equal(f.state.channels.length, channels, '真实围栏不得创建恢复读取器');
+  assert.equal((await f.history.coverage(a.contact_id)).failureCode, 'history_source_continuity_unverified');
 });
