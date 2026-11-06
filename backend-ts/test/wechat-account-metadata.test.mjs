@@ -34,6 +34,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.pa
 if(s.mode==='cancel-all'&&r.op==='metadata-sessions-all')return;
 if(s.mode==='no-config'){console.log(JSON.stringify({ok:false,error:{code:'history_account_unavailable'}}));return;}
 if(s.mode==='unverified-source'){console.log(JSON.stringify({ok:false,error:{code:'history_source_unverified'}}));return;}
+if(s.mode==='unverified-once'){const m=stateFile+'.once';if(!fs.existsSync(m)){fs.writeFileSync(m,'1');console.log(JSON.stringify({ok:false,error:{code:'history_source_unverified'}}));return;}}
 if(s.mode==='explicit-config'&&(process.env.WECHAT_CLI_CONFIG!==stateFile||process.env.HOME!==s.expectedHome||process.env.NOTALONE_UNRELATED_SECRET)){console.log(JSON.stringify({ok:false,error:{code:'history_account_unavailable'}}));return;}
 if(r.op==='metadata-account'){data=account(s);if(s.mode==='account-body')data.body='BODY_SENTINEL';if(s.mode==='account-promoted')data.normalHistory=true;if(s.mode==='account-artifact')data.artifactSha256='f'.repeat(64);}
 if(r.op==='metadata-avatar'){
@@ -329,6 +330,16 @@ test('后台持有CLI租约时，前台名单仍以独立进程在原预算内�
   assert.doesNotThrow(()=>process.kill(backgroundPid,0));
   assert.equal((await held.client.accountMetadata()).accountKey,accountKey);
  }finally{await held.release();}
+});
+
+test('前台名单遇到瞬时来源守卫失败时换新进程重试一次；持续失败仍上报',async t=>{
+ const account={id:'synthetic-id',key:accountKey,sourceGeneration:generation,revision:'1'},opts={signal:new AbortController().signal,timeoutMs:3000,limit:100};
+ const once=await fixture(t,'unverified-once'),a=new ForegroundSessionList(once.executable);
+ once.cleanups.push(()=>a.close());
+ assert.equal((await a.sessions(account,opts)).length>0,true);
+ const always=await fixture(t,'unverified-source'),b=new ForegroundSessionList(always.executable);
+ always.cleanups.push(()=>b.close());
+ await assert.rejects(b.sessions(account,opts),{code:'history_source_unverified'});
 });
 
 test('前台专用名单的账号变化仍拒绝旧范围，关闭及重置排空自有进程',async t=>{

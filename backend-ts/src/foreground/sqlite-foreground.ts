@@ -16,6 +16,8 @@ export interface ForegroundBindingConfirmation {
  * 名单由一次性的独立进程在后台刷新，刷新不排队阻塞复验，也不受观察期限取消。
  */
 const sessionRefreshAfterMs=30_000,sessionMaxAgeMs=300_000,sessionRefreshGapMs=5_000,sessionReadTimeoutMs=15_000;
+const sourceGuardRetryAttempts=2;
+const sourceGuardTransientCodes=new Set(['history_source_unverified','history_source_changed']);
 const scopeFailureCodes=new Set(['foreground_scope_unavailable','history_scope_changed','history_account_changed','history_source_changed']);
 type SessionParams={limit:number;keyword?:string};
 type SessionAccount=NonNullable<ForegroundSnapshot['account']>;
@@ -91,7 +93,7 @@ export class ForegroundSessionList {
   const run=()=>{
    this.lastRefreshAt=this.clock();
    const signal=AbortSignal.any([this.lifetime.signal,AbortSignal.timeout(sessionReadTimeoutMs)]);
-   const work=(async()=>{
+   const readOnce=async():Promise<ForegroundSession[]>=>{
     const client=new NarrowWechatClient(await loadNarrowWechatOptions(this.executable));
     try{
      const before=await client.accountMetadata(signal);
@@ -107,6 +109,16 @@ export class ForegroundSessionList {
      if(scopeFailureCodes.has((error as {code?:string}).code??''))this.cache=undefined;
      throw error;
     }finally{await client.close();}
+   };
+   // 微信持续写库时，来源守卫可能在建立瞬间被无关事件打断；换新进程重核验一次，每次仍做完整的前后账号核验。
+   const work=(async()=>{
+    for(let attempt=1;;attempt++){
+     try{return await readOnce();}
+     catch(error){
+      const code=(error as {code?:string}).code??'';
+      if(attempt>=sourceGuardRetryAttempts||!sourceGuardTransientCodes.has(code)||signal.aborted)throw error;
+     }
+    }
    })();
    const entry={key,promise:work};this.inflight=entry;
    void work.then(()=>{},()=>{}).finally(()=>{if(this.inflight===entry)this.inflight=undefined;});
