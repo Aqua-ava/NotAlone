@@ -58,7 +58,10 @@ export class MediaFiles {
  }
  async preview(address:ManagedAddress,size:number,digest:string):Promise<Buffer>{
   if(!Number.isSafeInteger(size)||size>32*1024*1024)throw new StorageFailure('media_preview_too_large');
-  await this.verify(address,size,digest);const handle=await open(this.location(address),constants.O_RDONLY|constants.O_NOFOLLOW);
-  try{const data=await handle.readFile();if(data.length!==size||sha256(data)!==digest)throw new StorageFailure('media_copy_incomplete');this.location(address);return data;}finally{await handle.close();}
+  // 预览只开一次句柄：stat 先核对身份，整读一次只哈希一次；身份与完整性语义与旧"verify+复读"路径一致。
+  // 写入路径的"写后独立复读"保持原样，防类型探针或磁盘写入副作用改变刚校验的副本。
+  const handle=await open(this.location(address),constants.O_RDONLY|constants.O_NOFOLLOW);
+  try{const stat=await handle.stat({bigint:true});if(stat.nlink!==1n||String(stat.ino)!==address.identity.ino||stat.size!==BigInt(size))throw new StorageFailure('media_file_identity_changed');
+   const data=await handle.readFile();if(data.length!==size||sha256(data)!==digest)throw new StorageFailure('media_copy_incomplete');this.location(address);return data;}finally{await handle.close();}
  }
 }

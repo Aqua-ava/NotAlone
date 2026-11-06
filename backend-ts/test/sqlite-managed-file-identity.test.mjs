@@ -52,3 +52,25 @@ test('旧记录带设备号时受管删除仍按其余身份核对并删除文�
  files.managed.erase(legacy);
  await assert.rejects(stat(path),{code:'ENOENT'});
 });
+
+test('预览路径对同一文件只读一次，写后复读校验保持独立读取',async t=>{
+ const {files,address,size,digest,bytes,path}=await fixture(t);
+ // 经实例取得 FileHandle 原型并计数读取；不注入生产代码。
+ const {open}=await import('node:fs/promises');
+ const probe=await open(path,'r');const proto=Object.getPrototypeOf(probe);await probe.close();
+ let readFileCalls=0,streamCalls=0;
+ const originalRead=proto.readFile,originalStream=proto.createReadStream;
+ proto.readFile=function(...args){readFileCalls+=1;return originalRead.apply(this,args);};
+ proto.createReadStream=function(...args){streamCalls+=1;return originalStream.apply(this,args);};
+ let previewReadCalls=0,previewStreamCalls=0;
+ try{
+  assert.deepEqual(await files.preview(address,size,digest),bytes);
+  previewReadCalls=readFileCalls;previewStreamCalls=streamCalls;
+  // verify() 仍按原样以流式复读核验完整性，不随预览优化改变。
+  await files.verify(address,size,digest);
+ }
+ finally{proto.readFile=originalRead;proto.createReadStream=originalStream;}
+ assert.equal(previewReadCalls,1);
+ assert.equal(previewStreamCalls,0);
+ assert.equal(streamCalls,1);
+});
