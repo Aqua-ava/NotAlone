@@ -150,3 +150,26 @@ test('保留：带记录的目标、未过宽限期、仍有效、被引用与�
   assert.equal(count(f, 'SELECT COUNT(*) n FROM sync_capture WHERE goal_id=?', withRecords[0]), 1, '带记录目标的抓取页保留');
   assert.equal((await f.history.read(ctx.binding.contact_id)).messages.length, 1, '消息与来源追溯不变');
 });
+
+test('共用读取器轮转产生的无进展目标：孤儿 running、被后继取代的空 complete 与被取代的空增量目标一小时后清理，仍需要的保留', async t => {
+  const ctx = await prepared(t); const { f, goalId } = ctx;
+  const history = { kind: 'history', ageDays: 0.1, markers: { cursor: null, failure_code: null } };
+  const orphans = seedGoals(f, goalId, 3, { ...history, state: 'running', markers: { ...history.markers, resume_cursor: null } });
+  const superseded = seedGoals(f, goalId, 3, { ...history, state: 'complete', markers: { ...history.markers, resume_cursor: 'tail-old' } });
+  const replacedIncremental = seedGoals(f, goalId, 3, { kind: 'incremental', ageDays: 0.1, markers: { failure_code: 'history_snapshot_replaced', pages_accepted: 0 } });
+  seedGoals(f, goalId, 1, { kind: 'incremental', ageDays: 0 }); // 同类型最新目标受保护，其余被取代的才可清理
+  const recentOrphan = seedGoals(f, goalId, 1, { ...history, ageDays: 0, state: 'running', markers: { ...history.markers, resume_cursor: null } });
+  // 最新的完成目标是续读检查点候选，必须保留；比它更新的 running 目标也仍然有效。
+  const latestComplete = seedGoals(f, goalId, 1, { ...history, ageDays: 0.05, state: 'complete', markers: { ...history.markers, resume_cursor: 'tail-new' } });
+  const newerRunning = seedGoals(f, goalId, 1, { ...history, ageDays: 0, state: 'running', markers: { ...history.markers, resume_cursor: null } });
+  await f.contacts.setReading(false); await f.contacts.setReading(true);
+  await rerun(ctx);
+  const alive = id => count(f, 'SELECT COUNT(*) n FROM read_goal WHERE id=?', id) === 1;
+  assert.ok(orphans.every(id => !alive(id)), '后继已完成的孤儿 running 目标被清理');
+  assert.ok(superseded.every(id => !alive(id)), '被更新完成目标取代的空 complete 目标被清理');
+  assert.ok(replacedIncremental.every(id => !alive(id)), '被新快照取代且无进展的增量目标一小时后清理');
+  assert.ok(alive(latestComplete[0]), '没有更新完成目标的 complete 目标是检查点候选，保留');
+  assert.ok(alive(newerRunning[0]) && alive(recentOrphan[0]), '一小时内的目标保留');
+  assert.ok(alive(goalId), '当前增量目标保留');
+  assert.equal((await f.history.read(ctx.binding.contact_id)).messages.length, 1, '消息与来源追溯不变');
+});
