@@ -9,15 +9,15 @@ import {readAllManagement} from './read-all.mjs';
 export {owner};
 
 /** 仅合成供应商作语义选择；输入、具名核验、许可预约、回执及正式决定沿真实合同。 */
-export function adjudicationSupplier({action='add',select,mergedText='联系人保留全部合成长期资料。'}={}){
+export function adjudicationSupplier({action='add',kind,select,mergedText='联系人保留全部合成长期资料。'}={}){
  return async(request)=>{
   const payload=JSON.parse(request.user);let value;
   if(request.purpose==='adjudication'){
    const candidate=payload.new_memories[0],prior=payload.existing_memories;
    const selected=select?select(prior,candidate):prior;
-   const ids=selected.map(p=>p.memory_id),evidence=candidate.source_texts.map(s=>({message_id:s.message_id,quote:s.text}));
-   const relation={kind:action==='update'?'state_change':action==='merge'?'supplement':'independent',related_memory_ids:action==='update'?ids.slice(0,1):ids,explanation:'逐字核对本轮合成来源。',evidence,claim_changed:action==='update',condition_changed:false};
-   value={decisions:[{candidate_index:candidate.candidate_index,action,replaced_memory_id:action==='update'?ids[0]:null,merged_memory_ids:action==='merge'?ids:[],merged_text:action==='merge'?mergedText:null,duplicate_memory_id:null,relation}]};
+   const ids=selected.map(p=>p.memory_id),evidence=[...candidate.source_texts,...action==='noop'?selected.flatMap(p=>p.sources):[]].map(s=>({message_id:s.message_id,quote:s.text}));
+   const relation={kind:kind??(action==='update'?'state_change':action==='merge'?'supplement':'independent'),related_memory_ids:action==='update'?ids.slice(0,1):action==='noop'?[ids[0]]:ids,explanation:'逐字核对本轮合成来源。',evidence,claim_changed:action==='update',condition_changed:false};
+   value={decisions:[{candidate_index:candidate.candidate_index,action,replaced_memory_id:action==='update'?ids[0]:null,merged_memory_ids:action==='merge'?ids:[],merged_text:action==='merge'?mergedText:null,duplicate_memory_id:action==='noop'?ids[0]:null,relation}]};
   }else if(request.purpose==='relation_verification'){
    value={results:payload.map(item=>({candidate_index:item.candidate_index,supported:true,evidence:[...item.sources.candidate,...item.sources.prior.flatMap(p=>p.sources)].map(s=>({message_id:s.message_id,quote:s.text})),claim_changed:item.proposed_relation.claim_changed,condition_changed:item.proposed_relation.condition_changed}))};
   }else if(request.purpose==='merge_verification'){

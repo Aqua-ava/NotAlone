@@ -1,4 +1,3 @@
-import {canonicalJSON} from '../../evidence/canonical-json.ts';
 /** 裁决只消费被冻结的候选、正式版本和消息；模型结果本身不授予写入资格。 */
 import {createHash,randomUUID} from 'node:crypto';
 import {StorageFailure,type StorageAction,type StorageLease,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
@@ -160,7 +159,7 @@ function finish(tx:StorageTransaction,raw:unknown,lease:StorageLease) {
  const i=raw as {ownerId:string;attemptIds:string[]},ownerId=id(i.ownerId);if(!Array.isArray(i.attemptIds)||!i.attemptIds.length||i.attemptIds.length>10000)fail('memory_adjudication_stale');
  const stages=i.attemptIds.map(a=>({id:a,...current(tx,ownerId,id(a),lease)})),first=stages[0]!,basis=first.basis,item=basis.item;
  if(first.attempt.kind!=='adjudication'||stages.some(s=>digest({...s.basis,pageIndex:0})!==digest({...basis,pageIndex:0}))||new Set(stages.map(s=>`${s.attempt.kind}:${s.basis.pageIndex}`)).size!==stages.length)fail('memory_adjudication_stale');
- let action:'auto_accept'|'auto_update'|'auto_noop'='auto_accept',target:Basis['parents'][number]|undefined,text:string|undefined,formation:'adoption'|'change'|'correction'='adoption',parents:Basis['parents']=[],reason:string|null=null;
+ let action:'auto_accept'|'auto_update'|'auto_noop'='auto_accept',target:Basis['parents'][number]|undefined,text:string|undefined,formation:'adoption'|'change'|'correction'='adoption',parents:Basis['parents']=[],reason:string|null=null,skippedSources:{duplicateMemoryId:string;newSources:string[]}|undefined;
  const mediaRelationPending=requiresMultimodalRelationReview(item);
  if(mediaRelationPending)reason='memory_media_relation_pending';
  const pageCount=mediaRelationPending?0:Math.ceil(item.similar.length/8);
@@ -172,9 +171,11 @@ function finish(tx:StorageTransaction,raw:unknown,lease:StorageLease) {
   const stage=stages.find(s=>s.attempt.kind==='relation_verification'&&s.basis.pageIndex===pageIndex);if(!stage)fail('memory_adjudication_output_unbound');
   const checked=parseRelations(blocks(tx,ownerId,stage!.id),[item]);if(checked.length!==1||checked[0]!.candidate_index!==0)fail('memory_adjudication_output_unbound');const verification=checked[0]!,relation=decision.relation;
   const ids=relation?.related_memory_ids??[];
-  if(!relation||!verification.supported||relation.kind==='unresolved_conflict'||!evidenceSupported(item,relation.evidence)||!relationCovered(item,relation.kind,ids,verification.evidence)||!ids.length||new Set(ids).size!==ids.length||ids.some(p=>!item.similar.some(m=>m.memory_id===p))||relation.claim_changed!==verification.claim_changed||relation.condition_changed!==verification.condition_changed)reason='memory_relation_pending';
+  if(!relation||!verification.supported||relation.kind==='unresolved_conflict'||!evidenceSupported(item,relation.evidence)||!relationCovered(item,decision.action==='noop'?'supplement':relation.kind,ids,verification.evidence)||!ids.length||new Set(ids).size!==ids.length||ids.some(p=>!item.similar.some(m=>m.memory_id===p))||relation.claim_changed!==verification.claim_changed||relation.condition_changed!==verification.condition_changed)reason='memory_relation_pending';
   else if(decision.action==='add'||decision.action==='keep'){
-   if(relation.kind!=='independent'||relation.claim_changed||relation.condition_changed)reason='memory_relation_pending';
+   // add 对齐腾讯 store 的「全新独立」；keep 对齐「相关并存」，由模型并核验确认与旧记忆互不改动时自动并存。
+   const kindAllowed=decision.action==='add'?relation.kind==='independent':['independent','supplement','historical_supplement'].includes(relation.kind);
+   if(!kindAllowed||relation.claim_changed||relation.condition_changed)reason='memory_relation_pending';
   }else if(decision.action==='update'){
    if(target){reason='memory_multiple_targets_pending';continue;}
    target=basis.parents.find(p=>p.id===decision.replaced_memory_id&&item.similar.some(m=>m.memory_id===p.id));const prior=item.similar.find(p=>p.memory_id===target?.id);
@@ -194,8 +195,13 @@ function finish(tx:StorageTransaction,raw:unknown,lease:StorageLease) {
    const duplicate=basis.parents.find(p=>p.id===decision.duplicate_memory_id&&item.similar.some(m=>m.memory_id===p.id)),prior=item.similar.find(m=>m.memory_id===duplicate?.id);
    const fact=item.candidate;
    if(target||!duplicate||!prior||ids.length!==1||ids[0]!==duplicate.id||relation.claim_changed||relation.condition_changed)reason='memory_duplicate_pending';
-   else if(fact.text!==prior.text||fact.category!==prior.category||fact.topic!==prior.topic||fact.subject!==prior.subject||fact.valid_at!==prior.valid_at||fact.invalid_at!==prior.invalid_at||canonicalJSON(fact.event)!==canonicalJSON(prior.event)||canonicalJSON(fact.conditions)!==canonicalJSON(prior.conditions)||canonicalJSON([...new Set(fact.source_message_ids)].sort())!==canonicalJSON([...new Set(prior.source_message_ids)].sort()))reason='memory_duplicate_pending';
-   else {action='auto_noop';target=duplicate;parents=[duplicate];}
+   // 同义重复对齐腾讯 skip：模型判无增量、目标为非保护的 auto 旧资料且旧正文信息量不更少（长度代理）时自动跳过；
+   // 现有来源模型不支持向旧版本追加引用，候选新增来源只记 skipped_duplicate 执行事件，不改旧记忆。
+   else if(!duplicate.protected&&prior.adoption_method==='auto'&&[...prior.text].length>=[...fact.text].length){
+    action='auto_noop';target=duplicate;parents=[duplicate];
+    skippedSources={duplicateMemoryId:target.id,newSources:[...new Set(fact.source_message_ids)].filter(s=>!prior.source_message_ids.includes(s))};
+   }
+   else reason='memory_duplicate_pending';
   }else reason='memory_duplicate_pending';
  }
  for(const s of stages){
@@ -207,6 +213,7 @@ function finish(tx:StorageTransaction,raw:unknown,lease:StorageLease) {
  let result=null;
  // 先记录真实裁决；采纳与完成仍在同一事务，任何CAS或来源失败会全部回滚。
  record(tx,ownerId,first.id,'adjudication_result',{candidateId:basis.candidateId,reason,action:reason?'pending':action,parentMemoryIds:parents.map(p=>p.id),text:text??item.candidate.text});
+ if(!reason&&skippedSources)record(tx,ownerId,first.id,'skipped_duplicate',{candidateId:basis.candidateId,...skippedSources});
  if(!reason){
   result=applyDecision(tx,{ownerId,request:{requestKey:`memory:adjudication:${String(first.attempt.step_id)}`,action,candidateIds:[basis.candidateId],candidateRevisions:[basis.candidateRevision],...(target?{memoryId:target.id,expectedVersionNo:target.versionNo,expectedHeadRevision:target.headRevision}:{})}},true,{executionId:first.id,body:text,formation,parents:parents.map(p=>({memoryId:p.id,versionNo:BigInt(p.versionNo)}))});
   if(parents.length>1)retireMergedParents(tx,{ownerId,executionId:first.id,primaryMemoryId:result.memoryId!,requestKey:`memory:adjudication:${String(first.attempt.step_id)}`,parents:parents.map(p=>({memoryId:p.id,versionNo:BigInt(p.versionNo),headRevision:BigInt(p.headRevision)}))});
