@@ -19,6 +19,22 @@ test('数字有单位、邻近类别词或属于固定数字时不算数量歧�
  assert.equal(ambiguitySignal({text:'用户本人计划在 2026 年完成换工作。'}),null);
 });
 
+test('编号、号码、群名、引号内名称和并列数量不算省略单位的数量',()=>{
+ assert.equal(ambiguitySignal({text:'用户本人手机尾号是0997。'}),null);
+ assert.equal(ambiguitySignal({text:'联系人带了吹风机，当时在202房间，让用户本人过去拿。'}),null);
+ assert.equal(ambiguitySignal({text:'联系人是群聊"105"的成员。'}),null);
+ assert.equal(ambiguitySignal({text:'联系人自称是群聊“2⃣6⃣某专业非全”的成员。'}),null);
+ assert.equal(ambiguitySignal({text:'用户本人的视频还差5、6个。'}),null);
+ assert.equal(ambiguitySignal({text:'联系人的快递取件码是 4582。'}),null);
+ assert.equal(ambiguitySignal({text:'联系人的工号是12345678901。'}),null);
+});
+
+test('编号词收紧后，仍缺单位的独立数量照常命中',()=>{
+ assert.deepEqual(ambiguitySignal({text:'联系人称最后给了 3000。'}),{rule:'quantity_without_unit',token:'3000'});
+ assert.deepEqual(ambiguitySignal({text:'联系人打电话说他弟弟现在是 3000。'}),{rule:'quantity_without_unit',token:'3000'});
+ assert.deepEqual(ambiguitySignal({text:'联系人说第一次是 5000，之后涨了。'}),{rule:'quantity_without_unit',token:'5000'});
+});
+
 test('代词在正文里没有唯一所指时命中指代歧义',()=>{
  assert.deepEqual(ambiguitySignal({text:'联系人称先给他了。'}),{rule:'unresolved_reference',token:'他'});
  assert.deepEqual(ambiguitySignal({text:'联系人称那个已经处理好了。'}),{rule:'unresolved_reference',token:'那个'});

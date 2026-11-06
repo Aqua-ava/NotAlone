@@ -15,6 +15,16 @@ const QUANTITY_UNITS=['块钱','个小时','小时','分钟','公斤','千克','
  '元','块','角','毛','分','岁','年','月','天','日','号','点','时','周','秒','个','位','人','家','件','份','条','张','本','杯','瓶','包','袋','套','台','辆','级','楼','层','班','次','倍','成','折','米','斤','克','度','篇','章','集','期','届','门','科','项','笔','单','抽','根','支','双','对','只','头','匹','亩','升','吨','万','亿','千','百','十','多','余','来','%','％'];
 /** 数字邻近出现这些类别词时，数量属于什么已经可判定（仍可能是别的歧义，但不属于本规则）。 */
 const QUANTITY_CATEGORIES=['工资','房租','奖金','收入','房贷','车贷','彩礼','红包','转账','存款','余额','价格','费用','押金','租金','利息','学费','机票','生活费','年终奖','提成','分红','借款','欠款','账单','月薪','年薪','时薪','日薪','绩效','金额','开销','花费','预算'];
+/** 数字邻近出现这些词时，数字是编号/标识而不是数量（手机尾号、房间号、群聊名等），不按「省略单位」处理。 */
+const IDENTIFIER_CONTEXT=['尾号','手机号','号码','房间','房号','门牌','群聊','群名','群昵称','编号','工号','学号','车牌','车次','航班','验证码','密码','账号','单号','取件码','邮编','区号','版本','型号'];
+/** 数字被引号/书名号包住时是名称或原文引用，不是数量。 */
+const QUOTE_PAIRS:Record<string,string>={'“':'”','"':'"','「':'」','『':'』','《':'》','‘':'’',"'":"'"};
+function identifierContext(text:string,start:number,end:number):boolean{
+ const before=text.slice(Math.max(0,start-8),start),after=text.slice(end,end+4);
+ if(IDENTIFIER_CONTEXT.some(word=>before.includes(word)||after.startsWith(word)))return true;
+ const open=text[start-1],close=text[end];
+ return open!==undefined&&QUOTE_PAIRS[open]!==undefined&&close===QUOTE_PAIRS[open];
+}
 /** 不是数量的常见数字（院校层次、工作制等），不按独立数字处理。 */
 const NON_QUANTITY_NUMBERS=new Set(['985','211','996','007','911','110','120','119','114']);
 /** 数字前是这些字/符号时才按「独立数量」看待：函数词、动词、标点或空白。 */
@@ -53,6 +63,10 @@ function quantitySignal(text:string):AmbiguitySignal|null{
  for(const match of normalized.matchAll(/\d+(?:\.\d+)?/gu)){
   const token=match[0],start=match.index,end=start+token.length;
   if(NON_QUANTITY_NUMBERS.has(token)||/^(?:19|20)\d\d$/u.test(token))continue;
+  // 前导 0 或 8 位以上整串数字是号码类标识；表情键帽数字（2⃣）与「5、6个」式并列数量的前一项也不是缺单位。
+  if(/^0\d/u.test(token)||/^\d{8,}$/u.test(token)||normalized[end]==='⃣'||normalized[end+1]==='⃣')continue;
+  if(/^\s*[、,，~]\s*\d+(?:\.\d+)?\s*(?:块钱|个|元|块|岁|年|月|天|号|人|次|条|件|位|家|套|台|只|本|份|篇|章)/u.test(normalized.slice(end)))continue;
+  if(identifierContext(normalized,start,end))continue;
   const previous=normalized[start-1]??'',following=normalized[end]??'';
   if(/[A-Za-z0-9]/u.test(previous)||/[A-Za-z0-9]/u.test(following))continue;
   if(':/：'.includes(previous)||':/：'.includes(following)||'~—至到-'.includes(previous)||'~—至到-'.includes(following))continue;

@@ -179,3 +179,9 @@ R3 独立判定 unknown 且探针中 2/5 真两读空 `alternatives` 仍被自�
 离线验证（0 外发，只读隔离副本）：合成探针真两读空 `alternatives` 捕获 2/2；细节没说误报 0/5（进入候选口径 0/4）；真实窗口进入候选触发 2/43（4.7%），两条均为 R2 已知真歧义信号，已采纳候选命中 0/8，进入候选口径未观察到误伤（原始候选口径 1/73 为已被核验拒绝的边界指代）。测试：新增 `sqlite-memory-ambiguity-guard` 12/12；相关回归 35/35、18/18；`tsc` 通过；`sqlite-memory-candidate-admission` 3 条存量失败在无本改动的 HEAD 同样失败，非回归。
 
 限制与待办：规则在 R3 同源小样本上调参，存在过拟合风险，只做过离线验证、未做真实小批模型验证；界面原因码文案映射位于用户遗留未提交文件 `desktop/src/renderer/SqliteMemoryManagementPanel.tsx`，本次未触碰，新码暂走未知码兜底文案；回滚方式见 `.scratch/memory-auto-adoption-alignment/evidence/07-ambiguity-guard-offline.md`。
+
+## 验收复核：兜底规则的存量误伤修正
+
+独立复核在隔离副本全部 393 条候选、88 条正式记忆上重扫兜底规则：数字类命中 10 条里 7 条是编号而非数量（手机尾号、房间号、群聊名、表情键帽数字、「5、6个」并列数量），其中 3 条已是自动采纳记忆，开启兜底后重跑会被降为待确认。已在 `ambiguity-guard.ts` 收紧数字规则（前导 0 或 8 位以上整串、编号类邻近词、引号内名称、键帽数字、并列数量不再按「省略单位」处理），并补两个测试；重扫后数字类误伤 7→0，候选命中 20→13（5.1%→3.3%），记忆命中 5→2，剩余均为指代词或「多赚点」类模糊数量。限制：仍是同一份存量数据上的离线调参，未做真实模型验证；`alternatives` 非空的命中本就不会降级，故上述为上界。
+
+附：`sqlite-memory-extraction.test.mjs`「已知模型回执至阶段提交之间仍占用同一目标」在兜底提交之前的 `1ad6b5eaf` 同样挂住（120 s 超时），`sqlite-memory-candidate-admission.test.mjs` 的 3 个旧 source_stamp 用例同样在兜底前失败，均与兜底无关，未处理。
