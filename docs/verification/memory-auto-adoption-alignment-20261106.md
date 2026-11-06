@@ -125,3 +125,49 @@
 附加发现（类 B，仅开发者调试面板）：`backend-ts/src/history/sqlite/recertify-candidates.ts:25`、`:47-53` 按联系人统计 message 行时未按绑定过滤，已完成认证后再被围栏的联系人，「预计需重新读取消息」会显示约两倍（合成验证：面板 2 vs 可见 1）。该入口只在开发模式渲染（ADR-173），不进入读取/提取/删除/模型路径；已另开修复任务。
 
 缺口：媒体在旧的 revoked 绑定下的真实可读性未实测（代码核对通过）；账户级删除与「再次认证产生第三代绑定」的删除闭包未合成实测。
+
+## R3：保留真歧义（提示正反例 + 合成探针 + 同窗口重测）
+
+执行者自身唯一代码改动：`backend-ts/src/memory/extraction/prompts.ts` 在 `relationshipExtractionContract` 与 `alternatives` 描述加入「必须填」「不要填」的合成对照例，并写明「合并只补全细节、不抹平两读」「合并保留主体归属」，另加两个提示结构断言与一个「提示正文参与策略指纹」用例；策略指纹随源码变更（新 run 不复用旧配置）。合成探针与重测均只使用合成句子或隔离副本，真实库未写入。注意：运行期间工作树另有其它会话的未提交改动（`backend-ts/src/history/sqlite/legacy-physical-suppression.ts`、`recertify-actions.ts`，21:12/21:13 修改、21:29:38 提交，不在提取/解析/核验路径），因此 R2→R3 不是严格单变量对照，但两轮目标集与内容等价。
+
+### 合成探针（10 个合成窗口：5 真两读 + 5 细节没说）
+
+| 指标 | 计数 |
+| --- | --- |
+| 真两读窗口 `alternatives` 非空（原始候选口径） | 3/5（未达方向性 ≥4/5） |
+| 真两读窗口 `alternatives` 非空（进入候选口径） | 1/7 |
+| 细节没说窗口 `alternatives` 空（原始候选口径） | 5/5 |
+| 原始候选 / 进入候选 | 10 / 7 |
+| 解析结构拒绝 / 核验拒绝 / 总拒绝 | 0 / 3（unverified 2、unsupported 1）/ 3 |
+| issues `subject` / `meaning` | 2 / 1 |
+| 真两读仍被当确定事实自动采纳（`alternatives` 为空且 contact/adopted） | 2/5（对象省略型、指代身份型） |
+| 外发（账本 used） | 15（extraction 2、verification 2、adjudication 6、relation_verification 5） |
+
+### 同窗口重测（2026-03-30 10:22–10:42，隔离副本，窗口内容与 R2 等价）
+
+| 指标 | 基线（原 run） | R2 | R3 |
+| --- | --- | --- | --- |
+| `alternatives` 非空（进入候选口径） | 6/18 | 0/15 | 0/10（0%） |
+| `alternatives` 非空（原始候选口径） | 7/22 | 1/24 | 2/27（≈7%） |
+| 原始候选 / 进入候选 | 22 / 18 | 24 / 15 | 27 / 10 |
+| 核验拒绝（`verification` verdict：unverified + unsupported） | 3+1 | 7+0 | 5+0 |
+| 解析结构拒绝 | 0 | 2 | 2 |
+| `stage_result.rejected` 求和（记录值） | 4 | 9 | 6 |
+| 两条真歧义文本（收入族 2 + 数字族 2）`alternatives` 非空 | — | 0/4 | 0/4 |
+| 外发（账本 used） | — | 17 | 17 |
+| 覆盖 | 101/101 目标 | 101/101（3 run） | 90/101 目标（2 run，受 17 次上限；第 2 run 末个核验未发出、第 3 run 未开始） |
+
+- 本轮按 R2 同口径（进入候选）仍是 0，未满足「>0/15」；按原始候选口径 2/27 高于 R2 的 1/24、低于基线 7/22，但两条非空候选均来自 run2 且都未发布（1 条核验 unverified、1 条所属批次核验未发出），与 R2 两条真歧义信号候选来源零重叠。两条真歧义族的 4 条候选在 R3 无逐字重现（长度与哈希不同），按来源最大重叠 4/4 匹配后 `alternatives` 全空。核验拒绝记录值未高于 R2，但重测覆盖不完整（2 run、90/101 目标），不能按等覆盖比较。另有 run2 `low_value_dropped` 1 条（置信度 0.3）。
+- 探针真两读 3/5 未达方向性标准，且其中 2/5 空 `alternatives` 直接被自动采纳为 active 记忆（防泄漏目标未达成）；细节没说 5/5 为空。两轮合计外发 32/32（探针 15、重测 17），其中探针分项超出计划 3 次、重测未完成计划覆盖，均已报告。
+- 独立判定（`r3-verifier`，只读复算、未调用模型）：`outcome=unknown`。三项原目标均未达标，不记 improved；未观察到可比退化但覆盖不全不能排除，不记 regressed；置信度：不记 improved 为高、不记 regressed 为中。流程偏差：两轮在独立判定完成前已按 `unknown` 结案（因总量耗尽、无下一轮），影响有限，如实保留。
+- 要得到可判定结论还缺：完整等覆盖的同窗口重测（3 run / 101 目标，估计约 26 次外发，需用户另行授权）；更大的真两读探针（≥10 个）并加旧提示对照；等覆盖的核验拒绝细分；干净工作树或精确代码差异清单以排除并发混杂；第二个真实窗口/联系人样本。当前提示改动未验证通过，不得在真库启用；工作树中该提示改动已回滚并保留补丁。
+
+## 桌面验收（任务 E，开发热更新实例）
+
+Computer Use 实测（复用现有 `pnpm run dev` 实例，未打包、未起第二份）：记忆页可达；记忆自动处理为关闭，全程未触发生成；选中联系人后「正式记忆 本页 5 条」与隔离核对的 active=5 一致，但 5/5 显示「当前无可引用版本。」，无「查看来源」、撤销入口不可达；「待确认记忆」「处理中未完成记忆」两栏均未渲染。原因：真库 277 位联系人带 `history_continuity_fence`（`history_source_continuity_unverified`），唯一无围栏联系人的绑定均 `revoked`，读取层来源资格核验失败后正文与候选被丢弃——属既有数据状态（其他任务在处理），不作为本页实现缺陷判据。未点击采纳/拒绝/撤销，未展开聊天正文，真实库未写入。
+
+自动化实测：`desktop` 视图套件 `sqlite-memory-management-view` 37/37 通过（含候选按处理状态分组、`memory_relation_conflict` 文案、来源可达、撤销经合成桥可达且不写真库）；`backend-ts` 的 `sqlite-memory-adjudication-evidence` 13/13 通过（断言 `memory_relation_evidence_incomplete`/`inconsistent`）。两项均运行当前工作树（含并行任务的未提交改动）。
+
+口径说明：任务书里的「范围变化／名单读取失败／绑定读取失败」是前台定位原因码（`binding_scope_changed`／`binding_session_list_failed`／`binding_verification_unavailable`），不在记忆管理页；记忆页的拆分码是 `relation_conflict`／`evidence_incomplete`／`unsupported`／`inconsistent`。
+
+未覆盖：真库上的候选分栏、真实原因码文案、自动采纳记忆的来源与撤销入口无实测证据（源资格阻断）；撤销真实执行未做（会改真实数据）；前台定位三条码的真实故障场景未构造；`test:app` 隔离实例未使用。
