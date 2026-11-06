@@ -147,10 +147,12 @@ function blocks(tx:StorageTransaction,ownerId:string,attemptId:string):readonly 
 function evidenceSupported(item:AdjudicationItem,evidence:readonly {message_id:string;quote:string}[]):boolean {
  const source=[...item.candidate_source_texts,...item.similar.flatMap(p=>p.source_texts)];return evidence.length>0&&evidence.every(e=>e.quote.trim()&&source.some(s=>s.content_kind!=='image'&&s.message_id===e.message_id&&typeof s.text==='string'&&s.text.includes(e.quote)));
 }
-function relationCovered(item:AdjudicationItem,ids:readonly string[],evidence:readonly {message_id:string;quote:string}[]):boolean {
+/** 关系核验证据须逐字有效并覆盖所声称关联的旧记忆；independent 关系只依赖候选自身来源，不要求引用无关旧记忆原文。 */
+function relationCovered(item:AdjudicationItem,kind:string,ids:readonly string[],evidence:readonly {message_id:string;quote:string}[]):boolean {
  if(!evidenceSupported(item,evidence))return false;
  const cited=new Set(evidence.map(e=>e.message_id));
  if(!item.candidate.source_message_ids.some(id=>cited.has(id)))return false;
+ if(kind==='independent')return true;
  const available=new Set([...item.candidate_source_texts,...item.similar.flatMap(m=>m.source_texts)].map(s=>s.message_id));
  return ids.every(id=>{const parent=item.similar.find(m=>m.memory_id===id);if(!parent)return false;const sources=parent.source_message_ids.filter(source=>available.has(source));return !sources.length||sources.some(source=>cited.has(source));});
 }
@@ -170,7 +172,7 @@ function finish(tx:StorageTransaction,raw:unknown,lease:StorageLease) {
   const stage=stages.find(s=>s.attempt.kind==='relation_verification'&&s.basis.pageIndex===pageIndex);if(!stage)fail('memory_adjudication_output_unbound');
   const checked=parseRelations(blocks(tx,ownerId,stage!.id),[item]);if(checked.length!==1||checked[0]!.candidate_index!==0)fail('memory_adjudication_output_unbound');const verification=checked[0]!,relation=decision.relation;
   const ids=relation?.related_memory_ids??[];
-  if(!relation||!verification.supported||relation.kind==='unresolved_conflict'||!evidenceSupported(item,relation.evidence)||!relationCovered(item,ids,verification.evidence)||!ids.length||new Set(ids).size!==ids.length||ids.some(p=>!item.similar.some(m=>m.memory_id===p))||relation.claim_changed!==verification.claim_changed||relation.condition_changed!==verification.condition_changed)reason='memory_relation_pending';
+  if(!relation||!verification.supported||relation.kind==='unresolved_conflict'||!evidenceSupported(item,relation.evidence)||!relationCovered(item,relation.kind,ids,verification.evidence)||!ids.length||new Set(ids).size!==ids.length||ids.some(p=>!item.similar.some(m=>m.memory_id===p))||relation.claim_changed!==verification.claim_changed||relation.condition_changed!==verification.condition_changed)reason='memory_relation_pending';
   else if(decision.action==='add'||decision.action==='keep'){
    if(relation.kind!=='independent'||relation.claim_changed||relation.condition_changed)reason='memory_relation_pending';
   }else if(decision.action==='update'){
