@@ -18,12 +18,17 @@ const identity=(kind:string,key:Record<string,string>):string=>createHash('sha25
 const target=(kind:string,key:Record<string,string>):RowDeletionTarget=>({kind:'row',domain:'history',rowKind:kind,key,identity:identity(kind,key),holderKeys:[]});
 function idsForScope(tx:StorageTransaction,op:DeletionOperation,records:StorageRow[]):{sourceIds:Set<string>;affectedMessageIds:Set<string>;deletedMessageIds:Set<string>} {
  const sourceIds=new Set(records.map(r=>String(r.id)));
- const candidates=op.scope.kind==='source'?[...new Set(records.flatMap(r=>r.message_id?[String(r.message_id)]:[]))]
-  :tx.all(`SELECT id FROM message WHERE owner_id=?${op.scope.kind==='account'?'':' AND contact_id=?'} AND availability='deleting'`,
-    op.scope.kind==='account'?[op.ownerId]:[op.ownerId,op.scope.contactId]).map(r=>String(r.id));
- const affectedMessageIds=new Set(candidates);
- const deletedMessageIds=new Set(candidates.filter(messageId=>!tx.all('SELECT id FROM capture_record WHERE owner_id=? AND message_id=?',[op.ownerId,messageId])
-  .some(r=>!sourceIds.has(String(r.id)))));
+ // 每条待删消息的反查补上 contact_id 并固定走 capture_record_message 索引：
+ // capture_record(owner_id,contact_id,message_id) 是指向 message(owner_id,contact_id,id) 的复合外键，
+ // 因此带 message_id 的行必然与该消息同 contact_id，集合与旧查询（只按 owner_id+message_id）逐行相同；
+ // 库内无统计信息时优化器会退回 autoindex_capture_record_4 的 (owner_id,contact_id) 前缀，
+ // 对每条消息扫描整个联系人分区（4.3 万消息夹具实测整个联系人删除计划约 64 秒，补索引查找后见下方性能档）。
+ const candidates=op.scope.kind==='source'?records.flatMap(r=>r.message_id?[{id:String(r.message_id),contactId:String(r.contact_id)}]:[])
+  :tx.all(`SELECT id,contact_id FROM message WHERE owner_id=?${op.scope.kind==='account'?'':' AND contact_id=?'} AND availability='deleting'`,
+    op.scope.kind==='account'?[op.ownerId]:[op.ownerId,op.scope.contactId]).map(r=>({id:String(r.id),contactId:String(r.contact_id)}));
+ const affectedMessageIds=new Set(candidates.map(c=>c.id));
+ const deletedMessageIds=new Set(candidates.filter(({id,contactId})=>!tx.all('SELECT id FROM capture_record INDEXED BY capture_record_message WHERE owner_id=? AND contact_id=? AND message_id=?',[op.ownerId,contactId,id])
+  .some(r=>!sourceIds.has(String(r.id)))).map(c=>c.id));
  return {sourceIds,affectedMessageIds,deletedMessageIds};
 }
 function plannedIds(tx:StorageTransaction,op:DeletionOperation,rowKind:string):Set<string>{
@@ -70,6 +75,7 @@ function scopeRows(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget
  targets.push(...records.map(r=>target('capture_record',{owner_id:ownerId,id:String(r.id)})));
  for(const id of affectedMessageIds){
   if(!deletedMessageIds.has(id))continue;
+  // message_alias_message 索引（迁移 43）让本查询按 message_id 定位，不再扫整个 owner 分区的别名（4.3 万消息夹具上反查总耗时从约 50 秒降到亚毫秒级/条）。
   for(const a of tx.all('SELECT * FROM message_alias WHERE owner_id=? AND message_id=?',[ownerId,id]))targets.push(target('message_alias',{owner_id:ownerId,id:String(a.id)}));
   targets.push(target('message',{owner_id:ownerId,id}));
  }
@@ -94,6 +100,7 @@ export const historyDeletionDomain:DeletionDomain={
    if(r.observed_key){
     const physicalKeys=sourceDeletionPhysicalKeys(tx,op);
     for(const key of physicalKeys.length?physicalKeys:[String(r.observed_key)])tx.run('INSERT OR IGNORE INTO history_source_exclusion VALUES(?,?,?,?,?)',[ownerId,r.conversation_id,'local',key,op.operationId]);
+    // 同上：依赖迁移 43 的 message_alias_message 索引，每个来源一次的排除查询按 message_id 定位。
     if(r.message_id)for(const alias of tx.all('SELECT scheme,external_key FROM message_alias WHERE owner_id=? AND message_id=?',[ownerId,r.message_id]))
      tx.run('INSERT OR IGNORE INTO history_source_exclusion VALUES(?,?,?,?,?)',[ownerId,r.conversation_id,alias.scheme,alias.external_key,op.operationId]);
    }

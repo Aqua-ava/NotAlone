@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 42,
+  "schemaVersion": 43,
   "migrationVersions": [
    1,
    2,
@@ -43,9 +43,10 @@
    39,
    40,
    41,
-   42
+   42,
+   43
   ],
-  "userVersion": 42,
+  "userVersion": 43,
   "sqliteVersion": "3.53.4",
   "tableCount": 95,
   "fieldCount": 958,
@@ -8925,6 +8926,17 @@
     }
    ],
    "indexes": [
+    {
+     "name": "message_alias_message",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "message_id"
+     ],
+     "sql": "CREATE INDEX message_alias_message ON message_alias(owner_id,message_id)"
+    },
     {
      "name": "sqlite_autoindex_message_alias_2",
      "unique": 1,

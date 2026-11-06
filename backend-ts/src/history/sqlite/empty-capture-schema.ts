@@ -17,3 +17,13 @@ CREATE INDEX sync_capture_goal ON sync_capture(owner_id,goal_id);
 export const historyCaptureRecordForeignKeyIndexMigration=(version:number):StorageMigration=>({version,sql:`
 CREATE INDEX capture_record_capture ON capture_record(owner_id,contact_id,capture_id);
 `});
+
+/**
+ * 删除闭包按 (owner_id, message_id) 反查 message_alias：此前只能落在 (owner_id,…) 外键唯一索引前缀上，
+ * 等于每条被删消息扫描整个 owner 分区（计划/清空/来源围栏三个调用点都在这次路径上，
+ * 见 deletion.ts 的 idsForScope 反查；真实库 36.6 万行别名在联系人删除时实测占据一分钟级开销）。
+ * 迁移只建索引不改数据；删除计划的目标集合与顺序不变。
+ */
+export const historyMessageAliasIndexMigration=(version:number):StorageMigration=>({version,sql:`
+CREATE INDEX message_alias_message ON message_alias(owner_id,message_id);
+`});
