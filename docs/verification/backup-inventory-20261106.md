@@ -156,3 +156,22 @@
 - 风险 2：`contact-sync-…-shm` 有 11-06 23:46 改写痕迹 → 备份曾被打开；若用户批准删除，删除时需重查 `lsof`。
 - 风险 3：`NotAlone-consolidation-20261031.M61JMC` 内部含 `.tar`/`.patch`，未打开检查（可能含私人内容）；其归属只有用户能回答。
 - 风险 4：本机磁盘可用 54 GiB，清理动作（尤其移废纸篓）不改变可用空间直到清空废纸篓；已提示。
+
+## 12. 执行记录（2026-11-07，用户批准后）
+
+用户在对话中逐项批准（全文见该对话记录），本轮执行如下：
+
+**已执行：`backups/sqlite` 下 9 份 C 类快照及其附属、共 16 个文件，逐个 `mv -n` 移入 `~/.Trash`（非 `rm`）**：
+
+before-quote-tail-v2-20261101.sqlite、before-quote-tail-sync-20261101.sqlite、before-quote-target-fence-repair-20261101.sqlite（＋-wal、-shm）、quote-target-fence-repair-20261101.json、before-quote-sync-20261101.sqlite（＋-wal、-shm）、before-image-placeholder-wxgf-20261031.sqlite（＋-wal、-shm）、before-original-image-decoding-fix-20261031.sqlite、before-original-image-reader-upgrade-20261031.sqlite、before-legacy-guard-repair-1793349613.sqlite、before-stable-source-upgrade-1793349058.sqlite。
+
+- 移动前逐项核对存在，`lsof +D backups` 无占用；移入废纸篓 16/16 成功，无同名冲突、无遗漏。
+- 保留项核对：`before-fence-restart-fix-20261106.sqlite`（B 类，验收文档＋提交 ed2b64e02 登记的回滚点）及其附属、`before-image-reset-20261105.sqlite` 未动；`managed/**` 未动。
+- 前后 du：backups 14,613,516 → 6,516,168 kB（**释放 8,097,348 kB ≈ 8.29 GB**，与 §9 表一致）；NotAloneDesktop 合计 23,876,984 → 15,779,636 kB。`df -k /` 可用 50,034,908 → 50,033,656 kB —— 废纸篓未清空，实际空间释放等待用户自行清空（本任务不代清空）。
+
+**用户未批准/裁决保留**：
+- `NotAlone-Quarantine`：用户确认为产品目录（`desktop/src/main/quarantine/paths.ts` 默认隔离根），保留。
+- `NotAlone-consolidation-20261031.M61JMC` 两个大 tar（合计 3.0 GB）：已按用户要求 `tar -tf` 列出内容（各 75,639/58,116 条目）并抽取 manifest/patch 小文本核对。实质为旧诊断总账 CLI（notalone-history-cli-development，v2.0.1-rc.5，源提交 795071fa…）的工具链快照：Go 工具链可重新下载，patch/manifest 共几百行可从该提交回溯，但 `dedup-integrated-*` 整树不在当前工作树。判定"可从 git 历史＋工具链重取重建、本轮非急需"→ **本轮保留**，等用户后续显式批准再处理；同目录 `uncommitted-files.tar`、`*.patch`、`status.bin` 均保留。
+- `contact-sync-20261103-…sqlite`（1.3 GB）：用户要求先核实对应任务是否结案，本轮保留。核实方向：2026-11-03 联系人同步调试相关任务单（引用数 0，仅列入本盘点任务单）。
+- `Cache/` 等 Electron 可再生缓存：需 App 完全退出，本轮保留；按 R7 每轮开发结束退出 App 后清理。
+- 废纸篓由用户自行清空，本任务不代清空。
