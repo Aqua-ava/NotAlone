@@ -41,7 +41,7 @@ test('最近聊天只读展示，刷新保留编辑且生成请求不再携带�
  await expect(region.getByRole('checkbox',{name:'使用消息：本次可用的合成聊天',exact:true})).toHaveCount(0);
  await expect(region.getByText(/取消勾选|已排除 \d+ 条消息/)).toHaveCount(0);
  await expect(region.getByText('本次可用的合成聊天',{exact:true})).toBeVisible();
- await expect(region.getByRole('button',{name:'以此版本继续',exact:true})).toBeEnabled();
+ await expect(region.getByRole('button',{name:'以这个说法继续',exact:true})).toBeEnabled();
  await region.getByRole('button',{name:'刷新最近聊天',exact:true}).click();
  await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveValue('尚未保存的候选编辑');
  await expect(region.getByText('本次可用的合成聊天',{exact:true})).toBeVisible();
@@ -54,12 +54,12 @@ test('最近聊天只读展示，刷新保留编辑且生成请求不再携带�
 test('关闭关系背景后撤销旧候选携入，生成不提交被后端禁止的组合',{timeout:30000},async t=>{
  const f=await panel(t,async operation=>operation.action==='generate'?receipt(operation):operation.action==='select'?{id:ids.selection}:pageData());
  const region=f.page.getByRole('region',{name:'表达工作区'});
- await region.getByRole('button',{name:'以此版本继续',exact:true}).click();
+ await region.getByRole('button',{name:'以这个说法继续',exact:true}).click();
  await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();
  await region.getByText('最近聊天 · 查看／补充',{exact:true}).click();
  await region.getByRole('checkbox',{name:'参考最近聊天和相关关系资料',exact:true}).uncheck();
  await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);
- await expect(region.getByRole('button',{name:'以此版本继续',exact:true})).toBeDisabled();
+ await expect(region.getByRole('button',{name:'以这个说法继续',exact:true})).toBeDisabled();
  await region.getByRole('button',{name:'帮我想想',exact:true}).click();
  await expect.poll(()=>f.commands.filter(c=>c.action==='generate').length).toBe(1);
  assert.equal(f.commands.find(c=>c.action==='generate').carriedSelectionId,undefined);
@@ -216,7 +216,7 @@ test('候选页面读取真实版本结构、保存多条编辑稿并选择具�
  await expect.poll(()=>f.commands.filter(c=>c.action==='edit').length).toBe(1);
  const edit=f.commands.find(c=>c.action==='edit');assert.equal(edit.candidateId,ids.candidate);assert.equal(edit.versionNo,1);assert.deepEqual(edit.parts,['手工修改后的第一条','手工修改后的第二条']);
  await expect(region.getByRole('status')).toContainText('未重新核验');
- await region.getByRole('button',{name:'选用此版本',exact:true}).click();await expect.poll(()=>f.commands.filter(c=>c.action==='select').length).toBe(1);
+ await region.getByRole('button',{name:'选用这个说法',exact:true}).click();await expect.poll(()=>f.commands.filter(c=>c.action==='select').length).toBe(1);
  assert.equal(f.commands.find(c=>c.action==='select').versionNo,2);
  await region.getByRole('button',{name:'查看上一版',exact:true}).click();await expect(first).toHaveValue('合成候选第一条');await expect(second).toHaveValue('合成候选第二条');
  await region.getByRole('button',{name:'回到最新版本',exact:true}).click();await expect(first).toHaveValue('手工修改后的第一条');await expect(second).toHaveValue('手工修改后的第二条');
@@ -232,7 +232,7 @@ test('覆盖不完整可直接使用，明确未发送失败的新请求保留�
  });
  const region=f.page.getByRole('region',{name:'表达工作区'}),draft=region.getByRole('textbox',{name:'有什么想说的',exact:true}),generate=region.getByRole('button',{name:'帮我表达',exact:true});
  await expect(region.getByRole('checkbox',{name:'使用已同步部分继续',exact:true})).toHaveCount(0);await draft.fill('合成本次表达要求');await expect(generate).toBeEnabled();assert.equal(generated,0);
- await region.getByRole('button',{name:'以此版本继续',exact:true}).click();await expect(region.getByRole('status')).toContainText('下一次明确请求');assert.equal(generated,0);
+ await region.getByRole('button',{name:'以这个说法继续',exact:true}).click();await expect(region.getByRole('status')).toContainText('下一次明确请求');assert.equal(generated,0);
  await generate.click();await expect(region.getByRole('alert')).toContainText('尚未发给模型');await expect(draft).toHaveValue('合成本次表达要求');
  await region.getByRole('button',{name:'重新生成',exact:true}).click();await expect.poll(()=>f.submitted.length).toBe(1);
  const requests=f.commands.filter(c=>c.action==='generate');assert.equal(requests.length,2);assert.equal(requests[0].acceptIncomplete,false);assert.equal(requests[0].selectedPackageId,undefined);assert.equal(requests[1].selectedPackageId,undefined);assert.equal(requests[0].carriedSelectionId,ids.selection);assert.notEqual(requests[1].requestKey,requests[0].requestKey);assert.equal(requests[1].text,requests[0].text);assert.equal(requests[1].carriedSelectionId,ids.selection);
@@ -271,7 +271,7 @@ test('聊天读取恢复失败不保留旧选稿及其派生草稿，新生成�
   throw new Error('未授权的合成页面操作');
  });
  const region=f.page.getByRole('region',{name:'表达工作区'}),draft=region.getByRole('textbox',{name:'有什么想说的',exact:true});
- await region.getByRole('button',{name:'以此版本继续',exact:true}).click();
+ await region.getByRole('button',{name:'以这个说法继续',exact:true}).click();
  await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();
  await draft.fill('从旧选稿继续修改的想法');await region.getByRole('button',{name:'帮我表达',exact:true}).click();
  await expect(region.getByRole('alert')).toHaveText('聊天读取暂未恢复，请重试生成。');
@@ -369,8 +369,8 @@ test('候选继续被后端判定失效时同时清草稿、旧携入及实际Sk
   throw new Error('未授权的合成页面操作');
  });
  const region=f.page.getByRole('region',{name:'表达工作区'}),draft=region.getByRole('textbox',{name:'有什么想说的',exact:true});
- await expect(region.getByRole('button',{name:'以此版本继续',exact:true})).toBeVisible();await region.getByRole('button',{name:'以此版本继续',exact:true}).click();await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();
- await draft.fill('资格失效时必须清掉的合成草稿');await region.getByRole('button',{name:'以此版本继续',exact:true}).click();
+ await expect(region.getByRole('button',{name:'以这个说法继续',exact:true})).toBeVisible();await region.getByRole('button',{name:'以这个说法继续',exact:true}).click();await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();
+ await draft.fill('资格失效时必须清掉的合成草稿');await region.getByRole('button',{name:'以这个说法继续',exact:true}).click();
  await expect(region.getByRole('alert')).toContainText('已失效');await expect(draft).toHaveValue('');await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);await expect(region.getByRole('combobox',{name:'本次回复Skill',exact:true})).toHaveCount(0);await expect(region.getByText('本次实际载入的 Skill',{exact:true})).toHaveCount(0);
 });
 
@@ -381,7 +381,7 @@ test('权威读取发现已展示候选资格失效时清草稿与旧携入，�
   throw new Error('未授权的合成页面操作');
  });
  const region=f.page.getByRole('region',{name:'表达工作区'}),draft=region.getByRole('textbox',{name:'有什么想说的',exact:true});
- await expect(region.getByRole('button',{name:'以此版本继续',exact:true})).toBeVisible();await region.getByRole('button',{name:'以此版本继续',exact:true}).click();await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();await draft.fill('后端已判失效时不应残留的草稿');invalid=true;
+ await expect(region.getByRole('button',{name:'以这个说法继续',exact:true})).toBeVisible();await region.getByRole('button',{name:'以这个说法继续',exact:true}).click();await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();await draft.fill('后端已判失效时不应残留的草稿');invalid=true;
  await region.getByRole('button',{name:'刷新候选',exact:true}).click();await expect(draft).toHaveValue('');await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);
 });
 
@@ -396,7 +396,7 @@ test('短暂读取失败后权威读取确认来源失效，仍撤下旧选稿�
   throw new Error('未授权的合成页面操作');
  });
  const region=f.page.getByRole('region',{name:'表达工作区'}),draft=region.getByRole('textbox',{name:'有什么想说的',exact:true}),read=region.getByRole('button',{name:'刷新候选',exact:true});
- await expect(region.getByRole('button',{name:'以此版本继续',exact:true})).toBeVisible();await region.getByRole('button',{name:'以此版本继续',exact:true}).click();await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();await draft.fill('短暂读失败后仍挂旧选稿的合成草稿');
+ await expect(region.getByRole('button',{name:'以这个说法继续',exact:true})).toBeVisible();await region.getByRole('button',{name:'以这个说法继续',exact:true}).click();await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();await draft.fill('短暂读失败后仍挂旧选稿的合成草稿');
  await read.click();await expect(region.getByRole('alert')).toContainText('尚未确认');await expect(draft).toHaveValue('短暂读失败后仍挂旧选稿的合成草稿');
  await read.click();await expect(region.getByText('这次候选的来源已失效，正文与依据已撤下。',{exact:true})).toBeVisible();await expect(draft).toHaveValue('');await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);
 });
@@ -433,4 +433,195 @@ test('本轮进度独立于历史失败，轻量状态显示真实阶段且未�
  await region.getByRole('button',{name:'重新生成',exact:true}).click();
  await expect.poll(()=>f.commands.filter(c=>c.action==='generate').length).toBe(2);
  const requests=f.commands.filter(c=>c.action==='generate');assert.notEqual(requests[0].requestKey,requests[1].requestKey);
+});
+
+// —— 请求分段、说法命名与版本降噪（spec §6）——
+const uid=n=>`${n.toString(16).padStart(8,'0')}-0000-4000-8000-${n.toString(16).padStart(12,'0')}`;
+const versionOf=(candidateId,parts=['合成说法正文'],extra={})=>({candidateId,versionNo:1,origin:'model',parentVersionNo:null,parts,basis:[{itemNo:1,kind:'message',text:'同联系人实际输入依据',verification:'actual_input'}],...extra});
+const requestOf=(requestId,candidates=[],extra={})=>({requestId,coverageWarning:null,sourceState:'available',candidates,selections:[],loadedSkills:[],...extra});
+const pageOf=(requests,extra={})=>({requests,coverage:{phase:'complete'},...extra});
+const requestSection=(region,index)=>region.locator('details.sqlite-candidate-request').nth(index);
+const requestSummary=request=>request.locator('summary').first();
+const candidateInput=(request,index=1)=>request.locator(`textarea[aria-label="候选第${index}条"]`);
+
+test('多个请求按倒数编号：仅最新一次展开，折叠内容保持挂载',{timeout:30000},async t=>{
+ const olderId=uid(101),latestId=uid(102),olderCandidate=uid(201),latestCandidate=uid(202);
+ const data=pageOf([
+  requestOf(olderId,[versionOf(olderCandidate,['旧请求的说法正文'])],{selections:[{id:uid(301),candidateId:olderCandidate,versionNo:1,selectionNo:1}]}),
+  requestOf(latestId,[versionOf(latestCandidate,['最新请求的说法正文'])]),
+ ]);
+ const f=await panel(t,async()=>data),region=f.page.getByRole('region',{name:'表达工作区'}),sections=region.locator('details.sqlite-candidate-request');
+ await expect.poll(()=>sections.count()).toBe(2);
+ const older=requestSection(region,0),latest=requestSection(region,1),olderInput=candidateInput(older),latestInput=candidateInput(latest);
+ await expect(requestSummary(older)).toHaveText('倒数第 2 次 · 1 个说法 · 已选用');
+ await expect(requestSummary(latest)).toHaveText('最新一次 · 1 个说法');
+ await expect(olderInput).toHaveCount(1);await expect(olderInput).toBeHidden();
+ await expect(latestInput).toHaveCount(1);await expect(latestInput).toBeVisible();await expect(latestInput).toHaveValue('最新请求的说法正文');
+ await expect(latest.getByRole('article',{name:'说法1',exact:true})).toBeVisible();
+ await expect(latest.locator('h4')).toHaveText('说法 1');
+ await expect(region.getByText(/候选第\d+组/)).toHaveCount(0);
+ await requestSummary(older).click();
+ await expect(olderInput).toBeVisible();await expect(olderInput).toHaveValue('旧请求的说法正文');
+ await expect(older.getByText('已记录1次选稿，最近选用第1版。',{exact:true})).toBeVisible();
+ await requestSummary(older).click();await expect(olderInput).toBeHidden();
+ await requestSummary(latest).click();await expect(latestInput).toBeHidden();
+ await requestSummary(latest).click();await expect(latestInput).toBeVisible();
+});
+
+test('hasMoreRequests 为真时请求标题仍按倒数计数',{timeout:30000},async t=>{
+ const data=pageOf([
+  requestOf(uid(111),[versionOf(uid(211),['第1条请求正文'])]),
+  requestOf(uid(112),[versionOf(uid(212),['第2条请求正文'])]),
+  requestOf(uid(113),[versionOf(uid(213),['第3条请求正文'])]),
+ ],{hasMoreRequests:true});
+ const f=await panel(t,async()=>data),region=f.page.getByRole('region',{name:'表达工作区'}),sections=region.locator('details.sqlite-candidate-request');
+ await expect(region.getByText('仅显示最近20次候选请求；更早记录未加载。',{exact:true})).toBeVisible();
+ await expect.poll(()=>sections.count()).toBe(3);
+ await expect(requestSummary(requestSection(region,0))).toHaveText('倒数第 3 次 · 1 个说法');
+ await expect(requestSummary(requestSection(region,1))).toHaveText('倒数第 2 次 · 1 个说法');
+ await expect(requestSummary(requestSection(region,2))).toHaveText('最新一次 · 1 个说法');
+ await expect(candidateInput(requestSection(region,0))).toBeHidden();
+ await expect(candidateInput(requestSection(region,1))).toBeHidden();
+ await expect(candidateInput(requestSection(region,2))).toBeVisible();
+});
+
+test('保存修改后显示已修改且不显示版本号，回看旧版显示版本提示与回到最新版本',{timeout:30000},async t=>{
+ let version=original();
+ const f=await panel(t,async operation=>{
+  if(operation.action==='read')return pageData(version);
+  if(operation.action==='edit'){version={...version,versionNo:2,parentVersionNo:1,origin:'manual',parts:operation.parts,basis:version.basis.map(b=>({...b,verification:'inherited_unverified'}))};return version;}
+  if(operation.action==='version')return original();
+  throw new Error('未授权的合成页面操作');
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'}),heading=region.locator('h4'),candidate=region.locator('textarea[aria-label="候选第1条"]');
+ await expect(heading).toHaveText('说法 1');
+ await expect(heading).not.toContainText(/第\s*\d+\s*版/);
+ await expect(region.locator('article')).toHaveAttribute('aria-label','说法1');
+ await expect(candidate).toHaveValue('合成候选第一条');
+ await candidate.fill('手工修改后的第一条');
+ await region.getByRole('button',{name:'保存修改',exact:true}).click();
+ await expect.poll(()=>f.commands.filter(c=>c.action==='edit').length).toBe(1);
+ await expect(heading).toHaveText('说法 1 · 已修改');
+ await expect(heading).not.toContainText('第2版');await expect(heading).not.toContainText('第 2 版');
+ await region.getByRole('button',{name:'查看上一版',exact:true}).click();
+ await expect(candidate).toHaveValue('合成候选第一条');
+ await expect(heading).toHaveText('说法 1 · 正在回看第 1 版（非最新）');
+ const back=region.getByRole('button',{name:'回到最新版本',exact:true});
+ await expect(back).toBeEnabled();
+ await back.click();
+ await expect(candidate).toHaveValue('手工修改后的第一条');
+ await expect(heading).toHaveText('说法 1 · 已修改');
+});
+
+test('折叠的旧请求显示有未保存修改，展开后编辑仍在',{timeout:30000},async t=>{
+ const olderId=uid(121),latestId=uid(122),olderCandidate=uid(221),latestCandidate=uid(222);
+ const data=pageOf([
+  requestOf(olderId,[versionOf(olderCandidate,['旧请求原正文'])],{selections:[{id:uid(321),candidateId:olderCandidate,versionNo:1,selectionNo:1}]}),
+  requestOf(latestId,[versionOf(latestCandidate,['最新请求正文'])]),
+ ]);
+ const f=await panel(t,async()=>data),region=f.page.getByRole('region',{name:'表达工作区'}),sections=region.locator('details.sqlite-candidate-request');
+ await expect.poll(()=>sections.count()).toBe(2);
+ const older=requestSection(region,0),input=candidateInput(older),summary=requestSummary(older);
+ await expect(input).toBeHidden();
+ await summary.click();await expect(input).toBeVisible();
+ await input.fill('折叠期间保留的未保存编辑');
+ await summary.click();
+ await expect(input).toBeHidden();await expect(input).toHaveCount(1);
+ await expect(summary).toHaveText('倒数第 2 次 · 1 个说法 · 已选用 · 有未保存修改');
+ await summary.click();await expect(input).toBeVisible();await expect(input).toHaveValue('折叠期间保留的未保存编辑');
+});
+
+test('折叠最新项后刷新保持折叠，新增请求后原最新折叠且新最新展开',{timeout:30000},async t=>{
+ const first=uid(131),second=uid(132),third=uid(133),c1=uid(231),c2=uid(232),c3=uid(233);
+ const two=()=>pageOf([requestOf(first,[versionOf(c1,['第一条请求正文'])]),requestOf(second,[versionOf(c2,['第二条请求正文'])])]);
+ let data=two();
+ const f=await panel(t,async operation=>{
+  if(operation.action!=='read')throw new Error('未授权的合成页面操作');
+  return data;
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'}),refresh=region.getByRole('button',{name:'刷新候选',exact:true}),sections=region.locator('details.sqlite-candidate-request');
+ await expect.poll(()=>sections.count()).toBe(2);
+ const latestInput=candidateInput(requestSection(region,1)),olderInput=candidateInput(requestSection(region,0));
+ await expect(latestInput).toBeVisible();
+ await requestSummary(requestSection(region,1)).click();await expect(latestInput).toBeHidden();
+ await requestSummary(requestSection(region,0)).click();await expect(olderInput).toBeVisible();
+ await refresh.click();
+ await expect.poll(()=>f.commands.filter(c=>c.action==='read').length).toBe(2);
+ await expect(sections).toHaveCount(2);
+ await expect(latestInput).toBeHidden();
+ await expect(olderInput).toBeVisible();
+ data=pageOf([first,second,third].map((requestId,index)=>requestOf(requestId,[versionOf([c1,c2,c3][index],[['第一条请求正文'],['第二条请求正文'],['第三条请求正文']][index])])));
+ await refresh.click();
+ await expect.poll(()=>f.commands.filter(c=>c.action==='read').length).toBe(3);
+ await expect(sections).toHaveCount(3);
+ await expect(requestSummary(requestSection(region,1))).toHaveText('倒数第 2 次 · 1 个说法');
+ await expect(requestSummary(requestSection(region,2))).toHaveText('最新一次 · 1 个说法');
+ await expect(candidateInput(requestSection(region,2))).toBeVisible();await expect(candidateInput(requestSection(region,2))).toHaveValue('第三条请求正文');
+ await expect(candidateInput(requestSection(region,1))).toBeHidden();
+});
+
+// 未做任何手动切换时，刷新追加新请求必须自动折叠原最新项；程序化 open 变动不能被 onToggle 误记为手动覆盖。
+test('未手动折叠时新增请求仍自动折叠原最新项，程序化展开不记为手动状态',{timeout:30000},async t=>{
+ const first=uid(151),second=uid(152),third=uid(153),fourth=uid(154),c1=uid(251),c2=uid(252),c3=uid(253),c4=uid(254);
+ const requestsPage=(requestIds,candidateIds,texts)=>pageOf(requestIds.map((requestId,index)=>requestOf(requestId,[versionOf(candidateIds[index],[texts[index]])])));
+ let data=requestsPage([first,second],[c1,c2],['第一条请求正文','第二条请求正文']);
+ const f=await panel(t,async operation=>{
+  if(operation.action!=='read')throw new Error('未授权的合成页面操作');
+  return data;
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'}),refresh=region.getByRole('button',{name:'刷新候选',exact:true}),sections=region.locator('details.sqlite-candidate-request');
+ await expect.poll(()=>sections.count()).toBe(2);
+ // 初始仅最新项默认展开，全程不做任何手动折叠/展开。
+ await expect(candidateInput(requestSection(region,1))).toBeVisible();
+ await expect(candidateInput(requestSection(region,0))).toBeHidden();
+ data=requestsPage([first,second,third],[c1,c2,c3],['第一条请求正文','第二条请求正文','第三条请求正文']);
+ await refresh.click();
+ await expect.poll(()=>f.commands.filter(c=>c.action==='read').length).toBe(2);
+ await expect(sections).toHaveCount(3);
+ await expect(requestSummary(requestSection(region,1))).toHaveText('倒数第 2 次 · 1 个说法');
+ await expect(requestSummary(requestSection(region,2))).toHaveText('最新一次 · 1 个说法');
+ // 原最新项自动折叠且内容仍挂载；新最新项自动展开；从未展开过的更早请求保持折叠。
+ await expect(candidateInput(requestSection(region,1))).toHaveCount(1);
+ await expect(candidateInput(requestSection(region,1))).toBeHidden();
+ await expect(candidateInput(requestSection(region,2))).toHaveCount(1);
+ await expect(candidateInput(requestSection(region,2))).toBeVisible();
+ await expect(candidateInput(requestSection(region,2))).toHaveValue('第三条请求正文');
+ await expect(candidateInput(requestSection(region,0))).toBeHidden();
+ // 再次追加：若上轮程序化 open 被 onToggle 误记为用户覆盖，第三条请求会错误地保持展开；这里应继续自动折叠。
+ data=requestsPage([first,second,third,fourth],[c1,c2,c3,c4],['第一条请求正文','第二条请求正文','第三条请求正文','第四条请求正文']);
+ await refresh.click();
+ await expect.poll(()=>f.commands.filter(c=>c.action==='read').length).toBe(3);
+ await expect(sections).toHaveCount(4);
+ await expect(requestSummary(requestSection(region,2))).toHaveText('倒数第 2 次 · 1 个说法');
+ await expect(requestSummary(requestSection(region,3))).toHaveText('最新一次 · 1 个说法');
+ await expect(candidateInput(requestSection(region,2))).toBeHidden();
+ await expect(candidateInput(requestSection(region,3))).toBeVisible();
+ await expect(candidateInput(requestSection(region,3))).toHaveValue('第四条请求正文');
+});
+
+// 来源失效时读取契约已撤下正文（候选为空），这里只核对界面不再渲染正文与依据，不替代后端撤下证据。
+test('失败、未知、生成中与来源失效请求的摘要后缀正确，失效请求按读取契约不渲染正文',{timeout:30000},async t=>{
+ const data=pageOf([
+  requestOf(uid(141),[],{generationState:'failed'}),
+  requestOf(uid(142),[versionOf(uid(241),['未确认结果的合成正文'])],{generationState:'unknown'}),
+  requestOf(uid(143),[],{generationState:'running'}),
+  requestOf(uid(144),[versionOf(uid(244),['普通请求第一条']),versionOf(uid(245),['普通请求第二条'])]),
+  requestOf(uid(145),[],{generationState:'invalidated',sourceState:'unavailable'}),
+ ]);
+ const f=await panel(t,async()=>data),region=f.page.getByRole('region',{name:'表达工作区'}),sections=region.locator('details.sqlite-candidate-request');
+ await expect.poll(()=>sections.count()).toBe(5);
+ await expect(requestSummary(requestSection(region,0))).toHaveText('倒数第 5 次 · 生成失败');
+ await expect(requestSummary(requestSection(region,1))).toHaveText('倒数第 4 次 · 结果未确认');
+ await expect(requestSummary(requestSection(region,2))).toHaveText('倒数第 3 次 · 生成中');
+ await expect(requestSummary(requestSection(region,3))).toHaveText('倒数第 2 次 · 2 个说法');
+ await expect(requestSummary(requestSection(region,4))).toHaveText('最新一次 · 来源已失效');
+ const unavailable=requestSection(region,4);
+ await expect(unavailable.locator('article')).toHaveCount(0);
+ await expect(unavailable.locator('textarea')).toHaveCount(0);
+ await expect(unavailable.getByText('同联系人实际输入依据',{exact:true})).toHaveCount(0);
+ await expect(unavailable.getByText('这次候选的来源已失效，正文与依据已撤下。',{exact:true})).toBeVisible();
+ await expect(requestSection(region,1).locator('article')).toHaveCount(1);
+ await expect(requestSection(region,1).locator('article')).toBeHidden();
+ await expect(requestSection(region,3).locator('article')).toHaveCount(2);
+ await expect(candidateInput(requestSection(region,3)).first()).toBeHidden();
 });

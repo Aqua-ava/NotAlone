@@ -4,6 +4,7 @@ import type {RewriteTone} from '../shared/reply-bridge';
 import type {SqliteDiscussionBridge,SqliteDiscussionReceipt} from '../shared/sqlite-discussion-bridge';
 import {readSqliteCandidatePage,readSqliteCandidateVersion,readSqliteCandidateStatus,type SqliteCandidateStatus,type SqliteCandidatePage,type SqliteCandidateVersion,type SqliteCandidateOperation} from '../shared/sqlite-reply-candidates';
 type WorkspaceInput={action:'express'|'suggest';draftText:string;tone:RewriteTone;instruction:string;contextText:string;includeRelationshipContext:boolean};
+type CandidateRequest=SqliteCandidatePage['requests'][number];
 const defaultOptions=()=>({tone:'original' as RewriteTone,instruction:'',contextText:'',includeRelationshipContext:true});
 const progressLabel=(phase:SqliteCandidateStatus['phase'])=>({not_found:'正在接纳本次请求…',preparing:'正在整理本次资料…',queued:'正在等待生成…',generating:'正在等待模型回复…',saving:'正在保存候选…',committed:'正在读取已保存候选…',failed:'正在核对本次结果…',unknown:'正在核对本次结果…'}[phase]);
 function statusFailure(status:SqliteCandidateStatus):string{
@@ -28,9 +29,11 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  const [options,setOptions]=useState(defaultOptions);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [edits,setEdits]=useState<Record<string,string[]>>({}),[inspected,setInspected]=useState<Record<string,SqliteCandidateVersion>>({});
+ // 折叠状态按 requestId 覆盖默认值：最新一次默认展开，用户手动切换后以手动为准；clear() 时重置。
+ const [openRequests,setOpenRequests]=useState<Record<string,boolean>>({});
  const available=!!bridge.candidates&&!!contactId&&!!sessionId&&!disabled;
  const unresolved=!!retry.current&&!(progress?.phase==='failed'&&progress.retryable);
- function clear(){stopProgress.current?.();setProgress(null);++revision.current;operation.current=null;retry.current=null;qualifiedRequests.current=[];setPage(null);setDraft('');setOptions(defaultOptions());setCarry(undefined);setBusy(false);setError('');setNotice('');setEdits({});setInspected({});}
+ function clear(){stopProgress.current?.();setProgress(null);++revision.current;operation.current=null;retry.current=null;qualifiedRequests.current=[];setPage(null);setDraft('');setOptions(defaultOptions());setCarry(undefined);setBusy(false);setError('');setNotice('');setEdits({});setInspected({});setOpenRequests({});}
  useEffect(()=>{mounted.current=true;const off=bridge.onInvalidated(()=>{seeded.current=scopeKey;clear();if(contactId)onDraftChange?.('',{contactId,scopeRevision});});return()=>{mounted.current=false;stopProgress.current?.();++revision.current;operation.current=null;off();};},[bridge,scopeKey]);
  useEffect(()=>{clear();if(available)void run({action:'read'});},[scopeKey,bridge]);
  // 临时禁用只暂停新操作；来源及范围失效仍由订阅和scopeKey立即清除。
@@ -155,6 +158,27 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   catch(e){if(current())rejectOperation(e);}
   finally{if(current()){operation.current=null;setBusy(false);}}
  }
+ // 请求排序由后端保证升序：最后一项为最新一次。页面只含最近 20 次，标题按倒数计数才不会在 hasMoreRequests 时错位。
+ function requestTitle(index:number,total:number){return index===total-1?'最新一次':`倒数第 ${total-index} 次`;}
+ function requestOpen(requestId:string,index:number,total:number){return openRequests[requestId]??index===total-1;}
+ function requestStatus(request:CandidateRequest){
+  if(request.generationState==='failed'&&!request.candidates.length)return '生成失败';
+  if(request.generationState==='unknown')return '结果未确认';
+  if(request.sourceState==='unavailable')return '来源已失效';
+  if(request.generationState==='running')return '生成中';
+  return `${request.candidates.length} 个说法`;
+ }
+ function requestSummary(request:CandidateRequest,index:number,total:number){
+  const summary=[requestTitle(index,total),requestStatus(request)];
+  if(request.selections.length)summary.push('已选用');
+  if(request.candidates.some(candidate=>Object.hasOwn(edits,candidate.candidateId)))summary.push('有未保存修改');
+  return summary.join(' · ');
+ }
+ // 浏览器在 open 被程序化修改时也会派发 toggle；只记录与当前渲染状态不一致的用户切换，避免新请求追加后旧的最新项被错误保留展开。
+ function toggleRequest(requestId:string,index:number,total:number,open:boolean){
+  if(open===requestOpen(requestId,index,total))return;
+  setOpenRequests(old=>old[requestId]===open?old:{...old,[requestId]:open});
+ }
  return <section aria-label="表达工作区" className="compose-panel unified-workspace sqlite-reply-candidates">
   <header className="compose-heading"><span className="section-eyebrow">一起想，把话说好</span><h2>有什么想说的？</h2><p>写下想法、方向或草稿；没有思路，也可以让我帮你想。</p></header>
   {!available&&<p role="status">请先选择本次联系人并打开当前助手会话。</p>}
@@ -184,22 +208,23 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   {carry&&<button className="button" disabled={busy} onClick={()=>{setCarry(undefined);setNotice('已取消本次候选继续。');}}>取消候选继续</button>}
   {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
   {page?.hasMoreRequests&&<p role="status">仅显示最近20次候选请求；更早记录未加载。</p>}
-  {page?.requests.map(request=><div key={request.requestId} className="sqlite-candidate-request">
+  {page?.requests.map((request,requestIndex)=><details key={request.requestId} className="sqlite-candidate-request" open={requestOpen(request.requestId,requestIndex,page.requests.length)} onToggle={event=>toggleRequest(request.requestId,requestIndex,page.requests.length,event.currentTarget.open)}>
+   <summary>{requestSummary(request,requestIndex,page.requests.length)}</summary>
    {request.skillWarning&&<p role="status">{request.skillWarning}</p>}
    {request.generationState==='unknown'&&<p role="status">本次模型调用结果未知，请核对原请求，不能换身份重发。</p>}
    {request.generationState==='failed'&&!progress&&!busy&&<p role="status">本次候选生成失败，没有可选正文。</p>}
    {request.sourceState==='unavailable'&&(!request.generationState||request.generationState==='committed'||request.generationState==='invalidated')&&<p role="status">这次候选的来源已失效，正文与依据已撤下。</p>}
-   {request.candidates.map(candidate=>{const v=inspected[candidate.candidateId]??candidate,parts=edits[v.candidateId]??v.parts;return <article key={v.candidateId} aria-label={`候选第${request.candidates.indexOf(candidate)+1}组`}>
-    <h4>候选第{request.candidates.indexOf(candidate)+1}组 · 第{v.versionNo}版{v.origin==='manual'?'（手工编辑）':''}</h4>
+   {request.candidates.map((candidate,candidateIndex)=>{const v=inspected[candidate.candidateId]??candidate,parts=edits[v.candidateId]??v.parts;return <article key={v.candidateId} aria-label={`说法${candidateIndex+1}`}>
+    <h4>说法 {candidateIndex+1}{v.origin==='manual'&&<span> · 已修改</span>}{v.versionNo!==candidate.versionNo&&<span> · 正在回看第 {v.versionNo} 版（非最新）</span>}</h4>
     {parts.map((part,index)=><label key={index}>第{index+1}条<textarea aria-label={`候选第${index+1}条`} value={part} disabled={busy||!available} onChange={e=>setEdits(old=>({...old,[v.candidateId]:parts.map((p,n)=>n===index?e.target.value:p)}))} /></label>)}
     <button className="button" disabled={busy||!available||!edits[v.candidateId]} onClick={()=>void run({action:'edit',candidateId:v.candidateId,versionNo:v.versionNo,parts})}>保存修改</button>
-    <button className="button" disabled={busy||!available} onClick={()=>void run({action:'select',candidateId:v.candidateId,versionNo:v.versionNo})}>选用此版本</button>
-    <button className="button" disabled={busy||!available||!options.includeRelationshipContext} onClick={()=>void continueVersion(v)}>以此版本继续</button>
+    <button className="button" disabled={busy||!available} onClick={()=>void run({action:'select',candidateId:v.candidateId,versionNo:v.versionNo})}>选用这个说法</button>
+    <button className="button" disabled={busy||!available||!options.includeRelationshipContext} onClick={()=>void continueVersion(v)}>以这个说法继续</button>
     {v.versionNo>1&&<button className="button" disabled={busy} onClick={()=>void run({action:'version',candidateId:v.candidateId,versionNo:v.versionNo-1})}>查看上一版</button>}
     {v.versionNo!==candidate.versionNo&&<button className="button" disabled={busy} onClick={()=>{setInspected(old=>{const next={...old};delete next[v.candidateId];return next;});setEdits({});}}>回到最新版本</button>}
     <details><summary>依据</summary>{v.basis.map(b=><div key={b.itemNo}><p>{b.verification==='inherited_unverified'?'继承原依据，手工修改尚未重新核验':'产生此模型版本的实际输入'} · {({message:'聊天原文',entry:'本次讨论',memory:'已采纳记忆',memory_candidate:'未确认记忆',document:'已发布资料',selection:'明确选稿',coverage:'历史覆盖'} as Record<string,string>)[b.kind]??'实际资料'}</p><p className="discussion-entry-text">{b.text}</p></div>)}</details>
    </article>;})}
    {!!request.selections.length&&<p>已记录{request.selections.length}次选稿，最近选用第{request.selections.at(-1)!.versionNo}版。</p>}
-  </div>)}
+  </details>)}
  </section>;
 }
