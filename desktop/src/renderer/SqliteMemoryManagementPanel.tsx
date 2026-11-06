@@ -32,14 +32,38 @@ function Editor({label,initial,submitLabel,busy,save,cancel}:{label:string;initi
   <div className="sqlite-memory-actions"><button type="submit" disabled={busy||!body.trim()||length>12000}>{submitLabel}</button><button type="button" disabled={busy} onClick={cancel}>取消编辑</button></div>
  </form>;
 }
+/** 候选待确认原因码的固定文案；未知码走兜底文案，不猜测含义。 */
+const pendingReasonTexts:Record<string,string>={
+ memory_conditions_pending:'存在无法自行判定的数据条件：未决指代、时间不合格或条件缺少来源，需要人工确认。',
+ memory_relation_conflict:'与旧资料构成真实矛盾，系统无法自行取舍，需要人工确认。',
+ memory_relation_evidence_incomplete:'关系证据未覆盖所比较的旧资料，需要重新核验。',
+ memory_relation_unsupported:'关系核验未通过，需要重新处理后再确认。',
+ memory_relation_inconsistent:'模型判定自相矛盾，需要重新处理后再确认。',
+ memory_duplicate_pending:'与旧资料的重复判定未通过，需要重新处理后再确认。',
+ memory_merge_pending:'合并核验未通过，需要重新处理后再确认。',
+ memory_multiple_targets_pending:'多条旧资料都可能成为改动目标，需要人工选择。',
+ memory_protected:'目标记忆受人工保护，需要人工确认。',
+ memory_timeline_pending:'时间线覆盖有风险，需要人工确认。',
+ memory_media_relation_pending:'候选含图片或与图片主题的关联待确认，需要人工确认。',
+ memory_processing_incomplete:'本轮运行尚未完成（等候额度、被打断或尚未开始），不需要逐条确认。',
+};
+function pendingStageText(candidate:MemoryCandidateView):{label:string;detail:string|null}{
+ if(candidate.pendingStage==='processing_incomplete')return {label:'处理中/未完成',detail:pendingReasonTexts.memory_processing_incomplete};
+ const reason=candidate.pendingReason??null;
+ if(reason==='memory_conditions_pending')return {label:'待确认（数据条件）',detail:pendingReasonTexts.memory_conditions_pending};
+ if(reason&&pendingReasonTexts[reason])return {label:'待确认',detail:pendingReasonTexts[reason]};
+ return {label:'待确认',detail:reason?`处理原因未知（${reason}），可先查看来源或联系处理记录。`:null};
+}
 function Candidate({candidate,busy,decide}:{candidate:MemoryCandidateView;busy:boolean;decide:(request:Decision)=>void}){
  const [editing,setEditing]=useState(false),request={candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]};
+ const stage=pendingStageText(candidate);
  return <article className="sqlite-memory-card memory-candidate-item" aria-label="记忆候选">
   <SourceTime sources={candidate.sources}/>
-  <p>待你确认</p>
+  <p>{stage.label}</p>
+  {stage.detail&&<p className="hint">{stage.detail}</p>}
   <Verification state={candidate.verificationState}/>
   <p className="sqlite-memory-body">{candidate.body}</p><Sources sources={candidate.sources}/>
-  {candidate.state==='pending'&&(editing?<Editor label="修改候选正文" initial={candidate.body} submitLabel="保存修改并采纳" busy={busy} cancel={()=>setEditing(false)} save={body=>decide({...request,action:'edit_accept',body})}/>:<div className="sqlite-memory-actions">
+  {candidate.state==='pending'&&candidate.pendingStage!=='processing_incomplete'&&(editing?<Editor label="修改候选正文" initial={candidate.body} submitLabel="保存修改并采纳" busy={busy} cancel={()=>setEditing(false)} save={body=>decide({...request,action:'edit_accept',body})}/>:<div className="sqlite-memory-actions">
    <button type="button" disabled={busy} onClick={()=>decide({...request,action:'accept'})}>采纳原稿</button>
    <button type="button" disabled={busy} onClick={()=>setEditing(true)}>修改并采纳</button>
    <button type="button" disabled={busy} onClick={()=>decide({...request,action:'reject'})}>拒绝候选</button>
@@ -138,7 +162,9 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
  const scope={scopeKind,contactId:scopeKind==='self'?null:contactId};
  const readRequest=contactId?{scope,displayContactId:contactId,scopeRevision}:null;
  const current=state?.context===accepted?state.snapshot:null,currentNotice=notice?.context===accepted?notice:null;
- const pendingCandidates=current?.view.candidates.filter(candidate=>candidate.state==='pending')??[];
+ // 旧读视图或旧快照没有 pendingStage 时按待确认展示，避免已有数据改口径。
+ const pendingCandidates=current?.view.candidates.filter(candidate=>candidate.state==='pending'&&candidate.pendingStage!=='processing_incomplete')??[];
+ const incompleteCandidates=current?.view.candidates.filter(candidate=>candidate.state==='pending'&&candidate.pendingStage==='processing_incomplete')??[];
  refresh.current=async(preserve=false,silent=false)=>{
   if(!readRequest||decisionPending.current||silent&&(busy||reading.current!==null||currentNotice?.error))return false;
   const token=++revision.current;reading.current=token;if(!preserve)setState(null);if(!silent){setBusy(true);setNotice(null);}
@@ -182,7 +208,10 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
    <div hidden={level!=='L1'}>
    {currentNotice&&<p role={currentNotice.error?'alert':'status'}>{currentNotice.message}{currentNotice.error&&<button type="button" disabled={busy} onClick={restart}>重试读取记忆资料</button>}</p>}{busy&&<p role="status">正在核对记忆资料…</p>}
    {current?.view.page?.preparing&&<p role="status">正在准备记忆列表，请稍候…</p>}
-   {current&&!current.view.page?.preparing&&<><div className={`memory-timeline-layout${pendingCandidates.length?' memory-timeline-with-pending':''}`}><section className="memory-timeline-section" aria-label="正式记忆时间线"><h3 className="memory-collection-heading">正式记忆 <span>{current.view.page?'本页 ':''}{current.view.memories.length} 条</span></h3>{current.view.memories.length===0?<p className="memory-browser-empty">本页没有可展示的正式记忆。</p>:<div className="memory-timeline-list">{memoriesBySourceTime(current.view.memories).map(memory=><Memory key={`${memory.id}:${memory.headRevision}`} memory={memory} busy={busy} bridge={bridge} request={readRequest!} authority={current} decide={request=>void decide(request)}/>)}</div>}</section>
+   {current&&!current.view.page?.preparing&&<><div className={`memory-timeline-layout${pendingCandidates.length||incompleteCandidates.length?' memory-timeline-with-pending':''}`}><section className="memory-timeline-section" aria-label="正式记忆时间线"><h3 className="memory-collection-heading">正式记忆 <span>{current.view.page?'本页 ':''}{current.view.memories.length} 条</span></h3>{current.view.memories.length===0?<p className="memory-browser-empty">本页没有可展示的正式记忆。</p>:<div className="memory-timeline-list">{memoriesBySourceTime(current.view.memories).map(memory=><Memory key={`${memory.id}:${memory.headRevision}`} memory={memory} busy={busy} bridge={bridge} request={readRequest!} authority={current} decide={request=>void decide(request)}/>)}</div>}</section>
+    {incompleteCandidates.length>0&&<aside className="memory-candidates-aside" aria-label="处理中未完成记忆"><h3 className="memory-collection-heading">处理中/未完成 <span>{current.view.page?'本页 ':''}{incompleteCandidates.length} 条</span></h3>
+      <p className="hint">这些候选不需要逐条确认；继续或重试请使用处理页面的「继续」或「放弃未知并重试」入口。</p>
+      <div className="memory-candidate-list">{incompleteCandidates.map(candidate=><Candidate key={`${candidate.id}:${candidate.stateRevision}`} candidate={candidate} busy={busy} decide={request=>void decide(request)}/>)}</div></aside>}
     {pendingCandidates.length>0&&<aside className="memory-candidates-aside" aria-label="待确认记忆"><h3 className="memory-collection-heading">待确认记忆 <span>{current.view.page?'本页 ':''}{pendingCandidates.length} 条</span></h3><div className="memory-candidate-list">{pendingCandidates.map(candidate=><Candidate key={`${candidate.id}:${candidate.stateRevision}`} candidate={candidate} busy={busy} decide={request=>void decide(request)}/>)}</div></aside>}</div><p className="memory-timeline-note">{current.view.page?'本页':''}按已知聊天来源时间排列 · 日期以本机时区显示，不代表事件发生日。</p></>}
    <nav className="sqlite-memory-actions" aria-label="记忆列表分页">
     <button type="button" disabled={busy||!previousPages.length} onClick={()=>changePage(previousPages.at(-1),previousPages.slice(0,-1))}>上一页记忆</button>

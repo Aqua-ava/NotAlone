@@ -45,6 +45,14 @@ function failureProvider(value:unknown):{name:string;code:string;status?:number}
  const status=typeof v.status==='number'&&Number.isSafeInteger(v.status)&&v.status>=100&&v.status<=599?v.status:undefined;
  return {name:v.name,code:v.code,...(status===undefined?{}:{status})};
 }
+/** 冻结前置门槛失败时向候选的提取 attempt 留痕，读取层据此把「真待确认」从「未完成」里分开。 */
+function recordGatePending(tx:StorageTransaction,ownerId:string,candidateId:bigint|string):void {
+ const candidate=tx.get('SELECT produced_attempt_id FROM memory_candidate WHERE owner_id=? AND id=?',[ownerId,String(candidateId)]);if(!candidate)return;
+ const attemptId=String(candidate.produced_attempt_id);
+ if(tx.get("SELECT 1 FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND kind='memory_conditions_pending'",[ownerId,attemptId]))return;
+ const n=tx.get('SELECT coalesce(max(event_no),0)+1 AS n FROM execution_event WHERE owner_id=? AND step_attempt_id=?',[ownerId,attemptId])!.n;
+ tx.run('INSERT INTO execution_event(owner_id,id,step_attempt_id,event_no,kind,originated_call_id,reused_call_id,payload,created_at) VALUES(?,?,?,?,?,?,NULL,NULL,?,?)',[ownerId,randomUUID(),attemptId,n,'memory_conditions_pending',JSON.stringify({candidateId:String(candidateId)}),Date.now()]);
+}
 function revision(tx:StorageTransaction,ownerId:string,scopeKind:string,contactId:string|null):bigint {
  const r=scopeKind==='self'?tx.get('SELECT memory_revision FROM owner WHERE owner_id=?',[ownerId]):tx.get('SELECT memory_revision FROM contact WHERE owner_id=? AND id=?',[ownerId,contactId]);
  return r?.memory_revision as bigint??fail('memory_scope_stale');
@@ -177,11 +185,14 @@ function finish(tx:StorageTransaction,raw:unknown,lease:StorageLease) {
   const stage=stages.find(s=>s.attempt.kind==='relation_verification'&&s.basis.pageIndex===pageIndex);if(!stage)fail('memory_adjudication_output_unbound');
   const checked=parseRelations(blocks(tx,ownerId,stage!.id),[item]);if(checked.length!==1||checked[0]!.candidate_index!==0)fail('memory_adjudication_output_unbound');const verification=checked[0]!,relation=decision.relation;
   const ids=relation?.related_memory_ids??[];
-  if(!relation||!verification.supported||relation.kind==='unresolved_conflict'||!evidenceSupported(item,relation.evidence)||!relationCovered(item,decision.action==='noop'?'supplement':relation.kind,ids,verification.evidence)||!ids.length||new Set(ids).size!==ids.length||ids.some(p=>!item.similar.some(m=>m.memory_id===p))||relation.claim_changed!==verification.claim_changed||relation.condition_changed!==verification.condition_changed)reason='memory_relation_pending';
+  // 原因码拆分：真矛盾、核验不支持、证据覆盖不足、模型自相矛盾分别计数，读取层与界面借此分别呈现。
+  const relationEvidenceOK=!!relation&&evidenceSupported(item,relation.evidence),relationCoveredOK=!!relation&&relationCovered(item,decision.action==='noop'?'supplement':relation.kind,ids,verification.evidence);
+  if(!relation||relation.kind==='unresolved_conflict'||!verification.supported||!relationEvidenceOK||!relationCoveredOK||!ids.length||new Set(ids).size!==ids.length||ids.some(p=>!item.similar.some(m=>m.memory_id===p))||relation.claim_changed!==verification.claim_changed||relation.condition_changed!==verification.condition_changed)
+   reason=!relation||relation.kind==='unresolved_conflict'?'memory_relation_conflict':!verification.supported?'memory_relation_unsupported':!(relationEvidenceOK&&relationCoveredOK)?'memory_relation_evidence_incomplete':'memory_relation_inconsistent';
   else if(decision.action==='add'||decision.action==='keep'){
    // add 对齐腾讯 store 的「全新独立」；keep 对齐「相关并存」，由模型并核验确认与旧记忆互不改动时自动并存。
    const kindAllowed=decision.action==='add'?relation.kind==='independent':['independent','supplement','historical_supplement'].includes(relation.kind);
-   if(!kindAllowed||relation.claim_changed||relation.condition_changed)reason='memory_relation_pending';
+   if(!kindAllowed||relation.claim_changed||relation.condition_changed)reason='memory_relation_inconsistent';
   }else if(decision.action==='update'){
    if(target){reason='memory_multiple_targets_pending';continue;}
    target=basis.parents.find(p=>p.id===decision.replaced_memory_id&&item.similar.some(m=>m.memory_id===p.id));const prior=item.similar.find(p=>p.memory_id===target?.id);
@@ -201,9 +212,10 @@ function finish(tx:StorageTransaction,raw:unknown,lease:StorageLease) {
    const duplicate=basis.parents.find(p=>p.id===decision.duplicate_memory_id&&item.similar.some(m=>m.memory_id===p.id)),prior=item.similar.find(m=>m.memory_id===duplicate?.id);
    const fact=item.candidate;
    if(target||!duplicate||!prior||ids.length!==1||ids[0]!==duplicate.id||relation.claim_changed||relation.condition_changed)reason='memory_duplicate_pending';
-   // 同义重复对齐腾讯 skip：模型判无增量、目标为非保护的 auto 旧资料且旧正文信息量不更少（长度代理）时自动跳过；
-   // 现有来源模型不支持向旧版本追加引用，候选新增来源只记 skipped_duplicate 执行事件，不改旧记忆。
-   else if(!duplicate.protected&&prior.adoption_method==='auto'&&[...prior.text].length>=[...fact.text].length){
+   // 同义重复对齐腾讯 skip：模型判无增量且旧正文信息量不更少（长度代理）时自动跳过；noop 不改写记忆内容，
+   // 受保护或已撤回的目标维持原状而候选被消费，因此不因保护状态拦截。现有来源模型不支持向旧版本追加引用，
+   // 候选新增来源只记 skipped_duplicate 执行事件，不改旧记忆。
+   else if([...prior.text].length>=[...fact.text].length){
     action='auto_noop';target=duplicate;parents=[duplicate];
     skippedSources={duplicateMemoryId:target.id,newSources:[...new Set(fact.source_message_ids)].filter(s=>!prior.source_message_ids.includes(s))};
    }
@@ -240,7 +252,7 @@ export const memoryAdjudicationActions:StorageAction[]=[
   if(prior.length&&decidedWithSameBasis(tx,i.ownerId,i.candidateId,basis))return null;
   // 同一任务的目标资料已被未知裁决调用占位：继续领取只会在建调用前撞唯一索引，改为明确停止。
   if(unknownOccupancy(tx,i.ownerId,basis.taskId))fail('memory_adjudication_receipt_unknown');
-  return makeStep(tx,i.ownerId,basis,'adjudication',lease);} catch(error){if(error instanceof StorageFailure&&['memory_conditions_pending','memory_verification_pending','memory_withdrawn_scope_pending','memory_adjudication_pool_limit','memory_adjudication_paused'].includes(error.code))return null;throw error;}
+  return makeStep(tx,i.ownerId,basis,'adjudication',lease);} catch(error){if(error instanceof StorageFailure&&['memory_conditions_pending','memory_verification_pending','memory_withdrawn_scope_pending','memory_adjudication_pool_limit','memory_adjudication_paused'].includes(error.code)){try{if(error.code==='memory_conditions_pending')recordGatePending(tx,i.ownerId,id(i.candidateId));}catch{/* 留痕失败不改变原有门槛失败语义 */}return null;}throw error;}
  }),
  act('stage','write',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string;purpose:SqliteAdjudicationModelPurpose;pageIndex:number};if(!purposes.includes(i.purpose)||!Number.isSafeInteger(i.pageIndex)||i.pageIndex<0)fail('memory_adjudication_purpose_invalid');const {basis}=current(tx,i.ownerId,i.attemptId,lease);if(i.pageIndex>=Math.max(1,Math.ceil(basis.item.similar.length/8)))fail('memory_adjudication_purpose_invalid');return makeStep(tx,i.ownerId,{...basis,pageIndex:i.pageIndex},i.purpose,lease);}),
  act('holders','read',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string};const {attempt}=current(tx,i.ownerId,i.attemptId,lease);return tx.all("SELECT c.id AS contactId,c.data_generation AS generation FROM step_input i JOIN contact c ON c.owner_id=i.owner_id AND c.id=i.source_contact_id WHERE i.owner_id=? AND i.step_id=? AND i.kind='message' UNION SELECT c.id AS contactId,c.data_generation AS generation FROM task_contribution tc JOIN contact c ON c.owner_id=tc.owner_id AND c.id=tc.source_contact_id WHERE tc.owner_id=? AND tc.task_id=?",[i.ownerId,attempt.step_id,i.ownerId,attempt.task_id]).map(r=>({contactId:String(r.contactId),generation:String(r.generation)}));}),

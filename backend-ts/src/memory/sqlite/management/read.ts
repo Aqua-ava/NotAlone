@@ -18,6 +18,19 @@ function mergeParents(tx:StorageTransaction,ownerId:string,decisionId:string){
 /** sourceEligibility 默认要求当前读取授权；读取授权暂时不可用时由 checkedVersion 改用已保存来源的资格（与回复一致）。 */
 export function versionView(tx:StorageTransaction,ownerId:string,v:StorageRow,sourceEligibility:SourceEligibility=assertSourceEligibility):MemoryVersionView{const parents=mergeParents(tx,ownerId,String(v.decision_id));if(v.content_state==='present')qualificationSources(tx,ownerId,{memoryId:String(v.memory_id),versionNo:v.version_no as bigint},sourceEligibility);return {timeStatus:v.content_state==='present'?memoryTimeEligibility(tx,ownerId,{memoryId:String(v.memory_id),versionNo:v.version_no as bigint}):'invalid',mergeParents:parents,mergeParentCount:parents.length?parents.length+1:0,verificationState:v.content_state==='present'?sourceVerificationState(tx,ownerId,{memoryId:String(v.memory_id),versionNo:v.version_no as bigint},sourceEligibility):'pending',versionNo:String(v.version_no),body:v.body as string|null,formationKind:String(v.formation_kind),adoptionMode:String(v.adoption_mode),previousVersionNo:v.previous_version_no===null?null:String(v.previous_version_no),restoredFromVersionNo:v.restored_from_version_no===null?null:String(v.restored_from_version_no),contentState:String(v.content_state),provenanceState:String(v.provenance_state),decisionId:String(v.decision_id),contributingContactIds:v.content_state==='present'?frozenContributingContactIds(tx,ownerId,{memoryId:String(v.memory_id),versionNo:v.version_no as bigint}):[],sources:sourceViews(citations(tx,ownerId,{memoryId:String(v.memory_id),versionNo:v.version_no as bigint},sourceEligibility))};}
 
+/** pending 候选的派生状态：有裁决原因或门槛留痕才是真待确认；无结果且无留痕按处理未完成呈现（查询层派生，不改表）。 */
+function pendingDerivation(tx:StorageTransaction,ownerId:string,c:StorageRow):{stage:'decision_pending'|'processing_incomplete';reason:string|null}{
+ const result=tx.get(`SELECT e.payload FROM execution_event e
+  JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id
+  JOIN step_input i ON i.owner_id=a.owner_id AND i.step_id=a.step_id AND i.kind='candidate' AND i.candidate_id=?
+  WHERE e.owner_id=? AND e.kind='adjudication_result' ORDER BY e.rowid DESC LIMIT 1`,[String(c.id),ownerId]);
+ if(result){const value=JSON.parse(String(result.payload));return value.reason?{stage:'decision_pending',reason:String(value.reason)}:{stage:'processing_incomplete',reason:null};}
+ const passed=tx.get(`SELECT 1 FROM step_input i JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id WHERE i.owner_id=? AND i.kind='candidate' AND i.candidate_id=? AND s.kind='adjudication' LIMIT 1`,[ownerId,String(c.id)]);
+ if(passed)return {stage:'processing_incomplete',reason:null};
+ const gate=tx.get("SELECT 1 FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND kind='memory_conditions_pending' LIMIT 1",[ownerId,String(c.produced_attempt_id)]);
+ if(gate)return {stage:'decision_pending',reason:'memory_conditions_pending'};
+ return {stage:'processing_incomplete',reason:null};
+}
 function candidateView(tx:StorageTransaction,ownerId:string,s:MemoryScope,c:StorageRow):MemoryCandidateView|null {
  if(!['pending','adopted','rejected','duplicate'].includes(String(c.state)))return null;
  let verificationState:'verified'|'pending';
@@ -29,7 +42,8 @@ function candidateView(tx:StorageTransaction,ownerId:string,s:MemoryScope,c:Stor
    requireSources(tx,ownerId,{candidateId:String(c.id)});verificationState=out.semanticVerification.state;
   }
   qualificationSources(tx,ownerId,{candidateId:String(c.id)});
-  return {verificationState,id:String(c.id),scopeKind:s.scopeKind,contactId:s.contactId,body:String(c.proposed_body),state:c.state as MemoryCandidateView['state'],stateRevision:String(c.state_revision),eventId:String(c.event_id),contributingContactIds:frozenContributingContactIds(tx,ownerId,{candidateId:String(c.id)}),sources:sourceViews(citations(tx,ownerId,{candidateId:String(c.id)}))};
+  const pendingFields=String(c.state)==='pending'?(()=>{const pending=pendingDerivation(tx,ownerId,c);return {pendingStage:pending.stage,pendingReason:pending.reason};})():undefined;
+  return {...pendingFields,verificationState,id:String(c.id),scopeKind:s.scopeKind,contactId:s.contactId,body:String(c.proposed_body),state:c.state as MemoryCandidateView['state'],stateRevision:String(c.state_revision),eventId:String(c.event_id),contributingContactIds:frozenContributingContactIds(tx,ownerId,{candidateId:String(c.id)}),sources:sourceViews(citations(tx,ownerId,{candidateId:String(c.id)}))};
  }catch{return null;}
 }
 function checkedVersion(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow):MemoryVersionView {

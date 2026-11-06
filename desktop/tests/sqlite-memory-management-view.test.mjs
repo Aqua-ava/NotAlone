@@ -640,3 +640,19 @@ test('已采纳原稿按需从首次记忆历史读取，无待确认项时主�
   assert.equal(await page.getByText(original.body,{exact:true}).count(),0);assert.equal(await page.getByText(source.quote,{exact:true}).count(),0);
  },false,contact,async()=>{},{withHistory:true});
 });
+
+test('候选按处理状态分组：待确认显示原因文案，未完成候选标注处理中/未完成且不提供采纳入口',{timeout:20000},async t=>{
+ const decisionId='66666666-6666-4666-8666-666666666666',incompleteId='77777777-7777-4777-8777-777777777777';
+ const decision={...candidate,id:decisionId,body:'与旧资料矛盾的原稿',pendingStage:'decision_pending',pendingReason:'memory_relation_conflict'};
+ const incomplete={...candidate,id:incompleteId,body:'等待额度重跑的原稿',pendingStage:'processing_incomplete',pendingReason:null};
+ await panel(t,async()=>({...view(),view:{candidates:[decision,incomplete],memories:[]}}),async page=>{
+  await page.getByText('与旧资料矛盾的原稿',{exact:true}).waitFor();await page.getByText('等待额度重跑的原稿',{exact:true}).waitFor();
+  const decisionAside=page.getByRole('complementary',{name:'待确认记忆'}),incompleteAside=page.getByRole('complementary',{name:'处理中未完成记忆'});
+  assert.equal(await decisionAside.getByRole('article',{name:'记忆候选'}).count(),1);
+  assert.ok(await decisionAside.getByText('处理原因').or(decisionAside.getByText('真实矛盾，系统无法自行取舍，需要人工确认')).count()>=1);
+  assert.ok(await decisionAside.getByRole('button',{name:'采纳原稿',exact:true}).count()===1);
+  assert.equal(await incompleteAside.getByRole('article',{name:'记忆候选'}).count(),1);
+  assert.ok(await incompleteAside.getByText('不需要逐条确认').count()>=1);
+  assert.equal(await incompleteAside.getByRole('button',{name:'采纳原稿',exact:true}).count(),0,'未完成候选不得提供采纳入口');
+ });
+});

@@ -36,7 +36,9 @@ test('已处理候选不占待处理分页，修改采纳的原稿只随对应�
  assert.ok(summary.versions.every(version=>!Object.hasOwn(version,'originalCandidates')));
  const history=await f.management.readHistory(f.scope,adopted.memoryId,{displayContactId:f.contactId});
  assert.equal(history.versions.length,1);assert.equal(history.versions[0].body,editedBody);
- assert.deepEqual(history.versions[0].originalCandidates,[{...original,state:'adopted',stateRevision:'1'}]);
+ // 读取视图会给 pending 候选附加 pendingStage/pendingReason 派生字段；归档原稿按决定时刻快照，不含这类时效字段。
+ const archivedOriginal=Object.fromEntries(Object.entries({...original,state:'adopted',stateRevision:'1'}).filter(([key])=>key!=='pendingStage'&&key!=='pendingReason'));
+ assert.deepEqual(history.versions[0].originalCandidates,[archivedOriginal]);
  assert.equal((await f.management.read(f.scope,{candidateId:original.id})).candidates[0].state,'adopted');
  assert.equal((await f.management.read(f.scope,{candidateId:rejected.id})).candidates[0].state,'rejected');
  await assert.rejects(f.management.readHistory({scopeKind:'contact',contactId:f.otherContactId},adopted.memoryId));

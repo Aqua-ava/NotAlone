@@ -8,7 +8,9 @@ export interface MemoryDecisionRequest {
  candidateIds?:string[];candidateRevisions?:string[];memoryId?:string;expectedVersionNo?:string;expectedHeadRevision?:string;
  restoredFromVersionNo?:string;expectedMergedParents?:MergedParentSnapshot[];body?:string;scope?:MemoryScope;
 }
-export interface MemoryCandidateView extends MemoryScope {verificationState:'verified'|'pending';id:string;body:string;state:'pending'|'adopted'|'rejected'|'duplicate';stateRevision:string;eventId:string;contributingContactIds:string[];sources:MemorySource[]}
+export interface MemoryCandidateView extends MemoryScope {verificationState:'verified'|'pending';id:string;body:string;state:'pending'|'adopted'|'rejected'|'duplicate';stateRevision:string;eventId:string;contributingContactIds:string[];sources:MemorySource[];
+ /** 仅 pending 候选有：decision_pending 表示有裁决或门槛原因的真待确认；processing_incomplete 表示处理未完成（额度、中断或未领取），不需要人工逐条确认。 */
+ pendingStage?:'decision_pending'|'processing_incomplete';pendingReason?:string|null}
 export interface MemoryVersionView {timeStatus:MemoryTimeEligibility;mergeParents:MergedParentSnapshot[];mergeParentCount:number;verificationState:'verified'|'pending';versionNo:string;body:string|null;formationKind:string;adoptionMode:string;previousVersionNo:string|null;restoredFromVersionNo:string|null;contentState:string;provenanceState:string;decisionId:string;contributingContactIds:string[];sources:MemorySource[];originalCandidates?:MemoryCandidateView[];
  /** 仅在读取授权暂时不可用、正文按已保存来源的资格显示时出现；授权恢复后重新实时核验，此标记消失。 */
  sourcePendingRecheck?:true}
