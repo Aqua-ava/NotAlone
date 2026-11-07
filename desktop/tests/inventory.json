@@ -67,6 +67,7 @@
   "tests/helper-shortcut-window.test.mjs",
   "tests/helpers/external-cli.test.mjs",
   "tests/helpers/probe.test.mjs",
+  "tests/helpers/probe-manifest-simplify.test.mjs",
   "tests/historical-reply-basis.test.mjs",
   "tests/layered-memory/controller.test.mjs",
   "tests/layered-memory/correction-caches.test.mjs",
