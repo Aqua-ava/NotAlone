@@ -17,7 +17,7 @@ export const timelinePreparationBatchSize=32;
 /** 每批让出数据库队列；只重建无正文派生时间，不触发模型、不写业务决定。 */
 export function prepareManagementTimeline(tx:StorageTransaction,input:unknown):{ready:boolean;prepared:number} {
  const q=input as any,ownerId=id(q?.ownerId),s=scope(q?.scope);available(tx,ownerId,s);
- if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed'",[ownerId]))return {ready:true,prepared:0};
+ if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' AND scope_kind<>'superseded_history'",[ownerId]))return {ready:true,prepared:0};
  const rows=tx.all('SELECT * FROM memory WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND management_timeline_dirty=1 ORDER BY id LIMIT ?',[ownerId,s.scopeKind,s.contactId,timelinePreparationBatchSize]);
  for(const memory of rows){
   let at:bigint|null=null;

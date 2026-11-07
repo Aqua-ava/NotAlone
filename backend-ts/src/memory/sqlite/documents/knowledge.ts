@@ -99,14 +99,14 @@ function scopeItems(tx:StorageTransaction,scope:DiscussionScope,scopeKind:'self'
 }
 function items(tx:StorageTransaction,scope:DiscussionScope,sourceEligibility:SourceEligibility):DocumentKnowledgeItem[]{
  available(tx,scope.ownerId,{scopeKind:'contact',contactId:scope.contactId});
- if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed'",[scope.ownerId]))return [];
+ if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' AND scope_kind<>'superseded_history'",[scope.ownerId]))return [];
  return [...scopeItems(tx,scope,'self',sourceEligibility),...scopeItems(tx,scope,'contact',sourceEligibility)];
 }
 function serialized(value:unknown):string{return JSON.stringify(value,(_key,v)=>typeof v==='bigint'?v.toString():v);}
 function requireDocuments(tx:StorageTransaction,scope:DiscussionScope,expected:readonly ReplyKnowledgeItem[],sourceEligibility:SourceEligibility,frozen=false):void{
  if(!expected.length)return;
  available(tx,scope.ownerId,{scopeKind:'contact',contactId:scope.contactId});
- if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed'",[scope.ownerId]))throw new StorageFailure('document_knowledge_stale');
+ if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' AND scope_kind<>'superseded_history'",[scope.ownerId]))throw new StorageFailure('document_knowledge_stale');
  const key=(item:ReplyKnowledgeItem)=>serialized([item.id,item.projection]),groups=new Map<string,ReplyKnowledgeItem[]>();
  for(const item of expected){
   if(item.kind!=='document'||!['owner','contact'].includes(item.scopeKind)||typeof item.publicationId!=='string'||!item.publicationId)throw new StorageFailure('document_knowledge_stale');

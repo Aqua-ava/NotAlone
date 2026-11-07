@@ -98,7 +98,7 @@ function listPosition(value:unknown):ListPosition {
 export function managementRead(tx:StorageTransaction,input:unknown):MemoryManagementView {
  const q=input as any,ownerId=id(q?.ownerId),s=scope(q?.scope),context=pageScope(tx,ownerId,s,q.displayContactId);
  if(q.memoryId!==undefined&&q.candidateId!==undefined||q.cursor!==undefined&&(q.memoryId!==undefined||q.candidateId!==undefined))fail('memory_request_invalid');
- if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed'",[ownerId]))return {candidates:[],memories:[],page:{revision:context.revision,nextCursor:null}};
+ if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' AND scope_kind<>'superseded_history'",[ownerId]))return {candidates:[],memories:[],page:{revision:context.revision,nextCursor:null}};
  if(q.memoryId===undefined&&q.candidateId===undefined&&tx.get('SELECT 1 FROM memory WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND management_timeline_dirty=1 LIMIT 1',[ownerId,s.scopeKind,s.contactId]))return {candidates:[],memories:[],page:{revision:context.revision,nextCursor:null,preparing:true}};
  const position=q.cursor===undefined?{candidateAfter:'',memoryAfter:'',memoryTime:null,candidatesDone:false,memoriesDone:false}:listPosition(decodePage(context,'list',q.cursor));
  const item=q.memoryId!==undefined||q.candidateId!==undefined;

@@ -16,7 +16,7 @@ export function scope(value:unknown):MemoryScope {
 }
 export function available(tx:StorageTransaction,ownerId:string,s:MemoryScope,write=false):void{
  if(!tx.get("SELECT 1 FROM owner WHERE owner_id=? AND state='active'",[ownerId])||(s.scopeKind==='contact'&&!tx.get("SELECT 1 FROM contact WHERE owner_id=? AND id=? AND state='active'",[ownerId,s.contactId])))fail('memory_scope_stale');
- if(write&&tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed'",[ownerId]))fail('memory_source_stale');
+ if(write&&tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' AND scope_kind<>'superseded_history'",[ownerId]))fail('memory_source_stale');
 }
 export function citations(tx:StorageTransaction,ownerId:string,parent:{candidateId?:string;memoryId?:string;versionNo?:bigint},sourceEligibility:SourceEligibility=assertSourceEligibility):StorageRow[]{
  const rows=tx.all(`SELECT c.*,m.text_body,m.sent_at,m.time_precision FROM memory_citation c JOIN message m ON m.owner_id=c.owner_id AND m.contact_id=c.source_contact_id AND m.id=c.message_id WHERE c.owner_id=? AND ${parent.candidateId?'c.candidate_id=?':'c.memory_id=? AND c.version_no=?'} ORDER BY c.source_contact_id,c.message_id,c.record_id`,parent.candidateId?[ownerId,parent.candidateId]:[ownerId,parent.memoryId!,parent.versionNo!]);

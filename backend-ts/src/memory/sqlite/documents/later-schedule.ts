@@ -261,7 +261,7 @@ export function queueSummary(tx:StorageTransaction,ownerId:string,now=Date.now()
 
 function scopeBlocked(tx:StorageTransaction,ownerId:string,row:StorageRow):boolean {
  const scopeKey=String(row.scope_key);
- if(tx.get("SELECT 1 FROM deletion_operation d WHERE d.owner_identity=? AND d.state<>'completed' LIMIT 1",[ownerId]))return true;
+ if(tx.get("SELECT 1 FROM deletion_operation d WHERE d.owner_identity=? AND d.state<>'completed' AND d.scope_kind<>'superseded_history' LIMIT 1",[ownerId]))return true;
  if(tx.get('SELECT 1 FROM memory_document_later_run_requirement WHERE owner_id=? AND scope_key=? AND generation=? AND paused=1',[ownerId,scopeKey,row.generation]))return true;
  if(tx.get("SELECT 1 FROM memory_document_later_schedule WHERE owner_id=? AND scope_key=? AND state IN ('failed','unknown') LIMIT 1",[ownerId,scopeKey]))return true;
  const isSelf=row.scope_kind==='self',contactId=row.contact_id===null?null:String(row.contact_id);

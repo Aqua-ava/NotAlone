@@ -101,7 +101,7 @@ test('认证HTTP读取并设置总开关，拒绝额外字段、非布尔值与�
 });
 
 const registryModule=mode=>new URL(`./fixtures/memory-management/auto-switch-upgrade-registry.mjs?mode=${mode}`,import.meta.url).href;
-test('41升级44只增加默认关闭的总开关列与两个反查索引，既有消息与迁移账本不变',{timeout:20000},async t=>{
+test('41升级45只增加默认关闭的总开关列、反查索引，并重建删除账本、新增清理请求表，既有消息与迁移账本不变',{timeout:20000},async t=>{
  const cleanup=[];let upgraded,memory;
  t.after(async()=>{await memory?.close();await upgraded?.close();for(const close of cleanup.reverse())await close();});
  const f=await fixture({after:close=>cleanup.push(close)},{registryModule:registryModule('legacy'),automatic:false});
@@ -112,8 +112,8 @@ test('41升级44只增加默认关闭的总开关列与两个反查索引，既�
  const read=()=>{const db=new DatabaseSync(path,{readOnly:true});try{return {messages:db.prepare('SELECT id,text_body FROM message ORDER BY id').all(),migrations:db.prepare('SELECT version,checksum FROM schema_migration ORDER BY version').all(),columns:db.prepare("SELECT name FROM pragma_table_info('database_instance')").all().map(row=>row.name)};}finally{db.close();}};
  const before=read();assert.ok(before.messages.length>0);assert.equal(before.columns.includes('memory_auto_processing'),false);
  upgraded=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:databaseId,registryModule:registryModule('current')});
- assert.equal(upgraded.status.schemaVersion,44);await upgraded.close();upgraded=undefined;
- const after=read();assert.deepEqual(after.messages,before.messages);assert.deepEqual(after.migrations.slice(0,41),before.migrations);assert.equal(after.migrations.length,44);
+ assert.equal(upgraded.status.schemaVersion,45);await upgraded.close();upgraded=undefined;
+ const after=read();assert.deepEqual(after.messages,before.messages);assert.deepEqual(after.migrations.slice(0,41),before.migrations);assert.equal(after.migrations.length,45);
  const db=new DatabaseSync(path,{readOnly:true});assert.equal(db.prepare('SELECT memory_auto_processing AS v FROM database_instance WHERE slot=1').get().v,0,'升级后默认关闭');db.close();
  upgraded=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:databaseId,registryModule:registryModule('current')});
  memory=new SqliteMemoryExtraction(upgraded,owner,{prepare:async()=>{throw new Error('not invoked');},invoke:async()=>{throw new Error('not invoked');}});

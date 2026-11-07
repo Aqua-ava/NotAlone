@@ -1,9 +1,10 @@
 import {sourceDeletionIds,sourceDeletionPhysicalKeys} from './source-deletion.ts';
-import { createHash } from 'node:crypto';
 import { StorageFailure, type StorageRow, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
 import type { DeletionDomain, DeletionOperation, RowDeletionTarget, CheckResult } from '../../storage/sqlite/deletion/contracts.ts';
 import { verifiedCutoffForOperation } from './clear-actions.ts';
 import { deletionTargetKey } from '../../storage/sqlite/deletion/actions.ts';
+import {historyTarget as target,rowIdentity as identity} from './deletion-target.ts';
+import {isSupersededScope,supersededCollect,supersededClearRow,supersededVerify} from './superseded-deletion.ts';
 const rowKinds=Object.fromEntries(['capture_record','message_alias','message','sync_capture','read_goal'].map(kind=>[kind,{keys:['owner_id','id'],ownerKey:'owner_id'}]));
 rowKinds.history_quote={keys:['owner_id','id'],ownerKey:'owner_id'};
 rowKinds.history_quote_dependency={keys:['owner_id','id'],ownerKey:'owner_id'};
@@ -14,9 +15,10 @@ rowKinds.history_source_recertification_cancel={keys:['owner_id','request_key'],
 rowKinds.history_source_recertification={keys:['owner_id','id'],ownerKey:'owner_id'};
 rowKinds.history_guard_lease={keys:['owner_id','contact_id'],ownerKey:'owner_id'};
 rowKinds.history_source_terminal={keys:['owner_id','id'],ownerKey:'owner_id'};
+rowKinds.history_superseded_cleanup={keys:['owner_id','contact_id'],ownerKey:'owner_id'};
+// 被取代副本的整条消息束（消息、别名、来源记录、引用及其尝试）；只由 superseded_history 范围计划。
+rowKinds.superseded_message={keys:['owner_id','id'],ownerKey:'owner_id'};
 const pass=(proof:string):CheckResult=>({result:'passed',proof});
-const identity=(kind:string,key:Record<string,string>):string=>createHash('sha256').update(JSON.stringify([kind,Object.keys(key).sort().map(k=>[k,key[k]])])).digest('hex');
-const target=(kind:string,key:Record<string,string>):RowDeletionTarget=>({kind:'row',domain:'history',rowKind:kind,key,identity:identity(kind,key),holderKeys:[]});
 function idsForScope(tx:StorageTransaction,op:DeletionOperation,records:StorageRow[]):{sourceIds:Set<string>;affectedMessageIds:Set<string>;deletedMessageIds:Set<string>} {
  const sourceIds=new Set(records.map(r=>String(r.id)));
  // 每条待删消息的反查补上 contact_id 并固定走 capture_record_message 索引：
@@ -44,6 +46,7 @@ function quoteTargetAffected(tx:StorageTransaction,ownerId:string,contactId:stri
 }
 function scopeRows(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget[]{
  const {ownerId,scope}=op;
+ if(isSupersededScope(scope))return supersededCollect(tx,op);
  if(!['source','contact_history','contact','account'].includes(scope.kind))return [];
  const args=scope.kind==='account'?[ownerId]:scope.kind==='source'?[ownerId,scope.contactId,JSON.stringify(sourceDeletionIds(tx,op))]:[ownerId,scope.contactId];
  const clause=scope.kind==='account'?'r.owner_id=?':scope.kind==='source'?'r.owner_id=? AND r.contact_id=? AND r.id IN (SELECT value FROM json_each(?))':'r.owner_id=? AND r.contact_id=?';
@@ -56,6 +59,7 @@ function scopeRows(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget
  if(scope.kind==='source')for(const record of records)if(record.observed_key)for(const terminal of tx.all(`SELECT id FROM history_source_terminal
   WHERE owner_id=? AND contact_id=? AND binding_id=? AND external_key=? AND accepted_data_generation<?`,[ownerId,scope.contactId,record.source_binding_id,record.observed_key,op.acceptedGeneration]))targets.push(target('history_source_terminal',{owner_id:ownerId,id:String(terminal.id)}));
  if(scope.kind==='contact'||scope.kind==='account')for(const terminal of tx.all(`SELECT id FROM history_source_terminal WHERE owner_id=?${scope.kind==='contact'?' AND contact_id=?':''}`,scope.kind==='contact'?[ownerId,scope.contactId]:[ownerId]))targets.push(target('history_source_terminal',{owner_id:ownerId,id:String(terminal.id)}));
+ if(scope.kind==='contact'||scope.kind==='account')for(const r of tx.all(`SELECT contact_id FROM history_superseded_cleanup WHERE owner_id=?${scope.kind==='contact'?' AND contact_id=?':''}`,scope.kind==='contact'?[ownerId,scope.contactId]:[ownerId]))targets.push(target('history_superseded_cleanup',{owner_id:ownerId,contact_id:String(r.contact_id)}));
  if(scope.kind==='contact'||scope.kind==='account')for(const r of tx.all(`SELECT owner_id,contact_id FROM history_continuity_fence WHERE owner_id=?${scope.kind==='contact'?' AND contact_id=?':''}`,scope.kind==='contact'?[ownerId,scope.contactId]:[ownerId]))targets.push(target('history_continuity_fence',{owner_id:ownerId,contact_id:String(r.contact_id)}));
  if(scope.kind==='contact'||scope.kind==='account')for(const r of tx.all(`SELECT owner_id,contact_id FROM history_continuity_scope WHERE owner_id=?${scope.kind==='contact'?' AND contact_id=?':''}`,scope.kind==='contact'?[ownerId,scope.contactId]:[ownerId]))targets.push(target('history_continuity_scope',{owner_id:ownerId,contact_id:String(r.contact_id)}));
  if(scope.kind==='contact'||scope.kind==='account')for(const r of tx.all(`SELECT owner_id,contact_id FROM history_guard_lease WHERE owner_id=?${scope.kind==='contact'?' AND contact_id=?':''}`,scope.kind==='contact'?[ownerId,scope.contactId]:[ownerId]))targets.push(target('history_guard_lease',{owner_id:ownerId,contact_id:String(r.contact_id)}));
@@ -132,6 +136,7 @@ export const historyDeletionDomain:DeletionDomain={
   // 目标数 N 时总量是 N 的平方（3 万目标的联系人清除需要数小时）。目标本身取自账本，键由同样的字段计算。
   const planned=tx.get("SELECT 1 FROM deletion_target WHERE operation_id=? AND domain='history' AND target_key=? AND target_payload IS NOT NULL",[op.operationId,deletionTargetKey(t)]);
   if(!planned)throw new StorageFailure('history_deletion_target_invalid');
+  if(isSupersededScope(op.scope)){supersededClearRow(tx,op,t);return;}
   const keys=rowKinds[t.rowKind]!.keys;
   if(t.rowKind==='history_quote_dependency'){
    const row=tx.get('SELECT * FROM history_quote WHERE owner_id=? AND id=?',[t.key.owner_id,t.key.id]);
@@ -150,6 +155,7 @@ export const historyDeletionDomain:DeletionDomain={
  authorizeFile(){throw new StorageFailure('history_has_no_managed_files');},
  fileCleared(){throw new StorageFailure('history_has_no_managed_files');},
  verify(tx,op){
+  if(isSupersededScope(op.scope))return supersededVerify(tx,op);
   const empty=scopeRows(tx,op).length===0;
   const removedRecords=plannedIds(tx,op,'capture_record'),removedMessages=plannedIds(tx,op,'message');
   const quoteRows=tx.all('SELECT id,message_id,source_record_id,binding_id,target_message_id,referenced_server_id,referenced_text,referenced_sender,referenced_type FROM history_quote WHERE owner_id=?'+(op.scope.kind==='account'?'':' AND contact_id=?'),

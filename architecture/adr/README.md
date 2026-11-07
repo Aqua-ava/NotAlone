@@ -141,7 +141,7 @@
 - [ADR-141：引用回复随正常消息同步读取](141-inline-quoted-reply-sync.md)
 - [ADR-142：首次连接后先选择联系人，再确认开启同步](142-first-connection-contact-selection.md)
 - [ADR-143：混合记忆处理调度](143-hybrid-memory-processing-schedule.md)
-- [ADR-144：保留旧资料的来源重新认证](144-preserved-history-source-recertification.md)
+- [ADR-144：保留旧资料的来源重新认证](144-preserved-history-source-recertification.md)（部分修订：无派生引用的旧副本见 ADR-175）
 - [ADR-145：记忆处理卡跟随当前联系人](145-contact-scoped-memory-processing-view.md)
 - [ADR-146：AI 服务地址与密钥由用户填写](146-editable-deepseek-endpoint.md)
 - [ADR-147：OpenCode Go 的模型环境配置](147-opencode-go-model-configuration.md)
@@ -171,3 +171,4 @@
 - [ADR-171：同一张图有标准图和高清图时取一张保存，不再比较内容](171-image-pick-standard-over-high-definition.md)
 - [ADR-172：JPEG 结束标记后允许少量尾随，WXGF 支持彩色加透明度双帧](172-jpeg-trailing-bytes-and-wxgf-alpha-frames.md)
 - [ADR-173：开发者批量来源重新认证](173-developer-batch-source-recertification.md)（已采纳（2026-11-05）；已实现并验收（2026-11-06，仅开发模式））
+- [ADR-175：修复同步通过后清理被取代绑定下无派生引用的旧副本](175-clean-superseded-binding-copies.md)（已采纳（2026-11-07）；部分覆盖 ADR-144 的旧消息保留条款；已实现，存量清理待用户确认）
