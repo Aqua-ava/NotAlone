@@ -11,7 +11,7 @@
 - `actions.ts`导出`createDeletionActions(registration)`，替换默认未接线的`deletion.*`动作。宿主仅装配受版本管理的回调；HTTP、renderer和Tool不得传入SQL、回调、模块路径或内部证明。本模块不增加任意 SQL Tool或第二套后台。
 - `registration.ts` 的基础身份／Skill 注册随后组合历史、媒体、讨论、记忆、候选和文档写者，公共 registry 使用最终 `installedDeletionRegistration`。requiredDomains 与精确 authority 同步安装；讨论／媒体局部删除不扩大为整个联系人 data_generation。
 - `planDeletion(tx,lease,registration,{ownerId,requestKey,scope})`可被可信领域动作组合调用，例如媒体原子发布旧文件清理意图。同事务先推进并撤销旧写入/使用资格，再固定闭包和幂等键；事务不得等待模型、CLI、SDK或文件I/O。
-- 范围包括`source/contact/contact_history/account/discussion/media_result_clear/media_result_replace`，有限字段形状见类型及DDL。同一实例、owner、固定删除namespace和requestKey只能指向同一范围；重复请求不再次推进代次。媒体clear/replace互不混用namespace。
+- 范围包括`source/contact/contact_history/account/discussion/media_result_clear/media_result_replace`，有限字段形状见类型及DDL。另有内部维护范围`superseded_history`（只含联系人，迁移45加入）：修复同步通过后清理被取代绑定下无派生引用的旧副本（[ADR-175](../../../../../architecture/adr/175-clean-superseded-binding-copies.md)），只有历史与媒体两个领域参与，不属于`installedDeletionScopes`、没有HTTP入口，不写删除围栏／排除项、不推进资料代次；批次上界固定在`accepted_generation`，实现见`history/sqlite/superseded-deletion.ts`。同一实例、owner、固定删除namespace和requestKey只能指向同一范围；重复请求不再次推进代次。媒体clear/replace互不混用namespace。
 
 ## 领域写者的必需接入
 

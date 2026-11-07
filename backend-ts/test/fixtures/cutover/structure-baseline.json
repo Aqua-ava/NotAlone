@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 44,
+  "schemaVersion": 45,
   "migrationVersions": [
    1,
    2,
@@ -45,15 +45,16 @@
    41,
    42,
    43,
-   44
+   44,
+   45
   ],
-  "userVersion": 44,
+  "userVersion": 45,
   "sqliteVersion": "3.53.4",
-  "tableCount": 95,
-  "fieldCount": 958,
+  "tableCount": 96,
+  "fieldCount": 961,
   "foreignKeyGroups": 195,
   "triggerCount": 120,
-  "checkCount": 302,
+  "checkCount": 303,
   "viewCount": 0
  },
  "tables": {
@@ -1542,7 +1543,7 @@
      "sql": null
     }
    ],
-   "sql": "CREATE TABLE deletion_operation ( operation_id TEXT PRIMARY KEY, owner_identity TEXT NOT NULL, request_namespace TEXT NOT NULL, request_key TEXT NOT NULL, scope_kind TEXT NOT NULL CHECK(scope_kind IN ('source','contact','contact_history','account','discussion','media_result_clear','media_result_replace')), contact_identity TEXT, source_identity TEXT, discussion_identity TEXT, message_identity TEXT, accepted_generation INTEGER NOT NULL CHECK(accepted_generation>=0), state TEXT NOT NULL CHECK(state IN ('fenced','cleaning','verifying','blocked','completed')), plan_revision INTEGER NOT NULL CHECK(plan_revision>0), domain_manifest TEXT NOT NULL, runner_token TEXT, runner_runtime TEXT, created_at INTEGER NOT NULL, completed_at INTEGER, UNIQUE(owner_identity,request_namespace,request_key), UNIQUE(owner_identity,operation_id), CHECK((scope_kind='account' AND contact_identity IS NULL AND source_identity IS NULL AND discussion_identity IS NULL AND message_identity IS NULL) OR (scope_kind='source' AND contact_identity IS NOT NULL AND source_identity IS NOT NULL AND discussion_identity IS NULL AND message_identity IS NULL) OR (scope_kind IN ('contact','contact_history') AND contact_identity IS NOT NULL AND source_identity IS NULL AND discussion_identity IS NULL AND message_identity IS NULL) OR (scope_kind='discussion' AND contact_identity IS NOT NULL AND source_identity IS NULL AND discussion_identity IS NOT NULL AND message_identity IS NULL) OR (scope_kind IN ('media_result_clear','media_result_replace') AND contact_identity IS NOT NULL AND source_identity IS NULL AND discussion_identity IS NULL AND message_identity IS NOT NULL)), CHECK((runner_token IS NULL)=(runner_runtime IS NULL)), CHECK((state='completed')=(completed_at IS NOT NULL)) ) STRICT"
+   "sql": "CREATE TABLE deletion_operation ( operation_id TEXT PRIMARY KEY, owner_identity TEXT NOT NULL, request_namespace TEXT NOT NULL, request_key TEXT NOT NULL, scope_kind TEXT NOT NULL CHECK(scope_kind IN ('source','contact','contact_history','account','discussion','media_result_clear','media_result_replace','superseded_history')), contact_identity TEXT, source_identity TEXT, discussion_identity TEXT, message_identity TEXT, accepted_generation INTEGER NOT NULL CHECK(accepted_generation>=0), state TEXT NOT NULL CHECK(state IN ('fenced','cleaning','verifying','blocked','completed')), plan_revision INTEGER NOT NULL CHECK(plan_revision>0), domain_manifest TEXT NOT NULL, runner_token TEXT, runner_runtime TEXT, created_at INTEGER NOT NULL, completed_at INTEGER, UNIQUE(owner_identity,request_namespace,request_key), UNIQUE(owner_identity,operation_id), CHECK((scope_kind='account' AND contact_identity IS NULL AND source_identity IS NULL AND discussion_identity IS NULL AND message_identity IS NULL) OR (scope_kind='source' AND contact_identity IS NOT NULL AND source_identity IS NOT NULL AND discussion_identity IS NULL AND message_identity IS NULL) OR (scope_kind IN ('contact','contact_history','superseded_history') AND contact_identity IS NOT NULL AND source_identity IS NULL AND discussion_identity IS NULL AND message_identity IS NULL) OR (scope_kind='discussion' AND contact_identity IS NOT NULL AND source_identity IS NULL AND discussion_identity IS NOT NULL AND message_identity IS NULL) OR (scope_kind IN ('media_result_clear','media_result_replace') AND contact_identity IS NOT NULL AND source_identity IS NULL AND discussion_identity IS NULL AND message_identity IS NOT NULL)), CHECK((runner_token IS NULL)=(runner_runtime IS NULL)), CHECK((state='completed')=(completed_at IS NOT NULL)) ) STRICT"
   },
   "deletion_target": {
    "columns": [
@@ -5527,6 +5528,46 @@
     }
    ],
    "sql": "CREATE TABLE history_source_terminal ( owner_id TEXT NOT NULL,id TEXT NOT NULL,contact_id TEXT NOT NULL,binding_id TEXT NOT NULL,external_key TEXT NOT NULL, reason TEXT NOT NULL CHECK(reason IN ('source_recalled','source_absent','source_system_replaced')), accepted_data_generation INTEGER NOT NULL CHECK(accepted_data_generation>=0), PRIMARY KEY(owner_id,id),UNIQUE(owner_id,contact_id,binding_id,external_key), FOREIGN KEY(owner_id,contact_id,binding_id) REFERENCES conversation_binding(owner_id,contact_id,id) ON DELETE CASCADE ) STRICT"
+  },
+  "history_superseded_cleanup": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "requested_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_history_superseded_cleanup_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "contact_id"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE history_superseded_cleanup ( owner_id TEXT NOT NULL, contact_id TEXT NOT NULL, requested_at INTEGER NOT NULL CHECK(requested_at>=0), PRIMARY KEY(owner_id,contact_id) ) STRICT"
   },
   "manual_confirmation": {
    "columns": [

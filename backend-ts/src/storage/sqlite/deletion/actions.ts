@@ -22,7 +22,7 @@ const hash = (v: unknown) => createHash('sha256').update(canonical(v)).digest('h
 /** 目标在账本中的唯一键（operation_id, domain, target_key 有唯一索引）；领域用它按点查询“是否为本计划目标”，不必扫描或解析全部目标。 */
 export const deletionTargetKey = (target: DeletionTarget): string => hash(target.kind === 'row' ? [target.rowKind, target.key, target.identity] : [target.fileId, target.generation]);
 function scope(value: DeletionScope): DeletionScope {
-  if (!value || !['source', 'contact', 'contact_history', 'account', 'discussion', 'media_result_clear', 'media_result_replace'].includes(value.kind)) return fail('deletion_input_invalid');
+  if (!value || !['source', 'contact', 'contact_history', 'account', 'discussion', 'media_result_clear', 'media_result_replace', 'superseded_history'].includes(value.kind)) return fail('deletion_input_invalid');
   const fields = value.kind === 'account' ? [] : value.kind === 'source' ? ['contactId', 'sourceId'] : value.kind === 'discussion' ? ['contactId', 'discussionId'] : value.kind.startsWith('media_') ? ['contactId', 'messageId'] : ['contactId'];
   if (canonical(Object.keys(value).sort()) !== canonical(['kind', ...fields].sort())) return fail('deletion_input_invalid');
   for (const field of fields) id((value as unknown as Record<string, string>)[field]);

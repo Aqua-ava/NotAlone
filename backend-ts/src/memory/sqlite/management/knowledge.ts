@@ -11,7 +11,7 @@ export interface MemoryKnowledgeItem extends ReplyKnowledgeItem {headRevision:bi
 const knowledgeSources=(rows:StorageRow[])=>rows.map(r=>({contactId:String(r.source_contact_id),messageId:String(r.message_id),recordId:String(r.record_id),acceptedRevision:r.accepted_revision as bigint}));
 function items(tx:StorageTransaction,scope:DiscussionScope,includeUnconfirmed:boolean,sourceEligibility:SourceEligibility,selected?:Pick<ReplyKnowledgeItem,'kind'|'id'>):MemoryKnowledgeItem[]{
  const ownerId=scope.ownerId;available(tx,ownerId,{scopeKind:'contact',contactId:scope.contactId});
- if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed'",[ownerId]))return [];
+ if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' AND scope_kind<>'superseded_history'",[ownerId]))return [];
  const result:MemoryKnowledgeItem[]=[];
  for(const m of !selected||selected.kind==='memory'?tx.all(`SELECT * FROM memory WHERE owner_id=? AND state='active' AND (scope_kind='self' OR contact_id=?)${selected?' AND id=?':''} ORDER BY id`,[ownerId,scope.contactId,...(selected?[selected.id]:[])]):[]){
   const v=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,m.id,m.current_version_no]);if(!v)continue;

@@ -9,6 +9,7 @@ import {normalUseContinuity} from './continuity.ts';
 import {auditedCoverageKey,completedLegacyPhysicalKeys,coveredRecallKey,recallCoverageDigest,uncoveredLegacyRecallCandidates,type RecallCoverageMapping} from './legacy-physical-suppression.ts';
 import {legacyProofDigest,validateLegacyTerminalProof,type LegacyTerminalProof} from './legacy-terminal-proof.ts';
 import {historyRecertifyCandidatesActions} from './recertify-candidates.ts';
+import {requestSupersededCleanup} from './superseded-actions.ts';
 
 const fail=(code:string):never=>{throw new StorageFailure(code);};
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>({name:`history.recertify${name}`,mode,retryBusy:true,execute});
@@ -43,7 +44,7 @@ function mappingProof(tx:StorageTransaction,token:ReadEligibility,target:History
  if(tx.get('SELECT 1 FROM history_source_exclusion WHERE owner_id=? AND conversation_id=? LIMIT 1',[token.owner_id,token.conversation_id])
   ||tx.get('SELECT 1 FROM history_cutoff WHERE owner_id=? AND conversation_id=? LIMIT 1',[token.owner_id,token.conversation_id])
   ||tx.get('SELECT 1 FROM history_deletion_fence WHERE owner_id=? AND contact_id=? LIMIT 1',[token.owner_id,token.contact_id])
-  ||tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' AND (scope_kind='account' OR contact_identity=?)",[token.owner_id,token.contact_id]))fail('history_recertify_legacy_proof_invalid');
+  ||tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' AND scope_kind<>'superseded_history' AND (scope_kind='account' OR contact_identity=?)",[token.owner_id,token.contact_id]))fail('history_recertify_legacy_proof_invalid');
  const old=JSON.parse(String(op!.old_token_json)) as ReadEligibility;
  if(!Array.isArray(audit.candidates)||audit.digest!==legacyProofDigest({proof:audit.proof,candidates:audit.candidates}))fail('history_recertify_legacy_proof_invalid');
  validateLegacyTerminalProof({token:old,target,report,candidates:audit.candidates},audit.proof,Date.now(),false);return audit.proof;
@@ -140,7 +141,7 @@ export const historyRecertifyActions:StorageAction[]=[
   assertReadEligibility(tx,token);
   if(tx.get("SELECT 1 FROM history_source_recertification WHERE owner_id=? AND contact_id=? AND state='running'",[token.owner_id,token.contact_id]))fail('history_recertify_already_running');
   const fence=tx.get('SELECT * FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id])??fail('history_recertify_not_required');
-  if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' AND (scope_kind='account' OR contact_identity=?)",[token.owner_id,token.contact_id]))fail('history_recertify_deletion_pending');
+  if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' AND scope_kind<>'superseded_history' AND (scope_kind='account' OR contact_identity=?)",[token.owner_id,token.contact_id]))fail('history_recertify_deletion_pending');
   const scope=tx.get('SELECT * FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
   const lease=tx.get('SELECT * FROM history_guard_lease WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
   const n=tx.get('SELECT count(*) n FROM message WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id])!.n;
@@ -210,7 +211,9 @@ export const historyRecertifyActions:StorageAction[]=[
   if(!fence||fence.reason!==JSON.parse(String(op.old_fence_json)).reason)fail('history_recertify_stale');
   tx.run('DELETE FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
   tx.run("UPDATE history_source_recertification SET state='completed',stage='completed',guard_state='lost',updated_at=?,finished_at=? WHERE owner_id=? AND id=?",[i.at,i.at,token.owner_id,i.id]);
-  tx.run('UPDATE contact SET source_revision=source_revision+1 WHERE owner_id=? AND id=?',[token.owner_id,token.contact_id]);return true;
+  tx.run('UPDATE contact SET source_revision=source_revision+1 WHERE owner_id=? AND id=?',[token.owner_id,token.contact_id]);
+  // 修复通过后登记清理请求（ADR-175）：与完成同一事务，重启后据此续跑，清理本身不在此事务内执行。
+  requestSupersededCleanup(tx,token.owner_id,token.contact_id,i.at);return true;
  }),
  action('NoteFailure','write',(tx,i:any)=>{const op=operation(tx,i.ownerId,i.id);if(op.state!=='running')return false;tx.run("UPDATE history_source_recertification SET failure_code=?,guard_state='lost',updated_at=? WHERE owner_id=? AND id=?",[typeof i.code==='string'&&/^[a-z][a-z0-9_]{0,127}$/.test(i.code)?i.code:'history_recertify_failed',i.at,i.ownerId,i.id]);if(op.new_binding_id)tx.run("UPDATE history_guard_lease SET state='lost' WHERE owner_id=? AND contact_id=? AND binding_id=?",[i.ownerId,op.contact_id,op.new_binding_id]);return true;}),
  action('Fail','write',(tx,i:any)=>{const op=operation(tx,i.ownerId,i.id);if(op.state!=='running')return false;const code=typeof i.code==='string'&&/^[a-z][a-z0-9_]{0,127}$/.test(i.code)?i.code:'history_recertify_failed';tx.run("UPDATE history_source_recertification SET state=?,stage=?,failure_code=?,guard_state='lost',updated_at=?,finished_at=? WHERE owner_id=? AND id=?",[i.interrupted?'interrupted':'failed',i.stage??op.stage,code,i.at,i.at,i.ownerId,i.id]);tx.run('INSERT OR IGNORE INTO history_continuity_fence VALUES(?,?,?)',[i.ownerId,op.contact_id,'history_source_continuity_unverified']);if(op.new_binding_id)tx.run("UPDATE history_guard_lease SET state='lost' WHERE owner_id=? AND contact_id=? AND binding_id=?",[i.ownerId,op.contact_id,op.new_binding_id]);return true;}),

@@ -20,13 +20,13 @@ test('77 表／778 字段／215 FK 逻辑目录逐项 disposition 与实现集�
   assert.deepEqual([...deferred].sort(), [...DEFERRED_DESIGN_TABLES].sort());
   const replaced = catalog.tables.filter(table => table.disposition === 'replaced').map(table => table.name);
   assert.deepEqual(replaced, [...REPLACED_DESIGN_TABLES]);
-  // 实际结构基线只含实现逻辑表与 28 张实现关联表，不建暂缓／替代表。
+  // 实际结构基线只含实现逻辑表与 29 张实现关联表，不建暂缓／替代表。
   assert.deepEqual(Object.keys(structure.tables), EXPECTED_TABLES);
-  assert.equal(EXPECTED_TABLES.length, 95);
-  assert.equal(IMPLEMENTED_DESIGN_TABLES.length + 28, EXPECTED_TABLES.length);
+  assert.equal(EXPECTED_TABLES.length, 96);
+  assert.equal(IMPLEMENTED_DESIGN_TABLES.length + 29, EXPECTED_TABLES.length);
   assert.match(structure.metadata.sqliteVersion, /^\d+\.\d+\.\d+$/);
   assert.deepEqual(structure.metadata, { schemaVersion: registry.migrations.at(-1).version, migrationVersions: registry.migrations.map(migration => migration.version), userVersion: registry.migrations.at(-1).version,
-    sqliteVersion: structure.metadata.sqliteVersion, tableCount: 95, fieldCount: 958, foreignKeyGroups: 195, triggerCount: 120, checkCount: 302, viewCount: 0 });
+    sqliteVersion: structure.metadata.sqliteVersion, tableCount: 96, fieldCount: 961, foreignKeyGroups: 195, triggerCount: 120, checkCount: 303, viewCount: 0 });
 });
 
 test('115 个迁移来源名称逐项 disposition 闭合且落点集合可核验', () => {
