@@ -172,3 +172,5 @@
 - [ADR-172：JPEG 结束标记后允许少量尾随，WXGF 支持彩色加透明度双帧](172-jpeg-trailing-bytes-and-wxgf-alpha-frames.md)
 - [ADR-173：开发者批量来源重新认证](173-developer-batch-source-recertification.md)（已采纳（2026-11-05）；已实现并验收（2026-11-06，仅开发模式））
 - [ADR-175：修复同步通过后清理被取代绑定下无派生引用的旧副本](175-clean-superseded-binding-copies.md)（已采纳（2026-11-07）；部分覆盖 ADR-144 的旧消息保留条款；已实现，存量清理待用户确认）
+
+- [ADR-176：核对来源后原地续读，不旋转绑定](176-in-place-source-recovery.md)——覆盖 ADR-144/173 的旋转绑定及全量重读条款，保留存量删除保护。

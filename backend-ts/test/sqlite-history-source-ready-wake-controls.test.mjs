@@ -102,7 +102,7 @@ test('空闲守卫收到共享进程来源错误码时来源准备先完整重�
  try{
   await assert.rejects(f.history.ensureSourceReady(f.a.contact_id),{code:'history_external_scope_changed'});
  }finally{f.channel.inspect=originalInspect;}
- assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate',{token}),false,'完整重验发现真实来源变化后须停读');
+ assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate',{token}),true,'持久围栏允许后续核对，候选资格本身不放行正文');assert.equal((await f.history.coverage(f.a.contact_id)).phase,'incomplete');
 });
 
 async function hostPreparations(history){

@@ -162,7 +162,7 @@ function targetIdentity(target, scope, inspection) {
 
 /** 对照同一账号的全量授权scope；仅接受制品摘要、动态descriptor及显式声明的新增恢复能力。 */
 export function compareUpgradeScopeEvidence(before, after, options = {}) {
-  if(!isObject(options)||Object.keys(options).some(key=>key!=='durableHistoryUpgrade')||options.durableHistoryUpgrade!==undefined&&options.durableHistoryUpgrade!==true)fail('history_image_upgrade_evidence_invalid');
+  if(!isObject(options)||Object.keys(options).some(key=>!['durableHistoryUpgrade','localIdRecoveryUpgrade'].includes(key))||Object.values(options).some(value=>value!==undefined&&value!==true))fail('history_image_upgrade_evidence_invalid');
   requireObject(before); requireObject(after);
   const beforeAccount = accountIdentity(before.account);
   const afterAccount = accountIdentity(after.account);
@@ -179,6 +179,17 @@ export function compareUpgradeScopeEvidence(before, after, options = {}) {
     if(after.scopes.some(item=>item?.support?.capabilities?.durableHistory!==(durableScopes.has(item?.scope?.conversationKey)?'supported':undefined)))fail('history_image_upgrade_scope_mismatch');
     after=structuredClone(after);
     for(const item of after.scopes)if(item?.support?.capabilities?.durableHistory==='supported')delete item.support.capabilities.durableHistory;
+  }
+  if(options.localIdRecoveryUpgrade===true){
+    if(before.scopes.some(item=>item?.support?.capabilities?.recoverFromLocalIds!==undefined))fail('history_image_upgrade_scope_mismatch');
+    const recoverable=new Set(before.scopes.filter(item=>item?.support?.capabilities?.durableIncremental==='supported').map(item=>item?.scope?.conversationKey));
+    if(after.scopes.some(item=>item?.support?.capabilities?.recoverFromLocalIds!==(recoverable.has(item?.scope?.conversationKey)?'supported':undefined)))fail('history_image_upgrade_scope_mismatch');
+    after=structuredClone(after);
+    for(const item of after.scopes)if(item?.support?.capabilities?.recoverFromLocalIds==='supported'){
+      const previous=before.scopes.find(row=>row?.scope?.conversationKey===item?.scope?.conversationKey);
+      if(previous?.support?.capabilities?.partitionGrowth===undefined&&item.support.capabilities.partitionGrowth==='supported')delete item.support.capabilities.partitionGrowth;
+      delete item.support.capabilities.recoverFromLocalIds;
+    }
   }
   const indexed = value => {
     const map = new Map();
@@ -528,6 +539,52 @@ const guardRegistrationPolicy = Object.freeze({
   identityAlgorithmSha256: '8488810c711da947db902fe93d3e53a1cee66729ce6d42c1a4d396dd0367cd23',
 });
 
+// 仅按已存localId恢复与核对有界锚点；来源身份算法不变，新增状态与检查点逐份绑定摘要。
+const localIdRecoveryPolicy=Object.freeze({
+ ...guardRegistrationPolicy,
+ ...{
+  "oldName": "fence-guard-registration-20261107-v1",
+  "newName": "sync-recovery-20261107-v3",
+  "oldCliSha256": "b925d805a79f3102f1b8d2a7c5b76a3592ce9ea321d91fc2b79619836c39c795",
+  "newCliSha256": "90443d9a27765ed35970e992009e7059793051fe703ce2e200f41694f9d6872b",
+  "oldOverlaySha256": "4903c8da7982718406de721dbc49552f9cbed685370c03082b2ffd77e5273ec1",
+  "newOverlaySha256": "7717a743685bb5218147950b81397c4ccb6d92969dc16a0cd596b4a88591c77a",
+  "localIdRecoveryFix": "wechat-local-id-recovery-v1",
+  "protocolOldSha256": "1e83eabc77d3b26c31829932fa829d7fe02e9b1e6294483ef6bcb3f8668d211a",
+  "protocolNewSha256": "e24adbba5e1aeb1cbedfb6c767c607c02902048f11d12b4e375884e5f7b6cac2",
+  "identityFiles": {
+    "cmd/wechat-cli/notalone_identity_aliases.go": "a2060c261101e537a477b16e8ea706c7ccb1e90bbc1c99ebb203b23c9681193c",
+    "cmd/wechat-cli/notalone_watch_darwin.go": "88f8955abe91ef5d59dfefeea031cb6088a3ae9a6a71b67efa63008943ca2027",
+    "cmd/wechat-cli/notalone_history.go": "735ea75af0e2202e40d7cce08a2501b9e4bd5bf855077427bb8337ff34d4ca4f",
+    "cmd/wechat-cli/notalone_snapshot.go": "5bccfa1c28d8ccd2ca0cf9f2725792af2e82b12f34f422d4f2bd10004553ffa7",
+    "cmd/wechat-cli/notalone_account_metadata.go": "934b33f197171a3eb4b0ccaf38ed0bf43996efd0fb761343360f7926acb1a78d"
+  },
+  "sourceChanges": {
+    "cmd/wechat-cli/notalone_checkpoint.go": {
+      "old": "1f6e8b9d980c6482f772249c6998eee92aa80d4295754b822deb5c09194c19d3",
+      "new": "2008106351fe3c2672ef7cfb81c02f2ff3bf884051f066f26ba9fb7e39273a29"
+    },
+    "cmd/wechat-cli/notalone_history_resume.go": {
+      "old": "8fdad325ef5e14500411dab896970bb65f0c490e0188a2d80b9595248fa921c7",
+      "new": "8a6e2e39dda98e9033838fb00876a662e84cb21f25ad70f0849ada071eae84f8"
+    },
+    "cmd/wechat-cli/notalone_recovery.go": {
+      "old": null,
+      "new": "0cfe15b70cec4ee5d3945869963c03c48ff4c823a9aec8d3e3f15003c344f3c4"
+    },
+    "cmd/wechat-cli/notalone_recovery_test.go": {
+      "old": null,
+      "new": "3e2756e066f722defcb893a4d403d1033639828f94a891c0887286dea36de6ed"
+    },
+    "cmd/wechat-cli/notalone_snapshot.go": {
+      "old": "5bccfa1c28d8ccd2ca0cf9f2725792af2e82b12f34f422d4f2bd10004553ffa7",
+      "new": "465af9405565837861800af4f997b716f0238c54ee658791b55d4d674bd9b7a2"
+    }
+  },
+  "identityAlgorithmSha256": "fc883872181fe61172dcf712be83370b4b611ff22f45854517fe40757a7342f3"
+}
+});
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -703,6 +760,7 @@ function assertSourcePair(oldFiles, newFiles, policy) {
       ||policy.newSharedProcessProtocol==='wechat-shared-process-v1'&&/^cmd\/wechat-cli\/notalone_(?:account_metadata|selection)(?:_test)?\.go$/.test(name)
       ||policy.newAvatarMetadataProtocol==='wechat-contact-avatar-metadata-v1'&&/^cmd\/wechat-cli\/notalone_contact_avatar(?:_test)?\.go$/.test(name)
       ||policy.guardRegistrationFix==='wechat-guard-registration-v1'&&/^cmd\/wechat-cli\/notalone_(?:watch|process)_darwin(?:_test)?\.go$/.test(name)
+      ||policy.localIdRecoveryFix==='wechat-local-id-recovery-v1'&&['notalone_checkpoint.go','notalone_history_resume.go','notalone_recovery.go','notalone_recovery_test.go','notalone_snapshot.go'].some(file=>name===`cmd/wechat-cli/${file}`)
       ||policy.newDurableHistoryProtocol==='wechat-partial-history-checkpoint-v1'&&/^cmd\/wechat-cli\/notalone_(?:checkpoint|delta|snapshot|tail|history_resume)(?:_test)?\.go$/.test(name);
     if(!allowed||!isObject(pair)
       ||!(pair.old===null||hashPattern.test(pair.old))||!hashPattern.test(pair.new)
@@ -947,7 +1005,10 @@ const resumableHistoryTools=createUpgradeImageCliTools({repositoryRoot,policy:re
 const imageStandardTools=createUpgradeImageCliTools({repositoryRoot,policy:imageStandardPolicy});
 const imageOpenLocalTools=createUpgradeImageCliTools({repositoryRoot,policy:imageOpenLocalPolicy});
 const guardRegistrationTools=createUpgradeImageCliTools({repositoryRoot,policy:guardRegistrationPolicy});
-export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',guardRegistrationPolicy.oldName)
+const localIdRecoveryTools=createUpgradeImageCliTools({repositoryRoot,policy:localIdRecoveryPolicy});
+export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',localIdRecoveryPolicy.oldName)
+ &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',localIdRecoveryPolicy.newName)
+ ?localIdRecoveryTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',guardRegistrationPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',guardRegistrationPolicy.newName)
  ?guardRegistrationTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageOpenLocalPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageOpenLocalPolicy.newName)

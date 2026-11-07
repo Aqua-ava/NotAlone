@@ -1,7 +1,8 @@
+// 旧副本及认证审计由历史专用夹具建立；断言继续验证当前存储的删除与抑制保护。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,owner,record,report,createChannel,target,restart} from './sqlite-clear-support.mjs';
-import {SqliteHistoryRecertifyService} from '../src/history/sqlite/recertify.ts';
+import {SqliteHistoryRecertifyService} from './fixtures/history/legacy-recertify-service.ts';
 import {mkdtemp,mkdir,writeFile,chmod,rm,realpath,readFile,symlink,lstat,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';

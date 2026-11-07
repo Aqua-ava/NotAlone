@@ -47,6 +47,7 @@ async function fixture(t,sharedMode=false,storageOptions={},contactCount=2,manif
   else if(r.op==='resolve')data={accountKey:plan.mode==='wrong-account'?'synthetic-other':'${account}',conversationKey:plan.mode==='wrong-conversation'?'synthetic-other':selected,displayName:'只作展示',sourceGeneration:plan.mode==='wrong-generation'?'f'.repeat(64):'${generation}'};
   else if(r.op==='inspect')data=schema;
   else if(r.op==='support')data={protocol:'private-history-v1',profileId:'synthetic-history-v1',adapterVersion:'1',status:['unverified','quarantine','quarantine-forged'].includes(plan.mode)?'unverified':'supported',reason:['unverified','quarantine','quarantine-forged'].includes(plan.mode)?'history_message_state_unverified':null,accountKey:'${account}',conversationKey:selected,sourceGeneration:'${generation}',programVersion:'synthetic',build:'1',artifactSha256:crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'),schemaFingerprint:schema.schemaFingerprint,declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-final',continuity:${sharedMode?"'same-source-instances-normal-use-v1'":"'synthetic-fixed-source'"},...(plan.capabilities?{capabilities:plan.capabilities}:plan.mode.startsWith('quarantine')?{capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory'].map(k=>[k,['programVersion','exactSchema','declaredLocalKey'].includes(k)?'supported':'unverified']))}:{})};
+  else if(r.op==='recover-target'){currentTarget='synthetic-recovered-target';data={target:{protocol:'private-history-v1',descriptor:currentTarget,partitions:schema.checkedPartitions,tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'},cursor:'synthetic-recovery-proof',anchors:plan.recoveryRows||[]};}
   else if((r.op==='target'||r.op==='quarantine-target'||r.op==='resume-target')){resumed=r.op==='resume-target';currentTarget=${sharedMode?"'synthetic-target-'+(++targetSerial)":"'synthetic-target'"};
    if(plan.mode==='slices'){
     const checkpoints=fs.existsSync(checkpointFile)?JSON.parse(fs.readFileSync(checkpointFile)):{};
@@ -699,4 +700,17 @@ test('历史只读了一部分时 saved_history_complete 为假，读完前不�
  assert.deepEqual([row.phase,row.savedHistoryComplete],['running',false]);
  let latest=first;for(let attempt=0;attempt<10&&latest.phase!=='complete';attempt++)latest=await f.history.synchronize(large.contact_id);
  assert.deepEqual([latest.phase,(await f.history.coverage(large.contact_id)).savedHistoryComplete],['complete',true]);
+});
+
+test('正式渠道恢复接口只提交授权旧表水位与有界锚点，旧读取器明确拒绝',async t=>{
+ const f=await fixture(t),channel=createWechatHistoryChannel(f.executable),scope=await f.scope();t.after(()=>channel.close());
+ const caps=capabilities({...Object.fromEntries(statusCapabilityKeys.map(key=>[key,'supported'])),incrementalTail:'supported',durableIncremental:'supported',durableHistory:'supported',recoverFromLocalIds:'supported'});
+ await f.setPlan({capabilities:caps,recoveryRows:[]});await channel.inspect(scope);const previous=await channel.target(scope);
+ const positions=[{partition:previous.tables[0].partition,table:previous.tables[0].instance,maxLocalId:'9007199254740993',anchorLocalIds:[]}];
+ const recovered=await channel.recoverTarget(scope,previous,positions);
+ assert.equal(recovered.cursor,'synthetic-recovery-proof');assert.deepEqual(recovered.anchors,[]);
+ const request=(await requests(f.logFile)).find(row=>row.op==='recover-target');assert.deepEqual(request.positions,positions);assert.equal(request.previousTarget.sourceGeneration,scope.token.source_generation);
+ await channel.close();
+ const legacy=createWechatHistoryChannel(f.executable);t.after(()=>legacy.close());await f.setPlan({capabilities:capabilities({...Object.fromEntries(statusCapabilityKeys.map(key=>[key,'supported'])),incrementalTail:'supported',durableIncremental:'supported'})});
+ await legacy.inspect(scope);await assert.rejects(legacy.recoverTarget(scope,previous,positions),{code:'history_tail_unsupported'});
 });

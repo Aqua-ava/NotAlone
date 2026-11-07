@@ -8,8 +8,8 @@ interface TestBudgets { maxBytes?: number; maxAgeMs?: number }
 type Identity = { dev: number; ino: number };
 const defaultBytes = 1024 * 1024, defaultAgeMs = 7 * 86400_000;
 const entries = new Set(['history.readPreflight', 'history.preflightGeneration', 'history.preflightContinuity',
-  'history.guardAcquire', 'history.prepareNormalUseGuard', 'history.guardRelease', 'history.markContinuityLost',
-  'history.emptyTargetProbeVerify', 'history.recertifyFail']);
+  'history.guardAcquire', 'history.prepareNormalUseGuard', 'history.prepareRecoveredGuard', 'history.guardRelease', 'history.markContinuityLost',
+  'history.emptyTargetProbeVerify', 'history.recertifyFail', 'history.recertifyNoteFailure']);
 const branches = new Set(['G01', 'G02', 'G03', 'G04', 'T01', 'T02', 'T03', 'N01', 'N02', 'N03', 'N04', 'N05', 'N06', 'N07', 'A01', 'A02', 'R01', 'R02', 'L01', 'C01']);
 const lostCodes = new Set(['history_source_changed', 'history_source_unverified', 'history_external_scope_changed',
   'history_scope_changed', 'history_schema_changed', 'history_shards_changed', 'history_cursor_scope_changed',

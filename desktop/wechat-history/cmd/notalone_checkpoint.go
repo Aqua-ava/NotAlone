@@ -22,6 +22,7 @@ type notaloneCheckpointIdentity struct {
 	Entry    notaloneTailBaselineEntry `json:"entry"`
 }
 type notaloneCheckpoint struct {
+	Watermarks     map[string]string                  `json:"watermarks,omitempty"`
 	Format         string                             `json:"format"`
 	Scope          string                             `json:"scope"`
 	Root           string                             `json:"root"`
@@ -205,6 +206,15 @@ func (h *notaloneHistorySession) loadCheckpoint(report notaloneSupportReport, pr
 	if len(value.TableSchemas) > 0 && len(value.TableSchemas) != len(tables) {
 		return nil, notaloneFailure("history_checkpoint_invalid")
 	}
+	if len(value.Watermarks) > len(tables) {
+		return nil, notaloneFailure("history_checkpoint_invalid")
+	}
+	for partition, watermark := range value.Watermarks {
+		n, e := strconv.ParseInt(watermark, 10, 64)
+		if tables[partition] == "" || e != nil || n < 0 || strconv.FormatInt(n, 10) != watermark {
+			return nil, notaloneFailure("history_checkpoint_invalid")
+		}
+	}
 	seen := map[notaloneTailIdentity]bool{}
 	for _, item := range value.Baseline {
 		id := item.Identity
@@ -237,6 +247,7 @@ func (h *notaloneHistorySession) saveCheckpoint(report notaloneSupportReport, pr
 	value.Target = target
 	value.Cursor = cursor
 	value.States = states
+	value.Watermarks = h.recoveryWatermarks
 	var schemasOK bool
 	value.TableSchemas, schemasOK = notaloneTableSchemaDigests(h.inspected.Tables)
 	if !schemasOK || len(value.TableSchemas) != len(target.Tables) || len(target.CheckedPartitions) == 0 ||

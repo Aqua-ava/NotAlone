@@ -18,7 +18,7 @@ const allowedErrors = new Set(['history_source_continuity_unverified', 'history_
   'history_snapshot_window_changed', 'history_already_running',
   'history_external_scope_changed', 'history_interrupted', 'history_page_budget_exhausted', 'history_cursor_invalid',
   'history_target_invalid', 'history_target_unverified', 'history_snapshot_closed', 'history_snapshot_unavailable',
-  'history_native_timeout', 'history_native_cancelled', 'history_native_unavailable', 'history_source_changed',
+  'history_native_timeout', 'history_native_cancelled', 'history_native_unavailable','history_source_unverified', 'history_source_changed',
   'history_schema_changed', 'history_scope_changed', 'history_message_state_unverified', 'history_source_lifecycle_unverified',
   'history_snapshot_runtime_proof_required', 'history_partition_coverage_runtime_proof_required', 'read_not_authorized',
   'read_eligibility_stale', 'history_contact_gateway_unavailable', 'history_contact_not_found', 'history_closed',
@@ -32,7 +32,7 @@ function keyContact(key:string):string|null {
  try{const value=JSON.parse(key);return Array.isArray(value)&&typeof value[0]==='string'?value[0]:null;}catch{return null;}
 }
 function notification() { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; }
-const retryableErrors=new Set(['history_native_timeout','history_native_unavailable','history_native_cancelled',
+const retryableErrors=new Set(['history_native_timeout','history_native_unavailable','history_source_unverified','history_native_cancelled',
   'history_snapshot_closed','history_snapshot_unavailable','history_snapshot_window_changed','history_already_running']);
 
 /** 启动、确认或开启发起首次历史；瞬时失败退避重试，完成后不轮询历史。 */

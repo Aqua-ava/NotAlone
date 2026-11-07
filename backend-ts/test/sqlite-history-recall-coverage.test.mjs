@@ -1,8 +1,9 @@
+// 旧副本及认证审计由历史专用夹具建立；断言继续验证当前存储的删除与抑制保护。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {fixture,owner,record,report,createChannel,target} from './sqlite-clear-support.mjs';
-import {SqliteHistoryRecertifyService} from '../src/history/sqlite/recertify.ts';
+import {SqliteHistoryRecertifyService} from './fixtures/history/legacy-recertify-service.ts';
 
 const registry=new URL('./fixtures/history/recall-coverage-registry.mjs',import.meta.url).href;
 const OLD='legacy-source',CURRENT='source-1';

@@ -158,7 +158,7 @@ test('共享读取器停止后重验不可用仍停读，恢复后完整重验�
   assert.equal(leaseFor(state, f.contactA).state, 'active');
 });
 
-test('真实围栏不因新读取器的重验尝试被删除，读取保持停读', {timeout: 10000}, async t => {
+test('读取器缺少受控恢复能力时保留围栏，不建立目标或读取正文', {timeout: 10000}, async t => {
   const f = await sharedFixture(t);
   await f.service.synchronize(f.contactA);
   const token = await f.current.contacts.eligibility(f.contactA);
@@ -166,7 +166,7 @@ test('真实围栏不因新读取器的重验尝试被删除，读取保持停�
   let state = await stateOf(f);
   assert.ok(fenceFor(state, f.contactA));
   const before = goalsFor(state, f.contactA).length;
-  await assert.rejects(f.service.synchronize(f.contactA), {code: 'history_source_continuity_unverified'});
+  await assert.rejects(f.service.synchronize(f.contactA), {code: 'history_source_recovery_unsupported'});
   state = await stateOf(f);
   assert.ok(fenceFor(state, f.contactA), '既有围栏不得被新读取或重验删除');
   assert.equal(goalsFor(state, f.contactA).length, before, '围栏期间不得建立新的读取目标');

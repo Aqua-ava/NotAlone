@@ -8,7 +8,7 @@ import { FirstHistoryCoordinator } from '../src/history/sqlite/coordinator.ts';
 
 async function parkedFixture(t) {
   const cleanup = [], f = await fixture({ after: callback => cleanup.push(callback) });
-  const state = { owner: undefined, releaseOwner: undefined, tail: Promise.resolve(), parks: 0, channels: [], wakes: [] };
+  const state = { owner: undefined, releaseOwner: undefined, tail: Promise.resolve(), parks: 0, pages: 0, channels: [], wakes: [] };
   // 只替代原生进程租约边界；顺序、停车回调、历史目标、守卫和存储均走生产服务。
   const shared = { async run(owner, work, releasePreviousOwner, signal) {
     const previous = state.tail;
@@ -31,9 +31,9 @@ async function parkedFixture(t) {
         return { ...await f.channel.inspect(scope), continuity: 'same-source-instances-normal-use-v1',
           capabilities: { incrementalTail: 'supported' } };
       },
-      page: async (scope, target, cursor) => ({ target: target.descriptor, cursorIn: cursor, cursorOut: null,
+      page: async (scope, target, cursor) => {state.pages++;return { target: target.descriptor, cursorIn: cursor, cursorOut: null,
         records: [record('1', { text: `合成历史：${scope.conversationKey}` })], completedPartitions: ['shard-a'],
-        exhausted: true, resumeCursor: `tail:${scope.conversationKey}` }),
+        exhausted: true, resumeCursor: `tail:${scope.conversationKey}` };},
       tail: async (_scope, target, cursor) => ({ target: target.descriptor, cursorIn: cursor, cursorOut: cursor,
         records: [], caughtUp: true }),
       park: async () => { state.parks++; },
@@ -104,7 +104,11 @@ test('空闲守卫瞬时退出后外置首次协调器仍会被唤醒，共享�
   } finally {
     f.channel.inspect = originalInspect;
   }
-  assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate', { token }), false, '完整重验发现真实来源变化后才保持围栏');
+  assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate', { token }), true, '只允许再次核元数据，不解除已检测到的真实来源围栏');
+  assert.equal((await f.history.coverage(b.contact_id)).failureCode,'history_source_continuity_unverified');
+  assert.equal(await f.history.bodyAvailable([b.contact_id]),false);
+  const source=(await f.history.read(b.contact_id)).messages[0].sourceRecordIds[0];
+  await assert.rejects(f.history.source(b.contact_id,source),{code:'history_source_not_found'});
 });
 
 for(const {code,failFirstRecovery} of [{code:'history_native_timeout'},{code:'history_source_changed'},{code:'history_native_timeout',failFirstRecovery:true}])test(`增量替换阻塞后守卫${code}按持久恢复资格决定是否唤醒首次${failFirstRecovery?'，恢复查询失败后下轮继续':''}`,async t=>{
@@ -136,13 +140,15 @@ for(const {code,failFirstRecovery} of [{code:'history_native_timeout'},{code:'hi
  assert.equal((await f.history.coverage(a.contact_id)).phase,'complete','完整重验后须自动恢复同步');
 });
 
-test('真实来源围栏不进入自动恢复门，也不创建恢复读取器', async t => {
+test('围栏候选仅允许核对，旧读取器缺水位恢复能力仍明确停读', async t => {
   t.mock.timers.enable({apis: ['setInterval']});
   const f = await parkedFixture(t), [a] = f.saved;
   await f.history.synchronize(a.contact_id);
   const token = await f.contacts.eligibility(a.contact_id);
   await f.storage.execute('history.markContinuityLost', {token});
-  assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate', {token}), false);
+  assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate', {token}), true);
+  await assert.rejects(f.history.synchronize(a.contact_id),{code:'history_source_recovery_unsupported'});
+  const pageCount=f.state.pages;
   const directory = {directory: async () => {
     const saved = await f.contacts.syncDirectory();
     return {...saved, bindings: saved.bindings.filter(row => row.contact_id === a.contact_id)};
@@ -150,10 +156,13 @@ test('真实来源围栏不进入自动恢复门，也不创建恢复读取器',
   const incremental = new IncrementalHistoryCoordinator(directory, f.history, {intervalMs: 30_000, firstHistoryManagedExternally: true});
   const first = new FirstHistoryCoordinator(directory, f.history);
   t.after(async () => { await incremental.close(); await first.close(); });
-  const wakes = [], channels = f.state.channels.length;
+  const wakes = [];
   f.history.setFirstHistoryWake(id => { wakes.push(id); first.wakeContact(id); });
   incremental.start(); t.mock.timers.tick(30_000); await incremental.waitForIdle(); await first.waitForIdle();
-  assert.deepEqual(wakes, [], '真实围栏不得触发首次恢复唤醒');
-  assert.equal(f.state.channels.length, channels, '真实围栏不得创建恢复读取器');
+  assert.deepEqual(wakes, [a.contact_id], '只唤醒当前联系人做正式元数据核对');
+  assert.equal(f.state.pages,pageCount,'能力不足不能以全量重读替代水位恢复');
+  assert.equal(await f.history.bodyAvailable([a.contact_id]),false);
+  const source=(await f.history.read(a.contact_id)).messages[0].sourceRecordIds[0];
+  await assert.rejects(f.history.source(a.contact_id,source),{code:'history_source_not_found'});
   assert.equal((await f.history.coverage(a.contact_id)).failureCode, 'history_source_continuity_unverified');
 });

@@ -57,7 +57,9 @@ test('空目标跨运行时重验仍拒绝完整检查分片变化',async t=>{
  await assert.rejects(f.current.history.synchronizeIncremental(f.contactId),{code:'history_source_continuity_unverified'});
  assert.equal(f.state.pages,1,'未验证几何不能接受新空页');
  const token=await f.current.contacts.eligibility(f.contactId);
- assert.equal(await f.current.storage.execute('history.normalUseRevalidationCandidate',{token}),false);
+ assert.equal(await f.current.storage.execute('history.normalUseRevalidationCandidate',{token}),true,'候选只允许再次核元数据，不说明来源已通过');
+ await assert.rejects(f.current.history.synchronizeIncremental(f.contactId),{code:'history_source_continuity_unverified'});
+ assert.equal(f.state.pages,1);assert.equal((await f.current.history.coverage(f.contactId)).failureCode,'history_source_continuity_unverified');
 });
 
 test('空目标当前活守卫中的支持报告变化仍拒绝，不借重验放宽',async t=>{
@@ -66,10 +68,10 @@ test('空目标当前活守卫中的支持报告变化仍拒绝，不借重验�
  assert.equal(f.state.pages,1);
 });
 
-test('已有真实来源围栏的空目标不能借运行时和制品更新恢复',async t=>{
+test('既有围栏的空目标元数据一致时自动原地恢复，不读取历史正文',{timeout:10000},async t=>{
  const f=await emptyFixture(t),token=await f.current.contacts.eligibility(f.contactId);
- await f.current.storage.execute('history.markContinuityLost',{token});await f.reopen();f.state.artifact='c'.repeat(64);
- const before=f.state.targets;
- await assert.rejects(f.current.history.synchronizeIncremental(f.contactId),{code:'history_source_continuity_unverified'});
- assert.equal(f.state.targets,before);assert.equal(f.state.pages,1);
+ await f.current.storage.execute('history.markContinuityLost',{token});await f.reopen();f.state.artifact='c'.repeat(64);const first=f.attachFirst();
+ const current=await f.current.contacts.eligibility(f.contactId);assert.equal(current.binding_id,token.binding_id);assert.equal(await f.current.storage.execute('history.normalUseRevalidationCandidate',{token:current}),true);
+ const before=f.state.targets;await f.current.history.synchronizeIncremental(f.contactId);await first.waitForIdle();
+ const coverage=await f.current.history.coverage(f.contactId);assert.ok(f.state.targets>before,'先核对新的物理目标再恢复');assert.equal(coverage.phase,'complete');assert.equal(coverage.incremental.emptyTargetAwaitingMessages,true);assert.equal(coverage.messageCount,0);assert.equal(coverage.failureCode,null);assert.equal((await f.current.contacts.eligibility(f.contactId)).binding_id,token.binding_id);
 });

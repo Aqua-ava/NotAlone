@@ -24,7 +24,7 @@ const fatalCodes = new Set(['history_source_continuity_unverified', 'history_sup
   'history_target_unverified', 'history_target_invalid', 'history_scope_invalid', 'history_account_changed', 'history_source_changed',
   'history_scope_changed', 'read_not_authorized', 'read_eligibility_stale', 'history_contact_not_found', 'history_goal_closed',
   'history_goal_stale', 'history_page_invalid', 'history_capture_replay_conflict', 'history_deletion_in_progress']);
-const transientCodes = new Set(['history_native_unavailable', 'history_native_timeout', 'history_native_cancelled',
+const transientCodes = new Set(['history_native_unavailable','history_source_unverified', 'history_native_timeout', 'history_native_cancelled',
   'history_interrupted', 'history_incremental_interrupted', 'history_closed', 'history_already_running',
   'history_page_budget_exhausted', 'history_first_read_failed', 'history_snapshot_closed', 'history_snapshot_unavailable',
   'history_snapshot_window_changed',

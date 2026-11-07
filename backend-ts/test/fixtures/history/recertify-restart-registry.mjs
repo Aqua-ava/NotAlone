@@ -8,7 +8,7 @@ const snapshot = {
       [input.ownerId, input.contactId]);
     return {
       runtime: tx.get('SELECT runtime_id,epoch FROM database_instance WHERE slot=1'),
-      scopes: rows('history_continuity_scope'), leases: rows('history_guard_lease'),
+      bindings: rows('conversation_binding'), scopes: rows('history_continuity_scope'), leases: rows('history_guard_lease'),
       fences: rows('history_continuity_fence'), operations: rows('history_source_recertification'),
       goals: rows('read_goal'), captures: rows('sync_capture'), messages: rows('message'),
     };

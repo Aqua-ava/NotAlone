@@ -85,10 +85,15 @@ test('引用补齐没有来源重验时不重新派发历史目标',async t=>{
 
 for(const failure of ['source-changed','revoked'])test(`引用重验后${failure}不能发送完成唤醒或保存迟到引用`,async t=>{
  const f=await pendingQuoteFixture(t);
- if(failure==='source-changed')f.state.quoteFailure='history_quote_source_changed';
+ if(failure==='source-changed'){f.state.quoteFailure='history_quote_source_changed';f.state.beforeQuote=()=>{f.target.tables=f.target.tables.map(table=>({...table,instance:table.instance+'-replaced'}));};}
  else f.state.beforeQuote=()=>f.contacts.revoke(f.a.contact_id,f.a.binding_id,f.a.selection_generation);
  await assert.rejects(f.history.synchronizeQuotes(f.a.contact_id),{code:failure==='source-changed'?'history_quote_source_changed':'read_not_authorized'});
  await f.first.waitForIdle();assert.deepEqual(f.wakes,[]);assert.equal(f.state.pages.length,f.pageCount);
  assert.ok((await f.history.read(f.a.contact_id)).messages.every(row=>!row.quote));
- if(failure==='source-changed')assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate',{token:await f.contacts.eligibility(f.a.contact_id)}),false);
+ if(failure==='source-changed'){
+  assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate',{token:await f.contacts.eligibility(f.a.contact_id)}),true,'只允许再次核元数据，不开放旧来源');
+  const source=(await f.history.read(f.a.contact_id)).messages[0].sourceRecordIds[0];await assert.rejects(f.history.source(f.a.contact_id,source),{code:'history_source_not_found'});
+  const quoteReads=f.state.quoteReads;await assert.rejects(f.history.ensureSourceReady(f.a.contact_id),{code:'history_source_continuity_unverified'});
+  assert.equal(f.state.quoteReads,quoteReads,'物理表已替换不能继续读取引用');assert.equal(f.state.pages.length,f.pageCount);assert.deepEqual(f.wakes,[]);assert.equal((await f.history.coverage(f.a.contact_id)).failureCode,'history_source_continuity_unverified');
+ }
 });

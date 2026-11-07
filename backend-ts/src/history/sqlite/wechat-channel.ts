@@ -2,7 +2,7 @@ import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import { loadNarrowWechatOptions } from '../wechat/artifacts.ts';
 import type {SharedWechatClient,SharedWechatLease} from '../wechat/shared-client.ts';
 import { NarrowWechatClient } from '../wechat/native-client.ts';
-import type { HistoryChannel, HistoryScope, HistorySource, HistorySupportReport, HistoryTarget } from './contracts.ts';
+import type { HistoryChannel, HistoryRecoveryPosition, HistoryScope, HistorySource, HistorySupportReport, HistoryTarget } from './contracts.ts';
 import { prepareBoundaryCandidate } from './boundary.ts';
 
 function unavailableReport():HistorySupportReport {
@@ -88,6 +88,10 @@ class WechatHistoryChannel implements HistoryChannel {
  async target(scope:HistoryScope,signal?:AbortSignal):Promise<HistoryTarget>{
   if(!this.#executable)return reject('history_support_unverified');
   return this.#run(scope,signal,async native=>{const target=await native.targetSelected(signal);this.#targetIssued=true;return target;});
+ }
+ async recoverTarget(scope:HistoryScope,previous:HistoryTarget,positions:readonly HistoryRecoveryPosition[],signal?:AbortSignal){
+  if(!this.#executable)return reject('history_support_unverified');
+  return this.#run(scope,signal,async native=>{const result=await native.recoverTargetSelected(previous,positions,signal);this.#targetIssued=true;return result;});
  }
  async resumeTarget(scope:HistoryScope,previous:HistoryTarget,cursor:string,signal?:AbortSignal):Promise<HistoryTarget|null>{
   if(!this.#executable)return reject('history_support_unverified');

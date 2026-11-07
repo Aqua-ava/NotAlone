@@ -1,3 +1,4 @@
+import {sourceRecoveryActions} from './source-recovery.ts';
 import {assertRecertifyAccess} from './recertify-access.ts';
 import { randomUUID } from 'node:crypto';
 import { sha256 } from '../../platform/sha256.ts';
@@ -98,6 +99,7 @@ function sameEmptyTargetGeometry(left:HistoryTarget,right:HistoryTarget):boolean
   &&sameStringSet(left.partitions,right.partitions)&&sameStringSet(left.checkedPartitions,right.checkedPartitions);
 }
 export const historyActions:StorageAction[]=[
+ ...sourceRecoveryActions,
  action('history.checkpointContacts','read',(tx,i)=>tx.all("SELECT id,data_generation FROM contact WHERE owner_id=? AND state='active'",[i.ownerId]).map(row=>({contactId:String(row.id),generation:String(row.data_generation)}))),
  action('history.scope','read',(tx,i)=>{assertReadEligibility(tx,i.token);const row=tx.get(`SELECT a.external_key AS account_key,c.external_key AS conversation_key FROM channel_account a JOIN channel_conversation c ON c.owner_id=a.owner_id AND c.account_id=a.id WHERE a.owner_id=? AND a.id=? AND c.id=?`,[i.token.owner_id,i.token.account_id,i.token.conversation_id])??fail('history_scope_invalid');return {token:i.token,accountKey:row.account_key,conversationKey:row.conversation_key};}),
  action('history.preflightGeneration','write',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);return preflightGeneration(tx,token);}),
@@ -216,6 +218,8 @@ export const historyActions:StorageAction[]=[
    purgeStaleGoals(tx,token.owner_id,token.contact_id);return {id:reusableHistory.id,target:reusableHistory.target,cursor:reusableHistory.cursor};
   }
   tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,state,coverage_state,created_at,cursor_scope_digest,cursor_scheme,creation_no) VALUES(?,?,?,?,?,?,?,'history',?,?,?,?,?,'running','partial',?,?,?,(SELECT coalesce(max(creation_no),0)+1 FROM read_goal WHERE creation_no IS NOT NULL))`,[token.owner_id,i.id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation),target.protocol,target.descriptor,JSON.stringify(target),JSON.stringify(token),serializeSupport(i.report),i.at,scopeDigest,historyCursorScheme]);
+  if(i.recoveryCursor)tx.run('UPDATE read_goal SET resume_cursor=? WHERE owner_id=? AND id=?',[assertHistoryCursor(i.recoveryCursor,'history_cursor_invalid'),token.owner_id,i.id]);
+  if(tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='history_source_recertification'"))tx.run("UPDATE history_source_recertification SET stage='history',goal_id=?,target_json=?,support_json=?,token_json=?,updated_at=? WHERE owner_id=? AND contact_id=? AND state='running' AND new_binding_id IS NULL AND old_token_json=?",[i.id,JSON.stringify(target),serializeSupport(i.report),JSON.stringify(token),i.at,token.owner_id,token.contact_id,JSON.stringify(token)]);
   purgeStaleGoals(tx,token.owner_id,token.contact_id);
   return {id:i.id,target,cursor:null};
  }),

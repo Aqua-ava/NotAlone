@@ -69,6 +69,13 @@ export interface HistoryTailPage {
   target: string; cursorIn: string; cursorOut: string;
   records: readonly HistoryRecord[]; caughtUp: boolean;
 }
+/** 只由已接纳的本机来源生成；不得由 HTTP 或渲染层提供续读水位。 */
+export interface HistoryRecoveryPosition {
+  partition:string; table:string; maxLocalId:string; anchorLocalIds:readonly string[];
+}
+export interface HistoryRecoveryResult {
+  target:HistoryTarget; cursor:string|null; anchors:readonly HistoryRecord[];
+}
 export interface HistoryChannel {
   /** 释放当前会话读者，账号级活守卫继续保护已验证来源；仅共享适配器提供。 */
   park?():Promise<void>;
@@ -78,6 +85,7 @@ export interface HistoryChannel {
   target(scope: HistoryScope, signal?: AbortSignal): Promise<HistoryTarget>;
   // 只接续业务事务已接受且作用域未变的本机检查点；缺失返回 null，不能猜测水位。
   resumeTarget?(scope: HistoryScope, previous: HistoryTarget, cursor: string, signal?: AbortSignal): Promise<HistoryTarget | null>;
+  recoverTarget?(scope:HistoryScope, previous:HistoryTarget, positions:readonly HistoryRecoveryPosition[], signal?:AbortSignal):Promise<HistoryRecoveryResult>;
   page(scope: HistoryScope, target: HistoryTarget, cursor: string | null, signal?: AbortSignal, options?: {checkpoint?:boolean}): Promise<HistoryPage>;
   /** 仅受信任渠道对已验证的单条引用来源做有限解析，不返回原始 XML。 */
   readQuote?(scope: HistoryScope, target: HistoryTarget, source: HistorySource, signal?: AbortSignal): Promise<HistoryQuoteContent & {proofDigest: string}>;

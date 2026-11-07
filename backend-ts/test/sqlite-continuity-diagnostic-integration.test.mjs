@@ -162,7 +162,7 @@ test('日志路径被符号链接替换时仍提交来源围栏并封禁后续�
   assert.deepEqual(await f.current.storage.execute('fixture.continuityDiagnosticFences', {ownerId: owner}),
     [{contact_id: f.contactA}]);
   assert.equal((await f.current.history.coverage(f.contactA)).failureCode, 'history_source_continuity_unverified');
-  await assert.rejects(f.current.history.synchronize(f.contactA), {code: 'history_source_continuity_unverified'});
+  await assert.rejects(f.current.history.synchronize(f.contactA), {code: 'history_source_recovery_unsupported'});
   assert.equal(f.state.pageCalls, pages, '诊断失败后仍不再读取正文');
   assert.equal(await readFile(outside, 'utf8'), 'synthetic-unchanged-marker');
 });

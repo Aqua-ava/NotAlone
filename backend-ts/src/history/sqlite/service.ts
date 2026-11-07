@@ -1,3 +1,5 @@
+import type {SourceRecoveryPlan} from './source-recovery.ts';
+import type {HistoryRecoveryResult} from './contracts.ts';
 import type {SharedWechatClient} from '../wechat/shared-client.ts';
 import { ActiveHolders } from '../../storage/sqlite/deletion/holders.ts';
 import { randomUUID } from 'node:crypto';
@@ -26,7 +28,7 @@ interface GuardResult {guardId?:string;revalidated:boolean}
 type MessageChangeKind='created'|'updated';
 type AcceptedPage=HistoryCoverage&{createdMessageIds?:string[];updatedMessageIds?:string[]};
 const bodyCapabilities=['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail'] as const;
-const recoverableGuardFailures=new Set(['history_native_timeout','history_native_unavailable','history_native_cancelled','history_snapshot_closed','history_snapshot_unavailable','history_snapshot_window_changed']);
+const recoverableGuardFailures=new Set(['history_native_timeout','history_native_unavailable','history_source_unverified','history_native_cancelled','history_snapshot_closed','history_snapshot_unavailable','history_snapshot_window_changed']);
 function waitForSourceReader(done:Promise<void>,signal:AbortSignal,remaining:number):Promise<void>{
  if(signal.aborted)return Promise.reject(new StorageFailure('history_native_cancelled'));
  if(remaining<=0)return Promise.reject(new StorageFailure('history_native_timeout'));
@@ -49,6 +51,7 @@ export class SqliteHistoryService {
  private firstHistoryWake?: (contactId:string)=>void;
  private readonly active=new Map<string,ActiveHistoryRead>();
  private readonly guards=new Map<string,RetainedGuard>();
+ private readonly recoveries=new WeakMap<HistoryTarget,{planDigest:string;recovery:HistoryRecoveryResult}>();
  private closed=false;
  private readonly shared?:SharedWechatClient;
  private readonly queued=new Map<string,{controller:AbortController;done:Promise<void>}>();
@@ -129,10 +132,14 @@ export class SqliteHistoryService {
      const release=async()=>{if(entry.sourceLost)await this.storage.execute('history.markContinuityLost',{token:entry.token,errorCode:entry.failureCode});await entry.release();};void release().catch(()=>{});}};
     void session.loss.then(lost,lost);
    };
+   const prepareProof=(proof:GuardProof,guardId:string)=>{
+    const recovery=this.recoveries.get(proof.target);
+    return this.storage.execute<{ok:boolean;revalidated:boolean}>(recovery?'history.prepareRecoveredGuard':'history.prepareNormalUseGuard',{token,target:proof.target,report:proof.report,guardId,...recovery});
+   };
    const armGuard=async(proof?:GuardProof):Promise<GuardResult>=>{
     if(retained){if(retained.failed||!await this.storage.execute<boolean>('history.guardCheck',{token,guardId:retained.guardId}))throw new StorageFailure('history_source_continuity_unverified');
     if(retained.parked&&!proof)throw new StorageFailure('history_source_continuity_unverified');
-    if(proof){const checked=await this.storage.execute<{ok:boolean;revalidated:boolean}>('history.prepareNormalUseGuard',{token,target:proof.target,report:proof.report,guardId:retained.guardId});if(!checked.ok)throw new StorageFailure('history_source_continuity_unverified');retained.report=structuredClone(proof.report);retained.target=structuredClone(proof.target);
+    if(proof){const checked=await prepareProof(proof,retained.guardId);if(!checked.ok)throw new StorageFailure('history_source_continuity_unverified');retained.report=structuredClone(proof.report);retained.target=structuredClone(proof.target);
      if(retained.parked){
       // 正常停车只更换原生选择；完整元数据查证成功后复用同一持久证明与删除holder，避免先lost再active的空窗。
       if(!channel?.guardSession||!(channel.guardSession.loss instanceof Promise))throw new StorageFailure('history_guard_invalid');
@@ -144,7 +151,7 @@ export class SqliteHistoryService {
     const guardSession=channel.guardSession;
     if(!(guardSession.loss instanceof Promise))throw new StorageFailure('history_guard_invalid');
     const guardId=randomUUID();let revalidated=false;
-    if(proof){const prepared=await this.storage.execute<{ok:boolean;revalidated:boolean}>('history.prepareNormalUseGuard',{token,target:proof.target,report:proof.report,guardId});if(!prepared.ok)throw new StorageFailure('history_source_continuity_unverified');revalidated=prepared.revalidated;}
+    if(proof){const prepared=await prepareProof(proof,guardId);if(!prepared.ok)throw new StorageFailure('history_source_continuity_unverified');revalidated=prepared.revalidated;}
     else if(!await this.storage.execute<boolean>('history.guardAcquire',{token,guardId}))throw new StorageFailure('history_source_continuity_unverified');
     const entry:RetainedGuard={channel,token,...(proof?{report:structuredClone(proof.report),target:structuredClone(proof.target)}:{}),guardId,failed:false,sourceLost:false,normalUse:proof!==undefined,bodyVerified:false,deferVerification:false,release:async()=>{}};
     let leaseReleased=false,releaseFailed=false,storageClosed=false;
@@ -157,9 +164,17 @@ export class SqliteHistoryService {
      }catch(error){releaseFailed=true;failure=error;}
      // 持久失证失败后先使存储失能；重试只排空尚未确认关闭的资源，不再访问旧库。
      if(releaseFailed&&!storageClosed)try{await this.storage.close();storageClosed=true;}catch(error){failure??=error;}
-     try{await entry.channel.close?.();}catch(error){failure??=error;}
+     let channelClosed=false;
+     try{
+      await entry.channel.close?.();channelClosed=true;
+      const closeCode=entry.channel.guardSession?.failureCode?.();
+      if(closeCode&&closeCode!=='history_native_closed'&&closeCode!==entry.failureCode&&!recoverableGuardFailures.has(closeCode)){
+       if(isSourceContinuityLost(new StorageFailure(closeCode)))await this.storage.execute('history.markContinuityLost',{token,errorCode:closeCode});
+       entry.failureCode=closeCode;failure??=new StorageFailure(closeCode);
+      }
+     }catch(error){failure??=error;}
+     if(channelClosed&&!failure&&this.guards.get(contactId)===entry)this.guards.delete(contactId);
      if(failure)throw failure;
-     if(this.guards.get(contactId)===entry)this.guards.delete(contactId);
     }});}catch(error){await this.storage.execute('history.guardRelease',{token,guardId,normalUse:entry.normalUse,sourceLost:entry.sourceLost,deferVerification:entry.deferVerification});throw error;}
     this.guards.set(contactId,entry);retained=entry;
     observeGuardLoss(entry,channel);
@@ -340,9 +355,23 @@ export class SqliteHistoryService {
  waitForReadIdle(contactId:string):Promise<void>{return this.queued.get(contactId)?.done??this.active.get(contactId)?.done??Promise.resolve();}
  coverage(contactId:string):Promise<HistoryCoverage>{return this.storage.execute('history.coverage',{ownerId:this.contacts.ownerId,contactId});}
  private async resumeOrTarget(scope:HistoryScope,channel:HistoryChannel,report:HistorySupportReport,signal:AbortSignal):Promise<HistoryTarget>{
+  let plan=await this.storage.execute<SourceRecoveryPlan|null>('history.sourceRecoveryPlan',{token:scope.token,report});
+  if(plan&&plan.target.tables.length===0&&plan.anchors.length===0){
+   const target=await channel.target(scope,signal);await this.contacts.validate(scope.token);signal.throwIfAborted();
+   this.recoveries.set(target,{planDigest:plan.digest,recovery:{target,cursor:null,anchors:[]}});return target;
+  }
+  if(plan){
+   if(!channel.recoverTarget||report.capabilities?.recoverFromLocalIds!=='supported')throw new StorageFailure('history_source_recovery_unsupported');
+   const recovery=await channel.recoverTarget(scope,plan.target,plan.positions,signal);await this.contacts.validate(scope.token);signal.throwIfAborted();
+   this.recoveries.set(recovery.target,{planDigest:plan.digest,recovery});return recovery.target;
+  }
   if(channel.resumeTarget&&report.capabilities?.durableIncremental==='supported'){
    const checkpoint=await this.storage.execute<{target:HistoryTarget;cursor:string}|null>('history.resumeCheckpoint',{token:scope.token,report});
    if(checkpoint){const resumed=await channel.resumeTarget(scope,checkpoint.target,checkpoint.cursor,signal);await this.contacts.validate(scope.token);if(resumed)return resumed;}
+  }
+  if(channel.recoverTarget&&report.capabilities?.recoverFromLocalIds==='supported'){
+   plan=await this.storage.execute<SourceRecoveryPlan|null>('history.sourceRecoveryPlan',{token:scope.token,report,allowUnfenced:true});
+   if(plan){const recovery=await channel.recoverTarget(scope,plan.target,plan.positions,signal);await this.contacts.validate(scope.token);signal.throwIfAborted();this.recoveries.set(recovery.target,{planDigest:plan.digest,recovery});return recovery.target;}
   }
   return channel.target(scope,signal);
  }
@@ -390,7 +419,7 @@ export class SqliteHistoryService {
    goal=armed.revalidated||reportGrowth||freshTarget?undefined:pendingOnRetainedGuard??await this.storage.execute<PendingGoal|null>('history.pending',{token:scope.token,report})??undefined;
    if(!goal){const target=freshTarget??await channel.target(scope,controller.signal);await check();
     if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target,report}))throw new StorageFailure('history_source_continuity_unverified');
-    goal=await this.storage.execute('history.begin',{token:scope.token,target,report,id:randomUUID(),at:Date.now()});}
+    goal=await this.storage.execute('history.begin',{token:scope.token,target,report,id:randomUUID(),at:Date.now(),recoveryCursor:this.recoveries.get(target)?.recovery.cursor});}
    if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target:goal!.target,report}))throw new StorageFailure('history_source_continuity_unverified');
    registerGoal(goal!.id);
    // 旧读取器的未完成页只能保留当前快照；新能力在有界片段末页取得并接受持久恢复证明。
@@ -474,7 +503,7 @@ export class SqliteHistoryService {
    const armed=await armGuard(freshTarget?{report,target:freshTarget}:undefined),guardId=armed.guardId;
    await check();await this.storage.execute('history.guardAuthorize',{token:scope.token,guardId});this.rememberBodySupport(contactId,report);
    if(armed.revalidated||freshTarget){
-    await this.storage.execute('history.begin',{token:scope.token,target:freshTarget,report,id:randomUUID(),at:Date.now()});
+    await this.storage.execute('history.begin',{token:scope.token,target:freshTarget,report,id:randomUUID(),at:Date.now(),recoveryCursor:freshTarget?this.recoveries.get(freshTarget)?.recovery.cursor:undefined});
     wakeGrowth=true;
     return await this.storage.execute<HistoryCoverage>('history.coverage',{ownerId:this.contacts.ownerId,contactId});
    }

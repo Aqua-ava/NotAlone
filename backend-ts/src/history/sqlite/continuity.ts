@@ -6,7 +6,7 @@ import { reusableEmptyGoals } from './goal-reuse.ts';
 
 const reason = 'history_source_continuity_unverified';
 export const normalUseContinuity = 'same-source-instances-normal-use-v1';
-const lostCodes=new Set(['history_source_changed','history_source_unverified','history_external_scope_changed','history_scope_changed','history_schema_changed','history_shards_changed','history_cursor_scope_changed','history_support_changed','history_target_unverified','history_quote_source_changed']);
+const lostCodes=new Set(['history_source_changed','history_external_scope_changed','history_scope_changed','history_schema_changed','history_shards_changed','history_cursor_scope_changed','history_support_changed','history_target_unverified','history_quote_source_changed']);
 export const isSourceContinuityLost=(error:unknown):boolean=>error instanceof StorageFailure&&lostCodes.has(error.code);
 function tables(target: HistoryTarget): string {
  const value:{partitions:string[];tables:[string,string][];checkedPartitions?:string[]}={
@@ -148,17 +148,17 @@ function priorNormalUse(tx:StorageTransaction,token:ReadEligibility,stored:strin
 }
 /** 仅允许已知 normal-use 支持档对旧 runtime/clean loss 走 metadata-only 重验。 */
 export function normalUseRevalidationCandidate(tx:StorageTransaction,token:ReadEligibility):boolean {
- if(tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]))return false;
+ const fenced=Boolean(tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]));
  const lease=tx.get('SELECT * FROM history_guard_lease WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
  const runtime=tx.get('SELECT runtime_id FROM database_instance WHERE slot=1');
- if(!lease||(lease.state==='active'&&lease.runtime_id===runtime?.runtime_id))return false;
+ if(!lease||(!fenced&&lease.state==='active'&&lease.runtime_id===runtime?.runtime_id))return false;
  if(lease.binding_id!==token.binding_id||lease.conversation_id!==token.conversation_id||lease.source_generation!==token.source_generation)return false;
  const scope=tx.get('SELECT conversation_id,source_generation,tables_json FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
  if(!scope||scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation||!scope.tables_json)return false;
  return priorNormalUse(tx,token,String(scope.tables_json));
 }
 /** 用当前报告与新目标完成跨运行代次的来源握手；成功后才租约续期并废弃旧游标。 */
-export function prepareNormalUseTarget(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,report:HistorySupportReport,guardId:string):{ok:boolean;revalidated:boolean} {
+export function prepareNormalUseTarget(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,report:HistorySupportReport,guardId:string,verifiedRecovery=false):{ok:boolean;revalidated:boolean} {
  const accountKey=report.accountKey;
  const runtime=tx.get('SELECT runtime_id FROM database_instance WHERE slot=1');
  if(!runtime?.runtime_id||typeof accountKey!=='string'||!accountKey||!guardId)return {ok:false,revalidated:false};
@@ -173,7 +173,7 @@ export function prepareNormalUseTarget(tx:StorageTransaction,token:ReadEligibili
  if(scope?.tables_json){
   const previous=storedTarget(String(scope.tables_json),token.source_generation);
   if(!previous||previous.accountKey!==accountKey)return {ok:fenceContinuity(tx,token,'N03'),revalidated:false};
-  storedTransition=historyTargetTransition(previous.target,target,priorPartitionGrowth(tx,token,report));
+  storedTransition=historyTargetTransition(previous.target,target,verifiedRecovery&&report.capabilities?.partitionGrowth==='supported'||priorPartitionGrowth(tx,token,report));
   if(storedTransition===null)return {ok:fenceContinuity(tx,token,'N04'),revalidated:false};
   if(storedTransition==='growth'||storedTransition==='legacy-exact-upgrade')nextScopeValue=identity(target,accountKey);
  }else{
