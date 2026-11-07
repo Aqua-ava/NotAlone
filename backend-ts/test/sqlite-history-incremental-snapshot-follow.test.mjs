@@ -6,7 +6,7 @@ import { IncrementalHistoryCoordinator } from '../src/history/sqlite/incremental
 import { StorageFailure } from '../src/storage/sqlite/contracts.ts';
 import { FirstHistoryCoordinator } from '../src/history/sqlite/coordinator.ts';
 
-async function parkedFixture(t) {
+async function parkedFixture(t,{durableHistory=true}={}) {
   const cleanup = [], f = await fixture({ after: callback => cleanup.push(callback) },{registryModule:new URL('./fixtures/history-parked-registry.mjs',import.meta.url).href});
   const state = { owner: undefined, releaseOwner: undefined, tail: Promise.resolve(), parks: 0, pages: 0, tails: [], serial:0,resumes:0, channels: [], wakes: [] };
   // 只替代原生进程租约边界；顺序、停车回调、历史目标、守卫和存储均走生产服务。
@@ -31,9 +31,10 @@ async function parkedFixture(t) {
       inspect: async scope => {
         current.scope = scope;
         return { ...await f.channel.inspect(scope), continuity: 'same-source-instances-normal-use-v1',
-          capabilities: { incrementalTail: 'supported',durableIncremental:'supported' } };
+          // 当前 v3 同时声明两项持久能力；兼容用例明确模拟尚无历史检查点的旧读取器。
+          capabilities: { incrementalTail: 'supported',durableIncremental:'supported',...(durableHistory?{durableHistory:'supported'}:{}) } };
       },
-      page: async (scope, target, cursor) => {await state.beforePage?.(scope);assert.equal(target.descriptor,current.descriptor);state.pages++;current.tailCursor=`checkpoint-${target.descriptor}`;return { target: target.descriptor, cursorIn: cursor, cursorOut: null,
+      page: async (scope, target, cursor) => {await state.beforePage?.(scope);assert.equal(target.descriptor,current.descriptor);state.pages++;current.tailCursor=`checkpoint-${target.descriptor}`;if(state.pageFactory)return state.pageFactory(scope,target,cursor,current);return { target: target.descriptor, cursorIn: cursor, cursorOut: null,
         records: [record('1', { text: `合成历史：${scope.conversationKey}` })], completedPartitions: ['shard-a'],
         exhausted: true, resumeCursor: current.tailCursor };},
       tail: async (_scope, target, cursor) => { assert.equal(target.descriptor,current.descriptor,'旧快照目标不能传给当前原生读取器');assert.equal(cursor,current.tailCursor,'必须使用本次交接产生的游标');state.tails.push({contactId:_scope.token.contact_id,cursor});return { target: target.descriptor, cursorIn: cursor, cursorOut: cursor, records: [], caughtUp: true };},
@@ -68,6 +69,29 @@ test('多联系人停车后新快照在同一租约接纳交接与增量，连�
   assert.equal((await f.history.read(b.contact_id)).messages.length,1);
  }
  assert.ok(f.state.resumes>=2,'停车后沿持久检查点恢复');
+});
+
+test('旧读取器缺少持久历史检查点时交回原首次路径并在同一租约扫完33页',{timeout:20000},async t=>{
+ const f=await parkedFixture(t,{durableHistory:false}),[a,b]=f.saved;f.state.dynamicSnapshots=true;
+ await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
+ f.state.pageFactory=(_scope,target,cursor,current)=>{
+  const page=cursor===null?1:Number(cursor.replace('synthetic-legacy-page-',''))+1,exhausted=page===33;
+  assert.ok(page>=1&&page<=33);
+  return {target:target.descriptor,cursorIn:cursor,cursorOut:exhausted?null:`synthetic-legacy-page-${page}`,
+   records:[record(String(page+1))],completedPartitions:exhausted?['shard-a']:[],exhausted,
+   ...(exhausted?{resumeCursor:current.tailCursor}:{})};
+ };
+ const pages=f.state.pages,tails=f.state.tails.length;
+ await f.history.synchronizeIncremental(a.contact_id,undefined,{followHistoryHandoff:true});
+ assert.equal(f.state.pages,pages,'缺少持久历史检查点时不能进入32页交接切片');
+ assert.equal(f.state.tails.length,tails);
+ assert.deepEqual(f.state.wakes,[a.contact_id],'保留原首次历史交接');
+ const directory={directory:async()=>{const saved=await f.contacts.syncDirectory();return {...saved,bindings:saved.bindings.filter(row=>row.contact_id===a.contact_id)};}};
+ const first=new FirstHistoryCoordinator(directory,f.history);t.after(()=>first.close());
+ first.wakeContact(a.contact_id);await first.waitForIdle();
+ assert.equal(f.state.pages-pages,33,'旧读取器在同一租约保留普通游标直到终页');
+ assert.equal((await f.history.coverage(a.contact_id)).phase,'complete');
+ assert.equal((await f.history.read(a.contact_id)).messages.length,34);
 });
 
 test('新完整历史的守卫重验作废旧增量后仍自动续读两轮',{timeout:20000},async t=>{

@@ -507,7 +507,9 @@ export class SqliteHistoryService {
     const handoff=await this.storage.execute<PendingGoal>('history.begin',{token:scope.token,target:freshTarget,report,id:randomUUID(),at:Date.now(),recoveryCursor:freshTarget?this.recoveries.get(freshTarget)?.recovery.cursor:undefined});
     // 多联系人切换会不断产生新快照；已证明的恢复点须在本次租约内交接并读增量，不能每轮只留给首次协调器。
     const provedResume=freshTarget&&(this.resumedTargets.has(freshTarget)||Boolean(this.recoveries.get(freshTarget)?.recovery.cursor));
-    if(!options.followHistoryHandoff||!provedResume){wakeGrowth=true;return await this.coverage(contactId);}
+    // 有界交接会在预算耗尽时释放租约；旧读取器仍由首次路径持有快照直到终页。
+    const durableHandoff=report.capabilities?.durableHistory==='supported'&&report.capabilities?.durableIncremental==='supported';
+    if(!options.followHistoryHandoff||!provedResume||!durableHandoff){wakeGrowth=true;return await this.coverage(contactId);}
     registerGoal(handoff.id);
     try{
      for(let index=0;index<32;index++){
