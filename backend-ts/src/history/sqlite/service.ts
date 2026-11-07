@@ -52,6 +52,7 @@ export class SqliteHistoryService {
  private readonly active=new Map<string,ActiveHistoryRead>();
  private readonly guards=new Map<string,RetainedGuard>();
  private readonly recoveries=new WeakMap<HistoryTarget,{planDigest:string;recovery:HistoryRecoveryResult}>();
+ private readonly resumedTargets=new WeakSet<HistoryTarget>();
  private closed=false;
  private readonly shared?:SharedWechatClient;
  private readonly queued=new Map<string,{controller:AbortController;done:Promise<void>}>();
@@ -367,7 +368,7 @@ export class SqliteHistoryService {
   }
   if(channel.resumeTarget&&report.capabilities?.durableIncremental==='supported'){
    const checkpoint=await this.storage.execute<{target:HistoryTarget;cursor:string}|null>('history.resumeCheckpoint',{token:scope.token,report});
-   if(checkpoint){const resumed=await channel.resumeTarget(scope,checkpoint.target,checkpoint.cursor,signal);await this.contacts.validate(scope.token);if(resumed)return resumed;}
+   if(checkpoint){const resumed=await channel.resumeTarget(scope,checkpoint.target,checkpoint.cursor,signal);await this.contacts.validate(scope.token);if(resumed){this.resumedTargets.add(resumed);return resumed;}}
   }
   if(channel.recoverTarget&&report.capabilities?.recoverFromLocalIds==='supported'){
    plan=await this.storage.execute<SourceRecoveryPlan|null>('history.sourceRecoveryPlan',{token:scope.token,report,allowUnfenced:true});
@@ -465,7 +466,7 @@ export class SqliteHistoryService {
   });}finally{if(wakeGrowth)this.wakeFirstHistory(contactId);}
  }
  /** 增量只从已证明的完整作用域检查点续读；每页接受前由存储动作复验资格、代次与删除状态。 */
- async synchronizeIncremental(contactId:string,signal?:AbortSignal):Promise<HistoryCoverage>{
+ async synchronizeIncremental(contactId:string,signal?:AbortSignal,options:{followHistoryHandoff?:boolean}={}):Promise<HistoryCoverage>{
   let wakeGrowth=false;
   try{return await this.withChannel(contactId,signal,async(scope,channel,controller,registerGoal,armGuard,metadataRevalidation,retainedGuardAvailable,releaseNormalUseGuard)=>{
   let goal:{id:string;target:HistoryTarget;cursor:string}|undefined;
@@ -503,9 +504,32 @@ export class SqliteHistoryService {
    const armed=await armGuard(freshTarget?{report,target:freshTarget}:undefined),guardId=armed.guardId;
    await check();await this.storage.execute('history.guardAuthorize',{token:scope.token,guardId});this.rememberBodySupport(contactId,report);
    if(armed.revalidated||freshTarget){
-    await this.storage.execute('history.begin',{token:scope.token,target:freshTarget,report,id:randomUUID(),at:Date.now(),recoveryCursor:freshTarget?this.recoveries.get(freshTarget)?.recovery.cursor:undefined});
-    wakeGrowth=true;
-    return await this.storage.execute<HistoryCoverage>('history.coverage',{ownerId:this.contacts.ownerId,contactId});
+    const handoff=await this.storage.execute<PendingGoal>('history.begin',{token:scope.token,target:freshTarget,report,id:randomUUID(),at:Date.now(),recoveryCursor:freshTarget?this.recoveries.get(freshTarget)?.recovery.cursor:undefined});
+    // 多联系人切换会不断产生新快照；已证明的恢复点须在本次租约内交接并读增量，不能每轮只留给首次协调器。
+    const provedResume=freshTarget&&(this.resumedTargets.has(freshTarget)||Boolean(this.recoveries.get(freshTarget)?.recovery.cursor));
+    if(!options.followHistoryHandoff||!provedResume){wakeGrowth=true;return await this.coverage(contactId);}
+    registerGoal(handoff.id);
+    try{
+     for(let index=0;index<32;index++){
+      await check();if(!await this.storage.execute<boolean>('history.guardCheck',{token:scope.token,guardId}))throw new StorageFailure('history_source_continuity_unverified');
+      const checkpoint=index===31&&report.capabilities?.durableHistory==='supported';
+      const page=await channel.page(scope,handoff.target,handoff.cursor,controller.signal,checkpoint?{checkpoint:true}:undefined);
+      if(checkpoint&&!page.exhausted&&!page.checkpointCursor)throw new StorageFailure('history_page_invalid');
+      await this.quarantinePageStates(contactId,scope,handoff,page);await check();
+      const currentReport=await inspect();
+      if(serializeSupport(currentReport)!==serializeSupport(report))throw new StorageFailure(isPartitionGrowthTargetChange(report,currentReport)?'history_target_growth_required':'history_support_changed');
+      const accepted=await this.storage.execute<AcceptedPage>('history.acceptPage',{token:scope.token,goalId:handoff.id,captureId:randomUUID(),page,at:Date.now(),runtimeToken:this.storage.status.runtimeId,guardId,notifyMessageChanges:true});
+      const coverage=this.publishAcceptedMessages(contactId,accepted,false);
+      if(page.exhausted){
+       if(!coverage.traversalComplete||!coverage.incremental?.cursorPresent||!['ready','incomplete'].includes(coverage.incremental.phase)){wakeGrowth=true;return coverage;}
+       break;
+      }
+      handoff.cursor=page.cursorOut;
+      if(index===31){wakeGrowth=true;return coverage;}
+     }
+    }catch(error){
+     try{await this.storage.execute('history.interrupt',{token:scope.token,goalId:handoff.id,code:error instanceof StorageFailure?error.code:'history_read_interrupted'});}catch{/* 撤权或删除后的旧资格不能再更新任务。 */}throw error;
+    }
    }
    if(typeof channel.tail!=='function')throw new StorageFailure('history_tail_unsupported');
    // 只有支持档明确声明增量能力才继续；仅存在方法不等于认证通过。
