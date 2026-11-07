@@ -95,9 +95,13 @@ for (const entry of objects) {
 }
 const trees = new Map();
 const roots = new Set();
-const batch = git(['cat-file', '--batch'], { input: objectIds.join('\n') + '\n' });
+// 对象闭包总量已越过单次 cat-file 的缓存上限：按批输入对象 OID，解析与顺序校验逐批保持不变。
+const BATCH_SIZE = 200;
+for (let batchStart = 0; batchStart < objectIds.length; batchStart += BATCH_SIZE) {
+const sliceIds = objectIds.slice(batchStart, batchStart + BATCH_SIZE);
+const batch = git(['cat-file', '--batch'], { input: sliceIds.join('\n') + '\n' });
 let position = 0;
-for (const expected of objectIds) {
+for (const expected of sliceIds) {
   const end = batch.indexOf(10, position);
   const header = batch.toString('ascii', position, end).split(' ');
   if (end < 0 || header[0] !== expected || !/^\d+$/.test(header[2] ?? '')) throw new Error('Git 对象流无效');
@@ -121,6 +125,7 @@ for (const expected of objectIds) {
   position = stop + 1;
 }
 if (position !== batch.length) throw new Error('Git 对象流有剩余字节');
+}
 // 同一对象可以出现在多个路径；按树与路径组合遍历，避免去重时漏掉禁用名称。
 const visitedTrees = new Set();
 function inspectTree(treeId, prefix) {
