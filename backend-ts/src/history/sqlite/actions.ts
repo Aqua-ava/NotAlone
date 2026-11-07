@@ -14,10 +14,12 @@ import { assertHistoryCursor, historyCursorScheme, historyCursorScopeDigest } fr
 import { isPartitionGrowthReportChange, isPartitionGrowthTargetChange } from '../partition-growth.ts';
 import { assertHistoryReadBoundary } from './suppression.ts';
 import { purgeStaleGoals } from './goal-retention.ts';
+// 规范化与空目标复用判据集中在 goal-reuse.ts；这里 re-export 保持既有导入点不变。
+import { serializeSupport, reusableEmptyGoals } from './goal-reuse.ts';
 import { assertSourceContinuity, assertCheckpointSourceContinuity, assertLiveGuard, fenceContinuity, normalUseContinuity, normalUseRevalidationCandidate, prepareNormalUseTarget, preflightGeneration, preflightTarget } from './continuity.ts';
 const fail:(code:string)=>never=(code)=>{throw new StorageFailure(code);};
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any)=>unknown):StorageAction=>({name,mode,retryBusy:true,execute});
-export const serializeSupport=(report:HistorySupportReport):string=>JSON.stringify(Object.fromEntries(Object.entries(report).sort(([a],[b])=>a.localeCompare(b))));
+export { serializeSupport };
 const publicSupportReasons=new Set(['history_message_state_unverified','history_source_lifecycle_unverified',
  'history_snapshot_runtime_proof_required','history_partition_coverage_runtime_proof_required']);
 const absentTargetProfile='wechat-4.0.6-29387-absent-private-target-v1';
@@ -191,9 +193,22 @@ export const historyActions:StorageAction[]=[
  action('history.begin','write',(tx,i)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertSupport(i.report);
   const target=targetOf(i.target,token,i.report);assertHistoryReadBoundary(tx,token,{kind:'history'});if(i.recertifyId)assertRecertifyAccess(tx,token,i.recertifyId,i.guardId,target);else assertSourceContinuity(tx,token,target,i.report?.continuity===normalUseContinuity?i.report.accountKey:undefined);
-  // 新固定快照会替换原生读取器中的目标；旧目标的增量游标不能再交给该读取器。
-  tx.run("UPDATE read_goal SET state='invalidated',failure_code='history_snapshot_replaced' WHERE owner_id=? AND contact_id=? AND kind='incremental' AND state IN ('running','incomplete')",[token.owner_id,token.contact_id]);
   const scopeDigest=historyCursorScopeDigest(token,i.report,target);
+  // 阶段 B（任务 01）：同一联系人仍有与本次固定快照完全同范围、0 页且无记录进展的空目标时，
+  // 直接续用最新的一个（不 INSERT、不重复作废）。摘要一致证明原生读取器目标未被替换；重新认证
+  // 操作（i.recertifyId）始终新建目标作审计关联。任一复用前提不成立则保持旧行为。
+  const reusable=typeof i.recertifyId==='string'&&i.recertifyId?[]:reusableEmptyGoals(tx,token,i.report,target);
+  const reusableHistory=reusable.find(goal=>goal.kind==='history');
+  const reusableIds=new Set(reusable.map(goal=>goal.id));
+  if(reusable.length){
+   const staleCandidates=tx.all("SELECT id FROM read_goal WHERE owner_id=? AND contact_id=? AND kind='incremental' AND state IN ('running','incomplete')",[token.owner_id,token.contact_id])
+    .map(row=>String(row.id)).filter(id=>!reusableIds.has(id));
+   // 新固定快照会替换原生读取器中的目标；旧目标的增量游标不能再交给该读取器。
+   if(staleCandidates.length)tx.run(`UPDATE read_goal SET state='invalidated',failure_code='history_snapshot_replaced' WHERE owner_id=? AND contact_id=? AND kind='incremental' AND state IN ('running','incomplete') AND id IN (${staleCandidates.map(()=>'?').join(',')})`,[token.owner_id,token.contact_id,...staleCandidates]);
+  }else{
+   tx.run("UPDATE read_goal SET state='invalidated',failure_code='history_snapshot_replaced' WHERE owner_id=? AND contact_id=? AND kind='incremental' AND state IN ('running','incomplete')",[token.owner_id,token.contact_id]);
+  }
+  if(reusableHistory){purgeStaleGoals(tx,token.owner_id,token.contact_id);return {id:reusableHistory.id,target:reusableHistory.target,cursor:reusableHistory.cursor};}
   tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,state,coverage_state,created_at,cursor_scope_digest,cursor_scheme,creation_no) VALUES(?,?,?,?,?,?,?,'history',?,?,?,?,?,'running','partial',?,?,?,(SELECT coalesce(max(creation_no),0)+1 FROM read_goal WHERE creation_no IS NOT NULL))`,[token.owner_id,i.id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation),target.protocol,target.descriptor,JSON.stringify(target),JSON.stringify(token),serializeSupport(i.report),i.at,scopeDigest,historyCursorScheme]);
   purgeStaleGoals(tx,token.owner_id,token.contact_id);
   return {id:i.id,target,cursor:null};

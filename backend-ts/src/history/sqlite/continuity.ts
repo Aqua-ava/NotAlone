@@ -2,6 +2,7 @@ import { StorageFailure, type StorageTransaction } from '../../storage/sqlite/co
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistorySupportReport, HistoryTarget } from './contracts.ts';
 import { historyTargetTransition, isPartitionGrowthTargetChange, type HistoryTargetTransition } from '../partition-growth.ts';
+import { reusableEmptyGoals } from './goal-reuse.ts';
 
 const reason = 'history_source_continuity_unverified';
 export const normalUseContinuity = 'same-source-instances-normal-use-v1';
@@ -194,7 +195,15 @@ export function prepareNormalUseTarget(tx:StorageTransaction,token:ReadEligibili
   else tx.run('INSERT INTO history_continuity_scope VALUES(?,?,?,?,?)',[token.owner_id,token.contact_id,token.conversation_id,token.source_generation,nextScopeValue]);
  }
  if(revalidated){
-  tx.run("UPDATE read_goal SET state='invalidated',failure_code='history_runtime_revalidated' WHERE owner_id=? AND contact_id=? AND kind IN ('history','incremental') AND state IN ('running','incomplete')",[token.owner_id,token.contact_id]);
+  // 阶段 B（任务 01）：与本次重验完全同范围、0 页且无记录进展的空目标保持 running，
+  // 由随后的 history.begin／history.incrementalPending 续用，不再先作废再重建；
+  // 其余行仍按原样作废（作废行是审计记录，此改动不会把已作废行改回 running）。
+  const keepIds=reusableEmptyGoals(tx,token,report,target).map(goal=>goal.id);
+  if(keepIds.length){
+   tx.run(`UPDATE read_goal SET state='invalidated',failure_code='history_runtime_revalidated' WHERE owner_id=? AND contact_id=? AND kind IN ('history','incremental') AND state IN ('running','incomplete') AND id NOT IN (${keepIds.map(()=>'?').join(',')})`,[token.owner_id,token.contact_id,...keepIds]);
+  }else{
+   tx.run("UPDATE read_goal SET state='invalidated',failure_code='history_runtime_revalidated' WHERE owner_id=? AND contact_id=? AND kind IN ('history','incremental') AND state IN ('running','incomplete')",[token.owner_id,token.contact_id]);
+  }
   tx.run("UPDATE history_guard_lease SET binding_id=?,conversation_id=?,source_generation=?,guard_id=?,runtime_id=?,state='active' WHERE owner_id=? AND contact_id=?",[token.binding_id,token.conversation_id,token.source_generation,guardId,runtime.runtime_id,token.owner_id,token.contact_id]);
  }else if(!lease){
   tx.run("INSERT INTO history_guard_lease VALUES(?,?,?,?,?,?,?,'active')",[token.owner_id,token.contact_id,token.binding_id,token.conversation_id,token.source_generation,guardId,runtime.runtime_id]);
