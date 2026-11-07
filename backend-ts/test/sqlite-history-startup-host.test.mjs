@@ -10,6 +10,7 @@ import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 import { createWechatContactMetadata } from '../src/contacts/sqlite/wechat-metadata.ts';
 import { launchDsh } from '../src/launch.ts';
 import {png} from './visual-media-support.mjs';
+import {DatabaseSync} from 'node:sqlite';
 
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const account='synthetic-startup-owner',conversation='friend-a',generation='a'.repeat(64);
@@ -22,7 +23,7 @@ async function ready(probe,accept,message){
  do{const value=await probe();if(accept(value))return value;await delay(25);}while(Date.now()<deadline);
  throw new Error(message);
 }
-async function fixture(t,{images=false}={}){
+async function fixture(t,{images=false,recovery=false}={}){
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-history-startup-'))),artifact=join(root,'synthetic-artifact'),userData=join(root,'storage');
  await mkdir(join(artifact,'bin'),{recursive:true});await mkdir(join(artifact,'lib'));await mkdir(userData);
  const executable=join(artifact,'bin','wx-cli'),planFile=join(root,'synthetic-plan'),logFile=join(root,'synthetic-requests'),wcdbFile=join(artifact,'lib','libWCDB.dylib');
@@ -42,9 +43,11 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
  else if(r.op==='release-selection')data={released:true};
  else if(r.op==='resolve'){selectedConversation=r.displayName;schema.scopeDigest=hash('${account}'+String.fromCharCode(0)+selectedConversation);data={accountKey:'${account}',conversationKey:selectedConversation,displayName:'合成甲',sourceGeneration:'${generation}'};}
  else if(r.op==='inspect')data=schema;
- else if(r.op==='support')data={protocol:'private-history-v1',profileId:'synthetic-startup-history-v1',adapterVersion:'1',status:plan.history,reason:plan.history==='supported'?null:'history_message_state_unverified',accountKey:'${account}',conversationKey:selectedConversation,sourceGeneration:'${generation}',programVersion:'4.0.6',build:'29387',artifactSha256:cli,schemaFingerprint:schema.schemaFingerprint,declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-final-status',continuity:'${images?'same-source-instances-normal-use-v1':'synthetic-fixed-source'}'};
+ else if(r.op==='support')data={protocol:'private-history-v1',profileId:'synthetic-startup-history-v1',adapterVersion:'1',status:plan.history,reason:plan.history==='supported'?null:'history_message_state_unverified',accountKey:'${account}',conversationKey:selectedConversation,sourceGeneration:'${generation}',programVersion:'4.0.6',build:'29387',artifactSha256:cli,schemaFingerprint:schema.schemaFingerprint,declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-final-status',continuity:'${images||recovery?'same-source-instances-normal-use-v1':'synthetic-fixed-source'}'${recovery?",capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','recoverFromLocalIds'].map(key=>[key,'supported']))":''}};
+ else if(r.op==='recover-target')data={target:{protocol:'private-history-v1',descriptor:'synthetic-startup-target',partitions:schema.checkedPartitions,tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'},cursor:'synthetic-recovery',anchors:[{partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'contact',kind:'text',text:'仅合成的启动首次历史',originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified',status:'0'}]};
+ else if(r.op==='tail')data={target:r.target,cursorIn:r.cursor,cursorOut:r.cursor,records:[],caughtUp:true};
  else if(r.op==='target')data={protocol:'private-history-v1',descriptor:'synthetic-startup-target',partitions:schema.checkedPartitions,tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'};
- else if(r.op==='page')data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[{partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'contact',kind:'${images?'image':'text'}',text:${images?'null':"'仅合成的启动首次历史'"},originalType:'${images?'3':'1'}',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified',status:'0'}],completedPartitions:schema.checkedPartitions,exhausted:true};
+ else if(r.op==='page')data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:r.cursor==='synthetic-recovery'?[]:[{partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'contact',kind:'${images?'image':'text'}',text:${images?'null':"'仅合成的启动首次历史'"},originalType:'${images?'3':'1'}',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified',status:'0'}],completedPartitions:schema.checkedPartitions,exhausted:true};
  else if(r.op==='image-open'){
  const qualityProof={kind:'wechat-message-image-content-v2',resourceInfoId:'10',matchingResourceIds:['20'],resourceSize:imageBytes.length,verifiedBytes:imageBytes.length,verifiedSha256:imageDigest,sourceSha256:imageDigest,conversion:'none',contentWidth:1,contentHeight:1,sourceVariant:'main',matchingResources:[{resourceId:'20',resourceTypeRaw:262145}],originalProof:null};
  data={protocol:'wechat-original-image-v1',resourceToken:'synthetic-startup-image',sourceGeneration:'${generation}',resourceSourceGeneration:'${generation}',target:r.target,partition:r.partition,table:r.table,localId:r.localId,serverId:r.serverId,sentAt:r.sentAt,resourceTable:'wechat-message-resource-v1',resourceId:'20',resourceTypeRaw:262145,variantCode:4,complete:true,quality:'unknown',qualityProof,expectedBytes:imageBytes.length,expectedSha256:imageDigest,mimeType:'image/png',envelope:'plain',sourceEnvelope:'plain'};
@@ -162,4 +165,37 @@ test('正式profile可只自动处理全部已授权联系人图片，已保存�
  const progress=(await restarted.request('/api/runtime/status')).body.image_sync;assert.equal(progress.checked,1);assert.equal(progress.failed,0);assert.equal(progress.last_failure_code,null);
  assert.equal((await restarted.request('/api/ledger/summary')).body.total_calls,0);
  await restarted.shutdown();noCliOrphans(await requests(f));
+});
+
+
+test('正式宿主原地恢复完成不擅自清理未登记的旧副本',{timeout:45000},async t=>{
+ const f=await fixture(t,{recovery:true}),initial=await start(f,{manual:true}),selected=await authorize(initial);
+ await initial.request('/api/sync/enable','POST',{});
+ assert.equal((await initial.request(`/api/contacts/${selected.contactId}/history/sync`,'POST',{})).status,200);
+ await initial.shutdown();
+ // 仅构造历史已存在的旧绑定、无引用消息与完成审计；不制造清理请求。
+ const file=join(f.userData,'managed/sqlite/notalone.sqlite'),db=new DatabaseSync(file);
+ const binding=db.prepare("SELECT * FROM conversation_binding WHERE contact_id=? AND state='verified'").get(selected.contactId),message=db.prepare('SELECT * FROM message WHERE contact_id=?').get(selected.contactId),oldBinding=randomUUID(),oldMessage=randomUUID();
+ const insert=(table,row)=>db.prepare(`INSERT INTO ${table}(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(()=>'?').join(',')})`).run(...Object.values(row));
+ insert('conversation_binding',{...binding,id:oldBinding,state:'revoked'});
+ insert('message',{...message,id:oldMessage,binding_id:oldBinding,display_no:message.display_no+1});
+ const at=Date.now();
+ insert('history_source_recertification',{owner_id:selected.ownerId,id:randomUUID(),contact_id:selected.contactId,request_key:'synthetic-old-copy',runtime_id:'synthetic-old-runtime',state:'completed',stage:'completed',started_at:at,updated_at:at,finished_at:at,old_binding_id:oldBinding,new_binding_id:binding.id,old_token_json:'{}',preserved_message_count:0,old_fence_json:'{}'});
+ db.prepare("UPDATE source_proof SET state='needs_confirmation',reason='history_source_continuity_unverified' WHERE contact_id=?").run(selected.contactId);
+ assert.equal(db.prepare('SELECT count(*) n FROM history_superseded_cleanup').get().n,0);
+ db.close();
+ const restored=await start(f,{manual:true}),key=randomUUID(),route=`/api/contacts/${selected.contactId}/history/recertify`;
+ const admitted=await restored.request(route,'POST',{request_key:key});assert.equal(admitted.status,202,JSON.stringify(admitted.body));
+ const completed=await ready(async()=>restored.request(route+`?request_key=${key}`),r=>r.body.state!=='running','synthetic_recovery_completion');
+ assert.equal(completed.body.state,'completed',JSON.stringify(completed.body));
+ // 正式关闭等待宿主已派发工作排空，然后离线核对旧副本与删除账本。
+ await restored.shutdown();
+ const after=new DatabaseSync(file,{readOnly:true});
+ try{
+  assert.equal(after.prepare('SELECT count(*) n FROM message WHERE id=?').get(oldMessage).n,1,'恢复没有删除旧副本');
+  assert.equal(after.prepare("SELECT count(*) n FROM deletion_operation WHERE scope_kind='superseded_history'").get().n,0,'恢复没有发起存量清理');
+  assert.equal(after.prepare('SELECT count(*) n FROM history_superseded_cleanup').get().n,0);
+  assert.equal(after.prepare('SELECT count(*) n FROM conversation_binding WHERE contact_id=?').get(selected.contactId).n,2);
+ }finally{after.close();}
+ noCliOrphans(await requests(f));
 });

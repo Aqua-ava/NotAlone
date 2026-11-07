@@ -231,9 +231,9 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
       historyResync=new SqliteHistoryResyncService(storage,contacts,createHistoryChannel,deletionHolders);}
     if(history){
       const proveLegacyTerminals=sqlite.wechatCliPath?await loadHostLegacyProofProvider({userData:sqlite.userData,databaseId:sqlite.expectedDatabaseId,currentExecutable:sqlite.wechatCliPath}):undefined;
-      // 修复通过后清理被取代绑定下没有派生引用的副本（ADR-175）：走统一删除账本，后台有界分批，失败留账本现场。
+      // 仅保留已登记旧清理的重启续跑；原地恢复不授权清理存量副本。
       supersededCleanup=new SupersededHistoryCleanup(storage,ownerId,deletionService);
-      historyRecertify=new SqliteHistoryRecertifyService(storage,contacts,createHistoryChannel,deletionHolders,{stopHistory:id=>history!.stop(id),onCompleted:id=>{if(automaticBackground)firstHistory?.wakeContact(id);supersededCleanup?.schedule(id);},proveLegacyTerminals});
+      historyRecertify=new SqliteHistoryRecertifyService(storage,contacts,createHistoryChannel,deletionHolders,{stopHistory:id=>history!.stop(id),onCompleted:id=>{if(automaticBackground)firstHistory?.wakeContact(id);},proveLegacyTerminals});
     }
     // 重启后只续跑已登记的清理请求与未结案的清理操作；不会主动清理没有登记的存量副本。
     if(supersededCleanup){const resume=setTimeout(()=>{void supersededCleanup?.resume().catch(()=>{});},15_000);resume.unref();}
