@@ -137,7 +137,7 @@ test('临时禁用期间真实来源失效仍立即撤下编辑及依据',{timeo
  assert.equal(f.commands.filter(c=>c.action==='read').length,1);
 });
 
-test('候选不展示Skill清单、正文及历史覆盖提示，仍可编辑回复',{timeout:30000},async t=>{
+test('候选只展示本次载入的Skill名称及来源，不展示目录清单、正文及历史覆盖提示，仍可编辑回复',{timeout:30000},async t=>{
  let data={...pageData()};
  data.requests[0].coverageWarning='历史覆盖不完整：本次使用当前可用资料，可能缺少重要语境。';
  data.requests[0].loadedSkills=[
@@ -156,9 +156,12 @@ test('候选不展示Skill清单、正文及历史覆盖提示，仍可编辑回
  await expect(region.getByText(/历史覆盖不完整/)).toHaveCount(0);
  await expect(region.getByText('实际进入模型输入的 Skill 内容',{exact:true})).toHaveCount(0);
  await expect(region.getByText(/先回应感受。|再说明边界。|辅助案例。/)).toHaveCount(0);
+ // 同一 Skill 的多个文件只显示一次，且不显示修订号。
+ await expect(region.getByText('本次载入的 Skill：合成安慰策略（模型调用）、合成边界策略（模型调用）',{exact:true})).toBeVisible();
  data={...data,requests:[{...data.requests[0],loadedSkills:[],preloadedSkills:[],skillWarning:'回复策略暂不可用'}]};
  await region.getByRole('button',{name:'刷新候选',exact:true}).click();
  await expect(region.getByText('回复策略暂不可用',{exact:true})).toBeVisible();
+ await expect(region.getByText('本次未载入 Skill',{exact:true})).toBeVisible();
  await expect(region.getByText(/本次预加载的 Skill/)).toHaveCount(0);
  await expect(region.getByRole('group',{name:'实际进入模型输入的 Skill 内容'})).toHaveCount(0);
  await region.getByRole('textbox',{name:'候选第1条',exact:true}).fill('失效策略后的候选仍可编辑');
@@ -211,6 +214,9 @@ test('候选页面读取真实版本结构、保存多条编辑稿并选择具�
  });
  const region=f.page.getByRole('region',{name:'表达工作区'}),first=region.getByRole('textbox',{name:'候选第1条',exact:true}),second=region.getByRole('textbox',{name:'候选第2条',exact:true});
  await expect(first).toHaveValue('合成候选第一条');await expect(second).toHaveValue('合成候选第二条');
+ await expect(region.getByText('共2条，按顺序分别发送，不是备选',{exact:true})).toBeVisible();
+ await expect(region.getByText('第1条（先发）')).toBeVisible();await expect(region.getByText('第2条（接着发）')).toBeVisible();
+ await expect(region.getByText('本次载入的 Skill：未命名 Skill（模型调用）',{exact:true})).toBeVisible();
  await region.getByText('依据',{exact:true}).click();await expect(region.getByText('同联系人实际输入依据',{exact:true})).toBeVisible();await expect(region.getByText('实际进入模型输入的 Skill 内容',{exact:true})).toHaveCount(0);
  await first.fill('手工修改后的第一条');await second.fill('手工修改后的第二条');await region.getByRole('button',{name:'保存修改',exact:true}).click();
  await expect.poll(()=>f.commands.filter(c=>c.action==='edit').length).toBe(1);

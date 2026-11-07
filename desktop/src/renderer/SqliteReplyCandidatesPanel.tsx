@@ -168,6 +168,14 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   if(request.generationState==='running')return '生成中';
   return `${request.candidates.length} 个说法`;
  }
+ // 展示本次请求实际载入的 Skill；来源分为模型按需调用、用户指定和自动预载。
+ function skillUsageLabel(request:CandidateRequest){
+  const found=new Map<string,CandidateRequest['loadedSkills'][number]>();
+  for(const skill of request.loadedSkills){const key=`${skill.packageId}:${skill.revisionNo}`,old=found.get(key);if(!old||skill.relativePath==='SKILL.md'&&old.relativePath!=='SKILL.md')found.set(key,skill);}
+  if(!found.size)return '本次未载入 Skill';
+  const origin=(skill:CandidateRequest['loadedSkills'][number])=>skill.origin==='explicit'?'用户指定':skill.origin==='auto_preload'?'自动预载':'模型调用';
+  return `本次载入的 Skill：${[...found.values()].map(skill=>`${skill.name??'未命名 Skill'}（${origin(skill)}）`).join('、')}`;
+ }
  function requestSummary(request:CandidateRequest,index:number,total:number){
   const summary=[requestTitle(index,total),requestStatus(request)];
   if(request.selections.length)summary.push('已选用');
@@ -211,12 +219,14 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   {page?.requests.map((request,requestIndex)=><details key={request.requestId} className="sqlite-candidate-request" open={requestOpen(request.requestId,requestIndex,page.requests.length)} onToggle={event=>toggleRequest(request.requestId,requestIndex,page.requests.length,event.currentTarget.open)}>
    <summary>{requestSummary(request,requestIndex,page.requests.length)}</summary>
    {request.skillWarning&&<p role="status">{request.skillWarning}</p>}
+   {request.sourceState==='available'&&request.candidates.length>0&&<p className="candidate-skill-usage">{skillUsageLabel(request)}</p>}
    {request.generationState==='unknown'&&<p role="status">本次模型调用结果未知，请核对原请求，不能换身份重发。</p>}
    {request.generationState==='failed'&&!progress&&!busy&&<p role="status">本次候选生成失败，没有可选正文。</p>}
    {request.sourceState==='unavailable'&&(!request.generationState||request.generationState==='committed'||request.generationState==='invalidated')&&<p role="status">这次候选的来源已失效，正文与依据已撤下。</p>}
    {request.candidates.map((candidate,candidateIndex)=>{const v=inspected[candidate.candidateId]??candidate,parts=edits[v.candidateId]??v.parts;return <article key={v.candidateId} aria-label={`说法${candidateIndex+1}`}>
     <h4>说法 {candidateIndex+1}{v.origin==='manual'&&<span> · 已修改</span>}{v.versionNo!==candidate.versionNo&&<span> · 正在回看第 {v.versionNo} 版（非最新）</span>}</h4>
-    {parts.map((part,index)=><label key={index}>第{index+1}条<textarea aria-label={`候选第${index+1}条`} value={part} disabled={busy||!available} onChange={e=>setEdits(old=>({...old,[v.candidateId]:parts.map((p,n)=>n===index?e.target.value:p)}))} /></label>)}
+    {parts.length>1&&<p className="candidate-sequence-hint">共{parts.length}条，按顺序分别发送，不是备选</p>}
+    {parts.map((part,index)=><label key={index}>第{index+1}条{parts.length>1&&(index===0?'（先发）':'（接着发）')}<textarea aria-label={`候选第${index+1}条`} value={part} disabled={busy||!available} onChange={e=>setEdits(old=>({...old,[v.candidateId]:parts.map((p,n)=>n===index?e.target.value:p)}))} /></label>)}
     <button className="button" disabled={busy||!available||!edits[v.candidateId]} onClick={()=>void run({action:'edit',candidateId:v.candidateId,versionNo:v.versionNo,parts})}>保存修改</button>
     <button className="button" disabled={busy||!available} onClick={()=>void run({action:'select',candidateId:v.candidateId,versionNo:v.versionNo})}>选用这个说法</button>
     <button className="button" disabled={busy||!available||!options.includeRelationshipContext} onClick={()=>void continueVersion(v)}>以这个说法继续</button>
