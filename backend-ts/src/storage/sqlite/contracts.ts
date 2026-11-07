@@ -20,7 +20,16 @@ export interface OpenStorageOptions {
   actionTimeoutMs?: number;
 }
 export type StorageRow = Record<string, SQLOutputValue>;
+// 仅记录固定来源围栏诊断；不承载正文、完整联系人身份或任意日志载荷。
+export interface StorageDiagnostic {
+  kind: 'history_continuity_fence';
+  contactPrefix: string;
+  branch: 'G01'|'G02'|'G03'|'G04'|'T01'|'T02'|'T03'|'N01'|'N02'|'N03'|'N04'|'N05'|'N06'|'N07'|'A01'|'A02'|'R01'|'R02'|'L01'|'C01';
+  errorCode?: string;
+}
 export interface StorageTransaction {
+  // Worker 在事务内只缓冲，提交成功后落本机日志；回滚和重试丢弃本次缓冲。
+  recordDiagnostic?(event: StorageDiagnostic): void;
   run(sql: string, values?: SQLInputValue[]): void;
   get(sql: string, values?: SQLInputValue[]): StorageRow | undefined;
   all(sql: string, values?: SQLInputValue[]): StorageRow[];

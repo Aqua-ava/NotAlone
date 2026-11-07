@@ -82,6 +82,8 @@ export class DeletionService {
         await this.storage.execute('deletion.clearTarget', {...runner, targetNo});
       }
       targetNo = undefined;
+      // 无正文诊断仍含可关联的联系人前缀；整联系人／账号删除结案前一并清除，失败沿原任务重试。
+      if(op.scope.kind==='contact'||op.scope.kind==='account')await this.storage.execute('storage.eraseContinuityDiagnostics',runner);
       const filesOkay = op.targets.every(t => t.target?.kind !== 'file' || this.files.verifyAbsent(t.target.address));
       await this.storage.execute('deletion.sealTargets', {...runner, checks: {
         runtime_files: filesOkay ? passed('managed_targets_absent') : {result: 'blocked', proof: 'managed_targets_remain'},

@@ -24,6 +24,97 @@ func notaloneGuardFixture(t *testing.T) (string, string) {
 	return directory, file
 }
 
+func TestNotaloneGuardFileRegistrationAllowsPendingSidecarWrite(t *testing.T) {
+	for _, remove := range []bool{false, true} {
+		t.Run(map[bool]string{false: "create", true: "remove"}[remove], func(t *testing.T) {
+			directory, file := notaloneGuardFixture(t)
+			queue, err := syscall.Kqueue()
+			if err != nil {
+				t.Fatal(err)
+			}
+			guard := &notaloneSourceGuard{queue: queue, lost: make(chan struct{}), closeDone: make(chan struct{}), kevent: syscall.Kevent, messageFiles: []string{file}}
+			t.Cleanup(func() { _ = guard.Close() })
+			if err := guard.add(directory, true); err != nil {
+				t.Fatal(err)
+			}
+			// 真实目录事件已入队，但固定分片的路径和实例未变。
+			sidecar := file + "-wal"
+			if err := os.WriteFile(sidecar, nil, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if remove {
+				if err := os.Remove(sidecar); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := guard.add(file, false); err != nil {
+				t.Fatalf("注册固定分片时把正常旁车事件误判为失证: %v", err)
+			}
+			if err := guard.Check(); err != nil {
+				t.Fatalf("注册后同一来源实例失效: %v", err)
+			}
+		})
+	}
+}
+
+func TestNotaloneGuardFileRegistrationPreservesPendingSourceLoss(t *testing.T) {
+	for _, change := range []string{"rename_and_restore", "replace", "new_shard", "event_error", "event_eof", "registration_error"} {
+		t.Run(change, func(t *testing.T) {
+			directory, file := notaloneGuardFixture(t)
+			extra := filepath.Join(directory, "auxiliary.db")
+			if err := os.WriteFile(extra, nil, 0600); err != nil {
+				t.Fatal(err)
+			}
+			guard, err := newNotaloneSourceGuard(directory, []string{file})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = guard.Close() })
+			must := func(err error) {
+				t.Helper()
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			switch change {
+			case "rename_and_restore":
+				must(os.Rename(file, file+".moved"))
+				must(os.Rename(file+".moved", file))
+			case "replace":
+				must(os.Rename(file, file+".old"))
+				must(os.WriteFile(file, []byte("新实例"), 0600))
+			case "new_shard":
+				must(os.WriteFile(filepath.Join(directory, "message_1.db"), nil, 0600))
+			case "event_error", "event_eof":
+				must(os.WriteFile(file+"-wal", nil, 0600))
+				// 错误标志无法由正常文件操作可靠制造；保留真实 kevent，仅污染返回事件的标志。
+				flag := uint16(syscall.EV_ERROR)
+				if change == "event_eof" {
+					flag = syscall.EV_EOF
+				}
+				guard.kevent = func(queue int, changes, events []syscall.Kevent_t, timeout *syscall.Timespec) (int, error) {
+					count, err := syscall.Kevent(queue, changes, events, timeout)
+					if count > 0 {
+						events[0].Flags |= flag
+					}
+					return count, err
+				}
+			case "registration_error":
+				guard.kevent = func(int, []syscall.Kevent_t, []syscall.Kevent_t, *syscall.Timespec) (int, error) {
+					return -1, syscall.EBADF
+				}
+			}
+			err = guard.add(extra, false)
+			if err == nil {
+				err = guard.Check()
+			}
+			if err == nil {
+				t.Fatal("登记新监听项时吞掉了已有失证或错误事件")
+			}
+		})
+	}
+}
+
 func TestNotaloneGuardAllowsExistingContentWrites(t *testing.T) {
 	directory, file := notaloneGuardFixture(t)
 	wal := filepath.Join(directory, "message_0.db-wal")

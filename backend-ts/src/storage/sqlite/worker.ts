@@ -4,10 +4,11 @@ import { randomUUID } from 'node:crypto';
 import { sha256 } from '../../platform/sha256.ts';
 import { controlledFiles } from './files.ts';
 import { statementCache } from './statement-cache.ts';
+import { ContinuityDiagnosticLog } from './continuity-diagnostic-log.ts';
 import { registry as defaultRegistry } from './registry.ts';
 import { memoryAdjudicationMigration, memoryAdjudicationRebuildPolicy, memoryAdjudicationRebuildChecksum, memoryAdjudicationUpgradeSteps } from '../../memory/sqlite/management/adjudication-schema.ts';
 import { memoryDocumentsMigration, memoryDocumentsRebuildPolicy, memoryDocumentsRebuildChecksum, memoryDocumentsUpgradeSteps } from '../../memory/sqlite/documents/schema.ts';
-import { StorageFailure, type OpenStorageOptions, type StorageRegistry, type StorageTransaction, type StorageLease, type StorageMaintenance } from './contracts.ts';
+import { StorageFailure, type OpenStorageOptions, type StorageRegistry, type StorageTransaction, type StorageLease, type StorageMaintenance, type StorageDiagnostic } from './contracts.ts';
 
 const port = parentPort!;
 const options = workerData as OpenStorageOptions;
@@ -137,6 +138,10 @@ try {
     if (!current || !lease || lease.databaseId !== databaseId || lease.runtimeId !== runtimeId || lease.epoch !== status.epoch
       || current.runtime_id !== runtimeId || current.epoch !== status.epoch) throw new StorageFailure('stale_lease');
   };
+  const diagnosticLog=new ContinuityDiagnosticLog(options.userData);
+  let diagnosticWarning=false;
+  const warnDiagnostic=()=>{if(!diagnosticWarning){diagnosticWarning=true;console.error('history_continuity_diagnostic_unavailable');}};
+  try{diagnosticLog.prune();}catch{warnDiagnostic();}
   const actions = new Map(registry.actions.map(a => [a.name, a]));
   port.postMessage({value: status});
   port.on('message', ({id, name, input, lease}) => {
@@ -149,10 +154,25 @@ try {
       if (name === 'storage.close') { connection.close(); respond({value: null}); port.close(); return; }
       files.verify();
       if (name === 'storage.check') { const value = transaction(false, () => { assertLease(lease); return checks(); }); assertLease(lease); respond({value}); return; }
+      // 仅删除协调器的有效 runner 可按持久范围清理日志；不接收任意路径或联系人前缀。
+      if(name==='storage.eraseContinuityDiagnostics'){
+        assertLease(lease);
+        const op=get('SELECT scope_kind,contact_identity,runner_token,runner_runtime,plan_revision,state FROM deletion_operation WHERE owner_identity=? AND operation_id=?',[input.ownerId,input.operationId]);
+        if(!op||op.runner_token!==input.token||op.runner_runtime!==runtimeId||op.plan_revision!==input.planRevision||op.state==='completed')throw new StorageFailure('deletion_stale_runner');
+        if(op.scope_kind==='account')diagnosticLog.erase();
+        else if(op.scope_kind==='contact'&&typeof op.contact_identity==='string'){
+          const prefix=op.contact_identity.slice(0,8);
+          // 通用删除注册表允许短合成身份；日志从未接纳非八位十六进制前缀，无对应记录可清理。
+          if(/^[a-f0-9]{8}$/.test(prefix))diagnosticLog.erase(prefix);
+        }
+        else throw new StorageFailure('deletion_scope_invalid');
+        assertLease(lease);respond({value:null});return;
+      }
       const action = actions.get(name);
       if (!action) throw new StorageFailure('action_unavailable');
       let result: unknown;
       for (let attempt = 0; ; attempt++) {
+        const diagnostics:StorageDiagnostic[]=[];
         try {
           const invoke = () => {
             assertLease(lease);
@@ -168,6 +188,11 @@ try {
                 ...files.inspectSidecars()}; },
             };
             const tx: StorageTransaction = {
+              recordDiagnostic(event) {
+                permitted();
+                if(action.mode!=='write'||diagnostics.length>=1024)throw new StorageFailure('diagnostic_transaction_invalid');
+                diagnostics.push(structuredClone(event));
+              },
               run(sql, values = []) { permitted(); prepared(sql).run(...bindings(values)); },
               get(sql, values) { permitted(); return get(sql, values); },
               all(sql, values) { permitted(); return all(sql, values); },
@@ -188,6 +213,10 @@ try {
           result = action.mode === 'maintenance' ? invoke() : transaction(action.mode === 'write', invoke);
           // WAL读事务内复核仍是旧快照；提交后新读提供返回前的租约检查点。
           if (action.mode === 'read') assertLease(lease);
+          // 事务已提交才落盘；诊断不可用不能反转已写围栏或改为允许读取。
+          for(const event of diagnostics)try{
+            diagnosticLog.append({entry:name,contactPrefix:event.contactPrefix,branch:event.branch,...(event.errorCode?{errorCode:event.errorCode}:{})});
+          }catch{warnDiagnostic();}
           break;
         } catch (error) { if (code(error) !== 'storage_busy' || !action.retryBusy || attempt >= 2) throw error; }
       }

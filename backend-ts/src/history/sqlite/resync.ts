@@ -139,7 +139,7 @@ export class SqliteHistoryResyncService {
       await this.storage.execute('history.restoreComplete', { ownerId: this.owner(), contactId, requestKey, at: Date.now() });
       return this.view(contactId, await this.stored(contactId), coverage);
     } catch (error) {
-      if (currentToken && isSourceContinuityLost(error)) await this.storage.execute('history.markContinuityLost', { token: currentToken });
+      if (currentToken && isSourceContinuityLost(error)) await this.storage.execute('history.markContinuityLost', { token: currentToken, errorCode: error instanceof StorageFailure ? error.code : undefined });
       throw error;
     } finally {
       try { if (release) await release(); } finally { try { await channel.close?.(); } catch { /* 已由 holder 关闭。 */ } }

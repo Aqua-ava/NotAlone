@@ -78,6 +78,66 @@ func TestNotaloneSourceProcessIdentityRejectsWrongPathAndStartTime(t *testing.T)
 	}
 }
 
+func TestNotaloneSourceProcessRegistrationAllowsPendingSidecarWrite(t *testing.T) {
+	path, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, err = filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := readNotaloneProcessIdentity(os.Getpid(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory, file := notaloneGuardFixture(t)
+	guard, err := newNotaloneSourceGuard(directory, []string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = guard.Close() })
+	if err := os.WriteFile(filepath.Join(directory, "message_0.db-shm"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := guard.WatchProcess(identity); err != nil {
+		t.Fatalf("注册存活进程时把正常旁车事件误判为失证: %v", err)
+	}
+	if err := guard.Check(); err != nil {
+		t.Fatalf("进程注册后同一来源实例失效: %v", err)
+	}
+}
+
+func TestNotaloneSourceProcessRegistrationRejectsPendingSourceReplacement(t *testing.T) {
+	path, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, err = filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := readNotaloneProcessIdentity(os.Getpid(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory, file := notaloneGuardFixture(t)
+	guard, err := newNotaloneSourceGuard(directory, []string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = guard.Close() })
+	if err := os.Rename(file, filepath.Join(directory, "replaced.db")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte("新实例"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := guard.WatchProcess(identity); err == nil {
+		t.Fatal("登记存活进程时未拒绝来源文件替换")
+	}
+}
+
 func TestNotaloneSourceGuardStopsWhenSourceProcessExits(t *testing.T) {
 	directory, file := notaloneGuardFixture(t)
 	child := exec.Command("/bin/cat")

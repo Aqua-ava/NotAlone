@@ -144,9 +144,9 @@ func (guard *notaloneSourceGuard) add(path string, directory bool) error {
 		event.Fflags |= syscall.NOTE_WRITE
 	}
 	// 文件不监听 WRITE/EXTEND：已有正文文件与 WAL 的正常提交不等于实例换代。
-	var events [1]syscall.Kevent_t
 	zero := syscall.Timespec{}
-	if count, err := guard.waitEvents(guard.queue, []syscall.Kevent_t{event}, events[:], &zero); err != nil || count != 0 {
+	// 注册不消费其他监听项的待处理事件；构造末尾由 Check 区分正常目录写入与真实失证。
+	if count, err := guard.waitEvents(guard.queue, []syscall.Kevent_t{event}, nil, &zero); err != nil || count != 0 {
 		return errors.New("source_guard_watch_failed")
 	}
 	return nil
