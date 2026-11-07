@@ -175,3 +175,12 @@ before-quote-tail-v2-20261101.sqlite、before-quote-tail-sync-20261101.sqlite、
 - `contact-sync-20261103-…sqlite`（1.3 GB）：用户要求先核实对应任务是否结案，本轮保留。核实方向：2026-11-03 联系人同步调试相关任务单（引用数 0，仅列入本盘点任务单）。
 - `Cache/` 等 Electron 可再生缓存：需 App 完全退出，本轮保留；按 R7 每轮开发结束退出 App 后清理。
 - 废纸篓由用户自行清空，本任务不代清空。
+
+## 13. 执行记录第二轮（2026-11-07 上午，用户批准）
+
+用户批准把 `contact-sync-20261103-*` 三件、`launch/` 目录与 `resumable-history-20261103-launch-before.json` 移入废纸篓；另按用户前轮"等迁移验证通过后再清 `before-image-reset-20261105`"的指示（迁移 43 已于当日验证通过），同批把该 1.9 GB 快照移入废纸篓。共 6 项、全部 `mv -n` 成功，无同名冲突；`lsof +D backups` 无占用；`managed/**` 与保留项未动。
+
+- 前后 du：backups 12,764,856 → 9,379,748 kB（本轮释放 3,385,108 kB ≈ 3.38 GB；首轮 8.29 GB，累计待用户清空废纸篓共约 11.67 GB）。`df -k /` 可用 43,788,448 → 41,423,460 kB（废纸篓未清空）。
+- 残留盘点：`backups/sqlite` 下现仅 3 份主快照——`before-bulk-contact-delete-20261107.sqlite`（3.0 GB，用户另会话批量删除流程生成，**尚未按 R5 登记**——该快照属另会话工作流，本任务不代登记，建议该任务收尾时补登記）、`before-fence-restart-fix-20261106.sqlite`（保留项，登记回滚点，其 -wal/-shm 随主保留）、`before-migration-43-20261107.sqlite`（本任务登记的迁移回滚点）。`notalone-pre-dedup-backups/` 空目录本轮未获批，保留。
+- `Cache/` 等可再生缓存本轮仍未清（App 当前未在跑，属 R7 每轮收尾动作）。
+- 废纸篓仍由用户自行清空。
