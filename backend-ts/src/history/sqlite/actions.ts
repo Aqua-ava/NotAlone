@@ -16,7 +16,7 @@ import { assertHistoryReadBoundary } from './suppression.ts';
 import { purgeStaleGoals } from './goal-retention.ts';
 // 规范化与空目标复用判据集中在 goal-reuse.ts；这里 re-export 保持既有导入点不变。
 import { serializeSupport, reusableEmptyGoals } from './goal-reuse.ts';
-import { assertSourceContinuity, assertCheckpointSourceContinuity, assertLiveGuard, fenceContinuity, normalUseContinuity, normalUseRevalidationCandidate, prepareNormalUseTarget, preflightGeneration, preflightTarget } from './continuity.ts';
+import { assertSourceContinuity, assertCheckpointSourceContinuity, assertLiveGuard, fenceContinuity, isSourceContinuityLost, normalUseContinuity, normalUseRevalidationCandidate, prepareNormalUseTarget, preflightGeneration, preflightTarget } from './continuity.ts';
 const fail:(code:string)=>never=(code)=>{throw new StorageFailure(code);};
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any)=>unknown):StorageAction=>({name,mode,retryBusy:true,execute});
 export { serializeSupport };
@@ -119,10 +119,10 @@ export const historyActions:StorageAction[]=[
   if(existing){
    if(existing.state==='active'&&existing.runtime_id===runtime.runtime_id&&existing.binding_id===token.binding_id
     &&existing.conversation_id===token.conversation_id&&existing.source_generation===token.source_generation)return existing.guard_id===i.guardId;
-   return fenceContinuity(tx,token);
+   return fenceContinuity(tx,token,'A01');
   }
   // 旧数据没有持久守卫记录时，不把第一次启动视为连续的恢复。
-  if(tx.get('SELECT 1 FROM read_goal WHERE owner_id=? AND contact_id=? LIMIT 1',[token.owner_id,token.contact_id]))return fenceContinuity(tx,token);
+  if(tx.get('SELECT 1 FROM read_goal WHERE owner_id=? AND contact_id=? LIMIT 1',[token.owner_id,token.contact_id]))return fenceContinuity(tx,token,'A02');
   tx.run("INSERT INTO history_guard_lease VALUES(?,?,?,?,?,?,?,'active')",[token.owner_id,token.contact_id,token.binding_id,token.conversation_id,token.source_generation,i.guardId,runtime.runtime_id]);
   return true;
  }),
@@ -140,12 +140,12 @@ export const historyActions:StorageAction[]=[
   tx.run("UPDATE history_guard_lease SET state='lost' WHERE owner_id=? AND contact_id=? AND guard_id=?",[token.owner_id,token.contact_id,i.guardId]);
   // 共享读取进程整体停止时，错误码不能证明每个空闲联系人来源失证：deferVerification 只把守卫降级为
   // lost，下一次读取仍须用当前读取器完整重验来源元数据，重验失败才由预检/续证重新围栏。
-  if(i.deferVerification!==true&&(i.normalUse!==true||i.sourceLost===true))fenceContinuity(tx,token);return true;
+  if(i.deferVerification!==true&&(i.normalUse!==true||i.sourceLost===true))fenceContinuity(tx,token,i.sourceLost===true?'R02':'R01');return true;
  }),
  action('history.markContinuityLost','write',(tx,i)=>{const token=i.token as ReadEligibility;
   if(!tx.get("SELECT 1 FROM conversation_binding WHERE owner_id=? AND contact_id=? AND id=? AND state='verified'",[token.owner_id,token.contact_id,token.binding_id]))return false;
   const scope=tx.get('SELECT conversation_id,source_generation FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
-  if(scope?.conversation_id===token.conversation_id&&scope.source_generation===token.source_generation)return fenceContinuity(tx,token);
+  if(scope?.conversation_id===token.conversation_id&&scope.source_generation===token.source_generation)return fenceContinuity(tx,token,'L01',isSourceContinuityLost(new StorageFailure(i.errorCode))?i.errorCode:undefined);
   return false;}),
  action('history.preflightContinuity','write',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);return preflightTarget(tx,token,targetOf(i.target,token,i.report),i.report);}),
  action('history.pending','read',(tx,i)=>{assertReadEligibility(tx,i.token);const goal=tx.get("SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND kind='history' AND creation_no IS NOT NULL AND state IN ('running','incomplete') AND eligibility_json=? ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1",[i.token.owner_id,i.token.contact_id,JSON.stringify(i.token)]);if(goal&&goal.support_json!==serializeSupport(i.report))fail('history_support_changed');

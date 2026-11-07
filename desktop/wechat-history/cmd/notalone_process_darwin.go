@@ -73,9 +73,9 @@ func (guard *notaloneSourceGuard) WatchProcess(identity notaloneProcessIdentity)
 	var event syscall.Kevent_t
 	syscall.SetKevent(&event, identity.pid, syscall.EVFILT_PROC, syscall.EV_ADD|syscall.EV_CLEAR)
 	event.Fflags = syscall.NOTE_EXIT | syscall.NOTE_EXEC
-	var events [1]syscall.Kevent_t
 	zero := syscall.Timespec{}
-	count, watchErr := guard.waitEvents(guard.queue, []syscall.Kevent_t{event}, events[:], &zero)
+	// 注册不消费目录旁车事件；下方仍按事件类型、来源实例及进程身份完整复核。
+	count, watchErr := guard.waitEvents(guard.queue, []syscall.Kevent_t{event}, nil, &zero)
 	current, err = readNotaloneProcessIdentity(identity.pid, identity.path)
 	if watchErr != nil || count != 0 || err != nil || current != identity || !guard.checkEvents() {
 		guard.invalid = true

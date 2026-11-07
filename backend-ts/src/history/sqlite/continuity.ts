@@ -1,4 +1,4 @@
-import { StorageFailure, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
+import { StorageFailure, type StorageTransaction, type StorageDiagnostic } from '../../storage/sqlite/contracts.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistorySupportReport, HistoryTarget } from './contracts.ts';
 import { historyTargetTransition, isPartitionGrowthTargetChange, type HistoryTargetTransition } from '../partition-growth.ts';
@@ -44,10 +44,11 @@ function storedTarget(stored:string,sourceGeneration:string):{target:HistoryTarg
    ...(value.checkedPartitions===undefined?{}:{checkedPartitions:value.checkedPartitions as string[]})}};
  }catch{return null;}
 }
-export function fenceContinuity(tx: StorageTransaction, token: ReadEligibility): false {
+export function fenceContinuity(tx: StorageTransaction, token: ReadEligibility, branch: StorageDiagnostic['branch'], errorCode?: string): false {
   if(!tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id])){
     tx.run('INSERT INTO history_continuity_fence VALUES(?,?,?)',[token.owner_id,token.contact_id,reason]);
     tx.run('UPDATE contact SET source_revision=source_revision+1 WHERE owner_id=? AND id=? AND source_revision<9223372036854775807',[token.owner_id,token.contact_id]);
+    tx.recordDiagnostic?.({kind:'history_continuity_fence',contactPrefix:token.contact_id.slice(0,8),branch,...(errorCode?{errorCode}:{})});
   }
   return false;
 }
@@ -88,15 +89,15 @@ export function preflightGeneration(tx: StorageTransaction, token: ReadEligibili
   if(tables.has('history_guard_lease')){
     const guard=tx.get('SELECT * FROM history_guard_lease WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
     const runtime=tx.get('SELECT runtime_id FROM database_instance WHERE slot=1');
-    if(guard&&(guard.state!=='active'||guard.runtime_id!==runtime?.runtime_id||guard.binding_id!==token.binding_id||guard.conversation_id!==token.conversation_id||guard.source_generation!==token.source_generation))return fenceContinuity(tx,token);
+    if(guard&&(guard.state!=='active'||guard.runtime_id!==runtime?.runtime_id||guard.binding_id!==token.binding_id||guard.conversation_id!==token.conversation_id||guard.source_generation!==token.source_generation))return fenceContinuity(tx,token,'G01');
   }
   const scope=tx.get('SELECT * FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
   if(scope){
-    if(scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation)return fenceContinuity(tx,token);
-    if(scope.tables_json===''&&hasHistoryOrSuppression(tx,token,tables))return fenceContinuity(tx,token);
+    if(scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation)return fenceContinuity(tx,token,'G02');
+    if(scope.tables_json===''&&hasHistoryOrSuppression(tx,token,tables))return fenceContinuity(tx,token,'G03');
     return true;
   }
-  if(hasHistoryOrSuppression(tx,token,tables))return fenceContinuity(tx,token);
+  if(hasHistoryOrSuppression(tx,token,tables))return fenceContinuity(tx,token,'G04');
   // 先检验身份和既有资料，不登记 provisional scope；目标读取完成后才固定分片基线。
   return true;
 }
@@ -106,7 +107,7 @@ export function preflightTarget(tx: StorageTransaction, token: ReadEligibility, 
   const named=report?.continuity===normalUseContinuity;
   const value=identity(target,named?report?.accountKey:undefined);
   if(!existing){
-    if(hasHistoryOrSuppression(tx,token,existingTables(tx)))return fenceContinuity(tx,token);
+    if(hasHistoryOrSuppression(tx,token,existingTables(tx)))return fenceContinuity(tx,token,'T01');
     tx.run('INSERT INTO history_continuity_scope VALUES(?,?,?,?,?)',[token.owner_id,token.contact_id,token.conversation_id,token.source_generation,value]);
     return true;
   }
@@ -124,9 +125,9 @@ export function preflightTarget(tx: StorageTransaction, token: ReadEligibility, 
     tx.run('UPDATE history_continuity_scope SET tables_json=? WHERE owner_id=? AND contact_id=?',[identity(target,accountKey),token.owner_id,token.contact_id]);
     return true;
    }
-   return fenceContinuity(tx,token);
+   return fenceContinuity(tx,token,'T02');
   }
-  return fenceContinuity(tx,token);
+  return fenceContinuity(tx,token,'T03');
 }
 /** 有明确顺序时使用最新支持档；旧目标无顺序时只使用已核验的账号和来源基线。 */
 function priorNormalUse(tx:StorageTransaction,token:ReadEligibility,stored:string):boolean {
@@ -167,16 +168,16 @@ export function prepareNormalUseTarget(tx:StorageTransaction,token:ReadEligibili
  let revalidated=false;
  let storedTransition:HistoryTargetTransition|null=null;
  let nextScopeValue:string|undefined;
- if(lease&&(lease.binding_id!==token.binding_id||lease.conversation_id!==token.conversation_id||lease.source_generation!==token.source_generation))return {ok:fenceContinuity(tx,token),revalidated:false};
- if(scope&&(scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation))return {ok:fenceContinuity(tx,token),revalidated:false};
+ if(lease&&(lease.binding_id!==token.binding_id||lease.conversation_id!==token.conversation_id||lease.source_generation!==token.source_generation))return {ok:fenceContinuity(tx,token,'N01'),revalidated:false};
+ if(scope&&(scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation))return {ok:fenceContinuity(tx,token,'N02'),revalidated:false};
  if(scope?.tables_json){
   const previous=storedTarget(String(scope.tables_json),token.source_generation);
-  if(!previous||previous.accountKey!==accountKey)return {ok:fenceContinuity(tx,token),revalidated:false};
+  if(!previous||previous.accountKey!==accountKey)return {ok:fenceContinuity(tx,token,'N03'),revalidated:false};
   storedTransition=historyTargetTransition(previous.target,target,priorPartitionGrowth(tx,token,report));
-  if(storedTransition===null)return {ok:fenceContinuity(tx,token),revalidated:false};
+  if(storedTransition===null)return {ok:fenceContinuity(tx,token,'N04'),revalidated:false};
   if(storedTransition==='growth'||storedTransition==='legacy-exact-upgrade')nextScopeValue=identity(target,accountKey);
  }else{
-  if(hasHistoryOrSuppression(tx,token,existingTables(tx)))return {ok:fenceContinuity(tx,token),revalidated:false};
+  if(hasHistoryOrSuppression(tx,token,existingTables(tx)))return {ok:fenceContinuity(tx,token,'N05'),revalidated:false};
   nextScopeValue=identity(target,accountKey);
  }
  const previousWasNormal=priorNormalUse(tx,token,String(scope?.tables_json??''));
@@ -184,11 +185,11 @@ export function prepareNormalUseTarget(tx:StorageTransaction,token:ReadEligibili
   if(lease.state==='active'&&lease.runtime_id===runtime.runtime_id){
    if(lease.guard_id!==guardId)return {ok:false,revalidated:false};
   }else{
-   if(!previousWasNormal||storedTransition===null)return {ok:fenceContinuity(tx,token),revalidated:false};
+   if(!previousWasNormal||storedTransition===null)return {ok:fenceContinuity(tx,token,'N06'),revalidated:false};
    revalidated=true;
   }
  }else if(tx.get('SELECT 1 FROM read_goal WHERE owner_id=? AND contact_id=? LIMIT 1',[token.owner_id,token.contact_id])){
-  return {ok:fenceContinuity(tx,token),revalidated:false};
+  return {ok:fenceContinuity(tx,token,'N07'),revalidated:false};
  }
  if(nextScopeValue!==undefined){
   if(scope)tx.run('UPDATE history_continuity_scope SET tables_json=? WHERE owner_id=? AND contact_id=?',[nextScopeValue,token.owner_id,token.contact_id]);

@@ -126,7 +126,7 @@ export class SqliteHistoryService {
      // 避免一次进程级来源故障把全部已持守卫联系人批量围栏。
      entry.sourceLost=sourceLost&&(this.shared?Boolean(activeRead):true);
      entry.deferVerification=sourceLost&&Boolean(this.shared)&&!activeRead;
-     const release=async()=>{if(entry.sourceLost)await this.storage.execute('history.markContinuityLost',{token:entry.token});await entry.release();};void release().catch(()=>{});}};
+     const release=async()=>{if(entry.sourceLost)await this.storage.execute('history.markContinuityLost',{token:entry.token,errorCode:entry.failureCode});await entry.release();};void release().catch(()=>{});}};
     void session.loss.then(lost,lost);
    };
    const armGuard=async(proof?:GuardProof):Promise<GuardResult>=>{
@@ -167,7 +167,7 @@ export class SqliteHistoryService {
    };
    const releaseNormalUseGuard=()=>{if(retained?.normalUse&&!retained.failed&&!retained.sourceLost)releaseGuardAfterSuccess=true;};
    try{const result=await run(scope,channel,controller,goalId=>register(`history:${goalId}`),armGuard,metadataRevalidation,Boolean(retained&&!retained.parked),releaseNormalUseGuard);if(retained?.failed)throw new StorageFailure('history_source_continuity_unverified');successful=true;return result;}
-   catch(error){if(isSourceContinuityLost(error))await this.storage.execute('history.markContinuityLost',{token});throw error;}
+   catch(error){if(isSourceContinuityLost(error))await this.storage.execute('history.markContinuityLost',{token,errorCode:error instanceof StorageFailure?error.code:undefined});throw error;}
   }catch(error){
    // 守卫失效可能抢在布尔检查或存储复验前完成；保留可恢复原始原因，避免把瞬时失败永久标成来源失证。
    if(error instanceof StorageFailure&&['history_source_continuity_unverified','history_interrupted'].includes(error.code)
