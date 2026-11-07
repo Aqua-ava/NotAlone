@@ -8,10 +8,10 @@ export const serializeSupport = (report: HistorySupportReport): string =>
   JSON.stringify(Object.fromEntries(Object.entries(report).sort(([a], [b]) => a.localeCompare(b))));
 
 /** 可续用的既有空目标：后续读取按该行的 target/cursor 继续，不重发 INSERT。 */
-export interface ReusableEmptyGoal { kind: 'history' | 'incremental'; id: string; target: HistoryTarget; cursor: string | null }
+export interface ReusableEmptyGoal { kind: 'history' | 'incremental'; id: string; target: HistoryTarget; cursor: string | null; state: 'running' | 'incomplete' | 'complete' }
 
 /**
- * 同一联系人的 0 页单空目标复用判据（任务 01 阶段 B 批准范围）。全部成立才返回该行：
+ * 同一联系人的 0 页单空目标复用判据（任务 01 阶段 B 与空探测轮遗留修正）。全部成立才返回该行：
  * - binding_id、grant_id、accepted_data_generation、accepted_barrier_generation 与当前许可完全一致；
  * - pages_accepted=0 且名下没有任何 capture_record（含经 sync_capture 的抓取记录）；
  * - 行内 cursor_scope_digest 与用当前许可/支持档/新目标重算的 cursor_scope_digest（cursor.ts）完全一致——
@@ -22,6 +22,10 @@ export interface ReusableEmptyGoal { kind: 'history' | 'incremental'; id: string
  * - 行内 target_json 与本次新目标 JSON 一致（比摘要更强的结构同等判定，防止摘要未覆盖字段的漂移）；
  * - incremental 行必须有 cursor（history.incrementalPending 的继续前提）；history 行不得是
  *   cursor 为 null 的 incomplete 终页剩余（history.pending 已到终页的固定快照不能反复接收完整扫描）。
+ * - 第三形态（空探测轮遗留）：complete 且 0 页、名下没有 capture_record 的空历史行也可续用——
+ *   该行本来就是"当轮重验应当得到的那条空目标"，重验等价于同一行重跑一次同等校验；调用方
+ *   （history.begin）在同事务把它的进度复位到新目标起点（state running、进度清空），保证
+ *   acceptPage 能按 running 状态接收本轮的（空）页，并保留完整轮校验与守卫链。
  * 任一条件不成立该行不可续用，调用方保持原有"新建/作废"行为；已 invalidated 的行不会被本函数返回。
  */
 export function reusableEmptyGoals(tx: StorageTransaction, token: ReadEligibility, report: HistorySupportReport, target: HistoryTarget): ReusableEmptyGoal[] {
@@ -31,11 +35,13 @@ export function reusableEmptyGoals(tx: StorageTransaction, token: ReadEligibilit
   try { expectedTargetJson = JSON.stringify(target); expectedEligibility = JSON.stringify(token); }
   catch { return []; }
   const rows = tx.all(`SELECT * FROM read_goal WHERE owner_id=? AND contact_id=?
-    AND kind IN ('history','incremental') AND state IN ('running','incomplete') AND creation_no IS NOT NULL
+    AND kind IN ('history','incremental') AND (state IN ('running','incomplete') OR (state='complete' AND kind='history'))
+    AND creation_no IS NOT NULL
     ORDER BY creation_no DESC, created_at DESC, id DESC`, [token.owner_id, token.contact_id]);
   const reusable: ReusableEmptyGoal[] = [];
   for (const row of rows) {
     try {
+      const state = String(row.state) as 'running' | 'incomplete' | 'complete';
       if (pagesAccepted(row) !== 0n) continue;
       if (String(row.binding_id) !== token.binding_id || String(row.grant_id) !== token.grant_id) continue;
       if (String(BigInt(String(row.accepted_data_generation))) !== String(BigInt(token.data_generation))
@@ -46,8 +52,11 @@ export function reusableEmptyGoals(tx: StorageTransaction, token: ReadEligibilit
       if (JSON.stringify(stored) !== expectedTargetJson) continue;
       if (hasCaptureRecord(tx, token.owner_id, String(row.id))) continue;
       if (row.kind === 'incremental' && !row.cursor) continue;
-      if (row.kind === 'history' && row.state === 'incomplete' && !row.cursor) continue;
-      reusable.push({kind: row.kind as 'history' | 'incremental', id: String(row.id), target: stored, cursor: row.cursor === null || row.cursor === undefined ? null : String(row.cursor)});
+      if (row.kind === 'history' && state === 'incomplete' && !row.cursor) continue;
+      // complete 空行按本轮重验复位为 fresh 起点（cursor NULL 重读同目标起点页）；running/incomplete 行保持原续读游标。
+      const cursor = state === 'complete' ? null
+        : row.cursor === null || row.cursor === undefined ? null : String(row.cursor);
+      reusable.push({kind: row.kind as 'history' | 'incremental', id: String(row.id), target: stored, cursor, state});
     } catch {/* 单行证据损坏时按不可续用处理，保持既有行为。 */}
   }
   return reusable;

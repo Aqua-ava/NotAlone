@@ -39,6 +39,12 @@ export const registry = { ...base, actions: [...base.actions,
   { name: 'fixture.listGoals', mode: 'read', retryBusy: false, execute(tx, i) {
     return tx.all(`SELECT id,contact_id,kind,state,failure_code,cursor,pages_accepted,creation_no,created_at,
       binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,cursor_scope_digest,eligibility_json,
-      support_json,target_json FROM read_goal WHERE owner_id=? AND contact_id=? ORDER BY creation_no DESC`, [i.ownerId, i.contactId]);
+      support_json,target_json,resume_cursor FROM read_goal WHERE owner_id=? AND contact_id=? ORDER BY creation_no DESC`, [i.ownerId, i.contactId]);
+  }},
+  { name: 'fixture.guardLease', mode: 'read', retryBusy: false, execute(tx, i) {
+    return tx.all(`SELECT contact_id,guard_id,state,runtime_id FROM history_guard_lease WHERE owner_id=?`, [i.ownerId]);
+  }},
+  { name: 'fixture.fences', mode: 'read', retryBusy: false, execute(tx, i) {
+    return tx.all(`SELECT contact_id,reason FROM history_continuity_fence WHERE owner_id=?`, [i.ownerId]);
   }},
 ] };

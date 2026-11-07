@@ -208,7 +208,13 @@ export const historyActions:StorageAction[]=[
   }else{
    tx.run("UPDATE read_goal SET state='invalidated',failure_code='history_snapshot_replaced' WHERE owner_id=? AND contact_id=? AND kind='incremental' AND state IN ('running','incomplete')",[token.owner_id,token.contact_id]);
   }
-  if(reusableHistory){purgeStaleGoals(tx,token.owner_id,token.contact_id);return {id:reusableHistory.id,target:reusableHistory.target,cursor:reusableHistory.cursor};}
+  if(reusableHistory){
+   // 空探测轮遗留（任务 01）：complete 空 history 行同身份复用时，在同事务把该行进度复位到本轮重验起点
+   // （acceptPage 只收 running/incomplete 行）；行数不变、读取流与新目标完全同路径，轮次校验与守卫链照旧。
+   if(reusableHistory.state==='complete')tx.run(`UPDATE read_goal SET state='running',coverage_state='partial',completed_partitions='[]',cursor=NULL,resume_cursor=NULL,failure_code=NULL
+    WHERE owner_id=? AND id=?`,[token.owner_id,reusableHistory.id]);
+   purgeStaleGoals(tx,token.owner_id,token.contact_id);return {id:reusableHistory.id,target:reusableHistory.target,cursor:reusableHistory.cursor};
+  }
   tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,state,coverage_state,created_at,cursor_scope_digest,cursor_scheme,creation_no) VALUES(?,?,?,?,?,?,?,'history',?,?,?,?,?,'running','partial',?,?,?,(SELECT coalesce(max(creation_no),0)+1 FROM read_goal WHERE creation_no IS NOT NULL))`,[token.owner_id,i.id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation),target.protocol,target.descriptor,JSON.stringify(target),JSON.stringify(token),serializeSupport(i.report),i.at,scopeDigest,historyCursorScheme]);
   purgeStaleGoals(tx,token.owner_id,token.contact_id);
   return {id:i.id,target,cursor:null};
