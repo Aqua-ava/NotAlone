@@ -67,7 +67,7 @@ function overlaySha(files) {
   return hash(JSON.stringify(rows));
 }
 
-async function syntheticUpgradeFixture({ existingImage = false, quotes = false, quoteTail = false, quoteInline = false, sharedProcess = false, contactAvatar = false, durableHistory = false, imageOpenIsolation = false } = {}) {
+async function syntheticUpgradeFixture({ existingImage = false, quotes = false, quoteTail = false, quoteInline = false, sharedProcess = false, contactAvatar = false, durableHistory = false, imageOpenIsolation = false, guardRegistration = false } = {}) {
   const repositoryRoot = await mkdtemp(path.join(process.cwd(), '.tmp-notalone-image-upgrade-'));
   const buildsRoot = path.join(repositoryRoot, 'local-tools/wx-cli/.notalone-builds');
   const oldName = existingImage ? 'original-image-20261031-v1' : 'true-delta-20261031-c2';
@@ -125,6 +125,16 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
     newFiles['cmd/wechat-cli/notalone_checkpoint.go']='partial checkpoint with accepted parent';
     newFiles['cmd/wechat-cli/notalone_history_resume_test.go']='partial restart regression';
   }
+  const guardSourceChanges = {};
+  if (guardRegistration) {
+    for (const name of ['notalone_watch_darwin.go', 'notalone_process_darwin.go',
+      'notalone_watch_darwin_test.go', 'notalone_process_darwin_test.go']) {
+      const file = `cmd/wechat-cli/${name}`;
+      oldFiles[file] ??= `original ${name}`;
+      newFiles[file] = `registration without event consumption ${name}`;
+      guardSourceChanges[file] = { old: hash(oldFiles[file]), new: hash(newFiles[file]) };
+    }
+  }
   const write = async (file, data, mode = 0o600) => {
     await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
     await writeFile(file, data, { mode });
@@ -169,7 +179,7 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
   const sharedSourceChanges=sharedProcess?Object.fromEntries(['cmd/wechat-cli/notalone_account_metadata.go','cmd/wechat-cli/notalone_selection_test.go'].map(name=>[name,{old:oldFiles[name]?hash(oldFiles[name]):null,new:hash(newFiles[name])}])):{};
   const avatarSourceChanges=contactAvatar?Object.fromEntries(['cmd/wechat-cli/notalone_contact_avatar.go','cmd/wechat-cli/notalone_contact_avatar_test.go'].map(name=>[name,{old:null,new:hash(newFiles[name])}])):{};
   const historySourceChanges=durableHistory?Object.fromEntries(['cmd/wechat-cli/notalone_checkpoint.go','cmd/wechat-cli/notalone_history_resume_test.go'].map(name=>[name,{old:oldFiles[name]?hash(oldFiles[name]):null,new:hash(newFiles[name])}])):{};
-  const updates=Object.entries({...inlineSourceChanges,...sharedSourceChanges}).filter(([name])=>Object.hasOwn(identityFiles,name)).sort(([a],[b])=>a.localeCompare(b));
+  const updates=Object.entries({...inlineSourceChanges,...sharedSourceChanges,...guardSourceChanges}).filter(([name])=>Object.hasOwn(identityFiles,name)).sort(([a],[b])=>a.localeCompare(b));
   const identityAlgorithmSha256 = hash(JSON.stringify({ files: Object.entries(identityFiles).sort((left, right) => left[0].localeCompare(right[0])),
     protocol: [protocolOldSha256, protocolNewSha256],...(updates.length?{updates}:{}) }));
   const policy = { oldName, newName, commonManifest: common,
@@ -180,6 +190,7 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
     ...(imageOpenIsolation?{newImageOpenIsolation:'wechat-image-open-local-v1'}:{}),
     ...(contactAvatar?{newAvatarMetadataProtocol:'wechat-contact-avatar-metadata-v1',sourceChanges:avatarSourceChanges}:{}),
     ...(durableHistory?{newDurableHistoryProtocol:'wechat-partial-history-checkpoint-v1',sourceChanges:historySourceChanges}:{}),
+    ...(guardRegistration ? { guardRegistrationFix: 'wechat-guard-registration-v1', sourceChanges: guardSourceChanges } : {}),
     oldCliSha256, newCliSha256, oldOverlaySha256: overlaySha(oldFiles), newOverlaySha256: overlaySha(newFiles),
     newImageProtocol: 'wechat-original-image-v1', identityFiles, identityAlgorithmSha256,
     protocolOldSha256, protocolNewSha256, imageSha256: hash(newImage), imageTestSha256: hash(newImageTest),
@@ -451,6 +462,41 @@ test('单图隔离升级：新制品清单声明隔离协议才通过，缺失�
   await writeFile(target,`${JSON.stringify(manifest,null,2)}\n`,{mode:0o600});
   await assert.rejects(invalid.tools.prepareAliases(invalid),/history_image_upgrade_/);
  }
+});
+
+test('守卫登记升级只接受固定四文件配对，保留旧来源别名和业务库', async t => {
+  const fixture = await syntheticUpgradeFixture({ existingImage: true, guardRegistration: true });
+  t.after(() => rm(fixture.repositoryRoot, { recursive: true, force: true }));
+  assert.equal((await fixture.tools.prepareAliases(fixture)).status, 'prepared');
+  const aliases = JSON.parse(await readFile(path.join(fixture.toRoot, 'source-identity-aliases.json'), 'utf8'));
+  assert.deepEqual(aliases.aliases, fixture.aliases);
+  assert.equal(aliases.artifactSha256, fixture.policy.newCliSha256);
+  assert.deepEqual(await readFile(fixture.oldAliasPath), fixture.oldAliasBytes);
+  assert.equal(await readFile(path.join(fixture.dbRoot, 'business.sqlite'), 'utf8'), 'must remain unchanged');
+});
+
+test('守卫登记升级拒绝缺少配对声明、源码摘要变化及夹带其他来源实现', async t => {
+  for (const change of ['missing-policy', 'watch', 'process', 'watch-test', 'process-test', 'identity', 'extra']) {
+    await t.test(change, async t => {
+      const fixture = await syntheticUpgradeFixture({ existingImage: true, guardRegistration: true });
+      t.after(() => rm(fixture.repositoryRoot, { recursive: true, force: true }));
+      if (change === 'missing-policy') {
+        delete fixture.policy.guardRegistrationFix;
+        fixture.tools = createUpgradeImageCliTools({ repositoryRoot: fixture.repositoryRoot, policy: fixture.policy });
+      } else {
+        const name = {
+          watch: 'notalone_watch_darwin.go', process: 'notalone_process_darwin.go',
+          'watch-test': 'notalone_watch_darwin_test.go', 'process-test': 'notalone_process_darwin_test.go',
+          identity: 'notalone_identity_aliases.go', extra: 'notalone_unreviewed.go',
+        }[change];
+        await writeFile(path.join(fixture.toRoot, 'source/cmd/wechat-cli', name), 'unreviewed change');
+      }
+      await assert.rejects(fixture.tools.prepareAliases(fixture), /history_image_upgrade_source_mismatch/);
+      await assert.rejects(lstat(path.join(fixture.toRoot, 'source-identity-aliases.json')), { code: 'ENOENT' });
+      await assert.rejects(lstat(path.join(fixture.toRoot, 'source-identity-upgrade-receipt.json')), { code: 'ENOENT' });
+      assert.deepEqual(await readFile(fixture.oldAliasPath), fixture.oldAliasBytes);
+    });
+  }
 });
 
 test('头像升级只新增固定窄元数据文件，沿用全部原来源别名', async t => {

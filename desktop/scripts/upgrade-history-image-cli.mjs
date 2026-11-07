@@ -494,6 +494,40 @@ const imageOpenLocalPolicy=Object.freeze({
  newImageOpenIsolation:'wechat-image-open-local-v1',
 });
 
+// 只修复 kqueue 登记时误消费排队事件；指纹算法不变，但 watch 整份源码已变，须独立绑定新旧摘要。
+const guardRegistrationPolicy = Object.freeze({
+  ...imageOpenLocalPolicy,
+  oldName: 'image-open-local-20261105-v1',
+  newName: 'fence-guard-registration-20261107-v1',
+  oldCliSha256: imageOpenLocalPolicy.newCliSha256,
+  newCliSha256: 'b925d805a79f3102f1b8d2a7c5b76a3592ce9ea321d91fc2b79619836c39c795',
+  oldOverlaySha256: imageOpenLocalPolicy.newOverlaySha256,
+  newOverlaySha256: '4903c8da7982718406de721dbc49552f9cbed685370c03082b2ffd77e5273ec1',
+  oldImageSha256: imageOpenLocalPolicy.imageSha256,
+  oldImageTestSha256: imageOpenLocalPolicy.imageTestSha256,
+  oldImageOpenIsolation: imageOpenLocalPolicy.newImageOpenIsolation,
+  guardRegistrationFix: 'wechat-guard-registration-v1',
+  sourceChanges: Object.freeze({
+    'cmd/wechat-cli/notalone_watch_darwin.go': {
+      old: '697b69668348c4f26fa79d0612b579258ff5667c32dbc5a73e21851f95e294df',
+      new: '88f8955abe91ef5d59dfefeea031cb6088a3ae9a6a71b67efa63008943ca2027',
+    },
+    'cmd/wechat-cli/notalone_process_darwin.go': {
+      old: 'cb066b086b984a09d29c80cba04c1b4601ba59ba04411b2bb93a3ea6b327241f',
+      new: '2734d3109ffa291c5fce4372649073b01c47b3de71ba7061d6df04372a97e2c4',
+    },
+    'cmd/wechat-cli/notalone_watch_darwin_test.go': {
+      old: '8b1720829675ed3e0d9e2110e20cd3a7213f061a86d0e5da73d88c3aee84b128',
+      new: '5911a1e8b3a48e772527c70ed8c90912b2477d4cd921e39c1bc790751e25e704',
+    },
+    'cmd/wechat-cli/notalone_process_darwin_test.go': {
+      old: 'ccfd5fd6770079f62de39042217c88ae5f2c79d7f9809f0c87823a686ebe4c4a',
+      new: '5087038dda543e012b3be77d51294bd23e225bc9f67463ef8953435ee8fad42a',
+    },
+  }),
+  identityAlgorithmSha256: '8488810c711da947db902fe93d3e53a1cee66729ce6d42c1a4d396dd0367cd23',
+});
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -663,11 +697,12 @@ function assertSourcePair(oldFiles, newFiles, policy) {
   }
   const permitted = new Set([protocol, image, imageTest]);
   for(const [name,pair] of Object.entries(policy.sourceChanges??{})){
-    // 内联同步只额外开放固定页／增量投影文件；每份仍绑定旧、新摘要，不接受任意身份源码变化。
+    // 每项扩展只开放对应固定源码；每份仍绑定旧、新摘要，不接受任意身份源码变化。
     const allowed=/^cmd\/wechat-cli\/notalone_quote(?:_[a-z0-9]+)*\.go$/.test(name)
       ||policy.newQuoteInline==='wechat-quote-inline-sync-v1'&&/^cmd\/wechat-cli\/notalone_(?:snapshot|tail)(?:_test)?\.go$/.test(name)
       ||policy.newSharedProcessProtocol==='wechat-shared-process-v1'&&/^cmd\/wechat-cli\/notalone_(?:account_metadata|selection)(?:_test)?\.go$/.test(name)
       ||policy.newAvatarMetadataProtocol==='wechat-contact-avatar-metadata-v1'&&/^cmd\/wechat-cli\/notalone_contact_avatar(?:_test)?\.go$/.test(name)
+      ||policy.guardRegistrationFix==='wechat-guard-registration-v1'&&/^cmd\/wechat-cli\/notalone_(?:watch|process)_darwin(?:_test)?\.go$/.test(name)
       ||policy.newDurableHistoryProtocol==='wechat-partial-history-checkpoint-v1'&&/^cmd\/wechat-cli\/notalone_(?:checkpoint|delta|snapshot|tail|history_resume)(?:_test)?\.go$/.test(name);
     if(!allowed||!isObject(pair)
       ||!(pair.old===null||hashPattern.test(pair.old))||!hashPattern.test(pair.new)
@@ -911,7 +946,10 @@ const contactAvatarTools=createUpgradeImageCliTools({repositoryRoot,policy:conta
 const resumableHistoryTools=createUpgradeImageCliTools({repositoryRoot,policy:resumableHistoryPolicy});
 const imageStandardTools=createUpgradeImageCliTools({repositoryRoot,policy:imageStandardPolicy});
 const imageOpenLocalTools=createUpgradeImageCliTools({repositoryRoot,policy:imageOpenLocalPolicy});
-export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageOpenLocalPolicy.oldName)
+const guardRegistrationTools=createUpgradeImageCliTools({repositoryRoot,policy:guardRegistrationPolicy});
+export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',guardRegistrationPolicy.oldName)
+ &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',guardRegistrationPolicy.newName)
+ ?guardRegistrationTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageOpenLocalPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageOpenLocalPolicy.newName)
  ?imageOpenLocalTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageStandardPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageStandardPolicy.newName)
