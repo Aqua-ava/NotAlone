@@ -174,7 +174,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   for(const skill of request.loadedSkills){const key=`${skill.packageId}:${skill.revisionNo}`,old=found.get(key);if(!old||skill.relativePath==='SKILL.md'&&old.relativePath!=='SKILL.md')found.set(key,skill);}
   if(!found.size)return '本次未载入 Skill';
   const origin=(skill:CandidateRequest['loadedSkills'][number])=>skill.origin==='explicit'?'用户指定':skill.origin==='auto_preload'?'自动预载':'模型调用';
-  return `本次载入的 Skill：${[...found.values()].map(skill=>`${skill.name??'未命名 Skill'}（${origin(skill)}）`).join('、')}`;
+  return `本次载入的 Skill：${[...found.values()].map(skill=>`${skill.title??skill.name??'未命名 Skill'}（${origin(skill)}）`).join('、')}`;
  }
  function requestSummary(request:CandidateRequest,index:number,total:number){
   const summary=[requestTitle(index,total),requestStatus(request)];

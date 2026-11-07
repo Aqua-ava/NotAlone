@@ -141,7 +141,7 @@ test('候选只展示本次载入的Skill名称及来源，不展示目录清单
  let data={...pageData()};
  data.requests[0].coverageWarning='历史覆盖不完整：本次使用当前可用资料，可能缺少重要语境。';
  data.requests[0].loadedSkills=[
-  {packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'SKILL.md',text:'先回应感受。'},
+  {packageId:ids.skill,name:'合成安慰策略',title:'合成安慰场景标题',revisionNo:1,relativePath:'SKILL.md',text:'先回应感受。'},
   {packageId:ids.otherSkill,name:'合成边界策略',revisionNo:2,relativePath:'SKILL.md',text:'再说明边界。'},
   {packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'references/example.md',text:'辅助案例。'},
  ];
@@ -156,8 +156,8 @@ test('候选只展示本次载入的Skill名称及来源，不展示目录清单
  await expect(region.getByText(/历史覆盖不完整/)).toHaveCount(0);
  await expect(region.getByText('实际进入模型输入的 Skill 内容',{exact:true})).toHaveCount(0);
  await expect(region.getByText(/先回应感受。|再说明边界。|辅助案例。/)).toHaveCount(0);
- // 同一 Skill 的多个文件只显示一次，且不显示修订号。
- await expect(region.getByText('本次载入的 Skill：合成安慰策略（模型调用）、合成边界策略（模型调用）',{exact:true})).toBeVisible();
+ // 同一 Skill 的多个文件只显示一次，不显示修订号；有中文标题时优先显示标题，没有则回退包名。
+ await expect(region.getByText('本次载入的 Skill：合成安慰场景标题（模型调用）、合成边界策略（模型调用）',{exact:true})).toBeVisible();
  data={...data,requests:[{...data.requests[0],loadedSkills:[],preloadedSkills:[],skillWarning:'回复策略暂不可用'}]};
  await region.getByRole('button',{name:'刷新候选',exact:true}).click();
  await expect(region.getByText('回复策略暂不可用',{exact:true})).toBeVisible();

@@ -5,6 +5,7 @@ import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import type {SqliteReplyCandidateService} from './service.ts';
 import type {SqliteReplyTurns} from './turns.ts';
 import {readReplyWorkspace} from './workspace.ts';
+import {skillPresentation} from '../../../skills/sqlite/presentation.ts';
 const uuid='[a-f0-9-]{36}',route=new RegExp(`^/api/contacts/(${uuid})/assistant-sessions/(${uuid})/reply-candidates(?:/(${uuid})/(edit|select|versions/([1-9][0-9]{0,5})))?$`);
 const statusRoute=new RegExp(`^/api/contacts/(${uuid})/assistant-sessions/(${uuid})/reply-candidates/status$`);
 const skillsRoute=new RegExp(`^/api/contacts/(${uuid})/assistant-sessions/(${uuid})/reply-candidates/(${uuid})/skills$`);
@@ -50,7 +51,7 @@ export class SqliteReplyCandidateHttp {
      sourceState:request.sourceState,
      candidates:request.candidates,
      selections:request.selections,
-     loadedSkills:(request.loadedSkills??[]).map(({text:_text,catalogRevision:_catalogRevision,...skill}:any)=>skill),
+     loadedSkills:(request.loadedSkills??[]).map(({text:_text,catalogRevision:_catalogRevision,...skill}:any)=>{const title=typeof skill.name==='string'?skillPresentation(skill.name)?.title:undefined;return title?{...skill,title}:skill;}),
      ...(request.preloadedSkills===undefined?{}:{preloadedSkills:request.preloadedSkills.map(({catalogRevision:_catalogRevision,...skill}:any)=>skill)}),
     });
     let visible=requests.slice(-requestWindowLimit),hasMoreRequests=requests.length>requestWindowLimit;

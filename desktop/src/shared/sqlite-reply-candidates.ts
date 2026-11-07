@@ -10,7 +10,7 @@ export type SqliteCandidateOperation=SqliteCandidateScope & (
  | {action:'select'|'version';candidateId:string;versionNo:number}
 );
 export interface SqliteCandidateVersion {candidateId:string;versionNo:number;origin:'model'|'manual';parentVersionNo:number|null;parts:string[];basis:{itemNo:number;kind:string;text:string;verification:'actual_input'|'inherited_unverified'}[]}
-export interface SqliteCandidateLoadedSkill {packageId:string;name?:string;revisionNo:number;relativePath:string;text?:string;origin?:'explicit'|'auto_preload'|null;catalogRevision?:string|null}
+export interface SqliteCandidateLoadedSkill {packageId:string;name?:string;title?:string;revisionNo:number;relativePath:string;text?:string;origin?:'explicit'|'auto_preload'|null;catalogRevision?:string|null}
 export interface SqliteCandidateRequest {requestId:string;generationState?:'committed'|'running'|'failed'|'unknown'|'invalidated';coverageWarning:string|null;skillWarning?:string|null;sourceState:'available'|'unavailable';candidates:SqliteCandidateVersion[];selections:{id:string;candidateId:string;versionNo:number;selectionNo:number}[];loadedSkills:SqliteCandidateLoadedSkill[];preloadedSkills?:{packageId:string;name?:string;revisionNo:number;origin:'explicit'|'auto_preload';catalogRevision?:string}[]}
 export interface SqliteCandidateRecentMessage {messageId:string;sender:'owner'|'contact'|'unknown';text:string;occurredAt:string|null;timePrecision:'millisecond'|'second'|null;displayPosition:string;ordering:'verified'|'unknown'}
 export interface SqliteCandidatePage {recentMessages?:SqliteCandidateRecentMessage[];requests:SqliteCandidateRequest[];coverage:{phase:'not_started'|'running'|'incomplete'|'complete'};hasMoreRequests?:boolean}
@@ -47,10 +47,11 @@ function exact(value:Record<string,unknown>,required:string[],optional:string[]=
  if(required.some(key=>!(key in value))||Object.keys(value).some(key=>!required.includes(key)&&!optional.includes(key)))invalid();
 }
 function validLoadedSkill(value:unknown,requireText:boolean):SqliteCandidateLoadedSkill&{text?:string}{
- const s=object(value),required=['packageId','revisionNo','relativePath',...(requireText?['text']:[])],optional=['name','origin','catalogRevision','text'];
+ const s=object(value),required=['packageId','revisionNo','relativePath',...(requireText?['text']:[])],optional=['name','title','origin','catalogRevision','text'];
  exact(s,required,optional);
  if(!uuid(s.packageId)||!Number.isSafeInteger(s.revisionNo)||!(s.revisionNo as number>0)||typeof s.relativePath!=='string'||!s.relativePath||s.relativePath.length>4096
   ||s.name!==undefined&&(typeof s.name!=='string'||!s.name||s.name.length>4096)
+  ||s.title!==undefined&&(typeof s.title!=='string'||!s.title||s.title.length>4096)
   ||s.origin!==undefined&&s.origin!==null&&!['explicit','auto_preload'].includes(String(s.origin))
   ||s.catalogRevision!==undefined&&s.catalogRevision!==null&&(typeof s.catalogRevision!=='string'||!s.catalogRevision||s.catalogRevision.length>65536)
   ||s.text!==undefined&&(typeof s.text!=='string'||!s.text||new TextEncoder().encode(s.text).byteLength>1024*1024))invalid();
