@@ -24,6 +24,7 @@ __pycache__/
 /.scratch/
 .dsh-computer-use/
 /model-permits/
+/docs/verification/deletion-and-sync-status-perf-20261106.md
 
 # 仅供本机构建的完整微信工具源码
 /local-tools/wx-cli/
