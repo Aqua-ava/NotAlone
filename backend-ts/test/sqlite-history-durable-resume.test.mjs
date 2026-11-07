@@ -11,12 +11,14 @@ test('同源重新建立守卫时只接续已接受检查点，不重新读取�
  f.channel.page=async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true,resumeCursor:'resume-initial'});
  f.channel.tail=async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:'accepted-tail',records:[record('2')],caughtUp:true});
  await f.service.synchronize(contact);await f.service.synchronizeIncremental(contact);await f.service.close();
- let resumed=0,fullTargets=0;const target={...f.target,descriptor:'new-delta-target'};
+ let lastResumedCursor,fullTargets=0;const target={...f.target,descriptor:'new-delta-target'};
  const channel={...f.channel,guardSession:{loss:new Promise(()=>{})},target:async()=>{fullTargets++;throw new Error('不得重扫历史');},
- resumeTarget:async(scope,previous,cursor)=>{resumed++;assert.equal(scope.token.contact_id,contact);assert.deepEqual(previous,f.target);assert.equal(cursor,'accepted-tail');return target;},
+ resumeTarget:async(scope,previous,cursor)=>{lastResumedCursor=cursor;assert.equal(scope.token.contact_id,contact);assert.deepEqual(previous,f.target);assert.equal(cursor,'accepted-tail');return target;},
  page:async(_scope,used,cursor)=>({target:used.descriptor,cursorIn:cursor,cursorOut:null,records:[record('0')],completedPartitions:['shard-a'],exhausted:true,resumeCursor:'new-tail'})};
  const service=new SqliteHistoryService(f.storage,f.contacts,()=>channel);t.after(()=>service.close().catch(()=>{}));
- assert.equal((await service.synchronizeIncremental(contact)).phase,'running');assert.equal((await service.synchronize(contact)).phase,'complete');assert.equal(resumed,1);assert.equal(fullTargets,0);assert.equal((await service.read(contact)).messages.length,3);await service.close();
+ // 06起每次重建守卫都按最新已接受增量检查点接续；完整目标重建必须失败阻止。
+ assert.equal((await service.synchronizeIncremental(contact)).phase,'running');assert.equal((await service.synchronize(contact)).phase,'complete');
+ assert.equal(lastResumedCursor,'accepted-tail');assert.equal(fullTargets,0);assert.equal((await service.read(contact)).messages.length,3);await service.close();
 });
 test('本机检查点丢失明确回退首次补齐，不使用调用者猜测游标',async t=>{
  const f=await fixture(t),contact=f.saved[0].contact_id;enableDurable(f.channel);

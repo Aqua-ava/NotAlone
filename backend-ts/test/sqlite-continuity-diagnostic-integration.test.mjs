@@ -98,20 +98,6 @@ test('来源错误码夹带正文或姓名时省略错误码且不影响围栏�
   assertSafe(rows);
 });
 
-for (const rebuildFence of [false, true]) test(`真实认证失败${rebuildFence ? '补建围栏记录C01' : '保留已有围栏且不重复记录'}`, async t => {
-  const f = await seed(t), token = await f.current.contacts.eligibility(f.contactA), id = randomUUID();
-  await markLost(f);
-  await f.current.storage.execute('history.recertifyPrepare', {token, id, requestKey: 'synthetic-diagnostic-failure', at: Date.now()});
-  if (rebuildFence) await f.current.storage.execute('fixture.continuityDiagnosticRemoveFence', {ownerId: owner, contactId: f.contactA});
-  await f.current.storage.execute('history.recertifyFail', {ownerId: owner, id, code: 'history_source_changed', at: Date.now()});
-  const rows = await diagnosticRows(f.root);
-  assert.equal(rows.length, rebuildFence ? 2 : 1);
-  if (rebuildFence) assert.deepEqual([rows[1].entry, rows[1].branch, rows[1].contactPrefix], ['history.recertifyFail', 'C01', f.contactA.slice(0, 8)]);
-  assertSafe(rows);
-  await f.current.storage.execute('history.recertifyFail', {ownerId: owner, id, code: 'history_source_changed', at: Date.now()});
-  assert.deepEqual(await diagnosticRows(f.root), rows);
-});
-
 test('真正回滚的事务不写诊断且不把待写事件泄漏到下次成功事务', async t => {
   const f = await seed(t);
   await assert.rejects(f.current.storage.execute('fixture.continuityDiagnosticRollback', {ownerId: owner, contactId: f.contactA}),

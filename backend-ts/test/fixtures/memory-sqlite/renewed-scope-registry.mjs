@@ -1,4 +1,4 @@
-import {registry as base} from '../history/recertify-registry.mjs';
+import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 export const registry={...base,actions:[...base.actions,{
  name:'fixture.memoryRawControl',mode:'read',retryBusy:false,execute(tx,i){
   return {run:tx.get('SELECT state,pause_requested_at FROM processing_run WHERE owner_id=? AND id=?',[i.ownerId,i.runId]),

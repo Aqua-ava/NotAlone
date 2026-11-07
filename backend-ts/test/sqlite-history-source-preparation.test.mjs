@@ -20,47 +20,50 @@ async function fixture(t,{shared}={}){
  t.after(async()=>{await history?.close();await storage.close();await rm(root,{recursive:true,force:true});});
  await contacts.initialize();await contacts.confirmAccount((await contacts.detectAccount()).candidate_token);await contacts.setReading(true);
  const snapshot=await contacts.candidates(true),saved=(await contacts.confirm(snapshot.snapshot_token,snapshot.sessions.map(s=>({locator:s.username,observed_display_name:s.display_name,expected_selection_generation:s.selection_generation})))).bindings[0];
- const state={created:0,inspections:0,pages:0,tails:0,instance:'table-1',failureCode:null,lose:()=>{},beforeInspect:null,beforePage:null};
+ const state={created:0,closed:0,active:0,maxActive:0,inspections:0,pages:0,tails:0,instance:'table-1',beforeInspect:null};
  const create=()=>{
-  ++state.created;const loss=Promise.withResolvers();let closed=false;
-  state.lose=()=>loss.resolve();
+  ++state.created;++state.active;state.maxActive=Math.max(state.maxActive,state.active);const loss=Promise.withResolvers();let closed=false;
   const target={protocol:'private-history-v1',descriptor:'synthetic-target',partitions:['p'],tables:[{partition:'p',instance:state.instance}],sourceGeneration:'source-1'};
-  return {guardSession:{loss:loss.promise,failureCode:()=>state.failureCode},
+  return {guardSession:{loss:loss.promise},
    inspect:async(scope,signal)=>{++state.inspections;await state.beforeInspect?.(signal);return {protocol:'private-history-v1',profileId:'synthetic-v1',adapterVersion:'1',status:'supported',reason:null,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic-final-rows',continuity:'same-source-instances-normal-use-v1',capabilities,accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation};},
    target:async()=>target,
-   page:async(_scope,_target,cursor)=>{++state.pages;await state.beforePage?.();return {target:target.descriptor,cursorIn:cursor,cursorOut:null,resumeCursor:'synthetic-tail',records:[{partition:'p',table:state.instance,localId:'1',serverId:'0',sender:'contact',kind:'text',text:'合成来源正文',originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified'}],completedPartitions:['p'],exhausted:true};},
+   page:async(_scope,_target,cursor)=>{++state.pages;return {target:target.descriptor,cursorIn:cursor,cursorOut:null,resumeCursor:'synthetic-tail',records:[{partition:'p',table:state.instance,localId:'1',serverId:'0',sender:'contact',kind:'text',text:'合成来源正文',originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified'}],completedPartitions:['p'],exhausted:true};},
    tail:async(_scope,_target,cursor)=>{++state.tails;return {target:target.descriptor,cursorIn:cursor,cursorOut:'tail-next',records:[],caughtUp:true};},
-   close:async()=>{if(!closed){closed=true;loss.resolve();}},
+   close:async()=>{if(!closed){closed=true;++state.closed;--state.active;loss.resolve();}},
   };
  };
  history=new SqliteHistoryService(storage,contacts,create,undefined,undefined,undefined,shared);
  return {storage,contacts,history,state,contactId:saved.contact_id,saved};
 }
 
-test('准备来源复用活守卫，正常释放后只续证元数据且不重读正文',async t=>{
+test('准备来源重新核对元数据并释放本轮守卫，不重读正文',async t=>{
  const f=await fixture(t),{history,state,contactId}=f;
  await history.synchronize(contactId);
  const source=(await history.read(contactId)).messages[0].sourceRecordIds[0];
  const before={created:state.created,inspections:state.inspections,pages:state.pages,tails:state.tails};
  await history.prepareSource(contactId);
- assert.deepEqual({created:state.created,inspections:state.inspections,pages:state.pages,tails:state.tails},before);
+ assert.equal(state.created,before.created+1);assert.equal(state.inspections,before.inspections+1);
+ assert.equal(state.closed,state.created);assert.equal(state.active,0);
  await history.stop(contactId);
  assert.equal(await f.storage.execute('fixture.assertSource',{owner_id:owner,contact_id:contactId,record_id:source,message_id:(await history.read(contactId)).messages[0].id}),true,'正常释放只结束本次外部读取，本机来源保持合格');
  assert.equal(await history.bodyAvailable([contactId]),false,'新正文读取仍须核验并建立本次守卫');
  await history.prepareSource(contactId);
- assert.equal(state.created,before.created+1);assert.equal(state.inspections,before.inspections+1);
+ assert.equal(state.created,before.created+2);assert.equal(state.inspections,before.inspections+2);
+ assert.equal(state.closed,state.created);assert.equal(state.active,0);
  assert.equal(state.pages,before.pages);assert.equal(state.tails,before.tails);
  const message=(await history.read(contactId)).messages[0];
  assert.equal(await f.storage.execute('fixture.assertSource',{owner_id:owner,contact_id:contactId,record_id:source,message_id:message.id}),true);
 });
 
-test('同联系人同步已在准备时等待已有读者，并发来源准备不重复打开渠道',async t=>{
+test('同联系人来源准备等待已有读者，并发请求串行核验且全部释放',async t=>{
  const {history,state,contactId}=await fixture(t),entered=Promise.withResolvers(),release=Promise.withResolvers();
  state.beforeInspect=async()=>{entered.resolve();await release.promise;};
  const synchronizing=history.synchronize(contactId);await entered.promise;
  const a=history.prepareSource(contactId),b=history.prepareSource(contactId);
+ assert.equal(state.created,1);assert.equal(state.active,1);
  release.resolve();await Promise.all([synchronizing,a,b]);
- assert.equal(state.created,1);assert.equal(state.inspections,2);assert.equal(state.pages,1);
+ assert.equal(state.maxActive,1);assert.equal(state.closed,state.created);assert.equal(state.active,0);
+ assert.equal(state.pages,1);assert.equal(state.tails,0);
 });
 
 test('共享通道排队时来源准备可取消，取消不打断已有同步',async t=>{

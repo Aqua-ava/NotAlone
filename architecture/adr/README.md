@@ -141,7 +141,7 @@
 - [ADR-141：引用回复随正常消息同步读取](141-inline-quoted-reply-sync.md)
 - [ADR-142：首次连接后先选择联系人，再确认开启同步](142-first-connection-contact-selection.md)
 - [ADR-143：混合记忆处理调度](143-hybrid-memory-processing-schedule.md)
-- [ADR-144：保留旧资料的来源重新认证](144-preserved-history-source-recertification.md)（部分修订：无派生引用的旧副本见 ADR-175）
+- [ADR-144：保留旧资料的来源重新认证](144-preserved-history-source-recertification.md)（流程已由ADR-177替代，保留合法旧资料与必要删除事实）
 - [ADR-145：记忆处理卡跟随当前联系人](145-contact-scoped-memory-processing-view.md)
 - [ADR-146：AI 服务地址与密钥由用户填写](146-editable-deepseek-endpoint.md)
 - [ADR-147：OpenCode Go 的模型环境配置](147-opencode-go-model-configuration.md)
@@ -158,7 +158,7 @@
 - [ADR-158：显式选择联系人后继续前台跟随](158-contact-selection-keeps-foreground-follow.md)
 - [ADR-159：前台联系人识别独立读取通道](159-foreground-read-channel-isolation.md)
 - [ADR-160：助手回看与 Skill 核验分离执行队列](160-assistant-read-and-skill-worker-isolation.md)
-- [ADR-161：旧读取器来源的有界抑制映射](161-proved-legacy-source-suppression-mapping.md)
+- [ADR-161：旧读取器来源的有界抑制映射](161-proved-legacy-source-suppression-mapping.md)（创建／认证传承流程已由ADR-177替代；既有有效删除等价范围仍保留）
 - [ADR-162：本机回复资料与独立模型并发](162-local-reply-context-and-independent-model-lanes.md)
 - [ADR-163：退役未接入 SQLite 的旧回复流程](163-retire-disconnected-reply-workflows.md)
 - [ADR-164：大历史分段恢复与联系人公平轮转](164-resumable-history-slices.md)
@@ -170,7 +170,9 @@
 - [ADR-170：不保存缩略图，取消原图分类机制](170-no-thumbnail-storage-and-no-original-classification.md)
 - [ADR-171：同一张图有标准图和高清图时取一张保存，不再比较内容](171-image-pick-standard-over-high-definition.md)
 - [ADR-172：JPEG 结束标记后允许少量尾随，WXGF 支持彩色加透明度双帧](172-jpeg-trailing-bytes-and-wxgf-alpha-frames.md)
-- [ADR-173：开发者批量来源重新认证](173-developer-batch-source-recertification.md)（已采纳（2026-11-05）；已实现并验收（2026-11-06，仅开发模式））
-- [ADR-175：修复同步通过后清理被取代绑定下无派生引用的旧副本](175-clean-superseded-binding-copies.md)（已采纳（2026-11-07）；部分覆盖 ADR-144 的旧消息保留条款；已实现，存量清理待用户确认）
+- [ADR-173：开发者批量来源重新认证](173-developer-batch-source-recertification.md)（已被ADR-177替代，原开发者入口退役）
+- [ADR-175：修复同步通过后清理被取代绑定下无派生引用的旧副本](175-clean-superseded-binding-copies.md)（已被ADR-177替代，一次性存量清理完成后退役流程；保留引用保护与必要删除事实）
 
-- [ADR-176：核对来源后原地续读，不旋转绑定](176-in-place-source-recovery.md)——覆盖 ADR-144/173 的旋转绑定及全量重读条款，保留存量删除保护。
+- [ADR-176：核对来源后原地续读，不旋转绑定](176-in-place-source-recovery.md)——保留原地来源核对；守卫生命周期及暂留旧流程由ADR-177收敛。
+
+- [ADR-177：退役重新认证与副本清理流程，保留最小删除等价事实](177-retire-source-recertification-and-cleanup.md)——来源守卫仅保护本轮独占读取，删除旧请求／批量面板和清理流程，迁移保留必要旧来源删除保护。

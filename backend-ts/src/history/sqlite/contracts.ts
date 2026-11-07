@@ -77,8 +77,6 @@ export interface HistoryRecoveryResult {
   target:HistoryTarget; cursor:string|null; anchors:readonly HistoryRecord[];
 }
 export interface HistoryChannel {
-  /** 释放当前会话读者，账号级活守卫继续保护已验证来源；仅共享适配器提供。 */
-  park?():Promise<void>;
   // 仅已实现持续原生守卫的渠道可声明；loss 在守卫无法继续时结束。
   readonly guardSession?: { readonly loss: Promise<void>; failureCode?():string|null };
   inspect(scope: HistoryScope, signal?: AbortSignal): Promise<HistorySupportReport>;

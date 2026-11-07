@@ -49,7 +49,7 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
     setAvatarRefresh(revision => revision + 1);
   }
   const selected = state.contacts.find((contact) => contact.contactId === state.selectedContactId);
-  const repairNeeded = enabled === true && consent.state.phase === 'ready' && !consent.state.busy
+  const sourceNeedsConfirmation = enabled === true && consent.state.phase === 'ready' && !consent.state.busy
     && consent.state.bindings.some(binding => binding.contactId === selected?.contactId) && sync.report?.historyCoverages?.some(row => row.contactId === selected?.contactId
     && (row.failureCode === 'history_source_continuity_unverified' || row.incrementalFailureCode === 'history_source_continuity_unverified')) === true;
   const visibleContacts = selected ? [selected, ...state.contacts.filter(contact => contact.contactId !== selected.contactId)] : state.contacts;
@@ -91,7 +91,7 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
         </button>
       </li>)}
     </ul><ContactChatHistory session={session} readingPosition={readingPosition} settingsTargetContactId={syncDetailsContactId}
-      syncIssue={repairNeeded}
+      syncIssue={sourceNeedsConfirmation}
       actions={selected && <>
         <button className="button" onClick={() => navigate('memory')}>查看关系资料</button>
         <button className="button primary" onClick={() => { void session.confirmManualContact(selected.contactId).then((confirmed) => { if (confirmed) return window.notalone.openHelper(); }); }}>打开助手</button>
@@ -100,8 +100,8 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
         coverages={sync.phase === 'ready' && !sync.errorCode ? sync.report?.historyCoverages : undefined}
         bodyAvailable={sync.report?.bodyAvailable} enabled={sync.report?.enabled} />}
       settings={selected && (visible => <>
-      <ContactSyncSettings session={session} navigate={navigate} visible={visible} />
-      <ContactHistoryClear session={session} repairNeeded={repairNeeded} />
+      <ContactSyncSettings session={session} navigate={navigate} visible={visible} sourceNeedsConfirmation={sourceNeedsConfirmation} />
+      <ContactHistoryClear session={session} />
     </>)} /></div>}
     {session.error && <p className="contacts-note" role="alert">{session.error}</p>}
   </section>;

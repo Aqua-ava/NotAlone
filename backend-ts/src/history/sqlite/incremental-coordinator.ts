@@ -199,6 +199,7 @@ export class IncrementalHistoryCoordinator {
         else throw new StorageFailure(coverage.incremental.failureCode ?? 'history_incremental_unavailable');
       }
       previousIncremental = coverage.incremental;
+      // 增量协调器是同一租约交接的显式接续方；普通读取仍交回首次协调器。
       return await this.#history.synchronizeIncremental(job.contactId, active.controller.signal,{followHistoryHandoff:true});
     })().then((coverage: HistoryCoverage) => {
       if (active.controller.signal.aborted) { this.#state(job.contactId, 'stopped'); return; }

@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 46,
+  "schemaVersion": 47,
   "migrationVersions": [
    1,
    2,
@@ -47,15 +47,16 @@
    43,
    44,
    45,
-   46
+   46,
+   47
   ],
-  "userVersion": 46,
+  "userVersion": 47,
   "sqliteVersion": "3.53.4",
-  "tableCount": 94,
-  "fieldCount": 955,
-  "foreignKeyGroups": 193,
+  "tableCount": 92,
+  "fieldCount": 933,
+  "foreignKeyGroups": 192,
   "triggerCount": 120,
-  "checkCount": 304,
+  "checkCount": 303,
   "viewCount": 0
  },
  "tables": {
@@ -1544,7 +1545,7 @@
      "sql": null
     }
    ],
-   "sql": "CREATE TABLE deletion_operation ( operation_id TEXT PRIMARY KEY, owner_identity TEXT NOT NULL, request_namespace TEXT NOT NULL, request_key TEXT NOT NULL, scope_kind TEXT NOT NULL CHECK(scope_kind IN ('source','contact','contact_history','account','discussion','media_result_clear','media_result_replace','superseded_history')), contact_identity TEXT, source_identity TEXT, discussion_identity TEXT, message_identity TEXT, accepted_generation INTEGER NOT NULL CHECK(accepted_generation>=0), state TEXT NOT NULL CHECK(state IN ('fenced','cleaning','verifying','blocked','completed')), plan_revision INTEGER NOT NULL CHECK(plan_revision>0), domain_manifest TEXT NOT NULL, runner_token TEXT, runner_runtime TEXT, created_at INTEGER NOT NULL, completed_at INTEGER, UNIQUE(owner_identity,request_namespace,request_key), UNIQUE(owner_identity,operation_id), CHECK((scope_kind='account' AND contact_identity IS NULL AND source_identity IS NULL AND discussion_identity IS NULL AND message_identity IS NULL) OR (scope_kind='source' AND contact_identity IS NOT NULL AND source_identity IS NOT NULL AND discussion_identity IS NULL AND message_identity IS NULL) OR (scope_kind IN ('contact','contact_history','superseded_history') AND contact_identity IS NOT NULL AND source_identity IS NULL AND discussion_identity IS NULL AND message_identity IS NULL) OR (scope_kind='discussion' AND contact_identity IS NOT NULL AND source_identity IS NULL AND discussion_identity IS NOT NULL AND message_identity IS NULL) OR (scope_kind IN ('media_result_clear','media_result_replace') AND contact_identity IS NOT NULL AND source_identity IS NULL AND discussion_identity IS NULL AND message_identity IS NOT NULL)), CHECK((runner_token IS NULL)=(runner_runtime IS NULL)), CHECK((state='completed')=(completed_at IS NOT NULL)) ) STRICT"
+   "sql": "CREATE TABLE deletion_operation ( operation_id TEXT PRIMARY KEY, owner_identity TEXT NOT NULL, request_namespace TEXT NOT NULL, request_key TEXT NOT NULL, scope_kind TEXT NOT NULL CHECK(scope_kind IN ('source','contact','contact_history','account','discussion','media_result_clear','media_result_replace')), contact_identity TEXT, source_identity TEXT, discussion_identity TEXT, message_identity TEXT, accepted_generation INTEGER NOT NULL CHECK(accepted_generation>=0), state TEXT NOT NULL CHECK(state IN ('fenced','cleaning','verifying','blocked','completed')), plan_revision INTEGER NOT NULL CHECK(plan_revision>0), domain_manifest TEXT NOT NULL, runner_token TEXT, runner_runtime TEXT, created_at INTEGER NOT NULL, completed_at INTEGER, UNIQUE(owner_identity,request_namespace,request_key), UNIQUE(owner_identity,operation_id), CHECK((scope_kind='account' AND contact_identity IS NULL AND source_identity IS NULL AND discussion_identity IS NULL AND message_identity IS NULL) OR (scope_kind='source' AND contact_identity IS NOT NULL AND source_identity IS NOT NULL AND discussion_identity IS NULL AND message_identity IS NULL) OR (scope_kind IN ('contact','contact_history') AND contact_identity IS NOT NULL AND source_identity IS NULL AND discussion_identity IS NULL AND message_identity IS NULL) OR (scope_kind='discussion' AND contact_identity IS NOT NULL AND source_identity IS NULL AND discussion_identity IS NOT NULL AND message_identity IS NULL) OR (scope_kind IN ('media_result_clear','media_result_replace') AND contact_identity IS NOT NULL AND source_identity IS NULL AND discussion_identity IS NULL AND message_identity IS NOT NULL)), CHECK((runner_token IS NULL)=(runner_runtime IS NULL)), CHECK((state='completed')=(completed_at IS NOT NULL)) ) STRICT"
   },
   "deletion_target": {
    "columns": [
@@ -4761,6 +4762,131 @@
    ],
    "sql": "CREATE TABLE history_restore ( owner_id TEXT NOT NULL, request_key TEXT NOT NULL, contact_id TEXT NOT NULL, authorization_id TEXT NOT NULL, conversation_id TEXT NOT NULL, binding_id TEXT NOT NULL, verification_id TEXT NOT NULL, grant_id TEXT NOT NULL, selection_generation INTEGER NOT NULL CHECK(selection_generation>0), barrier_generation INTEGER NOT NULL CHECK(barrier_generation>=0), cutoff_operation_id TEXT, goal_id TEXT, state TEXT NOT NULL CHECK(state IN ('authorized','active','completed')), created_at INTEGER NOT NULL, completed_at INTEGER, PRIMARY KEY(owner_id,request_key), UNIQUE(owner_id,authorization_id), FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id), FOREIGN KEY(owner_id,conversation_id) REFERENCES channel_conversation(owner_id,id), FOREIGN KEY(owner_id,binding_id) REFERENCES conversation_binding(owner_id,id), FOREIGN KEY(owner_id,goal_id) REFERENCES read_goal(owner_id,id) ON DELETE SET NULL, CHECK((state='completed')=(completed_at IS NOT NULL)) ) STRICT"
   },
+  "history_source_equivalence": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "conversation_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "generation_a",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "generation_b",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "partition_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "table_instance",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "local_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "history_source_equivalence_scope",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "conversation_id",
+      "partition_id",
+      "table_instance",
+      "local_id"
+     ],
+     "sql": "CREATE INDEX history_source_equivalence_scope ON history_source_equivalence(owner_id,contact_id,conversation_id,partition_id,table_instance,local_id)"
+    },
+    {
+     "name": "sqlite_autoindex_history_source_equivalence_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE history_source_equivalence ( owner_id TEXT NOT NULL, id TEXT NOT NULL, contact_id TEXT NOT NULL, conversation_id TEXT NOT NULL, generation_a TEXT NOT NULL,generation_b TEXT NOT NULL,partition_id TEXT NOT NULL,table_instance TEXT NOT NULL, local_id TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('prefix','point')), PRIMARY KEY(owner_id,id),FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id), CHECK(generation_a<>generation_b),CHECK((kind='prefix' AND local_id='') OR (kind='point' AND local_id<>'')) ) STRICT"
+  },
   "history_source_exclusion": {
    "columns": [
     {
@@ -4837,334 +4963,6 @@
     }
    ],
    "sql": "CREATE TABLE history_source_exclusion ( owner_id TEXT NOT NULL,conversation_id TEXT NOT NULL,scheme TEXT NOT NULL CHECK(scheme IN ('local','server')),external_key TEXT NOT NULL,operation_id TEXT NOT NULL, PRIMARY KEY(owner_id,conversation_id,scheme,external_key), FOREIGN KEY(owner_id,conversation_id) REFERENCES channel_conversation(owner_id,id) ) STRICT"
-  },
-  "history_source_recertification": {
-   "columns": [
-    {
-     "name": "owner_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 1
-    },
-    {
-     "name": "id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 2
-    },
-    {
-     "name": "contact_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "request_key",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "runtime_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "state",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "stage",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "failure_code",
-     "type": "TEXT",
-     "notnull": 0,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "started_at",
-     "type": "INTEGER",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "updated_at",
-     "type": "INTEGER",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "finished_at",
-     "type": "INTEGER",
-     "notnull": 0,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "old_binding_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "new_binding_id",
-     "type": "TEXT",
-     "notnull": 0,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "new_grant_id",
-     "type": "TEXT",
-     "notnull": 0,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "old_token_json",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "token_json",
-     "type": "TEXT",
-     "notnull": 0,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "target_json",
-     "type": "TEXT",
-     "notnull": 0,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "support_json",
-     "type": "TEXT",
-     "notnull": 0,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "guard_id",
-     "type": "TEXT",
-     "notnull": 0,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "guard_state",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": "'none'",
-     "pk": 0
-    },
-    {
-     "name": "goal_id",
-     "type": "TEXT",
-     "notnull": 0,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "preserved_message_count",
-     "type": "INTEGER",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "old_fence_json",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "old_scope_json",
-     "type": "TEXT",
-     "notnull": 0,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "old_lease_json",
-     "type": "TEXT",
-     "notnull": 0,
-     "dflt_value": null,
-     "pk": 0
-    }
-   ],
-   "foreignKeys": [
-    {
-     "id": 0,
-     "seq": 0,
-     "table": "contact",
-     "from": "owner_id",
-     "to": "owner_id",
-     "on_update": "NO ACTION",
-     "on_delete": "NO ACTION",
-     "match": "NONE"
-    },
-    {
-     "id": 0,
-     "seq": 1,
-     "table": "contact",
-     "from": "contact_id",
-     "to": "id",
-     "on_update": "NO ACTION",
-     "on_delete": "NO ACTION",
-     "match": "NONE"
-    }
-   ],
-   "indexes": [
-    {
-     "name": "history_recertification_contact",
-     "unique": 0,
-     "partial": 0,
-     "origin": "c",
-     "columns": [
-      "owner_id",
-      "contact_id",
-      "started_at"
-     ],
-     "sql": "CREATE INDEX history_recertification_contact ON history_source_recertification(owner_id,contact_id,started_at)"
-    },
-    {
-     "name": "history_recertification_running",
-     "unique": 1,
-     "partial": 1,
-     "origin": "c",
-     "columns": [
-      "owner_id",
-      "contact_id"
-     ],
-     "sql": "CREATE UNIQUE INDEX history_recertification_running ON history_source_recertification(owner_id,contact_id) WHERE state='running'"
-    },
-    {
-     "name": "sqlite_autoindex_history_source_recertification_2",
-     "unique": 1,
-     "partial": 0,
-     "origin": "u",
-     "columns": [
-      "owner_id",
-      "request_key"
-     ],
-     "sql": null
-    },
-    {
-     "name": "sqlite_autoindex_history_source_recertification_1",
-     "unique": 1,
-     "partial": 0,
-     "origin": "pk",
-     "columns": [
-      "owner_id",
-      "id"
-     ],
-     "sql": null
-    }
-   ],
-   "sql": "CREATE TABLE history_source_recertification ( owner_id TEXT NOT NULL,id TEXT NOT NULL,contact_id TEXT NOT NULL,request_key TEXT NOT NULL,runtime_id TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('running','completed','failed','interrupted')), stage TEXT NOT NULL CHECK(stage IN ('metadata','history','activation','completed')), failure_code TEXT,started_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,finished_at INTEGER, old_binding_id TEXT NOT NULL,new_binding_id TEXT,new_grant_id TEXT,old_token_json TEXT NOT NULL, token_json TEXT,target_json TEXT,support_json TEXT,guard_id TEXT,guard_state TEXT NOT NULL DEFAULT 'none' CHECK(guard_state IN ('none','active','lost')), goal_id TEXT,preserved_message_count INTEGER NOT NULL,old_fence_json TEXT NOT NULL,old_scope_json TEXT,old_lease_json TEXT, PRIMARY KEY(owner_id,id),UNIQUE(owner_id,request_key),FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) ) STRICT"
-  },
-  "history_source_recertification_cancel": {
-   "columns": [
-    {
-     "name": "owner_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 1
-    },
-    {
-     "name": "contact_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "request_key",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 2
-    },
-    {
-     "name": "cancelled_at",
-     "type": "INTEGER",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    }
-   ],
-   "foreignKeys": [
-    {
-     "id": 0,
-     "seq": 0,
-     "table": "contact",
-     "from": "owner_id",
-     "to": "owner_id",
-     "on_update": "NO ACTION",
-     "on_delete": "NO ACTION",
-     "match": "NONE"
-    },
-    {
-     "id": 0,
-     "seq": 1,
-     "table": "contact",
-     "from": "contact_id",
-     "to": "id",
-     "on_update": "NO ACTION",
-     "on_delete": "NO ACTION",
-     "match": "NONE"
-    }
-   ],
-   "indexes": [
-    {
-     "name": "history_recertification_cancel_contact",
-     "unique": 0,
-     "partial": 0,
-     "origin": "c",
-     "columns": [
-      "owner_id",
-      "contact_id"
-     ],
-     "sql": "CREATE INDEX history_recertification_cancel_contact ON history_source_recertification_cancel(owner_id,contact_id)"
-    },
-    {
-     "name": "sqlite_autoindex_history_source_recertification_cancel_1",
-     "unique": 1,
-     "partial": 0,
-     "origin": "pk",
-     "columns": [
-      "owner_id",
-      "request_key"
-     ],
-     "sql": null
-    }
-   ],
-   "sql": "CREATE TABLE history_source_recertification_cancel ( owner_id TEXT NOT NULL,contact_id TEXT NOT NULL,request_key TEXT NOT NULL,cancelled_at INTEGER NOT NULL, PRIMARY KEY(owner_id,request_key),FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) ) STRICT"
   },
   "history_source_terminal": {
    "columns": [
@@ -5277,46 +5075,6 @@
     }
    ],
    "sql": "CREATE TABLE history_source_terminal ( owner_id TEXT NOT NULL,id TEXT NOT NULL,contact_id TEXT NOT NULL,binding_id TEXT NOT NULL,external_key TEXT NOT NULL, reason TEXT NOT NULL CHECK(reason IN ('source_recalled','source_absent','source_system_replaced')), accepted_data_generation INTEGER NOT NULL CHECK(accepted_data_generation>=0), PRIMARY KEY(owner_id,id),UNIQUE(owner_id,contact_id,binding_id,external_key), FOREIGN KEY(owner_id,contact_id,binding_id) REFERENCES conversation_binding(owner_id,contact_id,id) ON DELETE CASCADE ) STRICT"
-  },
-  "history_superseded_cleanup": {
-   "columns": [
-    {
-     "name": "owner_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 1
-    },
-    {
-     "name": "contact_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 2
-    },
-    {
-     "name": "requested_at",
-     "type": "INTEGER",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    }
-   ],
-   "foreignKeys": [],
-   "indexes": [
-    {
-     "name": "sqlite_autoindex_history_superseded_cleanup_1",
-     "unique": 1,
-     "partial": 0,
-     "origin": "pk",
-     "columns": [
-      "owner_id",
-      "contact_id"
-     ],
-     "sql": null
-    }
-   ],
-   "sql": "CREATE TABLE history_superseded_cleanup ( owner_id TEXT NOT NULL, contact_id TEXT NOT NULL, requested_at INTEGER NOT NULL CHECK(requested_at>=0), PRIMARY KEY(owner_id,contact_id) ) STRICT"
   },
   "manual_confirmation": {
    "columns": [

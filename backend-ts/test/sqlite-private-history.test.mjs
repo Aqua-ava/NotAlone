@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { StorageFailure } from '../src/storage/sqlite/contracts.ts';
 import { SqliteStorage } from '../src/storage/sqlite/client.ts';
 import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 import { SqliteHistoryService } from '../src/history/sqlite/service.ts';
@@ -291,25 +292,27 @@ test('终态来源的长精确出现键不阻断正常来源删除',async t=>{
 });
 test('普通续读范围中未知历史保持不完整，但已成功追平的新消息状态可独立就绪',async t=>{
  const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id,inspect=channel.inspect;
- channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1',capabilities:{incrementalTail:'supported'}});
+ channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1',capabilities:{incrementalTail:'supported',durableIncremental:'supported'}});
  channel.guardSession={loss:new Promise(()=>{})};
+ channel.resumeTarget=async(_scope,previous,cursor)=>{assert.ok(cursor.startsWith('tail-'));return structuredClone(previous);};
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1'),record('2',{stateAssurance:'unverified',text:null})],completedPartitions:['shard-a'],exhausted:true,resumeCursor:'tail-1'});
  channel.tail=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:'tail-2',records:[],caughtUp:true});
- await service.synchronize(contact);const coverage=await service.synchronizeIncremental(contact);
+ await service.synchronize(contact);
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[],completedPartitions:['shard-a'],exhausted:true,resumeCursor:'tail-1'});
+ const coverage=await service.synchronizeIncremental(contact);
  assert.equal(coverage.phase,'incomplete');assert.equal(coverage.failureCode,'history_identity_quarantined');
  assert.equal(coverage.traversalComplete,true);assert.equal(coverage.incremental.phase,'ready');assert.equal(coverage.incremental.failureCode,null);
  assert.equal(coverage.incremental.pagesAccepted,1);assert.equal((await service.read(contact)).messages.length,1);
- channel.page=async()=>{throw new Error('已完成遍历的未知历史不得复用已交接的快照');};
- assert.equal((await service.synchronize(contact)).incremental.phase,'ready');
  await service.close();
 });
-test('增量重新认证历史未知出现后恢复完整覆盖，不重新打开已交接快照',async t=>{
+test('增量重新认证历史未知出现后恢复完整覆盖，沿已接受水位完成新快照交接',async t=>{
  const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id,inspect=channel.inspect;
- channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1',capabilities:{incrementalTail:'supported'}});
+ channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1',capabilities:{incrementalTail:'supported',durableIncremental:'supported'}});
  channel.guardSession={loss:new Promise(()=>{})};
+ channel.resumeTarget=async(_scope,previous,cursor)=>{assert.ok(cursor.startsWith('tail-'));return structuredClone(previous);};
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{stateAssurance:'unverified',sender:'unknown',text:null}),record('2')],completedPartitions:['shard-a'],exhausted:true,resumeCursor:'tail-1'});
  await service.synchronize(contact);assert.equal((await service.coverage(contact)).phase,'incomplete');
- channel.page=async()=>{throw new Error('不能重读已交接历史快照');};
+ channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[],completedPartitions:['shard-a'],exhausted:true,resumeCursor:'tail-1'});
  channel.tail=async(_scope,_target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:'tail-2',records:[record('1')],caughtUp:true});
  const coverage=await service.synchronizeIncremental(contact);assert.equal(coverage.phase,'complete');assert.equal(coverage.failureCode,null);assert.equal(coverage.quarantinedCount,0);
  assert.equal(coverage.incremental.phase,'ready');assert.equal((await service.read(contact)).messages.length,2);await service.close();
@@ -324,7 +327,7 @@ test('日常重启先复验完整来源，再以新目标从头重扫并重建�
  assert.equal(staged.phase,'running');assert.notEqual(staged.goalId,oldGoal,'重启后先新建完整历史目标');assert.equal(state.tails.length,0,'不能把旧不透明游标交给新原生进程');
  const rescanned=await second.synchronize(contact);assert.equal(rescanned.phase,'complete');assert.notEqual(rescanned.goalId,oldGoal);
  assert.equal(rescanned.incremental?.cursorPresent,true);assert.equal(state.pages.at(-1).cursor,null);
- const tailed=await second.synchronizeIncremental(contact);assert.equal(tailed.incremental?.phase,'ready');assert.equal(state.tails.length,1);
+ await second.synchronizeIncremental(contact);assert.equal(state.tails.length,0,'不支持持久检查点的读取器不能接用已关闭快照的游标');
  await second.close();await reopened.storage.close();
 });
 test('normal-use 来源表实例改变时在读取正文前永久围栏',async t=>{
@@ -353,17 +356,16 @@ test('日常重启的全量重扫仍保留已删除来源排除项',async t=>{
  assert.equal(coverage.phase,'complete');assert.deepEqual((await second.read(contact)).messages.map(row=>row.text),['合成正文2']);
  await second.close();await reopened.storage.close();
 });
-test('守卫明确报告 source change 时即使空闲也持久围栏',async t=>{
+test('已释放通道随后收到共享故障不围栏，下一次真实失证仍停止读取',async t=>{
  const f=await fixture(t),contact=f.saved[0].contact_id,state={created:0,closeCount:0,pages:[],tails:[],records:[record('1')],resumeCursor:'resume-after-history-1'};
- const first=new SqliteHistoryService(f.storage,f.contacts,normalUseChannelFactory(state));
- await first.synchronize(contact);state.failureCode='history_source_changed';
- let closed;
- const didClose=new Promise(resolve=>{closed=resolve;});state.onClose=closed;state.lose();await didClose;
- const before=state.created,beforePages=state.pages.length,second=new SqliteHistoryService(f.storage,f.contacts,normalUseChannelFactory(state));
- await assert.rejects(second.synchronize(contact),{code:'history_source_recovery_unsupported'});
- assert.equal(state.created,before+1,'围栏只允许打开渠道核对元数据，缺少恢复能力仍停读');assert.equal(state.pages.length,beforePages,'未核对来源不读正文页');
- assert.equal((await second.coverage(contact)).phase,'incomplete');
- await first.close();await second.close();
+ const history=new SqliteHistoryService(f.storage,f.contacts,normalUseChannelFactory(state));t.after(()=>history.close());
+ await history.synchronize(contact);assert.equal(state.closeCount,1);
+ state.failureCode='history_source_changed';state.lose();
+ assert.equal((await history.coverage(contact)).phase,'complete');
+ assert.equal((await history.synchronize(contact)).phase,'complete');
+ const before=state.pages.length;state.instance='synthetic-other-instance';
+ await assert.rejects(history.synchronize(contact),{code:'history_source_continuity_unverified'});
+ assert.equal(state.pages.length,before);assert.equal((await history.coverage(contact)).phase,'incomplete');
 });
 test('normal-use 完整遍历含未知状态时仍交接尾游标，但历史资格保持不完整',async t=>{
  const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id,inspect=channel.inspect,state={created:0,closeCount:0,pages:[],tails:[],records:[],resumeCursor:'verified-resume-cursor'};
@@ -494,10 +496,12 @@ test('旧代次或旧表实例的审计不阻挡当前覆盖，旧实际来源�
 });
 test('接受顺序在隐式行号重排、VACUUM及重开后保持，旧未知仍需精确新认证',async t=>{
  const f=await fixture(t,{registryModule:new URL('./fixtures/history/legacy-scope-registry.mjs',import.meta.url).href}),contact=f.saved[0].contact_id,inspect=f.channel.inspect;
- f.channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1',capabilities:{incrementalTail:'supported'}});
+ f.channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1',capabilities:{incrementalTail:'supported',durableIncremental:'supported'}});
  f.channel.guardSession={loss:new Promise(()=>{})};
+ f.channel.resumeTarget=async(_scope,previous)=>structuredClone(previous);
  f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{stateAssurance:'unverified',sender:'unknown',text:null})],completedPartitions:['shard-a'],exhausted:true,resumeCursor:'tail-1'});
  await f.service.synchronize(contact);
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[],completedPartitions:['shard-a'],exhausted:true,resumeCursor:'tail-1'});
  f.channel.tail=async(_scope,_target,cursor)=>({target:f.target.descriptor,cursorIn:cursor,cursorOut:'tail-2',records:[record('1')],caughtUp:true});
  await f.service.synchronizeIncremental(contact);assert.equal((await f.service.coverage(contact)).phase,'complete');
  await f.storage.execute('fixture.reorderImplicitRows',{ownerId:owner,contactId:contact});
@@ -862,8 +866,9 @@ test('同一来源在正常和未知状态间切换时，以最后一次观察�
 test('重复完整同步后增量继续使用新目标，已保存消息不会因旧游标被停读',async t=>{
  const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id,inspect=channel.inspect;
  let serial=0,currentTarget='';channel.guardSession={loss:new Promise(()=>{})};
- channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail'].map(k=>[k,'supported']))});
+ channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','durableIncremental'].map(k=>[k,'supported']))});
  channel.target=async()=>({...target,descriptor:currentTarget=`snapshot-${++serial}`});
+ channel.resumeTarget=async()=>channel.target();
  channel.page=async(_scope,used,cursor)=>({target:used.descriptor,cursorIn:cursor,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true,resumeCursor:`resume-${serial}`});
  channel.tail=async(_scope,used,cursor)=>{if(used.descriptor!==currentTarget){const {StorageFailure}=await import('../src/storage/sqlite/contracts.ts');throw new StorageFailure('history_target_unverified');}return {target:used.descriptor,cursorIn:cursor,cursorOut:`tail-${serial}`,records:[],caughtUp:true};};
  assert.equal((await service.synchronize(contact)).phase,'complete');
@@ -876,12 +881,14 @@ test('重复完整同步后增量继续使用新目标，已保存消息不会�
 
 test('新历史目标没有续读凭据时不能复用旧目标的增量游标',async t=>{
  const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id,inspect=channel.inspect;let serial=0,currentTarget='',canResume=true;channel.guardSession={loss:new Promise(()=>{})};
- channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail'].map(k=>[k,'supported']))});
+ channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','durableIncremental'].map(k=>[k,'supported']))});
  channel.target=async()=>({...target,descriptor:currentTarget=`snapshot-${++serial}`});
+ channel.resumeTarget=async()=>canResume?channel.target():null;
  channel.page=async(_scope,used,cursor)=>({target:used.descriptor,cursorIn:cursor,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true,...(canResume?{resumeCursor:`resume-${serial}`}:{})});
  let tailCalls=0;channel.tail=async(_scope,used,cursor)=>{tailCalls++;return {target:used.descriptor,cursorIn:cursor,cursorOut:`tail-${serial}`,records:[],caughtUp:true};};
  await service.synchronize(contact);await service.synchronizeIncremental(contact);canResume=false;await service.synchronize(contact);
- await assert.rejects(service.synchronizeIncremental(contact),{code:'history_incremental_not_ready'});assert.equal(tailCalls,1);assert.equal((await service.read(contact)).messages.length,1);
+ const pending=await service.synchronizeIncremental(contact);assert.equal(pending.phase,'running');
+ assert.equal(tailCalls,1,'无可证明恢复点时只交回首次历史，不执行tail');assert.equal((await service.read(contact)).messages.length,1);
 });
 
 

@@ -7,21 +7,15 @@ import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/servic
 import {deletionFixture} from './fixtures/memory-documents/deletion-support.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {fixture,owner,record,report,createChannel,restart,target} from './sqlite-clear-support.mjs';
-import {SqliteHistoryRecertifyService} from './fixtures/history/legacy-recertify-service.ts';
+import {fixture,owner,record,createChannel,restart} from './sqlite-clear-support.mjs';
 
-test('同物理出现跨认证binding副本，删除旧source须清除新副本',async t=>{
+test('同物理出现跨旧绑定副本，删除旧source须清除新副本',async t=>{
  const f=await fixture(t,{registryModule:new URL('./fixtures/history/source-epoch-deletion-registry.mjs',import.meta.url).href});
  f.state.pageRecords=[record('shard-a','1')];
  await f.current.history.synchronize(f.contactA);
- const oldToken=await f.current.contacts.eligibility(f.contactA),old=(await f.current.history.readChat(f.contactA)).messages[0];
- await f.current.storage.execute('history.markContinuityLost',{token:oldToken});
- const normal=scope=>({...report,continuity:'same-source-instances-normal-use-v1',accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation});
- const create=()=>{const {channel,state}=createChannel();state.pageRecords=[record('shard-a','1')];state.inspectFactory=normal;channel.guardSession={loss:new Promise(()=>{})};return channel;};
- const service=new SqliteHistoryRecertifyService(f.current.storage,f.current.contacts,create,f.current.holders,{stopHistory:id=>f.current.history.stop(id)});t.after(()=>service.close());
- assert.equal((await service.recertify(f.contactA,{requestKey:'same-actual-source'})).state,'completed');
- f.state.inspectFactory=normal;f.channel.guardSession={loss:new Promise(()=>{})};await f.current.history.synchronize(f.contactA);
- const fresh=(await f.current.history.readChat(f.contactA)).messages[0];assert.notEqual(fresh.id,old.id);
+ const fresh=(await f.current.history.readChat(f.contactA)).messages[0];
+ const [old]=await f.current.storage.execute('fixture.historicalSourceCopy',{token:await f.current.contacts.eligibility(f.contactA)});
+ assert.notEqual(fresh.id,old.id);
  const key=JSON.stringify(['source-1','shard-a','table-a','1']);
  const before=await f.current.storage.execute('diag.sourceRows',{ownerId:owner,contactId:f.contactA,key});assert.equal(before.length,2);assert.equal(new Set(before.map(r=>r.binding_id)).size,2);assert.equal(new Set(before.map(r=>r.conversation_id)).size,1);
  const plan=await f.current.deletion.plan({ownerId:owner,requestKey:'delete-old-same-occurrence',scope:{kind:'source',contactId:f.contactA,sourceId:old.sourceRecordIds[0]}});
@@ -35,15 +29,11 @@ test('同物理出现跨认证binding副本，删除旧source须清除新副本'
  assert.equal(readable.length,0);assert.equal(eligible.eligible,false);
 });
 
-const normalReport=scope=>({...report,continuity:'same-source-instances-normal-use-v1',accountKey:scope.accountKey,conversationKey:scope.conversationKey,sourceGeneration:scope.token.source_generation});
 async function copies(t,records=[record('shard-a','1')]){
  const f=await fixture(t,{registryModule:new URL('./fixtures/history/source-epoch-deletion-registry.mjs',import.meta.url).href});f.state.pageRecords=records;
- await f.current.history.synchronize(f.contactA);await f.current.history.synchronize(f.contactB);const old=(await f.current.history.readChat(f.contactA)).messages;
- await f.current.storage.execute('history.markContinuityLost',{token:await f.current.contacts.eligibility(f.contactA)});
- const create=()=>{const {channel,state}=createChannel();state.pageRecords=records;state.inspectFactory=normalReport;channel.guardSession={loss:new Promise(()=>{})};return channel;};
- const service=new SqliteHistoryRecertifyService(f.current.storage,f.current.contacts,create,f.current.holders,{stopHistory:id=>f.current.history.stop(id)});t.after(()=>service.close());
- assert.equal((await service.recertify(f.contactA,{requestKey:'copy-synthetic'})).state,'completed');f.state.inspectFactory=normalReport;f.channel.guardSession={loss:new Promise(()=>{})};await f.current.history.synchronize(f.contactA);
- return {...f,old,service,fresh:(await f.current.history.readChat(f.contactA)).messages};
+ await f.current.history.synchronize(f.contactA);await f.current.history.synchronize(f.contactB);
+ const old=await f.current.storage.execute('fixture.historicalSourceCopy',{token:await f.current.contacts.eligibility(f.contactA)});
+ return {...f,old,fresh:(await f.current.history.readChat(f.contactA)).messages};
 }
 test('删除只扩展相同owner联系人会话和可信物理tuple，异tuple及他人同tuple保留',async t=>{
  const f=await copies(t,[record('shard-a','1',{text:'相同合成正文'}),record('shard-a','2',{text:'相同合成正文'}),record('shard-b','1',{text:'相同合成正文'})]);
@@ -65,7 +55,7 @@ test('种子capture已擦除再重启，冻结计划仍找回并清除新epoch�
  const frozen=await f.current.storage.execute('diag.sourceIds',{operation:plan});assert.equal(frozen.length,2);
  const claim=await f.current.storage.execute('deletion.claim',{ownerId:owner,operationId:plan.operationId});const seedTarget=claim.targets.find(x=>x.target?.rowKind==='capture_record'&&x.target.key.id===sourceId);
  await f.current.storage.execute('deletion.clearTarget',{ownerId:owner,operationId:plan.operationId,token:claim.token,planRevision:claim.planRevision,targetNo:seedTarget.targetNo});
- assert.deepEqual(await f.current.storage.execute('diag.sourceIds',{operation:plan}),frozen);await f.service.close();const current=await restart(f,t);
+ assert.deepEqual(await f.current.storage.execute('diag.sourceIds',{operation:plan}),frozen);const current=await restart(f,t);
  assert.deepEqual(await current.storage.execute('diag.sourceIds',{operation:plan}),frozen);assert.equal((await current.deletion.advance(plan)).state,'completed');
  assert.equal((await current.storage.execute('diag.sourceRows',{ownerId:owner,contactId:f.contactA,key:JSON.stringify(['source-1','shard-a','table-a','1'])})).length,0);assert.deepEqual(await current.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
@@ -80,10 +70,9 @@ test('删旧source同时清除新epoch的候选输入、讨论上下文和媒体
  const result=await f.current.deletion.advance(plan);assert.equal(result.state,'completed',JSON.stringify(result.checks));assert.deepEqual(await f.current.storage.execute('diag.dependencies',{ownerId:owner}),{reply_context:0,reply_context_item:0,reply_candidate_input_source:0,media_extraction_attempt:0,message_media:0});assert.deepEqual(await f.current.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 test('旧来源删除撤下仅由新epoch实际输入产生的长期记忆和L2L3文档',async t=>{
- const f=await deletionFixture(t),contactId=f.contactId,oldSource=f.message.sourceRecordIds[0];await f.contacts.setReading(true);await f.storage.execute('history.markContinuityLost',{token:await f.contacts.eligibility(contactId)});
- const baseInspect=f.channel.inspect;const create=()=>({...f.channel,inspect:async scope=>({...await baseInspect(scope),continuity:'same-source-instances-normal-use-v1'}),guardSession:{loss:new Promise(()=>{})}});
- const service=new SqliteHistoryRecertifyService(f.storage,f.contacts,create,f.holders,{stopHistory:id=>f.service.stop(id)});t.after(()=>service.close());assert.equal((await service.recertify(contactId,{requestKey:'document-new-epoch'})).state,'completed');
- f.channel.inspect=async scope=>({...await baseInspect(scope),continuity:'same-source-instances-normal-use-v1'});f.channel.guardSession={loss:new Promise(()=>{})};await f.service.synchronize(contactId);await f.contacts.setReading(false);
+ const f=await deletionFixture(t),contactId=f.contactId;await f.contacts.setReading(true);
+ const [copy]=await f.storage.execute('fixture.historicalSourceCopy',{token:await f.contacts.eligibility(contactId)}),oldSource=copy.sourceRecordIds[0];
+ await f.contacts.setReading(false);
  const run=await f.extraction.start('derived-from-new-epoch');assert.ok(run.inputs.every(i=>i.recordId!==oldSource));await f.extraction.waitForIdle(run.runId);const scope={scopeKind:'contact',contactId};assert.equal((await f.documents.read(scope)).documents.length,2);
  const plan=await f.deletion.plan({ownerId:owner,requestKey:'delete-old-source-new-epoch-documents',scope:{kind:'source',contactId,sourceId:oldSource}});assert.equal((await f.documents.read(scope)).publication,null);
  const result=await f.deletion.advance(plan);assert.equal(result.state,'completed',JSON.stringify(result.checks));assert.deepEqual((await f.documents.read(scope)).documents,[]);assert.deepEqual(await f.storage.execute('fixture.documentErasure',{ownerId:owner,text:'合成园艺'}),{statements:0n,versions:0n,blocks:0n,events:0n,references:0n});assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});

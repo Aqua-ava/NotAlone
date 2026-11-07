@@ -1,6 +1,6 @@
 import type {StorageRow,StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {DeletionOperation} from '../../storage/sqlite/deletion/contracts.ts';
-import {completedLegacyPhysicalKeys} from './legacy-physical-suppression.ts';
+import {deletionEquivalentKeys} from './source-equivalence.ts';
 
 /** 同一已认证物理出现可跨binding重读；正文、时间及server别名不参与等价推断。 */
 function trustedOccurrence(row:StorageRow):boolean {
@@ -26,7 +26,7 @@ export function sourceDeletionPhysicalKeys(tx:StorageTransaction,op:DeletionOper
  const seed=tx.get(`${selection} AND r.id=?`,[op.ownerId,op.scope.contactId,op.acceptedGeneration,op.scope.sourceId]);
  if(!seed?.observed_key)return [];
  if(!trustedOccurrence(seed))return [String(seed.observed_key)];
- return completedLegacyPhysicalKeys(tx,{ownerId:op.ownerId,contactId:op.scope.contactId,conversationId:String(seed.conversation_id),key:String(seed.observed_key)});
+ return deletionEquivalentKeys(tx,{ownerId:op.ownerId,contactId:op.scope.contactId,conversationId:String(seed.conversation_id),key:String(seed.observed_key)});
 }
 /** 首次计划冻结的capture目标是重试依据；种子已擦除时仍沿同一集合清理所有派生。 */
 export function sourceDeletionIds(tx:StorageTransaction,op:DeletionOperation):string[]{

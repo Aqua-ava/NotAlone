@@ -1,3 +1,4 @@
+import {historicalDeletionEquivalences,retiredDeletionOperations} from './migrations/history-retirement-v1.ts';
 import { parentPort, workerData } from 'node:worker_threads';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
@@ -67,6 +68,9 @@ try {
     if (all('PRAGMA foreign_key_check').length) throw new StorageFailure('foreign_keys_failed');
     return {integrity: 'ok', foreignKeys: 'ok'} as const;
   };
+  // 固定v1函数只供迁移47校验旧审计；不读取外部数据，也不写业务行。
+  connection.function('notalone_history_deletion_equivalences_v1',()=>JSON.stringify(historicalDeletionEquivalences({get,all})));
+  connection.function('notalone_history_retired_deletion_operations_v1',()=>JSON.stringify(retiredDeletionOperations({get,all})));
   const transaction = <T>(write: boolean, fn: () => T): T => {
     connection.exec(write ? 'BEGIN IMMEDIATE' : 'BEGIN');
     try { const result = fn(); connection.exec('COMMIT'); return result; }

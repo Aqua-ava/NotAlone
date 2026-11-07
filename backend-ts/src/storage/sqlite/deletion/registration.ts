@@ -6,7 +6,6 @@ import {discussionCallDeletionDomain} from '../../../reply/sqlite/model-deletion
 import {memoryExtractionDeletionDomain} from '../../../memory/sqlite/deletion.ts';
 import { composeMediaDeletionRegistration } from '../../../media/sqlite/deletion.ts';
 import { historyDeletionDomain } from '../../../history/sqlite/deletion.ts';
-import { composeSupersededHistoryRegistration } from '../../../history/sqlite/superseded-deletion.ts';
 import { historyReaderHolderKey } from '../../../history/sqlite/service.ts';
 import { identityDeletionAuthority, identityDeletionDomain } from '../../../contacts/sqlite/deletion.ts';
 import { skillMetadataDeletionDomain } from '../../../skills/sqlite/deletion.ts';
@@ -43,13 +42,7 @@ const baseDeletionRegistration: DeletionRegistration = {
 };
 
 const mediaRegistration=composeMediaDeletionRegistration(baseDeletionRegistration);
-// 被取代副本清理是内部维护范围，不进入 installedDeletionScopes（对外可请求的用户删除范围）。
-const supersededRegistration=composeSupersededHistoryRegistration(mediaRegistration);
-export const installedDeletionRegistration:DeletionRegistration={...supersededRegistration,authority:withDiscussionDeletionAuthority(supersededRegistration.authority)};
-export const createInstalledDeletionRegistration=(options:{supersededBatchSize?:number}={}):DeletionRegistration=>{
-  const registration=composeSupersededHistoryRegistration(mediaRegistration,options.supersededBatchSize===undefined?{}:{batchSize:options.supersededBatchSize});
-  return {...registration,authority:withDiscussionDeletionAuthority(registration.authority)};
-};
+export const installedDeletionRegistration:DeletionRegistration={...mediaRegistration,authority:withDiscussionDeletionAuthority(mediaRegistration.authority)};
 
 const deletionOwner = (input: unknown): string => {
   const ownerId = (input as {ownerId?: unknown})?.ownerId;

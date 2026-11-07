@@ -6,10 +6,10 @@ import { IncrementalHistoryCoordinator } from '../src/history/sqlite/incremental
 import { StorageFailure } from '../src/storage/sqlite/contracts.ts';
 import { FirstHistoryCoordinator } from '../src/history/sqlite/coordinator.ts';
 
-async function parkedFixture(t) {
+async function sharedFixture(t) {
   const cleanup = [], f = await fixture({ after: callback => cleanup.push(callback) },{registryModule:new URL('./fixtures/history-parked-registry.mjs',import.meta.url).href});
-  const state = { owner: undefined, releaseOwner: undefined, tail: Promise.resolve(), parks: 0, pages: 0, channels: [], wakes: [] };
-  // 只替代原生进程租约边界；顺序、停车回调、历史目标、守卫和存储均走生产服务。
+  const state = { owner: undefined, releaseOwner: undefined, tail: Promise.resolve(), closes: 0, pages: 0, channels: [], wakes: [] };
+  // 只替代原生进程租约边界；顺序、历史目标、守卫和存储均走生产服务。
   const shared = { async run(owner, work, releasePreviousOwner, signal) {
     const previous = state.tail;
     let unlock; state.tail = new Promise(resolve => { unlock = resolve; });
@@ -36,8 +36,7 @@ async function parkedFixture(t) {
         exhausted: true, resumeCursor: `tail:${scope.conversationKey}` };},
       tail: async (_scope, target, cursor) => ({ target: target.descriptor, cursorIn: cursor, cursorOut: cursor,
         records: [], caughtUp: true }),
-      park: async () => { state.parks++; },
-      close: async () => { loss.resolve(); },
+      close: async () => { state.closes++;loss.resolve(); },
     };
   }, undefined, undefined, undefined, shared);
   history.setFirstHistoryWake(contactId => state.wakes.push(contactId));
@@ -46,17 +45,17 @@ async function parkedFixture(t) {
 }
 
 test('共享读取器切换联系人后增量新目标唤醒首次补齐，同身份快照不再作废旧增量', async t => {
-  const f = await parkedFixture(t), [a, b] = f.saved;
+  const f = await sharedFixture(t), [a, b] = f.saved;
   await f.history.synchronize(a.contact_id);
   await f.history.synchronize(b.contact_id);
-  assert.ok(f.state.parks > 0, '读取另一联系人应停车原读取器');
+  assert.equal(f.state.closes,2,'轮转后每位的原生选择已经释放');
   const beforeB = (await f.history.read(b.contact_id)).messages.map(row => row.id);
   const handoff = await f.history.synchronizeIncremental(a.contact_id);
   assert.equal(handoff.phase, 'running');
   // 目标复用（阶段 B）：快照身份未变时旧增量目标保持 running 继续续读，不再标记替换失效。
   assert.equal(handoff.incremental.phase, 'ready');
   assert.equal(handoff.incremental.failureCode, null);
-  assert.deepEqual(f.state.wakes, [a.contact_id], '普通停车后的新历史目标也必须自动交给首次协调器');
+  assert.deepEqual(f.state.wakes, [a.contact_id], '完整重验后的新历史目标也必须自动交给首次协调器');
   await f.history.synchronize(a.contact_id);
   const caughtUp = await f.history.synchronizeIncremental(a.contact_id);
   assert.equal(caughtUp.incremental.phase, 'ready');
@@ -65,7 +64,7 @@ test('共享读取器切换联系人后增量新目标唤醒首次补齐，同�
 });
 
 test('空闲守卫瞬时退出后外置首次协调器仍会被唤醒，共享进程错误码须完整重验后才判围栏', async t => {
-  const f = await parkedFixture(t), [a, b] = f.saved;
+  const f = await sharedFixture(t), [a, b] = f.saved;
   await f.history.synchronize(a.contact_id);
   await f.history.synchronize(b.contact_id);
   const current = f.state.channels.at(-1);
@@ -114,7 +113,7 @@ test('空闲守卫瞬时退出后外置首次协调器仍会被唤醒，共享�
 
 for(const {code,failFirstRecovery} of [{code:'history_native_timeout'},{code:'history_source_changed'},{code:'history_native_timeout',failFirstRecovery:true}])test(`增量替换阻塞后守卫${code}按持久恢复资格决定是否唤醒首次${failFirstRecovery?'，恢复查询失败后下轮继续':''}`,async t=>{
  t.mock.timers.enable({apis:['setInterval']});
- const f=await parkedFixture(t),[a,b]=f.saved;
+ const f=await sharedFixture(t),[a,b]=f.saved;
  await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
  const directory={directory:async()=>{const saved=await f.contacts.syncDirectory();return {...saved,bindings:saved.bindings.filter(row=>row.contact_id===a.contact_id)};}};
  const incremental=new IncrementalHistoryCoordinator(directory,f.history,{intervalMs:30_000,firstHistoryManagedExternally:true});
@@ -143,7 +142,7 @@ for(const {code,failFirstRecovery} of [{code:'history_native_timeout'},{code:'hi
 
 test('围栏候选仅允许核对，旧读取器缺水位恢复能力仍明确停读', async t => {
   t.mock.timers.enable({apis: ['setInterval']});
-  const f = await parkedFixture(t), [a] = f.saved;
+  const f = await sharedFixture(t), [a] = f.saved;
   await f.history.synchronize(a.contact_id);
   const token = await f.contacts.eligibility(a.contact_id);
   await f.storage.execute('history.markContinuityLost', {token});

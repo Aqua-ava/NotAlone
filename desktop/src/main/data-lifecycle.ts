@@ -14,7 +14,6 @@ const notices = {
  'source-deletion': '聊天记录来源正在删除，删除完成后会重新读取。',
  'contact-deletion': '联系人正在删除，旧聊天与资料已停用。',
  'history-clear': '聊天记录正在清空，完成后可重新同步并刷新。',
- recertification: '来源正在重新认证，旧聊天资料已撤下；全部核验完成后会刷新。',
 };
 interface Dependencies {
  history: Pick<ContactHistoryController, 'getState' | 'invalidate' | 'refreshCurrent'>;

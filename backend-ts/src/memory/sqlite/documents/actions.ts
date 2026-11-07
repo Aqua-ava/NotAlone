@@ -109,7 +109,7 @@ export const memoryDocumentsActions:StorageAction[]=[
  action('read','read',(tx,i)=>withSourceMemo(()=>{
   const ownerId=textId(i.ownerId),s=readScope(i.scope);available(tx,ownerId,s);
   const scope={scopeKind:s.scopeKind,contactId:s.contactId};
-  if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' AND scope_kind<>'superseded_history'",[ownerId]))return {scope,publication:null,documents:[],status:'needs_revalidation'};
+  if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed'",[ownerId]))return {scope,publication:null,documents:[],status:'needs_revalidation'};
   const latest=tx.get(`SELECT t.id,t.run_id,t.state,t.document_basis_state FROM processing_task t JOIN processing_run r ON r.owner_id=t.owner_id AND r.id=t.run_id WHERE t.owner_id=? AND t.scope_kind=? AND t.contact_id IS ? ORDER BY r.started_at DESC,r.rowid DESC LIMIT 1`,[ownerId,s.scopeKind,s.contactId]);
   const view=latest?taskView(tx,ownerId,String(latest.id)):null;
   const failed=view?.stages.find(step=>['failed','unknown','revoked'].includes(step.status));

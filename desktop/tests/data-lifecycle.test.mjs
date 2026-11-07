@@ -18,8 +18,8 @@ function fixture() {
  return {lifecycle:new DesktopDataLifecycle(ports),ports,discussion,state,events,requests,gate,request:{contactId,sessionId,requestKey,scopeRevision:1,text:'合成讨论要求'}};
 }
 
-test('删除来源、联系人、清空历史及重新认证均撤下旧资料并拒绝在途讨论的晚到成功',async t=>{
- for(const reason of ['source-deletion','contact-deletion','history-clear','recertification'])await t.test(reason,async()=>{
+test('删除来源、联系人和清空历史均撤下旧资料并拒绝在途讨论的晚到成功',async t=>{
+ for(const reason of ['source-deletion','contact-deletion','history-clear'])await t.test(reason,async()=>{
   const f=fixture();
   try{
    const pending=f.discussion.submit(f.request),rejected=assert.rejects(pending,/失效|变化/);

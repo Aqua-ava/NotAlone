@@ -368,7 +368,7 @@ test('已关闭同步的临时失败仅展示保存状态，不承诺正在自�
  await expect(issues).not.toContainText('正在读取');
 });
 
-test('来源无法确认时才显示修复入口，健康、临时失败及暂停不提示修复', async t => {
+test('来源无法确认时才显示停读检查入口，健康、临时失败及暂停不提示修复', async t => {
  const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
  const page=await browser.newPage();
  await mount(page,`
@@ -393,11 +393,10 @@ test('来源无法确认时才显示修复入口，健康、临时失败及暂�
  window.notalone={
   bindings:{getState:async()=>bindings,onStateChanged:listener=>{bindingListeners.add(listener);return()=>bindingListeners.delete(listener);},refresh:noop,refreshSaved:noop},
   contactHistory:{...subscription({revision:1,contactId:'a',scopeRevision:1,messages:{phase:'ready',items:[],nextCursor:null},error:null}),load:noop},
-  historyClear:subscription({revision:1,contactId:'a',scopeRevision:1,phase:'ready',clear:null,resync:null,busy:null,error:null,
-   recertify:{contactId:'a',state:'none',stage:'none',completed:false,requestKey:null,failureCode:null}}),
+  historyClear:subscription({revision:1,contactId:'a',scopeRevision:1,phase:'ready',clear:null,resync:null,busy:null,error:null}),
   syncControl:{getState:async()=>sync,onStateChanged:listener=>{listeners.add(listener);return()=>listeners.delete(listener);},refresh:noop}
  };
- createRoot(document.getElementById('root')).render(<ContactsPage session={{state:{contacts,selectedContactId:'a',scopeRevision:1,directoryPhase:'ready'},refreshContacts:noop}} navigate={()=>{}}/>);
+ window.navigationCalls=[];createRoot(document.getElementById('root')).render(<ContactsPage session={{state:{contacts,selectedContactId:'a',scopeRevision:1,directoryPhase:'ready'},refreshContacts:noop}} navigate={page=>window.navigationCalls.push(page)}/>);
  `);
  const entry=page.getByRole('button',{name:'处理同步问题',exact:true});
  const repair=page.getByRole('button',{name:'修复同步',exact:true,includeHidden:true});
@@ -418,18 +417,35 @@ test('来源无法确认时才显示修复入口，健康、临时失败及暂�
  await expect(status).toHaveText('历史覆盖待确认');
  await expect(entry).toHaveCount(0);await expect(repair).toHaveCount(0);
  await page.evaluate(()=>window.updateSync('history_source_continuity_unverified'));
- await expect(entry).toBeVisible();await entry.click();await expect(repair).toBeVisible();
- await repair.click();await expect(page.getByRole('dialog',{name:'确认修复同步',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'取消',exact:true}).click();
+ await expect(entry).toBeVisible();await entry.click();await expect(repair).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'检查微信来源',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'检查微信来源',exact:true}).click();
+ assert.deepEqual(await page.evaluate(()=>window.navigationCalls),['sync']);
  await page.evaluate(()=>window.updateSync(null));
  await expect(status).toHaveText('本机历史已读完');
  await expect(entry).toHaveCount(0);await expect(repair).toHaveCount(0);
  await page.evaluate(()=>window.updateSync('history_source_continuity_unverified',true,'a','ready',true));
- await expect(entry).toBeVisible();await expect(repair).toBeVisible();
- await repair.click();await expect(page.getByRole('dialog',{name:'确认修复同步',exact:true})).toBeVisible();
+ await expect(entry).toBeVisible();await expect(repair).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'检查微信来源',exact:true})).toBeVisible();
  assert.equal(await page.evaluate(()=>window.stopContact()),true);
  await expect(page.getByRole('button',{name:'开启自动同步',exact:true})).toBeVisible();
  await expect(status).toHaveText('聊天来源需要核验');
  await expect(entry).toHaveCount(0);await expect(repair).toHaveCount(0);
  await expect(page.getByRole('dialog',{name:'确认修复同步',exact:true})).toHaveCount(0);
+});
+
+test('来源待确认仅提供停读说明和设置导航，不展示认证或自动恢复授权',async t=>{
+ const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());const page=await browser.newPage();
+ await mount(page,`
+ import React from 'react';import {createRoot} from 'react-dom/client';import {ContactSyncSettings} from './src/renderer/ContactSyncSettings';
+ window.calls=[];const noop=async()=>{};const binding={contactId:'a',bindingId:'binding-a',locator:'friend-a',displayName:'合成联系人',status:'active'};
+ const state={revision:1,scopeRevision:1,phase:'ready',busy:null,errorCode:null,selectionOnly:true,sessionIssue:null,bindings:[binding],knownBindings:[binding],sessions:[{locator:'friend-a',displayName:'合成联系人',boundContactId:'a'}]};
+ window.notalone={bindings:{getState:async()=>state,onStateChanged:()=>()=>{},refresh:noop,refreshSaved:noop,confirm:async()=>{throw Error('不应自动授权');}},syncControl:{getState:async()=>({revision:1,scopeRevision:1,phase:'ready',report:{syncScope:'selected'}}),onStateChanged:()=>()=>{}}};
+ createRoot(document.getElementById('root')).render(<ContactSyncSettings session={{state:{contacts:[{contactId:'a',displayName:'合成联系人'}],selectedContactId:'a',scopeRevision:1}}} navigate={page=>window.calls.push(page)} sourceNeedsConfirmation/>);
+ `);
+ await expect(page.getByText('自动同步已停止。请核对微信账号和历史数据位置；来源一致后会自动接续，不同来源不会自动接纳。',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'修复同步',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'停止合成联系人的自动同步',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'检查微信来源',exact:true}).click();
+ assert.deepEqual(await page.evaluate(()=>window.calls),['sync']);
 });

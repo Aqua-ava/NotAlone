@@ -1,6 +1,8 @@
 # ADR-176：核对来源后原地续读，不旋转绑定
 
-状态：已采纳（2026-11-07）。用户确认“元数据一致可直接解除围栏、不全量重读”，并授权覆盖冲突旧条款。原地恢复已通过[任务 02 副本验收](../../docs/verification/sync-simplification-02-copy-replay-20261107.md)；迁移 46 已将三张旧来源表折叠为 `source_proof`，迁移及重启验收见[任务 04 记录](../../docs/verification/sync-simplification-04-copy-replay-20261107.md)；真实库恢复、存量清理及观察期另由用户执行。
+部分由[ADR-177](177-retire-source-recertification-and-cleanup.md)替代（2026-11-07）：保留元数据与锚点核对、原地续读和来源证明；守卫改为本轮独占读取期间，退出空闲持有／停车以及暂留认证和清理入口。旧审计中的必要删除等价事实迁移保留。
+
+状态：已采纳（2026-11-07）。用户确认“元数据一致可直接解除围栏、不全量重读”，并授权覆盖冲突旧条款。原地恢复已通过[任务 02 副本验收](../../docs/verification/sync-simplification-02-copy-replay-20261107.md)；迁移 46 已将三张旧来源表折叠为 `source_proof`，迁移及重启验收见[任务 04 记录](../../docs/verification/sync-simplification-04-copy-replay-20261107.md)；真实库恢复与增量接续见[任务03记录](../../docs/verification/sync-simplification-03-live-recovery-20261107.md)，其中人工分段验收缺口仍保留；存量清理在用户确认后由Agent执行，观察期仍由用户自行完成。
 
 重启造成的守卫失效与来源真实变化此前共用围栏，显式修复又建立新绑定并完整重读，累积重复副本。决定让绑定持续表示联系人与稳定会话的关系，来源核对独立表达读取资格；正常重启和显式处理使用同一条受控恢复流程。
 

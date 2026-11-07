@@ -7,14 +7,12 @@ import { verifiedTerminalReason, prepareRecord } from './normalize.ts';
 import {currentSourceScopeCTE,currentSourcePredicate} from './current-scope.ts';
 import {rememberSourceTerminal,type SourceTerminalReason} from './terminal.ts';
 import {failHistoryQuoteInTransaction,quoteParserVersion,saveHistoryQuoteInTransaction} from './quote-store.ts';
-import type {RecertifySourceWrite} from './recertify-access.ts';
 import {nextMessageDisplayNo} from '../../storage/sqlite/message-order.ts';
 
 /** 逐条排除判定：来源删除（05）与清空截断（06）分别记账，都不写回正文或原始载荷。 */
 export type IngestExclusion = 'source_excluded' | 'clear_excluded';
 export interface IngestObserved { localKey: string | null; serverKey: string | null }
 export interface IngestRecordsInput {
-  recertify?:RecertifySourceWrite;
   tx: StorageTransaction; token: ReadEligibility; report: HistorySupportReport; target: HistoryTarget;
   captureId: string; at: number; records: readonly HistoryRecord[];
   // 06 接线点：返回排除码时不建立/不改写消息；未命中继续按来源身份幂等写入。
@@ -201,8 +199,8 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
       [token.owner_id,token.contact_id,message.id,prepared.localKey,token.binding_id,BigInt(token.data_generation)]);
       if(priorSource){
         const quoteInput={token,recordId:String(priorSource.id),messageId:String(message.id),version:quoteParserVersion};
-        const quoteResult=prepared.quote?saveHistoryQuoteInTransaction(tx,{...quoteInput,content:prepared.quote,proofDigest:prepared.quote.proofDigest},input.recertify)
-          :prepared.quoteErrorCode?failHistoryQuoteInTransaction(tx,{...quoteInput,errorCode:prepared.quoteErrorCode},input.recertify):null;
+        const quoteResult=prepared.quote?saveHistoryQuoteInTransaction(tx,{...quoteInput,content:prepared.quote,proofDigest:prepared.quote.proofDigest})
+          :prepared.quoteErrorCode?failHistoryQuoteInTransaction(tx,{...quoteInput,errorCode:prepared.quoteErrorCode}):null;
         if(quoteResult?.changed)updatedMessageIds.add(String(message.id));
         continue;
       }
@@ -233,9 +231,9 @@ export function ingestRecords(input: IngestRecordsInput): { quarantined: boolean
     const recordId=randomUUID();
     tx.run('INSERT INTO capture_record(owner_id,id,contact_id,capture_id,item_no,state,message_id,raw_payload,observed_scheme,observed_key,normalizer_version,reason_code) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', [token.owner_id, recordId, token.contact_id, captureId, index, excluded ? 'excluded' : reason ? 'quarantined' : 'normalized', reason ? null : message!.id, excluded ? null : sourcePayload, prepared.localKey ? 'source-table-local-v1' : null, prepared.localKey, singleTextCopy?'2':'1', reason]);
     if(!reason&&!excluded&&message&&prepared.quote){
-      saveHistoryQuoteInTransaction(tx,{token,recordId,messageId:String(message.id),version:quoteParserVersion,content:prepared.quote,proofDigest:prepared.quote.proofDigest},input.recertify);
+      saveHistoryQuoteInTransaction(tx,{token,recordId,messageId:String(message.id),version:quoteParserVersion,content:prepared.quote,proofDigest:prepared.quote.proofDigest});
     }else if(!reason&&!excluded&&message&&prepared.quoteErrorCode){
-      failHistoryQuoteInTransaction(tx,{token,recordId,messageId:String(message.id),version:quoteParserVersion,errorCode:prepared.quoteErrorCode},input.recertify);
+      failHistoryQuoteInTransaction(tx,{token,recordId,messageId:String(message.id),version:quoteParserVersion,errorCode:prepared.quoteErrorCode});
     }
   }
   return { quarantined:quarantined||pendingStates.size>0, createdMessageIds, updatedMessageIds:[...updatedMessageIds] };

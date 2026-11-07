@@ -173,28 +173,24 @@ test('正式宿主原地恢复完成不擅自清理未登记的旧副本',{timeo
  await initial.request('/api/sync/enable','POST',{});
  assert.equal((await initial.request(`/api/contacts/${selected.contactId}/history/sync`,'POST',{})).status,200);
  await initial.shutdown();
- // 仅构造历史已存在的旧绑定、无引用消息与完成审计；不制造清理请求。
+ // 仅构造历史已存在的旧绑定和无引用消息。
  const file=join(f.userData,'managed/sqlite/notalone.sqlite'),db=new DatabaseSync(file);
  const binding=db.prepare("SELECT * FROM conversation_binding WHERE contact_id=? AND state='verified'").get(selected.contactId),message=db.prepare('SELECT * FROM message WHERE contact_id=?').get(selected.contactId),oldBinding=randomUUID(),oldMessage=randomUUID();
  const insert=(table,row)=>db.prepare(`INSERT INTO ${table}(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(()=>'?').join(',')})`).run(...Object.values(row));
  insert('conversation_binding',{...binding,id:oldBinding,state:'revoked'});
  insert('message',{...message,id:oldMessage,binding_id:oldBinding,display_no:message.display_no+1});
- const at=Date.now();
- insert('history_source_recertification',{owner_id:selected.ownerId,id:randomUUID(),contact_id:selected.contactId,request_key:'synthetic-old-copy',runtime_id:'synthetic-old-runtime',state:'completed',stage:'completed',started_at:at,updated_at:at,finished_at:at,old_binding_id:oldBinding,new_binding_id:binding.id,old_token_json:'{}',preserved_message_count:0,old_fence_json:'{}'});
  db.prepare("UPDATE source_proof SET state='needs_confirmation',reason='history_source_continuity_unverified' WHERE contact_id=?").run(selected.contactId);
- assert.equal(db.prepare('SELECT count(*) n FROM history_superseded_cleanup').get().n,0);
  db.close();
- const restored=await start(f,{manual:true}),key=randomUUID(),route=`/api/contacts/${selected.contactId}/history/recertify`;
- const admitted=await restored.request(route,'POST',{request_key:key});assert.equal(admitted.status,202,JSON.stringify(admitted.body));
- const completed=await ready(async()=>restored.request(route+`?request_key=${key}`),r=>r.body.state!=='running','synthetic_recovery_completion');
- assert.equal(completed.body.state,'completed',JSON.stringify(completed.body));
+ const restored=await start(f,{manual:true});
+ const completed=await restored.request(`/api/contacts/${selected.contactId}/history/sync`,'POST',{});
+ assert.equal(completed.status,200,JSON.stringify(completed.body));
  // 正式关闭等待宿主已派发工作排空，然后离线核对旧副本与删除账本。
  await restored.shutdown();
  const after=new DatabaseSync(file,{readOnly:true});
  try{
   assert.equal(after.prepare('SELECT count(*) n FROM message WHERE id=?').get(oldMessage).n,1,'恢复没有删除旧副本');
   assert.equal(after.prepare("SELECT count(*) n FROM deletion_operation WHERE scope_kind='superseded_history'").get().n,0,'恢复没有发起存量清理');
-  assert.equal(after.prepare('SELECT count(*) n FROM history_superseded_cleanup').get().n,0);
+  assert.equal(after.prepare("SELECT count(*) n FROM sqlite_schema WHERE name='history_superseded_cleanup'").get().n,0);
   assert.equal(after.prepare('SELECT count(*) n FROM conversation_binding WHERE contact_id=?').get(selected.contactId).n,2);
  }finally{after.close();}
  noCliOrphans(await requests(f));

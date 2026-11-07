@@ -1,12 +1,8 @@
-import { historyRecertifyFailureMessage, type HistoryBoundaryView, type HistoryClearRequest, type HistoryClearState, type HistoryClearView, type HistoryResyncView, type HistoryResyncRequest, type HistoryRecertifyView, type HistoryRecertifyRequest, type HistoryRecertifyCancelRequest } from '../../shared/history-clear-bridge';
-import { BackendRequestFailure } from '../backend/json-client';
+import { type HistoryBoundaryView, type HistoryClearRequest, type HistoryClearState, type HistoryClearView, type HistoryResyncView, type HistoryResyncRequest } from '../../shared/history-clear-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
-import type { HistoryActivityMutex } from './activity';
-import { recertifyView } from './recertify-read';
 
 type Scope = { generation: number; contactId: string; scopeRevision: number };
-type OwnedRecertification = Scope & { requestKey: string };
 const phases = new Set(['none', 'boundary_pending', 'cleaning', 'cleanup_blocked', 'completed']);
 const boundaryStates = new Set(['pending', 'verified', 'blocked']);
 const resyncStates = new Set(['none', 'authorized', 'active', 'completed']);
@@ -45,17 +41,13 @@ function resyncView(value: unknown): HistoryResyncView {
     completed: row.completed, goalPhase, messageCount, nonTextCount, failureCode };
 }
 export class HistoryClearController {
-  private state: HistoryClearState = { revision: 0, contactId: null, scopeRevision: 0, phase: 'idle', clear: null, resync: null, recertify: null, pendingRecertifyKey: null, recertifyStoppingKey: null, recertifyCancelBusy: false, busy: null, error: null };
+  private state: HistoryClearState = { revision: 0, contactId: null, scopeRevision: 0, phase: 'idle', clear: null, resync: null, busy: null, error: null };
   private scope: Scope | undefined;
   private revision = 0;
   private pending: AbortController | undefined;
-  private admission: AbortController | undefined;
-  private ownedRecertification: OwnedRecertification | undefined;
-  private readonly cancelRetryTimers = new Set<ReturnType<typeof setTimeout>>();
   private disposed = false;
   private readonly listeners = new Set<(state: HistoryClearState) => void>();
-  constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
-    private readonly activity?: HistoryActivityMutex) {
+  constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession) {
     contacts.onStateChanged(() => this.synchronizeScope());
     backend.onStateChanged(() => this.synchronizeScope());
     this.synchronizeScope();
@@ -64,10 +56,7 @@ export class HistoryClearController {
   onStateChanged(listener: (state: HistoryClearState) => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   dispose(): void {
     if (this.disposed) return;
-    const owned = this.ownedRecertification; this.ownedRecertification = undefined;
-    this.disposed = true; this.cancel(); this.admission?.abort(); this.admission = undefined;
-    for (const timer of this.cancelRetryTimers) clearTimeout(timer); this.cancelRetryTimers.clear(); this.listeners.clear();
-    if (owned) void this.stopRecertification(owned, false);
+    this.disposed = true; this.cancel(); this.listeners.clear();
   }
   private publish(patch: Partial<HistoryClearState>): void {
     const next = { ...this.state, ...patch, revision: this.state.revision + 1 };
@@ -85,11 +74,9 @@ export class HistoryClearController {
     const next = allowed ? { generation, contactId: contactId!, scopeRevision: contact.scopeRevision } : undefined;
     if (next?.generation === this.scope?.generation && next?.contactId === this.scope?.contactId
       && next?.scopeRevision === this.scope?.scopeRevision) return;
-    const owned = this.ownedRecertification; this.ownedRecertification = undefined;
-    this.cancel(); this.admission?.abort(); this.admission = undefined; this.scope = next;
+    this.cancel(); this.scope = next;
     this.publish({ contactId: next?.contactId ?? null, scopeRevision: contact.scopeRevision, phase: 'idle',
-      clear: null, resync: null, recertify: null, pendingRecertifyKey: null, recertifyStoppingKey: null, recertifyCancelBusy: false, busy: null, error: null });
-    if (owned) void this.stopRecertification(owned, false);
+      clear: null, resync: null, busy: null, error: null });
     if (next) void this.read(next);
   }
   private assertScope(request: HistoryClearRequest): Scope {
@@ -101,7 +88,7 @@ export class HistoryClearController {
   async refresh(request: HistoryClearRequest): Promise<void> { await this.read(this.assertScope(request)); }
   async clear(request: HistoryClearRequest): Promise<void> {
     const scope = this.assertScope(request);
-    if (this.state.busy || this.state.phase !== 'ready' || !this.state.clear || this.state.pendingRecertifyKey || this.state.recertifyStoppingKey || this.state.recertify?.state === 'running' || this.activity?.batchRunning()) throw new Error(this.activity?.batchRunning() ? '批量修复进行中，请先等待或停止批量修复。' : '清空状态已变化，请刷新后确认。');
+    if (this.state.busy || this.state.phase !== 'ready' || !this.state.clear) throw new Error('清空状态已变化，请刷新后确认。');
     this.cancel(); const pending = new AbortController(); this.pending = pending;
     const current = () => !this.disposed && this.scope === scope && this.pending === pending;
     try {
@@ -118,7 +105,7 @@ export class HistoryClearController {
   }
   async resync(request: HistoryResyncRequest): Promise<void> {
     const scope = this.assertScope(request);
-    if (this.state.busy || this.state.phase !== 'ready' || !this.state.clear || this.state.pendingRecertifyKey || this.state.recertifyStoppingKey || this.state.recertify?.state === 'running' || this.activity?.batchRunning()) throw new Error(this.activity?.batchRunning() ? '批量修复进行中，请先等待或停止批量修复。' : '重读状态已变化，请刷新后确认。');
+    if (this.state.busy || this.state.phase !== 'ready' || !this.state.clear) throw new Error('重读状态已变化，请刷新后确认。');
     this.cancel(); const pending = new AbortController(); this.pending = pending;
     const current = () => !this.disposed && this.scope === scope && this.pending === pending;
     try {
@@ -133,97 +120,19 @@ export class HistoryClearController {
       if (current()) this.publish({ busy: null, error: '重新同步结果尚未确认，请刷新核对；请求失败不等于未执行。' });
     } finally { if (this.pending === pending) this.pending = undefined; }
   }
-  async recertify(request: HistoryRecertifyRequest): Promise<void> {
-    const scope = this.assertScope(request);
-    if (request.confirmed !== true || !/^[A-Za-z0-9_.:@-]{1,200}$/.test(request.requestKey)
-      || this.state.busy || this.admission || this.state.phase !== 'ready' || !this.state.recertify || this.state.pendingRecertifyKey || this.state.recertifyStoppingKey || this.state.recertify.state === 'running' || this.activity?.batchRunning()) throw new Error(this.activity?.batchRunning() ? '批量修复进行中，请先等待或停止批量修复。' : '请先查询当前认证结果，再明确确认新操作。');
-    const pending = new AbortController(); this.admission = pending;
-    const operation = { ...scope, requestKey: request.requestKey }; this.ownedRecertification = operation;
-    const current = () => !this.disposed && this.scope === scope && this.admission === pending && scope.generation === this.backend.getConnectionGeneration();
-    this.publish({ busy: 'recertify', pendingRecertifyKey: request.requestKey, error: null });
-    try {
-      const response = await this.backend.requestJson({ method: 'POST', path: `/api/contacts/${scope.contactId}/history/recertify`,
-        body: { request_key: request.requestKey }, signal: pending.signal, timeoutMs: 10_000 });
-      if (!current() || response.generation !== scope.generation) return;
-      const recertify = recertifyView(response.data, scope.contactId);
-      if (recertify.requestKey !== request.requestKey || recertify.state === 'none') throw new Error('本次认证结果尚未确认。');
-      const known = this.state.recertify;
-      if (known?.requestKey === request.requestKey && ['completed', 'failed', 'interrupted'].includes(known.state)) this.publish({ busy: null });
-      else this.acceptRecertification(recertify, { busy: null }, true);
-    } catch (error) {
-      if (current()) {
-        if (this.state.recertify?.requestKey === request.requestKey && this.state.recertify.state !== 'none') { this.publish({ busy: null }); return; }
-        const rejected = error instanceof BackendRequestFailure && error.kind === 'response' && error.status !== undefined && error.status >= 400 && error.status < 500;
-        if (rejected && this.ownedRecertification === operation) this.ownedRecertification = undefined;
-        this.publish({ busy: null, ...(rejected ? { pendingRecertifyKey: null } : {}), error: rejected ? historyRecertifyFailureMessage(error.code ?? null)
-          : '本次来源认证结果尚未确认，请查询本次认证状态；未确认前不会开启另一轮认证。' });
-        if (rejected && error.code === 'history_recertify_already_running') await this.read(scope, null);
-      }
-    } finally { if (this.admission === pending) this.admission = undefined; }
-  }
-  private acceptRecertification(recertify: HistoryRecertifyView, patch: Partial<HistoryClearState> = {}, admissionResponse = false): void {
-    const known = this.state.recertify;
-    // 独立运输可能乱序到达；同一键的稳定终态不能被先前的 running 回包降级。
-    if (known?.requestKey === recertify.requestKey && known.contactId === recertify.contactId && ['completed', 'failed', 'interrupted'].includes(known.state)) recertify = known;
-    const terminal = ['completed', 'failed', 'interrupted'].includes(recertify.state);
-    if (terminal && this.ownedRecertification?.requestKey === recertify.requestKey && this.ownedRecertification.contactId === recertify.contactId) {
-      this.ownedRecertification = undefined;
-      // 精确终态已经持久确认，才可收掉仍在等待的接纳运输；普通进度读取不取消它。
-      if (!admissionResponse && this.admission) { this.admission.abort(); this.admission = undefined; patch = { ...patch, busy: null }; }
-    }
-    this.publish({ recertify, pendingRecertifyKey: null, ...(terminal ? { recertifyStoppingKey: null, recertifyCancelBusy: false } : {}), ...patch });
-  }
-  async cancelRecertify(request: HistoryRecertifyCancelRequest): Promise<void> {
-    const scope = this.assertScope(request);
-    const key = this.state.recertifyStoppingKey ?? this.state.pendingRecertifyKey ?? (this.state.recertify?.state === 'running' ? this.state.recertify.requestKey : null);
-    if (!key || request.requestKey !== key || this.state.recertifyCancelBusy) throw new Error('请先核对当前认证操作。');
-    const operation = { ...scope, requestKey: key }; this.ownedRecertification = operation;
-    await this.stopRecertification(operation, true);
-  }
-  private async stopRecertification(operation: OwnedRecertification, visible: boolean): Promise<void> {
-    if (operation.generation !== this.backend.getConnectionGeneration()) return;
-    const current = () => visible && !this.disposed && this.scope?.contactId === operation.contactId && this.scope.scopeRevision === operation.scopeRevision && this.scope.generation === operation.generation;
-    if (current()) this.publish({ recertifyStoppingKey: operation.requestKey, recertifyCancelBusy: true, error: null });
-    try {
-      const response = await this.backend.requestJson({ method: 'POST', path: `/api/contacts/${operation.contactId}/history/recertify/cancel`, body: { request_key: operation.requestKey }, timeoutMs: 10_000 });
-      if (response.generation !== operation.generation) throw new Error('连接已变化。');
-      const result = recertifyView(response.data, operation.contactId);
-      if (result.requestKey !== operation.requestKey || result.state === 'none') throw new Error('停止结果尚未确认。');
-      if (current()) {
-        const known = this.state.recertify;
-        if (known?.requestKey === operation.requestKey && ['completed', 'failed', 'interrupted'].includes(known.state)) this.publish({ recertifyCancelBusy: false });
-        else this.acceptRecertification(result, { recertifyCancelBusy: false, error: null });
-      }
-    } catch {
-      if (current()) this.publish({ recertifyCancelBusy: false, error: '停止结果尚未确认，请查询或重试停止同一认证；不会重新提交认证。' });
-      else if (!this.disposed && operation.generation === this.backend.getConnectionGeneration()) {
-        // 离开范围后只重试精确停止，绝不借用新范围或重新接纳来源读取。
-        const timer = setTimeout(() => { this.cancelRetryTimers.delete(timer); void this.stopRecertification(operation, false); }, 2000);
-        this.cancelRetryTimers.add(timer);
-      }
-    }
-  }
-  private async read(scope: Scope, requestedKey?: string | null): Promise<void> {
+  private async read(scope: Scope): Promise<void> {
     this.cancel(); const pending = new AbortController(); this.pending = pending;
     const current = () => !this.disposed && this.scope === scope && this.pending === pending && scope.generation === this.backend.getConnectionGeneration();
     this.publish({ phase: 'loading', error: null });
-    const key = requestedKey === undefined ? this.state.pendingRecertifyKey ?? this.state.recertifyStoppingKey ?? this.ownedRecertification?.requestKey ?? this.state.recertify?.requestKey : requestedKey;
     try {
-      const [clear, resync, recertify] = await Promise.all([
+      const [clear, resync] = await Promise.all([
         this.backend.requestJson({ method: 'GET', path: `/api/contacts/${scope.contactId}/history/clear`, signal: pending.signal }),
         this.backend.requestJson({ method: 'GET', path: `/api/contacts/${scope.contactId}/history/resync`, signal: pending.signal }),
-        this.backend.requestJson({ method: 'GET', path: `/api/contacts/${scope.contactId}/history/recertify${key ? `?request_key=${encodeURIComponent(key)}` : ''}`, signal: pending.signal }),
       ]);
-      if (!current() || clear.generation !== scope.generation || resync.generation !== scope.generation || recertify.generation !== scope.generation) return;
-      const next = recertifyView(recertify.data, scope.contactId), unconfirmed = !!key && next.requestKey !== key;
-      const patch = { phase: 'ready' as const, clear: clearView(clear.data), resync: resyncView(resync.data), error: unconfirmed ? '尚未查到本次认证的确定结果，请继续查询；不会自动重发或开启另一轮认证。' : null };
-      if (unconfirmed) this.publish(patch); else this.acceptRecertification(next, patch);
+      if (!current() || clear.generation !== scope.generation || resync.generation !== scope.generation) return;
+      this.publish({ phase: 'ready', clear: clearView(clear.data), resync: resyncView(resync.data), error: null });
     } catch {
-      if (current()) {
-        const unresolved = this.state.pendingRecertifyKey ?? this.state.recertifyStoppingKey ?? this.ownedRecertification?.requestKey
-          ?? (this.state.recertify?.state === 'running' ? this.state.recertify.requestKey : null);
-        this.publish({ phase: 'failed', recertify: null, pendingRecertifyKey: unresolved, error: '暂时无法读取聊天与来源认证状态，请查询本次状态或停止本次认证。' });
-      }
+      if (current()) this.publish({ phase: 'failed', error: '暂时无法读取聊天清空与重新同步状态，请重试。' });
     } finally { if (this.pending === pending) this.pending = undefined; }
   }
 }

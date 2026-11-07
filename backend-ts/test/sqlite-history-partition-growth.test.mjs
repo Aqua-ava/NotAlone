@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { StorageFailure } from '../src/storage/sqlite/contracts.ts';
 import { SqliteStorage } from '../src/storage/sqlite/client.ts';
 import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 import { FirstHistoryCoordinator } from '../src/history/sqlite/coordinator.ts';
@@ -34,16 +35,15 @@ function installGrowthChannel(f) {
   f.channel.target = async () => state.growing ? structuredClone(grownTarget) : structuredClone(oldTarget);
   f.channel.resumeTarget = async (_scope, previous, cursor) => {
     state.resumes.push({ previous: structuredClone(previous), cursor });
-    if (!state.growing) return null;
-    state.resumed = true;
-    return structuredClone(grownTarget);
+    state.resumed = state.growing?'growth':'same';
+    return structuredClone(state.growing?grownTarget:oldTarget);
   };
   f.channel.page = async (scope, target, cursor) => {
     state.pages.push({ target: structuredClone(target), cursor });
     if (state.pageHook) return state.pageHook(scope, target, cursor);
-    const records = state.resumed ? [message('1', fileB, 'table-v2')] : [message('1', fileA, 'table-v1')];
+    const records = state.resumed==='growth' ? [message('1', fileB, 'table-v2')] : state.resumed==='same' ? [] : [message('1', fileA, 'table-v1')];
     return { target: target.descriptor, cursorIn: cursor, cursorOut: null, records,
-      completedPartitions: [...target.partitions], exhausted: true, resumeCursor: state.resumed ? 'resume-v2' : 'resume-v1' };
+      completedPartitions: [...target.partitions], exhausted: true, resumeCursor: state.resumed==='growth' ? 'resume-v2' : 'resume-v1' };
   };
   f.channel.tail = async (scope, target, cursor) => {
     state.tails.push({ target: structuredClone(target), cursor });
@@ -58,7 +58,9 @@ function installGrowthChannel(f) {
 test('新增表目标尚无检查点就中断时，仍能从已核验旧分片的恢复点接续',async t=>{
  const f=await fixture(t),contactId=f.saved[0].contact_id,state=installGrowthChannel(f);
  await f.service.synchronize(contactId);state.growing=true;
- await f.service.synchronizeIncremental(contactId);await f.service.close();
+ state.pageHook=()=>{throw new StorageFailure('history_native_timeout');};
+ await assert.rejects(f.service.synchronizeIncremental(contactId,undefined,{followHistoryHandoff:true}),{code:'history_native_timeout'});
+ state.pageHook=null;await f.service.close();
  const restarted=new SqliteHistoryService(f.storage,f.contacts,()=>f.channel);t.after(()=>restarted.close());
  const result=await restarted.synchronize(contactId);assert.equal(result.phase,'complete');
  assert.equal(state.resumes.length,2);assert.ok(state.resumes.every(row=>row.cursor==='resume-v1'));
@@ -74,14 +76,13 @@ test('已接受单分片历史遇到安全表增长时从原游标建立新目�
   assert.deepEqual((await f.service.read(contactId)).messages.map(item => item.text), ['合成table-v1-1']);
 
   state.growing = true;
-  const pending = await f.service.synchronizeIncremental(contactId);
-  assert.equal(pending.phase, 'running');
-  assert.deepEqual(state.wakeups, [contactId]);
+  const pending = await f.service.synchronizeIncremental(contactId,undefined,{followHistoryHandoff:true});
+  assert.equal(pending.phase, 'complete');
+  assert.deepEqual(state.wakeups, []);assert.equal(state.tails.length,1);
   assert.equal(state.resumes.length, 1);
   assert.equal(state.resumes[0].cursor, 'resume-v1');
   assert.deepEqual(state.resumes[0].previous.tables, oldTarget.tables);
 
-  await f.service.synchronize(contactId);
   assert.deepEqual(state.pages.at(-1).target.tables, grownTarget.tables);
   const read = await f.service.read(contactId);
   assert.equal(read.coverage.phase, 'complete');
@@ -100,7 +101,7 @@ test('增量尾部发现安全表增长时不接受旧目标页并定向唤醒�
       records: [message('stale', fileA, 'table-v1')], caughtUp: false };
   };
 
-  const interrupted = await f.service.synchronizeIncremental(contactId);
+  const interrupted = await f.service.synchronizeIncremental(contactId,undefined,{followHistoryHandoff:true});
   assert.equal(interrupted.incremental.failureCode, 'history_target_growth_required');
   assert.deepEqual(state.wakeups, [contactId]);
   assert.equal((await f.service.read(contactId)).messages.length, 1, '变化检测前返回的旧目标页不能入库');

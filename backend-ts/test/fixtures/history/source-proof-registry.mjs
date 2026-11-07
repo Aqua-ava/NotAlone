@@ -1,6 +1,6 @@
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 import {fenceSource,getProof,isSourceBlocked,putScope} from '../../../src/history/sqlite/source-proof.ts';
-import {historySourceProofMigration} from '../../../src/history/sqlite/source-proof-schema.ts';
+import {historySourceProofMigration} from '../../../src/storage/sqlite/migrations/history-source-proof.ts';
 import {historyTarget} from '../../../src/history/sqlite/deletion-target.ts';
 import {deletionTargetKey} from '../../../src/storage/sqlite/deletion/actions.ts';
 

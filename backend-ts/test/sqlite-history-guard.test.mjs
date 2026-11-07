@@ -4,6 +4,7 @@ import {fixture as createFixture} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {SqliteHistoryService} from '../src/history/sqlite/service.ts';
 import {StorageFailure} from '../src/storage/sqlite/contracts.ts';
+import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
 import {EventEmitter} from 'node:events';
 import {PureTsEvents} from '../src/host/pure-ts-events.ts';
 
@@ -79,7 +80,7 @@ test('增量新增与旧消息变化只发无正文ID事件，隔离联系人且
  await history.stop();assert.equal(await history.bodyAvailable([contact]),false);
 });
 
-test('正文可用性只来自当前授权下的已核验活守卫，状态查询不打开渠道或读取正文',async t=>{
+test('正文可用性只来自当前授权下的已核验读取能力，状态查询不打开渠道或读取正文',async t=>{
  const f=await fixture(t),state={created:0,closed:0},create=guardedChannelFactory(state);let inspections=0,pages=0;
  const history=new SqliteHistoryService(f.storage,f.contacts,()=>{
   const channel=create(),inspect=channel.inspect,page=channel.page;
@@ -116,18 +117,18 @@ test('缺少正文必需能力时，已认证单次读取不能开启自动正�
  });
 });
 
-test('应用跨批次持有同一守卫，释放后核验续读且停读授权仍生效',async t=>{
+test('每批释放本次守卫，核验续读且停读授权仍生效',async t=>{
  const f=await fixture(t),state={created:0,closed:0},history=new SqliteHistoryService(f.storage,f.contacts,guardedChannelFactory(state));t.after(()=>history.close());
  const contact=f.saved[0].contact_id;await history.synchronize(contact);const source=(await history.read(contact)).messages[0].sourceRecordIds[0];await history.synchronize(contact);
- assert.equal(state.created,1);assert.equal(state.closed,0);
- await history.stop(contact);assert.equal(state.closed,1);assert.ok(await history.source(contact,source));
+ assert.equal(state.created,2);assert.equal(state.closed,2);
+ await history.stop(contact);assert.equal(state.closed,2);assert.ok(await history.source(contact,source));
  assert.equal((await snapshot(f,contact)).proofs[0].state,'ok');
- assert.equal((await history.synchronize(contact)).phase,'complete');assert.equal(state.created,2);assert.equal((await history.read(contact)).messages.length,1);
+ assert.equal((await history.synchronize(contact)).phase,'complete');assert.equal(state.created,3);assert.equal((await history.read(contact)).messages.length,1);
  await f.contacts.setReading(false);await history.stop(contact);
- await assert.rejects(history.synchronize(contact),{code:'read_not_authorized'});assert.equal(state.created,2);
+ await assert.rejects(history.synchronize(contact),{code:'read_not_authorized'});assert.equal(state.created,3);
 });
 
-test('页预算用尽后在同一活守卫和目标内从已提交游标续读',async t=>{
+test('合成固定目标的页预算结束后换本次守卫，从已提交游标续读',async t=>{
  const f=await fixture(t),state={created:0,closed:0},create=guardedChannelFactory(state),cursors=[];let targets=0;
  const history=new SqliteHistoryService(f.storage,f.contacts,()=>{
   const channel=create(),target=channel.target;
@@ -143,9 +144,9 @@ test('页预算用尽后在同一活守卫和目标内从已提交游标续读',
  });
  t.after(()=>history.close().catch(()=>{}));const contact=f.saved[0].contact_id;
  const paused=await history.synchronize(contact);assert.equal(paused.phase,'incomplete');assert.equal(paused.failureCode,'history_page_budget_exhausted');assert.equal(paused.pageCount,1000);
- assert.equal(cursors.length,1000);assert.equal(state.created,1);assert.equal(state.closed,0);
+ assert.equal(cursors.length,1000);assert.equal(state.created,1);assert.equal(state.closed,1);
  const complete=await history.synchronize(contact);assert.equal(complete.phase,'complete');assert.equal(complete.pageCount,1001);
- assert.equal(cursors.length,1001);assert.equal(cursors[1000],'page-1000');assert.equal(targets,1);assert.equal(state.created,1);assert.equal(state.closed,0);
+ assert.equal(cursors.length,1001);assert.equal(cursors[1000],'page-1000');assert.equal(targets,1);assert.equal(state.created,2);assert.equal(state.closed,2);
  assert.equal((await history.read(contact)).messages.length,2);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});await history.close();
 });
 
@@ -183,7 +184,7 @@ test('数据库重开不复活旧守卫，本机来源保留且重新核验后�
  assert.equal((await resumed.read(contact)).messages.length,1);assert.equal(await reopened.execute('history.guardCheck',{token,guardId:guard.guard_id}),false);await resumed.close();
 });
 
-test('删除来源排空空闲守卫，随后同步仍不能复活被抑制来源',async t=>{
+test('删除来源后再次同步不能复活已抑制来源',async t=>{
  const f=await fixture(t),state={created:0,closed:0},history=new SqliteHistoryService(f.storage,f.contacts,guardedChannelFactory(state));t.after(()=>history.close());
  const contact=f.saved[0].contact_id;await history.synchronize(contact);const source=(await history.read(contact)).messages[0].sourceRecordIds[0];
  const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts'),{ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
@@ -213,10 +214,10 @@ test('普通守卫释放不失效本机依据，实际来源失效仍隔离跨�
  assert.equal((await discussion.view(b.contact_id,d.id)).entries[0].body,'合成手写内容');
 });
 
-test('后台守卫意外退出后重新核验相同来源可续读，旧守卫仍失效',async t=>{
+test('已释放的读取守卫不复用，重新核验相同来源可续读',async t=>{
  const f=await fixture(t),state={created:0,closed:0},history=new SqliteHistoryService(f.storage,f.contacts,guardedChannelFactory(state));t.after(()=>history.close());
  const contact=f.saved[0].contact_id;await history.synchronize(contact);const guard=(await snapshot(f,contact)).guardAtKey,token=await f.contacts.eligibility(contact);state.lose();await history.stop(contact);
- assert.equal((await history.synchronize(contact)).phase,'complete');assert.equal(state.created,2);assert.equal(state.closed,1);
+ assert.equal((await history.synchronize(contact)).phase,'complete');assert.equal(state.created,2);assert.equal(state.closed,2);
  assert.equal((await history.read(contact)).messages.length,1);assert.equal((await snapshot(f,contact)).proofs[0].state,'ok');
  assert.equal(await f.storage.execute('history.guardCheck',{token,guardId:guard.guard_id}),false);await history.close();
 });
@@ -252,25 +253,25 @@ test('尚未读取时守卫已经退出，不能进入正文分页',async t=>{
 });
 
 test('易失守卫释放事务失败时关闭存储，重开后旧凭证失效且本机依据保留',async t=>{
- const f=await fixture(t),state={created:0,closed:0};let releases=0,storageCloses=0;
- const proxy={status:f.storage.status,execute:(name,input,...rest)=>name==='history.guardRelease'?(releases++,Promise.reject(new StorageFailure('storage_busy'))):f.storage.execute(name,input,...rest),close:()=>{storageCloses++;return f.storage.close();}};
+ const f=await fixture(t),state={created:0,closed:0};let releases=0,storageCloses=0,guardId;
+ const proxy={status:f.storage.status,execute:(name,input,...rest)=>name==='history.guardRelease'?(guardId=input.guardId,releases++,Promise.reject(new StorageFailure('storage_busy'))):f.storage.execute(name,input,...rest),close:()=>{storageCloses++;return f.storage.close();}};
  const history=new SqliteHistoryService(proxy,f.contacts,guardedChannelFactory(state));t.after(()=>history.close().catch(()=>{}));
- const contact=f.saved[0].contact_id;await history.synchronize(contact);const databaseId=f.storage.status.databaseId,guard=(await snapshot(f,contact)).guardAtKey,token=await f.contacts.eligibility(contact);
- await assert.rejects(history.stop(contact),{code:'storage_busy'});assert.equal(state.closed,1);
+ const contact=f.saved[0].contact_id,databaseId=f.storage.status.databaseId,token=await f.contacts.eligibility(contact);
+ await assert.rejects(history.synchronize(contact),{code:'storage_busy'});assert.equal(state.closed,1);
  await assert.rejects(f.storage.execute('history.read',{ownerId:f.contacts.ownerId,contactId:contact}),{code:'worker_failed'});
  await history.stop(contact);await history.close();
  assert.equal(releases,1,'存储已关闭后的重试不得再执行守卫写入');assert.equal(storageCloses,1);
  const reopened=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:databaseId});t.after(()=>reopened.close());
  assert.equal((await reopened.execute('history.read',{ownerId:f.contacts.ownerId,contactId:contact,limit:100})).replyEligibility,'ready');
- assert.equal(await reopened.execute('history.guardCheck',{token,guardId:guard.guard_id}),false);
+ assert.equal(await reopened.execute('history.guardCheck',{token,guardId}),false);
 });
 
 test('守卫释放事务失败后的停读重试仍须排空未关闭的渠道',async t=>{
  const f=await fixture(t),state={created:0,closed:0},create=guardedChannelFactory(state);let releases=0,closeAttempts=0;
  const proxy={status:f.storage.status,execute:(name,input,...rest)=>name==='history.guardRelease'?(releases++,Promise.reject(new StorageFailure('storage_busy'))):f.storage.execute(name,input,...rest),close:()=>f.storage.close()};
  const history=new SqliteHistoryService(proxy,f.contacts,()=>{const channel=create(),close=channel.close;channel.close=async()=>{if(++closeAttempts===1)throw new StorageFailure('history_native_unavailable');await close();};return channel;});
- t.after(()=>history.close().catch(()=>{}));const contact=f.saved[0].contact_id;await history.synchronize(contact);
- await assert.rejects(history.stop(contact),{code:'storage_busy'});assert.equal(state.closed,0);
+ t.after(()=>history.close().catch(()=>{}));const contact=f.saved[0].contact_id;
+ await assert.rejects(history.synchronize(contact),{code:'storage_busy'});assert.equal(state.closed,0);
  await history.stop(contact);assert.equal(state.closed,1);assert.equal(closeAttempts,2);assert.equal(releases,1);
  await history.stop(contact);assert.equal(closeAttempts,2,'真实排空完成后才结算并移除守卫');
 });
@@ -279,7 +280,7 @@ test('存储关闭未获确认时保留守卫并在停读重试中继续关闭',
  const f=await fixture(t),state={created:0,closed:0};let releases=0,storageCloses=0;
  const proxy={status:f.storage.status,execute:(name,input,...rest)=>name==='history.guardRelease'?(releases++,Promise.reject(new StorageFailure('storage_busy'))):f.storage.execute(name,input,...rest),close:async()=>{if(++storageCloses===1)throw new StorageFailure('storage_close_unconfirmed');await f.storage.close();}};
  const history=new SqliteHistoryService(proxy,f.contacts,guardedChannelFactory(state));t.after(()=>history.close().catch(()=>{}));const contact=f.saved[0].contact_id;
- await history.synchronize(contact);await assert.rejects(history.stop(contact),{code:'storage_busy'});assert.equal(storageCloses,1);
+ await assert.rejects(history.synchronize(contact),{code:'storage_close_unconfirmed'});assert.equal(storageCloses,1);
  await history.stop(contact);assert.equal(storageCloses,2);assert.equal(releases,1);
  await assert.rejects(f.storage.execute('history.read',{ownerId:f.contacts.ownerId,contactId:contact}),{code:'worker_failed'});
 });
@@ -407,4 +408,31 @@ test('整账号没有持久来源事实时删除仍清除每位联系人的易�
  assert.equal((await deletion.advance(op)).state,'completed');
  for(const token of tokens){const after=await snapshot(f,token.contact_id);assert.equal(after.proofs.length,0);assert.equal(after.guardAtKey,null);}
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('守卫释放写失败但读者与通道都已关闭时，删除不再被残留holder阻挡',async t=>{
+ const f=await createFixture(t),holders=new ActiveHolders(),id=f.saved[0].contact_id,token=await f.contacts.eligibility(id);
+ const proxy={status:f.storage.status,
+  execute:(name,input,...rest)=>name==='history.guardRelease'?Promise.reject(new StorageFailure('storage_busy')):f.storage.execute(name,input,...rest),
+  close:()=>f.storage.close()};
+ const history=new SqliteHistoryService(proxy,f.contacts,guardedChannelFactory({created:0,closed:0}),holders);
+ t.after(async()=>{await history.close().catch(()=>{});});
+ await assert.rejects(history.synchronize(id),{code:'storage_busy'});
+ // 排空失败只负责上报：读者与通道的官方关闭都已完成，holder不得继续阻挡删除。
+ const operation={ownerId:f.contacts.ownerId,scope:{kind:'source',contactId:id,sourceId:'synthetic-source'},acceptedGeneration:BigInt(token.data_generation)+1n};
+ assert.equal(holders.verify(operation,[]),true);
+});
+
+test('关闭失败后来源准备应重试真实排空，不循环等待已结束的工作',async t=>{
+ const f=await createFixture(t),id=f.saved[0].contact_id;let closes=0;
+ const create=()=>{
+  const loss=Promise.withResolvers();
+  return {...f.channel,guardSession:{loss:loss.promise},
+   close:async()=>{if(++closes===1)throw new StorageFailure('history_native_unavailable');}};
+ };
+ const history=new SqliteHistoryService(f.storage,f.contacts,create);
+ t.after(async()=>{await history.close().catch(()=>{});});
+ await assert.rejects(history.synchronize(id),{code:'history_native_unavailable'});
+ await history.prepareSource(id);
+ assert.ok(closes>=2,`来源准备为排除失败读者真实重试了 ${closes} 次关闭`);
 });

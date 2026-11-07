@@ -141,9 +141,13 @@ test('追加和删除重新核验路径，拒绝运行中被替换的文件与�
   unavailable(() => log.erase('abcd1234'));
 });
 
-test('原地恢复和故障补记新增围栏保留实际入口的白名单诊断',t=>{
+test('旧诊断可读取并随当前诊断维护，退役入口拒绝新写入',t=>{
  const root=fixture(t),log=new ContinuityDiagnosticLog(root);
  log.append({entry:'history.prepareRecoveredGuard',contactPrefix:'abcd1234',branch:'N04'});
- log.append({entry:'history.recertifyNoteFailure',contactPrefix:'abcd1234',branch:'C01',errorCode:'history_source_changed'});
- assert.deepEqual(records(root).map(row=>row.entry),['history.prepareRecoveredGuard','history.recertifyNoteFailure']);
+ const retired={entry:'history.recertifyNoteFailure',contactPrefix:'abcd1234',branch:'C01',errorCode:'history_source_changed'};
+ unavailable(()=>log.append(retired));
+ writeFileSync(files(root)[0],JSON.stringify({time:new Date().toISOString(),...retired})+'\n',{flag:'a'});
+ log.append(event('deadbeef'));log.prune();
+ assert.deepEqual(records(root).map(row=>row.entry),['history.prepareRecoveredGuard','history.recertifyNoteFailure','history.readPreflight']);
+ log.erase('abcd1234');assert.deepEqual(records(root).map(row=>row.contactPrefix),['deadbeef']);
 });

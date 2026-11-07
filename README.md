@@ -85,10 +85,12 @@ React／CSS 保存后热更新，main、preload、共享代码和 TypeScript 后
 | 范围 | 如何判断当前状态 |
 | --- | --- |
 | 桌面、后台与存储 | 正常入口使用 Electron／React、DSH／TypeScript 和受控 SQLite。模块能力与接口见[后端导航](backend-ts/src/README.md)。 |
-| 微信历史、增量、图片与前台定位 | 按当前来源认证与实际运行证据逐项判断；名称匹配不认证前台账号，OCR 不作为后台同步门禁。规则见[同步规格](architecture/current/wechat-sync.md)。 |
+| 微信历史、增量、图片与前台定位 | 按当前来源核对与实际运行证据逐项判断；名称匹配不认证前台账号，OCR 不作为后台同步门禁。规则见[同步规格](architecture/current/wechat-sync.md)。 |
 | 记忆处理与检索 | 历史自动分批、增量独立调度，内容拒绝与技术故障分开；默认来源核验不依赖历史维度放行台账。规则见[记忆处理](architecture/current/memory-processing.md)与[回复规格](architecture/current/reply-generation.md)。 |
 | Skill | 授权根内核验后默认启用，可停用；正常回复按需组合多个有效包。学习／审核发布等目标与当前开放入口分开，见[Skill 规格](architecture/current/skill-library.md)。 |
 | 独立分发与平台 | 当前开发面向 macOS；独立机器首用、签名、公证、发布包和其他平台须按各自发布任务验收。 |
+
+来源不变时，退出重开按已接纳位置自动接续；重新认证与开发者批量修复入口退役，日常使用无需“修复同步”。真实来源变化仍停读待明确核对，不通过恢复动作接纳异源或重新授予读取权限。
 
 历史迁移、合成测试和真实模型样例只证明各自记录的版本与范围。验证材料从[文档索引](docs/README.md)按需查找，README 不维护重复的阶段通过数量。
 
