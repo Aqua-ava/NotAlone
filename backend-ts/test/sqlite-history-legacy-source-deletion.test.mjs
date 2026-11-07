@@ -1,8 +1,9 @@
+// 旧副本及认证审计由历史专用夹具建立；断言继续验证当前存储的删除与抑制保护。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {fixture,owner,record,report,createChannel,target,restart} from './sqlite-clear-support.mjs';
-import {SqliteHistoryRecertifyService} from '../src/history/sqlite/recertify.ts';
+import {SqliteHistoryRecertifyService} from './fixtures/history/legacy-recertify-service.ts';
 
 const capabilities={normalHistory:'supported',snapshotBarrier:'supported',partitionCoverage:'supported',incrementalTail:'supported'};
 const rawTables=value=>value.tables.map((table,index)=>({target:table.instance,partition:table.partition,role:'private_message',columns:[{name:'local_id',type:'INTEGER',notNull:false,primaryKey:1,hidden:0}],indexes:[],declaredPrimaryKey:['local_id'],autoIncrement:true,sqlFingerprint:'e'.repeat(64),triggerFingerprints:[],schemaVersion:'9',rootPage:String(index+1)}));

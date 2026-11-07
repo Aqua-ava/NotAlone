@@ -1,10 +1,11 @@
+// 旧副本及认证审计由历史专用夹具建立；断言继续验证当前存储的删除与抑制保护。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {open,access} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {fixture,owner,record,report,createChannel} from './sqlite-clear-support.mjs';
-import {SqliteHistoryRecertifyService} from '../src/history/sqlite/recertify.ts';
+import {SqliteHistoryRecertifyService} from './fixtures/history/legacy-recertify-service.ts';
 import {SupersededHistoryCleanup} from '../src/history/sqlite/superseded-cleanup.ts';
 import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
 import {StorageFailure} from '../src/storage/sqlite/contracts.ts';
@@ -316,10 +317,14 @@ test('迁移 45 重建删除账本：既有操作、目标、校验与墓碑原�
  const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts');
  const {ActiveHolders}=await import('../src/storage/sqlite/deletion/holders.ts');
  const legacy=new URL('./fixtures/history/superseded-upgrade-registry.mjs?mode=legacy',import.meta.url).href;
- const f=await fixture(t,{registryModule:legacy});
- assert.equal(f.current.storage.status.schemaVersion,44);
- const path=join(f.root,'managed/sqlite/notalone.sqlite'),databaseId=f.current.storage.status.databaseId;
- await f.current.history.close();await f.current.storage.close();
+ const {mkdtemp,realpath,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');
+ const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-ledger-upgrade-'))),contactId='22222222-2222-4222-8222-222222222222';
+ const old=await SqliteStorage.open({userData:root,intent:'create',role:'test',registryModule:legacy});let current=old;
+ t.after(async()=>{await current.close();await rm(root,{recursive:true,force:true});});
+ await old.execute('fixture.seedLedgerIdentity44',{ownerId:owner,contactId});
+ assert.equal(old.status.schemaVersion,44);
+ const path=join(root,'managed/sqlite/notalone.sqlite'),databaseId=old.status.databaseId;
+ await old.close();
  // 旧库的账本里放入各类行（直接写 44 版结构，等价于旧版本已运行过的删除）。
  const seed=new DatabaseSync(path);seed.exec('PRAGMA foreign_keys=ON');
  for(const [id,kind,state] of [['op-contact','contact','completed'],['op-media','media_result_clear','blocked']]){
@@ -334,12 +339,12 @@ test('迁移 45 重建删除账本：既有操作、目标、校验与墓碑原�
  const ledger=()=>{const db=new DatabaseSync(path,{readOnly:true});try{const count=table=>db.prepare(`SELECT count(*) n FROM ${table}`).get().n;
   return {operations:db.prepare('SELECT * FROM deletion_operation ORDER BY operation_id').all().map(r=>({...r})),targets:count('deletion_target'),checks:count('deletion_check'),tombstones:count('request_tombstone')};}finally{db.close();}};
  const before=ledger();assert.equal(before.operations.length,2);assert.equal(before.targets,2);assert.equal(before.checks,2);assert.equal(before.tombstones,2);
- const upgraded=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:databaseId});
- t.after(()=>upgraded.close());
- assert.equal(upgraded.status.schemaVersion,45);
+ const upgraded=await SqliteStorage.open({userData:root,intent:'open',role:'test',expectedDatabaseId:databaseId});
+ current=upgraded;
+ assert.equal(upgraded.status.schemaVersion,46);
  assert.deepEqual(ledger(),before,'重建不丢任何账本行');
  assert.deepEqual(await upgraded.check(),{integrity:'ok',foreignKeys:'ok'});
  // 新范围可进入账本（CHECK 已扩展）：未满足清理条件时由授权层拒绝，而不是被表约束挡住。
- const service=new DeletionService(upgraded,new ActiveHolders(),new ManagedFiles(f.root));
- await assert.rejects(service.plan({ownerId:owner,requestKey:'no-superseded-yet',scope:{kind:'superseded_history',contactId:f.contactA}}),{code:'superseded_cleanup_no_certified_current'});
+ const service=new DeletionService(upgraded,new ActiveHolders(),new ManagedFiles(root));
+ await assert.rejects(service.plan({ownerId:owner,requestKey:'no-superseded-yet',scope:{kind:'superseded_history',contactId:contactId}}),{code:'superseded_cleanup_continuity_fence'});
 });

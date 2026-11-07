@@ -67,7 +67,7 @@ function overlaySha(files) {
   return hash(JSON.stringify(rows));
 }
 
-async function syntheticUpgradeFixture({ existingImage = false, quotes = false, quoteTail = false, quoteInline = false, sharedProcess = false, contactAvatar = false, durableHistory = false, imageOpenIsolation = false, guardRegistration = false } = {}) {
+async function syntheticUpgradeFixture({ existingImage = false, quotes = false, quoteTail = false, quoteInline = false, sharedProcess = false, contactAvatar = false, durableHistory = false, imageOpenIsolation = false, guardRegistration = false, localIdRecovery = false } = {}) {
   const repositoryRoot = await mkdtemp(path.join(process.cwd(), '.tmp-notalone-image-upgrade-'));
   const buildsRoot = path.join(repositoryRoot, 'local-tools/wx-cli/.notalone-builds');
   const oldName = existingImage ? 'original-image-20261031-v1' : 'true-delta-20261031-c2';
@@ -135,6 +135,13 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
       guardSourceChanges[file] = { old: hash(oldFiles[file]), new: hash(newFiles[file]) };
     }
   }
+  const recoverySourceChanges={};
+  if(localIdRecovery)for(const name of ['notalone_checkpoint.go','notalone_history_resume.go','notalone_recovery.go','notalone_recovery_test.go','notalone_snapshot.go']){
+    const file=`cmd/wechat-cli/${name}`;
+    if(!name.startsWith('notalone_recovery'))oldFiles[file]??=`original ${name}`;
+    newFiles[file]=`bounded localId recovery ${name}`;
+    recoverySourceChanges[file]={old:oldFiles[file]?hash(oldFiles[file]):null,new:hash(newFiles[file])};
+  }
   const write = async (file, data, mode = 0o600) => {
     await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
     await writeFile(file, data, { mode });
@@ -179,7 +186,7 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
   const sharedSourceChanges=sharedProcess?Object.fromEntries(['cmd/wechat-cli/notalone_account_metadata.go','cmd/wechat-cli/notalone_selection_test.go'].map(name=>[name,{old:oldFiles[name]?hash(oldFiles[name]):null,new:hash(newFiles[name])}])):{};
   const avatarSourceChanges=contactAvatar?Object.fromEntries(['cmd/wechat-cli/notalone_contact_avatar.go','cmd/wechat-cli/notalone_contact_avatar_test.go'].map(name=>[name,{old:null,new:hash(newFiles[name])}])):{};
   const historySourceChanges=durableHistory?Object.fromEntries(['cmd/wechat-cli/notalone_checkpoint.go','cmd/wechat-cli/notalone_history_resume_test.go'].map(name=>[name,{old:oldFiles[name]?hash(oldFiles[name]):null,new:hash(newFiles[name])}])):{};
-  const updates=Object.entries({...inlineSourceChanges,...sharedSourceChanges,...guardSourceChanges}).filter(([name])=>Object.hasOwn(identityFiles,name)).sort(([a],[b])=>a.localeCompare(b));
+  const updates=Object.entries({...inlineSourceChanges,...sharedSourceChanges,...guardSourceChanges,...recoverySourceChanges}).filter(([name])=>Object.hasOwn(identityFiles,name)).sort(([a],[b])=>a.localeCompare(b));
   const identityAlgorithmSha256 = hash(JSON.stringify({ files: Object.entries(identityFiles).sort((left, right) => left[0].localeCompare(right[0])),
     protocol: [protocolOldSha256, protocolNewSha256],...(updates.length?{updates}:{}) }));
   const policy = { oldName, newName, commonManifest: common,
@@ -191,6 +198,7 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
     ...(contactAvatar?{newAvatarMetadataProtocol:'wechat-contact-avatar-metadata-v1',sourceChanges:avatarSourceChanges}:{}),
     ...(durableHistory?{newDurableHistoryProtocol:'wechat-partial-history-checkpoint-v1',sourceChanges:historySourceChanges}:{}),
     ...(guardRegistration ? { guardRegistrationFix: 'wechat-guard-registration-v1', sourceChanges: guardSourceChanges } : {}),
+    ...(localIdRecovery?{localIdRecoveryFix:'wechat-local-id-recovery-v1',sourceChanges:recoverySourceChanges}:{}),
     oldCliSha256, newCliSha256, oldOverlaySha256: overlaySha(oldFiles), newOverlaySha256: overlaySha(newFiles),
     newImageProtocol: 'wechat-original-image-v1', identityFiles, identityAlgorithmSha256,
     protocolOldSha256, protocolNewSha256, imageSha256: hash(newImage), imageTestSha256: hash(newImageTest),
@@ -561,4 +569,36 @@ test('分段恢复升级对照混合普通与空会话，仅已有持久增量�
   const invalid=structuredClone(after);mutate(invalid);
   assert.throws(()=>compareUpgradeScopeEvidence(before,invalid,options),/history_image_upgrade_scope_mismatch/);
  }
+});
+
+
+test('本机水位恢复升级仅接受固定恢复源码配对并保留既有来源别名',async t=>{
+ const f=await syntheticUpgradeFixture({existingImage:true,localIdRecovery:true});t.after(()=>rm(f.repositoryRoot,{recursive:true,force:true}));
+ assert.equal((await f.tools.prepareAliases(f)).status,'prepared');
+ assert.deepEqual(JSON.parse(await readFile(path.join(f.toRoot,'source-identity-aliases.json'),'utf8')).aliases,f.aliases);
+ assert.deepEqual(await readFile(f.oldAliasPath),f.oldAliasBytes);
+ assert.equal(await readFile(path.join(f.dbRoot,'business.sqlite'),'utf8'),'must remain unchanged');
+});
+
+test('本机水位恢复升级拒绝缺少门禁、摘要变动和夹带来源实现',async t=>{
+ for(const change of ['missing-policy','checkpoint','history_resume','recovery','recovery_test','snapshot','identity','extra'])await t.test(change,async t=>{
+  const f=await syntheticUpgradeFixture({existingImage:true,localIdRecovery:true});t.after(()=>rm(f.repositoryRoot,{recursive:true,force:true}));
+  if(change==='missing-policy'){delete f.policy.localIdRecoveryFix;f.tools=createUpgradeImageCliTools({repositoryRoot:f.repositoryRoot,policy:f.policy});}
+  else await writeFile(path.join(f.toRoot,'source/cmd/wechat-cli',change==='identity'?'notalone_identity_aliases.go':change==='extra'?'notalone_unreviewed.go':`notalone_${change}.go`),'unreviewed change');
+  await assert.rejects(f.tools.prepareAliases(f),/history_image_upgrade_source_mismatch/);
+  await assert.rejects(lstat(path.join(f.toRoot,'source-identity-aliases.json')),{code:'ENOENT'});
+  assert.deepEqual(await readFile(f.oldAliasPath),f.oldAliasBytes);
+ });
+});
+
+test('本机水位恢复scope对照仅显式新增恢复能力，来源与其他读取能力仍严格一致',()=>{
+ const before=scopeEvidence('d'.repeat(64)),after=scopeEvidence('e'.repeat(64));
+ for(const row of before.scopes.filter(row=>row.target.tables.length))row.support.capabilities.durableIncremental='supported';
+ for(const row of after.scopes.filter(row=>row.target.tables.length)){row.support.capabilities.durableIncremental='supported';row.support.capabilities.recoverFromLocalIds='supported';row.support.capabilities.partitionGrowth='supported';}
+ const original=structuredClone(after);
+ assert.throws(()=>compareUpgradeScopeEvidence(before,after),/history_image_upgrade_scope_mismatch/);
+ assert.deepEqual(compareUpgradeScopeEvidence(before,after,{localIdRecoveryUpgrade:true}),{status:'verified',scopeCount:3});
+ assert.deepEqual(after,original);
+ after.scopes[0].support.capabilities.incrementalTail='unsupported';
+ assert.throws(()=>compareUpgradeScopeEvidence(before,after,{localIdRecoveryUpgrade:true}),/history_image_upgrade_scope_mismatch/);
 });

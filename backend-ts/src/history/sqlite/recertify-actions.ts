@@ -1,3 +1,5 @@
+import {getProof,isSourceBlocked,putScope,fenceSource} from './source-proof.ts';
+import {getSourceGuard,putSourceGuard,loseSourceGuard} from './source-guard.ts';
 import {randomUUID} from 'node:crypto';
 import {StorageFailure,type StorageAction,type StorageTransaction,type StorageRow} from '../../storage/sqlite/contracts.ts';
 import {assertReadEligibility} from '../../contacts/sqlite/actions.ts';
@@ -5,7 +7,7 @@ import type {ReadEligibility} from '../../contacts/sqlite/contracts.ts';
 import type {HistorySupportReport,HistoryTarget} from './contracts.ts';
 import {assertRecertifyAccess} from './recertify-access.ts';
 import {assertHistoryReadBoundary} from './suppression.ts';
-import {normalUseContinuity} from './continuity.ts';
+import {normalUseContinuity,fenceContinuity,isSourceContinuityLost} from './continuity.ts';
 import {auditedCoverageKey,completedLegacyPhysicalKeys,coveredRecallKey,recallCoverageDigest,uncoveredLegacyRecallCandidates,type RecallCoverageMapping} from './legacy-physical-suppression.ts';
 import {legacyProofDigest,validateLegacyTerminalProof,type LegacyTerminalProof} from './legacy-terminal-proof.ts';
 import {historyRecertifyCandidatesActions} from './recertify-candidates.ts';
@@ -98,7 +100,10 @@ function suppression(tx:StorageTransaction,token:ReadEligibility,target:HistoryT
 }
 function view(tx:StorageTransaction,contactId:string,op?:StorageRow) {
  const goal=op?.goal_id?tx.get('SELECT state,failure_code FROM read_goal WHERE owner_id=? AND id=?',[op.owner_id,op.goal_id]):undefined;
- const counts=op?.new_binding_id?tx.get("SELECT count(CASE WHEN kind='text' THEN 1 END) texts,count(CASE WHEN kind<>'text' THEN 1 END) media FROM message WHERE owner_id=? AND contact_id=? AND binding_id=?",[op.owner_id,contactId,op.new_binding_id]):undefined;
+ const counts=op?.new_binding_id?tx.get("SELECT count(CASE WHEN kind='text' THEN 1 END) texts,count(CASE WHEN kind<>'text' THEN 1 END) media FROM message WHERE owner_id=? AND contact_id=? AND binding_id=?",[op.owner_id,contactId,op.new_binding_id]):op?.goal_id?tx.get(`SELECT count(DISTINCT CASE WHEN m.kind='text' THEN m.id END) texts,count(DISTINCT CASE WHEN m.kind<>'text' THEN m.id END) media FROM message m
+  JOIN capture_record r ON r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id
+  JOIN sync_capture c ON c.owner_id=r.owner_id AND c.contact_id=r.contact_id AND c.id=r.capture_id
+  WHERE m.owner_id=? AND m.contact_id=? AND c.goal_id=?`,[op.owner_id,contactId,op.goal_id]):undefined;
  const pages=op?.goal_id?tx.get('SELECT count(*) n FROM sync_capture WHERE owner_id=? AND goal_id=?',[op.owner_id,op.goal_id]):undefined;
  return {contact_id:contactId,request_key:op?String(op.request_key):null,state:op?String(op.state):'none',stage:op?String(op.stage):'none',completed:op?.state==='completed',failure_code:op?.failure_code??null,message_count:Number(counts?.texts??0),non_text_count:Number(counts?.media??0),page_count:Number(pages?.n??0),preserved_message_count:Number(op?.preserved_message_count??0),started_at:op?Number(op.started_at):null,finished_at:op?.finished_at===null||!op?null:Number(op.finished_at),goalState:goal?.state??null,goalFailure:goal?.failure_code??null,id:op?.id??null,new_binding_id:op?.new_binding_id??null};
 }
@@ -140,13 +145,20 @@ export const historyRecertifyActions:StorageAction[]=[
   if(prior){if(prior.contact_id!==token.contact_id)fail('history_recertify_request_conflict');return false;}
   assertReadEligibility(tx,token);
   if(tx.get("SELECT 1 FROM history_source_recertification WHERE owner_id=? AND contact_id=? AND state='running'",[token.owner_id,token.contact_id]))fail('history_recertify_already_running');
-  const fence=tx.get('SELECT * FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id])??fail('history_recertify_not_required');
+  const proof=getProof(tx,token.owner_id,token.contact_id);if(proof?.state!=='needs_confirmation')fail('history_recertify_not_required');
+  const fence={owner_id:token.owner_id,contact_id:token.contact_id,reason:proof!.reason??'history_source_continuity_unverified'};
   if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' AND scope_kind<>'superseded_history' AND (scope_kind='account' OR contact_identity=?)",[token.owner_id,token.contact_id]))fail('history_recertify_deletion_pending');
-  const scope=tx.get('SELECT * FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
-  const lease=tx.get('SELECT * FROM history_guard_lease WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
+  const scope=getProof(tx,token.owner_id,token.contact_id);
+  const lease=getSourceGuard(tx,token.owner_id,token.contact_id);
   const n=tx.get('SELECT count(*) n FROM message WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id])!.n;
   tx.run(`INSERT INTO history_source_recertification(owner_id,id,contact_id,request_key,runtime_id,state,stage,started_at,updated_at,old_binding_id,old_token_json,preserved_message_count,old_fence_json,old_scope_json,old_lease_json) VALUES(?,?,?,?,?,'running','metadata',?,?,?,?,?,?,?,?)`,[token.owner_id,i.id,token.contact_id,i.requestKey,runtime(tx),i.at,i.at,token.binding_id,json(token),n,json({...fence,legacy_cause:'unknown'}),scope?json(scope):null,lease?json(lease):null]);
   return true;
+ }),
+ action('ResumeComplete','write',(tx,i:any)=>{
+  const token=i.token as ReadEligibility;assertReadEligibility(tx,token);const op=pending(tx,{ownerId:token.owner_id,id:i.id});
+  if(op.old_token_json!==json(token)||op.new_binding_id!==null||isSourceBlocked(tx,token.owner_id,token.contact_id))fail('history_recertify_stale');
+  const goal=tx.get("SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND id=? AND binding_id=? AND state='complete'",[token.owner_id,token.contact_id,i.goalId,token.binding_id])??fail('history_recertify_incomplete');
+  tx.run("UPDATE history_source_recertification SET state='completed',stage='completed',guard_state='lost',goal_id=?,target_json=?,support_json=?,token_json=?,updated_at=?,finished_at=? WHERE owner_id=? AND id=?",[i.goalId,goal.target_json,goal.support_json,json(token),i.at,i.at,token.owner_id,i.id]);return true;
  }),
  action('Rotate','write',(tx,i:any)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);const op=pending(tx,{ownerId:token.owner_id,id:i.id});
@@ -193,29 +205,32 @@ export const historyRecertifyActions:StorageAction[]=[
   const token=i.token as ReadEligibility,op=assertRecertifyAccess(tx,token,i.id,i.guardId,i.target);assertHistoryReadBoundary(tx,token,{kind:'history'});
   const goal=tx.get("SELECT * FROM read_goal WHERE owner_id=? AND id=? AND state='complete' AND eligibility_json=?",[token.owner_id,op.goal_id,op.token_json])??fail('history_recertify_incomplete');
   const target=JSON.parse(String(op.target_json)) as HistoryTarget,report=JSON.parse(String(op.support_json));suppression(tx,token,target,report,op);
-  const fence=tx.get('SELECT * FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id])!;
+  const fence=getProof(tx,token.owner_id,token.contact_id)!;
   const archived=JSON.parse(String(op.old_fence_json));if(fence.reason!==archived.reason)fail('history_recertify_stale');
   const scope=json({accountKey:report.accountKey,partitions:[...target.partitions].sort(),tables:target.tables.map(t=>[t.partition,t.instance]).sort((a,b)=>json(a).localeCompare(json(b))),...(target.checkedPartitions?{checkedPartitions:[...target.checkedPartitions].sort()}:{} )});
-  tx.run('INSERT INTO history_continuity_scope VALUES(?,?,?,?,?) ON CONFLICT(owner_id,contact_id) DO UPDATE SET conversation_id=excluded.conversation_id,source_generation=excluded.source_generation,tables_json=excluded.tables_json',[token.owner_id,token.contact_id,token.conversation_id,token.source_generation,scope]);
-  tx.run("INSERT INTO history_guard_lease VALUES(?,?,?,?,?,?,?,'active') ON CONFLICT(owner_id,contact_id) DO UPDATE SET binding_id=excluded.binding_id,conversation_id=excluded.conversation_id,source_generation=excluded.source_generation,guard_id=excluded.guard_id,runtime_id=excluded.runtime_id,state='active'",[token.owner_id,token.contact_id,token.binding_id,token.conversation_id,token.source_generation,i.guardId,runtime(tx)]);
+  putScope(tx,token,scope,{accountKey:report.accountKey,conversationKey:report.conversationKey,state:'needs_confirmation',checkedAt:i.at});
+  putSourceGuard(tx,{owner_id:token.owner_id,contact_id:token.contact_id,binding_id:token.binding_id,conversation_id:token.conversation_id,source_generation:token.source_generation,guard_id:i.guardId,runtime_id:runtime(tx),state:'active'});
   // Seal仍保留围栏；渠道清洁关闭确认后才允许Finalize发布稳定终态。
   tx.run("UPDATE history_source_recertification SET stage='activation',updated_at=? WHERE owner_id=? AND id=?",[i.at,token.owner_id,i.id]);return true;
  }),
  action('Finalize','write',(tx,i:any)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);const op=pending(tx,{ownerId:token.owner_id,id:i.id});
   if(op.stage!=='activation'||op.guard_state!=='active'||op.guard_id!==i.guardId||op.token_json!==json(token))fail('history_recertify_stale');
-  if(!tx.get("SELECT 1 FROM history_guard_lease WHERE owner_id=? AND contact_id=? AND binding_id=? AND conversation_id=? AND source_generation=? AND guard_id=? AND runtime_id=? AND state='lost'",[token.owner_id,token.contact_id,token.binding_id,token.conversation_id,token.source_generation,i.guardId,runtime(tx)]))fail('history_recertify_not_authorized');
+  const guard=getSourceGuard(tx,token.owner_id,token.contact_id);
+  if(!guard||guard.binding_id!==token.binding_id||guard.conversation_id!==token.conversation_id||guard.source_generation!==token.source_generation||guard.guard_id!==i.guardId||guard.runtime_id!==runtime(tx)||guard.state!=='lost')fail('history_recertify_not_authorized');
   if(!tx.get("SELECT 1 FROM read_goal WHERE owner_id=? AND id=? AND state='complete' AND eligibility_json=?",[token.owner_id,op.goal_id,op.token_json]))fail('history_recertify_incomplete');
   assertHistoryReadBoundary(tx,token,{kind:'history'});
-  const fence=tx.get('SELECT * FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
+  const fence=getProof(tx,token.owner_id,token.contact_id);
   if(!fence||fence.reason!==JSON.parse(String(op.old_fence_json)).reason)fail('history_recertify_stale');
-  tx.run('DELETE FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
+  putScope(tx,token,fence!.tables_json,{state:'ok',checkedAt:i.at});
   tx.run("UPDATE history_source_recertification SET state='completed',stage='completed',guard_state='lost',updated_at=?,finished_at=? WHERE owner_id=? AND id=?",[i.at,i.at,token.owner_id,i.id]);
   tx.run('UPDATE contact SET source_revision=source_revision+1 WHERE owner_id=? AND id=?',[token.owner_id,token.contact_id]);
   // 修复通过后登记清理请求（ADR-175）：与完成同一事务，重启后据此续跑，清理本身不在此事务内执行。
   requestSupersededCleanup(tx,token.owner_id,token.contact_id,i.at);return true;
  }),
- action('NoteFailure','write',(tx,i:any)=>{const op=operation(tx,i.ownerId,i.id);if(op.state!=='running')return false;tx.run("UPDATE history_source_recertification SET failure_code=?,guard_state='lost',updated_at=? WHERE owner_id=? AND id=?",[typeof i.code==='string'&&/^[a-z][a-z0-9_]{0,127}$/.test(i.code)?i.code:'history_recertify_failed',i.at,i.ownerId,i.id]);if(op.new_binding_id)tx.run("UPDATE history_guard_lease SET state='lost' WHERE owner_id=? AND contact_id=? AND binding_id=?",[i.ownerId,op.contact_id,op.new_binding_id]);return true;}),
- action('Fail','write',(tx,i:any)=>{const op=operation(tx,i.ownerId,i.id);if(op.state!=='running')return false;const code=typeof i.code==='string'&&/^[a-z][a-z0-9_]{0,127}$/.test(i.code)?i.code:'history_recertify_failed';tx.run("UPDATE history_source_recertification SET state=?,stage=?,failure_code=?,guard_state='lost',updated_at=?,finished_at=? WHERE owner_id=? AND id=?",[i.interrupted?'interrupted':'failed',i.stage??op.stage,code,i.at,i.at,i.ownerId,i.id]);const hadFence=tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[i.ownerId,op.contact_id]);tx.run('INSERT OR IGNORE INTO history_continuity_fence VALUES(?,?,?)',[i.ownerId,op.contact_id,'history_source_continuity_unverified']);if(!hadFence)tx.recordDiagnostic?.({kind:'history_continuity_fence',contactPrefix:String(op.contact_id).slice(0,8),branch:'C01'});if(op.new_binding_id)tx.run("UPDATE history_guard_lease SET state='lost' WHERE owner_id=? AND contact_id=? AND binding_id=?",[i.ownerId,op.contact_id,op.new_binding_id]);return true;}),
+ action('NoteFailure','write',(tx,i:any)=>{const op=operation(tx,i.ownerId,i.id);if(op.state!=='running')return false;tx.run("UPDATE history_source_recertification SET failure_code=?,guard_state='lost',updated_at=? WHERE owner_id=? AND id=?",[typeof i.code==='string'&&/^[a-z][a-z0-9_]{0,127}$/.test(i.code)?i.code:'history_recertify_failed',i.at,i.ownerId,i.id]);if(isSourceContinuityLost(new StorageFailure(i.code))){const token=JSON.parse(String(op.old_token_json)) as ReadEligibility;
+   if(tx.get("SELECT 1 FROM conversation_binding WHERE owner_id=? AND contact_id=? AND id=? AND state='verified'",[token.owner_id,token.contact_id,token.binding_id]))fenceContinuity(tx,token,'C01',i.code);}
+  if(op.new_binding_id)loseSourceGuard(tx,i.ownerId,String(op.contact_id),{bindingId:String(op.new_binding_id)});return true;}),
+ action('Fail','write',(tx,i:any)=>{const op=operation(tx,i.ownerId,i.id);if(op.state!=='running')return false;const code=typeof i.code==='string'&&/^[a-z][a-z0-9_]{0,127}$/.test(i.code)?i.code:'history_recertify_failed';tx.run("UPDATE history_source_recertification SET state=?,stage=?,failure_code=?,guard_state='lost',updated_at=?,finished_at=? WHERE owner_id=? AND id=?",[i.interrupted?'interrupted':'failed',i.stage??op.stage,code,i.at,i.at,i.ownerId,i.id]);fenceSource(tx,JSON.parse(String(op.old_token_json)) as ReadEligibility,'C01');if(op.new_binding_id)loseSourceGuard(tx,i.ownerId,String(op.contact_id),{bindingId:String(op.new_binding_id)});return true;}),
  ...historyRecertifyCandidatesActions,
 ];

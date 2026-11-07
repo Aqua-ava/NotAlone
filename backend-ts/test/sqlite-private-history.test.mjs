@@ -359,9 +359,9 @@ test('守卫明确报告 source change 时即使空闲也持久围栏',async t=>
  await first.synchronize(contact);state.failureCode='history_source_changed';
  let closed;
  const didClose=new Promise(resolve=>{closed=resolve;});state.onClose=closed;state.lose();await didClose;
- const before=state.created,second=new SqliteHistoryService(f.storage,f.contacts,normalUseChannelFactory(state));
- await assert.rejects(second.synchronize(contact),{code:'history_source_continuity_unverified'});
- assert.equal(state.created,before,'已知来源变更的围栏在打开新渠道前拦截');
+ const before=state.created,beforePages=state.pages.length,second=new SqliteHistoryService(f.storage,f.contacts,normalUseChannelFactory(state));
+ await assert.rejects(second.synchronize(contact),{code:'history_source_recovery_unsupported'});
+ assert.equal(state.created,before+1,'围栏只允许打开渠道核对元数据，缺少恢复能力仍停读');assert.equal(state.pages.length,beforePages,'未核对来源不读正文页');
  assert.equal((await second.coverage(contact)).phase,'incomplete');
  await first.close();await second.close();
 });

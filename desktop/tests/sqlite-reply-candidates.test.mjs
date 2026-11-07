@@ -82,6 +82,72 @@ test('暂时失去生成资格保留想法，结果未知只核对原请求且�
  await expect(draft).toHaveValue('后来改写的新想法');
 });
 
+test('生成被拒且请求未落库时保留真实原因，重复核对不覆盖原错',{timeout:30000},async t=>{
+ const reason='现有模型配置尚未就绪。';
+ const f=await panel(t,async operation=>{
+  if(operation.action==='read')return pageData();
+  if(operation.action==='status')return {requestKey:operation.requestKey,phase:'not_found',sent:false,errorCode:null,retryable:false,startedAt:null,finishedAt:null};
+  throw new Error(reason);
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'});
+ await region.getByRole('button',{name:'帮我想想',exact:true}).click();
+ await expect(region.getByRole('alert')).toHaveText(reason);
+ await region.getByRole('button',{name:'核对原请求',exact:true}).click();
+ await expect(region.getByRole('alert')).toHaveText(reason);
+ assert.equal(f.commands.filter(command=>command.action==='generate').length,1);
+});
+
+test('来源待核验错误保留中文原因并提供处理同步问题入口',{timeout:30000},async t=>{
+ const reason='聊天来源待重新核验，请到联系人页处理同步问题。';
+ const f=await panel(t,async operation=>{
+  if(operation.action==='read')return pageData();
+  if(operation.action==='status')return {requestKey:operation.requestKey,phase:'not_found',sent:false,errorCode:null,retryable:false,startedAt:null,finishedAt:null};
+  throw new Error(reason);
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'});
+ await region.getByRole('textbox',{name:'有什么想说的',exact:true}).fill('来源失效时应撤下的合成草稿');
+ await region.getByRole('button',{name:'帮我想想',exact:true}).click();
+ await expect(region.getByRole('alert')).toHaveText(reason);
+ await expect(region.getByRole('textbox',{name:'有什么想说的',exact:true})).toHaveValue('');
+ await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);
+ await f.page.evaluate(()=>{window.__managerNextFails=true;});
+ await region.getByRole('button',{name:'处理同步问题',exact:true}).click();
+ await expect(region.getByText('同步设置暂未打开，请重试。',{exact:true})).toBeVisible();
+ await expect(region.getByRole('alert')).toHaveText(reason);
+ await region.getByRole('button',{name:'处理同步问题',exact:true}).click();
+ assert.equal(await f.page.evaluate(()=>window.__managerOpened),1);
+ assert.equal(f.commands.filter(command=>command.action==='generate').length,1);
+ await f.page.evaluate(()=>window.__switch());
+ await expect(region.getByRole('button',{name:'处理同步问题',exact:true})).toHaveCount(0);
+});
+
+test('已落库来源核验失败同样提供处理同步问题入口',{timeout:30000},async t=>{
+ const f=await panel(t,async operation=>{
+  if(operation.action==='read')return pageData();
+  if(operation.action==='status')return {requestKey:operation.requestKey,phase:'failed',sent:false,errorCode:'discussion_source_unavailable',retryable:false,startedAt:1000,finishedAt:2000};
+  throw new Error('聊天来源待重新核验，请到联系人页处理同步问题。');
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'});
+ await region.getByRole('button',{name:'帮我想想',exact:true}).click();
+ await expect(region.getByRole('alert')).toHaveText('聊天来源待重新核验，请到联系人页处理同步问题。');
+ await expect(region.getByRole('button',{name:'处理同步问题',exact:true})).toBeVisible();
+});
+
+test('生成报错后已受理与结果未知状态仍显示原核对文案',{timeout:30000},async t=>{
+ for(const [phase,sent,expected] of [['preparing',false,'原请求仍在处理，请稍后核对。'],['unknown',true,'模型请求已发出，结果暂未确认。请核对原请求。']]){
+  const f=await panel(t,async operation=>{
+   if(operation.action==='read')return pageData();
+   if(operation.action==='status')return {requestKey:operation.requestKey,phase,sent,errorCode:null,retryable:false,startedAt:1000,finishedAt:null};
+   throw new Error('候选结果尚未确认，请保留原请求重试核对。');
+  });
+  const region=f.page.getByRole('region',{name:'表达工作区'});
+  await region.getByRole('button',{name:'帮我想想',exact:true}).click();
+  await expect(region.getByRole('alert')).toHaveText(expected);
+  await expect(region.getByRole('button',{name:'核对原请求',exact:true})).toBeVisible();
+  assert.equal(f.commands.filter(command=>command.action==='generate').length,1);
+ }
+});
+
 test('临时禁用再恢复保留候选编辑和展开依据，不重复读取候选',{timeout:30000},async t=>{
  const f=await panel(t,async()=>pageData()),region=f.page.getByRole('region',{name:'表达工作区'});
  const candidate=region.getByRole('textbox',{name:'候选第1条',exact:true});
@@ -188,7 +254,7 @@ async function panel(t,execute,initialDraft='',assistant=false){
  const compiled=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{SqliteReplyCandidatesPanel}from'./src/renderer/SqliteReplyCandidatesPanel';import{AssistantSessionPanel}from'./src/renderer/AssistantSessionPanel';
   const listeners=new Set();const bridge={candidates:{execute:request=>window.__execute(request).finally(()=>{window.__settled=(window.__settled||0)+1;})},onInvalidated:listener=>{listeners.add(listener);return()=>listeners.delete(listener);}};
   const root=createRoot(document.getElementById('root'));let props={bridge,contactId:${JSON.stringify(ids.contact)},scopeRevision:1,sessionId:${JSON.stringify(ids.session)},initialDraft:${JSON.stringify(initialDraft)},onSubmitted:receipt=>window.__submitted(receipt)};
-  window.notalone={sqliteDiscussion:bridge};
+  window.notalone={sqliteDiscussion:bridge,openManager:async()=>{if(window.__managerNextFails){window.__managerNextFails=false;throw new Error('合成窗口失败');}window.__managerOpened=(window.__managerOpened||0)+1;}};
   let state={contactId:props.contactId,scopeRevision:props.scopeRevision,phase:'idle',generationBlock:null,generationJobs:[],exploration:{phase:'idle'},
     savedSession:{phase:'ready',sessionId:props.sessionId,turns:[],inputs:[],currentInputVersionId:null,discussionEntries:[],runtimeRecovery:'ready'},
     sessionCatalog:{phase:'ready',items:[{sessionId:props.sessionId,isCurrent:true}],currentSessionId:props.sessionId}};

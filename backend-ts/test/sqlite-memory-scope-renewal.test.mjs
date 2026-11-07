@@ -1,9 +1,10 @@
+// 旧副本及认证审计由历史专用夹具建立；断言继续验证当前存储的删除与抑制保护。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {fixture,owner,record,report,createChannel} from './sqlite-clear-support.mjs';
 import {modelPort} from './fixtures/memory-sqlite/support.mjs';
-import {SqliteHistoryRecertifyService} from '../src/history/sqlite/recertify.ts';
+import {SqliteHistoryRecertifyService} from './fixtures/history/legacy-recertify-service.ts';
 import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 
 for(const boundary of ['unknown','paused'])test(`重新认证的新授权不被旧${boundary}轮阻挡，旧输入与回执保持失效`,async t=>{

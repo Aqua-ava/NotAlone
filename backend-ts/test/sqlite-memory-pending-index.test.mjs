@@ -1,4 +1,5 @@
-import test from 'node:test';
+import {cleanupPreSourceProofFixtures} from './fixtures/sqlite/pre-source-proof-registry.mjs';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {join} from 'node:path';
@@ -11,6 +12,7 @@ import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 import {registry} from '../src/storage/sqlite/registry.ts';
 import {memoryManagementPendingIndexMigration} from '../src/memory/sqlite/management/pending-index-schema.ts';
+after(cleanupPreSourceProofFixtures);
 
 const registryModule=mode=>new URL(`./fixtures/memory-management/pending-index-upgrade-registry.mjs?mode=${mode}`,import.meta.url).href;
 const query="SELECT * FROM memory_candidate WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND state='pending' AND id>? ORDER BY id LIMIT ?";
@@ -37,7 +39,7 @@ test('38升级39只增加待处理索引，旧迁移账本与候选、版本、�
  await extraction.close();extraction=undefined;await f.service.close();await f.storage.close();
  const beforeDb=new DatabaseSync(databasePath(f.root),{readOnly:true}),before=snapshot(beforeDb);beforeDb.close();
  assert.deepEqual(before.memory_candidate.map(candidate=>candidate.state).sort(),['adopted','pending']);
- upgraded=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:databaseId,registryModule:registryModule('current')});
+ upgraded=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:databaseId,registryModule:registryModule('index39')});
  assert.equal(upgraded.status.schemaVersion,39);
  const afterDb=new DatabaseSync(databasePath(f.root),{readOnly:true}),after=snapshot(afterDb);
  assert.deepEqual(after.schema_migration.slice(0,38),before.schema_migration);

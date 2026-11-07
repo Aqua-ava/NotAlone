@@ -20,25 +20,27 @@ import (
 )
 
 type notaloneHistoryRequest struct {
-	Operation        string `json:"op"`
-	Limit            int    `json:"limit,omitempty"`
-	Keyword          string `json:"keyword,omitempty"`
-	Account          string `json:"account,omitempty"`
-	Conversation     string `json:"conversation,omitempty"`
-	DisplayName      string `json:"displayName,omitempty"`
-	Consent          string `json:"consent,omitempty"`
-	Target           string `json:"target,omitempty"`
-	Cursor           string `json:"cursor,omitempty"`
-	Kind             string `json:"kind,omitempty"`
-	Partition        string `json:"partition,omitempty"`
-	Table            string `json:"table,omitempty"`
-	LocalID          string `json:"localId,omitempty"`
-	ServerID         string `json:"serverId,omitempty"`
-	SentAt           string `json:"sentAt,omitempty"`
-	ResourceToken    string `json:"resourceToken,omitempty"`
-	Offset           int64  `json:"offset,omitempty"`
-	ImageKeySupplied bool   `json:"imageKeySupplied,omitempty"`
-	Checkpoint       bool   `json:"checkpoint,omitempty"`
+	Operation        string                     `json:"op"`
+	Limit            int                        `json:"limit,omitempty"`
+	Keyword          string                     `json:"keyword,omitempty"`
+	Account          string                     `json:"account,omitempty"`
+	Conversation     string                     `json:"conversation,omitempty"`
+	DisplayName      string                     `json:"displayName,omitempty"`
+	Consent          string                     `json:"consent,omitempty"`
+	Target           string                     `json:"target,omitempty"`
+	Cursor           string                     `json:"cursor,omitempty"`
+	Kind             string                     `json:"kind,omitempty"`
+	Partition        string                     `json:"partition,omitempty"`
+	Table            string                     `json:"table,omitempty"`
+	LocalID          string                     `json:"localId,omitempty"`
+	ServerID         string                     `json:"serverId,omitempty"`
+	SentAt           string                     `json:"sentAt,omitempty"`
+	ResourceToken    string                     `json:"resourceToken,omitempty"`
+	Offset           int64                      `json:"offset,omitempty"`
+	ImageKeySupplied bool                       `json:"imageKeySupplied,omitempty"`
+	Checkpoint       bool                       `json:"checkpoint,omitempty"`
+	PreviousTarget   *notaloneSnapshotTarget    `json:"previousTarget,omitempty"`
+	Positions        []notaloneRecoveryPosition `json:"positions,omitempty"`
 }
 type notaloneResolved struct {
 	Account          string `json:"accountKey"`
@@ -66,6 +68,7 @@ type notaloneMetadataReport struct {
 	Record            *notaloneMetadataObservation `json:"record"`
 }
 type notaloneHistorySession struct {
+	recoveryWatermarks      map[string]string
 	server                  *server
 	selected                *notaloneResolved
 	guards                  []*notaloneSourceGuard
@@ -164,6 +167,7 @@ func (h *notaloneHistorySession) releaseSelection() error {
 	h.closeAllImages()
 
 	h.selected = nil
+	h.recoveryWatermarks = nil
 	h.snapshotMode = ""
 	h.inspected = nil
 	h.supportReport = nil
@@ -554,7 +558,7 @@ func (h *notaloneHistorySession) supportWithRefresh(ctx context.Context, refresh
 		_ = snapshot.Close()
 		return result, nil, err
 	}
-	for _, capability := range []string{"statusSemantics", "sourceLifecycle", "restartContinuity", "recoveryMapping", "snapshotBarrier", "partitionCoverage", "normalHistory", "incrementalTail"} {
+	for _, capability := range []string{"statusSemantics", "sourceLifecycle", "restartContinuity", "recoveryMapping", "snapshotBarrier", "partitionCoverage", "normalHistory", "incrementalTail", "partitionGrowth"} {
 		result.Capabilities[capability] = "supported"
 	}
 	result.Status = "supported"
@@ -568,6 +572,7 @@ func (h *notaloneHistorySession) supportWithRefresh(ctx context.Context, refresh
 	if !emptyTarget && h.checkpointDirectory != "" {
 		result.Capabilities["durableIncremental"] = "supported"
 		result.Capabilities["durableHistory"] = "supported"
+		result.Capabilities["recoverFromLocalIds"] = "supported"
 	}
 	result.Reason = nil
 	h.snapshot = snapshot
@@ -609,6 +614,9 @@ func cloneNotaloneReadProfile(value *notaloneReadProfile) *notaloneReadProfile {
 	return &clone
 }
 func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRequest) (any, error) {
+	if r.Operation != "recover-target" && (r.PreviousTarget != nil || r.Positions != nil) {
+		return nil, notaloneFailure("history_request_invalid")
+	}
 	if r.Checkpoint && r.Operation != "page" {
 		return nil, notaloneFailure("history_request_invalid")
 	}
@@ -697,6 +705,10 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		}
 	case "verify-snapshot-metadata":
 		if r.Consent != "selected-snapshot-metadata-v1" || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" {
+			return nil, notaloneFailure("history_request_invalid")
+		}
+	case "recover-target":
+		if r.Consent != "selected-history-v1" || !notaloneIdentity.MatchString(r.Account) || !notaloneIdentity.MatchString(r.Conversation) || r.DisplayName != "" || r.Target != "" || r.Cursor != "" || r.PreviousTarget == nil || r.Positions == nil {
 			return nil, notaloneFailure("history_request_invalid")
 		}
 	case "resume-target":
@@ -871,12 +883,12 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 		return notaloneMetadataReport{Format: "wechat-message-metadata-observation-v1", Status: "unverified", ScopeDigest: inspection.ScopeDigest, SourceGeneration: inspection.SourceGeneration, SchemaFingerprint: inspection.SchemaFingerprint, Kind: r.Kind, CheckedPartitions: inspection.CheckedPartitions, Record: observation}, nil
 	}
 
-	if (r.Operation == "target" || r.Operation == "resume-target" || r.Operation == "page" || r.Operation == "tail" || r.Operation == "quarantine-target" || r.Operation == "quarantine-page") && h.messageGuard != nil {
+	if (r.Operation == "target" || r.Operation == "resume-target" || r.Operation == "recover-target" || r.Operation == "page" || r.Operation == "tail" || r.Operation == "quarantine-target" || r.Operation == "quarantine-page") && h.messageGuard != nil {
 		if err := h.ensureMessageGuard(); err != nil {
 			return nil, err
 		}
 	}
-	refreshSchema := r.Operation == "support" || r.Operation == "target" || r.Operation == "resume-target" || r.Operation == "tail"
+	refreshSchema := r.Operation == "support" || r.Operation == "target" || r.Operation == "resume-target" || r.Operation == "recover-target" || r.Operation == "tail"
 	report, profile, err := h.supportWithRefresh(ctx, refreshSchema)
 	if err != nil {
 		return nil, err
@@ -891,6 +903,9 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 			return nil, notaloneFailure("history_target_growth_required")
 		}
 		return h.tailPage(ctx, r, report, profile)
+	}
+	if r.Operation == "recover-target" {
+		return h.recoverTarget(ctx, r, report, profile)
 	}
 	if r.Operation == "resume-target" {
 		if report.Status != "supported" || profile == nil || report.Capabilities["durableIncremental"] != "supported" {
@@ -946,6 +961,8 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 			_ = snapshot.Close()
 			return nil, initErr
 		}
+		snapshot.watermarks = checkpoint.Watermarks
+		h.recoveryWatermarks = checkpoint.Watermarks
 		if restoreErr := snapshot.restorePendingHistory(checkpoint.PendingAbsence); restoreErr != nil {
 			_ = snapshot.Close()
 			return nil, restoreErr
@@ -992,6 +1009,7 @@ func (h *notaloneHistorySession) handle(ctx context.Context, r notaloneHistoryRe
 			h.snapshot = nil
 		}
 		h.resetTail()
+		h.recoveryWatermarks = nil
 		snapshot, err := newNotaloneSnapshot(h.life, h.server, *h.selected, *h.inspected, *profile)
 		if err != nil {
 			return nil, err

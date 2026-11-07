@@ -27,7 +27,12 @@ export interface StorageDiagnostic {
   branch: 'G01'|'G02'|'G03'|'G04'|'T01'|'T02'|'T03'|'N01'|'N02'|'N03'|'N04'|'N05'|'N06'|'N07'|'A01'|'A02'|'R01'|'R02'|'L01'|'C01';
   errorCode?: string;
 }
+export type StorageRuntimeNamespace = 'history-source-guard';
 export interface StorageTransaction {
+  // 易失状态按动作隔离；只有SQL提交成功后由Worker发布，不能作为持久事实。
+  runtimeGet<T>(namespace:StorageRuntimeNamespace,key:string):T|undefined;
+  runtimeSet(namespace:StorageRuntimeNamespace,key:string,value:unknown):void;
+  runtimeDelete(namespace:StorageRuntimeNamespace,key:string):void;
   // Worker 在事务内只缓冲，提交成功后落本机日志；回滚和重试丢弃本次缓冲。
   recordDiagnostic?(event: StorageDiagnostic): void;
   run(sql: string, values?: SQLInputValue[]): void;

@@ -1,5 +1,7 @@
-import {registry as base} from './pagination-upgrade-registry.mjs';
+import {registry as current,paginationUpgradeActions} from './pagination-upgrade-registry.mjs';
+import {loadPreSourceProofRegistry} from '../sqlite/pre-source-proof-registry.mjs';
 const legacy=new URL(import.meta.url).searchParams.get('mode')==='legacy37';
+const previous=legacy?await loadPreSourceProofRegistry():current,base=legacy?{...previous,actions:[...previous.actions,...paginationUpgradeActions]}:previous;
 export const registry={...base,migrations:legacy?base.migrations.filter(migration=>migration.version<=37):base.migrations,actions:[...base.actions,
  {name:'fixture.markSourceDeleting',mode:'write',retryBusy:false,execute(tx,{ownerId,contactId}){
   // 模拟来源被真实删除／隔离：与守卫暂时失效不同，这类失效在本地资格中同样不通过。

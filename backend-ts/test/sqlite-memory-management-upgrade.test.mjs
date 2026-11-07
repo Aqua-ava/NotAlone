@@ -1,4 +1,5 @@
-import test from 'node:test';
+import {certifyLegacyMetadata,cleanupPreSourceProofFixtures} from './fixtures/sqlite/pre-source-proof-registry.mjs';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {fixture,owner,record} from './fixtures/memory-sqlite/support.mjs';
@@ -9,6 +10,7 @@ import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts
 import {DeletionService} from '../src/storage/sqlite/deletion/service.ts';
 import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
 import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
+after(cleanupPreSourceProofFixtures);
 
 // 已发布35的原始SQL摘要；修改现行触发器须追加迁移，不能重写这个兼容性基线。
 const published35Checksum='70afa5d228f0b927353ed2b60484a86b2eb41f6cf20c210790a9010da52592b5';
@@ -26,13 +28,14 @@ test('旧35升级保留原账本与来源时间，删除失败重试不恢复正
  f.channel.page=async source=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,
   records:[record('1',{text:'合成来源'.repeat(50),sentAt:source.token.contact_id===contactId?'1700000001000':'1700000002000'})],
   completedPartitions:['shard-a'],exhausted:true});
+ certifyLegacyMetadata(f.channel);
  for(const id of [contactId,independentContactId])await history.synchronize(id);
  const legacyManagement=new SqliteMemoryManagement(f.storage,owner);
  const affected=await legacyManagement.decide({requestKey:'upgrade-affected',action:'manual',scope,body:'来源支持的合成资料。'});
  const independent=await legacyManagement.decide({requestKey:'upgrade-independent',action:'manual',scope:{scopeKind:'contact',contactId:independentContactId},body:'另一联系人独立资料。'});
  const sourceId=await f.storage.execute('fixture.paginationUpgradeCitations',{ownerId:owner,contactId,memoryId:affected.memoryId,count:40});
  await f.storage.execute('fixture.paginationUpgradeCitations',{ownerId:owner,contactId:independentContactId,memoryId:independent.memoryId,count:1});
- const before=await f.storage.execute('fixture.paginationUpgradeSnapshot',{ownerId:owner}),databaseId=f.storage.status.databaseId;
+ const before=await f.storage.execute('fixture.paginationUpgradeSnapshot',{ownerId:owner}),databaseId=f.storage.status.databaseId;assert.equal(before.sourceSchema.proofs,null);assert.deepEqual(before.sourceSchema.tables,['history_continuity_fence','history_continuity_scope','history_guard_lease']);
  assert.equal(before.ledger[34].checksum,published35Checksum);
  await history.close();await f.storage.close();
 
@@ -43,7 +46,7 @@ test('旧35升级保留原账本与来源时间，删除失败重试不恢复正
  // 从公开读取入口完成实际来源投影；不假设迁移或触发器已同步计算好目录时间。
  const page=await management.read(scope),otherPage=await management.read(independentScope);
  assert.notEqual(page.page?.preparing,true);assert.notEqual(otherPage.page?.preparing,true);
- const after=await upgraded.execute('fixture.paginationUpgradeSnapshot',{ownerId:owner});
+ const after=await upgraded.execute('fixture.paginationUpgradeSnapshot',{ownerId:owner});assert.deepEqual(after.sourceSchema.tables,['source_proof']);assert.equal(after.sourceSchema.proofs.length,2);assert.ok(after.sourceSchema.proofs.every(proof=>proof.state==='ok'));
  assert.deepEqual(after.ledger.slice(0,35),before.ledger);
  assert.deepEqual(after.memories,before.memories);assert.deepEqual(after.versions,before.versions);
  const current=page.memories.find(memory=>memory.id===affected.memoryId);

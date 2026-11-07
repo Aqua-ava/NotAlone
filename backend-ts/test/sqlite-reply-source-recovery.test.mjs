@@ -10,7 +10,7 @@ const workspace=()=>({action:'express',draftText:'我想说晚点再聊',tone:'o
 
 for(const state of ['lost','old-runtime','binding-unverified'])test(`本机回复忽略 ${state}，挂起的微信恢复器不被调用且回放不重复生成`,{timeout:10000},async t=>{
  const f=await fixture(t,{registryModule,content}),contactId=f.ids[0],discussion=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner);
- await f.storage.execute('sourceRecoveryTest.runtimeState',{ownerId:f.owner,contactId,state});
+ const token=await f.contacts.eligibility(contactId);await f.storage.execute('sourceRecoveryTest.runtimeState',{ownerId:f.owner,contactId,state});
  let externalReads=0,release;const blocked=new Promise(resolve=>{release=resolve;});
  const turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},prepareSources:()=>{externalReads++;return blocked;}});t.after(()=>turns.close());
  const w=workspace(),input={contactId,discussionId:discussion.id,requestKey:randomUUID(),text:w.draftText,workspace:w,confirmedContact:true};
@@ -18,7 +18,12 @@ for(const state of ['lost','old-runtime','binding-unverified'])test(`本机回�
  assert.equal(externalReads,0);assert.match(JSON.stringify(f.requests[0]),/已保存聊天/);
  assert.equal((await turns.generate(input)).replayed,true);assert.equal(f.requests.length,1);
  assert.equal((await service.view(contactId,discussion.id))[0].candidates.length,1);
- await assert.rejects(f.storage.execute('sourceRecoveryTest.strict',{ownerId:f.owner,contactId}));
+ if(state==='binding-unverified')await assert.rejects(f.storage.execute('sourceRecoveryTest.strict',{ownerId:f.owner,contactId}));
+ else await assert.doesNotReject(f.storage.execute('sourceRecoveryTest.strict',{ownerId:f.owner,contactId}),'ok来源不依赖易失guard或旧runtime');
+ await f.storage.execute('sourceRecoveryTest.fence',{token});
+ if(state!=='binding-unverified')await f.storage.execute('sourceRecoveryTest.ready',{ownerId:f.owner,contactId});
+ await assert.rejects(turns.generate({...input,requestKey:randomUUID()}),'易失guard恢复不能解除来源待确认状态');
+ assert.equal(f.requests.length,1);assert.equal(externalReads,0);assert.equal((await service.view(contactId,discussion.id))[0].sourceState,'unavailable');
 });
 
 test('旧选稿与跨联系人本人资料也只核验本机实际来源',async t=>{
@@ -32,6 +37,22 @@ test('旧选稿与跨联系人本人资料也只核验本机实际来源',async 
  for(const id of f.ids)await f.storage.execute('sourceRecoveryTest.runtimeState',{ownerId:f.owner,contactId:id,state:'lost'});
  await turns.generate({...base,requestKey:randomUUID(),carriedSelectionId:selection.id});
  assert.equal(f.requests.length,2);assert.match(JSON.stringify(f.requests[1]),/合成本人已采纳资料/);
+});
+
+test('撤销读取授权后禁止新外部读取，已接纳的ok本机资料仍可幂等使用',{timeout:10000},async t=>{
+ const f=await fixture(t,{registryModule,content}),contactId=f.ids[0],discussion=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner);
+ const turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},prepareSources:()=>assert.fail('撤销授权后不应访问微信')});t.after(()=>turns.close());
+ const token=await f.contacts.eligibility(contactId),w=workspace(),input={contactId,discussionId:discussion.id,requestKey:randomUUID(),text:w.draftText,workspace:w,confirmedContact:true};await turns.generate(input);assert.equal(f.requests.length,1);
+ await f.contacts.revoke(contactId,token.binding_id,token.selection_generation);await assert.rejects(f.contacts.eligibility(contactId),{code:'read_not_authorized'});await assert.rejects(f.history.synchronize(contactId),{code:'read_not_authorized'});
+ await assert.doesNotReject(f.storage.execute('sourceRecoveryTest.strict',{ownerId:f.owner,contactId}));assert.equal((await service.view(contactId,discussion.id))[0].sourceState,'available');assert.equal((await turns.generate(input)).replayed,true);assert.equal(f.requests.length,1);
+ await assert.rejects(f.contacts.eligibility(contactId),{code:'read_not_authorized'},'使用本机资料不能恢复读取授权');
+});
+
+test('绑定撤销后幂等收据不恢复旧来源或候选正文',{timeout:10000},async t=>{
+ const f=await fixture(t,{registryModule,content}),contactId=f.ids[0],discussion=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner);
+ const turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},prepareSources:()=>assert.fail('绑定撤销后不应访问微信')});t.after(()=>turns.close());
+ const w=workspace(),input={contactId,discussionId:discussion.id,requestKey:randomUUID(),text:w.draftText,workspace:w,confirmedContact:true};await turns.generate(input);assert.equal(f.requests.length,1);
+ await f.storage.execute('sourceRecoveryTest.runtimeState',{ownerId:f.owner,contactId,state:'binding-revoked'});await assert.rejects(f.storage.execute('sourceRecoveryTest.strict',{ownerId:f.owner,contactId}));assert.equal((await service.view(contactId,discussion.id))[0].sourceState,'unavailable');assert.equal((await turns.generate(input)).replayed,true);assert.equal(f.requests.length,1);const rows=await service.view(contactId,discussion.id);assert.equal(rows[0].sourceState,'unavailable');assert.equal(rows[0].candidates.length,0);
 });
 
 test('不明旧来源围栏不自动恢复，也不调用微信准备器',async t=>{

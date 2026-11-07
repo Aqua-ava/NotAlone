@@ -149,7 +149,7 @@ test('共享读取器停止后重验不可用仍停读，恢复后完整重验�
   let state = await stateOf(f);
   assert.equal(state.fences.length, 0, '重验不可用时只停读，不能把守卫降级当作真实围栏');
   assert.equal(goalsFor(state, f.contactA).length, before, '重验不可用时不得建立新目标');
-  assert.equal((await f.service.coverage(f.contactA)).failureCode, 'history_source_continuity_unverified', '重验不可用时读取必须保持停读');
+  assert.equal((await f.service.coverage(f.contactA)).failureCode,null,'暂不可用不改已接纳的来源事实，实际读取已被拒绝');assert.equal(state.proofs.find(p=>p.contact_id===f.contactA).state,'ok');
   f.lane.inspectError = null;
   const coverage = await f.service.synchronize(f.contactA);
   assert.equal(coverage.phase, 'complete');
@@ -158,7 +158,7 @@ test('共享读取器停止后重验不可用仍停读，恢复后完整重验�
   assert.equal(leaseFor(state, f.contactA).state, 'active');
 });
 
-test('真实围栏不因新读取器的重验尝试被删除，读取保持停读', {timeout: 10000}, async t => {
+test('读取器缺少受控恢复能力时保留围栏，不建立目标或读取正文', {timeout: 10000}, async t => {
   const f = await sharedFixture(t);
   await f.service.synchronize(f.contactA);
   const token = await f.current.contacts.eligibility(f.contactA);
@@ -166,7 +166,7 @@ test('真实围栏不因新读取器的重验尝试被删除，读取保持停�
   let state = await stateOf(f);
   assert.ok(fenceFor(state, f.contactA));
   const before = goalsFor(state, f.contactA).length;
-  await assert.rejects(f.service.synchronize(f.contactA), {code: 'history_source_continuity_unverified'});
+  await assert.rejects(f.service.synchronize(f.contactA), {code: 'history_source_recovery_unsupported'});
   state = await stateOf(f);
   assert.ok(fenceFor(state, f.contactA), '既有围栏不得被新读取或重验删除');
   assert.equal(goalsFor(state, f.contactA).length, before, '围栏期间不得建立新的读取目标');
@@ -184,7 +184,7 @@ test('干净关闭（守卫 lost）后新运行代次首次读取完整重验并
   await restart(f, t);
   const nextState = await stateOf(f);
   assert.notEqual(nextState.runtimeId, previousRuntime);
-  assert.equal(leaseFor(nextState, f.contactA).runtimeId, previousRuntime, '干净关闭保留旧运行代次的 lost 守卫');
+  assert.equal(leaseFor(nextState,f.contactA),null,'Worker重启不保留来源守卫');assert.equal(nextState.proofs.find(p=>p.contact_id===f.contactA).state,'ok');
   const coverage = await f.open().synchronize(f.contactA);
   assert.equal(coverage.phase, 'complete');
   const state = await stateOf(f);
@@ -199,12 +199,11 @@ test('硬中断（守卫 active 旧运行代次）后新运行代次首次读取
   let state = await stateOf(f);
   assert.equal(leaseFor(state, f.contactA).state, 'active');
   const crashedRuntime = leaseFor(state, f.contactA).runtimeId;
-  // 硬中断不经过关停释放：不调用服务 close，直接重开存储换新运行代次；旧守卫仍是 active 但属于旧代次。
+  // 硬中断不经过服务释放：新Worker没有旧内存守卫，持久来源事实仍须重新核对。
   await restart(f, t);
   state = await stateOf(f);
   assert.notEqual(state.runtimeId, crashedRuntime);
-  assert.equal(leaseFor(state, f.contactA).state, 'active');
-  assert.equal(leaseFor(state, f.contactA).runtimeId, crashedRuntime);
+  assert.equal(leaseFor(state,f.contactA),null,'硬中断不恢复旧内存守卫');assert.equal(state.proofs.find(p=>p.contact_id===f.contactA).state,'ok');
   const coverage = await f.open().synchronize(f.contactA);
   assert.equal(coverage.phase, 'complete');
   state = await stateOf(f);
@@ -213,9 +212,9 @@ test('硬中断（守卫 active 旧运行代次）后新运行代次首次读取
   assert.equal(leaseFor(state, f.contactA).runtimeId, state.runtimeId, '硬中断后的首次读取应在新运行代次续租');
 });
 
-test('共享读取器停止后无 normal-use 基线的联系人下一次读取仍按严格预检围栏', {timeout: 10000}, async t => {
+test('共享读取器停止后的旧渠道仍须核对物理目标，实际变化继续围栏', {timeout: 10000}, async t => {
   const f = await sharedFixture(t);
-  // 非 normal-use 支持档没有元数据重验基线，只能按严格预检处理。
+  // 旧渠道模式不能借守卫重建放行发生变化的物理目标。
   f.lane.reportFactory = async scope => ({...report, accountKey: scope.accountKey, conversationKey: scope.conversationKey,
     sourceGeneration: scope.token.source_generation, continuity: 'synthetic-generation-1'});
   await f.service.synchronize(f.contactA);
@@ -225,8 +224,9 @@ test('共享读取器停止后无 normal-use 基线的联系人下一次读取�
   await stopSharedProcess(f, 'history_source_changed');
   state = await stateOf(f);
   assert.equal(state.fences.length, 0, '共享进程错误码不得直接围栏空闲守卫');
-  assert.equal(leaseFor(state, f.contactA).state, 'lost');
-  await assert.rejects(f.service.synchronize(f.contactA), {code: 'history_source_continuity_unverified'});
+  assert.equal(leaseFor(state,f.contactA).state,'lost');
+  f.lane.targetFactory=async()=>({...target,tables:target.tables.map(t=>({...t,instance:'synthetic-replaced-table'}))});
+  await assert.rejects(f.service.synchronize(f.contactA),{code:'history_source_changed'});
   state = await stateOf(f);
-  assert.ok(fenceFor(state, f.contactA), '没有 normal-use 重验基线时，下一次严格预检必须围栏并停读');
+  assert.ok(fenceFor(state, f.contactA), '当前物理实例确实变化时必须围栏并停读');
 });

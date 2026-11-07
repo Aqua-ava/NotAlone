@@ -5,7 +5,7 @@ import {deletionFixture} from './fixtures/memory-documents/deletion-support.mjs'
 import {record} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 
-test('正式自动记忆与递归文档在守卫失证后仍可供本机回复，后台读者仍严格',async t=>{
+test('正式自动记忆与递归文档的ok本机资格不依赖易失守卫',async t=>{
  const f=await deletionFixture(t),run=await f.extraction.start('local-documents-guard');await f.extraction.waitForIdle(run.runId);
  const scope={ownerId:f.owner,contactId:f.contactId,discussionId:randomUUID()};
  const before=await f.storage.execute('fixture.localReplyKnowledge',scope);
@@ -13,7 +13,7 @@ test('正式自动记忆与递归文档在守卫失证后仍可供本机回复�
  await f.storage.execute('fixture.localReplyGuardLost',scope);
  const after=await f.storage.execute('fixture.localReplyKnowledge',scope);assert.deepEqual(after,before);
  for(const item of before)assert.equal(await f.storage.execute('fixture.localReplyFrozen',{scope,item}),true);
- assert.deepEqual(await f.storage.execute('fixture.documentKnowledge',scope),[]);
+ assert.deepEqual(await f.storage.execute('fixture.documentKnowledge',scope),before.filter(item=>item.kind==='document'),'文档本机资格同样不依赖易失guard');
 });
 
 test('新正式发布保留原冻结集合；新请求拒绝指定旧集合，旧集合缺任一成员即失效',async t=>{

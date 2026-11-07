@@ -6,7 +6,7 @@ import path from 'node:path';
 import type { Writable } from 'node:stream';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import {readWechatQuotePayload,type WechatQuotePayload,type WechatQuoteSourceIdentity} from './quote-payload.ts';
-import type { HistoryPage, HistoryQuoteErrorCode,HistoryRecord, HistorySupportReport, HistoryTarget, HistoryTailPage } from '../sqlite/contracts.ts';
+import type { HistoryPage, HistoryQuoteErrorCode,HistoryRecord,HistoryRecoveryPosition, HistorySupportReport, HistoryTarget, HistoryTailPage } from '../sqlite/contracts.ts';
 import { boundaryProtocol, maxBoundaryMembers, membersManifestSha256, sourceLocalKey, type HistoryBoundaryCandidate } from '../sqlite/boundary.ts';
 import { isPartitionGrowthTargetChange, isSafePartitionGrowth, historyTargetTransition } from '../partition-growth.ts';
 import { WECHAT_METADATA_SUPPORT } from './support-profile.ts';
@@ -496,7 +496,7 @@ function supportReport(value: unknown, scope: ResolvedWechatScope, artifact: str
     || row.profileId === absentPrivateTargetProfile && (!absentTarget || declaredPrimaryKey.length > 0))) return fail();
   let capabilities: Record<string, 'supported' | 'unsupported' | 'unverified'> | undefined;
   if (hasCapabilities) {
-    const extras = ['incrementalTail', 'durableIncremental', 'durableHistory', 'partitionGrowth', boundaryProtocol].filter(key => Object.hasOwn(row.capabilities as object, key));
+    const extras = ['incrementalTail', 'durableIncremental', 'durableHistory', 'partitionGrowth', 'recoverFromLocalIds', boundaryProtocol].filter(key => Object.hasOwn(row.capabilities as object, key));
     const keys = ['programVersion', 'exactSchema', 'declaredLocalKey', 'automaticAllocation', 'serverIdUniqueConstraint', 'statusColumn', 'statusSemantics', 'sourceLifecycle', 'restartContinuity', 'recoveryMapping', 'snapshotBarrier', 'partitionCoverage', 'normalHistory', ...extras];
     const reported = object(row.capabilities, keys);
     capabilities = Object.fromEntries(keys.map(key => {
@@ -1137,6 +1137,37 @@ export class NarrowWechatClient {
       this.#activeImage=undefined;
     },signal);
   }
+  recoverTargetSelected(previous:HistoryTarget,positions:readonly HistoryRecoveryPosition[],signal?:AbortSignal):Promise<{target:HistoryTarget;cursor:string;anchors:readonly HistoryRecord[]}> {
+    try { signalValid(signal); } catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
+    return this.#enqueue(async()=>{
+      const scope=this.#readableScope();
+      if(this.#support?.capabilities?.recoverFromLocalIds!=='supported')return fail('history_tail_unsupported');
+      const old=historyTarget(previous,scope);
+      const current=this.#schema&&{protocol:'private-history-v1' as const,descriptor:'current-schema',sourceGeneration:scope.sourceGeneration,
+        partitions:this.#schema.tables.length?[...new Set(this.#schema.tables.map(table=>table.partition))]:this.#schema.checkedPartitions,
+        tables:this.#schema.tables.map(table=>({partition:table.partition,instance:table.target})),checkedPartitions:this.#schema.checkedPartitions};
+      if(!current||!historyTargetTransition(old,current,this.#support.capabilities?.partitionGrowth==='supported'))return fail('history_target_unverified');
+      const checked=list(positions,128,value=>{
+        const row=object(value,['partition','table','maxLocalId','anchorLocalIds']);
+        const partition=hash(row.partition),table=hash(row.table),maxLocalId=exactInteger(row.maxLocalId,true);
+        const anchorLocalIds=list(row.anchorLocalIds,8,id=>exactInteger(id,true));unique(anchorLocalIds);
+        if(!old.tables.some(item=>item.partition===partition&&item.instance===table)||anchorLocalIds.some(id=>BigInt(id)>BigInt(maxLocalId)))return fail('history_request_invalid');
+        return {partition,table,maxLocalId,anchorLocalIds};
+      });
+      unique(checked.map(row=>row.partition));if(checked.length!==old.tables.length)return fail('history_request_invalid');
+      const requested=new Set(checked.flatMap(row=>row.anchorLocalIds.map(id=>JSON.stringify([row.partition,row.table,id]))));
+      return this.#request({op:'recover-target',account:scope.accountKey,conversation:scope.conversationKey,consent:'selected-history-v1',previousTarget:old,positions:checked},value=>{
+        const row=object(value,['target','cursor','anchors']);
+        const target=historyTarget(row.target,scope,this.#schema),cursor=opaque(row.cursor);
+        if(!historyTargetTransition(old,target,this.#support?.capabilities?.partitionGrowth==='supported'))return fail('history_target_unverified');
+        const anchors=list(row.anchors,1024,value=>historyRecord(value,target));
+        const identities=anchors.map(row=>JSON.stringify([row.partition,row.table,row.localId]));unique(identities);
+        if(identities.some(id=>!requested.has(id)))return fail();
+        this.#target=structuredClone(target);this.#tailCursor=undefined;this.#lastTail=undefined;
+        return {target,cursor,anchors};
+      },pageResponseLimit);
+    },signal);
+  }
   resumeTargetSelected(previous: HistoryTarget, cursor: string, signal?: AbortSignal): Promise<HistoryTarget | null> {
     try { signalValid(signal); opaque(cursor); } catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
     return this.#enqueue(async () => {
@@ -1282,7 +1313,7 @@ export class NarrowWechatClient {
     });
     return native;
   }
-  async #request<T>(request: Record<string, string | number | boolean>, parse: (value: unknown) => T, limit = responseLimit, recoverableErrors?: ReadonlySet<string>): Promise<T> {
+  async #request<T>(request: Record<string, string | number | boolean | HistoryTarget | readonly HistoryRecoveryPosition[]>, parse: (value: unknown) => T, limit = responseLimit, recoverableErrors?: ReadonlySet<string>): Promise<T> {
     let native: NativeProcess;
     try { native = await this.#start(); }
     catch (error) { const code = error instanceof StorageFailure ? error.code : 'history_native_unavailable'; await this.#stop(code); return fail(code); }

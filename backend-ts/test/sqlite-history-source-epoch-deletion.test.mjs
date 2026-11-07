@@ -1,3 +1,4 @@
+// 旧副本及认证审计由历史专用夹具建立；断言继续验证当前存储的删除与抑制保护。
 import {randomUUID} from 'node:crypto';
 import {SqliteContactService} from '../src/contacts/sqlite/service.ts';
 import {SqliteHistoryService} from '../src/history/sqlite/service.ts';
@@ -7,7 +8,7 @@ import {deletionFixture} from './fixtures/memory-documents/deletion-support.mjs'
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,owner,record,report,createChannel,restart,target} from './sqlite-clear-support.mjs';
-import {SqliteHistoryRecertifyService} from '../src/history/sqlite/recertify.ts';
+import {SqliteHistoryRecertifyService} from './fixtures/history/legacy-recertify-service.ts';
 
 test('同物理出现跨认证binding副本，删除旧source须清除新副本',async t=>{
  const f=await fixture(t,{registryModule:new URL('./fixtures/history/source-epoch-deletion-registry.mjs',import.meta.url).href});

@@ -1,3 +1,4 @@
+import {SqliteHistoryService} from './service.ts';
 import {randomUUID} from 'node:crypto';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {LegacyProofContext,LegacyTerminalProof} from './legacy-terminal-proof.ts';
@@ -127,39 +128,16 @@ export class SqliteHistoryRecertifyService {
   const signal=job.controller.signal;let failure:unknown;
   try{
    signal.throwIfAborted();await this.options.stopHistory?.(job.contactId);signal.throwIfAborted();
-   const oldScope=await this.storage.execute<HistoryScope>('history.scope',{token});
-   job.channel=this.createChannel();job.channelClose=undefined;
-   const preview=await this.inspect(job.channel,oldScope,signal),previewTarget=await job.channel.target(oldScope,signal);
-   await this.closeChannel(job);job.channel=undefined;job.channelClose=undefined;signal.throwIfAborted();
-   if(this.options.proveLegacyTerminals){
-    const candidates=await this.storage.execute<LegacyProofContext['candidates']>('history.recertifyLegacyCandidates',{token,id:job.id,target:previewTarget,report:preview});
-    if(candidates.length){const proof=await this.options.proveLegacyTerminals({token,report:preview,target:previewTarget,candidates},signal);
-     await this.contacts.validate(token);signal.throwIfAborted();await this.storage.execute('history.recertifyLegacyMapping',{token,id:job.id,target:previewTarget,report:preview,proof,at:Date.now()});}
-   }
-   await this.storage.execute('history.recertifyRotate',{token,id:job.id,target:previewTarget,report:preview,bindingId:randomUUID(),verificationId:randomUUID(),grantId:randomUUID(),at:Date.now()});
-   const current=await this.contacts.eligibility(job.contactId),scope=await this.storage.execute<HistoryScope>('history.scope',{token:current});
-   signal.throwIfAborted();job.channel=this.createChannel();job.channelClose=undefined;const actual=job.channel,guardId=randomUUID();
-   const lost=()=>{if(job.intentionalClose||job.finalized)return;job.guardFailure=actual.guardSession?.failureCode?.()??'history_source_continuity_unverified';job.controller.abort();
-    job.lossWrite=this.persist(job,'history.recertifyNoteFailure',{ownerId:this.contacts.ownerId,id:job.id,code:job.guardFailure,at:Date.now()}).catch(error=>{job.lossError=error;});};
-   actual.guardSession?.loss.then(lost,lost);
-   const report=await this.inspect(actual,scope,signal),target=await actual.target(scope,signal);
-   if(serializeSupport(report)!==serializeSupport(preview))fail('history_recertify_source_changed');
-   const checkpoint=async()=>{await this.contacts.validate(current);signal.throwIfAborted();if(job.guardFailure)fail(job.guardFailure);};
-   await checkpoint();await this.storage.execute('history.recertifyGuard',{token:current,id:job.id,target,report,guardId,at:Date.now()});job.stage='history';
-   const goal=await this.storage.execute<{id:string}>('history.begin',{token:current,id:randomUUID(),target,report,guardId,recertifyId:job.id,at:Date.now()});
-   await this.storage.execute('history.recertifyAttach',{token:current,id:job.id,guardId,goalId:goal.id,at:Date.now()});
-   let cursor:string|null=null,complete=false;
-   for(let pageNo=0;pageNo<(this.options.maxPages??10000);pageNo++){
-    await checkpoint();const page=await actual.page(scope,target,cursor,signal);await checkpoint();
-    await this.storage.execute('history.acceptPage',{token:current,goalId:goal.id,page,captureId:randomUUID(),runtimeToken:guardId,guardId,recertifyId:job.id,at:Date.now()});
-    if(page.exhausted){const status=await this.read(job.contactId,job.requestKey);if(status.goalState!=='complete')fail(status.goalFailure??'history_recertify_incomplete');complete=true;break;}cursor=page.cursorOut;
-   }
-   if(!complete)fail('history_recertify_page_limit');
-   const finalReport=await this.inspect(actual,scope,signal);if(serializeSupport(finalReport)!==serializeSupport(report))fail('history_support_changed');await checkpoint();job.stage='activation';
-   await this.storage.execute('history.recertifyActivate',{token:current,id:job.id,guardId,target,at:Date.now()});await checkpoint();
-   if(!await this.storage.execute('history.guardRelease',{token:current,guardId,normalUse:true,sourceLost:false}))fail('history_source_continuity_unverified');
-   await checkpoint();job.intentionalClose=true;await this.closeChannel(job);const closeCode=actual.guardSession?.failureCode?.();if(closeCode&&closeCode!=='history_native_closed')fail(closeCode);await job.lossWrite;if(job.lossError)throw job.lossError;await checkpoint();
-   await this.storage.execute('history.recertifyFinalize',{token:current,id:job.id,guardId,at:Date.now()});job.finalized=true;
+   // 显式处理与正常启动共用元数据、锚点核对及续读入口，不旋转绑定。
+   const history=new SqliteHistoryService(this.storage,this.contacts,this.createChannel,this.holders);
+   try{
+    job.stage='history';
+    const coverage=await history.synchronize(job.contactId,signal);
+    if(!coverage.traversalComplete)fail(coverage.failureCode??'history_recertify_incomplete');
+    await history.close();signal.throwIfAborted();
+    await this.storage.execute('history.recertifyResumeComplete',{token,id:job.id,goalId:coverage.goalId,at:Date.now()});job.finalized=true;
+   }finally{await history.close();}
+
   }catch(error){failure=error;}
   finally{
    job.intentionalClose=true;

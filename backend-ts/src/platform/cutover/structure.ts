@@ -18,9 +18,10 @@ export const DEFERRED_DESIGN_TABLES = ['expression_preference', 'expression_pref
 export const REPLACED_DESIGN_TABLES = ['read_exclusion'] as const;
 /** 实现需要的关联/账本/范围表，均有对应票与真实动作，不冒充逻辑目录之外的领域平台。 */
 export const IMPLEMENTATION_TABLES = ['memory_document_later_schedule', 'memory_document_later_cursor', 'memory_document_later_run_requirement', 'document_effect_scope', 'document_extraction_reuse', 'document_publication_identity',
-  'document_replacement', 'history_cutoff_member', 'history_deletion_fence', 'history_continuity_fence', 'history_source_recertification', 'history_source_recertification_cancel', 'history_continuity_scope', 'history_guard_lease', 'history_message_quarantine', 'history_quote', 'history_quote_attempt', 'history_restore', 'history_source_exclusion', 'history_source_terminal', 'history_superseded_cleanup',
+  'document_replacement', 'history_cutoff_member', 'history_deletion_fence', 'source_proof', 'history_source_recertification', 'history_source_recertification_cancel', 'history_message_quarantine', 'history_quote', 'history_quote_attempt', 'history_restore', 'history_source_exclusion', 'history_source_terminal', 'history_superseded_cleanup',
   'message_alias', 'reply_candidate_context', 'reply_candidate_input', 'reply_candidate_input_source', 'reply_candidate_request',
   'reply_execution_input', 'run_content_input', 'runtime_file'] as const;
 export const EXPECTED_TABLES: readonly string[] = [...IMPLEMENTED_DESIGN_TABLES, ...IMPLEMENTATION_TABLES].sort();
-export const FORBIDDEN_TABLES: readonly string[] = [...DEFERRED_DESIGN_TABLES, ...REPLACED_DESIGN_TABLES].sort();
+export const RETIRED_IMPLEMENTATION_TABLES = ['history_continuity_fence','history_continuity_scope','history_guard_lease'] as const;
+export const FORBIDDEN_TABLES: readonly string[] = [...DEFERRED_DESIGN_TABLES, ...REPLACED_DESIGN_TABLES, ...RETIRED_IMPLEMENTATION_TABLES].sort();
 export const LOGICAL_CATALOG_TABLES = [...IMPLEMENTED_DESIGN_TABLES, ...DEFERRED_DESIGN_TABLES, ...REPLACED_DESIGN_TABLES].sort();

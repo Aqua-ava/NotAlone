@@ -4,7 +4,7 @@ import { fixture, record } from './sqlite-clear-support.mjs';
 import { SqliteHistoryService } from '../src/history/sqlite/service.ts';
 import { FirstHistoryCoordinator } from '../src/history/sqlite/coordinator.ts';
 
-for (const checkAction of ['history.guardCheck', 'history.acceptPage']) for (const failureCode of ['history_native_timeout', 'history_source_changed']) {
+for (const checkAction of ['history.guardCheck', 'history.acceptPage']) for (const failureCode of ['history_native_timeout', 'history_source_unverified', 'history_source_changed']) {
   test(`首次页${checkAction}期间${failureCode}保留真实原因及对应恢复边界`, { timeout: 5000 }, async t => {
     const cleanup = [], f = await fixture({ after: callback => cleanup.push(callback) }), storage = f.current.storage;
     let channels = 0, current;
@@ -43,7 +43,7 @@ for (const checkAction of ['history.guardCheck', 'history.acceptPage']) for (con
     });
     coordinator.wake(); await coordinator.waitForIdle();
     const token = await f.current.contacts.eligibility(f.contactA);
-    if (failureCode === 'history_native_timeout') {
+    if (failureCode !== 'history_source_changed') {
       assert.equal(await execute('history.normalUseRevalidationCandidate', { token }), true);
       assert.notEqual(coordinator.getState().contacts[0].phase, 'blocked', '瞬时超时不能永久停止同步');
       await accepted.promise; await coordinator.waitForIdle();
@@ -51,7 +51,7 @@ for (const checkAction of ['history.guardCheck', 'history.acceptPage']) for (con
       assert.equal((await history.read(f.contactA)).messages.length, 1);
       assert.equal(channels, 2, '不需要额外的用户唤醒即可重验并自动读取');
     } else {
-      assert.equal(await execute('history.normalUseRevalidationCandidate', { token }), false);
+      assert.equal(await execute('history.normalUseRevalidationCandidate', { token }), true, '围栏允许后续元数据核对，候选资格本身不放行正文');
       assert.equal(coordinator.getState().contacts[0].phase, 'blocked');
       assert.equal(channels, 1); assert.equal(f.state.pageCalls, checkAction === 'history.acceptPage' ? 1 : 0);
       assert.equal((await history.read(f.contactA)).messages.length, 0, '失证后在途页不能入库');

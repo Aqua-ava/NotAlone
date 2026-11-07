@@ -55,7 +55,7 @@ export function supersededBindings(db:SupersededReader,ownerId:string,contactId:
 /** 联系人当前能否清理：没有围栏、没有进行中的修复或其他删除，且现行副本非空。返回 undefined 表示可清理。 */
 export function supersededGate(db:SupersededReader,ownerId:string,contactId:string,bindings?:SupersededBinding[]):SupersededGateReason|undefined {
  if(!db.get("SELECT 1 FROM contact c JOIN owner o ON o.owner_id=c.owner_id WHERE c.owner_id=? AND c.id=? AND c.state='active' AND o.state='active'",[ownerId,contactId]))return 'contact_inactive';
- if(db.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[ownerId,contactId]))return 'continuity_fence';
+ if(!db.get("SELECT 1 FROM source_proof WHERE owner_id=? AND contact_id=? AND state='ok'",[ownerId,contactId]))return 'continuity_fence';
  if(db.get('SELECT 1 FROM history_deletion_fence WHERE owner_id=? AND contact_id=?',[ownerId,contactId]))return 'deletion_fence';
  if(db.get("SELECT 1 FROM history_source_recertification WHERE owner_id=? AND contact_id=? AND state='running'",[ownerId,contactId]))return 'recertify_running';
  if(db.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' AND scope_kind<>'superseded_history' AND (scope_kind='account' OR contact_identity=?)",[ownerId,contactId]))return 'deletion_pending';

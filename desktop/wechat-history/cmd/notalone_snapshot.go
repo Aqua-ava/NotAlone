@@ -211,6 +211,7 @@ type notaloneSnapshot struct {
 	table             string
 	schemaFingerprint string
 	target            notaloneSnapshotTarget
+	watermarks        map[string]string
 	identityDigests   map[notaloneTailIdentity]notaloneTailBaselineEntry
 	shardIndex        int
 	expectedCursor    string

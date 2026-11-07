@@ -1,3 +1,4 @@
+import {snapshotContinuity} from './source-proof-snapshot.mjs';
 import { registry as base } from '../../../src/storage/sqlite/registry.ts';
 import { reusableEmptyGoals } from '../../../src/history/sqlite/goal-reuse.ts';
 
@@ -42,9 +43,9 @@ export const registry = { ...base, actions: [...base.actions,
       support_json,target_json,resume_cursor FROM read_goal WHERE owner_id=? AND contact_id=? ORDER BY creation_no DESC`, [i.ownerId, i.contactId]);
   }},
   { name: 'fixture.guardLease', mode: 'read', retryBusy: false, execute(tx, i) {
-    return tx.all(`SELECT contact_id,guard_id,state,runtime_id FROM history_guard_lease WHERE owner_id=?`, [i.ownerId]);
+    return snapshotContinuity(tx,i.ownerId).guards;
   }},
   { name: 'fixture.fences', mode: 'read', retryBusy: false, execute(tx, i) {
-    return tx.all(`SELECT contact_id,reason FROM history_continuity_fence WHERE owner_id=?`, [i.ownerId]);
+    return snapshotContinuity(tx,i.ownerId).fences;
   }},
 ] };

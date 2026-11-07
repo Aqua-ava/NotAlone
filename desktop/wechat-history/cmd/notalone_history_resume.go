@@ -20,11 +20,16 @@ func (n *notaloneSnapshot) restorePendingHistory(pending []notaloneTailIdentity)
 		for _, id := range n.deltaIDs[shard.partition] {
 			ids[id] = true
 		}
+		rawWatermark, hasWatermark := n.watermarks[shard.partition]
+		watermark, _ := strconv.ParseInt(rawWatermark, 10, 64)
 		for _, page := range state.Pages.Pages {
 			if page.Kind != notaloneDeltaPageLeaf {
 				continue
 			}
 			for _, id := range page.RowIDs {
+				if hasWatermark && id <= watermark {
+					continue
+				}
 				identity := notaloneTailIdentity{Partition: shard.partition, Table: shard.instance, LocalID: strconv.FormatInt(id, 10)}
 				if _, accepted := n.identityDigests[identity]; !accepted {
 					ids[id] = true

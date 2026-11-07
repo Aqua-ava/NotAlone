@@ -19,16 +19,16 @@ function hasColumn(tx:StorageTransaction,table:'processing_run'|'sync_capture'|'
  return tx.all(`PRAGMA table_info(${table})`).some(row=>row.name===column);
 }
 export function hasRunFollowupState(tx:StorageTransaction):boolean{return hasColumn(tx,'processing_run','followup_state');}
-function tableExists(tx:StorageTransaction,table:'history_continuity_scope'|'history_message_quarantine'|'memory_document_later_schedule'|'memory_document_later_run_requirement'):boolean{
+function tableExists(tx:StorageTransaction,table:'source_proof'|'history_message_quarantine'|'memory_document_later_schedule'|'memory_document_later_run_requirement'):boolean{
  return !!tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?",[table]);
 }
 /** 20 之前的结构没有不可变创建顺序，沿用 created_at／rowid 的历史排序。 */
 function sourceScopeCTE(tx:StorageTransaction):string{
- if(hasColumn(tx,'read_goal','creation_no')&&tableExists(tx,'history_continuity_scope'))return currentSourceScopeCTE;
- const continuity=tableExists(tx,'history_continuity_scope')?` UNION ALL
+ if(hasColumn(tx,'read_goal','creation_no')&&tableExists(tx,'source_proof'))return currentSourceScopeCTE;
+ const continuity=tableExists(tx,'source_proof')?` UNION ALL
  SELECT c.owner_id,c.contact_id,b.id,json_object('sourceGeneration',c.source_generation,'partitions',json_extract(c.tables_json,'$.partitions'),'tables',json((
   SELECT json_group_array(json_object('partition',json_extract(t.value,'$[0]'),'instance',json_extract(t.value,'$[1]'))) FROM json_each(c.tables_json,'$.tables') t)))
- FROM history_continuity_scope c JOIN history_scope_request q ON q.owner_id=c.owner_id
+ FROM source_proof c JOIN history_scope_request q ON q.owner_id=c.owner_id
  JOIN conversation_binding b ON b.owner_id=c.owner_id AND b.contact_id=c.contact_id AND b.conversation_id=c.conversation_id AND b.state='verified'
  WHERE (q.contact_scope IS NULL OR c.contact_id=q.contact_id) AND c.tables_json<>'' AND json_valid(c.tables_json)
  AND NOT EXISTS (SELECT 1 FROM current_history_ranked h WHERE h.owner_id=c.owner_id AND h.contact_id=c.contact_id)` : '';

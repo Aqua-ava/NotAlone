@@ -1,3 +1,4 @@
+export const sqliteReplySourceUnavailableMessage='聊天来源待重新核验，请到联系人页处理同步问题。';
 export interface SqliteCandidateScope {contactId:string;scopeRevision:number;sessionId:string}
 export type SqliteWorkspaceTone='original'|'warm'|'concise'|'polite';
 export interface SqliteReplyWorkspace {action:'express'|'suggest';draftText:string;tone:SqliteWorkspaceTone;instruction:string;contextText:string;includeRelationshipContext:boolean}

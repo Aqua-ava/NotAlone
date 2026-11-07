@@ -3,10 +3,12 @@ import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistorySupportReport, HistoryTarget } from './contracts.ts';
 import { historyTargetTransition, isPartitionGrowthTargetChange, type HistoryTargetTransition } from '../partition-growth.ts';
 import { reusableEmptyGoals } from './goal-reuse.ts';
+import {getProof,isSourceBlocked,fenceSource,putScope,deleteProof} from './source-proof.ts';
+import {getSourceGuard,putSourceGuard} from './source-guard.ts';
 
 const reason = 'history_source_continuity_unverified';
 export const normalUseContinuity = 'same-source-instances-normal-use-v1';
-const lostCodes=new Set(['history_source_changed','history_source_unverified','history_external_scope_changed','history_scope_changed','history_schema_changed','history_shards_changed','history_cursor_scope_changed','history_support_changed','history_target_unverified','history_quote_source_changed']);
+const lostCodes=new Set(['history_account_changed','history_source_changed','history_external_scope_changed','history_scope_changed','history_schema_changed','history_shards_changed','history_cursor_scope_changed','history_support_changed','history_target_unverified','history_quote_source_changed']);
 export const isSourceContinuityLost=(error:unknown):boolean=>error instanceof StorageFailure&&lostCodes.has(error.code);
 function tables(target: HistoryTarget): string {
  const value:{partitions:string[];tables:[string,string][];checkedPartitions?:string[]}={
@@ -44,14 +46,7 @@ function storedTarget(stored:string,sourceGeneration:string):{target:HistoryTarg
    ...(value.checkedPartitions===undefined?{}:{checkedPartitions:value.checkedPartitions as string[]})}};
  }catch{return null;}
 }
-export function fenceContinuity(tx: StorageTransaction, token: ReadEligibility, branch: StorageDiagnostic['branch'], errorCode?: string): false {
-  if(!tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id])){
-    tx.run('INSERT INTO history_continuity_fence VALUES(?,?,?)',[token.owner_id,token.contact_id,reason]);
-    tx.run('UPDATE contact SET source_revision=source_revision+1 WHERE owner_id=? AND id=? AND source_revision<9223372036854775807',[token.owner_id,token.contact_id]);
-    tx.recordDiagnostic?.({kind:'history_continuity_fence',contactPrefix:token.contact_id.slice(0,8),branch,...(errorCode?{errorCode}:{})});
-  }
-  return false;
-}
+export const fenceContinuity=fenceSource;
 const continuityArtifacts: readonly [string, string][] = [
   ['read_goal', 'contact_id'], ['sync_capture', 'contact_id'], ['capture_record', 'contact_id'],
   ['message', 'contact_id'], ['message_alias', 'contact_id'], ['history_message_quarantine', 'contact_id'],
@@ -65,69 +60,41 @@ function hasHistoryOrSuppression(tx: StorageTransaction, token: ReadEligibility,
   return continuityArtifacts.some(([table, column]) => tables.has(table)&&tx.get(`SELECT 1 FROM ${table} WHERE owner_id=? AND ${column}=? LIMIT 1`,
     [token.owner_id, column === 'contact_id' ? token.contact_id : token.conversation_id]));
 }
-/** 仅恢复从未进入正文/目标读取的空范围；任何来源、目标、删除或排除记录都永久保留原围栏。 */
-function rearmEmptyContinuity(tx: StorageTransaction, token: ReadEligibility, tables: ReadonlySet<string>): boolean {
-  if(!tables.has('history_continuity_fence')||!tables.has('history_continuity_scope'))return false;
-  const fence=tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
-  const scope=tx.get('SELECT conversation_id,source_generation,tables_json FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
-  const guard=tables.has('history_guard_lease')?tx.get('SELECT state FROM history_guard_lease WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]):undefined;
-  const identityChanged=Boolean(scope&&(scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation));
-  const needsReset=Boolean(fence)||guard?.state==='lost'||identityChanged;
-  if(!needsReset||guard?.state==='active'||scope&&scope.tables_json!=='')return false;
-  if(hasHistoryOrSuppression(tx,token,tables))return false;
-  if(tables.has('history_guard_lease'))tx.run('DELETE FROM history_guard_lease WHERE owner_id=? AND contact_id=? AND state=\'lost\'',[token.owner_id,token.contact_id]);
-  tx.run('DELETE FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
-  tx.run('DELETE FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
-  return true;
+/** 空范围没有正文或删除保护时才可重置；守卫失去本身不改变已存来源事实。 */
+function rearmEmptyContinuity(tx:StorageTransaction,token:ReadEligibility,tables:ReadonlySet<string>):boolean {
+ if(!tables.has('source_proof'))return false;
+ const scope=getProof(tx,token.owner_id,token.contact_id),guard=getSourceGuard(tx,token.owner_id,token.contact_id);
+ const identityChanged=Boolean(scope&&(scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation));
+ if(!(scope?.state==='needs_confirmation'||guard?.state==='lost'||identityChanged)||guard?.state==='active'||scope&&scope.tables_json!=='')return false;
+ if(hasHistoryOrSuppression(tx,token,tables))return false;
+ deleteProof(tx,token.owner_id,token.contact_id);return true;
 }
-/** 在可能读取正文前独立提交失证状态；旧数据无可证明基线时也停读。 */
-export function preflightGeneration(tx: StorageTransaction, token: ReadEligibility): boolean {
-  const tables=existingTables(tx);
-  if(!tables.has('history_continuity_fence')||!tables.has('history_continuity_scope'))return false;
-  if(rearmEmptyContinuity(tx,token,tables))return true;
-  if(tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]))return false;
-  if(tables.has('history_guard_lease')){
-    const guard=tx.get('SELECT * FROM history_guard_lease WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
-    const runtime=tx.get('SELECT runtime_id FROM database_instance WHERE slot=1');
-    if(guard&&(guard.state!=='active'||guard.runtime_id!==runtime?.runtime_id||guard.binding_id!==token.binding_id||guard.conversation_id!==token.conversation_id||guard.source_generation!==token.source_generation))return fenceContinuity(tx,token,'G01');
-  }
-  const scope=tx.get('SELECT * FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
-  if(scope){
-    if(scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation)return fenceContinuity(tx,token,'G02');
-    if(scope.tables_json===''&&hasHistoryOrSuppression(tx,token,tables))return fenceContinuity(tx,token,'G03');
-    return true;
-  }
-  if(hasHistoryOrSuppression(tx,token,tables))return fenceContinuity(tx,token,'G04');
-  // 先检验身份和既有资料，不登记 provisional scope；目标读取完成后才固定分片基线。
+/** 持久事实只因身份或来源基线失配而围栏；运行守卫缺失由读取入口重验。 */
+export function preflightGeneration(tx:StorageTransaction,token:ReadEligibility):boolean {
+ const tables=existingTables(tx);if(!tables.has('source_proof'))return false;
+ if(rearmEmptyContinuity(tx,token,tables))return true;
+ const scope=getProof(tx,token.owner_id,token.contact_id);if(scope?.state==='needs_confirmation')return false;
+ if(scope){
+  if(scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation)return fenceContinuity(tx,token,'G02');
+  if(!scope.tables_json&&hasHistoryOrSuppression(tx,token,tables))return fenceContinuity(tx,token,'G03');
   return true;
+ }
+ return hasHistoryOrSuppression(tx,token,tables)?fenceContinuity(tx,token,'G04'):true;
 }
-export function preflightTarget(tx: StorageTransaction, token: ReadEligibility, target: HistoryTarget, report?:{continuity?:string;accountKey?:string}): boolean {
-  if(!preflightGeneration(tx,token))return false;
-  const existing=tx.get('SELECT tables_json FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
-  const named=report?.continuity===normalUseContinuity;
-  const value=identity(target,named?report?.accountKey:undefined);
-  if(!existing){
-    if(hasHistoryOrSuppression(tx,token,existingTables(tx)))return fenceContinuity(tx,token,'T01');
-    tx.run('INSERT INTO history_continuity_scope VALUES(?,?,?,?,?)',[token.owner_id,token.contact_id,token.conversation_id,token.source_generation,value]);
-    return true;
-  }
-  if(existing?.tables_json===''){
-    tx.run('UPDATE history_continuity_scope SET tables_json=? WHERE owner_id=? AND contact_id=?',[value,token.owner_id,token.contact_id]);
-    return true;
-  }
-  if(existing){
-   const previous=storedTarget(String(existing.tables_json),token.source_generation);
-   const accountKey=named?report?.accountKey:undefined;
-   const transition=previous&&(accountKey===undefined||previous.accountKey===accountKey)
-    ?historyTargetTransition(previous.target,target,false):null;
-   if(transition==='same')return true;
-   if(transition==='legacy-exact-upgrade'&&target.checkedPartitions!==undefined){
-    tx.run('UPDATE history_continuity_scope SET tables_json=? WHERE owner_id=? AND contact_id=?',[identity(target,accountKey),token.owner_id,token.contact_id]);
-    return true;
-   }
-   return fenceContinuity(tx,token,'T02');
-  }
-  return fenceContinuity(tx,token,'T03');
+export function preflightTarget(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,report?:{continuity?:string;accountKey?:string}):boolean {
+ if(!preflightGeneration(tx,token))return false;
+ const existing=getProof(tx,token.owner_id,token.contact_id),named=report?.continuity===normalUseContinuity;
+ const accountKey=named?report.accountKey:undefined,value=identity(target,accountKey);
+ if(!existing||!existing.tables_json){
+  if(hasHistoryOrSuppression(tx,token,existingTables(tx)))return fenceContinuity(tx,token,'T01');
+  putScope(tx,token,value,{...(accountKey?{accountKey}:{}),...(named?{checkedAt:Date.now()}:{} )});return true;
+ }
+ const previous=storedTarget(existing.tables_json,token.source_generation);
+ const transition=previous&&(accountKey===undefined||previous.accountKey===accountKey)?historyTargetTransition(previous.target,target,false):null;
+ if(transition==='same'||transition==='legacy-exact-upgrade'){
+  putScope(tx,token,value,{...(accountKey?{accountKey}:{}),...(named?{checkedAt:Date.now()}:{} )});return true;
+ }
+ return fenceContinuity(tx,token,'T02');
 }
 /** 有明确顺序时使用最新支持档；旧目标无顺序时只使用已核验的账号和来源基线。 */
 function priorNormalUse(tx:StorageTransaction,token:ReadEligibility,stored:string):boolean {
@@ -146,69 +113,45 @@ function priorNormalUse(tx:StorageTransaction,token:ReadEligibility,stored:strin
   return matchesStored(stored,target,account.external_key,true);
  }catch{return false;}
 }
-/** 仅允许已知 normal-use 支持档对旧 runtime/clean loss 走 metadata-only 重验。 */
+/** 已知来源的待确认或未持守卫状态都先核元数据，不把重启当作来源变化。 */
 export function normalUseRevalidationCandidate(tx:StorageTransaction,token:ReadEligibility):boolean {
- if(tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]))return false;
- const lease=tx.get('SELECT * FROM history_guard_lease WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
+ const scope=getProof(tx,token.owner_id,token.contact_id),guard=getSourceGuard(tx,token.owner_id,token.contact_id);
  const runtime=tx.get('SELECT runtime_id FROM database_instance WHERE slot=1');
- if(!lease||(lease.state==='active'&&lease.runtime_id===runtime?.runtime_id))return false;
- if(lease.binding_id!==token.binding_id||lease.conversation_id!==token.conversation_id||lease.source_generation!==token.source_generation)return false;
- const scope=tx.get('SELECT conversation_id,source_generation,tables_json FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
  if(!scope||scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation||!scope.tables_json)return false;
- return priorNormalUse(tx,token,String(scope.tables_json));
+ if(scope.state==='ok'&&guard?.state==='active'&&guard.runtime_id===runtime?.runtime_id&&guard.binding_id===token.binding_id
+  &&guard.conversation_id===token.conversation_id&&guard.source_generation===token.source_generation)return false;
+ return priorNormalUse(tx,token,scope.tables_json);
 }
-/** 用当前报告与新目标完成跨运行代次的来源握手；成功后才租约续期并废弃旧游标。 */
-export function prepareNormalUseTarget(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,report:HistorySupportReport,guardId:string):{ok:boolean;revalidated:boolean} {
- const accountKey=report.accountKey;
- const runtime=tx.get('SELECT runtime_id FROM database_instance WHERE slot=1');
- if(!runtime?.runtime_id||typeof accountKey!=='string'||!accountKey||!guardId)return {ok:false,revalidated:false};
- if(tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]))return {ok:false,revalidated:false};
- const scope=tx.get('SELECT * FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
- const lease=tx.get('SELECT * FROM history_guard_lease WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
- let revalidated=false;
- let storedTransition:HistoryTargetTransition|null=null;
- let nextScopeValue:string|undefined;
- if(lease&&(lease.binding_id!==token.binding_id||lease.conversation_id!==token.conversation_id||lease.source_generation!==token.source_generation))return {ok:fenceContinuity(tx,token,'N01'),revalidated:false};
- if(scope&&(scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation))return {ok:fenceContinuity(tx,token,'N02'),revalidated:false};
+/** 当前元数据通过后更新唯一事实，并在同一事务发布本次读取的易失守卫。 */
+export function prepareNormalUseTarget(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,report:HistorySupportReport,guardId:string,verifiedRecovery=false):{ok:boolean;revalidated:boolean} {
+ const runtime=tx.get('SELECT runtime_id FROM database_instance WHERE slot=1'),accountKey=report.accountKey;
+ if(!runtime?.runtime_id||!accountKey||!guardId)return {ok:false,revalidated:false};
+ const scope=getProof(tx,token.owner_id,token.contact_id),guard=getSourceGuard(tx,token.owner_id,token.contact_id);
+ if(scope?.state==='needs_confirmation')return {ok:false,revalidated:false};
+ const expected=tx.get(`SELECT a.external_key account_key,c.external_key conversation_key FROM channel_account a
+  JOIN channel_conversation c ON c.owner_id=a.owner_id AND c.account_id=a.id WHERE a.owner_id=? AND a.id=? AND c.id=?`,[token.owner_id,token.account_id,token.conversation_id]);
+ if(!expected||expected.account_key!==accountKey)return {ok:fenceContinuity(tx,token,'N03'),revalidated:false};
+ if(expected.conversation_key!==report.conversationKey||report.sourceGeneration!==token.source_generation
+  ||scope&&(scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation))return {ok:fenceContinuity(tx,token,'N02'),revalidated:false};
+ let transition:HistoryTargetTransition|null=null;
  if(scope?.tables_json){
-  const previous=storedTarget(String(scope.tables_json),token.source_generation);
+  const previous=storedTarget(scope.tables_json,token.source_generation);
   if(!previous||previous.accountKey!==accountKey)return {ok:fenceContinuity(tx,token,'N03'),revalidated:false};
-  storedTransition=historyTargetTransition(previous.target,target,priorPartitionGrowth(tx,token,report));
-  if(storedTransition===null)return {ok:fenceContinuity(tx,token,'N04'),revalidated:false};
-  if(storedTransition==='growth'||storedTransition==='legacy-exact-upgrade')nextScopeValue=identity(target,accountKey);
- }else{
-  if(hasHistoryOrSuppression(tx,token,existingTables(tx)))return {ok:fenceContinuity(tx,token,'N05'),revalidated:false};
-  nextScopeValue=identity(target,accountKey);
- }
- const previousWasNormal=priorNormalUse(tx,token,String(scope?.tables_json??''));
- if(lease){
-  if(lease.state==='active'&&lease.runtime_id===runtime.runtime_id){
-   if(lease.guard_id!==guardId)return {ok:false,revalidated:false};
-  }else{
-   if(!previousWasNormal||storedTransition===null)return {ok:fenceContinuity(tx,token,'N06'),revalidated:false};
-   revalidated=true;
-  }
- }else if(tx.get('SELECT 1 FROM read_goal WHERE owner_id=? AND contact_id=? LIMIT 1',[token.owner_id,token.contact_id])){
-  return {ok:fenceContinuity(tx,token,'N07'),revalidated:false};
- }
- if(nextScopeValue!==undefined){
-  if(scope)tx.run('UPDATE history_continuity_scope SET tables_json=? WHERE owner_id=? AND contact_id=?',[nextScopeValue,token.owner_id,token.contact_id]);
-  else tx.run('INSERT INTO history_continuity_scope VALUES(?,?,?,?,?)',[token.owner_id,token.contact_id,token.conversation_id,token.source_generation,nextScopeValue]);
- }
+  transition=historyTargetTransition(previous.target,target,verifiedRecovery&&report.capabilities?.partitionGrowth==='supported'||priorPartitionGrowth(tx,token,report));
+  if(transition===null)return {ok:fenceContinuity(tx,token,'N04'),revalidated:false};
+ }else if(hasHistoryOrSuppression(tx,token,existingTables(tx)))return {ok:fenceContinuity(tx,token,'N05'),revalidated:false};
+ const active=guard?.state==='active'&&guard.runtime_id===runtime.runtime_id;
+ if(active&&(guard.guard_id!==guardId||guard.binding_id!==token.binding_id||guard.conversation_id!==token.conversation_id||guard.source_generation!==token.source_generation))return {ok:false,revalidated:false};
+ const revalidated=Boolean(scope?.tables_json)&&!active;
+ if(revalidated&&!verifiedRecovery&&!priorNormalUse(tx,token,scope!.tables_json))return {ok:fenceContinuity(tx,token,'N06'),revalidated:false};
+ putScope(tx,token,identity(target,accountKey),{accountKey,conversationKey:report.conversationKey,state:'ok',checkedAt:Date.now()});
  if(revalidated){
-  // 阶段 B（任务 01）：与本次重验完全同范围、0 页且无记录进展的空目标保持 running，
-  // 由随后的 history.begin／history.incrementalPending 续用，不再先作废再重建；
-  // 其余行仍按原样作废（作废行是审计记录，此改动不会把已作废行改回 running）。
   const keepIds=reusableEmptyGoals(tx,token,report,target).map(goal=>goal.id);
-  if(keepIds.length){
-   tx.run(`UPDATE read_goal SET state='invalidated',failure_code='history_runtime_revalidated' WHERE owner_id=? AND contact_id=? AND kind IN ('history','incremental') AND state IN ('running','incomplete') AND id NOT IN (${keepIds.map(()=>'?').join(',')})`,[token.owner_id,token.contact_id,...keepIds]);
-  }else{
-   tx.run("UPDATE read_goal SET state='invalidated',failure_code='history_runtime_revalidated' WHERE owner_id=? AND contact_id=? AND kind IN ('history','incremental') AND state IN ('running','incomplete')",[token.owner_id,token.contact_id]);
-  }
-  tx.run("UPDATE history_guard_lease SET binding_id=?,conversation_id=?,source_generation=?,guard_id=?,runtime_id=?,state='active' WHERE owner_id=? AND contact_id=?",[token.binding_id,token.conversation_id,token.source_generation,guardId,runtime.runtime_id,token.owner_id,token.contact_id]);
- }else if(!lease){
-  tx.run("INSERT INTO history_guard_lease VALUES(?,?,?,?,?,?,?,'active')",[token.owner_id,token.contact_id,token.binding_id,token.conversation_id,token.source_generation,guardId,runtime.runtime_id]);
+  if(keepIds.length)tx.run(`UPDATE read_goal SET state='invalidated',failure_code='history_runtime_revalidated' WHERE owner_id=? AND contact_id=? AND kind IN ('history','incremental') AND state IN ('running','incomplete') AND id NOT IN (${keepIds.map(()=>'?').join(',')})`,[token.owner_id,token.contact_id,...keepIds]);
+  else tx.run("UPDATE read_goal SET state='invalidated',failure_code='history_runtime_revalidated' WHERE owner_id=? AND contact_id=? AND kind IN ('history','incremental') AND state IN ('running','incomplete')",[token.owner_id,token.contact_id]);
  }
+ putSourceGuard(tx,{owner_id:token.owner_id,contact_id:token.contact_id,binding_id:token.binding_id,conversation_id:token.conversation_id,
+  source_generation:token.source_generation,guard_id:guardId,runtime_id:String(runtime.runtime_id),state:'active'});
  return {ok:true,revalidated};
 }
 function priorPartitionGrowth(tx:StorageTransaction,token:ReadEligibility,current:HistorySupportReport):boolean {
@@ -219,24 +162,30 @@ function priorPartitionGrowth(tx:StorageTransaction,token:ReadEligibility,curren
 }
 /** 接受页的事务复验不改变围栏；失证应由预检先行持久化。 */
 export function assertSourceContinuity(tx: StorageTransaction, token: ReadEligibility, target: HistoryTarget,accountKey?:string): void {
-  if(tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]))throw new StorageFailure(reason);
-  const scope=tx.get('SELECT * FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
+  if(isSourceBlocked(tx,token.owner_id,token.contact_id))throw new StorageFailure(reason);
+  const scope=getProof(tx,token.owner_id,token.contact_id);
   if(!scope||scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation||!matchesStored(String(scope.tables_json),target,accountKey,accountKey!==undefined))throw new StorageFailure(reason);
 }
 /** 仅用于寻找旧恢复点：已核验范围可包含旧目标之后新增的表；后续原生目标与页提交仍走严格连续性核验。 */
 export function assertCheckpointSourceContinuity(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,accountKey:string,acceptedGrowth:boolean):void {
  if(!acceptedGrowth){assertSourceContinuity(tx,token,target,accountKey);return;}
- if(tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]))throw new StorageFailure(reason);
- const scope=tx.get('SELECT * FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
+ if(isSourceBlocked(tx,token.owner_id,token.contact_id))throw new StorageFailure(reason);
+ const scope=getProof(tx,token.owner_id,token.contact_id);
  if(!scope||scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation)throw new StorageFailure(reason);
  if(matchesStored(String(scope.tables_json),target,accountKey,true))return;
  const current=storedTarget(String(scope.tables_json),token.source_generation);
  if(!current||current.accountKey!==accountKey||historyTargetTransition(target,current.target,true)!=='growth')throw new StorageFailure(reason);
 }
-/** 如已登记活守卫，页提交必须持有当前运行代次和同一守卫。 */
-export function assertLiveGuard(tx:StorageTransaction,token:ReadEligibility,guardId:unknown):void{
-  const guard=tx.get('SELECT * FROM history_guard_lease WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
-  if(!guard)return;
-  const runtime=tx.get('SELECT runtime_id FROM database_instance WHERE slot=1');
-  if(guard.state!=='active'||guard.runtime_id!==runtime?.runtime_id||guard.binding_id!==token.binding_id||guard.conversation_id!==token.conversation_id||guard.source_generation!==token.source_generation||guard.guard_id!==guardId)throw new StorageFailure(reason);
+/** 普通来源页必须持有当前进程守卫；旧无守卫渠道只保留其原有合同。 */
+export function assertLiveGuard(tx:StorageTransaction,token:ReadEligibility,guardId:unknown):void {
+ const guard=getSourceGuard(tx,token.owner_id,token.contact_id);
+ if(!guard){
+  const proof=getProof(tx,token.owner_id,token.contact_id);
+  let normal=false;try{normal=typeof JSON.parse(proof?.tables_json??'{}').accountKey==='string';}catch{/* 损坏事实由连续性预检拒绝。 */}
+  if(guardId!==undefined&&guardId!==null||normal)throw new StorageFailure(reason);
+  return;
+ }
+ const runtime=tx.get('SELECT runtime_id FROM database_instance WHERE slot=1');
+ if(guard.state!=='active'||guard.runtime_id!==runtime?.runtime_id||guard.binding_id!==token.binding_id||guard.conversation_id!==token.conversation_id
+  ||guard.source_generation!==token.source_generation||guard.guard_id!==guardId)throw new StorageFailure(reason);
 }

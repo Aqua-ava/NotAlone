@@ -28,7 +28,7 @@ export function isCertifiedEmptyTarget(tx:StorageTransaction,token:ReadEligibili
   ||!Array.isArray(target.checkedPartitions)||target.checkedPartitions.length===0
   ||new Set(target.partitions).size!==target.partitions.length||new Set(target.checkedPartitions).size!==target.checkedPartitions.length
   ||!sameStrings(target.partitions,target.checkedPartitions))return false;
- if(tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]))return false;
+ if(tx.get("SELECT 1 FROM source_proof WHERE owner_id=? AND contact_id=? AND state='needs_confirmation'",[token.owner_id,token.contact_id]))return false;
  const current=tx.get(`SELECT o.owner_id,p.id AS contact_id,a.id AS account_id,c.id AS conversation_id,b.id AS binding_id,
   g.id AS grant_id,v.id AS verification_id,o.read_epoch,p.selection_generation,p.data_generation,b.identity_generation,
   a.scope_revision,c.barrier_generation,a.source_generation,a.external_key AS account_key,c.external_key AS conversation_key
@@ -46,7 +46,7 @@ export function isCertifiedEmptyTarget(tx:StorageTransaction,token:ReadEligibili
   if(String(current[key])!==token[key])return false;
  }
  if(report.accountKey!==current.account_key||report.conversationKey!==current.conversation_key||report.sourceGeneration!==current.source_generation)return false;
- const scope=tx.get('SELECT conversation_id,source_generation,tables_json FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
+ const scope=tx.get('SELECT conversation_id,source_generation,tables_json FROM source_proof WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
  if(!scope||scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation||typeof scope.tables_json!=='string')return false;
  try{
   const stored=JSON.parse(scope.tables_json) as {accountKey?:unknown;partitions?:unknown;tables?:unknown;checkedPartitions?:unknown};
@@ -79,8 +79,7 @@ export function readCoverage(tx:StorageTransaction,owner:string,contact:string):
  const legacyAmbiguous=historyGoal?.creation_no===null&&(historyGoal.goal_count as bigint)>1n;
  const goal=legacyAmbiguous?{...historyGoal,state:'incomplete',failure_code:'history_goal_order_unverified',cursor:null}:historyGoal;
  const safeIncremental=incrementalGoal?.creation_no===null?{...incrementalGoal,state:'incomplete',failure_code:'history_goal_order_unverified',cursor:null}:incrementalGoal;
- const continuityBlocked=Boolean(tx.get(`SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=? UNION ALL
-  SELECT 1 FROM history_guard_lease g JOIN database_instance d ON d.slot=1 WHERE g.owner_id=? AND g.contact_id=? AND (g.state<>'active' OR g.runtime_id<>d.runtime_id) LIMIT 1`,[owner,contact,owner,contact]));
+ const continuityBlocked=Boolean(tx.get("SELECT 1 FROM source_proof WHERE owner_id=? AND contact_id=? AND state='needs_confirmation'",[owner,contact]));
  const blockedBinding=continuityBlocked&&!goal?tx.get("SELECT id FROM conversation_binding WHERE owner_id=? AND contact_id=? AND state='verified'",[owner,contact]):undefined;
  const typeRows=tx.all(`WITH ${currentSourceScopeCTE} SELECT m.kind,m.original_type,count(*) AS n FROM message m WHERE owner_id=? AND contact_id=? AND availability='available' AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) AND ${currentMessageSource} GROUP BY m.kind,m.original_type`,[owner,contact,contact,owner,contact]);
  const counts={messages:0n,nontext:0n},typeCounts=new Map<HistoryMessageType,bigint>();

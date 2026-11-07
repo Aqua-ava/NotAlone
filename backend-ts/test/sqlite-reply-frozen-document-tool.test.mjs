@@ -47,8 +47,9 @@ test('目录冻结后正式新发布与守卫失证不换用本轮正文，真�
   const now=(await f.storage.execute('frozenDocumentTest.local',f.scope)).find(item=>item.projection?.kind==='directory');
   assert.ok(now);assert.notEqual(now.publicationId,oldDirectory.publicationId);
   assert.ok(JSON.stringify(await f.docs.documents.read(scope)).includes(newBody),'新publication确实含后来形成的正文，不能只更换空头指针');
+  const beforeGuard=await f.storage.execute('frozenDocumentTest.strict',f.scope);assert.ok(beforeGuard.some(item=>item.projection?.kind==='directory'&&item.publicationId===now.publicationId));
   await f.contacts.setReading(false);await f.storage.execute('frozenDocumentTest.guardLost',f.scope);
-  assert.deepEqual(await f.storage.execute('frozenDocumentTest.strict',f.scope),[]);
+  assert.deepEqual(await f.storage.execute('frozenDocumentTest.strict',f.scope),beforeGuard,'新发布集合的ok资格不依赖进程守卫；本轮工具仍须绑定旧冻结集合');
  });
  await f.generate().catch(error=>{t.diagnostic(JSON.stringify({requests:f.requests.length,supplierErrors:f.supplierErrors.map(value=>value.message)}));throw error;});assert.equal(f.requests.length,2);
  const inputs=(await f.inputs()).map(item=>({identity:JSON.parse(item.identity_json),text:item.text_body})),body=inputs.find(item=>item.identity.projection?.kind==='blocks');
@@ -61,8 +62,8 @@ test('目录冻结后正式新发布与守卫失证不换用本轮正文，真�
 });
 
 test('同步关闭且守卫已失证时可从本机资料首次召回目录并经真实工具读取正文',async t=>{
- const f=await setup(t);await f.contacts.setReading(false);await f.storage.execute('frozenDocumentTest.guardLost',f.scope);
- assert.deepEqual(await f.storage.execute('frozenDocumentTest.strict',f.scope),[]);
+ const f=await setup(t),before=await f.storage.execute('frozenDocumentTest.strict',f.scope);assert.equal(before.length,2);await f.contacts.setReading(false);await f.storage.execute('frozenDocumentTest.guardLost',f.scope);
+ assert.deepEqual(await f.storage.execute('frozenDocumentTest.strict',f.scope),before,'同步关闭和guard丢失不能撤销已接纳的本机证明');
  await f.generate();assert.equal(f.requests.length,2);assert.ok((await f.inputs()).some(item=>JSON.parse(item.identity_json).projection?.kind==='blocks'));
  assert.equal((await f.service.view(f.contactId,f.discussionId))[0].sourceState,'available');
 });
