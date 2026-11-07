@@ -22,12 +22,17 @@ __pycache__/
 /research/
 /chat_exports/
 /.scratch/
+/architecture/
 .dsh-computer-use/
 /model-permits/
-/docs/verification/deletion-and-sync-status-perf-20261106.md
+
+# docs 仅保留操作指南与 Agent 工作规则，其余为本机资料
+/docs/*
+!/docs/guides/
+!/docs/agents/
 
 # 仅供本机构建的完整微信工具源码
-/local-tools/wx-cli/
+/local-tools
 
 # pnpm workspace 安装产物
 node_modules/
