@@ -27,7 +27,7 @@ export const registry={...base,actions:[...base.actions,
    SELECT owner_id,'00000000-0000-4000-8000-000000000777',contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,json_set(support_json,'$.continuity',?),'complete','complete',9999999999999 FROM read_goal WHERE owner_id=? AND contact_id=? ORDER BY creation_no DESC LIMIT 1`,[i.mode,i.ownerId,i.contactId]);
   tx.run('DROP TRIGGER read_goal_creation_immutable');tx.run('UPDATE read_goal SET creation_no=NULL WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId]);
   tx.run("CREATE TRIGGER read_goal_creation_immutable BEFORE UPDATE OF creation_no ON read_goal BEGIN SELECT RAISE(ABORT,'history_goal_order_immutable'); END");
-  if(!i.canonical)tx.run("UPDATE history_continuity_scope SET tables_json=json_remove(tables_json,'$.accountKey') WHERE owner_id=? AND contact_id=?",[i.ownerId,i.contactId]);
-  if(i.wrongAccount)tx.run("UPDATE history_continuity_scope SET tables_json=json_set(tables_json,'$.accountKey','synthetic-wrong-account') WHERE owner_id=? AND contact_id=?",[i.ownerId,i.contactId]);
+  if(!i.canonical)tx.run("UPDATE source_proof SET tables_json=json_remove(tables_json,'$.accountKey') WHERE owner_id=? AND contact_id=?",[i.ownerId,i.contactId]);
+  if(i.wrongAccount)tx.run("UPDATE source_proof SET tables_json=json_set(tables_json,'$.accountKey','synthetic-wrong-account') WHERE owner_id=? AND contact_id=?",[i.ownerId,i.contactId]);
  }},
 ]};

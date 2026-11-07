@@ -50,7 +50,7 @@ test('ResumeComplete后completed稳定，迟到取消与本任务Fail不能改�
  const snapshot=await f.snapshot(),op=snapshot.operations[0];assert.equal(await f.current.storage.execute('history.recertifyFail',{ownerId:owner,id:op.id,code:'history_native_closed',stage:'activation',at:Date.now()}),false);
  assert.equal((await f.service.status(f.contactA,'stable-completed')).state,'completed');assert.equal((await f.snapshot()).fences.length,0);
  const currentMessage=snapshot.messages.find(m=>m.binding_id===op.old_binding_id),source=snapshot.captures.find(r=>r.message_id===currentMessage.id);
- await assert.rejects(f.current.storage.execute('history.source',{ownerId:owner,contactId:f.contactA,recordId:source.id}),{code:'history_source_not_found'});
+ const currentSource=await f.current.storage.execute('history.source',{ownerId:owner,contactId:f.contactA,recordId:source.id});assert.equal(currentSource.messageId,currentMessage.id);assert.equal(snapshot.proofs[0].state,'ok');assert.deepEqual(snapshot.legacyTables,[]);
 });
 test('HTTP响应未知后accepted任务不因连接结束取消，精确GET和取消无需重发POST', {timeout:5000},async t=>{
  const f=await setup(t),http=new SqliteHistoryClearHttp(f.current.clear,f.current.resync,f.service);let drop=true;
@@ -139,7 +139,7 @@ test('成功通知接真实FirstHistory及SQLite续读，不换绑定也不重�
  try{
   const before=await f.snapshot(),pending=f.service.recertify(f.contactA,{requestKey:'notify-normal-coordinator'});await f.entered();f.release();assert.equal((await pending).state,'completed');await first.waitForIdle();
   const after=await f.snapshot();assert.equal((await history.coverage(f.contactA)).phase,'complete');assert.equal((await f.current.contacts.eligibility(f.contactA)).binding_id,f.old.binding_id);assert.deepEqual(after.bindings,before.bindings);assert.equal(after.operations.length,1);assert.equal(after.fences.length,0);assert.equal(after.messages.length,before.messages.length);
-  assert.equal(normal.state.channels.length,1);assert.deepEqual(normal.state.readIds,[],'调度恢复沿已有水位，不重读旧正文');
+  assert.equal(first.getState().contacts.find(row=>row.contactId===f.contactA)?.phase,'complete');assert.equal(normal.state.channels.length,0,'已完成的ok证明不因正常唤醒重新打开读取器');assert.deepEqual(normal.state.readIds,[],'调度恢复不重读旧正文');
   incremental.wake();await incremental.waitForIdle();assert.equal((await history.coverage(f.contactA)).incremental.phase,'ready');assert.equal((await f.snapshot()).operations.length,1);
  }finally{f.release();await incremental.close();await first.close();await history.close();}
 });

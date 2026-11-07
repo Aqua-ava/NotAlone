@@ -7,7 +7,7 @@ import { StorageFailure } from '../src/storage/sqlite/contracts.ts';
 import { FirstHistoryCoordinator } from '../src/history/sqlite/coordinator.ts';
 
 async function parkedFixture(t) {
-  const cleanup = [], f = await fixture({ after: callback => cleanup.push(callback) });
+  const cleanup = [], f = await fixture({ after: callback => cleanup.push(callback) },{registryModule:new URL('./fixtures/history-parked-registry.mjs',import.meta.url).href});
   const state = { owner: undefined, releaseOwner: undefined, tail: Promise.resolve(), parks: 0, pages: 0, channels: [], wakes: [] };
   // 只替代原生进程租约边界；顺序、停车回调、历史目标、守卫和存储均走生产服务。
   const shared = { async run(owner, work, releasePreviousOwner, signal) {
@@ -70,7 +70,7 @@ test('空闲守卫瞬时退出后外置首次协调器仍会被唤醒，共享�
   await f.history.synchronize(b.contact_id);
   const current = f.state.channels.at(-1);
   current.code = 'history_native_timeout'; current.loss.resolve();
-  // 等待失效回调和同一存储队列中的持久失效完成，不依赖实际计时。
+  // 等待易失守卫释放和同一存储队列完成，不依赖实际计时。
   for (let i = 0; i < 12; i++) await Promise.resolve();
   await f.history.waitForReadIdle(b.contact_id);
   await f.storage.check();
@@ -83,7 +83,8 @@ test('空闲守卫瞬时退出后外置首次协调器仍会被唤醒，共享�
     incremental.wake(); await incremental.waitForIdle();
     assert.deepEqual(f.state.wakes, [b.contact_id], '空闲时失去守卫也须请求First恢复，不能等不存在的在途catch');
   } finally { await incremental.close(); }
-  assert.equal((await f.history.coverage(b.contact_id)).phase, 'incomplete');
+  assert.equal((await f.history.coverage(b.contact_id)).phase, 'running','协调器已建立经核验的新历史目标并交接首次补齐');
+  assert.equal((await f.storage.execute('fixture.sourceProofStates',{ownerId:f.contacts.ownerId})).find(row=>row.contact_id===b.contact_id).state,'ok');
   const token = await f.contacts.eligibility(b.contact_id);
   assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate', { token }), true);
   await f.history.synchronize(b.contact_id);
@@ -130,7 +131,7 @@ for(const {code,failFirstRecovery} of [{code:'history_native_timeout'},{code:'hi
  const wakes=[],channels=f.state.channels.length;f.history.setFirstHistoryWake(id=>{wakes.push(id);first.wakeContact(id);});
  if(failFirstRecovery){
   const execute=f.storage.execute.bind(f.storage);let injected=false;
-  f.storage.execute=(name,input,...rest)=>{if(name==='history.normalUseRevalidationCandidate'&&!injected){injected=true;return Promise.reject(new StorageFailure('history_interrupted'));}return execute(name,input,...rest);};
+  f.storage.execute=(name,input,...rest)=>{if(name==='history.readPreflight'&&!injected){injected=true;return Promise.reject(new StorageFailure('history_interrupted'));}return execute(name,input,...rest);};
   incremental.start();t.mock.timers.tick(30_000);await incremental.waitForIdle();await first.waitForIdle();
   assert.equal(injected,true);assert.deepEqual(wakes,[]);assert.equal(f.state.channels.length,channels,'查询失败不能绕过资格门启动读者');
   assert.equal(incremental.getState().contacts[0].phase,'degraded','查询暂时失败保守降级，下一轮仍重试恢复');

@@ -17,7 +17,7 @@ function sourceScopeCTE(saved:boolean):string{return `history_scope_request AS M
  UNION ALL
  SELECT c.owner_id,c.contact_id,b.id,json_object('sourceGeneration',c.source_generation,'partitions',json_extract(c.tables_json,'$.partitions'),'tables',json((
   SELECT json_group_array(json_object('partition',json_extract(t.value,'$[0]'),'instance',json_extract(t.value,'$[1]'))) FROM json_each(c.tables_json,'$.tables') t)))
- FROM history_continuity_scope c JOIN history_scope_request q ON q.owner_id=c.owner_id
+ FROM source_proof c JOIN history_scope_request q ON q.owner_id=c.owner_id
  JOIN conversation_binding b ON b.owner_id=c.owner_id AND b.contact_id=c.contact_id AND b.conversation_id=c.conversation_id AND ${saved?"b.state<>'revoked'":"b.state='verified'"}
  WHERE (q.contact_scope IS NULL OR c.contact_id=q.contact_id) AND NOT EXISTS(SELECT 1 FROM current_recertification_blocks cert WHERE cert.owner_id=b.owner_id AND cert.new_binding_id=b.id) AND c.tables_json<>'' AND json_valid(c.tables_json)
  AND NOT EXISTS (SELECT 1 FROM current_history_ranked h WHERE h.owner_id=c.owner_id AND h.contact_id=c.contact_id)

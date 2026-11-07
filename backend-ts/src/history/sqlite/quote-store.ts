@@ -156,7 +156,7 @@ export const historyQuoteActions:StorageAction[]=[
     AND r.normalizer_version IN ('1','2') AND json_valid(r.raw_payload) AND json_extract(r.raw_payload,'$.originalType')=?
     AND g.binding_id=? AND json_extract(g.target_json,'$.sourceGeneration')=?
     AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
-    AND NOT EXISTS(SELECT 1 FROM history_continuity_fence f WHERE f.owner_id=m.owner_id AND f.contact_id=m.contact_id)
+    AND EXISTS(SELECT 1 FROM source_proof f WHERE f.owner_id=m.owner_id AND f.contact_id=m.contact_id AND f.state='ok')
     AND ${currentSourcePredicate('r','g')}
     AND NOT EXISTS(SELECT 1 FROM history_quote_attempt a WHERE a.owner_id=m.owner_id AND a.contact_id=m.contact_id AND a.message_id=m.id
      AND a.source_key=r.observed_key AND a.source_generation=? AND a.version=?
@@ -165,7 +165,7 @@ export const historyQuoteActions:StorageAction[]=[
    [token.owner_id,token.contact_id,token.contact_id,token.owner_id,token.contact_id,token.binding_id,quoteType,quoteType,
     token.binding_id,token.source_generation,token.source_generation,expectedVersion,limit]);
   // 候选只包含受当前授权、删除围栏、绑定、来源代次及稳定来源键约束的元数据。
-  // 不验证活 guard：干净进程重启后旧 runtime lease 会阻止正文读取，但不应阻止 withChannel 先重验证。
+  // 本机候选沿用持久来源事实；原生读取前再建立本次易失守卫，不因进程重启撤销既有来源资格。
   return rows.map(row=>({messageId:String(row.message_id),recordId:String(row.record_id)}));
  }),
  action('Save','write',(tx,i)=>{const {changed:_changed,...result}=saveHistoryQuoteInTransaction(tx,i as SaveHistoryQuoteInput);return result;}),

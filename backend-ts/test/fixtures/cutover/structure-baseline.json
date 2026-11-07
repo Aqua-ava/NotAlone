@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 45,
+  "schemaVersion": 46,
   "migrationVersions": [
    1,
    2,
@@ -46,15 +46,16 @@
    42,
    43,
    44,
-   45
+   45,
+   46
   ],
-  "userVersion": 45,
+  "userVersion": 46,
   "sqliteVersion": "3.53.4",
-  "tableCount": 96,
-  "fieldCount": 961,
-  "foreignKeyGroups": 195,
+  "tableCount": 94,
+  "fieldCount": 955,
+  "foreignKeyGroups": 193,
   "triggerCount": 120,
-  "checkCount": 303,
+  "checkCount": 304,
   "viewCount": 0
  },
  "tables": {
@@ -3501,162 +3502,6 @@
    ],
    "sql": "CREATE TABLE execution_input ( owner_id TEXT NOT NULL,event_id TEXT NOT NULL,input_no INTEGER NOT NULL,role TEXT NOT NULL,presentation_no INTEGER NOT NULL, planned_step_id TEXT,planned_input_no INTEGER,reply_context_id TEXT,context_item_no INTEGER,producer_event_id TEXT, PRIMARY KEY(owner_id,event_id,input_no),FOREIGN KEY(owner_id,event_id) REFERENCES execution_event(owner_id,id) ON DELETE CASCADE, FOREIGN KEY(owner_id,planned_step_id,planned_input_no) REFERENCES step_input(owner_id,step_id,input_no), FOREIGN KEY(owner_id,reply_context_id,context_item_no) REFERENCES reply_context_item(owner_id,context_id,item_no), FOREIGN KEY(owner_id,producer_event_id) REFERENCES execution_event(owner_id,id) ON DELETE CASCADE, CHECK((planned_step_id IS NOT NULL AND planned_input_no IS NOT NULL AND reply_context_id IS NULL AND context_item_no IS NULL AND producer_event_id IS NULL) OR (planned_step_id IS NULL AND planned_input_no IS NULL AND reply_context_id IS NOT NULL AND context_item_no IS NOT NULL AND producer_event_id IS NULL) OR (planned_step_id IS NULL AND planned_input_no IS NULL AND reply_context_id IS NULL AND context_item_no IS NULL AND producer_event_id IS NOT NULL AND role='verified_contribution')) ) STRICT"
   },
-  "history_continuity_fence": {
-   "columns": [
-    {
-     "name": "owner_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 1
-    },
-    {
-     "name": "contact_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 2
-    },
-    {
-     "name": "reason",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    }
-   ],
-   "foreignKeys": [
-    {
-     "id": 0,
-     "seq": 0,
-     "table": "contact",
-     "from": "owner_id",
-     "to": "owner_id",
-     "on_update": "NO ACTION",
-     "on_delete": "NO ACTION",
-     "match": "NONE"
-    },
-    {
-     "id": 0,
-     "seq": 1,
-     "table": "contact",
-     "from": "contact_id",
-     "to": "id",
-     "on_update": "NO ACTION",
-     "on_delete": "NO ACTION",
-     "match": "NONE"
-    }
-   ],
-   "indexes": [
-    {
-     "name": "sqlite_autoindex_history_continuity_fence_1",
-     "unique": 1,
-     "partial": 0,
-     "origin": "pk",
-     "columns": [
-      "owner_id",
-      "contact_id"
-     ],
-     "sql": null
-    }
-   ],
-   "sql": "CREATE TABLE history_continuity_fence ( owner_id TEXT NOT NULL, contact_id TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY(owner_id,contact_id), FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) ) STRICT"
-  },
-  "history_continuity_scope": {
-   "columns": [
-    {
-     "name": "owner_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 1
-    },
-    {
-     "name": "contact_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 2
-    },
-    {
-     "name": "conversation_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "source_generation",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "tables_json",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    }
-   ],
-   "foreignKeys": [
-    {
-     "id": 0,
-     "seq": 0,
-     "table": "channel_conversation",
-     "from": "owner_id",
-     "to": "owner_id",
-     "on_update": "NO ACTION",
-     "on_delete": "NO ACTION",
-     "match": "NONE"
-    },
-    {
-     "id": 0,
-     "seq": 1,
-     "table": "channel_conversation",
-     "from": "conversation_id",
-     "to": "id",
-     "on_update": "NO ACTION",
-     "on_delete": "NO ACTION",
-     "match": "NONE"
-    },
-    {
-     "id": 1,
-     "seq": 0,
-     "table": "contact",
-     "from": "owner_id",
-     "to": "owner_id",
-     "on_update": "NO ACTION",
-     "on_delete": "NO ACTION",
-     "match": "NONE"
-    },
-    {
-     "id": 1,
-     "seq": 1,
-     "table": "contact",
-     "from": "contact_id",
-     "to": "id",
-     "on_update": "NO ACTION",
-     "on_delete": "NO ACTION",
-     "match": "NONE"
-    }
-   ],
-   "indexes": [
-    {
-     "name": "sqlite_autoindex_history_continuity_scope_1",
-     "unique": 1,
-     "partial": 0,
-     "origin": "pk",
-     "columns": [
-      "owner_id",
-      "contact_id"
-     ],
-     "sql": null
-    }
-   ],
-   "sql": "CREATE TABLE history_continuity_scope ( owner_id TEXT NOT NULL, contact_id TEXT NOT NULL, conversation_id TEXT NOT NULL, source_generation TEXT NOT NULL, tables_json TEXT NOT NULL, PRIMARY KEY(owner_id,contact_id), FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id), FOREIGN KEY(owner_id,conversation_id) REFERENCES channel_conversation(owner_id,id) ) STRICT"
-  },
   "history_cutoff": {
    "columns": [
     {
@@ -4077,102 +3922,6 @@
     }
    ],
    "sql": "CREATE TABLE history_deletion_fence ( owner_id TEXT NOT NULL,contact_id TEXT NOT NULL,operation_id TEXT NOT NULL, PRIMARY KEY(owner_id,contact_id),FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) ) STRICT"
-  },
-  "history_guard_lease": {
-   "columns": [
-    {
-     "name": "owner_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 1
-    },
-    {
-     "name": "contact_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 2
-    },
-    {
-     "name": "binding_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "conversation_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "source_generation",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "guard_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "runtime_id",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    },
-    {
-     "name": "state",
-     "type": "TEXT",
-     "notnull": 1,
-     "dflt_value": null,
-     "pk": 0
-    }
-   ],
-   "foreignKeys": [
-    {
-     "id": 0,
-     "seq": 0,
-     "table": "contact",
-     "from": "owner_id",
-     "to": "owner_id",
-     "on_update": "NO ACTION",
-     "on_delete": "NO ACTION",
-     "match": "NONE"
-    },
-    {
-     "id": 0,
-     "seq": 1,
-     "table": "contact",
-     "from": "contact_id",
-     "to": "id",
-     "on_update": "NO ACTION",
-     "on_delete": "NO ACTION",
-     "match": "NONE"
-    }
-   ],
-   "indexes": [
-    {
-     "name": "sqlite_autoindex_history_guard_lease_1",
-     "unique": 1,
-     "partial": 0,
-     "origin": "pk",
-     "columns": [
-      "owner_id",
-      "contact_id"
-     ],
-     "sql": null
-    }
-   ],
-   "sql": "CREATE TABLE history_guard_lease ( owner_id TEXT NOT NULL,contact_id TEXT NOT NULL,binding_id TEXT NOT NULL,conversation_id TEXT NOT NULL, source_generation TEXT NOT NULL,guard_id TEXT NOT NULL,runtime_id TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('active','lost')), PRIMARY KEY(owner_id,contact_id),FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) ) STRICT"
   },
   "history_message_quarantine": {
    "columns": [
@@ -14516,6 +14265,136 @@
     }
    ],
    "sql": "CREATE TABLE skill_package_revision ( owner_id TEXT NOT NULL, package_id TEXT NOT NULL, revision_no INTEGER NOT NULL CHECK(revision_no>=1), manifest_digest TEXT NOT NULL CHECK(length(manifest_digest)=64), content_digest TEXT NOT NULL CHECK(length(content_digest)=64), source_kind TEXT NOT NULL CHECK(source_kind='user_directory'), verification_state TEXT NOT NULL CHECK(verification_state IN ('verified','pending')), verified_at INTEGER NOT NULL CHECK(verified_at>=0), availability TEXT NOT NULL CHECK(availability IN ('current','unavailable')), PRIMARY KEY(owner_id,package_id,revision_no), FOREIGN KEY(owner_id,package_id) REFERENCES skill_package(owner_id,id) ON DELETE CASCADE ) STRICT"
+  },
+  "source_proof": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "account_key",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "conversation_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "conversation_key",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "source_generation",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "tables_json",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "state",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "checked_at",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "reason",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "channel_conversation",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "channel_conversation",
+     "from": "conversation_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 0,
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 1,
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_source_proof_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "contact_id"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE source_proof ( owner_id TEXT NOT NULL,contact_id TEXT NOT NULL, account_key TEXT,conversation_id TEXT,conversation_key TEXT,source_generation TEXT, tables_json TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN ('ok','needs_confirmation')), checked_at INTEGER,reason TEXT, PRIMARY KEY(owner_id,contact_id), FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id), FOREIGN KEY(owner_id,conversation_id) REFERENCES channel_conversation(owner_id,id), CHECK(state<>'ok' OR (account_key IS NOT NULL AND conversation_key IS NOT NULL AND conversation_id IS NOT NULL AND source_generation IS NOT NULL AND tables_json<>'')) ) STRICT"
   },
   "step_attempt": {
    "columns": [

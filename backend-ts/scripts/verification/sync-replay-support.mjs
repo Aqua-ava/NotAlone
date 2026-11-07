@@ -5,6 +5,7 @@ import {dirname, join, resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {Worker} from 'node:worker_threads';
+import {execFileSync} from 'node:child_process';
 import {DatabaseSync} from 'node:sqlite';
 
 export function copyBackup(backupArg, userDataArg) {
@@ -17,6 +18,25 @@ export function copyBackup(backupArg, userDataArg) {
  const userData=realpathSync(requested),file=join(userData,'managed/sqlite/notalone.sqlite');
  copyFileSync(backup,file,constants.COPYFILE_EXCL|constants.COPYFILE_FICLONE);
  return {backup,userData,file,unchanged:()=>{const current=statSync(backup);return ['dev','ino','size','mtimeMs','ctimeMs'].every(key=>current[key]===original[key]);}};
+}
+/** 仅克隆本轮已经关闭的自有副本；不打开源副本写连接，不覆盖已有目录。 */
+export function cloneReplayCopy(sourceArg,userDataArg) {
+ const source=realpathSync(sourceArg),requested=resolve(userDataArg),temporaryRoot=realpathSync(tmpdir());
+ assert.ok(source.startsWith(realpathSync('/tmp')+'/notalone-sync-'),'只允许已有自有临时副本');
+ assert.ok([temporaryRoot,realpathSync('/tmp')].includes(realpathSync(dirname(requested))),'输出必须是临时根直属新目录');
+ assert.equal(existsSync(requested),false);assert.ok(statfsSync(temporaryRoot).bavail*statfsSync(temporaryRoot).bsize>=15*2**30);
+ const origin=join(source,'managed/sqlite/notalone.sqlite'),original=statSync(origin);
+ const held=[origin,origin+'-wal',origin+'-shm'].filter(existsSync);
+ try{const pids=execFileSync('lsof',['-t','--',...held],{encoding:'utf8'});assert.equal(pids.trim(),'','源副本仍有进程占用');}
+ catch(error){if(error.status!==1)throw error;}
+ assert.ok(!existsSync(origin+'-wal')||statSync(origin+'-wal').size===0,'源副本有未合并WAL，不能按主文件克隆');
+ mkdirSync(join(requested,'managed/sqlite'),{recursive:true,mode:0o700});const userData=realpathSync(requested),file=join(userData,'managed/sqlite/notalone.sqlite');
+ copyFileSync(origin,file,constants.COPYFILE_EXCL|constants.COPYFILE_FICLONE);
+ return {userData,file,sourceUnchanged:()=>{const current=statSync(origin);return ['dev','ino','size','mtimeMs','ctimeMs'].every(key=>current[key]===original[key]);}};
+}
+export function blockedContactRows(file) {
+ const proof=readQuery(file,"SELECT 1 FROM sqlite_schema WHERE type='table' AND name='source_proof'").length>0;
+ return readQuery(file,proof?"SELECT owner_id,contact_id FROM source_proof WHERE state='needs_confirmation'":'SELECT owner_id,contact_id FROM history_continuity_fence');
 }
 export function readQuery(file,sql,parameters=[]) {
  const db=new DatabaseSync(file,{readOnly:true});try{return db.prepare(sql).all(...parameters);}finally{db.close();}

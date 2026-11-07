@@ -1,10 +1,11 @@
+import {loadPreSourceProofRegistry,sourceSchemaSnapshot} from '../sqlite/pre-source-proof-registry.mjs';
 import {randomUUID} from 'node:crypto';
-import {registry as base} from '../../../src/storage/sqlite/registry.ts';
+import {registry as current} from '../../../src/storage/sqlite/registry.ts';
 
 const legacy=new URL(import.meta.url).searchParams.get('mode')==='legacy';
 
 /** 只有合成来源准备和只读核验是夹具；迁移、管理决定及删除均沿正式动作。 */
-export const registry={...base,migrations:legacy?base.migrations.filter(migration=>migration.version<=35):base.migrations,actions:[...base.actions,
+export const paginationUpgradeActions=[
  {name:'fixture.paginationUpgradeCitations',mode:'write',retryBusy:false,execute(tx,{ownerId,contactId,memoryId,count}){
   const source=tx.get(`SELECT m.id,m.interpretation_revision,r.id record_id FROM message m
    JOIN capture_record r ON r.owner_id=m.owner_id AND r.message_id=m.id
@@ -18,9 +19,11 @@ export const registry={...base,migrations:legacy?base.migrations.filter(migratio
  }},
  {name:'fixture.paginationUpgradeSnapshot',mode:'read',retryBusy:false,execute(tx,{ownerId}){
   return {
-   ledger:tx.all('SELECT version,checksum,applied_at FROM schema_migration ORDER BY version'),
+   sourceSchema:sourceSchemaSnapshot(tx,ownerId),ledger:tx.all('SELECT version,checksum,applied_at FROM schema_migration ORDER BY version'),
    memories:tx.all('SELECT id,current_version_no,state,management_source_time FROM memory WHERE owner_id=? ORDER BY id',[ownerId]),
    versions:tx.all('SELECT memory_id,version_no,body,content_state,provenance_state FROM memory_version WHERE owner_id=? ORDER BY memory_id,version_no',[ownerId]),
   };
  }},
-]};
+];
+const base=legacy?await loadPreSourceProofRegistry():current;
+export const registry={...base,migrations:legacy?base.migrations.filter(migration=>migration.version<=35):base.migrations,actions:[...base.actions,...paginationUpgradeActions]};

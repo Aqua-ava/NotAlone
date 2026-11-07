@@ -21,7 +21,7 @@ JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id AND b
 JOIN channel_conversation v ON v.owner_id=b.owner_id AND v.id=b.conversation_id
 JOIN binding_verification bv ON bv.owner_id=g.owner_id AND bv.id=g.verification_id AND bv.binding_id=b.id
 JOIN channel_account a ON a.owner_id=v.owner_id AND a.id=v.account_id
-JOIN history_continuity_fence f ON f.owner_id=c.owner_id AND f.contact_id=c.id
+JOIN source_proof f ON f.owner_id=c.owner_id AND f.contact_id=c.id AND f.state='needs_confirmation'
 LEFT JOIN message m ON m.owner_id=c.owner_id AND m.contact_id=c.id
 WHERE c.owner_id=? AND c.state='active'
  AND g.selection_generation=c.selection_generation AND bv.identity_generation=b.identity_generation
@@ -31,7 +31,7 @@ ORDER BY image_unsaved_count DESC, stored_message_count ASC, c.id ASC`;
 
 /** 单联系人复核：联系人可能已不再围栏或授权已变化，因此同时返回围栏与资格标记供批量重跑判定。 */
 export const recertifyCandidateStateSql = `SELECT c.id AS contact_id,
- EXISTS(SELECT 1 FROM history_continuity_fence f WHERE f.owner_id=c.owner_id AND f.contact_id=c.id) AS fenced,
+ EXISTS(SELECT 1 FROM source_proof f WHERE f.owner_id=c.owner_id AND f.contact_id=c.id AND f.state='needs_confirmation') AS fenced,
  EXISTS(SELECT 1 FROM owner o
   JOIN read_grant g ON g.owner_id=o.owner_id AND g.contact_id=c.id AND g.revoked_at IS NULL
   JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id AND b.state='verified'
@@ -87,7 +87,7 @@ export const historyRecertifyCandidatesActions:StorageAction[]=[
   const ownerId=identifier(input?.ownerId);
   const rows=tx.all(recertifyCandidateIdsSql,[ownerId]).map((row:StorageRow):HistoryRecertifyCandidateRow=>({
    contact_id:String(row.contact_id),fenced:true,eligible:true,...counts(row)}));
-  const fencedTotal=count(tx.get("SELECT count(*) AS n FROM history_continuity_fence f JOIN contact c ON c.owner_id=f.owner_id AND c.id=f.contact_id WHERE f.owner_id=? AND c.state='active'",[ownerId])!.n);
+  const fencedTotal=count(tx.get("SELECT count(*) AS n FROM source_proof f JOIN contact c ON c.owner_id=f.owner_id AND c.id=f.contact_id WHERE f.owner_id=? AND f.state='needs_confirmation' AND c.state='active'",[ownerId])!.n);
   return {read_enabled:readEnabled(tx,ownerId),fenced_total:fencedTotal,contacts:rows,total:rows.length,
    with_unsaved_images:rows.filter(row=>row.image_unsaved_count>0).length,
    message_total:rows.reduce((sum,row)=>sum+row.stored_message_count,0),

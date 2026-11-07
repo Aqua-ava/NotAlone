@@ -1,3 +1,5 @@
+import {getProof,isSourceBlocked,putScope} from './source-proof.ts';
+import {loseSourceGuard} from './source-guard.ts';
 import {sha256} from '../../platform/sha256.ts';
 import {StorageFailure,type StorageTransaction,type StorageAction} from '../../storage/sqlite/contracts.ts';
 import {assertReadEligibility} from '../../contacts/sqlite/actions.ts';
@@ -19,9 +21,9 @@ export interface SourceRecoveryPlan {
 /** 来源核对只读本联系人的索引范围；最多返回每表八个锚点摘要，不返回正文。 */
 export function sourceRecoveryPlan(tx:StorageTransaction,token:ReadEligibility,report:HistorySupportReport,allowUnfenced=false):SourceRecoveryPlan|null {
  assertReadEligibility(tx,token);assertHistoryReadBoundary(tx,token,{kind:'history'});
- const fenced=Boolean(tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]));
+ const fenced=isSourceBlocked(tx,token.owner_id,token.contact_id);
  if(!fenced&&!allowUnfenced)return null;
- const scope=tx.get('SELECT * FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
+ const scope=getProof(tx,token.owner_id,token.contact_id);
  if(!scope&&!fenced)return null;
  const identity=tx.get('SELECT a.external_key account_key,c.external_key conversation_key FROM channel_account a JOIN channel_conversation c ON c.owner_id=a.owner_id AND c.account_id=a.id WHERE a.owner_id=? AND a.id=? AND c.id=?',[token.owner_id,token.account_id,token.conversation_id]);
  if(!scope||scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation||!scope.tables_json
@@ -67,8 +69,9 @@ export function prepareRecoveredSource(tx:StorageTransaction,input:{token:ReadEl
  const actual=new Map(recovery.anchors.map(r=>[sourceKey(r),anchorDigest(r)]));
  if(actual.size!==plan.anchors.length||plan.anchors.some(r=>actual.get(r.key)!==r.digest))return {ok:fenceContinuity(tx,token,'N04'),revalidated:false};
  // 清围栏与续期在同一事务；任何失败回滚，旧授权、删除代次及抑制表均不改写。
- tx.run('DELETE FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]);
- tx.run("UPDATE history_guard_lease SET state='lost' WHERE owner_id=? AND contact_id=?",[token.owner_id,token.contact_id]);
+ const proof=getProof(tx,token.owner_id,token.contact_id);if(!proof)fail();
+ putScope(tx,token,proof!.tables_json,{state:'ok',accountKey:report.accountKey,conversationKey:report.conversationKey});
+ loseSourceGuard(tx,token.owner_id,token.contact_id);
  const prepared=prepareNormalUseTarget(tx,token,recovery.target,report,input.guardId,true);
  if(!prepared.ok)fail();
  tx.run('UPDATE contact SET source_revision=source_revision+1 WHERE owner_id=? AND id=?',[token.owner_id,token.contact_id]);

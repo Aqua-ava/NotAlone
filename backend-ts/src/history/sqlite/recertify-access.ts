@@ -1,3 +1,4 @@
+import {isSourceBlocked} from './source-proof.ts';
 import {StorageFailure,type StorageTransaction,type StorageRow} from '../../storage/sqlite/contracts.ts';
 import {assertReadEligibility} from '../../contacts/sqlite/actions.ts';
 import type {ReadEligibility} from '../../contacts/sqlite/contracts.ts';
@@ -14,7 +15,7 @@ export function assertRecertifyAccess(tx:StorageTransaction,token:ReadEligibilit
  if(!op||op.state!=='running'||op.stage!=='history'||op.runtime_id!==runtime?.runtime_id||op.guard_state!=='active'||op.guard_id!==guardId
   ||op.token_json!==JSON.stringify(token)||op.new_binding_id!==token.binding_id||op.new_grant_id!==token.grant_id
   ||target&&op.target_json!==JSON.stringify(target)
-  ||!tx.get('SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]))throw new StorageFailure('history_recertify_not_authorized');
+  ||!isSourceBlocked(tx,token.owner_id,token.contact_id))throw new StorageFailure('history_recertify_not_authorized');
  return op;
 }
 

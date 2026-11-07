@@ -57,13 +57,22 @@ test('真正提交的来源失证只追加一条安全围栏诊断，重复围�
   assert.deepEqual(await diagnosticRows(f.root), rows);
 });
 
-test('真实readPreflight失租分支记录G01及调用入口', async t => {
+test('实际账号变化提交待确认后保留L01诊断与固定错误码',async t=>{
+  const f=await seed(t);
+  await markLost(f,f.contactA,{errorCode:'history_account_changed'});
+  const rows=await diagnosticRows(f.root);
+  assert.equal(rows.length,1);
+  assert.deepEqual([rows[0].entry,rows[0].branch,rows[0].errorCode],['history.markContinuityLost','L01','history_account_changed']);
+  assertSafe(rows);
+});
+
+test('真实readPreflight来源代次冲突记录G02及调用入口', async t => {
   const f = await seed(t, false);
-  await f.current.storage.execute('fixture.continuityDiagnosticLoseGuard', {ownerId: owner, contactId: f.contactA});
+  await f.current.storage.execute('fixture.continuityDiagnosticSourceChanged', {ownerId: owner, contactId: f.contactA});
   await assert.rejects(f.current.history.synchronize(f.contactA), {code: 'history_source_continuity_unverified'});
   const rows = await diagnosticRows(f.root);
   assert.equal(rows.length, 1);
-  assert.deepEqual([rows[0].entry, rows[0].branch, rows[0].contactPrefix], ['history.readPreflight', 'G01', f.contactA.slice(0, 8)]);
+  assert.deepEqual([rows[0].entry, rows[0].branch, rows[0].contactPrefix], ['history.readPreflight', 'G02', f.contactA.slice(0, 8)]);
   assertSafe(rows);
 });
 

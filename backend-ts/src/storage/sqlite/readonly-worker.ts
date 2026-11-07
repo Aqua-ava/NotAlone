@@ -53,7 +53,7 @@ try{
       if(!allowed.has(name)||action?.mode!=='read')throw new StorageFailure('readonly_action_forbidden');
       let active=true;
       const permitted=()=>{if(!active)throw new StorageFailure('transaction_expired');};
-      const tx:StorageTransaction={all(sql,values){permitted();return all(sql,values);},get(sql,values){permitted();return get(sql,values);},run(){permitted();throw new StorageFailure('readonly_write_forbidden');}};
+      const tx:StorageTransaction={runtimeGet(){permitted();return undefined;},runtimeSet(){permitted();throw new StorageFailure('readonly_write_forbidden');},runtimeDelete(){permitted();throw new StorageFailure('readonly_write_forbidden');},all(sql,values){permitted();return all(sql,values);},get(sql,values){permitted();return get(sql,values);},run(){permitted();throw new StorageFailure('readonly_write_forbidden');}};
       db.exec('BEGIN');let value:unknown;
       try{
         assertLease();value=action.execute(tx,input,{databaseId:status.databaseId,runtimeId:status.runtimeId,epoch:status.epoch});

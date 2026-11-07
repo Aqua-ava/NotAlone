@@ -1,3 +1,4 @@
+import {simulateSourceGuard} from '../history/runtime-guard-fixture.mjs';
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 import {installedDeletionRegistration} from '../../../src/storage/sqlite/deletion/registration.ts';
 import {createDeletionActions} from '../../../src/storage/sqlite/deletion/actions.ts';
@@ -34,11 +35,7 @@ export const registry={...base,actions:[...base.actions.filter(a=>!replaced.has(
  {name:'fixture.localReplyCurrent',mode:'read',retryBusy:false,execute(tx,input){replyLocalKnowledgeReader.requireCurrent(tx,input.scope,input.item);return true;}},
  {name:'fixture.localReplyFrozen',mode:'read',retryBusy:false,execute(tx,input){replyLocalKnowledgeReader.requireFrozen(tx,input.scope,input.item);return true;}},
  {name:'fixture.localReplyGuardLost',mode:'write',retryBusy:false,execute(tx,{ownerId,contactId}){
-  tx.run(`INSERT INTO history_guard_lease(owner_id,contact_id,binding_id,conversation_id,source_generation,guard_id,runtime_id,state)
-   SELECT b.owner_id,b.contact_id,b.id,b.conversation_id,a.source_generation,'synthetic-guard',d.runtime_id,'lost'
-   FROM conversation_binding b JOIN channel_conversation c ON c.owner_id=b.owner_id AND c.id=b.conversation_id
-   JOIN channel_account a ON a.owner_id=c.owner_id AND a.id=c.account_id JOIN database_instance d ON d.slot=1
-   WHERE b.owner_id=? AND b.contact_id=? ON CONFLICT(owner_id,contact_id) DO UPDATE SET state='lost'`,[ownerId,contactId]);
+  simulateSourceGuard(tx,{ownerId,contactId});
  }},
  {name:'fixture.documentKnowledge' ,mode:'read',retryBusy:false,execute(tx,input){return documentKnowledgeReader.read(tx,input);}},
  {name:'fixture.documentCurrent',mode:'read',retryBusy:false,execute(tx,input){documentKnowledgeReader.requireCurrent(tx,input.scope,input.item);return true;}},

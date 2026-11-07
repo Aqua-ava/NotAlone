@@ -10,25 +10,27 @@ import {SharedWechatClient} from '../../src/history/wechat/shared-client.ts';
 import {loadSharedNarrowWechatOptions} from '../../src/history/wechat/artifacts.ts';
 import {createWechatHistoryChannel} from '../../src/history/sqlite/wechat-channel.ts';
 import {SqliteHistoryService} from '../../src/history/sqlite/service.ts';
-import {copyBackup,readQuery,snapshot,assertDataPreserved,openReplayStorage,safeCode,verifyReplayArtifact} from './sync-replay-support.mjs';
+import {copyBackup,readQuery,snapshot,assertDataPreserved,openReplayStorage,safeCode,verifyReplayArtifact,blockedContactRows} from './sync-replay-support.mjs';
 
 const argumentsMap=new Map(process.argv.slice(2).map(value=>{const at=value.indexOf('=');return [value.slice(2,at<0?undefined:at),at<0?true:value.slice(at+1)];}));
 const send=message=>process.send?.(message);
 const ownReaderPids=()=>{try{return execFileSync('pgrep',['-P',String(process.pid)],{encoding:'utf8'}).trim().split('\n').filter(Boolean).map(Number);}catch(error){if(error.status===1)return [];throw error;}};
 
 async function pass(config) {
- const {userData,executable,inject,hard,limit,expectUnavailable}=config,file=join(userData,'managed/sqlite/notalone.sqlite');
+ const {userData,executable,inject,hard,limit,expectUnavailable}=config;const transientLimit=config.transientRetries??0,file=join(userData,'managed/sqlite/notalone.sqlite');
  const started=performance.now();let storage,shared,history;
  const result={pass:config.pass,ok:0,failed:0,errorCodes:{},existingFences:0,eligible:0,injected:0,anchors:0,recoveryTables:0,pageRecords:0,oldPageRecords:0};
  try{
   storage=await openReplayStorage(userData);
   const ownerId=readQuery(file,"SELECT owner_id FROM owner WHERE state='active' LIMIT 1")[0].owner_id;
-  const hasProof=readQuery(file,"SELECT 1 FROM sqlite_schema WHERE type='table' AND name='source_proof'").length>0;
-  const existingFenced=new Set(readQuery(file,hasProof?"SELECT contact_id FROM source_proof WHERE state='needs_confirmation'":'SELECT contact_id FROM history_continuity_fence').map(r=>r.contact_id));
+  const existingFenced=new Set(blockedContactRows(file).filter(r=>r.owner_id===ownerId).map(r=>r.contact_id));
   const candidates=readQuery(file,"SELECT id FROM contact WHERE owner_id=? AND state='active' ORDER BY id",[ownerId]);
   const eligible=[];
   for(const row of candidates){try{await storage.execute('identity.eligibility',{ownerId,contactId:row.id});eligible.push(row.id);}catch{/* 撤销或缺少资格者不恢复。 */}}
   result.eligible=eligible.length;result.existingFences=eligible.filter(id=>existingFenced.has(id)).length;
+  result.nonEligibleBlocked=snapshot(file).fences-result.existingFences;
+  const eligibleSet=new Set(eligible);
+  const afterSnapshot=()=>({...snapshot(file),eligibleFences:blockedContactRows(file).filter(r=>r.owner_id===ownerId&&eligibleSet.has(r.contact_id)).length});
   let selected=config.contactIds??eligible;
   if(limit)selected=selected.slice(0,limit);
   result.selected=selected.length;
@@ -62,15 +64,31 @@ async function pass(config) {
   };
   history=new SqliteHistoryService(storage,contacts,create,undefined,undefined,undefined,shared);
   send({event:'opened',pass:config.pass,eligible:eligible.length,existingFences:result.existingFences,injected:result.injected});
+  result.transientRetries=0;result.transientErrors={};result.retryEvents=[];
   for(const contactId of selected){
    const contactStarted=performance.now();
-   try{await history.synchronize(contactId);result.ok++;}
-   catch(error){result.failed++;const code=safeCode(error);result.errorCodes[code]=(result.errorCodes[code]??0)+1;}
+   for(let attempt=0;attempt<=transientLimit;attempt++){
+    const needsBefore=blockedContactRows(file).length;
+    try{await history.synchronize(contactId);result.ok++;break;}
+    catch(error){
+     const code=safeCode(error),temporary=['history_native_unavailable','history_source_unverified'].includes(code);
+     if(temporary){
+      const needsAfter=blockedContactRows(file).length,delayMs=attempt<transientLimit?Math.min(60_000,1000*2**attempt):0;
+      const event={contactPrefix:contactId.slice(0,8),code,attempt:attempt+1,delayMs,needsBefore,needsAfter};
+      result.transientErrors[code]=(result.transientErrors[code]??0)+1;if(result.retryEvents.length<200)result.retryEvents.push(event);
+      send({event:'transient-failure',pass:config.pass,...event});assert.ok(needsAfter<=needsBefore,'暂不可核验尝试不得新增needs');
+      if(attempt<transientLimit){result.transientRetries++;
+       // 复现生产coordinator的指数退避；最多四次，真实来源变化码不进入此分支。
+       await new Promise(resolve=>setTimeout(resolve,delayMs));continue;}
+     }
+     result.failed++;result.errorCodes[code]=(result.errorCodes[code]??0)+1;break;
+    }
+   }
    (result.contactMs??=[]).push(Math.round(performance.now()-contactStarted));
-   if(hard){if(expectUnavailable)await shared.run('hard-lifecycle-metadata',native=>native.accountMetadata());result.after=snapshot(file);result.elapsedMs=Math.round(performance.now()-started);send({event:'hard-ready',result,readerPids:ownReaderPids()});await new Promise(()=>{});}
+   if(hard){if(expectUnavailable)await shared.run('hard-lifecycle-metadata',native=>native.accountMetadata());result.after=afterSnapshot();result.elapsedMs=Math.round(performance.now()-started);send({event:'hard-ready',result,readerPids:ownReaderPids()});await new Promise(()=>{});}
   }
   const sorted=result.contactMs.sort((a,b)=>a-b);result.contactMs={min:sorted[0]??0,median:sorted[Math.floor(sorted.length/2)]??0,max:sorted.at(-1)??0};
-  result.after=snapshot(file);result.elapsedMs=Math.round(performance.now()-started);
+  result.after=afterSnapshot();result.elapsedMs=Math.round(performance.now()-started);
   assertDataPreserved(result.before,result.after);
   assert.equal(result.oldPageRecords,0,'恢复后不整段重读旧正文');
   await history.close();history=undefined;await shared.close();shared=undefined;await storage.close();storage=undefined;
@@ -86,7 +104,7 @@ export function childPass(config) {
   const timer=setTimeout(()=>{child.kill('SIGKILL');reject(new Error('replay_pass_timeout'));},20*60_000);
   child.on('error',error=>{clearTimeout(timer);reject(error);});
   child.on('message',message=>{
-   if(message.event==='opened')console.log(JSON.stringify(message));
+   if(message.event==='opened'||message.event==='transient-failure')console.log(JSON.stringify(message));
    if(message.event==='fatal')result={fatal:message.code};
    if(message.event==='completed'){result=message;writeFileSync(join(config.userData,`pass-${config.pass}.json`),JSON.stringify(message.result)+'\n',{flag:'wx',mode:0o600});}
    if(message.event==='hard-ready'){
@@ -105,13 +123,13 @@ async function main() {
  const passes=Number(argumentsMap.get('passes')??5),limit=argumentsMap.has('limit')?Number(argumentsMap.get('limit')):undefined;
  assert.ok(Number.isSafeInteger(passes)&&passes>=0);assert.ok(limit===undefined||Number.isSafeInteger(limit)&&limit>0);
  const scenario=argumentsMap.get('expect')??'normal';assert.ok(['normal','unavailable'].includes(scenario));
- const expectUnavailable=scenario==='unavailable';
- const copy=copyBackup(backup,requested),before=snapshot(copy.file),results=[];
- const assertScenario=(result,hard=false)=>{if(!expectUnavailable){assert.equal(result.failed,0,'在线有效范围全部可恢复');assert.equal(result.ok,hard?1:result.selected,'完整在线轮逐位成功，硬中断轮首位成功');assert.equal(result.after.fences,0,'来源一致的既有及演练围栏均解除');return;}assert.equal(result.ok,0,'微信未运行时不接受正文');assert.equal(result.pageRecords,0);assert.equal(result.anchors,0);assert.ok(result.failed>0);assert.ok(Object.keys(result.errorCodes).every(code=>['history_source_unverified','history_native_unavailable'].includes(code)),'只允许明确暂不可核验错误');assert.equal(result.after.fences,before.fences,'暂不可核验不新增围栏');};
- const initial=await childPass({userData:copy.userData,executable,pass:0,inject:argumentsMap.has('inject')?argumentsMap.get('inject')!=='false':!expectUnavailable,limit,expectUnavailable});results.push(initial.result);assertScenario(initial.result);
+ const expectUnavailable=scenario==='unavailable',transientRetries=Number(argumentsMap.get('transient-retries')??0);assert.ok(Number.isSafeInteger(transientRetries)&&transientRetries>=0&&transientRetries<=4);
+ const copy=copyBackup(backup,requested),before=snapshot(copy.file),results=[];let availabilityBaseline;
+ const assertScenario=(result,hard=false)=>{if(!expectUnavailable){assert.equal(result.failed,0,'在线有效范围全部可恢复');assert.equal(result.ok,hard?1:result.selected,'完整在线轮逐位成功，硬中断轮首位成功');assert.equal(result.after.eligibleFences,0,'有效读取范围的来源均恢复');assert.equal(result.after.fences,result.nonEligibleBlocked,'无效范围保留，不能新增有效范围围栏');return;}assert.equal(result.ok,0,'微信未运行时不接受正文');assert.equal(result.pageRecords,0);assert.equal(result.anchors,0);assert.ok(result.failed>0);assert.ok(Object.keys(result.errorCodes).every(code=>['history_source_unverified','history_native_unavailable'].includes(code)),'只允许明确暂不可核验错误');assert.equal(result.after.fences,availabilityBaseline??result.before.fences,'暂不可核验不新增围栏');};
+ const initial=await childPass({userData:copy.userData,executable,pass:0,inject:argumentsMap.has('inject')?argumentsMap.get('inject')!=='false':!expectUnavailable,limit,expectUnavailable,transientRetries});results.push(initial.result);availabilityBaseline=initial.result.before.fences;assertScenario(initial.result);
  console.log(JSON.stringify({event:'pass-result',...initial.result}));
  for(let passNo=1;passNo<=passes;passNo++){
-  const completed=await childPass({userData:copy.userData,executable,pass:passNo,inject:false,hard:passNo===2,contactIds:initial.contactIds,expectUnavailable});
+  const completed=await childPass({userData:copy.userData,executable,pass:passNo,inject:false,hard:passNo===2,contactIds:initial.contactIds,expectUnavailable,transientRetries});
   console.log(JSON.stringify({event:'pass-attempt',hardKilled:completed.hardKilled,...completed.result}));
   assertScenario(completed.result,completed.hardKilled);
   const previous=results.at(-1).after;assert.ok(completed.result.after.fences<=previous.fences,'重开或硬中断不增加围栏');

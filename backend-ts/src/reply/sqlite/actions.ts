@@ -45,9 +45,7 @@ export const discussionActions:StorageAction[]=[
   const owner=tx.get('SELECT read_epoch,memory_revision,preference_revision,skill_revision,document_revision,feedback_revision,current_publication_id FROM owner WHERE owner_id=?',[i.ownerId]);
   const revision={owner,contact:{selection:contact.selection_generation,data:contact.data_generation,source:contact.source_revision,memory:contact.memory_revision,document:contact.document_revision,feedback:contact.feedback_revision,publication:contact.current_publication_id},
    discussion:discussion?{generation:discussion.generation,runtime:discussion.current_runtime_id}:null,
-   continuity:tx.get('SELECT conversation_id,source_generation,tables_json FROM history_continuity_scope WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId])??null,
-   fence:tx.get('SELECT reason FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId])??null,
-   guard:tx.get('SELECT binding_id,conversation_id,source_generation,guard_id,runtime_id,state FROM history_guard_lease WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId])??null};
+   sourceProof:tx.get('SELECT account_key,conversation_id,conversation_key,source_generation,tables_json,state,reason FROM source_proof WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId])??null};
   return {generation:contact.data_generation,revision:sha256(JSON.stringify(revision,(_key,value)=>typeof value==='bigint'?String(value):value))};
  }),
  action('metadata','read',(tx,i)=>discussionView(requireDiscussion(tx,i))),

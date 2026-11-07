@@ -2,7 +2,8 @@
 /** before43 副本的元数据注入反例；默认使用存档，加 --executable 时由独立正式原生读取器取得当前元数据。 */
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {copyFileSync,constants,existsSync,mkdirSync,realpathSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
+import {copyFileSync,constants,existsSync,mkdirSync,realpathSync,rmSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {StorageFailure} from '../../src/storage/sqlite/contracts.ts';
 import {SqliteHistoryService} from '../../src/history/sqlite/service.ts';
@@ -10,14 +11,16 @@ import {SharedWechatClient} from '../../src/history/wechat/shared-client.ts';
 import {loadSharedNarrowWechatOptions} from '../../src/history/wechat/artifacts.ts';
 import {createWechatHistoryChannel} from '../../src/history/sqlite/wechat-channel.ts';
 import {historyTargetTransition} from '../../src/history/partition-growth.ts';
-import {copyBackup,readQuery,snapshot,openReplayStorage,assertDataPreserved,safeCode,verifyReplayArtifact} from './sync-replay-support.mjs';
+import {copyBackup,readQuery,snapshot,openReplayStorage,assertDataPreserved,safeCode,verifyReplayArtifact,blockedContactRows} from './sync-replay-support.mjs';
 const args=new Map(process.argv.slice(2).map(value=>{const at=value.indexOf('=');return [value.slice(2,at),value.slice(at+1)];}));
 const executable=args.has('executable')?verifyReplayArtifact(args.get('executable'),args.get('artifact-root')):undefined;
 const mode=executable?'current-native-metadata':'saved-metadata';
 const base=copyBackup(args.get('backup'),args.get('user-data'));let storage=await openReplayStorage(base.userData);
 const ownerId=readQuery(base.file,"SELECT owner_id FROM owner WHERE state='active' LIMIT 1")[0].owner_id;
 let contactId,token,report,target;
-for(const row of readQuery(base.file,"SELECT p.id FROM contact p WHERE p.owner_id=? AND p.state='active' AND NOT EXISTS(SELECT 1 FROM history_continuity_fence f WHERE f.owner_id=p.owner_id AND f.contact_id=p.id) ORDER BY p.id",[ownerId])){
+const blocked=new Set(blockedContactRows(base.file).filter(r=>r.owner_id===ownerId).map(r=>r.contact_id));
+for(const row of readQuery(base.file,"SELECT id FROM contact WHERE owner_id=? AND state='active' ORDER BY id",[ownerId])){
+ if(blocked.has(row.id))continue;
  try{
   const candidate=await storage.execute('identity.eligibility',{ownerId,contactId:row.id});
   const saved=readQuery(base.file,'SELECT support_json,target_json FROM read_goal WHERE owner_id=? AND contact_id=? ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1',[ownerId,row.id])[0];
@@ -72,8 +75,13 @@ for(const [name,change] of Object.entries(changes)){
  try{history=new SqliteHistoryService(storage,contacts,channel,undefined,undefined,undefined,shared);try{await history.synchronize(contactId);assert.fail('变化的元数据不得同步成功');}catch(error){code=safeCode(error);assert.notEqual(code,'replay_body_forbidden');}}
  finally{await history?.close();await shared?.close();await storage.close();storage=undefined;}
  const after=snapshot(file);assertDataPreserved(before,after);assert.equal(after.messages,before.messages);assert.equal(after.fences,before.fences+1,'每个独立反例均真正新增一位围栏');assert.equal(bodyMethods,0,'反例不得调用正文方法');
- const fenced=readQuery(file,'SELECT 1 FROM history_continuity_fence WHERE owner_id=? AND contact_id=?',[ownerId,contactId]);assert.equal(fenced.length,1);
+ const fenced=blockedContactRows(file).filter(r=>r.owner_id===ownerId&&r.contact_id===contactId);assert.equal(fenced.length,1);
  const result={mode,name,code,nativeReaderUsed:!!executable,nativeMetadataMethods,beforeFences:before.fences,afterFences:after.fences,bindings:after.bindings,messages:after.messages,referenceRowsUnchanged:true,bodyMethods};results.push(result);console.log(JSON.stringify({event:'metadata-counterexample',...result}));
+ writeFileSync(join(base.userData,`case-${name}.json`),JSON.stringify(result)+'\n',{flag:'wx',mode:0o600});
+ if(args.get('keep-case-copies')==='false'){
+  const held=[file,file+'-wal',file+'-shm'].filter(existsSync);try{const pids=execFileSync('lsof',['-t','--',...held],{encoding:'utf8'});assert.equal(pids.trim(),'','已完成反例副本仍有占用');}catch(error){if(error.status!==1)throw error;}
+  assert.ok(userData.startsWith(base.userData+'-')&&dirname(userData)===realpathSync('/tmp'));rmSync(userData,{recursive:true});
+ }
 }
 assert.equal(base.unchanged(),true);
 console.log(JSON.stringify({event:'metadata-counterexample-summary',mode,positiveMetadataControl:true,passed:results.length,bodyMethods:0,nativeReaderUsed:!!executable,backupUnchanged:true,results}));

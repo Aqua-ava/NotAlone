@@ -1,3 +1,4 @@
+import {simulateSourceGuard} from '../history/runtime-guard-fixture.mjs';
 import {decode} from '../../../src/reply/sqlite/requests.ts';
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 import {createReplyKnowledgeStorageRegistry} from '../../../src/reply/sqlite/candidates/knowledge-context.ts';
@@ -19,11 +20,7 @@ export const registry=createReplyKnowledgeStorageRegistry({...base,actions:[...b
  {name:'frozenDocumentTest.local',mode:'read',retryBusy:false,execute:(tx,i)=>replyLocalKnowledgeReader.read(tx,i)},
  {name:'frozenDocumentTest.strict',mode:'read',retryBusy:false,execute:(tx,i)=>documentKnowledgeReader.read(tx,i)},
  {name:'frozenDocumentTest.guardLost',mode:'write',retryBusy:false,execute(tx,{ownerId,contactId}){
-  // 合成渠道没有常驻守卫；模拟真实表中的失证状态，不改本机消息或资料资格。
-  tx.run(`INSERT INTO history_guard_lease(owner_id,contact_id,binding_id,conversation_id,source_generation,guard_id,runtime_id,state)
-   SELECT b.owner_id,b.contact_id,b.id,b.conversation_id,a.source_generation,'synthetic-frozen-guard',d.runtime_id,'lost'
-   FROM conversation_binding b JOIN channel_conversation c ON c.owner_id=b.owner_id AND c.id=b.conversation_id
-   JOIN channel_account a ON a.owner_id=c.owner_id AND a.id=c.account_id JOIN database_instance d ON d.slot=1
-   WHERE b.owner_id=? AND b.contact_id=? ON CONFLICT(owner_id,contact_id) DO UPDATE SET state='lost'`,[ownerId,contactId]);
+  // 合成渠道没有常驻守卫；模拟Worker内的易失守卫丢失，不改本机消息或资料资格。
+  simulateSourceGuard(tx,{ownerId,contactId});
  }},
 ]},replyLocalKnowledgeReader);

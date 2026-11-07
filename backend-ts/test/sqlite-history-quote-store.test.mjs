@@ -11,7 +11,6 @@ import {projectHistoryMessages} from '../src/history/sqlite/http.ts';
 import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
 import {DeletionService} from '../src/storage/sqlite/deletion/service.ts';
 import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
-import {randomUUID} from 'node:crypto';
 
 const owner='00000000-0000-4000-8000-000000000219';
 const metadata=()=>({account:async()=>({externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-1',assurance:'verified',supportProfile:'synthetic-metadata-v1'}),
@@ -133,14 +132,19 @@ test('同联系人现授权下重开读取后仍能补齐先前合法历史',asy
  assert.equal((await f.store.candidates(contact,'quote-v1')).length,1,'历史capture的旧read_epoch不否定当前同绑定来源');
 });
 
-test('干净进程重启后候选读取允许旧runtime guard，quote保存仍要求活guard',async t=>{
- const f=await fixture(t,{guardSession:true}),contact=f.bindings[0].contact_id;
+test('进程重开后合法本机引用可保存，来源待确认仍拒绝保存与候选',async t=>{
+ const f=await fixture(t,{guardSession:true}),contact=f.bindings[0].contact_id,other=f.bindings[1].contact_id;
  const before=await f.store.candidates(contact,'quote-v1');assert.equal(before.length,1);
  await f.abruptRestart();
- assert.deepEqual(await f.store.candidates(contact,'quote-v1'),before,'旧runtime guard只阻止正文解析，不阻止安全元数据候选');
- const token=await f.contacts.eligibility(contact),candidate=before[0];
- await assert.rejects(f.store.save({token,...candidate,version:'quote-v1',content,proofDigest:'c'.repeat(64)}),
-  error=>error.code==='history_source_not_available','实际保存仍须通过当前活guard来源复验');
+ assert.deepEqual(await f.store.candidates(contact,'quote-v1'),before,'重启不改变已核验的本机来源事实');
+ const token=await f.contacts.eligibility(contact);
+ await f.store.save({token,...before[0],version:'quote-v1',content,proofDigest:'c'.repeat(64)});
+ assert.ok((await f.history.read(contact)).messages.find(row=>row.id===before[0].messageId).quote);
+ const held=(await f.store.candidates(other,'quote-v1'))[0],otherToken=await f.contacts.eligibility(other);assert.ok(held);
+ await f.storage.execute('history.markContinuityLost',{token:otherToken});
+ assert.deepEqual(await f.store.candidates(other,'quote-v1'),[]);
+ await assert.rejects(f.store.save({token:otherToken,...held,version:'quote-v1',content,proofDigest:'c'.repeat(64)}),
+  error=>error.code==='history_source_not_available','实际来源待确认时仍拒绝保存');
 });
 
 test('v26迁移保留v25引用正文、来源和去重尝试',async t=>{
@@ -149,15 +153,16 @@ test('v26迁移保留v25引用正文、来源和去重尝试',async t=>{
  t.after(async()=>{await history?.close().catch(()=>{});await contacts?.close().catch(()=>{});await storage?.close().catch(()=>{});await rm(root,{recursive:true,force:true});});
  storage=await SqliteStorage.open({...databaseOptions,intent:'create',registryModule:new URL('./fixtures/history/v25-quote-registry.mjs',import.meta.url).href});
  const databaseId=storage.status.databaseId;assert.equal(storage.status.schemaVersion,25);
- await storage.execute('identity.initialize',{ownerId:owner,at:Date.now()});
- const {contactId:contact}=await storage.execute('fixture.seedIdentityV25',{ownerId:owner});
- const token=await storage.execute('identity.eligibility',{ownerId:owner,contactId:contact}),scope=await storage.execute('history.scope',{token}),legacyChannel=channel({records});
+ const {contactId:contact,token,scope}=await storage.execute('fixture.seedIdentityV25',{ownerId:owner});
+ const legacyChannel=channel({records});
  const report=await legacyChannel.inspect(scope),target=await legacyChannel.target(scope);
- assert.equal(await storage.execute('history.preflightContinuity',{token,target,report}),true);
- const goal=await storage.execute('history.begin',{token,target,report,id:randomUUID(),at:Date.now()});
+ const goal=await storage.execute('fixture.seedGoalV25',{token,target,report});
  const seeded=await storage.execute('fixture.seedHistoryV25',{token,goalId:goal.id,target,records}),carrier=seeded.find(row=>row.originalType==='244813135921');
  await storage.execute('fixture.seedQuoteV25',{ownerId:owner,contactId:contact,messageId:carrier.id,recordId:carrier.recordId,sourceGeneration:'source-1',
   quoteId:'10000000-0000-4000-8000-000000000001',attemptId:'10000000-0000-4000-8000-000000000002',version:'quote-v1',replyText:'迁移后保留回复',referencedText:'迁移后保留引用'});
+ const legacy=await storage.execute('fixture.inspectSchemaV25',{});assert.equal(legacy.quotes,1n);assert.equal(legacy.attempts,1n);
+ assert.ok(!legacy.tables.includes('source_proof'),'旧结构不应被新事实表垫底');
+ assert.ok(['history_continuity_fence','history_continuity_scope','history_guard_lease'].every(name=>legacy.tables.includes(name)));
  await storage.close();storage=undefined;
  storage=await SqliteStorage.open({...databaseOptions,intent:'open',expectedDatabaseId:databaseId});
  contacts=new SqliteContactService(storage,owner,metadata());history=new SqliteHistoryService(storage,contacts,channel({records}));await contacts.initialize();

@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import {fixture,owner,record,report,target,buildCandidate} from '../../sqlite-clear-support.mjs';
 import {SqliteHistoryRecertifyService} from '../../../src/history/sqlite/recertify.ts';
 
@@ -26,6 +27,7 @@ export async function recertifySetup(t,options={}){
  await f.current.history.synchronize(f.contactA);await f.current.history.synchronize(f.contactB);
  const old=await f.current.contacts.eligibility(f.contactA),saved=(await f.current.history.readChat(f.contactA)).messages[0];
  await f.current.storage.execute('history.markContinuityLost',{token:old});
+ const initial=await f.current.storage.execute('fixture.recertifySnapshot',{ownerId:owner,contactId:f.contactA});assert.equal(initial.proofs.length,1);assert.equal(initial.proofs[0].state,'needs_confirmation');assert.deepEqual(initial.legacyTables,[]);
  reader.state.channels.length=0;reader.state.readIds=[];
  const service=new SqliteHistoryRecertifyService(f.current.storage,f.current.contacts,reader.create,f.current.holders,{stopHistory:id=>f.current.history.stop(id),...options});t.after(()=>service.close());
  return Object.assign(f,{old,saved,reader,channels:reader.state.channels,service,snapshot:()=>f.current.storage.execute('fixture.recertifySnapshot',{ownerId:owner,contactId:f.contactA})});

@@ -18,7 +18,7 @@ function groupedReferences(refs:readonly MessageSourceReference[]){
  return groups.values();
 }
 export type SourceEligibility=(tx:StorageTransaction,ref:MessageSourceReference)=>void;
-const eligibleQuery=(projection:string,scopeCTE=currentSourceScopeCTE,runtimeGuard=true)=>`WITH ${scopeCTE},wanted AS (
+const eligibleQuery=(projection:string,scopeCTE=currentSourceScopeCTE)=>`WITH ${scopeCTE},wanted AS (
  SELECT json_extract(value,'$[0]') record_id,json_extract(value,'$[1]') message_id FROM json_each(?)
  ) SELECT ${projection} FROM wanted w WHERE EXISTS (SELECT r.id FROM capture_record r
  JOIN message m ON m.owner_id=r.owner_id AND m.contact_id=r.contact_id AND m.id=r.message_id
@@ -29,20 +29,19 @@ const eligibleQuery=(projection:string,scopeCTE=currentSourceScopeCTE,runtimeGua
  WHERE r.owner_id=? AND r.contact_id=? AND r.id=w.record_id AND r.message_id=w.message_id
  AND r.state='normalized' AND r.availability='available' AND m.availability='available'
  AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
- AND NOT EXISTS (SELECT 1 FROM history_continuity_fence f WHERE f.owner_id=m.owner_id AND f.contact_id=m.contact_id)
- ${runtimeGuard?"AND NOT EXISTS (SELECT 1 FROM history_guard_lease g JOIN database_instance d ON d.slot=1 WHERE g.owner_id=m.owner_id AND g.contact_id=m.contact_id AND (g.state<>'active' OR g.runtime_id<>d.runtime_id))":''}
+ AND EXISTS (SELECT 1 FROM source_proof f WHERE f.owner_id=m.owner_id AND f.contact_id=m.contact_id AND f.state='ok')
  AND m.binding_id=g.binding_id AND p.state='active' AND o.state='active' AND ${currentSourcePredicate()})`;
 
 /** 同一事务内按实际来源联系人批量核验，避免每条消息重新解析同一来源范围。 */
 /** 仅可信装配使用；请求入口不接收来源资格策略。 */
-export function sourceEligibility(scopeCTE:string,runtimeGuard:boolean):(tx:StorageTransaction,refs:readonly MessageSourceReference[])=>void {return (tx,refs)=>{
+export function sourceEligibility(scopeCTE:string):(tx:StorageTransaction,refs:readonly MessageSourceReference[])=>void {return (tx,refs)=>{
  for(const group of groupedReferences(refs)){
   const wanted=[...group.refs.values()];
-  const valid=tx.get(eligibleQuery('count(*) AS valid_count',scopeCTE,runtimeGuard),[group.ownerId,group.contactId,group.contactId,JSON.stringify(wanted),group.ownerId,group.contactId]);
+  const valid=tx.get(eligibleQuery('count(*) AS valid_count',scopeCTE),[group.ownerId,group.contactId,group.contactId,JSON.stringify(wanted),group.ownerId,group.contactId]);
   if(valid?.valid_count!==BigInt(wanted.length))throw new StorageFailure('history_source_not_available');
  }
 };}
-export const assertSourcesEligibility=sourceEligibility(currentSourceScopeCTE,true);
+export const assertSourcesEligibility=sourceEligibility(currentSourceScopeCTE);
 
 /** 统计可用内容时保留批次中合法的实际来源；部分失效不掩盖其他消息。 */
 export function eligibleSourceReferences(tx:StorageTransaction,refs:readonly MessageSourceReference[]):MessageSourceReference[]{

@@ -83,7 +83,7 @@ test('候选查询使用现有索引，不扫描消息、媒体或授权表', {t
  assert.ok(list.some(row=>/message_contact_display/.test(row.detail)),asText(list));
  for(const row of list)assert.ok(!/\bSCAN (message|media_file|read_grant|binding_verification|channel_account|channel_conversation|conversation_binding)\b/.test(row.detail),row.detail);
  const state=await f.current.storage.execute('fixture.explain',{sql:recertifyCandidateStateSql,params:[owner,f.contactA]});
- for(const row of state)assert.ok(!/\bSCAN (message|media_file|read_grant|history_continuity_fence)\b/.test(row.detail),row.detail);
+ for(const row of state)assert.ok(!/\bSCAN (message|media_file|read_grant|source_proof)\b/.test(row.detail),row.detail);
  const counts=await f.current.storage.execute('fixture.explain',{sql:recertifyCandidateCountsSql,params:[owner,f.contactA]});
  assert.ok(counts.some(row=>/SEARCH m USING INDEX message_contact_display/.test(row.detail)),asText(counts));
  for(const row of counts)assert.ok(!/\bSCAN (message|media_file)\b/.test(row.detail),row.detail);

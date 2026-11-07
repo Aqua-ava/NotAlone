@@ -1,10 +1,10 @@
+import {putScope} from '../../../src/history/sqlite/source-proof.ts';
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 import {currentSourceScopeCTE,savedSourceScopeCTE} from '../../../src/history/sqlite/current-scope.ts';
 export const registry={...base,actions:[...base.actions,
  {name:'fixture.statusFallback',mode:'write',retryBusy:false,execute(tx,i){
-  const row=tx.get('SELECT conversation_id FROM conversation_binding WHERE owner_id=? AND id=?',[i.ownerId,i.bindingId]);
-  tx.run('INSERT INTO history_continuity_scope(owner_id,contact_id,conversation_id,source_generation,tables_json) VALUES(?,?,?,?,?)',
-   [i.ownerId,i.contactId,row.conversation_id,'source-1',JSON.stringify({partitions:['shard-a'],tables:[['shard-a','table-instance-1']]})]);
+  const row=tx.get('SELECT b.conversation_id,c.account_id,a.external_key account_key FROM conversation_binding b JOIN channel_conversation c ON c.owner_id=b.owner_id AND c.id=b.conversation_id JOIN channel_account a ON a.owner_id=c.owner_id AND a.id=c.account_id WHERE b.owner_id=? AND b.id=?',[i.ownerId,i.bindingId]);
+  putScope(tx,{owner_id:i.ownerId,contact_id:i.contactId,account_id:row.account_id,conversation_id:row.conversation_id,source_generation:'source-1'},JSON.stringify({accountKey:row.account_key,partitions:['shard-a'],tables:[['shard-a','table-instance-1']]}),{state:'ok'});
  }},
  {name:'fixture.statusRecertification',mode:'write',retryBusy:false,execute(tx,i){
   tx.run('DELETE FROM history_source_recertification');

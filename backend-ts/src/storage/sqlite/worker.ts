@@ -45,6 +45,11 @@ try {
   const files = controlledFiles(options.userData, options.intent === 'create');
   db = new DatabaseSync(files.database, { enableForeignKeyConstraints: true, allowExtension: false, timeout: 100 });
   const connection = db;
+  // 结构迁移为既有删除目标重建固定摘要；不接受扩展模块或任意脚本。
+  connection.function('notalone_sha256',{deterministic:true},value=>{
+    if(typeof value!=='string'||value.length>1024*1024)throw new StorageFailure('storage_value_invalid');
+    return sha256(value);
+  });
   connection.exec('PRAGMA foreign_keys=ON; PRAGMA trusted_schema=OFF; PRAGMA synchronous=FULL; PRAGMA secure_delete=ON; PRAGMA temp_store=MEMORY;');
   const bindings = (values: SQLInputValue[]) => {
     if (values.some(v => typeof v === 'number' && (!Number.isFinite(v) || (Number.isInteger(v) && !Number.isSafeInteger(v))))) throw new StorageFailure('storage_value_invalid');
@@ -143,6 +148,8 @@ try {
   const warnDiagnostic=()=>{if(!diagnosticWarning){diagnosticWarning=true;console.error('history_continuity_diagnostic_unavailable');}};
   try{diagnosticLog.prune();}catch{warnDiagnostic();}
   const actions = new Map(registry.actions.map(a => [a.name, a]));
+  const runtimeValues=new Map<string,unknown>();
+  const removedRuntimeValue=Symbol('removed-runtime-value');
   port.postMessage({value: status});
   port.on('message', ({id, name, input, lease}) => {
     // 串行队列等待不消耗动作预算；主线程收到开始确认后监督本次同步执行。
@@ -173,6 +180,7 @@ try {
       let result: unknown;
       for (let attempt = 0; ; attempt++) {
         const diagnostics:StorageDiagnostic[]=[];
+        const runtimeOverlay=new Map<string,unknown>();
         try {
           const invoke = () => {
             assertLease(lease);
@@ -187,7 +195,23 @@ try {
                 tempStore: get('PRAGMA temp_store')!.temp_store as bigint, secureDelete: get('PRAGMA secure_delete')!.secure_delete as bigint,
                 ...files.inspectSidecars()}; },
             };
+            const runtimeKey=(namespace:string,key:string)=>{
+              permitted();
+              if(namespace!=='history-source-guard'||typeof key!=='string'||!key||key.length>1024||/[\u0000-\u001f\u007f]/.test(key))throw new StorageFailure('runtime_state_invalid');
+              return JSON.stringify([namespace,key]);
+            };
+            const runtimeMutation=(namespace:string,key:string,value:unknown)=>{
+              const scoped=runtimeKey(namespace,key);
+              if(action.mode!=='write')throw new StorageFailure('runtime_transaction_invalid');
+              runtimeOverlay.set(scoped,value===removedRuntimeValue?value:structuredClone(value));
+            };
             const tx: StorageTransaction = {
+              runtimeGet<T>(namespace:string,key:string):T|undefined {
+                const scoped=runtimeKey(namespace,key),value=runtimeOverlay.has(scoped)?runtimeOverlay.get(scoped):runtimeValues.get(scoped);
+                return value===removedRuntimeValue?undefined:structuredClone(value) as T|undefined;
+              },
+              runtimeSet(namespace,key,value){runtimeMutation(namespace,key,value);},
+              runtimeDelete(namespace,key){runtimeMutation(namespace,key,removedRuntimeValue);},
               recordDiagnostic(event) {
                 permitted();
                 if(action.mode!=='write'||diagnostics.length>=1024)throw new StorageFailure('diagnostic_transaction_invalid');
@@ -213,6 +237,8 @@ try {
           result = action.mode === 'maintenance' ? invoke() : transaction(action.mode === 'write', invoke);
           // WAL读事务内复核仍是旧快照；提交后新读提供返回前的租约检查点。
           if (action.mode === 'read') assertLease(lease);
+          // 本次尝试的SQL和结果复制均已成功；发布只含Map操作，失败或busy重试不留易失状态。
+          for(const [key,value] of runtimeOverlay){if(value===removedRuntimeValue)runtimeValues.delete(key);else runtimeValues.set(key,value);}
           // 事务已提交才落盘；诊断不可用不能反转已写围栏或改为允许读取。
           for(const event of diagnostics)try{
             diagnosticLog.append({entry:name,contactPrefix:event.contactPrefix,branch:event.branch,...(event.errorCode?{errorCode:event.errorCode}:{})});

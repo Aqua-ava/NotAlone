@@ -83,7 +83,7 @@ async function fixture(t,sharedMode=false,storageOptions={},contactCount=2,manif
  await writeFile(executable,script,{mode:0o700});const wcdb=Buffer.from('synthetic-channel-WCDB');await writeFile(join(artifact,'lib','libWCDB.dylib'),wcdb);
  const manifest={formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',cliSha256:hash(script),wcdbSha256:hash(wcdb),signing:'ad-hoc-development',realWechatVerified:false,...manifestExtra};
  await writeFile(manifestPath,JSON.stringify(manifest));
- const storage=await SqliteStorage.open({userData:join(root,'state'),intent:'create',role:'test',...storageOptions});
+ const storage=await SqliteStorage.open({userData:join(root,'state'),intent:'create',role:'test',registryModule:new URL('./fixtures/history-parked-registry.mjs',import.meta.url).href,...storageOptions});
  const contacts=new SqliteContactService(storage,owner,{account:async()=>({externalKey:account,identityScheme:'wechat.account.v1',sourceGeneration:generation,assurance:'verified',supportProfile:'synthetic-metadata-v1'}),sessions:async()=>[conversation,...(sharedMode?Array.from({length:contactCount-1},(_,index)=>index===0?'synthetic-second':`synthetic-friend-${index+2}`):[])].map(externalKey=>({externalKey,displayName:externalKey,kind:'private',identityAssurance:'verified'}))});
  await contacts.initialize();const candidate=await contacts.detectAccount();await contacts.confirmAccount(candidate.candidate_token);await contacts.setReading(true);
  const snapshot=await contacts.candidates(true);await contacts.confirm(snapshot.snapshot_token,snapshot.sessions.map(s=>({locator:s.username,observed_display_name:s.display_name,expected_selection_generation:s.selection_generation})));
@@ -93,6 +93,8 @@ async function fixture(t,sharedMode=false,storageOptions={},contactCount=2,manif
  const scope=()=>contacts.eligibility(binding.contact_id).then(token=>({token,accountKey:account,conversationKey:conversation}));
  return {root,artifact,executable,manifestPath,manifest,planFile,logFile,pidFile,storage,contacts,history,binding,bindings,scope,channels,shared,setPlan:plan=>writeFile(planFile,JSON.stringify({mode:'supported',serverId:'0',...plan}))};
 }
+const proofStates=f=>f.storage.execute('fixture.sourceProofStates',{ownerId:owner});
+const proofState=async(f,contactId)=>(await proofStates(f)).find(row=>row.contact_id===contactId)?.state;
 async function requests(file){try{return (await readFile(file,'utf8')).trim().split('\n').map(JSON.parse);}catch(error){if(error.code==='ENOENT')return [];throw error;}}
 function noProcess(pid){assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});}
 async function waitForOperation(file,operation){return new Promise((resolve,reject)=>{
@@ -233,14 +235,22 @@ test('正式渠道拒绝带额外字段的边界结果及超限tail，且坏页�
   await f.setPlan({resumeCursor:'tail-1',capabilities:capabilities({incrementalTail:'supported'}),tailRows:excessive});
   await assert.rejects(f.history.synchronizeIncremental(contact),{code:'history_protocol_invalid'});assert.equal((await f.history.read(contact)).messages.length,2);
   const rows=await requests(f.logFile);assert.equal(rows.filter(request=>request.op==='tail').length,1);assert.equal(f.channels.length,1);noProcess(Number(await readFile(f.pidFile,'utf8')));
-  await assert.rejects(f.history.synchronize(contact),{code:'history_source_continuity_unverified'});assert.equal(f.channels.length,1);
+  assert.equal(await proofState(f,contact),'ok','坏协议页不篡改已接纳来源事实');
+  const before=(await requests(f.logFile)).filter(row=>row.op==='resolve').length;
+  assert.equal((await f.history.synchronize(contact)).phase,'complete');assert.equal(f.channels.length,2);
+  assert.ok((await requests(f.logFile)).filter(row=>row.op==='resolve').length>before,'新进程必须重新核验账号会话来源');
+  assert.equal((await f.history.read(contact)).messages.length,2);
  }
 });
 
-test('合成原生进程意外退出后，持久停读且不启动新进程',async t=>{
+test('合成原生进程意外退出保留本机事实，新读取核验后恢复且不重复消息',async t=>{
  const f=await fixture(t),contact=f.binding.contact_id;await f.history.synchronize(contact);
- const pid=Number(await readFile(f.pidFile,'utf8'));process.kill(pid,'SIGKILL');await f.channels[0].guardSession.loss;
- await assert.rejects(f.history.synchronize(contact),{code:'history_source_continuity_unverified'});assert.equal(f.channels.length,1);noProcess(pid);
+ const before=(await f.history.read(contact)).messages.map(row=>row.id),pid=Number(await readFile(f.pidFile,'utf8'));process.kill(pid,'SIGKILL');await f.channels[0].guardSession.loss;
+ await f.history.stop(contact);noProcess(pid);assert.equal(await proofState(f,contact),'ok');assert.equal(await f.history.bodyAvailable([contact]),false);
+ const resolves=(await requests(f.logFile)).filter(row=>row.op==='resolve').length;
+ assert.equal((await f.history.synchronize(contact)).phase,'complete');assert.equal(f.channels.length,2);
+ assert.ok((await requests(f.logFile)).filter(row=>row.op==='resolve').length>resolves);assert.notEqual(Number(await readFile(f.pidFile,'utf8')),pid);
+ assert.deepEqual((await f.history.read(contact)).messages.map(row=>row.id),before);
 });
 
 test('无显式制品保持unverified，manifest缺失/链接/过大或制品身份不符均不启动进程',async t=>{
@@ -409,7 +419,7 @@ test('共享独立通道重复关闭不能清除后来联系人的选择',async 
 });
 
 
-test('关闭已park联系人不影响当前联系人，原生停止使所有轻量证明失效',async t=>{
+test('关闭已park联系人不影响当前联系人，原生停止只结束轻量守卫且保留来源事实',async t=>{
  const f=await fixture(t,true),[a,b]=f.bindings;
  await f.setPlan({capabilities:Object.fromEntries([...statusCapabilityKeys,'incrementalTail'].map(key=>[key,'supported']))});
  await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
@@ -421,7 +431,7 @@ test('关闭已park联系人不影响当前联系人，原生停止使所有轻�
  await f.history.synchronize(a.contact_id);
  await f.shared.stop();
  assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),false);
- for(const binding of [a,b])assert.equal((await f.history.coverage(binding.contact_id)).failureCode,'history_source_continuity_unverified');
+ for(const binding of [a,b]){assert.equal((await f.history.coverage(binding.contact_id)).failureCode,null);assert.equal(await proofState(f,binding.contact_id),'ok');}
  await f.history.synchronize(a.contact_id);assert.equal((await f.history.coverage(a.contact_id)).phase,'complete');
 });
 
@@ -520,7 +530,7 @@ test('反复切换仅保留当前联系人轻量证明订阅，关闭后无遗�
  await f.history.close();assert.equal(subscriptions,0);
 });
 
-test('共享parked联系人重新查证期间原来源保持可用，实际原生失证仍撤销证明',async t=>{
+test('共享parked联系人重新查证和普通进程停止均保留本机来源，真实身份变化才撤销证明',async t=>{
  const f=await fixture(t,true,{registryModule:new URL('./fixtures/history-parked-registry.mjs',import.meta.url).href}),[a,b]=f.bindings;
  await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
  const execute=f.storage.execute.bind(f.storage);let checked=0;
@@ -534,23 +544,27 @@ test('共享parked联系人重新查证期间原来源保持可用，实际原�
  finally{f.storage.execute=execute;}
  assert.equal(await execute('fixture.currentSourceValid',{ownerId:owner,contactId:a.contact_id}),2);
  await f.shared.stop();
+ assert.equal(await execute('fixture.currentSourceValid',{ownerId:owner,contactId:a.contact_id}),2);
+ assert.equal(await proofState(f,a.contact_id),'ok');assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),false);
+ const before=await countOps(f,'page');await f.setPlan({mode:'wrong-conversation'});await assert.rejects(f.history.synchronize(a.contact_id),{code:'history_scope_changed'});
+ assert.equal(await countOps(f,'page'),before);assert.equal(await proofState(f,a.contact_id),'needs_confirmation');
  await assert.rejects(execute('fixture.currentSourceValid',{ownerId:owner,contactId:a.contact_id}),{code:'history_source_not_available'});
- assert.equal((await f.history.coverage(a.contact_id)).failureCode,'history_source_continuity_unverified');
 });
 
-for(const mode of ['wrong-account','wrong-generation'])test(`parked联系人重新查证发现${mode}时旧来源立即失效且不读取正文`,async t=>{
+for(const mode of ['wrong-account','wrong-conversation','wrong-generation'])test(`parked联系人重新查证发现${mode}时旧来源立即失效且不读取正文`,async t=>{
  const f=await fixture(t,true,{registryModule:new URL('./fixtures/history-parked-registry.mjs',import.meta.url).href}),[a,b]=f.bindings;
  await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
  const before=(await requests(f.logFile)).filter(row=>row.op==='page').length;
- await f.setPlan({mode});await assert.rejects(f.history.synchronize(a.contact_id));
+ await f.setPlan({mode});await assert.rejects(f.history.synchronize(a.contact_id),{code:mode==='wrong-account'?'history_account_changed':mode==='wrong-conversation'?'history_scope_changed':'history_source_changed'});
  assert.equal((await requests(f.logFile)).filter(row=>row.op==='page').length,before);
  await assert.rejects(f.storage.execute('fixture.currentSourceValid',{ownerId:owner,contactId:a.contact_id}),{code:'history_source_not_available'});
+ assert.equal(await proofState(f,a.contact_id),'needs_confirmation');assert.equal(await proofState(f,b.contact_id),'ok','同一共享进程关闭不证明另一联系人的真实来源改变');
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
 
 // 单图失败的影响范围：图片请求与历史读取共用同一原生进程。声明了单图隔离的制品只拒绝这一次请求；
-// 旧制品（对照组）仍会关闭进程，使所有已读完联系人退回“来源待重验”。以下全部经过真实 SharedWechatClient、
+// 旧制品（对照组）仍会关闭进程，使所有原生读取守卫失效，但不据此否定已接纳本机来源。以下全部经过真实 SharedWechatClient、
 // WechatHistoryChannel、SqliteHistoryService 与 SQLite，原生进程为合成子进程。
 const isolatedImageManifest={originalImageProtocol:'wechat-original-image-v1',originalImageQualityProof:'wechat-cdn-big-hd-exact-content-v4',imageOpenIsolation:'wechat-image-open-local-v1'};
 const legacyImageManifest={originalImageProtocol:'wechat-original-image-v1',originalImageQualityProof:'wechat-cdn-big-hd-exact-content-v4'};
@@ -595,7 +609,7 @@ test('一张图片取不到时共享进程保留，已读完联系人的历史�
  assert.equal((await f.history.coverage(a.contact_id)).phase,'complete');
 });
 
-test('对照：未声明单图隔离的旧制品遇到同一次图片失败，会让全部已读完联系人退回来源待重验',async t=>{
+test('对照：旧制品单图失败关闭所有守卫，已接纳来源保留且下次读取重新核验',async t=>{
  const f=await fixture(t,true,{},2,legacyImageManifest),[a,b]=f.bindings;
  await f.setPlan({capabilities:supportedCapabilities()});
  await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
@@ -606,11 +620,11 @@ test('对照：未声明单图隔离的旧制品遇到同一次图片失败，�
  assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),false,'旧制品：一张图失败使两位联系人的正文资格同时失效');
  for(const binding of [a,b]){
   const coverage=await f.history.coverage(binding.contact_id);
-  assert.equal(coverage.phase,'incomplete');assert.equal(coverage.failureCode,'history_source_continuity_unverified');
+  assert.equal(coverage.phase,'complete');assert.equal(coverage.failureCode,null);assert.equal(await proofState(f,binding.contact_id),'ok');
  }
 });
 
-test('来源类图片错误仍终止读取：同一流程下关闭进程且全部联系人退回待重验',async t=>{
+test('来源类图片错误终止共享读取，逐联系人重新核验后才据真实冲突围栏',async t=>{
  const f=await fixture(t,true,{},2,isolatedImageManifest),[a,b]=f.bindings;
  await f.setPlan({capabilities:supportedCapabilities()});
  await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
@@ -618,7 +632,12 @@ test('来源类图片错误仍终止读取：同一流程下关闭进程且全�
  await f.setPlan({capabilities:supportedCapabilities(),imageError:'history_source_changed'});
  assert.deepEqual(await failOneImage(f,a),{code:'history_source_changed',stopped:'history_source_changed'});
  assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});
- for(const binding of [a,b])assert.equal((await f.history.coverage(binding.contact_id)).phase==='complete',false,'真实来源错误不得被隔离为单图失败');
+ assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),false,'来源错误仍终止整个原生读取进程');
+ for(const binding of [a,b])assert.equal(await proofState(f,binding.contact_id),'ok','共享错误码本身不能证明空闲联系人的来源已变');
+ const pages=await countOps(f,'page');await f.setPlan({capabilities:supportedCapabilities(),mode:'wrong-account'});
+ await assert.rejects(f.history.synchronize(a.contact_id),{code:'history_account_changed'});assert.equal(await countOps(f,'page'),pages);
+ assert.equal(await proofState(f,a.contact_id),'needs_confirmation');assert.equal(await proofState(f,b.contact_id),'ok');
+ await f.setPlan({capabilities:supportedCapabilities()});assert.equal((await f.history.synchronize(b.contact_id)).phase,'complete');
 });
 
 for(const contactCount of [10,100])test(`${contactCount}位联系人：同一组图片失败序列下，隔离只增加被拒绝的图片请求，不触发任何联系人的历史重建`,{timeout:120000},async t=>{
@@ -649,12 +668,15 @@ for(const contactCount of [10,100])test(`对照 ${contactCount}位联系人：�
  const after=await loadMetrics(f,contacts);
  t.diagnostic(JSON.stringify({contacts:contactCount,imageFailures:1,before,after}));
  assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});
- assert.deepEqual([after.complete,after.unverified],[0,contactCount],'一张图失败使全部联系人退回待重验');
+ assert.deepEqual([after.complete,after.unverified],[contactCount,0],'守卫丢失不改写已保存的来源资格');
+ assert.equal(await f.history.bodyAvailable(contacts.map(binding=>binding.contact_id)),false);
+ assert.equal((await proofStates(f)).filter(row=>row.state==='ok').length,contactCount);
+ assert.equal(after.pages,before.pages,'进程退出不能偷偷重读历史');
 });
 
 
 // 已保存的历史进度与当前来源资格分开表示：saved_history_complete 只读展示，不改变 phase、正文资格或任何读取判断。
-test('历史读完后连接失守卫：saved_history_complete 保持为真，phase 仍表示当前资格，正文资格不因展示字段恢复',async t=>{
+test('历史读完后连接失守卫保留已保存覆盖，外部正文资格仍须重新核验',async t=>{
  const f=await fixture(t,true),[a,b]=f.bindings;
  await f.setPlan({capabilities:supportedCapabilities()});
  const notStarted=await f.history.coverage(a.contact_id);
@@ -669,11 +691,11 @@ test('历史读完后连接失守卫：saved_history_complete 保持为真，pha
  assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),false);
  for(const binding of [a,b]){
   const row=await f.history.coverage(binding.contact_id);
-  assert.deepEqual([row.phase,row.failureCode,row.savedHistoryComplete],['incomplete','history_source_continuity_unverified',true],'保存的历史仍显示完成，但当前资格待重验');
+  assert.deepEqual([row.phase,row.failureCode,row.savedHistoryComplete],['complete',null,true],'已保存历史和来源事实不因易失守卫消失而回退');
  }
  const stale=live(await Promise.all([a,b].map(binding=>f.history.coverage(binding.contact_id))));
  assert.deepEqual(stale.cli_history_coverages.map(row=>[row.phase,row.failure_code,row.saved_history_complete]),
-  [['incomplete','history_source_continuity_unverified',true],['incomplete','history_source_continuity_unverified',true]]);
+  [['complete',null,true],['complete',null,true]]);
  assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),false,'展示字段不使正文重新可用');
  // 正式重验后恢复，两个字段一致。
  await f.history.synchronize(a.contact_id);

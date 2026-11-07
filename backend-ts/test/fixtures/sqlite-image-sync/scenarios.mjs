@@ -107,6 +107,10 @@ class Seeder{
   const grantId=`synthetic-grant-${tag}`;
   db.prepare('INSERT INTO read_grant(owner_id,id,contact_id,binding_id,verification_id,selection_generation,granted_at,revoked_at,reason) VALUES(?,?,?,?,?,?,?,NULL,NULL)')
    .run(owner,grantId,contactId,bindingId,verificationId,1,SCENARIO_NOW);
+  const accountKey=db.prepare('SELECT external_key FROM channel_account WHERE owner_id=? AND id=?').get(owner,account.id).external_key;
+  const tables=JSON.stringify({accountKey,partitions:['synthetic-partition'],tables:[['synthetic-partition','synthetic-table']],checkedPartitions:['synthetic-partition']});
+  db.prepare("INSERT INTO source_proof(owner_id,contact_id,account_key,conversation_id,conversation_key,source_generation,tables_json,state,checked_at) VALUES(?,?,?,?,?,? ,?,'ok',?)")
+   .run(owner,contactId,accountKey,conversationId,`synthetic-conversation-${tag}`,'source-1',tables,SCENARIO_NOW);
   const goalId=`synthetic-goal-${tag}`;
   db.prepare(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,cursor,state,coverage_state,completed_partitions,failure_code,created_at)
    VALUES(?,?,?,?,?,0,0,'history','private-history-v1','synthetic-fixed','{}','{}','{}',NULL,'complete','complete','[]',NULL,?)`)

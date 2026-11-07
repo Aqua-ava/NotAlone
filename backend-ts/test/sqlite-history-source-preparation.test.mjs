@@ -45,7 +45,8 @@ test('准备来源复用活守卫，正常释放后只续证元数据且不重�
  await history.prepareSource(contactId);
  assert.deepEqual({created:state.created,inspections:state.inspections,pages:state.pages,tails:state.tails},before);
  await history.stop(contactId);
- await assert.rejects(f.storage.execute('fixture.assertSource',{owner_id:owner,contact_id:contactId,record_id:source,message_id:(await history.read(contactId)).messages[0].id}),{code:'history_source_not_available'});
+ assert.equal(await f.storage.execute('fixture.assertSource',{owner_id:owner,contact_id:contactId,record_id:source,message_id:(await history.read(contactId)).messages[0].id}),true,'正常释放只结束本次外部读取，本机来源保持合格');
+ assert.equal(await history.bodyAvailable([contactId]),false,'新正文读取仍须核验并建立本次守卫');
  await history.prepareSource(contactId);
  assert.equal(state.created,before.created+1);assert.equal(state.inspections,before.inspections+1);
  assert.equal(state.pages,before.pages);assert.equal(state.tails,before.tails);

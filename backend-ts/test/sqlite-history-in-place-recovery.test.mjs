@@ -37,7 +37,7 @@ test('围栏元数据一致时原地恢复，保持绑定且仅续读最大 loca
  assert.equal(reader.state.positions[0].maxLocalId,'2');
  assert.equal((await f.current.history.readChat(f.contactA)).messages.length,3);
  const snapshot=await f.current.storage.execute('fixture.recertifyRestartSnapshot',{ownerId:owner,contactId:f.contactA});
- assert.equal(snapshot.fences.length,0);
+ assert.equal(snapshot.fences.length,0);assert.equal(snapshot.proofs.length,1);assert.equal(snapshot.proofs[0].state,'ok');assert.deepEqual(snapshot.legacyTables,[]);
  assert.deepEqual(await f.current.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
@@ -56,7 +56,7 @@ for(const [name,change] of [
  await f.current.storage.execute('history.markContinuityLost',{token:before});f.channel=reader.create();await restart(f,t);change(reader);reader.state.readIds=[];
  await assert.rejects(f.current.history.synchronize(f.contactA));
  const after=await f.current.storage.execute('fixture.recertifyRestartSnapshot',{ownerId:owner,contactId:f.contactA});
- assert.equal(after.fences.length,1);assert.equal((await f.current.contacts.eligibility(f.contactA)).binding_id,before.binding_id);assert.deepEqual(reader.state.readIds,[]);
+ assert.equal(after.fences.length,1);assert.equal(after.proofs.length,1);assert.equal(after.proofs[0].state,'needs_confirmation');assert.deepEqual(after.legacyTables,[]);assert.equal((await f.current.contacts.eligibility(f.contactA)).binding_id,before.binding_id);assert.deepEqual(reader.state.readIds,[]);
  assert.equal(after.messages.length,2);
 });
 

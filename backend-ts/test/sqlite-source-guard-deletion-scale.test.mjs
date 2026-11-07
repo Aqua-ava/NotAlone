@@ -1,0 +1,23 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,realpath,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {SqliteStorage} from '../src/storage/sqlite/client.ts';
+import {DeletionService} from '../src/storage/sqlite/deletion/service.ts';
+import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
+import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
+const registryModule=new URL('./fixtures/history/guard-deletion-scale-registry.mjs',import.meta.url).href;
+for(const withGuards of [false,true])test(`1025位联系人整账号删除不受易失守卫数量限制（${withGuards?'有':'无'}守卫）`,async t=>{
+ const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-guard-delete-scale-')));
+ const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test',registryModule});
+ t.after(async()=>{await storage.close();await rm(root,{recursive:true,force:true});});
+ const count=1025,ownerId=await storage.execute('fixture.seedGuardContacts',{count});
+ if(withGuards)for(let start=0;start<count;start+=256)await storage.execute('fixture.seedGuardBatch',{start,end:Math.min(count,start+256)});
+ assert.deepEqual(await storage.execute('fixture.guardScaleSnapshot',{count}),{guards:withGuards?count:0,contacts:BigInt(count),active:BigInt(count),deleted:0n});
+ const deletion=new DeletionService(storage,new ActiveHolders(),new ManagedFiles(root));
+ const op=await deletion.plan({ownerId,requestKey:'synthetic-scale-delete',scope:{kind:'account'}});
+ assert.equal((await deletion.advance(op)).state,'completed');
+ assert.deepEqual(await storage.execute('fixture.guardScaleSnapshot',{count}),{guards:0,contacts:BigInt(count),active:0n,deleted:BigInt(count)});
+ assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
