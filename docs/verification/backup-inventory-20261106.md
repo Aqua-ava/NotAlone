@@ -184,3 +184,6 @@ before-quote-tail-v2-20261101.sqlite、before-quote-tail-sync-20261101.sqlite、
 - 残留盘点：`backups/sqlite` 下现仅 3 份主快照——`before-bulk-contact-delete-20261107.sqlite`（3.0 GB，用户另会话批量删除流程生成，**尚未按 R5 登记**——该快照属另会话工作流，本任务不代登记，建议该任务收尾时补登記）、`before-fence-restart-fix-20261106.sqlite`（保留项，登记回滚点，其 -wal/-shm 随主保留）、`before-migration-43-20261107.sqlite`（本任务登记的迁移回滚点）。`notalone-pre-dedup-backups/` 空目录本轮未获批，保留。
 - `Cache/` 等可再生缓存本轮仍未清（App 当前未在跑，属 R7 每轮收尾动作）。
 - 废纸篓仍由用户自行清空。
+## 14. 收尾确认（2026-11-07，用户收口）
+
+用户在本轮收口消息中对 `before-image-reset-20261105.sqlite`（1.9 GB）给出二选一提示（认可清理／放回），由执行方决定。选择**认可清理**，依据：① 用户前轮"等迁移验证通过后再清"的条件已满足（迁移 43 当日应用并核对通过）；② 按"保留最近 2 份改动前快照"与现行登记，该快照被更晚的 `before-migration-43-20261107.sqlite`（本任务登记）与 `before-bulk-contact-delete-20261107.sqlite`（另会话）覆盖，且无任何文档登记其为回滚点；③ 该文件现位于 `~/.Trash`（未 rm），在用户清空废纸篓前均可随时放回。2026-11-07 收口时点核对：文件仍在废纸篓原位。如需放回请于清空废纸篓前提名。
