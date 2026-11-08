@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {historySingleTextCopyMigration} from '../src/history/sqlite/single-text-copy-schema.ts';
+import {historySingleTextCopyMigration} from '../src/storage/sqlite/migrations/history-single-text-copy.ts';
 
 test('旧来源正文完全一致时去重，不一致的历史内容及不可变保护保留',()=>{
  const db=new DatabaseSync(':memory:');

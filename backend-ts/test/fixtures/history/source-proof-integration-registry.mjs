@@ -1,5 +1,5 @@
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
-import {historySourceProofMigration} from '../../../src/history/sqlite/source-proof-schema.ts';
+import {historySourceProofMigration} from '../../../src/storage/sqlite/migrations/history-source-proof.ts';
 
 // 先在隔离注册表验证完整正式入口，再接入默认迁移。
 export const registry={...base,migrations:base.migrations.length===45?[...base.migrations,historySourceProofMigration(46)]:base.migrations,

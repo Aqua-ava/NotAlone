@@ -77,8 +77,6 @@ export interface HistoryRecoveryResult {
   target:HistoryTarget; cursor:string|null; anchors:readonly HistoryRecord[];
 }
 export interface HistoryChannel {
-  /** 释放当前会话读者，账号级活守卫继续保护已验证来源；仅共享适配器提供。 */
-  park?():Promise<void>;
   // 仅已实现持续原生守卫的渠道可声明；loss 在守卫无法继续时结束。
   readonly guardSession?: { readonly loss: Promise<void>; failureCode?():string|null };
   inspect(scope: HistoryScope, signal?: AbortSignal): Promise<HistorySupportReport>;
@@ -91,6 +89,8 @@ export interface HistoryChannel {
   readQuote?(scope: HistoryScope, target: HistoryTarget, source: HistorySource, signal?: AbortSignal): Promise<HistoryQuoteContent & {proofDigest: string}>;
   // 可选增量尾部能力：只由支持档声明 incrementalTail=supported 的已认证适配器提供。
   tail?(scope: HistoryScope, target: HistoryTarget, cursor: string, signal?: AbortSignal): Promise<HistoryTailPage>;
+  // 共享读取器换联系人前释放本通道选择并保留进程；重试幂等，失败须确认原进程停止。
+  park?(): Promise<void>;
   // 06 精确历史边界能力：仅已认证适配器提供，生产适配器不实现（空缺即拒绝）。
   boundarySnapshot?(scope: HistoryScope, signal?: AbortSignal): Promise<unknown>;
   close?(): Promise<void>;

@@ -1,7 +1,8 @@
+import {historicalSourceCopy} from './historical-source-copy.mjs';
 import {sourceDeletionIds} from '../../../src/history/sqlite/source-deletion.ts';
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 import {assertSourceEligibility} from '../../../src/history/sqlite/source.ts';
-export const registry={...base,actions:[...base.actions,
+export const registry={...base,actions:[...base.actions,historicalSourceCopy,
 {name:'diag.sourceIds',mode:'read',retryBusy:true,execute:(tx,i)=>sourceDeletionIds(tx,i.operation)},
 {name:'diag.mediaHead',mode:'write',retryBusy:true,execute(tx,i){tx.run("INSERT INTO message_media(owner_id,contact_id,message_id,media_generation,head_revision,state,created_at) VALUES(?,?,?,0,0,'active',?)",[i.ownerId,i.contactId,i.messageId,Date.now()]);return true;}},
 {name:'diag.dependencies',mode:'read',retryBusy:true,execute(tx,i){const count=(table)=>Number(tx.get(`SELECT count(*) n FROM ${table} WHERE owner_id=?`,[i.ownerId]).n);return Object.fromEntries(['reply_context','reply_context_item','reply_candidate_input_source','media_extraction_attempt','message_media'].map(table=>[table,count(table)]));}},

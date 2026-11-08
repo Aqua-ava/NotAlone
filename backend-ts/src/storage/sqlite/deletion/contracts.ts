@@ -5,9 +5,7 @@ export type DeletionScope =
   | { kind: 'contact' | 'contact_history'; contactId: string }
   | { kind: 'account' }
   | { kind: 'discussion'; contactId: string; discussionId: string }
-  | { kind: 'media_result_clear' | 'media_result_replace'; contactId: string; messageId: string }
-  // 系统维护范围（ADR-175）：修复同步后清理被取代绑定下无派生引用的副本，不是用户删除。
-  | { kind: 'superseded_history'; contactId: string };
+  | { kind: 'media_result_clear' | 'media_result_replace'; contactId: string; messageId: string };
 export type DeletionState = 'fenced' | 'cleaning' | 'verifying' | 'blocked' | 'completed';
 export interface DeletionOperation {
   operationId: string; ownerId: string; scope: DeletionScope; acceptedGeneration: bigint;

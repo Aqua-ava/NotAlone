@@ -24,7 +24,6 @@ import { createSyncControlBridge } from './sync-control';
 import type { DesktopSettings } from '../shared/desktop-bridge';
 import { createBackgroundTaskBridge } from './background-tasks';
 import { createHistoryClearBridge } from './history-clear';
-import { createHistoryRecertifyBatchBridge } from './history-recertify-batch';
 import { createContactHistoryBridge } from './contact-history';
 import { createContactDeletionBridge } from './contact-deletion';
 import { createQuarantineBridge } from './quarantine';
@@ -63,7 +62,6 @@ export function createAppBridge(renderer: RendererTransport, development = devel
     foreground: createForegroundBridge(renderer),
     syncControl: createSyncControlBridge(renderer),
     historyClear: createHistoryClearBridge(renderer),
-    ...(development ? { historyRecertifyBatch: createHistoryRecertifyBatchBridge(renderer) } : {}),
     contactHistory: createContactHistoryBridge(renderer),
     contactDeletion: createContactDeletionBridge(renderer),
     quarantine: createQuarantineBridge(renderer),

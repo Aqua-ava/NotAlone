@@ -9,8 +9,8 @@ import { useVisibleRefresh } from './use-visible-refresh';
 
 const initialSync: SyncControlState = { revision: -1, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
 
-export function ContactSyncSettings({ session, navigate, visible = true }: {
-  session: ContactSessionView; navigate: (page: ManagerPage) => void; visible?: boolean;
+export function ContactSyncSettings({ session, navigate, visible = true, sourceNeedsConfirmation = false }: {
+  session: ContactSessionView; navigate: (page: ManagerPage) => void; visible?: boolean; sourceNeedsConfirmation?: boolean;
 }) {
   const consent = useBindingConsent(session);
   const { state: sync } = useRevisionedSession(initialSync, window.notalone.syncControl);
@@ -64,6 +64,10 @@ export function ContactSyncSettings({ session, navigate, visible = true }: {
     <div className="bindings-toolbar"><h3>自动同步</h3>
       {readFailed && <button className="button" disabled={!!consent.state.busy || consent.state.phase === 'loading'}
         onClick={() => void refreshSaved()}>重试加载同步状态</button>}</div>
+    {sourceNeedsConfirmation && visible && <div>
+      <p role="status">自动同步已停止。请核对微信账号和历史数据位置；来源一致后会自动接续，不同来源不会自动接纳。</p>
+      <button className="button" onClick={() => navigate('sync')}>检查微信来源</button>
+    </div>}
     {selected ? <>
       <p>管理与 <b>{selected.displayName}</b> 的聊天同步。停止后，已保存的聊天和关系资料仍会保留。</p>
       {opening ? <p role="status">正在加载同步状态…</p> : selecting ? <BindingConsentPage contacts={session} consent={consent} navigate={navigate}

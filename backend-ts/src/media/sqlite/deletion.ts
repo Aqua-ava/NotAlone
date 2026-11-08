@@ -1,5 +1,4 @@
 import {sourceDeletionIds} from '../../history/sqlite/source-deletion.ts';
-import {isSupersededScope,supersededMessageIds} from '../../history/sqlite/superseded-deletion.ts';
 import { createHash } from 'node:crypto';
 import { sameFileIdentity } from '../../storage/sqlite/deletion/file-identity.ts';
 import { StorageFailure, type StorageRow, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
@@ -47,15 +46,6 @@ function select(tx: StorageTransaction, op: DeletionOperation): Selection {
   const {ownerId, scope} = op;
   const deletionSources=new Set(sourceDeletionIds(tx,op));
   if (scope.kind === 'discussion') return {attempts: [], files: [], heads: []};
-  // 被取代副本的媒体按消息束清理：附件、尝试与文件都挂在同一条消息上，不跨消息或跨联系人依赖。
-  if (isSupersededScope(scope)) {
-    const ids = supersededMessageIds(tx, op);
-    if (!ids.length) return {attempts: [], files: [], heads: []};
-    const json = JSON.stringify(ids), args = [ownerId, scope.contactId, json];
-    const within = 'owner_id=? AND contact_id=? AND message_id IN (SELECT value FROM json_each(?))';
-    return {attempts: tx.all(`SELECT * FROM media_extraction_attempt WHERE ${within}`, args), files: tx.all(`SELECT * FROM media_file WHERE ${within}`, args),
-      heads: tx.all(`SELECT * FROM message_media WHERE ${within}`, args)};
-  }
   const params = scope.kind === 'account' ? [ownerId] : [ownerId, scope.contactId];
   const clause = scope.kind === 'account' ? 'owner_id=?' : 'owner_id=? AND contact_id=?';
   const attempts = tx.all(`SELECT * FROM media_extraction_attempt WHERE ${clause}`, params);

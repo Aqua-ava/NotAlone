@@ -2,6 +2,7 @@ import {StorageFailure,type StorageDiagnostic,type StorageRow,type StorageTransa
 import type {ReadEligibility} from '../../contacts/sqlite/contracts.ts';
 import {removeSourceGuard} from './source-guard.ts';
 
+export const incompleteLegacySource='history_legacy_recertification_incomplete';
 export type SourceProofState='ok'|'needs_confirmation';
 export interface SourceProof extends StorageRow {
  owner_id:string;contact_id:string;account_key:string|null;conversation_id:string|null;conversation_key:string|null;

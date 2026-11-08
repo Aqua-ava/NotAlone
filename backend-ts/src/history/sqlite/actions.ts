@@ -1,7 +1,6 @@
 import {getProof,isSourceBlocked} from './source-proof.ts';
 import {getSourceGuard,putSourceGuard,loseSourceGuard} from './source-guard.ts';
 import {sourceRecoveryActions} from './source-recovery.ts';
-import {assertRecertifyAccess} from './recertify-access.ts';
 import { randomUUID } from 'node:crypto';
 import { sha256 } from '../../platform/sha256.ts';
 import { StorageFailure, type StorageAction, type StorageTransaction, type StorageRow } from '../../storage/sqlite/contracts.ts';
@@ -126,6 +125,7 @@ export const historyActions:StorageAction[]=[
   putSourceGuard(tx,{owner_id:token.owner_id,contact_id:token.contact_id,binding_id:token.binding_id,conversation_id:token.conversation_id,
    source_generation:token.source_generation,guard_id:i.guardId,runtime_id:String(runtime.runtime_id),state:'active'});return true;
  }),
+ action('history.bodyAvailable','read',(tx,i)=>{assertReadEligibility(tx,i.token);return getProof(tx,i.token.owner_id,i.token.contact_id)?.state==='ok';}),
  action('history.guardCheck','read',(tx,i)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);
   const guard=getSourceGuard(tx,token.owner_id,token.contact_id),runtime=tx.get('SELECT runtime_id FROM database_instance WHERE slot=1');
@@ -137,6 +137,7 @@ export const historyActions:StorageAction[]=[
   const token=i.token as ReadEligibility,guard=getSourceGuard(tx,token.owner_id,token.contact_id);
   if(!guard||guard.binding_id!==token.binding_id||guard.conversation_id!==token.conversation_id||guard.source_generation!==token.source_generation||guard.guard_id!==i.guardId)return false;
   loseSourceGuard(tx,token.owner_id,token.contact_id,{guardId:i.guardId});
+  // 与基线一致：非共享或正在读取的守卫确证失联时持久围栏（R02）；共享进程整体停止的空闲守卫先降级，由完整重验裁决。
   if(i.deferVerification!==true&&i.sourceLost===true)fenceContinuity(tx,token,'R02');return true;
  }),
  action('history.markContinuityLost','write',(tx,i)=>{const token=i.token as ReadEligibility;
@@ -160,10 +161,11 @@ export const historyActions:StorageAction[]=[
   const partialStates=durableHistory?"(state IN ('running','incomplete') OR (state='invalidated' AND failure_code='history_runtime_revalidated'))":"state IN ('running','incomplete')";
   const goal=tx.get(`SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND binding_id=? AND grant_id=?
    AND accepted_data_generation=? AND accepted_barrier_generation=? AND creation_no IS NOT NULL AND cursor_scope_digest IS NOT NULL
-   AND ((kind='incremental' AND cursor IS NOT NULL AND state IN ('running','incomplete'))
+   AND ((kind='incremental' AND cursor IS NOT NULL AND (state IN ('running','incomplete') OR (state='invalidated' AND failure_code='history_runtime_revalidated')))
    OR (kind='history' AND (state IN ('complete','incomplete') OR (state='invalidated' AND failure_code='history_runtime_revalidated')) AND cursor IS NULL AND resume_cursor IS NOT NULL)
    OR (kind='history' AND ${partialStates} AND cursor IS NOT NULL ${durableHistory?'AND resume_cursor IS NOT NULL':''}))
-   ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1`,[token.owner_id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation)]);
+   -- 已接受增量的检查点比旧快照恢复点新，重建守卫不退回整段快照起点。
+   ORDER BY (kind='incremental') DESC,creation_no DESC,created_at DESC,id DESC LIMIT 1`,[token.owner_id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation)]);
   if(!goal)return null;
   let previousReport:HistorySupportReport;
   try{previousReport=JSON.parse(String(goal.support_json)) as HistorySupportReport;}catch{return null;}
@@ -189,12 +191,12 @@ export const historyActions:StorageAction[]=[
  }),
  action('history.begin','write',(tx,i)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertSupport(i.report);
-  const target=targetOf(i.target,token,i.report);assertHistoryReadBoundary(tx,token,{kind:'history'});if(i.recertifyId)assertRecertifyAccess(tx,token,i.recertifyId,i.guardId,target);else assertSourceContinuity(tx,token,target,i.report?.continuity===normalUseContinuity?i.report.accountKey:undefined);
+  const target=targetOf(i.target,token,i.report);assertHistoryReadBoundary(tx,token,{kind:'history'});assertSourceContinuity(tx,token,target,i.report?.continuity===normalUseContinuity?i.report.accountKey:undefined);
   const scopeDigest=historyCursorScopeDigest(token,i.report,target);
   // 阶段 B（任务 01）：同一联系人仍有与本次固定快照完全同范围、0 页且无记录进展的空目标时，
-  // 直接续用最新的一个（不 INSERT、不重复作废）。摘要一致证明原生读取器目标未被替换；重新认证
-  // 操作（i.recertifyId）始终新建目标作审计关联。任一复用前提不成立则保持旧行为。
-  const reusable=typeof i.recertifyId==='string'&&i.recertifyId?[]:reusableEmptyGoals(tx,token,i.report,target);
+  // 直接续用最新的一个（不 INSERT、不重复作废）。摘要一致证明原生读取器目标未被替换。
+  // 任一复用前提不成立则建立新的目标。
+  const reusable=reusableEmptyGoals(tx,token,i.report,target);
   const reusableHistory=reusable.find(goal=>goal.kind==='history');
   const reusableIds=new Set(reusable.map(goal=>goal.id));
   if(reusable.length){
@@ -214,7 +216,6 @@ export const historyActions:StorageAction[]=[
   }
   tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,state,coverage_state,created_at,cursor_scope_digest,cursor_scheme,creation_no) VALUES(?,?,?,?,?,?,?,'history',?,?,?,?,?,'running','partial',?,?,?,(SELECT coalesce(max(creation_no),0)+1 FROM read_goal WHERE creation_no IS NOT NULL))`,[token.owner_id,i.id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation),target.protocol,target.descriptor,JSON.stringify(target),JSON.stringify(token),serializeSupport(i.report),i.at,scopeDigest,historyCursorScheme]);
   if(i.recoveryCursor)tx.run('UPDATE read_goal SET resume_cursor=? WHERE owner_id=? AND id=?',[assertHistoryCursor(i.recoveryCursor,'history_cursor_invalid'),token.owner_id,i.id]);
-  if(tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='history_source_recertification'"))tx.run("UPDATE history_source_recertification SET stage='history',goal_id=?,target_json=?,support_json=?,token_json=?,updated_at=? WHERE owner_id=? AND contact_id=? AND state='running' AND new_binding_id IS NULL AND old_token_json=?",[i.id,JSON.stringify(target),serializeSupport(i.report),JSON.stringify(token),i.at,token.owner_id,token.contact_id,JSON.stringify(token)]);
   purgeStaleGoals(tx,token.owner_id,token.contact_id);
   return {id:i.id,target,cursor:null};
  }),
@@ -232,7 +233,7 @@ export const historyActions:StorageAction[]=[
  }),
  action('history.acceptPage','write',(tx,i)=>{
   const token=i.token as ReadEligibility;const goal=currentGoal(tx,token,i.goalId);const page=i.page as HistoryPage;
-  if(i.recertifyId)assertRecertifyAccess(tx,token,i.recertifyId,i.guardId,JSON.parse(String(goal.target_json)));else assertLiveGuard(tx,token,i.guardId);
+  assertLiveGuard(tx,token,i.guardId);
   if(goal.kind!=='history')fail('history_goal_kind_invalid');
   const digest=sha256(JSON.stringify(page));
   const prior=tx.get('SELECT response_digest,contact_id,goal_id,read_epoch,cursor_in,cursor_out FROM sync_capture WHERE owner_id=? AND id=?',[token.owner_id,i.captureId]);
@@ -241,7 +242,7 @@ export const historyActions:StorageAction[]=[
   assertHistoryReadBoundary(tx,token,{kind:'history'});
   const target=JSON.parse(String(goal.target_json)) as HistoryTarget;
   const report=JSON.parse(String(goal.support_json)) as HistorySupportReport;
-  if(!i.recertifyId)assertSourceContinuity(tx,token,target,report.continuity===normalUseContinuity?report.accountKey:undefined);
+  assertSourceContinuity(tx,token,target,report.continuity===normalUseContinuity?report.accountKey:undefined);
   if(page?.target!==goal.target_descriptor||page.cursorIn!==goal.cursor||!Array.isArray(page.records)||page.records.length>1000||!Array.isArray(page.completedPartitions)||page.completedPartitions.some(p=>!target.partitions.includes(p))||typeof page.exhausted!=='boolean'||page.exhausted&&page.cursorOut!==null||!page.exhausted&&(typeof page.cursorOut!=='string'||!page.cursorOut||page.cursorOut===page.cursorIn))fail('history_page_invalid');
   const resumeCursor=page.resumeCursor===undefined||page.resumeCursor===null?null:assertHistoryCursor(page.resumeCursor,'history_page_invalid');
   if(resumeCursor!==null&&!page.exhausted)fail('history_page_invalid');
@@ -251,11 +252,10 @@ export const historyActions:StorageAction[]=[
   tx.run("INSERT INTO sync_capture(owner_id,id,contact_id,goal_id,read_epoch,runtime_token,captured_at,adapter_version,cursor_in,cursor_out,state,response_digest,acceptance_no) VALUES(?,?,?,?,?,?,?,?,?,?,'accepted',?,(SELECT coalesce(max(acceptance_no),0)+1 FROM sync_capture WHERE acceptance_no IS NOT NULL))",[token.owner_id,i.captureId,token.contact_id,goal.id,BigInt(token.read_epoch),i.runtimeToken,i.at,report.adapterVersion,page.cursorIn,page.cursorOut,digest]);
   const restoreOperationId=restoreOperationForGoal(tx,token.owner_id,String(goal.id))??null;
   const {quarantined,createdMessageIds,updatedMessageIds}=ingestRecords({tx,token,report,target,captureId:i.captureId,at:i.at,records:page.records,
-   ...(i.recertifyId?{recertify:{operationId:i.recertifyId,guardId:i.guardId,goalId:String(goal.id)}}:{}),
    exclude:observed=>observed.localKey&&clearBoundaryExclusion(tx,{ownerId:token.owner_id,conversationId:token.conversation_id,externalKey:observed.localKey,restoreOperationId})?'clear_excluded':null});
   const partitions=new Set<string>([...JSON.parse(String(goal.completed_partitions)),...page.completedPartitions]);
   const traversalComplete=page.exhausted&&target.partitions.every(p=>partitions.has(p));
-  const unresolved=quarantined||(i.recertifyId?Boolean(tx.get("SELECT 1 FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id WHERE c.owner_id=? AND c.goal_id=? AND r.state='quarantined' AND r.reason_code<>'metadata_only' LIMIT 1",[token.owner_id,goal.id])):unresolvedQuarantineCount(tx,token.owner_id,token.contact_id)>0);
+  const unresolved=quarantined||(unresolvedQuarantineCount(tx,token.owner_id,token.contact_id)>0);
   const complete=traversalComplete&&!unresolved;
   const state=complete?'complete':page.exhausted?'incomplete':'running';const code=unresolved?'history_identity_quarantined':page.exhausted&&!complete?'history_partitions_missing':null;
   if(quarantined)tx.run("UPDATE sync_capture SET state='quarantined',error_code='history_identity_quarantined' WHERE owner_id=? AND id=?",[token.owner_id,i.captureId]);

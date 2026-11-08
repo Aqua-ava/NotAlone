@@ -4,6 +4,7 @@ import {fixture as createFixture} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {SqliteHistoryService} from '../src/history/sqlite/service.ts';
 import {StorageFailure} from '../src/storage/sqlite/contracts.ts';
+import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
 import {EventEmitter} from 'node:events';
 import {PureTsEvents} from '../src/host/pure-ts-events.ts';
 
@@ -407,4 +408,35 @@ test('整账号没有持久来源事实时删除仍清除每位联系人的易�
  assert.equal((await deletion.advance(op)).state,'completed');
  for(const token of tokens){const after=await snapshot(f,token.contact_id);assert.equal(after.proofs.length,0);assert.equal(after.guardAtKey,null);}
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('守卫释放写失败但读者与通道都已关闭时，删除不再被残留holder阻挡',async t=>{
+ const f=await createFixture(t),holders=new ActiveHolders(),id=f.saved[0].contact_id,token=await f.contacts.eligibility(id);
+ const proxy={status:f.storage.status,
+  execute:(name,input,...rest)=>name==='history.guardRelease'?Promise.reject(new StorageFailure('storage_busy')):f.storage.execute(name,input,...rest),
+  close:()=>f.storage.close()};
+ const history=new SqliteHistoryService(proxy,f.contacts,guardedChannelFactory({created:0,closed:0}),holders);
+ t.after(async()=>{await history.close().catch(()=>{});});
+ // 保留条目在停读时统一释放守卫并关闭通道；保留语义下读取本身继续成功。
+ await history.synchronize(id);
+ await assert.rejects(history.stop(id),{code:'storage_busy'});
+ // 排空失败只负责上报：读者与通道的官方关闭都已完成，holder不得继续阻挡删除。
+ const operation={ownerId:f.contacts.ownerId,scope:{kind:'source',contactId:id,sourceId:'synthetic-source'},acceptedGeneration:BigInt(token.data_generation)+1n};
+ assert.equal(holders.verify(operation,[]),true);
+});
+
+test('关闭失败后来源准备应重试真实排空，不循环等待已结束的工作',async t=>{
+ const f=await createFixture(t),id=f.saved[0].contact_id;let closes=0;
+ const create=()=>{
+  const loss=Promise.withResolvers();
+  return {...f.channel,guardSession:{loss:loss.promise},
+   close:async()=>{if(++closes===1)throw new StorageFailure('history_native_unavailable');}};
+ };
+ const history=new SqliteHistoryService(f.storage,f.contacts,create);
+ t.after(async()=>{await history.close().catch(()=>{});});
+ // 保留条目的通道关闭延后到停读统一执行；关闭失败后来源准备先重试真实排空再新开读者。
+ await history.synchronize(id);
+ await assert.rejects(history.stop(id),{code:'history_native_unavailable'});
+ await history.prepareSource(id);
+ assert.ok(closes>=2,`来源准备为排除失败读者真实重试了 ${closes} 次关闭`);
 });

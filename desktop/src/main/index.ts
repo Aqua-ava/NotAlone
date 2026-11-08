@@ -41,10 +41,6 @@ import { installSourceDeletionBridge } from './sources/bridge';
 import { installBindingConsentBridge } from './bindings/bridge';
 import { installSyncControlBridge } from './sync/bridge';
 import { installHistoryClearBridge } from './history-clear/bridge';
-import { HistoryActivityMutex, singleHistoryOperationActive } from './history-clear/activity';
-import { HistoryRecertifyBatchController } from './history-clear/recertify-batch';
-import { installHistoryRecertifyBatchBridge } from './history-clear/recertify-batch-bridge';
-import { coordinateHistoryRecertification } from './history-clear/recertify-coordinator';
 import { installContactDeletionBridge } from './contact-deletion/bridge';
 import { installContactHistoryBridge } from './contact-history/bridge';
 import { SyncPriorityController } from './sync/priority';
@@ -166,17 +162,9 @@ void app.whenReady().then(async () => {
   const bindings = installBindingConsentBridge(commands, backend, contacts, beginReadingScopeChange, contactDeletionQuiet);
   const sync = installSyncControlBridge(commands, backend, contacts, beginReadingScopeChange, contactDeletionQuiet);
   const contactHistory = installContactHistoryBridge(commands, backend, contacts);
-  const historyActivity = new HistoryActivityMutex();
-  const historyClear = installHistoryClearBridge(commands, backend, contacts, historyActivity);
-  let historyRecertifyBatch: HistoryRecertifyBatchController | undefined;
-  if (development) {
-    historyRecertifyBatch = new HistoryRecertifyBatchController(backend, historyActivity,
-      () => singleHistoryOperationActive(historyClear.getState()),
-      { log: (line) => console.info('[notalone-dev-backend]', JSON.stringify(line)) });
-    installHistoryRecertifyBatchBridge(commands, historyRecertifyBatch, true);
-  }
+  const historyClear = installHistoryClearBridge(commands, backend, contacts);
   const syncPriority = new SyncPriorityController(backend, contacts, sync);
-  app.on('before-quit', () => { bindings.dispose(); sync.dispose(); historyRecertifyBatch?.dispose(); historyClear.dispose(); contactHistory.dispose(); void syncPriority.dispose(); });
+  app.on('before-quit', () => { bindings.dispose(); sync.dispose(); historyClear.dispose(); contactHistory.dispose(); void syncPriority.dispose(); });
   sync.onStateChanged((state) => foreground.setSyncControlState(state));
   foreground.setSyncControlState(sync.getState());
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
@@ -195,11 +183,6 @@ void app.whenReady().then(async () => {
   });
   dataLifecycle = new DesktopDataLifecycle({history: contactHistory, media, traces, provenance: candidateProvenance,
     skills: skillLearning, preferences, memory, processing: fixedMemoryProcessing, management: sqliteMemoryManagement, discussion: sqliteDiscussion, replies});
-  coordinateHistoryRecertification(historyClear, {
-    withdraw: () => { dataLifecycle.withdraw('recertification'); replies.beginOwnerContextChange(); },
-    revalidate: () => replies.revalidateOwnerContextChange(),
-    refresh: contactId => contactHistory.refreshCurrent(contactId),
-  });
   let settleHistoryClear: (() => Promise<void>) | undefined;
   let resyncWasComplete = false;
   historyClear.onStateChanged(state => {

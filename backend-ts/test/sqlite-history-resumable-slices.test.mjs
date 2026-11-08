@@ -30,6 +30,12 @@ async function resumableFixture(t,{third=false}={}){
   return {...f.channel,guardSession:{loss:loss.promise},
    inspect:async scope=>({...await f.channel.inspect(scope),continuity:'same-source-instances-normal-use-v1',capabilities:{incrementalTail:'supported',durableIncremental:'supported',durableHistory:'supported'}}),
    target:async scope=>{state.targets.push(scope.token.contact_id);return select(scope,0);},
+   tail:async(scope,target,cursor)=>{
+    assert.equal(selected.contactId,scope.token.contact_id);assert.equal(selected.target.descriptor,target.descriptor);
+    assert.ok(cursor,'增量只能沿已接受终页恢复点续读');
+    assert.equal(cursor,[...state.checkpoints.keys()].at(-1),'tail游标必须来自最近接受的恢复点');
+    return {target:target.descriptor,cursorIn:cursor,cursorOut:cursor,records:[],caughtUp:true};
+   },
    resumeTarget:async(scope,previous,cursor)=>{
     const checkpoint=state.checkpoints.get(cursor);state.resumes.push(cursor);
     if(!checkpoint)return null;
@@ -111,8 +117,9 @@ test('隔离记录不使已遍历终页的恢复证明在下一目标中断后�
  const f=await resumableFixture(t),service=f.open();f.state.quarantined=true;f.state.totals.set(f.a.contact_id,1);
  const terminal=await service.synchronize(f.a.contact_id);
  assert.equal(terminal.phase,'incomplete');assert.equal(terminal.traversalComplete,true);assert.equal(terminal.failureCode,'history_identity_quarantined');
- const checkpoint=[...f.state.checkpoints.keys()].at(-1);
  await service.stop(f.a.contact_id);await service.synchronizeIncremental(f.a.contact_id);
+ // 交接尝试会在中断前重新接受最新终页恢复点；重启后必须恢复这个最新证明，而不是旧的或从零开始。
+ const checkpoint=[...f.state.checkpoints.keys()].at(-1);
  const restarted=await f.reopen();await restarted.synchronize(f.a.contact_id);
  assert.equal(f.state.resumes.at(-1),checkpoint);
  assert.equal(f.state.targets.filter(id=>id===f.a.contact_id).length,1,'业务隔离不应丢失已经核验的原生终页位置');

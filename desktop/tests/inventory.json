@@ -3,7 +3,6 @@
   "tests/data-lifecycle.test.mjs",
   "tests/contact-avatar.test.mjs",
   "tests/memory-source-time.test.mjs",
-  "tests/history-recertify.test.mjs",
   "tests/message-stream.test.mjs",
   "tests/packaging/upgrade-history-image-cli.test.mjs",
   "tests/wechat-db-key-refresh.test.mjs",
@@ -67,6 +66,7 @@
   "tests/helper-shortcut-window.test.mjs",
   "tests/helpers/external-cli.test.mjs",
   "tests/helpers/probe.test.mjs",
+  "tests/helpers/runtime-cache.test.mjs",
   "tests/helpers/probe-manifest-simplify.test.mjs",
   "tests/historical-reply-basis.test.mjs",
   "tests/layered-memory/controller.test.mjs",
@@ -159,15 +159,12 @@
   "tests/backend-shutdown-confirmation.test.mjs",
   "tests/backend-lost-connection.test.mjs",
   "tests/contact-session-deletion.test.mjs",
-  "tests/history-recertify-batch.test.mjs",
-  "tests/history-recertify-batch-safety.test.mjs",
-  "tests/history-recertify-batch-bridge.test.mjs"
+  "tests/history-clear-bridge.test.mjs"
  ],
  "headless": [
   "tests/usage/continuity-view.test.mjs",
   "tests/contact-avatar-view.test.mjs",
   "tests/workspace-draft-sqlite-handoff.test.mjs",
-  "tests/history-recertify-view.test.mjs",
   "tests/assistant-session-workspace.test.mjs",
   "tests/foreground-recovery-view.test.mjs",
   "tests/contacts-history-view.test.mjs",
@@ -209,8 +206,7 @@
   "tests/usage/connection-view.test.mjs",
   "tests/first-frame-state-view.test.mjs",
   "tests/memory-automatic-switch.test.mjs",
-  "tests/sqlite-memory-source-recheck.test.mjs",
-  "tests/history-recertify-batch-view.test.mjs"
+  "tests/sqlite-memory-source-recheck.test.mjs"
  ],
  "isolated-http": [
   "tests/overview-reply-retrieval.test.mjs"

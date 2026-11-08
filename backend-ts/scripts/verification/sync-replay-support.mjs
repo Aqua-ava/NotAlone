@@ -53,10 +53,10 @@ export function assertDataPreserved(before,after) {
  assert.equal(after.bindings,before.bindings,'绑定总数不变');assert.ok(after.messages>=before.messages,'消息总数只增不减');
  assert.deepEqual(after.references,before.references,'记忆、候选、整理版本和引用行数不变');
 }
-export async function openReplayStorage(userData) {
+export async function openReplayStorage(userData,{registryModule}={}) {
  const file=join(userData,'managed/sqlite/notalone.sqlite'),identity=readQuery(file,'SELECT database_id,role FROM database_instance WHERE slot=1')[0];
  const worker=new Worker(new URL('../../src/storage/sqlite/worker.ts',import.meta.url),{
-  workerData:{userData,intent:'open',expectedDatabaseId:identity.database_id,role:identity.role},execArgv:['--experimental-strip-types']});
+  workerData:{userData,intent:'open',expectedDatabaseId:identity.database_id,role:identity.role,...(registryModule?{registryModule}:{})},execArgv:['--experimental-strip-types']});
  let status;
  try{status=await new Promise((resolve,reject)=>{
   const timer=setTimeout(()=>{void worker.terminate();reject(new Error('replay_open_timeout'));},600_000);

@@ -7,13 +7,13 @@ import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {DatabaseSync} from 'node:sqlite';
 import {writeFileSync} from 'node:fs';
-import {historySourceProofMigration} from '../../src/history/sqlite/source-proof-schema.ts';
+import {historySourceProofMigration} from '../../src/storage/sqlite/migrations/history-source-proof.ts';
 import {cloneReplayCopy,readQuery,snapshot,assertDataPreserved,openReplayStorage} from './sync-replay-support.mjs';
 const args=new Map(process.argv.slice(2).map(value=>{const at=value.indexOf('=');return [value.slice(2,at),value.slice(at+1)];}));
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const sql=historySourceProofMigration(46).sql,sqlSha256=hash(sql);
 const copy=cloneReplayCopy(args.get('source-user-data'),args.get('user-data'));
-const file=copy.file;
+const file=copy.file,registryModule=new URL('./sync-source-proof-registry.mjs',import.meta.url).href;
 const countTables=()=>readQuery(file,"SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'").map(r=>r.name);
 const version=()=>Number(readQuery(file,'PRAGMA user_version')[0].user_version);
 assert.equal(version(),45,'输入必须是独立schema45副本');
@@ -66,7 +66,7 @@ try{
 }finally{if(db.isTransaction)db.exec('ROLLBACK');db.close();db=undefined;}
 assert.equal(version(),45);assert.equal(countTables().includes('source_proof'),false);assertDataPreserved(before,snapshot(file));
 console.log(JSON.stringify({event:'sql-rollback-trial',sqlSha256,...timings,rolledBack:true}));
-let started=performance.now(),storage=await openReplayStorage(copy.userData);
+let started=performance.now(),storage=await openReplayStorage(copy.userData,{registryModule});
 timings.formalWorkerOpenMs=Math.round(performance.now()-started);assert.equal(storage.status.schemaVersion,46);
 const ledger=readQuery(file,'SELECT checksum FROM schema_migration WHERE version=46')[0];assert.equal(ledger.checksum,sqlSha256,'迁移源码在本次运行期间未变化');
 const proofs=readQuery(file,'SELECT * FROM source_proof ORDER BY owner_id,contact_id'),matrix=compareStates(proofs);
@@ -78,7 +78,7 @@ const eligibility={allowed:0,denied:0};for(const entry of expected.values()){
 }
 assert.equal(eligibility.allowed,278);assert.equal(eligibility.denied,2);
 await storage.close();storage=undefined;
-const proofDigest=hash(JSON.stringify(proofs));started=performance.now();storage=await openReplayStorage(copy.userData);timings.idempotentOpenMs=Math.round(performance.now()-started);
+const proofDigest=hash(JSON.stringify(proofs));started=performance.now();storage=await openReplayStorage(copy.userData,{registryModule});timings.idempotentOpenMs=Math.round(performance.now()-started);
 assert.equal(hash(JSON.stringify(readQuery(file,'SELECT * FROM source_proof ORDER BY owner_id,contact_id'))),proofDigest,'重开不重复迁移或改写来源状态');assert.equal(readQuery(file,'SELECT count(*) n FROM schema_migration WHERE version=46')[0].n,1);await storage.close();storage=undefined;
 const leaseBefore=readQuery(file,'SELECT epoch,runtime_id FROM database_instance WHERE slot=1')[0];
 const {openReplayStorage:openOld}=await import(pathToFileURL(join(resolve(args.get('old-source-root')),'backend-ts/scripts/verification/sync-replay-support.mjs')).href);

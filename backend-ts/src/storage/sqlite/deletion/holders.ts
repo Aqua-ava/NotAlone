@@ -6,7 +6,7 @@ import type { DeletionOperation } from './contracts.ts';
 // admittedDeletionIds只由可信的名单 lifetime 登记：这些联系人删除已封禁对应身份，名单读者只读活跃联系人，
 // 因此不进入该操作后续的 drain/verify 闭包；未登记准入的旧读者仍按原规则关闭。
 export interface ActiveResource { key: string; scopeKeys?: readonly string[]; ownerId: string; contactId?: string; coversAllContacts?: boolean; coversAllSources?: boolean; admittedDeletionIds?: readonly string[]; generation: bigint; close: () => Promise<void> }
-interface HeldResource extends ActiveResource { closing?: Promise<void> }
+interface HeldResource extends ActiveResource { closing?: Promise<void>; releasedOnFailure?: boolean }
 const scopedKey = (owner: string, key: string) => JSON.stringify([owner, key]);
 // 先登记后使用；close回调必须等待官方dispose/close、finally和末次写入，不得仅发cancel。
 export class ActiveHolders {
@@ -21,15 +21,22 @@ export class ActiveHolders {
     const fence = [this.blockedContacts.get(contactKey), this.blockedOwners.get(resource.ownerId),
       resource.coversAllSources === true ? this.blockedSourceContacts.get(contactKey) : undefined]
       .reduce<bigint>((max, value) => value !== undefined && value > max ? value : max, -1n);
+    const fencedV=this.held.has(key),blockedV=this.blockedKeys.has(key),genV=typeof resource.generation!=='bigint'||resource.generation<0n||resource.generation<fence;
+    if(fencedV||blockedV||genV){if(process.env.NOTALONE_DBG==='1')console.error('DBG_FENCE',resource.key,'held='+fencedV,'blocked='+blockedV,'gen='+genV,'actualKeyPub='+JSON.stringify(Array.from(this.held.keys()).slice(0,6)));}
     if (typeof resource.generation !== 'bigint' || resource.generation < 0n || this.held.has(key) || this.blockedKeys.has(key)
       || resource.generation < fence) throw new StorageFailure('deletion_holder_fenced');
     this.held.set(key, resource);
     return () => this.close(resource);
   }
   private close(resource: HeldResource): Promise<void> {
+    if(process.env.NOTALONE_DBG==='1')console.error('DBG_HCLOSE',resource.key.slice(12,44),'hadClosing='+Boolean(resource.closing));
     return resource.closing ??= Promise.resolve().then(resource.close).then(() => { this.held.delete(scopedKey(resource.ownerId, resource.key)); }, error => {
       // 只有明确失败才允许重新调用；超时不能释放仍在进行的close。
-      resource.closing = undefined; throw error;
+      resource.closing = undefined;
+      // close回调在其读者已真实结束、官方关闭尝试全部完成后可声明releasedOnFailure；
+      // 此时剩余失败只负责上报，不再把已排空的读者当活引用阻挡删除。
+      if (resource.releasedOnFailure) this.held.delete(scopedKey(resource.ownerId, resource.key));
+      throw error;
     });
   }
   fence(op: DeletionOperation, keys: string[]): void {

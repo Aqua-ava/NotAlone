@@ -117,22 +117,3 @@ html:has(.admin-layout)::-webkit-scrollbar { display: none; }
 }
 
 /* 开发者批量修复：只复用现有按钮与变量，状态与原因码保持可读。 */
-.fenced-repair-batch { display: grid; gap: 12px; }
-.fenced-repair-batch h2 { color: var(--panel-heading); font-size: 15px; font-weight: 500; }
-.fenced-repair-batch h3 { color: var(--panel-heading); font-size: 13px; font-weight: 500; margin-top: 4px; }
-.fenced-repair-batch p { color: #5d6b72; font-size: 12px; line-height: 1.9; }
-.fenced-repair-batch [role="alert"] { color: #99594e; }
-.fenced-repair-batch-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
-.fenced-repair-batch-limit { display: inline-flex; align-items: center; gap: 6px; color: #496e88; font-size: 12px; }
-.fenced-repair-batch-limit input { width: 72px; padding: 6px 8px; border: 1px solid var(--button-border); border-radius: 6px; background: var(--button-background); color: var(--button-text); font: inherit; }
-.fenced-repair-batch-limit input:hover:not(:disabled) { background: var(--button-hover-background); }
-.fenced-repair-batch-limit input:focus-visible { outline: 2px solid #5391b4; outline-offset: 2px; }
-.fenced-repair-batch-limit input:disabled { background: var(--button-disabled-background); border-color: var(--button-disabled-border); color: var(--button-disabled-text); }
-.fenced-repair-batch-all { display: inline-flex; align-items: center; gap: 6px; color: #496e88; font-size: 12px; }
-.fenced-repair-batch-all input:focus-visible { outline: 2px solid #5391b4; outline-offset: 2px; }
-.fenced-repair-batch-progress, .fenced-repair-batch-summary, .fenced-repair-batch-confirm { display: grid; gap: 10px; padding: 14px 16px; border: 1px dashed var(--line); border-radius: var(--panel-radius); background: #fffdf6; }
-.fenced-repair-batch-codes h4 { margin: 0 0 4px; color: #496e88; font-size: 12px; font-weight: 500; }
-.fenced-repair-batch-codes ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
-.fenced-repair-batch-codes li { display: flex; justify-content: space-between; gap: 14px; color: #5d6b72; font-size: 12px; }
-.fenced-repair-batch-codes b { color: #31495b; font-weight: 500; white-space: nowrap; }
-.fenced-repair-batch-confirm-actions { display: flex; flex-wrap: wrap; gap: 10px; }

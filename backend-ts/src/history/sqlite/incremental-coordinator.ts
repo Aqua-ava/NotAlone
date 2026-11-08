@@ -153,7 +153,10 @@ export class IncrementalHistoryCoordinator {
           // 新历史接续完成后绑定身份不变；以当前持久检查点解除旧快照的调度阻塞，不复用旧游标。
           let coverage:HistoryCoverage;
           try{coverage=await this.#history.coverage(contactId);}catch{continue;}
-          if(!coverage.traversalComplete||!coverage.incremental?.cursorPresent||!['ready','incomplete'].includes(coverage.incremental.phase)){
+          // 元数据准备可在完整历史之后作废旧增量；只重试这两类正常换代，当前目标和游标仍由正式服务重新核验。
+          const completeReplacement=coverage.phase==='complete'&&coverage.incremental?.phase==='invalidated'
+            &&replacedCheckpointErrors.has(coverage.incremental.failureCode??'');
+          if(!completeReplacement&&(!coverage.traversalComplete||!coverage.incremental?.cursorPresent||!['ready','incomplete'].includes(coverage.incremental.phase))){
             // 守卫后来失效时，旧增量阻塞也须让当前合法恢复资格接回首次读取。
             if(this.#firstHistoryManagedExternally)try{await this.#history.requestFirstHistoryRecovery?.(contactId);}
             catch{/* 本轮资格查询失败保留替换阻塞，下轮仍须重新经过持久资格门。 */}
@@ -196,7 +199,8 @@ export class IncrementalHistoryCoordinator {
         else throw new StorageFailure(coverage.incremental.failureCode ?? 'history_incremental_unavailable');
       }
       previousIncremental = coverage.incremental;
-      return await this.#history.synchronizeIncremental(job.contactId, active.controller.signal);
+      // 增量协调器是同一租约交接的显式接续方；普通读取仍交回首次协调器。
+      return await this.#history.synchronizeIncremental(job.contactId, active.controller.signal,{followHistoryHandoff:true});
     })().then((coverage: HistoryCoverage) => {
       if (active.controller.signal.aborted) { this.#state(job.contactId, 'stopped'); return; }
       const incremental = coverage.incremental;

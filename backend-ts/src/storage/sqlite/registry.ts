@@ -1,11 +1,11 @@
-import {historySourceProofMigration} from '../../history/sqlite/source-proof-schema.ts';
+import {historyRetirementMigration} from './migrations/history-retirement-schema.ts';
+import {historySourceProofMigration} from './migrations/history-source-proof.ts';
 import {createReplyKnowledgeStorageRegistry} from '../../reply/sqlite/candidates/knowledge-context.ts';
 import {createMemoryContentStorageRegistry} from '../../memory/content/storage.ts';
 import {builtinMemoryContentPlugins} from '../../memory/content/builtins.ts';
 import {memoryContentMigration} from '../../memory/sqlite/content-schema.ts';
 import {memoryContentCitationMigration} from '../../memory/sqlite/content-citation-schema.ts';
-import {historyRecertifyMigration,historyRecertifyCancelMigration} from '../../history/sqlite/recertify-schema.ts';
-import {historyRecertifyActions} from '../../history/sqlite/recertify-actions.ts';
+import {historyRecertifyMigration,historyRecertifyCancelMigration} from './migrations/history-recertify.ts';
 import {memoryAdjudicationMigration} from '../../memory/sqlite/management/adjudication-schema.ts';
 import {memoryDocumentsMigration} from '../../memory/sqlite/documents/schema.ts';
 import {memoryDocumentsActions} from '../../memory/sqlite/documents/actions.ts';
@@ -37,20 +37,19 @@ import { runActions } from '../../memory/sqlite/runs.ts';
 import { memoryExtractionMigration, memoryExecutionPlannedStepIndexMigration } from '../../memory/sqlite/schema.ts';
 import { mediaMigration, mediaImageQualityEvidenceMigration } from '../../media/sqlite/schema.ts';
 import { createMediaActions } from '../../media/sqlite/actions.ts';
-import { historyMigration } from '../../history/sqlite/schema.ts';
-import { historyIncrementalMigration } from '../../history/sqlite/incremental-schema.ts';
-import { historyClearMigration } from '../../history/sqlite/clear-schema.ts';
-import { historyContinuityMigration } from '../../history/sqlite/continuity-schema.ts';
-import { historyStateMigration } from '../../history/sqlite/state-schema.ts';
-import { historyGuardMigration } from '../../history/sqlite/guard-schema.ts';
-import { supersededHistoryMigration } from '../../history/sqlite/superseded-schema.ts';
-import { historySupersededActions } from '../../history/sqlite/superseded-actions.ts';
-import { historyAcceptanceOrderMigration } from '../../history/sqlite/acceptance-order-schema.ts';
-import { historyObservationIndexMigration } from '../../history/sqlite/observation-index-schema.ts';
-import { historyEmptyCaptureMigration, historyCaptureRecordForeignKeyIndexMigration, historyMessageAliasIndexMigration } from '../../history/sqlite/empty-capture-schema.ts';
-import { historyTerminalMigration } from '../../history/sqlite/terminal-schema.ts';
-import { historySingleTextCopyMigration } from '../../history/sqlite/single-text-copy-schema.ts';
-import { historyQuoteMigration, historyQuoteRevisionMigration } from '../../history/sqlite/quote-schema.ts';
+import { historyMigration } from './migrations/history-base.ts';
+import { historyIncrementalMigration } from './migrations/history-incremental.ts';
+import { historyClearMigration } from './migrations/history-clear.ts';
+import { historyContinuityMigration } from './migrations/history-continuity.ts';
+import { historyStateMigration } from './migrations/history-state.ts';
+import { historyGuardMigration } from './migrations/history-guard.ts';
+import { supersededHistoryMigration } from './migrations/history-superseded.ts';
+import { historyAcceptanceOrderMigration } from './migrations/history-acceptance-order.ts';
+import { historyObservationIndexMigration } from './migrations/history-observation-index.ts';
+import { historyEmptyCaptureMigration, historyCaptureRecordForeignKeyIndexMigration, historyMessageAliasIndexMigration } from './migrations/history-empty-capture.ts';
+import { historyTerminalMigration } from './migrations/history-terminal.ts';
+import { historySingleTextCopyMigration } from './migrations/history-single-text-copy.ts';
+import { historyQuoteMigration, historyQuoteRevisionMigration } from './migrations/history-quote.ts';
 import { historyClearActions } from '../../history/sqlite/clear-actions.ts';
 import { historyQuoteActions } from '../../history/sqlite/quote-store.ts';
 import { historyActions } from '../../history/sqlite/actions.ts';
@@ -83,6 +82,6 @@ CREATE TABLE schema_migration (
   checksum TEXT NOT NULL,
   applied_at INTEGER NOT NULL CHECK(applied_at>=0)
 ) STRICT;
-` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), mediaMigration(6), discussionMigration(7), memoryExtractionMigration(8), memoryExecutionMigration(9), replyCandidateMigration(10), memoryManagementMigration(11), memoryAdjudicationMigration(12), memoryDocumentsMigration(13), historyIncrementalMigration(14), historyClearMigration(15), historyContinuityMigration(16), historyStateMigration(17),historyGuardMigration(18),historyObservationIndexMigration(19),historyAcceptanceOrderMigration(20),historyTerminalMigration(21),historySingleTextCopyMigration(22),skillDefaultEnablementMigration,skillDefaultQualificationMigration,historyQuoteMigration(25),historyQuoteRevisionMigration(26),laterScheduleMigration(27),memoryIncrementalBaselineMigration(28),historyRecertifyMigration(29),historyRecertifyCancelMigration(30),mediaImageQualityEvidenceMigration(31),memoryContentMigration(32),memoryContentCitationMigration(33),memoryManagementPaginationMigration(34),memoryManagementTimelineMigration(35),memoryManagementTimelineMaintenanceMigration(36),memoryManagementTimelineProjectionMigration(37),memoryManagementTimelineRepairMigration(38),memoryManagementPendingIndexMigration(39), historyEmptyCaptureMigration(40), historyCaptureRecordForeignKeyIndexMigration(41), memoryAutoProcessingMigration(42), historyMessageAliasIndexMigration(43), memoryExecutionPlannedStepIndexMigration(44), supersededHistoryMigration(45),historySourceProofMigration(46)],
-  actions: [backgroundReadBoundaryAction,...historyRecertifyActions,...historySupersededActions,...memoryDocumentsLaterScheduleActions,...memoryDocumentsActions, ...memoryDocumentsStageActions, ...memoryDocumentsPublicationActions, ...memoryAdjudicationActions, ...memoryManagementActions, ...createReplyCandidateActions(replyLocalKnowledgeReader), ...discussionActions, ...discussionRequestActions, ...runtimeActions, ...discussionModelActions, ...runActions, ...executionActions, ...modelUsageSummaryActions, ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions, ...historyClearActions, ...historyQuoteActions, ...createMediaActions(installedDeletionRegistration), ...cutoverActions],
+` }, deletionMigration(2), identityMigration(3), {version:4,sql:skillSchemaSql}, historyMigration(5), mediaMigration(6), discussionMigration(7), memoryExtractionMigration(8), memoryExecutionMigration(9), replyCandidateMigration(10), memoryManagementMigration(11), memoryAdjudicationMigration(12), memoryDocumentsMigration(13), historyIncrementalMigration(14), historyClearMigration(15), historyContinuityMigration(16), historyStateMigration(17),historyGuardMigration(18),historyObservationIndexMigration(19),historyAcceptanceOrderMigration(20),historyTerminalMigration(21),historySingleTextCopyMigration(22),skillDefaultEnablementMigration,skillDefaultQualificationMigration,historyQuoteMigration(25),historyQuoteRevisionMigration(26),laterScheduleMigration(27),memoryIncrementalBaselineMigration(28),historyRecertifyMigration(29),historyRecertifyCancelMigration(30),mediaImageQualityEvidenceMigration(31),memoryContentMigration(32),memoryContentCitationMigration(33),memoryManagementPaginationMigration(34),memoryManagementTimelineMigration(35),memoryManagementTimelineMaintenanceMigration(36),memoryManagementTimelineProjectionMigration(37),memoryManagementTimelineRepairMigration(38),memoryManagementPendingIndexMigration(39), historyEmptyCaptureMigration(40), historyCaptureRecordForeignKeyIndexMigration(41), memoryAutoProcessingMigration(42), historyMessageAliasIndexMigration(43), memoryExecutionPlannedStepIndexMigration(44), supersededHistoryMigration(45),historySourceProofMigration(46),historyRetirementMigration(47)],
+  actions: [backgroundReadBoundaryAction,...memoryDocumentsLaterScheduleActions,...memoryDocumentsActions, ...memoryDocumentsStageActions, ...memoryDocumentsPublicationActions, ...memoryAdjudicationActions, ...memoryManagementActions, ...createReplyCandidateActions(replyLocalKnowledgeReader), ...discussionActions, ...discussionRequestActions, ...runtimeActions, ...discussionModelActions, ...runActions, ...executionActions, ...modelUsageSummaryActions, ...createDeletionActions(installedDeletionRegistration), ...installedDeletionActions, ...identityActions, ...skillActions, ...historyActions, ...historyClearActions, ...historyQuoteActions, ...createMediaActions(installedDeletionRegistration), ...cutoverActions],
 },builtinMemoryContentPlugins),replyLocalKnowledgeReader);

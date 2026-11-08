@@ -3,7 +3,7 @@ import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistorySupportReport, HistoryTarget } from './contracts.ts';
 import { historyTargetTransition, isPartitionGrowthTargetChange, type HistoryTargetTransition } from '../partition-growth.ts';
 import { reusableEmptyGoals } from './goal-reuse.ts';
-import {getProof,isSourceBlocked,fenceSource,putScope,deleteProof} from './source-proof.ts';
+import {getProof,incompleteLegacySource,isSourceBlocked,fenceSource,putScope,deleteProof} from './source-proof.ts';
 import {getSourceGuard,putSourceGuard} from './source-guard.ts';
 
 const reason = 'history_source_continuity_unverified';
@@ -65,7 +65,7 @@ function rearmEmptyContinuity(tx:StorageTransaction,token:ReadEligibility,tables
  if(!tables.has('source_proof'))return false;
  const scope=getProof(tx,token.owner_id,token.contact_id),guard=getSourceGuard(tx,token.owner_id,token.contact_id);
  const identityChanged=Boolean(scope&&(scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation));
- if(!(scope?.state==='needs_confirmation'||guard?.state==='lost'||identityChanged)||guard?.state==='active'||scope&&scope.tables_json!=='')return false;
+ if(scope?.reason===incompleteLegacySource||!(scope?.state==='needs_confirmation'||guard?.state==='lost'||identityChanged)||guard?.state==='active'||scope&&scope.tables_json!=='')return false;
  if(hasHistoryOrSuppression(tx,token,tables))return false;
  deleteProof(tx,token.owner_id,token.contact_id);return true;
 }
@@ -117,7 +117,7 @@ function priorNormalUse(tx:StorageTransaction,token:ReadEligibility,stored:strin
 export function normalUseRevalidationCandidate(tx:StorageTransaction,token:ReadEligibility):boolean {
  const scope=getProof(tx,token.owner_id,token.contact_id),guard=getSourceGuard(tx,token.owner_id,token.contact_id);
  const runtime=tx.get('SELECT runtime_id FROM database_instance WHERE slot=1');
- if(!scope||scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation||!scope.tables_json)return false;
+ if(!scope||scope.reason===incompleteLegacySource||scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation||!scope.tables_json)return false;
  if(scope.state==='ok'&&guard?.state==='active'&&guard.runtime_id===runtime?.runtime_id&&guard.binding_id===token.binding_id
   &&guard.conversation_id===token.conversation_id&&guard.source_generation===token.source_generation)return false;
  return priorNormalUse(tx,token,scope.tables_json);

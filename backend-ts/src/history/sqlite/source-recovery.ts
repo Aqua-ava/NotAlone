@@ -1,4 +1,4 @@
-import {getProof,isSourceBlocked,putScope} from './source-proof.ts';
+import {getProof,incompleteLegacySource,isSourceBlocked,putScope} from './source-proof.ts';
 import {loseSourceGuard} from './source-guard.ts';
 import {sha256} from '../../platform/sha256.ts';
 import {StorageFailure,type StorageTransaction,type StorageAction} from '../../storage/sqlite/contracts.ts';
@@ -26,7 +26,7 @@ export function sourceRecoveryPlan(tx:StorageTransaction,token:ReadEligibility,r
  const scope=getProof(tx,token.owner_id,token.contact_id);
  if(!scope&&!fenced)return null;
  const identity=tx.get('SELECT a.external_key account_key,c.external_key conversation_key FROM channel_account a JOIN channel_conversation c ON c.owner_id=a.owner_id AND c.account_id=a.id WHERE a.owner_id=? AND a.id=? AND c.id=?',[token.owner_id,token.account_id,token.conversation_id]);
- if(!scope||scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation||!scope.tables_json
+ if(!scope||scope.reason===incompleteLegacySource||scope.conversation_id!==token.conversation_id||scope.source_generation!==token.source_generation||!scope.tables_json
   ||report.continuity!==normalUseContinuity||report.accountKey!==identity?.account_key||report.conversationKey!==identity?.conversation_key||report.sourceGeneration!==token.source_generation)fail();
  let stored:any;try{stored=JSON.parse(String(scope!.tables_json));}catch{return fail();}
  if(stored.accountKey!==report.accountKey||!Array.isArray(stored.tables)||stored.tables.length>128)fail();

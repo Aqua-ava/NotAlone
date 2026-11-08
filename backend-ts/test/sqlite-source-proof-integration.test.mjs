@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,owner,record,restart} from './sqlite-clear-support.mjs';
-import {recoveryReader} from './fixtures/history/recertify-reader.mjs';
+import {recoveryReader} from './fixtures/history/recovery-reader.mjs';
 
 test('来源事实并表后正常同步、原地恢复及重启均保持同一绑定和消息',async t=>{
  const reader=recoveryReader();const f=await fixture(t,{channel:reader.create(),state:reader.state,registryModule:new URL('./fixtures/history/source-proof-integration-registry.mjs',import.meta.url).href});

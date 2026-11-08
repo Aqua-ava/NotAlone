@@ -1,3 +1,4 @@
+import {historicalSourceCopy} from '../history/historical-source-copy.mjs';
 import {simulateSourceGuard} from '../history/runtime-guard-fixture.mjs';
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 import {installedDeletionRegistration} from '../../../src/storage/sqlite/deletion/registration.ts';
@@ -7,7 +8,7 @@ import {documentKnowledgeReader,replyLocalKnowledgeReader} from '../../../src/me
 import {memoryDeletionImpact} from '../../../src/memory/sqlite/deletion-impact.ts';
 const config={...installedDeletionRegistration,domains:[memoryDocumentsDeletionDomain,...installedDeletionRegistration.domains.filter(d=>d.id!=='memory_documents')],requiredDomains:[...new Set(['memory_documents',...installedDeletionRegistration.requiredDomains])]};
 const replacement=createDeletionActions(config),replaced=new Set(replacement.map(a=>a.name));
-export const registry={...base,actions:[...base.actions.filter(a=>!replaced.has(a.name)),...replacement,
+export const registry={...base,actions:[...base.actions.filter(a=>!replaced.has(a.name)),...replacement,historicalSourceCopy,
  {name:'fixture.failedRunWithoutPause',mode:'write',retryBusy:false,execute(tx,{ownerId,runId}){
   tx.run("UPDATE processing_run SET state='failed',pause_requested_at=NULL WHERE owner_id=? AND id=?",[ownerId,runId]);
  }},

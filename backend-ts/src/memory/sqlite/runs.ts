@@ -445,7 +445,7 @@ function contactView(tx:StorageTransaction,raw:unknown){
  const input=raw as {ownerId:string;contactId:string},ownerId=textId(input.ownerId),contactId=textId(input.contactId);
  if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(contactId))fail('memory_extraction_input_invalid');
  if(!tx.get("SELECT 1 FROM contact c JOIN owner o ON o.owner_id=c.owner_id WHERE c.owner_id=? AND c.id=? AND c.state='active' AND o.state='active'",[ownerId,contactId]))fail('memory_extraction_not_found');
- if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' AND scope_kind<>'superseded_history' LIMIT 1",[ownerId]))fail('memory_extraction_scope_stale');
+ if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' LIMIT 1",[ownerId]))fail('memory_extraction_scope_stale');
  const latest=tx.get(`SELECT r.id FROM processing_run r WHERE r.owner_id=?
   AND EXISTS(SELECT 1 FROM run_contact rc WHERE rc.owner_id=r.owner_id AND rc.run_id=r.id AND rc.contact_id=? AND rc.state='active' AND ${currentRunContactScope})
   AND coalesce(json_extract(r.policy_config,'$.intent'),'')<>'memory_document_later_stage'

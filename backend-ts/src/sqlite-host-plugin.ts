@@ -1,7 +1,4 @@
 import {resolveBackgroundProcessingMode,resolveImageProcessingMode} from './host/sqlite-model-config.ts';
-import {SqliteHistoryRecertifyService} from './history/sqlite/recertify.ts';
-import {SupersededHistoryCleanup} from './history/sqlite/superseded-cleanup.ts';
-import {loadHostLegacyProofProvider} from './history/sqlite/legacy-terminal-maintenance.ts';
 import {SqliteMemoryManagement} from './memory/sqlite/management/service.ts';
 import {SqliteMemoryManagementHttp,memoryManagementQueryAllowed} from './memory/sqlite/management/http.ts';
 import {createSqliteModelRuntime} from './host/sqlite-model-runtime.ts';
@@ -77,14 +74,14 @@ interface SqliteHostResource { close(): Promise<void> }
 /** 同时通知各领域停读并等待真实排空；业务所有者未释放时保留共享资源，允许原操作续清。 */
 export async function closeSqliteHostResources(resources: {
   firstHistory?: SqliteHostResource; incremental?: SqliteHostResource; imageSync?: SqliteHostResource; quoteSync?:SqliteHostResource; discussions?: SqliteHostResource; memory?: SqliteHostResource; media?: SqliteHostResource; history?: SqliteHostResource;
-  historyRecertify?: SqliteHostResource; supersededCleanup?: SqliteHostResource; historyClear?: SqliteHostResource; historyResync?: SqliteHostResource; foreground?: SqliteHostResource; assistantReads?:SqliteHostResource; backgroundReads?:SqliteHostResource; library?:SqliteHostResource; contacts?: SqliteHostResource; wechat?:SqliteHostResource; models?: SqliteHostResource; storage?: SqliteHostResource;
+  historyClear?: SqliteHostResource; historyResync?: SqliteHostResource; foreground?: SqliteHostResource; assistantReads?:SqliteHostResource; backgroundReads?:SqliteHostResource; library?:SqliteHostResource; contacts?: SqliteHostResource; wechat?:SqliteHostResource; models?: SqliteHostResource; storage?: SqliteHostResource;
 }): Promise<void> {
   const failures: unknown[] = [];
   const failed: string[] = [];
   const fail = () => new SqliteHostResourceCloseFailure(failures, failed);
   // 不串行等待领域关闭：前一个读者可能正等待后一个领域释放共享CLI租约。
   const domains = ([['firstHistory', resources.firstHistory], ['incremental', resources.incremental], ['imageSync', resources.imageSync], ['quoteSync', resources.quoteSync],
-    ['historyRecertify', resources.historyRecertify], ['supersededCleanup', resources.supersededCleanup], ['historyClear', resources.historyClear], ['historyResync', resources.historyResync], ['foreground', resources.foreground],
+    ['historyClear', resources.historyClear], ['historyResync', resources.historyResync], ['foreground', resources.foreground],
     ['assistantReads', resources.assistantReads], ['backgroundReads', resources.backgroundReads], ['discussions', resources.discussions], ['memory', resources.memory],
     ['media', resources.media], ['history', resources.history], ['contacts', resources.contacts], ['library', resources.library]] as const);
   const closed = await Promise.allSettled(domains.map(async ([, resource]) => resource?.close()));
@@ -136,8 +133,6 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
   let incremental: IncrementalHistoryCoordinator | undefined;
   let historyClear: SqliteHistoryClearService | undefined;
   let historyResync: SqliteHistoryResyncService | undefined;
-  let historyRecertify:SqliteHistoryRecertifyService|undefined;
-  let supersededCleanup:SupersededHistoryCleanup|undefined;
   let media: SqliteMediaService | undefined;
   let imageSync:SqliteImageSyncCoordinator|undefined;
   let quoteSync:SqliteQuoteSyncCoordinator|undefined;
@@ -159,7 +154,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
     readyDispose(); models?.stopAccepting(); events?.close();
     await publication?.catch(() => {});
     if (opening) { try { storage ??= await opening; } catch {} }
-    await closeSqliteHostResources({firstHistory,incremental,imageSync,quoteSync,historyRecertify,supersededCleanup,historyClear,historyResync,foreground,assistantReads,backgroundReads,discussions,memory,media,history,contacts,library,wechat,models,storage:storage?{close:async()=>{await Promise.allSettled([...requests]);await storage!.close();}}:undefined});
+    await closeSqliteHostResources({firstHistory,incremental,imageSync,quoteSync,historyClear,historyResync,foreground,assistantReads,backgroundReads,discussions,memory,media,history,contacts,library,wechat,models,storage:storage?{close:async()=>{await Promise.allSettled([...requests]);await storage!.close();}}:undefined});
     if (published) await rm(config.infoPath, { force: true });
   });
   const stopResources=()=>shutdown.stop();
@@ -229,15 +224,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
     const deletionService = new DeletionService(storage, deletionHolders, new ManagedFiles(sqlite.userData),{reader:assistantReads});
     if(history){historyClear=new SqliteHistoryClearService(storage,contacts,createHistoryChannel,deletionService,deletionHolders);
       historyResync=new SqliteHistoryResyncService(storage,contacts,createHistoryChannel,deletionHolders);}
-    if(history){
-      const proveLegacyTerminals=sqlite.wechatCliPath?await loadHostLegacyProofProvider({userData:sqlite.userData,databaseId:sqlite.expectedDatabaseId,currentExecutable:sqlite.wechatCliPath}):undefined;
-      // 修复通过后清理被取代绑定下没有派生引用的副本（ADR-175）：走统一删除账本，后台有界分批，失败留账本现场。
-      supersededCleanup=new SupersededHistoryCleanup(storage,ownerId,deletionService);
-      historyRecertify=new SqliteHistoryRecertifyService(storage,contacts,createHistoryChannel,deletionHolders,{stopHistory:id=>history!.stop(id),onCompleted:id=>{if(automaticBackground)firstHistory?.wakeContact(id);supersededCleanup?.schedule(id);},proveLegacyTerminals});
-    }
-    // 重启后只续跑已登记的清理请求与未结案的清理操作；不会主动清理没有登记的存量副本。
-    if(supersededCleanup){const resume=setTimeout(()=>{void supersededCleanup?.resume().catch(()=>{});},15_000);resume.unref();}
-    const historyClearHttp=historyClear&&historyResync?new SqliteHistoryClearHttp(historyClear,historyResync,historyRecertify):undefined;
+    const historyClearHttp=historyClear&&historyResync?new SqliteHistoryClearHttp(historyClear,historyResync):undefined;
     // 图片同步装配来源可验证的图片入口；其他媒体沿已认证能力开放。
     const originalImages=history&&await supportsWechatOriginalImages(sqlite.wechatCliPath);
     media = new SqliteMediaService({storage,contacts,history:{source:(contactId,recordId)=>{
@@ -246,7 +233,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
     await media.initialize();
     if(originalImages)imageSync=new SqliteImageSyncCoordinator(backgroundReads,syncDirectory,media);
     if(history&&await supportsWechatQuotes(sqlite.wechatCliPath))quoteSync=new SqliteQuoteSyncCoordinator(syncDirectory,history);
-    contacts.setReadStop(async contactId=>{await Promise.all([historyRecertify?.stop(contactId),imageSync?.stop(contactId),quoteSync?.stop(contactId),firstHistory?firstHistory.stop(contactId):history?.stop(contactId),incremental?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);if(contactId)await checkpointCache?.forget(contactId);else await wechat?.stop();});
+    contacts.setReadStop(async contactId=>{await Promise.all([imageSync?.stop(contactId),quoteSync?.stop(contactId),firstHistory?firstHistory.stop(contactId):history?.stop(contactId),incremental?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);if(contactId)await checkpointCache?.forget(contactId);else await wechat?.stop();});
     const mediaHttp = new SqliteMediaHttp(media);
     const discussionsEnabled=capabilities.capabilities.includes('discussions'),memoryEnabled=capabilities.capabilities.includes('memory');
     if(discussionsEnabled||memoryEnabled)models=await createSqliteModelRuntime({ctx,environment:modelEnvironment,userData:sqlite.userData,businessHome:config.businessHome,infoPath:config.infoPath,envFilePath:config.envFilePath,
@@ -281,7 +268,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
       if(changesMemoryScope)res.once('finish',()=>{if(automaticBackground&&res.statusCode>=200&&res.statusCode<300)memory?.wake();});
       let releaseForeground:(()=>void)|undefined;
       try {
-        const changesAuthority=req.method==='DELETE'||req.method==='POST'&&(/^\/api\/contacts\/[a-f0-9-]{36}\/history\/recertify(?:\/cancel)?$/.test(url.pathname)||/^\/api\/sync\/(enable|disable|cli-bindings\/(confirm|revoke))$/.test(url.pathname)||/^\/api\/setup\/wechat\//.test(url.pathname));
+        const changesAuthority=req.method==='DELETE'||req.method==='POST'&&(/^\/api\/sync\/(enable|disable|cli-bindings\/(confirm|revoke))$/.test(url.pathname)||/^\/api\/setup\/wechat\//.test(url.pathname));
         if(changesAuthority&&foreground)releaseForeground=await foreground.beginChange();
         if (req.method === 'GET' && url.pathname === '/api/runtime/status') {
           let available=false;

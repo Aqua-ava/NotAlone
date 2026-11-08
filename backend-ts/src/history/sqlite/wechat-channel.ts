@@ -38,6 +38,7 @@ class WechatHistoryChannel implements HistoryChannel {
  #targetIssued=false;
  #closed=false;
  #closing?:Promise<void>;
+ /** 已释放选择并保留进程的停车收尾；共享模式下与close共用幂等回执，重试不重发请求。 */
  #parking?:Promise<void>;
  #unsubscribeStop?:()=>void;
  constructor(executable?:string,checkpointScope?:(scope:HistoryScope)=>Promise<void>,shared?:SharedWechatClient){this.#executable=executable;this.#checkpointScope=checkpointScope;this.#shared=shared;}
@@ -62,7 +63,7 @@ class WechatHistoryChannel implements HistoryChannel {
   }
  }
  async #client(scope:HistoryScope,signal?:AbortSignal):Promise<NarrowWechatClient>{
-  if(this.#closed)return reject('history_native_closed');
+  if(this.#closed){if(process.env.NOTALONE_DBG==='1')console.error('DBG_CH_CLOSED',this.#parking!==undefined?'parked-closed':'plain-closed');return reject('history_native_closed');}
   if(signal!==undefined&&!(signal instanceof AbortSignal))return reject('history_request_invalid');
   if(signal?.aborted){await this.close();return reject('history_native_cancelled');}
   const identity=scopeIdentity(scope);
@@ -145,7 +146,10 @@ class WechatHistoryChannel implements HistoryChannel {
    if(this.#shared){await this.park();return;}
    await this.#native?.close();
    try{await this.#opening;}catch{/* 初始化失败仍须排空；不重开读者。 */}
-   await this.#native?.close();
+   try{
+    if(this.#native?.stoppedReason)await this.#native?.close();
+    else await this.#native?.releaseSelection();
+   }finally{await this.#lease?.release();}
   })().catch(error=>{this.#closing=undefined;throw error;});
  }
 
