@@ -30,6 +30,11 @@ export const registry={...base,actions:[...base.actions,versionClosurePlans,{
   // 提取核验事件单独回传：验证 time_unverified 等候选层证据时不需要放宽主追踪过滤。
   return tx.all("SELECT e.kind,e.payload FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE e.owner_id=? AND s.kind='extraction_verification' ORDER BY e.rowid",[ownerId]).map(e=>({...e,payload:JSON.parse(e.payload)}));
  }},{
+ // 状态注入：把某条记忆的全部来源消息隔离，使其引用不再是当前有效来源（如旧绑定副本退出后的真实状态）。
+ name:'fixture.quarantineMemorySources',mode:'write',retryBusy:false,execute(tx,{ownerId,memoryId}){
+  return tx.run("INSERT OR IGNORE INTO history_message_quarantine(owner_id,contact_id,message_id,reason) SELECT DISTINCT owner_id,source_contact_id,message_id,'fixture_stale_source' FROM memory_citation WHERE owner_id=? AND memory_id=?",[ownerId,memoryId]);
+ },
+},{
  // 状态注入：把提取核验步骤置为 unknown，用来验证放弃动作只处理裁决类未知。
  name:'fixture.markExtractionStepUnknown',mode:'write',retryBusy:false,execute(tx,{ownerId,runId}){
   return tx.run("UPDATE processing_step SET state='unknown' WHERE owner_id=? AND kind='extraction_verification' AND id=(SELECT s.id FROM processing_step s JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE s.owner_id=? AND t.run_id=? AND s.kind='extraction_verification' ORDER BY s.step_no LIMIT 1)",[ownerId,ownerId,runId]);

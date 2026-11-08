@@ -91,8 +91,16 @@ function freeze(tx:StorageTransaction,ownerId:string,candidateId:string):Basis {
  for(const m of memories){
   const v=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,m.id,m.current_version_no]);if(!v)fail('memory_head_conflict');
   if(memoryTimeEligibility(tx,ownerId,{memoryId:String(m.id),versionNo:v!.version_no as bigint})!=='eligible')continue;
-  requireVersion(tx,ownerId,m,v!);
-  const prior=versionFact(tx,ownerId,v!),textSources=sources(tx,ownerId,{memoryId:String(m.id),versionNo:v!.version_no as bigint});
+  let prior:Record<string,any>|null,textSources:AdjudicationSource[];
+  try{
+   requireVersion(tx,ownerId,m,v!);
+   prior=versionFact(tx,ownerId,v!);textSources=sources(tx,ownerId,{memoryId:String(m.id),versionNo:v!.version_no as bigint});
+  }catch(error){
+   // 自动采纳的有效记忆若来源已不是当前有效来源（如旧绑定副本退出），它不再是可信的比较对象：只跳过它，
+   // 不能让同范围所有候选都因它而无法裁决。已撤回或人工保护的资料仍须按原样阻断，避免被无声绕过。
+   if(error instanceof StorageFailure&&error.code==='memory_source_stale'&&m.state==='active'&&m.manual_protection!==1n)continue;
+   throw error;
+  }
   parents.push({id:String(m.id),versionNo:String(v!.version_no),headRevision:String(m.head_revision),protected:m.manual_protection===1n||m.state==='withdrawn'});
   similar.push({memory_id:String(m.id),revision:String(v!.version_no),text:String(v!.body),category:prior?.category??'user_memory',topic:prior?.topic??'',subject:scopeKind==='self'?'self':'contact',adoption_method:v!.adoption_mode==='auto'&&m.state==='active'&&sourceVerificationState(tx,ownerId,{memoryId:String(m.id),versionNo:v!.version_no as bigint})==='verified'?'auto':'manual',source_message_ids:[...new Set(textSources.map(s=>s.message_id))],source_texts:textSources,statement_time:textSources.map(s=>s.occurred_at).filter((s):s is string=>s!==null).sort().at(-1)??null,valid_at:prior?.valid_at??null,invalid_at:prior?.invalid_at??null,event:prior?.event??null,conditions:prior?.conditions??null,source_receipt:digest(textSources),source_dependency_mode:prior?.source_dependency_mode??'all',requires_all_sources:prior?.requires_all_sources??true});
  }

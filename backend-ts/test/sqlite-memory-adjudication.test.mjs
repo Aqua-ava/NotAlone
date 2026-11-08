@@ -108,3 +108,12 @@ for(const action of ['protect','unprotect'])test(`合并父资料保护后旧恢
  else {const result=await f.management.decide(request),after=await f.read();assert.equal(active(after).length,2);for(const prior of original)assert.equal(after.memories.find(m=>m.id===prior.id).current.body,prior.current.body);assert.deepEqual(await f.management.decide(request),result);assert.deepEqual(await f.read(),after);}
  await healthy(f);
 });
+
+test('对比池里某条记忆的来源已失效时只跳过它，不拖死同范围其余候选',async t=>{
+ const f=await adjudicationFixture(t);await seed(f);const stale=(await f.read()).memories[0];
+ await f.storage.execute('fixture.quarantineMemorySources',{ownerId:f.owner,memoryId:stale.id});
+ const runId=await f.extract(['我长期偏好合成新活动。']);await f.adjudication.publishRun(runId);
+ const view=await f.read();assert.equal(view.candidates.filter(c=>c.state==='pending').length,0,await diagnostic(f));
+ const trace=await f.trace();assert.equal(trace.decisions.filter(d=>d.action==='auto_accept'&&d.outcome==='applied').length,2,await diagnostic(f));assert.equal(view.memories.length,2);
+ assert.equal(f.calls.length,0,'失效记忆不进入比较池，池为空时不需要关系调用');await healthy(f);
+});
