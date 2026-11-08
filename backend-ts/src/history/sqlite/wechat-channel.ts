@@ -63,7 +63,7 @@ class WechatHistoryChannel implements HistoryChannel {
   }
  }
  async #client(scope:HistoryScope,signal?:AbortSignal):Promise<NarrowWechatClient>{
-  if(this.#closed)return reject('history_native_closed');
+  if(this.#closed){if(process.env.NOTALONE_DBG==='1')console.error('DBG_CH_CLOSED',this.#parking!==undefined?'parked-closed':'plain-closed');return reject('history_native_closed');}
   if(signal!==undefined&&!(signal instanceof AbortSignal))return reject('history_request_invalid');
   if(signal?.aborted){await this.close();return reject('history_native_cancelled');}
   const identity=scopeIdentity(scope);

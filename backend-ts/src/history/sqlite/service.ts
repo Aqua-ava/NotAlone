@@ -115,7 +115,7 @@ export class SqliteHistoryService {
   let holder:Parameters<ActiveHolders['register']>[0]|undefined;
   let entry:RetainedEntry|undefined;
   const releases:(()=>Promise<void>)[]=[];
-  let gracefulRelease=false;
+  let cleanupDone=false,gracefulRelease=false;
   const closeChannel=()=>{
    if(!channel)return Promise.resolve();
    intentionalClose=true;
@@ -130,6 +130,8 @@ export class SqliteHistoryService {
    }finally{if(releaseFailed&&!storageClosed){await this.storage.close();storageClosed=true;}}
   })().catch(error=>{releasing=undefined;throw error;});
   const cleanup=async()=>{
+   if(cleanupDone){await work.promise;return;}
+   cleanupDone=true;
    let failure:unknown;
    try{for(const release of releases.reverse())await release();}catch(error){failure??=error;}
    // 探测轮等显式要求时，正常结果的租约也整体收尾（守卫+通道+条目），保留表清除；
@@ -187,19 +189,24 @@ export class SqliteHistoryService {
    entry=existing;
    let freshChannel=false;
    channel=entry&&!entry.parked?entry.channel:(freshChannel=true,this.createChannel());
+   if(process.env.NOTALONE_DBG==='1')console.error('DBG_LEASE',contactId.slice(0,8),'entry='+Boolean(entry),'parked='+Boolean(entry&&entry.parked),'fresh='+freshChannel);
    if(!entry){const created:RetainedEntry={channel:channel!,contactId,token,digest:JSON.stringify(token),parked:false,failed:false,normalUse:false,bodyVerified:false,close:()=>Promise.resolve(created.channel.close?.())};entry=created;}
    entry.token=token;entry.digest=JSON.stringify(token);
-   // 保留通道失联归因：在途读者按自身错误围栏；空闲守卫只降级正文资格并请求首次恢复，完整重验后才判围栏。
+   // 保留通道失联归因：在途读者按自身错误围栏；空闲守卫整体释放（守卫置 lost）并请求首次恢复，完整重验后才判围栏。
    if(freshChannel&&channel.guardSession)void channel.guardSession.loss.then(()=>{
     this.bodySupport.delete(contactId);
     const lostEntry=this.retained.get(contactId);
     if(lostEntry&&lostEntry.channel===channel){
      lostEntry.failed=true;lostEntry.failedCode=channel.guardSession?.failureCode?.()??null;
-     if(!this.active.has(contactId)&&lostEntry.normalUse)void this.requestFirstHistoryRecovery(contactId).catch(()=>{});
+     if(!this.active.has(contactId)){
+      // 失联即整体释放：守卫置 lost 使候选可验；首次恢复由协调器轮询或下一次读取发起，不在此重复唤醒。
+      void this.retireEntry(lostEntry).catch(()=>{});
+     }
     }
    });
    holder={key:historyReaderHolderKey(contactId,token.data_generation),ownerId:token.owner_id,contactId,generation:BigInt(token.data_generation),coversAllSources:true,close:stop};
    releaseHolder=this.holders.register(holder);
+   releases.push(releaseHolder);
    // 每任务一条易失reader；与读者holder同租约生命周期，任务完成后统一释放。
    const register=(key:string,coversAllSources=false)=>{const release=this.holders.register({key,ownerId:token!.owner_id,contactId,generation:BigInt(token!.data_generation),coversAllSources,close:stop});releases.push(release);return release;};
    const registerGoal=(goalId:string)=>register(`history:${goalId}`);
@@ -208,7 +215,7 @@ export class SqliteHistoryService {
     if(!channel?.guardSession){if(proof)throw new StorageFailure('history_guard_invalid');return {revalidated:false};}
     if(guardId)throw new StorageFailure('history_guard_invalid');
     const session=channel.guardSession;if(!(session.loss instanceof Promise))throw new StorageFailure('history_guard_invalid');
-    // 已停车的保留守卫换用本租约的新通道；停车时旧通道已释放选择，静默复用其幂等收尾。
+    // 已停车的保留守卫换用本租约的新通道（选择在租约开始完成）；停车时旧通道已释放选择，幂等收尾静默。
     if(entry&&entry.parked&&entry.channel!==channel){
      const parkedChannel=entry.channel;entry.channel=channel;entry.parked=false;
      void parkedChannel.close?.().catch(()=>{});
@@ -237,7 +244,9 @@ export class SqliteHistoryService {
      :{ok:await this.storage.execute<boolean>('history.guardAcquire',{token,guardId:candidateId2}),revalidated:false};
     if(!prepared.ok)throw new StorageFailure('history_source_continuity_unverified');
     guardId=candidateId2;
-    if(entry&&entry.channel===channel){entry.guardId=guardId;if(proof){entry.report=structuredClone(proof.report);entry.target=structuredClone(proof.target);}}
+    if(entry&&entry.channel===channel){entry.guardId=guardId;if(proof){entry.report=structuredClone(proof.report);entry.target=structuredClone(proof.target);}
+     // 与基线一致：armGuard 装配成功即在保留表登记当前条目，后续停车/检查点路径可按联系人命中。
+     this.retained.set(contactId,entry);}
     const lost=()=>{if(intentionalClose||leaseSettled)return;lossCode=session.failureCode?.()??'history_source_unverified';controller.abort();this.bodySupport.delete(contactId);void releaseGuard().catch(()=>{});};
     void session.loss.then(lost,lost);
     return {guardId,revalidated:prepared.revalidated};
@@ -260,7 +269,8 @@ export class SqliteHistoryService {
   }finally{
    leaseSettled=true;
    signal?.removeEventListener('abort',abort);workFinished=true;work.resolve();
-   try{if(releaseHolder)await releaseHolder();else await cleanup();}finally{done.resolve();}
+   // 工作先声明结束再统一收尾：holder 释放回调的 stop 不再等待在途工作，避免与 releases 循环互等。
+   try{await cleanup();}finally{done.resolve();}
   }
  }
  private async check(scope:HistoryScope,controller:AbortController):Promise<void>{
@@ -363,9 +373,12 @@ export class SqliteHistoryService {
    if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target,report}))throw new StorageFailure('history_source_continuity_unverified');
    await this.check(scope,controller);await this.storage.execute('history.guardAuthorize',{token:scope.token,guardId:armed.guardId});
    // 记忆来源重验完成后把共享读取器停回轻量停车；后续同联系人读取按其检查点重建目标与守卫。
-   if(options.retain!==false&&this.shared&&typeof channel.park==='function'){await channel.park();const parked=this.retained.get(contactId);if(parked)parked.parked=true;}
    return armed.revalidated;
   });
+  if(options.retain!==false&&this.shared){
+   const parked=this.retained.get(contactId);
+   if(parked&&typeof parked.channel.park==='function'&&parked.normalUse&&!parked.failed){await parked.channel.park();parked.parked=true;}
+  }
   // 成功重验会使旧未完目标失效；释放租约后再交回首次历史，失败不派发完成唤醒。
   if(revalidated&&!(await this.coverage(contactId)).traversalComplete)this.wakeFirstHistory(contactId);
  }
@@ -473,8 +486,7 @@ export class SqliteHistoryService {
   if(contactIds.length>16)throw new StorageFailure('history_request_invalid');
   return this.storage.execute('history.coverages',{ownerId:this.contacts.ownerId,contactIds});
  }
- async synchronize(contactId:string,signal?:AbortSignal):Promise<HistorySynchronization>{
-  let wakeGrowth=false;
+ async synchronize(contactId:string,signal?:AbortSignal):Promise<HistorySynchronization>{  let wakeGrowth=false;
   try{return await this.withChannel(contactId,signal,async(scope,channel,controller,registerGoal,armGuard,metadataRevalidation,retainedGuardAvailable)=>{
   let goal:PendingGoal|undefined;
   const check=()=>this.check(scope,controller);
@@ -540,7 +552,8 @@ export class SqliteHistoryService {
     const coverage=this.publishAcceptedMessages(contactId,accepted,false);
     if(page.exhausted)return coverage;goal!.cursor=page.cursorOut;
     if(checkpoint){
-     await channel.park!();const guard=this.retained.get(contactId);if(guard)guard.parked=true;
+     // 与基线一致：停车所标记的正是当前保留条目（armGuard 已在保留表登记）。
+     await channel.park!();const guardEntry=this.retained.get(contactId);if(guardEntry&&guardEntry.channel===channel)guardEntry.parked=true;
      return Object.defineProperty(coverage,resumableHistorySlice,{value:true});
     }
     // 每1000页只让出事件循环；下一页照常核对取消、授权和守卫，不释放未完成的原生快照。
@@ -561,8 +574,7 @@ export class SqliteHistoryService {
 
  /** 增量只从已证明的完整作用域检查点续读；每页接受前由存储动作复验资格、代次与删除状态。 */
  /** 默认把手交回首次协调器，不打断来源准备等调用方；同租约交接仅由接续增量的调用方显式开启。 */
- async synchronizeIncremental(contactId:string,signal?:AbortSignal,options:{followHistoryHandoff?:boolean}={}):Promise<HistoryCoverage>{
-  let wakeGrowth=false;
+ async synchronizeIncremental(contactId:string,signal?:AbortSignal,options:{followHistoryHandoff?:boolean}={}):Promise<HistoryCoverage>{  let wakeGrowth=false;
   try{return await this.withChannel(contactId,signal,async(scope,channel,controller,registerGoal,armGuard,metadataRevalidation,retainedGuardAvailable,releaseNormalUseGuard)=>{
   let goal:{id:string;target:HistoryTarget;cursor:string}|undefined;
   const check=()=>this.check(scope,controller);

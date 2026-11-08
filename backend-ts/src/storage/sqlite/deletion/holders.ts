@@ -21,12 +21,15 @@ export class ActiveHolders {
     const fence = [this.blockedContacts.get(contactKey), this.blockedOwners.get(resource.ownerId),
       resource.coversAllSources === true ? this.blockedSourceContacts.get(contactKey) : undefined]
       .reduce<bigint>((max, value) => value !== undefined && value > max ? value : max, -1n);
+    const fencedV=this.held.has(key),blockedV=this.blockedKeys.has(key),genV=typeof resource.generation!=='bigint'||resource.generation<0n||resource.generation<fence;
+    if(fencedV||blockedV||genV){if(process.env.NOTALONE_DBG==='1')console.error('DBG_FENCE',resource.key,'held='+fencedV,'blocked='+blockedV,'gen='+genV,'actualKeyPub='+JSON.stringify(Array.from(this.held.keys()).slice(0,6)));}
     if (typeof resource.generation !== 'bigint' || resource.generation < 0n || this.held.has(key) || this.blockedKeys.has(key)
       || resource.generation < fence) throw new StorageFailure('deletion_holder_fenced');
     this.held.set(key, resource);
     return () => this.close(resource);
   }
   private close(resource: HeldResource): Promise<void> {
+    if(process.env.NOTALONE_DBG==='1')console.error('DBG_HCLOSE',resource.key.slice(12,44),'hadClosing='+Boolean(resource.closing));
     return resource.closing ??= Promise.resolve().then(resource.close).then(() => { this.held.delete(scopedKey(resource.ownerId, resource.key)); }, error => {
       // 只有明确失败才允许重新调用；超时不能释放仍在进行的close。
       resource.closing = undefined;
