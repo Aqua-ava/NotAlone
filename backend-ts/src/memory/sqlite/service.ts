@@ -175,6 +175,21 @@ export class SqliteMemoryExtraction {
    if(result.launchRunId)this.launch(result.launchRunId);return result.view;
   });
  }
+ /**
+  * 用户显式让当前联系人遗留的待处理候选重新进入裁决：沿该轮已有的后续链执行，不新建提取轮、不领取提取目标，
+  * 也不触碰其他联系人。后续链异步执行，调用方通过联系人视图观察进度；与自动处理一样受总开关约束。
+  */
+ async readjudicate(contactId:string){
+  return this.admit(async()=>{
+   await this.initialize();this.requireAutomatic();this.available();
+   if(!this.afterRunSettled)throw new StorageFailure('memory_extraction_unavailable');
+   const runId=await this.storage.execute<string|null>('memoryExtraction.pendingAdjudicationRun',{ownerId:this.ownerId,contactId});
+   if(!runId)throw new StorageFailure('memory_extraction_no_pending_adjudication');
+   if(this.runs.has(runId))throw new StorageFailure('memory_extraction_contact_busy');
+   const work=this.executeFollowup(runId,false,[contactId]).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});
+   return this.readContact(contactId);
+  });
+ }
  /** 重启时只恢复持久标记为pending且L1已安全结束的后续登记，不再领取提取目标。 */
  async resumeFollowups():Promise<number>{
   this.available();if(!this.afterRunSettled)return 0;

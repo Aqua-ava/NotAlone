@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {adjudicationFixture,adjudicationSupplier} from './fixtures/memory-management/adjudication-support.mjs';
+import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 
 const healthy=async f=>assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 const active=view=>view.memories.filter(m=>m.state==='active');
@@ -116,4 +117,23 @@ test('对比池里某条记忆的来源已失效时只跳过它，不拖死同�
  const view=await f.read();assert.equal(view.candidates.filter(c=>c.state==='pending').length,0,await diagnostic(f));
  const trace=await f.trace();assert.equal(trace.decisions.filter(d=>d.action==='auto_accept'&&d.outcome==='applied').length,2,await diagnostic(f));assert.equal(view.memories.length,2);
  assert.equal(f.calls.length,0,'失效记忆不进入比较池，池为空时不需要关系调用');await healthy(f);
+});
+
+test('遗留待处理候选可由联系人范围的重新裁决再处理，且受总开关约束、无遗留时拒绝',async t=>{
+ const f=await adjudicationFixture(t);await seed(f);let memory=(await f.read()).memories[0];
+ // 人工保护的失效记忆仍按原样阻断：新候选停在待处理。
+ await f.management.decide({requestKey:'protect-stale',action:'protect',memoryId:memory.id,expectedVersionNo:'1',expectedHeadRevision:memory.headRevision});
+ await f.storage.execute('fixture.quarantineMemorySources',{ownerId:f.owner,memoryId:memory.id});
+ const runId=await f.extract(['我长期偏好合成新活动。']);await f.adjudication.publishRun(runId);
+ assert.equal((await f.read()).candidates.filter(c=>c.state==='pending').length,1,await diagnostic(f));
+ const service=new SqliteMemoryExtraction(f.storage,f.owner,{invoke:async()=>{throw new Error('重新裁决不得发起提取调用');}},undefined,async id=>f.adjudication.publishRun(id));t.after(()=>service.close());
+ await service.setAutomatic(false);await assert.rejects(service.readjudicate(f.contactId),{code:'memory_auto_processing_disabled'});
+ await service.setAutomatic(true);
+ // 来源仍失效时再次裁决不改变结果；来源恢复后同一入口把遗留候选处理掉。
+ await service.readjudicate(f.contactId);await service.waitForIdle(runId);
+ assert.equal((await f.read()).candidates.filter(c=>c.state==='pending').length,1);
+ await f.storage.execute('fixture.releaseMemorySources',{ownerId:f.owner,memoryId:memory.id});
+ await service.readjudicate(f.contactId);await service.waitForIdle(runId);
+ const view=await f.read();assert.equal(view.candidates.filter(c=>c.state==='pending').length,0,await diagnostic(f));assert.equal(view.memories.length,2);
+ await assert.rejects(service.readjudicate(f.contactId),{code:'memory_extraction_no_pending_adjudication'});await healthy(f);
 });

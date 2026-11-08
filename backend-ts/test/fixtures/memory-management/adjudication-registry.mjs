@@ -35,6 +35,11 @@ export const registry={...base,actions:[...base.actions,versionClosurePlans,{
   return tx.run("INSERT OR IGNORE INTO history_message_quarantine(owner_id,contact_id,message_id,reason) SELECT DISTINCT owner_id,source_contact_id,message_id,'fixture_stale_source' FROM memory_citation WHERE owner_id=? AND memory_id=?",[ownerId,memoryId]);
  },
 },{
+ // 状态注入：解除上面的来源隔离，模拟来源恢复为当前有效。
+ name:'fixture.releaseMemorySources',mode:'write',retryBusy:false,execute(tx,{ownerId,memoryId}){
+  return tx.run("DELETE FROM history_message_quarantine WHERE owner_id=? AND reason='fixture_stale_source' AND message_id IN (SELECT message_id FROM memory_citation WHERE owner_id=? AND memory_id=?)",[ownerId,ownerId,memoryId]);
+ },
+},{
  // 状态注入：把提取核验步骤置为 unknown，用来验证放弃动作只处理裁决类未知。
  name:'fixture.markExtractionStepUnknown',mode:'write',retryBusy:false,execute(tx,{ownerId,runId}){
   return tx.run("UPDATE processing_step SET state='unknown' WHERE owner_id=? AND kind='extraction_verification' AND id=(SELECT s.id FROM processing_step s JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE s.owner_id=? AND t.run_id=? AND s.kind='extraction_verification' ORDER BY s.step_no LIMIT 1)",[ownerId,ownerId,runId]);
