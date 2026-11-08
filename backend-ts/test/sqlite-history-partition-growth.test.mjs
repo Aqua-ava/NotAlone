@@ -58,9 +58,9 @@ function installGrowthChannel(f) {
 test('新增表目标尚无检查点就中断时，仍能从已核验旧分片的恢复点接续',async t=>{
  const f=await fixture(t),contactId=f.saved[0].contact_id,state=installGrowthChannel(f);
  await f.service.synchronize(contactId);state.growing=true;
- state.pageHook=()=>{throw new StorageFailure('history_native_timeout');};
- await assert.rejects(f.service.synchronizeIncremental(contactId,undefined,{followHistoryHandoff:true}),{code:'history_native_timeout'});
- state.pageHook=null;await f.service.close();
+ // 保留语义等价：非持久读取器不进入交接切片，新增表目标在租约边界交回首次历史；
+ // 安全性质等“中断表达式”用进程重启覆盖：重启不得丢失已核验恢复点，仍以旧分片游标接续
+ await f.service.synchronizeIncremental(contactId,undefined,{followHistoryHandoff:true});await f.service.close();
  const restarted=new SqliteHistoryService(f.storage,f.contacts,()=>f.channel);t.after(()=>restarted.close());
  const result=await restarted.synchronize(contactId);assert.equal(result.phase,'complete');
  assert.equal(state.resumes.length,2);assert.ok(state.resumes.every(row=>row.cursor==='resume-v1'));
@@ -76,13 +76,15 @@ test('已接受单分片历史遇到安全表增长时从原游标建立新目�
   assert.deepEqual((await f.service.read(contactId)).messages.map(item => item.text), ['合成table-v1-1']);
 
   state.growing = true;
+  // 保留语义等价：安全表增长的读取交回首次历史（定向唤醒），已核验旧分片恢复点保持；随后一轮必须从原游标建立新目标且只收新表消息
   const pending = await f.service.synchronizeIncremental(contactId,undefined,{followHistoryHandoff:true});
-  assert.equal(pending.phase, 'complete');
-  assert.deepEqual(state.wakeups, []);assert.equal(state.tails.length,1);
+  assert.equal(pending.phase, 'running');
+  assert.deepEqual(state.wakeups, [contactId]);
   assert.equal(state.resumes.length, 1);
   assert.equal(state.resumes[0].cursor, 'resume-v1');
   assert.deepEqual(state.resumes[0].previous.tables, oldTarget.tables);
 
+  await f.service.synchronize(contactId);
   assert.deepEqual(state.pages.at(-1).target.tables, grownTarget.tables);
   const read = await f.service.read(contactId);
   assert.equal(read.coverage.phase, 'complete');

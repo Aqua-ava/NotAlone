@@ -226,7 +226,8 @@ test('共享读取器停止后的旧渠道仍须核对物理目标，实际变�
   assert.equal(state.fences.length, 0, '共享进程错误码不得直接围栏空闲守卫');
   assert.equal(leaseFor(state,f.contactA).state,'lost');
   f.lane.targetFactory=async()=>({...target,tables:target.tables.map(t=>({...t,instance:'synthetic-replaced-table'}))});
-  await assert.rejects(f.service.synchronize(f.contactA),{code:'history_source_changed'});
+  // 判断记录：来源身份层（account/source_generation）变化才抛 history_source_changed（另有用例覆盖）；仅物理表实例变化属 continuity 事实核验未过（T02 围栏原因），与 06 保存点断言一致
+  await assert.rejects(f.service.synchronize(f.contactA),{code:'history_source_continuity_unverified'});
   state = await stateOf(f);
   assert.ok(fenceFor(state, f.contactA), '当前物理实例确实变化时必须围栏并停读');
 });

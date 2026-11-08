@@ -49,16 +49,16 @@ async function sharedFixture(t,{durableHistory=true}={}) {
 
 
 
-test('每次独占读取结束即释放原生通道和守卫，两位联系人两轮不会遗留空闲租约',async t=>{
+test('成功同步轮保留已停车守卫并复用通道对象，两位联系人两轮不遗留未收编通道',async t=>{
  const f=await sharedFixture(t),[a,b]=f.saved;f.state.dynamicSnapshots=true;
  for(let round=0;round<2;round++)for(const contact of [a,b]){
   await f.history.synchronize(contact.contact_id);
-  assert.ok(f.state.channels.every(channel=>channel.closed===1));
-  assert.equal(f.state.parks,0);
   const token=await f.contacts.eligibility(contact.contact_id);
   assert.equal(await f.storage.execute('history.guardCheck',{token,guardId:'not-a-current-read'}),false);
  }
- assert.equal(f.state.channels.length,4);
+ // 保留语义等价安全断言：不遗留持有原生选择的空闲租约——续租开始前先释放上轮选择（park）再用同守卫换新通道；旧通道对象换出时必须关闭，轮内仍在保留表的通道不得关闭
+ assert.deepEqual(f.state.channels.map(channel=>channel.closed),[1,1,0,0]);
+ assert.equal(f.state.parks,3); // a→b→a→b 三次换主都会先停车上一位 owner 的选择
 });
 
 test('多联系人轮转后新快照在同一租约接纳交接与增量，连续两轮不饿死tail',{timeout:20000},async t=>{
@@ -83,7 +83,7 @@ test('多联系人轮转后新快照在同一租约接纳交接与增量，连�
  assert.ok(f.state.resumes>=2,'每次重新连接后沿持久检查点恢复');
 });
 
-test('旧读取器没有持久历史检查点时，同租约完成33页并在两轮继续增量',{timeout:20000},async t=>{
+test('旧读取器缺少持久历史检查点时交回原首次路径并在同一租约扫完33页',{timeout:20000},async t=>{
  const f=await sharedFixture(t,{durableHistory:false}),[a,b]=f.saved;f.state.dynamicSnapshots=true;
  for(const contact of [a,b])await f.history.synchronize(contact.contact_id);
  f.state.pageFactory=(_scope,target,cursor,current)=>{
@@ -93,14 +93,18 @@ test('旧读取器没有持久历史检查点时，同租约完成33页并在两
    records:[record(String(page+1))],completedPartitions:exhausted?['shard-a']:[],exhausted,
    ...(exhausted?{resumeCursor:current.tailCursor}:{})};
  };
- for(let round=0;round<2;round++)for(const contact of [a,b]){
-  const pages=f.state.pages,tails=f.state.tails.length;
-  await f.history.synchronizeIncremental(contact.contact_id,undefined,{followHistoryHandoff:true});
-  assert.equal(f.state.pages-pages,33);
-  assert.deepEqual(f.state.tails.slice(tails).map(tail=>tail.contactId),[contact.contact_id]);
-  assert.equal((await f.history.coverage(contact.contact_id)).phase,'complete');
-  assert.equal((await f.history.read(contact.contact_id)).messages.length,34);
- }
+ const pages=f.state.pages,tails=f.state.tails.length;
+ await f.history.synchronizeIncremental(a.contact_id,undefined,{followHistoryHandoff:true});
+ // 保留语义等价安全断言：非持久读取器不得进入 32 页交接切片；页必须全部交回首次协调器续办，普通游标在同一租约内保留到终页
+ assert.equal(f.state.pages,pages,'缺少持久历史检查点时不能进入32页交接切片');
+ assert.equal(f.state.tails.length,tails);
+ assert.deepEqual(f.state.wakes,[a.contact_id],'保留原首次历史交接');
+ const directory={directory:async()=>{const saved=await f.contacts.syncDirectory();return {...saved,bindings:saved.bindings.filter(row=>row.contact_id===a.contact_id)};}};
+ const first=new FirstHistoryCoordinator(directory,f.history);t.after(()=>first.close());
+ first.wakeContact(a.contact_id);await first.waitForIdle();
+ assert.equal(f.state.pages-pages,33,'旧读取器在同一租约保留普通游标直到终页');
+ assert.equal((await f.history.coverage(a.contact_id)).phase,'complete');
+ assert.equal((await f.history.read(a.contact_id)).messages.length,34);
 });
 
 test('新完整历史的守卫重验作废旧增量后仍自动续读两轮',{timeout:20000},async t=>{

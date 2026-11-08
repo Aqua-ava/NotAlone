@@ -177,10 +177,11 @@ test('手动聊天文件导入与导入新建入口已从产品源码移除', as
 test('13偏好、15纠错诊断、17真实媒体与回复入口在SQLite宿主保持不可用声明', async () => {
   const source = await readFile(path.join(root, 'backend-ts/src/sqlite-host-plugin.ts'), 'utf8');
   for (const capability of ["expressionPreferences: 'unavailable'", "replies: 'unavailable'", "skillLearning: 'unavailable'",
-    "taskApi: 'unavailable'", "tasks: 'unavailable'", "imports: 'unavailable'", "mediaExtraction: 'unavailable'"]) {
+    "taskApi: 'unavailable'", "tasks: 'unavailable'", "imports: 'unavailable'"]) {
     assert.ok(source.includes(capability), `SQLite 宿主缺少停用声明：${capability}`);
   }
-  assert.ok(source.includes("mediaExtraction: 'unavailable'"));
+  // 真实媒体提取在宿主按集成图片能力条件启用；关闭能力时必须回落为不可用声明（与 main 语义一致）
+  assert.ok(source.includes("mediaExtraction: originalImages?'typescript':'unavailable'"), 'SQLite 宿主的媒体提取须按图片能力条件声明');
 });
 
 test('受管 PostgreSQL 运行时与旧 schema 准备不再被桌面正常入口引用', async () => {
