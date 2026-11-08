@@ -139,7 +139,8 @@ export class SqliteHistoryService {
    if(gracefulRelease&&entry&&token){void this.retireEntry(entry).catch(()=>{});this.retained.delete(contactId);}
    if(!successful||options.retain===false)try{await releaseGuard();}catch(error){failure=error;}
    try{if(!successful||options.retain===false)await closeChannel();}catch(error){failure??=error;}
-   if(successful&&options.retain!==false&&entry&&token){
+   // 与基线一致：只有确实武装（或复用）了活守卫的成功租约才保留通道；无守卫的一次性租约照常关闭。
+   if(successful&&options.retain!==false&&entry&&token&&guardId){
     entry.normalUse=normalUse;entry.bodyVerified=bodyVerified;
     if(!entry.holderRelease){
      const resource:Parameters<ActiveHolders['register']>[0]={key:`history:guard_${contactId}_${token.data_generation}`,ownerId:token.owner_id,contactId,generation:BigInt(token.data_generation),coversAllSources:true,close:async()=>{
@@ -159,6 +160,7 @@ export class SqliteHistoryService {
     this.retained.set(contactId,entry);
    }
    else if(entry&&this.retained.get(contactId)===entry){entry.failed=true;this.retained.delete(contactId);void this.retireEntry(entry).catch(()=>{});}
+   else if(successful&&!guardId)try{await closeChannel();}catch(error){failure??=error;}
    // 关闭尚未确认时保留holder，停读或删除可重试真实排空。
    if((!releaseFailed||storageClosed)&&closing){try{await closing;this.active.delete(contactId);if(holder)holder.releasedOnFailure=true;}catch{/* 关闭失败已记录。 */}}
    else this.active.delete(contactId);
