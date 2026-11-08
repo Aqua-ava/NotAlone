@@ -38,6 +38,8 @@ class WechatHistoryChannel implements HistoryChannel {
  #targetIssued=false;
  #closed=false;
  #closing?:Promise<void>;
+ /** 已释放选择并保留进程的停车收尾；共享模式下与close共用幂等回执，重试不重发请求。 */
+ #parking?:Promise<void>;
  #unsubscribeStop?:()=>void;
  constructor(executable?:string,checkpointScope?:(scope:HistoryScope)=>Promise<void>,shared?:SharedWechatClient){this.#executable=executable;this.#checkpointScope=checkpointScope;this.#shared=shared;}
  async #open(signal?:AbortSignal):Promise<NarrowWechatClient>{
@@ -126,14 +128,26 @@ class WechatHistoryChannel implements HistoryChannel {
    prepareBoundaryCandidate(scope,candidate);return candidate;
   });
  }
+ park():Promise<void>{
+  if(!this.#shared)return this.close();
+  if(this.#parking)return this.#parking;
+  this.#closed=true;
+  return this.#parking=(async()=>{
+   try{await this.#opening;}catch{/* 初始化失败仍须排空；不重开读者。 */}
+   // 停读标记先于进程退出确认；重试仍须等待原生关闭，不能只凭标记跳过。
+   try{if(this.#native?.stoppedReason)await this.#native.close();else await this.#native?.releaseSelection();}
+   finally{await this.#lease?.release();}
+  })().catch(error=>{this.#parking=undefined;throw error;});
+ }
  close():Promise<void>{
   if(this.#closing)return this.#closing;
   this.#closed=true;this.#guardLoss.resolve();this.#unsubscribeStop?.();this.#unsubscribeStop=undefined;
   return this.#closing=(async()=>{
-   if(!this.#shared)await this.#native?.close();
+   if(this.#shared){await this.park();return;}
+   await this.#native?.close();
    try{await this.#opening;}catch{/* 初始化失败仍须排空；不重开读者。 */}
    try{
-    if(!this.#shared||this.#native?.stoppedReason)await this.#native?.close();
+    if(this.#native?.stoppedReason)await this.#native?.close();
     else await this.#native?.releaseSelection();
    }finally{await this.#lease?.release();}
   })().catch(error=>{this.#closing=undefined;throw error;});
