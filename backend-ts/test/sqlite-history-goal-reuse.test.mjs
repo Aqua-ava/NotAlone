@@ -27,7 +27,7 @@ function support(scope, overrides = {}) {
     programVersion: 'synthetic', build: '1', artifactSha256: 'a'.repeat(64), schemaFingerprint: 'b'.repeat(64),
     declaredPrimaryKey: ['local_id'], identity: 'source-table-local-v1', statusSemantics: 'synthetic-raw-codes',
     continuity: normalUseContinuity, serverAliasSemantics: 'unverified',
-    capabilities: { incrementalTail: 'supported', durableIncremental:'supported', normalHistory: 'supported', snapshotBarrier: 'supported',
+    capabilities: { incrementalTail: 'supported', normalHistory: 'supported', snapshotBarrier: 'supported',
       partitionCoverage: 'supported', sourceLifecycle: 'supported', restartContinuity: 'supported',
       recoveryMapping: 'supported', exactSchema: 'supported', declaredLocalKey: 'supported',
       automaticAllocation: 'supported', statusColumn: 'supported' }, ...overrides,
@@ -45,7 +45,6 @@ function createChannel(state) {
         descriptor: `synthetic:${scope.conversationKey}${state.descriptorSuffix ?? ''}`,
         partitions: ['p'], tables: [{ partition: 'p', instance: 't' }], sourceGeneration: 'source-1',
       }),
-      resumeTarget:async(scope,previous)=>previous.descriptor===`synthetic:${scope.conversationKey}${state.descriptorSuffix??''}`?structuredClone(previous):null,
       page: async (_scope, target, cursor) => ({
         target: target.descriptor, cursorIn: cursor, cursorOut: null,
         records: state.historyRecords, completedPartitions: ['p'], exhausted: true,
@@ -57,6 +56,7 @@ function createChannel(state) {
         return { target: target.descriptor, cursorIn: cursor, cursorOut: batch.cursorOut ?? cursor,
           caughtUp: batch.caughtUp ?? true, records: batch.records ?? [] };
       },
+      park: async () => {},
       close: async () => { loss.resolve(); },
     };
   };
@@ -143,30 +143,46 @@ test('重启重验后同范围 0 页空增量目标被复用：不再新建交�
   assert.equal(invalidatedCount(before), 0);
 
   await f.restart();
-  // 正式入口由读取器验证恢复点；零页旧目标仍具同范围资格，可在本次尾页完成时沿用。
+  // 重开后的第一轮仍执行跨运行代次重验；重验识别出同范围 0 页空目标后保存原值并续用。
   await f.history.synchronizeIncremental(binding.contact_id);
-  const after = await goals(f, binding.contact_id), incrementalAfter = after.find(row => row.id === incrementalBefore.id);
-  assert.equal(after.length, before.length + 1, '本轮只新增历史交接目标');
+  await f.history.synchronize(binding.contact_id);
+  const after = await goals(f, binding.contact_id);
+  assert.equal(after.length, before.length + 1, '只新增重验轮的历史目标行，不再重建增量目标');
+  const incrementalAfter = after.find(row => row.id === incrementalBefore.id);
+  assert.ok(incrementalAfter, '旧增量目标被复用');
   assert.equal(incrementalAfter.state, 'running');
   assert.equal(incrementalAfter.cursor, incrementalBefore.cursor);
-  assert.equal(Number(incrementalAfter.pages_accepted),1);
-  assert.equal(invalidatedCount(after),0);
-  const coverage=await f.history.coverage(binding.contact_id);
-  assert.equal(coverage.phase,'complete');assert.equal(coverage.incremental.goalId,incrementalBefore.id);
-  assert.equal((await f.history.read(binding.contact_id)).messages.length,1);
+  assert.equal(Number(incrementalAfter.pages_accepted), 0);
+  assert.equal(invalidatedCount(after), 0, '复用成立时重验链不产生作废行');
+  const coverage = await f.history.coverage(binding.contact_id);
+  assert.equal(coverage.phase, 'complete');
+  assert.equal(coverage.incremental.goalId, incrementalBefore.id, '覆盖继续指向被复用的增量目标');
+  assert.equal(coverage.incremental.cursorPresent, true);
+  assert.equal((await f.history.read(binding.contact_id)).messages.length, 1, '消息与来源追溯不变');
+  // 被复用的增量目标可继续接住本轮读取：接收一次空"追平"页后仍是同一目标行。
+  f.state.tailBatches.push({ records: [], caughtUp: true, cursorOut: 'tail-1' });
+  await f.history.synchronizeIncremental(binding.contact_id);
+  const continued = await goals(f, binding.contact_id);
+  const continuedIncremental = continued.find(row => row.id === incrementalBefore.id);
+  assert.equal(continuedIncremental.state, 'running');
+  assert.equal(Number(continuedIncremental.pages_accepted), 1, '被复用目标按既有游标接续空页');
+  assert.equal(continued.length, after.length, '接读取只更新行，不新建');
 });
 
-test('空闲轮按已经接受的检查点续读，并保留唯一当前增量目标',async t=>{
- const f=await fixture(t);f.state.historyRecords=[record('1')];
- const [binding]=await select(f);await f.history.synchronize(binding.contact_id);
- for(let round=0;round<3;round++){
-  f.state.tailBatches.push({records:[],caughtUp:true,cursorOut:`tail-idle-${round}`});
-  await f.history.synchronizeIncremental(binding.contact_id);
-  const rows=await goals(f,binding.contact_id),current=rows.filter(row=>row.kind==='incremental'&&row.state==='running');
-  assert.equal(current.length,1);assert.equal(current[0].cursor,`tail-idle-${round}`);
-  assert.equal((await f.history.read(binding.contact_id)).messages.length,1);
- }
- assert.equal(f.state.tails.length,3);
+test('空闲多轮（无重启、无新消息）不新增任何目标行', async t => {
+  const f = await fixture(t);
+  f.state.historyRecords = [record('1')];
+  const bindings = await select(f);
+  await settle(f);
+  const before = await goalsOfAll(f, bindings);
+  assert.equal(before.length, bindings.length * 2, '每位联系人一个完成历史目标和一个运行增量目标');
+  for (let round = 0; round < 3; round++) {
+    f.state.tailBatches.push({ records: [], caughtUp: true, cursorOut: `tail-idle-${round}` });
+    await settle(f);
+  }
+  const after = await goalsOfAll(f, bindings);
+  assert.equal(after.length, before.length, '空闲轮只更新增量目标，不新建目标');
+  assert.equal(invalidatedCount(after), 0, '空闲轮不作废既有目标');
 });
 
 test('合成夹具：N 位联系人一次后台重启，每联系人新增 ≤1 行且旧增量目标被复用', async t => {
@@ -241,7 +257,7 @@ test('端到端负向：接受过空页的增量目标（pages_accepted>0）重�
   const incrementalBefore = before.find(row => row.kind === 'incremental');
   f.state.tailBatches.push({ records: [], caughtUp: true, cursorOut: 'tail-1' });
   await f.history.synchronizeIncremental(binding.contact_id);
-  assert.equal(Number((await goals(f,binding.contact_id)).find(row=>row.id===incrementalBefore.id).pages_accepted),1,'空页计入 pages_accepted');
+  assert.equal(Number(incrementalBefore.pages_accepted) + 1, 1, '空页计入 pages_accepted');
   await f.restart();
   await settle(f);
   const after = await goals(f, binding.contact_id);

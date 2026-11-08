@@ -62,9 +62,9 @@ test('空目标跨运行时重验仍拒绝完整检查分片变化',async t=>{
  assert.equal(f.state.pages,1);assert.equal((await f.current.history.coverage(f.contactId)).failureCode,'history_source_continuity_unverified');
 });
 
-test('空目标同一进程换制品也须重新核验检查分片，失配停读',async t=>{
- const f=await emptyFixture(t);f.state.artifact='c'.repeat(64);f.state.partitions=['shard-a'];
- await assert.rejects(f.current.history.synchronizeIncremental(f.contactId),{code:'history_source_continuity_unverified'});
+test('空目标当前活守卫中的支持报告变化仍拒绝，不借重验放宽',async t=>{
+ const f=await emptyFixture(t);f.state.artifact='c'.repeat(64);
+ await assert.rejects(f.current.history.synchronizeIncremental(f.contactId),{code:'history_support_changed'});
  assert.equal(f.state.pages,1);
 });
 
