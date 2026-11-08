@@ -32,3 +32,22 @@
 ## 复跑证据
 - 套件绿色复跑（2026-11-08）：snapshot-follow 6/6、partition-growth 8/8、shared-process-loss 9/9、first-history-coordinator 21/21、cutover-retirement 8/8、guard 40/40、source-preparation 7/7、transient-guard-recovery 6/6。
 - 修复前诊断与原始失败摘录存 `~/.local/state/notalone/diagnostics/sync-simplification-remaining-20261107/`（session3-external-diagnosis.md、/tmp/wt06-sf.log、/tmp/wt06-pg.log）。
+
+## 第二批（同日上午续）：private/quote/wake-controls 与守卫失联归因
+全量第三轮（同基线口径 `npm test -- --test-timeout=60000 --test-force-exit`）比较发现 9 例族外失败，逐例判定如下（均先验证 f687/077733bcc 对照）：
+
+7-9. `sqlite-private-history`（3 例）、`sqlite-history-target-handoff`（2 例）、`sqlite-history-source-ready-wake-controls`（2 例）——恢复 f687 测试体逐字复验后仅余两类语义差：
+   - `已释放通道…`：0777 版本按"共享进程停止不围栏"写死 `history_source_continuity_unverified`，而恢复语义在 f687 处归因（非共享失联确证 → R02 持久围栏 → 后续走 source-recovery-plan → `history_source_recovery_unsupported`），与 f687 用例逐字一致；判定为断言过时，取 f687 体。
+   - `wake-controls` 两例：`prepareSource` 快速路径不应要求 `bodyVerified`（f687 以 `guardId+guardCheck` 判活），正文资格由读取入口核对——去掉该条件后 7/7 通过；属真回归（恢复实现多加条件）。
+
+10. `sqlite-quote-sync`（1 例，无测试 diff）：`synchronizeQuotes` 应在 normal-use 流程复用保留条目 target（不重开 `channel.target` 覆盖正文活守卫的固定目标）——移植 f687 复用判定（`retained` 条目 + serializeSupport 对齐），并保留共享进程回切情形的"不借用另一联系人目标"短路。12/12 通过。属恢复缺漏。
+
+11. `sqlite-memory-management-upgrade` / `sqlite-memory-timeline-guard`（各 1 例）在 077733bcc 同型失败、单独复跑全绿——判为并发负载敏感的间歇失败，非本批引入；全量第三轮不再出现。
+
+服务侧同步恢复的基线行为：
+- `history.guardRelease` 恢复 `sourceLost && !deferVerification → fenceContinuity R02`（确证失联持久围栏；共享进程整体停止的空闲守卫只降级）。
+- `guardRelease` 调用与 `RetainedEntry` 携带 normalUse/sourceLost/deferVerification 归因；条目级失联观察（freshChannel 路径）补齐归因写入。
+- `prepareSource` 快速路径去掉 `bodyVerified` 条件（守卫活性按 `guardCheck` 判）。
+- ADR-177 关于"不再停车保留联系人守卫/租约"与恢复后的保留语义不一致——此冲突覆盖点在 closeout 与 06 Answer 记录，作为遗留事项（需后续 ADR 文案更新）。
+
+复跑证据：private-history 83/83、target-handoff 3/3、wake-controls 7/7、quote-sync 12/12、s-p-l 9/9、channel 44/44、guard 40/40、prep 7/7、coordinator 21/21、parked 6/6、goal-reuse 8/8、empty 4/4、sf 6/6、pg 8/8 全绿；全量第三轮 2104 tests / fail 48（基线 49、其中双基线命中不含新增）；新增失败 0（3 条 added 为解析器 unresolved 伪差，同名标题基线已含）。

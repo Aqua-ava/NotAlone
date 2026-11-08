@@ -137,7 +137,8 @@ export const historyActions:StorageAction[]=[
   const token=i.token as ReadEligibility,guard=getSourceGuard(tx,token.owner_id,token.contact_id);
   if(!guard||guard.binding_id!==token.binding_id||guard.conversation_id!==token.conversation_id||guard.source_generation!==token.source_generation||guard.guard_id!==i.guardId)return false;
   loseSourceGuard(tx,token.owner_id,token.contact_id,{guardId:i.guardId});
-  return true;
+  // 与基线一致：非共享或正在读取的守卫确证失联时持久围栏（R02）；共享进程整体停止的空闲守卫先降级，由完整重验裁决。
+  if(i.deferVerification!==true&&i.sourceLost===true)fenceContinuity(tx,token,'R02');return true;
  }),
  action('history.markContinuityLost','write',(tx,i)=>{const token=i.token as ReadEligibility;
   if(!tx.get("SELECT 1 FROM conversation_binding WHERE owner_id=? AND contact_id=? AND id=? AND state='verified'",[token.owner_id,token.contact_id,token.binding_id]))return false;

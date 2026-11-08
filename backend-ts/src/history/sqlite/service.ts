@@ -25,7 +25,7 @@ interface ActiveHistoryRead { done:Promise<void>; stop():Promise<void> }
 interface GuardProof {report:HistorySupportReport;target:HistoryTarget}
 interface GuardResult {guardId?:string;revalidated:boolean}
 interface RetainedEntry {channel:HistoryChannel;contactId:string;token:ReadEligibility;digest:string;parked:boolean;failed:boolean;normalUse:boolean;bodyVerified:boolean;
- report?:HistorySupportReport;target?:HistoryTarget;guardId?:string;holderRelease?:()=>Promise<void>;releaseFailed?:boolean;storageClosed?:boolean;releaseError?:unknown;failedCode?:string|null;close:()=>Promise<void>}
+ report?:HistorySupportReport;target?:HistoryTarget;guardId?:string;sourceLost?:boolean;deferVerification?:boolean;holderRelease?:()=>Promise<void>;releaseFailed?:boolean;storageClosed?:boolean;releaseError?:unknown;failedCode?:string|null;close:()=>Promise<void>}
 type MessageChangeKind='created'|'updated';
 type AcceptedPage=HistoryCoverage&{createdMessageIds?:string[];updatedMessageIds?:string[]};
 const bodyCapabilities=['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail'] as const;
@@ -111,6 +111,8 @@ export class SqliteHistoryService {
   const controller=new AbortController(),work=Promise.withResolvers<void>();
   let workFinished=false,leaseSettled=false,successful=false,bodyVerified=false,normalUse=false;
   let channel:HistoryChannel|undefined,token:ReadEligibility|undefined,guardId:string|undefined,lossCode:string|undefined;
+  // 守卫失联归因：确证来源连续性错误时持久围栏；共享进程整体停止的空闲守卫先降级，由完整重验裁决。
+  let sourceLost=false,deferVerification=false;
   let closing:Promise<void>|undefined,releasing:Promise<void>|undefined,releaseFailed=false,storageClosed=false,intentionalClose=false;
   let holder:Parameters<ActiveHolders['register']>[0]|undefined;
   let entry:RetainedEntry|undefined;
@@ -124,7 +126,7 @@ export class SqliteHistoryService {
   const releaseGuard=()=>releasing??=(async()=>{
    try{
     if(guardId&&token&&!releaseFailed){
-     try{if(!await this.storage.execute<boolean>('history.guardRelease',{token,guardId}))throw new StorageFailure('history_source_continuity_unverified');guardId=undefined;}
+     try{if(!await this.storage.execute<boolean>('history.guardRelease',{token,guardId,normalUse:entry?.normalUse===true,sourceLost:sourceLost===true,deferVerification:deferVerification===true}))throw new StorageFailure('history_source_continuity_unverified');guardId=undefined;}
      catch(error){releaseFailed=true;throw error;}
     }
    }finally{if(releaseFailed&&!storageClosed){await this.storage.close();storageClosed=true;}}
@@ -200,6 +202,9 @@ export class SqliteHistoryService {
     const lostEntry=this.retained.get(contactId);
     if(lostEntry&&lostEntry.channel===channel){
      lostEntry.failed=true;lostEntry.failedCode=channel.guardSession?.failureCode?.()??null;
+     // 归因：确证连续性错误才按来源失联围栏；共享进程整体停止时未在读取的守卫只降级，由完整重验裁决。
+     const code=lostEntry.failedCode;
+     if(code&&isSourceContinuityLost(new StorageFailure(code))){lostEntry.sourceLost=true;lostEntry.deferVerification=Boolean(this.shared)&&!this.active.has(contactId);}
      if(!this.active.has(contactId)){
       // 失联即整体释放：守卫置 lost 使候选可验；首次恢复由协调器轮询或下一次读取发起，不在此重复唤醒。
       void this.retireEntry(lostEntry).catch(()=>{});
@@ -233,12 +238,21 @@ export class SqliteHistoryService {
       if(!checked.ok)throw new StorageFailure('history_source_continuity_unverified');
       entry.report=structuredClone(proof.report);entry.target=structuredClone(proof.target);
       guardId=candidateId;
-      const lost=()=>{if(intentionalClose||leaseSettled)return;lossCode=session.failureCode?.()??'history_source_unverified';controller.abort();this.bodySupport.delete(contactId);void releaseGuard().catch(()=>{});};
+      const lost=()=>{if(intentionalClose||leaseSettled)return;const code=session.failureCode?.()??'history_source_unverified';lossCode=code;
+// 归因：确证连续性错误才视为来源失联；共享进程整体停止时未在读取的守卫只降级（完整重验裁决）。
+if(isSourceContinuityLost(new StorageFailure(code))){sourceLost=true;deferVerification=Boolean(this.shared)&&!this.active.has(contactId);}
+controller.abort();this.bodySupport.delete(contactId);void releaseGuard().catch(()=>{});};
       void session.loss.then(lost,lost);return {guardId,revalidated:checked.revalidated};
+    // 保留条目失联观察：租约结束后守卫失联仍按条目归因（确证才围栏；共享空闲只降级）。
+    void session.loss.then(()=>{if(intentionalClose||leaseSettled)return;const code=session.failureCode?.()??'history_source_unverified';if(isSourceContinuityLost(new StorageFailure(code))){entry!.sourceLost=true;entry!.deferVerification=Boolean(this.shared)&&!this.active.has(contactId);}},()=>{});
      }
      guardId=candidateId;
-     const lost=()=>{if(intentionalClose||leaseSettled)return;lossCode=session.failureCode?.()??'history_source_unverified';controller.abort();this.bodySupport.delete(contactId);void releaseGuard().catch(()=>{});};
+     const lost=()=>{if(intentionalClose||leaseSettled)return;const code=session.failureCode?.()??'history_source_unverified';lossCode=code;
+// 归因：确证连续性错误才视为来源失联；共享进程整体停止时未在读取的守卫只降级（完整重验裁决）。
+if(isSourceContinuityLost(new StorageFailure(code))){sourceLost=true;deferVerification=Boolean(this.shared)&&!this.active.has(contactId);}
+controller.abort();this.bodySupport.delete(contactId);void releaseGuard().catch(()=>{});};
      void session.loss.then(lost,lost);return {guardId,revalidated:false};
+    void session.loss.then(()=>{if(intentionalClose||leaseSettled)return;const code=session.failureCode?.()??'history_source_unverified';if(isSourceContinuityLost(new StorageFailure(code))){entry!.sourceLost=true;entry!.deferVerification=Boolean(this.shared)&&!this.active.has(contactId);}},()=>{});
     }
     const recovery=proof?this.recoveries.get(proof.target):undefined;
     const candidateId2=randomUUID();
@@ -249,9 +263,13 @@ export class SqliteHistoryService {
     if(entry&&entry.channel===channel){entry.guardId=guardId;if(proof){entry.report=structuredClone(proof.report);entry.target=structuredClone(proof.target);}
      // 与基线一致：armGuard 装配成功即在保留表登记当前条目，后续停车/检查点路径可按联系人命中。
      this.retained.set(contactId,entry);}
-    const lost=()=>{if(intentionalClose||leaseSettled)return;lossCode=session.failureCode?.()??'history_source_unverified';controller.abort();this.bodySupport.delete(contactId);void releaseGuard().catch(()=>{});};
+    const lost=()=>{if(intentionalClose||leaseSettled)return;const code=session.failureCode?.()??'history_source_unverified';lossCode=code;
+// 归因：确证连续性错误才视为来源失联；共享进程整体停止时未在读取的守卫只降级（完整重验裁决）。
+if(isSourceContinuityLost(new StorageFailure(code))){sourceLost=true;deferVerification=Boolean(this.shared)&&!this.active.has(contactId);}
+controller.abort();this.bodySupport.delete(contactId);void releaseGuard().catch(()=>{});};
     void session.loss.then(lost,lost);
     return {guardId,revalidated:prepared.revalidated};
+    void session.loss.then(()=>{if(intentionalClose||leaseSettled)return;const code=session.failureCode?.()??'history_source_unverified';if(isSourceContinuityLost(new StorageFailure(code))){entry!.sourceLost=true;entry!.deferVerification=Boolean(this.shared)&&!this.active.has(contactId);}},()=>{});
    };
    const retainedAvailable=Boolean(entry&&!entry.parked);
    const result=await run(scope,channel,controller,registerGoal,armGuard,metadataRevalidation,retainedAvailable,()=>{if(entry&&!entry.failed)gracefulRelease=true;});
@@ -261,6 +279,8 @@ export class SqliteHistoryService {
   }catch(error){
    this.bodySupport.delete(contactId);
    const actual=lossCode&&!signal?.aborted&&!this.closed?new StorageFailure(lossCode):error;
+   // 归因补齐：租约内抛出确证连续性错误同样按失联围栏路径传递（共享空闲守卫只降级）。
+   if(actual instanceof StorageFailure&&isSourceContinuityLost(actual)&&!sourceLost){sourceLost=true;deferVerification=Boolean(this.shared)&&!this.active.has(contactId);}
    if(entry&&entry.channel===channel){
     entry.failed=true;
     if(this.retained.get(contactId)===entry)this.retained.delete(contactId);
@@ -342,10 +362,10 @@ export class SqliteHistoryService {
   try{
    for(;;){
     check();
-    // 保留守卫与正文资格仍有效时直接复用，不重开读者、不重读正文。
+    // 保留守卫仍有效时直接复用，不重开读者；正文资格由读取入口另行核对（与基线一致）。
     const token=await this.contacts.eligibility(contactId);check();
     const entry=this.retained.get(contactId);
-    if(entry&&!entry.failed&&!entry.parked&&entry.guardId&&entry.bodyVerified&&entry.digest===JSON.stringify(token)){
+    if(entry&&!entry.failed&&!entry.parked&&entry.guardId&&entry.digest===JSON.stringify(token)){
      if(await this.storage.execute<boolean>('history.guardCheck',{token:entry.token,guardId:entry.guardId})){check();return;}
     }
     const pending=this.queued.get(contactId)?.done??this.active.get(contactId)?.done;
@@ -400,11 +420,15 @@ export class SqliteHistoryService {
   let revalidated=false;
   const result=await this.withChannel(contactId,signal,async(scope,channel,controller,_registerGoal,armGuard,_metadataRevalidation,_retainedGuardAvailable,_releaseNormalUseGuard)=>{
    if(!channel.readQuote)return {processed:0,more:false};
-   const report=await this.inspectCurrent(scope,channel,controller);
-   const normalUse=report.continuity===normalUseContinuity;
-   const target=await channel.target(scope,controller.signal);await this.check(scope,controller);
-   const armed=await armGuard(normalUse?{report,target}:undefined);revalidated=armed.revalidated;
-   if(!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target,report}))throw new StorageFailure('history_source_continuity_unverified');
+   const report=await this.inspectCurrent(scope,channel,controller);assertSupport(report);
+   if(report.accountKey!==scope.accountKey||report.conversationKey!==scope.conversationKey||report.sourceGeneration!==scope.token.source_generation)throw new StorageFailure('history_external_scope_changed');
+   const normalUse=report.continuity===normalUseContinuity,entry=this.retained.get(contactId);
+   // 共享进程切回联系人后重新证明来源；不借用另一联系人目标，也不推进文字检查点。
+   if(normalUse&&!this.shared&&(!entry?.bodyVerified||!entry.target||!entry.report||serializeSupport(entry.report)!==serializeSupport(report)))return {processed:0,more:false};
+   const reusable=normalUse&&entry?.bodyVerified&&entry.target&&entry.report&&serializeSupport(entry.report)===serializeSupport(report);
+   const target=reusable?entry.target!:await channel.target(scope,controller.signal);await this.check(scope,controller);
+   const armed=await armGuard(normalUse&&!reusable?{report,target}:undefined);revalidated=armed.revalidated;
+   if(normalUse&&!reusable&&!await this.storage.execute<boolean>('history.preflightContinuity',{token:scope.token,target,report}))throw new StorageFailure('history_source_continuity_unverified');
    this.rememberBodySupport(contactId,report,scope.token);let processed=0;
    for(const item of targets){
     await this.check(scope,controller);
@@ -690,7 +714,7 @@ export class SqliteHistoryService {
   const guardId=entry.guardId;entry.guardId=undefined;
   if(!guardId)return;
   try{
-   if(!await this.storage.execute<boolean>('history.guardRelease',{token:entry.token,guardId}))throw new StorageFailure('history_source_continuity_unverified');
+   if(!await this.storage.execute<boolean>('history.guardRelease',{token:entry.token,guardId,normalUse:entry.normalUse===true,sourceLost:entry.sourceLost===true,deferVerification:entry.deferVerification===true}))throw new StorageFailure('history_source_continuity_unverified');
   }catch(error){
    entry.releaseFailed=true;entry.guardId=guardId;
    if(!entry.storageClosed){try{await this.storage.close();entry.storageClosed=true;}catch{/* 首个失败已保留，存储关闭未确认的细节不再覆盖。 */}}
