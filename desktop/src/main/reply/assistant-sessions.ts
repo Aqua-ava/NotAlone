@@ -1,5 +1,4 @@
 import {readSqliteDiscussion} from './sqlite-discussion-read';
-import { createHash } from 'node:crypto';
 import type { SavedAssistantDiscussion, SavedAssistantInput, SavedAssistantTurn, SavedAssistantSession } from '../../shared/assistant-session';
 import { readAssistantCarry } from './assistant-candidate-carry';
 import type { BackendHost } from '../backend/host';
@@ -10,56 +9,9 @@ import { readReplyBasisChanges } from './basis-changes-read';
 import { readReplyScene } from './scene';
 import { listAssistantSessions } from './assistant-session-catalog';
 
-const READ_PART_BYTES = 256 * 1024;
+// 单次请求承载完整会话视图；上限对齐 json-client 运输层的响应字节门禁。
+const FULL_READ_BYTES = 8_388_608;
 const invalidRead = () => new Error('已保存讨论暂不可用。');
-
-async function readAssistantSessionParts(backend: Pick<BackendHost, 'getConnectionGeneration' | 'requestJson'>, path: string, sessionId: string,
-  signal: AbortSignal, generation: number, current: () => boolean) {
-  const fragments: string[] = [];
-  let first: Record<string, unknown> | undefined;
-  let partNumber = 0, byteCount = 0;
-  const fields = ['session_id', 'current_input_version_id', 'read_id', 'part_number', 'part_count',
-    'payload_bytes', 'payload_fragment', 'next_part'];
-  const sameHeader = (part: Record<string, unknown>) => !first || ['session_id', 'current_input_version_id',
-    'read_id', 'part_count', 'payload_bytes'].every((key) => part[key] === first![key]);
-  while (current()) {
-    const anchor = first ? `&read_id=${first.read_id}` : '';
-    const response = await backend.requestJson({ method: 'GET', path: `${path}?read_part=${partNumber}${anchor}`, signal });
-    if (!current() || response.generation !== generation) throw new BackendRequestFailure('cancelled');
-    const part = response.data;
-    if (!isRecord(part) || Object.keys(part).length !== fields.length || Object.keys(part).some((key) => !fields.includes(key))
-      || part.session_id !== sessionId || (part.current_input_version_id !== null && !isUuid(part.current_input_version_id))
-      || typeof part.read_id !== 'string' || !/^[0-9a-f]{64}$/.test(part.read_id)
-      || part.part_number !== partNumber || !Number.isSafeInteger(part.part_count) || (part.part_count as number) < 1
-      || partNumber >= (part.part_count as number) || !Number.isSafeInteger(part.payload_bytes) || (part.payload_bytes as number) < 1
-      || typeof part.payload_fragment !== 'string' || !part.payload_fragment || !sameHeader(part)
-      || part.next_part !== (partNumber + 1 < (part.part_count as number) ? partNumber + 1 : null)) throw invalidRead();
-    const fragment = Buffer.from(part.payload_fragment, 'utf8');
-    if (fragment.length > READ_PART_BYTES || fragment.toString('utf8') !== part.payload_fragment
-      || (part.next_part !== null && fragment.length < READ_PART_BYTES - 3)) throw invalidRead();
-    byteCount += fragment.length;
-    if (!Number.isSafeInteger(byteCount) || byteCount > (part.payload_bytes as number)) throw invalidRead();
-    first ??= part;
-    fragments.push(part.payload_fragment);
-    if (part.next_part === null) {
-      const wire = fragments.join('');
-      if (byteCount !== part.payload_bytes || createHash('sha256').update(wire, 'utf8').digest('hex') !== part.read_id) throw invalidRead();
-      const verified = await backend.requestJson({ method: 'GET', path: `${path}?read_part=0&read_id=${part.read_id}`, signal });
-      if (!current() || verified.generation !== generation) throw new BackendRequestFailure('cancelled');
-      const receipt = verified.data;
-      // 最后正文收齐后再核验同一权威读取；任意失败只丢弃本次内存累积。
-      if (!isRecord(receipt) || Object.keys(receipt).length !== fields.length || Object.keys(receipt).some((key) => !fields.includes(key))
-        || !sameHeader(receipt) || receipt.part_number !== 0 || receipt.payload_fragment !== first.payload_fragment
-        || receipt.next_part !== first.next_part) throw invalidRead();
-      const value: unknown = JSON.parse(wire);
-      if (!isRecord(value) || value.session_id !== sessionId
-        || value.current_input_version_id !== first.current_input_version_id) throw invalidRead();
-      return { data: value, generation };
-    }
-    partNumber += 1;
-  }
-  throw new BackendRequestFailure('cancelled');
-}
 
 function discussion(value: unknown, type: SavedAssistantDiscussion['type']): SavedAssistantDiscussion {
   const fields = ['type', 'correction', 'requirements', 'answer', 'confirmed_intent', 'skill_mode', 'skill_version_id',
@@ -122,13 +74,11 @@ export async function readAssistantSession(backend: Pick<BackendHost, 'getConnec
   if (!current()) throw new BackendRequestFailure('cancelled');
   let response;
   try {
-    response = await backend.requestJson({ method: 'GET', path, signal });
+    response = await backend.requestJson({ method: 'GET', path, signal, maxResponseBytes: FULL_READ_BYTES });
   } catch (error) {
+    // 请求失败但连接已换代或已取消时按取消报告，不把传输细节当作读取结论。
     if (!current()) throw new BackendRequestFailure('cancelled');
-    if (!(error instanceof BackendRequestFailure) || error.kind !== 'response' || error.status !== undefined
-      || error.code !== 'response_too_large'
-      || generation === undefined) throw error;
-    response = await readAssistantSessionParts(backend, path, sessionId, signal, generation, current);
+    throw error;
   }
   if (!current() || generation !== undefined && response.generation !== generation) throw new BackendRequestFailure('cancelled');
   const value = response.data;
