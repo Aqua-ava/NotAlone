@@ -33,7 +33,8 @@ function operation(row: StorageRow): DeletionOperation {
   return { operationId: row.operation_id as string, ownerId: row.owner_identity as string,
     scope: { kind, ...(row.contact_identity ? { contactId: row.contact_identity } : {}), ...(row.source_identity ? { sourceId: row.source_identity } : {}), ...(row.discussion_identity ? { discussionId: row.discussion_identity } : {}), ...(row.message_identity ? { messageId: row.message_identity } : {}) } as DeletionScope,
     acceptedGeneration: row.accepted_generation as bigint, planRevision: row.plan_revision as bigint, state: row.state as DeletionOperation['state'],
-    createdAt: new Date(Number(row.created_at)).toISOString(), completedAt: row.completed_at === null ? null : new Date(Number(row.completed_at)).toISOString() };
+    createdAt: new Date(Number(row.created_at)).toISOString(), completedAt: row.completed_at === null ? null : new Date(Number(row.completed_at)).toISOString(),
+    targetSummary: row.target_summary === null || row.target_summary === undefined ? null : String(row.target_summary) };
 }
 function find(tx: StorageTransaction, input: { ownerId: string; operationId: string }): StorageRow {
   return tx.get('SELECT * FROM deletion_operation WHERE owner_identity=? AND operation_id=?', [id(input.ownerId), id(input.operationId)]) ?? fail('deletion_not_found');
@@ -110,7 +111,8 @@ export function planDeletion(tx: StorageTransaction, lease: StorageLease, config
   if (typeof generation !== 'bigint' || generation < 0n) fail('deletion_fence_invalid');
   const operationId = randomUUID();
   const fields = target as unknown as Record<string, string>;
-  tx.run(`INSERT INTO deletion_operation VALUES(?,?,?,?,?,?,?,?,?,?,'fenced',1,?,NULL,NULL,?,NULL)`, [operationId, owner, ns, key, target.kind, fields.contactId ?? null, fields.sourceId ?? null, fields.discussionId ?? null, fields.messageId ?? null, generation, canonical(config.domains.map(d => d.id).sort()), Date.now()]);
+  // 显式列名：迁移追加的 target_summary 等列不参与定位插入，缺省 NULL。
+  tx.run(`INSERT INTO deletion_operation(operation_id,owner_identity,request_namespace,request_key,scope_kind,contact_identity,source_identity,discussion_identity,message_identity,accepted_generation,state,plan_revision,domain_manifest,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,'fenced',1,?,?)`, [operationId, owner, ns, key, target.kind, fields.contactId ?? null, fields.sourceId ?? null, fields.discussionId ?? null, fields.messageId ?? null, generation, canonical(config.domains.map(d => d.id).sort()), Date.now()]);
   refresh(tx, find(tx, { ownerId: owner, operationId }), config, lease);
   return snapshot(tx, find(tx, { ownerId: owner, operationId }));
 }
@@ -208,7 +210,12 @@ export function createDeletionActions(configInput?: DeletionRegistration): Stora
       const checks = tx.all('SELECT * FROM deletion_check WHERE operation_id=? AND plan_revision=?', [op.operationId, op.planRevision]);
       const complete = remaining === 0n && checkKinds.every(k => checks.some(c => c.check_kind === k)) && checks.every(c => c.result !== 'blocked');
       tx.run('UPDATE deletion_operation SET state=?,completed_at=?,runner_token=NULL,runner_runtime=NULL WHERE operation_id=?', [complete ? 'completed' : 'blocked', complete ? Date.now() : null, op.operationId]);
-      if (complete) tx.run('UPDATE deletion_target SET row_key_snapshot=NULL,managed_locator=NULL,expected_identity=NULL,target_payload=NULL,last_error_code=NULL WHERE operation_id=?', [op.operationId]);
+      // 完成即收敛台账：同一事务内先按 domain+row_kind 汇总条数写入操作行（不含任何行键），随后删除该操作全部逐行记录。
+      // completed 是终态：claim 对 completed 直接拒绝，领域回调不再触发，逐行记录没有后续读者。
+      if (complete) {
+        tx.run(`UPDATE deletion_operation SET target_summary=(SELECT COALESCE(json_group_object(j.bucket,j.n),'{}') FROM (SELECT domain||':'||COALESCE(row_kind,'file') bucket,COUNT(*) n FROM deletion_target WHERE operation_id=? GROUP BY domain,COALESCE(row_kind,'file')) j) WHERE operation_id=?`, [op.operationId, op.operationId]);
+        tx.run('DELETE FROM deletion_target WHERE operation_id=?', [op.operationId]);
+      }
       return snapshot(tx, find(tx, input));
     }),
     { name: 'deletion.compact', mode: 'maintenance', retryBusy: false, execute(maintenance) {

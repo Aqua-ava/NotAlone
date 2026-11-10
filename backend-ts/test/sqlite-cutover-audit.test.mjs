@@ -26,7 +26,7 @@ test('77 表／778 字段／215 FK 逻辑目录逐项 disposition 与实现集�
   assert.equal(IMPLEMENTED_DESIGN_TABLES.length + 25, EXPECTED_TABLES.length);
   assert.match(structure.metadata.sqliteVersion, /^\d+\.\d+\.\d+$/);
   assert.deepEqual(structure.metadata, { schemaVersion: registry.migrations.at(-1).version, migrationVersions: registry.migrations.map(migration => migration.version), userVersion: registry.migrations.at(-1).version,
-    sqliteVersion: structure.metadata.sqliteVersion, tableCount: 92, fieldCount: 933, foreignKeyGroups: 192, triggerCount: 120, checkCount: 303, viewCount: 0 });
+    sqliteVersion: structure.metadata.sqliteVersion, tableCount: 92, fieldCount: 934, foreignKeyGroups: 192, triggerCount: 120, checkCount: 303, viewCount: 0 });
 });
 
 test('115 个迁移来源名称逐项 disposition 闭合且落点集合可核验', () => {
