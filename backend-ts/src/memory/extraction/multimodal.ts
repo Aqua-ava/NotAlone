@@ -1,5 +1,6 @@
 /** 图文共同核验：图片引用实际文件版本，观察描述不冒充逐字原文。 */
 import {digest} from '../evidence/canonical-json.ts';
+import {windowDigest} from '../evidence/window-digest.ts';
 import {sha256} from '../../platform/sha256.ts';
 import {ExtractionArgumentsError,readExtractionToolArguments} from './arguments.ts';
 import {ExtractionProtocolError,validateExtractionWindow,uuid,type ExtractionWindow,type ExtractedFact,type SourceVerificationResult} from './protocol.ts';
@@ -138,7 +139,7 @@ function decodeFlat(raw:unknown,window:ExtractionWindow,facts:readonly Extracted
 }
 
 export function assertMultimodalAdmission(window:ExtractionWindow,fact:ExtractedFact,result:SourceVerificationResult):void{
- const bound=boundResults.get(result);if(!bound||bound.window!==digest(window)||bound.fact!==digest(fact)||bound.result!==digest(result))fail('unbound_admission');
+ const bound=boundResults.get(result);if(!bound||bound.window!==windowDigest(window)||bound.fact!==digest(fact)||bound.result!==digest(result))fail('unbound_admission');
 }
 export function replayMultimodalVerification(window:ExtractionWindow,facts:readonly ExtractedFact[],blocks:readonly unknown[],fingerprint:string,requestBody:unknown):VerificationAdmission[]{
  validateExtractionWindow(window);
@@ -151,17 +152,21 @@ export function replayMultimodalVerification(window:ExtractionWindow,facts:reado
 export function prepareMultimodalVerification(options:{window:ExtractionWindow;facts:readonly ExtractedFact[];images:NonNullable<ExtractionInvocation['images']>;ruleVersion?:string;requireCurrent():Promise<void>;record?(event:{stage:string;payload:unknown}):Promise<void>}):PreparedVerification{
  const window=structuredClone(options.window),facts=structuredClone([...options.facts]);validateExtractionWindow(window);
  const images=structuredClone(options.images),expected=window.messages.flatMap(message=>message.image?[message.image]:[]);
+ // 边界：actual.dataBase64 是调用方为本次模型调用实时加载的图片字节，window.image.sha256 是冻结时的文件身份摘要；
+ // 两者来源不同，这里重算摘要证明附给模型的字节仍是被核验的文件版本，不属于同源冗余计算。
  if(!expected.length||expected.length!==images.length||new Set(images.map(image=>image.id)).size!==images.length
   ||expected.some(image=>!images.some(actual=>actual.id===image.id&&actual.mimeType===image.mime_type&&sha256(Buffer.from(actual.dataBase64,'base64'))===image.sha256)))fail('images_missing');
  const system=prompt;
  const body=payload(window,facts),fingerprint=digest({policy:policyId,rule_version:options.ruleVersion??null,window,facts,prompt:system,schema});
+ // 绑定值用原窗口对象的记忆化摘要；与断言侧的同一对象命中同一份序列化，整次核验至多算一次。
+ const windowSha=windowDigest(options.window);
  const requestBody={...body,request_fingerprint:fingerprint};
  let responseSha:string|undefined;
  const decodeResponse=async(blocks:readonly unknown[])=>{
   await options.requireCurrent();const raw=readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:false,drop_stray_closers:true}).value;
   const sha=digest(raw);if(responseSha&&sha!==responseSha)fail('response_changed');responseSha=sha;
   const items=decodeFlat(raw,window,facts,fingerprint);
-  for(const item of items)if(item.admitted&&item.result){const fact=facts[item.candidate_index]!;boundResults.set(item.result,{window:digest(window),fact:digest({...fact,event:item.result.event,conditions:item.result.conditions}),result:digest(item.result)});}
+  for(const item of items)if(item.admitted&&item.result){const fact=facts[item.candidate_index]!;boundResults.set(item.result,{window:windowSha,fact:digest({...fact,event:item.result.event,conditions:item.result.conditions}),result:digest(item.result)});}
   return {items};
  };
  return {fingerprint,selection:facts.map((_,index)=>index),request:facts.length?{purpose:'verification',system,user:JSON.stringify(requestBody),images,tool:{name:'SourceVerificationOutput',description:'核验固定图文来源与完整候选。',parameters:structuredClone(schema)},validateOutput:async blocks=>{await decodeResponse(blocks);}}:null,decode:decodeResponse};

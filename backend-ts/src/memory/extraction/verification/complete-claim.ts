@@ -1,5 +1,6 @@
 /** 准备一次来源核验；请求、指纹、幂等解码和准入封装在同一 Interface。 */
 import {digest} from '../../evidence/canonical-json.ts';
+import {windowDigest} from '../../evidence/window-digest.ts';
 import {readExtractionToolArguments} from '../arguments.ts';
 import {verificationFailureDiagnostic} from './diagnostics.ts';
 import {buildSourceVerificationContract,buildSourceVerificationPayload} from '../contract.ts';
@@ -31,7 +32,7 @@ function factBinding(fact:ExtractedFact):unknown {
 /** 来源 receipt 的内部消费者使用；序列化的模型字段本身不授予新策略准入资格。 */
 export function assertCompleteClaimAdmission(window:ExtractionWindow,fact:ExtractedFact,result:SourceVerificationResult):void {
  const bound=admittedResults.get(result);
- if(!bound||bound.window!==digest(window)||bound.fact!==digest(factBinding(fact))||bound.result!==digest(result))fail('unbound_admission');
+ if(!bound||bound.window!==windowDigest(window)||bound.fact!==digest(factBinding(fact))||bound.result!==digest(result))fail('unbound_admission');
 }
 const supports=['supported','uncertain','unsupported'] as const;
 const repairFields=['results','candidate_index','verdict','issues','evidence','proof','event_verification','condition_verification',
@@ -262,8 +263,8 @@ export function prepareSourceVerification(options:{
  requireCurrent():Promise<void>;
  record?(event:{stage:string;payload:unknown}):Promise<void>;
 }):PreparedVerification{
- // 来源原始 JSONB 的大整数/1.0 摘要必须在普通结构克隆丢失原型前冻结。
- const windowSha=digest(options.window),window=structuredClone(options.window),allFacts=structuredClone([...options.facts]);
+ // 来源原始 JSONB 的大整数/1.0 摘要必须在普通结构克隆丢失原型前冻结；摘要按窗口对象记忆化，断言侧复用同一份。
+ const windowSha=windowDigest(options.window),window=structuredClone(options.window),allFacts=structuredClone([...options.facts]);
  const policy:PreparedVerificationPolicy=structuredClone(options.policy??{id:'legacy-v4'});
  const modern=policy.id==='complete-claim-v1';
  const selection=allFacts.flatMap((fact,index)=>modern||fact.speech_act!=='question'&&!['joke','sarcasm','hyperbole'].includes(fact.figurative_type)?[index]:[]);
