@@ -12,7 +12,7 @@ SQLite 是当前默认业务存储。正式装配使用 `sqlite-host-plugin.ts`�
 
 `verifyIdentity()` 同步检查句柄可用性及受控文件元数据，供连接状态快速拒绝文件被替换、关闭或 Worker 故障；不执行 SQL、不重复全库扫描，也不替代正式打开与业务动作中的实例租约、本人及范围复验。
 
-每个句柄仅拥有一个 Worker、一条连接。`execute(name,input,lease=status)` 通过消息串行调用：客户端一次只向 Worker 投递一个动作，其余按通道排队，前台回复链路（`reply.`、`discussion.`、`runtime.`、`skills.` 前缀及 `identity.manualConfirm`）优先于后台动作出队，各通道内先进先出，未列入的动作一律按后台处理；前台动作因此最多等待当前正在执行的那一个。已入 Worker 的动作不可抢占，普通动作的 15 秒执行上限不变；`maintenance` 模式动作（删除后的 checkpoint、VACUUM 与全库校验）在 Worker 内同步执行且无法打断，单独使用较长预算：取 10 分钟与按 4 MiB/s 估算库体积的较大者，期间 `verifyIdentity()` 与运行状态保持可用，仍超时才按同一规则关闭 Worker；`check()` 分别执行 `integrity_check` 和 `foreign_key_check`；普通打开（`intent: 'open'`）只做 `quick_check`，迁移、升级与显式 `check()` 仍做完整 `integrity_check`；`close()` 排空此前请求并关闭连接。Worker 退出、错误或超时后全部未决请求失败，不自动重开、不自动重放，业务须核对幂等记录再人工继续。
+每个句柄仅拥有一个 Worker、一条连接。`execute(name,input,lease=status)` 通过消息串行调用：客户端一次只向 Worker 投递一个动作，其余按通道排队，前台回复链路（`reply.`、`discussion.`、`runtime.`、`skills.` 前缀及 `identity.manualConfirm`）优先于后台动作出队，各通道内先进先出，未列入的动作一律按后台处理；前台动作因此最多等待当前正在执行的那一个。已入 Worker 的动作不可抢占，普通动作的 15 秒执行上限不变；`maintenance` 模式动作（删除后的 checkpoint、VACUUM 与全库校验）在 Worker 内同步执行且无法打断，单独使用较长预算：取 10 分钟与按 4 MiB/s 估算库体积的较大者，期间 `verifyIdentity()` 与运行状态保持可用，仍超时才按同一规则关闭 Worker；`check()` 分别执行 `integrity_check` 和 `foreign_key_check`；普通打开（`intent: 'open'`）不再同步执行全库完整性扫描，创建、升级、非 WAL 转换、显式 `check()` 与维护校验仍做完整 `integrity_check`，打开前发现 `-wal`／`-shm` 残留（上次连接未干净关闭）时在本次打开的写锁内补一次 `quick_check`；`close()` 排空此前请求并关闭连接。Worker 退出、错误或超时后全部未决请求失败，不自动重开、不自动重放，业务须核对幂等记录再人工继续。
 
 按 [ADR-159](../../../../architecture/adr/159-foreground-read-channel-isolation.md)，`openReader(actionNames)` 创建独立 Worker 的只读附属句柄，只接受可信装配声明且注册为 `read` 的具名动作。它沿用主句柄租约，不执行初始化、迁移或运行身份更新；每次短读结束后在事务外复验租约。主句柄故障、关闭或重开撤销旧读者。前台只声明 `identity.foregroundSnapshot`，由联系人元数据持有者负责删除排空及关闭，不与后台长查询共享执行队列。按 [ADR-160](../../../../architecture/adr/160-assistant-read-and-skill-worker-isolation.md)，助手目录、正文及候选回看使用另一附属读者，短读前后复核业务范围并参与删除排空；生成及最终提交继续使用主写者。
 
@@ -38,7 +38,7 @@ SQLite 是当前默认业务存储。正式装配使用 `sqlite-host-plugin.ts`�
 
 领域迁移在公共 registry 串行确定连续版本。各模块只追加独立迁移，不并发改写已发布 SQL，不按导入排序动态重编号；升级始终从原实例沿已发布链追加。隔离合成库的结果不能替代用户实例迁移证据。
 
-固定故障以 `StorageFailure.code` 传递，不传异常原文或文件路径。约束失败或事务失败回滚；`storage_busy` 不证明外部动作未发送。进程崩溃时 SQLite 回滚未提交升级，重开先核验身份、结构和迁移账本，再在同一写锁快照中完成完整性及 FK 检查后才升级或更新运行租约；实际升级保留前后完整性检查。创建中断留下的未初始化文件须人工诊断，不自动删除。
+固定故障以 `StorageFailure.code` 传递，不传异常原文或文件路径。约束失败或事务失败回滚；`storage_busy` 不证明外部动作未发送。进程崩溃时 SQLite 回滚未提交升级，重开先核验身份、结构和迁移账本：实际升级仍在同一写锁快照中先完成完整性及 FK 检查；检测到上次非正常退出（打开前存在 `-wal`／`-shm` 残留）时，同样在写锁内补一次 `quick_check` 后才更新运行租约。实际升级保留前后完整性检查。创建中断留下的未初始化文件须人工诊断，不自动删除。
 
 ## API 依据
 
