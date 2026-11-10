@@ -8,8 +8,8 @@ import {StorageFailure,type StorageRow,type StorageTransaction} from '../../stor
 import type {CheckResult,DeletionAuthority,DeletionDomain,DeletionOperation,DeletionScope,DeletionTarget,FileDeletionTarget,ManagedAddress,RowDeletionTarget} from '../../storage/sqlite/deletion/contracts.ts';
 function fail(code:string):never{throw new StorageFailure(code);}
 const pass=(proof:string):CheckResult=>({result:'passed',proof});
-const canonical=(value:unknown):string=>JSON.stringify(value,(_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
-const hash=(value:unknown):string=>createHash('sha256').update(canonical(value)).digest('hex');
+export const canonical=(value:unknown):string=>JSON.stringify(value,(_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
+export const hash=(value:unknown):string=>createHash('sha256').update(canonical(value)).digest('hex');
 const supported=(scope:DeletionScope)=>isMediaDeletionScope(scope)||['discussion','source','contact_history','contact','account'].includes(scope.kind);
 const wholeDiscussion=(scope:DeletionScope)=>['discussion','contact','account'].includes(scope.kind);
 /** 精确讨论的屏障只推进该讨论，不撤销同联系人的独立资料资格。 */

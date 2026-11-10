@@ -39,7 +39,7 @@ function preserveUnknownOccupation(tx:StorageTransaction,op:DeletionOperation,ro
 const fail=(code:string):never=>{throw new StorageFailure(code);};
 const pass=(proof:string):CheckResult=>({result:'passed',proof});
 const check=(ok:boolean,proof:string):CheckResult=>({result:ok?'passed':'blocked',proof});
-const address=(kind:string,key:Record<string,string>)=>createHash('sha256').update(JSON.stringify([kind,Object.entries(key).sort(([a],[b])=>a.localeCompare(b))])).digest('hex');
+export const address=(kind:string,key:Record<string,string>)=>createHash('sha256').update(JSON.stringify([kind,Object.entries(key).sort(([a],[b])=>a.localeCompare(b))])).digest('hex');
 function fenced(tx:StorageTransaction,op:DeletionOperation):void {
   if(verifyFence(tx,op).result!=='passed')fail('memory_deletion_not_fenced');
 }

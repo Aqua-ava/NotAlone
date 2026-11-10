@@ -3,7 +3,7 @@ import {StorageFailure,type StorageTransaction} from '../../../storage/sqlite/co
 import type {DeletionDomain,DeletionOperation,RowDeletionTarget,CheckResult} from '../../../storage/sqlite/deletion/contracts.ts';
 import {collectDiscussionDeletionImpact} from '../deletion.ts';
 const domain='reply_candidates';
-const identity=(op:DeletionOperation,id:string)=>createHash('sha256').update(JSON.stringify([domain,op.ownerId,op.operationId,id])).digest('hex');
+export const identity=(op:DeletionOperation,id:string)=>createHash('sha256').update(JSON.stringify([domain,op.ownerId,op.operationId,id])).digest('hex');
 function collect(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget[]{
  const impact=collectDiscussionDeletionImpact(tx,op);
  return impact.requestIds.filter(id=>tx.get('SELECT 1 FROM reply_candidate_request WHERE owner_id=? AND request_id=?',[op.ownerId,id])||tx.get('SELECT 1 FROM reply_candidate WHERE owner_id=? AND request_id=?',[op.ownerId,id])||tx.get('SELECT 1 FROM reply_candidate_input x JOIN reply_context c ON c.owner_id=x.owner_id AND c.id=x.context_id WHERE c.owner_id=? AND c.request_id=?',[op.ownerId,id])).map(id=>({kind:'row',domain,rowKind:'reply_candidate_scope',key:{owner_id:op.ownerId,request_id:id},identity:identity(op,id),holderKeys:impact.holderKeys}));

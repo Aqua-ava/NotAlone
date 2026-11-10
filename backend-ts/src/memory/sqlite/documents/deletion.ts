@@ -23,7 +23,7 @@ const verifyFence=(tx:StorageTransaction,op:DeletionOperation)=>isMediaDeletionS
 const eraseLedger=(op:DeletionOperation)=>op.scope.kind==='contact'||op.scope.kind==='account';
 const installed=(tx:StorageTransaction)=>!!tx.get('SELECT 1 FROM schema_migration WHERE version=13');
 const fail=(code:string):never=>{throw new StorageFailure(code);};
-const identity=(kind:string,key:Record<string,string>)=>createHash('sha256').update(JSON.stringify([domain,kind,Object.entries(key).sort(([a],[b])=>a.localeCompare(b))])).digest('hex');
+export const identity=(kind:string,key:Record<string,string>)=>createHash('sha256').update(JSON.stringify([domain,kind,Object.entries(key).sort(([a],[b])=>a.localeCompare(b))])).digest('hex');
 const pair=(id:unknown,version:unknown)=>JSON.stringify([String(id),String(version)]);
 const json=(values:Iterable<string>)=>JSON.stringify([...values]);
 interface Closure {steps:Set<string>;documents:Set<string>;versions:Map<string,{documentId:string;versionNo:bigint}>;publications:Set<string>;tasks:Set<string>}

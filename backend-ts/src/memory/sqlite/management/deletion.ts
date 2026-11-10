@@ -11,7 +11,7 @@ const domain='memory_management';
 const rowKinds:DeletionDomain['rowKinds']={memory_candidate:{keys:['owner_id','id'],ownerKey:'owner_id'},memory_version:{keys:['owner_id','memory_id','version_no'],ownerKey:'owner_id'},memory:{keys:['owner_id','id'],ownerKey:'owner_id'},memory_decision:{keys:['owner_id','id'],ownerKey:'owner_id'}};
 const allowed=(op:DeletionOperation)=>isMediaDeletionScope(op.scope)||['source','contact_history','contact','account'].includes(op.scope.kind);
 const verifyFence=(tx:StorageTransaction,op:DeletionOperation)=>isMediaDeletionScope(op.scope)?mediaDeletionAuthority.verify(tx,op):identityDeletionAuthority.verify(tx,op);
-const identity=(kind:string,key:Record<string,string>)=>createHash('sha256').update(JSON.stringify([domain,kind,Object.entries(key).sort(([a],[b])=>a.localeCompare(b))])).digest('hex');
+export const identity=(kind:string,key:Record<string,string>)=>createHash('sha256').update(JSON.stringify([domain,kind,Object.entries(key).sort(([a],[b])=>a.localeCompare(b))])).digest('hex');
 function target(rowKind:string,key:Record<string,string>):RowDeletionTarget{return {kind:'row',domain,rowKind,key,identity:identity(rowKind,key),holderKeys:[]};}
 function collect(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget[]{
  if(!allowed(op))return [];
