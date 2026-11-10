@@ -68,7 +68,7 @@ function response(input, prepared, {version = 2, fields = completeFields(), attr
     arguments_and_relation: facet(), temporal_and_modality: facet(),
   }], ...(fields ? {field_checks: fields} : {})};
   return [{type: 'tool-call', name: 'SourceVerificationOutput', arguments: JSON.stringify({
-    request_fingerprint: prepared.fingerprint, results: [{candidate_index: 0, verdict: 'supported', issues: [],
+    results: [{candidate_index: 0, verdict: 'supported', issues: [],
       evidence: [{message_id: input.facts[0].source_message_ids[0], quote: input.window.messages[0].text}], claim_check}],
   })}];
 }

@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,owner,record,modelPort} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
+import {DatabaseSync} from 'node:sqlite';
+import {join} from 'node:path';
+import {candidateAdmission} from '../src/memory/sqlite/management/admission.ts';
 
 // 与 complete-claim-verification / semantic-scope 的供应商响应合同一致；仅替换外部返回。
 const semanticFields=['category','topic','scene_name','alternatives','interpretation_reason','valid_at','invalid_at','speech_act','assertion_status','figurative_type','event','conditions'];
@@ -30,7 +33,9 @@ function supplier({negative=false,eventQuote=false,ungroundedEvent=false}={}){
    })}]};
   }else{
    assert.equal(request.tool.name,'SourceVerificationOutput');
-   value={request_fingerprint:payload.request_fingerprint,results:payload.candidates.map((candidate,candidate_index)=>{
+   assert.equal(payload.check_format,'local-ids-v3');
+   assert.equal(Object.hasOwn(payload,'request_fingerprint'),false);
+   value={results:payload.candidates.map((candidate,candidate_index)=>{
     const message=sources.get(candidate.source_message_ids[0]);assert.equal(message.contactId,input.scope.contact_id);
     const field_checks=Object.fromEntries(semanticFields.map(field=>[field,facet()]));
     if(ungroundedEvent)field_checks.event={verdict:'uncertain',evidence_indices:[0]};
@@ -88,6 +93,43 @@ test('正常提取逐项来源语义核验保持两位联系人输入隔离，�
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
+test('无模型指纹的新格式仍拒绝本地指纹错配和实际请求篡改',async t=>{
+ const f=await fixture(t),contactId=f.saved[0].contact_id;
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'我长期住在合成海城。'})],completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(contactId);await f.contacts.setReading(false);
+ const external=supplier();let memory;
+ memory=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>memory.accounting,external.respond));t.after(()=>memory.close());
+ const started=await memory.start('local-fingerprint-binding');await memory.waitForIdle();
+ const done=await memory.read(started.runId);assert.equal(done.candidates.length,1);
+ const db=new DatabaseSync(join(f.root,'managed','sqlite','notalone.sqlite'),{readOnly:true});
+ try{
+  const get=(sql,values=[])=>db.prepare(sql).get(...values);
+  const all=(sql,values=[])=>db.prepare(sql).all(...values);
+  const output=get(`SELECT e.*,t.scope_kind,t.run_id FROM execution_event e
+   JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id
+   JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
+   JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
+   WHERE e.owner_id=? AND t.run_id=? AND t.scope_kind='contact' AND e.kind='verified_output'`,[owner,started.runId]);
+  assert.ok(output);const payload=JSON.parse(output.payload),ref=payload.verification;
+  const inputs=all('SELECT * FROM run_input WHERE owner_id=? AND run_id=?',[owner,started.runId]);
+  assert.equal(candidateAdmission({get,all},owner,output,payload.fact,inputs).state,'verified');
+  const badRef=structuredClone(payload);badRef.verification.policyFingerprint='f'.repeat(64);
+  assert.equal(candidateAdmission({get,all},owner,{...output,payload:JSON.stringify(badRef)},payload.fact,inputs).state,'pending');
+  const input=get('SELECT payload FROM execution_event WHERE owner_id=? AND id=?',[owner,ref.inputEventId]);
+  const request=get("SELECT payload FROM execution_event WHERE owner_id=? AND originated_call_id=? AND kind='model_input'",[owner,ref.callId]);
+  const badInput=JSON.parse(input.payload);badInput.policy_fingerprint='f'.repeat(64);
+  const badRequest=JSON.parse(request.payload),body=JSON.parse(badRequest.user);
+  assert.equal(body.check_format,'local-ids-v3');assert.equal(Object.hasOwn(body,'request_fingerprint'),false);
+  body.messages[0].text='被替换的合成来源';badRequest.user=JSON.stringify(body);
+  // 仅在只读数据库边界模拟单个损坏回读，既有追踪与不可变触发器保持原样。
+  for(const [original,changed] of [[input.payload,badInput],[request.payload,badRequest]]){
+   const faulted={all,get:(sql,values)=>{const row=get(sql,values);return row?.payload===original?{...row,payload:JSON.stringify(changed)}:row;}};
+   assert.equal(candidateAdmission(faulted,owner,output,payload.fact,inputs).state,'pending');
+  }
+  assert.equal(candidateAdmission({get,all},owner,output,payload.fact,inputs).state,'verified');
+ }finally{db.close();}
+});
+
 test('语义核验逐项拒绝按内容跳过完成本轮，已知模型返回仍保留拒绝事实且不阻断',async t=>{
  const f=await fixture(t);const contactId=f.saved[0].contact_id;
  f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'我长期住在高雄。'})],completedPartitions:['shard-a'],exhausted:true});
@@ -139,7 +181,7 @@ test('整批候选全被拒按已处理收尾并继续后续批次，后续目�
   if(request.purpose!=='verification'||verifications++>0)return normal.respond(request,input);
   // 第一次核验整批判为语义不确定；同一 block 必须先构造再统一走 validateOutput，不能事后改写。
   const payload=JSON.parse(request.user);
-  const value={request_fingerprint:payload.request_fingerprint,results:payload.candidates.map((candidate,index)=>{
+  const value={results:payload.candidates.map((candidate,index)=>{
    const message=normal.sources.get(candidate.source_message_ids[0]);
    return {candidate_index:index,verdict:'supported',issues:[],evidence:[{message_id:message.message_id,quote:message.text}],
     claim_check:{version:2,field_checks:Object.fromEntries(semanticFields.map(field=>[field,facet()])),parts:[{

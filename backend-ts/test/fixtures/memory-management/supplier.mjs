@@ -18,7 +18,7 @@ export function supplier({negative=false}={}){
    value={scenes:[{scene_name:'合成长期资料',memories:payload.messages.map(fact)}]};
   }else{
    assert.equal(request.tool.name,'SourceVerificationOutput');
-   value={request_fingerprint:payload.request_fingerprint,results:payload.candidates.map((candidate,candidate_index)=>{
+   value={results:payload.candidates.map((candidate,candidate_index)=>{
     const message=sources.get(candidate.source_message_ids[0]);assert.equal(message.contactId,input.scope.contact_id);
     return {candidate_index,verdict:'supported',issues:[],evidence:[{message_id:message.message_id,quote:message.text}],
      claim_check:{version:2,field_checks:Object.fromEntries(semanticFields.map(field=>[field,facet()])),parts:[{

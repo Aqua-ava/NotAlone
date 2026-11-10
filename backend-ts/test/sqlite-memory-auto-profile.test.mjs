@@ -109,8 +109,8 @@ test('正式宿主同库增量优先与历史自动处理各一次，来源隔�
  assert.deepEqual(supplier.windows.map(window=>window.payload.target_message_ids),[[incremental.id],[history.id]],'增量先行、两类目标各处理一次');
  const expectedMessages=new Set([incremental.id,history.id]);
  assert.ok(supplier.windows.every(window=>window.payload.messages.every(message=>expectedMessages.has(message.message_id))));
- assert.deepEqual(supplier.verifications.map(call=>call.payload.candidates.flatMap(candidate=>candidate.source_message_ids)),[[incremental.id],[history.id]],'两轮分别核验自己的真实目标来源与请求指纹');
- assert.ok(supplier.verifications.every(call=>/^[a-f0-9]{64}$/.test(call.payload.request_fingerprint)&&call.output.request_fingerprint===call.payload.request_fingerprint));
+ assert.deepEqual(supplier.verifications.map(call=>call.payload.candidates.flatMap(candidate=>candidate.source_message_ids)),[[incremental.id],[history.id]],'两轮分别核验自己的真实目标来源，指纹由本地绑定');
+ assert.ok(supplier.verifications.every(call=>call.payload.check_format==='local-ids-v3'&&!Object.hasOwn(call.payload,'request_fingerprint')&&!Object.hasOwn(call.output,'request_fingerprint')));
  const queue=(await api(`/api/memory-processing/contacts/${contactId}/current`)).data.queue;
  assert.equal(queue.pending,0);assert.equal(queue.history.pending,0);
  const other=(await api(`/api/memory-processing/contacts/${f.saved[1].contact_id}/current`)).data;assert.equal(other.run,null);assert.equal(other.queue.pending,0);assert.equal(other.queue.history.pending,0);

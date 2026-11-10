@@ -26,7 +26,7 @@ async function verify(source, candidate, {mentions, sender = 'contact', subject 
       attribution: {...facet('supported'), scope_subject: subject, actor_kind: actor, resolution: 'explicit', subject_mentions: mentions},
       arguments_and_relation: facet('supported'), temporal_and_modality: facet('supported')}]}};
   const blocks = [{type: 'tool-call', name: 'SourceVerificationOutput',
-    arguments: JSON.stringify({request_fingerprint: prepared.fingerprint, results: [item]})}];
+    arguments: JSON.stringify({results: [item]})}];
   return (await prepared.decode(blocks)).items[0];
 }
 const mention = (kind, start, end) => ({kind, evidence_index: 0, source_span: {start, end}, candidate_span: {start: 0, end: 3}});

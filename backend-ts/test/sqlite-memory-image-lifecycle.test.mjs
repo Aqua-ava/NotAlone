@@ -76,10 +76,10 @@ function contentSupplier({imageFact=false,imageTopic='other'}={}){
   }
   if(!request.images?.length)return normal.respond(request,input);
   const facet={verdict:'supported',evidence_indices:[0],explanation:'合成来源明确支持该事实。'};
-  const value={request_fingerprint:body.request_fingerprint,results:body.candidates.map((candidate,candidate_index)=>{
+  const value={results:body.candidates.map((candidate,candidate_index)=>{
    const message=messages.get(candidate.source_message_ids[0]);
-   const evidence=message.content_kind==='image'?{kind:'image',message_id:message.message_id,quote:null,file_id:message.file_id,sha256:message.sha256,description:'合成图片中可见一个蓝色杯子。'}:
-    {kind:'text',message_id:message.message_id,quote:message.text,file_id:null,sha256:null,description:null};
+   const evidence=message.content_kind==='image'?{kind:'image',message_id:message.message_id,quote:null,description:'合成图片中可见一个蓝色杯子。'}:
+    {kind:'text',message_id:message.message_id,quote:message.text,description:null};
    return {candidate_index,verdict:'supported',issues:[],evidence:[evidence],
     scope_subject:candidate.subject==='self'?'self':'contact',actor_kind:candidate.subject==='self'?'self':'contact',resolution:'explicit',
     checks:['attribution','body','temporal_and_modality',...fields].map(field=>({field,...facet}))};

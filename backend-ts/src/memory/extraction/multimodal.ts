@@ -18,16 +18,16 @@ const verdict={type:'string',enum:supports};
 const facet={type:'object',additionalProperties:false,properties:{verdict,evidence_indices:{type:'array',maxItems:60,items:{type:'integer',minimum:0}},explanation:{type:'string',minLength:1,maxLength:2000}},required:['verdict','evidence_indices','explanation']};
 const attributionFacet={...facet,properties:{...facet.properties,scope_subject:{type:'string',enum:['self','contact','unknown']},actor_kind:{type:'string',enum:['self','contact','shared','third_party','unknown']},resolution:{type:'string',enum:['explicit','unique_context','unresolved']}},required:[...facet.required,'scope_subject','actor_kind','resolution']};
 const nullableString={type:['string','null']};
-const evidenceSchema={type:'object',additionalProperties:false,properties:{message_id:{type:'string',format:'uuid'},kind:{type:'string',enum:['text','image']},quote:nullableString,file_id:nullableString,sha256:nullableString,description:nullableString},required:['message_id','kind','quote','file_id','sha256','description']};
+const evidenceSchema={type:'object',additionalProperties:false,properties:{message_id:{type:'string',format:'uuid'},kind:{type:'string',enum:['text','image']},quote:nullableString,description:nullableString},required:['message_id','kind','quote','description']};
 const checkNames=[...facets,...fields] as const;
 const checkSchema={...facet,properties:{field:{type:'string',enum:checkNames},...facet.properties},required:['field',...facet.required]};
-const schema={title:'SourceVerificationOutput',type:'object',additionalProperties:false,properties:{request_fingerprint:{type:'string'},results:{type:'array',maxItems:60,items:{type:'object',additionalProperties:false,properties:{candidate_index:{type:'integer',minimum:0},verdict,issues:{type:'array',maxItems:30,items:{type:'string',minLength:1,maxLength:200}},evidence:{type:'array',minItems:1,maxItems:60,items:evidenceSchema},scope_subject:attributionFacet.properties.scope_subject,actor_kind:attributionFacet.properties.actor_kind,resolution:attributionFacet.properties.resolution,checks:{type:'array',minItems:15,maxItems:15,items:checkSchema}},required:['candidate_index','verdict','issues','evidence','scope_subject','actor_kind','resolution','checks']}}},required:['request_fingerprint','results']};
+const schema={title:'SourceVerificationOutput',type:'object',additionalProperties:false,properties:{results:{type:'array',maxItems:60,items:{type:'object',additionalProperties:false,properties:{candidate_index:{type:'integer',minimum:0},verdict,issues:{type:'array',maxItems:30,items:{type:'string',minLength:1,maxLength:200}},evidence:{type:'array',minItems:1,maxItems:60,items:evidenceSchema},scope_subject:attributionFacet.properties.scope_subject,actor_kind:attributionFacet.properties.actor_kind,resolution:attributionFacet.properties.resolution,checks:{type:'array',minItems:15,maxItems:15,items:checkSchema}},required:['candidate_index','verdict','issues','evidence','scope_subject','actor_kind','resolution','checks']}}},required:['results']};
 const prompt=`你是图文记忆来源核验器。只核验本次同一联系人的固定对话窗口与实际附图，不补写候选，不把图片占位文案当图片内容。按消息顺序、发送者、时间和image_id结合语境核验，每项只引用候选明确声明的source_message_ids。
-输出采用flat-fields-v2：每条results记录直接填写scope_subject、actor_kind、resolution，以及扁平checks数组。checks严格包含15项，各field恰好一次：attribution、body、temporal_and_modality、category、topic、scene_name、alternatives、interpretation_reason、valid_at、invalid_at、speech_act、assertion_status、figurative_type、event、conditions。每项只有field、verdict、evidence_indices、explanation这4个键；没有claim_check、field_checks或explanation_note等嵌套槽。
+输出采用local-ids-v3：每条results记录直接填写scope_subject、actor_kind、resolution，以及扁平checks数组。checks严格包含15项，各field恰好一次：attribution、body、temporal_and_modality、category、topic、scene_name、alternatives、interpretation_reason、valid_at、invalid_at、speech_act、assertion_status、figurative_type、event、conditions。每项只有field、verdict、evidence_indices、explanation这4个键；没有claim_check、field_checks或explanation_note等嵌套槽。
 每个check独立核验对应字段。supported只表示来源支持，不认证现实真值。所有非空语义字段都须有具体证据。完整核验正文中的所有限定、否定、时间与认知模态，不用总verdict代替独立检查。空数组及null不声明额外事实，可用空索引；非空字段以及attribution/body/temporal_and_modality的supported都必须有依据。event时间标注若不能验证可为uncertain，其他字段不确定须拒绝采纳。
 scope_subject对应关系资料归属（self/contact/unknown），shared共同事实属于contact范围；actor_kind保留实际语义主体（self/contact/shared/third_party/unknown），resolution只取explicit/unique_context/unresolved。图片发件人不自动等于图片内人物、物品所有者或截图说话人。不能把亲友或截图作者改成发件人本人；无法从对话明确或唯一归属时须unresolved/uncertain。图片不能证明未出现的动机、疾病、身份、长期偏好或因果关系。
-文字证据kind=text，quote必须是该文字消息内唯一出现的逐字引文，file_id/sha256/description都为null。图片证据kind=image，file_id/sha256逐字回传对应消息的实际文件标识与摘要，quote为null，description仅描述看见且支持候选的内容。图片观察描述不是新的聊天原文，不得伪造图片引文。不得引用未附上的图片、其他窗口或其他文件版本。
-候选依赖的每条来源都必须分别列入evidence。evidence_indices只引用当前候选evidence的0起索引，explanation解释支持或不支持的具体关系。request_fingerprint原样回传。issues只属于results记录。严格使用工具schema中的键，完整闭合每个check对象、checks数组、结果对象、results数组及最外层对象。`;
+文字证据kind=text，quote必须是该文字消息内唯一出现的逐字引文，description为null。图片证据kind=image，仅按message_id引用本次实际附图，quote为null，description仅描述看见且支持候选的内容。同一图片消息不得重复引用。图片观察描述不是新的聊天原文，不得伪造图片引文。不得引用未附上的图片、其他窗口或其他文件版本。
+候选依赖的每条来源都必须分别列入evidence。evidence_indices只引用当前候选evidence的0起索引，explanation解释支持或不支持的具体关系。issues只属于results记录。严格使用工具schema中的键，完整闭合每个check对象、checks数组、结果对象、results数组及最外层对象。`;
 
 function fail(reason:string):never{throw new ExtractionProtocolError(`multimodal_claim_${reason}`);}
 function exact(value:unknown,keys:readonly string[]):Row{
@@ -60,9 +60,9 @@ function argumentsEnvelope(blocks:readonly unknown[]):{value:Record<string,unkno
  }
  return {value,repairs:[...new Set(repairs)]};
 }
-function payload(window:ExtractionWindow,facts:readonly ExtractedFact[],format:'nested-v1'|'flat-fields-v2'='flat-fields-v2'){
- return {policy:policyId,...(format==='flat-fields-v2'?{check_format:format}:{}),owner_id:window.owner_id,contact_id:window.contact_id,target_message_ids:window.target_message_ids??window.messages.map(m=>m.message_id),
-  messages:window.messages.map(m=>({message_id:m.message_id,sender:m.sender,occurred_at:m.occurred_at,...(m.image?{content_kind:'image',image_id:m.image.id,file_id:m.image.file_id,sha256:m.image.sha256,mime_type:m.image.mime_type,media_generation:m.image.media_generation}:{content_kind:'text',text:m.text})})),
+function payload(window:ExtractionWindow,facts:readonly ExtractedFact[],format:'nested-v1'|'flat-fields-v2'|'local-ids-v3'='local-ids-v3'){
+ return {policy:policyId,...(format!=='nested-v1'?{check_format:format}:{}),owner_id:window.owner_id,contact_id:window.contact_id,target_message_ids:window.target_message_ids??window.messages.map(m=>m.message_id),
+  messages:window.messages.map(m=>({message_id:m.message_id,sender:m.sender,occurred_at:m.occurred_at,...(m.image?{content_kind:'image',image_id:m.image.id,...(format==='local-ids-v3'?{}:{file_id:m.image.file_id,sha256:m.image.sha256}),mime_type:m.image.mime_type,media_generation:m.image.media_generation}:{content_kind:'text',text:m.text})})),
   candidates:facts.map((fact,candidate_index)=>({candidate_index,...fact}))};
 }
 function facetStatus(value:unknown,evidenceCount:number,empty=false):typeof supports[number]{
@@ -138,14 +138,39 @@ function decodeFlat(raw:unknown,window:ExtractionWindow,facts:readonly Extracted
  return decodeNested({request_fingerprint:root.request_fingerprint,results:rows},window,facts,fingerprint);
 }
 
+/** 新格式的消息引用在本地补全冻结文件身份，再走相同的语义核验；旧解码分支保持原字节合同。 */
+function decodeLocal(raw:unknown,window:ExtractionWindow,facts:readonly ExtractedFact[],fingerprint:string):VerificationAdmission[]{
+ const root=exact(raw,['results']);
+ if(!Array.isArray(root.results))fail('structure_invalid');
+ const rows=root.results.map((value:unknown)=>{
+  if(!value||typeof value!=='object'||Array.isArray(value))fail('structure_invalid');
+  const row=value as Row;
+  if(!Array.isArray(row.evidence))fail('evidence_invalid');
+  const seen=new Set<string>();
+  const refs=row.evidence.map((value:unknown)=>{
+   const ref=exact(value,['message_id','kind','quote','description']);
+   const message=window.messages.find(message=>uuid(message.message_id)===ref.message_id);
+   if(!message)fail('evidence_scope_invalid');
+   const key=JSON.stringify([ref.message_id,ref.kind,ref.quote]);
+   if(seen.has(key))fail('evidence_duplicate');seen.add(key);
+   if(ref.kind==='image'&&!message.image)fail('image_evidence_invalid');
+   return {...ref,file_id:ref.kind==='image'?message.image!.file_id:null,sha256:ref.kind==='image'?message.image!.sha256:null};
+  });
+  return {...row,evidence:refs};
+ });
+ return decodeFlat({request_fingerprint:fingerprint,results:rows},window,facts,fingerprint);
+}
+
 export function assertMultimodalAdmission(window:ExtractionWindow,fact:ExtractedFact,result:SourceVerificationResult):void{
  const bound=boundResults.get(result);if(!bound||bound.window!==windowDigest(window)||bound.fact!==digest(fact)||bound.result!==digest(result))fail('unbound_admission');
 }
 export function replayMultimodalVerification(window:ExtractionWindow,facts:readonly ExtractedFact[],blocks:readonly unknown[],fingerprint:string,requestBody:unknown):VerificationAdmission[]{
  validateExtractionWindow(window);
  const format=requestBody&&typeof requestBody==='object'?(requestBody as Row).check_format:undefined;
- if(format!==undefined&&format!=='flat-fields-v2')fail('stored_request_mismatch');
- if(digest(requestBody)!==digest({...payload(window,facts,format??'nested-v1'),request_fingerprint:fingerprint}))fail('stored_request_mismatch');
+ if(format!==undefined&&format!=='flat-fields-v2'&&format!=='local-ids-v3')fail('stored_request_mismatch');
+ const expected=payload(window,facts,format??'nested-v1');
+ if(digest(requestBody)!==digest(format==='local-ids-v3'?expected:{...expected,request_fingerprint:fingerprint}))fail('stored_request_mismatch');
+ if(format==='local-ids-v3')return decodeLocal(readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:false,drop_stray_closers:true}).value,window,facts,fingerprint);
  return format==='flat-fields-v2'?decodeFlat(readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:false,drop_stray_closers:true}).value,window,facts,fingerprint):
   decodeNested(argumentsEnvelope(blocks).value,window,facts,fingerprint);
 }
@@ -160,12 +185,12 @@ export function prepareMultimodalVerification(options:{window:ExtractionWindow;f
  const body=payload(window,facts),fingerprint=digest({policy:policyId,rule_version:options.ruleVersion??null,window,facts,prompt:system,schema});
  // 绑定值用原窗口对象的记忆化摘要；与断言侧的同一对象命中同一份序列化，整次核验至多算一次。
  const windowSha=windowDigest(options.window);
- const requestBody={...body,request_fingerprint:fingerprint};
+ const requestBody=body;
  let responseSha:string|undefined;
  const decodeResponse=async(blocks:readonly unknown[])=>{
   await options.requireCurrent();const raw=readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:false,drop_stray_closers:true}).value;
   const sha=digest(raw);if(responseSha&&sha!==responseSha)fail('response_changed');responseSha=sha;
-  const items=decodeFlat(raw,window,facts,fingerprint);
+  const items=decodeLocal(raw,window,facts,fingerprint);
   for(const item of items)if(item.admitted&&item.result){const fact=facts[item.candidate_index]!;boundResults.set(item.result,{window:windowSha,fact:digest({...fact,event:item.result.event,conditions:item.result.conditions}),result:digest(item.result)});}
   return {items};
  };

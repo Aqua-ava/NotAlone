@@ -20,9 +20,9 @@ function multimodalScenario(){
 }
 function multimodalResponse(fingerprint,s){
  const facet=field=>({field,verdict:'supported',evidence_indices:[0,1],explanation:'使用本次固定文字与实际图片共同核验。'});
- return {request_fingerprint:fingerprint,results:[{candidate_index:0,verdict:'supported',issues:[],evidence:[
-  {message_id:s.textId,kind:'text',quote:'这是我家的豆豆。',file_id:null,sha256:null,description:null},
-  {message_id:s.imageId,kind:'image',quote:null,file_id:s.image.file_id,sha256:s.image.sha256,description:'图片中是一只橘猫。'}],
+ return {results:[{candidate_index:0,verdict:'supported',issues:[],evidence:[
+  {message_id:s.textId,kind:'text',quote:'这是我家的豆豆。',description:null},
+  {message_id:s.imageId,kind:'image',quote:null,description:'图片中是一只橘猫。'}],
   scope_subject:'contact',actor_kind:'contact',resolution:'explicit',checks:['attribution','body','temporal_and_modality',...fields].map(facet)}]};
 }
 test('多模态核验内 window 摘要只序列化一次，断言侧全部命中记忆化',async()=>{
@@ -62,7 +62,7 @@ function claimBlocks(prepared,window){
    attribution:{...facet('supported'),scope_subject:'contact',actor_kind:'contact',resolution:'explicit',
     subject_mentions:[{kind:'first_person',evidence_index:0,source_span:span('我住在海城。','我'),candidate_span:{start:0,end:3}}]},
    arguments_and_relation:facet('supported'),temporal_and_modality:facet('supported')}]}};
- return [{type:'tool-call',name:'SourceVerificationOutput',arguments:JSON.stringify({request_fingerprint:prepared.fingerprint,results:[item]})}];
+ return [{type:'tool-call',name:'SourceVerificationOutput',arguments:JSON.stringify({results:[item]})}];
 }
 test('完整命题核验内 window 摘要只序列化一次，断言侧全部命中记忆化',async()=>{
  const s=claimScenario();

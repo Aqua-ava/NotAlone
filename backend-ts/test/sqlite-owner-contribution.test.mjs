@@ -17,7 +17,7 @@ function supplier(){
   if(request.purpose==='extraction'){
    for(const message of payload.messages)sources.set(message.message_id,message);
    response={scenes:[{scene_name:'合成本人资料',memories:payload.messages.map(message=>({text:message.text.replace(/^我/,'用户'),subject:'self',category:'common_fact',topic:'other',source_message_ids:[message.message_id],confidence:0.8,risk_flags:[],valid_at:null,invalid_at:null,speech_act:'assertion',assertion_status:'asserted',figurative_type:'literal',alternatives:[],interpretation_reason:'保留合成原句明确陈述。',event:null,conditions:null}))}]};
-  }else response={request_fingerprint:payload.request_fingerprint,results:payload.candidates.map((candidate,candidate_index)=>{
+  }else response={results:payload.candidates.map((candidate,candidate_index)=>{
    const message=sources.get(candidate.source_message_ids[0]);
    return {candidate_index,verdict:'supported',issues:[],evidence:[{message_id:message.message_id,quote:message.text}],claim_check:{version:2,field_checks:Object.fromEntries(fields.map(field=>[field,supported()])),parts:[{candidate_span:{start:0,end:[...candidate.text].length},attribution:{...supported(),scope_subject:'self',actor_kind:'self',resolution:'explicit',subject_mentions:[{kind:'first_person',evidence_index:0,source_span:{start:0,end:1},candidate_span:{start:0,end:2}}]},arguments_and_relation:supported(),temporal_and_modality:supported()}]}};
   })};

@@ -1,0 +1,380 @@
+[
+  {
+    "kind": "complete-claim-v1",
+    "window": {
+      "owner_id": "00000001-1111-4111-8111-111111111111",
+      "contact_id": "00000002-1111-4111-8111-111111111111",
+      "target_message_ids": [
+        "00000003-1111-4111-8111-111111111111"
+      ],
+      "messages": [
+        {
+          "message_id": "00000003-1111-4111-8111-111111111111",
+          "sender": "contact",
+          "occurred_at": null,
+          "text_representation": "text",
+          "text": "我住在海城。"
+        }
+      ]
+    },
+    "facts": [
+      {
+        "text": "联系人住在海城。",
+        "category": "recent_state",
+        "subject": "contact",
+        "topic": "other",
+        "source_message_ids": [
+          "00000003-1111-4111-8111-111111111111"
+        ],
+        "confidence": 0.8,
+        "risk_flags": [],
+        "valid_at": null,
+        "invalid_at": null,
+        "speech_act": "assertion",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "alternatives": [],
+        "interpretation_reason": "合成来源自述居住地。",
+        "requires_all_sources": true,
+        "source_dependency_mode": "any",
+        "_scene_name": "居住",
+        "event": null,
+        "conditions": null,
+        "timing": {
+          "source_started_at": null,
+          "source_ended_at": null,
+          "source_time_complete": false
+        }
+      }
+    ],
+    "fingerprint": "15b81b554ea2fef25b3e18a215b56f434598f53fac8cf1ff5e7701a8d25ebd46",
+    "body": {
+      "messages": [
+        {
+          "message_id": "00000003-1111-4111-8111-111111111111",
+          "role": "target",
+          "sender": "contact",
+          "occurred_at": "unknown",
+          "text": "我住在海城。",
+          "source_calendar_at": "unknown",
+          "text_length": 6
+        }
+      ],
+      "candidates": [
+        {
+          "candidate_index": 0,
+          "text": "联系人住在海城。",
+          "subject": "contact",
+          "category": "recent_state",
+          "topic": "other",
+          "source_message_ids": [
+            "00000003-1111-4111-8111-111111111111"
+          ],
+          "valid_at": null,
+          "invalid_at": null,
+          "speech_act": "assertion",
+          "assertion_status": "asserted",
+          "figurative_type": "literal",
+          "scene_name": "居住",
+          "alternatives": [],
+          "interpretation_reason": "合成来源自述居住地。",
+          "confidence": 0.8,
+          "risk_flags": [],
+          "requires_all_sources": true,
+          "source_dependency_mode": "any",
+          "timing": {
+            "source_started_at": null,
+            "source_ended_at": null,
+            "source_time_complete": false
+          },
+          "event": null,
+          "conditions": null
+        }
+      ],
+      "claim_scope": [
+        {
+          "candidate_index": 0,
+          "codepoint_length": 8,
+          "scope_subject": "contact"
+        }
+      ],
+      "request_fingerprint": "15b81b554ea2fef25b3e18a215b56f434598f53fac8cf1ff5e7701a8d25ebd46"
+    },
+    "blocks": [
+      {
+        "type": "tool-call",
+        "name": "SourceVerificationOutput",
+        "arguments": "{\"request_fingerprint\":\"15b81b554ea2fef25b3e18a215b56f434598f53fac8cf1ff5e7701a8d25ebd46\",\"results\":[{\"candidate_index\":0,\"verdict\":\"supported\",\"issues\":[],\"evidence\":[{\"message_id\":\"00000003-1111-4111-8111-111111111111\",\"quote\":\"我住在海城。\"}],\"claim_check\":{\"version\":2,\"field_checks\":{\"category\":{\"verdict\":\"supported\",\"evidence_indices\":[0]},\"topic\":{\"verdict\":\"supported\",\"evidence_indices\":[0]},\"scene_name\":{\"verdict\":\"supported\",\"evidence_indices\":[0]},\"alternatives\":{\"verdict\":\"supported\",\"evidence_indices\":[0]},\"interpretation_reason\":{\"verdict\":\"supported\",\"evidence_indices\":[0]},\"valid_at\":{\"verdict\":\"supported\",\"evidence_indices\":[0]},\"invalid_at\":{\"verdict\":\"supported\",\"evidence_indices\":[0]},\"speech_act\":{\"verdict\":\"supported\",\"evidence_indices\":[0]},\"assertion_status\":{\"verdict\":\"supported\",\"evidence_indices\":[0]},\"figurative_type\":{\"verdict\":\"supported\",\"evidence_indices\":[0]},\"event\":{\"verdict\":\"supported\",\"evidence_indices\":[0]},\"conditions\":{\"verdict\":\"supported\",\"evidence_indices\":[0]}},\"parts\":[{\"candidate_span\":{\"start\":0,\"end\":8},\"attribution\":{\"verdict\":\"supported\",\"evidence_indices\":[0],\"scope_subject\":\"contact\",\"actor_kind\":\"contact\",\"resolution\":\"explicit\",\"subject_mentions\":[{\"kind\":\"first_person\",\"evidence_index\":0,\"source_span\":{\"start\":0,\"end\":1},\"candidate_span\":{\"start\":0,\"end\":3}}]},\"arguments_and_relation\":{\"verdict\":\"supported\",\"evidence_indices\":[0]},\"temporal_and_modality\":{\"verdict\":\"supported\",\"evidence_indices\":[0]}}]}}]}"
+      }
+    ]
+  },
+  {
+    "kind": "flat-fields-v2",
+    "window": {
+      "owner_id": "00000001-1111-4111-8111-111111111111",
+      "contact_id": "00000002-1111-4111-8111-111111111111",
+      "target_message_ids": [
+        "00000003-1111-4111-8111-111111111111"
+      ],
+      "messages": [
+        {
+          "message_id": "00000003-1111-4111-8111-111111111111",
+          "sender": "contact",
+          "occurred_at": null,
+          "text_representation": "text",
+          "text": "我住在海城。"
+        },
+        {
+          "message_id": "00000004-1111-4111-8111-111111111111",
+          "sender": "contact",
+          "occurred_at": null,
+          "text_representation": "placeholder",
+          "text": "",
+          "content_kind": "image",
+          "image": {
+            "id": "00000005-1111-4111-8111-111111111111",
+            "file_id": "00000005-1111-4111-8111-111111111111",
+            "sha256": "5d5d18fcc56e759a3ad25a651cb3309463a631faa18aaee3c21e61e49a162748",
+            "mime_type": "image/png",
+            "media_generation": "0"
+          }
+        }
+      ]
+    },
+    "facts": [
+      {
+        "text": "联系人住在海城。",
+        "category": "recent_state",
+        "subject": "contact",
+        "topic": "other",
+        "source_message_ids": [
+          "00000003-1111-4111-8111-111111111111",
+          "00000004-1111-4111-8111-111111111111"
+        ],
+        "confidence": 0.8,
+        "risk_flags": [],
+        "valid_at": null,
+        "invalid_at": null,
+        "speech_act": "assertion",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "alternatives": [],
+        "interpretation_reason": "合成来源自述居住地。",
+        "requires_all_sources": true,
+        "source_dependency_mode": "any",
+        "_scene_name": "居住",
+        "event": null,
+        "conditions": null,
+        "timing": {
+          "source_started_at": null,
+          "source_ended_at": null,
+          "source_time_complete": false
+        }
+      }
+    ],
+    "fingerprint": "a797ffc878e0f5a610036eac7911d42b6aaed6c9c4d80689d776a327b378ffd3",
+    "body": {
+      "policy": "multimodal-claim-v1",
+      "check_format": "flat-fields-v2",
+      "owner_id": "00000001-1111-4111-8111-111111111111",
+      "contact_id": "00000002-1111-4111-8111-111111111111",
+      "target_message_ids": [
+        "00000003-1111-4111-8111-111111111111"
+      ],
+      "messages": [
+        {
+          "message_id": "00000003-1111-4111-8111-111111111111",
+          "sender": "contact",
+          "occurred_at": null,
+          "content_kind": "text",
+          "text": "我住在海城。"
+        },
+        {
+          "message_id": "00000004-1111-4111-8111-111111111111",
+          "sender": "contact",
+          "occurred_at": null,
+          "content_kind": "image",
+          "image_id": "00000005-1111-4111-8111-111111111111",
+          "file_id": "00000005-1111-4111-8111-111111111111",
+          "sha256": "5d5d18fcc56e759a3ad25a651cb3309463a631faa18aaee3c21e61e49a162748",
+          "mime_type": "image/png",
+          "media_generation": "0"
+        }
+      ],
+      "candidates": [
+        {
+          "candidate_index": 0,
+          "text": "联系人住在海城。",
+          "category": "recent_state",
+          "subject": "contact",
+          "topic": "other",
+          "source_message_ids": [
+            "00000003-1111-4111-8111-111111111111",
+            "00000004-1111-4111-8111-111111111111"
+          ],
+          "confidence": 0.8,
+          "risk_flags": [],
+          "valid_at": null,
+          "invalid_at": null,
+          "speech_act": "assertion",
+          "assertion_status": "asserted",
+          "figurative_type": "literal",
+          "alternatives": [],
+          "interpretation_reason": "合成来源自述居住地。",
+          "requires_all_sources": true,
+          "source_dependency_mode": "any",
+          "_scene_name": "居住",
+          "event": null,
+          "conditions": null,
+          "timing": {
+            "source_started_at": null,
+            "source_ended_at": null,
+            "source_time_complete": false
+          }
+        }
+      ],
+      "request_fingerprint": "a797ffc878e0f5a610036eac7911d42b6aaed6c9c4d80689d776a327b378ffd3"
+    },
+    "blocks": [
+      {
+        "type": "tool-call",
+        "name": "SourceVerificationOutput",
+        "arguments": "{\"request_fingerprint\":\"a797ffc878e0f5a610036eac7911d42b6aaed6c9c4d80689d776a327b378ffd3\",\"results\":[{\"candidate_index\":0,\"verdict\":\"supported\",\"issues\":[],\"evidence\":[{\"message_id\":\"00000003-1111-4111-8111-111111111111\",\"kind\":\"text\",\"quote\":\"我住在海城。\",\"file_id\":null,\"sha256\":null,\"description\":null},{\"message_id\":\"00000004-1111-4111-8111-111111111111\",\"kind\":\"image\",\"quote\":null,\"file_id\":\"00000005-1111-4111-8111-111111111111\",\"sha256\":\"5d5d18fcc56e759a3ad25a651cb3309463a631faa18aaee3c21e61e49a162748\",\"description\":\"合成图片中的居住地点。\"}],\"scope_subject\":\"contact\",\"actor_kind\":\"contact\",\"resolution\":\"explicit\",\"checks\":[{\"field\":\"attribution\",\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},{\"field\":\"body\",\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},{\"field\":\"temporal_and_modality\",\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},{\"field\":\"category\",\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},{\"field\":\"topic\",\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},{\"field\":\"scene_name\",\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},{\"field\":\"alternatives\",\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},{\"field\":\"interpretation_reason\",\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},{\"field\":\"valid_at\",\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},{\"field\":\"invalid_at\",\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},{\"field\":\"speech_act\",\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},{\"field\":\"assertion_status\",\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},{\"field\":\"figurative_type\",\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},{\"field\":\"event\",\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},{\"field\":\"conditions\",\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"}]}]}"
+      }
+    ]
+  },
+  {
+    "kind": "nested-v1",
+    "window": {
+      "owner_id": "00000001-1111-4111-8111-111111111111",
+      "contact_id": "00000002-1111-4111-8111-111111111111",
+      "target_message_ids": [
+        "00000003-1111-4111-8111-111111111111"
+      ],
+      "messages": [
+        {
+          "message_id": "00000003-1111-4111-8111-111111111111",
+          "sender": "contact",
+          "occurred_at": null,
+          "text_representation": "text",
+          "text": "我住在海城。"
+        },
+        {
+          "message_id": "00000004-1111-4111-8111-111111111111",
+          "sender": "contact",
+          "occurred_at": null,
+          "text_representation": "placeholder",
+          "text": "",
+          "content_kind": "image",
+          "image": {
+            "id": "00000005-1111-4111-8111-111111111111",
+            "file_id": "00000005-1111-4111-8111-111111111111",
+            "sha256": "5d5d18fcc56e759a3ad25a651cb3309463a631faa18aaee3c21e61e49a162748",
+            "mime_type": "image/png",
+            "media_generation": "0"
+          }
+        }
+      ]
+    },
+    "facts": [
+      {
+        "text": "联系人住在海城。",
+        "category": "recent_state",
+        "subject": "contact",
+        "topic": "other",
+        "source_message_ids": [
+          "00000003-1111-4111-8111-111111111111",
+          "00000004-1111-4111-8111-111111111111"
+        ],
+        "confidence": 0.8,
+        "risk_flags": [],
+        "valid_at": null,
+        "invalid_at": null,
+        "speech_act": "assertion",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "alternatives": [],
+        "interpretation_reason": "合成来源自述居住地。",
+        "requires_all_sources": true,
+        "source_dependency_mode": "any",
+        "_scene_name": "居住",
+        "event": null,
+        "conditions": null,
+        "timing": {
+          "source_started_at": null,
+          "source_ended_at": null,
+          "source_time_complete": false
+        }
+      }
+    ],
+    "fingerprint": "a797ffc878e0f5a610036eac7911d42b6aaed6c9c4d80689d776a327b378ffd3",
+    "body": {
+      "policy": "multimodal-claim-v1",
+      "owner_id": "00000001-1111-4111-8111-111111111111",
+      "contact_id": "00000002-1111-4111-8111-111111111111",
+      "target_message_ids": [
+        "00000003-1111-4111-8111-111111111111"
+      ],
+      "messages": [
+        {
+          "message_id": "00000003-1111-4111-8111-111111111111",
+          "sender": "contact",
+          "occurred_at": null,
+          "content_kind": "text",
+          "text": "我住在海城。"
+        },
+        {
+          "message_id": "00000004-1111-4111-8111-111111111111",
+          "sender": "contact",
+          "occurred_at": null,
+          "content_kind": "image",
+          "image_id": "00000005-1111-4111-8111-111111111111",
+          "file_id": "00000005-1111-4111-8111-111111111111",
+          "sha256": "5d5d18fcc56e759a3ad25a651cb3309463a631faa18aaee3c21e61e49a162748",
+          "mime_type": "image/png",
+          "media_generation": "0"
+        }
+      ],
+      "candidates": [
+        {
+          "candidate_index": 0,
+          "text": "联系人住在海城。",
+          "category": "recent_state",
+          "subject": "contact",
+          "topic": "other",
+          "source_message_ids": [
+            "00000003-1111-4111-8111-111111111111",
+            "00000004-1111-4111-8111-111111111111"
+          ],
+          "confidence": 0.8,
+          "risk_flags": [],
+          "valid_at": null,
+          "invalid_at": null,
+          "speech_act": "assertion",
+          "assertion_status": "asserted",
+          "figurative_type": "literal",
+          "alternatives": [],
+          "interpretation_reason": "合成来源自述居住地。",
+          "requires_all_sources": true,
+          "source_dependency_mode": "any",
+          "_scene_name": "居住",
+          "event": null,
+          "conditions": null,
+          "timing": {
+            "source_started_at": null,
+            "source_ended_at": null,
+            "source_time_complete": false
+          }
+        }
+      ],
+      "request_fingerprint": "a797ffc878e0f5a610036eac7911d42b6aaed6c9c4d80689d776a327b378ffd3"
+    },
+    "blocks": [
+      {
+        "type": "tool-call",
+        "name": "SourceVerificationOutput",
+        "arguments": "{\"request_fingerprint\":\"a797ffc878e0f5a610036eac7911d42b6aaed6c9c4d80689d776a327b378ffd3\",\"results\":[{\"candidate_index\":0,\"verdict\":\"supported\",\"issues\":[],\"evidence\":[{\"message_id\":\"00000003-1111-4111-8111-111111111111\",\"kind\":\"text\",\"quote\":\"我住在海城。\",\"file_id\":null,\"sha256\":null,\"description\":null},{\"message_id\":\"00000004-1111-4111-8111-111111111111\",\"kind\":\"image\",\"quote\":null,\"file_id\":\"00000005-1111-4111-8111-111111111111\",\"sha256\":\"5d5d18fcc56e759a3ad25a651cb3309463a631faa18aaee3c21e61e49a162748\",\"description\":\"合成图片中的居住地点。\"}],\"claim_check\":{\"version\":1,\"attribution\":{\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\",\"scope_subject\":\"contact\",\"actor_kind\":\"contact\",\"resolution\":\"explicit\"},\"body\":{\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},\"temporal_and_modality\":{\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},\"field_checks\":{\"category\":{\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},\"topic\":{\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},\"scene_name\":{\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},\"alternatives\":{\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},\"interpretation_reason\":{\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},\"valid_at\":{\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},\"invalid_at\":{\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},\"speech_act\":{\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},\"assertion_status\":{\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},\"figurative_type\":{\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},\"event\":{\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"},\"conditions\":{\"verdict\":\"supported\",\"evidence_indices\":[0,1],\"explanation\":\"合成来源支持。\"}}}}]}"
+      }
+    ]
+  }
+]
