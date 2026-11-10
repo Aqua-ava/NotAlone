@@ -68,8 +68,10 @@
 
 ### 证据：cutover 不是退役遗留而是现行控制面
 
-- 每次桌面启动都执行：`desktop/src/main/startup/diagnostics.ts:20` 构建 `SqliteDevelopmentProbe`，`sqlite-development.ts:52-60` spawn 探针运行 `prepareDefaultDatabaseStartup`（`platform/cutover/startup.ts:85`），执行发现未知受控项、manifest 加载、技能根搬迁恢复、打开同一实例并写启动配置（`startup.ts:94-129`）。1114 行中约 160 行（targets 分类、cleanup）仅在存在旧目标时生效，其余每次启动都跑。
-- `phase` 状态机含 `switched/completed`（`contracts.ts:11`），completed 后每次启动走快路径（`startup.ts:109-113`），切换不可逆（manifest 成为持久开关）。控制动作仍注册进 storage 动作面（`storage/sqlite/registry.ts:64,86` cutoverActions），`control.ts` 同时服务 Skill 根搬迁（`skills/sqlite/root-relocation.ts:12,165`）。无法仅凭代码断言本机 manifest 是否 completed，故不能宣称"切换已完成"。
+- 每次桌面开发启动都执行：`desktop/src/main/startup/diagnostics.ts:20` 仅当传入 `development?.projectDirectory` 才构建 `SqliteDevelopmentProbe`（`index.ts:92`），`sqlite-development.ts:52-60` spawn 探针运行 `prepareDefaultDatabaseStartup`（`platform/cutover/startup.ts:85`），执行发现未知受控项、manifest 加载、技能根搬迁恢复、打开同一实例并写启动配置（`startup.ts:94-129`）。1114 行中约 160 行（targets 分类、cleanup）仅在存在旧目标时生效，其余每次启动都跑。
+- 打包版不执行该探针：无 `development` 时探针不构造，`ensureReady` 在无探针分支固定 blocked（`diagnostics.ts:70-78`）；打包构建与运行本就被发布门禁拒绝（`desktop/scripts/release-policy.mjs` 默认拒绝），当前不作为可运行目标。
+- `phase` 状态机含 `switched/completed`（`contracts.ts:11`），completed 后每次启动走快路径（`startup.ts:109-113`），切换不可逆（manifest 成为持久开关）。控制动作仍注册进 storage 动作面（`storage/sqlite/registry.ts:64,86` cutoverActions），`control.ts` 同时服务 Skill 根搬迁（`skills/sqlite/root-relocation.ts:12,165`）。
+- 本机 manifest 实证（只读字段级）：`database-cutover/manifest.json` phase=`completed`、revision=145、`targetOrigin=created`、writerChecks=0、legacyTargets 已记录 2 条；即切换已完成，且每次启动实际执行的是快路径核对，而非切换动作。
 - 迁移账本全部冻结：`worker.ts:86` 校验迁移条数、逐条 version、checksum 与注册表一致，任何现存库对旧迁移源码有永久校验关系；本机已应用 47/47 条（真实库 `schema_migration` count=47,max=47）。迁移 47 即 `historyRetirementMigration(47)`（`registry.ts` 末项；`migrations/history-retirement-schema.ts:2`）。
 - 迁移 47 的 SQL 调用两个 JS 函数（`history-retirement-schema.ts:15,18` → `worker.ts:72-73` 注册 `notalone_history_deletion_equivalences_v1`/`notalone_history_retired_deletion_operations_v1`），实现位于 `migrations/history-retirement-v1.ts:31,62`。新装机从 create 起完整重放迁移，故这两个函数及其依赖链（`history-legacy-proof-v1.ts` 的 digest/校验，仅被迁移链引用）必须永久保留。
 - 运行时引用面：`history-source-proof`（46）与 `history-superseded`（45，ADR-175）的表在现行查询中活跃（`source_proof` 真实库 16 行）；`history-recertify`（29/30）只剩账本。
@@ -86,7 +88,7 @@
 - `platform/cutover/` 整目录：现行启动控制面与 Skill 根搬迁依赖；不可按行号整块删除。
 - `inspect.ts` cutoverActions：注册进 registry 的运行时动作。
 
-**建议：部分做。迁移记账维持冻结不动；cutover 不移出运行时但可单列一张后续票评估"completed 快路径简化"；可删 launch 旧回收。是否删除 cutover 需要用户确认本机切换实物状态后另行决策。**
+**建议：部分做。迁移记账维持冻结不动；本机切换已确认完成（manifest phase=completed），可单列一张后续票以最小启动核验替换 cutover 控制面并退役旧目标分类/清理层（约 310 行每启动例行扫描）；launch 旧回收可删。**
 
 ## 问题 4：失败码是否可以收敛
 
