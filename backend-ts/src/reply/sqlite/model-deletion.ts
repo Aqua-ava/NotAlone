@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {sha256StableJson,sortedEntries} from '../../platform/stable-json.ts';
 import {StorageFailure,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {CheckResult,DeletionDomain,DeletionOperation,RowDeletionTarget} from '../../storage/sqlite/deletion/contracts.ts';
 import {collectDiscussionDeletionImpact} from './deletion.ts';
@@ -7,7 +7,8 @@ const domain='discussion_calls';
 const rowKinds:DeletionDomain['rowKinds']={event_source:{keys:['owner_id','event_id','record_id'],ownerKey:'owner_id'},execution_input:{keys:['owner_id','event_id','input_no'],ownerKey:'owner_id'},execution_event:{keys:['owner_id','id'],ownerKey:'owner_id'},model_call:{keys:['owner_id','id'],ownerKey:'owner_id'},operation_scope:{keys:['owner_id','operation_id','source_contact_id','effect_kind'],ownerKey:'owner_id'},model_operation:{keys:['owner_id','id'],ownerKey:'owner_id'}};
 const eraseLedger=(op:DeletionOperation)=>['contact','account'].includes(op.scope.kind);
 const supported=(op:DeletionOperation)=>isMediaDeletionScope(op.scope)||['discussion','source','contact_history','contact','account'].includes(op.scope.kind);
-export const identity=(kind:string,key:Record<string,string>)=>createHash('sha256').update(JSON.stringify([kind,Object.entries(key).sort()])).digest('hex');
+/** 身份=[kind, [k,v]对数组]；旧实现对键值对按其 join 字符串默认排序，本域键集合为固定 ASCII 列名且互不为前缀，键码点序与之逐字节一致。 */
+export const identity=(kind:string,key:Record<string,string>)=>sha256StableJson([kind,sortedEntries(key)]);
 const minimalReceipt='{"format":"minimal-discussion-call-v1"}';
 function closure(tx:StorageTransaction,op:DeletionOperation){
  const impact=collectDiscussionDeletionImpact(tx,op),requests=new Set(impact.requestIds),attempts=new Set(impact.attemptIds),operationIds=new Set<string>();

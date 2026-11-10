@@ -1,5 +1,5 @@
 import {sourceDeletionIds} from '../../../history/sqlite/source-deletion.ts';
-import {createHash} from 'node:crypto';
+import {sha256StableJson,sortedEntries} from '../../../platform/stable-json.ts';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {CheckResult,DeletionDomain,DeletionOperation,RowDeletionTarget} from '../../../storage/sqlite/deletion/contracts.ts';
 import {identityDeletionAuthority} from '../../../contacts/sqlite/deletion.ts';
@@ -23,7 +23,8 @@ const verifyFence=(tx:StorageTransaction,op:DeletionOperation)=>isMediaDeletionS
 const eraseLedger=(op:DeletionOperation)=>op.scope.kind==='contact'||op.scope.kind==='account';
 const installed=(tx:StorageTransaction)=>!!tx.get('SELECT 1 FROM schema_migration WHERE version=13');
 const fail=(code:string):never=>{throw new StorageFailure(code);};
-export const identity=(kind:string,key:Record<string,string>)=>createHash('sha256').update(JSON.stringify([domain,kind,Object.entries(key).sort(([a],[b])=>a.localeCompare(b))])).digest('hex');
+/** 身份=[domain,kind,键值对数组]；键集合为本域 rowKinds 固定 ASCII 列名，键码点序与既有 localeCompare 序在全部真实键集合上逐字节一致。 */
+export const identity=(kind:string,key:Record<string,string>)=>sha256StableJson([domain,kind,sortedEntries(key)]);
 const pair=(id:unknown,version:unknown)=>JSON.stringify([String(id),String(version)]);
 const json=(values:Iterable<string>)=>JSON.stringify([...values]);
 interface Closure {steps:Set<string>;documents:Set<string>;versions:Map<string,{documentId:string;versionNo:bigint}>;publications:Set<string>;tasks:Set<string>}

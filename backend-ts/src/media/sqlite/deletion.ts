@@ -1,5 +1,5 @@
 import {sourceDeletionIds} from '../../history/sqlite/source-deletion.ts';
-import { createHash } from 'node:crypto';
+import { sortedKeyJson, sha256StableJson } from '../../platform/stable-json.ts';
 import { sameFileIdentity } from '../../storage/sqlite/deletion/file-identity.ts';
 import { StorageFailure, type StorageRow, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
 import type { CheckResult, DeletionAuthority, DeletionDomain, DeletionOperation, DeletionRegistration, DeletionScope, DeletionTarget, FileDeletionTarget, ManagedAddress, RowDeletionTarget } from '../../storage/sqlite/deletion/contracts.ts';
@@ -9,9 +9,11 @@ const passed = (proof: string): CheckResult => ({result: 'passed', proof});
 const blocked = (proof: string): CheckResult => ({result: 'blocked', proof});
 export const isMediaDeletionScope = (scope: DeletionScope): scope is Extract<DeletionScope, {messageId: string}> => scope.kind === 'media_result_clear' || scope.kind === 'media_result_replace';
 const isMedia=isMediaDeletionScope;
-const same = (left: unknown, right: unknown): boolean => canonical(left) === canonical(right);
-export function canonical(value: unknown): string { return JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item); }
-export const identity = (kind: string, key: Record<string, string>): string => createHash('sha256').update(canonical([kind, key])).digest('hex');
+const same = (left: unknown, right: unknown): boolean => sortedKeyJson(left) === sortedKeyJson(right);
+/** 键排序 JSON 比较序列化收敛到 platform/stable-json；导出保留原入口名，行为由特征测试逐字节钉住。 */
+export const canonical = sortedKeyJson;
+/** 身份=[kind, key 对象]，键对象递归键码点序后取哈希；载入形状与既有实现一致。 */
+export const identity = (kind: string, key: Record<string, string>): string => sha256StableJson([kind, key]);
 const rowKinds = {
   message_media: {keys: ['owner_id', 'message_id'], ownerKey: 'owner_id'},
   media_extraction_attempt: {keys: ['owner_id', 'id'], ownerKey: 'owner_id'},
