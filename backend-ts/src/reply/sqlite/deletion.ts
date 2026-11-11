@@ -2,14 +2,15 @@ import {sourceDeletionIds} from '../../history/sqlite/source-deletion.ts';
 import {isMediaDeletionScope} from '../../media/sqlite/deletion.ts';
 import {memoryDeletionImpact} from '../../memory/sqlite/deletion-impact.ts';
 import {collectMemoryDocumentDeletionReferences} from '../../memory/sqlite/documents/deletion.ts';
-import {createHash} from 'node:crypto';
+import {sortedKeyJson,sha256StableJson} from '../../platform/stable-json.ts';
 import {sameManagedAddress} from '../../storage/sqlite/deletion/file-identity.ts';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {CheckResult,DeletionAuthority,DeletionDomain,DeletionOperation,DeletionScope,DeletionTarget,FileDeletionTarget,ManagedAddress,RowDeletionTarget} from '../../storage/sqlite/deletion/contracts.ts';
 function fail(code:string):never{throw new StorageFailure(code);}
 const pass=(proof:string):CheckResult=>({result:'passed',proof});
-const canonical=(value:unknown):string=>JSON.stringify(value,(_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
-const hash=(value:unknown):string=>createHash('sha256').update(canonical(value)).digest('hex');
+/** 键排序 JSON 比较序列化与哈希收敛到 platform/stable-json；导出保留原入口名，行为由特征测试逐字节钉住。 */
+export const canonical=sortedKeyJson;
+export const hash=sha256StableJson;
 const supported=(scope:DeletionScope)=>isMediaDeletionScope(scope)||['discussion','source','contact_history','contact','account'].includes(scope.kind);
 const wholeDiscussion=(scope:DeletionScope)=>['discussion','contact','account'].includes(scope.kind);
 /** 精确讨论的屏障只推进该讨论，不撤销同联系人的独立资料资格。 */

@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {sha256StableJson,sortedEntries} from '../../../platform/stable-json.ts';
 import type {StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {DeletionDomain,DeletionOperation,RowDeletionTarget,CheckResult} from '../../../storage/sqlite/deletion/contracts.ts';
 import {identityDeletionAuthority} from '../../../contacts/sqlite/deletion.ts';
@@ -11,7 +11,8 @@ const domain='memory_management';
 const rowKinds:DeletionDomain['rowKinds']={memory_candidate:{keys:['owner_id','id'],ownerKey:'owner_id'},memory_version:{keys:['owner_id','memory_id','version_no'],ownerKey:'owner_id'},memory:{keys:['owner_id','id'],ownerKey:'owner_id'},memory_decision:{keys:['owner_id','id'],ownerKey:'owner_id'}};
 const allowed=(op:DeletionOperation)=>isMediaDeletionScope(op.scope)||['source','contact_history','contact','account'].includes(op.scope.kind);
 const verifyFence=(tx:StorageTransaction,op:DeletionOperation)=>isMediaDeletionScope(op.scope)?mediaDeletionAuthority.verify(tx,op):identityDeletionAuthority.verify(tx,op);
-const identity=(kind:string,key:Record<string,string>)=>createHash('sha256').update(JSON.stringify([domain,kind,Object.entries(key).sort(([a],[b])=>a.localeCompare(b))])).digest('hex');
+/** 身份=[domain,kind,键值对数组]；键集合为本域 rowKinds 固定 ASCII 列名，键码点序与既有 localeCompare 序在全部真实键集合上逐字节一致。 */
+export const identity=(kind:string,key:Record<string,string>)=>sha256StableJson([domain,kind,sortedEntries(key)]);
 function target(rowKind:string,key:Record<string,string>):RowDeletionTarget{return {kind:'row',domain,rowKind,key,identity:identity(rowKind,key),holderKeys:[]};}
 function collect(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget[]{
  if(!allowed(op))return [];

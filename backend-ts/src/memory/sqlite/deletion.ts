@@ -1,5 +1,5 @@
 /** 按实际事件与输入清理来源；独立成功产物保留，待执行任务统一撤销。 */
-import {createHash} from 'node:crypto';
+import {sha256StableJson,sortedEntries} from '../../platform/stable-json.ts';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {CheckResult,DeletionDomain,DeletionOperation,RowDeletionTarget} from '../../storage/sqlite/deletion/contracts.ts';
 import {identityDeletionAuthority} from '../../contacts/sqlite/deletion.ts';
@@ -39,7 +39,8 @@ function preserveUnknownOccupation(tx:StorageTransaction,op:DeletionOperation,ro
 const fail=(code:string):never=>{throw new StorageFailure(code);};
 const pass=(proof:string):CheckResult=>({result:'passed',proof});
 const check=(ok:boolean,proof:string):CheckResult=>({result:ok?'passed':'blocked',proof});
-const address=(kind:string,key:Record<string,string>)=>createHash('sha256').update(JSON.stringify([kind,Object.entries(key).sort(([a],[b])=>a.localeCompare(b))])).digest('hex');
+/** 键值对形状的行地址；键集合为本域 rowKinds 固定 ASCII 列名，键码点序与既有 localeCompare 序在全部真实键集合上逐字节一致。 */
+export const address=(kind:string,key:Record<string,string>)=>sha256StableJson([kind,sortedEntries(key)]);
 function fenced(tx:StorageTransaction,op:DeletionOperation):void {
   if(verifyFence(tx,op).result!=='passed')fail('memory_deletion_not_fenced');
 }
