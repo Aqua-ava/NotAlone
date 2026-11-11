@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
+import {readFileSync} from 'node:fs';
 import {runExtractionFlow} from '../src/memory/extraction/flow.ts';
 import {assertMultimodalAdmission,replayMultimodalVerification} from '../src/memory/extraction/multimodal.ts';
 
@@ -17,12 +18,12 @@ function input(){
 function fact(i){return {text:'联系人养了一只叫豆豆的橘猫。',subject:'contact',category:'common_fact',topic:'other',source_message_ids:[i.textId,i.imageId],confidence:0.8,risk_flags:[],valid_at:null,invalid_at:null,speech_act:'assertion',assertion_status:'asserted',figurative_type:'literal',alternatives:[],interpretation_reason:'文字表明归属与名字，实际图片表明猫的外观。',event:null,conditions:null};}
 function verification(body,i,change=value=>value){
  const facet=field=>({field,verdict:'supported',evidence_indices:[0,1],explanation:'使用本次固定文字与实际图片共同核验。'});
- return change({request_fingerprint:body.request_fingerprint,results:[{candidate_index:0,verdict:'supported',issues:[],evidence:[
-  {message_id:i.textId,kind:'text',quote:'这是我家的豆豆。',file_id:null,sha256:null,description:null},
-  {message_id:i.imageId,kind:'image',quote:null,file_id:i.image.file_id,sha256:i.image.sha256,description:'图片中是一只橘猫。'},
+ return change({results:[{candidate_index:0,verdict:'supported',issues:[],evidence:[
+  {message_id:i.textId,kind:'text',quote:'这是我家的豆豆。',description:null},
+  {message_id:i.imageId,kind:'image',quote:null,description:'图片中是一只橘猫。'},
  ],scope_subject:'contact',actor_kind:'contact',resolution:'explicit',checks:['attribution','body','temporal_and_modality',...fields].map(facet)}]});
 }
-function nestedResponse(flat){return {request_fingerprint:flat.request_fingerprint,results:flat.results.map(row=>{
+function nestedResponse(flat){return {results:flat.results.map(row=>{
  const checks=new Map(row.checks.map(({field,...facet})=>[field,facet]));
  return {candidate_index:row.candidate_index,verdict:row.verdict,issues:row.issues,evidence:row.evidence,
   claim_check:{version:1,attribution:{...checks.get('attribution'),scope_subject:row.scope_subject,actor_kind:row.actor_kind,resolution:row.resolution},
@@ -76,15 +77,16 @@ test('扁平图文核验要求15项独立检查恰好一次，不接收缺项、
  for(const change of [value=>{value.results[0].checks.pop();return value;},value=>{value.results[0].checks[14].field='attribution';return value;},value=>{value.results[0].checks[14].field='new_field';return value;},value=>{delete value.results[0].checks[0].verdict;return value;},value=>nestedResponse(value)]){
   const {outcome}=await run(input(),change);assert.equal(outcome.accepted.length,0);assert.equal(outcome.failure_kind,'invalid_output');
  }
- const {requests}=await run(input());const body=JSON.parse(requests[1].user);assert.equal(body.check_format,'flat-fields-v2');
+ const {requests}=await run(input());const body=JSON.parse(requests[1].user);assert.equal(body.check_format,'local-ids-v3');
  const schema=requests[1].tool.parameters.properties.results.items.properties;
  assert.deepEqual(Object.keys(schema).sort(),['actor_kind','candidate_index','checks','evidence','issues','resolution','scope_subject','verdict'].sort());
  assert.equal(schema.checks.minItems,15);assert.equal(schema.checks.maxItems,15);
 });
 async function legacyArchive(){
- const i=input(),runResult=await run(i),prepared=runResult.events.find(event=>event.stage==='verification_input').payload;
- const body=JSON.parse(runResult.requests[1].user);delete body.check_format;
- return {i,prepared,body,value:nestedResponse(verification(body,i))};
+ const archives=JSON.parse(readFileSync(new URL('./fixtures/verification-hash-archives.json',import.meta.url),'utf8'));
+ const archive=archives.find(item=>item.kind==='nested-v1');
+ return {prepared:{window:archive.window,facts:archive.facts,policy_fingerprint:archive.fingerprint},
+  body:archive.body,value:JSON.parse(archive.blocks[0].arguments)};
 }
 function archivedReplay(archive,value,encode=JSON.stringify){
  const blocks=[{type:'tool-call',name:'SourceVerificationOutput',arguments:encode(value)}];

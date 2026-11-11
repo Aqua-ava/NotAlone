@@ -27,7 +27,7 @@ async function verify(messages, candidate, {subject = 'contact', actor = 'contac
       attribution: {...facet('supported'), scope_subject: subject, actor_kind: actor, resolution, subject_mentions: mentions},
       arguments_and_relation: facet('supported'), temporal_and_modality: facet('supported')}]}};
   const blocks = [{type: 'tool-call', name: 'SourceVerificationOutput',
-    arguments: JSON.stringify({request_fingerprint: prepared.fingerprint, results: [item]})}];
+    arguments: JSON.stringify({results: [item]})}];
   return (await prepared.decode(blocks)).items[0];
 }
 

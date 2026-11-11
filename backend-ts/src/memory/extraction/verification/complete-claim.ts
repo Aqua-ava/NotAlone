@@ -1,5 +1,6 @@
 /** 准备一次来源核验；请求、指纹、幂等解码和准入封装在同一 Interface。 */
 import {digest} from '../../evidence/canonical-json.ts';
+import {windowDigest} from '../../evidence/window-digest.ts';
 import {readExtractionToolArguments} from '../arguments.ts';
 import {verificationFailureDiagnostic} from './diagnostics.ts';
 import {buildSourceVerificationContract,buildSourceVerificationPayload} from '../contract.ts';
@@ -31,7 +32,7 @@ function factBinding(fact:ExtractedFact):unknown {
 /** 来源 receipt 的内部消费者使用；序列化的模型字段本身不授予新策略准入资格。 */
 export function assertCompleteClaimAdmission(window:ExtractionWindow,fact:ExtractedFact,result:SourceVerificationResult):void {
  const bound=admittedResults.get(result);
- if(!bound||bound.window!==digest(window)||bound.fact!==digest(factBinding(fact))||bound.result!==digest(result))fail('unbound_admission');
+ if(!bound||bound.window!==windowDigest(window)||bound.fact!==digest(factBinding(fact))||bound.result!==digest(result))fail('unbound_admission');
 }
 const supports=['supported','uncertain','unsupported'] as const;
 const repairFields=['results','candidate_index','verdict','issues','evidence','proof','event_verification','condition_verification',
@@ -62,7 +63,7 @@ const claimSchema={type:'object',additionalProperties:false,properties:{
    arguments_and_relation:facet,temporal_and_modality:facet},
   required:['candidate_span','attribution','arguments_and_relation','temporal_and_modality']}},
  },required:['version','parts','field_checks']};
-const claimInstructions=`\n逐条核验完整候选，不改写正文或字段。顶层request_fingerprint逐字回传输入同名值，每项results必须填写claim_check。
+const claimInstructions=`\n逐条核验完整候选，不改写正文或字段。每项results必须填写claim_check。
 claim_check.version固定为2；field_checks逐字段独立核验category、topic、scene_name、alternatives、interpretation_reason、valid_at、invalid_at、speech_act、assertion_status、figurative_type、event、conditions。分类、场景、解释不能引入原话未确定的领域、人物状态或长短期性质；不要求分类标签逐字出现在原话，但须由具体来源支持。备选解释保留原有不确定性，不扩成已证实事实。空数组和null不声明额外事实，可用空evidence_indices表示；非空语义字段的supported必须引用支持它的逐字依据。除event（发生时间标注）外，任一字段uncertain/unsupported均阻止接纳，不能以正文或总verdict代签；event是可选的标注，时间不确定时按未核实处理，不用它否决有据的正文。
 confidence、risk_flags、requires_all_sources、source_dependency_mode、timing和来源ID是结构、策略或来源定位信息，不要求原话声明这些配置；低confidence、有风险标签或合法any与requires_all_sources=true组合本身不表示命题无支持。结构不授予语义支持。
 claim_check.parts按Unicode码点覆盖完整正文（包括空白与标点），默认一段覆盖全文，最多四段，连续、不重叠、不遗漏。
@@ -211,10 +212,10 @@ function verificationPayload(window:ExtractionWindow,facts:ExtractedFact[],moder
  return payload;
 }
 
-function decodeVerificationRows(raw:Row,window:ExtractionWindow,facts:ExtractedFact[],policy:PreparedVerificationPolicy,fingerprint:string):VerificationAdmission[]{
+function decodeVerificationRows(raw:Row,window:ExtractionWindow,facts:ExtractedFact[],policy:PreparedVerificationPolicy,fingerprint:string,localIds=false):VerificationAdmission[]{
  const modern=policy.id==='complete-claim-v1';
- if(modern&&raw.request_fingerprint!==fingerprint)fail('fingerprint_mismatch');
- if(modern)object(raw,['results','request_fingerprint']);
+ if(modern&&!localIds&&raw.request_fingerprint!==fingerprint)fail('fingerprint_mismatch');
+ if(modern)object(raw,localIds?['results']:['results','request_fingerprint']);
  const rows=Array.isArray(raw.results)?raw.results:fail('results_invalid');
  const baseRows=rows.map((entry:unknown)=>{
   if(!modern||!entry||typeof entry!=='object'||Array.isArray(entry))return entry;
@@ -252,9 +253,13 @@ function decodeVerificationRows(raw:Row,window:ExtractionWindow,facts:ExtractedF
 
 /** 存档消费者重放原模型回复的同一确定性校验，不能以JSON准入标志代替。 */
 export function replayCompleteClaimVerification(window:ExtractionWindow,facts:ExtractedFact[],blocks:readonly unknown[],fingerprint:string,requestBody:unknown):VerificationAdmission[]{
- if(digest(requestBody)!==digest({...verificationPayload(window,facts,true),request_fingerprint:fingerprint}))fail('stored_request_mismatch');
+ const format=requestBody&&typeof requestBody==='object'?(requestBody as Row).check_format:undefined;
+ if(format!==undefined&&format!=='local-ids-v3')fail('stored_request_mismatch');
+ const localIds=format==='local-ids-v3';
+ const expected={...verificationPayload(window,facts,true),...(localIds?{check_format:format}:{request_fingerprint:fingerprint})};
+ if(digest(requestBody)!==digest(expected))fail('stored_request_mismatch');
  const raw=readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:true,field_names:repairFields,root_array_key:'results',drop_stray_closers:true}).value as Row;
- return decodeVerificationRows(raw,window,facts,{id:'complete-claim-v1'},fingerprint);
+ return decodeVerificationRows(raw,window,facts,{id:'complete-claim-v1'},fingerprint,localIds);
 }
 
 export function prepareSourceVerification(options:{
@@ -262,8 +267,8 @@ export function prepareSourceVerification(options:{
  requireCurrent():Promise<void>;
  record?(event:{stage:string;payload:unknown}):Promise<void>;
 }):PreparedVerification{
- // 来源原始 JSONB 的大整数/1.0 摘要必须在普通结构克隆丢失原型前冻结。
- const windowSha=digest(options.window),window=structuredClone(options.window),allFacts=structuredClone([...options.facts]);
+ // 来源原始 JSONB 的大整数/1.0 摘要必须在普通结构克隆丢失原型前冻结；摘要按窗口对象记忆化，断言侧复用同一份。
+ const windowSha=windowDigest(options.window),window=structuredClone(options.window),allFacts=structuredClone([...options.facts]);
  const policy:PreparedVerificationPolicy=structuredClone(options.policy??{id:'legacy-v4'});
  const modern=policy.id==='complete-claim-v1';
  const selection=allFacts.flatMap((fact,index)=>modern||fact.speech_act!=='question'&&!['joke','sarcasm','hyperbole'].includes(fact.figurative_type)?[index]:[]);
@@ -278,11 +283,9 @@ export function prepareSourceVerification(options:{
  if(modern){
   schema.properties.results.items.properties.claim_check=claimSchema;
   schema.properties.results.items.required.push('claim_check');
-  schema.properties.request_fingerprint={type:'string',pattern:'^[a-f0-9]{64}$'};
-  schema.required.push('request_fingerprint');
+  payload.check_format='local-ids-v3';
  }
  const fingerprint=digest({policy,window_sha256:windowSha,allFacts,selection,system,schema,payload});
- if(modern){schema.properties.request_fingerprint.enum=[fingerprint];payload.request_fingerprint=fingerprint;}
  const requestData={purpose:'verification' as const,system,user:JSON.stringify(payload),
   tool:{name:'SourceVerificationOutput',description:schema.description??'',parameters:schema}};
  let responseDigest:string|undefined,decoded:Promise<{items:VerificationAdmission[]}>|undefined,reportedInvalid=false;
@@ -296,7 +299,7 @@ export function prepareSourceVerification(options:{
   if(!decoded){
    responseDigest=currentDigest;
    decoded=Promise.resolve().then(()=>{
-    const selected=decodeVerificationRows(raw,window,facts,policy,fingerprint);
+    const selected=decodeVerificationRows(raw,window,facts,policy,fingerprint,modern);
     const mapped=new Map(selection.map((index,local)=>[index,{...selected[local]!,candidate_index:index}]));
     return {items:allFacts.map((_,index)=>mapped.get(index)??{candidate_index:index,admitted:true,result:null})};
    });

@@ -12,7 +12,7 @@ export function positiveSupplier(){
     assert.equal(body.tools[0].function.name,'SourceVerificationOutput');assert.equal(body.tools[0].function.strict,true);
     const payload=JSON.parse(body.messages.find(message=>message.role==='user').content);
     const facet=()=>({verdict:'supported',evidence_indices:[0]});
-    const output={request_fingerprint:payload.request_fingerprint,results:payload.candidates.map((candidate,candidate_index)=>{
+    const output={results:payload.candidates.map((candidate,candidate_index)=>{
      const message=messages.get(candidate.source_message_ids[0]);assert.ok(message);
      return {candidate_index,verdict:'supported',issues:[],evidence:[{message_id:message.message_id,quote:message.text}],claim_check:{version:2,field_checks:Object.fromEntries(verificationFields.map(field=>[field,facet()])),parts:[{candidate_span:{start:0,end:[...candidate.text].length},attribution:{...facet(),scope_subject:candidate.subject,actor_kind:candidate.subject,resolution:'explicit',subject_mentions:[{kind:'first_person',evidence_index:0,source_span:{start:0,end:1},candidate_span:{start:0,end:candidate.subject==='self'?2:3}}]},arguments_and_relation:facet(),temporal_and_modality:facet()}]}};
     })};

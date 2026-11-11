@@ -47,7 +47,7 @@ function blocks(prepared, example, facetVerdict = 'supported', patch = {}) {
       arguments_and_relation: facet(facetVerdict), temporal_and_modality: facet(facetVerdict),
     }]}, ...patch};
   return [{type: 'tool-call', name: 'SourceVerificationOutput', arguments: JSON.stringify({
-    request_fingerprint: prepared.fingerprint, results: [item],
+    results: [item],
   })}];
 }
 
@@ -184,17 +184,20 @@ test('新策略原生准入可签来源receipt，序列化字段或更换正文/
   assert.throws(()=>attachVerifiedSourceReceipt(changed,fact,result),/unbound_admission/);
 });
 
-test('覆盖按Unicode码点计数且请求指纹不能跨候选或来源复用', async () => {
+test('覆盖按Unicode码点计数且本地准入不能跨来源复用', async () => {
   const example={source:'🙂阿青说日期还没定。',candidate:'🙂阿青说日期还没定。'};
   const {window,facts}=scenario(example),prepared=prepareSourceVerification({window,facts,policy,requireCurrent:async()=>{}});
-  assert.equal((await prepared.decode(blocks(prepared,example))).items[0].admitted,true);
+  const admitted=(await prepared.decode(blocks(prepared,example))).items[0];
+  assert.equal(admitted.admitted,true);
   const invalid=prepareSourceVerification({window,facts,policy,requireCurrent:async()=>{}});
   const wrong=blocks(invalid,example),value=JSON.parse(wrong[0].arguments);
   value.results[0].claim_check.parts[0].candidate_span.end=example.candidate.length;
   wrong[0].arguments=JSON.stringify(value);
   assert.equal((await invalid.decode(wrong)).items[0].admitted,false);
-  const other=prepareSourceVerification({window:{...window,messages:[{...window.messages[0],text:'变化的来源'}]},facts,policy,requireCurrent:async()=>{}});
-  await assert.rejects(other.decode(blocks(prepared,example)),/fingerprint_mismatch/);
+  const changedWindow={...window,messages:[{...window.messages[0],text:'变化的来源'}]};
+  const other=prepareSourceVerification({window:changedWindow,facts,policy,requireCurrent:async()=>{}});
+  assert.notEqual(other.fingerprint,prepared.fingerprint);
+  assert.throws(()=>attachVerifiedSourceReceipt(changedWindow,facts[0],admitted.result),/unbound_admission/);
 });
 
 test('shared仍归联系人资料范围；旧事件未核验只丢时间，条件未核验仍拒绝',async()=>{

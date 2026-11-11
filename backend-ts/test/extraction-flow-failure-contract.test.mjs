@@ -31,9 +31,9 @@ function scenario(policy,count,{malformed=false,cancelAtLastParse=false,failVeri
       calls.push(request.purpose);let args;
       if(request.purpose==='extraction')args={scenes:[{scene_name:'合成场景',memories}]};
       else{
-        const payload=JSON.parse(request.user),modern=Object.hasOwn(payload,'request_fingerprint');
+        const payload=JSON.parse(request.user),modern=payload.check_format==='local-ids-v3';
         const facet={verdict:'supported',evidence_indices:[0]};
-        args={...(modern?{request_fingerprint:payload.request_fingerprint}:{}),results:Array.from({length:count},(_,candidate_index)=>({
+        args={results:Array.from({length:count},(_,candidate_index)=>({
           candidate_index,verdict:'supported',issues:[],evidence:[{message_id:message,quote:text}],
           ...(modern?{claim_check:{version:2,field_checks:Object.fromEntries(['category','topic','scene_name','alternatives','interpretation_reason',
             'valid_at','invalid_at','speech_act','assertion_status','figurative_type','event','conditions'].map(name=>[name,facet])),

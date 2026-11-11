@@ -41,7 +41,10 @@ export function candidateAdmission(tx:StorageTransaction,ownerId:string,output:S
   const requestEvent=tx.get("SELECT payload FROM execution_event WHERE owner_id=? AND originated_call_id=? AND kind='model_input'",[ownerId,ref.callId]);
   const responseEvent=tx.get("SELECT payload FROM execution_event WHERE owner_id=? AND originated_call_id=? AND kind='model_output'",[ownerId,ref.callId]);
   if(!requestEvent||!responseEvent)return pending();const request=payload(requestEvent),requestBody=JSON.parse(request.user);
-  if(request.purpose!=='verification'||requestBody.request_fingerprint!==ref.policyFingerprint)return pending();
+  if(request.purpose!=='verification')return pending();
+  // 新格式不向模型发送指纹：上方以输入事件和产物引用闭合本地指纹，下方仍重放实际请求与回复。
+  // 旧格式继续核对原请求中的指纹，不能用新格式规则补签旧存档。
+  if(requestBody.check_format!=='local-ids-v3'&&requestBody.request_fingerprint!==ref.policyFingerprint)return pending();
   const multimodal=result.verification_mode==='multimodal-claim-v1';
   const replay=(multimodal?replayMultimodalVerification:replayCompleteClaimVerification)(prepared.window,prepared.facts,payload(responseEvent).blocks,ref.policyFingerprint,requestBody)[index];
   if(!replay?.admitted||!same(replay.result,result))return pending();
