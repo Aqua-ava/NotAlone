@@ -1,3 +1,5 @@
+import { configureDiagnosticLog } from '../../../backend-ts/src/diagnostics/unified';
+import { installDiagnosticLogBridge } from './diagnostics/bridge';
 import {installSqliteMemoryManagementBridge} from './memory/sqlite-management';
 import { DesktopDataLifecycle } from './data-lifecycle';
 import { installMessageMediaBridge } from './media/bridge';
@@ -101,6 +103,16 @@ void app.whenReady().then(async () => {
   }
   installUsageBridge(windows, new UsageController(backend));
   const commands = electronPageCommands(windows);
+  const diagnosticRoot = app.getPath('userData');
+  const diagnosticLog = configureDiagnosticLog(diagnosticRoot, { proc: 'main', development: !!development });
+  process.env.NOTALONE_DIAGNOSTIC_ROOT = diagnosticRoot;
+  process.env.NOTALONE_DIAGNOSTIC_LEVEL = development ? 'debug' : 'info';
+  installDiagnosticLogBridge(commands, diagnosticRoot, diagnosticLog, async () => {
+    const result = await dialog.showSaveDialog({ title: '导出诊断包到本机', defaultPath: 'NotAlone-diagnostics.json',
+      filters: [{ name: '诊断 JSON', extensions: ['json'] }], properties: ['showOverwriteConfirmation'] });
+    return result.canceled ? undefined : result.filePath;
+  });
+  app.once('will-quit', () => { void diagnosticLog.close(); });
   const quarantine = new QuarantineController(new QuarantineLibrary(resolveQuarantineRoot(
     app.getPath('appData'), app.getPath('userData'), selectedDataPath)),presentQuarantine);
   installQuarantineBridge(commands, quarantine);

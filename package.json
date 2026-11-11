@@ -14,6 +14,7 @@
     "test": "pnpm --workspace-concurrency=1 --no-bail -r run test",
     "test:backend": "pnpm --dir backend-ts test",
     "test:desktop": "pnpm --dir desktop test",
-    "build": "pnpm --dir desktop run build"
+    "build": "pnpm --dir desktop run build",
+    "diag": "node desktop/scripts/diag.mjs"
   }
 }

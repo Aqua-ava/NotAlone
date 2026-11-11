@@ -20,6 +20,8 @@ export class OwnedBackendProcess {
     if (!config.sqlite) throw new BackendFailure('backend_launch_requires_sqlite');
     const environment: NodeJS.ProcessEnv = { LANG: process.env.LANG, LC_ALL: process.env.LC_ALL, TZ: process.env.TZ, TMPDIR: process.env.TMPDIR,
       // 显式诊断预算必须进入实际 DSH 进程，不能只留在开发监督器环境中。
+      NOTALONE_DIAGNOSTIC_ROOT: process.env.NOTALONE_DIAGNOSTIC_ROOT,
+      NOTALONE_DIAGNOSTIC_LEVEL: process.env.NOTALONE_DIAGNOSTIC_LEVEL,
       NOTALONE_PROBLEM_BUDGET: process.env.NOTALONE_PROBLEM_BUDGET,
       NOTALONE_PROBLEM_ROUND: process.env.NOTALONE_PROBLEM_ROUND,
       NOTALONE_WECHAT_CONFIG: wechatConfigurationPath(), ...(config.syncProbePath ? { NOTALONE_SYNC_PROBE: config.syncProbePath } : {}) };

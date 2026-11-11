@@ -79,6 +79,9 @@ importers:
       onnxruntime-node:
         specifier: 1.30.0
         version: 1.30.0
+      pino:
+        specifier: 10.4.0
+        version: 10.4.0
       sharp:
         specifier: 0.35.5
         version: 0.35.5(@types/node@26.6.4)
@@ -6292,6 +6295,69 @@ packages:
       tarball: https://registry.npmjs.org/silk-wasm/-/silk-wasm-3.7.1.tgz
     engines: {node: ">=16.11.0"}
 
+  "@pinojs/redact@0.4.0":
+    resolution:
+      integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==
+      tarball: https://registry.npmjs.org/@pinojs/redact/-/redact-0.4.0.tgz
+  atomic-sleep@1.0.0:
+    resolution:
+      integrity: sha512-kNOjDqAh7px0XWNI+4QbzoiR/nTkHAWNud2uvnJquD1/x5a7EQZMJT0AczqK0Qn67oY/TTQ1LbUKajZpp3I9tQ==
+      tarball: https://registry.npmjs.org/atomic-sleep/-/atomic-sleep-1.0.0.tgz
+    engines:
+      node: ">=8.0.0"
+  on-exit-leak-free@2.1.2:
+    resolution:
+      integrity: sha512-0eJJY6hXLGf1udHwfNftBqH+g73EU4B504nZeKpz1sYRKafAghwxEJunB2O7rDZkL4PGfsMVnTXZ2EjibbqcsA==
+      tarball: https://registry.npmjs.org/on-exit-leak-free/-/on-exit-leak-free-2.1.2.tgz
+    engines:
+      node: ">=14.0.0"
+  pino-abstract-transport@3.0.0:
+    resolution:
+      integrity: sha512-wlfUczU+n7Hy/Ha5j9a/gZNy7We5+cXp8YL+X+PG8S0KXxw7n/JXA3c46Y0zQznIJ83URJiwy7Lh56WLokNuxg==
+      tarball: https://registry.npmjs.org/pino-abstract-transport/-/pino-abstract-transport-3.0.0.tgz
+  pino-std-serializers@7.1.0:
+    resolution:
+      integrity: sha512-BndPH67/JxGExRgiX1dX0w1FvZck5Wa4aal9198SrRhZjH3GxKQUKIBnYJTdj2HDN3UQAS06HlfcSbQj2OHmaw==
+      tarball: https://registry.npmjs.org/pino-std-serializers/-/pino-std-serializers-7.1.0.tgz
+  pino@10.4.0:
+    resolution:
+      integrity: sha512-bk1ZMTwG/Vymx+zPoa28MhNzucFvXJWp3csrSuxuHPSMeUettaCoQ5Jvg07mtC4JGNpcfTwz41oVCnNgBK9+vA==
+      tarball: https://registry.npmjs.org/pino/-/pino-10.4.0.tgz
+    hasBin: true
+  process-warning@5.1.1:
+    resolution:
+      integrity: sha512-oCkNVj4OKnKEcocVBcDfiIugN1/cE6rgfT3nCtzeqZPA8+rIxMaQ0xXzIkGP8Gj2qUaP1UR7uhJ1VD8lUCpzCg==
+      tarball: https://registry.npmjs.org/process-warning/-/process-warning-5.1.1.tgz
+  quick-format-unescaped@4.0.4:
+    resolution:
+      integrity: sha512-tYC1Q1hgyRuHgloV/YXs2w15unPVh8qfu/qCTfhTYamaw7fyhumKa2yGpdSo87vY32rIclj+4fWYQXUMs9EHvg==
+      tarball: https://registry.npmjs.org/quick-format-unescaped/-/quick-format-unescaped-4.0.4.tgz
+  real-require@1.0.0:
+    resolution:
+      integrity: sha512-P4nbQYQfePJxRSmY+v/KINxVucm4NF3p3s7pJveMTtom52FR4YGltUQLB8idDXwDDWW+eYrWDFbuzUnjoWHF7g==
+      tarball: https://registry.npmjs.org/real-require/-/real-require-1.0.0.tgz
+  safe-stable-stringify@2.5.0:
+    resolution:
+      integrity: sha512-b3rppTKm9T+PsVCBEOUR46GWI7fdOs00VKZ1+9c1EWDaDMvjQc6tUwuFyIprgGgTcWoVHSKrU8H31ZHA2e0RHA==
+      tarball: https://registry.npmjs.org/safe-stable-stringify/-/safe-stable-stringify-2.5.0.tgz
+    engines:
+      node: ">=10"
+  sonic-boom@4.2.1:
+    resolution:
+      integrity: sha512-w6AxtubXa2wTXAUsZMMWERrsIRAdrK0Sc+FUytWvYAhBJLyuI4llrMIC1DtlNSdI99EI86KZum2MMq3EAZlF9Q==
+      tarball: https://registry.npmjs.org/sonic-boom/-/sonic-boom-4.2.1.tgz
+  split2@4.2.0:
+    resolution:
+      integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==
+      tarball: https://registry.npmjs.org/split2/-/split2-4.2.0.tgz
+    engines:
+      node: ">= 10.x"
+  thread-stream@4.2.1:
+    resolution:
+      integrity: sha512-Stg6edJXC/6/xqGwSXwFokrUhChJ18amEjpKH89WrQQ0oVFDF+pUUcTpiwWhFUrE89Vf16FBOlwhaw+lescxMQ==
+      tarball: https://registry.npmjs.org/thread-stream/-/thread-stream-4.2.1.tgz
+    engines:
+      node: ">=20"
 snapshots:
   "@electron-internal/extract-zip@1.0.5": {}
   "@electron/asar@4.3.1":
@@ -10787,3 +10853,34 @@ snapshots:
   zod@4.6.7: {}
 
   silk-wasm@3.7.1: {}
+  "@pinojs/redact@0.4.0": {}
+  atomic-sleep@1.0.0: {}
+  on-exit-leak-free@2.1.2: {}
+  pino-abstract-transport@3.0.0:
+    dependencies:
+      split2: 4.2.0
+  pino-std-serializers@7.1.0: {}
+  pino@10.4.0:
+    dependencies:
+      "@pinojs/redact": 0.4.0
+      atomic-sleep: 1.0.0
+      on-exit-leak-free: 2.1.2
+      pino-abstract-transport: 3.0.0
+      pino-std-serializers: 7.1.0
+      process-warning: 5.1.1
+      quick-format-unescaped: 4.0.4
+      real-require: 1.0.0
+      safe-stable-stringify: 2.5.0
+      sonic-boom: 4.2.1
+      thread-stream: 4.2.1
+  process-warning@5.1.1: {}
+  quick-format-unescaped@4.0.4: {}
+  real-require@1.0.0: {}
+  safe-stable-stringify@2.5.0: {}
+  sonic-boom@4.2.1:
+    dependencies:
+      atomic-sleep: 1.0.0
+  split2@4.2.0: {}
+  thread-stream@4.2.1:
+    dependencies:
+      real-require: 1.0.0

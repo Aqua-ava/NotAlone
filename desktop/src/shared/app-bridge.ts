@@ -1,3 +1,4 @@
+import type { DiagnosticLogBridge } from './diagnostic-bridge';
 import type {SqliteMemoryManagementBridge} from './sqlite-memory-management';
 import type { MessageMediaBridge } from './media-bridge';
 import type { UsageBridge } from './usage-bridge';
@@ -28,6 +29,7 @@ import type { ContactDeletionBridge } from './contact-deletion-bridge';
 import type { QuarantineBridge } from './quarantine-bridge';
 
 export type AppBridge = WindowBridge & DesktopBridge & {
+  diagnosticLogs: DiagnosticLogBridge;
   usage: UsageBridge;
   media: MessageMediaBridge;
   backend: BackendBridge; setup: SetupBridge; wechatSetup: WechatSetupBridge; startup: StartupBridge;

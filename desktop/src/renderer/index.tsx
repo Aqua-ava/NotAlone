@@ -1,3 +1,4 @@
+import { DiagnosticSettings } from './DiagnosticSettings';
 import type { BindingConsentState } from '../shared/binding-consent-bridge';
 import { UsagePanel } from './UsagePanel';
 import { historyReplyEligibility } from '../shared/history-reply-eligibility';
@@ -164,7 +165,7 @@ export function App() {
           && <StartupReadiness state={startup} backend={backend} onConfigure={showDiagnostics} />}
         {page === 'config' && <SetupPanel />}
         <div hidden={page !== 'config'}><UsagePanel active={page === 'config'} /></div>
-        {page === 'config' && <><ScreenPermissionPanel view={permission} /><DesktopControls />
+        {page === 'config' && <><ScreenPermissionPanel view={permission} /><DesktopControls /><DiagnosticSettings />
           <details className="startup-settings" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
             <summary>高级</summary>
             <p>手动文件导入入口已退役；已通过自动同步获取的资料无需重复导入。</p>

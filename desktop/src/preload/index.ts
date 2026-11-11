@@ -1,3 +1,4 @@
+import { createDiagnosticLogBridge } from './diagnostics';
 import {createSqliteMemoryManagementBridge} from './sqlite-memory-management';
 import { createMessageMediaBridge } from './media';
 import { createUsageBridge } from './usage';
@@ -38,6 +39,7 @@ function developmentHost(renderer: RendererTransport): boolean {
 }
 export function createAppBridge(renderer: RendererTransport, development = developmentHost(renderer)): AppBridge {
   return {
+    diagnosticLogs: createDiagnosticLogBridge(renderer),
     usage: createUsageBridge(renderer),
     media: createMessageMediaBridge(renderer),
     backend: createBackendBridge(renderer),
