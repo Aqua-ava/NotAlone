@@ -369,11 +369,23 @@ function claimDue(tx:StorageTransaction,ownerId:string,now:number):unknown {
 function bodyDigest(tx:StorageTransaction,ownerId:string,scope:MemoryScope):string {
  const base=scopeRow(tx,ownerId,scope),publicationId=base?.current_publication_id;
  if(publicationId===null||publicationId===undefined)return sha256('[]');
- const docs=tx.all(`SELECT d.id FROM publication_member m JOIN memory_document d ON d.owner_id=m.owner_id AND d.id=m.document_id
-  WHERE m.owner_id=? AND m.publication_id=? AND d.kind='scene' ORDER BY d.id`,[ownerId,publicationId]);
- const bodies=docs.map(doc=>tx.all('SELECT s.body FROM document_statement s JOIN publication_member m ON m.owner_id=s.owner_id AND m.document_id=s.document_id AND m.version_no=s.version_no WHERE m.owner_id=? AND m.publication_id=? AND s.document_id=? ORDER BY s.block_no,s.statement_no',[ownerId,publicationId,doc.id]).map(row=>String(row.body)));
- bodies.sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
- return sha256(JSON.stringify(bodies));
+ // 单条按 document_id、block_no、statement_no 排序的查询替代逐文档 N+1 查询；无正文文档仍贡献空数组成员。
+ // 排序沿用原比较器的 localeCompare，只是预计算每个文档的 JSON 键避免逐次重复序列化；
+ // 最终摘要串按 JSON 数组规则增量拼装，与 JSON.stringify(排序后成员) 逐字节相同。
+ const rows=tx.all(`SELECT m.document_id AS document_id,s.block_no AS block_no,s.statement_no AS statement_no,s.body AS body
+  FROM publication_member m JOIN memory_document d ON d.owner_id=m.owner_id AND d.id=m.document_id
+  LEFT JOIN document_statement s ON s.owner_id=m.owner_id AND s.document_id=m.document_id AND s.version_no=m.version_no
+  WHERE m.owner_id=? AND m.publication_id=? AND d.kind='scene' ORDER BY m.document_id,s.block_no,s.statement_no`,[ownerId,publicationId]);
+ const groups=new Map<string,string[]>();
+ for(const row of rows){
+  const documentId=String(row.document_id);
+  let bodies=groups.get(documentId);
+  if(!bodies){bodies=[];groups.set(documentId,bodies);}
+  if(row.body!==null)bodies.push(String(row.body));
+ }
+ const members=[...groups.values()],keys=members.map(bodies=>JSON.stringify(bodies));
+ const order=members.map((_,index)=>index).sort((a,b)=>keys[a]!.localeCompare(keys[b]!));
+ return sha256('['+order.map(index=>keys[index]!).join(',')+']');
 }
 /** 旧入口可能仍发布完整双阶段任务；只有真实当前publication且版本完全匹配时才结清同版队列。 */
 function finishLegacyFullPublication(tx:StorageTransaction,ownerId:string,taskId:string,now:number):boolean {
