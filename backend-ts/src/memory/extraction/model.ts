@@ -172,7 +172,7 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
         }
       }
       const observation=(strictCall??call)?.observation();
-      const responseObserved=observation?.dispatch==='http_accepted'||providerFailure?.status!==undefined;
+      const responseObserved=observation?.headers_received===true||observation?.http_status!==undefined||observation?.dispatch==='http_accepted'||providerFailure?.status!==undefined;
       if(providerFailure&&observation)providerFailure={...providerFailure,transport_category:observation.transport_category??'other',
           stage:responseObserved?'response_received':observation.fetch_started===false||observation.dispatch==='not_authorized'?'before_send':'awaiting_response',
           elapsed_ms:Date.now()-started,request_bytes:observation.request_bytes??observation.budget?.serialized_bytes??0,
@@ -181,7 +181,7 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
       if(reserved&&reservedReceipt&&observation) {
         const notSent=!responseObserved&&(observation.fetch_started===false||observation.dispatch==='not_authorized');
         const terminalTransport=!responseObserved&&!notSent&&!input.signal.aborted&&observation.terminal_transport_failure===true
-          &&providerFailure?.code==='TRANSPORT'&&input.claim.step_name==='extraction_verification'
+          &&(providerFailure?.code==='TRANSPORT'||providerFailure?.code==='TIMEOUT'&&observation.fetch_started===true)&&input.claim.step_name==='extraction_verification'
           &&input.messages.some(message=>message.content.some(block=>block.type==='image'));
         receipt={...reservedReceipt,...(responseObserved&&input.ledger_entry_id?{ledger_entry_id:input.ledger_entry_id}:{}),latency_ms:Date.now()-started,
           dispatch:responseObserved?'response_observed':notSent?'not_sent':'authorized_unconfirmed',

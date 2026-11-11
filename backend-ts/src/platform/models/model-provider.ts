@@ -1,6 +1,7 @@
 /** 普通调用沿用官方DeepSeekAdapter；来源核验另用同供应商的专用strict Beta传输。 */
 import type { Context } from '@deepseek-ai/cordis';
 import {AsyncLocalStorage} from 'node:async_hooks';
+import {channel} from 'node:diagnostics_channel';
 import {LlmError,type ImageBlock,type TextBlock,type GenerateOptions,type StreamChunk} from '@deepseek-ai/dsh-llm';
 import {bindDiagnosticProblemBudget} from '../../diagnostics/diagnostic-problem-budget.ts';
 import {currentDiagnosticTrace,newTraceId} from '../../diagnostics/context.ts';
@@ -35,8 +36,10 @@ export interface ModelProviderObservation {
   /** 仅显式false证明未到物理fetch前门；缺省或true均不能证明未发送。 */
   fetch_started?:boolean;
   request_bytes?:number;image_count?:number;
+  /** 原生Undici请求身份及实际HTTP头观测；缺省不证明尚未收到响应。 */
+  http_request_observed?:boolean;headers_received?:boolean;http_status?:number;
   transport_category?:ModelTransportCategory;
-  /** 仅来自实际adapter/strict fetch抛出的终端TRANSPORT，取消不属于此类。 */
+  /** 仅来自实际adapter/strict fetch的终端传输失败；首响应前官方TIMEOUT可纳入，取消不属于此类。 */
   terminal_transport_failure?:boolean;
   failure_category?:ImageCallFailureCategory;response_status?:number;terminal_outcome?:'succeeded'|'failed';
   budget: MessagesBudgetReceipt | null;
@@ -92,7 +95,10 @@ function transportCategory(error:unknown):ModelTransportCategory {
 function observeTransportFailure(observation:ModelProviderObservation,error:unknown,signal?:AbortSignal):void {
   if(!(error instanceof LlmError)||!['TRANSPORT','TIMEOUT','ABORTED'].includes(error.failure.code))return;
   observation.transport_category=transportCategory(error);
-  observation.terminal_transport_failure=error.failure.code==='TRANSPORT'&&!signal?.aborted;
+  const awaitingImageResponse=error.failure.code==='TIMEOUT'&&observation.fetch_started===true&&observation.http_request_observed===true
+    &&observation.headers_received!==true&&observation.http_status===undefined
+    &&observation.dispatch==='authorized_unconfirmed'&&observation.response_status===undefined&&(observation.image_count??0)>0;
+  observation.terminal_transport_failure=!signal?.aborted&&(error.failure.code==='TRANSPORT'||awaitingImageResponse);
 }
 function diagnosticFailureCategory(error:unknown,signal?:AbortSignal):ImageCallFailureCategory {
  if(signal?.aborted||error instanceof LlmError&&error.failure.code==='ABORTED')return 'cancelled';
@@ -129,6 +135,29 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
   }
   const calls=new Map<string,RegisteredCall>();
   const dispatchContext=new AsyncLocalStorage<{observation:ModelProviderObservation}>();
+  const nativeRequests=new WeakMap<object,ModelProviderObservation>();
+  const requestCreated=channel('undici:request:create'),responseHeaders=channel('undici:request:headers');
+  // Node 24 / Undici 7.30.1公开channel：仅按请求对象关联，不读取URL、请求头或正文。
+  // https://github.com/nodejs/undici/blob/v7.30.1/docs/docs/api/DiagnosticsChannel.md
+  const observeRequestCreated=(message:unknown):void=>{
+    try{
+      const current=dispatchContext.getStore();
+      if(!current||current.observation.fetch_started!==true||!message||typeof message!=='object')return;
+      const request=(message as {request?:unknown}).request;if(!request||typeof request!=='object')return;
+      nativeRequests.set(request,current.observation);current.observation.http_request_observed=true;
+    }catch{/* 观测不足时保留未知，不影响实际请求。 */}
+  };
+  const observeResponseHeaders=(message:unknown):void=>{
+    try{
+      if(!message||typeof message!=='object')return;
+      const value=message as {request?:unknown;response?:{statusCode?:unknown}};
+      if(!value.request||typeof value.request!=='object')return;
+      const observation=nativeRequests.get(value.request);if(!observation)return;
+      observation.headers_received=true;
+      const status=value.response?.statusCode;
+      if(typeof status==='number'&&Number.isInteger(status)&&status>=100&&status<=999)observation.http_status=status;
+    }catch{/* 已收到头的标记先保留；不能因状态读取失败推定没有响应。 */}
+  };
   const imageScopes=new AsyncLocalStorage<readonly ImageCallDiagnosticImage[]>();
   let images:ModelImageAttachments|undefined;
   // 官方store的公开transport接点强制零上传HTTP，触发官方inline fallback；不产生远端文件与重试。
@@ -195,6 +224,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
     },
   });
   const dispose=ctx.llm.registerAdapter([configuration.provider],adapter);
+  requestCreated.subscribe(observeRequestCreated);responseHeaders.subscribe(observeResponseHeaders);
   function observeImageInputs(current:RegisteredCall,manifests:readonly ModelImageManifest[]):void {
     current.images=manifests.map(image=>({id:image.id,originalBytes:image.originalBytes??current.images.find(input=>input.id===image.id)?.originalBytes??image.bytes,
       sentBytes:image.bytes,width:image.width,height:image.height,mimeType:image.requestMimeType}));
@@ -205,7 +235,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
     const observation=registered.observation;
     recordImageCallDiagnostic({callId:registered.call.attempt_id,traceId:registered.traceId,contactPrefix:registered.call.contactPrefix,
       images:registered.images,requestBytes:observation.request_bytes??observation.budget?.serialized_bytes??0,
-      durationMs:Math.max(0,Date.now()-registered.startedAt),stage:observation.dispatch==='http_accepted'||observation.response_status!==undefined?'response_received'
+      durationMs:Math.max(0,Date.now()-registered.startedAt),stage:observation.headers_received===true||observation.http_status!==undefined||observation.dispatch==='http_accepted'||observation.response_status!==undefined?'response_received'
         :observation.fetch_started===false||observation.dispatch==='not_authorized'?'before_send':'awaiting_response',
       failureCategory:observation.failure_category??(observation.terminal_outcome==='succeeded'?'none':observation.transport_category??'other'),
       outcome:observation.terminal_outcome??'unknown'});
@@ -312,6 +342,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
       if(calls.size)throw new Error('model_provider_calls_not_settled');
       images?.assertIdle();
       await dispose();
+      requestCreated.unsubscribe(observeRequestCreated);responseHeaders.unsubscribe(observeResponseHeaders);
     },
   };
 }
