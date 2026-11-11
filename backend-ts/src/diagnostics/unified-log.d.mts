@@ -14,3 +14,5 @@ export class UnifiedDiagnosticLog {
   stats(): { rejected: number; dropped: number; available: boolean };
 }
 export function readDiagnosticRecords(root: string): Promise<DiagnosticRecord[]>;
+/** @internal 只接收受信任上下文保存的时间；不扩展公共事件字段。 */
+export function writeObservedDiagnostic(log: UnifiedDiagnosticLog, input: DiagnosticEvent, observedAt: number): void;

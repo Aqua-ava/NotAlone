@@ -6,6 +6,11 @@ import { randomUUID } from 'node:crypto';
 import { checkedDiagnosticEvent, checkedDiagnosticRecord, diagnosticEvents } from './unified-contract.mjs';
 
 const MiB = 1024 * 1024;
+const observedWriters = new WeakMap();
+/** 仅供受信任上下文回放；时间不属于公共事件载荷，也不经 IPC／HTTP 暴露。 */
+export function writeObservedDiagnostic(log, input, observedAt) {
+  try { observedWriters.get(log)?.(input, observedAt); } catch { /* 内部回放失败不进入业务路径。 */ }
+}
 const namePattern = /^(main|backend)-(\d{4}-\d{2}-\d{2})-(\d+)\.jsonl$/;
 const identity = stat => `${stat.dev}:${stat.ino}`;
 const safe = (stat, directory, privateMode = true) => stat.uid === process.getuid?.()
@@ -123,6 +128,7 @@ export class UnifiedDiagnosticLog {
     this.queue = []; this.queuedBytes = 0; this.rejected = 0; this.dropped = 0; this.enabled = true; this.failed = false;
     this.debugUntil = 0; this.scheduled = false; this.closed = false;
     this.logger = pino({ base: null, timestamp: false, level: 'debug', formatters: { level: label => ({ level: label }) } }, { write: line => this.enqueue(line) });
+    observedWriters.set(this, (input, observedAt) => this.#diagnoseObserved(input, observedAt));
     this.pending = this.initialize().catch(() => { this.failed = true; });
   }
   async initialize() {
@@ -146,13 +152,17 @@ export class UnifiedDiagnosticLog {
     this.enabled = value.enabled;
   }
   diagnose(input) {
+    try { this.#diagnoseObserved(input, this.now()); } catch { this.dropped++; }
+  }
+  #diagnoseObserved(input, observedAt) {
     try {
       const event = checkedDiagnosticEvent(input);
       if (!event) { this.rejected++; return; }
+      if (!Number.isSafeInteger(observedAt) || observedAt < 0 || observedAt > 8640000000000000) { this.rejected++; return; }
       if (this.closed) return;
       const level = diagnosticEvents[event.event].level;
       if (level === 'debug' && !this.development && this.debugUntil <= this.now()) return;
-      this.logger[level]({ ...event, time: new Date(this.now()).toISOString(), proc: this.proc });
+      this.logger[level]({ ...event, time: new Date(observedAt).toISOString(), proc: this.proc });
     } catch { this.dropped++; }
   }
   enqueue(line) {

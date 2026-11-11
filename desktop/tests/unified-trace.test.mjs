@@ -93,3 +93,14 @@ test('轻量上下文在原生Node TypeScript与主进程CJS均能惰性初始�
   assert.deepEqual(JSON.parse(stdout),{count:1,proc:'backend'});
  }
 });
+
+test('首次惰性加载保留事件发生时间，初始化完成时间不能改变跨进程因果顺序',async t=>{
+ const run=promisify(execFile),root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-trace-observed-')));t.after(()=>rm(root,{recursive:true,force:true}));
+ const entry=path.resolve('../backend-ts/test/fixtures/unified-context-smoke.mjs'),output=path.join(root,'context.cjs');
+ await build({entryPoints:[entry],outfile:output,bundle:true,platform:'node',format:'cjs',logLevel:'silent'});
+ for(const [name,args] of [['native',['--experimental-strip-types',entry,'--timestamp']],['main-cjs',[output,'--timestamp']]]){
+  const data=await realpath(await mkdtemp(path.join(root,name+'-')));
+  const {stdout}=await run(process.execPath,args,{env:{...process.env,NOTALONE_DIAGNOSTIC_ROOT:data,NOTALONE_DIAGNOSTIC_LEVEL:'debug'}});
+  assert.deepEqual(JSON.parse(stdout),{count:1,proc:'backend',withinObservedCall:true});
+ }
+});
