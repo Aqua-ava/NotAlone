@@ -14,6 +14,29 @@ test('SQLite实际讨论保留顺序和来源，失效正文必须撤下且候�
  assert.throws(()=>readSqliteDiscussion({...value,entries:[{...value.entries[1],call_id:null}]},id,7));
 });
 
+test('会话读取单次请求承载完整视图，取消、连接换代与超限响应都丢弃本次读取',async()=>{
+ const output=await build({stdin:{contents:"export {readAssistantSession} from './src/main/reply/assistant-sessions';export {BackendRequestFailure} from './src/main/backend/json-client';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
+ const {readAssistantSession,BackendRequestFailure}=await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
+ const contactId=randomUUID(),sessionId=randomUUID(),entryId=randomUUID(),requestId=randomUUID();
+ const snapshot={mode:'sqlite',session_id:sessionId,runtime_recovery:'unchecked',entries:[{entry_id:entryId,position:'1',role:'user',text:'合成发言',request_id:requestId,call_id:null,content_state:'available'}]};
+ // 读取中连接换代：本次读取按取消丢弃。
+ let generation=7;
+ const changed={getConnectionGeneration:()=>generation,requestJson:async()=>{generation=8;return {generation:7,data:snapshot};}};
+ await assert.rejects(readAssistantSession(changed,contactId,sessionId,new AbortController().signal),
+  error=>error instanceof BackendRequestFailure&&error.kind==='cancelled');
+ // 请求期间发出取消信号：同样丢弃，不返回半程结果。
+ const controller=new AbortController();
+ const cancelled={getConnectionGeneration:()=>7,requestJson:async()=>{controller.abort();return {generation:7,data:snapshot};}};
+ await assert.rejects(readAssistantSession(cancelled,contactId,sessionId,controller.signal),
+  error=>error instanceof BackendRequestFailure&&error.kind==='cancelled');
+ // 响应超出运输字节门禁：错误如实传播，不做分片重试。
+ const calls=[];
+ const tooLarge={getConnectionGeneration:()=>7,requestJson:async input=>{calls.push(input);throw new BackendRequestFailure('response',undefined,'response_too_large');}};
+ await assert.rejects(readAssistantSession(tooLarge,contactId,sessionId,new AbortController().signal),
+  error=>error instanceof BackendRequestFailure&&error.code==='response_too_large');
+ assert.equal(calls.length,1);assert.equal(calls[0].method,'GET');assert.equal(calls[0].maxResponseBytes,8388608);
+});
+
 test('既有讨论读取与权威投影保留SQLite实际发言，失效后的旧读取不能恢复正文',async()=>{
  const output=await build({stdin:{contents:"export {readAssistantSession} from './src/main/reply/assistant-sessions';export {AssistantSessionProjection} from './src/main/reply/assistant-session-projection';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
  const {readAssistantSession,AssistantSessionProjection}=await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
