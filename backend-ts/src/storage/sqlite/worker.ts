@@ -1,5 +1,6 @@
 import {historicalDeletionEquivalences,retiredDeletionOperations} from './migrations/history-retirement-v1.ts';
 import { parentPort, workerData } from 'node:worker_threads';
+import { statSync } from 'node:fs';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { sha256 } from '../../platform/sha256.ts';
@@ -44,6 +45,12 @@ try {
     }
   }
   const files = controlledFiles(options.userData, options.intent === 'create');
+  // 上一个会话的退出状态：最后一个连接干净 close 时 SQLite 会删除 -wal/-shm；只要残留其一，就说明上次存在被强杀或崩溃的连接。
+  // 必须在打开自身连接之前采样，避免把本次会话产生的旁路文件误判为上次残留；只判存在性，不读内容也不改文件。
+  const priorExitResidue = options.intent === 'open' && ['-wal', '-shm'].some(suffix => {
+    try { statSync(files.database + suffix); return true; }
+    catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; return false; }
+  });
   db = new DatabaseSync(files.database, { enableForeignKeyConstraints: true, allowExtension: false, timeout: 100 });
   const connection = db;
   // 结构迁移为既有删除目标重建固定摘要；不接受扩展模块或任意脚本。
@@ -61,7 +68,8 @@ try {
   const all = (sql: string, values: SQLInputValue[] = []) => prepared(sql).all(...bindings(values));
   const get = (sql: string, values: SQLInputValue[] = []) => all(sql, values)[0];
   const schemaDigest = () => sha256(JSON.stringify(all("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name")));
-  // 普通打开用 quick_check（不核对索引内容与 UNIQUE，大库约快一半）；迁移、升级与显式 check() 仍做完整 integrity_check。
+  // quick_check 不核对索引内容与 UNIQUE，大库约快一半；打开路径（升级、非WAL转换、残留补检）用 quick，
+  // create、显式 check() 与维护校验仍做完整 integrity_check。普通重开不再触发任何全库扫描。
   const checks = (quick = false) => {
     const pragma = quick ? 'quick_check' : 'integrity_check';
     if (all(`PRAGMA ${pragma}`).some(r => r[pragma] !== 'ok')) throw new StorageFailure('integrity_failed');
@@ -77,7 +85,7 @@ try {
     catch (error) { if (connection.isTransaction) connection.exec('ROLLBACK'); throw error; }
   };
   const verifyExisting = () => {
-    // 先核验固定身份与结构；完整性在同一写锁快照内核验后才允许改动。
+    // 先核验固定身份与结构；需要全库完整性检查的情形由打开分支按条件决定，不属这里。
     const instance = get('SELECT * FROM database_instance WHERE slot=1');
     if (!instance || instance.database_id !== options.expectedDatabaseId || instance.role !== options.role
       || instance.format_family !== 'notalone-sqlite-v1') throw new StorageFailure('instance_mismatch');
@@ -90,7 +98,8 @@ try {
   if (options.intent === 'open') verifyExisting();
   const initiallyApplied = options.intent === 'create' ? 0 : Number(get('SELECT COUNT(*) AS n FROM schema_migration')!.n);
   let journal = get('PRAGMA journal_mode');
-  if (journal?.journal_mode !== 'wal') {
+  const openingWal = journal?.journal_mode === 'wal';
+  if (!openingWal) {
     // 已有非WAL库转换前仍完整核验，不能让损坏库先产生配置写入。
     if (options.intent === 'open') checks(true);
     journal = get('PRAGMA journal_mode=WAL');
@@ -107,7 +116,12 @@ try {
       if (get('PRAGMA foreign_keys')?.foreign_keys !== 0n) throw new StorageFailure('foreign_keys_disable_failed');
     }
     transaction(true, () => {
-      if (options.intent === 'open') { verifyExisting(); checks(true); }
+      // 普通重开只核验身份与结构，不再同步扫描全库；升级、非WAL转换与上次
+      // 非正常退出（打开前采样的 -wal/-shm 残留）才在提交前补一次快速检查。
+      if (options.intent === 'open') {
+        verifyExisting();
+        if (initiallyApplied < registry.migrations.length || !openingWal || priorExitResidue) checks(true);
+      }
       const applied = options.intent === 'create' ? 0 : Number(get('SELECT COUNT(*) AS n FROM schema_migration')!.n);
       for (const migration of registry.migrations.slice(applied)) {
         if (migration.rebuild) {
@@ -128,7 +142,8 @@ try {
       const epoch = get('SELECT epoch FROM database_instance WHERE slot=1')!.epoch as bigint;
       if (epoch >= 9223372036854775807n) throw new StorageFailure('epoch_exhausted');
       connection.prepare('UPDATE database_instance SET runtime_id=?,epoch=epoch+1,schema_digest=? WHERE slot=1').run(runtimeId, schemaDigest());
-      // 普通重开只更新已核验的运行租约；实际升级仍在提交前检查变更后的全库。
+      // 普通重开只更新已核验的运行租约（补检已在提交前完成，普通重开不再扫描全库）；
+      // 实际升级仍在提交前检查变更后的全库。
       if (options.intent === 'create' || applied < registry.migrations.length) checks();
     });
   } finally {

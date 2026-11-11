@@ -144,25 +144,57 @@ test('进程中断升级后由同一实例回滚恢复，未提交版本不留�
  await assert.rejects(SqliteStorage.open({...options,userData:alias}),{code:'unsafe_storage_path'});
  });
 
-test('外键损坏与页面完整性分别核验，FK失败不能被integrity通过掩盖',async t=>{
+test('外键损坏与页面完整性分别核验：普通打开不再预扫全库，显式check仍拒绝FK损坏',async t=>{
  const options={...await fixture(t),registryModule};const s=await SqliteStorage.open(options),id=s.status.databaseId;await s.close();
  const db=new DatabaseSync(databasePath(options),{enableForeignKeyConstraints:false});
  db.exec("INSERT INTO fact VALUES('missing','contact','orphan',NULL,'unknown',NULL)");
  assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok');db.close();
- await assert.rejects(SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id}),{code:'foreign_keys_failed'});
+ // 普通打开不再同步执行 quick_check／foreign_key_check：FK 损坏在打开时不被发现。
+ const reopened=await SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id});
+ try{
+  assert.equal(reopened.status.databaseId,id);
+  // 显式 check 仍分别核验：FK 失败不能被 integrity 通过掩盖。
+  await assert.rejects(reopened.check(),{code:'foreign_keys_failed'});
+ }finally{await reopened.close();}
 });
 
-test('重开和升级先拒绝原有外键损坏，不让后续迁移掩盖损坏资料',async t=>{
+test('升级仍先拒绝原有外键损坏，不让后续迁移掩盖损坏资料；普通打开不再预扫',async t=>{
  const options={...await fixture(t),registryModule};
  const first=await SqliteStorage.open(options),id=first.status.databaseId;await first.close();
  const db=new DatabaseSync(databasePath(options));
  db.exec("PRAGMA foreign_keys=OFF; INSERT INTO fact VALUES('missing','contact','invalid',NULL,'unknown',NULL)");db.close();
+ // 普通打开不执行全库检查：同样的损坏在无升级、无残留的重开中不会被发现。
+ const reopened=await SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id});
+ assert.equal(reopened.status.databaseId,id);await reopened.close();
  const before=await readFile(databasePath(options));
- await assert.rejects(SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id}),{code:'foreign_keys_failed'});
  const repairFile=join(options.userData,'invalid-repair.mjs');
  await writeFile(repairFile,`import {registry as base} from ${JSON.stringify(registryModule)};export const registry={...base,migrations:[...base.migrations,{version:base.migrations.length+1,sql:"DELETE FROM fact WHERE owner_id='missing'"}]};`);
  await assert.rejects(SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id,registryModule:new URL(`file://${repairFile}`).href}),{code:'foreign_keys_failed'});
  assert.deepEqual(await readFile(databasePath(options)),before);
+});
+
+test('create 建库仍执行全库完整性检查，CHECK 违规的数据不能建成实例',async t=>{
+ const options=await fixture(t);
+ const sql="PRAGMA ignore_check_constraints=ON; INSERT INTO fact VALUES('owner','contact','invalid',NULL,'known',NULL); PRAGMA ignore_check_constraints=OFF;";
+ const createBadFile=join(options.userData,'create-bad-check.mjs');
+ await writeFile(createBadFile,`import {registry as base} from ${JSON.stringify(registryModule)};export const registry={...base,migrations:[...base.migrations,{version:base.migrations.length+1,sql:${JSON.stringify(sql)}}]};`);
+ await assert.rejects(SqliteStorage.open({...options,registryModule:new URL(`file://${createBadFile}`).href}),{code:'integrity_failed'});
+});
+
+test('上次非正常退出（-wal/-shm残留）的下次打开即使无升级也补一次检查',async t=>{
+ const options={...await fixture(t),registryModule};
+ const first=await SqliteStorage.open(options),id=first.status.databaseId;await first.close();
+ // 模拟崩溃：子进程关闭FK约束写入孤儿行后保持连接不关，随后被 SIGKILL，留下残留旁路文件。
+ const script=join(options.userData,'crash-orphan.mjs');
+ await writeFile(script,`import {DatabaseSync} from 'node:sqlite';
+ const db=new DatabaseSync(${JSON.stringify(databasePath(options))});
+ db.exec("PRAGMA foreign_keys=OFF; INSERT INTO fact VALUES('missing','contact','crash',NULL,'unknown',NULL);");
+ setTimeout(()=>{},30000);`);
+ const child=spawn(process.execPath,[script],{stdio:'ignore'});const exited=once(child,'exit');
+ for(let i=0;i<300;i++){try{if((await stat(databasePath(options)+'-wal')).size>0)break;}catch{}await new Promise(r=>setTimeout(r,10));}
+ child.kill('SIGKILL');await exited;
+ // 无升级、已是WAL，但残留信号要求打开时补检查：FK 损坏仍被拒绝。
+ await assert.rejects(SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id}),{code:'foreign_keys_failed'});
 });
 
 test('升级后完整性失败仍回滚，旧版本及既有资料保持可用',async t=>{
