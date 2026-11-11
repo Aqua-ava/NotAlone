@@ -1,5 +1,7 @@
 import { parsePreferenceJson, stringifyPreferenceJson } from '../../shared/expression-preference-json';
 import { request, type ClientRequest } from 'node:http';
+import {currentDiagnosticTrace,newTraceId} from '../../../../backend-ts/src/diagnostics/context';
+import {checkedTraceId,requestDiagnosticModule,tracedRequest} from '../../../../backend-ts/src/diagnostics/request-trace';
 import type { BackendConnection } from './connection';
 import { isUuid } from '../uuid';
 import type { AssistantInputBudget } from '../../shared/assistant-input-budget';
@@ -21,6 +23,7 @@ export interface JsonRequest {
   manualContactId?: string;
   metadataConsent?: true;
   idempotencyKey?: string;
+  traceId?: string;
 }
 
 // 只携带安全分类；业务模块自行映射已知错误，不把响应原文转给界面。
@@ -70,7 +73,9 @@ export class JsonClient {
   }
 
   perform(options: JsonRequest): Promise<{ status: number; data: unknown }> {
-    return options.asyncPreparation ? this.performPreparation(options) : this.performOne(options);
+    if(options.traceId!==undefined&&!checkedTraceId(options.traceId))return Promise.reject(new BackendRequestFailure('response'));
+    const traced={...options,traceId:options.traceId??currentDiagnosticTrace()??newTraceId()};
+    return tracedRequest(traced.traceId,requestDiagnosticModule(options.path),'request_json',()=>traced.asyncPreparation?this.performPreparation(traced):this.performOne(traced));
   }
 
   // 只改变准备的等待方式；每次查询仍有网络期限，生成仍由原业务入口显式提交。
@@ -100,7 +105,7 @@ export class JsonClient {
         });
         result = await this.performOne({ method: 'GET', path: `${options.path}/status/${taskId}`,
           signal: controller.signal, timeoutMs: options.timeoutMs, maxResponseBytes: options.maxResponseBytes,
-          manualContactId: options.manualContactId }, options);
+          manualContactId: options.manualContactId,traceId:options.traceId }, options);
       }
       if (controller.signal.aborted) throw new BackendRequestFailure('cancelled');
       completed = true;
@@ -115,7 +120,7 @@ export class JsonClient {
       if (taskId && (controller.signal.aborted || !completed)) {
         // 取消、超时或回执异常都放弃等待；DELETE只表达取消意图，业务终态仍由原任务和退出时的权威回执结算。
         void this.performOne({ method: 'DELETE', path: `${options.path}/status/${taskId}`,
-          manualContactId: options.manualContactId, maxResponseBytes: 4096 }).catch(() => {});
+          manualContactId: options.manualContactId,traceId:options.traceId, maxResponseBytes: 4096 }).catch(() => {});
       }
     }
   }
@@ -146,6 +151,7 @@ export class JsonClient {
         hostname: '127.0.0.1', port: this.connection.port, method, path,
         headers: { Authorization: `Bearer ${this.connection.token}`, Accept: 'application/json',
           ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
+          ...(options.traceId ? { 'X-Trace-Id': options.traceId } : {}),
           ...(options.metadataConsent ? { 'X-NotAlone-Metadata-Consent': 'selected-list' } : {}),
           ...(options.manualContactId ? { 'X-NotAlone-Manual-Contact': options.manualContactId } : {}),
           ...(options.asyncPreparation ? { Prefer: 'respond-async' } : {}),

@@ -1,4 +1,6 @@
 import type {IncomingMessage,ServerResponse} from 'node:http';
+import {checkedTraceId,tracedRequest} from '../../../diagnostics/request-trace.ts';
+import {diagnose} from '../../../diagnostics/context.ts';
 import {readWechatHttpBody} from '../../../sync/wechat-http-body.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import type {SqliteMemoryManagement} from './service.ts';
@@ -22,7 +24,9 @@ export class SqliteMemoryManagementHttp {
  async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
   const url=new URL(req.url??'/','http://localhost');if(!url.pathname.startsWith('/api/memory-management'))return false;
   if(!this.authorize(req)||req.headers.origin!==undefined){send(res,401,{error:'unauthorized'});return true;}
-  try{
+  const traceHeader=req.headers['x-trace-id'];if(traceHeader!==undefined&&!checkedTraceId(traceHeader)){send(res,400,{error:'memory_request_invalid'});return true;}
+  const caller=url.pathname.endsWith('/history')?'management_history':req.method==='POST'?'management_decide':'management_read';
+  return tracedRequest(checkedTraceId(traceHeader),'memory.management',caller,async()=>{try{
    if(['/api/memory-management','/api/memory-management/history'].includes(url.pathname)&&req.method==='GET'){
     const kind=url.searchParams.get('scope_kind'),contactId=url.searchParams.get('contact_id');
     if(!memoryManagementQueryAllowed(req.method,url))throw new StorageFailure('memory_request_invalid');
@@ -39,7 +43,8 @@ export class SqliteMemoryManagementHttp {
     if(!request||Array.isArray(request)||Object.keys(request).some(k=>!fields.has(k))||!uuid.test(request.requestKey??'')||['auto_accept','auto_update','auto_retire','auto_noop'].includes(request.action)||request.scope&&Object.keys(request.scope).some(k=>!['scopeKind','contactId'].includes(k)))throw new StorageFailure('memory_request_invalid');
     const result=await this.service.decide(request as MemoryDecisionRequest);this.afterDecision();send(res,200,result);
    }else send(res,404,{error:'memory_not_found'});
-  }catch(error){const code=error instanceof StorageFailure?error.code:'memory_request_invalid';send(res,code==='memory_request_invalid'||code==='memory_scope_invalid'?400:409,{error:code});}
+  }catch(error){const code=error instanceof StorageFailure?error.code:'memory_request_invalid';diagnose({event:'request.failed',module:'memory.management',caller,reasonCode:code==='memory_source_stale'?'source_stale':'request_failed'});send(res,code==='memory_request_invalid'||code==='memory_scope_invalid'?400:409,{error:code});}
   return true;
+  });
  }
 }

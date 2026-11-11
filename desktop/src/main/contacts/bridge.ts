@@ -15,12 +15,14 @@ export function selectionArguments(args: unknown[], withDraft = false): ContactS
   const fields = value as Record<string, unknown>;
   const contactId = normalizeUuid(fields.contactId);
   const keys = withDraft ? ['contactId', 'scopeRevision', 'text'] : ['contactId', 'scopeRevision'];
+  if(Object.hasOwn(fields,'traceId')){keys.push('traceId');if(normalizeUuid(fields.traceId)===null)throw new Error('联系人操作不可用。');}
   if (Object.keys(fields).length !== keys.length || !Object.keys(fields).every((key) => keys.includes(key))
     || contactId === null
     || typeof fields.scopeRevision !== 'number' || !Number.isSafeInteger(fields.scopeRevision) || fields.scopeRevision < 0
     || (withDraft && (typeof fields.text !== 'string' || fields.text.length > 65_536))) throw new Error('联系人操作不可用。');
-  return withDraft ? { contactId, scopeRevision: fields.scopeRevision, text: fields.text as string }
-    : { contactId, scopeRevision: fields.scopeRevision };
+  const trace=Object.hasOwn(fields,'traceId')?{traceId:normalizeUuid(fields.traceId)!}:{};
+  return withDraft ? { contactId, scopeRevision: fields.scopeRevision, text: fields.text as string,...trace }
+    : { contactId, scopeRevision: fields.scopeRevision,...trace };
 }
 
 export function installContactSessionBridge(commands: PageCommands, backend: BackendHost,

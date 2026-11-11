@@ -212,7 +212,7 @@ test('主题只读桥只接受一个范围请求且不暴露发布写入',async 
  const {createSqliteMemoryManagementBridge}=await import(pathToFileURL(output)),calls=[];
  const bridge=createSqliteMemoryManagementBridge({invoke:async(...args)=>{calls.push(args);return {};},on(){},removeListener(){}});
  const input={scope:{scopeKind:'contact',contactId:contact},displayContactId:contact,scopeRevision:1};
- await bridge.readDocuments(input);assert.deepEqual(calls,[['memory:documents-read',input]]);
+ await bridge.readDocuments(input);const traceId=calls[0][1].traceId;assert.match(traceId,/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i);assert.deepEqual(calls,[['memory:documents-read',{...input,traceId}]]);
  await assert.rejects(bridge.readDocuments());await assert.rejects(bridge.readDocuments(input,{}));assert.equal('publish' in bridge,false);assert.equal(calls.length,1);
 });
 

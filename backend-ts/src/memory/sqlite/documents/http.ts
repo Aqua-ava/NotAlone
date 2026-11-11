@@ -1,4 +1,6 @@
 import type {IncomingMessage,ServerResponse} from 'node:http';
+import {checkedTraceId,tracedRequest} from '../../../diagnostics/request-trace.ts';
+import {diagnose} from '../../../diagnostics/context.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import type {SqliteMemoryDocuments} from './service.ts';
 
@@ -17,13 +19,15 @@ export class SqliteMemoryDocumentsHttp {
  async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
   const url=new URL(req.url??'/','http://localhost');if(!url.pathname.startsWith('/api/memory-documents'))return false;
   if(!this.authorize(req)||req.headers.origin!==undefined){send(res,401,{error:'unauthorized'});return true;}
-  try{
+  const traceHeader=req.headers['x-trace-id'];if(traceHeader!==undefined&&!checkedTraceId(traceHeader)){send(res,400,{error:'document_request_invalid'});return true;}
+  return tracedRequest(checkedTraceId(traceHeader),'memory.management','management_documents',async()=>{try{
    if(url.pathname!=='/api/memory-documents'){send(res,404,{error:'document_not_found'});return true;}
    if(!memoryDocumentsQueryAllowed(req.method,url))throw new StorageFailure('document_request_invalid');
    const scopeKind=url.searchParams.get('scope_kind') as 'self'|'contact',contactId=url.searchParams.get('contact_id');
    const scope={scopeKind,contactId};
    send(res,200,{...await this.service.read(scope),scope});
-  }catch(error){const code=error instanceof StorageFailure?error.code:'document_request_invalid';send(res,code==='document_request_invalid'||code==='memory_scope_invalid'?400:409,{error:code});}
+  }catch(error){const code=error instanceof StorageFailure?error.code:'document_request_invalid';diagnose({event:'request.failed',module:'memory.management',caller:'management_documents',reasonCode:'request_failed'});send(res,code==='document_request_invalid'||code==='memory_scope_invalid'?400:409,{error:code});}
   return true;
+  });
  }
 }

@@ -9,7 +9,7 @@ export function withdrawnProtectionVersion(memory:MemoryView):MemoryVersionView|
  return memory.versions.filter(v=>v.body!==null&&v.contentState==='present'&&v.provenanceState==='eligible').reduce<MemoryVersionView|null>((latest,v)=>latest===null||BigInt(v.versionNo)>BigInt(latest.versionNo)?v:latest,null);
 }
 /** 页面范围仍跟随顶部联系人；本人资料按完整贡献与来源双重复验，不以语义引句推断任务范围。 */
-export interface MemoryManagementRead {scope:MemoryScope;displayContactId:string;scopeRevision:number;cursor?:string}
+export interface MemoryManagementRead {scope:MemoryScope;displayContactId:string;scopeRevision:number;cursor?:string;traceId?:string}
 export interface MemoryManagementSnapshot {connectionGeneration:number;scope:MemoryScope;view:MemoryManagementView}
 export interface MemoryHistoryRead extends MemoryManagementRead {memoryId:string;expectedHeadRevision:string}
 export interface MemoryHistorySnapshot {connectionGeneration:number;scope:MemoryScope;view:MemoryHistoryView}

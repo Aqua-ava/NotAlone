@@ -1,4 +1,5 @@
 import type { SQLInputValue, SQLOutputValue } from 'node:sqlite';
+import type { DiagnosticEvent } from '../../diagnostics/unified-contract.mjs';
 
 export type SqliteRole = 'business' | 'test';
 export interface StorageLease { databaseId: string; runtimeId: string; epoch: bigint }
@@ -38,6 +39,8 @@ export interface StorageTransaction {
   runtimeDelete(namespace:StorageRuntimeNamespace,key:string):void;
   // Worker 在事务内只缓冲，提交成功后落本机日志；回滚和重试丢弃本次缓冲。
   recordDiagnostic?(event: StorageDiagnostic): void;
+  // 只缓冲白名单事件；提交后由宿主唯一日志写者发布，回滚／重试丢弃。
+  recordUnifiedDiagnostic?(event: DiagnosticEvent): void;
   run(sql: string, values?: SQLInputValue[]): void;
   get(sql: string, values?: SQLInputValue[]): StorageRow | undefined;
   all(sql: string, values?: SQLInputValue[]): StorageRow[];

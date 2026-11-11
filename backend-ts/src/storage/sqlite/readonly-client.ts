@@ -1,4 +1,6 @@
 import {Worker} from 'node:worker_threads';
+import {currentDiagnosticTrace,newTraceId} from '../../diagnostics/context.ts';
+import {publishStorageDiagnostics} from '../../diagnostics/storage-events.ts';
 import {sqliteOpenTimeoutMs} from './timeouts.ts';
 import {StorageFailure,type StorageReader,type StorageStatus} from './contracts.ts';
 const terminalCodes=new Set(['stale_lease','storage_identity_changed','unsafe_storage_path','storage_missing','schema_drift','migration_drift']);
@@ -16,7 +18,7 @@ export class SqliteReadonlyReader implements StorageReader {
   readonly ready:Promise<void>;
   private readonly worker:Worker;
   private readonly actions:Set<string>;
-  private readonly pending=new Map<number,{resolve:(value:any)=>void;reject:(error:Error)=>void;timer:NodeJS.Timeout}>();
+  private readonly pending=new Map<number,{traceId:string;resolve:(value:any)=>void;reject:(error:Error)=>void;timer:NodeJS.Timeout}>();
   private nextId=0;
   private failed=false;
   private closing?:Promise<void>;
@@ -37,6 +39,7 @@ export class SqliteReadonlyReader implements StorageReader {
       if(message.id===undefined){this.finishReady(new StorageFailure(message.code??'worker_failed'));void this.close();return;}
       const pending=this.pending.get(message.id);if(!pending)return;
       clearTimeout(pending.timer);this.pending.delete(message.id);
+      publishStorageDiagnostics(message.diagnostics,pending.traceId);
       if(message.code){pending.reject(new StorageFailure(message.code));if(terminalCodes.has(message.code))void this.close();}
       else pending.resolve(message.value);
     });
@@ -49,8 +52,9 @@ export class SqliteReadonlyReader implements StorageReader {
     const id=++this.nextId;
     return new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>{this.fail();},15_000);
-      this.pending.set(id,{resolve,reject,timer});
-      try{this.worker.postMessage({id,name,input});}catch{this.fail();}
+      const traceId=currentDiagnosticTrace()??newTraceId();
+      this.pending.set(id,{traceId,resolve,reject,timer});
+      try{this.worker.postMessage({id,name,input,traceId});}catch{this.fail();}
     });
   }
   close():Promise<void>{

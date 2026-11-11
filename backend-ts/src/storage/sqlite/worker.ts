@@ -1,4 +1,6 @@
 import {installManagementBatching} from '../../memory/sqlite/management/batching.ts';
+import {checkedDiagnosticEvent,type DiagnosticEvent} from '../../diagnostics/unified-contract.mjs';
+import {SqlDiagnosticSummary,storageDiagnosticModule} from '../../diagnostics/sql-summary.ts';
 import {memoryManagementBatchingMigration} from '../../memory/sqlite/management/batching-schema.ts';
 import {historicalDeletionEquivalences,retiredDeletionOperations} from './migrations/history-retirement-v1.ts';
 import { parentPort, workerData } from 'node:worker_threads';
@@ -67,7 +69,9 @@ try {
   };
   // 同一条 SQL 反复执行（如核验链上的上千次小查询）时复用预编译语句。
   const prepared = statementCache(connection);
-  const all = (sql: string, values: SQLInputValue[] = []) => prepared(sql).all(...bindings(values));
+  let sqlSummary:SqlDiagnosticSummary|undefined;
+  const measured=<T>(sql:string,work:()=>T):T=>sqlSummary?sqlSummary.measure(sql,work):work();
+  const all = (sql: string, values: SQLInputValue[] = []) => measured(sql,()=>prepared(sql).all(...bindings(values)));
   const get = (sql: string, values: SQLInputValue[] = []) => all(sql, values)[0];
   const schemaDigest = () => sha256(JSON.stringify(all("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name")));
   // quick_check 不核对索引内容与 UNIQUE，大库约快一半；打开路径（升级、非WAL转换、残留补检）用 quick，
@@ -173,10 +177,12 @@ try {
   const runtimeValues=new Map<string,unknown>();
   const removedRuntimeValue=Symbol('removed-runtime-value');
   port.postMessage({value: status});
-  port.on('message', ({id, name, input, lease}) => {
+  port.on('message', ({id, name, input, lease,traceId}) => {
     // 串行队列等待不消耗动作预算；主线程收到开始确认后监督本次同步执行。
     const startedAt=Number(process.hrtime.bigint())/1e6;
-    const respond=(value:Record<string,unknown>)=>port.postMessage({id,...value,startedAt,finishedAt:Number(process.hrtime.bigint())/1e6});
+    const safeTrace=typeof traceId==='string'&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(traceId)?traceId:undefined;
+    sqlSummary=new SqlDiagnosticSummary(storageDiagnosticModule(name),'sqlite_worker',safeTrace);
+    const respond=(value:Record<string,unknown>)=>{const diagnostics=[...(Array.isArray(value.diagnostics)?value.diagnostics:[]),...sqlSummary!.events()];sqlSummary=undefined;port.postMessage({id,...value,diagnostics,startedAt,finishedAt:Number(process.hrtime.bigint())/1e6});};
     // 开始确认带上动作模式：主线程据此选择执行预算，维护动作与普通动作不共用15秒上限。
     port.postMessage({id, started: true, startedAt, maintenance: actions.get(name)?.mode === 'maintenance'});
     try {
@@ -200,8 +206,10 @@ try {
       const action = actions.get(name);
       if (!action) throw new StorageFailure('action_unavailable');
       let result: unknown;
+      let committedDiagnostics:DiagnosticEvent[]=[];
       for (let attempt = 0; ; attempt++) {
         const diagnostics:StorageDiagnostic[]=[];
+        const unifiedDiagnostics:DiagnosticEvent[]=[];
         const runtimeOverlay=new Map<string,unknown>();
         try {
           managementBatching?.begin();
@@ -241,7 +249,10 @@ try {
                 if(action.mode!=='write'||diagnostics.length>=1024)throw new StorageFailure('diagnostic_transaction_invalid');
                 diagnostics.push(structuredClone(event));
               },
-              run(sql, values = []) { permitted(); prepared(sql).run(...bindings(values)); },
+              recordUnifiedDiagnostic(event) {
+                try{if(!active||unifiedDiagnostics.length>=128)return;const safe=checkedDiagnosticEvent(event);if(safe)unifiedDiagnostics.push(safe);}catch{}
+              },
+              run(sql, values = []) { permitted(); measured(sql,()=>prepared(sql).run(...bindings(values))); },
               get(sql, values) { permitted(); return get(sql, values); },
               all(sql, values) { permitted(); return all(sql, values); },
             };
@@ -268,10 +279,11 @@ try {
           for(const event of diagnostics)try{
             diagnosticLog.append({entry:name,contactPrefix:event.contactPrefix,branch:event.branch,...(event.errorCode?{errorCode:event.errorCode}:{})});
           }catch{warnDiagnostic();}
+          committedDiagnostics=unifiedDiagnostics;
           break;
         } catch (error) { if (code(error) !== 'storage_busy' || !action.retryBusy || attempt >= 2) throw error; }
       }
-      respond({value: result});
+      respond({value: result,diagnostics:committedDiagnostics});
     } catch (error) { respond({code: code(error)}); }
   });
 } catch (error) { try { db?.close(); } catch {} port.postMessage({code: code(error)}); port.close(); }

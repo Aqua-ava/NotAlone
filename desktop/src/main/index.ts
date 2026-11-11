@@ -1,4 +1,4 @@
-import { configureDiagnosticLog } from '../../../backend-ts/src/diagnostics/unified';
+import { configureDiagnosticLog,currentDiagnosticTrace,newTraceId,withDiagnosticTrace } from '../../../backend-ts/src/diagnostics/unified';
 import { installDiagnosticLogBridge } from './diagnostics/bridge';
 import {installSqliteMemoryManagementBridge} from './memory/sqlite-management';
 import { DesktopDataLifecycle } from './data-lifecycle';
@@ -148,21 +148,21 @@ void app.whenReady().then(async () => {
   let memoryScopeRevision = contacts.getState().scopeRevision;
   contacts.onStateChanged(state => {
     if (state.scopeRevision !== memoryScopeRevision) {
-      memoryScopeRevision = state.scopeRevision; fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize();
+      memoryScopeRevision = state.scopeRevision; fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize('memory_scope_listener','scope_changed');
     }
   });
   installBackgroundTaskBridge(commands, backend, contacts);
   const traces = installTraceBridge(commands, backend, contacts);
   memory.onRecordDeletion((phase) => traces.recordDeletionChanged(phase));
   const beginReadingScopeChange = () => {
-    const finishForeground = foreground.beginReadingScopeChange();
-    contacts.invalidateReadingScope();
+    const traceId=currentDiagnosticTrace()??newTraceId();
+    const finishForeground = withDiagnosticTrace(traceId,()=>foreground.beginReadingScopeChange());
+    withDiagnosticTrace(traceId,()=>contacts.invalidateReadingScope('reading_scope_begin'));
     let finished = false;
     return () => {
       if (finished) return;
       finished = true;
-      contacts.invalidateReadingScope();
-      finishForeground();
+      withDiagnosticTrace(traceId,()=>{contacts.invalidateReadingScope('reading_scope_end');finishForeground();});
     };
   };
   // 删除控制器先于授权与同步控制器构造：重连时先打开窗口，后续读取才会按窗口规则保留旧状态并补读。
@@ -225,7 +225,7 @@ void app.whenReady().then(async () => {
   installWechatSetupBridge(commands, new WechatSetupController(backend));
   installBackendBridge(windows, backend, () => app.quit());
   installStartupBridge(windows, diagnostics, backend, app.getPath('userData'));
-  app.on('before-quit', () => { fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize(); sqliteDiscussion.synchronize(true); foreground.stopContinuous(); diagnostics.cancel(); });
+  app.on('before-quit', () => { fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize('application_quit','application_quit'); sqliteDiscussion.synchronize(true); foreground.stopContinuous(); diagnostics.cancel(); });
   app.on('will-quit', () => sqliteDiscussion.close());
   installQuitLifecycle(backend, windows, async () => {
     await quarantine.close();

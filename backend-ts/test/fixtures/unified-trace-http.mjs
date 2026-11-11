@@ -1,0 +1,12 @@
+import {createServer} from 'node:http';
+import {SqliteStorage} from '../../src/storage/sqlite/client.ts';
+import {SqliteMemoryManagementHttp} from '../../src/memory/sqlite/management/http.ts';
+import {SqliteMemoryDocumentsHttp} from '../../src/memory/sqlite/documents/http.ts';
+import {configureDiagnosticLog} from '../../src/diagnostics/unified.ts';
+const root=process.argv[2],log=configureDiagnosticLog(root,{proc:'backend',development:true});
+const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test',registryModule:new URL('./sqlite/unified-diagnostic-registry.mjs',import.meta.url).href});
+const api=new SqliteMemoryManagementHttp({async read(){await storage.execute('diagnostic.read',{});return {memories:[],candidates:[]};}},req=>req.headers.authorization==='Bearer synthetic-token');
+const documents=new SqliteMemoryDocumentsHttp({async read(){await storage.execute('diagnostic.read',{});return {status:'idle',publication:null,documents:[]};}},req=>req.headers.authorization==='Bearer synthetic-token');
+const server=createServer((req,res)=>{void api.handle(req,res).then(async handled=>{if(!handled)handled=await documents.handle(req,res);await log.flush();if(!handled){res.writeHead(404);res.end();}});});
+await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));process.send({port:server.address().port});
+process.on('message',async value=>{if(value!=='close')return;await new Promise(resolve=>server.close(resolve));await storage.close();await log.close();process.disconnect();});

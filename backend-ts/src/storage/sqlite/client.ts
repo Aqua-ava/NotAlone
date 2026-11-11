@@ -1,4 +1,6 @@
 import { Worker } from 'node:worker_threads';
+import {currentDiagnosticTrace,newTraceId} from '../../diagnostics/context.ts';
+import {publishStorageDiagnostics} from '../../diagnostics/storage-events.ts';
 import {statSync} from 'node:fs';
 import { sqliteActionTimeoutMs, sqliteMaintenanceTimeoutMs, sqliteOpenTimeoutMs } from './timeouts.ts';
 import {controlledFiles} from './files.ts';
@@ -36,7 +38,7 @@ export class SqliteStorage {
   private failed = false;
   private closing?: Promise<void>;
   private diagnostic: Readonly<StorageFailureDiagnostic> | null = null;
-  private readonly pending = new Map<number, { name: string; input: unknown; lease: StorageLease; started: boolean; enqueuedAt:number; startedAt?:number; resolve: (value: any) => void; reject: (error: Error) => void; timer?: NodeJS.Timeout }>();
+  private readonly pending = new Map<number, { name: string; input: unknown; lease: StorageLease; traceId:string; started: boolean; enqueuedAt:number; startedAt?:number; resolve: (value: any) => void; reject: (error: Error) => void; timer?: NodeJS.Timeout }>();
   // 一次只放一个动作进入 Worker，其余在此按通道排队：前台动作最多等待当前正在执行的那一个。
   private readonly foregroundQueue:number[]=[];
   private readonly backgroundQueue:number[]=[];
@@ -84,6 +86,7 @@ export class SqliteStorage {
           ok:!message.code,finishedAt:message.finishedAt});
         if(this.timings.length>64)this.timings.shift();
       }
+      publishStorageDiagnostics(message.diagnostics,pending.traceId);
       if (message.code) pending.reject(new StorageFailure(message.code)); else pending.resolve(message.value);
     });
     worker.on('error', () => this.fail('worker_error'));
@@ -138,7 +141,7 @@ export class SqliteStorage {
   private request<T>(name: string, input: unknown, lease: StorageLease): Promise<T> {
     const id = ++this.nextId;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, {name, input, lease, started: false, enqueuedAt:monotonicMs(), resolve, reject});
+      this.pending.set(id, {name, input, lease, traceId:currentDiagnosticTrace()??newTraceId(), started: false, enqueuedAt:monotonicMs(), resolve, reject});
       (foregroundAction.test(name) ? this.foregroundQueue : this.backgroundQueue).push(id);
       this.pump();
     });
@@ -152,7 +155,7 @@ export class SqliteStorage {
       const pending = this.pending.get(id);
       if (!pending) continue;
       this.inFlight = id;
-      try { this.worker.postMessage({id, name: pending.name, input: pending.input, lease: pending.lease}); }
+      try { this.worker.postMessage({id, name: pending.name, input: pending.input, lease: pending.lease,traceId:pending.traceId}); }
       catch { this.fail('post_message_failed', pending.name); }
       return;
     }

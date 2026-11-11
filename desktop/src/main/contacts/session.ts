@@ -1,6 +1,7 @@
 import type { ContactDraft, ContactSelection, ContactSessionState, ContactSummary } from '../../shared/contact-session-bridge';
 import { contactDraftUpdate, type ContactDraftUpdate } from '../../shared/contact-session-bridge';
 import type { ContactDeletionQuiet } from './deletion-quiet';
+import {currentDiagnosticTrace,diagnose,newTraceId,withDiagnosticTrace} from '../../../../backend-ts/src/diagnostics/context';
 
 export type ContactDirectoryResult = {
   generation: number;
@@ -40,14 +41,14 @@ export class ContactSession {
     this.generation = generation;
     ++this.directoryRequest;
     this.publish({ directoryPhase: 'unavailable', contacts: [], selectedContactId: null,
-      draft: '', scopeRevision: this.state.scopeRevision + 1 });
+      draft: '', scopeRevision: this.state.scopeRevision + 1 },'full',{caller:'connection_generation',reasonCode:'connection_changed'});
     if (generation !== undefined) void this.refreshContacts();
   }
 
   // 授权决定变化保留人工选择与草稿，但所有既有读取和提交必须重新捕获范围。
-  invalidateReadingScope(): void {
+  invalidateReadingScope(caller='foreground_scope_change'): void {
     ++this.directoryRequest;
-    this.publish({ scopeRevision: this.state.scopeRevision + 1 });
+    this.publish({ scopeRevision: this.state.scopeRevision + 1 },'full',{caller,reasonCode:'reading_scope_changed'});
     if (this.state.directoryPhase === 'loading') void this.refreshContacts();
   }
 
@@ -75,7 +76,7 @@ export class ContactSession {
         ...(!selectedStillPresent && this.state.selectedContactId !== null ? {
           selectedContactId: null, draft: '', scopeRevision: this.state.scopeRevision + 1,
         } : {}),
-      });
+      },'full',{caller:'directory_missing',reasonCode:'directory_missing'});
       return true;
     } catch {
       if (current() && !background) {
@@ -99,10 +100,10 @@ export class ContactSession {
     const selected = this.state.selectedContactId === contactId;
     this.publish({ directoryPhase: this.state.directoryPhase === 'loading' ? 'ready' : this.state.directoryPhase,
       contacts: this.state.contacts.filter((contact) => contact.contactId !== contactId),
-      ...(selected ? { selectedContactId: null, draft: '', scopeRevision: this.state.scopeRevision + 1 } : {}) });
+      ...(selected ? { selectedContactId: null, draft: '', scopeRevision: this.state.scopeRevision + 1 } : {}) },'full',{caller:'contact_removed',reasonCode:'contact_removed'});
   }
 
-  selectContact(selection: ContactSelection): ContactSessionState {
+  selectContact(selection: ContactSelection,caller='select_contact'): ContactSessionState {
     if (!this.isCurrent(selection) || !this.state.contacts.some((contact) => contact.contactId === selection.contactId)) {
       throw new Error('联系人选择已失效，请刷新后重新确认。');
     }
@@ -110,7 +111,7 @@ export class ContactSession {
       // 选择来自当前有效目录；切换后，旧刷新成功或失败都不能改变新会话。
       ++this.directoryRequest;
       this.publish({ directoryPhase: 'ready', selectedContactId: selection.contactId,
-        draft: '', scopeRevision: this.state.scopeRevision + 1 });
+        draft: '', scopeRevision: this.state.scopeRevision + 1 },'full',{caller,reasonCode:'contact_selected',traceId:selection.traceId});
     }
     return this.getState();
   }
@@ -137,11 +138,18 @@ export class ContactSession {
 
   private clearDirectory(directoryPhase: 'owner-unconfigured' | 'error'): void {
     this.publish({ directoryPhase, contacts: [], selectedContactId: null,
-      draft: '', scopeRevision: this.state.scopeRevision + 1 });
+      draft: '', scopeRevision: this.state.scopeRevision + 1 },'full',{caller:directoryPhase==='owner-unconfigured'?'directory_missing':'directory_failed',reasonCode:directoryPhase==='owner-unconfigured'?'not_ready':'directory_failed'});
   }
 
-  private publish(update: Partial<ContactSessionState>, kind: 'full' | 'draft' = 'full'): void {
+  private publish(update: Partial<ContactSessionState>, kind: 'full' | 'draft' = 'full',cause?:{caller:string;reasonCode:string;traceId?:string}): void {
+    const previous=this.state;
     this.state = { ...this.state, ...update, revision: this.state.revision + 1 };
-    for (const listener of this.listeners) listener(this.getState(), kind);
+    const publish=()=>{for (const listener of this.listeners) listener(this.getState(), kind);};
+    if(previous.scopeRevision===this.state.scopeRevision){publish();return;}
+    withDiagnosticTrace(cause?.traceId??currentDiagnosticTrace()??newTraceId(),()=>{
+      const contact=this.state.selectedContactId??previous.selectedContactId;
+      diagnose({event:'scope.revision_changed',caller:cause?.caller??'memory_scope_listener',reasonCode:cause?.reasonCode??'scope_changed',fromRevision:previous.scopeRevision,toRevision:this.state.scopeRevision,...(contact?{contactPrefix:contact.slice(0,8)}:{})});
+      publish();
+    });
   }
 }

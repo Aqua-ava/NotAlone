@@ -1,5 +1,6 @@
 {
  "safe-node": [
+  "tests/unified-trace.test.mjs",
   "tests/unified-diagnostic-bridge.test.mjs",
   "tests/data-lifecycle.test.mjs",
   "tests/contact-avatar.test.mjs",

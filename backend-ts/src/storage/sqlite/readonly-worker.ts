@@ -1,4 +1,5 @@
 import {parentPort,workerData} from 'node:worker_threads';
+import {SqlDiagnosticSummary,storageDiagnosticModule} from '../../diagnostics/sql-summary.ts';
 import {DatabaseSync,type SQLInputValue} from 'node:sqlite';
 import {statSync} from 'node:fs';
 import {sha256} from '../../platform/sha256.ts';
@@ -28,9 +29,10 @@ try{
   const db=connection;
   db.exec('PRAGMA query_only=ON; PRAGMA foreign_keys=ON; PRAGMA trusted_schema=OFF; PRAGMA temp_store=MEMORY;');
   const prepared=statementCache(db);
+  let sqlSummary:SqlDiagnosticSummary|undefined;
   const all=(sql:string,values:SQLInputValue[]=[]):Record<string,any>[]=>{
     if(values.some(value=>typeof value==='number'&&(!Number.isFinite(value)||Number.isInteger(value)&&!Number.isSafeInteger(value))))throw new StorageFailure('storage_value_invalid');
-    return prepared(sql).all(...values);
+    return sqlSummary?sqlSummary.measure(sql,()=>prepared(sql).all(...values)):prepared(sql).all(...values);
   };
   const get=(sql:string,values:SQLInputValue[]=[])=>all(sql,values)[0];
   const schemaVersion=get('PRAGMA schema_version').schema_version;
@@ -47,7 +49,10 @@ try{
   const ledger=all('SELECT version,checksum FROM schema_migration ORDER BY version');
   if(ledger.length!==status.schemaVersion||ledger.length!==registry.migrations.length||ledger.some((row,index)=>row.version!==BigInt(index+1)||row.checksum!==sha256(registry.migrations[index].sql)))throw new StorageFailure('migration_drift');
   assertLease();port.postMessage({ready:true});
-  port.on('message',({id,name,input})=>{
+  port.on('message',({id,name,input,traceId})=>{
+    const safeTrace=typeof traceId==='string'&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(traceId)?traceId:undefined;
+    sqlSummary=new SqlDiagnosticSummary(storageDiagnosticModule(name),'sqlite_readonly_worker',safeTrace);
+    const respond=(value:Record<string,unknown>)=>{const diagnostics=sqlSummary!.events();sqlSummary=undefined;port.postMessage({id,...value,diagnostics});};
     try{
       const action=actions.get(name);
       if(!allowed.has(name)||action?.mode!=='read')throw new StorageFailure('readonly_action_forbidden');
@@ -61,7 +66,7 @@ try{
         value=structuredClone(value);db.exec('COMMIT');
       }catch(error){if(db.isTransaction)db.exec('ROLLBACK');throw error;}finally{active=false;}
       // COMMIT 后重新读取，避免 WAL 事务旧快照掩盖主运行租约变化。
-      assertLease();port.postMessage({id,value});
-    }catch(error){port.postMessage({id,code:failureCode(error)});}
+      assertLease();respond({value});
+    }catch(error){respond({code:failureCode(error)});}
   });
 }catch(error){try{connection?.close();}catch{}port.postMessage({code:failureCode(error)});port.close();}

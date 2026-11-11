@@ -1,5 +1,6 @@
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
+import {currentDiagnosticTrace,diagnose,newTraceId,withDiagnosticTrace} from '../../../../backend-ts/src/diagnostics/context';
 import type { ContactSession } from '../contacts/session';
 import { initialForegroundState, type ForegroundState, type ForegroundConfirmation, type GenerationBlock } from '../../shared/foreground-bridge';
 import { foregroundObservation } from './observation';
@@ -307,7 +308,7 @@ export class ForegroundController {
         }
         this.selectingObservedContact = true;
         let selected;
-        try { selected = this.contacts.selectContact({ contactId: observation.contactId, scopeRevision: scope }); }
+        try { selected = this.contacts.selectContact({ contactId: observation.contactId, scopeRevision: scope },'foreground_scope_change'); }
         finally { this.selectingObservedContact = false; }
         this.qualification = { generation, scopeRevision: selected.scopeRevision,
           contactId: observation.contactId, kind: 'verified-binding' };
@@ -373,13 +374,15 @@ export class ForegroundController {
     this.clearObservation(phase, 'observation_cancelled');
   }
   beginReadingScopeChange(): () => void {
+    const traceId=currentDiagnosticTrace()??newTraceId();
+    diagnose({event:'foreground.decision',caller:'reading_scope_begin',reasonCode:'reading_scope_changed',traceId,count:this.readingScopeChanges+1});
     ++this.readingScopeChanges; this.cancelScheduled();
     this.invalidateReadingScope();
     let finished = false;
     return () => {
       if (finished) return;
       finished = true; --this.readingScopeChanges;
-      this.invalidateReadingScope(); this.scheduleNext();
+      withDiagnosticTrace(traceId,()=>{diagnose({event:'foreground.decision',caller:'reading_scope_end',reasonCode:'reading_scope_changed',count:this.readingScopeChanges});this.invalidateReadingScope();this.scheduleNext();});
     };
   }
   private invalidateReadingScope(): void {

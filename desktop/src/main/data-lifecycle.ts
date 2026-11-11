@@ -9,6 +9,7 @@ import type { FixedMemoryProcessingController } from './memory/fixed-processing'
 import type { SqliteMemoryManagementController } from './memory/sqlite-management';
 import type { SqliteDiscussionController } from './reply/sqlite-discussion-bridge';
 import type { ReplySession } from './reply/session';
+import {currentDiagnosticTrace,diagnose,newTraceId,withDiagnosticTrace} from '../../../backend-ts/src/diagnostics/context';
 
 const notices = {
  'source-deletion': '聊天记录来源正在删除，删除完成后会重新读取。',
@@ -34,24 +35,28 @@ export class DesktopDataLifecycle {
  constructor(private readonly ports: Dependencies) {}
 
  withdraw(reason: keyof typeof notices): void {
+  withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>{
   const p = this.ports;
+  const reasonCode=reason==='contact-deletion'?'contact_deleted':reason==='history-clear'?'history_cleared':'source_deleted';
+  diagnose({event:'lifecycle.invalidated',caller:'data_lifecycle',reasonCode});
   p.history.invalidate(notices[reason]);
   p.media.invalidate();
-  this.withdrawDerived();
+  this.withdrawDerived(reasonCode);
+  });
  }
 
- private withdrawDerived(): void {
+ private withdrawDerived(reasonCode:string): void {
   const p = this.ports;
   p.traces.invalidateSource();
   p.provenance.invalidateSource();
   p.skills.invalidate();
-  this.withdrawSqlite();
+  this.withdrawSqlite(reasonCode);
  }
 
- private withdrawSqlite(): void {
+ private withdrawSqlite(reasonCode:string): void {
   this.ports.discussion.synchronize(true);
   this.ports.processing.synchronize();
-  this.ports.management.synchronize();
+  this.ports.management.synchronize('data_lifecycle',reasonCode);
  }
 
  beginHistoryClear(contactId: string): () => Promise<void> {
@@ -60,19 +65,22 @@ export class DesktopDataLifecycle {
  }
 
  async sourceChanged(contactId: string): Promise<void> {
+  return withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),async()=>{
   const p = this.ports;
+  diagnose({event:'lifecycle.invalidated',caller:'data_lifecycle',reasonCode:'source_changed',contactPrefix:contactId.slice(0,8)});
   // 原删除在切换联系人后仍会回调；本人衍生资料需复验，另一联系人的聊天和媒体仍有效。
   if (p.history.getState().contactId === contactId) {
    p.history.invalidate(notices['source-deletion']);
    p.media.invalidate();
   }
-  this.withdrawDerived();
+  this.withdrawDerived('source_changed');
   await Promise.all([p.replies.revalidateDeletedSource(contactId), p.memory.revalidateDeletedSource(contactId), p.preferences.invalidateSource(contactId)]);
   await p.history.refreshCurrent(contactId);
+  });
  }
 
  async connectionChanging(): Promise<void> {
-  this.withdrawSqlite();
+  this.withdrawSqlite('connection_changed');
   await this.ports.media.invalidateAndDrain();
   await this.ports.replies.prepareGenerationConnectionChange();
  }

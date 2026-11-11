@@ -1,4 +1,6 @@
 import type {BackendHost} from '../backend/host';
+import {currentDiagnosticTrace,diagnose,newTraceId,withDiagnosticTrace} from '../../../../backend-ts/src/diagnostics/context';
+import {requestFailureReason,tracedRequest} from '../../../../backend-ts/src/diagnostics/request-trace';
 import {BackendRequestFailure} from '../backend/json-client';
 import type {PageCommands} from '../page-commands';
 import {noArguments} from '../page-commands';
@@ -87,21 +89,29 @@ type Contacts={getState():{selectedContactId:string|null;scopeRevision:number}};
 export class SqliteMemoryManagementController {
  private revision=0;
  private readonly requests=new Set<AbortController>();
+ private readonly requestTraces=new Map<AbortController,string>();
+ private lastTraceId:string|undefined;
  constructor(private readonly backend:Pick<BackendHost,'getConnectionGeneration'|'requestJson'>,private readonly publishInvalidated:()=>void,private readonly contacts:Contacts){}
- synchronize(){this.revision++;for(const request of this.requests)request.abort();this.requests.clear();this.publishInvalidated();}
- release(){this.synchronize();}
+ synchronize(caller='management_read',reasonCode='scope_changed'){
+  const fromRevision=this.revision,traceId=currentDiagnosticTrace()??newTraceId();this.revision++;
+  const interrupted=[...new Set([...this.requestTraces.values(),...(this.lastTraceId?[this.lastTraceId]:[])])].slice(0,32);
+  diagnose({event:'management.synchronize',caller,reasonCode,traceId,fromRevision,toRevision:this.revision});
+  for(const interruptedTraceId of interrupted.length?interrupted:[undefined])diagnose({event:'management.invalidated',caller,reasonCode,traceId,fromRevision,toRevision:this.revision,...(interruptedTraceId?{interruptedTraceId}:{})});
+  for(const request of this.requests)request.abort();this.requests.clear();this.requestTraces.clear();this.publishInvalidated();
+ }
+ release(){withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>{diagnose({event:'management.released',caller:'management_release',reasonCode:'user_release',...(this.lastTraceId?{interruptedTraceId:this.lastTraceId}:{})});this.synchronize('management_release','user_release');});}
  private validate(input:unknown,decision=false):MemoryManagementRead{
-  const q=object(input);exact(q,decision?['scope','displayContactId','scopeRevision','connectionGeneration','request']:['scope','displayContactId','scopeRevision',...(Object.hasOwn(q,'cursor')?['cursor']:[])]);
+  const q=object(input);exact(q,[...(decision?['scope','displayContactId','scopeRevision','connectionGeneration','request']:['scope','displayContactId','scopeRevision',...(Object.hasOwn(q,'cursor')?['cursor']:[])]),...(Object.hasOwn(q,'traceId')?['traceId']:[])]);
   const s=scope(q.scope),displayContactId=uuid(q.displayContactId),current=this.contacts.getState();
   if(!Number.isSafeInteger(q.scopeRevision)||current.scopeRevision!==q.scopeRevision||current.selectedContactId!==displayContactId||s.scopeKind==='contact'&&s.contactId!==displayContactId)throw invalid();
   if(decision&&q.connectionGeneration!==this.backend.getConnectionGeneration())throw invalid();
-  return {scope:s,displayContactId,scopeRevision:q.scopeRevision as number,...(q.cursor===undefined?{}:{cursor:cursor(q.cursor)??undefined})};
+  return {scope:s,displayContactId,scopeRevision:q.scopeRevision as number,...(Object.hasOwn(q,'traceId')?{traceId:uuid(q.traceId)}:{}),...(q.cursor===undefined?{}:{cursor:cursor(q.cursor)??undefined})};
  }
  private async request(path:string,method:'GET'|'POST',body?:unknown){
-  const revision=this.revision,generation=this.backend.getConnectionGeneration();if(generation===undefined)throw invalid();const operation=new AbortController();this.requests.add(operation);
-  try{const response=await this.backend.requestJson({path,method,...(body===undefined?{}:{body}),signal:operation.signal,timeoutMs:10000,maxResponseBytes:8388608});
+  const revision=this.revision,generation=this.backend.getConnectionGeneration();if(generation===undefined)throw invalid();const operation=new AbortController(),traceId=currentDiagnosticTrace()??newTraceId();this.requests.add(operation);this.requestTraces.set(operation,traceId);this.lastTraceId=traceId;
+  try{const response=await this.backend.requestJson({path,method,...(body===undefined?{}:{body}),traceId,signal:operation.signal,timeoutMs:10000,maxResponseBytes:8388608});
    if(operation.signal.aborted||revision!==this.revision||generation!==response.generation||generation!==this.backend.getConnectionGeneration())throw invalid();return response;
-  }catch(error){if(operation.signal.aborted||revision!==this.revision||generation!==this.backend.getConnectionGeneration())throw invalid();throw error;}finally{this.requests.delete(operation);}
+  }catch(error){if(operation.signal.aborted||revision!==this.revision||generation!==this.backend.getConnectionGeneration())throw invalid();throw error;}finally{this.requests.delete(operation);this.requestTraces.delete(operation);}
  }
  private query(accepted:MemoryManagementRead):URLSearchParams {
   const query=new URLSearchParams({scope_kind:accepted.scope.scopeKind,display_contact_id:accepted.displayContactId});
@@ -112,20 +122,21 @@ export class SqliteMemoryManagementController {
   const response=await this.request(`/api/memory-management?${query}`,'GET');this.validate(accepted);
   return {connectionGeneration:response.generation,scope:accepted.scope,view:readView(response.data,accepted.scope,accepted.displayContactId)};
  }
- private failRead(error:unknown,revision:number,accepted:MemoryManagementRead):never {
+ private failRead(error:unknown,revision:number,accepted:MemoryManagementRead,caller:string):never {
+  diagnose({event:'request.failed',module:'memory.management',caller,reasonCode:requestFailureReason(error),traceId:accepted.traceId??this.lastTraceId});
   if(revision!==this.revision)throw invalid();
-  try{this.validate(accepted);}catch{this.synchronize();throw invalid();}
+  try{this.validate(accepted);}catch{this.synchronize(caller,'scope_changed');throw invalid();}
   if(error instanceof BackendRequestFailure&&error.kind==='connection')throw new MemoryReadFailure(error.code==='request_timeout'?'memory_read_timeout':'memory_read_unavailable');
-  this.synchronize();throw invalid();
+  this.synchronize(caller,'response_invalid');throw invalid();
  }
  async read(input:MemoryManagementRead):Promise<MemoryManagementSnapshot>{
   const accepted=this.validate(input),revision=this.revision;
-  try{return await this.readItem(accepted);}catch(error){this.failRead(error,revision,accepted);}
+  return tracedRequest(accepted.traceId,'memory.management','management_read',async()=>{try{return await this.readItem(accepted);}catch(error){this.failRead(error,revision,accepted,'management_read_failed');}});
  }
  async readHistory(input:MemoryHistoryRead):Promise<MemoryHistorySnapshot>{
   const raw=object(input),{memoryId:rawId,expectedHeadRevision:rawHead,...base}=raw;
   const accepted=this.validate(base),memoryId=uuid(rawId),expectedHeadRevision=decimal(rawHead),revision=this.revision;
-  try{
+  return tracedRequest(accepted.traceId,'memory.management','management_history',async()=>{try{
    const query=this.query(accepted);query.set('memory_id',memoryId);
    const response=await this.request(`/api/memory-management/history?${query}`,'GET');this.validate(base);
    const value=object(response.data),versions=array(value.versions).map(raw=>{
@@ -139,17 +150,17 @@ export class SqliteMemoryManagementController {
    const belongs=(v:MemoryVersionView)=>v.sources.every(source=>source.contactId===accepted.displayContactId)&&v.contributingContactIds.every(contact=>contact===accepted.displayContactId);
    if(versions.some(v=>accepted.scope.scopeKind==='contact'?!belongs(v):v.body!==null&&(!belongs(v)||!v.sources.length||v.contributingContactIds.length!==1)))throw invalid();
    return {connectionGeneration:response.generation,scope:accepted.scope,view:{memoryId,headRevision:expectedHeadRevision,versions,decisions:decisions(value.decisions),revision:pageRevision(value.revision),nextCursor:cursor(value.nextCursor)}};
-  }catch(error){this.failRead(error,revision,accepted);}
+  }catch(error){this.failRead(error,revision,accepted,'management_history_failed');}});
  }
  async readDocuments(input:MemoryManagementRead):Promise<MemoryDocumentsSnapshot>{
   const accepted=this.validate(input);if(accepted.scope.scopeKind==='self')throw invalid();
   const revision=this.revision;
-  try{const response=await this.request(`/api/memory-documents?scope_kind=${accepted.scope.scopeKind}${accepted.scope.contactId?`&contact_id=${accepted.scope.contactId}`:''}`,'GET');
+  return tracedRequest(accepted.traceId,'memory.management','management_documents',async()=>{try{const response=await this.request(`/api/memory-documents?scope_kind=${accepted.scope.scopeKind}${accepted.scope.contactId?`&contact_id=${accepted.scope.contactId}`:''}`,'GET');
    this.validate(input);return {connectionGeneration:response.generation,scope:accepted.scope,view:readDocumentsView(response.data,accepted.scope)};
-  }catch(error){this.failRead(error,revision,accepted);}
+  }catch(error){this.failRead(error,revision,accepted,'management_documents_failed');}});
  }
  async decide(input:MemoryManagementDecision):Promise<MemoryManagementOutcome>{
-  try{
+  return tracedRequest(input&&isUuid(input.traceId)?input.traceId:undefined,'memory.management','management_decide',async()=>{try{
    const accepted=this.validate(input,true),request=object(input.request),action=member(request.action,['accept','edit_accept','reject','correct','change','restore','withdraw','protect','unprotect']);
    const expected=['requestKey','action',...(['accept','edit_accept','reject'].includes(action)?['candidateIds','candidateRevisions']:['memoryId','expectedVersionNo','expectedHeadRevision']),...(['edit_accept','correct','change'].includes(action)?['body']:[]),...(action==='restore'?['restoredFromVersionNo','expectedMergedParents']:[])];exact(request,expected);
    const clean:MemoryDecisionRequest={requestKey:uuid(request.requestKey),action};
@@ -164,12 +175,12 @@ export class SqliteMemoryManagementController {
    const response=await this.request('/api/memory-management/decisions','POST',clean);this.validate(input,true);
    const result=object(response.data);return {status:'applied',result:{decisionId:uuid(result.decisionId),memoryId:result.memoryId===null?null:uuid(result.memoryId),versionNo:result.versionNo===null?null:decimal(result.versionNo),action:member(result.action,[action])}};
   }catch(error){
-   this.synchronize();const code=error instanceof BackendRequestFailure?error.code:undefined;
+   this.synchronize('management_decision_failed','request_failed');const code=error instanceof BackendRequestFailure?error.code:undefined;
    if(code&&['memory_head_conflict','memory_request_conflict','memory_candidate_stale'].includes(code))return {status:'conflict'};
    if(code==='memory_protected')return {status:'protected'};
    if(error instanceof ManagementInvalid||code&&/stale|deleted|invalidated|not_eligible|scope/.test(code))return {status:'source_stale'};
    return {status:'unavailable'};
-  }
+  }});
  }
 }
 // Electron 不保留 Error 自定义字段；读取错误码通过安全回执跨传输，再由 renderer 恢复。
@@ -182,7 +193,7 @@ export function installSqliteMemoryManagementBridge(commands:PageCommands,backen
   backend.onStateChanged(state=>{
     const next=state.phase==='connected'?backend.getConnectionGeneration():undefined;
     if(next===connectionGeneration)return;
-    connectionGeneration=next;controller.synchronize();
+    connectionGeneration=next;controller.synchronize('backend_state_changed','connection_changed');
   });
  commands.handle('memory:history-read',(...args)=>{if(args.length!==1)throw invalid();return readResponse(()=>controller.readHistory(args[0] as MemoryHistoryRead));},'manager');
  commands.handle('memory:management-read',(...args)=>{if(args.length!==1)throw invalid();return readResponse(()=>controller.read(args[0] as MemoryManagementRead));},'manager');

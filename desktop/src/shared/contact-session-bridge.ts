@@ -22,6 +22,7 @@ export interface ContactSessionState {
 export interface ContactSelection {
   contactId: string;
   scopeRevision: number;
+  traceId?: string;
 }
 
 export interface ContactDraft extends ContactSelection { text: string; }
