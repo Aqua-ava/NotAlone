@@ -8,10 +8,11 @@ import {sourceCalendarPayload} from './contract.ts';
 import type {ExtractionWindow,ExtractedFact,SourceVerificationResult} from './protocol.ts';
 import {prepareSourceVerification,type PreparedVerificationPolicy,type VerificationAdmission} from './verification/complete-claim.ts';
 import {prepareMultimodalVerification} from './multimodal.ts';
+import type {ModelImageInput} from '../../platform/models/model-images.ts';
 
 export interface ExtractionInvocation {
  purpose:'extraction'|'verification';system:string;user:string;tool:{name:string;description:string;parameters:Record<string,unknown>};
- images?:readonly {id:string;mimeType:'image/png'|'image/jpeg'|'image/webp'|'image/gif';dataBase64:string}[];
+ images?:readonly ModelImageInput[];
  validateOutput(blocks:readonly unknown[]):void|Promise<void>;
 }
 export interface ExtractionFlowOutcome {

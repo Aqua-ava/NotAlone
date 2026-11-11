@@ -1,3 +1,4 @@
+import {currentDiagnosticTrace,newTraceId,withDiagnosticTrace,diagnose} from '../../diagnostics/unified.ts';
 import {createBuiltinMemoryContentRegistry} from '../content/builtins.ts';
 import type {MemoryContentRegistry,MemoryContentResources,FrozenMemoryContent} from '../content/registry.ts';
 import {assertMultimodalAdmission} from '../extraction/multimodal.ts';
@@ -12,6 +13,8 @@ import {assertCompleteClaimAdmission} from '../extraction/verification/complete-
 import {isSharedFailure,sharedFailureCodes} from './control.ts';
 import type {CandidateVerificationReference} from './management/admission.ts';
 import type {ExtractionWindow} from '../extraction/protocol.ts';
+import {sha256} from '../../platform/sha256.ts';
+import {MODEL_IMAGE_LIMITS} from '../../platform/models/image-normalization.ts';
 import {ExtractionModelError} from '../extraction/model.ts';
 import type {ModelPermitAccounting,ModelTaskClaim} from '../../platform/models/model-permit-port.ts';
 import type {SqliteExtractionModelInvocation,SqliteExtractionModelPreparation} from './model-port.ts';
@@ -58,7 +61,7 @@ export class SqliteMemoryExtraction {
  get automaticEnabled():boolean{return this.automatic;}
  /** 宿主登记开关变化后的唤醒回调（重扫调度、后续整理）；只唤醒，不在回调内同步建轮。 */
  setAutomaticListener(listener:(enabled:boolean)=>void):void{this.onAutomaticChanged=listener;}
- private requireAutomatic(){if(!this.automatic)throw new StorageFailure('memory_auto_processing_disabled');}
+ private requireAutomatic(){if(!this.automatic){diagnose({event:'processing.control_changed',caller:'memory_processing',toState:'disabled',reasonCode:'disabled'});throw new StorageFailure('memory_auto_processing_disabled');}}
  readAutomatic():{enabled:boolean}{this.available();return {enabled:this.automatic};}
  /**
   * 关闭：不再建轮、不领取新步骤，并把正在执行的轮次按用户暂停语义停在步骤边界；
@@ -90,7 +93,7 @@ export class SqliteMemoryExtraction {
  private available(){if(this.stopped)throw new StorageFailure('memory_extraction_closed');}
  /** 关闭也等待已受理但尚未进入run的SQLite工作，防止宿主先释放存储。 */
  private admit<T>(work:()=>Promise<T>):Promise<T>{
-  this.available();const pending=Promise.resolve().then(()=>{this.available();return work();});this.pending.add(pending);
+  this.available();const pending=Promise.resolve().then(()=>{this.available();return withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),work);});this.pending.add(pending);
   void pending.then(()=>this.pending.delete(pending),()=>this.pending.delete(pending));return pending;
  }
  async start(requestKey:string){
@@ -288,6 +291,7 @@ export class SqliteMemoryExtraction {
    prepared.push(await this.content.registry.prepare({ownerId:this.ownerId,contactId:batch.contactId,message:{...row,id:row.message_id,kind:row.message_kind??'text'},frozen,resources:this.content.resources,signal,requireCurrent}));
   }
   const images=prepared.flatMap(part=>part.images??[]);
+  if(images.length>MODEL_IMAGE_LIMITS.maxImagesPerMessage||images.reduce((total,image)=>total+Buffer.byteLength(image.dataBase64,'base64'),0)>MODEL_IMAGE_LIMITS.maxMessageImageBytes)throw new StorageFailure('memory_content_input_too_large');
   const window:ExtractionWindow={owner_id:this.ownerId,contact_id:batch.contactId,target_message_ids:rows.filter(r=>r.role==='target').map(r=>String(r.message_id)),messages:prepared.map(part=>part.message)};
   let commonFailure:string|null=null;let modelFailure:string|null=null;
   let verificationInputEventId:string|null=null,verificationCall:{callId:string;reused:boolean}|null=null;
@@ -305,7 +309,7 @@ export class SqliteMemoryExtraction {
    invoke:async request=>{
     const scope={owner_id:this.ownerId,contact_id:batch.contactId};
     let prepared:SqliteExtractionModelPreparation;try{prepared=await this.model.prepare(request,{scope,signal,requireCurrent});}catch(error){if(commonCodes.includes((error as any)?.code))commonFailure=(error as any).code;throw error;}
-    const serial={purpose:request.purpose,system:request.system,user:request.user,tool:request.tool,...(request.images?.length?{images:request.images}:{})};
+    const serial={purpose:request.purpose,system:request.system,user:request.user,tool:request.tool,...(request.images?.length?{images:request.images.map(image=>({id:image.id,mimeType:image.mimeType,sourceSha256:image.sourceSha256??sha256(Buffer.from(image.dataBase64,'base64')),requestSha256:sha256(Buffer.from(image.dataBase64,'base64')),originalBytes:image.originalBytes??Buffer.byteLength(image.dataBase64,'base64'),bytes:Buffer.byteLength(image.dataBase64,'base64'),normalizationTier:image.normalizationTier??null}))}:{})};
     const call=await this.storage.execute<any>('memoryExtraction.prepareCall',{ownerId:this.ownerId,attemptId:batch.attemptId,purpose:request.purpose,request:serial,provider:prepared.provider,model:prepared.model,configurationId:prepared.configurationId,inputCap:prepared.maxInputTokens,outputCap:prepared.maxOutputTokens,inputNos:actualNos});
     if(request.purpose==='verification')verificationCall={callId:call.callId,reused:call.reused};
     if(call.reused){await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'model_reused',payload:{state:'known_result'},reuseId:call.callId,inputNos:actualNos});return {blocks:call.blocks};}

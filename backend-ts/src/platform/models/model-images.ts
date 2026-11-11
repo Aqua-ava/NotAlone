@@ -5,22 +5,21 @@ import type {Context} from '@deepseek-ai/cordis';
 import {AttachmentStore,AttachmentId,ImageVariantId,type ImageAttachmentRef,type ImageRequestTarget,type ImageMediaType,type RequestImageAttachment,type SaveImageAttachment,type StoredImageAttachment} from '@deepseek-ai/dsh-attachment';
 import type {TextBlock,ImageBlock} from '@deepseek-ai/dsh-llm';
 import sharp from 'sharp';
+import {MODEL_IMAGE_LIMITS,normalizeModelImageInput,normalizeModelImageBytes,type NormalizableModelImage,type ModelImageNormalizationTier} from './image-normalization.ts';
 
-export interface ModelImageInput {id:string;mimeType:ImageMediaType;dataBase64:string}
+export interface ModelImageInput extends NormalizableModelImage {}
 export interface ModelImageManifest {
  id:string;sourceSha256:string;attachmentSha256:string;requestSha256:string;
  requestMimeType:ImageMediaType;width:number;height:number;bytes:number;frame:0;
+ originalBytes?:number;normalizationTier?:ModelImageNormalizationTier;
 }
-interface Entry {id:string;sourceSha256:string;ref:ImageAttachmentRef;data:Buffer;request?:RequestImageAttachment}
+interface Entry {id:string;sourceSha256:string;originalBytes:number;tier:ModelImageNormalizationTier;ref:ImageAttachmentRef;data:Buffer;request?:RequestImageAttachment}
 interface ImageScope {entries:Entry[];signal:AbortSignal}
-const mediaTypes=['image/png','image/jpeg','image/webp','image/gif'] as const;
-const formats={png:'image/png',jpeg:'image/jpeg',webp:'image/webp',gif:'image/gif'} as const;
 const failure=()=>new Error('extraction_model_image_invalid');
 
 /** 来源受管副本由调用者保管；此官方附件适配只接受本次已冻结的完整字节。 */
 export class ModelImageAttachments extends AttachmentStore {
- readonly imageLimits={maxImageBytes:32*1024*1024,maxImagesPerMessage:8,maxMessageImageBytes:32*1024*1024,
-  maxImagePixels:32*1024*1024,maxImageDimension:32768,mediaTypes};
+ readonly imageLimits=MODEL_IMAGE_LIMITS;
  private readonly scopes=new AsyncLocalStorage<ImageScope>();
  private readonly active=new Set<ImageScope>();
  constructor(ctx:Context){super(ctx);}
@@ -38,26 +37,22 @@ export class ModelImageAttachments extends AttachmentStore {
   signal?.throwIfAborted();const entry=this.entry(ref);
   if(entry.request)return entry.request;
   if(![target.width,target.height,target.maxBytes].every(value=>Number.isSafeInteger(value)&&value>0))throw failure();
-  const pipeline=sharp(entry.data,{limitInputPixels:this.imageLimits.maxImagePixels,failOn:'error'})
-   .resize({width:target.width,height:target.height,fit:'inside',withoutEnlargement:true})
-   .toColourspace('srgb').png().timeout({seconds:10});
-  const {data,info}=await pipeline.toBuffer({resolveWithObject:true});
+  const version=entry.ref.width<=target.width&&entry.ref.height<=target.height&&entry.data.length<=target.maxBytes
+   ?{data:Buffer.from(entry.data),width:entry.ref.width,height:entry.ref.height,bytes:entry.data.length,mimeType:'image/jpeg' as const}
+   :await normalizeModelImageBytes(entry.data,{tier:entry.tier,target,signal});
   try{
    signal?.throwIfAborted();this.entry(ref);
-   if(data.length>target.maxBytes)throw new Error('extraction_model_image_budget_exceeded');
-   const output=await sharp(data).metadata();
-   if(output.depth!=='uchar'||output.space!=='srgb')throw failure();
-   entry.request={variantId:ImageVariantId(sha256(data)),attachment:structuredClone(ref),data,mediaType:'image/png',bytes:data.length,
-    width:info.width,height:info.height,depth:'uchar',space:'srgb',hasAlpha:output.hasAlpha};
+   entry.request={variantId:ImageVariantId(sha256(version.data)),attachment:structuredClone(ref),data:version.data,mediaType:'image/jpeg',bytes:version.bytes,
+    width:version.width,height:version.height,depth:'uchar',space:'srgb',hasAlpha:false};
    for(const duplicate of this.scopes.getStore()!.entries)if(duplicate.ref.attachmentId===ref.attachmentId)duplicate.request=entry.request;
    return entry.request;
-  }catch(error){data.fill(0);throw error;}
+  }catch(error){version.data.fill(0);throw error;}
  }
  manifest():ModelImageManifest[]{
   return (this.scopes.getStore()?.entries??[]).map(entry=>{
    const image=entry.request;if(!image)throw failure();
    return {id:entry.id,sourceSha256:entry.sourceSha256,attachmentSha256:String(entry.ref.attachmentId),requestSha256:sha256(image.data),
-    requestMimeType:image.mediaType,width:image.width,height:image.height,bytes:image.bytes,frame:0};
+    requestMimeType:image.mediaType,width:image.width,height:image.height,bytes:image.bytes,frame:0,originalBytes:entry.originalBytes,normalizationTier:entry.tier};
   });
  }
  async withImages<T>(inputs:readonly ModelImageInput[],signal:AbortSignal,work:(blocks:(TextBlock|ImageBlock)[])=>Promise<T>):Promise<T>{
@@ -69,24 +64,14 @@ export class ModelImageAttachments extends AttachmentStore {
   try{
    for(const input of inputs){
     signal.throwIfAborted();
-    if(!input||typeof input.id!=='string'||!/^[-a-zA-Z0-9_:]{1,160}$/.test(input.id)||!mediaTypes.includes(input.mimeType)
-     ||typeof input.dataBase64!=='string'||input.dataBase64.length>Math.ceil(this.imageLimits.maxImageBytes/3)*4
-     ||!/^[A-Za-z0-9+/]*={0,2}$/.test(input.dataBase64))throw failure();
-    const raw=Buffer.from(input.dataBase64,'base64');total+=raw.length;
+    if(!input||typeof input.id!=='string'||!/^[-a-zA-Z0-9_:]{1,160}$/.test(input.id))throw failure();
+    const normalized=await normalizeModelImageInput(input,{signal}),data=Buffer.from(normalized.dataBase64,'base64');total+=data.length;
     try{
-     if(!raw.length||raw.toString('base64')!==input.dataBase64||total>this.imageLimits.maxMessageImageBytes)throw failure();
-     const metadata=await sharp(raw,{limitInputPixels:this.imageLimits.maxImagePixels,failOn:'error'}).metadata();
-     if(!metadata.format||formats[metadata.format as keyof typeof formats]!==input.mimeType)throw failure();
-     const {data,info}=await sharp(raw,{limitInputPixels:this.imageLimits.maxImagePixels,failOn:'error',page:0,pages:1})
-      .rotate().toColourspace('srgb').resize({width:2048,height:2048,fit:'inside',withoutEnlargement:true})
-      .png().timeout({seconds:10}).toBuffer({resolveWithObject:true});
-     try{
-      signal.throwIfAborted();
-      if(data.length>this.imageLimits.maxImageBytes)throw failure();
-      const ref:ImageAttachmentRef={attachmentId:AttachmentId(sha256(data)),mediaType:'image/png',bytes:data.length,width:info.width,height:info.height};
-      scope.entries.push({id:input.id,sourceSha256:sha256(raw),ref,data});
-     }catch(error){data.fill(0);throw error;}
-    }finally{raw.fill(0);}
+     if(total>this.imageLimits.maxMessageImageBytes)throw failure();
+     const metadata=await sharp(data).metadata();
+     const ref:ImageAttachmentRef={attachmentId:AttachmentId(sha256(data)),mediaType:'image/jpeg',bytes:data.length,width:metadata.width!,height:metadata.height!};
+     scope.entries.push({id:input.id,sourceSha256:normalized.sourceSha256,originalBytes:normalized.originalBytes,tier:normalized.normalizationTier,ref,data});
+    }catch(error){data.fill(0);throw error;}
    }
    return await this.scopes.run(scope,()=>work(scope.entries.flatMap(entry=>[
     {type:'text' as const,text:`图片 image_id=${entry.id}（对应本次消息中的同名图片引用）：`},

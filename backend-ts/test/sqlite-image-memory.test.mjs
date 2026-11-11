@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {Context} from '@deepseek-ai/cordis';
+import sharp from 'sharp';
 import {fixture} from './media-support.mjs';
 import {fixture as memoryFixture,record} from './fixtures/memory-sqlite/support.mjs';
 import {fileMemoryContent} from './fixtures/memory-content/file-plugin.mjs';
@@ -10,7 +11,7 @@ import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 import {MemoryContentRegistry,memoryContentPlugin} from '../src/memory/content/registry.ts';
 import {createBuiltinMemoryContentRegistry} from '../src/memory/content/builtins.ts';
 
-const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64');
+const png=await sharp({create:{width:1,height:1,channels:4,background:{r:255,g:0,b:0,alpha:1}}}).png().toBuffer();
 const adapter={version:'synthetic-image-input-v1',supports:kind=>kind==='image',async execute(context){
  await context.save({role:'image_display',bytes:(async function*(){yield png;})(),expectedBytes:png.length,expectedSha256:createHash('sha256').update(png).digest('hex'),
   validate:async()=>({format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false})});
@@ -44,10 +45,14 @@ test('同联系人图片字节与文字按消息顺序共同进入正常记忆�
  assert.equal(requests.length,1);const request=requests[0],payload=JSON.parse(request.user);
  assert.deepEqual(payload.messages.map(message=>message.message_id),[image.id,f.messages.find(m=>m.kind==='text').id]);
  assert.equal(payload.messages[0].image_id,saved.files[0].fileId);
- assert.equal(request.images.length,1);assert.equal(request.images[0].id,saved.files[0].fileId);assert.deepEqual(Buffer.from(request.images[0].dataBase64,'base64'),png);
+ assert.equal(request.images.length,1);assert.equal(request.images[0].id,saved.files[0].fileId);
+ assert.equal(request.images[0].mimeType,'image/jpeg');
+ assert.equal(request.images[0].sourceSha256,createHash('sha256').update(png).digest('hex'));
+ assert.equal(payload.messages[0].sha256,request.images[0].sourceSha256);
  assert.ok(done.contentCounts.some(c=>c.kind==='image'&&c.total===1&&c.succeeded===1));
  const trace=await service.trace(done.tasks.find(task=>task.scopeKind==='contact').taskId);
  assert.ok(trace.events.some(event=>event.kind==='model_input'&&event.payload.images?.[0].id===saved.files[0].fileId));
+ for(const event of trace.events)assert.equal(JSON.stringify(event).includes('dataBase64'),false,'规范化图片字节不写入追踪');
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 test('未保存图片如实保留未就绪；图片稍后可用时单独作为新目标并带已处理文字语境',async t=>{

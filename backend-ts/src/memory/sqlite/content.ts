@@ -4,6 +4,7 @@ import {createBuiltinMemoryContentRegistry} from '../content/builtins.ts';
 import type {FrozenMemoryContent} from '../content/registry.ts';
 import type {MemoryContentRegistry} from '../content/registry.ts';
 import {AsyncLocalStorage} from 'node:async_hooks';
+import {MODEL_IMAGE_LIMITS} from '../../platform/models/image-normalization.ts';
 const builtinRegistry=createBuiltinMemoryContentRegistry();
 const scopes=new AsyncLocalStorage<MemoryContentRegistry>();
 const registry=()=>scopes.getStore()??builtinRegistry;
@@ -43,7 +44,7 @@ export function boundContentInputs(tx:StorageTransaction,ownerId:string,targets:
  const fits=(row:StorageRow)=>{
   const frozen=readFrozenContent(tx,ownerId,row),cost=frozen?registry().require(frozen).modelInputCost(frozen.identity):{images:0,bytes:0};
   if(!Number.isSafeInteger(cost.images)||cost.images<0||!Number.isSafeInteger(cost.bytes)||cost.bytes<0)throw new StorageFailure('memory_content_budget_invalid');
-  if(images+cost.images>8||bytes+cost.bytes>32*1024*1024)return false;
+  if(images+cost.images>MODEL_IMAGE_LIMITS.maxImagesPerMessage||bytes+cost.bytes>MODEL_IMAGE_LIMITS.maxMessageImageBytes)return false;
   images+=cost.images;bytes+=cost.bytes;return true;
  };
  const selected:StorageRow[]=[];

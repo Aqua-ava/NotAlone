@@ -2,6 +2,7 @@
 import {digest} from '../evidence/canonical-json.ts';
 import {windowDigest} from '../evidence/window-digest.ts';
 import {sha256} from '../../platform/sha256.ts';
+import {verifyNormalizedModelImage} from '../../platform/models/image-normalization.ts';
 import {ExtractionArgumentsError,readExtractionToolArguments} from './arguments.ts';
 import {ExtractionProtocolError,validateExtractionWindow,uuid,type ExtractionWindow,type ExtractedFact,type SourceVerificationResult} from './protocol.ts';
 import type {ExtractionInvocation} from './flow.ts';
@@ -177,10 +178,11 @@ export function replayMultimodalVerification(window:ExtractionWindow,facts:reado
 export function prepareMultimodalVerification(options:{window:ExtractionWindow;facts:readonly ExtractedFact[];images:NonNullable<ExtractionInvocation['images']>;ruleVersion?:string;requireCurrent():Promise<void>;record?(event:{stage:string;payload:unknown}):Promise<void>}):PreparedVerification{
  const window=structuredClone(options.window),facts=structuredClone([...options.facts]);validateExtractionWindow(window);
  const images=structuredClone(options.images),expected=window.messages.flatMap(message=>message.image?[message.image]:[]);
- // 边界：actual.dataBase64 是调用方为本次模型调用实时加载的图片字节，window.image.sha256 是冻结时的文件身份摘要；
- // 两者来源不同，这里重算摘要证明附给模型的字节仍是被核验的文件版本，不属于同源冗余计算。
+ // 原始字节直接核对冻结摘要；内存规范化版本必须有本进程生成且绑定来源与发送字节的证明。
  if(!expected.length||expected.length!==images.length||new Set(images.map(image=>image.id)).size!==images.length
-  ||expected.some(image=>!images.some(actual=>actual.id===image.id&&actual.mimeType===image.mime_type&&sha256(Buffer.from(actual.dataBase64,'base64'))===image.sha256)))fail('images_missing');
+  ||expected.some(image=>!images.some(actual=>actual.id===image.id&&(
+   actual.mimeType===image.mime_type&&sha256(Buffer.from(actual.dataBase64,'base64'))===image.sha256
+   ||verifyNormalizedModelImage(actual,image.sha256)))))fail('images_missing');
  const system=prompt;
  const body=payload(window,facts),fingerprint=digest({policy:policyId,rule_version:options.ruleVersion??null,window,facts,prompt:system,schema});
  // 绑定值用原窗口对象的记忆化摘要；与断言侧的同一对象命中同一份序列化，整次核验至多算一次。
