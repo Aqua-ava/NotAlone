@@ -129,7 +129,12 @@ test('manual正式profile不自动派发历史或记忆，重启后仍只执行�
  const synced=await h.request(`/api/contacts/${selected.contactId}/history/sync`,'POST',{});assert.equal(synced.status,200);
  assert.equal((await h.request(`/api/contacts/${selected.contactId}/messages`)).body.messages.length,1);
  assert.equal((await h.request('/api/memory-processing/runs/current')).body,null,'手动同步成功也不自动提取');
- const started=await h.request(`/api/memory-processing/contacts/${selected.contactId}/history`,'POST',{request_key:randomUUID()});assert.equal(started.status,200);
+ // manual只控制宿主自动派发；显式处理仍须先通过产品默认关闭的记忆总开关。
+ assert.deepEqual((await h.request('/api/memory-processing/automatic')).body,{enabled:false});
+ const disabled=await h.request(`/api/memory-processing/contacts/${selected.contactId}/history`,'POST',{request_key:randomUUID()});assert.equal(disabled.status,409);assert.equal(disabled.body.error,'memory_auto_processing_disabled');
+ assert.deepEqual((await h.request('/api/memory-processing/automatic','POST',{enabled:true})).body,{enabled:true});
+ assert.equal((await h.request('/api/memory-processing/runs/current')).body,null,'开启记忆总开关仍不自动派发manual宿主');
+ const started=await h.request(`/api/memory-processing/contacts/${selected.contactId}/history`,'POST',{request_key:randomUUID()});assert.equal(started.status,200,JSON.stringify(started.body));
  assert.ok(started.body.run.inputs.every(input=>input.contactId===selected.contactId));
  const blocked=await ready(async()=>h.request(`/api/memory-processing/runs/${started.body.run.runId}`),value=>value.body.status==='blocked'||value.body.status==='paused','synthetic_manual_memory_unconfigured');
  const continued=await h.request(`/api/memory-processing/runs/${started.body.run.runId}/continue`,'POST',{action_version:blocked.body.controlVersion,operation_id:randomUUID()});assert.equal(continued.status,200);assert.ok(continued.body.inputs.every(input=>input.contactId===selected.contactId));

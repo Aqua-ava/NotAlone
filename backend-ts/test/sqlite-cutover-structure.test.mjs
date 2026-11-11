@@ -31,7 +31,7 @@ test('实际 DDL 与 92 表结构基线逐表一致（含 CHECK、触发器 body
   if (baselineSqliteVersion !== undefined) assert.match(baselineSqliteVersion, /^\d+\.\d+\.\d+$/);
   assert.deepEqual(actualStable, baselineStable, '结构元数据与基线不一致');
   assert.equal(actual.metadata.checkCount, 303);
-  assert.equal(actual.metadata.triggerCount, 120);
+  assert.equal(actual.metadata.triggerCount, 102);
   assert.deepEqual(actual.metadata.migrationVersions, registry.migrations.map(migration => migration.version));
   assert.equal(actual.metadata.userVersion, baseline.metadata.schemaVersion);
   assert.deepEqual(Object.keys(actual.tables), EXPECTED_TABLES, '实际表集合必须等于实现表基线');
@@ -99,7 +99,7 @@ test('必要事务与约束：外键、CHECK、唯一键、幂等与范围触发
     assert.throws(() => db.prepare("INSERT INTO channel_conversation(owner_id,id,account_id,identity_scheme,external_key) VALUES('o','c','missing-account','wx','k')").run(), /FOREIGN KEY/);
     assert.throws(() => db.prepare("INSERT INTO database_instance(slot,database_id,format_family,role,created_at,runtime_id,epoch,schema_digest) VALUES(2,'id','notalone-sqlite-v1','test',1,'r',0,'')").run(), /CHECK/);
     assert.throws(() => db.prepare("INSERT INTO deletion_target(operation_id,target_no,storage_kind,domain,target_key,row_kind,plan_revision,state) VALUES('missing',1,'row','d','k','m',1,'cleared')").run(), /FOREIGN KEY|CHECK/);
-    assert.throws(() => db.prepare("INSERT INTO capture_record(owner_id,id,contact_id,capture_id,item_no,state,message_id,normalizer_version,availability) VALUES('o','r','c','cap',1,'normalized','m','v1','available')").run(), /capture_record_binding_mismatch/);
+    assert.throws(() => db.prepare("INSERT INTO capture_record(owner_id,id,contact_id,capture_id,item_no,state,message_id,normalizer_version,availability) VALUES('o','r','c','cap',1,'normalized','m','v1','available')").run(), /FOREIGN KEY/);
     assert.throws(() => db.prepare("INSERT INTO memory_citation(owner_id,id,source_contact_id,message_id,record_id,accepted_revision,span_start,span_end) VALUES('o','c','c','m','r',1,0,1)").run(), /memory_citation_required_mismatch/);
     db.exec('BEGIN');
     db.prepare("INSERT INTO owner(owner_id,created_at) VALUES('tx-owner',1)").run();

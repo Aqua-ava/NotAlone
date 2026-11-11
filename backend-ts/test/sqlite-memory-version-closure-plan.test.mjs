@@ -8,7 +8,7 @@ import {adjudicationFixture,adjudicationSupplier,owner} from './fixtures/memory-
  * 相关子查询又从 execution_input 按 owner_id 全表扫描，每个（版本，输入）组合都扫一遍。
  * 这里在含 auto 更新链的真实数据上检查两条生产语句的执行计划，固定其访问形状。
  */
-test('版本闭包递归查询由递归队列驱动，且按 event_id 定位执行输入而不全表扫描',async t=>{
+test('版本闭包递归查询由递归队列驱动，且按事件或计划输入定位执行输入而不全表扫描',async t=>{
  const f=await adjudicationFixture(t);
  await f.extract(['我长期住在高雄。'],{publish:true});
  f.setRespond(adjudicationSupplier({action:'update'}));
@@ -19,7 +19,8 @@ test('版本闭包递归查询由递归队列驱动，且按 event_id 定位执�
  for(const plan of plans){
   const inputs=plan.filter(detail=>/\bx USING\b/.test(detail));
   assert.ok(inputs.length>0,`计划应包含 execution_input 访问：\n${plan.join('\n')}`);
-  for(const detail of inputs)assert.match(detail,/event_id=\?/,`execution_input 不得只按 owner_id 扫描：${detail}`);
+  // SQLite可按事件主键或完整计划输入复合键定位；两者均拒绝退回仅owner扫描。
+  for(const detail of inputs)assert.match(detail,/(?:event_id=\?|planned_step_id=\? AND planned_input_no=\?)/,`execution_input 不得只按 owner_id 扫描：${detail}`);
   const decision=plan.findIndex(detail=>/^SEARCH d USING INDEX sqlite_autoindex_memory_decision_1/.test(detail));
   assert.ok(decision>=2,`计划应包含递归步的 memory_decision 访问：\n${plan.join('\n')}`);
   assert.equal(plan[decision-2],'SCAN a',`递归步应先取递归队列：\n${plan.join('\n')}`);

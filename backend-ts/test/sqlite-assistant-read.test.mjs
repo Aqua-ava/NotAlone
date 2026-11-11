@@ -166,6 +166,6 @@ test('来源连续性变化废弃旧最近聊天快照，重新读取保留权�
  try{
   await f.storage.execute('history.markContinuityLost',{token:await f.contacts.eligibility(contactId)});release.resolve();
   const late=await loading;assert.notEqual(late.status,200);assert.equal((await late.text()).includes(original),false);assert.equal(closed,1);
-  const fresh=await fetch(url);assert.equal(fresh.status,200);const current=await fresh.json();assert.equal(current.coverage.phase,'incomplete');assert.equal(current.coverage.failureCode,'history_source_continuity_unverified');assert.equal(opened,2);
+  const fresh=await fetch(url);assert.equal(fresh.status,200);const current=await fresh.json();assert.deepEqual(current.coverage,{phase:'incomplete'});assert.equal((await f.history.coverage(contactId)).failureCode,'history_source_continuity_unverified');assert.equal(opened,2);
  }finally{release.resolve();await loading;}
 });
