@@ -9,6 +9,7 @@ import {modelLedgerInputBudget, validateModelLedgerReceipt, type ModelLedgerRece
 import type {MessagesBudgetBinding, MessagesBudgetProfile} from '../../platform/models/model-input-budget.ts';
 import type {ModelTaskClaim,ModelPermitPort,ModelPermitLease} from '../../platform/models/model-permit-port.ts';
 import {ModelLedgerError} from '../../platform/models/model-ledger-contract.ts';
+import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import {DEEPSEEK_STRICT_VERIFICATION_TOOL} from './verification/deepseek-strict.ts';
 export type ExtractionPermitEndpoint=ModelPermitPort;
 export interface ExtractionProviderFailure {name:'LlmError'|'LlmFailure';code:string;status?:number;}
@@ -71,6 +72,12 @@ export async function extractionUnconfirmedRequests(endpoint:ExtractionPermitEnd
   return [...new Set(ids)].sort();
 }
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// 领域拒绝发生在预约事务提交前；工作线程失联或超时仍可能已经提交，不能据异常释放许可。
+function reservationWasRejected(error:unknown):boolean {
+  return error instanceof ModelLedgerError || error instanceof StorageFailure
+    && (error.code.startsWith('memory_') || error.code==='history_source_not_available'
+      || error.code==='stale_lease' || error.code==='storage_busy');
+}
 export interface ExtractionModelInput {
   /** 由原task/batch UUIDv5计算；每次物理调用另传新attempt_id。 */
   request_id:string;attempt_id:string;owner_id:string;contact_id:string|null;ledger_entry_id?:string;
@@ -105,7 +112,7 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
     const config={...input.binding,reasoningEffort:ReasoningEffortId(input.binding.reasoningEffort),stop:input.binding.stop?[...input.binding.stop]:undefined};
     const prepared=strictVerification?null:await options.ctx.llm.prepareCall(config,input.signal);
     let permit:ModelPermitLease|undefined,receipt:ModelLedgerReceipt|null=null;
-    let uncertain=false,reserved=false,call:ReturnType<typeof options.provider.beginCall>|undefined;
+    let uncertain=false,reserved=false,reservationRejected=false,call:ReturnType<typeof options.provider.beginCall>|undefined;
     let strictCall:ReturnType<typeof options.provider.beginStrictVerificationCall>|undefined;
     const started=Date.now();const blocks:ContentBlock[]=[];let text='',usage:ModelLedgerUsage|null=null,success=false,failure=false,validationRejected=false;
     let providerFailure:ExtractionProviderFailure|null=null;
@@ -118,7 +125,10 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
       const registration={sessionId,attempt_id:input.attempt_id,permit_id:permit.id,binding:input.binding,profile:input.profile,requireCurrent:input.requireCurrent,onImageInputs:input.onImageInputs,beforeDispatch:async(value:{attempt_id:string;permit_id:string;budget:Parameters<typeof modelLedgerInputBudget>[0];dispatch:'authorized_unconfirmed'})=>{
         receipt={...base,input_budget:modelLedgerInputBudget(value.budget)};
         uncertain=true;try{await permit!.reserve(receipt,input.claim);}
-        catch{throw new ExtractionModelError('extraction_model_reservation_rejected');}
+        catch(error){
+          if(reservationWasRejected(error)){uncertain=false;reservationRejected=true;}
+          throw new ExtractionModelError('extraction_model_reservation_rejected');
+        }
         uncertain=false;reserved=true;
         input.signal.throwIfAborted();await input.requireCurrent();input.signal.throwIfAborted();
       }};
@@ -148,6 +158,10 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
         // 官方adapter在非2xx时不会accept；LlmError的结构化status仍证明已观察HTTP响应。
         // 只保留稳定分类，不把上游message、cause或requestId带入业务错误。
         if(error instanceof LlmError)providerFailure=providerFailureSnapshot(error.failure,'LlmError');
+      }
+      if(reservationRejected){
+        receipt=null;permit?.settle();permit=undefined;
+        throw new ExtractionModelError('extraction_model_reservation_rejected');
       }
       let outputError:unknown;
       if(success&&reserved&&input.validateOutput){
