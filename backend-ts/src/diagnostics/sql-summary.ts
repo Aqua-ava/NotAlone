@@ -26,7 +26,12 @@ export class SqlDiagnosticSummary {
 }
 
 export function storageDiagnosticModule(action:string):DiagnosticModule {
- if(/^(?:history|sync|identity)\./.test(action))return 'history.sync';
+ if(/^memoryExtraction\./.test(action))return 'memory.processing';
+ // 主题的正式页面集合读取属于管理，其余具名任务／调度／发布动作属于处理。
+ if(/^memoryDocuments\./.test(action))return action==='memoryDocuments.read'?'memory.management':'memory.processing';
+ // 联系人域在注册表使用 identity 前缀，不是 contact／contacts。
+ if(/^identity\./.test(action))return 'contacts';
+ if(/^(?:history|sync)\./.test(action))return 'history.sync';
  if(/^(?:reply|discussion|runtime|skills)\./.test(action))return 'reply';
  if(/^(?:deletion|delete)\./.test(action))return 'deletion';
  if(/^media\./.test(action))return 'media';
