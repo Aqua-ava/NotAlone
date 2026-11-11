@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {SqliteStorage} from '../../src/storage/sqlite/client.ts';
+import {diagnosticLog} from '../../src/diagnostics/context.ts';
+const config=JSON.parse(await readFile(process.argv[2],'utf8'));
+const storage=await SqliteStorage.open({...config.open,registryModule:new URL('./sqlite/unified-diagnostic-growth.mjs',import.meta.url).href});
+const result=await storage.execute('fixture.growthControl',config.input);
+await import('../../src/diagnostics/unified.ts');await Promise.resolve();
+const log=diagnosticLog();assert.ok(log);await log.flush();await storage.close();await log.close();
+console.log(JSON.stringify(result));

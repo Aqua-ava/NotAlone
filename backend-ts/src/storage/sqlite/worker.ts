@@ -1,3 +1,4 @@
+import {DiagnosticBuffer,diagnosticOverflow} from '../../diagnostics/buffer.mjs';
 import {installManagementBatching} from '../../memory/sqlite/management/batching.ts';
 import {checkedDiagnosticEvent,type DiagnosticEvent} from '../../diagnostics/unified-contract.mjs';
 import {SqlDiagnosticSummary,storageDiagnosticModule} from '../../diagnostics/sql-summary.ts';
@@ -209,7 +210,7 @@ try {
       let committedDiagnostics:DiagnosticEvent[]=[];
       for (let attempt = 0; ; attempt++) {
         const diagnostics:StorageDiagnostic[]=[];
-        const unifiedDiagnostics:DiagnosticEvent[]=[];
+        const unifiedDiagnostics=new DiagnosticBuffer();
         const runtimeOverlay=new Map<string,unknown>();
         try {
           managementBatching?.begin();
@@ -250,7 +251,7 @@ try {
                 diagnostics.push(structuredClone(event));
               },
               recordUnifiedDiagnostic(event) {
-                try{if(!active||unifiedDiagnostics.length>=128)return;const safe=checkedDiagnosticEvent(event);if(safe)unifiedDiagnostics.push(safe);}catch{}
+                try{if(!active)return;const safe=checkedDiagnosticEvent(event);if(safe)unifiedDiagnostics.push(safe);}catch{}
               },
               run(sql, values = []) { permitted(); measured(sql,()=>prepared(sql).run(...bindings(values))); },
               get(sql, values) { permitted(); return get(sql, values); },
@@ -280,7 +281,7 @@ try {
             diagnosticLog.append({entry:name,contactPrefix:event.contactPrefix,branch:event.branch,...(event.errorCode?{errorCode:event.errorCode}:{})});
           }catch{warnDiagnostic();}
           for(const event of diagnostics){const safe=checkedDiagnosticEvent({event:'sync.continuity',caller:'sqlite_worker',reasonCode:event.branch,contactPrefix:event.contactPrefix});if(safe)unifiedDiagnostics.push(safe);}
-          committedDiagnostics=unifiedDiagnostics;
+          const batch=unifiedDiagnostics.take();committedDiagnostics=[...batch.items,...batch.notices,...(batch.dropped?[diagnosticOverflow('diagnostic_transaction',batch.dropped,safeTrace)]:[])];
           break;
         } catch (error) { if (code(error) !== 'storage_busy' || !action.retryBusy || attempt >= 2) throw error; }
       }

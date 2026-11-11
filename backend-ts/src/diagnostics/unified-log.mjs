@@ -1,3 +1,4 @@
+import {DiagnosticBuffer,diagnosticOverflow} from './buffer.mjs';
 import pino from 'pino';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, realpath, rename, unlink } from 'node:fs/promises';
@@ -125,7 +126,7 @@ export class UnifiedDiagnosticLog {
     // 各进程使用一半独立预算，避免并行轮转争抢另一个进程仍在写的文件。
     this.processBudget = Math.floor((options.maxTotalBytes ?? 50 * MiB) / 2);
     this.maxAgeMs = options.maxAgeMs ?? 14 * 86400_000; this.now = options.now ?? Date.now;
-    this.queue = []; this.queuedBytes = 0; this.rejected = 0; this.dropped = 0; this.enabled = true; this.failed = false;
+    this.queue = new DiagnosticBuffer(); this.detailAggregates = new Map(); this.rejected = 0; this.dropped = 0; this.enabled = true; this.failed = false;
     this.debugUntil = 0; this.scheduled = false; this.closed = false;
     this.logger = pino({ base: null, timestamp: false, level: 'debug', formatters: { level: label => ({ level: label }) } }, { write: line => this.enqueue(line) });
     observedWriters.set(this, (input, observedAt) => this.#diagnoseObserved(input, observedAt));
@@ -167,8 +168,20 @@ export class UnifiedDiagnosticLog {
   }
   enqueue(line) {
     const bytes = Buffer.byteLength(line);
-    if (bytes > 2048 || this.queue.length >= 2048 || this.queuedBytes + bytes > MiB) { this.dropped++; return; }
-    this.queue.push(line); this.queuedBytes += bytes;
+    if(bytes>2048){this.dropped++;return;}
+    const event=JSON.parse(line);
+    let key;
+    if(event.traceId&&event.level==='debug'&&['request.finished','sql.summary'].includes(event.event)){
+      const {time:_time,count:_count,durationMs:_duration,...scope}=event;key=JSON.stringify(scope);
+      const previous=this.detailAggregates.get(key);
+      if(previous){const combined={...previous.record,count:(previous.record.count??1)+(event.count??1),
+        ...((previous.record.durationMs!==undefined||event.durationMs!==undefined)?{durationMs:(previous.record.durationMs??0)+(event.durationMs??0)}:{})};
+        if(checkedDiagnosticRecord(combined)){previous.record=combined;previous.line=JSON.stringify(combined)+'\n';return;}
+      }
+    }
+    const item={line,record:event};
+    if(!this.queue.push(event,item,bytes))this.dropped++;
+    else if(key)this.detailAggregates.set(key,item);
     if (!this.scheduled) { this.scheduled = true; setImmediate(() => { this.scheduled = false; void this.flush(); }); }
   }
   async prune() {
@@ -216,11 +229,13 @@ export class UnifiedDiagnosticLog {
 
   flush() {
     this.pending = this.pending.then(async () => {
-      if (this.closed) { this.queue = []; this.queuedBytes = 0; return; }
+      if (this.closed) { this.queue.reset(); this.detailAggregates.clear(); return; }
       if (this.failed) { await this.initialize(); this.failed = false; }
-      const lines = this.queue; this.queue = []; this.queuedBytes = 0;
+      const batch=this.queue.take(),lines=batch.items.map(item=>item.line);this.detailAggregates.clear();
+      for(const notice of batch.notices)lines.push(JSON.stringify({...notice,time:new Date(this.now()).toISOString(),proc:this.proc,level:'error'})+'\n');
+      if(batch.dropped)lines.push(JSON.stringify({...diagnosticOverflow('diagnostic_writer',batch.dropped),time:new Date(this.now()).toISOString(),proc:this.proc,level:'error'})+'\n');
       if (lines.length) await this.write(aggregateLines(lines));
-    }).catch(() => { this.failed = true; this.queue = []; this.queuedBytes = 0; });
+    }).catch(() => { this.failed = true; this.queue.reset(); this.detailAggregates.clear(); });
     return this.pending;
   }
   async setEnabled(enabled) {
