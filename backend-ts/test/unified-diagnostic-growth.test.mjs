@@ -30,6 +30,16 @@ test('生产结构5000项批量控制保持业务结果并准确记录905项事�
  assert.equal(rows.filter(row=>row.runId===runId&&row.event.startsWith('processing.')).length,4096);
  const overflow=rows.filter(row=>row.event==='diagnostics.error'&&row.caller==='diagnostic_transaction');assert.equal(overflow.length,1);assert.equal(overflow[0].count,905);
 });
+test('调试洪峰耗尽细节预算后，warn级慢SQL仍通过运输和写者决策预算',async t=>{
+ const f=await fixture(t,{registryModule}),log=configureDiagnosticLog(f.root,{proc:'backend',development:true});t.after(()=>log.close());
+ const detail={event:'request.started',module:'memory.management'};
+ const slow={event:'sql.slow',module:'memory.management',reasonCode:'sql_slow',durationMs:2000,count:1,sqlFingerprint:'a'.repeat(64)};
+ const buffer=new DiagnosticBuffer();for(let n=0;n<128;n++)buffer.push(detail);assert.equal(buffer.push(slow),true);
+ const batch=buffer.take();assert.equal(batch.dropped,0);assert.equal(batch.items.at(-1).event,'sql.slow');
+ publishStorageDiagnostics([...Array(200).fill(detail),slow]);await log.flush();const rows=await readDiagnosticRecords(f.root);
+ assert.ok(rows.some(row=>row.event==='sql.slow'&&row.level==='warn'&&row.durationMs===2000));
+ assert.equal(rows.find(row=>row.caller==='diagnostic_transport'&&row.reasonCode==='budget_exhausted').count,72);
+});
 test('决策和细节分预算，上游溢出计数经过多层满队列仍精确保留',async t=>{
  const f=await fixture(t,{registryModule}),log=configureDiagnosticLog(f.root,{proc:'backend',development:true});t.after(()=>log.close());
  const decision={event:'processing.control_changed',caller:'memory_processing',reasonCode:'paused',fromState:'running',toState:'paused'};

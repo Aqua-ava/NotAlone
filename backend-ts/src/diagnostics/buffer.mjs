@@ -15,7 +15,7 @@ export class DiagnosticBuffer {
    if(previous&&previous.traceId!==event.traceId)delete combined.traceId;
    combined.count=Math.min(Number.MAX_SAFE_INTEGER,combined.count);this.notices.set(event.caller,combined);return true;
   }
-  const group=event.event.startsWith('sql.')||diagnosticEvents[event.event]?.level==='debug'?'detail':'decision';
+  const group=diagnosticEvents[event.event]?.level==='debug'?'detail':'decision';
   const limit=group==='decision'?diagnosticDecisionLimit:diagnosticDetailLimit;
   // 固定六个阶段的提示最多占12KiB，预留16KiB保证总内存队列不超8MiB。
   if(this.counts[group]>=limit||this.bytes+bytes>diagnosticByteLimit-16384){this.dropped++;return false;}
