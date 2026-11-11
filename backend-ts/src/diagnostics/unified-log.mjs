@@ -1,4 +1,4 @@
-import {DiagnosticBuffer,diagnosticOverflow} from './buffer.mjs';
+import {DiagnosticBuffer,diagnosticOverflow,diagnosticDecisionLimit} from './buffer.mjs';
 import {withDiagnosticLock} from './maintenance.mjs';
 import pino from 'pino';
 import { constants } from 'node:fs';
@@ -12,8 +12,8 @@ const controlBudget=512*1024, suppressionAge=14*86400_000, prefixLimit=4096;
 const staleControls=new WeakSet();
 const observedWriters = new WeakMap();
 /** 仅供受信任上下文回放；时间不属于公共事件载荷，也不经 IPC／HTTP 暴露。 */
-export function writeObservedDiagnostic(log, input, observedAt, observedNs=process.hrtime.bigint()) {
-  try { observedWriters.get(log)?.(input, observedAt, observedNs); } catch { /* 内部回放失败不进入业务路径。 */ }
+export function writeObservedDiagnostic(log, input, observedAt, observedNs=process.hrtime.bigint(),protection) {
+  try { observedWriters.get(log)?.(input, observedAt, observedNs,protection); } catch { /* 内部回放失败不进入业务路径。 */ }
 }
 const namePattern = /^(main|backend)-(\d{4}-\d{2}-\d{2})-(\d+)\.jsonl$/;
 const identity = stat => `${stat.dev}:${stat.ino}`;
@@ -86,13 +86,37 @@ async function saveControl(root,control,guard,maximumBytes=controlBudget){
  const text=JSON.stringify(control);if(Buffer.byteLength(text)>maximumBytes)unavailable();
  const directory=await guard(),file=path.join(directory,'diagnostic-control.json'),existing=await statIfPresent(file);
  if(existing&&!safe(existing,false))unavailable();
- const temporary=path.join(directory,`.diagnostic-control-${randomUUID()}.tmp`);
- const handle=await checkedOpen(temporary,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL);
- try{await handle.writeFile(text);await handle.sync();}finally{await handle.close();}
- try{await guard();await rename(temporary,file);}finally{await unlink(temporary).catch(()=>{});}
+ await replacePrivate(file,text,guard,'control');
+}
+/** 在根锁内处理两类固定私有临时文件；不信任的遗留目标阻塞维护，绝不跟随或删除。 */
+async function cleanupTemporaries(root,guard){
+ const directory=await guard();
+ for(const [location,kind,maximum]of [[directory,'control',controlBudget],[root,'settings',512]]){
+  const pattern=new RegExp(`^\\.diagnostic-${kind}-[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}\\.tmp$`);
+  for(const name of await readdir(location)){
+   if(!pattern.test(name))continue;
+   const file=path.join(location,name),stat=await statIfPresent(file);if(!stat)continue;
+   if(!safe(stat,false)||stat.size>maximum)unavailable();
+   const handle=await checkedOpen(file,constants.O_RDONLY,stat);
+   try{if((await handle.stat()).size>maximum)unavailable();await guard();const actual=await lstat(file);if(!safe(actual,false)||identity(actual)!==identity(stat))unavailable();await unlink(file);}
+   finally{await handle.close();}
+  }
+ }
+}
+async function replacePrivate(file,text,guard,kind){
+ const temporary=path.join(path.dirname(file),`.diagnostic-${kind}-${randomUUID()}.tmp`);let handle,created;
+ try{
+  handle=await checkedOpen(temporary,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL);created=await handle.stat();
+  await handle.writeFile(text);await handle.sync();await guard();await rename(temporary,file);
+ }finally{
+  await handle?.close().catch(()=>{});
+  // write/sync/rename 任一步失败也回收本次创建的 inode；不触碰被替换的不可信目标。
+  if(created){const actual=await statIfPresent(temporary);if(actual){await guard();if(!safe(actual,false)||identity(actual)!==identity(created))unavailable();await unlink(temporary);}}
+ }
 }
 async function eraseLocked(root,{all,prefixes,imageIds=[]},now,guard,maximumBytes){
  if(!Number.isSafeInteger(now)||now<0||now+suppressionAge>8640000000000000)unavailable();
+ await cleanupTemporaries(root,guard);
  const control=await readControl(root,now),merged=new Map(control.prefixes.map(row=>[row.prefix,row]));
  for(const prefix of prefixes)merged.set(prefix,{prefix,createdAt:now,expiresAt:now+suppressionAge});
  if(merged.size>prefixLimit)unavailable();
@@ -182,12 +206,12 @@ export class UnifiedDiagnosticLog {
     this.maxFileBytes = options.maxFileBytes ?? 5 * MiB;
     // 各进程使用一半独立预算，避免并行轮转争抢另一个进程仍在写的文件。
     const totalBudget=options.maxTotalBytes??50*MiB;this.controlBudget=Math.min(controlBudget,Math.floor(totalBudget/8));
-    this.processBudget = Math.floor((totalBudget-this.controlBudget) / 2);
+    this.processBudget = Math.floor((totalBudget-2*this.controlBudget) / 2);
     this.maxAgeMs = options.maxAgeMs ?? 14 * 86400_000; this.now = options.now ?? Date.now;
-    this.queue = new DiagnosticBuffer(); this.detailAggregates = new Map(); this.rejected = 0; this.dropped = 0; this.enabled = true; this.failed = false;
+    this.queue = new DiagnosticBuffer(); this.detailAggregates = new Map(); this.aggregateSamples=0; this.rejected = 0; this.dropped = 0; this.enabled = true; this.failed = false;
     this.debugUntil = 0; this.scheduled = false; this.closed = false;
     this.logger = pino({ base: null, timestamp: false, level: 'debug', formatters: { level: label => ({ level: label }) } }, { write: line => this.enqueue(line) });
-    observedWriters.set(this, (input, observedAt, observedNs) => this.#diagnoseObserved(input, observedAt, observedNs));
+    observedWriters.set(this, (input, observedAt, observedNs,protection) => this.#diagnoseObserved(input, observedAt, observedNs,protection));
     this.pending = this.initialize().catch(() => { this.failed = true; });
   }
   async initialize() {
@@ -195,7 +219,7 @@ export class UnifiedDiagnosticLog {
       || !Number.isSafeInteger(this.processBudget) || this.processBudget < this.maxFileBytes || this.processBudget > 25 * MiB
       || !Number.isSafeInteger(this.maxAgeMs) || this.maxAgeMs < 1 || this.maxAgeMs > 14 * 86400_000) unavailable();
     this.location = await rootDirectory(this.root, true);
-    await withDiagnosticLock(this.root,()=>this.guardLocation(),async()=>{await this.refreshSettings();const control=await readControl(this.root,this.now());if(staleControls.has(control))await saveControl(this.root,control,()=>this.guardLocation(),this.controlBudget);await this.prune();});
+    await withDiagnosticLock(this.root,()=>this.guardLocation(),async()=>{await cleanupTemporaries(this.root,()=>this.guardLocation());await this.refreshSettings();const control=await readControl(this.root,this.now());if(staleControls.has(control))await saveControl(this.root,control,()=>this.guardLocation(),this.controlBudget);await this.prune();});
     this.lastWriteDay = new Date(this.now()).toISOString().slice(0, 10);
   }
   async guardLocation() {
@@ -213,7 +237,7 @@ export class UnifiedDiagnosticLog {
   diagnose(input) {
     try { this.#diagnoseObserved(input, this.now()); } catch { this.dropped++; }
   }
-  #diagnoseObserved(input, observedAt, observedNs=process.hrtime.bigint()) {
+  #diagnoseObserved(input, observedAt, observedNs=process.hrtime.bigint(),protection) {
     try {
       const event = checkedDiagnosticEvent(input);
       if (!event) { this.rejected++; return; }
@@ -222,26 +246,30 @@ export class UnifiedDiagnosticLog {
       if (this.closed) return;
       const level = diagnosticEvents[event.event].level;
       if (level === 'debug' && !this.development && this.debugUntil <= this.now()) return;
-      const previous=this.observedNs;this.observedNs=observedNs;
-      try{this.logger[level]({ ...event, time: new Date(observedAt).toISOString(), proc: this.proc });}finally{this.observedNs=previous;}
+      const previous=this.observation;this.observation={...protection,observedAt,observedNs,...(event.contactPrefix?{contactPrefix:event.contactPrefix}:{})};
+      try{this.logger[level]({ ...event, time: new Date(observedAt).toISOString(), proc: this.proc });}finally{this.observation=previous;}
     } catch { this.dropped++; }
   }
   enqueue(line) {
     const bytes = Buffer.byteLength(line);
     if(bytes>2048){this.dropped++;return;}
     const event=JSON.parse(line);
+    const observation=this.observation??{observedAt:Date.parse(event.time),observedNs:process.hrtime.bigint()};
+    const sample={...observation,time:event.time,count:event.count??1,durationMs:event.durationMs};
     let key;
     if(event.traceId&&event.level==='debug'&&['request.finished','sql.summary'].includes(event.event)){
       const {time:_time,count:_count,durationMs:_duration,...scope}=event;key=JSON.stringify(scope);
       const previous=this.detailAggregates.get(key);
-      if(previous){const combined={...previous.record,count:(previous.record.count??1)+(event.count??1),
-        ...((previous.record.durationMs!==undefined||event.durationMs!==undefined)?{durationMs:(previous.record.durationMs??0)+(event.durationMs??0)}:{})};
-        if(checkedDiagnosticRecord(combined)){previous.record=combined;previous.line=JSON.stringify(combined)+'\n';return;}
+      if(previous){
+        if(this.aggregateSamples>=diagnosticDecisionLimit){this.queue.reject(observation,event);this.dropped++;return;}
+        if(!this.queue.reserve(bytes,observation,event)){this.dropped++;return;}
+        previous.samples.push(sample);this.aggregateSamples++;return;
       }
     }
-    const item={line,record:event,observedNs:this.observedNs??process.hrtime.bigint()};
-    if(!this.queue.push(event,item,bytes))this.dropped++;
-    else if(key)this.detailAggregates.set(key,item);
+    if(key&&this.aggregateSamples>=diagnosticDecisionLimit){this.queue.reject(observation,event);this.dropped++;return;}
+    const item={line,record:event,...observation,...(key?{samples:[sample]}:{})};
+    if(!this.queue.push(event,item,bytes,observation))this.dropped++;
+    else if(key){this.detailAggregates.set(key,item);this.aggregateSamples++;}
     if (!this.scheduled) { this.scheduled = true; setImmediate(() => { this.scheduled = false; void this.flush(); }); }
   }
   async prune() {
@@ -289,32 +317,39 @@ export class UnifiedDiagnosticLog {
 
   flush() {
     this.pending = this.pending.then(async () => {
-      if (this.closed) { this.queue.reset(); this.detailAggregates.clear(); return; }
+      if (this.closed) { this.queue.reset(); this.detailAggregates.clear();this.aggregateSamples=0; return; }
       if (this.failed) { await this.initialize(); this.failed = false; }
-      const batch=this.queue.take();this.detailAggregates.clear();
+      const batch=this.queue.take();this.detailAggregates.clear();this.aggregateSamples=0;
       if(batch.items.length||batch.notices.length||batch.dropped)await withDiagnosticLock(this.root,()=>this.guardLocation(),async()=>{
+       await cleanupTemporaries(this.root,()=>this.guardLocation());
        const control=await readControl(this.root,this.now()),suppressed=new Set(control.prefixes.map(row=>row.prefix));
        if(staleControls.has(control))await saveControl(this.root,control,()=>this.guardLocation(),this.controlBudget);
-       const lines=batch.items.filter(item=>!suppressed.has(item.record.contactPrefix)&&item.observedNs>BigInt(control.clearedNs)).map(item=>item.line);
-       for(const notice of batch.notices)lines.push(JSON.stringify({...notice,time:new Date(this.now()).toISOString(),proc:this.proc,level:'error'})+'\n');
-       if(batch.dropped)lines.push(JSON.stringify({...diagnosticOverflow('diagnostic_writer',batch.dropped),time:new Date(this.now()).toISOString(),proc:this.proc,level:'error'})+'\n');
+       const cutoff=BigInt(control.clearedNs),oldest=this.now()-this.maxAgeMs;
+       const allowed=observation=>observation&&observation.observedNs>cutoff&&observation.observedAt>=oldest&&!suppressed.has(observation.contactPrefix)&&!(observation.ambiguousPrefix&&suppressed.size);
+       const lines=[];
+       for(const item of batch.items){
+        if(item.samples){for(const sample of item.samples)if(allowed(sample)){const record={...item.record,time:sample.time,count:sample.count};if(sample.durationMs===undefined)delete record.durationMs;else record.durationMs=sample.durationMs;lines.push(JSON.stringify(record)+'\n');}}
+        else if(allowed(item))lines.push(item.line);
+       }
+       for(const {event,observation}of batch.noticeEntries)if(allowed(observation))lines.push(JSON.stringify({...event,time:new Date(observation.observedAt).toISOString(),proc:this.proc,level:'error'})+'\n');
+       if(batch.dropped&&allowed(batch.droppedObservation))lines.push(JSON.stringify({...diagnosticOverflow('diagnostic_writer',batch.dropped),...(batch.droppedObservation.contactPrefix?{contactPrefix:batch.droppedObservation.contactPrefix}:{}),time:new Date(batch.droppedObservation.observedAt).toISOString(),proc:this.proc,level:'error'})+'\n');
        if(lines.length)await this.write(aggregateLines(lines));
       });
-    }).catch(() => { this.failed = true; this.queue.reset(); this.detailAggregates.clear(); });
+    }).catch(() => { this.failed = true; this.queue.reset(); this.detailAggregates.clear();this.aggregateSamples=0; });
     return this.pending;
   }
-  async setEnabled(enabled) {
-    if (typeof enabled !== 'boolean') return false;
-    await this.flush();
-    try {
-      await this.guardLocation(); const file = path.join(this.root, 'diagnostic-settings.json'), stat = await statIfPresent(file);
-      if (stat && !safe(stat, false)) unavailable();
-      const temporary = path.join(this.root, `.diagnostic-settings-${randomUUID()}.tmp`);
-      const handle = await checkedOpen(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
-      try { await handle.writeFile(JSON.stringify({ enabled })); } finally { await handle.close(); }
-      try { await this.guardLocation(); await rename(temporary, file); } finally { await unlink(temporary).catch(() => {}); }
-      this.enabled = enabled; return true;
-    } catch { this.failed = true; return false; }
+  setEnabled(enabled) {
+    if (typeof enabled !== 'boolean') return Promise.resolve(false);
+    this.flush();let result=false;
+    this.pending=this.pending.then(async()=>{
+     await withDiagnosticLock(this.root,()=>this.guardLocation(),async()=>{
+      await cleanupTemporaries(this.root,()=>this.guardLocation());
+      const file=path.join(this.root,'diagnostic-settings.json'),stat=await statIfPresent(file);
+      if(stat&&!safe(stat,false))unavailable();
+      await replacePrivate(file,JSON.stringify({enabled}),()=>this.guardLocation(),'settings');this.enabled=enabled;result=true;
+     });
+    }).catch(()=>{this.failed=true;});
+    return this.pending.then(()=>result);
   }
   setDebugFor(milliseconds = 30 * 60_000) { this.debugUntil = this.now() + Math.min(Math.max(milliseconds, 0), 30 * 60_000); }
   stats() { return { rejected: this.rejected, dropped: this.dropped, available: !this.failed }; }

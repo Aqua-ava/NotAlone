@@ -183,7 +183,8 @@ try {
     const startedAt=Number(process.hrtime.bigint())/1e6;
     const safeTrace=typeof traceId==='string'&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(traceId)?traceId:undefined;
     sqlSummary=new SqlDiagnosticSummary(storageDiagnosticModule(name),'sqlite_worker',safeTrace);
-    const respond=(value:Record<string,unknown>)=>{const diagnostics=[...(Array.isArray(value.diagnostics)?value.diagnostics:[]),...sqlSummary!.events()];sqlSummary=undefined;port.postMessage({id,...value,diagnostics,startedAt,finishedAt:Number(process.hrtime.bigint())/1e6});};
+    let diagnosticObservation:{diagnosticObservedAt:number;diagnosticObservedMonotonicNs:bigint}|undefined;
+    const respond=(value:Record<string,unknown>)=>{const diagnostics=[...(Array.isArray(value.diagnostics)?value.diagnostics:[]),...sqlSummary!.events()];sqlSummary=undefined;port.postMessage({id,...value,diagnostics,...(diagnosticObservation??{diagnosticObservedAt:Date.now(),diagnosticObservedMonotonicNs:process.hrtime.bigint()}),startedAt,finishedAt:Number(process.hrtime.bigint())/1e6});};
     // 开始确认带上动作模式：主线程据此选择执行预算，维护动作与普通动作不共用15秒上限。
     port.postMessage({id, started: true, startedAt, maintenance: actions.get(name)?.mode === 'maintenance'});
     try {
@@ -277,6 +278,8 @@ try {
           };
           // 维护动作只允许可信注册代码使用；调用者先排空领域写者，结果仍需复核。
           result = action.mode === 'maintenance' ? invoke() : transaction(action.mode === 'write', invoke);
+          // COMMIT/读取已返回才观察；传输与宿主排队延迟不能把旧事件改成清除后的新事件。
+          diagnosticObservation={diagnosticObservedAt:Date.now(),diagnosticObservedMonotonicNs:process.hrtime.bigint()};
           // WAL读事务内复核仍是旧快照；提交后新读提供返回前的租约检查点。
           if (action.mode === 'read') assertLease(lease);
           // 本次尝试的SQL和结果复制均已成功；发布只含Map操作，失败或busy重试不留易失状态。
