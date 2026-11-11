@@ -4,14 +4,14 @@ import {createHash} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {join} from 'node:path';
 import {readFile} from 'node:fs/promises';
-import {fixture,owner} from './fixtures/memory-sqlite/support.mjs';
+import {owner} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
+import {legacyAdjudicationFixture} from './fixtures/memory-management/adjudication-legacy-seed.mjs';
 const registry=mode=>new URL(`./fixtures/memory-management/adjudication-upgrade-registry.mjs?mode=${mode}`,import.meta.url).href;
 const normalized=value=>JSON.stringify(value,(_k,v)=>typeof v==='bigint'?`${v}n`:v);
 const dataHash=data=>createHash('sha256').update(normalized(Object.fromEntries(Object.entries(data).map(([table,rows])=>[table,rows.map(normalized).sort()])))).digest('hex');
 async function seeded(t){
- const f=await fixture(t,{registryModule:registry('legacy')});
- const contacts=[];for(const c of f.saved){await f.service.synchronize(c.contact_id);const m=(await f.service.read(c.contact_id)).messages.find(m=>m.kind==='text');contacts.push({contactId:c.contact_id,messageId:m.id,recordId:m.sourceRecordIds[0]});}
+ const f=await legacyAdjudicationFixture(t,registry('legacy')),contacts=f.contacts;
  const graph=await f.storage.execute('fixture.sharedSeed',{owner,contacts});
  await f.storage.execute('fixture.sharedReuse',{owner,...graph,kind:'valid'});
  await f.storage.execute('fixture.upgradeLegacy',{owner,m:graph.m});
@@ -56,19 +56,11 @@ test('重建拒绝未经固定checksum许可的SQL，写锁冲突不改账本或
  const next=await f.open('upgrade');assert.equal(next.status.schemaVersion,12);assert.deepEqual(await next.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('真实核验候选及历史正式版本升级后支持三purpose与typed来源，拒绝越界和缺失快照',async t=>{
- const {record,modelPort}=await import('./fixtures/memory-sqlite/support.mjs');
- const {supplier}=await import('./fixtures/memory-management/supplier.mjs');
- const {SqliteMemoryExtraction}=await import('../src/memory/sqlite/service.ts');
- const {SqliteMemoryManagement}=await import('../src/memory/sqlite/management/service.ts');
- const f=await fixture(t,{registryModule:registry('legacy')}),[a,b]=f.saved.map(c=>c.contact_id);
- f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'我长期住在高雄。'}),record('2',{sender:'owner',text:'我长期偏好绿茶。'})],completedPartitions:['shard-a'],exhausted:true});
- for(const contactId of [a,b])await f.service.synchronize(contactId);await f.contacts.setReading(false);
- let extraction;extraction=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>extraction.accounting,supplier().respond));t.after(()=>extraction.close());
- const run=await extraction.start('upgrade-normal-output');await extraction.waitForIdle();
- const done=await extraction.read(run.runId);assert.equal(done.succeeded,4,JSON.stringify(done.tasks));
- let management=new SqliteMemoryManagement(f.storage,owner);await management.importRun(run.runId);
- const self={scopeKind:'self',contactId:null},initial=(await f.storage.execute('fixture.upgradeInspect',{})).data;
+test('冻结旧核验候选及历史正式版本真实升级后支持三purpose与typed来源，拒绝越界和缺失快照',async t=>{
+ const f=await legacyAdjudicationFixture(t,registry('legacy'),{withOwnerMessages:true}),[a,b]=f.saved.map(c=>c.contact_id);
+ const seededCandidates=await f.storage.execute('fixture.legacyCandidateSeed',{contacts:f.contacts});
+ assert.equal(seededCandidates.length,4);
+ const initial=(await f.storage.execute('fixture.upgradeInspect',{})).data;
  const adopt=initial.memory_candidate.find(c=>c.scope_kind==='self'&&initial.memory_citation.some(s=>s.candidate_id===c.id&&s.source_contact_id===a)),pending=initial.memory_candidate.find(c=>c.scope_kind==='self'&&c.id!==adopt?.id);
  assert.ok(adopt);assert.ok(pending);
  const accepted=await f.storage.execute('fixture.upgradeFormalHistory',{owner,candidateId:adopt.id});
@@ -76,15 +68,16 @@ test('真实核验候选及历史正式版本升级后支持三purpose与typed�
  const before=await f.storage.execute('fixture.upgradeInspect',{}),oldLease=f.storage.status;
  const storage=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:oldLease.databaseId,registryModule:registry('upgrade')});t.after(()=>storage.close());
  const after=await storage.execute('fixture.upgradeInspect',{});assert.equal(dataHash(after.data),dataHash(before.data));assert.equal(after.data.memory_version.length,2);assert.ok(after.data.memory.some(m=>m.manual_protection===1n));
- management=new SqliteMemoryManagement(storage,owner);memory=(await management.read(self)).memories.find(m=>m.id===accepted.memoryId);assert.equal(memory.current.versionNo,'2');assert.equal(memory.manualProtection,true);
- const sourceRows=after.data.run_input.map(r=>({contactId:r.source_contact_id,messageId:r.message_id,recordId:r.record_id,acceptedRevision:String(r.accepted_interpretation_revision)}));
+ memory=after.data.memory.find(m=>m.id===accepted.memoryId);assert.equal(memory.current_version_no,2n);assert.equal(memory.manual_protection,1n);
+ const selectedSources=new Set(after.data.memory_citation.filter(c=>c.candidate_id===adopt.id||c.candidate_id===pending.id).map(c=>c.record_id));
+ const sourceRows=after.data.run_input.filter(r=>selectedSources.has(r.record_id)).map(r=>({contactId:r.source_contact_id,messageId:r.message_id,recordId:r.record_id,acceptedRevision:String(r.accepted_interpretation_revision)}));
  const messages=[...new Map(sourceRows.map(r=>[r.recordId,r])).values()];
  for(const kind of ['adjudication','relation_verification','merge_verification']){
   const result=await storage.execute('fixture.typedAdjudication',{owner,candidateId:pending.id,memoryId:memory.id,messages,kind,onlyContact:b,skipCandidate:true});
   assert.equal(result.kind.kind,kind);assert.ok(result.kind.accepted_memory_revision>=0n);assert.deepEqual(result.contributors,[{source_contact_id:b}]);
   assert.ok(result.inputs.some(i=>i.kind==='memory'&&i.memory_version_no===2n));assert.ok(result.inputs.some(i=>i.kind==='message'&&i.source_contact_id===a));
  }
- const contactCandidate=(await management.read({scopeKind:'contact',contactId:a})).candidates[0];
+ const contactCandidate=after.data.memory_candidate.find(c=>c.scope_kind==='contact'&&c.contact_id===a);
  for(const violation of ['null_candidate_revision','missing_step_revision','null_head_revision','wrong_memory_version','null_message_revision','wrong_record','frozen_revision','wrong_purpose','new_purpose_wrong_step']){
   await assert.rejects(storage.execute('fixture.typedAdjudication',{owner,candidateId:pending.id,memoryId:memory.id,messages,violation}),undefined,violation);
  }
@@ -92,7 +85,7 @@ test('真实核验候选及历史正式版本升级后支持三purpose与typed�
  await assert.rejects(storage.execute('fixture.typedAdjudication',{owner,candidateId:pending.id,skipCandidate:true,messages}),undefined,'未冻结父输入不能引入本人消息');
  const adoption=await storage.execute('fixture.typedAdjudication',{owner,candidateId:pending.id,memoryId:memory.id,messages,kind:'adjudication'});
  const automatic=await storage.execute('fixture.typedPublish',{owner,candidateId:pending.id,execution:adoption});
- await management.decide({requestKey:'withdraw-history',action:'withdraw',memoryId:automatic.memoryId,expectedVersionNo:'1',expectedHeadRevision:'1'});
+ await storage.execute('fixture.legacyWithdraw',{owner,memoryId:automatic.memoryId});
  const comparison=await storage.execute('fixture.typedAdjudication',{owner,candidateId:pending.id,memoryId:automatic.memoryId,messages,kind:'relation_verification',onlyContact:b,skipCandidate:true});
  assert.ok(comparison.inputs.some(i=>i.kind==='memory'&&i.memory_version_no===1n),'撤回版本仅作为历史比较资料冻结');
  assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
@@ -113,20 +106,12 @@ test('FK恢复失败关闭当前连接，后续独立重开核验已提交升级
  const next=await f.open('upgrade'),after=await next.execute('fixture.upgradeInspect',{});assert.equal(after.userVersion,12n);assert.equal(after.fk,1n);assert.equal(dataHash(after.data),dataHash(f.before.data));assert.deepEqual(await next.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('noop真实结果与typed输入必须同候选及目标，原子消费duplicate且失败不遗留决定',async t=>{
- const {record,modelPort}=await import('./fixtures/memory-sqlite/support.mjs'),{supplier}=await import('./fixtures/memory-management/supplier.mjs');
- const {SqliteMemoryExtraction}=await import('../src/memory/sqlite/service.ts'),{SqliteMemoryManagement}=await import('../src/memory/sqlite/management/service.ts');
- const f=await fixture(t,{registryModule:registry('upgrade')}),contactId=f.saved[0].contact_id,scope={scopeKind:'self',contactId:null};
- f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{sender:'owner',text:'我长期偏好绿茶。'})],completedPartitions:['shard-a'],exhausted:true});await f.service.synchronize(contactId);await f.contacts.setReading(false);
- const normal=supplier(),respond=async(request,input)=>{
-  if(request.purpose!=='extraction')return normal.respond(request,input);
-  const result=await normal.respond({...request,validateOutput:()=>{}},input),payload=JSON.parse(result.blocks[0].arguments);payload.scenes[0].memories.push(structuredClone(payload.scenes[0].memories[0]),structuredClone(payload.scenes[0].memories[0]));
-  const blocks=[{...result.blocks[0],arguments:JSON.stringify(payload)}];await request.validateOutput(blocks);return {blocks};
- };
- let extraction;extraction=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>extraction.accounting,respond));t.after(()=>extraction.close());
- const run=await extraction.start('migration-noop-binding');await extraction.waitForIdle();const management=new SqliteMemoryManagement(f.storage,owner);await management.importRun(run.runId);
- const candidates=(await management.read(scope)).candidates;assert.equal(candidates.length,3);
- const accepted=await management.decide({requestKey:'noop-existing-target',action:'accept',candidateIds:[candidates[0].id],candidateRevisions:[candidates[0].stateRevision]});
+test('冻结v12的noop真实结果与typed输入必须同候选及目标，原子消费duplicate且失败不遗留决定',async t=>{
+ const legacy=await legacyAdjudicationFixture(t,registry('legacy'),{withOwnerMessages:true});
+ const candidates=await legacy.storage.execute('fixture.legacyCandidateSeed',{contacts:[legacy.contacts[0]],onlyOwner:true,ownerCopies:3});assert.equal(candidates.length,3);
+ const storage=await SqliteStorage.open({userData:legacy.root,intent:'open',role:'test',expectedDatabaseId:legacy.storage.status.databaseId,registryModule:registry('upgrade')});t.after(()=>storage.close());
+ const f={...legacy,storage};
+ const accepted=await f.storage.execute('fixture.upgradeFormalHistory',{owner,candidateId:candidates[0].id,firstOnly:true});
  const execution=await f.storage.execute('fixture.prepareNoopSql',{owner,candidateId:candidates[1].id,memoryId:accepted.memoryId});
  const before=await f.storage.execute('fixture.upgradeInspect',{}),candidate=before.data.memory_candidate.find(c=>c.id===candidates[1].id),memory=before.data.memory.find(m=>m.id===accepted.memoryId);
  for(const mode of ['missing_result','action','candidate','parent','reason','candidate_role','parent_role','candidate_revision','candidate_not_pending','multiple_results','failed_call','duplicate_without_decision','consume_failure']){
@@ -142,4 +127,20 @@ test('noop真实结果与typed输入必须同候选及目标，原子消费dupli
  await assert.rejects(f.storage.execute('fixture.noopRelationMutation',{owner,decisionId:result.decision.id,candidateId:candidate.id,mode:'adopt'}));
  const redacted=await f.storage.execute('fixture.noopRelationMutation',{owner,decisionId:result.decision.id,candidateId:candidate.id,mode:'delete'});assert.equal(redacted.outcome,'redacted');assert.equal(redacted.execution_id,null);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('冻结v12的自动退役拒绝伪造执行，不新增退役版本或消费候选',async t=>{
+ const legacy=await legacyAdjudicationFixture(t,registry('legacy'),{withOwnerMessages:true});
+ const candidates=await legacy.storage.execute('fixture.legacyCandidateSeed',{contacts:[legacy.contacts[0]],onlyOwner:true,ownerCopies:3});
+ const storage=await SqliteStorage.open({userData:legacy.root,intent:'open',role:'test',expectedDatabaseId:legacy.storage.status.databaseId,registryModule:registry('upgrade')});t.after(()=>storage.close());
+ const parents=[];for(const candidate of candidates.slice(0,2))parents.push(await storage.execute('fixture.upgradeFormalHistory',{owner,candidateId:candidate.id,firstOnly:true}));
+ const rows=(await storage.execute('fixture.upgradeInspect',{})).data.run_input;
+ const messages=rows.map(row=>({contactId:row.source_contact_id,messageId:row.message_id,recordId:row.record_id,acceptedRevision:String(row.accepted_interpretation_revision)}));
+ const input={owner,candidateId:candidates[2].id,memoryIds:parents.map(parent=>parent.memoryId),messages};
+ const execution=await storage.execute('fixture.typedAdjudication',input);
+ for(const violation of ['running','missing_primary','protected','call_failed','user','missing_execution','missing_target','missing_expected','stale_head','restored','version'])
+  await assert.rejects(storage.execute('fixture.autoRetireCase',{owner,candidateId:candidates[2].id,execution,primaryId:parents[0].memoryId,secondaryId:parents[1].memoryId,violation}),undefined,violation);
+ const done=await storage.execute('fixture.autoRetireCase',{owner,candidateId:candidates[2].id,execution,primaryId:parents[0].memoryId,secondaryId:parents[1].memoryId});
+ assert.equal(done.after,done.before+1n);assert.equal(done.retireVersions,0n);assert.equal(done.retireCandidates,0n);
+ assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

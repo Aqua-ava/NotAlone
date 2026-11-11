@@ -4,6 +4,7 @@ import {writeFileSync} from 'node:fs';
 import {StorageFailure} from '../../../src/storage/sqlite/contracts.ts';
 import {registry as shared} from '../memory-sqlite/shared-producer-registry.mjs';
 import {memoryAdjudicationMigration} from '../../../src/memory/sqlite/management/adjudication-schema.ts';
+import {legacyHistorySeed,legacyCandidateSeed,legacyWithdraw} from './adjudication-legacy-seed.mjs';
 const params=new URL(import.meta.url).searchParams,phase=params.get('fail'),mode=params.get('mode');
 // 故障仅限可信fixture，记录当前连接关闭事实，不向生产Worker增加控制接口。
 if(mode==='restoreFailure'){
@@ -66,7 +67,7 @@ const publish={name:'fixture.typedPublish',mode:'write',retryBusy:false,execute(
  tx.run("INSERT INTO decision_candidate VALUES(?,?,?,'accepted',?)",[owner,decision,candidateId,c.state_revision]);
  tx.run("INSERT INTO memory_version VALUES(?,?,1,?,'adoption','auto',?,NULL,NULL,0,'present','eligible')",[owner,memory,c.proposed_body,decision]);
  for(const r of tx.all('SELECT * FROM memory_required_message WHERE owner_id=? AND candidate_id=?',[owner,candidateId]))tx.run('INSERT INTO memory_required_message VALUES(?,?,NULL,?,1,?,?)',[owner,randomUUID(),memory,r.source_contact_id,r.message_id]);
- for(const r of tx.all('SELECT * FROM memory_citation WHERE owner_id=? AND candidate_id=?',[owner,candidateId]))tx.run('INSERT INTO memory_citation VALUES(?,?,NULL,?,1,?,?,?,?,?,?,?)',[owner,randomUUID(),memory,r.source_contact_id,r.message_id,r.record_id,r.accepted_revision,r.span_start,r.span_end,r.explanation]);
+ for(const r of tx.all('SELECT * FROM memory_citation WHERE owner_id=? AND candidate_id=?',[owner,candidateId]))tx.run('INSERT INTO memory_citation(owner_id,id,candidate_id,memory_id,version_no,source_contact_id,message_id,record_id,accepted_revision,span_start,span_end,explanation) VALUES(?,?,NULL,?,1,?,?,?,?,?,?,?)',[owner,randomUUID(),memory,r.source_contact_id,r.message_id,r.record_id,r.accepted_revision,r.span_start,r.span_end,r.explanation]);
  tx.run("UPDATE memory SET current_version_no=1,head_revision=1,state='active' WHERE owner_id=? AND id=?",[owner,memory]);
  tx.run("UPDATE memory_candidate SET state='adopted',state_revision=state_revision+1 WHERE owner_id=? AND id=?",[owner,candidateId]);
  tx.run('UPDATE owner SET memory_revision=memory_revision+1 WHERE owner_id=?',[owner]);
@@ -78,7 +79,7 @@ const hold={name:'fixture.upgradeHoldRead',mode:'read',retryBusy:false,execute(t
  if(Atomics.wait(barrier,1,0,5000)==='timed-out')throw new Error('synthetic_read_wait_timeout');
  return {before};
 }};
-const formal={name:'fixture.upgradeFormalHistory',mode:'write',retryBusy:false,execute(tx,{owner,candidateId}){
+const formal={name:'fixture.upgradeFormalHistory',mode:'write',retryBusy:false,execute(tx,{owner,candidateId,firstOnly=false}){
  const c=tx.get('SELECT * FROM memory_candidate WHERE owner_id=? AND id=?',[owner,candidateId]),memory=randomUUID(),first=randomUUID(),second=randomUUID(),protection=randomUUID();
  tx.run("INSERT INTO memory(owner_id,id,scope_kind,contact_id,state) VALUES(?,?,?,?,'withdrawn')",[owner,memory,c.scope_kind,c.contact_id]);
  tx.run("INSERT INTO memory_decision(owner_id,id,request_key,action,actor_kind,target_memory_id,created_at,outcome) VALUES(?,?,?,'accept','user',?,1,'applied')",[owner,first,randomUUID(),memory]);
@@ -86,10 +87,11 @@ const formal={name:'fixture.upgradeFormalHistory',mode:'write',retryBusy:false,e
  tx.run("INSERT INTO memory_version VALUES(?,?,1,?,'adoption','user',?,NULL,NULL,0,'present','eligible')",[owner,memory,c.proposed_body,first]);
  function sources(version){
   for(const r of tx.all('SELECT * FROM memory_required_message WHERE owner_id=? AND candidate_id=?',[owner,candidateId]))tx.run('INSERT INTO memory_required_message VALUES(?,?,NULL,?,?,?,?)',[owner,randomUUID(),memory,version,r.source_contact_id,r.message_id]);
-  for(const r of tx.all('SELECT * FROM memory_citation WHERE owner_id=? AND candidate_id=?',[owner,candidateId]))tx.run('INSERT INTO memory_citation VALUES(?,?,NULL,?,?,?,?,?,?,?,?,?)',[owner,randomUUID(),memory,version,r.source_contact_id,r.message_id,r.record_id,r.accepted_revision,r.span_start,r.span_end,r.explanation]);
+  for(const r of tx.all('SELECT * FROM memory_citation WHERE owner_id=? AND candidate_id=?',[owner,candidateId]))tx.run('INSERT INTO memory_citation(owner_id,id,candidate_id,memory_id,version_no,source_contact_id,message_id,record_id,accepted_revision,span_start,span_end,explanation) VALUES(?,?,NULL,?,?,?,?,?,?,?,?,?)',[owner,randomUUID(),memory,version,r.source_contact_id,r.message_id,r.record_id,r.accepted_revision,r.span_start,r.span_end,r.explanation]);
  }
  sources(1);tx.run("UPDATE memory SET current_version_no=1,head_revision=1,state='active' WHERE owner_id=? AND id=?",[owner,memory]);
  tx.run("UPDATE memory_candidate SET state='adopted',state_revision=state_revision+1 WHERE owner_id=? AND id=?",[owner,candidateId]);
+ if(firstOnly){tx.run('UPDATE owner SET memory_revision=memory_revision+1 WHERE owner_id=?',[owner]);return {memoryId:memory};}
  tx.run("INSERT INTO memory_decision(owner_id,id,request_key,action,actor_kind,target_memory_id,expected_version_no,expected_head_revision,created_at,outcome) VALUES(?,?,?,'correct','user',?,1,1,2,'applied')",[owner,second,randomUUID(),memory]);
  tx.run("INSERT INTO memory_version VALUES(?,?,2,'合成修正资料','correction','user',?,1,NULL,0,'present','eligible')",[owner,memory,second]);sources(2);
  tx.run('UPDATE memory SET current_version_no=2,head_revision=2 WHERE owner_id=? AND id=?',[owner,memory]);
@@ -110,7 +112,7 @@ const retire={name:'fixture.autoRetireCase',mode:'write',retryBusy:false,execute
   const version=primary.current_version_no+1n;
   tx.run("INSERT INTO memory_version VALUES(?,?,?,?,'adoption','auto',?,?,NULL,0,'present','eligible')",[owner,primaryId,version,candidate.proposed_body,mainDecision,primary.current_version_no]);
   for(const r of tx.all('SELECT * FROM memory_required_message WHERE owner_id=? AND candidate_id=?',[owner,candidateId]))tx.run('INSERT INTO memory_required_message VALUES(?,?,NULL,?,?,?,?)',[owner,randomUUID(),primaryId,version,r.source_contact_id,r.message_id]);
-  for(const r of tx.all('SELECT * FROM memory_citation WHERE owner_id=? AND candidate_id=?',[owner,candidateId]))tx.run('INSERT INTO memory_citation VALUES(?,?,NULL,?,?,?,?,?,?,?,?,?)',[owner,randomUUID(),primaryId,version,r.source_contact_id,r.message_id,r.record_id,r.accepted_revision,r.span_start,r.span_end,r.explanation]);
+  for(const r of tx.all('SELECT * FROM memory_citation WHERE owner_id=? AND candidate_id=?',[owner,candidateId]))tx.run('INSERT INTO memory_citation(owner_id,id,candidate_id,memory_id,version_no,source_contact_id,message_id,record_id,accepted_revision,span_start,span_end,explanation) VALUES(?,?,NULL,?,?,?,?,?,?,?,?,?)',[owner,randomUUID(),primaryId,version,r.source_contact_id,r.message_id,r.record_id,r.accepted_revision,r.span_start,r.span_end,r.explanation]);
   tx.run('UPDATE memory SET current_version_no=?,head_revision=head_revision+1 WHERE owner_id=? AND id=?',[version,owner,primaryId]);
   tx.run("UPDATE memory_candidate SET state='adopted',state_revision=state_revision+1 WHERE owner_id=? AND id=?",[owner,candidateId]);
  }
@@ -170,4 +172,4 @@ const noopRelation={name:'fixture.noopRelationMutation',mode:'write',retryBusy:f
 const migrate=memoryAdjudicationMigration(12);
 if(mode==='unmarked')delete migrate.rebuild;
 if(mode==='tamper')migrate.sql+='\nSELECT 2;';
-export const registry={migrations:[...shared.migrations.filter(m=>m.version<=11),...(mode==='legacy'?[]:[migrate])],actions:[...shared.actions,inspect,extra,typed,publish,hold,formal,retire,prepareNoop,noopProbe,noopRelation],migrationObserver:phase?event=>{if(event.phase===phase)throw new Error('synthetic_upgrade_fault');}:undefined};
+export const registry={migrations:mode==='current'?shared.migrations:[...shared.migrations.filter(m=>m.version<=11),...(mode==='legacy'?[]:[migrate])],actions:[...shared.actions,legacyHistorySeed,legacyCandidateSeed,legacyWithdraw,inspect,extra,typed,publish,hold,formal,retire,prepareNoop,noopProbe,noopRelation],migrationObserver:phase?event=>{if(event.phase===phase)throw new Error('synthetic_upgrade_fault');}:undefined};

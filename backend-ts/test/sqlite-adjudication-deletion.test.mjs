@@ -10,7 +10,7 @@ import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/servic
 import {DeletionService} from '../src/storage/sqlite/deletion/service.ts';
 import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
 import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
-const registryModule=new URL('./fixtures/memory-management/adjudication-upgrade-registry.mjs?mode=upgrade',import.meta.url).href;
+const registryModule=new URL('./fixtures/memory-management/adjudication-upgrade-registry.mjs?mode=current',import.meta.url).href;
 async function prepared(t){
  const f=await fixture(t,{registryModule}),[a,b]=f.saved.map(c=>c.contact_id),self={scopeKind:'self',contactId:null};
  f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{sender:'owner',text:'我长期偏好绿茶。'})],completedPartitions:['shard-a'],exhausted:true});
@@ -33,7 +33,8 @@ async function prepared(t){
  const discussions=new SqliteDiscussionService(f.storage,owner),reply=new SqliteReplyCandidateService(f.storage,owner),discussion=await discussions.newDiscussion(b),requestKey=randomUUID();
  const confirmationId=await f.storage.execute('identity.manualConfirm',{ownerId:owner,contactId:b,contextToken:requestKey,id:randomUUID(),at:Date.now()});
  const accepted=await reply.begin({contactId:b,discussionId:discussion.id,requestKey,text:'合成回复请求',identity:{kind:'manual',confirmationId}}),contextId=randomUUID();
- const frozen=await f.storage.execute('reply.freezeInput',{...accepted.attempt,contextId,skillRun:{packages:[],eligible:[]},items:[],at:Date.now()});
+ const frozen=await f.storage.execute('reply.freezeInput',{...accepted.attempt,contextId,skillRun:{packages:[],eligible:[]},items:[],queryText:'合成后继版本',at:Date.now()});
+ assert.ok(frozen.some(item=>item.identity.id===published.memoryId),'回复冻结必须实际取到本次要验证删除依赖的资料');
  return {...f,a,b,source,self,management,execution,published,head,contextId,accepted,frozen,deletion:new DeletionService(f.storage,new ActiveHolders(),new ManagedFiles(f.root))};
 }
 test('旧A仅作历史资格前文，B当前裁决产生的新身份与后继版本及回复均随A来源删除',async t=>{
@@ -72,7 +73,8 @@ test('真实同execution主更新后逐父retire不产版不消费候选，拒�
  const parents=[];for(const c of candidates.slice(0,2))parents.push(await management.decide({requestKey:`retire-parent-${c.id}`,action:'accept',candidateIds:[c.id],candidateRevisions:[c.stateRevision]}));
  const candidate=candidates[2],messages=[...new Map(candidates.flatMap(c=>c.sources).map(s=>[s.recordId,s])).values()];
  const execution=await f.storage.execute('fixture.typedAdjudication',{owner,candidateId:candidate.id,memoryIds:parents.map(p=>p.memoryId),messages});
- for(const violation of ['running','missing_primary','protected','call_failed','user','missing_execution','missing_target','missing_expected','stale_head','restored','version']){
+ // 原始 SQL 的退役版本约束留在冻结 v12 测试；当前产品由正式动作决定是否产生版本。
+ for(const violation of ['running','missing_primary','protected','call_failed','user','missing_execution','missing_target','missing_expected','stale_head','restored']){
   await assert.rejects(f.storage.execute('fixture.autoRetireCase',{owner,candidateId:candidate.id,execution,primaryId:parents[0].memoryId,secondaryId:parents[1].memoryId,violation}),undefined,violation);
  }
  const done=await f.storage.execute('fixture.autoRetireCase',{owner,candidateId:candidate.id,execution,primaryId:parents[0].memoryId,secondaryId:parents[1].memoryId});
@@ -89,9 +91,9 @@ test('21条真实target分两step，删第21条保留首step原稿、正式版�
  f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:Array.from({length:21},(_,n)=>record(String(n+1),{text:`我长期保留合成资料${n+1}。`,sentAt:String(1700000000000+(n+1)*1000)})),completedPartitions:['shard-a'],exhausted:true});
  await f.service.synchronize(contactId);await f.contacts.setReading(false);
  let extraction;extraction=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>extraction.accounting,supplier().respond));t.after(()=>extraction.close());
- const run=await extraction.start('precise-21-targets');await extraction.waitForIdle();assert.equal((await extraction.read(run.runId)).succeeded,21);
+ const run=await extraction.start('precise-21-targets');await extraction.waitForIdle();assert.equal((await extraction.read(run.runId)).succeeded,21,JSON.stringify((await extraction.read(run.runId)).tasks));
  const management=new SqliteMemoryManagement(f.storage,owner);await management.importRun(run.runId);
- const candidates=(await management.read(scope)).candidates;assert.equal(candidates.length,21);
+ const candidates=[];let cursor;do{const page=await management.read(scope,cursor?{cursor}:{});candidates.push(...page.candidates);cursor=page.page.nextCursor;}while(cursor);assert.equal(candidates.length,21);
  const first=candidates.find(c=>c.sources.some(s=>s.quote==='我长期保留合成资料1。')),last=candidates.find(c=>c.sources.some(s=>s.quote==='我长期保留合成资料21。'));assert.ok(first&&last);
  const accepted=await management.decide({requestKey:'first-step-accepted',action:'accept',candidateIds:[first.id],candidateRevisions:[first.stateRevision]});
  const manual=await management.decide({requestKey:'independent-manual-21',action:'manual',scope,body:'独立手录保留'});

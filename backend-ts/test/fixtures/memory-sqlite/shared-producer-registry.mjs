@@ -19,18 +19,24 @@ function reply(tx,owner,contact,message,record){
  tx.run("INSERT INTO discussion_entry VALUES(?,?,?,?,2,'assistant','合成回答',?,?,?,'available')",[owner,randomUUID(),contact,id,request,call,event]);
  return {discussion:id,request,entry,attempt,context,operation,call,event,contact,message,record};
 }
-function memory(tx,owner,contact,message,record){
+export function memory(tx,owner,contact,message,record,scopeKind='contact',contexts=[]){
  const run=randomUUID(),item=randomUUID(),task=randomUUID(),step=randomUUID(),attempt=randomUUID(),operation=randomUUID(),call=randomUUID(),event=randomUUID();
  const g=tx.get(`SELECT c.*,g.id AS grant_id,g.binding_id,b.identity_generation,a.scope_revision,a.source_generation FROM contact c JOIN read_grant g ON g.owner_id=c.owner_id AND g.contact_id=c.id AND g.revoked_at IS NULL JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id JOIN channel_conversation cv ON cv.owner_id=b.owner_id AND cv.id=b.conversation_id JOIN channel_account a ON a.owner_id=cv.owner_id AND a.id=cv.account_id WHERE c.owner_id=? AND c.id=?`,[owner,contact]);
  tx.run("INSERT INTO processing_run(owner_id,id,start_request_key,state,started_at,accepted_owner_feedback_revision,policy_config) VALUES(?,?,?,'preparing',1,0,'{}')",[owner,run,randomUUID()]);
  tx.run("INSERT INTO run_contact VALUES(?,?,?,?,?,?,?,?,?,?,?,'active')",[owner,run,contact,g.grant_id,g.binding_id,g.selection_generation,g.data_generation,g.identity_generation,g.scope_revision,g.source_generation,g.feedback_revision]);
  tx.run("INSERT INTO processing_item VALUES(?,?,?,?,'memory_extraction','pending','pending',NULL)",[owner,item,contact,message]);
  tx.run("INSERT INTO run_input VALUES(?,?,1,'target','message',?,?,?,?,1)",[owner,run,contact,item,message,record]);
+ for(const [index,source] of contexts.entries()){
+  tx.run(`INSERT INTO run_contact SELECT c.owner_id,?,c.id,g.id,g.binding_id,c.selection_generation,c.data_generation,b.identity_generation,a.scope_revision,a.source_generation,c.feedback_revision,'active' FROM contact c JOIN read_grant g ON g.owner_id=c.owner_id AND g.contact_id=c.id AND g.revoked_at IS NULL JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id JOIN channel_conversation v ON v.owner_id=b.owner_id AND v.id=b.conversation_id JOIN channel_account a ON a.owner_id=v.owner_id AND a.id=v.account_id WHERE c.owner_id=? AND c.id=?`,[run,owner,source.contactId]);
+  tx.run("INSERT INTO run_input VALUES(?,?,?,'context','message',?,NULL,?,?,1)",[owner,run,index+2,source.contactId,source.messageId,source.recordId]);
+ }
  tx.run("UPDATE processing_run SET state='running' WHERE owner_id=? AND id=?",[owner,run]);
- tx.run("INSERT INTO processing_task(owner_id,id,run_id,scope_kind,contact_id,state) VALUES(?,?,?,'contact',?,'running')",[owner,task,run,contact]);
+ tx.run("INSERT INTO processing_task(owner_id,id,run_id,scope_kind,contact_id,state) VALUES(?,?,?,?,?,'running')",[owner,task,run,scopeKind,scopeKind==='self'?null:contact]);
  tx.run('INSERT INTO task_contribution VALUES(?,?,?,?)',[owner,task,run,contact]);
+ for(const source of contexts)tx.run('INSERT INTO task_contribution VALUES(?,?,?,?)',[owner,task,run,source.contactId]);
  tx.run("INSERT INTO processing_step(owner_id,id,task_id,step_no,kind,state,input_state,successful_attempt_id) VALUES(?,?,?,1,'extraction_verification','running','frozen',NULL)",[owner,step,task]);
  tx.run('INSERT INTO step_input(owner_id,step_id,input_no,run_id,run_input_no) VALUES(?,?,1,?,1)',[owner,step,run]);
+ for(const [index] of contexts.entries())tx.run('INSERT INTO step_input(owner_id,step_id,input_no,run_id,run_input_no) VALUES(?,?,?,?,?)',[owner,step,index+2,run,index+2]);
  tx.run("INSERT INTO step_attempt VALUES(?,?,?,1,0,'synthetic',9999999999999,0,'synthetic','running',1,NULL,NULL)",[owner,attempt,step]);
  tx.run("INSERT INTO model_operation(owner_id,id,purpose,memory_step_id,slot,input_seal,state) VALUES(?,?,'extraction',?,0,'synthetic','resolved')",[owner,operation,step]);
  tx.run("INSERT INTO operation_scope VALUES(?,?,?,'extraction','released')",[owner,operation,contact]);
