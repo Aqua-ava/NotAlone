@@ -40,8 +40,9 @@ test('联系人全部阶段完成后撤销读取范围，状态和正文随当�
  const binding=f.saved.find(binding=>binding.contact_id===f.contactId);
  await f.contacts.revoke(f.contactId,binding.binding_id,binding.selection_generation);
  const after=await f.extraction.readContact(f.contactId);
- assert.equal(after.run.state,'revoked');assert.equal(after.run.status,'blocked');assert.equal(after.run.laterStages,'pending');
- assert.notEqual(after.run.stage,'completed');assert.deepEqual(after.run.candidates,[]);assert.equal(after.run.tasks[0].state,'revoked');
+ assert.equal(after.run,null,'已撤销联系人不再呈现原处理正文或已完成阶段');
+ const archived=await f.extraction.read(run.runId);
+ assert.deepEqual(archived.candidates,[]);assert.equal(archived.tasks.find(task=>task.contactId===f.contactId).state,'revoked');
 });
 
 test('同轮甲提取失败时已成功的乙仍可完成文档发布，整轮保持失败',async t=>{
