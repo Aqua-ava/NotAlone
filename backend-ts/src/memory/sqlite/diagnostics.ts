@@ -46,8 +46,9 @@ function changed(tx:StorageTransaction,ownerId:string,kind:'run'|'task'|'batch',
 }
 function publish(tx:StorageTransaction,ownerId:string,before:State|undefined,after:State,why:string):void{
  if(after.run)changed(tx,ownerId,'run',before?.run,after.run,why);
- for(const task of after.tasks)changed(tx,ownerId,'task',before?.tasks.find(old=>old.id===task.id),task,why);
- for(const batch of after.batches)changed(tx,ownerId,'batch',before?.batches.find(old=>old.id===batch.id),batch,why);
+ const tasks=new Map(before?.tasks.map(row=>[row.id,row])??[]),batches=new Map(before?.batches.map(row=>[row.id,row])??[]);
+ for(const task of after.tasks)changed(tx,ownerId,'task',tasks.get(task.id),task,why);
+ for(const batch of after.batches)changed(tx,ownerId,'batch',batches.get(batch.id),batch,why);
 }
 /** 状态只按本动作的 run/task/step 定向观察；写入由 Worker 在提交成功后发布。 */
 export function observedProcessingAction(action:StorageAction):StorageAction{
@@ -64,7 +65,15 @@ export function observedProcessingAction(action:StorageAction):StorageAction{
   });
   if(metadata){runId=String(metadata.run_id);taskId=String(metadata.task_id);stepId=String(metadata.step_id);}
   if(taskId&&!runId){const task=safely(()=>tx.get('SELECT run_id FROM processing_task WHERE owner_id=? AND id=?',[ownerId,taskId!]));if(task)runId=String(task.run_id);}
-  const recovering=name==='recover'?safely(()=>tx.all("SELECT id FROM processing_run WHERE owner_id=? AND state IN ('pending','running')",[ownerId]).map(row=>String(row.id))):undefined;
+  const recovering=name==='recover'?safely(()=>{
+   const ids=new Set(tx.all("SELECT id FROM processing_run WHERE owner_id=? AND state IN ('pending','running')",[ownerId]).map(row=>String(row.id)));
+   // 用户暂停不取消已发出的当前批次；恢复集合跟随旧执行者的实际在途尝试，不能只看 run 主状态。
+   const kinds=action.name.startsWith('memoryDocuments.')?"('document_scene','document_profile')":"('extraction_verification')";
+   for(const row of tx.all(`SELECT DISTINCT t.run_id FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
+    JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
+    WHERE a.owner_id=? AND a.state='running' AND a.runtime_token<>? AND s.kind IN ${kinds}`,[ownerId,lease.runtimeId]))ids.add(String(row.run_id));
+   return [...ids];
+  }):undefined;
   const before=runId?safely(()=>capture(tx,ownerId,runId!,taskId,stepId)):undefined;
   const recoveredBefore=recovering?.map(id=>({id,state:safely(()=>capture(tx,ownerId,id,undefined,undefined,true))}));
   const automatic=name==='setAutomatic'?safely(()=>tx.get('SELECT memory_auto_processing AS enabled FROM database_instance WHERE slot=1')):undefined;
