@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdir,mkdtemp,realpath,rm,writeFile} from 'node:fs/promises';
+import {mkdir,mkdtemp,realpath,rm,writeFile,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {loadManifest,saveManifest} from '../src/platform/cutover/control.ts';
@@ -36,12 +36,13 @@ test('自有SQLite宿主仍存活时重连预检直接准备原目标，不把�
  assert.deepEqual(kept(userData),before);
 });
 
-test('旧版写入者仍存活时重连预检仍阻断并记账',async t=>{
+test('完成切换后旧写入器记录不再参与桌面准备，也不取得清理权限',async t=>{
  const {userData}=await fixture(t);
  await privateFile(path.join(userData,'managed/backend.info'),handshake(process.pid));
  const result=await startup.prepareDefaultDatabaseStartup({userData});
- assert.equal(result.phase,'maintenance');assert.equal(result.code,'cutover_legacy_writer_running');
- assert.equal(loadManifest(userData).phase,'blocked');
+ assert.equal(result.phase,'prepared');assert.equal(result.code,'sqlite_prepared');
+ assert.equal(loadManifest(userData).phase,'completed');
+ assert.equal(await readFile(path.join(userData,'managed/backend.info'),'utf8'),handshake(process.pid));
 });
 
 test('重开会打开数据库，自有宿主存活时拒绝但不把已完成清单改成阻断',async t=>{

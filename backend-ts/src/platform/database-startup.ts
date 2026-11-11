@@ -3,7 +3,7 @@ import path from 'node:path';
 import {controlledFiles} from '../storage/sqlite/files.ts';
 import {recoverSkillRootRelocation} from '../skills/sqlite/root-relocation.ts';
 import {CUTOVER_STARTUP_CONFIG,type CutoverManifest,type CutoverResult} from './cutover/contracts.ts';
-import {CutoverControlError,loadManifest,loadStartupConfiguration} from './cutover/control.ts';
+import {CutoverControlError,loadManifest,loadStartupConfiguration,saveManifest} from './cutover/control.ts';
 import {assertPrivateUserData,unrecognizedManagedTargets} from './cutover/targets.ts';
 import type {DefaultDatabaseOptions,PreparedDatabaseStartup} from './cutover/startup.ts';
 
@@ -29,6 +29,8 @@ export async function prepareDatabaseStartup(options:DefaultDatabaseOptions):Pro
    configuration:{capabilities:configuration.capabilities,...(configuration.skillPackageRoot?{skillPackageRoot:configuration.skillPackageRoot}:{})},manifestRevision:manifest.revision};
  }catch(error){
   const code=error instanceof CutoverControlError?error.code:'cutover_storage_failed';
+  // 物理资料核对失败必须留下阻断；修正权限后进入一次完整维护复验，不能把既有身份丢失伪装成已准备。
+  if(manifest)try{manifest=saveManifest(userData,{...manifest,phase:'blocked',blockedCode:code});}catch{/* 无法持久化时保留现场，不创建新身份。 */}
   return {phase:'maintenance',code,detail:'startup_preparation_failed',manifestRevision:manifest?.revision??0};
  }
 }
