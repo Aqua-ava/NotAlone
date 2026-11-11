@@ -1,3 +1,5 @@
+import {DiagnosticBuffer,diagnosticOverflow} from './buffer.mjs';
+import {withDiagnosticLock} from './maintenance.mjs';
 import pino from 'pino';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, realpath, rename, unlink } from 'node:fs/promises';
@@ -6,10 +8,12 @@ import { randomUUID } from 'node:crypto';
 import { checkedDiagnosticEvent, checkedDiagnosticRecord, diagnosticEvents } from './unified-contract.mjs';
 
 const MiB = 1024 * 1024;
+const controlBudget=512*1024, suppressionAge=14*86400_000, prefixLimit=4096;
+const staleControls=new WeakSet();
 const observedWriters = new WeakMap();
 /** 仅供受信任上下文回放；时间不属于公共事件载荷，也不经 IPC／HTTP 暴露。 */
-export function writeObservedDiagnostic(log, input, observedAt) {
-  try { observedWriters.get(log)?.(input, observedAt); } catch { /* 内部回放失败不进入业务路径。 */ }
+export function writeObservedDiagnostic(log, input, observedAt, observedNs=process.hrtime.bigint()) {
+  try { observedWriters.get(log)?.(input, observedAt, observedNs); } catch { /* 内部回放失败不进入业务路径。 */ }
 }
 const namePattern = /^(main|backend)-(\d{4}-\d{2}-\d{2})-(\d+)\.jsonl$/;
 const identity = stat => `${stat.dev}:${stat.ino}`;
@@ -62,6 +66,60 @@ async function readPrivate(file, maxBytes) {
     if (bytesRead > stat.size || (await handle.stat()).size !== stat.size) unavailable();
     return buffer.subarray(0, bytesRead).toString('utf8');
   } finally { await handle.close(); }
+}
+async function readControl(root,now){
+ const text=await readPrivate(path.join(root,'logs','diagnostic-control.json'),controlBudget);
+ if(text===undefined)return {version:1,epoch:0,clearedAt:0,clearedNs:'0',prefixes:[]};
+ const value=JSON.parse(text),integer=n=>Number.isSafeInteger(n)&&n>=0,time=n=>integer(n)&&n<=8640000000000000;
+ if(!value||Object.keys(value).sort().join(',')!=='clearedAt,clearedNs,epoch,prefixes,version'||value.version!==1||!integer(value.epoch)||!time(value.clearedAt)||typeof value.clearedNs!=='string'||!/^(0|[1-9]\d{0,19})$/.test(value.clearedNs)||BigInt(value.clearedNs)>18446744073709551615n||!Array.isArray(value.prefixes)||value.prefixes.length>prefixLimit)unavailable();
+ const seen=new Set();
+ for(const row of value.prefixes){
+  if(!row||Object.keys(row).sort().join(',')!=='createdAt,expiresAt,prefix'||typeof row.prefix!=='string'||!/^[a-f0-9]{8}$/.test(row.prefix)||seen.has(row.prefix)||!time(row.createdAt)||!time(row.expiresAt)||row.expiresAt-row.createdAt!==suppressionAge)unavailable();
+  seen.add(row.prefix);
+ }
+ const control={...value,prefixes:value.prefixes.filter(row=>row.expiresAt>now)};if(control.prefixes.length!==value.prefixes.length)staleControls.add(control);
+ // libuv Darwin的hrtime来自同机mach_continuous_time；跨内核重启后旧RAM队列不可能存活。
+ // 此函数仅在持有根级内核锁时调用；重置回退的旧屏障，不用进程原点performance.now。
+ if(BigInt(control.clearedNs)>process.hrtime.bigint()){control.clearedNs='0';staleControls.add(control);}return control;
+}
+async function saveControl(root,control,guard,maximumBytes=controlBudget){
+ const text=JSON.stringify(control);if(Buffer.byteLength(text)>maximumBytes)unavailable();
+ const directory=await guard(),file=path.join(directory,'diagnostic-control.json'),existing=await statIfPresent(file);
+ if(existing&&!safe(existing,false))unavailable();
+ const temporary=path.join(directory,`.diagnostic-control-${randomUUID()}.tmp`);
+ const handle=await checkedOpen(temporary,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL);
+ try{await handle.writeFile(text);await handle.sync();}finally{await handle.close();}
+ try{await guard();await rename(temporary,file);}finally{await unlink(temporary).catch(()=>{});}
+}
+async function eraseLocked(root,{all,prefixes,imageIds=[]},now,guard,maximumBytes){
+ if(!Number.isSafeInteger(now)||now<0||now+suppressionAge>8640000000000000)unavailable();
+ const control=await readControl(root,now),merged=new Map(control.prefixes.map(row=>[row.prefix,row]));
+ for(const prefix of prefixes)merged.set(prefix,{prefix,createdAt:now,expiresAt:now+suppressionAge});
+ if(merged.size>prefixLimit)unavailable();
+ control.prefixes=[...merged.values()];if(all){if(!Number.isSafeInteger(control.epoch+1))unavailable();control.epoch++;control.clearedAt=now;control.clearedNs=process.hrtime.bigint().toString();}
+ // 先持久化抑制，再擦文件；崩溃重试和旧进程队列均不能补回前缀。
+ await saveControl(root,control,guard,maximumBytes);
+ const removed=new Set(prefixes),removedImages=new Set(imageIds);
+ for(const row of await inventory(root)){
+  if(all){await unlink(row.file).catch(error=>{if(error.code!=='ENOENT')throw error;});continue;}
+  const original=await readPrivate(row.file,5*MiB);if(original===undefined)continue;
+  const kept=[];for(const line of original.split('\n')){
+   if(Buffer.byteLength(line)>2048)continue;
+   try{const record=checkedDiagnosticRecord(JSON.parse(line));if(record&&!removed.has(record.contactPrefix)&&!(record.event==='processing.model_image'&&removedImages.has(record.imageId)))kept.push(JSON.stringify(record)+'\n');}catch{}
+  }
+  if(!kept.length){await unlink(row.file);continue;}
+  const handle=await checkedOpen(row.file,constants.O_WRONLY,row.stat);
+  try{await handle.truncate(0);await handle.writeFile(kept.join(''));await handle.sync();}finally{await handle.close();}
+ }
+ return control;
+}
+/** 仅存储协调器在复验持久删除runner后调用，不接受HTTP字段或任意文件路径。 */
+export async function eraseDiagnosticRecords(root,scope){
+ try{
+  if(!scope||!['contact','account'].includes(scope.kind)||Object.keys(scope).sort().join(',')!=='contactPrefixes,kind'||!Array.isArray(scope.contactPrefixes)||scope.contactPrefixes.length>prefixLimit||scope.contactPrefixes.some(prefix=>typeof prefix!=='string'||!/^[a-f0-9]{8}$/.test(prefix)))return false;
+  const location=await rootDirectory(root,true),guard=async()=>{const actual=await rootDirectory(root,false);if(!actual||actual.rootIdentity!==location.rootIdentity||actual.directoryIdentity!==location.directoryIdentity)unavailable();return actual.directory;};
+  await withDiagnosticLock(root,guard,()=>eraseLocked(root,{all:scope.kind==='account',prefixes:scope.contactPrefixes},Date.now(),guard,controlBudget));return true;
+ }catch{return false;}
 }
 // 活跃日志只取开始读取时已存在的完整行；正常追加不使已读取的时间线失效。
 async function readLogSnapshot(file, snapshotBytes) {
@@ -123,12 +181,13 @@ export class UnifiedDiagnosticLog {
     this.root = root; this.proc = options.proc ?? 'backend'; this.development = options.development === true;
     this.maxFileBytes = options.maxFileBytes ?? 5 * MiB;
     // 各进程使用一半独立预算，避免并行轮转争抢另一个进程仍在写的文件。
-    this.processBudget = Math.floor((options.maxTotalBytes ?? 50 * MiB) / 2);
+    const totalBudget=options.maxTotalBytes??50*MiB;this.controlBudget=Math.min(controlBudget,Math.floor(totalBudget/8));
+    this.processBudget = Math.floor((totalBudget-this.controlBudget) / 2);
     this.maxAgeMs = options.maxAgeMs ?? 14 * 86400_000; this.now = options.now ?? Date.now;
-    this.queue = []; this.queuedBytes = 0; this.rejected = 0; this.dropped = 0; this.enabled = true; this.failed = false;
+    this.queue = new DiagnosticBuffer(); this.detailAggregates = new Map(); this.rejected = 0; this.dropped = 0; this.enabled = true; this.failed = false;
     this.debugUntil = 0; this.scheduled = false; this.closed = false;
     this.logger = pino({ base: null, timestamp: false, level: 'debug', formatters: { level: label => ({ level: label }) } }, { write: line => this.enqueue(line) });
-    observedWriters.set(this, (input, observedAt) => this.#diagnoseObserved(input, observedAt));
+    observedWriters.set(this, (input, observedAt, observedNs) => this.#diagnoseObserved(input, observedAt, observedNs));
     this.pending = this.initialize().catch(() => { this.failed = true; });
   }
   async initialize() {
@@ -136,7 +195,7 @@ export class UnifiedDiagnosticLog {
       || !Number.isSafeInteger(this.processBudget) || this.processBudget < this.maxFileBytes || this.processBudget > 25 * MiB
       || !Number.isSafeInteger(this.maxAgeMs) || this.maxAgeMs < 1 || this.maxAgeMs > 14 * 86400_000) unavailable();
     this.location = await rootDirectory(this.root, true);
-    await this.refreshSettings(); await this.prune();
+    await withDiagnosticLock(this.root,()=>this.guardLocation(),async()=>{await this.refreshSettings();const control=await readControl(this.root,this.now());if(staleControls.has(control))await saveControl(this.root,control,()=>this.guardLocation(),this.controlBudget);await this.prune();});
     this.lastWriteDay = new Date(this.now()).toISOString().slice(0, 10);
   }
   async guardLocation() {
@@ -154,21 +213,35 @@ export class UnifiedDiagnosticLog {
   diagnose(input) {
     try { this.#diagnoseObserved(input, this.now()); } catch { this.dropped++; }
   }
-  #diagnoseObserved(input, observedAt) {
+  #diagnoseObserved(input, observedAt, observedNs=process.hrtime.bigint()) {
     try {
       const event = checkedDiagnosticEvent(input);
       if (!event) { this.rejected++; return; }
       if (!Number.isSafeInteger(observedAt) || observedAt < 0 || observedAt > 8640000000000000) { this.rejected++; return; }
+      if(typeof observedNs!=='bigint'||observedNs<0n||observedNs>18446744073709551615n){this.rejected++;return;}
       if (this.closed) return;
       const level = diagnosticEvents[event.event].level;
       if (level === 'debug' && !this.development && this.debugUntil <= this.now()) return;
-      this.logger[level]({ ...event, time: new Date(observedAt).toISOString(), proc: this.proc });
+      const previous=this.observedNs;this.observedNs=observedNs;
+      try{this.logger[level]({ ...event, time: new Date(observedAt).toISOString(), proc: this.proc });}finally{this.observedNs=previous;}
     } catch { this.dropped++; }
   }
   enqueue(line) {
     const bytes = Buffer.byteLength(line);
-    if (bytes > 2048 || this.queue.length >= 2048 || this.queuedBytes + bytes > MiB) { this.dropped++; return; }
-    this.queue.push(line); this.queuedBytes += bytes;
+    if(bytes>2048){this.dropped++;return;}
+    const event=JSON.parse(line);
+    let key;
+    if(event.traceId&&event.level==='debug'&&['request.finished','sql.summary'].includes(event.event)){
+      const {time:_time,count:_count,durationMs:_duration,...scope}=event;key=JSON.stringify(scope);
+      const previous=this.detailAggregates.get(key);
+      if(previous){const combined={...previous.record,count:(previous.record.count??1)+(event.count??1),
+        ...((previous.record.durationMs!==undefined||event.durationMs!==undefined)?{durationMs:(previous.record.durationMs??0)+(event.durationMs??0)}:{})};
+        if(checkedDiagnosticRecord(combined)){previous.record=combined;previous.line=JSON.stringify(combined)+'\n';return;}
+      }
+    }
+    const item={line,record:event,observedNs:this.observedNs??process.hrtime.bigint()};
+    if(!this.queue.push(event,item,bytes))this.dropped++;
+    else if(key)this.detailAggregates.set(key,item);
     if (!this.scheduled) { this.scheduled = true; setImmediate(() => { this.scheduled = false; void this.flush(); }); }
   }
   async prune() {
@@ -216,11 +289,18 @@ export class UnifiedDiagnosticLog {
 
   flush() {
     this.pending = this.pending.then(async () => {
-      if (this.closed) { this.queue = []; this.queuedBytes = 0; return; }
+      if (this.closed) { this.queue.reset(); this.detailAggregates.clear(); return; }
       if (this.failed) { await this.initialize(); this.failed = false; }
-      const lines = this.queue; this.queue = []; this.queuedBytes = 0;
-      if (lines.length) await this.write(aggregateLines(lines));
-    }).catch(() => { this.failed = true; this.queue = []; this.queuedBytes = 0; });
+      const batch=this.queue.take();this.detailAggregates.clear();
+      if(batch.items.length||batch.notices.length||batch.dropped)await withDiagnosticLock(this.root,()=>this.guardLocation(),async()=>{
+       const control=await readControl(this.root,this.now()),suppressed=new Set(control.prefixes.map(row=>row.prefix));
+       if(staleControls.has(control))await saveControl(this.root,control,()=>this.guardLocation(),this.controlBudget);
+       const lines=batch.items.filter(item=>!suppressed.has(item.record.contactPrefix)&&item.observedNs>BigInt(control.clearedNs)).map(item=>item.line);
+       for(const notice of batch.notices)lines.push(JSON.stringify({...notice,time:new Date(this.now()).toISOString(),proc:this.proc,level:'error'})+'\n');
+       if(batch.dropped)lines.push(JSON.stringify({...diagnosticOverflow('diagnostic_writer',batch.dropped),time:new Date(this.now()).toISOString(),proc:this.proc,level:'error'})+'\n');
+       if(lines.length)await this.write(aggregateLines(lines));
+      });
+    }).catch(() => { this.failed = true; this.queue.reset(); this.detailAggregates.clear(); });
     return this.pending;
   }
   async setEnabled(enabled) {
@@ -238,35 +318,22 @@ export class UnifiedDiagnosticLog {
   }
   setDebugFor(milliseconds = 30 * 60_000) { this.debugUntil = this.now() + Math.min(Math.max(milliseconds, 0), 30 * 60_000); }
   stats() { return { rejected: this.rejected, dropped: this.dropped, available: !this.failed }; }
-  async status() { await this.flush(); try { await this.refreshSettings(); const rows = await inventory(this.root); return { enabled: this.enabled, bytes: rows.reduce((sum, row) => sum + row.stat.size, 0), available: !this.failed }; } catch { return { enabled: this.enabled, bytes: 0, available: false }; } }
+  async status() { await this.flush(); try { await this.refreshSettings(); const rows = await inventory(this.root),control=await statIfPresent(path.join(this.root,'logs','diagnostic-control.json'));return { enabled: this.enabled, bytes: rows.reduce((sum, row) => sum + row.stat.size, control?.size??0), available: !this.failed }; } catch { return { enabled: this.enabled, bytes: 0, available: false }; } }
   async clear(contactPrefix) {
     if (contactPrefix !== undefined && (typeof contactPrefix !== 'string' || !/^[0-9a-f]{8}$/.test(contactPrefix))) return false;
-    return this.#clearRecords(contactPrefix === undefined ? undefined : { field: 'contactPrefix', value: contactPrefix });
+    return this.#clearRecords({all:contactPrefix===undefined,prefixes:contactPrefix===undefined?[]:[contactPrefix]});
   }
-  /** 单图片删除只擦除含该文件身份的逐图片事件，保留无图片标识的调用汇总。 */
+  /** 单图片擦除沿同一根锁串行执行，保留无图片标识的调用汇总。 */
   async eraseModelImage(imageId) {
     if (typeof imageId !== 'string' || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(imageId)) return false;
-    return this.#clearRecords({ field: 'imageId', value: imageId, event: 'processing.model_image' });
+    return this.#clearRecords({all:false,prefixes:[],imageIds:[imageId]});
   }
   async #clearRecords(filter) {
-    await this.flush();
-    try {
-      await this.guardLocation();
-      for (const row of await inventory(this.root)) {
-        if (filter === undefined) { await unlink(row.file).catch(error => { if (error.code !== 'ENOENT') throw error; }); continue; }
-        const original = await readPrivate(row.file, 5 * MiB);
-        if (original === undefined) continue;
-        const kept = [];
-        for (const line of original.split('\n')) {
-          if (Buffer.byteLength(line) > 2048) continue;
-          try { const record = checkedDiagnosticRecord(JSON.parse(line)); if (record && !(record[filter.field] === filter.value && (!filter.event || record.event === filter.event))) kept.push(JSON.stringify(record) + '\n'); } catch { /* 不重写损坏或越界原文。 */ }
-        }
-        if (!kept.length) { await unlink(row.file); continue; }
-        const handle = await checkedOpen(row.file, constants.O_WRONLY, row.stat);
-        try { await handle.truncate(0); await handle.writeFile(kept.join('')); } finally { await handle.close(); }
-      }
-      return true;
-    } catch { this.failed = true; return false; /* 用户操作必须知道清除未完成；下轮写入重新核对。 */ }
+    this.flush();let result=false;
+    this.pending=this.pending.then(async()=>{
+      await withDiagnosticLock(this.root,()=>this.guardLocation(),()=>eraseLocked(this.root,filter,this.now(),()=>this.guardLocation(),this.controlBudget));result=true;
+    }).catch(()=>{this.failed=true;});
+    return this.pending.then(()=>result);
   }
   eraseContact(contactPrefix) { return this.clear(contactPrefix); }
   async close() { await this.flush(); this.closed = true; }

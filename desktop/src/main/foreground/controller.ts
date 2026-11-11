@@ -23,6 +23,20 @@ const observationClock: ObservationClock = {
   schedule: (callback, delay) => setTimeout(() => { void callback(); }, delay),
   cancel: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
+function foregroundReason(reason:string|null,phase:ForegroundState['phase']):string{
+  if(reason==='connection_changed'||reason==='connection_unavailable')return 'connection_changed';
+  if(reason==='contact_changed')return 'scope_changed';
+  if(reason==='reading_scope_changed')return 'reading_scope_changed';
+  if(reason==='helper_focused'||reason==='wechat_not_in_front')return 'paused';
+  if(reason==='sync_disabled')return 'disabled';
+  if(reason==='screen_capture_permission_missing')return 'permission_missing';
+  if(reason&&isKnownForegroundReason(reason)){
+    if(reason.includes('timeout'))return 'timeout';if(reason.includes('ambiguous'))return 'ambiguous';
+    if(reason.includes('unmatched'))return 'unmatched';if(phase==='confirmed')return 'completed';
+    return phase==='manual-required'?'unmatched':phase==='paused'?'paused':'failed';
+  }
+  return reason?'rejected':'no_change';
+}
 
 // 连续观察和焦点只由可信宿主驱动，页面不能声明微信前台或启动采集。
 export class ForegroundController {
@@ -36,6 +50,7 @@ export class ForegroundController {
   private refreshAfterHelperFocus = false;
   private changePending = false;
   private readonly loggedUnknownReasons = new Set<string>();
+  private diagnosticState={phase:'idle',reasonCode:'no_change',contactId:null as string|null,began:performance.now()};
   private changeSource: ForegroundChangeSource | undefined;
   private syncPermit: { generation: number } | undefined;
   private captureAuthorityRevision = 0;
@@ -238,6 +253,9 @@ export class ForegroundController {
     await this.observeBeforeShow();
   }
   observeBeforeShow(): Promise<void> {
+    return withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>this.observeOwned());
+  }
+  private observeOwned():Promise<void>{
     if (this.disposed || this.stopped || this.state.suspendedByHelperFocus) return Promise.resolve();
     if (this.readingScopeChanges > 0) {
       this.clearObservation('manual-required', 'reading_scope_changed'); return Promise.resolve();
@@ -275,8 +293,8 @@ export class ForegroundController {
       const observation = foregroundObservation(response.data);
       if (observation.reason !== null && !isKnownForegroundReason(observation.reason) && !this.loggedUnknownReasons.has(observation.reason)) {
         // 未知前台原因不静默折叠：只记录协议原因码，界面继续走固定兜底文案。
-        this.loggedUnknownReasons.add(observation.reason);
-        console.warn('foreground_observation_unknown_reason', { phase: observation.phase, reason: observation.reason });
+        if(this.loggedUnknownReasons.size<32)this.loggedUnknownReasons.add(observation.reason);
+        diagnose({event:'foreground.decision',caller:'foreground_controller',reasonCode:'rejected',count:1});
       }
       // 丢弃已过时的身份/待选择结果，避免旧观察恢复资格或显示旧建议；技术失败及安全暂停仍处理。
       if (this.changePending && (observation.phase === 'confirmed'
@@ -430,6 +448,13 @@ export class ForegroundController {
       }
     }
     this.updateChangeSource();
+    if(this.state.phase!=='observing'){
+      const phases={idle:'idle',confirmed:'ready','manual-required':'blocked',paused:'paused',unavailable:'failed'},phase=phases[this.state.phase],reasonCode=foregroundReason(this.state.reason,this.state.phase),previous=this.diagnosticState;
+      if(phase!==previous.phase||reasonCode!==previous.reasonCode||this.state.confirmedContactId!==previous.contactId){
+        const now=performance.now();diagnose({event:'foreground.state_changed',caller:'foreground_controller',reasonCode,fromState:previous.phase,toState:phase,durationMs:Math.max(0,now-previous.began),...(this.state.confirmedContactId?{contactPrefix:this.state.confirmedContactId.slice(0,8)}:{})});
+        this.diagnosticState={phase,reasonCode,contactId:this.state.confirmedContactId,began:now};
+      }
+    }
     for (const listener of this.listeners) listener(this.getState());
   }
 }

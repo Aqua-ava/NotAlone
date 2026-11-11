@@ -1,13 +1,16 @@
-import {diagnose,newTraceId,withDiagnosticTrace} from './context.ts';
+import {currentDiagnosticTrace,diagnose,newTraceId,withDiagnosticTrace} from './context.ts';
 import type {DiagnosticModule} from './unified-contract.mjs';
 
 export function checkedTraceId(input:unknown):string|undefined {
  return typeof input==='string'&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(input)?input.toLowerCase():undefined;
 }
-export function requestDiagnosticModule(path:string):DiagnosticModule {
+export function requestDiagnosticModule(path:string,method?:string):DiagnosticModule {
+ if(method==='DELETE'&&(path==='/api/account'||/^\/api\/contacts\/[^/?]+(?:\/(?:sources|assistant-sessions)\/[^/?]+)?$/.test(path)))return 'deletion';
+ if(/^\/api\/tasks\/status(?:\?|$)/.test(path))return 'deletion';
  if(/^\/api\/(?:memory-management|memory-documents)/.test(path))return 'memory.management';
  if(/^\/api\/(?:memory-processing|memory-runs)/.test(path))return 'memory.processing';
  if(/\/(?:media|images|avatars)(?:\/|\?|$)/.test(path))return 'media';
+ if(/^\/api\/sync\/foreground(?:\/|\?|$)/.test(path))return 'foreground';
  if(/^\/api\/(?:sync|history)/.test(path))return 'history.sync';
  if(/\/(?:deletions|delete|clear)(?:\/|\?|$)/.test(path))return 'deletion';
  if(/\/(?:assistant|reply|replies)/.test(path))return 'reply';
@@ -24,7 +27,7 @@ export function requestFailureReason(error:unknown):string {
 }
 /** 对请求只记录固定分类；不接收正文、参数或URL作为日志字段。 */
 export function tracedRequest<T>(traceId:string|undefined,module:DiagnosticModule,caller:string,work:()=>Promise<T>):Promise<T> {
- return withDiagnosticTrace(checkedTraceId(traceId)??newTraceId(),async()=>{
+ return withDiagnosticTrace(checkedTraceId(traceId)??currentDiagnosticTrace()??newTraceId(),async()=>{
   const started=performance.now();diagnose({event:'request.started',module,caller,reasonCode:'request_started'});
   try{
    const value=await work(),durationMs=Math.max(0,performance.now()-started);

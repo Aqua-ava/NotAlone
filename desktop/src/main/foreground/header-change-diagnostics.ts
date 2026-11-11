@@ -1,5 +1,6 @@
 import { constants, closeSync, fstatSync, openSync, realpathSync, statSync, writeSync } from 'node:fs';
 import path from 'node:path';
+import {diagnose} from '../../../../backend-ts/src/diagnostics/context';
 
 const hostEvents = ['permit', 'reconcile', 'launch', 'changed', 'paused', 'stop', 'close', 'dispose'] as const;
 const observationEvents = ['change_received', 'change_queued', 'poll_scheduled', 'request_started', 'request_settled', 'result_published'] as const;
@@ -126,6 +127,21 @@ export function openHeaderChangeDiagnostics(environment: NodeJS.ProcessEnv): Hea
       }
     } catch { close(); }
   } };
+}
+
+/** 正式默认始终可用；统一出口复用原白名单，专用私有文件仍须显式开启。 */
+export function createHeaderChangeDiagnosticSink(special?:HeaderChangeDiagnosticSink):HeaderChangeDiagnosticSink{
+ let closed=false;
+ return {close(){closed=true;special?.close();},record(record){
+  if(closed)return;
+  try{
+   if(!validRecord(record))return;
+   if(record.kind==='observation'&&record.event==='result_published'&&record.changedContact)diagnose({event:'foreground.decision',caller:'foreground_probe',reasonCode:record.confirmed?'completed':'unmatched',durationMs:record.durationMs,count:1});
+   else if(record.kind==='native'&&!['begin','first_frame'].includes(record.reason))diagnose({event:'foreground.decision',caller:'foreground_native',reasonCode:record.reason,durationMs:record.nativeElapsedMs});
+   else if(record.kind==='native-context')diagnose({event:'foreground.decision',caller:'foreground_context',reasonCode:record.reason,durationMs:record.nativeElapsedMs});
+   special?.record(record);
+  }catch{/* 任一诊断出口故障不影响原生观察或读取资格。 */}
+ }};
 }
 
 export function diagnosticSignal(signal: string | null): HeaderChangeDiagnosticSignal {

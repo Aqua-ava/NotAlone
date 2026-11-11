@@ -1,6 +1,8 @@
 import type { SavedContactBinding } from '../../contacts/sqlite/contracts.ts';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import { resumableHistorySlice,type SqliteHistoryService } from './service.ts';
+import {newTraceId,withDiagnosticTrace,diagnose} from '../../diagnostics/context.ts';
+import {recordSyncState} from './diagnostics.ts';
 
 type FirstHistoryBinding = Pick<SavedContactBinding, 'contact_id' | 'binding_id' | 'grant_id' | 'selection_generation' | 'status'>;
 export interface FirstHistoryDirectoryPort {
@@ -73,6 +75,7 @@ export class FirstHistoryCoordinator {
   #retry(job:QueuedRead,code:string):boolean {
     if(!retryableErrors.has(code)||this.#closed||this.#stoppedContacts.has(job.contactId))return false;
     const attempt=(this.#retryAttempts.get(job.contactId)??0)+1;this.#retryAttempts.set(job.contactId,attempt);
+    diagnose({event:'sync.decision',caller:'history_first',reasonCode:'retry',count:attempt,...(/^[a-f0-9]{8}/.test(job.contactId)?{contactPrefix:job.contactId.slice(0,8)}:{})});
     const previous=this.#retryTimers.get(job.contactId);if(previous)clearTimeout(previous.timer);
     const delay=Math.min(this.#retryMaxMs,this.#retryMinMs*2**Math.min(attempt-1,16));
     const entry={key:job.key,timer:setTimeout(()=>{
@@ -111,7 +114,8 @@ export class FirstHistoryCoordinator {
   #notify(): void { this.#changed.resolve(); this.#changed = notification(); }
   #state(contactId: string, phase: FirstHistoryContactPhase, error: string | null = null): void {
     const previous=this.#states.get(contactId)?.lastError;
-    this.#states.set(contactId, { contactId, phase, lastError: error }); if (error) this.#lastError = error;
+    const next={contactId,phase,lastError:error};recordSyncState(this.#states.get(contactId),next,'history_first');
+    this.#states.set(contactId, next); if (error) this.#lastError = error;
     else if(previous===this.#lastError)this.#lastError=[...this.#states.values()].find(state=>state.lastError!==null)?.lastError??null;
   }
   #startPump(): void {
@@ -171,6 +175,9 @@ export class FirstHistoryCoordinator {
     }
   }
   #run(job: QueuedRead): void {
+    withDiagnosticTrace(newTraceId(),()=>this.#runTraced(job));
+  }
+  #runTraced(job:QueuedRead):void {
     this.#queued.delete(job.contactId); this.#attempted.add(job.key); this.#state(job.contactId, 'running');
     const active: ActiveRead = { ...job, controller: new AbortController(), done: Promise.resolve() };
     this.#active.set(job.contactId, active);

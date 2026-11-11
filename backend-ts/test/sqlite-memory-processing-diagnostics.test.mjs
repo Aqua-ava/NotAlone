@@ -123,6 +123,45 @@ test('诊断接收器失败不会改变正式处理结果或授权',{timeout:100
  const port=modelPort(()=>memory.accounting,empty);memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
  const run=await memory.start(randomUUID());await memory.waitForIdle();
  assert.equal((await memory.read(run.runId)).succeeded,1);assert.equal(port.calls,1);
- assert.equal((await records()).filter(row=>row.module==='memory.processing').length,0);
+ assert.equal((await records()).filter(row=>row.event.startsWith('processing.')).length,0);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('暂停中的在途批次重启后变为未知，日志仍保留任务和批次的恢复原因',{timeout:10000},async t=>{
+ const f=await fixture(t,{registryModule:new URL('./fixtures/memory-control/registry.mjs',import.meta.url).href});
+ await f.service.synchronize(f.saved[0].contact_id);const records=await diagnostics(f,t);
+ const entered=Promise.withResolvers(),gate=Promise.withResolvers();let memory;
+ const port=modelPort(()=>memory.accounting,async request=>{entered.resolve();await gate.promise;return empty(request);});
+ memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(async()=>{gate.resolve();await memory.close();});
+ const run=await memory.start(randomUUID());await entered.promise;await memory.pause(run.runId);
+ const taskId=run.tasks.find(task=>task.scopeKind==='contact').taskId;
+ const [attempt]=await f.storage.execute('fixture.attempts',{ownerId:owner,taskId});
+ await f.storage.execute('fixture.setRuntimeToken',{ownerId:owner,attemptId:attempt.id,token:randomUUID()});
+ await f.storage.execute('memoryExtraction.recover',{ownerId:owner});
+ const stopped=await memory.read(run.runId);assert.equal(stopped.state,'paused');assert.equal(stopped.tasks.find(task=>task.taskId===taskId).state,'unknown');
+ const rows=(await records()).filter(row=>row.runId===run.runId);
+ assert.ok(rows.some(row=>row.event==='processing.task_changed'&&row.taskId===taskId&&row.toState==='unknown'&&row.reasonCode==='receipt_unknown'));
+ assert.ok(rows.some(row=>row.event==='processing.batch_changed'&&row.toState==='unknown'&&row.reasonCode==='receipt_unknown'));
+ gate.resolve();await memory.waitForIdle();
+});
+
+test('公开处理观察器在10/100/1000任务下保留逐项事件且数据库访问有界',async t=>{
+ const {DatabaseSync}=await import('node:sqlite');
+ const {observedProcessingAction}=await import('../src/memory/sqlite/diagnostics.ts');
+ for(const count of [10,100,1000])await t.test(`${count}个任务`,()=>{
+  const db=new DatabaseSync(':memory:');
+  try{
+   db.exec('CREATE TABLE processing_run(owner_id TEXT,id TEXT,state TEXT); CREATE TABLE processing_task(owner_id TEXT,id TEXT,run_id TEXT,state TEXT,contact_id TEXT,error_code TEXT); CREATE INDEX task_run ON processing_task(owner_id,run_id)');
+   const runId=randomUUID(),contactId=randomUUID(),ids=Array.from({length:count},()=>randomUUID());
+   db.prepare('INSERT INTO processing_run VALUES(?,?,?)').run(owner,runId,'running');
+   const insert=db.prepare('INSERT INTO processing_task VALUES(?,?,?,?,?,NULL)');for(const id of ids)insert.run(owner,id,runId,'running',contactId);
+   let reads=0,writes=0;const events=[];
+   const tx={get(sql,values=[]){reads++;return db.prepare(sql).get(...values);},all(sql,values=[]){reads++;return db.prepare(sql).all(...values);},run(sql,values=[]){writes++;db.prepare(sql).run(...values);},recordUnifiedDiagnostic(event){events.push(event);}};
+   const action=observedProcessingAction({name:'memoryExtraction.control',mode:'write',retryBusy:false,execute(transaction){transaction.run("UPDATE processing_run SET state='paused' WHERE owner_id=? AND id=?",[owner,runId]);transaction.run("UPDATE processing_task SET state='paused' WHERE owner_id=? AND run_id=?",[owner,runId]);return 'business_result';}});
+   assert.equal(action.execute(tx,{ownerId:owner,runId,action:'pause'},{databaseId:randomUUID(),runtimeId:randomUUID(),epoch:1n}),'business_result');
+   assert.deepEqual(events,[{event:'processing.run_changed',caller:'memory_run',runId,fromState:'running',toState:'paused',reasonCode:'paused'},...ids.map(taskId=>({event:'processing.task_changed',caller:'memory_task',runId,fromState:'running',toState:'paused',reasonCode:'paused',taskId,contactPrefix:contactId.slice(0,8)}))]);
+   assert.equal(reads,4);assert.equal(writes,2);
+   t.diagnostic(JSON.stringify({tasks:count,reads,writes,events:events.length}));
+  }finally{db.close();}
+ });
 });

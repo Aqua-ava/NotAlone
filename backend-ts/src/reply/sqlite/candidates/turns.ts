@@ -1,4 +1,6 @@
 import {randomUUID} from 'node:crypto';
+import {currentDiagnosticTrace,diagnose,newTraceId,withDiagnosticTrace} from '../../../diagnostics/context.ts';
+import {observeReply,replyFailureReason,type ReplyDiagnosticPhase} from '../diagnostics.ts';
 import {sha256} from '../../../platform/sha256.ts';
 import type {SqliteStorage} from '../../../storage/sqlite/client.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
@@ -37,13 +39,18 @@ export class SqliteReplyTurns {
   const checked=await read();return checked?this.digest(checked.requestId,checked.revision):null;
  }
  generate(input:ReplyGenerationInput){
-  if(this.stopping)return Promise.reject(new StorageFailure('reply_runtime_closed'));
+  return withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>{
+  const observe=observeReply(input.contactId);observe('preparing');
+  if(this.stopping){observe('blocked','shutdown');return Promise.reject(new StorageFailure('reply_runtime_closed'));}
   const controller=new AbortController();this.controllers.add(controller);
-  const pending=this.generateOwned({...input,signal:input.signal?AbortSignal.any([input.signal,controller.signal]):controller.signal});
+  const pending=this.generateOwned({...input,signal:input.signal?AbortSignal.any([input.signal,controller.signal]):controller.signal},observe).then(value=>{observe('completed');return value;},error=>{
+   const reasonCode=replyFailureReason(error);observe('failed',reasonCode);diagnose({event:'diagnostics.error',module:'reply',caller:'reply_generate',reasonCode,...(/^[a-f0-9]{8}/.test(input.contactId)?{contactPrefix:input.contactId.slice(0,8)}:{})});throw error;
+  });
   this.pending.add(pending);const release=()=>{this.pending.delete(pending);this.controllers.delete(controller);};pending.then(release,release);return pending;
+  });
  }
  async close(){this.stopping=true;for(const c of this.controllers)c.abort();await Promise.allSettled([...this.pending]);}
- private async generateOwned(input:ReplyGenerationInput){
+ private async generateOwned(input:ReplyGenerationInput,observe:(phase:ReplyDiagnosticPhase,reasonCode?:string)=>void){
   const o=this.options,ownerId=o.service.ownerId;
   if(input.confirmedContact!==true)throw new StorageFailure('discussion_identity_required');
   const workspace=input.workspace===undefined?undefined:readReplyWorkspace(input.workspace);
@@ -57,7 +64,7 @@ export class SqliteReplyTurns {
   const accepted=await begin();
   const attempt=accepted.attempt as DiscussionAttempt;
   if(accepted.replayed)return {discussionId:attempt.discussionId,replayed:true,segmented:false};
-  this.stage('accepted');
+  this.stage('accepted');observe('preparing','request_started');
   o.service.phase(input.contactId,attempt.discussionId,input.requestKey,'preparing');
   try{
    const callId=randomUUID(),contextId=randomUUID();
@@ -91,7 +98,7 @@ export class SqliteReplyTurns {
    };
    const items=await readItems();
    const frozen=await o.storage.execute<FrozenReplyInput[]>('reply.freezeInput',{...attempt,contextId,skillRun:revision,items,workspace:workspaceSnapshot,queryText:input.text,at:Date.now()});
-   this.stage('context-frozen');
+   this.stage('context-frozen');observe('preparing','context_frozen');
    const requestIntent=workspace?workspace.action==='suggest'?'本次工作区动作：帮我想想。用户没有提供草稿时尚未确认任何立场，所有说法都只是可选思路。':'本次工作区动作：帮我表达。只按本次想法整理，不添加用户未确认的立场。':'本次明确请求：'+input.text;
    const prompt=requestIntent+'\n\n实际输入材料（编号用于basis）：\n'+frozen.map(item=>`[${item.itemNo}] ${item.kind}\n${item.text}`).join('\n\n')+'\n\n输出检查：每条候选必须同时包含parts和basis两个字段；basis至少填写一个本次实际材料编号。只写parts的候选无法交付。';
    // 每次候选任务重建独立副本；旧候选只有显式选择才进入新输入。
@@ -105,7 +112,7 @@ export class SqliteReplyTurns {
   const openSkillRun=o.library&&!skillDegraded?()=>input.selectedPackageId
    ?openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,{selectedPackageId:input.selectedPackageId,signal:input.signal})
    :openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,undefined,input.signal):undefined;
-  await runSingleDiscussionTurn({runtime:o.runtime,storage:o.storage,attempt,contextId,callId,configurationDigest,prompt,rebuildPrompt:prompt,systemPrompt,model:o.model,provider:o.provider,arbiter:o.arbiter,skillRun:null,openSkillRun,skillProtection:protection,skillRevision:revision,commitAction:'reply.commitCandidates',dispatchAction:'reply.dispatchCall',onPhase:phase=>o.service.phase(input.contactId,attempt.discussionId,input.requestKey,phase),onRuntimeAvailable:()=>this.stage('runtime-available'),configurationForRevision:revision=>this.digest(attempt.requestId,revision),assertAuthorized:()=>o.authorize(input.contactId),signal:input.signal});
+  await runSingleDiscussionTurn({runtime:o.runtime,storage:o.storage,attempt,contextId,callId,configurationDigest,prompt,rebuildPrompt:prompt,systemPrompt,model:o.model,provider:o.provider,arbiter:o.arbiter,skillRun:null,openSkillRun,skillProtection:protection,skillRevision:revision,commitAction:'reply.commitCandidates',dispatchAction:'reply.dispatchCall',onPhase:phase=>{observe(phase);o.service.phase(input.contactId,attempt.discussionId,input.requestKey,phase);},onRuntimeAvailable:()=>{this.stage('runtime-available');observe('ready','runtime_ready');},configurationForRevision:revision=>this.digest(attempt.requestId,revision),assertAuthorized:()=>o.authorize(input.contactId),signal:input.signal});
    return {discussionId:attempt.discussionId,replayed:false,segmented:accepted.segmented};
   }catch(error){await o.storage.execute('reply.failPreparation',{...attempt,code:input.signal?.aborted?'discussion_generation_cancelled':error instanceof StorageFailure?error.code:'discussion_generation_failed'}).catch(()=>{});throw error;}
   finally{o.service.phase(input.contactId,attempt.discussionId,input.requestKey,null);}

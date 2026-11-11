@@ -1,3 +1,4 @@
+import {DiagnosticBuffer,diagnosticOverflow} from '../../diagnostics/buffer.mjs';
 import {installManagementBatching} from '../../memory/sqlite/management/batching.ts';
 import {checkedDiagnosticEvent,type DiagnosticEvent} from '../../diagnostics/unified-contract.mjs';
 import {SqlDiagnosticSummary,storageDiagnosticModule} from '../../diagnostics/sql-summary.ts';
@@ -194,14 +195,19 @@ try {
         assertLease(lease);
         const op=get('SELECT scope_kind,contact_identity,runner_token,runner_runtime,plan_revision,state FROM deletion_operation WHERE owner_identity=? AND operation_id=?',[input.ownerId,input.operationId]);
         if(!op||op.runner_token!==input.token||op.runner_runtime!==runtimeId||op.plan_revision!==input.planRevision||op.state==='completed')throw new StorageFailure('deletion_stale_runner');
-        if(op.scope_kind==='account')diagnosticLog.erase();
+        let contactPrefixes:string[]=[];
+        if(op.scope_kind==='account'){
+          diagnosticLog.erase();
+          // 身份墓碑仍保留稳定ID；只投影前缀，已清正文不重新读取。
+          if(get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='contact'"))contactPrefixes=all('SELECT DISTINCT substr(id,1,8) AS prefix FROM contact WHERE owner_id=?',[input.ownerId]).map(row=>String(row.prefix)).filter(prefix=>/^[a-f0-9]{8}$/.test(prefix));
+        }
         else if(op.scope_kind==='contact'&&typeof op.contact_identity==='string'){
           const prefix=op.contact_identity.slice(0,8);
           // 通用删除注册表允许短合成身份；日志从未接纳非八位十六进制前缀，无对应记录可清理。
-          if(/^[a-f0-9]{8}$/.test(prefix))diagnosticLog.erase(prefix);
+          if(/^[a-f0-9]{8}$/.test(prefix)){diagnosticLog.erase(prefix);contactPrefixes=[prefix];}
         }
         else throw new StorageFailure('deletion_scope_invalid');
-        assertLease(lease);respond({value:null});return;
+        assertLease(lease);respond({value:{kind:op.scope_kind,contactPrefixes}});return;
       }
       const action = actions.get(name);
       if (!action) throw new StorageFailure('action_unavailable');
@@ -209,7 +215,7 @@ try {
       let committedDiagnostics:DiagnosticEvent[]=[];
       for (let attempt = 0; ; attempt++) {
         const diagnostics:StorageDiagnostic[]=[];
-        const unifiedDiagnostics:DiagnosticEvent[]=[];
+        const unifiedDiagnostics=new DiagnosticBuffer();
         const runtimeOverlay=new Map<string,unknown>();
         try {
           managementBatching?.begin();
@@ -250,7 +256,7 @@ try {
                 diagnostics.push(structuredClone(event));
               },
               recordUnifiedDiagnostic(event) {
-                try{if(!active||unifiedDiagnostics.length>=128)return;const safe=checkedDiagnosticEvent(event);if(safe)unifiedDiagnostics.push(safe);}catch{}
+                try{if(!active)return;const safe=checkedDiagnosticEvent(event);if(safe)unifiedDiagnostics.push(safe);}catch{}
               },
               run(sql, values = []) { permitted(); measured(sql,()=>prepared(sql).run(...bindings(values))); },
               get(sql, values) { permitted(); return get(sql, values); },
@@ -279,7 +285,8 @@ try {
           for(const event of diagnostics)try{
             diagnosticLog.append({entry:name,contactPrefix:event.contactPrefix,branch:event.branch,...(event.errorCode?{errorCode:event.errorCode}:{})});
           }catch{warnDiagnostic();}
-          committedDiagnostics=unifiedDiagnostics;
+          for(const event of diagnostics){const safe=checkedDiagnosticEvent({event:'sync.continuity',caller:'sqlite_worker',reasonCode:event.branch,contactPrefix:event.contactPrefix});if(safe)unifiedDiagnostics.push(safe);}
+          const batch=unifiedDiagnostics.take();committedDiagnostics=[...batch.items,...batch.notices,...(batch.dropped?[diagnosticOverflow('diagnostic_transaction',batch.dropped,safeTrace)]:[])];
           break;
         } catch (error) { if (code(error) !== 'storage_busy' || !action.retryBusy || attempt >= 2) throw error; }
       }

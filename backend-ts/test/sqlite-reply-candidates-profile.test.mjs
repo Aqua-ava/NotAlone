@@ -7,6 +7,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {launchDsh} from '../src/launch.ts';
+import {readDiagnosticRecords} from '../src/diagnostics/unified-log.mjs';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {SqliteDiscussionService} from '../src/reply/sqlite/service.ts';
 import {resolveHostReplyConfiguration} from '../src/host/host-reply-config.ts';
@@ -30,6 +31,21 @@ function handshake(infoPath){
   void load();
  });
 }
+/** 异步日志独立于业务响应；等候实际文件事件，不把返回200误当成已刷盘。 */
+function diagnosticRecordsWhen(root,accept){
+ return new Promise((resolveValue,reject)=>{
+  let ended=false,running=false,dirty=false;
+  const finish=(error,rows)=>{if(ended)return;ended=true;clearTimeout(timer);watcher.close();error?reject(error):resolveValue(rows);};
+  const load=async()=>{
+   if(ended)return;if(running){dirty=true;return;}running=true;
+   try{const rows=await readDiagnosticRecords(root);if(accept(rows))finish(null,rows);}catch(error){finish(error);}
+   finally{running=false;if(dirty&&!ended){dirty=false;void load();}}
+  };
+  const watcher=watch(join(root,'logs'),()=>{void load();}),timer=setTimeout(()=>finish(new Error('正式profile诊断刷盘超时')),2000);
+  void load();
+ });
+}
+const diagnosticTrace='94444444-4444-4444-8444-444444444444';
 const quote=value=>"'"+value.replaceAll("'","'\\''")+"'";
 
 test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双联系人隔离且重开回看不调用供应商',{timeout:30000},async t=>{
@@ -39,8 +55,8 @@ test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双�
  const auditPath=join(root,'synthetic-network.jsonl'),stderrPath=join(root,'synthetic-host.stderr'),wrapper=join(root,'synthetic-node');
  const socketIdentity=createHash('sha256').update(JSON.stringify([resolve(infoPath),resolve(envFilePath)])).digest('hex').slice(0,24);
  const socketDirectory=join('/tmp',`na-model-${process.getuid?.()??'local'}-${socketIdentity}`);
- const api=async(route,{body,method=body===undefined?'GET':'POST',auth=true}={})=>{
-  const response=await fetch(`http://${info.address}${route}`,{method,headers:auth?{Authorization:`Bearer ${info.token}`}:{},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(10000)});
+ const api=async(route,{body,method=body===undefined?'GET':'POST',auth=true,trace=diagnosticTrace}={})=>{
+  const response=await fetch(`http://${info.address}${route}`,{method,headers:auth?{Authorization:`Bearer ${info.token}`,'X-Trace-Id':trace}:{},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(10000)});
   return {status:response.status,data:await response.json()};
  };
  t.after(async()=>{
@@ -91,7 +107,7 @@ test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双�
  supplier.listen(0,'127.0.0.1');await once(supplier,'listening',{signal:AbortSignal.timeout(2000)});
  const start=async()=>{
   host=await launchDsh({nodeExecutable:wrapper,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath,infoPath,businessHome:root,
-   environment:{NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${supplier.address().port}`,NOTALONE_SYNTHETIC_NETWORK_AUDIT:auditPath},
+   environment:{NOTALONE_DIAGNOSTIC_ROOT:root,NOTALONE_DIAGNOSTIC_LEVEL:'debug',NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${supplier.address().port}`,NOTALONE_SYNTHETIC_NETWORK_AUDIT:auditPath},
    sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts','history','discussions']}},()=>true);
   try{info=await handshake(infoPath);}catch(error){throw new Error(`${error.message}; ${(await readFile(stderrPath,'utf8')).slice(-1600)}`);}
   const launch=JSON.parse(await readFile(infoPath+'.dsh-lock','utf8'));
@@ -106,6 +122,8 @@ test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双�
  };
  let home=await start();
  const state=await api('/api/runtime/status');assert.equal(state.status,200);assert.equal(state.data.storage,'sqlite');assert.equal(state.data.ownership.discussions,'typescript');
+ const ledgerTrace=randomUUID();assert.equal((await api('/api/ledger/summary',{trace:ledgerTrace})).status,200);
+ assert.equal((await api('/api/ledger/summary',{trace:'synthetic-private-trace'})).status,200,'原未包裹路由仍保留既有响应，非法头不进入诊断');
  const paths=[],sessionIds=[],versions=[];
  for(const [index,id] of ids.entries()){
   const created=await api(`/api/contacts/${id}/assistant-sessions`,{body:{}});assert.equal(created.status,200,JSON.stringify(created.data));sessionIds.push(created.data.session_id);
@@ -113,6 +131,10 @@ test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双�
   assert.equal((await api(path,{auth:false})).status,401);
   const request={request_key:randomUUID(),text:index?'帮我回应合成乙。':'帮我回应合成甲。',confirmed_contact:true};
   const generated=await api(path,{body:request});assert.equal(generated.status,200,JSON.stringify(generated.data));assert.equal(generated.data.session_id,created.data.session_id);
+  const records=await diagnosticRecordsWhen(root,rows=>rows.some(row=>row.event==='reply.state_changed'&&row.traceId===diagnosticTrace&&row.toState==='completed')&&rows.some(row=>row.event==='sql.summary'&&row.traceId===ledgerTrace));
+  const phases=records.filter(row=>row.event==='reply.state_changed'&&row.traceId===diagnosticTrace);
+  for(const phase of ['queued','generating','saving','completed'])assert.ok(phases.some(row=>row.toState===phase),`正常profile缺少${phase}诊断`);
+  assert.ok(records.some(row=>row.event==='sql.summary'&&row.traceId===ledgerTrace),'正常未包裹域的认证HTTP须把合法trace传入真实SQLite');assert.doesNotMatch(JSON.stringify(records),/synthetic-private-trace/);
   assert.equal((await api(`/api/contacts/${id}/assistant-sessions/${created.data.session_id}`)).data.runtime_recovery,'unchecked');
   const read=await api(path);assert.equal(read.status,200);assert.equal(read.data.coverage.phase,'complete');assert.equal(read.data.requests.length,1);
   const version=read.data.requests[0].candidates[0];versions.push({requestId:read.data.requests[0].requestId,...version});

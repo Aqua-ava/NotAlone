@@ -1,3 +1,6 @@
+import {replyFailureReason} from '../diagnostics.ts';
+import {diagnose} from '../../../diagnostics/context.ts';
+import {checkedTraceId,tracedRequest} from '../../../diagnostics/request-trace.ts';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import {readWechatHttpBody,WechatHttpBodyError} from '../../../sync/wechat-http-body.ts';
 import type {SqliteStorage} from '../../../storage/sqlite/client.ts';
@@ -28,6 +31,8 @@ export class SqliteReplyCandidateHttp {
  async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
   const raw=req.url??'',url=new URL(raw,'http://localhost'),statusMatch=statusRoute.exec(url.pathname),skillsMatch=skillsRoute.exec(url.pathname),match=statusMatch??skillsMatch??route.exec(url.pathname);if(!match)return false;
   const o=this.options;if(!o.authorize(req)){respond(res,401,{error:'unauthorized'});return true;}
+  const trace=req.headers['x-trace-id'];if(trace!==undefined&&!checkedTraceId(trace)){respond(res,400,{error:'reply_input_invalid'});return true;}
+  return tracedRequest(checkedTraceId(trace),'reply','reply_generate',async()=>{
   try{
    if(!statusMatch&&!skillsMatch&&raw!==url.pathname)invalid();
    const [,contactId,discussionId,candidateId,command,version]=match,scope={contactId,discussionId};
@@ -78,7 +83,8 @@ export class SqliteReplyCandidateHttp {
      else respond(res,405,{error:'method_not_allowed'});
     }
    }else respond(res,405,{error:'method_not_allowed'});
-  }catch(error){const code=error instanceof StorageFailure?error.code:error instanceof WechatHttpBodyError?error.code:'reply_unavailable';respond(res,code==='reply_input_invalid'||code==='reply_content_invalid'?400:409,{error:code});}
+  }catch(error){diagnose({event:'diagnostics.error',module:'reply',caller:'reply_http',reasonCode:replyFailureReason(error),contactPrefix:match[1].slice(0,8)});const code=error instanceof StorageFailure?error.code:error instanceof WechatHttpBodyError?error.code:'reply_unavailable';respond(res,code==='reply_input_invalid'||code==='reply_content_invalid'?400:409,{error:code});}
   return true;
+  });
  }
 }

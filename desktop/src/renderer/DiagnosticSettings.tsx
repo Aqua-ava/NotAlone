@@ -17,7 +17,7 @@ export function DiagnosticSettings() {
     setBusy(true); setError(''); setMessage('');
     try {
       if (action === 'toggle') setState(await window.notalone.diagnosticLogs.setEnabled(!state.enabled));
-      else if (action === 'clear') { setState(await window.notalone.diagnosticLogs.clear()); setMessage('已清除本机诊断日志。'); }
+      else if (action === 'clear') { setState(await window.notalone.diagnosticLogs.clear()); setMessage('已清除诊断记录。短期删除保护信息将在14天内过期。'); }
       else { const result = await window.notalone.diagnosticLogs.exportBundle(); setMessage(result.status === 'saved' ? '诊断包已保存到你选择的本机位置。' : '已取消导出。'); }
     } catch { setError('诊断日志操作未完成，请稍后重试。'); }
     finally { setBusy(false); }
@@ -27,7 +27,7 @@ export function DiagnosticSettings() {
     <h2>诊断日志</h2>
     <p>仅保存在本机，不会自动上传。记录操作编号、原因码和耗时，不包含聊天、图片或记忆正文。最多保留 14 天、50 MB，可随时清除。</p>
     <label><input type="checkbox" checked={state?.enabled ?? true} disabled={!state || busy} onChange={() => void operate('toggle')} />启用诊断日志</label>
-    <p>日志占用：<output aria-label="诊断日志占用">{size}</output></p>
+    <p>日志占用（含短期删除保护信息）：<output aria-label="诊断日志占用">{size}</output></p>
     <div className="startup-actions">
       <button className="button" disabled={!state || busy || !state.available} onClick={() => void operate('clear')}>清除日志</button>
       <button className="button" disabled={!state || busy || !state.available} onClick={() => void operate('export')}>导出诊断包…</button>

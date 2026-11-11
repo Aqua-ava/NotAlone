@@ -1,6 +1,7 @@
 import { constants } from 'node:fs';
 import { open, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import {diagnose,newTraceId} from './diagnostics/context.ts';
 
 const stages = ['runtime', 'configuration', 'storage', 'modules', 'handshake'] as const;
 const causes = ['pending', 'process_exit', 'unexpected_failure', 'permission_denied', 'configuration_invalid', 'storage_mismatch', 'storage_unavailable', 'timeout'] as const;
@@ -9,6 +10,19 @@ export type StartupCause = typeof causes[number];
 export interface StartupDiagnostic { version: 1; stage: StartupStage; cause: StartupCause; recordedAt: number }
 export type StartupErrorCode = `backend_startup_${StartupStage}_failed`;
 const location = (infoPath: string) => `${infoPath}.startup-diagnostic.json`;
+let observed: {infoPath:string;state:string;began:number;traceId:string}|undefined;
+
+/** 每个进程只有一条启动管线；路径只作内存归属比较，绝不进入事件。 */
+function recordStage(infoPath:string,state:string,reasonCode:string):void {
+  try {
+    const now=performance.now();
+    if(!observed||observed.infoPath!==infoPath||state==='runtime'&&reasonCode==='started')observed={infoPath,state:'idle',began:now,traceId:newTraceId()};
+    const previous=observed;
+    diagnose({event:'startup.state_changed',caller:'backend_startup',traceId:previous.traceId,fromState:previous.state,toState:state,reasonCode,durationMs:Math.max(0,now-previous.began)});
+    if(state==='failed')diagnose({event:'diagnostics.error',module:'startup',caller:'backend_startup',traceId:previous.traceId,reasonCode,durationMs:Math.max(0,now-previous.began)});
+    observed={...previous,state,began:now};
+  }catch{/* 统一诊断不改变原专用启动文件或异常行为。 */}
+}
 
 /** 仅识别固定错误码，不复制异常文本、堆栈、路径、配置或递归展开 cause。 */
 export function startupFailureCause(error: unknown): StartupCause {
@@ -26,6 +40,7 @@ export async function writeStartupDiagnostic(infoPath: string, stage: StartupSta
   const temporary = `${location(infoPath)}.${randomUUID()}.tmp`;
   try {
     if (!stages.includes(stage) || !causes.includes(cause)) return;
+    recordStage(infoPath,cause==='pending'?stage:'failed',cause==='pending'?'started':cause);
     const record: StartupDiagnostic = {version: 1, stage, cause, recordedAt: Date.now()};
     await writeFile(temporary, JSON.stringify(record), {mode: 0o600, flag: 'wx'});
     await rename(temporary, location(infoPath));
@@ -61,6 +76,7 @@ export async function finishStartupDiagnostic(infoPath: string, cause: StartupCa
 
 export async function clearStartupDiagnostic(infoPath: string): Promise<void> {
   await rm(location(infoPath), {force: true}).catch(() => {});
+  if(observed?.infoPath===infoPath&&observed.state!=='ready')recordStage(infoPath,'ready','completed');
 }
 
 export async function startupErrorCode(infoPath: string, cause: StartupCause): Promise<StartupErrorCode | undefined> {

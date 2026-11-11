@@ -1,4 +1,5 @@
 import { StorageFailure,type StorageReader } from '../contracts.ts';
+import {currentDiagnosticTrace,diagnose,newTraceId,withDiagnosticTrace} from '../../../diagnostics/context.ts';
 import type { SqliteStorage } from '../client.ts';
 import type { CheckResult, DeletionScope, DeletionSnapshot } from './contracts.ts';
 import type { ActiveHolders } from './holders.ts';
@@ -22,14 +23,17 @@ export class DeletionService {
   async plan(input: { ownerId: string; requestKey: string; scope: DeletionScope }): Promise<DeletionSnapshot> {
     const op = await this.storage.execute<DeletionSnapshot>('deletion.plan', input);
     this.holders.fence(op, op.targets.flatMap(t => t.target?.holderKeys ?? []));
+    this.record(op,'started');
     return op;
   }
   status(input: Address): Promise<DeletionSnapshot> { return this.reader.execute('deletion.status', input); }
   list(input: {ownerId: string; contactId?: string}): Promise<DeletionSnapshot[]> { return this.reader.execute('deletion.list', input); }
   async advance(input: Address): Promise<DeletionSnapshot> {
+    return withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),async()=>{
     const cleaned = await this.clean(input);
     if ('final' in cleaned) return cleaned.final;
     return this.compactAndVerify([cleaned.runner]).then(([op]) => op!);
+    });
   }
   /**
    * 批量推进多个操作：逐个完成清理并封存，随后只做一次全库压缩，再逐个核验结案。
@@ -38,6 +42,7 @@ export class DeletionService {
    * 中途崩溃时已封存未核验的操作停在清理态，沿原任务再次 advance 即可补齐（与单个推进的失败现场一致）。
    */
   async advanceBatch(inputs: Address[]): Promise<DeletionSnapshot[]> {
+    return withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),async()=>{
     const results = new Map<string, DeletionSnapshot>();
     const pending: Runner[] = [];
     for (const input of inputs) {
@@ -50,6 +55,7 @@ export class DeletionService {
       for (let i = 0; i < 3 && results.get(input.operationId)?.state === 'fenced'; i++) results.set(input.operationId, await this.advance(input));
     }
     return inputs.map(input => results.get(input.operationId)!);
+    });
   }
   private async clean(input: Address): Promise<{ final: DeletionSnapshot } | { runner: Runner }> {
     let op = await this.storage.execute<Claimed>('deletion.claim', input);
@@ -86,7 +92,7 @@ export class DeletionService {
       }
       targetNo = undefined;
       // 无正文诊断仍含可关联的联系人前缀；整联系人／账号删除结案前一并清除，失败沿原任务重试。
-      if(op.scope.kind==='contact'||op.scope.kind==='account')await this.storage.execute('storage.eraseContinuityDiagnostics',runner);
+      if(op.scope.kind==='contact'||op.scope.kind==='account')await this.storage.eraseDiagnostics(runner);
       const filesOkay = op.targets.every(t => t.target?.kind !== 'file' || this.files.verifyAbsent(t.target.address));
       await this.storage.execute('deletion.sealTargets', {...runner, checks: {
         runtime_files: filesOkay ? passed('managed_targets_absent') : {result: 'blocked', proof: 'managed_targets_remain'},
@@ -106,12 +112,18 @@ export class DeletionService {
     for (const runner of runners) {
       try {
         if (!maintenance) throw failure;
-        done.push(await this.storage.execute<DeletionSnapshot>('deletion.verify', {...runner, checks: { sqlite_pages_wal: maintenance }}));
+        const op=await this.storage.execute<DeletionSnapshot>('deletion.verify', {...runner, checks: { sqlite_pages_wal: maintenance }});this.record(op,op.state==='completed'?'completed':'retry');done.push(op);
       } catch (error) { done.push(await this.blocked(runner, undefined, error)); }
     }
     return done;
   }
-  private blocked(runner: Runner, targetNo: bigint | undefined, error: unknown): Promise<DeletionSnapshot> {
-    return this.storage.execute('deletion.blocked', {...runner, targetNo, code: error instanceof StorageFailure ? error.code : 'cleanup_failed'});
+  private async blocked(runner: Runner, targetNo: bigint | undefined, error: unknown): Promise<DeletionSnapshot> {
+    const code=error instanceof StorageFailure?error.code:'cleanup_failed';
+    const op=await this.storage.execute<DeletionSnapshot>('deletion.blocked', {...runner, targetNo, code});this.record(op,code==='diagnostic_cleanup_unavailable'?'diagnostic_cleanup_failed':code==='deletion_holder_timeout'?'timeout':'failed');return op;
+  }
+  private record(op:DeletionSnapshot,reasonCode:string):void{
+    if(['failed','timeout','diagnostic_cleanup_failed'].includes(reasonCode))diagnose({event:'diagnostics.error',module:'deletion',caller:op.scope.kind==='account'?'account_deletion':op.scope.kind==='contact'?'contact_deletion':'source_deletion',reasonCode});
+    diagnose({event:'deletion.decision',caller:op.scope.kind==='account'?'account_deletion':op.scope.kind==='contact'?'contact_deletion':'source_deletion',reasonCode,taskId:op.operationId,
+      ...(op.state!=='completed'&&op.scope.kind==='contact'&&/^[a-f0-9]{8}/.test(op.scope.contactId)?{contactPrefix:op.scope.contactId.slice(0,8)}:{})});
   }
 }
