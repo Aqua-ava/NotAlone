@@ -115,7 +115,13 @@ test('正式SQLite profile的图文后台在途时前台已到共享供应商，
  assert.deepEqual(new Set(payload.messages.map(message=>message.message_id)),new Set(backMessages.map(message=>message.id)));
  assert.ok(payload.messages.some(message=>message.text===backText));assert.ok(!JSON.stringify(payload).includes(frontText));assert.ok(frontMessages.every(message=>!JSON.stringify(payload).includes(message.id)));
  assert.equal(payload.messages.find(message=>message.message_id===image.id).image_id,file.fileId);
- const images=content.filter(block=>block.type==='image');assert.equal(images.length,1);assert.equal(images[0].source.type,'base64');assert.equal(images[0].source.data,png.toString('base64'));
+ const images=content.filter(block=>block.type==='image');assert.equal(images.length,1);assert.equal(images[0].source.type,'base64');assert.equal(images[0].source.media_type,'image/jpeg');
+ const sentImage=Buffer.from(images[0].source.data,'base64'),sentMetadata=await sharp(sentImage).metadata();
+ assert.equal(sentMetadata.format,'jpeg');assert.equal(sentMetadata.width,8);assert.equal(sentMetadata.height,8);
+ // 有损规范化保留合成橘色像素含义，不再要求发送原PNG的编码字节。
+ const pixels=await sharp(sentImage).raw().toBuffer();
+ for(let offset=0;offset<pixels.length;offset+=3)for(const [channel,expected] of [239,159,79].entries())assert.ok(Math.abs(pixels[offset+channel]-expected)<=3);
+ assert.ok(!wire.includes(file.fileId));assert.ok(!wire.includes(images[0].source.data));
  const permits=await readdir(join(root,'model-permits'));assert.equal(permits.length,1,'图文背景和前台只有一个模型宿主');
  await assert.rejects(access(join(root,'model-permits',permits[0],'state.json')),{code:'ENOENT'},'进程内许可不另写journal');
  releaseForeground.release();const generated=await generatedPromise;assert.equal(generated.status,200,JSON.stringify(generated.data));
@@ -125,7 +131,9 @@ test('正式SQLite profile的图文后台在途时前台已到共享供应商，
  assert.equal(run.status,200);const task=run.data.tasks.find(task=>task.scopeKind==='contact');assert.equal(task.contactId,backContact);assert.equal(task.state,'succeeded',JSON.stringify(task));
  const trace=(await api(`/api/memory-processing/tasks/${task.taskId}/events`)).data;
  assert.equal(trace.calls.length,1);assert.equal(trace.calls[0].purpose,'extraction');assert.equal(trace.calls[0].state,'succeeded');
- assert.ok(trace.events.some(event=>event.kind==='image_inputs'&&event.payload.images.some(manifest=>manifest.id===file.fileId)));
+ const manifest=trace.events.find(event=>event.kind==='image_inputs')?.payload.images.find(item=>item.id===file.fileId);assert.ok(manifest);
+ assert.equal(manifest.sourceSha256,createHash('sha256').update(png).digest('hex'));assert.equal(manifest.originalBytes,png.length);
+ assert.equal(manifest.requestMimeType,'image/jpeg');assert.equal(manifest.width,8);assert.equal(manifest.height,8);assert.equal(manifest.bytes,sentImage.length);
  assert.ok(trace.events.every(event=>event.sources.every(source=>source.contactId===backContact&&backMessages.some(message=>message.sourceRecordIds.includes(source.recordId)))));
  assert.deepEqual(new Set(trace.events.flatMap(event=>event.sources.map(source=>source.recordId))),new Set(backMessages.flatMap(message=>message.sourceRecordIds)));
  assert.deepEqual(supplierErrors,[]);
