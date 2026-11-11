@@ -11,6 +11,8 @@ export interface DeletionOperation {
   operationId: string; ownerId: string; scope: DeletionScope; acceptedGeneration: bigint;
   planRevision: bigint; state: DeletionState;
   createdAt: string; completedAt: string | null;
+  // completed 操作的操作级摘要：按 `domain:row_kind`（文件目标记为 `domain:file`）汇总条数的 JSON 文本，不含任何行键；未完成操作为 null。
+  targetSummary: string | null;
 }
 export const checkKinds = ['write_fence', 'database_rows', 'derived_eligibility', 'trace_payloads',
   'request_replay', 'runtime_files', 'runtime_live_refs', 'sqlite_pages_wal', 'scope_suppression', 'final_recheck'] as const;

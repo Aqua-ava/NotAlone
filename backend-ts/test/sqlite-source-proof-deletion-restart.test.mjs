@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm} from 'node:fs/promises';
+import {DatabaseSync} from 'node:sqlite';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
@@ -31,6 +32,11 @@ for(const scopeKind of ['contact','account'])test(`45未完成${scopeKind}删除
  const deletion=new DeletionService(storage,new ActiveHolders(),new ManagedFiles(root));
  const op={ownerId,operationId:'synthetic-delete'};
  assert.equal((await deletion.advance(op)).state,'completed');
+ // 完成即收敛台账：逐行记录清零，操作行只留按领域与行种汇总条数的摘要。
+ const ledger=new DatabaseSync(join(root,'managed/sqlite/notalone.sqlite'),{readOnly:true});
+ try{assert.equal(ledger.prepare("SELECT count(*) n FROM deletion_target WHERE operation_id='synthetic-delete'").get().n,0);
+  assert.ok(JSON.parse(ledger.prepare("SELECT target_summary s FROM deletion_operation WHERE operation_id='synthetic-delete'").get().s)['history:source_proof']>0);}
+ finally{ledger.close();}
  assert.deepEqual(await storage.execute('fixture.migratedDeletionState',{}),{proofs:[],goals:[]});
  assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

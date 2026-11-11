@@ -2,10 +2,14 @@ import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 import {registry as seed} from './v25-quote-registry.mjs';
 import {historyTarget} from '../../../src/history/sqlite/deletion-target.ts';
 import {historyDeletionDomain} from '../../../src/history/sqlite/deletion.ts';
-import {createDeletionActions} from '../../../src/storage/sqlite/deletion/actions.ts';
-import {deletionTargetKey} from '../../../src/storage/sqlite/deletion/actions.ts';
+import {createDeletionActions,deletionTargetKey} from '../../../src/storage/sqlite/deletion/actions.ts';
+import {deletionLedgerPruneMigration} from '../../../src/storage/sqlite/migrations/deletion-ledger-prune.ts';
 const canonical=v=>Array.isArray(v)?'['+v.map(canonical).join(',')+']':v&&typeof v==='object'?'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canonical(v[k])).join(',')+'}':JSON.stringify(v);
-export const registry={...base,migrations:base.migrations.filter(m=>m.version<=Number(new URL(import.meta.url).searchParams.get('version')||46)),actions:[...base.actions.filter(a=>!a.name.startsWith('deletion.')),...createDeletionActions({domains:[historyDeletionDomain],requiredDomains:['history'],authority:{fence(){return 1n;},verify(){return {result:'passed',proof:'synthetic'};}}}),...seed.actions,{name:'fixture.seedOldDelete',mode:'write',retryBusy:false,execute(tx,i){
+// 截断迁移序列须携带删除模块的现行schema：当前动作完成时写target_summary并清逐行台账，该列由台账收敛迁移提供。
+const version=Number(new URL(import.meta.url).searchParams.get('version')||46);
+const migrations=base.migrations.filter(m=>m.version<=version);
+if(version>=46)migrations.push(deletionLedgerPruneMigration(version+1));
+export const registry={...base,migrations,actions:[...base.actions.filter(a=>!a.name.startsWith('deletion.')),...createDeletionActions({domains:[historyDeletionDomain],requiredDomains:['history'],authority:{fence(){return 1n;},verify(){return {result:'passed',proof:'synthetic'};}}}),...seed.actions,{name:'fixture.seedOldDelete',mode:'write',retryBusy:false,execute(tx,i){
 const original=tx.get('SELECT * FROM read_goal WHERE owner_id=? AND id=?',[i.ownerId,i.goalId]);
 const firstToken=JSON.parse(original.eligibility_json);
 const appendGoal=(token,id,createdAt)=>tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,

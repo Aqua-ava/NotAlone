@@ -60,6 +60,8 @@ HTTP支持`Idempotency-Key`标识一次明确请求，账户删除必须提供�
 
 所有当前计划的必需面通过、目标清除且闭包复查无新增后才completed。新目标先推进planRevision，旧检查失效，调用方沿同操作再次advance。维护中断或失败保持未完成；重试再次维护，不能仅凭DB行已删宣告跨存储原子成功。本合同不承诺SSD底层、外部备份或模型服务商副本的法证擦除。
 
+completed是终态：转完成的同一事务内，统一模块按`domain:row_kind`（文件目标记为`domain:file`）把逐行条数汇总成JSON写入`deletion_operation.target_summary`，随后删除该操作的全部`deletion_target`逐行记录；摘要只含条数，不含任何行键、定位或证明。未完成操作（fenced/cleaning/verifying/blocked）的逐行记录原样保留。领域回调经claim对completed拒绝，公开状态只返回操作级进度，因此完成后没有读取方依赖逐行记录。迁移48为存量已完成操作补写摘要并清理逐行台账；释放的页经`deletion.compact`的VACUUM回收，只有下一次删除推进（advance/advanceBatch）或离线批量维护工具会触发压缩。
+
 ## API依据与验收边界
 
 文件身份与删除使用 Node 的 `lstat/unlink/rmdir/fsync`，SQLite 维护通过存储模块具名维护动作执行。变更相关 API 时核对实际安装环境；模块测试、宿主接线、真实资料删除和存储物理擦除的证据边界必须分别报告。
