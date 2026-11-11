@@ -61,7 +61,8 @@ export class SqliteMediaService {
    diagnose({event:'media.decision',caller,reasonCode:'started',...(contactPrefix?{contactPrefix}:{})});
    return work().then(value=>{diagnose({event:'media.decision',caller,reasonCode:'completed',durationMs:Math.max(0,performance.now()-started),...(contactPrefix?{contactPrefix}:{})});return value;},error=>{
     const reasons:Record<string,string>={media_execution_failed:'failed',media_thumbnail_only:'thumbnail_only',media_database_key_missing:'media_key_missing',media_association_failed:'association_failed',media_interrupted:'aborted',media_closed:'shutdown',read_not_authorized:'authorization_revoked',read_eligibility_stale:'authorization_revoked',history_source_not_available:'source_stale',media_adapter_unavailable:'not_ready'};
-    const reasonCode=error instanceof StorageFailure?reasons[error.code]??'image_unavailable':'failed';
+    let reasonCode='failed';
+    try{if(error instanceof StorageFailure){const code=error.code;reasonCode=Object.hasOwn(reasons,code)?reasons[code]:'image_unavailable';}}catch{/* 异常getter不能替换原业务异常。 */}
     diagnose({event:'diagnostics.error',module:'media',caller,reasonCode,durationMs:Math.max(0,performance.now()-started),...(contactPrefix?{contactPrefix}:{})});throw error;
    });
   });
