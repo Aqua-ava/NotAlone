@@ -10,7 +10,7 @@ import { installWechatSetupBridge } from './setup/wechat-bridge';
 import { installForegroundBridge } from './foreground/bridge';
 import { coordinateOwnerContextChanges, coordinateSourceContextChanges } from './reply/owner-context-changes';
 import { NativeHeaderChangeSource } from './foreground/native-change-source';
-import { openHeaderChangeDiagnostics } from './foreground/header-change-diagnostics';
+import { createHeaderChangeDiagnosticSink,openHeaderChangeDiagnostics } from './foreground/header-change-diagnostics';
 import { resolveHeaderChangeSourcePath } from './backend/bundled-helpers';
 import { CandidateCopyController } from './candidate-copy/controller';
 import { installElectronCandidateCopy } from './candidate-copy/electron';
@@ -133,7 +133,7 @@ void app.whenReady().then(async () => {
     if (state.reason === 'screen_capture_permission_missing') screenPermission.noteMissing();
   });
   app.on('before-quit', () => screenPermission.dispose());
-  const headerChangeDiagnostics = openHeaderChangeDiagnostics(process.env);
+  const headerChangeDiagnostics = createHeaderChangeDiagnosticSink(openHeaderChangeDiagnostics(process.env));
   const headerChanges = new NativeHeaderChangeSource(async () =>
     resolveHeaderChangeSourcePath(resourcesDirectory, development?.projectDirectory), headerChangeDiagnostics);
   app.on('will-quit', () => headerChangeDiagnostics?.close());

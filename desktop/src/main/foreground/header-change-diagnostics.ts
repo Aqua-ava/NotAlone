@@ -114,8 +114,6 @@ export function openHeaderChangeDiagnostics(environment: NodeJS.ProcessEnv): Hea
     if (closed) return;
     try {
       if (!validRecord(record)) return;
-      if(record.kind==='observation'&&record.event==='result_published'&&record.changedContact)diagnose({event:'foreground.decision',caller:'foreground_probe',reasonCode:record.confirmed?'completed':'unmatched',durationMs:record.durationMs,count:1});
-      else if(record.kind==='native'&&!['begin','first_frame','stopped'].includes(record.reason))diagnose({event:'foreground.decision',caller:'foreground_probe',reasonCode:record.reason==='permission_missing'||record.reason==='stream_permission_declined'?'permission_missing':record.reason==='lease_expired'?'lease_lost':'rejected',durationMs:record.nativeElapsedMs});
       if (record.kind === 'clock-anchor' && anchored) return;
       const line = Buffer.from(`${JSON.stringify(record)}\n`);
       if (records >= 4096 || bytes + line.length > 2 * 1024 * 1024) { close(); return; }
@@ -129,6 +127,21 @@ export function openHeaderChangeDiagnostics(environment: NodeJS.ProcessEnv): Hea
       }
     } catch { close(); }
   } };
+}
+
+/** 正式默认始终可用；统一出口复用原白名单，专用私有文件仍须显式开启。 */
+export function createHeaderChangeDiagnosticSink(special?:HeaderChangeDiagnosticSink):HeaderChangeDiagnosticSink{
+ let closed=false;
+ return {close(){closed=true;special?.close();},record(record){
+  if(closed)return;
+  try{
+   if(!validRecord(record))return;
+   if(record.kind==='observation'&&record.event==='result_published'&&record.changedContact)diagnose({event:'foreground.decision',caller:'foreground_probe',reasonCode:record.confirmed?'completed':'unmatched',durationMs:record.durationMs,count:1});
+   else if(record.kind==='native'&&!['begin','first_frame'].includes(record.reason))diagnose({event:'foreground.decision',caller:'foreground_native',reasonCode:record.reason,durationMs:record.nativeElapsedMs});
+   else if(record.kind==='native-context')diagnose({event:'foreground.decision',caller:'foreground_context',reasonCode:record.reason,durationMs:record.nativeElapsedMs});
+   special?.record(record);
+  }catch{/* 任一诊断出口故障不影响原生观察或读取资格。 */}
+ }};
 }
 
 export function diagnosticSignal(signal: string | null): HeaderChangeDiagnosticSignal {
