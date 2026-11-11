@@ -49,8 +49,8 @@ export function requireCandidate(tx:StorageTransaction,ownerId:string,c:StorageR
   &&(row.content_kind??'text')===(expected.contentKind??'text')&&(expected.contentRef?JSON.stringify(JSON.parse(String(row.content_ref_json)))===JSON.stringify(expected.contentRef):true)))))fail('memory_candidate_stale');
  return output.semanticVerification;
 }
-export function requireAutomaticCandidate(tx:StorageTransaction,ownerId:string,c:StorageRow):void{
- if(requireCandidate(tx,ownerId,c).state!=='verified')fail('memory_verification_pending');
+export function requireAutomaticCandidate(tx:StorageTransaction,ownerId:string,c:StorageRow,sourceEligibility:SourceEligibility=assertSourceEligibility):void{
+ if(requireCandidate(tx,ownerId,c,sourceEligibility).state!=='verified')fail('memory_verification_pending');
 }
 export function requireVersion(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow,sourceEligibility:SourceEligibility=assertSourceEligibility):StorageRow[]{
  available(tx,ownerId,{scopeKind:m.scope_kind as 'self'|'contact',contactId:m.contact_id as string|null});
