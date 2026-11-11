@@ -6,13 +6,13 @@ import {fileURLToPath} from 'node:url';
 import {canonicalJSON,digest} from '../evidence/canonical-json.ts';
 import type {PreparedVerificationPolicy} from './verification/complete-claim.ts';
 
+/** mode 的 legacy 值是现有 v2 存档字段，不再分派到旧核验策略。 */
 export interface CompleteClaimRuntimeConfig {
  version:2;mode:'legacy';rule_set_sha256:null;verification_policy:'complete-claim-v1';source_stamp:string;
 }
-export interface LegacyRuntimeConfig {version:1;mode:'legacy'|'bounded-runtime-v1';rule_set_sha256:string|null;}
-export type ExtractionRuntimeConfig=CompleteClaimRuntimeConfig|LegacyRuntimeConfig|null;
+export type ExtractionRuntimeConfig=CompleteClaimRuntimeConfig;
 export interface ResolvedExtractionPolicy {
- mode:'legacy'|'bounded-runtime-v1';verification:PreparedVerificationPolicy;ruleVersion:string;
+ mode:'legacy';verification:PreparedVerificationPolicy;ruleVersion:string;
  config:ExtractionRuntimeConfig;
 }
 export interface ExtractionPolicyVersion {
@@ -26,14 +26,16 @@ export class ExtractionPolicyVersionError extends Error {
 }
 const hash=/^[a-f0-9]{64}$/;
 const invalid=():never=>{throw new ExtractionPolicyVersionError('extraction_runtime_config_invalid');};
+const retired=():never=>{throw new ExtractionPolicyVersionError('extraction_runtime_config_retired');};
 const unavailable=():never=>{throw new ExtractionPolicyVersionError('extraction_policy_source_unavailable');};
 export function validateExtractionRuntimeConfig(value:unknown):ExtractionRuntimeConfig {
- if(value===null||value===undefined)return null;
+ if(value===null||value===undefined)retired();
  if(typeof value!=='object'||Array.isArray(value))invalid();
  const row=value as Record<string,unknown>,keys=Object.keys(row).sort().join(',');
  if(row.version===1){
   if(keys!=='mode,rule_set_sha256,version'||typeof row.mode!=='string'||!['legacy','bounded-runtime-v1'].includes(row.mode)
    ||(row.mode==='legacy'?row.rule_set_sha256!==null:typeof row.rule_set_sha256!=='string'||!hash.test(row.rule_set_sha256)))invalid();
+  retired();
  }else if(row.version===2){
   if(keys!=='mode,rule_set_sha256,source_stamp,verification_policy,version'||row.mode!=='legacy'
    ||row.rule_set_sha256!==null||row.verification_policy!=='complete-claim-v1'
@@ -42,25 +44,20 @@ export function validateExtractionRuntimeConfig(value:unknown):ExtractionRuntime
  return structuredClone(row) as unknown as ExtractionRuntimeConfig;
 }
 export function resolveExtractionPolicy(value:unknown,baseRuleVersion:string,sourceStamp?:string):ResolvedExtractionPolicy {
- const config=validateExtractionRuntimeConfig(value),mode=config?.mode??'legacy';
- if(config?.version===2){
-  if(!hash.test(baseRuleVersion)||!sourceStamp||config.source_stamp!==sourceStamp)unavailable();
-  const ruleVersion=digest({version:2,base_rule_version:baseRuleVersion,config});
-  return {mode,verification:{id:'complete-claim-v1',rule_version:ruleVersion},ruleVersion,config};
- }
- return {mode,verification:{id:mode==='bounded-runtime-v1'?'nullable-proof-v3':'legacy-v4',rule_version:baseRuleVersion},ruleVersion:baseRuleVersion,config};
+ const config=validateExtractionRuntimeConfig(value);
+ if(!hash.test(baseRuleVersion)||!sourceStamp||config.source_stamp!==sourceStamp)unavailable();
+ const ruleVersion=digest({version:2,base_rule_version:baseRuleVersion,config});
+ return {mode:'legacy',verification:{id:'complete-claim-v1',rule_version:ruleVersion},ruleVersion,config};
 }
 
 /** 同一判定供 A 缓存与 B 写入资格使用；窗口数字保留原 JSONB 精度表示。 */
 export function assertExtractionPolicyWindow(policy:ResolvedExtractionPolicy,runtime:unknown,aRuleVersion?:string):void {
  const row=runtime&&typeof runtime==='object'&&!Array.isArray(runtime)?runtime as Record<string,unknown>:null;
  const v2=canonicalJSON(row?.config_version??null)==='2';
- if(policy.config?.version===2){
-  if(!v2||row?.mode!=='legacy'||row.rule_set_sha256!==null
+ if(!v2||row?.mode!=='legacy'||row.rule_set_sha256!==null
    ||row.verification_policy!==policy.config.verification_policy||row.source_stamp!==policy.config.source_stamp
    ||row.rule_version!==policy.ruleVersion||aRuleVersion!==undefined&&aRuleVersion!==policy.ruleVersion)
    throw new ExtractionPolicyVersionError('extraction_policy_window_mismatch');
- }else if(v2||row?.verification_policy==='complete-claim-v1')throw new ExtractionPolicyVersionError('extraction_policy_window_mismatch');
 }
 
 // 收集所有字面依赖（包括类型边和注释中的可疑相对边），宁可拒绝缺失文件，不静默遗漏。

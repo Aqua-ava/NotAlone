@@ -1,12 +1,12 @@
 /** SQLite记忆裁决与DSH适配共用的纯数据合同。 */
-import type {EvidenceFact} from '../extraction/verification/evidence.ts';
-import type {MemoryConditions,MemoryEvent} from '../extraction/protocol.ts';
+import type {ExtractedFact,MemoryConditions,MemoryEvent} from '../extraction/protocol.ts';
 
 export type AdoptionAction='add'|'update'|'noop'|'keep'|'merge';
 export type EvolutionKind='supplement'|'state_change'|'error_correction'|'historical_supplement'|'unresolved_conflict'|'independent';
 export interface AdoptionScope {owner_id:string;contact_id:string}
-export interface AdoptionFact extends Omit<EvidenceFact,'dimension_evidence'> {
+export interface AdoptionFact extends ExtractedFact {
  dimension_evidence:Record<string,unknown>|null;
+ verified_source_receipt:readonly [string,string,'any'|'all',boolean]|null;
 }
 export interface AdoptionFactInput {fact:AdoptionFact;candidate_trace_id?:string|null}
 export interface ModelUsage {

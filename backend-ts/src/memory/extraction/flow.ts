@@ -3,11 +3,9 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {randomUUID} from 'node:crypto';
 import {DIRECT_EXTRACTION_PROMPT,DIRECT_EXTRACTION_SCHEMA} from './prompts.ts';
 import {readExtractionToolArguments,ExtractionArgumentsError} from './arguments.ts';
-import {parseDirectExtraction,parseSourceVerification,ExtractionProtocolError,validateExtractionWindow,LOW_VALUE_EXTRACTION_CONFIDENCE} from './protocol.ts';
-import {buildSourceVerificationContract,buildSourceVerificationPayload,sourceCalendarPayload} from './contract.ts';
+import {parseDirectExtraction,ExtractionProtocolError,validateExtractionWindow,LOW_VALUE_EXTRACTION_CONFIDENCE} from './protocol.ts';
+import {sourceCalendarPayload} from './contract.ts';
 import type {ExtractionWindow,ExtractedFact,SourceVerificationResult} from './protocol.ts';
-import {boundedExtractionInput,boundedExtractionPrompt,boundedExtractionSchema,bindBoundedFact,compileGroundedLabels,normalizeBoundedWindow,prepareBoundedForAdoption,sourceUnits} from './bounded.ts';
-import {verificationFailureDiagnostic} from './verification/diagnostics.ts';
 import {prepareSourceVerification,type PreparedVerificationPolicy,type VerificationAdmission} from './verification/complete-claim.ts';
 import {prepareMultimodalVerification} from './multimodal.ts';
 
@@ -23,7 +21,7 @@ export interface ExtractionFlowOutcome {
  verification:{fact:ExtractedFact;result:SourceVerificationResult}[];
 }
 export interface ExtractionFlowOptions {
- window:ExtractionWindow;signal:AbortSignal;mode?:'legacy'|'bounded-runtime-v1';max_retries?:number;retry_delay_ms?:number;
+ window:ExtractionWindow;signal:AbortSignal;mode?:'legacy';max_retries?:number;retry_delay_ms?:number;
  images?:ExtractionInvocation['images'];
  verificationPolicy?:PreparedVerificationPolicy;
  requireCurrent():Promise<void>;
@@ -55,7 +53,6 @@ function directExtractionInput(window:ExtractionWindow):string {
  });
 }
 const directFields=Object.keys(DIRECT_EXTRACTION_SCHEMA.properties.scenes.items.properties.memories.items.properties);
-const verificationFields=['results','candidate_index','verdict','issues','evidence','proof','event_verification','condition_verification','stage_evidence','occurrence_evidence','message_id','quote'] as const;
 function invocation(purpose:ExtractionInvocation['purpose'],prompt:string,schema:Record<string,any>,user:string,validateOutput:ExtractionInvocation['validateOutput']):ExtractionInvocation {
  return {purpose,system:prompt,user,tool:{name:schema.title,description:schema.description??'',parameters:schema},validateOutput};
 }
@@ -64,27 +61,12 @@ function failure(kind:ExtractionFlowOutcome['failure_kind'],completed:boolean,re
   failure_reason:kind==='invalid_output'?'模型输出未通过提取或来源核验，本批未写入记忆。':'模型调用不可用，本批保留待恢复。',verification:[]};
 }
 function invalid(error:unknown):boolean{return error instanceof ExtractionArgumentsError||error instanceof ExtractionProtocolError||Boolean(error&&typeof error==='object'&&'code' in error&&error.code==='extraction_model_validation_failed');}
-async function parseVerificationReply(
-  blocks:readonly unknown[],contract:ReturnType<typeof buildSourceVerificationContract>,window:ExtractionWindow,
-  facts:ExtractedFact[],mode:'legacy-v4'|'nullable-proof-v3'|undefined,record:ExtractionFlowOptions['record'],
-):Promise<SourceVerificationResult[]>{
-  try{
-    // 只收拢唯一、可逆的外层包络；候选覆盖、字段枚举、逐字引文仍由严格协议校验。
-    const decoded=readExtractionToolArguments(blocks,contract.schema.title,{repair:true,field_names:verificationFields,root_array_key:'results'});
-    return parseSourceVerification(decoded.value,window,facts,{isolate_items:true,...(mode?{mode}:{})});
-  }catch(error){
-    if(invalid(error))await record({stage:'verification_validation_failure',
-      payload:verificationFailureDiagnostic(blocks,contract.schema.title,facts.length,error)});
-    throw error;
-  }
-}
 function modelFailure(error:unknown):boolean{return Boolean(error&&typeof error==='object'&&'code' in error&&String(error.code).startsWith('extraction_model_'));}
 function safeTransient(error:unknown):boolean {
  // 调用端必须明确证明已知失败且允许重试；未知 dispatch 或 ACK 绝不盲重放。
  const value=error as {retryable?:unknown;receipt?:{outcome?:unknown}};
  return value?.retryable===true&&value.receipt?.outcome==='failed';
 }
-function reviewable(fact:ExtractedFact):boolean{return fact.speech_act!=='question'&&!['joke','sarcasm','hyperbole'].includes(fact.figurative_type);}
 function rawCandidates(payload:unknown){
  return (payload as {scenes:unknown[]}).scenes.flatMap(scene=>{
   const row=scene as Record<string,any>|null;
@@ -98,16 +80,16 @@ function rawCandidates(payload:unknown){
 }
 
 export async function runExtractionFlow(options:ExtractionFlowOptions):Promise<ExtractionFlowOutcome>{
+ if(options.mode!==undefined&&options.mode!=='legacy')throw new ExtractionProtocolError('extraction_runtime_retired');
  if(options.window.messages.some(message=>message.image)){
   prepareMultimodalVerification({window:options.window,facts:[],images:options.images??[],requireCurrent:options.requireCurrent});
-  return runLegacyExtractionFlow({...options,mode:'legacy'});
+  return runDirectExtractionFlow({...options,mode:'legacy'});
  }
  if(options.images?.length)throw new ExtractionProtocolError('图片必须属于本次固定消息窗口。');
- if(options.mode==='bounded-runtime-v1')return runBoundedExtractionFlow(options);
- return runLegacyExtractionFlow(options);
+ return runDirectExtractionFlow(options);
 }
 
-async function runLegacyExtractionFlow(options:ExtractionFlowOptions):Promise<ExtractionFlowOutcome>{
+async function runDirectExtractionFlow(options:ExtractionFlowOptions):Promise<ExtractionFlowOutcome>{
  const retries=options.max_retries??5,retryDelay=options.retry_delay_ms??30000;
  if(!Number.isSafeInteger(retries)||retries<0||retries>5||!Number.isSafeInteger(retryDelay)||retryDelay<0||retryDelay>30000)throw new ExtractionProtocolError();
  if(options.mode!==undefined&&options.mode!=='legacy')throw new ExtractionProtocolError();
@@ -159,6 +141,7 @@ async function runLegacyExtractionFlow(options:ExtractionFlowOptions):Promise<Ex
   }
   if(fact){facts.push(fact);traceIds.set(fact,candidate.candidate_trace_id);}
  }
+ if(!facts.length)return {accepted:[],candidate_trace_ids:[],rejected_count:parsedRejections,extraction_completed:true,failure_kind:null,failure_reason:null,verification:[]};
  let admissions:VerificationAdmission[];
  try{
   const preparedVerification=options.images?.length?prepareMultimodalVerification({window:options.window,facts,images:options.images,
@@ -196,87 +179,4 @@ async function runLegacyExtractionFlow(options:ExtractionFlowOptions):Promise<Ex
  }
  await options.record({stage:'verification_contract',payload:{results:admissions.flatMap(item=>item.result?[item.result]:[]),rejected_count:rejected}});
  return {accepted,candidate_trace_ids,rejected_count:rejected,extraction_completed:true,failure_kind:null,failure_reason:null,verification};
-}
-
-async function runBoundedExtractionFlow(options:ExtractionFlowOptions):Promise<ExtractionFlowOutcome>{
- const retries=options.max_retries??5,retryDelay=options.retry_delay_ms??30000;
- if(!Number.isSafeInteger(retries)||retries<0||retries>5||!Number.isSafeInteger(retryDelay)||retryDelay<0||retryDelay>30000)throw new ExtractionProtocolError();
- const window=normalizeBoundedWindow(options.window);validateExtractionWindow(window);options.signal.throwIfAborted();await options.requireCurrent();
- const schema=boundedExtractionSchema(window),prompt=boundedExtractionPrompt();
- const targetIds=sourceUnits(window).filter(unit=>unit.target).map(unit=>unit.id);
- let draft:unknown,raw:readonly unknown[]|undefined;
- for(let attempt=0;attempt<=retries;attempt++){
-  let error:unknown;
-  try{
-   options.signal.throwIfAborted();await options.requireCurrent();
-   const request=invocation('extraction',prompt,schema,boundedExtractionInput(window),blocks=>{
-    const decoded=readExtractionToolArguments(blocks,schema.title,{repair:true,allow_text_json:true,field_names:['units',...targetIds]});
-    compileGroundedLabels(window,decoded.value);
-   });
-   raw=(await options.invoke(request,options.signal)).blocks;
-   const decoded=readExtractionToolArguments(raw,schema.title,{repair:true,allow_text_json:true,field_names:['units',...targetIds]});
-   draft=decoded.value;compileGroundedLabels(window,draft);
-   await options.record({stage:'grounded_draft',payload:{protocol:'grounded-v2',compiler_version:'grounded-source-event-v1',prompt_profile:'bounded-dependency-teaching-v2',draft}});
-   break;
-  }catch(caught){error=caught;}
-  options.signal.throwIfAborted();
-  const retryable=invalid(error)||safeTransient(error);
-  if(!retryable&&!modelFailure(error))throw error;
-  await options.record({stage:'extraction_recovery',payload:{attempt:attempt+1,raw:raw??null,will_retry:retryable&&attempt<retries,
-   failure_kind:invalid(error)?'invalid_output':'unavailable'}});
-  if(!retryable||attempt===retries)return failure(invalid(error)?'invalid_output':'unavailable',false,0);
-  await delay(retryDelay,undefined,{signal:options.signal});
- }
- let compiled:ExtractedFact[];
- try{compiled=compileGroundedLabels(window,draft);}
- catch{return failure('invalid_output',true,0);}
- const traceIds=new Map<ExtractedFact,string>(),accepted:ExtractedFact[]=[];let rejected=0;
- for(const [index,fact] of compiled.entries()){
-  const candidate_trace_id=randomUUID();traceIds.set(fact,candidate_trace_id);
-  await options.record({stage:'candidate_raw',candidate_trace_id,payload:{index,fields:fact}});
-  try{
-   const ids=new Set(window.messages.map(message=>message.message_id)),targets=new Set((window.target_message_ids??window.messages.map(message=>message.message_id)));
-   if(!fact.source_message_ids.every(id=>ids.has(id))||!fact.source_message_ids.some(id=>targets.has(id)))throw new ExtractionProtocolError();
-   const bound=bindBoundedFact(window,fact);accepted.push(bound);traceIds.delete(fact);traceIds.set(bound,candidate_trace_id);
-   await options.record({stage:'parse',candidate_trace_id,payload:{status:'accepted',before:fact,after:bound}});
-  }catch{
-   rejected++;await options.record({stage:'parse',candidate_trace_id,payload:{status:'rejected',disposition:'source_rejected',not_executed:['verification','adoption','write']}});
-  }
- }
- const review=accepted.filter(reviewable);
- if(review.length>60)return failure('invalid_output',true,rejected);
- if(!review.length)return {accepted,candidate_trace_ids:accepted.map(fact=>traceIds.get(fact)!),rejected_count:rejected,
-  extraction_completed:true,failure_kind:null,failure_reason:null,verification:[]};
- await options.record({stage:'verification_input',payload:{window,facts:review,candidate_trace_ids:review.map(fact=>traceIds.get(fact)!)}});
- const contract=buildSourceVerificationContract(review,'nullable-proof-v3');
- const request=invocation('verification',contract.prompt,contract.schema,JSON.stringify(buildSourceVerificationPayload(window,review,{positionGuide:true})),blocks=>{
-  return parseVerificationReply(blocks,contract,window,review,'nullable-proof-v3',options.record).then(()=>{});
- });
- let results:SourceVerificationResult[];
- try{
-  options.signal.throwIfAborted();await options.requireCurrent();
-  const verificationRaw=(await options.invoke(request,options.signal)).blocks;
-  await options.record({stage:'verification_return',payload:{blocks:verificationRaw}});
-  results=await parseVerificationReply(verificationRaw,contract,window,review,'nullable-proof-v3',options.record);
- }catch(error){
-  options.signal.throwIfAborted();
-  if(invalid(error))return failure('invalid_output',true,rejected);
-  if(modelFailure(error))return failure('unavailable',true,rejected);
-  throw error;
- }
- await options.requireCurrent();options.signal.throwIfAborted();
- const checked=new Map(review.map((fact,index)=>[fact,results.find(result=>result.candidate_index===index)!]));
- const output:ExtractedFact[]=[],candidate_trace_ids:string[]=[],verification:ExtractionFlowOutcome['verification']=[];
- for(const fact of accepted){
-  const candidate_trace_id=traceIds.get(fact)!,result=checked.get(fact);
-  if(!result){const prepared=prepareBoundedForAdoption(fact);output.push(prepared);candidate_trace_ids.push(candidate_trace_id);continue;}
-  await options.record({stage:'verification',candidate_trace_id,payload:{status:'validated',result,before:fact,
-   disposition:result.verdict==='unsupported'?'unsupported_rejected':'continue'}});
-  if(result.verdict==='unsupported'){rejected++;continue;}
-  const updated={...fact,event:result.event,conditions:result.conditions};
-  const prepared=prepareBoundedForAdoption(updated);
-  output.push(prepared);candidate_trace_ids.push(candidate_trace_id);verification.push({fact:prepared,result});
- }
- await options.record({stage:'verification_contract',payload:{results,rejected_count:rejected}});
- return {accepted:output,candidate_trace_ids,rejected_count:rejected,extraction_completed:true,failure_kind:null,failure_reason:null,verification};
 }

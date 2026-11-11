@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseDirectExtraction} from '../src/memory/extraction/protocol.ts';
 import {prepareSourceVerification} from '../src/memory/extraction/verification/complete-claim.ts';
-import {attachVerifiedSourceReceipt} from '../src/memory/extraction/verification/evidence.ts';
+import {assertCompleteClaimAdmission} from '../src/memory/extraction/verification/complete-claim.ts';
 import {deepSeekStrictVerificationSchema} from '../src/memory/extraction/verification/deepseek-strict.ts';
 import {resolveExtractionPolicy} from '../src/memory/extraction/policy-version.ts';
 
@@ -156,8 +156,8 @@ test('完成核验后替换场景不能复用原接纳资格', async () => {
   const prepared = prepareSourceVerification({...input, policy, requireCurrent: async () => {}});
   const item = (await prepared.decode(response(input, prepared))).items[0];
   assert.equal(item.admitted, true);
-  assert.ok(attachVerifiedSourceReceipt(input.window, input.facts[0], item.result).verified_source_receipt);
-  assert.throws(() => attachVerifiedSourceReceipt(input.window, {...input.facts[0], _scene_name: '金融等级'}, item.result), /unbound_admission/);
+  assert.doesNotThrow(()=>assertCompleteClaimAdmission(input.window, input.facts[0], item.result));
+  assert.throws(() => assertCompleteClaimAdmission(input.window, {...input.facts[0], _scene_name: '金融等级'}, item.result), /unbound_admission/);
 });
 
 test('元数据缺项、非法证据和额外字段逐项失败；空值不要求补造来源事实', async () => {
@@ -240,7 +240,7 @@ test('单项元数据未定或结构错误不污染相邻有据候选', async ()
   }
 });
 
-test('新schema仍可编译strict合同，旧null/v1与nullable请求不升级到新语义合同', async () => {
+test('新schema仍可编译strict合同，旧null/v1配置明确拒绝而不升级新语义合同', async () => {
   const input = scenario({source: '陈禾说展演日期还没定。'});
   const modern = prepareSourceVerification({...input, policy, requireCurrent: async () => {}});
   const schema = deepSeekStrictVerificationSchema(modern.request.tool.parameters);
@@ -259,12 +259,6 @@ test('新schema仍可编译strict合同，旧null/v1与nullable请求不升级�
   closed(schema);
   for (const config of [null, {version: 1, mode: 'legacy', rule_set_sha256: null},
     {version: 1, mode: 'bounded-runtime-v1', rule_set_sha256: 'b'.repeat(64)}]) {
-    const legacy = prepareSourceVerification({...input, policy: resolveExtractionPolicy(config, 'a'.repeat(64)).verification,
-      requireCurrent: async () => {}});
-    const payload = JSON.parse(legacy.request.user);
-    assert.equal(Object.hasOwn(payload, 'request_fingerprint'), false);
-    assert.equal(Object.hasOwn(payload.candidates[0], 'scene_name'), false);
-    assert.equal(Object.hasOwn(legacy.request.tool.parameters.properties.results.items.properties, 'claim_check'), false);
-    assert.notEqual(legacy.fingerprint, modern.fingerprint);
+    assert.throws(()=>resolveExtractionPolicy(config,'a'.repeat(64)),{code:'extraction_runtime_config_retired'});
   }
 });

@@ -1,6 +1,5 @@
 import {verifyEvent,groundedEventProposal,groundedValidity} from './calendar.ts';
-import {parseProofProposal,verifyBoundedProof,type ProofProposal,type ProofVerification} from './verification/bounded-proof.ts';
-/** direct E 与 legacy-v4 V 的确定性边界；模型调用、许可、重试和写入由宿主负责。 */
+/** direct E 与完整命题 V 的确定性边界；模型调用、许可、重试和写入由宿主负责。 */
 export interface ExtractionMessage {
   message_id: string; text: string; sender: 'self'|'contact'; occurred_at: string|null;
   content_kind?:string;
@@ -27,10 +26,11 @@ export interface ExtractedFact {
 }
 export interface SourceVerificationResult {
   candidate_index:number;verdict:'supported'|'uncertain'|'unsupported';issues:string[];
-  evidence:{message_id:string;quote:string}[];verification_mode:'legacy-v4'|'nullable-proof-v3'|'complete-claim-v1'|'multimodal-claim-v1';
+  evidence:{message_id:string;quote:string}[];verification_mode:'complete-claim-v1'|'multimodal-claim-v1';
   content_evidence?:{message_id:string;kind:'text'|'image';quote:string|null;file_id:string|null;sha256:string|null;description:string|null}[];
   model_verdict:'supported'|'uncertain'|'unsupported';model_issues:string[];event:MemoryEvent|null;conditions:MemoryConditions|null;
-  proof:ProofProposal|null;proof_verification:ProofVerification|null;
+  /** 保留完整命题与图文存档的固定空槽，不再承载旧有限图证明。 */
+  proof:null;proof_verification:null;
   /** 发生时间标注（event）可选：核验不可采纳时丢弃 event 并置真，不参与整条候选的准入；不覆盖 valid_at/invalid_at。 */
   time_unverified?:boolean;
   model_claim_check?:unknown;
@@ -203,40 +203,8 @@ export function validateSourceVerification(payload:unknown,window:ExtractionWind
       if(!issues.includes('condition'))issues=[...issues,'condition'];
     }
     results.set(index,{candidate_index:index,verdict,issues,evidence,model_verdict:modelVerdict,model_issues:modelIssues,
-      verification_mode:'legacy-v4',event:timeUnverified?null:event,conditions,proof:null,proof_verification:null,
+      verification_mode:'complete-claim-v1',event:timeUnverified?null:event,conditions,proof:null,proof_verification:null,
       ...(timeUnverified?{time_unverified:true}:{})});
-  }
-  return Array.from({length:facts.length},(_,index)=>results.get(index)!);
-}
-
-// 历史 bounded-runtime-v1（nullable-proof-v3）与存档重放保留原语义：时间仍按原规则参与候选判定，不适用 ADR-150；该路径当前不可写入生产，启用前须先对齐。
-function validateSourceVerificationV3(payload:unknown,window:ExtractionWindow,facts:ExtractedFact[]):SourceVerificationResult[]{
-  validateExtractionWindow(window);requireValid(facts.length<=60&&Array.isArray(payload)&&payload.length===facts.length);
-  const results=new Map<number,SourceVerificationResult>();
-  for(const item of payload){
-    const raw=object(item),required=['candidate_index','verdict','issues','evidence'];
-    requireValid(required.every(key=>Object.hasOwn(raw,key))&&Object.keys(raw).every(key=>[...required,'proof','event_verification','condition_verification'].includes(key)));
-    const index=raw.candidate_index;requireValid(Number.isInteger(index)&&index>=0&&index<facts.length&&!results.has(index));
-    let verdict=choices(raw.verdict,['supported','uncertain','unsupported']) as SourceVerificationResult['verdict'];
-    let issues=stringArray(raw.issues).map(issue=>choices(issue,['meaning','subject','negation','degree','quantity','condition','time','pragmatics','disconnected_context','insufficient_evidence']));
-    requireValid(verdict==='supported'?issues.length===0:issues.length>0);
-    const fact=facts[index]!,evidence=Array.isArray(raw.evidence)?raw.evidence.map((entry:unknown)=>{
-      const quote=object(entry);exactFields(quote,['message_id','quote']);const message_id=uuid(quote.message_id),message=window.messages.find(row=>uuid(row.message_id)===message_id);
-      requireValid(fact.source_message_ids.includes(message_id)&&message&&message.text.includes(text(quote.quote)));return {message_id,quote:quote.quote as string};
-    }):requireValid(false) as never;
-    const targets=new Set((window.target_message_ids??window.messages.map(message=>message.message_id)).map(uuid));
-    requireValid(verdict!=='supported'||evidence.length>0&&evidence.some(row=>targets.has(row.message_id)));
-    const model_verdict=verdict,model_issues=[...issues],proof=parseProofProposal(raw.proof??null);
-    const checked=verifyBoundedProof(proof,window,fact,new Map(window.messages.map(message=>[uuid(message.message_id),message.text])));
-    if(checked.status==='unsupported'){verdict='unsupported';issues=[...new Set([...issues,'meaning'])];}
-    if(verdict==='supported'&&unresolvedAuthorQuote(window,fact)){verdict='uncertain';issues=['pragmatics'];}
-    const event=verifyEvent(raw.event_verification,fact,window),conditions=verifyConditions(raw.condition_verification,fact,window);
-    if(!eventAdoptionVerified(event)||!conditionsAdoptionVerified(conditions)){
-      verdict='unsupported';if(!eventAdoptionVerified(event)&&!issues.includes('time'))issues=[...issues,'time'];
-      if(!conditionsAdoptionVerified(conditions)&&!issues.includes('condition'))issues=[...issues,'condition'];
-    }
-    results.set(index,{candidate_index:index,verdict,issues,evidence,verification_mode:'nullable-proof-v3',model_verdict,model_issues,
-      event,conditions,proof,proof_verification:checked});
   }
   return Array.from({length:facts.length},(_,index)=>results.get(index)!);
 }
@@ -256,8 +224,8 @@ function unresolvedAuthorQuote(window:ExtractionWindow,fact:ExtractedFact):boole
   return message.sender==='self'&&/^(我姐|我哥|我同事)让我(周末|明天|后天)帮(她|他)顶个班$/.test(body);
 }
 
-/** 默认生产路径显式开启逐项隔离；严格 validator 保留整批合同供历史入口使用。 */
-export function parseSourceVerification(payload:unknown,window:ExtractionWindow,facts:ExtractedFact[],options:{isolate_items?:boolean;mode?:'legacy-v4'|'nullable-proof-v3'}={}):SourceVerificationResult[] {
+/** 默认生产路径显式开启逐项隔离；严格 validator 保留整批合同供固定存档重放使用。 */
+export function parseSourceVerification(payload:unknown,window:ExtractionWindow,facts:ExtractedFact[],options:{isolate_items?:boolean}={}):SourceVerificationResult[] {
   const root=object(payload);exactFields(root,['results']);requireValid(Array.isArray(root.results)&&facts.length<=60);
   const converted=root.results.map((entry:unknown)=>{
     if(entry===null||typeof entry!=='object'||Array.isArray(entry))return entry;
@@ -277,15 +245,6 @@ export function parseSourceVerification(payload:unknown,window:ExtractionWindow,
     });
     return {...row,event_verification:adjusted};
   });
-  if(options.mode==='nullable-proof-v3'){
-    if(!options.isolate_items)return validateSourceVerificationV3(converted,window,facts);
-    const isolated=facts.map((fact,index)=>{
-      const matches=converted.filter((value:unknown)=>value!==null&&typeof value==='object'&&!Array.isArray(value)&&Number.isInteger((value as any).candidate_index)&&(value as any).candidate_index===index);
-      try{requireValid(matches.length===1);return validateSourceVerificationV3([{...(matches[0] as object),candidate_index:0}],window,[fact])[0]!;}
-      catch(error){if(!(error instanceof ExtractionProtocolError))throw error;return {candidate_index:index,verdict:'unsupported' as const,issues:['insufficient_evidence'],evidence:[],verification_mode:'nullable-proof-v3' as const,model_verdict:'unsupported' as const,model_issues:['insufficient_evidence'],event:null,conditions:fact.conditions,proof:null,proof_verification:null};}
-    });
-    return isolated.map((result,index)=>({...result,candidate_index:index}));
-  }
   if(!options.isolate_items)return validateSourceVerification(converted,window,facts);
   return facts.map((fact,index)=>{
     const matches=converted.filter((value:unknown)=>value!==null&&typeof value==='object'&&!Array.isArray(value)&&Number.isInteger((value as any).candidate_index)&&(value as any).candidate_index===index);
@@ -296,7 +255,7 @@ export function parseSourceVerification(payload:unknown,window:ExtractionWindow,
    }catch(error){
     if(!(error instanceof ExtractionProtocolError))throw error;
     return {candidate_index:index,verdict:'unsupported' as const,issues:['insufficient_evidence'],evidence:[],
-     verification_mode:'legacy-v4' as const,model_verdict:'unsupported' as const,model_issues:['insufficient_evidence'],
+     verification_mode:'complete-claim-v1' as const,model_verdict:'unsupported' as const,model_issues:['insufficient_evidence'],
      event:fact.event,conditions:fact.conditions,proof:null,proof_verification:null};
    }
   });

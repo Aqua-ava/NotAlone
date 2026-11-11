@@ -11,7 +11,7 @@ import {
 import type {ExtractionInvocation} from '../flow.ts';
 
 type Support='supported'|'uncertain'|'unsupported';
-export type VerificationPolicyId='legacy-v4'|'nullable-proof-v3'|'complete-claim-v1';
+export type VerificationPolicyId='complete-claim-v1';
 export interface PreparedVerificationPolicy {id:VerificationPolicyId;rule_version?:string;}
 export interface VerificationAdmission {candidate_index:number;admitted:boolean;result:SourceVerificationResult|null;}
 export interface PreparedVerification {
@@ -197,40 +197,36 @@ function checkClaim(value:unknown,fact:ExtractedFact,evidence:SourceVerification
  return {verdict:statuses.includes('unsupported')?'unsupported':statuses.includes('uncertain')?'uncertain':'supported',issues:[...issues],eventSupport};
 }
 
-function verificationPayload(window:ExtractionWindow,facts:ExtractedFact[],modern:boolean):Row{
+function verificationPayload(window:ExtractionWindow,facts:ExtractedFact[]):Row{
  const payload=buildSourceVerificationPayload(window,facts);
- if(modern){
-  payload.candidates=(payload.candidates as Row[]).map((candidate,index)=>{
+ payload.candidates=(payload.candidates as Row[]).map((candidate,index)=>{
    const fact=facts[index]!;
    return {...candidate,scene_name:fact._scene_name,alternatives:fact.alternatives,
     interpretation_reason:fact.interpretation_reason,confidence:fact.confidence,risk_flags:fact.risk_flags,
     requires_all_sources:fact.requires_all_sources,source_dependency_mode:fact.source_dependency_mode,
     timing:fact.timing,event:candidate.event??null,conditions:candidate.conditions??null};
   });
-  payload.claim_scope=facts.map((fact,candidate_index)=>({candidate_index,codepoint_length:[...fact.text].length,scope_subject:fact.subject==='self'?'self':'contact'}));
- }
+ payload.claim_scope=facts.map((fact,candidate_index)=>({candidate_index,codepoint_length:[...fact.text].length,scope_subject:fact.subject==='self'?'self':'contact'}));
  return payload;
 }
 
-function decodeVerificationRows(raw:Row,window:ExtractionWindow,facts:ExtractedFact[],policy:PreparedVerificationPolicy,fingerprint:string,localIds=false):VerificationAdmission[]{
- const modern=policy.id==='complete-claim-v1';
- if(modern&&!localIds&&raw.request_fingerprint!==fingerprint)fail('fingerprint_mismatch');
- if(modern)object(raw,localIds?['results']:['results','request_fingerprint']);
+function decodeVerificationRows(raw:Row,window:ExtractionWindow,facts:ExtractedFact[],fingerprint:string,localIds=false):VerificationAdmission[]{
+ if(!localIds&&raw.request_fingerprint!==fingerprint)fail('fingerprint_mismatch');
+ object(raw,localIds?['results']:['results','request_fingerprint']);
  const rows=Array.isArray(raw.results)?raw.results:fail('results_invalid');
  const baseRows=rows.map((entry:unknown)=>{
-  if(!modern||!entry||typeof entry!=='object'||Array.isArray(entry))return entry;
+  if(!entry||typeof entry!=='object'||Array.isArray(entry))return entry;
   const {claim_check,...base}=entry as Row;return base;
  });
  const results=parseSourceVerification({results:baseRows},window,facts,
-  {isolate_items:true,...(policy.id==='nullable-proof-v3'?{mode:'nullable-proof-v3' as const}:{})});
+  {isolate_items:true});
  return results.map((original,index)=>{
   let result=original;
   const fact=facts[index]!;
-  if(policy.id!=='nullable-proof-v3'&&result.verdict==='supported'&&fact.requires_all_sources){
+  if(result.verdict==='supported'&&fact.requires_all_sources){
    const cited=new Set(result.evidence.map(reference=>reference.message_id));
    if(fact.source_message_ids.some(source=>!cited.has(source)))result={...result,verdict:'unsupported',issues:[...new Set([...result.issues,'insufficient_evidence'])]};
   }
-  if(!modern)return {candidate_index:index,admitted:result.verdict!=='unsupported',result};
   const matches=rows.filter((row:Row)=>row&&row.candidate_index===index),modelClaim=matches.length===1?matches[0].claim_check:null;
   let state:'checked'|'invalid'='checked',reason='complete',support:Support=result.verdict;
   try{
@@ -256,10 +252,10 @@ export function replayCompleteClaimVerification(window:ExtractionWindow,facts:Ex
  const format=requestBody&&typeof requestBody==='object'?(requestBody as Row).check_format:undefined;
  if(format!==undefined&&format!=='local-ids-v3')fail('stored_request_mismatch');
  const localIds=format==='local-ids-v3';
- const expected={...verificationPayload(window,facts,true),...(localIds?{check_format:format}:{request_fingerprint:fingerprint})};
+ const expected={...verificationPayload(window,facts),...(localIds?{check_format:format}:{request_fingerprint:fingerprint})};
  if(digest(requestBody)!==digest(expected))fail('stored_request_mismatch');
  const raw=readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:true,field_names:repairFields,root_array_key:'results',drop_stray_closers:true}).value as Row;
- return decodeVerificationRows(raw,window,facts,{id:'complete-claim-v1'},fingerprint,localIds);
+ return decodeVerificationRows(raw,window,facts,fingerprint,localIds);
 }
 
 export function prepareSourceVerification(options:{
@@ -269,22 +265,19 @@ export function prepareSourceVerification(options:{
 }):PreparedVerification{
  // 来源原始 JSONB 的大整数/1.0 摘要必须在普通结构克隆丢失原型前冻结；摘要按窗口对象记忆化，断言侧复用同一份。
  const windowSha=windowDigest(options.window),window=structuredClone(options.window),allFacts=structuredClone([...options.facts]);
- const policy:PreparedVerificationPolicy=structuredClone(options.policy??{id:'legacy-v4'});
- const modern=policy.id==='complete-claim-v1';
- const selection=allFacts.flatMap((fact,index)=>modern||fact.speech_act!=='question'&&!['joke','sarcasm','hyperbole'].includes(fact.figurative_type)?[index]:[]);
+ const policy=structuredClone(options.policy);
+ if(policy?.id!=='complete-claim-v1')fail('policy_invalid');
+ const selection=allFacts.map((_,index)=>index);
  const facts=selection.map(index=>allFacts[index]!);
  validateExtractionWindow(window);
- if(!['legacy-v4','nullable-proof-v3','complete-claim-v1'].includes(policy.id)||facts.length>60)fail('policy_invalid');
- if(modern&&!/^[a-f0-9]{64}$/.test(policy.rule_version??''))fail('policy_version_missing');
- const contract=buildSourceVerificationContract(facts,policy.id==='nullable-proof-v3'?'nullable-proof-v3':'legacy-v4',
-  {require_complete_evidence:policy.id!=='nullable-proof-v3'});
- const schema=structuredClone(contract.schema),system=contract.prompt+(modern?claimInstructions:'');
- const payload=verificationPayload(window,facts,modern);
- if(modern){
-  schema.properties.results.items.properties.claim_check=claimSchema;
-  schema.properties.results.items.required.push('claim_check');
-  payload.check_format='local-ids-v3';
- }
+ if(facts.length>60)fail('policy_invalid');
+ if(!/^[a-f0-9]{64}$/.test(policy.rule_version??''))fail('policy_version_missing');
+ const contract=buildSourceVerificationContract(facts,{require_complete_evidence:true});
+ const schema=structuredClone(contract.schema),system=contract.prompt+claimInstructions;
+ const payload=verificationPayload(window,facts);
+ schema.properties.results.items.properties.claim_check=claimSchema;
+ schema.properties.results.items.required.push('claim_check');
+ payload.check_format='local-ids-v3';
  const fingerprint=digest({policy,window_sha256:windowSha,allFacts,selection,system,schema,payload});
  const requestData={purpose:'verification' as const,system,user:JSON.stringify(payload),
   tool:{name:'SourceVerificationOutput',description:schema.description??'',parameters:schema}};
@@ -299,13 +292,13 @@ export function prepareSourceVerification(options:{
   if(!decoded){
    responseDigest=currentDigest;
    decoded=Promise.resolve().then(()=>{
-    const selected=decodeVerificationRows(raw,window,facts,policy,fingerprint,modern);
+    const selected=decodeVerificationRows(raw,window,facts,fingerprint,true);
     const mapped=new Map(selection.map((index,local)=>[index,{...selected[local]!,candidate_index:index}]));
     return {items:allFacts.map((_,index)=>mapped.get(index)??{candidate_index:index,admitted:true,result:null})};
    });
   }
   const output=structuredClone(await decoded);
-  if(modern)for(const item of output.items)if(item.admitted&&item.result){
+  for(const item of output.items)if(item.admitted&&item.result){
    const fact=allFacts[item.candidate_index]!;
    admittedResults.set(item.result,{window:windowSha,fact:digest(factBinding({...fact,event:item.result.event,conditions:item.result.conditions})),result:digest(item.result)});
   }

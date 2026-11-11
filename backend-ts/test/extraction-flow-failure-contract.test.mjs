@@ -11,17 +11,14 @@ const memory={text,subject:'contact',category:'preference',topic:'other',source_
   valid_at:null,invalid_at:null,speech_act:'assertion',assertion_status:'asserted',figurative_type:'literal',
   alternatives:[],interpretation_reason:'仅用于合成失败合同回归。',event:null,conditions:null};
 const stamp='a'.repeat(64),policies=[
-  ['default',undefined],['null',resolveExtractionPolicy(null,stamp).verification],
-  ['v1',resolveExtractionPolicy({version:1,mode:'legacy',rule_set_sha256:null},stamp).verification],
-  ['v2',resolveExtractionPolicy({version:2,mode:'legacy',rule_set_sha256:null,
-    verification_policy:'complete-claim-v1',source_stamp:stamp},stamp,stamp).verification],
+  ['v2',resolveExtractionPolicy({version:2,mode:'legacy',rule_set_sha256:null,verification_policy:'complete-claim-v1',source_stamp:stamp},stamp,stamp).verification],
 ];
 
 function scenario(policy,count,{malformed=false,cancelAtLastParse=false,failVerificationTrace=false}={}){
   const controller=new AbortController(),calls=[],events=[];
   const memories=Array.from({length:count},()=>({...memory}));if(malformed)memories.push(null);
   let parsed=0;
-  const options={window,signal:controller.signal,max_retries:0,retry_delay_ms:0,verificationPolicy:policy,
+  const options={window,signal:controller.signal,max_retries:0,retry_delay_ms:0,verificationPolicy:policy??policies[0][1],
     requireCurrent:async()=>{},record:async event=>{
       events.push(event);
       if(event.stage==='parse'&&++parsed===memories.length&&cancelAtLastParse)controller.abort();
@@ -49,7 +46,7 @@ function scenario(policy,count,{malformed=false,cancelAtLastParse=false,failVeri
   return {run:()=>runExtractionFlow(options),calls,events};
 }
 
-test('61条合法direct候选在默认/旧NULL/v1/新v2均归一invalid_output，E1/V0',async()=>{
+test('61条合法direct候选在现行v2完整命题核验均归一invalid_output，E1/V0',async()=>{
   for(const [name,policy] of policies){
     const x=scenario(policy,61),result=await x.run();
     assert.equal(result.failure_kind,'invalid_output',name);assert.equal(result.extraction_completed,true,name);
@@ -67,7 +64,7 @@ test('准备失败保留已解析的结构拒绝计数，不重试E或进入V',a
 });
 
 test('准备阶段协议错误遇取消仍优先抛AbortError，E1/V0',async()=>{
-  for(const policy of [undefined,policies.at(-1)[1]]){
+  for(const policy of [policies[0][1]]){
     const x=scenario(policy,61,{cancelAtLastParse:true});
     await assert.rejects(x.run(),{name:'AbortError'});
     assert.deepEqual(x.calls,['extraction']);
@@ -75,7 +72,7 @@ test('准备阶段协议错误遇取消仍优先抛AbortError，E1/V0',async()=>
 });
 
 test('60条边界仍一次E一次V并保留有据候选',async()=>{
-  for(const policy of [undefined,policies.at(-1)[1]]){
+  for(const policy of [policies[0][1]]){
     const x=scenario(policy,60),result=await x.run();
     assert.equal(result.failure_kind,null);assert.equal(result.accepted.length,60);
     assert.equal(result.rejected_count,0);assert.deepEqual(x.calls,['extraction','verification']);
