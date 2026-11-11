@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { scanDiagnosticCallSites } from './support/diagnostic-call-sites.mjs';
 import { diagnosticEvents, checkedDiagnosticEvent, checkedDiagnosticRecord } from '../src/diagnostics/unified-contract.mjs';
 const traceId = '18c9347b-140e-4e63-9576-8b9383cf20fb';
 test('统一诊断只接受注册事件和逐事件白名单，字段值不能携带任意正文', () => {
@@ -25,32 +26,69 @@ test('每个注册事件最小输入均可校验且固定字段由宿主补齐',
     assert.equal(checkedDiagnosticRecord({ ...row, level: 'arbitrary' }), undefined);
   }
 });
-test('所有产品diagnose字面调用点只使用已注册事件与字段', async () => {
+test('诊断调用点扫描识别可选链与嵌套值，只核对日志对象自身字段', () => {
+  const source = `
+    const unrelated = { event: 'not.registered', payload: '不属于诊断调用' };
+    const text = "diagnose({event:'fake.string', payload:'不是调用'})";
+    /* recordUnifiedDiagnostic?.({ event: 'fake.comment', payload: 1 }); */
+    diagnose({ event: 'request.finished', module: 'memory.management', traceId: makeTrace({ event: 'nested.value', payload: 1 }), durationMs });
+    hooks.recordUnifiedDiagnostic?.({ event: 'processing.run_changed', runId, count: size({ nested: { secret: 1 } }), payload: 1 });
+    this?.diagnose?.({ event: 'not.registered', count: 1 });
+    recordUnifiedDiagnostic?.({ event: 'sql.summary', count, ['path']: '/synthetic' });
+    diagnose({ event: 'request.finished', module: 'memory.management', metadata: { event: 'nested', body: 1 } });
+  `;
+  const result = scanDiagnosticCallSites(source);
+  assert.equal(result.sites.length, 5);
+  assert.deepEqual(result.sites[0].fields, ['event', 'module', 'traceId', 'durationMs']);
+  assert.deepEqual(result.violations.map(({ event, key, reason }) => ({ event, key, reason })), [
+    { event: 'processing.run_changed', key: 'payload', reason: 'unknown_field' },
+    { event: 'not.registered', key: undefined, reason: 'unregistered_event' },
+    { event: 'sql.summary', key: 'path', reason: 'unknown_field' },
+    { event: 'request.finished', key: 'metadata', reason: 'unknown_field' },
+  ]);
+});
+test('动态编号值正常通过，动态事件、参数与展开明确留给运行时验证', () => {
+  const result = scanDiagnosticCallSites(`
+    diagnose(variable);
+    diagnose({ event: selectedEvent, count });
+    recordUnifiedDiagnostic?.({ ...event });
+    diagnose({ event: 'request.finished', traceId: newTraceId(), durationMs: elapsed({ count: 1 }), ...context });
+    holder['recordUnifiedDiagnostic']?.({ event: 'sql.summary', sqlFingerprint: fingerprint, count: calculate(a, b) });
+  `);
+  assert.equal(result.sites.length, 4);
+  assert.equal(result.deferredCalls, 4);
+  assert.deepEqual(result.violations, []);
+});
+test('字段值中的模板插值和正则不改变顶层字段边界，缺少事件名仍会失败', () => {
+  const result = scanDiagnosticCallSites([
+    "diagnose({event:('request.finished') as const,traceId:`trace-${pick({secret:1})}`,durationMs:/[,{}]/.test('{') ? n : 0});",
+    "recordUnifiedDiagnostic?.({event:'sql.summary',count: data.map(x => ({ nested: x })).length});",
+    "diagnose({ count: 1 });",
+  ].join('\n'));
+  assert.equal(result.sites.length, 3);
+  assert.deepEqual(result.sites[0].fields, ['event', 'traceId', 'durationMs']);
+  assert.deepEqual(result.violations.map(item => item.reason), ['missing_event']);
+});
+test('所有产品诊断日志对象调用点只使用已注册事件与字段', async t => {
   const { readdir, readFile } = await import('node:fs/promises');
   const { default: path } = await import('node:path');
   const roots = [new URL('../src/', import.meta.url), new URL('../../desktop/src/', import.meta.url)];
-  let checked = 0;
+  let checked = 0, deferred = 0;
   async function visitDirectory(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const file = path.join(directory, entry.name);
       if (entry.isDirectory()) { await visitDirectory(file); continue; }
       if (!/\.(ts|tsx|mjs)$/.test(entry.name) || /\.d\.(ts|mts)$/.test(entry.name)) continue;
       const source = await readFile(file, 'utf8');
-      for (const match of source.matchAll(/\bdiagnose\(\s*\{([\s\S]*?)\}\s*\)/g)) {
-        const literal = /\bevent\s*:\s*['"]([^'"]+)['"]/.exec(match[1]);
-        if (!literal) continue;
-        const name = literal[1], rule = diagnosticEvents[name];
-        assert.ok(rule, `未注册事件 ${name}`);
-        for (const property of match[1].matchAll(/(?:^|[,\{\n])\s*(\w+)\s*:/g)) {
-          const key = property[1];
-          assert.ok(['event', 'module', ...rule.fields].includes(key), `${name} 越界字段 ${key}`);
-        }
-        checked++;
-      }
+      const result = scanDiagnosticCallSites(source);
+      assert.deepEqual(result.violations, [], '诊断调用点越过事件注册表');
+      checked += result.sites.filter(site => site.event !== undefined).length;
+      deferred += result.deferredCalls;
     }
   }
   for (const root of roots) await visitDirectory(root.pathname);
-  // 接入点会随02至04增加；每个字面调用均按同一注册表核验。
+  // 只检查具名诊断调用的对象字面量；动态参数、事件与展开由运行时白名单兜底。
   // 动态事件及展开字段由写入边界的越界测试兜底，不假称静态扫描能证明任意控制流。
-  if (!checked) return;
+  assert.ok(checked > 0);
+  t.diagnostic(`静态事件调用点 ${checked}；另有 ${deferred} 个动态参数／事件／展开调用仍由运行时核验（两者可重叠）`);
 });
