@@ -60,4 +60,7 @@ test('大量已分配目标只扫描一次分配集合，保留唯一未分配�
  assert.ok(result.elapsedMs<400,'大量已分配目标不能触发逐消息扫描全部run_input');
  const complete=await inspect(true);assert.equal(complete.history.count,1);assert.equal(complete.metadata.filter(row=>row.target_assigned===1n).length,6000);
  assert.ok(complete.elapsedMs<400,'完整metadata也应复用一次分配集合');
+ await change({releaseAssigned:true});const released=await inspect();assert.equal(released.history.count,6001);assert.equal(released.sourceQueries,1);assert.equal(released.bodyRows,0);assert.ok(released.queries<30);
+ assert.ok(released.elapsedMs<400,'释放后的6000目标不能逐项重复扫描旧运行');
+ t.diagnostic(JSON.stringify({released:6000,pending:released.history.count,elapsedMs:Math.round(released.elapsedMs*10)/10,queries:released.queries}));
 });

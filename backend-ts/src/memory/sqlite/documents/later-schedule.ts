@@ -1,6 +1,7 @@
 import {observedProcessingAction,recordProcessingRunChange} from '../diagnostics.ts';
 import {randomUUID} from 'node:crypto';
 import {sha256} from '../../../platform/sha256.ts';
+import {runTargetsReleased} from '../run-retirement.ts';
 import type {StorageAction,StorageMigration,StorageTransaction,StorageRow,StorageLease} from '../../../storage/sqlite/contracts.ts';
 import type {MemoryScope} from '../management/contracts.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
@@ -279,7 +280,7 @@ function scopeBlocked(tx:StorageTransaction,ownerId:string,row:StorageRow):boole
  for(const blocker of blockers){
   if(blocker.pause_requested_at!==null||blocker.run_state==='paused'||blocker.task_state==='paused'||blocker.task_state==='unknown'||blocker.has_unknown===1n)return true;
   const failed=blocker.run_state==='failed'||blocker.task_state==='failed'||blocker.task_state==='incomplete'&&blocker.task_error!==null&&blocker.task_error!=='targets_completed_elsewhere';
-  if(!failed||blocker.run_state==='completed')continue;
+  if(!failed||blocker.run_state==='completed'||runTargetsReleased(tx,ownerId,String(blocker.run_id)))continue;
   const newer=isSelf
    ?tx.get(`SELECT 1 FROM processing_run newer JOIN processing_task task ON task.owner_id=newer.owner_id AND task.run_id=newer.id
      WHERE newer.owner_id=? AND newer.state='completed' AND newer.started_at>? AND task.scope_kind='self' AND task.state='succeeded'

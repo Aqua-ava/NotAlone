@@ -34,6 +34,7 @@ export const registry={migrations:base.migrations,actions:[...base.actions,
    }
    tx.run("UPDATE processing_run SET state='pending' WHERE owner_id=? AND id=?",[input.ownerId,runId]);
   }
+  if(input.releaseAssigned)tx.run("UPDATE processing_run SET state='failed' WHERE owner_id=? AND id IN (SELECT run_id FROM run_contact WHERE owner_id=? AND contact_id=?)",[input.ownerId,input.ownerId,input.contactId]);
   if(input.sourceRemoved){
    // 重见消息的普通同步会去重；此处显式保留第二份合法来源以核验首次可用来源的切换。
    const source=tx.get('SELECT * FROM capture_record WHERE owner_id=? AND contact_id=? AND message_id=? AND state=\'normalized\' LIMIT 1',[input.ownerId,input.contactId,input.sourceRemoved]);

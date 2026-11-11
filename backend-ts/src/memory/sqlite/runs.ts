@@ -1,3 +1,4 @@
+import {assignedRunItemsCte,runTargetsReleased} from './run-retirement.ts';
 import {observedProcessingAction} from './diagnostics.ts';
 import {currentContent,freezeContent,hasMemoryContent,readFrozenContent,installedMemoryContentKinds} from './content.ts';
 import {randomUUID} from 'node:crypto';
@@ -146,9 +147,7 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string,conta
 function currentMessageRows(tx:StorageTransaction,ownerId:string,contactId:string,includeUnavailable=false,pending?:'history'|'incremental'):StorageRow[]{
  const sourceOrder=acceptedCaptureOrder(tx),scopeCte=sourceScopeCTE(tx),quarantine=tableExists(tx,'history_message_quarantine')?`AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)`:'';
  // 固定首个来源在消息表之前，避免 SQLite 为每条消息重新全扫首个来源结果。
- const rows=tx.all(`WITH ${scopeCte},current_assigned_items AS MATERIALIZED (
-  SELECT DISTINCT item_id FROM run_input WHERE owner_id=? AND source_contact_id=? AND role='target' AND item_id IS NOT NULL
- ),current_records AS MATERIALIZED (
+ const rows=tx.all(`WITH ${scopeCte},${assignedRunItemsCte('current_assigned_items')},current_records AS MATERIALIZED (
   SELECT source.message_id,min(source.id) record_id FROM capture_record source
   JOIN sync_capture capture ON capture.owner_id=source.owner_id AND capture.id=source.capture_id
   JOIN read_goal g ON g.owner_id=capture.owner_id AND g.id=capture.goal_id
@@ -280,6 +279,7 @@ function hasUnresolvedContactBlocker(tx:StorageTransaction,ownerId:string,contac
    JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
    JOIN task_contribution tc ON tc.owner_id=t.owner_id AND tc.task_id=t.id
    WHERE c.owner_id=? AND c.state='pending' AND t.run_id=? AND tc.source_contact_id=? LIMIT 1`,[ownerId,runId,contactId]))return true;
+  if(runTargetsReleased(tx,ownerId,runId))continue;
   const failed=run.state==='failed'||tasks.some(task=>task.state==='failed')||!!tx.get(`SELECT 1 FROM processing_step s JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
    JOIN task_contribution tc ON tc.owner_id=t.owner_id AND tc.task_id=t.id
    WHERE s.owner_id=? AND t.run_id=? AND tc.source_contact_id=? AND s.state='failed' LIMIT 1`,[ownerId,runId,contactId]);
@@ -309,7 +309,7 @@ interface ContactQueueState {contactId:string;pendingCount:number;oldestAt:numbe
 function contactQueueBlocked(tx:StorageTransaction,ownerId:string,contactId:string,incremental=true):boolean{
  const latest=latestTargetRun(tx,ownerId,contactId);
  let blocked=hasUnresolvedContactBlocker(tx,ownerId,contactId,incremental);
- if(latest&&latest.state!=='completed'&&latest.state!=='revoked'&&!hasOnlyLaterStageWaiting(tx,ownerId,contactId,latest)&&!(incremental&&safeHistoryProgress(tx,ownerId,contactId,latest)))blocked=true;
+ if(latest&&!runTargetsReleased(tx,ownerId,String(latest.id))&&latest.state!=='completed'&&latest.state!=='revoked'&&!hasOnlyLaterStageWaiting(tx,ownerId,contactId,latest)&&!(incremental&&safeHistoryProgress(tx,ownerId,contactId,latest)))blocked=true;
  return blocked;
 }
 function contactQueueState(tx:StorageTransaction,ownerId:string,contactId:string,incremental=true):ContactQueueState{
@@ -337,7 +337,7 @@ function queueStates(tx:StorageTransaction,ownerId:string,now:number,contactId?:
  return contacts.map(row=>{const state=contactQueueState(tx,ownerId,String(row.id));return {state,dueAt:triggerAt(state,now)};});
 }
 function scheduleSummary(tx:StorageTransaction,ownerId:string,now:number,contactId?:string){
- const counts=new Map<string,{kind:string;pending:number;unavailable:number}>();
+ const counts=new Map<string,{kind:string;pending:number;unavailable:number;unadmitted?:number}>();
  for(const contact of validContacts(tx,ownerId,contactId)){
   const id=String(contact.id),scope={ownerId,contactId:id,scopeCte:sourceScopeCTE(tx),sourceOrder:acceptedCaptureOrder(tx),pendingOnly:false};
   const rows=readScheduleInputRows(tx,scope),available=scheduleInputAvailability(tx,scope);
@@ -345,9 +345,9 @@ function scheduleSummary(tx:StorageTransaction,ownerId:string,now:number,contact
   const cleared=new Set(media.length?tx.all("SELECT message_id FROM message_media WHERE owner_id=? AND contact_id=? AND state='cleared' AND message_id IN (SELECT value FROM json_each(?))",[ownerId,id,JSON.stringify(media.map(row=>String(row.id)))]).map(row=>String(row.message_id)):[]);
   for(const message of rows){
    if(message.kind!=='text'&&cleared.has(String(message.id)))continue;
-   const kind=String(message.kind),count=counts.get(kind)??{kind,pending:0,unavailable:0};
+   const kind=String(message.kind),count=counts.get(kind)??{kind,pending:0,unavailable:0,...(kind==='image'?{unadmitted:0}:{})};
    if(message.extraction_state==='succeeded'&&message.kind==='text'){counts.set(kind,count);continue;}
-   if(!available.has(String(message.id)))count.unavailable++;else if(message.extraction_state!=='succeeded')count.pending++;
+   if(!available.has(String(message.id)))count.unavailable++;else if(message.extraction_state!=='succeeded'){count.pending++;if(kind==='image'&&message.target_assigned!==1n&&message.target_assigned!==1)count.unadmitted!++;}
    counts.set(kind,count);
   }
  }
@@ -480,8 +480,9 @@ function startHistory(tx:StorageTransaction,raw:unknown){
     WHERE s.owner_id=t.owner_id AND s.task_id=t.id AND (s.state='unknown' OR a.state='unknown' OR c.state='unknown'))
    OR EXISTS(SELECT 1 FROM memory_candidate candidate JOIN step_attempt a ON a.owner_id=candidate.owner_id AND a.id=candidate.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
     WHERE s.owner_id=t.owner_id AND s.task_id=t.id AND candidate.state='pending')) LIMIT 1`,[ownerId,contactId]);
- if(unresolved||view.run?.status==='blocked'||view.run?.status==='paused')fail('memory_extraction_history_blocked');
- if(view.run&&view.run.status!=='completed'||view.queue.later.pending>0)fail('memory_extraction_contact_busy');
+ const released=!!view.run&&runTargetsReleased(tx,ownerId,view.run.runId);
+ if(unresolved||view.run?.status==='blocked'&&!released||view.run?.status==='paused')fail('memory_extraction_history_blocked');
+ if(view.run&&view.run.status!=='completed'&&!released||view.queue.later.pending>0)fail('memory_extraction_contact_busy');
  const run=startRun(tx,{...input,requestKey:storedKey},false,true);
  if(!run)return fail('memory_extraction_no_pending_history');
  return {view:{...contactView(tx,{ownerId,contactId}),run:snapshot(tx,ownerId,run.runId,contactId)},launchRunId:run.runId};

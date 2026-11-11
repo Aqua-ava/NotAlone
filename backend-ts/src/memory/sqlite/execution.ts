@@ -11,6 +11,7 @@ import {assertContribution,assertInputs,currentAttempt,inputRows,fail,textId} fr
 import {applyControl,takeOverExpiredAttempt} from './control.ts';
 import {abandonUnknownAdjudication} from './unknown-recovery.ts';
 import {hasRunFollowupState,snapshot} from './runs.ts';
+import {retireStalePausedRuns} from './run-retirement.ts';
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>unknown):StorageAction=>observedProcessingAction({name:`memoryExtraction.${name}`,mode,retryBusy:mode==='write',execute} as StorageAction);
 const budgetNumbers=['input_tokens','max_output_tokens','context_window_tokens','safety_margin_tokens','serialized_bytes'] as const;
 function budgetSummary(value:unknown):Record<string,number>|null {
@@ -315,7 +316,8 @@ export const executionActions:StorageAction[]=[
    WHERE owner_id=? AND scope_kind='contact' AND state IN ('pending','running')
     AND EXISTS(SELECT 1 FROM processing_run r WHERE r.owner_id=processing_task.owner_id AND r.id=processing_task.run_id AND r.state IN ('running','pending') AND r.pause_requested_at IS NULL)
     AND NOT EXISTS(SELECT 1 FROM processing_step s WHERE s.owner_id=processing_task.owner_id AND s.task_id=processing_task.id AND s.state IN ('running','unknown'))`,[ownerId]);
-  tx.run("UPDATE processing_run SET state=CASE WHEN pause_requested_at IS NULL THEN 'incomplete' ELSE 'paused' END WHERE owner_id=? AND state IN ('running','pending')",[ownerId]);return true;
+  tx.run("UPDATE processing_run SET state=CASE WHEN pause_requested_at IS NULL THEN 'incomplete' ELSE 'paused' END WHERE owner_id=? AND state IN ('running','pending')",[ownerId]);
+  retireStalePausedRuns(tx,ownerId);return true;
  }),
  action('trace','read',(tx,raw)=>{
   const i=raw as {ownerId:string;taskId:string};const t=tx.get('SELECT * FROM processing_task WHERE owner_id=? AND id=?',[textId(i.ownerId),textId(i.taskId)]);if(!t||t.state==='revoked')fail('memory_extraction_not_found');

@@ -2,6 +2,7 @@ import type {StorageRow,StorageTransaction} from '../../storage/sqlite/contracts
 import {currentSourcePredicate} from '../../history/sqlite/current-scope.ts';
 import {memoryIncrementalBaseline} from '../../storage/sqlite/message-order.ts';
 import {currentContentAvailability,hasMemoryContent,installedMemoryContentKinds} from './content.ts';
+import {assignedRunItemsCte} from './run-retirement.ts';
 import {fail} from './qualification.ts';
 
 interface InputScope {ownerId:string;contactId:string;scopeCte:string;sourceOrder:string}
@@ -33,9 +34,7 @@ export function readScheduleInputRows(tx:StorageTransaction,options:InputRows):S
  const quarantine=tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='history_message_quarantine'")
   ?'AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)':'';
  // run_input 的复合 FK 保证 item 与 source_contact_id 同联系人；分配集合只扫描一次。
- const rows=tx.all(`WITH ${scopeCte},schedule_assigned_items AS MATERIALIZED (
-  SELECT DISTINCT item_id FROM run_input WHERE owner_id=? AND source_contact_id=? AND role='target' AND item_id IS NOT NULL
- ),schedule_candidate_messages AS MATERIALIZED (
+ const rows=tx.all(`WITH ${scopeCte},${assignedRunItemsCte('schedule_assigned_items')},schedule_candidate_messages AS MATERIALIZED (
   SELECT m.owner_id,m.contact_id,m.id,m.kind,m.display_no,p.id AS item_id,p.extraction_state,p.pipeline_state,
    ${pendingOnly?'0':'CASE WHEN p.id IN (SELECT item_id FROM schedule_assigned_items) THEN 1 ELSE 0 END'} AS target_assigned
   FROM message m LEFT JOIN processing_item p ON p.owner_id=m.owner_id AND p.contact_id=m.contact_id AND p.message_id=m.id AND p.purpose='memory_extraction'

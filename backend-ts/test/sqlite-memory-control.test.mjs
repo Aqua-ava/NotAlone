@@ -96,7 +96,7 @@ test('空历史、跨owner、撤销授权和来源失证不建新轮，也不影
  await assert.rejects(memory.startHistory(b,randomUUID()),error=>error.code==='memory_extraction_scope_stale');assert.equal(port.calls,1);
 });
 
-for(const kind of ['technical','paused','unknown'])test(`历史初始化保留${kind}保护，新键不重试旧调用，同键只读重放`,async t=>{
+for(const kind of ['technical','paused','unknown'])test(`历史初始化按${kind}状态复验占用，同键只读重放`,async t=>{
  const f=await fixtureWithMessages(t,{a:['我长期住在高雄。'],b:['乙的合成历史']});
  const entered=Promise.withResolvers(),gate=Promise.withResolvers();let memory;
  const port=modelPort(()=>memory.accounting,async(request,input)=>{
@@ -112,7 +112,8 @@ for(const kind of ['technical','paused','unknown'])test(`历史初始化保留${
  if(kind==='paused'){await entered.promise;const current=await memory.read(start.run.runId);await memory.pause(start.run.runId,current.controlVersion,randomUUID());}
  else await memory.waitForIdle(start.run.runId);
  const callsBefore=port.calls;
- await assert.rejects(memory.startHistory(f.ca,randomUUID()),error=>error.code==='memory_extraction_history_blocked');
+ if(kind==='technical'){const next=await memory.startHistory(f.ca,randomUUID());assert.notEqual(next.run.runId,start.run.runId);await memory.waitForIdle(next.run.runId);}
+ else await assert.rejects(memory.startHistory(f.ca,randomUUID()),error=>error.code==='memory_extraction_history_blocked');
  const replay=await memory.startHistory(f.ca,key);assert.equal(replay.run.runId,start.run.runId);assert.equal(port.calls,callsBefore);
  if(kind==='paused')gate.resolve();await memory.waitForIdle(start.run.runId);
  const other=await memory.startHistory(f.cb,randomUUID());await memory.waitForIdle(other.run.runId);
