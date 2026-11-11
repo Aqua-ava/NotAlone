@@ -44,13 +44,15 @@ export function sourceEligibility(scopeCTE:string):(tx:StorageTransaction,refs:r
 export const assertSourcesEligibility=sourceEligibility(currentSourceScopeCTE);
 
 /** 统计可用内容时保留批次中合法的实际来源；部分失效不掩盖其他消息。 */
-export function eligibleSourceReferences(tx:StorageTransaction,refs:readonly MessageSourceReference[]):MessageSourceReference[]{
+/** 仅可信装配选择范围；请求入口不接收来源资格策略。 */
+export function eligibleReferences(scopeCTE:string):(tx:StorageTransaction,refs:readonly MessageSourceReference[])=>MessageSourceReference[]{return (tx,refs)=>{
  const eligible=new Set<string>();
  for(const group of groupedReferences(refs)){
   const wanted=[...group.refs.values()];
-  for(const row of tx.all(eligibleQuery('w.record_id,w.message_id'),[group.ownerId,group.contactId,group.contactId,JSON.stringify(wanted),group.ownerId,group.contactId])){
+  for(const row of tx.all(eligibleQuery('w.record_id,w.message_id',scopeCTE),[group.ownerId,group.contactId,group.contactId,JSON.stringify(wanted),group.ownerId,group.contactId])){
    eligible.add(JSON.stringify([group.ownerId,group.contactId,row.record_id,row.message_id]));
   }
  }
  return refs.filter(ref=>eligible.has(JSON.stringify([ref.owner_id,ref.contact_id,ref.record_id,ref.message_id])));
-}
+};}
+export const eligibleSourceReferences=eligibleReferences(currentSourceScopeCTE);

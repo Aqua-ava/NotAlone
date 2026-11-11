@@ -7,7 +7,7 @@ import {memoryCandidateStates} from '../../shared/sqlite-memory-management';
 import type {MemoryCandidateView,MemoryDecisionRequest,MemoryManagementRead,MemoryManagementDecision,MemoryManagementSnapshot,
  MemoryManagementOutcome,MemoryManagementView,MemoryMergeParent,MemoryScope,MemorySource,MemoryVersionView,MemoryView,MemoryHistoryRead,MemoryHistorySnapshot,
  MemoryDocumentsSnapshot,MemoryDocumentsView,MemoryDocumentReference,MemoryDocumentStatement,MemoryDocumentView} from '../../shared/sqlite-memory-management';
-import {withdrawnProtectionVersion} from '../../shared/sqlite-memory-management';
+import {MemoryReadFailure,memoryReadFailureCode,type MemoryReadFailureResult,withdrawnProtectionVersion} from '../../shared/sqlite-memory-management';
 
 class ManagementInvalid extends Error {constructor(){super('记忆资料或范围已变化，请重新读取。');}}
 const invalid=()=>new ManagementInvalid();
@@ -101,7 +101,7 @@ export class SqliteMemoryManagementController {
   const revision=this.revision,generation=this.backend.getConnectionGeneration();if(generation===undefined)throw invalid();const operation=new AbortController();this.requests.add(operation);
   try{const response=await this.backend.requestJson({path,method,...(body===undefined?{}:{body}),signal:operation.signal,timeoutMs:10000,maxResponseBytes:8388608});
    if(operation.signal.aborted||revision!==this.revision||generation!==response.generation||generation!==this.backend.getConnectionGeneration())throw invalid();return response;
-  }finally{this.requests.delete(operation);}
+  }catch(error){if(operation.signal.aborted||revision!==this.revision||generation!==this.backend.getConnectionGeneration())throw invalid();throw error;}finally{this.requests.delete(operation);}
  }
  private query(accepted:MemoryManagementRead):URLSearchParams {
   const query=new URLSearchParams({scope_kind:accepted.scope.scopeKind,display_contact_id:accepted.displayContactId});
@@ -112,9 +112,15 @@ export class SqliteMemoryManagementController {
   const response=await this.request(`/api/memory-management?${query}`,'GET');this.validate(accepted);
   return {connectionGeneration:response.generation,scope:accepted.scope,view:readView(response.data,accepted.scope,accepted.displayContactId)};
  }
+ private failRead(error:unknown,revision:number,accepted:MemoryManagementRead):never {
+  if(revision!==this.revision)throw invalid();
+  try{this.validate(accepted);}catch{this.synchronize();throw invalid();}
+  if(error instanceof BackendRequestFailure&&error.kind==='connection')throw new MemoryReadFailure(error.code==='request_timeout'?'memory_read_timeout':'memory_read_unavailable');
+  this.synchronize();throw invalid();
+ }
  async read(input:MemoryManagementRead):Promise<MemoryManagementSnapshot>{
   const accepted=this.validate(input),revision=this.revision;
-  try{return await this.readItem(accepted);}catch{if(revision===this.revision)this.synchronize();throw invalid();}
+  try{return await this.readItem(accepted);}catch(error){this.failRead(error,revision,accepted);}
  }
  async readHistory(input:MemoryHistoryRead):Promise<MemoryHistorySnapshot>{
   const raw=object(input),{memoryId:rawId,expectedHeadRevision:rawHead,...base}=raw;
@@ -133,14 +139,14 @@ export class SqliteMemoryManagementController {
    const belongs=(v:MemoryVersionView)=>v.sources.every(source=>source.contactId===accepted.displayContactId)&&v.contributingContactIds.every(contact=>contact===accepted.displayContactId);
    if(versions.some(v=>accepted.scope.scopeKind==='contact'?!belongs(v):v.body!==null&&(!belongs(v)||!v.sources.length||v.contributingContactIds.length!==1)))throw invalid();
    return {connectionGeneration:response.generation,scope:accepted.scope,view:{memoryId,headRevision:expectedHeadRevision,versions,decisions:decisions(value.decisions),revision:pageRevision(value.revision),nextCursor:cursor(value.nextCursor)}};
-  }catch{if(revision===this.revision)this.synchronize();throw invalid();}
+  }catch(error){this.failRead(error,revision,accepted);}
  }
  async readDocuments(input:MemoryManagementRead):Promise<MemoryDocumentsSnapshot>{
   const accepted=this.validate(input);if(accepted.scope.scopeKind==='self')throw invalid();
   const revision=this.revision;
   try{const response=await this.request(`/api/memory-documents?scope_kind=${accepted.scope.scopeKind}${accepted.scope.contactId?`&contact_id=${accepted.scope.contactId}`:''}`,'GET');
    this.validate(input);return {connectionGeneration:response.generation,scope:accepted.scope,view:readDocumentsView(response.data,accepted.scope)};
-  }catch{if(revision===this.revision)this.synchronize();throw invalid();}
+  }catch(error){this.failRead(error,revision,accepted);}
  }
  async decide(input:MemoryManagementDecision):Promise<MemoryManagementOutcome>{
   try{
@@ -166,6 +172,10 @@ export class SqliteMemoryManagementController {
   }
  }
 }
+// Electron 不保留 Error 自定义字段；读取错误码通过安全回执跨传输，再由 renderer 恢复。
+async function readResponse<T>(read:()=>Promise<T>):Promise<T|MemoryReadFailureResult> {
+ try{return await read();}catch(error){const code=memoryReadFailureCode(error);if(code)return {readFailure:code};throw error;}
+}
 export function installSqliteMemoryManagementBridge(commands:PageCommands,backend:BackendHost,contacts:Contacts){
  const controller=new SqliteMemoryManagementController(backend,()=>commands.publish('memory:management-invalidated',{},'manager'),contacts);
  let connectionGeneration=backend.getConnectionGeneration();
@@ -174,9 +184,9 @@ export function installSqliteMemoryManagementBridge(commands:PageCommands,backen
     if(next===connectionGeneration)return;
     connectionGeneration=next;controller.synchronize();
   });
- commands.handle('memory:history-read',(...args)=>{if(args.length!==1)throw invalid();return controller.readHistory(args[0] as MemoryHistoryRead);},'manager');
- commands.handle('memory:management-read',(...args)=>{if(args.length!==1)throw invalid();return controller.read(args[0] as MemoryManagementRead);},'manager');
- commands.handle('memory:documents-read',(...args)=>{if(args.length!==1)throw invalid();return controller.readDocuments(args[0] as MemoryManagementRead);},'manager');
+ commands.handle('memory:history-read',(...args)=>{if(args.length!==1)throw invalid();return readResponse(()=>controller.readHistory(args[0] as MemoryHistoryRead));},'manager');
+ commands.handle('memory:management-read',(...args)=>{if(args.length!==1)throw invalid();return readResponse(()=>controller.read(args[0] as MemoryManagementRead));},'manager');
+ commands.handle('memory:documents-read',(...args)=>{if(args.length!==1)throw invalid();return readResponse(()=>controller.readDocuments(args[0] as MemoryManagementRead));},'manager');
  commands.handle('memory:management-decide',(...args)=>{if(args.length!==1)throw invalid();return controller.decide(args[0] as MemoryManagementDecision);},'manager');
  commands.handle('memory:management-release',(...args)=>{noArguments(args);controller.release();},'manager');return controller;
 }

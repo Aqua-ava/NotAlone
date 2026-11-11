@@ -200,7 +200,7 @@ export class JsonClient {
         });
       });
       const abort = () => req.destroy(new BackendRequestFailure('cancelled'));
-      const timer = setTimeout(() => req.destroy(new BackendRequestFailure('connection')), timeout);
+      const timer = setTimeout(() => req.destroy(new BackendRequestFailure('connection', undefined, 'request_timeout')), timeout);
       this.requests.add(req);
       signal?.addEventListener('abort', abort, { once: true });
       req.on('error', (error) => fail(error instanceof BackendRequestFailure ? error : new BackendRequestFailure('connection')));

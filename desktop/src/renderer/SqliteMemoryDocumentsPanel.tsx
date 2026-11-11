@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import type {MemoryDocumentsSnapshot,MemoryManagementRead,SqliteMemoryManagementBridge} from '../shared/sqlite-memory-management';
+import {memoryReadFailureCode,memoryReadResult} from '../shared/sqlite-memory-management';
 import {useVisibleRefresh} from './use-visible-refresh';
 
 /** 一个范围只展示后端核验过的完整发布集合；失效事件先卸载快照。 */
@@ -10,10 +11,10 @@ export function SqliteMemoryDocumentsPanel({bridge,request,level='L2',refreshKey
   if(!active.current||blocked)return;
   if(busyRef.current){refreshQueued.current=true;return;}const token=++revision.current;busyRef.current=true;setBusy(true);setNotice(null);
   try{
-   const value=await bridge.readDocuments(request);
+   const value=memoryReadResult(await bridge.readDocuments(request));
    if(active.current&&revision.current===token){setSnapshot(value);}
-  }catch{
-   if(active.current&&revision.current===token){setSnapshot(null);setNotice('来源或范围暂不可用，已撤下原资料，请重新读取。');}
+  }catch(error){
+   if(active.current&&revision.current===token){const code=memoryReadFailureCode(error);if(code)setNotice(code==='memory_read_timeout'?'读取超时，请重试':'读取暂不可用，请重试');else{setSnapshot(null);setNotice('来源或范围暂不可用，已撤下原资料，请重新读取。');}}
   }finally{if(active.current&&revision.current===token){busyRef.current=false;setBusy(false);if(refreshQueued.current){refreshQueued.current=false;queueMicrotask(()=>void refresh.current());}}}
  };
  useEffect(()=>{

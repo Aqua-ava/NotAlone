@@ -1,14 +1,31 @@
 import {archivedExtractionOutput} from '../outputs.ts';
 import {sourceVerificationState} from './evidence.ts';
 import {memoryTimeEligibility} from './temporal.ts';
-import {qualificationSources,frozenContributingContactIds} from './dependencies.ts';
+import {qualificationSources,qualificationSourceRows,frozenContributingContactIds} from './dependencies.ts';
 import type {StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {available,citations,fail,id,requireCandidate,requireSources,requireVersion,scope} from './qualification.ts';
 import type {MemoryCandidateView,MemoryManagementView,MemoryScope,MemorySource,MemoryVersionView,MemoryView,MemoryHistoryView} from './contracts.ts';
 import {citationContent} from '../content-citation.ts';
 import {decodePage,encodePage,managementPageSize,pageScope} from './pagination.ts';
-import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
-import {assertReplyLocalSource} from '../../../history/sqlite/reply-local-source.ts';
+import {assertSourceEligibility,eligibleSourceReferences,type SourceEligibility} from '../../../history/sqlite/source.ts';
+import {assertReplyLocalSource,eligibleReplyLocalSourceReferences} from '../../../history/sqlite/reply-local-source.ts';
+import type {MessageSourceReference} from '../../../history/sqlite/contracts.ts';
+interface PageSources {current:SourceEligibility;saved:SourceEligibility}
+/** 只保存本页身份与资格集合；跨请求重建，不缓存正文或放宽任何逐项复验。 */
+function pageSources(tx:StorageTransaction,ownerId:string,parents:{candidateId?:string;memoryId?:string;versionNo?:bigint}[]):PageSources {
+ const refs=new Map<string,MessageSourceReference>();
+ const key=(ref:MessageSourceReference)=>JSON.stringify([ref.owner_id,ref.contact_id,ref.record_id,ref.message_id]);
+ for(const parent of parents){
+  const rows=[...qualificationSourceRows(tx,ownerId,parent),...tx.all(`SELECT source_contact_id,message_id,record_id FROM memory_citation WHERE owner_id=? AND ${parent.candidateId?'candidate_id=?':'memory_id=? AND version_no=?'}`,parent.candidateId?[ownerId,parent.candidateId]:[ownerId,parent.memoryId!,parent.versionNo!])];
+  for(const row of rows){const ref={owner_id:ownerId,contact_id:String(row.source_contact_id),message_id:String(row.message_id),record_id:String(row.record_id)};refs.set(key(ref),ref);}
+ }
+ const wanted=[...refs.values()],current=new Set(eligibleSourceReferences(tx,wanted).map(key)),saved=new Map<string,Set<string>>();
+ return {current:(_tx,ref)=>{if(!current.has(key(ref)))fail('history_source_not_available');},saved:(_tx,ref)=>{
+  const contact=JSON.stringify([ref.owner_id,ref.contact_id]);let eligible=saved.get(contact);
+  if(!eligible){eligible=new Set(eligibleReplyLocalSourceReferences(tx,wanted.filter(r=>r.owner_id===ref.owner_id&&r.contact_id===ref.contact_id)).map(key));saved.set(contact,eligible);}
+  if(!eligible.has(key(ref)))fail('history_source_not_available');
+ }};
+}
 export function sourceViews(rows:StorageRow[]):MemorySource[]{return rows.map(r=>({contactId:String(r.source_contact_id),messageId:String(r.message_id),recordId:String(r.record_id),acceptedRevision:String(r.accepted_revision),
  sentAt:r.sent_at===null?null:String(r.sent_at),timePrecision:r.time_precision as MemorySource['timePrecision'],
  ...(r.content_kind==='image'?{quote:'',contentKind:'image' as const,contentRef:citationContent(r).contentRef!,description:String(r.explanation??'')}:{quote:[...String(r.text_body)].slice(Number(r.span_start),Number(r.span_end)).join('')})}));}
@@ -31,31 +48,32 @@ function pendingDerivation(tx:StorageTransaction,ownerId:string,c:StorageRow):{s
  if(gate)return {stage:'decision_pending',reason:String(gate.kind)};
  return {stage:'processing_incomplete',reason:null};
 }
-function candidateView(tx:StorageTransaction,ownerId:string,s:MemoryScope,c:StorageRow):MemoryCandidateView|null {
+function candidateView(tx:StorageTransaction,ownerId:string,s:MemoryScope,c:StorageRow,sourceEligibility:SourceEligibility=assertSourceEligibility):MemoryCandidateView|null {
  if(!['pending','adopted','rejected','duplicate'].includes(String(c.state)))return null;
  let verificationState:'verified'|'pending';
  try{
-  if(c.state==='pending')verificationState=requireCandidate(tx,ownerId,c).state;
+  if(c.state==='pending')verificationState=requireCandidate(tx,ownerId,c,sourceEligibility).state;
   else{
-   const out=archivedExtractionOutput(tx,{ownerId,eventId:String(c.event_id)});
+   const out=archivedExtractionOutput(tx,{ownerId,eventId:String(c.event_id)},sourceEligibility);
    if(out.proposedBody!==c.proposed_body||out.producedAttemptId!==c.produced_attempt_id||out.scopeKind!==c.scope_kind||out.contactId!==c.contact_id||out.outputNo!==c.output_no)fail('memory_candidate_stale');
-   requireSources(tx,ownerId,{candidateId:String(c.id)});verificationState=out.semanticVerification.state;
+   requireSources(tx,ownerId,{candidateId:String(c.id)},false,sourceEligibility);verificationState=out.semanticVerification.state;
   }
-  qualificationSources(tx,ownerId,{candidateId:String(c.id)});
+  qualificationSources(tx,ownerId,{candidateId:String(c.id)},sourceEligibility);
   const pendingFields=String(c.state)==='pending'?(()=>{const pending=pendingDerivation(tx,ownerId,c);return {pendingStage:pending.stage,pendingReason:pending.reason};})():undefined;
-  return {...pendingFields,verificationState,id:String(c.id),scopeKind:s.scopeKind,contactId:s.contactId,body:String(c.proposed_body),state:c.state as MemoryCandidateView['state'],stateRevision:String(c.state_revision),eventId:String(c.event_id),contributingContactIds:frozenContributingContactIds(tx,ownerId,{candidateId:String(c.id)}),sources:sourceViews(citations(tx,ownerId,{candidateId:String(c.id)}))};
+  return {...pendingFields,verificationState,id:String(c.id),scopeKind:s.scopeKind,contactId:s.contactId,body:String(c.proposed_body),state:c.state as MemoryCandidateView['state'],stateRevision:String(c.state_revision),eventId:String(c.event_id),contributingContactIds:frozenContributingContactIds(tx,ownerId,{candidateId:String(c.id)}),sources:sourceViews(citations(tx,ownerId,{candidateId:String(c.id)},sourceEligibility))};
  }catch{return null;}
 }
-function checkedVersion(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow):MemoryVersionView {
- try{if(v.content_state==='present')requireVersion(tx,ownerId,m,v);return versionView(tx,ownerId,v);}
+function checkedVersion(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow,sources?:PageSources):MemoryVersionView {
+ const current=sources?.current??assertSourceEligibility,saved=sources?.saved??assertReplyLocalSource;
+ try{if(v.content_state==='present')requireVersion(tx,ownerId,m,v,current);return versionView(tx,ownerId,v,current);}
  catch{
   // 读取授权暂时不可用（如重启后尚未重建）时，已保存且来源仍有效的记忆继续可查看，并标注待重新核验；
   // 来源被删除、隔离、换绑或失证时本地资格同样不通过，仍隐藏正文。写入与实时核验入口保持严格。
   if(v.content_state==='present')try{
-   requireVersion(tx,ownerId,m,v,assertReplyLocalSource);
-   return {...versionView(tx,ownerId,v,assertReplyLocalSource),sourcePendingRecheck:true};
+   requireVersion(tx,ownerId,m,v,saved);
+   return {...versionView(tx,ownerId,v,saved),sourcePendingRecheck:true};
   }catch{/* 本地资格也不通过：按失效处理。 */}
-  return {...versionView(tx,ownerId,{...v,body:null,content_state:'redacted'}),sources:[],provenanceState:'invalidated'};
+  return {...versionView(tx,ownerId,{...v,body:null,content_state:'redacted'},current),sources:[],provenanceState:'invalidated'};
  }
 }
 function owned(s:MemoryScope,display:string|null,value:{sources:MemorySource[];contributingContactIds:string[]}):boolean {
@@ -63,10 +81,10 @@ function owned(s:MemoryScope,display:string|null,value:{sources:MemorySource[];c
  return s.scopeKind==='contact'?value.sources.every(source=>source.contactId===display)&&value.contributingContactIds.every(contact=>contact===display)
   :value.sources.length>0&&value.sources.every(source=>source.contactId===display)&&value.contributingContactIds.length===1&&value.contributingContactIds[0]===display;
 }
-function summary(tx:StorageTransaction,ownerId:string,s:MemoryScope,m:StorageRow,display:string|null):MemoryView|null {
+function summary(tx:StorageTransaction,ownerId:string,s:MemoryScope,m:StorageRow,display:string|null,version?:StorageRow|null,sources?:PageSources):MemoryView|null {
  // 撤回项仍需最近版本来调整保护；历史正文只在用户展开后另行分页核验。
- const raw=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? ORDER BY version_no DESC LIMIT 1',[ownerId,m.id]);
- const latest=raw?checkedVersion(tx,ownerId,m,raw):null;
+ const raw=version===undefined?tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? ORDER BY version_no DESC LIMIT 1',[ownerId,m.id]):version;
+ const latest=raw?checkedVersion(tx,ownerId,m,raw,sources):null;
  if(display!==null&&s.scopeKind==='self'&&(!latest||latest.body===null||!owned(s,display,latest)))return null;
  if(latest&&latest.body!==null&&!owned(s,display,latest))return null;
  const current=m.state==='active'&&latest?.versionNo===String(m.current_version_no)&&latest.body!==null&&latest.provenanceState==='eligible'?latest:null;
@@ -107,23 +125,27 @@ export function managementRead(tx:StorageTransaction,input:unknown):MemoryManage
   const size=Buffer.byteLength(JSON.stringify(value));if(size>maxPageBytes)fail('memory_item_too_large');
   if(bytes+size>maxPageBytes)return false;items.push(value);bytes+=size;return true;
  };
+ const candidateRows=!position.candidatesDone&&q.memoryId===undefined?(q.candidateId===undefined?tx.all("SELECT * FROM memory_candidate WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND state='pending' AND id>? ORDER BY id LIMIT ?",[ownerId,s.scopeKind,s.contactId,position.candidateAfter,managementPageSize+1])
+   :tx.all('SELECT * FROM memory_candidate WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND id=?',[ownerId,s.scopeKind,s.contactId,id(q.candidateId)])):[];
+ const memoryRows=!position.memoriesDone&&q.candidateId===undefined?(q.memoryId===undefined?tx.all(`SELECT * FROM memory WHERE owner_id=? AND scope_kind=? AND contact_id IS ? ${position.memoryAfter?'AND (-coalesce(management_source_time,-1),id)>(?,?)':''} ORDER BY -coalesce(management_source_time,-1),id LIMIT ?`,[ownerId,s.scopeKind,s.contactId,...(position.memoryAfter?[-BigInt(position.memoryTime??'-1'),position.memoryAfter]:[]),managementPageSize+1])
+   :tx.all('SELECT * FROM memory WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND id=?',[ownerId,s.scopeKind,s.contactId,id(q.memoryId)])):[];
+ const latest=memoryRows.slice(0,managementPageSize).map(memory=>({memory,version:tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? ORDER BY version_no DESC LIMIT 1',[ownerId,memory.id])??null}));
+ const sources=pageSources(tx,ownerId,[...candidateRows.slice(0,managementPageSize).map(c=>({candidateId:String(c.id)})),...latest.flatMap(item=>item.version?[{memoryId:String(item.memory.id),versionNo:item.version.version_no as bigint}]:[])]);
  if(!position.candidatesDone&&q.memoryId===undefined){
-  const rows=q.candidateId===undefined?tx.all("SELECT * FROM memory_candidate WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND state='pending' AND id>? ORDER BY id LIMIT ?",[ownerId,s.scopeKind,s.contactId,position.candidateAfter,managementPageSize+1])
-   :tx.all('SELECT * FROM memory_candidate WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND id=?',[ownerId,s.scopeKind,s.contactId,id(q.candidateId)]);
+  const rows=candidateRows;
   let consumed=0;
   for(const row of rows.slice(0,managementPageSize)){
-   const value=candidateView(tx,ownerId,s,row);
+   const value=candidateView(tx,ownerId,s,row,sources.current);
    if(value&&owned(s,context.displayContactId,value)&&!append(value,candidates))break;
    position.candidateAfter=String(row.id);consumed++;
   }
   position.candidatesDone=consumed===rows.length;
  }
  if(!position.memoriesDone&&q.candidateId===undefined){
-  const rows=q.memoryId===undefined?tx.all(`SELECT * FROM memory WHERE owner_id=? AND scope_kind=? AND contact_id IS ? ${position.memoryAfter?'AND (-coalesce(management_source_time,-1),id)>(?,?)':''} ORDER BY -coalesce(management_source_time,-1),id LIMIT ?`,[ownerId,s.scopeKind,s.contactId,...(position.memoryAfter?[-BigInt(position.memoryTime??'-1'),position.memoryAfter]:[]),managementPageSize+1])
-   :tx.all('SELECT * FROM memory WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND id=?',[ownerId,s.scopeKind,s.contactId,id(q.memoryId)]);
+  const rows=memoryRows;
   let consumed=0;
-  for(const row of rows.slice(0,managementPageSize)){
-   const value=summary(tx,ownerId,s,row,context.displayContactId);
+  for(const {memory:row,version} of latest){
+   const value=summary(tx,ownerId,s,row,context.displayContactId,version,sources);
    if(value&&!append(value,memories))break;
    position.memoryAfter=String(row.id);position.memoryTime=row.management_source_time===null?null:String(row.management_source_time);consumed++;
   }

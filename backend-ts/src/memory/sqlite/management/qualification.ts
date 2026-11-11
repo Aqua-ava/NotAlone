@@ -40,11 +40,11 @@ export function requireSources(tx:StorageTransaction,ownerId:string,parent:{cand
  }
  return rows;
 }
-export function requireCandidate(tx:StorageTransaction,ownerId:string,c:StorageRow){
+export function requireCandidate(tx:StorageTransaction,ownerId:string,c:StorageRow,sourceEligibility:SourceEligibility=assertSourceEligibility){
  if(c.state!=='pending'||typeof c.event_id!=='string')fail('memory_candidate_stale');
- const output=verifiedExtractionOutput(tx,{ownerId,eventId:String(c.event_id)});
+ const output=verifiedExtractionOutput(tx,{ownerId,eventId:String(c.event_id)},sourceEligibility);
  if(output.proposedBody!==c.proposed_body||output.producedAttemptId!==c.produced_attempt_id||output.scopeKind!==c.scope_kind||output.contactId!==c.contact_id||output.outputNo!==c.output_no)fail('memory_candidate_stale');
- const actual=requireSources(tx,ownerId,{candidateId:String(c.id)});
+ const actual=requireSources(tx,ownerId,{candidateId:String(c.id)},false,sourceEligibility);
  if(output.semanticVerification.state==='verified'&&(actual.length!==output.citations.length||output.citations.some(expected=>!actual.some(row=>row.source_contact_id===expected.contactId&&row.message_id===expected.messageId&&row.record_id===expected.recordId&&row.accepted_revision===expected.interpretationRevision&&row.span_start===expected.spanStart&&row.span_end===expected.spanEnd
   &&(row.content_kind??'text')===(expected.contentKind??'text')&&(expected.contentRef?JSON.stringify(JSON.parse(String(row.content_ref_json)))===JSON.stringify(expected.contentRef):true)))))fail('memory_candidate_stale');
  return output.semanticVerification;

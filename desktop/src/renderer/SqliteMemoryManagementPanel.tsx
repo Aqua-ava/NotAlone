@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import type {MemoryCandidateView,MemoryDecisionRequest,MemoryManagementOutcome,MemoryManagementSnapshot,MemoryManagementRead,MemoryHistorySnapshot,MemorySource,MemoryVerificationState,MemoryVersionView,MemoryView,SqliteMemoryManagementBridge} from '../shared/sqlite-memory-management';
-import {withdrawnProtectionVersion} from '../shared/sqlite-memory-management';
+import {memoryReadResult,memoryReadFailureCode,withdrawnProtectionVersion} from '../shared/sqlite-memory-management';
 import {SqliteMemoryDocumentsPanel} from './SqliteMemoryDocumentsPanel';
 import {useVisibleRefresh} from './use-visible-refresh';
 import {memoriesBySourceTime,memorySourceDateLabel,memorySourceTime} from './memory-source-time';
@@ -89,15 +89,15 @@ function Version({version,current}:{version:MemoryVersionView;current:boolean}){
  </div>;
 }
 function MemoryHistory({memory,bridge,request,authority}:{memory:MemoryView;bridge:SqliteMemoryManagementBridge;request:MemoryManagementRead;authority:MemoryManagementSnapshot}){
- const [open,setOpen]=useState(false),[loaded,setLoaded]=useState<{authority:MemoryManagementSnapshot;value:MemoryHistorySnapshot}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [open,setOpen]=useState(false),[loaded,setLoaded]=useState<{authority:MemoryManagementSnapshot;value:MemoryHistorySnapshot}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[readRetryable,setReadRetryable]=useState(false);
  const [previous,setPrevious]=useState<(string|undefined)[]>([]),active=useRef(true),generation=useRef(0),cursor=useRef<string|undefined>(undefined),latestAuthority=useRef(authority);
  latestAuthority.current=authority;
  useEffect(()=>{active.current=true;return()=>{active.current=false;generation.current++;};},[]);
  async function load(next?:string){
-  if(!bridge.readHistory)return;const token=++generation.current;setLoaded(null);setBusy(true);setError('');
+  if(!bridge.readHistory)return;const token=++generation.current;setLoaded(null);setBusy(true);setError('');setReadRetryable(false);
   const current=()=>active.current&&generation.current===token&&latestAuthority.current===authority;
-  try{const value=await bridge.readHistory({...request,memoryId:memory.id,expectedHeadRevision:memory.headRevision,...(next?{cursor:next}:{})});if(current())setLoaded({authority,value});}
-  catch{if(current()){setLoaded(null);setError('历史资料已变化，请收起后重新展开。');}}
+  try{const value=memoryReadResult(await bridge.readHistory({...request,memoryId:memory.id,expectedHeadRevision:memory.headRevision,...(next?{cursor:next}:{})}));if(current())setLoaded({authority,value});}
+  catch(error){if(current()){const code=memoryReadFailureCode(error);setReadRetryable(code!==null);setLoaded(null);setError(code==='memory_read_timeout'?'读取超时，请重试':code?'读取暂不可用，请重试':'历史资料已变化，请收起后重新展开。');}}
   finally{if(current())setBusy(false);}
  }
  // 每次权威列表重读都撤下旧历史；运行时来源资格变化不一定会推进记忆头或页面修订。
@@ -105,7 +105,7 @@ function MemoryHistory({memory,bridge,request,authority}:{memory:MemoryView;brid
  const snapshot=loaded?.authority===authority?loaded.value:null,history=bridge.readHistory?snapshot?.view:memory;
  return <details className="memory-version-history" onToggle={event=>{const expanded=event.currentTarget.open;setOpen(expanded);if(!expanded){cursor.current=undefined;setPrevious([]);}}}>
   <summary>更新历史</summary>
-  {open&&<>{busy&&<p role="status">正在读取本页历史…</p>}{error&&<p role="alert">{error}</p>}
+  {open&&<>{busy&&<p role="status">正在读取本页历史…</p>}{error&&<p role="alert">{error}{readRetryable&&<button type="button" disabled={busy} onClick={()=>void load(cursor.current)}>重试读取历史资料</button>}</p>}
    {history&&<>{[...history.versions].reverse().map(version=><Version key={version.versionNo} version={version} current={version.versionNo===memory.current?.versionNo}/>)}
     <ol>{history.decisions.map(decision=><li key={decision.id}>{decision.actorKind==='system'?'系统自动决定':'用户决定'} · {({auto_accept:'自动采纳',auto_update:'自动更新',auto_retire:'已并入合并资料',auto_noop:'跳过重复资料',...successMessages}[decision.action]??decision.action)} · {decision.outcome==='redacted'?'敏感材料已清除':'已生效'}</li>)}</ol></>}
    {snapshot&&<nav className="sqlite-memory-actions" aria-label="记忆历史分页"><button type="button" disabled={busy||!previous.length} onClick={()=>{const next=previous.at(-1);setPrevious(previous.slice(0,-1));cursor.current=next;void load(next);}}>较新的版本与决定</button>
@@ -168,8 +168,8 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
  refresh.current=async(preserve=false,silent=false)=>{
   if(!readRequest||decisionPending.current||silent&&(busy||reading.current!==null||currentNotice?.error))return false;
   const token=++revision.current;reading.current=token;if(!preserve)setState(null);if(!silent){setBusy(true);setNotice(null);}
-  try{const next=await bridge.read({...readRequest,...(pageCursor.current?{cursor:pageCursor.current}:{})});if(active.current&&context.current===accepted&&token===revision.current){setState({context:accepted,snapshot:next});if(!decisionPending.current)setDocumentsBlocked(false);return true;}}
-  catch{if(active.current&&context.current===accepted&&token===revision.current){setState(null);setDocumentsBlocked(true);setNotice({context:accepted,message:'来源或范围暂不可用，已撤下原资料，请重新读取。',error:true});}}
+  try{const next=memoryReadResult(await bridge.read({...readRequest,...(pageCursor.current?{cursor:pageCursor.current}:{})}));if(active.current&&context.current===accepted&&token===revision.current){setState({context:accepted,snapshot:next});if(!decisionPending.current)setDocumentsBlocked(false);return true;}}
+  catch(error){if(active.current&&context.current===accepted&&token===revision.current){const code=memoryReadFailureCode(error);if(code){setNotice({context:accepted,message:code==='memory_read_timeout'?'读取超时，请重试':'读取暂不可用，请重试',error:true});}else{setState(null);setDocumentsBlocked(true);setNotice({context:accepted,message:'来源或范围暂不可用，已撤下原资料，请重新读取。',error:true});}}}
   finally{if(reading.current===token)reading.current=null;if(active.current&&context.current===accepted&&token===revision.current&&!silent)setBusy(false);}
   return false;
  };
@@ -189,7 +189,7 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
  const wasVisible=useRef(visible);
  useEffect(()=>{const reopened=visible&&!wasVisible.current;wasVisible.current=visible;if(reopened)void refresh.current(true,true);},[visible]);
  useVisibleRefresh(()=>refresh.current(true,true),visible&&level==='L1'&&!!contactId&&!busy&&!currentNotice?.error,current?.view.page?.preparing?1000:30000);
- function restart(){pageCursor.current=undefined;setPreviousPages([]);void refresh.current();}
+ function restart(){const preserve=!!current&&pageCursor.current===undefined;pageCursor.current=undefined;setPreviousPages([]);void refresh.current(preserve);}
  function changePage(next:string|undefined,previous:(string|undefined)[]){pageCursor.current=next;setPreviousPages(previous);void refresh.current();}
  async function decide(request:Decision){
   if(!current||!readRequest||busy)return;const snapshot=current,token=++revision.current;decisionPending.current=true;setDocumentsBlocked(true);setState(null);setBusy(true);setNotice(null);

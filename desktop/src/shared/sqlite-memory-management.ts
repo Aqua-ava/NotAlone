@@ -25,9 +25,9 @@ export interface MemoryDocumentsSnapshot {connectionGeneration:number;scope:Memo
 export interface MemoryManagementDecision extends MemoryManagementRead {connectionGeneration:number;request:MemoryDecisionRequest}
 export type MemoryManagementOutcome = {status:'applied';result:MemoryDecisionResult}|{status:'conflict'|'source_stale'|'protected'|'unavailable'};
 export interface SqliteMemoryManagementBridge {
- read(request:MemoryManagementRead):Promise<MemoryManagementSnapshot>;
- readHistory?(request:MemoryHistoryRead):Promise<MemoryHistorySnapshot>;
- readDocuments(request:MemoryManagementRead):Promise<MemoryDocumentsSnapshot>;
+ read(request:MemoryManagementRead):Promise<MemoryManagementSnapshot|MemoryReadFailureResult>;
+ readHistory?(request:MemoryHistoryRead):Promise<MemoryHistorySnapshot|MemoryReadFailureResult>;
+ readDocuments(request:MemoryManagementRead):Promise<MemoryDocumentsSnapshot|MemoryReadFailureResult>;
  decide(request:MemoryManagementDecision):Promise<MemoryManagementOutcome>;
  release():Promise<void>;
  onInvalidated(listener:()=>void):()=>void;
@@ -35,3 +35,25 @@ export interface SqliteMemoryManagementBridge {
 
 /** 重复资料已完成裁决，但未由该候选生成正式版本。 */
 export const memoryCandidateStates=['pending','adopted','rejected','duplicate'] as const;
+
+/** 只表达本次读取未完成；不代表已核验资料或范围失效。 */
+export type MemoryReadFailureCode='memory_read_timeout'|'memory_read_unavailable';
+export interface MemoryReadFailureResult {readFailure:MemoryReadFailureCode}
+export class MemoryReadFailure extends Error {
+ constructor(readonly code:MemoryReadFailureCode){super(code==='memory_read_timeout'?'读取超时，请重试':'读取暂不可用，请重试');}
+}
+export function memoryReadFailureCode(error:unknown):MemoryReadFailureCode|null {
+ if(!error||typeof error!=='object')return null;
+ const code=(error as {code?:unknown}).code;
+ return code==='memory_read_timeout'||code==='memory_read_unavailable'?code:null;
+}
+
+/** 安全封套必须穿过 IPC 与 contextBridge，进入 renderer 后才恢复本地错误。 */
+export function memoryReadResult<T>(result:T|MemoryReadFailureResult):T {
+ if(result&&typeof result==='object'&&'readFailure' in result){
+  const code=memoryReadFailureCode({code:result.readFailure});
+  if(code)throw new MemoryReadFailure(code);
+  throw new Error('记忆资料读取回执不可用。');
+ }
+ return result as T;
+}

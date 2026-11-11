@@ -20,7 +20,7 @@ function extractionOutput(tx:StorageTransaction,ref:VerifiedExtractionOutputRefe
  if(payload.scopeKind!==e.scope_kind||payload.contactId!==e.contact_id||payload.origin!=='auto'||typeof payload.fact?.text!=='string'||!payload.fact.text.trim())fail('memory_extraction_output_not_eligible');
  const inputs=tx.all(`SELECT i.* FROM execution_input x JOIN step_input si ON si.owner_id=x.owner_id AND si.step_id=x.planned_step_id AND si.input_no=x.planned_input_no JOIN run_input i ON i.owner_id=si.owner_id AND i.run_id=si.run_id AND i.input_no=si.run_input_no WHERE x.owner_id=? AND x.event_id=? ORDER BY x.presentation_no`,[ownerId,eventId]);
  if(!inputs.length)fail('memory_extraction_output_not_eligible');
- if(!published)assertInputs(tx,ownerId,String(e.run_id),inputs);
+ if(!published)assertInputs(tx,ownerId,String(e.run_id),inputs,sourceEligibility);
  else for(const input of inputs){sourceEligibility(tx,{owner_id:ownerId,contact_id:String(input.source_contact_id),record_id:String(input.record_id),message_id:String(input.message_id)});if(!tx.get("SELECT 1 FROM message WHERE owner_id=? AND contact_id=? AND id=? AND interpretation_revision=? AND availability='available'",[ownerId,input.source_contact_id,input.message_id,input.accepted_interpretation_revision]))fail('memory_extraction_source_stale');}
  const sources=tx.all('SELECT source_contact_id,record_id FROM event_source WHERE owner_id=? AND event_id=?',[ownerId,eventId]);
  const expected=new Set(inputs.map(i=>JSON.stringify([i.source_contact_id,i.record_id])));
@@ -42,5 +42,5 @@ function extractionOutput(tx:StorageTransaction,ref:VerifiedExtractionOutputRefe
 }
 
 /** 未决产物仍复验原处理授权；已发布版本只重验存档核验链与当前保存来源。 */
-export const verifiedExtractionOutput=(tx:StorageTransaction,ref:VerifiedExtractionOutputReference)=>extractionOutput(tx,ref);
+export const verifiedExtractionOutput=(tx:StorageTransaction,ref:VerifiedExtractionOutputReference,sourceEligibility:SourceEligibility=assertSourceEligibility)=>extractionOutput(tx,ref,false,sourceEligibility);
 export const archivedExtractionOutput=(tx:StorageTransaction,ref:VerifiedExtractionOutputReference,sourceEligibility:SourceEligibility=assertSourceEligibility)=>extractionOutput(tx,ref,true,sourceEligibility);
