@@ -1,11 +1,15 @@
 import {sha256} from '../platform/sha256.ts';
 import type {DiagnosticEvent,DiagnosticModule} from './unified-contract.mjs';
-import {diagnosticOverflow} from './buffer.mjs';
+import {diagnosticDecisionLimit,diagnosticDetailLimit,diagnosticOverflow} from './buffer.mjs';
 
-/** 只保留模板指纹和数字；参数从不交给聚合器，单动作最多128个模板。 */
+type SqlStatistics={sqlFingerprint:string;count:number;durationMs:number};
+const statisticLimit=4096,slowThresholdMs=1000;
+/** 统计仅保留最多4096个指纹和数字；参数及原始SQL不进入聚合状态。 */
 export class SqlDiagnosticSummary {
- private readonly rows=new Map<string,{sqlFingerprint:string;count:number;durationMs:number}>();
- private dropped=0;
+ private readonly rows=new Map<string,SqlStatistics>();
+ // 统计封顶后仍保留有界的单次慢观察，不将未观察到的早期快调用算入该告警。
+ private readonly extraSlow:SqlStatistics[]=[];
+ private untracked=0;
  private readonly module:DiagnosticModule;
  private readonly caller:'sqlite_worker'|'sqlite_readonly_worker';
  private readonly traceId?:string;
@@ -14,16 +18,34 @@ export class SqlDiagnosticSummary {
   const started=performance.now();
   try{return work();}finally{
    try{
-    let row=this.rows.get(sql);
-    if(!row&&this.rows.size<128){row={sqlFingerprint:sha256(sql),count:0,durationMs:0};this.rows.set(sql,row);}
-    if(row){row.count++;row.durationMs+=Math.max(0,performance.now()-started);}else this.dropped++;
+    const durationMs=Math.max(0,performance.now()-started),sqlFingerprint=sha256(sql);
+    let row=this.rows.get(sqlFingerprint);
+    if(!row&&this.rows.size<statisticLimit){row={sqlFingerprint,count:0,durationMs:0};this.rows.set(sqlFingerprint,row);}
+    if(row){row.count++;row.durationMs+=durationMs;}
+    else if(durationMs>=slowThresholdMs&&this.extraSlow.length<diagnosticDetailLimit)this.extraSlow.push({sqlFingerprint,count:1,durationMs});
+    else this.untracked=Math.min(Number.MAX_SAFE_INTEGER,this.untracked+1);
    }catch{}
   }
  }
  events():DiagnosticEvent[]{
-  try{const events:DiagnosticEvent[]=[...this.rows.values()].map(row=>({event:row.durationMs>=1000?'sql.slow':'sql.summary',module:this.module,caller:this.caller,
-   ...(this.traceId?{traceId:this.traceId}:{}),sqlFingerprint:row.sqlFingerprint,count:row.count,durationMs:Math.round(row.durationMs*1000)/1000,
-   ...(row.durationMs>=1000?{reasonCode:'sql_slow'}:{})}));if(this.dropped)events.push(diagnosticOverflow(this.caller,this.dropped,this.traceId));return events;}catch{return [];}
+  try{
+   const detail:SqlStatistics[]=[],slow:SqlStatistics[]=[];
+   for(const row of this.rows.values()){
+    if(row.durationMs>=slowThresholdMs)slow.push(row);
+    // debug 是最多128条模板的采样，不占慢SQL预算，也不冒称统计损失。
+    else if(detail.length<diagnosticDetailLimit)detail.push(row);
+   }
+   const retainedExtra=Math.min(this.extraSlow.length,Math.max(0,diagnosticDecisionLimit-slow.length));
+   slow.push(...this.extraSlow.slice(0,retainedExtra));
+   const record=(row:SqlStatistics,isSlow:boolean):DiagnosticEvent=>({event:isSlow?'sql.slow':'sql.summary',module:this.module,caller:this.caller,
+    ...(this.traceId?{traceId:this.traceId}:{}),sqlFingerprint:row.sqlFingerprint,count:row.count,durationMs:Math.round(row.durationMs*1000)/1000,
+    ...(isSlow?{reasonCode:'sql_slow'}:{})});
+   const events=[...detail.map(row=>record(row,false)),...slow.map(row=>record(row,true))];
+   // count 仅计未统计的调用及被裁掉的单次慢观察，已保留的告警不重复计数。
+   const lost=Math.min(Number.MAX_SAFE_INTEGER,this.untracked+this.extraSlow.length-retainedExtra);
+   if(lost)events.push(diagnosticOverflow(this.caller,lost,this.traceId));
+   return events;
+  }catch{return [];}
  }
 }
 
