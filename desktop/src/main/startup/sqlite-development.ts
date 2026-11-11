@@ -17,7 +17,7 @@ const failureCodes = new Set(['database_cutover_required', 'database_maintenance
   'cutover_checks_failed', 'cutover_target_unrecorded', 'cutover_configuration_conflict', 'cutover_storage_failed']);
 const blocked = (code: string): SqliteDevelopmentState => ({ phase: 'blocked', code, maintenance: true });
 
-/** 正常开发入口的唯一启动探针：默认 SQLite 切换、维护态与旧目标清理都由控制面决定。 */
+/** 正常开发入口只准备既有 SQLite 实例；首次初始化再进入维护控制面。 */
 export class SqliteDevelopmentProbe {
   private cancelChild: (() => void) | undefined;
   private contactConfiguration: SqliteLaunchConfiguration | undefined;
@@ -53,11 +53,11 @@ export class SqliteDevelopmentProbe {
   }
 
   private probe(allowSyntheticAuthorization: boolean): Promise<ReadyResult | PreparedResult | MaintenanceResult> {
-    const moduleUrl = pathToFileURL(path.join(this.projectDirectory, 'backend-ts/src/platform/cutover/startup.ts')).href;
+    const moduleUrl = pathToFileURL(path.join(this.projectDirectory, 'backend-ts/src/platform/database-startup.ts')).href;
     // 与开发宿主同一 Node；切换检查只读写 SQLite 与受控目录，不启动 DSH、微信或模型。
     const program = `(async()=>{ try {
-      const {prepareDefaultDatabaseStartup}=await import(${JSON.stringify(moduleUrl)});
-      const result=await prepareDefaultDatabaseStartup({userData:${JSON.stringify(this.userData)},skillPackageRoot:${JSON.stringify(path.join(this.projectDirectory, 'reply-skills/romance'))},allowSyntheticAuthorization:${allowSyntheticAuthorization}});
+      const {prepareDatabaseStartup}=await import(${JSON.stringify(moduleUrl)});
+      const result=await prepareDatabaseStartup({userData:${JSON.stringify(this.userData)},skillPackageRoot:${JSON.stringify(path.join(this.projectDirectory, 'reply-skills/romance'))},allowSyntheticAuthorization:${allowSyntheticAuthorization}});
       console.log(JSON.stringify(result));
     } catch(error) { console.log(JSON.stringify({phase:'maintenance',code:'cutover_storage_failed',detail:'probe_failed'})); } })();`;
     return new Promise((resolve, reject) => {

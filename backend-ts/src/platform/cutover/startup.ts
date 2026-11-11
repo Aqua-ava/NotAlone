@@ -14,6 +14,7 @@ import { authorizationDigest, cutoverDirectory, CutoverControlError, databaseFil
   saveManifest, saveStartupConfiguration, type StartupConfiguration } from './control.ts';
 import { cleanLegacyTarget, CutoverCleanupError, ensureSkillRoot } from './cleanup.ts';
 import { assertPrivateUserData, checkLegacyWriters, discoverLegacyTargets, unrecognizedManagedTargets } from './targets.ts';
+import {prepareDatabaseStartup} from '../database-startup.ts';
 
 const DEFAULT_CAPABILITIES: SqliteCapabilitiesConfiguration['capabilities'] = ['contacts', 'skills', 'history', 'discussions', 'memory'];
 const BUSINESS_TARGETS: readonly LegacyTargetKind[] = ['legacy_update_backup',
@@ -83,6 +84,11 @@ export interface PreparedDatabaseStartup {
 
 /** 桌面只准备已有目标；正式宿主仍须打开同一实例、核验完整性与本人身份后才能连接。 */
 export async function prepareDefaultDatabaseStartup(options: DefaultDatabaseOptions): Promise<PreparedDatabaseStartup | CutoverResult> {
+  return prepareDatabaseStartup(options);
+}
+
+/** 仅尚未完成初始化的旧目标维护入口；正常完成态由 database-startup 准备。 */
+export async function prepareLegacyDatabaseStartup(options: DefaultDatabaseOptions): Promise<PreparedDatabaseStartup | CutoverResult> {
   return runDatabaseStartup(options, 'prepare', async (userData, manifest) => {
     const configuration = completedConfiguration(userData, manifest, 'prepare');
     controlledFiles(userData, false).verify();
