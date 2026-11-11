@@ -3,6 +3,7 @@ import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import {readWechatHttpBody,WechatHttpBodyError} from '../../sync/wechat-http-body.ts';
 import {SqliteSkillLibrary,SqliteSkillError} from './library.ts';
 import type {SkillPackageState} from './contracts.ts';
+import type {SkillGroupState} from './groups.ts';
 import {skillPresentation} from './presentation.ts';
 
 const enabledLabels={enabled:'已启用',disabled:'已停用',unknown:'待核验启停'};
@@ -16,6 +17,19 @@ export function skillManagementView(item: SkillPackageState) {
   state_label:`${enabledLabels[item.enabledState]} · ${item.verificationReason==='directory_content_changed'?'场景文件与上次核验不一致':verificationLabels[item.verificationState]}`,
   revisions:item.revisions.map(r=>({revision_no:r.revisionNo.toString(),manifest_digest:r.manifestDigest,content_digest:r.contentDigest,
    source_kind:r.sourceKind,availability:r.availability,verification_state:r.verificationState}))};
+}
+/** 分组投影只含业务标识与名称，不含物理路径或 Skill 正文。 */
+export function skillGroupView(group: SkillGroupState) {
+ return {group_id:group.id,name:group.name,revision:group.revision.toString(),package_ids:group.packageIds,contact_ids:group.contactIds};
+}
+const uuid=(value: unknown): string=>{
+ if(typeof value!=='string' || !/^[a-f0-9-]{36}$/.test(value))throw new SqliteSkillError('skill_request_invalid');
+ return value;
+};
+const nullableUuid=(value: unknown): string|null=>value===null?null:uuid(value);
+function packageIds(value: unknown): string[] {
+ if(!Array.isArray(value) || value.length>256)throw new SqliteSkillError('skill_request_invalid');
+ return value.map(uuid);
 }
 function object(value: unknown): Record<string,unknown> {
  if(!value || typeof value!=='object' || Array.isArray(value))throw new SqliteSkillError('skill_request_invalid');
@@ -47,6 +61,8 @@ export class SqliteSkillHttp {
   try {
    if(raw!==path)throw new SqliteSkillError('skill_request_invalid');
    if(legacyLearning){respond(res,503,{error:'sqlite_skill_operation_unavailable'});return true;}
+   const groupRoute=/^\/api\/skills\/groups(?:\/([a-f0-9-]{36})\/(update|delete))?$/.exec(path),contactRoute=/^\/api\/skills\/contacts\/([A-Za-z0-9_.:-]{1,128})\/group$/.exec(path);
+   if(groupRoute || contactRoute){await this.handleGroups(req,res,controller.signal,path,groupRoute,contactRoute);return true;}
    const match=/^\/api\/skills\/([a-f0-9-]{36})\/(verify|enable|disable)$/.exec(path);
    const query=path==='/api/skills';
    if(!query && !match){respond(res,503,{error:'sqlite_skill_operation_unavailable'});return true;}
@@ -63,8 +79,39 @@ export class SqliteSkillHttp {
    respond(res,200,{skill:skillManagementView(item)});
   }catch(error){
    const code=error instanceof StorageFailure || error instanceof SqliteSkillError?error.code:error instanceof WechatHttpBodyError?error.code:'skill_operation_failed';
-   if(!controller.signal.aborted)respond(res,error instanceof WechatHttpBodyError?error.status:code==='skill_request_invalid'?400:409,{error:code});
+   if(!controller.signal.aborted)respond(res,error instanceof WechatHttpBodyError?error.status:code==='skill_request_invalid'||/_invalid$/.test(code)?400:409,{error:code});
   }finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
   return true;
+ }
+ /** 分组管理：读取列表、创建、修改、删除，以及联系人分配；所有写入都要求确认和预期修订。 */
+ private async handleGroups(req: IncomingMessage,res: ServerResponse,signal: AbortSignal,path: string,groupRoute: RegExpExecArray|null,contactRoute: RegExpExecArray|null): Promise<void> {
+  const list=!contactRoute && path==='/api/skills/groups' && req.method==='GET';
+  if(list){respond(res,200,{storage:'sqlite',groups:(await this.library.listGroups(signal)).map(skillGroupView)});return;}
+  if(req.method!=='POST'){respond(res,405,{error:'method_not_allowed'});return;}
+  let parsed: unknown;
+  try {parsed=JSON.parse((await readWechatHttpBody(req,16_384,10_000)).toString('utf8'));}
+  catch(error){if(error instanceof WechatHttpBodyError)throw error;throw new SqliteSkillError('skill_request_invalid');}
+  const body=object(parsed);
+  if(body.confirmed!==true)throw new SqliteSkillError('skill_request_invalid');
+  if(contactRoute){
+   exact(body,['group_id','expected_group_id','confirmed']);
+   const groupId=nullableUuid(body.group_id),expected=nullableUuid(body.expected_group_id);
+   const result=await this.library.assignContactGroup(contactRoute[1],groupId,expected,signal);
+   respond(res,200,{contact_id:result.contactId,group_id:result.groupId});return;
+  }
+  const [,id,action]=groupRoute!;
+  if(!id){
+   exact(body,['name','package_ids','confirmed']);
+   if(typeof body.name!=='string')throw new SqliteSkillError('skill_request_invalid');
+   respond(res,200,{group:skillGroupView(await this.library.createGroup(body.name,packageIds(body.package_ids),signal))});return;
+  }
+  if(action==='update'){
+   exact(body,['expected_revision','name','package_ids','confirmed']);
+   if(typeof body.name!=='string')throw new SqliteSkillError('skill_request_invalid');
+   respond(res,200,{group:skillGroupView(await this.library.updateGroup(id,head(body.expected_revision),body.name,packageIds(body.package_ids),signal))});return;
+  }
+  exact(body,['expected_revision','confirmed']);
+  await this.library.deleteGroup(id,head(body.expected_revision),signal);
+  respond(res,200,{deleted:true,group_id:id});
  }
 }

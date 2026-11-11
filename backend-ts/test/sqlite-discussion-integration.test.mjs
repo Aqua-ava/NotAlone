@@ -66,7 +66,7 @@ test('实际派发后连接中断保留最终测量预留，未知实耗不填�
 
 test('实际Skill载入经SQLite保护事务保存原文与修订，选择事实不冒充载入',async t=>{
  const f=await fixture(t);await mkdir(join(f.skillRoot,'gentle'),{mode:0o700});await writeFile(join(f.skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 合成沟通方法\n---\n先回应感受，再说明合成情况。\n',{mode:0o600});
- let skill=await f.library.discover('gentle');skill=await f.library.setEnabled(skill.id,skill.headRevision,'enabled');
+ let skill=await f.library.discover('gentle');skill=await f.library.setEnabled(skill.id,skill.headRevision,'enabled');{const group=await f.library.createGroup('合成分组',[skill.id]);await f.library.assignContactGroup(f.ids[0],group.id,null);}
  const d=await f.service.newDiscussion(f.ids[0]);await f.turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'使用指定的合成方法讨论',confirmedContact:true,selectedPackageId:skill.id});
  const view=await f.service.view(f.ids[0],d.id);const trace=await f.service.trace(f.ids[0],d.id,view.entries[1].origin_request_id);
  assert.equal(trace.events.filter(e=>e.kind==='skill_selection').length,1);const loaded=trace.events.filter(e=>e.kind==='skill_input');assert.equal(loaded.length,1);assert.match(loaded[0].payload,/先回应感受/);assert.equal(JSON.stringify(f.requests[0]).includes('先回应感受'),true);
@@ -114,7 +114,7 @@ test('真实来源删除沿实际输入和同副本后续发言清理全部副�
 });
 
 test('真实账号清理覆盖讨论调用追踪和受管目录，用户Skill原件保留',async t=>{
- const f=await fixture(t);await mkdir(join(f.skillRoot,'gentle'),{mode:0o700});const original='---\nname: gentle\ndescription: 合成方法\n---\n保留用户自己的选择。\n';await writeFile(join(f.skillRoot,'gentle/SKILL.md'),original,{mode:0o600});let skill=await f.library.discover('gentle');skill=await f.library.setEnabled(skill.id,skill.headRevision,'enabled');
+ const f=await fixture(t);await mkdir(join(f.skillRoot,'gentle'),{mode:0o700});const original='---\nname: gentle\ndescription: 合成方法\n---\n保留用户自己的选择。\n';await writeFile(join(f.skillRoot,'gentle/SKILL.md'),original,{mode:0o600});let skill=await f.library.discover('gentle');skill=await f.library.setEnabled(skill.id,skill.headRevision,'enabled');{const group=await f.library.createGroup('合成分组',[skill.id]);await f.library.assignContactGroup(f.ids[0],group.id,null);}
  const d=await f.service.newDiscussion(f.ids[0]);await f.turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'账号清理的合成讨论',confirmedContact:true,selectedPackageId:skill.id});
  const copies=await f.storage.execute('runtime.inventory',{ownerId:owner});const service=await deletion(f),op=await service.plan({ownerId:owner,requestKey:randomUUID(),scope:{kind:'account'}});const done=await service.advance(op);assert.equal(done.state,'completed',JSON.stringify(done.checks));
  await assert.rejects(f.service.list(f.ids[0]));for(const c of copies)await assert.rejects(access(join(f.root,'managed/runtime-copies',c.managedLocator)),{code:'ENOENT'});const {readFile}=await import('node:fs/promises');assert.equal(await readFile(join(f.skillRoot,'gentle/SKILL.md'),'utf8'),original);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});

@@ -103,6 +103,22 @@ export function requireSkillRevision(tx: StorageTransaction, ownerId: string, an
     || revision.availability!=='current' || revision.verificationState!=='verified'
     || revision.manifestDigest!==anchor.manifestDigest || revision.contentDigest!==anchor.contentDigest) fail('skill_run_invalidated');
 }
+/**
+ * 与联系人／来源资格在同一短事务使用：冻结的分配和分组修订必须仍是当前状态，
+ * 且每个可用 Skill 都在该分组的绑定中。没有分组信息的修订不得带任何可用 Skill。
+ */
+export function requireSkillGroupScope(tx: StorageTransaction,ownerId: string,revision: {eligible: {packageId: string}[];group?: {contactId: string;groupId: string|null;revision: bigint}}): void {
+  const group=revision.group;
+  if(!group){if(revision.eligible.length)fail('skill_run_invalidated');return;}
+  const row=tx.get('SELECT a.group_id,s.revision FROM contact_skill_group a JOIN skill_group s ON s.owner_id=a.owner_id AND s.id=a.group_id WHERE a.owner_id=? AND a.contact_id=?',[ownerId,text(group.contactId)]);
+  if(group.groupId===null){
+    if(row||revision.eligible.length)fail('skill_run_invalidated');
+    return;
+  }
+  if(!row||row.group_id!==group.groupId||row.revision!==group.revision)fail('skill_run_invalidated');
+  for(const anchor of revision.eligible)
+    if(!tx.get('SELECT 1 FROM skill_group_package WHERE owner_id=? AND group_id=? AND package_id=?',[ownerId,group.groupId,anchor.packageId]))fail('skill_run_invalidated');
+}
 /** 与联系人／来源资格在同一短事务使用，避免末尾分离复验的交错窗口。 */
 export function requireSkillRun(tx: StorageTransaction, ownerId: string, revision: SkillRunRevision): void {
   requireSkillOwner(tx,ownerId);
@@ -110,6 +126,7 @@ export function requireSkillRun(tx: StorageTransaction, ownerId: string, revisio
   if(current.length!==revision.packages.length || new Set(revision.packages.map(p=>p.id)).size!==current.length
     || current.some(row=>!revision.packages.some(p=>p.id===row.id && p.headRevision===row.head_revision)))fail('skill_run_invalidated');
   for(const anchor of revision.eligible)requireSkillRevision(tx,ownerId,anchor);
+  requireSkillGroupScope(tx,ownerId,revision);
 }
 export const skillActions: StorageAction[] = [
   {name:'skills.list',mode:'read',retryBusy:false,execute(tx,input){

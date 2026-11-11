@@ -7,6 +7,7 @@ import type {installModelProvider} from '../../../platform/models/model-provider
 import type {ModelPermitArbiter} from '../../../platform/models/model-permits.ts';
 import {SqliteSkillLibrary,skillAnchor} from '../../../skills/sqlite/library.ts';
 import {openSqliteSkillRun} from '../../../skills/sqlite/provider.ts';
+import {inSkillGroup,skillRunGroup} from '../../../skills/sqlite/groups.ts';
 import type {SkillRunProtection,SkillRunRevision} from '../../../skills/sqlite/contracts.ts';
 import type {SqliteDiscussionService} from '../service.ts';
 import type {SqliteDiscussionRuntime} from '../runtime.ts';
@@ -68,12 +69,16 @@ export class SqliteReplyTurns {
      skillDegraded=true;catalog=await o.storage.execute<any[]>('skills.list',{ownerId});
     }
    }else catalog=await o.storage.execute<any[]>('skills.list',{ownerId});
-   const eligible=catalog.filter(p=>p.enabledState==='enabled'&&p.verificationState==='verified'&&p.currentRevisionNo!==null&&(!input.selectedPackageId||p.id===input.selectedPackageId));
+   // 只有联系人所在分组绑定的 Skill 才可用；未分组联系人没有任何可用 Skill，分组之外的失效包也不影响本联系人。
+   const group=o.library?await o.library.groupScope(input.contactId,input.signal):null;
+   const scope=group??{groupId:null,revision:0n,packageIds:[]};
+   const grouped=inSkillGroup(catalog,scope);
+   const eligible=grouped.filter(p=>p.enabledState==='enabled'&&p.verificationState==='verified'&&p.currentRevisionNo!==null&&(!input.selectedPackageId||p.id===input.selectedPackageId));
    if(input.selectedPackageId&&!eligible.some(p=>p.id===input.selectedPackageId))throw new StorageFailure('discussion_skill_unavailable');
-   // 任一已启用策略缺失、未核验或当前修订不可用时整体撤下，不带其余策略继续。
-   if(!input.selectedPackageId&&catalog.some(p=>p.enabledState==='enabled'&&(p.verificationState!=='verified'||p.currentRevisionNo===null)))skillDegraded=true;
+   // 本组任一已启用策略缺失、未核验或当前修订不可用时整体撤下，不带其余策略继续。
+   if(!input.selectedPackageId&&grouped.some(p=>p.enabledState==='enabled'&&(p.verificationState!=='verified'||p.currentRevisionNo===null)))skillDegraded=true;
    const runnable=skillDegraded?[]:eligible;
-   const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:o.library?runnable.map(skillAnchor):[]};
+   const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:o.library?runnable.map(skillAnchor):[],...(group?{group:skillRunGroup(input.contactId,group)}:{})};
    const readItems=async()=>{
     // 候选只使用本次请求的显式消息；旧讨论 entry 兼容槽不参与候选装配，避免把助手讨论正文或来源带入新候选。
     const history=workspace

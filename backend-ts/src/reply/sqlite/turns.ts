@@ -4,6 +4,7 @@ import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import {SqliteSkillLibrary,skillAnchor} from '../../skills/sqlite/library.ts';
 import {openSqliteSkillRun} from '../../skills/sqlite/provider.ts';
+import {inSkillGroup,skillRunGroup} from '../../skills/sqlite/groups.ts';
 import type {SkillRunRevision} from '../../skills/sqlite/contracts.ts';
 import type {HostReplyModelConfiguration} from '../../host/host-reply-config.ts';
 import type {installModelProvider} from '../../platform/models/model-provider.ts';
@@ -54,9 +55,11 @@ export class SqliteDiscussionTurns {
   try{
   const callId=randomUUID(),contextId=randomUUID();
   const catalog=this.library?await this.library.refresh(input.signal):await this.storage.execute<any[]>('skills.list',{ownerId});
-  const eligible=catalog.filter(p=>p.enabledState==='enabled'&&p.verificationState==='verified'&&p.currentRevisionNo!==null&&(!input.selectedPackageId||p.id===input.selectedPackageId));
+  // 只有联系人所在分组绑定的 Skill 才可用；未分组联系人没有任何可用 Skill。
+  const group=this.library?await this.library.groupScope(input.contactId,input.signal):null;
+  const eligible=inSkillGroup(catalog.filter(p=>p.enabledState==='enabled'&&p.verificationState==='verified'&&p.currentRevisionNo!==null&&(!input.selectedPackageId||p.id===input.selectedPackageId)),group??{groupId:null,revision:0n,packageIds:[]});
   if(input.selectedPackageId&&!eligible.some(p=>p.id===input.selectedPackageId))throw new StorageFailure('discussion_skill_unavailable');
-  const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:this.library?eligible.map(skillAnchor):[]};
+  const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:this.library?eligible.map(skillAnchor):[],...(group?{group:skillRunGroup(input.contactId,group)}:{})};
   const view=await this.discussions.view(input.contactId,attempt.discussionId);
   const entries=view.entries.filter((e:any)=>e.content_state==='available');
   const messages=await this.storage.execute<any[]>('discussion.messages',{...attempt,messageIds:input.contextMessageIds??[]});

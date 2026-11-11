@@ -118,7 +118,9 @@ test('Skill失效后仅从仍有效的非Skill输入建立新上下文，旧修�
  const contactId=f.ids[0],d=await f.discussions.newDiscussion(contactId),requestKey=randomUUID();
  const confirmationId=await f.storage.execute('identity.manualConfirm',{ownerId:f.owner,contactId,contextToken:requestKey,id:randomUUID(),at:Date.now()});
  const {attempt}=await f.discussions.begin(contactId,requestKey,'技能失效的合成请求',{kind:'manual',confirmationId},d.id);
- const input={...attempt,contextId:randomUUID(),callId:randomUUID()},anchor=skillAnchor(skill),skillRun={packages:[{id:skill.id,headRevision:skill.headRevision}],eligible:[anchor]};
+ // 运行修订带联系人分组范围：合成联系人放入绑定该 Skill 的分组。
+ const grouped=await f.library.createGroup('合成分组',[skill.id]);await f.library.assignContactGroup(contactId,grouped.id,null);
+ const input={...attempt,contextId:randomUUID(),callId:randomUUID()},anchor=skillAnchor(skill),skillRun={packages:[{id:skill.id,headRevision:skill.headRevision}],eligible:[anchor],group:{contactId,groupId:grouped.id,revision:grouped.revision}};
  await f.storage.execute('discussion.freezeContext',{...input,skillRun,items:[],at:Date.now()});
  await f.storage.execute('discussion.prepareCall',{...input,operationId:randomUUID(),provider:budget.provider,requestKey:input.callId,inputSeal:'b'.repeat(64),model:budget.model,configurationId:'c'.repeat(64),inputCap:1024,outputCap:512});
  await f.storage.execute('discussion.skillSelection',{...input,selected:anchor});

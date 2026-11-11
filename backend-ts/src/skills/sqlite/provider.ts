@@ -5,6 +5,7 @@ import type SkillRegistry from '@deepseek-ai/dsh-skill';
 import type {SkillCandidate,SkillProvider,SkillProviderControl} from '@deepseek-ai/dsh-skill';
 import {sha256,validateResourcePath} from '../skill-package.ts';
 import {SqliteSkillLibrary,SqliteSkillError,skillAnchor,type VerifiedSkillSnapshot} from './library.ts';
+import {inSkillGroup,skillRunGroup,type SkillGroupScope} from './groups.ts';
 import type {LoadedSkill,PreloadedSkill,SkillAnchor,SkillPackageState,SkillPreloadInput,SkillPreloadOrigin,SkillPreloadSelection,SkillPreloadTrace,SkillRunProtection,SkillRunRevision,SkillRunScope} from './contracts.ts';
 
 const providerName='notalone-sqlite-skills';
@@ -31,9 +32,11 @@ export interface SqliteSkillPreloadOptions {
  * 冻结目录后按来源选出本轮 anchor；纯选择不读字节，实际内容由 assertAnchor 独立复核。
  * 显式入口只选指定单包；自动入口缺省选择全部 eligible，便于正常路径一次预加载。
  */
-export function planSkillPreload(items: SkillPackageState[],options: Pick<SqliteSkillPreloadOptions,'selectedPackageId'|'preloadPackageIds'>={}): SkillPreloadSelection {
+export function planSkillPreload(items: SkillPackageState[],options: Pick<SqliteSkillPreloadOptions,'selectedPackageId'|'preloadPackageIds'>={},group?: SkillGroupScope): SkillPreloadSelection {
   const catalog=[...items],catalogSnapshot=catalogRevision(catalog);
-  const available=catalog.filter(item=>item.enabledState==='enabled' && item.verificationState==='verified' && item.currentRevisionNo!==null);
+  const enabled=catalog.filter(item=>item.enabledState==='enabled' && item.verificationState==='verified' && item.currentRevisionNo!==null);
+  // 未提供分组范围的受信任内部调用保持原语义；回复入口总会提供，未分组联系人没有任何可用包。
+  const available=group?inSkillGroup(enabled,group):enabled;
   let origin: SkillPreloadOrigin,chosen: SkillPackageState[];
   if(options.selectedPackageId){
     origin='explicit';const item=available.find(entry=>entry.id===options.selectedPackageId);
@@ -72,11 +75,11 @@ async function openSqliteSkillRunOnDemand(library: SqliteSkillLibrary,request: S
   if(!request.contactId || !request.callId || !protection?.assertCurrent || !protection.recordInput || !protection.recordSelection)throw new SqliteSkillError('skill_protection_required');
   const scope=Object.freeze({ownerId:library.ownerId,contactId:request.contactId,callId:request.callId});
   signal?.throwIfAborted();await protection.assertCurrent(scope,null,signal);
-  const items=await library.list(signal);
-  const available=items.filter(item=>item.enabledState==='enabled' && item.verificationState==='verified' && item.currentRevisionNo!==null);
+  const items=await library.list(signal),group=await library.groupScope(request.contactId,signal);
+  const available=inSkillGroup(items.filter(item=>item.enabledState==='enabled' && item.verificationState==='verified' && item.currentRevisionNo!==null),group);
   const selected=selectedPackageId?available.find(item=>item.id===selectedPackageId):undefined;
   if(selectedPackageId && !selected)throw new SqliteSkillError('skill_selection_unavailable');
-  const run=new SqliteSkillRun(library,scope,protection,items,{selected:selected?skillAnchor(selected):null},signal);
+  const run=new SqliteSkillRun(library,scope,protection,items,{selected:selected?skillAnchor(selected):null,group},signal);
   try {
     // 打开只做数据库资格复验；目录字节在每次读取、每次模型发送和候选提交前复验，不在此重复读取全部目录。
     await run.validateQualification();
@@ -89,10 +92,10 @@ async function openPreloadedRun(library: SqliteSkillLibrary,request: SqliteSkill
   if(!request.contactId || !request.callId || !protection?.assertCurrent || !protection.recordInput || !protection.recordSelection)throw new SqliteSkillError('skill_protection_required');
   const signal=options.signal,scope=Object.freeze({ownerId:library.ownerId,contactId:request.contactId,callId:request.callId});
   signal?.throwIfAborted();await protection.assertCurrent(scope,null,signal);
-  const items=await library.list(signal);
-  const plan=planSkillPreload(items,options);
+  const items=await library.list(signal),group=await library.groupScope(request.contactId,signal);
+  const plan=planSkillPreload(items,options,group);
   const projection=plan.origin==='explicit'||plan.anchors.length===1?plan.anchors[0]??null:null;
-  const run=new SqliteSkillRun(library,scope,protection,items,{selected:projection,preload:{origin:plan.origin,anchors:plan.anchors}},signal);
+  const run=new SqliteSkillRun(library,scope,protection,items,{selected:projection,preload:{origin:plan.origin,anchors:plan.anchors},group},signal);
   try {
     await run.preload(signal);
     await run.validate(signal);
@@ -102,6 +105,8 @@ async function openPreloadedRun(library: SqliteSkillLibrary,request: SqliteSkill
 export class SqliteSkillRun {
   readonly scope: SkillRunScope;
   private readonly selected: SkillAnchor | null;
+  /** 打开时冻结的联系人分组范围；之后的分配或绑定变化由资格复验拒绝。 */
+  private readonly group: SkillGroupScope;
   private readonly preloadPlan: {origin: SkillPreloadOrigin;anchors: SkillAnchor[]} | null;
   private readonly loadedByName=new Map<string,LoadedSkill>();
   private readonly preloadedByName=new Map<string,PreloadedSkill>();
@@ -113,8 +118,9 @@ export class SqliteSkillRun {
   private readonly controller=new AbortController();
   private preloadStarted=false;
   private unregister?: ()=>void;
-  constructor(library: SqliteSkillLibrary,scope: SkillRunScope,protection: SkillRunProtection,items: SkillPackageState[],options: {selected?: SkillAnchor|null;preload?: {origin: SkillPreloadOrigin;anchors: readonly SkillAnchor[]}}={},signal?: AbortSignal) {
+  constructor(library: SqliteSkillLibrary,scope: SkillRunScope,protection: SkillRunProtection,items: SkillPackageState[],options: {selected?: SkillAnchor|null;preload?: {origin: SkillPreloadOrigin;anchors: readonly SkillAnchor[]};group: SkillGroupScope},signal?: AbortSignal) {
     this.library=library;this.scope=scope;this.protection=protection;this.catalog=structuredClone(items);this.catalogIdentity=catalogRevision(items);
+    this.group=Object.freeze({groupId:options.group.groupId,revision:options.group.revision,packageIds:[...options.group.packageIds]});
     this.selected=options.selected?Object.freeze({...options.selected}):null;
     this.preloadPlan=options.preload?{origin:options.preload.origin,anchors:options.preload.anchors.map(anchor=>Object.freeze({...anchor}))}:null;
     if(signal?.aborted)this.close();else signal?.addEventListener('abort',()=>this.close(),{once:true,signal:this.controller.signal});
@@ -239,10 +245,10 @@ export class SqliteSkillRun {
   private signal(signal?: AbortSignal): AbortSignal {return signal?AbortSignal.any([this.controller.signal,signal]):this.controller.signal;}
   private rememberFailure(error: unknown): void {if(this.failureReason===null)this.failureReason=error;}
   private frozenRevision(): SkillRunRevision {
-    return {packages:this.catalog.map(item=>({id:item.id,headRevision:item.headRevision})),eligible:this.eligible().map(skillAnchor)};
+    return {packages:this.catalog.map(item=>({id:item.id,headRevision:item.headRevision})),eligible:this.eligible().map(skillAnchor),group:skillRunGroup(this.scope.contactId,this.group)};
   }
   private eligible(): SkillPackageState[] {
-    const available=this.catalog.filter(item=>item.enabledState==='enabled' && item.verificationState==='verified' && item.currentRevisionNo!==null);
+    const available=inSkillGroup(this.catalog.filter(item=>item.enabledState==='enabled' && item.verificationState==='verified' && item.currentRevisionNo!==null),this.group);
     const plan=this.preloadPlan;
     if(plan)return available.filter(item=>plan.anchors.some(anchor=>anchor.packageId===item.id));
     const selected=this.selected;

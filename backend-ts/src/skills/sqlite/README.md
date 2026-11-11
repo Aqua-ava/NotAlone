@@ -20,6 +20,16 @@
 
 每个修订保存清单 SHA-256、原始 SKILL.md 与全部资源的内容 SHA-256、source_kind=user_directory、核验时间及可用性。摘要不等于审核或用户授权。正文和资源不在两张业务表复制，也不创建文件历史库；旧修订 unavailable 即使后来字节相同也不恢复。重新核验建立新修订，历史正文只可从仍合法的实际调用载荷查回。
 
+## 联系人分组
+
+依据 [ADR-178](../../../../architecture/adr/178-contact-skill-groups.md)。`groups.ts` 导出迁移51 `skillGroupMigration(51)`（`skill_group`、`skill_group_package`、`contact_skill_group`，联系人／包／分组删除级联清除绑定）、`skillGroupActions`（`skillGroups.list|create|update|delete|assign|scope`）以及运行共用的 `inSkillGroup`／`skillRunGroup`。联系人至多一个分组；未分组联系人范围为空，因此首次模型请求不提供 Skill 工具。
+
+- 运行：`openSqliteSkillRun` 的目录、显式 `selectedPackageId`、预加载和 `eligible()` 都先按 `library.groupScope(contactId)` 过滤；冻结的 `SkillRunRevision.group` 带联系人、分组标识和分组修订。回复模块（`reply/sqlite/turns.ts`、`candidates/turns.ts`）用同一函数生成修订，字节须与运行一致。
+- 资格：`requireSkillRun` 同事务调用 `requireSkillGroupScope`——分配或分组修订变化、可用包越出分组绑定都拒绝；修订缺少 `group` 且 `eligible` 非空同样拒绝（失败即关闭）。无实际变化的 `update` 不推进分组修订。
+- 删除：`skill_metadata` 域在联系人范围收集并清除该联系人的分配，账号范围清除全部分组；原 Skill 目录不受影响。
+- HTTP：`GET /api/skills/groups`；`POST /api/skills/groups`（创建）、`/groups/:id/update`、`/groups/:id/delete`、`/contacts/:contactId/group`，均要求 `confirmed:true` 与预期修订／当前分组，非法请求 400，冲突 409。
+- 测试夹具：隔离 Skill 夹具的 `fixture.scope` 默认把联系人放入包含全部 Skill 的 `fixture-all` 分组，保持既有机制测试；分组门禁见 `test/sqlite-skill-groups.test.mjs`，传 `noGroup:true` 可关闭。
+
 ## 正常业务 HTTP 适配
 
 `SqliteSkillHttp(library, authorize).handle(req,res)` 已由 `sqlite-host-plugin.ts` 装配，复用原 `/api/skills` 路径；authorize注入宿主唯一 Bearer/Origin 认证，owner由身份域解析，目录根由受信任启动配置指定，两者不接受请求传入。GET 自动刷新发现，返回含中文 title、场景 tags 与 state_label 的最小状态投影，不含物理路径。`/:id/verify|enable|disable` 对已自动发现的项目以十进制expected_head_revision做CAS，均要求confirmed=true。管理接口不接收手动新增目录或安装路径。未知字段、跨owner参数和SQL被拒绝；旧删除、回滚和学习入口返回不可用，不能回落PG或触碰原目录。现有SkillLearningPage提供最小DTO分支和manager具名桥接，以精确CAS管理中文状态。

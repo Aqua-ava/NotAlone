@@ -72,13 +72,13 @@ test('旧式按需Skill正文载入后可在两次上限内读取声明资源',a
  await mkdir(path.join(original,'gentle','references'),{recursive:true});
  await writeFile(path.join(original,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 安慰时使用的合成沟通方法\n---\n先回应感受，再说明情况。\n');
  await writeFile(path.join(original,'gentle/references/guide.md'),'这是合成 Skill 的补充资料。\n');
- const database=await SqliteStorage.open({userData:home,intent:'create',role:'test'});
+ const database=await SqliteStorage.open({userData:home,intent:'create',role:'test',registryModule:new URL('./fixtures/sqlite-skills/real-registry.mjs',import.meta.url).href});
  t.after(async()=>{await database.close();await rm(home,{recursive:true,force:true});});
  await new SqliteContactService(database,f.options.attempt.ownerId,{account:async()=>{throw Error('不得读取渠道');},sessions:async()=>[]}).initialize();
- const library=new SqliteSkillLibrary(database,f.options.attempt.ownerId,original);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');
+ const library=new SqliteSkillLibrary(database,f.options.attempt.ownerId,original);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');await database.execute('fixture.grantSkills',{ownerId:f.options.attempt.ownerId,contactId:f.options.attempt.contactId});
  const selections=[],inputs=[],protection={assertCurrent:async(scope,revision)=>{if(revision)await database.execute('skills.assertRun',{ownerId:scope.ownerId,revision});},recordSelection:async(_scope,value)=>{selections.push(value);},recordInput:async value=>{inputs.push(value);}};
  f.options.skillRun=await openSqliteSkillRun(library,{contactId:f.options.attempt.contactId,callId:f.options.callId},protection);
- f.options.skillProtection=protection;f.options.skillRevision={packages:[{id:item.id,headRevision:item.headRevision}],eligible:[skillAnchor(item)]};
+ f.options.skillProtection=protection;f.options.skillRevision={packages:[{id:item.id,headRevision:item.headRevision}],eligible:[skillAnchor(item)],group:f.options.skillRun.revision.group};
  const result=await runSingleDiscussionTurn(f.options);
  assert.equal(result.text,'按实际策略生成的合成候选。');assert.equal(f.requests.length,4);
  assert.deepEqual(f.requests[0].tools.map(tool=>tool.name).sort(),['skill','skill_resource']);
@@ -142,10 +142,10 @@ test('真实SQLite Skill库经官方scoped provider载入，选择事实与真�
  const original=path.join(home,'originals');await mkdir(path.join(original,'gentle'),{recursive:true});
  const document='---\nname: gentle\ndescription: 合成沟通方法\n---\n先回应感受，再说明情况。\n';
  const file=path.join(original,'gentle/SKILL.md');await writeFile(file,document);
- const database=await SqliteStorage.open({userData:home,intent:'create',role:'test'});
+ const database=await SqliteStorage.open({userData:home,intent:'create',role:'test',registryModule:new URL('./fixtures/sqlite-skills/real-registry.mjs',import.meta.url).href});
  t.after(async()=>{await database.close();await rm(home,{recursive:true,force:true});});
  await new SqliteContactService(database,f.options.attempt.ownerId,{account:async()=>{throw Error('本测试不得读取渠道');},sessions:async()=>[]}).initialize();
- const library=new SqliteSkillLibrary(database,f.options.attempt.ownerId,original);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');
+ const library=new SqliteSkillLibrary(database,f.options.attempt.ownerId,original);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');await database.execute('fixture.grantSkills',{ownerId:f.options.attempt.ownerId,contactId:f.options.attempt.contactId});
  const selected=[],loaded=[];
  const protection={
   assertCurrent:async(scope,revision)=>{assert.equal(scope.callId,f.options.callId);if(revision)await database.execute('skills.assertRun',{ownerId:scope.ownerId,revision});},
@@ -155,7 +155,7 @@ test('真实SQLite Skill库经官方scoped provider载入，选择事实与真�
  const run=await openSqliteSkillRun(library,{contactId:f.options.attempt.contactId,callId:f.options.callId},protection,item.id);
  assert.equal(selected.length,1);assert.equal(loaded.length,0);
  await f.ctx.plugin(Skills);
- f.options.skillRun=run;f.options.skillProtection=protection;f.options.skillRevision={packages:[{id:item.id,headRevision:item.headRevision}],eligible:[skillAnchor(item)]};
+ f.options.skillRun=run;f.options.skillProtection=protection;f.options.skillRevision={packages:[{id:item.id,headRevision:item.headRevision}],eligible:[skillAnchor(item)],group:run.revision.group};
  await runSingleDiscussionTurn(f.options);
  assert.equal(loaded.length,1);assert.equal(loaded[0].relativePath,'SKILL.md');
  assert.equal(JSON.stringify(f.requests[0]).includes('先回应感受，再说明情况。'),true);

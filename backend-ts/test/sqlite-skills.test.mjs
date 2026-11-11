@@ -123,6 +123,7 @@ test('官方 scoped provider 只加载已启用修订，选择与真实载入分
  const {library,storage}=await fixture(t);let item=await library.discover('gentle');
  const ctx=new Context();await ctx.plugin(SkillRegistry);const key={},layer=createScope(ctx,key);t.after(()=>layer.dispose());t.after(()=>ctx.fiber.dispose());
  const trace=protection(storage);
+ await storage.execute('fixture.scope',{ownerId:'owner-a',contactId:'contact-a',callId:'grant-group'});
  const unknown=await openSqliteSkillRun(library,{contactId:'contact-a',callId:'call-unknown'},trace);unknown.mount(layer.ctx);
  assert.deepEqual((await ctx.skills.snapshot({scope:key})).skills,[]);unknown.close();
  item=await library.setEnabled(item.id,item.headRevision,'enabled');

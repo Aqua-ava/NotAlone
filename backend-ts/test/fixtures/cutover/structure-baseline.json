@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 50,
+  "schemaVersion": 51,
   "migrationVersions": [
    1,
    2,
@@ -51,15 +51,16 @@
    47,
    48,
    49,
-   50
+   50,
+   51
   ],
-  "userVersion": 50,
+  "userVersion": 51,
   "sqliteVersion": "3.53.4",
-  "tableCount": 92,
-  "fieldCount": 934,
-  "foreignKeyGroups": 192,
+  "tableCount": 95,
+  "fieldCount": 945,
+  "foreignKeyGroups": 197,
   "triggerCount": 82,
-  "checkCount": 303,
+  "checkCount": 306,
   "viewCount": 0
  },
  "tables": {
@@ -947,6 +948,98 @@
     }
    ],
    "sql": "CREATE TABLE contact ( owner_id TEXT NOT NULL, id TEXT NOT NULL, display_name TEXT, remark TEXT, selection_generation INTEGER NOT NULL DEFAULT 0 CHECK(selection_generation>=0), data_generation INTEGER NOT NULL DEFAULT 0 CHECK(data_generation>=0), source_revision INTEGER NOT NULL DEFAULT 0, memory_revision INTEGER NOT NULL DEFAULT 0, document_revision INTEGER NOT NULL DEFAULT 0, feedback_revision INTEGER NOT NULL DEFAULT 0, current_publication_id TEXT, state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active','deleting','deleted')), management_revision INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(owner_id,id), FOREIGN KEY(owner_id) REFERENCES owner(owner_id) ) STRICT"
+  },
+  "contact_skill_group": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "group_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "skill_group",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "skill_group",
+     "from": "group_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 0,
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 1,
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "contact_skill_group_by_group",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "group_id"
+     ],
+     "sql": "CREATE INDEX contact_skill_group_by_group ON contact_skill_group(owner_id,group_id)"
+    },
+    {
+     "name": "sqlite_autoindex_contact_skill_group_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "contact_id"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE contact_skill_group ( owner_id TEXT NOT NULL, contact_id TEXT NOT NULL, group_id TEXT NOT NULL, PRIMARY KEY(owner_id,contact_id), FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) ON DELETE CASCADE, FOREIGN KEY(owner_id,group_id) REFERENCES skill_group(owner_id,id) ON DELETE CASCADE ) STRICT"
   },
   "conversation_binding": {
    "columns": [
@@ -13745,6 +13838,175 @@
    "foreignKeys": [],
    "indexes": [],
    "sql": "CREATE TABLE schema_migration ( version INTEGER PRIMARY KEY CHECK(version>0), checksum TEXT NOT NULL, applied_at INTEGER NOT NULL CHECK(applied_at>=0) ) STRICT"
+  },
+  "skill_group": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "name",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "revision",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": "1",
+     "pk": 0
+    },
+    {
+     "name": "created_at",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "owner",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_skill_group_2",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "name"
+     ],
+     "sql": null
+    },
+    {
+     "name": "sqlite_autoindex_skill_group_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "id"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE skill_group ( owner_id TEXT NOT NULL REFERENCES owner(owner_id) ON DELETE CASCADE, id TEXT NOT NULL, name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 30 AND name=trim(name)), revision INTEGER NOT NULL DEFAULT 1 CHECK(revision>=1), created_at INTEGER NOT NULL CHECK(created_at>=0), PRIMARY KEY(owner_id,id), UNIQUE(owner_id,name) ) STRICT"
+  },
+  "skill_group_package": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "group_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "package_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 3
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "skill_package",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "skill_package",
+     "from": "package_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 0,
+     "table": "skill_group",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 1,
+     "table": "skill_group",
+     "from": "group_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "CASCADE",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "skill_group_package_by_package",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "package_id"
+     ],
+     "sql": "CREATE INDEX skill_group_package_by_package ON skill_group_package(owner_id,package_id)"
+    },
+    {
+     "name": "sqlite_autoindex_skill_group_package_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "group_id",
+      "package_id"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE skill_group_package ( owner_id TEXT NOT NULL, group_id TEXT NOT NULL, package_id TEXT NOT NULL, PRIMARY KEY(owner_id,group_id,package_id), FOREIGN KEY(owner_id,group_id) REFERENCES skill_group(owner_id,id) ON DELETE CASCADE, FOREIGN KEY(owner_id,package_id) REFERENCES skill_package(owner_id,id) ON DELETE CASCADE ) STRICT"
   },
   "skill_package": {
    "columns": [

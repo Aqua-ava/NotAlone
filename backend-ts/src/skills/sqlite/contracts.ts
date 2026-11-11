@@ -52,9 +52,12 @@ export interface SkillPreloadSelection {
 }
 /** 已在打开运行前读取并写入实际输入事件的本轮 Skill 正文。 */
 export interface PreloadedSkill extends LoadedSkill { content: string }
+/** 冻结的联系人分组范围：分配或分组绑定变化会使在途运行失效；缺失时不得带任何可用 Skill。 */
+export interface SkillRunGroup {contactId: string; groupId: string | null; revision: bigint}
 export interface SkillRunRevision {
   packages: {id: string; headRevision: bigint}[];
   eligible: SkillAnchor[];
+  group?: SkillRunGroup;
 }
 export interface SkillInput {
   scope: SkillRunScope;

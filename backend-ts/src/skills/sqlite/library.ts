@@ -4,6 +4,7 @@ import {isAbsolute} from 'node:path';
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import {sha256,validateName,type SkillPackage} from '../skill-package.ts';
 import type {SkillAnchor,SkillEnabledState,SkillPackageState,SkillVerificationState} from './contracts.ts';
+import type {SkillGroupScope,SkillGroupState} from './groups.ts';
 import type {SkillObservation} from './storage.ts';
 import {SecureSkillDirectory} from '../secure-directory.ts';
 import {AsyncSecureSkillDirectory} from '../secure-directory-async.ts';
@@ -65,6 +66,16 @@ export class SqliteSkillLibrary {
     finally{this.pending.delete(pending);}
   }
   list(signal?:AbortSignal): Promise<SkillPackageState[]> {return this.execute('skills.list',{ownerId:this.ownerId},signal);}
+  /** 分组管理与联系人分配；只改业务绑定，不读取也不改动原 Skill 目录。 */
+  listGroups(signal?:AbortSignal): Promise<SkillGroupState[]> {return this.execute('skillGroups.list',{ownerId:this.ownerId},signal);}
+  createGroup(name:string,packageIds:string[],signal?:AbortSignal): Promise<SkillGroupState> {return this.execute('skillGroups.create',{ownerId:this.ownerId,id:randomUUID(),name,packageIds,at:BigInt(Date.now())},signal);}
+  updateGroup(id:string,expectedRevision:bigint,name:string,packageIds:string[],signal?:AbortSignal): Promise<SkillGroupState> {return this.execute('skillGroups.update',{ownerId:this.ownerId,id,expectedRevision,name,packageIds},signal);}
+  deleteGroup(id:string,expectedRevision:bigint,signal?:AbortSignal): Promise<void> {return this.execute('skillGroups.delete',{ownerId:this.ownerId,id,expectedRevision},signal).then(()=>undefined);}
+  assignContactGroup(contactId:string,groupId:string|null,expectedGroupId:string|null,signal?:AbortSignal): Promise<{contactId:string;groupId:string|null}> {
+    return this.execute('skillGroups.assign',{ownerId:this.ownerId,contactId,groupId,expectedGroupId},signal);
+  }
+  /** 本次联系人适用的分组范围；未分组时没有可用 Skill。 */
+  groupScope(contactId:string,signal?:AbortSignal): Promise<SkillGroupScope> {return this.execute('skillGroups.scope',{ownerId:this.ownerId,contactId},signal);}
   /** 管理刷新与运行前共用；在授权根中发现、核验并默认启用合格项目，保留用户停用。 */
   refresh(signal?:AbortSignal): Promise<SkillPackageState[]> {
     if(signal?.aborted)return Promise.reject(signal.reason);

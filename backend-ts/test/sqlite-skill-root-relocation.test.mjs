@@ -50,6 +50,10 @@ function anchorFor(item){
 test('原子重定位保留多包状态与修订，仅更新目录身份并使旧锚失效',async t=>{
  const storage=await fixture(t);
  await seed(storage,'a-enabled','enabled',1);await seed(storage,'b-disabled','disabled',2);await seed(storage,'c-unknown','unknown',3);
+ await storage.execute('fixture.contact',{ownerId,contactId:'contact-a'});
+ const grouped=await storage.execute('skillGroups.create',{ownerId,id:'group-a',name:'合成分组',packageIds:(await storage.execute('skills.list',{ownerId})).map(item=>item.id),at:0n});
+ await storage.execute('skillGroups.assign',{ownerId,contactId:'contact-a',groupId:grouped.id,expectedGroupId:null});
+ const group={contactId:'contact-a',groupId:grouped.id,revision:grouped.revision};
  const before=await storage.execute('skills.list',{ownerId}),plan=planFor(before),oldAnchor=anchorFor(before.find(item=>item.directoryName==='a-enabled'));
  const relocated=await storage.execute('skills.relocateRoot',{ownerId,packages:plan});
  assert.equal(relocated.length,before.length);
@@ -58,10 +62,10 @@ test('原子重定位保留多包状态与修订，仅更新目录身份并使�
   assert.deepEqual(next,{...old,directoryIdentity:target.directoryIdentity,headRevision:old.headRevision+1n});
  }
  await assert.rejects(storage.execute('skills.assertRevision',{ownerId,anchor:oldAnchor}),{code:'skill_run_invalidated'});
- await assert.rejects(storage.execute('skills.assertRun',{ownerId,revision:{packages:before.map(item=>({id:item.id,headRevision:item.headRevision})),eligible:[oldAnchor]}}),{code:'skill_run_invalidated'});
+ await assert.rejects(storage.execute('skills.assertRun',{ownerId,revision:{packages:before.map(item=>({id:item.id,headRevision:item.headRevision})),eligible:[oldAnchor],group}}),{code:'skill_run_invalidated'});
  const newAnchor=anchorFor(relocated.find(item=>item.directoryName==='a-enabled'));
  assert.equal(await storage.execute('skills.assertRevision',{ownerId,anchor:newAnchor}),true);
- assert.equal(await storage.execute('skills.assertRun',{ownerId,revision:{packages:relocated.map(item=>({id:item.id,headRevision:item.headRevision})),eligible:[newAnchor]}}),true);
+ assert.equal(await storage.execute('skills.assertRun',{ownerId,revision:{packages:relocated.map(item=>({id:item.id,headRevision:item.headRevision})),eligible:[newAnchor],group}}),true);
 });
 
 test('CAS、包集合变化或当前版本摘要不匹配时整批回滚',async t=>{

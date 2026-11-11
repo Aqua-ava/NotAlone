@@ -110,5 +110,17 @@ const requests=[],supplierErrors=[],inProcessModel=options.inProcessModel??proce
  const discussions=new SqliteDiscussionService(storage,owner,options.clock??Date.now);
  runtime=new SqliteDiscussionRuntime({storage,ownerId:owner,userData:root,ctx,holders,fault:options.runtimeFault});await runtime.initialize();
  const arbiter=new ModelPermitArbiter();library=new SqliteSkillLibrary(storage,owner,skillRoot,{readerBinary:options.skillReaderBinary});
+ if(options.skillGroups!=='manual'){
+  // 既有 Skill 机制测试默认让合成联系人使用全部 Skill；联系人分组门禁由专门测试验证，传 skillGroups:'manual' 可关闭。
+  const scopeOf=library.groupScope.bind(library);
+  library.groupScope=async(contactId,signal)=>{
+   const ids=(await library.list(signal)).map(item=>item.id).sort();
+   let group=(await library.listGroups(signal)).find(item=>item.name==='fixture-all');
+   if(!group)group=await library.createGroup('fixture-all',ids,signal);
+   else if(JSON.stringify(group.packageIds)!==JSON.stringify(ids))group=await library.updateGroup(group.id,group.revision,'fixture-all',ids,signal);
+   if(!group.contactIds.includes(contactId))await library.assignContactGroup(contactId,group.id,null,signal);
+   return scopeOf(contactId,signal);
+  };
+ }
  return {root,storage,contacts,ids,discussions,runtime,model,provider,arbiter,library,requests,owner,ctx,holders,history,channel,messages,skillRoot,supplierErrors,close};
 }

@@ -39,6 +39,7 @@ export async function apply(ctx:Context):Promise<void>{
  await writeFile(join(skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 合成 profile 策略\n---\n先回应感受，再说明情况。\n');
  const library=new SqliteSkillLibrary(storage,owner,skillRoot);cleanups.push(()=>library.close());
  let skill=await library.discover('gentle');skill=await library.setEnabled(skill.id,skill.headRevision,'enabled');
+ {const group=await library.createGroup('合成分组',[skill.id]);await library.assignContactGroup(contactId,group.id,null);}
  const configuration=resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-only'});if(configuration.status!=='configured')throw new Error('synthetic host configuration unavailable');
  const connection=resolveAdapterOptions({baseURL:process.env.NOTALONE_PRECALL_PROVIDER_URL!,thinking:configuration.provider.connection.defaults.thinking,maxTokens:configuration.model.maxTokens,retryPolicy:{mode:'normal',maxRetries:0}});
  const provider=installModelProvider(ctx,{provider:'synthetic-official',connection,resolveAuth:async()=>({headers:{}}),resolveUserId:()=> 'synthetic-anonymous'});cleanups.push(()=>provider.dispose());
