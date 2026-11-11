@@ -51,7 +51,9 @@ function dataFields(value) {
 }
 export function checkedDiagnosticEvent(value) {
   try {
-    const input = dataFields(value), rule = input && Object.hasOwn(diagnosticEvents, input.event) && diagnosticEvents[input.event];
+    const input = dataFields(value);
+    if (!input || typeof input.event !== 'string') return;
+    const rule = Object.hasOwn(diagnosticEvents, input.event) && diagnosticEvents[input.event];
     if (!rule) return;
     const module = input.module ?? rule.module;
     if (!diagnosticModules.includes(module) || rule.module && module !== rule.module) return;

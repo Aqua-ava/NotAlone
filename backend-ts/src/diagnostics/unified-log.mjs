@@ -22,17 +22,20 @@ async function rootDirectory(root, create) {
   if (!safe(stat, true)) unavailable();
   return { directory, rootIdentity: identity(await lstat(root)), directoryIdentity: identity(stat) };
 }
-async function inventory(root, create = false) {
+async function inventory(root, create = false, skipUnavailable = false) {
   const location = await rootDirectory(root, create);
   if (!location) return [];
   const rows = [];
   for (const name of await readdir(location.directory)) {
     const match = namePattern.exec(name);
     if (!match) continue;
-    const file = path.join(location.directory, name), stat = await statIfPresent(file);
-    if (!stat) continue;
-    if (!safe(stat, false)) unavailable();
-    rows.push({ name, file, stat, proc: match[1], day: match[2], number: Number(match[3]) });
+    const file = path.join(location.directory, name);
+    try {
+      const stat = await statIfPresent(file);
+      if (!stat) continue;
+      if (!safe(stat, false)) unavailable();
+      rows.push({ name, file, stat, proc: match[1], day: match[2], number: Number(match[3]) });
+    } catch (error) { if (!skipUnavailable) throw error; }
   }
   return rows;
 }
@@ -55,19 +58,40 @@ async function readPrivate(file, maxBytes) {
     return buffer.subarray(0, bytesRead).toString('utf8');
   } finally { await handle.close(); }
 }
+// 活跃日志只取开始读取时已存在的完整行；正常追加不使已读取的时间线失效。
+async function readLogSnapshot(file, snapshotBytes) {
+  const stat = await statIfPresent(file);
+  if (!stat) return;
+  if (!safe(stat, false) || stat.size > 5 * MiB) unavailable();
+  const limit = Math.min(stat.size, snapshotBytes), handle = await checkedOpen(file, constants.O_RDONLY, stat);
+  try {
+    const buffer = Buffer.alloc(limit); let length = 0;
+    while (length < limit) {
+      const { bytesRead } = await handle.read(buffer, length, limit - length, length);
+      if (!bytesRead) break;
+      length += bytesRead;
+    }
+    const after = await handle.stat(), current = await statIfPresent(file);
+    if (!safe(after, false) || after.size < limit || !current || !safe(current, false) || identity(after) !== identity(current)) unavailable();
+    const lastNewline = length ? buffer.lastIndexOf(10, length - 1) : -1;
+    return buffer.subarray(0, lastNewline + 1).toString('utf8');
+  } finally { await handle.close(); }
+}
 export async function readDiagnosticRecords(root) {
   try {
-    const rows = await inventory(root), result = [];
+    const rows = await inventory(root, false, true), result = [];
     // 只枚举统一日志，不读取专用追踪或用户任意指定的文件。
     let budget = 50 * MiB;
     for (const row of rows.sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs)) {
       if (row.stat.size > 5 * MiB || row.stat.size > budget) continue;
       budget -= row.stat.size;
-      const text = await readPrivate(row.file, 5 * MiB);
-      for (const line of (text ?? '').split('\n')) {
-        if (!line || Buffer.byteLength(line) > 2048) continue;
-        try { const checked = checkedDiagnosticRecord(JSON.parse(line)); if (checked) result.push(checked); } catch { /* 损坏记录不导出。 */ }
-      }
+      try {
+        const text = await readLogSnapshot(row.file, row.stat.size);
+        for (const line of (text ?? '').split('\n')) {
+          if (!line || Buffer.byteLength(line) > 2048) continue;
+          try { const checked = checkedDiagnosticRecord(JSON.parse(line)); if (checked) result.push(checked); } catch { /* 损坏记录不导出。 */ }
+        }
+      } catch { /* 轮转、清除或单份不可读时仍保留其他安全文件的时间线。 */ }
     }
     return result.sort((a, b) => a.time.localeCompare(b.time));
   } catch { return []; }
@@ -107,6 +131,7 @@ export class UnifiedDiagnosticLog {
       || !Number.isSafeInteger(this.maxAgeMs) || this.maxAgeMs < 1 || this.maxAgeMs > 14 * 86400_000) unavailable();
     this.location = await rootDirectory(this.root, true);
     await this.refreshSettings(); await this.prune();
+    this.lastWriteDay = new Date(this.now()).toISOString().slice(0, 10);
   }
   async guardLocation() {
     const actual = await rootDirectory(this.root, false);
@@ -150,6 +175,7 @@ export class UnifiedDiagnosticLog {
     const directory = await this.guardLocation(); await this.refreshSettings();
     if (!this.enabled) return;
     const day = new Date(this.now()).toISOString().slice(0, 10);
+    if (this.lastWriteDay !== day) { await this.prune(); this.lastWriteDay = day; }
     let rows = (await inventory(this.root)).filter(row => row.proc === this.proc);
     let current = rows.filter(row => row.day === day).sort((a, b) => b.number - a.number)[0];
     let number = current?.number ?? 1, size = current?.stat.size ?? 0, total = rows.reduce((sum, row) => sum + row.stat.size, 0);
