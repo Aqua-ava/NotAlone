@@ -78,7 +78,7 @@ test('48迁移为存量已完成操作补摘要并清逐行记录，未完成操
 
   storage = await open(userData, { intent: 'open', expectedDatabaseId: databaseId, registryModule: registryModule('deletion-registry.mjs') });
   t.after(() => storage.close());
-  assert.equal(storage.status.schemaVersion, 49); // 48 号迁移 + 夹具 sample 迁移
+  assert.equal(storage.status.schemaVersion, 50); // 当前注册表 + 夹具 sample 迁移
   const db = new DatabaseSync(database, { readOnly: true });
   try {
     assert.equal(db.prepare("SELECT count(*) n FROM deletion_target WHERE operation_id='done-1'").get().n, 0);
