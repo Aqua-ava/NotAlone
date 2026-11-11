@@ -30,7 +30,17 @@ CREATE TABLE contact_skill_group (
 CREATE INDEX contact_skill_group_by_group ON contact_skill_group(owner_id,group_id);
 `});
 
-export interface SkillGroupState {id: string; name: string; revision: bigint; packageIds: string[]; contactIds: string[]}
+/**
+ * 迁移 52：内置“恋人”分组使用全部 Skill（含之后新增的），不逐包绑定；每个 Owner 至多一个。
+ * 现有回复场景全部属于恋人场景，因此不要求用户逐个勾选。
+ */
+export const skillGroupAllPackagesMigration=(version: number)=>({version,sql:`
+ALTER TABLE skill_group ADD COLUMN all_packages INTEGER NOT NULL DEFAULT 0 CHECK(all_packages IN (0,1));
+CREATE UNIQUE INDEX skill_group_one_all_packages ON skill_group(owner_id) WHERE all_packages=1;
+`});
+export const BUILTIN_GROUP_NAME='恋人';
+
+export interface SkillGroupState {id: string; name: string; revision: bigint; allPackages: boolean; packageIds: string[]; contactIds: string[]}
 /** 本次联系人实际适用的分组范围；未分组时 groupId 为 null 且没有任何可用包。 */
 export interface SkillGroupScope {groupId: string|null; revision: bigint; packageIds: string[]}
 
@@ -60,10 +70,12 @@ function packageIds(tx: StorageTransaction,ownerId: string,value: unknown): stri
   return ids.sort();
 }
 function view(tx: StorageTransaction,ownerId: string,id: string): SkillGroupState {
-  const row=tx.get('SELECT id,name,revision FROM skill_group WHERE owner_id=? AND id=?',[ownerId,id]);
+  const row=tx.get('SELECT id,name,revision,all_packages FROM skill_group WHERE owner_id=? AND id=?',[ownerId,id]);
   if(!row)fail('skill_group_missing');
-  return {id:row.id as string,name:row.name as string,revision:row.revision as bigint,
-    packageIds:tx.all('SELECT package_id FROM skill_group_package WHERE owner_id=? AND group_id=? ORDER BY package_id',[ownerId,id]).map(r=>r.package_id as string),
+  const all=row.all_packages===1n;
+  return {id:row.id as string,name:row.name as string,revision:row.revision as bigint,allPackages:all,
+    packageIds:(all?tx.all('SELECT id AS package_id FROM skill_package WHERE owner_id=? ORDER BY id',[ownerId])
+      :tx.all('SELECT package_id FROM skill_group_package WHERE owner_id=? AND group_id=? ORDER BY package_id',[ownerId,id])).map(r=>r.package_id as string),
     contactIds:tx.all('SELECT contact_id FROM contact_skill_group WHERE owner_id=? AND group_id=? ORDER BY contact_id',[ownerId,id]).map(r=>r.contact_id as string)};
 }
 function expectedGroup(tx: StorageTransaction,input: {ownerId: string;id: string;expectedRevision: bigint}): SkillGroupState {
@@ -100,7 +112,9 @@ export const skillGroupActions: StorageAction[] = [
   }},
   {name:'skillGroups.update',mode:'write',retryBusy:false,execute(tx,input){
     const i=input as {ownerId:string;id:string;expectedRevision:bigint;name:string;packageIds:string[]};
-    const item=expectedGroup(tx,i),name=groupName(i.name),ids=packageIds(tx,i.ownerId,i.packageIds);
+    const item=expectedGroup(tx,i);
+    if(item.allPackages)fail('skill_group_builtin');
+    const name=groupName(i.name),ids=packageIds(tx,i.ownerId,i.packageIds);
     // 没有实际变化时不推进修订，避免无谓撤销在途运行。
     if(name===item.name&&JSON.stringify(ids)===JSON.stringify(item.packageIds))return item;
     requireNameFree(tx,i.ownerId,name,i.id);
@@ -110,10 +124,26 @@ export const skillGroupActions: StorageAction[] = [
   }},
   {name:'skillGroups.delete',mode:'write',retryBusy:false,execute(tx,input){
     const i=input as {ownerId:string;id:string;expectedRevision:bigint};
-    expectedGroup(tx,i);
+    if(expectedGroup(tx,i).allPackages)fail('skill_group_builtin');
     // 级联清除绑定和联系人分配；原 Skill 目录与包状态不受影响。
     tx.run('DELETE FROM skill_group WHERE owner_id=? AND id=?',[i.ownerId,i.id]);
     return true;
+  }},
+  {name:'skillGroups.ensureBuiltin',mode:'write',retryBusy:false,execute(tx,input){
+    const i=input as {ownerId:string;id:string;at:bigint};
+    text(i.ownerId);text(i.id);requireSkillOwner(tx,i.ownerId);
+    if(typeof i.at!=='bigint'||i.at<0n)fail('skill_input_invalid');
+    const existing=tx.get('SELECT id FROM skill_group WHERE owner_id=? AND all_packages=1',[i.ownerId]);
+    if(existing)return view(tx,i.ownerId,existing.id as string);
+    const named=tx.get('SELECT id FROM skill_group WHERE owner_id=? AND name=?',[i.ownerId,BUILTIN_GROUP_NAME]);
+    if(named){
+      // 已有同名分组改为使用全部 Skill，保留其联系人分配；修订推进使在途运行失效。
+      tx.run('DELETE FROM skill_group_package WHERE owner_id=? AND group_id=?',[i.ownerId,named.id]);
+      tx.run('UPDATE skill_group SET all_packages=1,revision=revision+1 WHERE owner_id=? AND id=?',[i.ownerId,named.id]);
+      return view(tx,i.ownerId,named.id as string);
+    }
+    tx.run('INSERT INTO skill_group(owner_id,id,name,revision,created_at,all_packages) VALUES(?,?,?,1,?,1)',[i.ownerId,i.id,BUILTIN_GROUP_NAME,i.at]);
+    return view(tx,i.ownerId,i.id);
   }},
   {name:'skillGroups.assign',mode:'write',retryBusy:false,execute(tx,input){
     const i=input as {ownerId:string;contactId:string;groupId:string|null;expectedGroupId:string|null};
@@ -131,9 +161,10 @@ export const skillGroupActions: StorageAction[] = [
   }},
   {name:'skillGroups.scope',mode:'read',retryBusy:false,execute(tx,input): SkillGroupScope {
     const i=input as {ownerId:string;contactId:string};text(i.ownerId);text(i.contactId);requireSkillOwner(tx,i.ownerId);
-    const row=tx.get('SELECT a.group_id,s.revision FROM contact_skill_group a JOIN skill_group s ON s.owner_id=a.owner_id AND s.id=a.group_id WHERE a.owner_id=? AND a.contact_id=?',[i.ownerId,i.contactId]);
+    const row=tx.get('SELECT a.group_id,s.revision,s.all_packages FROM contact_skill_group a JOIN skill_group s ON s.owner_id=a.owner_id AND s.id=a.group_id WHERE a.owner_id=? AND a.contact_id=?',[i.ownerId,i.contactId]);
     if(!row)return {groupId:null,revision:0n,packageIds:[]};
     return {groupId:row.group_id as string,revision:row.revision as bigint,
-      packageIds:tx.all('SELECT package_id FROM skill_group_package WHERE owner_id=? AND group_id=? ORDER BY package_id',[i.ownerId,row.group_id]).map(r=>r.package_id as string)};
+      packageIds:(row.all_packages===1n?tx.all('SELECT id AS package_id FROM skill_package WHERE owner_id=? ORDER BY id',[i.ownerId])
+        :tx.all('SELECT package_id FROM skill_group_package WHERE owner_id=? AND group_id=? ORDER BY package_id',[i.ownerId,row.group_id])).map(r=>r.package_id as string)};
   }},
 ];

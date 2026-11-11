@@ -68,6 +68,8 @@ export class SqliteSkillLibrary {
   list(signal?:AbortSignal): Promise<SkillPackageState[]> {return this.execute('skills.list',{ownerId:this.ownerId},signal);}
   /** 分组管理与联系人分配；只改业务绑定，不读取也不改动原 Skill 目录。 */
   listGroups(signal?:AbortSignal): Promise<SkillGroupState[]> {return this.execute('skillGroups.list',{ownerId:this.ownerId},signal);}
+  /** 内置“恋人”分组使用全部回复场景；幂等建立，已有同名分组改为内置。 */
+  ensureBuiltinGroup(signal?:AbortSignal): Promise<SkillGroupState> {return this.execute('skillGroups.ensureBuiltin',{ownerId:this.ownerId,id:randomUUID(),at:BigInt(Date.now())},signal);}
   createGroup(name:string,packageIds:string[],signal?:AbortSignal): Promise<SkillGroupState> {return this.execute('skillGroups.create',{ownerId:this.ownerId,id:randomUUID(),name,packageIds,at:BigInt(Date.now())},signal);}
   updateGroup(id:string,expectedRevision:bigint,name:string,packageIds:string[],signal?:AbortSignal): Promise<SkillGroupState> {return this.execute('skillGroups.update',{ownerId:this.ownerId,id,expectedRevision,name,packageIds},signal);}
   deleteGroup(id:string,expectedRevision:bigint,signal?:AbortSignal): Promise<void> {return this.execute('skillGroups.delete',{ownerId:this.ownerId,id,expectedRevision},signal).then(()=>undefined);}

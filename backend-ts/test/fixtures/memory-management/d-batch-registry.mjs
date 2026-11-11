@@ -3,7 +3,7 @@ import {paginationUpgradeActions} from './pagination-upgrade-registry.mjs';
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 import {pageScope} from '../../../src/memory/sqlite/management/pagination.ts';
 const parameters=new URL(import.meta.url).searchParams,legacy=parameters.has('legacy'),failing=parameters.has('failing');
-const migrations=legacy?base.migrations.filter(m=>m.version<=49):failing?[...base.migrations,{version:52,sql:'INSERT INTO deliberately_missing_table VALUES(1);'}]:base.migrations;
+const migrations=legacy?base.migrations.filter(m=>m.version<=49):failing?[...base.migrations,{version:53,sql:'INSERT INTO deliberately_missing_table VALUES(1);'}]:base.migrations;
 const decide=base.actions.find(action=>action.name==='memory.applyDecision');
 const read=base.actions.find(action=>action.name==='memory.read'),prepare=base.actions.find(action=>action.name==='memory.prepareTimeline');
 const revision=(tx,self=false)=>tx.get(self?"SELECT management_revision n FROM owner WHERE owner_id='owner-a'":"SELECT management_revision n FROM contact WHERE owner_id='owner-a' AND id='contact-a'").n;

@@ -110,12 +110,14 @@ export function requireSkillRevision(tx: StorageTransaction, ownerId: string, an
 export function requireSkillGroupScope(tx: StorageTransaction,ownerId: string,revision: {eligible: {packageId: string}[];group?: {contactId: string;groupId: string|null;revision: bigint}}): void {
   const group=revision.group;
   if(!group){if(revision.eligible.length)fail('skill_run_invalidated');return;}
-  const row=tx.get('SELECT a.group_id,s.revision FROM contact_skill_group a JOIN skill_group s ON s.owner_id=a.owner_id AND s.id=a.group_id WHERE a.owner_id=? AND a.contact_id=?',[ownerId,text(group.contactId)]);
+  const row=tx.get('SELECT a.group_id,s.revision,s.all_packages FROM contact_skill_group a JOIN skill_group s ON s.owner_id=a.owner_id AND s.id=a.group_id WHERE a.owner_id=? AND a.contact_id=?',[ownerId,text(group.contactId)]);
   if(group.groupId===null){
     if(row||revision.eligible.length)fail('skill_run_invalidated');
     return;
   }
   if(!row||row.group_id!==group.groupId||row.revision!==group.revision)fail('skill_run_invalidated');
+  // 内置“恋人”分组使用全部 Skill；其余分组须逐包绑定。
+  if(row.all_packages===1n)return;
   for(const anchor of revision.eligible)
     if(!tx.get('SELECT 1 FROM skill_group_package WHERE owner_id=? AND group_id=? AND package_id=?',[ownerId,group.groupId,anchor.packageId]))fail('skill_run_invalidated');
 }

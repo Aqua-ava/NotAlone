@@ -2,7 +2,7 @@ import {StorageFailure} from '../../../src/storage/sqlite/contracts.ts';
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 import {skillActions,skillSchemaSql,skillDefaultEnablementMigration,skillDefaultQualificationMigration,requireSkillRevision,requireSkillRun} from '../../../src/skills/sqlite/storage.ts';
 import {skillMetadataDeletionDomain} from '../../../src/skills/sqlite/deletion.ts';
-import {skillGroupMigration,skillGroupActions} from '../../../src/skills/sqlite/groups.ts';
+import {skillGroupMigration,skillGroupAllPackagesMigration,skillGroupActions} from '../../../src/skills/sqlite/groups.ts';
 const skillDeletion=skillMetadataDeletionDomain();
 // 仅隔离测试合同替身；生产 owner DDL 由实施02提供。
 // 精确组合01底座，不重复正式registry已集成的02/14或其他领域。
@@ -18,7 +18,8 @@ CREATE TABLE fixture_input(owner_id TEXT NOT NULL,contact_id TEXT NOT NULL,call_
  {version:version+5,sql:"CREATE TABLE contact(owner_id TEXT NOT NULL,id TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active','deleting','deleted')),PRIMARY KEY(owner_id,id)) STRICT;"},
  {version:version+6,sql:skillGroupMigration(version+6).sql+`
 CREATE TRIGGER fixture_all_group_follow AFTER INSERT ON skill_package
-BEGIN INSERT INTO skill_group_package SELECT NEW.owner_id,id,NEW.id FROM skill_group WHERE owner_id=NEW.owner_id AND name='fixture-all'; END;`}],actions:[...skillActions,...skillGroupActions,
+BEGIN INSERT INTO skill_group_package SELECT NEW.owner_id,id,NEW.id FROM skill_group WHERE owner_id=NEW.owner_id AND name='fixture-all'; END;`},
+ {version:version+7,sql:skillGroupAllPackagesMigration(version+7).sql}],actions:[...skillActions,...skillGroupActions,
  {name:'fixture.contact',mode:'write',retryBusy:false,execute(tx,i){tx.run('INSERT OR IGNORE INTO contact(owner_id,id) VALUES(?,?)',[i.ownerId,i.contactId]);}},
  {name:'fixture.contactState',mode:'write',retryBusy:false,execute(tx,i){tx.run('UPDATE contact SET state=? WHERE owner_id=? AND id=?',[i.state,i.ownerId,i.contactId]);}},
  {name:'fixture.deleteContact',mode:'write',retryBusy:false,execute(tx,i){tx.run('DELETE FROM contact WHERE owner_id=? AND id=?',[i.ownerId,i.contactId]);}},

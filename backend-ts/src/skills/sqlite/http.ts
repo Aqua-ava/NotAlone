@@ -20,7 +20,7 @@ export function skillManagementView(item: SkillPackageState) {
 }
 /** 分组投影只含业务标识与名称，不含物理路径或 Skill 正文。 */
 export function skillGroupView(group: SkillGroupState) {
- return {group_id:group.id,name:group.name,revision:group.revision.toString(),package_ids:group.packageIds,contact_ids:group.contactIds};
+ return {group_id:group.id,name:group.name,revision:group.revision.toString(),all_packages:group.allPackages,package_ids:group.packageIds,contact_ids:group.contactIds};
 }
 const uuid=(value: unknown): string=>{
  if(typeof value!=='string' || !/^[a-f0-9-]{36}$/.test(value))throw new SqliteSkillError('skill_request_invalid');
@@ -86,7 +86,7 @@ export class SqliteSkillHttp {
  /** 分组管理：读取列表、创建、修改、删除，以及联系人分配；所有写入都要求确认和预期修订。 */
  private async handleGroups(req: IncomingMessage,res: ServerResponse,signal: AbortSignal,path: string,groupRoute: RegExpExecArray|null,contactRoute: RegExpExecArray|null): Promise<void> {
   const list=!contactRoute && path==='/api/skills/groups' && req.method==='GET';
-  if(list){respond(res,200,{storage:'sqlite',groups:(await this.library.listGroups(signal)).map(skillGroupView)});return;}
+  if(list){await this.library.ensureBuiltinGroup(signal);respond(res,200,{storage:'sqlite',groups:(await this.library.listGroups(signal)).map(skillGroupView)});return;}
   if(req.method!=='POST'){respond(res,405,{error:'method_not_allowed'});return;}
   let parsed: unknown;
   try {parsed=JSON.parse((await readWechatHttpBody(req,16_384,10_000)).toString('utf8'));}

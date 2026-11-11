@@ -167,23 +167,72 @@ test('分组 HTTP：认证、确认、预期修订校验与联系人分配，错
   return {status:res.status,body:await res.json().catch(()=>null)};
  };
  assert.equal((await call('/api/skills/groups',null,{})).status,401);
- assert.deepEqual((await call('/api/skills/groups')).body,{storage:'sqlite',groups:[]});
- assert.equal((await call('/api/skills/groups',{name:'恋人',package_ids:[gentle.id],confirmed:false})).status,400);
- assert.equal((await call('/api/skills/groups',{name:'恋人',package_ids:[gentle.id],confirmed:true,owner_id:'other'})).status,400);
- assert.equal((await call('/api/skills/groups',{name:' 恋人',package_ids:[],confirmed:true})).status,400);
- const created=(await call('/api/skills/groups',{name:'恋人',package_ids:[gentle.id],confirmed:true})).body.group;
- assert.deepEqual(created,{group_id:created.group_id,name:'恋人',revision:'1',package_ids:[gentle.id],contact_ids:[]});
- assert.equal((await call('/api/skills/groups',{name:'恋人',package_ids:[],confirmed:true})).status,409);
- const updated=(await call(`/api/skills/groups/${created.group_id}/update`,{expected_revision:'1',name:'恋人',package_ids:[],confirmed:true})).body.group;
+ const builtinId=(await call('/api/skills/groups')).body.groups.find(g=>g.all_packages).group_id;
+ assert.deepEqual((await call('/api/skills/groups')).body.groups.map(g=>g.name),['恋人'],'读取时建立内置分组');
+ assert.equal((await call('/api/skills/groups',{name:'同事',package_ids:[gentle.id],confirmed:false})).status,400);
+ assert.equal((await call('/api/skills/groups',{name:'同事',package_ids:[gentle.id],confirmed:true,owner_id:'other'})).status,400);
+ assert.equal((await call('/api/skills/groups',{name:' 同事',package_ids:[],confirmed:true})).status,400);
+ const created=(await call('/api/skills/groups',{name:'同事',package_ids:[gentle.id],confirmed:true})).body.group;
+ assert.deepEqual(created,{group_id:created.group_id,name:'同事',revision:'1',all_packages:false,package_ids:[gentle.id],contact_ids:[]});
+ assert.equal((await call('/api/skills/groups',{name:'同事',package_ids:[],confirmed:true})).status,409);
+ const updated=(await call(`/api/skills/groups/${created.group_id}/update`,{expected_revision:'1',name:'同事',package_ids:[],confirmed:true})).body.group;
  assert.equal(updated.revision,'2');assert.deepEqual(updated.package_ids,[]);
- assert.equal((await call(`/api/skills/groups/${created.group_id}/update`,{expected_revision:'1',name:'恋人',package_ids:[gentle.id],confirmed:true})).status,409);
+ assert.equal((await call(`/api/skills/groups/${created.group_id}/update`,{expected_revision:'1',name:'同事',package_ids:[gentle.id],confirmed:true})).status,409);
  const assigned=await call('/api/skills/contacts/lover/group',{group_id:created.group_id,expected_group_id:null,confirmed:true});
  assert.deepEqual(assigned.body,{contact_id:'lover',group_id:created.group_id});
  assert.equal((await call('/api/skills/contacts/lover/group',{group_id:null,expected_group_id:null,confirmed:true})).status,409);
- assert.deepEqual((await call('/api/skills/groups')).body.groups[0].contact_ids,['lover']);
+ assert.deepEqual((await call('/api/skills/groups')).body.groups.find(g=>g.group_id===created.group_id).contact_ids,['lover']);
  assert.equal((await call('/api/skills/contacts/ghost/group',{group_id:created.group_id,expected_group_id:null,confirmed:true})).status,409);
  assert.equal((await call(`/api/skills/groups/${created.group_id}/delete`,{expected_revision:'1',confirmed:true})).status,409);
  assert.deepEqual((await call(`/api/skills/groups/${created.group_id}/delete`,{expected_revision:'2',confirmed:true})).body,{deleted:true,group_id:created.group_id});
- assert.deepEqual((await call('/api/skills/groups')).body.groups,[]);
+ assert.deepEqual((await call('/api/skills/groups')).body.groups.map(g=>g.group_id),[builtinId]);
  assert.equal((await call('/api/skills/groups',null,undefined,'DELETE')).status,405);
+});
+
+test('内置“恋人”分组自动包含全部 Skill（含之后新增的），不可改绑定或删除，幂等建立',async t=>{
+ const {library,storage,root,gentle,direct}=await fixture(t);
+ const builtin=await library.ensureBuiltinGroup();
+ assert.equal(builtin.name,'恋人');assert.equal(builtin.allPackages,true);assert.deepEqual(builtin.packageIds,[gentle.id,direct.id].sort());
+ assert.equal((await library.ensureBuiltinGroup()).id,builtin.id,'重复建立返回同一分组');
+ await assert.rejects(library.updateGroup(builtin.id,builtin.revision,'恋人',[]),{code:'skill_group_builtin'});
+ await assert.rejects(library.deleteGroup(builtin.id,builtin.revision),{code:'skill_group_builtin'});
+ await assert.rejects(library.createGroup('恋人',[]),{code:'skill_group_name_conflict'});
+ await library.assignContactGroup('lover',builtin.id,null);
+ const trace=protection(storage);
+ const run=await openSqliteSkillRun(library,{contactId:'lover',callId:'c1'},trace);t.after(()=>run.close());
+ assert.deepEqual(names(run),[gentle.id,direct.id].sort(),'恋人分组下全部已启用 Skill 可用');
+ await library.setEnabled(direct.id,direct.headRevision,'disabled');
+ await assert.rejects(run.validate(),{code:'skill_run_invalidated'});
+ const next=await openSqliteSkillRun(library,{contactId:'lover',callId:'c2'},trace);t.after(()=>next.close());
+ assert.deepEqual(names(next),[gentle.id],'全局停用的 Skill 仍不生效');
+ // 之后新发现的 Skill 自动属于恋人分组。
+ await mkdir(join(root,'warm'),{recursive:true});
+ await writeFile(join(root,'warm','SKILL.md'),'---\nname: warm\ndescription: 合成场景 warm\n---\n\n合成策略 warm。\n');
+ const warm=(await library.refresh()).find(item=>item.directoryName==='warm');
+ const later=await openSqliteSkillRun(library,{contactId:'lover',callId:'c3'},trace);t.after(()=>later.close());
+ assert.ok(names(later).includes(warm.id));assert.equal((await library.groupScope('lover')).packageIds.includes(warm.id),true);
+ // 内置分组与其他分组并存，其他联系人仍可归入自定义分组或保持未分组。
+ assert.deepEqual(names(await openSqliteSkillRun(library,{contactId:'stranger',callId:'c4'},trace).then(r=>{t.after(()=>r.close());return r;})),[]);
+});
+
+test('已有同名“恋人”分组被改为内置，保留联系人分配；已有内置分组时不再转换',async t=>{
+ const {library,gentle}=await fixture(t);
+ const manual=await library.createGroup('恋人',[gentle.id]);await library.assignContactGroup('lover',manual.id,null);
+ const builtin=await library.ensureBuiltinGroup();
+ assert.equal(builtin.id,manual.id);assert.equal(builtin.allPackages,true);assert.equal(builtin.revision,2n);assert.deepEqual(builtin.contactIds,['lover']);
+ assert.equal((await library.ensureBuiltinGroup()).revision,2n,'已是内置时不推进修订');
+});
+
+test('分组 HTTP：读取分组时建立内置“恋人”，更新或删除被拒绝',async t=>{
+ const {library}=await fixture(t);
+ const http=new SqliteSkillHttp(library,req=>req.headers.authorization==='Bearer synthetic-only'&&!req.headers.origin);
+ const server=createServer(async(req,res)=>{if(!await http.handle(req,res))res.writeHead(404).end();});
+ server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(r=>{server.close(r);server.closeAllConnections?.();}));
+ const call=async(path,body)=>{const res=await fetch(`http://127.0.0.1:${server.address().port}${path}`,{method:body?'POST':'GET',headers:{authorization:'Bearer synthetic-only','content-type':'application/json'},body:body?JSON.stringify(body):undefined});return {status:res.status,body:await res.json()};};
+ const groups=(await call('/api/skills/groups')).body.groups;
+ assert.equal(groups.length,1);assert.equal(groups[0].name,'恋人');assert.equal(groups[0].all_packages,true);assert.equal(groups[0].package_ids.length,2);
+ assert.equal((await call('/api/skills/groups')).body.groups.length,1,'重复读取不重复建立');
+ assert.equal((await call(`/api/skills/groups/${groups[0].group_id}/update`,{expected_revision:'1',name:'恋人',package_ids:[],confirmed:true})).status,409);
+ assert.equal((await call(`/api/skills/groups/${groups[0].group_id}/delete`,{expected_revision:'1',confirmed:true})).status,409);
+ assert.equal((await call('/api/skills/contacts/lover/group',{group_id:groups[0].group_id,expected_group_id:null,confirmed:true})).status,200);
 });

@@ -22,7 +22,7 @@
 
 ## 联系人分组
 
-依据 [ADR-178](../../../../architecture/adr/178-contact-skill-groups.md)。`groups.ts` 导出迁移51 `skillGroupMigration(51)`（`skill_group`、`skill_group_package`、`contact_skill_group`，联系人／包／分组删除级联清除绑定）、`skillGroupActions`（`skillGroups.list|create|update|delete|assign|scope`）以及运行共用的 `inSkillGroup`／`skillRunGroup`。联系人至多一个分组；未分组联系人范围为空，因此首次模型请求不提供 Skill 工具。
+依据 [ADR-178](../../../../architecture/adr/178-contact-skill-groups.md)。内置“恋人”分组（迁移52 `all_packages`，`skillGroups.ensureBuiltin`，分组 GET 时幂等建立）使用全部 Skill，不逐包绑定且不可改名、改绑定或删除；其余分组须逐包绑定。`groups.ts` 导出迁移51 `skillGroupMigration(51)`（`skill_group`、`skill_group_package`、`contact_skill_group`，联系人／包／分组删除级联清除绑定）、`skillGroupActions`（`skillGroups.list|create|update|delete|assign|scope`）以及运行共用的 `inSkillGroup`／`skillRunGroup`。联系人至多一个分组；未分组联系人范围为空，因此首次模型请求不提供 Skill 工具。
 
 - 运行：`openSqliteSkillRun` 的目录、显式 `selectedPackageId`、预加载和 `eligible()` 都先按 `library.groupScope(contactId)` 过滤；冻结的 `SkillRunRevision.group` 带联系人、分组标识和分组修订。回复模块（`reply/sqlite/turns.ts`、`candidates/turns.ts`）用同一函数生成修订，字节须与运行一致。
 - 资格：`requireSkillRun` 同事务调用 `requireSkillGroupScope`——分配或分组修订变化、可用包越出分组绑定都拒绝；修订缺少 `group` 且 `eligible` 非空同样拒绝（失败即关闭）。无实际变化的 `update` 不推进分组修订。
