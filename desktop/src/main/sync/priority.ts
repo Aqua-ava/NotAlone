@@ -5,6 +5,7 @@ import type { SyncControlController } from './controller';
 export class SyncPriorityController {
   private generation: number | undefined;
   private enabled: boolean | undefined;
+  private synchronizationRevision = 0;
   private desiredContactId: string | null = null;
   private acceptedContactId: string | null | undefined;
   private cleared = false;
@@ -17,12 +18,13 @@ export class SyncPriorityController {
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
     private readonly sync: SyncControlController) {
     this.unsubscribe = [backend.onStateChanged(() => this.synchronize()),
-      contacts.onStateChanged(() => this.synchronize()), sync.onStateChanged(() => this.synchronize())];
+      contacts.onStateChanged(() => this.synchronize()), sync.onStateChanged(() => this.synchronize(true))];
     this.synchronize();
   }
 
-  private synchronize(): void {
+  private synchronize(statusChanged = false): void {
     if (this.disposed || this.closing) return;
+    const previousContactId = this.desiredContactId;
     const generation = this.backend.getConnectionGeneration();
     if (generation !== this.generation) {
       this.pending?.abort();
@@ -37,6 +39,7 @@ export class SyncPriorityController {
     this.desiredContactId = this.enabled === true && ['ready', 'loading'].includes(contact.directoryPhase)
       && contact.contacts.some((item) => item.contactId === contact.selectedContactId)
       ? contact.selectedContactId : null;
+    if (statusChanged || previousContactId !== this.desiredContactId) this.synchronizationRevision += 1;
     this.start();
   }
 
@@ -44,9 +47,11 @@ export class SyncPriorityController {
     const generation = this.generation;
     if (this.disposed || this.running || generation === undefined || !this.current(generation)
       || this.cleared && this.acceptedContactId === this.desiredContactId) return;
+    const revision = this.synchronizationRevision;
     const running = this.drain(generation).finally(() => {
       if (this.running === running) this.running = undefined;
-      if (generation !== this.generation && !this.closing) this.start();
+      // 在途登记失败时也消费其间到达的新状态事件；没有新事件则停止，避免自动重试循环。
+      if ((generation !== this.generation || revision !== this.synchronizationRevision) && !this.closing) this.start();
     });
     this.running = running;
   }

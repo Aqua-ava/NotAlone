@@ -117,7 +117,8 @@ test('慢登记期间只串行跟随最后选择，普通状态报告在途不�
     const statusEntered = new Promise((resolve) => { statusArrived = resolve; });
     f.control.beforeStatus = async () => { statusArrived(); await heldStatus; };
     const refreshing = f.sync.refresh(); await statusEntered;
-    assert.equal(f.sync.getState().report, null);
+    assert.equal(f.sync.getState().phase, 'ready');
+    assert.equal(f.sync.getState().report.enabled, true, '刷新期间保留已核验的有效报告。');
     await f.contacts.refreshContacts();
     assert.deepEqual(f.requests, [{ contact_id: null }, { contact_id: a }, { contact_id: b }], '普通报告在途不能清除有效优先提示。');
     releaseStatus(); await refreshing;
@@ -149,11 +150,15 @@ test('释放协调器先清除提示并移除订阅，后续选择和状态变�
 test('登记失败不冒充成功，后续同范围状态刷新重试当前目标，关闭后不重试旧目标', async (t) => {
   const f = await fixture(t);
   await f.waitPriority(null);
+  const entered = Promise.withResolvers(), release = Promise.withResolvers();
+  t.after(() => release.resolve());
+  f.control.beforePriority = async contactId => { if (contactId === a) { entered.resolve(); await release.promise; } };
   f.control.priorityFailures = 1;
-  f.select(a); await f.waitPriority(a);
-  // HTTP 往返只观察合成服务，不能以另一条业务状态发布代替待验证的刷新事件。
-  await f.backend.requestJson({ method: 'GET', path: '/api/sync/status' });
-  await f.sync.refresh(); await f.waitPriority(a, 2);
+  f.select(a); await entered.promise;
+  // 明确把新状态事件安排在失败回执之前，覆盖静默刷新与旧登记结算的交错。
+  await f.sync.refresh();
+  release.resolve(); await f.waitPriority(a, 2);
+  f.control.beforePriority = undefined;
   f.control.priorityFailures = 1;
   f.select(b); await f.waitPriority(b);
   await f.backend.requestJson({ method: 'GET', path: '/api/sync/status' });
