@@ -1,14 +1,16 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
+import {loadHybridProcessingModule,loadHybridProcessingFixture,certifyLegacyMetadata,cleanupPreSourceProofFixtures} from './fixtures/sqlite/pre-source-proof-registry.mjs';
+after(cleanupPreSourceProofFixtures);
 import assert from 'node:assert/strict';
-import {fixture,owner,modelPort,record} from './fixtures/memory-sqlite/support.mjs';
+const {fixture,owner,modelPort,record}=await loadHybridProcessingFixture('memory-sqlite/support.mjs');
 import {randomUUID} from 'node:crypto';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
-import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
-import {SqliteContactService} from '../src/contacts/sqlite/service.ts';
-import {SqliteHistoryService} from '../src/history/sqlite/service.ts';
-import {DeletionService} from '../src/storage/sqlite/deletion/service.ts';
-import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
-import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
+const {SqliteMemoryExtraction}=await loadHybridProcessingModule('memory/sqlite/service.ts');
+const {SqliteContactService}=await loadHybridProcessingModule('contacts/sqlite/service.ts');
+const {SqliteHistoryService}=await loadHybridProcessingModule('history/sqlite/service.ts');
+const {DeletionService}=await loadHybridProcessingModule('storage/sqlite/deletion/service.ts');
+const {ManagedFiles}=await loadHybridProcessingModule('storage/sqlite/deletion/managed-files.ts');
+const {ActiveHolders}=await loadHybridProcessingModule('storage/sqlite/deletion/holders.ts');
 
 test('启用边界保留既有消息和账本，旧增量不自动处理且清空后新消息序号不回退',async t=>{
  const cleanups=[];let storage,extraction,contacts,history;
@@ -17,11 +19,11 @@ test('启用边界保留既有消息和账本，旧增量不自动处理且清�
  const current=new URL('./fixtures/memory-documents/hybrid-upgrade-registry.mjs',import.meta.url).href;
  const f=await fixture({after:cleanup=>cleanups.push(cleanup)},{registryModule:legacy}),contactId=f.saved[0].contact_id;
  f.channel.page=async(_scope,target)=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true,resumeCursor:'tail-1'});
- await f.service.synchronize(contactId);
+ certifyLegacyMetadata(f.channel);await f.service.synchronize(contactId);
  extraction=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>extraction.accounting));
  const run=await extraction.start('hybrid-upgrade-existing-history');await extraction.waitForIdle(run.runId);await extraction.close();
- const coverage=await f.service.coverage(contactId),token=await f.contacts.eligibility(contactId);
- await f.storage.execute('history.acceptIncrementalPage',{token,goalId:coverage.incremental.goalId,captureId:randomUUID(),page:{target:f.target.descriptor,cursorIn:'tail-1',cursorOut:'tail-2',caughtUp:true,records:[record('2')]},at:Date.now(),runtimeToken:f.storage.status.runtimeId});
+ f.channel.tail=async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:'tail-2',caughtUp:true,records:[record('2')]});
+ await f.service.synchronizeIncremental(contactId);
  assert.equal((await f.storage.execute('memoryExtraction.readSchedule',{ownerId:owner,now:Date.now()})).pending,1);
  const before=await f.storage.execute('fixture.hybridUpgradeInspect',{}),databaseId=f.storage.status.databaseId;
  assert.equal(f.storage.status.schemaVersion,26);assert.ok(before.tables.message.length>0);assert.ok(before.tables.model_call.length>0);
@@ -40,8 +42,11 @@ test('启用边界保留既有消息和账本，旧增量不自动处理且清�
  const unavailable=async()=>{throw Error('此验收不读取真实渠道');};
  contacts=new SqliteContactService(storage,owner,{account:unavailable,conversations:unavailable});await contacts.initialize();
  history=new SqliteHistoryService(storage,contacts,f.channel);
- const nextToken=await contacts.eligibility(contactId),nextGoal=(await history.coverage(contactId)).incremental.goalId;
- await storage.execute('history.acceptIncrementalPage',{token:nextToken,goalId:nextGoal,captureId:randomUUID(),page:{target:f.target.descriptor,cursorIn:'tail-2',cursorOut:'tail-3',caughtUp:true,records:[record('3')]},at:Date.now(),runtimeToken:storage.status.runtimeId});
+ certifyLegacyMetadata(f.channel);
+ f.channel.tail=async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:'tail-3',caughtUp:true,records:[record('3')]});
+ // 历史版本重连先经正常历史入口完成运行代次核对，再进入增量。
+ f.channel.page=async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[record('1'),record('2')],completedPartitions:['shard-a'],exhausted:true,resumeCursor:'tail-2'});
+ await history.synchronize(contactId);await history.synchronizeIncremental(contactId);
  assert.equal((await storage.execute('memoryExtraction.readSchedule',{ownerId:owner,now:Date.now()})).pending,1,'启用之后新增文字仍自动排队');
  await history.close();await contacts.close();
  const deletion=new DeletionService(storage,new ActiveHolders(),new ManagedFiles(f.root)),plan=await deletion.plan({ownerId:owner,requestKey:'hybrid-baseline-account-delete',scope:{kind:'account'}});

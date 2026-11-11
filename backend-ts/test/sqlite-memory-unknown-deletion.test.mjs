@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {fixture,owner,modelPort} from './fixtures/memory-sqlite/support.mjs';
+import {fixture,owner,modelPort,record} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 import {DeletionService} from '../src/storage/sqlite/deletion/service.ts';
 import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
@@ -8,6 +8,9 @@ import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
 test('来源删除保留未知消息效果占用，其他合法来源不能让新轮盲目重发',async t=>{
  const registryModule=new URL('./fixtures/sqlite-memory-deletion/registry.mjs',import.meta.url).href;
  const f=await fixture(t,{registryModule});const contactId=f.saved[0].contact_id;
+ // 已核验的server别名将两个不同本机出现关联到同一消息；重复读取本身不新增来源。
+ const inspect=f.channel.inspect;let reads=0;f.channel.inspect=async scope=>({...await inspect(scope),serverAliasSemantics:'verified_within_scope'});
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record(++reads===1?'1':'11',{serverId:'999',text:'同一合成消息的两个可信出现。'})],completedPartitions:['shard-a'],exhausted:true});
  await f.service.synchronize(contactId);await f.service.synchronize(contactId);
  const message=(await f.service.read(contactId)).messages.find(message=>message.kind==='text');
  assert.equal(message.sourceRecordIds.length,2);
