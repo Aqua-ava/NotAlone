@@ -74,7 +74,7 @@ export async function createSqliteMemoryRuntime(options:{ctx:Context;contentReso
   service=new SqliteMemoryExtraction(options.storage,options.ownerId,port,options.holders,adjudication?async(runId,contactIds)=>{
    await adjudication!.publishRun(runId);await documents!.enrollRun(runId);
    // 只安排持久队列，不同步等候一小时／一天的后续阶段。
-   laterWorker?.wake();
+   if(schedulingStarted)laterWorker?.wake();
    if(contactIds?.length)for(const contactId of contactIds){markAdmissionDirty(contactId);void l1Scheduler?.wake(contactId);}
    else{markAdmissionDirty();void l1Scheduler?.wake();}
   }:options.afterRunSettled,options.ensureSourceReady,async()=>{
