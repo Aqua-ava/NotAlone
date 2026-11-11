@@ -23,10 +23,10 @@ function readItem(value:unknown):SkillLibraryItem {
 const invalidGroup=()=>new Error('分组状态尚未核对，请刷新后再操作。');
 function readGroup(value:unknown):SkillGroupItem{
  const i=row(value);
- if(!isUuid(i.group_id)||!text(i.name)||!i.name.trim()||[...i.name].length>30||!decimal(i.revision)
+ if(!isUuid(i.group_id)||!text(i.name)||!i.name.trim()||[...i.name].length>30||!decimal(i.revision)||typeof i.all_packages!=='boolean'
   ||!Array.isArray(i.package_ids)||i.package_ids.length>256||i.package_ids.some(id=>!isUuid(id))||new Set(i.package_ids).size!==i.package_ids.length
   ||!Array.isArray(i.contact_ids)||i.contact_ids.some(id=>!isUuid(id))||new Set(i.contact_ids).size!==i.contact_ids.length)throw invalidGroup();
- return {groupId:i.group_id,name:i.name,revision:i.revision,packageIds:i.package_ids as string[],contactIds:i.contact_ids as string[]};
+ return {groupId:i.group_id,name:i.name,revision:i.revision,allPackages:i.all_packages,packageIds:i.package_ids as string[],contactIds:i.contact_ids as string[]};
 }
 export class SkillLibraryController {
  private readonly backend:Pick<BackendHost,'getConnectionGeneration'|'requestJson'>;
@@ -98,6 +98,7 @@ export class SkillLibraryController {
    if(code==='skill_group_name_conflict')throw new Error('已有同名分组，请换一个名称。');
    if(code==='skill_group_name_invalid')throw new Error('分组名称需为 1–30 个字符，且首尾不能有空格。');
    if(code==='skill_group_revision_conflict'||code==='skill_group_assignment_conflict'||code==='skill_group_missing')throw new Error('分组已被其他操作改动，请刷新后再试。');
+   if(code==='skill_group_builtin')throw new Error('内置的“恋人”分组使用全部回复场景，不能修改或删除。');
    if(code==='skill_group_limit')throw new Error('分组数量已达上限。');
    if(code==='skill_contact_unavailable')throw new Error('该联系人当前不可用，请刷新后再试。');
    throw new Error('分组操作结果尚未核对，请刷新分组状态后再操作。');

@@ -6,7 +6,8 @@ const UNGROUPED = '';
 
 /**
  * 联系人分组：为不同联系人选用不同的回复场景。
- * 联系人至多属于一个分组，没有分组的联系人不使用任何回复场景；分组只决定可选范围，全局停用的场景仍不会生效。
+ * 内置的“恋人”分组自动使用全部回复场景（含之后新增的），其他分组自行选择；联系人至多属于一个分组，
+ * 没有分组的联系人不使用任何回复场景。分组只决定可选范围，全局停用的场景仍不会生效。
  */
 export function SkillGroupsPanel({ bridge, skills, contacts, visible = true, onUnavailable }: {
   bridge: SkillLibraryBridge;
@@ -67,7 +68,7 @@ export function SkillGroupsPanel({ bridge, skills, contacts, visible = true, onU
     <div className="sqlite-skill-heading">
       <div>
         <h2>联系人分组</h2>
-        <p>为不同的人选用不同的回复场景，例如恋人、同事。没有分组的联系人不使用任何回复场景。</p>
+        <p>现有回复场景都是恋人场景：把联系人放进“恋人”即可使用全部场景。也可以新建其他分组并自选场景；没有分组的联系人不使用任何回复场景。</p>
       </div>
       <button className="button" disabled={busy} onClick={() => void perform(() => bridge.readGroups())}>
         {busy ? '正在核对…' : '刷新分组'}
@@ -85,7 +86,7 @@ export function SkillGroupsPanel({ bridge, skills, contacts, visible = true, onU
       </form>
       {!view.groups.length && <p role="status">还没有分组。新建分组后，选择它可用的回复场景，再把联系人放进去。</p>}
       <div className="sqlite-skill-list">
-        {view.groups.map((group) => <GroupCard key={`${group.groupId}:${group.revision}`}
+        {view.groups.map((group) => group.allPackages ? <BuiltinGroupCard key={group.groupId} group={group} total={skills.length} /> : <GroupCard key={`${group.groupId}:${group.revision}`}
           group={group} skills={skills} busy={unavailable} confirmingDelete={confirmingDelete === group.groupId}
           onRequestDelete={(on) => setConfirmingDelete(on ? group.groupId : null)}
           onSave={(name, packageIds) => perform(() => bridge.updateGroup({ groupId: group.groupId, expectedRevision: group.revision, name, packageIds, connectionGeneration: generation, confirmed: true }))}
@@ -160,6 +161,19 @@ function GroupCard({ group, skills, busy, confirmingDelete, onRequestDelete, onS
           <button className="button" disabled={busy} onClick={() => onRequestDelete(false)}>取消</button>
         </>}
       </div>
+    </div>
+  </article>;
+}
+
+function BuiltinGroupCard({ group, total }: { group: SkillGroupItem; total: number }) {
+  return <article className="sqlite-skill-card skill-group-card" aria-label={`分组：${group.name}`}>
+    <div className="sqlite-skill-card-main">
+      <div className="sqlite-skill-title-row">
+        <h3>{group.name}</h3>
+        <span className="sqlite-skill-enabled-label is-enabled">内置</span>
+        <span className="sqlite-skill-enabled-label">{group.contactIds.length ? `${group.contactIds.length} 位联系人` : '暂无联系人'}</span>
+      </div>
+      <p>自动使用全部回复场景（当前 {total} 个，之后新增的也会加入）。仍遵循各场景自己的开关，已关闭的场景不会生效。</p>
     </div>
   </article>;
 }

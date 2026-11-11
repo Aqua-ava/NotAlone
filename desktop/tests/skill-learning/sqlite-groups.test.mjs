@@ -15,8 +15,8 @@ const skill=(packageId,name,title)=>({package_id:packageId,name,title,tags:['场
 
 /** 内存后端：按真实 HTTP 合同回答分组请求，并记录请求体。 */
 function fakeBackend(){
- const groups=[],calls=[];let counter=0,generation=1;
- const view=g=>({group_id:g.id,name:g.name,revision:String(g.revision),package_ids:[...g.packageIds].sort(),contact_ids:[...g.contactIds].sort()});
+ const builtinId='ffffffff-1111-4111-8111-000000000001',groups=[{id:builtinId,name:'恋人',revision:1,packageIds:[],contactIds:[],builtin:true}],calls=[];let counter=0,generation=1;
+ const view=g=>({group_id:g.id,name:g.name,revision:String(g.revision),all_packages:!!g.builtin,package_ids:g.builtin?[packageA,packageB]:[...g.packageIds].sort(),contact_ids:[...g.contactIds].sort()});
  const failure=code=>Object.assign(new Error('本机业务请求未完成'),{code});
  return {groups,calls,setGeneration:value=>{generation=value;},backend:{getConnectionGeneration:()=>generation,requestJson:async input=>{
   calls.push(structuredClone(input));
@@ -32,6 +32,7 @@ function fakeBackend(){
   if(match){
    const g=groups.find(item=>item.id===match[1]);
    if(!g||String(g.revision)!==body.expected_revision)throw failure('skill_group_revision_conflict');
+   if(g.builtin)throw failure('skill_group_builtin');
    if(match[2]==='delete'){groups.splice(groups.indexOf(g),1);return {generation,data:{deleted:true,group_id:g.id}};}
    g.name=body.name;g.packageIds=body.package_ids;g.revision++;return {generation,data:{group:view(g)}};
   }
@@ -53,24 +54,27 @@ const base={connectionGeneration:1,confirmed:true};
 
 test('分组控制器只发送精确请求体，回执核对后重新读取，错误码映射为可操作提示',async t=>{
  const fake=fakeBackend(),controller=await controllerFor(t,fake.backend);
- assert.deepEqual(await controller.readGroups(),{connectionGeneration:1,groups:[]});
- const created=await controller.createGroup({...base,name:'恋人',packageIds:[packageA]});
- const group=created.groups[0];assert.equal(group.name,'恋人');assert.deepEqual(group.packageIds,[packageA]);
- assert.deepEqual(fake.calls.find(c=>c.method==='POST').body,{name:'恋人',package_ids:[packageA],confirmed:true});
- await assert.rejects(controller.createGroup({...base,name:'恋人',packageIds:[]}),/已有同名分组/);
- await assert.rejects(controller.updateGroup({...base,groupId:group.groupId,expectedRevision:'9',name:'恋人',packageIds:[]}),/已被其他操作改动/);
- await assert.rejects(controller.createGroup({...base,name:' 恋人 ',packageIds:[]}),/1–30 个字符/);
+ const initial=await controller.readGroups();
+ assert.deepEqual(initial.groups.map(g=>[g.name,g.allPackages]),[['恋人',true]]);
+ assert.deepEqual(initial.groups[0].packageIds,[packageA,packageB]);
+ const created=await controller.createGroup({...base,name:'同事',packageIds:[packageA]});
+ const group=created.groups.find(g=>g.name==='同事');assert.equal(group.allPackages,false);assert.deepEqual(group.packageIds,[packageA]);
+ assert.deepEqual(fake.calls.find(c=>c.method==='POST').body,{name:'同事',package_ids:[packageA],confirmed:true});
+ await assert.rejects(controller.createGroup({...base,name:'同事',packageIds:[]}),/已有同名分组/);
+ await assert.rejects(controller.updateGroup({...base,groupId:group.groupId,expectedRevision:'9',name:'同事',packageIds:[]}),/已被其他操作改动/);
+ await assert.rejects(controller.createGroup({...base,name:' 同事 ',packageIds:[]}),/1–30 个字符/);
  await assert.rejects(controller.createGroup({...base,name:'x',packageIds:['not-a-uuid']}));
  await assert.rejects(controller.createGroup({...base,name:'x',packageIds:[],owner_id:'other'}));
  await assert.rejects(controller.createGroup({...base,confirmed:false,name:'x',packageIds:[]}));
  const assigned=await controller.assignContactGroup({...base,contactId:contactA.toUpperCase(),groupId:group.groupId,expectedGroupId:null});
- assert.deepEqual(assigned.groups[0].contactIds,[contactA]);
+ assert.deepEqual(assigned.groups.find(g=>g.groupId===group.groupId).contactIds,[contactA]);
  await assert.rejects(controller.assignContactGroup({...base,contactId:contactA,groupId:null,expectedGroupId:null}),/已被其他操作改动/);
  const cleared=await controller.assignContactGroup({...base,contactId:contactA,groupId:null,expectedGroupId:group.groupId});
- assert.deepEqual(cleared.groups[0].contactIds,[]);
+ assert.deepEqual(cleared.groups.find(g=>g.groupId===group.groupId).contactIds,[]);
  fake.setGeneration(2);await assert.rejects(controller.deleteGroup({...base,groupId:group.groupId,expectedRevision:'1'}),/尚未核对/);
  fake.setGeneration(1);
- assert.deepEqual((await controller.deleteGroup({...base,groupId:group.groupId,expectedRevision:'1'})).groups,[]);
+ assert.deepEqual((await controller.deleteGroup({...base,groupId:group.groupId,expectedRevision:'1'})).groups.map(g=>g.name),['恋人']);
+ await assert.rejects(controller.deleteGroup({...base,groupId:initial.groups[0].groupId,expectedRevision:'1'}),/内置的“恋人”分组/);
 });
 
 test('控制器拒绝一位联系人同时出现在多个分组的异常回执',async t=>{
@@ -95,29 +99,31 @@ test('联系人分组页：新建、选择回复场景、分配联系人与删�
  await expect(page.getByRole('article',{name:'回复场景：温柔表达'})).toBeVisible();
  assert.equal(fake.calls.some(c=>c.path==='/api/skills/groups'),false,'未进入分组页时不读取分组');
  await page.getByRole('tab',{name:'联系人分组'}).click();
- await expect(page.getByText('还没有分组')).toBeVisible();
+ const builtin=page.getByRole('article',{name:'分组：恋人'});
+ await expect(builtin).toContainText('内置');await expect(builtin).toContainText('自动使用全部回复场景（当前 2 个');
+ await expect(builtin.getByRole('checkbox')).toHaveCount(0);await expect(builtin.getByRole('button')).toHaveCount(0);
  await expect(page.getByLabel('「小林」所属分组')).toHaveValue('');
  await expect(page.getByLabel('「小林」所属分组').locator('option:checked')).toHaveText('未分组（不使用回复场景）');
- const create=page.getByRole('form',{name:'新建分组'});
- await create.getByLabel('分组名称').fill('恋人');await create.getByRole('button',{name:'新建分组'}).click();
- const lovers=page.getByRole('article',{name:'分组：恋人'});await expect(lovers).toBeVisible();await expect(lovers).toContainText('暂无联系人');
- await lovers.getByLabel('温柔表达').check();
- await lovers.getByRole('button',{name:'保存分组'}).click();
- await expect.poll(()=>fake.groups[0].packageIds).toEqual([packageA]);
- await expect(lovers.getByRole('button',{name:'保存分组'})).toBeDisabled();
- await create.getByLabel('分组名称').fill('同事');await create.getByRole('button',{name:'新建分组'}).click();
- await expect(page.getByRole('article',{name:'分组：同事'})).toBeVisible();
- await expect(page.getByLabel('「小林」所属分组').locator('option')).toHaveText(['未分组（不使用回复场景）','恋人','同事']);
  await page.getByLabel('「小林」所属分组').selectOption({label:'恋人'});
- await expect(page.getByRole('article',{name:'分组：恋人'})).toContainText('1 位联系人');
- assert.deepEqual(fake.groups.find(g=>g.name==='恋人').contactIds,[contactA]);
- await page.getByLabel('「小林」所属分组').selectOption({label:'同事'});
- await expect(page.getByRole('article',{name:'分组：恋人'})).toContainText('暂无联系人');
- await page.getByRole('article',{name:'分组：同事'}).getByRole('button',{name:'删除分组'}).click();
+ await expect(builtin).toContainText('1 位联系人');
+ assert.deepEqual(fake.groups.find(g=>g.builtin).contactIds,[contactA]);
+ const create=page.getByRole('form',{name:'新建分组'});
+ await create.getByLabel('分组名称').fill('同事');await create.getByRole('button',{name:'新建分组'}).click();
+ const work=page.getByRole('article',{name:'分组：同事'});await expect(work).toBeVisible();await expect(work).toContainText('暂无联系人');
+ await work.getByLabel('直接表达').check();
+ await work.getByRole('button',{name:'保存分组'}).click();
+ await expect.poll(()=>fake.groups.find(g=>g.name==='同事').packageIds).toEqual([packageB]);
+ await expect(work.getByRole('button',{name:'保存分组'})).toBeDisabled();
+ await expect(page.getByLabel('「同事老王」所属分组').locator('option')).toHaveText(['未分组（不使用回复场景）','恋人','同事']);
+ await page.getByLabel('「同事老王」所属分组').selectOption({label:'同事'});
+ await expect(work).toContainText('1 位联系人');
+ await page.getByLabel('「同事老王」所属分组').selectOption({label:'恋人'});
+ await expect(work).toContainText('暂无联系人');await expect(builtin).toContainText('2 位联系人');
+ await work.getByRole('button',{name:'删除分组'}).click();
  await expect(page.getByText('将回到“未分组”')).toBeVisible();
  await page.getByRole('button',{name:'确认删除'}).click();
  await expect(page.getByRole('article',{name:'分组：同事'})).toHaveCount(0);
- await expect(page.getByLabel('「小林」所属分组')).toHaveValue('');
+ await expect(builtin).toBeVisible();
  await page.getByRole('tab',{name:'回复场景'}).click();
  await expect(page.getByRole('article',{name:'回复场景：温柔表达'})).toBeVisible();
 });
