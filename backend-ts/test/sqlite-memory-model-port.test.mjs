@@ -1,38 +1,27 @@
+import {ModelPermitArbiter} from '../src/platform/models/model-permits.ts';
+import {createModelPermitPort} from '../src/platform/models/model-permit-port.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createSqliteExtractionModelPort} from '../src/memory/sqlite/model-port.ts';
 import {createServer} from 'node:http';
-import {createServer as createPermitSocketServer} from 'node:net';
-import {createInterface} from 'node:readline';
 import {once} from 'node:events';
 import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {randomUUID,createHash,randomFillSync} from 'node:crypto';
 import {spawn} from 'node:child_process';
-import {startModelHost} from '../src/platform/models/model-host.ts';
 import {resolveHostReplyConfiguration} from '../src/host/host-reply-config.ts';
 import sharp from 'sharp';
 
 for(const stop of ['调用取消','端口关闭'])test(`排队等待后台许可时${stop}会结束模型调用，不挂住停读`,{timeout:4000},async t=>{
- const directory=await mkdtemp(join(tmpdir(),'na-memory-permit-cancel-'));
- const path=join(directory,'p.sock'),sockets=new Set(),queued=Promise.withResolvers(),operations=[];let queuedSocket;
- const server=createPermitSocketServer(socket=>{
-  sockets.add(socket);socket.on('error',()=>{});socket.on('close',()=>sockets.delete(socket));
-  const lines=createInterface({input:socket});
-  lines.on('line',line=>{
-   const request=JSON.parse(line);operations.push(request.op);
-   if(request.op==='unconfirmed_requests')socket.write(JSON.stringify({state:'unconfirmed_requests',request_ids:[],next_cursor:null})+'\n');
-   else if(request.op==='acquire'){queuedSocket=socket;queued.resolve();}
-  });
-  socket.on('close',()=>lines.close());
- });
- server.listen(path);await once(server,'listening');
- t.after(async()=>{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});});
+ const arbiter=new ModelPermitArbiter(1),held=await arbiter.acquire('background'),queued=Promise.withResolvers();
+ t.after(()=>{arbiter.stop();held.settle();});
+ const base=createModelPermitPort(arbiter,{reserve:async()=>{},recordReserved:async()=>{},unconfirmedRequests:async()=>[]});
+ const permit={...base,acquire(signal,attempt){const result=base.acquire(signal,attempt);queued.resolve();return result;}};
  const configuration=resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-only'});
  let physicalCalls=0;
  const port=createSqliteExtractionModelPort({ctx:{llm:{prepareCall:async config=>({config,stream(){throw Error('排队期间不得发送模型请求');}})}},configuration,
-  provider:{beginCall(){physicalCalls++;throw Error('排队期间不得预约模型请求');}},permit:{path,token:'synthetic-only'},authorizePurpose:async()=>{}});
+  provider:{beginCall(){physicalCalls++;throw Error('排队期间不得预约模型请求');}},permit,authorizePurpose:async()=>{}});
  const controller=new AbortController();
  const invocation=port.invoke({purpose:'extraction',system:'合成提取要求',user:'合成聊天',tool:{name:'DirectMemoryExtractionOutput'}},
   {requestId:randomUUID(),attemptId:randomUUID(),scope:{owner_id:randomUUID(),contact_id:randomUUID()},
@@ -40,9 +29,7 @@ for(const stop of ['调用取消','端口关闭'])test(`排队等待后台许可
    signal:controller.signal,requireCurrent:async()=>{},onReceipt:async()=>{throw Error('未获许可不能生成回执');}});
  const outcome=invocation.then(()=>({unexpectedSuccess:true}),error=>({error}));
  await queued.promise;
- const disconnected=once(queuedSocket,'close');
  const closing=stop==='端口关闭'?port.close():undefined;if(stop==='调用取消')controller.abort();
- await disconnected;
  let timer;
  const result=await Promise.race([outcome,new Promise(resolve=>{timer=setTimeout(()=>resolve({timedOut:true}),800);})]);
  clearTimeout(timer);
@@ -50,7 +37,7 @@ for(const stop of ['调用取消','端口关闭'])test(`排队等待后台许可
  assert.equal(result.unexpectedSuccess,undefined);
  assert.match(result.error.code,/^extraction_model_(cancelled|ack_unknown)$/);
  await (closing??port.close());
- assert.equal(physicalCalls,0);assert.deepEqual(operations,['unconfirmed_requests','acquire']);
+ assert.equal(physicalCalls,0);assert.equal(arbiter.snapshot().backgroundActive,1);assert.equal(arbiter.snapshot().backgroundWaiting,0);
 });
 
 test('未配置模型不会建立提取端口或静默选择其他供应商',()=>{
@@ -86,14 +73,15 @@ test('官方DSH和真实ModelHost端口：用途、凭据、最终预算、未�
     if(provider){provider.closeAllConnections();await new Promise(resolveClose=>provider.close(resolveClose));}
     await rm(directory,{recursive:true,force:true});
   });
-  host=await startModelHost({runtimeEnvironment:{NOTALONE_MANAGED_USER_DATA:directory},businessHome:directory,
-    infoPath:join(directory,'info'),envFilePath:join(directory,'env'),accounting:{
+  const accounting={
       reserve:async receipt=>{assert.ok(receipt.input_budget.serialized_bytes>0);reserved.set(receipt.request_id,receipt);},
       recordReserved:async receipt=>{assert.ok(reserved.has(receipt.request_id));if(failReceipt)throw new Error('synthetic_ack_failure');reserved.delete(receipt.request_id);},
       unconfirmedRequests:async()=>[...reserved.keys()].sort(),
-    }});
+    };
   provider=createServer(async(req,res)=>{
-    let raw='';for await(const chunk of req)raw+=chunk;requests++;payloads.push({path:req.url,body:JSON.parse(raw)});
+    let raw='';for await(const chunk of req)raw+=chunk;
+    if(req.url==='/synthetic-accounting'){const input=JSON.parse(raw);try{const result=await accounting[input.op](...input.args);res.end(JSON.stringify(result??null));}catch{res.writeHead(409);res.end('{}');}return;}
+    requests++;payloads.push({path:req.url,body:JSON.parse(raw)});
     if(req.url==='/strict/chat/completions')assert.equal(req.headers.authorization,'Bearer synthetic-only');
     else assert.equal(req.headers['x-api-key'],'synthetic-only');
     if(rejectHTTP){rejectHTTP=false;res.writeHead(401,{'content-type':'application/json'});res.end(JSON.stringify({type:'error',error:{type:'authentication_error',message:'合成供应商原始正文不进入安全元数据'}}));return;}
@@ -112,8 +100,7 @@ test('官方DSH和真实ModelHost端口：用途、凭据、最终预算、未�
   await writeFile(join(profile,'cordis.patch.yml'),`- insert:\n    - name: '@deepseek-ai/dsh-llm'\n    - name: ${JSON.stringify(resolve('test/fixtures/sqlite-memory-model-port.ts'))}\n`);
   child=spawn(process.execPath,[resolve('node_modules/@deepseek-ai/dsh/lib/bin.js'),'--profile','notalone'],{
     cwd:directory,env:{PATH:process.env.PATH,HOME:directory,DSH_HOME:directory,DSH_TELEMETRY_DISABLED:'1',
-      NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${provider.address().port}/anthropic`,
-      NOTALONE_MODEL_PERMIT_SOCKET:host.permit.path,NOTALONE_MODEL_PERMIT_TOKEN:host.permit.token},stdio:['ignore','pipe','pipe']});
+      NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${provider.address().port}/anthropic`},stdio:['ignore','pipe','pipe']});
   exited=once(child,'exit');let log='';child.stderr.on('data',value=>log+=value);
   const url=await new Promise((ready,reject)=>{
     const timer=setTimeout(()=>reject(new Error(log.slice(-1500))),10000);

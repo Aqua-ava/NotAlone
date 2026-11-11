@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import type { ProcessIdentity } from '../process/process-identity.ts';
 /** 单一进程持有许可状态；取消与断线都不能证明已发送的供应商调用结算。 */
 export type ModelWorkKind = 'foreground' | 'background';
 export interface ModelPermit {
@@ -10,10 +9,7 @@ export interface ModelPermit {
   /** 丢失执行者时保留容量并冻结同类；必须由宿主停止整代执行者后重建仲裁。 */
   orphan(): void;
 }
-export interface ModelPermitRecord { id: string; kind: ModelWorkKind; worker: ProcessIdentity; attempt_id?: string; }
 interface Waiter {
-  worker?: ProcessIdentity;
-  attempt_id?: string;
   kind: ModelWorkKind;
   resolve: (permit: ModelPermit) => void;
   reject: (error: Error) => void;
@@ -22,15 +18,7 @@ interface Waiter {
 }
 export class ModelPermitArbiter {
   private queue: Waiter[] = [];
-  private active = new Map<string, { kind: ModelWorkKind; orphan: boolean; worker?: ProcessIdentity; attempt_id?: string }>();
-  private journal?: {host: ProcessIdentity; record: (active: ModelPermitRecord[]) => void};
-  attachJournal(journal: {host: ProcessIdentity; record: (active: ModelPermitRecord[]) => void}) {
-    if (this.active.size || this.queue.length || this.journal) throw new Error('model_permit_journal_attachment_invalid');
-    this.journal = journal;
-  }
-  private persist() {
-    this.journal?.record([...this.active].map(([id, item]) => ({id,kind:item.kind,worker:item.worker ?? this.journal!.host,...item.attempt_id ? {attempt_id:item.attempt_id} : {}})));
-  }
+  private active = new Map<string, { kind: ModelWorkKind; orphan: boolean }>();
   private paused = false;
   private stopped = false;
   private drainWaiters: (() => void)[] = [];
@@ -52,11 +40,11 @@ export class ModelPermitArbiter {
       paused: this.paused, stopped: this.stopped,
     };
   }
-  acquire(kind: ModelWorkKind, signal?: AbortSignal, worker?: ProcessIdentity, attempt_id?: string): Promise<ModelPermit> {
+  acquire(kind: ModelWorkKind, signal?: AbortSignal): Promise<ModelPermit> {
     if (kind !== 'foreground' && kind !== 'background') return Promise.reject(new Error('model_permit_kind_invalid'));
     if (this.stopped || signal?.aborted) return Promise.reject(new Error('model_work_stopped'));
     return new Promise((resolve, reject) => {
-      const waiter: Waiter = { kind, worker, attempt_id, resolve, reject, signal, cancel: () => {
+      const waiter: Waiter = { kind, resolve, reject, signal, cancel: () => {
         const index = this.queue.indexOf(waiter);
         // 已发放许可后，signal 不再有释放权。
         if (index < 0) return;
@@ -104,19 +92,13 @@ export class ModelPermitArbiter {
     const waiter = this.queue.splice(index, 1)[0];
     waiter.signal?.removeEventListener('abort', waiter.cancel);
     const id = randomUUID();
-    const state = { kind: waiter.kind, orphan: false, worker: waiter.worker, attempt_id: waiter.attempt_id };
+    const state = { kind: waiter.kind, orphan: false };
     this.active.set(id, state);
-    try { this.persist(); } catch (error) {
-      this.stop();
-      waiter.reject(error instanceof Error ? error : new Error('model_permit_journal_failed'));
-      return;
-    }
     waiter.resolve({
       id,
       settle: () => {
         if (!this.active.has(id)) return;
         this.active.delete(id);
-        try { this.persist(); } catch (error) { this.active.set(id,state); this.stop(); throw error; }
         if (!this.active.size) for (const resolve of this.drainWaiters.splice(0)) resolve();
         this.dispatch();
       },

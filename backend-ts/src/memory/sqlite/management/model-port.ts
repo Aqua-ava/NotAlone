@@ -3,7 +3,7 @@ import type {Context} from '@deepseek-ai/cordis';
 import {sha256} from '../../../platform/sha256.ts';
 import type {HostReplyConfiguration} from '../../../host/host-reply-config.ts';
 import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
-import type {ModelTaskClaim} from '../../../platform/models/model-permit-server.ts';
+import type {ModelTaskClaim} from '../../../platform/models/model-permit-port.ts';
 import type {installModelProvider} from '../../../platform/models/model-provider.ts';
 import {createExtractionModelCaller,type ExtractionPermitEndpoint} from '../../extraction/model.ts';
 import type {SqliteExtractionModelPreparation} from '../model-port.ts';

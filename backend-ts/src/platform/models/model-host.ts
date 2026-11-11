@@ -1,10 +1,9 @@
 /** 宿主唯一的 TS 模型许可；稳定状态不随临时DSH profile销毁。 */
-import { mkdir, lstat, rmdir } from 'node:fs/promises';
+import { mkdir, lstat } from 'node:fs/promises';
 import { join, resolve, isAbsolute } from 'node:path';
-import { randomBytes } from 'node:crypto';
 import { sha256 } from '../../platform/sha256.ts';
 import { ModelPermitArbiter } from './model-permits.ts';
-import { startModelPermitServer, type ModelPermitAccounting } from './model-permit-server.ts';
+import { createModelPermitPort, type ModelPermitAccounting } from './model-permit-port.ts';
 export interface ModelHostOptions {
   runtimeEnvironment: Readonly<NodeJS.ProcessEnv>;
   businessHome: string;
@@ -47,48 +46,21 @@ function modelHostPaths(options:ModelHostIdentityOptions) {
   const identity = sha256(JSON.stringify([resolve(options.infoPath),resolve(options.envFilePath)])).slice(0,24);
   const base = managed ?? join(options.businessHome,'.notalone');
   const directory = join(base,'model-permits',identity);
-  const socketDirectory = join('/tmp',`na-model-${process.getuid?.() ?? 'local'}-${identity}`);
-  return {directory,socketDirectory,path:join(socketDirectory,'p.sock'),statePath:join(directory,'state.json')};
+  return {directory,identityHome:join(directory,'identity')};
 }
 export async function startModelHost(options: ModelHostOptions) {
-  const {directory,socketDirectory,path,statePath}=modelHostPaths(options);
-  const concurrency = modelBackgroundConcurrency(options.runtimeEnvironment);
-  await mkdir(directory,{recursive:true,mode:0o700});
-  await privateDirectory(directory);
-  // macOS Unix socket路径有严格长度限制；只有socket放短私有目录，状态留业务目录。
-  const createdSocketDirectory = await privateDirectory(socketDirectory);
-  const token = randomBytes(32).toString('base64url');
-  const arbiter = new ModelPermitArbiter(concurrency);
-  let server: Awaited<ReturnType<typeof startModelPermitServer>>;
-  try { server = await startModelPermitServer({path,statePath,token,arbiter,accounting:options.accounting}); }
-  catch (error) {
-    if (createdSocketDirectory) await rmdir(socketDirectory).catch(()=>{});
-    throw error;
-  }
-  let closing: Promise<void> | undefined;
-  async function shutdown() {
-    await server.shutdown();
-    await rmdir(socketDirectory).catch(()=>{});
-  }
+  const {directory,identityHome}=modelHostPaths(options);
+  const arbiter=new ModelPermitArbiter(modelBackgroundConcurrency(options.runtimeEnvironment));
+  await mkdir(directory,{recursive:true,mode:0o700});await privateDirectory(directory);
+  const permit=createModelPermitPort(arbiter,options.accounting);
+  let closing:Promise<void>|undefined;
   return {
-    arbiter,
-    statePath,
-    permit:{path,token},
-    unknownSettlements: server.unknownSettlements,
-    unconfirmedPermitIds: server.unconfirmedPermitIds,
-    shutdown,
-    /** stopNewWork 必须先停业务接收，不能先等排队请求退出。 */
-    close(stopNewWork: () => Promise<void>): Promise<void> {
-      return closing ??= (async()=>{
-        // 先拒绝所有待领许可，让排队请求能退出，再等真实在途结算。
-        arbiter.stop();
-        try {
-          await stopNewWork();
-          await arbiter.pauseAndDrain();
-          await server.close();
-          await rmdir(socketDirectory).catch(()=>{});
-        } catch (error) { await shutdown(); throw error; }
-      })().catch(error=>{closing=undefined;throw error;});
+    arbiter,identityHome,permit,
+    async shutdown(){arbiter.stop();},
+    /** 先停业务与排队者；已派发的真实调用及孤儿仍须结算，不能借关闭清除。 */
+    close(stopNewWork:()=>Promise<void>):Promise<void>{
+      return closing??=(async()=>{arbiter.stop();await stopNewWork();await arbiter.pauseAndDrain();})()
+        .catch(error=>{closing=undefined;throw error;});
     },
   };
 }
