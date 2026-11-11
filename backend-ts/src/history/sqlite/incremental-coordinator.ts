@@ -2,6 +2,8 @@ import type { SavedContactBinding } from '../../contacts/sqlite/contracts.ts';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import type { HistoryCoverage } from './contracts.ts';
 import type { SqliteHistoryService } from './service.ts';
+import {newTraceId,withDiagnosticTrace} from '../../diagnostics/context.ts';
+import {recordSyncState} from './diagnostics.ts';
 
 type IncrementalBinding = Pick<SavedContactBinding, 'contact_id' | 'binding_id' | 'grant_id' | 'selection_generation' | 'status'>;
 export interface IncrementalHistoryDirectoryPort {
@@ -103,7 +105,8 @@ export class IncrementalHistoryCoordinator {
   #notify(): void { this.#changed.resolve(); this.#changed = notification(); }
   #state(contactId: string, phase: IncrementalContactPhase, error: string | null = null): void {
     // 逐人错误只留在联系人条目，避免恢复成功后全局残留旧失败。
-    this.#states.set(contactId, { contactId, phase, lastError: error });
+    const next={contactId,phase,lastError:error};recordSyncState(this.#states.get(contactId),next,'history_incremental');
+    this.#states.set(contactId,next);
   }
   #startPump(): void {
     if (this.#pump || this.#closed) return;
@@ -177,6 +180,9 @@ export class IncrementalHistoryCoordinator {
     }
   }
   #run(job: QueuedRead): void {
+    withDiagnosticTrace(newTraceId(),()=>this.#runTraced(job));
+  }
+  #runTraced(job:QueuedRead):void {
     this.#queued.delete(job.contactId); this.#state(job.contactId, 'running');
     const active: ActiveRead = { ...job, controller: new AbortController(), done: Promise.resolve() };
     let previousIncremental: HistoryCoverage['incremental'];

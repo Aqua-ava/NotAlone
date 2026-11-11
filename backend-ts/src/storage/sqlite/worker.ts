@@ -279,6 +279,7 @@ try {
           for(const event of diagnostics)try{
             diagnosticLog.append({entry:name,contactPrefix:event.contactPrefix,branch:event.branch,...(event.errorCode?{errorCode:event.errorCode}:{})});
           }catch{warnDiagnostic();}
+          for(const event of diagnostics){const safe=checkedDiagnosticEvent({event:'sync.continuity',caller:'sqlite_worker',reasonCode:event.branch,contactPrefix:event.contactPrefix});if(safe)unifiedDiagnostics.push(safe);}
           committedDiagnostics=unifiedDiagnostics;
           break;
         } catch (error) { if (code(error) !== 'storage_busy' || !action.retryBusy || attempt >= 2) throw error; }
