@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,owner,record,modelPort} from './fixtures/memory-sqlite/support.mjs';
@@ -23,15 +24,14 @@ async function prepared(t,{legacy=false,partialQuote=false,archive=false,modernN
   }return result;
  };
  let interrupted=false;
- const transport=archive||reuse?{execute:async(name,input)=>{
+ const transport=archive||legacy||reuse?{execute:async(name,input)=>{
   if(reuse&&name==='memoryExtraction.finish'&&!interrupted){interrupted=true;await f.storage.execute('fixture.recoverKnownAttempt',{ownerId:owner,attemptId:input.attemptId});throw new Error('合成已知核验回执后的阶段中断');}
-  return f.storage.execute(name,archive&&name==='memoryExtraction.finish'?{...input,verificationRefs:undefined}:input);
+  return f.storage.execute(name,(archive||legacy)&&name==='memoryExtraction.finish'?{...input,verificationRefs:undefined}:input);
  }}:f.storage;
  let extraction;extraction=new SqliteMemoryExtraction(transport,owner,modelPort(()=>extraction.accounting,respond));t.after(()=>extraction.close());
- let run;
- if(legacy){await extraction.initialize();run=await f.storage.execute('memoryExtraction.start',{ownerId:owner,requestKey:'legacy-unreviewed',policyConfig:{version:1,mode:'legacy',rule_set_sha256:null}});await extraction.continue(run.runId);}
- else run=await extraction.start('normal-narrow-evidence');
- await extraction.waitForIdle();if(reuse){await extraction.continue(run.runId);await extraction.waitForIdle();}const done=await extraction.read(run.runId);assert.ok(done.tasks.filter(x=>x.scopeKind==='contact'&&x.contactId===contactId).every(x=>x.state==='succeeded'),JSON.stringify(done.tasks));
+ const run=await extraction.start('normal-narrow-evidence');
+ await extraction.waitForIdle();if(reuse){const current=await extraction.read(run.runId);await extraction.continue(run.runId,current.controlVersion,randomUUID());await extraction.waitForIdle();}const done=await extraction.read(run.runId);assert.ok(done.tasks.filter(x=>x.scopeKind==='contact'&&x.contactId===contactId).every(x=>x.state==='succeeded'),JSON.stringify(done.tasks));
+ if(legacy)await f.storage.execute('fixture.legacyPolicyArchive',{ownerId:owner,runId:run.runId});
  const management=new SqliteMemoryManagement(f.storage,owner);await management.importRun(run.runId);return {...f,contactId,extraction,management,runId:run.runId,normal};
 }
 
@@ -46,9 +46,10 @@ test('正常07真实核验引句只引用事实来源，完整窗口仍保留为
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('合法旧配置无逐事实核验的候选可人工查看采纳，自动发布必须等待核验',async t=>{
+test('旧配置存档无逐事实具名核验仍可人工采纳，退役策略不再执行',async t=>{
  const f=await prepared(t,{legacy:true}),scope={scopeKind:'contact',contactId:f.contactId},candidate=(await f.management.read(scope)).candidates[0];assert.ok(candidate);
- assert.equal(f.normal.purposes.filter(x=>x.purpose==='verification').length,0);
+ assert.equal(f.normal.purposes.filter(x=>x.purpose==='verification').length,1);
+ await assert.rejects(f.extraction.continue(f.runId,0,randomUUID()),{code:'extraction_runtime_config_retired'});
  assert.equal(candidate.verificationState,'pending');
  await assert.rejects(f.management.automatic({requestKey:'unverified-auto',action:'auto_accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]}),{code:'memory_verification_pending'});
  await f.management.publishRun(f.runId);assert.equal((await f.management.read(scope)).memories.length,0);
@@ -106,13 +107,13 @@ test('旧候选与版本整窗citation只投影真实来源，原事件原稿req
  assert.deepEqual(await f.storage.execute('fixture.archiveState',{ownerId:owner}),original);
 });
 
-test('旧source_stamp的已完成存档继续可读，未完成固定任务不伪成功也不调用模型',async t=>{
+test('旧source_stamp已完成存档可读，未完成任务经受控后继轮重启而不改写旧成功',async t=>{
  const completed=await prepared(t),scope={scopeKind:'contact',contactId:completed.contactId};
  await completed.storage.execute('fixture.oldSourceStamp',{ownerId:owner,runId:completed.runId});assert.equal((await completed.management.read(scope)).candidates[0].verificationState,'verified');
  const f=await fixture(t),contactId=f.saved[0].contact_id;await f.service.synchronize(contactId);await f.contacts.setReading(false);
  let extraction;const port=modelPort(()=>extraction.accounting);extraction=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>extraction.close());await extraction.initialize();
  const run=await f.storage.execute('memoryExtraction.start',{ownerId:owner,requestKey:'old-incomplete-policy',policyConfig:{version:2,mode:'legacy',rule_set_sha256:null,verification_policy:'complete-claim-v1',source_stamp:'0'.repeat(64)}});
- await extraction.continue(run.runId);await extraction.waitForIdle();const after=await extraction.read(run.runId);assert.equal(port.calls,0);assert.equal(after.succeeded,0);assert.equal(after.candidates.length,0);
+ await extraction.pause(run.runId);const paused=await extraction.read(run.runId);await extraction.continue(run.runId,paused.controlVersion,randomUUID());await extraction.waitForIdle();const after=await extraction.read(run.runId);assert.equal(port.calls,1,'仅受控后继轮调用模型');assert.equal(after.succeeded,0);assert.equal(after.candidates.length,0);
 });
 
 
@@ -121,7 +122,7 @@ test('旧source_stamp的unknown回执继续保守占用，不伪成功、不重�
  await f.service.synchronize(contactId);await f.contacts.setReading(false);
  let extraction;const port=modelPort(()=>extraction.accounting,async()=>{throw new Error('合成未知回执');});extraction=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>extraction.close());
  const run=await extraction.start('old-stamp-unknown');await extraction.waitForIdle();assert.equal((await extraction.read(run.runId)).unknown,1);assert.equal(port.calls,1);
- await f.storage.execute('fixture.oldSourceStamp',{ownerId:owner,runId:run.runId});await extraction.continue(run.runId);await extraction.waitForIdle();
+ await f.storage.execute('fixture.oldSourceStamp',{ownerId:owner,runId:run.runId});const blocked=await extraction.read(run.runId);await assert.rejects(extraction.continue(run.runId,blocked.controlVersion,randomUUID()),{code:'memory_extraction_receipt_unknown'});await extraction.waitForIdle();
  const after=await extraction.read(run.runId);assert.equal(after.unknown,1);assert.equal(after.succeeded,0);assert.equal(after.candidates.length,0);assert.equal(port.calls,1);
 });
 

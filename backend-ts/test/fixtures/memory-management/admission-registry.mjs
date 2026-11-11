@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {registry as base} from './registry.mjs';
 import {registry as typed} from './adjudication-upgrade-registry.mjs?mode=upgrade';
 import {verifiedExtractionOutput} from '../../../src/memory/sqlite/outputs.ts';
-export const registry={...base,actions:[...base.actions,...typed.actions.filter(a=>['fixture.typedAdjudication','fixture.typedPublish'].includes(a.name)),
+export const registry={...base,actions:[...base.actions,{name:'fixture.legacyPolicyArchive',mode:'write',retryBusy:false,execute(tx,i){tx.run('UPDATE processing_run SET policy_config=? WHERE owner_id=? AND id=?',[JSON.stringify({version:1,mode:'legacy',rule_set_sha256:null}),i.ownerId,i.runId]);}},...typed.actions.filter(a=>['fixture.typedAdjudication','fixture.typedPublish'].includes(a.name)),
  {name:'fixture.recoverKnownAttempt',mode:'write',retryBusy:false,execute(tx,i,lease){
   tx.run('UPDATE step_attempt SET runtime_token=? WHERE owner_id=? AND id=?',[randomUUID(),i.ownerId,i.attemptId]);
   return base.actions.find(a=>a.name==='memoryExtraction.recover').execute(tx,{ownerId:i.ownerId},lease);
