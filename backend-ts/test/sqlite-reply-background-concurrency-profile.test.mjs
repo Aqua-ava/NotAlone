@@ -117,8 +117,7 @@ test('正式SQLite profile的图文后台在途时前台已到共享供应商，
  assert.equal(payload.messages.find(message=>message.message_id===image.id).image_id,file.fileId);
  const images=content.filter(block=>block.type==='image');assert.equal(images.length,1);assert.equal(images[0].source.type,'base64');assert.equal(images[0].source.data,png.toString('base64'));
  const permits=await readdir(join(root,'model-permits'));assert.equal(permits.length,1,'图文背景和前台只有一个模型宿主');
- const journal=JSON.parse(await readFile(join(root,'model-permits',permits[0],'state.json'),'utf8'));
- assert.deepEqual(journal.active.map(permit=>permit.kind).sort(),['background','foreground']);
+ await assert.rejects(access(join(root,'model-permits',permits[0],'state.json')),{code:'ENOENT'},'进程内许可不另写journal');
  releaseForeground.release();const generated=await generatedPromise;assert.equal(generated.status,200,JSON.stringify(generated.data));
  const viewed=await api(path);assert.equal(viewed.status,200);const request=viewed.data.requests[0];assert.deepEqual(request.candidates[0].parts,['合成甲周一见。']);assert.ok(request.candidates[0].basis.some(basis=>basis.text.includes(frontText)));
  releaseBackground.release();
@@ -136,10 +135,10 @@ test('正式SQLite profile的图文后台在途时前台已到共享供应商，
  const frontTrace=await new SqliteDiscussionService(reopened,owner).trace(frontContact,sessionId,request.requestId);assert.equal(frontTrace.calls.length,1);assert.equal(frontTrace.calls[0].state,'succeeded');
  const ledger=await reopened.execute('fixture.replyBackgroundConcurrencyEvidence',{ownerId:owner});assert.equal(ledger.length,2);
  assert.deepEqual(ledger.map(call=>[call.purpose,call.contactId]).sort(),[['discussion',frontContact],['extraction',backContact]].sort());
- assert.equal(new Set(journal.active.map(permit=>permit.id)).size,2);assert.equal(new Set(ledger.map(call=>call.id)).size,2);
+ assert.notEqual(ledger[0].receipt.permit_id??ledger[0].receipt.permitId,ledger[1].receipt.permit_id??ledger[1].receipt.permitId);assert.equal(new Set(ledger.map(call=>call.id)).size,2);
  for(const call of ledger){assert.equal(call.state,'succeeded');assert.equal(call.settlement,'settled');assert.equal(call.provider,normal.model.provider);assert.equal(call.model,normal.model.model);assert.ok((call.receipt.input_budget??call.receipt.inputBudget).serialized_bytes>0);}
  const frontCall=ledger.find(call=>call.purpose==='discussion'),backCall=ledger.find(call=>call.purpose==='extraction');
- assert.equal(frontCall.id,frontTrace.calls[0].id);assert.equal(backCall.id,trace.calls[0].callId);assert.notEqual(frontCall.receipt.inputBudget.request_sha256,backCall.receipt.input_budget.request_sha256);assert.equal(backCall.receipt.permit_id,journal.active.find(permit=>permit.kind==='background').id);assert.equal(frontCall.stepAttemptId,null);assert.equal(backCall.replyAttemptId,null);
+ assert.equal(frontCall.id,frontTrace.calls[0].id);assert.equal(backCall.id,trace.calls[0].callId);assert.notEqual(frontCall.receipt.inputBudget.request_sha256,backCall.receipt.input_budget.request_sha256);assert.ok(backCall.receipt.permit_id);assert.equal(frontCall.stepAttemptId,null);assert.equal(backCall.replyAttemptId,null);
  const audit=(await readFile(auditPath,'utf8')).trim().split('\n').map(line=>JSON.parse(line));assert.equal(audit.length,2);assert.ok(audit.every(item=>item.kind==='redirect'&&item.syntheticAuthentication));
  t.diagnostic(JSON.stringify({foregroundSupplierArrivalWhileBackgroundHeldMs:Number(heldArrivalMs.toFixed(3)),backgroundCapacity:1,ledgerCalls:2,note:'实测诊断值，不构成性能保证；背景保持未结算直至前台先完成。'}));
 });

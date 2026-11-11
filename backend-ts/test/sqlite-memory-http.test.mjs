@@ -16,7 +16,7 @@ test('正式Bearer认证HTTP冻结并处理已保存文字，拒绝Origin、owne
  assert.equal((await fetch(`${base}/schedule`,{headers:{...headers,origin:'https://invalid.example'}})).status,401);
  assert.equal((await fetch(`${base}/schedule?contact_id=${f.saved[0].contact_id}`,{headers})).status,400);
  assert.equal((await fetch(`${base}/schedule`,{method:'POST',headers,body:'{}'})).status,400);
- assert.deepEqual(await (await fetch(`${base}/schedule`,{headers})).json(),{pending:0,nextDueAt:null,blockedContacts:0},'既有历史不进入自动增量队列');
+ assert.deepEqual(await (await fetch(`${base}/schedule`,{headers})).json(),{pending:0,nextDueAt:null,blockedContacts:0,content:[{kind:'text',pending:1,unavailable:0}]},'既有历史不进入自动增量队列');
  assert.equal((await fetch(`${base}/runs`,{method:'POST',headers,body:JSON.stringify({request_key:randomUUID(),owner_id:owner})})).status,400);
  const requestKey=randomUUID();const started=await (await fetch(`${base}/runs`,{method:'POST',headers,body:JSON.stringify({request_key:requestKey})})).json();assert.equal(started.total,1);await memory.waitForIdle();
  const done=await (await fetch(`${base}/runs/current`,{headers})).json();assert.equal(done.succeeded,1);assert.equal(done.laterStages,'pending');assert.equal((await (await fetch(`${base}/runs`,{method:'POST',headers,body:JSON.stringify({request_key:requestKey})})).json()).runId,done.runId);
@@ -36,7 +36,7 @@ test('认证联系人状态接口只读当前联系人，拒绝其他owner范围
  assert.equal((await fetch(`${base}/${a}/current`,{method:'POST',headers})).status,400);
  assert.equal((await fetch(`${base}/${randomUUID()}/current`,{headers})).status,404);
  const empty=await fetch(`${base}/${b}/current`,{headers});assert.equal(empty.status,200);assert.equal(empty.headers.get('cache-control'),'no-store');
- assert.deepEqual(await empty.json(),{contactId:b,run:null,queue:{pending:0,nextDueAt:null,blockedContacts:0,later:{pending:0,nextDueAt:null,stage:null}}});
+ assert.deepEqual(await empty.json(),{contactId:b,run:null,queue:{pending:0,nextDueAt:null,blockedContacts:0,content:[],history:{pending:0},later:{pending:0,nextDueAt:null,stage:null}}});
  assert.equal(port.calls,0,'状态查询不读取模型或启动记忆任务');
  const run=await memory.start(randomUUID());await memory.waitForIdle(run.runId);const before=port.calls;
  const own=await (await fetch(`${base}/${a}/current`,{headers})).json();

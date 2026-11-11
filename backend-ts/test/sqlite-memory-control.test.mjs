@@ -174,8 +174,9 @@ test('没有当前联系人处理记录时返回空；各联系人保留自己�
  const binding=f.saved.find(binding=>binding.contact_id===a);
  await f.contacts.revoke(a,binding.binding_id,binding.selection_generation);
  const revoked=await x.service.readContact(a);
- assert.equal(revoked.run.status,'blocked');assert.equal(revoked.run.tasks[0].state,'revoked');assert.equal(revoked.run.revoked,1);
- assert.deepEqual(revoked.run.candidates,[],'撤销范围后不显示旧候选正文');
+ assert.equal(revoked.run,null,'撤销后当前视图不恢复旧轮次或正文');
+ const archive=await x.service.read(first.runId);assert.equal(archive.tasks[0].state,'revoked');assert.equal(archive.revoked,1);
+ assert.deepEqual(archive.candidates,[],'撤销范围后不显示旧候选正文');
  assert.ok((await x.service.readContact(b)).run.tasks.every(task=>task.state!=='revoked'));
 });
 
@@ -743,7 +744,7 @@ test('策略升级恢复保留原授权代次，撤销后不能借新轮恢复�
  const before=await x.service.readContact(f.ca),binding=f.saved.find(row=>row.contact_id===f.ca);
  await f.contacts.revoke(f.ca,binding.binding_id,binding.selection_generation);
  await assert.rejects(x.service.continue(first.run.runId,before.run.controlVersion,randomUUID()),e=>e.code==='memory_extraction_scope_stale');
- assert.equal(x.state.calls,0);assert.equal((await x.service.readContact(f.ca)).run.runId,first.run.runId);
+ assert.equal(x.state.calls,0);assert.equal((await x.service.readContact(f.ca)).run,null);assert.equal((await x.service.read(first.run.runId)).runId,first.run.runId);
 });
 
 

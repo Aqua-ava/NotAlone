@@ -7,7 +7,7 @@ import {modelLedgerInputBudget} from '../src/platform/models/model-ledger-contra
 import {buildDeepSeekStrictVerificationRequest} from '../src/memory/extraction/verification/deepseek-strict.ts';
 import {installModelProvider} from '../src/platform/models/model-provider.ts';
 
-const configured=(extra={})=>resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-output-configuration-key',...extra});
+const configured=(extra={})=>resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-output-configuration-key',NOTALONE_OPENCODE_API_KEY:'synthetic-opencode-output-key',...extra});
 
 test('宿主输出缺省使用供应商上限，显式任务额度可超过旧4096且校验供应商硬上限',()=>{
   const first=configured();assert.equal(first.status,'configured');
@@ -32,8 +32,8 @@ test('实际strict发送入口的最终HTTP实体和预约快照使用配置额�
   const cases=[{maxTokens:393216},{maxTokens:65536},{maxTokens:8192,base:'https://gateway.invalid/proxy/v1'},
     {maxTokens:384000,base:'https://opencode.ai/inference/go/anthropic',modelId:'deepseek-v4.1-flash'}];
   for(const {maxTokens,base,modelId} of cases){
-    const resolved=configured({NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS:String(maxTokens),...(base?{NOTALONE_DEEPSEEK_BASE_URL:base}:{}),...(modelId?{NOTALONE_DEEPSEEK_MODEL:modelId}:{})}),binding={provider:resolved.model.provider,
-      model:resolved.model.model,maxTokens:resolved.model.maxTokens,temperature:0,reasoningEffort:'off'};
+    const resolved=configured({NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS:String(maxTokens),...(base?{NOTALONE_DEEPSEEK_BASE_URL:base}:{}),...(modelId?{NOTALONE_DEEPSEEK_MODEL:modelId}:{})}),binding=(assert.equal(resolved.status,'configured'),{provider:resolved.model.provider,
+      model:resolved.model.model,maxTokens:resolved.model.maxTokens,temperature:0,reasoningEffort:'off'});
     const provider=installModelProvider({llm:{registerAdapter:()=>()=>{}}},{...resolved.provider,resolveUserId:()=> 'synthetic-output-test'});
     let reservations=0,budget;
     const sessionId=randomUUID();
@@ -50,7 +50,7 @@ test('实际strict发送入口的最终HTTP实体和预约快照使用配置额�
       assert.equal(request.body.model,modelId??'deepseek-flash');
       assert.equal(budget.context_window_tokens,modelId?1000000:1048576);
       if(modelId)assert.equal(request.headers.get('user-agent'),'NotAlone/0.1');
-      assert.equal(request.headers.get('authorization'),'Bearer synthetic-output-configuration-key');
+      assert.equal(request.headers.get('authorization'),modelId?'Bearer synthetic-opencode-output-key':'Bearer synthetic-output-configuration-key');
       assert.equal(request.body.max_tokens,maxTokens);assert.equal(budget.max_output_tokens,maxTokens);
       assert.equal(budget.request_sha256,createHash('sha256').update(request.raw).digest('hex'));
       assert.equal(reservations,1);assert.equal(call.observation().dispatch,'http_accepted');
@@ -61,8 +61,8 @@ test('实际strict发送入口的最终HTTP实体和预约快照使用配置额�
 
 test('strict请求与记录沿用宿主实际配置，不被旧4096静默缩减',()=>{
   for(const maxTokens of [393216,65536,8192]){
-  const resolved=configured({NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS:String(maxTokens)}),binding={provider:resolved.model.provider,model:resolved.model.model,
-    maxTokens:resolved.model.maxTokens,temperature:0,reasoningEffort:'off'},profile=resolved.model.budgetProfile;
+  const resolved=configured({NOTALONE_DEEPSEEK_MAX_OUTPUT_TOKENS:String(maxTokens)}),binding=(assert.equal(resolved.status,'configured'),{provider:resolved.model.provider,model:resolved.model.model,
+    maxTokens:resolved.model.maxTokens,temperature:0,reasoningEffort:'off'}),profile=resolved.model.budgetProfile;
   const text='完整的合成核验请求';
   const strict=buildDeepSeekStrictVerificationRequest({...binding,system:'仅作合成容量测量。',user:text,
     tool:{name:'SourceVerificationOutput',description:'合成',parameters:{type:'object',additionalProperties:false,properties:{},required:[]}}}).body;
