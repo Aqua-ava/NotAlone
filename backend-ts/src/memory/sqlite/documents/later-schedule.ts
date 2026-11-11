@@ -7,6 +7,7 @@ import type {MemoryScope} from '../management/contracts.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import {available} from '../management/qualification.ts';
 import {assertContribution,assertInputs} from '../qualification.ts';
+import {currentContent,freezeContent} from '../content.ts';
 import {memoryBasis,documentSources} from './basis.ts';
 import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 
@@ -354,6 +355,13 @@ function createLaterRun(tx:StorageTransaction,ownerId:string,row:StorageRow,now:
  const contacts=[...new Set(uniqueSources.map(source=>source.contactId))].sort();
  const contactsById=new Map<string,StorageRow>();
  for(const contactId of contacts){const template=currentRunContact(tx,ownerId,contactId);if(!template)throw new StorageFailure('document_scope_stale');contactsById.set(contactId,template);}
+ // 后续文字文档只冻结传递来源身份；先核验全部内容，避免失效来源留下半建轮次。
+ const frozenSources=uniqueSources.map(source=>{
+  const message=tx.get("SELECT * FROM message WHERE owner_id=? AND contact_id=? AND id=? AND availability='available'",[ownerId,source.contactId,source.messageId]);
+  const content=message?currentContent(tx,ownerId,source.contactId,message):null;
+  if(!content)throw new StorageFailure('memory_content_source_stale');
+  return {source,content};
+ });
  const runId=randomUUID(),taskId=randomUUID(),requestKey=`later-document:${String(row.scope_key)}:${String(row.generation)}:${randomUUID()}`;
  const owner=tx.get("SELECT feedback_revision FROM owner WHERE owner_id=? AND state='active'",[ownerId]);if(!owner)throw new StorageFailure('document_scope_stale');
  const policy={intent:'memory_document_later_stage',stage:String(row.stage),generation:Number(row.generation),scopeKind:scope.scopeKind,contactId:scope.contactId};
@@ -363,7 +371,10 @@ function createLaterRun(tx:StorageTransaction,ownerId:string,row:StorageRow,now:
   tx.run('INSERT INTO run_contact VALUES(?,?,?,?,?,?,?,?,?,?,?,\'active\')',[ownerId,runId,contactId,template.grant_id,template.binding_id,template.accepted_selection_generation,template.accepted_data_generation,template.accepted_identity_generation,template.accepted_account_revision,template.accepted_source_generation,template.accepted_feedback_revision]);
   assertContribution(tx,ownerId,runId,contactId);
  }
- for(const [index,source] of uniqueSources.entries())tx.run("INSERT INTO run_input(owner_id,run_id,input_no,role,kind,source_contact_id,item_id,message_id,record_id,accepted_interpretation_revision) VALUES(?,?,?,'context','message',?,NULL,?,?,?)",[ownerId,runId,index+1,source.contactId,source.messageId,source.recordId,source.acceptedRevision]);
+ for(const [index,{source,content}] of frozenSources.entries()){
+  tx.run("INSERT INTO run_input(owner_id,run_id,input_no,role,kind,source_contact_id,item_id,message_id,record_id,accepted_interpretation_revision) VALUES(?,?,?,'context','message',?,NULL,?,?,?)",[ownerId,runId,index+1,source.contactId,source.messageId,source.recordId,source.acceptedRevision]);
+  freezeContent(tx,ownerId,runId,index+1,content);
+ }
  tx.run("INSERT INTO processing_task(owner_id,id,run_id,scope_kind,contact_id,state) VALUES(?,?,?,?,?,'succeeded')",[ownerId,taskId,runId,scope.scopeKind,scope.contactId]);
  for(const contactId of contacts)tx.run('INSERT INTO task_contribution VALUES(?,?,?,?)',[ownerId,taskId,runId,contactId]);
  assertInputs(tx,ownerId,runId,tx.all('SELECT * FROM run_input WHERE owner_id=? AND run_id=? ORDER BY input_no',[ownerId,runId]));
