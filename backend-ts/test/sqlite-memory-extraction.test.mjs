@@ -61,10 +61,15 @@ test('晚到早时间消息的实际载荷和完整追踪presentation顺序一�
 });
 test('已知模型回执至阶段提交之间仍占用同一目标，另一轮不能并发重复效果',async t=>{
  const f=await fixture(t);await f.service.synchronize(f.saved[0].contact_id);await f.contacts.setReading(false);const {modelPort}=await import('./fixtures/memory-sqlite/support.mjs');let memory;const port=modelPort(()=>memory.accounting);const invoke=port.invoke;let entered,release;const ready=new Promise(r=>entered=r),pending=new Promise(r=>release=r);port.invoke=async(...args)=>{const result=await invoke(...args);if(port.calls===1){entered();await pending;}return result;};memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
- const first=await memory.start('known-before-commit');await ready;const second=await memory.start('concurrent-same-target');
- // 第二轮的任务结算不等待第一轮的外部确定性屏障。
- await memory.waitForIdle(second.runId);
- const calls=port.calls;release();await memory.waitForIdle();assert.equal(calls,1);assert.equal((await memory.read(first.runId)).succeeded,1);assert.equal((await memory.read(second.runId)).succeeded,0);
+ const first=await memory.start('known-before-commit');await ready;
+ let second;
+ try{
+  second=await memory.start('concurrent-same-target');
+  // 正式步骤按 FIFO 串行；闸门关闭期间核对没有第二次物理调用，不等待排队轮次先结束。
+  assert.equal(port.calls,1);
+  assert.ok((await memory.read(second.runId)).tasks.some(task=>task.state==='pending'));
+ }finally{release();}
+ await memory.waitForIdle();assert.equal(port.calls,1);assert.equal((await memory.read(first.runId)).succeeded,1);assert.equal((await memory.read(second.runId)).succeeded,0);
  await memory.continue(second.runId);await memory.waitForIdle();assert.equal(port.calls,1);
 });
 test('公共供应商认证失败保存可识别原因并暂停整轮，不把两位联系人的资料重复出站',async t=>{
