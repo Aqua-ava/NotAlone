@@ -18,7 +18,7 @@ test('正常候选HTTP继承合法trace到SQL，固定记录预算、来源及�
  const server=createServer((req,res)=>{http.handle(req,res).then(handled=>{if(!handled){res.writeHead(404);res.end();}},()=>{res.writeHead(500);res.end();});});
  server.listen(0,'127.0.0.1');await once(server,'listening');t.after(async()=>{await turns.close();await new Promise(resolve=>server.close(resolve));});
  const api=traceId=>fetch(`http://127.0.0.1:${server.address().port}/api/contacts/${contactId}/assistant-sessions/${discussionId}/reply-candidates`,{method:'POST',headers:{authorization:'Bearer synthetic','x-trace-id':traceId},body:JSON.stringify({request_key:randomUUID(),text:'合成私密请求正文',confirmed_contact:true})});
- for(const [code,reason]of [['input_budget_exceeded','budget_exhausted'],['discussion_context_stale','source_stale'],['discussion_generation_cancelled','aborted']]){
+ for(const [code,reason]of [['input_budget_exceeded','budget_exhausted'],['discussion_context_stale','source_stale'],['discussion_generation_cancelled','aborted'],['discussion_generation_timeout','timeout']]){
   const traceId=randomUUID();failure=new StorageFailure(code);const response=await api(traceId);assert.equal(response.status,409);await response.arrayBuffer();await log.flush();
   const rows=(await readDiagnosticRecords(f.root)).filter(row=>row.traceId===traceId);
   assert.ok(rows.some(row=>row.event==='sql.summary'),'实际SQLite工作须继承同一HTTP trace');

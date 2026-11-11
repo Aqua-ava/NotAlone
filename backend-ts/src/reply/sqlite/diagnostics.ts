@@ -4,6 +4,7 @@ export type ReplyDiagnosticPhase='preparing'|'ready'|'queued'|'generating'|'savi
 export function replyFailureReason(error:unknown):string {
  try{
   if(error instanceof StorageFailure){const code=error.code;
+   if(code==='discussion_generation_timeout')return 'timeout';
    if(/budget|call_limit|context_limit/.test(code))return 'budget_exhausted';
    if(/cancel|interrupt/.test(code))return 'aborted';
    if(/source|context_stale|invalidated|knowledge_stale/.test(code))return 'source_stale';
