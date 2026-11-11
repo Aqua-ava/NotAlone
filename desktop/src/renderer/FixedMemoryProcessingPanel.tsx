@@ -16,6 +16,7 @@ const sharedReasons: Record<string, string> = {
   document_model_scope_invalid: '模型用途范围不可用',
 };
 const blockedReasons: Record<string, string> = {
+  media_model_input_unavailable:'部分图片未能送入模型，已保留稍后重试。',
   extraction_model_image_unsupported:'当前模型不支持图片，本批图片仍待处理。请配置支持图片的模型后继续。',
   extraction_model_image_invalid:'图片内容暂时无法送入模型，本批保留待处理。',
   extraction_model_image_budget_exceeded:'图片超出本次处理上限，本批保留待处理。',
@@ -65,6 +66,32 @@ function statusText(run: FixedProcessingRun | null, queue?: FixedProcessingQueue
   if (run.status === 'processing') return stageText(run);
   if (run.statusReason === 'later_stages_scheduled') return run.stage === 'document_profile' ? '等待更新长期概览' : '等待整理主题资料';
   return run.total === 0 ? '当前没有待处理的文字目标' : '等待提取与核验';
+}
+
+/** 隔离计数与重试范围均属于当前轮；旧范围回执不得回填页面。 */
+function ImageRetryControl({bridge,view,enabled,onSettled}:{bridge:FixedMemoryProcessingBridge;view:FixedProcessingView;enabled:boolean;onSettled:()=>Promise<void>}) {
+  const [pending,setPending]=useState(false),[error,setError]=useState('');
+  const busy=useRef(false),alive=useRef(true),attempt=useRef<{version:number;id:string}|null>(null);
+  useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
+  const run=view.run,isolated=run?.isolated??0;
+  if(!run||isolated===0)return null;
+  const retry=async()=>{
+    if(busy.current||!enabled)return;
+    busy.current=true;setPending(true);setError('');
+    if(attempt.current?.version!==run.controlVersion)attempt.current={version:run.controlVersion,id:crypto.randomUUID()};
+    try{
+      await bridge.retryImages({runId:run.runId,controlVersion:run.controlVersion,operationId:attempt.current.id,connectionGeneration:view.connectionGeneration});
+      if(alive.current)attempt.current=null;
+    }catch{if(alive.current)setError('图片重试结果暂未确认，请核对最新状态后重试。');}
+    finally{
+      if(alive.current){await onSettled();if(alive.current){busy.current=false;setPending(false);}}
+    }
+  };
+  return <div className="memory-processing-actions">
+    <p role="status">{isolated} 张图片未能送入模型</p>
+    {run.actions.includes('retry_images')&&<button className="button" type="button" disabled={pending||!enabled} onClick={()=>void retry()}>{pending?'正在登记重试…':'稍后重试图片'}</button>}
+    {error&&<p role="alert">{error}</p>}
+  </div>;
 }
 
 /** 只使用后端发布的恢复资格；回执后重新读取，不把接纳当作已完成。 */
@@ -167,6 +194,9 @@ export function FixedMemoryProcessingPanel({ bridge, contactId, scopeKey = '', o
     };
   }, [bridge, contactId, scopeKey]);
   const run = view?.run ?? null;
+  const queuedIsolated=view?.queue?.content?.filter(item=>item.kind==='image').reduce((sum,item)=>sum+(item.isolated??0),0)??0;
+  const previousIsolated=Math.max(0,queuedIsolated-(run?.isolated??0));
+  const unadmittedImages=view?.queue?.content?.filter(item=>item.kind==='image').reduce((sum,item)=>sum+(item.unadmitted??0),0)??0;
   const allTargetsDone = run && run.total > 0 && run.succeeded === run.total && run.pending === 0;
   const noNewMemory = allTargetsDone && run.candidates.length === 0
     && run.tasks.length > 0 && run.tasks.every(task => ['succeeded', 'awaiting_decision'].includes(task.state));
@@ -185,9 +215,12 @@ export function FixedMemoryProcessingPanel({ bridge, contactId, scopeKey = '', o
     {view?.queue?.history && <p>历史待提取消息 {view.queue.history.pending} 条。导入完成后自动分批处理，已完成消息会跳过。</p>}
     {view?.queue && view.queue.pending > 0 && <p>增量待提取消息 {view.queue.pending} 条。{view.queue.nextDueAt != null ? `预计 ${new Date(view.queue.nextDueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 检查批量条件。` : ''}{view.queue.blockedContacts > 0 ? '当前联系人已暂停或受阻，待处理消息会保留。' : ''}</p>}
     {view?.queue?.content?.filter(item=>item.unavailable>0).map(item=><p key={item.kind}>{item.kind==='image'?'图片':'内容'}尚未就绪 {item.unavailable} 条，未计为已处理。</p>)}
+    {unadmittedImages>0&&<p>仍有 {unadmittedImages} 张图片未纳入</p>}
+    {previousIsolated>0&&<p>另有 {previousIsolated} 张图片未能送入模型，保留在原处理记录中。</p>}
     {view?.queue?.later && view.queue.later.pending > 0 && <p>主题与长期概览仍有 {view.queue.later.pending} 项待处理。{view.queue.later.nextDueAt != null && run?.statusReason !== 'later_stages_scheduled' ? `预计 ${new Date(view.queue.later.nextDueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 继续。` : ''}</p>}
     {run && <>
       {run.status === 'blocked' && <p>{reasonText(failureReason)}</p>}
+      <ImageRetryControl key={`images:${contactId}:${scopeKey}:${view!.connectionGeneration}:${run.runId}`} bridge={bridge} view={view!} enabled={automatic.enabled===true} onSettled={()=>refresh.current()}/>
       {automatic.enabled !== false && <RecoveryControl key={`${contactId}:${scopeKey}:${view!.connectionGeneration}:${run.runId}`} bridge={bridge} view={view!} onSettled={()=>refresh.current()}/>}
       {run.statusReason === 'later_stages_scheduled' && run.nextDueAt != null && <p>预计 {new Date(run.nextDueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 开始，执行前会重新核对资料。</p>}
       <p>最近一批提取与核验：已处理 {run.succeeded} / {run.total} 条消息目标</p>

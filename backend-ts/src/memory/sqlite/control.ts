@@ -2,12 +2,13 @@ import type {StorageRow,StorageTransaction} from '../../storage/sqlite/contracts
 import {assertTaskContributions,fail,textId} from './qualification.ts';
 import {setRunSchedulePaused,resumeRunSchedule} from './documents/later-schedule.ts';
 import {abandonableUnknown} from './unknown-recovery.ts';
+import {canRetryIsolatedImages} from './image-isolation.ts';
 
 /** 轮次控制投影：只读派生，不新增业务状态，也不把数量换算成百分比。 */
 export type ControlStatus='waiting'|'processing'|'paused'|'blocked'|'completed';
 export type ControlAction='pause'|'continue';
 /** 投影可提供的动作；abandon_unknown 仅用于裁决类未知回执，由专用入口执行。 */
-export type ProjectedControlAction=ControlAction|'abandon_unknown';
+export type ProjectedControlAction=ControlAction|'abandon_unknown'|'retry_images';
 export type LaterStagesState='pending'|'scheduled'|'running'|'unknown'|'completed'|'failed'|'revoked';
 
 /** 通用模型配置故障；单人资料失败不在其中，不能据此暂停整轮。 */
@@ -122,6 +123,11 @@ function resumable(tx:StorageTransaction,ownerId:string,runId:string,rows:Storag
 }
 /** 只读投影；后续阶段由09的 laterStagesState 提供，未合并时视为尚未完成。 */
 export function projectControl(tx:StorageTransaction,ownerId:string,run:StorageRow,options:{laterStages?:LaterStagesState;taskStates?:Map<string,string>;contactId?:string}={}):ControlProjection{
+ const result=projectExistingControl(tx,ownerId,run,options);
+ if(!canRetryIsolatedImages(tx,ownerId,String(run.id),options.contactId))return result;
+ return {...result,actions:[...result.actions,'retry_images']};
+}
+function projectExistingControl(tx:StorageTransaction,ownerId:string,run:StorageRow,options:{laterStages?:LaterStagesState;taskStates?:Map<string,string>;contactId?:string}={}):ControlProjection{
  const runId=String(run.id),state=String(run.state),pauseRequested=run.pause_requested_at!==null;
  const taskStates=options.taskStates??currentTaskStates(tx,ownerId,runId);
  const taskRows=tasks(tx,ownerId,runId).filter(task=>options.contactId===undefined||task.scope_kind==='contact'&&task.contact_id===options.contactId),callsSummary=calls(tx,ownerId,runId,options.contactId),classes=targetClasses(tx,ownerId,runId,taskStates,options.contactId);

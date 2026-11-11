@@ -42,7 +42,7 @@ function readQueue(raw: unknown): FixedProcessingQueue {
     if (value.stage!==null&&!['document_scene','document_profile'].includes(String(value.stage))) throw invalid();
     later={pending:count(value.pending),nextDueAt:value.nextDueAt===null?null:count(value.nextDueAt),stage:value.stage as 'document_scene'|'document_profile'|null};
   }
-  const content=queue.content===undefined?undefined:array(queue.content).map(raw=>{const item=row(raw);exact(item,['kind','pending','unavailable']);return {kind:text(item.kind,64),pending:count(item.pending),unavailable:count(item.unavailable)};});
+  const content=queue.content===undefined?undefined:array(queue.content).map(raw=>{const item=row(raw);exact(item,['kind','pending','unavailable',...(Object.hasOwn(item,'isolated')?['isolated']:[]),...(Object.hasOwn(item,'unadmitted')?['unadmitted']:[])]);return {kind:text(item.kind,64),pending:count(item.pending),unavailable:count(item.unavailable),...(Object.hasOwn(item,'isolated')?{isolated:count(item.isolated)}:{}),...(Object.hasOwn(item,'unadmitted')?{unadmitted:count(item.unadmitted)}:{})};});
   return {...(content?{content}:{}),pending:count(queue.pending),blockedContacts:count(queue.blockedContacts),nextDueAt:queue.nextDueAt===null?null:count(queue.nextDueAt),...(later?{later}:{}),...(history?{history}:{})};
 }
 function scope(value: Record<string, unknown>) {
@@ -51,7 +51,7 @@ function scope(value: Record<string, unknown>) {
 }
 const runStates = ['pending', 'running', 'paused', 'failed', 'incomplete', 'revoked', 'completed'];
 const statuses = ['waiting', 'processing', 'paused', 'blocked', 'completed'];
-const controlActions = ['pause', 'continue', 'abandon_unknown'];
+const controlActions = ['pause', 'continue', 'abandon_unknown', 'retry_images'];
 const reasonCode = /^[a-z][a-z0-9_]{0,63}$/;
 const callStates = ['prepared', 'sending', 'succeeded', 'failed', 'unknown'];
 export function readFixedProcessingRun(raw: unknown): FixedProcessingRun | null {
@@ -66,6 +66,8 @@ export function readFixedProcessingRun(raw: unknown): FixedProcessingRun | null 
   if (!statuses.includes(String(value.status)) || (value.statusReason !== null && (typeof value.statusReason !== 'string' || !reasonCode.test(value.statusReason)))
     || !Array.isArray(value.actions) || value.actions.some(action => !controlActions.includes(String(action))) || new Set(value.actions).size !== value.actions.length) throw invalid();
   const controlVersion = count(value.controlVersion), pending = count(value.pending), revoked = count(value.revoked);
+  const isolated=value.isolated===undefined?undefined:count(value.isolated);
+  if(isolated!==undefined&&succeeded+isolated>total)throw invalid();
   const nextDueAt = value.nextDueAt == null ? null : count(value.nextDueAt);
   if (value.sharedFaultCode !== undefined && value.sharedFaultCode !== null && (typeof value.sharedFaultCode !== 'string' || !reasonCode.test(value.sharedFaultCode))) throw invalid();
   const callInput = row(value.calls);
@@ -92,9 +94,9 @@ export function readFixedProcessingRun(raw: unknown): FixedProcessingRun | null 
   });
   if (new Set(tasks.map(task => task.taskId)).size !== tasks.length || new Set(inputs.map(input => input.inputNo)).size !== inputs.length
     || new Set(candidates.map(candidate => candidate.id)).size !== candidates.length) throw invalid();
-  const contentCounts=value.contentCounts===undefined?undefined:array(value.contentCounts).map(raw=>{const item=row(raw);const total=count(item.total),succeeded=count(item.succeeded);if(succeeded>total)throw invalid();return {kind:text(item.kind,64),total,succeeded};});
+  const contentCounts=value.contentCounts===undefined?undefined:array(value.contentCounts).map(raw=>{const item=row(raw);const total=count(item.total),succeeded=count(item.succeeded),isolated=item.isolated===undefined?undefined:count(item.isolated);if(succeeded+(isolated??0)>total)throw invalid();return {kind:text(item.kind,64),total,succeeded,...(isolated===undefined?{}:{isolated})};});
   if(contentCounts&&contentCounts.reduce((sum,item)=>sum+item.total,0)!==total)throw invalid();
-  return {...(contentCounts?{contentCounts}:{}), runId: id(value.runId), state: value.state as FixedProcessingRun['state'], total, succeeded, failed, unknown,
+  return {...(contentCounts?{contentCounts}:{}),...(isolated===undefined?{}:{isolated}), runId: id(value.runId), state: value.state as FixedProcessingRun['state'], total, succeeded, failed, unknown,
     stage: value.stage as FixedProcessingRun['stage'], laterStages: value.laterStages as FixedProcessingRun['laterStages'],
     status: value.status as FixedProcessingRun['status'],
     statusReason: value.statusReason as string | null, sharedFaultCode: (value.sharedFaultCode as string | null | undefined) ?? null, actions: value.actions as FixedProcessingRun['actions'],
@@ -231,7 +233,7 @@ export class FixedMemoryProcessingController {
     const value = this.generation(input, ['requestKey', 'connectionGeneration']), requestKey = id(value.requestKey);
     return this.view(await this.request('/api/memory-processing/runs', 'POST', { request_key: requestKey }, value.connectionGeneration as number));
   }
-  async control(action: 'pause' | 'continue' | 'abandon-unknown', input: FixedProcessingControl): Promise<FixedProcessingView> {
+  async control(action: 'pause' | 'continue' | 'abandon-unknown' | 'retry-images', input: FixedProcessingControl): Promise<FixedProcessingView> {
     const value = this.generation(input, ['runId', 'controlVersion', 'operationId', 'connectionGeneration']), runId = id(value.runId);
     const actionVersion = count(value.controlVersion);
     const view = this.view(await this.request(`/api/memory-processing/runs/${runId}/${action}`, 'POST',
@@ -269,7 +271,7 @@ export function installFixedMemoryProcessingBridge(commands: PageCommands, backe
   commands.handle('memory:fixed-processing-history-start',(...args)=>{
     if(args.length!==1)throw invalid();return controller.startHistory(args[0] as FixedProcessingHistoryStart);
   },'manager');
-  for (const action of ['pause', 'continue', 'abandon-unknown'] as const) commands.handle(`memory:fixed-processing-${action}`, (...args) => {
+  for (const action of ['pause', 'continue', 'abandon-unknown', 'retry-images'] as const) commands.handle(`memory:fixed-processing-${action}`, (...args) => {
     if (args.length !== 1) throw invalid(); return controller.control(action, args[0] as FixedProcessingControl);
   }, 'manager');
   commands.handle('memory:fixed-processing-trace', (...args) => {

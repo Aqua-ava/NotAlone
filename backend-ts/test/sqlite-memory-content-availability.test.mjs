@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {createHash} from 'node:crypto';
+import sharp from 'sharp';
 import {join} from 'node:path';
 import {fixture as mediaFixture} from './media-support.mjs';
 import {createBuiltinMemoryContentRegistry} from '../src/memory/content/builtins.ts';
@@ -45,7 +46,7 @@ test('自定义插件未提供批量方法时仍以完整同范围消息执行�
 
 
 test('图片批量可用性保留最新文件及逐条来源资格，混合失效不淘汰合法图片',async t=>{
- const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64');
+ const png=await sharp({create:{width:4,height:3,channels:3,background:'blue'}}).png().toBuffer();
  const adapter={version:'synthetic-content-availability-v1',supports:kind=>kind==='image',async execute(context){
   await context.save({role:'image_display',bytes:(async function*(){yield png;})(),expectedBytes:png.length,expectedSha256:createHash('sha256').update(png).digest('hex'),
    validate:async()=>({format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false})});

@@ -31,7 +31,7 @@ export class SqliteMemoryExtractionHttp {
   }
   const contact=/^\/api\/memory-processing\/contacts\/([a-f0-9-]{36})\/(current|history|readjudicate)$/.exec(url.pathname);
   const task=/^\/api\/memory-processing\/tasks\/([a-f0-9-]{36})\/events$/.exec(url.pathname);
-  const run=/^\/api\/memory-processing\/runs(?:\/(current|[a-f0-9-]{36})(?:\/(pause|continue|abandon-unknown))?)?$/.exec(url.pathname);
+  const run=/^\/api\/memory-processing\/runs(?:\/(current|[a-f0-9-]{36})(?:\/(pause|continue|abandon-unknown|retry-images))?)?$/.exec(url.pathname);
   if(!contact&&!task&&!run){send(res,404,{error:'memory_extraction_not_found'});return true;}
   try{
    if(url.search)throw new StorageFailure('memory_extraction_request_invalid');
@@ -64,7 +64,7 @@ export class SqliteMemoryExtractionHttp {
     const body=JSON.parse((await readWechatHttpBody(req,1024,10_000)).toString('utf8')||'{}');
     const fields=body&&typeof body==='object'&&!Array.isArray(body)?Object.keys(body).sort().join(','):'';
     if(fields!=='action_version,operation_id'||!Number.isSafeInteger(body.action_version)||body.action_version<0||!uuid.test(body.operation_id??''))throw new StorageFailure('memory_extraction_request_invalid');
-    value=await (run![2]==='pause'?this.service.pause(run![1]!,body.action_version,body.operation_id):run![2]==='abandon-unknown'?this.service.abandonUnknown(run![1]!,body.action_version,body.operation_id):this.service.continue(run![1]!,body.action_version,body.operation_id));
+    value=await (run![2]==='pause'?this.service.pause(run![1]!,body.action_version,body.operation_id):run![2]==='abandon-unknown'?this.service.abandonUnknown(run![1]!,body.action_version,body.operation_id):run![2]==='retry-images'?this.service.retryImages(run![1]!,body.action_version,body.operation_id):this.service.continue(run![1]!,body.action_version,body.operation_id));
    }else{if(req.method!=='GET'||run![1]!=='current'&&!uuid.test(run![1]!))throw new StorageFailure('memory_extraction_request_invalid');value=await this.service.read(run![1]==='current'?undefined:run![1]);}
    send(res,200,value);
   }catch(error){const code=error instanceof StorageFailure?error.code:'memory_extraction_request_invalid';send(res,code.includes('not_found')?404:code==='memory_extraction_request_invalid'?400:409,{error:code});}

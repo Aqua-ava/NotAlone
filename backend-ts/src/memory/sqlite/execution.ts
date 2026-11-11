@@ -12,6 +12,7 @@ import {applyControl,takeOverExpiredAttempt} from './control.ts';
 import {abandonUnknownAdjudication} from './unknown-recovery.ts';
 import {hasRunFollowupState,snapshot} from './runs.ts';
 import {retireStalePausedRuns} from './run-retirement.ts';
+import {isolatedInputs,recordImageIsolation,retryIsolatedImages} from './image-isolation.ts';
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>unknown):StorageAction=>observedProcessingAction({name:`memoryExtraction.${name}`,mode,retryBusy:mode==='write',execute} as StorageAction);
 const budgetNumbers=['input_tokens','max_output_tokens','context_window_tokens','safety_margin_tokens','serialized_bytes'] as const;
 function budgetSummary(value:unknown):Record<string,number>|null {
@@ -113,6 +114,8 @@ export const executionActions:StorageAction[]=[
  }),
  action('claim','write',(tx,raw,lease)=>prepareStep(tx,raw as Parameters<typeof prepareStep>[1],lease)),
  action('current','read',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string};currentAttempt(tx,i.ownerId,i.attemptId,lease);return true;}),
+ action('isolateImage','write',(tx,raw,lease)=>recordImageIsolation(tx,raw as Parameters<typeof recordImageIsolation>[1],lease)),
+ action('retryImages','write',(tx,raw)=>{const result=retryIsolatedImages(tx,raw as Parameters<typeof retryIsolatedImages>[1]);return snapshot(tx,result.ownerId,result.runId);}),
  action('imageRecoveryPlan','read',(tx,raw,lease)=>{
   const i=raw as {ownerId:string;attemptId:string};const {attempt}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
   return tx.all(`SELECT e.payload FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id
@@ -121,10 +124,13 @@ export const executionActions:StorageAction[]=[
  }),
  /** 原窗的已知终态只供审计；新子窗使用不同slot与请求，未知调用绝不释放。 */
  action('supersedeImageInput','write',(tx,raw,lease)=>{
-  const i=raw as {ownerId:string;attemptId:string;slot:number;inputNos:number[]};const {attempt}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
+  const i=raw as {ownerId:string;attemptId:string;slot:number;inputNos:number[];unchangedVariant?:boolean};const {attempt}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
   if(!Number.isSafeInteger(i.slot)||i.slot<0||i.slot>128)fail('memory_extraction_input_invalid');
   const calls=tx.all(`SELECT c.*,o.id AS op_id FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
    WHERE c.owner_id=? AND o.memory_step_id=? AND o.slot=? AND o.purpose IN ('extraction','verification')`,[i.ownerId,attempt.step_id,i.slot]);
+  if(!calls.length&&i.unchangedVariant===true){
+   event(tx,{ownerId:i.ownerId,attemptId:i.attemptId,kind:'image_input_degraded',payload:{slot:i.slot,reason:'extraction_model_image_variant_unchanged'},inputNos:i.inputNos},lease);return true;
+  }
   if(!calls.length||calls.some(call=>['sending','unknown'].includes(String(call.state))))fail('memory_extraction_receipt_unknown');
   for(const call of calls){
    if(call.state==='prepared'){
@@ -215,6 +221,7 @@ export const executionActions:StorageAction[]=[
  action('finish','write',(tx,raw,lease)=>{
   const i=raw as {ownerId:string;attemptId:string;outcome:{accepted:unknown[];extraction_completed:boolean;failure_kind:string|null;rejected_count:number;candidate_trace_ids:string[];verification:{fact:unknown;result:unknown}[]};verificationRefs?:(CandidateVerificationReference|null)[];inputNos:number[];candidateInputNos?:number[][];completedGroups?:{slot:number;inputNos:number[]}[]};const {attempt,task,rows}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
   if(!i.outcome.extraction_completed||i.outcome.failure_kind!==null)fail('memory_extraction_protocol_incomplete');
+  const isolated=new Set(isolatedInputs(tx,i.ownerId,String(task.run_id),String(task.contact_id)).map(input=>input.inputNo));
   if(!i.completedGroups&&tx.get("SELECT 1 FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND kind='image_input_degraded'",[i.ownerId,i.attemptId]))fail('memory_extraction_protocol_incomplete');
   if(tx.get(`SELECT 1 FROM model_call c WHERE c.owner_id=? AND c.step_attempt_id=? AND c.state<>'succeeded'
    AND NOT(c.state='failed' AND c.settlement_state='settled' AND EXISTS(SELECT 1 FROM execution_event e WHERE e.owner_id=c.owner_id AND e.originated_call_id=c.id AND e.kind='image_input_degraded'))`,[i.ownerId,i.attemptId]))fail('memory_extraction_receipt_unknown');
@@ -224,13 +231,13 @@ export const executionActions:StorageAction[]=[
      WHERE c.owner_id=? AND o.memory_step_id=? AND o.slot=? AND o.purpose='extraction' AND c.state='succeeded'`,[i.ownerId,attempt.step_id,group.slot]))fail('memory_extraction_protocol_incomplete');
     return group.inputNos.filter(no=>rows.some(row=>Number(row.input_no)===no&&row.role==='target'));
    });
-   const expected=rows.filter(row=>row.role==='target').map(row=>Number(row.input_no));
+   const expected=rows.filter(row=>row.role==='target'&&!isolated.has(Number(row.input_no))).map(row=>Number(row.input_no));
    if(covered.length!==expected.length||new Set(covered).size!==covered.length||expected.some(no=>!covered.includes(no)))fail('memory_extraction_protocol_incomplete');
   }
   for(const [index,value] of i.outcome.accepted.entries()){
    const inputNos=i.candidateInputNos?.[index]??i.inputNos;
    const candidateRows=inputNos.map(no=>rows.find(row=>Number(row.input_no)===no)??fail('memory_extraction_input_not_frozen'));
-   const f=value as {subject:string;source_message_ids:string[]};if(!f.source_message_ids?.length||!f.source_message_ids.every(id=>candidateRows.some(r=>r.message_id===id))||!f.source_message_ids.some(id=>candidateRows.some(r=>r.message_id===id&&r.role==='target')))fail('memory_extraction_source_stale');
+   const f=value as {subject:string;source_message_ids:string[]};if(!f.source_message_ids?.length||!f.source_message_ids.every(id=>candidateRows.some(r=>r.message_id===id&&!isolated.has(Number(r.input_no))))||!f.source_message_ids.some(id=>candidateRows.some(r=>r.message_id===id&&r.role==='target')))fail('memory_extraction_source_stale');
    const verification=i.verificationRefs?.[index]??null;
    if(verification){
     const checked=tx.get("SELECT payload FROM execution_event WHERE owner_id=? AND id=? AND step_attempt_id=? AND kind='verification'",[i.ownerId,verification.eventId,i.attemptId]);
@@ -239,8 +246,8 @@ export const executionActions:StorageAction[]=[
    const outputId=event(tx,{ownerId:i.ownerId,attemptId:i.attemptId,kind:f.subject==='self'?'verified_self_contribution':'verified_output',payload:{outputNo:index+1,fact:value,scopeKind:f.subject==='self'?'self':'contact',contactId:f.subject==='self'?null:String(task.contact_id),origin:'auto',state:'verified_pending_decision',verification},inputNos},lease);
    if(verification&&candidateAdmission(tx,i.ownerId,{...tx.get('SELECT * FROM execution_event WHERE owner_id=? AND id=?',[i.ownerId,outputId])!,scope_kind:'contact',run_id:task.run_id},value as Record<string,any>,candidateRows).state!=='verified')fail('memory_extraction_verification_unbound');
   }
-  event(tx,{ownerId:i.ownerId,attemptId:i.attemptId,kind:'stage_result',payload:{outcome:i.outcome.accepted.length?'verified_pending_decision':'no_new_memory',rejected:i.outcome.rejected_count,laterStages:'pending'},inputNos:i.inputNos},lease);
-  for(const row of rows.filter(r=>r.role==='target'))tx.run("UPDATE processing_item SET extraction_state='succeeded' WHERE owner_id=? AND id=?",[i.ownerId,row.item_id]);
+  event(tx,{ownerId:i.ownerId,attemptId:i.attemptId,kind:'stage_result',payload:{outcome:isolated.size?'completed_with_isolated_images':i.outcome.accepted.length?'verified_pending_decision':'no_new_memory',isolated:isolated.size,rejected:i.outcome.rejected_count,laterStages:'pending'},inputNos:i.inputNos},lease);
+  for(const row of rows.filter(row=>row.role==='target'&&!isolated.has(Number(row.input_no))))tx.run("UPDATE processing_item SET extraction_state='succeeded' WHERE owner_id=? AND id=?",[i.ownerId,row.item_id]);
   tx.run("UPDATE step_attempt SET state='succeeded',finished_at=? WHERE owner_id=? AND id=?",[Date.now(),i.ownerId,i.attemptId]);tx.run("UPDATE processing_step SET state='succeeded',successful_attempt_id=? WHERE owner_id=? AND id=?",[i.attemptId,i.ownerId,attempt.step_id]);
   tx.run("UPDATE model_operation SET state='applied' WHERE owner_id=? AND memory_step_id=? AND state='resolved'",[i.ownerId,attempt.step_id]);for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='released' WHERE owner_id=? AND operation_id IN (SELECT id FROM model_operation WHERE owner_id=? AND memory_step_id=?)`,[i.ownerId,i.ownerId,attempt.step_id]);return true;
  }),

@@ -3,7 +3,7 @@ export type FixedProcessingRunState = 'pending' | 'running' | 'paused' | 'failed
 /** 统一轮次状态：待处理、处理中、暂停、受阻、完成；历史失败不得冒充当前状态。 */
 export type FixedProcessingStatus = 'waiting' | 'processing' | 'paused' | 'blocked' | 'completed';
 /** abandon_unknown 仅在裁决类未知回执时由后端发布；执行后账本成本仍记为未知。 */
-export type FixedProcessingControlAction = 'pause' | 'continue' | 'abandon_unknown';
+export type FixedProcessingControlAction = 'pause' | 'continue' | 'abandon_unknown' | 'retry_images';
 export interface FixedProcessingCallSummary {
   prepared: number; sending: number; succeeded: number; failed: number; unknown: number;
 }
@@ -27,7 +27,8 @@ export interface FixedProcessingRun {
   /** 后续阶段合并等待的最早执行时间；到期仍须重新核验资格。 */
   nextDueAt?: number | null;
   controlVersion: number; pending: number; revoked: number; calls: FixedProcessingCallSummary;
-  contentCounts?: {kind:string;total:number;succeeded:number}[];
+  isolated?:number;
+  contentCounts?: {kind:string;total:number;succeeded:number;isolated?:number}[];
   inputs: FixedProcessingInput[]; candidates: FixedProcessingCandidate[];
 }
 export interface FixedProcessingEvent {
@@ -40,7 +41,7 @@ export interface FixedProcessingCall {
 }
 export interface FixedProcessingTrace { events: FixedProcessingEvent[]; calls: FixedProcessingCall[] }
 export interface FixedProcessingQueue {
-  content?: {kind:string;pending:number;unavailable:number}[];
+  content?: {kind:string;pending:number;unavailable:number;isolated?:number;unadmitted?:number}[];
   pending: number; nextDueAt: number | null; blockedContacts: number;
   history?: { pending: number };
   later?: { pending: number; nextDueAt: number | null; stage: 'document_scene' | 'document_profile' | null };
@@ -67,6 +68,7 @@ export interface FixedMemoryProcessingBridge {
   pause(request: FixedProcessingControl): Promise<FixedProcessingView>;
   continue(request: FixedProcessingControl): Promise<FixedProcessingView>;
   abandonUnknown(request: FixedProcessingControl): Promise<FixedProcessingView>;
+  retryImages(request: FixedProcessingControl): Promise<FixedProcessingView>;
   trace(request: FixedProcessingTraceRequest): Promise<FixedProcessingTrace>;
   release(): Promise<void>;
   onInvalidated(listener: () => void): () => void;

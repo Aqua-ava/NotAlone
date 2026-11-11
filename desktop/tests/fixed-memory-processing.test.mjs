@@ -129,6 +129,9 @@ test('具名模式桥不接受renderer自选模式或额外参数',async t=>{
  await bridge.readCurrent({contactId:ids.contact});
  assert.deepEqual(calls.at(-1),['memory:fixed-processing-current',{contactId:ids.contact}]);
  await assert.rejects(bridge.readCurrent({contactId:ids.contact},'extra'));assert.equal(calls.length,2);
+ const retry={runId:ids.run,controlVersion:3,operationId:ids.request,connectionGeneration:1};
+ await bridge.retryImages(retry);assert.deepEqual(calls.at(-1),['memory:fixed-processing-retry-images',retry]);
+ await assert.rejects(bridge.retryImages(retry,'extra'));assert.equal(calls.length,3);
 });
 
 test('面板释放只取消正文，模式核验仍等待其回执且完整资格变化会取消模式',async t=>{
@@ -187,4 +190,20 @@ test('记忆自动处理总开关：读取与设置只传一个布尔值，拒�
   await assert.rejects(f.controller.setAutomatic(bad));
  assert.equal(f.calls.length,count,'非法输入与旧连接不出站');
  enabled='maybe';await assert.rejects(f.controller.readAutomatic(),'后端返回非布尔值时拒绝，不猜测开关状态');
+});
+
+test('隔离图片计数沿具名桥读取，图片重试保留版本及幂等标识且拒绝非法计数',async t=>{
+ const operation='77777777-7777-4777-8777-777777777777';
+ let data={...snapshot(),total:3,succeeded:1,pending:0,isolated:2,actions:['retry_images'],controlVersion:3,
+  contentCounts:[{kind:'image',total:3,succeeded:1,isolated:2}]};
+ const f=await fixture(t,async req=>{
+  if(req.path.endsWith('/retry-images')){assert.deepEqual(req.body,{action_version:3,operation_id:operation});return {...data,controlVersion:4,isolated:0,contentCounts:[{kind:'image',total:3,succeeded:1,isolated:0}]};}
+  if(req.path.endsWith('/current'))return {contactId:ids.contact,run:data,queue:{pending:0,nextDueAt:null,blockedContacts:0,content:[{kind:'image',pending:0,unavailable:0,isolated:2}]}};
+  return data;
+ });
+ const current=await f.controller.read({contactId:ids.contact});assert.equal(current.run.isolated,2);assert.equal(current.run.contentCounts[0].isolated,2);assert.equal(current.queue.content[0].isolated,2);
+ const retried=await f.controller.control('retry-images',{runId:ids.run,controlVersion:3,operationId:operation,connectionGeneration:1});
+ assert.equal(retried.run.isolated,0);assert.equal(f.calls.at(-1).path,`/api/memory-processing/runs/${ids.run}/retry-images`);
+ for(const isolated of [-1,1.5,4]){data={...data,isolated};await assert.rejects(f.controller.read({contactId:ids.contact}));}
+ data={...data,isolated:2,contentCounts:[{kind:'image',total:3,succeeded:1,isolated:3}]};await assert.rejects(f.controller.read({contactId:ids.contact}));
 });

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
+import sharp from 'sharp';
 import {fixture,owner,record,modelPort} from './fixtures/memory-sqlite/support.mjs';
 import {fixture as replyFixture} from './fixtures/sqlite-reply-candidates/support.mjs';
 import {supplier} from './fixtures/memory-management/supplier.mjs';
@@ -14,11 +15,11 @@ import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/servic
 import {createBuiltinMemoryContentRegistry} from '../src/memory/content/builtins.ts';
 import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
 
-// 合成PNG；类型校验替身只测试受管文件、图文输入及删除生命周期。
-const imageBytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nWQAAAAASUVORK5CYII=','base64');
+// 每版使用不同的真实像素，避免靠PNG尾部拼字节伪造换图身份。
+const imageBytes=revision=>sharp({create:{width:8,height:6,channels:3,background:{r:((revision-1)*97)%256,g:((revision-1)*53)%256,b:255}}}).png().toBuffer();
 function imageAdapter(){let revision=0;return {version:'synthetic-memory-image-v1',supports:(kind,goal)=>kind==='image'&&goal==='extract',
  async execute(context){
-  const bytes=Buffer.concat([imageBytes,Buffer.from(String(++revision))]);
+  const bytes=await imageBytes(++revision);
   await context.save({role:'image_display',expectedBytes:bytes.length,expectedSha256:createHash('sha256').update(bytes).digest('hex'),
    bytes:(async function*(){yield bytes;})(),validate:async()=>({format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false})});
   return {association:{protocol:'media-association-v1',profileId:'synthetic-memory-image-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-memory-image'}};
@@ -50,7 +51,7 @@ test('记忆只读取已冻结的实际图片副本，关闭同步仍可读且�
  const input={contactId:f.contactId,messageId:message.id,fileId:file.fileId,sha256:snapshot.digest,mediaGeneration:snapshot.generation,
   mimeType:snapshot.mimeType,byteSize:Number(snapshot.byteSize),signal:new AbortController().signal,requireCurrent:async()=>{checks++;}};
  const actual=await f.media.readMemoryImage(input);
- assert.equal(actual.mimeType,'image/png');assert.deepEqual(Buffer.from(actual.dataBase64,'base64'),Buffer.concat([imageBytes,Buffer.from('1')]));
+ assert.equal(actual.mimeType,'image/png');assert.deepEqual(Buffer.from(actual.dataBase64,'base64'),await imageBytes(1));
  assert.equal(checks,2,'字节读取前后均复验当前记忆任务');
  await assert.rejects(f.media.readMemoryImage({...input,contactId:f.saved[1].contact_id}));
  await assert.rejects(f.media.readMemoryImage({...input,sha256:'0'.repeat(64)}),{code:'memory_extraction_source_stale'});
@@ -128,6 +129,10 @@ test('实际图片证据可采纳为记忆，清除图片同时擦除图片引�
  const before=await f.management.read(f.scope),memory=before.memories.find(item=>item.id===adopted.memoryId);
  assert.equal(memory.current.sources[0].contentKind,'image');assert.equal(memory.current.sources[0].contentRef.file_id,file.fileId);
  assert.equal(memory.current.sources[0].quote,'','图片证据不伪造文字引句或字符范围');
+ const originalDigest=createHash('sha256').update(await imageBytes(1)).digest('hex'),sent=f.requests.flatMap(request=>request.images??[]).find(image=>image.id===file.fileId);
+ assert.equal(memory.current.sources[0].contentRef.sha256,originalDigest,'图片依据始终保留原始受管文件摘要');
+ assert.equal(sent.sourceSha256,originalDigest);assert.equal(sent.mimeType,'image/jpeg');assert.equal((await sharp(Buffer.from(sent.dataBase64,'base64')).metadata()).format,'jpeg');
+ assert.notEqual(createHash('sha256').update(Buffer.from(sent.dataBase64,'base64')).digest('hex'),originalDigest,'发送版本与来源身份分别记量');
  await f.media.clear(f.contactId,message.id,'clear-direct-image-evidence');
  const after=(await f.management.read(f.scope)).memories.find(item=>item.id===adopted.memoryId);
  assert.equal(after.current,null);assert.ok(after.versions.every(version=>version.body===null&&version.sources.length===0));

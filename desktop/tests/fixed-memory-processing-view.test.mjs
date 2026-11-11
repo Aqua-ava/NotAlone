@@ -5,11 +5,11 @@ import {chromium} from '@playwright/test';
 const ids={run:'11111111-1111-4111-8111-111111111111',task:'22222222-2222-4222-8222-222222222222',contact:'33333333-3333-4333-8333-333333333333'};
 const run=()=>({runId:ids.run,state:'incomplete',total:1,succeeded:1,failed:0,unknown:0,stage:'extraction_verification',laterStages:'pending',status:'blocked',statusReason:'later_stages_pending',sharedFaultCode:null,actions:[],controlVersion:0,pending:0,revoked:0,calls:{prepared:0,sending:0,succeeded:4,failed:0,unknown:0},
  tasks:[{taskId:ids.task,scopeKind:'contact',contactId:ids.contact,state:'succeeded',total:1,succeeded:1,errorCode:null}],inputs:[],candidates:[]});
-async function withPanel(t,command,testPage){
+async function withPanel(t,command,testPage,automaticEnabled=true){
  const compiled=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {FixedMemoryProcessingPanel} from './src/renderer/FixedMemoryProcessingPanel';
  const listeners=new Set();window.invalidate=()=>{for(const listener of listeners)listener();};const bridge=new Proxy({},{get:(_,method)=>method==='onInvalidated'?(listener)=>{listeners.add(listener);return()=>listeners.delete(listener);}:(...args)=>window.command(method,...args)});const root=createRoot(document.getElementById('root'));let contactId='${ids.contact}',pageVisible=true;window.show=mounted=>root.render(mounted?<div hidden={!pageVisible}><FixedMemoryProcessingPanel bridge={bridge} contactId={contactId} visible={pageVisible}/></div>:null);window.setPageVisible=visible=>{pageVisible=visible;window.show(true);};window.selectContact=id=>{contactId=id;window.show(true);};window.show(true);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
  const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(4000);
- await page.exposeFunction('command',async(method,...args)=>{if(method==='readAutomatic')return {connectionGeneration:1,enabled:true};const value=await command(method,...args);return method==='readCurrent'&&value&&!Object.hasOwn(value,'contactId')?{...value,contactId:args[0]?.contactId}:value;});await page.route('http://127.0.0.1/fixed-memory-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/fixed-memory-test');await page.addScriptTag({content:compiled.outputFiles[0].text});await testPage(page);
+ await page.exposeFunction('command',async(method,...args)=>{if(method==='readAutomatic')return {connectionGeneration:1,enabled:automaticEnabled};const value=await command(method,...args);return method==='readCurrent'&&value&&!Object.hasOwn(value,'contactId')?{...value,contactId:args[0]?.contactId}:value;});await page.route('http://127.0.0.1/fixed-memory-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/fixed-memory-test');await page.addScriptTag({content:compiled.outputFiles[0].text});await testPage(page);
 }
 // 回到可见页面走正式的自动状态读取，不通过已移除的刷新按钮。
 const revisit=page=>page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
@@ -230,5 +230,60 @@ test('裁决类未知回执提供放弃重试：需二次确认，确认后携�
   assert.equal(abandoned.length,1);
   assert.equal(abandoned[0].runId,ids.run);assert.equal(abandoned[0].controlVersion,3);assert.equal(abandoned[0].connectionGeneration,2);
   assert.match(abandoned[0].operationId,/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+ });
+});
+
+test('隔离图片显示中文原因与窄重试入口，防重且完成后重新读取权威状态',async t=>{
+ let current={connectionGeneration:1,run:{...run(),total:3,succeeded:1,isolated:2,actions:['retry_images'],controlVersion:4,
+  contentCounts:[{kind:'image',total:3,succeeded:1,isolated:2}]},queue:{pending:0,nextDueAt:null,blockedContacts:0,content:[{kind:'image',pending:0,unavailable:0,isolated:2}]}};
+ const requested=Promise.withResolvers(),finish=Promise.withResolvers(),requests=[];
+ await withPanel(t,async(method,input)=>{
+  if(method==='readCurrent')return current;
+  if(method==='retryImages'){requests.push(input);requested.resolve();await finish.promise;return current;}
+ },async page=>{
+  await page.getByText('2 张图片未能送入模型',{exact:true}).waitFor();
+  const retry=page.getByRole('button',{name:'稍后重试图片',exact:true});await retry.click();await requested.promise;
+  assert.equal(await page.getByRole('button',{name:'正在登记重试…'}).isDisabled(),true);
+  await page.getByRole('button',{name:'正在登记重试…'}).evaluate(button=>button.click());assert.equal(requests.length,1);
+  assert.equal(requests[0].runId,ids.run);assert.equal(requests[0].controlVersion,4);assert.equal(requests[0].connectionGeneration,1);assert.match(requests[0].operationId,/^[a-f0-9-]{36}$/);
+  current={...current,run:{...current.run,isolated:0,actions:[],contentCounts:[{kind:'image',total:3,succeeded:1,isolated:0}]},queue:{...current.queue,content:[{kind:'image',pending:2,unavailable:0,isolated:0}]}};
+  finish.resolve();await page.getByText('2 张图片未能送入模型',{exact:true}).waitFor({state:'detached'});
+  assert.equal(await page.getByRole('button',{name:'稍后重试图片',exact:true}).count(),0);
+ });
+});
+
+test('总开关关闭时图片重试禁用，其他历史轮的隔离数量不冒充当前轮可重试',async t=>{
+ const calls=[],current={connectionGeneration:1,run:{...run(),total:3,succeeded:1,isolated:2,actions:['retry_images']},
+  queue:{pending:0,nextDueAt:null,blockedContacts:0,content:[{kind:'image',pending:0,unavailable:0,isolated:5}]}};
+ await withPanel(t,async method=>{calls.push(method);if(method==='readCurrent')return current;},async page=>{
+  await page.getByText('2 张图片未能送入模型',{exact:true}).waitFor();
+  await page.getByText('另有 3 张图片未能送入模型，保留在原处理记录中。',{exact:true}).waitFor();
+  const retry=page.getByRole('button',{name:'稍后重试图片',exact:true});assert.equal(await retry.isDisabled(),true);assert.equal(await retry.getAttribute('class'),'button');
+  await retry.evaluate(button=>button.click());assert.equal(calls.includes('retryImages'),false);
+ },false);
+});
+
+test('只有历史隔离计数或缺少后端资格时不显示图片重试按钮',async t=>{
+ await withPanel(t,async method=>method==='readCurrent'?{connectionGeneration:1,run:{...run(),isolated:0,actions:[]},
+  queue:{pending:0,nextDueAt:null,blockedContacts:0,content:[{kind:'image',pending:0,unavailable:0,isolated:2}]}}:undefined,async page=>{
+  await page.getByText('另有 2 张图片未能送入模型，保留在原处理记录中。',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'稍后重试图片',exact:true}).count(),0);
+ });
+});
+
+test('图片重试失败保留幂等标识，切换联系人后旧回执不回填或刷新旧范围',async t=>{
+ const other='44444444-4444-4444-8444-444444444444',requests=[],reads=[],finish=Promise.withResolvers(),entered=Promise.withResolvers();let attempts=0;
+ await withPanel(t,async(method,input)=>{
+  if(method==='readCurrent'){reads.push(input.contactId);return {connectionGeneration:1,contactId:input.contactId,run:input.contactId===other?null:{...run(),total:3,succeeded:1,isolated:2,actions:['retry_images'],controlVersion:4}};}
+  if(method==='retryImages'){requests.push(input);if(++attempts===1)throw new Error('synthetic_failure');entered.resolve();return finish.promise;}
+ },async page=>{
+  const retry=page.getByRole('button',{name:'稍后重试图片',exact:true});await retry.click();
+  await page.getByText('图片重试结果暂未确认，请核对最新状态后重试。',{exact:true}).waitFor();await retry.click();await entered.promise;
+  assert.equal(requests.length,2);assert.equal(requests[0].operationId,requests[1].operationId);
+  await page.evaluate(id=>window.selectContact(id),other);await page.getByText('暂无处理记录',{exact:true}).waitFor();
+  const count=reads.length;finish.resolve({connectionGeneration:1,run:run()});
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  assert.equal(reads.length,count);assert.equal(await page.getByText('2 张图片未能送入模型',{exact:true}).count(),0);
+  assert.equal(await page.getByRole('button',{name:'稍后重试图片',exact:true}).count(),0);
  });
 });

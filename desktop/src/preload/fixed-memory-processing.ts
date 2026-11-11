@@ -13,6 +13,7 @@ export function createFixedMemoryProcessingBridge(transport: PageTransport): Fix
     pause: (...args: [FixedProcessingControl]) => args.length === 1 ? transport.invoke('memory:fixed-processing-pause', args[0]) : fail(),
     continue: (...args: [FixedProcessingControl]) => args.length === 1 ? transport.invoke('memory:fixed-processing-continue', args[0]) : fail(),
     abandonUnknown: (...args: [FixedProcessingControl]) => args.length === 1 ? transport.invoke('memory:fixed-processing-abandon-unknown', args[0]) : fail(),
+    retryImages: (...args: [FixedProcessingControl]) => args.length === 1 ? transport.invoke('memory:fixed-processing-retry-images', args[0]) : fail(),
     trace: (...args: [FixedProcessingTraceRequest]) => args.length === 1 ? transport.invoke('memory:fixed-processing-trace', args[0]) : fail(),
     release: (...args: unknown[]) => args.length === 0 ? transport.invoke('memory:fixed-processing-release') : fail(),
     onInvalidated: (listener: () => void) => {

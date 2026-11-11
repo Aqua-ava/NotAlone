@@ -1,4 +1,5 @@
 import {assignedRunItemsCte,runTargetsReleased} from './run-retirement.ts';
+import {isolatedInputs} from './image-isolation.ts';
 import {observedProcessingAction} from './diagnostics.ts';
 import {currentContent,freezeContent,hasMemoryContent,readFrozenContent,installedMemoryContentKinds} from './content.ts';
 import {randomUUID} from 'node:crypto';
@@ -93,7 +94,9 @@ export function currentReuseAttempt(tx:StorageTransaction,ownerId:string,runId:s
 export function snapshot(tx:StorageTransaction,ownerId:string,runId:string,contactId?:string){
  let r=tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);if(!r)fail('memory_extraction_not_found');
  const storedRun=r!;
- const inputs=tx.all(`SELECT * FROM run_input WHERE owner_id=? AND run_id=?${contactId===undefined?'':' AND source_contact_id=?'} ORDER BY input_no`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]);
+ const inputs=tx.all(`SELECT i.*,p.extraction_state AS current_extraction_state FROM run_input i LEFT JOIN processing_item p ON p.owner_id=i.owner_id AND p.id=i.item_id
+  WHERE i.owner_id=? AND i.run_id=?${contactId===undefined?'':' AND i.source_contact_id=?'} ORDER BY i.input_no`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]);
+ const isolated=new Set(isolatedInputs(tx,ownerId,runId,contactId).map(input=>input.inputNo));
  const targets=inputs.filter(i=>i.role==='target');
  const tasks=tx.all(`SELECT * FROM processing_task WHERE owner_id=? AND run_id=?${contactId===undefined?'':" AND scope_kind='contact' AND contact_id=?"} ORDER BY scope_kind,contact_id`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]);
  const taskStates=new Map<string,string>();
@@ -110,7 +113,7 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string,conta
   const key=String(row.input_no),states=targetStates.get(key)??new Set<string>();states.add('succeeded');targetStates.set(key,states);
  }
  const targetHasState=(i:StorageRow,state:string)=>targetStates.get(String(i.input_no))?.has(state)??false;
- const targetSucceeded=(i:StorageRow)=>targetHasState(i,'succeeded');
+ const targetSucceeded=(i:StorageRow)=>targetHasState(i,'succeeded')&&i.current_extraction_state==='succeeded'&&!isolated.has(Number(i.input_no));
  const succeeded=targets.filter(targetSucceeded).length;
  const runningDocument=tx.get(`SELECT s.kind FROM processing_step s JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
   WHERE t.owner_id=? AND t.run_id=? AND t.state<>'revoked' AND s.state='running' AND s.kind IN ('document_scene','document_profile')${contactId===undefined?'':" AND t.scope_kind='contact' AND t.contact_id=?"} ORDER BY s.step_no LIMIT 1`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]);
@@ -129,8 +132,8 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string,conta
  }
  const stage=r!.state==='completed'||laterProjection.state==='completed'?'completed':runningDocument?String(runningDocument.kind):laterProjection.stage??'extraction_verification';
  const contentKinds=[...new Set(targets.map(input=>readFrozenContent(tx,ownerId,input)?.kind??'text'))];
- const contentCounts=contentKinds.map(kind=>{const items=targets.filter(input=>(readFrozenContent(tx,ownerId,input)?.kind??'text')===kind);return {kind,total:items.length,succeeded:items.filter(targetSucceeded).length};});
- const result={contentCounts,runId,state:String(r!.state),total:targets.length,succeeded,failed:targets.filter(i=>!targetSucceeded(i)&&targetHasState(i,'failed')).length,unknown:targets.filter(i=>!targetSucceeded(i)&&targetHasState(i,'unknown')).length,
+ const contentCounts=contentKinds.map(kind=>{const items=targets.filter(input=>(readFrozenContent(tx,ownerId,input)?.kind??'text')===kind),count=items.filter(input=>isolated.has(Number(input.input_no))).length;return {kind,total:items.length,succeeded:items.filter(targetSucceeded).length,...(count?{isolated:count}:{})};});
+ const result={contentCounts,...(isolated.size?{isolated:isolated.size}:{}),runId,state:String(r!.state),total:targets.length,succeeded,failed:targets.filter(i=>!targetSucceeded(i)&&!isolated.has(Number(i.input_no))&&targetHasState(i,'failed')).length,unknown:targets.filter(i=>!targetSucceeded(i)&&targetHasState(i,'unknown')).length,
   stage,laterStages,nextDueAt:laterProjection.nextDueAt,tasks:tasks.map(t=>({taskId:String(t.id),scopeKind:String(t.scope_kind),contactId:t.contact_id===null?null:String(t.contact_id),state:taskStates.get(String(t.id))!,
    total:t.scope_kind==='self'?0:targets.filter(i=>i.source_contact_id===t.contact_id).length,succeeded:t.scope_kind==='self'?0:targets.filter(i=>i.source_contact_id===t.contact_id&&targetSucceeded(i)).length,errorCode:t.error_code===null?null:String(t.error_code)})),
   inputs:inputs.map(i=>({inputNo:number(i.input_no),role:String(i.role),contactId:String(i.source_contact_id),messageId:String(i.message_id),recordId:String(i.record_id),itemId:i.item_id===null?null:String(i.item_id)})),candidates};
@@ -138,7 +141,7 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string,conta
  // 只有整轮联系人及输入来源均属于当前联系人才可恢复，包含本轮相关本人整理；混合轮次仍不可从局部视图控制。
  const exclusiveContact=contactId!==undefined&&!tx.get("SELECT 1 FROM processing_task WHERE owner_id=? AND run_id=? AND scope_kind='contact' AND contact_id<>? LIMIT 1",[ownerId,runId,contactId])&&!tx.get("SELECT 1 FROM run_input WHERE owner_id=? AND run_id=? AND source_contact_id<>? LIMIT 1",[ownerId,runId,contactId]);
  const actions=contactId===undefined?control.actions:exclusiveContact
-  ?projectControl(tx,ownerId,storedRun,{taskStates,laterStages:laterStagesState(tx,ownerId,runId).state}).actions.filter(action=>action==='continue'||action==='abandon_unknown'):[];
+  ?projectControl(tx,ownerId,storedRun,{taskStates,laterStages:laterStagesState(tx,ownerId,runId).state}).actions.filter(action=>action==='continue'||action==='abandon_unknown'||action==='retry_images'):[];
  const superseded=!!tx.get('SELECT 1 FROM processing_run WHERE owner_id=? AND start_request_key=?',[ownerId,`policy-recovery:${runId}`]);
  return {...result,...control,actions:superseded?[]:actions};
 }
@@ -219,9 +222,10 @@ function followupEligible(tx:StorageTransaction,ownerId:string,runId:string):boo
  if(tx.get(`SELECT 1 FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
   JOIN processing_step s ON s.owner_id=o.owner_id AND s.id=o.memory_step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
   WHERE c.owner_id=? AND t.run_id=? AND c.state IN ('unknown','sending','prepared') LIMIT 1`,[ownerId,runId]))return false;
- const targets=tx.all(`SELECT p.extraction_state FROM run_input i JOIN processing_item p ON p.owner_id=i.owner_id AND p.id=i.item_id
+ const targets=tx.all(`SELECT i.input_no,p.extraction_state FROM run_input i JOIN processing_item p ON p.owner_id=i.owner_id AND p.id=i.item_id
   WHERE i.owner_id=? AND i.run_id=? AND i.role='target'`,[ownerId,runId]);
- if(!targets.length||targets.some(row=>row.extraction_state!=='succeeded'))return false;
+ const isolated=new Set(isolatedInputs(tx,ownerId,runId).map(input=>input.inputNo));
+ if(!targets.length||targets.some(row=>row.extraction_state!=='succeeded'&&!isolated.has(Number(row.input_no))))return false;
  for(const task of tasks){try{assertTaskContributions(tx,ownerId,runId,String(task.id));}catch{return false;}}
  try{assertInputs(tx,ownerId,runId,tx.all('SELECT * FROM run_input WHERE owner_id=? AND run_id=?',[ownerId,runId]));}catch{return false;}
  return true;
@@ -291,9 +295,10 @@ function hasUnresolvedContactBlocker(tx:StorageTransaction,ownerId:string,contac
  return false;
 }
 function extractionCompleteForRun(tx:StorageTransaction,ownerId:string,runId:string,contactId:string):boolean{
- const targets=tx.all(`SELECT p.extraction_state FROM run_input i JOIN processing_item p ON p.owner_id=i.owner_id AND p.id=i.item_id
+ const targets=tx.all(`SELECT i.input_no,p.extraction_state FROM run_input i JOIN processing_item p ON p.owner_id=i.owner_id AND p.id=i.item_id
   WHERE i.owner_id=? AND i.run_id=? AND i.source_contact_id=? AND i.role='target'`,[ownerId,runId,contactId]);
- if(!targets.length||targets.some(row=>row.extraction_state!=='succeeded'))return false;
+ const isolated=new Set(isolatedInputs(tx,ownerId,runId,contactId).map(input=>input.inputNo));
+ if(!targets.length||targets.some(row=>row.extraction_state!=='succeeded'&&!isolated.has(Number(row.input_no))))return false;
  const contactTask=tx.get("SELECT * FROM processing_task WHERE owner_id=? AND run_id=? AND scope_kind='contact' AND contact_id=?",[ownerId,runId,contactId]);
  if(!contactTask||!(contactTask.state==='succeeded'||contactTask.state==='incomplete'&&contactTask.error_code==='targets_completed_elsewhere'))return false;
  const linkedTasks=tx.all(`SELECT DISTINCT t.* FROM processing_task t JOIN task_contribution c ON c.owner_id=t.owner_id AND c.task_id=t.id
@@ -337,16 +342,25 @@ function queueStates(tx:StorageTransaction,ownerId:string,now:number,contactId?:
  return contacts.map(row=>{const state=contactQueueState(tx,ownerId,String(row.id));return {state,dueAt:triggerAt(state,now)};});
 }
 function scheduleSummary(tx:StorageTransaction,ownerId:string,now:number,contactId?:string){
- const counts=new Map<string,{kind:string;pending:number;unavailable:number;unadmitted?:number}>();
+ const counts=new Map<string,{kind:string;pending:number;unavailable:number;unadmitted?:number;isolated?:number}>();
  for(const contact of validContacts(tx,ownerId,contactId)){
   const id=String(contact.id),scope={ownerId,contactId:id,scopeCte:sourceScopeCTE(tx),sourceOrder:acceptedCaptureOrder(tx),pendingOnly:false};
   const rows=readScheduleInputRows(tx,scope),available=scheduleInputAvailability(tx,scope);
   const media=rows.filter(row=>row.kind!=='text');
   const cleared=new Set(media.length?tx.all("SELECT message_id FROM message_media WHERE owner_id=? AND contact_id=? AND state='cleared' AND message_id IN (SELECT value FROM json_each(?))",[ownerId,id,JSON.stringify(media.map(row=>String(row.id)))]).map(row=>String(row.message_id)):[]);
+  const isolatedItems=new Set(media.length?tx.all(`SELECT DISTINCT p.id FROM processing_item p
+   JOIN run_input i ON i.owner_id=p.owner_id AND i.item_id=p.id AND i.source_contact_id=p.contact_id
+   JOIN step_input si ON si.owner_id=i.owner_id AND si.run_id=i.run_id AND si.run_input_no=i.input_no
+   JOIN execution_input x ON x.owner_id=si.owner_id AND x.planned_step_id=si.step_id AND x.planned_input_no=si.input_no
+   JOIN execution_event e ON e.owner_id=x.owner_id AND e.id=x.event_id AND e.kind='media_input_isolated'
+   JOIN media_file f ON f.owner_id=p.owner_id AND f.contact_id=p.contact_id AND f.message_id=p.message_id
+    AND f.id=json_extract(e.payload,'$.file_id') AND f.content_digest=json_extract(e.payload,'$.sha256')
+   WHERE p.owner_id=? AND p.contact_id=? AND p.extraction_state='failed' AND f.content_state='present' AND f.publish_state='current'`,[ownerId,id]).map(row=>String(row.id)):[]);
   for(const message of rows){
    if(message.kind!=='text'&&cleared.has(String(message.id)))continue;
    const kind=String(message.kind),count=counts.get(kind)??{kind,pending:0,unavailable:0,...(kind==='image'?{unadmitted:0}:{})};
    if(message.extraction_state==='succeeded'&&message.kind==='text'){counts.set(kind,count);continue;}
+   if(kind==='image'&&available.has(String(message.id))&&isolatedItems.has(String(message.item_id))){count.isolated=(count.isolated??0)+1;counts.set(kind,count);continue;}
    if(!available.has(String(message.id)))count.unavailable++;else if(message.extraction_state!=='succeeded'){count.pending++;if(kind==='image'&&message.target_assigned!==1n&&message.target_assigned!==1)count.unadmitted!++;}
    counts.set(kind,count);
   }
@@ -394,7 +408,7 @@ function startRun(tx:StorageTransaction,raw:unknown,scheduled=false,history=fals
   if(canReuse)for(const row of rows){const proof=reusableExtraction(tx,ownerId,String(c.id),row);if(proof)reused.set(String(row.id),proof);}
   const baseline=scheduled?memoryIncrementalBaseline(tx):0n;
   const targets=(scheduled?rows.filter(r=>r.first_goal_kind==='incremental'&&(r.display_no as bigint)>baseline&&(r.item_id===null||r.extraction_state==='pending')&&r.target_assigned!==1n&&r.target_assigned!==1):
-   rows.filter(r=>(r.extraction_state!=='succeeded'||reused.has(String(r.id)))&&(!history||r.target_assigned!==1n&&r.target_assigned!==1)&&(!history||r.first_goal_kind==='history'||(r.display_no as bigint)<=memoryIncrementalBaseline(tx)))).slice(0,automaticHistory?50:undefined);
+   rows.filter(r=>(r.item_id===null||r.extraction_state==='pending'||reused.has(String(r.id)))&&(!history||r.target_assigned!==1n&&r.target_assigned!==1)&&(!history||r.first_goal_kind==='history'||(r.display_no as bigint)<=memoryIncrementalBaseline(tx)))).slice(0,automaticHistory?50:undefined);
   if(!targets.length)continue;
   const targetIds=new Set(targets.map(row=>String(row.id)));
   if(scheduled||history)for(const target of targets)assertSourceEligibility(tx,{owner_id:ownerId,contact_id:String(c.id),message_id:String(target.id),record_id:String(target.record_id)});

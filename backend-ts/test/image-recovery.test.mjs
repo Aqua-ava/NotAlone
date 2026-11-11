@@ -85,3 +85,20 @@ test('未知回执与权限失败不拆分也不释放，取消不会继续子�
   run:async()=>{runs++;throw recoverable();},supersede:async()=>{throw new Error('synthetic_release_failed');}}),/synthetic_release_failed/);
  assert.equal(runs,1);
 });
+
+test('单图耗尽后只隔离该图片，继续同窗文字与健康兄弟目标',async()=>{
+ const targets=[text('t1'),image('bad'),image('good'),text('t2')],isolated=[],calls=[];
+ const result=await recoverImageTargets({targets,isImage,signal:signal(),canRecover,
+  run:async(items,attempt)=>{calls.push(attempt.slot);if(items.some(item=>item.id==='bad'))throw recoverable();return 'ok';},supersede:async()=>{},
+  isolate:async target=>{isolated.push(target.id);}});
+ assert.deepEqual(isolated,['bad']);assert.deepEqual(result.isolated,[targets[1]]);
+ assert.deepEqual(result.results.flatMap(row=>row.targets).map(target=>target.id),['t1','good','t2']);
+ assert.deepEqual(calls,[0,1,65,97,2]);
+});
+
+test('重启看到耗尽叶时登记隔离，连续隔离保护拒绝后不发送其他目标',async()=>{
+ let calls=0,isolated=0;
+ await assert.rejects(recoverImageTargets({targets:[image('bad')],isImage,signal:signal(),canRecover,previouslyDegraded:new Set([0,64]),
+  run:async()=>{calls++;return null;},supersede:async()=>{},isolate:async()=>{isolated++;throw new Error('memory_image_input_circuit_open');}}),/memory_image_input_circuit_open/);
+ assert.equal(calls,0);assert.equal(isolated,1);
+});

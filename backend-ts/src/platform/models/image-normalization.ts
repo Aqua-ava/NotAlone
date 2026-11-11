@@ -17,7 +17,7 @@ export interface NormalizedModelImage extends NormalizableModelImage {
 }
 export interface NormalizedImageVersion {data:Buffer;mimeType:'image/jpeg';width:number;height:number;bytes:number;tier:ModelImageNormalizationTier}
 export class ModelImageNormalizationError extends Error {
- readonly code:'extraction_model_image_invalid'|'extraction_model_image_budget_exceeded';
+ readonly code:'extraction_model_image_invalid'|'extraction_model_image_budget_exceeded'|'extraction_model_image_variant_unchanged';
  constructor(code:ModelImageNormalizationError['code']){super(code);this.code=code;}
 }
 const proofSecret=randomBytes(32),hash=(data:Buffer)=>createHash('sha256').update(data).digest('hex');
@@ -74,11 +74,18 @@ export async function normalizeModelImageInput(input:NormalizableModelImage,opti
   const metadata=await sharp(raw,{limitInputPixels:MODEL_IMAGE_LIMITS.maxImagePixels,failOn:'error',page:0,pages:1}).metadata();
   if(!metadata.format||formats[metadata.format as keyof typeof formats]!==input.mimeType
    ||!metadata.width||!metadata.height||Math.max(metadata.width,metadata.height)>MODEL_IMAGE_LIMITS.maxImageDimension)invalid();
-  const normalized=await normalizeModelImageBytes(raw,{tier,signal:options.signal});
+  const smaller=tier==='degraded'&&hasProof?{width:Math.min(MODEL_IMAGE_LIMITS.degradedMaxEdge,Math.max(1,Math.floor(metadata.width*0.75))),
+   height:Math.min(MODEL_IMAGE_LIMITS.degradedMaxEdge,Math.max(1,Math.floor(metadata.height*0.75))),maxBytes:MODEL_IMAGE_LIMITS.maxImageBytes}:undefined;
+  if(smaller&&smaller.width>=metadata.width&&smaller.height>=metadata.height)throw new ModelImageNormalizationError('extraction_model_image_variant_unchanged');
+  const normalized=await normalizeModelImageBytes(raw,{tier,signal:options.signal,...(smaller?{target:smaller}:{})});
   try{
    const result:NormalizedModelImage={id:input.id,mimeType:'image/jpeg',dataBase64:normalized.data.toString('base64'),
     sourceSha256:hasProof?input.sourceSha256!:hash(raw),originalBytes:hasProof?input.originalBytes!:raw.length,normalizationTier:tier,normalizationProof:''};
    result.normalizationProof=proof(result).toString('hex');return result;
   }finally{normalized.data.fill(0);}
+ }catch(error){
+  options.signal?.throwIfAborted();
+  if(error instanceof ModelImageNormalizationError)throw error;
+  throw new ModelImageNormalizationError('extraction_model_image_invalid');
  }finally{raw.fill(0);}
 }

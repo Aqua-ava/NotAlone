@@ -20,7 +20,7 @@ async function imageFixture(t,count,fail){
  f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:Array.from({length:count-1},(_,i)=>({partition:'a',table:'one',localId:String(10+i),serverId:'0',sender:'contact',kind:'image',text:null,originalType:'image',sentAt:null,timePrecision:null,orderScheme:null,orderKey:null,stateAssurance:'verified'})),completedPartitions:['a'],exhausted:true});
  await f.history.synchronize(f.contact);
  const messages=(await f.history.read(f.contact)).messages.filter(message=>message.kind==='image');
- for(const message of messages)await f.media.extract(f.contact,message.id,{requestKey:`synthetic-recovery-${message.id}`,goal:'extract'});
+ const files=new Map();for(const message of messages){const saved=await f.media.extract(f.contact,message.id,{requestKey:`synthetic-recovery-${message.id}`,goal:'extract'});files.set(message.id,saved.files[0].fileId);}
  let service;const requests=[],receipts=new Map();
  const accounting=()=>({...service.accounting,reserve:async(receipt,claim)=>{receipts.set(receipt.attempt_id,receipt);return service.accounting.reserve(receipt,claim);}});
  const model=modelPort(accounting,async(request,input)=>{
@@ -33,7 +33,7 @@ async function imageFixture(t,count,fail){
   return {blocks:[{type:'tool-call',name:request.tool.name,arguments:JSON.stringify({scenes:[]})}]};
  });
  service=new SqliteMemoryExtraction(f.storage,f.owner,model,f.media.holders,undefined,undefined,undefined,{registry:createBuiltinMemoryContentRegistry(),resources:{readImage:input=>f.media.readMemoryImage(input)}});
- t.after(()=>service.close());return {...f,service,requests,messages};
+ t.after(()=>service.close());return {...f,service,requests,messages,files};
 }
 
 test('明确终端传输失败按不同子窗二分记账，文字目标只处理一次且账本无未知',async t=>{
@@ -52,3 +52,34 @@ test('明确终端传输失败按不同子窗二分记账，文字目标只处�
 });
 
 export {imageFixture};
+
+test('一张图降级仍失败时隔离并完成其他目标，显式重试沿原轮成功恢复',async t=>{
+ let badId=null,broken=true;
+ const f=await imageFixture(t,3,request=>broken&&request.images.some(image=>image.id===badId));
+ badId=f.files.get(f.messages[1].id);
+ const run=await f.service.start(randomUUID());await f.service.waitForIdle(run.runId);
+ const done=await f.service.read(run.runId);
+ assert.equal(done.isolated,1);assert.equal(done.succeeded,run.total-1);assert.equal(done.failed,0);assert.equal(done.unknown,0);
+ assert.equal(done.tasks.find(task=>task.scopeKind==='contact').state,'succeeded');
+ assert.ok(done.actions.includes('retry_images'));
+ const view=await f.service.readContact(f.contact);assert.equal(view.queue.content.find(item=>item.kind==='image').isolated,1);
+ const trace=await f.service.trace(done.tasks.find(task=>task.scopeKind==='contact').taskId);
+ assert.ok(trace.events.some(event=>event.kind==='media_input_isolated'&&event.payload.reason==='media_model_input_unavailable'));
+ assert.equal(trace.calls.some(call=>['unknown','prepared','sending'].includes(call.state)),false);
+ broken=false;const operationId=randomUUID();
+ await f.service.retryImages(run.runId,done.controlVersion,operationId);await f.service.waitForIdle(run.runId);
+ const after=await f.service.read(run.runId);assert.equal(after.isolated??0,0);assert.equal(after.succeeded,run.total);
+ const calls=f.requests.length;await f.service.retryImages(run.runId,done.controlVersion,operationId);await f.service.waitForIdle(run.runId);
+ assert.equal(f.requests.length,calls,'同一次重试回执重放不重新调用模型');
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('连续三张单图均不可用时持久暂停，后续图片保持未处理且不继续花费',async t=>{
+ const f=await imageFixture(t,4,request=>request.images.length>0);
+ const run=await f.service.start(randomUUID());await f.service.waitForIdle(run.runId);
+ const done=await f.service.read(run.runId);assert.equal(done.state,'paused');assert.equal(done.isolated,3);
+ assert.ok(f.requests.length<=12);assert.ok(done.total>done.isolated+done.succeeded);
+ const trace=await f.service.trace(done.tasks.find(task=>task.scopeKind==='contact').taskId);
+ assert.equal(trace.calls.some(call=>['unknown','prepared','sending'].includes(call.state)),false);
+ const count=f.requests.length;await f.service.recoverBacklog({wait:true});await f.service.resumeFollowups();await f.service.waitForIdle();assert.equal(f.requests.length,count);
+});

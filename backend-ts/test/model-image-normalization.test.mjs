@@ -102,7 +102,7 @@ test('损坏图片、类型伪装、超像素图片与取消均在模型调用�
  const png=await sharp({create:{width:4,height:3,channels:3,background:'red'}}).png().toBuffer();
  await assert.rejects(prepare(png,'image/jpeg'),/extraction_model_image_invalid/);
  const oversized=await sharp({create:{width:6000,height:6000,channels:3,background:'white'}}).png().toBuffer();
- await assert.rejects(prepare(oversized),/pixel limit/);
+ await assert.rejects(prepare(oversized),/extraction_model_image_invalid/);
  const controller=new AbortController();controller.abort();
  await assert.rejects(normalizeModelImageInput({id:'cancel',mimeType:'image/png',dataBase64:png.toString('base64')},{signal:controller.signal}),{name:'AbortError'});
 });
@@ -116,4 +116,15 @@ test('正式图片附件统一采用8张上限，规范化后计字节且超过�
  let entered=false;
  await assert.rejects(images.withImages([...input,{...input[0],id:'synthetic-9'}],new AbortController().signal,async()=>{entered=true;}),/extraction_model_image_invalid/);
  assert.equal(entered,false);assert.equal(images.imageLimits,MODEL_IMAGE_LIMITS);images.assertIdle();
+});
+
+test('小于1024的单图降级仍生成更小尺寸，一像素图片不重发相同版本',async()=>{
+ const {normalizeModelImageInput}=await import('../src/platform/models/image-normalization.ts');
+ const data=await sharp({create:{width:400,height:300,channels:3,background:'green'}}).png().toBuffer();
+ const primary=await normalizeModelImageInput({id:'small',mimeType:'image/png',dataBase64:data.toString('base64')});
+ const degraded=await normalizeModelImageInput(primary,{tier:'degraded'}),meta=await sharp(Buffer.from(degraded.dataBase64,'base64')).metadata();
+ assert.ok(meta.width<400&&meta.height<300);assert.notEqual(degraded.dataBase64,primary.dataBase64);
+ const one=await sharp({create:{width:1,height:1,channels:3,background:'red'}}).png().toBuffer();
+ const minimal=await normalizeModelImageInput({id:'minimal',mimeType:'image/png',dataBase64:one.toString('base64')});
+ await assert.rejects(normalizeModelImageInput(minimal,{tier:'degraded'}),error=>error.code==='extraction_model_image_variant_unchanged');
 });

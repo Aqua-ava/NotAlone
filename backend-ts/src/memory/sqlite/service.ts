@@ -15,7 +15,7 @@ import {isSharedFailure,sharedFailureCodes} from './control.ts';
 import type {CandidateVerificationReference} from './management/admission.ts';
 import type {ExtractionWindow} from '../extraction/protocol.ts';
 import {sha256} from '../../platform/sha256.ts';
-import {MODEL_IMAGE_LIMITS,normalizeModelImageInput} from '../../platform/models/image-normalization.ts';
+import {MODEL_IMAGE_LIMITS,normalizeModelImageInput,ModelImageNormalizationError} from '../../platform/models/image-normalization.ts';
 import {ExtractionModelError} from '../extraction/model.ts';
 import type {ModelPermitAccounting,ModelTaskClaim} from '../../platform/models/model-permit-port.ts';
 import type {SqliteExtractionModelInvocation,SqliteExtractionModelPreparation} from './model-port.ts';
@@ -232,6 +232,12 @@ export class SqliteMemoryExtraction {
   }
   const run=await this.storage.execute<any>('memoryExtraction.control',{ownerId:this.ownerId,runId,action:'continue',actionVersion,operationId});this.launch(runId);return run;
  });}
+ /** 仅重试本轮已隔离图片，仍受自动处理开关、来源、待确认及未知回执门槛保护。 */
+ async retryImages(runId:string,actionVersion:number,operationId:string){return this.admit(async()=>{
+  await this.initialize();this.available();this.requireAutomatic();
+  const run=await this.storage.execute<any>('memoryExtraction.retryImages',{ownerId:this.ownerId,runId,actionVersion,operationId});
+  this.launch(runId);return run;
+ });}
  /** 用户放弃裁决类未知调用后重试：账本成本仍记未知，原请求不重发；其余候选重新裁决。 */
  async abandonUnknown(runId:string,actionVersion:number,operationId:string){return this.admit(async()=>{
   await this.initialize();this.available();this.requireAutomatic();
@@ -284,19 +290,31 @@ export class SqliteMemoryExtraction {
   const policy=await this.version();const resolved=policy.resolve(batch.policyConfig);
   const requireCurrent=async()=>{signal.throwIfAborted();await policy.assertCurrent();await this.withSourceReady(batch.contactId,()=>this.storage.execute('memoryExtraction.current',{ownerId:this.ownerId,attemptId:batch.attemptId}));};
   const rows=[...batch.rows].sort((a,b)=>a.sent_at!==null&&b.sent_at!==null&&a.sent_at!==b.sent_at?Number((a.sent_at as bigint)-(b.sent_at as bigint)):a.display_no!==undefined&&b.display_no!==undefined?Number((a.display_no as bigint)-(b.display_no as bigint)):Number(a.input_no)-Number(b.input_no));
-  const prepared:PreparedMemoryContent[]=[];
+  const prepared=new Map<number,PreparedMemoryContent>();
+  const isolate=async(row:StorageRow)=>{
+   const result=await this.storage.execute<{paused:boolean}>('memoryExtraction.isolateImage',{ownerId:this.ownerId,attemptId:batch.attemptId,inputNo:Number(row.input_no)});
+   if(result.paused)throw new StorageFailure('memory_image_input_circuit_open');
+  };
   for(const row of rows){
    const frozen:FrozenMemoryContent=row.identity_json?{pluginId:String(row.plugin_id),pluginVersion:String(row.plugin_version),kind:String(row.content_kind),identity:JSON.parse(String(row.identity_json))}:
     {pluginId:'notalone.text',pluginVersion:'1',kind:'text',identity:{}};
-   prepared.push(await this.content.registry.prepare({ownerId:this.ownerId,contactId:batch.contactId,message:{...row,id:row.message_id,kind:row.message_kind??'text'},frozen,resources:this.content.resources,signal,requireCurrent}));
+   try{prepared.set(Number(row.input_no),await this.content.registry.prepare({ownerId:this.ownerId,contactId:batch.contactId,message:{...row,id:row.message_id,kind:row.message_kind??'text'},frozen,resources:this.content.resources,signal,requireCurrent}));}
+   catch(error){
+    if(!(error instanceof ModelImageNormalizationError)||frozen.kind!=='image')throw error;
+    await requireCurrent();
+    if(row.role==='target')await isolate(row);
+    else await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'image_context_omitted',payload:{reason:'media_model_input_unavailable'},inputNos:[Number(row.input_no)]});
+   }
   }
-  const hasImage=(row:StorageRow)=>!!prepared[rows.indexOf(row)]?.images?.length;
-  const groupRows=(targets:readonly StorageRow[],includeImageContext:boolean)=>rows.filter(row=>targets.includes(row)||row.role==='context'&&(includeImageContext||!hasImage(row)));
+  const activeRows=rows.filter(row=>prepared.has(Number(row.input_no))),unchangedVariants=new Set<number>();
+  const hasImage=(row:StorageRow)=>!!prepared.get(Number(row.input_no))?.images?.length;
+  const groupRows=(targets:readonly StorageRow[],includeImageContext:boolean)=>activeRows.filter(row=>targets.includes(row)||row.role==='context'&&(includeImageContext||!hasImage(row)));
   const runGroup=async(targets:readonly StorageRow[],attempt:ImageRecoveryAttempt)=>{
   const selected=groupRows(targets,attempt.includeImageContext),actualNos=selected.map(row=>Number(row.input_no));
   const contents=await Promise.all(selected.map(async row=>{
-   const part=prepared[rows.indexOf(row)]!;
-   return attempt.tier==='degraded'&&part.images?.length?{...part,images:await Promise.all(part.images.map(image=>normalizeModelImageInput(image,{tier:'degraded',signal})))}:part;
+   const part=prepared.get(Number(row.input_no))!;
+   try{return attempt.tier==='degraded'&&part.images?.length?{...part,images:await Promise.all(part.images.map(image=>normalizeModelImageInput(image,{tier:'degraded',signal})))}:part;}
+   catch(error){if(error instanceof ModelImageNormalizationError&&error.code==='extraction_model_image_variant_unchanged')unchangedVariants.add(attempt.slot);throw error;}
   }));
   const images=contents.flatMap(part=>part.images??[]);
   if(images.length>MODEL_IMAGE_LIMITS.maxImagesPerMessage||images.reduce((total,image)=>total+Buffer.byteLength(image.dataBase64,'base64'),0)>MODEL_IMAGE_LIMITS.maxMessageImageBytes)throw new StorageFailure('memory_content_input_too_large');
@@ -349,13 +367,18 @@ export class SqliteMemoryExtraction {
    else if(resolved.verification.id==='complete-claim-v1')assertCompleteClaimAdmission(window,fact,checked.result);else return null;
    return {eventId,candidateTraceId,inputEventId:verificationInputEventId,callId:verificationCall.callId,policyFingerprint:checked.result.claim_validation!.policy_fingerprint};
   });
+  if(images.length)await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'image_input_recovered',payload:{slot:attempt.slot},inputNos:actualNos});
   return {outcome,verificationRefs,inputNos:actualNos};
   };
   const prior=await this.storage.execute<number[]>('memoryExtraction.imageRecoveryPlan',{ownerId:this.ownerId,attemptId:batch.attemptId});
-  const recovered=await recoverImageTargets({targets:rows.filter(row=>row.role==='target'),isImage:hasImage,signal,previouslyDegraded:new Set(prior),run:runGroup,
-   canRecover:error=>error instanceof ExtractionModelError&&error.receipt?.outcome==='failed'&&error.receipt.terminal_failure==='transport',
-   supersede:attempt=>this.storage.execute('memoryExtraction.supersedeImageInput',{ownerId:this.ownerId,attemptId:batch.attemptId,slot:attempt.slot,inputNos:groupRows(attempt.targets,attempt.includeImageContext).map(row=>Number(row.input_no))}).then(()=>{}),
-  });
+  const targets=activeRows.filter(row=>row.role==='target');
+  const recovered=targets.length?await recoverImageTargets({targets,isImage:hasImage,signal,previouslyDegraded:new Set(prior),run:runGroup,
+   canRecover:error=>error instanceof ExtractionModelError&&error.receipt?.outcome==='failed'&&error.receipt.terminal_failure==='transport'
+    ||error instanceof ModelImageNormalizationError&&error.code==='extraction_model_image_variant_unchanged',
+   supersede:attempt=>this.storage.execute('memoryExtraction.supersedeImageInput',{ownerId:this.ownerId,attemptId:batch.attemptId,slot:attempt.slot,
+    unchangedVariant:unchangedVariants.has(attempt.slot),inputNos:groupRows(attempt.targets,attempt.includeImageContext).map(row=>Number(row.input_no))}).then(()=>{}),
+   isolate:row=>isolate(row),
+  }):{results:[]};
   const parts=recovered.results.map(result=>result.value);
   const outcome:ExtractionFlowOutcome={accepted:parts.flatMap(part=>part.outcome.accepted),rejected_count:parts.reduce((sum,part)=>sum+part.outcome.rejected_count,0),extraction_completed:true,
    candidate_trace_ids:parts.flatMap(part=>part.outcome.candidate_trace_ids),failure_kind:null,failure_reason:null,verification:parts.flatMap(part=>part.outcome.verification)};
