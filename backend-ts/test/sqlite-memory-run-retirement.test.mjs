@@ -48,6 +48,43 @@ test('合法用户暂停不会因新资料或退休扫描自动解除',async t=>
  assert.equal(await f.storage.execute('fixture.retireStaleRuns',{ownerId:owner,now:Date.now()}),0);assert.equal((await memory.read(old.run.runId)).state,'paused');
 });
 
+test('仅owner反馈快照永久失配的暂停运行也会退休并释放原目标',async t=>{
+ const f=await fixture(t,{registryModule}),contactId=f.saved[0].contact_id;await f.service.synchronize(contactId);
+ let memory,fail=true;const port=modelPort(()=>memory.accounting),prepare=port.prepare;
+ port.prepare=async(...args)=>{if(fail)throw Object.assign(Error('合成确定失败'),{code:'extraction_model_purpose_invalid'});return prepare(...args);};
+ memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
+ const old=await memory.startHistory(contactId,randomUUID());await memory.waitForIdle(old.run.runId);
+ await f.storage.execute('fixture.stalePausedRun',{ownerId:owner,contactId,runId:old.run.runId,stale:false,ownerFeedbackStale:true});
+ await assert.rejects(f.storage.execute('fixture.assertRunInputs',{ownerId:owner,runId:old.run.runId}),{code:'memory_extraction_scope_stale'});
+ assert.equal(await f.storage.execute('fixture.retireStaleRuns',{ownerId:owner,now:Date.now()}),1);
+ assert.equal((await memory.read(old.run.runId)).state,'revoked');
+ assert.equal(await f.storage.execute('fixture.retireStaleRuns',{ownerId:owner,now:Date.now()}),0);
+ fail=false;const next=await memory.startHistory(contactId,randomUUID());await memory.waitForIdle(next.run.runId);
+ assert.equal((await memory.read(next.run.runId)).succeeded,1);assert.equal(port.calls,1);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('owner快照失配退休保留已有成功步骤和回执历史',async t=>{
+ const f=await fixture(t,{registryModule}),contactId=f.saved[0].contact_id;await f.service.synchronize(contactId);
+ let memory;const port=modelPort(()=>memory.accounting);memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
+ const old=await memory.startHistory(contactId,randomUUID());await memory.waitForIdle(old.run.runId);
+ const history=await f.storage.execute('fixture.runSuccessfulHistory',{ownerId:owner,runId:old.run.runId});assert.ok(history.steps.length);assert.ok(history.attempts.length);
+ await f.storage.execute('fixture.stalePausedRun',{ownerId:owner,contactId,runId:old.run.runId,stale:false,ownerFeedbackStale:true});
+ assert.equal(await f.storage.execute('fixture.retireStaleRuns',{ownerId:owner,now:Date.now()}),1);
+ assert.deepEqual(await f.storage.execute('fixture.runSuccessfulHistory',{ownerId:owner,runId:old.run.runId}),history);
+ assert.equal(port.calls,1);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('owner反馈失配但调用仍未知时保留暂停和未知保护',async t=>{
+ const f=await fixture(t,{registryModule}),contactId=f.saved[0].contact_id;await f.service.synchronize(contactId);
+ let memory;const port=modelPort(()=>memory.accounting,async()=>{throw Object.assign(Error('合成未知回执'),{code:'extraction_model_call_failed'});});
+ memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
+ const old=await memory.startHistory(contactId,randomUUID());await memory.waitForIdle(old.run.runId);
+ await f.storage.execute('fixture.stalePausedRun',{ownerId:owner,contactId,runId:old.run.runId,stale:false,ownerFeedbackStale:true});
+ assert.equal(await f.storage.execute('fixture.retireStaleRuns',{ownerId:owner,now:Date.now()}),0);
+ assert.equal((await memory.read(old.run.runId)).state,'paused');assert.equal(port.calls,1);
+});
+
 test('过期暂停运行退休后新L1可交接真实文档流程的L2和L3',async t=>{
  const {documentFixture}=await import('./fixtures/memory-documents/support.mjs');
  const f=await documentFixture(t,{registryModule,laterScheduling:true});let fail=true;const prepare=f.extractionPort.prepare;

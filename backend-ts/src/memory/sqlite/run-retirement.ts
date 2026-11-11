@@ -1,5 +1,5 @@
 import {recordProcessingRunChange} from './diagnostics.ts';
-import {assertContribution} from './qualification.ts';
+import {assertContribution,assertInputs} from './qualification.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {StorageTransaction} from '../../storage/sqlite/contracts.ts';
 
@@ -48,6 +48,8 @@ export function runTargetsReleased(tx:StorageTransaction,ownerId:string,runId:st
 /** 只退休范围代次已永久失配的暂停轮；每次最多处理128轮，真实调用/候选未知时保持原状。 */
 export function retireStalePausedRuns(tx:StorageTransaction,ownerId:string,now=Date.now()):number {
  const hasLater=!!tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='memory_document_later_run_requirement'");
+ const staleOwnerScope=`NOT EXISTS(SELECT 1 FROM owner current_owner WHERE current_owner.owner_id=retiring_run.owner_id
+  AND current_owner.state='active' AND current_owner.feedback_revision=retiring_run.accepted_owner_feedback_revision)`;
  const staleScope=`EXISTS(SELECT 1 FROM run_contact old_contact WHERE old_contact.owner_id=retiring_run.owner_id AND old_contact.run_id=retiring_run.id AND NOT EXISTS(
   SELECT 1 FROM contact c JOIN owner o ON o.owner_id=c.owner_id JOIN read_grant g ON g.owner_id=c.owner_id AND g.id=old_contact.grant_id AND g.contact_id=c.id
   JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id JOIN binding_verification v ON v.owner_id=g.owner_id AND v.id=g.verification_id
@@ -61,7 +63,7 @@ export function retireStalePausedRuns(tx:StorageTransaction,ownerId:string,now=D
  const laterUnsettled=hasLater?`AND NOT EXISTS(SELECT 1 FROM memory_document_later_run_requirement q JOIN memory_document_later_schedule later ON later.owner_id=q.owner_id AND later.scope_key=q.scope_key AND later.generation=q.generation
   WHERE q.owner_id=retiring_run.owner_id AND q.run_id=retiring_run.id AND (q.outcome='unknown' OR later.state IN ('unknown','running')))` :'';
  const rows=tx.all(`SELECT retiring_run.id,retiring_run.state FROM processing_run retiring_run WHERE retiring_run.owner_id=? AND (retiring_run.state='paused' OR retiring_run.pause_requested_at IS NOT NULL)
-  AND ${staleScope} AND NOT ${unsettledRunSql('retiring_run')} AND NOT ${pendingCandidateSql('retiring_run')} ${laterUnsettled}
+  AND (${staleScope} OR ${staleOwnerScope}) AND NOT ${unsettledRunSql('retiring_run')} AND NOT ${pendingCandidateSql('retiring_run')} ${laterUnsettled}
   AND NOT EXISTS(SELECT 1 FROM model_operation o JOIN processing_step s ON s.owner_id=o.owner_id AND s.id=o.memory_step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
    WHERE t.owner_id=retiring_run.owner_id AND t.run_id=retiring_run.id AND (
     EXISTS(SELECT 1 FROM operation_item i WHERE i.owner_id=o.owner_id AND i.operation_id=o.id AND i.state IN ('reserved','unknown'))
@@ -70,6 +72,8 @@ export function retireStalePausedRuns(tx:StorageTransaction,ownerId:string,now=D
  let retired=0;
  for(const row of rows){
   const runId=String(row.id),contacts=tx.all('SELECT contact_id FROM run_contact WHERE owner_id=? AND run_id=?',[ownerId,runId]);let stale=false;
+  // 空输入只复验owner快照，与正常assertInputs保持同一永久失配判定。
+  try{assertInputs(tx,ownerId,runId,[]);}catch(error){if(!(error instanceof StorageFailure)||error.code!=='memory_extraction_scope_stale')throw error;stale=true;}
   for(const contact of contacts)try{assertContribution(tx,ownerId,runId,String(contact.contact_id));}catch(error){if(!(error instanceof StorageFailure)||error.code!=='memory_extraction_scope_stale')throw error;stale=true;}
   if(!stale)continue;
   // 成功步骤和原始失败事实保留；已知但尚未提交的效果不再占用后续运行。
