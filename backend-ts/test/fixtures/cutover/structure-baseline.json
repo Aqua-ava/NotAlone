@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 48,
+  "schemaVersion": 49,
   "migrationVersions": [
    1,
    2,
@@ -49,14 +49,15 @@
    45,
    46,
    47,
-   48
+   48,
+   49
   ],
-  "userVersion": 48,
+  "userVersion": 49,
   "sqliteVersion": "3.53.4",
   "tableCount": 92,
   "fieldCount": 934,
   "foreignKeyGroups": 192,
-  "triggerCount": 120,
+  "triggerCount": 102,
   "checkCount": 303,
   "viewCount": 0
  },
@@ -15018,19 +15019,9 @@
  },
  "triggers": [
   {
-   "name": "adjudication_operation_step",
-   "table": "model_operation",
-   "sql": "CREATE TRIGGER adjudication_operation_step BEFORE INSERT ON model_operation WHEN NEW.purpose IN ('adjudication','relation_verification','merge_verification') AND NOT EXISTS(SELECT 1 FROM processing_step s WHERE s.owner_id=NEW.owner_id AND s.id=NEW.memory_step_id AND s.kind=NEW.purpose) BEGIN SELECT RAISE(ABORT,'adjudication_operation_step'); END"
-  },
-  {
    "name": "auto_noop_consume",
    "table": "memory_decision",
    "sql": "CREATE TRIGGER auto_noop_consume AFTER INSERT ON memory_decision WHEN NEW.action='auto_noop' AND NEW.outcome='applied' BEGIN INSERT INTO decision_candidate(owner_id,decision_id,candidate_id,relation_kind,accepted_state_revision) SELECT DISTINCT NEW.owner_id,NEW.id,i.candidate_id,'accepted',i.accepted_state_revision FROM execution_event e JOIN execution_input x ON x.owner_id=e.owner_id AND x.event_id=e.id AND x.role='candidate' JOIN step_input i ON i.owner_id=x.owner_id AND i.step_id=x.planned_step_id AND i.input_no=x.planned_input_no AND i.kind='candidate' WHERE e.owner_id=NEW.owner_id AND e.step_attempt_id=NEW.execution_id AND e.kind='adjudication_result' AND json_extract(e.payload,'$.candidateId')=i.candidate_id; SELECT RAISE(ABORT,'auto_noop_consumption') WHERE changes()<>1; UPDATE memory_candidate SET state='duplicate',state_revision=state_revision+1 WHERE owner_id=NEW.owner_id AND state='pending' AND id IN (SELECT candidate_id FROM decision_candidate WHERE owner_id=NEW.owner_id AND decision_id=NEW.id); SELECT RAISE(ABORT,'auto_noop_consumption') WHERE changes()<>1; END"
-  },
-  {
-   "name": "auto_noop_execution",
-   "table": "memory_decision",
-   "sql": "CREATE TRIGGER auto_noop_execution BEFORE INSERT ON memory_decision WHEN NEW.action='auto_noop' AND NEW.outcome='applied' AND NOT EXISTS( SELECT 1 FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id JOIN model_operation o ON o.owner_id=s.owner_id AND o.memory_step_id=s.id AND o.purpose='adjudication' JOIN model_call call ON call.owner_id=o.owner_id AND call.operation_id=o.id AND call.state='succeeded' JOIN execution_event e ON e.owner_id=a.owner_id AND e.step_attempt_id=a.id AND e.kind='adjudication_result' JOIN execution_input cx ON cx.owner_id=e.owner_id AND cx.event_id=e.id AND cx.role='candidate' JOIN step_input ci ON ci.owner_id=cx.owner_id AND ci.step_id=cx.planned_step_id AND ci.input_no=cx.planned_input_no AND ci.step_id=s.id AND ci.kind='candidate' JOIN memory_candidate candidate ON candidate.owner_id=ci.owner_id AND candidate.id=ci.candidate_id JOIN execution_input mx ON mx.owner_id=e.owner_id AND mx.event_id=e.id AND mx.role='parent_memory' JOIN step_input mi ON mi.owner_id=mx.owner_id AND mi.step_id=mx.planned_step_id AND mi.input_no=mx.planned_input_no AND mi.step_id=s.id AND mi.kind='memory' JOIN memory m ON m.owner_id=mi.owner_id AND m.id=mi.memory_id JOIN memory_version v ON v.owner_id=m.owner_id AND v.memory_id=m.id AND v.version_no=m.current_version_no WHERE a.owner_id=NEW.owner_id AND a.id=NEW.execution_id AND a.state='succeeded' AND s.state='succeeded' AND s.successful_attempt_id=a.id AND s.kind='adjudication' AND candidate.state='pending' AND candidate.state_revision=ci.accepted_state_revision AND t.scope_kind=candidate.scope_kind AND t.contact_id IS candidate.contact_id AND m.scope_kind=candidate.scope_kind AND m.contact_id IS candidate.contact_id AND mi.memory_id=NEW.target_memory_id AND mi.memory_version_no=NEW.expected_version_no AND mi.accepted_head_revision=NEW.expected_head_revision AND m.state IN ('active','withdrawn') AND m.current_version_no=mi.memory_version_no AND m.head_revision=mi.accepted_head_revision AND v.content_state='present' AND v.provenance_state='eligible' AND json_extract(e.payload,'$.action')='auto_noop' AND json_type(e.payload,'$.reason')='null' AND json_extract(e.payload,'$.candidateId')=ci.candidate_id AND json_type(e.payload,'$.parentMemoryIds')='array' AND json_array_length(e.payload,'$.parentMemoryIds')=1 AND json_extract(e.payload,'$.parentMemoryIds[0]')=NEW.target_memory_id AND (SELECT count(*) FROM execution_event result WHERE result.owner_id=a.owner_id AND result.step_attempt_id=a.id AND result.kind='adjudication_result')=1) BEGIN SELECT RAISE(ABORT,'auto_noop_execution'); END"
   },
   {
    "name": "auto_retire_execution",
@@ -15043,16 +15034,6 @@
    "sql": "CREATE TRIGGER binding_identity_immutable BEFORE UPDATE OF owner_id,id,contact_id,conversation_id ON conversation_binding BEGIN SELECT RAISE(ABORT,'binding_identity_immutable'); END"
   },
   {
-   "name": "candidate_real_producer",
-   "table": "memory_candidate",
-   "sql": "CREATE TRIGGER candidate_real_producer BEFORE INSERT ON memory_candidate WHEN NOT EXISTS( SELECT 1 FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE e.owner_id=NEW.owner_id AND e.id=NEW.event_id AND e.step_attempt_id=NEW.produced_attempt_id AND e.event_no=NEW.output_no AND e.kind='verified_output' AND a.state='succeeded' AND s.successful_attempt_id=a.id AND s.state='succeeded' AND t.scope_kind=NEW.scope_kind AND t.contact_id IS NEW.contact_id AND json_extract(e.payload,'$.fact.text')=NEW.proposed_body) BEGIN SELECT RAISE(ABORT,'memory_candidate_producer_mismatch'); END"
-  },
-  {
-   "name": "capture_record_binding",
-   "table": "capture_record",
-   "sql": "CREATE TRIGGER capture_record_binding BEFORE INSERT ON capture_record WHEN NEW.message_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sync_capture c JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id JOIN message m ON m.owner_id=NEW.owner_id AND m.contact_id=NEW.contact_id AND m.id=NEW.message_id WHERE c.owner_id=NEW.owner_id AND c.contact_id=NEW.contact_id AND c.id=NEW.capture_id AND m.binding_id=g.binding_id) BEGIN SELECT RAISE(ABORT,'capture_record_binding_mismatch'); END"
-  },
-  {
    "name": "capture_record_immutable",
    "table": "capture_record",
    "sql": "CREATE TRIGGER capture_record_immutable BEFORE UPDATE OF owner_id,id,contact_id,capture_id,item_no,state,message_id,raw_payload,observed_scheme,observed_key,normalizer_version,reason_code ON capture_record WHEN OLD.state IN ('normalized','excluded') BEGIN SELECT RAISE(ABORT,'capture_record_immutable'); END"
@@ -15061,11 +15042,6 @@
    "name": "capture_record_no_restore",
    "table": "capture_record",
    "sql": "CREATE TRIGGER capture_record_no_restore BEFORE UPDATE OF availability ON capture_record WHEN NEW.availability<>'deleting' BEGIN SELECT RAISE(ABORT,'capture_record_no_restore'); END"
-  },
-  {
-   "name": "decision_candidate_scope",
-   "table": "decision_candidate",
-   "sql": "CREATE TRIGGER decision_candidate_scope BEFORE INSERT ON decision_candidate WHEN NOT EXISTS( SELECT 1 FROM memory_candidate c JOIN memory_decision d ON d.owner_id=c.owner_id AND d.id=NEW.decision_id LEFT JOIN memory m ON m.owner_id=d.owner_id AND m.id=d.target_memory_id WHERE c.owner_id=NEW.owner_id AND c.id=NEW.candidate_id AND c.state='pending' AND c.state_revision=NEW.accepted_state_revision AND ((NEW.relation_kind='rejected' AND d.action='reject') OR (NEW.relation_kind='accepted' AND d.action IN ('accept','edit_accept','auto_accept','auto_update','auto_noop') AND m.scope_kind=c.scope_kind AND m.contact_id IS c.contact_id))) BEGIN SELECT RAISE(ABORT,'memory_decision_candidate_mismatch'); END"
   },
   {
    "name": "discussion_entry_call",
@@ -15091,11 +15067,6 @@
    "name": "discussion_scope_immutable",
    "table": "assistant_discussion",
    "sql": "CREATE TRIGGER discussion_scope_immutable BEFORE UPDATE OF owner_id,id,contact_id ON assistant_discussion BEGIN SELECT RAISE(ABORT,'discussion_scope_immutable'); END"
-  },
-  {
-   "name": "document_basis_producer",
-   "table": "document_basis",
-   "sql": "CREATE TRIGGER document_basis_producer BEFORE INSERT ON document_basis WHEN NOT EXISTS(SELECT 1 FROM memory_document_version v JOIN execution_event e ON e.owner_id=v.owner_id AND e.step_attempt_id=v.produced_attempt_id JOIN execution_input x ON x.owner_id=e.owner_id AND x.event_id=e.id JOIN step_input i ON i.owner_id=x.owner_id AND i.step_id=x.planned_step_id AND i.input_no=x.planned_input_no WHERE v.owner_id=NEW.owner_id AND v.document_id=NEW.document_id AND v.version_no=NEW.version_no AND e.id=NEW.event_id AND x.input_no=NEW.input_no AND ((NEW.relation_kind IN ('support','contradiction') AND i.kind='memory') OR (NEW.relation_kind='context' AND i.kind='document'))) BEGIN SELECT RAISE(ABORT,'document_basis_producer'); END"
   },
   {
    "name": "document_block_scope",
@@ -15128,19 +15099,9 @@
    "sql": "CREATE TRIGGER document_identity_task_cleanup AFTER DELETE ON processing_task WHEN OLD.accepted_publication_id IS NOT NULL BEGIN DELETE FROM document_publication_identity WHERE owner_id=OLD.owner_id AND id=OLD.accepted_publication_id AND NOT EXISTS(SELECT 1 FROM document_publication p WHERE p.owner_id=OLD.owner_id AND p.id=OLD.accepted_publication_id) AND NOT EXISTS(SELECT 1 FROM processing_task t WHERE t.owner_id=OLD.owner_id AND t.accepted_publication_id=OLD.accepted_publication_id) AND NOT EXISTS(SELECT 1 FROM step_input i WHERE i.owner_id=OLD.owner_id AND i.publication_id=OLD.accepted_publication_id); END"
   },
   {
-   "name": "document_member_scope",
-   "table": "publication_member",
-   "sql": "CREATE TRIGGER document_member_scope BEFORE INSERT ON publication_member WHEN NOT EXISTS(SELECT 1 FROM document_publication p JOIN memory_document d ON d.owner_id=p.owner_id AND d.id=NEW.document_id JOIN memory_document_version v ON v.owner_id=d.owner_id AND v.document_id=d.id AND v.version_no=NEW.version_no WHERE p.owner_id=NEW.owner_id AND p.id=NEW.publication_id AND p.scope_kind=d.scope_kind AND p.contact_id IS d.contact_id AND d.state='active' AND v.content_state='present') BEGIN SELECT RAISE(ABORT,'document_member_scope'); END"
-  },
-  {
    "name": "document_operation_step",
    "table": "model_operation",
    "sql": "CREATE TRIGGER document_operation_step BEFORE INSERT ON model_operation WHEN NEW.purpose IN ('document_scene','document_profile') AND NOT EXISTS(SELECT 1 FROM processing_step s WHERE s.owner_id=NEW.owner_id AND s.id=NEW.memory_step_id AND s.kind=NEW.purpose) BEGIN SELECT RAISE(ABORT,'document_operation_step'); END"
-  },
-  {
-   "name": "document_producer_scope",
-   "table": "memory_document_version",
-   "sql": "CREATE TRIGGER document_producer_scope BEFORE INSERT ON memory_document_version WHEN NOT EXISTS(SELECT 1 FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id JOIN memory_document d ON d.owner_id=t.owner_id AND d.id=NEW.document_id WHERE a.owner_id=NEW.owner_id AND a.id=NEW.produced_attempt_id AND s.kind=CASE d.kind WHEN 'scene' THEN 'document_scene' ELSE 'document_profile' END AND t.scope_kind=d.scope_kind AND t.contact_id IS d.contact_id) BEGIN SELECT RAISE(ABORT,'document_producer_scope'); END"
   },
   {
    "name": "document_publication_fixed",
@@ -15151,16 +15112,6 @@
    "name": "document_publication_identity_insert",
    "table": "document_publication",
    "sql": "CREATE TRIGGER document_publication_identity_insert AFTER INSERT ON document_publication BEGIN INSERT INTO document_publication_identity VALUES(NEW.owner_id,NEW.id); END"
-  },
-  {
-   "name": "document_publication_scope",
-   "table": "document_publication",
-   "sql": "CREATE TRIGGER document_publication_scope BEFORE INSERT ON document_publication WHEN NOT EXISTS(SELECT 1 FROM processing_task t WHERE t.owner_id=NEW.owner_id AND t.id=NEW.basis_task_id AND t.run_id=NEW.run_id AND t.scope_kind=NEW.scope_kind AND t.contact_id IS NEW.contact_id AND t.document_basis_state='frozen') BEGIN SELECT RAISE(ABORT,'document_publication_scope'); END"
-  },
-  {
-   "name": "document_task_basis_fixed",
-   "table": "processing_task",
-   "sql": "CREATE TRIGGER document_task_basis_fixed BEFORE UPDATE OF document_basis_state,accepted_memory_revision,accepted_document_revision,accepted_publication_id ON processing_task WHEN OLD.document_basis_state<>'pending' AND NOT (OLD.state='revoked' AND NEW.state='revoked' AND NEW.document_basis_state='not_applicable' AND NEW.accepted_memory_revision IS NULL AND NEW.accepted_document_revision IS NULL AND NEW.accepted_publication_id IS NULL AND EXISTS(SELECT 1 FROM deletion_operation x WHERE x.owner_identity=OLD.owner_id AND x.state<>'completed')) BEGIN SELECT RAISE(ABORT,'document_task_basis_immutable'); END"
   },
   {
    "name": "duplicate_candidate_insert",
@@ -15238,11 +15189,6 @@
    "sql": "CREATE TRIGGER grant_revocation_final BEFORE UPDATE ON read_grant WHEN OLD.revoked_at IS NOT NULL BEGIN SELECT RAISE(ABORT,'grant_revocation_final'); END"
   },
   {
-   "name": "grant_verification_generation",
-   "table": "read_grant",
-   "sql": "CREATE TRIGGER grant_verification_generation BEFORE INSERT ON read_grant WHEN NOT EXISTS(SELECT 1 FROM binding_verification v JOIN conversation_binding b ON b.owner_id=v.owner_id AND b.id=v.binding_id JOIN contact c ON c.owner_id=b.owner_id AND c.id=b.contact_id WHERE v.owner_id=NEW.owner_id AND v.id=NEW.verification_id AND v.binding_id=NEW.binding_id AND v.identity_generation=b.identity_generation AND b.state='verified' AND c.state='active' AND c.selection_generation=NEW.selection_generation) BEGIN SELECT RAISE(ABORT,'grant_verification_generation'); END"
-  },
-  {
    "name": "history_source_terminal_identity",
    "table": "history_source_terminal",
    "sql": "CREATE TRIGGER history_source_terminal_identity BEFORE UPDATE OF owner_id,id,contact_id,binding_id,external_key,accepted_data_generation ON history_source_terminal BEGIN SELECT RAISE(ABORT,'history_source_terminal_immutable'); END"
@@ -15271,11 +15217,6 @@
    "name": "media_file_parent_cycle",
    "table": "media_file",
    "sql": "CREATE TRIGGER media_file_parent_cycle BEFORE INSERT ON media_file WHEN NEW.parent_file_id=NEW.id OR EXISTS ( WITH RECURSIVE chain(id,parent_file_id) AS ( SELECT id,parent_file_id FROM media_file WHERE owner_id=NEW.owner_id AND id=NEW.parent_file_id UNION SELECT f.id,f.parent_file_id FROM media_file f JOIN chain p ON f.owner_id=NEW.owner_id AND f.id=p.parent_file_id) SELECT 1 FROM chain WHERE id=NEW.id OR parent_file_id=NEW.id) BEGIN SELECT RAISE(ABORT,'media_parent_cycle'); END"
-  },
-  {
-   "name": "media_head_kind",
-   "table": "message_media",
-   "sql": "CREATE TRIGGER media_head_kind BEFORE INSERT ON message_media WHEN NOT EXISTS ( SELECT 1 FROM message WHERE owner_id=NEW.owner_id AND contact_id=NEW.contact_id AND id=NEW.message_id AND kind IN ('image','voice','video') AND availability='available') BEGIN SELECT RAISE(ABORT,'media_message_ineligible'); END"
   },
   {
    "name": "memory_candidate_fixed",
@@ -15365,12 +15306,7 @@
   {
    "name": "memory_timeline_update",
    "table": "memory",
-   "sql": "CREATE TRIGGER memory_timeline_update AFTER UPDATE OF current_version_no,state ON memory BEGIN UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=NEW.owner_id AND id=NEW.id; END"
-  },
-  {
-   "name": "memory_version_decision",
-   "table": "memory_version",
-   "sql": "CREATE TRIGGER memory_version_decision BEFORE INSERT ON memory_version WHEN NOT EXISTS( SELECT 1 FROM memory_decision d JOIN memory m ON m.owner_id=d.owner_id AND m.id=d.target_memory_id WHERE d.owner_id=NEW.owner_id AND d.id=NEW.decision_id AND d.target_memory_id=NEW.memory_id AND d.outcome='applied' AND d.action NOT IN ('reject','withdraw','protect','unprotect','auto_retire','auto_noop') AND d.expected_version_no IS NEW.previous_version_no AND NEW.version_no=COALESCE(d.expected_version_no,0)+1 AND m.current_version_no IS d.expected_version_no AND (d.expected_head_revision IS NULL OR m.head_revision=d.expected_head_revision) AND (d.action NOT IN ('auto_accept','auto_update','accept','edit_accept') OR EXISTS(SELECT 1 FROM decision_candidate c WHERE c.owner_id=d.owner_id AND c.decision_id=d.id AND c.relation_kind='accepted')) AND d.restored_from_version_no IS NEW.restored_from_version_no AND ((d.actor_kind='system' AND NEW.adoption_mode='auto') OR (d.action='restore') OR (d.actor_kind='user' AND NEW.adoption_mode<>'auto'))) BEGIN SELECT RAISE(ABORT,'memory_version_decision_mismatch'); END"
+   "sql": "CREATE TRIGGER memory_timeline_update AFTER UPDATE OF current_version_no,state ON memory BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND NEW.scope_kind='self' AND NEW.management_timeline_dirty=1; UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id=NEW.contact_id AND NEW.scope_kind='contact' AND NEW.management_timeline_dirty=1; UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=NEW.owner_id AND id=NEW.id AND management_timeline_dirty=0; END"
   },
   {
    "name": "memory_version_fixed",
@@ -15488,11 +15424,6 @@
    "sql": "CREATE TRIGGER reply_context_item_scope BEFORE INSERT ON reply_context_item WHEN (NEW.kind='message' AND NOT EXISTS(SELECT 1 FROM reply_context c WHERE c.owner_id=NEW.owner_id AND c.id=NEW.context_id AND c.contact_id=NEW.source_contact_id)) OR (NEW.kind='entry' AND NOT EXISTS(SELECT 1 FROM reply_context c JOIN discussion_entry e ON e.owner_id=c.owner_id AND e.contact_id=c.contact_id AND e.discussion_id=c.discussion_id WHERE c.owner_id=NEW.owner_id AND c.id=NEW.context_id AND e.id=NEW.entry_id)) BEGIN SELECT RAISE(ABORT,'reply_context_scope'); END"
   },
   {
-   "name": "reply_execution_input_scope",
-   "table": "reply_execution_input",
-   "sql": "CREATE TRIGGER reply_execution_input_scope BEFORE INSERT ON reply_execution_input WHEN NOT EXISTS( SELECT 1 FROM execution_event e JOIN model_call c ON c.owner_id=e.owner_id AND c.id=e.originated_call_id WHERE e.owner_id=NEW.owner_id AND e.id=NEW.event_id AND c.reply_context_id=NEW.context_id AND e.reply_attempt_id=c.reply_attempt_id) BEGIN SELECT RAISE(ABORT,'reply_execution_input_scope'); END"
-  },
-  {
    "name": "reply_input_immutable",
    "table": "reply_candidate_input",
    "sql": "CREATE TRIGGER reply_input_immutable BEFORE UPDATE ON reply_candidate_input BEGIN SELECT RAISE(ABORT,'reply_input_immutable'); END"
@@ -15511,11 +15442,6 @@
    "name": "reply_selection_immutable",
    "table": "reply_selection",
    "sql": "CREATE TRIGGER reply_selection_immutable BEFORE UPDATE ON reply_selection BEGIN SELECT RAISE(ABORT,'reply_selection_immutable'); END"
-  },
-  {
-   "name": "reply_version_call",
-   "table": "reply_candidate_version",
-   "sql": "CREATE TRIGGER reply_version_call BEFORE INSERT ON reply_candidate_version WHEN NEW.origin_kind='model' AND NOT EXISTS( SELECT 1 FROM reply_candidate k JOIN reply_attempt a ON a.owner_id=k.owner_id AND a.request_id=k.request_id JOIN model_call c ON c.owner_id=a.owner_id AND c.reply_attempt_id=a.id JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE k.owner_id=NEW.owner_id AND k.id=NEW.candidate_id AND c.id=NEW.call_id AND c.state='succeeded' AND o.reply_request_id=k.request_id) BEGIN SELECT RAISE(ABORT,'reply_version_call_scope'); END"
   },
   {
    "name": "reply_version_clear_only",
@@ -15543,16 +15469,6 @@
    "sql": "CREATE TRIGGER run_input_immutable BEFORE UPDATE ON run_input BEGIN SELECT RAISE(ABORT,'run_input_immutable'); END"
   },
   {
-   "name": "runtime_commit_request",
-   "table": "runtime_copy",
-   "sql": "CREATE TRIGGER runtime_commit_request BEFORE UPDATE OF committed_request_id ON runtime_copy WHEN NEW.committed_request_id IS NOT NULL AND NOT EXISTS( SELECT 1 FROM reply_request r WHERE r.owner_id=NEW.owner_id AND r.contact_id=NEW.contact_id AND r.discussion_id=NEW.discussion_id AND r.id=NEW.committed_request_id) BEGIN SELECT RAISE(ABORT,'runtime_commit_request'); END"
-  },
-  {
-   "name": "runtime_context_scope",
-   "table": "runtime_context",
-   "sql": "CREATE TRIGGER runtime_context_scope BEFORE INSERT ON runtime_context WHEN NOT EXISTS( SELECT 1 FROM runtime_copy r JOIN reply_context c ON c.owner_id=r.owner_id AND c.contact_id=r.contact_id AND c.discussion_id=r.discussion_id WHERE r.owner_id=NEW.owner_id AND r.id=NEW.copy_id AND c.id=NEW.context_id) BEGIN SELECT RAISE(ABORT,'runtime_context_scope'); END"
-  },
-  {
    "name": "runtime_scope_immutable",
    "table": "runtime_copy",
    "sql": "CREATE TRIGGER runtime_scope_immutable BEFORE UPDATE OF owner_id,id,contact_id,discussion_id,sdk_instance_id,managed_locator,write_generation,accepted_data_generation,source_revision ON runtime_copy BEGIN SELECT RAISE(ABORT,'runtime_scope_immutable'); END"
@@ -15561,11 +15477,6 @@
    "name": "skill_default_enabled_insert_guard",
    "table": "skill_package",
    "sql": "CREATE TRIGGER skill_default_enabled_insert_guard BEFORE INSERT ON skill_package WHEN NEW.default_enabled=1 AND (NEW.enabled_state<>'unknown' OR NEW.enabled_origin IS NOT NULL OR NEW.verification_state<>'verified' OR NEW.current_revision_no IS NULL OR NEW.verification_reason IS NOT NULL OR NOT EXISTS (SELECT 1 FROM skill_package_revision r WHERE r.owner_id=NEW.owner_id AND r.package_id=NEW.id AND r.revision_no=NEW.current_revision_no AND r.verification_state='verified' AND r.availability='current')) BEGIN SELECT RAISE(ABORT,'skill_default_enable_requires_unknown'); END"
-  },
-  {
-   "name": "skill_default_enabled_update_guard",
-   "table": "skill_package",
-   "sql": "CREATE TRIGGER skill_default_enabled_update_guard BEFORE UPDATE OF default_enabled,enabled_state,enabled_origin ON skill_package WHEN NEW.default_enabled=1 AND (NEW.enabled_state<>'unknown' OR NEW.enabled_origin IS NOT NULL OR NEW.verification_state<>'verified' OR NEW.current_revision_no IS NULL OR NEW.verification_reason IS NOT NULL OR NOT EXISTS (SELECT 1 FROM skill_package_revision r WHERE r.owner_id=NEW.owner_id AND r.package_id=NEW.id AND r.revision_no=NEW.current_revision_no AND r.verification_state='verified' AND r.availability='current')) BEGIN SELECT RAISE(ABORT,'skill_default_enable_requires_unknown'); END"
   },
   {
    "name": "skill_revision_anchor_immutable",

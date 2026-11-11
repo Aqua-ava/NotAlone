@@ -158,16 +158,22 @@ export function applyDecision(tx:StorageTransaction,input:unknown,system=false,a
  }
  if(candidates.some(c=>c.scope_kind!==s.scopeKind||c.contact_id!==s.contactId))fail('memory_scope_mismatch');
  if(action==='auto_noop'){
+  // 同一入口闭合实际调用、候选和唯一目标；删除重复触发器后也不能以缺项事件代签。
   const execution=tx.get(`SELECT 1 FROM step_attempt a JOIN processing_step ps ON ps.owner_id=a.owner_id AND ps.id=a.step_id
    JOIN processing_task t ON t.owner_id=ps.owner_id AND t.id=ps.task_id
+   JOIN model_operation o ON o.owner_id=ps.owner_id AND o.memory_step_id=ps.id AND o.purpose='adjudication'
+   JOIN model_call mc ON mc.owner_id=o.owner_id AND mc.operation_id=o.id AND mc.state='succeeded'
    JOIN step_input ci ON ci.owner_id=ps.owner_id AND ci.step_id=ps.id AND ci.kind='candidate'
    JOIN step_input mi ON mi.owner_id=ps.owner_id AND mi.step_id=ps.id AND mi.kind='memory'
    JOIN execution_event e ON e.owner_id=a.owner_id AND e.step_attempt_id=a.id AND e.kind='adjudication_result'
+   JOIN execution_input cx ON cx.owner_id=e.owner_id AND cx.event_id=e.id AND cx.role='candidate' AND cx.planned_step_id=ci.step_id AND cx.planned_input_no=ci.input_no
    JOIN execution_input x ON x.owner_id=e.owner_id AND x.event_id=e.id AND x.role='parent_memory' AND x.planned_step_id=mi.step_id AND x.planned_input_no=mi.input_no
    WHERE a.owner_id=? AND a.id=? AND a.state='succeeded' AND ps.kind='adjudication' AND ps.state='succeeded' AND ps.successful_attempt_id=a.id
    AND t.state IN ('succeeded','awaiting_decision') AND t.scope_kind=? AND t.contact_id IS ?
    AND ci.candidate_id=? AND ci.accepted_state_revision=? AND mi.memory_id=? AND mi.memory_version_no=? AND mi.accepted_head_revision=?
-   AND json_extract(e.payload,'$.action')='auto_noop' AND json_extract(e.payload,'$.candidateId')=? AND json_extract(e.payload,'$.reason') IS NULL`,[ownerId,authority!.executionId,s.scopeKind,s.contactId,candidates[0]!.id,candidates[0]!.state_revision,m!.id,previous!.version_no,m!.head_revision,candidates[0]!.id]);
+   AND json_extract(e.payload,'$.action')='auto_noop' AND json_extract(e.payload,'$.candidateId')=? AND json_type(e.payload,'$.reason')='null'
+   AND json_type(e.payload,'$.parentMemoryIds')='array' AND json_array_length(e.payload,'$.parentMemoryIds')=1 AND json_extract(e.payload,'$.parentMemoryIds[0]')=mi.memory_id
+   AND (SELECT count(*) FROM execution_event result WHERE result.owner_id=a.owner_id AND result.step_attempt_id=a.id AND result.kind='adjudication_result')=1`,[ownerId,authority!.executionId,s.scopeKind,s.contactId,candidates[0]!.id,candidates[0]!.state_revision,m!.id,previous!.version_no,m!.head_revision,candidates[0]!.id]);
   if(!execution)fail('memory_adjudication_output_unbound');
   qualificationSources(tx,ownerId,{candidateId:String(candidates[0]!.id)});qualificationSources(tx,ownerId,{memoryId:String(m!.id),versionNo:previous!.version_no as bigint});
  }

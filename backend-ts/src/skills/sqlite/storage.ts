@@ -204,7 +204,9 @@ export const skillActions: StorageAction[] = [
   }},
   {name:'skills.defaultEnable',mode:'write',retryBusy:false,execute(tx,input){
     const i=key(input) as Expected,item=expected(tx,input);
-    if(item.enabledState!=='unknown' || item.verificationState!=='verified' || item.verificationReason!==null || item.currentRevisionNo===null)
+    const current=item.revisions.find(revision=>revision.revisionNo===item.currentRevisionNo);
+    if(item.enabledState!=='unknown' || item.verificationState!=='verified' || item.verificationReason!==null || item.currentRevisionNo===null
+      ||current?.verificationState!=='verified'||current.availability!=='current')
       fail('skill_default_enable_not_qualified');
     tx.run('UPDATE skill_package SET default_enabled=1,head_revision=head_revision+1 WHERE owner_id=? AND id=?',[i.ownerId,i.id]);
     return state(tx,i.ownerId,i.id);
