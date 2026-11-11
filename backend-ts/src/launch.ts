@@ -5,7 +5,6 @@ import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { createServer } from 'node:net';
 import { constants } from 'node:fs';
-import { processIdentityState, type ProcessIdentity } from './platform/process/process-identity.ts';
 import type { SqliteCapabilitiesConfiguration } from './sqlite-capabilities.ts';
 import { finishStartupDiagnostic, writeStartupDiagnostic } from './startup-diagnostics.ts';
 
@@ -67,36 +66,6 @@ async function atomicRecord(file: string, value: object): Promise<void> {
     await rename(temporary, file);
   } finally { await rm(temporary, { force: true }); }
 }
-async function stopPid(identity: ProcessIdentity): Promise<boolean> {
-  for (let attempt = 0; attempt < 60; attempt++) {
-    const state = await processIdentityState(identity);
-    if (state === 'gone') return true;
-    if (state === 'unknown') return false;
-    await delay(100);
-  }
-  for (const signal of ['SIGTERM', 'SIGKILL'] as const) {
-    const state = await processIdentityState(identity);
-    if (state === 'gone') return true;
-    if (state !== 'same') return false;
-    try { process.kill(identity.pid, signal); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true; }
-    for (let attempt = 0; attempt < 20; attempt++) {
-      const observed = await processIdentityState(identity);
-      if (observed === 'gone') return true;
-      if (observed === 'unknown') return false;
-      await delay(100);
-    }
-  }
-  return await processIdentityState(identity) === 'gone';
-}
-/** 仅回收退役前遗留且可核验归属的进程，不提供旧执行器的启动或回退路径。 */
-async function retiredProcessStopped(home: string, childPid: number | undefined, nonce: string): Promise<void> {
-  let value;
-  try { value = JSON.parse(await readFile(path.join(home, 'legacy.pid'), 'utf8')); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return; throw new Error('backend_cleanup_failed'); }
-  if (!value || !Number.isSafeInteger(value.pid) || value.pid < 1 || value.parentPid !== childPid || value.nonce !== nonce) throw new Error('backend_cleanup_failed');
-  if (value.identity?.pid !== value.pid || value.identity?.parentPid !== value.parentPid || !await stopPid(value.identity)) throw new Error('backend_cleanup_failed');
-}
-
 /** Electron 拥有临时 profile 和寿命管道；失败不自动启动另一种后台。 */
 export async function launchDsh(config: LaunchConfiguration, canStart: () => boolean): Promise<OwnedDshProcess> {
   if (!canStart()) throw new Error('backend_connection_failed');
@@ -120,7 +89,6 @@ export async function launchDsh(config: LaunchConfiguration, canStart: () => boo
         try {
           const metadata = JSON.parse(await readFile(path.join(previous.home, 'host.json'), 'utf8'));
           if (metadata.lockNonce !== previous.nonce || metadata.parentPid !== previous.parentPid) throw new Error('backend_cleanup_failed');
-          await retiredProcessStopped(previous.home, previous.childPid, previous.nonce);
           await rm(previous.home, { recursive: true, force: true });
         } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
       }
@@ -133,7 +101,6 @@ export async function launchDsh(config: LaunchConfiguration, canStart: () => boo
   let child: ChildProcess | undefined;
   let releasePromise: Promise<void> | undefined;
   const release = (): Promise<void> => releasePromise ??= (async () => {
-    if (home) await retiredProcessStopped(home, child?.pid, nonce);
     await guarded(lockPath, async () => {
       const record = JSON.parse(await readFile(lockPath, 'utf8'));
       if (record.nonce !== nonce) throw new Error('backend_cleanup_failed');
