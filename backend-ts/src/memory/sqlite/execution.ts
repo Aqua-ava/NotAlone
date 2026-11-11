@@ -1,3 +1,4 @@
+import {observedProcessingAction} from './diagnostics.ts';
 import {boundContentInputs} from './content.ts';
 import {candidateAdmission,type CandidateVerificationReference} from './management/admission.ts';
 import {finalizeOwnerContributions} from './owner-contribution.ts';
@@ -10,7 +11,7 @@ import {assertContribution,assertInputs,currentAttempt,inputRows,fail,textId} fr
 import {applyControl,takeOverExpiredAttempt} from './control.ts';
 import {abandonUnknownAdjudication} from './unknown-recovery.ts';
 import {hasRunFollowupState,snapshot} from './runs.ts';
-const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>unknown):StorageAction=>({name:`memoryExtraction.${name}`,mode,retryBusy:mode==='write',execute} as StorageAction);
+const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>unknown):StorageAction=>observedProcessingAction({name:`memoryExtraction.${name}`,mode,retryBusy:mode==='write',execute} as StorageAction);
 const budgetNumbers=['input_tokens','max_output_tokens','context_window_tokens','safety_margin_tokens','serialized_bytes'] as const;
 function budgetSummary(value:unknown):Record<string,number>|null {
  if(!value||typeof value!=='object'||Array.isArray(value))return null;

@@ -1,3 +1,4 @@
+import {observedProcessingAction} from '../diagnostics.ts';
 import {randomUUID} from 'node:crypto';
 import {sha256} from '../../../platform/sha256.ts';
 import type {StorageAction,StorageLease,StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
@@ -14,7 +15,7 @@ import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 import {failLaterStage,finishLaterStagePublication,laterTaskPaused,reconcileTerminalLaterRuns} from './later-schedule.ts';
 
 export interface DocumentClaim {attemptId:string;stepId:string;taskId:string;runId:string;kind:'document_scene'|'document_profile';laterStage:string|null;scheduleNow:number|null;scopeKind:'self'|'contact';contactId:string|null;claim:ModelTaskClaim;memories:L2ScenarioMemory[];scenarios:any[];profile:any;}
-const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute} as StorageAction);
+const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute} as StorageAction);
 /** 普通暂停后不再启动新的文档小批；正在执行的批次允许收尾。 */
 function runPaused(tx:StorageTransaction,ownerId:string,runId:string):boolean {
  const run=tx.get('SELECT pause_requested_at FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);

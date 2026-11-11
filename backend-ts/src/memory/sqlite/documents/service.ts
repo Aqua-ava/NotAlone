@@ -1,3 +1,4 @@
+import {currentDiagnosticTrace,newTraceId,withDiagnosticTrace} from '../../../diagnostics/context.ts';
 import type {SqliteStorage} from '../../../storage/sqlite/client.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import type {ActiveHolders} from '../../../storage/sqlite/deletion/holders.ts';
@@ -32,6 +33,7 @@ export class SqliteMemoryDocuments {
  queueSummary():Promise<{pending:number;nextDueAt:number|null;stage:'document_scene'|'document_profile'|null}>{return this.storage.execute('memoryDocuments.queueSummary',{ownerId:this.ownerId});}
  nextDueAt():Promise<number|null>{return this.storage.execute('memoryDocuments.nextDueAt',{ownerId:this.ownerId});}
  async runDueStages(now=Date.now()):Promise<unknown[]> {
+  return withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),async()=>{
   const results:unknown[]=[];if(this.stop.signal.aborted)return results;
   for(let index=0;index<32&&!this.stop.signal.aborted;index++){
    const job=await this.storage.execute<any>('memoryDocuments.claimDue',{ownerId:this.ownerId,now});
@@ -44,11 +46,12 @@ export class SqliteMemoryDocuments {
    if(finalState==='failed'||finalState==='unknown')break;
   }
   return results;
+  });
  }
  publishRun(runId:string):Promise<unknown>{
   if(this.stop.signal.aborted)return Promise.reject(new StorageFailure('document_service_closed'));
   const prior=this.active.get(runId);if(prior)return prior;
-  const work=this.run(runId);this.active.set(runId,work);this.pending.add(work);void work.then(()=>{this.pending.delete(work);this.active.delete(runId);},()=>{this.pending.delete(work);this.active.delete(runId);});return work;
+  const work=withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>this.run(runId));this.active.set(runId,work);this.pending.add(work);void work.then(()=>{this.pending.delete(work);this.active.delete(runId);},()=>{this.pending.delete(work);this.active.delete(runId);});return work;
  }
  private async run(runId:string){
   const tasks=await this.storage.execute<string[]>('memoryDocuments.tasks',{ownerId:this.ownerId,runId});const results=[];

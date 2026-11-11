@@ -1,4 +1,4 @@
-import {currentDiagnosticTrace,newTraceId,withDiagnosticTrace,diagnose} from '../../diagnostics/unified.ts';
+import {currentDiagnosticTrace,newTraceId,withDiagnosticTrace,diagnose} from '../../diagnostics/context.ts';
 import {createBuiltinMemoryContentRegistry} from '../content/builtins.ts';
 import type {MemoryContentRegistry,MemoryContentResources,FrozenMemoryContent} from '../content/registry.ts';
 import {assertMultimodalAdmission} from '../extraction/multimodal.ts';

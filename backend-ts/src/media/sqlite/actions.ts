@@ -1,3 +1,4 @@
+import {recordReadyImageOutsideRun} from '../../memory/sqlite/diagnostics.ts';
 import {randomUUID} from 'node:crypto';
 import {StorageFailure, type StorageAction, type StorageLease, type StorageRow, type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import {assertReadEligibility} from '../../contacts/sqlite/actions.ts';
@@ -197,6 +198,7 @@ export function createMediaActions(registration:DeletionRegistration):StorageAct
   for(const f of fresh)tx.run("UPDATE media_file SET publish_state='current' WHERE owner_id=? AND id=?",[i.ownerId,f.id]);
   tx.run("UPDATE media_extraction_attempt SET state='completed',result_outcome=?,lease_token=NULL,lease_expires_at=NULL,finished_at=?,association_proof_format=?,association_proof=?,error_code=? WHERE owner_id=? AND id=?",[outcome,Date.now(),proof?'media-association-v1':null,proof?JSON.stringify(proof):null,i.errorCode??null,i.ownerId,i.attemptId]);
   tx.run('UPDATE message_media SET head_revision=head_revision+1 WHERE owner_id=? AND message_id=?',[i.ownerId,i.messageId]);
+  if(kind==='image'&&!full(current)&&full(combination))recordReadyImageOutsideRun(tx,i.ownerId,i.contactId,i.messageId);
   if(current.some(f=>!keepIds.has(f.id))||tx.get("SELECT 1 FROM media_file WHERE owner_id=? AND message_id=? AND publish_state IN ('retired','cleanup_pending') AND content_state='present'",[i.ownerId,i.messageId]))planDeletion(tx,lease,registration,{ownerId:i.ownerId,requestKey:`${i.attemptId}-replace`,scope:{kind:'media_result_replace',contactId:i.contactId,messageId:i.messageId}});
   return snapshot(tx,i);
  }),

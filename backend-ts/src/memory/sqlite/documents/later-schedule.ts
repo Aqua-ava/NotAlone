@@ -1,3 +1,4 @@
+import {observedProcessingAction,recordProcessingRunChange} from '../diagnostics.ts';
 import {randomUUID} from 'node:crypto';
 import {sha256} from '../../../platform/sha256.ts';
 import type {StorageAction,StorageMigration,StorageTransaction,StorageRow,StorageLease} from '../../../storage/sqlite/contracts.ts';
@@ -46,7 +47,7 @@ ALTER TABLE processing_run ADD COLUMN followup_state TEXT NOT NULL DEFAULT \'non
 export const laterScheduleMigration=(version:number):StorageMigration=>({version,sql:schema});
 export interface LaterScheduleSnapshot {scene:Record<string,unknown>|null;profile:Record<string,unknown>|null}
 export interface LaterStagesProjection {state:'completed'|'pending'|'scheduled'|'running'|'unknown'|'failed'|'revoked';reasons:string[];nextDueAt:number|null;stage:'document_scene'|'document_profile'|null}
-const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute});
+const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute});
 const scopeParts=(scope:MemoryScope)=>({scopeKind:scope.scopeKind,contactId:scope.contactId,scopeKey:scope.scopeKind==='self'?'self':scope.contactId!});
 const exists=(tx:StorageTransaction)=>!!tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='memory_document_later_schedule'");
 const safeTime=(value:unknown)=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?value:(()=>{throw new StorageFailure('document_schedule_time_invalid')})();
@@ -87,6 +88,7 @@ function maybeCompleteL1Run(tx:StorageTransaction,ownerId:string,runId:string):v
  if(tx.get("SELECT 1 FROM processing_step s JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id LEFT JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id LEFT JOIN model_call c ON c.owner_id=a.owner_id AND c.step_attempt_id=a.id WHERE t.owner_id=? AND t.run_id=? AND (s.state='unknown' OR a.state='unknown' OR c.state='unknown') LIMIT 1",[ownerId,runId]))return;
  if(tx.get("SELECT 1 FROM memory_document_later_run_requirement WHERE owner_id=? AND run_id=? AND outcome NOT IN ('completed','no_formal_change') LIMIT 1",[ownerId,runId]))return;
  tx.run("UPDATE processing_run SET state='completed' WHERE owner_id=? AND id=? AND state IN ('running','incomplete') AND pause_requested_at IS NULL",[ownerId,runId]);
+ recordProcessingRunChange(tx,runId,String(run.state),'completed','completed');
 }
 
 /** 在正式记忆 revision 已递增的同一事务内登记；同一待执行 L2 窗口只保留首个 due anchor。 */
