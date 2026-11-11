@@ -4,12 +4,12 @@ import type {StorageAction,StorageLease,StorageRow,StorageTransaction} from '../
 import {readExtractionToolArguments} from '../../extraction/arguments.ts';
 import {DEFAULT_L2_SCENARIO_BUDGET,parseScenarioVerification,validateScenarioDocument,type L2ScenarioMemory,type L2ScenarioReference} from '../../scenarios/workspace.ts';
 import {parseProfileVerification,validateProfile,validateIncrementalProfile,type L3ProfileEntry} from '../../profiles/workspace.ts';
-import {documentSources,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments} from './basis.ts';
+import {documentSources,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,withDocumentSourceQualifications} from './basis.ts';
 import {current} from './stages.ts';
 import {preconditions,revisions,task,taskView} from './actions.ts';
 import {fail,textId} from '../qualification.ts';
 import {finishLaterStagePublication} from './later-schedule.ts';
-const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute} as StorageAction);
+const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:(tx,input,lease)=>withDocumentSourceQualifications(tx,()=>execute(tx,input,lease))} as StorageAction);
 function verification(tx:StorageTransaction,ownerId:string,attemptId:string,eventId:string,tool:string):unknown {
  const e=tx.get(`SELECT e.payload FROM execution_event e JOIN model_call c ON c.owner_id=e.owner_id AND c.id=e.originated_call_id
   JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE e.owner_id=? AND e.id=? AND e.step_attempt_id=? AND e.kind='document_output' AND c.state='succeeded' AND o.commit_forbidden_at IS NULL`,[ownerId,eventId,attemptId]);

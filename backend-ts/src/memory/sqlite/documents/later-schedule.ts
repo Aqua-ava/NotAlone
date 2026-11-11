@@ -8,7 +8,7 @@ import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import {available} from '../management/qualification.ts';
 import {assertContribution,assertInputs} from '../qualification.ts';
 import {currentContent,freezeContent} from '../content.ts';
-import {memoryBasis,documentSources} from './basis.ts';
+import {memoryBasis,documentSources,withDocumentSourceQualifications} from './basis.ts';
 import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 
 const sceneWindowMs=60*60*1000,profileWindowMs=24*60*60*1000;
@@ -49,7 +49,7 @@ ALTER TABLE processing_run ADD COLUMN followup_state TEXT NOT NULL DEFAULT \'non
 export const laterScheduleMigration=(version:number):StorageMigration=>({version,sql:schema});
 export interface LaterScheduleSnapshot {scene:Record<string,unknown>|null;profile:Record<string,unknown>|null}
 export interface LaterStagesProjection {state:'completed'|'pending'|'scheduled'|'running'|'unknown'|'failed'|'revoked';reasons:string[];nextDueAt:number|null;stage:'document_scene'|'document_profile'|null}
-const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute});
+const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:(tx,input)=>withDocumentSourceQualifications(tx,()=>execute(tx,input))});
 const scopeParts=(scope:MemoryScope)=>({scopeKind:scope.scopeKind,contactId:scope.contactId,scopeKey:scope.scopeKind==='self'?'self':scope.contactId!});
 const exists=(tx:StorageTransaction)=>!!tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='memory_document_later_schedule'");
 const safeTime=(value:unknown)=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?value:(()=>{throw new StorageFailure('document_schedule_time_invalid')})();

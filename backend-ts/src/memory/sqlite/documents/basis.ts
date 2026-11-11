@@ -4,12 +4,24 @@ import type {L2ScenarioMemory,L2ScenarioReference,L2ScenarioVersion} from '../..
 import type {L3ProfileDocument,L3ProfileEntry} from '../../profiles/workspace.ts';
 import {sha256} from '../../../platform/sha256.ts';
 import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
+import type {MessageSourceReference} from '../../../history/sqlite/contracts.ts';
 import {qualificationSources,mergeKnowledgeSources} from '../management/dependencies.ts';
 import {sourceVerificationState} from '../management/evidence.ts';
 import {memoryTimeEligibility} from '../management/temporal.ts';
 import {fail,requireVersion} from '../management/qualification.ts';
 import {documentActualInputs,type DocumentActualInput} from './inputs.ts';
 
+const sourceQualifications=new WeakMap<StorageTransaction,Set<string>>();
+/** 一个同步动作内只复用当前来源身份的核验；不缓存正文、版本修订或文档依赖结果。 */
+export const documentSourceEligibility:SourceEligibility=(tx,ref:MessageSourceReference)=>{
+ const cache=sourceQualifications.get(tx),key=JSON.stringify([ref.owner_id,ref.contact_id,ref.record_id,ref.message_id]);
+ if(cache?.has(key))return;
+ assertSourceEligibility(tx,ref);cache?.add(key);
+};
+export function withDocumentSourceQualifications<T>(tx:StorageTransaction,work:()=>T):T{
+ if(sourceQualifications.has(tx))return work();
+ sourceQualifications.set(tx,new Set());try{return work();}finally{sourceQualifications.delete(tx);}
+}
 function safeNumber(value:bigint):number {if(value<0n||value>BigInt(Number.MAX_SAFE_INTEGER))fail('document_revision_invalid');return Number(value);}
 function fact(tx:StorageTransaction,ownerId:string,decisionId:string):Record<string,any>|null {
  const row=tx.get(`SELECT e.payload FROM decision_candidate dc JOIN memory_candidate c ON c.owner_id=dc.owner_id AND c.id=dc.candidate_id
@@ -25,8 +37,8 @@ export function withSourceMemo<T>(run:()=>T):T {
  const outer=sourceMemo;sourceMemo=new Map();
  try{return run();}finally{sourceMemo=outer;}
 }
-function memorySources(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow,sourceEligibility:SourceEligibility=assertSourceEligibility):ReplySource[] {
- const key=sourceMemo&&sourceEligibility===assertSourceEligibility?JSON.stringify([ownerId,String(m.id),String(v.version_no)]):undefined;
+function memorySources(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow,sourceEligibility:SourceEligibility=documentSourceEligibility):ReplySource[] {
+ const key=sourceMemo&&(sourceEligibility===assertSourceEligibility||sourceEligibility===documentSourceEligibility)?JSON.stringify([ownerId,String(m.id),String(v.version_no)]):undefined;
  const hit=key===undefined?undefined:sourceMemo!.get(key);if(hit)return hit;
  const sources=memorySourcesUncached(tx,ownerId,m,v,sourceEligibility);
  if(key!==undefined)sourceMemo!.set(key,sources);
@@ -55,12 +67,12 @@ export function frozenMemories(tx:StorageTransaction,ownerId:string,stepId:strin
  });
 }
 export function sourceStillValid(tx:StorageTransaction,ownerId:string,s:ReplySource):void {
- assertSourceEligibility(tx,{owner_id:ownerId,contact_id:s.contactId,message_id:s.messageId,record_id:s.recordId});
+ documentSourceEligibility(tx,{owner_id:ownerId,contact_id:s.contactId,message_id:s.messageId,record_id:s.recordId});
  if(!tx.get("SELECT 1 FROM message WHERE owner_id=? AND contact_id=? AND id=? AND interpretation_revision=? AND availability='available'",[ownerId,s.contactId,s.messageId,s.acceptedRevision]))fail('document_source_stale');
 }
 interface DocumentInspection {sources:ReplySource[];stale:boolean}
 /** 旧头修订可标为失效，但仍逐项核验历史版本及实际来源，不能掩盖缺失依据。 */
-function inspectActualInputs(tx:StorageTransaction,ownerId:string,actual:DocumentActualInput[],visited:Set<string>,cache:Map<string,DocumentInspection>,sourceEligibility:SourceEligibility=assertSourceEligibility):DocumentInspection {
+function inspectActualInputs(tx:StorageTransaction,ownerId:string,actual:DocumentActualInput[],visited:Set<string>,cache:Map<string,DocumentInspection>,sourceEligibility:SourceEligibility=documentSourceEligibility):DocumentInspection {
  const sources:ReplySource[]=[];let stale=false;
  for(const {row:i} of actual){
   if(i.kind==='memory'){
@@ -82,7 +94,7 @@ export function actualInputSources(tx:StorageTransaction,ownerId:string,actual:D
  const result=inspectActualInputs(tx,ownerId,actual,new Set(),new Map());if(result.stale)fail('document_memory_stale');return result.sources;
 }
 /** 同时核对历史图完整性和当前记忆资格；两者不能互相代替。 */
-function inspectDocument(tx:StorageTransaction,ownerId:string,documentId:string,versionNo:bigint,visited:Set<string>,cache:Map<string,DocumentInspection>,sourceEligibility:SourceEligibility=assertSourceEligibility):DocumentInspection {
+function inspectDocument(tx:StorageTransaction,ownerId:string,documentId:string,versionNo:bigint,visited:Set<string>,cache:Map<string,DocumentInspection>,sourceEligibility:SourceEligibility=documentSourceEligibility):DocumentInspection {
  const key=JSON.stringify([documentId,String(versionNo)]);if(visited.has(key))fail('document_dependency_cycle');visited.add(key);
  const cached=cache.get(key);if(cached){visited.delete(key);return cached;}
  const v=tx.get(`SELECT v.*,s.id AS step_id,s.state AS step_state,a.state AS attempt_state FROM memory_document_version v
@@ -122,7 +134,7 @@ function inspectDocument(tx:StorageTransaction,ownerId:string,documentId:string,
  const result={sources:mergeKnowledgeSources(sources),stale};visited.delete(key);cache.set(key,result);return result;
 }
 /** 校验完成文档实际输入及其传递来源；不把重新选择的record替换为原证明。 */
-export function documentSources(tx:StorageTransaction,ownerId:string,documentId:string,versionNo:bigint,visited=new Set<string>(),cache=new Map<string,ReplySource[]>(),sourceEligibility:SourceEligibility=assertSourceEligibility):ReplySource[]{
+export function documentSources(tx:StorageTransaction,ownerId:string,documentId:string,versionNo:bigint,visited=new Set<string>(),cache=new Map<string,ReplySource[]>(),sourceEligibility:SourceEligibility=documentSourceEligibility):ReplySource[]{
  const key=JSON.stringify([documentId,String(versionNo)]);if(visited.has(key))fail('document_dependency_cycle');
  const cached=cache.get(key);if(cached)return cached;
  const inspected=new Map<string,DocumentInspection>(),result=inspectDocument(tx,ownerId,documentId,versionNo,visited,inspected,sourceEligibility);
@@ -144,7 +156,7 @@ function publicationStructure(tx:StorageTransaction,ownerId:string,publicationId
  for(const row of rows)if(row.scope_kind!==scopeKind||row.contact_id!==contactId||row.state!=='active'||row.content_state!=='present')fail('document_publication_unavailable');
  return {publication:p!,members:rows};
 }
-export function publicationMembers(tx:StorageTransaction,ownerId:string,publicationId:string,scopeKind:string,contactId:string|null,cache=new Map<string,ReplySource[]>(),sourceEligibility:SourceEligibility=assertSourceEligibility):StorageRow[]{
+export function publicationMembers(tx:StorageTransaction,ownerId:string,publicationId:string,scopeKind:string,contactId:string|null,cache=new Map<string,ReplySource[]>(),sourceEligibility:SourceEligibility=documentSourceEligibility):StorageRow[]{
  const {publication,members}=publicationStructure(tx,ownerId,publicationId,scopeKind,contactId);
  if(publication.availability!=='available')fail('document_publication_unavailable');
  for(const row of members)documentSources(tx,ownerId,String(row.document_id),row.version_no as bigint,new Set(),cache,sourceEligibility);

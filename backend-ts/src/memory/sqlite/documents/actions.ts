@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import type {StorageAction,StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {assertInputs,assertTaskContributions,fail,textId} from '../qualification.ts';
 import {available,scope as readScope} from '../management/qualification.ts';
-import {memoryBasis,publicationMembers,renderDocuments,withSourceMemo} from './basis.ts';
+import {memoryBasis,publicationMembers,renderDocuments,withSourceMemo,documentSourceEligibility,withDocumentSourceQualifications} from './basis.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import {laterStagesState as scheduledLaterStagesState,type LaterStagesProjection} from './later-schedule.ts';
 
@@ -39,7 +39,7 @@ export function preconditions(tx:StorageTransaction,ownerId:string,t:StorageRow,
  if(contributions||!laterStageForTask(tx,ownerId,t))assertTaskContributions(tx,ownerId,String(t.run_id),String(t.id));
  const inputs=tx.all(`SELECT i.* FROM run_input i JOIN task_contribution c ON c.owner_id=i.owner_id AND c.run_id=i.run_id AND c.source_contact_id=i.source_contact_id
   WHERE c.owner_id=? AND c.task_id=? ORDER BY i.input_no`,[ownerId,t.id]);
- assertInputs(tx,ownerId,String(t.run_id),inputs);
+ assertInputs(tx,ownerId,String(t.run_id),inputs,documentSourceEligibility);
  if(tx.get(`SELECT 1 FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id
   JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
   LEFT JOIN memory_candidate c ON c.owner_id=e.owner_id AND c.event_id=e.id
@@ -102,7 +102,7 @@ function noFormalChangeStatus(tx:StorageTransaction,ownerId:string,s:{scopeKind:
   WHERE s.owner_id=? AND s.task_id=? AND c.state='pending' LIMIT 1`,[ownerId,latest.id]))return 'processing';
  return schedule.length||requirements.length?'processing':'idle';
 }
-const action=(name:string,mode:'read'|'write',fn:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:fn});
+const action=(name:string,mode:'read'|'write',fn:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:(tx,input)=>withDocumentSourceQualifications(tx,()=>fn(tx,input))});
 export const memoryDocumentsActions:StorageAction[]=[
  action('tasks','read',(tx,i)=>tx.all('SELECT id FROM processing_task WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[textId(i.ownerId),textId(i.runId)]).map(row=>String(row.id))),
  action('readTask','read',(tx,i)=>taskView(tx,textId(i.ownerId),textId(i.taskId))),
