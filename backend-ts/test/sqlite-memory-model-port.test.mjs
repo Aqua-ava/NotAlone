@@ -118,7 +118,11 @@ test('官方DSH和真实ModelHost端口：用途、凭据、最终预算、未�
   const noCredentials=await call({noCredentials:true});assert.equal(noCredentials.error,'extraction_model_credentials_unavailable');assert.equal(requests,1);
   const oversized=await call({oversized:true});assert.equal(oversized.error,'extraction_model_budget_exceeded');assert.equal(requests,1);
   const late=await call({lateDeletion:true});assert.equal(late.error,'synthetic_scope_deleted');assert.equal(requests,2);
-  rejectHTTP=true;const authentication=await call();assert.equal(authentication.error,'extraction_model_call_failed');assert.deepEqual(authentication.providerFailure,{name:'LlmFailure',code:'AUTH',status:401});assert.equal(authentication.dispatch,'response_observed');assert.equal(authentication.outcome,'failed');assert.doesNotMatch(JSON.stringify(authentication),/合成供应商原始正文/);assert.equal(requests,3);
+  rejectHTTP=true;const authentication=await call();assert.equal(authentication.error,'extraction_model_call_failed');
+  assert.deepEqual(authentication.providerFailure,{name:'LlmFailure',code:'AUTH',status:401,transport_category:'other',stage:'response_received',
+    elapsed_ms:authentication.providerFailure.elapsed_ms,request_bytes:authentication.providerFailure.request_bytes,image_count:0});
+  assert.ok(authentication.providerFailure.elapsed_ms>=0);assert.ok(authentication.providerFailure.request_bytes>0);
+  assert.equal(authentication.dispatch,'response_observed');assert.equal(authentication.outcome,'failed');assert.doesNotMatch(JSON.stringify(authentication),/合成供应商原始正文/);assert.equal(requests,3);
   const shared=await call({sharedProbe:true});
   assert.equal(shared.text,'合成输出');assert.equal(shared.sharedCalls,5);assert.equal(requests,4);
   const invalid=await call({verification:true,invalidOutput:true});
@@ -134,17 +138,18 @@ test('官方DSH和真实ModelHost端口：用途、凭据、最终预算、未�
   assert.deepEqual(imageExtraction.imageInputs,imageVerification.imageInputs);
   const manifest=imageExtraction.imageInputs[0];assert.equal(manifest.id,imageId);
   assert.equal(manifest.sourceSha256,createHash('sha256').update(png).digest('hex'));
+  assert.equal(manifest.originalBytes,png.length);assert.equal(manifest.requestMimeType,'image/jpeg');
   assert.deepEqual({width:manifest.width,height:manifest.height,frame:manifest.frame},{width:8,height:6,frame:0});
   const extractionImage=payloads[5].body.messages[0].content.find(block=>block.type==='image');
-  assert.equal(extractionImage.source.type,'base64');assert.equal(extractionImage.source.media_type,'image/png');
+  assert.equal(extractionImage.source.type,'base64');assert.equal(extractionImage.source.media_type,'image/jpeg');
   const actual=Buffer.from(extractionImage.source.data,'base64');
   assert.equal(createHash('sha256').update(actual).digest('hex'),manifest.requestSha256);
   const verificationImage=payloads[6].body.messages[1].content.find(block=>block.type==='image_url');
-  assert.equal(verificationImage.image_url.url,'data:image/png;base64,'+extractionImage.source.data);
+  assert.equal(verificationImage.image_url.url,'data:image/jpeg;base64,'+extractionImage.source.data);
   assert.deepEqual(payloads.slice(5).map(payload=>payload.path),['/anthropic/v1/messages','/strict/chat/completions'],'图文调用不能产生Files API上传或额外HTTP重试');
   const malformed=await call({images:[{...images[0],dataBase64:Buffer.from('合成损坏图片').toString('base64')}]});
   assert.ok(malformed.error);assert.equal(requests,7,'坏图片在任何HTTP前失败');
-  const noisy=await sharp(randomFillSync(Buffer.alloc(256*256*3)),{raw:{width:256,height:256,channels:3}}).png().toBuffer();
+  const noisy=await sharp(randomFillSync(Buffer.alloc(512*512*3)),{raw:{width:512,height:512,channels:3}}).png().toBuffer();
   const imageBudget=await call({images:[{id:randomUUID(),mimeType:'image/png',dataBase64:noisy.toString('base64')}]});
   assert.equal(imageBudget.receipt.outcome,'succeeded');assert.equal(requests,8);
   assert.ok(imageBudget.receipt.input_budget.serialized_bytes>131072,'完整实体仍包含所有真实图片字节');

@@ -12,6 +12,19 @@ export function withDiagnosticTrace<T>(traceId:string|undefined,work:()=>T):T {
 }
 export function registerDiagnosticLog(log:UnifiedDiagnosticLog,publishObserved:(event:DiagnosticEvent,observedAt:number)=>void):void {current=log;for(const item of pending.splice(0))publishObserved(item.event,item.observedAt);}
 export function diagnosticLog():UnifiedDiagnosticLog|undefined{return current;}
+/** 删除前先停止旧图片调用；擦除惰性队列和已有统一日志中的该文件身份，失败如实返回。 */
+export async function eraseModelImageDiagnostic(imageId:string):Promise<boolean>{
+ if(typeof imageId!=='string'||!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(imageId))return false;
+ for(let index=pending.length-1;index>=0;index--)if(pending[index]!.event.event==='processing.model_image'&&pending[index]!.event.imageId===imageId)pending.splice(index,1);
+ try{
+  if(!current){
+   const root=process.env.NOTALONE_DIAGNOSTIC_ROOT;if(!root)return true;
+   const {configureDiagnosticLog}=await import('./unified.ts');
+   if(!current)configureDiagnosticLog(root,{proc:'backend',development:process.env.NOTALONE_DIAGNOSTIC_LEVEL==='debug'});
+  }
+  return await current!.eraseModelImage(imageId);
+ }catch{return false;}
+}
 /** 普通业务只依赖轻量上下文；后台首次需要写盘时异步加载写者并有界暂存。 */
 export function diagnose(event:DiagnosticEvent):void {
  try{

@@ -22,6 +22,8 @@ export const diagnosticEvents = Object.freeze({
   'processing.batch_changed': schema('memory.processing', 'info', ['runId', 'taskId', 'batchId', 'fromState', 'toState', 'count', 'durationMs']),
   'processing.control_changed': schema('memory.processing', 'info', ['runId', 'fromState', 'toState', 'count']),
   'processing.image_excluded': schema('memory.processing', 'info', ['runId', 'taskId', 'count']),
+  'processing.model_call': schema('memory.processing', 'info', ['callId', 'originalBytes', 'sentBytes', 'imageCount', 'requestBytes', 'durationMs', 'stage', 'failureCategory', 'toState']),
+  'processing.model_image': schema('memory.processing', 'info', ['callId', 'imageId', 'originalBytes', 'sentBytes', 'imageCount', 'requestBytes', 'width', 'height', 'mimeType', 'durationMs', 'stage', 'failureCategory']),
   'sync.decision': schema('history.sync', 'info', ['count', 'durationMs']),
   'sync.completed': schema('history.sync', 'info', ['count', 'durationMs']),
   'media.decision': schema('media', 'info', ['count', 'durationMs']),
@@ -35,13 +37,19 @@ export const diagnosticEvents = Object.freeze({
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const finite = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER;
 const validators = {
-  traceId: uuid, interruptedTraceId: uuid, runId: uuid, taskId: uuid, batchId: uuid,
+  traceId: uuid, interruptedTraceId: uuid, runId: uuid, taskId: uuid, batchId: uuid, callId: uuid, imageId: uuid,
   reasonCode: value => diagnosticReasons.includes(value), caller: value => diagnosticCallers.includes(value),
   contactPrefix: value => typeof value === 'string' && /^[0-9a-f]{8}$/.test(value),
   durationMs: finite, count: value => Number.isSafeInteger(value) && finite(value),
   fromRevision: value => Number.isSafeInteger(value) && finite(value), toRevision: value => Number.isSafeInteger(value) && finite(value),
   fromState: value => diagnosticStates.includes(value), toState: value => diagnosticStates.includes(value),
   sqlFingerprint: value => typeof value === 'string' && /^[0-9a-f]{16,64}$/.test(value),
+  originalBytes: value => Number.isSafeInteger(value) && finite(value), sentBytes: value => Number.isSafeInteger(value) && finite(value),
+  requestBytes: value => Number.isSafeInteger(value) && finite(value), imageCount: value => Number.isSafeInteger(value) && value >= 1 && value <= 8,
+  width: value => Number.isSafeInteger(value) && value >= 1 && value <= 32768, height: value => Number.isSafeInteger(value) && value >= 1 && value <= 32768,
+  mimeType: value => ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(value),
+  stage: value => ['before_send', 'awaiting_response', 'response_received'].includes(value),
+  failureCategory: value => ['none', 'socket_closed', 'reset', 'timeout', 'tls', 'dns', 'other', 'image_budget', 'image_invalid', 'model_budget', 'cancelled'].includes(value),
 };
 function dataFields(value) {
   if (!value || typeof value !== 'object' || ![Object.prototype, null].includes(Object.getPrototypeOf(value)) || Object.getOwnPropertySymbols(value).length) return;

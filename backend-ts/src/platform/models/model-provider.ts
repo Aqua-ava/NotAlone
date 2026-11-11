@@ -3,6 +3,8 @@ import type { Context } from '@deepseek-ai/cordis';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {LlmError,type ImageBlock,type TextBlock,type GenerateOptions,type StreamChunk} from '@deepseek-ai/dsh-llm';
 import {bindDiagnosticProblemBudget} from '../../diagnostics/diagnostic-problem-budget.ts';
+import {currentDiagnosticTrace,newTraceId} from '../../diagnostics/context.ts';
+import {recordImageCallDiagnostic,type ImageCallDiagnosticImage,type ImageCallFailureCategory} from './image-call-diagnostics.ts';
 import { DeepSeekAdapter, DeepSeekFileStore,resolveRequestImageTarget, PUBLIC_BASE_URL, type DeepSeekConnectionOptions, type DeepSeekAdapterOptions } from '@deepseek-ai/dsh-llm-deepseek';
 import {ModelImageAttachments,type ModelImageInput,type ModelImageManifest} from './model-images.ts';
 import {
@@ -15,6 +17,7 @@ import {
 } from '../../memory/extraction/verification/deepseek-strict.ts';
 export interface ModelProviderCall {
   sessionId: string; attempt_id: string; permit_id: string;
+  contactPrefix?: string;
   binding: MessagesBudgetBinding; profile: MessagesBudgetProfile;
   requireCurrent(): Promise<void>;
   onImageInputs?(images:readonly ModelImageManifest[]):Promise<void>;
@@ -35,6 +38,7 @@ export interface ModelProviderObservation {
   transport_category?:ModelTransportCategory;
   /** 仅来自实际adapter/strict fetch抛出的终端TRANSPORT，取消不属于此类。 */
   terminal_transport_failure?:boolean;
+  failure_category?:ImageCallFailureCategory;response_status?:number;terminal_outcome?:'succeeded'|'failed';
   budget: MessagesBudgetReceipt | null;
   budget_rejection:{code:ModelInputBudgetError['code'];receipt:MessagesBudgetReceipt|null}|null;
 }
@@ -90,6 +94,27 @@ function observeTransportFailure(observation:ModelProviderObservation,error:unkn
   observation.transport_category=transportCategory(error);
   observation.terminal_transport_failure=error.failure.code==='TRANSPORT'&&!signal?.aborted;
 }
+function diagnosticFailureCategory(error:unknown,signal?:AbortSignal):ImageCallFailureCategory {
+ if(signal?.aborted||error instanceof LlmError&&error.failure.code==='ABORTED')return 'cancelled';
+ let current=error;const seen=new Set<unknown>();
+ for(let depth=0;current&&typeof current==='object'&&depth<8&&!seen.has(current);depth++){
+  seen.add(current);const row=current as {code?:unknown;message?:unknown;cause?:unknown};
+  if(row.code==='extraction_model_image_budget_exceeded'||row.message==='extraction_model_image_budget_exceeded')return 'image_budget';
+  if(row.code==='extraction_model_image_invalid'||row.message==='extraction_model_image_invalid')return 'image_invalid';
+  if(typeof row.code==='string'&&row.code.startsWith('reply_budget_'))return 'model_budget';
+  current=row.cause;
+ }
+ return transportCategory(error);
+}
+function observeProviderFailure(observation:ModelProviderObservation,error:unknown,signal?:AbortSignal):void {
+ observeTransportFailure(observation,error,signal);observation.terminal_outcome='failed';
+ observation.failure_category=diagnosticFailureCategory(error,signal);
+ if(error instanceof LlmError&&error.failure.status!==undefined)observation.response_status=error.failure.status;
+}
+interface RegisteredCall {
+ call:ModelProviderCall;observation:ModelProviderObservation;prepared:boolean;
+ traceId:string;startedAt:number;images:ImageCallDiagnosticImage[];
+}
 export function installModelProvider(ctx: Context, configuration: ModelProviderConfiguration) {
   if(!configuration.provider.trim()||configuration.connection.retryPolicy.mode!=='normal'||configuration.connection.retryPolicy.maxRetries!==0)throw new Error('model_provider_retry_policy_invalid');
   const diagnosticBudget=bindDiagnosticProblemBudget();
@@ -102,16 +127,27 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
     if(!['https:','http:'].includes(parsed.protocol)||parsed.username||parsed.password||parsed.search||parsed.hash)
       throw new Error('model_provider_strict_endpoint_invalid');
   }
-  const calls=new Map<string,{call:ModelProviderCall;observation:ModelProviderObservation;prepared:boolean}>();
+  const calls=new Map<string,RegisteredCall>();
   const dispatchContext=new AsyncLocalStorage<{observation:ModelProviderObservation}>();
+  const imageScopes=new AsyncLocalStorage<readonly ImageCallDiagnosticImage[]>();
   let images:ModelImageAttachments|undefined;
   // 官方store的公开transport接点强制零上传HTTP，触发官方inline fallback；不产生远端文件与重试。
   const inlineFiles=new DeepSeekFileStore({fetch:async()=>{throw new Error('model_image_files_disabled');}});
   // 沿官方公开prepareCall/stream包装异常；宿主转换finish后仍能保留脱敏传输分类。
   async function* observeStream(stream:AsyncIterable<StreamChunk>,options:GenerateOptions):AsyncGenerator<StreamChunk>{
-    try{yield* stream;}catch(error){
+    try{for await(const chunk of stream){
       const current=options.sessionId?calls.get(String(options.sessionId)):undefined;
-      if(current)observeTransportFailure(current.observation,error,options.signal);
+      if(current&&chunk.type==='finish'){
+        current.observation.terminal_outcome=['stop','tool-calls'].includes(chunk.reason.kind)?'succeeded':'failed';
+        if(chunk.reason.kind==='error'||chunk.reason.kind==='aborted'){
+          current.observation.failure_category=chunk.reason.kind==='aborted'?'cancelled':current.observation.transport_category??'other';
+          if(chunk.reason.failure.status!==undefined)current.observation.response_status=chunk.reason.failure.status;
+        }
+      }
+      yield chunk;
+    }}catch(error){
+      const current=options.sessionId?calls.get(String(options.sessionId)):undefined;
+      if(current)observeProviderFailure(current.observation,error,options.signal);
       throw error;
     }
   }
@@ -142,6 +178,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
       let budget:MessagesBudgetReceipt;
       const prepared=prepareBoundMessagesRequest(request.body,current.call.binding);
       const imageInputs=images?.manifest()??[];
+      observeImageInputs(current,imageInputs);
       current.observation.request_bytes=Buffer.byteLength(JSON.stringify(prepared.body),'utf8');current.observation.image_count=imageInputs.length;
       try{budget=measureSerializedMessages(prepared.body,current.call.binding,current.call.profile,imageInputs);}
       catch(error){if(error instanceof ModelInputBudgetError)current.observation.budget_rejection={code:error.code,receipt:error.receipt};throw error;}
@@ -158,17 +195,38 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
     },
   });
   const dispose=ctx.llm.registerAdapter([configuration.provider],adapter);
+  function observeImageInputs(current:RegisteredCall,manifests:readonly ModelImageManifest[]):void {
+    current.images=manifests.map(image=>({id:image.id,originalBytes:image.originalBytes??current.images.find(input=>input.id===image.id)?.originalBytes??image.bytes,
+      sentBytes:image.bytes,width:image.width,height:image.height,mimeType:image.requestMimeType}));
+  }
+  function close(registered:RegisteredCall):void {
+    if(calls.get(registered.call.sessionId)!==registered)return;
+    calls.delete(registered.call.sessionId);
+    const observation=registered.observation;
+    recordImageCallDiagnostic({callId:registered.call.attempt_id,traceId:registered.traceId,contactPrefix:registered.call.contactPrefix,
+      images:registered.images,requestBytes:observation.request_bytes??observation.budget?.serialized_bytes??0,
+      durationMs:Math.max(0,Date.now()-registered.startedAt),stage:observation.dispatch==='http_accepted'||observation.response_status!==undefined?'response_received'
+        :observation.fetch_started===false||observation.dispatch==='not_authorized'?'before_send':'awaiting_response',
+      failureCategory:observation.failure_category??(observation.terminal_outcome==='succeeded'?'none':observation.transport_category??'other'),
+      outcome:observation.terminal_outcome??'unknown'});
+  }
   function register(call:ModelProviderCall){
     if(!call.sessionId||!call.attempt_id||!call.permit_id||call.binding.provider!==configuration.provider||calls.has(call.sessionId))throw new Error('model_provider_call_conflict');
     const registered={call:{...call,binding:freeze(structuredClone(call.binding)),profile:freeze(structuredClone(call.profile))},
-      observation:{attempt_id:call.attempt_id,permit_id:call.permit_id,dispatch:'not_authorized' as ModelProviderObservation['dispatch'],before_dispatch_started:false,budget:null as MessagesBudgetReceipt|null,budget_rejection:null as ModelProviderObservation['budget_rejection']} as ModelProviderObservation,prepared:false};
+      observation:{attempt_id:call.attempt_id,permit_id:call.permit_id,dispatch:'not_authorized' as ModelProviderObservation['dispatch'],before_dispatch_started:false,budget:null as MessagesBudgetReceipt|null,budget_rejection:null as ModelProviderObservation['budget_rejection']} as ModelProviderObservation,
+      prepared:false,traceId:currentDiagnosticTrace()??newTraceId(),startedAt:Date.now(),images:[...(imageScopes.getStore()??[])]};
     calls.set(call.sessionId,registered);
     return registered;
   }
   return {
     withImages<T>(input:readonly ModelImageInput[],signal:AbortSignal,work:(blocks:(TextBlock|ImageBlock)[])=>Promise<T>):Promise<T>{
       // 附件是该provider内部的调用适配，不改变整个profile的可选依赖树。
-      return (images??=new ModelImageAttachments(ctx.isolate('attachments'))).withImages(input,signal,work);
+      return (images??=new ModelImageAttachments(ctx.isolate('attachments'))).withImages(input,signal,blocks=>{
+        const refs=blocks.filter((block):block is ImageBlock=>block.type==='image');
+        const metadata=input.map((image,index)=>({id:image.id,originalBytes:image.originalBytes??Buffer.byteLength(image.dataBase64,'base64'),
+          sentBytes:0,width:refs[index]?.attachment.width,height:refs[index]?.attachment.height,mimeType:refs[index]?.attachment.mediaType}));
+        return imageScopes.run(metadata,()=>work(blocks));
+      });
     },
     /** 只反映安装时成功绑定；不表示尚有额度，不暴露账本身份或重读env。 */
     get diagnosticProblemBudgetBound():boolean {return diagnosticBudget!==null;},
@@ -181,7 +239,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
         },
         observation:():ModelProviderObservation=>structuredClone(registered.observation),
         /** 在实际官方stream退出后释放session，取消等待者不能提前解绑在途调用。 */
-        close() { if(calls.get(call.sessionId)===registered)calls.delete(call.sessionId); },
+        close() { close(registered); },
       };
     },
     beginStrictVerificationCall(call:ModelProviderCall){
@@ -189,6 +247,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
       return {
         observation:():ModelProviderObservation=>structuredClone(registered.observation),
         async send(input:StrictVerificationSendInput):Promise<DeepSeekStrictVerificationResponse>{
+          try{
           if(registered.prepared)throw new LlmError('DeepSeek strict call was already prepared.','INVALID_REQUEST');
           registered.prepared=true;
           input.signal.throwIfAborted();
@@ -208,6 +267,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
           });
           let budget:MessagesBudgetReceipt;
           const imageInputs=images?.manifest()??[];
+          observeImageInputs(registered,imageInputs);
           registered.observation.request_bytes=Buffer.byteLength(JSON.stringify(request.body),'utf8');registered.observation.image_count=imageInputs.length;
           try{budget=measureSerializedStrictChatCompletion(request.body,registered.call.binding,registered.call.profile,imageInputs);}
           catch(error){
@@ -241,10 +301,11 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
           let payload:unknown;
           try{payload=JSON.parse(await boundedResponseText(response));}
           catch(error){throw new LlmError('DeepSeek strict response was not valid JSON.','INVALID_RESPONSE',{cause:error});}
-          try{return decodeDeepSeekStrictVerificationResponse(payload);}
+          try{const result=decodeDeepSeekStrictVerificationResponse(payload);registered.observation.terminal_outcome=result.success?'succeeded':'failed';return result;}
           catch(error){throw new LlmError('DeepSeek strict response did not match the tool envelope.','INVALID_RESPONSE',{cause:error});}
+          }catch(error){observeProviderFailure(registered.observation,error,input.signal);throw error;}
         },
-        close() { if(calls.get(call.sessionId)===registered)calls.delete(call.sessionId); },
+        close() { close(registered); },
       };
     },
     async dispose() {

@@ -122,7 +122,7 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
       const sessionId=SessionId(randomUUID());
       // 预约只保存110物理身份；确认HTTP后的终态才由既有账本事务建立010外键。
       const base:ModelLedgerReceipt={attempt_id:input.attempt_id,permit_id:permit.id,request_id:input.request_id,owner_id:input.owner_id,contact_id:input.contact_id,scope_kind:input.contact_id===null?'owner_memory':'contact',provider:input.binding.provider,model:input.binding.model,called_at:new Date(started).toISOString(),latency_ms:null,dispatch:'authorized_unconfirmed',outcome:'pending',usage:null,cost:{status:'unknown',amount:null,currency:null,pricing_version:null}};
-      const registration={sessionId,attempt_id:input.attempt_id,permit_id:permit.id,binding:input.binding,profile:input.profile,requireCurrent:input.requireCurrent,onImageInputs:input.onImageInputs,beforeDispatch:async(value:{attempt_id:string;permit_id:string;budget:Parameters<typeof modelLedgerInputBudget>[0];dispatch:'authorized_unconfirmed'})=>{
+      const registration={sessionId,attempt_id:input.attempt_id,permit_id:permit.id,...(input.contact_id?{contactPrefix:input.contact_id.slice(0,8)}:{}),binding:input.binding,profile:input.profile,requireCurrent:input.requireCurrent,onImageInputs:input.onImageInputs,beforeDispatch:async(value:{attempt_id:string;permit_id:string;budget:Parameters<typeof modelLedgerInputBudget>[0];dispatch:'authorized_unconfirmed'})=>{
         receipt={...base,input_budget:modelLedgerInputBudget(value.budget)};
         uncertain=true;try{await permit!.reserve(receipt,input.claim);}
         catch(error){
@@ -171,14 +171,14 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
           else outputError=error;
         }
       }
-      const reservedReceipt=receipt as ModelLedgerReceipt|null;
-      if(reserved&&reservedReceipt) {
-        const observation=(strictCall??call)!.observation();
-        const responseObserved=observation.dispatch==='http_accepted'||providerFailure?.status!==undefined;
-        if(providerFailure)providerFailure={...providerFailure,transport_category:observation.transport_category??'other',
+      const observation=(strictCall??call)?.observation();
+      const responseObserved=observation?.dispatch==='http_accepted'||providerFailure?.status!==undefined;
+      if(providerFailure&&observation)providerFailure={...providerFailure,transport_category:observation.transport_category??'other',
           stage:responseObserved?'response_received':observation.fetch_started===false||observation.dispatch==='not_authorized'?'before_send':'awaiting_response',
           elapsed_ms:Date.now()-started,request_bytes:observation.request_bytes??observation.budget?.serialized_bytes??0,
           image_count:observation.image_count??input.messages.flatMap(message=>message.content).filter(block=>block.type==='image').length};
+      const reservedReceipt=receipt as ModelLedgerReceipt|null;
+      if(reserved&&reservedReceipt&&observation) {
         const notSent=!responseObserved&&(observation.fetch_started===false||observation.dispatch==='not_authorized');
         const terminalTransport=!responseObserved&&!notSent&&!input.signal.aborted&&observation.terminal_transport_failure===true
           &&providerFailure?.code==='TRANSPORT'&&input.claim.step_name==='extraction_verification'

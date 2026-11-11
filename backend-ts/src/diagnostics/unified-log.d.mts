@@ -8,6 +8,7 @@ export class UnifiedDiagnosticLog {
   close(): Promise<void>;
   clear(contactPrefix?: string): Promise<boolean>;
   eraseContact(contactPrefix: string): Promise<boolean>;
+  eraseModelImage(imageId: string): Promise<boolean>;
   setEnabled(enabled: boolean): Promise<boolean>;
   setDebugFor(milliseconds?: number): void;
   status(): Promise<DiagnosticStatus>;

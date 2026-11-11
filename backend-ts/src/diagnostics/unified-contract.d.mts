@@ -4,6 +4,8 @@ export interface DiagnosticEvent {
   reasonCode?: string; caller?: string; contactPrefix?: string; runId?: string; taskId?: string; batchId?: string;
   durationMs?: number; count?: number; fromRevision?: number; toRevision?: number;
   fromState?: string; toState?: string; sqlFingerprint?: string;
+  callId?: string; imageId?: string; originalBytes?: number; sentBytes?: number; imageCount?: number; requestBytes?: number;
+  width?: number; height?: number; mimeType?: string; stage?: string; failureCategory?: string;
 }
 export interface DiagnosticRecord extends DiagnosticEvent { time: string; level: 'debug' | 'info' | 'warn' | 'error'; proc: 'main' | 'backend' | 'renderer'; module: DiagnosticModule }
 export const diagnosticEvents: Readonly<Record<string, { readonly module: DiagnosticModule | null; readonly level: DiagnosticRecord['level']; readonly fields: readonly string[] }>>;

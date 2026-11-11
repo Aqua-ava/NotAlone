@@ -241,17 +241,25 @@ export class UnifiedDiagnosticLog {
   async status() { await this.flush(); try { await this.refreshSettings(); const rows = await inventory(this.root); return { enabled: this.enabled, bytes: rows.reduce((sum, row) => sum + row.stat.size, 0), available: !this.failed }; } catch { return { enabled: this.enabled, bytes: 0, available: false }; } }
   async clear(contactPrefix) {
     if (contactPrefix !== undefined && (typeof contactPrefix !== 'string' || !/^[0-9a-f]{8}$/.test(contactPrefix))) return false;
+    return this.#clearRecords(contactPrefix === undefined ? undefined : { field: 'contactPrefix', value: contactPrefix });
+  }
+  /** 单图片删除只擦除含该文件身份的逐图片事件，保留无图片标识的调用汇总。 */
+  async eraseModelImage(imageId) {
+    if (typeof imageId !== 'string' || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(imageId)) return false;
+    return this.#clearRecords({ field: 'imageId', value: imageId, event: 'processing.model_image' });
+  }
+  async #clearRecords(filter) {
     await this.flush();
     try {
       await this.guardLocation();
       for (const row of await inventory(this.root)) {
-        if (contactPrefix === undefined) { await unlink(row.file).catch(error => { if (error.code !== 'ENOENT') throw error; }); continue; }
+        if (filter === undefined) { await unlink(row.file).catch(error => { if (error.code !== 'ENOENT') throw error; }); continue; }
         const original = await readPrivate(row.file, 5 * MiB);
         if (original === undefined) continue;
         const kept = [];
         for (const line of original.split('\n')) {
           if (Buffer.byteLength(line) > 2048) continue;
-          try { const record = checkedDiagnosticRecord(JSON.parse(line)); if (record && record.contactPrefix !== contactPrefix) kept.push(JSON.stringify(record) + '\n'); } catch { /* 不重写损坏或越界原文。 */ }
+          try { const record = checkedDiagnosticRecord(JSON.parse(line)); if (record && !(record[filter.field] === filter.value && (!filter.event || record.event === filter.event))) kept.push(JSON.stringify(record) + '\n'); } catch { /* 不重写损坏或越界原文。 */ }
         }
         if (!kept.length) { await unlink(row.file); continue; }
         const handle = await checkedOpen(row.file, constants.O_WRONLY, row.stat);

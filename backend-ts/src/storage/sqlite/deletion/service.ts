@@ -3,6 +3,7 @@ import type { SqliteStorage } from '../client.ts';
 import type { CheckResult, DeletionScope, DeletionSnapshot } from './contracts.ts';
 import type { ActiveHolders } from './holders.ts';
 import type { ManagedFiles } from './managed-files.ts';
+import {eraseModelImageDiagnostic} from '../../../diagnostics/context.ts';
 
 type Address = { ownerId: string; operationId: string };
 type Claimed = DeletionSnapshot & { token: string | null };
@@ -78,6 +79,8 @@ export class DeletionService {
         if (item.target.kind === 'file') {
           await this.storage.execute('deletion.authorizeFile', {...runner, targetNo});
           this.files.erase(item.target.address);
+          // 旧调用已排空；文件身份仍在删除目标中，先擦除统一日志再声明目标清理完成。
+          if(item.target.domain==='media'&&!await eraseModelImageDiagnostic(item.target.fileId))throw new StorageFailure('diagnostic_image_cleanup_failed');
         }
         await this.storage.execute('deletion.clearTarget', {...runner, targetNo});
       }
