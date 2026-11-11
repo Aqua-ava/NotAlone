@@ -1,7 +1,7 @@
 /** 普通调用沿用官方DeepSeekAdapter；来源核验另用同供应商的专用strict Beta传输。 */
 import type { Context } from '@deepseek-ai/cordis';
 import {AsyncLocalStorage} from 'node:async_hooks';
-import {LlmError,type ImageBlock,type TextBlock} from '@deepseek-ai/dsh-llm';
+import {LlmError,type ImageBlock,type TextBlock,type GenerateOptions,type StreamChunk} from '@deepseek-ai/dsh-llm';
 import {bindDiagnosticProblemBudget} from '../../diagnostics/diagnostic-problem-budget.ts';
 import { DeepSeekAdapter, DeepSeekFileStore,resolveRequestImageTarget, PUBLIC_BASE_URL, type DeepSeekConnectionOptions, type DeepSeekAdapterOptions } from '@deepseek-ai/dsh-llm-deepseek';
 import {ModelImageAttachments,type ModelImageInput,type ModelImageManifest} from './model-images.ts';
@@ -23,6 +23,7 @@ export interface ModelProviderCall {
     /** 最终序列化HTTP实体的Unicode字符数；不携带正文。 */
     request_entity_characters?:number}): Promise<void>;
 }
+export type ModelTransportCategory='socket_closed'|'reset'|'timeout'|'tls'|'dns'|'other';
 export interface ModelProviderObservation {
   attempt_id: string; permit_id: string;
   dispatch: 'not_authorized'|'authorized_unconfirmed'|'http_accepted';
@@ -30,6 +31,10 @@ export interface ModelProviderObservation {
   before_dispatch_started?: boolean;
   /** 仅显式false证明未到物理fetch前门；缺省或true均不能证明未发送。 */
   fetch_started?:boolean;
+  request_bytes?:number;image_count?:number;
+  transport_category?:ModelTransportCategory;
+  /** 仅来自实际adapter/strict fetch抛出的终端TRANSPORT，取消不属于此类。 */
+  terminal_transport_failure?:boolean;
   budget: MessagesBudgetReceipt | null;
   budget_rejection:{code:ModelInputBudgetError['code'];receipt:MessagesBudgetReceipt|null}|null;
 }
@@ -64,6 +69,27 @@ function httpFailure(status:number):LlmError{
     :status>=500?'SERVER':status===400||status===413?'INVALID_REQUEST':`HTTP_${status}`;
   return new LlmError(`DeepSeek strict request failed (HTTP ${status}).`,code,{status});
 }
+/** 只投影稳定枚举；底层异常和cause链不会保存到观测或账本。 */
+function transportCategory(error:unknown):ModelTransportCategory {
+  const seen=new Set<unknown>();let value=error;
+  for(let depth=0;value&&typeof value==='object'&&depth<8&&!seen.has(value);depth++){
+    seen.add(value);const row=value as {code?:unknown;name?:unknown;cause?:unknown;failure?:{code?:unknown}};
+    if(row.name==='TimeoutError')return 'timeout';
+    const code=typeof row.code==='string'?row.code:row.failure?.code;
+    if(code==='UND_ERR_SOCKET')return 'socket_closed';
+    if(code==='ECONNRESET'||code==='EPIPE')return 'reset';
+    if(code==='ENOTFOUND'||code==='EAI_AGAIN')return 'dns';
+    if(typeof code==='string'&&(/^(?:ERR_TLS_|ERR_SSL_|CERT_)/.test(code)||['DEPTH_ZERO_SELF_SIGNED_CERT','UNABLE_TO_VERIFY_LEAF_SIGNATURE','SELF_SIGNED_CERT_IN_CHAIN'].includes(code)))return 'tls';
+    if(typeof code==='string'&&['TIMEOUT','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT','UND_ERR_HEADERS_TIMEOUT','UND_ERR_BODY_TIMEOUT'].includes(code))return 'timeout';
+    value=row.cause;
+  }
+  return 'other';
+}
+function observeTransportFailure(observation:ModelProviderObservation,error:unknown,signal?:AbortSignal):void {
+  if(!(error instanceof LlmError)||!['TRANSPORT','TIMEOUT','ABORTED'].includes(error.failure.code))return;
+  observation.transport_category=transportCategory(error);
+  observation.terminal_transport_failure=error.failure.code==='TRANSPORT'&&!signal?.aborted;
+}
 export function installModelProvider(ctx: Context, configuration: ModelProviderConfiguration) {
   if(!configuration.provider.trim()||configuration.connection.retryPolicy.mode!=='normal'||configuration.connection.retryPolicy.maxRetries!==0)throw new Error('model_provider_retry_policy_invalid');
   const diagnosticBudget=bindDiagnosticProblemBudget();
@@ -81,7 +107,22 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
   let images:ModelImageAttachments|undefined;
   // 官方store的公开transport接点强制零上传HTTP，触发官方inline fallback；不产生远端文件与重试。
   const inlineFiles=new DeepSeekFileStore({fetch:async()=>{throw new Error('model_image_files_disabled');}});
-  const adapter=new DeepSeekAdapter({
+  // 沿官方公开prepareCall/stream包装异常；宿主转换finish后仍能保留脱敏传输分类。
+  async function* observeStream(stream:AsyncIterable<StreamChunk>,options:GenerateOptions):AsyncGenerator<StreamChunk>{
+    try{yield* stream;}catch(error){
+      const current=options.sessionId?calls.get(String(options.sessionId)):undefined;
+      if(current)observeTransportFailure(current.observation,error,options.signal);
+      throw error;
+    }
+  }
+  class ObservedDeepSeekAdapter extends DeepSeekAdapter {
+    override async prepareCall(provider:string,model:string,signal?:AbortSignal){
+      const prepared=await super.prepareCall(provider,model,signal);
+      return {...prepared,stream:(options:GenerateOptions)=>observeStream(prepared.stream(options),options)};
+    }
+    override stream(options:GenerateOptions):AsyncIterable<StreamChunk>{return observeStream(super.stream(options),options);}
+  }
+  const adapter=new ObservedDeepSeekAdapter({
     options:()=>connection,
     resolveAuth:configuration.resolveAuth,
     resolveUserId:()=>{
@@ -101,6 +142,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
       let budget:MessagesBudgetReceipt;
       const prepared=prepareBoundMessagesRequest(request.body,current.call.binding);
       const imageInputs=images?.manifest()??[];
+      current.observation.request_bytes=Buffer.byteLength(JSON.stringify(prepared.body),'utf8');current.observation.image_count=imageInputs.length;
       try{budget=measureSerializedMessages(prepared.body,current.call.binding,current.call.profile,imageInputs);}
       catch(error){if(error instanceof ModelInputBudgetError)current.observation.budget_rejection={code:error.code,receipt:error.receipt};throw error;}
       if(imageInputs.length)await current.call.onImageInputs?.(imageInputs);
@@ -166,6 +208,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
           });
           let budget:MessagesBudgetReceipt;
           const imageInputs=images?.manifest()??[];
+          registered.observation.request_bytes=Buffer.byteLength(JSON.stringify(request.body),'utf8');registered.observation.image_count=imageInputs.length;
           try{budget=measureSerializedStrictChatCompletion(request.body,registered.call.binding,registered.call.profile,imageInputs);}
           catch(error){
             if(error instanceof ModelInputBudgetError)registered.observation.budget_rejection={code:error.code,receipt:error.receipt};
@@ -192,7 +235,7 @@ export function installModelProvider(ctx: Context, configuration: ModelProviderC
           registered.observation.fetch_started=true;
           try{response=await fetch(request.endpoint,{method:'POST',headers,body:JSON.stringify(request.body),
             redirect:'error',signal:input.signal});}
-          catch(error){throw new LlmError('DeepSeek strict transport failed.',error instanceof Error&&error.name==='AbortError'?'ABORTED':'TRANSPORT',{cause:error});}
+          catch(error){const failure=new LlmError('DeepSeek strict transport failed.',input.signal.aborted||error instanceof Error&&error.name==='AbortError'?'ABORTED':'TRANSPORT',{cause:error});observeTransportFailure(registered.observation,failure,input.signal);throw failure;}
           if(!response.ok)throw httpFailure(response.status);
           registered.observation.dispatch='http_accepted';
           let payload:unknown;

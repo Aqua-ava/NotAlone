@@ -1,6 +1,6 @@
 import {currentDiagnosticTrace,newTraceId,withDiagnosticTrace,diagnose} from '../../diagnostics/context.ts';
 import {createBuiltinMemoryContentRegistry} from '../content/builtins.ts';
-import type {MemoryContentRegistry,MemoryContentResources,FrozenMemoryContent} from '../content/registry.ts';
+import type {MemoryContentRegistry,MemoryContentResources,FrozenMemoryContent,PreparedMemoryContent} from '../content/registry.ts';
 import {assertMultimodalAdmission} from '../extraction/multimodal.ts';
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import type {MemoryScheduleSnapshot} from './scheduler.ts';
@@ -8,13 +8,14 @@ import type {StorageRow} from '../../storage/sqlite/contracts.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import {ActiveHolders} from '../../storage/sqlite/deletion/holders.ts';
 import {createExtractionPolicyVersion,type ExtractionPolicyVersion} from '../extraction/policy-version.ts';
-import {runExtractionFlow,type ExtractionInvocation} from '../extraction/flow.ts';
+import {runExtractionFlow,type ExtractionInvocation,type ExtractionFlowOutcome} from '../extraction/flow.ts';
+import {recoverImageTargets,type ImageRecoveryAttempt} from '../extraction/image-recovery.ts';
 import {assertCompleteClaimAdmission} from '../extraction/verification/complete-claim.ts';
 import {isSharedFailure,sharedFailureCodes} from './control.ts';
 import type {CandidateVerificationReference} from './management/admission.ts';
 import type {ExtractionWindow} from '../extraction/protocol.ts';
 import {sha256} from '../../platform/sha256.ts';
-import {MODEL_IMAGE_LIMITS} from '../../platform/models/image-normalization.ts';
+import {MODEL_IMAGE_LIMITS,normalizeModelImageInput} from '../../platform/models/image-normalization.ts';
 import {ExtractionModelError} from '../extraction/model.ts';
 import type {ModelPermitAccounting,ModelTaskClaim} from '../../platform/models/model-permit-port.ts';
 import type {SqliteExtractionModelInvocation,SqliteExtractionModelPreparation} from './model-port.ts';
@@ -283,17 +284,25 @@ export class SqliteMemoryExtraction {
   const policy=await this.version();const resolved=policy.resolve(batch.policyConfig);
   const requireCurrent=async()=>{signal.throwIfAborted();await policy.assertCurrent();await this.withSourceReady(batch.contactId,()=>this.storage.execute('memoryExtraction.current',{ownerId:this.ownerId,attemptId:batch.attemptId}));};
   const rows=[...batch.rows].sort((a,b)=>a.sent_at!==null&&b.sent_at!==null&&a.sent_at!==b.sent_at?Number((a.sent_at as bigint)-(b.sent_at as bigint)):a.display_no!==undefined&&b.display_no!==undefined?Number((a.display_no as bigint)-(b.display_no as bigint)):Number(a.input_no)-Number(b.input_no));
-  const actualNos=rows.map(row=>Number(row.input_no));
-  const prepared=[];
+  const prepared:PreparedMemoryContent[]=[];
   for(const row of rows){
    const frozen:FrozenMemoryContent=row.identity_json?{pluginId:String(row.plugin_id),pluginVersion:String(row.plugin_version),kind:String(row.content_kind),identity:JSON.parse(String(row.identity_json))}:
     {pluginId:'notalone.text',pluginVersion:'1',kind:'text',identity:{}};
    prepared.push(await this.content.registry.prepare({ownerId:this.ownerId,contactId:batch.contactId,message:{...row,id:row.message_id,kind:row.message_kind??'text'},frozen,resources:this.content.resources,signal,requireCurrent}));
   }
-  const images=prepared.flatMap(part=>part.images??[]);
+  const hasImage=(row:StorageRow)=>!!prepared[rows.indexOf(row)]?.images?.length;
+  const groupRows=(targets:readonly StorageRow[],includeImageContext:boolean)=>rows.filter(row=>targets.includes(row)||row.role==='context'&&(includeImageContext||!hasImage(row)));
+  const runGroup=async(targets:readonly StorageRow[],attempt:ImageRecoveryAttempt)=>{
+  const selected=groupRows(targets,attempt.includeImageContext),actualNos=selected.map(row=>Number(row.input_no));
+  const contents=await Promise.all(selected.map(async row=>{
+   const part=prepared[rows.indexOf(row)]!;
+   return attempt.tier==='degraded'&&part.images?.length?{...part,images:await Promise.all(part.images.map(image=>normalizeModelImageInput(image,{tier:'degraded',signal})))}:part;
+  }));
+  const images=contents.flatMap(part=>part.images??[]);
   if(images.length>MODEL_IMAGE_LIMITS.maxImagesPerMessage||images.reduce((total,image)=>total+Buffer.byteLength(image.dataBase64,'base64'),0)>MODEL_IMAGE_LIMITS.maxMessageImageBytes)throw new StorageFailure('memory_content_input_too_large');
-  const window:ExtractionWindow={owner_id:this.ownerId,contact_id:batch.contactId,target_message_ids:rows.filter(r=>r.role==='target').map(r=>String(r.message_id)),messages:prepared.map(part=>part.message)};
+  const window:ExtractionWindow={owner_id:this.ownerId,contact_id:batch.contactId,target_message_ids:targets.map(row=>String(row.message_id)),messages:contents.map(part=>part.message)};
   let commonFailure:string|null=null;let modelFailure:string|null=null;
+  let lastModelFailure:unknown;
   let verificationInputEventId:string|null=null,verificationCall:{callId:string;reused:boolean}|null=null;
   const verificationEvents=new Map<string,string>();
   const commonCodes=[...sharedFailureCodes];
@@ -310,7 +319,7 @@ export class SqliteMemoryExtraction {
     const scope={owner_id:this.ownerId,contact_id:batch.contactId};
     let prepared:SqliteExtractionModelPreparation;try{prepared=await this.model.prepare(request,{scope,signal,requireCurrent});}catch(error){if(commonCodes.includes((error as any)?.code))commonFailure=(error as any).code;throw error;}
     const serial={purpose:request.purpose,system:request.system,user:request.user,tool:request.tool,...(request.images?.length?{images:request.images.map(image=>({id:image.id,mimeType:image.mimeType,sourceSha256:image.sourceSha256??sha256(Buffer.from(image.dataBase64,'base64')),requestSha256:sha256(Buffer.from(image.dataBase64,'base64')),originalBytes:image.originalBytes??Buffer.byteLength(image.dataBase64,'base64'),bytes:Buffer.byteLength(image.dataBase64,'base64'),normalizationTier:image.normalizationTier??null}))}:{})};
-    const call=await this.storage.execute<any>('memoryExtraction.prepareCall',{ownerId:this.ownerId,attemptId:batch.attemptId,purpose:request.purpose,request:serial,provider:prepared.provider,model:prepared.model,configurationId:prepared.configurationId,inputCap:prepared.maxInputTokens,outputCap:prepared.maxOutputTokens,inputNos:actualNos});
+    const call=await this.storage.execute<any>('memoryExtraction.prepareCall',{ownerId:this.ownerId,attemptId:batch.attemptId,purpose:request.purpose,request:serial,provider:prepared.provider,model:prepared.model,configurationId:prepared.configurationId,inputCap:prepared.maxInputTokens,outputCap:prepared.maxOutputTokens,inputNos:actualNos,slot:attempt.slot});
     if(request.purpose==='verification')verificationCall={callId:call.callId,reused:call.reused};
     if(call.reused){await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'model_reused',payload:{state:'known_result'},reuseId:call.callId,inputNos:actualNos});return {blocks:call.blocks};}
     let result:{blocks:readonly unknown[]};
@@ -322,14 +331,16 @@ export class SqliteMemoryExtraction {
      const providerCode=typeof value?.provider_failure?.code==='string'&&/^[A-Z][A-Z0-9_]{0,63}$/.test(value.provider_failure.code)?value.provider_failure.code:null;
      // 校验拒绝仍保存有界原始输出及来源关联；只供本机排错，绝不作为成功回执复用。
      if(error instanceof ExtractionModelError&&error.rejectedOutput)await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'model_output_rejected',payload:{purpose:request.purpose,...error.rejectedOutput},callId:call.callId,inputNos:actualNos});
-     modelFailure=code;if(status===401||status===403)commonFailure='extraction_model_authentication_failed';else if(status===429||status!==null&&status>=500)commonFailure='extraction_model_provider_unavailable';
-     await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'model_failure',payload:{code,providerCode,status},callId:call.callId,inputNos:actualNos});throw error;
+     modelFailure=code;lastModelFailure=error;if(status===401||status===403)commonFailure='extraction_model_authentication_failed';else if(status===429||status!==null&&status>=500)commonFailure='extraction_model_provider_unavailable';
+     const failure=error instanceof ExtractionModelError?error.provider_failure:null;
+     await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'model_failure',payload:{code,providerCode,status,
+      transport_category:failure?.transport_category??null,stage:failure?.stage??null,elapsed_ms:failure?.elapsed_ms??null,request_bytes:failure?.request_bytes??null,image_count:failure?.image_count??images.length},callId:call.callId,inputNos:actualNos});throw error;
     }
     await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'model_output',payload:{blocks:result.blocks},callId:call.callId,inputNos:actualNos});return result;
    }});
   await requireCurrent();
   if(commonFailure)throw new StorageFailure(commonFailure);
-  if(outcome.failure_kind!==null||!outcome.extraction_completed)throw new StorageFailure(modelFailure??'memory_extraction_protocol_incomplete');
+  if(outcome.failure_kind!==null||!outcome.extraction_completed)throw lastModelFailure??new StorageFailure(modelFailure??'memory_extraction_protocol_incomplete');
   // 逐条拒绝是内容结果：目标按“已处理、无新增”收尾并继续后续批次，不能升级为整批失败或整轮受阻。
   const verificationRefs:(CandidateVerificationReference|null)[]=outcome.accepted.map((fact,index)=>{
    const checked=outcome.verification.find(v=>v.fact===fact),candidateTraceId=outcome.candidate_trace_ids[index]!,eventId=verificationEvents.get(candidateTraceId);
@@ -338,7 +349,19 @@ export class SqliteMemoryExtraction {
    else if(resolved.verification.id==='complete-claim-v1')assertCompleteClaimAdmission(window,fact,checked.result);else return null;
    return {eventId,candidateTraceId,inputEventId:verificationInputEventId,callId:verificationCall.callId,policyFingerprint:checked.result.claim_validation!.policy_fingerprint};
   });
-  await this.withSourceReady(batch.contactId,()=>this.storage.execute('memoryExtraction.finish',{ownerId:this.ownerId,attemptId:batch.attemptId,outcome,verificationRefs,inputNos:actualNos}));
+  return {outcome,verificationRefs,inputNos:actualNos};
+  };
+  const prior=await this.storage.execute<number[]>('memoryExtraction.imageRecoveryPlan',{ownerId:this.ownerId,attemptId:batch.attemptId});
+  const recovered=await recoverImageTargets({targets:rows.filter(row=>row.role==='target'),isImage:hasImage,signal,previouslyDegraded:new Set(prior),run:runGroup,
+   canRecover:error=>error instanceof ExtractionModelError&&error.receipt?.outcome==='failed'&&error.receipt.terminal_failure==='transport',
+   supersede:attempt=>this.storage.execute('memoryExtraction.supersedeImageInput',{ownerId:this.ownerId,attemptId:batch.attemptId,slot:attempt.slot,inputNos:groupRows(attempt.targets,attempt.includeImageContext).map(row=>Number(row.input_no))}).then(()=>{}),
+  });
+  const parts=recovered.results.map(result=>result.value);
+  const outcome:ExtractionFlowOutcome={accepted:parts.flatMap(part=>part.outcome.accepted),rejected_count:parts.reduce((sum,part)=>sum+part.outcome.rejected_count,0),extraction_completed:true,
+   candidate_trace_ids:parts.flatMap(part=>part.outcome.candidate_trace_ids),failure_kind:null,failure_reason:null,verification:parts.flatMap(part=>part.outcome.verification)};
+  await this.withSourceReady(batch.contactId,()=>this.storage.execute('memoryExtraction.finish',{ownerId:this.ownerId,attemptId:batch.attemptId,outcome,
+   verificationRefs:parts.flatMap(part=>part.verificationRefs),candidateInputNos:parts.flatMap(part=>part.outcome.accepted.map(()=>part.inputNos)),
+   inputNos:rows.map(row=>Number(row.input_no)),completedGroups:recovered.results.map(result=>({slot:result.slot,inputNos:result.value.inputNos}))}));
  }
  close():Promise<void>{return this.closing??=(async()=>{this.stopped=true;for(const entry of this.active.values())entry.abort.abort();await Promise.allSettled([...this.pending]);await Promise.allSettled([...this.runs.values()]);await this.model.close?.();})().catch(error=>{this.closing=undefined;throw error;});}
 }

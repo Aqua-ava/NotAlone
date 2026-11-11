@@ -36,6 +36,8 @@ export interface ModelLedgerReceipt {
   /** 确认收到HTTP响应才可标response_observed；仅hook通过或transport断连不能推定已发送。 */
   dispatch:'authorized_unconfirmed'|'response_observed'|'http_accepted'|'not_sent';
   outcome:'pending'|'succeeded'|'failed'|'cancelled'|'unknown';
+  /** 图片提取已观察到传输终态；不证明上游未处理，也不证明成本已知。 */
+  terminal_failure?:'transport';
   usage:ModelLedgerUsage|null;cost:ModelLedgerCost;
 }
 export class ModelLedgerError extends Error {
@@ -55,6 +57,7 @@ export function validateModelLedgerReceipt(receipt:ModelLedgerReceipt) {
   for(const value of [receipt.provider,receipt.model])if(typeof value!=='string'||!value.trim())invalid();
   if(!/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(receipt.called_at)||!Number.isFinite(Date.parse(receipt.called_at))||receipt.latency_ms!==null&&!count(receipt.latency_ms))invalid();
   if(!['authorized_unconfirmed','response_observed','http_accepted','not_sent'].includes(receipt.dispatch)||!['pending','succeeded','failed','cancelled','unknown'].includes(receipt.outcome))invalid();
+  if(receipt.terminal_failure!==undefined&&(receipt.terminal_failure!=='transport'||receipt.outcome!=='failed'||receipt.dispatch!=='authorized_unconfirmed'))invalid();
   if(receipt.outcome==='succeeded'&&!['response_observed','http_accepted'].includes(receipt.dispatch))invalid();
   if(receipt.usage!==null) {
     const usage=receipt.usage;

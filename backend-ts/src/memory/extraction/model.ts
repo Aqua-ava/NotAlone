@@ -3,7 +3,7 @@ import type {Context} from '@deepseek-ai/cordis';
 import {LlmError,ReasoningEffortId, type GenerateOptions, type ContentBlock,type LlmFailure} from '@deepseek-ai/dsh-llm';
 import {SessionId} from '@deepseek-ai/dsh-session';
 import {randomUUID} from 'node:crypto';
-import type {installModelProvider} from '../../platform/models/model-provider.ts';
+import type {ModelTransportCategory,installModelProvider} from '../../platform/models/model-provider.ts';
 import type {ModelImageManifest} from '../../platform/models/model-images.ts';
 import {modelLedgerInputBudget, validateModelLedgerReceipt, type ModelLedgerReceipt, type ModelLedgerCost, type ModelLedgerUsage} from '../../platform/models/model-ledger-contract.ts';
 import type {MessagesBudgetBinding, MessagesBudgetProfile} from '../../platform/models/model-input-budget.ts';
@@ -12,7 +12,7 @@ import {ModelLedgerError} from '../../platform/models/model-ledger-contract.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import {DEEPSEEK_STRICT_VERIFICATION_TOOL} from './verification/deepseek-strict.ts';
 export type ExtractionPermitEndpoint=ModelPermitPort;
-export interface ExtractionProviderFailure {name:'LlmError'|'LlmFailure';code:string;status?:number;}
+export interface ExtractionProviderFailure {name:'LlmError'|'LlmFailure';code:string;status?:number;transport_category?:ModelTransportCategory;stage?:'before_send'|'awaiting_response'|'response_received';elapsed_ms?:number;request_bytes?:number;image_count?:number;}
 function providerFailureSnapshot(failure:LlmFailure,name:ExtractionProviderFailure['name']):ExtractionProviderFailure {
   return {name,code:/^[A-Z][A-Z0-9_]{0,63}$/.test(failure.code)?failure.code:'PROVIDER_ERROR',
     ...(failure.status===undefined?{}:{status:failure.status})};
@@ -175,10 +175,18 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
       if(reserved&&reservedReceipt) {
         const observation=(strictCall??call)!.observation();
         const responseObserved=observation.dispatch==='http_accepted'||providerFailure?.status!==undefined;
+        if(providerFailure)providerFailure={...providerFailure,transport_category:observation.transport_category??'other',
+          stage:responseObserved?'response_received':observation.fetch_started===false||observation.dispatch==='not_authorized'?'before_send':'awaiting_response',
+          elapsed_ms:Date.now()-started,request_bytes:observation.request_bytes??observation.budget?.serialized_bytes??0,
+          image_count:observation.image_count??input.messages.flatMap(message=>message.content).filter(block=>block.type==='image').length};
         const notSent=!responseObserved&&(observation.fetch_started===false||observation.dispatch==='not_authorized');
+        const terminalTransport=!responseObserved&&!notSent&&!input.signal.aborted&&observation.terminal_transport_failure===true
+          &&providerFailure?.code==='TRANSPORT'&&input.claim.step_name==='extraction_verification'
+          &&input.messages.some(message=>message.content.some(block=>block.type==='image'));
         receipt={...reservedReceipt,...(responseObserved&&input.ledger_entry_id?{ledger_entry_id:input.ledger_entry_id}:{}),latency_ms:Date.now()-started,
           dispatch:responseObserved?'response_observed':notSent?'not_sent':'authorized_unconfirmed',
-          outcome:validationRejected?'failed':success?'succeeded':responseObserved&&failure?'failed':notSent?'cancelled':'unknown',
+          outcome:validationRejected?'failed':success?'succeeded':responseObserved&&failure||terminalTransport?'failed':notSent?'cancelled':'unknown',
+          ...(terminalTransport?{terminal_failure:'transport' as const}:{}),
           usage,...(validationRejected?{legacy_outcome:'rejected_by_validation' as const}:{}),cost:usage&&input.costForUsage?input.costForUsage(usage):base.cost};
         uncertain=true;
         try {await recordExtractionModelReceipt(options.permit,receipt);uncertain=false;}
@@ -191,7 +199,8 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
       }
       if(uncertain)throw new ExtractionModelError('extraction_model_ack_unknown',receipt);
       if(receipt)await input.onReceipt?.(structuredClone(receipt));
-      permit?.settle();permit=undefined;
+      if(receipt?.outcome==='unknown'||receipt?.outcome==='pending'){permit?.orphan();permit=undefined;}
+      else{permit?.settle();permit=undefined;}
       if(outputError!==undefined)throw outputError;
       if(validationRejected)throw new ExtractionModelError('extraction_model_validation_failed',receipt,null,blocks);
       if(!success||!receipt){
