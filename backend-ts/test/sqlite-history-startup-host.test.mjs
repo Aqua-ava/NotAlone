@@ -158,7 +158,7 @@ test('正式profile可只自动处理全部已授权联系人图片，已保存�
   messages.push({contactId:binding.contact_id,messageId:rows[0].message_id});
  }
  const old=messages[0],seed=await initial.request(`/api/contacts/${old.contactId}/messages/${old.messageId}/media`,'POST',{request_key:randomUUID(),goal:'extract'});
- assert.equal(seed.status,200);assert.equal(seed.body.files.length,1);
+ assert.equal(seed.status,200,seed.body.error);assert.equal(seed.body.files.length,1);
  await initial.shutdown();const before=(await requests(f)).length;
  const restarted=await start(f,{manual:true,memory:true,imageProcessing:'automatic'});
  const runtime=(await restarted.request('/api/runtime/status')).body;assert.equal(runtime.background_processing,'manual');assert.equal(runtime.image_processing,'automatic');assert.equal(runtime.ownership.mediaExtraction,'typescript');assert.deepEqual(Object.keys(runtime.image_sync).sort(),['checked','failed','last_failure_code','processing']);
@@ -166,8 +166,10 @@ test('正式profile可只自动处理全部已授权联系人图片，已保存�
   const saved=await ready(async()=>(await restarted.request(`/api/contacts/${item.contactId}/history-messages?limit=20`)).body.messages?.find(row=>row.message_id===item.messageId),row=>row?.image_media?.state==='available','synthetic_automatic_image_timeout').catch(async error=>{throw new Error(error.message+' '+JSON.stringify((await restarted.request(`/api/contacts/${item.contactId}/messages/${item.messageId}/media`)).body)+' '+JSON.stringify((await restarted.request('/api/runtime/status')).body.image_sync));});
   assert.equal(saved.image_media.state,'available');
  }
+ // 图片发布先于extract的释放、清理和最终回读；available不代表协调器已结算计数。
+ const progress=await ready(async()=>(await restarted.request('/api/runtime/status')).body.image_sync,row=>row?.processing===false,'synthetic_automatic_image_drain_timeout');
  const rows=(await requests(f)).slice(before);assert.equal(rows.filter(row=>row.op==='image-open').length,1);assert.equal(rows.some(row=>row.op==='page'),false);
- const progress=(await restarted.request('/api/runtime/status')).body.image_sync;assert.equal(progress.checked,1);assert.equal(progress.failed,0);assert.equal(progress.last_failure_code,null);
+ assert.equal(progress.checked,1);assert.equal(progress.failed,0);assert.equal(progress.last_failure_code,null);
  assert.equal((await restarted.request('/api/ledger/summary')).body.total_calls,0);
  await restarted.shutdown();noCliOrphans(await requests(f));
 });
