@@ -54,6 +54,8 @@ import {PureTsEvents} from './host/pure-ts-events.ts';
 import {WechatHistoryCheckpointCache} from './history/wechat/checkpoint-cache.ts';
 import { clearStartupDiagnostic, finishStartupDiagnostic, startupFailureCause, writeStartupDiagnostic } from './startup-diagnostics.ts';
 import {SqliteHostShutdown} from './host/sqlite-shutdown.ts';
+import {newTraceId,withDiagnosticTrace} from './diagnostics/context.ts';
+import {checkedTraceId} from './diagnostics/request-trace.ts';
 
 export const name = 'notalone-sqlite-host';
 export const inject = ['appReady', 'appExit','skills','llm'];
@@ -260,6 +262,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
     const handleRequest=async (req:IncomingMessage,res:ServerResponse):Promise<void> => {
       const respond = (status: number, value: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
       if (!authorizeSqliteRequest(req, token)) { respond(401, { error: 'unauthorized' }); return; }
+      return withDiagnosticTrace(checkedTraceId(req.headers['x-trace-id'])??newTraceId(),async()=>{
       let url: URL;
       try { url = new URL(req.url ?? '', 'http://localhost'); }
       catch { respond(400, { error: 'invalid_request' }); return; }
@@ -350,6 +353,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
         if (!await deletions.handle(req,res)&&!await memoryManagementHttp?.handle(req,res)&&!await memoryDocumentsHttp?.handle(req,res)&&!await mediaHttp.handle(req,res)&&!await historyHttp?.handle(req,res)&&!await historyClearHttp?.handle(req,res)&&!await skills?.handle(req,res)&&!(discussionsEnabled&&await discussions!.http.handle(req,res))&&!(memoryEnabled&&await memory!.http.handle(req,res))&&!await contacts!.handle(req, res)) respond(url.pathname.startsWith('/api/') ? 503 : 404, { error: 'sqlite_capability_unavailable' });
       } catch { if (!res.headersSent) respond(503, { error: 'sqlite_contact_operation_failed' }); else res.destroy(); }
       finally {releaseForeground?.();}
+      });
     };
     await writeStartupDiagnostic(config.infoPath, 'handshake');
     server=createServer((req,res)=>{

@@ -5,6 +5,7 @@ import type { StartupCode, StartupPaths, StartupState } from '../../shared/start
 import { configurationPaths, loadBackendConfiguration, saveBackendConfiguration, type BackendConfiguration } from '../backend/config';
 import { BackendFailure } from '../backend/connection';
 import { SqliteDevelopmentProbe } from './sqlite-development';
+import {diagnose,newTraceId} from '../../../../backend-ts/src/diagnostics/context';
 
 /** 默认启动由 SQLite 控制面核验受控存储。 */
 export class StartupDiagnostics {
@@ -14,6 +15,8 @@ export class StartupDiagnostics {
   private closing = false;
   private readonly sqliteDevelopment?: SqliteDevelopmentProbe;
   private readonly developmentProjectDirectory?: string;
+  private diagnosticBegan=performance.now();
+  private diagnosticTrace=newTraceId();
 
   constructor(private readonly userData: string, resourcesDirectory?: string, developmentProjectDirectory?: string) {
     this.developmentProjectDirectory = developmentProjectDirectory;
@@ -79,7 +82,15 @@ export class StartupDiagnostics {
   }
 
   private publish(update: Partial<StartupState>): void {
+    const previous=this.state;
     this.state = { ...this.state, ...update, revision: this.state.revision + 1 };
+    if(previous.phase!==this.state.phase||previous.code!==this.state.code){
+      const now=performance.now();
+      if(this.state.phase==='checking'){this.diagnosticBegan=now;this.diagnosticTrace=newTraceId();}
+      diagnose({event:'startup.state_changed',caller:'startup_controller',traceId:this.diagnosticTrace,fromState:previous.phase,toState:this.state.phase,
+        reasonCode:this.state.phase==='checking'||this.state.phase==='preparing'?'started':this.state.phase==='ready'?'completed':this.state.phase==='cancelled'?'cancelled':this.state.phase==='blocked'?'not_ready':'no_change',
+        durationMs:Math.max(0,now-this.diagnosticBegan)});
+    }
     for (const listener of this.listeners) listener(this.getState());
   }
 }

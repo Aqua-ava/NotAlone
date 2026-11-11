@@ -61,12 +61,12 @@ test('隔离原revision重现历史触发链：真实运输超时随后无条件
  assert.deepEqual(rows.filter(row=>['request.failed','management.invalidated'].includes(row.event)).map(row=>[row.event,row.reasonCode]),[['request.failed','request_timeout'],['management.invalidated','request_timeout']]);
  t.diagnostic(JSON.stringify({sourceRevision:'baae193625d43d7315f04c989d3685922f1f4fec',timeoutMs:20,events:rows.map(row=>row.event)}));
 });
-test('真实删除HTTP方法与路由归入删除模块，普通联系人读取仍归联系人模块',async t=>{
+test('真实HTTP方法与路由区分删除、联系人读取及前台定位模块',async t=>{
  const p=await ports(t),server=createServer((req,res)=>{res.writeHead(200,{'Content-Type':'application/json'});res.end('{}');});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
  const client=new p.JsonClient({port:server.address().port,token:'synthetic-token'});
  for(const path of [`/api/contacts/${contact}`,`/api/contacts/${contact}/sources/${trace}`,'/api/account'])await client.perform({method:'DELETE',path,traceId:trace});
- await client.perform({method:'GET',path:`/api/contacts/${contact}`,traceId:trace});await p.log.flush();const rows=(await p.readDiagnosticRecords(p.root)).filter(row=>row.event==='request.finished'&&row.traceId===trace);
- assert.deepEqual(rows.map(row=>[row.module,row.count??1]),[['deletion',3],['contacts',1]]);
+ await client.perform({method:'GET',path:`/api/contacts/${contact}`,traceId:trace});await client.perform({method:'POST',path:'/api/sync/foreground/observe',traceId:trace});await p.log.flush();const rows=(await p.readDiagnosticRecords(p.root)).filter(row=>row.event==='request.finished'&&row.traceId===trace);
+ assert.deepEqual(rows.map(row=>[row.module,row.count??1]),[['deletion',3],['contacts',1],['foreground',1]]);
 });
 
 test('渲染桥经严格IPC、真实HTTP与SQLite Worker生成可还原的双进程时间线',{timeout:20000},async t=>{
