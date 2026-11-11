@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SqliteStorage } from '../src/storage/sqlite/client.ts';
+import { registry as currentRegistry } from '../src/storage/sqlite/registry.ts';
 import { DeletionService } from '../src/storage/sqlite/deletion/service.ts';
 import { ActiveHolders } from '../src/storage/sqlite/deletion/holders.ts';
 import { ManagedFiles } from '../src/storage/sqlite/deletion/managed-files.ts';
@@ -64,6 +65,7 @@ test('48迁移为存量已完成操作补摘要并清逐行记录，未完成操
   t.after(() => rm(userData, { recursive: true, force: true }));
   const legacyModule = registryModule('deletion-ledger-prune-legacy-registry.mjs');
   let storage = await open(userData, { intent: 'create', registryModule: legacyModule });
+  assert.equal(storage.status.schemaVersion, 47, '存量种子固定在尚未精简台账的历史结构');
   await storage.execute('fixture.legacyLedger', {});
   const databaseId = storage.status.databaseId;
   await storage.close();
@@ -78,7 +80,7 @@ test('48迁移为存量已完成操作补摘要并清逐行记录，未完成操
 
   storage = await open(userData, { intent: 'open', expectedDatabaseId: databaseId, registryModule: registryModule('deletion-registry.mjs') });
   t.after(() => storage.close());
-  assert.equal(storage.status.schemaVersion, 50); // 当前注册表 + 夹具 sample 迁移
+  assert.equal(storage.status.schemaVersion, currentRegistry.migrations.at(-1).version + 1); // 当前注册表 + 夹具 sample 迁移
   const db = new DatabaseSync(database, { readOnly: true });
   try {
     assert.equal(db.prepare("SELECT count(*) n FROM deletion_target WHERE operation_id='done-1'").get().n, 0);

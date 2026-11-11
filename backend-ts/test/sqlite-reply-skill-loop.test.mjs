@@ -99,8 +99,14 @@ test('92个默认启用Skill的简介目录准备P95和最大值保持秒级', {
  const catalog=await addScaleSkills(f);
  assert.equal(catalog.length,92);
  const run=async label=>{
-  firstAt=0;const started=performance.now();
+  firstAt=0;const before=f.requests.length,started=performance.now();
   await f.turns.generate({...f.input,requestKey:randomUUID(),text:label});
+  const added=f.requests.length-before;
+  if(added!==1){
+   const trace=await f.trace();
+   t.diagnostic(JSON.stringify({label,physicalRequests:added,requests:f.requests.slice(before).map(request=>({tools:toolNames(request),hasCatalog:JSON.stringify(request).includes('available_skills')})),calls:trace.calls.map(call=>({state:call.state,settlement:call.settlement_state})),events:trace.events.map(event=>event.kind)}));
+  }
+  assert.equal(added,1,`${label}未选用Skill时只允许一次物理请求`);
   assert.ok(firstAt>0);return firstAt-started;
  };
  // 预热不计入门禁；20 个有效样本使 nearest-rank P95 具有统计意义，而不是退化为最大值。
