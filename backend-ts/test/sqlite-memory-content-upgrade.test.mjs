@@ -1,9 +1,10 @@
-import {certifyLegacyMetadata,cleanupPreSourceProofFixtures} from './fixtures/sqlite/pre-source-proof-registry.mjs';
+import {certifyLegacyMetadata,loadPreSourceProofModule,loadPreSourceProofFixture,cleanupPreSourceProofFixtures} from './fixtures/sqlite/pre-source-proof-registry.mjs';
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,owner,record,modelPort} from './fixtures/memory-sqlite/support.mjs';
-import {supplier} from './fixtures/memory-management/supplier.mjs';
-import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
+
+const {SqliteMemoryExtraction}=await loadPreSourceProofModule('memory/sqlite/service.ts');
+const {supplier}=await loadPreSourceProofFixture('memory-management/supplier.mjs');
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 after(cleanupPreSourceProofFixtures);

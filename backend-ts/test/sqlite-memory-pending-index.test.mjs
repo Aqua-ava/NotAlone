@@ -1,4 +1,4 @@
-import {cleanupPreSourceProofFixtures} from './fixtures/sqlite/pre-source-proof-registry.mjs';
+import {loadPreSourceProofModule,loadPreSourceProofFixture,cleanupPreSourceProofFixtures} from './fixtures/sqlite/pre-source-proof-registry.mjs';
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
@@ -6,9 +6,10 @@ import {join} from 'node:path';
 import {performance} from 'node:perf_hooks';
 import {createHash} from 'node:crypto';
 import {fixture,owner,record,modelPort} from './fixtures/memory-sqlite/support.mjs';
-import {supplier} from './fixtures/memory-management/supplier.mjs';
+
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
-import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
+const {SqliteMemoryExtraction}=await loadPreSourceProofModule('memory/sqlite/service.ts');
+const {supplier}=await loadPreSourceProofFixture('memory-management/supplier.mjs');
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 import {registry} from '../src/storage/sqlite/registry.ts';
 import {memoryManagementPendingIndexMigration} from '../src/memory/sqlite/management/pending-index-schema.ts';

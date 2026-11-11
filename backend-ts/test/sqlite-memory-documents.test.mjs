@@ -144,7 +144,8 @@ test('正式SQLite profile中L1记忆立即进入回复，主题窗口未到期�
  await f.service.synchronize(contactId);await f.contacts.setReading(false);const databaseId=f.storage.status.databaseId;
  await f.service.close();await f.contacts.close();await f.storage.close();
  const infoPath=join(root,'managed/sqlite-backend.info'),envFile=join(root,'synthetic.env'),audit=join(root,'synthetic-network.jsonl'),stderr=join(root,'synthetic-host.stderr'),wrapper=join(root,'synthetic-node');
- await writeFile(envFile,'NOTALONE_DEEPSEEK_API_KEY=synthetic-only\n',{mode:0o600,flag:'wx'});await writeFile(audit,'',{mode:0o600,flag:'wx'});await writeFile(stderr,'',{mode:0o600,flag:'wx'});
+ // 本例显式派发固定输入；自动启动调度另有专门覆盖，避免同时领取同一目标。
+ await writeFile(envFile,'NOTALONE_DEEPSEEK_API_KEY=synthetic-only\nNOTALONE_BACKGROUND_PROCESSING=manual\n',{mode:0o600,flag:'wx'});await writeFile(audit,'',{mode:0o600,flag:'wx'});await writeFile(stderr,'',{mode:0o600,flag:'wx'});
  const quote=value=>"'"+value.replaceAll("'","'\\''")+"'",guard=new URL('./fixtures/sqlite-memory-profile-network-guard.mjs',import.meta.url).pathname;
  await writeFile(wrapper,`#!/bin/sh\nexec ${quote(process.execPath)} --import ${quote(guard)} "$@" 2>> ${quote(stderr)}\n`,{mode:0o700,flag:'wx'});
  const supplier=documentProfileSupplier();provider=createServer(supplier.handler);provider.listen(0,'127.0.0.1');await once(provider,'listening');
@@ -159,7 +160,7 @@ test('正式SQLite profile中L1记忆立即进入回复，主题窗口未到期�
  assert.equal((await api('/api/memory-documents?scope_kind=self',undefined,false)).status,401);
  const started=await api('/api/memory-processing/runs',{request_key:randomUUID()});assert.equal(started.status,200,JSON.stringify(started.data));
  let run;try{run=await changed(join(root,'managed/sqlite/notalone.sqlite-wal'),()=>api(`/api/memory-processing/runs/${started.data.runId}`),value=>value.status!==200||value.data.status==='waiting'&&value.data.statusReason==='later_stages_scheduled');}
- catch(error){throw new Error(`${error.message}; ${JSON.stringify({supplier:supplier.errors,base:supplier.base.errors,documentCalls:supplier.documents.map(x=>x.names),stderr:(await readFile(stderr,'utf8')).slice(-1800)})}`);}
+ catch(error){throw new Error(`${error.message}; ${JSON.stringify({current:(await api(`/api/memory-processing/runs/${started.data.runId}`)).data,supplier:supplier.errors,base:supplier.base.errors,documentCalls:supplier.documents.map(x=>x.names),stderr:(await readFile(stderr,'utf8')).slice(-1800)})}`);}
  assert.equal(run.status,200);assert.equal(run.data.state,'incomplete');assert.equal(run.data.succeeded,1);assert.ok(run.data.nextDueAt>Date.now());
  const view=await api(`/api/memory-documents?scope_kind=contact&contact_id=${contactId}`);assert.equal(view.status,200,JSON.stringify(view.data));assert.equal(view.data.publication,null);assert.deepEqual(view.data.documents,[]);assert.equal(supplier.documents.length,0);
  const session=await api(`/api/contacts/${contactId}/assistant-sessions`,{});assert.equal(session.status,200,JSON.stringify(session.data));

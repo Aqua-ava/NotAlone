@@ -5,20 +5,22 @@ import {join,dirname,basename} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {StorageFailure} from '../../../src/storage/sqlite/contracts.ts';
 
-// 固定02完成时的公开源码；仅旧结构演练使用，不能让旧DDL运行46的source_proof动作。
+// 固定公开历史源码，仅用于对应结构的升级演练，不能给旧DDL装入现行来源动作。
 export const preSourceProofRef='7b5def9bb26db2db1c0835332d38ca6341754a34';
 const temporaryBase=realpathSync(tmpdir()),ownedPrefix=`notalone-pre-source-proof-${process.pid}-`,ownedList=join(temporaryBase,`notalone-pre-source-proof-${process.pid}.jsonl`);
-let snapshotRoot,registryPromise;
-function sourceRoot(){
- if(snapshotRoot)return snapshotRoot;
+const hybridProcessingRef='6829c083434483c11145757df8fa538e6f573eb0';
+const snapshotRoots=new Map(),registryPromises=new Map();
+function sourceRoot(reference=preSourceProofRef){
+ if(![preSourceProofRef,hybridProcessingRef].includes(reference))throw Error('legacy_fixture_reference_invalid');
+ if(snapshotRoots.has(reference))return snapshotRoots.get(reference);
  const repository=fileURLToPath(new URL('../../../../',import.meta.url)),temporary=mkdtempSync(join(temporaryBase,ownedPrefix));
  try{
-  const archive=execFileSync('git',['-C',repository,'archive',preSourceProofRef,'backend-ts/src'],{maxBuffer:64*1024*1024,stdio:['ignore','pipe','pipe']});
+  const archive=execFileSync('git',['-C',repository,'archive',reference,'backend-ts/src','backend-ts/package.json','pnpm-lock.yaml','backend-ts/test/fixtures/memory-management/supplier.mjs','backend-ts/test/fixtures/memory-sqlite/support.mjs'],{maxBuffer:64*1024*1024,stdio:['ignore','pipe','pipe']});
   execFileSync('tar',['-xf','-','-C',temporary],{input:archive,stdio:['pipe','ignore','pipe']});
   symlinkSync(join(repository,'backend-ts/node_modules'),join(temporary,'backend-ts/node_modules'),'dir');
-  writeFileSync(join(temporary,'.fixture-source.json'),JSON.stringify({ref:preSourceProofRef,pid:process.pid}),{mode:0o600});
+  writeFileSync(join(temporary,'.fixture-source.json'),JSON.stringify({ref:reference,pid:process.pid}),{mode:0o600});
   appendFileSync(ownedList,JSON.stringify(temporary)+'\n',{mode:0o600});
-  snapshotRoot=temporary;process.once('exit',()=>rmSync(temporary,{recursive:true,force:true}));return snapshotRoot;
+  snapshotRoots.set(reference,temporary);process.once('exit',()=>rmSync(temporary,{recursive:true,force:true}));return temporary;
  }catch(error){rmSync(temporary,{recursive:true,force:true});throw error;}
 }
 /** Worker可能被terminate；测试主进程after按本PID精确清单补清理，不扫描或删除其他任务目录。 */
@@ -28,7 +30,7 @@ export function cleanupPreSourceProofFixtures(){
   const root=JSON.parse(line);if(!existsSync(root))continue;
   if(dirname(root)!==temporaryBase||!basename(root).startsWith(ownedPrefix)||realpathSync(root)!==root)throw Error('legacy_fixture_cleanup_invalid');
   const marker=JSON.parse(readFileSync(join(root,'.fixture-source.json'),'utf8'));
-  if(marker.ref!==preSourceProofRef||marker.pid!==process.pid)throw Error('legacy_fixture_cleanup_invalid');
+  if(![preSourceProofRef,hybridProcessingRef].includes(marker.ref)||marker.pid!==process.pid)throw Error('legacy_fixture_cleanup_invalid');
   rmSync(root,{recursive:true,force:true});
  }
  rmSync(ownedList,{force:true});
@@ -37,13 +39,22 @@ export function cleanupPreSourceProofFixtures(){
 export function legacyAction(action){return {...action,execute(...args){try{return action.execute(...args);}catch(error){
  if(error?.name==='StorageFailure'&&typeof error.code==='string')throw new StorageFailure(error.code);throw error;
 }}};}
-export function loadPreSourceProofModule(relative){
+export function loadPreSourceProofModule(relative,reference=preSourceProofRef){
  if(!/^[a-zA-Z0-9_./-]+\.ts$/.test(relative)||relative.split('/').includes('..'))throw Error('legacy_fixture_path_invalid');
- return import(pathToFileURL(join(sourceRoot(),'backend-ts/src',relative)).href);
+ return import(pathToFileURL(join(sourceRoot(reference),'backend-ts/src',relative)).href);
 }
-export function loadPreSourceProofRegistry(){return registryPromise??=(async()=>{
- const {registry}=await loadPreSourceProofModule('storage/sqlite/registry.ts');return {...registry,actions:registry.actions.map(legacyAction)};
-})();}
+/** 历史控制器与供应商替身必须使用同一固定协议，不能混用现行 local-ids 输出。 */
+export function loadPreSourceProofFixture(relative,reference=preSourceProofRef){
+ if(!/^[a-zA-Z0-9_./-]+\.mjs$/.test(relative)||relative.split('/').includes('..'))throw Error('legacy_fixture_path_invalid');
+ return import(pathToFileURL(join(sourceRoot(reference),'backend-ts/test/fixtures',relative)).href);
+}
+export function loadPreSourceProofRegistry(reference=preSourceProofRef){
+ if(!registryPromises.has(reference))registryPromises.set(reference,(async()=>{
+  const {registry}=await loadPreSourceProofModule('storage/sqlite/registry.ts',reference);return {...registry,actions:registry.actions.map(legacyAction)};
+ })());return registryPromises.get(reference);
+}
+export const loadHybridProcessingFixture=relative=>loadPreSourceProofFixture(relative,hybridProcessingRef);
+export const loadHybridProcessingModule=relative=>loadPreSourceProofModule(relative,hybridProcessingRef);
 
 /** 让旧渠道按当时正常使用合同产出可独立核验的账号/目标；事实由旧动作保存，非升级后补签。 */
 export function certifyLegacyMetadata(channel){
