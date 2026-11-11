@@ -1552,6 +1552,7 @@ for (const scenario of ['旧空读取', '旧非空读取', '权威current变化'
             input_version_id: input.input_version_id, state: 'running' };
         } else if (request.method === 'POST' && request.url === `${base}/replies`) {
           formalCount += 1; assert.equal(body.idempotency_key, preparedKey);
+          await oldCaptured.promise;
           authority = { session_id: sessionId, current_input_version_id: input.input_version_id,
             turns: [turn], inputs: [input] };
           payload = { ...turn.reply, session_id: sessionId, turn_id: turn.turn_id,
@@ -1582,8 +1583,9 @@ for (const scenario of ['旧空读取', '旧非空读取', '权威current变化'
     f.contacts.setDraft({ ...f.scope, text: '迟到读取回归的合成草稿。' });
     if (scenario === '旧非空读取') changeCurrent();
     holdReads = true;
+    const generating = f.bridge.generate({ ...f.scope, newRequest: true });
     const oldRead = f.bridge.readSavedSession(f.scope); await oldCaptured.promise;
-    const generating = f.bridge.generate({ ...f.scope, newRequest: true }); await freshCaptured.promise;
+    await freshCaptured.promise;
     releaseOld.resolve(); await oldRead;
     if (scenario === '较新current变化') {
       changeCurrent(); await f.bridge.readSavedSession(f.scope);

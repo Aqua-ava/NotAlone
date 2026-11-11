@@ -6,6 +6,7 @@ import { historicalReplyFixture, ports } from '../fixtures/historical-reply-basi
 // 仅控制传输边界，实际Main/preload/React不使用HTTP、数据库或模型。
 async function changingPreference(previous = false) {
   const f = await historicalReplyFixture(), entered = Promise.withResolvers(), release = Promise.withResolvers();
+  await f.bridge.readSavedSession(f.scope);
   f.contacts.setDraft({ ...f.scope, text: '用户明确保留的独立草稿。' });
   if (previous) {
     await f.bridge.generate({ ...f.scope, newRequest: true });
@@ -126,6 +127,7 @@ test('首次无候选删除偏好时旧返回不能恢复，结算保留草稿�
   await f.replies.revalidateExpressionPreferences();
   assert.equal((await f.bridge.getState()).result, null); assert.equal(f.contacts.getState().draft, '用户明确保留的独立草稿。');
   assert.equal(f.change.generations.length, 1);
+  await f.bridge.readSavedSession(f.scope);
   await f.bridge.generate({ ...f.scope, newRequest: false }); assert.equal(f.change.prepares.length, 2);
   assert.notEqual(f.change.prepares[0].idempotency_key, f.change.prepares[1].idempotency_key);
   assert.deepEqual((await f.bridge.getState()).result.expressionPreferences, []);
@@ -138,10 +140,11 @@ test('偏好拒绝后终态读取故障保留作业身份，普通按钮不能�
   assert.equal((await f.bridge.getState()).errorCode, 'prepared_context_unconfirmed');
   assert.equal((await f.bridge.getState()).canRetry, false);
   assert.equal((await f.bridge.getState()).generationJobs.length, 1);
-  await f.bridge.generate({ ...f.scope, newRequest: false });
-  await f.bridge.generate({ ...f.scope, newRequest: true });
+  await assert.rejects(f.bridge.generate({ ...f.scope, newRequest: false }), /核对当前助手会话/);
+  await assert.rejects(f.bridge.generate({ ...f.scope, newRequest: true }), /核对当前助手会话/);
   assert.equal(f.change.prepares.length, 1); assert.equal(f.change.sealed, false);
   f.change.readFailure = false;
+  await f.bridge.readSavedSession(f.scope);
   await f.bridge.generate({ ...f.scope, newRequest: true });
   assert.equal(f.change.prepares.length, 2); assert.equal(f.change.sealed, true);
 });

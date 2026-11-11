@@ -23,7 +23,8 @@ export async function withMemoryPage(f, signal, run) {
       window.deliverMemory = (state) => { for (const listener of listeners) listener(state); };
       window.deliverOwnerMemory = (state) => { for (const listener of ownerListeners) listener(state); };
       window.notalone = { backend: { onStateChanged: () => () => {} },
-        fixedMemoryProcessing: { readMode: async () => ({ mode: 'legacy', connectionGeneration: 1 }) },
+        fixedMemoryProcessing: { readMode: async () => ({ mode: 'legacy', connectionGeneration: 1 }), release: async () => {} },
+        sqliteMemoryManagement: { release: async () => {} },
         memory: new Proxy({}, { get: (_, method) => method === 'onStateChanged'
         ? (listener) => { listeners.add(listener); return () => listeners.delete(listener); }
         : method === 'onProcessingInvalidated'
