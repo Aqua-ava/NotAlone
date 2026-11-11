@@ -28,6 +28,7 @@
   "tests/assistant-input-budget-notice.test.mjs",
   "tests/assistant-input-budget-read.test.mjs",
   "tests/assistant-message-notices.test.mjs",
+  "tests/assistant-read-request-count.test.mjs",
   "tests/assistant-session-catalog-read.test.mjs",
   "tests/assistant-session-catalog.test.mjs",
   "tests/assistant-session-deletion-guards.test.mjs",
