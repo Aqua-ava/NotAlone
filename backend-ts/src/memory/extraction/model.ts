@@ -79,7 +79,7 @@ export interface ExtractionModelInput {
   /** 原stream退出后、terminal receipt前校验；仅显式invalid_output记原010校验拒绝。 */
   validateOutput?(blocks:readonly ContentBlock[]):void|Promise<void>;
   costForUsage?(usage:ModelLedgerUsage):ModelLedgerCost;
-  /** 存储确认receipt后持久化最小关联；回调成功前不settle，失败保留journal未知。 */
+  /** 存储确认receipt后持久化最小关联；回调成功前不settle，失败保留许可未知。 */
   onReceipt?(receipt:ModelLedgerReceipt):Promise<void>;
   onImageInputs?(images:readonly ModelImageManifest[]):Promise<void>;
 }
