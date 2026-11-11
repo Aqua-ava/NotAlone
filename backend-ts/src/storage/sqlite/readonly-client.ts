@@ -39,7 +39,7 @@ export class SqliteReadonlyReader implements StorageReader {
       if(message.id===undefined){this.finishReady(new StorageFailure(message.code??'worker_failed'));void this.close();return;}
       const pending=this.pending.get(message.id);if(!pending)return;
       clearTimeout(pending.timer);this.pending.delete(message.id);
-      publishStorageDiagnostics(message.diagnostics,pending.traceId);
+      publishStorageDiagnostics(message.diagnostics,pending.traceId,{observedAt:message.diagnosticObservedAt,observedNs:message.diagnosticObservedMonotonicNs});
       if(message.code){pending.reject(new StorageFailure(message.code));if(terminalCodes.has(message.code))void this.close();}
       else pending.resolve(message.value);
     });

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, realpath, chmod, rm, readdir, readFile, appendFile, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, chmod, rm, readdir, readFile, appendFile, symlink, writeFile, lstat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { UnifiedDiagnosticLog, readDiagnosticRecords } from '../src/diagnostics/unified-log.mjs';
@@ -25,10 +25,12 @@ test('事件名拒绝隐式字符串转换和自定义序列化，敏感合成�
 });
 test('低流量连续运行跨过16天，在日期轮转时清除过期文件', async t => {
   const root = await fixture(t); let now = Date.now(); const log = new UnifiedDiagnosticLog(root, { proc: 'main', now: () => now });
-  log.diagnose(event(1)); await log.flush(); const original = await readdir(path.join(root, 'logs'));
+  log.diagnose(event(1)); await log.flush(); const original = (await readdir(path.join(root, 'logs'))).filter(file=>file.endsWith('.jsonl'));
+  const lock=path.join(root,'logs','diagnostic-maintenance.lock'),before=await lstat(lock);
   now += 16 * 86400_000; log.diagnose(event(2)); await log.flush();
-  const files = await readdir(path.join(root, 'logs'));
+  const files = (await readdir(path.join(root, 'logs'))).filter(file=>file.endsWith('.jsonl'));
   assert.ok(original.every(file => !files.includes(file))); assert.equal(files.length, 1);
+  const after=await lstat(lock);assert.equal(after.dev,before.dev);assert.equal(after.ino,before.ino);
   assert.deepEqual((await readDiagnosticRecords(root)).map(row => row.count), [2]);
 });
 test('持续追加期间读取有界完整行快照，已有时间线不会整包丢失', async t => {

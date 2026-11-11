@@ -13,7 +13,7 @@ export async function withDiagnosticLock(root,guard,work,timeoutMs=2000){
  const deadline=performance.now()+timeoutMs;
  for(;;){
   const directory=await guard(),rootStat=await lstat(root);
-  if(!rootStat.isDirectory()||rootStat.uid!==process.getuid?.()||(rootStat.mode&0o777)!==0o700)throw new Error('diagnostic_lock_unavailable');
+  if(!rootStat.isDirectory()||rootStat.uid!==process.getuid?.()||(rootStat.mode&0o022)!==0)throw new Error('diagnostic_lock_unavailable');
   const file=path.join(directory,'diagnostic-maintenance.lock');let handle;
   try{
    handle=await open(file,constants.O_CREAT|constants.O_RDWR|constants.O_NOFOLLOW|constants.O_NONBLOCK|darwinExclusiveLock,0o600);

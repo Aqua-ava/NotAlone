@@ -1,4 +1,5 @@
 import type { DiagnosticEvent, DiagnosticRecord } from './unified-contract.mjs';
+import type {DiagnosticObservation} from './buffer.mjs';
 export interface DiagnosticStatus { enabled: boolean; bytes: number; available: boolean }
 export interface DiagnosticLogOptions { proc?: 'main' | 'backend'; development?: boolean; maxFileBytes?: number; maxTotalBytes?: number; maxAgeMs?: number; now?: () => number }
 export class UnifiedDiagnosticLog {
@@ -17,4 +18,4 @@ export function readDiagnosticRecords(root: string): Promise<DiagnosticRecord[]>
 /** @internal 范围必须由现行删除runner在存储中复验。 */
 export function eraseDiagnosticRecords(root:string,scope:{kind:'contact'|'account';contactPrefixes:string[]}):Promise<boolean>;
 /** @internal 只接收受信任上下文保存的时间；不扩展公共事件字段。 */
-export function writeObservedDiagnostic(log: UnifiedDiagnosticLog, input: DiagnosticEvent, observedAt: number, observedNs?:bigint): void;
+export function writeObservedDiagnostic(log: UnifiedDiagnosticLog, input: DiagnosticEvent, observedAt: number, observedNs?:bigint, protection?:DiagnosticObservation): void;

@@ -86,7 +86,7 @@ export class SqliteStorage {
           ok:!message.code,finishedAt:message.finishedAt});
         if(this.timings.length>64)this.timings.shift();
       }
-      publishStorageDiagnostics(message.diagnostics,pending.traceId);
+      publishStorageDiagnostics(message.diagnostics,pending.traceId,{observedAt:message.diagnosticObservedAt,observedNs:message.diagnosticObservedMonotonicNs});
       if (message.code) pending.reject(new StorageFailure(message.code)); else pending.resolve(message.value);
     });
     worker.on('error', () => this.fail('worker_error'));

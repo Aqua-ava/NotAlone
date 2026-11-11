@@ -52,7 +52,7 @@ try{
   port.on('message',({id,name,input,traceId})=>{
     const safeTrace=typeof traceId==='string'&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(traceId)?traceId:undefined;
     sqlSummary=new SqlDiagnosticSummary(storageDiagnosticModule(name),'sqlite_readonly_worker',safeTrace);
-    const respond=(value:Record<string,unknown>)=>{const diagnostics=sqlSummary!.events();sqlSummary=undefined;port.postMessage({id,...value,diagnostics});};
+    const respond=(value:Record<string,unknown>)=>{const diagnosticObservedAt=Date.now(),diagnosticObservedMonotonicNs=process.hrtime.bigint(),diagnostics=sqlSummary!.events();sqlSummary=undefined;port.postMessage({id,...value,diagnostics,diagnosticObservedAt,diagnosticObservedMonotonicNs});};
     try{
       const action=actions.get(name);
       if(!allowed.has(name)||action?.mode!=='read')throw new StorageFailure('readonly_action_forbidden');

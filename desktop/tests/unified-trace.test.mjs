@@ -9,6 +9,7 @@ import {fork,execFileSync,execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
+import {createHash} from 'node:crypto';
 const require=createRequire(import.meta.url),contact='11111111-1111-4111-8111-111111111111',trace='22222222-2222-4222-8222-222222222222';
 async function ports(t,historical=false){
  const root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-trace-main-')));t.after(()=>rm(root,{recursive:true,force:true}));
@@ -84,7 +85,8 @@ test('渲染桥经严格IPC、真实HTTP与SQLite Worker生成可还原的双进
  assert.ok(rows.some(row=>row.event==='request.started'&&row.caller==='management_read'));
  assert.ok(rows.some(row=>row.event==='request.finished'&&row.proc==='backend'));
  assert.ok(rows.some(row=>row.event==='request.finished'&&row.proc==='backend'&&row.caller==='management_documents'));
- assert.ok(rows.some(row=>row.event==='sql.summary'&&row.count===101));
+ const fingerprint=createHash('sha256').update('SELECT value FROM diagnostic_fact').digest('hex');
+ assert.equal(rows.filter(row=>row.event==='sql.summary'&&row.sqlFingerprint===fingerprint).reduce((sum,row)=>sum+row.count,0),202,'两次实际读取各101次，异步flush允许合并为202或分别保存101');
  const timeline=execFileSync('pnpm',['run','diag','--data-dir',p.root,'--trace',input.traceId],{cwd:path.resolve('..'),encoding:'utf8'}).split('\n').filter(line=>line.startsWith('{')).map(line=>JSON.parse(line));
  assert.equal(timeline.length,rows.length);assert.deepEqual(timeline.map(row=>row.time),timeline.map(row=>row.time).sort());
  t.diagnostic(JSON.stringify({traceId:input.traceId,eventCount:rows.length,processes:[...new Set(rows.map(row=>row.proc))]}));
