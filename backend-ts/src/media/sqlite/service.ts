@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import {currentDiagnosticTrace,diagnose,newTraceId,withDiagnosticTrace} from '../../diagnostics/context.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import {ActiveHolders} from '../../storage/sqlite/deletion/holders.ts';
@@ -51,7 +52,19 @@ export class SqliteMediaService {
   if(!state.capabilities.reason&&!this.options.adapters.some(a=>a.supports(state.kind,'extract')))state.capabilities.reason='media_adapter_unavailable';return state;
  }
  extract(contactId:string,messageId:string,input:{requestKey:string;goal:MediaGoal},signal?:AbortSignal):Promise<MediaSnapshot>{
-  return this.track(this.runExtraction(contactId,messageId,input,signal));
+  return this.track(this.traceOperation(contactId,'media_extract',()=>this.runExtraction(contactId,messageId,input,signal)));
+ }
+ /** 只记录固定分类和数量；诊断失败不能改变原业务Promise及异常身份。 */
+ private traceOperation<T>(contactId:string,caller:'media_extract'|'media_preview'|'media_memory_image',work:()=>Promise<T>):Promise<T>{
+  return withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>{
+   const started=performance.now(),contactPrefix=/^[a-f0-9]{8}/.test(contactId)?contactId.slice(0,8):undefined;
+   diagnose({event:'media.decision',caller,reasonCode:'started',...(contactPrefix?{contactPrefix}:{})});
+   return work().then(value=>{diagnose({event:'media.decision',caller,reasonCode:'completed',durationMs:Math.max(0,performance.now()-started),...(contactPrefix?{contactPrefix}:{})});return value;},error=>{
+    const reasons:Record<string,string>={media_execution_failed:'failed',media_thumbnail_only:'thumbnail_only',media_database_key_missing:'media_key_missing',media_association_failed:'association_failed',media_interrupted:'aborted',media_closed:'shutdown',read_not_authorized:'authorization_revoked',read_eligibility_stale:'authorization_revoked',history_source_not_available:'source_stale',media_adapter_unavailable:'not_ready'};
+    const reasonCode=error instanceof StorageFailure?reasons[error.code]??'image_unavailable':'failed';
+    diagnose({event:'diagnostics.error',module:'media',caller,reasonCode,durationMs:Math.max(0,performance.now()-started),...(contactPrefix?{contactPrefix}:{})});throw error;
+   });
+  });
  }
  private async runExtraction(contactId:string,messageId:string,input:{requestKey:string;goal:MediaGoal},signal?:AbortSignal):Promise<MediaSnapshot>{
   this.available();const scope={ownerId:this.ownerId,contactId,messageId};
@@ -147,10 +160,10 @@ export class SqliteMediaService {
   }finally{settle();await release();}
  }
  openPreview(contactId:string,messageId:string,fileId:string):Promise<MediaPreview>{
-  const opening=this.acquirePreview(contactId,messageId,fileId);this.openings.add(opening);
+  const opening=this.traceOperation(contactId,'media_preview',()=>this.acquirePreview(contactId,messageId,fileId));this.openings.add(opening);
   const settled=()=>{this.openings.delete(opening);};void opening.then(settled,settled);return opening;
  }
- readMemoryImage(input:MemoryImageInput):Promise<{mimeType:string;dataBase64:string}>{return this.track(this.acquireMemoryImage(input));}
+ readMemoryImage(input:MemoryImageInput):Promise<{mimeType:string;dataBase64:string}>{return this.track(this.traceOperation(input.contactId,'media_memory_image',()=>this.acquireMemoryImage(input)));}
  private async acquireMemoryImage(input:MemoryImageInput):Promise<{mimeType:string;dataBase64:string}>{
   const scope={ownerId:this.ownerId,contactId:input.contactId,messageId:input.messageId,fileId:input.fileId};
   const checkpoint=async():Promise<FileReference>=>{
