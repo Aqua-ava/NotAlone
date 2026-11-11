@@ -24,9 +24,9 @@ export function diagnosticLog():UnifiedDiagnosticLog|undefined{return current;}
 export async function eraseModelImageDiagnostic(imageId:string):Promise<boolean>{
  if(typeof imageId!=='string'||!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(imageId))return false;
  const buffered=pending.take();
- for(const item of buffered.items)if(item.event.event!=='processing.model_image'||item.event.imageId!==imageId)pending.push(item.event,item);
- for(const notice of buffered.notices)pending.push(notice);
- if(buffered.dropped)pending.push(diagnosticOverflow('diagnostic_lazy',buffered.dropped));
+ for(const item of buffered.items)if(item.event.event!=='processing.model_image'||item.event.imageId!==imageId)pending.push(item.event,item,Buffer.byteLength(JSON.stringify(item.event)),{observedAt:item.observedAt,observedNs:item.observedNs});
+ for(const entry of buffered.noticeEntries)pending.push(entry.event,undefined,0,entry.observation);
+ if(buffered.dropped)pending.push(diagnosticOverflow('diagnostic_lazy',buffered.dropped),undefined,0,buffered.droppedObservation);
  try{
   if(!current){
    const root=process.env.NOTALONE_DIAGNOSTIC_ROOT;if(!root)return true;
