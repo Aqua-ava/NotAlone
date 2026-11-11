@@ -42,7 +42,7 @@ function SkillLearningContent({ session, visible }: { session: ContactSessionVie
     else{connected=true;setConnectionPhase('connected');read();}
     return()=>{active=false;unsubscribe?.();};
   },[bridge,attempt]);
-  if(library?.mode==='sqlite')return <SqliteSkillLibraryPage key={library.connectionGeneration} initial={library} visible={visible} bridge={bridge} onModeChange={setLibrary} onUnavailable={()=>{setLibrary(null);setFailure('Skill 状态暂不可用，请重新读取。');}}/>;
+  if(library?.mode==='sqlite')return <SqliteSkillLibraryPage key={library.connectionGeneration} initial={library} visible={visible} contacts={session.state.contacts ?? []} bridge={bridge} onModeChange={setLibrary} onUnavailable={()=>{setLibrary(null);setFailure('Skill 状态暂不可用，请重新读取。');}}/>;
   if(library?.mode==='legacy')return visible ? <LegacySkillLearningPage session={session}/> : null;
   const connectionMessage: Record<BackendPhase,string> = {
     connecting:'正在连接本机服务，连接后可查看 Skill。',

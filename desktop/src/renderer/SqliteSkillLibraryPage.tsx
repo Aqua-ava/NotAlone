@@ -1,15 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ContactSummary } from '../shared/contact-session-bridge';
+import { SkillGroupsPanel } from './SkillGroupsPanel';
 import type { SkillLibraryBridge, SkillLibraryItem, SkillLibrarySnapshot, SqliteSkillLibrarySnapshot } from '../shared/skill-library-bridge';
 
 const verificationLabels = { pending: '场景文件待核验', missing: '场景文件缺失，请恢复后刷新', conflict: '无法确认场景文件，请检查后刷新', invalid: '场景文件校验未通过，请检查后刷新' };
 
-export function SqliteSkillLibraryPage({ initial, bridge, onModeChange, onUnavailable, visible = true }: {
+export function SqliteSkillLibraryPage({ initial, bridge, onModeChange, onUnavailable, visible = true, contacts = [] }: {
   initial: SqliteSkillLibrarySnapshot;
   bridge: SkillLibraryBridge;
   onModeChange: (value: SkillLibrarySnapshot) => void;
   onUnavailable: () => void;
   visible?: boolean;
+  contacts?: ContactSummary[];
 }) {
+  const [tab, setTab] = useState<'scenes' | 'groups'>('scenes');
+  const [groupsOpened, setGroupsOpened] = useState(false);
   const [view, setView] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [background, setBackground] = useState(false);
@@ -69,6 +74,14 @@ export function SqliteSkillLibraryPage({ initial, bridge, onModeChange, onUnavai
   const visibleSkills = selectedTag === '全部' ? view.skills : view.skills.filter((item) => item.tags.includes(selectedTag));
 
   return <section className="sqlite-skill-library" aria-label="Skill 管理">
+    <div className="sqlite-skill-tabs" role="tablist" aria-label="Skill 管理分区">
+      <button type="button" role="tab" aria-selected={tab === 'scenes'} onClick={() => setTab('scenes')}>回复场景</button>
+      <button type="button" role="tab" aria-selected={tab === 'groups'} onClick={() => { setTab('groups'); setGroupsOpened(true); }}>联系人分组</button>
+    </div>
+    {groupsOpened && <div hidden={tab !== 'groups'}>
+      <SkillGroupsPanel bridge={bridge} skills={view.skills} contacts={contacts} visible={visible && tab === 'groups'} onUnavailable={() => undefined} />
+    </div>}
+    <div hidden={tab !== 'scenes'} className="sqlite-skill-library">
     <div className="sqlite-skill-heading">
       <div>
         <h2>回复场景</h2>
@@ -128,5 +141,6 @@ export function SqliteSkillLibraryPage({ initial, bridge, onModeChange, onUnavai
       </div>
       {!visibleSkills.length && <p role="status">这个标签下暂时没有回复场景。</p>}
     </>}
+    </div>
   </section>;
 }

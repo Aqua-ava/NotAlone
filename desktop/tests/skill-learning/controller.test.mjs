@@ -134,7 +134,7 @@ test('待审核桥接只接受当前联系人操作，不提供模型发布或�
       scopeRevision: 1, directoryPhase: 'ready', contacts: [{ contactId }] }) };
     const backend = { getConnectionGeneration: () => 1, onStateChanged: () => () => {} };
     installSkillLearningBridge({ handle: (channel, handler, role) => { assert.equal(role, 'manager'); handlers.set(channel, handler); }, publish: () => {} }, backend, contacts);
-    assert.deepEqual([...handlers.keys()], ['skill-library:read', 'skill-library:verify', 'skill-library:enabled', 'skill-learning:get-state', 'skill-learning:refresh', 'skill-learning:poll', 'skill-learning:configure', 'skill-learning:resume',
+    assert.deepEqual([...handlers.keys()], ['skill-library:read', 'skill-library:verify', 'skill-library:enabled', 'skill-library:groups-read', 'skill-library:group-create', 'skill-library:group-update', 'skill-library:group-delete', 'skill-library:group-assign', 'skill-learning:get-state', 'skill-learning:refresh', 'skill-learning:poll', 'skill-learning:configure', 'skill-learning:resume',
       'skill-learning:open-review', 'skill-learning:update-review', 'skill-learning:save-review', 'skill-learning:compare-review',
       'skill-learning:approve-review', 'skill-learning:decide-review', 'skill-learning:retry-review', 'skill-learning:close-review',
       'skill-learning:open-history', 'skill-learning:close-history', 'skill-learning:rollback-history', 'skill-learning:retry-history',

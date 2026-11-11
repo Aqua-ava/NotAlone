@@ -44,6 +44,11 @@ export class SkillLearningController {
   readLibrary() { return this.library.read(); }
   verifyLibrary(input: unknown) { return this.library.verify(input); }
   changeLibraryEnabled(input: unknown) { return this.library.changeEnabled(input); }
+  readGroups() { return this.library.readGroups(); }
+  createGroup(input: unknown) { return this.library.createGroup(input); }
+  updateGroup(input: unknown) { return this.library.updateGroup(input); }
+  deleteGroup(input: unknown) { return this.library.deleteGroup(input); }
+  assignContactGroup(input: unknown) { return this.library.assignContactGroup(input); }
   onStateChanged(listener: (state: SkillLearningState) => void) {
     this.listeners.add(listener); return () => { this.listeners.delete(listener); };
   }
