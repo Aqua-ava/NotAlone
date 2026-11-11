@@ -7,6 +7,7 @@ export const managementPageSize=20;
 export interface ManagementPageScope {ownerId:string;scope:MemoryScope;displayContactId:string|null;revision:string}
 export function pageScope(tx:StorageTransaction,ownerId:string,scope:MemoryScope,displayContactId?:string):ManagementPageScope {
  available(tx,ownerId,scope);
+ tx.flushDerived?.();
  const display=displayContactId===undefined?null:id(displayContactId);
  if(display!==null)available(tx,ownerId,{scopeKind:'contact',contactId:display});
  if(scope.scopeKind==='contact'&&display!==null&&display!==scope.contactId)fail('memory_scope_invalid');

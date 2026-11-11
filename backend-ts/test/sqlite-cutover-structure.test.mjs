@@ -31,7 +31,7 @@ test('实际 DDL 与 92 表结构基线逐表一致（含 CHECK、触发器 body
   if (baselineSqliteVersion !== undefined) assert.match(baselineSqliteVersion, /^\d+\.\d+\.\d+$/);
   assert.deepEqual(actualStable, baselineStable, '结构元数据与基线不一致');
   assert.equal(actual.metadata.checkCount, 303);
-  assert.equal(actual.metadata.triggerCount, 102);
+  assert.equal(actual.metadata.triggerCount, 82);
   assert.deepEqual(actual.metadata.migrationVersions, registry.migrations.map(migration => migration.version));
   assert.equal(actual.metadata.userVersion, baseline.metadata.schemaVersion);
   assert.deepEqual(Object.keys(actual.tables), EXPECTED_TABLES, '实际表集合必须等于实现表基线');

@@ -29,6 +29,9 @@ export interface StorageDiagnostic {
 }
 export type StorageRuntimeNamespace = 'history-source-guard';
 export interface StorageTransaction {
+  // 分页或时间线在同一写事务内读取前结清派生状态；其他写入由Worker在提交前结清。
+  // 结清失败使整个动作回滚，不支持捕获后继续提交；下一次重试建立新聚合。
+  flushDerived?():void;
   // 易失状态按动作隔离；只有SQL提交成功后由Worker发布，不能作为持久事实。
   runtimeGet<T>(namespace:StorageRuntimeNamespace,key:string):T|undefined;
   runtimeSet(namespace:StorageRuntimeNamespace,key:string,value:unknown):void;

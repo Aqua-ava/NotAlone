@@ -2,7 +2,7 @@ import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 import {skillActions} from '../../../src/skills/sqlite/storage.ts';
 
 const defaultEnable=skillActions.find(action=>action.name==='skills.defaultEnable');
-export const registry={...base,actions:[...base.actions,
+export const registry={...base,migrations:base.migrations.filter(migration=>migration.version<=49),actions:[...base.actions,
  {name:'fixture.triggerNames',mode:'read',retryBusy:false,execute(tx){return tx.all("SELECT name,sql FROM sqlite_schema WHERE type='trigger' ORDER BY name");}},
  {name:'fixture.triggerSeed',mode:'write',retryBusy:false,execute(tx){
   tx.run("INSERT INTO owner(owner_id,created_at) VALUES('owner-a',0)");

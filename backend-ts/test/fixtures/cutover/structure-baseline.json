@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 49,
+  "schemaVersion": 50,
   "migrationVersions": [
    1,
    2,
@@ -50,14 +50,15 @@
    46,
    47,
    48,
-   49
+   49,
+   50
   ],
-  "userVersion": 49,
+  "userVersion": 50,
   "sqliteVersion": "3.53.4",
   "tableCount": 92,
   "fieldCount": 934,
   "foreignKeyGroups": 192,
-  "triggerCount": 102,
+  "triggerCount": 82,
   "checkCount": 303,
   "viewCount": 0
  },
@@ -15224,54 +15225,9 @@
    "sql": "CREATE TRIGGER memory_candidate_fixed BEFORE UPDATE OF proposed_body,produced_attempt_id,event_id,output_no,scope_kind,contact_id ON memory_candidate WHEN NOT (NEW.state='deleted' AND NEW.proposed_body IS NULL AND NEW.produced_attempt_id IS NULL AND NEW.event_id IS NULL) BEGIN SELECT RAISE(ABORT,'memory_candidate_immutable'); END"
   },
   {
-   "name": "memory_candidate_management_delete",
-   "table": "memory_candidate",
-   "sql": "CREATE TRIGGER memory_candidate_management_delete AFTER DELETE ON memory_candidate BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=OLD.owner_id AND OLD.scope_kind='self'; UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=OLD.owner_id AND id=OLD.contact_id AND OLD.scope_kind='contact'; END"
-  },
-  {
-   "name": "memory_candidate_management_insert",
-   "table": "memory_candidate",
-   "sql": "CREATE TRIGGER memory_candidate_management_insert AFTER INSERT ON memory_candidate BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND NEW.scope_kind='self'; UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id=NEW.contact_id AND NEW.scope_kind='contact'; END"
-  },
-  {
-   "name": "memory_candidate_management_update",
-   "table": "memory_candidate",
-   "sql": "CREATE TRIGGER memory_candidate_management_update AFTER UPDATE ON memory_candidate BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND NEW.scope_kind='self'; UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id=NEW.contact_id AND NEW.scope_kind='contact'; END"
-  },
-  {
    "name": "memory_citation_scope",
    "table": "memory_citation",
    "sql": "CREATE TRIGGER memory_citation_scope BEFORE INSERT ON memory_citation WHEN NOT EXISTS( SELECT 1 FROM memory_required_message r WHERE r.owner_id=NEW.owner_id AND r.candidate_id IS NEW.candidate_id AND r.memory_id IS NEW.memory_id AND r.version_no IS NEW.version_no AND r.source_contact_id=NEW.source_contact_id AND r.message_id=NEW.message_id) BEGIN SELECT RAISE(ABORT,'memory_citation_required_mismatch'); END"
-  },
-  {
-   "name": "memory_citation_timeline_delete",
-   "table": "memory_citation",
-   "sql": "CREATE TRIGGER memory_citation_timeline_delete AFTER DELETE ON memory_citation BEGIN UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=OLD.owner_id AND id=OLD.memory_id AND current_version_no=OLD.version_no ; END"
-  },
-  {
-   "name": "memory_citation_timeline_insert",
-   "table": "memory_citation",
-   "sql": "CREATE TRIGGER memory_citation_timeline_insert AFTER INSERT ON memory_citation BEGIN UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=NEW.owner_id AND id=NEW.memory_id AND current_version_no=NEW.version_no ; END"
-  },
-  {
-   "name": "memory_citation_timeline_update",
-   "table": "memory_citation",
-   "sql": "CREATE TRIGGER memory_citation_timeline_update AFTER UPDATE ON memory_citation BEGIN UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=OLD.owner_id AND id=OLD.memory_id AND current_version_no=OLD.version_no AND (OLD.owner_id<>NEW.owner_id OR OLD.memory_id IS NOT NEW.memory_id OR OLD.version_no IS NOT NEW.version_no); UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=NEW.owner_id AND id=NEW.memory_id AND current_version_no=NEW.version_no ; END"
-  },
-  {
-   "name": "memory_decision_management_delete",
-   "table": "memory_decision",
-   "sql": "CREATE TRIGGER memory_decision_management_delete AFTER DELETE ON memory_decision BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=OLD.owner_id AND EXISTS(SELECT 1 FROM memory m WHERE m.owner_id=OLD.owner_id AND m.id=OLD.target_memory_id AND m.scope_kind='self'); UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=OLD.owner_id AND id IN(SELECT contact_id FROM memory m WHERE m.owner_id=OLD.owner_id AND m.id=OLD.target_memory_id AND m.scope_kind='contact'); END"
-  },
-  {
-   "name": "memory_decision_management_insert",
-   "table": "memory_decision",
-   "sql": "CREATE TRIGGER memory_decision_management_insert AFTER INSERT ON memory_decision BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND EXISTS(SELECT 1 FROM memory m WHERE m.owner_id=NEW.owner_id AND m.id=NEW.target_memory_id AND m.scope_kind='self'); UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id IN(SELECT contact_id FROM memory m WHERE m.owner_id=NEW.owner_id AND m.id=NEW.target_memory_id AND m.scope_kind='contact'); END"
-  },
-  {
-   "name": "memory_decision_management_update",
-   "table": "memory_decision",
-   "sql": "CREATE TRIGGER memory_decision_management_update AFTER UPDATE ON memory_decision BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND EXISTS(SELECT 1 FROM memory m WHERE m.owner_id=NEW.owner_id AND m.id=NEW.target_memory_id AND m.scope_kind='self'); UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id IN(SELECT contact_id FROM memory m WHERE m.owner_id=NEW.owner_id AND m.id=NEW.target_memory_id AND m.scope_kind='contact'); END"
   },
   {
    "name": "memory_head_closure",
@@ -15284,29 +15240,9 @@
    "sql": "CREATE TRIGGER memory_incremental_baseline_immutable BEFORE UPDATE OF memory_incremental_baseline_display_no ON database_instance BEGIN SELECT RAISE(ABORT,'memory_incremental_baseline_immutable'); END"
   },
   {
-   "name": "memory_management_delete",
-   "table": "memory",
-   "sql": "CREATE TRIGGER memory_management_delete AFTER DELETE ON memory BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=OLD.owner_id AND OLD.scope_kind='self'; UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=OLD.owner_id AND id=OLD.contact_id AND OLD.scope_kind='contact'; END"
-  },
-  {
-   "name": "memory_management_insert",
-   "table": "memory",
-   "sql": "CREATE TRIGGER memory_management_insert AFTER INSERT ON memory BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND NEW.scope_kind='self'; UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id=NEW.contact_id AND NEW.scope_kind='contact'; END"
-  },
-  {
-   "name": "memory_management_update",
-   "table": "memory",
-   "sql": "CREATE TRIGGER memory_management_update AFTER UPDATE ON memory BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND NEW.scope_kind='self'; UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id=NEW.contact_id AND NEW.scope_kind='contact'; END"
-  },
-  {
    "name": "memory_required_scope",
    "table": "memory_required_message",
    "sql": "CREATE TRIGGER memory_required_scope BEFORE INSERT ON memory_required_message WHEN NOT EXISTS( SELECT 1 FROM (SELECT scope_kind,contact_id FROM memory_candidate WHERE owner_id=NEW.owner_id AND id=NEW.candidate_id UNION ALL SELECT scope_kind,contact_id FROM memory WHERE owner_id=NEW.owner_id AND id=NEW.memory_id) p WHERE p.scope_kind='self' OR p.contact_id=NEW.source_contact_id) BEGIN SELECT RAISE(ABORT,'memory_source_scope_mismatch'); END"
-  },
-  {
-   "name": "memory_timeline_update",
-   "table": "memory",
-   "sql": "CREATE TRIGGER memory_timeline_update AFTER UPDATE OF current_version_no,state ON memory BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND NEW.scope_kind='self' AND NEW.management_timeline_dirty=1; UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id=NEW.contact_id AND NEW.scope_kind='contact' AND NEW.management_timeline_dirty=1; UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=NEW.owner_id AND id=NEW.id AND management_timeline_dirty=0; END"
   },
   {
    "name": "memory_version_fixed",
@@ -15314,44 +15250,9 @@
    "sql": "CREATE TRIGGER memory_version_fixed BEFORE UPDATE ON memory_version WHEN NOT (OLD.content_state='present' AND NEW.content_state='redacted' AND NEW.body IS NULL AND NEW.provenance_state='invalidated' AND NEW.owner_id=OLD.owner_id AND NEW.memory_id=OLD.memory_id AND NEW.version_no=OLD.version_no AND NEW.decision_id=OLD.decision_id AND NEW.formation_kind=OLD.formation_kind AND NEW.adoption_mode=OLD.adoption_mode AND NEW.previous_version_no IS OLD.previous_version_no AND NEW.restored_from_version_no IS OLD.restored_from_version_no AND NEW.protection_at_formation=OLD.protection_at_formation) BEGIN SELECT RAISE(ABORT,'memory_version_immutable'); END"
   },
   {
-   "name": "memory_version_management_delete",
-   "table": "memory_version",
-   "sql": "CREATE TRIGGER memory_version_management_delete AFTER DELETE ON memory_version BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=OLD.owner_id AND EXISTS(SELECT 1 FROM memory m WHERE m.owner_id=OLD.owner_id AND m.id=OLD.memory_id AND m.scope_kind='self'); UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=OLD.owner_id AND id IN(SELECT contact_id FROM memory m WHERE m.owner_id=OLD.owner_id AND m.id=OLD.memory_id AND m.scope_kind='contact'); END"
-  },
-  {
-   "name": "memory_version_management_insert",
-   "table": "memory_version",
-   "sql": "CREATE TRIGGER memory_version_management_insert AFTER INSERT ON memory_version BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND EXISTS(SELECT 1 FROM memory m WHERE m.owner_id=NEW.owner_id AND m.id=NEW.memory_id AND m.scope_kind='self'); UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id IN(SELECT contact_id FROM memory m WHERE m.owner_id=NEW.owner_id AND m.id=NEW.memory_id AND m.scope_kind='contact'); END"
-  },
-  {
-   "name": "memory_version_management_update",
-   "table": "memory_version",
-   "sql": "CREATE TRIGGER memory_version_management_update AFTER UPDATE ON memory_version BEGIN UPDATE owner SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND EXISTS(SELECT 1 FROM memory m WHERE m.owner_id=NEW.owner_id AND m.id=NEW.memory_id AND m.scope_kind='self'); UPDATE contact SET management_revision=management_revision+1 WHERE owner_id=NEW.owner_id AND id IN(SELECT contact_id FROM memory m WHERE m.owner_id=NEW.owner_id AND m.id=NEW.memory_id AND m.scope_kind='contact'); END"
-  },
-  {
-   "name": "memory_version_timeline_delete",
-   "table": "memory_version",
-   "sql": "CREATE TRIGGER memory_version_timeline_delete AFTER DELETE ON memory_version BEGIN UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=OLD.owner_id AND id=OLD.memory_id AND current_version_no=OLD.version_no ; END"
-  },
-  {
-   "name": "memory_version_timeline_insert",
-   "table": "memory_version",
-   "sql": "CREATE TRIGGER memory_version_timeline_insert AFTER INSERT ON memory_version BEGIN UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=NEW.owner_id AND id=NEW.memory_id AND current_version_no=NEW.version_no ; END"
-  },
-  {
-   "name": "memory_version_timeline_update",
-   "table": "memory_version",
-   "sql": "CREATE TRIGGER memory_version_timeline_update AFTER UPDATE ON memory_version BEGIN UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=OLD.owner_id AND id=OLD.memory_id AND current_version_no=OLD.version_no AND (OLD.owner_id<>NEW.owner_id OR OLD.memory_id IS NOT NEW.memory_id OR OLD.version_no IS NOT NEW.version_no); UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=NEW.owner_id AND id=NEW.memory_id AND current_version_no=NEW.version_no ; END"
-  },
-  {
    "name": "message_immutable",
    "table": "message",
    "sql": "CREATE TRIGGER message_immutable BEFORE UPDATE OF text_body,kind,sender_role,identity_scheme,external_key,binding_id,contact_id ON message BEGIN SELECT RAISE(ABORT,'message_immutable'); END"
-  },
-  {
-   "name": "message_timeline_time",
-   "table": "message",
-   "sql": "CREATE TRIGGER message_timeline_time AFTER UPDATE OF sent_at ON message BEGIN UPDATE memory SET management_timeline_dirty=1 WHERE owner_id=NEW.owner_id AND id IN( SELECT citation.memory_id FROM memory_citation citation JOIN memory current ON current.owner_id=citation.owner_id AND current.id=citation.memory_id AND current.current_version_no=citation.version_no WHERE citation.owner_id=NEW.owner_id AND citation.source_contact_id=NEW.contact_id AND citation.message_id=NEW.id AND citation.memory_id IS NOT NULL ); END"
   },
   {
    "name": "model_call_identity_immutable",

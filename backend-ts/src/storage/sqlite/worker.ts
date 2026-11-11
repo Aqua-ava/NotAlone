@@ -1,3 +1,5 @@
+import {installManagementBatching} from '../../memory/sqlite/management/batching.ts';
+import {memoryManagementBatchingMigration} from '../../memory/sqlite/management/batching-schema.ts';
 import {historicalDeletionEquivalences,retiredDeletionOperations} from './migrations/history-retirement-v1.ts';
 import { parentPort, workerData } from 'node:worker_threads';
 import { statSync } from 'node:fs';
@@ -154,6 +156,7 @@ try {
       } catch (error) { connection.close(); db = undefined; throw error; }
     }
   }
+  const managementBatching=registry.migrations.some(migration=>migration.sql===memoryManagementBatchingMigration(50).sql)?installManagementBatching(connection):undefined;
   files.verify();
   const status = {databaseId, runtimeId, epoch: get('SELECT epoch FROM database_instance WHERE slot=1')!.epoch,
     role: options.role, schemaVersion: registry.migrations.length, sqliteVersion: get('SELECT sqlite_version() AS v')!.v};
@@ -201,6 +204,7 @@ try {
         const diagnostics:StorageDiagnostic[]=[];
         const runtimeOverlay=new Map<string,unknown>();
         try {
+          managementBatching?.begin();
           const invoke = () => {
             assertLease(lease);
             let active = true;
@@ -225,6 +229,7 @@ try {
               runtimeOverlay.set(scoped,value===removedRuntimeValue?value:structuredClone(value));
             };
             const tx: StorageTransaction = {
+              flushDerived(){permitted();managementBatching?.flush();},
               runtimeGet<T>(namespace:string,key:string):T|undefined {
                 const scoped=runtimeKey(namespace,key),value=runtimeOverlay.has(scoped)?runtimeOverlay.get(scoped):runtimeValues.get(scoped);
                 return value===removedRuntimeValue?undefined:structuredClone(value) as T|undefined;
@@ -247,6 +252,7 @@ try {
               if (value && typeof (value as Promise<unknown>).then === 'function') {
                 void Promise.resolve(value).catch(() => {}); throw new StorageFailure('async_transaction_forbidden');
               }
+              managementBatching?.flush();
               // 提交前确认结果可安全穿过Worker协议，避免已提交后才因序列化报失败。
               assertLease(lease);
               return structuredClone(value);

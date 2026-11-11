@@ -26,7 +26,9 @@ SQLite 是当前默认业务存储。正式装配使用 `sqlite-host-plugin.ts`�
 
 向 `registry.actions` 注册 `{name,mode:'read'|'write'|'maintenance',retryBusy,execute(tx,input,lease)}`，名称例如 `capture.commitPage`、`deletion.plan`、`skills.list`。动作是受版本管理的代码，不接受 renderer、HTTP 或 Tool 提供 SQL、回调或模块地址。`registryModule` 只供受信任构建装配和隔离测试加载扩展注册模块，不是产品配置或 RPC 字段。
 
-`execute` 必须同步返回，read/write 只使用 `StorageTransaction.run/get/all(sql,values?)`；maintenance 只获得 `StorageMaintenance.checkpoint/vacuum/check`，没有领域 SQL 能力。不等待 CLI、模型、DSH、网络或文件 I/O；外部步骤先在事务外执行，再用固定输入与幂等键提交并复验全部资格。事务接口退出即失效，Promise 返回在 read/write 中会回滚并拒绝。读动作由 SQLite `query_only` 禁写。主键、复合 FK、CHECK、NULL 分支、唯一性及资格必须由对应业务模块共同验证。
+`execute` 必须同步返回，read/write 使用 `StorageTransaction.run/get/all(sql,values?)` 与受控派生结清 `flushDerived()`；maintenance 只获得 `StorageMaintenance.checkpoint/vacuum/check`，没有领域 SQL 能力。不等待 CLI、模型、DSH、网络或文件 I/O；外部步骤先在事务外执行，再用固定输入与幂等键提交并复验全部资格。事务接口退出即失效，Promise 返回在 read/write 中会回滚并拒绝。读动作由 SQLite `query_only` 禁写。主键、复合 FK、CHECK、NULL 分支、唯一性及资格必须由对应业务模块共同验证。
+
+迁移50起，20条管理修订／时间线派生维护由受控writer连接安装的同名TEMP触发器承担；主库不再逐行写owner/contact管理修订。TEMP聚合只保存同事务的范围和精确增量，随事务及SAVEPOINT回滚；时间线首次标脏立即写入，已标脏的重复事件仅累加原嵌套更新应产生的增量。Worker在提交与结果复制之前结清，分页范围及时间线读取入口在同事务读取前显式调用`tx.flushDerived?.()`，不能用提交前的旧修订生成返回游标。结清失败要求整个动作回滚，不支持捕获后继续提交；新重试重新开始聚合。只读连接只读已提交且结清的主库状态，无需安装TEMP触发器。auto_noop消费／撤下及文档身份镜像／清理5条业务原子触发器继续即时执行。直接用外部SQLite连接写业务表不属于受控事务接口。
 
 所有 INTEGER 读取为 `bigint`，跨 JSON 边界显式转十进制字符串或经范围检查的安全整数；不能直接转 Number 截断；绑定时拒绝超安全范围的整数 Number 及非有限数值，防止写入已失真的身份或计数。UTC 时间用毫秒，未知值保持 NULL。参数使用 node:sqlite 的绑定值数组，不插值业务输入。具名写事务采用 `BEGIN IMMEDIATE`，busy 每次最多等 100ms；仅 `retryBusy:true` 的纯数据库幂等动作在整事务回滚后最多重试两次，不重发外部请求。结果在 COMMIT 前验证可克隆。
 
