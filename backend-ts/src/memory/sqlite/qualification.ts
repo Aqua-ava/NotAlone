@@ -1,4 +1,4 @@
-import {assertFrozenContent,contentRows} from './content.ts';
+import {assertFrozenContent,contentRows,readFrozenContent} from './content.ts';
 import { StorageFailure,type StorageTransaction,type StorageRow,type StorageLease } from '../../storage/sqlite/contracts.ts';
 import { assertSourceEligibility,type SourceEligibility } from '../../history/sqlite/source.ts';
 export const fail=(code:string):never=>{throw new StorageFailure(code);};
@@ -39,7 +39,8 @@ export function assertInputs(tx:StorageTransaction,ownerId:string,runId:string,r
  for(const i of rows){
   assertContribution(tx,ownerId,runId,String(i.source_contact_id));
   sourceEligibility(tx,{owner_id:ownerId,contact_id:String(i.source_contact_id),record_id:String(i.record_id),message_id:String(i.message_id)});
-  const m=tx.get("SELECT * FROM message WHERE owner_id=? AND contact_id=? AND id=? AND availability='available'",[ownerId,i.source_contact_id,i.message_id]);
+  const frozen=readFrozenContent(tx,ownerId,i),image=frozen?.kind==='image'&&frozen.pluginId==='notalone.image';
+  const m=tx.get(`SELECT ${image?'id,kind,interpretation_revision':'*'} FROM message WHERE owner_id=? AND contact_id=? AND id=? AND availability='available'`,[ownerId,i.source_contact_id,i.message_id]);
   if(!m||m.interpretation_revision!==i.accepted_interpretation_revision)fail('memory_extraction_source_stale');
   assertFrozenContent(tx,ownerId,i,m!);
  }

@@ -147,3 +147,23 @@ test('取消联系人后，旧重试操作的幂等回执也必须重新核对�
  assert.throws(()=>f.transact(()=>retryIsolatedImages(f.tx,input)),{code:'memory_extraction_scope_stale'});
  assert.equal(canRetryIsolatedImages(f.tx,f.owner,f.run.runId),false);
 });
+
+test('同一步骤跨attempt重复隔离只计一次，显式重试的新步骤才登记新的失败',async t=>{
+ const f=await fixture(t),row=f.imageRows[0];assert.deepEqual(f.isolate(row),{paused:false,count:1});f.finish();
+ await f.storage.execute('memoryExtraction.control',{ownerId:f.owner,runId:f.run.runId,action:'continue',actionVersion:0,operationId:randomUUID()});
+ const resumed=await f.storage.execute('memoryExtraction.claim',{ownerId:f.owner,runId:f.run.runId,taskId:f.batch.taskId});
+ assert.equal(resumed.stepId,f.batch.stepId);assert.notEqual(resumed.attemptId,f.batch.attemptId);
+ assert.deepEqual(f.transact(()=>recordImageIsolation(f.tx,{ownerId:f.owner,attemptId:resumed.attemptId,inputNo:Number(row.input_no)},f.storage.status)),{paused:false,count:1});
+ assert.equal(f.tx.get("SELECT count(*) AS n FROM execution_event WHERE owner_id=? AND kind='media_input_isolated'",[f.owner]).n,1n);
+ f.transact(()=>{
+  f.tx.run("UPDATE step_attempt SET state='failed',finished_at=? WHERE owner_id=? AND id=?",[Date.now(),f.owner,resumed.attemptId]);
+  f.tx.run("UPDATE processing_step SET state='failed' WHERE owner_id=? AND id=?",[f.owner,resumed.stepId]);
+  f.tx.run("UPDATE processing_task SET state='failed' WHERE owner_id=? AND id=?",[f.owner,f.batch.taskId]);
+  f.tx.run("UPDATE processing_run SET state='incomplete' WHERE owner_id=? AND id=?",[f.owner,f.run.runId]);
+ });
+ f.transact(()=>retryIsolatedImages(f.tx,{ownerId:f.owner,runId:f.run.runId,actionVersion:1,operationId:randomUUID()}));
+ const retried=await f.storage.execute('memoryExtraction.claim',{ownerId:f.owner,runId:f.run.runId,taskId:f.batch.taskId});
+ assert.notEqual(retried.stepId,f.batch.stepId);
+ assert.deepEqual(f.transact(()=>recordImageIsolation(f.tx,{ownerId:f.owner,attemptId:retried.attemptId,inputNo:Number(row.input_no)},f.storage.status)),{paused:false,count:1});
+ assert.equal(f.tx.get("SELECT count(*) AS n FROM execution_event WHERE owner_id=? AND kind='media_input_isolated'",[f.owner]).n,2n);
+});

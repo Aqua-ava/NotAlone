@@ -290,7 +290,7 @@ export class SqliteMemoryExtraction {
   const policy=await this.version();const resolved=policy.resolve(batch.policyConfig);
   const requireCurrent=async()=>{signal.throwIfAborted();await policy.assertCurrent();await this.withSourceReady(batch.contactId,()=>this.storage.execute('memoryExtraction.current',{ownerId:this.ownerId,attemptId:batch.attemptId}));};
   const rows=[...batch.rows].sort((a,b)=>a.sent_at!==null&&b.sent_at!==null&&a.sent_at!==b.sent_at?Number((a.sent_at as bigint)-(b.sent_at as bigint)):a.display_no!==undefined&&b.display_no!==undefined?Number((a.display_no as bigint)-(b.display_no as bigint)):Number(a.input_no)-Number(b.input_no));
-  const prepared=new Map<number,PreparedMemoryContent>();
+  const prepared=new Map<number,PreparedMemoryContent>(),unavailableInputs=new Set<number>();
   const isolate=async(row:StorageRow)=>{
    const result=await this.storage.execute<{paused:boolean}>('memoryExtraction.isolateImage',{ownerId:this.ownerId,attemptId:batch.attemptId,inputNo:Number(row.input_no)});
    if(result.paused)throw new StorageFailure('memory_image_input_circuit_open');
@@ -300,17 +300,19 @@ export class SqliteMemoryExtraction {
     {pluginId:'notalone.text',pluginVersion:'1',kind:'text',identity:{}};
    try{prepared.set(Number(row.input_no),await this.content.registry.prepare({ownerId:this.ownerId,contactId:batch.contactId,message:{...row,id:row.message_id,kind:row.message_kind??'text'},frozen,resources:this.content.resources,signal,requireCurrent}));}
    catch(error){
-    if(!(error instanceof ModelImageNormalizationError)||frozen.kind!=='image')throw error;
+    if((!(error instanceof ModelImageNormalizationError)&&!(error instanceof StorageFailure&&error.code==='memory_content_image_unavailable'))||frozen.kind!=='image')throw error;
     await requireCurrent();
-    if(row.role==='target')await isolate(row);
-    else await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'image_context_omitted',payload:{reason:'media_model_input_unavailable'},inputNos:[Number(row.input_no)]});
+    unavailableInputs.add(Number(row.input_no));
+    if(row.role==='context')await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'image_context_omitted',payload:{reason:'media_model_input_unavailable'},inputNos:[Number(row.input_no)]});
    }
   }
-  const activeRows=rows.filter(row=>prepared.has(Number(row.input_no))),unchangedVariants=new Set<number>();
-  const hasImage=(row:StorageRow)=>!!prepared.get(Number(row.input_no))?.images?.length;
-  const groupRows=(targets:readonly StorageRow[],includeImageContext:boolean)=>activeRows.filter(row=>targets.includes(row)||row.role==='context'&&(includeImageContext||!hasImage(row)));
+  const unchangedVariants=new Set<number>();
+  // 树身份只取冻结输入；单项准备失败不重新排列其他目标或复用不同输入的旧槽。
+  const hasImage=(row:StorageRow)=>row.content_kind==='image'||row.message_kind==='image';
+  const groupRows=(targets:readonly StorageRow[],includeImageContext:boolean)=>rows.filter(row=>targets.includes(row)||row.role==='context'&&(includeImageContext||!hasImage(row)));
   const runGroup=async(targets:readonly StorageRow[],attempt:ImageRecoveryAttempt)=>{
   const selected=groupRows(targets,attempt.includeImageContext),actualNos=selected.map(row=>Number(row.input_no));
+  if(selected.some(row=>unavailableInputs.has(Number(row.input_no))))throw new StorageFailure('memory_content_image_unavailable');
   const contents=await Promise.all(selected.map(async row=>{
    const part=prepared.get(Number(row.input_no))!;
    try{return attempt.tier==='degraded'&&part.images?.length?{...part,images:await Promise.all(part.images.map(image=>normalizeModelImageInput(image,{tier:'degraded',signal})))}:part;}
@@ -370,13 +372,18 @@ export class SqliteMemoryExtraction {
   if(images.length)await this.storage.execute('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:'image_input_recovered',payload:{slot:attempt.slot},inputNos:actualNos});
   return {outcome,verificationRefs,inputNos:actualNos};
   };
+  const interrupted=await this.storage.execute<{slot:number;inputNos:number[]}[]>('memoryExtraction.unrecordedImageFailures',{ownerId:this.ownerId,attemptId:batch.attemptId});
+  for(const failure of interrupted)await this.storage.execute('memoryExtraction.supersedeImageInput',{ownerId:this.ownerId,attemptId:batch.attemptId,...failure});
   const prior=await this.storage.execute<number[]>('memoryExtraction.imageRecoveryPlan',{ownerId:this.ownerId,attemptId:batch.attemptId});
-  const targets=activeRows.filter(row=>row.role==='target');
+  const targets=rows.filter(row=>row.role==='target');
   const recovered=targets.length?await recoverImageTargets({targets,isImage:hasImage,signal,previouslyDegraded:new Set(prior),run:runGroup,
+   unavailable:row=>unavailableInputs.has(Number(row.input_no)),
    canRecover:error=>error instanceof ExtractionModelError&&error.receipt?.outcome==='failed'&&error.receipt.terminal_failure==='transport'
-    ||error instanceof ModelImageNormalizationError&&error.code==='extraction_model_image_variant_unchanged',
+    ||error instanceof ModelImageNormalizationError&&error.code==='extraction_model_image_variant_unchanged'
+    ||error instanceof StorageFailure&&error.code==='memory_content_image_unavailable',
    supersede:attempt=>this.storage.execute('memoryExtraction.supersedeImageInput',{ownerId:this.ownerId,attemptId:batch.attemptId,slot:attempt.slot,
-    unchangedVariant:unchangedVariants.has(attempt.slot),inputNos:groupRows(attempt.targets,attempt.includeImageContext).map(row=>Number(row.input_no))}).then(()=>{}),
+    unchangedVariant:unchangedVariants.has(attempt.slot),preparationUnavailable:groupRows(attempt.targets,attempt.includeImageContext).some(row=>unavailableInputs.has(Number(row.input_no))),
+    inputNos:groupRows(attempt.targets,attempt.includeImageContext).map(row=>Number(row.input_no))}).then(()=>{}),
    isolate:row=>isolate(row),
   }):{results:[]};
   const parts=recovered.results.map(result=>result.value);

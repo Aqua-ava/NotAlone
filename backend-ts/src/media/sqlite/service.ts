@@ -160,7 +160,16 @@ export class SqliteMediaService {
     ||file.mimeType!==input.mimeType||Number(file.byteSize)!==input.byteSize||!file.viewable||!file.mimeType.startsWith('image/'))throw new StorageFailure('memory_extraction_source_stale');
    this.available();input.signal.throwIfAborted();return file;
   };
-  const file=await checkpoint();const bytes=await this.files.preview(file.address,input.byteSize,input.sha256);await checkpoint();
+  const file=await checkpoint();let bytes:Buffer;
+  try{bytes=await this.files.preview(file.address,input.byteSize,input.sha256);}
+  catch(error){
+   // 单文件读取失败前后都核验原范围；撤销、删除或替图仍走原来的失效路径。
+   await checkpoint();
+   const code=error&&typeof error==='object'&&'code' in error?String(error.code):'';
+   if(['ENOENT','EACCES','EPERM','EIO','media_file_identity_changed','media_copy_incomplete','media_preview_too_large','media_file_io_failed'].includes(code))throw new StorageFailure('memory_content_image_unavailable');
+   throw error;
+  }
+  await checkpoint();
   return {mimeType:file.mimeType,dataBase64:bytes.toString('base64')};
  }
  private async acquirePreview(contactId:string,messageId:string,fileId:string):Promise<MediaPreview>{

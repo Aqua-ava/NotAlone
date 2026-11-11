@@ -2,7 +2,7 @@ import type { BackendHost } from '../backend/host';
 import type { PageCommands } from '../page-commands';
 import { noArguments } from '../page-commands';
 import { isUuid } from '../uuid';
-import type { FixedProcessingCall, FixedProcessingControl, FixedProcessingEvent, FixedProcessingRun,
+import type {ImageRetryRunSummary, FixedProcessingCall, FixedProcessingControl, FixedProcessingEvent, FixedProcessingRun,
   FixedProcessingStart, FixedProcessingTrace, FixedProcessingTraceRequest, FixedProcessingView, FixedProcessingMode, FixedProcessingQueue, FixedProcessingRead, FixedProcessingHistoryStart, FixedProcessingHistoryResult, FixedHistoryFailureReason, FixedProcessingAutomatic } from '../../shared/fixed-memory-processing';
 
 type ContactSelection = {getState():{selectedContactId:string|null;scopeRevision:number}};
@@ -102,6 +102,12 @@ export function readFixedProcessingRun(raw: unknown): FixedProcessingRun | null 
     statusReason: value.statusReason as string | null, sharedFaultCode: (value.sharedFaultCode as string | null | undefined) ?? null, actions: value.actions as FixedProcessingRun['actions'],
     controlVersion, pending, revoked, calls, tasks, inputs, candidates, nextDueAt };
 }
+function readImageRetryRun(raw:unknown):ImageRetryRunSummary {
+  const value=row(raw);exact(value,['runId','controlVersion','isolated','actions']);
+  const isolated=count(value.isolated),actions=array(value.actions);
+  if(isolated<1||actions.length>1||actions.some(action=>action!=='retry_images'))throw invalid();
+  return {runId:id(value.runId),controlVersion:count(value.controlVersion),isolated,actions:actions as ImageRetryRunSummary['actions']};
+}
 function readTrace(raw: unknown): FixedProcessingTrace {
   const value = row(raw);
   const events: FixedProcessingEvent[] = array(value.events).map(rawEvent => {
@@ -193,11 +199,12 @@ export class FixedMemoryProcessingController {
   }
   private contactView(response:{generation:number;data:unknown},contactId:string):FixedProcessingView {
     try {
-      const value=row(response.data);exact(value,['contactId','run','queue']);if(value.contactId!==contactId)throw invalid();
+      const value=row(response.data);exact(value,['contactId','run','queue',...(Object.hasOwn(value,'retryRun')?['retryRun']:[])]);if(value.contactId!==contactId)throw invalid();
       const run=readFixedProcessingRun(value.run);
       if(run&&(run.tasks.some(task=>task.scopeKind!=='contact'||task.contactId!==contactId)
         ||run.inputs.some(item=>item.contactId!==contactId)||run.candidates.some(item=>item.scopeKind!=='contact'||item.contactId!==contactId)))throw invalid();
-      return {connectionGeneration:response.generation,contactId,run,queue:readQueue(value.queue)};
+      const retryRun=Object.hasOwn(value,'retryRun')?readImageRetryRun(value.retryRun):undefined;if(retryRun&&retryRun.runId===run?.runId)throw invalid();
+      return {connectionGeneration:response.generation,contactId,run,queue:readQueue(value.queue),...(retryRun?{retryRun}:{})};
     }catch{this.synchronize();throw invalid();}
   }
   private automatic(response: {generation: number; data: unknown}): FixedProcessingAutomatic {

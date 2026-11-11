@@ -1,5 +1,5 @@
-import {assignedRunItemsCte,runTargetsReleased} from './run-retirement.ts';
-import {isolatedInputs} from './image-isolation.ts';
+import {assignedRunItemsCte,runTargetsReleased,releasedRunSql} from './run-retirement.ts';
+import {isolatedInputs,canRetryIsolatedImages,isolatedContactItemIds} from './image-isolation.ts';
 import {observedProcessingAction} from './diagnostics.ts';
 import {currentContent,freezeContent,hasMemoryContent,readFrozenContent,installedMemoryContentKinds} from './content.ts';
 import {randomUUID} from 'node:crypto';
@@ -264,7 +264,7 @@ function hasUnresolvedContactBlocker(tx:StorageTransaction,ownerId:string,contac
  if(tableExists(tx,'memory_document_later_schedule')&&tableExists(tx,'memory_document_later_run_requirement')&&tx.get(`SELECT 1 FROM memory_document_later_schedule s WHERE s.owner_id=? AND (s.scope_kind='self' OR s.contact_id=?)
   AND EXISTS(SELECT 1 FROM memory_document_later_run_requirement q WHERE q.owner_id=s.owner_id AND q.scope_key=s.scope_key AND q.generation=s.generation AND q.outcome='pending' AND q.paused=1 AND EXISTS(SELECT 1 FROM run_contact rc WHERE rc.owner_id=q.owner_id AND rc.run_id=q.run_id AND rc.contact_id=? AND rc.state='active' AND ${currentRunContactScope})) LIMIT 1`,[ownerId,contactId,contactId]))return true;
  const runs=tx.all(`SELECT r.* FROM processing_run r JOIN run_contact rc ON rc.owner_id=r.owner_id AND rc.run_id=r.id
-  WHERE rc.owner_id=? AND rc.contact_id=? AND rc.state='active' AND ${currentRunContactScope}`,[ownerId,contactId]);
+  WHERE rc.owner_id=? AND rc.contact_id=? AND rc.state='active' AND ${currentRunContactScope} AND NOT ${releasedRunSql('r')}`,[ownerId,contactId]);
  for(const run of runs){
   const runId=String(run.id),tasks=tx.all(`SELECT DISTINCT t.* FROM processing_task t JOIN task_contribution c ON c.owner_id=t.owner_id AND c.task_id=t.id
    WHERE t.owner_id=? AND t.run_id=? AND c.source_contact_id=?`,[ownerId,runId,contactId]);
@@ -348,14 +348,7 @@ function scheduleSummary(tx:StorageTransaction,ownerId:string,now:number,contact
   const rows=readScheduleInputRows(tx,scope),available=scheduleInputAvailability(tx,scope);
   const media=rows.filter(row=>row.kind!=='text');
   const cleared=new Set(media.length?tx.all("SELECT message_id FROM message_media WHERE owner_id=? AND contact_id=? AND state='cleared' AND message_id IN (SELECT value FROM json_each(?))",[ownerId,id,JSON.stringify(media.map(row=>String(row.id)))]).map(row=>String(row.message_id)):[]);
-  const isolatedItems=new Set(media.length?tx.all(`SELECT DISTINCT p.id FROM processing_item p
-   JOIN run_input i ON i.owner_id=p.owner_id AND i.item_id=p.id AND i.source_contact_id=p.contact_id
-   JOIN step_input si ON si.owner_id=i.owner_id AND si.run_id=i.run_id AND si.run_input_no=i.input_no
-   JOIN execution_input x ON x.owner_id=si.owner_id AND x.planned_step_id=si.step_id AND x.planned_input_no=si.input_no
-   JOIN execution_event e ON e.owner_id=x.owner_id AND e.id=x.event_id AND e.kind='media_input_isolated'
-   JOIN media_file f ON f.owner_id=p.owner_id AND f.contact_id=p.contact_id AND f.message_id=p.message_id
-    AND f.id=json_extract(e.payload,'$.file_id') AND f.content_digest=json_extract(e.payload,'$.sha256')
-   WHERE p.owner_id=? AND p.contact_id=? AND p.extraction_state='failed' AND f.content_state='present' AND f.publish_state='current'`,[ownerId,id]).map(row=>String(row.id)):[]);
+  const isolatedItems=media.length?isolatedContactItemIds(tx,ownerId,id):new Set<string>();
   for(const message of rows){
    if(message.kind!=='text'&&cleared.has(String(message.id)))continue;
    const kind=String(message.kind),count=counts.get(kind)??{kind,pending:0,unavailable:0,...(kind==='image'?{unadmitted:0}:{})};
@@ -406,9 +399,9 @@ function startRun(tx:StorageTransaction,raw:unknown,scheduled=false,history=fals
   // 只有接线了后续文档阶段的正常宿主才复用已有提取证明；仅提取入口保持“已成功目标不重做”。
   const canReuse=!scheduled&&!history&&i.followupStages===true&&!!tx.get('SELECT 1 FROM schema_migration WHERE version=13'),reused=new Map<string,StorageRow>();
   if(canReuse)for(const row of rows){const proof=reusableExtraction(tx,ownerId,String(c.id),row);if(proof)reused.set(String(row.id),proof);}
-  const baseline=scheduled?memoryIncrementalBaseline(tx):0n;
+  const baseline=scheduled?memoryIncrementalBaseline(tx):0n,isolatedIds=rows.some(row=>row.kind==='image')?isolatedContactItemIds(tx,ownerId,String(c.id)):new Set<string>();
   const targets=(scheduled?rows.filter(r=>r.first_goal_kind==='incremental'&&(r.display_no as bigint)>baseline&&(r.item_id===null||r.extraction_state==='pending')&&r.target_assigned!==1n&&r.target_assigned!==1):
-   rows.filter(r=>(r.item_id===null||r.extraction_state==='pending'||reused.has(String(r.id)))&&(!history||r.target_assigned!==1n&&r.target_assigned!==1)&&(!history||r.first_goal_kind==='history'||(r.display_no as bigint)<=memoryIncrementalBaseline(tx)))).slice(0,automaticHistory?50:undefined);
+   rows.filter(r=>(r.extraction_state!=='succeeded'&&!isolatedIds.has(String(r.item_id))||reused.has(String(r.id)))&&(!history||r.target_assigned!==1n&&r.target_assigned!==1)&&(!history||r.first_goal_kind==='history'||(r.display_no as bigint)<=memoryIncrementalBaseline(tx)))).slice(0,automaticHistory?50:undefined);
   if(!targets.length)continue;
   const targetIds=new Set(targets.map(row=>String(row.id)));
   if(scheduled||history)for(const target of targets)assertSourceEligibility(tx,{owner_id:ownerId,contact_id:String(c.id),message_id:String(target.id),record_id:String(target.record_id)});
@@ -455,6 +448,50 @@ const schedulingActions:StorageAction[]=[
 ];
 export const scheduleActions:StorageAction[]=schedulingActions.map(action=>action.mode==='read'?{...action,
  execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>withScheduleInputStats(tx,()=>action.execute(tx,input,lease))}:action);
+/** 旧隔离只投影最早一轮的元数据；先在SQL内按当前身份、文件及来源过滤，再复用正式重试门。 */
+function oldImageRetryRun(tx:StorageTransaction,ownerId:string,contactId:string,currentRunId?:string){
+ if(!hasMemoryContent(tx)||!tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='media_file'"))return;
+ const candidate=tx.get(`WITH ${sourceScopeCTE(tx)},image_retry_candidate AS (
+  SELECT r.id,r.intent_revision FROM processing_run r JOIN run_contact rc ON rc.owner_id=r.owner_id AND rc.run_id=r.id
+  JOIN contact c ON c.owner_id=rc.owner_id AND c.id=rc.contact_id JOIN owner o ON o.owner_id=c.owner_id
+  JOIN read_grant grant_now ON grant_now.owner_id=rc.owner_id AND grant_now.id=rc.grant_id AND grant_now.contact_id=rc.contact_id
+  JOIN conversation_binding binding_now ON binding_now.owner_id=grant_now.owner_id AND binding_now.id=grant_now.binding_id
+  JOIN binding_verification verified_now ON verified_now.owner_id=grant_now.owner_id AND verified_now.id=grant_now.verification_id
+  JOIN channel_conversation conversation_now ON conversation_now.owner_id=binding_now.owner_id AND conversation_now.id=binding_now.conversation_id
+  JOIN channel_account account_now ON account_now.owner_id=conversation_now.owner_id AND account_now.id=conversation_now.account_id
+  WHERE rc.owner_id=? AND rc.contact_id=? AND r.id<>? AND rc.state='active' AND r.state NOT IN ('revoked','preparing')
+   AND grant_now.revoked_at IS NULL AND binding_now.state='verified' AND account_now.identity_state='verified'
+   AND c.selection_generation=rc.accepted_selection_generation AND grant_now.selection_generation=c.selection_generation
+   AND c.data_generation=rc.accepted_data_generation AND c.feedback_revision=rc.accepted_feedback_revision
+   AND binding_now.id=rc.binding_id AND binding_now.identity_generation=rc.accepted_identity_generation AND verified_now.identity_generation=binding_now.identity_generation
+   AND account_now.scope_revision=rc.accepted_account_revision AND account_now.source_generation=rc.accepted_source_generation AND r.accepted_owner_feedback_revision=o.feedback_revision
+   AND NOT EXISTS(SELECT 1 FROM run_contact other WHERE other.owner_id=r.owner_id AND other.run_id=r.id AND other.contact_id<>rc.contact_id)
+   AND NOT EXISTS(SELECT 1 FROM run_input other WHERE other.owner_id=r.owner_id AND other.run_id=r.id AND other.source_contact_id<>rc.contact_id)
+   AND EXISTS(SELECT 1 FROM run_input i JOIN processing_item p ON p.owner_id=i.owner_id AND p.id=i.item_id AND p.contact_id=i.source_contact_id
+    JOIN run_content_input frozen ON frozen.owner_id=i.owner_id AND frozen.run_id=i.run_id AND frozen.input_no=i.input_no AND frozen.content_kind='image'
+    JOIN message m ON m.owner_id=i.owner_id AND m.contact_id=i.source_contact_id AND m.id=i.message_id AND m.kind='image' AND m.availability='available' AND m.interpretation_revision=i.accepted_interpretation_revision
+    JOIN media_file file ON file.owner_id=i.owner_id AND file.contact_id=i.source_contact_id AND file.message_id=i.message_id AND file.id=json_extract(frozen.identity_json,'$.fileId')
+    JOIN message_media media ON media.owner_id=file.owner_id AND media.contact_id=file.contact_id AND media.message_id=file.message_id
+    JOIN capture_record source ON source.owner_id=i.owner_id AND source.contact_id=i.source_contact_id AND source.id=i.record_id AND source.message_id=i.message_id
+    JOIN sync_capture capture ON capture.owner_id=source.owner_id AND capture.id=source.capture_id JOIN read_goal g ON g.owner_id=capture.owner_id AND g.id=capture.goal_id
+    JOIN step_input si ON si.owner_id=i.owner_id AND si.run_id=i.run_id AND si.run_input_no=i.input_no
+    JOIN execution_input x ON x.owner_id=si.owner_id AND x.planned_step_id=si.step_id AND x.planned_input_no=si.input_no
+    JOIN execution_event e ON e.owner_id=x.owner_id AND e.id=x.event_id
+    WHERE i.owner_id=r.owner_id AND i.run_id=r.id AND i.source_contact_id=rc.contact_id AND i.role='target' AND p.extraction_state='failed'
+     AND file.role='image_display' AND file.publish_state='current' AND file.content_state='present' AND file.container_valid=1 AND file.viewable=1 AND media.state<>'cleared'
+     AND file.content_digest=json_extract(frozen.identity_json,'$.sha256') AND CAST(media.media_generation AS TEXT)=json_extract(frozen.identity_json,'$.mediaGeneration')
+     AND source.state='normalized' AND source.availability='available' AND ${currentSourcePredicate('source','g')}
+     AND e.kind='media_input_isolated' AND json_extract(e.payload,'$.file_id')=file.id AND json_extract(e.payload,'$.sha256')=file.content_digest
+     AND NOT EXISTS(SELECT 1 FROM step_input later_si JOIN execution_input later_x ON later_x.owner_id=later_si.owner_id AND later_x.planned_step_id=later_si.step_id AND later_x.planned_input_no=later_si.input_no
+      JOIN execution_event later_event ON later_event.owner_id=later_x.owner_id AND later_event.id=later_x.event_id
+      WHERE later_si.owner_id=i.owner_id AND later_si.run_id=i.run_id AND later_si.run_input_no=i.input_no AND later_event.kind IN ('media_input_isolated','image_retry_requested')
+       AND (later_event.created_at>e.created_at OR later_event.created_at=e.created_at AND later_event.rowid>e.rowid)))
+  ORDER BY r.started_at,r.rowid LIMIT 1
+ ) SELECT id,intent_revision FROM image_retry_candidate`,[ownerId,contactId,contactId,ownerId,contactId,currentRunId??'']);
+ if(!candidate)return;
+ const runId=String(candidate.id),items=isolatedInputs(tx,ownerId,runId,contactId);if(!items.length)return;
+ return {runId,controlVersion:number(candidate.intent_revision),isolated:items.length,actions:canRetryIsolatedImages(tx,ownerId,runId,contactId)?['retry_images']:[]};
+}
 /** 联系人视图只读投影，不把全局最新轮次或本人资料混入当前联系人。 */
 function contactView(tx:StorageTransaction,raw:unknown){
  const input=raw as {ownerId:string;contactId:string},ownerId=textId(input.ownerId),contactId=textId(input.contactId);
@@ -467,8 +504,8 @@ function contactView(tx:StorageTransaction,raw:unknown){
   AND EXISTS(SELECT 1 FROM processing_task task WHERE task.owner_id=r.owner_id AND task.run_id=r.id AND task.scope_kind='contact' AND task.contact_id=?)
   AND EXISTS(SELECT 1 FROM run_input i WHERE i.owner_id=r.owner_id AND i.run_id=r.id AND i.role='target' AND i.source_contact_id=?)
   ORDER BY r.started_at DESC,r.rowid DESC LIMIT 1`,[ownerId,contactId,contactId,contactId]);
- const now=Date.now();
- return {contactId,run:latest?snapshot(tx,ownerId,String(latest.id),contactId):null,queue:withScheduleInputStats(tx,()=>({...scheduleSummary(tx,ownerId,now,contactId),history:{pending:pendingIncrementalStats(tx,ownerId,contactId,true).count},later:laterQueueSummary(tx,ownerId,now,contactId)}))};
+ const now=Date.now(),retryRun=oldImageRetryRun(tx,ownerId,contactId,latest?String(latest.id):undefined);
+ return {contactId,...(retryRun?{retryRun}:{}),run:latest?snapshot(tx,ownerId,String(latest.id),contactId):null,queue:withScheduleInputStats(tx,()=>({...scheduleSummary(tx,ownerId,now,contactId),history:{pending:pendingIncrementalStats(tx,ownerId,contactId,true).count},later:laterQueueSummary(tx,ownerId,now,contactId)}))};
 }
 /** 历史初始化是具名用户动作；新请求不能借新预算绕过未决调用、暂停或失败。 */
 function startHistory(tx:StorageTransaction,raw:unknown){

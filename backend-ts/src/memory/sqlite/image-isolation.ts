@@ -46,6 +46,22 @@ export function isolatedInputs(tx:StorageTransaction,ownerId:string,runId:string
  }
  return result;
 }
+/** 联系人汇总与新轮准入共用当前隔离身份；只读取事件/文件元数据，不载入聊天正文。 */
+export function isolatedContactItemIds(tx:StorageTransaction,ownerId:string,contactId:string):ReadonlySet<string>{
+ const rows=tx.all(`WITH isolated_contact_events AS (
+  SELECT p.id,e.kind,e.payload,row_number() OVER(PARTITION BY p.id ORDER BY e.created_at DESC,e.rowid DESC) position
+  FROM processing_item p JOIN run_input i ON i.owner_id=p.owner_id AND i.item_id=p.id AND i.source_contact_id=p.contact_id
+  JOIN step_input si ON si.owner_id=i.owner_id AND si.run_id=i.run_id AND si.run_input_no=i.input_no
+  JOIN execution_input x ON x.owner_id=si.owner_id AND x.planned_step_id=si.step_id AND x.planned_input_no=si.input_no
+  JOIN execution_event e ON e.owner_id=x.owner_id AND e.id=x.event_id AND e.kind IN ('media_input_isolated','image_retry_requested')
+  WHERE p.owner_id=? AND p.contact_id=? AND p.extraction_state='failed'
+ ) SELECT DISTINCT e.id FROM isolated_contact_events e JOIN processing_item p ON p.id=e.id AND p.owner_id=? AND p.contact_id=?
+ JOIN media_file file ON file.owner_id=p.owner_id AND file.contact_id=p.contact_id AND file.message_id=p.message_id
+  AND file.id=json_extract(e.payload,'$.file_id') AND file.content_digest=json_extract(e.payload,'$.sha256')
+ WHERE e.position=1 AND e.kind='media_input_isolated' AND json_extract(e.payload,'$.reason')='media_model_input_unavailable'
+  AND file.content_state='present' AND file.publish_state='current'`,[ownerId,contactId,ownerId,contactId]);
+ return new Set(rows.map(row=>String(row.id)));
+}
 export function recordImageIsolation(tx:StorageTransaction,input:{ownerId:string;attemptId:string;inputNo:number},lease:StorageLease):{paused:boolean;count:number}{
  const {ownerId,attemptId}=input,{attempt,task,rows}=currentAttempt(tx,ownerId,attemptId,lease);
  if(!Number.isSafeInteger(input.inputNo)||input.inputNo<1)fail('memory_extraction_input_not_frozen');
@@ -53,7 +69,11 @@ export function recordImageIsolation(tx:StorageTransaction,input:{ownerId:string
  if(!row||frozen?.kind!=='image')fail('memory_extraction_input_not_frozen');
  const item=tx.get('SELECT extraction_state FROM processing_item WHERE owner_id=? AND id=?',[ownerId,row!.item_id]);
  if(!item||!['pending','running','failed'].includes(String(item.extraction_state)))fail('memory_extraction_targets_completed_elsewhere');
- const exists=tx.get("SELECT 1 FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND kind='media_input_isolated' AND json_extract(payload,'$.input_no')=?",[ownerId,attemptId,input.inputNo]);
+ // 继续同一步骤只复用已隔离叶；显式重试建立新步骤，才能登记新的失败。
+ const exists=tx.get(`SELECT 1 FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id
+  WHERE e.owner_id=? AND a.step_id=? AND e.kind='media_input_isolated' AND json_extract(e.payload,'$.input_no')=?
+   AND json_extract(e.payload,'$.file_id')=? AND json_extract(e.payload,'$.sha256')=? LIMIT 1`,
+  [ownerId,attempt.step_id,input.inputNo,String(frozen!.identity.fileId),String(frozen!.identity.sha256)]);
  if(!exists){
   const eventId=append(tx,ownerId,attemptId,'media_input_isolated',{reason,input_no:input.inputNo,file_id:String(frozen!.identity.fileId),sha256:String(frozen!.identity.sha256)});
   tx.run('INSERT INTO execution_input(owner_id,event_id,input_no,role,presentation_no,planned_step_id,planned_input_no) VALUES(?,?,1,?,1,?,?)',[ownerId,eventId,row!.role,attempt.step_id,row!.planned_input_no]);

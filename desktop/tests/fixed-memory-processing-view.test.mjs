@@ -287,3 +287,26 @@ test('图片重试失败保留幂等标识，切换联系人后旧回执不回�
   assert.equal(await page.getByRole('button',{name:'稍后重试图片',exact:true}).count(),0);
  });
 });
+
+test('新正常轮之后两个旧隔离轮逐个显示窄重试入口并使用各自版本',async t=>{
+ const older='55555555-5555-4555-8555-555555555555',next='66666666-6666-4666-8666-666666666666',requests=[];let index=0;
+ const retryRuns=[{runId:older,controlVersion:4,isolated:2,actions:['retry_images']},{runId:next,controlVersion:7,isolated:1,actions:['retry_images']}];
+ await withPanel(t,async(method,input)=>{
+  if(method==='readCurrent')return {connectionGeneration:1,run:run(),...(retryRuns[index]?{retryRun:retryRuns[index]}:{}),queue:{pending:0,nextDueAt:null,blockedContacts:0,content:[{kind:'image',pending:0,unavailable:0,isolated:index===0?3:index===1?1:0}]}};
+  if(method==='retryImages'){requests.push(input);index++;return {connectionGeneration:1,run:run()};}
+ },async page=>{
+  await page.getByText('之前处理记录中有 2 张图片未能送入模型',{exact:true}).waitFor();await page.getByRole('button',{name:'稍后重试图片',exact:true}).click();
+  await page.getByText('之前处理记录中有 1 张图片未能送入模型',{exact:true}).waitFor();await page.getByRole('button',{name:'稍后重试图片',exact:true}).click();
+  await page.getByRole('button',{name:'稍后重试图片',exact:true}).waitFor({state:'detached'});
+  assert.deepEqual(requests.map(({runId,controlVersion})=>({runId,controlVersion})),[{runId:older,controlVersion:4},{runId:next,controlVersion:7}]);assert.ok(requests.every(request=>request.runId!==ids.run));
+ });
+});
+
+for(const eligible of [false,true])test(`旧隔离摘要${eligible?'关闭总开关':'缺少后端资格'}时不会发起图片重试`,async t=>{
+ const calls=[],retryRun={runId:'77777777-7777-4777-8777-777777777777',controlVersion:5,isolated:1,actions:eligible?['retry_images']:[]};
+ await withPanel(t,async method=>{calls.push(method);if(method==='readCurrent')return {connectionGeneration:1,run:run(),retryRun};},async page=>{
+  await page.getByText('之前处理记录中有 1 张图片未能送入模型',{exact:true}).waitFor();const button=page.getByRole('button',{name:'稍后重试图片',exact:true});
+  if(eligible){assert.equal(await button.isDisabled(),true);await button.evaluate(node=>node.click());}else assert.equal(await button.count(),0);
+  assert.equal(calls.includes('retryImages'),false);
+ },!eligible);
+});

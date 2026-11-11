@@ -4,6 +4,7 @@ import {MODEL_IMAGE_LIMITS} from '../../platform/models/image-normalization.ts';
 export interface ImageRecoveryAttempt {slot:number;tier:'primary'|'degraded';includeImageContext:boolean}
 export interface ImageRecoveryOptions<T,R> {
  targets:readonly T[];isImage(target:T):boolean;signal:AbortSignal;previouslyDegraded?:ReadonlySet<number>;
+ unavailable?(target:T):boolean;
  run(targets:readonly T[],attempt:ImageRecoveryAttempt):Promise<R>;
  canRecover(error:unknown):boolean;
  supersede(attempt:ImageRecoveryAttempt&{targets:readonly T[]}):Promise<void>;
@@ -36,12 +37,13 @@ export async function recoverImageTargets<T,R>(options:ImageRecoveryOptions<T,R>
    }
   }
   const positions=targets.flatMap((target,index)=>options.isImage(target)?[index]:[]);
-  if(tier==='degraded'){
+  const unavailable=positions.length===1&&options.unavailable?.(targets[positions[0]!]!);
+  if(tier==='degraded'||unavailable){
    if(!options.isolate)throw failure;
    const image=targets.find(options.isImage);if(!image)throw failure;
    await options.isolate(image,failure,{slot,tier,includeImageContext});isolated.push(image);
    const remaining=targets.filter(target=>target!==image);
-   if(remaining.length)await visit(remaining,slot+32,false);
+   if(remaining.length)await visit(remaining,slot+(tier==='degraded'?32:96),false);
    return;
   }
   if(positions.length===1){await visit(targets,slot+64,false,'degraded');return;}

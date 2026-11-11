@@ -207,3 +207,12 @@ test('隔离图片计数沿具名桥读取，图片重试保留版本及幂等�
  for(const isolated of [-1,1.5,4]){data={...data,isolated};await assert.rejects(f.controller.read({contactId:ids.contact}));}
  data={...data,isolated:2,contentCounts:[{kind:'image',total:3,succeeded:1,isolated:3}]};await assert.rejects(f.controller.read({contactId:ids.contact}));
 });
+
+test('旧隔离图片只读取一个窄重试摘要，拒绝混入正文或伪造完整运行',async t=>{
+ const retryRun={runId:ids.request,controlVersion:5,isolated:2,actions:['retry_images']};let data={contactId:ids.contact,run:snapshot(),queue:{pending:0,nextDueAt:null,blockedContacts:0},retryRun};
+ const f=await fixture(t,async()=>data),view=await f.controller.read({contactId:ids.contact});assert.deepEqual(view.retryRun,retryRun);
+ assert.equal(Object.hasOwn(view.retryRun,'inputs'),false);assert.equal(f.calls.length,1);
+ for(const invalid of [{...retryRun,isolated:0},{...retryRun,actions:['continue']},{...retryRun,body:'不得读取的旧正文'},{...snapshot(),isolated:1},{...retryRun,runId:ids.run}]){
+  data={...data,retryRun:invalid};await assert.rejects(f.controller.read({contactId:ids.contact}));
+ }
+});

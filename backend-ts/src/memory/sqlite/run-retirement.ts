@@ -5,13 +5,14 @@ import type {StorageTransaction} from '../../storage/sqlite/contracts.ts';
 
 /** 同一运行的完整调用链；执行或结算尚未知时绝不因运行主状态释放目标。 */
 function unsettledRunSql(run:string):string {
- return `EXISTS(SELECT 1 FROM processing_task held_task JOIN processing_step held_step ON held_step.owner_id=held_task.owner_id AND held_step.task_id=held_task.id
+ return `(EXISTS(SELECT 1 FROM processing_task held_unknown_task WHERE held_unknown_task.owner_id=${run}.owner_id AND held_unknown_task.run_id=${run}.id AND held_unknown_task.state='unknown')
+  OR EXISTS(SELECT 1 FROM processing_task held_task JOIN processing_step held_step ON held_step.owner_id=held_task.owner_id AND held_step.task_id=held_task.id
   LEFT JOIN step_attempt held_attempt ON held_attempt.owner_id=held_step.owner_id AND held_attempt.step_id=held_step.id
   LEFT JOIN model_operation held_operation ON held_operation.owner_id=held_step.owner_id AND held_operation.memory_step_id=held_step.id
   LEFT JOIN model_call held_call ON held_call.owner_id=held_operation.owner_id AND held_call.operation_id=held_operation.id
   WHERE held_task.owner_id=${run}.owner_id AND held_task.run_id=${run}.id
    AND (held_step.state IN ('running','unknown') OR held_attempt.state IN ('running','unknown')
-    OR held_operation.state IN ('prepared','in_flight','unknown') OR held_call.state IN ('prepared','sending','unknown') OR held_call.settlement_state IN ('reserved','unknown')))`;
+    OR held_operation.state IN ('prepared','in_flight','unknown') OR held_call.state IN ('prepared','sending','unknown') OR held_call.settlement_state IN ('reserved','unknown'))))`;
 }
 function occupiedRunSql(run:string):string {
  return `EXISTS(SELECT 1 FROM processing_task occupied_task JOIN processing_step occupied_step ON occupied_step.owner_id=occupied_task.owner_id AND occupied_step.task_id=occupied_task.id
@@ -26,7 +27,7 @@ function pendingCandidateSql(run:string):string {
   JOIN memory_candidate held_candidate ON held_candidate.owner_id=candidate_attempt.owner_id AND held_candidate.produced_attempt_id=candidate_attempt.id
   WHERE candidate_task.owner_id=${run}.owner_id AND candidate_task.run_id=${run}.id AND held_candidate.state='pending')`;
 }
-function releasedRunSql(run:string):string {
+export function releasedRunSql(run:string):string {
  return `(${run}.state IN ('failed','revoked','completed') AND NOT ${unsettledRunSql(run)} AND NOT ${occupiedRunSql(run)} AND NOT ${pendingCandidateSql(run)})`;
 }
 /** 统计与领取共用一次物化的运行集合，避免逐消息重复扫描同一运行的调用链。 */

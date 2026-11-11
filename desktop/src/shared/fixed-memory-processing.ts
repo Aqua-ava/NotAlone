@@ -46,7 +46,8 @@ export interface FixedProcessingQueue {
   history?: { pending: number };
   later?: { pending: number; nextDueAt: number | null; stage: 'document_scene' | 'document_profile' | null };
 }
-export interface FixedProcessingView { connectionGeneration: number; contactId?: string; run: FixedProcessingRun | null; queue?: FixedProcessingQueue }
+export interface ImageRetryRunSummary {runId:string;controlVersion:number;isolated:number;actions:'retry_images'[]}
+export interface FixedProcessingView { retryRun?:ImageRetryRunSummary; connectionGeneration: number; contactId?: string; run: FixedProcessingRun | null; queue?: FixedProcessingQueue }
 export interface FixedProcessingRead { contactId: string }
 /** 记忆自动处理总开关：库内持久偏好，默认关闭。 */
 export interface FixedProcessingAutomatic { connectionGeneration: number; enabled: boolean }

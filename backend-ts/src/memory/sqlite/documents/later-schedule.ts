@@ -1,7 +1,7 @@
 import {observedProcessingAction,recordProcessingRunChange} from '../diagnostics.ts';
 import {randomUUID} from 'node:crypto';
 import {sha256} from '../../../platform/sha256.ts';
-import {runTargetsReleased} from '../run-retirement.ts';
+import {runTargetsReleased,releasedRunSql} from '../run-retirement.ts';
 import type {StorageAction,StorageMigration,StorageTransaction,StorageRow,StorageLease} from '../../../storage/sqlite/contracts.ts';
 import type {MemoryScope} from '../management/contracts.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
@@ -274,7 +274,7 @@ function scopeBlocked(tx:StorageTransaction,ownerId:string,row:StorageRow):boole
     WHERE s.owner_id=t.owner_id AND s.task_id=t.id AND (s.state='unknown' OR a.state='unknown' OR c.state='unknown')) AS has_unknown
   FROM processing_task t JOIN processing_run r ON r.owner_id=t.owner_id AND r.id=t.run_id
   LEFT JOIN task_contribution contribution ON contribution.owner_id=t.owner_id AND contribution.task_id=t.id
-  WHERE t.owner_id=? AND coalesce(json_extract(r.policy_config,'$.intent'),'')<>'memory_document_later_stage'
+  WHERE t.owner_id=? AND coalesce(json_extract(r.policy_config,'$.intent'),'')<>'memory_document_later_stage' AND NOT ${releasedRunSql('r')}
    AND (?=1 OR (t.scope_kind='contact' AND t.contact_id=?) OR contribution.source_contact_id=?) GROUP BY t.id`,
  [ownerId,isSelf?1:0,contactId,contactId]);
  for(const blocker of blockers){

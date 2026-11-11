@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FixedMemoryProcessingBridge, FixedProcessingRun, FixedProcessingView, FixedProcessingQueue } from '../shared/fixed-memory-processing';
+import type { FixedMemoryProcessingBridge, FixedProcessingRun, FixedProcessingView, FixedProcessingQueue, ImageRetryRunSummary } from '../shared/fixed-memory-processing';
 import { useAutomaticProcessing } from './MemoryAutomaticSwitch';
 
 const sharedReasons: Record<string, string> = {
@@ -68,13 +68,13 @@ function statusText(run: FixedProcessingRun | null, queue?: FixedProcessingQueue
   return run.total === 0 ? '当前没有待处理的文字目标' : '等待提取与核验';
 }
 
-/** 隔离计数与重试范围均属于当前轮；旧范围回执不得回填页面。 */
-function ImageRetryControl({bridge,view,enabled,onSettled}:{bridge:FixedMemoryProcessingBridge;view:FixedProcessingView;enabled:boolean;onSettled:()=>Promise<void>}) {
+/** 每个控件只持有后端给出的单轮重试摘要；旧范围回执不得回填页面。 */
+function ImageRetryControl({bridge,view,run,previous=false,enabled,onSettled}:{bridge:FixedMemoryProcessingBridge;view:Pick<FixedProcessingView,'connectionGeneration'>;run:FixedProcessingRun|ImageRetryRunSummary;previous?:boolean;enabled:boolean;onSettled:()=>Promise<void>}) {
   const [pending,setPending]=useState(false),[error,setError]=useState('');
   const busy=useRef(false),alive=useRef(true),attempt=useRef<{version:number;id:string}|null>(null);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
-  const run=view.run,isolated=run?.isolated??0;
-  if(!run||isolated===0)return null;
+  const isolated=run.isolated??0;
+  if(isolated===0)return null;
   const retry=async()=>{
     if(busy.current||!enabled)return;
     busy.current=true;setPending(true);setError('');
@@ -88,7 +88,7 @@ function ImageRetryControl({bridge,view,enabled,onSettled}:{bridge:FixedMemoryPr
     }
   };
   return <div className="memory-processing-actions">
-    <p role="status">{isolated} 张图片未能送入模型</p>
+    <p role="status">{previous?'之前处理记录中有 ':''}{isolated} 张图片未能送入模型</p>
     {run.actions.includes('retry_images')&&<button className="button" type="button" disabled={pending||!enabled} onClick={()=>void retry()}>{pending?'正在登记重试…':'稍后重试图片'}</button>}
     {error&&<p role="alert">{error}</p>}
   </div>;
@@ -195,7 +195,7 @@ export function FixedMemoryProcessingPanel({ bridge, contactId, scopeKey = '', o
   }, [bridge, contactId, scopeKey]);
   const run = view?.run ?? null;
   const queuedIsolated=view?.queue?.content?.filter(item=>item.kind==='image').reduce((sum,item)=>sum+(item.isolated??0),0)??0;
-  const previousIsolated=Math.max(0,queuedIsolated-(run?.isolated??0));
+  const previousIsolated=Math.max(0,queuedIsolated-(run?.isolated??0)-(view?.retryRun?.isolated??0));
   const unadmittedImages=view?.queue?.content?.filter(item=>item.kind==='image').reduce((sum,item)=>sum+(item.unadmitted??0),0)??0;
   const allTargetsDone = run && run.total > 0 && run.succeeded === run.total && run.pending === 0;
   const noNewMemory = allTargetsDone && run.candidates.length === 0
@@ -218,9 +218,10 @@ export function FixedMemoryProcessingPanel({ bridge, contactId, scopeKey = '', o
     {unadmittedImages>0&&<p>仍有 {unadmittedImages} 张图片未纳入</p>}
     {previousIsolated>0&&<p>另有 {previousIsolated} 张图片未能送入模型，保留在原处理记录中。</p>}
     {view?.queue?.later && view.queue.later.pending > 0 && <p>主题与长期概览仍有 {view.queue.later.pending} 项待处理。{view.queue.later.nextDueAt != null && run?.statusReason !== 'later_stages_scheduled' ? `预计 ${new Date(view.queue.later.nextDueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 继续。` : ''}</p>}
+    {view?.retryRun&&<ImageRetryControl key={`previous-images:${contactId}:${scopeKey}:${view.connectionGeneration}:${view.retryRun.runId}`} bridge={bridge} view={view} run={view.retryRun} previous enabled={automatic.enabled===true} onSettled={()=>refresh.current()}/>}
     {run && <>
       {run.status === 'blocked' && <p>{reasonText(failureReason)}</p>}
-      <ImageRetryControl key={`images:${contactId}:${scopeKey}:${view!.connectionGeneration}:${run.runId}`} bridge={bridge} view={view!} enabled={automatic.enabled===true} onSettled={()=>refresh.current()}/>
+      <ImageRetryControl key={`images:${contactId}:${scopeKey}:${view!.connectionGeneration}:${run.runId}`} bridge={bridge} view={view!} run={run} enabled={automatic.enabled===true} onSettled={()=>refresh.current()}/>
       {automatic.enabled !== false && <RecoveryControl key={`${contactId}:${scopeKey}:${view!.connectionGeneration}:${run.runId}`} bridge={bridge} view={view!} onSettled={()=>refresh.current()}/>}
       {run.statusReason === 'later_stages_scheduled' && run.nextDueAt != null && <p>预计 {new Date(run.nextDueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 开始，执行前会重新核对资料。</p>}
       <p>最近一批提取与核验：已处理 {run.succeeded} / {run.total} 条消息目标</p>

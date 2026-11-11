@@ -122,16 +122,36 @@ export const executionActions:StorageAction[]=[
    WHERE e.owner_id=? AND a.step_id=? AND e.kind='image_input_degraded'`,[i.ownerId,attempt.step_id])
    .map(row=>Number(JSON.parse(String(row.payload)).slot)).filter(slot=>Number.isSafeInteger(slot)&&slot>=0&&slot<=128);
  }),
+ /** 终端回执与降级登记之间退出时，先补齐原槽计划，不重发已经失败的原载荷。 */
+ action('unrecordedImageFailures','read',(tx,raw,lease)=>{
+  const i=raw as {ownerId:string;attemptId:string};const {attempt}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
+  const failed=tx.all(`SELECT o.slot,c.id FROM model_operation o JOIN model_call c ON c.owner_id=o.owner_id AND c.operation_id=o.id
+   WHERE o.owner_id=? AND o.memory_step_id=? AND o.purpose IN ('extraction','verification') AND c.state='failed' AND c.settlement_state='settled'
+    AND json_extract(c.receipt,'$.terminal_failure')='transport' AND NOT EXISTS(
+     SELECT 1 FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id
+     WHERE e.owner_id=o.owner_id AND a.step_id=o.memory_step_id AND e.kind='image_input_degraded' AND json_extract(e.payload,'$.slot')=o.slot)
+   ORDER BY o.slot,c.attempt_no`,[i.ownerId,attempt.step_id]);
+  const result:{slot:number;inputNos:number[]}[]=[],seen=new Set<number>();
+  for(const call of failed){
+   const slot=Number(call.slot);if(seen.has(slot))continue;seen.add(slot);
+   const inputNos=tx.all(`SELECT si.run_input_no FROM execution_event e JOIN execution_input x ON x.owner_id=e.owner_id AND x.event_id=e.id
+    JOIN step_input si ON si.owner_id=x.owner_id AND si.step_id=x.planned_step_id AND si.input_no=x.planned_input_no
+    WHERE e.owner_id=? AND e.originated_call_id=? AND e.kind='model_input' ORDER BY x.presentation_no`,[i.ownerId,call.id]).map(row=>Number(row.run_input_no));
+   if(!inputNos.length)fail('memory_extraction_receipt_unknown');result.push({slot,inputNos});
+  }
+  return result;
+ }),
  /** 原窗的已知终态只供审计；新子窗使用不同slot与请求，未知调用绝不释放。 */
  action('supersedeImageInput','write',(tx,raw,lease)=>{
-  const i=raw as {ownerId:string;attemptId:string;slot:number;inputNos:number[];unchangedVariant?:boolean};const {attempt}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
+  const i=raw as {ownerId:string;attemptId:string;slot:number;inputNos:number[];unchangedVariant?:boolean;preparationUnavailable?:boolean};const {attempt}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
   if(!Number.isSafeInteger(i.slot)||i.slot<0||i.slot>128)fail('memory_extraction_input_invalid');
   const calls=tx.all(`SELECT c.*,o.id AS op_id FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
    WHERE c.owner_id=? AND o.memory_step_id=? AND o.slot=? AND o.purpose IN ('extraction','verification')`,[i.ownerId,attempt.step_id,i.slot]);
-  if(!calls.length&&i.unchangedVariant===true){
-   event(tx,{ownerId:i.ownerId,attemptId:i.attemptId,kind:'image_input_degraded',payload:{slot:i.slot,reason:'extraction_model_image_variant_unchanged'},inputNos:i.inputNos},lease);return true;
+  if(!calls.length&&(i.unchangedVariant===true||i.preparationUnavailable===true)){
+   event(tx,{ownerId:i.ownerId,attemptId:i.attemptId,kind:'image_input_degraded',payload:{slot:i.slot,reason:i.unchangedVariant?'extraction_model_image_variant_unchanged':'memory_content_image_unavailable'},inputNos:i.inputNos},lease);return true;
   }
   if(!calls.length||calls.some(call=>['sending','unknown'].includes(String(call.state))))fail('memory_extraction_receipt_unknown');
+  const operations=new Set<string>();
   for(const call of calls){
    if(call.state==='prepared'){
     if(call.receipt!==null||call.sent_at!==null)fail('memory_extraction_receipt_unknown');
@@ -140,9 +160,13 @@ export const executionActions:StorageAction[]=[
     const receipt=call.receipt===null?null:JSON.parse(String(call.receipt));
     if(call.settlement_state!=='settled'||call.error_code!=='not_dispatched'&&receipt?.dispatch!=='not_sent'&&receipt?.terminal_failure!=='transport')fail('memory_extraction_receipt_unknown');
    }else if(call.state!=='succeeded'||call.settlement_state!=='settled')fail('memory_extraction_receipt_unknown');
-   event(tx,{ownerId:i.ownerId,attemptId:i.attemptId,kind:'image_input_degraded',callId:String(call.id),payload:{slot:i.slot,reason:'media_model_input_unavailable'},inputNos:i.inputNos},lease);
-   tx.run("UPDATE model_operation SET state='sealed',commit_forbidden_at=coalesce(commit_forbidden_at,?) WHERE owner_id=? AND id=?",[Date.now(),i.ownerId,call.op_id]);
-   for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='released' WHERE owner_id=? AND operation_id=?`,[i.ownerId,call.op_id]);
+   const link=call.step_attempt_id===i.attemptId?{callId:String(call.id)}:call.state==='succeeded'?{reuseId:String(call.id)}:{};
+   event(tx,{ownerId:i.ownerId,attemptId:i.attemptId,kind:'image_input_degraded',...link,payload:{slot:i.slot,reason:'media_model_input_unavailable',...(call.step_attempt_id!==i.attemptId?{priorCallId:String(call.id)}:{})},inputNos:i.inputNos},lease);
+   operations.add(String(call.op_id));
+  }
+  for(const operationId of operations){
+   tx.run("UPDATE model_operation SET state='sealed',commit_forbidden_at=coalesce(commit_forbidden_at,?) WHERE owner_id=? AND id=?",[Date.now(),i.ownerId,operationId]);
+   for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='released' WHERE owner_id=? AND operation_id=?`,[i.ownerId,operationId]);
   }
   return true;
  }),
@@ -257,7 +281,7 @@ export const executionActions:StorageAction[]=[
   tx.run("UPDATE model_call SET state='unknown',settlement_state='unknown' WHERE owner_id=? AND step_attempt_id=? AND state='sending'",[i.ownerId,i.attemptId]);
   tx.run("UPDATE model_call SET state='failed',settlement_state='settled',error_code='not_dispatched' WHERE owner_id=? AND step_attempt_id=? AND state='prepared'",[i.ownerId,i.attemptId]);
   if(unknown){for(const o of tx.all("SELECT operation_id FROM model_call WHERE owner_id=? AND step_attempt_id=? AND state='unknown'",[i.ownerId,i.attemptId])){tx.run("UPDATE model_operation SET state='unknown' WHERE owner_id=? AND id=? AND state<>'sealed'",[i.ownerId,o.operation_id]);for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='unknown' WHERE owner_id=? AND operation_id=?`,[i.ownerId,o.operation_id]);}}
-  if(!unknown){for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='released' WHERE owner_id=? AND operation_id IN (SELECT id FROM model_operation WHERE owner_id=? AND memory_step_id=? AND state NOT IN ('unknown','in_flight','sealed'))`,[i.ownerId,i.ownerId,a.step_id]);const last=tx.get("SELECT o.id FROM model_operation o JOIN model_call c ON c.owner_id=o.owner_id AND c.operation_id=o.id WHERE c.owner_id=? AND c.step_attempt_id=? AND o.state<>'sealed' ORDER BY CASE o.purpose WHEN 'verification' THEN 0 ELSE 1 END,c.attempt_no DESC LIMIT 1",[i.ownerId,i.attemptId]);if(last)tx.run("UPDATE model_operation SET state='failed' WHERE owner_id=? AND id=?",[i.ownerId,last.id]);for(const o of tx.all("SELECT operation_id FROM model_call WHERE owner_id=? AND step_attempt_id=? AND state='failed'",[i.ownerId,i.attemptId])){tx.run("UPDATE model_operation SET state='failed' WHERE owner_id=? AND id=? AND state<>'sealed'",[i.ownerId,o.operation_id]);for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='released' WHERE owner_id=? AND operation_id=?`,[i.ownerId,o.operation_id]);}}
+  if(!unknown){for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='released' WHERE owner_id=? AND operation_id IN (SELECT id FROM model_operation WHERE owner_id=? AND memory_step_id=? AND state NOT IN ('unknown','in_flight','sealed'))`,[i.ownerId,i.ownerId,a.step_id]);const last=tx.get("SELECT o.id FROM model_operation o JOIN model_call c ON c.owner_id=o.owner_id AND c.operation_id=o.id WHERE c.owner_id=? AND c.step_attempt_id=? AND o.state<>'sealed' AND (c.state='failed' OR ?=1) ORDER BY c.received_at DESC,c.sent_at DESC,c.id DESC LIMIT 1",[i.ownerId,i.attemptId,['extraction_model_validation_failed','memory_extraction_protocol_incomplete'].includes(i.code)?1:0]);if(last)tx.run("UPDATE model_operation SET state='failed' WHERE owner_id=? AND id=?",[i.ownerId,last.id]);for(const o of tx.all("SELECT operation_id FROM model_call WHERE owner_id=? AND step_attempt_id=? AND state='failed'",[i.ownerId,i.attemptId])){tx.run("UPDATE model_operation SET state='failed' WHERE owner_id=? AND id=? AND state<>'sealed'",[i.ownerId,o.operation_id]);for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='released' WHERE owner_id=? AND operation_id=?`,[i.ownerId,o.operation_id]);}}
   const state=unknown?'unknown':'failed';tx.run('UPDATE step_attempt SET state=?,finished_at=?,error_code=? WHERE owner_id=? AND id=?',[state,Date.now(),i.code,i.ownerId,i.attemptId]);tx.run("UPDATE processing_step SET state=? WHERE owner_id=? AND id=? AND state<>'revoked'",[state,i.ownerId,a.step_id]);
   tx.run("UPDATE processing_task SET state=?,error_code=? WHERE owner_id=? AND id=(SELECT task_id FROM processing_step WHERE owner_id=? AND id=?) AND state<>'revoked'",[state,i.code,i.ownerId,i.ownerId,a.step_id]);return true;
  }),
