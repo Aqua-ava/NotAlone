@@ -79,3 +79,42 @@ test('完整命题核验内 window 摘要只序列化一次，断言侧全部命
  assert.equal(windowDigestStats.computed,1);
  assert.equal(windowDigestStats.hits,2);
 });
+
+test('完整命题结果不能绑定到原地改写的联系人、正文或来源快照',async()=>{
+ for(const mutate of [
+  window=>{window.contact_id=randomUUID();},
+  window=>{window.messages[0].text='我不住在海城。';},
+  window=>{window.target_message_ids.push(randomUUID());},
+  window=>{window.messages.push({...window.messages[0],message_id:randomUUID()});},
+  window=>{window.messages[0].message_snapshot.text='被改写的来源';},
+  window=>{window.messages[0].source_snapshots[0].raw_payload.text='被改写的原始资料';},
+ ]){
+  const s=claimScenario();
+  s.window.messages[0].message_snapshot={text:'原消息快照'};
+  s.window.messages[0].source_snapshots=[{raw_payload:{text:'原始资料'}}];
+  const prepared=prepareSourceVerification({window:s.window,facts:[s.fact],policy:{id:'complete-claim-v1',rule_version:'a'.repeat(64)},requireCurrent:async()=>{}});
+  const {items}=await prepared.decode(claimBlocks(prepared,s.window));
+  assert.equal(items[0].admitted,true);
+  const result=items[0].result,bound={...s.fact,event:result.event,conditions:result.conditions};
+  assert.doesNotThrow(()=>assertCompleteClaimAdmission(s.window,bound,result));
+  assert.throws(()=>{mutate(s.window);assertCompleteClaimAdmission(s.window,bound,result);},
+   error=>error instanceof TypeError||/complete_claim_unbound_admission/.test(error.message));
+ }
+});
+
+test('图文结果不能绑定到原地替换的图片身份',async()=>{
+ for(const mutate of [
+  window=>{window.messages[1].image.sha256='f'.repeat(64);},
+  window=>{window.messages[1].image.file_id=randomUUID();},
+  window=>{window.messages[1].image={...window.messages[1].image,media_generation:'1'};},
+ ]){
+  const s=multimodalScenario();
+  const prepared=prepareMultimodalVerification({window:s.window,facts:[s.fact],images:s.images,requireCurrent:async()=>{}});
+  const {items}=await prepared.decode([{type:'tool-call',name:'SourceVerificationOutput',arguments:JSON.stringify(multimodalResponse(prepared.fingerprint,s))}]);
+  assert.equal(items[0].admitted,true);
+  const result=items[0].result,bound={...s.fact,event:result.event,conditions:result.conditions};
+  assert.doesNotThrow(()=>assertMultimodalAdmission(s.window,bound,result));
+  assert.throws(()=>{mutate(s.window);assertMultimodalAdmission(s.window,bound,result);},
+   error=>error instanceof TypeError||/multimodal_claim_unbound_admission/.test(error.message));
+ }
+});
