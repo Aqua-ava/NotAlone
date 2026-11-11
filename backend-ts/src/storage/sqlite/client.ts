@@ -117,6 +117,12 @@ export class SqliteStorage {
     if (this.failed || this.closing) return Promise.reject(new StorageFailure('worker_failed'));
     return this.request(name, input, lease);
   }
+  /** 持久runner先完成专用日志清理，再在宿主协调两进程统一日志；Worker不持有第二写者。 */
+  async eraseDiagnostics(input:{ownerId:string;operationId:string;token:string;planRevision:bigint}):Promise<void>{
+    const scope=await this.execute<{kind:'contact'|'account';contactPrefixes:string[]}>('storage.eraseContinuityDiagnostics',input);
+    const {eraseDiagnosticRecords}=await import('../../diagnostics/unified-log.mjs');
+    if(!await eraseDiagnosticRecords(this.options.userData,scope))throw new StorageFailure('diagnostic_cleanup_unavailable');
+  }
   check(): Promise<{ integrity: 'ok'; foreignKeys: 'ok' }> { return this.execute('storage.check', {}); }
   /** 运行状态只核验当前句柄及文件身份；不排队查询或重复全库完整性检查。 */
   verifyIdentity():void {

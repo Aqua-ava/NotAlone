@@ -4,7 +4,9 @@ import type {DiagnosticModule} from './unified-contract.mjs';
 export function checkedTraceId(input:unknown):string|undefined {
  return typeof input==='string'&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(input)?input.toLowerCase():undefined;
 }
-export function requestDiagnosticModule(path:string):DiagnosticModule {
+export function requestDiagnosticModule(path:string,method?:string):DiagnosticModule {
+ if(method==='DELETE'&&(path==='/api/account'||/^\/api\/contacts\/[^/?]+(?:\/(?:sources|assistant-sessions)\/[^/?]+)?$/.test(path)))return 'deletion';
+ if(/^\/api\/tasks\/status(?:\?|$)/.test(path))return 'deletion';
  if(/^\/api\/(?:memory-management|memory-documents)/.test(path))return 'memory.management';
  if(/^\/api\/(?:memory-processing|memory-runs)/.test(path))return 'memory.processing';
  if(/\/(?:media|images|avatars)(?:\/|\?|$)/.test(path))return 'media';

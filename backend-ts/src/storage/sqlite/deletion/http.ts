@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import {checkedTraceId,tracedRequest} from '../../../diagnostics/request-trace.ts';
 import { sha256 } from '../../../platform/sha256.ts';
 import { StorageFailure } from '../contracts.ts';
 import { readWechatHttpBody, WechatHttpBodyError } from '../../../sync/wechat-http-body.ts';
@@ -46,6 +47,8 @@ export class SqliteDeletionHttp {
     if (!((method === 'DELETE' && (source || discussion || contact || url.pathname === '/api/account'))
       || (method === 'GET' && (state || isTask || url.pathname === '/api/deletions')) || (method === 'POST' && retry))) return false;
     const respond = (status: number, body: unknown) => {res.writeHead(status, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'}); res.end(JSON.stringify(body));};
+    const trace=req.headers['x-trace-id'];if(trace!==undefined&&!checkedTraceId(trace)){respond(400,{error:'deletion_request_invalid'});return true;}
+    return tracedRequest(checkedTraceId(trace),'deletion',contact?'contact_deletion':url.pathname==='/api/account'?'account_deletion':'source_deletion',async()=>{
     try {
       let body: Record<string, unknown> = {};
       if (method === 'DELETE' || method === 'POST') {
@@ -101,6 +104,7 @@ export class SqliteDeletionHttp {
       respond(status, {error: code});
     }
     return true;
+    });
   }
   private async run(operationId: string): Promise<DeletionSnapshot> {
     let op = await this.service.advance({ownerId: this.ownerId, operationId});

@@ -75,7 +75,7 @@ export class JsonClient {
   perform(options: JsonRequest): Promise<{ status: number; data: unknown }> {
     if(options.traceId!==undefined&&!checkedTraceId(options.traceId))return Promise.reject(new BackendRequestFailure('response'));
     const traced={...options,traceId:options.traceId??currentDiagnosticTrace()??newTraceId()};
-    return tracedRequest(traced.traceId,requestDiagnosticModule(options.path),'request_json',()=>traced.asyncPreparation?this.performPreparation(traced):this.performOne(traced));
+    return tracedRequest(traced.traceId,requestDiagnosticModule(options.path,options.method),'request_json',()=>traced.asyncPreparation?this.performPreparation(traced):this.performOne(traced));
   }
 
   // 只改变准备的等待方式；每次查询仍有网络期限，生成仍由原业务入口显式提交。

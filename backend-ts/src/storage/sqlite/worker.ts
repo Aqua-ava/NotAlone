@@ -195,14 +195,19 @@ try {
         assertLease(lease);
         const op=get('SELECT scope_kind,contact_identity,runner_token,runner_runtime,plan_revision,state FROM deletion_operation WHERE owner_identity=? AND operation_id=?',[input.ownerId,input.operationId]);
         if(!op||op.runner_token!==input.token||op.runner_runtime!==runtimeId||op.plan_revision!==input.planRevision||op.state==='completed')throw new StorageFailure('deletion_stale_runner');
-        if(op.scope_kind==='account')diagnosticLog.erase();
+        let contactPrefixes:string[]=[];
+        if(op.scope_kind==='account'){
+          diagnosticLog.erase();
+          // 身份墓碑仍保留稳定ID；只投影前缀，已清正文不重新读取。
+          if(get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='contact'"))contactPrefixes=all('SELECT DISTINCT substr(id,1,8) AS prefix FROM contact WHERE owner_id=?',[input.ownerId]).map(row=>String(row.prefix)).filter(prefix=>/^[a-f0-9]{8}$/.test(prefix));
+        }
         else if(op.scope_kind==='contact'&&typeof op.contact_identity==='string'){
           const prefix=op.contact_identity.slice(0,8);
           // 通用删除注册表允许短合成身份；日志从未接纳非八位十六进制前缀，无对应记录可清理。
-          if(/^[a-f0-9]{8}$/.test(prefix))diagnosticLog.erase(prefix);
+          if(/^[a-f0-9]{8}$/.test(prefix)){diagnosticLog.erase(prefix);contactPrefixes=[prefix];}
         }
         else throw new StorageFailure('deletion_scope_invalid');
-        assertLease(lease);respond({value:null});return;
+        assertLease(lease);respond({value:{kind:op.scope_kind,contactPrefixes}});return;
       }
       const action = actions.get(name);
       if (!action) throw new StorageFailure('action_unavailable');
