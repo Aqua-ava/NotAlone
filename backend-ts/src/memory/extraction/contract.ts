@@ -1,4 +1,4 @@
-import {SOURCE_VERIFICATION_CONTRACTS} from './prompts.ts';
+import {SOURCE_VERIFICATION_CONTRACT} from './prompts.ts';
 import {sourceCalendar} from './calendar.ts';
 import {requireValid,uuid,validateExtractionWindow} from './protocol.ts';
 import type {ExtractedFact,ExtractionWindow,MemoryEvent} from './protocol.ts';
@@ -8,10 +8,9 @@ const ADDITIONS = ["\n直接提取时间核验：只用各消息source_calendar_
 const position={type:'object',additionalProperties:false,properties:{message_id:{type:'string',format:'uuid'},char_start:{type:'integer',minimum:0},char_end:{type:'integer',minimum:1}},required:['message_id','char_start','char_end']};
 const quote={type:'object',additionalProperties:false,properties:{message_id:{type:'string',format:'uuid'},quote:{type:'string',minLength:1,maxLength:8192}},required:['message_id','quote']};
 const verdict={type:'string',enum:['supported','uncertain','unsupported']};
-export function buildSourceVerificationContract(facts:ExtractedFact[],mode:'legacy-v4'|'nullable-proof-v3'='legacy-v4',options:{require_complete_evidence?:boolean}={}):{prompt:string;schema:Record<string,any>} {
-  requireValid(['legacy-v4','nullable-proof-v3'].includes(mode)&&facts.length<=60);
-  requireValid(!options.require_complete_evidence||mode==='legacy-v4');
-  const base=SOURCE_VERIFICATION_CONTRACTS[mode];let prompt:string=base.prompt;
+export function buildSourceVerificationContract(facts:ExtractedFact[],options:{require_complete_evidence?:boolean}={}):{prompt:string;schema:Record<string,any>} {
+  requireValid(facts.length<=60);
+  const base=SOURCE_VERIFICATION_CONTRACT;let prompt:string=base.prompt;
   const schema=structuredClone(base.schema) as Record<string,any>,properties=schema.properties.results.items.properties;
   if(facts.some(f=>f.requires_all_sources)){for(const [before,after] of REPLACEMENTS)prompt=prompt.replace(before,after);prompt+=ADDITIONS[0];}
   if(facts.some(f=>f.conditions!==null)){properties.condition_verification={type:['array','null'],maxItems:8,items:{type:'object',additionalProperties:false,properties:{index:{type:'integer',minimum:0},verdict,evidence:{type:'array',maxItems:8,items:position}},required:['index','verdict','evidence']}};prompt+=ADDITIONS[1];}
@@ -37,20 +36,10 @@ export function sourceCalendarPayload(message:ExtractionWindow['messages'][numbe
  const anchor=sourceCalendar(message);if(!anchor)return 'unknown';
  const raw=message.source_snapshots![0].raw_payload as Record<string,unknown>;return modelISO(raw.time_iso as string)!;
 }
-export function buildSourceVerificationPayload(window:ExtractionWindow,facts:ExtractedFact[],options:{positionGuide?:boolean}={}):Record<string,unknown> {
+export function buildSourceVerificationPayload(window:ExtractionWindow,facts:ExtractedFact[]):Record<string,unknown> {
  validateExtractionWindow(window);requireValid(facts.length<=60);
  const targets=new Set((window.target_message_ids??window.messages.map(m=>m.message_id)).map(uuid)),direct=facts.some(f=>f.requires_all_sources);
  const payload:Record<string,unknown>={messages:window.messages.map(m=>({message_id:uuid(m.message_id),role:targets.has(uuid(m.message_id))?'target':'context',sender:m.sender,occurred_at:modelISO(m.occurred_at)??'unknown',text:m.text,...(direct?{source_calendar_at:sourceCalendarPayload(m),text_length:Array.from(m.text).length}:{})})),
  candidates:facts.map((f,candidate_index)=>({candidate_index,text:f.text,subject:f.subject,category:f.category,topic:f.topic,source_message_ids:f.source_message_ids,valid_at:modelISO(f.valid_at),invalid_at:modelISO(f.invalid_at),speech_act:f.speech_act,assertion_status:f.assertion_status,figurative_type:f.figurative_type,...(f.event?{event:eventPayload(f.event)}:{}),...(f.conditions?{conditions:f.conditions}:{})}))};
- if(options.positionGuide){
-  const texts=[...window.messages.map(message=>message.text),...facts.map(fact=>fact.text)];
-  if(window.messages.length<=4&&texts.every(text=>Array.from(text).length<=4096)&&texts.reduce((sum,text)=>sum+Array.from(text).length,0)<=8192){
-   const ruler=(text:string)=>({codepoint_length:Array.from(text).length,blocks:Array.from(text).map((character,start)=>({start,end:start+1,text:character}))});
-   payload.position_guide={version:2,unit:'unicode_codepoint',block_width:1,
-    messages:window.messages.map(message=>({message_id:uuid(message.message_id),...ruler(message.text)})),
-    candidates:facts.map((fact,candidate_index)=>({candidate_index,...ruler(fact.text)}))};
-   if(Buffer.byteLength(JSON.stringify(payload.position_guide),'utf8')>128*1024)delete payload.position_guide;
-  }
- }
  return payload;
 }

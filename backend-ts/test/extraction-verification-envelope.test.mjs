@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {runExtractionFlow} from '../src/memory/extraction/flow.ts';
+import {verificationPolicy,completeClaimRow} from './fixtures/complete-claim-response.mjs';
 import {canonicalJSON} from '../src/memory/evidence/canonical-json.ts';
 
 const owner='11111111-1111-4111-8111-111111111111';
@@ -12,13 +13,12 @@ const window={owner_id:owner,contact_id:contact,messages:[
 const fact={text:'PRIVATE_DIAGNOSTIC_SENTINEL',category:'relationship_note',subject:'contact',topic:'other',
   source_message_ids:[message],confidence:0.9,risk_flags:[],valid_at:null,invalid_at:null,speech_act:'assertion',
   assertion_status:'asserted',figurative_type:'literal',alternatives:[],interpretation_reason:'PRIVATE_REASON_SENTINEL'};
-const verificationRow={candidate_index:0,verdict:'supported',issues:[],
-  evidence:[{message_id:message,quote:'PRIVATE_DIAGNOSTIC_SENTINEL'}]};
+const verificationRow=completeClaimRow(fact,{candidate_index:0,verdict:'supported',issues:[],evidence:[{message_id:message,quote:'PRIVATE_DIAGNOSTIC_SENTINEL'}]},window);
 const reply=(name,args)=>({blocks:[{type:'tool-call',name,arguments:args}],receipt:{outcome:'succeeded'}});
 
 async function runWithVerificationReply(verificationBlocks){
   const events=[];
-  const result=await runExtractionFlow({window,signal:new AbortController().signal,max_retries:0,retry_delay_ms:0,
+  const result=await runExtractionFlow({window,verificationPolicy,signal:new AbortController().signal,max_retries:0,retry_delay_ms:0,
     requireCurrent:async()=>{},record:async event=>{events.push(event);},
     invoke:async request=>{
       if(request.purpose==='extraction')
@@ -42,7 +42,7 @@ test('V验证闭包失败记录脱敏结构且不伪造verification_return',asyn
     block_types:['tool-call'],tool_names:['SourceVerificationOutput'],
     arguments_parseable:true,json_root_type:'object',json_root_keys:['<other>'],
     results_type:'unavailable',results_count:null,
-    rows:[{keys:['candidate_index','evidence','issues','verdict'],candidate_index:0,verdict:'supported',evidence_count:1}],
+    rows:[{keys:['<other>','candidate_index','evidence','issues','verdict'],candidate_index:0,verdict:'supported',evidence_count:1}],
   });
   assert.equal(canonicalJSON(event?.payload).includes('PRIVATE_'),false);
 });
@@ -103,7 +103,7 @@ test('V失败诊断写入失败阻止本批且不伪装成模型不可用',async
   let calls=0;
   const blocks=[{type:'tool-call',name:'SourceVerificationOutput',
     arguments:JSON.stringify({result:[verificationRow]})}];
-  await assert.rejects(runExtractionFlow({window,signal:new AbortController().signal,max_retries:0,retry_delay_ms:0,
+  await assert.rejects(runExtractionFlow({window,verificationPolicy,signal:new AbortController().signal,max_retries:0,retry_delay_ms:0,
     requireCurrent:async()=>{},
     record:async event=>{
       if(event.stage==='verification_validation_failure')

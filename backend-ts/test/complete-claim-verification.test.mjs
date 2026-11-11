@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {parseDirectExtraction} from '../src/memory/extraction/protocol.ts';
 import {prepareSourceVerification} from '../src/memory/extraction/verification/complete-claim.ts';
-import {attachVerifiedSourceReceipt} from '../src/memory/extraction/verification/evidence.ts';
+import {assertCompleteClaimAdmission} from '../src/memory/extraction/verification/complete-claim.ts';
 import {parseStoredJSON} from '../src/memory/evidence/canonical-json.ts';
 
 const mechanism = JSON.parse(readFileSync(new URL('./fixtures/complete-claim-mechanism.json', import.meta.url)));
@@ -170,18 +170,15 @@ test('新策略原生准入可签来源receipt，序列化字段或更换正文/
     raw_payload:parseStoredJSON('{"synthetic":true,"id":900719925474099312345,"ratio":1.0}'),source_content_sha256:'b'.repeat(64)}];
   const prepared=prepareSourceVerification({window,facts,policy,requireCurrent:async()=>{}});
   const result=(await prepared.decode(blocks(prepared,example))).items[0].result;
-  const bound=attachVerifiedSourceReceipt(window,fact,result);
-  assert.equal(bound.dimension_evidence.version,1);
-  assert.equal(bound.dimension_evidence.source_bound,true);
-  assert.ok(bound.verified_source_receipt);
-  assert.equal(bound.dimension_evidence.semantic_basis,undefined);
-  assert.throws(()=>attachVerifiedSourceReceipt(window,fact,structuredClone(result)),/unbound_admission/);
+  assert.doesNotThrow(()=>assertCompleteClaimAdmission(window,fact,result));
+  assert.equal(result.claim_validation.status,'checked');
+  assert.throws(()=>assertCompleteClaimAdmission(window,fact,structuredClone(result)),/unbound_admission/);
   for(const changed of [{...fact,text:fact.text+'其他内容'},{...fact,confidence:0.99},
     {...fact,source_message_ids:['66666666-6666-4666-8666-666666666666']}])
-    assert.throws(()=>attachVerifiedSourceReceipt(window,changed,result),/unbound_admission/);
-  assert.throws(()=>attachVerifiedSourceReceipt({...window,contact_id:window.owner_id},fact,result),/unbound_admission/);
+    assert.throws(()=>assertCompleteClaimAdmission(window,changed,result),/unbound_admission/);
+  assert.throws(()=>assertCompleteClaimAdmission({...window,contact_id:window.owner_id},fact,result),/unbound_admission/);
   const changed=structuredClone(window);changed.messages[0].source_snapshots[0].raw_payload.changed=true;
-  assert.throws(()=>attachVerifiedSourceReceipt(changed,fact,result),/unbound_admission/);
+  assert.throws(()=>assertCompleteClaimAdmission(changed,fact,result),/unbound_admission/);
 });
 
 test('覆盖按Unicode码点计数且本地准入不能跨来源复用', async () => {
@@ -197,7 +194,7 @@ test('覆盖按Unicode码点计数且本地准入不能跨来源复用', async (
   const changedWindow={...window,messages:[{...window.messages[0],text:'变化的来源'}]};
   const other=prepareSourceVerification({window:changedWindow,facts,policy,requireCurrent:async()=>{}});
   assert.notEqual(other.fingerprint,prepared.fingerprint);
-  assert.throws(()=>attachVerifiedSourceReceipt(changedWindow,facts[0],admitted.result),/unbound_admission/);
+  assert.throws(()=>assertCompleteClaimAdmission(changedWindow,facts[0],admitted.result),/unbound_admission/);
 });
 
 test('shared仍归联系人资料范围；旧事件未核验只丢时间，条件未核验仍拒绝',async()=>{
