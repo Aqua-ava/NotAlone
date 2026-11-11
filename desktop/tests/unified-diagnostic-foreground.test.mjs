@@ -1,0 +1,25 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,realpath,rm,readFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {build} from 'esbuild';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url),contact='18888888-8888-4888-8888-888888888888';
+test('前台稳定状态记录权限与歧义原因，重复正常观察不刷info且名称不落盘',async t=>{
+ const root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-foreground-diag-')));t.after(()=>rm(root,{recursive:true,force:true}));const output=path.join(root,'ports.cjs');
+ await build({stdin:{contents:`export {ForegroundController} from './src/main/foreground/controller';export {openHeaderChangeDiagnostics} from './src/main/foreground/header-change-diagnostics';export {configureDiagnosticLog} from '../backend-ts/src/diagnostics/unified';export {readDiagnosticRecords} from '../backend-ts/src/diagnostics/unified-log.mjs';`,resolveDir:process.cwd()},outfile:output,bundle:true,platform:'node',format:'cjs',logLevel:'silent'});
+ const p=require(output),log=p.configureDiagnosticLog(root,{proc:'main',development:true});t.after(()=>log.close());
+ let observation={phase:'confirmed',reason:'confirmed_active_binding',probe_available:true,wechat_in_front:true,binding_id:contact,contact_id:contact,recognized_name:'合成私密会话名称',recognition_confidence:1};
+ const contacts={getState:()=>({scopeRevision:1,selectedContactId:contact,directoryPhase:'ready',contacts:[{contactId:contact}]}),onStateChanged:()=>()=>{},selectContact(){return this.getState();}};
+ const backend={getConnectionGeneration:()=>1,onStateChanged:()=>()=>{},requestJson:async()=>({generation:1,data:{observation_id:contact,observed_at:new Date().toISOString(),...observation}})};
+ const controller=new p.ForegroundController(backend,contacts,{schedule(){return 0;},cancel(){}});t.after(()=>controller.dispose());
+ await controller.observeBeforeShow();await controller.observeBeforeShow();
+ observation={phase:'unavailable',reason:'screen_capture_permission_missing',probe_available:false,wechat_in_front:false,binding_id:null,contact_id:null};await controller.observeBeforeShow();
+ observation={phase:'manual-required',reason:'ambiguous_requires_selection',probe_available:true,wechat_in_front:true,binding_id:null,contact_id:null,recognized_name:'合成私密会话名称',recognition_confidence:1};await controller.observeBeforeShow();
+ const special=path.join(root,'special.jsonl'),sink=p.openHeaderChangeDiagnostics({NOTALONE_HEADER_CHANGE_HOST_DIAGNOSTICS_FILE:special});
+ const record={kind:'observation',ordinal:1,elapsedMs:10,event:'result_published',durationMs:12,changedContact:true,confirmed:true,phase:'confirmed'};sink.record(record);sink.close();assert.deepEqual(JSON.parse(await readFile(special,'utf8')),record);
+ await log.flush();const rows=await p.readDiagnosticRecords(root),states=rows.filter(row=>row.event==='foreground.state_changed');
+ assert.equal(states.filter(row=>row.toState==='ready').length,1);assert.ok(states.some(row=>row.reasonCode==='permission_missing'));assert.ok(states.some(row=>row.reasonCode==='ambiguous'));
+ assert.ok(rows.some(row=>row.caller==='foreground_probe'&&row.durationMs===12));assert.doesNotMatch(JSON.stringify(rows),/合成私密|recognized|confidence|special.jsonl/);
+});
