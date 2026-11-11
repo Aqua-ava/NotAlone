@@ -60,7 +60,9 @@ HTTP支持`Idempotency-Key`标识一次明确请求，账户删除必须提供�
 
 所有当前计划的必需面通过、目标清除且闭包复查无新增后才completed。新目标先推进planRevision，旧检查失效，调用方沿同操作再次advance。维护中断或失败保持未完成；重试再次维护，不能仅凭DB行已删宣告跨存储原子成功。本合同不承诺SSD底层、外部备份或模型服务商副本的法证擦除。
 
-completed是终态：转完成的同一事务内，统一模块按`domain:row_kind`（文件目标记为`domain:file`）把逐行条数汇总成JSON写入`deletion_operation.target_summary`，随后删除该操作的全部`deletion_target`逐行记录；摘要只含条数，不含任何行键、定位或证明。未完成操作（fenced/cleaning/verifying/blocked）的逐行记录原样保留。领域回调经claim对completed拒绝，公开状态只返回操作级进度，因此完成后没有读取方依赖逐行记录。迁移48为存量已完成操作补写摘要并清理逐行台账；释放的页经`deletion.compact`的VACUUM回收，只有下一次删除推进（advance/advanceBatch）或离线批量维护工具会触发压缩。
+completed是终态：转完成的同一事务内，统一模块按`domain:row_kind`（文件目标记为`domain:file`）把逐行条数汇总成JSON写入`deletion_operation.target_summary`，随后删除该操作的全部`deletion_target`逐行记录；摘要只含条数，不含任何行键、定位或证明。未完成操作（fenced/cleaning/verifying/blocked）的逐行记录原样保留。completed不再领取runner或触发领域回调，公开状态只返回操作级进度，因此完成后没有读取方依赖逐行记录。迁移48为存量已完成操作补写摘要并清理逐行台账；DELETE释放的页进入freelist，文件不会随迁移自动缩小。现有服务只在仍需清理的删除推进（advance/advanceBatch，包括启动恢复未完成的媒体删除）或离线批量删除维护中调用`deletion.compact`的VACUUM回收空间；普通启动、读取和重试已completed操作均不触发压缩。
+
+自动回收尚未接线。`deletion.compact`在唯一写者Worker中同步执行，预算为10分钟与按数据库加WAL体积、4 MiB/s估算耗时的较大值；前台优先队列不能抢占已开始的维护。服务层即使先检测`freelist_count/page_count>0.2`且空闲页超过50 MiB，再等待当下队列空闲，也无法防止随后到达的回复写请求等待整次VACUUM与全库校验。自动触发需要宿主维护窗口、写者及长读者排空和存储调度支持；不能仅以定时器或空闲快照保证前台不阻塞。迁移后的专门维护应在具备这些条件的窗口执行。
 
 ## API依据与验收边界
 
