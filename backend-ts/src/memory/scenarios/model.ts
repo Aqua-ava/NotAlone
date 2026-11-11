@@ -7,9 +7,8 @@ import {
   type LlmFailure,
 } from '@deepseek-ai/dsh-llm';
 import {SessionId} from '@deepseek-ai/dsh-session';
-import {createConnection} from 'node:net';
-import {createInterface} from 'node:readline';
 import {randomUUID} from 'node:crypto';
+import type {ModelPermitLease} from '../../platform/models/model-permit-port.ts';
 import type {installModelProvider} from '../../platform/models/model-provider.ts';
 import type {ModelLedgerCost, ModelLedgerReceipt, ModelLedgerUsage} from '../../platform/models/model-ledger-contract.ts';
 import {modelLedgerInputBudget} from '../../platform/models/model-ledger-contract.ts';
@@ -21,57 +20,6 @@ import {
 } from '../extraction/model.ts';
 import type {ScenarioDocumentCall, ScenarioDocumentCallPort, ScenarioDocumentCallResult} from './workspace.ts';
 import {withLayeredFailureOperation,type LayeredFailureOperation} from '../../diagnostics/layered-failure-diagnostic.ts';
-
-interface PermitState {
-  state: string;
-  permit_id?: string;
-  reason?: string;
-}
-
-function connect(endpoint: ExtractionPermitEndpoint, signal?: AbortSignal) {
-  let cancellable = true;
-  const socket = createConnection(endpoint.path);
-  const lines = createInterface({input: socket})[Symbol.asyncIterator]();
-  socket.on('error', () => {});
-  const abort = () => socket.destroy();
-  signal?.addEventListener('abort', abort, {once: true});
-  async function exchange(value: unknown, timeout = 10_000): Promise<PermitState> {
-    if (cancellable && signal?.aborted) throw new L2ScenarioModelError('l2_scenario_model_cancelled');
-    socket.write(`${JSON.stringify(value)}\n`);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      const item = await Promise.race([
-        lines.next(),
-        new Promise<never>((_, reject) => {
-          if (timeout) timer = setTimeout(() => {
-            socket.destroy();
-            reject(new L2ScenarioModelError('l2_scenario_model_ack_unknown'));
-          }, timeout);
-        }),
-      ]);
-      if (item.done || Buffer.byteLength(item.value) > 4096) {
-        throw new L2ScenarioModelError('l2_scenario_model_ack_unknown');
-      }
-      return JSON.parse(item.value) as PermitState;
-    } catch (error) {
-      if (error instanceof L2ScenarioModelError) throw error;
-      throw new L2ScenarioModelError('l2_scenario_model_ack_unknown', undefined, error);
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-  return {
-    exchange,
-    detachCancellation() {
-      cancellable = false;
-      signal?.removeEventListener('abort', abort);
-    },
-    close() {
-      signal?.removeEventListener('abort', abort);
-      socket.destroy();
-    },
-  };
-}
 
 function providerFailure(error: LlmError | LlmFailure): {name: 'LlmError'|'LlmFailure'; code: string; status?: number} {
   const failure = error instanceof LlmError ? error.failure : error;
@@ -128,7 +76,7 @@ export function createL2ScenarioModel(options: {
         reasoningEffort: ReasoningEffortId(input.binding.reasoningEffort),
       };
       const prepared = await withLayeredFailureOperation('model_prepare',()=>options.ctx.llm.prepareCall(binding, input.signal));
-      const connection = connect(options.permit, input.signal);
+      let permit:ModelPermitLease|undefined;
       const attemptId = randomUUID();
       const ledgerEntryId = input.contact_id === null ? null : randomUUID();
       let receipt: ModelLedgerReceipt | null = null;
@@ -145,22 +93,12 @@ export function createL2ScenarioModel(options: {
       let observedFailure: {name: 'LlmError'|'LlmFailure'; code: string; status?: number} | null = null;
       let observedError:unknown;
       try {
-        const granted = await withLayeredFailureOperation('model_permit',()=>connection.exchange({
-          op: 'acquire',
-          token: options.permit.token,
-          kind: 'background',
-          attempt_id: attemptId,
-          worker: {pid: process.pid, parentPid: process.ppid, executable: process.execPath},
-        }, 0));
-        if (granted.state !== 'granted' || !granted.permit_id) {
-          throw new L2ScenarioModelError('l2_scenario_model_permit_unavailable');
-        }
-        permitHeld = true;
-        connection.detachCancellation();
+        permit=await withLayeredFailureOperation('model_permit',()=>options.permit.acquire(input.signal,attemptId));
+        permitHeld=true;
         const sessionId = SessionId(randomUUID());
         const base: ModelLedgerReceipt = {
           attempt_id: attemptId,
-          permit_id: granted.permit_id,
+          permit_id: permit.id,
           request_id: input.claim.task_id,
           owner_id: input.owner_id,
           contact_id: input.contact_id,
@@ -177,22 +115,14 @@ export function createL2ScenarioModel(options: {
         call = options.provider.beginCall({
           sessionId,
           attempt_id: attemptId,
-          permit_id: granted.permit_id,
+          permit_id: permit.id,
           binding: input.binding,
           profile: input.profile,
           requireCurrent: input.requireCurrent,
           beforeDispatch: async value => {
             receipt = {...base, input_budget: modelLedgerInputBudget(value.budget)};
-            const response = await withLayeredFailureOperation('model_reservation',()=>connection.exchange({
-              op: 'reserve',
-              token: options.permit.token,
-              receipt,
-              claim: input.claim,
-            }));
-            if (response.state !== 'reserved') {
-              reservationRejected = true;
-              throw new L2ScenarioModelError('l2_scenario_model_reservation_rejected',null,undefined,null,'model_reservation');
-            }
+            try{await withLayeredFailureOperation('model_reservation',()=>permit!.reserve(receipt!,input.claim));}
+            catch{reservationRejected=true;throw new L2ScenarioModelError('l2_scenario_model_reservation_rejected',null,undefined,null,'model_reservation');}
             reserved = true;
             input.signal.throwIfAborted();
             await input.requireCurrent();
@@ -252,19 +182,13 @@ export function createL2ScenarioModel(options: {
           };
           try {
             await recordExtractionModelReceipt(options.permit, terminal);
-            const state = await connection.exchange({op: 'settled'});
-            if (state.state !== 'settled') {
-              throw new L2ScenarioModelError('l2_scenario_model_ack_unknown', terminal);
-            }
+            permit?.settle();permit=undefined;
             settled = true;
             receipt = terminal;
           } catch (error) {
             if (error instanceof ExtractionModelError && error.code === 'extraction_model_scope_deleted') {
               scopeDeleted = true;
-              const state = await connection.exchange({op: 'settled'});
-              if (state.state !== 'settled') {
-                throw new L2ScenarioModelError('l2_scenario_model_ack_unknown', terminal);
-              }
+              permit?.settle();permit=undefined;
               settled = true;
               receipt = terminal;
             } else {
@@ -278,10 +202,7 @@ export function createL2ScenarioModel(options: {
         } else if (permitHeld && (reservationRejected || call?.observation().before_dispatch_started === false)) {
           call?.close();
           try {
-            const state = await connection.exchange({op: 'settled'});
-            if (state.state !== 'settled') {
-              throw new L2ScenarioModelError('l2_scenario_model_ack_unknown');
-            }
+            permit?.settle();permit=undefined;
             settled = true;
           } catch (error) {
             if (error instanceof L2ScenarioModelError) throw error;
@@ -290,7 +211,7 @@ export function createL2ScenarioModel(options: {
         } else {
           call?.close();
         }
-        connection.close();
+        permit?.orphan();
       }
       if (!settled) throw new L2ScenarioModelError('l2_scenario_model_ack_unknown', receipt);
       if (scopeDeleted) throw new L2ScenarioModelError('l2_scenario_model_scope_deleted', receipt);

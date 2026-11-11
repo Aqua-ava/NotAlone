@@ -6,7 +6,7 @@ import {assertSourceEligibility} from '../../../history/sqlite/source.ts';
 import {assertTaskContributions} from '../qualification.ts';
 import {verifiedExtractionOutput} from '../outputs.ts';
 import {validateModelLedgerReceipt,type ModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
-import type {ModelTaskClaim} from '../../../platform/models/model-permit-server.ts';
+import type {ModelTaskClaim} from '../../../platform/models/model-permit-port.ts';
 import type {AdjudicationItem,AdjudicationSource,SimilarMemory} from '../../adoption/contracts.ts';
 import {requireImageCitation} from '../content-citation.ts';
 import {parseAdjudications,parseRelations,mergeResult} from '../../adoption/adjudication-dsh.ts';

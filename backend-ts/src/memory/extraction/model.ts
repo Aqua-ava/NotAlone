@@ -2,17 +2,15 @@
 import type {Context} from '@deepseek-ai/cordis';
 import {LlmError,ReasoningEffortId, type GenerateOptions, type ContentBlock,type LlmFailure} from '@deepseek-ai/dsh-llm';
 import {SessionId} from '@deepseek-ai/dsh-session';
-import {createConnection} from 'node:net';
-import {createInterface} from 'node:readline';
 import {randomUUID} from 'node:crypto';
 import type {installModelProvider} from '../../platform/models/model-provider.ts';
 import type {ModelImageManifest} from '../../platform/models/model-images.ts';
 import {modelLedgerInputBudget, validateModelLedgerReceipt, type ModelLedgerReceipt, type ModelLedgerCost, type ModelLedgerUsage} from '../../platform/models/model-ledger-contract.ts';
 import type {MessagesBudgetBinding, MessagesBudgetProfile} from '../../platform/models/model-input-budget.ts';
-import type {ModelTaskClaim} from '../../platform/models/model-permit-server.ts';
+import type {ModelTaskClaim,ModelPermitPort,ModelPermitLease} from '../../platform/models/model-permit-port.ts';
+import {ModelLedgerError} from '../../platform/models/model-ledger-contract.ts';
 import {DEEPSEEK_STRICT_VERIFICATION_TOOL} from './verification/deepseek-strict.ts';
-export interface ExtractionPermitEndpoint {path:string;token:string}
-type State={state:string;reason?:string;permit_id?:string;request_ids?:string[];next_cursor?:string|null};
+export type ExtractionPermitEndpoint=ModelPermitPort;
 export interface ExtractionProviderFailure {name:'LlmError'|'LlmFailure';code:string;status?:number;}
 function providerFailureSnapshot(failure:LlmFailure,name:ExtractionProviderFailure['name']):ExtractionProviderFailure {
   return {name,code:/^[A-Z][A-Z0-9_]{0,63}$/.test(failure.code)?failure.code:'PROVIDER_ERROR',
@@ -59,47 +57,18 @@ export class ExtractionModelError extends Error {
       &&status!==undefined&&(status===408||status===429||status>=500);
   }
 }
-function connect(endpoint:ExtractionPermitEndpoint, signal?:AbortSignal) {
-  let cancellable=true;
-  const socket=createConnection(endpoint.path), reader=createInterface({input:socket}), lines=reader[Symbol.asyncIterator]();
-  // error由迭代器处理；不允许认证/连接失败退回本地许可。
-  socket.on('error',()=>{});
-  // destroy 不保证触发输入 end；显式结束读行，排队许可的 next() 才会退出。
-  socket.once('close',()=>reader.close());
-  const abort=()=>{reader.close();socket.destroy();}; signal?.addEventListener('abort',abort,{once:true});
-  async function exchange(value:unknown,timeout=10000):Promise<State> {
-    if(cancellable&&signal?.aborted)throw new ExtractionModelError('extraction_model_cancelled');
-    socket.write(JSON.stringify(value)+'\n');
-    let timer:ReturnType<typeof setTimeout>|undefined;
-    try {
-      const item=await Promise.race([lines.next(),new Promise<never>((_,reject)=>{if(timeout)timer=setTimeout(()=>{socket.destroy();reject(new ExtractionModelError('extraction_model_ack_unknown'));},timeout);})]);
-      if(item.done||Buffer.byteLength(item.value)>4096)throw new ExtractionModelError('extraction_model_ack_unknown');
-      return JSON.parse(item.value);
-    } catch {throw new ExtractionModelError('extraction_model_ack_unknown');}
-    finally {clearTimeout(timer);}
-  }
-  return {socket,exchange,detachCancellation(){cancellable=false;signal?.removeEventListener('abort',abort);},close(){signal?.removeEventListener('abort',abort);reader.close();socket.destroy();}};
-}
-/** 仅重发同一精确receipt的记账ACK；不得据存储已知解除journal未知或重发模型。 */
+/** 同一精确回执仍由持久账本确认；错误类型只暴露允许的删除原因。 */
 export async function recordExtractionModelReceipt(endpoint:ExtractionPermitEndpoint,receipt:ModelLedgerReceipt):Promise<void> {
   validateModelLedgerReceipt(receipt);
-  const connection=connect(endpoint);
-  try {const state=await connection.exchange({op:'record',token:endpoint.token,receipt});
-    if(state.state==='accounting_rejected'&&state.reason==='scope_deleted')throw new ExtractionModelError('extraction_model_scope_deleted',receipt);
-    if(state.state!=='recorded')throw new ExtractionModelError('extraction_model_ack_unknown',receipt);
-  } catch(error) {if(error instanceof ExtractionModelError&&error.receipt)throw error;throw new ExtractionModelError('extraction_model_ack_unknown',receipt);}
-  finally {connection.close();}
+  try{await endpoint.recordReserved(receipt);}
+  catch(error){throw new ExtractionModelError(error instanceof ModelLedgerError&&error.code==='model_ledger_scope_deleted'
+    ?'extraction_model_scope_deleted':'extraction_model_ack_unknown',receipt);}
 }
-/** 消费者恢复必须同时询问宿主journal/孤儿；存储 known不足以证明可重放。 */
+/** 恢复只询问 SQLite 的权威未知调用，不再维护第二份 journal。 */
 export async function extractionUnconfirmedRequests(endpoint:ExtractionPermitEndpoint,scope:{owner_id:string;contact_id:string|null}):Promise<string[]> {
-  const result:string[]=[];let after:string|undefined;
-  do {const connection=connect(endpoint);let state:State;
-    try{state=await connection.exchange({op:'unconfirmed_requests',token:endpoint.token,owner_id:scope.owner_id,contact_id:scope.contact_id,...(after?{after}:{})});}finally{connection.close();}
-    const ids=state.request_ids;
-    if(state.state!=='unconfirmed_requests'||!Array.isArray(ids)||ids.length>64||ids.some(id=>typeof id!=='string'||!uuid.test(id)||after!==undefined&&id<=after)||ids.join()!==[...new Set(ids)].sort().join()||state.next_cursor!==null&&(!ids.length||state.next_cursor!==ids.at(-1)))throw new ExtractionModelError('extraction_model_recovery_unknown');
-    result.push(...ids);after=state.next_cursor??undefined;
-  }while(after);
-  return result;
+  let ids:string[];try{ids=await endpoint.unconfirmedRequests(scope);}catch{throw new ExtractionModelError('extraction_model_recovery_unknown');}
+  if(!Array.isArray(ids)||ids.some(id=>typeof id!=='string'||!uuid.test(id)))throw new ExtractionModelError('extraction_model_recovery_unknown');
+  return [...new Set(ids)].sort();
 }
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export interface ExtractionModelInput {
@@ -135,22 +104,21 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
     })():null;
     const config={...input.binding,reasoningEffort:ReasoningEffortId(input.binding.reasoningEffort),stop:input.binding.stop?[...input.binding.stop]:undefined};
     const prepared=strictVerification?null:await options.ctx.llm.prepareCall(config,input.signal);
-    const connection=connect(options.permit,input.signal);let receipt:ModelLedgerReceipt|null=null;
+    let permit:ModelPermitLease|undefined,receipt:ModelLedgerReceipt|null=null;
     let uncertain=false,reserved=false,call:ReturnType<typeof options.provider.beginCall>|undefined;
     let strictCall:ReturnType<typeof options.provider.beginStrictVerificationCall>|undefined;
     const started=Date.now();const blocks:ContentBlock[]=[];let text='',usage:ModelLedgerUsage|null=null,success=false,failure=false,validationRejected=false;
     let providerFailure:ExtractionProviderFailure|null=null;
     try {
-      const granted=await connection.exchange({op:'acquire',token:options.permit.token,kind:'background',attempt_id:input.attempt_id,worker:{pid:process.pid,parentPid:process.ppid,executable:process.execPath}},0);
-      if(granted.state!=='granted'||!granted.permit_id||!uuid.test(granted.permit_id))throw new ExtractionModelError('extraction_model_permit_unavailable');
-      connection.detachCancellation();
+      try{permit=await options.permit.acquire(input.signal,input.attempt_id);}
+      catch{throw new ExtractionModelError(input.signal.aborted?'extraction_model_cancelled':'extraction_model_permit_unavailable');}
       const sessionId=SessionId(randomUUID());
       // 预约只保存110物理身份；确认HTTP后的终态才由既有账本事务建立010外键。
-      const base:ModelLedgerReceipt={attempt_id:input.attempt_id,permit_id:granted.permit_id,request_id:input.request_id,owner_id:input.owner_id,contact_id:input.contact_id,scope_kind:input.contact_id===null?'owner_memory':'contact',provider:input.binding.provider,model:input.binding.model,called_at:new Date(started).toISOString(),latency_ms:null,dispatch:'authorized_unconfirmed',outcome:'pending',usage:null,cost:{status:'unknown',amount:null,currency:null,pricing_version:null}};
-      const registration={sessionId,attempt_id:input.attempt_id,permit_id:granted.permit_id,binding:input.binding,profile:input.profile,requireCurrent:input.requireCurrent,onImageInputs:input.onImageInputs,beforeDispatch:async(value:{attempt_id:string;permit_id:string;budget:Parameters<typeof modelLedgerInputBudget>[0];dispatch:'authorized_unconfirmed'})=>{
+      const base:ModelLedgerReceipt={attempt_id:input.attempt_id,permit_id:permit.id,request_id:input.request_id,owner_id:input.owner_id,contact_id:input.contact_id,scope_kind:input.contact_id===null?'owner_memory':'contact',provider:input.binding.provider,model:input.binding.model,called_at:new Date(started).toISOString(),latency_ms:null,dispatch:'authorized_unconfirmed',outcome:'pending',usage:null,cost:{status:'unknown',amount:null,currency:null,pricing_version:null}};
+      const registration={sessionId,attempt_id:input.attempt_id,permit_id:permit.id,binding:input.binding,profile:input.profile,requireCurrent:input.requireCurrent,onImageInputs:input.onImageInputs,beforeDispatch:async(value:{attempt_id:string;permit_id:string;budget:Parameters<typeof modelLedgerInputBudget>[0];dispatch:'authorized_unconfirmed'})=>{
         receipt={...base,input_budget:modelLedgerInputBudget(value.budget)};
-        uncertain=true;const state=await connection.exchange({op:'reserve',receipt,claim:input.claim});
-        if(state.state!=='reserved'){uncertain=false;throw new ExtractionModelError('extraction_model_reservation_rejected');}
+        uncertain=true;try{await permit!.reserve(receipt,input.claim);}
+        catch{throw new ExtractionModelError('extraction_model_reservation_rejected');}
         uncertain=false;reserved=true;
         input.signal.throwIfAborted();await input.requireCurrent();input.signal.throwIfAborted();
       }};
@@ -202,15 +170,14 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
         try {await recordExtractionModelReceipt(options.permit,receipt);uncertain=false;}
         catch(error) {
           if(error instanceof ExtractionModelError&&error.code==='extraction_model_scope_deleted'){
-            uncertain=false;const state=await connection.exchange({op:'settled'});
-            if(state.state!=='settled')throw new ExtractionModelError('extraction_model_ack_unknown',receipt);
+            uncertain=false;permit.settle();permit=undefined;
           }
           throw error;
         }
       }
       if(uncertain)throw new ExtractionModelError('extraction_model_ack_unknown',receipt);
       if(receipt)await input.onReceipt?.(structuredClone(receipt));
-      const state=await connection.exchange({op:'settled'});if(state.state!=='settled')throw new ExtractionModelError('extraction_model_ack_unknown',receipt);
+      permit?.settle();permit=undefined;
       if(outputError!==undefined)throw outputError;
       if(validationRejected)throw new ExtractionModelError('extraction_model_validation_failed',receipt,null,blocks);
       if(!success||!receipt){
@@ -222,6 +189,6 @@ export function createExtractionModelCaller(options:{ctx:Context;provider:Return
     } catch(error) {
       if(error instanceof ExtractionModelError&&!error.receipt&&receipt)throw new ExtractionModelError(error.code,receipt,error.provider_failure);
       throw error;
-    } finally {call?.close();strictCall?.close();connection.close();}
+    } finally {call?.close();strictCall?.close();permit?.orphan();}
   }};
 }

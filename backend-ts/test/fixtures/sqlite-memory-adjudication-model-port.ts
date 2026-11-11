@@ -1,3 +1,4 @@
+import {syntheticModelHost} from './synthetic-model-permits.ts';
 import type {} from '@deepseek-ai/dsh-cmdline';
 import type {Context} from '@deepseek-ai/cordis';
 import {createServer} from 'node:http';
@@ -9,7 +10,8 @@ import {installModelProvider} from '../../src/platform/models/model-provider.ts'
 export const name='sqlite-memory-adjudication-model-port-synthetic';
 export const inject=['llm','appReady'];
 const toolNames={adjudication:'BatchMemoryAdjudicationOutput',relation_verification:'BatchMemoryRelationVerificationOutput',merge_verification:'MergedMemoryVerificationOutput'} as const;
-export function apply(ctx:Context) {
+export async function apply(ctx:Context) {
+  const modelHost=await syntheticModelHost();
   const base=resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-only'});
   if(base.status!=='configured')throw new Error('synthetic_configuration_unavailable');
   let deny=false,credentials=true,current=true,sharedCalls=0,disposals=0;
@@ -23,7 +25,7 @@ export function apply(ctx:Context) {
     sharedCalls++;return registered.beginCall(input);
   },async dispose(){disposals++;await registered.dispose();}};
   const createPort=()=>createSqliteAdjudicationModelPort({ctx,configuration,provider:sharedProvider,
-    permit:{path:process.env.NOTALONE_MODEL_PERMIT_SOCKET!,token:process.env.NOTALONE_MODEL_PERMIT_TOKEN!},
+    permit:modelHost.permit,
     authorizePurpose:async()=>{if(deny)throw new Error('synthetic_purpose_denied');}});
   const port=createPort();
   const server=createServer(async(req,res)=>{
@@ -50,5 +52,5 @@ export function apply(ctx:Context) {
   const ready=ctx.appReady!.onReady(()=>server.listen(0,'127.0.0.1',()=>{
     const address=server.address();if(address&&typeof address!=='string')process.stdout.write(`SQLITE_ADJUDICATION_MODEL_PORT_READY http://127.0.0.1:${address.port}\n`);
   }));
-  ctx.effect(()=>async()=>{ready();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await port.close();await registered.dispose();});
+  ctx.effect(()=>async()=>{ready();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await port.close();await registered.dispose();await modelHost.shutdown();});
 }

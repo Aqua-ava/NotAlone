@@ -4,7 +4,6 @@ import {randomUUID} from 'node:crypto';
 import {SqliteMemoryAdjudication} from './management/adjudication-service.ts';
 import {createSqliteAdjudicationModelPort} from './management/model-port.ts';
 import {getOrCreateAnonymousUserId} from '@deepseek-ai/dsh-anonymous-user-id';
-import {join,dirname} from 'node:path';
 import {mkdir,lstat} from 'node:fs/promises';
 import type {Context} from '@deepseek-ai/cordis';
 import type {IncomingMessage} from 'node:http';
@@ -59,7 +58,7 @@ export async function createSqliteMemoryRuntime(options:{ctx:Context;contentReso
    if(!options.sharedModel){
    modelHost=await startModelHost({runtimeEnvironment:{...options.environment,NOTALONE_MANAGED_USER_DATA:options.userData},businessHome:options.businessHome,infoPath:options.infoPath,envFilePath:options.envFilePath,
     accounting:{reserve:async(r,c)=>{await service.accounting.reserve(r,c);},recordReserved:async r=>{await service.accounting.recordReserved(r);},unconfirmedRequests:s=>service.accounting.unconfirmedRequests!(s)}});
-   const identityHome=join(dirname(modelHost.statePath),'identity');await mkdir(identityHome,{recursive:true,mode:0o700});const identity=await lstat(identityHome);if(!identity.isDirectory()||(identity.mode&0o077)!==0||process.getuid&&identity.uid!==process.getuid())throw new StorageFailure('memory_model_identity_not_private');const anonymousId=getOrCreateAnonymousUserId({env:{DSH_HOME:identityHome}});
+   const identityHome=modelHost.identityHome;await mkdir(identityHome,{recursive:true,mode:0o700});const identity=await lstat(identityHome);if(!identity.isDirectory()||(identity.mode&0o077)!==0||process.getuid&&identity.uid!==process.getuid())throw new StorageFailure('memory_model_identity_not_private');const anonymousId=getOrCreateAnonymousUserId({env:{DSH_HOME:identityHome}});
    resolveUserId=()=>anonymousId;
    }
    port=createSqliteExtractionModelPort({ctx:options.ctx,configuration,permit:options.sharedModel?.permit??modelHost!.permit,resolveUserId,

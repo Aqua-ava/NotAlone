@@ -9,7 +9,6 @@ import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {spawn} from 'node:child_process';
-import {startModelHost} from '../src/platform/models/model-host.ts';
 import {validateModelLedgerReceipt} from '../src/platform/models/model-ledger-contract.ts';
 
 const tools={adjudication:'BatchMemoryAdjudicationOutput',relation_verification:'BatchMemoryRelationVerificationOutput',merge_verification:'MergedMemoryVerificationOutput'};
@@ -50,14 +49,15 @@ test('官方DSH与唯一ModelHost：三种裁决purpose、owner/contact回执、
     if(provider){provider.closeAllConnections();await new Promise(resolveClose=>provider.close(resolveClose));}
     await rm(directory,{recursive:true,force:true});
   });
-  host=await startModelHost({runtimeEnvironment:{NOTALONE_MANAGED_USER_DATA:directory},businessHome:directory,
-    infoPath:join(directory,'info'),envFilePath:join(directory,'env'),accounting:{
+  const accounting={
       reserve:async(receipt,claim)=>{validateModelLedgerReceipt(receipt);assert.ok(receipt.input_budget.serialized_bytes>0);reserved.set(receipt.request_id,receipt);claims.push(claim);},
       recordReserved:async receipt=>{validateModelLedgerReceipt(receipt);assert.ok(reserved.has(receipt.request_id));if(failReceipt)throw new Error('synthetic_ack_failure');reserved.delete(receipt.request_id);receipts.push(receipt);},
       unconfirmedRequests:async()=>[...reserved.keys()].sort(),
-    }});
+    };
   provider=createServer(async(req,res)=>{
-    let raw='';for await(const chunk of req)raw+=chunk;requests++;
+    let raw='';for await(const chunk of req)raw+=chunk;
+    if(req.url==='/synthetic-accounting'){const input=JSON.parse(raw);try{const result=await accounting[input.op](...input.args);res.end(JSON.stringify(result??null));}catch{res.writeHead(409);res.end('{}');}return;}
+    requests++;
     assert.equal(req.headers['x-api-key'],'synthetic-only');
     const body=JSON.parse(raw);assert.equal(body.tools.length,1);assert.ok(Object.values(tools).includes(body.tools[0].name));
     const events=[{type:'message_start',message:{id:'synthetic',model:'deepseek-flash',usage:{input_tokens:3,output_tokens:0}}},
@@ -74,8 +74,7 @@ test('官方DSH与唯一ModelHost：三种裁决purpose、owner/contact回执、
   await writeFile(join(profile,'cordis.patch.yml'),`- insert:\n    - name: '@deepseek-ai/dsh-llm'\n    - name: ${JSON.stringify(resolve('test/fixtures/sqlite-memory-adjudication-model-port.ts'))}\n`);
   child=spawn(process.execPath,[resolve('node_modules/@deepseek-ai/dsh/lib/bin.js'),'--profile','notalone'],{
     cwd:directory,env:{PATH:process.env.PATH,HOME:directory,DSH_HOME:directory,DSH_TELEMETRY_DISABLED:'1',
-      NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${provider.address().port}/anthropic`,
-      NOTALONE_MODEL_PERMIT_SOCKET:host.permit.path,NOTALONE_MODEL_PERMIT_TOKEN:host.permit.token},stdio:['ignore','pipe','pipe']});
+      NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${provider.address().port}/anthropic`},stdio:['ignore','pipe','pipe']});
   exited=once(child,'exit');let log='';child.stderr.on('data',value=>log+=value);
   const url=await new Promise((ready,reject)=>{
     const timer=setTimeout(()=>reject(new Error(log.slice(-1500))),10000);

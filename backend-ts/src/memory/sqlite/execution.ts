@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {sha256} from '../../platform/sha256.ts';
 import type {StorageAction,StorageTransaction,StorageRow,StorageLease} from '../../storage/sqlite/contracts.ts';
 import {validateModelLedgerReceipt,type ModelLedgerReceipt} from '../../platform/models/model-ledger-contract.ts';
-import type {ModelTaskClaim} from '../../platform/models/model-permit-server.ts';
+import type {ModelTaskClaim} from '../../platform/models/model-permit-port.ts';
 import {assertContribution,assertInputs,currentAttempt,inputRows,fail,textId} from './qualification.ts';
 import {applyControl,takeOverExpiredAttempt} from './control.ts';
 import {abandonUnknownAdjudication} from './unknown-recovery.ts';

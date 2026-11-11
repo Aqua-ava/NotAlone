@@ -3,13 +3,12 @@ import assert from 'node:assert/strict';
 import {ModelPermitArbiter} from '../src/platform/models/model-permits.ts';
 
 const turn = () => new Promise(resolve => setImmediate(resolve));
-const worker = {pid: 12345, parentPid: 1, startedAt: 'Tue Nov 3 00:00:00 2026', executable: '/synthetic/node'};
 function requests(t, arbiter) {
   const held = [];
   t.after(() => { arbiter.stop(); for (const permit of held) { try { permit.settle(); } catch {} } });
   return (kind, signal, attemptId) => {
     const state = {permit: undefined, error: undefined};
-    state.done = arbiter.acquire(kind, signal, worker, attemptId).then(
+    state.done = arbiter.acquire(kind, signal).then(
       permit => { held.push(permit); state.permit = permit; return permit; },
       error => { state.error = error; });
     return state;
@@ -99,49 +98,4 @@ test('stop全局拒绝两个类别等待者，保留在途直到全部结算', a
   let drained = false; const drain = arbiter.pauseAndDrain().then(() => { drained = true; });
   foreground.permit.settle(); await turn(); assert.equal(drained, false);
   background.permit.settle(); await drain; assert.throws(() => arbiter.resume(), /model_work_stopped/);
-});
-
-test('许可journal记录同时在途的两个类别及原执行者和attempt身份', async t => {
-  const arbiter = new ModelPermitArbiter(3), entries = [];
-  arbiter.attachJournal({host: worker, record: active => entries.push(structuredClone(active))});
-  const request = requests(t, arbiter);
-  const foreground = request('foreground', undefined, 'foreground-attempt');
-  const background = request('background', undefined, 'background-attempt'); await turn();
-  assert.ok(foreground.permit); assert.ok(background.permit);
-  assert.deepEqual(entries.at(-1), [
-    {id: foreground.permit.id, kind: 'foreground', worker, attempt_id: 'foreground-attempt'},
-    {id: background.permit.id, kind: 'background', worker, attempt_id: 'background-attempt'},
-  ]);
-});
-
-for (const failingKind of ['foreground', 'background']) test(`${failingKind}派发journal失败停止全部类别，不继续发放并保留未知容量`, async t => {
-  const arbiter = new ModelPermitArbiter(3), failure = new Error('synthetic_journal_failed');
-  arbiter.attachJournal({host: worker, record: active => { if (active.at(-1)?.kind === failingKind) throw failure; }});
-  const request = requests(t, arbiter); await arbiter.pauseAndDrain();
-  const foreground = request('foreground'), background = request('background'), nextBackground = request('background');
-  arbiter.resume(); await turn();
-  if (failingKind === 'foreground') {
-    assert.equal(foreground.error, failure);
-    assert.match(background.error?.message ?? '', /model_work_stopped/);
-  } else {
-    assert.ok(foreground.permit);
-    assert.equal(background.error, failure);
-  }
-  assert.match(nextBackground.error?.message ?? '', /model_work_stopped/);
-  assert.equal(background.permit, undefined);
-  assert.equal(arbiter.snapshot().foregroundActive, true);
-  assert.equal(arbiter.snapshot().backgroundActive, failingKind === 'background' ? 1 : 0);
-  assert.equal(arbiter.snapshot().stopped, true);
-});
-
-test('结算journal失败恢复原许可且全局停收，不以另一类别空槽绕过', async t => {
-  const arbiter = new ModelPermitArbiter(1), failure = new Error('synthetic_journal_failed'); let fail = false;
-  arbiter.attachJournal({host: worker, record: () => { if (fail) throw failure; }});
-  const request = requests(t, arbiter), foreground = request('foreground'), background = request('background'); await turn();
-  assert.ok(foreground.permit); assert.ok(background.permit);
-  const nextForeground = request('foreground'), nextBackground = request('background');
-  fail = true; assert.throws(() => foreground.permit.settle(), error => error === failure); await turn();
-  assert.equal(arbiter.snapshot().foregroundActive, true); assert.equal(arbiter.snapshot().backgroundActive, 1);
-  for (const item of [nextForeground, nextBackground]) assert.match(item.error?.message ?? '', /model_work_stopped/);
-  fail = false;
 });

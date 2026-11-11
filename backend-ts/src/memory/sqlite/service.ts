@@ -13,7 +13,7 @@ import {isSharedFailure,sharedFailureCodes} from './control.ts';
 import type {CandidateVerificationReference} from './management/admission.ts';
 import type {ExtractionWindow} from '../extraction/protocol.ts';
 import {ExtractionModelError} from '../extraction/model.ts';
-import type {ModelPermitAccounting,ModelTaskClaim} from '../../platform/models/model-permit-server.ts';
+import type {ModelPermitAccounting,ModelTaskClaim} from '../../platform/models/model-permit-port.ts';
 import type {SqliteExtractionModelInvocation,SqliteExtractionModelPreparation} from './model-port.ts';
 export interface ExtractionModelPort {
  prepare(request:ExtractionInvocation,input:Pick<SqliteExtractionModelInvocation,'scope'|'signal'|'requireCurrent'>):Promise<SqliteExtractionModelPreparation>;
