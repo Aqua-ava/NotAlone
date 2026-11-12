@@ -87,7 +87,7 @@ function readDocumentsView(raw:unknown,expected:MemoryScope):MemoryDocumentsView
   const selected=object(value.profileSelection),validCount=(n:unknown):n is number=>Number.isSafeInteger(n)&&Number(n)>=0;
   if(!publication||!validCount(selected.accepted)||!validCount(selected.rejected)||!validCount(selected.retained))throw invalid();
   const publishedEntries=documents.filter(d=>d.kind==='profile').reduce((count,d)=>count+d.statements.length,0);
-  if(selected.accepted>0&&selected.accepted+selected.retained!==publishedEntries)throw invalid();
+  if(selected.accepted+selected.retained!==publishedEntries)throw invalid();
   profileSelection={accepted:selected.accepted,rejected:selected.rejected,retained:selected.retained};
  }
  return {status,publication,documents,...(profileSelection?{profileSelection}:{})};

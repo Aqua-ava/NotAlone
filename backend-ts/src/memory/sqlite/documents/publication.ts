@@ -2,7 +2,7 @@ import {observedProcessingAction} from '../diagnostics.ts';
 import {randomUUID} from 'node:crypto';
 import type {StorageAction,StorageLease,StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {readExtractionToolArguments} from '../../extraction/arguments.ts';
-import {DEFAULT_L2_SCENARIO_BUDGET,parseScenarioVerification,validateScenarioDocument,type L2ScenarioMemory,type L2ScenarioReference} from '../../scenarios/workspace.ts';
+import {DEFAULT_L2_SCENARIO_BUDGET,L2ScenarioError,parseScenarioVerification,validateScenarioDocument,type L2ScenarioMemory,type L2ScenarioReference} from '../../scenarios/workspace.ts';
 import {selectProfilePublication,validateProfile,type ProfileVerification} from '../../profiles/workspace.ts';
 import {documentSources,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,withDocumentSourceQualifications} from './basis.ts';
 import {current} from './stages.ts';
@@ -87,8 +87,9 @@ export const memoryDocumentsPublicationActions:StorageAction[]=[
   const proposal=validateProfile({entries:i.entries},memories,DEFAULT_L2_SCENARIO_BUDGET),eventId=textId(i.verificationEventId);
   const checked=verification(tx,ownerId,String(attempt.id),eventId,'ProfileVerificationOutput') as ProfileVerification;
   const prior=new Set(renderDocuments(tx,ownerId,old,memories).scenarios.map(s=>s.version_id));
-  const selection=selectProfilePublication(proposal,checked,memories,DEFAULT_L2_SCENARIO_BUDGET,previous,
+  const selection=(()=>{try{return selectProfilePublication(proposal,checked,memories,DEFAULT_L2_SCENARIO_BUDGET,previous,
     previous?sceneVersions(tx,ownerId,t,memories).filter(s=>!prior.has(s.version_id)):[]);
+   }catch(error){if(error instanceof L2ScenarioError)fail(error.code);throw error;}})();
   const eventNo=tx.get('SELECT coalesce(max(event_no),0)+1 AS n FROM execution_event WHERE owner_id=? AND step_attempt_id=?',[ownerId,attempt.id])!.n;
   tx.run('INSERT INTO execution_event(owner_id,id,step_attempt_id,event_no,kind,payload,created_at) VALUES(?,?,?,?,?,?,?)',
     [ownerId,randomUUID(),attempt.id,eventNo,'document_profile_selection',JSON.stringify({verificationEventId:eventId,

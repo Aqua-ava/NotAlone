@@ -8,7 +8,7 @@ import {randomUUID} from 'node:crypto';
 const tool=(name,value)=>({blocks:[{type:'tool-call',id:'synthetic-partial-profile',name,arguments:JSON.stringify(value)}]});
 
 /** 仅替换合成模型回答；输入冻结、核验解析、SQLite发布与删除都走正式服务。 */
-async function partialFixture(t,{reject=[13],entryCount=16,malformed}={}){
+async function partialFixture(t,{reject=[13],entryCount=16,malformed,manualBody='这是一条单独的合成手工背景记忆。'}={}){
  const control={reject:new Set(reject),entryCount,entries:[],packets:[],malformed,sceneRevision:0,label:'合成画像',preferMemoryId:null,emptyExtraction:false};
  const f=await deletionFixture(t,{extractionResponse:async request=>control.emptyExtraction&&request.purpose==='extraction'?tool(request.tool.name,{scenes:[]}):undefined,documentResponse:async({request,payload})=>{
   const names=request.tools.map(x=>x.name);
@@ -38,8 +38,8 @@ async function partialFixture(t,{reject=[13],entryCount=16,malformed}={}){
   }
  }});
  // 两个不同记忆版本交替引用，才能发现删除中间条目后尾部证据错位。
- await new SqliteMemoryManagement(f.storage,f.owner).decide({requestKey:'partial-profile-second-memory',action:'manual',scope:{scopeKind:'contact',contactId:f.contactId},body:'这是一条单独的合成手工背景记忆。'});
- return {...f,control};
+ const manual=await new SqliteMemoryManagement(f.storage,f.owner).decide({requestKey:'partial-profile-second-memory',action:'manual',scope:{scopeKind:'contact',contactId:f.contactId},body:manualBody});
+ return {...f,control,manualMemoryId:manual.memoryId};
 }
 
 async function runFixture(f,key){
@@ -131,6 +131,42 @@ test('新条目通过但旧条目改写未通过时，只加入新条目并保�
  assert.deepEqual(second.view.profileSelection,{accepted:1,rejected:1,retained:1});
  assert.deepEqual(new Set(current.statements.map(x=>x.text)),new Set([...old.statements.map(x=>x.text),'核验通过的新条目。']));
  assert.ok(!current.statements.some(x=>x.text==='未获支持的旧条目替换内容。'));
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('同一L1支持两个事实时，新事实通过不得吞掉改写被拒的旧事实',async t=>{
+ const f=await partialFixture(t,{reject:[],entryCount:1,manualBody:'合成联系人长期喜欢园艺，并且每周照料盆栽。'});
+ const entry=(payload,text)=>{const m=payload.memories.find(x=>x.memory_id===f.manualMemoryId);assert.ok(m);return {text,kind:'fact',section:'interests',basis:'对应同一条冻结记忆中的明确事实。',temporal_status:'stable',uncertainty:'',references:[{memory_id:m.memory_id,revision:m.revision}]};};
+ f.control.entryFactory=payload=>[entry(payload,'合成联系人长期喜欢园艺。')];
+ const first=await runFixture(f,'profile-shared-source-first'),old=first.view.documents.find(x=>x.kind==='profile');assert.ok(old);
+ await new SqliteMemoryManagement(f.storage,f.owner).decide({requestKey:'partial-profile-shared-source-trigger',action:'manual',scope:{scopeKind:'contact',contactId:f.contactId},body:'合成新增背景，用于触发下一轮主题整理。'});
+ f.control.reject=new Set([0]);f.control.sceneRevision=3;f.control.sceneMemoryId=f.manualMemoryId;f.control.emptyExtraction=true;
+ f.control.entryFactory=payload=>[entry(payload,'合成联系人长期讨厌园艺。'),entry(payload,'合成联系人每周照料盆栽。')];
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('2',{text:'同源反例的合成例行问候。',sentAt:'1700000003000'})],completedPartitions:['shard-a'],exhausted:true});
+ await f.contacts.setReading(true);await f.service.synchronize(f.contactId);await f.contacts.setReading(false);
+ const second=await runFixture(f,'profile-shared-source-second');
+ assert.equal(f.control.packets.length,2);assert.deepEqual(f.control.packets.at(-1).results.map(x=>x.supported),[false,true]);
+ assert.equal(second.state.outcome,'completed');
+ const current=second.view.documents.find(x=>x.kind==='profile');assert.ok(current);
+ assert.deepEqual(new Set(current.statements.map(x=>x.text)),new Set(['合成联系人长期喜欢园艺。','合成联系人每周照料盆栽。']),'同一来源身份不是两个语义条目互相替换的授权');
+ assert.deepEqual(second.view.profileSelection,{accepted:1,rejected:1,retained:1});
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('保留旧有效条目后超过L3预算时不删旧条目，也不放宽发布预算',async t=>{
+ const f=await partialFixture(t,{reject:[],entryCount:16,manualBody:'合成联系人长期喜欢园艺，并且每周照料盆栽。'});
+ const first=await runFixture(f,'profile-retained-budget-first'),old=first.view.documents.find(x=>x.kind==='profile');assert.equal(old?.statements.length,16);
+ await new SqliteMemoryManagement(f.storage,f.owner).decide({requestKey:'partial-profile-retained-budget-trigger',action:'manual',scope:{scopeKind:'contact',contactId:f.contactId},body:'合成新增背景，仅用于推进整理修订。'});
+ f.control.reject=new Set([0]);f.control.sceneRevision=4;f.control.sceneMemoryId=f.manualMemoryId;f.control.emptyExtraction=true;
+ f.control.entryFactory=payload=>{const m=payload.memories.find(x=>x.memory_id===f.manualMemoryId);assert.ok(m);return ['合成联系人长期讨厌园艺。','合成联系人每周照料盆栽。'].map(text=>({text,kind:'fact',section:'interests',basis:'对应冻结的合成记忆。',temporal_status:'stable',uncertainty:'',references:[{memory_id:m.memory_id,revision:m.revision}]}));};
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('2',{text:'预算反例的合成例行问候。',sentAt:'1700000004000'})],completedPartitions:['shard-a'],exhausted:true});
+ await f.contacts.setReading(true);await f.service.synchronize(f.contactId);await f.contacts.setReading(false);
+ const second=await runFixture(f,'profile-retained-budget-second');
+ assert.equal(f.control.packets.length,2);assert.deepEqual(f.control.packets.at(-1).results.map(x=>x.supported),[false,true]);
+ assert.equal(second.state.outcome,'incomplete');
+ assert.equal(second.state.stages.find(x=>x.kind==='profile').errorCode,'l3_profile_budget_exceeded');
+ assert.deepEqual(second.view.documents.find(x=>x.kind==='profile'),old,'预算不足不得静默删除仍有效的旧内容以挤入新条目');
+ assert.equal(second.view.publication.id,first.view.publication.id);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 

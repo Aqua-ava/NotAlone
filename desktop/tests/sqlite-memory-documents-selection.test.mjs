@@ -36,7 +36,7 @@ test('文档读取保留逐条核验计数，旧发布没有计数字段仍可�
 });
 test('核验选择计数必须为非负整数且与新发布条目数量一致',async()=>{
  let value=response();const instance=controller(async()=>value);
- for(const selected of [{accepted:-1,rejected:1,retained:0},{accepted:'15',rejected:1,retained:0},{accepted:15,rejected:0.5,retained:0},{accepted:15,rejected:1,retained:NaN},{accepted:16,rejected:1,retained:0},null]){value=response(15,selected);await assert.rejects(instance.readDocuments(request));}
+ for(const selected of [{accepted:-1,rejected:1,retained:0},{accepted:'15',rejected:1,retained:0},{accepted:15,rejected:0.5,retained:0},{accepted:15,rejected:1,retained:NaN},{accepted:16,rejected:1,retained:0},{accepted:0,rejected:1,retained:999},null]){value=response(15,selected);await assert.rejects(instance.readDocuments(request));}
  value={...response(0,{accepted:0,rejected:16,retained:0}),publication:null};await assert.rejects(instance.readDocuments(request));
 });
 test('长期概览显示通过与未通过计数，正文可查看，主题页不混入概览提示',{timeout:20000},async t=>{

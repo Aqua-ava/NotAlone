@@ -1231,7 +1231,8 @@ export function selectProfilePublication(
   const acceptedIdentities=new Set(accepted.map(({entry})=>entryIdentity(entry)));
   const retained=(existing?.entries??[]).flatMap((entry,index)=>{
     const refs=entry.references.map(ref=>`${ref.memory_id}:${ref.revision}`);
-    const preserve=!refs.some(ref=>changed.has(ref))&&!acceptedIdentities.has(entryIdentity(entry))||!refs.every(ref=>acceptedRefs.has(ref));
+    // 同一来源可以承载多个事实；部分拒绝时不能仅凭共用来源推定旧条目已被替换。
+    const preserve=(rejected.length>0||!refs.some(ref=>changed.has(ref)))&&!acceptedIdentities.has(entryIdentity(entry))||!refs.every(ref=>acceptedRefs.has(ref));
     return preserve?[{index,entry}]:[];
   });
   const selected=validateProfile({entries:[...accepted.map(item=>item.entry),...retained.map(item=>item.entry)]},memories,budget);

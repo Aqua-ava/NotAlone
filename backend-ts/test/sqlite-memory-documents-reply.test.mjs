@@ -188,14 +188,20 @@ test('本人混合文档保留全部实际贡献来源，回复另一联系人�
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('画像核验失败时已暂存主题不进入候选输入',{timeout:20000},async t=>{
- const f=await setup(t,{rejectProfile:true,allowNoDocument:true}),scope={ownerId:f.owner,contactId:f.a,discussionId:(await f.discussions.newDiscussion(f.a)).id};
+test('画像条目全部未获支持时已核验主题仍可进入回复候选',{timeout:20000},async t=>{
+ const f=await setup(t,{rejectProfile:true}),scope={ownerId:f.owner,contactId:f.a,discussionId:(await f.discussions.newDiscussion(f.a)).id};
  const task=(await f.extraction.read(f.run.runId)).tasks.find(item=>item.contactId===f.a),state=await f.documents.readTask(task.taskId);
- assert.equal(state.outcome,'incomplete');assert.deepEqual(state.stages.map(s=>s.status),['succeeded','failed']);
- const page=await f.documents.read({scopeKind:'contact',contactId:f.a});assert.equal(page.publication,null);assert.deepEqual(page.documents,[]);
- const knowledge=await f.storage.execute('fixture.documentKnowledge',scope);assert.equal(knowledge.filter(item=>item.kind==='document').length,0);assert.equal(knowledge.filter(item=>item.kind==='memory').length,1);
+ assert.equal(state.outcome,'completed');assert.deepEqual(state.stages.map(s=>s.status),['succeeded','succeeded']);
+ const page=await f.documents.read({scopeKind:'contact',contactId:f.a});assert.ok(page.publication);assert.deepEqual(page.documents.map(item=>item.kind),['scene']);
+ assert.deepEqual(page.profileSelection,{accepted:0,rejected:1,retained:0});
+ const knowledge=await f.storage.execute('fixture.documentKnowledge',scope),documents=knowledge.filter(item=>item.kind==='document');
+ assert.equal(documents.length,1);assert.equal(documents[0].id,page.documents[0].id);assert.equal(documents[0].publicationId,page.publication.id);
+ assert.equal(knowledge.filter(item=>item.kind==='memory').length,1);assert.ok(knowledge.every(item=>!item.text.includes('【长期背景】')),'被拒画像不得作为正式回复资料');
  await f.turns.generate({contactId:f.a,discussionId:scope.discussionId,requestKey:randomUUID(),text:'结合资料写一句',confirmedContact:true});
- const candidate=(await f.service.view(f.a,scope.discussionId))[0].candidates[0];assert.equal(candidate.basis[0].kind,'memory');assert.equal(itemNumber(f.requests[0]),null);
+ const candidate=(await f.service.view(f.a,scope.discussionId))[0].candidates[0];assert.equal(candidate.basis[0].kind,'document');assert.equal(candidate.basis[0].verification,'actual_input');
+ const saved=await f.storage.execute('fixture.replyDocumentSources',{ownerId:f.owner,discussionId:scope.discussionId});
+ assert.ok(saved.length);assert.ok(saved.every(row=>JSON.parse(row.identity_json).id===page.documents[0].id));
+ assert.ok(itemNumber(f.requests[0]));assert.ok(!JSON.stringify(f.requests[0]).includes('【长期背景】'));
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
