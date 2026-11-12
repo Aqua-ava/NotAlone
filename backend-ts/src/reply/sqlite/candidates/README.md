@@ -20,6 +20,8 @@
 
 候选执行每次重建独立受管DSH副本，以避免未选择的旧候选通过SDK历史进入下一请求。只有同讨论的真实selection可以显式携入；携入固定正文版本及原始输入来源。Skill仍由 Skill 域的官方 provider读取，assertCurrent/recordSelection/recordInput及写事务requireSkillRun沿讨论域真实合同，不以selected冒充loaded，不改变原目录。
 
+分组复验只约束在途使用；候选输入按数据库中的请求状态区分在途与已完成记录。已完成候选的回看、版本、编辑、选稿、参考资料及明确携入不要求历史分组仍是当前分组，但包修订、来源与删除保护继续复验；新请求独立冻结当前分组。
+
 `replyCandidateDeletionDomain` 必须列入requiredDomains，并在discussion_calls前释放候选FK；其余原有域顺序保持。来源闭包由讨论域收集，增量纳入知识/选稿完整来源及后续显式携入请求。fence立即撤下候选正文与依据、不可逆清除版本资格；统一删除排空持有者后清实际输入、选择、版本、调用追踪及讨论域完整受管文件。候选域自身没有文件目标，不能声称只删本域即完成删除。
 
 正常前台将确认的联系人上下文同时用于主进程门禁和页面禁用／撤快照；不能只信任 renderer 的 `confirmed_contact`。当前上下文取得规则见领域合同。页面 Skill 名称仅来自真实 `skill_input`，策略只作用本次；选择、复制或编辑均不证明外部消息已发送。

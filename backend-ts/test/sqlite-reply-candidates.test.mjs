@@ -134,6 +134,53 @@ test('真实Skill加载独立于选择记录，资格失效后候选正文、依
  const id=view.candidates[0].candidateId;await f.library.setEnabled(skill.id,skill.headRevision,'disabled');view=(await service.view(f.ids[0],d.id))[0];assert.deepEqual(view.candidates,[]);assert.deepEqual(view.loadedSkills,[]);await assert.rejects(service.edit({contactId:f.ids[0],discussionId:d.id,candidateId:id,versionNo:1,parts:['不能洗回']}));
 });
 
+test('Skill分组变化保留已完成候选、编辑与依据，明确继续使用当前分组',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');const {mkdir,writeFile}=await import('node:fs/promises');
+ const f=await realFixture(t,{skillGroups:'manual',content:JSON.stringify({candidates:[{parts:['分组变化前的合成候选'],basis:[1]}]})});
+ await mkdir(join(f.skillRoot,'gentle'));await writeFile(join(f.skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 合成温和表达\n---\n先回应感受，再说明情况。\n');
+ let skill=await f.library.discover('gentle');skill=await f.library.setEnabled(skill.id,skill.headRevision,'enabled');
+ const contactId=f.ids[0],d=await f.discussions.newDiscussion(contactId),discussionId=d.id,service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ const input={contactId,discussionId,requestKey:randomUUID(),text:'未分组时生成',confirmedContact:true};
+ await turns.generate(input);const original=(await service.view(contactId,discussionId))[0],candidate=original.candidates[0],scope={contactId,discussionId,candidateId:candidate.candidateId};
+ assert.deepEqual(original.loadedSkills,[]);
+ let group=await f.library.createGroup('合成分组',[skill.id]);await f.library.assignContactGroup(contactId,group.id,null);
+ assert.equal((await service.view(contactId,discussionId))[0].sourceState,'available','加入分组不撤下旧候选');
+ assert.deepEqual((await service.version({...scope,versionNo:1})).parts,['分组变化前的合成候选']);
+ assert.equal((await service.inputMaterials({contactId,discussionId,requestId:original.requestId,offset:0})).recorded,true);
+ const edited=await service.edit({...scope,versionNo:1,parts:['分组变化后手工编辑的候选']});assert.equal(edited.versionNo,2);
+ const selected=await service.select({...scope,versionNo:2});assert.equal(f.requests.length,1,'回看、编辑和选稿不调用模型');
+ await turns.generate({...input,requestKey:randomUUID(),text:'按当前分组继续',carriedSelectionId:selected.id,selectedPackageId:skill.id});
+ const loaded=(await service.view(contactId,discussionId))[1];assert.equal(loaded.loadedSkills.length,1);
+ assert.match(JSON.stringify(f.requests[1]),/分组变化后手工编辑的候选/);
+ const checkHistory=async()=>{
+  const history=await service.view(contactId,discussionId);assert.deepEqual(history.map(r=>r.sourceState),['available','available']);
+  assert.deepEqual(history[0].candidates[0].parts,['分组变化后手工编辑的候选']);
+  assert.deepEqual(history[1].loadedSkills,loaded.loadedSkills,'分组变化保留实际使用的Skill快照');
+  assert.equal((await service.skillInputs({contactId,discussionId,requestId:loaded.requestId,offset:0})).total,1);
+ };
+ group=await f.library.updateGroup(group.id,group.revision,'合成新名称',[skill.id]);await checkHistory();
+ group=await f.library.updateGroup(group.id,group.revision,group.name,[]);await checkHistory();
+ const other=await f.library.createGroup('合成另一分组',[]);await f.library.assignContactGroup(contactId,other.id,group.id);await checkHistory();
+ await f.library.deleteGroup(group.id,group.revision);await checkHistory();
+ await f.library.deleteGroup(other.id,other.revision);await checkHistory();
+ await turns.generate({...input,requestKey:randomUUID(),text:'取消分组后继续',carriedSelectionId:selected.id});
+ const latest=(await service.view(contactId,discussionId))[2];assert.equal(latest.sourceState,'available');assert.deepEqual(latest.loadedSkills,[]);
+ assert.doesNotMatch(JSON.stringify(f.requests[2]),/先回应感受，再说明情况/);assert.equal(f.requests.length,3);
+});
+
+test('Skill分组变化仍拒绝在途旧快照，按既有无Skill路径重新生成',{timeout:10000},async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
+ const entered=Promise.withResolvers(),release=Promise.withResolvers(),f=await realFixture(t,{skillGroups:'manual',content:JSON.stringify({candidates:[{parts:['分组变化后的迟到候选'],basis:[1]}]}),onRequest:async()=>{entered.resolve();await release.promise;}});
+ const contactId=f.ids[0],d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ const group=await f.library.createGroup('合成在途分组',[]),input={contactId,discussionId:d.id,requestKey:randomUUID(),text:'生成期间检查分组',confirmedContact:true};
+ const pending=turns.generate(input);
+ try{
+  await entered.promise;await f.library.assignContactGroup(contactId,group.id,null);release.resolve();await pending;
+  const view=(await service.view(contactId,d.id))[0];assert.equal(view.sourceState,'available');assert.deepEqual(view.loadedSkills,[]);
+  assert.equal(view.skillWarning,'回复策略暂不可用');assert.equal(f.requests.length,2,'拒绝迟到旧结果后，沿既有降级合同发起独立无Skill调用');
+ }finally{release.resolve();await pending.catch(()=>{});}
+});
+
 test('来源在模型在途时删除立即撤销资格，迟到响应不产生候选并清理受管文件',async t=>{
  const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts');const {ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
  const entered=Promise.withResolvers(),release=Promise.withResolvers(),f=await realFixture(t,{content:JSON.stringify({candidates:[{parts:['迟到的合成候选'],basis:[1]}]}),onRequest:async()=>{entered.resolve();await release.promise;}}),d=await f.discussions.newDiscussion(f.ids[0]),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());

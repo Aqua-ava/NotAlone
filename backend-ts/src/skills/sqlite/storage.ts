@@ -122,13 +122,13 @@ export function requireSkillGroupScope(tx: StorageTransaction,ownerId: string,re
     if(!tx.get('SELECT 1 FROM skill_group_package WHERE owner_id=? AND group_id=? AND package_id=?',[ownerId,group.groupId,anchor.packageId]))fail('skill_run_invalidated');
 }
 /** 与联系人／来源资格在同一短事务使用，避免末尾分离复验的交错窗口。 */
-export function requireSkillRun(tx: StorageTransaction, ownerId: string, revision: SkillRunRevision): void {
+export function requireSkillRun(tx: StorageTransaction, ownerId: string, revision: SkillRunRevision,options:{checkCurrentGroup?:boolean}={}): void {
   requireSkillOwner(tx,ownerId);
   const current=tx.all('SELECT id,head_revision FROM skill_package WHERE owner_id=?',[text(ownerId)]);
   if(current.length!==revision.packages.length || new Set(revision.packages.map(p=>p.id)).size!==current.length
     || current.some(row=>!revision.packages.some(p=>p.id===row.id && p.headRevision===row.head_revision)))fail('skill_run_invalidated');
   for(const anchor of revision.eligible)requireSkillRevision(tx,ownerId,anchor);
-  requireSkillGroupScope(tx,ownerId,revision);
+  if(options.checkCurrentGroup!==false)requireSkillGroupScope(tx,ownerId,revision);
 }
 export const skillActions: StorageAction[] = [
   {name:'skills.list',mode:'read',retryBusy:false,execute(tx,input){
