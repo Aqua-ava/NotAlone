@@ -6,7 +6,7 @@ const modify=(result,tool,transform)=>{const value=JSON.parse(result.blocks[0].a
 for(const side of ['new','old'])test(`关系核验仅引用${side==='new'?'新':'旧'}来源不得发布更新`,async t=>{
  const f=await adjudicationFixture(t);await seed(f);const normal=adjudicationSupplier({action:'update'});
  f.setRespond(async(request,input)=>{const result=await normal(request,input);if(request.purpose!=='relation_verification')return result;const payload=JSON.parse(request.user)[0],source=side==='new'?payload.sources.candidate:payload.sources.prior.flatMap(p=>p.sources);return modify(result,request.tool.name,value=>{value.results[0].evidence=source.map(s=>({message_id:s.message_id,quote:s.text}));});});
- await f.extract(['我现在改变该合成事项。'],{publish:true});const view=await f.read();assert.equal(view.memories.length,1);assert.equal(view.memories[0].current.versionNo,'1');assert.ok(view.candidates.some(c=>c.state==='pending'));assert.equal((await f.trace()).events.filter(e=>e.kind==='adjudication_result').at(-1).payload.reason,'memory_relation_pending');
+ await f.extract(['我现在改变该合成事项。'],{publish:true});const view=await f.read();assert.equal(view.memories.length,1);assert.equal(view.memories[0].current.versionNo,'1');assert.ok(view.candidates.some(c=>c.state==='pending'));assert.equal((await f.trace()).events.filter(e=>e.kind==='adjudication_result').at(-1).payload.reason,'memory_relation_evidence_incomplete');
 });
 
 test('独立关系仅引用候选来源即可自动采纳，不要求覆盖无关旧记忆原文',async t=>{
@@ -55,11 +55,11 @@ test('keep 声称补充关系时通过关系核验即可自动并存',async t=>{
 test('add 声称补充关系时仍待确认',async t=>{
  const f=await adjudicationFixture(t);await seed(f);
  const normal=adjudicationSupplier({action:'add',kind:'supplement'});
- f.setRespond(async(request,input)=>{const result=await normal(request,input);if(request.purpose!=='relation_verification')return result;const payload=JSON.parse(request.user)[0];return modify(result,request.tool.name,value=>{value.results[0].evidence=payload.sources.candidate.map(s=>({message_id:s.message_id,quote:s.text}));});});
+ f.setRespond(async(request,input)=>normal(request,input));
  await f.extract(['我新增一项补充性质的合成事项。'],{publish:true});
  const view=await f.read();assert.equal(view.memories.length,1);
  const latest=(await f.trace()).events.filter(e=>e.kind==='adjudication_result').at(-1);
- assert.equal(latest.payload.reason,'memory_relation_pending');
+ assert.equal(latest.payload.reason,'memory_relation_inconsistent');
 });
 
 test('合并核验仅引用新候选，缺任一选定父的来源时不得合并',async t=>{
