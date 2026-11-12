@@ -1,5 +1,5 @@
 import { Worker } from 'node:worker_threads';
-import {currentDiagnosticTrace,newTraceId} from '../../diagnostics/context.ts';
+import {currentDiagnosticTrace,diagnose,newTraceId} from '../../diagnostics/context.ts';
 import {publishStorageDiagnostics} from '../../diagnostics/storage-events.ts';
 import {statSync} from 'node:fs';
 import { sqliteActionTimeoutMs, sqliteMaintenanceTimeoutMs, sqliteOpenTimeoutMs } from './timeouts.ts';
@@ -169,9 +169,15 @@ export class SqliteStorage {
   private fail(cause?: StorageFailureDiagnostic['cause'], action?: string): void {
     if (this.failed) return;
     if (cause) {
-      const current = action ?? [...this.pending.values()].find(pending => pending.started)?.name;
+      const active = [...this.pending.values()].find(pending => pending.started);
+      const current = action ?? active?.name;
       this.diagnostic = Object.freeze({cause, ...(typeof current === 'string' && /^[A-Za-z][A-Za-z0-9_.-]{0,127}$/.test(current) ? {action: current} : {}),
         pendingCount: this.pending.size, queuedCount: [...this.pending.values()].filter(pending => !pending.started).length});
+      // 存储线程失效后本进程不会自行恢复，必须在日志中留下是哪个受控动作、持续多久；不含输入或业务内容。
+      diagnose({event: 'storage.failed', reasonCode: cause, count: this.pending.size,
+        ...(this.diagnostic.action ? {action: this.diagnostic.action} : {}),
+        ...(active?.startedAt !== undefined ? {durationMs: milliseconds(monotonicMs() - active.startedAt)} : {}),
+        ...(active ? {traceId: active.traceId} : {})});
     }
     this.failed = true;
     this.foregroundQueue.length = 0; this.backgroundQueue.length = 0; this.inFlight = undefined;

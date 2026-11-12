@@ -4,6 +4,8 @@ import {mkdtemp,realpath,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
+import {configureDiagnosticLog} from '../src/diagnostics/unified.ts';
+import {readDiagnosticRecords} from '../src/diagnostics/unified-log.mjs';
 
 async function fixture(t){
  const userData=await realpath(await mkdtemp(join(tmpdir(),'notalone-sqlite-timing-')));
@@ -127,4 +129,21 @@ test('维护动作仍有上限：超过自己的预算关闭Worker并保留诊�
  assert.ok(performance.now()-started>=350);assert.ok(performance.now()-started<2_500);
  assert.deepEqual(storage.failureDiagnostic,{cause:'action_timeout',action:'timing.maintain',pendingCount:1,queuedCount:0});
  assert.throws(()=>storage.verifyIdentity(),{code:'worker_failed'});
+});
+
+test('动作超时终止存储线程时留下受控动作名、持续时间与请求编号，不含输入内容',async t=>{
+ const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-storage-failed-diag-')));t.after(()=>rm(root,{recursive:true,force:true}));
+ const log=configureDiagnosticLog(root,{proc:'backend',development:true});t.after(()=>log.close());
+ const userData=await realpath(await mkdtemp(join(tmpdir(),'notalone-sqlite-timing-')));t.after(()=>rm(userData,{recursive:true,force:true}));
+ const storage=await SqliteStorage.open({userData,intent:'create',role:'test',actionTimeoutMs:300,registryModule:new URL('./fixtures/sqlite/timing-registry.mjs',import.meta.url).href});
+ t.after(()=>storage.close());
+ const results=await Promise.allSettled([storage.execute('timing.block',{milliseconds:5_000,sequence:'合成敏感输入'}),storage.execute('timing.block',{milliseconds:1,sequence:'不能执行'})]);
+ assert.ok(results.every(result=>result.status==='rejected'));
+ await log.flush();
+ const failed=(await readDiagnosticRecords(root)).filter(row=>row.event==='storage.failed');
+ assert.equal(failed.length,1,'一次失效只记录一次');
+ const [row]=failed;
+ assert.equal(row.reasonCode,'action_timeout');assert.equal(row.action,'timing.block');assert.equal(row.count,2);assert.equal(row.level,'error');
+ assert.ok(row.durationMs>=250&&row.durationMs<3_000,'持续时间应接近动作超时上限');
+ assert.doesNotMatch(JSON.stringify(row),/合成敏感输入|不能执行/);
 });

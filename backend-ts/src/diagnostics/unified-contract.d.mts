@@ -2,7 +2,7 @@ export type DiagnosticModule = 'contacts' | 'memory.management' | 'memory.proces
 export interface DiagnosticEvent {
   event: string; module?: DiagnosticModule; traceId?: string; interruptedTraceId?: string;
   reasonCode?: string; caller?: string; contactPrefix?: string; runId?: string; taskId?: string; batchId?: string;
-  durationMs?: number; count?: number; fromRevision?: number; toRevision?: number;
+  durationMs?: number; count?: number; action?: string; fromRevision?: number; toRevision?: number;
   fromState?: string; toState?: string; sqlFingerprint?: string;
   callId?: string; imageId?: string; originalBytes?: number; sentBytes?: number; imageCount?: number; requestBytes?: number;
   width?: number; height?: number; mimeType?: string; stage?: string; failureCategory?: string;
