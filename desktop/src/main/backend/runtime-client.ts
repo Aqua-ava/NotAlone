@@ -9,6 +9,9 @@ const shutdownTimeoutMs = 30_000;
 export class RetiredBackendRuntime extends BackendFailure {
   constructor() { super('backend_connection_failed'); }
 }
+// 后台进程仍在应答且数据库身份一致，但存储线程已被终止（动作超时或线程退出）。存储层设计上不自动重开，
+// 该进程不会自行恢复；与“旧实现／换库”不同，自有进程可以整体重启来恢复。
+export class BackendStorageUnavailable extends RetiredBackendRuntime {}
 
 // 方法和路径由主进程固定，既不跟随重定向，也不接收渲染层 URL。
 export class RuntimeClient {
@@ -85,8 +88,9 @@ export class RuntimeClient {
           || Object.values(owners).some(owner => typeof owner !== 'string' || !['typescript', 'typescript-migration-command', 'unavailable'].includes(owner))) throw new RetiredBackendRuntime();
         if (state === 'running' && this.expectedStorage) {
           const identity = (value as {storageIdentity?: {databaseId?: unknown; ownerId?: unknown; available?: unknown}}).storageIdentity;
-          if (!identity || identity.available !== true || identity.databaseId !== this.expectedStorage.databaseId
+          if (!identity || typeof identity.available !== 'boolean' || identity.databaseId !== this.expectedStorage.databaseId
             || identity.ownerId !== this.expectedStorage.ownerId) throw new RetiredBackendRuntime();
+          if (identity.available !== true) throw new BackendStorageUnavailable();
         }
       }
       const metadata = value as {shutdownFailed?: unknown; shutdownProtocol?: unknown};

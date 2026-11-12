@@ -2,7 +2,7 @@ import { rm } from 'node:fs/promises';
 import type { BackendState } from '../../shared/backend-bridge';
 import { BackendFailure, readConnection } from './connection';
 import { startupErrorCode } from '../../../../backend-ts/src/startup-diagnostics';
-import { RetiredBackendRuntime, RuntimeClient } from './runtime-client';
+import { BackendStorageUnavailable, RetiredBackendRuntime, RuntimeClient } from './runtime-client';
 import { loadBackendConfiguration, type BackendConfiguration } from './config';
 import { OwnedBackendProcess, type OwnedProcess } from './process';
 import { BackendRequestFailure, type JsonRequest } from './json-client';
@@ -42,6 +42,11 @@ export class BackendHost {
   recoveryDelaysMs = [2000, 4000, 8000, 15000];
   private recoveryAttempts = 0;
   private recoveryTimer: NodeJS.Timeout | undefined;
+  // 存储线程被终止后后台进程仍应答但不会自行恢复；自有进程整体重启一次即可恢复。
+  // 滚动窗口内次数有上限，避免数据库本身损坏时无限重启。
+  storageRestartLimit = 3;
+  storageRestartWindowMs = 10 * 60_000;
+  private storageRestarts: number[] = [];
   private readonly listeners = new Set<(state: BackendState) => void>();
   private readonly manualContacts = new Map<string, number>();
   private readonly unreleasedMediaPreviews = new Set<MediaPreviewConnection>();
@@ -214,7 +219,10 @@ export class BackendHost {
         // 已回收的失败启动不再占用下次用户明确重试；旧进程对象不参与新运行时状态。
         if (this.ownedChild === failedChild) this.ownedChild = undefined;
       }
-      if (!this.closing && generation === this.generation) this.publish({ phase: 'disconnected', errorCode: error instanceof BackendFailure ? error.code : 'backend_connection_failed', canRetryConnection: true });
+      if (!this.closing && generation === this.generation) {
+        this.publish({ phase: 'disconnected', errorCode: error instanceof BackendFailure ? error.code : 'backend_connection_failed', canRetryConnection: true });
+        this.restartForLostStorage(error);
+      }
     }).finally(() => { this.initialization = undefined; this.publishEligibility(); });
     return this.initialization;
   }
@@ -437,13 +445,15 @@ export class BackendHost {
   private async refresh(generation: number): Promise<void> {
     const client = this.target;
     if (!client || this.closing || generation !== this.generation || this.state.phase !== 'connected') return;
+    let lost: unknown;
     try {
       const state = await client.status();
       if (this.closing || generation !== this.generation || client !== this.target) return;
       if (state === 'running') { this.probeFailures = 0; this.schedulePoll(generation); return; }
     } catch (error) {
       if (this.closing || generation !== this.generation || client !== this.target) return;
-      // 单次超时只说明后台忙；自有进程已退出或认证被拒是明确失联，不再等待。
+      lost = error;
+      // 单次超时只说明后台忙；自有进程已退出、认证被拒或存储线程已终止是明确失联，不再等待。
       const definitive = error instanceof RetiredBackendRuntime || (this.ownedChild !== undefined && !this.ownedChild.isRunning());
       if (!definitive && ++this.probeFailures < this.probeFailureLimit) { this.schedulePoll(generation); return; }
     }
@@ -451,7 +461,24 @@ export class BackendHost {
     client.cancelPending();
     ++this.generation;
     this.publish({ phase: 'disconnected', errorCode: 'backend_connection_failed', canRetryConnection: true });
-    this.scheduleRecovery();
+    if (!this.restartForLostStorage(lost)) this.scheduleRecovery();
+  }
+
+  // 自有后台的存储线程已终止：接回同一进程只会再次得到“存储不可用”，因此整体重启（先停读、确认退出，再拉起新进程）。
+  // 非自有进程、退出中、已有重启或预算用尽时不处理，保留“重新检查并连接”的明确入口。
+  private restartForLostStorage(error: unknown): boolean {
+    if (!(error instanceof BackendStorageUnavailable) || !this.ownedChild?.isRunning()) return false;
+    if (this.quitting || this.closing || this.restarting || this.preparing || this.configurationSave) return false;
+    const now = Date.now();
+    this.storageRestarts = this.storageRestarts.filter((at) => now - at < this.storageRestartWindowMs);
+    if (this.storageRestarts.length >= this.storageRestartLimit) return false;
+    this.storageRestarts.push(now);
+    clearTimeout(this.pollTimer); clearTimeout(this.recoveryTimer); this.recoveryTimer = undefined;
+    // 存储已不可用，没有可冲刷的写入，优雅停读也无从落盘：放下认证目标，让收尾直接回收自有进程（SIGTERM→SIGKILL）。
+    this.target?.cancelPending();
+    this.target = undefined;
+    void this.restart().catch(() => {});
+    return true;
   }
 
   // 失联后的自动接回：只复用仍存活的原后台，进程消失时保留“重新检查并连接”的明确入口。

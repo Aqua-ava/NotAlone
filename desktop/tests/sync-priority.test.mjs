@@ -67,6 +67,8 @@ async function fixture(t) {
   await writeFile(info, `address=127.0.0.1:${server.address().port}\ntoken=synthetic_priority_token\npid=${process.pid}\n`, { mode: 0o600 });
   await writeFile(path.join(directory, 'backend-launch.json'), JSON.stringify({ backendInfoPath: info }));
   const backend = new ports.BackendHost(directory);
+  // 本文件验证“断开后的联系人与优先读取行为”，需要首次探测失败即断开，且不在测试内自动接回。
+  backend.probeFailureLimit = 1; backend.recoveryDelaysMs = [600_000];
   const contacts = ports.installContactSessionBridge({ handle() {}, publish() {} }, backend);
   const sync = new ports.SyncControlController(backend, contacts);
   const priority = new ports.SyncPriorityController(backend, contacts, sync);

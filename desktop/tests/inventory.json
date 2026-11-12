@@ -164,6 +164,7 @@
   "tests/incremental-sync-status.test.mjs",
   "tests/backend-shutdown-confirmation.test.mjs",
   "tests/backend-lost-connection.test.mjs",
+  "tests/backend-storage-loss.test.mjs",
   "tests/contact-session-deletion.test.mjs",
   "tests/history-clear-bridge.test.mjs"
  ],
