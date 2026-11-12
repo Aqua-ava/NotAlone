@@ -1212,6 +1212,33 @@ function entryIdentity(entry: L3ProfileEntry): string {
   });
 }
 
+/** 先核对完整回执，再按原条目位置选择发布；失败的新提案不撤销有效旧条目。 */
+export function selectProfilePublication(
+  proposal: L3ProfileDraft,
+  verification: ProfileVerification,
+  memories: readonly L2ScenarioMemory[],
+  budget: L2ScenarioBudget,
+  existing?: L3ProfileDocument | null,
+  changedScenarios: readonly L2ScenarioVersion[] = [],
+): {accepted:{index:number;entry:L3ProfileEntry}[]; rejected:number[]; retained:{index:number;entry:L3ProfileEntry}[]} {
+  parseProfileVerification(verification, proposal.entries, memories);
+  const supported=new Map(verification.results.map(result=>[result.entry_index,result.supported]));
+  const accepted=proposal.entries.flatMap((entry,index)=>supported.get(index)?[{index,entry}]:[]);
+  const rejected=proposal.entries.flatMap((_,index)=>supported.get(index)?[]:[index]);
+  if(!accepted.length)return {accepted,rejected,retained:[]};
+  const changed=new Set(changedScenarios.flatMap(scene=>scene.paragraphs.flatMap(paragraph=>paragraph.references.map(ref=>`${ref.memory_id}:${ref.revision}`))));
+  const acceptedRefs=new Set(accepted.flatMap(({entry})=>entry.references.map(ref=>`${ref.memory_id}:${ref.revision}`)));
+  const acceptedIdentities=new Set(accepted.map(({entry})=>entryIdentity(entry)));
+  const retained=(existing?.entries??[]).flatMap((entry,index)=>{
+    const refs=entry.references.map(ref=>`${ref.memory_id}:${ref.revision}`);
+    const preserve=!refs.some(ref=>changed.has(ref))&&!acceptedIdentities.has(entryIdentity(entry))||!refs.every(ref=>acceptedRefs.has(ref));
+    return preserve?[{index,entry}]:[];
+  });
+  const selected=validateProfile({entries:[...accepted.map(item=>item.entry),...retained.map(item=>item.entry)]},memories,budget);
+  validateIncrementalProfile(selected,existing,changedScenarios);
+  return {accepted,rejected,retained};
+}
+
 /** 变化场景之外的有效旧条目必须逐字保留；依据变化条目允许更新或合并。 */
 export function validateIncrementalProfile(
   proposal: L3ProfileDraft,

@@ -3,7 +3,7 @@ import {randomUUID} from 'node:crypto';
 import type {StorageAction,StorageLease,StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {readExtractionToolArguments} from '../../extraction/arguments.ts';
 import {DEFAULT_L2_SCENARIO_BUDGET,parseScenarioVerification,validateScenarioDocument,type L2ScenarioMemory,type L2ScenarioReference} from '../../scenarios/workspace.ts';
-import {parseProfileVerification,validateProfile,validateIncrementalProfile,type L3ProfileEntry} from '../../profiles/workspace.ts';
+import {selectProfilePublication,validateProfile,type ProfileVerification} from '../../profiles/workspace.ts';
 import {documentSources,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,withDocumentSourceQualifications} from './basis.ts';
 import {current} from './stages.ts';
 import {preconditions,revisions,task,taskView} from './actions.ts';
@@ -11,7 +11,7 @@ import {fail,textId} from '../qualification.ts';
 import {finishLaterStagePublication} from './later-schedule.ts';
 const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:(tx,input,lease)=>withDocumentSourceQualifications(tx,()=>execute(tx,input,lease))} as StorageAction);
 function verification(tx:StorageTransaction,ownerId:string,attemptId:string,eventId:string,tool:string):unknown {
- const e=tx.get(`SELECT e.payload FROM execution_event e JOIN model_call c ON c.owner_id=e.owner_id AND c.id=e.originated_call_id
+ const e=tx.get(`SELECT e.payload FROM execution_event e JOIN model_call c ON c.owner_id=e.owner_id AND c.id=coalesce(e.originated_call_id,e.reused_call_id)
   JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE e.owner_id=? AND e.id=? AND e.step_attempt_id=? AND e.kind='document_output' AND c.state='succeeded' AND o.commit_forbidden_at IS NULL`,[ownerId,eventId,attemptId]);
  if(!e)fail('document_verification_unbound');
  return readExtractionToolArguments(JSON.parse(String(e!.payload)).blocks,tool).value;
@@ -85,14 +85,20 @@ export const memoryDocumentsPublicationActions:StorageAction[]=[
   const ownerId=textId(i.ownerId),{attempt,t}=current(tx,ownerId,textId(i.attemptId),lease);if(attempt.kind!=='document_profile')fail('document_stage_invalid');
   const memories=frozenMemories(tx,ownerId,String(attempt.step_id)),old=members(tx,ownerId,t),previous=renderDocuments(tx,ownerId,old,memories).profile;
   const proposal=validateProfile({entries:i.entries},memories,DEFAULT_L2_SCENARIO_BUDGET),eventId=textId(i.verificationEventId);
-  const checked=verification(tx,ownerId,String(attempt.id),eventId,'ProfileVerificationOutput') as {results:{entry_index:number;supported:boolean}[]};
-  parseProfileVerification(checked,proposal.entries,memories);
-  if(checked.results.some(r=>!r.supported))fail('document_profile_unverified');
-  if(previous){const prior=new Set(renderDocuments(tx,ownerId,old,memories).scenarios.map(s=>s.version_id));validateIncrementalProfile(proposal,previous,sceneVersions(tx,ownerId,t,memories).filter(s=>!prior.has(s.version_id)));}
-  const oldProfile=old.find(v=>v.kind==='profile'),documentId=oldProfile?String(oldProfile.document_id):randomUUID();
+  const checked=verification(tx,ownerId,String(attempt.id),eventId,'ProfileVerificationOutput') as ProfileVerification;
+  const prior=new Set(renderDocuments(tx,ownerId,old,memories).scenarios.map(s=>s.version_id));
+  const selection=selectProfilePublication(proposal,checked,memories,DEFAULT_L2_SCENARIO_BUDGET,previous,
+    previous?sceneVersions(tx,ownerId,t,memories).filter(s=>!prior.has(s.version_id)):[]);
+  const eventNo=tx.get('SELECT coalesce(max(event_no),0)+1 AS n FROM execution_event WHERE owner_id=? AND step_attempt_id=?',[ownerId,attempt.id])!.n;
+  tx.run('INSERT INTO execution_event(owner_id,id,step_attempt_id,event_no,kind,payload,created_at) VALUES(?,?,?,?,?,?,?)',
+    [ownerId,randomUUID(),attempt.id,eventNo,'document_profile_selection',JSON.stringify({verificationEventId:eventId,
+      accepted:selection.accepted.map(item=>item.index),rejected:selection.rejected.map(index=>({index,code:'document_profile_entry_unsupported'})),
+      retained:selection.retained.map(item=>item.index)}),Date.now()]);
+  if(!selection.accepted.length){markSuccess(tx,ownerId,attempt);return true;}
+  const oldProfile=old.find(v=>v.kind==='profile'),documentId=oldProfile?String(oldProfile!.document_id):randomUUID();
   const v=makeVersion(tx,ownerId,t,String(attempt.id),'profile',documentId,'长期背景',null,null);
   if(oldProfile)replace(tx,ownerId,t,documentId,v.versionNo,String(oldProfile.version_identity));
-  for(const [index,entry] of proposal.entries.entries()){
+  for(const {index,entry} of selection.accepted){
    const n=index+1;tx.run("INSERT INTO document_block VALUES(?,?,?,?, 'profile',?)",[ownerId,documentId,v.versionNo,n,entry.section]);
    const kind=entry.kind==='contradiction'?'contradiction':entry.kind==='inference'?'inference':'fact';
    const refs=entry.references.map(ref=>memories.find(m=>m.memory_id===ref.memory_id&&m.revision===ref.revision));
@@ -100,6 +106,19 @@ export const memoryDocumentsPublicationActions:StorageAction[]=[
    tx.run('INSERT INTO document_statement(owner_id,document_id,version_no,block_no,statement_no,kind,body,rationale,left_claim,right_claim,resolution_state,resolution_text,profile_kind,section,temporal_status,uncertainty) VALUES(?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?)',
     [ownerId,documentId,v.versionNo,n,kind,entry.text,entry.basis,kind==='contradiction'?refs[0]!.text:null,kind==='contradiction'?refs[1]!.text:null,kind==='contradiction'?'unresolved':null,null,entry.kind,entry.section,entry.temporal_status,entry.uncertainty]);
    storeBasis(tx,ownerId,documentId,v.versionNo,n,1,eventId,entry.references,kind==='contradiction'?'contradiction':'support');
+  }
+  if(selection.retained.length){
+   if(!oldProfile)fail('document_profile_previous_missing');
+   const statements=tx.all('SELECT * FROM document_statement WHERE owner_id=? AND document_id=? AND version_no=? ORDER BY block_no,statement_no',[ownerId,oldProfile!.document_id,oldProfile!.version_no]);
+   for(const [offset,item] of selection.retained.entries()){
+    const row=statements[item.index];if(!row)fail('document_profile_previous_missing');
+    const n=proposal.entries.length+offset+1;
+    tx.run("INSERT INTO document_block VALUES(?,?,?,?, 'profile',?)",[ownerId,documentId,v.versionNo,n,row.section]);
+    tx.run('INSERT INTO document_statement(owner_id,document_id,version_no,block_no,statement_no,kind,body,rationale,left_claim,right_claim,resolution_state,resolution_text,profile_kind,section,temporal_status,uncertainty) VALUES(?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?)',
+     [ownerId,documentId,v.versionNo,n,row.kind,row.body,row.rationale,row.left_claim,row.right_claim,row.resolution_state,row.resolution_text,row.profile_kind,row.section,row.temporal_status,row.uncertainty]);
+    tx.run('INSERT INTO document_basis SELECT owner_id,?,?,?,1,basis_no,event_id,input_no,relation_kind,contradiction_side FROM document_basis WHERE owner_id=? AND document_id=? AND version_no=? AND block_no=? AND statement_no=?',
+     [documentId,v.versionNo,n,ownerId,oldProfile!.document_id,oldProfile!.version_no,row.block_no,row.statement_no]);
+   }
   }
   markSuccess(tx,ownerId,attempt);return true;
  }),
