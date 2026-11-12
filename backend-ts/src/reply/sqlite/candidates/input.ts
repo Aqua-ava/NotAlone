@@ -101,6 +101,12 @@ export function memorySourceTimeLabel(tx:StorageTransaction,ownerId:string,sourc
  const start=Math.min(...times),end=Math.max(...times),first=sourceDate.format(start),last=sourceDate.format(end),age=ageLabel(end,at);
  return `（聊天时间：${first===last?first:`${first} 至 ${last}`}${age?`，${age}`:''}${times.length<sources.length?'，部分来源时间未知':''}）`;
 }
+/** 帮我想想用于记忆检索的最近消息条数（含双方）。 */
+const RECENT_QUERY_MESSAGES=5;
+/** 工作区记忆检索词：帮我表达以草稿为准；帮我想想（及草稿为空时）只用最近几条消息原文，不拼入全部近期聊天、一次性要求或补充背景。 */
+export function workspaceRetrievalQuery(workspace:Pick<ReplyWorkspaceSnapshot,'action'|'draftText'>,messageBodies:readonly string[]):string{
+ return workspace.action==='express'&&workspace.draftText.trim()?workspace.draftText:messageBodies.slice(-RECENT_QUERY_MESSAGES).join('\n');
+}
 export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contextId:string;requestId:string;workspace?:ReplyWorkspaceSnapshot;queryText?:string;at?:number},reader:ReplyKnowledgeReader):FrozenReplyInput[]{
  requireDiscussion(tx,i);
  const frozenAt=typeof i.at==='number'&&Number.isSafeInteger(i.at)?i.at:Date.now();
@@ -108,12 +114,12 @@ export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contex
  const items:Omit<FrozenReplyInput,'itemNo'>[]=[];
  // 候选只冻结本次消息；entry 是旧讨论兼容槽，Skill 走独立受控读取，均不隐式成为候选材料，也不读取 discussion_entry 正文。
  // 召回查询只用不含时间的原话，避免日期数字混入词法检索。
- const messageQuery:string[]=[];
+ const messageQuery:string[]=[],messageBodies:string[]=[];
  for(const row of tx.all('SELECT x.*,m.text_body,m.sender_role,m.sent_at FROM reply_context_item x LEFT JOIN message m ON m.owner_id=x.owner_id AND m.id=x.message_id WHERE x.owner_id=? AND x.context_id=? ORDER BY x.item_no',[i.ownerId,i.contextId])){
   if(row.kind!=='message')continue;
   const sources:ReplySource[]=[{contactId:String(row.source_contact_id),messageId:String(row.message_id),recordId:String(row.record_id),acceptedRevision:row.accepted_revision as bigint}];
   const plain=`${row.sender_role==='owner'?'我':'对方'}：${row.text_body}`;
-  messageQuery.push(plain);
+  messageQuery.push(plain);messageBodies.push(String(row.text_body??''));
   items.push({kind:'message',identity:{contextItemNo:row.item_no},text:messageTimePrefix(row.sent_at)+plain,sources});
  }
  // 旧输入合同的文字兼容入口仍保留，但当前请求正文由本次具名请求直接冻结，不从 discussion_entry 回读。
@@ -127,7 +133,7 @@ export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contex
   if(w.instruction.trim())items.push({kind:'entry',identity:{workspaceItem:'instruction'},text:`本次一次性写作要求：\n${w.instruction}`,sources:[]});
   if(w.contextText.trim())items.push({kind:'entry',identity:{workspaceItem:'supplemental_context'},text:`本次补充背景（独立于想法/草稿，仅作用本次）：\n${w.contextText}`,sources:[]});
  }
- const query=i.workspace?[i.workspace.draftText,i.workspace.instruction,i.workspace.contextText,...messageQuery].filter(Boolean).join('\n'):[i.queryText??items.filter(item=>item.kind==='entry').at(-1)?.text??'',...messageQuery].join('\n');
+ const query=i.workspace?workspaceRetrievalQuery(i.workspace,messageBodies):[i.queryText??items.filter(item=>item.kind==='entry').at(-1)?.text??'',...messageQuery].join('\n');
  const related=includeRelatedData?selectReplyKnowledge(reader.read(tx,i),query):[];
  knowledge(tx,i,related,reader);
  for(const item of related){
