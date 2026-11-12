@@ -43,3 +43,20 @@ test('相关性相同时人工确认记忆优先，不因稳定ID排序被自动
   assert.equal(selected.length,scopeKind==='contact'?5:3);
  }
 });
+
+test('联系人与本人记忆不设字符上限，只受条数上限约束并保留完整正文',()=>{
+ const long=size=>'园艺'+'𠀀'.repeat(size-2);
+ const contacts=Array.from({length:6},(_,n)=>memory(`contact-${n}`,'contact','memory',long(700)));
+ const owners=Array.from({length:4},(_,n)=>memory(`owner-${n}`,'owner','memory',long(300)));
+ const selected=selectReplyKnowledge([...contacts,...owners],'园艺');
+ assert.deepEqual(selected.filter(item=>item.scopeKind==='contact'),contacts.slice(0,5));
+ assert.deepEqual(selected.filter(item=>item.scopeKind==='owner'),owners.slice(0,3));
+ for(const item of selected)assert.equal(Array.from(item.text).length,item.scopeKind==='contact'?700:300);
+});
+
+test('较长记忆不再挤掉后面的相关记忆',()=>{
+ const long=memory('contact-long','contact','memory','园艺'+'𠀀'.repeat(900));
+ const short=memory('contact-short','contact','memory','园艺短资料');
+ const selected=selectReplyKnowledge([long,short],'园艺');
+ assert.equal(selected.includes(long),true);assert.equal(selected.includes(short),true);
+});

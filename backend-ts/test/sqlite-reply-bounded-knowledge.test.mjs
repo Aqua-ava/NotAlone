@@ -138,7 +138,7 @@ test('正文追加后删除实际来源，取消迟到候选并清除新增输�
  assert.equal(f.requests.length,2);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('空suggest不以工作区提示模板召回记忆，完整条目超字符预算时不截断',async t=>{
+test('空suggest不以工作区提示模板召回记忆；联系人记忆不设字符预算，超长完整条目照常注入且不截断',async t=>{
  const f=await fixture(t,{synchronizeHistory:false,content:JSON.stringify({candidates:[{parts:['合成建议'],basis:[1]}]})}),contactId=f.ids[0];
  const management=new SqliteMemoryManagement(f.storage,f.owner);
  for(const [index,body] of ['工作区动作帮我想想关系背景已启用尚未确认立场。','园艺'+ '甲'.repeat(599),'园艺短条目完整结束。'].entries())await management.decide({requestKey:`query-${index}`,action:'manual',scope:{scopeKind:'contact',contactId},body});
@@ -147,7 +147,7 @@ test('空suggest不以工作区提示模板召回记忆，完整条目超字符�
  await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'',confirmedContact:true,workspace});
  assert.ok(!JSON.stringify(f.requests[0]).includes('记忆'));assert.ok(!JSON.stringify(f.requests[0]).includes('园艺短条目完整结束'));
  await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'园艺',confirmedContact:true});
- assert.ok(!JSON.stringify(f.requests[1]).includes('甲甲甲'));assert.match(JSON.stringify(f.requests[1]),/园艺短条目完整结束。/);
+ assert.ok(JSON.stringify(f.requests[1]).includes('园艺'+'甲'.repeat(599)));assert.match(JSON.stringify(f.requests[1]),/园艺短条目完整结束。/);
 });
 
 test('固定合成容量标定：15个场景、8条画像和两次大段正文仍受完整provider预算约束',async t=>{

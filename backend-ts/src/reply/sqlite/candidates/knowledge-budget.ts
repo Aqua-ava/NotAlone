@@ -1,12 +1,12 @@
 import {buildQueryTokens,RELEVANCE_THRESHOLD} from '../../../retrieval/retrieval-lexical.ts';
 import {rankMemories} from '../../../retrieval/retrieval-ranking.ts';
 import type {ReplyKnowledgeItem} from './contracts.ts';
-/** 完整条目预算；最终请求仍经过provider完整输入预算。 */
-export const RELATIONSHIP_BUDGET={contactCount:5,contactChars:600,ownerCount:3,ownerChars:240,candidateCount:3,candidateChars:300,directoryCount:12,directoryChars:1600,profileCount:8,profileChars:1200,documentReadCount:2,documentBlocks:3,documentChars:1800} as const;
+/** 完整条目预算：联系人／本人记忆只限条数、不设字符上限，未确认候选保留条数与字符上限；最终请求仍经过provider完整输入预算。 */
+export const RELATIONSHIP_BUDGET={contactCount:5,ownerCount:3,candidateCount:3,candidateChars:300,directoryCount:12,directoryChars:1600,profileCount:8,profileChars:1200,documentReadCount:2,documentBlocks:3,documentChars:1800} as const;
 export function selectReplyKnowledge(items:ReplyKnowledgeItem[],query:string):ReplyKnowledgeItem[]{
  const tokens=buildQueryTokens(query),selected:ReplyKnowledgeItem[]=[];
  for(const scopeKind of ['contact','owner','candidate'] as const){
-  let chars=0,count=0;const maxCount=scopeKind==='candidate'?RELATIONSHIP_BUDGET.candidateCount:scopeKind==='contact'?RELATIONSHIP_BUDGET.contactCount:RELATIONSHIP_BUDGET.ownerCount,maxChars=scopeKind==='candidate'?RELATIONSHIP_BUDGET.candidateChars:scopeKind==='contact'?RELATIONSHIP_BUDGET.contactChars:RELATIONSHIP_BUDGET.ownerChars;
+  let chars=0,count=0;const maxCount=scopeKind==='candidate'?RELATIONSHIP_BUDGET.candidateCount:scopeKind==='contact'?RELATIONSHIP_BUDGET.contactCount:RELATIONSHIP_BUDGET.ownerCount,maxChars=scopeKind==='candidate'?RELATIONSHIP_BUDGET.candidateChars:Infinity;
   const candidates=items.filter(item=>scopeKind==='candidate'?item.kind==='memory_candidate':item.kind==='memory'&&item.scopeKind===scopeKind);
   const ranked=candidates.length&&tokens.length?rankMemories(candidates.map(item=>({
    item,text:item.text,...(item.kind==='memory_candidate'?{candidate_id:item.id}:{memory_id:item.id}),
