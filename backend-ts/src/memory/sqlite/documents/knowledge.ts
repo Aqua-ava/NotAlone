@@ -1,7 +1,7 @@
 import {RELATIONSHIP_BUDGET} from '../../../reply/sqlite/candidates/knowledge-budget.ts';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {DiscussionScope} from '../../../reply/sqlite/contracts.ts';
-import type {ReplyKnowledgeItem,ReplyKnowledgeReader} from '../../../reply/sqlite/candidates/contracts.ts';
+import type {ReplyKnowledgeHeader,ReplyKnowledgeItem,ReplyKnowledgeReader} from '../../../reply/sqlite/candidates/contracts.ts';
 import {available} from '../management/qualification.ts';
 import {memoryKnowledgeReader,createMemoryKnowledgeReader} from '../management/knowledge.ts';
 import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
@@ -154,6 +154,10 @@ function combineKnowledge(memory:ReplyKnowledgeReader,documents:ReplyKnowledgeRe
  };
  return {
   read:(tx,scope)=>[...memory.read(tx,scope),...documents.read(tx,scope)],
+  // 记忆按需逐条核验，文档仍整体读取；回复据此避免每次全量核验全部记忆。
+  ...(memory.list&&memory.open?{list:(tx:StorageTransaction,scope:DiscussionScope)=>memory.list!(tx,scope),
+   open:(tx:StorageTransaction,scope:DiscussionScope,header:ReplyKnowledgeHeader)=>memory.open!(tx,scope,header),
+   readDocuments:(tx:StorageTransaction,scope:DiscussionScope)=>documents.read(tx,scope)}:{}),
   readDocument:(tx,scope,item,range)=>documents.readDocument!(tx,scope,item,range),
   requireCurrent:(tx,scope,item)=>reader(item).requireCurrent(tx,scope,item),
   requireFrozen:(tx,scope,item)=>{const selected=reader(item);(selected.requireFrozen??selected.requireCurrent)(tx,scope,item);},

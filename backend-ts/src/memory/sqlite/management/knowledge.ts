@@ -3,7 +3,7 @@ import {sourceVerificationState} from './evidence.ts';
 import {qualificationSources,mergeKnowledgeSources} from './dependencies.ts';
 import type {StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {DiscussionScope} from '../../../reply/sqlite/contracts.ts';
-import type {ReplyKnowledgeItem,ReplyKnowledgeReader,ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
+import type {ReplyKnowledgeHeader,ReplyKnowledgeItem,ReplyKnowledgeReader,ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 import {available,fail,requireAutomaticCandidate,requireSources,requireVersion} from './qualification.ts';
 import {memoryTimeEligibility} from './temporal.ts';
 /** identity_json保留额外修订；版本不变的保护操作也必须使旧快照失效。 */
@@ -29,8 +29,28 @@ function items(tx:StorageTransaction,scope:DiscussionScope,includeUnconfirmed:bo
  }
  return result;
 }
+/**
+ * 低成本头部：只读当前版本正文与范围，不核验来源、时间资格或依赖（那是逐条核验的主要成本）。
+ * 与 items 的过滤前置条件一致（范围可用、无进行中的删除），因此是 items 结果的超集且同序。
+ */
+function headers(tx:StorageTransaction,scope:DiscussionScope,includeUnconfirmed:boolean):ReplyKnowledgeHeader[]{
+ const ownerId=scope.ownerId;available(tx,ownerId,{scopeKind:'contact',contactId:scope.contactId});
+ if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed'",[ownerId]))return [];
+ const result:ReplyKnowledgeHeader[]=[];
+ for(const m of tx.all(`SELECT m.id,m.scope_kind,m.contact_id,v.version_no,v.body,v.adoption_mode FROM memory m JOIN memory_version v ON v.owner_id=m.owner_id AND v.memory_id=m.id AND v.version_no=m.current_version_no
+  WHERE m.owner_id=? AND m.state='active' AND (m.scope_kind='self' OR m.contact_id=?) ORDER BY m.id`,[ownerId,scope.contactId]))
+  result.push({kind:'memory',id:String(m.id),versionNo:m.version_no as bigint,scopeKind:m.scope_kind==='self'?'owner':'contact',contactId:m.contact_id as string|null,text:String(m.body),qualification:m.adoption_mode==='auto'?'auto':'confirmed'});
+ if(includeUnconfirmed)for(const c of tx.all(`SELECT id,scope_kind,contact_id,proposed_body FROM memory_candidate WHERE owner_id=? AND state='pending' AND (scope_kind='self' OR contact_id=?) ORDER BY id`,[ownerId,scope.contactId]))
+  result.push({kind:'memory_candidate',id:String(c.id),versionNo:1n,scopeKind:c.scope_kind==='self'?'owner':'contact',contactId:c.contact_id as string|null,text:String(c.proposed_body),qualification:'unconfirmed'});
+ return result;
+}
 export function createMemoryKnowledgeReader(options={includeUnconfirmed:false},sourceEligibility:SourceEligibility=assertSourceEligibility):ReplyKnowledgeReader{return {
  read:(tx,scope)=>items(tx,scope,options.includeUnconfirmed,sourceEligibility),
+ list:(tx,scope)=>headers(tx,scope,options.includeUnconfirmed),
+ open(tx,scope,header){
+  const found=items(tx,scope,options.includeUnconfirmed,sourceEligibility,{kind:header.kind,id:header.id})[0];
+  return found&&found.versionNo===header.versionNo&&found.text===header.text?found:null;
+ },
  requireCurrent(tx,scope,item){
   const found=items(tx,scope,options.includeUnconfirmed,sourceEligibility,item)[0];
   const revision=(item as MemoryKnowledgeItem).headRevision;

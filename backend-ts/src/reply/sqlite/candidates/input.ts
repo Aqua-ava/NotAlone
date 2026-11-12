@@ -1,4 +1,4 @@
-import {selectReplyKnowledge} from './knowledge-budget.ts';
+import {readReplyKnowledgeSource,selectReplyKnowledge} from './knowledge-budget.ts';
 import {readSemanticScores} from './memory-semantics.ts';
 import {requireSkillRun} from '../../../skills/sqlite/storage.ts';
 import type {SkillRunRevision} from '../../../skills/sqlite/contracts.ts';
@@ -136,7 +136,7 @@ export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contex
  }
  const query=i.workspace?workspaceRetrievalQuery(i.workspace,messageBodies):[i.queryText??items.filter(item=>item.kind==='entry').at(-1)?.text??'',...messageQuery].join('\n');
  // 事务外算好的语义得分仅在检索词与本次完全一致时采用，否则退回纯词法。
- const related=includeRelatedData?selectReplyKnowledge(reader.read(tx,i),query,i.workspace?readSemanticScores(i.semantic,query):undefined):[];
+ const related=includeRelatedData?selectReplyKnowledge(readReplyKnowledgeSource(tx,i,reader),query,i.workspace?readSemanticScores(i.semantic,query):undefined):[];
  knowledge(tx,i,related,reader);
  for(const item of related){
   // 记忆／候选末尾附来源聊天时间；文档是多来源整理，不在此处标注。

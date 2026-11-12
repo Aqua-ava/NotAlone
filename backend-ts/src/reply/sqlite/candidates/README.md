@@ -14,6 +14,8 @@
 
 `ReplyKnowledgeReader.read/requireCurrent` 在当前 SQLite 短事务运行，HTTP 不能传正文、版本资格、SQL 或 adapter。`ReplyKnowledgeItem` 固定真实版本、本人／联系人范围、publication 成员和精确 `capture_record.id` 来源；写者复验所选版本，候选域复验范围、来源与解释修订。生产 Worker 安装 `replyLocalKnowledgeReader` 组合正式记忆与文档；未确认参考默认关闭，不把提取原稿视为已采纳记忆。一次性工作区要求不读取或保存长期表达偏好。
 
+回复挑选记忆走按需核验：读者可选提供 `list`（低成本头部：当前版本正文、范围与资格类型，不核验来源，是 `read` 同类条目的超集且同序）、`open`（核验并物化单个头部，失效或版本已变返回 null）与 `readDocuments`。`selectReplyKnowledge` 只按正文词法／语义排序，入选前才对排在前面的条目调用 `open`，失效条目被跳过且不占条数或字符预算，结果与逐条核验后再排序完全一致；每次回复的核验次数只随入选条数增长，不随记忆池线性增长。原先 `freezeInput` 与 `memoryPool` 各自整池逐条核验来源（每条数十次查询），池大时单个存储动作会超过 15 秒执行上限而终止 Worker。未提供 `list/open` 的读者退化为整体 `read`。
+
 `reply_candidate_context` 留存冻结时本人／联系人的 memory/document 修订作为快照信息；资格复验以本次实际选择的版本、publication 成员及完整来源为准，未改变这些依赖的其他记忆新增、主题或概览发布不使本轮失效。`reply_candidate_input` 在原 context 类型之外保存真实候选输入，不重写已发布表。`reply_execution_input` 将快照绑定真实 `model_request` 事件，`event_source_planned` 保存这一类型化来源分支。展示依据仅引用本次 call 的实际输入，不能替代删除依赖闭包。
 
 候选执行每次重建独立受管DSH副本，以避免未选择的旧候选通过SDK历史进入下一请求。只有同讨论的真实selection可以显式携入；携入固定正文版本及原始输入来源。Skill仍由 Skill 域的官方 provider读取，assertCurrent/recordSelection/recordInput及写事务requireSkillRun沿讨论域真实合同，不以selected冒充loaded，不改变原目录。

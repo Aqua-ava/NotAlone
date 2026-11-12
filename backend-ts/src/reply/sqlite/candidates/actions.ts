@@ -7,6 +7,7 @@ import {discussionModelActions,dropSkillForCurrentCall} from '../model-actions.t
 import {requireDiscussion} from '../actions.ts';
 import {sanitizeDiscussionErrorCode} from '../failure.ts';
 import {emptyReplyKnowledge,type ReplyKnowledgeItem,type ReplyKnowledgeReader} from './contracts.ts';
+import {readReplyKnowledgeSource} from './knowledge-budget.ts';
 import {freezeReplyInput,requireReplyInput,requireSelection,replySourceContacts,selectionSourceContacts} from './input.ts';
 import {insertModelCandidates,parseReplyOutput,readParts,requireCandidate,versionView} from './versions.ts';
 export const INCOMPLETE_HISTORY_WARNING='历史覆盖不完整：本次使用当前可用资料，可能缺少重要语境。';
@@ -92,7 +93,7 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
   freeze.execute(tx,i,lease);return freezeReplyInput(tx,i,reader);
  }),
  // 供事务外计算语义得分：只返回当前合格的联系人／本人记忆正文与版本，不冻结、不写入。
- action('memoryPool','read',(tx,i)=>{requireAttempt(tx,i);return reader.read(tx,i).filter(item=>item.kind==='memory').map(item=>({id:item.id,versionNo:String(item.versionNo),text:item.text}));}),
+ action('memoryPool','read',(tx,i)=>{requireAttempt(tx,i);return readReplyKnowledgeSource(tx,i,reader).memories.filter(item=>item.kind==='memory').map(item=>({id:item.id,versionNo:String(item.versionNo),text:item.text}));}),
  action('sourceContacts','read',(tx,i)=>{requireAttempt(tx,i);return replySourceContacts(tx,i,reader);}),
  action('selectionSourceContacts','read',(tx,i)=>{requireDiscussion(tx,i);return selectionSourceContacts(tx,i);}),
  action('configuration','read',(tx,i)=>{

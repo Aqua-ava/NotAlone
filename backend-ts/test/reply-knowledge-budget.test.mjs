@@ -112,3 +112,35 @@ test('语义得分：事务外按余弦计算，模型失败返回 null，检索
  assert.equal(readSemanticScores({query:'想去徒步',scores:{a:'x'}},'想去徒步'),undefined);
  assert.equal(readSemanticScores(scored,'想去徒步').get(semanticKey('a','1')),1);
 });
+
+// 按需核验：排序只看正文，入选前才核验；失效条目被跳过且不占预算，也不扩大核验范围。
+function lazySource(items,{stale=new Set()}={}){
+ const opened=[];
+ return {opened,source:{memories:items,documents:[],open(header){opened.push(header.id);return stale.has(header.id)?null:header;}}};
+}
+
+test('按需核验：只核验可能入选的条目，结果与整体读取一致',()=>{
+ const contacts=Array.from({length:50},(_,n)=>memory(`contact-${String(n).padStart(2,'0')}`));
+ const {source,opened}=lazySource(contacts);
+ assert.deepEqual(selectReplyKnowledge(source,'园艺'),selectReplyKnowledge(contacts,'园艺'));
+ assert.deepEqual(opened,contacts.slice(0,5).map(item=>item.id),'50 条同分记忆只核验预算内的 5 条');
+});
+
+test('按需核验：失效条目被跳过，由排在后面的条目补位，且失效条目不占条数预算',()=>{
+ const contacts=Array.from({length:8},(_,n)=>memory(`contact-${n}`));
+ const {source,opened}=lazySource(contacts,{stale:new Set(['contact-1','contact-3'])});
+ const selected=selectReplyKnowledge(source,'园艺');
+ assert.deepEqual(selected.map(item=>item.id),['contact-0','contact-2','contact-4','contact-5','contact-6']);
+ assert.deepEqual(opened,['contact-0','contact-1','contact-2','contact-3','contact-4','contact-5','contact-6']);
+});
+
+test('按需核验：字符预算放不下的条目不核验，空查询与无关资料不核验任何条目',()=>{
+ const body=size=>'园艺'+'𠀀'.repeat(size-2);
+ const candidates=[memory('candidate-a','contact','memory_candidate',body(301)),memory('candidate-b','owner','memory_candidate',body(151))];
+ const {source,opened}=lazySource(candidates);
+ assert.deepEqual(selectReplyKnowledge(source,'园艺').map(item=>item.id),['candidate-b']);
+ assert.deepEqual(opened,['candidate-b'],'超出 300 字符预算的候选无需核验');
+ const idle=lazySource([memory('contact-x')]);
+ assert.deepEqual(selectReplyKnowledge(idle.source,''),[]);assert.deepEqual(selectReplyKnowledge(idle.source,'完全无关的话题'),[]);
+ assert.deepEqual(idle.opened,[]);
+});
