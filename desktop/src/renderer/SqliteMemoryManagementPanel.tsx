@@ -108,8 +108,8 @@ function MemoryHistory({memory,bridge,request,authority}:{memory:MemoryView;brid
   {open&&<>{busy&&<p role="status">正在读取本页历史…</p>}{error&&<p role="alert">{error}{readRetryable&&<button type="button" disabled={busy} onClick={()=>void load(cursor.current)}>重试读取历史资料</button>}</p>}
    {history&&<>{[...history.versions].reverse().map(version=><Version key={version.versionNo} version={version} current={version.versionNo===memory.current?.versionNo}/>)}
     <ol>{history.decisions.map(decision=><li key={decision.id}>{decision.actorKind==='system'?'系统自动决定':'用户决定'} · {({auto_accept:'自动采纳',auto_update:'自动更新',auto_retire:'已并入合并资料',auto_noop:'跳过重复资料',...successMessages}[decision.action]??decision.action)} · {decision.outcome==='redacted'?'敏感材料已清除':'已生效'}</li>)}</ol></>}
-   {snapshot&&<nav className="sqlite-memory-actions" aria-label="记忆历史分页"><button type="button" disabled={busy||!previous.length} onClick={()=>{const next=previous.at(-1);setPrevious(previous.slice(0,-1));cursor.current=next;void load(next);}}>较新的版本与决定</button>
-    <button type="button" disabled={busy||!snapshot.view.nextCursor} onClick={()=>{const next=snapshot.view.nextCursor!;setPrevious([...previous,cursor.current]);cursor.current=next;void load(next);}}>更早的版本与决定</button></nav>}
+   {snapshot&&(previous.length>0||snapshot.view.nextCursor)&&<nav className="sqlite-memory-actions" aria-label="记忆历史分页"><button type="button" disabled={busy||!previous.length} onClick={()=>{const next=previous.at(-1);setPrevious(previous.slice(0,-1));cursor.current=next;void load(next);}}>较新的记录</button>
+    <button type="button" disabled={busy||!snapshot.view.nextCursor} onClick={()=>{const next=snapshot.view.nextCursor!;setPrevious([...previous,cursor.current]);cursor.current=next;void load(next);}}>更早的记录</button></nav>}
   </>}
  </details>;
 }

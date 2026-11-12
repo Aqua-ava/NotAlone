@@ -80,7 +80,7 @@ test('首次记忆只展示当前内容，来源和修改可达且更多保留�
   await card.getByRole('button',{name:'撤销首次自动采纳'}).click();await page.getByRole('status').filter({hasText:'已撤销首次自动采纳'}).waitFor();
   assert.equal(await card.getByText(version.body,{exact:true}).count(),0);
   const request=calls.find(call=>call.method==='decide').input.request;assert.equal(request.expectedVersionNo,'1');assert.equal(request.expectedHeadRevision,'1');assert.equal(request.memoryId,id);
- });
+ },false,contact,async()=>{},{withHistory:true});
 });
 test('首次记忆保护变更后仍可查看更新历史，未改变正文版本',{timeout:20000},async t=>{
  const version={mergeParents:[],mergeParentCount:0,verificationState:'verified',timeStatus:'eligible',versionNo:'1',body:'合成资料：喜欢安静的阅读环境。',formationKind:'adoption',adoptionMode:'auto',previousVersionNo:null,restoredFromVersionNo:null,contentState:'present',provenanceState:'eligible',decisionId:id,sources:[source],contributingContactIds:[contact]};
@@ -565,8 +565,8 @@ test('记忆列表与展开历史逐页替换，未展开不读取旧版，末�
   await page.getByRole('button',{name:'下一页记忆',exact:true}).click();await page.getByText('第41条合成记忆',{exact:true}).waitFor();assert.equal(await page.getByRole('article',{name:'正式记忆',exact:true}).count(),5);assert.equal(await page.getByRole('button',{name:'下一页记忆',exact:true}).isDisabled(),true);
   await page.getByRole('button',{name:'上一页记忆',exact:true}).click();await page.getByText('第21条合成记忆',{exact:true}).waitFor();
   await openMemoryMore(page.getByRole('article',{name:'正式记忆'}).first());assert.equal(calls.filter(call=>call.method==='readHistory').length,0);await page.getByText('更新历史',{exact:true}).first().click();await page.getByText('历史版本43',{exact:true}).waitFor();assert.equal(calls.filter(call=>call.method==='readHistory').length,1);assert.equal(await page.locator('.memory-version-history[open] .sqlite-memory-body').count(),20);
-  await page.getByRole('button',{name:'更早的版本与决定',exact:true}).click();await page.getByText('历史版本23',{exact:true}).waitFor();assert.equal(await page.getByText('历史版本43',{exact:true}).count(),0);
-  await page.getByRole('button',{name:'更早的版本与决定',exact:true}).click();await page.getByText('历史版本1',{exact:true}).waitFor();assert.equal(await page.locator('.memory-version-history[open] .sqlite-memory-body').count(),3);assert.equal(await page.getByRole('button',{name:'更早的版本与决定',exact:true}).isDisabled(),true);
+  await page.getByRole('button',{name:'更早的记录',exact:true}).click();await page.getByText('历史版本23',{exact:true}).waitFor();assert.equal(await page.getByText('历史版本43',{exact:true}).count(),0);
+  await page.getByRole('button',{name:'更早的记录',exact:true}).click();await page.getByText('历史版本1',{exact:true}).waitFor();assert.equal(await page.locator('.memory-version-history[open] .sqlite-memory-body').count(),3);assert.equal(await page.getByRole('button',{name:'更早的记录',exact:true}).isDisabled(),true);
   for(const stylesheet of ['style.css','memory.css'])await page.addStyleTag({content:await readFile(new URL(`../src/renderer/${stylesheet}`,import.meta.url),'utf8')});
   await page.setViewportSize({width:680,height:850});await page.locator('.sqlite-memory-management').screenshot({path:'/tmp/notalone-management-pagination-preview.png'});
   await page.evaluate(()=>window.invalidate());await page.getByRole('alert').filter({hasText:'已撤下正文'}).waitFor();assert.equal(await page.getByText('历史版本1',{exact:true}).count(),0);
@@ -587,7 +587,7 @@ for(const redactedCurrent of [false,true])test(`同头版本列表刷新重新�
  const old={...current,versionNo:'1',body:'仅旧来源支持的合成历史',previousVersionNo:null};
  const cleared={...old,body:null,contentState:'redacted',provenanceState:'invalidated',sources:[]};
  let refreshed=false,historyReads=0,releaseLate;const cursors=[],late=new Promise(resolve=>{releaseLate=resolve;});
- const historical=version=>({connectionGeneration:1,scope:{scopeKind:'contact',contactId:contact},view:{memoryId:id,headRevision:'2',revision:'a'.repeat(64),versions:[version],decisions:[],nextCursor:'older'}});
+ const historical=version=>({connectionGeneration:1,scope:{scopeKind:'contact',contactId:contact},view:{memoryId:id,headRevision:'2',revision:'a'.repeat(64),versions:[version],decisions:[],nextCursor:refreshed?null:'older'}});
  await panel(t,async(method,input)=>{
   if(method==='readHistory'){cursors.push(input.cursor);historyReads++;if(historyReads===2)return late;return historical(refreshed?cleared:old);}
   const latest=refreshed&&redactedCurrent?{...current,body:null,contentState:'redacted',provenanceState:'invalidated',sources:[]}:current;
@@ -595,14 +595,14 @@ for(const redactedCurrent of [false,true])test(`同头版本列表刷新重新�
  },async page=>{
   await page.getByText(current.body,{exact:true}).waitFor();assert.equal(historyReads,0);
   await openMemoryMore(page);await page.getByText('更新历史',{exact:true}).click();await page.getByText(old.body,{exact:true}).waitFor();
-  await page.getByRole('button',{name:'更早的版本与决定',exact:true}).click();
+  await page.getByRole('button',{name:'更早的记录',exact:true}).click();
   refreshed=true;await refreshVisible(page);
   await page.getByText('正文已清除或来源已失效。',{exact:true}).waitFor();
   assert.equal(await page.getByText(old.body,{exact:true}).count(),0);assert.equal(historyReads,3);assert.deepEqual(cursors,[undefined,'older','older']);
   releaseLate(historical(old));await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   assert.equal(await page.getByText(old.body,{exact:true}).count(),0);assert.equal(await page.getByText(current.body,{exact:true}).count(),redactedCurrent?0:1);
   await page.getByText('更新历史',{exact:true}).click();await refreshVisible(page);await page.evaluate(()=>new Promise(requestAnimationFrame));assert.equal(historyReads,3,'折叠历史不因列表刷新请求旧版');
-  await page.getByText('更新历史',{exact:true}).click();await page.getByText('正文已清除或来源已失效。',{exact:true}).waitFor();assert.equal(historyReads,4);
+  await page.getByText('更新历史',{exact:true}).click();await page.getByText('正文已清除或来源已失效。',{exact:true}).waitFor();assert.equal(historyReads,4);assert.equal(await page.getByRole('navigation',{name:'记忆历史分页'}).count(),0,'没有前后页时不展示分页');
   await page.getByText('更多',{exact:true}).click();await refreshVisible(page);await page.evaluate(()=>new Promise(requestAnimationFrame));assert.equal(historyReads,4,'收起更多后不再读取已展开的历史');assert.equal(await page.getByText('正文已清除或来源已失效。',{exact:true}).count(),0);
  },false,contact,async()=>{},{withHistory:true});
 });
