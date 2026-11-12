@@ -184,6 +184,20 @@ test('旧请求重送返回原尝试回执，不能把后来的失败解释为�
  const replay=await f.media.extract(f.contact,m.id,{requestKey:'original-operation',goal:'extract'});assert.equal(replay.requestedAttempt.attemptId,first.latestAttempt.attemptId);assert.equal(replay.requestedAttempt.state,'completed');assert.equal(replay.latestAttempt.state,'failed');
 });
 
+test('启动时的已存副本核验不阻塞宿主初始化，完成后仍撤下缺失副本',async t=>{
+ const {readdir,unlink}=await import('node:fs/promises');
+ const f=await fixture(t,imageAdapter());const m=f.messages.find(m=>m.kind==='image');await f.media.extract(f.contact,m.id,{requestKey:'startup-sweep',goal:'extract'});
+ const names=await readdir(join(f.root,'managed','media'));await unlink(join(f.root,'managed','media',names[0]));
+ const reopened=new SqliteMediaService({storage:f.storage,contacts:f.contacts,history:f.history,userData:f.root,adapters:[imageAdapter()]});t.after(()=>reopened.close());
+ let release;const gate=new Promise(resolve=>{release=resolve;});const verify=reopened.files.verify.bind(reopened.files);
+ reopened.files.verify=async(...args)=>{await gate;return verify(...args);};
+ // 核验被挂起时 initialize 仍须完成；握手不再随媒体体积变慢。
+ await reopened.initialize();
+ let settled=false;void reopened.startupVerification.then(()=>{settled=true;});await new Promise(resolve=>setImmediate(resolve));assert.equal(settled,false);
+ release();await reopened.startupVerification;
+ const view=await reopened.read(f.contact,m.id);assert.equal(view.state,'invalidated');assert.deepEqual(view.files,[]);
+});
+
 test('语音播放件不能脱离合法原始SILK父件单独发布',async t=>{
  const {createHash}=await import('node:crypto');const adapter={version:'synthetic-no-source-v1',supports:kind=>kind==='voice',execute:async context=>{const bytes=Buffer.from('synthetic-wav');await context.save({role:'audio_playback',expectedBytes:bytes.length,expectedSha256:createHash('sha256').update(bytes).digest('hex'),bytes:(async function*(){yield bytes;})(),validate:async()=>({format:'synthetic-wav',mimeType:'audio/wav',containerValid:true,viewable:false,playable:true})});return {association:{protocol:'media-association-v1',profileId:'synthetic-voice',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-wave'}};}};
  const f=await fixture(t,adapter);const m=f.messages.find(m=>m.kind==='voice');await assert.rejects(f.media.extract(f.contact,m.id,{requestKey:'without-silk',goal:'extract'}),{code:'media_audio_source_required'});assert.deepEqual((await f.media.read(f.contact,m.id)).files,[]);

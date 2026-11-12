@@ -34,12 +34,19 @@ export class SqliteMediaService {
  private track<T>(operation:Promise<T>):Promise<T>{this.operations.add(operation);const settled=()=>{this.operations.delete(operation);};void operation.then(settled,settled);return operation;}
  initialize():Promise<void>{return this.track(this.start());}
  private async start():Promise<void>{await this.options.storage.execute('media.recover',{ownerId:this.ownerId});await this.resumeCleanup();
-  const current=await this.options.storage.execute<{contactId:string;messageId:string;fileId:string}[]>('media.currentFiles',{ownerId:this.ownerId});
+  // 已存副本的全量哈希核验随媒体量线性增长，不能挡住宿主握手；改为握手前即开始、后台串行执行。
+  // 查看与提取路径本就逐文件再核验，所以未扫到的副本不会被当作已验证内容暴露。
+  this.startupVerification=this.track(this.verifyStoredFiles());
+ }
+ /** 启动后台核验的完成信号；只供测试与诊断等待，不参与启动门禁，也不会拒绝。 */
+ startupVerification:Promise<void>=Promise.resolve();
+ private async verifyStoredFiles():Promise<void>{
+  let current:{contactId:string;messageId:string;fileId:string}[];
+  try{current=await this.options.storage.execute<{contactId:string;messageId:string;fileId:string}[]>('media.currentFiles',{ownerId:this.ownerId});}catch{return;}
   for(const file of current){
-   try{await this.verifyFile(file.contactId,file.messageId,file.fileId);}catch(error){
-    // 个别副本的旧来源失效只阻止该副本访问，不阻断其他联系人的宿主启动。
-    if(!(error instanceof StorageFailure)||error.code!=='history_source_not_available')throw error;
-   }
+   if(this.closed)return;
+   // 个别副本核验失败（来源失效、读写异常）只留待用户访问时重试，不中断其余副本，也不影响宿主可用性。
+   try{await this.verifyFile(file.contactId,file.messageId,file.fileId);}catch{/* 访问时会再次核验并给出明确错误。 */}
   }
  }
  private available():void{if(this.closed)throw new StorageFailure('media_closed');}
