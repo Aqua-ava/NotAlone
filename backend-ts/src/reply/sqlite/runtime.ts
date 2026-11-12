@@ -58,7 +58,11 @@ export class SqliteDiscussionRuntime {
   const held:HeldCopy={copy,controller:new AbortController(),workDone:done.promise,finish:done.resolve,busy:false,release:async()=>{}};
   held.release=this.holders.register({key:`runtime:${copy.id}`,ownerId:this.ownerId,contactId:copy.contactId,generation:copy.dataGeneration,close:async()=>{
    held.controller.abort();await held.workDone;await this.fault?.('beforeClose');await held.driver?.close();held.driver=undefined;
-   await this.fault?.('afterClose');await this.capture(held.copy);this.held.delete(copy.id);
+   await this.fault?.('afterClose');
+   // 停读已排空且存储句柄永久失效时保留原副本供下次核验；死库无法接收最终清单。
+   // 删除排空及健康存储仍必须完整登记，官方driver关闭失败也始终阻断释放。
+   if(!this.stopping||!this.storage.failureDiagnostic)await this.capture(held.copy);
+   this.held.delete(copy.id);
   }});
   this.held.set(copy.id,held);return held;
  }
@@ -148,6 +152,10 @@ export class SqliteDiscussionRuntime {
  }
  close():Promise<void>{
   this.stopping=true;for(const held of this.held.values())held.controller.abort();
-  return this.closing??=(async()=>{await Promise.allSettled([...this.pending]);await Promise.all([...this.held.values()].map(held=>held.release()));})().catch(error=>{this.closing=undefined;throw error;});
+  return this.closing??=(async()=>{
+   await Promise.allSettled([...this.pending]);
+   const closed=await Promise.allSettled([...this.held.values()].map(held=>held.release()));
+   const failed=closed.find((result):result is PromiseRejectedResult=>result.status==='rejected');if(failed)throw failed.reason;
+  })().catch(error=>{this.closing=undefined;throw error;});
  }
 }
