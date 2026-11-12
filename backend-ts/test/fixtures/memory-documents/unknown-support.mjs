@@ -10,8 +10,8 @@ import {ManagedFiles} from '../../../src/storage/sqlite/deletion/managed-files.t
 import {SqliteMemoryManagement} from '../../../src/memory/sqlite/management/service.ts';
 
 /** 固定真实提取、核验、裁决、存储与Worker；仅模型物理边界替身。 */
-export async function unknownFixture(t,{unknownScope='contact',unknownStage='document_scene',beforeCall,mutateExtraction,beforeDocuments,adjudicationRespond}={}) {
- const f=await fixture(t,{registryModule:new URL('./unknown-registry.mjs',import.meta.url).href}),a=f.saved[0].contact_id,b=f.saved[1].contact_id,holders=new ActiveHolders(),calls=[],receipts=[];let extraction,unknownSent=false;
+export async function unknownFixture(t,{unknownScope='contact',unknownStage='document_scene',beforeCall,mutateExtraction,beforeDocuments,adjudicationRespond,registryModule=new URL('./unknown-registry.mjs',import.meta.url).href}={}) {
+ const f=await fixture(t,{registryModule}),a=f.saved[0].contact_id,b=f.saved[1].contact_id,holders=new ActiveHolders(),calls=[],receipts=[];let extraction,unknownSent=false;
  const normal=supplier();
  const extractionPort=modelPort(()=>extraction.accounting,async(request,input)=>{
   if(request.purpose!=='extraction')return normal.respond(request,input);

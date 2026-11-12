@@ -1036,6 +1036,22 @@ export function parseProfileVerification(
   if (seen.size !== entries.length) invalid('l3_profile_verification_invalid');
 }
 
+/** 在线核验与已知回执重放共用相同的工具包络及逐字证据合同。 */
+export function parseProfileVerificationOutput(blocks:readonly ContentBlock[],entries:readonly L3ProfileEntry[],memories:readonly L2ScenarioMemory[]):ProfileVerification {
+  const calls=readToolCalls(blocks);
+  if(calls.length!==1||calls[0]!.name!==verificationTool.name)invalid('l3_profile_verification_invalid','必须只调用一次ProfileVerificationOutput');
+  let value:unknown;
+  try{value=JSON.parse(calls[0]!.arguments);}catch{invalid('l3_profile_verification_invalid','ProfileVerificationOutput参数不是有效JSON');}
+  parseProfileVerification(value,entries,memories);return value as ProfileVerification;
+}
+export const MAX_PROFILE_VERIFICATION_ATTEMPTS=2;
+export function isRetryableProfileVerificationError(error:unknown):error is L2ScenarioError {
+  return error instanceof L2ScenarioError&&[
+    'l3_profile_quote_invalid','l3_profile_quote_memory_invalid','l3_profile_quote_proposal_invalid',
+    'l3_profile_quote_wrapper_invalid','l3_profile_verification_invalid',
+  ].includes(error.code);
+}
+
 export async function verifyProfileProposal(options: {
   entries: readonly L3ProfileEntry[];
   memories: readonly L2ScenarioMemory[];
@@ -1061,7 +1077,7 @@ export async function verifyProfileProposal(options: {
   if (!Number.isSafeInteger(options.remainingCalls) || options.remainingCalls < 0) {
     invalid('l3_profile_verification_budget_invalid');
   }
-  const maxAttempts = Math.min(2, options.remainingCalls);
+  const maxAttempts = Math.min(MAX_PROFILE_VERIFICATION_ATTEMPTS, options.remainingCalls);
   if (!maxAttempts) {
     throw new L3ProfileVerificationError('l3_profile_verification_budget_exhausted', []);
   }
@@ -1131,12 +1147,7 @@ export async function verifyProfileProposal(options: {
     let value: unknown;
     let failure: L2ScenarioError | null = null;
     try {
-      if (calls.length !== 1 || calls[0]!.name !== verificationTool.name) {
-        invalid('l3_profile_verification_invalid', '必须只调用一次ProfileVerificationOutput');
-      }
-      try { value = JSON.parse(calls[0]!.arguments); }
-      catch { invalid('l3_profile_verification_invalid', 'ProfileVerificationOutput参数不是有效JSON'); }
-      parseProfileVerification(value, options.entries, options.memories);
+      value = parseProfileVerificationOutput(response.blocks, options.entries, options.memories);
     } catch (error) {
       if (!(error instanceof L2ScenarioError)) throw error;
       failure = error;
@@ -1157,13 +1168,7 @@ export async function verifyProfileProposal(options: {
       error_code:failure.code,
       receipt_id:response.receipt_id ?? null,
     });
-    const retryable = [
-      'l3_profile_quote_invalid',
-      'l3_profile_quote_memory_invalid',
-      'l3_profile_quote_proposal_invalid',
-      'l3_profile_quote_wrapper_invalid',
-      'l3_profile_verification_invalid',
-    ].includes(failure.code);
+    const retryable = isRetryableProfileVerificationError(failure);
     if (attempt >= maxAttempts || !retryable) {
       throw new L3ProfileVerificationError(failure.code, attempts, errorMessage(failure));
     }

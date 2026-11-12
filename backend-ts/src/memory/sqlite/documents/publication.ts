@@ -4,7 +4,7 @@ import type {StorageAction,StorageLease,StorageRow,StorageTransaction} from '../
 import {readExtractionToolArguments} from '../../extraction/arguments.ts';
 import {DEFAULT_L2_SCENARIO_BUDGET,L2ScenarioError,parseScenarioVerification,validateScenarioDocument,type L2ScenarioMemory,type L2ScenarioReference} from '../../scenarios/workspace.ts';
 import {selectProfilePublication,validateProfile,type ProfileVerification} from '../../profiles/workspace.ts';
-import {documentSources,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,withDocumentSourceQualifications} from './basis.ts';
+import {documentSources,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,withDocumentSourceQualifications,withSourceMemo} from './basis.ts';
 import {current} from './stages.ts';
 import {preconditions,revisions,task,taskView} from './actions.ts';
 import {fail,textId} from '../qualification.ts';
@@ -61,6 +61,47 @@ function sceneVersions(tx:StorageTransaction,ownerId:string,t:StorageRow,memorie
   JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE r.owner_id=? AND s.task_id=? AND s.kind='document_scene'`,[ownerId,t.id]);
  const retained=old.filter(o=>o.kind==='scene'&&!replacements.some(r=>r.old_document_id===o.document_id&&r.old_version_no===o.version_no));
  return renderDocuments(tx,ownerId,[...retained,...staged],memories).scenarios;
+}
+/** 发布前的全部来源与集合核验；局部读取缓存随返回销毁，不能跨入后续SQL写入。 */
+function validatedPublication(tx:StorageTransaction,ownerId:string,taskId:string):{t:StorageRow;all:StorageRow[]}{
+ return withSourceMemo(()=>{
+  const t=task(tx,ownerId,taskId);preconditions(tx,ownerId,t,{allowPaused:true});const r=revisions(tx,ownerId,t);
+  if(t.document_basis_state!=='frozen'||r.memory_revision!==t.accepted_memory_revision||r.document_revision!==t.accepted_document_revision||r.current_publication_id!==t.accepted_publication_id)fail('document_publication_conflict');
+  const stages=tx.all("SELECT kind,state FROM processing_step WHERE owner_id=? AND task_id=? AND kind IN ('document_scene','document_profile')",[ownerId,t.id]);
+  const mode=laterStage(tx,ownerId,t),completed=stages.every(s=>s.state==='succeeded'||s.state==='not_applicable');
+  if(!completed||(mode==='document_scene'?(stages.length!==1||stages[0]?.kind!=='document_scene'||stages[0]?.state!=='succeeded'):
+   mode==='document_profile'?(stages.length!==1||stages[0]?.kind!=='document_profile'||stages[0]?.state!=='succeeded'):stages.length!==2))fail('document_stage_incomplete');
+  const prior=members(tx,ownerId,t),created=tx.all(`SELECT v.*,d.kind,d.scope_kind,d.contact_id,d.state FROM memory_document_version v JOIN memory_document d ON d.owner_id=v.owner_id AND d.id=v.document_id JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE v.owner_id=? AND s.task_id=? AND s.kind IN ('document_scene','document_profile') AND s.state='succeeded' AND a.state='succeeded' AND v.content_state='present'`,[ownerId,t.id]);
+  const replacements=tx.all(`SELECT r.old_document_id,r.old_version_no FROM document_replacement r JOIN memory_document_version v ON v.owner_id=r.owner_id AND v.document_id=r.document_id AND v.version_no=r.version_no JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE r.owner_id=? AND s.task_id=?`,[ownerId,t.id]);
+  const all=[...prior.filter(v=>!replacements.some(x=>x.old_document_id===v.document_id&&x.old_version_no===v.version_no)),...created];
+  if(new Set(all.map(v=>String(v.document_id))).size!==all.length||all.filter(v=>v.kind==='profile').length>1)fail('document_member_conflict');
+  const sourceCache=new Map<string,ReturnType<typeof documentSources>>();
+  for(const m of all){if(m.scope_kind!==t.scope_kind||m.contact_id!==t.contact_id||m.state!=='active')fail('document_scope_stale');documentSources(tx,ownerId,String(m.document_id),m.version_no as bigint,new Set(),sourceCache);}
+  return {t,all};
+ });
+}
+/** 结清前先收集全部已核验的完成依据；缓存不得延续到processing_item或run状态写入。 */
+function validatedSettlement(tx:StorageTransaction,ownerId:string,runId:string):{itemId:string;completedAttempt:string}[]|null {
+ return withSourceMemo(()=>{
+  const run=tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);
+  if(!run||run.pause_requested_at!==null||['revoked','failed','paused'].includes(String(run.state)))return null;
+  const tasks=tx.all('SELECT * FROM processing_task WHERE owner_id=? AND run_id=?',[ownerId,runId]);if(!tasks.length)return null;
+  for(const t of tasks){
+   preconditions(tx,ownerId,t);const view=taskView(tx,ownerId,String(t.id));if(view.outcome!=='completed')return null;
+   const p=tx.get("SELECT * FROM document_publication WHERE owner_id=? AND basis_task_id=? AND availability='available'",[ownerId,t.id]);
+   const r=revisions(tx,ownerId,t);if(!p||r.current_publication_id!==p.id)return null;
+   publicationMembers(tx,ownerId,String(p.id),String(t.scope_kind),t.contact_id as string|null);
+  }
+  return tx.all("SELECT * FROM run_input WHERE owner_id=? AND run_id=? AND role='target'",[ownerId,runId]).map(target=>{
+   const attempt=tx.get(`SELECT s.successful_attempt_id FROM step_input i JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
+    WHERE i.owner_id=? AND i.run_id=? AND i.run_input_no=? AND s.kind='extraction_verification' AND s.state='succeeded' AND t.scope_kind='contact' AND t.contact_id=? LIMIT 1`,[ownerId,runId,target.input_no,target.source_contact_id]);
+   const reused=attempt?null:tx.get(`SELECT a.id AS successful_attempt_id FROM document_extraction_reuse reuse JOIN step_attempt a ON a.owner_id=reuse.owner_id AND a.id=reuse.source_attempt_id AND a.state='succeeded'
+    JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id AND s.kind='extraction_verification' AND s.state='succeeded' AND s.successful_attempt_id=a.id
+    WHERE reuse.owner_id=? AND reuse.run_id=? AND reuse.input_no=?`,[ownerId,runId,target.input_no]);
+   const completedAttempt=attempt?.successful_attempt_id??reused?.successful_attempt_id;if(!completedAttempt)fail('document_completion_input_missing');
+   return {itemId:String(target.item_id),completedAttempt:String(completedAttempt)};
+  });
+ });
 }
 export const memoryDocumentsPublicationActions:StorageAction[]=[
  act('saveScene','write',(tx,i,lease)=>{
@@ -124,18 +165,7 @@ export const memoryDocumentsPublicationActions:StorageAction[]=[
   markSuccess(tx,ownerId,attempt);return true;
  }),
  act('publish','write',(tx,i)=>{
-  const ownerId=textId(i.ownerId),t=task(tx,ownerId,textId(i.taskId));preconditions(tx,ownerId,t,{allowPaused:true});
-  const r=revisions(tx,ownerId,t);
-  if(t.document_basis_state!=='frozen'||r.memory_revision!==t.accepted_memory_revision||r.document_revision!==t.accepted_document_revision||r.current_publication_id!==t.accepted_publication_id)fail('document_publication_conflict');
-  const stages=tx.all("SELECT kind,state FROM processing_step WHERE owner_id=? AND task_id=? AND kind IN ('document_scene','document_profile')",[ownerId,t.id]);
-  const mode=laterStage(tx,ownerId,t),completed=stages.every(s=>s.state==='succeeded'||s.state==='not_applicable');
-  if(!completed||(mode==='document_scene'?(stages.length!==1||stages[0]?.kind!=='document_scene'||stages[0]?.state!=='succeeded'):
-   mode==='document_profile'?(stages.length!==1||stages[0]?.kind!=='document_profile'||stages[0]?.state!=='succeeded'):stages.length!==2))fail('document_stage_incomplete');
-  const prior=members(tx,ownerId,t),created=tx.all(`SELECT v.*,d.kind,d.scope_kind,d.contact_id,d.state FROM memory_document_version v JOIN memory_document d ON d.owner_id=v.owner_id AND d.id=v.document_id JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE v.owner_id=? AND s.task_id=? AND s.kind IN ('document_scene','document_profile') AND s.state='succeeded' AND a.state='succeeded' AND v.content_state='present'`,[ownerId,t.id]);
-  const replacements=tx.all(`SELECT r.old_document_id,r.old_version_no FROM document_replacement r JOIN memory_document_version v ON v.owner_id=r.owner_id AND v.document_id=r.document_id AND v.version_no=r.version_no JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE r.owner_id=? AND s.task_id=?`,[ownerId,t.id]);
-  const all=[...prior.filter(v=>!replacements.some(x=>x.old_document_id===v.document_id&&x.old_version_no===v.version_no)),...created];
-  if(new Set(all.map(v=>String(v.document_id))).size!==all.length||all.filter(v=>v.kind==='profile').length>1)fail('document_member_conflict');
-  for(const m of all){if(m.scope_kind!==t.scope_kind||m.contact_id!==t.contact_id||m.state!=='active')fail('document_scope_stale');documentSources(tx,ownerId,String(m.document_id),m.version_no as bigint);}
+  const ownerId=textId(i.ownerId),{t,all}=validatedPublication(tx,ownerId,textId(i.taskId));
   const publicationId=randomUUID(),number=tx.get('SELECT coalesce(max(publication_no),0)+1 AS n FROM document_publication WHERE owner_id=? AND scope_kind=? AND contact_id IS ?',[ownerId,t.scope_kind,t.contact_id])!.n;
   tx.run("INSERT INTO document_publication VALUES(?,?,?,?,?,?,'documents-v1',?,?,?,?,'available')",[ownerId,publicationId,t.scope_kind,t.contact_id,number,t.run_id,t.id,Date.now(),all.length,publicationDigest(all.map(v=>({documentId:String(v.document_id),versionNo:v.version_no as bigint})))]);
   for(const m of all)tx.run('INSERT INTO publication_member VALUES(?,?,?,?)',[ownerId,publicationId,m.document_id,m.version_no]);
@@ -145,25 +175,8 @@ export const memoryDocumentsPublicationActions:StorageAction[]=[
   finishLaterStagePublication(tx,ownerId,String(t.id),typeof i.now==='number'?i.now:Date.now());return taskView(tx,ownerId,String(t.id));
  }),
  act('settle','write',(tx,i)=>{
-  const ownerId=textId(i.ownerId),runId=textId(i.runId),run=tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);
-  if(!run||run.pause_requested_at!==null||['revoked','failed','paused'].includes(String(run.state)))return false;
-  const tasks=tx.all('SELECT * FROM processing_task WHERE owner_id=? AND run_id=?',[ownerId,runId]);
-  if(!tasks.length)return false;
-  for(const t of tasks){
-   preconditions(tx,ownerId,t);const view=taskView(tx,ownerId,String(t.id));if(view.outcome!=='completed')return false;
-   const p=tx.get("SELECT * FROM document_publication WHERE owner_id=? AND basis_task_id=? AND availability='available'",[ownerId,t.id]);
-   const r=revisions(tx,ownerId,t);if(!p||r.current_publication_id!==p.id)return false;
-   publicationMembers(tx,ownerId,String(p.id),String(t.scope_kind),t.contact_id as string|null);
-  }
-  for(const target of tx.all("SELECT * FROM run_input WHERE owner_id=? AND run_id=? AND role='target'",[ownerId,runId])){
-   const attempt=tx.get(`SELECT s.successful_attempt_id FROM step_input i JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
-    WHERE i.owner_id=? AND i.run_id=? AND i.run_input_no=? AND s.kind='extraction_verification' AND s.state='succeeded' AND t.scope_kind='contact' AND t.contact_id=? LIMIT 1`,[ownerId,runId,target.input_no,target.source_contact_id]);
-   const reused=attempt?null:tx.get(`SELECT a.id AS successful_attempt_id FROM document_extraction_reuse reuse JOIN step_attempt a ON a.owner_id=reuse.owner_id AND a.id=reuse.source_attempt_id AND a.state='succeeded'
-    JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id AND s.kind='extraction_verification' AND s.state='succeeded' AND s.successful_attempt_id=a.id
-    WHERE reuse.owner_id=? AND reuse.run_id=? AND reuse.input_no=?`,[ownerId,runId,target.input_no]);
-   const completedAttempt=attempt?.successful_attempt_id??reused?.successful_attempt_id;if(!completedAttempt)fail('document_completion_input_missing');
-   tx.run("UPDATE processing_item SET pipeline_state='completed',completion_attempt_id=? WHERE owner_id=? AND id=? AND extraction_state='succeeded' AND pipeline_state='pending'",[completedAttempt!,ownerId,target.item_id]);
-  }
+  const ownerId=textId(i.ownerId),runId=textId(i.runId),targets=validatedSettlement(tx,ownerId,runId);if(!targets)return false;
+  for(const target of targets)tx.run("UPDATE processing_item SET pipeline_state='completed',completion_attempt_id=? WHERE owner_id=? AND id=? AND extraction_state='succeeded' AND pipeline_state='pending'",[target.completedAttempt,ownerId,target.itemId]);
   tx.run("UPDATE processing_run SET state='completed' WHERE owner_id=? AND id=? AND state<>'revoked'",[ownerId,runId]);return true;
  }),
 ];

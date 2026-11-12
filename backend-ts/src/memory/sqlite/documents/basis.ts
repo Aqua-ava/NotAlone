@@ -101,7 +101,7 @@ function inspectDocument(tx:StorageTransaction,ownerId:string,documentId:string,
   JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
   WHERE v.owner_id=? AND v.document_id=? AND v.version_no=?`,[ownerId,documentId,versionNo]);
  if(!v||v.content_state!=='present'||v.step_state!=='succeeded'||v.attempt_state!=='succeeded')fail('document_unavailable');
- const sources:ReplySource[]=[];let stale=false;const events=tx.all(`SELECT e.*,o.input_seal FROM execution_event e JOIN model_call c ON c.owner_id=e.owner_id AND c.id=e.originated_call_id
+ const sources:ReplySource[]=[];let stale=false;const events=tx.all(`SELECT e.*,o.input_seal FROM execution_event e JOIN model_call c ON c.owner_id=e.owner_id AND c.id=coalesce(e.originated_call_id,e.reused_call_id)
   JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE e.owner_id=? AND e.step_attempt_id=? AND e.kind='document_input' ORDER BY e.event_no`,[ownerId,v!.produced_attempt_id]);
  if(!events.length)fail('document_input_incomplete');
  const compare=(eventId:string,expected:DocumentActualInput[])=>{
@@ -112,7 +112,7 @@ function inspectDocument(tx:StorageTransaction,ownerId:string,documentId:string,
   const request=JSON.parse(String(event.payload));
   if(sha256(JSON.stringify(request))!==event.input_seal)fail('document_input_incomplete');
   const actual=documentActualInputs(tx,ownerId,String(v!.step_id),request);compare(String(event.id),actual);
-  const outputs=tx.all("SELECT id FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND kind='document_output' AND originated_call_id=?",[ownerId,v!.produced_attempt_id,event.originated_call_id]);
+  const outputs=tx.all("SELECT id FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND kind='document_output' AND coalesce(originated_call_id,reused_call_id)=?",[ownerId,v!.produced_attempt_id,event.originated_call_id??event.reused_call_id]);
   if(outputs.length!==1)fail('document_input_incomplete');compare(String(outputs[0]!.id),actual);
   const inspected=inspectActualInputs(tx,ownerId,actual,visited,cache,sourceEligibility),expectedSources=inspected.sources,keys=expectedSources.map(source=>JSON.stringify([source.contactId,source.recordId])).sort();
   stale||=inspected.stale;
@@ -129,7 +129,7 @@ function inspectDocument(tx:StorageTransaction,ownerId:string,documentId:string,
   WHERE b.owner_id=? AND b.document_id=? AND b.version_no=? AND NOT EXISTS(
    SELECT 1 FROM execution_event input JOIN execution_input x ON x.owner_id=input.owner_id AND x.event_id=input.id
    WHERE input.owner_id=output.owner_id AND input.step_attempt_id=output.step_attempt_id AND input.kind='document_input'
-    AND input.originated_call_id=output.originated_call_id AND x.planned_step_id=used.planned_step_id AND x.planned_input_no=used.planned_input_no) LIMIT 1`,[ownerId,documentId,versionNo]);
+    AND coalesce(input.originated_call_id,input.reused_call_id)=coalesce(output.originated_call_id,output.reused_call_id) AND x.planned_step_id=used.planned_step_id AND x.planned_input_no=used.planned_input_no) LIMIT 1`,[ownerId,documentId,versionNo]);
  if(missing)fail('document_basis_missing');
  const result={sources:mergeKnowledgeSources(sources),stale};visited.delete(key);cache.set(key,result);return result;
 }
