@@ -36,7 +36,7 @@ export function CandidateMaterialGroups({items}:{items:Material[]}){
 export function CandidateBasis({version}:{version:SqliteCandidateVersion}){
  const inherited=version.basis.some(item=>item.verification==='inherited_unverified');
  return <details className="candidate-basis" key={`${version.candidateId}:${version.versionNo}`}><summary><span>依据</span><small> · 引用 {version.basis.length} 项</small></summary>
-  <p className="candidate-reference-note">这条说法引用的资料；完整输入及 Skill 见「本次参考」。</p>
+  <p className="candidate-reference-note">这条说法引用的资料；其他资料及 Skill 见「本次参考」。</p>
   {inherited&&<p className="candidate-reference-note" role="status">继承原依据，手工修改尚未重新核验</p>}
   <CandidateMaterialGroups items={version.basis}/>
  </details>;
@@ -48,6 +48,7 @@ export function SqliteCandidateReferences({bridge,scope,request,disabled,onUnava
  const [inputs,setInputs]=useState<SqliteCandidateInputPage|null>(null),[skills,setSkills]=useState<SqliteCandidateSkillPage|null>(null);
  const [loading,setLoading]=useState<'inputs'|'skills'|null>(null),[error,setError]=useState('');
  const generation=useRef(0),mounted=useRef(false);
+ const referenceItems=inputs?.items.filter(item=>item.kind!=='message')??[];
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;++generation.current;};},[]);
  async function load(kind:'inputs'|'skills',offset=0){
   if(disabled||loading)return;
@@ -76,14 +77,14 @@ export function SqliteCandidateReferences({bridge,scope,request,disabled,onUnava
   else{++generation.current;setLoading(null);setInputs(null);setSkills(null);setSkillOpen(false);setError('');}
  }
  return <details className="candidate-references" open={open} onToggle={event=>toggle(event.currentTarget.open)}>
-  <summary><span>本次参考</span><small> · 原文、资料与 Skill</small></summary>
+  <summary><span>本次参考</span><small> · 资料与 Skill</small></summary>
   {open&&<>
-   <p className="candidate-reference-note">实际送入这次生成的材料，按原文展示；每条说法引用的部分见各自「依据」。</p>
-   {inputs?.recorded===false&&<p role="status">这次实际输入记录缺失，无法还原完整参考。</p>}
+   <p className="candidate-reference-note">本次输入与资料按类别展示，Skill 单独查看；引用的聊天原文见各自「依据」。</p>
+   {inputs?.recorded===false&&<p role="status">这次实际输入记录缺失，无法还原参考资料。</p>}
    {inputs?.recorded&&<>
-    <CandidateMaterialGroups items={inputs.items}/>
+    <CandidateMaterialGroups items={referenceItems}/>
     {!inputs.total&&<p className="candidate-reference-note">本次未记录资料输入。</p>}
-    <p className="candidate-reference-note">已显示 {inputs.items.length} / {inputs.total} 项输入</p>
+    <p className="candidate-reference-note">已显示 {referenceItems.length} 项参考资料</p>
     {inputs.nextOffset!==null&&<button className="button" disabled={disabled||!!loading} onClick={()=>void load('inputs',inputs.nextOffset!)}>加载更多输入</button>}
    </>}
    {loading&&<p role="status" className="candidate-reference-note">正在读取{loading==='inputs'?'实际输入':' Skill 正文'}…</p>}

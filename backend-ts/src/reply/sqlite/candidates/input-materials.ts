@@ -10,7 +10,7 @@ export const INPUT_MATERIAL_PAGE_MAX_BYTES=1_500_000;
 const pageItemLimit=50;
 function fail(code:string):never{throw new StorageFailure(code);}
 
-/** 完整材料按真实提交调用读取；候选引用只是这些材料中的子集。 */
+/** 共享参考按真实提交调用读取；聊天原文只随候选引用展示。 */
 export function readInputMaterials(tx:StorageTransaction,i:DiscussionScope&{requestId:string;offset:number},reader:ReplyKnowledgeReader){
  requireDiscussion(tx,i);
  if(typeof i.requestId!=='string'||!/^[a-f0-9-]{36}$/.test(i.requestId)||!Number.isSafeInteger(i.offset)||i.offset<0||i.offset>1_000_000)fail('reply_input_invalid');
@@ -21,7 +21,7 @@ export function readInputMaterials(tx:StorageTransaction,i:DiscussionScope&{requ
   WHERE v.owner_id=? AND v.candidate_id=? AND v.version_no=1 AND v.origin_kind='model'`,[i.ownerId,candidate.id]);
  const event=call&&tx.get("SELECT id FROM execution_event WHERE owner_id=? AND reply_attempt_id=? AND originated_call_id=? AND kind='model_request' ORDER BY event_no DESC LIMIT 1",[i.ownerId,call.reply_attempt_id,call.call_id]);
  if(!event)return {recorded:false,items:[],nextOffset:null,total:0};
- const where='FROM reply_execution_input e JOIN reply_candidate_input x ON x.owner_id=e.owner_id AND x.context_id=e.context_id AND x.item_no=e.item_no WHERE e.owner_id=? AND e.event_id=? AND e.context_id=?';
+ const where="FROM reply_execution_input e JOIN reply_candidate_input x ON x.owner_id=e.owner_id AND x.context_id=e.context_id AND x.item_no=e.item_no WHERE e.owner_id=? AND e.event_id=? AND e.context_id=? AND x.kind<>'message'";
  const bindings=[i.ownerId,event.id,call!.reply_context_id];
  const total=Number(tx.get(`SELECT COUNT(*) n ${where}`,bindings)!.n),rows=tx.all(`SELECT x.item_no,x.kind,x.text_body,x.identity_json ${where} ORDER BY x.item_no LIMIT ? OFFSET ?`,[...bindings,pageItemLimit,i.offset]);
  const items:ReturnType<typeof materialView>[]= [];let bytes=0;
