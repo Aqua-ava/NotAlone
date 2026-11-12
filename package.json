@@ -16,6 +16,7 @@
     "test:backend": "pnpm --dir backend-ts test",
     "test:desktop": "pnpm --dir desktop test",
     "build": "pnpm --dir desktop run build",
-    "diag": "node desktop/scripts/diag.mjs"
+    "diag": "node desktop/scripts/diag.mjs",
+    "prepare:embedding": "node scripts/prepare_memory_embedding.mjs"
   }
 }

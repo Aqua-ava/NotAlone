@@ -39,10 +39,11 @@ export class SetupController {
     this.publish({ phase: 'loading', ownerReady: false, credentialsConfigured: false, errorCode: undefined });
     try {
       const { data } = await this.backend.requestJson({ method: 'GET', path: '/api/setup/status', maxResponseBytes: 4096 });
-      const status = data as { initialized?: unknown; owner_configured?: unknown; credentials_configured?: unknown; runtime_owner_configured?: unknown; official_deepseek_defaults?: unknown; recoverable_owner?: unknown; deepseek_base_url?: unknown; runtime_configuration_pending?: unknown; runtime_configuration_environment_override?: unknown };
+      const status = data as { initialized?: unknown; owner_configured?: unknown; credentials_configured?: unknown; runtime_owner_configured?: unknown; official_deepseek_defaults?: unknown; recoverable_owner?: unknown; deepseek_base_url?: unknown; runtime_configuration_pending?: unknown; semantic_model_ready?: unknown; runtime_configuration_environment_override?: unknown };
       if (!status || typeof status.initialized !== 'boolean' || typeof status.owner_configured !== 'boolean'
         || typeof status.credentials_configured !== 'boolean' || typeof status.runtime_owner_configured !== 'boolean'
         || status.runtime_configuration_pending !== undefined && typeof status.runtime_configuration_pending !== 'boolean'
+        || status.semantic_model_ready !== undefined && typeof status.semantic_model_ready !== 'boolean'
         || status.runtime_configuration_environment_override !== undefined && typeof status.runtime_configuration_environment_override !== 'boolean') throw new Error();
       const ownerReady = status.runtime_owner_configured;
       if (!this.isCurrent(operation)) return;
@@ -53,6 +54,7 @@ export class SetupController {
       }
       this.publish({ phase: pending ? 'restart-failed' : ownerReady ? 'ready' : status.owner_configured ? 'identity-unbound' : 'needs-owner',
         ownerReady, configurationPending: pending, errorCode: pending ? status.runtime_configuration_environment_override === true ? 'configuration-environment-override' : 'reload-failed' : undefined, recoverableOwner: !ownerReady && status.recoverable_owner === true, credentialsConfigured: status.credentials_configured,
+        semanticModelReady: typeof status.semantic_model_ready === 'boolean' ? status.semantic_model_ready : undefined,
         baseUrl: isAiServiceBaseUrl(status.deepseek_base_url) ? status.deepseek_base_url : undefined,
         officialDefaults: typeof status.official_deepseek_defaults === 'boolean' ? status.official_deepseek_defaults : undefined });
     } catch { if (this.isCurrent(operation)) this.publish({ phase: 'failed', ownerReady: false, credentialsConfigured: false }); }

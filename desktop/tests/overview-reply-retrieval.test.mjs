@@ -181,6 +181,33 @@ test('原话补查计费明确标为估算，不把字符估计冒充供应商�
   assert(html.includes('3/2048 估算 token'));
 });
 
+test('回执按自身记录的条数上限和不限字数读取，不再写死旧的 5/600 与 3/240', async () => {
+  const f = await generatedFixture((f) => {
+    const receipt = contactRetrieval(f);
+    Object.assign(receipt.budgets.contact_memory, { limit: 4, char_limit: null });
+    Object.assign(receipt.budgets.owner_memory, { limit: 2, char_limit: null });
+    f.records.evidence.retrieval = receipt;
+  });
+  await f.bridge.loadEvidence(f.selection);
+  assert.equal((await f.bridge.getEvidenceState()).phase, 'ready');
+  const html = await renderEvidence(f);
+  assert(html.includes('联系人资料：1/4 条'));
+  assert(html.includes('字符（不限字数）'));
+  assert(html.includes('本人资料：0/2 条，0 字符（不限字数）'));
+});
+
+test('回执记录的字数上限小于实际用量时视为无效并撤下旧依据', async () => {
+  const f = await generatedFixture((f) => {
+    const receipt = contactRetrieval(f);
+    receipt.budgets.contact_memory.char_limit = 1;
+    f.records.evidence.retrieval = receipt;
+  });
+  await f.bridge.loadEvidence(f.selection);
+  const evidence = await f.bridge.getEvidenceState();
+  assert.equal(evidence.phase, 'failed');
+  assert.deepEqual(evidence.items, []);
+});
+
 test('预算回执与实际使用资料矛盾时撤下旧依据，保留用户合法候选编辑', async () => {
   for (const field of ['used_count', 'used_chars']) {
     const f = await generatedFixture((f) => { f.records.evidence.retrieval = contactRetrieval(f); });

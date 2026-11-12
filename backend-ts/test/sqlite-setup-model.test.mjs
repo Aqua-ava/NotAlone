@@ -20,7 +20,7 @@ test('SQLite 正式宿主提供模型设置，保存后重开生效且不泄露�
   return {host,request};
  }
  let running=await start();let result=await running.request('/api/setup/status');
- assert.equal(result.status,200);assert.equal(result.data.initialized,true);assert.equal(result.data.owner_configured,true);assert.equal(result.data.credentials_configured,false);assert.equal(result.data.runtime_owner_configured,true);
+ assert.equal(result.status,200);assert.equal(result.data.initialized,true);assert.equal(result.data.owner_configured,true);assert.equal(result.data.credentials_configured,false);assert.equal(result.data.runtime_owner_configured,true);assert.equal(typeof result.data.semantic_model_ready,'boolean');
  result=await running.request('/api/setup/official-deepseek',{api_key:'synthetic-rejected-key',confirm_official_defaults:false});assert.equal(result.status,400);
  result=await running.request('/api/setup/credentials',{provider:'deepseek',api_key:'synthetic-test-key',extra:true});assert.equal(result.status,400);
  result=await running.request('/api/setup/credentials',{provider:'deepseek',api_key:'synthetic-test-key'});assert.equal(result.status,200);assert.equal(result.data.configured,true);assert.doesNotMatch(JSON.stringify(result),/synthetic-test-key/);

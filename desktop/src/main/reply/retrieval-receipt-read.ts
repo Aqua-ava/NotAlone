@@ -25,13 +25,16 @@ function overview(value: unknown): ReplyOverviewRevision | null {
   if (!revision(item.projection_revision) || !integer(item.memory_revision)) throw invalid();
   return { projectionRevision: item.projection_revision, memoryRevision: item.memory_revision };
 }
-function memoryBudget(value: unknown, limit: number, charLimit: number, evidence: ReplyEvidenceItem[], kind: ReplyEvidenceItem['kind']): ReplyMemoryRetrievalBudget {
+// 条数与字数上限以回执自己的记录为准，只核对与实际用量自洽：旧回执为 5/600、3/240，不限字数的新回执 char_limit 为 null。
+function memoryBudget(value: unknown, evidence: ReplyEvidenceItem[], kind: ReplyEvidenceItem['kind']): ReplyMemoryRetrievalBudget {
   const item = fields(value, ['limit', 'char_limit', 'used_count', 'used_chars', 'exhausted']);
   const used = evidence.filter((entry) => entry.kind === kind);
-  if (item.limit !== limit || item.char_limit !== charLimit || !integer(item.used_count) || item.used_count > limit
-    || !integer(item.used_chars) || item.used_chars > charLimit || typeof item.exhausted !== 'boolean'
+  const charLimit = item.char_limit;
+  if (!integer(item.limit, 1) || item.limit > 20 || !(charLimit === null || integer(charLimit, 1))
+    || !integer(item.used_count) || item.used_count > item.limit
+    || !integer(item.used_chars) || (charLimit !== null && item.used_chars > charLimit) || typeof item.exhausted !== 'boolean'
     || item.used_count !== used.length || item.used_chars !== used.reduce((total, entry) => total + Array.from(entry.text).length, 0)) throw invalid();
-  return { limit, charLimit, usedCount: item.used_count, usedChars: item.used_chars, exhausted: item.exhausted };
+  return { limit: item.limit, charLimit, usedCount: item.used_count, usedChars: item.used_chars, exhausted: item.exhausted };
 }
 
 // 回执只描述本次实际使用的底层证据；缺失的旧过程不从当前概览或其他联系人补填。
@@ -73,9 +76,9 @@ export function readReplyRetrieval(value: unknown, evidence: ReplyEvidenceItem[]
     || typeof source.exhausted !== 'boolean') throw invalid();
   return { version: 1, retrieverVersion: 'lexical-v1', status: item.status as ReplyRetrievalReceipt['status'],
     overviewRevisions, queries, budgets: {
-      contactMemory: memoryBudget(budgets.contact_memory, 5, 600, evidence, 'confirmed_memory'),
-      ownerMemory: memoryBudget(budgets.owner_memory, 3, 240, evidence, 'owner_memory'),
-      pendingCandidate: memoryBudget(budgets.pending_candidate, 3, 300, evidence, 'pending_candidate'), sourceMessages: {
+      contactMemory: memoryBudget(budgets.contact_memory, evidence, 'confirmed_memory'),
+      ownerMemory: memoryBudget(budgets.owner_memory, evidence, 'owner_memory'),
+      pendingCandidate: memoryBudget(budgets.pending_candidate, evidence, 'pending_candidate'), sourceMessages: {
         callLimit: 3, itemLimit: 16, tokenLimit: 2048, usedCalls: source.used_calls,
         usedCount: source.used_count, usedTokens: source.used_tokens, exhausted: source.exhausted } } };
 }

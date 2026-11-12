@@ -148,6 +148,17 @@ test('状态地址兼容旧后端与非法旧配置，公开状态不会携带UR
  }
 });
 
+test('状态读取本机语义模型是否就绪；旧后端不返回时保持未知，类型错误视为状态不可用',async()=>{
+ const read=async value=>{
+  const controller=new SetupController({onStateChanged(){},getConnectionGeneration:()=>1,async requestJson(){return {data:{initialized:true,owner_configured:true,runtime_owner_configured:true,credentials_configured:true,...value}};}});
+  await controller.refresh();return controller.getState();
+ };
+ assert.equal((await read({semantic_model_ready:false})).semanticModelReady,false);
+ assert.equal((await read({semantic_model_ready:true})).semanticModelReady,true);
+ const legacy=await read({});assert.equal(legacy.phase,'ready');assert.equal(legacy.semanticModelReady,undefined);
+ assert.equal((await read({semantic_model_ready:'yes'})).phase,'failed');
+});
+
 test('AI配置专用IPC与预加载桥复验管理窗口和严格参数，错误不包含凭据',async()=>{
  const handlers=new Map(),calls=[],invokes=[];
  globalThis.__setupIpc={ipcMain:{handle:(name,fn)=>handlers.set(name,fn)},ipcRenderer:{invoke:async(...args)=>{invokes.push(args);},on(){},removeListener(){}}};

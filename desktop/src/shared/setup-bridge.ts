@@ -4,6 +4,8 @@ export interface SetupState {
   phase: SetupPhase;
   ownerReady: boolean;
   credentialsConfigured: boolean;
+  /** 本机语义模型是否已准备；旧后台不返回时为 undefined。未准备时记忆检索退回字面匹配。 */
+  semanticModelReady?: boolean;
   /** 配置已保存，但当前宿主尚未确认采用新启动快照。 */
   configurationPending?: boolean;
   officialDefaults?: boolean;

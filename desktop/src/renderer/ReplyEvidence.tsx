@@ -26,7 +26,7 @@ function RetrievalSummary({ receipt }: { receipt: ReplyRetrievalReceipt | null |
     <p>概览仅用于定位；以下原话和资料才是本次实际依据。回执与导航版本对应生成时。</p>
     {[['联系人资料', contactMemory], ['本人资料', ownerMemory], ['未确认参考', pendingCandidate]].map(([name, budget]) => {
       const value = budget as typeof contactMemory;
-      return <p key={name as string}>{name as string}：{value.usedCount}/{value.limit} 条，{value.usedChars}/{value.charLimit} 字符{value.exhausted ? '；预算已耗尽' : ''}。</p>;
+      return <p key={name as string}>{name as string}：{value.usedCount}/{value.limit} 条，{value.charLimit === null ? `${value.usedChars} 字符（不限字数）` : `${value.usedChars}/${value.charLimit} 字符`}{value.exhausted ? '；预算已耗尽' : ''}。</p>;
     })}
     <p>原话补查：{sourceMessages.usedCalls}/{sourceMessages.callLimit} 次，{sourceMessages.usedCount}/{sourceMessages.itemLimit} 条，{sourceMessages.usedTokens}/{sourceMessages.tokenLimit} 估算 token{sourceMessages.exhausted ? '；预算已耗尽' : ''}。</p>
     {receipt.queries.map((query, index) => <p key={index}>

@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {mkdir,mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {createBusinessEmbeddingFactory,createLocalEmbeddingLifecycle} from '../src/platform/models/local-embedding-lifecycle.ts';
+import {createBusinessEmbeddingFactory,createLocalEmbeddingLifecycle,projectEmbeddingCache,projectEmbeddingInstalled} from '../src/platform/models/local-embedding-lifecycle.ts';
+import {embeddingSnapshot} from '../src/retrieval/retrieval-embedding.ts';
 
 test('宿主从明确的业务目录读取模型，不沿用DSH运行目录',async t=>{
  const businessHome=await mkdtemp(join(tmpdir(),'notalone-embedding-home-'));
@@ -96,4 +97,19 @@ test('本机embedding打开期间退出保留迟到模型，释放失败必须�
  assert.equal(embeds,0);
  assert.equal(closes,2);
  assert.equal(lifecycle.opened(),false);
+});
+
+test('语义模型只在固定快照的必要文件齐全时才算已安装，缺任何一个都提示安装',async t=>{
+ const project=await mkdtemp(join(tmpdir(),'notalone-embedding-project-'));
+ t.after(()=>rm(project,{recursive:true,force:true}));
+ assert.equal(await projectEmbeddingInstalled(project),false);
+ const snapshot=embeddingSnapshot(projectEmbeddingCache(project));
+ await mkdir(snapshot,{recursive:true});
+ const files=['tokenizer.json','tokenizer_config.json','model_optimized.onnx'];
+ for(const file of files.slice(0,2))await writeFile(join(snapshot,file),'synthetic');
+ assert.equal(await projectEmbeddingInstalled(project),false);
+ await writeFile(join(snapshot,files[2]),'synthetic');
+ assert.equal(await projectEmbeddingInstalled(project),true);
+ await rm(join(snapshot,files[0]));
+ assert.equal(await projectEmbeddingInstalled(project),false);
 });

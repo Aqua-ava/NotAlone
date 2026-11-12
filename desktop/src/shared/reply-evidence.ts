@@ -12,7 +12,7 @@ export interface ReplyEvidenceNavigation {
 }
 export interface ReplyOverviewRevision { projectionRevision: string; memoryRevision: number; }
 export interface ReplyMemoryRetrievalBudget {
-  limit: number; charLimit: number; usedCount: number; usedChars: number; exhausted: boolean;
+  limit: number; /** 不限字数时为 null。 */ charLimit: number | null; usedCount: number; usedChars: number; exhausted: boolean;
 }
 export interface ReplyRetrievalQuery {
   kind: 'confirmed_memory' | 'owner_memory' | 'pending_candidate' | 'message';

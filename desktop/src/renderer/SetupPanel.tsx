@@ -45,6 +45,11 @@ export function SetupPanel() {
               : state.recoverableOwner ? '检测到唯一已有本人，确认后恢复原身份。'
                 : '检测到既有本人资料，但无法唯一确认本次身份。请检查受控配置，不会自动选择本人。'}</p>}
             <p>{state.credentialsConfigured ? 'DeepSeek · 已配置' : 'DeepSeek · 尚未配置'}</p>
+            {state.semanticModelReady === true && <p>本机语义模型 · 已就绪</p>}
+            {state.semanticModelReady === false && <>
+              <p role="status">本机语义模型 · 尚未安装</p>
+              <p>未安装时，回复挑选联系人和本人记忆只能按字面匹配，相关度较差。请在项目目录运行 <code>pnpm run prepare:embedding</code> 下载固定模型（需联网，约 100 MB），完成后无需重启，重新生成回复即生效。</p>
+            </>}
             <p>密钥和模型配置保存后需重启本机服务才会生效；保存本身不会发起模型调用。</p>
             <p>使用 DeepSeek Messages 兼容接口，沿用当前模型。更改地址后，请重新输入该服务对应的 API Key。</p>
             {state.phase === 'identity-unbound' && state.recoverableOwner && <button className="button" onClick={() => {

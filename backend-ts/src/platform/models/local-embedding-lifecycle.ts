@@ -1,6 +1,7 @@
 /** 固定本机 embedding 的宿主生命周期；惰性打开、并发复用，关闭前排空在途推理。 */
 import {createLocalEmbedding,embeddingSnapshot,EmbeddingUnavailableError} from '../../retrieval/retrieval-embedding.ts';
 import {isAbsolute,join} from 'node:path';
+import {stat} from 'node:fs/promises';
 import type {EmbedTexts} from '../../retrieval/retrieval-hybrid.ts';
 
 type LocalEmbedding=Pick<Awaited<ReturnType<typeof createLocalEmbedding>>,'embed'|'close'>;
@@ -8,6 +9,17 @@ export interface LocalEmbeddingLifecycle {
   embed:EmbedTexts;
   close():Promise<void>;
   opened():boolean;
+}
+
+/** 项目目录下的固定语义模型缓存（由 scripts/prepare_memory_embedding.mjs 显式准备，运行时不联网）。 */
+export function projectEmbeddingCache(projectDirectory:string):string{return join(projectDirectory,'.models/memory-embedding');}
+
+/** 只核对固定快照的必要文件是否齐全，不加载模型；设置页据此提示安装。 */
+export async function projectEmbeddingInstalled(projectDirectory:string):Promise<boolean>{
+  const snapshot=embeddingSnapshot(projectEmbeddingCache(projectDirectory));
+  const found=await Promise.all(['tokenizer.json','tokenizer_config.json','model_optimized.onnx']
+    .map(file=>stat(join(snapshot,file)).then(entry=>entry.isFile(),()=>false)));
+  return found.every(Boolean);
 }
 
 /** 业务资源由稳定目录定位，不能继承 DSH 为隔离运行而设置的 HOME。 */

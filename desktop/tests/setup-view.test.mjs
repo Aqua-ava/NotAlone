@@ -34,6 +34,17 @@ test('旧状态缺地址时预填官方地址，保存前必须输入密钥且�
  assert.equal((await page.evaluate(()=>window.calls)).length,0);
 });
 
+test('本机语义模型未安装时提示安装命令，已就绪时只显示状态，旧后台未知时不提示',async t=>{
+ const page=await fixture(t);
+ await expect(page.getByText(/本机语义模型/)).toHaveCount(0);
+ await page.evaluate(()=>window.update({semanticModelReady:false}));
+ await expect(page.getByText('本机语义模型 · 尚未安装',{exact:true})).toBeVisible();
+ await expect(page.getByText('pnpm run prepare:embedding')).toBeVisible();
+ await page.evaluate(()=>window.update({semanticModelReady:true}));
+ await expect(page.getByText('本机语义模型 · 已就绪',{exact:true})).toBeVisible();
+ await expect(page.getByText('pnpm run prepare:embedding')).toHaveCount(0);
+});
+
 async function draftFixture(t){
  const built=await build({stdin:{contents:`
  import React,{useState} from 'react';import{createRoot}from'react-dom/client';

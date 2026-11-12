@@ -3,7 +3,6 @@ import {SqliteReplyTurns} from './candidates/turns.ts';
 import {SqliteReplyCandidateHttp} from './candidates/http.ts';
 import type {Context} from '@deepseek-ai/cordis';
 import type {IncomingMessage,ServerResponse} from 'node:http';
-import {join} from 'node:path';
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import type {ActiveHolders} from '../../storage/sqlite/deletion/holders.ts';
 import type {SqliteSkillLibrary} from '../../skills/sqlite/library.ts';
@@ -15,7 +14,7 @@ import {SqliteDiscussionService} from './service.ts';
 import {SqliteDiscussionRuntime} from './runtime.ts';
 import {SqliteDiscussionTurns} from './turns.ts';
 import {SqliteDiscussionHttp} from './http.ts';
-import {createBusinessEmbeddingFactory,createLocalEmbeddingLifecycle} from '../../platform/models/local-embedding-lifecycle.ts';
+import {createBusinessEmbeddingFactory,createLocalEmbeddingLifecycle,projectEmbeddingCache} from '../../platform/models/local-embedding-lifecycle.ts';
 
 /** 宿主唯一装配点共享模型提供者与许可；讨论只拥有自己的官方运行副本。 */
 export async function createSqliteDiscussionHost(options:{
@@ -35,7 +34,7 @@ export async function createSqliteDiscussionHost(options:{
   authorize:async()=>{if(stopping)throw new StorageFailure('discussion_runtime_closed');},
  }):undefined;
  // 语义模型惰性打开：首次需要时才加载；模型未准备时由回复链路降级为词法。
- const embedding=options.projectDirectory?createLocalEmbeddingLifecycle(createBusinessEmbeddingFactory(options.projectDirectory,join(options.projectDirectory,'.models/memory-embedding'))):undefined;
+ const embedding=options.projectDirectory?createLocalEmbeddingLifecycle(createBusinessEmbeddingFactory(options.projectDirectory,projectEmbeddingCache(options.projectDirectory))):undefined;
  const candidates=new SqliteReplyCandidateService(options.storage,options.ownerId,options.reader);
  const candidateTurns=options.model?new SqliteReplyTurns({storage:options.storage,service:candidates,discussions:service,runtime,model:options.model.configuration,provider:options.model.provider,arbiter:options.model.arbiter,library:options.library,...(embedding?{embed:embedding.embed}:{}),authorize:async()=>{if(stopping)throw new StorageFailure('reply_runtime_closed');}}):undefined;
  const candidateHttp=new SqliteReplyCandidateHttp({storage:options.storage,service:candidates,turns:candidateTurns,authorize:options.authorizeRequest});

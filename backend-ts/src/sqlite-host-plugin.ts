@@ -3,6 +3,7 @@ import {SqliteMemoryManagement} from './memory/sqlite/management/service.ts';
 import {SqliteMemoryManagementHttp,memoryManagementQueryAllowed} from './memory/sqlite/management/http.ts';
 import {createSqliteModelRuntime} from './host/sqlite-model-runtime.ts';
 import {SqliteModelSetup} from './host/sqlite-model-setup.ts';
+import {projectEmbeddingInstalled} from './platform/models/local-embedding-lifecycle.ts';
 import {createSqliteMemoryRuntime} from './memory/sqlite/runtime.ts';
 import {SqliteMemoryDocumentsHttp,memoryDocumentsQueryAllowed} from './memory/sqlite/documents/http.ts';
 import {createSqliteDiscussionHost} from './reply/sqlite/host-runtime.ts';
@@ -295,7 +296,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
         }
         if (shutdown.state !== 'running') { respond(503, { error: 'runtime_stopping' }); return; }
         if(req.method==='GET'&&url.pathname==='/api/setup/status'){
-          respond(200,{...modelSetup.status(),owner_id:ownerId,storage:'sqlite',capabilities:capabilities.capabilities});return;
+          respond(200,{...modelSetup.status(),semantic_model_ready:await projectEmbeddingInstalled(config.projectDirectory),owner_id:ownerId,storage:'sqlite',capabilities:capabilities.capabilities});return;
         }
         if(req.method==='POST'&&(url.pathname==='/api/setup/credentials'||url.pathname==='/api/setup/official-deepseek'||url.pathname==='/api/setup/deepseek-configuration')){
           try {
