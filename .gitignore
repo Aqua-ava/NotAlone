@@ -25,6 +25,8 @@ __pycache__/
 /architecture/
 .dsh-computer-use/
 /model-permits/
+# 本机语义检索模型（公开模型，按 scripts/prepare_memory_embedding.mjs 准备）
+/.models/
 
 # docs 仅保留操作指南与 Agent 工作规则，其余为本机资料
 /docs/*

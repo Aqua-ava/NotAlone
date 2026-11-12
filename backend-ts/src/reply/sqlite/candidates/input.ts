@@ -1,4 +1,5 @@
 import {selectReplyKnowledge} from './knowledge-budget.ts';
+import {readSemanticScores} from './memory-semantics.ts';
 import {requireSkillRun} from '../../../skills/sqlite/storage.ts';
 import type {SkillRunRevision} from '../../../skills/sqlite/contracts.ts';
 import {StorageFailure,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
@@ -107,7 +108,7 @@ const RECENT_QUERY_MESSAGES=5;
 export function workspaceRetrievalQuery(workspace:Pick<ReplyWorkspaceSnapshot,'action'|'draftText'>,messageBodies:readonly string[]):string{
  return workspace.action==='express'&&workspace.draftText.trim()?workspace.draftText:messageBodies.slice(-RECENT_QUERY_MESSAGES).join('\n');
 }
-export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contextId:string;requestId:string;workspace?:ReplyWorkspaceSnapshot;queryText?:string;at?:number},reader:ReplyKnowledgeReader):FrozenReplyInput[]{
+export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contextId:string;requestId:string;workspace?:ReplyWorkspaceSnapshot;queryText?:string;at?:number;semantic?:unknown},reader:ReplyKnowledgeReader):FrozenReplyInput[]{
  requireDiscussion(tx,i);
  const frozenAt=typeof i.at==='number'&&Number.isSafeInteger(i.at)?i.at:Date.now();
  const includeRelatedData=!i.workspace||i.workspace.includeRelationshipContext;
@@ -134,7 +135,8 @@ export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contex
   if(w.contextText.trim())items.push({kind:'entry',identity:{workspaceItem:'supplemental_context'},text:`本次补充背景（独立于想法/草稿，仅作用本次）：\n${w.contextText}`,sources:[]});
  }
  const query=i.workspace?workspaceRetrievalQuery(i.workspace,messageBodies):[i.queryText??items.filter(item=>item.kind==='entry').at(-1)?.text??'',...messageQuery].join('\n');
- const related=includeRelatedData?selectReplyKnowledge(reader.read(tx,i),query):[];
+ // 事务外算好的语义得分仅在检索词与本次完全一致时采用，否则退回纯词法。
+ const related=includeRelatedData?selectReplyKnowledge(reader.read(tx,i),query,i.workspace?readSemanticScores(i.semantic,query):undefined):[];
  knowledge(tx,i,related,reader);
  for(const item of related){
   // 记忆／候选末尾附来源聊天时间；文档是多来源整理，不在此处标注。

@@ -70,3 +70,45 @@ test('工作区检索词：帮我表达以草稿为准，帮我想想只用最�
  assert.equal(workspaceRetrievalQuery({action:'suggest',draftText:''},['只有一条']),'只有一条');
  assert.equal(workspaceRetrievalQuery({action:'suggest',draftText:''},[]),'');
 });
+
+test('混合检索：语义为主的综合分入选，词法只加少量分，词法命中但语义很低的不入选',async()=>{
+ const {semanticKey}=await import('../src/reply/sqlite/candidates/memory-semantics.ts');
+ const hike=memory('hike','contact','memory','他喜欢爬山。'),boosted=memory('boosted','contact','memory','徒步装备已经买好。'),plain=memory('plain','contact','memory','公司报销流程复杂。'),lexicalOnly=memory('lex','contact','memory','徒步徒步徒步。');
+ const semantic=new Map([[semanticKey('hike',1n),0.72],[semanticKey('boosted',1n),0.55],[semanticKey('plain',1n),0.55],[semanticKey('lex',1n),0.2]]);
+ // hike 仅凭语义 0.72×0.8 入选；boosted 与 plain 语义同为 0.55（0.44），只有词法命中的 boosted 加分后越过 0.48；lex 词法命中但语义仅 0.2，综合分不足。
+ const selected=selectReplyKnowledge([plain,lexicalOnly,boosted,hike],'想去徒步',semantic);
+ assert.deepEqual(selected.map(item=>item.id),['hike','boosted']);
+ assert.deepEqual(selectReplyKnowledge([plain,lexicalOnly,boosted,hike],'想去徒步').map(item=>item.id).sort(),['boosted','lex']);
+});
+
+test('混合检索：综合分门槛为 0.48（语义 0.8＋词法 0.2），缺少语义得分或为候选的资料不入选',async()=>{
+ const {semanticKey,HYBRID_THRESHOLD,DENSE_WEIGHT,SPARSE_WEIGHT}=await import('../src/reply/sqlite/candidates/memory-semantics.ts');
+ assert.equal(HYBRID_THRESHOLD,0.48);assert.equal(DENSE_WEIGHT,0.8);assert.equal(SPARSE_WEIGHT,0.2);
+ const items=[memory('below'),memory('at'),memory('missing'),memory('candidate','contact','memory_candidate')].map((item,n)=>({...item,text:`无关文字${n}。`}));
+ const semantic=new Map([[semanticKey('below',1n),0.59],[semanticKey('at',1n),0.61],[semanticKey('candidate',1n),0.99]]);
+ assert.deepEqual(selectReplyKnowledge(items,'完全不同的查询',semantic).map(item=>item.id),['at']);
+});
+
+test('混合检索仍受条数上限约束，且不设字符上限',async()=>{
+ const {semanticKey}=await import('../src/reply/sqlite/candidates/memory-semantics.ts');
+ const long=n=>'𠀀'.repeat(900)+n;
+ const contacts=Array.from({length:7},(_,n)=>memory(`c${n}`,'contact','memory',long(n))),owners=Array.from({length:5},(_,n)=>memory(`o${n}`,'owner','memory',long(n)));
+ const semantic=new Map([...contacts,...owners].map((item,n)=>[semanticKey(item.id,1n),0.9-n*0.01]));
+ const selected=selectReplyKnowledge([...contacts,...owners],'毫无词法重合',semantic);
+ assert.equal(selected.filter(item=>item.scopeKind==='contact').length,5);assert.equal(selected.filter(item=>item.scopeKind==='owner').length,3);
+ assert.deepEqual(selected.filter(item=>item.scopeKind==='contact').map(item=>item.id),['c0','c1','c2','c3','c4']);
+});
+
+test('语义得分：事务外按余弦计算，模型失败返回 null，检索词不一致时被忽略',async()=>{
+ const {scoreMemorySemantics,readSemanticScores,semanticKey}=await import('../src/reply/sqlite/candidates/memory-semantics.ts');
+ const embed=async texts=>texts.map(text=>text.includes('徒步')||text.includes('爬山')?[1,0]:[0,1]);
+ const pool=[{id:'a',versionNo:'1',text:'他喜欢爬山'},{id:'b',versionNo:'2',text:'报销流程'}];
+ const scored=await scoreMemorySemantics('想去徒步',pool,embed);
+ assert.equal(scored.query,'想去徒步');assert.equal(scored.scores[semanticKey('a','1')],1);assert.equal(scored.scores[semanticKey('b','2')],0);
+ assert.equal(await scoreMemorySemantics('想去徒步',pool,async()=>{throw new Error('模型不可用');}),null);
+ assert.equal(await scoreMemorySemantics('想去徒步',pool,async texts=>texts.map(()=>[Number.NaN,1])),null);
+ assert.equal(await scoreMemorySemantics('  ',pool,embed),null);assert.equal(await scoreMemorySemantics('想去徒步',[],embed),null);
+ assert.equal(readSemanticScores(scored,'另一个查询'),undefined);
+ assert.equal(readSemanticScores({query:'想去徒步',scores:{a:'x'}},'想去徒步'),undefined);
+ assert.equal(readSemanticScores(scored,'想去徒步').get(semanticKey('a','1')),1);
+});

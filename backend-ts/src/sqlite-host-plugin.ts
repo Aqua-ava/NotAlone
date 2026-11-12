@@ -250,7 +250,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
     // 共享模型宿主的记账回调已可找到唯一 memory 实例，再受理自动调度。
     if(memoryEnabled&&automaticBackground)memory.startScheduling();
     const memoryDocumentsHttp=memoryEnabled&&memory.documents?new SqliteMemoryDocumentsHttp(memory.documents,req=>authorizeSqliteRequest(req,token)):undefined;
-    discussions=await createSqliteDiscussionHost({ctx,storage,ownerId,userData:sqlite.userData,holders:deletionHolders,reader:assistantReads,library,authorizeRequest:req=>authorizeSqliteRequest(req,token),
+    discussions=await createSqliteDiscussionHost({ctx,storage,ownerId,userData:sqlite.userData,projectDirectory:config.projectDirectory,holders:deletionHolders,reader:assistantReads,library,authorizeRequest:req=>authorizeSqliteRequest(req,token),
       ...(models?.shared?{model:{configuration:models.shared.configuration.model,provider:models.shared.provider,arbiter:models.shared.arbiter}}:{})});
     const deletions = new SqliteDeletionHttp(deletionService, ownerId);
     const ownership = { contacts: 'typescript', wechat: 'typescript',

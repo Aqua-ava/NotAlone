@@ -3,11 +3,12 @@ import { mkdir, stat, rename, rm } from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
-import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { join, resolve } from 'node:path';
 import { createLocalEmbedding, embeddingSnapshot, EMBEDDING_REVISION } from '../backend-ts/src/retrieval/retrieval-embedding.ts';
 const repository='Qdrant/bge-small-zh-v1.5', args=process.argv.slice(2);
-let cache=process.env.NOTALONE_MEMORY_EMBEDDING_CACHE??join(homedir(),'.cache/notalone/memory-embedding'), offline=false;
+// 默认放在项目目录的 .models 下（已被 git 忽略），后台从同一位置读取；可用环境变量或 --cache 覆盖。
+let cache=process.env.NOTALONE_MEMORY_EMBEDDING_CACHE??resolve(fileURLToPath(new URL('..', import.meta.url)),'.models/memory-embedding'), offline=false;
 for(let i=0;i<args.length;i++){
  if(args[i]==='--offline'&&!offline)offline=true;
  else if(args[i]==='--cache'&&args[i+1])cache=resolve(args[++i]);

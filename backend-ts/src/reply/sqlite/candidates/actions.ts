@@ -91,6 +91,8 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
   // 使用本次受理时冻结的覆盖事实，后台同步进展不阻断或改写当前请求。
   freeze.execute(tx,i,lease);return freezeReplyInput(tx,i,reader);
  }),
+ // 供事务外计算语义得分：只返回当前合格的联系人／本人记忆正文与版本，不冻结、不写入。
+ action('memoryPool','read',(tx,i)=>{requireAttempt(tx,i);return reader.read(tx,i).filter(item=>item.kind==='memory').map(item=>({id:item.id,versionNo:String(item.versionNo),text:item.text}));}),
  action('sourceContacts','read',(tx,i)=>{requireAttempt(tx,i);return replySourceContacts(tx,i,reader);}),
  action('selectionSourceContacts','read',(tx,i)=>{requireDiscussion(tx,i);return selectionSourceContacts(tx,i);}),
  action('configuration','read',(tx,i)=>{

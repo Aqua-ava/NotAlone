@@ -212,3 +212,20 @@ test('来源状态更新使派生文档失效时初始召回省略，旧冻结�
  await assert.rejects(f.storage.execute('fixture.requireDocument',{...scope,item:directory}),{code:'document_knowledge_stale'});
  await assert.rejects(f.storage.execute('fixture.readDocument',{...scope,item:directory,range:{startBlock:1,blockCount:1}}),{code:'document_knowledge_stale'});
 });
+
+test('回复链路：本机语义补充词法漏召回的同义记忆，语义模型缺失或失败时降级为词法仍可生成',async t=>{
+ const f=await fixture(t,{synchronizeHistory:false,content:JSON.stringify({candidates:[{parts:['合成建议'],basis:[1]}]})}),contactId=f.ids[0];
+ const management=new SqliteMemoryManagement(f.storage,f.owner);
+ for(const [index,body] of ['他喜欢爬山。','公司报销流程复杂。'].entries())await management.decide({requestKey:`semantic-${index}`,action:'manual',scope:{scopeKind:'contact',contactId},body});
+ const workspace={action:'express',draftText:'想去徒步',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true};
+ const embed=async texts=>texts.map(text=>/徒步|爬山/.test(text)?[1,0]:[0,1]);
+ const run=async options=>{
+  const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},...options});t.after(()=>turns.close());
+  const before=f.requests.length;await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:workspace.draftText,confirmedContact:true,workspace});
+  return JSON.stringify(f.requests[before]);
+ };
+ const withSemantics=await run({embed});
+ assert.ok(withSemantics.includes('他喜欢爬山'),'语义相近的记忆应被补充');assert.ok(!withSemantics.includes('公司报销流程'),'语义无关的记忆不进入');
+ assert.ok(!(await run({})).includes('他喜欢爬山'),'未装配语义模型时退回词法');
+ assert.ok(!(await run({embed:async()=>{throw new Error('模型未准备');}})).includes('他喜欢爬山'),'语义模型失败时退回词法且不阻断生成');
+});
