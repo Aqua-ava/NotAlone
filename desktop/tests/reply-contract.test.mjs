@@ -136,3 +136,15 @@ test('后端前台失败原因都有共享说明，不靠界面默认分支静�
   }
   assert.match(foregroundSource, /isKnownForegroundReason|isAwaitingForegroundSelection/);
 });
+
+test('桌面主进程自己置为不可用的前台原因都有共享说明，不落到“暂不可用”兜底文案', () => {
+  // 主进程自产原因：连接重置、尚未连接、观察超时/取消等；漏映射时面板只显示泛化兜底并谎称“等待自动重试”。
+  const produced = new Set([...controllerSource.matchAll(/clearObservation\('unavailable',\s*'([a-z_]+)'\)/g)].map((match) => match[1]));
+  if (/invalidatePending\(phase[^)]*\)[^{]*\{[\s\S]*?clearObservation\(phase, '([a-z_]+)'\)/.test(controllerSource)) {
+    produced.add(controllerSource.match(/clearObservation\(phase, '([a-z_]+)'\)/)[1]);
+  }
+  for (const code of ['connection_changed', 'connection_unavailable', 'observation_timeout', 'observation_cancelled']) {
+    assert.ok(produced.has(code), `${code} 应仍由控制器产生；若已移除请同步更新本测试`);
+  }
+  for (const code of produced) assert.ok(foreground.foregroundFailureReason(code), `主进程原因 ${code} 缺少共享说明`);
+});

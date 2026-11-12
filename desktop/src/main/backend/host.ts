@@ -34,6 +34,14 @@ export class BackendHost {
   private configurationSave: Promise<void> | undefined;
   private generation = 0;
   private pollTimer: NodeJS.Timeout | undefined;
+  // 后台忙于同步或读取时，一次状态探测超时不证明失联；连续失败才撤销全部在途请求。
+  probeFailureLimit = 3;
+  pollIntervalMs = 1000;
+  private probeFailures = 0;
+  // 失联后只在原进程仍存活时自动接回同一实例，从不自动启动替代进程。
+  recoveryDelaysMs = [2000, 4000, 8000, 15000];
+  private recoveryAttempts = 0;
+  private recoveryTimer: NodeJS.Timeout | undefined;
   private readonly listeners = new Set<(state: BackendState) => void>();
   private readonly manualContacts = new Map<string, number>();
   private readonly unreleasedMediaPreviews = new Set<MediaPreviewConnection>();
@@ -192,11 +200,14 @@ export class BackendHost {
     if (this.configurationSave) return this.configurationSave.catch(() => {}).then(() => this.connect());
     if (this.initialization) return this.initialization;
     const generation = ++this.generation;
-    clearTimeout(this.pollTimer);
+    clearTimeout(this.pollTimer); clearTimeout(this.recoveryTimer); this.recoveryTimer = undefined;
+    this.probeFailures = 0;
     this.target?.cancelPending();
     this.publish({ phase: 'connecting', errorCode: undefined, canRetryConnection: false });
     this.initialization = this.initialize(generation).then(() => {
-      if (!this.closing) this.schedulePoll(generation);
+      if (this.closing) return;
+      if (this.state.phase === 'connected') this.recoveryAttempts = 0;
+      this.schedulePoll(generation);
     }).catch(async (error: unknown) => {
       const failedChild = this.ownedChild;
       if (failedChild && !this.target && await failedChild.terminate()) {
@@ -241,7 +252,7 @@ export class BackendHost {
     if (this.stopping) return this.stopping;
     this.closing = true;
     ++this.generation;
-    clearTimeout(this.pollTimer);
+    clearTimeout(this.pollTimer); clearTimeout(this.recoveryTimer); this.recoveryTimer = undefined;
     this.target?.cancelPending();
     this.publish({ phase: 'stopping', errorCode: undefined, canRetryConnection: false, canRetryShutdown: false });
     this.stopping = this.shutdown().finally(() => { this.stopping = undefined; });
@@ -420,7 +431,7 @@ export class BackendHost {
 
   private schedulePoll(generation: number): void {
     clearTimeout(this.pollTimer);
-    this.pollTimer = setTimeout(() => void this.refresh(generation), 1000);
+    this.pollTimer = setTimeout(() => void this.refresh(generation), this.pollIntervalMs);
   }
 
   private async refresh(generation: number): Promise<void> {
@@ -429,13 +440,38 @@ export class BackendHost {
     try {
       const state = await client.status();
       if (this.closing || generation !== this.generation || client !== this.target) return;
-      if (state !== 'running') throw new BackendFailure('backend_connection_failed');
-      this.schedulePoll(generation);
-    } catch {
+      if (state === 'running') { this.probeFailures = 0; this.schedulePoll(generation); return; }
+    } catch (error) {
       if (this.closing || generation !== this.generation || client !== this.target) return;
-      client.cancelPending();
-      ++this.generation;
-      this.publish({ phase: 'disconnected', errorCode: 'backend_connection_failed', canRetryConnection: true });
+      // 单次超时只说明后台忙；自有进程已退出或认证被拒是明确失联，不再等待。
+      const definitive = error instanceof RetiredBackendRuntime || (this.ownedChild !== undefined && !this.ownedChild.isRunning());
+      if (!definitive && ++this.probeFailures < this.probeFailureLimit) { this.schedulePoll(generation); return; }
     }
+    this.probeFailures = 0;
+    client.cancelPending();
+    ++this.generation;
+    this.publish({ phase: 'disconnected', errorCode: 'backend_connection_failed', canRetryConnection: true });
+    this.scheduleRecovery();
+  }
+
+  // 失联后的自动接回：只复用仍存活的原后台，进程消失时保留“重新检查并连接”的明确入口。
+  private scheduleRecovery(): void {
+    clearTimeout(this.recoveryTimer);
+    const delays = this.recoveryDelaysMs;
+    const delay = delays[Math.min(this.recoveryAttempts, delays.length - 1)] ?? 2000;
+    this.recoveryTimer = setTimeout(() => void this.recover(), delay);
+  }
+
+  private async recover(): Promise<void> {
+    this.recoveryTimer = undefined;
+    const busy = () => this.quitting || this.closing || this.restarting || this.preparing || this.configurationSave
+      || this.initialization || this.state.phase !== 'disconnected';
+    if (busy()) return;
+    const alive = this.ownedChild ? this.ownedChild.isRunning() : await this.target?.isListening() === true;
+    // 持续失败时不无限重试，约两三分钟后交还给用户明确重试。
+    if (!alive || busy() || this.recoveryAttempts >= 10) return;
+    ++this.recoveryAttempts;
+    await this.connect().catch(() => {});
+    if (this.state.phase === 'disconnected' && !this.closing && !this.quitting) this.scheduleRecovery();
   }
 }

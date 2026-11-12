@@ -71,6 +71,10 @@ const reasons = Object.freeze({
   foreground_observation_unavailable: ['后端观察', '本机微信会话识别服务暂不可用，正在重试'],
   foreground_scope_unavailable: ['微信账号', '微信账号尚未连接或验证已失效，请到同步设置重新连接并确认会话'],
   foreground_observation_busy: ['后端观察', '本轮观察繁忙，等待重新识别'],
+  // 以下三项由桌面主进程自身产生：连接重置、尚未连接与观察被取消，都不是联系人匹配失败。
+  connection_changed: ['本机连接', '与本机服务的连接已重置，正在自动重新连接，恢复后自动重新识别'],
+  connection_unavailable: ['本机连接', '本机服务尚未连接，连接恢复后自动重新识别；可在设置中点“重新检查并连接”'],
+  observation_cancelled: ['后端观察', '上一轮观察已取消，等待重新识别'],
   binding_verification_unavailable: ['联系人匹配', '会话绑定校验暂不可用（读取已绑定联系人失败）'],
   binding_scope_changed: ['联系人匹配', '会话绑定校验暂不可用（同步或新消息使微信范围刚发生变化，将自动重试）'],
   binding_session_list_failed: ['联系人匹配', '会话绑定校验暂不可用（读取微信会话名单失败）'],

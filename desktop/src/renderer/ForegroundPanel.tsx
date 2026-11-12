@@ -54,7 +54,8 @@ export function ForegroundPanel({ state, session, permission }: { state: Foregro
       ? '系统前台状态未知，等待自动重试；也可在上方选择本次联系人'
     : state.phase === 'unavailable' && state.reason === 'screen_capture_permission_missing'
       ? '缺少屏幕录制权限，授权后可重新识别微信会话'
-    : state.phase === 'unavailable' && failure && ['foreground_scope_unavailable', 'foreground_observation_unavailable', 'observation_unavailable', 'observation_timeout'].includes(state.reason ?? '')
+    : state.phase === 'unavailable' && failure && ['foreground_scope_unavailable', 'foreground_observation_unavailable', 'observation_unavailable', 'observation_timeout',
+      'connection_changed', 'connection_unavailable', 'observation_cancelled'].includes(state.reason ?? '')
       ? failure.message
     : state.phase === 'unavailable' && failure ? `${failure.message}，等待自动重试；也可在上方选择本次联系人`
     : state.phase === 'unavailable' ? '前台定位暂不可用，等待自动重试；也可在上方选择联系人' : '前台定位尚未观察';
