@@ -12,7 +12,7 @@ export type SqliteCandidateOperation=SqliteCandidateScope & (
 );
 export interface SqliteCandidateVersion {candidateId:string;versionNo:number;origin:'model'|'manual';parentVersionNo:number|null;parts:string[];basis:{itemNo:number;kind:string;text:string;verification:'actual_input'|'inherited_unverified'}[]}
 export interface SqliteCandidateLoadedSkill {packageId:string;name?:string;title?:string;revisionNo:number;relativePath:string;text?:string;origin?:'explicit'|'auto_preload'|null;catalogRevision?:string|null}
-export interface SqliteCandidateRequest {requestId:string;generationState?:'committed'|'running'|'failed'|'unknown'|'invalidated';coverageWarning:string|null;skillWarning?:string|null;sourceState:'available'|'unavailable';candidates:SqliteCandidateVersion[];selections:{id:string;candidateId:string;versionNo:number;selectionNo:number}[];loadedSkills:SqliteCandidateLoadedSkill[];preloadedSkills?:{packageId:string;name?:string;revisionNo:number;origin:'explicit'|'auto_preload';catalogRevision?:string}[]}
+export interface SqliteCandidateRequest {requestId:string;generationState?:'committed'|'running'|'failed'|'unknown'|'invalidated';generationErrorCode?:string|null;generationSent?:boolean;coverageWarning:string|null;skillWarning?:string|null;sourceState:'available'|'unavailable';candidates:SqliteCandidateVersion[];selections:{id:string;candidateId:string;versionNo:number;selectionNo:number}[];loadedSkills:SqliteCandidateLoadedSkill[];preloadedSkills?:{packageId:string;name?:string;revisionNo:number;origin:'explicit'|'auto_preload';catalogRevision?:string}[]}
 export interface SqliteCandidateRecentMessage {messageId:string;sender:'owner'|'contact'|'unknown';text:string;occurredAt:string|null;timePrecision:'millisecond'|'second'|null;displayPosition:string;ordering:'verified'|'unknown'}
 export interface SqliteCandidatePage {recentMessages?:SqliteCandidateRecentMessage[];requests:SqliteCandidateRequest[];coverage:{phase:'not_started'|'running'|'incomplete'|'complete'};hasMoreRequests?:boolean}
 export interface SqliteCandidateSkillPage {items:(SqliteCandidateLoadedSkill&{text:string})[];nextOffset:number|null;total:number}
@@ -79,9 +79,11 @@ export function readSqliteCandidatePage(value:unknown):SqliteCandidatePage{
     ||!(m.occurredAt===null||typeof m.occurredAt==='string'&&m.occurredAt.length<=64)||!(m.timePrecision===null||['second','millisecond'].includes(String(m.timePrecision)))
     ||typeof m.displayPosition!=='string'||m.displayPosition.length>64||!['verified','unknown'].includes(String(m.ordering)))invalid();}
  }
- for(const value of v.requests){const r=object(value);exact(r,['requestId','coverageWarning','sourceState','candidates','selections','loadedSkills'],['generationState','skillWarning','preloadedSkills']);
+ for(const value of v.requests){const r=object(value);exact(r,['requestId','coverageWarning','sourceState','candidates','selections','loadedSkills'],['generationState','generationErrorCode','generationSent','skillWarning','preloadedSkills']);
   if(!uuid(r.requestId)||!(r.coverageWarning===null||typeof r.coverageWarning==='string')||!['available','unavailable'].includes(String(r.sourceState))
    ||r.generationState!==undefined&&!['committed','running','failed','unknown','invalidated'].includes(String(r.generationState))
+   ||r.generationErrorCode!==undefined&&r.generationErrorCode!==null&&(typeof r.generationErrorCode!=='string'||!/^[a-z][a-z0-9_]{0,79}$/.test(r.generationErrorCode))
+   ||r.generationSent!==undefined&&typeof r.generationSent!=='boolean'
    ||r.skillWarning!==undefined&&r.skillWarning!==null&&r.skillWarning!=='回复策略暂不可用'
    ||!Array.isArray(r.candidates)||!Array.isArray(r.selections)||!Array.isArray(r.loadedSkills)||r.preloadedSkills!==undefined&&!Array.isArray(r.preloadedSkills))invalid();
   r.candidates.forEach(readSqliteCandidateVersion);

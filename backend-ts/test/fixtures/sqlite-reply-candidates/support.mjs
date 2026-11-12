@@ -39,7 +39,7 @@ export async function fixture(t,options={}){
  })();
  t.after(close);
  // 默认正式注册表；知识消费者测试可显式替换外部发布者边界。
- storage=await SqliteStorage.open({userData:root,intent:'create',role:'test',...(options.registryModule?{registryModule:options.registryModule}:{})});
+ storage=await SqliteStorage.open({userData:root,intent:'create',role:'test',...(options.registryModule?{registryModule:options.registryModule}:{}),...(options.actionTimeoutMs?{actionTimeoutMs:options.actionTimeoutMs}:{})});
  // 产品默认关闭记忆自动处理；本夹具用于验证记忆提取与相关链路，创建后明确开启。
  await storage.execute('memoryExtraction.setAutomatic',{enabled:true});
  const metadata={

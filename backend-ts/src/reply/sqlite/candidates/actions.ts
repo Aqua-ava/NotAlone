@@ -1,5 +1,6 @@
 import {hasReplyDocumentTool,readReplyDocument} from './document-input.ts';
 import {randomUUID} from 'node:crypto';
+import {withReplyLocalSourceEligibility} from '../../../history/sqlite/reply-local-source.ts';
 import {StorageFailure,type StorageAction,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {readCoverage} from '../../../history/sqlite/read.ts';
 import {discussionRequestActions,requireAttempt,decode} from '../requests.ts';
@@ -7,7 +8,6 @@ import {discussionModelActions,dropSkillForCurrentCall} from '../model-actions.t
 import {requireDiscussion} from '../actions.ts';
 import {sanitizeDiscussionErrorCode} from '../failure.ts';
 import {emptyReplyKnowledge,type ReplyKnowledgeItem,type ReplyKnowledgeReader} from './contracts.ts';
-import {readReplyKnowledgeSource} from './knowledge-budget.ts';
 import {freezeReplyInput,requireReplyInput,requireSelection,replySourceContacts,selectionSourceContacts} from './input.ts';
 import {insertModelCandidates,parseReplyOutput,readParts,requireCandidate,versionView} from './versions.ts';
 export const INCOMPLETE_HISTORY_WARNING='历史覆盖不完整：本次使用当前可用资料，可能缺少重要语境。';
@@ -53,7 +53,7 @@ const commit=discussionModelActions.find((a):a is Extract<StorageAction,{mode:'r
 const dispatch=discussionModelActions.find((a):a is Extract<StorageAction,{mode:'read'|'write'}>=>a.name==='discussion.dispatchCall'&&a.mode!=='maintenance')!;
 /** 只由受信任注册表安装正式08/09消费者；HTTP不能指定适配器。 */
 export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyReplyKnowledge):StorageAction[]{
- const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any,lease:any)=>unknown):StorageAction=>({name:`reply.${name}`,mode,retryBusy:mode==='write',execute});
+ const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any,lease:any)=>unknown):StorageAction=>({name:`reply.${name}`,mode,retryBusy:mode==='write',execute:(tx,i,lease)=>withReplyLocalSourceEligibility(tx,scoped=>execute(scoped,i,lease))});
  return [
  action('status','read',(tx,i)=>{
   requireDiscussion(tx,i);
@@ -92,8 +92,8 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
   // 使用本次受理时冻结的覆盖事实，后台同步进展不阻断或改写当前请求。
   freeze.execute(tx,i,lease);return freezeReplyInput(tx,i,reader);
  }),
- // 供事务外计算语义得分：只返回当前合格的联系人／本人记忆正文与版本，不冻结、不写入。
- action('memoryPool','read',(tx,i)=>{requireAttempt(tx,i);return readReplyKnowledgeSource(tx,i,reader).memories.filter(item=>item.kind==='memory').map(item=>({id:item.id,versionNo:String(item.versionNo),text:item.text}));}),
+ // 供事务外计算语义得分：只列记忆头部，不展开文档；冻结入选项时另核来源。
+ action('memoryPool','read',(tx,i)=>{requireAttempt(tx,i);return (reader.list?reader.list(tx,i):reader.read(tx,i)).filter(item=>item.kind==='memory').map(item=>({id:item.id,versionNo:String(item.versionNo),text:item.text}));}),
  action('sourceContacts','read',(tx,i)=>{requireAttempt(tx,i);return replySourceContacts(tx,i,reader);}),
  action('selectionSourceContacts','read',(tx,i)=>{requireDiscussion(tx,i);return selectionSourceContacts(tx,i);}),
  action('configuration','read',(tx,i)=>{
@@ -133,7 +133,10 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
     try{const v=requireCandidate(tx,{...i,candidateId:String(k.id)},reader);return versionView(tx,i.ownerId,String(k.id),v.version.version_no as bigint);}catch{return null;}
    }).filter(Boolean);
    const skills=candidates.length?skillViews(tx,i.ownerId,String(r.id),i.includeSkillText!==false):{loadedSkills:[],preloadedSkills:[]};
-   return {...i,requestId:r.id,generationState:tx.get("SELECT 1 FROM model_call c JOIN reply_attempt a ON a.owner_id=c.owner_id AND a.id=c.reply_attempt_id WHERE a.owner_id=? AND a.request_id=? AND c.state='unknown'",[i.ownerId,r.id])?'unknown':r.state==='cancelled'?'failed':r.state,coverageWarning:r.coverage_warning,skillWarning:candidates.length&&tx.get("SELECT 1 FROM execution_event e JOIN reply_attempt a ON a.owner_id=e.owner_id AND a.id=e.reply_attempt_id WHERE e.owner_id=? AND a.request_id=? AND e.kind='skill_unavailable'",[i.ownerId,r.id])?'回复策略暂不可用':null,candidates,sourceState:candidates.length?'available':'unavailable',loadedSkills:skills.loadedSkills,preloadedSkills:skills.preloadedSkills,selections:candidates.length?tx.all('SELECT * FROM reply_selection WHERE owner_id=? AND request_id=? ORDER BY selection_no',[i.ownerId,r.id]).map(s=>({id:s.id,candidateId:s.candidate_id,versionNo:Number(s.version_no),selectionNo:Number(s.selection_no)})):[]};
+   const latest=tx.get('SELECT error_code FROM reply_attempt WHERE owner_id=? AND request_id=? ORDER BY attempt_no DESC LIMIT 1',[i.ownerId,r.id]);
+   const generationErrorCode=latest?.error_code==null?null:sanitizeDiscussionErrorCode(latest.error_code);
+   const generationSent=!!tx.get('SELECT 1 FROM model_call c JOIN reply_attempt a ON a.owner_id=c.owner_id AND a.id=c.reply_attempt_id WHERE a.owner_id=? AND a.request_id=? AND c.sent_at IS NOT NULL LIMIT 1',[i.ownerId,r.id]);
+   return {...i,requestId:r.id,generationErrorCode,generationSent,generationState:tx.get("SELECT 1 FROM model_call c JOIN reply_attempt a ON a.owner_id=c.owner_id AND a.id=c.reply_attempt_id WHERE a.owner_id=? AND a.request_id=? AND c.state='unknown'",[i.ownerId,r.id])?'unknown':r.state==='cancelled'?'failed':r.state,coverageWarning:r.coverage_warning,skillWarning:candidates.length&&tx.get("SELECT 1 FROM execution_event e JOIN reply_attempt a ON a.owner_id=e.owner_id AND a.id=e.reply_attempt_id WHERE e.owner_id=? AND a.request_id=? AND e.kind='skill_unavailable'",[i.ownerId,r.id])?'回复策略暂不可用':null,candidates,sourceState:candidates.length?'available':'unavailable',loadedSkills:skills.loadedSkills,preloadedSkills:skills.preloadedSkills,selections:candidates.length?tx.all('SELECT * FROM reply_selection WHERE owner_id=? AND request_id=? ORDER BY selection_no',[i.ownerId,r.id]).map(s=>({id:s.id,candidateId:s.candidate_id,versionNo:Number(s.version_no),selectionNo:Number(s.selection_no)})):[]};
   });
  }),
  action('skillInputs','read',(tx,i)=>{

@@ -1,4 +1,5 @@
 import {replyFailureReason} from '../diagnostics.ts';
+import {sanitizeDiscussionErrorCode} from '../failure.ts';
 import {diagnose} from '../../../diagnostics/context.ts';
 import {checkedTraceId,tracedRequest} from '../../../diagnostics/request-trace.ts';
 import type {IncomingMessage,ServerResponse} from 'node:http';
@@ -51,6 +52,8 @@ export class SqliteReplyCandidateHttp {
     const compact=(request:any)=>({
      requestId:request.requestId,
      ...(request.generationState===undefined?{}:{generationState:request.generationState}),
+     ...(request.generationErrorCode===undefined?{}:{generationErrorCode:request.generationErrorCode===null?null:sanitizeDiscussionErrorCode(request.generationErrorCode)}),
+     ...(typeof request.generationSent==='boolean'?{generationSent:request.generationSent}:{}),
      coverageWarning:request.coverageWarning,
      ...(request.skillWarning===undefined?{}:{skillWarning:request.skillWarning}),
      sourceState:request.sourceState,

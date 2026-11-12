@@ -67,6 +67,7 @@ export class SqliteReplyTurns {
   const accepted=await begin();
   const attempt=accepted.attempt as DiscussionAttempt;
   if(accepted.replayed)return {discussionId:attempt.discussionId,replayed:true,segmented:false};
+  const acceptedAt=Date.now();let modelExecutionStarted=false;
   this.stage('accepted');observe('preparing','request_started');
   o.service.phase(input.contactId,attempt.discussionId,input.requestKey,'preparing');
   try{
@@ -124,9 +125,16 @@ export class SqliteReplyTurns {
   const openSkillRun=o.library&&!skillDegraded?()=>input.selectedPackageId
    ?openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,{selectedPackageId:input.selectedPackageId,signal:input.signal})
    :openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,undefined,input.signal):undefined;
+  modelExecutionStarted=true;
   await runSingleDiscussionTurn({runtime:o.runtime,storage:o.storage,attempt,contextId,callId,configurationDigest,prompt,rebuildPrompt:prompt,systemPrompt,model:o.model,provider:o.provider,arbiter:o.arbiter,skillRun:null,openSkillRun,skillProtection:protection,skillRevision:revision,commitAction:'reply.commitCandidates',dispatchAction:'reply.dispatchCall',onPhase:phase=>{observe(phase);o.service.phase(input.contactId,attempt.discussionId,input.requestKey,phase);},onRuntimeAvailable:()=>{this.stage('runtime-available');observe('ready','runtime_ready');},configurationForRevision:revision=>this.digest(attempt.requestId,revision),assertAuthorized:()=>o.authorize(input.contactId),signal:input.signal});
    return {discussionId:attempt.discussionId,replayed:false,segmented:accepted.segmented};
-  }catch(error){await o.storage.execute('reply.failPreparation',{...attempt,code:input.signal?.aborted?'discussion_generation_cancelled':error instanceof StorageFailure?error.code:'discussion_generation_failed'}).catch(()=>{});throw error;}
+  }catch(error){
+   const storageFailure=!modelExecutionStarted&&error instanceof StorageFailure&&error.code==='worker_failed'?o.storage.failureDiagnostic:null;
+   const preparationCode=storageFailure?(storageFailure.cause==='action_timeout'?'discussion_preparation_timeout':'discussion_storage_interrupted'):null;
+   if(preparationCode)o.service.preparationFailed({contactId:input.contactId,discussionId:attempt.discussionId,requestKey:input.requestKey,startedAt:acceptedAt},preparationCode);
+   await o.storage.execute('reply.failPreparation',{...attempt,code:preparationCode??(input.signal?.aborted?'discussion_generation_cancelled':error instanceof StorageFailure?error.code:'discussion_generation_failed')}).catch(()=>{});
+   throw preparationCode?new StorageFailure(preparationCode):error;
+  }
   finally{o.service.phase(input.contactId,attempt.discussionId,input.requestKey,null);}
  }
 }

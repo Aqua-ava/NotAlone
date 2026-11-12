@@ -485,6 +485,25 @@ test('首次会话带入已有想法并通过 SQLite 候选接口提交', {timeo
 });
 
 
+test('重读历史失败显示准备超时、资料服务中断与应用中断的具体原因',{timeout:30000},async t=>{
+ const cases=[
+  ['discussion_preparation_timeout',false,'整理资料超时，尚未发给模型。'],
+  ['discussion_storage_interrupted',false,'本机资料服务在准备时中断，尚未发给模型。'],
+  ['runtime_interrupted',false,'应用在整理资料时中断，尚未发给模型。'],
+  ['runtime_interrupted',true,'应用在生成期间中断，没有保存候选。请核对原请求。'],
+ ];
+ const data={coverage:{phase:'complete'},requests:cases.map(([generationErrorCode,generationSent],index)=>({requestId:`${index+1}1111111-1111-4111-8111-111111111111`,generationState:'failed',generationErrorCode,generationSent,coverageWarning:null,sourceState:'unavailable',candidates:[],selections:[],loadedSkills:[]}))};
+ const f=await panel(t,async()=>data),region=f.page.getByRole('region',{name:'表达工作区'});
+ await expect(region.locator('details.sqlite-candidate-request')).toHaveCount(cases.length);
+ for(let index=0;index<cases.length;index++){
+  const request=region.locator('details.sqlite-candidate-request').nth(index);
+  if(index<cases.length-1)await request.locator('summary').click();
+  await expect(request.getByRole('status')).toHaveText(cases[index][2]);
+ }
+ await region.getByRole('button',{name:'刷新候选',exact:true}).click();
+ await expect(region.locator('details.sqlite-candidate-request').last().getByRole('status')).toHaveText(cases.at(-1)[2]);
+});
+
 test('本轮进度独立于历史失败，轻量状态显示真实阶段且未发送失败可新请求重试',{timeout:30000},async t=>{
  let phase='preparing',calls=0;const gate=Promise.withResolvers();
  const f=await panel(t,async op=>{
@@ -505,6 +524,29 @@ test('本轮进度独立于历史失败，轻量状态显示真实阶段且未�
  await region.getByRole('button',{name:'重新生成',exact:true}).click();
  await expect.poll(()=>f.commands.filter(c=>c.action==='generate').length).toBe(2);
  const requests=f.commands.filter(c=>c.action==='generate');assert.notEqual(requests[0].requestKey,requests[1].requestKey);
+});
+
+test('状态核对失败不继续宣称正在整理，恢复后显示真实阶段且未知结果不能新请求重发',{timeout:30000},async t=>{
+ let readable=false,phase='generating';const gate=Promise.withResolvers();
+ const f=await panel(t,async op=>{
+  if(op.action==='read')return pageData();
+  if(op.action==='generate')return gate.promise;
+  if(op.action==='status'){
+   if(!readable)throw new Error('合成状态读取失败');
+   return {requestKey:op.requestKey,phase,sent:true,errorCode:null,retryable:false,startedAt:1000,finishedAt:null};
+  }
+  throw new Error('未授权操作');
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'}),generate=region.getByRole('button',{name:'帮我想想',exact:true});
+ await generate.click();
+ await expect(region.getByText('暂时无法核对本次进度，请保留原请求，勿重复生成。',{exact:true})).toBeVisible();
+ await expect(region.getByText('正在整理本次资料…',{exact:true})).toHaveCount(0);await expect(generate).toBeDisabled();
+ readable=true;await expect(region.getByText('正在等待模型回复…',{exact:true})).toBeVisible();
+ phase='unknown';gate.reject(new Error('合成传输中断'));
+ await expect(region.getByRole('alert')).toHaveText('模型请求已发出，结果暂未确认。请核对原请求。');
+ await expect(generate).toBeDisabled();await region.getByRole('button',{name:'核对原请求',exact:true}).click();
+ assert.equal(f.commands.filter(c=>c.action==='generate').length,1);
+ const requestKey=f.commands.find(c=>c.action==='generate').requestKey;assert.ok(f.commands.filter(c=>c.action==='status').every(c=>c.requestKey===requestKey));
 });
 
 // —— 请求分段、说法命名与版本降噪（spec §6）——

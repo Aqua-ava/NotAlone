@@ -6,7 +6,7 @@ import {available} from '../management/qualification.ts';
 import {memoryKnowledgeReader,createMemoryKnowledgeReader} from '../management/knowledge.ts';
 import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
 import {assertReplyLocalSource} from '../../../history/sqlite/reply-local-source.ts';
-import {documentSources,publicationMembers} from './basis.ts';
+import {documentSources,publicationMembers,withSourceMemo} from './basis.ts';
 import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 
 /** 发布修订随实际输入冻结；在途只复验原集合，后来新增资料留给下一次请求。 */
@@ -77,6 +77,8 @@ function scopeItems(tx:StorageTransaction,scope:DiscussionScope,scopeKind:'self'
  const current=scopeKind==='self'?tx.get('SELECT current_publication_id,document_revision FROM owner WHERE owner_id=?',[ownerId]):tx.get('SELECT current_publication_id,document_revision FROM contact WHERE owner_id=? AND id=?',[ownerId,contactId]);
  if(!current||current.current_publication_id===null&&!publicationIdOverride)return [];
  try{
+  // 本闭包只读；同一发布集合共享的记忆来源复用，不延续到后续写入或下一次读取。
+  return withSourceMemo(()=>{
   const cache=new Map<string,ReplySource[]>(),publicationId=publicationIdOverride??String(current.current_publication_id),members=publicationMembers(tx,ownerId,publicationId,scopeKind,contactId,cache,sourceEligibility);
   // 完整集合只在本次调用内复核一次；同文档的目录与正文仍各自重建并比较。
   const requested=new Map<string,ReplyKnowledgeItem[]>();
@@ -91,6 +93,7 @@ function scopeItems(tx:StorageTransaction,scope:DiscussionScope,scopeKind:'self'
      ...projection,qualification:'published' as const,sources,documentRevision:current.document_revision as bigint}];
    });
   });
+  },tx,sourceEligibility);
  }catch(error){
   // 来源失效时省略整个发布集合；精确复核随后因缺少原项而拒绝，工具范围／预算仍显式返回。
   if(error instanceof StorageFailure&&!['reply_document_range_invalid','reply_document_budget_exceeded'].includes(error.code))return [];

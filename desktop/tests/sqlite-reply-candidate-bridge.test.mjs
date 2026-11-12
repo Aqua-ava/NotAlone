@@ -99,6 +99,9 @@ test('已知失败按安全中文状态映射，未知错误不将供应商正�
   ['skill_run_invalidated','本次Skill资格已失效，请重新读取。'],
   ['history_source_not_available','聊天来源待重新核验，请到联系人页处理同步问题。'],
   ['discussion_source_unavailable','聊天来源待重新核验，请到联系人页处理同步问题。'],
+  ['discussion_preparation_timeout','整理资料超时，请核对原请求。'],
+  ['discussion_storage_interrupted','本机资料服务中断，请核对原请求。'],
+  ['runtime_interrupted','应用运行曾中断，请核对原请求。'],
   ['reply_page_too_large','本次候选记录超出可显示范围，请先处理较早记录后重试。'],
   ['reply_skill_page_too_large','本次Skill输入超出可显示范围。'],
   ['synthetic_provider_unknown','候选结果尚未确认，请保留原请求重试核对。'],
@@ -107,6 +110,17 @@ test('已知失败按安全中文状态映射，未知错误不将供应商正�
   await assert.rejects(f.bridge.candidates.execute(input),error=>{assert.equal(error.message,expected);assert.equal(error.message.includes('供应商'),false);assert.equal(error.message.includes('私密正文'),false);return true;});
  }
  assert.equal(f.requests.every(request=>request.body.request_key===ids.request),true);
+});
+
+test('历史失败仅接收无正文错误码与真实发送标记，拒绝异常正文及额外诊断字段',async t=>{
+ const f=fixture(await modules());t.after(()=>f.controller.close());
+ const request={...pageData().requests[0],generationState:'failed',generationErrorCode:'discussion_storage_interrupted',generationSent:false,sourceState:'unavailable',candidates:[],selections:[],loadedSkills:[]};
+ f.respond(async()=>({generation:3,data:{...pageData(),requests:[request]}}));
+ assert.deepEqual((await f.bridge.candidates.execute({...scope,action:'read'})).requests[0],request);
+ for(const extra of [{generationErrorCode:'合成异常正文 /private/path'},{generationErrorCode:'a'.repeat(81)},{generationSent:'false'},{errorDetail:'合成供应商正文'},{stack:'合成私密调用堆栈'}]){
+  f.respond(async()=>({generation:3,data:{...pageData(),requests:[{...request,...extra}]}}));
+  await assert.rejects(f.bridge.candidates.execute({...scope,action:'read'}),/候选结果尚未确认/);
+ }
 });
 
 test('最近聊天投影只接受当前联系人范围内的有限文字材料',async t=>{

@@ -7,7 +7,8 @@ const codes=new Set(['ABORTED','AUTH','PERMISSION','RATE_LIMIT','QUOTA','ACCOUNT
 export interface DiscussionFailureEvidence {kind:string;code:string;status?:number;dispatch:string}
 const executionCodes=new Set(['discussion_generation_timeout','discussion_generation_cancelled','discussion_generation_failed','discussion_call_failed','discussion_call_limit',
  'discussion_identity_required','discussion_request_stale','discussion_source_unavailable','discussion_runtime_invalidated','history_source_not_available',
- 'reply_source_unavailable','reply_sources_not_ready','reply_input_stale','reply_output_invalid','reply_content_invalid','reply_basis_not_actual_input','reply_knowledge_unavailable','memory_knowledge_stale','skill_run_invalidated','discussion_skill_unavailable','discussion_call_budget_invalid']);
+ 'reply_source_unavailable','reply_sources_not_ready','reply_input_stale','reply_output_invalid','reply_content_invalid','reply_basis_not_actual_input','reply_knowledge_unavailable','memory_knowledge_stale','skill_run_invalidated','discussion_skill_unavailable','discussion_call_budget_invalid',
+ 'discussion_preparation_timeout','discussion_storage_interrupted','runtime_interrupted']);
 /** 进度接口仅暴露固定本地原因码，供应商文本不能成为错误分类。 */
 export function sanitizeDiscussionErrorCode(value:unknown):string{return typeof value==='string'&&executionCodes.has(value)?value:'discussion_generation_failed';}
 
