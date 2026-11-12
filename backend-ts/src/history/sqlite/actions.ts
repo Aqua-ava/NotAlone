@@ -164,8 +164,9 @@ export const historyActions:StorageAction[]=[
    AND ((kind='incremental' AND cursor IS NOT NULL AND (state IN ('running','incomplete') OR (state='invalidated' AND failure_code='history_runtime_revalidated')))
    OR (kind='history' AND (state IN ('complete','incomplete') OR (state='invalidated' AND failure_code='history_runtime_revalidated')) AND cursor IS NULL AND resume_cursor IS NOT NULL)
    OR (kind='history' AND ${partialStates} AND cursor IS NOT NULL ${durableHistory?'AND resume_cursor IS NOT NULL':''}))
-   -- 已接受增量的检查点比旧快照恢复点新，重建守卫不退回整段快照起点。
-   ORDER BY (kind='incremental') DESC,creation_no DESC,created_at DESC,id DESC LIMIT 1`,[token.owner_id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation)]);
+   -- 只按创建先后取最新恢复点：已接受增量的检查点比旧快照恢复点新，重建守卫不退回整段快照起点；
+   -- 但更旧的已作废增量检查点不能压过更新的未完成历史片段，否则大历史每片都从头重读、永远读不完并反复新建目标。
+   ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1`,[token.owner_id,token.contact_id,token.binding_id,token.grant_id,BigInt(token.data_generation),BigInt(token.barrier_generation)]);
   if(!goal)return null;
   let previousReport:HistorySupportReport;
   try{previousReport=JSON.parse(String(goal.support_json)) as HistorySupportReport;}catch{return null;}
