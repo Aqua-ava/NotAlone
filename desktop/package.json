@@ -19,6 +19,7 @@
     "prepare:probe": "node scripts/prepare-probe.mjs",
     "package": "node scripts/package.mjs",
     "dev:status": "node scripts/development-status.mjs",
+    "dev:stable": "node scripts/dev-stable.mjs",
     "test:inventory": "node scripts/test-inventory.mjs",
     "test:native": "swift test --package-path ../native/macos && node --test ../native/macos/Tests/DiagnosticEntrypoints.test.mjs",
     "diag": "node scripts/diag.mjs"

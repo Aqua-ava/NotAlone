@@ -10,6 +10,7 @@
     "dev": "pnpm --dir desktop run dev",
     "start": "pnpm run dev",
     "dev:status": "pnpm --dir desktop run dev:status",
+    "dev:stable": "pnpm --dir desktop run dev:stable",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm --workspace-concurrency=1 --no-bail -r run test",
     "test:backend": "pnpm --dir backend-ts test",

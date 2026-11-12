@@ -53,6 +53,7 @@
   "tests/contact-restore-coalescing.test.mjs",
   "tests/desktop-state-optimization.test.mjs",
   "tests/development-policy.test.mjs",
+  "tests/dev-stable.test.mjs",
   "tests/development.test.mjs",
   "tests/expression-preferences/controller.test.mjs",
   "tests/expression-preferences/bigint.test.mjs",

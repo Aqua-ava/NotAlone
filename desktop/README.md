@@ -62,6 +62,16 @@ React／CSS 保存后热更新；main、preload、共享 TypeScript 和后台源
 
 开发版顶部变化辅助资源来自 `desktop/.dev/resources/notalone-probe`，完整性或签名核验失败时回到正常周期观察，不搜索配置探针旁的任意文件。开发源码覆盖仅在内存生效，不改写保存的项目路径；旧 `pythonExecutable` 兼容忽略，不能作为启动修复方向。
 
+### 他人改码时的稳定实例
+
+其他 Agent 在主工作区持续改代码时，主工作区的热更新实例会因每次保存重启，半成品源码还可能使本机服务起不来。需要在此期间照常使用 App 时，从主工作区运行 `pnpm run dev:stable`（Agent 同样放后台）：
+
+- 在同级目录 `<仓库名>-stable` 创建主工作区 HEAD 的 Git worktree 快照，在其中运行同一套 `scripts/dev.mjs`，仍是热更新开发模式而不是打包版。只含已提交内容，主工作区的保存、未提交改动和编译失败都不会影响它。
+- 默认沿用已有快照；`pnpm run dev:stable --update` 切到主工作区当前 HEAD，运行中的实例随后经认证停读自动重启。快照落后时启动输出会提示落后的提交数。
+- `node_modules`、`.env`、`model-permits`、`local-tools` 和媒体校验产物以符号链接共享主工作区，Electron 沿用同一真实路径，不会因换目录重新授权；Skill 只读器在快照内自行构建。
+- 该实例使用真实资料目录并持有单实例锁。此时 Agent 自己的验收改用 `pnpm run dev -- --user-data-dir /绝对路径` 的独立合成资料目录，不终止用户的实例；核对快照实例在 `<仓库名>-stable/desktop` 下运行 `pnpm run dev:status`。
+- 不再需要时先从 App 菜单正常退出，再用 `git worktree remove ../<仓库名>-stable` 移除快照。
+
 ### 默认 SQLite 开发入口
 
 正常开发沿同一官方 profile 启动受控 SQLite，不需要 runtime 选择标记。独立合成验收可选择新的绝对 userData 目录，先核对实例占用，并在退出后核验本轮资源：
