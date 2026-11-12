@@ -139,6 +139,10 @@ export function AssistantSessionPanel({ replies, initialDraft = '', onInitialDra
   const discussionDisabled = Boolean(replies.state.generationBlock) || busy || !!confirmation || !currentDiscussion || saved?.phase !== 'ready'
     || Boolean(replies.state.sourceAvailability) || replies.state.phase === 'waiting' || activeContactJobs.length > 0
     || replies.state.sessionDeletion === 'deleted' || replies.state.sessionDeletion === 'missing';
+  const sessionRecovery = <button className="button" disabled={!replies.state.contactId || busy}
+    onClick={() => void (saved?.sessionId ? replies.viewSavedSession(saved.sessionId) : replies.listSavedSessions())}>
+    {saved?.sessionId ? '重新核对讨论' : '刷新讨论列表'}
+  </button>;
   useEffect(() => { setConfirmation(null); setCopyError(false); }, [replies.state.contactId, replies.state.scopeRevision, saved?.sessionId]);
   useEffect(() => {
     if (sqliteDiscussion && saved?.phase === 'ready' && saved.sessionId && (!catalog || catalog.phase === 'idle')) {
@@ -180,8 +184,8 @@ export function AssistantSessionPanel({ replies, initialDraft = '', onInitialDra
     </p>}
     {replies.state.contextRefresh?.sessionId === saved?.sessionId && <p role="status">已更新当前聊天和有效资料，历史讨论仅作参考。</p>}
     {catalog?.phase === 'loading' && <p role="status">正在核对助手会话…</p>}
-    {catalog?.selectionPending && catalog.phase !== 'loading' && <p role="alert">助手会话操作尚未确认，请刷新列表后明确选择会话。</p>}
-    {catalog?.phase === 'failed' && !catalog.selectionPending && <p role="alert">助手会话列表暂不可用，请刷新重试。</p>}
+    {catalog?.selectionPending && catalog.phase !== 'loading' && <p role="alert">联系人已选中，助手讨论的操作结果尚待核对。{sessionRecovery}</p>}
+    {catalog?.phase === 'failed' && !catalog.selectionPending && <p role="alert">助手会话列表暂不可用，请重新核对。{sessionRecovery}</p>}
     {confirmation && <AssistantSessionDeletionConfirmation busy={catalog?.phase === 'loading' || Boolean(catalog?.selectionPending)}
       onConfirm={confirmDelete} onCancel={() => setConfirmation(null)} />}
     {deleting && <p role="status">正在删除并核对助手会话…</p>}
@@ -206,7 +210,9 @@ export function AssistantSessionPanel({ replies, initialDraft = '', onInitialDra
       </button>}
     </div>)}
     {saved?.phase === 'loading' && <p role="status">正在读取已保存讨论…</p>}
-    {saved?.phase === 'failed' && <p role="alert">已保存讨论暂不可用，请重试读取。</p>}
+    {saved?.phase === 'failed' && <p role="alert">已保存讨论暂不可用，请重新核对。
+      {!catalog?.selectionPending && catalog?.phase !== 'failed' && sessionRecovery}
+    </p>}
     {copyError && <p role="alert">复制来源暂不可确认，请重新读取讨论后核对。</p>}
     {sqliteDiscussion && <>
       {window.notalone.sqliteDiscussion.candidates&&<SqliteReplyCandidatesPanel bridge={window.notalone.sqliteDiscussion} contactId={replies.state.contactId}

@@ -197,7 +197,8 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  }
  return <section aria-label="表达工作区" className="compose-panel unified-workspace sqlite-reply-candidates">
   <header className="compose-heading"><span className="section-eyebrow">一起想，把话说好</span><h2>有什么想说的？</h2><p>写下想法、方向或草稿；没有思路，也可以让我帮你想。</p></header>
-  {!available&&<p role="status">请先选择本次联系人并打开当前助手会话。</p>}
+  {!available&&<p role="status">{!contactId ? '请先选择本次联系人。'
+   : !sessionId ? '联系人已选中，请先打开当前助手讨论。' : '联系人已选中，助手讨论暂不可用，请核对上方状态。'}</p>}
   <textarea aria-label="有什么想说的" rows={3} maxLength={65536} value={draft} placeholder="写下你的想法或草稿，也可以留空，点击「帮我想想」…" disabled={!available||busy} onChange={e=>{seeded.current=scopeKey;setDraft(e.target.value);if(contactId)onDraftChange?.(e.target.value,{contactId,scopeRevision});}} />
   <div className="workspace-actions">
     <button className="generate-button" aria-label="帮我表达" disabled={!available||busy||unresolved||!page||!draft.trim()} onClick={()=>void generate('express')}><Icon name="write" size={18}/>帮我表达</button>

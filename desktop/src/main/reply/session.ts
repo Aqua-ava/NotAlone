@@ -81,6 +81,7 @@ export class ReplySession {
   private readonly sessionProjection = new AssistantSessionProjection();
   private sessionDelete: AbortController | undefined;
   private catalogPending: AbortController | undefined;
+  private catalogMutation: AbortController | undefined;
   private candidateRestoreOperation = 0;
   private candidateSourceCheck: CandidateSourceCheck | undefined;
   private readonly candidateVersions: AssistantCandidateVersionSession;
@@ -468,9 +469,21 @@ export class ReplySession {
     } finally { if (this.savedRead === pending) this.savedRead = undefined; }
   }
 
+  private invalidateSessionCatalog(): void {
+    const pending = this.catalogPending;
+    if (!pending) return;
+    const selectionPending = this.catalogMutation === pending || this.state.sessionCatalog?.selectionPending === true;
+    pending.abort(); this.catalogPending = undefined; this.catalogMutation = undefined;
+    // 纯读取取消后可重新核对；变更请求已发出则继续保留结果未知的门禁。
+    this.publish({ sessionCatalog: { phase: selectionPending ? 'failed' : 'idle', items: [],
+      currentSessionId: null, selectionPending } });
+  }
+
   async listSavedSessions(selection: ContactSelection): Promise<void> {
     this.assertScope(selection);
-    if (this.catalogPending || this.state.sessionDeletion === 'deleting') return;
+    if (this.catalogPending || this.state.sessionDeletion === 'deleting'
+      || this.pendingOwnerContextChanges > 0 || this.pendingExpressionPreferenceDeletions > 0
+      || this.retainedSourceValidation?.checking) return;
     const previous = this.state.sessionCatalog;
     const pending = new AbortController(); this.catalogPending = pending;
     const generation = this.backend.getConnectionGeneration();
@@ -507,13 +520,16 @@ export class ReplySession {
     this.assertScope(selection);
     if (this.catalogPending
       || this.state.savedSession?.phase === 'loading' || this.state.sessionDeletion === 'deleting'
-      || this.state.sessionDeletion === 'failed' || this.state.sourceAvailability === 'checking') {
+      || this.state.sessionDeletion === 'failed' || this.state.sourceAvailability === 'checking'
+      || this.pendingOwnerContextChanges > 0 || this.pendingExpressionPreferenceDeletions > 0
+      || this.retainedSourceValidation?.checking) {
       throw new Error('请等待当前操作完成后再切换助手会话。');
     }
     this.workspaceRequirementInputVersion = undefined;
     const previous = this.state.sessionCatalog;
     this.leaveGenerationView();
     const pending = new AbortController(); this.catalogPending = pending;
+    if (!viewOnly) this.catalogMutation = pending;
     const generation = this.backend.getConnectionGeneration();
     const current = () => !pending.signal.aborted && this.catalogPending === pending
       && selection.contactId === this.state.contactId && selection.scopeRevision === this.state.scopeRevision
@@ -546,7 +562,7 @@ export class ReplySession {
       const preserveLocalDraft = !viewOnly && !selection.sessionId && !carry && saved.discussionEntries !== undefined
         && (this.state.savedSession?.phase === 'ready' && this.state.savedSession.sessionId === null
           || this.state.savedSession?.phase === 'failed' && independentDraft);
-      if (!preserveLocalDraft) this.contacts.clearDraft(selection);
+      if (!viewOnly && !preserveLocalDraft) this.contacts.clearDraft(selection);
       const catalog = viewOnly ? await listAssistantSessions(this.backend, selection.contactId, pending.signal) : undefined;
       if (!current() || catalog && catalog.generation !== generation) return;
       const currentSessionId = viewOnly ? catalog!.currentSessionId : saved.sessionId;
@@ -577,9 +593,13 @@ export class ReplySession {
         // 来源删除也会清除选择回执；拒绝的分类不能代替对原会话的权威重读。
         await this.handleCandidateSourceUnavailable(new AssistantCandidateSourceUnavailable(carry, generation, null));
       }
-      // POST 可能已落库；只有显式选择并重读成功才能恢复本次生成。
-      if (current()) this.publish({ sessionCatalog: { phase: 'failed', items: [], currentSessionId: null, selectionPending: true } });
-    } finally { if (this.catalogPending === pending) this.catalogPending = undefined; }
+      // 只有变更请求可能已落库；只读失败保留既有待核对决定，不制造未知写入。
+      if (current()) this.publish({ sessionCatalog: { phase: 'failed', items: [], currentSessionId: null,
+        selectionPending: !viewOnly || previous?.selectionPending === true } });
+    } finally {
+      if (this.catalogPending === pending) this.catalogPending = undefined;
+      if (this.catalogMutation === pending) this.catalogMutation = undefined;
+    }
   }
 
   async deleteSavedSession(selection: AssistantSessionDeletion): Promise<void> {
@@ -684,6 +704,7 @@ export class ReplySession {
     this.sessionProjection.invalidateSource();
     this.generationJobs.cancelAll();
     this.savedRead?.abort(); this.savedRead = undefined;
+    this.invalidateSessionCatalog();
     this.cancelPending(); this.lastAttempt = undefined;
 
     this.pendingContent = content;
@@ -727,6 +748,7 @@ export class ReplySession {
     const held = this.heldResult ?? (this.state.result ? { result: this.state.result,
       selectedCandidateId: this.state.selectedCandidateId } : undefined);
     this.savedRead?.abort(); this.savedRead = undefined;
+    this.invalidateSessionCatalog();
     this.cancelPending(); this.lastAttempt = undefined;
     this.heldResult = held;
     this.candidateVersions.setScope(null);
@@ -744,6 +766,7 @@ export class ReplySession {
   // 删除检查点只接收主进程已确认的联系人；跨联系人本人资料也可能影响当前依据。
   async revalidateDeletedSource(contactId: string, options: { preserveInput?: true } = {}): Promise<void> {
     this.sessionProjection.invalidateSource();
+    this.invalidateSessionCatalog();
     for (const [key, retry] of this.retainedRetries) if (retry.contactId === contactId) this.retainedRetries.delete(key);
     this.messageNotices.forget(contactId);
     const owningGeneration = this.backend.getConnectionGeneration();
@@ -762,6 +785,7 @@ export class ReplySession {
         this.publish({});
       }
     });
+    const refreshCatalog = this.state.sessionCatalog?.phase === 'idle' && !this.state.sessionCatalog.selectionPending;
     try {
       let candidateSnapshotAccepted = false;
       if (this.candidateSourceCheck) {
@@ -775,11 +799,6 @@ export class ReplySession {
         candidateSnapshotAccepted = this.state.savedSession.phase === 'ready';
       }
       if (!candidateSnapshotAccepted) this.candidateVersions.setScope(null);
-      if (this.catalogPending) {
-        this.catalogPending.abort(); this.catalogPending = undefined;
-        this.publish({ sessionCatalog: { phase: 'failed', items: [], currentSessionId: null, selectionPending: true } });
-      }
-
       this.savedRead?.abort();
       this.savedRead = undefined;
       if (this.state.savedSession && !candidateSnapshotAccepted) this.publish({ savedSession: { ...this.state.savedSession, ...invalidatedSqliteDiscussion(this.state.savedSession), phase: 'idle', turns: [], inputs: [], currentInputVersionId: null } });
@@ -852,6 +871,14 @@ export class ReplySession {
                 draft: latest.draft !== displayedContent.draft ? latest.draft : clean.draft };
             } else this.pendingContent = clean;
             await this.readSavedSession({ contactId: activeContact, scopeRevision: activeScope });
+          }
+          if (refreshCatalog && activeContact && activeContact === this.state.contactId && activeScope === this.state.scopeRevision
+            && owningGeneration === this.backend.getConnectionGeneration()
+            && this.pendingOwnerContextChanges === 0 && this.pendingExpressionPreferenceDeletions === 0) {
+            const selection = { contactId: activeContact, scopeRevision: activeScope };
+            await this.listSavedSessions(selection);
+            if (!restoring && activeContact === this.state.contactId && activeScope === this.state.scopeRevision
+              && owningGeneration === this.backend.getConnectionGeneration()) await this.readSavedSession(selection);
           }
         }
       }

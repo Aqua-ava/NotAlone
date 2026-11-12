@@ -14,6 +14,67 @@ const contactId = '11111111-1111-4111-8111-111111111111';
 const sessionId = '33333333-3333-4333-8333-333333333333';
 const nextSessionId = '44444444-4444-4444-8444-444444444444';
 
+test('已选联系人会话待核对时直接只读恢复，保留草稿且不续期或生成', { timeout: 30_000 }, async t => {
+  const compiled = await build({ stdin: { contents: `
+    import React from 'react'; import { createRoot } from 'react-dom/client';
+    import { AssistantSessionPanel } from './src/renderer/AssistantSessionPanel';
+    window.__calls = [];
+    window.notalone = { sqliteDiscussion: {
+      candidates: {execute: async request => {window.__calls.push(request.action); return {requests:[],coverage:{phase:'complete'}};}},
+      submit: async () => {window.__calls.push('submit');}, onInvalidated: () => () => {}
+    }};
+    let state = {contactId:${JSON.stringify(contactId)},scopeRevision:7,phase:'idle',generationBlock:null,generationJobs:[],
+      savedSession:{phase:'ready',sessionId:${JSON.stringify(sessionId)},turns:[],inputs:[],currentInputVersionId:null,discussionEntries:[],runtimeRecovery:'ready'},
+      sessionCatalog:{phase:'ready',items:[{sessionId:${JSON.stringify(sessionId)},isCurrent:true}],currentSessionId:${JSON.stringify(sessionId)},selectionPending:true}};
+    const root=createRoot(document.getElementById('root'));
+    const render=()=>root.render(React.createElement(AssistantSessionPanel,{initialDraft:'用户的独立草稿',replies:{state,
+      listSavedSessions:async()=>{window.__calls.push('list');},
+      viewSavedSession:async id=>{window.__calls.push(['view',id]);state={...state,sessionCatalog:{...state.sessionCatalog,phase:'loading'}};render();await new Promise(resolve=>{window.__finishRead=resolve;});state={...state,sessionCatalog:{...state.sessionCatalog,phase:'ready',selectionPending:false,currentSessionId:window.__recoveredCurrent??id}};render();},
+      resumeSavedSession:async()=>{window.__calls.push('resume');},newSavedSession:async()=>{window.__calls.push('new');},readSavedSession:async()=>{window.__calls.push('readSaved');}
+    }}));
+    window.__catalogPatch=patch=>{state={...state,sessionCatalog:{...state.sessionCatalog,...patch}};render();};
+    render();
+  `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false, logLevel: 'silent' });
+  const server = createServer((_req, res) => { res.setHeader('content-type', 'text/html'); res.end('<div id="root"></div>'); });
+  let browser;
+  t.after(async () => {
+    try { await browser?.close(); }
+    finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+  });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  browser = await chromium.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
+  const page = await browser.newPage(); page.setDefaultTimeout(5000);
+  await page.goto(`http://127.0.0.1:${server.address().port}`); await page.addScriptTag({ content: compiled.outputFiles[0].text });
+  const history=page.locator('details.session-browser'),workspace=page.getByRole('region',{name:'表达工作区'});
+  const input=workspace.getByRole('textbox',{name:'有什么想说的',exact:true});
+  const suggest=workspace.getByRole('button',{name:'帮我想想',exact:true});
+  assert.equal(await history.evaluate(element=>element.open),false);
+  await expect(page.getByRole('alert')).toContainText('联系人已选中，助手讨论的操作结果尚待核对。');
+  await expect(workspace).not.toContainText('请先选择本次联系人');
+  await expect(suggest).toBeDisabled();
+  await page.getByRole('alert').getByRole('button',{name:'重新核对讨论',exact:true}).click();
+  await expect(page.getByText('正在核对助手会话…',{exact:true})).toBeVisible();
+  await expect(suggest).toBeDisabled();
+  await page.evaluate(()=>window.__finishRead());
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(input).toHaveValue('用户的独立草稿');
+  await expect(suggest).toBeEnabled();
+  await expect(workspace.getByRole('button',{name:'帮我表达',exact:true})).toBeEnabled();
+  assert.deepEqual((await page.evaluate(()=>window.__calls)).filter(call=>call!=='read'),[['view',sessionId]]);
+  await page.evaluate(()=>window.__catalogPatch({phase:'failed',selectionPending:false}));
+  await expect(page.getByRole('alert')).toContainText('助手会话列表暂不可用');
+  await expect(page.getByRole('alert').getByRole('button',{name:'重新核对讨论',exact:true})).toBeVisible();
+  await expect(workspace).not.toContainText('请先选择本次联系人');
+  await page.evaluate(id=>{window.__recoveredCurrent=id;},nextSessionId);
+  await page.getByRole('alert').getByRole('button',{name:'重新核对讨论',exact:true}).click();
+  await expect(page.getByText('正在核对助手会话…',{exact:true})).toBeVisible();
+  await page.evaluate(()=>window.__finishRead());
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(suggest).toBeDisabled();
+  assert.equal(await history.evaluate(element=>element.open),false);
+  assert.deepEqual((await page.evaluate(()=>window.__calls)).filter(call=>call!=='read'),[['view',sessionId],['view',sessionId]]);
+});
+
 test('正式讨论面板从历史回看显式继续，分段回执重新读取权威讨论与目录', { timeout: 30_000 }, async t => {
   const compiled = await build({ stdin: { contents: `
     import React from 'react'; import { createRoot } from 'react-dom/client';
@@ -44,9 +105,14 @@ test('正式讨论面板从历史回看显式继续，分段回执重新读取�
     render();
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false, logLevel: 'silent' });
   const server = createServer((_req, res) => { res.setHeader('content-type', 'text/html'); res.end('<div id="root"></div>'); });
-  server.listen(0, '127.0.0.1'); await once(server, 'listening'); t.after(() => new Promise(resolve => server.close(resolve)));
-  const browser = await chromium.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
-  t.after(() => browser.close()); const page = await browser.newPage(); const submissions = [];
+  let browser;
+  t.after(async () => {
+    try { await browser?.close(); }
+    finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+  });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  browser = await chromium.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
+  const page = await browser.newPage(); const submissions = [];
   await page.exposeFunction('__submit', async request => { submissions.push(request); return { sessionId: submissions.length === 1 ? nextSessionId : sessionId, segmented: submissions.length === 1, replayed: submissions.length > 1, requestKey: request.requestKey }; });
   await page.goto(`http://127.0.0.1:${server.address().port}`); await page.addScriptTag({ content: compiled.outputFiles[0].text });
   await expect(page.getByRole('region', { name: '助手讨论发言', exact: true })).toHaveCount(0);
@@ -140,9 +206,14 @@ test('正式会话面板消费联系人初始草稿且用户编辑后不会重�
     createRoot(document.getElementById('root')).render(React.createElement(View));
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false, logLevel: 'silent' });
   const server = createServer((_req, res) => { res.setHeader('content-type', 'text/html'); res.end('<div id="root"></div>'); });
-  server.listen(0, '127.0.0.1'); await once(server, 'listening'); t.after(() => new Promise(resolve => server.close(resolve)));
-  const browser = await chromium.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
-  t.after(() => browser.close()); const page = await browser.newPage();
+  let browser;
+  t.after(async () => {
+    try { await browser?.close(); }
+    finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+  });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  browser = await chromium.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
+  const page = await browser.newPage();
   await page.goto(`http://127.0.0.1:${server.address().port}`); await page.addScriptTag({ content: compiled.outputFiles[0].text });
   const input = page.getByRole('textbox', { name: '有什么想说的', exact: true });
   await expect(input).toHaveValue('联系人初始草稿');
