@@ -6,16 +6,19 @@ export type SqliteCandidateOperation=SqliteCandidateScope & (
  | {action:'read'}
  | {action:'status';requestKey:string}
  | {action:'skills';requestId:string;offset:number}
+ | {action:'inputs';requestId:string;offset:number}
  | {action:'generate';requestKey:string;text:string;acceptIncomplete:boolean;carriedSelectionId?:string;selectedPackageId?:string;workspace?:SqliteReplyWorkspace}
  | {action:'edit';candidateId:string;versionNo:number;parts:string[]}
  | {action:'select'|'version';candidateId:string;versionNo:number}
 );
-export interface SqliteCandidateVersion {candidateId:string;versionNo:number;origin:'model'|'manual';parentVersionNo:number|null;parts:string[];basis:{itemNo:number;kind:string;text:string;verification:'actual_input'|'inherited_unverified'}[]}
+export interface SqliteCandidateVersion {candidateId:string;versionNo:number;origin:'model'|'manual';parentVersionNo:number|null;parts:string[];basis:(SqliteCandidateInputMaterial&{verification:'actual_input'|'inherited_unverified'})[]}
 export interface SqliteCandidateLoadedSkill {packageId:string;name?:string;title?:string;revisionNo:number;relativePath:string;text?:string;origin?:'explicit'|'auto_preload'|null;catalogRevision?:string|null}
 export interface SqliteCandidateRequest {requestId:string;generationState?:'committed'|'running'|'failed'|'unknown'|'invalidated';generationErrorCode?:string|null;generationSent?:boolean;coverageWarning:string|null;skillWarning?:string|null;sourceState:'available'|'unavailable';candidates:SqliteCandidateVersion[];selections:{id:string;candidateId:string;versionNo:number;selectionNo:number}[];loadedSkills:SqliteCandidateLoadedSkill[];preloadedSkills?:{packageId:string;name?:string;revisionNo:number;origin:'explicit'|'auto_preload';catalogRevision?:string}[]}
 export interface SqliteCandidateRecentMessage {messageId:string;sender:'owner'|'contact'|'unknown';text:string;occurredAt:string|null;timePrecision:'millisecond'|'second'|null;displayPosition:string;ordering:'verified'|'unknown'}
 export interface SqliteCandidatePage {recentMessages?:SqliteCandidateRecentMessage[];requests:SqliteCandidateRequest[];coverage:{phase:'not_started'|'running'|'incomplete'|'complete'};hasMoreRequests?:boolean}
 export interface SqliteCandidateSkillPage {items:(SqliteCandidateLoadedSkill&{text:string})[];nextOffset:number|null;total:number}
+export interface SqliteCandidateInputMaterial {itemNo:number;kind:string;text:string;versionNo?:number;scopeKind?:'owner'|'contact';workspaceItem?:'request'|'draft'|'instruction'|'supplemental_context';qualification?:'confirmed'|'auto'|'unconfirmed'|'published';projectionKind?:'directory'|'profile'|'blocks'}
+export interface SqliteCandidateInputPage {items:SqliteCandidateInputMaterial[];nextOffset:number|null;total:number;recorded:boolean}
 export interface SqliteReplyCandidatesBridge {execute(operation:SqliteCandidateOperation):Promise<unknown>}
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(v);
 function invalid():never{throw new Error('本次候选操作无效。');}
@@ -32,10 +35,10 @@ function validWorkspace(value:unknown):value is SqliteReplyWorkspace{
 export function readSqliteCandidateOperation(value:unknown):SqliteCandidateOperation{
  if(!value||typeof value!=='object'||Array.isArray(value))invalid();const v=value as Record<string,unknown>;
  const common=['contactId','scopeRevision','sessionId','action'];
- const extra=v.action==='read'?[]:v.action==='status'?['requestKey']:v.action==='skills'?['requestId','offset']:v.action==='generate'?['requestKey','text','acceptIncomplete','carriedSelectionId','selectedPackageId','workspace']:v.action==='edit'?['candidateId','versionNo','parts']:v.action==='select'||v.action==='version'?['candidateId','versionNo']:invalid();
+ const extra=v.action==='read'?[]:v.action==='status'?['requestKey']:v.action==='skills'||v.action==='inputs'?['requestId','offset']:v.action==='generate'?['requestKey','text','acceptIncomplete','carriedSelectionId','selectedPackageId','workspace']:v.action==='edit'?['candidateId','versionNo','parts']:v.action==='select'||v.action==='version'?['candidateId','versionNo']:invalid();
  if(Object.keys(v).some(k=>![...common,...extra].includes(k))||!uuid(v.contactId)||!uuid(v.sessionId)||!Number.isSafeInteger(v.scopeRevision)||(v.scopeRevision as number)<0)invalid();
  if(v.action==='status'&&!uuid(v.requestKey))invalid();
- if(v.action==='skills'&&(!uuid(v.requestId)||!Number.isSafeInteger(v.offset)||(v.offset as number)<0||(v.offset as number)>1_000_000))invalid();
+ if((v.action==='skills'||v.action==='inputs')&&(!uuid(v.requestId)||!Number.isSafeInteger(v.offset)||(v.offset as number)<0||(v.offset as number)>1_000_000))invalid();
  if(v.action==='generate'&&(!uuid(v.requestKey)||typeof v.text!=='string'||v.text.length>100000||typeof v.acceptIncomplete!=='boolean'||v.carriedSelectionId!==undefined&&!uuid(v.carriedSelectionId)||v.selectedPackageId!==undefined&&!uuid(v.selectedPackageId)
   ||v.workspace!==undefined&&(!validWorkspace(v.workspace)||v.text!==v.workspace.draftText||v.carriedSelectionId!==undefined&&!v.workspace.includeRelationshipContext)
   ||v.workspace===undefined&&!v.text.trim()))invalid();
@@ -64,7 +67,7 @@ export function readSqliteCandidateVersion(value:unknown):SqliteCandidateVersion
   ||!(v.parentVersionNo===null||Number.isSafeInteger(v.parentVersionNo)&&(v.parentVersionNo as number)>=1&&(v.parentVersionNo as number)<(v.versionNo as number))
   ||!Array.isArray(v.parts)||!v.parts.length||v.parts.length>8||v.parts.some(p=>typeof p!=='string'||!p.trim()||p.length>10000)
   ||!Array.isArray(v.basis)||v.basis.length>50)invalid();
- for(const basis of v.basis){const b=object(basis);exact(b,['itemNo','kind','text','verification']);if(!Number.isSafeInteger(b.itemNo)||(b.itemNo as number)<1||typeof b.kind!=='string'||typeof b.text!=='string'||!b.text||b.text.length>100000||!['actual_input','inherited_unverified'].includes(String(b.verification)))invalid();}
+ for(const basis of v.basis){const b=object(basis);exact(b,['itemNo','kind','text','verification'],['scopeKind','workspaceItem','qualification','projectionKind','versionNo']);validMaterial(b);if(!['actual_input','inherited_unverified'].includes(String(b.verification)))invalid();}
  return v as unknown as SqliteCandidateVersion;
 }
 export function readSqliteCandidatePage(value:unknown):SqliteCandidatePage{
@@ -101,6 +104,27 @@ export function readSqliteCandidateSkillPage(value:unknown,offset:number):Sqlite
  if(end>(v.total as number)||end===offset&&offset<(v.total as number)||(nextOffset===null?end!==v.total:nextOffset!==end))invalid();
  for(const skill of v.items)validLoadedSkill(skill,true);
  return v as unknown as SqliteCandidateSkillPage;
+}
+
+function validMaterial(item:Record<string,unknown>):void{
+ if(!Number.isSafeInteger(item.itemNo)||(item.itemNo as number)<1||typeof item.kind!=='string'||!item.kind||typeof item.text!=='string'||!item.text||new TextEncoder().encode(item.text).byteLength>1_500_000
+  ||item.versionNo!==undefined&&(!Number.isSafeInteger(item.versionNo)||(item.versionNo as number)<1)
+  ||item.scopeKind!==undefined&&!['owner','contact'].includes(String(item.scopeKind))
+  ||item.workspaceItem!==undefined&&!['request','draft','instruction','supplemental_context'].includes(String(item.workspaceItem))
+  ||item.qualification!==undefined&&!['confirmed','auto','unconfirmed','published'].includes(String(item.qualification))
+  ||item.projectionKind!==undefined&&!['directory','profile','blocks'].includes(String(item.projectionKind)))invalid();
+}
+export function readSqliteCandidateInputPage(value:unknown,offset=0):SqliteCandidateInputPage{
+ const v=object(value);exact(v,['items','nextOffset','total','recorded']);
+ if(!Number.isSafeInteger(offset)||offset<0||typeof v.recorded!=='boolean'||!Array.isArray(v.items)||v.items.length>50||!Number.isSafeInteger(v.total)||(v.total as number)<0)invalid();
+ const end=offset+v.items.length;
+ if(end>(v.total as number)||end===offset&&offset<(v.total as number)||(v.nextOffset===null?end!==v.total:!Number.isSafeInteger(v.nextOffset)||v.nextOffset!==end)||!v.recorded&&(v.total!==0||v.items.length!==0||v.nextOffset!==null))invalid();
+ const numbers=new Set<number>();
+ for(const value of v.items){const item=object(value);exact(item,['itemNo','kind','text'],['scopeKind','workspaceItem','qualification','projectionKind','versionNo']);validMaterial(item);
+  if(numbers.has(item.itemNo as number))invalid();
+  numbers.add(item.itemNo as number);
+ }
+ return v as unknown as SqliteCandidateInputPage;
 }
 
 /** 进度只包含调用状态，不允许聊天、模型正文或诊断详情进入此通道。 */

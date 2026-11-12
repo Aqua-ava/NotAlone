@@ -1,5 +1,6 @@
 import type {StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {DiscussionScope} from '../contracts.ts';
+import type {InputMaterialMetadata} from './input-material-metadata.ts';
 export interface ReplySource {contactId:string;messageId:string;recordId:string;acceptedRevision:bigint}
 /** 08/09只读消费者合同；读取及复验均在短事务内，不接受页面提供正文或资格。 */
 export interface ReplyKnowledgeItem {
@@ -32,7 +33,7 @@ export interface ReplyKnowledgeReader {
 export const emptyReplyKnowledge:ReplyKnowledgeReader={read:()=>[],requireCurrent(){throw new Error('reply_knowledge_unavailable');}};
 export interface ReplyCandidateVersion {
  candidateId:string;versionNo:number;origin:'model'|'manual';parentVersionNo:number|null;
- parts:string[];basis:{itemNo:number;kind:string;text:string;verification:'actual_input'|'inherited_unverified'}[];
+ parts:string[];basis:({itemNo:number;kind:string;text:string;verification:'actual_input'|'inherited_unverified'}&InputMaterialMetadata)[];
 }
 export interface ReplyCandidateView extends DiscussionScope {
  requestId:string;coverageWarning:string|null;candidates:ReplyCandidateVersion[];

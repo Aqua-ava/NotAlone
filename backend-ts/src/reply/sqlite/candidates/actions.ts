@@ -10,6 +10,7 @@ import {sanitizeDiscussionErrorCode} from '../failure.ts';
 import {emptyReplyKnowledge,type ReplyKnowledgeItem,type ReplyKnowledgeReader} from './contracts.ts';
 import {freezeReplyInput,requireReplyInput,requireSelection,replySourceContacts,selectionSourceContacts} from './input.ts';
 import {insertModelCandidates,parseReplyOutput,readParts,requireCandidate,versionView} from './versions.ts';
+import {readInputMaterials} from './input-materials.ts';
 export const INCOMPLETE_HISTORY_WARNING='历史覆盖不完整：本次使用当前可用资料，可能缺少重要语境。';
 function fail(code:string):never{throw new StorageFailure(code);}
 function storedWorkspaceFingerprint(value:string):string|null{const parsed=JSON.parse(value);return parsed?.kind==='reply_candidate_request_v1'&&typeof parsed.workspaceFingerprint==='string'?parsed.workspaceFingerprint:null;}
@@ -139,6 +140,7 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
    return {...i,requestId:r.id,generationErrorCode,generationSent,generationState:tx.get("SELECT 1 FROM model_call c JOIN reply_attempt a ON a.owner_id=c.owner_id AND a.id=c.reply_attempt_id WHERE a.owner_id=? AND a.request_id=? AND c.state='unknown'",[i.ownerId,r.id])?'unknown':r.state==='cancelled'?'failed':r.state,coverageWarning:r.coverage_warning,skillWarning:candidates.length&&tx.get("SELECT 1 FROM execution_event e JOIN reply_attempt a ON a.owner_id=e.owner_id AND a.id=e.reply_attempt_id WHERE e.owner_id=? AND a.request_id=? AND e.kind='skill_unavailable'",[i.ownerId,r.id])?'回复策略暂不可用':null,candidates,sourceState:candidates.length?'available':'unavailable',loadedSkills:skills.loadedSkills,preloadedSkills:skills.preloadedSkills,selections:candidates.length?tx.all('SELECT * FROM reply_selection WHERE owner_id=? AND request_id=? ORDER BY selection_no',[i.ownerId,r.id]).map(s=>({id:s.id,candidateId:s.candidate_id,versionNo:Number(s.version_no),selectionNo:Number(s.selection_no)})):[]};
   });
  }),
+ action('inputs','read',(tx,i)=>readInputMaterials(tx,i,reader)),
  action('skillInputs','read',(tx,i)=>{
   requireDiscussion(tx,i);
   if(typeof i.requestId!=='string'||!/^[a-f0-9-]{36}$/.test(i.requestId)||!Number.isSafeInteger(i.offset)||i.offset<0||i.offset>1_000_000)fail('reply_input_invalid');

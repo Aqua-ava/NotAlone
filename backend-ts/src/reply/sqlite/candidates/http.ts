@@ -13,13 +13,14 @@ import {skillPresentation} from '../../../skills/sqlite/presentation.ts';
 const uuid='[a-f0-9-]{36}',route=new RegExp(`^/api/contacts/(${uuid})/assistant-sessions/(${uuid})/reply-candidates(?:/(${uuid})/(edit|select|versions/([1-9][0-9]{0,5})))?$`);
 const statusRoute=new RegExp(`^/api/contacts/(${uuid})/assistant-sessions/(${uuid})/reply-candidates/status$`);
 const skillsRoute=new RegExp(`^/api/contacts/(${uuid})/assistant-sessions/(${uuid})/reply-candidates/(${uuid})/skills$`);
+const inputsRoute=new RegExp(`^/api/contacts/(${uuid})/assistant-sessions/(${uuid})/reply-candidates/(${uuid})/inputs$`);
 const id=(v:unknown):v is string=>typeof v==='string'&&new RegExp(`^${uuid}$`).test(v);
 /** 宿主只放行候选状态和详情页的固定查询，禁止借 URL query 扩大读取范围。 */
 export function replyCandidateQueryAllowed(method:string|undefined,url:URL):boolean{
  if(method!=='GET')return false;
  const entries=[...url.searchParams];
  if(statusRoute.test(url.pathname))return entries.length===1&&entries[0][0]==='request_key'&&id(entries[0][1]);
- if(!skillsRoute.test(url.pathname))return false;
+ if(!skillsRoute.test(url.pathname)&&!inputsRoute.test(url.pathname))return false;
  return entries.length===0||entries.length===1&&entries[0][0]==='offset'&&/^(?:0|[1-9][0-9]{0,5})$/.test(entries[0][1]);
 }
 function invalid():never{throw new StorageFailure('reply_input_invalid');}
@@ -30,17 +31,18 @@ export class SqliteReplyCandidateHttp {
  private readonly options:{storage:SqliteStorage;service:SqliteReplyCandidateService;turns?:SqliteReplyTurns;authorize:(request:IncomingMessage)=>boolean};
  constructor(options:SqliteReplyCandidateHttp['options']){this.options=options;}
  async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
-  const raw=req.url??'',url=new URL(raw,'http://localhost'),statusMatch=statusRoute.exec(url.pathname),skillsMatch=skillsRoute.exec(url.pathname),match=statusMatch??skillsMatch??route.exec(url.pathname);if(!match)return false;
+  const raw=req.url??'',url=new URL(raw,'http://localhost'),statusMatch=statusRoute.exec(url.pathname),skillsMatch=skillsRoute.exec(url.pathname),inputsMatch=inputsRoute.exec(url.pathname),match=statusMatch??skillsMatch??inputsMatch??route.exec(url.pathname);if(!match)return false;
   const o=this.options;if(!o.authorize(req)){respond(res,401,{error:'unauthorized'});return true;}
   const trace=req.headers['x-trace-id'];if(trace!==undefined&&!checkedTraceId(trace)){respond(res,400,{error:'reply_input_invalid'});return true;}
   return tracedRequest(checkedTraceId(trace),'reply','reply_generate',async()=>{
   try{
-   if(!statusMatch&&!skillsMatch&&raw!==url.pathname)invalid();
+   if(!statusMatch&&!skillsMatch&&!inputsMatch&&raw!==url.pathname)invalid();
    const [,contactId,discussionId,candidateId,command,version]=match,scope={contactId,discussionId};
-   if(skillsMatch){
+   if(skillsMatch||inputsMatch){
     const offset=url.searchParams.get('offset')??'0',entries=[...url.searchParams];
     if(req.method!=='GET'||!Number.isSafeInteger(Number(offset))||Number(offset)<0||Number(offset)>1_000_000||entries.some(([key])=>key!=='offset')||entries.length>1)invalid();
-    respond(res,200,await o.service.skillInputs({...scope,requestId:skillsMatch[3],offset:Number(offset)}));
+    const input={...scope,requestId:(skillsMatch??inputsMatch)![3],offset:Number(offset)};
+    respond(res,200,await (inputsMatch?o.service.inputMaterials(input):o.service.skillInputs(input)));
    }else if(statusMatch){
     const requestKey=url.searchParams.get('request_key');
     if(req.method!=='GET'||!id(requestKey)||[...url.searchParams].length!==1||url.searchParams.has('request_key')===false)invalid();

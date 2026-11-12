@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
+import {readFile} from 'node:fs/promises';
 import {build} from 'esbuild';
 import {chromium,expect} from '@playwright/test';
 
@@ -203,7 +204,7 @@ test('临时禁用期间真实来源失效仍立即撤下编辑及依据',{timeo
  assert.equal(f.commands.filter(c=>c.action==='read').length,1);
 });
 
-test('候选只展示本次载入的Skill名称及来源，不展示目录清单、正文及历史覆盖提示，仍可编辑回复',{timeout:30000},async t=>{
+test('候选默认只展示本次载入的Skill名称及来源，正文按需展开且不混入候选依据',{timeout:30000},async t=>{
  let data={...pageData()};
  data.requests[0].coverageWarning='历史覆盖不完整：本次使用当前可用资料，可能缺少重要语境。';
  data.requests[0].loadedSkills=[
@@ -249,8 +250,179 @@ test('候选保留请求分页提示，刷新时不读取Skill正文',{timeout:3
  assert.equal(f.commands.filter(command=>command.action==='skills').length,0);
 });
 
+// 明确展开才读取本次材料；候选编号引用与完整输入是两个不同集合。
+const inputPage=(items,extra={})=>({items,nextOffset:null,total:items.length,recorded:true,...extra});
+const referenceSummary=region=>region.locator('summary').filter({hasText:/^本次参考/});
+async function openReferenceGroup(region,label){
+ const summary=referenceSummary(region).locator('..').locator('summary').filter({hasText:new RegExp(`^${label}`)});
+ await expect(summary).toBeVisible();
+ if(!await summary.evaluate(element=>element.parentElement.open))await summary.click();
+}
+
+test('本次参考默认收起并按类别展示完整实际输入，候选依据只展示编号引用',{timeout:30000},async t=>{
+ const cited='（2026-11-07 13:38）对方：合成引用原文\n第二行原文';
+ const other='（2026-11-07 13:39）我：未被这条候选引用的完整合成原文';
+ const relation='合成关系资料正文',owner='合成本人资料正文',draft='本次想法/草稿：合成输入';
+ const version={...original(),basis:[{itemNo:1,kind:'message',text:cited,verification:'actual_input'}]};
+ const items=[{itemNo:1,kind:'message',text:cited},{itemNo:2,kind:'message',text:other},
+  {itemNo:3,kind:'memory',scopeKind:'contact',qualification:'confirmed',text:relation},
+  {itemNo:4,kind:'memory',scopeKind:'owner',qualification:'auto',text:owner},
+  {itemNo:5,kind:'entry',workspaceItem:'draft',text:draft}];
+ const f=await panel(t,async operation=>operation.action==='inputs'?inputPage(items):pageData(version));
+ const region=f.page.getByRole('region',{name:'表达工作区'});
+ await expect(referenceSummary(region)).toBeVisible();
+ assert.equal(f.commands.filter(command=>command.action==='inputs').length,0);
+ await expect(region.getByText(other,{exact:true})).toHaveCount(0);
+ await region.getByText('依据',{exact:true}).click();
+ await expect(region.getByText(cited,{exact:true})).toBeVisible();
+ await expect(region.getByText(/产生此模型版本的实际输入/)).toHaveCount(0);
+ await expect(region.getByText(other,{exact:true})).toHaveCount(0);
+ await referenceSummary(region).click();
+ await expect.poll(()=>f.commands.filter(command=>command.action==='inputs').length).toBe(1);
+ assert.deepEqual(f.commands.find(command=>command.action==='inputs'),{contactId:ids.contact,scopeRevision:1,sessionId:ids.session,action:'inputs',requestId:ids.request,offset:0});
+ await openReferenceGroup(region,'聊天原文');await expect(region.getByText(other,{exact:true})).toBeVisible();
+ await openReferenceGroup(region,'关系资料');await expect(region.getByText(relation,{exact:true})).toBeVisible();
+ await openReferenceGroup(region,'本人资料');await expect(region.getByText(owner,{exact:true})).toBeVisible();
+ await openReferenceGroup(region,'本次输入与讨论');await expect(region.getByText(draft,{exact:true})).toBeVisible();
+ assert.equal(f.commands.filter(command=>command.action==='skills').length,0);
+});
+
+test('手改候选的继承依据只提示一次，聊天原文保留完整且不混Skill',{timeout:30000},async t=>{
+ const version={...original(),versionNo:2,parentVersionNo:1,origin:'manual',basis:[
+  {itemNo:1,kind:'message',text:'合成我方原文',verification:'inherited_unverified'},
+  {itemNo:2,kind:'message',text:'合成对方原文',verification:'inherited_unverified'},
+  {itemNo:3,kind:'memory',text:'合成继承的关系记忆',verification:'inherited_unverified'},
+ ]};
+ const f=await panel(t,async()=>pageData(version)),region=f.page.getByRole('region',{name:'表达工作区'});
+ await region.getByText('依据',{exact:true}).click();
+ await expect(region.getByText('继承原依据，手工修改尚未重新核验',{exact:true})).toHaveCount(1);
+ await expect(region.getByText('合成我方原文',{exact:true})).toBeVisible();await expect(region.getByText('合成对方原文',{exact:true})).toBeVisible();
+ await expect(region.getByText(/产生此模型版本的实际输入/)).toHaveCount(0);
+ await expect(region.getByText('本次实际加载的合成Skill正文',{exact:true})).toHaveCount(0);
+ assert.equal(f.commands.filter(command=>command.action==='inputs'||command.action==='skills').length,0);
+});
+
+test('Skill实际读取单独按需分页，输入翻页保留原文且重开重新核验',{timeout:30000},async t=>{
+ const input1={itemNo:1,kind:'message',text:'第一页的合成聊天原文'},input2={itemNo:2,kind:'message',text:'第二页的合成聊天原文'};
+ const skills=[{packageId:ids.skill,name:'合成方法',revisionNo:1,relativePath:'SKILL.md',text:'合成 Skill 正文'},
+  {packageId:ids.skill,name:'合成方法',revisionNo:1,relativePath:'references/example.md',text:'合成 Skill 参考原文'}];
+ const data=pageData();data.requests[0].loadedSkills=skills.map(({text,...metadata})=>metadata);
+ const f=await panel(t,async operation=>{
+  if(operation.action==='inputs')return operation.offset===0?inputPage([input1],{nextOffset:1,total:2}):inputPage([input2],{total:2});
+  if(operation.action==='skills')return {items:[skills[operation.offset]],nextOffset:operation.offset===0?1:null,total:2};
+  return data;
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'});
+ await referenceSummary(region).click();await openReferenceGroup(region,'聊天原文');
+ await expect(region.getByText(input1.text,{exact:true})).toBeVisible();
+ assert.equal(f.commands.filter(command=>command.action==='skills').length,0);
+ await region.getByRole('button',{name:'加载更多输入',exact:true}).click();
+ await expect(region.getByText(input2.text,{exact:true})).toBeVisible();await expect(region.getByText(input1.text,{exact:true})).toBeVisible();
+ await openReferenceGroup(region,'Skill · 实际读取');
+ await region.locator('summary').filter({hasText:/^合成方法 · 第 1 版 · SKILL.md$/}).click();await expect(region.getByText(skills[0].text,{exact:true})).toBeVisible();
+ await region.getByRole('button',{name:'加载更多 Skill',exact:true}).click();
+ await region.locator('summary').filter({hasText:/^合成方法 · 第 1 版 · references\/example.md$/}).click();await expect(region.getByText(skills[1].text,{exact:true})).toBeVisible();
+ assert.deepEqual(f.commands.filter(command=>command.action==='inputs').map(command=>command.offset),[0,1]);
+ assert.deepEqual(f.commands.filter(command=>command.action==='skills').map(command=>command.offset),[0,1]);
+ await referenceSummary(region).click();await expect(region.getByText(input1.text,{exact:true})).toHaveCount(0);
+ await referenceSummary(region).click();await expect.poll(()=>f.commands.filter(command=>command.action==='inputs').length).toBe(3);
+ assert.equal(f.commands.filter(command=>command.action==='skills').length,2);
+});
+
+test('权威快照刷新重置展开资料，临时禁用保留已核验参考且不重取',{timeout:30000},async t=>{
+ const input={itemNo:1,kind:'message',text:'刷新前已展开的合成原文'};
+ const f=await panel(t,async operation=>operation.action==='inputs'?inputPage([input]):pageData());
+ const region=f.page.getByRole('region',{name:'表达工作区'});
+ await referenceSummary(region).click();await openReferenceGroup(region,'聊天原文');await expect(region.getByText(input.text,{exact:true})).toBeVisible();
+ await f.page.evaluate(()=>window.__setDisabled(true));await expect(region.getByText(input.text,{exact:true})).toBeVisible();
+ await f.page.evaluate(()=>window.__setDisabled(false));await expect(region.getByText(input.text,{exact:true})).toBeVisible();
+ assert.equal(f.commands.filter(command=>command.action==='inputs').length,1);
+ await region.getByRole('button',{name:'刷新候选',exact:true}).click();
+ await expect(region.getByText(input.text,{exact:true})).toHaveCount(0);
+ await expect(referenceSummary(region)).toBeVisible();
+ assert.equal(await referenceSummary(region).evaluate(element=>element.parentElement.open),false);
+ await referenceSummary(region).click();await openReferenceGroup(region,'聊天原文');await expect(region.getByText(input.text,{exact:true})).toBeVisible();
+ assert.equal(f.commands.filter(command=>command.action==='inputs').length,2);
+});
+
+test('来源失效或换联系人后迟到实际输入不能恢复旧参考',{timeout:30000},async t=>{
+ for(const boundary of ['invalidated','contact']){
+  const entered=Promise.withResolvers(),release=Promise.withResolvers();
+  const input={itemNo:1,kind:'message',text:`${boundary}之后不可恢复的合成原文`};
+  const f=await panel(t,async operation=>{
+   if(operation.action==='inputs'){entered.resolve();return release.promise;}
+   if(operation.action==='read')return operation.contactId===ids.other?{requests:[],coverage:{phase:'complete'}}:pageData();
+   throw new Error('未授权的合成参考操作');
+  });
+  const region=f.page.getByRole('region',{name:'表达工作区'});
+  await referenceSummary(region).click();await entered.promise;
+  await f.page.evaluate(value=>value==='invalidated'?window.__invalidate():window.__switch(),boundary);
+  release.resolve(inputPage([input]));await f.page.waitForFunction(()=>window.__settled>=2);
+  await expect(region.getByText(input.text,{exact:true})).toHaveCount(0);
+  await expect(referenceSummary(region)).toHaveCount(0);
+ }
+});
+
+test('来源失效后迟到Skill正文不能恢复，缺失实际输入记录保持未知',{timeout:30000},async t=>{
+ const entered=Promise.withResolvers(),release=Promise.withResolvers();
+ const skill={packageId:ids.skill,name:'合成回复方法',revisionNo:1,relativePath:'SKILL.md',text:'失效后不可恢复的合成 Skill 正文'};
+ const f=await panel(t,async operation=>{
+  if(operation.action==='inputs')return inputPage([],{recorded:false});
+  if(operation.action==='skills'){entered.resolve();return release.promise;}
+  return pageData();
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'});
+ await referenceSummary(region).click();
+ await expect(region.getByText('这次实际输入记录缺失，无法还原完整参考。',{exact:true})).toBeVisible();
+ await openReferenceGroup(region,'Skill · 实际读取');await entered.promise;
+ await f.page.evaluate(()=>window.__invalidate());release.resolve({items:[skill],nextOffset:null,total:1});
+ await f.page.waitForFunction(()=>window.__settled>=3);
+ await expect(region.getByText(skill.text,{exact:true})).toHaveCount(0);await expect(referenceSummary(region)).toHaveCount(0);
+});
+
+test('实际输入报来源失效会撤下候选，并拒绝并行刷新候选的迟到旧快照',{timeout:30000},async t=>{
+ const inputEntered=Promise.withResolvers(),inputResult=Promise.withResolvers(),readEntered=Promise.withResolvers(),readResult=Promise.withResolvers();
+ let reads=0;
+ const f=await panel(t,async operation=>{
+  if(operation.action==='inputs'){inputEntered.resolve();return inputResult.promise;}
+  if(operation.action==='read'){if(++reads===1)return pageData();readEntered.resolve();return readResult.promise;}
+  throw new Error('未授权的合成并行操作');
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'}),candidate=region.getByRole('textbox',{name:'候选第1条',exact:true});
+ await expect(candidate).toHaveValue('合成候选第一条');
+ await referenceSummary(region).click();await inputEntered.promise;
+ await region.getByRole('button',{name:'刷新候选',exact:true}).click();await readEntered.promise;
+ inputResult.reject(new Error('来源已失效，请重新核验。'));
+ await expect(candidate).toHaveCount(0);await expect(referenceSummary(region)).toHaveCount(0);
+ readResult.resolve(pageData());await f.page.waitForFunction(()=>window.__settled>=3);
+ await expect(candidate).toHaveCount(0);await expect(referenceSummary(region)).toHaveCount(0);
+ await expect(region.getByText('同联系人实际输入依据',{exact:true})).toHaveCount(0);
+});
+
+test('真实样式下本次参考在窄宽窗口紧凑收起，原文区域限高且无横向溢出',{timeout:30000},async t=>{
+ const items=Array.from({length:50},(_,index)=>({itemNo:index+1,kind:'message',text:`（2026-11-07 13:38）${index%2?'我':'对方'}：第${index+1}条合成聊天原文\n第二行保留原来的换行。https://example.invalid/${'long-synthetic-path-'.repeat(9)}`}));
+ const version={...original(),parts:['这是用于布局验收的合成候选。']};
+ const f=await panel(t,async operation=>operation.action==='inputs'?inputPage(items):pageData(version),'',false,true);
+ const region=f.page.getByRole('region',{name:'表达工作区'}),summary=referenceSummary(region),reference=summary.locator('..');
+ for(const width of [420,760]){
+  await f.page.setViewportSize({width,height:960});
+  await expect(summary).toBeVisible();
+  const compact=await reference.boundingBox();assert.ok(compact.height<=56,`宽${width}时收起的本次参考高度为${compact.height}`);
+  assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await region.screenshot({path:`/tmp/notalone-reference-${width}-collapsed.png`});
+  await summary.focus();await f.page.keyboard.press('Enter');
+  await expect(reference.locator('.candidate-reference-scroll').first()).toBeVisible();
+  const scroll=await reference.locator('.candidate-reference-scroll').first().evaluate(element=>({height:element.getBoundingClientRect().height,scrollHeight:element.scrollHeight,clientHeight:element.clientHeight,scrollWidth:element.scrollWidth,clientWidth:element.clientWidth}));
+  assert.ok(scroll.height<=260,`宽${width}时原文区域高度为${scroll.height}`);assert.ok(scroll.scrollHeight>scroll.clientHeight);assert.ok(scroll.scrollWidth<=scroll.clientWidth);
+  t.diagnostic(`${width}px：收起 ${compact.height}px，原文区域 ${scroll.height}px，页面与聊天区无横向溢出`);
+  assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await region.screenshot({path:`/tmp/notalone-reference-${width}-expanded.png`});
+  await summary.click();await expect(reference.locator('.candidate-reference-scroll')).toHaveCount(0);
+ }
+});
+
 /** 仅IPC业务边界为显式替身；实际React、浏览器事件及渲染均执行。 */
-async function panel(t,execute,initialDraft='',assistant=false){
+async function panel(t,execute,initialDraft='',assistant=false,styled=false){
  const compiled=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{SqliteReplyCandidatesPanel}from'./src/renderer/SqliteReplyCandidatesPanel';import{AssistantSessionPanel}from'./src/renderer/AssistantSessionPanel';
   const listeners=new Set();const bridge={candidates:{execute:request=>window.__execute(request).finally(()=>{window.__settled=(window.__settled||0)+1;})},onInvalidated:listener=>{listeners.add(listener);return()=>listeners.delete(listener);}};
   const root=createRoot(document.getElementById('root'));let props={bridge,contactId:${JSON.stringify(ids.contact)},scopeRevision:1,sessionId:${JSON.stringify(ids.session)},initialDraft:${JSON.stringify(initialDraft)},onSubmitted:receipt=>window.__submitted(receipt)};
@@ -262,11 +434,13 @@ async function panel(t,execute,initialDraft='',assistant=false){
     readSavedSession:async()=>{},newSavedSession:async()=>{},deleteSavedSession:async()=>{},viewSavedSession:async()=>{},resumeSavedSession:async()=>{}};
   const render=()=>root.render(${assistant}?React.createElement(AssistantSessionPanel,{replies:{...replies,state}}):React.createElement(SqliteReplyCandidatesPanel,props));window.__invalidate=()=>{for(const listener of listeners)listener({revision:2,contactId:props.contactId,scopeRevision:props.scopeRevision});};
   window.__setDisabled=disabled=>{props={...props,disabled};render();};window.__switch=()=>{props={...props,contactId:${JSON.stringify(ids.other)},scopeRevision:2,sessionId:${JSON.stringify(ids.otherSession)}};render();};render();`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
- const server=createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end('<div id="root"></div>');});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));
- const browser=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'});t.after(()=>browser.close());
+ const server=createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end(styled?'<meta name="viewport" content="width=device-width, initial-scale=1"><div class="ime-pane"><main class="ime-workspace"><div id="root"></div></main></div>':'<div id="root"></div>');});server.listen(0,'127.0.0.1');await once(server,'listening');
+ const browser=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'});t.after(async()=>{await browser.close();await new Promise(resolve=>server.close(resolve));});
  const page=await browser.newPage();page.setDefaultTimeout(5000);const commands=[],submitted=[];
  await page.exposeFunction('__execute',async request=>{commands.push(request);return execute(request,commands);});await page.exposeFunction('__submitted',value=>submitted.push(value));
- await page.goto(`http://127.0.0.1:${server.address().port}`);await page.addScriptTag({content:compiled.outputFiles[0].text});
+ await page.goto(`http://127.0.0.1:${server.address().port}`);
+ if(styled)for(const path of ['style.css','rewrite.css','helper-layout.css'])await page.addStyleTag({content:await readFile(new URL(`../src/renderer/${path}`,import.meta.url),'utf8')});
+ await page.addScriptTag({content:compiled.outputFiles[0].text});
  return {page,commands,submitted};
 }
 

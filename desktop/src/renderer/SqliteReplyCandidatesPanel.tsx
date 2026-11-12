@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {Icon} from './icons';
+import {CandidateBasis,SqliteCandidateReferences} from './SqliteCandidateReferences';
 import type {RewriteTone} from '../shared/reply-bridge';
 import type {SqliteDiscussionBridge,SqliteDiscussionReceipt} from '../shared/sqlite-discussion-bridge';
 import {sqliteReplySourceUnavailableMessage,readSqliteCandidatePage,readSqliteCandidateVersion,readSqliteCandidateStatus,type SqliteCandidateStatus,type SqliteCandidatePage,type SqliteCandidateVersion,type SqliteCandidateOperation} from '../shared/sqlite-reply-candidates';
@@ -39,6 +40,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  const [edits,setEdits]=useState<Record<string,string[]>>({}),[inspected,setInspected]=useState<Record<string,SqliteCandidateVersion>>({});
  // 折叠状态按 requestId 覆盖默认值：最新一次默认展开，用户手动切换后以手动为准；clear() 时重置。
  const [openRequests,setOpenRequests]=useState<Record<string,boolean>>({});
+ const [referenceRevision,setReferenceRevision]=useState(0);
  const available=!!bridge.candidates&&!!contactId&&!!sessionId&&!disabled;
  const unresolved=!!retry.current&&!(progress?.phase==='failed'&&progress.retryable);
  function clear(){stopProgress.current?.();setProgress(null);setProgressUnreadable(false);++revision.current;operation.current=null;retry.current=null;generationFailure.current=null;qualifiedRequests.current=[];setPage(null);setDraft('');setOptions(defaultOptions());setCarry(undefined);setBusy(false);setError('');setNotice('');setEdits({});setInspected({});setOpenRequests({});}
@@ -64,6 +66,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   }
   qualifiedRequests.current=next.requests.filter(r=>r.sourceState==='available'&&r.candidates.length).map(r=>r.requestId);
   setPage(next);
+  setReferenceRevision(value=>value+1);
   if(!preserveEdits){setEdits({});setInspected({});}
   else{
    const previous=new Map(page?.requests.flatMap(r=>r.candidates.map(c=>[c.candidateId,c.versionNo] as const))??[]);
@@ -229,6 +232,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
    <summary>{requestSummary(request,requestIndex,page.requests.length)}</summary>
    {request.skillWarning&&<p role="status">{request.skillWarning}</p>}
    {request.sourceState==='available'&&request.candidates.length>0&&<p className="candidate-skill-usage">{skillUsageLabel(request)}</p>}
+   {request.sourceState==='available'&&request.candidates.length>0&&requestOpen(request.requestId,requestIndex,page.requests.length)&&bridge.candidates&&contactId&&sessionId&&<SqliteCandidateReferences key={`${request.requestId}:${referenceRevision}`} bridge={bridge.candidates} scope={{contactId,scopeRevision,sessionId}} request={request} disabled={!available||busy} onUnavailable={()=>{clear();rejectOperation(new Error('本次候选来源已失效，请重新读取。'));}}/>}
    {request.generationState==='unknown'&&<p role="status">本次模型调用结果未知，请核对原请求，不能换身份重发。</p>}
    {request.generationState==='failed'&&!busy&&<p role="status">{interruptionMessage(request.generationErrorCode,request.generationSent)??'本次候选生成失败，没有可选正文。'}</p>}
    {request.sourceState==='unavailable'&&(!request.generationState||request.generationState==='committed'||request.generationState==='invalidated')&&<p role="status">这次候选的来源已失效，正文与依据已撤下。</p>}
@@ -237,11 +241,11 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
     {parts.length>1&&<p className="candidate-sequence-hint">共{parts.length}条，按顺序分别发送，不是备选</p>}
     {parts.map((part,index)=><label key={index}>第{index+1}条{parts.length>1&&(index===0?'（先发）':'（接着发）')}<textarea aria-label={`候选第${index+1}条`} value={part} disabled={busy||!available} onChange={e=>setEdits(old=>({...old,[v.candidateId]:parts.map((p,n)=>n===index?e.target.value:p)}))} /></label>)}
     <button className="button" disabled={busy||!available||!edits[v.candidateId]} onClick={()=>void run({action:'edit',candidateId:v.candidateId,versionNo:v.versionNo,parts})}>保存修改</button>
-    <button className="button" disabled={busy||!available} onClick={()=>void run({action:'select',candidateId:v.candidateId,versionNo:v.versionNo})}>选用这个说法</button>
-    <button className="button" disabled={busy||!available||!options.includeRelationshipContext} onClick={()=>void continueVersion(v)}>以这个说法继续</button>
+    <button className="button" title="记录选用当前已保存的版本；消息仍由你亲自发送" disabled={busy||!available} onClick={()=>void run({action:'select',candidateId:v.candidateId,versionNo:v.versionNo})}>选用这个说法</button>
+    <button className="button" title="记录选用，并将当前已保存版本带入下一次明确生成；点击后不会立即生成" disabled={busy||!available||!options.includeRelationshipContext} onClick={()=>void continueVersion(v)}>以这个说法继续</button>
     {v.versionNo>1&&<button className="button" disabled={busy} onClick={()=>void run({action:'version',candidateId:v.candidateId,versionNo:v.versionNo-1})}>查看上一版</button>}
     {v.versionNo!==candidate.versionNo&&<button className="button" disabled={busy} onClick={()=>{setInspected(old=>{const next={...old};delete next[v.candidateId];return next;});setEdits({});}}>回到最新版本</button>}
-    <details><summary>依据</summary>{v.basis.map(b=><div key={b.itemNo}><p>{b.verification==='inherited_unverified'?'继承原依据，手工修改尚未重新核验':'产生此模型版本的实际输入'} · {({message:'聊天原文',entry:'本次讨论',memory:'已采纳记忆',memory_candidate:'未确认记忆',document:'已发布资料',selection:'明确选稿',coverage:'历史覆盖'} as Record<string,string>)[b.kind]??'实际资料'}</p><p className="discussion-entry-text">{b.text}</p></div>)}</details>
+    <CandidateBasis version={v}/>
    </article>;})}
    {!!request.selections.length&&<p>已记录{request.selections.length}次选稿，最近选用第{request.selections.at(-1)!.versionNo}版。</p>}
   </details>)}

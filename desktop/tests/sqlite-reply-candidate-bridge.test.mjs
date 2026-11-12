@@ -70,6 +70,34 @@ test('preload及主进程均拒绝通用owner、路径、SQL字段和额外参�
  assert.equal(f.requests.length,0);assert.equal(f.invocations.length,1,'只有格式合法但范围错误的请求可到达主进程');
 });
 
+test('实际输入按请求分页走只读路径，严格校验分类与未知记录',async t=>{
+ const f=fixture(await modules());t.after(()=>f.controller.close());
+ const item={itemNo:1,kind:'memory',text:'合成本人资料',scopeKind:'owner',qualification:'auto',versionNo:2};
+ const data={recorded:true,items:[item],nextOffset:1,total:2};
+ f.respond(async()=>({generation:3,data}));
+ assert.deepEqual(await f.bridge.candidates.execute({...scope,action:'inputs',requestId:ids.request,offset:0}),data);
+ assert.equal(f.requests[0].method,'GET');
+ assert.equal(f.requests[0].path,`/api/contacts/${ids.contact}/assistant-sessions/${ids.session}/reply-candidates/${ids.request}/inputs?offset=0`);
+ for(const invalid of [
+  {...data,recorded:false},{...data,nextOffset:0},{...data,items:[item,item]},
+  {...data,items:[{...item,scopeKind:'other'}]},{...data,items:[{...item,versionNo:0}]},
+  {...data,items:[{...item,identity:{secret:'不可透传'}}]},
+ ]){
+  f.respond(async()=>({generation:3,data:invalid}));
+  await assert.rejects(f.bridge.candidates.execute({...scope,action:'inputs',requestId:ids.request,offset:0}),/候选结果尚未确认/);
+ }
+ const missing={recorded:false,items:[],nextOffset:null,total:0};
+ f.respond(async()=>({generation:3,data:missing}));
+ assert.deepEqual(await f.bridge.candidates.execute({...scope,action:'inputs',requestId:ids.request,offset:0}),missing);
+ const long={recorded:true,items:[{...item,text:'合'.repeat(100001)}],nextOffset:null,total:1};
+ f.respond(async()=>({generation:3,data:long}));
+ assert.equal((await f.bridge.candidates.execute({...scope,action:'inputs',requestId:ids.request,offset:0})).items[0].text.length,100001);
+ for(const offset of [-1,0.5,1_000_001])await assert.rejects(f.bridge.candidates.execute({...scope,action:'inputs',requestId:ids.request,offset}),/无效/);
+ const gate=Promise.withResolvers();f.respond(()=>gate.promise);
+ const pending=f.bridge.candidates.execute({...scope,action:'inputs',requestId:ids.request,offset:0}),rejected=assert.rejects(pending,/失效/);
+ f.select();gate.resolve({generation:3,data});await rejected;
+});
+
 test('联系人、连接换代或显式来源失效均取消在途候选读取并拒绝迟到正文',async()=>{
  const api=await modules();
  for(const invalidate of [f=>f.select(),f=>f.connection(),f=>f.controller.synchronize(true)]){

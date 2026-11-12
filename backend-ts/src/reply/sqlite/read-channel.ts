@@ -6,7 +6,7 @@ import {randomUUID} from 'node:crypto';
 // 仅供助手回看；生成受理、编辑、选择、来源冻结和最终资格仍交给唯一写者。
 export const assistantReadActions=[
  'discussion.list','discussion.view','discussion.trace',
- 'reply.view','reply.status','reply.version','reply.skillInputs','history.readRecent',
+ 'reply.view','reply.status','reply.version','reply.skillInputs','reply.inputs','history.readRecent',
  'deletion.list','deletion.status',
 ] as const;
 const allowed=new Set<string>(assistantReadActions),metadata=new Set(['deletion.list','deletion.status']);

@@ -193,6 +193,21 @@
 .sqlite-candidate-request > summary::marker { color: var(--muted); }
 .sqlite-candidate-request[open] > summary { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .sqlite-candidate-request h4 span { color: var(--muted); font-size: 12px; font-weight: 400; }
+.candidate-references, .candidate-basis { margin: 10px 0; min-width: 0; }
+.candidate-references { padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.candidate-references summary small, .candidate-basis summary small { color: var(--muted); font-size: 11px; font-weight: 400; }
+.ime-pane .candidate-reference-note { margin: 6px 0; font-size: 11px; line-height: 1.6; color: var(--muted); }
+.candidate-reference-group { border-top: 1px solid var(--line); padding: 6px 0; min-width: 0; }
+.candidate-reference-group > summary { overflow-wrap: anywhere; }
+.ime-pane .candidate-reference-group[open] > summary { margin-bottom: 4px; }
+.candidate-reference-scroll { max-height: 260px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.candidate-reference-item { padding: 5px 0; border-bottom: 1px solid var(--line); }
+.candidate-reference-item:last-child { border-bottom: 0; }
+.candidate-reference-chat { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: baseline; gap: 5px; }
+.candidate-reference-meta { color: var(--muted); font-size: 10px; }
+.ime-pane .candidate-reference-item p, .ime-pane .candidate-skill-file p { margin: 2px 0 5px; font-size: 12px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.candidate-skill-file { padding: 5px 0; }
+.candidate-references summary:focus-visible, .candidate-basis summary:focus-visible { outline: 2px solid #5391b4; outline-offset: 2px; border-radius: 3px; }
 .session-browser > summary { display: list-item; font-size: 17px; font-weight: 600; color: #2d4657; }
 .session-browser > summary span { display: block; margin: 6px 0 0 18px; font-size: 12px; font-weight: 400; color: #748590; }
 .session-browser-content { padding-top: 18px; }

@@ -5,6 +5,7 @@ import {requireReplyInput} from './input.ts';
 import {hasCurrentReplyDependencies} from '../provenance.ts';
 import type {DiscussionScope} from '../contracts.ts';
 import type {ReplyCandidateVersion,ReplyKnowledgeReader} from './contracts.ts';
+import {inputMaterialMetadata} from './input-material-metadata.ts';
 function fail(code:string):never{throw new StorageFailure(code);}
 export function readParts(value:unknown):string[]{
  if(!Array.isArray(value)||!value.length||value.length>8||value.some(p=>typeof p!=='string'||!p.trim()||p.length>10000)||value.join('').length>30000)fail('reply_content_invalid');
@@ -34,7 +35,7 @@ export function versionView(tx:StorageTransaction,ownerId:string,candidateId:str
  const v=tx.get('SELECT * FROM reply_candidate_version WHERE owner_id=? AND candidate_id=? AND version_no=?',[ownerId,candidateId,versionNo])!;
  return {candidateId,versionNo:Number(v.version_no),origin:v.origin_kind==='model'?'model':'manual',parentVersionNo:v.parent_version_no===null?null:Number(v.parent_version_no),
   parts:tx.all('SELECT text_body FROM reply_version_part WHERE owner_id=? AND candidate_id=? AND version_no=? ORDER BY part_no',[ownerId,candidateId,versionNo]).map(p=>String(p.text_body)),
-  basis:tx.all('SELECT b.*,x.kind,x.text_body FROM reply_basis b JOIN reply_candidate_input x ON x.owner_id=b.owner_id AND x.context_id=b.context_id AND x.item_no=b.item_no WHERE b.owner_id=? AND b.candidate_id=? AND b.version_no=? ORDER BY basis_no',[ownerId,candidateId,versionNo]).map(b=>({itemNo:Number(b.item_no),kind:String(b.kind),text:String(b.text_body),verification:b.verification_state as 'actual_input'|'inherited_unverified'}))};
+  basis:tx.all('SELECT b.*,x.kind,x.text_body,x.identity_json FROM reply_basis b JOIN reply_candidate_input x ON x.owner_id=b.owner_id AND x.context_id=b.context_id AND x.item_no=b.item_no WHERE b.owner_id=? AND b.candidate_id=? AND b.version_no=? ORDER BY basis_no',[ownerId,candidateId,versionNo]).map(b=>({itemNo:Number(b.item_no),kind:String(b.kind),text:String(b.text_body),verification:b.verification_state as 'actual_input'|'inherited_unverified',...inputMaterialMetadata(String(b.identity_json))}))};
 }
 export function insertModelCandidates(tx:StorageTransaction,i:{ownerId:string;requestId:string;contextId:string;callId:string;physicalCallId?:string;text:string}):void{
  const output=parseReplyOutput(i.text),physicalCallId=i.physicalCallId??i.callId;
