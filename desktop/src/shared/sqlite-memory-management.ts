@@ -20,7 +20,7 @@ export interface MemoryDocumentStatement {
  leftClaim:string|null;rightClaim:string|null;resolutionState:'unresolved'|'resolved'|null;resolutionText:string|null;references:MemoryDocumentReference[];
 }
 export interface MemoryDocumentView extends MemoryScope {id:string;versionNo:string;kind:'scene'|'profile';title:string;statements:MemoryDocumentStatement[]}
-export interface MemoryDocumentsView {status:MemoryDocumentsStatus;publication:{id:string;members:{documentId:string;versionNo:string}[]}|null;documents:MemoryDocumentView[]}
+export interface MemoryDocumentsView {status:MemoryDocumentsStatus;publication:{id:string;members:{documentId:string;versionNo:string}[]}|null;documents:MemoryDocumentView[];profileSelection?:{accepted:number;rejected:number;retained:number}}
 export interface MemoryDocumentsSnapshot {connectionGeneration:number;scope:MemoryScope;view:MemoryDocumentsView}
 export interface MemoryManagementDecision extends MemoryManagementRead {connectionGeneration:number;request:MemoryDecisionRequest}
 export type MemoryManagementOutcome = {status:'applied';result:MemoryDecisionResult}|{status:'conflict'|'source_stale'|'protected'|'unavailable'};

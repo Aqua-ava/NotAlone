@@ -82,7 +82,15 @@ function readDocumentsView(raw:unknown,expected:MemoryScope):MemoryDocumentsView
    ||members.some(m=>!documents.some(d=>d.id===m.documentId&&d.versionNo===m.versionNo)))throw invalid();
   publication={id:uuid(p.id),members};
  }else if(documents.length)throw invalid();
- return {status,publication,documents};
+ let profileSelection:MemoryDocumentsView['profileSelection'];
+ if(value.profileSelection!==undefined){
+  const selected=object(value.profileSelection),validCount=(n:unknown):n is number=>Number.isSafeInteger(n)&&Number(n)>=0;
+  if(!publication||!validCount(selected.accepted)||!validCount(selected.rejected)||!validCount(selected.retained))throw invalid();
+  const publishedEntries=documents.filter(d=>d.kind==='profile').reduce((count,d)=>count+d.statements.length,0);
+  if(selected.accepted>0&&selected.accepted+selected.retained!==publishedEntries)throw invalid();
+  profileSelection={accepted:selected.accepted,rejected:selected.rejected,retained:selected.retained};
+ }
+ return {status,publication,documents,...(profileSelection?{profileSelection}:{})};
 }
 type Contacts={getState():{selectedContactId:string|null;scopeRevision:number}};
 /** 不缓存正文；每次决定重新核验页面可管理范围，迟到响应不能重新发布旧快照。 */

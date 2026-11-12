@@ -102,6 +102,23 @@ function noFormalChangeStatus(tx:StorageTransaction,ownerId:string,s:{scopeKind:
   WHERE s.owner_id=? AND s.task_id=? AND c.state='pending' LIMIT 1`,[ownerId,latest.id]))return 'processing';
  return schedule.length||requirements.length?'processing':'idle';
 }
+/** 仅汇总当前发布所依据的成功核验选择；旧资料没有该记录时保持兼容。 */
+function readProfileSelection(tx:StorageTransaction,ownerId:string,taskId:string):{accepted:number;rejected:number;retained:number}|undefined {
+ const step=tx.get(`SELECT s.successful_attempt_id FROM processing_step s JOIN step_attempt a ON a.owner_id=s.owner_id AND a.id=s.successful_attempt_id
+  WHERE s.owner_id=? AND s.task_id=? AND s.kind='document_profile' AND s.state='succeeded' AND a.state='succeeded'
+  ORDER BY s.step_no DESC LIMIT 1`,[ownerId,taskId]);
+ if(!step)return;
+ const event=tx.get("SELECT payload,step_attempt_id FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND kind='document_profile_selection' ORDER BY event_no DESC LIMIT 1",[ownerId,step.successful_attempt_id]);
+ if(!event)return;
+ try{
+  const value=JSON.parse(String(event.payload));
+  const indexes=(items:unknown):items is number[]=>Array.isArray(items)&&items.every(index=>Number.isSafeInteger(index)&&index>=0)&&new Set(items).size===items.length;
+  if(!indexes(value.accepted)||!Array.isArray(value.rejected)||!indexes(value.retained))return;
+  const rejected=value.rejected.map((item:any)=>item?.index);if(!indexes(rejected)||rejected.some(index=>value.accepted.includes(index)))return;
+  if(typeof value.verificationEventId!=='string'||!tx.get("SELECT 1 FROM execution_event WHERE owner_id=? AND id=? AND step_attempt_id=? AND kind='document_output'",[ownerId,value.verificationEventId,event.step_attempt_id]))return;
+  return {accepted:value.accepted.length,rejected:rejected.length,retained:value.retained.length};
+ }catch{return;}
+}
 const action=(name:string,mode:'read'|'write',fn:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:(tx,input)=>withDocumentSourceQualifications(tx,()=>fn(tx,input))});
 export const memoryDocumentsActions:StorageAction[]=[
  action('tasks','read',(tx,i)=>tx.all('SELECT id FROM processing_task WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[textId(i.ownerId),textId(i.runId)]).map(row=>String(row.id))),
@@ -130,7 +147,8 @@ export const memoryDocumentsActions:StorageAction[]=[
    const members=rows.map(m=>({documentId:String(m.document_id),versionNo:String(m.version_no)}));
    // 共享任务的其他裁决可能因来源删除而撤销；仍须按文档自己的完整依据判断当前发布。
    const publishedStatus=(unchanged==='idle'&&status==='idle')||(!conflict&&view?.outcome==='completed'&&p.basis_task_id===latest?.id)?'completed':status;
-   return {scope,publication:{id:String(p.id),members},documents:rendered.documents,status:publishedStatus};
+   const profileSelection=readProfileSelection(tx,ownerId,String(p.basis_task_id));
+   return {scope,publication:{id:String(p.id),members},documents:rendered.documents,status:publishedStatus,...(profileSelection?{profileSelection}:{})};
   }catch(error){if(error instanceof StorageFailure)return {scope,publication:null,documents:[],status:'needs_revalidation'};throw error;}
  })),
 ];

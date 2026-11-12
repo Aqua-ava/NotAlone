@@ -20,6 +20,7 @@ async function partialFixture(t,{reject=[13],entryCount=16,malformed}={}){
    if(control.malformed==='missing')results.pop();
    if(control.malformed==='duplicate')results[1].entry_index=results[0].entry_index;
    if(control.malformed==='quote')results[0].evidence[0].quote='这句合成引文不在任何记忆里。';
+   if(control.reverseResults)results.reverse();
    const packet={results};control.packets.push(structuredClone(packet));return tool('ProfileVerificationOutput',packet);
   }
   if(payload.layer==='l2'&&control.sceneRevision){
@@ -54,6 +55,7 @@ test('L3逐条核验16项中拒绝第14项，其他15项按原引证绑定发布
  if(!profile)t.diagnostic(JSON.stringify(result.state.stages.map(({kind,status,errorCode})=>({kind,status,errorCode}))));
  assert.ok(profile,'一条不受支持不应阻止其余合法条目发布');
  assert.equal(profile.statements.length,15);
+ assert.deepEqual(result.view.profileSelection,{accepted:15,rejected:1,retained:0});
  const expected=f.control.entries.filter((_,index)=>index!==13);
  assert.deepEqual(profile.statements.map(x=>x.text),expected.map(x=>x.text));
  for(const [index,statement] of profile.statements.entries()){
@@ -70,12 +72,24 @@ test('L3逐条核验16项中拒绝第14项，其他15项按原引证绑定发布
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
+test('核验结果合法逆序返回时仍按entry_index发布原提案顺序',async t=>{
+ const f=await partialFixture(t,{reject:[],entryCount:3});f.control.reverseResults=true;
+ const result=await runFixture(f,'profile-reverse-verification-results');
+ assert.deepEqual(f.control.packets[0].results.map(x=>x.entry_index),[2,1,0]);
+ const profile=result.view.documents.find(x=>x.kind==='profile');assert.ok(profile);
+ assert.deepEqual(profile.statements.map(x=>x.text),f.control.entries.map(x=>x.text));
+ assert.deepEqual(result.view.profileSelection,{accepted:3,rejected:0,retained:0});
+ assert.equal(result.state.outcome,'completed');
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
 test('L3全部条目不受支持时按无新增收尾，只发布场景而不创建空画像',async t=>{
  const f=await partialFixture(t,{reject:Array.from({length:16},(_,i)=>i)}),result=await runFixture(f,'profile-all-rejected');
  assert.equal(f.control.packets.length,1);assert.equal(f.control.packets[0].results.filter(x=>x.supported).length,0);
  assert.equal(result.state.outcome,'completed','全部内容拒绝不得伪装成技术或任务故障');
  assert.deepEqual(result.view.documents.map(x=>x.kind),['scene']);
  assert.equal(result.view.publication.members.length,1);
+ assert.deepEqual(result.view.profileSelection,{accepted:0,rejected:16,retained:0});
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
@@ -92,6 +106,7 @@ test('已有有效L3的更新全部未获支持时保留旧画像，不删除或
  assert.equal(f.control.packets.at(-1).results[0].supported,false);
  assert.equal(second.state.outcome,'completed');
  const current=second.view.documents.find(x=>x.kind==='profile');assert.deepEqual(current,old);
+ assert.deepEqual(second.view.profileSelection,{accepted:0,rejected:1,retained:1});
  assert.notEqual(second.view.publication.id,first.view.publication.id,'新场景仍应形成新的完整发布集合');
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
@@ -113,6 +128,7 @@ test('新条目通过但旧条目改写未通过时，只加入新条目并保�
  assert.equal(f.control.packets.length,2);assert.deepEqual(f.control.packets.at(-1).results.map(x=>x.supported),[false,true]);
  assert.equal(second.state.outcome,'completed');
  const current=second.view.documents.find(x=>x.kind==='profile');assert.ok(current);
+ assert.deepEqual(second.view.profileSelection,{accepted:1,rejected:1,retained:1});
  assert.deepEqual(new Set(current.statements.map(x=>x.text)),new Set([...old.statements.map(x=>x.text),'核验通过的新条目。']));
  assert.ok(!current.statements.some(x=>x.text==='未获支持的旧条目替换内容。'));
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});

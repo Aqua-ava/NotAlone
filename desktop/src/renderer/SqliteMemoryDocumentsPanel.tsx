@@ -40,6 +40,7 @@ export function SqliteMemoryDocumentsPanel({bridge,request,level='L2',refreshKey
   {busy&&!view&&<p role="status">正在核对主题资料…</p>}
   {notice&&<p role="alert">{notice}<button type="button" disabled={busy} onClick={()=>void refresh.current()}>重试读取主题资料</button></p>}
   {message&&<p role="status">{message}</p>}
+  {level==='L3'&&view?.profileSelection&&view.profileSelection.rejected>0&&<p role="status">核验结果：{view.profileSelection.accepted} 条通过，{view.profileSelection.rejected} 条未通过。未通过的新提案未采纳。{view.profileSelection.retained>0?`另保留 ${view.profileSelection.retained} 条已有有效内容。`:view.profileSelection.accepted===0?'本轮没有新增概览。':''}</p>}
   {view?.publication&&view.documents.length===0&&<p>当前发布集合没有可展示的资料。</p>}
   {documents.length===0&&<p className="memory-browser-empty">{blocked||view?.status==='needs_revalidation'?'资料待核验，暂不可查看。':busy&&!view?'正在读取资料…':level==='L2'?'当前还没有可展示的主题资料。':'当前还没有可展示的长期概览。'}</p>}
   <div className="memory-flat-grid memory-document-grid">{documents.map(document=><article key={`${document.id}:${document.versionNo}`} className="sqlite-memory-card" aria-label={document.kind==='scene'?'主题资料':'长期概览'}>

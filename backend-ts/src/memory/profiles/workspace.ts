@@ -1225,7 +1225,7 @@ export function selectProfilePublication(
   const supported=new Map(verification.results.map(result=>[result.entry_index,result.supported]));
   const accepted=proposal.entries.flatMap((entry,index)=>supported.get(index)?[{index,entry}]:[]);
   const rejected=proposal.entries.flatMap((_,index)=>supported.get(index)?[]:[index]);
-  if(!accepted.length)return {accepted,rejected,retained:[]};
+  if(!accepted.length)return {accepted,rejected,retained:(existing?.entries??[]).map((entry,index)=>({index,entry}))};
   const changed=new Set(changedScenarios.flatMap(scene=>scene.paragraphs.flatMap(paragraph=>paragraph.references.map(ref=>`${ref.memory_id}:${ref.revision}`))));
   const acceptedRefs=new Set(accepted.flatMap(({entry})=>entry.references.map(ref=>`${ref.memory_id}:${ref.revision}`)));
   const acceptedIdentities=new Set(accepted.map(({entry})=>entryIdentity(entry)));
