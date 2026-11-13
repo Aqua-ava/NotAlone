@@ -264,6 +264,14 @@ func notaloneTestPackedInfo(md5Values ...string) []byte {
 func newNotaloneImageProtocolFixtureWithResourceData(t *testing.T, messageContent []byte, contentType int64, imageBytes, storageBytes []byte,
 	cacheMD5 string, messagePackedInfo, infoPackedInfo []byte, details []notaloneImageTestResourceDetail) notaloneImageProtocolFixture {
 	t.Helper()
+	return newNotaloneImageProtocolFixtureWithInfoServerIDs(t, messageContent, contentType, imageBytes, storageBytes, cacheMD5,
+		messagePackedInfo, infoPackedInfo, details, []int64{7710666891970547832})
+}
+
+// infoServerIDs 逐项写入 MessageResourceInfo 的 message_svr_id；第一行 message_id 为 5 并挂接 details，其余行没有明细。
+func newNotaloneImageProtocolFixtureWithInfoServerIDs(t *testing.T, messageContent []byte, contentType int64, imageBytes, storageBytes []byte,
+	cacheMD5 string, messagePackedInfo, infoPackedInfo []byte, details []notaloneImageTestResourceDetail, infoServerIDs []int64) notaloneImageProtocolFixture {
+	t.Helper()
 	h := notaloneProtocolFixture(t, true)
 	const localID, serverID, createTime = int64(1), int64(7710666891970547832), int64(1700000000)
 	writer, err := wcdb.OpenWithKeyMapWritable(filepath.Join(h.server.cfg.DBRoot, "db_storage/message/message_0.db"), h.server.cfg.Keys)
@@ -296,10 +304,14 @@ func newNotaloneImageProtocolFixtureWithResourceData(t *testing.T, messageConten
 		resourceRows.WriteString(fmt.Sprintf(`INSERT INTO MessageResourceDetail VALUES(%d,5,%d,%d,1700000000,1700000000,1,'0',X'%x');`,
 			detail.id, detail.typeRaw, detail.size, detail.packedInfo))
 	}
+	var infoRows strings.Builder
+	for index, infoServerID := range infoServerIDs {
+		infoRows.WriteString(fmt.Sprintf(`INSERT INTO MessageResourceInfo VALUES(%d,1,3,1700000000,1,%d,0,X'%s');`, 5+index, infoServerID, hex.EncodeToString(infoPackedInfo)))
+	}
 	notaloneTestDB(t, h.server.cfg.DBRoot, h.server.cfg, "message", "message_resource.db",
 		`CREATE TABLE ChatName2Id(user_name TEXT);INSERT INTO ChatName2Id(rowid,user_name) VALUES(1,'`+h.selected.Conversation+`');`+
 			`CREATE TABLE MessageResourceInfo(message_id INTEGER,chat_id INTEGER,message_local_type INTEGER,message_create_time INTEGER,message_local_id INTEGER,message_svr_id INTEGER,message_origin_source INTEGER,packed_info BLOB);`+
-			`INSERT INTO MessageResourceInfo VALUES(5,1,3,1700000000,1,7710666891970547832,0,X'`+hex.EncodeToString(infoPackedInfo)+`');`+
+			infoRows.String()+
 			`CREATE TABLE MessageResourceDetail(resource_id INTEGER,message_id INTEGER,type INTEGER,size INTEGER,create_time INTEGER,access_time INTEGER,status INTEGER,data_index TEXT,packed_info BLOB);`+
 			resourceRows.String(),
 		strings.Repeat("66", 16))
@@ -546,6 +558,51 @@ func notaloneOpenDescriptorCount(t *testing.T) int {
 
 // 单图关联失败只拒绝这一次请求：不留下图片令牌、资源守卫或句柄，仍有效的消息守卫与固定快照保持可用。
 // 两个夹具分别让失败发生在消息查找之前和资源守卫、图片候选守卫已创建之后，覆盖全部清理路径。
+// 微信一次发送多张图片时，批次里除第一张外的资源记录 message_svr_id 为 0，而消息表里是真实值。
+func TestNotAloneImageOpenAssociatesBatchSentImageWithZeroResourceServerID(t *testing.T) {
+	imageBytes := notaloneTinyPNG(t, 3, 2)
+	const cacheMD5 = "a71dbe52628a3f83a77ab494817525c6"
+	const otherMD5 = "b71dbe52628a3f83a77ab494817525c6"
+	packed := notaloneTestPackedInfo(cacheMD5)
+	message := []byte(notaloneImageXML(imageBytes, len(imageBytes), 3, 2, true))
+	details := []notaloneImageTestResourceDetail{{id: 11, typeRaw: 65537, size: int64(len(imageBytes)), packedInfo: packed}}
+	t.Run("zero server id binds through chat type second local id and cache md5", func(t *testing.T) {
+		fixture := newNotaloneImageProtocolFixtureWithInfoServerIDs(t, message, 0, imageBytes, imageBytes, cacheMD5, packed, packed, details, []int64{0})
+		value, err := fixture.history.handle(context.Background(), fixture.request)
+		if err != nil {
+			t.Fatalf("batch-sent image whose resource row has server id 0 should open: %v", err)
+		}
+		opened := value.(notaloneImageOpenResponse)
+		if opened.ServerID != fixture.request.ServerID || opened.ResourceID != "11" || opened.QualityProof.ResourceInfoID != "5" {
+			t.Fatalf("zero server id association must keep the message identity and bind the single resource row: %#v", opened)
+		}
+	})
+	t.Run("exact server id still wins and keeps the original source generation", func(t *testing.T) {
+		exact := newNotaloneImageProtocolFixtureWithInfoServerIDs(t, message, 0, imageBytes, imageBytes, cacheMD5, packed, packed, details, []int64{7710666891970547832})
+		if _, err := exact.history.handle(context.Background(), exact.request); err != nil {
+			t.Fatalf("exact server id association must keep working: %v", err)
+		}
+	})
+	t.Run("zero server id with another cache md5 is rejected", func(t *testing.T) {
+		fixture := newNotaloneImageProtocolFixtureWithInfoServerIDs(t, message, 0, imageBytes, imageBytes, cacheMD5, notaloneTestPackedInfo(otherMD5), packed, details, []int64{0})
+		if _, err := fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != "history_image_association_unverified" {
+			t.Fatalf("zero server id must not bypass the cache md5 binding: %v", err)
+		}
+	})
+	t.Run("another non-zero server id is not a fallback", func(t *testing.T) {
+		fixture := newNotaloneImageProtocolFixtureWithInfoServerIDs(t, message, 0, imageBytes, imageBytes, cacheMD5, packed, packed, details, []int64{1})
+		if _, err := fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != "history_image_association_unverified" {
+			t.Fatalf("a resource row owned by another server id must not attach: %v", err)
+		}
+	})
+	t.Run("two zero server id rows are ambiguous", func(t *testing.T) {
+		fixture := newNotaloneImageProtocolFixtureWithInfoServerIDs(t, message, 0, imageBytes, imageBytes, cacheMD5, packed, packed, details, []int64{0, 0})
+		if _, err := fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != "history_image_association_unverified" {
+			t.Fatalf("ambiguous zero server id rows must not attach: %v", err)
+		}
+	})
+}
+
 func TestNotAloneImageOpenSingleImageFailureLeavesSessionUsable(t *testing.T) {
 	imageBytes := notaloneTinyPNG(t, 3, 2)
 	const cacheMD5 = "a71dbe52628a3f83a77ab494817525c6"

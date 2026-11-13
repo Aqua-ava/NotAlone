@@ -165,9 +165,11 @@ type notaloneImageResourceRecord struct {
 	InfoID               int64
 	InfoPackedInfoLength int64
 	InfoPackedInfoSHA256 string
-	CacheMD5             string
-	Details              []notaloneImageResourceDetail
-	MatchingDetails      []notaloneImageResourceDetail
+	// InfoServerIDZero 表示资源记录的 message_svr_id 为 0，靠会话、类型、秒、local_id 与缓存 MD5 关联。
+	InfoServerIDZero bool
+	CacheMD5         string
+	Details          []notaloneImageResourceDetail
+	MatchingDetails  []notaloneImageResourceDetail
 }
 
 type notaloneImageResourceDetail struct {
@@ -994,6 +996,10 @@ func (h *notaloneHistorySession) openImage(ctx context.Context, request notalone
 		"cache_md5", resource.CacheMD5, "info_packed_length", strconv.FormatInt(resource.InfoPackedInfoLength, 10),
 		"info_packed_sha256", resource.InfoPackedInfoSHA256, "verified_sha256", proof.VerifiedSHA256,
 		"classification", proof.Kind, proof.SourceVariant}
+	if resource.InfoServerIDZero {
+		// 仅在零 server_id 关联时追加，常规关联的来源代次保持不变。
+		resourceIdentityParts = append(resourceIdentityParts, "resource_info_server_id_zero")
+	}
 	for _, detail := range resource.MatchingDetails {
 		resourceIdentityParts = append(resourceIdentityParts, "resource_detail", strconv.FormatInt(detail.ID, 10), strconv.FormatInt(detail.TypeRaw, 10),
 			strconv.FormatInt(detail.Size, 10), strconv.FormatInt(detail.Status, 10), detail.DataIndex, strconv.FormatInt(detail.CreateTime, 10),
@@ -1215,6 +1221,16 @@ func (h *notaloneHistorySession) findMessageImageResource(ctx context.Context, m
 	infoRows, err := db.QueryBounded(ctx, 3, infoQuery, int64(notaloneImagePackedInfoByteLimit), h.selected.Conversation, message.localType, message.createTime, message.localID, message.serverID)
 	if err != nil {
 		return resource, nil, notaloneFailure("history_image_read_failed")
+	}
+	if len(infoRows) == 0 {
+		// 微信一次发送多张图片时，只给批次里第一张的资源记录写入真实 server_id，其余记为 0，而消息表里仍是真实值。
+		// 严格相等查不到时，只在同会话、同类型、同秒、同 local_id 下接受 server_id 为 0 的记录，
+		// 且必须恰好一行；其缓存 MD5 仍须与消息自身的缓存 MD5 一致（见下方核验），不放宽任何其他条件。
+		infoRows, err = db.QueryBounded(ctx, 3, infoQuery, int64(notaloneImagePackedInfoByteLimit), h.selected.Conversation, message.localType, message.createTime, message.localID, int64(0))
+		if err != nil {
+			return resource, nil, notaloneFailure("history_image_read_failed")
+		}
+		resource.InfoServerIDZero = len(infoRows) == 1
 	}
 	if len(infoRows) != 1 {
 		return resource, nil, notaloneFailure("history_image_association_unverified")
