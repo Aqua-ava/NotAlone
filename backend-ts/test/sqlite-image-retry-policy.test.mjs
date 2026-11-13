@@ -2,73 +2,103 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture} from './media-support.mjs';
 import {SCENARIO_NOW,MINUTE,DAY,withTransaction} from './fixtures/sqlite-image-sync/scenarios.mjs';
-import {imageFinalFailureCodes,imageMaxAutomaticAttempts} from '../src/media/sqlite/image-refresh.ts';
 
-// 当前运行之前的自动尝试；适配器版本不是准备版本，按“取图失败”计数。
+// 当前运行之前的自动尝试；适配器版本不是准备版本，按“取图结果”计数。
 const VERSION='synthetic-adapter-v1';
 const ATTEMPT_AT=SCENARIO_NOW-30_000;
 const key=(messageId,index)=>`image_sync_v5_${messageId}_${index}`;
 
-/** 每个联系人一条消息，失败码与次数不同，便于分别断言。 */
-function seed(f,{failures}){
+/** 每个联系人一条消息，状态与失败码不同，便于分别断言。 */
+function seed(f,{attempts}){
  return withTransaction(f.root,f.owner,seeder=>{
   const scope=seeder.contact('policy');
-  const messages=Object.entries(failures).map(([name,{count,errorCode,requestedAt=ATTEMPT_AT}],index)=>{
+  const entries=Object.entries(attempts).map(([name,{states=[],errorCode,requestKey}],index)=>{
    const message=seeder.message(scope,{displayNo:100+index});seeder.media(scope,{messageId:message.messageId});
-   for(let attempt=0;attempt<count;attempt++){
-    seeder.attempt(scope,{messageId:message.messageId,recordId:message.recordId,version:VERSION,requestKey:key(message.messageId,attempt),state:'failed',requestedAt,errorCode});
-   }
-   return [name,String(100+index)];
+   states.forEach((state,attempt)=>seeder.attempt(scope,{messageId:message.messageId,recordId:message.recordId,version:VERSION,
+    requestKey:requestKey?.(message.messageId,attempt)??key(message.messageId,attempt),state,requestedAt:ATTEMPT_AT,...(errorCode?{errorCode}:{})}));
+   return [name,{displayNo:String(100+index),messageId:message.messageId}];
   });
-  return {scope,display:Object.fromEntries(messages)};
+  return {scope,items:Object.fromEntries(entries)};
  });
 }
-const targets=async(f,scenario,{now=SCENARIO_NOW,runtimeStartedAt}={})=>(await f.storage.execute('media.imageSyncTargets',{
- ownerId:f.owner,contactId:scenario.scope.contactId,after:'0',now,...(runtimeStartedAt===undefined?{}:{runtimeStartedAt})})).map(row=>row.displayNo);
-const pending=(f,scenario,{runtimeStartedAt}={})=>f.storage.execute('media.imageRefreshPending',{
- ownerId:f.owner,contactId:scenario.scope.contactId,...(runtimeStartedAt===undefined?{}:{runtimeStartedAt})});
+const targets=async(f,scenario,{now=SCENARIO_NOW}={})=>(await f.storage.execute('media.imageSyncTargets',{
+ ownerId:f.owner,contactId:scenario.scope.contactId,after:'0',now})).map(row=>row.displayNo);
+const pending=(f,scenario)=>f.storage.execute('media.imageRefreshPending',{ownerId:f.owner,contactId:scenario.scope.contactId});
+const viewTargets=(f,scenario,messageIds,{now=SCENARIO_NOW}={})=>f.storage.execute('media.imageViewTargets',{
+ ownerId:f.owner,contactId:scenario.scope.contactId,messageIds,now});
 
-test('确定性失败出现一次就停止自动重试，数天后也不再按时间到期',async t=>{
+test('没有尝试过的图片到期；已有结果的图片不论失败原因都不再按时间到期',async t=>{
  const f=await fixture(t);
- const scenario=seed(f,{failures:Object.fromEntries(imageFinalFailureCodes.map(code=>[code,{count:1,errorCode:code}]))});
- assert.equal(Object.keys(scenario.display).length,imageFinalFailureCodes.length);
- assert.deepEqual(await targets(f,scenario,{now:ATTEMPT_AT+DAY*30}),[],'确定性失败不应按时间排队');
- assert.equal(await pending(f,scenario),false,'全部停止重试后不应再安排刷新');
+ const scenario=seed(f,{attempts:{
+  fresh:{},
+  failed:{states:['failed'],errorCode:'media_thumbnail_only'},
+  association:{states:['failed'],errorCode:'media_association_failed'},
+  unverified:{states:['failed'],errorCode:'media_association_unverified'},
+  completed:{states:['completed']},
+  many:{states:['failed','failed','failed']},
+ }});
+ const {items}=scenario;
+ assert.deepEqual(await targets(f,scenario),[items.fresh.displayNo]);
+ assert.deepEqual(await targets(f,scenario,{now:ATTEMPT_AT+DAY*30}),[items.fresh.displayNo],'数天之后也不会因为时间再入选');
 });
 
-test('来源变化等非确定性的关联失败（media_association_unverified）仍会自动重试',async t=>{
+test('被中断或撤销的自动尝试不算已有结果，仍按首次尝试处理',async t=>{
  const f=await fixture(t);
- const scenario=seed(f,{failures:{transient:{count:1,errorCode:'media_association_unverified'}}});
- assert.deepEqual(await targets(f,scenario,{now:ATTEMPT_AT+MINUTE}),[scenario.display.transient]);
+ const scenario=seed(f,{attempts:{interrupted:{states:['interrupted']},revoked:{states:['revoked']},mixed:{states:['interrupted','failed']}}});
+ const {items}=scenario;
+ assert.deepEqual(await targets(f,scenario),[items.interrupted.displayNo,items.revoked.displayNo]);
 });
 
-test('非确定性失败仍按 1 分钟、5 分钟…的退避重试，用满上限后停止',async t=>{
+test('历史适配器与旧前缀尝试不计入自动尝试次数',async t=>{
  const f=await fixture(t);
- const scenario=seed(f,{failures:Object.fromEntries(
-  Array.from({length:imageMaxAutomaticAttempts+1},(_,index)=>[`n${index+1}`,{count:index+1,errorCode:'media_thumbnail_only'}]))});
- const d=scenario.display;
- assert.deepEqual(await targets(f,scenario,{now:ATTEMPT_AT+MINUTE-1}),[],'退避未到期不返回');
- assert.deepEqual(await targets(f,scenario,{now:ATTEMPT_AT+MINUTE}),[d.n1],'1 次失败后 1 分钟到期');
- // 第 5 次失败后（以及此后）不再自动重试，即使已过去很多天。
- const later=await targets(f,scenario,{now:ATTEMPT_AT+DAY*30});
- assert.deepEqual(later,[d.n1,d.n2,d.n3,d.n4],'次数用满的 n5、n6 不再到期');
+ const scenario=seed(f,{attempts:{legacy:{states:['failed'],requestKey:messageId=>`image_sync_v3_${messageId}_0`}}});
+ assert.deepEqual(await targets(f,scenario),[scenario.items.legacy.displayNo]);
 });
 
-test('停止重试的图片在 App 重启后只再试一次，本次运行内不会重复',async t=>{
+test('只有尚未试过的图片才需要安排定时刷新',async t=>{
  const f=await fixture(t);
- const scenario=seed(f,{failures:{final:{count:1,errorCode:'media_association_failed'},exhausted:{count:imageMaxAutomaticAttempts,errorCode:'media_thumbnail_only'}}});
- const d=scenario.display;
- // 缺省不重试；上次尝试之后才启动的运行，对每条停止重试的图片各给一次机会。
- assert.deepEqual(await targets(f,scenario,{now:ATTEMPT_AT+DAY}),[]);
- assert.deepEqual(await targets(f,scenario,{now:ATTEMPT_AT+DAY,runtimeStartedAt:ATTEMPT_AT+1}),[d.final,d.exhausted]);
- assert.equal(await pending(f,scenario,{runtimeStartedAt:ATTEMPT_AT+1}),true,'重启后的运行应安排刷新');
- // 同一运行内已经尝试过（上次尝试不早于运行开始）：不再返回，也不再安排刷新。
- assert.deepEqual(await targets(f,scenario,{now:ATTEMPT_AT+DAY,runtimeStartedAt:ATTEMPT_AT}),[]);
- assert.equal(await pending(f,scenario,{runtimeStartedAt:ATTEMPT_AT}),false);
+ const attempted=seed(f,{attempts:{failed:{states:['failed']},completed:{states:['completed']}}});
+ assert.equal(await pending(f,attempted),false,'都已有结果时不再定时唤醒');
+ const fresh=await fixture(t);
+ const waiting=seed(fresh,{attempts:{failed:{states:['failed']},fresh:{}}});
+ assert.equal(await pending(fresh,waiting),true,'仍有尚未试过的图片时需要刷新');
 });
 
-test('运行开始时间必须是非负整数',async t=>{
- const f=await fixture(t),scenario=seed(f,{failures:{one:{count:1,errorCode:'media_thumbnail_only'}}});
- for(const runtimeStartedAt of [-1,1.5,'1',NaN])await assert.rejects(f.storage.execute('media.imageSyncTargets',{
-  ownerId:f.owner,contactId:scenario.scope.contactId,after:'0',now:SCENARIO_NOW,runtimeStartedAt}),{code:'media_request_invalid'});
+test('打开聊天：只返回仍未保存的图片，已有结果的失败图片也可再试一次',async t=>{
+ const f=await fixture(t);
+ const scenario=seed(f,{attempts:{
+  fresh:{},
+  failed:{states:['failed'],errorCode:'media_thumbnail_only'},
+  association:{states:['failed'],errorCode:'media_association_failed'},
+  many:{states:['failed','failed','failed','failed','failed','failed']},
+ }});
+ const {items}=scenario;
+ const ids=Object.values(items).map(item=>item.messageId);
+ const rows=await viewTargets(f,scenario,ids);
+ assert.deepEqual(rows.map(row=>row.displayNo),Object.values(items).map(item=>item.displayNo),'按显示号升序返回');
+ for(const row of rows)assert.match(row.requestKey,/^image_reconcile_v1_/,'打开聊天的尝试使用补查请求键');
+ // 每次尝试请求键包含时间窗口，不与既有尝试撞键。
+ const later=await viewTargets(f,scenario,[items.failed.messageId],{now:SCENARIO_NOW+MINUTE*2});
+ assert.notEqual(later[0].requestKey,rows.find(row=>row.messageId===items.failed.messageId).requestKey);
+});
+
+test('打开聊天：不返回运行中、已清除、未请求或不存在的图片',async t=>{
+ const f=await fixture(t);
+ const scenario=seed(f,{attempts:{target:{states:['failed']},running:{states:['pending']},other:{states:['failed']}}});
+ const {items}=scenario;
+ assert.deepEqual((await viewTargets(f,scenario,[items.target.messageId,items.running.messageId,'unknown-message'])).map(row=>row.displayNo),[items.target.displayNo]);
+ await withTransaction(f.root,f.owner,seeder=>{seeder.db.prepare("UPDATE message_media SET state='cleared' WHERE owner_id=? AND message_id=?").run(f.owner,items.target.messageId);});
+ assert.deepEqual(await viewTargets(f,scenario,[items.target.messageId]),[],'已清除的图片不恢复');
+ assert.deepEqual((await viewTargets(f,scenario,[items.other.messageId])).map(row=>row.displayNo),[items.other.displayNo]);
+});
+
+test('打开聊天：参数必须是 1～100 个合法消息 ID，时间为非负整数',async t=>{
+ const f=await fixture(t),scenario=seed(f,{attempts:{one:{states:['failed']}}});
+ const base={ownerId:f.owner,contactId:scenario.scope.contactId,now:SCENARIO_NOW};
+ const bad=[
+  {messageIds:[]},{messageIds:'x'},{messageIds:[1]},{messageIds:['a b']},{messageIds:Array.from({length:101},(_,index)=>`m${index}`)},
+  {messageIds:[scenario.items.one.messageId],now:-1},{messageIds:[scenario.items.one.messageId],now:1.5},
+ ];
+ for(const extra of bad)await assert.rejects(f.storage.execute('media.imageViewTargets',{...base,...extra}),{code:'media_request_invalid'},JSON.stringify(extra).slice(0,60));
+ assert.equal((await viewTargets(f,scenario,Array.from({length:100},(_,index)=>index===0?scenario.items.one.messageId:`m${index}`))).length,1,'恰好 100 个合法');
 });

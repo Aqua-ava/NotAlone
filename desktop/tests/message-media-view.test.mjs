@@ -56,7 +56,7 @@ test('已保存图片可查看并清除，图片面板不提供原图升级或�
  await page.evaluate(()=>window.setError('media_quality_unverified'));await expect(page.getByText('图片资源未通过完整文件校验，本次没有保存图片；消息记录仍保留。',{exact:true})).toBeVisible();
  await page.evaluate(()=>window.setError('media_thumbnail_only'));await expect(page.getByText('本机目前只有缩略图，太小看不清，没有保存；消息记录仍保留，微信下载标准图后会自动补取。',{exact:true})).toBeVisible();
  await page.evaluate(()=>window.setError('media_association_unverified'));await expect(page.getByText('消息与资源尚未唯一核验，未读取图片；消息记录仍保留。',{exact:true})).toBeVisible();
- await page.evaluate(()=>window.setError('media_database_key_missing'));await expect(page.getByText('缺少微信图片资源库的数据库密钥（微信重建数据库后会换密钥），暂时取不到图片；补取密钥后会自动重试，消息记录仍保留。',{exact:true})).toBeVisible();
+ await page.evaluate(()=>window.setError('media_database_key_missing'));await expect(page.getByText('缺少微信图片资源库的数据库密钥（微信重建数据库后会换密钥），暂时取不到图片；补取密钥并重启后，打开该聊天会再试一次，消息记录仍保留。',{exact:true})).toBeVisible();
  await page.evaluate(()=>window.showRetry());await expect(page.getByRole('button',{name:'重查同次媒体操作',exact:true})).toBeVisible();await page.getByRole('button',{name:'重查同次媒体操作',exact:true}).click();assert.deepEqual(await page.evaluate(()=>window.calls),['extract','retry']);
  await page.getByRole('button',{name:'清除这条媒体',exact:true}).click();await expect(page.getByText('已清除',{exact:false})).toBeVisible();
  assert.deepEqual(await page.evaluate(()=>window.calls),['extract','retry','clear']);

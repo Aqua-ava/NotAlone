@@ -10,7 +10,7 @@ import {SqliteImageSyncCoordinator} from '../src/media/sqlite/image-sync.ts';
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 import {fixture,owner,record} from './fixtures/memory-sqlite/support.mjs';
 
-const expectedActions=['media.imageRefreshPending','media.imageSyncTargets','memory.history','memory.read'];
+const expectedActions=['media.imageRefreshPending','media.imageSyncTargets','media.imageViewTargets','memory.history','memory.read'];
 function bounded(work,label='后台慢读不应阻塞前台写入',ms=750){
  let timer;return Promise.race([work,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(label)),ms);})]).finally(()=>clearTimeout(timer));
 }

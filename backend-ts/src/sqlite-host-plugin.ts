@@ -211,7 +211,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
       contacts.setReadStart(()=>{if(automaticImages)imageSync?.wake();if(automaticBackground){firstHistory!.wake();incremental!.wake();quoteSync?.wake();memory?.wake();}});
     }
     if(history&&process.env.NOTALONE_SYNC_PROBE&&path.isAbsolute(process.env.NOTALONE_SYNC_PROBE)) foreground=SqliteForeground.create(ownerId,process.env.NOTALONE_SYNC_PROBE,sqlite.wechatCliPath??'',()=>contacts!.foregroundSnapshot(),proof=>contacts!.confirmForeground(proof));
-    const historyHttp=history?new SqliteHistoryHttp(history):undefined;
+    const historyHttp=history?new SqliteHistoryHttp(history,(contactId,messageIds)=>{if(automaticImages)imageSync?.retryViewed(contactId,messageIds);}):undefined;
     let historyStatusInFlight:Promise<Record<string,unknown>>|undefined;
     const readHistoryStatus=async()=>{
       const directory=await contacts!.syncDirectory();

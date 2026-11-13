@@ -150,7 +150,8 @@ export function historyQueryAllowed(method:string|undefined,url:URL):boolean {
 /** 宿主先做唯一Bearer/无Origin认证；所有范围由已绑定的服务owner确定。 */
 export class SqliteHistoryHttp {
   private readonly service: HistoryHttpService;
-  constructor(service: HistoryHttpService) { this.service = service; }
+  readonly #imagesViewed?: (contactId: string, messageIds: readonly string[]) => void;
+  constructor(service: HistoryHttpService, imagesViewed?: (contactId: string, messageIds: readonly string[]) => void) { this.service = service; this.#imagesViewed = imagesViewed; }
   async handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const route = /^\/api\/contacts\/([a-f0-9-]{36})\/(messages|history-messages|history|history\/sync)$/.exec(url.pathname);
@@ -178,6 +179,9 @@ export class SqliteHistoryHttp {
         if(operation==='history-messages'){
           const imageIds = read.messages.slice(0,limit).filter(message=>message.kind==='image').map(message=>message.id);
           const imageMedia = imageIds.length ? await this.service.imageMedia(contactId,imageIds) : new Map();
+          // 用户打开聊天看到尚未保存的图片：交给图片同步各再试一次；失败不影响聊天读取。
+          const unsaved = imageIds.filter(id => !['available', 'cleared'].includes(imageMedia.get(id)?.state ?? ''));
+          if (unsaved.length) { try { this.#imagesViewed?.(contactId, unsaved); } catch { /* 不影响聊天读取 */ } }
           value = projectHistoryMessages(read, limit, imageMedia);
         } else value = projectHistoryMessages(read,limit);
       } else {

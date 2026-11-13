@@ -101,13 +101,14 @@ test('大联系人结果集合、目标顺序与刷新语义与黄金样例完�
 
  // 明确被排除的变体不得出现在结果中：清除、原图、隔离、已有 main 分类、缺规范化捕获、运行中。
  for(const index of [17,19,29,31,37,43])assert.ok(!traversal.displayNos.includes(String(3000+index)),`被排除的变体 ${3000+index} 不应出现`);
- // 退避未到期的消息不在当前遍历中，但下一个时间窗口会返回。
- assert.ok(!traversal.displayNos.includes('3053'),'命中刷新退避的图片当前不应到期');
- assert.ok(actual['large/refresh-after'].some(row=>row.displayNo==='3053'),'下一个刷新窗口应返回 3053');
+ // 已自动尝试过一次的图片不按时间再到期：当前与之后的时间窗口都不返回。
+ assert.ok(!traversal.displayNos.includes('3053'),'已自动尝试过的图片不应到期');
+ assert.ok(!actual['large/refresh-after'].some(row=>row.displayNo==='3053'),'时间推移后 3053 仍不返回');
+ assert.ok(!actual['large/refresh-window'].some(row=>row.displayNo==='3053'),'刷新窗口内 3053 仍不返回');
  assert.equal(actual['large/pending'],true,'大联系人仍有待处理图片');
 });
 
-test('边界场景空 cutoff、已有 cutoff、多个 legacy 尝试和退避阶梯与黄金样例一致',{timeout:60000},async t=>{
+test('边界场景空 cutoff、已有 cutoff、多个 legacy 尝试和来源准备退避与黄金样例一致',{timeout:60000},async t=>{
  const f=await fixture(t),scenario=buildEdgeScenario(f);
  const actual=await collectCases(f.storage,scenario);
  assert.deepEqual(actual,golden.edge,'边界场景公开动作结果必须与黄金样例相同');
@@ -116,8 +117,9 @@ test('边界场景空 cutoff、已有 cutoff、多个 legacy 尝试和退避阶�
  // 无尝试的普通图片按 display_no 翻页；已有可查看图片（含旧库的缩略图／未知分类副本）的消息不再入选。
  assert.deepEqual(displayNos('edge/page-first'),Array.from({length:64},(_,index)=>String(1001+index)));
  assert.deepEqual(displayNos('edge/page-second'),['1065','1066','1067','1068','1069','1070','1101','1111','1114','1115','1116']);
- // 下一个刷新窗口只多出退避到期的历史尝试图片。
- assert.deepEqual(displayNos('edge/page-second-refresh-window'),['1065','1066','1067','1068','1069','1070','1101','1111','1113','1114','1115','1116']);
+ // 已自动尝试过一次的 1113 随时间推移也不再到期：下一个时间窗口与当前结果相同。
+ assert.deepEqual(displayNos('edge/page-second-refresh-window'),displayNos('edge/page-second'));
+ assert.ok(!displayNos('edge/page-second-refresh-window').includes('1113'));
  assert.equal(actual['edge/page-pending'],true);
  // 已有 legacy cutoff：cutoff 之前的当前版本尝试不计入 preparation，全部立即到期。
  assert.deepEqual(displayNos('edge/cutoff'),['3001','3002','3003','3004','3005','3006','3007','3008','3009','3010']);
@@ -135,12 +137,6 @@ test('边界场景空 cutoff、已有 cutoff、多个 legacy 尝试和退避阶�
   assert.deepEqual(displayNos(`edge/ladder-${ladder.count}-due`),ladder.displayNos,`退避到期后应返回 ${ladder.count}`);
   assert.equal(actual[`edge/ladder-${ladder.count}-pending`],true);
  }
- // 单图重试阶梯：历史适配器命中 v5 键的尝试次数逐级延长退避。
- assert.deepEqual(displayNos('edge/retry-0'),[]);
- assert.deepEqual(displayNos('edge/retry-61000'),['5001']);
- assert.deepEqual(displayNos('edge/retry-301000'),['5001','5002']);
- assert.deepEqual(displayNos('edge/retry-1801000'),['5001','5002','5003']);
- assert.deepEqual(displayNos('edge/retry-21601000'),['5001','5002','5003','5004']);
- // 自动尝试用满 5 次后停止（5005、5006），本次运行内不再按时间排队。
- assert.deepEqual(displayNos('edge/retry-86401000'),['5001','5002','5003','5004']);
+ // 单图失败只自动尝试一次：无论过去多久都不按时间重新排队，重试只由打开聊天触发。
+ for(const offset of [0,61000,301000,1801000,21601000,86401000])assert.deepEqual(displayNos(`edge/retry-${offset}`),[],`edge/retry-${offset} 不应有到期目标`);
 });

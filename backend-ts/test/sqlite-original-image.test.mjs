@@ -92,3 +92,23 @@ test('图片保存和清除通过同条消息更新通知聊天占位',async t=>
  await f.media.clear(f.contact,image.id,randomUUID());
  assert.deepEqual(updates,[{contactId:f.contact,messageId:image.id},{contactId:f.contact,messageId:image.id}]);
 });
+
+test('聊天专用HTTP只把尚未保存的图片交给打开聊天补查，已保存的不重复交出，回调异常不影响聊天读取',async t=>{
+ const f=await fixture(t,new OriginalImageMediaAdapter(resourcePort()));
+ const image=f.messages.find(m=>m.kind==='image');
+ const viewed=[];let fail=false;
+ const http=new SqliteHistoryHttp(f.history,(contactId,messageIds)=>{viewed.push({contactId,messageIds:[...messageIds]});if(fail)throw new Error('synthetic hook failure');});
+ const get=async()=>{
+  const req=Object.assign(new EventEmitter(),{method:'GET',url:`/api/contacts/${f.contact}/history-messages?limit=20`});
+  let status,body;const res={writeHead:code=>{status=code;},end:value=>{body=JSON.parse(value);}};
+  assert.equal(await http.handle(req,res),true);assert.equal(status,200);return body;
+ };
+ const before=await get();
+ assert.notEqual(before.messages.find(item=>item.message_id===image.id).image_media.state,'available');
+ assert.deepEqual(viewed,[{contactId:f.contact,messageIds:[image.id]}],'未保存的图片交给补查');
+ fail=true;await get();assert.equal(viewed.length,2,'回调抛错时聊天读取照常成功');
+ await f.media.extract(f.contact,image.id,{requestKey:randomUUID(),goal:'extract'});
+ viewed.length=0;await get();assert.deepEqual(viewed,[],'已保存的图片不再交出');
+ await f.media.clear(f.contact,image.id,randomUUID());
+ await get();assert.deepEqual(viewed,[],'已清除的图片不再交出');
+});
