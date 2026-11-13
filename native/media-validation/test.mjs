@@ -83,6 +83,19 @@ test('WXGF包头伪起始码后仍解码合法HEVC单帧',async()=>{
  const output=join(directory,'wxgf.header-preamble.png');await writeFile(output,result.stdout);
  assert.deepEqual(await validate(output,'image',signal()),{format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false});
 });
+test('WXGF按真实形态定位HEVC码流：长头、前置假参数集、尾部垃圾仍与干净流输出一致',async()=>{
+ const plain=await decodeWxgf(join(directory,'wxgf'));
+ assert.equal(plain.status,0,plain.stderr?.toString());
+ for(const name of ['header-long','leading-fake-sps','trailing-garbage','real-shape']){
+  const result=await decodeWxgf(join(directory,'wxgf.'+name));
+  assert.equal(result.status,0,name+':'+(result.stderr?.toString()??''));
+  assert.ok(result.stdout.equals(plain.stdout),name+'应与干净单帧输出一致');
+ }
+ // 垃圾之后又出现合法切片：画面不完整，整体拒绝且不输出部分图片。
+ const partial=await decodeWxgf(join(directory,'wxgf.garbage-then-slice'));
+ assert.equal(partial.status,1);assert.equal(partial.stdout.length,0);
+ assert.match(partial.stderr.toString(),/^media_image_invalid\n$/);
+});
 test('WXGF可从已unlink的继承fd3解码且不创建临时文件',async()=>{
  const scratch=join(directory,'wxgf-unlinked');await mkdir(scratch);
  const input=join(scratch,'input');await writeFile(input,await readFile(join(directory,'wxgf')));

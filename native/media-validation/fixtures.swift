@@ -398,8 +398,26 @@ func wxgf(_ root:String) throws {
     var headerPreamble=Data("wxgf".utf8)
     headerPreamble.append(contentsOf:[0,0,0,1,0x80,0x01])
     for unit in sets+slices {headerPreamble.append(contentsOf:[0,0,0,1]);headerPreamble.append(unit)}
+    // 真实 wxgf 头约 4.1KB 且含伪起始码；这些形态必须仍能解码，超过 16KiB 的头才拒绝。
+    func realShaped(header:Int,fakeSps:Bool,tail:[UInt8]?,tailSlice:Bool=false) -> Data {
+        var result=Data("wxgf".utf8)
+        result.append(Data(repeating:0xff,count:header))
+        result.append(contentsOf:[0,0,0,1,0x80,0x01])
+        if fakeSps {result.append(contentsOf:[0,0,0,1,0x42,0x01,0xaa,0xbb,0xcc])}
+        for unit in sets+slices {result.append(contentsOf:[0,0,0,1]);result.append(unit)}
+        if let tail {
+            result.append(contentsOf:[0,0,0,1]);result.append(contentsOf:tail)
+            if tailSlice,let slice=slices.first {result.append(contentsOf:[0,0,0,1]);result.append(slice)}
+        }
+        return result
+    }
+    let headerLong=realShaped(header:4200,fakeSps:false,tail:nil)
+    let leadingFakeSps=realShaped(header:0,fakeSps:true,tail:nil)
+    let trailingGarbage=realShaped(header:0,fakeSps:false,tail:[0xf6,0xdb,0x01,0x02])
+    let realShape=realShaped(header:4200,fakeSps:true,tail:[0xf6,0xdb,0x01,0x02])
+    let garbageThenSlice=realShaped(header:0,fakeSps:false,tail:[0xf6,0xdb,0x01,0x02],tailSlice:true)
     var headerBeyondBound=Data("wxgf".utf8)
-    headerBeyondBound.append(Data(repeating:0xff,count:4097))
+    headerBeyondBound.append(Data(repeating:0xff,count:16*1024+1))
     headerBeyondBound.append(contentsOf:[0,0,0,1,0x80,0x01])
     for unit in sets+slices {headerBeyondBound.append(contentsOf:[0,0,0,1]);headerBeyondBound.append(unit)}
     guard output.count>4,output.count<=32*1024*1024,multiple.count<=32*1024*1024,
@@ -410,6 +428,11 @@ func wxgf(_ root:String) throws {
     try multiple.write(to:URL(fileURLWithPath:root+"/wxgf.multiframe"))
     try headerPreamble.write(to:URL(fileURLWithPath:root+"/wxgf.header-preamble"))
     try headerBeyondBound.write(to:URL(fileURLWithPath:root+"/wxgf.header-over-limit"))
+    for (name,data) in [("header-long",headerLong),("leading-fake-sps",leadingFakeSps),("trailing-garbage",trailingGarbage),
+                        ("real-shape",realShape),("garbage-then-slice",garbageThenSlice)] {
+        guard data.count<=32*1024*1024 else {throw FixtureFailure("wxgf_size")}
+        try data.write(to:URL(fileURLWithPath:root+"/wxgf."+name))
+    }
     try dualFrame.write(to:URL(fileURLWithPath:root+"/wxgf.dual-frame"))
     try dualBrokenAlpha.write(to:URL(fileURLWithPath:root+"/wxgf.dual-frame-broken-alpha"))
     try dualTwoColor.write(to:URL(fileURLWithPath:root+"/wxgf.dual-frame-two-color"))
@@ -438,6 +461,15 @@ private func verifyWxgfFixtures(_ root:String) throws {
         guard try decode(name)==dual else {throw FixtureFailure("dual_sei_output")}
     }
     guard try decode("wxgf.sei")==plain else {throw FixtureFailure("single_sei_output")}
+    for name in ["wxgf.header-long","wxgf.leading-fake-sps","wxgf.trailing-garbage","wxgf.real-shape"] {
+        guard try decode(name)==plain else {throw FixtureFailure("real_shape_output")}
+    }
+    do {
+        _=try decode("wxgf.garbage-then-slice")
+        throw FixtureFailure("garbage_then_slice_accepted")
+    } catch let failure as Failure {
+        guard failure.code=="media_image_invalid" else {throw FixtureFailure("garbage_then_slice_error")}
+    }
     do {
         _=try decode("wxgf.dual-frame-two-color")
         throw FixtureFailure("two_color_accepted")

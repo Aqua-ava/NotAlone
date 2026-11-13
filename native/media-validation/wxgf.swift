@@ -7,27 +7,44 @@ import VideoToolbox
 
 private let wxgfPrefix=Data("wxgf".utf8)
 private let wxgfStartCode=[UInt8](arrayLiteral:0,0,0,1)
-private let wxgfHeaderPrefixLimit=4096
+// 实测头约 4.1KB；留 4 倍余量，仍是有界扫描。
+private let wxgfHeaderPrefixLimit=16*1024
 private let wxgfOutputLimit=32*1024*1024
 private let wxgfPixelLimit=40_000_000
 
-private func wxgfHeaderRecoveryPayload(_ data:Data) throws -> Data? {
-    let bytes=[UInt8](data)
-    let starts=try annexBStarts(bytes)
-    guard starts.count>=5 else {return nil}
-    var sawMalformedHeader=false
+// WeChat 的 wxgf 头长度不固定（实测约 4.1KB，且含伪起始码、伪单元），这里不按头长度跳过，
+// 而是在头窗口内找第一个能依次接上 SPS、PPS 和切片的 VPS 作为 HEVC 码流起点。
+private func wxgfHEVCUnits(_ payload:Data) -> [AnnexNAL]? {
+    let bytes=[UInt8](payload)
+    guard let starts=try? annexBStarts(bytes) else {return nil}
     for index in starts.indices {
-        let startCodeOffset=starts[index].offset
-        if startCodeOffset>wxgfHeaderPrefixLimit {break}
-        let unit:AnnexNAL
-        do {unit=try annexBNAL(bytes,starts,at:index)}
-        catch {sawMalformedHeader=true;continue}
-        guard sawMalformedHeader,unit.type==32 else {continue}
-        let suffix=Data(data.dropFirst(startCodeOffset))
-        guard let units=try? annexBUnits(suffix),hasOrderedHEVCFrameUnits(units) else {continue}
-        return suffix
+        let offset=starts[index].offset
+        if offset>wxgfHeaderPrefixLimit {break}
+        let header=offset+starts[index].length
+        guard header+1<bytes.count,(Int(bytes[header])>>1)&0x3f==32,
+              let units=wxgfUnits(bytes,starts,from:index),hasOrderedHEVCFrameUnits(units) else {continue}
+        return units
     }
     return nil
+}
+
+// 从起点逐个解析单元。最后一个切片之后若出现不能解析的尾部，丢弃该尾部；
+// 但尾部之后再出现合法切片说明画面不完整，整体拒绝，不输出部分图片。
+private func wxgfUnits(_ bytes:[UInt8],_ starts:[(offset:Int,length:Int)],from first:Int) -> [AnnexNAL]? {
+    var units:[AnnexNAL]=[]
+    var sawSlice=false
+    for index in first..<starts.count {
+        guard let unit=try? annexBNAL(bytes,starts,at:index) else {
+            guard sawSlice else {return nil}
+            for rest in (index+1)..<starts.count {
+                if let later=try? annexBNAL(bytes,starts,at:rest),(0...31).contains(later.type) {return nil}
+            }
+            return units
+        }
+        units.append(unit)
+        if (0...31).contains(unit.type) {sawSlice=true}
+    }
+    return units
 }
 
 private func png(_ image:CGImage) throws -> Data {
@@ -269,10 +286,7 @@ func decodeWxgf(_ data:Data) throws -> Data {
     let payloadData=Data(payload)
     let jpeg=Data([0xff,0xd8,0xff])
     let pngHeader=Data([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a])
-    var hevcUnits=try? annexBUnits(payloadData)
-    if hevcUnits==nil,let recoveryPayload=try? wxgfHeaderRecoveryPayload(payloadData) {
-        hevcUnits=try? annexBUnits(recoveryPayload)
-    }
+    let hevcUnits=wxgfHEVCUnits(payloadData)
     if let hevcUnits,hevcUnits.contains(where:{$0.type==32}),hevcUnits.contains(where:{$0.type==33}),
        hevcUnits.contains(where:{$0.type==34}),hevcUnits.contains(where:{(0...31).contains($0.type)}) {
         if let frames=try? splitHEVCFrames(hevcUnits) {
