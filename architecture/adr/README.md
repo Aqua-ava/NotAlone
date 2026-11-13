@@ -185,3 +185,4 @@
 
 - [ADR-181：L3 逐条核验与合格条目发布](181-l3-item-verification-and-partial-publication.md)
 - [ADR-182：回复时联系人／本人记忆改用本机混合检索](182-reply-memory-hybrid-retrieval.md)
+- [ADR-183：回复模型调用结果未知时自动放弃，不锁定联系人](183-auto-abandon-unknown-reply-model-calls.md)——局部修订 ADR-121 的 unknown 阻断口径。
