@@ -399,11 +399,13 @@ func wxgf(_ root:String) throws {
     headerPreamble.append(contentsOf:[0,0,0,1,0x80,0x01])
     for unit in sets+slices {headerPreamble.append(contentsOf:[0,0,0,1]);headerPreamble.append(unit)}
     // 真实 wxgf 头约 4.1KB 且含伪起始码；这些形态必须仍能解码，超过 16KiB 的头才拒绝。
-    func realShaped(header:Int,fakeSps:Bool,tail:[UInt8]?,tailSlice:Bool=false) -> Data {
+    func realShaped(header:Int,fakeSps:Bool,fakeVps:Bool=false,tail:[UInt8]?,tailSlice:Bool=false) -> Data {
         var result=Data("wxgf".utf8)
         result.append(Data(repeating:0xff,count:header))
         result.append(contentsOf:[0,0,0,1,0x80,0x01])
         if fakeSps {result.append(contentsOf:[0,0,0,1,0x42,0x01,0xaa,0xbb,0xcc])}
+        // 真实样本里头尾都有“头字节合法但 nuh_layer_id 非零”的伪 VPS/SPS。
+        if fakeVps {result.append(contentsOf:[0,0,0,1,0x40,0x35,0x01,0x02])}
         for unit in sets+slices {result.append(contentsOf:[0,0,0,1]);result.append(unit)}
         if let tail {
             result.append(contentsOf:[0,0,0,1]);result.append(contentsOf:tail)
@@ -415,6 +417,8 @@ func wxgf(_ root:String) throws {
     let leadingFakeSps=realShaped(header:0,fakeSps:true,tail:nil)
     let trailingGarbage=realShaped(header:0,fakeSps:false,tail:[0xf6,0xdb,0x01,0x02])
     let realShape=realShaped(header:4200,fakeSps:true,tail:[0xf6,0xdb,0x01,0x02])
+    let fakeVpsBefore=realShaped(header:28,fakeSps:false,fakeVps:true,tail:nil)
+    let trailingFakeSps=realShaped(header:0,fakeSps:false,tail:[0x43,0x66,0x11,0x22])
     let garbageThenSlice=realShaped(header:0,fakeSps:false,tail:[0xf6,0xdb,0x01,0x02],tailSlice:true)
     var headerBeyondBound=Data("wxgf".utf8)
     headerBeyondBound.append(Data(repeating:0xff,count:16*1024+1))
@@ -429,7 +433,8 @@ func wxgf(_ root:String) throws {
     try headerPreamble.write(to:URL(fileURLWithPath:root+"/wxgf.header-preamble"))
     try headerBeyondBound.write(to:URL(fileURLWithPath:root+"/wxgf.header-over-limit"))
     for (name,data) in [("header-long",headerLong),("leading-fake-sps",leadingFakeSps),("trailing-garbage",trailingGarbage),
-                        ("real-shape",realShape),("garbage-then-slice",garbageThenSlice)] {
+                        ("real-shape",realShape),("fake-vps-before",fakeVpsBefore),("trailing-fake-sps",trailingFakeSps),
+                        ("garbage-then-slice",garbageThenSlice)] {
         guard data.count<=32*1024*1024 else {throw FixtureFailure("wxgf_size")}
         try data.write(to:URL(fileURLWithPath:root+"/wxgf."+name))
     }
@@ -461,7 +466,7 @@ private func verifyWxgfFixtures(_ root:String) throws {
         guard try decode(name)==dual else {throw FixtureFailure("dual_sei_output")}
     }
     guard try decode("wxgf.sei")==plain else {throw FixtureFailure("single_sei_output")}
-    for name in ["wxgf.header-long","wxgf.leading-fake-sps","wxgf.trailing-garbage","wxgf.real-shape"] {
+    for name in ["wxgf.header-long","wxgf.leading-fake-sps","wxgf.trailing-garbage","wxgf.real-shape","wxgf.fake-vps-before","wxgf.trailing-fake-sps"] {
         guard try decode(name)==plain else {throw FixtureFailure("real_shape_output")}
     }
     do {

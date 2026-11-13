@@ -86,7 +86,7 @@ test('WXGF包头伪起始码后仍解码合法HEVC单帧',async()=>{
 test('WXGF按真实形态定位HEVC码流：长头、前置假参数集、尾部垃圾仍与干净流输出一致',async()=>{
  const plain=await decodeWxgf(join(directory,'wxgf'));
  assert.equal(plain.status,0,plain.stderr?.toString());
- for(const name of ['header-long','leading-fake-sps','trailing-garbage','real-shape']){
+ for(const name of ['header-long','leading-fake-sps','trailing-garbage','real-shape','fake-vps-before','trailing-fake-sps']){
   const result=await decodeWxgf(join(directory,'wxgf.'+name));
   assert.equal(result.status,0,name+':'+(result.stderr?.toString()??''));
   assert.ok(result.stdout.equals(plain.stdout),name+'应与干净单帧输出一致');

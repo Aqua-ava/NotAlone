@@ -12,6 +12,13 @@ private let wxgfHeaderPrefixLimit=16*1024
 private let wxgfOutputLimit=32*1024*1024
 private let wxgfPixelLimit=40_000_000
 
+// 静态图只用基础层（nuh_layer_id=0）。头里的伪单元常带非零层号，这样可与真实单元区分。
+private func isBaseLayerNAL(_ first:UInt8,_ second:UInt8) -> Bool {(first&1)==0 && (second>>3)==0}
+private func wxgfBaseLayerNAL(_ bytes:[UInt8],_ starts:[(offset:Int,length:Int)],at index:Int) -> AnnexNAL? {
+    guard let unit=try? annexBNAL(bytes,starts,at:index),isBaseLayerNAL(unit.bytes[0],unit.bytes[1]) else {return nil}
+    return unit
+}
+
 // WeChat 的 wxgf 头长度不固定（实测约 4.1KB，且含伪起始码、伪单元），这里不按头长度跳过，
 // 而是在头窗口内找第一个能依次接上 SPS、PPS 和切片的 VPS 作为 HEVC 码流起点。
 private func wxgfHEVCUnits(_ payload:Data) -> [AnnexNAL]? {
@@ -21,7 +28,7 @@ private func wxgfHEVCUnits(_ payload:Data) -> [AnnexNAL]? {
         let offset=starts[index].offset
         if offset>wxgfHeaderPrefixLimit {break}
         let header=offset+starts[index].length
-        guard header+1<bytes.count,(Int(bytes[header])>>1)&0x3f==32,
+        guard header+1<bytes.count,(Int(bytes[header])>>1)&0x3f==32,isBaseLayerNAL(bytes[header],bytes[header+1]),
               let units=wxgfUnits(bytes,starts,from:index),hasOrderedHEVCFrameUnits(units) else {continue}
         return units
     }
@@ -34,10 +41,10 @@ private func wxgfUnits(_ bytes:[UInt8],_ starts:[(offset:Int,length:Int)],from f
     var units:[AnnexNAL]=[]
     var sawSlice=false
     for index in first..<starts.count {
-        guard let unit=try? annexBNAL(bytes,starts,at:index) else {
+        guard let unit=wxgfBaseLayerNAL(bytes,starts,at:index) else {
             guard sawSlice else {return nil}
             for rest in (index+1)..<starts.count {
-                if let later=try? annexBNAL(bytes,starts,at:rest),(0...31).contains(later.type) {return nil}
+                if let later=wxgfBaseLayerNAL(bytes,starts,at:rest),(0...31).contains(later.type) {return nil}
             }
             return units
         }
