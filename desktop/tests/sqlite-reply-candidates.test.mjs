@@ -532,22 +532,25 @@ test('聊天读取恢复失败不保留旧选稿及其派生草稿，新生成�
  const requests=f.commands.filter(c=>c.action==='generate');assert.equal(requests[0].carriedSelectionId,ids.selection);assert.equal(requests[1].carriedSelectionId,undefined);assert.equal(requests[1].text,'重新写下的独立想法');
 });
 
-test('聊天恢复提示后仍按原请求核对，模型结果未知时不能换请求重发',{timeout:30000},async t=>{
+test('模型请求已自动放弃时说明费用风险，重新生成使用新请求身份',{timeout:30000},async t=>{
+ let generated=0;
  const f=await panel(t,async operation=>{
   if(operation.action==='read')return pageData();
-  if(operation.action==='status')return {requestKey:operation.requestKey,phase:'unknown',sent:true,errorCode:null,retryable:false,startedAt:1000,finishedAt:null};
-  if(operation.action==='generate')throw new Error('聊天读取暂未恢复，请重试生成。');
+  if(operation.action==='status')return {requestKey:operation.requestKey,phase:'failed',sent:true,errorCode:'discussion_generation_timeout',retryable:true,startedAt:1000,finishedAt:2000};
+  if(operation.action==='generate'){if(++generated===1)throw new Error('本次生成未完成。');return receipt(operation);}
   throw new Error('未授权的合成页面操作');
  });
  const region=f.page.getByRole('region',{name:'表达工作区'});
- await region.getByRole('textbox',{name:'有什么想说的',exact:true}).fill('还不能另发的想法');
+ await region.getByRole('textbox',{name:'有什么想说的',exact:true}).fill('放弃后仍保留的合成想法');
  await region.getByRole('button',{name:'帮我表达',exact:true}).click();
- await expect(region.getByRole('alert')).toContainText('结果暂未确认');
- await expect(region.getByRole('button',{name:'重试生成',exact:true})).toHaveCount(0);
- await expect(region.getByRole('button',{name:'帮我想想',exact:true})).toBeDisabled();
- await region.getByRole('button',{name:'核对原请求',exact:true}).click();
- await expect.poll(()=>f.commands.filter(c=>c.action==='status').length).toBe(2);
- const request=f.commands.find(c=>c.action==='generate');assert.equal(f.commands.filter(c=>c.action==='generate').length,1);assert.ok(f.commands.filter(c=>c.action==='status').every(c=>c.requestKey===request.requestKey));
+ await expect(region.getByRole('alert')).toHaveText('已发出但没有收到结果，已自动放弃；可重新生成，旧请求可能已产生费用。');
+ const retry=region.getByRole('button',{name:'重新生成',exact:true});await expect(retry).toBeEnabled();
+ await expect(region.getByRole('button',{name:'核对原请求',exact:true})).toHaveCount(0);
+ assert.equal(generated,1,'自动放弃不能自动另发模型请求');
+ await retry.click();await expect.poll(()=>f.submitted.length).toBe(1);
+ const requests=f.commands.filter(c=>c.action==='generate');assert.equal(requests.length,2);assert.notEqual(requests[1].requestKey,requests[0].requestKey);
+ assert.equal(requests[1].text,requests[0].text);assert.deepEqual(requests[1].workspace,requests[0].workspace);
+ assert.equal(requests[1].contactId,ids.contact);assert.equal(requests[1].sessionId,ids.session);
 });
 
 test('已确认联系人在历史未开始或后台读取中均能直接生成',{timeout:30000},async t=>{
@@ -667,7 +670,7 @@ test('重读历史失败显示准备超时、资料服务中断与应用中断�
   ['discussion_preparation_timeout',false,'整理资料超时，尚未发给模型。'],
   ['discussion_storage_interrupted',false,'本机资料服务在准备时中断，尚未发给模型。'],
   ['runtime_interrupted',false,'应用在整理资料时中断，尚未发给模型。'],
-  ['runtime_interrupted',true,'应用在生成期间中断，没有保存候选。请核对原请求。'],
+  ['runtime_interrupted',true,'已发出但没有收到结果，已自动放弃；可重新生成，旧请求可能已产生费用。'],
  ];
  const data={coverage:{phase:'complete'},requests:cases.map(([generationErrorCode,generationSent],index)=>({requestId:`${index+1}1111111-1111-4111-8111-111111111111`,generationState:'failed',generationErrorCode,generationSent,coverageWarning:null,sourceState:'unavailable',candidates:[],selections:[],loadedSkills:[]}))};
  const f=await panel(t,async()=>data),region=f.page.getByRole('region',{name:'表达工作区'});
@@ -913,6 +916,9 @@ test('失败、未知、生成中与来源失效请求的摘要后缀正确，�
  await expect(unavailable.getByText('这次候选的来源已失效，正文与依据已撤下。',{exact:true})).toBeVisible();
  await expect(requestSection(region,1).locator('article')).toHaveCount(1);
  await expect(requestSection(region,1).locator('article')).toBeHidden();
+ await requestSummary(requestSection(region,1)).click();
+ await expect(requestSection(region,1).getByRole('status')).toHaveText('本次模型调用结果暂未确认，请等待本机恢复处理。');
+ await expect(region.getByText(/不能换身份重发/)).toHaveCount(0);
  await expect(requestSection(region,3).locator('article')).toHaveCount(2);
  await expect(candidateInput(requestSection(region,3)).first()).toBeHidden();
 });

@@ -255,11 +255,12 @@ test('目录准备后当前修订在发送前变化时整体降级，唯一物�
  assert.ok(!wire.includes('先回应感受'));assert.ok(!wire.includes('已变化的合成正文'));assert.ok(!wire.includes('available_skills'));
 });
 
-test('模型超时发生在简介目录首请求时取消候选且不自动重送',{timeout:6000},async t=>{
+test('模型超时发生在简介目录首请求时自动放弃且成本仍未知，不自动重送',{timeout:6000},async t=>{
  const f=await setup(t,async()=>new Promise(()=>{}));f.model.deadline_ms=1000;
  await assert.rejects(f.turns.generate(f.input),error=>error?.code==='discussion_generation_timeout');
  assert.equal(f.requests.length,1);assert.deepEqual((await f.view())?.candidates??[],[]);
- const trace=await f.trace();assert.equal(trace.calls.length,1);assert.equal(trace.calls[0].state,'unknown');
+ const trace=await f.trace();assert.equal(trace.calls.length,1);assert.equal(trace.calls[0].state,'failed');assert.equal(trace.calls[0].settlement_state,'unknown');
+ const status=await f.service.status(f.input.contactId,f.input.discussionId,f.input.requestKey);assert.equal(status.phase,'failed');assert.equal(status.sent,true);assert.equal(status.retryable,true);assert.equal(status.errorCode,'discussion_generation_timeout');
 });
 
 test('关闭候选运行会中止简介目录的在途首请求并拒绝迟到正文',{timeout:6000},async t=>{

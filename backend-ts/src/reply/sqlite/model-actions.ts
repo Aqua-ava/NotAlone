@@ -14,11 +14,14 @@ function context(tx:StorageTransaction,i:any):StorageRow{
  return row;
 }
 function call(tx:StorageTransaction,i:any):StorageRow{
+ const row=tx.get(`SELECT c.*,o.commit_forbidden_at,o.reply_request_id,o.state operation_state FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE c.owner_id=? AND c.id=? AND c.reply_attempt_id=? AND c.reply_context_id=?`,[i.ownerId,i.callId,i.attemptId,i.contextId]);
+ if(row&&row.reply_request_id===i.requestId&&row.commit_forbidden_at!==null)fail('discussion_call_invalidated');
  requireAttempt(tx,i);context(tx,i);
- const row=tx.get(`SELECT c.*,o.commit_forbidden_at,o.reply_request_id,o.state operation_state FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE c.owner_id=? AND c.id=? AND c.reply_attempt_id=? AND c.reply_context_id=?`,[i.ownerId,i.callId,i.attemptId,i.contextId])??fail('discussion_call_invalid');
+ if(!row)fail('discussion_call_invalid');
  if(row.reply_request_id!==i.requestId||row.commit_forbidden_at!==null||!['prepared','in_flight'].includes(String(row.operation_state))||!['prepared','sending'].includes(String(row.state)))fail('discussion_call_invalidated');
  return row;
 }
+export {call as requireDiscussionCall};
 function revision(tx:StorageTransaction,i:any,run:SkillRunRevision|null):void{
  if(run!==null){requireSkillRun(tx,i.ownerId,run);if(encode(run)!==context(tx,i).skill_run_json)fail('discussion_skill_revision_conflict');}
 }
@@ -47,6 +50,15 @@ function inheritSources(tx:StorageTransaction,i:any,eventId:string,withInputs:bo
   if(item.kind==='entry')for(const source of tx.all('SELECT s.* FROM event_source s JOIN discussion_entry e ON e.owner_id=s.owner_id AND e.origin_event_id=s.event_id WHERE e.owner_id=? AND e.id=?',[i.ownerId,item.entry_id]))tx.run('INSERT OR IGNORE INTO event_source VALUES(?,?,?,?)',[i.ownerId,eventId,source.source_contact_id,source.record_id]);
  }
 }
+/** 本机调用已结束后封存未知结果；保留回执与未知成本，禁止迟到提交。 */
+function abandonUnknown(tx:StorageTransaction,ownerId:string,operationId:string,now:number):void{
+ // 存量也可能在尝试终止后留下 sending；已收到的物理回执不能改成未知。
+ tx.run("UPDATE model_call SET state='succeeded' WHERE owner_id=? AND operation_id=? AND state='sending' AND settlement_state='settled' AND json_extract(receipt,'$.format')='dsh-physical-step-v1'",[ownerId,operationId]);
+ tx.run("UPDATE model_call SET state='unknown',settlement_state='unknown' WHERE owner_id=? AND operation_id=? AND state='sending'",[ownerId,operationId]);
+ tx.run("UPDATE model_call SET state='failed',error_code='unknown_abandoned' WHERE owner_id=? AND operation_id=? AND state='unknown'",[ownerId,operationId]);
+ tx.run("UPDATE model_operation SET state='sealed',commit_forbidden_at=COALESCE(commit_forbidden_at,?) WHERE owner_id=? AND id=?",[now,ownerId,operationId]);
+ tx.run("UPDATE operation_scope SET state='released' WHERE owner_id=? AND operation_id=?",[ownerId,operationId]);
+}
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any,lease:StorageLease)=>unknown):StorageAction=>({name:`discussion.${name}`,mode,retryBusy:mode==='write',execute});
 /** 候选入口必须先通过自己的正式知识reader；这里继续复验共同的调用与来源。 */
 export function dropSkillForCurrentCall(tx:StorageTransaction,i:any){
@@ -71,16 +83,27 @@ export const discussionModelActions:StorageAction[]=[
   for(const attempt of attempts){
    // 已有逐次真实回执的首行只因逻辑任务未提交而仍是sending；崩溃不能抹掉其已结算事实。
    tx.run("UPDATE model_call SET state='succeeded' WHERE owner_id=? AND reply_attempt_id=? AND state='sending' AND settlement_state='settled' AND json_extract(receipt,'$.format')='dsh-physical-step-v1'",[ownerId,attempt.id]);
-   // 发送授权事务已经提交时无法证明外部是否收到；重开只保留未知，不能自动重送。
+   // 旧运行时已不在途；发送事实与成本仍未知，随后封存而不重送。
    tx.run("UPDATE model_call SET state='unknown',settlement_state='unknown',error_code='runtime_interrupted' WHERE owner_id=? AND reply_attempt_id=? AND state='sending'",[ownerId,attempt.id]);
    tx.run("UPDATE model_call SET state='failed',settlement_state='settled',error_code='not_dispatched' WHERE owner_id=? AND reply_attempt_id=? AND state='prepared'",[ownerId,attempt.id]);
    for(const operation of tx.all('SELECT DISTINCT operation_id FROM model_call WHERE owner_id=? AND reply_attempt_id=?',[ownerId,attempt.id])){
     const unknown=!!tx.get("SELECT 1 FROM model_call WHERE owner_id=? AND operation_id=? AND state='unknown'",[ownerId,operation.operation_id]);
-    tx.run("UPDATE model_operation SET state=? WHERE owner_id=? AND id=? AND state<>'sealed'",[unknown?'unknown':'failed',ownerId,operation.operation_id]);
-    tx.run('UPDATE operation_scope SET state=? WHERE owner_id=? AND operation_id=?',[unknown?'unknown':'released',ownerId,operation.operation_id]);
+    if(unknown)abandonUnknown(tx,ownerId,String(operation.operation_id),Date.now());
+    else{
+     tx.run("UPDATE model_operation SET state='failed' WHERE owner_id=? AND id=? AND state<>'sealed'",[ownerId,operation.operation_id]);
+     tx.run("UPDATE operation_scope SET state='released' WHERE owner_id=? AND operation_id=?",[ownerId,operation.operation_id]);
+    }
    }
    tx.run("UPDATE reply_attempt SET state='failed',finished_at=COALESCE(finished_at,?),error_code='runtime_interrupted' WHERE owner_id=? AND id=?",[Date.now(),ownerId,attempt.id]);
    tx.run("UPDATE reply_request SET state='cancelled' WHERE owner_id=? AND id=? AND state='running'",[ownerId,attempt.request_id]);
+  }
+  // 升级前已终止的未知调用也需释放；当前运行时仍在执行的请求不可越过。
+  for(const operation of tx.all(`SELECT o.id FROM model_operation o
+   WHERE o.owner_id=? AND o.purpose='discussion' AND o.state IN ('in_flight','unknown')
+   AND o.commit_forbidden_at IS NULL AND o.reply_request_id IS NOT NULL
+   AND NOT EXISTS(SELECT 1 FROM reply_attempt a WHERE a.owner_id=o.owner_id AND a.request_id=o.reply_request_id
+    AND a.state='running' AND a.accepted_runtime_id=? AND a.accepted_storage_epoch=?)`,[ownerId,lease.runtimeId,lease.epoch])){
+   abandonUnknown(tx,ownerId,String(operation.id),Date.now());
   }
   return attempts.length;
  }),
@@ -220,8 +243,11 @@ export const discussionModelActions:StorageAction[]=[
    if(failure&&!settled)tx.run('UPDATE model_call SET receipt=? WHERE owner_id=? AND id=?',[JSON.stringify({...receipt,failure}),i.ownerId,physical.id]);
    tx.run('UPDATE model_call SET state=?,error_code=?,settlement_state=? WHERE owner_id=? AND id=?',[state,settled?null:errorCode,state==='unknown'?'unknown':'settled',i.ownerId,physical.id]);
   }
-  tx.run('UPDATE model_operation SET state=? WHERE owner_id=? AND id=?',[unknown?'unknown':'failed',i.ownerId,c.operation_id]);
-  tx.run('UPDATE operation_scope SET state=? WHERE owner_id=? AND operation_id=?',[unknown?'unknown':'released',i.ownerId,c.operation_id]);
+  if(unknown)abandonUnknown(tx,i.ownerId,String(c.operation_id),Date.now());
+  else{
+   tx.run("UPDATE model_operation SET state='failed' WHERE owner_id=? AND id=?",[i.ownerId,c.operation_id]);
+   tx.run("UPDATE operation_scope SET state='released' WHERE owner_id=? AND operation_id=?",[i.ownerId,c.operation_id]);
+  }
   tx.run("UPDATE reply_attempt SET state='failed',finished_at=?,error_code=? WHERE owner_id=? AND id=? AND state='running'",[Date.now(),errorCode,i.ownerId,i.attemptId]);
   tx.run("UPDATE reply_request SET state='cancelled' WHERE owner_id=? AND id=? AND state='running'",[i.ownerId,c.reply_attempt_id?i.requestId:null]);
  }),

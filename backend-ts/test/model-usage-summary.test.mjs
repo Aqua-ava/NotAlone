@@ -135,3 +135,31 @@ test('真实SQLite汇总正常提取回执，并隔离同库其他本人及其�
     await f.contacts.close();
   }
 });
+
+
+test('回复自动放弃仍计授权未确认次数，保留未知成本与安全回执', async t => {
+  const {accountingFixture,failAuthorizedDiscussion}=await import('./fixtures/sqlite/discussion-abandon-accounting-support.mjs');
+  const f=await accountingFixture(t),{input}=await failAuthorizedDiscussion(f);
+  const ledger=await f.storage.execute('abandonTest.ledger',{ownerId:f.owner});
+  assert.equal(ledger.calls[0].state,'failed');
+  assert.equal(ledger.calls[0].error_code,'unknown_abandoned');
+  assert.equal(ledger.calls[0].settlement_state,'unknown');
+  assert.deepEqual(JSON.parse(ledger.calls[0].receipt).failure,{kind:'error',code:'TIMEOUT',dispatch:'authorized_unconfirmed'});
+  const summary=await f.storage.execute('modelUsage.summary',{ownerId:f.owner});
+  assert.equal(summary.total_calls,0);
+  assert.equal(summary.total_attempts,1);
+  assert.equal(summary.authorized_unconfirmed_calls,1);
+  assert.equal(summary.not_sent_attempts,0);
+  assert.equal(summary.known_input_tokens,0);
+  assert.equal(summary.known_output_tokens,0);
+  assert.deepEqual(summary.cost_totals,[]);
+  assert.deepEqual(summary.provider_counts,{});
+  assert.equal(summary.recent[0].entry_id,input.callId);
+  assert.equal(summary.recent[0].dispatch,'authorized_unconfirmed');
+  assert.equal(summary.recent[0].confirmed,false);
+  assert.equal(summary.recent[0].cost_status,'unknown');
+  assert.equal(summary.recent[0].cost_amount,null);
+  assert.equal(summary.recent[0].contact_id,f.contactId);
+  assert.equal((await f.storage.execute('modelUsage.summary',{ownerId:'00000000-0000-4000-8000-000000000099'})).total_attempts,0);
+  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});

@@ -37,14 +37,14 @@ test('准备阶段明确未发送的失败可由用户新请求重试，旧请�
  assert.equal((await service.status(contactId,discussion.id,requestKey)).phase,'committed');assert.equal(f.requests.length,1);
 });
 
-test('已出站后超时保留真实原因与未知状态，状态核对不能重新发送',async t=>{
+test('已出站后超时自动放弃并保留真实原因，可重试状态核对不重新发送',async t=>{
  const entered=Promise.withResolvers(),f=await fixture(t,{onRequest:async()=>{entered.resolve();return true;}}),contactId=f.ids[0],discussion=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner);
  const turns=new SqliteReplyTurns({...f,model:{...f.model,deadline_ms:500},service,authorize:async()=>{}});t.after(()=>turns.close());
  const requestKey=randomUUID(),pending=turns.generate({contactId,discussionId:discussion.id,requestKey,text:'合成超时请求',confirmedContact:true});
  const failed=assert.rejects(pending,{code:'discussion_generation_timeout'});
  await entered.promise;const running=await service.status(contactId,discussion.id,requestKey);
  assert.equal(running.phase,'generating');assert.equal(running.sent,true);assert.equal(running.retryable,false);
- await failed;const unknown=await service.status(contactId,discussion.id,requestKey);
- assert.equal(unknown.phase,'unknown');assert.equal(unknown.sent,true);assert.equal(unknown.retryable,false);assert.equal(unknown.errorCode,'discussion_generation_timeout');
- await service.status(contactId,discussion.id,requestKey);assert.equal(f.requests.length,1);
+ await failed;const abandoned=await service.status(contactId,discussion.id,requestKey);
+ assert.equal(abandoned.phase,'failed');assert.equal(abandoned.sent,true);assert.equal(abandoned.retryable,true);assert.equal(abandoned.errorCode,'discussion_generation_timeout');
+ assert.deepEqual(await service.status(contactId,discussion.id,requestKey),abandoned);assert.equal(f.requests.length,1);
 });

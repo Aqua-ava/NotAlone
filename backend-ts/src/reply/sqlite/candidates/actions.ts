@@ -4,7 +4,7 @@ import {withReplyLocalSourceEligibility} from '../../../history/sqlite/reply-loc
 import {StorageFailure,type StorageAction,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {readCoverage} from '../../../history/sqlite/read.ts';
 import {discussionRequestActions,requireAttempt,decode} from '../requests.ts';
-import {discussionModelActions,dropSkillForCurrentCall} from '../model-actions.ts';
+import {discussionModelActions,dropSkillForCurrentCall,requireDiscussionCall} from '../model-actions.ts';
 import {requireDiscussion} from '../actions.ts';
 import {sanitizeDiscussionErrorCode} from '../failure.ts';
 import {emptyReplyKnowledge,type ReplyKnowledgeItem,type ReplyKnowledgeReader} from './contracts.ts';
@@ -117,7 +117,7 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
   return {...result,documentInputs};
  }),
  action('commitCandidates','write',(tx,i,lease)=>{
-  requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader);parseReplyOutput(i.text);
+  requireDiscussionCall(tx,i);requireReplyInput(tx,i,i.contextId,reader);parseReplyOutput(i.text);
   // 沿11真实调用结算合同；结构化候选不另存为可读讨论发言。
   const result=commit.execute(tx,i,lease);
   insertModelCandidates(tx,i);

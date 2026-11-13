@@ -44,7 +44,7 @@ test('真实准备动作超时：原请求立即核对为未发送失败，重�
  }finally{await storage.close();}
 });
 
-test('已发送后存储线程中断：不得伪造未发送失败，重开后仍保护未知调用',{timeout:10000},async t=>{
+test('已发送后存储线程中断：重开后自动放弃为已发送可重试失败，原请求不重发',{timeout:10000},async t=>{
  let f;
  f=await fixture(t,{registryModule,onRequest:async()=>{
   await assert.rejects(f.storage.execute('preparationFailureTest.exit',{}),{code:'worker_failed'});
@@ -60,8 +60,13 @@ test('已发送后存储线程中断：不得伪造未发送失败，重开后�
  try{
   await storage.execute('discussion.recover',{ownerId:f.owner});
   const reopened=new SqliteReplyCandidateService(storage,f.owner),status=await reopened.status(contactId,discussion.id,input.requestKey);
-  assert.equal(status.phase,'unknown');assert.equal(status.sent,true);assert.equal(status.retryable,false);
+  assert.equal(status.phase,'failed');assert.equal(status.sent,true);assert.equal(status.retryable,true);assert.equal(status.errorCode,'runtime_interrupted');
   const [history]=await reopened.view(contactId,discussion.id);
-  assert.equal(history.generationState,'unknown');assert.equal(history.generationSent,true);
+  assert.equal(history.generationState,'failed');assert.equal(history.generationSent,true);assert.equal(history.generationErrorCode,'runtime_interrupted');assert.deepEqual(history.candidates,[]);
+  await assert.rejects(reopened.begin({...input,identity:{kind:'manual',confirmationId:randomUUID()}}),{code:'discussion_request_stale'});
+  const requestKey=randomUUID(),confirmationId=await storage.execute('identity.manualConfirm',{ownerId:f.owner,contactId,contextToken:requestKey,id:randomUUID(),at:Date.now()});
+  const fresh=await reopened.begin({...input,requestKey,identity:{kind:'manual',confirmationId}});
+  assert.notEqual(fresh.attempt.requestId,history.requestId);assert.equal(f.requests.length,1,'恢复与新请求受理不自动发出模型调用');
+  assert.equal(await storage.execute('discussion.recover',{ownerId:f.owner}),0);assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
  }finally{await storage.close();}
 });

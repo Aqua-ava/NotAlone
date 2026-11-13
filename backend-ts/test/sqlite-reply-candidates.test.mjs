@@ -118,11 +118,18 @@ test('历史正在后台同步时可生成与继续改写，追平后的原请�
 
 
 
-test('供应商断线保存unknown，原请求及新请求键均不能绕过后重复物理调用',async t=>{
+test('供应商断线后自动放弃且保留已发送失败，原身份不重发而新身份可明确生成',async t=>{
  const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
- const f=await realFixture(t,{onRequest:async(_req,res)=>{res.destroy();return true;}}),d=await f.discussions.newDiscussion(f.ids[0]),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ const f=await realFixture(t,{content:JSON.stringify({candidates:[{parts:['断线后重新生成的合成候选'],basis:[1]}]}),onRequest:async(_req,res,_body,count)=>{if(count===1){res.destroy();return true;}}}),d=await f.discussions.newDiscussion(f.ids[0]),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
  const input={contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'断线合成请求',confirmedContact:true};await assert.rejects(turns.generate(input),{code:'discussion_generation_failed'});
- assert.equal((await service.view(f.ids[0],d.id))[0].generationState,'unknown');await assert.rejects(turns.generate(input),{code:'discussion_request_stale'});await assert.rejects(turns.generate({...input,requestKey:randomUUID()}),{code:'discussion_call_unknown'});assert.equal(f.requests.length,1);
+ const status=await service.status(f.ids[0],d.id,input.requestKey);
+ assert.equal(status.phase,'failed');assert.equal(status.sent,true);assert.equal(status.retryable,true);assert.equal(status.errorCode,'discussion_generation_failed');
+ const [failed]=await service.view(f.ids[0],d.id);assert.equal(failed.generationState,'failed');assert.equal(failed.generationSent,true);assert.deepEqual(failed.candidates,[]);
+ assert.equal(f.requests.length,1,'自动放弃不自动另发模型请求');
+ await assert.rejects(turns.generate(input),{code:'discussion_request_stale'});assert.equal(f.requests.length,1,'原请求身份不能重发');
+ const fresh={...input,requestKey:randomUUID()};await turns.generate(fresh);assert.equal(f.requests.length,2);
+ assert.equal((await service.status(f.ids[0],d.id,fresh.requestKey)).phase,'committed');
+ const history=await service.view(f.ids[0],d.id);assert.equal(history[0].requestId,failed.requestId);assert.equal(history[0].generationState,'failed');assert.notEqual(history[1].requestId,failed.requestId);assert.deepEqual(history[1].candidates[0].parts,['断线后重新生成的合成候选']);
 });
 
 test('真实Skill加载独立于选择记录，资格失效后候选正文、依据和实际Skill快照一起撤下',async t=>{

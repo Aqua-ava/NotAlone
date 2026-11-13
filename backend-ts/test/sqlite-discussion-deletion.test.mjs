@@ -86,3 +86,36 @@ test('联系人和账号删除组合真实身份域，覆盖受管副本并保�
   else await assert.rejects(f.discussion().view('b',other.id),{code:'discussion_unavailable'});
  }
 });
+
+
+for(const kind of ['contact','source'])test(`自动放弃调用仍在${kind==='contact'?'联系人':'来源'}删除闭包内`,async t=>{
+ const {accountingFixture,failAuthorizedDiscussion}=await import('./fixtures/sqlite/discussion-abandon-accounting-support.mjs');
+ const f=await accountingFixture(t),{input,message}=await failAuthorizedDiscussion(f);
+ const before=await f.storage.execute('abandonTest.ledger',{ownerId:f.owner});
+ assert.equal(before.calls[0].error_code,'unknown_abandoned');
+ assert.equal(before.operations[0].state,'sealed');
+ const otherContactId=f.saved[1].contact_id,other=await f.discussions.newDiscussion(otherContactId);
+ const deletion=new DeletionService(f.storage,new ActiveHolders(),new ManagedFiles(f.root),{drainTimeoutMs:100});
+ const scope=kind==='contact'?{kind,contactId:f.contactId}:{kind,contactId:f.contactId,sourceId:message.record_id};
+ const planned=await deletion.plan({ownerId:f.owner,requestKey:`synthetic-abandon-delete-${kind}`,scope});
+ const done=await deletion.advance(planned);
+ assert.equal(done.state,'completed',JSON.stringify(done.checks));
+ assert.ok(done.targets.every(target=>target.target===null));
+ const after=await f.storage.execute('abandonTest.ledger',{ownerId:f.owner});
+ assert.equal(after.contexts.length,0);assert.equal(after.requests.length,0);
+ if(kind==='contact'){
+  assert.equal(after.calls.length,0);assert.equal(after.operations.length,0);assert.equal(after.scopes.length,0);
+  assert.equal((await f.storage.execute('modelUsage.summary',{ownerId:f.owner})).total_attempts,0);
+ }else{
+  assert.equal(after.calls.length,1);assert.equal(after.operations.length,1);
+  assert.equal(after.calls[0].reply_attempt_id,null);assert.equal(after.calls[0].reply_context_id,null);
+  assert.equal(after.calls[0].settlement_state,'unknown');
+  assert.deepEqual(JSON.parse(after.calls[0].receipt),{format:'minimal-discussion-call-v1'});
+  assert.equal(after.operations[0].reply_request_id,null);assert.equal(after.operations[0].state,'sealed');
+  assert.equal(after.scopes[0].state,'released');
+  assert.equal((await f.storage.execute('modelUsage.summary',{ownerId:f.owner})).authorized_unconfirmed_calls,1);
+ }
+ assert.equal((await f.discussions.view(otherContactId,other.id)).discussion.id,other.id);
+ await assert.rejects(f.discussions.trace(input.contactId,input.discussionId,input.requestId));
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});

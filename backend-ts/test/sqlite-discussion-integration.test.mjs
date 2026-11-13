@@ -54,12 +54,13 @@ test('真实SQLite请求与官方运行副本保存实际发言，重送不重�
  const after=await f.storage.execute('runtime.inventory',{ownerId:owner});assert.equal(after.length,1);assert.equal(after[0].sdkInstanceId,sessionId);assert.equal(after[0].state,'ready');assert.equal((await f.service.view(f.ids[0],d.id)).entries.length,4);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('实际派发后连接中断保留最终测量预留，未知实耗不填零且不重发',async t=>{
+test('实际派发后连接中断自动放弃并保留最终测量预留，未知实耗不填零且不重发',async t=>{
  const f=await fixture(t,{onRequest:(_req,res)=>{res.destroy();return true;}}),d=await f.service.newDiscussion(f.ids[0]);
  const input={contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'合成未知回执',confirmedContact:true};
  await assert.rejects(f.turns.generate(input));assert.equal(f.requests.length,1);
- const [call]=await f.storage.execute('discussionTest.calls',{ownerId:owner});assert.equal(call.state,'unknown');assert.equal(call.settlement_state,'unknown');assert.ok(call.reserved_budget_units>512n);assert.equal(call.actual_budget_units,null);assert.ok(JSON.parse(call.receipt).inputBudget.input_tokens>0);
+ const [call]=await f.storage.execute('discussionTest.calls',{ownerId:owner});assert.equal(call.state,'failed');assert.equal(call.settlement_state,'unknown');assert.ok(call.reserved_budget_units>512n);assert.equal(call.actual_budget_units,null);assert.ok(JSON.parse(call.receipt).inputBudget.input_tokens>0);
  assert.deepEqual(JSON.parse(call.receipt).failure,{kind:'error',code:'TRANSPORT',dispatch:'authorized_unconfirmed'});
+ const summary=await f.storage.execute('modelUsage.summary',{ownerId:owner});assert.equal(summary.authorized_unconfirmed_calls,1);assert.equal(summary.total_calls,0);assert.deepEqual(summary.cost_totals,[]);
  assert.deepEqual(await f.storage.execute('memoryExtraction.unconfirmed',{owner_id:owner,contact_id:f.ids[0]}),[],'07计费回查不能冒领讨论producer的未知请求');
  await assert.rejects(f.turns.generate(input),{code:'discussion_request_stale'});assert.equal(f.requests.length,1);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
