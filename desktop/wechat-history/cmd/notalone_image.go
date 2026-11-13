@@ -1307,7 +1307,21 @@ func (h *notaloneHistorySession) readMessageImage(ctx context.Context, message n
 	var selected *verifiedCandidate
 	var foundCandidate, foundAssociation, associationUnverified, qualityUnverified, keyUnavailable bool
 	var decoderFailure string
-	for _, suffixes := range [][]string{{".dat", "_h.dat"}, {"_t.dat"}} {
+	// 由已累计的失败标志给出真实原因，优先级固定：解码失败、缺钥、关联未核实、质量未核实、文件缺失。
+	failure := func() error {
+		switch {
+		case decoderFailure != "":
+			return notaloneFailure(decoderFailure)
+		case keyUnavailable:
+			return notaloneFailure("history_image_key_unavailable")
+		case associationUnverified || foundCandidate && !foundAssociation:
+			return notaloneFailure("history_image_association_unverified")
+		case qualityUnverified || foundCandidate:
+			return notaloneFailure("history_image_quality_unverified")
+		}
+		return notaloneFailure("history_image_local_file_missing")
+	}
+	for tier, suffixes := range [][]string{{".dat", "_h.dat"}, {"_t.dat"}} {
 		for _, suffix := range suffixes {
 			if err := ctx.Err(); err != nil {
 				return nil, "", nil, emptyProof, "", notaloneFailure("history_image_read_failed")
@@ -1418,6 +1432,11 @@ func (h *notaloneHistorySession) readMessageImage(ctx context.Context, message n
 		if selected != nil {
 			break
 		}
+		// 标准图或高清图的文件存在却核验失败：直接报真实原因，不退到缩略图掩盖它。
+		// 只有这两档文件都不存在时才读缩略图，使“微信尚未下载标准图”仍按缩略图返回。
+		if tier == 0 && (decoderFailure != "" || keyUnavailable || associationUnverified || qualityUnverified || foundCandidate) {
+			return nil, "", nil, emptyProof, "", failure()
+		}
 	}
 	if selected != nil {
 		resource.ID, resource.TypeRaw, resource.Size, resource.Status = selected.record.ID, selected.record.TypeRaw, selected.record.Size, selected.record.Status
@@ -1426,22 +1445,7 @@ func (h *notaloneHistorySession) readMessageImage(ctx context.Context, message n
 		resource.MatchingDetails = selected.matching
 		return selected.data, selected.envelope, selected.guard, selected.proof, selected.mimeType, nil
 	}
-	if decoderFailure != "" {
-		return nil, "", nil, emptyProof, "", notaloneFailure(decoderFailure)
-	}
-	if keyUnavailable {
-		return nil, "", nil, emptyProof, "", notaloneFailure("history_image_key_unavailable")
-	}
-	if associationUnverified || foundCandidate && !foundAssociation {
-		return nil, "", nil, emptyProof, "", notaloneFailure("history_image_association_unverified")
-	}
-	if qualityUnverified {
-		return nil, "", nil, emptyProof, "", notaloneFailure("history_image_quality_unverified")
-	}
-	if foundCandidate {
-		return nil, "", nil, emptyProof, "", notaloneFailure("history_image_quality_unverified")
-	}
-	return nil, "", nil, emptyProof, "", notaloneFailure("history_image_local_file_missing")
+	return nil, "", nil, emptyProof, "", failure()
 }
 
 func (h *notaloneHistorySession) guardImageCandidate(candidate string) (*notaloneSourceGuard, string, error) {

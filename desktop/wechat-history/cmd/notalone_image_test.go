@@ -1073,13 +1073,10 @@ func TestNotAloneImageOpenPrefersStandardThenHighDefinitionThenThumbnail(t *test
 			t.Fatalf("只有高清图也必须保存: %#v", opened)
 		}
 	})
-	t.Run("标准图与高清图都不可用时仍按缩略图返回", func(t *testing.T) {
+	t.Run("标准图与高清图文件都不存在时按缩略图返回", func(t *testing.T) {
 		fixture := newNotaloneImageProtocolFixtureWithImage(t, `<msg><img /></msg>`, primary)
 		base := strings.TrimSuffix(fixture.path, ".dat")
-		if err := os.WriteFile(fixture.path, primary[:len(primary)-1], 0600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(base+"_h.dat", bytes.Repeat([]byte{0x5a}, len(primary)), 0600); err != nil {
+		if err := os.Remove(fixture.path); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(base+"_t.dat", other, 0600); err != nil {
@@ -1088,6 +1085,50 @@ func TestNotAloneImageOpenPrefersStandardThenHighDefinitionThenThumbnail(t *test
 		opened := openedImage(t, fixture)
 		if opened.Quality != "thumbnail" || opened.QualityProof.SourceVariant != "thumbnail" || opened.ExpectedSHA256 != wantSHA(other) {
 			t.Fatalf("只有缩略图可用时必须带缩略图分类返回，由后台决定是否保存: %#v", opened)
+		}
+	})
+	t.Run("标准图或高清图文件存在却核验失败时报真实原因，不退到缩略图", func(t *testing.T) {
+		undecodable := bytes.Repeat([]byte{0x5a}, len(primary))
+		for _, tc := range []struct {
+			name      string
+			standard  []byte
+			highDef   []byte
+			wantError string
+		}{
+			{"标准图大小与消息资源不符", primary[:len(primary)-1], nil, "history_image_association_unverified"},
+			{"标准图大小相符但无法解码", undecodable, nil, ""},
+			{"标准图缺失、高清图大小与消息资源不符", nil, primary[:len(primary)-1], "history_image_association_unverified"},
+			{"标准图与高清图都核验失败", primary[:len(primary)-1], undecodable, ""},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				fixture := newNotaloneImageProtocolFixtureWithImage(t, `<msg><img /></msg>`, primary)
+				base := strings.TrimSuffix(fixture.path, ".dat")
+				if tc.standard == nil {
+					if err := os.Remove(fixture.path); err != nil {
+						t.Fatal(err)
+					}
+				} else if err := os.WriteFile(fixture.path, tc.standard, 0600); err != nil {
+					t.Fatal(err)
+				}
+				if tc.highDef != nil {
+					if err := os.WriteFile(base+"_h.dat", tc.highDef, 0600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := os.WriteFile(base+"_t.dat", other, 0600); err != nil {
+					t.Fatal(err)
+				}
+				value, err := fixture.history.handle(context.Background(), fixture.request)
+				if err == nil {
+					t.Fatalf("标准图或高清图存在却核验失败，不得以缩略图冒充成功: %#v", value)
+				}
+				if err.Error() == "history_image_thumbnail_only" || err.Error() == "history_image_local_file_missing" {
+					t.Fatalf("必须报标准图或高清图的真实失败原因，实际: %v", err)
+				}
+				if tc.wantError != "" && err.Error() != tc.wantError {
+					t.Fatalf("真实失败原因 = %v, want %s", err, tc.wantError)
+				}
+			})
 		}
 	})
 }

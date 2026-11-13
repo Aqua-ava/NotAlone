@@ -585,6 +585,33 @@ const localIdRecoveryPolicy=Object.freeze({
 }
 });
 
+// 标准图／高清图文件存在却核验失败时报真实原因而不退到缩略图（ADR-171 修订），并含零 server_id 批量图关联修复。
+// 新旧源码只差 notalone_image.go 与其测试；协议与五个来源身份文件逐字不变，故无来源身份更新、无清单字段变化。
+const imageMainFailurePolicy=Object.freeze({
+ ...localIdRecoveryPolicy,
+ oldName:'sync-recovery-20261107-v3',
+ newName:'image-main-failure-20261113',
+ oldCliSha256:localIdRecoveryPolicy.newCliSha256,
+ newCliSha256:'5e58696930e7014efa415ab639706475b2e105815ba4d7a5bfb03d26fdfe27c5',
+ oldOverlaySha256:localIdRecoveryPolicy.newOverlaySha256,
+ newOverlaySha256:'075c8286e5d471fd34100c5595ae64330be9eba280e4a9486a1b011f46a9ec6a',
+ oldImageSha256:localIdRecoveryPolicy.imageSha256,
+ oldImageTestSha256:localIdRecoveryPolicy.imageTestSha256,
+ imageSha256:'a7383d5006c6acedd83e31546de041b596aded13ef8cb3a90baad8cdb0c054c4',
+ imageTestSha256:'a7f8e8715f67e6c819f2e1ccf5ac4c5ee48966282bd510ed499ce444f36a852e',
+ protocolOldSha256:localIdRecoveryPolicy.protocolNewSha256,
+ protocolNewSha256:localIdRecoveryPolicy.protocolNewSha256,
+ identityFiles:Object.freeze({
+  'cmd/wechat-cli/notalone_identity_aliases.go':'a2060c261101e537a477b16e8ea706c7ccb1e90bbc1c99ebb203b23c9681193c',
+  'cmd/wechat-cli/notalone_watch_darwin.go':'88f8955abe91ef5d59dfefeea031cb6088a3ae9a6a71b67efa63008943ca2027',
+  'cmd/wechat-cli/notalone_history.go':'735ea75af0e2202e40d7cce08a2501b9e4bd5bf855077427bb8337ff34d4ca4f',
+  'cmd/wechat-cli/notalone_snapshot.go':'465af9405565837861800af4f997b716f0238c54ee658791b55d4d674bd9b7a2',
+  'cmd/wechat-cli/notalone_account_metadata.go':'934b33f197171a3eb4b0ccaf38ed0bf43996efd0fb761343360f7926acb1a78d',
+ }),
+ sourceChanges:Object.freeze({}),
+ identityAlgorithmSha256:'3192ef26075e2c19d302e4245384b077346c6134ddfc7836cf91a7b5d6bf4cc1',
+});
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -1006,7 +1033,10 @@ const imageStandardTools=createUpgradeImageCliTools({repositoryRoot,policy:image
 const imageOpenLocalTools=createUpgradeImageCliTools({repositoryRoot,policy:imageOpenLocalPolicy});
 const guardRegistrationTools=createUpgradeImageCliTools({repositoryRoot,policy:guardRegistrationPolicy});
 const localIdRecoveryTools=createUpgradeImageCliTools({repositoryRoot,policy:localIdRecoveryPolicy});
-export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',localIdRecoveryPolicy.oldName)
+const imageMainFailureTools=createUpgradeImageCliTools({repositoryRoot,policy:imageMainFailurePolicy});
+export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageMainFailurePolicy.oldName)
+ &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageMainFailurePolicy.newName)
+ ?imageMainFailureTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',localIdRecoveryPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',localIdRecoveryPolicy.newName)
  ?localIdRecoveryTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',guardRegistrationPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',guardRegistrationPolicy.newName)

@@ -41,7 +41,8 @@ async function evidence(executable) {
 }
 const before=await evidence(args.get('old-executable')),after=await evidence(args.get('executable'));
 try{
- const comparison=compareUpgradeScopeEvidence(before,after,{localIdRecoveryUpgrade:true});
+ // 默认按“新增 recoverFromLocalIds 能力”的配对核对；仅改图片读取等不改能力的配对传 --capability-upgrade=none。
+ const comparison=compareUpgradeScopeEvidence(before,after,args.get('capability-upgrade')==='none'?{}:{localIdRecoveryUpgrade:true});
  console.log(JSON.stringify({status:comparison.status,scopes:comparison.scopeCount,bodyOperations:0,configurationWrites:0,transientRetries:before.transientRetries+after.transientRetries}));
 }catch(error){
  // 失败只报告结构字段名，绝不打印字段值、会话键或展示名称。
