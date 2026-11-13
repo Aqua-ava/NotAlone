@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -167,12 +168,22 @@ type notaloneImageResourceRecord struct {
 	InfoPackedInfoSHA256 string
 	// InfoServerIDZero 表示资源记录的 message_svr_id 为 0，靠会话、类型、秒、local_id 与缓存 MD5 关联。
 	InfoServerIDZero bool
-	CacheMD5         string
-	Details          []notaloneImageResourceDetail
-	MatchingDetails  []notaloneImageResourceDetail
+	// DuplicateInfos 是同一消息的重复资源记录（除 InfoID 对应的第一行外）；非空时 Details 为各行明细的合并。
+	DuplicateInfos  []notaloneImageResourceInfoRef
+	CacheMD5        string
+	Details         []notaloneImageResourceDetail
+	MatchingDetails []notaloneImageResourceDetail
+}
+
+type notaloneImageResourceInfoRef struct {
+	ID           int64
+	PackedLength int64
+	PackedSHA256 string
 }
 
 type notaloneImageResourceDetail struct {
+	// InfoID 是该明细所属的 MessageResourceInfo 行。
+	InfoID           int64
 	ID               int64
 	TypeRaw          int64
 	Size             int64
@@ -1000,6 +1011,13 @@ func (h *notaloneHistorySession) openImage(ctx context.Context, request notalone
 		// 仅在零 server_id 关联时追加，常规关联的来源代次保持不变。
 		resourceIdentityParts = append(resourceIdentityParts, "resource_info_server_id_zero")
 	}
+	if len(resource.DuplicateInfos) > 0 {
+		// 仅在重复资源记录时追加，常规关联的来源代次保持不变。
+		resourceIdentityParts = append(resourceIdentityParts, "resource_info_duplicate")
+		for _, info := range resource.DuplicateInfos {
+			resourceIdentityParts = append(resourceIdentityParts, strconv.FormatInt(info.ID, 10), strconv.FormatInt(info.PackedLength, 10), info.PackedSHA256)
+		}
+	}
 	for _, detail := range resource.MatchingDetails {
 		resourceIdentityParts = append(resourceIdentityParts, "resource_detail", strconv.FormatInt(detail.ID, 10), strconv.FormatInt(detail.TypeRaw, 10),
 			strconv.FormatInt(detail.Size, 10), strconv.FormatInt(detail.Status, 10), detail.DataIndex, strconv.FormatInt(detail.CreateTime, 10),
@@ -1222,6 +1240,7 @@ func (h *notaloneHistorySession) findMessageImageResource(ctx context.Context, m
 	if err != nil {
 		return resource, nil, notaloneFailure("history_image_read_failed")
 	}
+	zeroFallback := false
 	if len(infoRows) == 0 {
 		// 微信一次发送多张图片时，只给批次里第一张的资源记录写入真实 server_id，其余记为 0，而消息表里仍是真实值。
 		// 严格相等查不到时，只在同会话、同类型、同秒、同 local_id 下接受 server_id 为 0 的记录，
@@ -1230,56 +1249,70 @@ func (h *notaloneHistorySession) findMessageImageResource(ctx context.Context, m
 		if err != nil {
 			return resource, nil, notaloneFailure("history_image_read_failed")
 		}
+		zeroFallback = true
 		resource.InfoServerIDZero = len(infoRows) == 1
 	}
-	if len(infoRows) != 1 {
+	// 微信偶尔对同一条消息写入两行重复的资源记录：会话、类型、秒、local_id、server_id 与缓存 MD5 全部相同，
+	// 只是各自的明细不同（常见为一行记着已下载的标准图，另一行没有）。精确匹配恰好两行时按同一资源处理，
+	// 逐行核验后合并明细，后续仍须按文件大小、缓存 MD5 与实际解码逐项核实；零 server_id 回退和三行及以上仍要求恰好一行。
+	if len(infoRows) != 1 && !(len(infoRows) == 2 && !zeroFallback) {
 		return resource, nil, notaloneFailure("history_image_association_unverified")
 	}
-	infoRow := infoRows[0]
-	messageID := rowInt64(infoRow, "message_id")
-	infoPackedInfo := rowBytes(infoRow, "info_packed_info")
-	infoPackedLength := rowInt64(infoRow, "info_packed_info_length")
-	cacheMD5, validCacheMD5 := notaloneSinglePackedMD5(infoPackedInfo, infoPackedLength)
-	if messageID <= 0 || !validCacheMD5 || cacheMD5 != message.cacheMD5 {
-		return resource, nil, notaloneFailure("history_image_association_unverified")
-	}
-	infoPackedSHA := sha256.Sum256(infoPackedInfo)
-	detailQuery := `SELECT resource_id,type AS resource_type_raw,size AS resource_size,status AS resource_status,data_index AS resource_data_index,create_time AS resource_create_time,access_time AS resource_access_time,CASE WHEN length(CAST(packed_info AS BLOB))<=? THEN packed_info ELSE NULL END AS detail_packed_info,length(CAST(packed_info AS BLOB)) AS detail_packed_info_length FROM MessageResourceDetail WHERE message_id=? AND (type & 65535)=1 ORDER BY resource_id LIMIT 33`
-	detailRows, err := db.QueryBounded(ctx, 33, detailQuery, int64(notaloneImagePackedInfoByteLimit), messageID)
-	if err != nil {
-		return resource, nil, notaloneFailure("history_image_read_failed")
-	}
-	if len(detailRows) == 0 || len(detailRows) > 32 {
-		return resource, nil, notaloneFailure("history_image_association_unverified")
-	}
-	resource.InfoID = messageID
-	resource.InfoPackedInfoLength = infoPackedLength
-	resource.InfoPackedInfoSHA256 = hex.EncodeToString(infoPackedSHA[:])
-	resource.CacheMD5 = cacheMD5
-	var previousID int64
-	for _, row := range detailRows {
-		id, rawType := rowInt64(row, "resource_id"), rowInt64(row, "resource_type_raw")
-		size := rowInt64(row, "resource_size")
-		if id <= 0 || id <= previousID || rawType&0xffff != 1 || size < 0 || size > notaloneImageSourceByteLimit {
-			return notaloneImageResourceRecord{}, nil, notaloneFailure("history_image_association_unverified")
+	for rowIndex, infoRow := range infoRows {
+		messageID := rowInt64(infoRow, "message_id")
+		infoPackedInfo := rowBytes(infoRow, "info_packed_info")
+		infoPackedLength := rowInt64(infoRow, "info_packed_info_length")
+		cacheMD5, validCacheMD5 := notaloneSinglePackedMD5(infoPackedInfo, infoPackedLength)
+		if messageID <= 0 || !validCacheMD5 || cacheMD5 != message.cacheMD5 {
+			return resource, nil, notaloneFailure("history_image_association_unverified")
 		}
-		previousID = id
-		packedLength := rowInt64(row, "detail_packed_info_length")
-		packedInfo := rowBytes(row, "detail_packed_info")
-		packedMD5Values, packedValid := notalonePackedMD5s(packedInfo, packedLength)
-		packedMD5s := make([]string, 0, len(packedMD5Values))
-		for value := range packedMD5Values {
-			packedMD5s = append(packedMD5s, value)
+		infoPackedSHA := sha256.Sum256(infoPackedInfo)
+		detailQuery := `SELECT resource_id,type AS resource_type_raw,size AS resource_size,status AS resource_status,data_index AS resource_data_index,create_time AS resource_create_time,access_time AS resource_access_time,CASE WHEN length(CAST(packed_info AS BLOB))<=? THEN packed_info ELSE NULL END AS detail_packed_info,length(CAST(packed_info AS BLOB)) AS detail_packed_info_length FROM MessageResourceDetail WHERE message_id=? AND (type & 65535)=1 ORDER BY resource_id LIMIT 33`
+		detailRows, err := db.QueryBounded(ctx, 33, detailQuery, int64(notaloneImagePackedInfoByteLimit), messageID)
+		if err != nil {
+			return resource, nil, notaloneFailure("history_image_read_failed")
 		}
-		packedDigest := ""
-		if packedValid {
-			sum := sha256.Sum256(packedInfo)
-			packedDigest = hex.EncodeToString(sum[:])
+		if len(detailRows) == 0 || len(detailRows) > 32 {
+			return resource, nil, notaloneFailure("history_image_association_unverified")
 		}
-		resource.Details = append(resource.Details, notaloneImageResourceDetail{ID: id, TypeRaw: rawType, Size: size,
-			Status: rowInt64(row, "resource_status"), DataIndex: rowString(row, "resource_data_index"),
-			CreateTime: rowInt64(row, "resource_create_time"), AccessTime: rowInt64(row, "resource_access_time"),
-			PackedInfoLength: packedLength, PackedInfoSHA256: packedDigest, PackedMD5s: packedMD5s, PackedInfoValid: packedValid})
+		if rowIndex == 0 {
+			resource.InfoID = messageID
+			resource.InfoPackedInfoLength = infoPackedLength
+			resource.InfoPackedInfoSHA256 = hex.EncodeToString(infoPackedSHA[:])
+			resource.CacheMD5 = cacheMD5
+		} else {
+			resource.DuplicateInfos = append(resource.DuplicateInfos, notaloneImageResourceInfoRef{ID: messageID,
+				PackedLength: infoPackedLength, PackedSHA256: hex.EncodeToString(infoPackedSHA[:])})
+		}
+		var previousID int64
+		for _, row := range detailRows {
+			id, rawType := rowInt64(row, "resource_id"), rowInt64(row, "resource_type_raw")
+			size := rowInt64(row, "resource_size")
+			if id <= 0 || id <= previousID || rawType&0xffff != 1 || size < 0 || size > notaloneImageSourceByteLimit {
+				return notaloneImageResourceRecord{}, nil, notaloneFailure("history_image_association_unverified")
+			}
+			previousID = id
+			packedLength := rowInt64(row, "detail_packed_info_length")
+			packedInfo := rowBytes(row, "detail_packed_info")
+			packedMD5Values, packedValid := notalonePackedMD5s(packedInfo, packedLength)
+			packedMD5s := make([]string, 0, len(packedMD5Values))
+			for value := range packedMD5Values {
+				packedMD5s = append(packedMD5s, value)
+			}
+			packedDigest := ""
+			if packedValid {
+				sum := sha256.Sum256(packedInfo)
+				packedDigest = hex.EncodeToString(sum[:])
+			}
+			resource.Details = append(resource.Details, notaloneImageResourceDetail{InfoID: messageID, ID: id, TypeRaw: rawType, Size: size,
+				Status: rowInt64(row, "resource_status"), DataIndex: rowString(row, "resource_data_index"),
+				CreateTime: rowInt64(row, "resource_create_time"), AccessTime: rowInt64(row, "resource_access_time"),
+				PackedInfoLength: packedLength, PackedInfoSHA256: packedDigest, PackedMD5s: packedMD5s, PackedInfoValid: packedValid})
+		}
+	}
+	if len(resource.DuplicateInfos) > 0 {
+		// 各行明细按资源 ID 全局升序，供后续核验与读取程序回执使用（匹配的资源 ID 必须严格升序）。
+		sort.Slice(resource.Details, func(left, right int) bool { return resource.Details[left].ID < resource.Details[right].ID })
 	}
 	if resourceGuard.Check() != nil {
 		return notaloneImageResourceRecord{}, nil, notaloneFailure("history_image_source_changed")
@@ -1410,7 +1443,11 @@ func (h *notaloneHistorySession) readMessageImage(ctx context.Context, message n
 					proof.OriginalProof = &original
 				}
 			}
+			// 重复资源记录时，以实际核验通过的明细所属的那一行为准。
 			proof.ResourceInfoID = strconv.FormatInt(resource.InfoID, 10)
+			if matching[0].InfoID > 0 {
+				proof.ResourceInfoID = strconv.FormatInt(matching[0].InfoID, 10)
+			}
 			proof.MatchingResourceIDs = make([]string, 0, len(matching))
 			for _, detail := range matching {
 				proof.MatchingResourceIDs = append(proof.MatchingResourceIDs, strconv.FormatInt(detail.ID, 10))

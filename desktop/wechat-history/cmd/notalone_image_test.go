@@ -228,6 +228,8 @@ type notaloneImageProtocolFixture struct {
 }
 
 type notaloneImageTestResourceDetail struct {
+	// infoID 是明细所属的 MessageResourceInfo 行；缺省为第一行（message_id 5）。
+	infoID     int64
 	id         int64
 	typeRaw    int64
 	size       int64
@@ -301,8 +303,12 @@ func newNotaloneImageProtocolFixtureWithInfoServerIDs(t *testing.T, messageConte
 	// The resource DB remains an encrypted WCDB fixture; only this selected message is represented.
 	var resourceRows strings.Builder
 	for _, detail := range details {
-		resourceRows.WriteString(fmt.Sprintf(`INSERT INTO MessageResourceDetail VALUES(%d,5,%d,%d,1700000000,1700000000,1,'0',X'%x');`,
-			detail.id, detail.typeRaw, detail.size, detail.packedInfo))
+		infoID := detail.infoID
+		if infoID == 0 {
+			infoID = 5
+		}
+		resourceRows.WriteString(fmt.Sprintf(`INSERT INTO MessageResourceDetail VALUES(%d,%d,%d,%d,1700000000,1700000000,1,'0',X'%x');`,
+			detail.id, infoID, detail.typeRaw, detail.size, detail.packedInfo))
 	}
 	var infoRows strings.Builder
 	for index, infoServerID := range infoServerIDs {
@@ -599,6 +605,94 @@ func TestNotAloneImageOpenAssociatesBatchSentImageWithZeroResourceServerID(t *te
 		fixture := newNotaloneImageProtocolFixtureWithInfoServerIDs(t, message, 0, imageBytes, imageBytes, cacheMD5, packed, packed, details, []int64{0, 0})
 		if _, err := fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != "history_image_association_unverified" {
 			t.Fatalf("ambiguous zero server id rows must not attach: %v", err)
+		}
+	})
+}
+
+// 微信偶尔对同一条消息写入两行重复的资源记录（server_id 与缓存 MD5 都相同，明细不同）：
+// 真实库中一行记着已下载的标准图，另一行没有。
+func TestNotAloneImageOpenAcceptsDuplicateResourceRows(t *testing.T) {
+	imageBytes := notaloneTinyPNG(t, 3, 2)
+	const cacheMD5 = "a71dbe52628a3f83a77ab494817525c6"
+	const exactServerID = int64(7710666891970547832)
+	packed := notaloneTestPackedInfo(cacheMD5)
+	message := []byte(notaloneImageXML(imageBytes, len(imageBytes), 3, 2, true))
+	open := func(t *testing.T, serverIDs []int64, details []notaloneImageTestResourceDetail) (any, error) {
+		t.Helper()
+		fixture := newNotaloneImageProtocolFixtureWithInfoServerIDs(t, message, 0, imageBytes, imageBytes, cacheMD5, packed, packed, details, serverIDs)
+		return fixture.history.handle(context.Background(), fixture.request)
+	}
+	// message_id 5 为较早的一行，6 为较晚的一行（查询按 message_id 降序，先看到 6）。
+	t.Run("the standard image recorded only in the older duplicate row is used", func(t *testing.T) {
+		value, err := open(t, []int64{exactServerID, exactServerID}, []notaloneImageTestResourceDetail{
+			{infoID: 5, id: 11, typeRaw: 65537, size: int64(len(imageBytes)), packedInfo: packed},
+			{infoID: 6, id: 21, typeRaw: 65537, size: 0, packedInfo: packed},
+		})
+		if err != nil {
+			t.Fatalf("exact duplicate resource rows should open when one row records the file: %v", err)
+		}
+		opened := value.(notaloneImageOpenResponse)
+		if opened.ResourceID != "11" || opened.QualityProof.ResourceInfoID != "5" {
+			t.Fatalf("the proof must name the row that records the verified file: %#v", opened)
+		}
+	})
+	t.Run("the standard image recorded only in the newer duplicate row is used", func(t *testing.T) {
+		value, err := open(t, []int64{exactServerID, exactServerID}, []notaloneImageTestResourceDetail{
+			{infoID: 5, id: 11, typeRaw: 65537, size: 0, packedInfo: packed},
+			{infoID: 6, id: 21, typeRaw: 65537, size: int64(len(imageBytes)), packedInfo: packed},
+		})
+		if err != nil {
+			t.Fatalf("exact duplicate resource rows should open: %v", err)
+		}
+		if opened := value.(notaloneImageOpenResponse); opened.ResourceID != "21" || opened.QualityProof.ResourceInfoID != "6" {
+			t.Fatalf("unexpected duplicate binding: %#v", opened)
+		}
+	})
+	t.Run("both duplicate rows recording the file give ascending matching resource ids", func(t *testing.T) {
+		value, err := open(t, []int64{exactServerID, exactServerID}, []notaloneImageTestResourceDetail{
+			{infoID: 5, id: 11, typeRaw: 65537, size: int64(len(imageBytes)), packedInfo: packed},
+			{infoID: 6, id: 21, typeRaw: 65537, size: int64(len(imageBytes)), packedInfo: packed},
+		})
+		if err != nil {
+			t.Fatalf("duplicate rows that both record the file should open: %v", err)
+		}
+		opened := value.(notaloneImageOpenResponse)
+		ids := opened.QualityProof.MatchingResourceIDs
+		if opened.ResourceID != "11" || len(ids) != 2 || ids[0] != "11" || ids[1] != "21" {
+			t.Fatalf("matching resource ids must be ascending with the lowest as representative: %#v %#v", opened.ResourceID, ids)
+		}
+	})
+	t.Run("duplicate rows whose details do not record the file still fail the size check", func(t *testing.T) {
+		_, err := open(t, []int64{exactServerID, exactServerID}, []notaloneImageTestResourceDetail{
+			{infoID: 5, id: 11, typeRaw: 65537, size: 0, packedInfo: packed},
+			{infoID: 6, id: 21, typeRaw: 65537, size: 1, packedInfo: packed},
+		})
+		if err == nil || err.Error() != "history_image_association_unverified" {
+			t.Fatalf("duplicate rows must not bypass the per-detail size and md5 verification: %v", err)
+		}
+	})
+	t.Run("a malformed detail in either duplicate row rejects the whole record", func(t *testing.T) {
+		_, err := open(t, []int64{exactServerID, exactServerID}, []notaloneImageTestResourceDetail{
+			{infoID: 5, id: 11, typeRaw: 65537, size: int64(len(imageBytes)), packedInfo: packed},
+			{infoID: 6, id: 21, typeRaw: 65538, size: 0, packedInfo: packed},
+		})
+		if err == nil || err.Error() != "history_image_association_unverified" {
+			t.Fatalf("a duplicate row with an invalid detail must not attach: %v", err)
+		}
+	})
+	t.Run("three exact rows stay ambiguous", func(t *testing.T) {
+		_, err := open(t, []int64{exactServerID, exactServerID, exactServerID}, []notaloneImageTestResourceDetail{
+			{infoID: 5, id: 11, typeRaw: 65537, size: int64(len(imageBytes)), packedInfo: packed},
+		})
+		if err == nil || err.Error() != "history_image_association_unverified" {
+			t.Fatalf("three duplicate rows must not attach: %v", err)
+		}
+	})
+	t.Run("a duplicate row with another cache md5 is rejected", func(t *testing.T) {
+		fixture := newNotaloneImageProtocolFixtureWithInfoServerIDs(t, message, 0, imageBytes, imageBytes, cacheMD5, notaloneTestPackedInfo("b71dbe52628a3f83a77ab494817525c6"), packed,
+			[]notaloneImageTestResourceDetail{{infoID: 5, id: 11, typeRaw: 65537, size: int64(len(imageBytes)), packedInfo: packed}}, []int64{exactServerID, exactServerID})
+		if _, err := fixture.history.handle(context.Background(), fixture.request); err == nil || err.Error() != "history_image_association_unverified" {
+			t.Fatalf("the cache md5 binding must hold for duplicate rows: %v", err)
 		}
 	})
 }

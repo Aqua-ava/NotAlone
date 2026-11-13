@@ -612,6 +612,22 @@ const imageMainFailurePolicy=Object.freeze({
  identityAlgorithmSha256:'3192ef26075e2c19d302e4245384b077346c6134ddfc7836cf91a7b5d6bf4cc1',
 });
 
+// 同一消息的两行重复资源记录（会话、类型、秒、local_id、server_id 与缓存 MD5 全同）按同一资源合并明细后核验（ADR-171 修订）。
+// 新旧源码只差 notalone_image.go 与其测试；协议与五个来源身份文件逐字不变，故无来源身份更新、无清单字段变化。
+const imageDuplicateResourcePolicy=Object.freeze({
+ ...imageMainFailurePolicy,
+ oldName:'image-main-failure-20261113',
+ newName:'image-duplicate-resource-20261114',
+ oldCliSha256:imageMainFailurePolicy.newCliSha256,
+ newCliSha256:'892bd18705b709ff927f4c21de4796f166a8754bf1e3940cd0b9522759a7f97f',
+ oldOverlaySha256:imageMainFailurePolicy.newOverlaySha256,
+ newOverlaySha256:'803a9fdad54459d24853626e3aea16712b5847a0f0e2edc8795d34f5a09cd5d8',
+ oldImageSha256:imageMainFailurePolicy.imageSha256,
+ oldImageTestSha256:imageMainFailurePolicy.imageTestSha256,
+ imageSha256:'4a53dce004bccb757e94fb669039eadddde85cd63619280c5b1e63af47efdd8d',
+ imageTestSha256:'70277c9183e8d7ee035ad93e82ee2d75c9a1093446b684c2c0c5b385a671423f',
+});
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -1034,7 +1050,10 @@ const imageOpenLocalTools=createUpgradeImageCliTools({repositoryRoot,policy:imag
 const guardRegistrationTools=createUpgradeImageCliTools({repositoryRoot,policy:guardRegistrationPolicy});
 const localIdRecoveryTools=createUpgradeImageCliTools({repositoryRoot,policy:localIdRecoveryPolicy});
 const imageMainFailureTools=createUpgradeImageCliTools({repositoryRoot,policy:imageMainFailurePolicy});
-export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageMainFailurePolicy.oldName)
+const imageDuplicateResourceTools=createUpgradeImageCliTools({repositoryRoot,policy:imageDuplicateResourcePolicy});
+export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageDuplicateResourcePolicy.oldName)
+ &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageDuplicateResourcePolicy.newName)
+ ?imageDuplicateResourceTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageMainFailurePolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageMainFailurePolicy.newName)
  ?imageMainFailureTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',localIdRecoveryPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',localIdRecoveryPolicy.newName)
