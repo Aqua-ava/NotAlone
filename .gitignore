@@ -21,8 +21,6 @@ __pycache__/
 # 本机调研、聊天导出、会话截图、临时资料与模型许可状态
 /research/
 /chat_exports/
-/.scratch/
-/architecture/
 .dsh-computer-use/
 /model-permits/
 # 本机语义检索模型（公开模型，按 scripts/prepare_memory_embedding.mjs 准备）
