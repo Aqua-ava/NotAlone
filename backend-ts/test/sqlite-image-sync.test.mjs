@@ -36,15 +36,38 @@ test('缺副本失败会持久退避并自动恢复，重复唤醒与重启不�
  t.mock.timers.tick(86_400_000);await next.waitForIdle();assert.equal(reads,3);
 });
 
-test('连续失败逐级退避到每天重试，未到期唤醒不读图片',async t=>{
+test('连续失败逐级退避，用满 5 次自动尝试后本次运行内不再重试，未到期唤醒不读图片',async t=>{
  let reads=0;const adapter=imageAdapter();adapter.execute=async()=>{reads++;throw new StorageFailure('media_local_file_missing');};
  const f=await fixture(t,adapter);t.mock.timers.enable({apis:['setTimeout','Date']});
  const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());sync.wake();await sync.waitForIdle();
- for(const delay of [60_000,300_000,1_800_000,21_600_000,86_400_000,86_400_000]){
+ for(const delay of [60_000,300_000,1_800_000,21_600_000]){
   const before=reads;t.mock.timers.tick(delay-1);await sync.waitForIdle();sync.wake();await sync.waitForIdle();assert.equal(reads,before);
   t.mock.timers.tick(1);sync.wake();await sync.waitForIdle();assert.equal(reads,before+1);
  }
+ // 第 5 次尝试后停止自动重试：再过多天也不读图片，也不再安排刷新定时器。
+ assert.equal(reads,5);
+ for(let day=0;day<3;day++){t.mock.timers.tick(86_400_000);sync.wake();await sync.waitForIdle();}
+ assert.equal(reads,5);
 });
+
+test('确定性失败只尝试一次，不按时间重试',async t=>{
+ let reads=0;const adapter=imageAdapter();adapter.execute=async()=>{reads++;throw new StorageFailure('media_association_failed');};
+ const f=await fixture(t,adapter);t.mock.timers.enable({apis:['setTimeout','Date']});
+ const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());sync.wake();await sync.waitForIdle();
+ assert.equal(reads,1);
+ for(let day=0;day<3;day++){t.mock.timers.tick(86_400_000);sync.wake();await sync.waitForIdle();}
+ assert.equal(reads,1);
+});
+
+test('App 重启后，停止重试的图片只再试一次',async t=>{
+ let reads=0;const adapter=imageAdapter();adapter.execute=async()=>{reads++;throw new StorageFailure('media_association_failed');};
+ const f=await fixture(t,adapter);t.mock.timers.enable({apis:['setTimeout','Date']});
+ const first=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);sync_close(t,first);first.wake();await first.waitForIdle();assert.equal(reads,1);
+ await first.close();t.mock.timers.tick(1000);
+ const restarted=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);sync_close(t,restarted);restarted.wake();await restarted.waitForIdle();assert.equal(reads,2);
+ restarted.wake();await restarted.waitForIdle();assert.equal(reads,2);
+});
+function sync_close(t,sync){t.after(()=>sync.close());}
 
 test('存量图片超过一页时处理全部消息，不因前页退避漏掉后页',async t=>{
  let reads=0;const f=await fixture(t,imageAdapter(()=>reads++)),page=f.channel.page;

@@ -6,7 +6,7 @@
 
 读取程序给每个微信数据库文件配一把密钥，按文件头 16 字节的“盐”对应。微信更新、重装或迁移时会重建数据库并换盐，旧密钥对新文件无效。
 
-典型症状：文字照常读取，图片整批失败。现在后台在读取程序报关联失败、且配置的密钥表里没有 `message_resource.db` 当前文件头盐时，会明确返回 `media_database_key_missing`，聊天里图片显示“图片暂不可用：缺少微信数据库密钥”。旧版本（或配置不可读时）仍只显示 `media_association_unverified`（来源是读取程序 `history_image_association_unverified`），其真实原因同样可能是读取程序打不开该库：`no enc_key for salt … refresh wxkey's schema-2 key map`，不要凭关联失败的错误码断定是关联问题，先做下面的只读判定。
+典型症状：文字照常读取，图片整批失败。现在后台在读取程序报关联失败、且配置的密钥表里没有 `message_resource.db` 当前文件头盐时，会明确返回 `media_database_key_missing`，聊天里图片显示“图片暂不可用：缺少微信数据库密钥”。旧版本（或配置不可读时）仍只显示关联失败（读取程序的 `history_image_association_unverified`，旧版记为 `media_association_unverified`，现在记为 `media_association_failed` 且不自动重试），其真实原因同样可能是读取程序打不开该库：`no enc_key for salt … refresh wxkey's schema-2 key map`，不要凭关联失败的错误码断定是关联问题，先做下面的只读判定。
 
 ## 先只读判定，不要动配置
 

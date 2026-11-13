@@ -141,5 +141,6 @@ test('边界场景空 cutoff、已有 cutoff、多个 legacy 尝试和退避阶�
  assert.deepEqual(displayNos('edge/retry-301000'),['5001','5002']);
  assert.deepEqual(displayNos('edge/retry-1801000'),['5001','5002','5003']);
  assert.deepEqual(displayNos('edge/retry-21601000'),['5001','5002','5003','5004']);
- assert.deepEqual(displayNos('edge/retry-86401000'),['5001','5002','5003','5004','5005','5006']);
+ // 自动尝试用满 5 次后停止（5005、5006），本次运行内不再按时间排队。
+ assert.deepEqual(displayNos('edge/retry-86401000'),['5001','5002','5003','5004']);
 });

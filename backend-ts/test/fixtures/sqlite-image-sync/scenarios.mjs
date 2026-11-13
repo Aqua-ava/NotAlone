@@ -183,7 +183,7 @@ class Seeder{
   * 插入一次提取尝试。默认是当前准备版本的失败记录（会参与 preparation 聚合）；
   * `version` 为历史适配器版本时构成 legacy cutoff 数据。
   */
- attempt(scope,{messageId,recordId,goal='extract',version=imagePreparationVersion,requestKey,state='failed',resultOutcome=null,requestedAt,generation=0}){
+ attempt(scope,{messageId,recordId,goal='extract',version=imagePreparationVersion,requestKey,state='failed',resultOutcome=null,requestedAt,generation=0,errorCode='synthetic_failure'}){
   const owner=this.#owner;
   if(this.#attemptKeys.has(requestKey))throw new Error(`duplicate synthetic request key: ${requestKey}`);
   this.#attemptKeys.add(requestKey);
@@ -196,7 +196,7 @@ class Seeder{
     scope.grantId,scope.verificationId,state,outcome,
     lease?'synthetic-lease':null,lease?requestedAt+120_000:null,
     requestedAt,lease?null:requestedAt,lease?null:requestedAt,
-    version,state==='failed'?'synthetic_failure':null);
+    version,state==='failed'?errorCode:null);
   return attemptId;
  }
 
@@ -217,7 +217,7 @@ const historyRequestKey=(messageId,index)=>`image_sync_v3_${messageId}_${index}`
 const retriedRequestKey=(messageId,index)=>`image_sync_v5_${messageId}_${index}`;
 const reconcileRequestKey=(messageId,index)=>`${imageReconcilePrefix}${messageId}_${index}_${Math.floor(SCENARIO_NOW/MINUTE)}`;
 
-function withTransaction(root,owner,build){
+export function withTransaction(root,owner,build){
  const db=openDatabase(root);const seeder=new Seeder(db,owner);
  db.exec('BEGIN');
  try{const value=build(seeder);db.exec('COMMIT');return value;}

@@ -45,7 +45,8 @@ function identity(request:VisualRequest,source:HistorySource,token:ReadEligibili
 function mapped(error:unknown):unknown {
   if(!(error instanceof StorageFailure))return error;
   const codes:Record<string,string>={
-    history_image_association_unverified:'media_association_unverified',
+    // 消息与资源无法唯一关联属确定性失败，独立成码以便不自动重试；其余来源变化类仍用 media_association_unverified。
+    history_image_association_unverified:'media_association_failed',
     history_image_original_unavailable:'media_original_unavailable',
     history_image_metadata_invalid:'media_metadata_invalid',
     history_image_local_file_missing:'media_local_file_missing',

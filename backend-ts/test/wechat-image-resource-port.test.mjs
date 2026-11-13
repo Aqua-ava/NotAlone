@@ -274,7 +274,7 @@ test('读取程序报关联失败且资源库缺当前盐的密钥时，单独�
  process.env.NOTALONE_WECHAT_CONFIG=config;
  for(const [name,keys,expected] of [
   ['缺盐',{['f'.repeat(32)]:'0'.repeat(64)},'media_database_key_missing'],
-  ['盐已覆盖，仍是原来的关联失败',{[salt.toString('hex')]:'0'.repeat(64)},'media_association_unverified'],
+  ['盐已覆盖，仍是原来的关联失败',{[salt.toString('hex')]:'0'.repeat(64)},'media_association_failed'],
  ]){
   await writeFile(config,JSON.stringify({schema_version:2,wxid:'synthetic',db_root:accountRoot,keys}),{mode:0o600});resetDatabaseKeyDiagnosis();
   const f=await fixture(t,{nativeError:'history_image_association_unverified'});
@@ -295,7 +295,7 @@ test('原图缺失返回媒体获取失败并释放原生客户端',async t=>{
 
 test('返回前必须复验已保存消息的精确身份，失配时不读取字节',async t=>{
  const f=await fixture(t),request=selection();request.source.raw.localId='124';const port=createWechatImageResourcePort(f.executable);
- await assert.rejects(port.open(request),{code:'media_association_unverified'});
+ await assert.rejects(port.open(request),{code:'media_association_failed'});
  const rows=await requests(f);assert.deepEqual(rows.map(row=>row.op),['resolve','inspect','support','target','image-open']);
  const pid=Number(await readFile(f.pidFile,'utf8'));assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});
 });

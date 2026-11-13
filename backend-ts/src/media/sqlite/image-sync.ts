@@ -11,7 +11,7 @@ interface ImageTarget {messageId:string;displayNo:string;requestKey:string}
 /** 遍历有效授权联系人补查存量与新图片；目录查询只依赖宿主提供的隔离读者，退避由持久回执决定。 */
 export class SqliteImageSyncCoordinator {
  readonly #reads:Pick<StorageReader,'execute'>;readonly #contacts:ImageSyncDirectory;readonly #media:SqliteMediaService;
- readonly #pending=new Set<string>();readonly #stoppedContacts=new Set<string>();#all=false;#paused=false;#closed=false;#work?:Promise<void>;
+ readonly #startedAt=Date.now();readonly #pending=new Set<string>();readonly #stoppedContacts=new Set<string>();#all=false;#paused=false;#closed=false;#work?:Promise<void>;
  #active?:{contactId:string;controller:AbortController;done:Promise<void>};
  #refreshTimer?:ReturnType<typeof setTimeout>;
  #checked=0;#failed=0;#lastFailure:string|null=null;
@@ -47,19 +47,19 @@ export class SqliteImageSyncCoordinator {
     try{
      let after='0';
      images:while(!this.#closed&&!controller.signal.aborted){
-      const targets=await this.#reads.execute<ImageTarget[]>('media.imageSyncTargets',{ownerId:this.#media.ownerId,contactId,after,now:Date.now()});
+      const targets=await this.#reads.execute<ImageTarget[]>('media.imageSyncTargets',{ownerId:this.#media.ownerId,contactId,after,now:Date.now(),runtimeStartedAt:this.#startedAt});
       if(!targets.length)break;
       for(const target of targets){
        if(this.#closed||controller.signal.aborted)break;
        after=target.displayNo;
        try{await this.#media.extract(contactId,target.messageId,{requestKey:target.requestKey,goal:'extract'},controller.signal);this.#checked++;}
        catch(error){
-        // 仅缩略图是预期结果（不保存，按持久退避重试），不计入同步失败。
+        // 仅缩略图是预期结果（不保存，按持久退避有限次重试），不计入同步失败。
         if(error instanceof StorageFailure&&error.code==='media_thumbnail_only'){this.#checked++;continue;}
         this.#failure(error);if(error instanceof ImagePreparationFailure||error instanceof StorageFailure&&error.code.startsWith('history_'))break images;}
       }
      }
-     if(!this.#closed&&!controller.signal.aborted&&await this.#reads.execute<boolean>('media.imageRefreshPending',{ownerId:this.#media.ownerId,contactId}))this.#scheduleRefresh();
+     if(!this.#closed&&!controller.signal.aborted&&await this.#reads.execute<boolean>('media.imageRefreshPending',{ownerId:this.#media.ownerId,contactId,runtimeStartedAt:this.#startedAt}))this.#scheduleRefresh();
     }finally{finish();if(this.#active?.controller===controller)this.#active=undefined;}
    }
   }

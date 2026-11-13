@@ -1,7 +1,8 @@
 import type {StorageAction,StorageRow} from '../../storage/sqlite/contracts.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
-import {imageReconcileRequestKey,imageReconcilePrefix,imageRetryDelaysMs,imagePreparationVersion} from './image-refresh.ts';
+import {imageReconcileRequestKey,imageReconcilePrefix,imageRetryDelaysMs,imagePreparationVersion,imageMaxAutomaticAttempts,imageFinalFailureCodes} from './image-refresh.ts';
 
+const finalCodesSql=imageFinalFailureCodes.map(code=>`'${code}'`).join(',');
 const retryDelaySql=(alias:string)=>`CASE ${imageRetryDelaysMs.slice(0,-1).map((delay,index)=>`WHEN ${alias}.retry_count=${index+1} THEN ${delay}`).join(' ')} ELSE ${imageRetryDelaysMs.at(-1)} END`;
 // 只枚举待办消息身份；旧运行时守卫由媒体服务先合法重验，实际读取与发布仍逐条核验来源。
 // legacy cutoff 只需按联系人计算一次；相关子查询会被 SQLite 按 preparation 的每一行重算，
@@ -13,7 +14,8 @@ export const imageSyncWorkSql=`WITH legacy AS (
  SELECT owner_id,message_id,accepted_media_generation,
   max(requested_at) last_attempt_at,
   count(CASE WHEN adapter_version<>'${imagePreparationVersion}' AND (request_key GLOB 'image_sync_v5_*' OR request_key GLOB '${imageReconcilePrefix}*') THEN 1 END) retry_count,
-  max(CASE WHEN adapter_version<>'${imagePreparationVersion}' AND (request_key GLOB 'image_sync_v5_*' OR request_key GLOB '${imageReconcilePrefix}*') THEN requested_at END) last_retry_at
+  max(CASE WHEN adapter_version<>'${imagePreparationVersion}' AND (request_key GLOB 'image_sync_v5_*' OR request_key GLOB '${imageReconcilePrefix}*') THEN requested_at END) last_retry_at,
+  count(CASE WHEN adapter_version<>'${imagePreparationVersion}' AND (request_key GLOB 'image_sync_v5_*' OR request_key GLOB '${imageReconcilePrefix}*') AND error_code IN (${finalCodesSql}) THEN 1 END) final_failures
  FROM media_extraction_attempt WHERE owner_id=? AND contact_id=? AND goal='extract'
  GROUP BY owner_id,message_id,accepted_media_generation
 ), preparation AS (
@@ -27,6 +29,9 @@ export const imageSyncWorkSql=`WITH legacy AS (
 ), work AS (
  SELECT m.id,m.display_no,coalesce(h.media_generation,0) media_generation,
   coalesce(a.retry_count,0) retry_count,a.last_attempt_at,
+  -- 出现确定性失败，或自动尝试次数已用完：本次运行内停止自动重试（parked），不再按时间排队。
+  (coalesce(a.final_failures,0)>0 OR coalesce(a.retry_count,0)>=${imageMaxAutomaticAttempts}) parked,
+  coalesce(p.last_retry_at+${retryDelaySql('p')},0) prep_due,
   max(CASE WHEN coalesce(a.retry_count,0)=0 THEN 0 ELSE a.last_retry_at+${retryDelaySql('a')} END,
    coalesce(p.last_retry_at+${retryDelaySql('p')},0)) next_due
  FROM message m JOIN contact c ON c.owner_id=m.owner_id AND c.id=m.contact_id AND c.state='active'
@@ -46,6 +51,12 @@ export const imageSyncWorkSql=`WITH legacy AS (
  AND NOT EXISTS(SELECT 1 FROM media_extraction_attempt a WHERE a.owner_id=m.owner_id AND a.message_id=m.id AND a.state IN ('pending','running'))
 ) `;
 /** 参数顺序必须与 imageSyncWorkSql 的占位符顺序一致：legacy→attempts→preparation→work。 */
+/** 本次运行开始时间：停止自动重试的图片，只有上次尝试早于它（即上次运行遗留）时才再试一次。缺省为 0，表示不重试。 */
+function runtimeStartedAt(input:any):bigint{
+ const value=input.runtimeStartedAt??0;
+ if(!Number.isSafeInteger(value)||value<0)throw new StorageFailure('media_request_invalid');
+ return BigInt(value);
+}
 function scope(input:any):string[]{
  if(![input.ownerId,input.contactId].every(value=>typeof value==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(value)))throw new StorageFailure('media_request_invalid');
  return [input.ownerId,input.contactId,input.ownerId,input.contactId,input.ownerId,input.contactId,input.ownerId,input.contactId];
@@ -54,10 +65,11 @@ export function createImageSyncActions():StorageAction[]{return [
  {name:'media.imageSyncTargets',mode:'read',retryBusy:false,execute:(tx,input:any)=>{
   const parameters=scope(input),now=input.now??Date.now();
   if(typeof input.after!=='string'||!/^\d{1,20}$/.test(input.after)||!Number.isSafeInteger(now)||now<0)throw new StorageFailure('media_request_invalid');
-  const rows=tx.all(imageSyncWorkSql+'SELECT * FROM work WHERE display_no>? AND next_due<=? ORDER BY display_no LIMIT 64',[...parameters,BigInt(input.after),BigInt(now)]);
+  const started=runtimeStartedAt(input);
+  const rows=tx.all(imageSyncWorkSql+'SELECT * FROM work WHERE display_no>? AND ((parked=0 AND next_due<=?) OR (parked=1 AND last_attempt_at<? AND prep_due<=?)) ORDER BY display_no LIMIT 64',[...parameters,BigInt(input.after),BigInt(now),started,BigInt(now)]);
   return rows.map((row:StorageRow)=>({messageId:String(row.id),displayNo:String(row.display_no),requestKey:row.last_attempt_at===null
    ?`image_sync_v5_${row.id}_${row.media_generation}`
    :imageReconcileRequestKey(String(row.id),String(row.media_generation),now)}));
  }},
- {name:'media.imageRefreshPending',mode:'read',retryBusy:false,execute:(tx,input:any)=>!!tx.get(imageSyncWorkSql+'SELECT 1 FROM work LIMIT 1',scope(input))},
+ {name:'media.imageRefreshPending',mode:'read',retryBusy:false,execute:(tx,input:any)=>!!tx.get(imageSyncWorkSql+'SELECT 1 FROM work WHERE parked=0 OR last_attempt_at<? LIMIT 1',[...scope(input),runtimeStartedAt(input)])},
  ];}
