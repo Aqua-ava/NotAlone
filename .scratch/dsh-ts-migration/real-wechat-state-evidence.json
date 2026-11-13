@@ -1,0 +1,486 @@
+[
+  {
+    "checked_at": "2026-10-24T03:15:58.360Z",
+    "label": "disabled",
+    "public_state": {
+      "sync_enabled": false,
+      "sync_scope": "selected",
+      "phase": "sync_disabled",
+      "cli_available": true,
+      "failure_code": null,
+      "cli_sync_phase": "disabled",
+      "cli_sync_mode": null,
+      "cli_stream_active": false,
+      "cli_bound_count": 1,
+      "cli_pending_count": 0,
+      "cli_batch_message_count": 0,
+      "cli_failure_code": null,
+      "cli_history_authorization_state": "declined"
+    },
+    "runtime": {
+      "state": "running",
+      "ownership": {
+        "setup": "typescript",
+        "credentials": "typescript",
+        "schemaUpdates": "python-migration-command",
+        "contacts": "python",
+        "replies": "python",
+        "memory": "typescript",
+        "skills": "python",
+        "imports": "python",
+        "deletion": "python",
+        "wechat": "split",
+        "wechatScope": "typescript",
+        "wechatBodySync": "split",
+        "tasks": "python",
+        "wechatIncremental": "typescript",
+        "wechatHistory": "python",
+        "foregroundLocation": "typescript",
+        "contactContext": "typescript",
+        "expressionPreferences": "typescript"
+      }
+    },
+    "readers": [],
+    "database": {
+      "contacts": 1,
+      "active_bindings": 1,
+      "history_authorizations": 0,
+      "history_decision": "declined",
+      "messages": 0,
+      "outside_scope_messages": 0,
+      "reply_requests": 0,
+      "outbound_calls": 0,
+      "before_baseline_messages": 0,
+      "original_baseline_unchanged": true,
+      "original_binding_unchanged": true
+    }
+  },
+  {
+    "checked_at": "2026-10-24T03:19:38.854Z",
+    "label": "reenabled",
+    "public_state": {
+      "sync_enabled": true,
+      "sync_scope": "selected",
+      "phase": "active",
+      "cli_available": true,
+      "failure_code": null,
+      "cli_sync_phase": "active",
+      "cli_sync_mode": "global_follow",
+      "cli_stream_active": true,
+      "cli_bound_count": 1,
+      "cli_pending_count": 0,
+      "cli_batch_message_count": 0,
+      "cli_failure_code": null,
+      "cli_history_authorization_state": "declined"
+    },
+    "runtime": {
+      "state": "running",
+      "ownership": {
+        "setup": "typescript",
+        "credentials": "typescript",
+        "schemaUpdates": "python-migration-command",
+        "contacts": "python",
+        "replies": "python",
+        "memory": "typescript",
+        "skills": "python",
+        "imports": "python",
+        "deletion": "python",
+        "wechat": "split",
+        "wechatScope": "typescript",
+        "wechatBodySync": "split",
+        "tasks": "python",
+        "wechatIncremental": "typescript",
+        "wechatHistory": "python",
+        "foregroundLocation": "typescript",
+        "contactContext": "typescript",
+        "expressionPreferences": "typescript"
+      }
+    },
+    "readers": [
+      {
+        "parent": "typescript",
+        "metadata_follow": true,
+        "history": false,
+        "since_time": false,
+        "strict_read_only": true,
+        "target_matches": false
+      }
+    ],
+    "database": {
+      "contacts": 1,
+      "active_bindings": 1,
+      "history_authorizations": 0,
+      "history_decision": "declined",
+      "messages": 0,
+      "outside_scope_messages": 0,
+      "reply_requests": 0,
+      "outbound_calls": 0,
+      "before_baseline_messages": 0,
+      "original_baseline_unchanged": true,
+      "original_binding_unchanged": true
+    }
+  },
+  {
+    "checked_at": "2026-10-24T03:21:33.936Z",
+    "label": "restarted",
+    "public_state": {
+      "sync_enabled": true,
+      "sync_scope": "selected",
+      "phase": "active",
+      "cli_available": true,
+      "failure_code": null,
+      "cli_sync_phase": "active",
+      "cli_sync_mode": "global_follow",
+      "cli_stream_active": true,
+      "cli_bound_count": 1,
+      "cli_pending_count": 0,
+      "cli_batch_message_count": 0,
+      "cli_failure_code": null,
+      "cli_history_authorization_state": "declined"
+    },
+    "runtime": {
+      "state": "running",
+      "ownership": {
+        "setup": "typescript",
+        "credentials": "typescript",
+        "schemaUpdates": "python-migration-command",
+        "contacts": "python",
+        "replies": "python",
+        "memory": "typescript",
+        "skills": "python",
+        "imports": "python",
+        "deletion": "python",
+        "wechat": "split",
+        "wechatScope": "typescript",
+        "wechatBodySync": "split",
+        "tasks": "python",
+        "wechatIncremental": "typescript",
+        "wechatHistory": "python",
+        "foregroundLocation": "typescript",
+        "contactContext": "typescript",
+        "expressionPreferences": "typescript"
+      }
+    },
+    "readers": [
+      {
+        "parent": "typescript",
+        "metadata_follow": true,
+        "history": false,
+        "since_time": false,
+        "strict_read_only": true,
+        "target_matches": false
+      }
+    ],
+    "database": {
+      "contacts": 1,
+      "active_bindings": 1,
+      "history_authorizations": 0,
+      "history_decision": "declined",
+      "messages": 0,
+      "outside_scope_messages": 0,
+      "reply_requests": 0,
+      "outbound_calls": 0,
+      "before_baseline_messages": 0,
+      "original_baseline_unchanged": true,
+      "original_binding_unchanged": true
+    }
+  },
+  {
+    "checked_at": "2026-10-24T03:21:56.522Z",
+    "label": "restarted-disabled",
+    "public_state": {
+      "sync_enabled": false,
+      "sync_scope": "selected",
+      "phase": "sync_disabled",
+      "cli_available": true,
+      "failure_code": null,
+      "cli_sync_phase": "disabled",
+      "cli_sync_mode": null,
+      "cli_stream_active": false,
+      "cli_bound_count": 1,
+      "cli_pending_count": 0,
+      "cli_batch_message_count": 0,
+      "cli_failure_code": null,
+      "cli_history_authorization_state": "declined"
+    },
+    "runtime": {
+      "state": "running",
+      "ownership": {
+        "setup": "typescript",
+        "credentials": "typescript",
+        "schemaUpdates": "python-migration-command",
+        "contacts": "python",
+        "replies": "python",
+        "memory": "typescript",
+        "skills": "python",
+        "imports": "python",
+        "deletion": "python",
+        "wechat": "split",
+        "wechatScope": "typescript",
+        "wechatBodySync": "split",
+        "tasks": "python",
+        "wechatIncremental": "typescript",
+        "wechatHistory": "python",
+        "foregroundLocation": "typescript",
+        "contactContext": "typescript",
+        "expressionPreferences": "typescript"
+      }
+    },
+    "readers": [],
+    "database": {
+      "contacts": 1,
+      "active_bindings": 1,
+      "history_authorizations": 0,
+      "history_decision": "declined",
+      "messages": 0,
+      "outside_scope_messages": 0,
+      "reply_requests": 0,
+      "outbound_calls": 0,
+      "before_baseline_messages": 0,
+      "original_baseline_unchanged": true,
+      "original_binding_unchanged": true
+    }
+  },
+  {
+    "checked_at": "2026-10-24T04:19:15.148Z",
+    "label": "fresh-message-ready",
+    "public_state": {
+      "sync_enabled": true,
+      "sync_scope": "selected",
+      "phase": "active",
+      "cli_available": true,
+      "failure_code": null,
+      "cli_sync_phase": "active",
+      "cli_sync_mode": "global_follow",
+      "cli_stream_active": true,
+      "cli_bound_count": 1,
+      "cli_pending_count": 0,
+      "cli_batch_message_count": 0,
+      "cli_failure_code": null,
+      "cli_history_authorization_state": "declined"
+    },
+    "runtime": {
+      "state": "running",
+      "ownership": {
+        "setup": "typescript",
+        "credentials": "typescript",
+        "schemaUpdates": "python-migration-command",
+        "contacts": "python",
+        "replies": "python",
+        "memory": "typescript",
+        "skills": "python",
+        "imports": "python",
+        "deletion": "python",
+        "wechat": "split",
+        "wechatScope": "typescript",
+        "wechatBodySync": "split",
+        "tasks": "python",
+        "wechatIncremental": "typescript",
+        "wechatHistory": "python",
+        "foregroundLocation": "typescript",
+        "contactContext": "typescript",
+        "expressionPreferences": "typescript"
+      }
+    },
+    "readers": [
+      {
+        "parent": "typescript",
+        "metadata_follow": true,
+        "history": false,
+        "since_time": false,
+        "strict_read_only": true,
+        "target_matches": false
+      }
+    ],
+    "database": {
+      "contacts": 1,
+      "active_bindings": 1,
+      "history_authorizations": 0,
+      "history_decision": "declined",
+      "messages": 0,
+      "outside_scope_messages": 0,
+      "reply_requests": 0,
+      "outbound_calls": 0,
+      "before_baseline_messages": 0,
+      "original_baseline_unchanged": true,
+      "original_binding_unchanged": true
+    }
+  },
+  {
+    "checked_at": "2026-10-24T04:48:43.276Z",
+    "label": "authorized-test-sent",
+    "public_state": {
+      "sync_enabled": true,
+      "sync_scope": "selected",
+      "phase": "active",
+      "cli_available": true,
+      "failure_code": null,
+      "cli_sync_phase": "active",
+      "cli_sync_mode": "global_follow",
+      "cli_stream_active": true,
+      "cli_bound_count": 1,
+      "cli_pending_count": 0,
+      "cli_batch_message_count": 0,
+      "cli_failure_code": null,
+      "cli_history_authorization_state": "declined"
+    },
+    "runtime": {
+      "state": "running",
+      "ownership": {
+        "setup": "typescript",
+        "credentials": "typescript",
+        "schemaUpdates": "python-migration-command",
+        "contacts": "python",
+        "replies": "python",
+        "memory": "typescript",
+        "skills": "python",
+        "imports": "python",
+        "deletion": "python",
+        "wechat": "split",
+        "wechatScope": "typescript",
+        "wechatBodySync": "split",
+        "tasks": "python",
+        "wechatIncremental": "typescript",
+        "wechatHistory": "python",
+        "foregroundLocation": "typescript",
+        "contactContext": "typescript",
+        "expressionPreferences": "typescript"
+      }
+    },
+    "readers": [
+      {
+        "parent": "typescript",
+        "metadata_follow": true,
+        "history": false,
+        "since_time": false,
+        "strict_read_only": true,
+        "target_matches": false
+      }
+    ],
+    "database": {
+      "contacts": 1,
+      "active_bindings": 1,
+      "history_authorizations": 0,
+      "history_decision": "declined",
+      "messages": 1,
+      "outside_scope_messages": 0,
+      "reply_requests": 0,
+      "outbound_calls": 0,
+      "before_baseline_messages": 0,
+      "original_baseline_unchanged": true,
+      "original_binding_unchanged": true
+    }
+  },
+  {
+    "checked_at": "2026-10-24T04:51:12.680Z",
+    "label": "positive-disabled",
+    "public_state": {
+      "sync_enabled": false,
+      "sync_scope": "selected",
+      "phase": "sync_disabled",
+      "cli_available": true,
+      "failure_code": null,
+      "cli_sync_phase": "disabled",
+      "cli_sync_mode": null,
+      "cli_stream_active": false,
+      "cli_bound_count": 1,
+      "cli_pending_count": 0,
+      "cli_batch_message_count": 0,
+      "cli_failure_code": null,
+      "cli_history_authorization_state": "declined"
+    },
+    "runtime": {
+      "state": "running",
+      "ownership": {
+        "setup": "typescript",
+        "credentials": "typescript",
+        "schemaUpdates": "python-migration-command",
+        "contacts": "python",
+        "replies": "python",
+        "memory": "typescript",
+        "skills": "python",
+        "imports": "python",
+        "deletion": "python",
+        "wechat": "split",
+        "wechatScope": "typescript",
+        "wechatBodySync": "split",
+        "tasks": "python",
+        "wechatIncremental": "typescript",
+        "wechatHistory": "python",
+        "foregroundLocation": "typescript",
+        "contactContext": "typescript",
+        "expressionPreferences": "typescript"
+      }
+    },
+    "readers": [],
+    "database": {
+      "contacts": 1,
+      "active_bindings": 1,
+      "history_authorizations": 0,
+      "history_decision": "declined",
+      "messages": 5,
+      "outside_scope_messages": 0,
+      "reply_requests": 0,
+      "outbound_calls": 0,
+      "before_baseline_messages": 0,
+      "original_baseline_unchanged": true,
+      "original_binding_unchanged": true
+    }
+  },
+  {
+    "checked_at": "2026-10-24T04:52:35.649Z",
+    "label": "positive-same-db-restart",
+    "public_state": {
+      "sync_enabled": false,
+      "sync_scope": "selected",
+      "phase": "sync_disabled",
+      "cli_available": false,
+      "failure_code": null,
+      "cli_sync_phase": "disabled",
+      "cli_sync_mode": null,
+      "cli_stream_active": false,
+      "cli_bound_count": 1,
+      "cli_pending_count": 0,
+      "cli_batch_message_count": 0,
+      "cli_failure_code": null,
+      "cli_history_authorization_state": "declined"
+    },
+    "runtime": {
+      "state": "running",
+      "ownership": {
+        "setup": "typescript",
+        "credentials": "typescript",
+        "schemaUpdates": "python-migration-command",
+        "contacts": "python",
+        "replies": "python",
+        "memory": "typescript",
+        "skills": "python",
+        "imports": "python",
+        "deletion": "python",
+        "wechat": "split",
+        "wechatScope": "typescript",
+        "wechatBodySync": "split",
+        "tasks": "python",
+        "wechatIncremental": "typescript",
+        "wechatHistory": "python",
+        "foregroundLocation": "typescript",
+        "contactContext": "typescript",
+        "expressionPreferences": "typescript"
+      }
+    },
+    "readers": [],
+    "database": {
+      "contacts": 1,
+      "active_bindings": 1,
+      "history_authorizations": 0,
+      "history_decision": "declined",
+      "messages": 5,
+      "outside_scope_messages": 0,
+      "reply_requests": 0,
+      "outbound_calls": 0,
+      "before_baseline_messages": 0,
+      "original_baseline_unchanged": true,
+      "original_binding_unchanged": true
+    }
+  }
+]

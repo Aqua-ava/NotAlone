@@ -1,0 +1,36 @@
+# 图片输入可靠性：L1/L2已验收，L3最终未通过，授权用尽
+
+- 工作树 /Users/local-user/.codex/worktrees/image-input-reliability/NotAlone，分支codex/image-input-reliability；命令显式cwd。主仓3项他人tracked WIP不改、不暂存、不提交。
+- 根因体积：原图2043188B→3131712B附件PNG→2832863B发送PNG，超DSH2097152B，本地Error包装TRANSPORT且HTTP0；直接HTTP8/8成功，JPEG85为228605B。
+- 01/02/03/04/06/07已resolved；05 open/ready-for-agent保守跟踪L3离线质量调查及后续新授权；不能标整体验收完成。
+- 基础提交1f8f64704规范化、761e30775降级、045594894退休、5fd77ca42隔离、c6f98ebed诊断删除、ae7d61991边界、e0a2d8667原生响应/TIMEOUT。
+- 后续c038cb0d0本人反馈失配退休、7147c2a62日志屏障、caa7caf05释放查询性能、f8163e32d manual派发门禁、e39bf0930 profile规范JPEG快照。
+- 97c1690ba独立L2/L3冻结图片来源身份（不prepare、不发图、snapshot先于建运行）；图片/文档/删除/终态/增长49项+半轮拒绝1项绿。
+- 34a002051裁决单动作来源缓存；4498fc52b新增指定实际JPEG摘要断连的本地HTTP集成，新测试+transport22项绿，6个不同请求独立已知结算。
+- JPEG85/1536、单图降级1024且小图继续缩小，单图2MiB、8张/32MiB；派生仅内存，原file_id/sha256保留，发送元数据分记。
+- 明确终态TRANSPORT可降级；TIMEOUT还须fetch_started+当前原生请求+首响应头/状态均未观察到，未取消。真未知/ACK丢失/有HTTP等不降级。
+- 冻结二分树、成功叶复用和跨attempt恢复保持；单图耗尽隔离并继续其他目标，连续3次同类隔离持久暂停，显式CAS重试受完整门禁保护。
+- 退休每批128，只处理永久stale且账本/候选/效果均释放的暂停轮；无历史switch归因证据，不改pausedBySwitch。晚图进入下一轮，不扩张冻结输入。
+- 产品initialize已退休c296e552为revoked/released，d8b8510d保持failed/released；未知保护、来源和已成功历史保留，未手工改库。
+- 用户委托root经CUA拒绝6条人工pending，原44条已采纳及资料保留；分页隐藏已定位为正常页1/2/3，无资格缺陷。
+- 合成PNG1280×1706/2039224B（距目标0.194%，复杂度来自像素）真实E/V累计4calls。最新追加2calls即时导出2call+2image统一事件，fields齐/missing0/content0/rejected0/dropped0，清理完成。
+- 原L1统一日志已滚动，不能补造旧日志；SQLite图片追踪/原sha/发送元数据和账本仍有证据，区别记录限制。
+- 样本14/14图片成功证明=本轮9新+5既有，隔离0/pending0/missingTrace0。L1新增6calls已知结算；CUA真实处理卡9图/9图、35文/35文成功。
+- 原失败图本轮E/V实际JPEG1134×1512/207252B，原sha匹配，success/settled。
+- L2 gen3真实published/succeeded，3calls成功且结算。
+- L3 gen4失败document_contradiction_basis_missing，3calls succeeded/settled、effects释放；只重试known L3的gen5失败document_profile_unverified，另3calls known，不冒称L3发布成功。
+- L3 schema矛盾引用exact2修复a25dc2a8c已提交，8新test、19相关green+typecheck；4个frozen/mergeMain930基线fail保持，最后一次真实L3gen6仍document_profile_unverified，未发布。
+- 最终总账46次预留/父96=stage08+synthetic4+sample34(6L1+16adju+3L2+9L3)，active0、finallyauto0；foreign/unproven0、sampleunknown0、other4unchanged。
+- 用户限定唯一30min续作/最后一次L3≤3calls已用尽；同ledger stage6-l3-contract硬cap46，不得再模型、不放宽guard，后续真复验须新明确授权。私有账本/tmp/notalone-image-reliability-hw9x92j_/budget.sqlite，原start/deadline见stage6-authorized.json。
+- 已结束命令核对auto0、sample unknown0、其他unknown4不变、foreign新运行/调用来源0；本轮授权已用尽，不得再发模型。
+- 文档缓存fa5347005已提交（5source+2test）：同copy claimScene首写前来源核验至first write boundary12003→1771ms（非完整动作/文档耗时），该段sourceSQL4226→267/来源耗时10898→879ms/getterqueue413ms；growth21/201→1，保留10/100池，跨action撤权/删除拒绝；typecheck+45tests绿。
+- root已完成无模型CUA重试UI闭环：合成1隔离→点击→pending1/等待提取，提示/按钮消失且成功0，无真实POST/noModel，controller CAS已还原。
+- 最终main已FF7d3ab2227，3WIP SHA全保留；4TEMP逐项对HEAD还原、CAS clean，worktree.env软链删除/main.env未改。worktree tracked clean、main仅原3WIP。
+- 主仓ignored同步已获授权：task folder定向复制，ADR179只合并小图不重发1行，新增ADR180，current memory-processing与ADR索引只合并本任务hunk；主仓3tracked WIP SHA保持不变。
+- .scratch与architecture均ignored，不进Git提交。gen6最终失败：16核验15supported/1unsupported inference，3calls均known settled/effects释放；7scene/0profile。新round unchanged、旧round仅图片improved，State已同步。
+- 不push、不远端分支/PR、不外发聊天；日志/截图无聊天正文/图/凭据。开发仅pnpm run dev，核验复用，禁止打包。
+- AGENTS及规范/技能已读，后续rg/sed定位；CUA最终观察后下一调用completion_summary。等待有界，不裸sleep轮询。
+- 最终backend/desktop typecheck各0，publichistory7d3=3532commits/26047blobs/2061files/issues0，diffcheck0；本轮未重跑这些检查，仅记录root实际结果。
+- main普通pnpm dev已恢复，无验收/budget/manual/UI环境；HTTP+CUA autooff，CUA已completion_summary，不再操作。
+- 最后独立复核new34均succeeded/settled、foreign/unproven0/sampleunknown0/other4、14coverage9新5旧/auto0；同ledger46used/parent96/cap46/extra3尽，无active轮。
+- tools/4sourcebackup/worktree.dev/app已删，私有目录仅保留600权限budget.sqlite，无图片/用户DBcopy；禁止再模型或放宽guard。

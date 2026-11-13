@@ -1,0 +1,2670 @@
+{
+  "status": "static_gap_review_not_runtime_coverage",
+  "date": "2026-10-29",
+  "count": 115,
+  "tables": [
+    {
+      "old_table": "assistant_candidate_selection",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "reply_selection"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 298
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/reply-discussion-context.ts",
+          "line": 94
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-assistant-erasure-sql.ts",
+          "line": 5
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-materials.ts",
+          "line": 116
+        }
+      ]
+    },
+    {
+      "old_table": "assistant_candidate_version",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "reply_candidate_version"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 271
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-continuation.ts",
+          "line": 81
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-store.ts",
+          "line": 178
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/reply-discussion-context.ts",
+          "line": 92
+        }
+      ]
+    },
+    {
+      "old_table": "assistant_runtime_deletion_target",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "deletion_target"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime-erasure.ts",
+          "line": 11
+        },
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime.ts",
+          "line": 347
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 517
+        }
+      ]
+    },
+    {
+      "old_table": "assistant_runtime_session",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "runtime_copy",
+        "runtime_context"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 411
+        },
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime-erasure.ts",
+          "line": 19
+        },
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime-projection.ts",
+          "line": 29
+        },
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime.ts",
+          "line": 163
+        }
+      ]
+    },
+    {
+      "old_table": "assistant_session",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "assistant_discussion"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 205
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-store.ts",
+          "line": 64
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-user-activity.ts",
+          "line": 10
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/reply-discussion-context.ts",
+          "line": 136
+        }
+      ]
+    },
+    {
+      "old_table": "assistant_session_input",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "discussion_entry",
+        "reply_request"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 455
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-format.ts",
+          "line": 13
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-store.ts",
+          "line": 155
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/reply-discussion-digests.ts",
+          "line": 12
+        }
+      ]
+    },
+    {
+      "old_table": "assistant_session_turn",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "discussion_entry",
+        "reply_request"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-erasure.ts",
+          "line": 21
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 89
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-adoption.ts",
+          "line": 31
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-continuation.ts",
+          "line": 70
+        }
+      ]
+    },
+    {
+      "old_table": "background_task",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "processing_task"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 41
+        },
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 33
+        },
+        {
+          "file": "backend-ts/src/host/pure-ts-task-events.ts",
+          "line": 21
+        },
+        {
+          "file": "backend-ts/src/host-plugin.ts",
+          "line": 127
+        }
+      ]
+    },
+    {
+      "old_table": "background_task_step",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "processing_step",
+        "step_attempt",
+        "task_contribution"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 34
+        },
+        {
+          "file": "backend-ts/src/host/pure-ts-task-events.ts",
+          "line": 22
+        },
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 215
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/service.ts",
+          "line": 53
+        }
+      ]
+    },
+    {
+      "old_table": "channel_identity",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "conversation_binding"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/contacts/binding-service.ts",
+          "line": 115
+        },
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 82
+        },
+        {
+          "file": "backend-ts/src/sync/sync-scope.ts",
+          "line": 121
+        },
+        {
+          "file": "backend-ts/src/sync/wechat-history-enrollment.ts",
+          "line": 19
+        }
+      ]
+    },
+    {
+      "old_table": "cli_backfill_state",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "read_goal",
+        "history_cutoff",
+        "read_grant"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/sync/sync-incremental-recovery.ts",
+          "line": 21
+        }
+      ]
+    },
+    {
+      "old_table": "cli_history_sync_state",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "read_goal",
+        "history_cutoff",
+        "read_grant"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/reply/generation/reply-scope.ts",
+          "line": 23
+        },
+        {
+          "file": "backend-ts/src/sync/sync-incremental-store.ts",
+          "line": 81
+        }
+      ]
+    },
+    {
+      "old_table": "confirmed_memory",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "memory",
+        "memory_version"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 245
+        },
+        {
+          "file": "backend-ts/src/memory/overview/catalog.ts",
+          "line": 98
+        },
+        {
+          "file": "backend-ts/src/memory/overview/service.ts",
+          "line": 32
+        },
+        {
+          "file": "backend-ts/src/memory/processing/query.ts",
+          "line": 142
+        }
+      ]
+    },
+    {
+      "old_table": "contact",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "contact"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/contacts/binding-service.ts",
+          "line": 127
+        },
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 30
+        },
+        {
+          "file": "backend-ts/src/contacts/contact-handoff.ts",
+          "line": 41
+        },
+        {
+          "file": "backend-ts/src/foreground/foreground-location-api.ts",
+          "line": 37
+        }
+      ]
+    },
+    {
+      "old_table": "contact_memory_index",
+      "status": "查询派生",
+      "targets": [],
+      "note": "从当前有效版本和发布集合查询；不预建持久投影，现有概览接口及元数据仍须适配。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/overview/catalog.ts",
+          "line": 151
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/erasure.ts",
+          "line": 73
+        },
+        {
+          "file": "backend-ts/src/reply/context/reply-context.ts",
+          "line": 52
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 178
+        }
+      ]
+    },
+    {
+      "old_table": "contact_memory_state",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "contact"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/overview/catalog.ts",
+          "line": 122
+        },
+        {
+          "file": "backend-ts/src/memory/overview/service.ts",
+          "line": 29
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/candidate.ts",
+          "line": 99
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/protection.ts",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "old_table": "conversation_binding",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "conversation_binding"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/contacts/binding-service.ts",
+          "line": 72
+        },
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 70
+        },
+        {
+          "file": "backend-ts/src/foreground/foreground-location-api.ts",
+          "line": 37
+        },
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 40
+        }
+      ]
+    },
+    {
+      "old_table": "cross_domain_deletion_operation",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "deletion_operation",
+        "deletion_target",
+        "deletion_check"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime-erasure.ts",
+          "line": 7
+        },
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime.ts",
+          "line": 346
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 142
+        }
+      ]
+    },
+    {
+      "old_table": "expression_preference",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "expression_preference",
+        "expression_preference_version",
+        "preference_source"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-service.ts",
+          "line": 55
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/reply-discussion-context.ts",
+          "line": 142
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-source-guards-sql.ts",
+          "line": 47
+        },
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime-projection.ts",
+          "line": 48
+        }
+      ]
+    },
+    {
+      "old_table": "expression_preference_operation",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "expression_preference_version",
+        "request_tombstone",
+        "deletion_operation"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-service.ts",
+          "line": 108
+        }
+      ]
+    },
+    {
+      "old_table": "expression_preference_state",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "owner"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-service.ts",
+          "line": 46
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 185
+        }
+      ]
+    },
+    {
+      "old_table": "front_sync_state",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "owner"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 72
+        },
+        {
+          "file": "backend-ts/src/foreground/foreground-location-api.ts",
+          "line": 27
+        },
+        {
+          "file": "backend-ts/src/sync/sync-incremental-store.ts",
+          "line": 77
+        },
+        {
+          "file": "backend-ts/src/sync/sync-scope.ts",
+          "line": 45
+        }
+      ]
+    },
+    {
+      "old_table": "import_confirmation",
+      "status": "旧入口待接线核对",
+      "targets": [],
+      "note": "本轮非文字仅占位，不建媒体处理表；原导入／媒体消费者退役和历史副本清理需单独接线验收，不能视为已兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 99
+        },
+        {
+          "file": "backend-ts/src/memory/processing/legacy-adoption.ts",
+          "line": 52
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 270
+        }
+      ]
+    },
+    {
+      "old_table": "layered_memory_batch",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "step_attempt",
+        "execution_event",
+        "execution_input",
+        "event_source"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 108
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 166
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 94
+        },
+        {
+          "file": "backend-ts/src/memory/profiles/service.ts",
+          "line": 253
+        }
+      ]
+    },
+    {
+      "old_table": "layered_memory_fact_correction",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "organization_feedback",
+        "feedback_input"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/records/documents/facts.ts",
+          "line": 20
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/source-policy.ts",
+          "line": 11
+        },
+        {
+          "file": "backend-ts/src/memory/scenarios/service.ts",
+          "line": 912
+        },
+        {
+          "file": "backend-ts/src/diagnostics/organization-quality-snapshot.ts",
+          "line": 50
+        }
+      ]
+    },
+    {
+      "old_table": "layered_memory_feedback",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "organization_feedback",
+        "feedback_input"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/profiles/service.ts",
+          "line": 295
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/source-policy.ts",
+          "line": 9
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/store.ts",
+          "line": 54
+        },
+        {
+          "file": "backend-ts/src/memory/scenarios/service.ts",
+          "line": 340
+        }
+      ]
+    },
+    {
+      "old_table": "layered_memory_generation",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "document_publication",
+        "publication_member"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/profiles/service.ts",
+          "line": 245
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/facts.ts",
+          "line": 37
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/store.ts",
+          "line": 90
+        },
+        {
+          "file": "backend-ts/src/memory/scenarios/service.ts",
+          "line": 292
+        }
+      ]
+    },
+    {
+      "old_table": "layered_memory_job",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "processing_task",
+        "processing_step",
+        "step_attempt"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 102
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 164
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 89
+        },
+        {
+          "file": "backend-ts/src/memory/processing/legacy-adoption.ts",
+          "line": 137
+        }
+      ]
+    },
+    {
+      "old_table": "layered_memory_state",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "owner",
+        "contact"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 102
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 221
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 89
+        },
+        {
+          "file": "backend-ts/src/memory/processing/legacy-adoption.ts",
+          "line": 138
+        }
+      ]
+    },
+    {
+      "old_table": "layered_profile_batch",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "step_attempt",
+        "execution_event",
+        "execution_input",
+        "event_source"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 111
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 172
+        },
+        {
+          "file": "backend-ts/src/memory/processing/query.ts",
+          "line": 97
+        },
+        {
+          "file": "backend-ts/src/memory/profiles/service.ts",
+          "line": 416
+        }
+      ]
+    },
+    {
+      "old_table": "layered_profile_version",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "memory_document",
+        "memory_document_version",
+        "document_block",
+        "document_statement",
+        "document_basis"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/profiles/service.ts",
+          "line": 441
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/facts.ts",
+          "line": 46
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/store.ts",
+          "line": 103
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/erasure.ts",
+          "line": 36
+        }
+      ]
+    },
+    {
+      "old_table": "local_wechat_observation",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "sync_capture"
+      ],
+      "note": "实际来源落到有界捕获；旧文件导入入口需逐项核对适配或退役。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 17
+        },
+        {
+          "file": "backend-ts/src/host/pure-ts-follow-smoke.ts",
+          "line": 18
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 218
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 8
+        }
+      ]
+    },
+    {
+      "old_table": "manual_contact_confirmation",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "manual_confirmation"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 51
+        },
+        {
+          "file": "backend-ts/src/host/pure-ts-reply-scope.ts",
+          "line": 20
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 190
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-explored.ts",
+          "line": 22
+        }
+      ]
+    },
+    {
+      "old_table": "media_attempt",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "message_media",
+        "media_extraction_attempt",
+        "media_file"
+      ],
+      "note": "媒体Q11已确认，三实体区分消息管理、实际尝试与自有文件；不照搬旧artifacts JSON，不迁旧PG媒体资料，实际适配/解码/身份仍需验证。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 330
+        }
+      ]
+    },
+    {
+      "old_table": "media_request_tombstone",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "request_tombstone",
+        "deletion_operation"
+      ],
+      "note": "共享请求墓碑与统一删除操作记录媒体失效/清除，读取/重提资格按本实例新代次核验；不迁旧PG墓碑。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 331
+        }
+      ]
+    },
+    {
+      "old_table": "memory_candidate",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "memory_candidate"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 246
+        },
+        {
+          "file": "backend-ts/src/memory/overview/evidence/sources.ts",
+          "line": 99
+        },
+        {
+          "file": "backend-ts/src/memory/overview/projection/memory.ts",
+          "line": 37
+        },
+        {
+          "file": "backend-ts/src/memory/overview/projection/versions.ts",
+          "line": 28
+        }
+      ]
+    },
+    {
+      "old_table": "memory_correction_decision",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "memory_decision",
+        "memory_version"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/overview/evidence/sources.ts",
+          "line": 103
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/erasure.ts",
+          "line": 41
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/protection.ts",
+          "line": 95
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations.ts",
+          "line": 64
+        }
+      ]
+    },
+    {
+      "old_table": "memory_extraction_receipt",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "processing_run",
+        "run_input",
+        "processing_item"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 109
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-schedule.ts",
+          "line": 11
+        },
+        {
+          "file": "backend-ts/src/memory/processing/query.ts",
+          "line": 114
+        }
+      ]
+    },
+    {
+      "old_table": "memory_extraction_schedule",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "processing_run",
+        "run_input",
+        "processing_item"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-schedule.ts",
+          "line": 19
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 468
+        }
+      ]
+    },
+    {
+      "old_table": "memory_extraction_trace",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "step_attempt",
+        "execution_event",
+        "execution_input",
+        "event_source"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 49
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 794
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/host.ts",
+          "line": 52
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/service.ts",
+          "line": 263
+        }
+      ]
+    },
+    {
+      "old_table": "memory_extraction_trace_call",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "execution_event",
+        "model_call"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/host.ts",
+          "line": 54
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/service.ts",
+          "line": 185
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-recovery.ts",
+          "line": 47
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 34
+        }
+      ]
+    },
+    {
+      "old_table": "memory_extraction_trace_dependency",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "execution_input",
+        "event_source"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 815
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/service.ts",
+          "line": 409
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/runner.ts",
+          "line": 257
+        },
+        {
+          "file": "backend-ts/src/memory/overview/evidence/sources.ts",
+          "line": 125
+        }
+      ]
+    },
+    {
+      "old_table": "memory_extraction_trace_event",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "execution_event"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 50
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 797
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/service.ts",
+          "line": 140
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/service.ts",
+          "line": 94
+        }
+      ]
+    },
+    {
+      "old_table": "memory_extraction_trace_link",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "execution_input",
+        "event_source"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 801
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/service.ts",
+          "line": 404
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/runner.ts",
+          "line": 244
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-recovery.ts",
+          "line": 80
+        }
+      ]
+    },
+    {
+      "old_table": "memory_extraction_watermark",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "processing_run",
+        "run_input",
+        "processing_item"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/service.ts",
+          "line": 378
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/runner.ts",
+          "line": 104
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 47
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-schedule.ts",
+          "line": 95
+        }
+      ]
+    },
+    {
+      "old_table": "memory_processing_legacy_adoption",
+      "status": "不复刻旧流程",
+      "targets": [],
+      "note": "空库无旧数据迁移，任务固定归属一轮；不复制旧升级或跨轮兼容状态。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/processing/history.ts",
+          "line": 31
+        },
+        {
+          "file": "backend-ts/src/memory/processing/legacy-adoption.ts",
+          "line": 31
+        },
+        {
+          "file": "backend-ts/src/memory/processing/query.ts",
+          "line": 53
+        }
+      ]
+    },
+    {
+      "old_table": "memory_processing_operation",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "processing_run",
+        "processing_task",
+        "request_tombstone"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 155
+        }
+      ]
+    },
+    {
+      "old_table": "memory_processing_plan",
+      "status": "不复刻旧流程",
+      "targets": [],
+      "note": "空库无旧数据迁移，任务固定归属一轮；不复制旧升级或跨轮兼容状态。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/service.ts",
+          "line": 393
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 35
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-schedule.ts",
+          "line": 34
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 91
+        }
+      ]
+    },
+    {
+      "old_table": "memory_processing_receipt",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "processing_run",
+        "run_input",
+        "processing_item"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/service.ts",
+          "line": 380
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 55
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-recovery.ts",
+          "line": 89
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-schedule.ts",
+          "line": 97
+        }
+      ]
+    },
+    {
+      "old_table": "memory_processing_round",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "processing_run",
+        "processing_task"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-schedule.ts",
+          "line": 65
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 240
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 49
+        },
+        {
+          "file": "backend-ts/src/memory/processing/history.ts",
+          "line": 30
+        }
+      ]
+    },
+    {
+      "old_table": "memory_processing_round_target",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "run_input"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 22
+        },
+        {
+          "file": "backend-ts/src/memory/processing/legacy-adoption.ts",
+          "line": 193
+        },
+        {
+          "file": "backend-ts/src/memory/processing/query.ts",
+          "line": 59
+        },
+        {
+          "file": "backend-ts/src/memory/processing/round.ts",
+          "line": 104
+        }
+      ]
+    },
+    {
+      "old_table": "memory_processing_round_task",
+      "status": "不复刻旧流程",
+      "targets": [],
+      "note": "空库无旧数据迁移，任务固定归属一轮；不复制旧升级或跨轮兼容状态。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 15
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 241
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 50
+        },
+        {
+          "file": "backend-ts/src/memory/processing/history.ts",
+          "line": 29
+        }
+      ]
+    },
+    {
+      "old_table": "memory_processing_scope",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "owner",
+        "contact"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 30
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-schedule.ts",
+          "line": 64
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 233
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 45
+        }
+      ]
+    },
+    {
+      "old_table": "memory_processing_target",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "run_input"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/service.ts",
+          "line": 374
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 51
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-recovery.ts",
+          "line": 80
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-schedule.ts",
+          "line": 78
+        }
+      ]
+    },
+    {
+      "old_table": "memory_upgrade_batch",
+      "status": "不复刻旧流程",
+      "targets": [],
+      "note": "空库无旧数据迁移，任务固定归属一轮；不复制旧升级或跨轮兼容状态。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 91
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/erasure.ts",
+          "line": 45
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 706
+        }
+      ]
+    },
+    {
+      "old_table": "memory_upgrade_job",
+      "status": "不复刻旧流程",
+      "targets": [],
+      "note": "空库无旧数据迁移，任务固定归属一轮；不复制旧升级或跨轮兼容状态。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 91
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/erasure.ts",
+          "line": 53
+        }
+      ]
+    },
+    {
+      "old_table": "memory_upgrade_operation",
+      "status": "不复刻旧流程",
+      "targets": [],
+      "note": "空库无旧数据迁移，任务固定归属一轮；不复制旧升级或跨轮兼容状态。",
+      "evidence": []
+    },
+    {
+      "old_table": "message",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "message"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 28
+        },
+        {
+          "file": "backend-ts/src/host/pure-ts-follow-smoke.ts",
+          "line": 15
+        },
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 148
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 208
+        }
+      ]
+    },
+    {
+      "old_table": "message_source_ref",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "capture_record"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 15
+        },
+        {
+          "file": "backend-ts/src/host/pure-ts-follow-smoke.ts",
+          "line": 16
+        },
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 163
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 209
+        }
+      ]
+    },
+    {
+      "old_table": "model_call_learning_claim",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "model_call"
+      ],
+      "note": "核心调用生产者由真实执行 FK 记录；Skill 学习认领部分按本次范围排除。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 175
+        }
+      ]
+    },
+    {
+      "old_table": "model_call_receipt",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "model_operation",
+        "model_call"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 96
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/service.ts",
+          "line": 148
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-recovery.ts",
+          "line": 48
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 72
+        }
+      ]
+    },
+    {
+      "old_table": "organization_quality_attempt",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "quality_attempt"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/diagnostics/organization-quality-store.ts",
+          "line": 151
+        },
+        {
+          "file": "backend-ts/src/diagnostics/quality-model-authorization.ts",
+          "line": 50
+        }
+      ]
+    },
+    {
+      "old_table": "organization_quality_case",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "quality_case",
+        "quality_case_input"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/diagnostics/organization-quality-store.ts",
+          "line": 82
+        },
+        {
+          "file": "backend-ts/src/diagnostics/quality-model-authorization.ts",
+          "line": 40
+        }
+      ]
+    },
+    {
+      "old_table": "organization_quality_fact_intent",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "memory_decision",
+        "organization_feedback"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/diagnostics/organization-quality-snapshot.ts",
+          "line": 72
+        },
+        {
+          "file": "backend-ts/src/diagnostics/organization-quality-store.ts",
+          "line": 87
+        }
+      ]
+    },
+    {
+      "old_table": "organization_quality_revocation",
+      "status": "不建候选",
+      "targets": [],
+      "note": "既有静态审查未见消费者；诊断删除由统一删除与调用资格承担，实施前复核消费者。",
+      "evidence": []
+    },
+    {
+      "old_table": "organization_quality_run",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "quality_run"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/diagnostics/organization-quality-store.ts",
+          "line": 111
+        },
+        {
+          "file": "backend-ts/src/diagnostics/quality-model-authorization.ts",
+          "line": 40
+        }
+      ]
+    },
+    {
+      "old_table": "outbound_ledger_entry",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "model_operation",
+        "model_call"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/platform/models/model-ledger.ts",
+          "line": 132
+        },
+        {
+          "file": "backend-ts/src/diagnostics/source-processing-trace.ts",
+          "line": 134
+        },
+        {
+          "file": "backend-ts/src/diagnostics/usage-summary.ts",
+          "line": 14
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 381
+        }
+      ]
+    },
+    {
+      "old_table": "owner",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "owner"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 99
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 151
+        },
+        {
+          "file": "backend-ts/src/memory/processing/query.ts",
+          "line": 43
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/store.ts",
+          "line": 25
+        }
+      ]
+    },
+    {
+      "old_table": "owner_channel_identity",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "channel_account"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/contacts/binding-service.ts",
+          "line": 56
+        },
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 71
+        },
+        {
+          "file": "backend-ts/src/foreground/foreground-location-api.ts",
+          "line": 27
+        },
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 79
+        }
+      ]
+    },
+    {
+      "old_table": "owner_memory",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "memory",
+        "memory_version"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 246
+        },
+        {
+          "file": "backend-ts/src/memory/processing/query.ts",
+          "line": 141
+        },
+        {
+          "file": "backend-ts/src/memory/processing/round.ts",
+          "line": 571
+        },
+        {
+          "file": "backend-ts/src/memory/records/manual.ts",
+          "line": 19
+        }
+      ]
+    },
+    {
+      "old_table": "owner_memory_state",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "owner"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/reply/context/reply-context-overview.ts",
+          "line": 26
+        }
+      ]
+    },
+    {
+      "old_table": "relationship_overview_projection",
+      "status": "查询派生",
+      "targets": [],
+      "note": "从当前有效版本和发布集合查询；不预建持久投影，现有概览接口及元数据仍须适配。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/overview/service.ts",
+          "line": 69
+        }
+      ]
+    },
+    {
+      "old_table": "reply_attempt",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "reply_attempt"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 753
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-format.ts",
+          "line": 36
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-interruption.ts",
+          "line": 20
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-store.ts",
+          "line": 166
+        }
+      ]
+    },
+    {
+      "old_table": "reply_candidate",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "reply_candidate",
+        "reply_candidate_version",
+        "reply_version_part"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-erasure.ts",
+          "line": 27
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 227
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-continuation.ts",
+          "line": 76
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-store.ts",
+          "line": 150
+        }
+      ]
+    },
+    {
+      "old_table": "reply_candidate_citation",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "reply_basis"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/reply/generation/reply-store.ts",
+          "line": 152
+        }
+      ]
+    },
+    {
+      "old_table": "reply_context_evidence",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "reply_context",
+        "reply_context_item",
+        "event_source"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/host/pure-ts-reply-evidence.ts",
+          "line": 44
+        },
+        {
+          "file": "backend-ts/src/preferences/preference-erasure.ts",
+          "line": 22
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-assistant-erasure-sql.ts",
+          "line": 100
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-source-guards-sql.ts",
+          "line": 187
+        }
+      ]
+    },
+    {
+      "old_table": "reply_exploration",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "discussion_entry",
+        "reply_request"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-explored.ts",
+          "line": 32
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-store.ts",
+          "line": 204
+        },
+        {
+          "file": "backend-ts/src/reply/exploration/exploration-skill-use.ts",
+          "line": 11
+        },
+        {
+          "file": "backend-ts/src/reply/exploration/exploration-store.ts",
+          "line": 43
+        }
+      ]
+    },
+    {
+      "old_table": "reply_expression_preference_use",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "reply_context_item"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-erasure.ts",
+          "line": 25
+        },
+        {
+          "file": "backend-ts/src/preferences/preference-service.ts",
+          "line": 168
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-generation-guards.ts",
+          "line": 68
+        },
+        {
+          "file": "backend-ts/src/skills/skill-source-dependencies.ts",
+          "line": 46
+        }
+      ]
+    },
+    {
+      "old_table": "reply_invalidated_key",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "request_tombstone"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/host/pure-ts-reply-evidence.ts",
+          "line": 35
+        },
+        {
+          "file": "backend-ts/src/preferences/preference-erasure.ts",
+          "line": 36
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 244
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-format.ts",
+          "line": 42
+        }
+      ]
+    },
+    {
+      "old_table": "reply_original_source_use",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "reply_context",
+        "reply_context_item",
+        "event_source"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-erasure.ts",
+          "line": 23
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-assistant-erasure.ts",
+          "line": 141
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-assistant-guards.ts",
+          "line": 202
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-generation-guards.ts",
+          "line": 98
+        }
+      ]
+    },
+    {
+      "old_table": "reply_request",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "reply_request"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/host/pure-ts-reply-evidence.ts",
+          "line": 33
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/erasure.ts",
+          "line": 70
+        },
+        {
+          "file": "backend-ts/src/preferences/preference-erasure.ts",
+          "line": 19
+        },
+        {
+          "file": "backend-ts/src/preferences/preference-service.ts",
+          "line": 167
+        }
+      ]
+    },
+    {
+      "old_table": "reply_skill",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "skill_package",
+        "owner"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/reply/exploration/reply-exploration-guards.ts",
+          "line": 67
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-assistant-erasure-sql.ts",
+          "line": 19
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-skill-guards.ts",
+          "line": 20
+        },
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime-projection.ts",
+          "line": 62
+        }
+      ]
+    },
+    {
+      "old_table": "reply_skill_file_cleanup",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "deletion_target"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-files.ts",
+          "line": 64
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 1043
+        },
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 11
+        },
+        {
+          "file": "backend-ts/src/skills/skill-library.ts",
+          "line": 43
+        }
+      ]
+    },
+    {
+      "old_table": "reply_skill_method",
+      "status": "本次范围外",
+      "targets": [],
+      "note": "按用户最新 Skill 范围不建学习／审核／方法策略表；包修订锚点另保留，旧消费者需后续退役适配，未执行下线。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-execution-view.ts",
+          "line": 19
+        },
+        {
+          "file": "backend-ts/src/skills/skill-history-policy-store.ts",
+          "line": 49
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 39
+        },
+        {
+          "file": "backend-ts/src/platform/database/schema-skill-upgrade.ts",
+          "line": 72
+        }
+      ]
+    },
+    {
+      "old_table": "reply_skill_publication",
+      "status": "本次范围外",
+      "targets": [],
+      "note": "按用户最新 Skill 范围不建学习／审核／方法策略表；包修订锚点另保留，旧消费者需后续退役适配，未执行下线。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 31
+        },
+        {
+          "file": "backend-ts/src/skills/skill-history-policy-store.ts",
+          "line": 40
+        },
+        {
+          "file": "backend-ts/src/skills/skill-port.ts",
+          "line": 19
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 221
+        }
+      ]
+    },
+    {
+      "old_table": "reply_skill_version",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "skill_package_revision"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-files.ts",
+          "line": 67
+        },
+        {
+          "file": "backend-ts/src/reply/exploration/exploration-service.ts",
+          "line": 36
+        },
+        {
+          "file": "backend-ts/src/reply/exploration/reply-exploration-guards.ts",
+          "line": 67
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-assistant-erasure-sql.ts",
+          "line": 19
+        }
+      ]
+    },
+    {
+      "old_table": "reply_skill_working_copy",
+      "status": "本次范围外",
+      "targets": [],
+      "note": "按用户最新 Skill 范围不建学习／审核／方法策略表；包修订锚点另保留，旧消费者需后续退役适配，未执行下线。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-files.ts",
+          "line": 64
+        },
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 10
+        },
+        {
+          "file": "backend-ts/src/skills/skill-history-policy-store.ts",
+          "line": 117
+        },
+        {
+          "file": "backend-ts/src/skills/skill-library.ts",
+          "line": 42
+        }
+      ]
+    },
+    {
+      "old_table": "scenario_document_mapping",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "publication_member"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/scenarios/service.ts",
+          "line": 669
+        }
+      ]
+    },
+    {
+      "old_table": "scenario_document_version",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "memory_document",
+        "memory_document_version",
+        "document_block",
+        "document_statement",
+        "document_basis"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/memory/profiles/service.ts",
+          "line": 253
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/facts.ts",
+          "line": 42
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/store.ts",
+          "line": 97
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/erasure.ts",
+          "line": 36
+        }
+      ]
+    },
+    {
+      "old_table": "skill_draft",
+      "status": "本次范围外",
+      "targets": [],
+      "note": "按用户最新 Skill 范围不建学习／审核／方法策略表；包修订锚点另保留，旧消费者需后续退役适配，未执行下线。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 36
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-materials.ts",
+          "line": 173
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-store.ts",
+          "line": 83
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 123
+        }
+      ]
+    },
+    {
+      "old_table": "skill_history_operation",
+      "status": "本次范围外",
+      "targets": [],
+      "note": "按用户最新 Skill 范围不建学习／审核／方法策略表；包修订锚点另保留，旧消费者需后续退役适配，未执行下线。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-history-policy-store.ts",
+          "line": 95
+        }
+      ]
+    },
+    {
+      "old_table": "skill_learning_batch",
+      "status": "本次范围外",
+      "targets": [],
+      "note": "按用户最新 Skill 范围不建学习／审核／方法策略表；包修订锚点另保留，旧消费者需后续退役适配，未执行下线。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 50
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-store.ts",
+          "line": 91
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 708
+        }
+      ]
+    },
+    {
+      "old_table": "skill_learning_operation",
+      "status": "本次范围外",
+      "targets": [],
+      "note": "按用户最新 Skill 范围不建学习／审核／方法策略表；包修订锚点另保留，旧消费者需后续退役适配，未执行下线。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-learning-store.ts",
+          "line": 137
+        }
+      ]
+    },
+    {
+      "old_table": "skill_learning_receipt",
+      "status": "本次范围外",
+      "targets": [],
+      "note": "按用户最新 Skill 范围不建学习／审核／方法策略表；包修订锚点另保留，旧消费者需后续退役适配，未执行下线。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 45
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-materials.ts",
+          "line": 69
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-store.ts",
+          "line": 93
+        }
+      ]
+    },
+    {
+      "old_table": "skill_learning_scope",
+      "status": "本次范围外",
+      "targets": [],
+      "note": "按用户最新 Skill 范围不建学习／审核／方法策略表；包修订锚点另保留，旧消费者需后续退役适配，未执行下线。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 83
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 39
+        },
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 69
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-materials.ts",
+          "line": 271
+        }
+      ]
+    },
+    {
+      "old_table": "skill_library",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "skill_package",
+        "owner"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-format.ts",
+          "line": 26
+        },
+        {
+          "file": "backend-ts/src/reply/exploration/exploration-store.ts",
+          "line": 37
+        },
+        {
+          "file": "backend-ts/src/reply/exploration/reply-exploration-guards.ts",
+          "line": 66
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-preparation.ts",
+          "line": 66
+        }
+      ]
+    },
+    {
+      "old_table": "skill_method_identity",
+      "status": "本次范围外",
+      "targets": [],
+      "note": "按用户最新 Skill 范围不建学习／审核／方法策略表；包修订锚点另保留，旧消费者需后续退役适配，未执行下线。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-learning-store.ts",
+          "line": 203
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 253
+        }
+      ]
+    },
+    {
+      "old_table": "skill_policy_operation",
+      "status": "本次范围外",
+      "targets": [],
+      "note": "按用户最新 Skill 范围不建学习／审核／方法策略表；包修订锚点另保留，旧消费者需后续退役适配，未执行下线。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-history-policy-store.ts",
+          "line": 169
+        }
+      ]
+    },
+    {
+      "old_table": "skill_policy_state",
+      "status": "本次范围外",
+      "targets": [],
+      "note": "按用户最新 Skill 范围不建学习／审核／方法策略表；包修订锚点另保留，旧消费者需后续退役适配，未执行下线。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-history-policy-store.ts",
+          "line": 131
+        }
+      ]
+    },
+    {
+      "old_table": "skill_review_call",
+      "status": "本次范围外",
+      "targets": [],
+      "note": "按用户最新 Skill 范围不建学习／审核／方法策略表；包修订锚点另保留，旧消费者需后续退役适配，未执行下线。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 355
+        }
+      ]
+    },
+    {
+      "old_table": "skill_review_comparison",
+      "status": "本次范围外",
+      "targets": [],
+      "note": "按用户最新 Skill 范围不建学习／审核／方法策略表；包修订锚点另保留，旧消费者需后续退役适配，未执行下线。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 25
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-store.ts",
+          "line": 86
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 129
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 710
+        }
+      ]
+    },
+    {
+      "old_table": "skill_review_operation",
+      "status": "本次范围外",
+      "targets": [],
+      "note": "按用户最新 Skill 范围不建学习／审核／方法策略表；包修订锚点另保留，旧消费者需后续退役适配，未执行下线。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 26
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-store.ts",
+          "line": 89
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 134
+        }
+      ]
+    },
+    {
+      "old_table": "skill_scope_policy",
+      "status": "本次范围外",
+      "targets": [],
+      "note": "按用户最新 Skill 范围不建学习／审核／方法策略表；包修订锚点另保留，旧消费者需后续退役适配，未执行下线。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-execution-view.ts",
+          "line": 29
+        },
+        {
+          "file": "backend-ts/src/skills/skill-history-policy-store.ts",
+          "line": 132
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 66
+        }
+      ]
+    },
+    {
+      "old_table": "source_document",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "sync_capture"
+      ],
+      "note": "实际来源落到有界捕获；旧文件导入入口需逐项核对适配或退役。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 16
+        },
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 44
+        },
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 91
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 217
+        }
+      ]
+    },
+    {
+      "old_table": "source_processing_batch",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "sync_capture"
+      ],
+      "note": "实际来源落到有界捕获；旧文件导入入口需逐项核对适配或退役。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 177
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/sources.ts",
+          "line": 36
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/reply-discussion-context.ts",
+          "line": 142
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-source-guards-sql.ts",
+          "line": 31
+        }
+      ]
+    },
+    {
+      "old_table": "source_processing_capture_tombstone",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "request_tombstone"
+      ],
+      "note": "阻止旧捕获重放；单个来源删除不能自动升级为整个渠道消息的永久读取排除。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/sync/sync-incremental-store-write.ts",
+          "line": 36
+        },
+        {
+          "file": "backend-ts/src/diagnostics/source-processing-trace.ts",
+          "line": 421
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 646
+        }
+      ]
+    },
+    {
+      "old_table": "source_processing_record",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "capture_record"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 194
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/sources.ts",
+          "line": 36
+        },
+        {
+          "file": "backend-ts/src/sync/sync-incremental-store-write.ts",
+          "line": 43
+        },
+        {
+          "file": "backend-ts/src/diagnostics/source-processing-trace.ts",
+          "line": 303
+        }
+      ]
+    },
+    {
+      "old_table": "wechat_auto_read_suppression",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "read_exclusion",
+        "history_cutoff"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/sync/sync-auto-read-suppression.ts",
+          "line": 37
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 628
+        }
+      ]
+    },
+    {
+      "old_table": "wechat_binding_history_authorization",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "read_grant",
+        "read_goal"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/reply/generation/reply-scope.ts",
+          "line": 24
+        },
+        {
+          "file": "backend-ts/src/sync/sync-incremental-store.ts",
+          "line": 80
+        },
+        {
+          "file": "backend-ts/src/sync/sync-scope-history.ts",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "old_table": "wechat_history_sync_authorization",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "read_grant",
+        "read_goal"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 74
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-scope.ts",
+          "line": 25
+        },
+        {
+          "file": "backend-ts/src/sync/sync-scope.ts",
+          "line": 67
+        },
+        {
+          "file": "backend-ts/src/sync/wechat-setup.ts",
+          "line": 117
+        }
+      ]
+    },
+    {
+      "old_table": "wechat_message_metadata",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "capture_record",
+        "message"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 106
+        },
+        {
+          "file": "backend-ts/src/host/pure-ts-follow-smoke.ts",
+          "line": 19
+        },
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 136
+        },
+        {
+          "file": "backend-ts/src/sync/sync-incremental-store-write.ts",
+          "line": 17
+        }
+      ]
+    },
+    {
+      "old_table": "wechat_observation_baseline",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "history_cutoff",
+        "read_goal"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/contacts/binding-service.ts",
+          "line": 136
+        },
+        {
+          "file": "backend-ts/src/sync/sync-incremental-store.ts",
+          "line": 189
+        },
+        {
+          "file": "backend-ts/src/sync/sync-scope.ts",
+          "line": 138
+        },
+        {
+          "file": "backend-ts/src/sync/wechat-history-enrollment.ts",
+          "line": 39
+        }
+      ]
+    },
+    {
+      "old_table": "wechat_observation_cursor",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "read_goal"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/host/pure-ts-follow-smoke.ts",
+          "line": 17
+        },
+        {
+          "file": "backend-ts/src/sync/sync-incremental-store.ts",
+          "line": 185
+        }
+      ]
+    },
+    {
+      "old_table": "wechat_sync_exclusion",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "read_exclusion"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 75
+        },
+        {
+          "file": "backend-ts/src/sync/sync-scope-history.ts",
+          "line": 4
+        },
+        {
+          "file": "backend-ts/src/sync/sync-scope.ts",
+          "line": 120
+        },
+        {
+          "file": "backend-ts/src/sync/wechat-history-enrollment.ts",
+          "line": 18
+        }
+      ]
+    },
+    {
+      "old_table": "wechat_sync_scope",
+      "status": "事实映射，接线未验证",
+      "targets": [
+        "channel_account",
+        "owner"
+      ],
+      "note": "新模型保存所需事实，不保证旧字段、SQL 或接口一一兼容。",
+      "evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 73
+        },
+        {
+          "file": "backend-ts/src/sync/sync-scope.ts",
+          "line": 44
+        },
+        {
+          "file": "backend-ts/src/sync/wechat-setup.ts",
+          "line": 116
+        }
+      ]
+    }
+  ],
+  "media_integration": "Q11_confirmed_no_data_migration"
+}

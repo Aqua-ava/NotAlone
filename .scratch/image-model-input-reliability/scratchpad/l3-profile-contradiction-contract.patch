@@ -1,0 +1,39 @@
+--- a/backend-ts/src/memory/profiles/workspace.ts
++++ b/backend-ts/src/memory/profiles/workspace.ts
+@@ -198,6 +198,10 @@
+   }
+   assertNoActionGuidance(text);
+   assertNoActionGuidance(basis);
++  const references = checkedReferences(value.references, memories);
++  if (kind === 'contradiction' && (references.length !== 2 || new Set(references.map(reference => reference.memory_id)).size !== 2)) {
++    invalid('l3_profile_reference_invalid', '矛盾条目必须恰好引用两个不同memory_id的底层记忆版本，分别对应冲突的两端');
++  }
+   return {
+     text,
+     kind,
+@@ -205,7 +209,7 @@
+     basis,
+     temporal_status: temporal,
+     uncertainty,
+-    references: checkedReferences(value.references, memories),
++    references,
+   };
+ }
+ 
+@@ -689,6 +693,7 @@
+     `每条ENTRY元数据只填kind、section、basis、temporal_status、uncertainty、references。kind只能为${KIND_VALUES.join('/')}；section只能为${SECTION_VALUES.join('/')}；temporal_status只能为${TEMPORAL_VALUES.join('/')}。`,
+     'ENTRY正文不是元数据字段，不要额外加入text、confidence、source_ids等键；references只填本次底层版本的memory_id和正整数revision。',
+     'inference与contradiction必须temporal_status=uncertain并写明不确定性；不得把计划、假设、转述或一次行为升级为稳定特征。',
++    'contradiction的references必须恰好包含两条且memory_id不同，分别对应冲突两端；不得引用同一记忆的两个版本，也不得增添第三条。',
+     '保留历史、现状、未知、条件、否定与演变；来源时间不等于事件发生时间，保存时间不等于事实成立时间。',
+     '增量维护时保留所有未受变化场景影响的旧条目，只更新或删除依据确实变化的条目。',
+     `profile.md必须严格匹配以下形状；标题后直接开始ENTRY，不得添加##标题、前言或总结。最多${maxEntries}条，正文、依据与不确定性合计最多${maxCharacters}字。`,
+@@ -734,7 +739,7 @@
+         kind_values:KIND_VALUES,
+         section_values:SECTION_VALUES,
+         temporal_status_values:TEMPORAL_VALUES,
+-        references:'每个引用只填本次输入中的memory_id和正整数revision',
++        references:'每个引用只填本次输入中的memory_id和正整数revision；contradiction必须恰好两条且memory_id不同',
+       },
+       completion:{tool:'ProfileProposalComplete', arguments:'空对象', required_after_valid_write:true},
+     })}],

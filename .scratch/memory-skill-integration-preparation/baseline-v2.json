@@ -1,0 +1,85 @@
+{
+  "version": 2,
+  "recorded_at_taipei": "2026-10-15 23:03:28",
+  "refs": {
+    "preparation_start": "fd0c84820f69aa0b672cb4835813c8846a3a2037",
+    "previous_main": "0eb10b4c7f46e70a585c0269c8e4c42b914d54ec",
+    "main": "08c4d48e719353492f37620f4fb2aabd8710efc6",
+    "signed": "54e482a6ccfa8ca1ccc7e9dc34b0bfaf27fb1616",
+    "review": "c30a4051345cccc698f286489d56489d4b14b49b",
+    "merge_base": "b8938031109edf3305821a0d3419ee8c3d28d5ff",
+    "interim_main": "1ca63b67cd19adffff67d43bda966d7c3050a7ae",
+    "interim_main_2": "3d8fc0f11e617e0777073dc165b0934303530f84",
+    "amended_equivalent_main": "8407b98ae591bb872ff2a800242869b20e6da717"
+  },
+  "counts": {
+    "main_only_commits": 77,
+    "signed_only_commits": 137,
+    "main_changed_paths": 250,
+    "signed_changed_paths": 439,
+    "shared_paths": 40,
+    "shared_source_paths": 29,
+    "union_paths": 649,
+    "previous_main_delta_paths": 16,
+    "previous_main_delta_commits": 4,
+    "main_migrations": 58,
+    "signed_migrations": 67
+  },
+  "rules": [
+    {
+      "path": "AGENTS.md",
+      "local_sha256": "5bfe929e1d894904a101acf21986b6182e8a940f31c03049d09118372da79541",
+      "original_sha256": "5bfe929e1d894904a101acf21986b6182e8a940f31c03049d09118372da79541",
+      "identical": true
+    },
+    {
+      "path": "docs/agents/workflow.md",
+      "local_sha256": "457c5639e2da592bd5f02fe66d52d13134fa31a0f15edae28b126dc1cbe2526c",
+      "original_sha256": "457c5639e2da592bd5f02fe66d52d13134fa31a0f15edae28b126dc1cbe2526c",
+      "identical": true
+    },
+    {
+      "path": "docs/agents/engineering.md",
+      "local_sha256": "35d30ed047a12854d8ce923ad09b591755ccdcce1002024d4342c285fe208403",
+      "original_sha256": "35d30ed047a12854d8ce923ad09b591755ccdcce1002024d4342c285fe208403",
+      "identical": true
+    },
+    {
+      "path": "docs/agents/issue-tracker.md",
+      "local_sha256": "751a109c114254c42c5bdc0bd3df115bb70e005e620cbf3a273db70f7221ed57",
+      "original_sha256": "751a109c114254c42c5bdc0bd3df115bb70e005e620cbf3a273db70f7221ed57",
+      "identical": true
+    },
+    {
+      "path": "docs/agents/triage-labels.md",
+      "local_sha256": "e54527f0d10f853f46bf441afaa778d4320da814ce80dd85912b11554bd3b4ef",
+      "original_sha256": "e54527f0d10f853f46bf441afaa778d4320da814ce80dd85912b11554bd3b4ef",
+      "identical": true
+    },
+    {
+      "path": "docs/agents/domain.md",
+      "local_sha256": "23e8c0378c4d24829f1e5d9d4bd64e78a4399ccee7fd7f4d9c259aba2fb22570",
+      "original_sha256": "23e8c0378c4d24829f1e5d9d4bd64e78a4399ccee7fd7f4d9c259aba2fb22570",
+      "identical": true
+    }
+  ],
+  "decisions": {
+    "canonical": "keep_main_001_058_append_signed_059_068",
+    "old_prepared_receipt": "verify_terminal_or_controlled_stop_then_explicit_reprepare_keep_user_edits",
+    "upgrade_algorithm": "versioned_grounded_default_with_source_bound_event_adapter",
+    "signed_database": "preserve_no_migration_no_cleanup",
+    "ticket_publication": "approved_formal_split_only_no_claim_or_implementation",
+    "prepared_format": {
+      "version": 2,
+      "schema_revision": "explicit_increment_on_structure_change"
+    }
+  },
+  "boundaries": {
+    "product_tests_rerun": false,
+    "database_access": false,
+    "external_model_calls": false,
+    "desktop_use": false,
+    "merge_or_cherry_pick": false,
+    "remote_operations": false
+  }
+}

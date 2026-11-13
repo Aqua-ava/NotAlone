@@ -1,0 +1,108 @@
+{
+  "scope": "原01基线9范围项，无无限兜底",
+  "items": [
+    {
+      "id": "usage-summary",
+      "contract": [
+        "GET /api/ledger/summary"
+      ],
+      "status": "native_candidate",
+      "source": "backend-ts/src/host-plugin.ts:164；usage-summary.ts:20",
+      "evidence": "公开HTTP合成多owner/旧新去重/取消未知/费用分组/503安全刷新，1项主用例；相关9项",
+      "root_app_acceptance": "根实际App+公开HTTP/PG；4确认/2授权未确认/1未发送，未知/本人/取消/分币种/故障刷新通过"
+    },
+    {
+      "id": "physical-accounting",
+      "contract": [
+        "内部 ModelLedgerReceipt / model_call_receipt；非公开管理端点"
+      ],
+      "status": "read_only_dependency",
+      "source": "backend-ts/src/model-ledger.ts；usage-summary.ts",
+      "evidence": "消费05原receipt，不改写历史/仲裁/dispatch。05既有App观测HTTP3，其中1确认成功、2响应头前取消仍authorized_unconfirmed；另2后台unknown无已观测HTTP，不能合并断言实际出站。",
+      "root_app_acceptance": "只读消费05权威台账；本票合成schema记录明确分列，不冒充新真实模型"
+    },
+    {
+      "id": "credential-status",
+      "contract": [
+        "GET /api/settings/credentials",
+        "GET /api/setup/status（仅模型/凭据字段）"
+      ],
+      "status": "native_candidate_v1",
+      "source": "backend-ts/src/host-storage.ts:101",
+      "evidence": "新增pending/environment_override布尔，status不暴露值；13存储、1官方DSH HTTP",
+      "root_app_acceptance": "根实际App未配置→已配置，待加载和环境覆盖只给布尔；普通日志/诊断无占位值"
+    },
+    {
+      "id": "credential-write",
+      "contract": [
+        "POST /api/setup/credentials {provider:deepseek,api_key}",
+        "POST /api/setup/official-deepseek {api_key,confirm_official_defaults:true}"
+      ],
+      "status": "native_candidate_v1",
+      "source": "backend-ts/src/host-storage.ts；desktop/src/main/setup/controller.ts",
+      "evidence": "保存返回restart_required；环境覆盖/禁用dotenv拒绝；重开冲突仍pending；桌面12项",
+      "root_app_acceptance": "根实际App owned重启换PID/待加载清除/台账不新增；external同PID及环境冲突由13存储+12桌面+1官方HTTP覆盖，未称额外native覆盖"
+    },
+    {
+      "id": "startup-paths-diagnostics",
+      "contract": [
+        "startup:get-state",
+        "startup:get-paths",
+        "startup:save-paths",
+        "startup:retry",
+        "startup:prepare-configuration"
+      ],
+      "status": "retained_paths_ts_read_probe_candidate",
+      "source": "desktop/src/main/startup/bridge.ts；diagnostics.ts:182",
+      "evidence": "原startup具名路径/准备/重试保留；普通DSH probe只读HostStorage TS，结构写入仍03既有Python迁移责任，不能称整个Python启动链已退役。",
+      "root_app_acceptance": "根实际npm run dev普通TS probe通过，Electron Node24.21.0；原路径与准备生命周期保留，Python结构写入仍03/26"
+    },
+    {
+      "id": "diagnostic-export",
+      "contract": [
+        "产品需求已定义预览/脱敏导出：原首用06:20；尚无具体预览/导出IPC或HTTP实现合同"
+      ],
+      "status": "native_candidate",
+      "source": "desktop/src/main/startup/diagnostic-export.ts；startup/bridge.ts:18",
+      "evidence": "白名单版本1预览、manager固定IPC、显式本机保存0600/拒绝symlink/取消错误重试；无上传/模型重放",
+      "root_app_acceptance": "根原生预览→取消无文件→保存0600/441字节与预览相同，错误/符号链接/重试由模块覆盖"
+    },
+    {
+      "id": "sync-status",
+      "contract": [
+        "GET /api/sync/status"
+      ],
+      "status": "retained_management_consumer",
+      "source": "desktop/src/main/sync/status.ts；imports/controller.ts",
+      "evidence": "只消费既有GET /api/sync/status；状态恢复/迟到/未知指标相关回归通过；业务执行仍19/20/21，不冒称TS已完全迁移。",
+      "root_app_acceptance": "根相关状态消费者19项通过；本票未开启微信或假称新同步执行证据，19/20/21保持原责任"
+    },
+    {
+      "id": "task-status",
+      "contract": [
+        "GET /api/tasks/status?contact_id&task_id"
+      ],
+      "status": "retained_management_consumer",
+      "source": "desktop/src/main/imports/controller.ts:280",
+      "evidence": "只消费既有owner+contact任务状态，后台轮询/失败/迟到相关回归通过；任务执行/恢复22，不在23重写。",
+      "root_app_acceptance": "根相关状态消费者19项通过；执行/重试/持久任务仍22，不在23重写"
+    },
+    {
+      "id": "runtime-status",
+      "contract": [
+        "GET /api/runtime/status"
+      ],
+      "status": "retained_native_dependency",
+      "source": "backend-ts/src/host-plugin.ts:158；desktop/src/main/startup/diagnostic-export.ts",
+      "evidence": "原runtime GET保留，新增ledger类型归属；导出只白名单backend/startup固定状态，不含pid/legacyPid/path。",
+      "root_app_acceptance": "根实际认证GET running/dsh/TS reply ready；诊断仅固定白名单，不含pid/path"
+    }
+  ],
+  "not_covered": [
+    "25完整质量/性能/费用矩阵",
+    "本票未新增真实模型或微信证据；实际App合成证据已补",
+    "03结构写入与22任务执行的Python退役留原责任票及26"
+  ],
+  "original_05_acceptance_sha256": "6a1ddaa72b16fa48b986d4070004ec1f4b4eda9e9045fe44e71d6f40c54c4200",
+  "root_scope_completed": true
+}

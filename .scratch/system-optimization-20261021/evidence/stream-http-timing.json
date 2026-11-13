@@ -1,0 +1,89 @@
+{
+  "samples": {
+    "baseline": [
+      {
+        "cli_5000_produce_consume_seconds": 0.02061279199915589,
+        "sse_5000_two_healthy_subscribers_seconds": 0.02065825000318
+      },
+      {
+        "cli_5000_produce_consume_seconds": 0.02083462500013411,
+        "sse_5000_two_healthy_subscribers_seconds": 0.02057458399940515
+      },
+      {
+        "cli_5000_produce_consume_seconds": 0.02043875000163098,
+        "sse_5000_two_healthy_subscribers_seconds": 0.020652125000196975
+      },
+      {
+        "cli_5000_produce_consume_seconds": 0.020862749999650987,
+        "sse_5000_two_healthy_subscribers_seconds": 0.021205958000791725
+      },
+      {
+        "cli_5000_produce_consume_seconds": 0.022318999999697553,
+        "sse_5000_two_healthy_subscribers_seconds": 0.021604000001389068
+      },
+      {
+        "cli_5000_produce_consume_seconds": 0.020889291001367383,
+        "sse_5000_two_healthy_subscribers_seconds": 0.020648499998060288
+      },
+      {
+        "cli_5000_produce_consume_seconds": 0.02111762500135228,
+        "sse_5000_two_healthy_subscribers_seconds": 0.020574666999891633
+      }
+    ],
+    "candidate": [
+      {
+        "cli_5000_produce_consume_seconds": 0.021437666000565514,
+        "sse_5000_two_healthy_subscribers_seconds": 0.023409082998114172
+      },
+      {
+        "cli_5000_produce_consume_seconds": 0.021343041000363883,
+        "sse_5000_two_healthy_subscribers_seconds": 0.02711812499910593
+      },
+      {
+        "cli_5000_produce_consume_seconds": 0.02159275000303751,
+        "sse_5000_two_healthy_subscribers_seconds": 0.023248499997862382
+      },
+      {
+        "cli_5000_produce_consume_seconds": 0.021444292000524,
+        "sse_5000_two_healthy_subscribers_seconds": 0.023366375000478
+      },
+      {
+        "cli_5000_produce_consume_seconds": 0.02194500000041444,
+        "sse_5000_two_healthy_subscribers_seconds": 0.02378891600164934
+      },
+      {
+        "cli_5000_produce_consume_seconds": 0.02193125000121654,
+        "sse_5000_two_healthy_subscribers_seconds": 0.024149124998075422
+      },
+      {
+        "cli_5000_produce_consume_seconds": 0.021693958002288127,
+        "sse_5000_two_healthy_subscribers_seconds": 0.023273999999219086
+      }
+    ]
+  },
+  "summary": {
+    "baseline": {
+      "cli_5000_produce_consume_seconds": {
+        "p50": 0.020862749999650987,
+        "p95_nearest_rank": 0.022318999999697553
+      },
+      "sse_5000_two_healthy_subscribers_seconds": {
+        "p50": 0.020652125000196975,
+        "p95_nearest_rank": 0.021604000001389068
+      }
+    },
+    "candidate": {
+      "cli_5000_produce_consume_seconds": {
+        "p50": 0.02159275000303751,
+        "p95_nearest_rank": 0.02194500000041444
+      },
+      "sse_5000_two_healthy_subscribers_seconds": {
+        "p50": 0.023409082998114172,
+        "p95_nearest_rank": 0.02711812499910593
+      }
+    }
+  },
+  "runs_per_version": 7,
+  "no_tracemalloc": true,
+  "note": "7 点 p95 为最大样本；仅本机合成吞吐，非用户消息延迟"
+}

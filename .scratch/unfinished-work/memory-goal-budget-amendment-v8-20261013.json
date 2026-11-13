@@ -1,0 +1,227 @@
+{
+  "HTTP_status_before_stage": {
+    "confirmed_200": 55,
+    "prior_read_timeout_remote_unknown": 4
+  },
+  "activation": {
+    "HTTP_after_amendment_preparation": 0,
+    "new_private_immutable_bundle_ready": false,
+    "registered": false,
+    "root_activation_authorized": false
+  },
+  "additional_fresh_allocation": 8,
+  "allocation": {
+    "closed_actual_requests": 59,
+    "closed_unused_requests": 171,
+    "full140_unactivated": 280,
+    "new_diagnostic4_unactivated": 8,
+    "retired_unregistered": 12
+  },
+  "allocation_authority_zh": "用户已授权在本目标内调用现有ECNU；530为Root明确分配的有限工程总上限，不表述为用户给出的数字额度。",
+  "case_mapping": [
+    {
+      "case_id": "A05",
+      "case_name": "指代：姐借车",
+      "historical_formal_comparison_available": true,
+      "input_sha256": "1459fbddcc6c3f15a3e180ebd7ec75f70bc793cbd3dd042fc1389c7051133a4c",
+      "local_position": 0,
+      "original_gold_position": 4,
+      "prior_full_unknown": false,
+      "required_claims": 1
+    },
+    {
+      "case_id": "A06",
+      "case_name": "指代：机场等行李",
+      "historical_formal_comparison_available": true,
+      "input_sha256": "de162f8e5cced01487046354b265d097da65fd9979d45c538c3d2e0ce9eecebb",
+      "local_position": 1,
+      "original_gold_position": 5,
+      "prior_full_unknown": false,
+      "required_claims": 2
+    },
+    {
+      "case_id": "A07",
+      "case_name": "指代：他们来家",
+      "historical_formal_comparison_available": true,
+      "input_sha256": "d484b373403cd04029cae70390c3b5d46d05f650db45311eb22b717418141929",
+      "local_position": 2,
+      "original_gold_position": 6,
+      "prior_full_unknown": false,
+      "required_claims": 1
+    },
+    {
+      "case_id": "A08",
+      "case_name": "指代：那本书",
+      "historical_formal_comparison_available": false,
+      "input_sha256": "3afedf18d2615fed891f78860d0547bbfb672080d9867a014138c713400ebd5f",
+      "local_position": 3,
+      "original_gold_position": 7,
+      "prior_full_unknown": true,
+      "required_claims": 1
+    }
+  ],
+  "case_positions": [
+    4,
+    5,
+    6,
+    7
+  ],
+  "case_set": "reference21",
+  "causal_AB_claimed": false,
+  "closed_stages": [
+    {
+      "closed": true,
+      "completion_file_sha256": "047d3476059e308751de6c220560e60b8a7fd2b9b02b6cc27ee6fb792b360807",
+      "request_limit": 6,
+      "reserved_requests": 6,
+      "run_id": "ac04d687-248f-4050-9671-c8ccd20d9278",
+      "stage": "technical",
+      "unused_permanently_closed": 0
+    },
+    {
+      "closed": true,
+      "completion_file_sha256": "db4af7d1e08ac5b523226674902eb3b5c9e699b9eb13a9e8b2969fe73f102fb8",
+      "request_limit": 42,
+      "reserved_requests": 4,
+      "run_id": "058fa1c2-d34c-41c5-9cbb-780e74bdd5eb",
+      "stage": "baseline",
+      "unused_permanently_closed": 38
+    },
+    {
+      "closed": true,
+      "completion_file_sha256": "0f8e6ad6bda9806e7780ad5272a6b5d2f93474778e62a6c0294cb85cfac5fc16",
+      "request_limit": 3,
+      "reserved_requests": 1,
+      "run_id": "ca296275-14b8-4be6-baaa-cee6edc58cb5",
+      "stage": "v-diagnostic",
+      "unused_permanently_closed": 2
+    },
+    {
+      "closed": true,
+      "completion_file_sha256": "2493614e76d9b90e57a89343fe44d15025887ac485b06569b44a29c287fb523b",
+      "request_limit": 42,
+      "reserved_requests": 2,
+      "run_id": "ae0add54-7f6e-4033-b1e6-37e3a400748f",
+      "stage": "baseline-after-timeout",
+      "unused_permanently_closed": 40
+    },
+    {
+      "closed": true,
+      "completion_file_sha256": "4fb267e7f4963641d82cd389d9891cb0e3bf99e42c880ec879ad279876cd6248",
+      "request_limit": 2,
+      "reserved_requests": 1,
+      "run_id": "5363d8e3-3353-46d7-ae4b-4d1af63bf20e",
+      "stage": "v-payload300-diagnostic",
+      "unused_permanently_closed": 1
+    },
+    {
+      "closed": true,
+      "completion_file_sha256": "e9f914a26d0ac90f270672b20e76dc7b5137d7adb8dfbec2f65978b084427dc9",
+      "request_limit": 42,
+      "reserved_requests": 10,
+      "run_id": "c02248b0-ad08-4d09-9fb7-edf21539081a",
+      "stage": "baseline300",
+      "unused_permanently_closed": 32
+    },
+    {
+      "closed": true,
+      "completion_file_sha256": "bac7d380bdb6934319442e008429b2b0b635ef2d878aad066427aa8be776581b",
+      "request_limit": 42,
+      "reserved_requests": 10,
+      "run_id": "02e6662f-ce11-4d28-be10-b66b1ef30e13",
+      "stage": "candidate21",
+      "unused_permanently_closed": 32
+    },
+    {
+      "closed": true,
+      "completion_file_sha256": "1708431f13785ee913f32427bae2635afec0159a0cf83de8514c8420794a0a86",
+      "request_limit": 8,
+      "reserved_requests": 8,
+      "run_id": "86b6a718-b1e4-4203-8f74-27a38f297987",
+      "stage": "diagnostic4",
+      "unused_permanently_closed": 0
+    },
+    {
+      "closed": true,
+      "completion_file_sha256": "458345fff02cfa521de1aa899aa5236a048795d2b57887cecb4a32a6f9c30127",
+      "request_limit": 1,
+      "reserved_requests": 1,
+      "run_id": "472f5c0d-7a7e-4620-9586-1698f76b7d97",
+      "stage": "v-semantic-control",
+      "unused_permanently_closed": 0
+    },
+    {
+      "closed": true,
+      "completion_file_sha256": "9adaec4e488734ade6748ed19b909083fab4b3f477ce7c7c50077d54e6abce56",
+      "request_limit": 42,
+      "reserved_requests": 16,
+      "run_id": "8d0460a1-56c6-4226-842b-2c383929c539",
+      "stage": "complete21-observation",
+      "unused_permanently_closed": 26
+    }
+  ],
+  "deadline_utc": "2026-10-13T04:30:00+00:00",
+  "default_release_table_changed": false,
+  "following_stages_automatic": false,
+  "fourth_baseline_permitted": false,
+  "from_utc": "2026-10-13T02:30:00+00:00",
+  "full140_run_id_unactivated": "88a79693-5c3c-46f3-9cd9-53f18465c428",
+  "full280_reallocation_permitted": false,
+  "general_error_continue_fixed_four": true,
+  "goal_limit": 530,
+  "historical_comparison_positions": [
+    4,
+    5,
+    6
+  ],
+  "http_start_deadline_utc": "2026-10-13T03:59:15+00:00",
+  "kind": "finite_unactivated_budget_amendment",
+  "limits": {
+    "absolute_window_seconds": 7200,
+    "http_start_margin_seconds": 1845,
+    "max_retries": 0,
+    "phase_wait_limit_seconds": 600,
+    "request_timeout_seconds": 300
+  },
+  "old_Gold_or_seals_changed": false,
+  "old_closed_unused_reuse_permitted": false,
+  "original_optional_claims": 1,
+  "original_reference_windows": 21,
+  "original_required_claims": 28,
+  "planned_windows": 4,
+  "previous_amendment_canonical_sha256": "a169ca075abf987765da6270e184fd7bd590a617942894cf50f9004225a709a3",
+  "previous_amendment_file_sha256": "0112233fd64e42eb2025c5b978dd57a11f240d200d325f116cf9c9bc493ba293",
+  "previous_goal_limit": 522,
+  "purpose": "fixed_A05_A08_branch_priority_diagnostic_not_complete_baseline_or_causal_AB",
+  "quality_certified": false,
+  "reference_canonical_sha256": "5fb8d53b90a1a96c5987ac7b825bb233cc3e9f196f976e4851c40b0243b77b32",
+  "reference_file_sha256": "5ab68ad8fbb48348231b27ae600ca011e47bf7fc2c1aa2f4e5b417bfa392d5a6",
+  "request_limit": 8,
+  "required_claims": 5,
+  "retired12_reuse_permitted": false,
+  "run_id": "e910bd79-c4c1-4f0b-bf4a-56e946c65dcd",
+  "source_freeze": {
+    "dependency_scope_zh": "全部实际依赖源码及受限依赖超集；包含原03新增模块；旧60文件清单不可复用。173路径只为AST过覆盖草案，非173个模块已实际执行。",
+    "inventory_draft_candidate_path_count": 173,
+    "inventory_draft_sha256": "e5ce391dba866837509d32c780738e457523509ee5a13954c594959694732c27",
+    "source_commit": null,
+    "source_hashes": null,
+    "status": "pending_verified_runtime03_and_Root_final_hash"
+  },
+  "stop_conditions": [
+    "unsafe_or_unresolved_semantic_audit",
+    "unknown_technical_result",
+    "source_or_payload_or_config_drift",
+    "HTTP_or_tool_contract_failure",
+    "missing_invalid_or_late_explicit_phase_review",
+    "persistent_budget_record_receipt_or_cleanup_failure",
+    "absolute_deadline"
+  ],
+  "timezone_display": "Asia/Taipei 2026-10-13 10:30–12:30；最后HTTP起发11:59:15",
+  "unpaired_prior_full_unknown_positions": [
+    7
+  ],
+  "unused_this_run_closed_forever": true,
+  "version": 8,
+  "window_rolling_extension_permitted": false
+}

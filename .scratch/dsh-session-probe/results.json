@@ -1,0 +1,133 @@
+{
+  "scope": "synthetic-runtime-only",
+  "langchain": {
+    "versions": {
+      "langchain": "1.3.15",
+      "langgraph": "1.2.11",
+      "langgraph-checkpoint": "4.2.0",
+      "langgraph-checkpoint-sqlite": "3.0.3"
+    },
+    "checks": {
+      "same_session_carries_history": true,
+      "different_contact_separate_thread": true,
+      "new_session_starts_empty": true,
+      "new_process_restores_history": true,
+      "other_session_runs_while_first_waits": true,
+      "cancel_then_replace": true
+    },
+    "results": {
+      "first": {
+        "seen": [
+          "MARK_A_ONLY"
+        ],
+        "turns": 1,
+        "reply": "CURRENT_RESULT"
+      },
+      "continued": {
+        "seen": [
+          "MARK_A_ONLY"
+        ],
+        "turns": 2,
+        "reply": "CURRENT_RESULT"
+      },
+      "other_contact": {
+        "seen": [
+          "MARK_B_ONLY"
+        ],
+        "turns": 1,
+        "reply": "CURRENT_RESULT"
+      },
+      "new_chat": {
+        "seen": [],
+        "turns": 1,
+        "reply": "CURRENT_RESULT"
+      },
+      "restored": {
+        "seen": [
+          "MARK_A_ONLY"
+        ],
+        "turns": 3,
+        "reply": "CURRENT_RESULT"
+      },
+      "parallel_other_contact": {
+        "seen": [
+          "MARK_B_ONLY"
+        ],
+        "turns": 2,
+        "reply": "CURRENT_RESULT"
+      },
+      "cancelled": true,
+      "replacement": {
+        "seen": [
+          "MARK_A_ONLY",
+          "MARK_REPLACEMENT"
+        ],
+        "turns": 5,
+        "reply": "CURRENT_RESULT"
+      },
+      "old_response_committed": false
+    }
+  },
+  "dsh": {
+    "version": "0.2.0-rc.2",
+    "checks": {
+      "first": true,
+      "continued": true,
+      "other": true,
+      "new": true,
+      "restored": false
+    },
+    "error": "RuntimeError({'code': -32603, 'message': 'session \"probe-contact-a-chat-1\" already exists'})",
+    "model_requests": [
+      {
+        "path": "/v1/messages",
+        "humans": [
+          "[{'type': 'text', 'text': 'MARK_A_ONLY 邀约'}]"
+        ],
+        "tools": [],
+        "extra_keys": [
+          "output_config",
+          "system",
+          "thinking"
+        ]
+      },
+      {
+        "path": "/v1/messages",
+        "humans": [
+          "[{'type': 'text', 'text': 'MARK_A_ONLY 邀约'}]",
+          "[{'type': 'text', 'text': '自然一点'}]"
+        ],
+        "tools": [],
+        "extra_keys": [
+          "output_config",
+          "system",
+          "thinking"
+        ]
+      },
+      {
+        "path": "/v1/messages",
+        "humans": [
+          "[{'type': 'text', 'text': 'MARK_B_ONLY 回复'}]"
+        ],
+        "tools": [],
+        "extra_keys": [
+          "output_config",
+          "system",
+          "thinking"
+        ]
+      },
+      {
+        "path": "/v1/messages",
+        "humans": [
+          "[{'type': 'text', 'text': '全新讨论'}]"
+        ],
+        "tools": [],
+        "extra_keys": [
+          "output_config",
+          "system",
+          "thinking"
+        ]
+      }
+    ]
+  }
+}

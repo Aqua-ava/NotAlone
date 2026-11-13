@@ -1,0 +1,57 @@
+{
+  "kind": "product-source-verification-prompt-comparison-v1",
+  "status": "prepared-pending-credential",
+  "scope": {
+    "purpose": "在匿名 C4 窗口上对照产品来源核验提示与加入转述支持单叶后的候选提示。",
+    "arms": [
+      "baseline：当前产品 SOURCE_VERIFICATION_SYSTEM_PROMPT（改动前版本可复现）",
+      "candidate：当前仓库中的产品提示（已含转述支持单叶）"
+    ],
+    "provider": "only existing ECNU endpoint (chat.ecnu.edu.cn/open/api/v1)",
+    "model": "ecnu-max",
+    "official_deepseek_endpoint_or_key": false,
+    "max_public_invokes": 4,
+    "per_window_invokes": 2,
+    "windows": 2,
+    "writes_to_business_data": false,
+    "reads_real_chat_or_holdout": false
+  },
+  "seed": {
+    "path": "~/.notalone/audits/memory-party-semantic-stability-pilot-20261004/inputs-v1/C4-seed-original14-v1.json",
+    "sha256": "068ad6890f34f5e92ad30e103ca2be06955ed3f18e1a8b0ca4a74868d7e7022c",
+    "case_id": "C4",
+    "fixture_origin": "手工匿名合成，已知开发/回归；未调用E，不是实际聊天或留出",
+    "window_split": "known-anonymous-contrast"
+  },
+  "windows": [
+    {
+      "input_sha256": "6f873ef4ac1f6c8952a034c0ca98c5ccd25454b13dd445f07d72577c608dbcc5",
+      "input_path": "~/.notalone/audits/memory-party-semantic-stability-pilot-20261004/trial-stage1-v1/r1-C4-candidate/V-input.json",
+      "usable": true
+    },
+    {
+      "input_sha256": "0b1549bd53b73ef4c033b46357d76f75f5d74eca7d7bd174a467b2e90c56d512",
+      "input_path": "~/.notalone/audits/memory-party-semantic-stability-pilot-20261004/trial-stage2-v1/r3-C4-candidate/V-input.json",
+      "usable": true
+    }
+  ],
+  "checks": [
+    "候选正文、主体与语用字段是否与原话一致（不升级为本人事实）",
+    "verdict 是否为 supported 且 issues 为空",
+    "完整 Fact 是否新增 semantic:* 风险",
+    "转述候选是否保持 pending（report/reported）",
+    "坏 auto、误拒与不必要降级是否为 0"
+  ],
+  "gates": {
+    "supported_all_windows": true,
+    "no_semantic_risk_all_windows": true,
+    "report_reported_stays_pending": true,
+    "bad_auto_zero": true,
+    "unnecessary_downgrade_zero": true
+  },
+  "limitations": [
+    "本材料只是两个匿名窗口，不证明整体提取准确率。",
+    "基线提示需要从 git 取改动前版本，不能与候选提示共用同一常量。",
+    "真实运行需要可用 ECNU key；当前 .env 的 key 为官方形态，不可用于 ECNU 端点。"
+  ]
+}

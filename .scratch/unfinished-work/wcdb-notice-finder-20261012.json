@@ -1,0 +1,126 @@
+{
+  "date": "2026-10-12",
+  "scope": [
+    "带9份来源许可材料的新候选包",
+    "真实Finder启动",
+    "公开菜单正常退出",
+    "隔离资源恢复与清理"
+  ],
+  "status": "passed",
+  "sourceCommit": "565f0471",
+  "productionSourceCommit": "b6fed39f2e555986d438d522693a9112adeb99e5",
+  "productionCodeChanged": false,
+  "testFixtureChanged": false,
+  "finderTestSha256": "a631ac93c27e9b3620cf805e1778323b66cc808f0d9d01ae1a68e93422a3f6ba",
+  "artifact": {
+    "appPath": "/Users/local-user/learn/NotAlone/desktop/artifacts/wcdb-notice-package-20261012.iecln6/packaged/NotAlone-darwin-arm64/NotAlone.app",
+    "archivePath": "/Users/local-user/learn/NotAlone/desktop/artifacts/wcdb-notice-package-20261012.iecln6/NotAlone-macOS-arm64-with-notices.zip",
+    "archiveBytes": 140277674,
+    "archiveSha256": "05307269a90a450265a4416947929d27fc5c97ae5f3ba4bd554433d7da4841d3",
+    "signature": "ad-hoc",
+    "developerIdOrNotarization": false,
+    "asarSha256": "27cc230aee9c979dcd88e0b3eecb2e08bc677e6d072bba44183cb8fca591e1c7",
+    "licenseFilesInsideApp": 9,
+    "helperFiles": 4
+  },
+  "actualWindow": {
+    "from": "2026-10-12T05:34:20.780Z",
+    "until": "2026-10-12T05:44:20.780Z",
+    "maxLaunches": 2,
+    "actualLaunches": 1,
+    "coordinator": "main-agent",
+    "authorization": "用户明确要求补完新候选包Finder启动退出，沿用本轮授权；锁屏后用户确认已解锁。有限时段重设，未重复索要授权。"
+  },
+  "finder": {
+    "command": "NOTALONE_FINDER_PACKAGE_ACCEPTANCE=1 NOTALONE_TEST_APP_EXECUTABLE=<同一新候选包可执行文件> npm run test:app -- --interactive --coordinator main-agent --from 2026-10-12T05:34:20.780Z --until 2026-10-12T05:44:20.780Z --max-launches 2 tests/finder-package-acceptance.spec.ts --output artifacts/wcdb-notice-package-20261012-finder-unlocked/results",
+    "passed": 1,
+    "total": 1,
+    "exitCode": 0,
+    "testReported": "1.6m",
+    "runnerReported": "1.7m",
+    "runnerSeconds": 100.11504999999998,
+    "actualLaunches": 1,
+    "source": "主Agent CUA在已核对的Finder目录双击新候选NotAlone.app",
+    "compiledNotaloneProtocolUiObserved": true,
+    "managerReady": true,
+    "absolutePythonConfigurationObserved": true,
+    "configurationMachineReady": true,
+    "authenticatedRuntimeRunning": true,
+    "helperOpened": true,
+    "helperHidden": true,
+    "publicMenuNormalQuitRequested": true,
+    "stoppingUiObserved": true,
+    "appAndBackendGone": true,
+    "ownedHandshakeAbsent": true
+  },
+  "rootVerification": {
+    "originalUserDataDirectoryIdentityRestored": true,
+    "originalConfigurationContentsRead": false,
+    "ownedDatabaseAbsent": true,
+    "ownedTemporaryDirectoryAbsent": true,
+    "knownRunnerAndWorkerGone": true,
+    "appAndHeadlessLeasesAbsent": true,
+    "strictSignatureAfterRun": true,
+    "helperHashesAndStrictSignaturesMatched": 4,
+    "licenseFilesAfterRunVerified": 9,
+    "asarHashAfterRunMatched": true,
+    "archiveHashAfterRunMatched": true
+  },
+  "lockedAttempt": {
+    "windowFrom": "2026-10-12T04:03:27.007Z",
+    "windowUntil": "2026-10-12T04:13:27.007Z",
+    "runnerExitCode": 2,
+    "actualAppLaunches": 0,
+    "finderDoubleClickPerformed": false,
+    "countedAsPass": false,
+    "reason": "Mac锁屏，CUA无法自动解锁；等待中断，夹具保留未确认资源后由主Agent按精确归属核验清理。",
+    "originalDirectoryIdentityRestored": true,
+    "ownedDatabaseAbsent": true,
+    "ownedTemporaryDirectoryRemoved": true,
+    "matchingLeaseRemovedAfterOwnerVerification": true,
+    "rawFailureHistoryRetained": true
+  },
+  "verificationScope": {
+    "actualFinderOnly": true,
+    "previousLifecycleEvidence": "final-package-finder-20261012.json仅为原包生命周期；本次未重跑生命周期/重开场景",
+    "newSafetyTypecheckOrPackagingSuiteRun": false,
+    "relativeLinks": {
+      "checked": 79,
+      "passed": true
+    },
+    "diffCheck": "passed",
+    "review": {
+      "standardsHard": 0,
+      "standardsImportantJudgement": 0,
+      "specMissing": 0,
+      "specScopeCreep": 0,
+      "specWrong": 0,
+      "readOnly": true,
+      "finalEvidenceReviewed": true
+    }
+  },
+  "dataProcessing": {
+    "syntheticConfigurationAndDatabaseOnly": true,
+    "appLaunches": 1,
+    "wechatRead": false,
+    "ocrRun": false,
+    "cliOrProbeExecuted": false,
+    "externalModelCalls": 0,
+    "privateConfigurationContentsRead": false,
+    "privateClipboardContentsRead": false,
+    "tccOrPermissionsChanged": false,
+    "chatSent": false,
+    "gitPush": false,
+    "deployed": false
+  },
+  "remaining": {
+    "exactBuildSourceVerified": false,
+    "binaryLicenseCoverageVerified": false,
+    "completeMac20Closed": false,
+    "mac20State": "claimed",
+    "mac20Triage": "needs-info",
+    "originalAcceptanceChanged": false,
+    "ocrPaused": true,
+    "newProductFeaturesFrozen": true
+  }
+}

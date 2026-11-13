@@ -1,0 +1,1470 @@
+{
+  "format_version": 1,
+  "status": "agent_reviewed_reference",
+  "annotation_path": ".scratch/memory-extraction-accuracy/reference-review-projection-20261018.md",
+  "annotation_sha256": "86c3bc474e522b80946f60a2d5af698f60b3b61d93a556a3191ee9fc64dcf073",
+  "provenance": {
+    "synthetic_only": true,
+    "quality_certified": false,
+    "blind_annotation": false,
+    "source_file_sha256": {
+      ".scratch/unfinished-work/memory-gold-reference-v2-20261016.json": "6ec7ee70a47b94d0cdf667be6478b8fe7cbe33e91bc3d4ec5e49ee340914f738",
+      ".scratch/memory-extraction-accuracy/reference-agent-contrast-gold-20261018.json": "7d7ff70e5d906255d7b26a1682433bb73867e264e1f3bb1e6846c3f8f9cd0786"
+    },
+    "source_provenance": {
+      "oracle_aware": true,
+      "blind_annotation": false,
+      "annotation_kind": "Agent技术标注及公开合成装配",
+      "human_review": [
+        {
+          "case_id": "A14",
+          "decision": "none",
+          "answer": "不存成关系资料（推荐）",
+          "covered_fields": [
+            "inclusion"
+          ],
+          "not_covered": "未认证其余20窗、全部技术字段、真实资料或自动采纳放行。"
+        }
+      ],
+      "independent_review": {
+        "status": "passed",
+        "standards": {
+          "status": "passed",
+          "reviewer": "grounded_eval_standards",
+          "findings": 0,
+          "scope": "9文件绑定、工程规则与不变性。"
+        },
+        "spec": {
+          "status": "passed",
+          "reviewer": "grounded_eval_spec",
+          "findings": 0,
+          "scope": "独立核实际合成source、contact sender、target 0、D2第87行、A05语义；其它139/R105不动。"
+        },
+        "not_certified": "本次语义复审仅A05及直接通则；full140核装配与不变性，其余139及R105延续旧独审。不是新盲标、现实真伪、模型质量、运行冻结或维度放行。"
+      },
+      "structured_review": {
+        "status": "passed",
+        "reviewer": "grounded_eval_spec",
+        "scope": "本次语义复审仅A05及直接通则；full140核装配与不变性，其余139及R105延续旧独审。不是新盲标、现实真伪、模型质量、运行冻结或维度放行。"
+      },
+      "quality_certified": false,
+      "scope": "仅当前21个已提交公开合成窗口，28必需与A15可选1；旧holdout作回归，不认证真实分布、真实6/12、生产放行或模型成绩。",
+      "previous_review": {
+        "scope": "仅历史版本；不认证source-fidelity-v2",
+        "structured_review": {
+          "status": "passed",
+          "reviewer": "gold_field_review",
+          "reviewed_source_sha256": "9161944e41236328ad15a70f897074c4123e7f0e1877b5fb728fb1cdabdcba21",
+          "scope": "21窗、28必需+1可选、34绑定variant、40来源选择、E14/V4、禁止项及用户抽查范围，与中文判据逐项一致；独立AST重建21窗口摘要0差异。",
+          "followup_change": "复审后仅本字段追加审核引用，未修改命题、variant、输入或评分判据。",
+          "not_certified": "不是首次盲标、全窗用户认证、实际模型语义审核、最终运行冻结或生产放行。"
+        },
+        "independent_review": {
+          "reviewer": "gold_field_review",
+          "description": "中文判据文末记录两轮独立技术复审：有限语义/字段配对、A03/分类纠正、E14、topic、risk、alternatives、reason和V四键均覆盖；JSON装配本身尚待另外复审，不把结构/摘要当语义证明。"
+        }
+      },
+      "source_fidelity_revision": {
+        "kind": "source-fidelity",
+        "revision": 2,
+        "affected_case_ids": [
+          "A05"
+        ],
+        "basis_path": ".scratch/unfinished-work/goal-memory-dimension-proof-interface-decision-20261013.md",
+        "basis_sha256": "8b0c67429021b13a3b61509613847839d3ef841d8002bdd48877e6b1700e61b3",
+        "previous_reference": {
+          "reference_path": ".scratch/unfinished-work/memory-gold-reference-20261012.json",
+          "reference_file_sha256": "5ab68ad8fbb48348231b27ae600ca011e47bf7fc2c1aa2f4e5b417bfa392d5a6",
+          "reference_sha256": "5fb8d53b90a1a96c5987ac7b825bb233cc3e9f196f976e4851c40b0243b77b32",
+          "annotation_path": ".scratch/unfinished-work/memory-gold-agent-annotations-20261012.md",
+          "annotation_sha256": "7039a302f64d6a14761ae448e425597c5ef46e0fbb3d7bc41c95c6d9a9b91e91"
+        },
+        "old_results_seen": true,
+        "old_results_recomputed": false,
+        "pending_slice_history": {
+          "commit": "9d44e5fb",
+          "reference_path": ".scratch/unfinished-work/memory-gold-reference-v2-20261016.json",
+          "file_sha256": "10a9e6ff5222c9c7a2b9776584fd560bc7344853c56becd77c7646bd65191d48",
+          "reference_sha256": "d4b6b2de9f23a442af6f2ef49d22e09911446c00bc46436eb940c71cad102091",
+          "annotation_sha256": "08ef4653f776ee1b998715eedc3bbe7f3887fe991b7e4ada2fc6041b95ee65e1",
+          "status": "agent_reference_pending_review"
+        }
+      },
+      "reference_version": "source-fidelity-v2",
+      "reference_path": ".scratch/unfinished-work/memory-gold-reference-v2-20261016.json"
+    },
+    "projection_group": "main16",
+    "scope": "仅原A01–A16；common_rules逐字保留，原其他5窗不进入本集合。",
+    "projection_review": {
+      "reviewer_kind": "agent",
+      "semantic_equivalence": "passed",
+      "standards": "passed",
+      "execution_authorized_by_projection": false
+    }
+  },
+  "e_fields": [
+    "text",
+    "category",
+    "subject",
+    "topic",
+    "source_message_ids",
+    "confidence",
+    "risk_flags",
+    "valid_at",
+    "invalid_at",
+    "speech_act",
+    "assertion_status",
+    "figurative_type",
+    "alternatives",
+    "interpretation_reason"
+  ],
+  "v_fields": [
+    "candidate_index",
+    "verdict",
+    "issues",
+    "evidence"
+  ],
+  "common_rules": {
+    "scope_time_and_sources": "- 固定21窗：A01–A16为现行 reference 主集，A17–A19为公开语义补充，B01–B02为核心公开观察。窗口不删、不补位。旧公开 holdout 只作回归，不当作新留出。\n- 下文每个 `P` 为一个必需独立命题；语义相同的重复输出不增加覆盖。A15借书关系只作可选审计；A14依实际用户答复无必需命题，窗口仍保留。当前整理为**28个已列必需命题＋A15可选1个**，此数字仍需全量技术复核及最终结构化装配核对，不因用户回答A14就变成终冻主张分母。\n- `source` 为窗内零起始索引。每个实际消息ID为 `uuid5(NAMESPACE_URL, f'notalone-evaluation/{case.name}/{i}')`，时间 `T(i)=2026-09-15T00:00:00+00:00+i分钟`；至少有一条 target，不可用 context 单独制造事实。来源集合无顺序要求，可接受集合在各窗注明；无关额外来源仍是引用缺陷，不靠堆来源获得信用。[build_window](../../backend/src/notalone/memory_extraction/evaluation.py)第81–98行、[E来源规则](../../backend/src/notalone/memory_extraction/adapters.py)第108–112行。\n- `subject` 表示资料归属：`self` 是 owner 本人范围，`contact/shared` 为当前联系人范围；第三人的称呼必须写在命题中，不能因 subject=contact 把第三人写成联系人。合成 owner/contact 分别为 `uuid5(NAMESPACE_URL, 'notalone-evaluation/owner')` 和 `uuid5(NAMESPACE_URL, 'notalone-evaluation/contact')`，不是实际身份或联系人授权。\n- 所有下列保留命题的 `figurative_type=literal`；未知人物、对象或借用方向属于内容歧义，不等于修辞 unknown。实质歧义可在 `alternatives` 中保留确有依据的备选，不补身份或新事件。\n- `H`：已完成历史事实的 `valid_at=null, invalid_at=null`，保留原句的文本时间限定；null不表示今天仍成立。`L`：稳定事实或偏好也为 `null/null`，不臆造开始时间或永恒有效。`I(i)`：当前临时状态的 `valid_at=T(i)` 为观察点，未知结束时 `invalid_at=null`，正文写来源日期；不猜真正开始时间。逐窗有明确期间或瞬时边界时覆盖这些缩写。\n- 期间均取来源的 `+00:00` 偏移：本轮“昨天”为2026-09-14，“周末”为 `[2026-09-19T00:00:00+00:00, 2026-09-21T00:00:00+00:00)`，“下周”为 `[2026-09-21T00:00:00+00:00, 2026-09-28T00:00:00+00:00)`。这些是**整个计划期间的有效边界**，不是断言活动恰在期间起点发生；不能任选周六、周日或一个参展日。只写日期的日程取所指日期次日零点，任职等持续状态不得据此臆造终止日。\n- 日期沿用户2026-10-05已确认的口径：[原台账票](../memory-extraction-accuracy/issues/11-release-ledger-and-next.md)第80–90行明确废弃“只有原文明示结束日期／期间才填 invalid_at”的旧规则；[现行domain-data](../../architecture/current/domain-data.md)第126–128行、[E提示](../../backend/src/notalone/memory_extraction/adapters.py)第83–104行为当前提取要求。瞬时状态的检索失效不得超过来源当天结束；未知持续期仍不套固定TTL。旧语用文档曾留过时句子，本轮已按既有决定同步，不需要用户再次决定同一规则，也不证明模型已遵守。\n- “理想去向”只表示原三道门下、若维度已放行且来源核验支持、置信度≥0.7、风险在原白名单内时的 `auto/pending/none`。真实生产默认放行表仍为空，表中理想auto不代表已写业务记忆。[ADR-036](../../architecture/adr/036-per-dimension-adoption-release.md)第26–38、52–64行。健康、借款、歧义、计划、请求、转述保持原风险／语用门，不能通过改 Gold 去掉模型实际风险标记。[采纳白名单](../../backend/src/notalone/memory_extraction/adoption.py)第50–53行、[语用分流](../../backend/src/notalone/memory_extraction/pragmatics.py)第60–88行。\n- 分类沿现有五类和独审意见收紧：completed客观完成结果用 `common_fact`，临时状态／未来安排用 `recent_state`，亲友关系动态用 `relationship_note`，明确偏好才用 `preference`，确有应避内容才用 `taboo`。不把无法归类的关系备注当作所有其他分类的完整正确兜底；标签不能替代完整正文。A02仅按其三个语义组合分别确定分类。[分类定义](../../architecture/current/domain-data.md)第114–124行、[E分类示例](../../backend/src/notalone/memory_extraction/adapters.py)第46–50行。",
+    "e_field_rules": [
+      {
+        "field": "text",
+        "rule": "非空字符串；依逐命题必要含义和等价边界核对，不要求唯一逐字模板。不增加人物、行为人、事实阶段、因果、数量、条件或未知期限；保留必要否定与日期／期间。"
+      },
+      {
+        "field": "category",
+        "rule": "单个现有枚举：`common_fact/preference/taboo/recent_state/relationship_note`；按逐命题单类或A02明确分支匹配，不能填topic或自由类别。"
+      },
+      {
+        "field": "subject",
+        "rule": "单个 `self/contact/shared`；按逐命题资料归属。第三人事实仍须在正文保留第三人，双方讨论同一物品不自动变shared。"
+      },
+      {
+        "field": "topic",
+        "rule": "单个 `health/work/family/travel/finance/study/emotion/other`；按下方有限主题映射。粗筛主题不证明身份、工作、财务交易或亲属角色，也不自动形成同名风险。"
+      },
+      {
+        "field": "source_message_ids",
+        "rule": "非空字符串数组，每项为本窗消息UUID，满足逐命题必要source集合及至少一个target；不得借用别窗或无关来源。按照集合核语义支持，但重复引用另报，不增加覆盖。"
+      },
+      {
+        "field": "confidence",
+        "rule": "JSON number，有限且在 `[0,1]`；bool、null、字符串不是schema要求的number。保留模型实际数值，不编造固定0.8或逐命题唯一Gold分数。明确直接证据的E指导是≥0.8，原自动采纳门是≥0.7；低分导致pending与正文是否准确分开报告，不能为了过auto门改分。"
+      },
+      {
+        "field": "risk_flags",
+        "rule": "字符串数组，可为空；项须非空字符串。必须忠实保留已有借款／健康风险及实际运行添加的阻塞项，具体允许／禁止见下方风险规则。不能把它变成采纳动作或新增受控枚举。"
+      },
+      {
+        "field": "valid_at",
+        "rule": "JSON null或带时区ISO8601字符串；按 `H/L/I(i)` 与逐命题明确日期，使用来源偏移而非实验当天。观察点不是已证明的实际开始时刻，期间起点不是活动恰在该刻发生。"
+      },
+      {
+        "field": "invalid_at",
+        "rule": "JSON null或带时区ISO8601字符串；明确政策边界和未知持续期按逐命题核对。两端都有值时须 `invalid_at>valid_at`，区间为半开。null不能写成空字符串或字符串“null”，检索失效不得写成真实离职／行为结束已证明。"
+      },
+      {
+        "field": "speech_act",
+        "rule": "单个 `assertion/plan/question/request/report/correction/unknown`；依逐命题固定或有限组合，不能仅因“还没发生”把所有计划统称假设。none窗不补伪候选。"
+      },
+      {
+        "field": "assertion_status",
+        "rule": "单个 `asserted/hypothetical/conditional/reported/unknown`；与对应speech/body组合绑定。明确未决定／不知道是自述状态的asserted，非模型证据不足；真实条件仍conditional。"
+      },
+      {
+        "field": "figurative_type",
+        "rule": "单个 `literal/joke/sarcasm/hyperbole/unknown`；本批保留命题均literal。未知第三人／借用方向不变成修辞unknown，不补原句没有的玩笑或讽刺。"
+      },
+      {
+        "field": "alternatives",
+        "rule": "字符串数组，非空项；确有内容歧义的必填范围及明确命题应空规则见下表。是少量用户可见备选解释，不是自由补故事或内部思考。 A05须明确物品归属及“她”指称未知，不以泛称未决代替具体未知关系。"
+      },
+      {
+        "field": "interpretation_reason",
+        "rule": "非空字符串，简短面向用户，说明原句与标签／来源的对应依据；不要求唯一措辞或固定字数。schema写字符串、Fact类型仅验字符串，但原Flow转换另要求非空，空值应记结构／转换失败，不能补理由冒充完整通过。不得与正文／标签／主体相矛盾，不含长链推理、模型内部思考、秘密或本窗外事实。"
+      }
+    ],
+    "v_field_rules": [
+      {
+        "field": "candidate_index",
+        "rule": "真正整数，不能bool；满足 `0<=index<len(实际待核验候选)`，每个输入候选恰一次，不重复、遗漏或越界。按index回填原候选，不按返回顺序猜编号。"
+      },
+      {
+        "field": "verdict",
+        "rule": "单个 `supported/uncertain/unsupported`。supported表示完整原主张和其可见人物／限定／标签／时间均有来源支持；uncertain是证据不足或真实歧义；unsupported是矛盾或无支持。任何返回值都不认证现实世界真伪。"
+      },
+      {
+        "field": "issues",
+        "rule": "数组，项只取 `meaning/subject/negation/degree/quantity/condition/time/pragmatics/disconnected_context/insufficient_evidence`。supported须 `[]`；uncertain和unsupported须至少一个受控issue，不能添加自由正文、写库动作或固定“已认证”状态。"
+      },
+      {
+        "field": "evidence",
+        "rule": "数组，每项恰有 `message_id` 与 `quote`。ID为该candidate原 `source_message_ids` 内的本窗消息，quote为对应消息中真实非空逐字子串，不改字、补词或引用候选正文冒充聊天。supported必须至少一个target来源片段；uncertain／unsupported允许 `[]`，不得为凑证据引用candidate原来源之外的context。"
+      }
+    ],
+    "risk": "`risk_flags` 原schema不是受控枚举；下列是语义审核要求，不修改其字段或采纳白名单。\n\n- **必须**：A03和A10两项保持借款敏感性，允许忠实标签如 `loan`、`financial`、`借款`，至少一个实际敏感标记须在原门白名单之外；A11保持健康敏感性，允许 `health` 或 `健康`。不得用空数组、none、low替换它们以把理想pending变auto。借款否定仍是财务关系资料，不因“小王没借”就剥去本窗风险范围。\n- **可接受**：其他原句没有证实敏感风险的命题允许 `[]`，或原白名单中合法的非空无风险标记 `low/low_risk/none/无/低风险`。实际有来源支持的额外敏感标记可以保留；未知标记依原门阻止auto，不能为评分静默删除，但另记其语义依据或不必要降级。A05借车不等于借款，B01讨论90元报价不等于金融交易，不为这些合成原句捏造金融／健康等风险。\n- **按运行层分别记录**：`pragmatic:report/reported/plan/request/conditional/unknown/ambiguous` 等标签只在对应语用或歧义确实存在时有据；来源／未来有效期／V uncertain生成的 `semantic:*`、`pragmatic:future_validity` 等保留实际程序来源。记录E原字段与外壳添加项的差异，不让模型理由替代确定性裁决。低风险也不抹去真实计划／请求／转述的pending分流。\n- **禁止**：虚构疾病、负债、转账、私人地址或其他本窗未给风险；把实质风险填成白名单低风险；添加“用户已确认／已核验真相”等永久认证标签；改白名单或去掉实际阻塞。无必要的风险保守pending可以说明安全，却不是所有理想auto命题都已满足完整去向。\n\n风险判定沿[原采纳白名单](../../backend/src/notalone/memory_extraction/adoption.py)第50–53行和[语用阻塞生成](../../backend/src/notalone/memory_extraction/pragmatics.py)第66–83行；`financial` 已有[公开行为测试](../../backend/tests/unit/memory_extraction/test_evaluation.py)第204–212行证明会留pending，文档未新增词表实现。",
+    "alternatives_and_reason": "- **必须有真实歧义说明**：A01/A03/A09未知第三人身份，A04未识别事项，A07未知“他们”及所指家里归属，A10借入／借出方向，A15可选借书方向／所有权。`alternatives` 须非空，且只保留原句真的容许的解释；身份无法定位时可直接说明“本窗无法唯一确定所指第三人”，不要求编两位具体人。A10可列“第三人向联系人借”与“第三人借给联系人”的两种读法，否定项的每种读法都保留小王没借，不能丢否定。\n- **应为空**：其余确定命题的 `alternatives=[]`；B01条件与未决定、B02本人“不知道”分别已有确定标签／知识对象，不因未来未发生或说话人不知道某事实就凭空增加不同主体或现实猜测。A02各组合准确保留“仅邀约、接受未说明”后无须再猜已接受；A15必需读完主张保留“所指书”而不补书名，不能把可选借书角色歧义塞入这一已完成命题并称作同一完整参考。\n- **简短理由**：说明可见原句的直接依据即可，如“回答沿上条问题指向同一面试，结果已完成，入职仍是未来安排”；这只是允许的示例，不是唯一模板。理由可解释观察日或政策检索边界，但不得把它写成原文证明实际开始／结束；不得与标签、正文、人物、source或备选解释矛盾。字段非空合法性与理由语义准确分别核验，不能要求模型输出内部推理来证明自己。",
+    "verification": "每个实际进入核验的候选按当次输入顺序分配零起始 `candidate_index`；不是P编号，也不是只给正确候选编号。外层只有 `results`，每项只有以下四键，candidate数不超过原60上限。无可核验候选时V不执行，不伪造一次空核验通过。[V schema与提示](../../backend/src/notalone/memory_extraction/verification_adapters.py)第30–121、149–153行、[契约校验](../../backend/src/notalone/memory_extraction/verification.py)第70–260行。\n\n| 字段 | 原合法性与语义判据 |\n| --- | --- |\n| `candidate_index` | 真正整数，不能bool；满足 `0<=index<len(实际待核验候选)`，每个输入候选恰一次，不重复、遗漏或越界。按index回填原候选，不按返回顺序猜编号。 |\n| `verdict` | 单个 `supported/uncertain/unsupported`。supported表示完整原主张和其可见人物／限定／标签／时间均有来源支持；uncertain是证据不足或真实歧义；unsupported是矛盾或无支持。任何返回值都不认证现实世界真伪。 |\n| `issues` | 数组，项只取 `meaning/subject/negation/degree/quantity/condition/time/pragmatics/disconnected_context/insufficient_evidence`。supported须 `[]`；uncertain和unsupported须至少一个受控issue，不能添加自由正文、写库动作或固定“已认证”状态。 |\n| `evidence` | 数组，每项恰有 `message_id` 与 `quote`。ID为该candidate原 `source_message_ids` 内的本窗消息，quote为对应消息中真实非空逐字子串，不改字、补词或引用候选正文冒充聊天。supported必须至少一个target来源片段；uncertain／unsupported允许 `[]`，不得为凑证据引用candidate原来源之外的context。 |\n\n逐字片段存在只证明字符出处：片段可能遗漏条件、反转否定或不支撑某角色。独立语义审核仍需核完整命题、必要来源和上述E字段；机械校验没有要求每个source必须返回一段quote，文档不编造这种已经实现的规则，也不把“有一段target”说成全部来源／限定都支持。日期的政策检索边界不等于原文真的宣布结束时刻；V若误拒符合现行政策的候选，记录准确候选损失与字段争议，不改Gold救分。\n\nV当前可见候选包含text、subject、category、topic、source、两日期及三语用字段，**不包含confidence、risk_flags、alternatives、interpretation_reason**；不能宣称一次supported已检查完E全部14字段。[V实际序列化](../../backend/src/notalone/memory_extraction/verification_adapters.py)第262–286行。独审对这些遗漏字段照原E原输出另核，实际运行的reason/置信度/风险不由V或Agent代填。\n\nV只降不升：supported继续原语用／风险／置信度门，reported、计划或健康／借款仍可pending；uncertain附加实际 `semantic:*` 风险，unsupported拒绝，不改候选正文、主体、来源或时间。结构／证据契约非法或核验失败时按原Flow批次失败记录，不把失败当none，也不为了补覆盖重提候选。[原Flow核验处理](../../backend/src/notalone/memory_extraction/flow.py)第270–369行。V模型和E模型可能相关误判，一条V输出不能为自身或E原答案签独立语义正确证明。",
+    "equivalence_and_execution_boundaries": "1. 先按以上原句独立语义核对，固定允许正文、必须限定、来源集合、分类与标签分支，再冻结；不先看新模型输出来放宽答案。整理者已见旧oracle的事实始终保留，独立复核不能冒充首次盲标。\n2. 同义词、主动／被动和忠实拆合可以获得**raw语义覆盖**；数量、否定、条件、相对时间、完成性质和人物角色不得丢。无明确购买／维修执行者时保留结果，不能强写动作人。主张分母按独立命题，不按输出条数；重复无额外信用，但全部额外输出逐条审计。\n3. **程序接受覆盖、完整契约覆盖另报**；混合语用／时间不得用单一字段统一通过，保守pending不等于满足可auto事实的完整契约。独审后A03只留report/reported，A02和A10仍按明确有限组合，A16只留入职日程；新增topic／风险／备选解释／理由与V判据已独审，仍须结构化装配验证，不把“可评审集合”改写成“21窗技术字段全部已认证”。[核心spec](../memory-core-claim-retention/spec.md)第15–23、74–79行、[E拆分要求](../../backend/src/notalone/memory_extraction/adapters.py)第76–78行。\n4. 旧 `evaluate_case` 正则结果保持原样，并与本技术语义审计分开：当前“不匹配旧严格期望的auto”会直接进入程序 `false_fact`，其中可能有同义、分类、标签或已变更日期口径的差异，不能全部称确定的现实语义造假。[评分器](../../backend/src/notalone/memory_extraction/evaluation.py)第174–211行。反之，确定坏auto、记错人不能被这些差异掩盖。\n5. A14纳入性已有实际答复，仍不代替其他技术字段的独审终冻；当前真实ECNU执行继续关闭。Agent核对不代替新完整计划／配置／源码哈希冻结或最终runner审查；不启动供应商，不复开旧预算，不写业务或改变生产放行。本文不宣称新的模型成绩，旧实际6/12与原07的0/5验收均不改。",
+    "reference_usage": "以显式独立审核表判断每层全量原输出，包括额外/被拒/重复/none窗；不由JSON、matcher、V=supported或模型自身理由签语义正确。无默认pass，未决/失败/未运行保留分母；相同命题多个variant不是多个机会，字段分支不可笛卡尔积拼接。",
+    "source_fidelity_revision": "来源保真修订：出借施事不证明物品产权；来源没有明确唯一指称句时，保留可核行动角色与已发生阶段，物品归属保持未知，非空alternatives须明确具体未解关系，不补Identity、反向产权或现实认证。typed proof的范围／可信前提UNKNOWN不一概否定普通正文中已有来源的角色和阶段。"
+  },
+  "windows": [
+    {
+      "id": "A01",
+      "position": 0,
+      "case_name": "复核：未知第三人部门",
+      "input_sha256": "04f01a6314e6e40d7b538b2d73ae3b09506f63c4dba156e492b758176a1613b9",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "A01-P1",
+          "required": true,
+          "meaning_requirements": [
+            "身份不明的第三人不是仓库管理员",
+            "否定归属仍是该第三人"
+          ],
+          "variants": [
+            {
+              "id": "A01-P1-v1",
+              "body_requirements": [
+                "身份不明的第三人不是仓库管理员",
+                "否定归属仍是该第三人"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "work"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "完整命题均由这些相连来源直接支持，至少含一个target。"
+                }
+              ],
+              "speech_act": "report",
+              "assertion_status": "reported",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "稳定事实或习惯，valid_at/invalid_at均为JSON null；不编资料开始时间或宣称永远有效，来源时间不等于实际事件起点。",
+              "ideal_destination": "pending",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "必须非空，说明本窗无法唯一确定所指第三人的具体身份；不得编两位具体人、姓名、职业或亲友角色。保留第三人称呼，不把其写成用户或联系人。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        },
+        {
+          "id": "A01-P2",
+          "required": true,
+          "meaning_requirements": [
+            "同一身份不明第三人在采购部",
+            "与否定仓库管理员的那个人一致"
+          ],
+          "variants": [
+            {
+              "id": "A01-P2-v1",
+              "body_requirements": [
+                "同一身份不明第三人在采购部",
+                "与否定仓库管理员的那个人一致"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "work"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "完整命题均由这些相连来源直接支持，至少含一个target。"
+                }
+              ],
+              "speech_act": "report",
+              "assertion_status": "reported",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "稳定事实或习惯，valid_at/invalid_at均为JSON null；不编资料开始时间或宣称永远有效，来源时间不等于实际事件起点。",
+              "ideal_destination": "pending",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "必须非空，说明本窗无法唯一确定所指第三人的具体身份；不得编两位具体人、姓名、职业或亲友角色。保留第三人称呼，不把其写成用户或联系人。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "把未知第三人改成联系人/用户",
+        "把被否定的职务归属换给另一人",
+        "补具体姓名、职级或任职起点",
+        "丢掉正负两项之一；忠实合并只能各计一次覆盖"
+      ]
+    },
+    {
+      "id": "A02",
+      "position": 1,
+      "case_name": "指代：跨消息老李",
+      "input_sha256": "742d5e97f0fcbd0d8b367b3746c0adc0b67e1c494f7c1bc7a658bf6a838ea103",
+      "target_indices": [
+        1
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "A02-P1",
+          "required": true,
+          "meaning_requirements": [
+            "老李向联系人提出周末钓鱼邀约",
+            "原句没有说明联系人已接受",
+            "邀约对象、老李和周末钓鱼均保留"
+          ],
+          "variants": [
+            {
+              "id": "A02-P1-v1",
+              "body_requirements": [
+                "联系人已收到老李邀请，内容是周末钓鱼",
+                "不说明已接受或双方已约定"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "收到邀请的已发生关系经历，老李身份从context0恢复，target1支持邀约。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "已发生事实且无明示资料有效期，valid_at/invalid_at均为JSON null；正文保留原有历史时间限定，null不表示查询当天仍成立，不补事件开始或结束时刻。",
+              "ideal_destination": "auto",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "应为空数组；已确定的正文、标签、主体和直接证据不靠备选解释添加猜测。未知书名、未决定或本人不知道的知识状态不能被升级成另一个事件/人物。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            },
+            {
+              "id": "A02-P1-v2",
+              "body_requirements": [
+                "据联系人陈述，老李向联系人发出了周末钓鱼邀约",
+                "正文保持邀约转述，不升级成双方已约定"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "老李邀约的转述，身份由0、邀约及对象由target1支持。"
+                }
+              ],
+              "speech_act": "report",
+              "assertion_status": "reported",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "已发生事实且无明示资料有效期，valid_at/invalid_at均为JSON null；正文保留原有历史时间限定，null不表示查询当天仍成立，不补事件开始或结束时刻。",
+              "ideal_destination": "pending",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "应为空数组；已确定的正文、标签、主体和直接证据不靠备选解释添加猜测。未知书名、未决定或本人不知道的知识状态不能被升级成另一个事件/人物。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            },
+            {
+              "id": "A02-P1-v3",
+              "body_requirements": [
+                "老李提出邀联系人周末钓鱼的未来安排",
+                "仅是第三方邀约，联系人参与未确定；asserted只承诺邀约安排已表达"
+              ],
+              "subject": "contact",
+              "category": "recent_state",
+              "allowed_topics": [
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "保存未来邀约安排，老李身份与内容/接受未确定均沿相连问答。"
+                }
+              ],
+              "speech_act": "plan",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": "2026-09-19T00:00:00+00:00",
+              "invalid_at": "2026-09-21T00:00:00+00:00",
+              "time_rule": "以来源+00:00偏移的整个历周/周末期间作为计划的检索有效边界；不声称活动恰在期间起点发生，不挑其中某个确定日期，不补出发/返回/结束时刻。",
+              "ideal_destination": "pending",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "应为空数组；已确定的正文、标签、主体和直接证据不靠备选解释添加猜测。未知书名、未决定或本人不知道的知识状态不能被升级成另一个事件/人物。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "推断老李很忙",
+        "联系人已接受、已经决定去钓鱼或双方已确定约定",
+        "补具体钓鱼日、地点、活动已经发生",
+        "把未来期间当成收到邀请的发生日期",
+        "三个variant重复增加同一P1分母；request未列完整契约允许标签，未列读法保留未决不默认通过"
+      ]
+    },
+    {
+      "id": "A03",
+      "position": 2,
+      "case_name": "指代：他借钱",
+      "input_sha256": "6a6a0de53fa54e8661ab75b2f20edc7da4c72506470e66f80a5f0c89e7dded9d",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "A03-P1",
+          "required": true,
+          "meaning_requirements": [
+            "身份不明第三人在2026-09-14又向/跟联系人借钱",
+            "保留又及联系人为被借钱一方",
+            "实际交付、仅请求或结清未唯一确定，正文保持原借钱措辞"
+          ],
+          "variants": [
+            {
+              "id": "A03-P1-v1",
+              "body_requirements": [
+                "身份不明第三人在2026-09-14又向/跟联系人借钱",
+                "保留又及联系人为被借钱一方",
+                "实际交付、仅请求或结清未唯一确定，正文保持原借钱措辞"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "finance"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "完整命题均由这些相连来源直接支持，至少含一个target。"
+                }
+              ],
+              "speech_act": "report",
+              "assertion_status": "reported",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "已发生事实且无明示资料有效期，valid_at/invalid_at均为JSON null；正文保留原有历史时间限定，null不表示查询当天仍成立，不补事件开始或结束时刻。",
+              "ideal_destination": "pending",
+              "risk_rule": "必须保留借款敏感性，至少一个忠实敏感标记在原白名单之外，允许loan/financial/借款等语义等价标记；不得以[]、none或low替换；保持原门pending，另保留身份或方向歧义。",
+              "alternatives_rule": "必须非空，说明本窗无法唯一确定所指第三人的具体身份；不得编两位具体人、姓名、职业或亲友角色。保留第三人称呼，不把其写成用户或联系人。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "把第三人改成联系人或编具体身份",
+        "反转为联系人向第三人借钱",
+        "补金额、次数、实际交付、仅仅请求、已结清或还款状态",
+        "用A05明确姐姐经历豁免未知他的report/reported",
+        "理想auto或剥除借款/身份歧义风险"
+      ]
+    },
+    {
+      "id": "A04",
+      "position": 3,
+      "case_name": "指代：那个事",
+      "input_sha256": "b448b09ed590877e93e3d1a28b4f4e6f0a76718de26dbb4183b2e1d71d6efd8e",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "A04-P1",
+          "required": true,
+          "meaning_requirements": [
+            "来源时点联系人请求用户暂不向别人透露所指但未识别事项",
+            "保留请求对象、暂时性和事项未知",
+            "禁止对外泄露不等于用户与联系人之间不能提该话题"
+          ],
+          "variants": [
+            {
+              "id": "A04-P1-v1",
+              "body_requirements": [
+                "来源时点联系人请求用户暂不向别人透露所指但未识别事项",
+                "保留请求对象、暂时性和事项未知",
+                "禁止对外泄露不等于用户与联系人之间不能提该话题"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "完整命题均由这些相连来源直接支持，至少含一个target。"
+                }
+              ],
+              "speech_act": "request",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": "2026-09-15T00:00:00+00:00",
+              "invalid_at": null,
+              "time_rule": "valid_at取来源消息0的occurred_at为观察点，正文保留2026-09-15来源日期；不是实际开始已证明。持续期无法推算，invalid_at明确null，不套固定TTL。",
+              "ideal_destination": "pending",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "必须非空，说明所指事项无法由本窗识别；保留未知，不补秘密正文或事项类型。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "归到self只因执行请求者是用户",
+        "补秘密内容或泄露已发生",
+        "升级为永久保密偏好/永久taboo",
+        "猜当天结束或其他固定TTL"
+      ]
+    },
+    {
+      "id": "A05",
+      "position": 4,
+      "case_name": "指代：姐借车",
+      "input_sha256": "1459fbddcc6c3f15a3e180ebd7ec75f70bc793cbd3dd042fc1389c7051133a4c",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "A05-P1",
+          "required": true,
+          "meaning_requirements": [
+            "联系人作为接收方经历姐姐把原句所称“她的车”借给自己的事件，姐姐为出借施事、联系人为接收方，借用已发生",
+            "物品车主／归属未知；原句“她”缺明确唯一指称句，不能认定车属于姐姐，也不能反向断言不属于姐姐",
+            "保留本人参与的已发生经历，非纯第三人事件；不补Identity、已归还、借用期限或资产转移"
+          ],
+          "variants": [
+            {
+              "id": "A05-P1-v1",
+              "body_requirements": [
+                "联系人作为接收方经历姐姐把原句所称“她的车”借给自己的事件，姐姐为出借施事、联系人为接收方，借用已发生",
+                "物品车主／归属未知；原句“她”缺明确唯一指称句，不能认定车属于姐姐，也不能反向断言不属于姐姐",
+                "保留本人参与的已发生经历，非纯第三人事件；不补Identity、已归还、借用期限或资产转移"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "family"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "完整命题均由这些相连来源直接支持，至少含一个target。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "已发生事实且无明示资料有效期，valid_at/invalid_at均为JSON null；正文保留原有历史时间限定，null不表示查询当天仍成立，不补事件开始或结束时刻。",
+              "ideal_destination": "pending",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "alternatives须非空，明确物品车主／归属未知及原句“她”缺明确唯一指称；不能仅因姐姐为出借施事就认定姐姐拥有该车，不编另一具体所有人或反向产权事实。仅泛称其他未决解释不足以明确此关系。",
+              "reason_rule": "简短说明来源支持姐姐出借、联系人接收及已发生经历；车主未知，“她”无明确唯一指称句，不由出借施事、代词性别或固定模板推产权，不补Identity或现实认证。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "联系人拥有该车",
+        "当前仍在借用、已经归还或借用期限已知",
+        "车归用户所有或永久资产转移",
+        "仅因有姐姐就机械标纯第三人report/reported",
+        "把借车当金融借款捏造风险",
+        "仅因姐姐是出借施事或“她”的性别就认定车属于姐姐／姐姐自己的车",
+        "反向断言车不属于姐姐，或补造另一具体车主及来源Identity"
+      ]
+    },
+    {
+      "id": "A06",
+      "position": 5,
+      "case_name": "指代：机场等行李",
+      "input_sha256": "de162f8e5cced01487046354b265d097da65fd9979d45c538c3d2e0ce9eecebb",
+      "target_indices": [
+        1
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "A06-P1",
+          "required": true,
+          "meaning_requirements": [
+            "联系人已到机场",
+            "保留已完成到达性质"
+          ],
+          "variants": [
+            {
+              "id": "A06-P1-v1",
+              "body_requirements": [
+                "联系人已到机场",
+                "保留已完成到达性质"
+              ],
+              "subject": "contact",
+              "category": "common_fact",
+              "allowed_topics": [
+                "travel"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "完整命题均由这些相连来源直接支持，至少含一个target。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "已发生事实且无明示资料有效期，valid_at/invalid_at均为JSON null；正文保留原有历史时间限定，null不表示查询当天仍成立，不补事件开始或结束时刻。",
+              "ideal_destination": "auto",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "应为空数组；已确定的正文、标签、主体和直接证据不靠备选解释添加猜测。未知书名、未决定或本人不知道的知识状态不能被升级成另一个事件/人物。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        },
+        {
+          "id": "A06-P2",
+          "required": true,
+          "meaning_requirements": [
+            "2026-09-15来源时点联系人正在等行李",
+            "状态为正在等待，不是已经取完；地点可不写，若写机场须恢复context来源"
+          ],
+          "variants": [
+            {
+              "id": "A06-P2-v1",
+              "body_requirements": [
+                "2026-09-15来源时点联系人正在等行李",
+                "状态为正在等待，不是已经取完；地点可不写，若写机场须恢复context来源"
+              ],
+              "subject": "contact",
+              "category": "recent_state",
+              "allowed_topics": [
+                "travel"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    1
+                  ],
+                  "when": "正文仅为来源时点正在等行李，不明确机场地点。"
+                },
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "正文同时写明在机场等行李，机场地点由context0恢复。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": "2026-09-15T00:01:00+00:00",
+              "invalid_at": "2026-09-16T00:00:00+00:00",
+              "time_rule": "valid_at为target1观察点；invalid_at为来源当天结束的政策检索边界，不是等待实际结束时刻。无额外原句依据不得任取更早终点。",
+              "ideal_destination": "auto",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "应为空数组；已确定的正文、标签、主体和直接证据不靠备选解释添加猜测。未知书名、未决定或本人不知道的知识状态不能被升级成另一个事件/人物。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "补航班、到达钟点或已经取到行李",
+        "把查询当天仍在等作为事实",
+        "用历史到达与瞬时等待共用一个有效区间冒充两项完整契约",
+        "把政策检索失效写成原文证明的实际结束"
+      ]
+    },
+    {
+      "id": "A07",
+      "position": 6,
+      "case_name": "指代：他们来家",
+      "input_sha256": "d484b373403cd04029cae70390c3b5d46d05f650db45311eb22b717418141929",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "A07-P1",
+          "required": true,
+          "meaning_requirements": [
+            "身份未知的他们计划在来源所指周末来所指家里",
+            "来访者身份及所指家里归属未知",
+            "保留未来安排而非已到访"
+          ],
+          "variants": [
+            {
+              "id": "A07-P1-v1",
+              "body_requirements": [
+                "身份未知的他们计划在来源所指周末来所指家里",
+                "来访者身份及所指家里归属未知",
+                "保留未来安排而非已到访"
+              ],
+              "subject": "contact",
+              "category": "recent_state",
+              "allowed_topics": [
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "完整命题均由这些相连来源直接支持，至少含一个target。"
+                }
+              ],
+              "speech_act": "plan",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": "2026-09-19T00:00:00+00:00",
+              "invalid_at": "2026-09-21T00:00:00+00:00",
+              "time_rule": "以来源+00:00偏移的整个历周/周末期间作为计划的检索有效边界；不声称活动恰在期间起点发生，不挑其中某个确定日期，不补出发/返回/结束时刻。",
+              "ideal_destination": "pending",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "必须非空，明确他们的身份和所指家里归属无法唯一定位；不编具体人、亲属角色或房屋所有者。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "补具体人、他们是家人、用户也参加或双方已确认",
+        "写成已经到访",
+        "指定周六零点来访或编房屋所有者",
+        "用relationship_note规避recent_state/时间要求"
+      ]
+    },
+    {
+      "id": "A08",
+      "position": 7,
+      "case_name": "指代：那本书",
+      "input_sha256": "3afedf18d2615fed891f78860d0547bbfb672080d9867a014138c713400ebd5f",
+      "target_indices": [
+        1
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "A08-P1",
+          "required": true,
+          "meaning_requirements": [
+            "联系人刚读完《活着》",
+            "保留书名、刚和已完成性质"
+          ],
+          "variants": [
+            {
+              "id": "A08-P1-v1",
+              "body_requirements": [
+                "联系人刚读完《活着》",
+                "保留书名、刚和已完成性质"
+              ],
+              "subject": "contact",
+              "category": "common_fact",
+              "allowed_topics": [
+                "study",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    1
+                  ],
+                  "when": "target1已自足给书名及完成，不要求引用问题0。"
+                },
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "可额外引用相连书名问题0；它不是必需来源，不得从问题补其他事实。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "已发生事实且无明示资料有效期，valid_at/invalid_at均为JSON null；正文保留原有历史时间限定，null不表示查询当天仍成立，不补事件开始或结束时刻。",
+              "ideal_destination": "auto",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "应为空数组；已确定的正文、标签、主体和直接证据不靠备选解释添加猜测。未知书名、未决定或本人不知道的知识状态不能被升级成另一个事件/人物。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "补喜欢、推荐、学习动机、学历或阅读起止日",
+        "把刚读完改成未来准备读",
+        "书名/完成性质丢失"
+      ]
+    },
+    {
+      "id": "A09",
+      "position": 8,
+      "case_name": "指代：那人",
+      "input_sha256": "7e2cf397080187caa261dec7a9d7dbb8177de63f2dc21620002cfba086479a60",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "A09-P1",
+          "required": true,
+          "meaning_requirements": [
+            "身份不明的第三人在2026-09-14又来了",
+            "保留又、未知人物和未知到访地点"
+          ],
+          "variants": [
+            {
+              "id": "A09-P1-v1",
+              "body_requirements": [
+                "身份不明的第三人在2026-09-14又来了",
+                "保留又、未知人物和未知到访地点"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "完整命题均由这些相连来源直接支持，至少含一个target。"
+                }
+              ],
+              "speech_act": "report",
+              "assertion_status": "reported",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "已发生事实且无明示资料有效期，valid_at/invalid_at均为JSON null；正文保留原有历史时间限定，null不表示查询当天仍成立，不补事件开始或结束时刻。",
+              "ideal_destination": "pending",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "必须非空，说明本窗无法唯一确定所指第三人的具体身份；不得编两位具体人、姓名、职业或亲友角色。保留第三人称呼，不把其写成用户或联系人。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "换成联系人本人或编具体身份/地点/拜访对象",
+        "补具体次数",
+        "把昨天改为实验当天的昨天"
+      ]
+    },
+    {
+      "id": "A10",
+      "position": 9,
+      "case_name": "指代：多第三方借钱",
+      "input_sha256": "20dafb6b356ce5e066811fe0edac03c44115063565b0cc97ad7f086ba4ffd999",
+      "target_indices": [
+        1
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "A10-P1",
+          "required": true,
+          "meaning_requirements": [
+            "老李与联系人之间原问的借你钱事项肯定成立",
+            "原借入/借出方向未明",
+            "两个人和肯定/否定不能互换或丢失"
+          ],
+          "variants": [
+            {
+              "id": "A10-P1-v1",
+              "body_requirements": [
+                "老李与联系人之间原问的借你钱事项肯定成立",
+                "原借入/借出方向未明",
+                "两个人和肯定/否定不能互换或丢失",
+                "作为第三人关系事项的转述"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "finance"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "借钱事项与人物/否定沿相连问题0和target回答1。"
+                }
+              ],
+              "speech_act": "report",
+              "assertion_status": "reported",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "已发生事实且无明示资料有效期，valid_at/invalid_at均为JSON null；正文保留原有历史时间限定，null不表示查询当天仍成立，不补事件开始或结束时刻。",
+              "ideal_destination": "pending",
+              "risk_rule": "必须保留借款敏感性，至少一个忠实敏感标记在原白名单之外，允许loan/financial/借款等语义等价标记；不得以[]、none或low替换；保持原门pending，另保留身份或方向歧义。",
+              "alternatives_rule": "必须非空，保留老李向联系人借/借给联系人两个有据方向读法；不选择其中一方向或推断实际金额/交付。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            },
+            {
+              "id": "A10-P1-v2",
+              "body_requirements": [
+                "老李与联系人之间原问的借你钱事项肯定成立",
+                "原借入/借出方向未明",
+                "两个人和肯定/否定不能互换或丢失",
+                "联系人直接陈述其参与的原借钱事项，仍保持方向未明"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "finance"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "参与关系的直接陈述仍需原问题和target回答，两项人物与极性不互换。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "已发生事实且无明示资料有效期，valid_at/invalid_at均为JSON null；正文保留原有历史时间限定，null不表示查询当天仍成立，不补事件开始或结束时刻。",
+              "ideal_destination": "pending",
+              "risk_rule": "必须保留借款敏感性，至少一个忠实敏感标记在原白名单之外，允许loan/financial/借款等语义等价标记；不得以[]、none或low替换；保持原门pending，另保留身份或方向歧义。",
+              "alternatives_rule": "必须非空，保留老李向联系人借/借给联系人两个有据方向读法；不选择其中一方向或推断实际金额/交付。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        },
+        {
+          "id": "A10-P2",
+          "required": true,
+          "meaning_requirements": [
+            "小王与联系人之间原问的借你钱事项没有成立",
+            "原借入/借出方向未明",
+            "两个人和肯定/否定不能互换或丢失"
+          ],
+          "variants": [
+            {
+              "id": "A10-P2-v1",
+              "body_requirements": [
+                "小王与联系人之间原问的借你钱事项没有成立",
+                "原借入/借出方向未明",
+                "两个人和肯定/否定不能互换或丢失",
+                "作为第三人关系事项的转述"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "finance"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "借钱事项与人物/否定沿相连问题0和target回答1。"
+                }
+              ],
+              "speech_act": "report",
+              "assertion_status": "reported",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "已发生事实且无明示资料有效期，valid_at/invalid_at均为JSON null；正文保留原有历史时间限定，null不表示查询当天仍成立，不补事件开始或结束时刻。",
+              "ideal_destination": "pending",
+              "risk_rule": "必须保留借款敏感性，至少一个忠实敏感标记在原白名单之外，允许loan/financial/借款等语义等价标记；不得以[]、none或low替换；保持原门pending，另保留身份或方向歧义。",
+              "alternatives_rule": "必须非空，保留小王向联系人借/借给联系人两个有据方向读法；两种方向读法均保留小王没借，不能丢否定。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            },
+            {
+              "id": "A10-P2-v2",
+              "body_requirements": [
+                "小王与联系人之间原问的借你钱事项没有成立",
+                "原借入/借出方向未明",
+                "两个人和肯定/否定不能互换或丢失",
+                "联系人直接陈述其参与的原借钱事项，仍保持方向未明"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "finance"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "参与关系的直接陈述仍需原问题和target回答，两项人物与极性不互换。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "已发生事实且无明示资料有效期，valid_at/invalid_at均为JSON null；正文保留原有历史时间限定，null不表示查询当天仍成立，不补事件开始或结束时刻。",
+              "ideal_destination": "pending",
+              "risk_rule": "必须保留借款敏感性，至少一个忠实敏感标记在原白名单之外，允许loan/financial/借款等语义等价标记；不得以[]、none或low替换；保持原门pending，另保留身份或方向歧义。",
+              "alternatives_rule": "必须非空，保留小王向联系人借/借给联系人两个有据方向读法；两种方向读法均保留小王没借，不能丢否定。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "擅定贷方/借方或去掉方向歧义",
+        "交换老李与小王、丢否定",
+        "补金额、交付、债务或还款状态",
+        "剥去借款风险或理想auto",
+        "交叉report/asserted或assertion/reported算完整标签信用"
+      ]
+    },
+    {
+      "id": "A11",
+      "position": 10,
+      "case_name": "指代：感冒好点",
+      "input_sha256": "0f5471a75da0c0ea7385a23b5724bd11fc6f4090d801dc90aab0b7ed889b39f6",
+      "target_indices": [
+        1
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "A11-P1",
+          "required": true,
+          "meaning_requirements": [
+            "2026-09-15来源时点联系人的感冒明显好转",
+            "改善程度保留，非完全康复"
+          ],
+          "variants": [
+            {
+              "id": "A11-P1-v1",
+              "body_requirements": [
+                "2026-09-15来源时点联系人的感冒明显好转",
+                "改善程度保留，非完全康复"
+              ],
+              "subject": "contact",
+              "category": "recent_state",
+              "allowed_topics": [
+                "health"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "完整命题均由这些相连来源直接支持，至少含一个target。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": "2026-09-15T00:01:00+00:00",
+              "invalid_at": null,
+              "time_rule": "valid_at取来源消息1的occurred_at为观察点，正文保留2026-09-15来源日期；不是实际开始已证明。持续期无法推算，invalid_at明确null，不套固定TTL。",
+              "ideal_destination": "pending",
+              "risk_rule": "必须保留原健康敏感性，允许health/健康等忠实标记，不能换成[]、none或low以过auto门；不补诊断、病因或治疗。",
+              "alternatives_rule": "应为空数组；已确定的正文、标签、主体和直接证据不靠备选解释添加猜测。未知书名、未决定或本人不知道的知识状态不能被升级成另一个事件/人物。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "完全康复、仅感冒中而丢掉明显改善",
+        "补发病时间、病因、诊断、治疗或结束日",
+        "套当天/七天TTL或说查询当天仍感冒",
+        "把健康风险改成无风险"
+      ]
+    },
+    {
+      "id": "A12",
+      "position": 11,
+      "case_name": "指代：咱们那家店",
+      "input_sha256": "0295c6eeb0916a56dcafd67f0b17804c521e15fec0b03e6e6f06eb80567d12f7",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "none",
+      "claims": [],
+      "forbidden_meanings": [
+        "从纯问句预设制造共同到店经历、店名、地址",
+        "双方已约好同行或行程仍有效",
+        "从咱们生成shared事实",
+        "删除none窗口或把运行失败当合法空"
+      ]
+    },
+    {
+      "id": "A13",
+      "position": 12,
+      "case_name": "指代：门票",
+      "input_sha256": "4dde37e447170cde8d575d9ad0c8202c941f6c06d322ee16bacf4a026341c312",
+      "target_indices": [
+        1
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "A13-P1",
+          "required": true,
+          "meaning_requirements": [
+            "原所问门票已买好，共两张",
+            "数量、对象和完成属于同一事件",
+            "购买执行者未由原文明示"
+          ],
+          "variants": [
+            {
+              "id": "A13-P1-v1",
+              "body_requirements": [
+                "原所问门票已买好，共两张",
+                "数量、对象和完成属于同一事件",
+                "购买执行者未由原文明示"
+              ],
+              "subject": "contact",
+              "category": "common_fact",
+              "allowed_topics": [
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "完整命题均由这些相连来源直接支持，至少含一个target。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "已发生事实且无明示资料有效期，valid_at/invalid_at均为JSON null；正文保留原有历史时间限定，null不表示查询当天仍成立，不补事件开始或结束时刻。",
+              "ideal_destination": "auto",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "应为空数组；已确定的正文、标签、主体和直接证据不靠备选解释添加猜测。未知书名、未决定或本人不知道的知识状态不能被升级成另一个事件/人物。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "补票种、同行者、已入场或具体购买人",
+        "强指联系人亲自购买或改成shared",
+        "孤立两张而丢事件联系",
+        "拆分数量/对象/完成后重复计同一命题"
+      ]
+    },
+    {
+      "id": "A14",
+      "position": 13,
+      "case_name": "指代：发地址",
+      "input_sha256": "b6ef3f7a47a1eaef77a7510aa6126ea1577144bf9c561c09ed0100f9a8401ef9",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "none",
+      "claims": [],
+      "forbidden_meanings": [
+        "把一次性稍后发地址动作存为关系资料或待确认候选并算完整通过",
+        "地址已发送、具体地址内容、发给第三人",
+        "长期发地址习惯",
+        "将只A14的用户答复当全21窗/所有短期信息认证",
+        "删掉窗口或运行后修改旧pending oracle"
+      ]
+    },
+    {
+      "id": "A15",
+      "position": 14,
+      "case_name": "指代：借书看完",
+      "input_sha256": "0707efdd06f0fe9cc9499075bde040b738733f7e6846fda1fba352b1b29fb3ad",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "A15-P1",
+          "required": true,
+          "meaning_requirements": [
+            "联系人已读完所指书",
+            "书名未知但读完性质确定，不补名称或角色"
+          ],
+          "variants": [
+            {
+              "id": "A15-P1-v1",
+              "body_requirements": [
+                "联系人已读完所指书",
+                "书名未知但读完性质确定，不补名称或角色"
+              ],
+              "subject": "contact",
+              "category": "common_fact",
+              "allowed_topics": [
+                "study",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "完整命题均由这些相连来源直接支持，至少含一个target。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "已发生事实且无明示资料有效期，valid_at/invalid_at均为JSON null；正文保留原有历史时间限定，null不表示查询当天仍成立，不补事件开始或结束时刻。",
+              "ideal_destination": "auto",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "应为空数组；已确定的正文、标签、主体和直接证据不靠备选解释添加猜测。未知书名、未决定或本人不知道的知识状态不能被升级成另一个事件/人物。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        },
+        {
+          "id": "A15-P2",
+          "required": false,
+          "meaning_requirements": [
+            "用户与联系人之间存在原句所指借书关系",
+            "借用方向和所有权不明，独立于确定的读完命题",
+            "这是可选关系审计，不作为必需补漏或增加主分母"
+          ],
+          "variants": [
+            {
+              "id": "A15-P2-v1",
+              "body_requirements": [
+                "用户与联系人之间存在原句所指借书关系",
+                "借用方向和所有权不明，独立于确定的读完命题",
+                "这是可选关系审计，不作为必需补漏或增加主分母",
+                "作为关系转述保留方向未知"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "study",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "仅原target0，不补书名/归还/所有权。"
+                }
+              ],
+              "speech_act": "report",
+              "assertion_status": "unknown",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "已发生事实且无明示资料有效期，valid_at/invalid_at均为JSON null；正文保留原有历史时间限定，null不表示查询当天仍成立，不补事件开始或结束时刻。",
+              "ideal_destination": "pending",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "必须非空，保留借书方向/所有权歧义，不选具体出借人、借入人或物品所有者。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            },
+            {
+              "id": "A15-P2-v2",
+              "body_requirements": [
+                "用户与联系人之间存在原句所指借书关系",
+                "借用方向和所有权不明，独立于确定的读完命题",
+                "这是可选关系审计，不作为必需补漏或增加主分母",
+                "作为本人经历的关系陈述保留方向未知"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "study",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "仅原target0，不补书名/归还/所有权。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "unknown",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "已发生事实且无明示资料有效期，valid_at/invalid_at均为JSON null；正文保留原有历史时间限定，null不表示查询当天仍成立，不补事件开始或结束时刻。",
+              "ideal_destination": "pending",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "必须非空，保留借书方向/所有权歧义，不选具体出借人、借入人或物品所有者。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "擅定出借人/借入人/书所有者、书名、归还或借用日期",
+        "从谢谢推断喜欢该书或双方共同阅读",
+        "让可选角色歧义使确定读完事实消失",
+        "可选关系未知仍auto"
+      ]
+    },
+    {
+      "id": "A16",
+      "position": 15,
+      "case_name": "指代：面试结果",
+      "input_sha256": "2558968d4de940dc1afe7971c3d1937e53bd71aedbcd40f275a0c83a0eb1e47e",
+      "target_indices": [
+        1
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "A16-P1",
+          "required": true,
+          "meaning_requirements": [
+            "联系人通过原所问面试",
+            "已完成结果，不补具体通过日期"
+          ],
+          "variants": [
+            {
+              "id": "A16-P1-v1",
+              "body_requirements": [
+                "联系人通过原所问面试",
+                "已完成结果，不补具体通过日期"
+              ],
+              "subject": "contact",
+              "category": "common_fact",
+              "allowed_topics": [
+                "work"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "完整命题均由这些相连来源直接支持，至少含一个target。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "已发生事实且无明示资料有效期，valid_at/invalid_at均为JSON null；正文保留原有历史时间限定，null不表示查询当天仍成立，不补事件开始或结束时刻。",
+              "ideal_destination": "auto",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "应为空数组；已确定的正文、标签、主体和直接证据不靠备选解释添加猜测。未知书名、未决定或本人不知道的知识状态不能被升级成另一个事件/人物。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        },
+        {
+          "id": "A16-P2",
+          "required": true,
+          "meaning_requirements": [
+            "联系人计划在2026-09-21即来源下周一入职",
+            "只是一项未来入职日程，不另造持续任职状态"
+          ],
+          "variants": [
+            {
+              "id": "A16-P2-v1",
+              "body_requirements": [
+                "联系人计划在2026-09-21即来源下周一入职",
+                "只是一项未来入职日程，不另造持续任职状态"
+              ],
+              "subject": "contact",
+              "category": "recent_state",
+              "allowed_topics": [
+                "work"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "完整命题均由这些相连来源直接支持，至少含一个target。"
+                }
+              ],
+              "speech_act": "plan",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": "2026-09-21T00:00:00+00:00",
+              "invalid_at": "2026-09-22T00:00:00+00:00",
+              "time_rule": "只写日期的入职日程在所指日期生效、次日零点检索失效；09-22不是离职或任职结束。与旧invalid=null期望差异保留。",
+              "ideal_destination": "pending",
+              "risk_rule": "沿common_rules.risk保持原门：没有原句支持的敏感风险时允许[]或原白名单的非空低风险标记；不得捏造疾病、负债等风险，也不得删掉实际程序阻塞以过auto门。",
+              "alternatives_rule": "应为空数组；已确定的正文、标签、主体和直接证据不靠备选解释添加猜测。未知书名、未决定或本人不知道的知识状态不能被升级成另一个事件/人物。",
+              "reason_rule": "非空、简短面向用户，忠实说明本窗原话与正文/主体/标签/来源的对应依据；不固定唯一措辞或字数，不改变模型实际confidence；不得与正文或alternatives矛盾，不含内部思考或本窗外事实。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "补公司、职位、已入职、面试通过钟点或周二离职",
+        "新增持续任职主张或用null失效替代此日程边界",
+        "单一标签/时间覆盖过去面试结果和未来入职"
+      ]
+    }
+  ]
+}

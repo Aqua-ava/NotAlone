@@ -1,0 +1,3884 @@
+{
+  "userData": "/Users/local-user/Library/Application Support/NotAloneDesktop",
+  "config": {
+    "formatVersion": 1,
+    "intent": "open",
+    "role": "test",
+    "expectedDatabaseId": "63c91816-90a8-4cd2-b2ff-b189719c4ec0",
+    "capabilities": [
+      "contacts",
+      "skills",
+      "history",
+      "discussions",
+      "memory"
+    ],
+    "skillPackageRoot": "/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages"
+  },
+  "ownerId": "9bb13fa7-2418-4084-a950-a6804d9c333c",
+  "states": [
+    {
+      "id": "641d0ea0-9be0-4796-83c1-91fd7fad6a22",
+      "directoryName": "romance-001-first-contact",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-001-first-contact\",\"16777230\",\"88883218\"]",
+      "displayName": "romance-001-first-contact",
+      "description": "初次开聊：承接共同经历或已知兴趣：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "2e6173bdec9f15dc3a97a901dd9ca1f2b037f0204333e60deb528702245ac01b",
+          "contentDigest": "dcc2b65f2fc18436de71952f3ce3c78507540aa86f3f93e4ecbc42fffae0f629",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581096",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "a64548bff040445f6ec0e1a1600e7057de8818dc80db0bade9bc5753d1b81517",
+          "contentDigest": "c5a4971811788b55367986e87c4cd03ddd662d8684a4c3e074c806fe5a856271",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585080",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "31097409157f7c1a9af05ed28209d429559896e3ac21be4d908c8c0d5347426b",
+          "contentDigest": "1a423c2f32fbb9f74a776daa11cdfe9b30c21163a3489e9beace2d1d4352d924",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500130",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "2e43b219-1da8-42a3-b795-8d3c71bec696",
+      "directoryName": "romance-002-slow-warmup",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-002-slow-warmup\",\"16777230\",\"88883222\"]",
+      "displayName": "romance-002-slow-warmup",
+      "description": "对方慢热谨慎时的轻量破冰：用于该恋爱沟通场景，参考通用沟通方法。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "47179bbdab94e2b86bcf62b87010c7c7b3a418da2564f560c1192478b86a1229",
+          "contentDigest": "68a4e7e89ff404d37ead5c607bb0b42cf4c3e9a305e9b0eddeebd0e4f2949392",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581101",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "679844c74b92adbfcec8058e61016bebc3ef77d73d566b82b77b968b8aa94691",
+          "contentDigest": "b9240665a2c9df71df52c205bc5bf2ed09c4f3477628571d9c7f8c32ba272e3c",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585201",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "22faf976b3ebd093074448fdf377e42b45cc9feafb0acb9259c4c39549cf5723",
+          "contentDigest": "ff6647719c1f0fecca52bc36f346aa220739cda3a66fe8bd5631bdf18a578fa9",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500139",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "180a8be8-5c00-49b2-ae28-aa2f1f59b676",
+      "directoryName": "romance-003-reconnect-after-gap",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-003-reconnect-after-gap\",\"16777230\",\"88883226\"]",
+      "displayName": "romance-003-reconnect-after-gap",
+      "description": "很久没联系后的重新搭话：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "efb5e2ef1059b4a8a37da422d678934b836b7a6c7627625e235f3f47bde9c80f",
+          "contentDigest": "146cc3912c277b180e510eb334dfecde430c59f9334ef7fd87f66feb50889909",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581325",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "81a974dc69a36c5295a49efff91e97f950c7bbcbb7d0eebaed8f359b1baefb3f",
+          "contentDigest": "12e21ed7d58e6ee838924590d6184e439c37ed45458c8a9f6001aacf437f1d15",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585268",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "7b8529c8bd04467800bc13a22b2dbd61cca9188c136192f8635c55a53ee5d5f0",
+          "contentDigest": "cbd888e80b2bca1f872a4ac5402157b4acf11d6966c1bcfe66cf67cd05d88401",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500156",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "cef9d85f-7e6c-4bab-9f64-183c122c6a18",
+      "directoryName": "romance-004-refresh-routine-chat",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-004-refresh-routine-chat\",\"16777230\",\"88883230\"]",
+      "displayName": "romance-004-refresh-routine-chat",
+      "description": "例行问候聊成流水账后的重启：用于该恋爱沟通场景，参考通用沟通方法。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "366240712bf1f6f78d9a4fdf85924afb6d7eb680377e315540eb833a1ead37e3",
+          "contentDigest": "20ed7bcc44cc43017dba980128ce7c958ef6c9eb9489c69ad5247ffa74909bcb",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581328",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "41648ef247cbf0a794b8037e3a3463bfcd42ab615e0661b0f614dc7d8ecea204",
+          "contentDigest": "9942519b410143fee2e086ef88ca0c89f1008afea767458c0147076c4db98b92",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585368",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "d1ac3c721d36db30139d4dcee396d0c158de28a7ffdf6805f8c9b93620aafb31",
+          "contentDigest": "f44ce33a58004f76ec18fbbb7b97a361674b41d5c215e50bc9540e81dac97ec0",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500192",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "6caa75f9-92ee-44cc-9c61-26c71972774a",
+      "directoryName": "romance-005-why-contact-now",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-005-why-contact-now\",\"16777230\",\"88883234\"]",
+      "displayName": "romance-005-why-contact-now",
+      "description": "回应“怎么突然找我”：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "c68c576967bb24d625319b47e51b83c181f778fcd60c37fd420f02b19515e76e",
+          "contentDigest": "5e751d2c0847013f3add7b106c2ec855e91a4e9d618b9e76042804efa0c6291d",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581331",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "a9fefd27da3cf073d82995344ae81a64b42810cc215809d31893c7c225dbe0b6",
+          "contentDigest": "bb8bcfe6601a22f1627aa8e5d9251141a2f66859ddcecbe8c4bca2368168efe6",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585374",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "6ae0b6bb4bb0d4839fb288819c7e9e524553cd4ebc95cf08d4d35277b1eec41d",
+          "contentDigest": "290467d41181f3a57f97da5d92150c2608a2384c2101ab217894834745c9674c",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500197",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "a456de27-3a7d-43f1-b549-8143e70bc64b",
+      "directoryName": "romance-006-topic-expansion",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-006-topic-expansion\",\"16777230\",\"88883238\"]",
+      "displayName": "romance-006-topic-expansion",
+      "description": "延展对方已经抛出的话题：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "58de36d255747064e397a3955a325770ecc801b7b31e145a482a0451a48f0f5a",
+          "contentDigest": "88ac805a97b0817c449482d27bee8ee6406f33482bedc510c488d251ce40d007",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581334",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "957dc5119d8b373909b93f0f88f7e880a3ce0c5f27b9042773ebf9b65844ebc5",
+          "contentDigest": "b6653fbba5d592cc19beff268c0246e746d6b5af336bd53914a4b216f4f395d8",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585381",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "25453181c835fdb4548f6934ec4dd24cca669a53c651a5a6776ba494f4ff831e",
+          "contentDigest": "91a2cdd3dad245ee08933f1fe0bd51e02029989c5c9d29977ff754aac02db80f",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500202",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "9d670429-db13-461d-bf63-37fa303a1ec9",
+      "directoryName": "romance-007-short-reply",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-007-short-reply\",\"16777230\",\"88883242\"]",
+      "displayName": "romance-007-short-reply",
+      "description": "对方只回“哈哈”、表情或短词：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "5243e51b644d213538fca2a6e8dbbd49fac0ef8b93493c2bc37943c405b253d7",
+          "contentDigest": "bcd7e9044092356f27ac30756287c7c2204f139c85475361a1087d7da4eddd56",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581338",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "e5ebb34a22df37883e108d92da8d8d7668ee7aa6945d1aa24ee10523d5f618d7",
+          "contentDigest": "edad2560954373bcd40d5636af11537ad2be33c7115a1b1bfe42b6a29864331a",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585387",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "88ba640423c580efad23c954d58fd418677673c7a2384b2ac0255b99a2a13345",
+          "contentDigest": "77cf218a794b045066f263132bfef16f212f85abfe2a01d8cef30a9cf4eb7a1e",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500207",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "b6add3cb-bde1-4315-bc9c-96dca4a04052",
+      "directoryName": "romance-008-interview-to-sharing",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-008-interview-to-sharing\",\"16777230\",\"88883246\"]",
+      "displayName": "romance-008-interview-to-sharing",
+      "description": "连续查户口后改成双向分享：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "76757553e7f8ed68026674c148e0116deda3c83811ec11d4e6b1e4364b6f838e",
+          "contentDigest": "41e54abd3b51e6e46192361237d84a82f6e11cbffa3aece323def4ea06d1986f",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581341",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "1ffc007c212acaf9c3c5cec14d16ba49106aa23735946c8f4f084e8b4f103f17",
+          "contentDigest": "b455cb00bf01423ce3473dc24a5b703d91bc65b5df1816bae8f5532f2be3c894",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585393",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "fefacf5e70e82fa67f408ec05e0573301ea687542eb5693cedecb6ed347aeef8",
+          "contentDigest": "230322ab7ce3f0fc6ba75230d3077a4b08d767530c62e1780793cfde959d70d9",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500211",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "022c0de2-1111-41ae-a50a-24f44896583c",
+      "directoryName": "romance-009-passive-chat",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-009-passive-chat\",\"16777230\",\"88883250\"]",
+      "displayName": "romance-009-passive-chat",
+      "description": "对方愿意回但不主动找话题：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "bc57e80da7c8a0c963e39d26149ed66c872a080785a8b09b6b49ecdcdf310ed2",
+          "contentDigest": "7fb925a53d9db85f5cc9f5c88927abf67d73f3d19e0548fd31fab65e6a3d2d2e",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581344",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "1192b75107c358654e6ab1559d3f14125facfe4a506a8eb06817ba8cd4d5e2f9",
+          "contentDigest": "5cdbffb86b8f68c86048e81d815b38bc34ebecffa51bd0362c7375db31e4695d",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585528",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "fece451c9e25199f50d6eeeefafd288ae0b0144eab8131dec8b8867448e62b72",
+          "contentDigest": "dd1311e6fed6a31f5c1e03cd840cdba353821d690b1db11bc1a5e5ba200fc1a2",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500221",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "d8538109-0993-4090-814c-4e6adf570f9d",
+      "directoryName": "romance-010-close-chat",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-010-close-chat\",\"16777230\",\"88883254\"]",
+      "displayName": "romance-010-close-chat",
+      "description": "正在聊天但需要先结束：用于该恋爱沟通场景，参考通用沟通方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "9164d20261b2f033d33343ce7381c8505b48aeb3a4757111d09bb1cbd5760440",
+          "contentDigest": "b1e5d1b30884dd3509ed744b0907b7e6f61b66f60c95d2f8432a1f85ab395a33",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581347",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "3f5d4d831e332dd4e821f7978104ecd984bc2c646b8dd4038cb319b4588c81cc",
+          "contentDigest": "8284710f8289ba5e8cf04e6d467c825cf33d563f6049748caf55b486bd87597d",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585589",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "878dd62897c7464d062da471900f146e561ce97abe6e61db2e29b4747b488ba0",
+          "contentDigest": "231a8824770f8cecc48fa462d79557a477eea6d16c62e05207a1b56acd4b9092",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500664",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "ca4ff62f-ec4a-4b37-96d6-664e388c91c7",
+      "directoryName": "romance-011-topic-reset",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-011-topic-reset\",\"16777230\",\"88883258\"]",
+      "displayName": "romance-011-topic-reset",
+      "description": "原话题聊完或单次冷场后的转场：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "65614477dc2b198917a347160dfeb195ce6bb988be9899122ede5a647872cb0c",
+          "contentDigest": "3f1d2e0508c256fc12e071e42c8d9731488ced552200fdb91559f821fffc4b9a",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581349",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "584dbd8f3f25e7c7ed92de34cdd01a7f72f6727836bca64edab3a9f12aabbd7e",
+          "contentDigest": "a71f2d93809e1c396017563bf2891728c79449712851afe63549561f0df6b69c",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585615",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "5342e081be3060a8febd55e9a2b1f156affc409680bcf90180141d687bdcd186",
+          "contentDigest": "f87b1fc10c561e79d2fd74684c211a96f9b905f9cbcf20e289f899f1ab085dbe",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500695",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "4ca8da34-bca7-430a-a72b-4b8314b7ba63",
+      "directoryName": "romance-012-share-experience",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-012-share-experience\",\"16777230\",\"88883262\"]",
+      "displayName": "romance-012-share-experience",
+      "description": "分享自己的真实经历和生活状态：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "5888d61c012224b08cda6c6a6f7f2141e755ae059bb85b75b09c96560df8149c",
+          "contentDigest": "ceb01df39616fa595d37b096365ff4992f7f1a4762b0390ab8488657feaba410",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581427",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "a1f8e5ff16e51d21f3955ba8717bb0810c02a77ccc3e98795bf1ab19aae1f1f0",
+          "contentDigest": "7b6b064bbe8fcc8dbb3fd18771b1f79f9b7811cbb99dfba79322ad3c47fddad6",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585622",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "bc3b1d6cb005bcfce39ec3ef4a2c1569cddebbd9601edad57aa4525abd920a55",
+          "contentDigest": "29e0f8e88e33f2d6c43041bc8996b1cf3be63895aedca11afdfee141bdd3c33a",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500700",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "3504fcb3-7921-4d52-bab2-762f0ee10162",
+      "directoryName": "romance-013-past-relationships",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-013-past-relationships\",\"16777230\",\"88883266\"]",
+      "displayName": "romance-013-past-relationships",
+      "description": "回应前任、恋爱史等问题：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "6e3ac32ea818689e60c59f5c7acccd782db89e554069e81f7ff990a65f40b28c",
+          "contentDigest": "7be655225bb9103022ad911727b846624395f1102a39cd8fc26e894f65ff5e75",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581572",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "985bb4488092597523f7e960d9e5b14fb937021921b34ddb21024b5a1cd438ea",
+          "contentDigest": "ba8c7ea7ae271c0f7d274ae6b6285d75c92c743b4272f69948463e4cd2ac8ab4",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585629",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "563284d64ea14d63c07f1651de2ebce086ed4171c66612993d6df18d60d10294",
+          "contentDigest": "991c12cad4af5225cf777c03d57e1f6de113729477bb84ec8c56c4fd560dd09e",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500705",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "08f8a138-0e2e-4630-b686-00d76e34df64",
+      "directoryName": "romance-014-dating-values",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-014-dating-values\",\"16777230\",\"88883270\"]",
+      "displayName": "romance-014-dating-values",
+      "description": "回应择偶标准、感情观等问题：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "2b66da99778d53f56f543ed68d8368a2e2e4c7a457fcd1dc27fd8f2546c22530",
+          "contentDigest": "ea62b21a60681883aabb7764e6c886f195f7983c67d1463e49be789ab11bc6c1",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581576",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "48cef1aa0c6ffb9d4ebd41c847923f7046857400033d95339d4ac269856b302c",
+          "contentDigest": "78d434ed3f24d067ea26d43ba2cc2e366ac97c6ae8760e7033ff58dea4c4360d",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585729",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "89fd88e2ecaea221ed343487b472d469fde9ea661ff998b68e4a15941dac60b2",
+          "contentDigest": "7de8cd34d1ec702802aee09aa2e683bcbf9531fb055d704d0bebf2e03b0c54c7",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500719",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "33522d33-0b32-4cfe-ae97-2ca3dfd080a5",
+      "directoryName": "romance-015-private-question",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-015-private-question\",\"16777230\",\"88883274\"]",
+      "displayName": "romance-015-private-question",
+      "description": "被问暂时不想说的私人问题：用于该恋爱沟通场景，参考通用沟通方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "51e46d0b2566df7718e9b630dc5d5d1786c162d646d367b6da32d95bf6216ed2",
+          "contentDigest": "ed8c79d97f8134e67f1a53176bfc0b9569cc77740fbc6a6c31b7902052399457",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581578",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "7a83be12a2c891f8f84041bdaddf097878f59d5113dc62b5f73af2ea0ee3a8d9",
+          "contentDigest": "d985fba9d534a72302646ad2c664a0d973cf2ff96542f335f9bb54df9574b4c3",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585737",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "b36338727e2bcf214d1adce12166ad233b3b02d0e54164cf716f434fe74596bd",
+          "contentDigest": "9efb5d348404dca1a742fb9e3bde4392463f6730d84492a663cef66f56c94918",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500753",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "d170ce58-e8cf-4ff9-a1c3-c21ca3a2e8ed",
+      "directoryName": "romance-016-playful-banter",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-016-playful-banter\",\"16777230\",\"88883278\"]",
+      "displayName": "romance-016-playful-banter",
+      "description": "接住对方的玩笑、调侃和轻挑战：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "1f0635ce4dc15902e0cb4c2c0d155b0d02c3607825d4698f5da54c70128f69b0",
+          "contentDigest": "5251cf1f74b4bd1fc151a737c254d5e2beeb6366f2df3dba4717ea3981f893d9",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581581",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "1d253431e1c9afa333c448a68fd75cb078028b36f26eaa0da331d60339f4420c",
+          "contentDigest": "9ca67cbdef8ab6a154370f47ae52fe910b290f6d0120896c343901e87a4fb884",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585742",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "34f767ee8f0f97a5dbf5017214358e0969912f074b7ba7e28a36bba8dec65c4f",
+          "contentDigest": "e10ea0dbef2e223124cc4b7d277136e9ee13671c747825e32acba3de50b51248",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500762",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "f8974ed9-a72e-4326-a403-aaf3120142c2",
+      "directoryName": "romance-017-sincerity-challenge",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-017-sincerity-challenge\",\"16777230\",\"88883282\"]",
+      "displayName": "romance-017-sincerity-challenge",
+      "description": "回应“你对谁都这样吗”的真诚质疑：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "aaa5e46212de5879c129a334e1cd18466013a8f2b9a1f68bc72e49e6e74f513f",
+          "contentDigest": "6983bdc978e8c35f471c54123f2e8b458aca1743e4c29d9d501e2b234d70f914",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581584",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "91c8e9a7aae48e5b232a1bb740e2151771ffddc83be30a3a6067c798775418ab",
+          "contentDigest": "1174229860b0ad594a602a532ae52a81918e60c89c6e0b1d624599a767cbc226",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585747",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "2096f965ea30839174c7d0daa93c7b930f06f3b90c7b21fce3612a106b350408",
+          "contentDigest": "88c72b6d2cd7e81e12c065b7d6dabe37f15effd0658a79026f457e6338c77957",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500767",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "2c471f93-a9d1-45a5-9ad5-6ab71df560c4",
+      "directoryName": "romance-018-specific-compliment",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-018-specific-compliment\",\"16777230\",\"88883286\"]",
+      "displayName": "romance-018-specific-compliment",
+      "description": "基于真实细节夸奖对方：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "ec5d61469656f7cf6b2246f800e21982a3cb99435bbc0e83336eb96707da441d",
+          "contentDigest": "29a581b2b748b12cdba137d5cdfed21e282731ff48a2d749bc4b41fd9b32a52f",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581587",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "d42ef8f4d5a9a7e35f332686bc530255c1065a2a1f9f0d45b671d49e0a6697ab",
+          "contentDigest": "106d2a031dc8a6eaaba74f3f21fa0c611395ce9b6baf1c1432f121930851d2a8",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585753",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "e7ae43ded253a52b9ef76296d544e19f6b5212847d2ae235fe02973f1d166940",
+          "contentDigest": "8a44bf92e09f26fc83d3bf283153a97b020e1679b0b0babad0a96c04bf3d8d48",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500771",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "5564c881-3399-471a-8f4e-267b581f3a1a",
+      "directoryName": "romance-019-light-flirting",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-019-light-flirting\",\"16777230\",\"88883290\"]",
+      "displayName": "romance-019-light-flirting",
+      "description": "轻度暧昧试探与接招：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "13b09d8021d72300d0607fd15e64a779db29bf254483e2725af7f0f3dcfaf1a9",
+          "contentDigest": "e109fe99592fe67e87c1baea6e02d75f155f9a492a5155a3e325c883c945841b",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581590",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "617d3a9af9eea0eaca6747164cf15c179eb45b0e259c7bf66cb14486556584bc",
+          "contentDigest": "d141b7b6a14fbf3613238dda1f70fa400be1911b2516a9b1c13586f5b95986c1",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585870",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "d82ef5b3e5553fbf97c41200bbd61351a850f30ea2fab04519dca19d87843596",
+          "contentDigest": "ee652ab3843946d61f77acffd4435b0f09e34ae15cd76010ae01db9e3850a9f4",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500784",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "3a2e4512-dad9-4b4b-a1c0-9843670634d9",
+      "directoryName": "romance-020-miss-you",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-020-miss-you\",\"16777230\",\"88883294\"]",
+      "displayName": "romance-020-miss-you",
+      "description": "轻松表达“想你了”：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "874949da5998bac399978d48ec07477ba69a064e5f20a3ab14ef79b9f5de8528",
+          "contentDigest": "4efc1e4bbf840c6c54b70b8d74c7a411802b1003ec2166205e24f2e56b72259e",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581593",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "bd832b3e01ab1f0583afbc78caacfc3e5808851acc7eb0e781e2b80640346e78",
+          "contentDigest": "0c183b3bb44fd506288e6a0f8046a2f0f09726935476faa0949f07ec8b6522ad",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585919",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "3e000fe557ecbaa97f566d2b542d143af214e9bc242f45f304eb1d91ae30f13b",
+          "contentDigest": "851f19c3c35350e4391d70c3e807032f0f27b1e4f9075df69773f0914ed92c1f",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500817",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "58a4d7bc-a44f-47e6-aca2-9b0f60175115",
+      "directoryName": "romance-021-friend-to-romance",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-021-friend-to-romance\",\"16777230\",\"88883298\"]",
+      "displayName": "romance-021-friend-to-romance",
+      "description": "从朋友式相处表达不同的好感：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "f1020add301dea938092613597d71c1b34747fe13e0222fc1b47c907f3a6f147",
+          "contentDigest": "80b2c2982203c91f23f21d77f48e727fb5899c95fb03540b9459b19a0f12a1fb",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581597",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "824259f60b79f59d0192af209324abcf4cae4c4decbc9fd3aa3126adf78095d3",
+          "contentDigest": "0ac401786d751ed8cb24e803ad8b039de10389a8f1eeea203df32205ffd5b087",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585967",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "176da84cfea21072ce1c08a84ee11630fe741653430f6f42fb5919ed0c95ce08",
+          "contentDigest": "4b2c2feb93ddaa4fc8e95b16259f811f17f7c067221e9de136608bcb53c19fd4",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500825",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "a5f7e051-7728-47b9-a743-f4da629ce562",
+      "directoryName": "romance-022-gaming-to-personal",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-022-gaming-to-personal\",\"16777230\",\"88883302\"]",
+      "displayName": "romance-022-gaming-to-personal",
+      "description": "从游戏搭子转成想和对方相处：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "3407e460d351d635e6e6a3251bbe964844b73d1fe514fdd1ab7476dc85bed9d4",
+          "contentDigest": "a57209ddb15b82c073cc878e8b249fe513273557ebf00ccef76440f537358e62",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581827",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "a7a24a0f777e51d575491ba6da5080bfc1122dab8d09f7c03a1f338073dbeda3",
+          "contentDigest": "0c8f7acb2ff00c6b5475a8b9b3e4acf9b340a0823aacd1c4ba40947b497a0edb",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585973",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "9c3031c175b333aa77ad0c4e04adf8c5539fdda95a7258e9956255afc195048a",
+          "contentDigest": "06441159395fc708f8f809f6b40b460d5edeafb6cfeb1d41ed93c36a82ad3a06",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500832",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "76563b9b-8deb-449f-9163-d1d639cd4aa2",
+      "directoryName": "romance-023-after-showing-interest",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-023-after-showing-interest\",\"16777230\",\"88883306\"]",
+      "displayName": "romance-023-after-showing-interest",
+      "description": "表露好感后的接话与收住：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "529e4ef272677c66110eec7f218f2a13e95462094ef5241cb63d49d62ab66a70",
+          "contentDigest": "fb0bde5c78b30d67dafc6439a3f46fb27a9f55257eb6eebd25762685480870b2",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581830",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "306e147d074602c3c8766990553c86fe8cf741ab0d856100e4a9efba921eadac",
+          "contentDigest": "cc057f5d8ef7151b04fb1f1f1f4396b8437f4662ccb9dbef3354e52643837809",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585978",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "4d447401af0ca203b9a9fd76f465b9078f0f0fbdeaeb82f2ed13e6fb895e9fef",
+          "contentDigest": "291f8337d8f1f3c46cdcb91b9f357d48d44f0427fd1b3d00861068c20b7ab443",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500846",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "33d6566c-30ff-476e-9136-6ccf027e4f4f",
+      "directoryName": "romance-024-flirt-repair",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-024-flirt-repair\",\"16777230\",\"88883310\"]",
+      "displayName": "romance-024-flirt-repair",
+      "description": "暧昧过头、让对方不舒服后的收回：用于该恋爱沟通场景，参考通用沟通方法。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "c065f2e97da2b7aa1c4f058700e42dd83963254330cad011f28c01e9212943d4",
+          "contentDigest": "ad74aee74746e6f4114e0a005d1edd1e2c5514099bc06ea1d633b07003e970c4",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581832",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "ed5f0123f2e5d90218c118b15424bdea3c0291a8d948c730deb3f56887f788dd",
+          "contentDigest": "1fd9a361f51f4764f7a8617ad587db3471d56bab8e67b753a65ed3fbed3fd402",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423585984",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "38e8cac8f5bc017b8d506b66f8b7c291e367d0292b4562756098448a0eb21afa",
+          "contentDigest": "3c13d6dc34fe18a62bdfd1241a2100a7dd1908a7e4d9a78aa36ed4f7eb60a924",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500880",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "6093e7d1-fd61-4d77-847c-65881005b6d7",
+      "directoryName": "romance-025-meeting-interest",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-025-meeting-interest\",\"16777230\",\"88883314\"]",
+      "displayName": "romance-025-meeting-interest",
+      "description": "试探对方是否愿意见面：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "e67f67c57d05e58251e67bfbb89f8e96b943fa353a702689c8df98a2c02b172d",
+          "contentDigest": "f53aaaf47b21e84f93de3d3ed46b4ef15393aba2edaf7bb63fc01cb6a4b97f5e",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581835",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "1d8dacc70ecb0f5bf17e551faca267d3da378010f1393171df70c14a69fd04b9",
+          "contentDigest": "10086479c98996ef7674260e04b0de1ad2447c8fbec56f44ce25cbf129acb30d",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586086",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "d9a4ce0ce10f3efcbc552617539a462698df9bdf1f370877abc96b4e0885a0b0",
+          "contentDigest": "79eae2fdca78eb9d52c73ee71e8e6251f21cda4907174b1ffe7d3fd7353be610",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500885",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "355d9f17-5341-4344-962a-7468305d8bf4",
+      "directoryName": "romance-026-concrete-date-plan",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-026-concrete-date-plan\",\"16777230\",\"88883318\"]",
+      "displayName": "romance-026-concrete-date-plan",
+      "description": "把“有空约”落实为具体安排：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "e45bade8a6c929305f14eb822784525967e28979fd6103cb850a3aa986c10262",
+          "contentDigest": "ed778ae7e2d45bceb53f4978fecbfc0237bb23381132a3660176539134db6a2c",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581838",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "299a1b88b2ac47f6f636e32ce915fd4e6c6b23391df777e0e946825ea76ef2b6",
+          "contentDigest": "f5b005454d058286d255bb3e093b91ce74c053de6224d4c3c8d031b99a590aea",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586092",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "1beb1ab75b7aa82207ebe31e6d3c0995755e8036e8ebc4269975ef6c59521633",
+          "contentDigest": "5b468368423c8374580a609cced103e36485ad3b12c32a5e1afed0cdd9aeb038",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500890",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "12ada0be-7cf7-41e7-8cb2-c3359da57018",
+      "directoryName": "romance-027-call-video-invite",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-027-call-video-invite\",\"16777230\",\"88883322\"]",
+      "displayName": "romance-027-call-video-invite",
+      "description": "通话或视频聊天的邀约：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "7dca651bf50c6dd914b2a4481f66dcc748cc3361a0882661cfe60548f24f9491",
+          "contentDigest": "a893c0098915eceb4813c1a8ca42ea6a7cf2549a3dd7407dff51f4cd932ee4f9",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581840",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "29134047f6f882dfec4635351506a2f4b62f848c4116e4abb83c3bfc37f94b39",
+          "contentDigest": "9b8426040c6f8f5e2e0b328e7968cb2ea1e41c56d906b26c79e4bd4c854065c0",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586096",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "f2b72f0bdcb93a927c5f89ceda6876f3789254e84d4f35b58a2cd5939a2562f6",
+          "contentDigest": "273b6f82944c851bf0b995e36942c04d64d8ac8d930fb6f6530d11cf3056cc3a",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500895",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "43e0986f-fb73-4950-8c92-4976efdd4ce1",
+      "directoryName": "romance-028-vague-invite-response",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-028-vague-invite-response\",\"16777230\",\"88883326\"]",
+      "displayName": "romance-028-vague-invite-response",
+      "description": "邀约只得到“下次吧”“再看看”：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "ac9d437983207fd3dcad034e80e222caba157a21c6895f5b2f7e131753abc0a4",
+          "contentDigest": "977d3365c1945fc105cadd5652e2262e2915b41a0f2f0dcd55b37b1e89d976b9",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581842",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "961ca31a69c6c605a1eaae772920d8785eeaeaaa122207a7b2043f3144cc32ea",
+          "contentDigest": "84630ce666446487c29e1278634274420a0d4f186b19beaf628b7d053a47a3f4",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586102",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "9cab4604169cc491da97fd3afc8dcf28ddacf083bb5c2179d5ae83304ed9a93b",
+          "contentDigest": "028c3787d6166d728695a6b756845753d103617f37bcbb2446a2a6268d2960f6",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500900",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "29c61d2d-8cf9-49c0-825f-485c3c30a3c4",
+      "directoryName": "romance-029-schedule-conflict",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-029-schedule-conflict\",\"16777230\",\"88883330\"]",
+      "displayName": "romance-029-schedule-conflict",
+      "description": "有见面意愿但时间冲突的协调：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "c358ff546bb192627df2ad1a853ab3978d99e16c223cba38ce16273c1a60c055",
+          "contentDigest": "917a9794f49e1b945400b8130b5349263fe92f9efb09a481fea3137478564150",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581845",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "bf2c04fe8078509789555d1217b9bdf621f21e18453a8c739ccd1381a04475ec",
+          "contentDigest": "0558414d3907dcb00e9e23ca903443fb60a4a49291131a4d746f89a9f4076dea",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586110",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "e53d2c99856757f29274cc420fb9908ca60a1e9889533adedcbd591487b478e2",
+          "contentDigest": "3e413ebe821f0130bc3e058d6417a99c29a82293a86393d82bd968b22d6f3ffd",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500912",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "d050f791-1e0e-4d30-bf59-f6b45bbcde02",
+      "directoryName": "romance-030-last-minute-cancel",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-030-last-minute-cancel\",\"16777230\",\"88883334\"]",
+      "displayName": "romance-030-last-minute-cancel",
+      "description": "已经约好却临时取消或改期：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "3aa1bd548c4187d6ad59dcfb407b9092e6ff2487ffd24b37866edac0b4ce64c9",
+          "contentDigest": "c1f5cc60de5bd9c99ca6a1a37ac23ddeef908fdde98f86a569e618d44140f3df",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581847",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "aae62e2a35f0c302a143c92e203cea6d88a75679b5d1a30c3b9ae900968cc68c",
+          "contentDigest": "4a03bd8d77f7a0eccae9805b97e59e86efe87e1bceaf4da0d959e9fdc9d1dd2a",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586144",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "dccdaeb2b53aab0a94c05e7387aea6a03cad2e8c544b9217610d91581de7eaf1",
+          "contentDigest": "bdf01f39d666ce42843851a0773b246dcd2d7c3444b6ac2e345ef0da187d45f4",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500945",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "153982c0-4232-4e9f-8317-86e94a732acc",
+      "directoryName": "romance-031-pre-date-confirmation",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-031-pre-date-confirmation\",\"16777230\",\"88883338\"]",
+      "displayName": "romance-031-pre-date-confirmation",
+      "description": "见面前再次确认必要细节：用于该恋爱沟通场景，参考通用沟通方法。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "1c4795bab795bdcee1b3faa3f52e1837eb94981121263afca8c369b1675e7e48",
+          "contentDigest": "bed5a4e8dc5c9bcbabbb30396116a510060abcff7085b3e5a222be3384222f41",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419581938",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "2dd9bcd7441cbf87a47214694572ec2d5af55baf31befe2f54b388bdc3c2b478",
+          "contentDigest": "823832c9e594000ef18cab7d07cf44b776cfc0b9ad17de8223602b059ff04e63",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586256",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "8ee4c9d7f740035b037f60e520da2d2d5f69949d6dc4e97fa59cb6f5c93689fb",
+          "contentDigest": "ecf44b918fe6bb0c53c1d765cdc62537a438dd22312764691573c66f80f8d2e6",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500952",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "a7c775a0-e436-446a-a25d-019e55afec99",
+      "directoryName": "romance-032-extra-companion",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-032-extra-companion\",\"16777230\",\"88883342\"]",
+      "displayName": "romance-032-extra-companion",
+      "description": "约会临时增加朋友或同行者：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "d43d217fd3386c4995095d4463967606d2e1b8559624157908ebbfab47d06f38",
+          "contentDigest": "7e8afb0d83f54a24f92e5639f0bd32fba2ecd82e9414474d78216a3961b51482",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582091",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "346a237abe3925a29f378aaee858b57ac298101a9dcf0516df8685b8bf33aa3f",
+          "contentDigest": "5811153dd88a9175be9f537aa009da86adf45766b680cfbb8af104e8d6474357",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586282",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "5fe84cfa663413696415bcc9e5701c5a07cd6ae19dea532290eeb523c04fe3cc",
+          "contentDigest": "0882182b499c8fd5b2d3937ab858e924ab40f6ed56a7054d17e731467e869c50",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500958",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "080f828d-2c4f-4944-9d55-c2a0cc33e63e",
+      "directoryName": "romance-033-in-person-silence",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-033-in-person-silence\",\"16777230\",\"88883346\"]",
+      "displayName": "romance-033-in-person-silence",
+      "description": "见面时冷场或接不上话：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "27862259c4b16aa3c51fe37e9e68e3665bcc5bc69dfd5b6b1d70b8ee4ee72b30",
+          "contentDigest": "aaafa29f6b10790cdd53b87b6e65e85518de58969acf85a7bc60c71deb540d5c",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582096",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "1ce06f8439bdb03e87b0d8581716f68e81d7c3f712f21e7032b2204e0d1982b7",
+          "contentDigest": "f03e6386738ff5bc30d5243cb3bf6e55dde1cb476a4fc972328e200f35eff3ab",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586289",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "ea2c81b4a5d7e967990c9a8b01ce925f363460b1d44734ba75e3c0feaef1cbd0",
+          "contentDigest": "937e001f023e9f58a91b2349a8ee4790075ab090a7cc1ff78dc53775a721a290",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500966",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "eb774dda-a469-476a-ae32-7125b6faad12",
+      "directoryName": "romance-034-date-awkwardness",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-034-date-awkwardness\",\"16777230\",\"88883350\"]",
+      "displayName": "romance-034-date-awkwardness",
+      "description": "见面时说错话、出糗或尴尬的化解：用于该恋爱沟通场景，参考通用沟通方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "e76c98397a7eaddb66455d84095f9ede32d4f094f201728f96ed1dd1b46e109d",
+          "contentDigest": "c3dceb1a7ecc574b51363b0fc0b6418b65e3f1fafff551db7e675f0b6d4b556a",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582099",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "de4b8b388a97bb26b7cd029fcb38c95ab8d443d9730d7dfb3db313c84500fca4",
+          "contentDigest": "090ca3be8ea595cf8b5e5c7d82eada03c7f6ca3336a426c8686b4731829ff3e9",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586294",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "95db3b627731fde6e83f82ae86124edf194565d1831ef7069b9b99e7c70ccfe4",
+          "contentDigest": "b7c70006e73c4f43bf85c320e2abe34ead4c7ee3e5b68ea008d34da7a1763b79",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500982",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "ca49e87a-70da-4b40-b314-fb2845d15875",
+      "directoryName": "romance-035-first-date-followup",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-035-first-date-followup\",\"16777230\",\"88883354\"]",
+      "displayName": "romance-035-first-date-followup",
+      "description": "见面结束后的第一条跟进：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "c8e5160f2049d5f3c55dc1ecf547b069e3d02b34a7b3208fa8b6a7d4ed2c7beb",
+          "contentDigest": "440e2bb5eea649faec30ace0a37e9f558d8cb16020a990777dd6d5b1af29cea3",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582102",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "ae7daa5a4ed3ad0965ef8f430e71d443f67b9dbdbf9f7a7932c9ea39f58c8041",
+          "contentDigest": "ef9e81cf00f31d714789e34bd6559c4e22963becce6af8defae8f71b5c53b2b3",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586329",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "9e1e491f368356c53afa8fccc5f771137324a5df201158c9fe4751c8e6889009",
+          "contentDigest": "f678337889b36a1793fe971b13121357244a0375cef0383b42d20b938ab53fbb",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500992",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "c2b924f8-f76b-435b-805e-9d76bb175edc",
+      "directoryName": "romance-036-next-date-invite",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-036-next-date-invite\",\"16777230\",\"88883358\"]",
+      "displayName": "romance-036-next-date-invite",
+      "description": "承接上次体验提出再次见面：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "e1221a6014ddc3af26d8e65e3fd83cd7ddd3d269778aefa72a1b7dfa817c6e7d",
+          "contentDigest": "22e83e429280338490fea51071b7bcdbe1c89e9e6a7164b4fbc3f56136c8c5a1",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582105",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "764c260473a7b4302bf918b23f89605ea9163850cbf9690a510f8b63ed2da8cb",
+          "contentDigest": "7d231ccd28429b9fc69206917e320fcf89377b3d095190d45d32a8e2b2b5a1cc",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586418",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "8da8d913f2f9b96b63cfc3c98f5286dd3fe4c68ddfa208d81c448e89eb289a21",
+          "contentDigest": "e27e89f2c001205e94343b3b8b4c7ff8115c3e6976a6bd97b2b552e12037efc7",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425500997",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "ea9226d0-e40b-4ec0-a8c5-f677d00705cb",
+      "directoryName": "romance-037-end-date",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-037-end-date\",\"16777230\",\"88883362\"]",
+      "displayName": "romance-037-end-date",
+      "description": "约会不合拍时结束当次见面：用于该恋爱沟通场景，参考相应处理方法。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "b52950e5759e8b7e644f045e75bc58d099a825fde5c43fc103053e230c4c5c98",
+          "contentDigest": "93349ce81f2003055211357056ffa6bc0f2ad36286ef1f6d442e4915a0aa337c",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582108",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "69868b6ec576b0b475ee5b48cc49d8e1df6330b812e7097e29e9f1d853c77210",
+          "contentDigest": "a9dfb3dca3712e9439dd1e85e1992d02c2dd73778e9899c79f574f7b83e2087c",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586425",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "967bfc114225bfb90aeb9ee317d58270ef792ed19d5504275101ae22bc257720",
+          "contentDigest": "fc65f5c3911a1671008d38009f7023e5116ad24d91a11d2e446d95c60f6256ee",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501000",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "bb22b200-bf52-4fe9-8290-bdb11b779853",
+      "directoryName": "romance-038-unanswered-message",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-038-unanswered-message\",\"16777230\",\"88883366\"]",
+      "displayName": "romance-038-unanswered-message",
+      "description": "一条消息迟迟没有回复：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "74f82d778f6dc7681dde7b747f6f08c514653cec2876dcc1ed2318d02af8b010",
+          "contentDigest": "fd9fd649228fa85aeab162460b7b60c48ecc426b10a7f1b4798b77b96a72cdba",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582114",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "51306ae40e334ee6eee5f0c4fc57eca5ce59b78c1f0f4cd609d028c5d94f9887",
+          "contentDigest": "a48a80649e99f024bf78f64b6529ec5895107abff08d4fcf67ba59770a83f255",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586430",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "d0e6ee102631725fb0933904074ea5a7e9af42de070e720882ad01054808d666",
+          "contentDigest": "b6992520abd14b7e1c87b07e5ab72ec44d09bfda00bfc4b6b61437e9527c0c54",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501005",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "44996e5f-129f-424d-a178-66034cd60346",
+      "directoryName": "romance-039-fading-interaction",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-039-fading-interaction\",\"16777230\",\"88883370\"]",
+      "displayName": "romance-039-fading-interaction",
+      "description": "多轮互动逐渐变冷：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "4036037b4e36eeeea29c0817fd26ded07b756fdf5cf6e6789ee460c23fd66dfb",
+          "contentDigest": "a7d16d9b39e4dde743a54401a4efa94661c4ea85d77febcaa06c46444ac1e42d",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582195",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "669a666a0c2c2f78a501f458c190ec964b8e1c1d3d83fff20590a763b1885aa9",
+          "contentDigest": "d0006b76436699ee26ffced039b336ec2cc7f88331e7bb2f862598e6a4259b32",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586436",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "c5f9a82aa3043d2f0d463492b2b70c37443c3bddcbe50765d92c0c6755b6d35e",
+          "contentDigest": "df10c2d1fd91678e02027a71830fed2ffff2cac907f883f5fd6efef8ddfc62e6",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501009",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "4d63df03-c6f3-4fc1-8754-60f8f358a25e",
+      "directoryName": "romance-040-hot-cold-contact",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-040-hot-cold-contact\",\"16777230\",\"88883374\"]",
+      "displayName": "romance-040-hot-cold-contact",
+      "description": "对方忽冷忽热时稳定交流：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "363d3ae69dbf560f697a00853b07f5bea5aa5e812a3916f8ce335af9fd14d345",
+          "contentDigest": "03d5fd778cbe4aa1b9b1b5af1e86d1ffaa02c14b6d31e5218524b9a169f3b93c",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582349",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "d9cb0abafbf428c1096b3574840ede4e744b7160430a0bf3af2e5b5f7e9ca89e",
+          "contentDigest": "c203c947e899ee7078057af16947246a1f706254676383a9238a08f9d165c725",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586442",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "44feaa93899c7a57e2a6b92bf6116c011d2e3c0e97bfcf031f7c3cf574c71234",
+          "contentDigest": "df3b47f95a9145693fe45c947a99ced46b0052cb9540c1ba229850a06c70bae9",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501022",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "d11acbd7-45b7-4bd4-87ed-be00650ceafe",
+      "directoryName": "romance-041-busy-tired-exit",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-041-busy-tired-exit\",\"16777230\",\"88883378\"]",
+      "displayName": "romance-041-busy-tired-exit",
+      "description": "对方说忙、困或想休息时收住：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "7a60d6b498b710b97fe21b8085926a22077c5b6a10a819c08ee8788485aa266f",
+          "contentDigest": "164a4a77d9144f994bff600c554d12662e9242b9ee22f76dc24b7d398ad35801",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582352",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "6f728a6ebe8f3b894a3bc97509ea008de5357ba787d033d4cf95617be40ea717",
+          "contentDigest": "02c4f22dc5a5734be6b3649f562252f7d3d40ccf021d8adfab17579a7c57e4ab",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586562",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "8fb92c9169cf53155112bdc70320ac8a6baf85c9d305761b2ab158abf3a28f80",
+          "contentDigest": "9f79824703de882490468ad3f61500be92cdaf808c310b3d4f49cabeb681c28e",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501030",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "b450ee25-5be4-49b4-b0ec-4110e2c0391b",
+      "directoryName": "romance-042-after-overexplaining",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-042-after-overexplaining\",\"16777230\",\"88883382\"]",
+      "displayName": "romance-042-after-overexplaining",
+      "description": "自己连发追问、解释过多后的降压：用于该恋爱沟通场景，参考相应处理方法。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "7baa7d03074886078ab3025b83cdae60ab0742f39c867d260a8fda78bbbced69",
+          "contentDigest": "bf8e33a5c1c3e85ed4a299cf333077e6fda6c2e2c3c021ecac4cd05316cca035",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582355",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "5f75645e9acca9fff2b4436d20a393e22c76a32c58370f5036747d10b0e32067",
+          "contentDigest": "938483eed73a2a18df0a1ee7486fe69dd2ba85dcd0ed9643d6fdea54360a4d37",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586590",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "3175c555fbf6408ab80dbd9f4dbc4404313c5ea5a41b82a90ef5d2dcbc07f23c",
+          "contentDigest": "57c4070525777ee45158b4552273255a1df36c60a7899ea3d5787bdf84a4a953",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501036",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "fc356d8e-3da4-49ae-b73c-aafaad3867da",
+      "directoryName": "romance-043-help-only-contact",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-043-help-only-contact\",\"16777230\",\"88883386\"]",
+      "displayName": "romance-043-help-only-contact",
+      "description": "对方主要在需要帮助时才联系：用于该恋爱沟通场景，参考相应处理方法。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "963cb8960731ac5fdb6e531bc8a15f12787d5e645662a5c788a007f397ca9319",
+          "contentDigest": "30703968bd12f6c7cc6c4029ded7c9cebbd5e4f35d18afc12eb3eb3309ddb637",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582358",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "3544eecf3999c0709f032ff173b5d878d3d33addf2116685a638bff3a595824a",
+          "contentDigest": "d4fa649bb840e526463db38a4309e35815461d4abab9519805094a25228ad7e1",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586595",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "611e09b5ce8901113650a905f185e36d2ee7038e619e032a1d5ef81ccebd4f3b",
+          "contentDigest": "320c1ee1adc2ed3716b07ad05a8493a2a108e33c957889e1c1aaed9413a7cb01",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501041",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "ce81dddd-2b95-488f-9516-26bc8ee2232d",
+      "directoryName": "romance-044-one-sided-venting",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-044-one-sided-venting\",\"16777230\",\"88883390\"]",
+      "displayName": "romance-044-one-sided-venting",
+      "description": "长时间倾诉陪聊却没有双向相处：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "ade45258025bb6b6953c8932cd67cfcfabc10256948a3754a2fd6e9372e53b2e",
+          "contentDigest": "f91d2454469fc89baeb7facf66bea73f6a4e7028aa7e98331f28bcf7159cccef",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582361",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "bb115a7ee4ed01b1212d363499cdfbcd99cfae4ac8b4cbf9058359a80eacf901",
+          "contentDigest": "42e0bd3056632069a269ef23ad2bc07669beaaf60cf5c3dbdbd71e5f66986a5a",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586602",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "b04341e60568b3cb9f1f9b363f8bfc72bf7585f23ff6745a42807b51a9f97fde",
+          "contentDigest": "c08d51c497ea83f4c0b14f4dc9d2cbf6c610fa05340f66ec80f60cbb0348f26e",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501045",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "2831d33b-3eee-45bb-8a8f-865179a8b102",
+      "directoryName": "romance-045-conditional-affection",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-045-conditional-affection\",\"16777230\",\"88883394\"]",
+      "displayName": "romance-045-conditional-affection",
+      "description": "回应“达到某条件才考虑在一起”：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "1b2130bef3bbb86afb7e2de64663abc2eb529159f27b0bb9f7b213a9d6c8265c",
+          "contentDigest": "aaf0b71614cbed07d9975fc4428f515ad8d12a91d70e06438b56899b75bdd289",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582363",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "01a773b90d0175523eb3fb7f755331957913a72697bd3352b95809753af0ca5a",
+          "contentDigest": "a3522f4d864f3523ca44c5715a40bc3a59df2f558843e306c9368bc2ee75aa25",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586609",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "7c8c11e9daf17f1ba4ebe053168e522c18d2d211119e5bf9473fed38fe8c40bf",
+          "contentDigest": "161b427c6a8ad6344d5d672aa3ba636e5b823a4192b6e41306e0d0643d74caa5",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501049",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "0975fb67-fd94-4927-928a-9d235ee40aed",
+      "directoryName": "romance-046-mixed-signals",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-046-mixed-signals\",\"16777230\",\"88883398\"]",
+      "displayName": "romance-046-mixed-signals",
+      "description": "说有好感却持续回避见面等矛盾信息：用于该恋爱沟通场景，参考通用沟通方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "ae0885b21222a1c3fbc1073fbb55138409d0a433d38381447a8e0706f25dd6b4",
+          "contentDigest": "3dd5cf57bd4f88b16d7b8185485dc1c85b2d425387cd786b4d2b53ca4676c4c6",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582365",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "047b52ef4d11fe7a7a50f74ddff7e22acab8f26959b168423b3e5fdcffa9a442",
+          "contentDigest": "5aaa514883e1128ffb9665d2a3571e856f53998599eb64bf80ac3636bbc4fc34",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586639",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "2194af630430aa5c1f79b4bb4003224da1400293647263d6a07a242591e3132d",
+          "contentDigest": "6548806a20ec4272d67969da9c2d789fb3f94eedeb7b91c00309a43732ff364a",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501062",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "7ab863f3-9f38-434c-a432-2652d2b05e7c",
+      "directoryName": "romance-047-sadness-support",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-047-sadness-support\",\"16777230\",\"88883402\"]",
+      "displayName": "romance-047-sadness-support",
+      "description": "对方难过或受委屈时回应：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "44f00b6c48259ab07e22f860088c8234e2f8a55e817c9f71cacdaa786ed2fcf3",
+          "contentDigest": "c2b4a085ccadbde63f5ae767c172044329c5d312d0748c47f03f47da636f72db",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582368",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "66b9f557349375ad27bc11dbed1115f822c01fdba1f46743aa5b7eeb645c1a15",
+          "contentDigest": "e981d83360e068ac773dd0269b31082ab9c1c5ec318d53324f42bfd1d0b49018",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586761",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "53b7508f592883051eb853341d62d010776b48ca126ec831a9594cc4b6347525",
+          "contentDigest": "19b8cf5f854c5221ec4e84edc320ab63af5752a7e7e215bb897e7659d01dcc89",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501068",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "79e62d52-d347-48de-b386-26fb9ad79014",
+      "directoryName": "romance-048-anxiety-support",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-048-anxiety-support\",\"16777230\",\"88883406\"]",
+      "displayName": "romance-048-anxiety-support",
+      "description": "对方焦虑、纠结或担忧未来时回应：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "32a5a9732f3d65642b09ba95d106bedc1d3acdc8ac634b97b964bf5f05bf8839",
+          "contentDigest": "6e50bbf234f392ba34a4ed5f7ed8547d2feac9b55ed90d13a02e190f01b332be",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582371",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "d72289d6ddd9a7cfb2349c80c9e20de2d03ece550dfdf721804fdf7ca4e6bb22",
+          "contentDigest": "9bac1bf921f9bcafb67e3374dd0df3183cec13ac15d457a7b65df9654a7deca2",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586794",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "15dafc6e12ba80f6289301526f9c162d5ff6a213127e9bad80805e6155c5190f",
+          "contentDigest": "e4748a2c21daf551027f1cb212feb4eaa19ec8996411f0d92317065cb46326a9",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501073",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "dee4ca75-f196-4abb-99d6-c8a4b3ed7fa1",
+      "directoryName": "romance-049-venting-about-others",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-049-venting-about-others\",\"16777230\",\"88883410\"]",
+      "displayName": "romance-049-venting-about-others",
+      "description": "对方生气、抱怨别人或某件事时回应：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "25b4f52ce9be2b492086377e7af7a839c100e9ef30de5ec62f22258f30c98c28",
+          "contentDigest": "be2d4e39acd22d718b53513cc9331712ce2fe0f39370b279ff01929e26856d85",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582451",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "4c046f46c3a62cc6a2875cf4c2b7b7da0dcfbd8cf8b4d6ccc54fa43d3d3ff428",
+          "contentDigest": "e4fb58740db39dd3dc93ec052f1a2e735659882d3646c145c17521ef0a5f8755",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586800",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "5ba43654a79ed51e2987cb5e9194ed8c698da115e1b799a77713a46325425a44",
+          "contentDigest": "7f8d41246f3445e0858875a30f796750d2f9f2a45dcd341f2fbfc63ff828c27b",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501078",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "74538eb7-74bc-4118-bf11-db62bbcfb3fe",
+      "directoryName": "romance-050-celebrate-good-news",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-050-celebrate-good-news\",\"16777230\",\"88883414\"]",
+      "displayName": "romance-050-celebrate-good-news",
+      "description": "对方分享好消息或成果时捧场：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "b16344b9676726a8b371ede2a532b3a636f4b3177fc3d72a0d0d2e5af88b2b2a",
+          "contentDigest": "00334314c22b92fea679a6f723eaa27ca5251a0987e8470377c8ee5118b00606",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582605",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "94dafab378055e2609ba1fc19b2ee70d3bba02575e68bdf7c8d5e20ff004b87b",
+          "contentDigest": "9e5976938e7f402f5f36b0242fe4da2854a9988917d5f40509ec0c18ea760909",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586806",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "58ba913142b78b5db6b7901f31ea55f1776d1d56dde7f834f7dee17ca453a0d8",
+          "contentDigest": "3a4c8bf23496725a735d6dd55dc0f4cab26d2879c9f6dd627784c3c5fcb53f78",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501083",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "ba52e07d-c666-40c8-8eeb-907cc4cf04fd",
+      "directoryName": "romance-051-illness-fatigue-care",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-051-illness-fatigue-care\",\"16777230\",\"88883418\"]",
+      "displayName": "romance-051-illness-fatigue-care",
+      "description": "对方身体不适或疲惫时关心：用于该恋爱沟通场景，参考通用沟通方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "6229bca72d80e9a7e9e2c9fff8e2f68790c2182b4e795d96e4273306a02a50bd",
+          "contentDigest": "4795f0919f490fb47b8e88d744d121b004c8ca4d9279d8f4089dac104b4b6063",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582608",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "c91617e859c6ccf96084544277c4868b22c640bcf0479d99d720697ed3f2e27d",
+          "contentDigest": "79500d5229392e4c29f0a16f14fa00f648a6cfc01e38c1683b612d6ad94d99df",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586835",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "a2377a18c5bc21f7760e639687873ddbaf3ac1d35db3b3cdf3194edd0b5eb526",
+          "contentDigest": "dcdc913482e4d5d4c113aa4c8e83a6e79dda449d131559c9e6f26bcefff26871",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501088",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "fd55fab5-7bfa-4358-9196-7262f40f8659",
+      "directoryName": "romance-052-specific-gratitude",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-052-specific-gratitude\",\"16777230\",\"88883422\"]",
+      "displayName": "romance-052-specific-gratitude",
+      "description": "感谢对方为自己做的具体事情：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "2a0245e5f0f85418c14049fd8f467a30d7e03b2e05a83dc604da123d6536a6b3",
+          "contentDigest": "103622023cfde9178ea7f34a86871aace6e456f6e9de1fed3766163bfddd68c0",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582611",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "b37081d3f08246156af1612c7216773add023f0ddf0aaba1606a00e14300eb28",
+          "contentDigest": "9eacc8910365b781b1c0d4e41f75d59a8970fd55e9ebdce3442c1b38305863f6",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586959",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "a5bacb1dd0fb8e4d1443a40bec39b13ec726598c5e1567ca57488dab8b0e7087",
+          "contentDigest": "4bc40c734e0a4721d99a5f2f81a98966b72ddd6098f5b1abf9ea3eb4aad88847",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501101",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "12cb4b21-053f-470b-a0c8-1f6dba2a424d",
+      "directoryName": "romance-053-couple-reconnection",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-053-couple-reconnection\",\"16777230\",\"88883426\"]",
+      "displayName": "romance-053-couple-reconnection",
+      "description": "稳定关系中疏远后的重新亲近：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "b65d094732b2d736f66fa131d143b3a553411133f1f387c246115e7549e1e98a",
+          "contentDigest": "58ee43b0cd6519b66653664e59d8ab52569a1f1ca7e1d950a09eded1df68c815",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582616",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "2d787206bbc68fa203b0dcb76468bc737b1efb334ea39dec2e67b33429707f89",
+          "contentDigest": "f94872cfcf8e887f55f969e7ddf06ac14dc1e066a97aac9f6cb586788aad3164",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586964",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "dd791c43073fbd7bbf4e10e6fd52b25b4988f1364494c9b21d86dd6ca087018a",
+          "contentDigest": "b0c469505ee5a0e1432bae7aaafde5ee14037cadedcedfecac7dcfe9fb416929",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501108",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "408b161e-4ede-4b5a-a921-c874c6d7ea96",
+      "directoryName": "romance-054-couple-help-request",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-054-couple-help-request\",\"16777230\",\"88883430\"]",
+      "displayName": "romance-054-couple-help-request",
+      "description": "情侣之间提出或回应具体求助：用于该恋爱沟通场景，参考通用沟通方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "2fc15413e5126d93cca315ce533531d07b6504c08b0aec833fa4761594c39e03",
+          "contentDigest": "7aeb5b99965514a39b87d3fde9deb39d63b86f236213a1312cb53a0ab2b8719f",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582620",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "36c1337e1b635ee2cc709ddeecf81301d9d22566217deac0f8ce1655f22d7bfc",
+          "contentDigest": "b1efef418d03ff19430c2c0b11e1c6d9e8d1cb1635cde987f27c66ee365cd499",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586971",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "6a6f01cddb99fd782896e857236136745dcca4d1d7b1d537e133512bf33f00a3",
+          "contentDigest": "d89c5181eabb57990825cf940b3e018cba3bb2b9bd0622559e6ee3a83f7f378e",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501118",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "06888b26-d0a3-46e0-be2f-5b281df424a9",
+      "directoryName": "romance-055-work-busy-relationship",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-055-work-busy-relationship\",\"16777230\",\"88883434\"]",
+      "displayName": "romance-055-work-busy-relationship",
+      "description": "忙事业或学习时说明陪伴安排：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "c801e4580b51dce2b5813836a120d9ff5736be6956f4402601ad9bdb494cf752",
+          "contentDigest": "b051c20694676ae643396b427be4f7ab90732026eea81c6c58b8466f0e4523c2",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582624",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "1b081a0dd06e779a0aad4011f8c9aa82a513a8cbcf5cfcadc475e8a981094cd1",
+          "contentDigest": "59b7c231c566215391eeebc6dde6ff88aa2e820d521924178edff094e9ab511b",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586977",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "7708953dcb36cb634436613acc93e13c5fd72f26d66643bdda2970034901fe35",
+          "contentDigest": "3eaeb3220203ac02cfecf646bf34f7ebf3603e73fa66c8d743d25418b562377b",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501126",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "8abcce02-dd58-4c61-b5b5-b4fe1078cca7",
+      "directoryName": "romance-056-confession",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-056-confession\",\"16777230\",\"88883438\"]",
+      "displayName": "romance-056-confession",
+      "description": "正式表白与回应表白：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "584fcc0cdf82344d939cd641883baeef881559888648d1e9c73121904f768ab1",
+          "contentDigest": "6b3e960de6f060aa124fab797f80fd8dcecfef54be837a1d77d6eeab6a338347",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582627",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "73e32bbf1c0306dfddeb551174d9eeb91a8894851ce270811e6fe1b1287f2b81",
+          "contentDigest": "f7bad92eb510748b9de5c0ae7eca97fc1e9ddc2b7a9427c9745fd6ce11718259",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423586982",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "8d4483165e5c3ac5a2755a58f1a34ef631787538fa315c6f043ecab9fb425f1d",
+          "contentDigest": "bb0b101d1f7a21dfd6bca7fc00afb66439e378820d3e7bbfd4e029bf2d11ac2c",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501130",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "09b1f1be-8c86-4a40-aac8-d0e2daad1c43",
+      "directoryName": "romance-057-premature-confession",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-057-premature-confession\",\"16777230\",\"88883442\"]",
+      "displayName": "romance-057-premature-confession",
+      "description": "过早表白后的沟通补救：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "195ac6268b30d4b7584ad7e23c3f2e3be85c5b95a7c786bfe1731bb98f7212db",
+          "contentDigest": "cd9751a75a22af919737befdd4383115fa00bc32bc2793b4f1a359302069f79b",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582629",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "e47290c8564cfe2c6d0a142369a9c98c76ed7dc5f5561237c72f00805688f474",
+          "contentDigest": "47ac44cac35051651ae5d1c07b2a5fb4df3205ccb45ffc5faff1b8ebbfd7f4f8",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587082",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "54a24dcb5da13aa649d0e2cde46cf877adac8fd8487a15f5e9cb62757954582d",
+          "contentDigest": "30093f4f39843aecc2a6664ff90c924a1be8845a167301f852da062ce45bfd7d",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501135",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "637d257a-e243-4a8e-959e-90290504a554",
+      "directoryName": "romance-058-define-relationship",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-058-define-relationship\",\"16777230\",\"88883446\"]",
+      "displayName": "romance-058-define-relationship",
+      "description": "暧昧已久时问清彼此的关系意愿：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "86cee1dec838d7d07cc6739e164de8fdddbb487583a723f319cbac9a3ba45fa8",
+          "contentDigest": "512a1e9b96ab78ba79fdc5fdd4f5665bb96798da99f1e678d7173ccad3bf0116",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582710",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "a12eaecfb9fec322b68c6e03dcd3097c13262016c2629d7bf5754e667347a973",
+          "contentDigest": "712fc9e9f5d827d182c0cc4ad4c49a334ee51386041e7b8e49b013be322b867c",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587116",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "3a592a4be44b9e13d58d9a64c6a5fe29a87a1ab0dce41600f467fdc887988927",
+          "contentDigest": "99f184a6459cf3ae0d26589205c65acb9981720c7fae77d121d838d1f532d484",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501153",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "cd2fe2ed-86b4-4c83-85ec-776f12e129dc",
+      "directoryName": "romance-059-exclusivity-commitment",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-059-exclusivity-commitment\",\"16777230\",\"88883450\"]",
+      "displayName": "romance-059-exclusivity-commitment",
+      "description": "明确排他性、称谓和承诺范围：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "e3502085f91d773599e48d907364f35518f1e92bfa3c38905f8976f2eba51d42",
+          "contentDigest": "3d4f9206fbf3b8e073796938f2f793563613023f8374b6529460c289fc224c90",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582868",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "4a86d9119902dea06bca04437dbe90494990add82b4bddcb36daae672e849f34",
+          "contentDigest": "f629ed31d94f85d83e55d806396898f96202a086cf8601f14161eaf9e03c502a",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587121",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "c48c7067e8939d2e05ebc351035867b18586ad78628b36e722fbbf68363a9a5e",
+          "contentDigest": "9d33a3e895ac9c620db75739917cb14905a028f6e3eada38d842a7de6de407f7",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501162",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "70a9cb1a-7aa8-420d-b937-249fc22b8d3f",
+      "directoryName": "romance-060-contact-frequency",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-060-contact-frequency\",\"16777230\",\"88883454\"]",
+      "displayName": "romance-060-contact-frequency",
+      "description": "商量联系频率和消息回应期待：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "5efa699184bc00e75ccd02aba749ecf4ea5113e7ebcdccb2fa108d81739155d9",
+          "contentDigest": "2d7f934231ec7e4e20a2f88dd1bbbecd3a0d167811927a829c4a2ac52820650b",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582871",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "f701e19a75730f2c7df7cdfa52e9aad1b6db81fab5686145e1f5e749f7728088",
+          "contentDigest": "59db623143ca046e6afd6ffa39e063e5c913b8a5f7fc813422459789c1dfcdb0",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587127",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "e67970d2093d793827a259c96ccbd6ec90b11379a6121c4480aa113d2d92b606",
+          "contentDigest": "a0f582e757f910ce770b2b345a9bf36e285103da1cad1216424d70713203eb73",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501168",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "d38e468f-490a-4463-81fd-6fe59acd5b14",
+      "directoryName": "romance-061-personal-space",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-061-personal-space\",\"16777230\",\"88883458\"]",
+      "displayName": "romance-061-personal-space",
+      "description": "表达独处、朋友或个人生活的空间需要：用于该恋爱沟通场景，参考相应处理方法。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "fd64ae3751a1ae6031189bec81dc216dc988c6067cf558dc356485bdb2af0dc3",
+          "contentDigest": "1c985d894fde4057a7805548dcde514901155269cf27d338dc39091aa3d4ec9b",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582875",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "5e132ff0c331a22b3ce7db2925b2c940409b35641ab05dac76a83260c0ab6d6d",
+          "contentDigest": "c2467c210e5258a1e54b3588438524cbdffc1484f5f6c90736309d8d598e392d",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587132",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "3d9587b7502b7562ff5b5e95bbd324e824acd76ca018d0519379e5d76115aa26",
+          "contentDigest": "4c1687d35111a7c8e40b7227a4aec675aa6b77a5bf6f704d262256fc614f9ac5",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501174",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "6255ffd7-2a5a-4b81-91ff-450ef070a9c6",
+      "directoryName": "romance-062-physical-consent",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-062-physical-consent\",\"16777230\",\"88883462\"]",
+      "displayName": "romance-062-physical-consent",
+      "description": "身体亲密前后表达、确认和撤回同意：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "e3119fe0bece261469252b4b3a5abe9a400596681489df40b57749a55417f80f",
+          "contentDigest": "b9b6435f46c339c5de264d60ef84d5ad243423c412341a864b00a4de0fda34a1",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582878",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "04b87afa695780e7af0881bed20e360749739de57b9f7e7cb7c399f8e0f3012e",
+          "contentDigest": "ffc1539dd98c60afe60e14f7335ceba8731f6a4cdbc5bb3e8e28ee34ab228054",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587137",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "90f0cdfdd22918a0cb9deccbbe9158a2b492aafd8d660a39bf2102abc39ab88d",
+          "contentDigest": "ed516739223965ce156db235af16e9eeb8d4a5506aa8ac15f78384e7e1c75ea0",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501178",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "c363d99d-702e-426d-a289-e48ff515818d",
+      "directoryName": "romance-063-public-relationship-photos",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-063-public-relationship-photos\",\"16777230\",\"88883466\"]",
+      "displayName": "romance-063-public-relationship-photos",
+      "description": "关系公开和合照发布的边界：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "09009b62a3dd9ac15b14f5a90ec36464f45dad86bfb526839711c00e3cad4a24",
+          "contentDigest": "3ee26091dd5a7d926720c6ea7a4a282257e1bdf4ea1a96c1f8d239b237b228fa",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582880",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "4bd1f397d094bb3a50f4afc6a3e8cc8688e79bc40f936cc3bcf5104e9425a54f",
+          "contentDigest": "83a852859e3a2953c5fa7e0032a5c4dd1488cfd64aafc6b3908d7849538e57f4",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587265",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "7ea83673240de1895214e439d8d25b904ce92a01fb0c9cdf43c0c51d222bcee8",
+          "contentDigest": "cc33fda02b87d403de35476141f1016d0ad930faeb1cd41e843f1a47c0b4532e",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501184",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "ed390340-16e9-4026-9e92-c247c08447d4",
+      "directoryName": "romance-064-digital-privacy",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-064-digital-privacy\",\"16777230\",\"88883470\"]",
+      "displayName": "romance-064-digital-privacy",
+      "description": "手机、密码、定位和查岗的边界：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "55e8fa8c22b96fbbf7fdcfe6138e06480d504aa926e87e04bd856c131649e213",
+          "contentDigest": "11e2d2025b976fe2cfadcd863ef862d68ff302e2fb7afb86f9bd493254eb5fb8",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582882",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "d19285f55647fbcf213691d1547a6927dd1e8672cad88c993f5744db2f7bbab9",
+          "contentDigest": "cf83a39a811c64cffee1409a61169455a002724a9b12bca0d8eb43272b8deb5b",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587299",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "4086d383885ba5af9ae61158983a6f3d53baf7061e3fe21567bf37224a9ef977",
+          "contentDigest": "1a638dec120c8bf43231171582b1dc2781b2d7a9b688e50b1a0e0316db815707",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501189",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "39ce048e-5f08-4b56-afaa-44c8be8681b5",
+      "directoryName": "romance-065-jealousy-conversation",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-065-jealousy-conversation\",\"16777230\",\"88883474\"]",
+      "displayName": "romance-065-jealousy-conversation",
+      "description": "吃醋或对异性交往不安时的沟通：用于该恋爱沟通场景，参考通用沟通方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "13d016301e3d9b4c8d1ed24df29822fcaa6ff937eaae664bc70c0053e6042c33",
+          "contentDigest": "cd2d77c3076c610ad9c840d70382f9b080e4e0faedf93e76ea46a376ded8d73e",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582885",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "b1d70c5f2c53eb072241a69d9b231fa59e0023d62108d99cef39bfb222b2d06a",
+          "contentDigest": "80e401087819a3b9fcbbc9026ef70a4bf8c96aad06ee5fe766ce6c8b244d1feb",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587304",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "5981a5c9d5b248929a845d6b280bb375d97f2abd528ebe5e7c0e72c76daefdb4",
+          "contentDigest": "318b1f90f99fb0ba593e776775575753276c7c6d95f8bb73e57384a35a54b60c",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501201",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "0028dad1-97c6-4f3e-8543-f5c5143dbba5",
+      "directoryName": "romance-066-express-dissatisfaction",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-066-express-dissatisfaction\",\"16777230\",\"88883478\"]",
+      "displayName": "romance-066-express-dissatisfaction",
+      "description": "表达不满与回应对方的不满：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "0d655e01e5449b1c25f4fb26aace86d3a60f24d00d2f8dd7d19eb1280fc43313",
+          "contentDigest": "4201830e52e00ff1b500ba04665b6208277f9b9e534d47ecf8fb1c7992592595",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419582888",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "5a797be1b422e1fab9e0c0575323b334308602378fd85e35770e0f2dfcd7b8b3",
+          "contentDigest": "0dedaedd95904c07bb800ae00884af9d24e6f8769c8b627e31787c8d314fcf1d",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587310",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "5042c6d9dfa221e60c81e28668f04faff9ea2c50c99ac555c386558a146a399e",
+          "contentDigest": "7f7f0aef7a72de8778aacad63579d073380bd2ebaa0e41cfd673087037afd5a8",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501206",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "9b482707-a22d-41ec-9b52-e0101dd9d3cb",
+      "directoryName": "romance-067-conflicting-statements",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-067-conflicting-statements\",\"16777230\",\"88883482\"]",
+      "displayName": "romance-067-conflicting-statements",
+      "description": "前后说法矛盾时问清一个关键事实：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "7db73127e2ac6c4b9d8556353ad8bc63da7d1d0cb7df545864a910690d3e3e3e",
+          "contentDigest": "6281fdd20421fb719ddf3c941ab701983297381330024a8ee0b98d637146da24",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583042",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "34af22a2242f09d5eac227d117a8fff1c4015aa1d515916055aa9d978c24e205",
+          "contentDigest": "0a09150e5e73530fe1b2502a767a599c2de6e62dba842ee9404db4d798ff106b",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587315",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "0b411dc5cb5e288327c443501f2c614de634d463f7d83e9d31b1327e3e16817a",
+          "contentDigest": "651b1ae8e40d713d8801ac21501106e7533125dbf485c03828f970941ff76349",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501211",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "74867792-ed18-4e3c-bb18-df46dfa541c6",
+      "directoryName": "romance-068-text-misunderstanding",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-068-text-misunderstanding\",\"16777230\",\"88883486\"]",
+      "displayName": "romance-068-text-misunderstanding",
+      "description": "文字或语气被误解后的澄清：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "868f7a58bd0dcf3b36de14c7266c69b6683411ed14bc335d284410239db02ba3",
+          "contentDigest": "5fe7547373ec544508c825f9519d682f8fdb4f7cb0fc0e94aee3f6c9b15ac2fc",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583124",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "d41c62729ee7f2079ef16e33078a3edf0b22a58e6e3be794adae0962bf0daa20",
+          "contentDigest": "2f940a978b233f1a0c4b000854f7b76f8c67fbc7116075182c6c22ff776e0e26",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587320",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "b1577fddb2b7f7b2438b0a79670471024713a525f5abd97f75bcf284ff64e97d",
+          "contentDigest": "add54a37dea7991d5c78f0ec835dfa9ef47c1c3ba07437b1538dced642769236",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501215",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "881cd76f-05f7-4ddb-9fae-db4b732292a5",
+      "directoryName": "romance-069-hurtful-words-apology",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-069-hurtful-words-apology\",\"16777230\",\"88883490\"]",
+      "displayName": "romance-069-hurtful-words-apology",
+      "description": "失言伤到对方后的道歉：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "d4f7a1fadf9853dc28b995d239caaee32bc8f340187f118b9c07d46d923d27b2",
+          "contentDigest": "3abe494af52609aef05b241d7204aae140b3776cefa225bfe602532a74572815",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583127",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "cc0783b8b31389610276ffd3928d606bddf0c098096937ccd30bc313d4c102c5",
+          "contentDigest": "dd65a8da0155b8c86b47698be2a3be335850bc3e51fad8f794bd1a13a16b72c4",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587353",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "f1d49edffb4f476504e858c1c89b968d026bdfcdaae9f1029872da447bf675d4",
+          "contentDigest": "bc5052a0da97285fbff9710fe3119210bca9bc35b6878c135489f2afe11d765a",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501220",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "349deb3b-49b2-4c68-85b8-1f2d21c4d177",
+      "directoryName": "romance-070-broken-promise-repair",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-070-broken-promise-repair\",\"16777230\",\"88883494\"]",
+      "displayName": "romance-070-broken-promise-repair",
+      "description": "失约或失信后的具体补救：用于该恋爱沟通场景，参考通用沟通方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "e07fa68c9aed9abfee10086e5b3ce9006e128ac0efa4d485ff5d689f4136485d",
+          "contentDigest": "17b7dde0be5a73e2c5c216b8bd9bc7c594660b5cfef29b2c49dfee7f8d6d3ca6",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583129",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "1f6e6104d9f2c25365fd7771855868d292ad8e6d7043175e1762faa393724da3",
+          "contentDigest": "0f8dfc4d097a7527b02e8bb777baa21a3483717ea87f4fcc3f5b81e9d3296640",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587478",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "53fe396d5aa3a5b88a3344586b1ce953a429658bb1082625748b7a0014d9b644",
+          "contentDigest": "6625b1ff126410597f78e1e775a25345af874921e196f61b562655eef422f3df",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501224",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "c4998668-45e9-4fb4-b8f4-ffb878f644a9",
+      "directoryName": "romance-071-conflict-pause",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-071-conflict-pause\",\"16777230\",\"88883498\"]",
+      "displayName": "romance-071-conflict-pause",
+      "description": "争执升温时暂停并约好恢复沟通：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "063e9fb86a5e26029ca8d246e57412ecba0ffbde50844e50884b976f12fb09dd",
+          "contentDigest": "93db15e0ac9781635a12c475e5e1204851de0e67eb364d13f17d475a1aeec07c",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583132",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "d5a7b1cf7b2e9dade0e92864e06fd0399e5bf19aefd2cfadbc8e2596c1d9ad47",
+          "contentDigest": "73a5de9658bb36a8e7fc9284c3337dff0cf74a1ad87fe3c29cacfaa7f754b1bc",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587509",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "3c54fc351bfc03407a4c5a897ab5c1a8f85e7f2b4822e79709bb69a201f2e88b",
+          "contentDigest": "24acd9d7bffedc6e17092459a50da1883f2ca85bac4487b44028a1ffebf938f8",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501231",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "4a74e0a6-2feb-49a7-874c-c56188601d7e",
+      "directoryName": "romance-072-reopen-after-silence",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-072-reopen-after-silence\",\"16777230\",\"88883502\"]",
+      "displayName": "romance-072-reopen-after-silence",
+      "description": "冷战后重新开启对话：用于该恋爱沟通场景，参考通用沟通方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "aed905369d65ad745d8e4afe7afe2757a47bc6e0a39c17cd301c716718b15bed",
+          "contentDigest": "1239c5db761558663ff346d2b18132f2128566672d1f32967c5540a748c64b8d",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583135",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "9993dbe0f8af6e1886db7ca19338553037b707634bb328eb5827c1d110826eaf",
+          "contentDigest": "50bceeb740d10e7068f132b5c81553c9b2b1e9fda9405cd1ea8ac2c5a8e75cd7",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587515",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "57c38282f6a08643b7a5e2f9e094695394d65aac0d757111a84c8f7e0415d5a8",
+          "contentDigest": "7fc6472831c86265e8cffe041a5530630d737025c7f94d9458586d40b38f09ce",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501242",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "45ea458d-93d2-4788-b21d-b370adbcf01d",
+      "directoryName": "romance-073-recurring-conflict",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-073-recurring-conflict\",\"16777230\",\"88883506\"]",
+      "displayName": "romance-073-recurring-conflict",
+      "description": "同一矛盾反复出现时协商可试行办法：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "9bca8449c61b608435bfd65edee13d3af2e96022b53ae52c80a1847827bbe601",
+          "contentDigest": "bf56ac667e4831dce6b02be0b7686f084334a8352ba71b7cca7b5638c6fa930e",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583138",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "78ea24e7b20db3a63ac2b26f0314b156e09201cc35f449f133fce15c53d72cc5",
+          "contentDigest": "730ab957dd47fb84438b871cd70ef442a130668bb3213ac2c799e76338b93bb1",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587520",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "56d51e3a291723a9979f3b96c875326d09749d7a9f3bbea504f4c6a23eb284a4",
+          "contentDigest": "cfb636f405be10e83f2d200ad84d876e964b63da78055a9f4046840eaffb8c6c",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501247",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "15506827-40c2-44d1-bf8a-bc5ad4d12e19",
+      "directoryName": "romance-074-romantic-rejection",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-074-romantic-rejection\",\"16777230\",\"88883510\"]",
+      "displayName": "romance-074-romantic-rejection",
+      "description": "对方说“不合适”“不想恋爱”时回应：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "3e6f212a1dca002219498e2eaa6777b3528495c1627bb67318bb45a8837f2099",
+          "contentDigest": "024eb6e8c7e8038a8ce3cdf14d84df012d513ed30d7e172a70f2353a14f93ec9",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583141",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "10339fd03dc18aa144fe3ed0f1257685064512ad7c6c09f6bc2920ae1e930c43",
+          "contentDigest": "a328b14bac3f3390bff293c91034ee8c13115e5eda9177ae7b901580317819fa",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587528",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "42c31166998ff52c96293fe853c505b9137fbfc12be03b14ea2f33f7c53a305c",
+          "contentDigest": "33fc582e2a1b47e7a337d08de310f943b41a1cc2164fc42f1393b2c5fbe2fe1c",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501252",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "b46ce869-edfe-4241-9b93-ffb83a036209",
+      "directoryName": "romance-075-end-dating-interest",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-075-end-dating-interest\",\"16777230\",\"88883514\"]",
+      "displayName": "romance-075-end-dating-interest",
+      "description": "自己不想继续发展时说清楚：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "6487818eae76c38d04c6cde4597a3d81ef7bed5b782572012e7c9a26e739ba1f",
+          "contentDigest": "718c236583bd8d0beceb4ecbe1928f81b24ac43edab6d875ca64a806555b537d",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583144",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "1d9b8f4f3dbd90cd93b81cde10b740b8e73daeca08b4fd6f31eb62d9f99a7560",
+          "contentDigest": "dd7e58e988a4be7a8b7a1b11a14caa23b1b50bd2fb132f86d448b35b948264a9",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587655",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "dbb010cbb5ac2086bbbfd058aacb60958c0ec41b9b83071a16fd9dc4897e5d50",
+          "contentDigest": "34e6f5ff0d6e62425a9abe0406c4d04fdf20d34d00ffe40ebad93b175b4d06b7",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501256",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "63bc2109-bfa8-4842-8a9a-da5fa8572166",
+      "directoryName": "romance-076-after-rejection-coworkers",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-076-after-rejection-coworkers\",\"16777230\",\"88883518\"]",
+      "displayName": "romance-076-after-rejection-coworkers",
+      "description": "被拒后仍需同学、同事式往来：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "3b1d246306f77c38d9073f996a1d98aba29ecae8134edbb8b126fd4fe124baa8",
+          "contentDigest": "870fa72335ac91d61153aaca0c9d14ce765b11c2532159fce4f7d3b2c14d3844",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583147",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "16be5741dea5505eaadcc9e09cb5375c91b20935cc7180f3ea15657bcf33c0a0",
+          "contentDigest": "881fdcead76f7b9168dc0629e337c0bd90192411cec674e7b9d8eaf599727f98",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587665",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "2d98af02b02f375eb0222342cbb448e18d0ee381a3b565df65739d5550c33c5e",
+          "contentDigest": "d35a9e0bea11d607ea3aa552ded5881ee930126a00dc51c1c1936037c9965ab0",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501261",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "190b914e-cd82-4cbc-ba01-7e87e96f8539",
+      "directoryName": "romance-077-meet-new-partner",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-077-meet-new-partner\",\"16777230\",\"88883522\"]",
+      "displayName": "romance-077-meet-new-partner",
+      "description": "聚会遇到对方新伴侣时的回应：用于该恋爱沟通场景，参考相应处理方法。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "5ee15eb4e33089edaa2c38d9d53b8e7187670f3117d2c26b210c9caeb7304849",
+          "contentDigest": "fa4ce248965b95867521c9f8003dad7aef3330188b7727bd6879a45839208741",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583387",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "0dbc5654db0cb8ab8daea0ac60c5d34f3828b3b6a16eeebc4308287f5b94f13a",
+          "contentDigest": "dfa40b8fd98eaf899b92fb1047cdf44091654c47e1fd3c62cc4559b92e30538a",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587671",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "3eb3c04b7961b1465167ddff448829c22e6f63845303f6bd3435a9cda07bdc19",
+          "contentDigest": "95e8a65104d226bdb26e8734dbb0a61682abb22857898f6df9603395bdf9a306",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501270",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "d036d593-1db6-483a-8308-08b6fdb4fd29",
+      "directoryName": "romance-078-breakup-conversation",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-078-breakup-conversation\",\"16777230\",\"88883526\"]",
+      "displayName": "romance-078-breakup-conversation",
+      "description": "表达分手决定或回应分手：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "916ba90e27e5440434201e56e8587d9a0b86fd909c042114694860a96a4ab947",
+          "contentDigest": "e07b763601c7fc7b184d7b49cc862db36719a2d92a2ce3ea012f02956a0734f6",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583391",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "b4d8ff6b621dd8af111715f034038b38a7a19bc1b21417532a05df526d687887",
+          "contentDigest": "e0472366ebced9d593bd32fa61ec4d80d7f0e04a849ecad420751c57a7b1c751",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587676",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "0c6ae34f9caec71fb6cacea2de447230ff0e87401ef956f372972b6cc16509eb",
+          "contentDigest": "75ce36cfff44081360c04e2f17309826d9a0f120cb18d79cb31248865334b84d",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501275",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "7fca5d3b-4328-484c-92c5-c5a4933fed54",
+      "directoryName": "romance-079-breakup-logistics",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-079-breakup-logistics\",\"16777230\",\"88883530\"]",
+      "displayName": "romance-079-breakup-logistics",
+      "description": "分手后的物品和必要事务交接：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "91b4025545cfdfb24d0aa6cddbe34102cf36406f8d466419595f8d3da1859a0d",
+          "contentDigest": "6846f24e4605fbf87a3a4d238353aabfda2926a7c5e6a36b24765711c90b0445",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583394",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "9d3b60b2d7e7b88ac96d11a302a466bd4df2e91c45ef2439dbe46ee332e540e3",
+          "contentDigest": "600126732622898aeb81e8ded4e84036548023413f7fdcc5efcc0705fe9aacf8",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587681",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "82d265cd5e735ce552e1d8aeee1d541edd80d43cb6fe3c4661fb9a8a9e53e7f0",
+          "contentDigest": "57b08cf7c6ce3cfb55196fcfa44b20c2f126c00114e06746e6dc51bc00e2e13a",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501279",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "aa210f5b-539c-451d-a696-573467dd78f2",
+      "directoryName": "romance-080-reconnect-after-breakup",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-080-reconnect-after-breakup\",\"16777230\",\"88883534\"]",
+      "displayName": "romance-080-reconnect-after-breakup",
+      "description": "明确想尝试复联时写第一条消息：用于该恋爱沟通场景，参考相应处理方法。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "6cf8e6d364ee4c0c29360085a64fb0634203b66017d233353e137a49f278c445",
+          "contentDigest": "b5e5baa29f4d980bc44ee9476cc7fd8d73cccf302ac3b01d6107c7af217a38aa",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583398",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "44ec7c4fe29c37d42544af7544aa7fd6d65808688b526ff900ed9474967aa109",
+          "contentDigest": "aa4b3fea8724a40ccac61a4ae54dc280520c71bbd16287cf4c9a1c2d212ddf5e",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587717",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "c49470aee4a67cfa73f1d86dae142204df08beaee4506a6f677b112ff176163d",
+          "contentDigest": "3005ebbcdf204fa37ba769633dc1655a81a0d00e2a0b77e28adc30409838b62e",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501288",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "3340acd2-a2dd-4ffd-b9e1-9b9633f57f36",
+      "directoryName": "romance-081-betrayal-clarification",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-081-betrayal-clarification\",\"16777230\",\"88883538\"]",
+      "displayName": "romance-081-betrayal-clarification",
+      "description": "发现背叛后问清与沟通有关的事实：用于该恋爱沟通场景，参考相应处理方法。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "7c2916a41ed44e7266d6bfa28ff1b439ead6e6202ed9f853f3f5d0b5b3aaf289",
+          "contentDigest": "780b8e93428674afa87a5aac857925d17ab9c53ac26aa95571895d54489fda9f",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583400",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "48a6e0bfc846402e1a08514f8bb4ec1df1bed526191ca7b4869deb6bb83403a7",
+          "contentDigest": "391164549b1d74861bd642cb45a177d9649b83f0ea0b468faa65c60b6a90ebdb",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587841",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "a06fa6b3385e6e8da53950c5a252edd528378907d3c4970673c7dab66e967951",
+          "contentDigest": "9d96a70ad7085593332efae52530c085ee7e3bbf4d3415bf4052443a97b2a5e7",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501294",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "20d2ffa6-c4d8-49ce-9c4d-ee2598df25c3",
+      "directoryName": "romance-082-trust-repair-conditions",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-082-trust-repair-conditions\",\"16777230\",\"88883542\"]",
+      "displayName": "romance-082-trust-repair-conditions",
+      "description": "明确选择尝试修复后谈条件和具体行动：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "00e5a2016b7306bfaf8e5ee8a0cdbeaa50f8068ddf651648919d1e6454144d5d",
+          "contentDigest": "b786337b38e6c969280d98a3be3a087f4ac639c5c20a7fc8f3eae8202d4399f8",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583403",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "9cc25ec708b122f3e98062e5518c89135825fc00c609d5a90c82d9cae936ac3b",
+          "contentDigest": "54c828393b26116f181488b8390e719537a01d944d65cb1839838e57abb630c1",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587877",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "0ee26ef0c4530bf743733c9e8362342df23ddb7b18f5674e9e313bdc518f84fe",
+          "contentDigest": "0db93922e675cc55940b68b255b66d072bf5df50ed7d5e5f1f98042b048dc2b0",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501305",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "7c1fdc7b-c4d2-497f-8fde-e6b73bf1a87c",
+      "directoryName": "romance-083-meet-family",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-083-meet-family\",\"16777230\",\"88883546\"]",
+      "displayName": "romance-083-meet-family",
+      "description": "见家长前商量意愿、分寸和安排：用于该恋爱沟通场景，参考通用沟通方法。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "f654e69a4a3946b73a7d3f007d5ca8dff2df11b70cf6a292db79da5162841db0",
+          "contentDigest": "3a015ad32398d8d36b95a0c2a407ef3b5067ce386eed5f2b7e19e151547300ec",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583407",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "1d01b4b53de0f18fbbe61cadb3a1575ea8c640261cbde4511dd68d0dfd59454c",
+          "contentDigest": "a6e9023fe8e6ed618c5e03deb2ca8e7da5736623e4991b77c7f593d83a81ee87",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587884",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "1527f81c828212625da621687f924a6b1809d93290eaafc77e72fd00a6943e72",
+          "contentDigest": "c06df15adfe55eef299462f284b8f1aa134b81c5ee808d5ea2e937b17911584b",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501807",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "b097f69a-ed3e-434e-a9b0-0a0c3c83778a",
+      "directoryName": "romance-084-marriage-timing",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-084-marriage-timing\",\"16777230\",\"88883550\"]",
+      "displayName": "romance-084-marriage-timing",
+      "description": "谈是否结婚以及时间期待：用于该恋爱沟通场景，参考通用沟通方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "8ee86cc3ca4c9d719131148331d8fa5372e127c17fbd05b57f5ea318e47b0538",
+          "contentDigest": "46a47a86f766b030d8aaa98a168ecd0b7c6d10126907f425e9983a21a3c1eab1",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583409",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "19f20cb1692adf5f6b446fc8dcac43201ca7765a5f8316946981d80be5bdea15",
+          "contentDigest": "f44d251acf82365465d5b2fe3c181384027813583e935b778df183055e9486a2",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587890",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "d2a3bc239efff32c5a8c1ef761632d6b880bfbe209eb6e7a39fcc7aac4c6d417",
+          "contentDigest": "b932035ffa9679b31d11b9d994bbac874704d056946719bc9f8d89c47574d0ff",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501888",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "dbb1c501-7538-4f36-bd22-f31d2954455e",
+      "directoryName": "romance-085-parenthood-intentions",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-085-parenthood-intentions\",\"16777230\",\"88883554\"]",
+      "displayName": "romance-085-parenthood-intentions",
+      "description": "谈生育意愿和未来责任预期：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "b752f173af68629b0550b70f08893008544e204b5c1d4c6c6054c5221dd81839",
+          "contentDigest": "967fefd4cf74063bd102e37e6a7f3a2623de3837f5e76cd1490fb6f16a887651",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583411",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "2646a39ffecc3d0962c7e62ad35ac5c0cd560776b73e542438d9b3d0d068ae28",
+          "contentDigest": "67e1a9f4b60f63ef9fe33520a17e7a45bbcc703a2f3d74ef2fab76924f5b9cf2",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423587936",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "1d50edb02175fc290e305c2fed1f327df470ceba417db6ee53a069590a22df11",
+          "contentDigest": "d76670493f1c968f812bf907bdd3986d75dd19cfaea9e8a6e307cdc0eeac0e94",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425501978",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "8a40dbff-732a-4902-bf63-f881a80e7b59",
+      "directoryName": "romance-086-city-future-life",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-086-city-future-life\",\"16777230\",\"88883558\"]",
+      "displayName": "romance-086-city-future-life",
+      "description": "谈居住城市和未来生活安排：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "30f826a7514fade5761d0ba0fc603563232f2babac611af296a012741eded3b7",
+          "contentDigest": "ce1ed64cff1c9536ab5ddc06544742bb568a83c5a7ceba3f2e497733472e536d",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583491",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "bd5ed157309f4ac438b3c5afee7ef97a9d09f2901a0cd6153a3187e582e0a388",
+          "contentDigest": "ad4989dba46b0af055f8e9f9d1893845db208bd88c30ca25bbf25bc4c75f30ec",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423588084",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "09c22833a24ea854ce5e4d9408bafbbd23c3590e6eccb17976671ee601ffe2ed",
+          "contentDigest": "2864f9495e0156052523bf54b43a9762770ce9450c302413db3e36b5b8bd7bf6",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425502039",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "9cd875cb-d391-43d5-89f2-32ebb4bbd93a",
+      "directoryName": "romance-087-shared-expenses",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-087-shared-expenses\",\"16777230\",\"88883562\"]",
+      "displayName": "romance-087-shared-expenses",
+      "description": "谈共同开支和金钱边界：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "66359d51bd2188f4cdf769663fcbc36aa449225d98aeae30bb65ae955c460d66",
+          "contentDigest": "be82ac7ee695b0ee9b1a1145ca158c8d09c43b053538733148cfcc36d008996d",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583694",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "6c2ecfb627f42df84e4ffe948a91b0f8175562282029806300f23b07870cd3ae",
+          "contentDigest": "0d4cd1a81f4d763438545920766378f906cad170eed6f3bb29e656fadb80c0dd",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423588089",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "e68fc183b35dd65e6c7bfaf2e2197ad855fa1e2fe6cf326b2331187e0b8363cc",
+          "contentDigest": "8fc9504be3817f1a265f58bf58fc5560551ba4bd41936b8a77a233837c7d88fa",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425502202",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "bd032114-67f1-4ef6-828c-fad51e7c2268",
+      "directoryName": "romance-088-housework-care",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-088-housework-care\",\"16777230\",\"88883566\"]",
+      "displayName": "romance-088-housework-care",
+      "description": "谈日常家务和照护分工：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "36e3253681de6f842dea915207b634e3ef49f833326aed168602c2e8d777c38d",
+          "contentDigest": "aabad4ce073b4af8c719d7fbf5886657774e623aa780ae8275f4023eb8feb445",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583700",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "265b2635bfd0a84cada6e379e5ce6081a6674b07e1e2e93f3a174a38be9c1487",
+          "contentDigest": "2ac1fc8e014355764c92e9e308ce81771709fc870fa3250ddcaee1489e99a03c",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423588094",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "8442f8ff04e127a328ba2b0ad2f45e1400fddf7e1bf2e5378b7e9d3452f6d86a",
+          "contentDigest": "4219731fe5f794d1ee3ebfdd6dfe474bd22ba1c2f62cf6f936976084822b3edb",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425502272",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "9edd99ee-6824-4402-a4cb-5768faab2e77",
+      "directoryName": "romance-089-caregiving-transition",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-089-caregiving-transition\",\"16777230\",\"88883570\"]",
+      "displayName": "romance-089-caregiving-transition",
+      "description": "育儿或照护变化后重新商量分工：用于该恋爱沟通场景，参考通用沟通方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "fc430d57eb2b1faa8bb2d1354151080c17e72196f2d74e74176d409370256cfb",
+          "contentDigest": "305c3bb6fee208222b06a3943a3bfa34440c02ad0528417260106a6a3fe1e9f2",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583707",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "2281a8863e70cd12f51fc830c224b65ddd9764e6c6a0cccc325533dbc85150d3",
+          "contentDigest": "3f73e437ae6f34960e4f25908c6c582ebd0a327cfc511cb8d8ab8cafb36201dd",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423588105",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "86e0c28882320cc33f2a9901944592c54812ce6708bea727da7536a8eb1aa4e6",
+          "contentDigest": "c56422ff98dc15049841858bd38d8c49e1d32d049cce47b5acaf12d3757957cb",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425502453",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "59aee42e-1003-4e18-9218-4a4b12dbdf04",
+      "directoryName": "romance-090-parents-boundaries",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-090-parents-boundaries\",\"16777230\",\"88883574\"]",
+      "displayName": "romance-090-parents-boundaries",
+      "description": "双方父母介入、探访和责任边界：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "48a6e40fb79a044f3fb0f54ae131c0836818071105bf2cdd00f488c8c878eff6",
+          "contentDigest": "0f8285de9102050794139ad69fb2cb00deed9bb29cf061c1be32ded9ef83c94c",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583712",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "7eec467826c3b3684be5a6fbbadc456178744b6865273c9411b8f0d62cf5f2c5",
+          "contentDigest": "368595ed1d93825dac989befcabda38f178dd911c624167f5b0f51342789ff55",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423588143",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "1b05c3a52e64868304e292a67a53df694e706ceb7e29b90a6df3747d8f2db79f",
+          "contentDigest": "69313943bbc9b4709ca898b523723c5af7e2d5eea92d658749b69c1ebd461808",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425502642",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "21b1509e-a3c2-469f-af0b-2ef45608289d",
+      "directoryName": "romance-091-blended-family",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-091-blended-family\",\"16777230\",\"88883578\"]",
+      "displayName": "romance-091-blended-family",
+      "description": "重组家庭中前伴侣、孩子的往来边界：用于该恋爱沟通场景，参考相应处理方法。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "f6ff554b3de6fd6ad3473f63ab663eacbb4902a2d54b321fc4b1e8d67951394a",
+          "contentDigest": "ed486a8d603c449ada7aa0819bc1325f9801ae51c8acd7a7182c87b86e98cc7d",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583720",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "4045074f7febc989d0f380146ac1997ca0133760c3c362a19430043ae99f76e2",
+          "contentDigest": "66f31057c4b1c5215aecdd82932a1267c778d30f70e0189133237ce0479b16f2",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423588268",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "a01269b2e8ba157b5cf749af331d3330d2c392e47245318a434fd3e522057adb",
+          "contentDigest": "f40d42cc4f5098e2a8b053e45c814b0c0d6f7e83e5fe21cd6edc568af27bd371",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425502792",
+          "availability": "current"
+        }
+      ]
+    },
+    {
+      "id": "e4f12222-735d-4f31-9ac4-d9e30ad887b4",
+      "directoryName": "romance-092-relationship-checkin",
+      "directoryIdentity": "[\"/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages/romance-092-relationship-checkin\",\"16777230\",\"88883582\"]",
+      "displayName": "romance-092-relationship-checkin",
+      "description": "提出并安排一次关系近况沟通：用于该恋爱沟通场景，参考相应处理方法及表达示例。",
+      "enabledState": "unknown",
+      "enabledOrigin": null,
+      "verificationState": "verified",
+      "verificationReason": null,
+      "currentRevisionNo": "3",
+      "headRevision": "4",
+      "revisions": [
+        {
+          "revisionNo": "1",
+          "manifestDigest": "fa66ebceb670a13ede445320895205dd2eca2d83ffeda0af66d3af425f19eaf1",
+          "contentDigest": "6821c8cd412280aeeadb845ed4b44fc5c6212822c3f17773f94f22df286963d1",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793419583724",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "2",
+          "manifestDigest": "2f8960e4d88a0999b841b0d29c8432f67c455b092ef1cb0cb4be1182c7c27a73",
+          "contentDigest": "0bccd3a1a9ccc31a5c28d156cee55a3702264ef4ef326fba7390b307131ba4e6",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793423588294",
+          "availability": "unavailable"
+        },
+        {
+          "revisionNo": "3",
+          "manifestDigest": "3e3c81bbc35e5441e8c7383676a30f91c9cfc3bbdb93af777f455c8145742442",
+          "contentDigest": "248c480d7ca4a5169ecb2037d48535b41b0c8d187ea47c9eb52c3eba62a3c2e7",
+          "sourceKind": "user_directory",
+          "verificationState": "verified",
+          "verifiedAt": "1793425503213",
+          "availability": "current"
+        }
+      ]
+    }
+  ]
+}

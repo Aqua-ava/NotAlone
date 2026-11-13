@@ -1,0 +1,26 @@
+# 19缺口收口补充交接
+- 结论：**新证据足以建议原根按已确认范围签收19**；最终签收/票状态由原根处理。
+- 只新增本补充；原26项矩阵及原2缺口结论均未改，不写26项本轮直接全PASS。
+- [closure-addendum.json](closure-addendum.json) 含D5/D6脚本断言、版本、制品与组合边界。
+- 当前HEAD 256fecc1fb1a3dcb49070bfaf663c635cb958491；相对43ae208f仅5个离线盲评工具/测试路径和4个记录文件。
+- backend-ts/src/profile/package/lock、backend/src/database、desktop/src运行源码diff为空；根当前源receipt零漂移。
+- DSH固定0.2.1-rc.2/687f282e8625c6b8d11ff58211a90524be2e4317，官方归档无.git。
+- D5：官方host/原Legacy heartbeat首流code7→4748ms后新PID自然重开；只GET status，无check/retry/二次enable/改clock。
+- D5：重放ID2并加入ID3，最终2规范消息/6来源/created2+reused4；authority/binding/baseline不变，范围外正文0。
+- D5直测selected/new-only/无key；原probe未断言metadata --cursor，根离线核同轮raw确认第二流携第一代最后metadata cursor。
+- metadata续接receipt为事后独立原始事实核验，无新请求/测试；结合稳定消息去重、授权不变与D6持久cursor恢复收口。
+- D5 result SHA312fdf792dd09f13358ec665ac5fd3294ca8e8ae9c95cb6755eb6e457dae1150。
+- D5 artifact SHA65820bd318c6f7c9315dc5400d7dcd11960a19b354ee91652e5ee7a5499b45b7。
+- D6：已有1条规范消息时只SIGKILL身份核验后的launcher helper；原DSH/Legacy/CLI自然退出，旧锁保留。
+- D6：同库/env/business/info/ModelHost路径自然回收旧锁，只GET status约4657ms自动携原cursor读取。
+- D6：原UUID/原source/processing/receipt保持；规范消息仍1，新增来源有同scope message_reused，无模型任务。
+- D6是后端helper父丢失，不等同真实Electron/App崩溃；没有停机新消息或20追赶。
+- D6 source_ref_count=1过严RED保留，按原多来源合同补可追溯reused，未改产品或清journal绕门。
+- D6 result SHA8fedbbc4cef8119cc61b7d5f855d5693300353df2b6ad00eab28bb186706d9de。
+- D6最新artifact SHA f72622aa81cdbbf97ae9d1879db342247845be692ddda2d25071da078a1bf30c；不用早期旧摘要。
+- 消费根独立receipt：reconnect 30raw/16share/734当前+1468归档；abrupt18对+9raw+3share/899当前+899归档，全匹配。
+- 本轮直接复核四个小制品摘要、脚本与结果；未重算两套全量源SHA。
+- 两case均selected/new-only且未布置非空排除；all_private/非空撤销删除排除/109抑制由原B3–B6/E2的G3及官方scope证据组合。
+- 真实全部私聊故障全分支、Electron崩溃、21 OCR、20历史追赶、17全闭环均不在本次直测或签收范围。
+- 未发现需新增阻塞19的具体缺口；旧blocked状态不影响本证据判断。
+- 数据影响0；仅新增两补充文件，无HTTP/PG/App/微信/模型/测试/源码/index/票据/目标状态操作。

@@ -1,0 +1,2026 @@
+[
+  {
+    "package_id": "641d0ea0-9be0-4796-83c1-91fd7fad6a22",
+    "name": "romance-001-first-contact",
+    "description": "初次开聊：用于用户要联系刚认识的恋爱对象的场景，从双方真实经历或已知兴趣中找切口，写出自然、容易接话的第一句。",
+    "directory_name": "romance-001-first-contact",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "2e6173bdec9f15dc3a97a901dd9ca1f2b037f0204333e60deb528702245ac01b",
+        "content_digest": "dcc2b65f2fc18436de71952f3ce3c78507540aa86f3f93e4ecbc42fffae0f629",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "2e43b219-1da8-42a3-b795-8d3c71bec696",
+    "name": "romance-002-slow-warmup",
+    "description": "对方慢热谨慎时的轻量破冰：用于刚认识的对象回复谨慎、信息不多而用户想继续认识的场景，降低问题负担，用小步交流观察对方是否愿意参与。",
+    "directory_name": "romance-002-slow-warmup",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "47179bbdab94e2b86bcf62b87010c7c7b3a418da2564f560c1192478b86a1229",
+        "content_digest": "68a4e7e89ff404d37ead5c607bb0b42cf4c3e9a305e9b0eddeebd0e4f2949392",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "180a8be8-5c00-49b2-ae28-aa2f1f59b676",
+    "name": "romance-003-reconnect-after-gap",
+    "description": "很久没联系后的重新搭话：用于用户想重新联系一位很久没聊的恋爱对象的场景，承认联系间隔，从真实共同记忆或当前缘由自然开启。",
+    "directory_name": "romance-003-reconnect-after-gap",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "efb5e2ef1059b4a8a37da422d678934b836b7a6c7627625e235f3f47bde9c80f",
+        "content_digest": "146cc3912c277b180e510eb334dfecde430c59f9334ef7fd87f66feb50889909",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "cef9d85f-7e6c-4bab-9f64-183c122c6a18",
+    "name": "romance-004-refresh-routine-chat",
+    "description": "例行问候聊成流水账后的重启：用于用户和恋爱对象还会互相问候、却总在“吃了吗、在干嘛”打转的场景，用具体新内容重新打开交流。",
+    "directory_name": "romance-004-refresh-routine-chat",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "366240712bf1f6f78d9a4fdf85924afb6d7eb680377e315540eb833a1ead37e3",
+        "content_digest": "20ed7bcc44cc43017dba980128ce7c958ef6c9eb9489c69ad5247ffa74909bcb",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "6caa75f9-92ee-44cc-9c61-26c71972774a",
+    "name": "romance-005-why-contact-now",
+    "description": "回应“怎么突然找我”：用于对方问用户为什么此时来找她的场景，直接说明真实缘由或兴趣，避免编造借口和含糊试探。",
+    "directory_name": "romance-005-why-contact-now",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "c68c576967bb24d625319b47e51b83c181f778fcd60c37fd420f02b19515e76e",
+        "content_digest": "5e751d2c0847013f3add7b106c2ec855e91a4e9d618b9e76042804efa0c6291d",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "a456de27-3a7d-43f1-b549-8143e70bc64b",
+    "name": "romance-006-topic-expansion",
+    "description": "延展对方已经抛出的话题：用于对方主动分享一件事而用户想继续聊的场景，抓住具体细节和感受，再用对等分享带出下一轮。",
+    "directory_name": "romance-006-topic-expansion",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "58de36d255747064e397a3955a325770ecc801b7b31e145a482a0451a48f0f5a",
+        "content_digest": "88ac805a97b0817c449482d27bee8ee6406f33482bedc510c488d251ce40d007",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "9d670429-db13-461d-bf63-37fa303a1ec9",
+    "name": "romance-007-short-reply",
+    "description": "对方只回“哈哈”、表情或短词：用于对方只回“哈哈”、表情或一个短词的场景，结合上一句判断是否有真实接点，再决定轻接、转题或停下。",
+    "directory_name": "romance-007-short-reply",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "5243e51b644d213538fca2a6e8dbbd49fac0ef8b93493c2bc37943c405b253d7",
+        "content_digest": "bcd7e9044092356f27ac30756287c7c2204f139c85475361a1087d7da4eddd56",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "b6add3cb-bde1-4315-bc9c-96dca4a04052",
+    "name": "romance-008-interview-to-sharing",
+    "description": "连续查户口后改成双向分享：用于用户发现自己连续问了多个问题的场景，先回应已知答案，再加入真实经历，让交流恢复来回。",
+    "directory_name": "romance-008-interview-to-sharing",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "76757553e7f8ed68026674c148e0116deda3c83811ec11d4e6b1e4364b6f838e",
+        "content_digest": "41e54abd3b51e6e46192361237d84a82f6e11cbffa3aece323def4ea06d1986f",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "022c0de2-1111-41ae-a50a-24f44896583c",
+    "name": "romance-009-passive-chat",
+    "description": "对方愿意回但不主动找话题：用于对方会回复却很少主动开话题的场景，用户可发起一次有内容的交流或清楚邀约，再按实际回应决定是否继续投入。",
+    "directory_name": "romance-009-passive-chat",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "bc57e80da7c8a0c963e39d26149ed66c872a080785a8b09b6b49ecdcdf310ed2",
+        "content_digest": "7fb925a53d9db85f5cc9f5c88927abf67d73f3d19e0548fd31fab65e6a3d2d2e",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "d8538109-0993-4090-814c-4e6adf570f9d",
+    "name": "romance-010-close-chat",
+    "description": "正在聊天但需要先结束：用于用户想休息、转去处理事情或结束正在进行的对话的场景，写清当前安排，保留真实的下次联系意愿。",
+    "directory_name": "romance-010-close-chat",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "9164d20261b2f033d33343ce7381c8505b48aeb3a4757111d09bb1cbd5760440",
+        "content_digest": "b1e5d1b30884dd3509ed744b0907b7e6f61b66f60c95d2f8432a1f85ab395a33",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "ca4ff62f-ec4a-4b37-96d6-664e388c91c7",
+    "name": "romance-011-topic-reset",
+    "description": "原话题聊完或单次冷场后的转场：用于当前话题自然结束或短暂停顿的场景，从上一轮细节、共同兴趣或眼前情境换到一个相关的新入口。",
+    "directory_name": "romance-011-topic-reset",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "65614477dc2b198917a347160dfeb195ce6bb988be9899122ede5a647872cb0c",
+        "content_digest": "3f1d2e0508c256fc12e071e42c8d9731488ced552200fdb91559f821fffc4b9a",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "4ca8da34-bca7-430a-a72b-4b8314b7ba63",
+    "name": "romance-012-share-experience",
+    "description": "分享自己的真实经历和生活状态：用于用户想让恋爱聊天更双向的场景，把一段确实发生的经历、感受或生活状态说得具体而不过度包装。",
+    "directory_name": "romance-012-share-experience",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "5888d61c012224b08cda6c6a6f7f2141e755ae059bb85b75b09c96560df8149c",
+        "content_digest": "ceb01df39616fa595d37b096365ff4992f7f1a4762b0390ab8488657feaba410",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "3504fcb3-7921-4d52-bab2-762f0ee10162",
+    "name": "romance-013-past-relationships",
+    "description": "回应前任、恋爱史等问题：用于对方询问前任、过去关系或单身经历的场景，诚实回答用户愿意公开的范围，不攻击旧伴侣，也不回避当前问题。",
+    "directory_name": "romance-013-past-relationships",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "6e3ac32ea818689e60c59f5c7acccd782db89e554069e81f7ff990a65f40b28c",
+        "content_digest": "7be655225bb9103022ad911727b846624395f1102a39cd8fc26e894f65ff5e75",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "08f8a138-0e2e-4630-b686-00d76e34df64",
+    "name": "romance-014-dating-values",
+    "description": "回应择偶标准、感情观等问题：用于对方问择偶标准、关系期待或相处观念的场景，用具体行为表达用户真实看法，并邀请双方交换观点。",
+    "directory_name": "romance-014-dating-values",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "2b66da99778d53f56f543ed68d8368a2e2e4c7a457fcd1dc27fd8f2546c22530",
+        "content_digest": "ea62b21a60681883aabb7764e6c886f195f7983c67d1463e49be789ab11bc6c1",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "33522d33-0b32-4cfe-ae97-2ca3dfd080a5",
+    "name": "romance-015-private-question",
+    "description": "被问暂时不想说的私人问题：用于对方问到用户暂时不想披露的经历或信息的场景，给出清楚而不羞辱人的边界，并提供可选的替代话题。",
+    "directory_name": "romance-015-private-question",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "51e46d0b2566df7718e9b630dc5d5d1786c162d646d367b6da32d95bf6216ed2",
+        "content_digest": "ed8c79d97f8134e67f1a53176bfc0b9569cc77740fbc6a6c31b7902052399457",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "d170ce58-e8cf-4ff9-a1c3-c21ca3a2e8ed",
+    "name": "romance-016-playful-banter",
+    "description": "接住对方的玩笑、调侃和轻挑战：用于恋爱对象用玩笑、调侃或轻挑战打开话题的场景，先判断语气，再用贴合双方熟悉程度的幽默回应。",
+    "directory_name": "romance-016-playful-banter",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "1f0635ce4dc15902e0cb4c2c0d155b0d02c3607825d4698f5da54c70128f69b0",
+        "content_digest": "5251cf1f74b4bd1fc151a737c254d5e2beeb6366f2df3dba4717ea3981f893d9",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "f8974ed9-a72e-4326-a403-aaf3120142c2",
+    "name": "romance-017-sincerity-challenge",
+    "description": "回应“你对谁都这样吗”的真诚质疑：用于对方怀疑用户是否对所有人都一样热情的场景，辨别她是在开玩笑还是认真确认，再坦率说明真实态度。",
+    "directory_name": "romance-017-sincerity-challenge",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "aaa5e46212de5879c129a334e1cd18466013a8f2b9a1f68bc72e49e6e74f513f",
+        "content_digest": "6983bdc978e8c35f471c54123f2e8b458aca1743e4c29d9d501e2b234d70f914",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "2c471f93-a9d1-45a5-9ad5-6ab71df560c4",
+    "name": "romance-018-specific-compliment",
+    "description": "基于真实细节夸奖对方：用于用户想表达欣赏的场景，从对方真实说过或做过的一件事出发，讲清自己看到的优点和实际感受。",
+    "directory_name": "romance-018-specific-compliment",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "ec5d61469656f7cf6b2246f800e21982a3cb99435bbc0e83336eb96707da441d",
+        "content_digest": "29a581b2b748b12cdba137d5cdfed21e282731ff48a2d749bc4b41fd9b32a52f",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "5564c881-3399-471a-8f4e-267b581f3a1a",
+    "name": "romance-019-light-flirting",
+    "description": "轻度暧昧试探与接招：用于双方已有轻松来回、用户想表达一点好感的场景，沿当前话题加一层亲近感，并观察对方是否愿意接续。",
+    "directory_name": "romance-019-light-flirting",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "13b09d8021d72300d0607fd15e64a779db29bf254483e2725af7f0f3dcfaf1a9",
+        "content_digest": "e109fe99592fe67e87c1baea6e02d75f155f9a492a5155a3e325c883c945841b",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "3a2e4512-dad9-4b4b-a1c0-9843670634d9",
+    "name": "romance-020-miss-you",
+    "description": "轻松表达“想你了”：用于用户确实想念正在交往或已有亲近互动的对象的场景，用具体、轻松的话说明感受，不让对方承担安抚责任。",
+    "directory_name": "romance-020-miss-you",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "874949da5998bac399978d48ec07477ba69a064e5f20a3ab14ef79b9f5de8528",
+        "content_digest": "4efc1e4bbf840c6c54b70b8d74c7a411802b1003ec2166205e24f2e56b72259e",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "58a4d7bc-a44f-47e6-aca2-9b0f60175115",
+    "name": "romance-021-friend-to-romance",
+    "description": "从朋友式相处表达不同的好感：用于用户与熟悉朋友产生恋爱意愿并想说清楚的场景，坦率区分友情和好感，同时保留对方选择朋友关系的空间。",
+    "directory_name": "romance-021-friend-to-romance",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "f1020add301dea938092613597d71c1b34747fe13e0222fc1b47c907f3a6f147",
+        "content_digest": "80b2c2982203c91f23f21d77f48e727fb5899c95fb03540b9459b19a0f12a1fb",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "a5f7e051-7728-47b9-a743-f4da629ce562",
+    "name": "romance-022-gaming-to-personal",
+    "description": "从游戏搭子转成想和对方相处：用于组队对象问用户是不是只因缺人而来的场景，承认真实缘由，再点明确实想与她一起玩的个人兴趣。",
+    "directory_name": "romance-022-gaming-to-personal",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "3407e460d351d635e6e6a3251bbe964844b73d1fe514fdd1ab7476dc85bed9d4",
+        "content_digest": "a57209ddb15b82c073cc878e8b249fe513273557ebf00ccef76440f537358e62",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "76563b9b-8deb-449f-9163-d1d639cd4aa2",
+    "name": "romance-023-after-showing-interest",
+    "description": "表露好感后的接话与收住：用于用户已表达欣赏或好感、对方正在回应的场景，先听清对方态度，再选择回应、澄清或给空间。",
+    "directory_name": "romance-023-after-showing-interest",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "529e4ef272677c66110eec7f218f2a13e95462094ef5241cb63d49d62ab66a70",
+        "content_digest": "fb0bde5c78b30d67dafc6439a3f46fb27a9f55257eb6eebd25762685480870b2",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "33d6566c-30ff-476e-9136-6ccf027e4f4f",
+    "name": "romance-024-flirt-repair",
+    "description": "暧昧过头、让对方不舒服后的收回：用于对方指出用户的话太亲密、太冒犯或让她不自在的场景，停止推进，具体承认影响并给她空间。",
+    "directory_name": "romance-024-flirt-repair",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "c065f2e97da2b7aa1c4f058700e42dd83963254330cad011f28c01e9212943d4",
+        "content_digest": "ad74aee74746e6f4114e0a005d1edd1e2c5514099bc06ea1d633b07003e970c4",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "6093e7d1-fd61-4d77-847c-65881005b6d7",
+    "name": "romance-025-meeting-interest",
+    "description": "试探对方是否愿意见面：用于双方聊到可共同体验的事、用户想知道对方是否愿意线下见面的场景，发出具体但低压力的邀请。",
+    "directory_name": "romance-025-meeting-interest",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "e67f67c57d05e58251e67bfbb89f8e96b943fa353a702689c8df98a2c02b172d",
+        "content_digest": "f53aaaf47b21e84f93de3d3ed46b4ef15393aba2edaf7bb63fc01cb6a4b97f5e",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "355d9f17-5341-4344-962a-7468305d8bf4",
+    "name": "romance-026-concrete-date-plan",
+    "description": "把“有空约”落实为具体安排：用于对方表示愿意见面或说“有空约”且双方想继续的场景，提出清楚的日期、活动和地点供彼此协调。",
+    "directory_name": "romance-026-concrete-date-plan",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "e45bade8a6c929305f14eb822784525967e28979fd6103cb850a3aa986c10262",
+        "content_digest": "ed778ae7e2d45bceb53f4978fecbfc0237bb23381132a3660176539134db6a2c",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "12ada0be-7cf7-41e7-8cb2-c3359da57018",
+    "name": "romance-027-call-video-invite",
+    "description": "通话或视频聊天的邀约：用于用户想从文字聊天转为语音或视频的场景，说明想聊的目的、预估时长并先询问对方是否方便。",
+    "directory_name": "romance-027-call-video-invite",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "7dca651bf50c6dd914b2a4481f66dcc748cc3361a0882661cfe60548f24f9491",
+        "content_digest": "a893c0098915eceb4813c1a8ca42ea6a7cf2549a3dd7407dff51f4cd932ee4f9",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "43e0986f-fb73-4950-8c92-4976efdd4ce1",
+    "name": "romance-028-vague-invite-response",
+    "description": "邀约只得到“下次吧”“再看看”：用于用户邀请见面后只收到“下次吧”“再看看”等答复的场景，澄清一次是否想另约，然后接受对方选择。",
+    "directory_name": "romance-028-vague-invite-response",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "ac9d437983207fd3dcad034e80e222caba157a21c6895f5b2f7e131753abc0a4",
+        "content_digest": "977d3365c1945fc105cadd5652e2262e2915b41a0f2f0dcd55b37b1e89d976b9",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "29c61d2d-8cf9-49c0-825f-485c3c30a3c4",
+    "name": "romance-029-schedule-conflict",
+    "description": "有见面意愿但时间冲突的协调：用于双方都表达想见面、但原定日期不合适的场景，整理真实可用时段并共同找到替代安排。",
+    "directory_name": "romance-029-schedule-conflict",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "c358ff546bb192627df2ad1a853ab3978d99e16c223cba38ce16273c1a60c055",
+        "content_digest": "917a9794f49e1b945400b8130b5349263fe92f9efb09a481fea3137478564150",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "d050f791-1e0e-4d30-bf59-f6b45bbcde02",
+    "name": "romance-030-last-minute-cancel",
+    "description": "已经约好却临时取消或改期：用于对方临近见面时取消或改期，先确认实际情况，再按用户意愿协调、表达影响或结束安排。",
+    "directory_name": "romance-030-last-minute-cancel",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "3aa1bd548c4187d6ad59dcfb407b9092e6ff2487ffd24b37866edac0b4ce64c9",
+        "content_digest": "c1f5cc60de5bd9c99ca6a1a37ac23ddeef908fdde98f86a569e618d44140f3df",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "153982c0-4232-4e9f-8317-86e94a732acc",
+    "name": "romance-031-pre-date-confirmation",
+    "description": "见面前再次确认必要细节：用于双方已同意约会、日期临近且关键细节仍不完整的场景，简洁核对时间地点和必要安排。",
+    "directory_name": "romance-031-pre-date-confirmation",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "1c4795bab795bdcee1b3faa3f52e1837eb94981121263afca8c369b1675e7e48",
+        "content_digest": "bed5a4e8dc5c9bcbabbb30396116a510060abcff7085b3e5a222be3384222f41",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "a7c775a0-e436-446a-a25d-019e55afec99",
+    "name": "romance-032-extra-companion",
+    "description": "约会临时增加朋友或同行者：用于已约好两人见面，却临时出现同行安排的场景，帮用户说明意愿并协商是否改期。",
+    "directory_name": "romance-032-extra-companion",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "d43d217fd3386c4995095d4463967606d2e1b8559624157908ebbfab47d06f38",
+        "content_digest": "7e8afb0d83f54a24f92e5639f0bd32fba2ecd82e9414474d78216a3961b51482",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "080f828d-2c4f-4944-9d55-c2a0cc33e63e",
+    "name": "romance-033-in-person-silence",
+    "description": "见面时冷场或接不上话：用于约会现场出现短暂停顿或话题用尽的场景，帮用户从共同环境和已有话题自然续聊。",
+    "directory_name": "romance-033-in-person-silence",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "27862259c4b16aa3c51fe37e9e68e3665bcc5bc69dfd5b6b1d70b8ee4ee72b30",
+        "content_digest": "aaafa29f6b10790cdd53b87b6e65e85518de58969acf85a7bc60c71deb540d5c",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "eb774dda-a469-476a-ae32-7125b6faad12",
+    "name": "romance-034-date-awkwardness",
+    "description": "见面时说错话、出糗或尴尬的化解：用于用户或约会对象现场失言、记错或出糗的场景，帮用户接住并判断是否需要认真道歉。",
+    "directory_name": "romance-034-date-awkwardness",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "e76c98397a7eaddb66455d84095f9ede32d4f094f201728f96ed1dd1b46e109d",
+        "content_digest": "c3dceb1a7ecc574b51363b0fc0b6418b65e3f1fafff551db7e675f0b6d4b556a",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "ca49e87a-70da-4b40-b314-fb2845d15875",
+    "name": "romance-035-first-date-followup",
+    "description": "见面结束后的第一条跟进：用于一次约会刚结束、用户想发第一条消息表达真实体验或感谢的场景，帮用户写贴合实际细节的短消息。",
+    "directory_name": "romance-035-first-date-followup",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "c8e5160f2049d5f3c55dc1ecf547b069e3d02b34a7b3208fa8b6a7d4ed2c7beb",
+        "content_digest": "440e2bb5eea649faec30ace0a37e9f558d8cb16020a990777dd6d5b1af29cea3",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "c2b924f8-f76b-435b-805e-9d76bb175edc",
+    "name": "romance-036-next-date-invite",
+    "description": "承接上次体验提出再次见面：用于用户已经确定想再约一次的场景，帮用户用共同经历提出具体、容易回应的下一次安排。",
+    "directory_name": "romance-036-next-date-invite",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "e1221a6014ddc3af26d8e65e3fd83cd7ddd3d269778aefa72a1b7dfa817c6e7d",
+        "content_digest": "22e83e429280338490fea51071b7bcdbe1c89e9e6a7164b4fbc3f56136c8c5a1",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "ea9226d0-e40b-4ec0-a8c5-f677d00705cb",
+    "name": "romance-037-end-date",
+    "description": "约会不合拍时结束当次见面：用于用户在线下见面后感到不舒服、疲惫或不合适并想提前离开的场景，帮用户清楚、安全地收尾。",
+    "directory_name": "romance-037-end-date",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "b52950e5759e8b7e644f045e75bc58d099a825fde5c43fc103053e230c4c5c98",
+        "content_digest": "93349ce81f2003055211357056ffa6bc0f2ad36286ef1f6d442e4915a0aa337c",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "bb22b200-bf52-4fe9-8290-bdb11b779853",
+    "name": "romance-038-unanswered-message",
+    "description": "一条消息迟迟没有回复：用于用户发出的单条消息尚未得到回复的场景，帮用户决定是否等待、补充必要信息或发一次轻量跟进。",
+    "directory_name": "romance-038-unanswered-message",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "74f82d778f6dc7681dde7b747f6f08c514653cec2876dcc1ed2318d02af8b010",
+        "content_digest": "fd9fd649228fa85aeab162460b7b60c48ecc426b10a7f1b4798b77b96a72cdba",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "44996e5f-129f-424d-a178-66034cd60346",
+    "name": "romance-039-fading-interaction",
+    "description": "多轮互动逐渐变冷：用于多次聊天都变短、缺少延续且主动性持续下降的场景，帮用户用一次清楚沟通决定如何收住或调整投入。",
+    "directory_name": "romance-039-fading-interaction",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "4036037b4e36eeeea29c0817fd26ded07b756fdf5cf6e6789ee460c23fd66dfb",
+        "content_digest": "a7d16d9b39e4dde743a54401a4efa94661c4ea85d77febcaa06c46444ac1e42d",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "4d63df03-c6f3-4fc1-8754-60f8f358a25e",
+    "name": "romance-040-hot-cold-contact",
+    "description": "对方忽冷忽热时稳定交流：用于对方时而热络、时而突然消失，而用户想保持真实联系又不想反复追问的场景，帮用户说清期待。",
+    "directory_name": "romance-040-hot-cold-contact",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "363d3ae69dbf560f697a00853b07f5bea5aa5e812a3916f8ce335af9fd14d345",
+        "content_digest": "03d5fd778cbe4aa1b9b1b5af1e86d1ffaa02c14b6d31e5218524b9a169f3b93c",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "d11acbd7-45b7-4bd4-87ed-be00650ceafe",
+    "name": "romance-041-busy-tired-exit",
+    "description": "对方说忙、困或想休息时收住：用于伴侣明确表示现在无法继续聊的场景，帮用户体面暂停对话，必要时约定之后再联系。",
+    "directory_name": "romance-041-busy-tired-exit",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "7a60d6b498b710b97fe21b8085926a22077c5b6a10a819c08ee8788485aa266f",
+        "content_digest": "164a4a77d9144f994bff600c554d12662e9242b9ee22f76dc24b7d398ad35801",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "b450ee25-5be4-49b4-b0ec-4110e2c0391b",
+    "name": "romance-042-after-overexplaining",
+    "description": "自己连发追问、解释过多后的降压：用于用户发现自己已连续补消息或写了很长解释的场景，帮用户判断是否还需一句收尾并停止追加。",
+    "directory_name": "romance-042-after-overexplaining",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "7baa7d03074886078ab3025b83cdae60ab0742f39c867d260a8fda78bbbced69",
+        "content_digest": "bf8e33a5c1c3e85ed4a299cf333077e6fda6c2e2c3c021ecac4cd05316cca035",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "fc356d8e-3da4-49ae-b73c-aafaad3867da",
+    "name": "romance-043-help-only-contact",
+    "description": "对方主要在需要帮助时才联系：用于互动常围绕借力、代办或资源请求展开，帮用户表达愿意帮到哪里及希望关系如何互相往来。",
+    "directory_name": "romance-043-help-only-contact",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "963cb8960731ac5fdb6e531bc8a15f12787d5e645662a5c788a007f397ca9319",
+        "content_digest": "30703968bd12f6c7cc6c4029ded7c9cebbd5e4f35d18afc12eb3eb3309ddb637",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "ce81dddd-2b95-488f-9516-26bc8ee2232d",
+    "name": "romance-044-one-sided-venting",
+    "description": "长时间倾诉陪聊却没有双向相处：用于对方长期把联系用于排解情绪，而用户想兼顾关心和自身精力的场景，帮用户表达可承受范围。",
+    "directory_name": "romance-044-one-sided-venting",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "ade45258025bb6b6953c8932cd67cfcfabc10256948a3754a2fd6e9372e53b2e",
+        "content_digest": "f91d2454469fc89baeb7facf66bea73f6a4e7028aa7e98331f28bcf7159cccef",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "2831d33b-3eee-45bb-8a8f-865179a8b102",
+    "name": "romance-045-conditional-affection",
+    "description": "回应“达到某条件才考虑在一起”：用于对方把交往与外貌、收入或其他条件绑定的场景，帮用户询问具体顾虑并表达自己是否愿意接受。",
+    "directory_name": "romance-045-conditional-affection",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "1b2130bef3bbb86afb7e2de64663abc2eb529159f27b0bb9f7b213a9d6c8265c",
+        "content_digest": "aaf0b71614cbed07d9975fc4428f515ad8d12a91d70e06438b56899b75bdd289",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "0975fb67-fd94-4927-928a-9d235ee40aed",
+    "name": "romance-046-mixed-signals",
+    "description": "说有好感却持续回避见面等矛盾信息：用于对方口头表达兴趣、现实安排却长期落空的场景，帮用户用一次具体澄清区分时间障碍与意愿差异。",
+    "directory_name": "romance-046-mixed-signals",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "ae0885b21222a1c3fbc1073fbb55138409d0a433d38381447a8e0706f25dd6b4",
+        "content_digest": "3dd5cf57bd4f88b16d7b8185485dc1c85b2d425387cd786b4d2b53ca4676c4c6",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "7ab863f3-9f38-434c-a432-2652d2b05e7c",
+    "name": "romance-047-sadness-support",
+    "description": "对方难过或受委屈时回应：用于恋人或约会对象分享失落、受挫或委屈的场景，帮用户先回应感受，再判断对方想倾诉还是想解决问题。",
+    "directory_name": "romance-047-sadness-support",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "44f00b6c48259ab07e22f860088c8234e2f8a55e817c9f71cacdaa786ed2fcf3",
+        "content_digest": "c2b4a085ccadbde63f5ae767c172044329c5d312d0748c47f03f47da636f72db",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "79e62d52-d347-48de-b386-26fb9ad79014",
+    "name": "romance-048-anxiety-support",
+    "description": "对方焦虑、纠结或担忧未来时回应：用于伴侣因工作、学业或重要决定感到焦虑的场景，帮用户拆出担心点并询问对方需要的支持。",
+    "directory_name": "romance-048-anxiety-support",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "32a5a9732f3d65642b09ba95d106bedc1d3acdc8ac634b97b964bf5f05bf8839",
+        "content_digest": "6e50bbf234f392ba34a4ed5f7ed8547d2feac9b55ed90d13a02e190f01b332be",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "dee4ca75-f196-4abb-99d6-c8a4b3ed7fa1",
+    "name": "romance-049-venting-about-others",
+    "description": "对方生气、抱怨别人或某件事时回应：用于伴侣讲述不公平、受气或烦心事的场景，帮用户表达理解并辨别其想倾诉还是想找办法。",
+    "directory_name": "romance-049-venting-about-others",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "25b4f52ce9be2b492086377e7af7a839c100e9ef30de5ec62f22258f30c98c28",
+        "content_digest": "be2d4e39acd22d718b53513cc9331712ce2fe0f39370b279ff01929e26856d85",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "74538eb7-74bc-4118-bf11-db62bbcfb3fe",
+    "name": "romance-050-celebrate-good-news",
+    "description": "对方分享好消息或成果时捧场：用于伴侣或约会对象分享完成目标、取得进展或开心小事的场景，帮用户具体回应并让喜悦继续被看见。",
+    "directory_name": "romance-050-celebrate-good-news",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "b16344b9676726a8b371ede2a532b3a636f4b3177fc3d72a0d0d2e5af88b2b2a",
+        "content_digest": "00334314c22b92fea679a6f723eaa27ca5251a0987e8470377c8ee5118b00606",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "ba52e07d-c666-40c8-8eeb-907cc4cf04fd",
+    "name": "romance-051-illness-fatigue-care",
+    "description": "对方身体不适或疲惫时关心：用于伴侣说生病、疼痛或精力耗尽的场景，帮用户表达关心、询问需要并避免要求对方继续陪聊。",
+    "directory_name": "romance-051-illness-fatigue-care",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "6229bca72d80e9a7e9e2c9fff8e2f68790c2182b4e795d96e4273306a02a50bd",
+        "content_digest": "4795f0919f490fb47b8e88d744d121b004c8ca4d9279d8f4089dac104b4b6063",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "fd55fab5-7bfa-4358-9196-7262f40f8659",
+    "name": "romance-052-specific-gratitude",
+    "description": "感谢对方为自己做的具体事情：用于伴侣完成一项帮助、记住偏好或投入时间的场景，帮用户点出具体行为及影响，表达真诚感谢。",
+    "directory_name": "romance-052-specific-gratitude",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "2a0245e5f0f85418c14049fd8f467a30d7e03b2e05a83dc604da123d6536a6b3",
+        "content_digest": "103622023cfde9178ea7f34a86871aace6e456f6e9de1fed3766163bfddd68c0",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "12cb4b21-053f-470b-a0c8-1f6dba2a424d",
+    "name": "romance-053-couple-reconnection",
+    "description": "稳定关系中疏远后的重新亲近：用于伴侣因忙碌或日常单调减少了交流，帮用户提出一项小而具体的共同活动或联系安排。",
+    "directory_name": "romance-053-couple-reconnection",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "b65d094732b2d736f66fa131d143b3a553411133f1f387c246115e7549e1e98a",
+        "content_digest": "58ee43b0cd6519b66653664e59d8ab52569a1f1ca7e1d950a09eded1df68c815",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "408b161e-4ede-4b5a-a921-c874c6d7ea96",
+    "name": "romance-054-couple-help-request",
+    "description": "情侣之间提出或回应具体求助：用于一方需要伴侣做一件明确的事的场景，帮用户说清任务、时间和可协商空间，并回应无法做到的情况。",
+    "directory_name": "romance-054-couple-help-request",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "2fc15413e5126d93cca315ce533531d07b6504c08b0aec833fa4761594c39e03",
+        "content_digest": "7aeb5b99965514a39b87d3fde9deb39d63b86f236213a1312cb53a0ab2b8719f",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "06888b26-d0a3-46e0-be2f-5b281df424a9",
+    "name": "romance-055-work-busy-relationship",
+    "description": "忙事业或学习时说明陪伴安排：用于用户近期投入工作或学业、联系时间减少的场景，帮用户如实解释情况并提出可兑现的相处安排。",
+    "directory_name": "romance-055-work-busy-relationship",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "c801e4580b51dce2b5813836a120d9ff5736be6956f4402601ad9bdb494cf752",
+        "content_digest": "b051c20694676ae643396b427be4f7ab90732026eea81c6c58b8466f0e4523c2",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "8abcce02-dd58-4c61-b5b5-b4fe1078cca7",
+    "name": "romance-056-confession",
+    "description": "正式表白与回应表白：用于用户准备清楚说出恋爱好感，或收到对方表白需要回答的场景，帮用户按真实意愿表达并留出选择空间。",
+    "directory_name": "romance-056-confession",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "584fcc0cdf82344d939cd641883baeef881559888648d1e9c73121904f768ab1",
+        "content_digest": "6b3e960de6f060aa124fab797f80fd8dcecfef54be837a1d77d6eeab6a338347",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "09b1f1be-8c86-4a40-aac8-d0e2daad1c43",
+    "name": "romance-057-premature-confession",
+    "description": "过早表白后的沟通补救：用于用户太早说出恋爱承诺或让对方感到压力的场景，帮用户承认节奏过快并澄清真实意图。",
+    "directory_name": "romance-057-premature-confession",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "195ac6268b30d4b7584ad7e23c3f2e3be85c5b95a7c786bfe1731bb98f7212db",
+        "content_digest": "cd9751a75a22af919737befdd4383115fa00bc32bc2793b4f1a359302069f79b",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "637d257a-e243-4a8e-959e-90290504a554",
+    "name": "romance-058-define-relationship",
+    "description": "暧昧已久时问清彼此的关系意愿：用于双方长期亲密互动却没有谈过关系定位，帮用户直接说出期待并询问对方当前想法。",
+    "directory_name": "romance-058-define-relationship",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "86cee1dec838d7d07cc6739e164de8fdddbb487583a723f319cbac9a3ba45fa8",
+        "content_digest": "512a1e9b96ab78ba79fdc5fdd4f5665bb96798da99f1e678d7173ccad3bf0116",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "cd2fe2ed-86b4-4c83-85ec-776f12e129dc",
+    "name": "romance-059-exclusivity-commitment",
+    "description": "明确排他性、称谓和承诺范围：用于双方准备讨论是否排他、怎样介绍彼此或承诺什么的场景，帮用户把抽象标签落成具体协议。",
+    "directory_name": "romance-059-exclusivity-commitment",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "e3502085f91d773599e48d907364f35518f1e92bfa3c38905f8976f2eba51d42",
+        "content_digest": "3d4f9206fbf3b8e073796938f2f793563613023f8374b6529460c289fc224c90",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "70a9cb1a-7aa8-420d-b937-249fc22b8d3f",
+    "name": "romance-060-contact-frequency",
+    "description": "商量联系频率和消息回应期待：用于两人对日常联系多少、忙时是否报备或何时回消息有不同感受的场景，帮用户提出可执行的协商。",
+    "directory_name": "romance-060-contact-frequency",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "5efa699184bc00e75ccd02aba749ecf4ea5113e7ebcdccb2fa108d81739155d9",
+        "content_digest": "2d7f934231ec7e4e20a2f88dd1bbbecd3a0d167811927a829c4a2ac52820650b",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "d38e468f-490a-4463-81fd-6fe59acd5b14",
+    "name": "romance-061-personal-space",
+    "description": "表达独处、朋友或个人生活的空间需要：用于用户需要保留独处时间、友谊或私人安排的场景，帮用户讲清边界并协商相处方式。",
+    "directory_name": "romance-061-personal-space",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "fd64ae3751a1ae6031189bec81dc216dc988c6067cf558dc356485bdb2af0dc3",
+        "content_digest": "1c985d894fde4057a7805548dcde514901155269cf27d338dc39091aa3d4ec9b",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "6255ffd7-2a5a-4b81-91ff-450ef070a9c6",
+    "name": "romance-062-physical-consent",
+    "description": "身体亲密前后表达、确认和撤回同意：用于亲密互动将要升级、用户不确定或想停止的场景，帮用户明确表达并回应对方即时边界。",
+    "directory_name": "romance-062-physical-consent",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "e3119fe0bece261469252b4b3a5abe9a400596681489df40b57749a55417f80f",
+        "content_digest": "b9b6435f46c339c5de264d60ef84d5ad243423c412341a864b00a4de0fda34a1",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "c363d99d-702e-426d-a289-e48ff515818d",
+    "name": "romance-063-public-relationship-photos",
+    "description": "关系公开和合照发布的边界：用于用户想讨论是否公开恋情、发布合照或约定发布范围的场景，协助核对双方意愿与隐私边界，拟出不替对方表态的候选。",
+    "directory_name": "romance-063-public-relationship-photos",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "09009b62a3dd9ac15b14f5a90ec36464f45dad86bfb526839711c00e3cad4a24",
+        "content_digest": "3ee26091dd5a7d926720c6ea7a4a282257e1bdf4ea1a96c1f8d239b237b228fa",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "ed390340-16e9-4026-9e92-c247c08447d4",
+    "name": "romance-064-digital-privacy",
+    "description": "手机、密码、定位和查岗的边界：用于用户要回应查手机、共享密码、持续定位或线上互动规则的场景，帮助说清隐私选择、信任诉求与可接受替代安排。",
+    "directory_name": "romance-064-digital-privacy",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "55e8fa8c22b96fbbf7fdcfe6138e06480d504aa926e87e04bd856c131649e213",
+        "content_digest": "11e2d2025b976fe2cfadcd863ef862d68ff302e2fb7afb86f9bd493254eb5fb8",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "39ce048e-5f08-4b56-afaa-44c8be8681b5",
+    "name": "romance-065-jealousy-conversation",
+    "description": "吃醋或对异性交往不安时的沟通：用于用户想表达嫉妒、询问具体互动或回应伴侣不安的场景，帮助区分观察与推测，提出一项清楚且可协商的请求。",
+    "directory_name": "romance-065-jealousy-conversation",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "13d016301e3d9b4c8d1ed24df29822fcaa6ff937eaae664bc70c0053e6042c33",
+        "content_digest": "cd2d77c3076c610ad9c840d70382f9b080e4e0faedf93e76ea46a376ded8d73e",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "0028dad1-97c6-4f3e-8543-f5c5143dbba5",
+    "name": "romance-066-express-dissatisfaction",
+    "description": "表达不满与回应对方的不满：用于用户要说明具体行为的影响，或先接住伴侣的不满的场景，帮助软化开场、听清需求并提出单项请求或试行办法。",
+    "directory_name": "romance-066-express-dissatisfaction",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "0d655e01e5449b1c25f4fb26aace86d3a60f24d00d2f8dd7d19eb1280fc43313",
+        "content_digest": "4201830e52e00ff1b500ba04665b6208277f9b9e534d47ecf8fb1c7992592595",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "9b482707-a22d-41ec-9b52-e0101dd9d3cb",
+    "name": "romance-067-conflicting-statements",
+    "description": "前后说法矛盾时问清一个关键事实：用于用户发现两段说法不一致、想核实关键事实的场景，帮助引用原话、保留不确定，并只提出一个中性澄清问题。",
+    "directory_name": "romance-067-conflicting-statements",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "7db73127e2ac6c4b9d8556353ad8bc63da7d1d0cb7df545864a910690d3e3e3e",
+        "content_digest": "6281fdd20421fb719ddf3c941ab701983297381330024a8ee0b98d637146da24",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "74867792-ed18-4e3c-bb18-df46dfa541c6",
+    "name": "romance-068-text-misunderstanding",
+    "description": "文字或语气被误解后的澄清：用于用户发现一句话被理解成冷淡、讽刺或拒绝的场景，帮助承认文字局限、解释本意并邀请对方修正理解。",
+    "directory_name": "romance-068-text-misunderstanding",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "868f7a58bd0dcf3b36de14c7266c69b6683411ed14bc335d284410239db02ba3",
+        "content_digest": "5fe7547373ec544508c825f9519d682f8fdb4f7cb0fc0e94aee3f6c9b15ac2fc",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "881cd76f-05f7-4ddb-9fae-db4b732292a5",
+    "name": "romance-069-hurtful-words-apology",
+    "description": "失言伤到对方后的道歉：用于用户想为争执中的刺耳话、嘲讽或贬低道歉的场景，帮助准确承认行为和影响，提出补救并留出对方不立即原谅的空间。",
+    "directory_name": "romance-069-hurtful-words-apology",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "d4f7a1fadf9853dc28b995d239caaee32bc8f340187f118b9c07d46d923d27b2",
+        "content_digest": "3abe494af52609aef05b241d7204aae140b3776cefa225bfe602532a74572815",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "349deb3b-49b2-4c68-85b8-1f2d21c4d177",
+    "name": "romance-070-broken-promise-repair",
+    "description": "失约或失信后的具体补救：用于用户错过约定、未完成承诺或隐瞒变化的场景，帮助说明事实、承担影响、提出可验证补救并重新协商承诺范围。",
+    "directory_name": "romance-070-broken-promise-repair",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "e07fa68c9aed9abfee10086e5b3ce9006e128ac0efa4d485ff5d689f4136485d",
+        "content_digest": "17b7dde0be5a73e2c5c216b8bd9bc7c594660b5cfef29b2c49dfee7f8d6d3ca6",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "c4998668-45e9-4fb4-b8f4-ffb878f644a9",
+    "name": "romance-071-conflict-pause",
+    "description": "争执升温时暂停并约好恢复沟通：用于用户已难以倾听或担心继续伤人的场景，帮助提出有返回时间的短暂停顿、说明期间安排并按约重启话题。",
+    "directory_name": "romance-071-conflict-pause",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "063e9fb86a5e26029ca8d246e57412ecba0ffbde50844e50884b976f12fb09dd",
+        "content_digest": "93db15e0ac9781635a12c475e5e1204851de0e67eb364d13f17d475a1aeec07c",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "4a74e0a6-2feb-49a7-874c-c56188601d7e",
+    "name": "romance-072-reopen-after-silence",
+    "description": "冷战后重新开启对话：用于双方停止交谈一段时间、用户想打破僵局的场景，帮助承认自己的部分、说明议题并邀请一个双方可承受的重谈时间。",
+    "directory_name": "romance-072-reopen-after-silence",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "aed905369d65ad745d8e4afe7afe2757a47bc6e0a39c17cd301c716718b15bed",
+        "content_digest": "1239c5db761558663ff346d2b18132f2128566672d1f32967c5540a748c64b8d",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "45ea458d-93d2-4788-b21d-b370adbcf01d",
+    "name": "romance-073-recurring-conflict",
+    "description": "同一矛盾反复出现时协商可试行办法：用于用户面对重复争执、希望找到小范围改变的场景，帮助辨认循环、拆出共同问题并约定负责人、期限和复盘点。",
+    "directory_name": "romance-073-recurring-conflict",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "9bca8449c61b608435bfd65edee13d3af2e96022b53ae52c80a1847827bbe601",
+        "content_digest": "bf56ac667e4831dce6b02be0b7686f084334a8352ba71b7cca7b5638c6fa930e",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "15506827-40c2-44d1-bf8a-bc5ad4d12e19",
+    "name": "romance-074-romantic-rejection",
+    "description": "对方说“不合适”“不想恋爱”时回应：用于用户需要接住明确拒绝、避免追问施压的场景，帮助简短承认、结束说服，并按是否还需往来准备后续边界。",
+    "directory_name": "romance-074-romantic-rejection",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "3e6f212a1dca002219498e2eaa6777b3528495c1627bb67318bb45a8837f2099",
+        "content_digest": "024eb6e8c7e8038a8ce3cdf14d84df012d513ed30d7e172a70f2353a14f93ec9",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "b46ce869-edfe-4241-9b93-ffb83a036209",
+    "name": "romance-075-end-dating-interest",
+    "description": "自己不想继续发展时说清楚：用于用户决定不再约会或推进关系的场景，帮助直接表达决定、避免虚假希望，并按实际事务保留必要沟通边界。",
+    "directory_name": "romance-075-end-dating-interest",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "6487818eae76c38d04c6cde4597a3d81ef7bed5b782572012e7c9a26e739ba1f",
+        "content_digest": "718c236583bd8d0beceb4ecbe1928f81b24ac43edab6d875ca64a806555b537d",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "63bc2109-bfa8-4842-8a9a-da5fa8572166",
+    "name": "romance-076-after-rejection-coworkers",
+    "description": "被拒后仍需同学、同事式往来：用于用户与拒绝自己的对象共享工作、学习或社交场景的场景，帮助礼貌降温、维持必要合作并避免继续追求或制造尴尬。",
+    "directory_name": "romance-076-after-rejection-coworkers",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "3b1d246306f77c38d9073f996a1d98aba29ecae8134edbb8b126fd4fe124baa8",
+        "content_digest": "870fa72335ac91d61153aaca0c9d14ce765b11c2532159fce4f7d3b2c14d3844",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "190b914e-cd82-4cbc-ba01-7e87e96f8539",
+    "name": "romance-077-meet-new-partner",
+    "description": "聚会遇到对方新伴侣时的回应：用于用户在共同场合见到曾经喜欢或交往过的对象与新伴侣的场景，帮助准备礼貌问候、合宜距离与自我照顾办法。",
+    "directory_name": "romance-077-meet-new-partner",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "5ee15eb4e33089edaa2c38d9d53b8e7187670f3117d2c26b210c9caeb7304849",
+        "content_digest": "fa4ce248965b95867521c9f8003dad7aef3330188b7727bd6879a45839208741",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "d036d593-1db6-483a-8308-08b6fdb4fd29",
+    "name": "romance-078-breakup-conversation",
+    "description": "表达分手决定或回应分手：用于用户已决定结束关系或正收到对方提出结束的场景，帮助用清楚、尊重的语言回应，并分别处理情绪、空间与必要后续。",
+    "directory_name": "romance-078-breakup-conversation",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "916ba90e27e5440434201e56e8587d9a0b86fd909c042114694860a96a4ab947",
+        "content_digest": "e07b763601c7fc7b184d7b49cc862db36719a2d92a2ce3ea012f02956a0734f6",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "7fca5d3b-4328-484c-92c5-c5a4933fed54",
+    "name": "romance-079-breakup-logistics",
+    "description": "分手后的物品和必要事务交接：用于用户需要处理归还物品、账目、共同安排或后续联系的场景，帮助列清事项、提出安全简短的交接方式并设定边界。",
+    "directory_name": "romance-079-breakup-logistics",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "91b4025545cfdfb24d0aa6cddbe34102cf36406f8d466419595f8d3da1859a0d",
+        "content_digest": "6846f24e4605fbf87a3a4d238353aabfda2926a7c5e6a36b24765711c90b0445",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "aa210f5b-539c-451d-a696-573467dd78f2",
+    "name": "romance-080-reconnect-after-breakup",
+    "description": "明确想尝试复联时写第一条消息：用于用户已主动决定联系前任、且对方未要求停止联系的场景，帮助简短说明来意、承认未知并给对方不回应的空间。",
+    "directory_name": "romance-080-reconnect-after-breakup",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "6cf8e6d364ee4c0c29360085a64fb0634203b66017d233353e137a49f278c445",
+        "content_digest": "b5e5baa29f4d980bc44ee9476cc7fd8d73cccf302ac3b01d6107c7af217a38aa",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "3340acd2-a2dd-4ffd-b9e1-9b9633f57f36",
+    "name": "romance-081-betrayal-clarification",
+    "description": "发现背叛后问清与沟通有关的事实：用于用户已发现可能违反双方关系约定的行为、需要核实关键事实的场景，帮助聚焦当下决定所需信息并降低审讯式追问。",
+    "directory_name": "romance-081-betrayal-clarification",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "7c2916a41ed44e7266d6bfa28ff1b439ead6e6202ed9f853f3f5d0b5b3aaf289",
+        "content_digest": "780b8e93428674afa87a5aac857925d17ab9c53ac26aa95571895d54489fda9f",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "20d2ffa6-c4d8-49ce-9c4d-ee2598df25c3",
+    "name": "romance-082-trust-repair-conditions",
+    "description": "明确选择尝试修复后谈条件和具体行动：用于用户已决定愿意尝试重建信任的场景，帮助把需要转为双方可理解的行动、边界、观察期和退出选择。",
+    "directory_name": "romance-082-trust-repair-conditions",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "00e5a2016b7306bfaf8e5ee8a0cdbeaa50f8068ddf651648919d1e6454144d5d",
+        "content_digest": "b786337b38e6c969280d98a3be3a087f4ac639c5c20a7fc8f3eae8202d4399f8",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "7c1fdc7b-c4d2-497f-8fde-e6b73bf1a87c",
+    "name": "romance-083-meet-family",
+    "description": "见家长前商量意愿、分寸和安排：用于用户或伴侣提出见父母的场景，帮助确认双方准备程度、场合介绍方式、停留时间与亲属边界，不把见面当作承诺证明。",
+    "directory_name": "romance-083-meet-family",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "f654e69a4a3946b73a7d3f007d5ca8dff2df11b70cf6a292db79da5162841db0",
+        "content_digest": "3a015ad32398d8d36b95a0c2a407ef3b5067ce386eed5f2b7e19e151547300ec",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "b097f69a-ed3e-434e-a9b0-0a0c3c83778a",
+    "name": "romance-084-marriage-timing",
+    "description": "谈是否结婚以及时间期待：用于用户想确认双方对婚姻的意愿、时间范围或现实准备的场景，帮助把价值问题、时间期待与下一步信息分开讨论。",
+    "directory_name": "romance-084-marriage-timing",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "8ee86cc3ca4c9d719131148331d8fa5372e127c17fbd05b57f5ea318e47b0538",
+        "content_digest": "46a47a86f766b030d8aaa98a168ecd0b7c6d10126907f425e9983a21a3c1eab1",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "dbb1c501-7538-4f36-bd22-f31d2954455e",
+    "name": "romance-085-parenthood-intentions",
+    "description": "谈生育意愿和未来责任预期：用于用户要聊是否想要孩子、时间安排或照护责任的场景，帮助区分真实意愿、未知条件与可分担的实际工作，不用承诺促成共识。",
+    "directory_name": "romance-085-parenthood-intentions",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "b752f173af68629b0550b70f08893008544e204b5c1d4c6c6054c5221dd81839",
+        "content_digest": "967fefd4cf74063bd102e37e6a7f3a2623de3837f5e76cd1490fb6f16a887651",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "8a40dbff-732a-4902-bf63-f881a80e7b59",
+    "name": "romance-086-city-future-life",
+    "description": "谈居住城市和未来生活安排：用于用户与伴侣面对异地、迁居或职业选择的场景，帮助明确时间、优先条件、可选方案与各自承担，不替任何人决定搬迁。",
+    "directory_name": "romance-086-city-future-life",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "30f826a7514fade5761d0ba0fc603563232f2babac611af296a012741eded3b7",
+        "content_digest": "ce1ed64cff1c9536ab5ddc06544742bb568a83c5a7ceba3f2e497733472e536d",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "9cd875cb-d391-43d5-89f2-32ebb4bbd93a",
+    "name": "romance-087-shared-expenses",
+    "description": "谈共同开支和金钱边界：用于用户要商量房租、旅行、共同账户或消费分担的场景，帮助区分共同与个人支出、明确规则和自主空间，避免控制性安排。",
+    "directory_name": "romance-087-shared-expenses",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "66359d51bd2188f4cdf769663fcbc36aa449225d98aeae30bb65ae955c460d66",
+        "content_digest": "be82ac7ee695b0ee9b1a1145ca158c8d09c43b053538733148cfcc36d008996d",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "bd032114-67f1-4ef6-828c-fad51e7c2268",
+    "name": "romance-088-housework-care",
+    "description": "谈日常家务和照护分工：用于用户觉得家务、提醒或照护劳动分配不清的场景，帮助列出任务、标准、负责人和替补，协商可复查的整体责任。",
+    "directory_name": "romance-088-housework-care",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "36e3253681de6f842dea915207b634e3ef49f833326aed168602c2e8d777c38d",
+        "content_digest": "aabad4ce073b4af8c719d7fbf5886657774e623aa780ae8275f4023eb8feb445",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "9edd99ee-6824-4402-a4cb-5768faab2e77",
+    "name": "romance-089-caregiving-transition",
+    "description": "育儿或照护变化后重新商量分工：用于家庭成员、工作或健康状态改变后，用户需要调整日常照护的场景，帮助重新核对负担、任务所有权、临时支持与复看日期。",
+    "directory_name": "romance-089-caregiving-transition",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "fc430d57eb2b1faa8bb2d1354151080c17e72196f2d74e74176d409370256cfb",
+        "content_digest": "305c3bb6fee208222b06a3943a3bfa34440c02ad0528417260106a6a3fe1e9f2",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "59aee42e-1003-4e18-9218-4a4b12dbdf04",
+    "name": "romance-090-parents-boundaries",
+    "description": "双方父母介入、探访和责任边界：用于伴侣需要商量探访、经济支持、备用钥匙或婚育建议的场景，帮助先在两人之间达成原则，再由各自一方与父母沟通。",
+    "directory_name": "romance-090-parents-boundaries",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "48a6e40fb79a044f3fb0f54ae131c0836818071105bf2cdd00f488c8c878eff6",
+        "content_digest": "0f8285de9102050794139ad69fb2cb00deed9bb29cf061c1be32ded9ef83c94c",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "21b1509e-a3c2-469f-af0b-2ef45608289d",
+    "name": "romance-091-blended-family",
+    "description": "重组家庭中前伴侣、孩子的往来边界：用于伴侣要讨论共同照护、前伴侣联络或家庭角色的场景，帮助聚焦孩子需要、可协商规则和成人各自的责任。",
+    "directory_name": "romance-091-blended-family",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "f6ff554b3de6fd6ad3473f63ab663eacbb4902a2d54b321fc4b1e8d67951394a",
+        "content_digest": "ed486a8d603c449ada7aa0819bc1325f9801ae51c8acd7a7182c87b86e98cc7d",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  },
+  {
+    "package_id": "e4f12222-735d-4f31-9ac4-d9e30ad887b4",
+    "name": "romance-092-relationship-checkin",
+    "description": "提出并安排一次关系近况沟通：用于用户想在没有急性争执时定期聊聊相处体验、感谢与待调整事项的场景，帮助约时间、限主题并形成可复查的小步骤。",
+    "directory_name": "romance-092-relationship-checkin",
+    "enabled_state": "unknown",
+    "verification_state": "verified",
+    "verification_reason": null,
+    "head_revision": "2",
+    "current_revision_no": "1",
+    "state_label": "待核验启停 · 目录已核验",
+    "revisions": [
+      {
+        "revision_no": "1",
+        "manifest_digest": "fa66ebceb670a13ede445320895205dd2eca2d83ffeda0af66d3af425f19eaf1",
+        "content_digest": "6821c8cd412280aeeadb845ed4b44fc5c6212822c3f17773f94f22df286963d1",
+        "source_kind": "user_directory",
+        "availability": "current",
+        "verification_state": "verified"
+      }
+    ]
+  }
+]

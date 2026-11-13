@@ -1,0 +1,4651 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-28",
+  "state": "historical_mapping_not_requirements_or_runtime_certification",
+  "source_summary": {
+    "migration_count": 128,
+    "create_events": 123,
+    "drop_events": 8,
+    "active_business_tables": 115,
+    "counts_by_status": {
+      "retain": 20,
+      "merge": 74,
+      "drop_legacy": 9,
+      "diagnostic_only": 4,
+      "unmapped": 8
+    },
+    "migration_ledger": "不在迁移静态CREATE列表；程序另建，不计入115"
+  },
+  "summary": {
+    "old_tables": 115,
+    "old_unmapped": 8,
+    "unmapped_with_explicit_plan": 8,
+    "remaining_without_plan": 0,
+    "implementation_and_runtime_verified": 0
+  },
+  "tables": [
+    {
+      "old_table": "assistant_candidate_selection",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "assistant_selection"
+      ],
+      "reason": "显式选择指具体版本，复制/编辑不自动选择或证明发送。",
+      "design_task": "06",
+      "created_at": {
+        "file": "backend-ts/database/migrations/053_assistant_candidate_versions.sql",
+        "line": 43
+      },
+      "consumer_counts": {
+        "literal_sql": 15,
+        "word_mentions": 16
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 298
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/reply-discussion-context.ts",
+          "line": 94
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-assistant-erasure-sql.ts",
+          "line": 5
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-materials.ts",
+          "line": 116
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "assistant_selection"
+      ],
+      "physical_plan_note": "显式选择指具体版本，复制/编辑不自动选择或证明发送。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "assistant_candidate_version",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "reply_candidate_version"
+      ],
+      "reason": "统一原稿和用户编辑版本，完整父版范围FK和幂等edit key。",
+      "design_task": "06",
+      "created_at": {
+        "file": "backend-ts/database/migrations/053_assistant_candidate_versions.sql",
+        "line": 10
+      },
+      "consumer_counts": {
+        "literal_sql": 21,
+        "word_mentions": 22
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 271
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-continuation.ts",
+          "line": 81
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-store.ts",
+          "line": 178
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/reply-discussion-context.ts",
+          "line": 92
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "reply_candidate_version"
+      ],
+      "physical_plan_note": "统一原稿和用户编辑版本，完整父版范围FK和幂等edit key。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "assistant_runtime_deletion_target",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "deletion_file_target"
+      ],
+      "reason": "目标独立于live业务行，FK删除操作，预期目录/manifest身份先持久化，同操作可安全重试。",
+      "design_task": "08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/118_assistant_runtime_deletion.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 12,
+        "word_mentions": 14
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime-erasure.ts",
+          "line": 11
+        },
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime.ts",
+          "line": 347
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 517
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "deletion_target"
+      ],
+      "physical_plan_note": "目标独立于live业务行，FK删除操作，预期目录/manifest身份先持久化，同操作可安全重试。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "assistant_runtime_session",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "assistant_runtime_instance",
+        "assistant_runtime_context"
+      ],
+      "reason": "业务记录权威与JSONL运行副本分层，current映射、完整资格、配置和真实event seal保留；重建不伪造turn。",
+      "design_task": "06",
+      "created_at": {
+        "file": "backend-ts/database/migrations/117_persistent_assistant_runtime.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 16,
+        "word_mentions": 17
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 411
+        },
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime-erasure.ts",
+          "line": 19
+        },
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime-projection.ts",
+          "line": 29
+        },
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime.ts",
+          "line": 163
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "assistant_runtime_instance",
+        "assistant_runtime_context"
+      ],
+      "physical_plan_note": "业务记录权威与JSONL运行副本分层，current映射、完整资格、配置和真实event seal保留；重建不伪造turn。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "assistant_session",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "assistant_session"
+      ],
+      "reason": "当前会话、输入、选择、runtime指针均同session；浏览历史不切current。",
+      "design_task": "06",
+      "created_at": {
+        "file": "backend-ts/database/migrations/048_assistant_sessions.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 37,
+        "word_mentions": 39
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 205
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-store.ts",
+          "line": 64
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-user-activity.ts",
+          "line": 10
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/reply-discussion-context.ts",
+          "line": 136
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "assistant_session"
+      ],
+      "physical_plan_note": "当前会话、输入、选择、runtime指针均同session；浏览历史不切current。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "assistant_session_input",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "assistant_turn"
+      ],
+      "reason": "合并已提交输入与逻辑请求，kind区分generation/exploration/carry；input只存一次，实际attempt另存。",
+      "design_task": "06",
+      "created_at": {
+        "file": "backend-ts/database/migrations/051_assistant_session_inputs.sql",
+        "line": 7
+      },
+      "consumer_counts": {
+        "literal_sql": 26,
+        "word_mentions": 27
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 455
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-format.ts",
+          "line": 13
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-store.ts",
+          "line": 155
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/reply-discussion-digests.ts",
+          "line": 12
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "assistant_turn"
+      ],
+      "physical_plan_note": "合并已提交输入与逻辑请求，kind区分generation/exploration/carry；input只存一次，实际attempt另存。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "assistant_session_turn",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "assistant_turn"
+      ],
+      "reason": "合并已提交输入与逻辑请求，kind区分generation/exploration/carry；input只存一次，实际attempt另存。",
+      "design_task": "06",
+      "created_at": {
+        "file": "backend-ts/database/migrations/048_assistant_sessions.sql",
+        "line": 18
+      },
+      "consumer_counts": {
+        "literal_sql": 85,
+        "word_mentions": 87
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-erasure.ts",
+          "line": 21
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 89
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-adoption.ts",
+          "line": 31
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-continuation.ts",
+          "line": 70
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "assistant_turn"
+      ],
+      "physical_plan_note": "合并已提交输入与逻辑请求，kind区分generation/exploration/carry；input只存一次，实际attempt另存。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "background_task",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "background_task"
+      ],
+      "reason": "有限工作任务复用，记忆task归属及固定输入合同明确。删除控制账本独立于被删owner生命周期。",
+      "design_task": "05/08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/016_background_task.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 127,
+        "word_mentions": 131
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 41
+        },
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 33
+        },
+        {
+          "file": "backend-ts/src/host/pure-ts-task-events.ts",
+          "line": 21
+        },
+        {
+          "file": "backend-ts/src/host-plugin.ts",
+          "line": 127
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "background_task"
+      ],
+      "physical_plan_note": "有限工作任务复用，记忆task归属及固定输入合同明确。删除控制账本独立于被删owner生命周期。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "background_task_step",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "background_task_step",
+        "step_attempt",
+        "step_attempt_guard"
+      ],
+      "reason": "当前步骤与执行历史/租约guard分开，单调lease_generation不能由重置计数替代。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/016_background_task.sql",
+        "line": 44
+      },
+      "consumer_counts": {
+        "literal_sql": 101,
+        "word_mentions": 108
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 34
+        },
+        {
+          "file": "backend-ts/src/host/pure-ts-task-events.ts",
+          "line": 22
+        },
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 215
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/service.ts",
+          "line": 53
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "background_task_step",
+        "step_attempt",
+        "step_attempt_guard"
+      ],
+      "physical_plan_note": "当前步骤与执行历史/租约guard分开，单调lease_generation不能由重置计数替代。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "channel_identity",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "conversation_binding"
+      ],
+      "reason": "当前binding-service以locator查询channel_identity；合并前必须保留真正稳定external_id，不以昵称或未证locator猜同一。",
+      "design_task": "02",
+      "created_at": {
+        "file": "backend-ts/database/migrations/003_separate_contact_identity.sql",
+        "line": 27
+      },
+      "consumer_counts": {
+        "literal_sql": 6,
+        "word_mentions": 7
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/contacts/binding-service.ts",
+          "line": 115
+        },
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 82
+        },
+        {
+          "file": "backend-ts/src/sync/sync-scope.ts",
+          "line": 121
+        },
+        {
+          "file": "backend-ts/src/sync/wechat-history-enrollment.ts",
+          "line": 19
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "conversation_binding"
+      ],
+      "physical_plan_note": "当前binding-service以locator查询channel_identity；合并前必须保留真正稳定external_id，不以昵称或未证locator猜同一。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "cli_backfill_state",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "sync_checkpoint",
+        "conversation_clear_boundary",
+        "conversation_read_grant"
+      ],
+      "reason": "按grant/data_generation/episode保存读取及历史覆盖；不照搬时间/最大local_id假定。真实CLI合同未证明，字段映射不代表续读已可用。",
+      "design_task": "08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/029_cli_backfill_state.sql",
+        "line": 9
+      },
+      "consumer_counts": {
+        "literal_sql": 8,
+        "word_mentions": 9
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/sync/sync-incremental-recovery.ts",
+          "line": 21
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "sync_checkpoint",
+        "conversation_clear_boundary",
+        "conversation_read_grant"
+      ],
+      "physical_plan_note": "按grant/data_generation/episode保存读取及历史覆盖；不照搬时间/最大local_id假定。真实CLI合同未证明，字段映射不代表续读已可用。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "cli_history_sync_state",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "sync_checkpoint",
+        "conversation_clear_boundary",
+        "conversation_read_grant"
+      ],
+      "reason": "按grant/data_generation/episode保存读取及历史覆盖；不照搬时间/最大local_id假定。真实CLI合同未证明，字段映射不代表续读已可用。",
+      "design_task": "08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/104_cli_history_sync_state.sql",
+        "line": 6
+      },
+      "consumer_counts": {
+        "literal_sql": 10,
+        "word_mentions": 10
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/reply/generation/reply-scope.ts",
+          "line": 23
+        },
+        {
+          "file": "backend-ts/src/sync/sync-incremental-store.ts",
+          "line": 81
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "sync_checkpoint",
+        "conversation_clear_boundary",
+        "conversation_read_grant"
+      ],
+      "physical_plan_note": "按grant/data_generation/episode保存读取及历史覆盖；不照搬时间/最大local_id假定。真实CLI合同未证明，字段映射不代表续读已可用。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "confirmed_memory",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "memory",
+        "memory_version",
+        "memory_version_parent"
+      ],
+      "reason": "本人/联系人共表但明确范围；版本和父边保留，手录独立根与manual采纳不同。",
+      "design_task": "04",
+      "created_at": {
+        "file": "backend-ts/database/migrations/009_memory_store.sql",
+        "line": 29
+      },
+      "consumer_counts": {
+        "literal_sql": 43,
+        "word_mentions": 119
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 245
+        },
+        {
+          "file": "backend-ts/src/memory/overview/catalog.ts",
+          "line": 98
+        },
+        {
+          "file": "backend-ts/src/memory/overview/service.ts",
+          "line": 32
+        },
+        {
+          "file": "backend-ts/src/memory/processing/query.ts",
+          "line": 142
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "memory",
+        "memory_version",
+        "memory_version_parent"
+      ],
+      "physical_plan_note": "本人/联系人共表但明确范围；版本和父边保留，手录独立根与manual采纳不同。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "contact",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "contact"
+      ],
+      "reason": "保留用户、联系人及验证绑定身份；具体行按同名目标映射，字段并非逐列照搬。",
+      "design_task": "02",
+      "created_at": {
+        "file": "backend-ts/database/migrations/003_separate_contact_identity.sql",
+        "line": 18
+      },
+      "consumer_counts": {
+        "literal_sql": 39,
+        "word_mentions": 775
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/contacts/binding-service.ts",
+          "line": 127
+        },
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 30
+        },
+        {
+          "file": "backend-ts/src/contacts/contact-handoff.ts",
+          "line": 41
+        },
+        {
+          "file": "backend-ts/src/foreground/foreground-location-api.ts",
+          "line": 37
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "contact"
+      ],
+      "physical_plan_note": "保留用户、联系人及验证绑定身份；具体行按同名目标映射，字段并非逐列照搬。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "contact_memory_index",
+      "status": "unmapped",
+      "proposed_logical_targets": [],
+      "reason": "有独立目录topics/built_from_memory_revision消费者；overview_projection可能承接但需projection_kind及语义/字段审计，不能只因可重建删除。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/018_contact_memory_index.sql",
+        "line": 13
+      },
+      "consumer_counts": {
+        "literal_sql": 9,
+        "word_mentions": 11
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/overview/catalog.ts",
+          "line": 151
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/erasure.ts",
+          "line": 73
+        },
+        {
+          "file": "backend-ts/src/reply/context/reply-context.ts",
+          "line": 52
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 178
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "有类型投影",
+      "physical_targets": [
+        "scope_projection"
+      ],
+      "physical_plan_note": "projection_kind=contact_index，独立字段合同；不冒称等同long_term_overview。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "contact_memory_state",
+      "status": "unmapped",
+      "proposed_logical_targets": [],
+      "reason": "当前reply与目录依赖单调memory_revision集合修订，前面模型尚无已明确落点。可并入稳定scope，但不能用head_revision/文档dirty_revision/max版本替代。",
+      "design_task": "04/07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/018_contact_memory_index.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 8,
+        "word_mentions": 13
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/overview/catalog.ts",
+          "line": 122
+        },
+        {
+          "file": "backend-ts/src/memory/overview/service.ts",
+          "line": 29
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/candidate.ts",
+          "line": 99
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/protection.ts",
+          "line": 13
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "补集合字段",
+      "physical_targets": [
+        "processing_scope"
+      ],
+      "physical_plan_note": "稳定范围增加memory_revision；不是head_revision或document dirty_revision。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "conversation_binding",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "conversation_binding"
+      ],
+      "reason": "保留用户、联系人及验证绑定身份；具体行按同名目标映射，字段并非逐列照搬。",
+      "design_task": "02",
+      "created_at": {
+        "file": "backend-ts/database/migrations/006_conversation_binding.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 61,
+        "word_mentions": 63
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/contacts/binding-service.ts",
+          "line": 72
+        },
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 70
+        },
+        {
+          "file": "backend-ts/src/foreground/foreground-location-api.ts",
+          "line": 37
+        },
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 40
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "conversation_binding"
+      ],
+      "physical_plan_note": "保留用户、联系人及验证绑定身份；具体行按同名目标映射，字段并非逐列照搬。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "cross_domain_deletion_operation",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "deletion_operation",
+        "deletion_row_target",
+        "deletion_file_target",
+        "deletion_verification"
+      ],
+      "reason": "Q42统一控制及复核、先fence后枚举/清理，地址快照不FK到即将删除的live对象。",
+      "design_task": "08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/113_cross_domain_deletion_operations.sql",
+        "line": 4
+      },
+      "consumer_counts": {
+        "literal_sql": 24,
+        "word_mentions": 25
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime-erasure.ts",
+          "line": 7
+        },
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime.ts",
+          "line": 346
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 142
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "deletion_operation",
+        "deletion_target",
+        "deletion_verification"
+      ],
+      "physical_plan_note": "Q42统一控制及复核、先fence后枚举/清理，地址快照不FK到即将删除的live对象。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "expression_preference",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "expression_preference",
+        "expression_preference_version",
+        "preference_version_source"
+      ],
+      "reason": "head与实际版本分层，manual范围可改变，message来源固定原联系人；来源任一相交擦除的现行合同不可擅改OR。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/065_expression_preferences.sql",
+        "line": 8
+      },
+      "consumer_counts": {
+        "literal_sql": 19,
+        "word_mentions": 22
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-service.ts",
+          "line": 55
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/reply-discussion-context.ts",
+          "line": 142
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-source-guards-sql.ts",
+          "line": 47
+        },
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime-projection.ts",
+          "line": 48
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "expression_preference",
+        "expression_preference_version",
+        "material_reference"
+      ],
+      "physical_plan_note": "head与实际版本分层，manual范围可改变，message来源固定原联系人；来源任一相交擦除的现行合同不可擅改OR。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "expression_preference_operation",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "expression_preference_operation"
+      ],
+      "reason": "明确确认/更新/删除幂等；历史op不能回退当前，删除清摘要及依赖。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/065_expression_preferences.sql",
+        "line": 35
+      },
+      "consumer_counts": {
+        "literal_sql": 7,
+        "word_mentions": 8
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-service.ts",
+          "line": 108
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "expression_preference_operation"
+      ],
+      "physical_plan_note": "明确确认/更新/删除幂等；历史op不能回退当前，删除清摘要及依赖。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "expression_preference_state",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "owner_collection_state"
+      ],
+      "reason": "三种owner集合计数器可同一行存储但分别单调，空集合也必须捕获。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/065_expression_preferences.sql",
+        "line": 4
+      },
+      "consumer_counts": {
+        "literal_sql": 3,
+        "word_mentions": 5
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-service.ts",
+          "line": 46
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 185
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "owner_collection_state"
+      ],
+      "physical_plan_note": "三种owner集合计数器可同一行存储但分别单调，空集合也必须捕获。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "front_sync_state",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "account_sync_control"
+      ],
+      "reason": "同一旧bool被CLI读取和前台observe共同消费；转账号控制时必须迁移两个消费者，不新增另一份相互冲突开关。",
+      "design_task": "08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/022_front_sync_state.sql",
+        "line": 8
+      },
+      "consumer_counts": {
+        "literal_sql": 7,
+        "word_mentions": 11
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 72
+        },
+        {
+          "file": "backend-ts/src/foreground/foreground-location-api.ts",
+          "line": 27
+        },
+        {
+          "file": "backend-ts/src/sync/sync-incremental-store.ts",
+          "line": 77
+        },
+        {
+          "file": "backend-ts/src/sync/sync-scope.ts",
+          "line": 45
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "account_sync_control"
+      ],
+      "physical_plan_note": "同一旧bool被CLI读取和前台observe共同消费；转账号控制时必须迁移两个消费者，不新增另一份相互冲突开关。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "import_confirmation",
+      "status": "drop_legacy",
+      "proposed_logical_targets": [],
+      "reason": "用户已明确移除手动文件导入入口；不能只删表却留下确认/导入HTTP和代码路径。",
+      "design_task": "03",
+      "created_at": {
+        "file": "backend-ts/database/migrations/003_separate_contact_identity.sql",
+        "line": 69
+      },
+      "consumer_counts": {
+        "literal_sql": 6,
+        "word_mentions": 7
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 99
+        },
+        {
+          "file": "backend-ts/src/memory/processing/legacy-adoption.ts",
+          "line": 52
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 270
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "按确认范围退役",
+      "physical_targets": [],
+      "physical_plan_note": "用户已明确移除手动文件导入入口；不能只删表却留下确认/导入HTTP和代码路径。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "layered_memory_batch",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "memory_trace",
+        "memory_trace_event",
+        "trace_document_input"
+      ],
+      "reason": "实际参与窗口及输入输出归完整trace，租约/调用归共享attempt/call，不能只迁展示引句。",
+      "design_task": "04/07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/073_layered_scenario_documents.sql",
+        "line": 17
+      },
+      "consumer_counts": {
+        "literal_sql": 26,
+        "word_mentions": 29
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 108
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 166
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 94
+        },
+        {
+          "file": "backend-ts/src/memory/profiles/service.ts",
+          "line": 253
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "memory_trace",
+        "memory_trace_event",
+        "material_reference"
+      ],
+      "physical_plan_note": "实际参与窗口及输入输出归完整trace，租约/调用归共享attempt/call，不能只迁展示引句。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "layered_memory_fact_correction",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "organization_feedback",
+        "organization_feedback_input"
+      ],
+      "reason": "摘要错误与精确事实版本保护属于有限反馈，不是偏好/新事实，保留实际窗口与撤销。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/078_layered_memory_corrections.sql",
+        "line": 32
+      },
+      "consumer_counts": {
+        "literal_sql": 5,
+        "word_mentions": 6
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/records/documents/facts.ts",
+          "line": 20
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/source-policy.ts",
+          "line": 11
+        },
+        {
+          "file": "backend-ts/src/memory/scenarios/service.ts",
+          "line": 912
+        },
+        {
+          "file": "backend-ts/src/diagnostics/organization-quality-snapshot.ts",
+          "line": 50
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "organization_feedback",
+        "material_reference"
+      ],
+      "physical_plan_note": "摘要错误与精确事实版本保护属于有限反馈，不是偏好/新事实，保留实际窗口与撤销。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "layered_memory_feedback",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "organization_feedback",
+        "organization_feedback_input"
+      ],
+      "reason": "摘要错误与精确事实版本保护属于有限反馈，不是偏好/新事实，保留实际窗口与撤销。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/078_layered_memory_corrections.sql",
+        "line": 5
+      },
+      "consumer_counts": {
+        "literal_sql": 11,
+        "word_mentions": 12
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/profiles/service.ts",
+          "line": 295
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/source-policy.ts",
+          "line": 9
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/store.ts",
+          "line": 54
+        },
+        {
+          "file": "backend-ts/src/memory/scenarios/service.ts",
+          "line": 340
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "organization_feedback",
+        "material_reference"
+      ],
+      "physical_plan_note": "摘要错误与精确事实版本保护属于有限反馈，不是偏好/新事实，保留实际窗口与撤销。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "layered_memory_generation",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "document_publication",
+        "document_publication_member"
+      ],
+      "reason": "一致L2版本集合及可选L3必须保留，避免新主题配旧画像。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/074_layered_memory_coverage.sql",
+        "line": 18
+      },
+      "consumer_counts": {
+        "literal_sql": 13,
+        "word_mentions": 14
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/profiles/service.ts",
+          "line": 245
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/facts.ts",
+          "line": 37
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/store.ts",
+          "line": 90
+        },
+        {
+          "file": "backend-ts/src/memory/scenarios/service.ts",
+          "line": 292
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "document_publication",
+        "document_publication_member"
+      ],
+      "physical_plan_note": "一致L2版本集合及可选L3必须保留，避免新主题配旧画像。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "layered_memory_job",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "background_task",
+        "background_task_step",
+        "step_attempt",
+        "document_collection"
+      ],
+      "reason": "复用执行/租约，保留有限组织目标和来源资格，不新增另一套自动恢复。",
+      "design_task": "05/07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/074_layered_memory_coverage.sql",
+        "line": 31
+      },
+      "consumer_counts": {
+        "literal_sql": 46,
+        "word_mentions": 48
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 102
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 164
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 89
+        },
+        {
+          "file": "backend-ts/src/memory/processing/legacy-adoption.ts",
+          "line": 137
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "background_task",
+        "background_task_step",
+        "step_attempt",
+        "document_collection"
+      ],
+      "physical_plan_note": "复用执行/租约，保留有限组织目标和来源资格，不新增另一套自动恢复。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "layered_memory_state",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "document_collection"
+      ],
+      "reason": "owner/contact组织控制、dirty/settings修订及current publication；自动maintenance不能照搬手动处理新规则。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/073_layered_scenario_documents.sql",
+        "line": 2
+      },
+      "consumer_counts": {
+        "literal_sql": 49,
+        "word_mentions": 50
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 102
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 221
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 89
+        },
+        {
+          "file": "backend-ts/src/memory/processing/legacy-adoption.ts",
+          "line": 138
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "document_collection"
+      ],
+      "physical_plan_note": "owner/contact组织控制、dirty/settings修订及current publication；自动maintenance不能照搬手动处理新规则。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "layered_profile_batch",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "memory_trace",
+        "memory_trace_event",
+        "trace_document_input"
+      ],
+      "reason": "实际参与窗口及输入输出归完整trace，租约/调用归共享attempt/call，不能只迁展示引句。",
+      "design_task": "04/07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/075_layered_profile_generation.sql",
+        "line": 2
+      },
+      "consumer_counts": {
+        "literal_sql": 29,
+        "word_mentions": 31
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 111
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 172
+        },
+        {
+          "file": "backend-ts/src/memory/processing/query.ts",
+          "line": 97
+        },
+        {
+          "file": "backend-ts/src/memory/profiles/service.ts",
+          "line": 416
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "memory_trace",
+        "memory_trace_event",
+        "material_reference"
+      ],
+      "physical_plan_note": "实际参与窗口及输入输出归完整trace，租约/调用归共享attempt/call，不能只迁展示引句。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "layered_profile_version",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "memory_document",
+        "memory_document_version",
+        "document_block",
+        "document_block_reference"
+      ],
+      "reason": "Q40共同head/version但保留L2/L3类型、不确定性、时态和依据。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/075_layered_profile_generation.sql",
+        "line": 28
+      },
+      "consumer_counts": {
+        "literal_sql": 24,
+        "word_mentions": 25
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/profiles/service.ts",
+          "line": 441
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/facts.ts",
+          "line": 46
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/store.ts",
+          "line": 103
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/erasure.ts",
+          "line": 36
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "memory_document",
+        "memory_document_version",
+        "document_block",
+        "document_block_reference"
+      ],
+      "physical_plan_note": "Q40共同head/version但保留L2/L3类型、不确定性、时态和依据。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "local_wechat_observation",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "source_batch"
+      ],
+      "reason": "CLI捕获来源归有界batch；来源可靠性、模式、adapter及同绑定观察锚点必须保留。文件导入入口另按用户决定移除。",
+      "design_task": "03",
+      "created_at": {
+        "file": "backend-ts/database/migrations/020_local_wechat_observation.sql",
+        "line": 7
+      },
+      "consumer_counts": {
+        "literal_sql": 62,
+        "word_mentions": 93
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 17
+        },
+        {
+          "file": "backend-ts/src/host/pure-ts-follow-smoke.ts",
+          "line": 18
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 218
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 8
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "source_batch"
+      ],
+      "physical_plan_note": "CLI捕获来源归有界batch；来源可靠性、模式、adapter及同绑定观察锚点必须保留。文件导入入口另按用户决定移除。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "manual_contact_confirmation",
+      "status": "unmapped",
+      "proposed_logical_targets": [],
+      "reason": "存在真实显式手动联系人确认读写；turn.scope_origin字段不是持久确认身份/代次的替代。需补正式实体或有证据的等价合同。",
+      "design_task": "02/06",
+      "created_at": {
+        "file": "backend-ts/database/migrations/060_manual_contact_confirmation.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 17,
+        "word_mentions": 19
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 51
+        },
+        {
+          "file": "backend-ts/src/host/pure-ts-reply-scope.ts",
+          "line": 20
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 190
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-explored.ts",
+          "line": 22
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "补真实实体",
+      "physical_targets": [
+        "manual_contact_confirmation"
+      ],
+      "physical_plan_note": "assistant_turn用真实manual_confirmation_id与binding_id排他，保留本次客户端确认代次。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "media_attempt",
+      "status": "drop_legacy",
+      "proposed_logical_targets": [
+        "deletion_file_target"
+      ],
+      "reason": "本轮仅非文字占位，实际媒体能力不建；现有敏感缓存/旧副本仍须经切换文件目标清理，不能忽略删除消费者。",
+      "design_task": "03/08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/072_scoped_media_lifecycle.sql",
+        "line": 4
+      },
+      "consumer_counts": {
+        "literal_sql": 3,
+        "word_mentions": 3
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 330
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "按确认范围退役",
+      "physical_targets": [
+        "deletion_target"
+      ],
+      "physical_plan_note": "本轮仅非文字占位，实际媒体能力不建；现有敏感缓存/旧副本仍须经切换文件目标清理，不能忽略删除消费者。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "media_request_tombstone",
+      "status": "drop_legacy",
+      "proposed_logical_targets": [
+        "deletion_file_target"
+      ],
+      "reason": "本轮仅非文字占位，实际媒体能力不建；现有敏感缓存/旧副本仍须经切换文件目标清理，不能忽略删除消费者。",
+      "design_task": "03/08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/072_scoped_media_lifecycle.sql",
+        "line": 29
+      },
+      "consumer_counts": {
+        "literal_sql": 4,
+        "word_mentions": 4
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 331
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "按确认范围退役",
+      "physical_targets": [
+        "deletion_target"
+      ],
+      "physical_plan_note": "本轮仅非文字占位，实际媒体能力不建；现有敏感缓存/旧副本仍须经切换文件目标清理，不能忽略删除消费者。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_candidate",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "memory_candidate"
+      ],
+      "reason": "保留待裁决主张及subject/原会话，未采纳不冒充事实。",
+      "design_task": "04",
+      "created_at": {
+        "file": "backend-ts/database/migrations/009_memory_store.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 59,
+        "word_mentions": 75
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 246
+        },
+        {
+          "file": "backend-ts/src/memory/overview/evidence/sources.ts",
+          "line": 99
+        },
+        {
+          "file": "backend-ts/src/memory/overview/projection/memory.ts",
+          "line": 37
+        },
+        {
+          "file": "backend-ts/src/memory/overview/projection/versions.ts",
+          "line": 28
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "memory_candidate"
+      ],
+      "physical_plan_note": "保留待裁决主张及subject/原会话，未采纳不冒充事实。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_correction_decision",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "memory_decision",
+        "memory_version_parent"
+      ],
+      "reason": "人工拒绝/纠错/恢复为真实决定和版本关系；保护窗口引用与防复活规则仍需完整闭合。",
+      "design_task": "04",
+      "created_at": {
+        "file": "backend-ts/database/migrations/061_memory_correction_protection.sql",
+        "line": 19
+      },
+      "consumer_counts": {
+        "literal_sql": 23,
+        "word_mentions": 24
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/overview/evidence/sources.ts",
+          "line": 103
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/erasure.ts",
+          "line": 41
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/protection.ts",
+          "line": 95
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations.ts",
+          "line": 64
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "memory_decision",
+        "memory_version_parent"
+      ],
+      "physical_plan_note": "人工拒绝/纠错/恢复为真实决定和版本关系；保护窗口引用与防复活规则仍需完整闭合。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_extraction_receipt",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "processing_run",
+        "processing_input",
+        "processing_receipt"
+      ],
+      "reason": "自动调度退役为用户手动固定目标；逐消息成功/unknown/无新记忆结果与读取cursor分开，不能仅靠水位推全成功。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/097_persistent_extraction_schedule.sql",
+        "line": 14
+      },
+      "consumer_counts": {
+        "literal_sql": 6,
+        "word_mentions": 6
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 109
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-schedule.ts",
+          "line": 11
+        },
+        {
+          "file": "backend-ts/src/memory/processing/query.ts",
+          "line": 114
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "processing_run",
+        "processing_input",
+        "processing_receipt"
+      ],
+      "physical_plan_note": "自动调度退役为用户手动固定目标；逐消息成功/unknown/无新记忆结果与读取cursor分开，不能仅靠水位推全成功。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_extraction_schedule",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "processing_run",
+        "processing_input",
+        "processing_receipt"
+      ],
+      "reason": "自动调度退役为用户手动固定目标；逐消息成功/unknown/无新记忆结果与读取cursor分开，不能仅靠水位推全成功。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/097_persistent_extraction_schedule.sql",
+        "line": 2
+      },
+      "consumer_counts": {
+        "literal_sql": 8,
+        "word_mentions": 8
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-schedule.ts",
+          "line": 19
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 468
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "processing_run",
+        "processing_input",
+        "processing_receipt"
+      ],
+      "physical_plan_note": "自动调度退役为用户手动固定目标；逐消息成功/unknown/无新记忆结果与读取cursor分开，不能仅靠水位推全成功。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_extraction_trace",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "memory_trace"
+      ],
+      "reason": "完整记忆提取trace保留实际过程与删除资格。",
+      "design_task": "04",
+      "created_at": {
+        "file": "backend-ts/database/migrations/039_memory_extraction_trace.sql",
+        "line": 4
+      },
+      "consumer_counts": {
+        "literal_sql": 34,
+        "word_mentions": 34
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 49
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 794
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/host.ts",
+          "line": 52
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/service.ts",
+          "line": 263
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "memory_trace"
+      ],
+      "physical_plan_note": "完整记忆提取trace保留实际过程与删除资格。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_extraction_trace_call",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "memory_trace_event",
+        "model_call"
+      ],
+      "reason": "最小无正文调用关联保留真实物理call；来源删/整联系人删边界不同。",
+      "design_task": "04/05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/042_extraction_trace_call_receipts.sql",
+        "line": 10
+      },
+      "consumer_counts": {
+        "literal_sql": 11,
+        "word_mentions": 13
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/host.ts",
+          "line": 54
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/service.ts",
+          "line": 185
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-recovery.ts",
+          "line": 47
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 34
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "memory_trace_event",
+        "model_call"
+      ],
+      "physical_plan_note": "最小无正文调用关联保留真实物理call；来源删/整联系人删边界不同。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_extraction_trace_dependency",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "trace_message_input",
+        "trace_source_input",
+        "trace_memory_input"
+      ],
+      "reason": "完整实际窗口、消息及来源/旧记忆版本用真实类型FK，不能只迁最终引用。",
+      "design_task": "04",
+      "created_at": {
+        "file": "backend-ts/database/migrations/039_memory_extraction_trace.sql",
+        "line": 59
+      },
+      "consumer_counts": {
+        "literal_sql": 16,
+        "word_mentions": 16
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 815
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/service.ts",
+          "line": 409
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/runner.ts",
+          "line": 257
+        },
+        {
+          "file": "backend-ts/src/memory/overview/evidence/sources.ts",
+          "line": 125
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "material_reference"
+      ],
+      "physical_plan_note": "完整实际窗口、消息及来源/旧记忆版本用真实类型FK，不能只迁最终引用。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_extraction_trace_event",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "memory_trace_event"
+      ],
+      "reason": "实际输入输出与阶段结果是敏感载荷，不进普通日志。",
+      "design_task": "04",
+      "created_at": {
+        "file": "backend-ts/database/migrations/039_memory_extraction_trace.sql",
+        "line": 26
+      },
+      "consumer_counts": {
+        "literal_sql": 59,
+        "word_mentions": 59
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 50
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 797
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/service.ts",
+          "line": 140
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/service.ts",
+          "line": 94
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "memory_trace_event"
+      ],
+      "physical_plan_note": "实际输入输出与阶段结果是敏感载荷，不进普通日志。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_extraction_trace_link",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "memory_candidate",
+        "memory_version",
+        "memory_decision"
+      ],
+      "reason": "产生关系由candidate.trace_id、version.created_from_trace及真实决定引用承接；不重建record_kind+任意ID。",
+      "design_task": "04",
+      "created_at": {
+        "file": "backend-ts/database/migrations/039_memory_extraction_trace.sql",
+        "line": 43
+      },
+      "consumer_counts": {
+        "literal_sql": 17,
+        "word_mentions": 17
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 801
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/service.ts",
+          "line": 404
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/runner.ts",
+          "line": 244
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-recovery.ts",
+          "line": 80
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "memory_candidate",
+        "memory_version",
+        "memory_decision"
+      ],
+      "physical_plan_note": "产生关系由candidate.trace_id、version.created_from_trace及真实决定引用承接；不重建record_kind+任意ID。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_extraction_watermark",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "processing_run",
+        "processing_input",
+        "processing_receipt"
+      ],
+      "reason": "自动调度退役为用户手动固定目标；逐消息成功/unknown/无新记忆结果与读取cursor分开，不能仅靠水位推全成功。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/012_extraction_topic_watermark.sql",
+        "line": 19
+      },
+      "consumer_counts": {
+        "literal_sql": 6,
+        "word_mentions": 8
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/service.ts",
+          "line": 378
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/runner.ts",
+          "line": 104
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 47
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-schedule.ts",
+          "line": 95
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "processing_run",
+        "processing_input",
+        "processing_receipt"
+      ],
+      "physical_plan_note": "自动调度退役为用户手动固定目标；逐消息成功/unknown/无新记忆结果与读取cursor分开，不能仅靠水位推全成功。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_processing_legacy_adoption",
+      "status": "drop_legacy",
+      "proposed_logical_targets": [],
+      "reason": "空库不迁旧业务，不建旧任务接入/资料升级流程；须移除旧恢复/计费/删除耦合而非让死表反向成为新库前提。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/127_memory_processing_legacy_adoption.sql",
+        "line": 4
+      },
+      "consumer_counts": {
+        "literal_sql": 8,
+        "word_mentions": 8
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/processing/history.ts",
+          "line": 31
+        },
+        {
+          "file": "backend-ts/src/memory/processing/legacy-adoption.ts",
+          "line": 31
+        },
+        {
+          "file": "backend-ts/src/memory/processing/query.ts",
+          "line": 53
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "按确认范围退役",
+      "physical_targets": [],
+      "physical_plan_note": "空库不迁旧业务，不建旧任务接入/资料升级流程；须移除旧恢复/计费/删除耦合而非让死表反向成为新库前提。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_processing_operation",
+      "status": "unmapped",
+      "proposed_logical_targets": [],
+      "reason": "旧pause/continue操作键有真实读写；新run.start_operation_id只覆盖start，需明确控制动作的幂等/旧操作拒绝如何保存，intent_revision单字段不能冒称全部API回放已覆盖。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/125_memory_processing_control.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 2,
+        "word_mentions": 2
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 155
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "补控制回执",
+      "physical_targets": [
+        "processing_operation"
+      ],
+      "physical_plan_note": "明确start/pause/resume幂等键与旧动作拒绝，不能只有run启动键。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_processing_plan",
+      "status": "drop_legacy",
+      "proposed_logical_targets": [
+        "background_task",
+        "processing_round"
+      ],
+      "reason": "Q38任务直接属于固定轮次，去掉旧N:M归属和plan壳；不是去掉目标/来源/成功事实。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/090_memory_processing_progress.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 10,
+        "word_mentions": 10
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/service.ts",
+          "line": 393
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 35
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-schedule.ts",
+          "line": 34
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 91
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "按确认范围退役",
+      "physical_targets": [
+        "background_task",
+        "processing_round"
+      ],
+      "physical_plan_note": "Q38任务直接属于固定轮次，去掉旧N:M归属和plan壳；不是去掉目标/来源/成功事实。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_processing_receipt",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "processing_receipt"
+      ],
+      "reason": "跨轮逐消息结果，unknown_hold阻止重发但不能计成功。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/090_memory_processing_progress.sql",
+        "line": 14
+      },
+      "consumer_counts": {
+        "literal_sql": 13,
+        "word_mentions": 13
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/service.ts",
+          "line": 380
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 55
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-recovery.ts",
+          "line": 89
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-schedule.ts",
+          "line": 97
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "processing_receipt"
+      ],
+      "physical_plan_note": "跨轮逐消息结果，unknown_hold阻止重发但不能计成功。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_processing_round",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "processing_run",
+        "processing_round"
+      ],
+      "reason": "一次启动与每范围固定分支分别表达，当前状态不等于单个task状态。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/124_memory_processing_lifecycle.sql",
+        "line": 18
+      },
+      "consumer_counts": {
+        "literal_sql": 23,
+        "word_mentions": 23
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-schedule.ts",
+          "line": 65
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 240
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 49
+        },
+        {
+          "file": "backend-ts/src/memory/processing/history.ts",
+          "line": 30
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "processing_run",
+        "processing_round"
+      ],
+      "physical_plan_note": "一次启动与每范围固定分支分别表达，当前状态不等于单个task状态。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_processing_round_target",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "processing_input"
+      ],
+      "reason": "固定本轮实际消息集合与target/context角色；Q38下不追加新消息。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/126_memory_processing_round_targets.sql",
+        "line": 4
+      },
+      "consumer_counts": {
+        "literal_sql": 18,
+        "word_mentions": 18
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 22
+        },
+        {
+          "file": "backend-ts/src/memory/processing/legacy-adoption.ts",
+          "line": 193
+        },
+        {
+          "file": "backend-ts/src/memory/processing/query.ts",
+          "line": 59
+        },
+        {
+          "file": "backend-ts/src/memory/processing/round.ts",
+          "line": 104
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "processing_input"
+      ],
+      "physical_plan_note": "固定本轮实际消息集合与target/context角色；Q38下不追加新消息。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_processing_round_task",
+      "status": "drop_legacy",
+      "proposed_logical_targets": [
+        "background_task",
+        "processing_round"
+      ],
+      "reason": "Q38任务直接属于固定轮次，去掉旧N:M归属和plan壳；不是去掉目标/来源/成功事实。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/124_memory_processing_lifecycle.sql",
+        "line": 41
+      },
+      "consumer_counts": {
+        "literal_sql": 34,
+        "word_mentions": 34
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 15
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 241
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 50
+        },
+        {
+          "file": "backend-ts/src/memory/processing/history.ts",
+          "line": 29
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "按确认范围退役",
+      "physical_targets": [
+        "background_task",
+        "processing_round"
+      ],
+      "physical_plan_note": "Q38任务直接属于固定轮次，去掉旧N:M归属和plan壳；不是去掉目标/来源/成功事实。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_processing_scope",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "processing_scope"
+      ],
+      "reason": "稳定范围和硬撤销代次保留；普通暂停派发意图与硬撤销分离。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/124_memory_processing_lifecycle.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 32,
+        "word_mentions": 35
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 30
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-schedule.ts",
+          "line": 64
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 233
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 45
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "processing_scope"
+      ],
+      "physical_plan_note": "稳定范围和硬撤销代次保留；普通暂停派发意图与硬撤销分离。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_processing_target",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "processing_input"
+      ],
+      "reason": "固定本轮实际消息集合与target/context角色；Q38下不追加新消息。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/090_memory_processing_progress.sql",
+        "line": 8
+      },
+      "consumer_counts": {
+        "literal_sql": 35,
+        "word_mentions": 35
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/service.ts",
+          "line": 374
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 51
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-recovery.ts",
+          "line": 80
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-schedule.ts",
+          "line": 78
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "processing_input"
+      ],
+      "physical_plan_note": "固定本轮实际消息集合与target/context角色；Q38下不追加新消息。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_upgrade_batch",
+      "status": "drop_legacy",
+      "proposed_logical_targets": [],
+      "reason": "空库不迁旧业务，不建旧任务接入/资料升级流程；须移除旧恢复/计费/删除耦合而非让死表反向成为新库前提。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/067_memory_upgrade_batches.sql",
+        "line": 45
+      },
+      "consumer_counts": {
+        "literal_sql": 6,
+        "word_mentions": 6
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 91
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/erasure.ts",
+          "line": 45
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 706
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "按确认范围退役",
+      "physical_targets": [],
+      "physical_plan_note": "空库不迁旧业务，不建旧任务接入/资料升级流程；须移除旧恢复/计费/删除耦合而非让死表反向成为新库前提。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_upgrade_job",
+      "status": "drop_legacy",
+      "proposed_logical_targets": [],
+      "reason": "空库不迁旧业务，不建旧任务接入/资料升级流程；须移除旧恢复/计费/删除耦合而非让死表反向成为新库前提。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/067_memory_upgrade_batches.sql",
+        "line": 24
+      },
+      "consumer_counts": {
+        "literal_sql": 2,
+        "word_mentions": 4
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 91
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/erasure.ts",
+          "line": 53
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "按确认范围退役",
+      "physical_targets": [],
+      "physical_plan_note": "空库不迁旧业务，不建旧任务接入/资料升级流程；须移除旧恢复/计费/删除耦合而非让死表反向成为新库前提。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "memory_upgrade_operation",
+      "status": "drop_legacy",
+      "proposed_logical_targets": [],
+      "reason": "空库不迁旧业务，不建旧任务接入/资料升级流程；须移除旧恢复/计费/删除耦合而非让死表反向成为新库前提。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/067_memory_upgrade_batches.sql",
+        "line": 93
+      },
+      "consumer_counts": {
+        "literal_sql": 0,
+        "word_mentions": 0
+      },
+      "consumer_evidence": [],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "按确认范围退役",
+      "physical_targets": [],
+      "physical_plan_note": "空库不迁旧业务，不建旧任务接入/资料升级流程；须移除旧恢复/计费/删除耦合而非让死表反向成为新库前提。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "message",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "message"
+      ],
+      "reason": "保留文字及非文字占位，原始出现/规范消息和真实来源分层。",
+      "design_task": "03",
+      "created_at": {
+        "file": "backend-ts/database/migrations/003_separate_contact_identity.sql",
+        "line": 85
+      },
+      "consumer_counts": {
+        "literal_sql": 72,
+        "word_mentions": 838
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 28
+        },
+        {
+          "file": "backend-ts/src/host/pure-ts-follow-smoke.ts",
+          "line": 15
+        },
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 148
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 208
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "message"
+      ],
+      "physical_plan_note": "保留文字及非文字占位，原始出现/规范消息和真实来源分层。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "message_source_ref",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "source_record"
+      ],
+      "reason": "通过已核验record到message的真实范围关系表达多份捕获支持，不丢多来源OR语义。",
+      "design_task": "03",
+      "created_at": {
+        "file": "backend-ts/database/migrations/021_message_source_ref.sql",
+        "line": 24
+      },
+      "consumer_counts": {
+        "literal_sql": 68,
+        "word_mentions": 71
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 15
+        },
+        {
+          "file": "backend-ts/src/host/pure-ts-follow-smoke.ts",
+          "line": 16
+        },
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 163
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 209
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "source_record"
+      ],
+      "physical_plan_note": "通过已核验record到message的真实范围关系表达多份捕获支持，不丢多来源OR语义。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "model_call_learning_claim",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "step_model_call"
+      ],
+      "reason": "真实授权slot与step_attempt关联；旧propose_skill每租约一次约束不能泛化成每个提取步骤总共一次模型调用。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/111_model_call_learning_claim.sql",
+        "line": 7
+      },
+      "consumer_counts": {
+        "literal_sql": 2,
+        "word_mentions": 8
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 175
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "model_call_execution"
+      ],
+      "physical_plan_note": "真实授权slot与step_attempt关联；旧propose_skill每租约一次约束不能泛化成每个提取步骤总共一次模型调用。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "model_call_receipt",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "model_request",
+        "model_call"
+      ],
+      "reason": "逻辑请求与物理尝试分层，兼容出站投影需审计非模型消费者；unknown/费用不随任务清理退款。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/110_model_call_receipt.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 33,
+        "word_mentions": 40
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 96
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/service.ts",
+          "line": 148
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-recovery.ts",
+          "line": 48
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 72
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "model_request",
+        "model_call"
+      ],
+      "physical_plan_note": "逻辑请求与物理尝试分层，兼容出站投影需审计非模型消费者；unknown/费用不随任务清理退款。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "organization_quality_attempt",
+      "status": "diagnostic_only",
+      "proposed_logical_targets": [
+        "quality_case",
+        "quality_run",
+        "quality_attempt",
+        "quality_fact_intent"
+      ],
+      "reason": "保留诊断能力；createRun有_test/fixed_synthetic门禁，但case冻结/读取/人工标注没有同一测试库门禁。独立诊断库是待改造决策，不能据此移除当前业务消费者。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/079_organization_quality.sql",
+        "line": 82
+      },
+      "consumer_counts": {
+        "literal_sql": 6,
+        "word_mentions": 6
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/diagnostics/organization-quality-store.ts",
+          "line": 151
+        },
+        {
+          "file": "backend-ts/src/diagnostics/quality-model-authorization.ts",
+          "line": 50
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "保留诊断能力，非默认测试库隔离事实",
+      "physical_targets": [
+        "quality_case",
+        "quality_run",
+        "quality_attempt",
+        "quality_fact_intent"
+      ],
+      "physical_plan_note": "保留诊断能力；createRun有_test/fixed_synthetic门禁，但case冻结/读取/人工标注没有同一测试库门禁。独立诊断库是待改造决策，不能据此移除当前业务消费者。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "organization_quality_case",
+      "status": "diagnostic_only",
+      "proposed_logical_targets": [
+        "quality_case",
+        "quality_run",
+        "quality_attempt",
+        "quality_fact_intent"
+      ],
+      "reason": "保留诊断能力；createRun有_test/fixed_synthetic门禁，但case冻结/读取/人工标注没有同一测试库门禁。独立诊断库是待改造决策，不能据此移除当前业务消费者。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/079_organization_quality.sql",
+        "line": 2
+      },
+      "consumer_counts": {
+        "literal_sql": 18,
+        "word_mentions": 20
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/diagnostics/organization-quality-store.ts",
+          "line": 82
+        },
+        {
+          "file": "backend-ts/src/diagnostics/quality-model-authorization.ts",
+          "line": 40
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "保留诊断能力，非默认测试库隔离事实",
+      "physical_targets": [
+        "quality_case",
+        "quality_run",
+        "quality_attempt",
+        "quality_fact_intent"
+      ],
+      "physical_plan_note": "保留诊断能力；createRun有_test/fixed_synthetic门禁，但case冻结/读取/人工标注没有同一测试库门禁。独立诊断库是待改造决策，不能据此移除当前业务消费者。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "organization_quality_fact_intent",
+      "status": "diagnostic_only",
+      "proposed_logical_targets": [
+        "quality_case",
+        "quality_run",
+        "quality_attempt",
+        "quality_fact_intent"
+      ],
+      "reason": "保留诊断能力；createRun有_test/fixed_synthetic门禁，但case冻结/读取/人工标注没有同一测试库门禁。独立诊断库是待改造决策，不能据此移除当前业务消费者。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/079_organization_quality.sql",
+        "line": 131
+      },
+      "consumer_counts": {
+        "literal_sql": 3,
+        "word_mentions": 3
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/diagnostics/organization-quality-snapshot.ts",
+          "line": 72
+        },
+        {
+          "file": "backend-ts/src/diagnostics/organization-quality-store.ts",
+          "line": 87
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "保留诊断能力，非默认测试库隔离事实",
+      "physical_targets": [
+        "quality_case",
+        "quality_run",
+        "quality_attempt",
+        "quality_fact_intent"
+      ],
+      "physical_plan_note": "保留诊断能力；createRun有_test/fixed_synthetic门禁，但case冻结/读取/人工标注没有同一测试库门禁。独立诊断库是待改造决策，不能据此移除当前业务消费者。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "organization_quality_revocation",
+      "status": "unmapped",
+      "proposed_logical_targets": [],
+      "reason": "只见迁移定义，src/test未找到消费者；候选不建但需最终覆盖审计，不宣称已使用或强保留。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/079_organization_quality.sql",
+        "line": 111
+      },
+      "consumer_counts": {
+        "literal_sql": 0,
+        "word_mentions": 0
+      },
+      "consumer_evidence": [],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "候选不建",
+      "physical_targets": [],
+      "physical_plan_note": "只见迁移定义、无src/test业务消费者；初始化结构检查随新schema改造，不能宣称已做运行验收。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "organization_quality_run",
+      "status": "diagnostic_only",
+      "proposed_logical_targets": [
+        "quality_case",
+        "quality_run",
+        "quality_attempt",
+        "quality_fact_intent"
+      ],
+      "reason": "保留诊断能力；createRun有_test/fixed_synthetic门禁，但case冻结/读取/人工标注没有同一测试库门禁。独立诊断库是待改造决策，不能据此移除当前业务消费者。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/079_organization_quality.sql",
+        "line": 60
+      },
+      "consumer_counts": {
+        "literal_sql": 11,
+        "word_mentions": 12
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/diagnostics/organization-quality-store.ts",
+          "line": 111
+        },
+        {
+          "file": "backend-ts/src/diagnostics/quality-model-authorization.ts",
+          "line": 40
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "保留诊断能力，非默认测试库隔离事实",
+      "physical_targets": [
+        "quality_case",
+        "quality_run",
+        "quality_attempt",
+        "quality_fact_intent"
+      ],
+      "physical_plan_note": "保留诊断能力；createRun有_test/fixed_synthetic门禁，但case冻结/读取/人工标注没有同一测试库门禁。独立诊断库是待改造决策，不能据此移除当前业务消费者。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "outbound_ledger_entry",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "model_request",
+        "model_call"
+      ],
+      "reason": "逻辑请求与物理尝试分层，兼容出站投影需审计非模型消费者；unknown/费用不随任务清理退款。",
+      "design_task": "05",
+      "created_at": {
+        "file": "backend-ts/database/migrations/010_outbound_ledger.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 10,
+        "word_mentions": 12
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/platform/models/model-ledger.ts",
+          "line": 132
+        },
+        {
+          "file": "backend-ts/src/diagnostics/source-processing-trace.ts",
+          "line": 134
+        },
+        {
+          "file": "backend-ts/src/diagnostics/usage-summary.ts",
+          "line": 14
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 381
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "model_request",
+        "model_call"
+      ],
+      "physical_plan_note": "逻辑请求与物理尝试分层，兼容出站投影需审计非模型消费者；unknown/费用不随任务清理退款。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "owner",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "owner"
+      ],
+      "reason": "保留用户、联系人及验证绑定身份；具体行按同名目标映射，字段并非逐列照搬。",
+      "design_task": "02",
+      "created_at": {
+        "file": "backend-ts/database/migrations/001_initial_ingest.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 21,
+        "word_mentions": 1337
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store-processing.ts",
+          "line": 99
+        },
+        {
+          "file": "backend-ts/src/memory/processing/control.ts",
+          "line": 151
+        },
+        {
+          "file": "backend-ts/src/memory/processing/query.ts",
+          "line": 43
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/store.ts",
+          "line": 25
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "owner"
+      ],
+      "physical_plan_note": "保留用户、联系人及验证绑定身份；具体行按同名目标映射，字段并非逐列照搬。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "owner_channel_identity",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "channel_account"
+      ],
+      "reason": "本人渠道账号合并为已核验channel_account，仍需活动唯一及跨owner真实身份约束。",
+      "design_task": "02",
+      "created_at": {
+        "file": "backend-ts/database/migrations/015_owner_channel_identity.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 11,
+        "word_mentions": 13
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/contacts/binding-service.ts",
+          "line": 56
+        },
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 71
+        },
+        {
+          "file": "backend-ts/src/foreground/foreground-location-api.ts",
+          "line": 27
+        },
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 79
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "channel_account"
+      ],
+      "physical_plan_note": "本人渠道账号合并为已核验channel_account，仍需活动唯一及跨owner真实身份约束。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "owner_memory",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "memory",
+        "memory_version",
+        "memory_version_parent"
+      ],
+      "reason": "本人/联系人共表但明确范围；版本和父边保留，手录独立根与manual采纳不同。",
+      "design_task": "04",
+      "created_at": {
+        "file": "backend-ts/database/migrations/011_owner_memory.sql",
+        "line": 4
+      },
+      "consumer_counts": {
+        "literal_sql": 40,
+        "word_mentions": 162
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 246
+        },
+        {
+          "file": "backend-ts/src/memory/processing/query.ts",
+          "line": 141
+        },
+        {
+          "file": "backend-ts/src/memory/processing/round.ts",
+          "line": 571
+        },
+        {
+          "file": "backend-ts/src/memory/records/manual.ts",
+          "line": 19
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "memory",
+        "memory_version",
+        "memory_version_parent"
+      ],
+      "physical_plan_note": "本人/联系人共表但明确范围；版本和父边保留，手录独立根与manual采纳不同。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "owner_memory_state",
+      "status": "unmapped",
+      "proposed_logical_targets": [],
+      "reason": "当前reply与目录依赖单调memory_revision集合修订，前面模型尚无已明确落点。可并入稳定scope，但不能用head_revision/文档dirty_revision/max版本替代。",
+      "design_task": "04/07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/064_owner_memory_revision.sql",
+        "line": 2
+      },
+      "consumer_counts": {
+        "literal_sql": 1,
+        "word_mentions": 2
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/reply/context/reply-context-overview.ts",
+          "line": 26
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "补集合字段",
+      "physical_targets": [
+        "processing_scope"
+      ],
+      "physical_plan_note": "本人范围同样维护memory_revision，空集合也初始化。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "relationship_overview_projection",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "overview_projection",
+        "overview_projection_member"
+      ],
+      "reason": "无正文导航projection及built_at/revision有真实消费者，不与L2/L3正文混表。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/063_relationship_overview_projection.sql",
+        "line": 73
+      },
+      "consumer_counts": {
+        "literal_sql": 2,
+        "word_mentions": 2
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/overview/service.ts",
+          "line": 69
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "scope_projection",
+        "material_reference"
+      ],
+      "physical_plan_note": "无正文导航projection及built_at/revision有真实消费者，不与L2/L3正文混表。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "reply_attempt",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "assistant_attempt"
+      ],
+      "reason": "短请求执行历史保留，不假扮background长任务。",
+      "design_task": "06",
+      "created_at": {
+        "file": "backend-ts/database/migrations/007_reply_store.sql",
+        "line": 44
+      },
+      "consumer_counts": {
+        "literal_sql": 15,
+        "word_mentions": 16
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 753
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-format.ts",
+          "line": 36
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-interruption.ts",
+          "line": 20
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-store.ts",
+          "line": 166
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "assistant_attempt"
+      ],
+      "physical_plan_note": "短请求执行历史保留，不假扮background长任务。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "reply_candidate",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "reply_candidate",
+        "reply_candidate_version",
+        "reply_candidate_segment",
+        "reply_candidate_version_message"
+      ],
+      "reason": "Q39 root只身份，全部正文从v1统一版本化，稳定段身份不等于外部message_id。",
+      "design_task": "06",
+      "created_at": {
+        "file": "backend-ts/database/migrations/007_reply_store.sql",
+        "line": 97
+      },
+      "consumer_counts": {
+        "literal_sql": 26,
+        "word_mentions": 28
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-erasure.ts",
+          "line": 27
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 227
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-continuation.ts",
+          "line": 76
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-store.ts",
+          "line": 150
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "reply_candidate",
+        "reply_candidate_version",
+        "reply_candidate_segment",
+        "reply_candidate_version_message"
+      ],
+      "physical_plan_note": "Q39 root只身份，全部正文从v1统一版本化，稳定段身份不等于外部message_id。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "reply_candidate_citation",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "candidate_version_citation"
+      ],
+      "reason": "实际候选版本依据定位；不替代完整context来源依赖。",
+      "design_task": "06",
+      "created_at": {
+        "file": "backend-ts/database/migrations/007_reply_store.sql",
+        "line": 124
+      },
+      "consumer_counts": {
+        "literal_sql": 2,
+        "word_mentions": 3
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/reply/generation/reply-store.ts",
+          "line": 152
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "candidate_version_citation"
+      ],
+      "physical_plan_note": "实际候选版本依据定位；不替代完整context来源依赖。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "reply_context_evidence",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "assistant_context_snapshot",
+        "assistant_context_item"
+      ],
+      "reason": "实际构造上下文与具体message/memory candidate/version/source等typed引用，不能仅存kind+source_ids。",
+      "design_task": "06",
+      "created_at": {
+        "file": "backend-ts/database/migrations/007_reply_store.sql",
+        "line": 64
+      },
+      "consumer_counts": {
+        "literal_sql": 10,
+        "word_mentions": 11
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/host/pure-ts-reply-evidence.ts",
+          "line": 44
+        },
+        {
+          "file": "backend-ts/src/preferences/preference-erasure.ts",
+          "line": 22
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-assistant-erasure-sql.ts",
+          "line": 100
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-source-guards-sql.ts",
+          "line": 187
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "material_set",
+        "material_reference"
+      ],
+      "physical_plan_note": "实际构造上下文与具体message/memory candidate/version/source等typed引用，不能仅存kind+source_ids。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "reply_exploration",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "assistant_turn"
+      ],
+      "reason": "合并已提交输入与逻辑请求，kind区分generation/exploration/carry；input只存一次，实际attempt另存。",
+      "design_task": "06",
+      "created_at": {
+        "file": "backend-ts/database/migrations/052_reply_exploration.sql",
+        "line": 45
+      },
+      "consumer_counts": {
+        "literal_sql": 21,
+        "word_mentions": 21
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-explored.ts",
+          "line": 32
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-store.ts",
+          "line": 204
+        },
+        {
+          "file": "backend-ts/src/reply/exploration/exploration-skill-use.ts",
+          "line": 11
+        },
+        {
+          "file": "backend-ts/src/reply/exploration/exploration-store.ts",
+          "line": 43
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "assistant_turn"
+      ],
+      "physical_plan_note": "合并已提交输入与逻辑请求，kind区分generation/exploration/carry；input只存一次，实际attempt另存。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "reply_expression_preference_use",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "assistant_context_item"
+      ],
+      "reason": "实际使用具体preference_version真FK，不以当前值回填历史。",
+      "design_task": "06/07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/065_expression_preferences.sql",
+        "line": 49
+      },
+      "consumer_counts": {
+        "literal_sql": 7,
+        "word_mentions": 7
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-erasure.ts",
+          "line": 25
+        },
+        {
+          "file": "backend-ts/src/preferences/preference-service.ts",
+          "line": 168
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-generation-guards.ts",
+          "line": 68
+        },
+        {
+          "file": "backend-ts/src/skills/skill-source-dependencies.ts",
+          "line": 46
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "material_reference"
+      ],
+      "physical_plan_note": "实际使用具体preference_version真FK，不以当前值回填历史。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "reply_invalidated_key",
+      "status": "unmapped",
+      "proposed_logical_targets": [],
+      "reason": "删除/中断后的旧reply键存在真实拒绝消费者；deletion_operation只封存删除请求键，不能自动覆盖所有子回复键。需独立最小封存关系或被保留turn tombstone的明确定义。",
+      "design_task": "06/08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/049_style_samples.sql",
+        "line": 48
+      },
+      "consumer_counts": {
+        "literal_sql": 22,
+        "word_mentions": 23
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/host/pure-ts-reply-evidence.ts",
+          "line": 35
+        },
+        {
+          "file": "backend-ts/src/preferences/preference-erasure.ts",
+          "line": 36
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 244
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-format.ts",
+          "line": 42
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "补子请求封存",
+      "physical_targets": [
+        "assistant_request_tombstone"
+      ],
+      "physical_plan_note": "与删除操作键不同；删除／中断后旧回复不能重建。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "reply_original_source_use",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "assistant_context_snapshot",
+        "assistant_context_item"
+      ],
+      "reason": "实际构造上下文与具体message/memory candidate/version/source等typed引用，不能仅存kind+source_ids。",
+      "design_task": "06",
+      "created_at": {
+        "file": "backend-ts/database/migrations/049_style_samples.sql",
+        "line": 39
+      },
+      "consumer_counts": {
+        "literal_sql": 9,
+        "word_mentions": 9
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-erasure.ts",
+          "line": 23
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-assistant-erasure.ts",
+          "line": 141
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-assistant-guards.ts",
+          "line": 202
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-generation-guards.ts",
+          "line": 98
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "material_set",
+        "material_reference"
+      ],
+      "physical_plan_note": "实际构造上下文与具体message/memory candidate/version/source等typed引用，不能仅存kind+source_ids。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "reply_request",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "assistant_turn"
+      ],
+      "reason": "合并已提交输入与逻辑请求，kind区分generation/exploration/carry；input只存一次，实际attempt另存。",
+      "design_task": "06",
+      "created_at": {
+        "file": "backend-ts/database/migrations/007_reply_store.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 86,
+        "word_mentions": 89
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/host/pure-ts-reply-evidence.ts",
+          "line": 33
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/erasure.ts",
+          "line": 70
+        },
+        {
+          "file": "backend-ts/src/preferences/preference-erasure.ts",
+          "line": 19
+        },
+        {
+          "file": "backend-ts/src/preferences/preference-service.ts",
+          "line": 167
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "assistant_turn"
+      ],
+      "physical_plan_note": "合并已提交输入与逻辑请求，kind区分generation/exploration/carry；input只存一次，实际attempt另存。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "reply_skill",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "reply_skill"
+      ],
+      "reason": "保留原目录及官方DSH加载，只必要业务身份/状态，不能把缺DB引用当删除授权。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/008_skill_port.sql",
+        "line": 10
+      },
+      "consumer_counts": {
+        "literal_sql": 53,
+        "word_mentions": 60
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/reply/exploration/reply-exploration-guards.ts",
+          "line": 67
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-assistant-erasure-sql.ts",
+          "line": 19
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-skill-guards.ts",
+          "line": 20
+        },
+        {
+          "file": "backend-ts/src/reply/runtime/assistant-runtime-projection.ts",
+          "line": 62
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "reply_skill"
+      ],
+      "physical_plan_note": "保留原目录及官方DSH加载，只必要业务身份/状态，不能把缺DB引用当删除授权。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "reply_skill_file_cleanup",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "deletion_file_target"
+      ],
+      "reason": "目标独立于live业务行，FK删除操作，预期目录/manifest身份先持久化，同操作可安全重试。",
+      "design_task": "08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/101_directory_reply_skills.sql",
+        "line": 32
+      },
+      "consumer_counts": {
+        "literal_sql": 16,
+        "word_mentions": 16
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-files.ts",
+          "line": 64
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-discussion-service.ts",
+          "line": 1043
+        },
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 11
+        },
+        {
+          "file": "backend-ts/src/skills/skill-library.ts",
+          "line": 43
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "deletion_target"
+      ],
+      "physical_plan_note": "目标独立于live业务行，FK删除操作，预期目录/manifest身份先持久化，同操作可安全重试。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "reply_skill_method",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "reply_method",
+        "skill_version_method",
+        "skill_method_parent"
+      ],
+      "reason": "方法身份、版本成员与祖先延续真实FK，停用不能被改名/合并洗掉。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/068_skill_review_publication.sql",
+        "line": 85
+      },
+      "consumer_counts": {
+        "literal_sql": 10,
+        "word_mentions": 10
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-execution-view.ts",
+          "line": 19
+        },
+        {
+          "file": "backend-ts/src/skills/skill-history-policy-store.ts",
+          "line": 49
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 39
+        },
+        {
+          "file": "backend-ts/src/platform/database/schema-skill-upgrade.ts",
+          "line": 72
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "reply_method",
+        "skill_version_method",
+        "skill_method_parent"
+      ],
+      "physical_plan_note": "方法身份、版本成员与祖先延续真实FK，停用不能被改名/合并洗掉。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "reply_skill_publication",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "reply_skill_version",
+        "skill_catalog_operation"
+      ],
+      "reason": "固定批准来历可并入version，真实review/draft/source关系不能丢；普通包与reviewed不可洗来源。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/068_skill_review_publication.sql",
+        "line": 66
+      },
+      "consumer_counts": {
+        "literal_sql": 8,
+        "word_mentions": 8
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 31
+        },
+        {
+          "file": "backend-ts/src/skills/skill-history-policy-store.ts",
+          "line": 40
+        },
+        {
+          "file": "backend-ts/src/skills/skill-port.ts",
+          "line": 19
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 221
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "reply_skill_version",
+        "skill_operation"
+      ],
+      "physical_plan_note": "固定批准来历可并入version，真实review/draft/source关系不能丢；普通包与reviewed不可洗来源。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "reply_skill_version",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "reply_skill_version"
+      ],
+      "reason": "正文/描述/资源清单以不可变文件为权威，DB完整性锚点及审核/来源/范围。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/008_skill_port.sql",
+        "line": 36
+      },
+      "consumer_counts": {
+        "literal_sql": 53,
+        "word_mentions": 55
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-files.ts",
+          "line": 67
+        },
+        {
+          "file": "backend-ts/src/reply/exploration/exploration-service.ts",
+          "line": 36
+        },
+        {
+          "file": "backend-ts/src/reply/exploration/reply-exploration-guards.ts",
+          "line": 67
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-assistant-erasure-sql.ts",
+          "line": 19
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "reply_skill_version"
+      ],
+      "physical_plan_note": "正文/描述/资源清单以不可变文件为权威，DB完整性锚点及审核/来源/范围。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "reply_skill_working_copy",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "skill_worktree_projection"
+      ],
+      "reason": "工作目录投影可恢复但非第二份正文权威，不能覆盖用户并发修改。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/101_directory_reply_skills.sql",
+        "line": 36
+      },
+      "consumer_counts": {
+        "literal_sql": 15,
+        "word_mentions": 15
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/preferences/preference-files.ts",
+          "line": 64
+        },
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 10
+        },
+        {
+          "file": "backend-ts/src/skills/skill-history-policy-store.ts",
+          "line": 117
+        },
+        {
+          "file": "backend-ts/src/skills/skill-library.ts",
+          "line": 42
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "skill_worktree_projection"
+      ],
+      "physical_plan_note": "工作目录投影可恢复但非第二份正文权威，不能覆盖用户并发修改。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "scenario_document_mapping",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "document_version_parent"
+      ],
+      "reason": "延续/合并/拆分两端都真实FK，旧source端缺FK不照搬。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/076_layered_memory_maintenance.sql",
+        "line": 66
+      },
+      "consumer_counts": {
+        "literal_sql": 4,
+        "word_mentions": 4
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/scenarios/service.ts",
+          "line": 669
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "document_version_parent"
+      ],
+      "physical_plan_note": "延续/合并/拆分两端都真实FK，旧source端缺FK不照搬。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "scenario_document_version",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "memory_document",
+        "memory_document_version",
+        "document_block",
+        "document_block_reference"
+      ],
+      "reason": "Q40共同head/version但保留L2/L3类型、不确定性、时态和依据。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/073_layered_scenario_documents.sql",
+        "line": 35
+      },
+      "consumer_counts": {
+        "literal_sql": 24,
+        "word_mentions": 25
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/memory/profiles/service.ts",
+          "line": 253
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/facts.ts",
+          "line": 42
+        },
+        {
+          "file": "backend-ts/src/memory/records/documents/store.ts",
+          "line": 97
+        },
+        {
+          "file": "backend-ts/src/memory/records/mutations/erasure.ts",
+          "line": 36
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "memory_document",
+        "memory_document_version",
+        "document_block",
+        "document_block_reference"
+      ],
+      "physical_plan_note": "Q40共同head/version但保留L2/L3类型、不确定性、时态和依据。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "skill_draft",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "skill_draft",
+        "skill_draft_version",
+        "skill_draft_target"
+      ],
+      "reason": "proposed根、不可变草稿修订、私密依据及实际target version分层，不冒充已发布策略。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/066_skill_learning_drafts.sql",
+        "line": 47
+      },
+      "consumer_counts": {
+        "literal_sql": 19,
+        "word_mentions": 20
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 36
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-materials.ts",
+          "line": 173
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-store.ts",
+          "line": 83
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 123
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "skill_draft",
+        "skill_draft_version",
+        "skill_draft_target"
+      ],
+      "physical_plan_note": "proposed根、不可变草稿修订、私密依据及实际target version分层，不冒充已发布策略。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "skill_history_operation",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "skill_catalog_operation"
+      ],
+      "reason": "更新/合并/回滚和批准幂等，当前版本与目录修订双重预期，回滚保留停用。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/069_skill_history_operations.sql",
+        "line": 6
+      },
+      "consumer_counts": {
+        "literal_sql": 2,
+        "word_mentions": 2
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-history-policy-store.ts",
+          "line": 95
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "skill_operation"
+      ],
+      "physical_plan_note": "更新/合并/回滚和批准幂等，当前版本与目录修订双重预期，回滚保留停用。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "skill_learning_batch",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "skill_learning_batch",
+        "skill_learning_receipt",
+        "skill_learning_input"
+      ],
+      "reason": "有限真实材料及消费事实，no_change/reuse也可成功；具体引用不藏无FK数组。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/066_skill_learning_drafts.sql",
+        "line": 72
+      },
+      "consumer_counts": {
+        "literal_sql": 7,
+        "word_mentions": 7
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 50
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-store.ts",
+          "line": 91
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 708
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "skill_learning_batch",
+        "skill_learning_receipt",
+        "material_reference"
+      ],
+      "physical_plan_note": "有限真实材料及消费事实，no_change/reuse也可成功；具体引用不藏无FK数组。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "skill_learning_operation",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "skill_learning_operation"
+      ],
+      "reason": "独立学习用途授权默认关闭，旧操作不得覆盖后来关闭；不能由同步/记忆按钮授予。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/066_skill_learning_drafts.sql",
+        "line": 35
+      },
+      "consumer_counts": {
+        "literal_sql": 2,
+        "word_mentions": 2
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-learning-store.ts",
+          "line": 137
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "skill_operation"
+      ],
+      "physical_plan_note": "独立学习用途授权默认关闭，旧操作不得覆盖后来关闭；不能由同步/记忆按钮授予。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "skill_learning_receipt",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "skill_learning_batch",
+        "skill_learning_receipt",
+        "skill_learning_input"
+      ],
+      "reason": "有限真实材料及消费事实，no_change/reuse也可成功；具体引用不藏无FK数组。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/066_skill_learning_drafts.sql",
+        "line": 88
+      },
+      "consumer_counts": {
+        "literal_sql": 9,
+        "word_mentions": 9
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 45
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-materials.ts",
+          "line": 69
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-store.ts",
+          "line": 93
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "skill_learning_batch",
+        "skill_learning_receipt",
+        "material_reference"
+      ],
+      "physical_plan_note": "有限真实材料及消费事实，no_change/reuse也可成功；具体引用不藏无FK数组。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "skill_learning_scope",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "skill_learning_scope"
+      ],
+      "reason": "独立学习用途授权默认关闭，旧操作不得覆盖后来关闭；不能由同步/记忆按钮授予。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/066_skill_learning_drafts.sql",
+        "line": 25
+      },
+      "consumer_counts": {
+        "literal_sql": 15,
+        "word_mentions": 15
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 83
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/tasks/store.ts",
+          "line": 39
+        },
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 69
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-materials.ts",
+          "line": 271
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "skill_learning_scope"
+      ],
+      "physical_plan_note": "独立学习用途授权默认关闭，旧操作不得覆盖后来关闭；不能由同步/记忆按钮授予。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "skill_library",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "owner_collection_state"
+      ],
+      "reason": "三种owner集合计数器可同一行存储但分别单调，空集合也必须捕获。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/008_skill_port.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 24,
+        "word_mentions": 27
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/reply/discussion/assistant-generation-format.ts",
+          "line": 26
+        },
+        {
+          "file": "backend-ts/src/reply/exploration/exploration-store.ts",
+          "line": 37
+        },
+        {
+          "file": "backend-ts/src/reply/exploration/reply-exploration-guards.ts",
+          "line": 66
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-preparation.ts",
+          "line": 66
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "owner_collection_state"
+      ],
+      "physical_plan_note": "三种owner集合计数器可同一行存储但分别单调，空集合也必须捕获。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "skill_method_identity",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "reply_method",
+        "skill_version_method",
+        "skill_method_parent"
+      ],
+      "reason": "方法身份、版本成员与祖先延续真实FK，停用不能被改名/合并洗掉。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/066_skill_learning_drafts.sql",
+        "line": 98
+      },
+      "consumer_counts": {
+        "literal_sql": 2,
+        "word_mentions": 2
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-learning-store.ts",
+          "line": 203
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 253
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "reply_method",
+        "skill_version_method",
+        "skill_method_parent"
+      ],
+      "physical_plan_note": "方法身份、版本成员与祖先延续真实FK，停用不能被改名/合并洗掉。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "skill_policy_operation",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "skill_policy_operation"
+      ],
+      "reason": "明确范围政策动作幂等，不留反馈原话。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/070_skill_scope_policies.sql",
+        "line": 24
+      },
+      "consumer_counts": {
+        "literal_sql": 4,
+        "word_mentions": 4
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-history-policy-store.ts",
+          "line": 169
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "skill_operation"
+      ],
+      "physical_plan_note": "明确范围政策动作幂等，不留反馈原话。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "skill_policy_state",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "owner_collection_state"
+      ],
+      "reason": "三种owner集合计数器可同一行存储但分别单调，空集合也必须捕获。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/070_skill_scope_policies.sql",
+        "line": 4
+      },
+      "consumer_counts": {
+        "literal_sql": 3,
+        "word_mentions": 3
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-history-policy-store.ts",
+          "line": 131
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "owner_collection_state"
+      ],
+      "physical_plan_note": "三种owner集合计数器可同一行存储但分别单调，空集合也必须捕获。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "skill_review_call",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "skill_review_result_call",
+        "step_model_call",
+        "model_call"
+      ],
+      "reason": "审核结果固定真实attempt与实际消费call链，不从后来current attempt猜测。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/068_skill_review_publication.sql",
+        "line": 50
+      },
+      "consumer_counts": {
+        "literal_sql": 1,
+        "word_mentions": 1
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 355
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "skill_review_result_call",
+        "model_call_execution",
+        "model_call"
+      ],
+      "physical_plan_note": "审核结果固定真实attempt与实际消费call链，不从后来current attempt猜测。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "skill_review_comparison",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "skill_review",
+        "skill_review_input",
+        "skill_review_target",
+        "skill_review_side"
+      ],
+      "reason": "独立审核输入不必来自助手session，冻结同输入两侧策略/结果，不伪造assistant turn。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/068_skill_review_publication.sql",
+        "line": 10
+      },
+      "consumer_counts": {
+        "literal_sql": 13,
+        "word_mentions": 15
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 25
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-store.ts",
+          "line": 86
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 129
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 710
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "skill_review",
+        "material_reference",
+        "skill_draft_target",
+        "skill_review_side"
+      ],
+      "physical_plan_note": "独立审核输入不必来自助手session，冻结同输入两侧策略/结果，不伪造assistant turn。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "skill_review_operation",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "skill_catalog_operation"
+      ],
+      "reason": "更新/合并/回滚和批准幂等，当前版本与目录修订双重预期，回滚保留停用。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/068_skill_review_publication.sql",
+        "line": 37
+      },
+      "consumer_counts": {
+        "literal_sql": 7,
+        "word_mentions": 7
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-cleanup.ts",
+          "line": 26
+        },
+        {
+          "file": "backend-ts/src/skills/skill-learning-store.ts",
+          "line": 89
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 134
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "skill_operation"
+      ],
+      "physical_plan_note": "更新/合并/回滚和批准幂等，当前版本与目录修订双重预期，回滚保留停用。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "skill_scope_policy",
+      "status": "retain",
+      "proposed_logical_targets": [
+        "skill_scope_policy"
+      ],
+      "reason": "用户范围停用与不可变正文独立，目标方法要真实FK及祖先归属。",
+      "design_task": "07",
+      "created_at": {
+        "file": "backend-ts/database/migrations/070_skill_scope_policies.sql",
+        "line": 8
+      },
+      "consumer_counts": {
+        "literal_sql": 7,
+        "word_mentions": 8
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/skills/skill-execution-view.ts",
+          "line": 29
+        },
+        {
+          "file": "backend-ts/src/skills/skill-history-policy-store.ts",
+          "line": 132
+        },
+        {
+          "file": "backend-ts/src/skills/skill-review-store.ts",
+          "line": 66
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "skill_scope_policy"
+      ],
+      "physical_plan_note": "用户范围停用与不可变正文独立，目标方法要真实FK及祖先归属。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "source_document",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "source_batch"
+      ],
+      "reason": "CLI捕获来源归有界batch；来源可靠性、模式、adapter及同绑定观察锚点必须保留。文件导入入口另按用户决定移除。",
+      "design_task": "03",
+      "created_at": {
+        "file": "backend-ts/database/migrations/003_separate_contact_identity.sql",
+        "line": 51
+      },
+      "consumer_counts": {
+        "literal_sql": 93,
+        "word_mentions": 144
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 16
+        },
+        {
+          "file": "backend-ts/src/host/host-model-accounting.ts",
+          "line": 44
+        },
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 91
+        },
+        {
+          "file": "backend-ts/src/memory/adoption/engine.ts",
+          "line": 217
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "source_batch"
+      ],
+      "physical_plan_note": "CLI捕获来源归有界batch；来源可靠性、模式、adapter及同绑定观察锚点必须保留。文件导入入口另按用户决定移除。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "source_processing_batch",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "source_batch"
+      ],
+      "reason": "CLI捕获来源归有界batch；来源可靠性、模式、adapter及同绑定观察锚点必须保留。文件导入入口另按用户决定移除。",
+      "design_task": "03",
+      "created_at": {
+        "file": "backend-ts/database/migrations/040_source_processing_trace.sql",
+        "line": 2
+      },
+      "consumer_counts": {
+        "literal_sql": 18,
+        "word_mentions": 18
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 177
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/sources.ts",
+          "line": 36
+        },
+        {
+          "file": "backend-ts/src/reply/discussion/reply-discussion-context.ts",
+          "line": 142
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-source-guards-sql.ts",
+          "line": 31
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "source_batch"
+      ],
+      "physical_plan_note": "CLI捕获来源归有界batch；来源可靠性、模式、adapter及同绑定观察锚点必须保留。文件导入入口另按用户决定移除。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "source_processing_capture_tombstone",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "ingestion_tombstone"
+      ],
+      "reason": "捕获UUID和可靠消息身份是不同tombstone种类，均不能代替未读历史边界。",
+      "design_task": "08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/041_source_processing_capture_tombstone.sql",
+        "line": 4
+      },
+      "consumer_counts": {
+        "literal_sql": 3,
+        "word_mentions": 3
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/sync/sync-incremental-store-write.ts",
+          "line": 36
+        },
+        {
+          "file": "backend-ts/src/diagnostics/source-processing-trace.ts",
+          "line": 421
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 646
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "read_exclusion"
+      ],
+      "physical_plan_note": "捕获UUID和可靠消息身份是不同tombstone种类，均不能代替未读历史边界。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "source_processing_record",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "source_record",
+        "message"
+      ],
+      "reason": "原始出现归source_record，规范消息保存已证identity/order；raw协议字段不得丢失，不能宣称旧local_id+time已可靠。",
+      "design_task": "03",
+      "created_at": {
+        "file": "backend-ts/database/migrations/040_source_processing_trace.sql",
+        "line": 14
+      },
+      "consumer_counts": {
+        "literal_sql": 13,
+        "word_mentions": 13
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 194
+        },
+        {
+          "file": "backend-ts/src/memory/extraction/sources.ts",
+          "line": 36
+        },
+        {
+          "file": "backend-ts/src/sync/sync-incremental-store-write.ts",
+          "line": 43
+        },
+        {
+          "file": "backend-ts/src/diagnostics/source-processing-trace.ts",
+          "line": 303
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "source_record",
+        "message"
+      ],
+      "physical_plan_note": "原始出现归source_record，规范消息保存已证identity/order；raw协议字段不得丢失，不能宣称旧local_id+time已可靠。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "wechat_auto_read_suppression",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "ingestion_tombstone"
+      ],
+      "reason": "捕获UUID和可靠消息身份是不同tombstone种类，均不能代替未读历史边界。",
+      "design_task": "08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/109_wechat_auto_read_suppression.sql",
+        "line": 3
+      },
+      "consumer_counts": {
+        "literal_sql": 2,
+        "word_mentions": 4
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/sync/sync-auto-read-suppression.ts",
+          "line": 37
+        },
+        {
+          "file": "backend-ts/src/deletion/cross-domain-deletion.ts",
+          "line": 628
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "read_exclusion"
+      ],
+      "physical_plan_note": "捕获UUID和可靠消息身份是不同tombstone种类，均不能代替未读历史边界。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "wechat_binding_history_authorization",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "conversation_read_grant",
+        "history_restore_authorization"
+      ],
+      "reason": "授权协议版本、grant生命周期代次及显式恢复资格分开；旧账号/绑定历史授权需逐入口改造。",
+      "design_task": "08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/108_wechat_binding_history_authorization.sql",
+        "line": 4
+      },
+      "consumer_counts": {
+        "literal_sql": 6,
+        "word_mentions": 8
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/reply/generation/reply-scope.ts",
+          "line": 24
+        },
+        {
+          "file": "backend-ts/src/sync/sync-incremental-store.ts",
+          "line": 80
+        },
+        {
+          "file": "backend-ts/src/sync/sync-scope-history.ts",
+          "line": 9
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "conversation_read_grant",
+        "history_restore_authorization"
+      ],
+      "physical_plan_note": "授权协议版本、grant生命周期代次及显式恢复资格分开；旧账号/绑定历史授权需逐入口改造。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "wechat_history_sync_authorization",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "conversation_read_grant",
+        "history_restore_authorization"
+      ],
+      "reason": "授权协议版本、grant生命周期代次及显式恢复资格分开；旧账号/绑定历史授权需逐入口改造。",
+      "design_task": "08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/105_history_sync_authorization.sql",
+        "line": 5
+      },
+      "consumer_counts": {
+        "literal_sql": 5,
+        "word_mentions": 10
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 74
+        },
+        {
+          "file": "backend-ts/src/reply/generation/reply-scope.ts",
+          "line": 25
+        },
+        {
+          "file": "backend-ts/src/sync/sync-scope.ts",
+          "line": 67
+        },
+        {
+          "file": "backend-ts/src/sync/wechat-setup.ts",
+          "line": 117
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "conversation_read_grant",
+        "history_restore_authorization"
+      ],
+      "physical_plan_note": "授权协议版本、grant生命周期代次及显式恢复资格分开；旧账号/绑定历史授权需逐入口改造。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "wechat_message_metadata",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "source_record",
+        "message"
+      ],
+      "reason": "原始出现归source_record，规范消息保存已证identity/order；raw协议字段不得丢失，不能宣称旧local_id+time已可靠。",
+      "design_task": "03",
+      "created_at": {
+        "file": "backend-ts/database/migrations/004_separate_wechat_message_metadata.sql",
+        "line": 31
+      },
+      "consumer_counts": {
+        "literal_sql": 7,
+        "word_mentions": 8
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 106
+        },
+        {
+          "file": "backend-ts/src/host/pure-ts-follow-smoke.ts",
+          "line": 19
+        },
+        {
+          "file": "backend-ts/src/imports/history-import-service.ts",
+          "line": 136
+        },
+        {
+          "file": "backend-ts/src/sync/sync-incremental-store-write.ts",
+          "line": 17
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "source_record",
+        "message"
+      ],
+      "physical_plan_note": "原始出现归source_record，规范消息保存已证identity/order；raw协议字段不得丢失，不能宣称旧local_id+time已可靠。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "wechat_observation_baseline",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "sync_checkpoint",
+        "conversation_clear_boundary",
+        "conversation_read_grant"
+      ],
+      "reason": "按grant/data_generation/episode保存读取及历史覆盖；不照搬时间/最大local_id假定。真实CLI合同未证明，字段映射不代表续读已可用。",
+      "design_task": "08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/026_cli_background_sync.sql",
+        "line": 15
+      },
+      "consumer_counts": {
+        "literal_sql": 5,
+        "word_mentions": 6
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/contacts/binding-service.ts",
+          "line": 136
+        },
+        {
+          "file": "backend-ts/src/sync/sync-incremental-store.ts",
+          "line": 189
+        },
+        {
+          "file": "backend-ts/src/sync/sync-scope.ts",
+          "line": 138
+        },
+        {
+          "file": "backend-ts/src/sync/wechat-history-enrollment.ts",
+          "line": 39
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "sync_checkpoint",
+        "conversation_clear_boundary",
+        "conversation_read_grant"
+      ],
+      "physical_plan_note": "按grant/data_generation/episode保存读取及历史覆盖；不照搬时间/最大local_id假定。真实CLI合同未证明，字段映射不代表续读已可用。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "wechat_observation_cursor",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "sync_checkpoint",
+        "conversation_clear_boundary",
+        "conversation_read_grant"
+      ],
+      "reason": "按grant/data_generation/episode保存读取及历史覆盖；不照搬时间/最大local_id假定。真实CLI合同未证明，字段映射不代表续读已可用。",
+      "design_task": "08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/020_local_wechat_observation.sql",
+        "line": 71
+      },
+      "consumer_counts": {
+        "literal_sql": 7,
+        "word_mentions": 8
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/host/pure-ts-follow-smoke.ts",
+          "line": 17
+        },
+        {
+          "file": "backend-ts/src/sync/sync-incremental-store.ts",
+          "line": 185
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "sync_checkpoint",
+        "conversation_clear_boundary",
+        "conversation_read_grant"
+      ],
+      "physical_plan_note": "按grant/data_generation/episode保存读取及历史覆盖；不照搬时间/最大local_id假定。真实CLI合同未证明，字段映射不代表续读已可用。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "wechat_sync_exclusion",
+      "status": "merge",
+      "proposed_logical_targets": [
+        "conversation_exclusion"
+      ],
+      "reason": "联系人删除后仍保留必要渠道排除，不能外键级联随contact消失。",
+      "design_task": "08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/100_all_private_sync_scope.sql",
+        "line": 16
+      },
+      "consumer_counts": {
+        "literal_sql": 4,
+        "word_mentions": 4
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 75
+        },
+        {
+          "file": "backend-ts/src/sync/sync-scope-history.ts",
+          "line": 4
+        },
+        {
+          "file": "backend-ts/src/sync/sync-scope.ts",
+          "line": 120
+        },
+        {
+          "file": "backend-ts/src/sync/wechat-history-enrollment.ts",
+          "line": 18
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "已给映射，待实现验证",
+      "physical_targets": [
+        "read_exclusion"
+      ],
+      "physical_plan_note": "联系人删除后仍保留必要渠道排除，不能外键级联随contact消失。",
+      "verification_status": "static_mapping_only"
+    },
+    {
+      "old_table": "wechat_sync_scope",
+      "status": "unmapped",
+      "proposed_logical_targets": [],
+      "reason": "旧表保存selected/all_private及明确授权时间；新account开关bool不覆盖范围模式。须明确selected-only后如何禁用旧入口或补范围字段，不能猜已覆盖。",
+      "design_task": "02/08",
+      "created_at": {
+        "file": "backend-ts/database/migrations/100_all_private_sync_scope.sql",
+        "line": 4
+      },
+      "consumer_counts": {
+        "literal_sql": 4,
+        "word_mentions": 6
+      },
+      "consumer_evidence": [
+        {
+          "file": "backend-ts/src/contacts/contact-context.ts",
+          "line": 73
+        },
+        {
+          "file": "backend-ts/src/sync/sync-scope.ts",
+          "line": 44
+        },
+        {
+          "file": "backend-ts/src/sync/wechat-setup.ts",
+          "line": 116
+        }
+      ],
+      "coverage": "逻辑映射；不是新DDL/接口/端到端已验证",
+      "physical_plan_status": "补范围字段",
+      "physical_targets": [
+        "account_sync_control"
+      ],
+      "physical_plan_note": "scope_mode、scope_generation、明确授权版本／时间独立于read_enabled；默认仍按已确认所选范围，保留前台共同消费者。",
+      "verification_status": "static_mapping_only"
+    }
+  ],
+  "limits": [
+    "不是实际数据库元数据；DO块动态DDL、动态表名、触发器内部引用及字符串拼接不能由简单字面扫描完整证明。",
+    "消费者数量是导航线索，不等同于业务已启用或测试已通过；deletion/schema检查引用不单独证明正常写入。",
+    "映射到02–08逻辑提案，父Agent后续物理合并/表名收敛必须再映射一次。",
+    "未读取用户配置、聊天、Skill、凭据或业务库；未运行App/模型/SQL/安装/远端操作。"
+  ]
+}

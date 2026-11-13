@@ -1,0 +1,373 @@
+{
+  "root": "/Users/local-user/Library/Application Support/NotAloneDesktop/skill-packages",
+  "packages": [
+    {
+      "name": "romance-001-first-contact",
+      "package_sha256": "dcc2b65f2fc18436de71952f3ce3c78507540aa86f3f93e4ecbc42fffae0f629"
+    },
+    {
+      "name": "romance-002-slow-warmup",
+      "package_sha256": "68a4e7e89ff404d37ead5c607bb0b42cf4c3e9a305e9b0eddeebd0e4f2949392"
+    },
+    {
+      "name": "romance-003-reconnect-after-gap",
+      "package_sha256": "146cc3912c277b180e510eb334dfecde430c59f9334ef7fd87f66feb50889909"
+    },
+    {
+      "name": "romance-004-refresh-routine-chat",
+      "package_sha256": "20ed7bcc44cc43017dba980128ce7c958ef6c9eb9489c69ad5247ffa74909bcb"
+    },
+    {
+      "name": "romance-005-why-contact-now",
+      "package_sha256": "5e751d2c0847013f3add7b106c2ec855e91a4e9d618b9e76042804efa0c6291d"
+    },
+    {
+      "name": "romance-006-topic-expansion",
+      "package_sha256": "88ac805a97b0817c449482d27bee8ee6406f33482bedc510c488d251ce40d007"
+    },
+    {
+      "name": "romance-007-short-reply",
+      "package_sha256": "bcd7e9044092356f27ac30756287c7c2204f139c85475361a1087d7da4eddd56"
+    },
+    {
+      "name": "romance-008-interview-to-sharing",
+      "package_sha256": "41e54abd3b51e6e46192361237d84a82f6e11cbffa3aece323def4ea06d1986f"
+    },
+    {
+      "name": "romance-009-passive-chat",
+      "package_sha256": "7fb925a53d9db85f5cc9f5c88927abf67d73f3d19e0548fd31fab65e6a3d2d2e"
+    },
+    {
+      "name": "romance-010-close-chat",
+      "package_sha256": "b1e5d1b30884dd3509ed744b0907b7e6f61b66f60c95d2f8432a1f85ab395a33"
+    },
+    {
+      "name": "romance-011-topic-reset",
+      "package_sha256": "3f1d2e0508c256fc12e071e42c8d9731488ced552200fdb91559f821fffc4b9a"
+    },
+    {
+      "name": "romance-012-share-experience",
+      "package_sha256": "ceb01df39616fa595d37b096365ff4992f7f1a4762b0390ab8488657feaba410"
+    },
+    {
+      "name": "romance-013-past-relationships",
+      "package_sha256": "7be655225bb9103022ad911727b846624395f1102a39cd8fc26e894f65ff5e75"
+    },
+    {
+      "name": "romance-014-dating-values",
+      "package_sha256": "ea62b21a60681883aabb7764e6c886f195f7983c67d1463e49be789ab11bc6c1"
+    },
+    {
+      "name": "romance-015-private-question",
+      "package_sha256": "ed8c79d97f8134e67f1a53176bfc0b9569cc77740fbc6a6c31b7902052399457"
+    },
+    {
+      "name": "romance-016-playful-banter",
+      "package_sha256": "5251cf1f74b4bd1fc151a737c254d5e2beeb6366f2df3dba4717ea3981f893d9"
+    },
+    {
+      "name": "romance-017-sincerity-challenge",
+      "package_sha256": "6983bdc978e8c35f471c54123f2e8b458aca1743e4c29d9d501e2b234d70f914"
+    },
+    {
+      "name": "romance-018-specific-compliment",
+      "package_sha256": "29a581b2b748b12cdba137d5cdfed21e282731ff48a2d749bc4b41fd9b32a52f"
+    },
+    {
+      "name": "romance-019-light-flirting",
+      "package_sha256": "e109fe99592fe67e87c1baea6e02d75f155f9a492a5155a3e325c883c945841b"
+    },
+    {
+      "name": "romance-020-miss-you",
+      "package_sha256": "4efc1e4bbf840c6c54b70b8d74c7a411802b1003ec2166205e24f2e56b72259e"
+    },
+    {
+      "name": "romance-021-friend-to-romance",
+      "package_sha256": "80b2c2982203c91f23f21d77f48e727fb5899c95fb03540b9459b19a0f12a1fb"
+    },
+    {
+      "name": "romance-022-gaming-to-personal",
+      "package_sha256": "a57209ddb15b82c073cc878e8b249fe513273557ebf00ccef76440f537358e62"
+    },
+    {
+      "name": "romance-023-after-showing-interest",
+      "package_sha256": "fb0bde5c78b30d67dafc6439a3f46fb27a9f55257eb6eebd25762685480870b2"
+    },
+    {
+      "name": "romance-024-flirt-repair",
+      "package_sha256": "ad74aee74746e6f4114e0a005d1edd1e2c5514099bc06ea1d633b07003e970c4"
+    },
+    {
+      "name": "romance-025-meeting-interest",
+      "package_sha256": "f53aaaf47b21e84f93de3d3ed46b4ef15393aba2edaf7bb63fc01cb6a4b97f5e"
+    },
+    {
+      "name": "romance-026-concrete-date-plan",
+      "package_sha256": "ed778ae7e2d45bceb53f4978fecbfc0237bb23381132a3660176539134db6a2c"
+    },
+    {
+      "name": "romance-027-call-video-invite",
+      "package_sha256": "a893c0098915eceb4813c1a8ca42ea6a7cf2549a3dd7407dff51f4cd932ee4f9"
+    },
+    {
+      "name": "romance-028-vague-invite-response",
+      "package_sha256": "977d3365c1945fc105cadd5652e2262e2915b41a0f2f0dcd55b37b1e89d976b9"
+    },
+    {
+      "name": "romance-029-schedule-conflict",
+      "package_sha256": "917a9794f49e1b945400b8130b5349263fe92f9efb09a481fea3137478564150"
+    },
+    {
+      "name": "romance-030-last-minute-cancel",
+      "package_sha256": "c1f5cc60de5bd9c99ca6a1a37ac23ddeef908fdde98f86a569e618d44140f3df"
+    },
+    {
+      "name": "romance-031-pre-date-confirmation",
+      "package_sha256": "bed5a4e8dc5c9bcbabbb30396116a510060abcff7085b3e5a222be3384222f41"
+    },
+    {
+      "name": "romance-032-extra-companion",
+      "package_sha256": "7e8afb0d83f54a24f92e5639f0bd32fba2ecd82e9414474d78216a3961b51482"
+    },
+    {
+      "name": "romance-033-in-person-silence",
+      "package_sha256": "aaafa29f6b10790cdd53b87b6e65e85518de58969acf85a7bc60c71deb540d5c"
+    },
+    {
+      "name": "romance-034-date-awkwardness",
+      "package_sha256": "c3dceb1a7ecc574b51363b0fc0b6418b65e3f1fafff551db7e675f0b6d4b556a"
+    },
+    {
+      "name": "romance-035-first-date-followup",
+      "package_sha256": "440e2bb5eea649faec30ace0a37e9f558d8cb16020a990777dd6d5b1af29cea3"
+    },
+    {
+      "name": "romance-036-next-date-invite",
+      "package_sha256": "22e83e429280338490fea51071b7bcdbe1c89e9e6a7164b4fbc3f56136c8c5a1"
+    },
+    {
+      "name": "romance-037-end-date",
+      "package_sha256": "93349ce81f2003055211357056ffa6bc0f2ad36286ef1f6d442e4915a0aa337c"
+    },
+    {
+      "name": "romance-038-unanswered-message",
+      "package_sha256": "fd9fd649228fa85aeab162460b7b60c48ecc426b10a7f1b4798b77b96a72cdba"
+    },
+    {
+      "name": "romance-039-fading-interaction",
+      "package_sha256": "a7d16d9b39e4dde743a54401a4efa94661c4ea85d77febcaa06c46444ac1e42d"
+    },
+    {
+      "name": "romance-040-hot-cold-contact",
+      "package_sha256": "03d5fd778cbe4aa1b9b1b5af1e86d1ffaa02c14b6d31e5218524b9a169f3b93c"
+    },
+    {
+      "name": "romance-041-busy-tired-exit",
+      "package_sha256": "164a4a77d9144f994bff600c554d12662e9242b9ee22f76dc24b7d398ad35801"
+    },
+    {
+      "name": "romance-042-after-overexplaining",
+      "package_sha256": "bf8e33a5c1c3e85ed4a299cf333077e6fda6c2e2c3c021ecac4cd05316cca035"
+    },
+    {
+      "name": "romance-043-help-only-contact",
+      "package_sha256": "30703968bd12f6c7cc6c4029ded7c9cebbd5e4f35d18afc12eb3eb3309ddb637"
+    },
+    {
+      "name": "romance-044-one-sided-venting",
+      "package_sha256": "f91d2454469fc89baeb7facf66bea73f6a4e7028aa7e98331f28bcf7159cccef"
+    },
+    {
+      "name": "romance-045-conditional-affection",
+      "package_sha256": "aaf0b71614cbed07d9975fc4428f515ad8d12a91d70e06438b56899b75bdd289"
+    },
+    {
+      "name": "romance-046-mixed-signals",
+      "package_sha256": "3dd5cf57bd4f88b16d7b8185485dc1c85b2d425387cd786b4d2b53ca4676c4c6"
+    },
+    {
+      "name": "romance-047-sadness-support",
+      "package_sha256": "c2b4a085ccadbde63f5ae767c172044329c5d312d0748c47f03f47da636f72db"
+    },
+    {
+      "name": "romance-048-anxiety-support",
+      "package_sha256": "6e50bbf234f392ba34a4ed5f7ed8547d2feac9b55ed90d13a02e190f01b332be"
+    },
+    {
+      "name": "romance-049-venting-about-others",
+      "package_sha256": "be2d4e39acd22d718b53513cc9331712ce2fe0f39370b279ff01929e26856d85"
+    },
+    {
+      "name": "romance-050-celebrate-good-news",
+      "package_sha256": "00334314c22b92fea679a6f723eaa27ca5251a0987e8470377c8ee5118b00606"
+    },
+    {
+      "name": "romance-051-illness-fatigue-care",
+      "package_sha256": "4795f0919f490fb47b8e88d744d121b004c8ca4d9279d8f4089dac104b4b6063"
+    },
+    {
+      "name": "romance-052-specific-gratitude",
+      "package_sha256": "103622023cfde9178ea7f34a86871aace6e456f6e9de1fed3766163bfddd68c0"
+    },
+    {
+      "name": "romance-053-couple-reconnection",
+      "package_sha256": "58ee43b0cd6519b66653664e59d8ab52569a1f1ca7e1d950a09eded1df68c815"
+    },
+    {
+      "name": "romance-054-couple-help-request",
+      "package_sha256": "7aeb5b99965514a39b87d3fde9deb39d63b86f236213a1312cb53a0ab2b8719f"
+    },
+    {
+      "name": "romance-055-work-busy-relationship",
+      "package_sha256": "b051c20694676ae643396b427be4f7ab90732026eea81c6c58b8466f0e4523c2"
+    },
+    {
+      "name": "romance-056-confession",
+      "package_sha256": "6b3e960de6f060aa124fab797f80fd8dcecfef54be837a1d77d6eeab6a338347"
+    },
+    {
+      "name": "romance-057-premature-confession",
+      "package_sha256": "cd9751a75a22af919737befdd4383115fa00bc32bc2793b4f1a359302069f79b"
+    },
+    {
+      "name": "romance-058-define-relationship",
+      "package_sha256": "512a1e9b96ab78ba79fdc5fdd4f5665bb96798da99f1e678d7173ccad3bf0116"
+    },
+    {
+      "name": "romance-059-exclusivity-commitment",
+      "package_sha256": "3d4f9206fbf3b8e073796938f2f793563613023f8374b6529460c289fc224c90"
+    },
+    {
+      "name": "romance-060-contact-frequency",
+      "package_sha256": "2d7f934231ec7e4e20a2f88dd1bbbecd3a0d167811927a829c4a2ac52820650b"
+    },
+    {
+      "name": "romance-061-personal-space",
+      "package_sha256": "1c985d894fde4057a7805548dcde514901155269cf27d338dc39091aa3d4ec9b"
+    },
+    {
+      "name": "romance-062-physical-consent",
+      "package_sha256": "b9b6435f46c339c5de264d60ef84d5ad243423c412341a864b00a4de0fda34a1"
+    },
+    {
+      "name": "romance-063-public-relationship-photos",
+      "package_sha256": "3ee26091dd5a7d926720c6ea7a4a282257e1bdf4ea1a96c1f8d239b237b228fa"
+    },
+    {
+      "name": "romance-064-digital-privacy",
+      "package_sha256": "11e2d2025b976fe2cfadcd863ef862d68ff302e2fb7afb86f9bd493254eb5fb8"
+    },
+    {
+      "name": "romance-065-jealousy-conversation",
+      "package_sha256": "cd2d77c3076c610ad9c840d70382f9b080e4e0faedf93e76ea46a376ded8d73e"
+    },
+    {
+      "name": "romance-066-express-dissatisfaction",
+      "package_sha256": "4201830e52e00ff1b500ba04665b6208277f9b9e534d47ecf8fb1c7992592595"
+    },
+    {
+      "name": "romance-067-conflicting-statements",
+      "package_sha256": "6281fdd20421fb719ddf3c941ab701983297381330024a8ee0b98d637146da24"
+    },
+    {
+      "name": "romance-068-text-misunderstanding",
+      "package_sha256": "5fe7547373ec544508c825f9519d682f8fdb4f7cb0fc0e94aee3f6c9b15ac2fc"
+    },
+    {
+      "name": "romance-069-hurtful-words-apology",
+      "package_sha256": "3abe494af52609aef05b241d7204aae140b3776cefa225bfe602532a74572815"
+    },
+    {
+      "name": "romance-070-broken-promise-repair",
+      "package_sha256": "17b7dde0be5a73e2c5c216b8bd9bc7c594660b5cfef29b2c49dfee7f8d6d3ca6"
+    },
+    {
+      "name": "romance-071-conflict-pause",
+      "package_sha256": "93db15e0ac9781635a12c475e5e1204851de0e67eb364d13f17d475a1aeec07c"
+    },
+    {
+      "name": "romance-072-reopen-after-silence",
+      "package_sha256": "1239c5db761558663ff346d2b18132f2128566672d1f32967c5540a748c64b8d"
+    },
+    {
+      "name": "romance-073-recurring-conflict",
+      "package_sha256": "bf56ac667e4831dce6b02be0b7686f084334a8352ba71b7cca7b5638c6fa930e"
+    },
+    {
+      "name": "romance-074-romantic-rejection",
+      "package_sha256": "024eb6e8c7e8038a8ce3cdf14d84df012d513ed30d7e172a70f2353a14f93ec9"
+    },
+    {
+      "name": "romance-075-end-dating-interest",
+      "package_sha256": "718c236583bd8d0beceb4ecbe1928f81b24ac43edab6d875ca64a806555b537d"
+    },
+    {
+      "name": "romance-076-after-rejection-coworkers",
+      "package_sha256": "870fa72335ac91d61153aaca0c9d14ce765b11c2532159fce4f7d3b2c14d3844"
+    },
+    {
+      "name": "romance-077-meet-new-partner",
+      "package_sha256": "fa4ce248965b95867521c9f8003dad7aef3330188b7727bd6879a45839208741"
+    },
+    {
+      "name": "romance-078-breakup-conversation",
+      "package_sha256": "e07b763601c7fc7b184d7b49cc862db36719a2d92a2ce3ea012f02956a0734f6"
+    },
+    {
+      "name": "romance-079-breakup-logistics",
+      "package_sha256": "6846f24e4605fbf87a3a4d238353aabfda2926a7c5e6a36b24765711c90b0445"
+    },
+    {
+      "name": "romance-080-reconnect-after-breakup",
+      "package_sha256": "b5e5baa29f4d980bc44ee9476cc7fd8d73cccf302ac3b01d6107c7af217a38aa"
+    },
+    {
+      "name": "romance-081-betrayal-clarification",
+      "package_sha256": "780b8e93428674afa87a5aac857925d17ab9c53ac26aa95571895d54489fda9f"
+    },
+    {
+      "name": "romance-082-trust-repair-conditions",
+      "package_sha256": "b786337b38e6c969280d98a3be3a087f4ac639c5c20a7fc8f3eae8202d4399f8"
+    },
+    {
+      "name": "romance-083-meet-family",
+      "package_sha256": "3a015ad32398d8d36b95a0c2a407ef3b5067ce386eed5f2b7e19e151547300ec"
+    },
+    {
+      "name": "romance-084-marriage-timing",
+      "package_sha256": "46a47a86f766b030d8aaa98a168ecd0b7c6d10126907f425e9983a21a3c1eab1"
+    },
+    {
+      "name": "romance-085-parenthood-intentions",
+      "package_sha256": "967fefd4cf74063bd102e37e6a7f3a2623de3837f5e76cd1490fb6f16a887651"
+    },
+    {
+      "name": "romance-086-city-future-life",
+      "package_sha256": "ce1ed64cff1c9536ab5ddc06544742bb568a83c5a7ceba3f2e497733472e536d"
+    },
+    {
+      "name": "romance-087-shared-expenses",
+      "package_sha256": "be82ac7ee695b0ee9b1a1145ca158c8d09c43b053538733148cfcc36d008996d"
+    },
+    {
+      "name": "romance-088-housework-care",
+      "package_sha256": "aabad4ce073b4af8c719d7fbf5886657774e623aa780ae8275f4023eb8feb445"
+    },
+    {
+      "name": "romance-089-caregiving-transition",
+      "package_sha256": "305c3bb6fee208222b06a3943a3bfa34440c02ad0528417260106a6a3fe1e9f2"
+    },
+    {
+      "name": "romance-090-parents-boundaries",
+      "package_sha256": "0f8285de9102050794139ad69fb2cb00deed9bb29cf061c1be32ded9ef83c94c"
+    },
+    {
+      "name": "romance-091-blended-family",
+      "package_sha256": "ed486a8d603c449ada7aa0819bc1325f9801ae51c8acd7a7182c87b86e98cc7d"
+    },
+    {
+      "name": "romance-092-relationship-checkin",
+      "package_sha256": "6821c8cd412280aeeadb845ed4b44fc5c6212822c3f17773f94f22df286963d1"
+    }
+  ]
+}

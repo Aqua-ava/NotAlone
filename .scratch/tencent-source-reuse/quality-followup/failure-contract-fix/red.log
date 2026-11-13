@@ -1,0 +1,95 @@
+TAP version 13
+# Subtest: 61条合法direct候选在默认/旧NULL/v1/新v2均归一invalid_output，E1/V0
+not ok 1 - 61条合法direct候选在默认/旧NULL/v1/新v2均归一invalid_output，E1/V0
+  ---
+  duration_ms: 4.86425
+  type: 'test'
+  location: '$REPO_ROOT/backend-ts/test/extraction-flow-failure-contract.test.mjs:49:1'
+  failureType: 'testCodeFailure'
+  error: 'complete_claim_policy_invalid'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ExtractionProtocolError'
+  stack: |-
+    fail (file://$REPO_ROOT/backend-ts/src/complete-claim-verification.ts:60:42)
+    prepareSourceVerification (file://$REPO_ROOT/backend-ts/src/complete-claim-verification.ts:115:97)
+    runLegacyExtractionFlow (file://$REPO_ROOT/backend-ts/src/extraction-flow.ts:150:29)
+    async TestContext.<anonymous> (file://$REPO_ROOT/backend-ts/test/extraction-flow-failure-contract.test.mjs:51:40)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: 准备失败保留已解析的结构拒绝计数，不重试E或进入V
+not ok 2 - 准备失败保留已解析的结构拒绝计数，不重试E或进入V
+  ---
+  duration_ms: 1.935667
+  type: 'test'
+  location: '$REPO_ROOT/backend-ts/test/extraction-flow-failure-contract.test.mjs:60:1'
+  failureType: 'testCodeFailure'
+  error: 'complete_claim_policy_invalid'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ExtractionProtocolError'
+  stack: |-
+    fail (file://$REPO_ROOT/backend-ts/src/complete-claim-verification.ts:60:42)
+    prepareSourceVerification (file://$REPO_ROOT/backend-ts/src/complete-claim-verification.ts:115:97)
+    runLegacyExtractionFlow (file://$REPO_ROOT/backend-ts/src/extraction-flow.ts:150:29)
+    async TestContext.<anonymous> (file://$REPO_ROOT/backend-ts/test/extraction-flow-failure-contract.test.mjs:61:58)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: 准备阶段协议错误遇取消仍优先抛AbortError，E1/V0
+not ok 3 - 准备阶段协议错误遇取消仍优先抛AbortError，E1/V0
+  ---
+  duration_ms: 3.062042
+  type: 'test'
+  location: '$REPO_ROOT/backend-ts/test/extraction-flow-failure-contract.test.mjs:66:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      Comparison {
+    +   name: 'ExtractionProtocolError'
+    -   name: 'AbortError'
+      }
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    name: 'AbortError'
+  actual:
+  error: 'complete_claim_policy_invalid'
+  stack: |-
+    fail (file://$REPO_ROOT/backend-ts/src/complete-claim-verification.ts:60:42)
+    prepareSourceVerification (file://$REPO_ROOT/backend-ts/src/complete-claim-verification.ts:115:97)
+    runLegacyExtractionFlow (file://$REPO_ROOT/backend-ts/src/extraction-flow.ts:150:29)
+    async waitForActual (node:assert:644:5)
+    async Function.rejects (node:assert:767:25)
+    async TestContext.<anonymous> (file://$REPO_ROOT/backend-ts/test/extraction-flow-failure-contract.test.mjs:69:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  operator: 'rejects'
+  stack: |-
+    async TestContext.<anonymous> (file://$REPO_ROOT/backend-ts/test/extraction-flow-failure-contract.test.mjs:69:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: 60条边界仍一次E一次V并保留有据候选
+ok 4 - 60条边界仍一次E一次V并保留有据候选
+  ---
+  duration_ms: 15.706625
+  type: 'test'
+  ...
+# Subtest: verification_input追踪故障仍原样传播，E1/V0
+ok 5 - verification_input追踪故障仍原样传播，E1/V0
+  ---
+  duration_ms: 0.30025
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 2
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 135.547166

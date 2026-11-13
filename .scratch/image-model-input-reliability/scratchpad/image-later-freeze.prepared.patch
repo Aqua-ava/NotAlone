@@ -1,0 +1,16 @@
+*** Begin Patch
+*** Update File: backend-ts/src/memory/sqlite/documents/later-schedule.ts
+@@
+ import {assertContribution,assertInputs} from '../qualification.ts';
++import {currentContent,freezeContent} from '../content.ts';
+@@
+- for(const [index,source] of uniqueSources.entries())tx.run("INSERT INTO run_input(owner_id,run_id,input_no,role,kind,source_contact_id,item_id,message_id,record_id,accepted_interpretation_revision) VALUES(?,?,?,'context','message',?,NULL,?,?,?)",[ownerId,runId,index+1,source.contactId,source.messageId,source.recordId,source.acceptedRevision]);
++ for(const [index,source] of uniqueSources.entries()){
++  const message=tx.get("SELECT * FROM message WHERE owner_id=? AND contact_id=? AND id=? AND availability='available'",[ownerId,source.contactId,source.messageId]);
++  const frozen=message?currentContent(tx,ownerId,source.contactId,message):null;
++  if(!frozen)throw new StorageFailure('memory_content_source_stale');
++  tx.run("INSERT INTO run_input(owner_id,run_id,input_no,role,kind,source_contact_id,item_id,message_id,record_id,accepted_interpretation_revision) VALUES(?,?,?,'context','message',?,NULL,?,?,?)",[ownerId,runId,index+1,source.contactId,source.messageId,source.recordId,source.acceptedRevision]);
++  // 后续文字文档只冻结传递来源身份；不准备或发送原始图片。
++  freezeContent(tx,ownerId,runId,index+1,frozen);
++ }
+*** End Patch

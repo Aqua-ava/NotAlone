@@ -1,0 +1,24 @@
+# 06e：正式09联合验证交接（06仍claimed）
+- 起点 clean `d43865c27b7b51ac0b2acbc2304d3d0d200d8748`；本轮仅本地提交，无远端操作。
+- 正式09目标 `d1f29bf10d2b09491e6ce5dd3eb500e73a1cd8bd`；no-ff集成 `13a687f46fd4bb35760076f2dd5745903571ddbf`。
+- 联合测试初版 `e7eac56d08ff78fc6dc3d8a2d43265f30989ac14`；最终代码 `340c40db70a3f4cf72633849ff040bbf3d34c66d`（增量仅3行保留断言）。
+- 两处冲突合成：`owner_memory_store.py:550`先存合法后继、清实际分层回复依赖、再失效旧叶；`owner-layered.ts:101`纠错沿await事实通知，其他管理沿上下文通知，保有限同命令重试且不重复通知。
+- 其后只加HTTP测试，无额外产品修复、接口或schema变化；`correction-v1`保持，078摘要与原06相同，未抢079。
+- 新模块`backend/tests/integration/server/test_owner_layered_correction_reply_copies.py:24`构造A/B实际消费同一本人L3和L2 Tool，C连L1、初始/后继模型输入和carry内容均未消费目标。
+- 四条纵片`:237`起：本人L2/L3总结反馈及精确fact-error→correct；保正确L1、独立先前batch L2及C，清prepared、Tool正文、历史依据、编辑、未消费carry及已消费后继。
+- 同事务擦除`:159`在任何GET前查准备与carry输入；`:172`核公开读取、旧键重放、编辑及携入后继；不等下一次读取才清正文。
+- 恢复`:198`验证refresh/普通disable→enable不解除保护和pending；精确correct后pending0、新rev/supersedes正确，允许合法新version重建且独立本人L2仍在。
+- 迟到`:333`起四类×两处8例：实际Tool读取后下一模型发送前、最终writer保存前；断言全在gate外，核模型实际调用1/2次与旧键/保存拒绝，避免hook吞断言假绿。
+- 新模块初版12/12、84.444秒；最终完整12/12、75.368秒，均零跳过；是两轮，不合称一次全量。
+- 相关4组：纠错36/36 82.465秒；正式09 22/22 91.020秒；历史/carry31/31 48.410秒；07/08宽组86/86 285.509秒，均零跳过。
+- 86分母=画像类21+07类22+被08重复导入的07类22+08类21；目标43项实际通过，无需为分母重跑。产品源码在四组与最终12项窗口保持一致。
+- 实际装配：`overview_reply_support.py:92`的`build_reply_service -> create_app`正式回复链；整理为`LayeredMemoryService -> EmbeddedOrganizationDispatcher -> BackgroundTaskWorker`，仅外部模型Adapter受控替换。
+- 联合两轮runtime各19个实际加载模块，路径与摘要逐项匹配本树；四组另有运行清单，不把模块已加载说成真实供应商SDK或原生App通过。
+- 合并最小公开PG2例、typecheck、Node22及py_compile通过；原审查者对13a两冲突、e7e测试及340三行增量的Standards/Spec各0。
+- 19个本轮随机_test库均finally DROP/catalog_absent，精确复核剩余0；26个记录PID均不存在，未保留常驻进程或App/headless租约；归属与日志在仓库外完整交接。
+- 早期单例失败为合法独立画像/选择回执预期、active工作误continue、过短有界等待；wrapper首轮为tests导入错误。原分母/失败日志保留，后续校准不冒称产品Bug修复。
+- 实际命令：显式隔离环境`python -m unittest tests.integration.server.test_owner_layered_correction_reply_copies -v`；相关四组及runner完整参数见仓库外交接，均正式001–078、300秒上限。
+- 公开扫描`node scripts/check_public_history.mjs --ref main --working-tree`仍既存12项、新增0；私人资料、凭据、业务库、微信及外部消息未处理。
+- 原98原生整例FAIL、两阶段局部与d438 HTTP后验2/2继续分列；完整8步原生仍待实际复验，不借管理夹具称09回复链组合App通过。
+- 删除整理结果后的反馈/guard/pending语义仍等真正人类选择，未预选；真实模型0、质量unknown关闭；06/索引仍claimed、AC未勾选。
+- 本轮写测收尾后交还协调者，后续native25须由协调者排期；本上下文不启动App或浏览器。

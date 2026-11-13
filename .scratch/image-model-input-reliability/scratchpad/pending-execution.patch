@@ -1,0 +1,112 @@
+--- a/backend-ts/src/memory/sqlite/execution.ts
++++ b/backend-ts/src/memory/sqlite/execution.ts
+@@ -112,28 +112,57 @@
+  }),
+  action('claim','write',(tx,raw,lease)=>prepareStep(tx,raw as Parameters<typeof prepareStep>[1],lease)),
+  action('current','read',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string};currentAttempt(tx,i.ownerId,i.attemptId,lease);return true;}),
++ action('imageRecoveryPlan','read',(tx,raw,lease)=>{
++  const i=raw as {ownerId:string;attemptId:string};const {attempt}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
++  return tx.all(`SELECT e.payload FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id
++   WHERE e.owner_id=? AND a.step_id=? AND e.kind='image_input_degraded'`,[i.ownerId,attempt.step_id])
++   .map(row=>Number(JSON.parse(String(row.payload)).slot)).filter(slot=>Number.isSafeInteger(slot)&&slot>=0&&slot<=128);
++ }),
++ /** 原窗的已知终态只供审计；新子窗使用不同slot与请求，未知调用绝不释放。 */
++ action('supersedeImageInput','write',(tx,raw,lease)=>{
++  const i=raw as {ownerId:string;attemptId:string;slot:number;inputNos:number[]};const {attempt}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
++  if(!Number.isSafeInteger(i.slot)||i.slot<0||i.slot>128)fail('memory_extraction_input_invalid');
++  const calls=tx.all(`SELECT c.*,o.id AS op_id FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
++   WHERE c.owner_id=? AND o.memory_step_id=? AND o.slot=? AND o.purpose IN ('extraction','verification')`,[i.ownerId,attempt.step_id,i.slot]);
++  if(!calls.length||calls.some(call=>['sending','unknown'].includes(String(call.state))))fail('memory_extraction_receipt_unknown');
++  for(const call of calls){
++   if(call.state==='prepared'){
++    if(call.receipt!==null||call.sent_at!==null)fail('memory_extraction_receipt_unknown');
++    tx.run("UPDATE model_call SET state='failed',settlement_state='settled',error_code='not_dispatched' WHERE owner_id=? AND id=?",[i.ownerId,call.id]);
++   }else if(call.state==='failed'){
++    const receipt=call.receipt===null?null:JSON.parse(String(call.receipt));
++    if(call.settlement_state!=='settled'||call.error_code!=='not_dispatched'&&receipt?.dispatch!=='not_sent'&&receipt?.terminal_failure!=='transport')fail('memory_extraction_receipt_unknown');
++   }
++   event(tx,{ownerId:i.ownerId,attemptId:i.attemptId,kind:'image_input_degraded',callId:String(call.id),payload:{slot:i.slot,reason:'media_model_input_unavailable'},inputNos:i.inputNos},lease);
++   tx.run("UPDATE model_operation SET state='sealed',commit_forbidden_at=coalesce(commit_forbidden_at,?) WHERE owner_id=? AND id=?",[Date.now(),i.ownerId,call.op_id]);
++   for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='released' WHERE owner_id=? AND operation_id=?`,[i.ownerId,call.op_id]);
++  }
++  return true;
++ }),
+  action('event','write',(tx,raw,lease)=>event(tx,raw as Parameters<typeof event>[1],lease)),
+  action('prepareCall','write',(tx,raw,lease)=>{
+-  const i=raw as {ownerId:string;attemptId:string;purpose:string;request:unknown;provider:string;model:string;configurationId:string;inputCap:number;outputCap:number;inputNos:number[]};
++  const i=raw as {ownerId:string;attemptId:string;purpose:string;request:unknown;provider:string;model:string;configurationId:string;inputCap:number;outputCap:number;inputNos:number[];slot?:number};
+   const {attempt,task,rows}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
++  const slot=i.slot??0;if(!Number.isSafeInteger(slot)||slot<0||slot>128)fail('memory_extraction_input_invalid');
++  const selected=i.inputNos.map(no=>rows.find(row=>Number(row.input_no)===no)??fail('memory_extraction_input_not_frozen'));
+   if(!['extraction','verification'].includes(i.purpose)||!Number.isSafeInteger(i.inputCap)||i.inputCap<1||!Number.isSafeInteger(i.outputCap)||i.outputCap<1)fail('memory_extraction_model_configuration_invalid');
+   if(rows.some(row=>row.role==='target'&&tx.get("SELECT 1 FROM processing_item WHERE owner_id=? AND id=? AND extraction_state='succeeded'",[i.ownerId,row.item_id])))fail('memory_extraction_targets_completed_elsewhere');
+   const seal=sha256(JSON.stringify(i.request));
+-  let operation=tx.get('SELECT * FROM model_operation WHERE owner_id=? AND memory_step_id=? AND purpose=? AND slot=0',[i.ownerId,attempt.step_id,i.purpose]);
++  let operation=tx.get('SELECT * FROM model_operation WHERE owner_id=? AND memory_step_id=? AND purpose=? AND slot=?',[i.ownerId,attempt.step_id,i.purpose,slot]);
+   if(operation){
+    if(operation.input_seal!==seal||operation.commit_forbidden_at!==null)fail('memory_extraction_operation_changed');
+    const known=tx.get("SELECT c.*,e.payload FROM model_call c JOIN execution_event e ON e.owner_id=c.owner_id AND e.originated_call_id=c.id AND e.kind='model_output' WHERE c.owner_id=? AND c.operation_id=? AND c.state='succeeded' ORDER BY c.attempt_no DESC LIMIT 1",[i.ownerId,operation.id]);
+-   if(known&&operation.state!=='failed'){occupy(tx,i.ownerId,rows,String(operation.id),i.purpose,'sent');return {callId:String(known.id),reused:true,blocks:JSON.parse(String(known.payload)).blocks};}
++   if(known&&operation.state!=='failed'){occupy(tx,i.ownerId,selected,String(operation.id),i.purpose,'sent');return {callId:String(known.id),reused:true,blocks:JSON.parse(String(known.payload)).blocks};}
+    if(tx.get("SELECT 1 FROM model_call WHERE owner_id=? AND operation_id=? AND state IN ('prepared','sending','unknown')",[i.ownerId,operation.id]))fail('memory_extraction_receipt_unknown');
+   }else{
+-   const id=randomUUID();tx.run("INSERT INTO model_operation(owner_id,id,purpose,memory_step_id,slot,input_seal,state,commit_forbidden_at) VALUES(?,?,?,?,0,?,'prepared',NULL)",[i.ownerId,id,i.purpose,attempt.step_id,seal]);operation=tx.get('SELECT * FROM model_operation WHERE owner_id=? AND id=?',[i.ownerId,id])!;
+-   for(const item of rows.filter(r=>r.role==='target')){
++   const id=randomUUID();tx.run("INSERT INTO model_operation(owner_id,id,purpose,memory_step_id,slot,input_seal,state,commit_forbidden_at) VALUES(?,?,?,?,?,?,'prepared',NULL)",[i.ownerId,id,i.purpose,attempt.step_id,slot,seal]);operation=tx.get('SELECT * FROM model_operation WHERE owner_id=? AND id=?',[i.ownerId,id])!;
++   for(const item of selected.filter(r=>r.role==='target')){
+     assertEffectAvailable(tx,i.ownerId,item.item_id,i.purpose,id);
+     tx.run("INSERT INTO operation_item VALUES(?,?,?,?,'reserved')",[i.ownerId,id,item.item_id,i.purpose]);
+    }
+    for(const c of tx.all('SELECT source_contact_id FROM task_contribution WHERE owner_id=? AND task_id=?',[i.ownerId,task.id]))tx.run("INSERT INTO operation_scope VALUES(?,?,?,?,'reserved')",[i.ownerId,id,c.source_contact_id,i.purpose]);
+   }
+-  occupy(tx,i.ownerId,rows,String(operation.id),i.purpose,'reserved');
++  occupy(tx,i.ownerId,selected,String(operation.id),i.purpose,'reserved');
+   const callId=randomUUID(),requestId=randomUUID();const no=tx.get('SELECT coalesce(max(attempt_no),0)+1 AS n FROM model_call WHERE owner_id=? AND operation_id=?',[i.ownerId,operation.id])!.n;
+   tx.run("INSERT INTO model_call(owner_id,id,operation_id,attempt_no,step_attempt_id,provider,request_key,state,reserved_budget_units,settlement_state,model,configuration_id,input_cap,output_cap) VALUES(?,?,?,?,?,?,?,'prepared',0,'reserved',?,?,?,?)",[i.ownerId,callId,operation.id,no,i.attemptId,textId(i.provider),requestId,textId(i.model),textId(i.configurationId),i.inputCap,i.outputCap]);
+   event(tx,{ownerId:i.ownerId,attemptId:i.attemptId,kind:'model_input',callId,payload:i.request,inputNos:i.inputNos},lease);return {callId,requestId,reused:false};
+@@ -163,7 +192,8 @@
+    :JSON.stringify(old.input_budget)===JSON.stringify(budget);
+   if(!sameIdentity||!sameBudget)fail('memory_extraction_receipt_mismatch');
+   if(c.state==='succeeded'||c.state==='failed'){if((redacted?minimalModelReceipt(c.receipt)!==minimalModelReceipt(r):c.receipt!==JSON.stringify(r)))fail('memory_extraction_receipt_conflict');return true;}
+-  const unknown=r.outcome==='unknown'||r.outcome==='pending'||r.dispatch==='authorized_unconfirmed';
++  const terminalTransport=r.outcome==='failed'&&r.terminal_failure==='transport'&&r.dispatch==='authorized_unconfirmed'&&c.op_purpose!=='document_scene'&&c.op_purpose!=='document_profile';
++  const unknown=r.outcome==='unknown'||r.outcome==='pending'||r.dispatch==='authorized_unconfirmed'&&!terminalTransport;
+   const state=unknown?'unknown':r.outcome==='succeeded'?'succeeded':'failed';
+   const usage=r.usage;const actual=usage?usage.input_tokens+usage.output_tokens:null;
+   tx.run('UPDATE model_call SET state=?,received_at=?,actual_budget_units=?,settlement_state=?,receipt=? WHERE owner_id=? AND id=?',[state,Date.now(),actual,unknown?'unknown':'settled',redacted?minimalModelReceipt(r):JSON.stringify(r),r.owner_id,c.id]);
+@@ -181,18 +211,30 @@
+  }),
+  action('unconfirmed','read',(tx,raw)=>{const i=raw as {owner_id:string;contact_id:string|null};return tx.all(`SELECT DISTINCT c.request_key FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id JOIN operation_scope s ON s.owner_id=c.owner_id AND s.operation_id=c.operation_id WHERE c.owner_id=? AND o.purpose IN ('extraction','verification','adjudication','relation_verification','merge_verification','document_scene','document_profile') AND c.state IN ('sending','unknown')${i.contact_id===null?'':' AND s.source_contact_id=?'}`,i.contact_id===null?[textId(i.owner_id)]:[textId(i.owner_id),textId(i.contact_id)]).map(c=>String(c.request_key));}),
+  action('finish','write',(tx,raw,lease)=>{
+-  const i=raw as {ownerId:string;attemptId:string;outcome:{accepted:unknown[];extraction_completed:boolean;failure_kind:string|null;rejected_count:number;candidate_trace_ids:string[];verification:{fact:unknown;result:unknown}[]};verificationRefs?:(CandidateVerificationReference|null)[];inputNos:number[]};const {attempt,task,rows}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
++  const i=raw as {ownerId:string;attemptId:string;outcome:{accepted:unknown[];extraction_completed:boolean;failure_kind:string|null;rejected_count:number;candidate_trace_ids:string[];verification:{fact:unknown;result:unknown}[]};verificationRefs?:(CandidateVerificationReference|null)[];inputNos:number[];candidateInputNos?:number[][];completedGroups?:{slot:number;inputNos:number[]}[]};const {attempt,task,rows}=currentAttempt(tx,i.ownerId,i.attemptId,lease);
+   if(!i.outcome.extraction_completed||i.outcome.failure_kind!==null)fail('memory_extraction_protocol_incomplete');
+-  if(tx.get("SELECT 1 FROM model_call WHERE owner_id=? AND step_attempt_id=? AND state<>'succeeded'",[i.ownerId,i.attemptId]))fail('memory_extraction_receipt_unknown');
++  if(tx.get(`SELECT 1 FROM model_call c WHERE c.owner_id=? AND c.step_attempt_id=? AND c.state<>'succeeded'
++   AND NOT(c.state='failed' AND c.settlement_state='settled' AND EXISTS(SELECT 1 FROM execution_event e WHERE e.owner_id=c.owner_id AND e.originated_call_id=c.id AND e.kind='image_input_degraded'))`,[i.ownerId,i.attemptId]))fail('memory_extraction_receipt_unknown');
++  if(i.completedGroups){
++   const covered=i.completedGroups.flatMap(group=>{
++    if(!tx.get(`SELECT 1 FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
++     WHERE c.owner_id=? AND o.memory_step_id=? AND o.slot=? AND o.purpose='extraction' AND c.state='succeeded'`,[i.ownerId,attempt.step_id,group.slot]))fail('memory_extraction_protocol_incomplete');
++    return group.inputNos.filter(no=>rows.some(row=>Number(row.input_no)===no&&row.role==='target'));
++   });
++   const expected=rows.filter(row=>row.role==='target').map(row=>Number(row.input_no));
++   if(covered.length!==expected.length||new Set(covered).size!==covered.length||expected.some(no=>!covered.includes(no)))fail('memory_extraction_protocol_incomplete');
++  }
+   for(const [index,value] of i.outcome.accepted.entries()){
+-   const f=value as {subject:string;source_message_ids:string[]};if(!f.source_message_ids?.length||!f.source_message_ids.every(id=>rows.some(r=>r.message_id===id))||!f.source_message_ids.some(id=>rows.some(r=>r.message_id===id&&r.role==='target')))fail('memory_extraction_source_stale');
++   const inputNos=i.candidateInputNos?.[index]??i.inputNos;
++   const candidateRows=inputNos.map(no=>rows.find(row=>Number(row.input_no)===no)??fail('memory_extraction_input_not_frozen'));
++   const f=value as {subject:string;source_message_ids:string[]};if(!f.source_message_ids?.length||!f.source_message_ids.every(id=>candidateRows.some(r=>r.message_id===id))||!f.source_message_ids.some(id=>candidateRows.some(r=>r.message_id===id&&r.role==='target')))fail('memory_extraction_source_stale');
+    const verification=i.verificationRefs?.[index]??null;
+    if(verification){
+     const checked=tx.get("SELECT payload FROM execution_event WHERE owner_id=? AND id=? AND step_attempt_id=? AND kind='verification'",[i.ownerId,verification.eventId,i.attemptId]);
+     if(!checked||verification.candidateTraceId!==i.outcome.candidate_trace_ids[index]||!i.outcome.verification.some(v=>JSON.stringify(v.fact)===JSON.stringify(value)&&JSON.stringify(v.result)===JSON.stringify(JSON.parse(String(checked.payload)).result)))fail('memory_extraction_verification_unbound');
+    }
+-   const outputId=event(tx,{ownerId:i.ownerId,attemptId:i.attemptId,kind:f.subject==='self'?'verified_self_contribution':'verified_output',payload:{outputNo:index+1,fact:value,scopeKind:f.subject==='self'?'self':'contact',contactId:f.subject==='self'?null:String(task.contact_id),origin:'auto',state:'verified_pending_decision',verification},inputNos:i.inputNos},lease);
+-   if(verification&&candidateAdmission(tx,i.ownerId,{...tx.get('SELECT * FROM execution_event WHERE owner_id=? AND id=?',[i.ownerId,outputId])!,scope_kind:'contact',run_id:task.run_id},value as Record<string,any>,rows).state!=='verified')fail('memory_extraction_verification_unbound');
++   const outputId=event(tx,{ownerId:i.ownerId,attemptId:i.attemptId,kind:f.subject==='self'?'verified_self_contribution':'verified_output',payload:{outputNo:index+1,fact:value,scopeKind:f.subject==='self'?'self':'contact',contactId:f.subject==='self'?null:String(task.contact_id),origin:'auto',state:'verified_pending_decision',verification},inputNos},lease);
++   if(verification&&candidateAdmission(tx,i.ownerId,{...tx.get('SELECT * FROM execution_event WHERE owner_id=? AND id=?',[i.ownerId,outputId])!,scope_kind:'contact',run_id:task.run_id},value as Record<string,any>,candidateRows).state!=='verified')fail('memory_extraction_verification_unbound');
+   }
+   event(tx,{ownerId:i.ownerId,attemptId:i.attemptId,kind:'stage_result',payload:{outcome:i.outcome.accepted.length?'verified_pending_decision':'no_new_memory',rejected:i.outcome.rejected_count,laterStages:'pending'},inputNos:i.inputNos},lease);
+   for(const row of rows.filter(r=>r.role==='target'))tx.run("UPDATE processing_item SET extraction_state='succeeded' WHERE owner_id=? AND id=?",[i.ownerId,row.item_id]);

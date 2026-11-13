@@ -1,0 +1,38 @@
+# 06 实现交接（未完成，State仍claimed）
+- 树：本票独立工作树（具体路径见端侧交接副本）；分支codex/layered-memory-06；HEAD f1403bad，clean。
+- 已merge正式08基线43ad53eb到55dc55a7；仅planning元数据冲突取最新状态，产品无冲突。
+- 产品切片提交：6b80fbc0首summary-error；5639957d精确fact入口+correction-v1；f1403bad来源裁减+ownerL3恢复。
+- 06票 .scratch/layered-relationship-memory/issues/06-layered-memory-corrections.md；权威spec S6/I3/I4/I6/I8/T1/T2及ticket-proposal/planning。
+- 公开命令/候选合同 见端侧A-06-interface.md（最新版，未签收）。078预留06；079归C10。
+- 关键新增 backend/src/notalone/persistence/layered_corrections.py：summary/fact命令、unprotected证据过滤、目标撤回。
+- 078 migration已有反馈表、correction_revision、batch/profile_batch.correction_input；source wrapper每轮裁减活guard并推进修订。
+- layered_memory.py work.correction_revision/corrections，模型前后与writer同连接重验；snapshot仍schema2，反馈通过org generation撤旧快照。
+- layered_profile.py为全当前集合固定IDs，但实际只读取独立合法主题；保留正确旧L2，允许新独立本人背景。
+- application/layered_memory_service.py两种公开命令；所有整理contract追加:correction-v1；Adapter有反馈时具名corrections参数。
+- memory/layered_correction_validation.py：受限逐字新事实+唯一引用/固定title/hint/uncertain文案，未知自由概括不放。真实质量unknown。
+- 旧证据保护目前取目标实际完整input_manifest（包括未引用），canonical message/原版本链过滤；manual共享source ID不作为错误身份。
+- 同批次独立主题只反馈A时B原版本保留可读；未来未知重概括保守，不能把已准入B一并撤掉。
+- source_deletion.py最终残留复核新增feedback/profile deps；仍须更严guard有效性/owner两阶段/08副本闭包验证。
+- 目前新增公开HTTP测试唯一class tests.integration.server.test_layered_memory_corrections.LayeredMemoryCorrectionHttpTest，共6方法。
+- 已绿：contactL2 summary不改L1；fact仅实际叶+原correct；新独立手录+实际纠错对照；同批B保留capture/read；ownerL3新独立背景；B→A两阶段来源清除。
+- 最后全class6：A-06-slice3-class.log，12.058s OK；ownership catalog_absent；env-i双禁dotenv、正式001–078迁移。
+- 运行器外部A-06-run.py：参数 run-name + unittest精确case/class；自建随机*_test先marker，finally DROP+catalog_absent；输出日志另存。
+- 启动务必 env -i PATH="$CONDA_PREFIX/bin:/usr/bin:/bin:/usr/sbin:/sbin" "$CONDA_PREFIX/bin/python" <runner> ...；返回session要保留等待。
+- 所有红/失败保留：red-summary404；green-summary SQL误用observation.status；red-fact404；red-independent缺实际对照；red-same-batch撤B；red-two-stage末次revision未变；red-owner-profile原测试缩进错误及真红profile_attempt_interrupted，均已修正绿。
+- 桥接/UI完全未改：desktop/src/main/memory/{bridge,controller,owner-layered,layered-read}.ts；shared/memory-bridge.ts；renderer LayeredMemoryPanel/OwnerLayeredMemoryPanel/MemoryPage。
+- 下一切片先Node公开bridge红→支持summary-error/fact-error、当前target验证及暂撤缓存；再React双scope×layer入口，fact定位指定L1而非整列表。
+- 前端现管理request只允许旧actions；GET parser可扩可选反馈字段兼容旧fixture。facts导航需精确目标id，现LayeredMemoryPanel facts()只跳列表。
+- Node controller tests可无头跑；任何浏览器/页面/真实App先向root协调资源。禁止启动App抢前台；root负责CUA、两轴审查及D整合。
+- 后续必须：contactL3/ownerL2与fact全矩阵、跨owner/contact、同message新source_ref/旧链包装/无关追加/换题拆并/跨层保护。
+- 必须：并发反馈/更正/来源删除/停用ABA/撤回/恢复/迟到，先最小公开HTTP红绿，再05/07/08相关模块与必要广回归。
+- hook内仅记录公开响应，断言在hook外先核收据数；Embedded dispatcher模型中持run_worker全局锁，不在hook等待物理DELETE。
+- 来源DELETE202→当场阻读/旧snapshot无效→晚结果拒发布→worker释放后等物理清理，不能改生产锁/增timeout掩盖协调错误。
+- 必须新增08实际read_scenario工具→保存依据/准备/回复/讨论/恢复副本，反馈撤回与来源删除闭包，不推给09/11。
+- 必须077已有资料→078真实升级/重复noop/约束保留；当前每轮仅空库全链001–078，不能冒称旧库升级已验。
+- 真正未决：删除整理结果后重开是否全清保护（原S7）或保留可管理无正文guard；root/D已问真实用户，未回，不预选。普通刷新/停用重开/恢复需保留保护。
+- 078字段可供C10临时兼容，root已知f1403bad主DDL；未决删除结果分支预计仅命令行为，但仍WIP不进integration。
+- 当前delete结果没有按最终语义清feedback；不得作为候选完成，必须等决定后实现+测试。主动删feedback入口亦未实现。
+- A-06-interface说明literal规则及真实quality关闭，避免宣称通用语义防重或完整可用。
+- npm typecheck在merge时运行未见错误；public --ref main扫描有继承docs本机路径提示，需按root固定070说明/复核，不能宣称零提示。
+- 全程未读.env/业务库/私聊、无外部模型/消息/远端；只自有marker库资源；未启动App/浏览器。
+- 完成后Answer/索引写真实范围但State保持claimed，root再启动新两轴review；不要自行开reviewer或发别的chat。

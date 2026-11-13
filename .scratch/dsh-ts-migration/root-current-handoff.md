@@ -1,0 +1,19 @@
+# DSH／TypeScript迁移最终交接
+- 25、26按用户明确修订范围resolved；迁移主线已完成，未发布。
+- 固定96条：96/96成功、96次物理调用、0重试；完整原记录私有保留。
+- 调用/tokens/延迟沿预注册算法通过，实际质量未评；费用/输出由用户豁免。
+- 用户取消盲评与启动/RSS对照：skipped_by_user，未评/未测，不能称通过。
+- 已知三路毫秒级HTTP退化non_blocking_by_user；OCR和记忆语义质量deferred_by_user。
+- 正常默认npm run dev只用TypeScript/DSH，不需要runtime标记、Python路径或Conda。
+- 原env、启动配置、PG/资料位置、身份与116SQL保留；旧Python字段兼容忽略。
+- 旧Python生产实现、LangChain/LangGraph/Deep Agents、旁车及回退入口退役。
+- 最终实际同联系人/同讨论生成33.633秒完成，两组候选保存，显式重读后可编辑复制，正常退出0进程。
+- 原先25秒运输/20秒循环/30秒租约失败保留；前台90/120/120秒有界对齐，后台20秒与取消/来源/迟到保护保留。
+- 启动生命周期只观测自有进程，460次未见Python；无RSS/启动性能采样。
+- 只做受影响最小回归与TSC，未重跑已有效全量或新增审查。
+- 历史Python测试保留固定23a树+显式独立venv；未执行、不算当前通过。
+- 微信原生工具LLDB内嵌CPython独立保留；不宣称全产品无CPython。
+- 用户原3处测试修改与未归属证据保留；未发送外部消息、打包、push或建PR。
+- 证据：final-acceptance-closeout/capture-summary.json、ticket26-retirement-result/verification.json。
+- 精确最小命令/边界：ticket26-host-handoff.md、ticket26-desktop-handoff.md、ticket26-fixtures-handoff.md、ticket26-generation-transport-handoff.md。
+- 最终本地提交与公开扫描由root收尾；以后新问题作为新任务，不恢复本轮已取消评测。

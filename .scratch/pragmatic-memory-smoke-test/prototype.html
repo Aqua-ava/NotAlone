@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>语用记忆提取：最小验证原型</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d9dee8;
+      --panel: #ffffff;
+      --wash: #f5f7fb;
+      --blue: #315efb;
+      --blue-wash: #edf2ff;
+      --green: #13795b;
+      --green-wash: #eaf8f2;
+      --amber: #9a6700;
+      --amber-wash: #fff7df;
+      --red: #b42318;
+      --red-wash: #fff0ee;
+      --shadow: 0 14px 36px rgba(25, 37, 63, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: linear-gradient(180deg, #eef3ff 0, #f7f9fc 360px, var(--wash) 100%);
+      font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    }
+    button, select { font: inherit; }
+    button { cursor: pointer; }
+    .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 42px 0 64px; }
+    .eyebrow { color: var(--blue); font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 8px 0 10px; font-size: clamp(28px, 5vw, 46px); line-height: 1.12; letter-spacing: -.04em; }
+    h2, h3 { margin: 0; line-height: 1.25; }
+    p { margin: 8px 0; }
+    .lede { max-width: 780px; color: var(--muted); font-size: 17px; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .badge { border: 1px solid #cdd7ff; border-radius: 999px; padding: 4px 10px; color: #2947b9; background: rgba(255,255,255,.82); font-size: 12px; font-weight: 700; }
+    .question, .panel { border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,.94); box-shadow: var(--shadow); }
+    .question { margin-top: 28px; padding: 22px 24px; border-left: 5px solid var(--blue); }
+    .question strong { display: block; margin-bottom: 4px; font-size: 17px; }
+    .tabs { display: flex; gap: 8px; overflow-x: auto; margin: 28px 0 12px; padding-bottom: 2px; }
+    .tab { border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; color: var(--muted); background: #fff; white-space: nowrap; }
+    .tab.active { border-color: var(--blue); color: #fff; background: var(--blue); }
+    .walkthrough { min-height: 104px; padding: 18px 20px; background: var(--blue-wash); box-shadow: none; }
+    .walkthrough .step-label { color: var(--blue); font-size: 12px; font-weight: 800; letter-spacing: .08em; }
+    .walkthrough h2 { margin-top: 4px; font-size: 20px; }
+    .walkthrough p { color: #48536b; }
+    .layout { display: grid; grid-template-columns: 310px minmax(0, 1fr); gap: 18px; margin-top: 18px; align-items: start; }
+    .control-panel { padding: 18px; position: sticky; top: 16px; }
+    .control-panel label { display: block; margin: 14px 0 6px; color: var(--muted); font-size: 13px; font-weight: 700; }
+    select { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 11px; color: var(--ink); background: #fff; }
+    .button-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .primary, .secondary, .quiet { border-radius: 10px; padding: 9px 12px; font-weight: 700; }
+    .primary { border: 1px solid var(--blue); color: #fff; background: var(--blue); }
+    .secondary { border: 1px solid #c8d2ff; color: #2947b9; background: var(--blue-wash); }
+    .quiet { border: 1px solid var(--line); color: var(--muted); background: #fff; }
+    .small-note { color: var(--muted); font-size: 12px; }
+    .scenario-list { display: grid; gap: 8px; margin-top: 18px; }
+    .scenario-button { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; color: var(--ink); background: #fff; text-align: left; }
+    .scenario-button:hover, .scenario-button.active { border-color: var(--blue); background: var(--blue-wash); }
+    .scenario-button .scenario-title { display: block; font-weight: 800; }
+    .scenario-button .scenario-tag { display: block; color: var(--muted); font-size: 12px; }
+    .main-stack { display: grid; gap: 18px; min-width: 0; }
+    .case-header { padding: 20px 22px; }
+    .case-header .meta { margin-top: 6px; color: var(--muted); font-size: 13px; }
+    .dialogue { display: grid; gap: 8px; margin-top: 16px; }
+    .message { border-radius: 12px; padding: 10px 12px; background: #f6f7fa; }
+    .message .speaker { display: block; margin-bottom: 2px; color: var(--muted); font-size: 12px; font-weight: 800; }
+    .message.contact { border-left: 3px solid #85a4ff; }
+    .message.user { border-left: 3px solid #82c9ac; }
+    .result-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .result-card { padding: 20px; min-width: 0; }
+    .result-card h3 { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 17px; }
+    .result-card h3 span { color: var(--muted); font-size: 11px; font-weight: 700; }
+    .empty { margin-top: 14px; color: var(--muted); }
+    .output-table { display: grid; gap: 7px; margin-top: 14px; }
+    .output-row { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 10px; padding-bottom: 7px; border-bottom: 1px solid #edf0f5; }
+    .output-row:last-child { border-bottom: 0; }
+    .output-key { color: var(--muted); font-size: 12px; }
+    .output-value { overflow-wrap: anywhere; font-weight: 650; }
+    .decision { margin-top: 14px; border-radius: 12px; padding: 14px; }
+    .decision.candidate, .decision.plan_candidate { border: 1px solid #b9e4d2; color: var(--green); background: var(--green-wash); }
+    .decision.pending { border: 1px solid #f1d690; color: var(--amber); background: var(--amber-wash); }
+    .decision.invalidated, .decision.blocked { border: 1px solid #f1b8b0; color: var(--red); background: var(--red-wash); }
+    .decision .action { font-size: 20px; font-weight: 850; }
+    .decision .reason { margin-top: 4px; color: inherit; font-size: 13px; }
+    .ledger { padding: 20px; }
+    .ledger-list { display: grid; gap: 8px; margin-top: 14px; }
+    .ledger-item { display: grid; grid-template-columns: 150px 1fr auto; gap: 10px; align-items: center; border-bottom: 1px solid #edf0f5; padding: 8px 0; }
+    .ledger-item:last-child { border-bottom: 0; }
+    .ledger-item .prop { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .action-chip { border-radius: 999px; padding: 2px 8px; font-size: 12px; font-weight: 800; }
+    .action-chip.candidate, .action-chip.plan_candidate { color: var(--green); background: var(--green-wash); }
+    .action-chip.pending { color: var(--amber); background: var(--amber-wash); }
+    .action-chip.invalidated, .action-chip.blocked { color: var(--red); background: var(--red-wash); }
+    .json-panel { padding: 20px; }
+    pre { max-height: 480px; overflow: auto; margin: 14px 0 0; border-radius: 12px; padding: 14px; color: #dae2f4; background: #182033; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .footnote { color: var(--muted); font-size: 12px; }
+    .danger-note { margin-top: 12px; border-radius: 10px; padding: 10px 12px; color: var(--red); background: var(--red-wash); font-size: 13px; }
+    @media (max-width: 860px) {
+      .layout { grid-template-columns: 1fr; }
+      .control-panel { position: static; }
+      .result-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      .shell { width: min(100% - 20px, 1180px); padding-top: 28px; }
+      .question, .panel { border-radius: 14px; }
+      .question, .case-header, .result-card, .ledger, .json-panel { padding: 16px; }
+      .output-row { grid-template-columns: 108px minmax(0, 1fr); }
+      .ledger-item { grid-template-columns: 1fr auto; }
+      .ledger-item .prop { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="eyebrow">NotAlone · pragmatic memory prototype</div>
+    <h1>一句话，先理解意图，再决定能不能记。</h1>
+    <p class="lede">这个离线原型把“模型解释”和“确定性安全闸门”拆开。模型可以说它理解成了什么，但不能直接把“吹牛、假设、引用或不确定表达”写成长期事实。</p>
+    <div class="badge-row">
+      <span class="badge">模型：DeepSeek V4 Flash</span>
+      <span class="badge">thinking：disabled</span>
+      <span class="badge">temperature：0.0</span>
+      <span class="badge">不联网 · 不写数据库</span>
+    </div>
+
+    <section class="question" aria-labelledby="question-title">
+      <strong id="question-title">要验证的问题</strong>
+      <span>当“我贷款 30 万加仓”既可能是真事，也可能是吹牛时，系统能否保留语用解释和证据状态，而不是只看字面就确认？</span>
+    </section>
+
+    <nav class="tabs" aria-label="验证步骤">
+      <button class="tab active" data-tab="question">1 · 问题</button>
+      <button class="tab" data-tab="interpret">2 · 模型解释</button>
+      <button class="tab" data-tab="gate">3 · 安全闸门</button>
+      <button class="tab" data-tab="evidence">4 · 后续证据</button>
+    </nav>
+    <section class="panel walkthrough" id="walkthrough" aria-live="polite"></section>
+
+    <div class="layout">
+      <aside class="panel control-panel">
+        <h2>自由操作</h2>
+        <p class="small-note">先选一个合成场景，再运行“模拟模型解释”。</p>
+        <label for="case-select">选择场景</label>
+        <select id="case-select"></select>
+        <div class="button-row">
+          <button class="primary" id="run-button">运行解释</button>
+          <button class="quiet" id="reset-button">重置</button>
+        </div>
+        <div class="danger-note">这里的“模型输出”是固定合成结果，用于验证状态机；真正调用 DeepSeek 请运行旁边的 <code>run_live_smoke.py</code>。</div>
+        <div class="scenario-list" id="scenario-list"></div>
+      </aside>
+
+      <section class="main-stack">
+        <section class="panel case-header">
+          <h2 id="case-title"></h2>
+          <div class="meta" id="case-meta"></div>
+          <div class="dialogue" id="dialogue"></div>
+        </section>
+
+        <div class="result-grid">
+          <section class="panel result-card">
+            <h3>模拟模型解释 <span>只提出解释</span></h3>
+            <div id="model-result" class="empty">还没有运行。模型不拥有状态迁移权。</div>
+          </section>
+          <section class="panel result-card">
+            <h3>确定性安全闸门 <span>真正决定动作</span></h3>
+            <div id="decision-result" class="empty">还没有运行。先看左侧场景，再点击“运行解释”。</div>
+          </section>
+        </div>
+
+        <section class="panel ledger">
+          <h2>候选账本</h2>
+          <p class="small-note">这里展示本次原型操作中每个候选的状态；没有任何一条会自动变成 <code>confirmed_memory</code>。</p>
+          <div id="ledger-list" class="ledger-list"></div>
+        </section>
+
+        <section class="panel json-panel">
+          <h2>完整状态</h2>
+          <p class="small-note">每次选择场景、运行解释、切换步骤或重置后都会更新。实际接入时，这份状态应保留来源消息和决策原因。</p>
+          <pre id="state-json" aria-label="完整状态 JSON"></pre>
+        </section>
+      </section>
+    </div>
+    <p class="footnote">原型边界：只使用合成中文，不读取联系人、不访问网络、不连接 PostgreSQL、不发送消息。通过原型不等于真实联系人验收。</p>
+  </main>
+
+  <script>
+    /* ------------------------- Pure logic: no DOM references ------------------------- */
+    const ENUMS = Object.freeze({
+      dialogueAct: ["statement", "plan", "hypothetical", "boast", "quote", "uncertain", "correction", "evidence"],
+      assertionStatus: ["asserted", "planned", "hypothetical", "quoted", "uncertain", "retracted"],
+      literalness: ["literal", "exaggerated", "ironic", "non_literal"],
+      timeStatus: ["past", "current", "future", "timeless"],
+      evidenceRelation: ["direct", "supporting", "contradicts", "insufficient"]
+    });
+
+    const CASES = Object.freeze([
+      {
+        id: "fact",
+        title: "明确事实",
+        tag: "asserted · literal · direct",
+        dialogue: [{ speaker: "联系人", text: "我现在在上海。", tone: "contact" }],
+        sourceMessageIds: ["msg-fact-1"],
+        expected: "candidate",
+        explanation: "字面陈述、当前时间、直接来源，可以先生成 candidate；仍不自动确认。",
+        output: { proposition: "联系人现在在上海", dialogue_act: "statement", assertion_status: "asserted", literalness: "literal", time_status: "current", alternatives: [], evidence_relation: "direct", source_message_ids: ["msg-fact-1"], model_confidence: 0.94 }
+      },
+      {
+        id: "plan",
+        title: "未来计划",
+        tag: "planned · future",
+        dialogue: [{ speaker: "联系人", text: "我下个月准备去上海。", tone: "contact" }],
+        sourceMessageIds: ["msg-plan-1"],
+        expected: "plan_candidate",
+        explanation: "这是意向，不是已经发生的事实；保留为 plan_candidate。",
+        output: { proposition: "联系人计划下个月去上海", dialogue_act: "plan", assertion_status: "planned", literalness: "literal", time_status: "future", alternatives: ["可能只是随口安排"], evidence_relation: "direct", source_message_ids: ["msg-plan-1"], model_confidence: 0.91 }
+      },
+      {
+        id: "hypothetical",
+        title: "假设条件",
+        tag: "hypothetical · future",
+        dialogue: [{ speaker: "联系人", text: "如果我有 30 万，我就加仓。", tone: "contact" }],
+        sourceMessageIds: ["msg-hypothetical-1"],
+        expected: "pending",
+        explanation: "条件句只表达假设，不能直接记成“联系人有 30 万”或“已经加仓”。",
+        output: { proposition: "联系人在拥有 30 万的条件下会考虑加仓", dialogue_act: "hypothetical", assertion_status: "hypothetical", literalness: "literal", time_status: "future", alternatives: ["投资设想", "反事实表达"], evidence_relation: "insufficient", source_message_ids: ["msg-hypothetical-1"], model_confidence: 0.88 }
+      },
+      {
+        id: "boast",
+        title: "吹牛或夸张",
+        tag: "boast · exaggerated · insufficient",
+        dialogue: [{ speaker: "联系人", text: "明天 100w 到手，我贷款 30w 加仓。", tone: "contact" }, { speaker: "用户", text: "你又开始吹了。", tone: "user" }],
+        sourceMessageIds: ["msg-boast-1", "msg-boast-2"],
+        expected: "pending",
+        explanation: "即使第一句话是陈述形式，后文已经提供了夸张/吹牛的语境信号；只能 pending。",
+        output: { proposition: "联系人声称明天会拿到 100 万并贷款 30 万加仓", dialogue_act: "boast", assertion_status: "asserted", literalness: "exaggerated", time_status: "future", alternatives: ["夸张", "玩笑", "真实计划但无证据"], evidence_relation: "insufficient", source_message_ids: ["msg-boast-1", "msg-boast-2"], model_confidence: 0.76 }
+      },
+      {
+        id: "quote",
+        title: "转述或引用",
+        tag: "quoted · literal",
+        dialogue: [{ speaker: "联系人", text: "他说他要贷款 30 万。", tone: "contact" }],
+        sourceMessageIds: ["msg-quote-1"],
+        expected: "pending",
+        explanation: "主语是“他说”，不是联系人本人；引用内容不能直接归因给联系人。",
+        output: { proposition: "某人声称要贷款 30 万", dialogue_act: "quote", assertion_status: "quoted", literalness: "literal", time_status: "future", alternatives: ["联系人只是在转述第三方"], evidence_relation: "direct", source_message_ids: ["msg-quote-1"], model_confidence: 0.93 }
+      },
+      {
+        id: "uncertain",
+        title: "不确定表达",
+        tag: "uncertain · future",
+        dialogue: [{ speaker: "联系人", text: "我可能下个月去上海。", tone: "contact" }],
+        sourceMessageIds: ["msg-uncertain-1"],
+        expected: "pending",
+        explanation: "“可能”明确降低了承诺强度；保存为待确认候选，而不是确定偏好或事实。",
+        output: { proposition: "联系人可能下个月去上海", dialogue_act: "uncertain", assertion_status: "uncertain", literalness: "literal", time_status: "future", alternatives: ["尚未决定", "礼貌性回应"], evidence_relation: "insufficient", source_message_ids: ["msg-uncertain-1"], model_confidence: 0.89 }
+      },
+      {
+        id: "correction",
+        title: "纠正或撤回",
+        tag: "retracted · contradicts",
+        dialogue: [{ speaker: "联系人", text: "我上次说错了，没有贷款，那是吹牛。", tone: "contact" }],
+        sourceMessageIds: ["msg-correction-1"],
+        invalidates: ["boast", "hypothetical"],
+        expected: "invalidated",
+        explanation: "明确撤回/纠正应让相关旧候选失效；不能只新增一条“他说没有贷款”的孤立记忆。",
+        output: { proposition: "联系人撤回此前关于贷款的说法", dialogue_act: "correction", assertion_status: "retracted", literalness: "literal", time_status: "past", alternatives: [], evidence_relation: "contradicts", source_message_ids: ["msg-correction-1"], model_confidence: 0.97 }
+      },
+      {
+        id: "evidence",
+        title: "后续支持证据",
+        tag: "evidence · supporting",
+        dialogue: [{ speaker: "联系人", text: "我已经提交贷款申请了。", tone: "contact" }],
+        sourceMessageIds: ["msg-evidence-1"],
+        supports: ["plan"],
+        expected: "candidate",
+        explanation: "后续行动证据可以支持此前计划，但仍只是新的 candidate；正式确认还要经过采纳门槛。",
+        output: { proposition: "联系人已经提交贷款申请", dialogue_act: "evidence", assertion_status: "asserted", literalness: "literal", time_status: "current", alternatives: ["只是口头声称，仍需更多证据"], evidence_relation: "supporting", source_message_ids: ["msg-evidence-1"], model_confidence: 0.9 }
+      }
+    ]);
+
+    function clone(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function getCase(caseId) {
+      return CASES.find((item) => item.id === caseId) || CASES[0];
+    }
+
+    function validateModelOutput(output, sourceMessageIds) {
+      const errors = [];
+      if (!output || typeof output !== "object") return ["输出不是对象"];
+      for (const field of ["proposition", "dialogue_act", "assertion_status", "literalness", "time_status", "evidence_relation"]) {
+        if (typeof output[field] !== "string" || !output[field].trim()) errors.push(`${field} 缺失`);
+      }
+      for (const [field, values] of Object.entries(ENUMS)) {
+        const outputField = field === "dialogueAct" ? "dialogue_act" : field === "assertionStatus" ? "assertion_status" : field;
+        if (typeof output[outputField] === "string" && !values.includes(output[outputField])) errors.push(`${outputField} 不在受控枚举中`);
+      }
+      if (!Array.isArray(output.alternatives)) errors.push("alternatives 必须是数组");
+      if (!Array.isArray(output.source_message_ids) || output.source_message_ids.length === 0) errors.push("必须有来源消息");
+      const validSources = new Set(sourceMessageIds);
+      if (Array.isArray(output.source_message_ids) && output.source_message_ids.some((id) => !validSources.has(id))) errors.push("来源消息 ID 不在当前窗口");
+      if (typeof output.model_confidence !== "number" || output.model_confidence < 0 || output.model_confidence > 1) errors.push("model_confidence 必须在 0 到 1 之间");
+      return errors;
+    }
+
+    function detectHardSafetyCue(texts) {
+      /* 只识别高精度降级信号；不根据关键词单独创建记忆。 */
+      const text = texts.join("\n");
+      if (/(?:上次|之前|刚才).{0,16}(?:说错|不对)|(?:那是|只是)吹牛|撤回/.test(text)) return "retraction";
+      if (/如果|假如|要是/.test(text)) return "hypothetical";
+      if (/(?:他|她|别人)说|据说|听说/.test(text)) return "quoted";
+      if (/可能|也许|不一定|大概/.test(text)) return "uncertain";
+      if (/吹牛|你又开始吹|开玩笑|逗你|夸张/.test(text)) return "non_literal";
+      if (/准备|计划|打算|想去/.test(text)) return "future_plan";
+      return null;
+    }
+
+    function decideMemoryAction(output, context) {
+      const errors = validateModelOutput(output, context.sourceMessageIds);
+      if (errors.length > 0) return { action: "blocked", reason: `结构化输出不合约：${errors.join("；")}`, safetyFlags: errors };
+      const hardCue = detectHardSafetyCue(context.texts || []);
+      if (hardCue === "retraction") return { action: "invalidated", reason: "原文包含明确的纠正、撤回或“那是吹牛”信号；相关旧候选必须失效。", safetyFlags: ["hard_cue:retraction"] };
+      if (hardCue === "future_plan") return { action: "plan_candidate", reason: "原文包含明确的计划表达；即使模型字段误判，也不能当成当前事实。", safetyFlags: ["hard_cue:future_plan"] };
+      if (["hypothetical", "quoted", "uncertain", "non_literal"].includes(hardCue)) return { action: "pending", reason: "原文包含强语用不确定信号；即使模型字段误判，也不能自动确认。", safetyFlags: [`hard_cue:${hardCue}`] };
+      if (output.dialogue_act === "correction" || output.assertion_status === "retracted" || output.evidence_relation === "contradicts") {
+        return { action: "invalidated", reason: "检测到纠正、撤回或矛盾证据；相关旧候选必须失效。", safetyFlags: ["retraction"] };
+      }
+      if (output.dialogue_act === "plan" && output.assertion_status === "planned" && output.time_status === "future") {
+        return { action: "plan_candidate", reason: "这是未来计划，不是已经发生的事实。", safetyFlags: ["future_plan"] };
+      }
+      if (["hypothetical", "quoted", "uncertain"].includes(output.assertion_status) || ["ironic", "exaggerated", "non_literal"].includes(output.literalness) || output.evidence_relation === "insufficient" || output.dialogue_act === "boast") {
+        return { action: "pending", reason: "语用状态不确定、存在引用/假设/夸张，或证据不足；不能自动确认。", safetyFlags: ["uncertain_pragmatics"] };
+      }
+      if (output.assertion_status === "asserted" && output.literalness === "literal" && ["direct", "supporting"].includes(output.evidence_relation)) {
+        return { action: "candidate", reason: "字面陈述且有直接/支持性证据，可生成候选；仍不能自动变成 confirmed_memory。", safetyFlags: ["requires_adoption_gate"] };
+      }
+      return { action: "pending", reason: "无法满足安全采纳条件，保留为待确认。", safetyFlags: ["default_safe_fallback"] };
+    }
+
+    function initialState() {
+      return { version: 1, selectedCaseId: "fact", activeTab: "question", modelOutput: null, decision: null, candidateLedger: {}, history: [], lastAction: "初始化" };
+    }
+
+    function withHistory(state, type, payload) {
+      const next = clone(state);
+      next.history.push({ step: next.history.length + 1, type, payload: clone(payload) });
+      next.lastAction = type;
+      return next;
+    }
+
+    function reduceState(state, event) {
+      if (event.type === "RESET") return initialState();
+      if (event.type === "TAB") {
+        const next = withHistory(state, "切换步骤", { tab: event.tab });
+        next.activeTab = event.tab;
+        return next;
+      }
+      if (event.type === "SELECT_CASE") {
+        const selected = getCase(event.caseId);
+        const next = withHistory(state, "选择场景", { caseId: selected.id });
+        next.selectedCaseId = selected.id;
+        next.modelOutput = null;
+        next.decision = null;
+        return next;
+      }
+      if (event.type === "RUN_CASE") {
+        const selected = getCase(state.selectedCaseId);
+        const modelOutput = clone(selected.output);
+        const decision = decideMemoryAction(modelOutput, { sourceMessageIds: selected.sourceMessageIds, texts: selected.dialogue.map((message) => message.text) });
+        const next = withHistory(state, "运行解释", { caseId: selected.id, action: decision.action });
+        next.modelOutput = modelOutput;
+        next.decision = decision;
+        next.candidateLedger[selected.id] = {
+          caseId: selected.id,
+          proposition: modelOutput.proposition,
+          action: decision.action,
+          sourceMessageIds: modelOutput.source_message_ids,
+          reason: decision.reason,
+          confirmedMemory: false
+        };
+        for (const invalidatedId of selected.invalidates || []) {
+          if (next.candidateLedger[invalidatedId]) {
+            next.candidateLedger[invalidatedId].action = "invalidated";
+            next.candidateLedger[invalidatedId].reason = "被后续纠正/撤回消息失效。";
+            next.candidateLedger[invalidatedId].confirmedMemory = false;
+          }
+        }
+        return next;
+      }
+      return state;
+    }
+
+    /* ------------------------- UI shell ------------------------- */
+    const walkthroughs = {
+      question: { label: "STEP 1", title: "先问清楚：这句话是在陈述，还是在做别的事？", text: "同一串字面内容可能是事实、计划、假设、引用、吹牛或玩笑。第一步不写记忆，只保留解释空间。" },
+      interpret: { label: "STEP 2", title: "模型只输出受控的语用字段", text: "模型要同时给出 dialogue_act、assertion_status、literalness、time_status 和 evidence_relation，并保留 alternatives 与 source_message_ids。" },
+      gate: { label: "STEP 3", title: "状态迁移由确定性算法掌握", text: "纠正变 invalidated，未来计划变 plan_candidate，不确定/夸张/假设/引用变 pending；只有字面且有证据才是 candidate。" },
+      evidence: { label: "STEP 4", title: "后续证据可以改变候选，但不会绕过采纳门槛", text: "“已经提交申请”可以支持“准备贷款”的旧计划，但 prototype 永远不自动提升为 confirmed_memory。" }
+    };
+
+    let state = initialState();
+    const $ = (id) => document.getElementById(id);
+    const caseSelect = $("case-select");
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+    }
+
+    function renderModelOutput(output) {
+      if (!output) return '<div class="empty">还没有运行。模型不拥有状态迁移权。</div>';
+      const fields = [
+        ["proposition", output.proposition], ["dialogue_act", output.dialogue_act], ["assertion_status", output.assertion_status],
+        ["literalness", output.literalness], ["time_status", output.time_status], ["alternatives", output.alternatives.join("；") || "（无）"],
+        ["evidence_relation", output.evidence_relation], ["source_message_ids", output.source_message_ids.join(", ")], ["model_confidence", output.model_confidence]
+      ];
+      return `<div class="output-table">${fields.map(([key, value]) => `<div class="output-row"><div class="output-key">${escapeHtml(key)}</div><div class="output-value">${escapeHtml(value)}</div></div>`).join("")}</div>`;
+    }
+
+    function renderDecision(decision) {
+      if (!decision) return '<div class="empty">还没有运行。先看左侧场景，再点击“运行解释”。</div>';
+      return `<div class="decision ${escapeHtml(decision.action)}"><div class="action">最终动作：${escapeHtml(decision.action)}</div><div class="reason">${escapeHtml(decision.reason)}</div><div class="small-note">安全标记：${escapeHtml(decision.safetyFlags.join("、"))}</div></div>`;
+    }
+
+    function renderLedger(ledger) {
+      const items = Object.values(ledger);
+      if (!items.length) return '<div class="empty">还没有候选。运行一个场景后，这里会显示状态迁移。</div>';
+      return items.map((item) => `<div class="ledger-item"><div class="prop" title="${escapeHtml(item.proposition)}">${escapeHtml(item.proposition)}</div><div class="small-note">来源：${escapeHtml(item.sourceMessageIds.join(", "))}</div><span class="action-chip ${escapeHtml(item.action)}">${escapeHtml(item.action)}</span></div>`).join("");
+    }
+
+    function render() {
+      const selected = getCase(state.selectedCaseId);
+      $("walkthrough").innerHTML = `<div class="step-label">${escapeHtml(walkthroughs[state.activeTab].label)}</div><h2>${escapeHtml(walkthroughs[state.activeTab].title)}</h2><p>${escapeHtml(walkthroughs[state.activeTab].text)}</p>`;
+      document.querySelectorAll("[data-tab]").forEach((button) => button.classList.toggle("active", button.dataset.tab === state.activeTab));
+      caseSelect.value = selected.id;
+      $("case-title").textContent = selected.title;
+      $("case-meta").textContent = `${selected.tag} · 预期安全动作：${selected.expected} · ${selected.explanation}`;
+      $("dialogue").innerHTML = selected.dialogue.map((message) => `<div class="message ${escapeHtml(message.tone)}"><span class="speaker">${escapeHtml(message.speaker)}</span>${escapeHtml(message.text)}</div>`).join("");
+      $("model-result").innerHTML = renderModelOutput(state.modelOutput);
+      $("decision-result").innerHTML = renderDecision(state.decision);
+      $("ledger-list").innerHTML = renderLedger(state.candidateLedger);
+      $("state-json").textContent = JSON.stringify(state, null, 2);
+      document.querySelectorAll(".scenario-button").forEach((button) => button.classList.toggle("active", button.dataset.caseId === selected.id));
+    }
+
+    function dispatch(event) {
+      state = reduceState(state, event);
+      render();
+    }
+
+    CASES.forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.id;
+      option.textContent = `${item.title} · ${item.expected}`;
+      caseSelect.appendChild(option);
+      const button = document.createElement("button");
+      button.className = "scenario-button";
+      button.dataset.caseId = item.id;
+      button.innerHTML = `<span class="scenario-title">${escapeHtml(item.title)}</span><span class="scenario-tag">${escapeHtml(item.tag)}</span>`;
+      button.addEventListener("click", () => dispatch({ type: "SELECT_CASE", caseId: item.id }));
+      $("scenario-list").appendChild(button);
+    });
+
+    caseSelect.addEventListener("change", (event) => dispatch({ type: "SELECT_CASE", caseId: event.target.value }));
+    $("run-button").addEventListener("click", () => dispatch({ type: "RUN_CASE" }));
+    $("reset-button").addEventListener("click", () => dispatch({ type: "RESET" }));
+    document.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", () => dispatch({ type: "TAB", tab: button.dataset.tab })));
+    render();
+  </script>
+</body>
+</html>

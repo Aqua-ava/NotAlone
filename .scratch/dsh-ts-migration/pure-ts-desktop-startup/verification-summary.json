@@ -1,0 +1,53 @@
+{
+  "node": "v24.19.0",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "results": [
+    {
+      "name": "backend-focused",
+      "status": 0,
+      "signal": null,
+      "durationMs": 8966,
+      "counts": [
+        "ℹ tests 26",
+        "ℹ pass 26",
+        "ℹ fail 0",
+        "ℹ cancelled 0",
+        "ℹ skipped 0"
+      ]
+    },
+    {
+      "name": "desktop-focused",
+      "status": 0,
+      "signal": null,
+      "durationMs": 5333,
+      "counts": [
+        "ℹ tests 26",
+        "ℹ pass 26",
+        "ℹ fail 0",
+        "ℹ cancelled 0",
+        "ℹ skipped 0"
+      ]
+    },
+    {
+      "name": "backend-typecheck",
+      "status": 0,
+      "signal": null,
+      "durationMs": 243,
+      "counts": []
+    },
+    {
+      "name": "desktop-typecheck",
+      "status": 0,
+      "signal": null,
+      "durationMs": 299,
+      "counts": []
+    }
+  ],
+  "cleanup": {
+    "syntheticDatabases": 0,
+    "ownedProcesses": 0,
+    "temporaryDirectories": 0
+  },
+  "realAppTested": false
+}

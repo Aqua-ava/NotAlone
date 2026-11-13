@@ -1,0 +1,166 @@
+--- a/backend-ts/src/memory/sqlite/documents/basis.ts
++++ b/backend-ts/src/memory/sqlite/documents/basis.ts
+@@ -4,12 +4,24 @@
+ import type {L3ProfileDocument,L3ProfileEntry} from '../../profiles/workspace.ts';
+ import {sha256} from '../../../platform/sha256.ts';
+ import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
++import type {MessageSourceReference} from '../../../history/sqlite/contracts.ts';
+ import {qualificationSources,mergeKnowledgeSources} from '../management/dependencies.ts';
+ import {sourceVerificationState} from '../management/evidence.ts';
+ import {memoryTimeEligibility} from '../management/temporal.ts';
+ import {fail,requireVersion} from '../management/qualification.ts';
+ import {documentActualInputs,type DocumentActualInput} from './inputs.ts';
+ 
++const sourceQualifications=new WeakMap<StorageTransaction,Set<string>>();
++/** 一个同步动作内只复用当前来源身份的核验；不缓存正文、版本修订或文档依赖结果。 */
++export const documentSourceEligibility:SourceEligibility=(tx,ref:MessageSourceReference)=>{
++ const cache=sourceQualifications.get(tx),key=JSON.stringify([ref.owner_id,ref.contact_id,ref.record_id,ref.message_id]);
++ if(cache?.has(key))return;
++ assertSourceEligibility(tx,ref);cache?.add(key);
++};
++export function withDocumentSourceQualifications<T>(tx:StorageTransaction,work:()=>T):T{
++ if(sourceQualifications.has(tx))return work();
++ sourceQualifications.set(tx,new Set());try{return work();}finally{sourceQualifications.delete(tx);}
++}
+ function safeNumber(value:bigint):number {if(value<0n||value>BigInt(Number.MAX_SAFE_INTEGER))fail('document_revision_invalid');return Number(value);}
+ function fact(tx:StorageTransaction,ownerId:string,decisionId:string):Record<string,any>|null {
+  const row=tx.get(`SELECT e.payload FROM decision_candidate dc JOIN memory_candidate c ON c.owner_id=dc.owner_id AND c.id=dc.candidate_id
+@@ -25,8 +37,8 @@
+  const outer=sourceMemo;sourceMemo=new Map();
+  try{return run();}finally{sourceMemo=outer;}
+ }
+-function memorySources(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow,sourceEligibility:SourceEligibility=assertSourceEligibility):ReplySource[] {
+- const key=sourceMemo&&sourceEligibility===assertSourceEligibility?JSON.stringify([ownerId,String(m.id),String(v.version_no)]):undefined;
++function memorySources(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow,sourceEligibility:SourceEligibility=documentSourceEligibility):ReplySource[] {
++ const key=sourceMemo&&(sourceEligibility===assertSourceEligibility||sourceEligibility===documentSourceEligibility)?JSON.stringify([ownerId,String(m.id),String(v.version_no)]):undefined;
+  const hit=key===undefined?undefined:sourceMemo!.get(key);if(hit)return hit;
+  const sources=memorySourcesUncached(tx,ownerId,m,v,sourceEligibility);
+  if(key!==undefined)sourceMemo!.set(key,sources);
+@@ -55,12 +67,12 @@
+  });
+ }
+ export function sourceStillValid(tx:StorageTransaction,ownerId:string,s:ReplySource):void {
+- assertSourceEligibility(tx,{owner_id:ownerId,contact_id:s.contactId,message_id:s.messageId,record_id:s.recordId});
++ documentSourceEligibility(tx,{owner_id:ownerId,contact_id:s.contactId,message_id:s.messageId,record_id:s.recordId});
+  if(!tx.get("SELECT 1 FROM message WHERE owner_id=? AND contact_id=? AND id=? AND interpretation_revision=? AND availability='available'",[ownerId,s.contactId,s.messageId,s.acceptedRevision]))fail('document_source_stale');
+ }
+ interface DocumentInspection {sources:ReplySource[];stale:boolean}
+ /** 旧头修订可标为失效，但仍逐项核验历史版本及实际来源，不能掩盖缺失依据。 */
+-function inspectActualInputs(tx:StorageTransaction,ownerId:string,actual:DocumentActualInput[],visited:Set<string>,cache:Map<string,DocumentInspection>,sourceEligibility:SourceEligibility=assertSourceEligibility):DocumentInspection {
++function inspectActualInputs(tx:StorageTransaction,ownerId:string,actual:DocumentActualInput[],visited:Set<string>,cache:Map<string,DocumentInspection>,sourceEligibility:SourceEligibility=documentSourceEligibility):DocumentInspection {
+  const sources:ReplySource[]=[];let stale=false;
+  for(const {row:i} of actual){
+   if(i.kind==='memory'){
+@@ -82,7 +94,7 @@
+  const result=inspectActualInputs(tx,ownerId,actual,new Set(),new Map());if(result.stale)fail('document_memory_stale');return result.sources;
+ }
+ /** 同时核对历史图完整性和当前记忆资格；两者不能互相代替。 */
+-function inspectDocument(tx:StorageTransaction,ownerId:string,documentId:string,versionNo:bigint,visited:Set<string>,cache:Map<string,DocumentInspection>,sourceEligibility:SourceEligibility=assertSourceEligibility):DocumentInspection {
++function inspectDocument(tx:StorageTransaction,ownerId:string,documentId:string,versionNo:bigint,visited:Set<string>,cache:Map<string,DocumentInspection>,sourceEligibility:SourceEligibility=documentSourceEligibility):DocumentInspection {
+  const key=JSON.stringify([documentId,String(versionNo)]);if(visited.has(key))fail('document_dependency_cycle');visited.add(key);
+  const cached=cache.get(key);if(cached){visited.delete(key);return cached;}
+  const v=tx.get(`SELECT v.*,s.id AS step_id,s.state AS step_state,a.state AS attempt_state FROM memory_document_version v
+@@ -122,7 +134,7 @@
+  const result={sources:mergeKnowledgeSources(sources),stale};visited.delete(key);cache.set(key,result);return result;
+ }
+ /** 校验完成文档实际输入及其传递来源；不把重新选择的record替换为原证明。 */
+-export function documentSources(tx:StorageTransaction,ownerId:string,documentId:string,versionNo:bigint,visited=new Set<string>(),cache=new Map<string,ReplySource[]>(),sourceEligibility:SourceEligibility=assertSourceEligibility):ReplySource[]{
++export function documentSources(tx:StorageTransaction,ownerId:string,documentId:string,versionNo:bigint,visited=new Set<string>(),cache=new Map<string,ReplySource[]>(),sourceEligibility:SourceEligibility=documentSourceEligibility):ReplySource[]{
+  const key=JSON.stringify([documentId,String(versionNo)]);if(visited.has(key))fail('document_dependency_cycle');
+  const cached=cache.get(key);if(cached)return cached;
+  const inspected=new Map<string,DocumentInspection>(),result=inspectDocument(tx,ownerId,documentId,versionNo,visited,inspected,sourceEligibility);
+@@ -144,7 +156,7 @@
+  for(const row of rows)if(row.scope_kind!==scopeKind||row.contact_id!==contactId||row.state!=='active'||row.content_state!=='present')fail('document_publication_unavailable');
+  return {publication:p!,members:rows};
+ }
+-export function publicationMembers(tx:StorageTransaction,ownerId:string,publicationId:string,scopeKind:string,contactId:string|null,cache=new Map<string,ReplySource[]>(),sourceEligibility:SourceEligibility=assertSourceEligibility):StorageRow[]{
++export function publicationMembers(tx:StorageTransaction,ownerId:string,publicationId:string,scopeKind:string,contactId:string|null,cache=new Map<string,ReplySource[]>(),sourceEligibility:SourceEligibility=documentSourceEligibility):StorageRow[]{
+  const {publication,members}=publicationStructure(tx,ownerId,publicationId,scopeKind,contactId);
+  if(publication.availability!=='available')fail('document_publication_unavailable');
+  for(const row of members)documentSources(tx,ownerId,String(row.document_id),row.version_no as bigint,new Set(),cache,sourceEligibility);
+--- a/backend-ts/src/memory/sqlite/documents/actions.ts
++++ b/backend-ts/src/memory/sqlite/documents/actions.ts
+@@ -2,7 +2,7 @@
+ import type {StorageAction,StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
+ import {assertInputs,assertTaskContributions,fail,textId} from '../qualification.ts';
+ import {available,scope as readScope} from '../management/qualification.ts';
+-import {memoryBasis,publicationMembers,renderDocuments,withSourceMemo} from './basis.ts';
++import {memoryBasis,publicationMembers,renderDocuments,withSourceMemo,documentSourceEligibility,withDocumentSourceQualifications} from './basis.ts';
+ import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
+ import {laterStagesState as scheduledLaterStagesState,type LaterStagesProjection} from './later-schedule.ts';
+ 
+@@ -39,7 +39,7 @@
+  if(contributions||!laterStageForTask(tx,ownerId,t))assertTaskContributions(tx,ownerId,String(t.run_id),String(t.id));
+  const inputs=tx.all(`SELECT i.* FROM run_input i JOIN task_contribution c ON c.owner_id=i.owner_id AND c.run_id=i.run_id AND c.source_contact_id=i.source_contact_id
+   WHERE c.owner_id=? AND c.task_id=? ORDER BY i.input_no`,[ownerId,t.id]);
+- assertInputs(tx,ownerId,String(t.run_id),inputs);
++ assertInputs(tx,ownerId,String(t.run_id),inputs,documentSourceEligibility);
+  if(tx.get(`SELECT 1 FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id
+   JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
+   LEFT JOIN memory_candidate c ON c.owner_id=e.owner_id AND c.event_id=e.id
+@@ -102,7 +102,7 @@
+   WHERE s.owner_id=? AND s.task_id=? AND c.state='pending' LIMIT 1`,[ownerId,latest.id]))return 'processing';
+  return schedule.length||requirements.length?'processing':'idle';
+ }
+-const action=(name:string,mode:'read'|'write',fn:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:fn});
++const action=(name:string,mode:'read'|'write',fn:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:(tx,input)=>withDocumentSourceQualifications(tx,()=>fn(tx,input))});
+ export const memoryDocumentsActions:StorageAction[]=[
+  action('tasks','read',(tx,i)=>tx.all('SELECT id FROM processing_task WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[textId(i.ownerId),textId(i.runId)]).map(row=>String(row.id))),
+  action('readTask','read',(tx,i)=>taskView(tx,textId(i.ownerId),textId(i.taskId))),
+--- a/backend-ts/src/memory/sqlite/documents/stages.ts
++++ b/backend-ts/src/memory/sqlite/documents/stages.ts
+@@ -7,7 +7,7 @@
+ import {validateModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
+ import type {ModelTaskClaim} from '../../../platform/models/model-permit-port.ts';
+ import type {L2ScenarioMemory} from '../../scenarios/workspace.ts';
+-import {actualInputSources,memoryBasis,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,sourceStillValid} from './basis.ts';
++import {actualInputSources,memoryBasis,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,sourceStillValid,withDocumentSourceQualifications} from './basis.ts';
+ import {documentActualInputs} from './inputs.ts';
+ import {preconditions,revisions,task,taskView} from './actions.ts';
+ import {fail,textId} from '../qualification.ts';
+@@ -15,7 +15,7 @@
+ import {failLaterStage,finishLaterStagePublication,laterTaskPaused,reconcileTerminalLaterRuns} from './later-schedule.ts';
+ 
+ export interface DocumentClaim {attemptId:string;stepId:string;taskId:string;runId:string;kind:'document_scene'|'document_profile';laterStage:string|null;scheduleNow:number|null;scopeKind:'self'|'contact';contactId:string|null;claim:ModelTaskClaim;memories:L2ScenarioMemory[];scenarios:any[];profile:any;}
+-const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute} as StorageAction);
++const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:(tx,input,lease)=>withDocumentSourceQualifications(tx,()=>execute(tx,input,lease))} as StorageAction);
+ /** 普通暂停后不再启动新的文档小批；正在执行的批次允许收尾。 */
+ function runPaused(tx:StorageTransaction,ownerId:string,runId:string):boolean {
+  const run=tx.get('SELECT pause_requested_at FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);
+--- a/backend-ts/src/memory/sqlite/documents/publication.ts
++++ b/backend-ts/src/memory/sqlite/documents/publication.ts
+@@ -4,12 +4,12 @@
+ import {readExtractionToolArguments} from '../../extraction/arguments.ts';
+ import {DEFAULT_L2_SCENARIO_BUDGET,parseScenarioVerification,validateScenarioDocument,type L2ScenarioMemory,type L2ScenarioReference} from '../../scenarios/workspace.ts';
+ import {parseProfileVerification,validateProfile,validateIncrementalProfile,type L3ProfileEntry} from '../../profiles/workspace.ts';
+-import {documentSources,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments} from './basis.ts';
++import {documentSources,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,withDocumentSourceQualifications} from './basis.ts';
+ import {current} from './stages.ts';
+ import {preconditions,revisions,task,taskView} from './actions.ts';
+ import {fail,textId} from '../qualification.ts';
+ import {finishLaterStagePublication} from './later-schedule.ts';
+-const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute} as StorageAction);
++const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:(tx,input,lease)=>withDocumentSourceQualifications(tx,()=>execute(tx,input,lease))} as StorageAction);
+ function verification(tx:StorageTransaction,ownerId:string,attemptId:string,eventId:string,tool:string):unknown {
+  const e=tx.get(`SELECT e.payload FROM execution_event e JOIN model_call c ON c.owner_id=e.owner_id AND c.id=e.originated_call_id
+   JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE e.owner_id=? AND e.id=? AND e.step_attempt_id=? AND e.kind='document_output' AND c.state='succeeded' AND o.commit_forbidden_at IS NULL`,[ownerId,eventId,attemptId]);
+--- a/backend-ts/src/memory/sqlite/documents/later-schedule.ts
++++ b/backend-ts/src/memory/sqlite/documents/later-schedule.ts
+@@ -8,7 +8,7 @@
+ import {available} from '../management/qualification.ts';
+ import {assertContribution,assertInputs} from '../qualification.ts';
+ import {currentContent,freezeContent} from '../content.ts';
+-import {memoryBasis,documentSources} from './basis.ts';
++import {memoryBasis,documentSources,withDocumentSourceQualifications} from './basis.ts';
+ import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
+ 
+ const sceneWindowMs=60*60*1000,profileWindowMs=24*60*60*1000;
+@@ -49,7 +49,7 @@
+ export const laterScheduleMigration=(version:number):StorageMigration=>({version,sql:schema});
+ export interface LaterScheduleSnapshot {scene:Record<string,unknown>|null;profile:Record<string,unknown>|null}
+ export interface LaterStagesProjection {state:'completed'|'pending'|'scheduled'|'running'|'unknown'|'failed'|'revoked';reasons:string[];nextDueAt:number|null;stage:'document_scene'|'document_profile'|null}
+-const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute});
++const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:(tx,input)=>withDocumentSourceQualifications(tx,()=>execute(tx,input))});
+ const scopeParts=(scope:MemoryScope)=>({scopeKind:scope.scopeKind,contactId:scope.contactId,scopeKey:scope.scopeKind==='self'?'self':scope.contactId!});
+ const exists=(tx:StorageTransaction)=>!!tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='memory_document_later_schedule'");
+ const safeTime=(value:unknown)=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?value:(()=>{throw new StorageFailure('document_schedule_time_invalid')})();

@@ -1,0 +1,64 @@
+{
+  "revision": "93b0b88617b9016e360e77fb68dbddd78fe7f2c4",
+  "mode": "phases",
+  "python": "3.12.13",
+  "hash_seed": 0,
+  "machine": "arm64",
+  "psycopg": "3.3.4",
+  "libpq": 180000,
+  "transport": "local",
+  "results": [
+    {
+      "profile": "import_file",
+      "records": 100,
+      "input_sha256": "94a472d2c642ed8d1af18023e9e4d85d2639a760a84537b590217849e64eae56",
+      "samples": [
+        {
+          "read_parse": 0.011838665999675868,
+          "normalize": 0.013244959000076051,
+          "trace_inclusive": 0.014878582999699574,
+          "repository_inclusive": 0.02943962500012276,
+          "total": 0.05462450000050012,
+          "repository_excluding_trace": 0.014561042000423186
+        }
+      ],
+      "sample_count": 1
+    },
+    {
+      "profile": "import_file",
+      "records": 1000,
+      "input_sha256": "aac5e39010162eff8bacebca5c9be2f5a34a968ec45a2843a5ccbc0919582521",
+      "samples": [
+        {
+          "read_parse": 0.05468466700040153,
+          "normalize": 0.05235766700025124,
+          "trace_inclusive": 0.09548204200018517,
+          "repository_inclusive": 0.15349908400003187,
+          "total": 0.2613939170005324,
+          "repository_excluding_trace": 0.0580170419998467
+        }
+      ],
+      "sample_count": 1
+    },
+    {
+      "profile": "import_file",
+      "records": 10000,
+      "input_sha256": "48d1a6022f8b7042eb7c9ad66b5cc7491a475c5d8bee75c495972517241097c2",
+      "samples": [
+        {
+          "read_parse": 0.37402495900005306,
+          "normalize": 0.5145835829998759,
+          "trace_inclusive": 1.4650584159999198,
+          "repository_inclusive": 2.179121000000123,
+          "total": 3.0812819169996146,
+          "repository_excluding_trace": 0.7140625840002031
+        }
+      ],
+      "sample_count": 1
+    }
+  ],
+  "owned_database": "notalone_import_benchmark_380c4c3170a14d02b039ad19c7ece571_test",
+  "measurement_note": "协议消息与驱动等待分别实测；不等于 TCP 包数或网络往返。时间无计数/追踪，P95 为 nearest-rank；内存为独立 tracemalloc Python 峰值。import_file 从读取文件到事务提交，不含预览与后台提取。phases 含独立包装开销，仅供定位。",
+  "server_version": 160014,
+  "owned_database_removed": true
+}

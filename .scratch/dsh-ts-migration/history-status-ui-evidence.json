@@ -1,0 +1,39 @@
+{
+  "checked_at": "2026-10-24T03:36:40.779Z",
+  "source": "c9cc31cb",
+  "actual_app": true,
+  "entry": "npm run dev",
+  "fixture": "synthetic",
+  "real_wechat_read": false,
+  "ui": {
+    "decline_then_enable_history_declined": true,
+    "first_time_prompt_absent": true,
+    "refresh_history_declined": true,
+    "disable_history_declined": true,
+    "disable_first_time_prompt_absent": true
+  },
+  "public": {
+    "enabled": true,
+    "history": "declined",
+    "version": 1,
+    "scope": "selected"
+  },
+  "database": {
+    "messages": 0,
+    "history_grants": 0,
+    "replies": 0,
+    "outbound": 0,
+    "decision": "declined",
+    "baseline_unchanged": true
+  },
+  "cleanup": {
+    "development_exit_code": 0,
+    "harness_exit_code": 0,
+    "database_absent": true,
+    "fixture_directory_absent": true,
+    "scope_directory_absent": true,
+    "metadata_absent": true,
+    "development_instances": 0,
+    "orphaned_instances": 0
+  }
+}

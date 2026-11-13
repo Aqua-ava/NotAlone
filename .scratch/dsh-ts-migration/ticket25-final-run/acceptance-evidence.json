@@ -1,0 +1,221 @@
+{
+  "schema_version": "ticket25-acceptance-evidence-v1",
+  "observed_on": "2026-10-25",
+  "synthetic_only": true,
+  "external_message_sent": false,
+  "push_or_pr_created": false,
+  "dsh": {
+    "version": "0.2.1-rc.2",
+    "commit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+    "tag": "dsh-v0.2.1-rc.2",
+    "adaptation": "official profile, Agent, LLM prepareCall, DeepSeek Messages adapter, scope/session/tools public contracts"
+  },
+  "environment": {
+    "os": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M6",
+    "memory_bytes": 17179869184,
+    "node": "v24.22.1",
+    "power_mode": null
+  },
+  "source_bindings": {
+    "old_arm_commit": "3c168296e9e8edaa43b8b323ff693e790e709069",
+    "new_arm_commit": "9ed7770d1a2cd74361d2b2adbeff78962b1e09e8",
+    "frozen_manifest_sha256": "84b81a3255bffe8bc69da6f38c0dd79e1ba83510454ef8a9091c947b995b362b",
+    "dataset_sha256": "088df6b1729c5b9445e1648e495e4bde005580eb838216e84d3ba569caebe607",
+    "lock_sha256": "bfcf83f9f210d5014177c08dcae98b0cd50d9b9f8a3c481794018c1fc8a92798",
+    "profile_sha256": "7dbc0689b34c8ed31bdf834ceedbce4300d7d6ff8057dc542c5ba07ee4394b09",
+    "dependency_snapshot_equal": true,
+    "workspace_changed_during_execution": null,
+    "fixed_git_source_changed_during_execution": false
+  },
+  "capture": {
+    "file_sha256": "65757d5923766175cfb298941790c03b96d90f93d262fe11991eca622cadd442",
+    "logical_runs_planned": 96,
+    "logical_runs_received": 96,
+    "logical_runs_succeeded": 95,
+    "logical_runs_failed": 1,
+    "failed_record": "style-conflict:new:1",
+    "failed_record_error": "reply_candidates_rejected",
+    "failed_record_vendor_http_status": 200,
+    "failed_record_response_complete": false,
+    "actual_supplier_calls": 96,
+    "automatic_retries": 0,
+    "usage_known_records": 96,
+    "cost_known_records": 96,
+    "excluded_failed_or_partial_attempts": 1
+  },
+  "blind_review": {
+    "visible_file_sha256": "b1f697d22eca29b35b188ef7d4d970df09785925bc68d9b237042680ab1d98c6",
+    "binding_file_sha256": "fede182c33858dd2d66810a33f92a149fdbdd0c51288aa4c1a140d47eeb2912c",
+    "complete_pairs": 47,
+    "reviewed_records": 94,
+    "unmatched_success_for_full_denominator_report": "style-conflict:old:1",
+    "reviewers": [
+      {
+        "reviewer_id": "agent-reviewer-1-20261025",
+        "reviewer_type": "agent",
+        "model": "gpt-5-based-codex-agent",
+        "version": "codex-desktop-2026-10-25",
+        "items": 94,
+        "file_sha256": "c7e605d0ca0b8790b6b33658dd086a9ba95ca60635905c5d081cfc74eb02be91"
+      },
+      {
+        "reviewer_id": "agent-reviewer-2-20261025",
+        "reviewer_type": "agent",
+        "model": "gpt-5-based-codex-agent",
+        "version": "codex-desktop-2026-10-25",
+        "items": 94,
+        "file_sha256": "6c1ed24850f638c3bc9499a8130656919c659523795a9836c1904e4d92bdb91d"
+      }
+    ],
+    "initial_disagreements": 48,
+    "adjudicator": {
+      "reviewer_id": "agent-adjudicator-3-20261025",
+      "reviewer_type": "agent",
+      "model": "gpt-5-based-codex-agent",
+      "version": "codex-desktop-2026-10-25",
+      "items": 48,
+      "file_sha256": "2330b287404377eb8f476c4dd22d0ceb36dd2ca0eed28331898074b776f6fcff"
+    },
+    "adjudicated_items": 48,
+    "unresolved_disagreements": 0
+  },
+  "price_snapshot": {
+    "currency": "USD",
+    "billed_model": "DeepSeek-V4.1-Flash-1017",
+    "observed_date": "2026-10-25",
+    "cache_hit_usd_per_million": 0.003,
+    "cache_miss_usd_per_million": 0.15,
+    "output_usd_per_million": 0.6,
+    "source_page_sha256": "b856a6e93fa4793ecc8f3fd03a01bb7d8f7572f78a4739da8ce6dbdb09328d66",
+    "internal_snapshot_sha256": "3eb61fb2ca9322dff1bbaa356fe9b05482436316c2e55e156f6d0b23b455102f"
+  },
+  "report": {
+    "schema_version": "reply-migration-report-v1",
+    "file_sha256": "ce6332186407f42fccda2a4de8d130c3414181601d76d69a7d644380374d5029",
+    "run_file_sha256": "b2cb34c03c3e245c995e352288aec2dccf1013e0ade019cfa8ad1acaa505a182",
+    "summary_file_sha256": "9a88e2c57183b8fe27fa2b48e744b37e0c66a4611ab784401c2a4c2ff141d7f0",
+    "overall": "failed",
+    "population": {
+      "planned": 96,
+      "received": 96,
+      "missing": 0
+    },
+    "failure_rate": {
+      "status": "failed",
+      "old": 0,
+      "new": 0.020833333333333332,
+      "denominator_per_arm": 48
+    },
+    "semantic_quality": {
+      "status": "failed",
+      "old_passed_numerator": 24,
+      "new_passed_numerator": 24,
+      "scored_per_arm": {
+        "old": 47,
+        "new": 48
+      },
+      "newly_introduced_false_fact_pairs": 5,
+      "newly_introduced_pair_ids": [
+        "prototype-gap:1",
+        "prototype-thought:2",
+        "paired-decline:2",
+        "group:3",
+        "missing:2"
+      ],
+      "newly_introduced_wrong_person": 0,
+      "newly_introduced_unsupported_commitment": 0,
+      "absolute_quality_verified": false
+    },
+    "metrics": {
+      "physical_calls": {
+        "status": "passed",
+        "old": 48,
+        "new": 48
+      },
+      "total_tokens": {
+        "status": "passed",
+        "old": 289090,
+        "new": 288812,
+        "estimated_ratio": 0.9990383617558546
+      },
+      "cost_usd": {
+        "status": "passed",
+        "old": 0.01257021,
+        "new": 0.012363666000000004,
+        "estimated_ratio": 0.983568770927455
+      },
+      "latency_p50": "undetermined",
+      "latency_p95": "undetermined"
+    },
+    "latency_unknown_reason": "legacy captures lack a complete no-overlap five-phase timeline, first event, first token and final persisted-result public observation",
+    "model_equivalence": "same_request_configuration_only; response fingerprint unavailable",
+    "remaining_unknowns": [
+      "independent_reviews_missing for the excluded incomplete pair",
+      "latency evidence and latency values for all 96 records",
+      "response model fingerprint for all 96 records",
+      "old arm profile hash",
+      "prompt hash",
+      "tool schema hash"
+    ],
+    "real_model_quality_verified": false,
+    "production_switch_approved": false
+  },
+  "deterministic_checks_this_turn": {
+    "reply_blind_packet": {
+      "passed": 28,
+      "failed": 0
+    },
+    "reply_comparison_sources_and_multi_attempt": {
+      "passed": 135,
+      "failed": 0
+    },
+    "typescript_strict_typecheck": "passed",
+    "normalization_reproduction": "byte_identical",
+    "report_cli_exit": 2
+  },
+  "previous_full_suite": {
+    "total": 1255,
+    "passed": 1254,
+    "failed": 1,
+    "failure": "foreground-location-probe.test.mjs parallel timing reported probe_timeout instead of probe_warming",
+    "single_test_rerun": "passed",
+    "final_full_suite_after_cancellation": {
+      "total": 1258,
+      "passed": 1258,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 258308.368625,
+      "time_limit_seconds": 600
+    }
+  },
+  "desktop_full_suite": {
+    "total": 1012,
+    "passed": 1011,
+    "failed": 0,
+    "skipped": 1,
+    "duration_ms": 52191.236709,
+    "time_limit_seconds": 600,
+    "environment": {
+      "python": "3.12.15 from conda environment NotAlone",
+      "node": "v24.22.1",
+      "playwright": "1.64.0 from the single pnpm store instance"
+    },
+    "pre_run_failures_preserved": [
+      "three existing tests were absent from the inventory",
+      "the top-level node_modules/playwright directory was a duplicate npm instance rather than the pnpm instance; it was moved aside and replaced with a symlink before rerun",
+      "the first run lacked the NotAlone conda PATH and therefore missed npm and Python 3.12"
+    ],
+    "skipped_reason": "one explicitly environment-gated native/App test"
+  },
+  "evaluation_inventory": "deterministic-evidence.md",
+  "unresolved_ticket_25_gates": [
+    "real model quality and failure-rate regression",
+    "observable latency timeline",
+    "root-owned actual App and WeChat evidence",
+    "root-owned active stop acceptance after the parallel cancellation slice",
+    "non-reply domains lack a complete same-model quality/cost matrix"
+  ],
+  "ticket_state": "claimed"
+}

@@ -1,0 +1,37 @@
+{
+  "sameCopiedWorkload": true,
+  "readonly": true,
+  "firstWriteBlocked": true,
+  "measurements": {
+    "before": {
+      "elapsedMs": 12003,
+      "queries": 11140,
+      "source": {
+        "hash": "fb95aa47c3fc92335a8f3f8324367e15644c5305d34597e215361829da0b31e1",
+        "queries": 4226,
+        "elapsedMs": 10898.470000000007,
+        "rows": 4226
+      }
+    },
+    "final": {
+      "elapsedMs": 1771,
+      "queries": 7181,
+      "source": {
+        "hash": "fb95aa47c3fc92335a8f3f8324367e15644c5305d34597e215361829da0b31e1",
+        "queries": 267,
+        "elapsedMs": 879.3100000000002,
+        "rows": 267
+      }
+    },
+    "queue-final": {
+      "elapsedMs": 413,
+      "queries": 33,
+      "source": null
+    },
+    "schedule-final": {
+      "elapsedMs": 4527,
+      "queries": 493,
+      "source": null
+    }
+  }
+}

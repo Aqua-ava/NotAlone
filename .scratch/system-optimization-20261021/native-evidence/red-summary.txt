@@ -1,0 +1,4 @@
+ProbeDiagnosticInvocationTests: 初次编译失败（red）
+error: cannot find ProbeDiagnosticInvocation in scope
+随后实现CLI诊断参数政策，2项测试通过（green）。
+完整原始编译日志留在端侧临时目录，未提交本机路径。

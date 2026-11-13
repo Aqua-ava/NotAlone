@@ -1,0 +1,27 @@
+test_concurrent_publish_preserves_bus_order (tests.integration.server.test_events.EventStreamContractTest.test_concurrent_publish_preserves_bus_order) ... ok
+test_event_payload_cannot_be_replaced_with_message_body (tests.integration.server.test_events.EventStreamContractTest.test_event_payload_cannot_be_replaced_with_message_body) ... ok
+test_event_subscription_requires_valid_token (tests.integration.server.test_events.EventStreamContractTest.test_event_subscription_requires_valid_token) ... ok
+test_head_request_returns_headers_without_body (tests.integration.server.test_events.EventStreamContractTest.test_head_request_returns_headers_without_body) ... ok
+test_malformed_content_length_returns_stable_400 (tests.integration.server.test_events.EventStreamContractTest.test_malformed_content_length_returns_stable_400) ... ok
+test_open_sse_requires_initialized_owner (tests.integration.server.test_events.EventStreamContractTest.test_open_sse_requires_initialized_owner) ... ok
+test_oversized_body_returns_stable_413 (tests.integration.server.test_events.EventStreamContractTest.test_oversized_body_returns_stable_413) ... ok
+test_oversized_declared_body_returns_413_without_waiting_for_body (tests.integration.server.test_events.EventStreamContractTest.test_oversized_declared_body_returns_413_without_waiting_for_body) ... ok
+test_real_loopback_http_sse_uses_same_contract (tests.integration.server.test_events.EventStreamContractTest.test_real_loopback_http_sse_uses_same_contract) ... ok
+test_real_sse_subscription_close_finishes_http_response (tests.integration.server.test_events.EventStreamContractTest.test_real_sse_subscription_close_finishes_http_response) ... ok
+test_reconnect_gets_current_state_without_message_history (tests.integration.server.test_events.EventStreamContractTest.test_reconnect_gets_current_state_without_message_history) ... ok
+test_subscription_only_receives_its_owner_events (tests.integration.server.test_events.EventStreamContractTest.test_subscription_only_receives_its_owner_events) ... ok
+test_three_event_contracts_are_streamed_in_publish_order (tests.integration.server.test_events.EventStreamContractTest.test_three_event_contracts_are_streamed_in_publish_order) ... ok
+test_authenticated_body_has_total_deadline_despite_trickle (tests.integration.server.test_http_resource_limits.HttpResourceLimitsTest.test_authenticated_body_has_total_deadline_despite_trickle) ... ok
+test_authenticated_short_body_is_400_and_never_dispatched (tests.integration.server.test_http_resource_limits.HttpResourceLimitsTest.test_authenticated_short_body_is_400_and_never_dispatched) ... ok
+test_bounded_replay_does_not_replace_authoritative_individual_task_reads (tests.integration.server.test_http_resource_limits.HttpResourceLimitsTest.test_bounded_replay_does_not_replace_authoritative_individual_task_reads) ... ok
+test_connection_limit_rejects_excess_and_recovers_after_deadlines (tests.integration.server.test_http_resource_limits.HttpResourceLimitsTest.test_connection_limit_rejects_excess_and_recovers_after_deadlines) ... ok
+test_incomplete_headers_have_total_deadline_despite_trickle (tests.integration.server.test_http_resource_limits.HttpResourceLimitsTest.test_incomplete_headers_have_total_deadline_despite_trickle) ... ok
+test_shutdown_closes_partial_header_body_and_idle_sse_connections (tests.integration.server.test_http_resource_limits.HttpResourceLimitsTest.test_shutdown_closes_partial_header_body_and_idle_sse_connections) ... ok
+test_sse_stays_open_after_input_deadline_and_overflow_ends_response (tests.integration.server.test_http_resource_limits.HttpResourceLimitsTest.test_sse_stays_open_after_input_deadline_and_overflow_ends_response) ... ok
+test_unauthorized_length_errors_keep_400_and_413_precedence (tests.integration.server.test_http_resource_limits.HttpResourceLimitsTest.test_unauthorized_length_errors_keep_400_and_413_precedence) ... ok
+test_unauthorized_partial_body_is_rejected_before_body_read (tests.integration.server.test_http_resource_limits.HttpResourceLimitsTest.test_unauthorized_partial_body_is_rejected_before_body_read) ... ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 9.239s
+
+OK

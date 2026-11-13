@@ -1,0 +1,109 @@
+--- a/backend/src/notalone/server/app.py
++++ b/backend/src/notalone/server/app.py
+@@ -1,6 +1,9 @@
+ """常驻本地后端服务的 HTTP 应用与回环服务器。"""
+ 
+ from __future__ import annotations
++
++from notalone.front_sync.incremental_events import IncrementalEventReceiver, IncrementalEventUnavailable
++from notalone.server.event_publisher import EventBusMessagePublisher
+ 
+ from notalone.reply.errors import (
+     ReplyBudgetError, ReplyCandidatesRejectedError, ReplyError, ReplyProviderContextLimitError, ReplyReviewInvalidError, ReplyTimeoutError,
+@@ -560,6 +563,7 @@
+         "_setup_service",
+         "_wechat_setup_service",
+         "_wechat_scope_transferred",
++        "_incremental_events",
+         "_skill_service",
+         "_skill_learning",
+         "_expression_preferences",
+@@ -598,6 +602,7 @@
+         setup_service: SetupService | None = None,
+         wechat_setup_service: WechatSetupService | None = None,
+         wechat_scope_transferred: bool = False,
++        incremental_events: IncrementalEventReceiver | None = None,
+         expression_preferences: ExpressionPreferenceService | None = None,
+         runtime_shutdown: Callable[[], None] | None = None,
+         contact_context: ContactContextHandoff | None = None,
+@@ -635,6 +640,7 @@
+         self._setup_service = setup_service
+         self._wechat_setup_service = wechat_setup_service
+         self._wechat_scope_transferred = wechat_scope_transferred
++        self._incremental_events = incremental_events
+         self._skill_service = skill_service
+         self._skill_learning = skill_learning
+         self._sync_control = sync_control
+@@ -877,6 +883,23 @@
+                 return _json_response(HTTPStatus.OK, transfer())
+             except SyncHostBusy:
+                 return _json_response(HTTPStatus.CONFLICT, {"error": "foreground_observation_busy"})
++        if path_value == "/api/runtime/sync-incremental/events":
++            # 仅沿原内部token认证；公开TS宿主不代理此路径。
++            if any(key.lower() == "origin" for key in headers):
++                return _json_response(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
++            if path != path_value:
++                return _json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
++            if self._incremental_events is None or method_upper != "POST":
++                return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
++            if len(request_body) > 256 * 1024:
++                return _json_response(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "request_body_too_large"})
++            try:
++                accepted = self._incremental_events.receive(_parse_task_json(request_body))
++            except IncrementalEventUnavailable:
++                return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "incremental_event_unavailable"})
++            except (ValueError, TypeError):
++                return _json_response(HTTPStatus.BAD_REQUEST, {"error": "incremental_event_invalid"})
++            return _json_response(HTTPStatus.OK, {"accepted": accepted})
+         if path_value == "/api/runtime/wechat-scope/revoke":
+             if not self._wechat_scope_transferred or method_upper != "POST":
+                 return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+@@ -3400,6 +3423,7 @@
+     setup_service: SetupService | None = None,
+     wechat_setup_service: WechatSetupService | None = None,
+     wechat_scope_transferred: bool = False,
++    incremental_events_transferred: bool = False,
+     expression_preferences: ExpressionPreferenceService | None = None,
+     follow_smoke: FollowSmokeController | None = None,
+     runtime_shutdown: Callable[[], None] | None = None,
+@@ -3427,10 +3451,24 @@
+         from notalone.tasks.organization_dispatch import EmbeddedOrganizationDispatcher
+         layered_memory.attach_dispatcher(EmbeddedOrganizationDispatcher(database_url))
+     layered_memory.start_maintenance(owner_id)
++    events = events or EventBus()
++    skill_learning = skill_learning or SkillLearningService(
++        PostgresSkillLearningStore(database_url), task_host=task_host,
++        review=reply_service.skill_review if reply_service is not None else None,
++    )
++    incremental_events = None
++    if incremental_events_transferred and owner_id is not None:
++        incremental_events = IncrementalEventReceiver(
++            database_url=database_url, owner_id=owner_id,
++            publisher=EventBusMessagePublisher(
++                events, owner_id=owner_id, task_host=task_host,
++                learning_notify=skill_learning.notify,
++            ),
++        )
+     return BackendApp(
+         contact_directory=contacts,
+         contact_context=contact_context,
+-        events=events or EventBus(),
++        events=events,
+         owner_id=owner_id,
+         token=token or secrets.token_urlsafe(32),
+         sync_control=sync_control,
+@@ -3466,12 +3504,12 @@
+             processing=PostgresSourceProcessingStore(database_url),
+         ),
+         skill_service=skill_service,
+-        skill_learning=skill_learning or SkillLearningService(PostgresSkillLearningStore(database_url), task_host=task_host,
+-            review=reply_service.skill_review if reply_service is not None else None),
++        skill_learning=skill_learning,
+         ledger_service=ledger_service,
+         setup_service=setup_service,
+         wechat_setup_service=wechat_setup_service,
+         wechat_scope_transferred=wechat_scope_transferred,
++        incremental_events=incremental_events,
+         runtime_shutdown=runtime_shutdown,
+     )
+ 

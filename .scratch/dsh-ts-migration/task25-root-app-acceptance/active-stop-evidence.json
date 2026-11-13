@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "acceptance": "active-stop",
+  "head": "cca335e4",
+  "mode": "npm run dev",
+  "contactDisplayName": "cloudy",
+  "actualAppComputerUse": true,
+  "diagnosticObserver": "renderer CDP, sanitized job fields only",
+  "turnId": "88e65711-0d21-4cd6-934b-2e3de6909937",
+  "requestKey": "a4c75b15-003f-4a25-974f-2f21bee1faa8",
+  "inputVersionId": "f72374e3-ddeb-41eb-b058-0bbab60e940c",
+  "jobPhases": [
+    "queued",
+    "generating",
+    "stopping",
+    "cancelled"
+  ],
+  "finalSessionPhase": "idle",
+  "database": {
+    "state": "failed",
+    "interruptionReason": "user_cancelled",
+    "candidateCount": 0
+  },
+  "visibleCopy": {
+    "beforeStop": "停止本次生成",
+    "stopping": "正在停止本次生成…",
+    "stopped": "本次生成已由你停止。",
+    "result": "本次生成已停止，没有保存候选。你可以重新生成，或从历史讨论中重试这次中断的输入。"
+  },
+  "preFixFailure": {
+    "httpStatus": 400,
+    "error": "assistant_session_request_invalid",
+    "cause": "Python compatibility route rejected user_cancelled before cca335e4"
+  },
+  "wechatMessagesSent": 0,
+  "visualFramesPersistedOrUploaded": 0
+}

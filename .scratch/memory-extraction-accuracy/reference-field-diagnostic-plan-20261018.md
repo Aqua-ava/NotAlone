@@ -1,0 +1,33 @@
+# 隔离V逐字段证据诊断原型
+
+## 失败与可证伪假设
+
+承接[三窗诊断](reference-targeted-diagnosis-20261018.md)：A07及A16有来源支持的计划被V误降级，A10类别错误被V漏检；A16另有E依赖缺项，不能混作V修复。旧提示已要求逐项核验，但输出只含总体verdict/issues/evidence，无法确认模型究竟检了哪个字段。待证假设是强制输出逐字段结论能减少跳检和无据误拒；结构完整本身不能证明假设成立。
+
+## 最小实现与所有权
+
+只新增 `evaluation_reference_field_diagnostic.py`、同名unit test、本计划及独立合成controls JSON，runtime已确认reference为唯一owner。通过既有factory复用原V的legacy-v4/reference-retention-v1完整语义提示，明确替换四槽输出合同。固定八字段为meaning、subject、category、speech_act、assertion_status、figurative_type、time、dependency；time同时检查原期间及两时间槽，dependency检查原source集合是否足够，不补来源。topic、risk、confidence不在本原型逐字段覆盖内，诊断不能作为生产采纳结果。
+
+输入保持原V的messages/candidates，复制后绑定SHA256。模型只返回摘要及每个candidate_index的八字段，不能返回总verdict或候选修订。每字段恰一次，state为supported、mismatch、insufficient或ambiguous：分别表示有据、明确错配、缺证及仍有歧义。缺字段、多字段、重复候选、错摘要和未知状态均拒收。
+
+每字段附0至4个证据：text以实际message_id、Unicode码点半开区间及逐字quote绑定；occurred_at以实际message_id及原时间元数据值绑定。统一七键kind/message_id/start/end/quote/value/scope，非适用槽必须null。scope区分candidate_source和window_context，按原来源集合核实，不能由模型改写。supported必须有原来源的text证据，允许已声明context；occurred_at仅允许辅助time字段，不能单独证明文本或时间。候选八字段全supported时，text证据并集必须覆盖至少一个原来源中的target，时间元数据不能代替目标正文。mismatch必须有证据，可引用窗口反证；缺证或歧义可空。window_context不能成为supported依据，也不回填来源。元数据绑定成功不证明事件日期等于观察日。
+
+程序唯一汇总：任一mismatch则diagnostic_verdict=unsupported；否则任一insufficient/ambiguous则uncertain；八项supported才supported。其中dependency的mismatch只表示来源完整性合同不满足，不能把汇总unsupported呈现为内容已证伪。它只汇总模型标签，不自动认证其语义，始终输出semantic_verified=false。该状态不映射回legacy、不接采纳或生产注册，不改变E、Gold、旧profile及空放行表。
+
+## 定点对照与验收
+
+独立Agent先建立合成正确候选及单字段变异：保留未知人物的明确计划、漏条件、完成动作误plan、日期错、关系互动类别错、必要事项依赖缺失、独立安排与无关前文、人物被强行落实。正控包含必须借助已声明context解释的字段、相对日期所需原消息时间。不同窗口不得拼接共享上下文以节省调用。
+
+接口验收复用三窗原捕获候选，确认摘要及输入不变、旧四槽输出不被伪装成新字段证据；再检缺项、重复、假引文、越界、假scope、错元数据及错摘要。固定响应只验证接口与程序汇总，不计模型准确性。每个独立字段错误对照必须检出预期字段，并保持其余有据字段supported；全部uncertain或一律拒绝不算通过。必要依赖缺项单列为预定义联动控制，独立审阅须在模型输出前写明哪些字段确实因缺来源而insufficient及其原因，不能事后放宽；已可确定的作者/subject不随缺context变unknown。配对完整依赖正控须恢复受影响字段supported。分别统计漏检、误拒及缺证定位，不将一律保守记为成功。原三窗仅回归，独立对照另列，不改原Gold与历史评分。
+
+先做离线接口及独立对照预期复核，再由runtime审查冻结最小真实调用集合、上限和停止规则。此前不API；已撤回的7次草案不构成调用许可。真实比较需要同一合成窗口/候选送旧V及新V，每次只改变协议输出；原三窗可复用旧V捕获。不得重跑E或直接重跑16窗，不重试同配置求过。协议失败即停止并保留未知；出现新的误拒或漏检则本候选方案失败，不能静默改提示追加抽样。
+
+本阶段交付是可审阅原型和可证伪对照，原safe13／一般3、FULL15/18仍不变，任务质量目标未达成。
+
+## 已完成的离线预期审查
+
+[合成对照](reference-field-diagnostic-controls-20261018.json)固定5窗13候选、104项字段预期：代表性标签为94 supported、7 mismatch、3 insufficient；强行命名另预先允许mismatch，绝不允许supported。独立Gold审查0阻断。该小集没有必须判ambiguous的样例，此项未覆盖。116处文本证据及3处时间辅助元数据经核对；它们是模型输出前的人工预期，不是模型成功结果。
+
+最小实测候选收敛为W1与W3各一次旧V/新V配对，共4次：W1仅检正确未知人物计划与日期错配；W3同时检正确已收到邀请、类别错及完成阶段误标plan，共5候选各旧新配对。强行命名对照保留离线，预先允许insufficient或mismatch两种有据标签，不纳入首轮实测。这两窗可直接区分计划误拒与字段漏检，足以决定是否值得继续该机制。必要依赖与无关前文控制继续留作离线预期，当前不为覆盖它们默认扩大API；原三窗也不重抽。真实调用尚未冻结，需接口独审及runtime核对执行边界后再开始；4次不是已运行结果。
+
+验证：13项相关unit通过；Spec发现的time=mismatch仅元数据漏洞已按任何state须配text修复并复核关闭，Standards与Spec零剩余问题。原三窗捕获输入及retention完整提示前缀离线一致，旧四槽响应被新接口拒收而非伪装字段结果；5窗人工预期可经接口校验。以上均为结构证据、零API，不计语义改善。

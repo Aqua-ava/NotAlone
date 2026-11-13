@@ -1,0 +1,3836 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-28",
+  "state": "historical_unapproved_superseded_by_requirements_audit",
+  "baseline": {
+    "total": 107,
+    "business": 100,
+    "conditional": 3,
+    "diagnostic": 4
+  },
+  "recommended": null,
+  "requirement_gate": "用户未认可94表；先按真实需求逐表审查，再讨论Q43。旧PG只查漏，不是保留要求。",
+  "options": {
+    "shared_materials": {
+      "kind": "shared_materials",
+      "counts": {
+        "total": 94,
+        "business": 86,
+        "conditional": 2,
+        "diagnostic": 4,
+        "metadata": 2
+      },
+      "tables": [
+        {
+          "name": "background_task",
+          "source_task": "05",
+          "source_tasks": [
+            "05",
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 102,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "归属固定的一份有限工作",
+          "primary_key_shape": "owner_id, task_id",
+          "logical_sources": [
+            "background_task"
+          ]
+        },
+        {
+          "name": "background_task_step",
+          "source_task": "05",
+          "source_tasks": [
+            "05"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 116,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "有独立恢复价值的步骤",
+          "primary_key_shape": "owner_id, task_id, step_no",
+          "logical_sources": [
+            "background_task_step"
+          ]
+        },
+        {
+          "name": "model_call",
+          "source_task": "05",
+          "source_tasks": [
+            "04",
+            "05",
+            "06",
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 146,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "一次物理模型调用无正文账目",
+          "primary_key_shape": "owner_id, call_id",
+          "logical_sources": [
+            "model_call"
+          ]
+        },
+        {
+          "name": "model_call_execution",
+          "group": "处理与调用",
+          "one_row_meaning": "一次物理调用唯一对应的step/assistant/quality真实执行及调用槽",
+          "primary_key_shape": "owner_id,call_id",
+          "status": "business",
+          "logical_sources": [
+            "step_model_call",
+            "assistant_attempt_model_call"
+          ],
+          "source_tasks": [
+            "05",
+            "06",
+            "07"
+          ]
+        },
+        {
+          "name": "model_request",
+          "source_task": "05",
+          "source_tasks": [
+            "05",
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 138,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "一次稳定逻辑模型操作",
+          "primary_key_shape": "owner_id, request_id",
+          "logical_sources": [
+            "model_request"
+          ]
+        },
+        {
+          "name": "processing_input",
+          "source_task": "05",
+          "source_tasks": [
+            "05"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 75,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "点击时固定的可用消息成员",
+          "primary_key_shape": "owner_id, run_id, scope_id, message_id",
+          "logical_sources": [
+            "processing_input"
+          ]
+        },
+        {
+          "name": "processing_operation",
+          "group": "处理与调用",
+          "one_row_meaning": "一次start/pause/resume等处理控制动作的幂等回执",
+          "primary_key_shape": "owner_id,operation_key",
+          "status": "business",
+          "logical_sources": [],
+          "source_tasks": [
+            "10"
+          ]
+        },
+        {
+          "name": "processing_receipt",
+          "source_task": "05",
+          "source_tasks": [
+            "05"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 92,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "某条消息跨轮处理或未知隔离结果",
+          "primary_key_shape": "owner_id, contact_id, message_id",
+          "logical_sources": [
+            "processing_receipt"
+          ]
+        },
+        {
+          "name": "processing_round",
+          "source_task": "05",
+          "source_tasks": [
+            "05"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 62,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "本次启动在一个范围上的固定分支",
+          "primary_key_shape": "owner_id, run_id, scope_id",
+          "logical_sources": [
+            "processing_round"
+          ]
+        },
+        {
+          "name": "processing_run",
+          "source_task": "05",
+          "source_tasks": [
+            "05"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 48,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "一次用户手动启动",
+          "primary_key_shape": "owner_id, run_id",
+          "logical_sources": [
+            "processing_run"
+          ]
+        },
+        {
+          "name": "processing_scope",
+          "source_task": "05",
+          "source_tasks": [
+            "05",
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 35,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "跨轮稳定的本人或联系人控制范围",
+          "primary_key_shape": "owner_id, scope_id",
+          "logical_sources": [
+            "processing_scope"
+          ]
+        },
+        {
+          "name": "step_attempt",
+          "source_task": "05",
+          "source_tasks": [
+            "05",
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 122,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "步骤一次真实领取执行及租约历史",
+          "primary_key_shape": "owner_id, task_id, step_no, attempt_no",
+          "logical_sources": [
+            "step_attempt"
+          ]
+        },
+        {
+          "name": "step_attempt_guard",
+          "source_task": "05",
+          "source_tasks": [
+            "05"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 130,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "本次执行需要复验的硬范围门禁",
+          "primary_key_shape": "owner_id, task_id, step_no, attempt_no, guard_scope_id",
+          "logical_sources": [
+            "step_attempt_guard"
+          ]
+        },
+        {
+          "name": "account_sync_control",
+          "source_task": "08",
+          "source_tasks": [
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/08-deletion-consistency.md",
+          "source_line": 85,
+          "group": "读取及删除",
+          "status": "business",
+          "one_row_meaning": "账号读取开关及开关代次",
+          "primary_key_shape": "owner_id, account_id",
+          "logical_sources": [
+            "account_sync_control"
+          ]
+        },
+        {
+          "name": "contact_data_control",
+          "source_task": "08",
+          "source_tasks": [
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/08-deletion-consistency.md",
+          "source_line": 87,
+          "group": "读取及删除",
+          "status": "business",
+          "one_row_meaning": "联系人硬数据代次及局部来源修订",
+          "primary_key_shape": "owner_id, contact_id",
+          "logical_sources": [
+            "contact_data_control"
+          ]
+        },
+        {
+          "name": "conversation_clear_boundary",
+          "source_task": "08",
+          "source_tasks": [
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/08-deletion-consistency.md",
+          "source_line": 93,
+          "group": "读取及删除",
+          "status": "business",
+          "one_row_meaning": "覆盖尚未读历史的稳定会话分界凭据",
+          "primary_key_shape": "owner_id, boundary_id",
+          "logical_sources": [
+            "conversation_clear_boundary"
+          ]
+        },
+        {
+          "name": "conversation_read_grant",
+          "source_task": "08",
+          "source_tasks": [
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/08-deletion-consistency.md",
+          "source_line": 86,
+          "group": "读取及删除",
+          "status": "business",
+          "one_row_meaning": "绑定上的一次独立读取授权",
+          "primary_key_shape": "owner_id, grant_id",
+          "logical_sources": [
+            "conversation_read_grant"
+          ]
+        },
+        {
+          "name": "deletion_operation",
+          "source_task": "08",
+          "source_tasks": [
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/08-deletion-consistency.md",
+          "source_line": 50,
+          "group": "读取及删除",
+          "status": "business",
+          "one_row_meaning": "独立于被删对象的持久删除请求",
+          "primary_key_shape": "operation_id",
+          "logical_sources": [
+            "deletion_operation"
+          ]
+        },
+        {
+          "name": "deletion_target",
+          "group": "读取及删除",
+          "one_row_meaning": "删除操作中一个具有明确存储类型及预期身份的清理目标",
+          "primary_key_shape": "operation_id,target_no",
+          "status": "business",
+          "logical_sources": [
+            "deletion_row_target",
+            "deletion_file_target"
+          ],
+          "source_tasks": [
+            "08"
+          ]
+        },
+        {
+          "name": "deletion_verification",
+          "source_task": "08",
+          "source_tasks": [
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/08-deletion-consistency.md",
+          "source_line": 75,
+          "group": "读取及删除",
+          "status": "business",
+          "one_row_meaning": "一个计划修订的分面复核结果",
+          "primary_key_shape": "operation_id, check_kind",
+          "logical_sources": [
+            "deletion_verification"
+          ]
+        },
+        {
+          "name": "history_restore_authorization",
+          "source_task": "08",
+          "source_tasks": [
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/08-deletion-consistency.md",
+          "source_line": 115,
+          "group": "读取及删除",
+          "status": "business",
+          "one_row_meaning": "单联系人显式历史恢复的新资格",
+          "primary_key_shape": "owner_id, restore_id",
+          "logical_sources": [
+            "history_restore_authorization"
+          ]
+        },
+        {
+          "name": "read_exclusion",
+          "group": "读取及删除",
+          "one_row_meaning": "一个会话、消息或捕获身份的最小读取排除",
+          "primary_key_shape": "owner_id,exclusion_id",
+          "status": "business",
+          "logical_sources": [
+            "ingestion_tombstone",
+            "conversation_exclusion"
+          ],
+          "source_tasks": [
+            "08"
+          ]
+        },
+        {
+          "name": "sync_checkpoint",
+          "source_task": "08",
+          "source_tasks": [
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/08-deletion-consistency.md",
+          "source_line": 119,
+          "group": "读取及删除",
+          "status": "business",
+          "one_row_meaning": "某授权代次和读取episode的进度与覆盖",
+          "primary_key_shape": "owner_id, grant_id, data_generation, stream_episode_id",
+          "logical_sources": [
+            "sync_checkpoint"
+          ]
+        },
+        {
+          "name": "material_reference",
+          "group": "共用材料",
+          "one_row_meaning": "材料清单中的一个有类型、有真实FK的来源或具体版本",
+          "primary_key_shape": "owner_id,material_set_id,item_no",
+          "status": "business",
+          "logical_sources": [
+            "trace_message_input",
+            "trace_source_input",
+            "trace_memory_input",
+            "trace_document_input",
+            "trace_feedback_input",
+            "assistant_context_item",
+            "preference_version_source",
+            "organization_feedback_input",
+            "skill_learning_input",
+            "skill_review_input",
+            "overview_projection_member"
+          ],
+          "source_tasks": [
+            "04",
+            "05",
+            "07",
+            "06"
+          ]
+        },
+        {
+          "name": "material_set",
+          "group": "共用材料",
+          "one_row_meaning": "某一明确用途、时点及业务归属的不可变材料清单/快照",
+          "primary_key_shape": "owner_id,material_set_id",
+          "status": "business",
+          "logical_sources": [
+            "assistant_context_snapshot"
+          ],
+          "source_tasks": [
+            "06"
+          ]
+        },
+        {
+          "name": "expression_preference",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 47,
+          "group": "集合与表达偏好",
+          "status": "business",
+          "one_row_meaning": "一条用户明确长期偏好身份",
+          "primary_key_shape": "owner_id, preference_id",
+          "logical_sources": [
+            "expression_preference"
+          ]
+        },
+        {
+          "name": "expression_preference_operation",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 50,
+          "group": "集合与表达偏好",
+          "status": "business",
+          "one_row_meaning": "偏好保存修改删除的幂等操作",
+          "primary_key_shape": "owner_id, operation_key",
+          "logical_sources": [
+            "expression_preference_operation"
+          ]
+        },
+        {
+          "name": "expression_preference_version",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 48,
+          "group": "集合与表达偏好",
+          "status": "business",
+          "one_row_meaning": "偏好正文及适用范围的具体版本",
+          "primary_key_shape": "owner_id, preference_id, version_no",
+          "logical_sources": [
+            "expression_preference_version"
+          ]
+        },
+        {
+          "name": "owner_collection_state",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 37,
+          "group": "集合与表达偏好",
+          "status": "business",
+          "one_row_meaning": "用户三个独立集合的单调修订",
+          "primary_key_shape": "owner_id",
+          "logical_sources": [
+            "owner_collection_state"
+          ]
+        },
+        {
+          "name": "claim_evidence",
+          "group": "记忆及证据",
+          "one_row_meaning": "候选或已采纳记忆版本的一处真实消息片段",
+          "primary_key_shape": "owner_id,evidence_id",
+          "status": "business",
+          "logical_sources": [
+            "candidate_evidence",
+            "memory_version_evidence"
+          ],
+          "source_tasks": [
+            "04"
+          ]
+        },
+        {
+          "name": "claim_required_message",
+          "group": "记忆及证据",
+          "one_row_meaning": "一个主张成立必须存在的一条消息",
+          "primary_key_shape": "owner_id,requirement_id",
+          "status": "business",
+          "logical_sources": [
+            "candidate_required_message",
+            "memory_version_required_message"
+          ],
+          "source_tasks": [
+            "04"
+          ]
+        },
+        {
+          "name": "memory",
+          "source_task": "04",
+          "source_tasks": [
+            "04",
+            "05",
+            "07",
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/04-memory-evidence-model.md",
+          "source_line": 47,
+          "group": "记忆及证据",
+          "status": "business",
+          "one_row_meaning": "一条稳定记忆身份及当前版本指针",
+          "primary_key_shape": "owner_id, memory_id",
+          "logical_sources": [
+            "memory"
+          ]
+        },
+        {
+          "name": "memory_candidate",
+          "source_task": "04",
+          "source_tasks": [
+            "04",
+            "06",
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/04-memory-evidence-model.md",
+          "source_line": 28,
+          "group": "记忆及证据",
+          "status": "business",
+          "one_row_meaning": "一次待裁决记忆主张",
+          "primary_key_shape": "owner_id, candidate_id",
+          "logical_sources": [
+            "memory_candidate"
+          ]
+        },
+        {
+          "name": "memory_decision",
+          "source_task": "04",
+          "source_tasks": [
+            "04"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/04-memory-evidence-model.md",
+          "source_line": 158,
+          "group": "记忆及证据",
+          "status": "business",
+          "one_row_meaning": "采纳拒绝修正恢复删除的操作事实",
+          "primary_key_shape": "owner_id, decision_id",
+          "logical_sources": [
+            "memory_decision"
+          ]
+        },
+        {
+          "name": "memory_trace",
+          "source_task": "04",
+          "source_tasks": [
+            "04",
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/04-memory-evidence-model.md",
+          "source_line": 123,
+          "group": "记忆及证据",
+          "status": "business",
+          "one_row_meaning": "一次有界处理过程及正文生命周期",
+          "primary_key_shape": "owner_id, trace_id",
+          "logical_sources": [
+            "memory_trace"
+          ]
+        },
+        {
+          "name": "memory_trace_event",
+          "source_task": "04",
+          "source_tasks": [
+            "04"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/04-memory-evidence-model.md",
+          "source_line": 137,
+          "group": "记忆及证据",
+          "status": "business",
+          "one_row_meaning": "处理阶段事件及完整敏感载荷",
+          "primary_key_shape": "owner_id, trace_id, event_no",
+          "logical_sources": [
+            "memory_trace_event"
+          ]
+        },
+        {
+          "name": "memory_version",
+          "source_task": "04",
+          "source_tasks": [
+            "04",
+            "06",
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/04-memory-evidence-model.md",
+          "source_line": 64,
+          "group": "记忆及证据",
+          "status": "business",
+          "one_row_meaning": "记忆的具体内容及依据版本",
+          "primary_key_shape": "owner_id, memory_id, version_no",
+          "logical_sources": [
+            "memory_version"
+          ]
+        },
+        {
+          "name": "memory_version_parent",
+          "source_task": "04",
+          "source_tasks": [
+            "04"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/04-memory-evidence-model.md",
+          "source_line": 89,
+          "group": "记忆及证据",
+          "status": "business",
+          "one_row_meaning": "两个具体记忆版本间的来历边",
+          "primary_key_shape": "owner_id, child_memory_id, child_version_no, parent_memory_id, parent_version_no",
+          "logical_sources": [
+            "memory_version_parent"
+          ]
+        },
+        {
+          "name": "document_block",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 67,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "文档版本内一个有类型的内容块",
+          "primary_key_shape": "owner_id, document_id, version_no, block_no",
+          "logical_sources": [
+            "document_block"
+          ]
+        },
+        {
+          "name": "document_block_reference",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 77,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "文档块对实际版本输入的引用",
+          "primary_key_shape": "owner_id, document_id, version_no, block_no, reference_no",
+          "logical_sources": [
+            "document_block_reference"
+          ]
+        },
+        {
+          "name": "document_collection",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 64,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "同一本人或联系人范围的文档集合",
+          "primary_key_shape": "owner_id, collection_id",
+          "logical_sources": [
+            "document_collection"
+          ]
+        },
+        {
+          "name": "document_publication",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 79,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "同范围一次一致文档发布集合",
+          "primary_key_shape": "owner_id, collection_id, publication_no",
+          "logical_sources": [
+            "document_publication"
+          ]
+        },
+        {
+          "name": "document_publication_member",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 84,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "发布集合内一篇文档选用的一版",
+          "primary_key_shape": "owner_id, collection_id, publication_no, document_id",
+          "logical_sources": [
+            "document_publication_member"
+          ]
+        },
+        {
+          "name": "document_version_parent",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 68,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "文档版本延续合并拆分来历边",
+          "primary_key_shape": "owner_id, child_document_id, child_version_no, parent_document_id, parent_version_no",
+          "logical_sources": [
+            "document_version_parent"
+          ]
+        },
+        {
+          "name": "memory_document",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 65,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "一个稳定主题或画像身份",
+          "primary_key_shape": "owner_id, document_id",
+          "logical_sources": [
+            "memory_document"
+          ]
+        },
+        {
+          "name": "memory_document_version",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 66,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "文档一个具体内容版本",
+          "primary_key_shape": "owner_id, document_id, version_no",
+          "logical_sources": [
+            "memory_document_version"
+          ]
+        },
+        {
+          "name": "organization_feedback",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 92,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "针对具体文档块或记忆版本的有限纠错反馈",
+          "primary_key_shape": "owner_id, feedback_id",
+          "logical_sources": [
+            "organization_feedback"
+          ]
+        },
+        {
+          "name": "scope_projection",
+          "group": "派生文档与投影",
+          "one_row_meaning": "同范围某一类型导航/概览投影的当前元数据",
+          "primary_key_shape": "owner_id,projection_id",
+          "status": "conditional",
+          "logical_sources": [
+            "overview_projection"
+          ],
+          "source_tasks": [
+            "07"
+          ]
+        },
+        {
+          "name": "channel_account",
+          "source_task": "02",
+          "source_tasks": [
+            "02",
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/02-contact-identity-model.md",
+          "source_line": 47,
+          "group": "身份",
+          "status": "business",
+          "one_row_meaning": "已核验渠道账号身份",
+          "primary_key_shape": "owner_id, account_id",
+          "logical_sources": [
+            "channel_account"
+          ]
+        },
+        {
+          "name": "contact",
+          "source_task": "02",
+          "source_tasks": [
+            "02",
+            "03",
+            "04",
+            "05",
+            "06",
+            "07",
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/02-contact-identity-model.md",
+          "source_line": 69,
+          "group": "身份",
+          "status": "business",
+          "one_row_meaning": "属于用户的一位联系人",
+          "primary_key_shape": "owner_id, contact_id",
+          "logical_sources": [
+            "contact"
+          ]
+        },
+        {
+          "name": "conversation_binding",
+          "source_task": "02",
+          "source_tasks": [
+            "02",
+            "03"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/02-contact-identity-model.md",
+          "source_line": 84,
+          "group": "身份",
+          "status": "business",
+          "one_row_meaning": "已核验渠道会话到联系人的稳定映射",
+          "primary_key_shape": "owner_id, binding_id",
+          "logical_sources": [
+            "conversation_binding"
+          ]
+        },
+        {
+          "name": "manual_contact_confirmation",
+          "group": "身份",
+          "one_row_meaning": "一次用户明确手动联系人确认，不授予微信读取资格",
+          "primary_key_shape": "owner_id,confirmation_id",
+          "status": "business",
+          "logical_sources": [],
+          "source_tasks": [
+            "10"
+          ]
+        },
+        {
+          "name": "owner",
+          "source_task": "02",
+          "source_tasks": [
+            "02",
+            "03",
+            "04",
+            "05",
+            "06",
+            "07",
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/02-contact-identity-model.md",
+          "source_line": 36,
+          "group": "身份",
+          "status": "business",
+          "one_row_meaning": "本机资料所有者身份",
+          "primary_key_shape": "owner_id",
+          "logical_sources": [
+            "owner"
+          ]
+        },
+        {
+          "name": "database_instance",
+          "group": "数据库元数据",
+          "one_row_meaning": "数据库实例UUID、用途和格式身份",
+          "primary_key_shape": "singleton_key=1",
+          "status": "metadata",
+          "logical_sources": [],
+          "source_tasks": [
+            "10"
+          ]
+        },
+        {
+          "name": "schema_migration",
+          "group": "数据库元数据",
+          "one_row_meaning": "新SQLite结构的一次已提交版本及校验和",
+          "primary_key_shape": "migration_no",
+          "status": "metadata",
+          "logical_sources": [],
+          "source_tasks": [
+            "10"
+          ]
+        },
+        {
+          "name": "message",
+          "source_task": "03",
+          "source_tasks": [
+            "02",
+            "03",
+            "04",
+            "05",
+            "06",
+            "07",
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/03-message-source-model.md",
+          "source_line": 90,
+          "group": "消息来源",
+          "status": "business",
+          "one_row_meaning": "可靠核验后的规范消息及非文字占位",
+          "primary_key_shape": "owner_id, contact_id, message_id",
+          "logical_sources": [
+            "message"
+          ]
+        },
+        {
+          "name": "source_batch",
+          "source_task": "03",
+          "source_tasks": [
+            "03",
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/03-message-source-model.md",
+          "source_line": 41,
+          "group": "消息来源",
+          "status": "business",
+          "one_row_meaning": "一次有界CLI捕获页",
+          "primary_key_shape": "owner_id, contact_id, batch_id",
+          "logical_sources": [
+            "source_batch"
+          ]
+        },
+        {
+          "name": "source_record",
+          "source_task": "03",
+          "source_tasks": [
+            "03",
+            "04",
+            "06",
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/03-message-source-model.md",
+          "source_line": 65,
+          "group": "消息来源",
+          "status": "business",
+          "one_row_meaning": "捕获页中的一次原始出现",
+          "primary_key_shape": "owner_id, contact_id, record_id",
+          "logical_sources": [
+            "source_record"
+          ]
+        },
+        {
+          "name": "quality_attempt",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 168,
+          "group": "诊断能力（位置待决）",
+          "status": "diagnostic",
+          "one_row_meaning": "诊断案例一次真实调用及审阅",
+          "primary_key_shape": "owner_id, attempt_id〔键概形建议，run/case/call为外键〕",
+          "logical_sources": [
+            "quality_attempt"
+          ]
+        },
+        {
+          "name": "quality_case",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 168,
+          "group": "诊断能力（位置待决）",
+          "status": "diagnostic",
+          "one_row_meaning": "冻结诊断输入及人工标注",
+          "primary_key_shape": "owner_id, case_id〔键概形建议，run_id为外键〕",
+          "logical_sources": [
+            "quality_case"
+          ]
+        },
+        {
+          "name": "quality_fact_intent",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 168,
+          "group": "诊断能力（位置待决）",
+          "status": "diagnostic",
+          "one_row_meaning": "精确纠错目标与有限质量案例衔接",
+          "primary_key_shape": "owner_id, intent_id〔键概形建议，现稿未逐表定键〕",
+          "logical_sources": [
+            "quality_fact_intent"
+          ]
+        },
+        {
+          "name": "quality_run",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 168,
+          "group": "诊断能力（位置待决）",
+          "status": "diagnostic",
+          "one_row_meaning": "合成用途运行门禁下的一次质量数据集运行",
+          "primary_key_shape": "owner_id, run_id〔键概形建议，现稿未逐表定键〕",
+          "logical_sources": [
+            "quality_run"
+          ]
+        },
+        {
+          "name": "assistant_attempt",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 72,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "助手短请求的一次实际执行",
+          "primary_key_shape": "owner_id, contact_id, session_id, turn_id, attempt_no",
+          "logical_sources": [
+            "assistant_attempt"
+          ]
+        },
+        {
+          "name": "assistant_request_tombstone",
+          "group": "助手与候选",
+          "one_row_meaning": "已删除或中断回复请求的最小封存键",
+          "primary_key_shape": "owner_id,contact_id,request_key",
+          "status": "business",
+          "logical_sources": [],
+          "source_tasks": [
+            "10"
+          ]
+        },
+        {
+          "name": "assistant_runtime_context",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 157,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "运行副本实际纳入的上下文",
+          "primary_key_shape": "owner_id, contact_id, session_id, runtime_id, context_id",
+          "logical_sources": [
+            "assistant_runtime_context"
+          ]
+        },
+        {
+          "name": "assistant_runtime_instance",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 156,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "业务会话的一个DSH运行副本",
+          "primary_key_shape": "owner_id, contact_id, session_id, runtime_id",
+          "logical_sources": [
+            "assistant_runtime_instance"
+          ]
+        },
+        {
+          "name": "assistant_selection",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 108,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "用户一次显式选择具体候选版本",
+          "primary_key_shape": "owner_id, contact_id, session_id, selection_no",
+          "logical_sources": [
+            "assistant_selection"
+          ]
+        },
+        {
+          "name": "assistant_session",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 37,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "联系人下的一段业务讨论",
+          "primary_key_shape": "owner_id, contact_id, session_id",
+          "logical_sources": [
+            "assistant_session"
+          ]
+        },
+        {
+          "name": "assistant_turn",
+          "source_task": "06",
+          "source_tasks": [
+            "06",
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 52,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "一次明确提交输入及逻辑请求",
+          "primary_key_shape": "owner_id, contact_id, session_id, turn_id",
+          "logical_sources": [
+            "assistant_turn"
+          ]
+        },
+        {
+          "name": "candidate_version_citation",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 138,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "某版候选的具体显示依据定位",
+          "primary_key_shape": "owner_id, contact_id, session_id, candidate_id, version_no, citation_no",
+          "logical_sources": [
+            "candidate_version_citation"
+          ]
+        },
+        {
+          "name": "reply_candidate",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 80,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "生成的一个稳定回复候选身份",
+          "primary_key_shape": "owner_id, contact_id, session_id, candidate_id",
+          "logical_sources": [
+            "reply_candidate"
+          ]
+        },
+        {
+          "name": "reply_candidate_segment",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 103,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "候选内稳定的消息段身份与顺序",
+          "primary_key_shape": "owner_id, contact_id, session_id, candidate_id, segment_id",
+          "logical_sources": [
+            "reply_candidate_segment"
+          ]
+        },
+        {
+          "name": "reply_candidate_version",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 86,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "回复候选的原稿或编辑版本",
+          "primary_key_shape": "owner_id, contact_id, session_id, candidate_id, version_no",
+          "logical_sources": [
+            "reply_candidate_version"
+          ]
+        },
+        {
+          "name": "reply_candidate_version_message",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 104,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "某版本某段的正文",
+          "primary_key_shape": "owner_id, contact_id, session_id, candidate_id, version_no, segment_id",
+          "logical_sources": [
+            "reply_candidate_version_message"
+          ]
+        },
+        {
+          "name": "reply_method",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 110,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "回复方法的稳定身份",
+          "primary_key_shape": "owner_id, method_id",
+          "logical_sources": [
+            "reply_method"
+          ]
+        },
+        {
+          "name": "reply_skill",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 108,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "Skill稳定身份及业务目录状态",
+          "primary_key_shape": "owner_id, skill_id",
+          "logical_sources": [
+            "reply_skill"
+          ]
+        },
+        {
+          "name": "reply_skill_version",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 109,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "不可变Skill文件版本锚点及发布来历",
+          "primary_key_shape": "owner_id, skill_id, version_no",
+          "logical_sources": [
+            "reply_skill_version"
+          ]
+        },
+        {
+          "name": "skill_draft",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 133,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "待审核策略草稿稳定身份",
+          "primary_key_shape": "owner_id, contact_id, draft_id",
+          "logical_sources": [
+            "skill_draft"
+          ]
+        },
+        {
+          "name": "skill_draft_target",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 135,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "草稿修订明确针对的Skill版本",
+          "primary_key_shape": "owner_id, contact_id, draft_id, revision, target_skill_id, target_version_no",
+          "logical_sources": [
+            "skill_draft_target"
+          ]
+        },
+        {
+          "name": "skill_draft_version",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 134,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "草稿一个修订的清洗策略及私人依据",
+          "primary_key_shape": "owner_id, contact_id, draft_id, revision",
+          "logical_sources": [
+            "skill_draft_version"
+          ]
+        },
+        {
+          "name": "skill_learning_batch",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 130,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "一份有限授权学习批次及结果",
+          "primary_key_shape": "owner_id, contact_id, batch_id",
+          "logical_sources": [
+            "skill_learning_batch"
+          ]
+        },
+        {
+          "name": "skill_learning_receipt",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 132,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "实际材料预约及成功消费结果",
+          "primary_key_shape": "owner_id, contact_id, material_key",
+          "logical_sources": [
+            "skill_learning_receipt"
+          ]
+        },
+        {
+          "name": "skill_learning_scope",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 128,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "单联系人独立学习授权",
+          "primary_key_shape": "owner_id, contact_id",
+          "logical_sources": [
+            "skill_learning_scope"
+          ]
+        },
+        {
+          "name": "skill_method_parent",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 112,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "方法延续或替代祖先边",
+          "primary_key_shape": "owner_id, child_method_id, parent_method_id",
+          "logical_sources": [
+            "skill_method_parent"
+          ]
+        },
+        {
+          "name": "skill_operation",
+          "group": "Skill及审核",
+          "one_row_meaning": "一次明确的Skill目录、政策或学习授权动作及幂等结果",
+          "primary_key_shape": "owner_id,operation_key",
+          "status": "business",
+          "logical_sources": [
+            "skill_policy_operation",
+            "skill_learning_operation",
+            "skill_catalog_operation"
+          ],
+          "source_tasks": [
+            "07"
+          ]
+        },
+        {
+          "name": "skill_parent",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 113,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "Skill合并或延续祖先边",
+          "primary_key_shape": "owner_id, child_skill_id, parent_skill_id",
+          "logical_sources": [
+            "skill_parent"
+          ]
+        },
+        {
+          "name": "skill_review",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 136,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "冻结输入和草稿修订的业务对照审核",
+          "primary_key_shape": "owner_id, contact_id, review_id",
+          "logical_sources": [
+            "skill_review"
+          ]
+        },
+        {
+          "name": "skill_review_result_call",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 140,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "审核结果消费的真实物理调用链",
+          "primary_key_shape": "owner_id, contact_id, review_id, side, call_id",
+          "logical_sources": [
+            "skill_review_result_call"
+          ]
+        },
+        {
+          "name": "skill_review_side",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 139,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "审核一侧实际策略及执行结果",
+          "primary_key_shape": "owner_id, contact_id, review_id, side",
+          "logical_sources": [
+            "skill_review_side"
+          ]
+        },
+        {
+          "name": "skill_scope_policy",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 119,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "Skill或方法在明确范围的停用决定",
+          "primary_key_shape": "owner_id, policy_id",
+          "logical_sources": [
+            "skill_scope_policy"
+          ]
+        },
+        {
+          "name": "skill_use",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 121,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "实际Skill版本及政策视图使用事实",
+          "primary_key_shape": "owner_id, use_id",
+          "logical_sources": [
+            "skill_use"
+          ]
+        },
+        {
+          "name": "skill_use_method",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 121,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "实际使用视图中的具体版本方法成员",
+          "primary_key_shape": "owner_id, use_id, method_id",
+          "logical_sources": [
+            "skill_use_method"
+          ]
+        },
+        {
+          "name": "skill_version_method",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 111,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "某Skill版本的方法成员及顺序",
+          "primary_key_shape": "owner_id, skill_id, version_no, method_id",
+          "logical_sources": [
+            "skill_version_method"
+          ]
+        },
+        {
+          "name": "skill_worktree_projection",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 150,
+          "group": "Skill及审核",
+          "status": "conditional",
+          "one_row_meaning": "可恢复的非权威Skill工作目录回写",
+          "primary_key_shape": "owner_id, operation_key, skill_id",
+          "logical_sources": [
+            "skill_worktree_projection"
+          ]
+        }
+      ],
+      "logical_to_physical": {
+        "owner": [
+          "owner"
+        ],
+        "channel_account": [
+          "channel_account"
+        ],
+        "contact": [
+          "contact"
+        ],
+        "conversation_binding": [
+          "conversation_binding"
+        ],
+        "source_batch": [
+          "source_batch"
+        ],
+        "source_record": [
+          "source_record"
+        ],
+        "message": [
+          "message"
+        ],
+        "memory_candidate": [
+          "memory_candidate"
+        ],
+        "memory": [
+          "memory"
+        ],
+        "memory_version": [
+          "memory_version"
+        ],
+        "memory_version_parent": [
+          "memory_version_parent"
+        ],
+        "candidate_evidence": [
+          "claim_evidence"
+        ],
+        "candidate_required_message": [
+          "claim_required_message"
+        ],
+        "memory_version_evidence": [
+          "claim_evidence"
+        ],
+        "memory_version_required_message": [
+          "claim_required_message"
+        ],
+        "memory_trace": [
+          "memory_trace"
+        ],
+        "memory_trace_event": [
+          "memory_trace_event"
+        ],
+        "trace_message_input": [
+          "material_reference"
+        ],
+        "trace_source_input": [
+          "material_reference"
+        ],
+        "trace_memory_input": [
+          "material_reference"
+        ],
+        "memory_decision": [
+          "memory_decision"
+        ],
+        "processing_scope": [
+          "processing_scope"
+        ],
+        "processing_run": [
+          "processing_run"
+        ],
+        "processing_round": [
+          "processing_round"
+        ],
+        "processing_input": [
+          "processing_input"
+        ],
+        "processing_receipt": [
+          "processing_receipt"
+        ],
+        "background_task": [
+          "background_task"
+        ],
+        "background_task_step": [
+          "background_task_step"
+        ],
+        "step_attempt": [
+          "step_attempt"
+        ],
+        "step_attempt_guard": [
+          "step_attempt_guard"
+        ],
+        "model_request": [
+          "model_request"
+        ],
+        "model_call": [
+          "model_call"
+        ],
+        "step_model_call": [
+          "model_call_execution"
+        ],
+        "assistant_session": [
+          "assistant_session"
+        ],
+        "assistant_turn": [
+          "assistant_turn"
+        ],
+        "assistant_attempt": [
+          "assistant_attempt"
+        ],
+        "reply_candidate": [
+          "reply_candidate"
+        ],
+        "reply_candidate_version": [
+          "reply_candidate_version"
+        ],
+        "reply_candidate_segment": [
+          "reply_candidate_segment"
+        ],
+        "reply_candidate_version_message": [
+          "reply_candidate_version_message"
+        ],
+        "assistant_selection": [
+          "assistant_selection"
+        ],
+        "assistant_context_snapshot": [
+          "material_set"
+        ],
+        "assistant_context_item": [
+          "material_reference"
+        ],
+        "candidate_version_citation": [
+          "candidate_version_citation"
+        ],
+        "assistant_attempt_model_call": [
+          "model_call_execution"
+        ],
+        "assistant_runtime_instance": [
+          "assistant_runtime_instance"
+        ],
+        "assistant_runtime_context": [
+          "assistant_runtime_context"
+        ],
+        "owner_collection_state": [
+          "owner_collection_state"
+        ],
+        "expression_preference": [
+          "expression_preference"
+        ],
+        "expression_preference_version": [
+          "expression_preference_version"
+        ],
+        "preference_version_source": [
+          "material_reference"
+        ],
+        "expression_preference_operation": [
+          "expression_preference_operation"
+        ],
+        "document_collection": [
+          "document_collection"
+        ],
+        "memory_document": [
+          "memory_document"
+        ],
+        "memory_document_version": [
+          "memory_document_version"
+        ],
+        "document_block": [
+          "document_block"
+        ],
+        "document_version_parent": [
+          "document_version_parent"
+        ],
+        "trace_document_input": [
+          "material_reference"
+        ],
+        "trace_feedback_input": [
+          "material_reference"
+        ],
+        "document_block_reference": [
+          "document_block_reference"
+        ],
+        "document_publication": [
+          "document_publication"
+        ],
+        "document_publication_member": [
+          "document_publication_member"
+        ],
+        "organization_feedback": [
+          "organization_feedback"
+        ],
+        "organization_feedback_input": [
+          "material_reference"
+        ],
+        "overview_projection": [
+          "scope_projection"
+        ],
+        "overview_projection_member": [
+          "material_reference"
+        ],
+        "reply_skill": [
+          "reply_skill"
+        ],
+        "reply_skill_version": [
+          "reply_skill_version"
+        ],
+        "reply_method": [
+          "reply_method"
+        ],
+        "skill_version_method": [
+          "skill_version_method"
+        ],
+        "skill_method_parent": [
+          "skill_method_parent"
+        ],
+        "skill_parent": [
+          "skill_parent"
+        ],
+        "skill_scope_policy": [
+          "skill_scope_policy"
+        ],
+        "skill_policy_operation": [
+          "skill_operation"
+        ],
+        "skill_use": [
+          "skill_use"
+        ],
+        "skill_use_method": [
+          "skill_use_method"
+        ],
+        "skill_learning_scope": [
+          "skill_learning_scope"
+        ],
+        "skill_learning_operation": [
+          "skill_operation"
+        ],
+        "skill_learning_batch": [
+          "skill_learning_batch"
+        ],
+        "skill_learning_input": [
+          "material_reference"
+        ],
+        "skill_learning_receipt": [
+          "skill_learning_receipt"
+        ],
+        "skill_draft": [
+          "skill_draft"
+        ],
+        "skill_draft_version": [
+          "skill_draft_version"
+        ],
+        "skill_draft_target": [
+          "skill_draft_target"
+        ],
+        "skill_review": [
+          "skill_review"
+        ],
+        "skill_review_input": [
+          "material_reference"
+        ],
+        "skill_review_target": [
+          "skill_review",
+          "skill_draft_target"
+        ],
+        "skill_review_side": [
+          "skill_review_side"
+        ],
+        "skill_review_result_call": [
+          "skill_review_result_call"
+        ],
+        "skill_catalog_operation": [
+          "skill_operation"
+        ],
+        "skill_worktree_projection": [
+          "skill_worktree_projection"
+        ],
+        "quality_run": [
+          "quality_run"
+        ],
+        "quality_case": [
+          "quality_case"
+        ],
+        "quality_attempt": [
+          "quality_attempt"
+        ],
+        "quality_fact_intent": [
+          "quality_fact_intent"
+        ],
+        "deletion_operation": [
+          "deletion_operation"
+        ],
+        "deletion_row_target": [
+          "deletion_target"
+        ],
+        "deletion_file_target": [
+          "deletion_target"
+        ],
+        "deletion_verification": [
+          "deletion_verification"
+        ],
+        "account_sync_control": [
+          "account_sync_control"
+        ],
+        "conversation_read_grant": [
+          "conversation_read_grant"
+        ],
+        "contact_data_control": [
+          "contact_data_control"
+        ],
+        "conversation_clear_boundary": [
+          "conversation_clear_boundary"
+        ],
+        "ingestion_tombstone": [
+          "read_exclusion"
+        ],
+        "conversation_exclusion": [
+          "read_exclusion"
+        ],
+        "history_restore_authorization": [
+          "history_restore_authorization"
+        ],
+        "sync_checkpoint": [
+          "sync_checkpoint"
+        ]
+      },
+      "derived_relations": [
+        {
+          "logical": "skill_review_target",
+          "via": [
+            "skill_review.draft_id/revision",
+            "skill_draft_target"
+          ],
+          "condition": "审核无独立targets输入；不可变草稿版本固定集合，发布仍核当前版本和来源"
+        }
+      ]
+    },
+    "domain_inputs": {
+      "kind": "domain_inputs",
+      "counts": {
+        "total": 100,
+        "business": 91,
+        "conditional": 3,
+        "diagnostic": 4,
+        "metadata": 2
+      },
+      "tables": [
+        {
+          "name": "background_task",
+          "source_task": "05",
+          "source_tasks": [
+            "05",
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 102,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "归属固定的一份有限工作",
+          "primary_key_shape": "owner_id, task_id",
+          "logical_sources": [
+            "background_task"
+          ]
+        },
+        {
+          "name": "background_task_step",
+          "source_task": "05",
+          "source_tasks": [
+            "05"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 116,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "有独立恢复价值的步骤",
+          "primary_key_shape": "owner_id, task_id, step_no",
+          "logical_sources": [
+            "background_task_step"
+          ]
+        },
+        {
+          "name": "model_call",
+          "source_task": "05",
+          "source_tasks": [
+            "04",
+            "05",
+            "06",
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 146,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "一次物理模型调用无正文账目",
+          "primary_key_shape": "owner_id, call_id",
+          "logical_sources": [
+            "model_call"
+          ]
+        },
+        {
+          "name": "model_call_execution",
+          "group": "处理与调用",
+          "one_row_meaning": "一次物理调用唯一对应的step/assistant/quality真实执行及调用槽",
+          "primary_key_shape": "owner_id,call_id",
+          "status": "business",
+          "logical_sources": [
+            "step_model_call",
+            "assistant_attempt_model_call"
+          ],
+          "source_tasks": [
+            "05",
+            "06",
+            "07"
+          ]
+        },
+        {
+          "name": "model_request",
+          "source_task": "05",
+          "source_tasks": [
+            "05",
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 138,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "一次稳定逻辑模型操作",
+          "primary_key_shape": "owner_id, request_id",
+          "logical_sources": [
+            "model_request"
+          ]
+        },
+        {
+          "name": "processing_input",
+          "source_task": "05",
+          "source_tasks": [
+            "05"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 75,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "点击时固定的可用消息成员",
+          "primary_key_shape": "owner_id, run_id, scope_id, message_id",
+          "logical_sources": [
+            "processing_input"
+          ]
+        },
+        {
+          "name": "processing_operation",
+          "group": "处理与调用",
+          "one_row_meaning": "一次start/pause/resume等处理控制动作的幂等回执",
+          "primary_key_shape": "owner_id,operation_key",
+          "status": "business",
+          "logical_sources": [],
+          "source_tasks": [
+            "10"
+          ]
+        },
+        {
+          "name": "processing_receipt",
+          "source_task": "05",
+          "source_tasks": [
+            "05"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 92,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "某条消息跨轮处理或未知隔离结果",
+          "primary_key_shape": "owner_id, contact_id, message_id",
+          "logical_sources": [
+            "processing_receipt"
+          ]
+        },
+        {
+          "name": "processing_round",
+          "source_task": "05",
+          "source_tasks": [
+            "05"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 62,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "本次启动在一个范围上的固定分支",
+          "primary_key_shape": "owner_id, run_id, scope_id",
+          "logical_sources": [
+            "processing_round"
+          ]
+        },
+        {
+          "name": "processing_run",
+          "source_task": "05",
+          "source_tasks": [
+            "05"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 48,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "一次用户手动启动",
+          "primary_key_shape": "owner_id, run_id",
+          "logical_sources": [
+            "processing_run"
+          ]
+        },
+        {
+          "name": "processing_scope",
+          "source_task": "05",
+          "source_tasks": [
+            "05",
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 35,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "跨轮稳定的本人或联系人控制范围",
+          "primary_key_shape": "owner_id, scope_id",
+          "logical_sources": [
+            "processing_scope"
+          ]
+        },
+        {
+          "name": "step_attempt",
+          "source_task": "05",
+          "source_tasks": [
+            "05",
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 122,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "步骤一次真实领取执行及租约历史",
+          "primary_key_shape": "owner_id, task_id, step_no, attempt_no",
+          "logical_sources": [
+            "step_attempt"
+          ]
+        },
+        {
+          "name": "step_attempt_guard",
+          "source_task": "05",
+          "source_tasks": [
+            "05"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/05-processing-task-model.md",
+          "source_line": 130,
+          "group": "处理与调用",
+          "status": "business",
+          "one_row_meaning": "本次执行需要复验的硬范围门禁",
+          "primary_key_shape": "owner_id, task_id, step_no, attempt_no, guard_scope_id",
+          "logical_sources": [
+            "step_attempt_guard"
+          ]
+        },
+        {
+          "name": "account_sync_control",
+          "source_task": "08",
+          "source_tasks": [
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/08-deletion-consistency.md",
+          "source_line": 85,
+          "group": "读取及删除",
+          "status": "business",
+          "one_row_meaning": "账号读取开关及开关代次",
+          "primary_key_shape": "owner_id, account_id",
+          "logical_sources": [
+            "account_sync_control"
+          ]
+        },
+        {
+          "name": "contact_data_control",
+          "source_task": "08",
+          "source_tasks": [
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/08-deletion-consistency.md",
+          "source_line": 87,
+          "group": "读取及删除",
+          "status": "business",
+          "one_row_meaning": "联系人硬数据代次及局部来源修订",
+          "primary_key_shape": "owner_id, contact_id",
+          "logical_sources": [
+            "contact_data_control"
+          ]
+        },
+        {
+          "name": "conversation_clear_boundary",
+          "source_task": "08",
+          "source_tasks": [
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/08-deletion-consistency.md",
+          "source_line": 93,
+          "group": "读取及删除",
+          "status": "business",
+          "one_row_meaning": "覆盖尚未读历史的稳定会话分界凭据",
+          "primary_key_shape": "owner_id, boundary_id",
+          "logical_sources": [
+            "conversation_clear_boundary"
+          ]
+        },
+        {
+          "name": "conversation_read_grant",
+          "source_task": "08",
+          "source_tasks": [
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/08-deletion-consistency.md",
+          "source_line": 86,
+          "group": "读取及删除",
+          "status": "business",
+          "one_row_meaning": "绑定上的一次独立读取授权",
+          "primary_key_shape": "owner_id, grant_id",
+          "logical_sources": [
+            "conversation_read_grant"
+          ]
+        },
+        {
+          "name": "deletion_operation",
+          "source_task": "08",
+          "source_tasks": [
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/08-deletion-consistency.md",
+          "source_line": 50,
+          "group": "读取及删除",
+          "status": "business",
+          "one_row_meaning": "独立于被删对象的持久删除请求",
+          "primary_key_shape": "operation_id",
+          "logical_sources": [
+            "deletion_operation"
+          ]
+        },
+        {
+          "name": "deletion_target",
+          "group": "读取及删除",
+          "one_row_meaning": "删除操作中一个具有明确存储类型及预期身份的清理目标",
+          "primary_key_shape": "operation_id,target_no",
+          "status": "business",
+          "logical_sources": [
+            "deletion_row_target",
+            "deletion_file_target"
+          ],
+          "source_tasks": [
+            "08"
+          ]
+        },
+        {
+          "name": "deletion_verification",
+          "source_task": "08",
+          "source_tasks": [
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/08-deletion-consistency.md",
+          "source_line": 75,
+          "group": "读取及删除",
+          "status": "business",
+          "one_row_meaning": "一个计划修订的分面复核结果",
+          "primary_key_shape": "operation_id, check_kind",
+          "logical_sources": [
+            "deletion_verification"
+          ]
+        },
+        {
+          "name": "history_restore_authorization",
+          "source_task": "08",
+          "source_tasks": [
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/08-deletion-consistency.md",
+          "source_line": 115,
+          "group": "读取及删除",
+          "status": "business",
+          "one_row_meaning": "单联系人显式历史恢复的新资格",
+          "primary_key_shape": "owner_id, restore_id",
+          "logical_sources": [
+            "history_restore_authorization"
+          ]
+        },
+        {
+          "name": "read_exclusion",
+          "group": "读取及删除",
+          "one_row_meaning": "一个会话、消息或捕获身份的最小读取排除",
+          "primary_key_shape": "owner_id,exclusion_id",
+          "status": "business",
+          "logical_sources": [
+            "ingestion_tombstone",
+            "conversation_exclusion"
+          ],
+          "source_tasks": [
+            "08"
+          ]
+        },
+        {
+          "name": "sync_checkpoint",
+          "source_task": "08",
+          "source_tasks": [
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/08-deletion-consistency.md",
+          "source_line": 119,
+          "group": "读取及删除",
+          "status": "business",
+          "one_row_meaning": "某授权代次和读取episode的进度与覆盖",
+          "primary_key_shape": "owner_id, grant_id, data_generation, stream_episode_id",
+          "logical_sources": [
+            "sync_checkpoint"
+          ]
+        },
+        {
+          "name": "expression_preference",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 47,
+          "group": "集合与表达偏好",
+          "status": "business",
+          "one_row_meaning": "一条用户明确长期偏好身份",
+          "primary_key_shape": "owner_id, preference_id",
+          "logical_sources": [
+            "expression_preference"
+          ]
+        },
+        {
+          "name": "expression_preference_operation",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 50,
+          "group": "集合与表达偏好",
+          "status": "business",
+          "one_row_meaning": "偏好保存修改删除的幂等操作",
+          "primary_key_shape": "owner_id, operation_key",
+          "logical_sources": [
+            "expression_preference_operation"
+          ]
+        },
+        {
+          "name": "expression_preference_version",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 48,
+          "group": "集合与表达偏好",
+          "status": "business",
+          "one_row_meaning": "偏好正文及适用范围的具体版本",
+          "primary_key_shape": "owner_id, preference_id, version_no",
+          "logical_sources": [
+            "expression_preference_version"
+          ]
+        },
+        {
+          "name": "owner_collection_state",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 37,
+          "group": "集合与表达偏好",
+          "status": "business",
+          "one_row_meaning": "用户三个独立集合的单调修订",
+          "primary_key_shape": "owner_id",
+          "logical_sources": [
+            "owner_collection_state"
+          ]
+        },
+        {
+          "name": "preference_version_source",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 49,
+          "group": "集合与表达偏好",
+          "status": "business",
+          "one_row_meaning": "偏好版本当时实际捕获支持",
+          "primary_key_shape": "owner_id, preference_id, version_no, source_contact_id, record_id",
+          "logical_sources": [
+            "preference_version_source"
+          ]
+        },
+        {
+          "name": "claim_evidence",
+          "group": "记忆及证据",
+          "one_row_meaning": "候选或已采纳记忆版本的一处真实消息片段",
+          "primary_key_shape": "owner_id,evidence_id",
+          "status": "business",
+          "logical_sources": [
+            "candidate_evidence",
+            "memory_version_evidence"
+          ],
+          "source_tasks": [
+            "04"
+          ]
+        },
+        {
+          "name": "claim_required_message",
+          "group": "记忆及证据",
+          "one_row_meaning": "一个主张成立必须存在的一条消息",
+          "primary_key_shape": "owner_id,requirement_id",
+          "status": "business",
+          "logical_sources": [
+            "candidate_required_message",
+            "memory_version_required_message"
+          ],
+          "source_tasks": [
+            "04"
+          ]
+        },
+        {
+          "name": "memory",
+          "source_task": "04",
+          "source_tasks": [
+            "04",
+            "05",
+            "07",
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/04-memory-evidence-model.md",
+          "source_line": 47,
+          "group": "记忆及证据",
+          "status": "business",
+          "one_row_meaning": "一条稳定记忆身份及当前版本指针",
+          "primary_key_shape": "owner_id, memory_id",
+          "logical_sources": [
+            "memory"
+          ]
+        },
+        {
+          "name": "memory_candidate",
+          "source_task": "04",
+          "source_tasks": [
+            "04",
+            "06",
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/04-memory-evidence-model.md",
+          "source_line": 28,
+          "group": "记忆及证据",
+          "status": "business",
+          "one_row_meaning": "一次待裁决记忆主张",
+          "primary_key_shape": "owner_id, candidate_id",
+          "logical_sources": [
+            "memory_candidate"
+          ]
+        },
+        {
+          "name": "memory_decision",
+          "source_task": "04",
+          "source_tasks": [
+            "04"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/04-memory-evidence-model.md",
+          "source_line": 158,
+          "group": "记忆及证据",
+          "status": "business",
+          "one_row_meaning": "采纳拒绝修正恢复删除的操作事实",
+          "primary_key_shape": "owner_id, decision_id",
+          "logical_sources": [
+            "memory_decision"
+          ]
+        },
+        {
+          "name": "memory_trace",
+          "source_task": "04",
+          "source_tasks": [
+            "04",
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/04-memory-evidence-model.md",
+          "source_line": 123,
+          "group": "记忆及证据",
+          "status": "business",
+          "one_row_meaning": "一次有界处理过程及正文生命周期",
+          "primary_key_shape": "owner_id, trace_id",
+          "logical_sources": [
+            "memory_trace"
+          ]
+        },
+        {
+          "name": "memory_trace_event",
+          "source_task": "04",
+          "source_tasks": [
+            "04"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/04-memory-evidence-model.md",
+          "source_line": 137,
+          "group": "记忆及证据",
+          "status": "business",
+          "one_row_meaning": "处理阶段事件及完整敏感载荷",
+          "primary_key_shape": "owner_id, trace_id, event_no",
+          "logical_sources": [
+            "memory_trace_event"
+          ]
+        },
+        {
+          "name": "memory_version",
+          "source_task": "04",
+          "source_tasks": [
+            "04",
+            "06",
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/04-memory-evidence-model.md",
+          "source_line": 64,
+          "group": "记忆及证据",
+          "status": "business",
+          "one_row_meaning": "记忆的具体内容及依据版本",
+          "primary_key_shape": "owner_id, memory_id, version_no",
+          "logical_sources": [
+            "memory_version"
+          ]
+        },
+        {
+          "name": "memory_version_parent",
+          "source_task": "04",
+          "source_tasks": [
+            "04"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/04-memory-evidence-model.md",
+          "source_line": 89,
+          "group": "记忆及证据",
+          "status": "business",
+          "one_row_meaning": "两个具体记忆版本间的来历边",
+          "primary_key_shape": "owner_id, child_memory_id, child_version_no, parent_memory_id, parent_version_no",
+          "logical_sources": [
+            "memory_version_parent"
+          ]
+        },
+        {
+          "name": "trace_input",
+          "group": "记忆及证据",
+          "one_row_meaning": "一次memory_trace中的一个明确类型实际输入",
+          "primary_key_shape": "owner_id,trace_id,input_no",
+          "status": "business",
+          "logical_sources": [
+            "trace_message_input",
+            "trace_source_input",
+            "trace_memory_input",
+            "trace_document_input",
+            "trace_feedback_input"
+          ],
+          "source_tasks": [
+            "04",
+            "05",
+            "07"
+          ]
+        },
+        {
+          "name": "document_block",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 67,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "文档版本内一个有类型的内容块",
+          "primary_key_shape": "owner_id, document_id, version_no, block_no",
+          "logical_sources": [
+            "document_block"
+          ]
+        },
+        {
+          "name": "document_block_reference",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 77,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "文档块对实际版本输入的引用",
+          "primary_key_shape": "owner_id, document_id, version_no, block_no, reference_no",
+          "logical_sources": [
+            "document_block_reference"
+          ]
+        },
+        {
+          "name": "document_collection",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 64,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "同一本人或联系人范围的文档集合",
+          "primary_key_shape": "owner_id, collection_id",
+          "logical_sources": [
+            "document_collection"
+          ]
+        },
+        {
+          "name": "document_publication",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 79,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "同范围一次一致文档发布集合",
+          "primary_key_shape": "owner_id, collection_id, publication_no",
+          "logical_sources": [
+            "document_publication"
+          ]
+        },
+        {
+          "name": "document_publication_member",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 84,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "发布集合内一篇文档选用的一版",
+          "primary_key_shape": "owner_id, collection_id, publication_no, document_id",
+          "logical_sources": [
+            "document_publication_member"
+          ]
+        },
+        {
+          "name": "document_version_parent",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 68,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "文档版本延续合并拆分来历边",
+          "primary_key_shape": "owner_id, child_document_id, child_version_no, parent_document_id, parent_version_no",
+          "logical_sources": [
+            "document_version_parent"
+          ]
+        },
+        {
+          "name": "memory_document",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 65,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "一个稳定主题或画像身份",
+          "primary_key_shape": "owner_id, document_id",
+          "logical_sources": [
+            "memory_document"
+          ]
+        },
+        {
+          "name": "memory_document_version",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 66,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "文档一个具体内容版本",
+          "primary_key_shape": "owner_id, document_id, version_no",
+          "logical_sources": [
+            "memory_document_version"
+          ]
+        },
+        {
+          "name": "organization_feedback",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 92,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "针对具体文档块或记忆版本的有限纠错反馈",
+          "primary_key_shape": "owner_id, feedback_id",
+          "logical_sources": [
+            "organization_feedback"
+          ]
+        },
+        {
+          "name": "organization_feedback_input",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 94,
+          "group": "派生文档与投影",
+          "status": "business",
+          "one_row_meaning": "纠错反馈实际保护输入及来源",
+          "primary_key_shape": "owner_id, feedback_id, input_no",
+          "logical_sources": [
+            "organization_feedback_input"
+          ]
+        },
+        {
+          "name": "overview_projection_member",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 100,
+          "group": "派生文档与投影",
+          "status": "conditional",
+          "one_row_meaning": "概览缓存成员及无正文定位",
+          "primary_key_shape": "owner_id, projection_id, member_no",
+          "logical_sources": [
+            "overview_projection_member"
+          ]
+        },
+        {
+          "name": "scope_projection",
+          "group": "派生文档与投影",
+          "one_row_meaning": "同范围某一类型导航/概览投影的当前元数据",
+          "primary_key_shape": "owner_id,projection_id",
+          "status": "conditional",
+          "logical_sources": [
+            "overview_projection"
+          ],
+          "source_tasks": [
+            "07"
+          ]
+        },
+        {
+          "name": "channel_account",
+          "source_task": "02",
+          "source_tasks": [
+            "02",
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/02-contact-identity-model.md",
+          "source_line": 47,
+          "group": "身份",
+          "status": "business",
+          "one_row_meaning": "已核验渠道账号身份",
+          "primary_key_shape": "owner_id, account_id",
+          "logical_sources": [
+            "channel_account"
+          ]
+        },
+        {
+          "name": "contact",
+          "source_task": "02",
+          "source_tasks": [
+            "02",
+            "03",
+            "04",
+            "05",
+            "06",
+            "07",
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/02-contact-identity-model.md",
+          "source_line": 69,
+          "group": "身份",
+          "status": "business",
+          "one_row_meaning": "属于用户的一位联系人",
+          "primary_key_shape": "owner_id, contact_id",
+          "logical_sources": [
+            "contact"
+          ]
+        },
+        {
+          "name": "conversation_binding",
+          "source_task": "02",
+          "source_tasks": [
+            "02",
+            "03"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/02-contact-identity-model.md",
+          "source_line": 84,
+          "group": "身份",
+          "status": "business",
+          "one_row_meaning": "已核验渠道会话到联系人的稳定映射",
+          "primary_key_shape": "owner_id, binding_id",
+          "logical_sources": [
+            "conversation_binding"
+          ]
+        },
+        {
+          "name": "manual_contact_confirmation",
+          "group": "身份",
+          "one_row_meaning": "一次用户明确手动联系人确认，不授予微信读取资格",
+          "primary_key_shape": "owner_id,confirmation_id",
+          "status": "business",
+          "logical_sources": [],
+          "source_tasks": [
+            "10"
+          ]
+        },
+        {
+          "name": "owner",
+          "source_task": "02",
+          "source_tasks": [
+            "02",
+            "03",
+            "04",
+            "05",
+            "06",
+            "07",
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/02-contact-identity-model.md",
+          "source_line": 36,
+          "group": "身份",
+          "status": "business",
+          "one_row_meaning": "本机资料所有者身份",
+          "primary_key_shape": "owner_id",
+          "logical_sources": [
+            "owner"
+          ]
+        },
+        {
+          "name": "database_instance",
+          "group": "数据库元数据",
+          "one_row_meaning": "数据库实例UUID、用途和格式身份",
+          "primary_key_shape": "singleton_key=1",
+          "status": "metadata",
+          "logical_sources": [],
+          "source_tasks": [
+            "10"
+          ]
+        },
+        {
+          "name": "schema_migration",
+          "group": "数据库元数据",
+          "one_row_meaning": "新SQLite结构的一次已提交版本及校验和",
+          "primary_key_shape": "migration_no",
+          "status": "metadata",
+          "logical_sources": [],
+          "source_tasks": [
+            "10"
+          ]
+        },
+        {
+          "name": "message",
+          "source_task": "03",
+          "source_tasks": [
+            "02",
+            "03",
+            "04",
+            "05",
+            "06",
+            "07",
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/03-message-source-model.md",
+          "source_line": 90,
+          "group": "消息来源",
+          "status": "business",
+          "one_row_meaning": "可靠核验后的规范消息及非文字占位",
+          "primary_key_shape": "owner_id, contact_id, message_id",
+          "logical_sources": [
+            "message"
+          ]
+        },
+        {
+          "name": "source_batch",
+          "source_task": "03",
+          "source_tasks": [
+            "03",
+            "08"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/03-message-source-model.md",
+          "source_line": 41,
+          "group": "消息来源",
+          "status": "business",
+          "one_row_meaning": "一次有界CLI捕获页",
+          "primary_key_shape": "owner_id, contact_id, batch_id",
+          "logical_sources": [
+            "source_batch"
+          ]
+        },
+        {
+          "name": "source_record",
+          "source_task": "03",
+          "source_tasks": [
+            "03",
+            "04",
+            "06",
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/03-message-source-model.md",
+          "source_line": 65,
+          "group": "消息来源",
+          "status": "business",
+          "one_row_meaning": "捕获页中的一次原始出现",
+          "primary_key_shape": "owner_id, contact_id, record_id",
+          "logical_sources": [
+            "source_record"
+          ]
+        },
+        {
+          "name": "quality_attempt",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 168,
+          "group": "诊断能力（位置待决）",
+          "status": "diagnostic",
+          "one_row_meaning": "诊断案例一次真实调用及审阅",
+          "primary_key_shape": "owner_id, attempt_id〔键概形建议，run/case/call为外键〕",
+          "logical_sources": [
+            "quality_attempt"
+          ]
+        },
+        {
+          "name": "quality_case",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 168,
+          "group": "诊断能力（位置待决）",
+          "status": "diagnostic",
+          "one_row_meaning": "冻结诊断输入及人工标注",
+          "primary_key_shape": "owner_id, case_id〔键概形建议，run_id为外键〕",
+          "logical_sources": [
+            "quality_case"
+          ]
+        },
+        {
+          "name": "quality_fact_intent",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 168,
+          "group": "诊断能力（位置待决）",
+          "status": "diagnostic",
+          "one_row_meaning": "精确纠错目标与有限质量案例衔接",
+          "primary_key_shape": "owner_id, intent_id〔键概形建议，现稿未逐表定键〕",
+          "logical_sources": [
+            "quality_fact_intent"
+          ]
+        },
+        {
+          "name": "quality_run",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 168,
+          "group": "诊断能力（位置待决）",
+          "status": "diagnostic",
+          "one_row_meaning": "合成用途运行门禁下的一次质量数据集运行",
+          "primary_key_shape": "owner_id, run_id〔键概形建议，现稿未逐表定键〕",
+          "logical_sources": [
+            "quality_run"
+          ]
+        },
+        {
+          "name": "assistant_attempt",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 72,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "助手短请求的一次实际执行",
+          "primary_key_shape": "owner_id, contact_id, session_id, turn_id, attempt_no",
+          "logical_sources": [
+            "assistant_attempt"
+          ]
+        },
+        {
+          "name": "assistant_context_item",
+          "source_task": "06",
+          "source_tasks": [
+            "06",
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 120,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "上下文中一项带真实类型外键的材料",
+          "primary_key_shape": "owner_id, contact_id, session_id, context_id, item_no",
+          "logical_sources": [
+            "assistant_context_item"
+          ]
+        },
+        {
+          "name": "assistant_context_snapshot",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 114,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "一次实际构造的有界上下文快照",
+          "primary_key_shape": "owner_id, contact_id, session_id, context_id",
+          "logical_sources": [
+            "assistant_context_snapshot"
+          ]
+        },
+        {
+          "name": "assistant_request_tombstone",
+          "group": "助手与候选",
+          "one_row_meaning": "已删除或中断回复请求的最小封存键",
+          "primary_key_shape": "owner_id,contact_id,request_key",
+          "status": "business",
+          "logical_sources": [],
+          "source_tasks": [
+            "10"
+          ]
+        },
+        {
+          "name": "assistant_runtime_context",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 157,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "运行副本实际纳入的上下文",
+          "primary_key_shape": "owner_id, contact_id, session_id, runtime_id, context_id",
+          "logical_sources": [
+            "assistant_runtime_context"
+          ]
+        },
+        {
+          "name": "assistant_runtime_instance",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 156,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "业务会话的一个DSH运行副本",
+          "primary_key_shape": "owner_id, contact_id, session_id, runtime_id",
+          "logical_sources": [
+            "assistant_runtime_instance"
+          ]
+        },
+        {
+          "name": "assistant_selection",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 108,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "用户一次显式选择具体候选版本",
+          "primary_key_shape": "owner_id, contact_id, session_id, selection_no",
+          "logical_sources": [
+            "assistant_selection"
+          ]
+        },
+        {
+          "name": "assistant_session",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 37,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "联系人下的一段业务讨论",
+          "primary_key_shape": "owner_id, contact_id, session_id",
+          "logical_sources": [
+            "assistant_session"
+          ]
+        },
+        {
+          "name": "assistant_turn",
+          "source_task": "06",
+          "source_tasks": [
+            "06",
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 52,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "一次明确提交输入及逻辑请求",
+          "primary_key_shape": "owner_id, contact_id, session_id, turn_id",
+          "logical_sources": [
+            "assistant_turn"
+          ]
+        },
+        {
+          "name": "candidate_version_citation",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 138,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "某版候选的具体显示依据定位",
+          "primary_key_shape": "owner_id, contact_id, session_id, candidate_id, version_no, citation_no",
+          "logical_sources": [
+            "candidate_version_citation"
+          ]
+        },
+        {
+          "name": "reply_candidate",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 80,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "生成的一个稳定回复候选身份",
+          "primary_key_shape": "owner_id, contact_id, session_id, candidate_id",
+          "logical_sources": [
+            "reply_candidate"
+          ]
+        },
+        {
+          "name": "reply_candidate_segment",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 103,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "候选内稳定的消息段身份与顺序",
+          "primary_key_shape": "owner_id, contact_id, session_id, candidate_id, segment_id",
+          "logical_sources": [
+            "reply_candidate_segment"
+          ]
+        },
+        {
+          "name": "reply_candidate_version",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 86,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "回复候选的原稿或编辑版本",
+          "primary_key_shape": "owner_id, contact_id, session_id, candidate_id, version_no",
+          "logical_sources": [
+            "reply_candidate_version"
+          ]
+        },
+        {
+          "name": "reply_candidate_version_message",
+          "source_task": "06",
+          "source_tasks": [
+            "06"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/06-assistant-history-model.md",
+          "source_line": 104,
+          "group": "助手与候选",
+          "status": "business",
+          "one_row_meaning": "某版本某段的正文",
+          "primary_key_shape": "owner_id, contact_id, session_id, candidate_id, version_no, segment_id",
+          "logical_sources": [
+            "reply_candidate_version_message"
+          ]
+        },
+        {
+          "name": "reply_method",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 110,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "回复方法的稳定身份",
+          "primary_key_shape": "owner_id, method_id",
+          "logical_sources": [
+            "reply_method"
+          ]
+        },
+        {
+          "name": "reply_skill",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 108,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "Skill稳定身份及业务目录状态",
+          "primary_key_shape": "owner_id, skill_id",
+          "logical_sources": [
+            "reply_skill"
+          ]
+        },
+        {
+          "name": "reply_skill_version",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 109,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "不可变Skill文件版本锚点及发布来历",
+          "primary_key_shape": "owner_id, skill_id, version_no",
+          "logical_sources": [
+            "reply_skill_version"
+          ]
+        },
+        {
+          "name": "skill_draft",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 133,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "待审核策略草稿稳定身份",
+          "primary_key_shape": "owner_id, contact_id, draft_id",
+          "logical_sources": [
+            "skill_draft"
+          ]
+        },
+        {
+          "name": "skill_draft_target",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 135,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "草稿修订明确针对的Skill版本",
+          "primary_key_shape": "owner_id, contact_id, draft_id, revision, target_skill_id, target_version_no",
+          "logical_sources": [
+            "skill_draft_target"
+          ]
+        },
+        {
+          "name": "skill_draft_version",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 134,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "草稿一个修订的清洗策略及私人依据",
+          "primary_key_shape": "owner_id, contact_id, draft_id, revision",
+          "logical_sources": [
+            "skill_draft_version"
+          ]
+        },
+        {
+          "name": "skill_learning_batch",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 130,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "一份有限授权学习批次及结果",
+          "primary_key_shape": "owner_id, contact_id, batch_id",
+          "logical_sources": [
+            "skill_learning_batch"
+          ]
+        },
+        {
+          "name": "skill_learning_input",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 131,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "本学习批次实际材料的类型化输入组件",
+          "primary_key_shape": "owner_id, contact_id, batch_id, input_no",
+          "logical_sources": [
+            "skill_learning_input"
+          ]
+        },
+        {
+          "name": "skill_learning_receipt",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 132,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "实际材料预约及成功消费结果",
+          "primary_key_shape": "owner_id, contact_id, material_key",
+          "logical_sources": [
+            "skill_learning_receipt"
+          ]
+        },
+        {
+          "name": "skill_learning_scope",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 128,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "单联系人独立学习授权",
+          "primary_key_shape": "owner_id, contact_id",
+          "logical_sources": [
+            "skill_learning_scope"
+          ]
+        },
+        {
+          "name": "skill_method_parent",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 112,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "方法延续或替代祖先边",
+          "primary_key_shape": "owner_id, child_method_id, parent_method_id",
+          "logical_sources": [
+            "skill_method_parent"
+          ]
+        },
+        {
+          "name": "skill_operation",
+          "group": "Skill及审核",
+          "one_row_meaning": "一次明确的Skill目录、政策或学习授权动作及幂等结果",
+          "primary_key_shape": "owner_id,operation_key",
+          "status": "business",
+          "logical_sources": [
+            "skill_policy_operation",
+            "skill_learning_operation",
+            "skill_catalog_operation"
+          ],
+          "source_tasks": [
+            "07"
+          ]
+        },
+        {
+          "name": "skill_parent",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 113,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "Skill合并或延续祖先边",
+          "primary_key_shape": "owner_id, child_skill_id, parent_skill_id",
+          "logical_sources": [
+            "skill_parent"
+          ]
+        },
+        {
+          "name": "skill_review",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 136,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "冻结输入和草稿修订的业务对照审核",
+          "primary_key_shape": "owner_id, contact_id, review_id",
+          "logical_sources": [
+            "skill_review"
+          ]
+        },
+        {
+          "name": "skill_review_input",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 137,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "审核共同上下文实际类型化来源",
+          "primary_key_shape": "owner_id, contact_id, review_id, input_no",
+          "logical_sources": [
+            "skill_review_input"
+          ]
+        },
+        {
+          "name": "skill_review_result_call",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 140,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "审核结果消费的真实物理调用链",
+          "primary_key_shape": "owner_id, contact_id, review_id, side, call_id",
+          "logical_sources": [
+            "skill_review_result_call"
+          ]
+        },
+        {
+          "name": "skill_review_side",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 139,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "审核一侧实际策略及执行结果",
+          "primary_key_shape": "owner_id, contact_id, review_id, side",
+          "logical_sources": [
+            "skill_review_side"
+          ]
+        },
+        {
+          "name": "skill_scope_policy",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 119,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "Skill或方法在明确范围的停用决定",
+          "primary_key_shape": "owner_id, policy_id",
+          "logical_sources": [
+            "skill_scope_policy"
+          ]
+        },
+        {
+          "name": "skill_use",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 121,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "实际Skill版本及政策视图使用事实",
+          "primary_key_shape": "owner_id, use_id",
+          "logical_sources": [
+            "skill_use"
+          ]
+        },
+        {
+          "name": "skill_use_method",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 121,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "实际使用视图中的具体版本方法成员",
+          "primary_key_shape": "owner_id, use_id, method_id",
+          "logical_sources": [
+            "skill_use_method"
+          ]
+        },
+        {
+          "name": "skill_version_method",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 111,
+          "group": "Skill及审核",
+          "status": "business",
+          "one_row_meaning": "某Skill版本的方法成员及顺序",
+          "primary_key_shape": "owner_id, skill_id, version_no, method_id",
+          "logical_sources": [
+            "skill_version_method"
+          ]
+        },
+        {
+          "name": "skill_worktree_projection",
+          "source_task": "07",
+          "source_tasks": [
+            "07"
+          ],
+          "source_file": ".scratch/sqlite-database-rebuild/issues/07-preference-document-skill-model.md",
+          "source_line": 150,
+          "group": "Skill及审核",
+          "status": "conditional",
+          "one_row_meaning": "可恢复的非权威Skill工作目录回写",
+          "primary_key_shape": "owner_id, operation_key, skill_id",
+          "logical_sources": [
+            "skill_worktree_projection"
+          ]
+        }
+      ],
+      "logical_to_physical": {
+        "owner": [
+          "owner"
+        ],
+        "channel_account": [
+          "channel_account"
+        ],
+        "contact": [
+          "contact"
+        ],
+        "conversation_binding": [
+          "conversation_binding"
+        ],
+        "source_batch": [
+          "source_batch"
+        ],
+        "source_record": [
+          "source_record"
+        ],
+        "message": [
+          "message"
+        ],
+        "memory_candidate": [
+          "memory_candidate"
+        ],
+        "memory": [
+          "memory"
+        ],
+        "memory_version": [
+          "memory_version"
+        ],
+        "memory_version_parent": [
+          "memory_version_parent"
+        ],
+        "candidate_evidence": [
+          "claim_evidence"
+        ],
+        "candidate_required_message": [
+          "claim_required_message"
+        ],
+        "memory_version_evidence": [
+          "claim_evidence"
+        ],
+        "memory_version_required_message": [
+          "claim_required_message"
+        ],
+        "memory_trace": [
+          "memory_trace"
+        ],
+        "memory_trace_event": [
+          "memory_trace_event"
+        ],
+        "trace_message_input": [
+          "trace_input"
+        ],
+        "trace_source_input": [
+          "trace_input"
+        ],
+        "trace_memory_input": [
+          "trace_input"
+        ],
+        "memory_decision": [
+          "memory_decision"
+        ],
+        "processing_scope": [
+          "processing_scope"
+        ],
+        "processing_run": [
+          "processing_run"
+        ],
+        "processing_round": [
+          "processing_round"
+        ],
+        "processing_input": [
+          "processing_input"
+        ],
+        "processing_receipt": [
+          "processing_receipt"
+        ],
+        "background_task": [
+          "background_task"
+        ],
+        "background_task_step": [
+          "background_task_step"
+        ],
+        "step_attempt": [
+          "step_attempt"
+        ],
+        "step_attempt_guard": [
+          "step_attempt_guard"
+        ],
+        "model_request": [
+          "model_request"
+        ],
+        "model_call": [
+          "model_call"
+        ],
+        "step_model_call": [
+          "model_call_execution"
+        ],
+        "assistant_session": [
+          "assistant_session"
+        ],
+        "assistant_turn": [
+          "assistant_turn"
+        ],
+        "assistant_attempt": [
+          "assistant_attempt"
+        ],
+        "reply_candidate": [
+          "reply_candidate"
+        ],
+        "reply_candidate_version": [
+          "reply_candidate_version"
+        ],
+        "reply_candidate_segment": [
+          "reply_candidate_segment"
+        ],
+        "reply_candidate_version_message": [
+          "reply_candidate_version_message"
+        ],
+        "assistant_selection": [
+          "assistant_selection"
+        ],
+        "assistant_context_snapshot": [
+          "assistant_context_snapshot"
+        ],
+        "assistant_context_item": [
+          "assistant_context_item"
+        ],
+        "candidate_version_citation": [
+          "candidate_version_citation"
+        ],
+        "assistant_attempt_model_call": [
+          "model_call_execution"
+        ],
+        "assistant_runtime_instance": [
+          "assistant_runtime_instance"
+        ],
+        "assistant_runtime_context": [
+          "assistant_runtime_context"
+        ],
+        "owner_collection_state": [
+          "owner_collection_state"
+        ],
+        "expression_preference": [
+          "expression_preference"
+        ],
+        "expression_preference_version": [
+          "expression_preference_version"
+        ],
+        "preference_version_source": [
+          "preference_version_source"
+        ],
+        "expression_preference_operation": [
+          "expression_preference_operation"
+        ],
+        "document_collection": [
+          "document_collection"
+        ],
+        "memory_document": [
+          "memory_document"
+        ],
+        "memory_document_version": [
+          "memory_document_version"
+        ],
+        "document_block": [
+          "document_block"
+        ],
+        "document_version_parent": [
+          "document_version_parent"
+        ],
+        "trace_document_input": [
+          "trace_input"
+        ],
+        "trace_feedback_input": [
+          "trace_input"
+        ],
+        "document_block_reference": [
+          "document_block_reference"
+        ],
+        "document_publication": [
+          "document_publication"
+        ],
+        "document_publication_member": [
+          "document_publication_member"
+        ],
+        "organization_feedback": [
+          "organization_feedback"
+        ],
+        "organization_feedback_input": [
+          "organization_feedback_input"
+        ],
+        "overview_projection": [
+          "scope_projection"
+        ],
+        "overview_projection_member": [
+          "overview_projection_member"
+        ],
+        "reply_skill": [
+          "reply_skill"
+        ],
+        "reply_skill_version": [
+          "reply_skill_version"
+        ],
+        "reply_method": [
+          "reply_method"
+        ],
+        "skill_version_method": [
+          "skill_version_method"
+        ],
+        "skill_method_parent": [
+          "skill_method_parent"
+        ],
+        "skill_parent": [
+          "skill_parent"
+        ],
+        "skill_scope_policy": [
+          "skill_scope_policy"
+        ],
+        "skill_policy_operation": [
+          "skill_operation"
+        ],
+        "skill_use": [
+          "skill_use"
+        ],
+        "skill_use_method": [
+          "skill_use_method"
+        ],
+        "skill_learning_scope": [
+          "skill_learning_scope"
+        ],
+        "skill_learning_operation": [
+          "skill_operation"
+        ],
+        "skill_learning_batch": [
+          "skill_learning_batch"
+        ],
+        "skill_learning_input": [
+          "skill_learning_input"
+        ],
+        "skill_learning_receipt": [
+          "skill_learning_receipt"
+        ],
+        "skill_draft": [
+          "skill_draft"
+        ],
+        "skill_draft_version": [
+          "skill_draft_version"
+        ],
+        "skill_draft_target": [
+          "skill_draft_target"
+        ],
+        "skill_review": [
+          "skill_review"
+        ],
+        "skill_review_input": [
+          "skill_review_input"
+        ],
+        "skill_review_target": [
+          "skill_review",
+          "skill_draft_target"
+        ],
+        "skill_review_side": [
+          "skill_review_side"
+        ],
+        "skill_review_result_call": [
+          "skill_review_result_call"
+        ],
+        "skill_catalog_operation": [
+          "skill_operation"
+        ],
+        "skill_worktree_projection": [
+          "skill_worktree_projection"
+        ],
+        "quality_run": [
+          "quality_run"
+        ],
+        "quality_case": [
+          "quality_case"
+        ],
+        "quality_attempt": [
+          "quality_attempt"
+        ],
+        "quality_fact_intent": [
+          "quality_fact_intent"
+        ],
+        "deletion_operation": [
+          "deletion_operation"
+        ],
+        "deletion_row_target": [
+          "deletion_target"
+        ],
+        "deletion_file_target": [
+          "deletion_target"
+        ],
+        "deletion_verification": [
+          "deletion_verification"
+        ],
+        "account_sync_control": [
+          "account_sync_control"
+        ],
+        "conversation_read_grant": [
+          "conversation_read_grant"
+        ],
+        "contact_data_control": [
+          "contact_data_control"
+        ],
+        "conversation_clear_boundary": [
+          "conversation_clear_boundary"
+        ],
+        "ingestion_tombstone": [
+          "read_exclusion"
+        ],
+        "conversation_exclusion": [
+          "read_exclusion"
+        ],
+        "history_restore_authorization": [
+          "history_restore_authorization"
+        ],
+        "sync_checkpoint": [
+          "sync_checkpoint"
+        ]
+      },
+      "derived_relations": [
+        {
+          "logical": "skill_review_target",
+          "via": [
+            "skill_review.draft_id/revision",
+            "skill_draft_target"
+          ],
+          "condition": "审核无独立targets输入；不可变草稿版本固定集合，发布仍核当前版本和来源"
+        }
+      ]
+    }
+  },
+  "count_notes": [
+    "94包括86基础业务、2项暂保留的条件投影、4项诊断能力、2项数据库元数据；不是94类产品功能。",
+    "4项诊断没有擅自搬出业务库；同schema的隔离测试实例另设角色门禁，真实case仍按敏感数据清理。",
+    "新增手动确认、处理控制回执及子回复封存键来自旧功能覆盖，不能为减表省略。",
+    "学习材料单元由既有receipt真实引用material_set并保留batch/ordinal归属；若改成独立membership实现，需要再加表重算。",
+    "不合并Skill与方法祖先两张图；不靠预期缓存性能删除暂保留项。",
+    "清单与主外键概形不是已执行的全量DDL，Q43选择、各类型完整约束及接口改造尚待后续。"
+  ]
+}

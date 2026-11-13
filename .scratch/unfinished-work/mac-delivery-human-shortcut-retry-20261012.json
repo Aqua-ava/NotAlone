@@ -1,0 +1,100 @@
+{
+  "date": "2026-10-12",
+  "scope": "同一新候选包的第二场人工快捷键复验",
+  "status": "helper_show_observed_receipt_wait_timed_out_late_user_show_confirmed",
+  "reviewBase": "be049b0b",
+  "window": {
+    "from": "2026-10-12T06:40:41.893Z",
+    "until": "2026-10-12T07:00:41.893Z",
+    "maxLaunches": 1,
+    "actualAppLaunches": 1,
+    "unexpectedAppLaunches": 0
+  },
+  "runner": {
+    "exitCode": 1,
+    "processSeconds": 478.97159733300214,
+    "completedAt": "2026-10-12T06:48:40.888Z"
+  },
+  "observations": {
+    "nativeDialogAndSixMessageImportAndAllTaskChecksPassed": true,
+    "shortcutPublicRegistrationAndWindowPreconditionsPassed": true,
+    "helperShowObserved": true,
+    "programObservationEvidence": "失败位于显示观察完成后的收据poll，未失败于窗口显示poll",
+    "receiptWaitMinutes": 4,
+    "humanFeedbackReceivedBeforeRunnerExit": false,
+    "lateUserFeedback": "小窗已出现",
+    "humanShowReceiptWritten": false,
+    "hideStageRun": false,
+    "humanHideReceiptWritten": false,
+    "nativeWholeScenarioPassed": false,
+    "showPartialEvidencePreserved": true,
+    "agentDidNotPressShortcut": true
+  },
+  "cleanup": {
+    "actualAppLaunches": 1,
+    "unexpectedAppLaunches": 0,
+    "recordedProcessesGone": 6,
+    "includesOwnedBackendAndWorker": true,
+    "ownedPathsAbsent": 4,
+    "exactDatabaseAbsent": true,
+    "limitedDatabaseNamespaceUnchanged": true,
+    "bothLeasesAbsent": true,
+    "defaultDirectoryIdentityMatched": true,
+    "defaultConfigurationContentsNotInspected": true,
+    "nativeWholeResultAbsent": true,
+    "humanShowAndHideReceiptAbsent": true,
+    "hideRequestAbsent": true,
+    "strictSignaturePassed": true,
+    "asarAndArchiveHashesAndArchiveSizeUnchanged": true,
+    "runnerExitCode": 1,
+    "helperShowObservedInTest": true,
+    "receiptWaitTimedOut": true,
+    "latePositiveUserFeedbackReceived": true,
+    "latePositiveFeedbackNotUsedToRewriteFailureOrReceipt": true,
+    "at": "2026-10-12T06:52:29.882229+00:00"
+  },
+  "dataProcessing": {
+    "syntheticOnly": true,
+    "unrelatedFilesNotOpened": true,
+    "rawUiAndPrivateFileNamesNotCommitted": true,
+    "realWechatRead": false,
+    "ocrRun": false,
+    "officialHelperExecuted": false,
+    "externalModelCalls": 0,
+    "permissionsOrTccChanged": false,
+    "chatSent": false,
+    "push": false
+  },
+  "remaining": {
+    "sameHelperShowHideAndNormalQuitWholeAcceptancePending": true,
+    "wcdbExactBuildAndBinaryLicensePending": true,
+    "originalOcr18DependencyPending": true,
+    "mac20State": "claimed",
+    "mac20Triage": "needs-info",
+    "originalAcceptanceChecked": 1,
+    "originalAcceptancePending": 3
+  },
+  "coordinationChangePlanned": "人工操作与反馈共用固定25分钟交互截止；整场28分钟、runner30分钟；程序观察另写时间记录，绝不代签人机收据。",
+  "finalReview": {
+    "base": "be049b0b",
+    "standardsNewHardViolations": 0,
+    "standardsImportantSuggestions": 0,
+    "standardsEvidenceOverreach": 0,
+    "specNewErrors": 0,
+    "specScopeOverreach": 0,
+    "remainingRequirementsRetained": true,
+    "reviewersRanAppOrTests": false,
+    "notes": "固定人工交互截止、独立程序观察记录与真人收据区分通过；显示部分、迟到反馈、旧失败及未运行隐藏分列。"
+  },
+  "localLinks": {
+    "relativeLinksChecked": 91,
+    "missing": 0
+  },
+  "checks": {
+    "typecheckPassed": true,
+    "receiptProtocolPassed": 3,
+    "receiptProtocolTotal": 3,
+    "receiptProtocolSeconds": 0.120561459,
+    "realAppNotRunByTheseChecks": true
+  }
+}

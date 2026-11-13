@@ -1,0 +1,264 @@
+{
+  "schema_version": "reply-first-real-pilot-root-evidence-v1",
+  "scope": {
+    "case_id": "paired-decline",
+    "repeat": 1,
+    "order": "BA",
+    "logical_runs": 2,
+    "max_reservations": 8,
+    "max_minutes": 30,
+    "max_cost_usd": 3
+  },
+  "vendor_manifest_sha256": "f80e305ba9c266640d71fd466878f095dcc23231b9e4a34cf7479b001c78ddea",
+  "actual_upstream_requests": 2,
+  "used_reservations": 2,
+  "ledger_limit": 8,
+  "ledger_reset": false,
+  "same_ledger_deadline_retained": true,
+  "initial_setup_failure_preserved": true,
+  "setup_failure_business_generations": 0,
+  "setup_failure_supplier_requests": 0,
+  "setup_recovery_receipt": "root-local-setup-recovery.json",
+  "automatic_retries": 0,
+  "real_model_quality_verified": false,
+  "production_switch_approved": false,
+  "sole_independent_semantic_acceptor": "主协调；此根仅执行和证据完整性核验，尚无独立质量结论",
+  "raw_evidence_location_alias": "${HOME}/.local/state/notalone/diagnostics/dsh05-reply-runtime",
+  "raw_artifacts_sha256": {
+    "pg-user-original_sanitized_environment.raw.log": "5271a8a6646324a73e631368d85475cefaec0ef3b0b0f3d1612bc18314a82136",
+    "pg-user-explicit_local_username.raw.log": "9b41e9c248a94c2c3e652ff2a52e66c4d2f420ce2c018228641946f75988b2ea",
+    "check.raw.log": "45c8463138b075ee7c675ff953dd560e06a54daa4bb0c795470a2454324aa7d4",
+    "continue-local-setup.mjs": "ed55b0a65d7e038fa414a2b2536e38d6899f0a2308982777abeea83edf90fcfb",
+    "raw-capture.json": "7acde542d4abac9c7b54e2831ab55de8e7fd3f6f2b394b00b370aa5a83b54d25",
+    "config.json": "3070916e26d441d4d993d53c1641367811d452e3fb9cb6e037159c62bfd15d93",
+    "controller-exit.json": "41f7ade1dcd5d008f650fbf09cba199b2491aecdea494cea34695584d01a262a",
+    "first-pilot.setup-continuation.started.json": "88ff2cbe1c96aaf57065b5b4177df8ebc275dee779406db328a74328e1ded776",
+    "supplier-run.raw-capture.json": "5462a5980906913635c6cd116e10dfea3563ca074b94584cf4d06af5efabd67a",
+    "supplier-run.controller-exit.json": "69cf9d433cea30111a8cab88faea4c5190cbb5b490b9b067b703782cc109be1f",
+    "supplier-run.controller.raw.log": "a6704305ea5d0572e31aa7e8b3e7bc7e3c27fd32ee42c438a3335b47b2424c7c",
+    "raw-attempts.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "controller.raw.log": "55287c04c6086f07b369dd25f43caa0f1625f99890e47fd6a05d6933e26a0d17",
+    "supplier-run.raw-attempts.json": "2ce03e2104ba4c4a0e23eea2a637b381c771b7f5926b9469b851de1ce3ed0178",
+    "first-pilot.started.json": "28a662c641b65d173595bf0c0ff42e844943ffa5f09459b3b8db6b44ef360da7",
+    "setup-failure-diagnosis.json": "b2dea8f22885b5824485f9f965802570179582266a8bff217c3d4a4f3ec354ae",
+    "problem.sqlite": "0a9895af5e36aea8647d03cef526d4580d95d10daa6ae29bc5a39dc98ad964e2",
+    "setup-orphan-cleanup.json": "c7d890c4ec4108ed2d9813f931a1e7b549e71b9cc15328eb35b4cb351c8a79cb",
+    "first-pilot.root-launch.json": "639bece407bca06228d906160a680cd43366a10cd2ee23405ae07e041f819e31"
+  },
+  "credential_matches_in_persisted_artifacts": 0,
+  "private_directory_mode": "0700",
+  "private_file_mode": "0600",
+  "shared_postgresql_alive": true,
+  "collector_cleanup": {
+    "own_database_dropped": true,
+    "own_profile_removed": true,
+    "own_python_exited": true
+  },
+  "root_verification_history": [
+    "首次完整性核验因三份自有PG诊断文件为0644而失败；目录始终0700，诊断文件已修为0600",
+    "修正权限后仅重跑纯证据核验，未重跑SDK/模型/PG业务链"
+  ],
+  "raw_result_evidence_kind": "official_deepseek_first_pilot_actual_business_pipelines",
+  "raw_result_arms_configuration_equal": false,
+  "raw_result_configuration_unknown_reasons": [
+    "供应商协议分别为原OpenAI Chat与官方DSH Anthropic适配，工具schema/提示词需要另行做语义等价核验",
+    "已授权首次8次内真实供应商先导，usage缺失保留null，整体质量未定"
+  ],
+  "rows": [
+    {
+      "arm": "new",
+      "status": "succeeded",
+      "logical_calls": 1,
+      "physical_calls": 1,
+      "actual_model": "deepseek-flash",
+      "upstream_status": 200,
+      "request_sha256": "71b4c607f1313fb43241b1e8c005098fd021a91c379e471af5b635badb87db41",
+      "response_sha256": "14f1a71f4068ca14e4aef3e0059417fe42dde1cd1e7a34602ab131657fff36c3",
+      "response_complete": true,
+      "response_usage_raw": [
+        {
+          "input_tokens": 2954,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 2816,
+          "output_tokens": 0,
+          "service_tier": "standard"
+        },
+        {
+          "input_tokens": 2954,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 2816,
+          "output_tokens": 290,
+          "service_tier": "standard"
+        }
+      ],
+      "normalized_usage": null,
+      "usage_unknown_reason": "anthropic_input_cache_and_accumulation_semantics_unclassified",
+      "actual_cost_usd": null,
+      "complete_candidates": [
+        {
+          "candidate_id": "1902c480-c68a-4d34-a24c-a21372f4fad7",
+          "text": "周六这次我就不去了，谢谢你的邀请。",
+          "basis": "对方问周六怎么样，直接说明这次不参加，语气平和，不解释未提供的理由。",
+          "risk_notes": [
+            "对方情绪未知，回复后对方的反应无法预判。"
+          ],
+          "messages": [
+            {
+              "text": "周六这次我就不去了，谢谢你的邀请。",
+              "message_id": "f0b07791-3664-4b1d-be2f-6ccd0ba067ac"
+            }
+          ],
+          "citation_ids": [
+            "d2a0db2b-9293-59c9-a1e3-0aced2fb28d5",
+            "a3083bc3-181c-512d-a240-415ce8837047"
+          ]
+        },
+        {
+          "candidate_id": "31d9985f-3ede-4e51-b6be-e6fe8de5dde3",
+          "text": "周六我这次参加不了，抱歉啦，谢谢你叫我。",
+          "basis": "明确拒绝周六散步的邀请，用“这次”限定范围，不涉及以后是否再约。",
+          "risk_notes": [
+            "未提供拒绝原因，正文也未编造原因；对方情绪未知。"
+          ],
+          "messages": [
+            {
+              "text": "周六我这次参加不了，抱歉啦，谢谢你叫我。",
+              "message_id": "0ec88dd8-36e8-4c1b-976b-5063a13c4274"
+            }
+          ],
+          "citation_ids": [
+            "d2a0db2b-9293-59c9-a1e3-0aced2fb28d5",
+            "a3083bc3-181c-512d-a240-415ce8837047"
+          ]
+        }
+      ],
+      "pg_reread_verified": true,
+      "pg_completed_request": true,
+      "pg_source_snapshot_sha256": "88bd678525203455fde98d56634536fae48b7535d10745829f0c0dbae95ba961",
+      "source_evidence": [
+        {
+          "kind": "user_purpose",
+          "text": "帮我表达"
+        },
+        {
+          "kind": "user_draft",
+          "text": "这次明确拒绝邀请"
+        },
+        {
+          "kind": "user_current_chat",
+          "text": "{\"available_facts\":[\"对方邀请周六散步\"],\"current_message\":\"那周六怎么样？\",\"recent_context\":[\"对方提议周六一起散步。\",\"用户已明确这次不能参加。\"]}"
+        }
+      ],
+      "observed_ms": 2391.947209,
+      "first_token_ms": null,
+      "final_persisted_result_ms": null,
+      "complete_five_phase_partition": false,
+      "timing_unknown_reasons": [
+        "未暴露完整且无重叠的五阶段公共观测接口",
+        "供应商写出时间不代表SDK消费事件或首token时间",
+        "返回及复读证明已持久化，不能代替准确提交完成时刻"
+      ]
+    },
+    {
+      "arm": "old",
+      "status": "succeeded",
+      "logical_calls": 1,
+      "physical_calls": 1,
+      "actual_model": "deepseek-flash",
+      "upstream_status": 200,
+      "request_sha256": "dc1f2cb4da0b38a192eeddbd35f8ac6a9c8fa32d15802e9217b5ee83ed9bfaad",
+      "response_sha256": "3926ace98dafe99850a0dae918c0a6529e63ac4f770d0fd93a8fccc122bf2c7a",
+      "response_complete": true,
+      "response_usage_raw": {
+        "prompt_tokens": 5776,
+        "completion_tokens": 302,
+        "total_tokens": 6078,
+        "prompt_tokens_details": {
+          "cached_tokens": 4352
+        },
+        "prompt_cache_hit_tokens": 4352,
+        "prompt_cache_miss_tokens": 1424
+      },
+      "normalized_usage": {
+        "input_tokens": 5776,
+        "output_tokens": 302,
+        "reasoning_tokens": null,
+        "cache_hit_tokens": 4352,
+        "cache_miss_tokens": 1424
+      },
+      "usage_unknown_reason": null,
+      "actual_cost_usd": null,
+      "complete_candidates": [
+        {
+          "candidate_id": "cf3242e6-91f7-4b26-872e-4b6f8bed7e54",
+          "text": "周六这次我就不去了，谢谢你叫我。",
+          "basis": "对方问周六怎么样，你这次明确不参加，所以直接说明不去并道谢，语气自然不生硬。",
+          "citation_ids": [
+            "d2a0db2b-9293-59c9-a1e3-0aced2fb28d5",
+            "a3083bc3-181c-512d-a240-415ce8837047"
+          ],
+          "risk_notes": [
+            "没有说明不去的具体原因，若你想给个理由需要自己补充。"
+          ],
+          "messages": [
+            {
+              "message_id": "cf3242e6-91f7-4b26-872e-4b6f8bed7e54",
+              "text": "周六这次我就不去了，谢谢你叫我。"
+            }
+          ]
+        },
+        {
+          "candidate_id": "6699db13-c9a5-46e6-b7aa-3b55fb97f18d",
+          "text": "周六我这次去不了，抱歉啊，谢谢你还特意问我。",
+          "basis": "保留明确拒绝的意思，用“去不了”比“不去”更缓和，同时回应了对方的邀请。",
+          "citation_ids": [
+            "d2a0db2b-9293-59c9-a1e3-0aced2fb28d5",
+            "a3083bc3-181c-512d-a240-415ce8837047"
+          ],
+          "risk_notes": [
+            "“去不了”暗示有原因但未说明，若不想留悬念可换成更直接的表达。"
+          ],
+          "messages": [
+            {
+              "message_id": "6699db13-c9a5-46e6-b7aa-3b55fb97f18d",
+              "text": "周六我这次去不了，抱歉啊，谢谢你还特意问我。"
+            }
+          ]
+        }
+      ],
+      "pg_reread_verified": true,
+      "pg_completed_request": true,
+      "pg_source_snapshot_sha256": "b29ae86dcf5503a710521af12bfb0c7b58e1e182ad4c02eb974b75a039e1242b",
+      "source_evidence": [
+        {
+          "kind": "user_purpose",
+          "text": "帮我表达"
+        },
+        {
+          "kind": "user_draft",
+          "text": "这次明确拒绝邀请"
+        },
+        {
+          "kind": "user_current_chat",
+          "text": "{\"available_facts\":[\"对方邀请周六散步\"],\"current_message\":\"那周六怎么样？\",\"recent_context\":[\"对方提议周六一起散步。\",\"用户已明确这次不能参加。\"]}"
+        }
+      ],
+      "observed_ms": 2610.7318749999995,
+      "first_token_ms": null,
+      "final_persisted_result_ms": null,
+      "complete_five_phase_partition": false,
+      "timing_unknown_reasons": [
+        "未暴露完整且无重叠的五阶段公共观测接口",
+        "供应商写出时间不代表SDK消费事件或首token时间",
+        "返回及复读证明已持久化，不能代替准确提交完成时刻"
+      ]
+    }
+  ],
+  "limitations": [
+    "仅冻结paired-decline/repeat1一对；不能推断完整96质量/性能资格",
+    "新Anthropic兼容响应保留原usage事件，统一输入/缓存与累积口径未知",
+    "实际供应商费用未提供，记null；未推断计费金额",
+    "旧非流式未观测首token；完整五阶段分区未知",
+    "未执行native/App/正式切换；Python仍默认"
+  ]
+}

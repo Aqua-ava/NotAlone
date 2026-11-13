@@ -1,0 +1,951 @@
+{
+  "data_version": "synthetic-v1",
+  "config": {
+    "model": "offline-controlled",
+    "prompt_version": "fidelity-v1",
+    "dataset_usage": "开发集可回归；保留集仅报告夹具，不声明真实模型未见"
+  },
+  "protocol": {
+    "mode": "offline_controlled_outputs",
+    "semantic_method": "explicit_annotations_only",
+    "missing_cost": "unknown",
+    "holdout_policy": "提示调整使用过的保留案例不得再称未见数据",
+    "limitations": "合成输出仅验证报告流程；真实语义、自然度与用户相似度未验证。"
+  },
+  "summary": {
+    "denominator": 16,
+    "contract_failed": 2,
+    "semantic_reviewed": 14,
+    "fidelity_failed": 14,
+    "unreviewed": 2,
+    "known_call_count": 15,
+    "known_elapsed_ms": 1640,
+    "unknown_cost_count": 1,
+    "total_call_count": null,
+    "total_elapsed_ms": null,
+    "quality_verified": false,
+    "dimensions": {
+      "intent": {
+        "denominator": 16,
+        "evaluated_denominator": 14,
+        "pass": 11,
+        "fail": 3,
+        "unknown": 0,
+        "unreviewed": 2
+      },
+      "unsupported_content": {
+        "denominator": 16,
+        "evaluated_denominator": 14,
+        "pass": 1,
+        "fail": 13,
+        "unknown": 0,
+        "unreviewed": 2
+      },
+      "naturalness": {
+        "denominator": 16,
+        "evaluated_denominator": 0,
+        "pass": 0,
+        "fail": 0,
+        "unknown": 14,
+        "unreviewed": 2
+      },
+      "relationship_fit": {
+        "denominator": 16,
+        "evaluated_denominator": 0,
+        "pass": 0,
+        "fail": 0,
+        "unknown": 14,
+        "unreviewed": 2
+      },
+      "user_similarity": {
+        "denominator": 16,
+        "evaluated_denominator": 0,
+        "pass": 0,
+        "fail": 0,
+        "unknown": 14,
+        "unreviewed": 2
+      }
+    },
+    "human_fidelity_pass": 0,
+    "reviewer_kinds": {
+      "human": 0,
+      "synthetic_fixture": 0,
+      "agent_review": 0,
+      "unknown": 16
+    },
+    "by_split": {
+      "development": {
+        "denominator": 4,
+        "contract_failed": 0,
+        "semantic_reviewed": 4,
+        "fidelity_failed": 4,
+        "unreviewed": 0,
+        "known_call_count": 4,
+        "known_elapsed_ms": 40,
+        "unknown_cost_count": 0,
+        "total_call_count": 4,
+        "total_elapsed_ms": 40,
+        "quality_verified": false,
+        "dimensions": {
+          "intent": {
+            "denominator": 4,
+            "evaluated_denominator": 4,
+            "pass": 3,
+            "fail": 1,
+            "unknown": 0,
+            "unreviewed": 0
+          },
+          "unsupported_content": {
+            "denominator": 4,
+            "evaluated_denominator": 4,
+            "pass": 0,
+            "fail": 4,
+            "unknown": 0,
+            "unreviewed": 0
+          },
+          "naturalness": {
+            "denominator": 4,
+            "evaluated_denominator": 0,
+            "pass": 0,
+            "fail": 0,
+            "unknown": 4,
+            "unreviewed": 0
+          },
+          "relationship_fit": {
+            "denominator": 4,
+            "evaluated_denominator": 0,
+            "pass": 0,
+            "fail": 0,
+            "unknown": 4,
+            "unreviewed": 0
+          },
+          "user_similarity": {
+            "denominator": 4,
+            "evaluated_denominator": 0,
+            "pass": 0,
+            "fail": 0,
+            "unknown": 4,
+            "unreviewed": 0
+          }
+        },
+        "human_fidelity_pass": 0,
+        "reviewer_kinds": {
+          "human": 0,
+          "synthetic_fixture": 0,
+          "agent_review": 0,
+          "unknown": 4
+        }
+      },
+      "holdout": {
+        "denominator": 12,
+        "contract_failed": 2,
+        "semantic_reviewed": 10,
+        "fidelity_failed": 10,
+        "unreviewed": 2,
+        "known_call_count": 11,
+        "known_elapsed_ms": 1600,
+        "unknown_cost_count": 1,
+        "total_call_count": null,
+        "total_elapsed_ms": null,
+        "quality_verified": false,
+        "dimensions": {
+          "intent": {
+            "denominator": 12,
+            "evaluated_denominator": 10,
+            "pass": 8,
+            "fail": 2,
+            "unknown": 0,
+            "unreviewed": 2
+          },
+          "unsupported_content": {
+            "denominator": 12,
+            "evaluated_denominator": 10,
+            "pass": 1,
+            "fail": 9,
+            "unknown": 0,
+            "unreviewed": 2
+          },
+          "naturalness": {
+            "denominator": 12,
+            "evaluated_denominator": 0,
+            "pass": 0,
+            "fail": 0,
+            "unknown": 10,
+            "unreviewed": 2
+          },
+          "relationship_fit": {
+            "denominator": 12,
+            "evaluated_denominator": 0,
+            "pass": 0,
+            "fail": 0,
+            "unknown": 10,
+            "unreviewed": 2
+          },
+          "user_similarity": {
+            "denominator": 12,
+            "evaluated_denominator": 0,
+            "pass": 0,
+            "fail": 0,
+            "unknown": 10,
+            "unreviewed": 2
+          }
+        },
+        "human_fidelity_pass": 0,
+        "reviewer_kinds": {
+          "human": 0,
+          "synthetic_fixture": 0,
+          "agent_review": 0,
+          "unknown": 12
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "case_id": "prototype-gap",
+      "split": "development",
+      "tags": [
+        "无依据开场白"
+      ],
+      "generation_input": {
+        "current_intent": "轻松问候",
+        "available_facts": [],
+        "unknowns": [
+          "联系间隔"
+        ],
+        "allowed_changes": [
+          "措辞自然，语义保持"
+        ]
+      },
+      "forbidden_additions": [
+        "好久没联系"
+      ],
+      "status": "ok",
+      "output": {
+        "candidates": [
+          {
+            "text": "好久没联系，最近怎么样？",
+            "basis": "故意错误的受控夹具",
+            "citation_ids": []
+          }
+        ]
+      },
+      "elapsed_ms": 10,
+      "call_count": 1,
+      "deterministic_contract": {
+        "status": "pass",
+        "errors": []
+      },
+      "semantic_review": {
+        "reviewer": "故意错误的合成标注夹具",
+        "basis": "当前意图：轻松问候；候选加入：好久没联系。标注只验证报告传播。",
+        "intent": "pass",
+        "unsupported_content": "fail",
+        "naturalness": "unknown",
+        "relationship_fit": "unknown",
+        "user_similarity": "unknown",
+        "status": "reviewed",
+        "reviewer_kind": "unknown"
+      }
+    },
+    {
+      "case_id": "prototype-thought",
+      "split": "development",
+      "tags": [
+        "无依据开场白"
+      ],
+      "generation_input": {
+        "current_intent": "主动问候",
+        "available_facts": [],
+        "unknowns": [
+          "是否突然想到对方"
+        ],
+        "allowed_changes": [
+          "措辞自然，语义保持"
+        ]
+      },
+      "forbidden_additions": [
+        "突然想到你"
+      ],
+      "status": "ok",
+      "output": {
+        "candidates": [
+          {
+            "text": "突然想到你啦。",
+            "basis": "故意错误的受控夹具",
+            "citation_ids": []
+          }
+        ]
+      },
+      "elapsed_ms": 10,
+      "call_count": 1,
+      "deterministic_contract": {
+        "status": "pass",
+        "errors": []
+      },
+      "semantic_review": {
+        "reviewer": "故意错误的合成标注夹具",
+        "basis": "当前意图：主动问候；候选加入：突然想到你。标注只验证报告传播。",
+        "intent": "pass",
+        "unsupported_content": "fail",
+        "naturalness": "unknown",
+        "relationship_fit": "unknown",
+        "user_similarity": "unknown",
+        "status": "reviewed",
+        "reviewer_kind": "unknown"
+      }
+    },
+    {
+      "case_id": "paired-decline",
+      "split": "development",
+      "tags": [
+        "同句不同前文"
+      ],
+      "generation_input": {
+        "current_intent": "这次明确拒绝邀请",
+        "available_facts": [
+          "对方邀请周六散步"
+        ],
+        "unknowns": [
+          "对方情绪"
+        ],
+        "allowed_changes": [
+          "措辞自然，语义保持"
+        ],
+        "current_message": "那周六怎么样？",
+        "recent_context": [
+          "对方提议周六一起散步。",
+          "用户已明确这次不能参加。"
+        ]
+      },
+      "forbidden_additions": [
+        "答应参加"
+      ],
+      "status": "ok",
+      "output": {
+        "candidates": [
+          {
+            "text": "周六见！",
+            "basis": "故意错误的受控夹具",
+            "citation_ids": []
+          }
+        ]
+      },
+      "elapsed_ms": 10,
+      "call_count": 1,
+      "deterministic_contract": {
+        "status": "pass",
+        "errors": []
+      },
+      "semantic_review": {
+        "reviewer": "故意错误的合成标注夹具",
+        "basis": "当前意图：这次明确拒绝邀请；候选加入：答应参加。标注只验证报告传播。",
+        "intent": "fail",
+        "unsupported_content": "fail",
+        "naturalness": "unknown",
+        "relationship_fit": "unknown",
+        "user_similarity": "unknown",
+        "status": "reviewed",
+        "reviewer_kind": "unknown"
+      }
+    },
+    {
+      "case_id": "paired-accept",
+      "split": "development",
+      "tags": [
+        "同句不同前文"
+      ],
+      "generation_input": {
+        "current_intent": "接受邀请但不承诺以后",
+        "available_facts": [
+          "对方邀请周六散步"
+        ],
+        "unknowns": [
+          "以后有无时间"
+        ],
+        "allowed_changes": [
+          "措辞自然，语义保持"
+        ],
+        "current_message": "那周六怎么样？",
+        "recent_context": [
+          "对方提议周六一起散步。",
+          "用户已明确这次愿意参加。"
+        ]
+      },
+      "forbidden_additions": [
+        "长期承诺"
+      ],
+      "status": "ok",
+      "output": {
+        "candidates": [
+          {
+            "text": "以后每个周末都陪你。",
+            "basis": "故意错误的受控夹具",
+            "citation_ids": []
+          }
+        ]
+      },
+      "elapsed_ms": 10,
+      "call_count": 1,
+      "deterministic_contract": {
+        "status": "pass",
+        "errors": []
+      },
+      "semantic_review": {
+        "reviewer": "故意错误的合成标注夹具",
+        "basis": "当前意图：接受邀请但不承诺以后；候选加入：长期承诺。标注只验证报告传播。",
+        "intent": "pass",
+        "unsupported_content": "fail",
+        "naturalness": "unknown",
+        "relationship_fit": "unknown",
+        "user_similarity": "unknown",
+        "status": "reviewed",
+        "reviewer_kind": "unknown"
+      }
+    },
+    {
+      "case_id": "intent-only",
+      "split": "holdout",
+      "tags": [
+        "意图保真"
+      ],
+      "generation_input": {
+        "current_intent": "明确婉拒不留候补",
+        "available_facts": [
+          "收到邀请"
+        ],
+        "unknowns": [
+          "以后是否参加"
+        ],
+        "allowed_changes": [
+          "措辞自然，语义保持"
+        ]
+      },
+      "forbidden_additions": [
+        "改为犹豫或接受"
+      ],
+      "status": "ok",
+      "output": {
+        "candidates": [
+          {
+            "text": "我考虑一下，应该可以。",
+            "basis": "故意错误的受控夹具",
+            "citation_ids": []
+          }
+        ]
+      },
+      "elapsed_ms": 10,
+      "call_count": 1,
+      "deterministic_contract": {
+        "status": "pass",
+        "errors": []
+      },
+      "semantic_review": {
+        "reviewer": "故意错误的合成标注夹具",
+        "basis": "当前意图：明确婉拒不留候补；候选加入：改为犹豫或接受。标注只验证报告传播。",
+        "intent": "fail",
+        "unsupported_content": "pass",
+        "naturalness": "unknown",
+        "relationship_fit": "unknown",
+        "user_similarity": "unknown",
+        "status": "reviewed",
+        "reviewer_kind": "unknown"
+      }
+    },
+    {
+      "case_id": "experience",
+      "split": "holdout",
+      "tags": [
+        "事实经历"
+      ],
+      "generation_input": {
+        "current_intent": "询问展览信息",
+        "available_facts": [],
+        "unknowns": [
+          "是否去过展览"
+        ],
+        "allowed_changes": [
+          "措辞自然，语义保持"
+        ]
+      },
+      "forbidden_additions": [
+        "共同经历"
+      ],
+      "status": "ok",
+      "output": {
+        "candidates": [
+          {
+            "text": "上次我们去的时候真开心。",
+            "basis": "故意错误的受控夹具",
+            "citation_ids": []
+          }
+        ]
+      },
+      "elapsed_ms": 10,
+      "call_count": 1,
+      "deterministic_contract": {
+        "status": "pass",
+        "errors": []
+      },
+      "semantic_review": {
+        "reviewer": "故意错误的合成标注夹具",
+        "basis": "当前意图：询问展览信息；候选加入：共同经历。标注只验证报告传播。",
+        "intent": "pass",
+        "unsupported_content": "fail",
+        "naturalness": "unknown",
+        "relationship_fit": "unknown",
+        "user_similarity": "unknown",
+        "status": "reviewed",
+        "reviewer_kind": "unknown"
+      }
+    },
+    {
+      "case_id": "emotion",
+      "split": "holdout",
+      "tags": [
+        "情绪"
+      ],
+      "generation_input": {
+        "current_intent": "平静确认对方近况",
+        "available_facts": [],
+        "unknowns": [
+          "是否担心对方"
+        ],
+        "allowed_changes": [
+          "措辞自然，语义保持"
+        ]
+      },
+      "forbidden_additions": [
+        "我很担心"
+      ],
+      "status": "ok",
+      "output": {
+        "candidates": [
+          {
+            "text": "我担心得睡不着。",
+            "basis": "故意错误的受控夹具",
+            "citation_ids": []
+          }
+        ]
+      },
+      "elapsed_ms": 10,
+      "call_count": 1,
+      "deterministic_contract": {
+        "status": "pass",
+        "errors": []
+      },
+      "semantic_review": {
+        "reviewer": "故意错误的合成标注夹具",
+        "basis": "当前意图：平静确认对方近况；候选加入：我很担心。标注只验证报告传播。",
+        "intent": "pass",
+        "unsupported_content": "fail",
+        "naturalness": "unknown",
+        "relationship_fit": "unknown",
+        "user_similarity": "unknown",
+        "status": "reviewed",
+        "reviewer_kind": "unknown"
+      }
+    },
+    {
+      "case_id": "commitment",
+      "split": "holdout",
+      "tags": [
+        "承诺"
+      ],
+      "generation_input": {
+        "current_intent": "只询问时间",
+        "available_facts": [],
+        "unknowns": [
+          "自身能否参加"
+        ],
+        "allowed_changes": [
+          "措辞自然，语义保持"
+        ]
+      },
+      "forbidden_additions": [
+        "承诺参加"
+      ],
+      "status": "ok",
+      "output": {
+        "candidates": [
+          {
+            "text": "我一定会到。",
+            "basis": "故意错误的受控夹具",
+            "citation_ids": []
+          }
+        ]
+      },
+      "elapsed_ms": 10,
+      "call_count": 1,
+      "deterministic_contract": {
+        "status": "pass",
+        "errors": []
+      },
+      "semantic_review": {
+        "reviewer": "故意错误的合成标注夹具",
+        "basis": "当前意图：只询问时间；候选加入：承诺参加。标注只验证报告传播。",
+        "intent": "pass",
+        "unsupported_content": "fail",
+        "naturalness": "unknown",
+        "relationship_fit": "unknown",
+        "user_similarity": "unknown",
+        "status": "reviewed",
+        "reviewer_kind": "unknown"
+      }
+    },
+    {
+      "case_id": "motive",
+      "split": "holdout",
+      "tags": [
+        "心理推断"
+      ],
+      "generation_input": {
+        "current_intent": "询问未回复的近况但不归因",
+        "available_facts": [],
+        "unknowns": [
+          "沉默原因"
+        ],
+        "allowed_changes": [
+          "措辞自然，语义保持"
+        ]
+      },
+      "forbidden_additions": [
+        "把沉默解释为不在乎"
+      ],
+      "status": "ok",
+      "output": {
+        "candidates": [
+          {
+            "text": "你没回复就是不在乎。",
+            "basis": "故意错误的受控夹具",
+            "citation_ids": []
+          }
+        ]
+      },
+      "elapsed_ms": 10,
+      "call_count": 1,
+      "deterministic_contract": {
+        "status": "pass",
+        "errors": []
+      },
+      "semantic_review": {
+        "reviewer": "故意错误的合成标注夹具",
+        "basis": "当前意图：询问未回复的近况但不归因；候选加入：把沉默解释为不在乎。标注只验证报告传播。",
+        "intent": "pass",
+        "unsupported_content": "fail",
+        "naturalness": "unknown",
+        "relationship_fit": "unknown",
+        "user_similarity": "unknown",
+        "status": "reviewed",
+        "reviewer_kind": "unknown"
+      }
+    },
+    {
+      "case_id": "stale",
+      "split": "holdout",
+      "tags": [
+        "时效"
+      ],
+      "generation_input": {
+        "current_intent": "问现在喜欢喝什么",
+        "available_facts": [
+          "2024年曾说喜欢茶"
+        ],
+        "unknowns": [
+          "现在口味"
+        ],
+        "allowed_changes": [
+          "措辞自然，语义保持"
+        ]
+      },
+      "forbidden_additions": [
+        "旧事实直接变现状"
+      ],
+      "status": "ok",
+      "output": {
+        "candidates": [
+          {
+            "text": "你一直最爱喝茶。",
+            "basis": "故意错误的受控夹具",
+            "citation_ids": []
+          }
+        ]
+      },
+      "elapsed_ms": 10,
+      "call_count": 1,
+      "deterministic_contract": {
+        "status": "pass",
+        "errors": []
+      },
+      "semantic_review": {
+        "reviewer": "故意错误的合成标注夹具",
+        "basis": "当前意图：问现在喜欢喝什么；候选加入：旧事实直接变现状。标注只验证报告传播。",
+        "intent": "pass",
+        "unsupported_content": "fail",
+        "naturalness": "unknown",
+        "relationship_fit": "unknown",
+        "user_similarity": "unknown",
+        "status": "reviewed",
+        "reviewer_kind": "unknown"
+      }
+    },
+    {
+      "case_id": "contact-style",
+      "split": "holdout",
+      "tags": [
+        "联系人表达"
+      ],
+      "generation_input": {
+        "current_intent": "普通问候，不用未确认昵称",
+        "available_facts": [],
+        "unknowns": [
+          "称呼授权"
+        ],
+        "allowed_changes": [
+          "措辞自然，语义保持"
+        ]
+      },
+      "forbidden_additions": [
+        "其他联系人专属称呼"
+      ],
+      "status": "ok",
+      "output": {
+        "candidates": [
+          {
+            "text": "宝贝最近好吗？",
+            "basis": "故意错误的受控夹具",
+            "citation_ids": []
+          }
+        ]
+      },
+      "elapsed_ms": 10,
+      "call_count": 1,
+      "deterministic_contract": {
+        "status": "pass",
+        "errors": []
+      },
+      "semantic_review": {
+        "reviewer": "故意错误的合成标注夹具",
+        "basis": "当前意图：普通问候，不用未确认昵称；候选加入：其他联系人专属称呼。标注只验证报告传播。",
+        "intent": "pass",
+        "unsupported_content": "fail",
+        "naturalness": "unknown",
+        "relationship_fit": "unknown",
+        "user_similarity": "unknown",
+        "status": "reviewed",
+        "reviewer_kind": "unknown"
+      }
+    },
+    {
+      "case_id": "style-conflict",
+      "split": "holdout",
+      "tags": [
+        "样本冲突"
+      ],
+      "generation_input": {
+        "current_intent": "严肃地拒绝",
+        "available_facts": [
+          "样本曾使用玩笑语气"
+        ],
+        "unknowns": [
+          "当前感受"
+        ],
+        "allowed_changes": [
+          "措辞自然，语义保持"
+        ]
+      },
+      "forbidden_additions": [
+        "玩笑覆盖意图"
+      ],
+      "status": "ok",
+      "output": {
+        "candidates": [
+          {
+            "text": "哈哈当然行。",
+            "basis": "故意错误的受控夹具",
+            "citation_ids": []
+          }
+        ]
+      },
+      "elapsed_ms": 10,
+      "call_count": 1,
+      "deterministic_contract": {
+        "status": "pass",
+        "errors": []
+      },
+      "semantic_review": {
+        "reviewer": "故意错误的合成标注夹具",
+        "basis": "当前意图：严肃地拒绝；候选加入：玩笑覆盖意图。标注只验证报告传播。",
+        "intent": "fail",
+        "unsupported_content": "fail",
+        "naturalness": "unknown",
+        "relationship_fit": "unknown",
+        "user_similarity": "unknown",
+        "status": "reviewed",
+        "reviewer_kind": "unknown"
+      }
+    },
+    {
+      "case_id": "no-history",
+      "split": "holdout",
+      "tags": [
+        "无历史"
+      ],
+      "generation_input": {
+        "current_intent": "简短问候",
+        "available_facts": [],
+        "unknowns": [
+          "所有关系经历"
+        ],
+        "allowed_changes": [
+          "措辞自然，语义保持"
+        ]
+      },
+      "forbidden_additions": [
+        "虚构共同回忆"
+      ],
+      "status": "ok",
+      "output": {
+        "candidates": [
+          {
+            "text": "还记得我们的旅行吗？",
+            "basis": "故意错误的受控夹具",
+            "citation_ids": []
+          }
+        ]
+      },
+      "elapsed_ms": 10,
+      "call_count": 1,
+      "deterministic_contract": {
+        "status": "pass",
+        "errors": []
+      },
+      "semantic_review": {
+        "reviewer": "故意错误的合成标注夹具",
+        "basis": "当前意图：简短问候；候选加入：虚构共同回忆。标注只验证报告传播。",
+        "intent": "pass",
+        "unsupported_content": "fail",
+        "naturalness": "unknown",
+        "relationship_fit": "unknown",
+        "user_similarity": "unknown",
+        "status": "reviewed",
+        "reviewer_kind": "unknown"
+      }
+    },
+    {
+      "case_id": "group",
+      "split": "holdout",
+      "tags": [
+        "多条一致性"
+      ],
+      "generation_input": {
+        "current_intent": "不承诺参加，只问安排",
+        "available_facts": [
+          "对方在讨论活动"
+        ],
+        "unknowns": [
+          "能否参加"
+        ],
+        "allowed_changes": [
+          "措辞自然，语义保持"
+        ]
+      },
+      "forbidden_additions": [
+        "整组形成参加承诺"
+      ],
+      "status": "ok",
+      "output": {
+        "candidates": [
+          {
+            "text": "我先问问安排。\n到时候一定陪你去。",
+            "basis": "故意错误的受控夹具",
+            "citation_ids": []
+          }
+        ]
+      },
+      "elapsed_ms": 10,
+      "call_count": 1,
+      "deterministic_contract": {
+        "status": "pass",
+        "errors": []
+      },
+      "semantic_review": {
+        "reviewer": "故意错误的合成标注夹具",
+        "basis": "当前意图：不承诺参加，只问安排；候选加入：整组形成参加承诺。标注只验证报告传播。",
+        "intent": "pass",
+        "unsupported_content": "fail",
+        "naturalness": "unknown",
+        "relationship_fit": "unknown",
+        "user_similarity": "unknown",
+        "status": "reviewed",
+        "reviewer_kind": "unknown"
+      }
+    },
+    {
+      "case_id": "timeout",
+      "split": "holdout",
+      "tags": [
+        "响应故障"
+      ],
+      "generation_input": {
+        "current_intent": "简短问候",
+        "available_facts": [],
+        "unknowns": [
+          "联系间隔"
+        ],
+        "allowed_changes": [
+          "措辞"
+        ]
+      },
+      "forbidden_additions": [
+        "编造"
+      ],
+      "status": "timeout",
+      "output": null,
+      "elapsed_ms": 1500,
+      "call_count": 1,
+      "deterministic_contract": {
+        "status": "fail",
+        "errors": [
+          "timeout"
+        ]
+      },
+      "semantic_review": {
+        "status": "unreviewed"
+      }
+    },
+    {
+      "case_id": "missing",
+      "split": "holdout",
+      "tags": [
+        "响应故障"
+      ],
+      "generation_input": {
+        "current_intent": "简短问候",
+        "available_facts": [],
+        "unknowns": [
+          "联系间隔"
+        ],
+        "allowed_changes": [
+          "措辞"
+        ]
+      },
+      "forbidden_additions": [
+        "编造"
+      ],
+      "status": "missing",
+      "output": null,
+      "elapsed_ms": null,
+      "call_count": null,
+      "deterministic_contract": {
+        "status": "fail",
+        "errors": [
+          "missing"
+        ]
+      },
+      "semantic_review": {
+        "status": "unreviewed"
+      }
+    }
+  ]
+}

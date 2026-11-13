@@ -1,0 +1,176 @@
+{
+  "baseline": "681fcc38eab77c8fe149b76705419971f3750a86",
+  "candidateHead": "cf08f92f46c0d5ea96f27e368b4736867316ca99",
+  "node": "v25.2.1",
+  "inputSummary": {
+    "drafts": "10/100/1000联系人，每组100次1–100字符输入，双窗口事件加invoke回包",
+    "memory": "contact/owner各60轮模拟调度",
+    "learning": "25个Skill各5版本，每份1120字符，20轮复验；第11轮（索引10）变化或失败"
+  },
+  "drafts": [
+    {
+      "before": {
+        "contacts": 10,
+        "events": 100,
+        "eventJsonBytesForTwoWindows": 296504,
+        "responseJsonBytes": 148252,
+        "totalJsonBytes": 444756,
+        "everyStateEquivalent": true
+      },
+      "after": {
+        "contacts": 10,
+        "events": 100,
+        "eventJsonBytesForTwoWindows": 53904,
+        "responseJsonBytes": 26952,
+        "totalJsonBytes": 80856,
+        "everyStateEquivalent": true
+      }
+    },
+    {
+      "before": {
+        "contacts": 100,
+        "events": 100,
+        "eventJsonBytesForTwoWindows": 2474504,
+        "responseJsonBytes": 1237252,
+        "totalJsonBytes": 3711756,
+        "everyStateEquivalent": true
+      },
+      "after": {
+        "contacts": 100,
+        "events": 100,
+        "eventJsonBytesForTwoWindows": 53904,
+        "responseJsonBytes": 26952,
+        "totalJsonBytes": 80856,
+        "everyStateEquivalent": true
+      }
+    },
+    {
+      "before": {
+        "contacts": 1000,
+        "events": 100,
+        "eventJsonBytesForTwoWindows": 24614504,
+        "responseJsonBytes": 12307252,
+        "totalJsonBytes": 36921756,
+        "everyStateEquivalent": true
+      },
+      "after": {
+        "contacts": 1000,
+        "events": 100,
+        "eventJsonBytesForTwoWindows": 53904,
+        "responseJsonBytes": 26952,
+        "totalJsonBytes": 80856,
+        "everyStateEquivalent": true
+      }
+    }
+  ],
+  "memory": [
+    {
+      "scope": "contact",
+      "before": {
+        "requests": 60,
+        "publishes": 60,
+        "jsonBytes": 89275,
+        "pendingTimers": 1
+      },
+      "after": {
+        "requests": 0,
+        "publishes": 0,
+        "jsonBytes": 0,
+        "pendingTimers": 0
+      },
+      "reentryEquivalent": true
+    },
+    {
+      "scope": "owner",
+      "before": {
+        "requests": 60,
+        "publishes": 60,
+        "jsonBytes": 63653,
+        "pendingTimers": 1
+      },
+      "after": {
+        "requests": 0,
+        "publishes": 0,
+        "jsonBytes": 0,
+        "pendingTimers": 0
+      },
+      "reentryEquivalent": true
+    }
+  ],
+  "learning": [
+    {
+      "mode": "stable",
+      "before": {
+        "requests": 40,
+        "publishes": 40,
+        "jsonBytes": 18258559
+      },
+      "after": {
+        "requests": 40,
+        "publishes": 0,
+        "jsonBytes": 0
+      },
+      "everyStateEquivalent": true
+    },
+    {
+      "mode": "changed",
+      "before": {
+        "requests": 40,
+        "publishes": 40,
+        "jsonBytes": 18272809
+      },
+      "after": {
+        "requests": 40,
+        "publishes": 1,
+        "jsonBytes": 457213
+      },
+      "everyStateEquivalent": true
+    },
+    {
+      "mode": "failed",
+      "before": {
+        "requests": 40,
+        "publishes": 58,
+        "jsonBytes": 9599605
+      },
+      "after": {
+        "requests": 40,
+        "publishes": 38,
+        "jsonBytes": 470322
+      },
+      "everyStateEquivalent": true
+    }
+  ],
+  "inputSha256": "86fe7b13d853e77b8956e9544fb8678bf52bdb6abf06122b629743c0d69c07d1",
+  "sourceSha256": {
+    "src/main/contacts/session.ts": {
+      "baseline": "e2c6cfcb476af93a19209da6bf0193f0eed0f7db2d3339b949faf9bd1bfa90a1",
+      "candidate": "929e768fccd92ee7f662d635e3d01f8548ae3b6cee79f3cbeabf4e56c963b5de"
+    },
+    "src/main/contacts/bridge.ts": {
+      "baseline": "49f2dd982ad91742938c0a3fa84ff3a3e96ccd040759055b79a34d90cf70f373",
+      "candidate": "3b51cabee49a2ea7a3773fb6363f4aa087416cf98f5f4eb1587b2f9f6df46504"
+    },
+    "src/shared/contact-session-bridge.ts": {
+      "baseline": "506d0f1f1231083d6cd37a851be30d16f506a543058075bcf418d5a773c1f95f",
+      "candidate": "aa7172f8ca9736711c2ece8bead85dd5c8f25ccefb4c80a37d430112bed6cab1"
+    },
+    "src/main/memory/controller.ts": {
+      "baseline": "a8e5fa6892d562ebbdc570005883773fb22fdcda0c975d40f29817fa21409aa4",
+      "candidate": "3c8d63c3a547611732e271f153156049f59a481afe2554733a7e2823b9dbbc40"
+    },
+    "src/main/memory/owner-layered.ts": {
+      "baseline": "30605a2087dd7e197def0451a7b7d770dfa124929e98966901c56d7fa5d9186b",
+      "candidate": "f1d46cc6c32f15fd2727e95024baaead2be7a348f0991ffb1b5710146941a9f6"
+    },
+    "src/main/skill-learning/controller.ts": {
+      "baseline": "19f6e5de51952c5a24c49e4f05e18584f2253965f79517933b3b41d4380ac1ab",
+      "candidate": "3c4c8abf2760e648eac1c9f57b8d079f70d3bad4e175aefcd66ee6b2bc134883"
+    }
+  },
+  "limitations": [
+    "未启动实际App/微信/数据库或外部模型",
+    "模拟调度次数和JSON字节不等于延迟、CPU或RSS",
+    "联系人主进程内部订阅仍可克隆完整目录；Skill后端GET次数保持不变"
+  ]
+}

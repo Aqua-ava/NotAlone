@@ -1,0 +1,708 @@
+[
+  {
+    "id": 1,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "E",
+        "path": "SKILL.md",
+        "start_line": 111,
+        "end_line": 116
+      },
+      {
+        "source": "G",
+        "path": "references/practical/场景感、松弛感与社交校准：从接话到关系推进.md",
+        "start_line": 22,
+        "end_line": 33
+      }
+    ],
+    "examples": [
+      {
+        "source": "E",
+        "path": "examples/conversation-examples.md",
+        "start_line": 7,
+        "end_line": 40,
+        "kind": "dialogue"
+      }
+    ],
+    "notes": "E 的观察—发挥—邀请和 G 的现场取材都直接对应从已知细节开聊。"
+  },
+  {
+    "id": 2,
+    "support": "shared_method",
+    "methods": [
+      {
+        "source": "C",
+        "path": "relationship-copilot/references/human-progression-playbook.md",
+        "start_line": 66,
+        "end_line": 70
+      }
+    ],
+    "examples": [],
+    "notes": "只保留轻量自我线索、低风险动机和轻问题的方法；不据慢热断言对方在防御或观察。源文示例把该判断写入话术，本项不选该例；这是可借用的轻量开聊方法，未单列不预设动机的慢热场景。"
+  },
+  {
+    "id": 3,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "G",
+        "path": "references/practical/聊天化被动为主动：引导互动的实用指南.md",
+        "start_line": 32,
+        "end_line": 37
+      },
+      {
+        "source": "G",
+        "path": "references/practical/聊天化被动为主动：引导互动的实用指南.md",
+        "start_line": 62,
+        "end_line": 68
+      }
+    ],
+    "examples": [
+      {
+        "source": "G",
+        "path": "references/practical/聊天化被动为主动：引导互动的实用指南.md",
+        "start_line": 66,
+        "end_line": 68,
+        "kind": "scenario"
+      }
+    ],
+    "notes": "G29 对很久没见的熟人给出共同回忆接到当前兴趣的场景。"
+  },
+  {
+    "id": 4,
+    "support": "shared_method",
+    "methods": [
+      {
+        "source": "D",
+        "path": ".claude/skills/dating-coach/references/knowledge-base.md",
+        "start_line": 36,
+        "end_line": 37
+      }
+    ],
+    "examples": [],
+    "notes": "D12 的平淡期推进方案含刻意降频和推拉，本项改用 D 聊天总则中交替分享与提问的通用节奏；可围绕用户已提供的真实细节换话题，源文未单列流水账重启案例，也不填具体经历。"
+  },
+  {
+    "id": 5,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 17,
+        "end_line": 29
+      },
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 49,
+        "end_line": 53
+      }
+    ],
+    "examples": [
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 103,
+        "end_line": 115,
+        "kind": "phrase"
+      }
+    ],
+    "notes": "G01 有该质疑的三种原文回复，并提供本轮目标与积极、含糊、拒绝后的通用分支。"
+  },
+  {
+    "id": 6,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "G",
+        "path": "references/practical/巧妙接话技巧：让沟通更流畅的实用指南.md",
+        "start_line": 33,
+        "end_line": 49
+      }
+    ],
+    "examples": [
+      {
+        "source": "G",
+        "path": "references/practical/巧妙接话技巧：让沟通更流畅的实用指南.md",
+        "start_line": 39,
+        "end_line": 42,
+        "kind": "scenario"
+      }
+    ],
+    "notes": "G07 直接讲关键词延伸、选择细节并以提问或分享承接，附有完整示例。"
+  },
+  {
+    "id": 7,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "E",
+        "path": "docs/conversation-mastery.md",
+        "start_line": 114,
+        "end_line": 129
+      }
+    ],
+    "examples": [
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 87,
+        "end_line": 101,
+        "kind": "phrase"
+      },
+      {
+        "source": "E",
+        "path": "examples/conversation-examples.md",
+        "start_line": 44,
+        "end_line": 89,
+        "kind": "dialogue"
+      }
+    ],
+    "notes": "E05 区分能量变化及不追发的处理；G01 有针对只回哈哈或表情的收束话术。"
+  },
+  {
+    "id": 8,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "C",
+        "path": "relationship-copilot/references/human-progression-playbook.md",
+        "start_line": 205,
+        "end_line": 213
+      }
+    ],
+    "examples": [
+      {
+        "source": "C",
+        "path": "relationship-copilot/references/human-progression-playbook.md",
+        "start_line": 215,
+        "end_line": 225,
+        "kind": "scenario"
+      }
+    ],
+    "notes": "C14 直接提出接对方一句、补自己的经历或态度、再留轻问题，并给了采访式与分享式对照。"
+  },
+  {
+    "id": 9,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "C",
+        "path": "relationship-copilot/references/human-progression-playbook.md",
+        "start_line": 84,
+        "end_line": 94
+      }
+    ],
+    "examples": [
+      {
+        "source": "C",
+        "path": "relationship-copilot/references/human-progression-playbook.md",
+        "start_line": 96,
+        "end_line": 101,
+        "kind": "phrase"
+      }
+    ],
+    "notes": "C10 原文直接讨论愿意聊但不主动的情况，并提供接住对方可调侃点的例句。"
+  },
+  {
+    "id": 10,
+    "support": "shared_method",
+    "methods": [
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 17,
+        "end_line": 29
+      },
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 49,
+        "end_line": 53
+      }
+    ],
+    "examples": [
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 87,
+        "end_line": 101,
+        "kind": "phrase"
+      }
+    ],
+    "notes": "源文未单列正常聊天中的主动结束，只能借用 G 的收线策略及短回复、低能量时结束当轮的示例。"
+  },
+  {
+    "id": 11,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "G",
+        "path": "references/practical/化解尴尬：轻松救场的实用指南.md",
+        "start_line": 31,
+        "end_line": 36
+      }
+    ],
+    "examples": [
+      {
+        "source": "G",
+        "path": "references/practical/化解尴尬：轻松救场的实用指南.md",
+        "start_line": 37,
+        "end_line": 38,
+        "kind": "scenario"
+      }
+    ],
+    "notes": "G25 直接处理话题断层，方法是从刚聊过的关键词找关联角度，再用提问或分享转场。"
+  },
+  {
+    "id": 12,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "C",
+        "path": "relationship-copilot/references/human-progression-playbook.md",
+        "start_line": 205,
+        "end_line": 213
+      }
+    ],
+    "examples": [
+      {
+        "source": "C",
+        "path": "relationship-copilot/references/human-progression-playbook.md",
+        "start_line": 221,
+        "end_line": 225,
+        "kind": "phrase"
+      }
+    ],
+    "notes": "C14 直接覆盖用自己的经历、偏好和态度形成双向聊天；仅抽取源文分享示例，不补用户背景。"
+  },
+  {
+    "id": 13,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "D",
+        "path": ".claude/skills/dating-coach/references/signal-patterns.md",
+        "start_line": 331,
+        "end_line": 332
+      }
+    ],
+    "examples": [
+      {
+        "source": "D",
+        "path": ".claude/skills/dating-coach/references/signal-patterns.md",
+        "start_line": 339,
+        "end_line": 341,
+        "kind": "template"
+      }
+    ],
+    "notes": "仅选“真诚但别交底、展示原则而非细节”的应对方法，避开对提问动机的推断。表格例句是原作者模板，不代表用户经历；只在“性格不合、和平分手”符合真实情况时才能使用。"
+  },
+  {
+    "id": 14,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "D",
+        "path": ".claude/skills/dating-coach/references/signal-patterns.md",
+        "start_line": 331,
+        "end_line": 332
+      }
+    ],
+    "examples": [
+      {
+        "source": "D",
+        "path": ".claude/skills/dating-coach/references/signal-patterns.md",
+        "start_line": 339,
+        "end_line": 342,
+        "kind": "template"
+      }
+    ],
+    "notes": "仅选真诚表达原则的通用方法，不推断提问动机。表格中的择偶观回答是原作者模板，不代表用户价值观；只有符合用户真实想法时才能采用。"
+  },
+  {
+    "id": 15,
+    "support": "shared_method",
+    "methods": [
+      {
+        "source": "G",
+        "path": "references/practical/化解尴尬：轻松救场的实用指南.md",
+        "start_line": 81,
+        "end_line": 84
+      }
+    ],
+    "examples": [
+      {
+        "source": "G",
+        "path": "references/practical/化解尴尬：轻松救场的实用指南.md",
+        "start_line": 82,
+        "end_line": 84,
+        "kind": "scenario"
+      }
+    ],
+    "notes": "G26 的隐私问题示例来自被问工资的通用场景，不是恋爱对象提问；可借用回避具体隐私并转话题的方法，源文未给恋爱场景案例。"
+  },
+  {
+    "id": 16,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "E",
+        "path": "SKILL.md",
+        "start_line": 168,
+        "end_line": 184
+      }
+    ],
+    "examples": [
+      {
+        "source": "E",
+        "path": "SKILL.md",
+        "start_line": 176,
+        "end_line": 182,
+        "kind": "phrase"
+      }
+    ],
+    "notes": "E 的 Art of Banter 直接列出玩笑挑战、callback、角色反转、夸张升级和自嘲，并附尊重边界的护栏；只选原表例句，不把示例细节当作用户事实。"
+  },
+  {
+    "id": 17,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "E",
+        "path": "SKILL.md",
+        "start_line": 361,
+        "end_line": 370
+      }
+    ],
+    "examples": [
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 177,
+        "end_line": 189,
+        "kind": "phrase"
+      },
+      {
+        "source": "E",
+        "path": "SKILL.md",
+        "start_line": 363,
+        "end_line": 370,
+        "kind": "phrase"
+      }
+    ],
+    "notes": "E05/G01 明确覆盖“你对谁都这样吗”的真诚质疑；例句引用原文，不额外证明用户真诚。"
+  },
+  {
+    "id": 18,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "G",
+        "path": "references/practical/万能夸人的话术技巧：真诚认可的实用指南.md",
+        "start_line": 23,
+        "end_line": 32
+      }
+    ],
+    "examples": [
+      {
+        "source": "G",
+        "path": "references/practical/万能夸人的话术技巧：真诚认可的实用指南.md",
+        "start_line": 79,
+        "end_line": 81,
+        "kind": "phrase"
+      }
+    ],
+    "notes": "G09 给出从具体行为提炼优点并说明带来感受的步骤；示例是新认识者聊天细节，不涉及外貌或未给出的个人事实。"
+  },
+  {
+    "id": 19,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 41,
+        "end_line": 53
+      }
+    ],
+    "examples": [
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 191,
+        "end_line": 205,
+        "kind": "phrase"
+      }
+    ],
+    "notes": "G08/C05 的 G01 原文直接设有“把玩笑转成一点暧昧”场景；例句后附否认或转移时回到轻话题的分支，与普通接梗区分。"
+  },
+  {
+    "id": 20,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 49,
+        "end_line": 53
+      }
+    ],
+    "examples": [
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 163,
+        "end_line": 175,
+        "kind": "phrase"
+      }
+    ],
+    "notes": "G10 有轻松表达想念的稳健、会撩和直接原文；方法只补充通用后续反馈分支。"
+  },
+  {
+    "id": 21,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "C",
+        "path": "relationship-copilot/references/human-progression-playbook.md",
+        "start_line": 109,
+        "end_line": 117
+      }
+    ],
+    "examples": [
+      {
+        "source": "C",
+        "path": "relationship-copilot/references/human-progression-playbook.md",
+        "start_line": 119,
+        "end_line": 129,
+        "kind": "phrase"
+      }
+    ],
+    "notes": "C11 直接要求在已有温度时表达非普通朋友方向的兴趣并避免对抗拒者硬推；示例保留原作者的性别化措辞，主Agent需注意适用边界。"
+  },
+  {
+    "id": 22,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "C",
+        "path": "relationship-copilot/references/human-progression-playbook.md",
+        "start_line": 165,
+        "end_line": 173
+      }
+    ],
+    "examples": [
+      {
+        "source": "C",
+        "path": "relationship-copilot/references/human-progression-playbook.md",
+        "start_line": 175,
+        "end_line": 203,
+        "kind": "scenario"
+      }
+    ],
+    "notes": "C13 有专门的游戏搭子/缺人位辨识、承认真实借口并点明想相处后收住的方法，以及积极、拒绝和不接分支。"
+  },
+  {
+    "id": 23,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "C",
+        "path": "relationship-copilot/references/human-progression-playbook.md",
+        "start_line": 255,
+        "end_line": 269
+      }
+    ],
+    "examples": [
+      {
+        "source": "C",
+        "path": "relationship-copilot/references/human-progression-playbook.md",
+        "start_line": 277,
+        "end_line": 299,
+        "kind": "scenario"
+      }
+    ],
+    "notes": "C16/C04 在表达或轻推进之后强调收住，并分别给继续调侃与不接时的原文接法；没有补入额外情绪事实。"
+  },
+  {
+    "id": 24,
+    "support": "shared_method",
+    "methods": [
+      {
+        "source": "G",
+        "path": "references/practical/场景感、松弛感与社交校准：从接话到关系推进.md",
+        "start_line": 77,
+        "end_line": 85
+      }
+    ],
+    "examples": [],
+    "notes": "源文未单列调情过头后的修复或道歉话术；只选基于反馈降低张力、对不适信号立即停止的通用校准方法，作为shared_method，不提供原例。"
+  },
+  {
+    "id": 25,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "E",
+        "path": "docs/conversation-mastery.md",
+        "start_line": 155,
+        "end_line": 163
+      }
+    ],
+    "examples": [
+      {
+        "source": "E",
+        "path": "docs/conversation-mastery.md",
+        "start_line": 157,
+        "end_line": 185,
+        "kind": "template"
+      }
+    ],
+    "notes": "E08 直接覆盖有兴趣、聊了一段时间及共同细节等不同邀约入口；保留原文模板，不据此推断对方意愿。"
+  },
+  {
+    "id": 26,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "G",
+        "path": "references/practical/主动表达、第一次见面与自然接触.md",
+        "start_line": 21,
+        "end_line": 28
+      },
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 117,
+        "end_line": 131
+      }
+    ],
+    "examples": [
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 119,
+        "end_line": 131,
+        "kind": "template"
+      }
+    ],
+    "notes": "G11/C07 对应具体活动、时间与反馈后细化安排；含糊忙碌且无新信息时不连环追问。"
+  },
+  {
+    "id": 27,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "E",
+        "path": "docs/conversation-mastery.md",
+        "start_line": 147,
+        "end_line": 149
+      }
+    ],
+    "examples": [
+      {
+        "source": "E",
+        "path": "docs/conversation-mastery.md",
+        "start_line": 150,
+        "end_line": 152,
+        "kind": "phrase"
+      }
+    ],
+    "notes": "E08 有直接的视频通话桥接说明和建议短时通话的原文句子。"
+  },
+  {
+    "id": 28,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "E",
+        "path": "SKILL.md",
+        "start_line": 196,
+        "end_line": 207
+      },
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 49,
+        "end_line": 53
+      }
+    ],
+    "examples": [
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 133,
+        "end_line": 145,
+        "kind": "phrase"
+      }
+    ],
+    "notes": "G11/E10 明确区分只说忙与给替代时间，并分别示范不追问和等待具体安排。"
+  },
+  {
+    "id": 29,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "E",
+        "path": "SKILL.md",
+        "start_line": 196,
+        "end_line": 207
+      },
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 117,
+        "end_line": 131
+      }
+    ],
+    "examples": [
+      {
+        "source": "E",
+        "path": "SKILL.md",
+        "start_line": 201,
+        "end_line": 202,
+        "kind": "phrase"
+      }
+    ],
+    "notes": "G11/E08 原文有时间冲突但提供替代时间的情形，建议接住替代窗口并细化，而非把冲突误作拒绝。"
+  },
+  {
+    "id": 30,
+    "support": "direct",
+    "methods": [
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 147,
+        "end_line": 161
+      }
+    ],
+    "examples": [
+      {
+        "source": "G",
+        "path": "references/practical/实战话术编排器：从一句回复到后续分支.md",
+        "start_line": 149,
+        "end_line": 161,
+        "kind": "phrase"
+      }
+    ],
+    "notes": "G11 有稳健、轻调侃和明确交还新时间的原文，并提醒紧急状况先关心安全与实际困难。"
+  },
+  {
+    "id": 31,
+    "support": "shared_method",
+    "methods": [
+      {
+        "source": "G",
+        "path": "references/practical/主动表达、第一次见面与自然接触.md",
+        "start_line": 40,
+        "end_line": 43
+      }
+    ],
+    "examples": [],
+    "notes": "D15 也只谈约会地点、流程和结束时铺垫下次，没有见面前复核时间地点的原文话术；G12 仅提供公开场所、时间及活动安排原则，故维持 shared_method。"
+  }
+]

@@ -1,0 +1,16 @@
+number	filename	source_unit	signed_issue	triage	state	type	blocked_by	migration_mapping	unchecked_ac	checked_ac
+01	01-current-status-and-prepared-format.md	U1	01	ready-for-agent	resolved	task	None	-	0	6
+02	02-correction-and-erasure.md	U2	03	ready-for-agent	resolved	task	None	058→059	0	6
+03	03-event-version-grounded-adapter.md	U3	02	ready-for-agent	resolved	task	01, 02	059→060	0	6
+04	04-historical-reply-continuation.md	U4	04	ready-for-agent	resolved	task	01, 02	-	0	6
+05	05-contact-overview.md	U5	05	ready-for-agent	resolved	task	03	060→061	0	6
+06	06-owner-overview.md	U6	06	ready-for-agent	resolved	task	05	061→062	0	6
+07	07-frozen-overview-retrieval.md	U7	07	ready-for-agent	resolved	task	04, 06	-	0	6
+08	08-expression-preferences.md	U8	08	ready-for-agent	resolved	task	06	062→063	0	6
+09	09-learning-drafts.md	U9	09	ready-for-agent	resolved	task	04, 08	063→064	0	6
+10	10-versioned-memory-upgrade.md	U13	13	ready-for-agent	resolved	task	09	064→065	0	6
+11	11-review-and-publication.md	U10	10	ready-for-agent	resolved	task	10	065→066	0	6
+12	12-skill-version-history.md	U11	11	ready-for-agent	resolved	task	11	066→067	0	6
+13	13-scoped-skill-feedback.md	U12	12	ready-for-agent	resolved	task	12	067→068	0	6
+14	14-semantic-research-archive.md	U14	14	ready-for-agent	resolved	research	None	-	0	5
+15	15-combined-integration-acceptance.md	U15	15	ready-for-agent	resolved	task	07, 13	-	0	8

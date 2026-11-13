@@ -1,0 +1,4 @@
+
+> notalone-backend-ts-validation@0.0.0 typecheck
+> tsc --noEmit
+

@@ -1,0 +1,106 @@
+TAP version 13
+# Subtest: 显式新任务经正式A→B保留第三人称和忠实未知日期，负向facet不写入且缓存不绕版本/unknown
+ok 1 - 显式新任务经正式A→B保留第三人称和忠实未知日期，负向facet不写入且缓存不绕版本/unknown
+  ---
+  duration_ms: 1467.671666
+  type: 'test'
+  ...
+# Subtest: 完整命题核验聚合时间/认知模态负向判断，保留两个有据控制
+ok 2 - 完整命题核验聚合时间/认知模态负向判断，保留两个有据控制
+  ---
+  duration_ms: 4.961542
+  type: 'test'
+  ...
+# Subtest: prepared decode 幂等并隔离返回值，不能在验证后交换另一份响应
+ok 3 - prepared decode 幂等并隔离返回值，不能在验证后交换另一份响应
+  ---
+  duration_ms: 1.145708
+  type: 'test'
+  ...
+# Subtest: 全文漏核、facet 缺项或未定、归属 unresolved 均不能被顶层 supported 覆盖
+ok 4 - 全文漏核、facet 缺项或未定、归属 unresolved 均不能被顶层 supported 覆盖
+  ---
+  duration_ms: 3.531125
+  type: 'test'
+  ...
+# Subtest: 新策略原生准入可签来源receipt，序列化字段或更换正文/范围/来源不能代签
+ok 5 - 新策略原生准入可签来源receipt，序列化字段或更换正文/范围/来源不能代签
+  ---
+  duration_ms: 4.204042
+  type: 'test'
+  ...
+# Subtest: 覆盖按Unicode码点计数且请求指纹不能跨候选或来源复用
+ok 6 - 覆盖按Unicode码点计数且请求指纹不能跨候选或来源复用
+  ---
+  duration_ms: 1.904792
+  type: 'test'
+  ...
+# Subtest: shared仍归联系人资料范围，三项supported也不能覆盖旧事件或条件未核验
+ok 7 - shared仍归联系人资料范围，三项supported也不能覆盖旧事件或条件未核验
+  ---
+  duration_ms: 5.568709
+  type: 'test'
+  ...
+# Subtest: A结果在真实租约围栏内完成三类裁决、合并、trace与水位收尾
+ok 8 - A结果在真实租约围栏内完成三类裁决、合并、trace与水位收尾
+  ---
+  duration_ms: 2029.746292
+  type: 'test'
+  ...
+# Subtest: 批次最终提交失败保留已采纳 partial，且不推进水位，重试不重复采纳
+ok 9 - 批次最终提交失败保留已采纳 partial，且不推进水位，重试不重复采纳
+  ---
+  duration_ms: 1021.633375
+  type: 'test'
+  ...
+# Subtest: A结果来源撤销后停止B且不写记忆或水位
+ok 10 - A结果来源撤销后停止B且不写记忆或水位
+  ---
+  duration_ms: 961.43425
+  type: 'test'
+  ...
+# Subtest: 模型ACK未知沿因果链保留稳定错误码，不写记忆或水位
+ok 11 - 模型ACK未知沿因果链保留稳定错误码，不写记忆或水位
+  ---
+  duration_ms: 1012.751584
+  type: 'test'
+  ...
+# Subtest: 116真实随机_test迁移兼容旧快照，SQL与TS同时拒绝非法v2
+ok 12 - 116真实随机_test迁移兼容旧快照，SQL与TS同时拒绝非法v2
+  ---
+  duration_ms: 871.675542
+  type: 'test'
+  ...
+# Subtest: 真实新任务显式冻结v2，旧NULL冲突重入不升级，未知及源版本不匹配不领取
+ok 13 - 真实新任务显式冻结v2，旧NULL冲突重入不升级，未知及源版本不匹配不领取
+  ---
+  duration_ms: 855.4595
+  type: 'test'
+  ...
+# Subtest: 显式五键策略和旧null/v1同形校验，不借新字段升级旧任务
+ok 14 - 显式五键策略和旧null/v1同形校验，不借新字段升级旧任务
+  ---
+  duration_ms: 8.159291
+  type: 'test'
+  ...
+# Subtest: 旧v1模式必须是字符串，不能借数组或对象强制转换通过
+ok 15 - 旧v1模式必须是字符串，不能借数组或对象强制转换通过
+  ---
+  duration_ms: 0.140959
+  type: 'test'
+  ...
+# Subtest: sourceStamp跟踪实际传递依赖及vendor，冻结后变更保守失败
+ok 16 - sourceStamp跟踪实际传递依赖及vendor，冻结后变更保守失败
+  ---
+  duration_ms: 48.879333
+  type: 'test'
+  ...
+1..16
+# tests 16
+# suites 0
+# pass 16
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5228.023042

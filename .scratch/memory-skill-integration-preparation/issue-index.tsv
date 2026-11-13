@@ -1,0 +1,16 @@
+path	state	triage	blocked_by	answer_line	checked_ac	unchecked_ac	signed_blob
+.scratch/memory-skill-evolution/issues/01-historical-current-status.md	resolved	ready-for-agent	None (can start immediately)	37	7	0	e9c7788a454d966ea04c5a2bea8a60014ec8bc31
+.scratch/memory-skill-evolution/issues/02-memory-event-update-dedup.md	resolved	ready-for-agent	01	36	6	0	e298d2143d1ee4cfff812148d54f81a6b9edb8c8
+.scratch/memory-skill-evolution/issues/03-correction-rejection-regrowth.md	resolved	ready-for-agent	None (can start immediately)	36	6	0	518014bda642ec984acfca2785af0305163957c3
+.scratch/memory-skill-evolution/issues/04-historical-reply-evidence-change.md	resolved	ready-for-agent	01, 03	42	6	0	9a7781f9c1b47f92d2cb74f9c2e45a8249fc51f5
+.scratch/memory-skill-evolution/issues/05-contact-relationship-overview.md	resolved	ready-for-agent	01, 02, 03	42	6	0	0918457d226fcc9efdbb75575c9080a768a5b690
+.scratch/memory-skill-evolution/issues/06-owner-facts-preferences-overview.md	resolved	ready-for-agent	01, 02, 03	46	6	0	424f1f5ad473e16f7627b8008b737b22fdc6d5a9
+.scratch/memory-skill-evolution/issues/07-overview-evidence-reply-retrieval.md	resolved	ready-for-agent	05, 06	52	6	0	581839d663f7ffddd839d221389526ca37d74547
+.scratch/memory-skill-evolution/issues/08-explicit-expression-preferences.md	resolved	ready-for-agent	None (can start immediately)	36	6	0	0f8cca5069369461f696c4eff53cfe8db1412941
+.scratch/memory-skill-evolution/issues/09-automatic-skill-drafts.md	resolved	ready-for-agent	None (can start immediately)	36	6	0	129aa75b5d2125e305e863703032b87e348ee7ea
+.scratch/memory-skill-evolution/issues/10-skill-review-scope-publication.md	resolved	ready-for-agent	09	47	7	0	7126000abb77637c8549cb3dc3fb8c15018c9168
+.scratch/memory-skill-evolution/issues/11-skill-update-merge-rollback.md	resolved	ready-for-agent	10	43	6	0	e3fe80b351a74499b0c5ed3cf3a11564ab1f69aa
+.scratch/memory-skill-evolution/issues/12-scoped-skill-feedback.md	resolved	ready-for-agent	10	46	8	0	5c56b0e53d3aa53cc2dce24d1f6c235e289c63a8
+.scratch/memory-skill-evolution/issues/13-legacy-memory-comparison-upgrade.md	resolved	ready-for-agent	01, 02, 03	45	6	0	ab201a967c5dc08913e65a21503b66bc7c381311
+.scratch/memory-skill-evolution/issues/14-semantic-retrieval-gap-evaluation.md	resolved	ready-for-agent	None (can start immediately)	42	6	0	24a4ab42446f3625a217ca33d1d582342c430148
+.scratch/memory-skill-evolution/issues/15-combined-evolution-acceptance.md	resolved	ready-for-agent	04, 07, 08, 11, 12, 13	44	6	0	fa4b3cf8fe7346ed1291c17bec50a2f711d040d4

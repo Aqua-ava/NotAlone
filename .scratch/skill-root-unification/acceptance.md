@@ -1,0 +1,17 @@
+# Skill 单一仓库目录
+- 用户明确授权：App只读仓库这一套，删除App数据目录的重复副本。
+- 旧根：NotAloneDesktop/skill-packages；新根：项目reply-skills/romance。
+- 92包共184个文件完整树逐字节比对一致；旧根唯一SOURCES.md也一致，未知文件不删除。
+- 显式skills.relocateRoot单事务CAS更新directory_identity/head，保留全部ID、启停、来源资格、修订历史/当前版与摘要；旧run/anchor失效。
+- prepare先发布私有journal，startup先recover再正常打开；DB已提交/配置未切换、目标被改、硬链接发布中断均可安全阻断或恢复。
+- 迁移时检查握手及DSH launch lock均已退出；仅在App停止后打开维护存储，遵守单个活动lease。
+- 本机迁移后92unknown、92verified、当前内容修订仍为3；IDs/启停/历史全部比较保留，head统一+1。
+- App已重开真实读取新根，API及Computer Use显示92已核验、无身份冲突。
+- 成功切换后再次校验原副本inode及完整文件树，删92包+旧SOURCES并移除空旧根，约251194字节文件内容；未保留内容备份。
+- 删除后实际App的第001包再次技术核验成功；全部92当前digest与仓库一致，旧根确认不存在。
+- 原有启停选择保持；测试中断恢复和source撤销不复活，未调用真实回复生成或外部消息发送。
+- 新开发实例默认仓库根，不创建App内副本；已有明确自定义配置优先，相关3项桌面回归通过。
+- 后台6文件共28项通过，桌面3项通过，两端pnpm run typecheck通过；最后新增预算校验后重跑8项迁移/恢复测试通过。
+- 产品包validate_romance_reply_skills仍92包/92资源/0告警；DSH依赖及官方profile/provider/工具接口未改。
+- 复用开发缓存并留正常App供使用；临时恢复测试目录均已清理，未新增运行时镜像或打包。
+- 已在main本地提交fb0ed4e2；提交后公开历史及工作区扫描issues=0，未push。

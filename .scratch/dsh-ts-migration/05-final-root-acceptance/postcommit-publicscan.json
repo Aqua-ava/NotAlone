@@ -1,0 +1,12 @@
+{
+  "exit_code": 0,
+  "scan": {
+    "commit": "b0a6817582d92b4142977c486fe7a9366496cb88",
+    "historicalBlobs": 14794,
+    "historicalCommits": 2223,
+    "currentFiles": 15931,
+    "issues": 0,
+    "locations": []
+  },
+  "raw_sha256": "ea39a7df6e7a6254d0466859852ff8871865536014098811b5669a0ba012212e"
+}

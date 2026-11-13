@@ -1,0 +1,53 @@
+--- a/backend-ts/src/memory/sqlite/documents/later-schedule.ts
++++ b/backend-ts/src/memory/sqlite/documents/later-schedule.ts
+@@ -1,7 +1,7 @@
+ import {observedProcessingAction,recordProcessingRunChange} from '../diagnostics.ts';
+ import {randomUUID} from 'node:crypto';
+ import {sha256} from '../../../platform/sha256.ts';
+-import {runTargetsReleased,releasedRunSql} from '../run-retirement.ts';
++import {runTargetsReleased} from '../run-retirement.ts';
+ import type {StorageAction,StorageMigration,StorageTransaction,StorageRow,StorageLease} from '../../../storage/sqlite/contracts.ts';
+ import type {MemoryScope} from '../management/contracts.ts';
+ import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
+@@ -262,7 +262,7 @@
+  return {pending:Number(pending.n),nextDueAt:due?Number(due.due_at):null,stage:due?String(due.stage) as 'document_scene'|'document_profile':null};
+ }
+ 
+-function scopeBlocked(tx:StorageTransaction,ownerId:string,row:StorageRow):boolean {
++function scopeBlocked(tx:StorageTransaction,ownerId:string,row:StorageRow,releasedRuns:Map<string,boolean>):boolean {
+  const scopeKey=String(row.scope_key);
+  if(tx.get("SELECT 1 FROM deletion_operation d WHERE d.owner_identity=? AND d.state<>'completed' LIMIT 1",[ownerId]))return true;
+  if(tx.get('SELECT 1 FROM memory_document_later_run_requirement WHERE owner_id=? AND scope_key=? AND generation=? AND paused=1',[ownerId,scopeKey,row.generation]))return true;
+@@ -274,13 +274,20 @@
+     WHERE s.owner_id=t.owner_id AND s.task_id=t.id AND (s.state='unknown' OR a.state='unknown' OR c.state='unknown')) AS has_unknown
+   FROM processing_task t JOIN processing_run r ON r.owner_id=t.owner_id AND r.id=t.run_id
+   LEFT JOIN task_contribution contribution ON contribution.owner_id=t.owner_id AND contribution.task_id=t.id
+-  WHERE t.owner_id=? AND coalesce(json_extract(r.policy_config,'$.intent'),'')<>'memory_document_later_stage' AND NOT ${releasedRunSql('r')}
++  WHERE t.owner_id=? AND coalesce(json_extract(r.policy_config,'$.intent'),'')<>'memory_document_later_stage'
+    AND (?=1 OR (t.scope_kind='contact' AND t.contact_id=?) OR contribution.source_contact_id=?) GROUP BY t.id`,
+  [ownerId,isSelf?1:0,contactId,contactId]);
+  for(const blocker of blockers){
++  // 一个同步只读扫描内按运行复验一次；先缩小到当前范围任务，避免每个任务展开完整回执链。
++  const runId=String(blocker.run_id);
++  if(['failed','revoked','completed'].includes(String(blocker.run_state))){
++   let released=releasedRuns.get(runId);
++   if(released===undefined){released=runTargetsReleased(tx,ownerId,runId);releasedRuns.set(runId,released);}
++   if(released)continue;
++  }
+   if(blocker.pause_requested_at!==null||blocker.run_state==='paused'||blocker.task_state==='paused'||blocker.task_state==='unknown'||blocker.has_unknown===1n)return true;
+   const failed=blocker.run_state==='failed'||blocker.task_state==='failed'||blocker.task_state==='incomplete'&&blocker.task_error!==null&&blocker.task_error!=='targets_completed_elsewhere';
+-  if(!failed||blocker.run_state==='completed'||runTargetsReleased(tx,ownerId,String(blocker.run_id)))continue;
++  if(!failed||blocker.run_state==='completed')continue;
+   const newer=isSelf
+    ?tx.get(`SELECT 1 FROM processing_run newer JOIN processing_task task ON task.owner_id=newer.owner_id AND task.run_id=newer.id
+      WHERE newer.owner_id=? AND newer.state='completed' AND newer.started_at>? AND task.scope_kind='self' AND task.state='succeeded'
+@@ -301,7 +308,8 @@
+  const candidates=tx.all(`SELECT * FROM memory_document_later_schedule s WHERE s.owner_id=? AND s.state='scheduled' AND (?=1 OR s.due_at<=?)
+   AND (s.stage='document_scene' OR NOT EXISTS(SELECT 1 FROM memory_document_later_schedule newer WHERE newer.owner_id=s.owner_id AND newer.scope_key=s.scope_key AND newer.stage='document_scene' AND newer.generation>s.generation AND newer.state IN ('scheduled','running')))
+   ORDER BY s.due_at,s.scope_key,s.generation`,[ownerId,includeFuture?1:0,now]);
+- return candidates.filter(row=>!scopeBlocked(tx,ownerId,row));
++ const releasedRuns=new Map<string,boolean>();
++ return candidates.filter(row=>!scopeBlocked(tx,ownerId,row,releasedRuns));
+ }
+ function validCurrentMemories(tx:StorageTransaction,ownerId:string,scope:MemoryScope):{memories:unknown[];sources:ReplySource[]} {
+  const memories:unknown[]=[],sources:ReplySource[]=[];

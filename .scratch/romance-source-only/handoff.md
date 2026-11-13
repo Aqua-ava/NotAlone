@@ -1,0 +1,18 @@
+# 92 项 Skill 原文纠正
+- 用户拒绝编造：方法/示例必须来自原5仓库；出处仅单独文档，Skill不加仓库文件行号。
+- 92包现已全部重建：76直接、16通用；128方法段，89示例段（80不同范围），13无单列例；0无方法包。
+- 旧184自行编写案例已从仓库和本机当前包撤回；原文作者示例不宣称真实事件。
+- 来源：reply-skills/romance/SOURCES.md、provenance.json；包外39原文件JSON快照。
+- 独立锁表 reply-skills/romance-sources.lock.json：68不同原文件（缓存索引69含重复G/LICENSE.zh-CN.md）。
+- D README62允许复制、84–86明示MIT；其他4源完整LICENSE，D只保留原许可声明。
+- scripts/romance-source-material.mjs 选原文，render_romance_reply_skills.mjs 确定性生成。
+- validator核固定仓库/commit+独立源锁+文件/段哈希+整包字节；不自动判断语义，选段已交叉审阅修正。
+- 6来源回归通过；3 DSH/SQLite回归通过；全92真实包校验0告警。
+- 本机update-installed.mjs已完成92原位更新、92核验；0enabled/disabled、92unknown，全保留目录身份/启停。
+- Computer Use Skill页刷新：92新描述、92当前修订2；首尾截图确认，关联表单不存在；页面已回顶。
+- 常驻仅pnpm run dev，未打包。交互PTY会话56247后台dev启动；90895宿主，监督器有效。
+- 初次nohup进程退出遗留socket，已查无lsof引用且ECONNREFUSED后清理；无未知进程强杀。
+- 多余默认Electron已通过Cmd+Q退出，当前开发App留供用户查看；.dev仍在用不删除。
+- 本地提交d71c6ddd已创建，未push；提交前后公开扫描均0命中；工作区干净，收尾完成。
+- 验收临时测试夹具已自动删除；默认Electron1窗口→0；当前.dev3.8MB/原生只读器52KB在用保留。旧原创authoring临时指令已废弃。
+- 最后汇报应附 :codex-annotation{index="1"} 并链接SOURCES.md；禁止push。

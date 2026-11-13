@@ -1,0 +1,39 @@
+# 持久助手会话执行交接
+- 01—07均resolved；用户接受已记录性能限制，最终全量/GUI/双轴及自有PG清理已完成。用户随后要求合并并删除任务分支/工作树，本地main已快进，四个空闲分支已删，其余受管理器占用限制待清理。
+- 主任务源 /Users/local-user/Documents/learn/NotAlone/.scratch/persistent-assistant-conversations，只有root更新planning/issues/acceptance；spec冻结不改。
+- 集成 /Users/local-user/.codex/worktrees/persistent-assistant-integration/NotAlone，codex/persistent-assistant-conversations，HEAD f8dbfbc6b7c1de031eb70b655e30373a1baf7ad5 clean（相对bf4仅四份Markdown），bf4生产树=1c7ff6e926443a75204f9b75201b2e513b81f9a2。基线77d408f9e225f14d6a6d1326395c4c8cd46810c9。
+- 主目录main仍77d，原3untracked文件未动，证明R/main-preservation-final-review.json；只在主.scratch写状态。不push/PR/发布/打包/旧包/微信发送/真实资料批迁。
+- R=/Users/local-user/.local/state/notalone/diagnostics/persistent-assistant-20261026，原红/失败/中间证据全保留不覆盖。
+- 前六票merge：01 74c18d8、05 b9cbd0af、02 4ad0ec4b、03 778ef382、04 ed2f3031、06 ca437b50，均双轴/集成通过；04 fa330分离inspect/build不再每轮构整段、保正文守卫；06 1eead9保护丢prepare回执的真实新段running身份。
+- 07实现81dd，schema计数修dbb→mergef375；全量入口/历史迁移测试修9ef→58d；desktop两test修277→4a；4aa仅ADR106/后台README验收记录。
+- 先前全量58d backend934/934、4a desktop1034=1033pass0fail1既有NOTALONE_STATIC_E_APP缺失skip；不能把root旧npm test exit1假称全绿；2历史非回复冻结入口缺外部56材料bundle显式blocked未执行。
+- Root实际CUA矩阵R/desktop-07源f375（产品等价4aa）：同runtime13→25→37，正常退出重启恢复编辑、回看不切current不续期、明确继续/新开/12h提示、故障删除同op重试、重启不复活；DB活动时间控制非等12h。
+- 外部逐Buffer转UTF8曾损坏第二body26931/receipt26928；root暂停并修Buffer.concat一次解码，红绿+独立SDK确认无产品bug；旧坏capture不能当wire。R/desktop-07-utf8实际补2轮23248/26928及SHA精确等receipt。
+- d59最终GUI R/desktop-07-final及finalrestart已连续13→25→37、精确编辑version1正常重启恢复/零额外HTTP回看继续新开、3次wire精确匹配；但深层SDK叶目录0500故障后恢复0700，同op重试仍failed，marker先删正文残留，GUI未通过。两次正常退出0且App/Host消失，原失败夹具只读保留。
+- 正常模型A77d/B4a同配置SHA50a323d7，各2轮固定合成来源，共4真实HTTP/4预留/0unknown/0error，9项零模型读写，cleanup true；R/real-model/execution-summary.json。
+- 匿名盲审B=X/A=Y，双方前四维2表达1准入，B说明略好但A也准入；冻结规则finish unchanged。双方在家轻微无来源，A跨作者冲突暗示B无；n1/Agent非人工/统计提升。ID/实际出站精确编辑链已核，感谢语也在新意图中，不证明单独因果。
+- 同问题problem-budget.sqlite8次/30min，used4/streak1/paired-r1已finish unchanged，conclusion.json，禁止新增真实调用/重置/扩样。后续内部读取改动靠完整body/结果等价合成验证，透明标明真实模型执行于4a。
+- 固定v4脚本baseline/benchmark-final.mjs SHA c8d8df0e2b2e0339915b5157ba126f4f9d66dcdc7c8552d27839cb9e8403093a；A final-v4-A77d complete339.18/457.02、prepare84.56/125.08、queries1514/2761（prepare326/740），core9.50/17.58；模型瞬时环回，不是实际推理。
+- 原B4a final-v4-B complete412.05/641.26、prepare108.71/184.97、queries1867/3911（462/1119）；performance-final.json保存初次退步。
+- 全分支77d→4aa终审：Standards P3文档6文件9处待实现状态；Spec P2故事35公开准备未减少。R/review-final-{standards,spec}/closeout-report.md；不得放宽目标或只以计量完成结案。
+- 唯一后续实现者 /root/final_review_fixes，独立07树codex/persistent-assistant-07；ff4aa后文档7afea9c1已修P3、独立Standards document-fix-report PASS。
+- 性能首片bf216d3a8104b0ecd27057366e16395b8573ab64（5生产文件）同Tx去重2处、scope共享锁合并、16表inventory UNION、祖先+source同SQL；两轮prepare331/687，首轮较A仍+5。核心50/guard53/scope2及双types绿、body/结果稳定UUID归一后两轮SHA相同。
+- 两轴performance-fix-report/performance-code-report代码PASS，merge337，integration-proof.json整树=bf。根同v4 final-v4-B-reviewfix一次：prepare89.52/141.95、complete415.50/573.66、core7.68/10.38、queries1608/3076（331/687）；cleanup/gitunchanged true，performance-after-review.json。
+- Spec performance-verdict-report仍FAIL P2：core虽减publicprepare仍+5.9/+13.5%；不能局部span代替用户等待。没有固定总时延保证但目标仍未达；不重复抽样求有利结果。
+- 子Agent首片full935=933pass2fail（同步公平少tail/取消tail未开始），两单例及同并发18模块绿，原因未重现，未改时限/断言；原backend-full.log保留。
+- d59最终全量已通过：backend942/942、desktop1034=1033pass0fail1既有发行夹具skip、root exit0，两types先前绿；third-pass/integration-full-{result,summary}.json。v3 trace570spawn/568exit（1无PID failedspawn、1exit事件未收到），实际全部观测PID已无，integration-process-cleanup-proof.json。新删除修复后仍需相关→最终full。
+- 透明CLI observer trace-cli-spawn.mjs SHA6294f4889d7719c3b8be47f9b065e5eb98c2575291d45a21279774b3e92c4a8f；275spawn=275exit无残留。PID1745 sessions971ms kill跨许多direct测试，可能预期timeout，不可归因当前失败；integration-cli-pid1745.json注明关联不足。
+- 二片4f25427d+真实Lease竞态修复8f5f41c2+就绪测试5df16ac5已两轴PASS、根合入683d5610；就绪8/8与相关61/61+双types/public0，原全量原因仍未知；根暂不重跑full直到性能代码稳定。
+- 二片证据R/final-review-fixes/second-pass/{public-prepare-hotspots.json,transaction-map.json}：原公开17/19真实Tx vsA12，每Tx真实schema/migrations验证成本大；不cache通用底座，不跨阶段cache，不改模型/预算/输出/摘要截断。暂未做③依赖cache，无必要不扩范围。
+- 删除修复65424bd2已冻结于独立07树：directory_identity先独立COMMIT再FS，严格同op/scope/原生身份续清；深叶/最终rmdir/两真实Host SIGKILL边界均绿，persistent私有delete事务前拒绝。相关96、schema32、guard39（重叠），双types/public0。双轴同报P2的三个迁移夹具已由24d5dfac先真红后36/36绿，Standards/Spec小delta复核PASS；专职merger已合入da9467a1（父d59/24d5，tree等于候选），原配对公开prepare判准未达；用户明确接受毫秒级差异并停止进一步优化，未合入额外改动。Spec user-performance-decision.md解除性能阻塞但保留实验未达；da946 full backend960/961、desktop1033pass/1skip、exit1，真实来源窗口SQL 57014后25P02导致fixture挂起；根留证后仅SIGTERM本轮PID37735并清自有库/目录。真实PG红灯证实500ms污染与COMMIT返回ROLLBACK误报成功；独立修复6016662b固定，19模块180/180、双types/public0、正式Host超时502→200 unavailable且0模型、资源释放；Standards/Spec双轴增量PASS，专职merger合入bf4b7fbe且整树等于候选；root bf4b有界full完成：后台970/970、桌面1033pass/0fail/1既有skip、exit0；641已观测PID均不存活，PG0连接。bf4真实开发小窗通过深叶故障同op重试/重启不复活、连续13→25→37/编辑恢复/回看继续新开0额外HTTP、三次wire与receipt一致；隔离库/runtime均清，证据desktop-07-finalfixed/final-acceptance-proof.json。
+- 独立只读 /root/full_readiness_recon 完成，报告second-pass/full-readiness-recon.md0600：enable await bounded cycle但可degraded；launchDsh仅spawn+锁记录非握手就绪；旧100x25ms test混early-exit/等待超时，原动态原因均未证。
+- 握手建议用有界ready/exit/timer完整字段与status/PID，合成wrapper0600 stderr重定向，不改production launch/SDK；reply-service-runtime-support:83–86有先例，fixture/contact-context support15s polling未分型。不要仅延长数字/固定sleep/回填因果；本次单例握手408/750ms仅本次事实。
+- 根固定v4最终da9467 B一次：公开prepare101.265/127.523高于A84.557/125.082，完整396.754/520.380高于339.182/457.023，q1534/2837（准备309/623）；旧d59 B为79.407/121.128。均n1即时模型，不宣称统计/总收益；Spec按原判准重开P2；重复成本预研无足够收益且跨域底座有风险。预登记20对AB/BA合成复测40次全有效：首次中位差-0.151ms、条件区间[-5.707,4.519]、10负10正；续用-6.347ms、[-7.911,-3.597]、20负，联合判准未达；真实模型0，原样本全保留。后用户在thread 00000000-0000-4000-8000-000000000001明确“这点速度不影响”“你发消息告诉他”，授权停止继续为完整调用约32–54ms投入优化、记录结果并推进full/GUI；已停writer并待其清理，未合入新优化。Spec user-performance-decision.md确认用户接受的观察限制解除阻塞，原判据仍未达；不可宣称首轮/整体提速。
+- 审查复用final_standards_closeout/final_spec_closeout，deletion-retry-fix-report.md同一迁移夹具P2已由migration-followup-report.md关闭，生产删除合同未见新缺陷。Spec要求最终HEAD一次新冻结v4 B（schema每Tx inspect新增列/文件），d59只保原测来源；禁止新增真实模型。
+- DSH锁定0.2.1-rc.2/Cordis4.0.5，官方源/Users/local-user/Documents/learn/dsh固定687f282e8625c6b8d11ff58211a90524be2e4317，勿checkout/升级/臆造API；SDK完整制品可复现构建未认证。
+- 根自有PG16.15核零客户端后已smart关闭；30.6GB合成日志已无损压缩至2.89GB，解压SHA逐字节匹配，原日志及自有data已清理，保留R/pg-test/{compression-proof,cleanup-after}.json与压缩日志。
+- Node24=/Users/local-user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin；npm10=/Users/local-user/.local/state/notalone/diagnostics/migration-resume-20261025/agent-node-tools/node_modules/.bin；pnpm11=runtime dependencies/bin/fallback；Chromeenv=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome。
+- 每Agent独立随机DB/HOME/config；root独占实际桌面，仅npm run dev且先核验现有实例/source；不读用户库，不以发布包补native skip。
+- 清理：01普通树已移，02/03/05管理归档；最终04/06/07/final-perf/context-timeout五树官方archive均返回Another active task still uses this worktree（R/worktree-cleanup-blocked-final.json）。04/06/07/context-timeout已合入且clean，final-perf有已停的自有未提交试验，不能rm整树或绕锁；主目录3个原untracked及main HEAD已核原样。
+- 多个旧recon/review默认cwd均integration，原04/06线程已归档且read_thread为notLoaded，仍未找出其他引用；用户后来要求删除后，官方worktree管理器仍拒绝五个受占用树及本会话主树。不得强删或绕锁，final-perf未提交试验已额外备份但未合入main。
+- 文档/规范每份最多整读一次，后续rg/行号；输出裁剪，full限600s、失败先单例；禁止clock.sleep/反复sleep轮询。

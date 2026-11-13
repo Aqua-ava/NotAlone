@@ -1,0 +1,31 @@
+# 06c 续实现交接（仍 claimed，未完成）
+- 测试提交 `2da65e4b`；产品仍 `cd09cccb`，基于 `b0233805`；本交接另行提交。无接口、schema、产品行为修改。
+- 首要待复现P1：078:40–44只认active手录叶；68–79的UPDATE AFTER清guard。contact memory_store:736–784、owner owner_memory_store:529–551均先旧叶invalidated、后INSERT新叶，中间态可能删无message反馈。
+- 最小路径：contact/owner单手录→summary-error→原链correct仅换措辞/类别→refresh；应保留非空corrections，需先真实红再修。现14例没有覆盖纯手录修正。
+- Spec另疑点：fact-error目标L3仅撤L3，仍可读取依赖同一被报错L1的L2；按S6:54应撤受影响派生，需公开capture/read_scenario最小复现。
+- 既有矩阵对L3 fact-error后L2全保留的预期可能不合规格，不能用其绿认证此边界；完整参与依赖也须纳入。
+- 第三疑点：fact-error首次响应丢失后同命令重放因世代变化409，I8:168管理幂等；需核原合同再定向复现，不先改API/schema。
+- 第四疑点P2：反馈DTO/UI仅kind/version/index/reason/state与count；目标正文物删后不能核哪篇及哪些旧依据受保护（S6:55）。需最小可回看合同，不因此新增主动feedback删除操作。
+- root已启动固定b023的Standards/Spec两轴只读审查；后续delta交原审者，06c不自启reviewer。
+- 新文件test_layered_correction_concurrency.py：联系人/本人×scenario propose/verify、profile propose/verify共8显式测试。
+- 8例在实际模型Port hook里发新总结反馈，仅记录响应，外层断言旧A不再出现；后加独立新根，L2/L3均可合法重整。
+- 验证末语义调用后迟到响应拒绝；未单独构造最终writer锁等待的窄竞态，writer同连接复验静态位于layered_memory.py:560–563/profile.py:164–166。
+- 新文件test_layered_correction_evidence.py共6：同规范消息新增source_ref、contact旧L1 correct链+无关新资料、改topic、拆段、合段、L2错误跨L3。
+- source_ref前置用既有多来源式合成SQL夹具装配，业务观察/确认/刷新仍走公开HTTP；没有伪称公开导入路径已通过。
+- contact旧链测试从带canonical message的L1沿生产correct，所以不能覆盖上述owner纯手录P1；四种改写仅证明当前保守机验拒绝，非通用语义保证。
+- 新14例精确class最终14/14绿，54.301s；py_compile与git diff --check通过，正式001–078隔离PG。
+- 首轮真实失败保留：单例误要求profile全空，但独立B合法重整；8例首轮4/8因L3反馈完整A+B保护count=2，后改正。
+- canonical首轮公开alias import仅修改raw载荷被409拒绝，改用合成合法第二来源引用；此为前置修正，非产品红绿。
+- 首轮已绿的新防绕过场景只报告回归绿，不冒称产品缺陷红绿。
+- 五个06c runner自有库均finally DROP且catalog_absent=true；当前无PG/测试/HTTP进程，写/测窗口已全部交回root。
+- 所有命令、首轮失败、绿日志、marker和完整私有交接在仓库外A-06c-handoff.md指针中；不读业务库/.env/凭据/他人process。
+- 产品guard最终cd09后，其余06、05、07、08精确class尚未重跑；宽回归等真实产品修复后再跑，避免过早重复。
+- AST原生声明计数：OwnerLayeredMemory5、OwnerLayeredSafety9、OwnerLayeredConstraint1、LayeredReply22、ScenarioRead21、LayeredMemoryManagement34、LayeredProfile21。
+- 仍待反馈参与后的fact/withdraw/disable ABA、source DELETE202即时阻读/迟到/恢复定向；已有owner safety:252有可复用模式，hook内不等全局Worker物理删除。
+- 既有原纠错8、独立矩阵8、Port5+预算对照、实际08副本3、077→078升级1、React20/Node40均为此前HEAD证据，不混成当前完整回归。
+- 06/09规格前置独立；后正式落地者须合入另一票当时最新正式产品，再核owner L2/L3反馈/事实修正跨contact prepared/tool/历史依据/回复副本精确闭包。
+- 当前不追09 WIP；08仅contact目录，不宣称owner新层工具组合可用；078归06，079归C10。
+- 删除整理结果后反馈/保护全清或保留可管理无正文guard仍等真人选择；不得预选，不加独立反馈删除命令，来源删除沿原最小guard合同。
+- 全程模型0、未App/headless/微信/浏览器/外发/远端；当前A没有浏览器或原生资源窗口。
+- root独占三个native验收文件；本轮未触碰，仍由root在最终ready后协调CUA，普通HTTP不替代App。
+- 06票与索引保持claimed，最终两轴、真实App、D独立汇合签收及真实质量资格仍未完成。

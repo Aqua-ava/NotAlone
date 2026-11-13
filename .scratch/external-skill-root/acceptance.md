@@ -1,0 +1,12 @@
+# 允许外部 Skill 根
+- 用户要求：仅删除Skill必须位于App数据目录内的限制，未要求迁移或删除现有两份Skill。
+- sqlite-capabilities.ts移除userData包含判断；保留规范绝对路径、显式能力、固定宿主根、App数据根/managed隔离及既有原生只读校验。
+- 既有配置测试先红后绿：外部根从undefined变为可用配置；保留受管区/无效路径拒绝断言。
+- 后台3个相关文件16项通过：node --test test/sqlite-history-host.test.mjs test/sqlite-host-launch.test.mjs test/sqlite-skill-profile.test.mjs。
+- 桌面3项通过：node --test tests/sqlite-development.test.mjs；两端pnpm run typecheck均通过。
+- DSH沿用0.2.1-rc.2及官方profile/scoped registry/provider接线，没有新增或改变DSH API；固定源码依据仍是687f282e8625c6b8d11ff58211a90524be2e4317。
+- 隔离App以pnpm run dev --user-data-dir临时目录启动，status确认监督器及宿主10065；仅contacts/skills能力。
+- 隔离配置skillPackageRoot直接指向仓库reply-skills/romance，API与实际UI均发现92项；Computer Use核验第001项成功，显示目录已核验/当前修订1。
+- 验证未调用外部模型或微信；日常App配置、数据库和92个Skill文件均保持原样，没有迁移或改启停。
+- App通过Cmd+Q退出，确认无进程和lsof引用后删除自建临时目录：18236KiB→0；获取开发租约后清理无跟踪/引用的.dev缓存3892KiB→0，原生只读器52KiB保留。
+- 本地提交5c2a4e2d，工作区干净；提交前后公开扫描均0命中，未push、未打包。

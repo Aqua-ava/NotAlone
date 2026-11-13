@@ -1,0 +1,38 @@
+{
+  "baseline_revision": "681fcc38eab77c8fe149b76705419971f3750a86",
+  "related_modules": [
+    "test_message_api",
+    "test_memory_processing_read",
+    "test_merged_migration_history",
+    "test_import_statement_migration",
+    "test_database_migrations",
+    "test_postgres_repository",
+    "test_postgres_retrieval",
+    "test_cli_pagination_sync"
+  ],
+  "related_tests": 75,
+  "related_passed": 75,
+  "related_seconds": 14.498,
+  "isolated_api_tests": 20,
+  "isolated_api_passed": 20,
+  "http_related_tests": 11,
+  "http_related_passed": 10,
+  "known_baseline_failure": {
+    "test": "MemoryProcessingProgressHttpTest.test_completed_batches_survive_failure_and_resume_keeps_context",
+    "expected": [
+      20,
+      42
+    ],
+    "actual": [
+      10,
+      42
+    ],
+    "baseline_exit_code": 1,
+    "candidate_exit_code": 1
+  },
+  "worktree_pythonpath_explicit": true,
+  "temporary_instances_stopped_and_removed": true,
+  "baseline_archive_removed": true,
+  "desktop_run": false,
+  "business_database_migrated": false
+}

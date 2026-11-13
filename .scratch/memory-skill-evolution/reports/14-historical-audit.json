@@ -1,0 +1,3871 @@
+{
+  "analysis_module_sha256": {
+    "backend/src/notalone/experiments/hindsight_dataset.py": "752a5d2764f4a258663d9d9a0a0a2a1d05fc8ffbe70574aba9b67321229028e1",
+    "backend/src/notalone/experiments/hindsight_metrics.py": "5b7ef63969b1749c5c2e22ed5cf20e069292fa9b987652b996a5451831d4b83e",
+    "backend/src/notalone/retrieval/lexical.py": "93ec53f0a40db5200ba673898d9461015c21a6879ca0bcaa55ebfe4d9105b233"
+  },
+  "analysis_plan_sha256": "3b79c1c7e8f3603b5ad2e5b2b636033ce69cb9b24d1d43b129adc7a2dedcafe4",
+  "execution_mode": "retrospective_required_condition_analysis",
+  "fresh_heldout_validation": false,
+  "frozen_data_sha256": {
+    "dataset-manifest.json": "f9ec17f43726dd88f6ae14da3eb2251a50ad6df44c14b793cd4d63ab25ed8858",
+    "dataset.json": "839635b01004c3d060f45aa9339c7a47493f2b0aa292ef479a5a1dcc16b01a57",
+    "gold.json": "d5e7d27dd2d9ea1335e719a68e88a7f5c8745c1875939ba5165520b2064a88c9"
+  },
+  "frozen_snapshot_safety_audit": {
+    "A_else_B_first": {
+      "non_active": 0,
+      "revision_mismatches": 0,
+      "scope_mismatches": 0,
+      "source_mismatches": 0,
+      "state_negative_selected": 0
+    },
+    "A_lexical": {
+      "non_active": 0,
+      "revision_mismatches": 0,
+      "scope_mismatches": 0,
+      "source_mismatches": 0,
+      "state_negative_selected": 0
+    },
+    "B_first_only": {
+      "non_active": 0,
+      "revision_mismatches": 0,
+      "scope_mismatches": 0,
+      "source_mismatches": 0,
+      "state_negative_selected": 0
+    },
+    "B_lexical_filter": {
+      "non_active": 0,
+      "revision_mismatches": 0,
+      "scope_mismatches": 0,
+      "source_mismatches": 0,
+      "state_negative_selected": 0
+    },
+    "B_vector": {
+      "non_active": 0,
+      "revision_mismatches": 0,
+      "scope_mismatches": 0,
+      "source_mismatches": 0,
+      "state_negative_selected": 0
+    }
+  },
+  "historical_latency": {
+    "A_lexical": {
+      "failures": 0,
+      "inherited_attempts": 103,
+      "max_ms": 16.75066602183506,
+      "new_path_measured": false,
+      "p50_ms": 14.161166036501527,
+      "p95_ms": 16.275292029604316
+    },
+    "B_vector": {
+      "failures": 0,
+      "inherited_attempts": 103,
+      "max_ms": 32.23704197444022,
+      "new_path_measured": false,
+      "p50_ms": 16.610040969680995,
+      "p95_ms": 24.161458015441895
+    }
+  },
+  "historical_lifecycle": {
+    "authority": "InMemoryMemoryStore current active/valid/source/revision re-read",
+    "cases": [
+      {
+        "case": "active",
+        "diagnostics": {
+          "candidates": 1,
+          "error": "",
+          "rejected": [],
+          "selected_ids": [
+            "9d995553-a5c5-5aa5-88bc-3074b38cda25"
+          ],
+          "status": "success"
+        },
+        "passed": true,
+        "selected_ids": [
+          "9d995553-a5c5-5aa5-88bc-3074b38cda25"
+        ],
+        "target_memory_id": "9d995553-a5c5-5aa5-88bc-3074b38cda25"
+      },
+      {
+        "case": "stale_revision",
+        "diagnostics": {
+          "candidates": 1,
+          "error": "",
+          "rejected": [
+            [
+              "9d995553-a5c5-5aa5-88bc-3074b38cda25",
+              "revision"
+            ]
+          ],
+          "selected_ids": [],
+          "status": "success"
+        },
+        "passed": true,
+        "selected_ids": [],
+        "target_memory_id": "9d995553-a5c5-5aa5-88bc-3074b38cda25"
+      },
+      {
+        "case": "deleted",
+        "diagnostics": {
+          "candidates": 1,
+          "error": "",
+          "rejected": [
+            [
+              "9d995553-a5c5-5aa5-88bc-3074b38cda25",
+              "local_authority"
+            ]
+          ],
+          "selected_ids": [],
+          "status": "success"
+        },
+        "passed": true,
+        "selected_ids": [],
+        "target_memory_id": "9d995553-a5c5-5aa5-88bc-3074b38cda25"
+      },
+      {
+        "case": "invalidated",
+        "diagnostics": {
+          "candidates": 1,
+          "error": "",
+          "rejected": [
+            [
+              "9d995553-a5c5-5aa5-88bc-3074b38cda25",
+              "local_authority"
+            ]
+          ],
+          "selected_ids": [],
+          "status": "success"
+        },
+        "passed": true,
+        "selected_ids": [],
+        "target_memory_id": "9d995553-a5c5-5aa5-88bc-3074b38cda25"
+      },
+      {
+        "case": "expired",
+        "diagnostics": {
+          "candidates": 1,
+          "error": "",
+          "rejected": [
+            [
+              "9d995553-a5c5-5aa5-88bc-3074b38cda25",
+              "local_authority"
+            ]
+          ],
+          "selected_ids": [],
+          "status": "success"
+        },
+        "passed": true,
+        "selected_ids": [],
+        "target_memory_id": "9d995553-a5c5-5aa5-88bc-3074b38cda25"
+      },
+      {
+        "case": "foreign_scope",
+        "diagnostics": {
+          "candidates": 1,
+          "error": "",
+          "rejected": [
+            [
+              "9d995553-a5c5-5aa5-88bc-3074b38cda25",
+              "scope"
+            ]
+          ],
+          "selected_ids": [],
+          "status": "success"
+        },
+        "passed": true,
+        "selected_ids": [],
+        "target_memory_id": "9d995553-a5c5-5aa5-88bc-3074b38cda25"
+      }
+    ],
+    "status": "passed",
+    "vector_rows_retained_during_check": true
+  },
+  "historical_source_provenance": {
+    "current_code_is_not_asserted_identical": true,
+    "participating_original_sources": {
+      "experiments/pgvector/client.py": {
+        "matches_recorded": true,
+        "sha256": "5e80419fc34bce7a06e81ffd2e9cb4ffedb5798756ac83bf2b44457e0e2d8029"
+      },
+      "experiments/pgvector/embedding.py": {
+        "matches_recorded": true,
+        "sha256": "e6ff1960e674ad79e9c8c28d1ce4f02679a7bb7c3e37f23bf73457ac408cd33b"
+      },
+      "experiments/pgvector/evaluate.py": {
+        "matches_recorded": true,
+        "sha256": "45e4e6c501f52ba572963804012b856bbebe43cb1ad48dfbe23920b6272f26d3"
+      },
+      "experiments/pgvector/runtime.py": {
+        "matches_recorded": true,
+        "sha256": "966660acb118fa6e0d03a5c4bf081ad7e1177ae23227832457d1c2cf4e711842"
+      },
+      "experiments/pgvector/store.py": {
+        "matches_recorded": true,
+        "sha256": "f352a57cb32d76c63dc68600d620d34740fc05ee42fc26b053d492d2e56669b6"
+      },
+      "src/notalone/experiments/hindsight_baseline.py": {
+        "matches_recorded": true,
+        "sha256": "738d2f9442356be5161ba4d324bea9b8b2cc8409c79653fde8e35fa555adb2bd"
+      },
+      "src/notalone/experiments/hindsight_dataset.py": {
+        "matches_recorded": true,
+        "sha256": "752a5d2764f4a258663d9d9a0a0a2a1d05fc8ffbe70574aba9b67321229028e1"
+      },
+      "src/notalone/experiments/hindsight_metrics.py": {
+        "matches_recorded": true,
+        "sha256": "5b7ef63969b1749c5c2e22ed5cf20e069292fa9b987652b996a5451831d4b83e"
+      },
+      "src/notalone/experiments/pgvector_adapter.py": {
+        "matches_recorded": true,
+        "sha256": "dafd1a4f629e4f6893e2af84d9e2763e3546a1b40cfd878c8eb01dc2038cfdfd"
+      }
+    },
+    "public_evidence_commit": "53372729",
+    "recorded_run_start_commit": "e015b960274c308ca2093ecc1db3856df4f80a6c",
+    "run_start_public_commit": "6dc1a499e6a524c9e69cb34ec0aa9ed709ac5134"
+  },
+  "integration_base": "ada604d9",
+  "new_database_queries": 0,
+  "new_embedding_calls": 0,
+  "per_query": [
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-coffee-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-coffee-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-coffee-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "c77afd04-ce6b-58dc-ba72-6564323b0663"
+      ],
+      "B_wrong_ids": [
+        "9751ba1a-11ff-5eab-9175-1442f9393476",
+        "4f3bebeb-3b70-5a02-8ce2-d7e3d028a9da",
+        "c77afd04-ce6b-58dc-ba72-6564323b0663"
+      ],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-coffee-direct",
+      "selections": {
+        "A_else_B_first": [
+          "69b5ace2-e6ef-584d-b24b-9a5abfa4d5cc",
+          "9dc346b8-3646-5a1f-b97b-ea53fdbe6ed5",
+          "c77afd04-ce6b-58dc-ba72-6564323b0663"
+        ],
+        "A_lexical": [
+          "69b5ace2-e6ef-584d-b24b-9a5abfa4d5cc",
+          "9dc346b8-3646-5a1f-b97b-ea53fdbe6ed5",
+          "c77afd04-ce6b-58dc-ba72-6564323b0663"
+        ],
+        "B_first_only": [
+          "69b5ace2-e6ef-584d-b24b-9a5abfa4d5cc"
+        ],
+        "B_lexical_filter": [
+          "69b5ace2-e6ef-584d-b24b-9a5abfa4d5cc",
+          "9dc346b8-3646-5a1f-b97b-ea53fdbe6ed5",
+          "c77afd04-ce6b-58dc-ba72-6564323b0663"
+        ],
+        "B_vector": [
+          "69b5ace2-e6ef-584d-b24b-9a5abfa4d5cc",
+          "9dc346b8-3646-5a1f-b97b-ea53fdbe6ed5",
+          "9751ba1a-11ff-5eab-9175-1442f9393476",
+          "4f3bebeb-3b70-5a02-8ce2-d7e3d028a9da",
+          "c77afd04-ce6b-58dc-ba72-6564323b0663"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-hiking-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-hiking-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-hiking-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "17b31801-b52b-59fa-959b-38ff940e67ff",
+        "86c8ea6e-a329-5ed6-aceb-c1b45ba202b3"
+      ],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-hiking-direct",
+      "selections": {
+        "A_else_B_first": [
+          "be6d9923-d449-526d-b055-b549bcb8982b",
+          "ba5c2bba-fd8d-5ffc-bc2c-bcd6573098ee"
+        ],
+        "A_lexical": [
+          "be6d9923-d449-526d-b055-b549bcb8982b",
+          "ba5c2bba-fd8d-5ffc-bc2c-bcd6573098ee"
+        ],
+        "B_first_only": [
+          "ba5c2bba-fd8d-5ffc-bc2c-bcd6573098ee"
+        ],
+        "B_lexical_filter": [
+          "ba5c2bba-fd8d-5ffc-bc2c-bcd6573098ee",
+          "be6d9923-d449-526d-b055-b549bcb8982b"
+        ],
+        "B_vector": [
+          "ba5c2bba-fd8d-5ffc-bc2c-bcd6573098ee",
+          "17b31801-b52b-59fa-959b-38ff940e67ff",
+          "be6d9923-d449-526d-b055-b549bcb8982b",
+          "86c8ea6e-a329-5ed6-aceb-c1b45ba202b3"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "b08474f2-4b85-5dbd-b95b-8f6c8a1b0e68",
+        "38bc1fb1-225d-5692-badc-16f47eefe2f1",
+        "f39e1879-5466-5fe6-82cb-5762368ec542",
+        "be6d9923-d449-526d-b055-b549bcb8982b",
+        "2fa1686d-356d-53ce-b340-22556502adaf"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-meeting-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [
+          "b08474f2-4b85-5dbd-b95b-8f6c8a1b0e68"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "b08474f2-4b85-5dbd-b95b-8f6c8a1b0e68"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "b08474f2-4b85-5dbd-b95b-8f6c8a1b0e68",
+          "38bc1fb1-225d-5692-badc-16f47eefe2f1",
+          "f39e1879-5466-5fe6-82cb-5762368ec542",
+          "be6d9923-d449-526d-b055-b549bcb8982b",
+          "2fa1686d-356d-53ce-b340-22556502adaf"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "b08474f2-4b85-5dbd-b95b-8f6c8a1b0e68"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-meeting-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [
+          "b08474f2-4b85-5dbd-b95b-8f6c8a1b0e68"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "b08474f2-4b85-5dbd-b95b-8f6c8a1b0e68"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "b08474f2-4b85-5dbd-b95b-8f6c8a1b0e68"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-meeting-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "b08474f2-4b85-5dbd-b95b-8f6c8a1b0e68"
+      ],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-meeting-direct",
+      "selections": {
+        "A_else_B_first": [
+          "b9f54e1e-c928-5bf3-beaf-4d06ac41907c",
+          "9b9ba348-6c71-5f14-911c-e5ce0eae1a72"
+        ],
+        "A_lexical": [
+          "b9f54e1e-c928-5bf3-beaf-4d06ac41907c",
+          "9b9ba348-6c71-5f14-911c-e5ce0eae1a72"
+        ],
+        "B_first_only": [
+          "b9f54e1e-c928-5bf3-beaf-4d06ac41907c"
+        ],
+        "B_lexical_filter": [
+          "b9f54e1e-c928-5bf3-beaf-4d06ac41907c",
+          "9b9ba348-6c71-5f14-911c-e5ce0eae1a72"
+        ],
+        "B_vector": [
+          "b9f54e1e-c928-5bf3-beaf-4d06ac41907c",
+          "9b9ba348-6c71-5f14-911c-e5ce0eae1a72",
+          "b08474f2-4b85-5dbd-b95b-8f6c8a1b0e68"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "8997a25a-e279-558a-afc9-0de3a058a22b",
+        "1236d878-c438-57ef-9af8-1b76d689e3d3",
+        "7fe32fb1-522e-5c1f-9366-4726234780f5",
+        "a525d09f-fa1f-52d6-8f7e-ca1913313aad"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-train-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [
+          "8997a25a-e279-558a-afc9-0de3a058a22b"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "8997a25a-e279-558a-afc9-0de3a058a22b"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "8997a25a-e279-558a-afc9-0de3a058a22b",
+          "7ab7a589-d49c-5a7d-819f-0d8c6188eaab",
+          "1236d878-c438-57ef-9af8-1b76d689e3d3",
+          "7fe32fb1-522e-5c1f-9366-4726234780f5",
+          "a525d09f-fa1f-52d6-8f7e-ca1913313aad"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "d902df9d-1ae1-5b10-a784-03d2f288f2f3"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-train-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [
+          "7ab7a589-d49c-5a7d-819f-0d8c6188eaab"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "7ab7a589-d49c-5a7d-819f-0d8c6188eaab"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "7ab7a589-d49c-5a7d-819f-0d8c6188eaab",
+          "d902df9d-1ae1-5b10-a784-03d2f288f2f3"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-train-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "56149a7f-fba5-56a6-8b1d-8bbd53b75392"
+      ],
+      "B_wrong_ids": [
+        "d902df9d-1ae1-5b10-a784-03d2f288f2f3",
+        "dd7f8bbf-3803-5408-a00b-db29b085a1a9"
+      ],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-train-direct",
+      "selections": {
+        "A_else_B_first": [
+          "8f1eef0c-cbcf-576a-ba24-7bc4807567ea",
+          "7ab7a589-d49c-5a7d-819f-0d8c6188eaab",
+          "56149a7f-fba5-56a6-8b1d-8bbd53b75392"
+        ],
+        "A_lexical": [
+          "8f1eef0c-cbcf-576a-ba24-7bc4807567ea",
+          "7ab7a589-d49c-5a7d-819f-0d8c6188eaab",
+          "56149a7f-fba5-56a6-8b1d-8bbd53b75392"
+        ],
+        "B_first_only": [
+          "8f1eef0c-cbcf-576a-ba24-7bc4807567ea"
+        ],
+        "B_lexical_filter": [
+          "8f1eef0c-cbcf-576a-ba24-7bc4807567ea",
+          "7ab7a589-d49c-5a7d-819f-0d8c6188eaab"
+        ],
+        "B_vector": [
+          "8f1eef0c-cbcf-576a-ba24-7bc4807567ea",
+          "7ab7a589-d49c-5a7d-819f-0d8c6188eaab",
+          "d902df9d-1ae1-5b10-a784-03d2f288f2f3",
+          "dd7f8bbf-3803-5408-a00b-db29b085a1a9"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-movie-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-movie-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-movie-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [
+          "2603cf3f-4b22-5624-a7fe-7dd780a95604"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "2603cf3f-4b22-5624-a7fe-7dd780a95604"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "2603cf3f-4b22-5624-a7fe-7dd780a95604"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-movie-direct",
+      "selections": {
+        "A_else_B_first": [
+          "6e9acff9-fec5-542b-9c9e-50c1743d5b51",
+          "2603cf3f-4b22-5624-a7fe-7dd780a95604"
+        ],
+        "A_lexical": [
+          "6e9acff9-fec5-542b-9c9e-50c1743d5b51",
+          "2603cf3f-4b22-5624-a7fe-7dd780a95604"
+        ],
+        "B_first_only": [
+          "6e9acff9-fec5-542b-9c9e-50c1743d5b51"
+        ],
+        "B_lexical_filter": [
+          "6e9acff9-fec5-542b-9c9e-50c1743d5b51",
+          "2603cf3f-4b22-5624-a7fe-7dd780a95604"
+        ],
+        "B_vector": [
+          "6e9acff9-fec5-542b-9c9e-50c1743d5b51",
+          "2603cf3f-4b22-5624-a7fe-7dd780a95604"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-meal-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "38bc1fb1-225d-5692-badc-16f47eefe2f1",
+        "adbc4b47-6cbb-5843-ae16-a4747ba5658b",
+        "e236da16-0a2c-5818-adf4-58449bf73d7b"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-meal-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [
+          "8faf297d-4fa1-53fd-b197-c8eaed9d5e08"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "8faf297d-4fa1-53fd-b197-c8eaed9d5e08"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "8faf297d-4fa1-53fd-b197-c8eaed9d5e08",
+          "38bc1fb1-225d-5692-badc-16f47eefe2f1",
+          "adbc4b47-6cbb-5843-ae16-a4747ba5658b",
+          "e236da16-0a2c-5818-adf4-58449bf73d7b"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "5180bb58-bcda-5f9c-820e-5f7a81b18477",
+        "aac52d8f-838b-5d07-be79-f842e48d7f1c",
+        "036b72c4-e209-5a7d-8cd7-6c56827b5e74",
+        "adbc4b47-6cbb-5843-ae16-a4747ba5658b",
+        "f11d96f1-1e75-56b9-8a42-85b0566554c5"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-meal-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [
+          "5180bb58-bcda-5f9c-820e-5f7a81b18477"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "5180bb58-bcda-5f9c-820e-5f7a81b18477"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "5180bb58-bcda-5f9c-820e-5f7a81b18477",
+          "aac52d8f-838b-5d07-be79-f842e48d7f1c",
+          "036b72c4-e209-5a7d-8cd7-6c56827b5e74",
+          "adbc4b47-6cbb-5843-ae16-a4747ba5658b",
+          "f11d96f1-1e75-56b9-8a42-85b0566554c5"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-meal-direct",
+      "selections": {
+        "A_else_B_first": [
+          "8faf297d-4fa1-53fd-b197-c8eaed9d5e08",
+          "af31aece-8d27-53b2-ad02-d1415aec770e"
+        ],
+        "A_lexical": [
+          "8faf297d-4fa1-53fd-b197-c8eaed9d5e08",
+          "af31aece-8d27-53b2-ad02-d1415aec770e"
+        ],
+        "B_first_only": [
+          "af31aece-8d27-53b2-ad02-d1415aec770e"
+        ],
+        "B_lexical_filter": [
+          "af31aece-8d27-53b2-ad02-d1415aec770e",
+          "8faf297d-4fa1-53fd-b197-c8eaed9d5e08"
+        ],
+        "B_vector": [
+          "af31aece-8d27-53b2-ad02-d1415aec770e",
+          "8faf297d-4fa1-53fd-b197-c8eaed9d5e08"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-gift-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-gift-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-gift-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-gift-direct",
+      "selections": {
+        "A_else_B_first": [
+          "9ad6f6b4-9aad-5c01-8e2d-61ad0102224c",
+          "c76de322-187c-5aea-84a8-e3b3a9bd8aef"
+        ],
+        "A_lexical": [
+          "9ad6f6b4-9aad-5c01-8e2d-61ad0102224c",
+          "c76de322-187c-5aea-84a8-e3b3a9bd8aef"
+        ],
+        "B_first_only": [
+          "9ad6f6b4-9aad-5c01-8e2d-61ad0102224c"
+        ],
+        "B_lexical_filter": [
+          "9ad6f6b4-9aad-5c01-8e2d-61ad0102224c",
+          "c76de322-187c-5aea-84a8-e3b3a9bd8aef"
+        ],
+        "B_vector": [
+          "9ad6f6b4-9aad-5c01-8e2d-61ad0102224c",
+          "c76de322-187c-5aea-84a8-e3b3a9bd8aef"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "7ab7a589-d49c-5a7d-819f-0d8c6188eaab",
+        "cee3560d-13b5-5dde-9378-9058a4bd4b89",
+        "b42718d8-d680-503a-8372-0ae257634175",
+        "be6d9923-d449-526d-b055-b549bcb8982b"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-car-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [
+          "d902df9d-1ae1-5b10-a784-03d2f288f2f3"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "d902df9d-1ae1-5b10-a784-03d2f288f2f3"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "d902df9d-1ae1-5b10-a784-03d2f288f2f3",
+          "7ab7a589-d49c-5a7d-819f-0d8c6188eaab",
+          "cee3560d-13b5-5dde-9378-9058a4bd4b89",
+          "b42718d8-d680-503a-8372-0ae257634175",
+          "be6d9923-d449-526d-b055-b549bcb8982b"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-car-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-car-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "7ab7a589-d49c-5a7d-819f-0d8c6188eaab"
+      ],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-car-direct",
+      "selections": {
+        "A_else_B_first": [
+          "2c8d2064-7c41-5bce-85e8-558bdf5fa894",
+          "d902df9d-1ae1-5b10-a784-03d2f288f2f3"
+        ],
+        "A_lexical": [
+          "2c8d2064-7c41-5bce-85e8-558bdf5fa894",
+          "d902df9d-1ae1-5b10-a784-03d2f288f2f3"
+        ],
+        "B_first_only": [
+          "d902df9d-1ae1-5b10-a784-03d2f288f2f3"
+        ],
+        "B_lexical_filter": [
+          "d902df9d-1ae1-5b10-a784-03d2f288f2f3",
+          "2c8d2064-7c41-5bce-85e8-558bdf5fa894"
+        ],
+        "B_vector": [
+          "d902df9d-1ae1-5b10-a784-03d2f288f2f3",
+          "2c8d2064-7c41-5bce-85e8-558bdf5fa894",
+          "7ab7a589-d49c-5a7d-819f-0d8c6188eaab"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-cat-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-cat-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [
+          "72e5c01a-3230-564e-b07e-be067d779153"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "72e5c01a-3230-564e-b07e-be067d779153"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "72e5c01a-3230-564e-b07e-be067d779153",
+          "4f3bebeb-3b70-5a02-8ce2-d7e3d028a9da"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-cat-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "9dc346b8-3646-5a1f-b97b-ea53fdbe6ed5"
+      ],
+      "B_wrong_ids": [
+        "9dc346b8-3646-5a1f-b97b-ea53fdbe6ed5",
+        "8626cc74-52b8-58b6-bd02-d11758653ed8",
+        "9751ba1a-11ff-5eab-9175-1442f9393476"
+      ],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-cat-direct",
+      "selections": {
+        "A_else_B_first": [
+          "4f3bebeb-3b70-5a02-8ce2-d7e3d028a9da",
+          "72e5c01a-3230-564e-b07e-be067d779153",
+          "9dc346b8-3646-5a1f-b97b-ea53fdbe6ed5"
+        ],
+        "A_lexical": [
+          "4f3bebeb-3b70-5a02-8ce2-d7e3d028a9da",
+          "72e5c01a-3230-564e-b07e-be067d779153",
+          "9dc346b8-3646-5a1f-b97b-ea53fdbe6ed5"
+        ],
+        "B_first_only": [
+          "4f3bebeb-3b70-5a02-8ce2-d7e3d028a9da"
+        ],
+        "B_lexical_filter": [
+          "4f3bebeb-3b70-5a02-8ce2-d7e3d028a9da",
+          "72e5c01a-3230-564e-b07e-be067d779153",
+          "9dc346b8-3646-5a1f-b97b-ea53fdbe6ed5"
+        ],
+        "B_vector": [
+          "4f3bebeb-3b70-5a02-8ce2-d7e3d028a9da",
+          "72e5c01a-3230-564e-b07e-be067d779153",
+          "9dc346b8-3646-5a1f-b97b-ea53fdbe6ed5",
+          "8626cc74-52b8-58b6-bd02-d11758653ed8",
+          "9751ba1a-11ff-5eab-9175-1442f9393476"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-exam-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [
+          "11697eec-9635-5802-8878-2c0c7e7cf52e"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "11697eec-9635-5802-8878-2c0c7e7cf52e"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "11697eec-9635-5802-8878-2c0c7e7cf52e"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-exam-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-exam-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-exam-direct",
+      "selections": {
+        "A_else_B_first": [
+          "4c136dd1-0579-548d-861d-d825a975fb3b",
+          "11697eec-9635-5802-8878-2c0c7e7cf52e"
+        ],
+        "A_lexical": [
+          "4c136dd1-0579-548d-861d-d825a975fb3b",
+          "11697eec-9635-5802-8878-2c0c7e7cf52e"
+        ],
+        "B_first_only": [
+          "11697eec-9635-5802-8878-2c0c7e7cf52e"
+        ],
+        "B_lexical_filter": [
+          "11697eec-9635-5802-8878-2c0c7e7cf52e",
+          "4c136dd1-0579-548d-861d-d825a975fb3b"
+        ],
+        "B_vector": [
+          "11697eec-9635-5802-8878-2c0c7e7cf52e",
+          "4c136dd1-0579-548d-861d-d825a975fb3b"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-move-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-move-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [
+          "5180bb58-bcda-5f9c-820e-5f7a81b18477"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "5180bb58-bcda-5f9c-820e-5f7a81b18477"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "5180bb58-bcda-5f9c-820e-5f7a81b18477",
+          "8da57f25-affc-59fc-b4e9-33226a41c770"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-move-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-move-direct",
+      "selections": {
+        "A_else_B_first": [
+          "5180bb58-bcda-5f9c-820e-5f7a81b18477",
+          "8da57f25-affc-59fc-b4e9-33226a41c770"
+        ],
+        "A_lexical": [
+          "5180bb58-bcda-5f9c-820e-5f7a81b18477",
+          "8da57f25-affc-59fc-b4e9-33226a41c770"
+        ],
+        "B_first_only": [
+          "5180bb58-bcda-5f9c-820e-5f7a81b18477"
+        ],
+        "B_lexical_filter": [
+          "5180bb58-bcda-5f9c-820e-5f7a81b18477",
+          "8da57f25-affc-59fc-b4e9-33226a41c770"
+        ],
+        "B_vector": [
+          "5180bb58-bcda-5f9c-820e-5f7a81b18477",
+          "8da57f25-affc-59fc-b4e9-33226a41c770"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-cook-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [
+          "05f06be4-8dbd-5c69-92dc-587b31ab699e"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "05f06be4-8dbd-5c69-92dc-587b31ab699e"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "05f06be4-8dbd-5c69-92dc-587b31ab699e"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "aac52d8f-838b-5d07-be79-f842e48d7f1c",
+        "68ec5b04-40c2-55d7-ab52-e5a84feb4f02"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-cook-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [
+          "aac52d8f-838b-5d07-be79-f842e48d7f1c"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "aac52d8f-838b-5d07-be79-f842e48d7f1c"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "aac52d8f-838b-5d07-be79-f842e48d7f1c",
+          "05f06be4-8dbd-5c69-92dc-587b31ab699e",
+          "68ec5b04-40c2-55d7-ab52-e5a84feb4f02"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-cook-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [
+          "05f06be4-8dbd-5c69-92dc-587b31ab699e"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "05f06be4-8dbd-5c69-92dc-587b31ab699e"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "05f06be4-8dbd-5c69-92dc-587b31ab699e"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "20fc2989-268b-5f6f-964c-e3baba2a737d",
+        "9ea2f135-6a9d-5f82-b0dd-16a8f4ff20b3"
+      ],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-cook-direct",
+      "selections": {
+        "A_else_B_first": [
+          "05f06be4-8dbd-5c69-92dc-587b31ab699e",
+          "81fe466f-c0cb-52ce-afde-ad32e1c4d5ee"
+        ],
+        "A_lexical": [
+          "05f06be4-8dbd-5c69-92dc-587b31ab699e",
+          "81fe466f-c0cb-52ce-afde-ad32e1c4d5ee"
+        ],
+        "B_first_only": [
+          "81fe466f-c0cb-52ce-afde-ad32e1c4d5ee"
+        ],
+        "B_lexical_filter": [
+          "81fe466f-c0cb-52ce-afde-ad32e1c4d5ee",
+          "05f06be4-8dbd-5c69-92dc-587b31ab699e"
+        ],
+        "B_vector": [
+          "81fe466f-c0cb-52ce-afde-ad32e1c4d5ee",
+          "05f06be4-8dbd-5c69-92dc-587b31ab699e",
+          "20fc2989-268b-5f6f-964c-e3baba2a737d",
+          "9ea2f135-6a9d-5f82-b0dd-16a8f4ff20b3"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-run-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-run-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [
+          "17b31801-b52b-59fa-959b-38ff940e67ff"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "17b31801-b52b-59fa-959b-38ff940e67ff"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "17b31801-b52b-59fa-959b-38ff940e67ff"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-run-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [
+          "17b31801-b52b-59fa-959b-38ff940e67ff"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "17b31801-b52b-59fa-959b-38ff940e67ff"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "17b31801-b52b-59fa-959b-38ff940e67ff"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-run-direct",
+      "selections": {
+        "A_else_B_first": [
+          "17b31801-b52b-59fa-959b-38ff940e67ff",
+          "75bad6bc-bf0b-5a94-be37-80c5dfe58ece"
+        ],
+        "A_lexical": [
+          "17b31801-b52b-59fa-959b-38ff940e67ff",
+          "75bad6bc-bf0b-5a94-be37-80c5dfe58ece"
+        ],
+        "B_first_only": [
+          "17b31801-b52b-59fa-959b-38ff940e67ff"
+        ],
+        "B_lexical_filter": [
+          "17b31801-b52b-59fa-959b-38ff940e67ff",
+          "75bad6bc-bf0b-5a94-be37-80c5dfe58ece"
+        ],
+        "B_vector": [
+          "17b31801-b52b-59fa-959b-38ff940e67ff",
+          "75bad6bc-bf0b-5a94-be37-80c5dfe58ece"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "68ec5b04-40c2-55d7-ab52-e5a84feb4f02"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-hair-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [
+          "68ec5b04-40c2-55d7-ab52-e5a84feb4f02"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "68ec5b04-40c2-55d7-ab52-e5a84feb4f02"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "68ec5b04-40c2-55d7-ab52-e5a84feb4f02"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "bbe6b76f-228b-5afb-a70b-8d4d1935c6b4"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-hair-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [
+          "bbe6b76f-228b-5afb-a70b-8d4d1935c6b4"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "bbe6b76f-228b-5afb-a70b-8d4d1935c6b4"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "bbe6b76f-228b-5afb-a70b-8d4d1935c6b4",
+          "abf3fc6e-9ae4-5ccf-8e4d-3387994ee408"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-hair-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [
+          "abf3fc6e-9ae4-5ccf-8e4d-3387994ee408"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "abf3fc6e-9ae4-5ccf-8e4d-3387994ee408"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "abf3fc6e-9ae4-5ccf-8e4d-3387994ee408"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "bbe6b76f-228b-5afb-a70b-8d4d1935c6b4"
+      ],
+      "B_wrong_ids": [
+        "bbe6b76f-228b-5afb-a70b-8d4d1935c6b4",
+        "9fb8790d-9746-566e-94eb-3e9ba3ab6588"
+      ],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-hair-direct",
+      "selections": {
+        "A_else_B_first": [
+          "08b41890-ff6e-5d74-9b71-21d4d9d679bc",
+          "abf3fc6e-9ae4-5ccf-8e4d-3387994ee408",
+          "bbe6b76f-228b-5afb-a70b-8d4d1935c6b4"
+        ],
+        "A_lexical": [
+          "08b41890-ff6e-5d74-9b71-21d4d9d679bc",
+          "abf3fc6e-9ae4-5ccf-8e4d-3387994ee408",
+          "bbe6b76f-228b-5afb-a70b-8d4d1935c6b4"
+        ],
+        "B_first_only": [
+          "08b41890-ff6e-5d74-9b71-21d4d9d679bc"
+        ],
+        "B_lexical_filter": [
+          "08b41890-ff6e-5d74-9b71-21d4d9d679bc",
+          "abf3fc6e-9ae4-5ccf-8e4d-3387994ee408",
+          "bbe6b76f-228b-5afb-a70b-8d4d1935c6b4"
+        ],
+        "B_vector": [
+          "08b41890-ff6e-5d74-9b71-21d4d9d679bc",
+          "abf3fc6e-9ae4-5ccf-8e4d-3387994ee408",
+          "bbe6b76f-228b-5afb-a70b-8d4d1935c6b4",
+          "9fb8790d-9746-566e-94eb-3e9ba3ab6588"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "a525d09f-fa1f-52d6-8f7e-ca1913313aad",
+        "18d214b6-f013-57f4-9607-8040ba7c958c",
+        "0bd45381-c328-5c62-a570-19a18eddb270"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-concert-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [
+          "cee3560d-13b5-5dde-9378-9058a4bd4b89"
+        ],
+        "A_lexical": [
+          "cee3560d-13b5-5dde-9378-9058a4bd4b89"
+        ],
+        "B_first_only": [
+          "cee3560d-13b5-5dde-9378-9058a4bd4b89"
+        ],
+        "B_lexical_filter": [
+          "cee3560d-13b5-5dde-9378-9058a4bd4b89"
+        ],
+        "B_vector": [
+          "cee3560d-13b5-5dde-9378-9058a4bd4b89",
+          "a525d09f-fa1f-52d6-8f7e-ca1913313aad",
+          "18d214b6-f013-57f4-9607-8040ba7c958c",
+          "0bd45381-c328-5c62-a570-19a18eddb270"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "b4add71e-a201-5a23-b3df-227f8b919631"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-concert-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [
+          "2209860d-ee57-5d33-a019-47798e95668d"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "2209860d-ee57-5d33-a019-47798e95668d"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "2209860d-ee57-5d33-a019-47798e95668d",
+          "b4add71e-a201-5a23-b3df-227f8b919631"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-concert-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-concert-direct",
+      "selections": {
+        "A_else_B_first": [
+          "2209860d-ee57-5d33-a019-47798e95668d",
+          "cee3560d-13b5-5dde-9378-9058a4bd4b89"
+        ],
+        "A_lexical": [
+          "2209860d-ee57-5d33-a019-47798e95668d",
+          "cee3560d-13b5-5dde-9378-9058a4bd4b89"
+        ],
+        "B_first_only": [
+          "2209860d-ee57-5d33-a019-47798e95668d"
+        ],
+        "B_lexical_filter": [
+          "2209860d-ee57-5d33-a019-47798e95668d",
+          "cee3560d-13b5-5dde-9378-9058a4bd4b89"
+        ],
+        "B_vector": [
+          "2209860d-ee57-5d33-a019-47798e95668d",
+          "cee3560d-13b5-5dde-9378-9058a4bd4b89"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-feedback-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [
+          "2fa1686d-356d-53ce-b340-22556502adaf"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "2fa1686d-356d-53ce-b340-22556502adaf"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "2fa1686d-356d-53ce-b340-22556502adaf"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-feedback-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [
+          "e51ed01e-8217-5e14-b3db-284599e75945"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "e51ed01e-8217-5e14-b3db-284599e75945"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "e51ed01e-8217-5e14-b3db-284599e75945"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-feedback-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [
+          "2fa1686d-356d-53ce-b340-22556502adaf"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "2fa1686d-356d-53ce-b340-22556502adaf"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "2fa1686d-356d-53ce-b340-22556502adaf"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "5e71ce5a-0605-5ffb-ac76-070e23a06b84"
+      ],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-feedback-direct",
+      "selections": {
+        "A_else_B_first": [
+          "2fa1686d-356d-53ce-b340-22556502adaf",
+          "e51ed01e-8217-5e14-b3db-284599e75945"
+        ],
+        "A_lexical": [
+          "2fa1686d-356d-53ce-b340-22556502adaf",
+          "e51ed01e-8217-5e14-b3db-284599e75945"
+        ],
+        "B_first_only": [
+          "2fa1686d-356d-53ce-b340-22556502adaf"
+        ],
+        "B_lexical_filter": [
+          "2fa1686d-356d-53ce-b340-22556502adaf",
+          "e51ed01e-8217-5e14-b3db-284599e75945"
+        ],
+        "B_vector": [
+          "2fa1686d-356d-53ce-b340-22556502adaf",
+          "e51ed01e-8217-5e14-b3db-284599e75945",
+          "5e71ce5a-0605-5ffb-ac76-070e23a06b84"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-father-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [
+          "b20b9db2-3c77-52cc-b941-5fa3776c6cf0"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "b20b9db2-3c77-52cc-b941-5fa3776c6cf0"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "b20b9db2-3c77-52cc-b941-5fa3776c6cf0",
+          "67d9ff45-fde0-59d0-b88c-1289ad66975f"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-father-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [
+          "b20b9db2-3c77-52cc-b941-5fa3776c6cf0"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "b20b9db2-3c77-52cc-b941-5fa3776c6cf0"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "b20b9db2-3c77-52cc-b941-5fa3776c6cf0"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-father-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [
+          "67d9ff45-fde0-59d0-b88c-1289ad66975f"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "67d9ff45-fde0-59d0-b88c-1289ad66975f"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "67d9ff45-fde0-59d0-b88c-1289ad66975f",
+          "b20b9db2-3c77-52cc-b941-5fa3776c6cf0"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "2209860d-ee57-5d33-a019-47798e95668d",
+        "fdb55686-72ae-5b49-acf7-7b6531210837"
+      ],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-father-direct",
+      "selections": {
+        "A_else_B_first": [
+          "b20b9db2-3c77-52cc-b941-5fa3776c6cf0",
+          "67d9ff45-fde0-59d0-b88c-1289ad66975f"
+        ],
+        "A_lexical": [
+          "b20b9db2-3c77-52cc-b941-5fa3776c6cf0",
+          "67d9ff45-fde0-59d0-b88c-1289ad66975f"
+        ],
+        "B_first_only": [
+          "b20b9db2-3c77-52cc-b941-5fa3776c6cf0"
+        ],
+        "B_lexical_filter": [
+          "b20b9db2-3c77-52cc-b941-5fa3776c6cf0",
+          "67d9ff45-fde0-59d0-b88c-1289ad66975f"
+        ],
+        "B_vector": [
+          "b20b9db2-3c77-52cc-b941-5fa3776c6cf0",
+          "67d9ff45-fde0-59d0-b88c-1289ad66975f",
+          "2209860d-ee57-5d33-a019-47798e95668d",
+          "fdb55686-72ae-5b49-acf7-7b6531210837"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "73622031-11b2-5dc2-b722-eb05c8b55abb"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-hotel-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [
+          "73622031-11b2-5dc2-b722-eb05c8b55abb"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "73622031-11b2-5dc2-b722-eb05c8b55abb"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "73622031-11b2-5dc2-b722-eb05c8b55abb"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-hotel-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [
+          "56149a7f-fba5-56a6-8b1d-8bbd53b75392"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "56149a7f-fba5-56a6-8b1d-8bbd53b75392"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "56149a7f-fba5-56a6-8b1d-8bbd53b75392"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-hotel-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "d15f5d3b-e9cf-5234-a086-dc02c8868333",
+        "8da57f25-affc-59fc-b4e9-33226a41c770",
+        "c8547738-5867-55a9-b61d-91f7063cc1f5"
+      ],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-hotel-direct",
+      "selections": {
+        "A_else_B_first": [
+          "56149a7f-fba5-56a6-8b1d-8bbd53b75392",
+          "bbb945f5-8c6a-55ab-925b-8fda4588a5ef"
+        ],
+        "A_lexical": [
+          "56149a7f-fba5-56a6-8b1d-8bbd53b75392",
+          "bbb945f5-8c6a-55ab-925b-8fda4588a5ef"
+        ],
+        "B_first_only": [
+          "56149a7f-fba5-56a6-8b1d-8bbd53b75392"
+        ],
+        "B_lexical_filter": [
+          "56149a7f-fba5-56a6-8b1d-8bbd53b75392",
+          "bbb945f5-8c6a-55ab-925b-8fda4588a5ef"
+        ],
+        "B_vector": [
+          "56149a7f-fba5-56a6-8b1d-8bbd53b75392",
+          "bbb945f5-8c6a-55ab-925b-8fda4588a5ef",
+          "d15f5d3b-e9cf-5234-a086-dc02c8868333",
+          "8da57f25-affc-59fc-b4e9-33226a41c770",
+          "c8547738-5867-55a9-b61d-91f7063cc1f5"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "7a4412bb-b6f3-59c6-adef-8d7a821bf7f0",
+        "c056a823-edfc-55c5-9b06-93d96247560f",
+        "f39e1879-5466-5fe6-82cb-5762368ec542"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-birthday-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [
+          "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af",
+          "2686bacd-9fe1-555d-b88b-780ac83dfe69",
+          "7a4412bb-b6f3-59c6-adef-8d7a821bf7f0",
+          "c056a823-edfc-55c5-9b06-93d96247560f",
+          "f39e1879-5466-5fe6-82cb-5762368ec542"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "1acff262-aa85-5f51-acad-209b75031f5e",
+        "29b5f499-7ef3-5321-9aa8-6e88f806104d",
+        "5b1eff9c-a096-5f55-83d7-c2952d47c4aa",
+        "82d01c79-4342-508e-80b2-8cd61606bce3"
+      ],
+      "B_wrong_ids": [
+        "16b378db-bb99-5b92-a0f7-1492c6288fe4"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-birthday-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [
+          "1acff262-aa85-5f51-acad-209b75031f5e",
+          "29b5f499-7ef3-5321-9aa8-6e88f806104d",
+          "5b1eff9c-a096-5f55-83d7-c2952d47c4aa",
+          "82d01c79-4342-508e-80b2-8cd61606bce3"
+        ],
+        "A_lexical": [
+          "1acff262-aa85-5f51-acad-209b75031f5e",
+          "29b5f499-7ef3-5321-9aa8-6e88f806104d",
+          "5b1eff9c-a096-5f55-83d7-c2952d47c4aa",
+          "82d01c79-4342-508e-80b2-8cd61606bce3"
+        ],
+        "B_first_only": [
+          "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af",
+          "16b378db-bb99-5b92-a0f7-1492c6288fe4"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "16b378db-bb99-5b92-a0f7-1492c6288fe4",
+        "cc1c98f8-8dc0-5d5b-8665-85925cc6bcb5"
+      ],
+      "B_wrong_ids": [
+        "16b378db-bb99-5b92-a0f7-1492c6288fe4"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-birthday-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [
+          "16b378db-bb99-5b92-a0f7-1492c6288fe4",
+          "cc1c98f8-8dc0-5d5b-8665-85925cc6bcb5"
+        ],
+        "A_lexical": [
+          "16b378db-bb99-5b92-a0f7-1492c6288fe4",
+          "cc1c98f8-8dc0-5d5b-8665-85925cc6bcb5"
+        ],
+        "B_first_only": [
+          "16b378db-bb99-5b92-a0f7-1492c6288fe4"
+        ],
+        "B_lexical_filter": [
+          "16b378db-bb99-5b92-a0f7-1492c6288fe4"
+        ],
+        "B_vector": [
+          "16b378db-bb99-5b92-a0f7-1492c6288fe4"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "16b378db-bb99-5b92-a0f7-1492c6288fe4",
+        "a13bc3b8-12b2-5961-8382-cca30c0b9de7",
+        "b8f85b9d-acdd-55e6-85df-eea9242616a4"
+      ],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-birthday-direct",
+      "selections": {
+        "A_else_B_first": [
+          "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af",
+          "2686bacd-9fe1-555d-b88b-780ac83dfe69"
+        ],
+        "A_lexical": [
+          "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af",
+          "2686bacd-9fe1-555d-b88b-780ac83dfe69"
+        ],
+        "B_first_only": [
+          "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af"
+        ],
+        "B_lexical_filter": [
+          "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af",
+          "2686bacd-9fe1-555d-b88b-780ac83dfe69"
+        ],
+        "B_vector": [
+          "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af",
+          "2686bacd-9fe1-555d-b88b-780ac83dfe69",
+          "16b378db-bb99-5b92-a0f7-1492c6288fe4",
+          "a13bc3b8-12b2-5961-8382-cca30c0b9de7",
+          "b8f85b9d-acdd-55e6-85df-eea9242616a4"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af",
+        "1acff262-aa85-5f51-acad-209b75031f5e",
+        "2686bacd-9fe1-555d-b88b-780ac83dfe69",
+        "29b5f499-7ef3-5321-9aa8-6e88f806104d",
+        "5b1eff9c-a096-5f55-83d7-c2952d47c4aa"
+      ],
+      "B_wrong_ids": [
+        "be6d9923-d449-526d-b055-b549bcb8982b",
+        "9b0febe2-e76f-538b-9590-9277910bcb36",
+        "f52455c1-dc3c-573a-ae71-2d83aa7f9f65",
+        "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-video-paraphrase-1",
+      "selections": {
+        "A_else_B_first": [
+          "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af",
+          "1acff262-aa85-5f51-acad-209b75031f5e",
+          "2686bacd-9fe1-555d-b88b-780ac83dfe69",
+          "29b5f499-7ef3-5321-9aa8-6e88f806104d",
+          "5b1eff9c-a096-5f55-83d7-c2952d47c4aa"
+        ],
+        "A_lexical": [
+          "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af",
+          "1acff262-aa85-5f51-acad-209b75031f5e",
+          "2686bacd-9fe1-555d-b88b-780ac83dfe69",
+          "29b5f499-7ef3-5321-9aa8-6e88f806104d",
+          "5b1eff9c-a096-5f55-83d7-c2952d47c4aa"
+        ],
+        "B_first_only": [
+          "be6d9923-d449-526d-b055-b549bcb8982b"
+        ],
+        "B_lexical_filter": [
+          "9b0febe2-e76f-538b-9590-9277910bcb36",
+          "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af"
+        ],
+        "B_vector": [
+          "be6d9923-d449-526d-b055-b549bcb8982b",
+          "f39e1879-5466-5fe6-82cb-5762368ec542",
+          "9b0febe2-e76f-538b-9590-9277910bcb36",
+          "f52455c1-dc3c-573a-ae71-2d83aa7f9f65",
+          "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "2209860d-ee57-5d33-a019-47798e95668d"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-video-paraphrase-2",
+      "selections": {
+        "A_else_B_first": [
+          "2209860d-ee57-5d33-a019-47798e95668d"
+        ],
+        "A_lexical": [],
+        "B_first_only": [
+          "2209860d-ee57-5d33-a019-47798e95668d"
+        ],
+        "B_lexical_filter": [],
+        "B_vector": [
+          "2209860d-ee57-5d33-a019-47798e95668d"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "be6d9923-d449-526d-b055-b549bcb8982b",
+        "b08474f2-4b85-5dbd-b95b-8f6c8a1b0e68"
+      ],
+      "group": "paraphrase",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-video-paraphrase-3",
+      "selections": {
+        "A_else_B_first": [
+          "f39e1879-5466-5fe6-82cb-5762368ec542"
+        ],
+        "A_lexical": [
+          "f39e1879-5466-5fe6-82cb-5762368ec542"
+        ],
+        "B_first_only": [
+          "be6d9923-d449-526d-b055-b549bcb8982b"
+        ],
+        "B_lexical_filter": [
+          "f39e1879-5466-5fe6-82cb-5762368ec542"
+        ],
+        "B_vector": [
+          "be6d9923-d449-526d-b055-b549bcb8982b",
+          "f39e1879-5466-5fe6-82cb-5762368ec542",
+          "b08474f2-4b85-5dbd-b95b-8f6c8a1b0e68"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "eba0cde0-fade-5289-abfb-a4954f4f2bad"
+      ],
+      "B_wrong_ids": [
+        "eba0cde0-fade-5289-abfb-a4954f4f2bad",
+        "69bc3e1e-524a-5ecb-8a55-3e78008e3ffc",
+        "b20b9db2-3c77-52cc-b941-5fa3776c6cf0"
+      ],
+      "group": "direct",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-video-direct",
+      "selections": {
+        "A_else_B_first": [
+          "f39e1879-5466-5fe6-82cb-5762368ec542",
+          "da1897fd-9eb2-53f3-901f-f05540ecfbec",
+          "eba0cde0-fade-5289-abfb-a4954f4f2bad"
+        ],
+        "A_lexical": [
+          "f39e1879-5466-5fe6-82cb-5762368ec542",
+          "da1897fd-9eb2-53f3-901f-f05540ecfbec",
+          "eba0cde0-fade-5289-abfb-a4954f4f2bad"
+        ],
+        "B_first_only": [
+          "da1897fd-9eb2-53f3-901f-f05540ecfbec"
+        ],
+        "B_lexical_filter": [
+          "da1897fd-9eb2-53f3-901f-f05540ecfbec",
+          "f39e1879-5466-5fe6-82cb-5762368ec542",
+          "eba0cde0-fade-5289-abfb-a4954f4f2bad"
+        ],
+        "B_vector": [
+          "da1897fd-9eb2-53f3-901f-f05540ecfbec",
+          "f39e1879-5466-5fe6-82cb-5762368ec542",
+          "eba0cde0-fade-5289-abfb-a4954f4f2bad",
+          "69bc3e1e-524a-5ecb-8a55-3e78008e3ffc",
+          "b20b9db2-3c77-52cc-b941-5fa3776c6cf0"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "empty",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-empty-1",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "9ad6f6b4-9aad-5c01-8e2d-61ad0102224c",
+        "9b9ba348-6c71-5f14-911c-e5ce0eae1a72",
+        "c76de322-187c-5aea-84a8-e3b3a9bd8aef",
+        "5669c722-f789-5e22-9144-333d7b351392",
+        "5e074958-701b-51f8-831f-51b8fb66a628"
+      ],
+      "B_wrong_ids": [
+        "c0c716aa-f8ad-5aec-af9d-3ec3b0e8b1a3",
+        "c7c4ac07-2217-5bb1-9a2a-81d920b49905",
+        "9b9ba348-6c71-5f14-911c-e5ce0eae1a72",
+        "5927d4b9-9083-54b4-afd6-1aaa991ebb77",
+        "da7a3565-a654-5ef1-bdf0-851028e68415"
+      ],
+      "group": "empty",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-empty-2",
+      "selections": {
+        "A_else_B_first": [
+          "9ad6f6b4-9aad-5c01-8e2d-61ad0102224c",
+          "9b9ba348-6c71-5f14-911c-e5ce0eae1a72",
+          "c76de322-187c-5aea-84a8-e3b3a9bd8aef",
+          "5669c722-f789-5e22-9144-333d7b351392",
+          "5e074958-701b-51f8-831f-51b8fb66a628"
+        ],
+        "A_lexical": [
+          "9ad6f6b4-9aad-5c01-8e2d-61ad0102224c",
+          "9b9ba348-6c71-5f14-911c-e5ce0eae1a72",
+          "c76de322-187c-5aea-84a8-e3b3a9bd8aef",
+          "5669c722-f789-5e22-9144-333d7b351392",
+          "5e074958-701b-51f8-831f-51b8fb66a628"
+        ],
+        "B_first_only": [
+          "c0c716aa-f8ad-5aec-af9d-3ec3b0e8b1a3"
+        ],
+        "B_lexical_filter": [
+          "c0c716aa-f8ad-5aec-af9d-3ec3b0e8b1a3",
+          "c7c4ac07-2217-5bb1-9a2a-81d920b49905",
+          "9b9ba348-6c71-5f14-911c-e5ce0eae1a72",
+          "5927d4b9-9083-54b4-afd6-1aaa991ebb77",
+          "da7a3565-a654-5ef1-bdf0-851028e68415"
+        ],
+        "B_vector": [
+          "c0c716aa-f8ad-5aec-af9d-3ec3b0e8b1a3",
+          "c7c4ac07-2217-5bb1-9a2a-81d920b49905",
+          "9b9ba348-6c71-5f14-911c-e5ce0eae1a72",
+          "5927d4b9-9083-54b4-afd6-1aaa991ebb77",
+          "da7a3565-a654-5ef1-bdf0-851028e68415"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "empty",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-empty-3",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "56149a7f-fba5-56a6-8b1d-8bbd53b75392",
+        "72e5c01a-3230-564e-b07e-be067d779153",
+        "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af",
+        "b9f54e1e-c928-5bf3-beaf-4d06ac41907c",
+        "17b31801-b52b-59fa-959b-38ff940e67ff"
+      ],
+      "B_wrong_ids": [],
+      "group": "empty",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-empty-4",
+      "selections": {
+        "A_else_B_first": [
+          "56149a7f-fba5-56a6-8b1d-8bbd53b75392",
+          "72e5c01a-3230-564e-b07e-be067d779153",
+          "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af",
+          "b9f54e1e-c928-5bf3-beaf-4d06ac41907c",
+          "17b31801-b52b-59fa-959b-38ff940e67ff"
+        ],
+        "A_lexical": [
+          "56149a7f-fba5-56a6-8b1d-8bbd53b75392",
+          "72e5c01a-3230-564e-b07e-be067d779153",
+          "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af",
+          "b9f54e1e-c928-5bf3-beaf-4d06ac41907c",
+          "17b31801-b52b-59fa-959b-38ff940e67ff"
+        ],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "81fe466f-c0cb-52ce-afde-ad32e1c4d5ee",
+        "291399ae-791e-51ae-8e66-06f25fc4d51d",
+        "374a27fe-6887-5119-b4aa-95d872d1d013",
+        "3e8477dc-ab99-5666-a1f2-4d21e8824b20",
+        "49c05ee8-b0cf-5ec0-90e8-6ec430142794"
+      ],
+      "B_wrong_ids": [],
+      "group": "empty",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-empty-5",
+      "selections": {
+        "A_else_B_first": [
+          "81fe466f-c0cb-52ce-afde-ad32e1c4d5ee",
+          "291399ae-791e-51ae-8e66-06f25fc4d51d",
+          "374a27fe-6887-5119-b4aa-95d872d1d013",
+          "3e8477dc-ab99-5666-a1f2-4d21e8824b20",
+          "49c05ee8-b0cf-5ec0-90e8-6ec430142794"
+        ],
+        "A_lexical": [
+          "81fe466f-c0cb-52ce-afde-ad32e1c4d5ee",
+          "291399ae-791e-51ae-8e66-06f25fc4d51d",
+          "374a27fe-6887-5119-b4aa-95d872d1d013",
+          "3e8477dc-ab99-5666-a1f2-4d21e8824b20",
+          "49c05ee8-b0cf-5ec0-90e8-6ec430142794"
+        ],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "empty",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-empty-6",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "4bdad046-0de7-53f4-83af-6c95b77ada10"
+      ],
+      "B_wrong_ids": [],
+      "group": "empty",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-empty-7",
+      "selections": {
+        "A_else_B_first": [
+          "4bdad046-0de7-53f4-83af-6c95b77ada10"
+        ],
+        "A_lexical": [
+          "4bdad046-0de7-53f4-83af-6c95b77ada10"
+        ],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "empty",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-empty-8",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "empty",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-empty-9",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": true,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "empty",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-empty-10",
+      "selections": {
+        "A_else_B_first": [],
+        "A_lexical": [],
+        "B_first_only": [],
+        "B_lexical_filter": [],
+        "B_vector": []
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "86c8ea6e-a329-5ed6-aceb-c1b45ba202b3",
+        "eba0cde0-fade-5289-abfb-a4954f4f2bad",
+        "36ae4ac0-0bd1-5e6e-b613-51850016570f",
+        "f8edf5be-80cb-533b-bded-4ff8e57a22d3"
+      ],
+      "B_wrong_ids": [
+        "a0acbee3-f2aa-56e7-8b8c-0a41985a1917"
+      ],
+      "group": "topic",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-topic-1",
+      "selections": {
+        "A_else_B_first": [
+          "c77afd04-ce6b-58dc-ba72-6564323b0663",
+          "86c8ea6e-a329-5ed6-aceb-c1b45ba202b3",
+          "eba0cde0-fade-5289-abfb-a4954f4f2bad",
+          "36ae4ac0-0bd1-5e6e-b613-51850016570f",
+          "f8edf5be-80cb-533b-bded-4ff8e57a22d3"
+        ],
+        "A_lexical": [
+          "c77afd04-ce6b-58dc-ba72-6564323b0663",
+          "86c8ea6e-a329-5ed6-aceb-c1b45ba202b3",
+          "eba0cde0-fade-5289-abfb-a4954f4f2bad",
+          "36ae4ac0-0bd1-5e6e-b613-51850016570f",
+          "f8edf5be-80cb-533b-bded-4ff8e57a22d3"
+        ],
+        "B_first_only": [
+          "c77afd04-ce6b-58dc-ba72-6564323b0663"
+        ],
+        "B_lexical_filter": [
+          "c77afd04-ce6b-58dc-ba72-6564323b0663"
+        ],
+        "B_vector": [
+          "c77afd04-ce6b-58dc-ba72-6564323b0663",
+          "a0acbee3-f2aa-56e7-8b8c-0a41985a1917"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "48d7093f-ccab-5715-975a-bf838fd5dbac",
+        "291399ae-791e-51ae-8e66-06f25fc4d51d",
+        "6aa6e973-fc6e-5aa5-9803-5e6b956a8fda",
+        "6d228c72-eb09-5b84-8b48-ed04e6f3d95e"
+      ],
+      "B_wrong_ids": [
+        "48d7093f-ccab-5715-975a-bf838fd5dbac"
+      ],
+      "group": "topic",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-topic-2",
+      "selections": {
+        "A_else_B_first": [
+          "2de4771e-c339-5b3c-941a-49769afd3bc8",
+          "48d7093f-ccab-5715-975a-bf838fd5dbac",
+          "291399ae-791e-51ae-8e66-06f25fc4d51d",
+          "6aa6e973-fc6e-5aa5-9803-5e6b956a8fda",
+          "6d228c72-eb09-5b84-8b48-ed04e6f3d95e"
+        ],
+        "A_lexical": [
+          "2de4771e-c339-5b3c-941a-49769afd3bc8",
+          "48d7093f-ccab-5715-975a-bf838fd5dbac",
+          "291399ae-791e-51ae-8e66-06f25fc4d51d",
+          "6aa6e973-fc6e-5aa5-9803-5e6b956a8fda",
+          "6d228c72-eb09-5b84-8b48-ed04e6f3d95e"
+        ],
+        "B_first_only": [
+          "2de4771e-c339-5b3c-941a-49769afd3bc8"
+        ],
+        "B_lexical_filter": [
+          "2de4771e-c339-5b3c-941a-49769afd3bc8",
+          "48d7093f-ccab-5715-975a-bf838fd5dbac"
+        ],
+        "B_vector": [
+          "2de4771e-c339-5b3c-941a-49769afd3bc8",
+          "48d7093f-ccab-5715-975a-bf838fd5dbac"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "5669c722-f789-5e22-9144-333d7b351392",
+        "817ff8f9-c7e1-5bc3-93c3-f4fb51589117",
+        "e48480ab-a77c-5324-ac11-eb0c50e62c5e",
+        "036b72c4-e209-5a7d-8cd7-6c56827b5e74",
+        "487ae116-c1dc-5e7d-9222-d071a84c2b4b"
+      ],
+      "B_wrong_ids": [],
+      "group": "topic",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-topic-3",
+      "selections": {
+        "A_else_B_first": [
+          "5669c722-f789-5e22-9144-333d7b351392",
+          "817ff8f9-c7e1-5bc3-93c3-f4fb51589117",
+          "e48480ab-a77c-5324-ac11-eb0c50e62c5e",
+          "036b72c4-e209-5a7d-8cd7-6c56827b5e74",
+          "487ae116-c1dc-5e7d-9222-d071a84c2b4b"
+        ],
+        "A_lexical": [
+          "5669c722-f789-5e22-9144-333d7b351392",
+          "817ff8f9-c7e1-5bc3-93c3-f4fb51589117",
+          "e48480ab-a77c-5324-ac11-eb0c50e62c5e",
+          "036b72c4-e209-5a7d-8cd7-6c56827b5e74",
+          "487ae116-c1dc-5e7d-9222-d071a84c2b4b"
+        ],
+        "B_first_only": [
+          "b3124855-c59e-56e5-8ac3-2049e50f887f"
+        ],
+        "B_lexical_filter": [
+          "b3124855-c59e-56e5-8ac3-2049e50f887f"
+        ],
+        "B_vector": [
+          "b3124855-c59e-56e5-8ac3-2049e50f887f"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [
+        "bcb35158-5dce-5dc1-bb2b-2fa9763b9126",
+        "48d7093f-ccab-5715-975a-bf838fd5dbac"
+      ],
+      "group": "topic",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-topic-4",
+      "selections": {
+        "A_else_B_first": [
+          "c2f72c3f-aec3-5f9b-b642-b07a5c88a531"
+        ],
+        "A_lexical": [
+          "c2f72c3f-aec3-5f9b-b642-b07a5c88a531"
+        ],
+        "B_first_only": [
+          "c2f72c3f-aec3-5f9b-b642-b07a5c88a531"
+        ],
+        "B_lexical_filter": [
+          "c2f72c3f-aec3-5f9b-b642-b07a5c88a531"
+        ],
+        "B_vector": [
+          "c2f72c3f-aec3-5f9b-b642-b07a5c88a531",
+          "bcb35158-5dce-5dc1-bb2b-2fa9763b9126",
+          "48d7093f-ccab-5715-975a-bf838fd5dbac"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "topic",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-topic-5",
+      "selections": {
+        "A_else_B_first": [
+          "ca5715af-021f-5e8d-92b5-b6036e705ca9"
+        ],
+        "A_lexical": [
+          "ca5715af-021f-5e8d-92b5-b6036e705ca9"
+        ],
+        "B_first_only": [
+          "ca5715af-021f-5e8d-92b5-b6036e705ca9"
+        ],
+        "B_lexical_filter": [
+          "ca5715af-021f-5e8d-92b5-b6036e705ca9"
+        ],
+        "B_vector": [
+          "ca5715af-021f-5e8d-92b5-b6036e705ca9"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "c77afd04-ce6b-58dc-ba72-6564323b0663"
+      ],
+      "B_wrong_ids": [
+        "9751ba1a-11ff-5eab-9175-1442f9393476",
+        "4f3bebeb-3b70-5a02-8ce2-d7e3d028a9da",
+        "c77afd04-ce6b-58dc-ba72-6564323b0663"
+      ],
+      "group": "isolation",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-isolation",
+      "selections": {
+        "A_else_B_first": [
+          "69b5ace2-e6ef-584d-b24b-9a5abfa4d5cc",
+          "9dc346b8-3646-5a1f-b97b-ea53fdbe6ed5",
+          "c77afd04-ce6b-58dc-ba72-6564323b0663"
+        ],
+        "A_lexical": [
+          "69b5ace2-e6ef-584d-b24b-9a5abfa4d5cc",
+          "9dc346b8-3646-5a1f-b97b-ea53fdbe6ed5",
+          "c77afd04-ce6b-58dc-ba72-6564323b0663"
+        ],
+        "B_first_only": [
+          "69b5ace2-e6ef-584d-b24b-9a5abfa4d5cc"
+        ],
+        "B_lexical_filter": [
+          "69b5ace2-e6ef-584d-b24b-9a5abfa4d5cc",
+          "9dc346b8-3646-5a1f-b97b-ea53fdbe6ed5",
+          "c77afd04-ce6b-58dc-ba72-6564323b0663"
+        ],
+        "B_vector": [
+          "69b5ace2-e6ef-584d-b24b-9a5abfa4d5cc",
+          "9dc346b8-3646-5a1f-b97b-ea53fdbe6ed5",
+          "9751ba1a-11ff-5eab-9175-1442f9393476",
+          "4f3bebeb-3b70-5a02-8ce2-d7e3d028a9da",
+          "c77afd04-ce6b-58dc-ba72-6564323b0663"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+        "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+        "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+        "8da57f25-affc-59fc-b4e9-33226a41c770"
+      ],
+      "B_wrong_ids": [
+        "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+        "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+        "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+        "f39e1879-5466-5fe6-82cb-5762368ec542"
+      ],
+      "group": "lifecycle",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-deleted",
+      "selections": {
+        "A_else_B_first": [
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+          "8da57f25-affc-59fc-b4e9-33226a41c770"
+        ],
+        "A_lexical": [
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+          "8da57f25-affc-59fc-b4e9-33226a41c770"
+        ],
+        "B_first_only": [
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c"
+        ],
+        "B_lexical_filter": [
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+          "f39e1879-5466-5fe6-82cb-5762368ec542"
+        ],
+        "B_vector": [
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+          "f39e1879-5466-5fe6-82cb-5762368ec542"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+        "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+        "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+        "8da57f25-affc-59fc-b4e9-33226a41c770"
+      ],
+      "B_wrong_ids": [
+        "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+        "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+        "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+        "f39e1879-5466-5fe6-82cb-5762368ec542"
+      ],
+      "group": "lifecycle",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-invalidated",
+      "selections": {
+        "A_else_B_first": [
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+          "8da57f25-affc-59fc-b4e9-33226a41c770"
+        ],
+        "A_lexical": [
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+          "8da57f25-affc-59fc-b4e9-33226a41c770"
+        ],
+        "B_first_only": [
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba"
+        ],
+        "B_lexical_filter": [
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+          "f39e1879-5466-5fe6-82cb-5762368ec542"
+        ],
+        "B_vector": [
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+          "f39e1879-5466-5fe6-82cb-5762368ec542"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+        "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+        "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+        "8da57f25-affc-59fc-b4e9-33226a41c770"
+      ],
+      "B_wrong_ids": [
+        "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+        "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+        "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+        "f39e1879-5466-5fe6-82cb-5762368ec542"
+      ],
+      "group": "lifecycle",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-expired",
+      "selections": {
+        "A_else_B_first": [
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+          "8da57f25-affc-59fc-b4e9-33226a41c770"
+        ],
+        "A_lexical": [
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+          "8da57f25-affc-59fc-b4e9-33226a41c770"
+        ],
+        "B_first_only": [
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be"
+        ],
+        "B_lexical_filter": [
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+          "f39e1879-5466-5fe6-82cb-5762368ec542"
+        ],
+        "B_vector": [
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+          "f39e1879-5466-5fe6-82cb-5762368ec542"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+        "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+        "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+        "8da57f25-affc-59fc-b4e9-33226a41c770"
+      ],
+      "B_wrong_ids": [
+        "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+        "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+        "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+        "f39e1879-5466-5fe6-82cb-5762368ec542"
+      ],
+      "group": "lifecycle",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-future",
+      "selections": {
+        "A_else_B_first": [
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+          "8da57f25-affc-59fc-b4e9-33226a41c770"
+        ],
+        "A_lexical": [
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+          "8da57f25-affc-59fc-b4e9-33226a41c770"
+        ],
+        "B_first_only": [
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1"
+        ],
+        "B_lexical_filter": [
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+          "f39e1879-5466-5fe6-82cb-5762368ec542"
+        ],
+        "B_vector": [
+          "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+          "7c7f9c89-4ef9-56dc-a17e-d261de4864ba",
+          "2c51ef3e-a069-5c46-a1e9-e3653241c4be",
+          "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+          "f39e1879-5466-5fe6-82cb-5762368ec542"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [],
+      "B_wrong_ids": [],
+      "group": "budget",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-budget-contact",
+      "selections": {
+        "A_else_B_first": [
+          "1acff262-aa85-5f51-acad-209b75031f5e",
+          "29b5f499-7ef3-5321-9aa8-6e88f806104d",
+          "5b1eff9c-a096-5f55-83d7-c2952d47c4aa",
+          "82d01c79-4342-508e-80b2-8cd61606bce3"
+        ],
+        "A_lexical": [
+          "1acff262-aa85-5f51-acad-209b75031f5e",
+          "29b5f499-7ef3-5321-9aa8-6e88f806104d",
+          "5b1eff9c-a096-5f55-83d7-c2952d47c4aa",
+          "82d01c79-4342-508e-80b2-8cd61606bce3"
+        ],
+        "B_first_only": [
+          "1acff262-aa85-5f51-acad-209b75031f5e"
+        ],
+        "B_lexical_filter": [
+          "1acff262-aa85-5f51-acad-209b75031f5e",
+          "5b1eff9c-a096-5f55-83d7-c2952d47c4aa",
+          "29b5f499-7ef3-5321-9aa8-6e88f806104d",
+          "a059c197-008b-53a5-a9ef-320b6f7ae7ab"
+        ],
+        "B_vector": [
+          "1acff262-aa85-5f51-acad-209b75031f5e",
+          "5b1eff9c-a096-5f55-83d7-c2952d47c4aa",
+          "29b5f499-7ef3-5321-9aa8-6e88f806104d",
+          "a059c197-008b-53a5-a9ef-320b6f7ae7ab"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "b9f54e1e-c928-5bf3-beaf-4d06ac41907c"
+      ],
+      "B_wrong_ids": [
+        "8faf297d-4fa1-53fd-b197-c8eaed9d5e08",
+        "b9f54e1e-c928-5bf3-beaf-4d06ac41907c"
+      ],
+      "group": "owner",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-owner-meal",
+      "selections": {
+        "A_else_B_first": [
+          "b9f54e1e-c928-5bf3-beaf-4d06ac41907c"
+        ],
+        "A_lexical": [
+          "b9f54e1e-c928-5bf3-beaf-4d06ac41907c"
+        ],
+        "B_first_only": [
+          "8faf297d-4fa1-53fd-b197-c8eaed9d5e08"
+        ],
+        "B_lexical_filter": [
+          "b9f54e1e-c928-5bf3-beaf-4d06ac41907c"
+        ],
+        "B_vector": [
+          "8faf297d-4fa1-53fd-b197-c8eaed9d5e08",
+          "b9f54e1e-c928-5bf3-beaf-4d06ac41907c"
+        ]
+      }
+    },
+    {
+      "A_contact_empty": false,
+      "A_wrong_ids": [
+        "b9f54e1e-c928-5bf3-beaf-4d06ac41907c"
+      ],
+      "B_wrong_ids": [
+        "8faf297d-4fa1-53fd-b197-c8eaed9d5e08",
+        "b9f54e1e-c928-5bf3-beaf-4d06ac41907c"
+      ],
+      "group": "owner_budget",
+      "inherited_status_A": "succeeded",
+      "inherited_status_B": "succeeded",
+      "query_id": "final-owner-budget",
+      "selections": {
+        "A_else_B_first": [
+          "b9f54e1e-c928-5bf3-beaf-4d06ac41907c"
+        ],
+        "A_lexical": [
+          "b9f54e1e-c928-5bf3-beaf-4d06ac41907c"
+        ],
+        "B_first_only": [
+          "8faf297d-4fa1-53fd-b197-c8eaed9d5e08"
+        ],
+        "B_lexical_filter": [
+          "b9f54e1e-c928-5bf3-beaf-4d06ac41907c"
+        ],
+        "B_vector": [
+          "8faf297d-4fa1-53fd-b197-c8eaed9d5e08",
+          "b9f54e1e-c928-5bf3-beaf-4d06ac41907c"
+        ]
+      }
+    }
+  ],
+  "posthoc_oracle_feasibility_bound": {
+    "description": "仅用gold拒绝A为空时新增的无关首条；这是可行空间上界，不是可实现判别器或性能证据。",
+    "direct_macro_recall": 0.9416666666666667,
+    "execution_mode": "gold_oracle_bound_not_a_method",
+    "fresh_validation": false,
+    "paraphrase_macro_recall": 0.18055555555555555,
+    "quality_denominator": 95,
+    "quality_injection_queries": 15,
+    "rejected_query_ids": [
+      "final-meeting-paraphrase-1",
+      "final-meeting-paraphrase-2",
+      "final-train-paraphrase-1",
+      "final-meal-paraphrase-3",
+      "final-cook-paraphrase-2",
+      "final-hair-paraphrase-1",
+      "final-hair-paraphrase-2",
+      "final-hotel-paraphrase-1",
+      "final-video-paraphrase-2"
+    ]
+  },
+  "prior_hindsight_boundary": {
+    "denominator": 103,
+    "direct_recall": 0.875,
+    "not_rerun": true,
+    "p95_ms": 1782.9612080240622,
+    "paraphrase_recall": 0.15,
+    "quality_denominator": 95,
+    "quality_injection_queries": 12,
+    "source_sha256": "46e59e06859e6893fbdb756bb3a1f2590ae6786ad32c0f0f8838de83a4c4a32c",
+    "timeout_failures": 0
+  },
+  "quality_error_transition": {
+    "fixed_A_wrong_queries": [
+      "final-empty-4",
+      "final-empty-5",
+      "final-empty-7",
+      "final-topic-3"
+    ],
+    "new_B_wrong_queries": [
+      "final-hiking-direct",
+      "final-meeting-paraphrase-1",
+      "final-meeting-paraphrase-2",
+      "final-meeting-direct",
+      "final-train-paraphrase-1",
+      "final-train-paraphrase-2",
+      "final-meal-paraphrase-2",
+      "final-meal-paraphrase-3",
+      "final-car-paraphrase-1",
+      "final-car-direct",
+      "final-cook-paraphrase-2",
+      "final-cook-direct",
+      "final-hair-paraphrase-1",
+      "final-hair-paraphrase-2",
+      "final-concert-paraphrase-1",
+      "final-concert-paraphrase-2",
+      "final-feedback-direct",
+      "final-father-direct",
+      "final-hotel-paraphrase-1",
+      "final-hotel-direct",
+      "final-birthday-paraphrase-1",
+      "final-birthday-direct",
+      "final-video-paraphrase-2",
+      "final-video-paraphrase-3",
+      "final-topic-4"
+    ],
+    "shared_wrong_queries": [
+      "final-coffee-direct",
+      "final-train-direct",
+      "final-cat-direct",
+      "final-hair-direct",
+      "final-birthday-paraphrase-2",
+      "final-birthday-paraphrase-3",
+      "final-video-paraphrase-1",
+      "final-video-direct",
+      "final-empty-2",
+      "final-topic-1",
+      "final-topic-2"
+    ]
+  },
+  "raw_result_sha256": "a87f5bc2b138a9472bf6066a865b4ae2eb0ec40b837f61a881e6979eb569ac24",
+  "schema_version": 1,
+  "summaries": {
+    "A_else_B_first": {
+      "final/budget": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_5": 1.0,
+        "macro_recall_at_5": 0.6666666666666666,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/direct": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 5,
+        "irrelevant_injection_query_rate": 0.25,
+        "macro_precision_at_5": 0.9166666666666666,
+        "macro_recall_at_5": 0.9416666666666667,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 20,
+        "precision_query_denominator": 20,
+        "queries": 20,
+        "scope_violations": 0,
+        "unexpected_id_count": 5
+      },
+      "final/empty": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 4,
+        "irrelevant_injection_query_rate": 0.4,
+        "macro_precision_at_5": 0.0,
+        "macro_recall_at_5": null,
+        "over_budget_queries": 0,
+        "positive_empty_rate": null,
+        "positive_queries": 0,
+        "precision_query_denominator": 4,
+        "queries": 10,
+        "scope_violations": 0,
+        "unexpected_id_count": 16
+      },
+      "final/isolation": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 1,
+        "irrelevant_injection_query_rate": 1.0,
+        "macro_precision_at_5": 0.6666666666666666,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 1
+      },
+      "final/lifecycle": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 4,
+        "irrelevant_injection_query_rate": 1.0,
+        "macro_precision_at_5": 0.2,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 4,
+        "precision_query_denominator": 4,
+        "queries": 4,
+        "scope_violations": 0,
+        "unexpected_id_count": 16
+      },
+      "final/owner": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_3": 1.0,
+        "macro_recall_at_3": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/owner_budget": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_3": 1.0,
+        "macro_recall_at_3": 0.75,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/paraphrase": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 12,
+        "irrelevant_injection_query_rate": 0.2,
+        "macro_precision_at_5": 0.6571428571428571,
+        "macro_recall_at_5": 0.18055555555555555,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.4166666666666667,
+        "positive_queries": 60,
+        "precision_query_denominator": 35,
+        "queries": 60,
+        "scope_violations": 0,
+        "unexpected_id_count": 20
+      },
+      "final/quality": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 24,
+        "irrelevant_injection_query_rate": 0.25263157894736843,
+        "macro_precision_at_5": 0.6833333333333333,
+        "macro_recall_at_5": 0.396078431372549,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.29411764705882354,
+        "positive_queries": 85,
+        "precision_query_denominator": 64,
+        "queries": 95,
+        "scope_violations": 0,
+        "unexpected_id_count": 54
+      },
+      "final/topic": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 3,
+        "irrelevant_injection_query_rate": 0.6,
+        "macro_precision_at_5": 0.48,
+        "macro_recall_at_5": 0.8,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 5,
+        "precision_query_denominator": 5,
+        "queries": 5,
+        "scope_violations": 0,
+        "unexpected_id_count": 13
+      }
+    },
+    "A_lexical": {
+      "final/budget": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_5": 1.0,
+        "macro_recall_at_5": 0.6666666666666666,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/direct": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 5,
+        "irrelevant_injection_query_rate": 0.25,
+        "macro_precision_at_5": 0.9166666666666666,
+        "macro_recall_at_5": 0.9416666666666667,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 20,
+        "precision_query_denominator": 20,
+        "queries": 20,
+        "scope_violations": 0,
+        "unexpected_id_count": 5
+      },
+      "final/empty": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 4,
+        "irrelevant_injection_query_rate": 0.4,
+        "macro_precision_at_5": 0.0,
+        "macro_recall_at_5": null,
+        "over_budget_queries": 0,
+        "positive_empty_rate": null,
+        "positive_queries": 0,
+        "precision_query_denominator": 4,
+        "queries": 10,
+        "scope_violations": 0,
+        "unexpected_id_count": 16
+      },
+      "final/isolation": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 1,
+        "irrelevant_injection_query_rate": 1.0,
+        "macro_precision_at_5": 0.6666666666666666,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 1
+      },
+      "final/lifecycle": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 4,
+        "irrelevant_injection_query_rate": 1.0,
+        "macro_precision_at_5": 0.2,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 4,
+        "precision_query_denominator": 4,
+        "queries": 4,
+        "scope_violations": 0,
+        "unexpected_id_count": 16
+      },
+      "final/owner": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_3": 1.0,
+        "macro_recall_at_3": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/owner_budget": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_3": 1.0,
+        "macro_recall_at_3": 0.75,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/paraphrase": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 3,
+        "irrelevant_injection_query_rate": 0.05,
+        "macro_precision_at_5": 0.4,
+        "macro_recall_at_5": 0.016666666666666666,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.9166666666666666,
+        "positive_queries": 60,
+        "precision_query_denominator": 5,
+        "queries": 60,
+        "scope_violations": 0,
+        "unexpected_id_count": 11
+      },
+      "final/quality": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 15,
+        "irrelevant_injection_query_rate": 0.15789473684210525,
+        "macro_precision_at_5": 0.6686274509803922,
+        "macro_recall_at_5": 0.2803921568627451,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.6470588235294118,
+        "positive_queries": 85,
+        "precision_query_denominator": 34,
+        "queries": 95,
+        "scope_violations": 0,
+        "unexpected_id_count": 45
+      },
+      "final/topic": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 3,
+        "irrelevant_injection_query_rate": 0.6,
+        "macro_precision_at_5": 0.48,
+        "macro_recall_at_5": 0.8,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 5,
+        "precision_query_denominator": 5,
+        "queries": 5,
+        "scope_violations": 0,
+        "unexpected_id_count": 13
+      }
+    },
+    "B_first_only": {
+      "final/budget": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_5": 1.0,
+        "macro_recall_at_5": 0.16666666666666666,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/direct": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_5": 1.0,
+        "macro_recall_at_5": 0.4708333333333333,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 20,
+        "precision_query_denominator": 20,
+        "queries": 20,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/empty": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 1,
+        "irrelevant_injection_query_rate": 0.1,
+        "macro_precision_at_5": 0.0,
+        "macro_recall_at_5": null,
+        "over_budget_queries": 0,
+        "positive_empty_rate": null,
+        "positive_queries": 0,
+        "precision_query_denominator": 1,
+        "queries": 10,
+        "scope_violations": 0,
+        "unexpected_id_count": 1
+      },
+      "final/isolation": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_5": 1.0,
+        "macro_recall_at_5": 0.5,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/lifecycle": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_5": 1.0,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 4,
+        "precision_query_denominator": 4,
+        "queries": 4,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/owner": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_3": 1.0,
+        "macro_recall_at_3": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/owner_budget": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_3": 1.0,
+        "macro_recall_at_3": 0.75,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/paraphrase": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 12,
+        "irrelevant_injection_query_rate": 0.2,
+        "macro_precision_at_5": 0.6571428571428571,
+        "macro_recall_at_5": 0.18055555555555555,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.4166666666666667,
+        "positive_queries": 60,
+        "precision_query_denominator": 35,
+        "queries": 60,
+        "scope_violations": 0,
+        "unexpected_id_count": 12
+      },
+      "final/quality": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 13,
+        "irrelevant_injection_query_rate": 0.1368421052631579,
+        "macro_precision_at_5": 0.7868852459016393,
+        "macro_recall_at_5": 0.29705882352941176,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.29411764705882354,
+        "positive_queries": 85,
+        "precision_query_denominator": 61,
+        "queries": 95,
+        "scope_violations": 0,
+        "unexpected_id_count": 13
+      },
+      "final/topic": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_5": 1.0,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 5,
+        "precision_query_denominator": 5,
+        "queries": 5,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      }
+    },
+    "B_lexical_filter": {
+      "final/budget": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_5": 1.0,
+        "macro_recall_at_5": 0.6666666666666666,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/direct": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 4,
+        "irrelevant_injection_query_rate": 0.2,
+        "macro_precision_at_5": 0.9333333333333333,
+        "macro_recall_at_5": 0.9416666666666667,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 20,
+        "precision_query_denominator": 20,
+        "queries": 20,
+        "scope_violations": 0,
+        "unexpected_id_count": 4
+      },
+      "final/empty": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 1,
+        "irrelevant_injection_query_rate": 0.1,
+        "macro_precision_at_5": 0.0,
+        "macro_recall_at_5": null,
+        "over_budget_queries": 0,
+        "positive_empty_rate": null,
+        "positive_queries": 0,
+        "precision_query_denominator": 1,
+        "queries": 10,
+        "scope_violations": 0,
+        "unexpected_id_count": 5
+      },
+      "final/isolation": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 1,
+        "irrelevant_injection_query_rate": 1.0,
+        "macro_precision_at_5": 0.6666666666666666,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 1
+      },
+      "final/lifecycle": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 4,
+        "irrelevant_injection_query_rate": 1.0,
+        "macro_precision_at_5": 0.2,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 4,
+        "precision_query_denominator": 4,
+        "queries": 4,
+        "scope_violations": 0,
+        "unexpected_id_count": 16
+      },
+      "final/owner": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_3": 1.0,
+        "macro_recall_at_3": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/owner_budget": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_3": 1.0,
+        "macro_recall_at_3": 0.75,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/paraphrase": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 2,
+        "irrelevant_injection_query_rate": 0.03333333333333333,
+        "macro_precision_at_5": 0.5,
+        "macro_recall_at_5": 0.016666666666666666,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.9333333333333333,
+        "positive_queries": 60,
+        "precision_query_denominator": 4,
+        "queries": 60,
+        "scope_violations": 0,
+        "unexpected_id_count": 3
+      },
+      "final/quality": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 8,
+        "irrelevant_injection_query_rate": 0.08421052631578947,
+        "macro_precision_at_5": 0.8388888888888889,
+        "macro_recall_at_5": 0.292156862745098,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.6588235294117647,
+        "positive_queries": 85,
+        "precision_query_denominator": 30,
+        "queries": 95,
+        "scope_violations": 0,
+        "unexpected_id_count": 13
+      },
+      "final/topic": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 1,
+        "irrelevant_injection_query_rate": 0.2,
+        "macro_precision_at_5": 0.9,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 5,
+        "precision_query_denominator": 5,
+        "queries": 5,
+        "scope_violations": 0,
+        "unexpected_id_count": 1
+      }
+    },
+    "B_vector": {
+      "final/budget": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_5": 1.0,
+        "macro_recall_at_5": 0.6666666666666666,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/direct": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 13,
+        "irrelevant_injection_query_rate": 0.65,
+        "macro_precision_at_5": 0.675,
+        "macro_recall_at_5": 0.9416666666666667,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 20,
+        "precision_query_denominator": 20,
+        "queries": 20,
+        "scope_violations": 0,
+        "unexpected_id_count": 28
+      },
+      "final/empty": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 1,
+        "irrelevant_injection_query_rate": 0.1,
+        "macro_precision_at_5": 0.0,
+        "macro_recall_at_5": null,
+        "over_budget_queries": 0,
+        "positive_empty_rate": null,
+        "positive_queries": 0,
+        "precision_query_denominator": 1,
+        "queries": 10,
+        "scope_violations": 0,
+        "unexpected_id_count": 5
+      },
+      "final/isolation": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 1,
+        "irrelevant_injection_query_rate": 1.0,
+        "macro_precision_at_5": 0.4,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 3
+      },
+      "final/lifecycle": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 4,
+        "irrelevant_injection_query_rate": 1.0,
+        "macro_precision_at_5": 0.2,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 4,
+        "precision_query_denominator": 4,
+        "queries": 4,
+        "scope_violations": 0,
+        "unexpected_id_count": 16
+      },
+      "final/owner": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_3": 1.0,
+        "macro_recall_at_3": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/owner_budget": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_3": 1.0,
+        "macro_recall_at_3": 0.75,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/paraphrase": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 19,
+        "irrelevant_injection_query_rate": 0.31666666666666665,
+        "macro_precision_at_5": 0.5761904761904763,
+        "macro_recall_at_5": 0.2638888888888889,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.4166666666666667,
+        "positive_queries": 60,
+        "precision_query_denominator": 35,
+        "queries": 60,
+        "scope_violations": 0,
+        "unexpected_id_count": 44
+      },
+      "final/quality": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 36,
+        "irrelevant_injection_query_rate": 0.37894736842105264,
+        "macro_precision_at_5": 0.6065573770491803,
+        "macro_recall_at_5": 0.4666666666666666,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.29411764705882354,
+        "positive_queries": 85,
+        "precision_query_denominator": 61,
+        "queries": 95,
+        "scope_violations": 0,
+        "unexpected_id_count": 81
+      },
+      "final/topic": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 3,
+        "irrelevant_injection_query_rate": 0.6,
+        "macro_precision_at_5": 0.6666666666666667,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 5,
+        "precision_query_denominator": 5,
+        "queries": 5,
+        "scope_violations": 0,
+        "unexpected_id_count": 4
+      }
+    }
+  },
+  "timeout": {
+    "historical_count": null,
+    "reason": "记忆检索Port无超时参数，旧结果没有独立超时字段；不能据0失败宣称超时控制通过。"
+  }
+}

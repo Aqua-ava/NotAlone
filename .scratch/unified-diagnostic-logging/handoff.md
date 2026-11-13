@@ -1,0 +1,38 @@
+# 统一诊断日志进行中交接
+
+- 统一日志任务已完成：01–05均resolved，spec及各Answer已更新；root亲核diff/验证，全部本地提交，无push/PR/打包。
+- 已读一次AGENTS/workflow/engineering/issue-tracker/domain/scaling/triage、spec及01–05；不整份重读，仅rg/sed。
+- 桌面先dev:status，只pnpm run dev，绝不打包；root独占CUA，验收时需通知写者暂停src保存重启。
+- 原3WIP及外部图片model/provider等WIP一律保留不混提交；不stash/reset/换branch/改历史/push/PR。
+- 05 resolved：2068bb54b+夹具适配9304b8cec，独立基准33b66ca7c；同一真库副本mean7082.36→301.39ms，资格SQL3383→1；root最终16/16。
+- 正常/修订失效/证明失效完整+逐项hash一致，失效撤下7/16项；root亲跑7/7，真库副本已删。
+- 01 resolved：实现57b0c1611、修复8100de58f（event对象绕过/日期prune/并发读空包）两轴复验通过，scanner增强32f75bfda。
+- 用户决定pino10.4.0+自研安全异步写前轮转，不用pino-roll；供应链已核，锁只97行必要新增。
+- 01真实CUA开关/清除/本机导出0600已验；当前开关true且跨重启保持，日志不上传。
+- 实际启动各n1 off main597.61/backend16656.01ms，on481.49/15078.14ms，不能解释提速/无影响。
+- 01旧12样本真SQLite合成模型mean off/on：管理.9501/1.0684ms，同步5.0599/5.1163，提取178.5967/177.1307；最终全接入须task01重测。
+- 02 resolved：abd76bbf5+c448e3ca1+5ead41501；getter分类容错/首次lazy observedAt/真实动作SQL模块归类已修并review。
+- root亲跑桌面70、NodeTS/CJS时间1、storage3；真实CUA目标16正式+1候选无失效，trace9a3be84a-6c6a-43df-98a1-83b68faa8d43。
+- 该真实trace65条跨main/backend，SQL59汇总5191调用，main470.261ms/backend469.217ms，pnpm diag --trace exit0。
+- 历史原因用baae193旧controller隔离20ms真实HTTPdeadline复现：timeout→无条件synchronize→invalidated；当前已被2068bb修复，勿虚称现场自然故障复现。
+- 03 resolved：03a80e844+4e97f2197；root新13/13、双轴复核Map线性+paused在途重启恢复通过，真实SQLite合成模型不联网。
+- 03范围memory/sqlite diagnostics/execution/runs/service、documents stages/publication/later-schedule/service、media/actions晚图hook；已冻结释放全部。
+- 外部图片会话1f8f64704误带03三段service诊断，协调后保留历史归属；外部会话idle释放；其stage2 WIP和2降级红测/1旧快照失败非本任务。
+- 04 claimed，前三模块已commit：同步a9df7952c、取图24606503f、正式回复70aface2c，媒体分类hardening c75f2611f。
+- root已读同步/媒体/回复diff；同步+continuity16/16、new媒体回复5/5过；回复正式DSH profile合成guard1/1作者过且实际阶段同trace。
+- 04共享容量补修5d3237970：4096decision/128debug、writer8MiB序列化上限、固定6阶段保留溢出槽原count不递归。
+- 03实测1001→128静默丢873已修；root growth：热/首次lazy1001全到，5001产生精确loss905。
+- warn下游优先级修794521849；上游SQL聚合补修由task02提交74a02d5b2，root priority+growth10/10，Spec原129单次/累计slow复验通过。
+- SQL统计4096指纹不留rawSQL、最多128debug输出采样、独立slow4096、统计外128单次slow补充；保留warn不重复计损，超限明确error/count。
+- 04六模块及共享fix全部resolved：deletecd857bc12、foreground7d7bcf09b+abd60bf39、startup0cc00064d、最终7d627a7cd；独审6缺陷+15d边界关闭。
+- 删除维护方案root已批准Mac O_EXLOCK=0x20（Apple open2/XNU源码和本机probe），NONBLOCK/NOFOLLOW、固定空0600锁文件不删、close/crash内核释放。
+- 不用PID接管/socket/listener或新原生编译；非darwin fail-safe不可用，本次Mac限制需报告。root已浏览官方Apple文档，agent需留SDK/跨进程崩溃实测证据。
+- 删除已实现root互斥/14天4096prefix512KiB抑制/hrtime屏障/可信runner→清理→seal；root原delete16/16通过，但独审又发现6缺陷，task04正在唯一生产修复。
+- 普通diagnose失败静默；明确clear/erase失败如实返回，原continuity清理失败仍blocked重试；privacy-deletion补保留清除/前缀碰撞说明。
+- 回复超时P2已由2b6442572修成固定timeout；Standards最小HTTP原路径1/1复验通过，409响应/同trace保持。
+- 独审6项+15d旧包均由7d627a7cd关闭：Spec e86f1db62 6/6、Standards b38d018b0 20/20；root全部unified84/84+desktop12/12；峰8077/8192，预算各24.5MiB+control/temp1MiB。
+- 01最终benchmark9d599422d，12样本off/on mean管理1.2095/1.1977、同步6.1832/6.5397、提取201.4709/202.0776；26modelCalls各，on13081/off0、drop0，临时库全删，Answer已更新。
+- 真库只副本0700/0600真实路径用后删；禁止正文姓名外传；diag-temp用户已全部撤，不恢复。
+- 实际最终启动n1 off/on main466.846/432.079ms，backend17839.053/16267.347；/tmp/notalone-final-app-startup-summary.json600。普通dev4534/App4563已启动(外部可正常退出)，旧observer/pointer全删316751bytes。
+- 最终CLI：desktop1355pass/1既有staticEskip；backend2287pass/12fail/2cancel，05fixture9304已root16/16修复。其余13image(含2cancel)归旧1f8 PNG无效/旧快照，独立代表对照已证且归档全清理，已交图片会话；HEAD9304公史0，仅3WIP。
+- 实际CUA最终完成并发completion_summary：默认App clear0.1KB说明/导出35774记录全白名单600(已删)、微信激活+小窗观察；未宣称自动匹配。off重启unchecked/on重启checked，外部桌面lease已归还。

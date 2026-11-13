@@ -1,0 +1,8 @@
+{
+  "root_development_cache_kib_before": 3612,
+  "root_development_cache_kib_after": 0,
+  "python_cache_directories_removed": 32,
+  "python_cache_bytes_removed": 8909315,
+  "other_running_worktree_app": "untouched",
+  "shared_node_modules": "untouched"
+}

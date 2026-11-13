@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "head": "2fa30b91",
+  "mode": "npm run dev",
+  "computerUse": true,
+  "contactSwitch": {
+    "fromDisplayName": "cloudy",
+    "toDisplayName": "狗子磊",
+    "scopeRevisionChanged": true,
+    "targetInputBeforeSwitch": "回一个自然简短的消息。",
+    "targetInputAfterSwitch": "",
+    "targetCandidateCount": 0,
+    "targetVisibleCandidateCopy": "暂无候选",
+    "cloudyJobVisibleForTarget": false
+  },
+  "switchBack": {
+    "displayName": "cloudy",
+    "inputRestored": true,
+    "previousCandidateGroupRetained": true,
+    "previousCandidateGroupLabel": "上一组候选，尚未按当前输入重新生成。",
+    "stoppedJobNoticeRetained": true,
+    "crossContactResultCount": 0
+  },
+  "syncDisable": {
+    "uiBefore": {
+      "enabledCopy": "后台正文同步已开启",
+      "action": "关闭后台同步"
+    },
+    "uiAfter": {
+      "enabledCopy": "后台正文同步已关闭",
+      "readCopy": "后台读取已关闭",
+      "action": "开启后台同步"
+    },
+    "state": {
+      "enabled": false,
+      "backgroundPhase": "disabled",
+      "foregroundPhase": "sync_disabled",
+      "syncProbeProcessCount": 0
+    },
+    "savedScope": {
+      "syncScope": "all_private",
+      "confirmedBindingCount": 291,
+      "historyAuthorizationState": "accepted"
+    },
+    "finalStateRetained": true
+  },
+  "wechatMessagesSent": 0,
+  "visualFramesPersistedOrUploaded": 0
+}

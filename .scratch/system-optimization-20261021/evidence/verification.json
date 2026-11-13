@@ -1,0 +1,39 @@
+{
+  "baseline_revision": "681fcc38eab77c8fe149b76705419971f3750a86",
+  "candidate_revision": "317ec9d5ac316ea63a386eb22e5c9af1d697e3e3",
+  "pythonpath": "src (backend cwd)",
+  "modules": [
+    {
+      "command": "python -m unittest discover -s tests/unit/wechat_cli -t . -v",
+      "count": 115,
+      "result": "OK"
+    },
+    {
+      "command": "python -m unittest discover -s tests/unit/front_sync -t . -v",
+      "count": 229,
+      "result": "OK"
+    },
+    {
+      "command": "python -m unittest discover -s tests/unit/server -t . -v",
+      "count": 79,
+      "result": "OK"
+    },
+    {
+      "command": "python -m unittest tests.integration.server.test_events tests.integration.server.test_http_resource_limits -v",
+      "count": 22,
+      "result": "OK"
+    },
+    {
+      "command": "python .scratch/system-optimization-20261021/evidence/run_persistence.py",
+      "count": 1,
+      "result": "OK",
+      "isolated_utf8_pg": true,
+      "tcp_listening": false
+    }
+  ],
+  "total": 446,
+  "all_synthetic": true,
+  "real_app_run": false,
+  "real_wechat_run": false,
+  "external_model_calls": 0
+}

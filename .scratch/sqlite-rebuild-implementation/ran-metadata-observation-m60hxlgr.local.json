@@ -1,0 +1,69 @@
+{
+  "format": "wechat-human-b-metadata-observation-v1",
+  "cliSha256": "d555fdcedf100eba62e8dbc4dbcde50901b3f1b8198f6a6a44e62cfb66c26327",
+  "overlaySha256": "35e8b4864182ed3b21fa601e1559e70a9aba99fc80b93be018cac33ed03d3f3c",
+  "bodyRead": false,
+  "sourceXmlRead": false,
+  "rawIdentitiesPersisted": false,
+  "events": [
+    {
+      "signal": "observer_open",
+      "armed": false,
+      "configuredAccountVerified": true,
+      "selectedPrivateTargetExact": true,
+      "checkedPartitions": 8,
+      "presentTables": 2,
+      "historyStatus": "unverified"
+    },
+    {
+      "signal": "ready",
+      "action": "arm",
+      "lockedCount": 0,
+      "status": "unverified",
+      "records": []
+    },
+    {
+      "signal": "locked",
+      "action": "next",
+      "lockedCount": 1,
+      "status": "unverified",
+      "records": [
+        {
+          "slot": 0,
+          "present": true,
+          "sender": "owner",
+          "originalType": "1",
+          "status": "2",
+          "serverIdAssigned": true,
+          "localIdExact": true,
+          "identityStable": null,
+          "serverIdStable": null,
+          "normalHistory": false
+        }
+      ]
+    },
+    {
+      "signal": "observed",
+      "action": "current",
+      "lockedCount": 1,
+      "status": "unverified",
+      "records": [
+        {
+          "slot": 0,
+          "present": true,
+          "sender": "unknown",
+          "originalType": "10000",
+          "status": "4",
+          "serverIdAssigned": true,
+          "localIdExact": true,
+          "identityStable": true,
+          "serverIdStable": true,
+          "normalHistory": false
+        }
+      ]
+    },
+    {
+      "signal": "closed"
+    }
+  ]
+}

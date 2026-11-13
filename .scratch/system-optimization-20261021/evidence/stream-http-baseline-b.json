@@ -1,0 +1,63 @@
+{
+  "source_revision": "681fcc38eab77c8fe149b76705419971f3750a86",
+  "python_version": "3.12.13",
+  "source_sha256": {
+    "backend/src/notalone/server/app.py": "0efed399ecc4d5cff7e8bcb42c4b7b8239ee319dbc449fed8483d6fa7e0e8abf",
+    "backend/src/notalone/server/event_bus.py": "0a6826814c6ef8ef1ff2451fa1ca6910c60fc4f9f954827676693ec1979b4b22",
+    "backend/src/notalone/wechat_cli/adapter.py": "b659a775271458d806f6f8f0cfa5d9f0151b3db9a2e27eeb7ecd4f6bf0c35dba"
+  },
+  "input": "5000/100000 session metadata events, 10 synthetic locators; same-owner sync states; 12 unauthenticated partial bodies",
+  "input_recipe_sha256": "1c8f95b1382d9601c09fc95713138e9492f71233442287af071a16ed76c594c9",
+  "cli": [
+    {
+      "events": 5000,
+      "queued": 5001,
+      "upstream_read": 5000,
+      "retained_bytes": 773912,
+      "peak_bytes": 776157,
+      "drain_seconds": 0.0027089579998573754,
+      "ordered_events": 5000,
+      "reader_stopped": true
+    },
+    {
+      "events": 100000,
+      "queued": 100001,
+      "upstream_read": 100000,
+      "retained_bytes": 15422592,
+      "peak_bytes": 15424310,
+      "drain_seconds": 0.05497933300284785,
+      "ordered_events": 100000,
+      "reader_stopped": true
+    }
+  ],
+  "bus": [
+    {
+      "events": 5000,
+      "slow_queued": 5000,
+      "slow_closed": false,
+      "fast_queued": 0,
+      "retained_bytes": 1394152,
+      "peak_bytes": 1394536,
+      "publish_seconds": 0.12288887499744305,
+      "fast_ordered_events": 5000,
+      "queued_after_close": 5001
+    },
+    {
+      "events": 100000,
+      "slow_queued": 100000,
+      "slow_closed": false,
+      "fast_queued": 0,
+      "retained_bytes": 28017704,
+      "peak_bytes": 28018088,
+      "publish_seconds": 2.5684053750010207,
+      "fast_ordered_events": 100000,
+      "queued_after_close": 100001
+    }
+  ],
+  "http": {
+    "incomplete_unauthorized_requests": 12,
+    "responses_within_each_50ms_observation": 0,
+    "request_workers_at_observation": 12,
+    "note": "超时为删失观察，不能当作请求延迟"
+  }
+}

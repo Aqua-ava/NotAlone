@@ -1,0 +1,130 @@
+TAP version 13
+# Subtest: 现代核验请求包含完整提议；场景、解释及备选含义不能只留在 E
+ok 1 - 现代核验请求包含完整提议；场景、解释及备选含义不能只留在 E
+  ---
+  duration_ms: 3.576875
+  type: 'test'
+  ...
+# Subtest: 正文忠实也不能在语义元数据尚未逐项核验时接纳
+ok 2 - 正文忠实也不能在语义元数据尚未逐项核验时接纳
+  ---
+  duration_ms: 1.537625
+  type: 'test'
+  ...
+# Subtest: 每个语义字段的未定或无支持都否决整体；结构配置与忠实未知不判假
+ok 3 - 每个语义字段的未定或无支持都否决整体；结构配置与忠实未知不判假
+  ---
+  duration_ms: 22.120709
+  type: 'test'
+  ...
+# Subtest: 省略语义主体不能靠发言者身份与 explicit 自签通过
+ok 4 - 省略语义主体不能靠发言者身份与 explicit 自签通过
+  ---
+  duration_ms: 0.745083
+  type: 'test'
+  ...
+# Subtest: 实际第一人称和第三方主体有据可接受；任意重合字与发言者标签不能充当指代依据
+ok 5 - 实际第一人称和第三方主体有据可接受；任意重合字与发言者标签不能充当指代依据
+  ---
+  duration_ms: 3.078875
+  type: 'test'
+  ...
+# Subtest: 完成核验后替换场景不能复用原接纳资格
+ok 6 - 完成核验后替换场景不能复用原接纳资格
+  ---
+  duration_ms: 1.464917
+  type: 'test'
+  ...
+# Subtest: 元数据缺项、非法证据和额外字段逐项失败；空值不要求补造来源事实
+ok 7 - 元数据缺项、非法证据和额外字段逐项失败；空值不要求补造来源事实
+  ---
+  duration_ms: 2.917583
+  type: 'test'
+  ...
+# Subtest: 主体位置按Unicode码点绑定当前段与实际引文，错误提及不能越界或串证据
+ok 8 - 主体位置按Unicode码点绑定当前段与实际引文，错误提及不能越界或串证据
+  ---
+  duration_ms: 2.974625
+  type: 'test'
+  ...
+# Subtest: 新schema仍可编译strict合同，旧null/v1与nullable请求不升级到新语义合同
+ok 9 - 新schema仍可编译strict合同，旧null/v1与nullable请求不升级到新语义合同
+  ---
+  duration_ms: 1.375792
+  type: 'test'
+  ...
+# Subtest: 完整命题核验聚合时间/认知模态负向判断，保留两个有据控制
+ok 10 - 完整命题核验聚合时间/认知模态负向判断，保留两个有据控制
+  ---
+  duration_ms: 6.284875
+  type: 'test'
+  ...
+# Subtest: prepared decode 幂等并隔离返回值，不能在验证后交换另一份响应
+ok 11 - prepared decode 幂等并隔离返回值，不能在验证后交换另一份响应
+  ---
+  duration_ms: 2.007208
+  type: 'test'
+  ...
+# Subtest: 全文漏核、facet 缺项或未定、归属 unresolved 均不能被顶层 supported 覆盖
+ok 12 - 全文漏核、facet 缺项或未定、归属 unresolved 均不能被顶层 supported 覆盖
+  ---
+  duration_ms: 5.68825
+  type: 'test'
+  ...
+# Subtest: 新策略原生准入可签来源receipt，序列化字段或更换正文/范围/来源不能代签
+ok 13 - 新策略原生准入可签来源receipt，序列化字段或更换正文/范围/来源不能代签
+  ---
+  duration_ms: 1.957
+  type: 'test'
+  ...
+# Subtest: 覆盖按Unicode码点计数且请求指纹不能跨候选或来源复用
+ok 14 - 覆盖按Unicode码点计数且请求指纹不能跨候选或来源复用
+  ---
+  duration_ms: 2.515209
+  type: 'test'
+  ...
+# Subtest: shared仍归联系人资料范围，三项supported也不能覆盖旧事件或条件未核验
+ok 15 - shared仍归联系人资料范围，三项supported也不能覆盖旧事件或条件未核验
+  ---
+  duration_ms: 2.623166
+  type: 'test'
+  ...
+# Subtest: 61条合法direct候选在默认/旧NULL/v1/新v2均归一invalid_output，E1/V0
+ok 16 - 61条合法direct候选在默认/旧NULL/v1/新v2均归一invalid_output，E1/V0
+  ---
+  duration_ms: 17.439042
+  type: 'test'
+  ...
+# Subtest: 准备失败保留已解析的结构拒绝计数，不重试E或进入V
+ok 17 - 准备失败保留已解析的结构拒绝计数，不重试E或进入V
+  ---
+  duration_ms: 3.15575
+  type: 'test'
+  ...
+# Subtest: 准备阶段协议错误遇取消仍优先抛AbortError，E1/V0
+ok 18 - 准备阶段协议错误遇取消仍优先抛AbortError，E1/V0
+  ---
+  duration_ms: 4.924333
+  type: 'test'
+  ...
+# Subtest: 60条边界仍一次E一次V并保留有据候选
+ok 19 - 60条边界仍一次E一次V并保留有据候选
+  ---
+  duration_ms: 26.019542
+  type: 'test'
+  ...
+# Subtest: verification_input追踪故障仍原样传播，E1/V0
+ok 20 - verification_input追踪故障仍原样传播，E1/V0
+  ---
+  duration_ms: 0.372083
+  type: 'test'
+  ...
+1..20
+# tests 20
+# suites 0
+# pass 20
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 211.426625

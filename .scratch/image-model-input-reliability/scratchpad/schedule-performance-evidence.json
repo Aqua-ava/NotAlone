@@ -1,0 +1,301 @@
+{
+  "sameCopiedWorkload": true,
+  "statisticsEqual": true,
+  "statistics": {
+    "pending": 0,
+    "blockedContacts": 0,
+    "content": [
+      {
+        "kind": "text",
+        "pending": 35,
+        "unavailable": 0
+      },
+      {
+        "kind": "image",
+        "pending": 9,
+        "unavailable": 0,
+        "unadmitted": 0
+      }
+    ],
+    "runState": "failed",
+    "runTotal": 44
+  },
+  "main": {
+    "elapsedMs": 207,
+    "queries": 395,
+    "diagnosticEvents": 70,
+    "slow": [
+      {
+        "hash": "27b826459f29d0132ebced74e882583e46174aa12f1d174f49054443188e0ffe",
+        "queries": 2,
+        "elapsedMs": 108.9,
+        "rows": 88
+      },
+      {
+        "hash": "c57b040bf8e15df6905f2667953cbdc8290326631dfbb2b97db12e7847cc8956",
+        "queries": 6,
+        "elapsedMs": 43.39,
+        "rows": 194
+      },
+      {
+        "hash": "866b1b6910f4639835b89e6c3640421ddece47444a5df259e199cb355b8f7a41",
+        "queries": 1,
+        "elapsedMs": 7.89,
+        "rows": 481
+      },
+      {
+        "hash": "4c544b1861f9e38e2ca56e2c27e4198cdd984450d633d233978d8900ad73a7b8",
+        "queries": 133,
+        "elapsedMs": 5.119999999999995,
+        "rows": 133
+      },
+      {
+        "hash": "f6629acaffa6f87c950fceff482cc58932ada4f5025b7c30fe67424e5cbe1cdd",
+        "queries": 1,
+        "elapsedMs": 3.6,
+        "rows": 0
+      },
+      {
+        "hash": "b7e4c9d15575435478d68078d0ea2b648111c91fc4ab1f2aa44403beccdd25ec",
+        "queries": 132,
+        "elapsedMs": 3.3799999999999994,
+        "rows": 132
+      },
+      {
+        "hash": "3d81c92738761af233040072b303b6884529759b7e9fa31f0141f5609c1a6821",
+        "queries": 1,
+        "elapsedMs": 3,
+        "rows": 14
+      },
+      {
+        "hash": "2cb50ba9919f4a1cfde9639b1cfc8ed0fe28d13498da0571b88356bea152780d",
+        "queries": 1,
+        "elapsedMs": 2.01,
+        "rows": 1
+      },
+      {
+        "hash": "c839965ca55051a697e16c7095d8b166edae21e6f52605cd6cf9c8cc7eeba1ba",
+        "queries": 1,
+        "elapsedMs": 1.65,
+        "rows": 0
+      },
+      {
+        "hash": "522993941b3951b71e0eb2d5a8c2bb434c6adaa004c5698a2494ea5bf0123231",
+        "queries": 1,
+        "elapsedMs": 1.35,
+        "rows": 0
+      }
+    ]
+  },
+  "before": {
+    "elapsedMs": 7513,
+    "queries": 423,
+    "diagnosticEvents": 77,
+    "slow": [
+      {
+        "hash": "033cb1bbc1288df0fb1f8d84a17a3a38b0baa89409cf5d592424b671e068ddce",
+        "queries": 6,
+        "elapsedMs": 6884.65,
+        "rows": 110
+      },
+      {
+        "hash": "f61babcae2a361012ab1bb58ad3c476dd5c44a813e5730902bc4f979812e1019",
+        "queries": 5,
+        "elapsedMs": 192.69,
+        "rows": 0
+      },
+      {
+        "hash": "57bc287a8550ff04e67d7222ad7e083d288dda8e6e7463b82964ac84e86ddfe5",
+        "queries": 1,
+        "elapsedMs": 102.73,
+        "rows": 481
+      },
+      {
+        "hash": "27b826459f29d0132ebced74e882583e46174aa12f1d174f49054443188e0ffe",
+        "queries": 2,
+        "elapsedMs": 101.62,
+        "rows": 88
+      },
+      {
+        "hash": "30a35f8ed127c99281f894626d65e4abb82332b7a3460fd0d56cc5651cfb9dcf",
+        "queries": 1,
+        "elapsedMs": 82.34,
+        "rows": 2
+      },
+      {
+        "hash": "b22efd40604178c61860f22d2c1a47373ac7989f02782ec717fd8549e5194131",
+        "queries": 1,
+        "elapsedMs": 55.25,
+        "rows": 0
+      },
+      {
+        "hash": "c70f18694bf1870500937f4393427500f27f1200c1700962dae43ac38454ccc3",
+        "queries": 1,
+        "elapsedMs": 35.69,
+        "rows": 0
+      },
+      {
+        "hash": "1510a511b2056835e913fc8a18bd6617a2546ec17072f0791462004546bcf667",
+        "queries": 1,
+        "elapsedMs": 5.94,
+        "rows": 0
+      },
+      {
+        "hash": "4c544b1861f9e38e2ca56e2c27e4198cdd984450d633d233978d8900ad73a7b8",
+        "queries": 140,
+        "elapsedMs": 4.719999999999995,
+        "rows": 140
+      },
+      {
+        "hash": "f6629acaffa6f87c950fceff482cc58932ada4f5025b7c30fe67424e5cbe1cdd",
+        "queries": 1,
+        "elapsedMs": 3.76,
+        "rows": 0
+      }
+    ]
+  },
+  "diagnosticsOff": {
+    "elapsedMs": 7522,
+    "queries": 423,
+    "diagnosticEvents": 0,
+    "slow": [
+      {
+        "hash": "033cb1bbc1288df0fb1f8d84a17a3a38b0baa89409cf5d592424b671e068ddce",
+        "queries": 6,
+        "elapsedMs": 6249.27,
+        "rows": 110
+      },
+      {
+        "hash": "f61babcae2a361012ab1bb58ad3c476dd5c44a813e5730902bc4f979812e1019",
+        "queries": 5,
+        "elapsedMs": 380.02000000000004,
+        "rows": 0
+      },
+      {
+        "hash": "57bc287a8550ff04e67d7222ad7e083d288dda8e6e7463b82964ac84e86ddfe5",
+        "queries": 1,
+        "elapsedMs": 337.6,
+        "rows": 481
+      },
+      {
+        "hash": "27b826459f29d0132ebced74e882583e46174aa12f1d174f49054443188e0ffe",
+        "queries": 2,
+        "elapsedMs": 121.85,
+        "rows": 88
+      },
+      {
+        "hash": "f6629acaffa6f87c950fceff482cc58932ada4f5025b7c30fe67424e5cbe1cdd",
+        "queries": 1,
+        "elapsedMs": 114.33,
+        "rows": 0
+      },
+      {
+        "hash": "30a35f8ed127c99281f894626d65e4abb82332b7a3460fd0d56cc5651cfb9dcf",
+        "queries": 1,
+        "elapsedMs": 106.73,
+        "rows": 2
+      },
+      {
+        "hash": "b22efd40604178c61860f22d2c1a47373ac7989f02782ec717fd8549e5194131",
+        "queries": 1,
+        "elapsedMs": 67.63,
+        "rows": 0
+      },
+      {
+        "hash": "c70f18694bf1870500937f4393427500f27f1200c1700962dae43ac38454ccc3",
+        "queries": 1,
+        "elapsedMs": 39.76,
+        "rows": 0
+      },
+      {
+        "hash": "1510a511b2056835e913fc8a18bd6617a2546ec17072f0791462004546bcf667",
+        "queries": 1,
+        "elapsedMs": 16.92,
+        "rows": 0
+      },
+      {
+        "hash": "9bddff1d4c7b7fc776c0a06fa945338b79a8283daedbcd9107d590a59bc41d2a",
+        "queries": 1,
+        "elapsedMs": 6.8,
+        "rows": 0
+      }
+    ]
+  },
+  "final": {
+    "elapsedMs": 1291,
+    "queries": 434,
+    "diagnosticEvents": 77,
+    "slow": [
+      {
+        "hash": "57bc287a8550ff04e67d7222ad7e083d288dda8e6e7463b82964ac84e86ddfe5",
+        "queries": 1,
+        "elapsedMs": 312.59,
+        "rows": 481
+      },
+      {
+        "hash": "f61babcae2a361012ab1bb58ad3c476dd5c44a813e5730902bc4f979812e1019",
+        "queries": 5,
+        "elapsedMs": 285.68,
+        "rows": 0
+      },
+      {
+        "hash": "d6923fe1e9794bdf22e49b0a80a56d702f5a77d278ec634b1e5950d7b665d615",
+        "queries": 14,
+        "elapsedMs": 182.09,
+        "rows": 12
+      },
+      {
+        "hash": "f6629acaffa6f87c950fceff482cc58932ada4f5025b7c30fe67424e5cbe1cdd",
+        "queries": 1,
+        "elapsedMs": 107.08,
+        "rows": 0
+      },
+      {
+        "hash": "27b826459f29d0132ebced74e882583e46174aa12f1d174f49054443188e0ffe",
+        "queries": 2,
+        "elapsedMs": 95.62,
+        "rows": 88
+      },
+      {
+        "hash": "30a35f8ed127c99281f894626d65e4abb82332b7a3460fd0d56cc5651cfb9dcf",
+        "queries": 1,
+        "elapsedMs": 79.85,
+        "rows": 2
+      },
+      {
+        "hash": "b22efd40604178c61860f22d2c1a47373ac7989f02782ec717fd8549e5194131",
+        "queries": 1,
+        "elapsedMs": 62.57,
+        "rows": 0
+      },
+      {
+        "hash": "c57b040bf8e15df6905f2667953cbdc8290326631dfbb2b97db12e7847cc8956",
+        "queries": 6,
+        "elapsedMs": 42.269999999999996,
+        "rows": 194
+      },
+      {
+        "hash": "c70f18694bf1870500937f4393427500f27f1200c1700962dae43ac38454ccc3",
+        "queries": 1,
+        "elapsedMs": 35.45,
+        "rows": 0
+      },
+      {
+        "hash": "1510a511b2056835e913fc8a18bd6617a2546ec17072f0791462004546bcf667",
+        "queries": 1,
+        "elapsedMs": 15.85,
+        "rows": 0
+      }
+    ]
+  },
+  "beforePlan": {
+    "queryHash": "033cb1bbc1288df0fb1f8d84a17a3a38b0baa89409cf5d592424b671e068ddce",
+    "nodes": 28,
+    "correlated": 7
+  },
+  "finalPlan": {
+    "queryHash": "c57b040bf8e15df6905f2667953cbdc8290326631dfbb2b97db12e7847cc8956",
+    "nodes": 7,
+    "correlated": 1
+  }
+}

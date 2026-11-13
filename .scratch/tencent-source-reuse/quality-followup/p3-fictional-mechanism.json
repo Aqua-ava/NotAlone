@@ -1,0 +1,40 @@
+{
+  "origin": "独立Agent从逻辑机制重新构造的全虚构案例，不包含真实原句或实体",
+  "classification": {
+    "primary": [
+      "temporal_relation",
+      "epistemic_modality"
+    ],
+    "secondary": [
+      "coreference_resolution"
+    ],
+    "not_established": [
+      "conditional",
+      "counterfactual"
+    ]
+  },
+  "cases": [
+    {
+      "id": "negative",
+      "source": "门口那声短哨，我听成了散场提示，当时一下轻松了。",
+      "candidate": "说话者获悉社区演出已经结束后放松下来。",
+      "expected_verdict": "unsupported",
+      "reason": "听觉解释不等于获得确定消息；来源未给出获悉事件，也未说明具体活动。候选新增信息确证事件、事件与情绪的先后链及具体场合。情绪表达本身有依据，不能连同正确部分一并否认。"
+    },
+    {
+      "id": "control_faithful",
+      "source": "门口那声短哨，我听成了散场提示，当时一下轻松了。",
+      "candidate": "说话者把门口的一声短哨理解为散场提示，并自述当时变得轻松。",
+      "expected_verdict": "supported",
+      "reason": "保留主观理解和来源时点的自述情绪，不确认提示是否真实，也不补出活动身份或信息确证事件。"
+    },
+    {
+      "id": "control_explicit_sequence",
+      "source": "主持人发来消息，说本场朗诵结束了。我读完这条消息后放松下来。",
+      "candidate": "说话者读完主持人告知本场朗诵结束的消息后放松下来。",
+      "expected_verdict": "supported",
+      "reason": "信息来源、接收行为及情绪的先后均已明说；候选保留消息告知的归属，没有把转述扩成外部事实认证。此对照应防止一律拒绝有依据的事件先后关系。"
+    }
+  ],
+  "real_model_calls_for_these_cases": 0
+}
