@@ -58,3 +58,28 @@ test('真实SQLite宿主存活时：重连预检不改写清单，也不放行�
   assert.notEqual(next.pid, info.pid);
   assert.equal((await fetch(`http://${next.address}/api/runtime/status`, { headers: { Authorization: `Bearer ${next.token}` } })).status, 200);
 });
+
+test('真实SQLite宿主异步停读在有界时间内确认stopped，且无任何资源被强制放弃', async t => {
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-live-shutdown-')));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const first = await runDefaultDatabaseStartup({ userData: root });
+  assert.equal(first.phase, 'ready');
+  const infoPath = path.join(root, 'managed/sqlite-backend.info');
+  const host = await launchDsh({ nodeExecutable: process.execPath, projectDirectory: new URL('../../', import.meta.url).pathname,
+    envFilePath: path.join(root, 'unused.env'), infoPath, businessHome: root, environment: {},
+    sqlite: { userData: root, expectedDatabaseId: first.databaseId, expectedOwnerId: first.ownerId, role: 'test', ...first.configuration } }, () => true);
+  t.after(() => host.terminate());
+  const info = await handshake(host, infoPath);
+  const request = async (method, endpoint) => (await fetch(`http://${info.address}${endpoint}`, { method, headers: { Authorization: `Bearer ${info.token}` } }));
+  const begun = Date.now();
+  assert.ok([200, 202].includes((await request('POST', '/api/runtime/shutdown/begin')).status));
+  let last;
+  for (let attempt = 0; attempt < 100 && !(last?.state === 'stopped'); attempt++) {
+    try { last = await (await request('GET', '/api/runtime/status')).json(); } catch { if (!host.isRunning()) break; }
+    if (last?.state !== 'stopped') await delay(100);
+  }
+  // 状态确认 stopped 或宿主在确认后随即退出，二者都算有界收尾；失败或被强制放弃必须为空。
+  if (last) { assert.equal(last.shutdownFailed, false); assert.deepEqual(last.shutdownForcedResources, []); }
+  assert.ok(await host.waitForExit(10000), '宿主应在停读后退出');
+  assert.ok(Date.now() - begun < 20000);
+});

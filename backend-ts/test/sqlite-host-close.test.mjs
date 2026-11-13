@@ -99,3 +99,34 @@ test('后段资源关闭失败同样记录资源键',async()=>{
  await assert.rejects(closeSqliteHostResources({wechat:{close:async()=>{throw new Error('x');}},storage:{close:async()=>{}}}),error=>[...error.resources].join()==='wechat');
  await assert.rejects(closeSqliteHostResources({storage:{close:async()=>{throw new Error('x');}}}),error=>[...error.resources].join()==='storage');
 });
+
+const quick={domains:30,wechat:30,models:30,storage:30};
+test('领域关闭挂住时到期强制继续，仍按序关闭共享资源并报告被强制的领域',async()=>{
+ const calls=[],never=new Promise(()=>{});
+ const report=await closeSqliteHostResources({
+  history:{close:()=>never},contacts:{close:async()=>{calls.push('contacts');}},
+  wechat:{close:async()=>{calls.push('wechat');}},models:{close:async()=>{calls.push('models');}},storage:{close:async()=>{calls.push('storage');}},
+ },{deadlines:quick});
+ assert.deepEqual(report.forced,['history']);assert.deepEqual(calls,['contacts','wechat','models','storage']);
+});
+test('领域明确关闭失败优先于超时：仍抛出，且不关闭共享存储',async()=>{
+ const failure=new Error('合成联系人关闭失败'),calls=[];
+ await assert.rejects(closeSqliteHostResources({
+  history:{close:()=>new Promise(()=>{})},contacts:{close:async()=>{throw failure;}},
+  storage:{close:async()=>{calls.push('storage');}},
+ },{deadlines:quick}),error=>error instanceof AggregateError&&error.errors.length===1&&error.errors[0]===failure);
+ assert.deepEqual(calls,[]);
+});
+test('微信、模型、存储任一阶段挂住都到期返回，并逐项报告',async()=>{
+ const never=()=>new Promise(()=>{}),calls=[];
+ const report=await closeSqliteHostResources({
+  wechat:{close:never},models:{close:never},storage:{close:never},
+ },{deadlines:quick});
+ assert.deepEqual(report.forced,['wechat','models','storage']);
+ const normal=await closeSqliteHostResources({models:{close:async()=>{calls.push('models');}},storage:{close:async()=>{calls.push('storage');}}});
+ assert.deepEqual(normal.forced,[]);assert.deepEqual(calls,['models','storage']);
+});
+test('资源自报的强制项并入报告，不影响停读成功',async()=>{
+ const report=await closeSqliteHostResources({models:{close:async()=>({forced:['modelOrphans']})},storage:{close:async()=>{}}},{deadlines:quick});
+ assert.deepEqual(report.forced,['modelOrphans']);
+});

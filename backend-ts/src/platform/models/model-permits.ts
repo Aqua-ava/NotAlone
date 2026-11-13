@@ -16,12 +16,14 @@ interface Waiter {
   signal?: AbortSignal;
   cancel: () => void;
 }
+/** 退出排空结果：计数只含固定数字，不含任何业务内容。 */
+export interface ModelDrainReport { timedOut: boolean; inFlight: number; orphaned: number }
 export class ModelPermitArbiter {
   private queue: Waiter[] = [];
   private active = new Map<string, { kind: ModelWorkKind; orphan: boolean }>();
   private paused = false;
   private stopped = false;
-  private drainWaiters: (() => void)[] = [];
+  private drainWaiters: { ignoreOrphans: boolean; resolve: () => void }[] = [];
   readonly backgroundLimit: number;
   constructor(backgroundLimit = 1) {
     this.backgroundLimit = backgroundLimit;
@@ -58,9 +60,43 @@ export class ModelPermitArbiter {
       this.dispatch();
     });
   }
+  /** 运行期全局暂停：等待全部许可（含孤儿）真实结算；孤儿在运行期继续冻结所属类别。 */
   pauseAndDrain(): Promise<void> {
     this.paused = true;
-    return this.active.size === 0 ? Promise.resolve() : new Promise(resolve => this.drainWaiters.push(resolve));
+    return this.drainedFor(false) ? Promise.resolve() : new Promise(resolve => this.drainWaiters.push({ ignoreOrphans: false, resolve }));
+  }
+  /**
+   * 退出专用排空：只等待真正在途的调用，孤儿不再等待（进程内没有任何路径会结算孤儿，其权威记录在 SQLite 台账，
+   * 下次启动仍按未知调用阻塞，退出本身即证明执行者已停止）；真实在途调用也有上限，到期返回而不是无限等待。
+   * 排空期间在途调用转为孤儿会立即解除等待。
+   */
+  drainForExit(timeoutMs: number): Promise<ModelDrainReport> {
+    this.paused = true;
+    if (this.drainedFor(true)) return Promise.resolve(this.drainReport(false));
+    return new Promise(resolve => {
+      const waiter = { ignoreOrphans: true, resolve: () => { clearTimeout(timer); resolve(this.drainReport(false)); } };
+      const timer = setTimeout(() => {
+        const index = this.drainWaiters.indexOf(waiter);
+        if (index >= 0) this.drainWaiters.splice(index, 1);
+        resolve(this.drainReport(true));
+      }, timeoutMs);
+      this.drainWaiters.push(waiter);
+    });
+  }
+  private drainedFor(ignoreOrphans: boolean): boolean {
+    for (const value of this.active.values()) if (!(ignoreOrphans && value.orphan)) return false;
+    return true;
+  }
+  private drainReport(timedOut: boolean): ModelDrainReport {
+    const values = [...this.active.values()];
+    return { timedOut, inFlight: values.filter(x => !x.orphan).length, orphaned: values.filter(x => x.orphan).length };
+  }
+  private flushDrainWaiters(): void {
+    if (!this.drainWaiters.length) return;
+    const ready = this.drainWaiters.filter(waiter => this.drainedFor(waiter.ignoreOrphans));
+    if (!ready.length) return;
+    this.drainWaiters = this.drainWaiters.filter(waiter => !ready.includes(waiter));
+    for (const waiter of ready) waiter.resolve();
   }
   resume(): void {
     if (this.stopped) throw new Error('model_work_stopped');
@@ -99,10 +135,10 @@ export class ModelPermitArbiter {
       settle: () => {
         if (!this.active.has(id)) return;
         this.active.delete(id);
-        if (!this.active.size) for (const resolve of this.drainWaiters.splice(0)) resolve();
+        this.flushDrainWaiters();
         this.dispatch();
       },
-      orphan: () => { if (this.active.has(id)) state.orphan = true; },
+      orphan: () => { if (this.active.has(id)) { state.orphan = true; this.flushDrainWaiters(); } },
     });
   }
 }

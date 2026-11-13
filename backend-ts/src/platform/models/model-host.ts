@@ -2,7 +2,7 @@
 import { mkdir, lstat } from 'node:fs/promises';
 import { join, resolve, isAbsolute } from 'node:path';
 import { sha256 } from '../../platform/sha256.ts';
-import { ModelPermitArbiter } from './model-permits.ts';
+import { ModelPermitArbiter, type ModelDrainReport } from './model-permits.ts';
 import { createModelPermitPort, type ModelPermitAccounting } from './model-permit-port.ts';
 export interface ModelHostOptions {
   runtimeEnvironment: Readonly<NodeJS.ProcessEnv>;
@@ -10,6 +10,8 @@ export interface ModelHostOptions {
   infoPath: string;
   envFilePath: string;
   accounting?: ModelPermitAccounting;
+  /** 退出时等待真实在途调用的上限（毫秒）；孤儿不等待。默认 3 秒。 */
+  drainTimeoutMs?: number;
 }
 export function modelBackgroundConcurrency(environment: Readonly<NodeJS.ProcessEnv>): number {
   const raw = environment.NOTALONE_EXTRACTION_BATCH_CONCURRENCY;
@@ -53,13 +55,19 @@ export async function startModelHost(options: ModelHostOptions) {
   const arbiter=new ModelPermitArbiter(modelBackgroundConcurrency(options.runtimeEnvironment));
   await mkdir(directory,{recursive:true,mode:0o700});await privateDirectory(directory);
   const permit=createModelPermitPort(arbiter,options.accounting);
-  let closing:Promise<void>|undefined;
+  let closing:Promise<void>|undefined,drainReport:ModelDrainReport|undefined;
+  const drainTimeoutMs=options.drainTimeoutMs??3000;
   return {
     arbiter,identityHome,permit,
+    /** 最近一次关闭的排空结果；未关闭前为空。 */
+    get drainReport(){return drainReport;},
     async shutdown(){arbiter.stop();},
-    /** 先停业务与排队者；已派发的真实调用及孤儿仍须结算，不能借关闭清除。 */
+    /**
+     * 先停业务与排队者，再等待真正在途的调用结算（有上限）。孤儿不等待：它的权威记录在 SQLite 台账，
+     * 进程退出本身证明执行者已停止；运行期孤儿仍冻结所属类别，不借退出清除。
+     */
     close(stopNewWork:()=>Promise<void>):Promise<void>{
-      return closing??=(async()=>{arbiter.stop();await stopNewWork();await arbiter.pauseAndDrain();})()
+      return closing??=(async()=>{arbiter.stop();await stopNewWork();drainReport=await arbiter.drainForExit(drainTimeoutMs);})()
         .catch(error=>{closing=undefined;throw error;});
     },
   };

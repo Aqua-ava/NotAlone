@@ -13,7 +13,7 @@ const {BackendHost}=await import(path.join(directory,'host.mjs'));
 after(()=>rm(directory,{recursive:true,force:true}));
 const ownership=Object.fromEntries(['contacts','deletion','wechat','skills','skillLearning','imports','taskApi','taskManagement','tasks','crossDomainDeletion','wechatBodySync','wechatIncremental','wechatHistory','foregroundLocation','contactContext','memory','expressionPreferences'].map(name=>[name,'typescript']));
 
-async function fixture(t,{protocol=true,failFirst=false,loseBegin=false,loseFirstStatus=false,expectedStorage=false,storageIdentity}={}) {
+async function fixture(t,{protocol=true,failFirst=false,loseBegin=false,loseFirstStatus=false,expectedStorage=false,storageIdentity,stuck=false,owned=false,shutdownTimeoutMs,terminateResult=true}={}) {
   const userData=await mkdtemp(path.join(directory,'user-'));
   let state='running',shutdownFailed=false,attempts=0,legacy=0,release;
   const pending=new Promise(resolve=>{release=resolve;});
@@ -26,7 +26,7 @@ async function fixture(t,{protocol=true,failFirst=false,loseBegin=false,loseFirs
       else assert.equal(req.url,'/api/runtime/shutdown/begin');
       attempts++;state='stopping';began();
       if(failFirst&&attempts===1)shutdownFailed=true;
-      else {shutdownFailed=false;void pending.then(()=>{state='stopped';});}
+      else {shutdownFailed=false;if(!stuck)void pending.then(()=>{state='stopped';});}
       if(loseBegin){res.destroy();return;}
       if(req.url==='/api/runtime/shutdown'){await pending;state='stopped';reply(200,{state,runtime:'dsh'});return;}
       reply(202,{state,runtime:'dsh'});return;
@@ -40,10 +40,13 @@ async function fixture(t,{protocol=true,failFirst=false,loseBegin=false,loseFirs
   await writeFile(path.join(userData,'backend.info'),`address=127.0.0.1:${server.address().port}\ntoken=synthetic_token\npid=${process.pid}\n`,{mode:0o600});
   const host=new BackendHost(userData,expectedStorage?async config=>{
     config.sqlite={userData,expectedDatabaseId:'synthetic-db',expectedOwnerId:'synthetic-owner',role:'test',capabilities:['contacts']};
-  }:undefined);
+  }:undefined,undefined,undefined,shutdownTimeoutMs?{shutdownTimeoutMs}:undefined);
   t.after(async()=>{release();await host.stop();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));});
   await host.connect();if(!expectedStorage)assert.equal(host.getState().phase,'connected');
-  return {host,started,release,counts:()=>({attempts,legacy})};
+  let terminated=0,running=true;
+  // 模拟本 App 自有的后端进程：pid 与握手一致才会被视为同一进程。
+  if(owned)host.ownedChild={pid:process.pid,isRunning:()=>running,waitForExit:async()=>!running,terminate:async()=>{terminated++;if(terminateResult)running=false;return terminateResult;}};
+  return {host,started,release,counts:()=>({attempts,legacy}),terminated:()=>terminated};
 }
 
 test('异步停读在排空期间保持stopping，原目标确认后才完成退出',async t=>{
@@ -113,4 +116,33 @@ test('复用服务身份与资料文件均有效时直接连接，停读后仍�
   const f=await fixture(t,{expectedStorage:true,storageIdentity:{databaseId:'synthetic-db',ownerId:'synthetic-owner',available:true}});
   assert.equal(f.host.getState().phase,'connected');assert.equal(f.host.getState().reused,true);
   f.release();assert.equal(await f.host.stop(),true);
+});
+
+test('自有后端超过桌面等待上限仍在停读，强制回收进程后完成退出',async t=>{
+  const f=await fixture(t,{stuck:true,owned:true,shutdownTimeoutMs:300});
+  const stopping=f.host.stop();await f.started;
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal(f.terminated(),0,'上限之前只等待、不强杀');assert.equal(f.host.getState().phase,'stopping');
+  assert.equal(await stopping,true);
+  assert.equal(f.terminated(),1);assert.equal(f.host.getState().phase,'stopped');assert.equal(f.counts().attempts,1);
+});
+
+test('复用的非自有后端超时不强杀，保留重试入口',async t=>{
+  const f=await fixture(t,{stuck:true,shutdownTimeoutMs:300});
+  assert.equal(await f.host.stop(),false);
+  assert.equal(f.host.getState().phase,'shutdown-failed');assert.equal(f.host.getState().canRetryShutdown,true);
+  assert.equal(f.terminated(),0);
+});
+
+test('后端明确报告停读失败时不强杀自有进程，仍保留重试入口',async t=>{
+  const f=await fixture(t,{failFirst:true,owned:true,shutdownTimeoutMs:300});
+  assert.equal(await f.host.stop(),false);
+  assert.equal(f.host.getState().phase,'shutdown-failed');assert.equal(f.terminated(),0);
+  f.release();assert.equal(await f.host.stop(),true);
+});
+
+test('强制回收失败时不宣称已停读，保留重试入口',async t=>{
+  const f=await fixture(t,{stuck:true,owned:true,shutdownTimeoutMs:300,terminateResult:false});
+  assert.equal(await f.host.stop(),false);
+  assert.equal(f.terminated(),1);assert.equal(f.host.getState().phase,'shutdown-failed');assert.equal(f.host.getState().canRetryShutdown,true);
 });

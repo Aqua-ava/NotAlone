@@ -46,3 +46,15 @@ test('同宿主一个前台与三个后台共用仲裁但不借槽',async t=>{
  assert.equal(host.arbiter.snapshot().foregroundActive,true);assert.equal(host.arbiter.snapshot().backgroundActive,3);
  for(const permit of permits)permit.settle();await host.close(async()=>{});
 });
+test('退出时孤儿许可不阻塞关闭，排空报告保留孤儿数量',async t=>{
+ const host=await startModelHost(await options(t));
+ const permit=await host.arbiter.acquire('background');permit.orphan();
+ await host.close(async()=>{});
+ assert.deepEqual(host.drainReport,{timedOut:false,inFlight:0,orphaned:1});
+});
+test('关闭时真实在途调用超过排空上限，关闭仍返回并标记超时',async t=>{
+ const host=await startModelHost({...await options(t),drainTimeoutMs:30});
+ await host.arbiter.acquire('foreground');
+ await host.close(async()=>{});
+ assert.deepEqual(host.drainReport,{timedOut:true,inFlight:1,orphaned:0});
+});

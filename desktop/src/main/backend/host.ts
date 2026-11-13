@@ -2,7 +2,7 @@ import { rm } from 'node:fs/promises';
 import type { BackendState } from '../../shared/backend-bridge';
 import { BackendFailure, readConnection } from './connection';
 import { startupErrorCode } from '../../../../backend-ts/src/startup-diagnostics';
-import { BackendStorageUnavailable, RetiredBackendRuntime, RuntimeClient } from './runtime-client';
+import { BackendShutdownTimeout, BackendStorageUnavailable, RetiredBackendRuntime, RuntimeClient } from './runtime-client';
 import { loadBackendConfiguration, type BackendConfiguration } from './config';
 import { OwnedBackendProcess, type OwnedProcess } from './process';
 import { BackendRequestFailure, type JsonRequest } from './json-client';
@@ -65,7 +65,8 @@ export class BackendHost {
   constructor(private readonly userData: string,
     private readonly beforeConnect?: (config: BackendConfiguration, canStart: () => boolean) => Promise<void>,
     private readonly resourcesDirectory?: string,
-    private readonly afterShutdown?: () => Promise<boolean>) {}
+    private readonly afterShutdown?: () => Promise<boolean>,
+    private readonly options?: { shutdownTimeoutMs?: number }) {}
 
   getState(): BackendState {
     return { ...this.state, canSaveStartupPaths: !this.configurationSave && this.configurationCanChange(),
@@ -328,7 +329,7 @@ export class BackendHost {
       // 原自建进程仍存活时不移交另一实例；退出仍须回收本 App 已持有的运行时。
       if (this.ownedChild?.isRunning() && connection.pid !== this.ownedChild.pid) throw new BackendFailure('backend_handshake_invalid');
       const client = new RuntimeClient(connection, config.runtime, config.sqlite?.expectedOwnerId
-        ? {databaseId: config.sqlite.expectedDatabaseId, ownerId: config.sqlite.expectedOwnerId} : undefined);
+        ? {databaseId: config.sqlite.expectedDatabaseId, ownerId: config.sqlite.expectedOwnerId} : undefined, this.options?.shutdownTimeoutMs);
       try {
         if (await client.status() !== 'running') throw new BackendFailure('backend_connection_failed');
       } catch (error) {
@@ -357,7 +358,7 @@ export class BackendHost {
       if (started) {
         if (started.pid !== this.ownedChild.pid) throw new BackendFailure('backend_handshake_invalid');
         const client = new RuntimeClient(started, config.runtime, config.sqlite?.expectedOwnerId
-          ? {databaseId: config.sqlite.expectedDatabaseId, ownerId: config.sqlite.expectedOwnerId} : undefined);
+          ? {databaseId: config.sqlite.expectedDatabaseId, ownerId: config.sqlite.expectedOwnerId} : undefined, this.options?.shutdownTimeoutMs);
         if (await client.status() !== 'running') throw new BackendFailure('backend_connection_failed');
         this.target = client;
         if (!this.closing) this.publish({ phase: 'connected', reused: false, errorCode: undefined, canRetryConnection: false });
@@ -391,12 +392,17 @@ export class BackendHost {
     try {
       // 客户端只有取得原实例的 stopped 确认才返回；服务可能随后退出，不再强求一次 GET。
       if (await this.target.shutdown() !== 'stopped') throw new BackendFailure('backend_shutdown_unconfirmed');
-    } catch {
+    } catch (error) {
       try {
         if (await this.target.status() !== 'stopped') throw new BackendFailure('backend_shutdown_unconfirmed');
       } catch {
-        this.publish({ phase: 'shutdown-failed', errorCode: 'backend_shutdown_unconfirmed', canRetryShutdown: true });
-        return false;
+        // 后端自身各阶段都有硬上限；仍超过桌面等待上限，说明其停读流程无法自行完成。仅对本 App 自有进程
+        // 升级为 SIGTERM→SIGKILL 回收（SQLite WAL 崩溃安全，未结算的模型调用留在台账由用户处理）；
+        // 后端明确报告失败、复用的他方进程或回收失败都保留重试入口，不宣称已停读。
+        if (!(error instanceof BackendShutdownTimeout && await this.reclaimOwnedChild())) {
+          this.publish({ phase: 'shutdown-failed', errorCode: 'backend_shutdown_unconfirmed', canRetryShutdown: true });
+          return false;
+        }
       }
     }
     if (this.ownedChild && this.target.connection.pid === this.ownedChild.pid) {
@@ -406,6 +412,13 @@ export class BackendHost {
       }
     }
     return this.finishShutdown();
+  }
+
+  /** 仅当认证目标就是本 App 自有子进程时回收；回收确认退出才返回 true。 */
+  private async reclaimOwnedChild(): Promise<boolean> {
+    const child = this.ownedChild;
+    if (!child || this.target?.connection.pid !== child.pid) return false;
+    return child.terminate().catch(() => false);
   }
 
   private async finishShutdown(): Promise<boolean> {

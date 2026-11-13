@@ -5,7 +5,12 @@ import { openMessageStream, type MessageStreamCallbacks } from './message-stream
 
 type RuntimeState = 'running' | 'stopping' | 'stopped';
 type RuntimeReply = {state: RuntimeState; shutdownFailed: boolean; shutdownProtocol?: 'poll-v1'};
-const shutdownTimeoutMs = 30_000;
+const defaultShutdownTimeoutMs = 30_000;
+// 后端已分阶段设置硬上限（合计约 23 秒）；超过桌面等待上限仍无结果，说明其停读流程无法自行完成。
+// 与“后端明确报告失败”区分：只有本类才允许对本 App 自有进程升级为强制回收。
+export class BackendShutdownTimeout extends BackendFailure {
+  constructor() { super('backend_shutdown_unconfirmed'); }
+}
 export class RetiredBackendRuntime extends BackendFailure {
   constructor() { super('backend_connection_failed'); }
 }
@@ -19,7 +24,7 @@ export class RuntimeClient {
   private readonly streams = new Set<AbortController>();
   private shutdownProtocol: 'poll-v1' | undefined;
   constructor(readonly connection: BackendConnection, private readonly expectedRuntime?: 'dsh',
-    private readonly expectedStorage?: {databaseId: string; ownerId: string}) { this.transport = new JsonClient(connection); }
+    private readonly expectedStorage?: {databaseId: string; ownerId: string}, private readonly shutdownTimeoutMs = defaultShutdownTimeoutMs) { this.transport = new JsonClient(connection); }
 
   async status(): Promise<RuntimeState> {
     const reply = await this.perform('GET', '/api/runtime/status', 4000);
@@ -27,7 +32,7 @@ export class RuntimeClient {
     return reply.state;
   }
   async shutdown(): Promise<RuntimeState> {
-    const deadline = Date.now() + shutdownTimeoutMs;
+    const deadline = Date.now() + this.shutdownTimeoutMs;
     // 能力只来自原目标的认证状态；旧后台继续使用原同步停读接口。
     const endpoint = this.shutdownProtocol === 'poll-v1' ? '/api/runtime/shutdown/begin' : '/api/runtime/shutdown';
     let reply: RuntimeReply | undefined;
@@ -36,12 +41,13 @@ export class RuntimeClient {
     for (;;) {
       if (reply?.shutdownFailed) throw new BackendFailure('backend_shutdown_unconfirmed');
       if (reply?.state === 'stopped') return reply.state;
-      if (reply?.state === 'running' || Date.now() >= deadline) throw new BackendFailure('backend_shutdown_unconfirmed');
+      if (reply?.state === 'running') throw new BackendFailure('backend_shutdown_unconfirmed');
+      if (Date.now() >= deadline) throw new BackendShutdownTimeout();
       await new Promise(resolve => setTimeout(resolve, Math.min(200, deadline - Date.now())));
-      if (Date.now() >= deadline) throw new BackendFailure('backend_shutdown_unconfirmed');
+      if (Date.now() >= deadline) throw new BackendShutdownTimeout();
       // 接纳停读后仅查询原连接，不重发停止、不读取新握手、不把失联当成功。
       try { reply = await this.perform('GET', '/api/runtime/status', Math.min(4000, deadline - Date.now())); }
-      catch { if (Date.now() >= deadline) throw new BackendFailure('backend_shutdown_unconfirmed'); }
+      catch { if (Date.now() >= deadline) throw new BackendShutdownTimeout(); }
     }
   }
 

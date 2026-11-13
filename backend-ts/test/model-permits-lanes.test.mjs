@@ -99,3 +99,35 @@ test('stop全局拒绝两个类别等待者，保留在途直到全部结算', a
   foreground.permit.settle(); await turn(); assert.equal(drained, false);
   background.permit.settle(); await drain; assert.throws(() => arbiter.resume(), /model_work_stopped/);
 });
+
+test('退出排空不等待孤儿：只剩孤儿时立即完成并报告数量', async t => {
+  const arbiter = new ModelPermitArbiter(2), request = requests(t, arbiter);
+  const lost = request('background'); await lost.done; lost.permit.orphan();
+  arbiter.stop();
+  assert.deepEqual(await arbiter.drainForExit(1000), {timedOut: false, inFlight: 0, orphaned: 1});
+});
+
+test('退出排空开始后在途调用转为孤儿，排空随即完成', async t => {
+  const arbiter = new ModelPermitArbiter(2), request = requests(t, arbiter);
+  const running = request('background'); await running.done; arbiter.stop();
+  let done = false; const draining = arbiter.drainForExit(5000).then(report => { done = true; return report; });
+  await turn(); assert.equal(done, false, '真实在途调用仍须等待');
+  running.permit.orphan();
+  assert.deepEqual(await draining, {timedOut: false, inFlight: 0, orphaned: 1});
+});
+
+test('退出排空对真实在途调用有上限：到期返回而不是无限等待', async t => {
+  const arbiter = new ModelPermitArbiter(1), request = requests(t, arbiter);
+  const running = request('foreground'); await running.done; arbiter.stop();
+  assert.deepEqual(await arbiter.drainForExit(30), {timedOut: true, inFlight: 1, orphaned: 0});
+  running.permit.settle(); // 迟到的结算不再有等待者，也不抛错
+  assert.deepEqual(await arbiter.drainForExit(30), {timedOut: false, inFlight: 0, orphaned: 0});
+});
+
+test('运行期全局暂停仍等待孤儿，孤儿冻结语义不因退出排空改变', async t => {
+  const arbiter = new ModelPermitArbiter(1), request = requests(t, arbiter);
+  const lost = request('background'); await lost.done; lost.permit.orphan();
+  let drained = false; const drain = arbiter.pauseAndDrain().then(() => { drained = true; });
+  await turn(); assert.equal(drained, false);
+  lost.permit.settle(); await drain; assert.equal(drained, true);
+});

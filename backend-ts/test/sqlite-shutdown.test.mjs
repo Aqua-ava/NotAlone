@@ -34,3 +34,14 @@ test('停读失败暴露固定的资源键供状态诊断，重试开始即清�
  const other=new SqliteHostShutdown(async()=>{throw new Error('任意错误');});
  await assert.rejects(other.stop());assert.deepEqual(other.failedResources,[]);
 });
+
+test('停读报告的强制项只保留固定名称，重试开始即清空',async()=>{
+ let calls=0;
+ const shutdown=new SqliteHostShutdown(async()=>{if(++calls===1)return {forced:['history','合成私密名称','modelOrphans']};});
+ assert.deepEqual(shutdown.forcedResources,[]);
+ await shutdown.stop();
+ assert.equal(shutdown.state,'stopped');assert.deepEqual([...shutdown.forcedResources],['history','modelOrphans']);
+ const retry=new SqliteHostShutdown(async()=>{if(++calls===2)throw new Error('合成失败');return {forced:['storage']};});
+ await assert.rejects(retry.stop());assert.deepEqual(retry.forcedResources,[],'失败时不报告强制项');
+ retry.begin();await retry.stop();assert.deepEqual([...retry.forcedResources],['storage']);
+});
