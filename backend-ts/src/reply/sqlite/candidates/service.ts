@@ -19,7 +19,7 @@ export class SqliteReplyCandidateService {
  /** 仅保存尚未进入模型执行的失败回执；死存储不能写入时供原请求核对，重启后由持久恢复结算。 */
  preparationFailed(input:{contactId:string;discussionId:string;requestKey:string;startedAt:number},errorCode:'discussion_preparation_timeout'|'discussion_storage_interrupted'):void{
   const key=JSON.stringify([input.contactId,input.discussionId,input.requestKey]);
-  this.preparationFailures.set(key,{requestKey:input.requestKey,phase:'failed',sent:false,errorCode,retryable:true,startedAt:input.startedAt,finishedAt:Date.now()});
+  this.preparationFailures.set(key,{requestKey:input.requestKey,phase:'failed',sent:false,abandoned:false,errorCode,retryable:true,startedAt:input.startedAt,finishedAt:Date.now()});
   if(this.preparationFailures.size>64)this.preparationFailures.delete(this.preparationFailures.keys().next().value!);
  }
  async status(contactId:string,discussionId:string,requestKey:string):Promise<ReplyGenerationStatus>{

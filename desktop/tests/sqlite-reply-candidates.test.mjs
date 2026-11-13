@@ -532,11 +532,26 @@ test('聊天读取恢复失败不保留旧选稿及其派生草稿，新生成�
  const requests=f.commands.filter(c=>c.action==='generate');assert.equal(requests[0].carriedSelectionId,ids.selection);assert.equal(requests[1].carriedSelectionId,undefined);assert.equal(requests[1].text,'重新写下的独立想法');
 });
 
+test('已发送但已收到响应的失败不说成自动放弃，仍可用新请求重新生成',{timeout:30000},async t=>{
+ const f=await panel(t,async operation=>{
+  if(operation.action==='read')return pageData();
+  if(operation.action==='status')return {requestKey:operation.requestKey,phase:'failed',sent:true,abandoned:false,errorCode:'reply_output_invalid',retryable:true,startedAt:1000,finishedAt:2000};
+  if(operation.action==='generate')throw new Error('本次生成未完成。');
+  throw new Error('未授权的合成页面操作');
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'});
+ await region.getByRole('textbox',{name:'有什么想说的',exact:true}).fill('响应无效的合成想法');
+ await region.getByRole('button',{name:'帮我表达',exact:true}).click();
+ await expect(region.getByRole('alert')).toHaveText('本次生成失败，没有保存候选。');
+ await expect(region.getByRole('alert')).not.toContainText('自动放弃');await expect(region.getByRole('alert')).not.toContainText('没有收到结果');
+ await expect(region.getByRole('button',{name:'重新生成',exact:true})).toBeEnabled();
+});
+
 test('模型请求已自动放弃时说明费用风险，重新生成使用新请求身份',{timeout:30000},async t=>{
  let generated=0;
  const f=await panel(t,async operation=>{
   if(operation.action==='read')return pageData();
-  if(operation.action==='status')return {requestKey:operation.requestKey,phase:'failed',sent:true,errorCode:'discussion_generation_timeout',retryable:true,startedAt:1000,finishedAt:2000};
+  if(operation.action==='status')return {requestKey:operation.requestKey,phase:'failed',sent:true,abandoned:true,errorCode:'discussion_generation_timeout',retryable:true,startedAt:1000,finishedAt:2000};
   if(operation.action==='generate'){if(++generated===1)throw new Error('本次生成未完成。');return receipt(operation);}
   throw new Error('未授权的合成页面操作');
  });
@@ -670,9 +685,12 @@ test('重读历史失败显示准备超时、资料服务中断与应用中断�
   ['discussion_preparation_timeout',false,'整理资料超时，尚未发给模型。'],
   ['discussion_storage_interrupted',false,'本机资料服务在准备时中断，尚未发给模型。'],
   ['runtime_interrupted',false,'应用在整理资料时中断，尚未发给模型。'],
-  ['runtime_interrupted',true,'已发出但没有收到结果，已自动放弃；可重新生成，旧请求可能已产生费用。'],
+  ['runtime_interrupted',true,'已发出但没有收到结果，已自动放弃；可重新生成，旧请求可能已产生费用。',true],
+  ['discussion_generation_failed',true,'已发出但没有收到结果，已自动放弃；可重新生成，旧请求可能已产生费用。',true],
+  ['runtime_interrupted',true,'应用在生成期间中断，请重新生成。',false],
+  ['reply_output_invalid',true,'本次候选生成失败，没有可选正文。',false],
  ];
- const data={coverage:{phase:'complete'},requests:cases.map(([generationErrorCode,generationSent],index)=>({requestId:`${index+1}1111111-1111-4111-8111-111111111111`,generationState:'failed',generationErrorCode,generationSent,coverageWarning:null,sourceState:'unavailable',candidates:[],selections:[],loadedSkills:[]}))};
+ const data={coverage:{phase:'complete'},requests:cases.map(([generationErrorCode,generationSent,,generationAbandoned],index)=>({requestId:`${index+1}1111111-1111-4111-8111-111111111111`,generationState:'failed',generationErrorCode,generationSent,...(generationAbandoned===undefined?{}:{generationAbandoned}),coverageWarning:null,sourceState:'unavailable',candidates:[],selections:[],loadedSkills:[]}))};
  const f=await panel(t,async()=>data),region=f.page.getByRole('region',{name:'表达工作区'});
  await expect(region.locator('details.sqlite-candidate-request')).toHaveCount(cases.length);
  for(let index=0;index<cases.length;index++){

@@ -41,5 +41,5 @@ export interface ReplyCandidateView extends DiscussionScope {
 }
 export type ReplyGenerationPhase='not_found'|'preparing'|'queued'|'generating'|'saving'|'committed'|'failed'|'unknown';
 export interface ReplyGenerationStatus {
- requestKey:string;phase:ReplyGenerationPhase;sent:boolean;errorCode:string|null;retryable:boolean;startedAt:number|null;finishedAt:number|null;
+ requestKey:string;phase:ReplyGenerationPhase;sent:boolean;/** 已发出但未收到结果、被本机自动放弃的未知调用（ADR-183）；已收到响应的失败不属于此类。 */abandoned:boolean;errorCode:string|null;retryable:boolean;startedAt:number|null;finishedAt:number|null;
 }

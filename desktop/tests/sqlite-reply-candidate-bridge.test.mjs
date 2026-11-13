@@ -143,10 +143,10 @@ test('已知失败按安全中文状态映射，未知错误不将供应商正�
 
 test('历史失败仅接收无正文错误码与真实发送标记，拒绝异常正文及额外诊断字段',async t=>{
  const f=fixture(await modules());t.after(()=>f.controller.close());
- const request={...pageData().requests[0],generationState:'failed',generationErrorCode:'discussion_storage_interrupted',generationSent:false,sourceState:'unavailable',candidates:[],selections:[],loadedSkills:[]};
+ const request={...pageData().requests[0],generationState:'failed',generationErrorCode:'discussion_storage_interrupted',generationSent:false,generationAbandoned:false,sourceState:'unavailable',candidates:[],selections:[],loadedSkills:[]};
  f.respond(async()=>({generation:3,data:{...pageData(),requests:[request]}}));
  assert.deepEqual((await f.bridge.candidates.execute({...scope,action:'read'})).requests[0],request);
- for(const extra of [{generationErrorCode:'合成异常正文 /private/path'},{generationErrorCode:'a'.repeat(81)},{generationSent:'false'},{errorDetail:'合成供应商正文'},{stack:'合成私密调用堆栈'}]){
+ for(const extra of [{generationErrorCode:'合成异常正文 /private/path'},{generationErrorCode:'a'.repeat(81)},{generationSent:'false'},{generationAbandoned:'true'},{errorDetail:'合成供应商正文'},{stack:'合成私密调用堆栈'}]){
   f.respond(async()=>({generation:3,data:{...pageData(),requests:[{...request,...extra}]}}));
   await assert.rejects(f.bridge.candidates.execute({...scope,action:'read'}),/候选结果尚未确认/);
  }
@@ -177,6 +177,11 @@ test('候选状态沿固定只读路径返回无正文进度，拒绝夹带私�
  assert.equal(f.requests[0].path,`/api/contacts/${ids.contact}/assistant-sessions/${ids.session}/reply-candidates/status?request_key=${ids.request}`);
  assert.equal(f.requests[0].timeoutMs,8000);assert.equal(f.requests[0].maxResponseBytes,4096);
  f.respond(async()=>({generation:3,data:{...status,text:'不应进入IPC的合成私密正文'}}));
+ await assert.rejects(f.bridge.candidates.execute({...scope,action:'status',requestKey:ids.request}),/候选结果尚未确认/);
+ const abandoned={...status,phase:'failed',sent:true,abandoned:true,errorCode:'discussion_generation_timeout',retryable:true,finishedAt:2000};
+ f.respond(async()=>({generation:3,data:abandoned}));
+ assert.deepEqual(await f.bridge.candidates.execute({...scope,action:'status',requestKey:ids.request}),abandoned);
+ f.respond(async()=>({generation:3,data:{...abandoned,abandoned:'true'}}));
  await assert.rejects(f.bridge.candidates.execute({...scope,action:'status',requestKey:ids.request}),/候选结果尚未确认/);
 });
 

@@ -8,8 +8,9 @@ type WorkspaceInput={action:'express'|'suggest';draftText:string;tone:RewriteTon
 type CandidateRequest=SqliteCandidatePage['requests'][number];
 const defaultOptions=()=>({tone:'original' as RewriteTone,instruction:'',contextText:'',includeRelationshipContext:true});
 const progressLabel=(phase:SqliteCandidateStatus['phase'])=>({not_found:'正在接纳本次请求…',preparing:'正在整理本次资料…',queued:'正在等待生成…',generating:'正在等待模型回复…',saving:'正在保存候选…',committed:'正在读取已保存候选…',failed:'正在核对本次结果…',unknown:'正在核对本次结果…'}[phase]);
-function interruptionMessage(code:string|null|undefined,sent:boolean|undefined):string|undefined{
- if(sent===true)return '已发出但没有收到结果，已自动放弃；可重新生成，旧请求可能已产生费用。';
+function interruptionMessage(code:string|null|undefined,sent:boolean|undefined,abandoned:boolean|undefined):string|undefined{
+ // 仅本机确认“已发出但未收到结果”并自动放弃时才这样说；已收到响应的失败同样已发送，不能套用。
+ if(abandoned===true)return '已发出但没有收到结果，已自动放弃；可重新生成，旧请求可能已产生费用。';
  if(code==='discussion_preparation_timeout')return sent===false?'整理资料超时，尚未发给模型。':'本次生成超时，没有保存候选。';
  if(code==='discussion_storage_interrupted')return sent===false?'本机资料服务在准备时中断，尚未发给模型。':'本机资料服务中断，请重新生成。';
  if(code==='runtime_interrupted')return sent===false?'应用在整理资料时中断，尚未发给模型。':'应用在生成期间中断，请重新生成。';
@@ -18,7 +19,7 @@ function statusFailure(status:SqliteCandidateStatus):string{
  if(status.phase==='unknown')return '模型请求已发出，结果暂未确认。请核对原请求。';
  if(status.phase==='not_found')return '尚未找到原请求，请稍后核对。';
  if(status.phase!=='failed')return '原请求仍在处理，请稍后核对。';
- const interruption=interruptionMessage(status.errorCode,status.sent);if(interruption)return interruption;
+ const interruption=interruptionMessage(status.errorCode,status.sent,status.abandoned);if(interruption)return interruption;
  if(status.errorCode==='discussion_source_unavailable'||status.errorCode==='history_source_not_available')return sqliteReplySourceUnavailableMessage;
  if(status.errorCode==='reply_sources_not_ready'&&!status.sent)return '聊天读取暂未恢复，请重试生成。';
  if(status.errorCode?.includes('timeout'))return status.sent?'本次生成超时，没有保存候选。':'整理资料超时，尚未发给模型。';
@@ -235,7 +236,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
    {request.sourceState==='available'&&request.candidates.length>0&&<p className="candidate-skill-usage">{skillUsageLabel(request)}</p>}
    {request.sourceState==='available'&&request.candidates.length>0&&requestOpen(request.requestId,requestIndex,page.requests.length)&&bridge.candidates&&contactId&&sessionId&&<SqliteCandidateReferences key={`${request.requestId}:${referenceRevision}`} bridge={bridge.candidates} scope={{contactId,scopeRevision,sessionId}} request={request} disabled={!available||busy} onUnavailable={()=>{clear();rejectOperation(new Error('本次候选来源已失效，请重新读取。'));}}/>}
    {request.generationState==='unknown'&&<p role="status">本次模型调用结果暂未确认，请等待本机恢复处理。</p>}
-   {request.generationState==='failed'&&!busy&&<p role="status">{interruptionMessage(request.generationErrorCode,request.generationSent)??'本次候选生成失败，没有可选正文。'}</p>}
+   {request.generationState==='failed'&&!busy&&<p role="status">{interruptionMessage(request.generationErrorCode,request.generationSent,request.generationAbandoned)??'本次候选生成失败，没有可选正文。'}</p>}
    {request.sourceState==='unavailable'&&(!request.generationState||request.generationState==='committed'||request.generationState==='invalidated')&&<p role="status">这次候选的来源已失效，正文与依据已撤下。</p>}
    {request.candidates.map((candidate,candidateIndex)=>{const v=inspected[candidate.candidateId]??candidate,parts=edits[v.candidateId]??v.parts;return <article key={v.candidateId} aria-label={`说法${candidateIndex+1}`}>
     <h4>说法 {candidateIndex+1}{v.origin==='manual'&&<span> · 已修改</span>}{v.versionNo!==candidate.versionNo&&<span> · 正在回看第 {v.versionNo} 版（非最新）</span>}</h4>

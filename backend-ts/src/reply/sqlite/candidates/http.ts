@@ -56,6 +56,7 @@ export class SqliteReplyCandidateHttp {
      ...(request.generationState===undefined?{}:{generationState:request.generationState}),
      ...(request.generationErrorCode===undefined?{}:{generationErrorCode:request.generationErrorCode===null?null:sanitizeDiscussionErrorCode(request.generationErrorCode)}),
      ...(typeof request.generationSent==='boolean'?{generationSent:request.generationSent}:{}),
+     ...(typeof request.generationAbandoned==='boolean'?{generationAbandoned:request.generationAbandoned}:{}),
      coverageWarning:request.coverageWarning,
      ...(request.skillWarning===undefined?{}:{skillWarning:request.skillWarning}),
      sourceState:request.sourceState,

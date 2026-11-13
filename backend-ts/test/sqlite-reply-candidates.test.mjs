@@ -123,13 +123,23 @@ test('供应商断线后自动放弃且保留已发送失败，原身份不重�
  const f=await realFixture(t,{content:JSON.stringify({candidates:[{parts:['断线后重新生成的合成候选'],basis:[1]}]}),onRequest:async(_req,res,_body,count)=>{if(count===1){res.destroy();return true;}}}),d=await f.discussions.newDiscussion(f.ids[0]),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
  const input={contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'断线合成请求',confirmedContact:true};await assert.rejects(turns.generate(input),{code:'discussion_generation_failed'});
  const status=await service.status(f.ids[0],d.id,input.requestKey);
- assert.equal(status.phase,'failed');assert.equal(status.sent,true);assert.equal(status.retryable,true);assert.equal(status.errorCode,'discussion_generation_failed');
- const [failed]=await service.view(f.ids[0],d.id);assert.equal(failed.generationState,'failed');assert.equal(failed.generationSent,true);assert.deepEqual(failed.candidates,[]);
+ assert.equal(status.phase,'failed');assert.equal(status.sent,true);assert.equal(status.abandoned,true);assert.equal(status.retryable,true);assert.equal(status.errorCode,'discussion_generation_failed');
+ const [failed]=await service.view(f.ids[0],d.id);assert.equal(failed.generationState,'failed');assert.equal(failed.generationSent,true);assert.equal(failed.generationAbandoned,true);assert.deepEqual(failed.candidates,[]);
  assert.equal(f.requests.length,1,'自动放弃不自动另发模型请求');
  await assert.rejects(turns.generate(input),{code:'discussion_request_stale'});assert.equal(f.requests.length,1,'原请求身份不能重发');
  const fresh={...input,requestKey:randomUUID()};await turns.generate(fresh);assert.equal(f.requests.length,2);
  assert.equal((await service.status(f.ids[0],d.id,fresh.requestKey)).phase,'committed');
  const history=await service.view(f.ids[0],d.id);assert.equal(history[0].requestId,failed.requestId);assert.equal(history[0].generationState,'failed');assert.notEqual(history[1].requestId,failed.requestId);assert.deepEqual(history[1].candidates[0].parts,['断线后重新生成的合成候选']);
+});
+
+test('模型已返回但输出无效的失败已发送却不是自动放弃，状态和历史均不标记已放弃',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
+ const f=await realFixture(t,{content:'这不是合法的候选结构'}),d=await f.discussions.newDiscussion(f.ids[0]),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ const input={contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'输出无效合成请求',confirmedContact:true};await assert.rejects(turns.generate(input));
+ const status=await service.status(f.ids[0],d.id,input.requestKey);
+ assert.equal(status.phase,'failed');assert.equal(status.sent,true);assert.equal(status.abandoned,false,'已收到响应的失败不是被放弃的未知调用');
+ const [failed]=await service.view(f.ids[0],d.id);assert.equal(failed.generationState,'failed');assert.equal(failed.generationSent,true);assert.equal(failed.generationAbandoned,false);
+ assert.equal((await service.status(f.ids[0],d.id,randomUUID())).abandoned,false,'未找到的请求不是已放弃');
 });
 
 test('真实Skill加载独立于选择记录，资格失效后候选正文、依据和实际Skill快照一起撤下',async t=>{
