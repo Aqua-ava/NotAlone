@@ -6,7 +6,7 @@ import type {SqliteDiscussionBridge,SqliteDiscussionReceipt} from '../shared/sql
 import {sqliteReplySourceUnavailableMessage,readSqliteCandidatePage,readSqliteCandidateVersion,readSqliteCandidateStatus,type SqliteCandidateStatus,type SqliteCandidatePage,type SqliteCandidateVersion,type SqliteCandidateOperation} from '../shared/sqlite-reply-candidates';
 type WorkspaceInput={action:'express'|'suggest';draftText:string;tone:RewriteTone;instruction:string;contextText:string;includeRelationshipContext:boolean};
 type CandidateRequest=SqliteCandidatePage['requests'][number];
-const defaultOptions=()=>({tone:'original' as RewriteTone,instruction:'',contextText:'',includeRelationshipContext:true});
+const defaultOptions=()=>({tone:'original' as RewriteTone,instruction:''});
 const progressLabel=(phase:SqliteCandidateStatus['phase'])=>({not_found:'正在接纳本次请求…',preparing:'正在整理本次资料…',queued:'正在等待生成…',generating:'正在等待模型回复…',saving:'正在保存候选…',committed:'正在读取已保存候选…',failed:'正在核对本次结果…',unknown:'正在核对本次结果…'}[phase]);
 function interruptionMessage(code:string|null|undefined,sent:boolean|undefined,abandoned:boolean|undefined):string|undefined{
  // 仅本机确认“已发出但未收到结果”并自动放弃时才这样说；已收到响应的失败同样已发送，不能套用。
@@ -60,7 +60,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   }
  },[scopeKey,available,initialDraft,handoffKey,onInitialDraftTaken]);
  type Command=SqliteCandidateOperation extends infer O?O extends SqliteCandidateOperation?Omit<O,'contactId'|'scopeRevision'|'sessionId'>:never:never;
- function showPage(next:SqliteCandidatePage,preserveEdits=false){
+ function showPage(next:SqliteCandidatePage){
   // 仅保留无正文的来源标识，短暂读取失败后仍能核对旧草稿的资格。
   const readable=qualifiedRequests.current;
   if(readable.some(id=>!next.requests.some(r=>r.requestId===id&&r.sourceState==='available'))){
@@ -69,23 +69,17 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   qualifiedRequests.current=next.requests.filter(r=>r.sourceState==='available'&&r.candidates.length).map(r=>r.requestId);
   setPage(next);
   setReferenceRevision(value=>value+1);
-  if(!preserveEdits){setEdits({});setInspected({});}
-  else{
-   const previous=new Map(page?.requests.flatMap(r=>r.candidates.map(c=>[c.candidateId,c.versionNo] as const))??[]);
-   const unchanged=new Set(next.requests.filter(r=>r.sourceState==='available').flatMap(r=>r.candidates.filter(c=>previous.get(c.candidateId)===c.versionNo).map(c=>c.candidateId)));
-   setEdits(old=>Object.fromEntries(Object.entries(old).filter(([id])=>unchanged.has(id))));
-   setInspected(old=>Object.fromEntries(Object.entries(old).filter(([id])=>unchanged.has(id))));
-  }
+  setEdits({});setInspected({});
  }
  function rejectOperation(error:unknown){
   const text=(error instanceof Error?error.message:'候选结果尚未确认，请重新读取。').replace(/^Error invoking remote method '[^']+': Error: /,'');
   setEdits({});setInspected({});setNotice('');
   if(text===sqliteReplySourceUnavailableMessage||/失效|已变化|已不可用|请先确认/.test(text)){
    seeded.current=scopeKey;qualifiedRequests.current=[];setPage(null);setDraft('');if(contactId)onDraftChange?.('',{contactId,scopeRevision});setCarry(undefined);retry.current=null;
-  }else setPage(old=>old?{coverage:old.coverage,requests:[]}:null);
+  }else setPage(old=>old?{requests:[]}:null);
   setError(text);return text;
  }
- async function run(command:Command,refreshContext=false){
+ async function run(command:Command){
   if(!available||!bridge.candidates||!contactId||!sessionId||operation.current)return;
   const token={},boundary=revision.current;operation.current=token;setBusy(true);setError('');
   const current=()=>mounted.current&&operation.current===token&&revision.current===boundary&&latest.current.scopeKey===scopeKey&&latest.current.bridge===bridge;
@@ -98,7 +92,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
      // 只保留用户独立输入；旧选稿及其派生草稿不能随恢复请求重新带入。
      const carried=!!retry.current?.carry||!!carry;
      qualifiedRequests.current=[];setCarry(undefined);setEdits({});setInspected({});
-     setPage(old=>old?{coverage:old.coverage,requests:[]}:null);
+     setPage(old=>old?{requests:[]}:null);
      if(carried){seeded.current=scopeKey;setDraft('');onDraftChange?.('',{contactId,scopeRevision});retry.current=null;}
     }
     setError(status.phase==='not_found'&&generationFailure.current?.requestKey===status.requestKey?generationFailure.current.message:statusFailure(status));return;
@@ -121,7 +115,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
    const response=await bridge.candidates.execute({...scope,...command} as SqliteCandidateOperation);if(!current())return;
    if(command.action==='status'){
     const status=readSqliteCandidateStatus(response);if(status.requestKey!==command.requestKey)throw new Error('候选状态不匹配。');await showStatus(status);
-   }else if(command.action==='read'){showPage(readSqliteCandidatePage(response),refreshContext);}
+   }else if(command.action==='read'){showPage(readSqliteCandidatePage(response));}
    else if(command.action==='version')setInspected(v=>({...v,[command.candidateId]:readSqliteCandidateVersion(response)}));
    else{
     if(command.action==='generate'){
@@ -143,15 +137,9 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   }
   finally{stop();if(current()){operation.current=null;setBusy(false);}}
  }
- function changeOptions(update:Partial<ReturnType<typeof defaultOptions>>){
-  setOptions(value=>({...value,...update}));
-  if(carry&&update.includeRelationshipContext===false){
-   setCarry(undefined);setNotice('关闭关系背景后已取消旧候选继续。');
-  }
- }
  async function generate(action:'express'|'suggest'){
   if(action==='express'&&!draft.trim()||!page||unresolved||operation.current)return;
-  const workspace:WorkspaceInput={action,draftText:draft,...options};
+  const workspace:WorkspaceInput={action,draftText:draft,...options,contextText:'',includeRelationshipContext:true};
   const fingerprint=JSON.stringify({workspace,carry}),requestKey=crypto.randomUUID();
   retry.current={fingerprint,requestKey,text:draft,workspace,carry};
   await run({action:'generate',requestKey,text:draft,workspace,acceptIncomplete:false,...(carry?{carriedSelectionId:carry}:{})});
@@ -163,7 +151,6 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   await run({action:'generate',requestKey,text:original.text,workspace:original.workspace,acceptIncomplete:false,...(original.carry?{carriedSelectionId:original.carry}:{})});
  }
  async function continueVersion(v:SqliteCandidateVersion){
-  if(!options.includeRelationshipContext)return;
   if(!available||!bridge.candidates||!contactId||!sessionId||operation.current)return;
   const token={},boundary=revision.current;operation.current=token;setBusy(true);setError('');
   const current=()=>mounted.current&&operation.current===token&&revision.current===boundary&&latest.current.scopeKey===scopeKey&&latest.current.bridge===bridge;
@@ -210,16 +197,6 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
     <button className="compose-primary workspace-suggest" aria-label="帮我想想" disabled={!available||busy||unresolved||!page} onClick={()=>void generate('suggest')}><Icon name="sparkle" size={18}/>帮我想想</button>
   </div>
   <p className="workspace-action-hint">有想法，帮你组织表达；没思路，给你几种说法和建议理由。</p>
-  <details className="workspace-context"><summary>最近聊天 · 查看／补充</summary><div className="workspace-context-body">
-    <label className="rewrite-context"><input type="checkbox" checked={options.includeRelationshipContext} disabled={!available||busy} onChange={e=>changeOptions({includeRelationshipContext:e.target.checked})}/>参考最近聊天和相关关系资料</label>
-    <p className="rewrite-privacy">使用这位联系人当前可用的资料，具体依据会随候选展示。</p>
-    <button className="button" disabled={!available||busy} onClick={()=>void run({action:'read'},true)}>刷新最近聊天</button>
-    {!page?.recentMessages?.length&&<p>暂无可用的最近聊天。可以补充上下文，或先写下想法。</p>}
-    {!!page?.recentMessages?.length&&<><p className="rewrite-privacy">以下最多50条，按消息时间从新到旧展示；聊天先后仍未核验。关系背景开启时，这些消息会作为本次生成候选的参考。</p>
-      <div className="workspace-message-list" role="group" aria-label="最近聊天材料">{page.recentMessages.map(message=><div className="reply-message workspace-message-row" key={message.messageId}><div className="reply-message-selection"><span><small>{message.sender==='owner'?'我':message.sender==='contact'?'对方':'角色未核验'} · {message.occurredAt?new Date(message.occurredAt).toLocaleString('zh-CN'):'时间未知'}</small><span className="reply-message-text">{message.text}</span></span></div></div>)}</div></>}
-    <label>补充聊天上下文<textarea aria-label="补充聊天上下文" rows={3} maxLength={65536} value={options.contextText} disabled={!available||busy} placeholder="只粘贴这位联系人的聊天内容，建议标明是谁说的话。" onChange={e=>setOptions(v=>({...v,contextText:e.target.value}))}/></label>
-    <p className="rewrite-privacy">补充内容只作为本次聊天背景，不会被当成你的表达意图。</p>
-  </div></details>
   <details className="compose-settings"><summary>语气和本次要求</summary><div className="rewrite-options">
     <label>本次语气<select aria-label="本次语气" value={options.tone} disabled={!available||busy} onChange={e=>setOptions(v=>({...v,tone:e.target.value as RewriteTone}))}><option value="original">自然表达</option><option value="warm">自然温和</option><option value="concise">简洁直接</option><option value="polite">礼貌克制</option></select></label>
     <label>本次要求<textarea aria-label="本次要求" rows={2} maxLength={4096} value={options.instruction} disabled={!available||busy} placeholder="例如：不要催促、简短一些…" onChange={e=>setOptions(v=>({...v,instruction:e.target.value}))}/></label>
@@ -244,7 +221,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
     {parts.map((part,index)=><label key={index}>第{index+1}条{parts.length>1&&(index===0?'（先发）':'（接着发）')}<textarea aria-label={`候选第${index+1}条`} value={part} disabled={busy||!available} onChange={e=>setEdits(old=>({...old,[v.candidateId]:parts.map((p,n)=>n===index?e.target.value:p)}))} /></label>)}
     <button className="button" disabled={busy||!available||!edits[v.candidateId]} onClick={()=>void run({action:'edit',candidateId:v.candidateId,versionNo:v.versionNo,parts})}>保存修改</button>
     <button className="button" title="记录选用当前已保存的版本；消息仍由你亲自发送" disabled={busy||!available} onClick={()=>void run({action:'select',candidateId:v.candidateId,versionNo:v.versionNo})}>选用这个说法</button>
-    <button className="button" title="记录选用，并将当前已保存版本带入下一次明确生成；点击后不会立即生成" disabled={busy||!available||!options.includeRelationshipContext} onClick={()=>void continueVersion(v)}>以这个说法继续</button>
+    <button className="button" title="记录选用，并将当前已保存版本带入下一次明确生成；点击后不会立即生成" disabled={busy||!available} onClick={()=>void continueVersion(v)}>以这个说法继续</button>
     {v.versionNo>1&&<button className="button" disabled={busy} onClick={()=>void run({action:'version',candidateId:v.candidateId,versionNo:v.versionNo-1})}>查看上一版</button>}
     {v.versionNo!==candidate.versionNo&&<button className="button" disabled={busy} onClick={()=>{setInspected(old=>{const next={...old};delete next[v.candidateId];return next;});setEdits({});}}>回到最新版本</button>}
     <CandidateBasis version={v}/>

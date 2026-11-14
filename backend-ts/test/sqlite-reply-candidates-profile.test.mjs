@@ -134,7 +134,7 @@ test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双�
   for(const phase of ['queued','generating','saving','completed'])assert.ok(phases.some(row=>row.toState===phase),`正常profile缺少${phase}诊断`);
   assert.ok(records.some(row=>row.event==='sql.summary'&&row.traceId===ledgerTrace),'正常未包裹域的认证HTTP须把合法trace传入真实SQLite');assert.doesNotMatch(JSON.stringify(records),/synthetic-private-trace/);
   assert.equal((await api(`/api/contacts/${id}/assistant-sessions/${created.data.session_id}`)).data.runtime_recovery,'unchecked');
-  const read=await api(path);assert.equal(read.status,200);assert.equal(read.data.coverage.phase,'complete');assert.equal(read.data.requests.length,1);
+  const read=await api(path);assert.equal(read.status,200);assert.equal(read.data.requests.length,1);
   const version=read.data.requests[0].candidates[0];versions.push({requestId:read.data.requests[0].requestId,...version});
   assert.equal(version.versionNo,1);assert.deepEqual(version.parts,['合成正式候选','第二条']);assert.equal(version.basis[0].verification,'actual_input');assert.ok(version.basis[0].text.includes(index?texts[index]:memoryText));
   const wire=JSON.stringify(requests[index?2:0]);assert.ok(wire.includes(texts[index]));assert.ok(!wire.includes(texts[1-index]));assert.ok(!wire.includes('媒体占位不得作为正文输入'));

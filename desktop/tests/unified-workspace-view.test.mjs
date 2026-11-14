@@ -23,13 +23,13 @@ const bundled = await build({ stdin: { contents: `
 const entry = path.join(directory, 'view.mjs');
 await writeFile(entry, bundled.outputFiles[0].text);
 const view = await import(pathToFileURL(entry).href);
-function render({ draft = '', contactId = 'synthetic-contact', historyCoverage, ...overrides } = {}) {
+function render({ draft = '', contactId = 'synthetic-contact', ...overrides } = {}) {
   const state = { contactId, scopeRevision: 1, phase: 'idle', mode: 'rewrite_draft', options: {
     tone: 'original', instruction: '', includeRelationshipContext: true, inputKind: 'workspace',
   }, savedSession: { phase: 'ready', sessionId: 'synthetic-session' },
   messages: { phase: 'ready', items: [], nextCursor: null }, exploration: { phase: 'idle' }, ...overrides };
   return view.renderToStaticMarkup(view.createElement(view.UnifiedReplyWorkspace, {
-    contacts: { state: { selectedContactId: contactId, draft, scopeRevision: 1 } }, replies: { state }, historyCoverage,
+    contacts: { state: { selectedContactId: contactId, draft, scopeRevision: 1 } }, replies: { state },
   }));
 }
 
@@ -61,13 +61,13 @@ test('没有思路可直接请求建议，表达动作要求输入，不出现�
   assert.doesNotMatch(html, /aria-label="帮我想想"[^>]*disabled/);
   assert.match(html, /aria-label="有什么想说的"/);
   assert.doesNotMatch(html, /选择待回复消息|回应消息|主动聊聊|确认方向|表达方向/);
-  assert.match(html, /暂无可用的最近聊天/);
+  assert.doesNotMatch(html, /最近聊天 · 查看／补充|aria-label="补充聊天上下文"/);
 });
 
-test('有想法时两种动作都可用，补充聊天单独输入', () => {
+test('有想法时两种动作都可用', () => {
   const html = render({ draft: '想关心一下最近的情况' });
   assert.doesNotMatch(html, /aria-label="帮我表达"[^>]*disabled/);
-  assert.match(html, /aria-label="补充聊天上下文"/);
+  assert.doesNotMatch(html, /aria-label="帮我想想"[^>]*disabled/);
   assert.match(html, /想关心一下最近的情况/);
 });
 
@@ -75,19 +75,6 @@ test('未确认联系人或生成中不可触发新请求', () => {
   for (const overrides of [{ contactId: null }, { phase: 'waiting' }, { generationBlock: 'unconfirmed' }]) {
     assert.match(render(overrides), /aria-label="帮我想想"[^>]*disabled/);
   }
-});
-
-test('最近对话只读展示时间与材料，不提供逐条勾选或排除提示', () => {
-  const html = render({ messages: { phase: 'ready', nextCursor: null, items: [{ messageId: 'synthetic-message',
-    speaker: 'contact', text: '今天忙完了', occurredAt: '2026-10-19T08:00:00Z' }] } });
-  assert.match(html, /今天忙完了/);
-  assert.match(html, /最近一条/);
-  assert.match(html, /参考最近聊天和相关关系资料/);
-  assert.match(html, /刷新最近聊天/);
-  assert.doesNotMatch(html, /type="radio"/);
-  // 仅保留关系背景总开关；消息级勾选、排除提示和恢复排除操作均已退役。
-  assert.equal((html.match(/type="checkbox"/g) ?? []).length, 1);
-  assert.doesNotMatch(html, /使用消息：|取消勾选|已排除/);
 });
 
 test('工作区候选直接展示理由，版本未核验前不开放编辑', () => {
@@ -122,15 +109,6 @@ test('历史候选记录含已退役排除字段时仍可回看，不再显示�
   const html = renderCandidates(null, true);
   assert.match(html, /最近怎么样？/);
   assert.doesNotMatch(html, /使用消息：|取消勾选|已排除/);
-});
-
-test('联系人已确认即可生成，历史未开始、同步中或不完整均不要求等待或额外确认', () => {
-  for (const historyCoverage of ['not_started', 'syncing', 'incomplete']) {
-    const html = render({ historyCoverage, draft: '本次合成想法' });
-    assert.doesNotMatch(html, /aria-label="帮我想想"[^>]*disabled/);
-    assert.doesNotMatch(html, /aria-label="帮我表达"[^>]*disabled/);
-    assert.doesNotMatch(html, /历史尚未追平|等待当前联系人历史同步|基于已同步部分继续/);
-  }
 });
 
 test('没有联系人时不产生历史同步资格或沿用旧联系人覆盖', () => {

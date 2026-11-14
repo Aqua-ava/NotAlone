@@ -181,7 +181,6 @@
   "tests/memory-page-fixed-processing.test.mjs",
   "tests/memory-processing-entry.test.mjs",
   "tests/setup-view.test.mjs",
-  "tests/visual-media-integration.test.mjs",
   "tests/candidate-manual-edit-view.test.mjs",
   "tests/desktop-interaction-view.test.mjs",
   "tests/layered-memory/react.test.mjs",
@@ -201,8 +200,6 @@
   "tests/contact-deletion-view.test.mjs",
   "tests/wechat-setup-view.test.mjs",
   "tests/history-reply-warning-view.test.mjs",
-  "tests/message-media-integration.test.mjs",
-  "tests/message-media-view.test.mjs",
   "tests/skill-learning/sqlite-library-view.test.mjs",
   "tests/skill-learning/sqlite-groups.test.mjs",
   "tests/sqlite-discussion-composer.test.mjs",
@@ -243,7 +240,5 @@
   "tests/scheduling/launch-rejection.spec.ts",
   "tests/windows.spec.ts"
  ],
- "historical": [
-  "tests/voice-media-integration.test.mjs"
- ]
+ "historical": []
 }

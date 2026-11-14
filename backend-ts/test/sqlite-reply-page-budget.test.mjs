@@ -11,7 +11,7 @@ function candidate(index,basisCount=1){
 }
 function request(index,basisCount=1){return {requestId:randomUUID(),generationState:'committed',coverageWarning:null,sourceState:'available',candidates:[candidate(index,basisCount)],selections:[],loadedSkills:[]};}
 async function serve(t,requests){
- const calls=[];const service={view:async(...args)=>{calls.push(args);return requests;},recentHistory:async()=>({messages:[],coverage:{phase:'complete',messageCount:0,incremental:{phase:'unavailable'}}})};
+ const calls=[];const service={view:async(...args)=>{calls.push(args);return requests;}};
  const http=new SqliteReplyCandidateHttp({storage:{},service,turns:undefined,authorize:()=>true}),server=createServer(async(req,res)=>{if(!await http.handle(req,res)){res.writeHead(404);res.end();}});
  server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));
  return {calls,url:`http://127.0.0.1:${server.address().port}/api/contacts/${contactId}/assistant-sessions/${discussionId}/reply-candidates`};
@@ -19,7 +19,7 @@ async function serve(t,requests){
 
 test('候选页读取固定最近窗口，第21个请求只标记有更早记录',async t=>{
  const requests=Array.from({length:21},(_,index)=>request(index,0)),f=await serve(t,requests),response=await fetch(f.url),body=await response.json();
- assert.equal(response.status,200);assert.equal(body.requests.length,20);assert.equal(body.hasMoreRequests,true);assert.deepEqual(body.coverage,{phase:'complete'});
+ assert.equal(response.status,200);assert.equal(body.requests.length,20);assert.equal(body.hasMoreRequests,true);assert.equal(Object.hasOwn(body,'coverage'),false);assert.equal(Object.hasOwn(body,'recentMessages'),false);
  assert.deepEqual(f.calls,[[contactId,discussionId,{includeSkillText:false,limit:21}]]);
 });
 

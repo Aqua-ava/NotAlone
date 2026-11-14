@@ -53,27 +53,10 @@
 .candidate-version-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .candidate-version-navigation span { color: #69787f; font-size: 12px; }
 
-/* 统一工作区先提供两个动作，背景材料和表达设置按需展开。 */
+/* 统一工作区提供两个动作，表达设置按需展开。 */
 .unified-workspace > textarea { width: 100%; min-height: 116px; resize: vertical; }
 .workspace-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
 .workspace-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; }
 .workspace-action-hint { color: var(--muted, #697e8b); font-size: 13px; margin: 10px 0 20px; }
-.workspace-context { border-top: 1px solid var(--line, #dce5eb); border-bottom: 1px solid var(--line, #dce5eb); padding: 14px 0; }
-.workspace-context summary { cursor: pointer; color: #46667d; }
-.workspace-context-body { display: grid; gap: 12px; padding-top: 14px; }
-.workspace-context-body > label:last-of-type { display: grid; gap: 8px; }
-.workspace-context-body textarea { width: 100%; resize: vertical; }
-.workspace-context-body > button { justify-self: start; }
-.workspace-message-list { max-height: 240px; overflow-y: auto; display: grid; gap: 8px; }
-.workspace-message-list .reply-message { display: flex; gap: 10px; align-items: start; }
-.workspace-message-list .reply-message small { display: block; }
 .candidate-reason > small { color: #54728a; font-weight: 600; }
 .candidate-reason .reply-basis { margin-top: 6px; }
-
-/* 单条媒体操作置于消息选择区下方，避免label包含按钮或播放控件。 */
-.workspace-message-list .workspace-message-row { flex-direction: column; align-items: stretch; }
-.reply-message-selection { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
-.reply-message-selection > span { min-width: 0; flex: 1; }
-.message-media-panel { min-width: 0; width: 100%; overflow-wrap: anywhere; }
-.message-media-panel img, .message-media-panel video { max-width: 100%; max-height: 280px; object-fit: contain; }
-.message-media-panel audio { width: 100%; }

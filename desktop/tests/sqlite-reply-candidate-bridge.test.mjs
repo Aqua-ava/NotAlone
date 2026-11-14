@@ -13,10 +13,10 @@ function modules(){return loaded??=(async()=>{
  await build({stdin:{contents:"export * from './src/main/reply/sqlite-discussion-bridge';export * from './src/preload/sqlite-discussion';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',outfile,logLevel:'silent'});
  return import(pathToFileURL(outfile).href);
 })();}
-const ids={contact:'11111111-1111-4111-8111-111111111111',other:'22222222-2222-4222-8222-222222222222',session:'33333333-3333-4333-8333-333333333333',candidate:'44444444-4444-4444-8444-444444444444',request:'55555555-5555-4555-8555-555555555555',selection:'66666666-6666-4666-8666-666666666666',skill:'77777777-7777-4777-8777-777777777777',message:'88888888-8888-4888-8888-888888888888'};
+const ids={contact:'11111111-1111-4111-8111-111111111111',other:'22222222-2222-4222-8222-222222222222',session:'33333333-3333-4333-8333-333333333333',candidate:'44444444-4444-4444-8444-444444444444',request:'55555555-5555-4555-8555-555555555555',selection:'66666666-6666-4666-8666-666666666666',skill:'77777777-7777-4777-8777-777777777777'};
 const scope={contactId:ids.contact,scopeRevision:1,sessionId:ids.session};
 const version=()=>({candidateId:ids.candidate,versionNo:1,origin:'model',parentVersionNo:null,parts:['合成候选第一条','合成候选第二条'],basis:[{itemNo:1,kind:'message',text:'合成同联系人依据',verification:'actual_input'}]});
-const pageData=()=>({requests:[{requestId:ids.request,generationState:'committed',coverageWarning:null,sourceState:'available',candidates:[version()],selections:[],loadedSkills:[{packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'SKILL.md',text:'合成实际载入Skill正文',origin:'auto_preload',catalogRevision:'[["skill","1"]]'}],preloadedSkills:[{packageId:ids.skill,name:'合成安慰策略',revisionNo:1,origin:'auto_preload',catalogRevision:'[["skill","1"]]'}]}],recentMessages:[{messageId:ids.message,sender:'contact',text:'合成最近聊天',occurredAt:'2026-10-31T10:00:00.000Z',timePrecision:'second',displayPosition:'2',ordering:'unknown'}],coverage:{phase:'complete'}});
+const pageData=()=>({requests:[{requestId:ids.request,generationState:'committed',coverageWarning:null,sourceState:'available',candidates:[version()],selections:[],loadedSkills:[{packageId:ids.skill,name:'合成安慰策略',revisionNo:1,relativePath:'SKILL.md',text:'合成实际载入Skill正文',origin:'auto_preload',catalogRevision:'[["skill","1"]]'}],preloadedSkills:[{packageId:ids.skill,name:'合成安慰策略',revisionNo:1,origin:'auto_preload',catalogRevision:'[["skill","1"]]'}]}]});
 function fixture(api){
  let generation=3,selected=ids.contact,scopeRevision=1,confirmed=true;const contactListeners=new Set(),backendListeners=new Set(),requests=[],handlers=new Map(),invocations=[];
  let respond=async()=>({generation,data:pageData()});
@@ -151,13 +151,6 @@ test('历史失败仅接收无正文错误码与真实发送标记，拒绝异�
   await assert.rejects(f.bridge.candidates.execute({...scope,action:'read'}),/候选结果尚未确认/);
  }
 });
-
-test('最近聊天投影只接受当前联系人范围内的有限文字材料',async t=>{
- const f=fixture(await modules());t.after(()=>f.controller.close());
- f.respond(async()=>({generation:3,data:{...pageData(),recentMessages:[{messageId:ids.message,sender:'other',text:'越权联系人消息',occurredAt:null,timePrecision:null,displayPosition:'1',ordering:'unknown'}]}}));
- await assert.rejects(f.bridge.candidates.execute({...scope,action:'read'}),/候选结果尚未确认/);assert.equal(f.requests.length,1);
-});
-
 
 test('前台确认失效时主进程拒绝候选操作并撤销在途读取，不能仅靠页面按钮门禁',async t=>{
  const f=fixture(await modules());t.after(()=>f.controller.close());f.confirm(false);

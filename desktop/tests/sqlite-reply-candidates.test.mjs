@@ -8,10 +8,10 @@ import {chromium,expect} from '@playwright/test';
 
 const ids={contact:'11111111-1111-4111-8111-111111111111',other:'22222222-2222-4222-8222-222222222222',session:'33333333-3333-4333-8333-333333333333',otherSession:'44444444-4444-4444-8444-444444444444',candidate:'55555555-5555-4555-8555-555555555555',request:'66666666-6666-4666-8666-666666666666',selection:'77777777-7777-4777-8777-777777777777',skill:'88888888-8888-4888-8888-888888888888',otherSkill:'99999999-9999-4999-8999-999999999999'};
 const original=()=>({candidateId:ids.candidate,versionNo:1,origin:'model',parentVersionNo:null,parts:['合成候选第一条','合成候选第二条'],basis:[{itemNo:1,kind:'message',text:'同联系人实际输入依据',verification:'actual_input'}]});
-const pageData=(version=original(),phase='complete')=>({requests:[{requestId:ids.request,coverageWarning:null,sourceState:'available',candidates:[version],selections:[],loadedSkills:[{packageId:ids.skill,revisionNo:1,relativePath:'SKILL.md',text:'本次实际加载的合成Skill正文'}]}],coverage:{phase}});
+const pageData=(version=original())=>({requests:[{requestId:ids.request,coverageWarning:null,sourceState:'available',candidates:[version],selections:[],loadedSkills:[{packageId:ids.skill,revisionNo:1,relativePath:'SKILL.md',text:'本次实际加载的合成Skill正文'}]}]});
 const receipt=(request,replayed=false)=>({session_id:request.sessionId,request_key:request.requestKey,segmented:false,replayed});
 
-test('SQLite恢复原表达工作区，两种动作及背景和语气设置真实传给生成',{timeout:30000},async t=>{
+test('SQLite表达工作区保留两种动作、默认关系背景和本次语气设置',{timeout:30000},async t=>{
  const f=await panel(t,async operation=>operation.action==='generate'?receipt(operation):pageData());
  const region=f.page.getByRole('region',{name:'表达工作区'});
  const draft=region.getByRole('textbox',{name:'有什么想说的',exact:true});
@@ -21,50 +21,30 @@ test('SQLite恢复原表达工作区，两种动作及背景和语气设置真�
  await expect.poll(()=>f.commands.filter(c=>c.action==='generate').length).toBe(1);
  assert.equal(f.commands.find(c=>c.action==='generate').workspace.action,'suggest');
  assert.equal(f.commands.find(c=>c.action==='generate').workspace.draftText,'');
- await region.getByText('最近聊天 · 查看／补充',{exact:true}).click();
- await region.getByRole('checkbox',{name:'参考最近聊天和相关关系资料',exact:true}).uncheck();
- await region.getByRole('textbox',{name:'补充聊天上下文',exact:true}).fill('对方：今天有些忙');
+ await expect(region.getByText('最近聊天 · 查看／补充',{exact:true})).toHaveCount(0);
+ await expect(region.getByRole('textbox',{name:'补充聊天上下文',exact:true})).toHaveCount(0);
  await region.getByText('语气和本次要求',{exact:true}).click();
  await region.getByRole('combobox',{name:'本次语气',exact:true}).selectOption('concise');
  await region.getByRole('textbox',{name:'本次要求',exact:true}).fill('简短一些');
  await draft.fill('想问问下班了吗');await express.click();
  await expect.poll(()=>f.commands.filter(c=>c.action==='generate').length).toBe(2);
- assert.deepEqual(f.commands.filter(c=>c.action==='generate')[1].workspace,{action:'express',draftText:'想问问下班了吗',tone:'concise',instruction:'简短一些',contextText:'对方：今天有些忙',includeRelationshipContext:false});
+ assert.deepEqual(f.commands.filter(c=>c.action==='generate')[1].workspace,{action:'express',draftText:'想问问下班了吗',tone:'concise',instruction:'简短一些',contextText:'',includeRelationshipContext:true});
  await expect(draft).toHaveValue('');
 });
 
-test('最近聊天只读展示，刷新保留编辑且生成请求不再携带排除字段',{timeout:30000},async t=>{
- const message='99999999-9999-4999-8999-999999999999';
- const f=await panel(t,async operation=>operation.action==='generate'?receipt(operation):{...pageData(),recentMessages:[{messageId:message,sender:'contact',text:'本次可用的合成聊天',occurredAt:null,timePrecision:null,displayPosition:'1',ordering:'unknown'}]});
- const region=f.page.getByRole('region',{name:'表达工作区'});
- await region.getByRole('textbox',{name:'候选第1条',exact:true}).fill('尚未保存的候选编辑');
- await region.getByText('最近聊天 · 查看／补充',{exact:true}).click();
- await expect(region.getByRole('checkbox',{name:'使用消息：本次可用的合成聊天',exact:true})).toHaveCount(0);
- await expect(region.getByText(/取消勾选|已排除 \d+ 条消息/)).toHaveCount(0);
- await expect(region.getByText('本次可用的合成聊天',{exact:true})).toBeVisible();
- await expect(region.getByRole('button',{name:'以这个说法继续',exact:true})).toBeEnabled();
- await region.getByRole('button',{name:'刷新最近聊天',exact:true}).click();
- await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveValue('尚未保存的候选编辑');
- await expect(region.getByText('本次可用的合成聊天',{exact:true})).toBeVisible();
- await region.getByRole('button',{name:'帮我想想',exact:true}).click();
- await expect.poll(()=>f.commands.filter(c=>c.action==='generate').length).toBe(1);
- assert.deepEqual(f.commands.find(c=>c.action==='generate').workspace,{action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true});
- assert.equal(Object.hasOwn(f.commands.find(c=>c.action==='generate').workspace,'excludedMessageIds'),false);
-});
-
-test('关闭关系背景后撤销旧候选携入，生成不提交被后端禁止的组合',{timeout:30000},async t=>{
+test('候选继续可显式取消，随后生成不携入旧选稿',{timeout:30000},async t=>{
  const f=await panel(t,async operation=>operation.action==='generate'?receipt(operation):operation.action==='select'?{id:ids.selection}:pageData());
  const region=f.page.getByRole('region',{name:'表达工作区'});
  await region.getByRole('button',{name:'以这个说法继续',exact:true}).click();
  await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();
- await region.getByText('最近聊天 · 查看／补充',{exact:true}).click();
- await region.getByRole('checkbox',{name:'参考最近聊天和相关关系资料',exact:true}).uncheck();
+ await region.getByRole('button',{name:'取消候选继续',exact:true}).click();
  await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);
- await expect(region.getByRole('button',{name:'以这个说法继续',exact:true})).toBeDisabled();
+ await expect(region.getByRole('button',{name:'以这个说法继续',exact:true})).toBeEnabled();
  await region.getByRole('button',{name:'帮我想想',exact:true}).click();
  await expect.poll(()=>f.commands.filter(c=>c.action==='generate').length).toBe(1);
  assert.equal(f.commands.find(c=>c.action==='generate').carriedSelectionId,undefined);
- assert.equal(f.commands.find(c=>c.action==='generate').workspace.includeRelationshipContext,false);
+ assert.deepEqual(f.commands.find(c=>c.action==='generate').workspace,{action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true});
+ assert.equal(Object.hasOwn(f.commands.find(c=>c.action==='generate').workspace,'excludedMessageIds'),false);
 });
 
 test('暂时失去生成资格保留想法，结果未知只核对原请求且保留后来编辑',{timeout:30000},async t=>{
@@ -355,7 +335,7 @@ test('来源失效或换联系人后迟到实际输入不能恢复旧参考',{ti
   const input={itemNo:1,kind:'memory',scopeKind:'contact',text:`${boundary}之后不可恢复的合成关系资料`};
   const f=await panel(t,async operation=>{
    if(operation.action==='inputs'){entered.resolve();return release.promise;}
-   if(operation.action==='read')return operation.contactId===ids.other?{requests:[],coverage:{phase:'complete'}}:pageData();
+   if(operation.action==='read')return operation.contactId===ids.other?{requests:[]}:pageData();
    throw new Error('未授权的合成参考操作');
   });
   const region=f.page.getByRole('region',{name:'表达工作区'});
@@ -471,9 +451,9 @@ test('候选页面读取真实版本结构、保存多条编辑稿并选择具�
  await region.getByRole('button',{name:'回到最新版本',exact:true}).click();await expect(first).toHaveValue('手工修改后的第一条');await expect(second).toHaveValue('手工修改后的第二条');
 });
 
-test('覆盖不完整可直接使用，明确未发送失败的新请求保留显式选稿',{timeout:30000},async t=>{
+test('明确未发送失败的新请求保留显式选稿',{timeout:30000},async t=>{
  let generated=0;const f=await panel(t,async operation=>{
-  if(operation.action==='read')return pageData(original(),'incomplete');
+  if(operation.action==='read')return pageData();
   if(operation.action==='select')return {id:ids.selection,candidateId:operation.candidateId,versionNo:operation.versionNo,selectionNo:1};
   if(operation.action==='status')return {requestKey:operation.requestKey,phase:'failed',sent:false,errorCode:'discussion_generation_failed',retryable:true,startedAt:1000,finishedAt:2000};
   if(operation.action==='generate'){if(++generated===1)throw new Error('候选结果尚未确认，请保留原请求重试核对。');return receipt(operation,true);}
@@ -568,26 +548,6 @@ test('模型请求已自动放弃时说明费用风险，重新生成使用新�
  assert.equal(requests[1].contactId,ids.contact);assert.equal(requests[1].sessionId,ids.session);
 });
 
-test('已确认联系人在历史未开始或后台读取中均能直接生成',{timeout:30000},async t=>{
- let phase='not_started';
- const f=await panel(t,async operation=>{
-  if(operation.action==='read')return pageData(original(),phase);
-  if(operation.action==='generate')return receipt(operation);
-  throw new Error('未授权的合成页面操作');
- });
- const region=f.page.getByRole('region',{name:'表达工作区'});
- for(const next of ['not_started','running','incomplete']){
-  phase=next;await region.getByRole('button',{name:'刷新候选',exact:true}).click();
-  await region.getByRole('textbox',{name:'有什么想说的',exact:true}).fill('合成本次表达');
-  const generate=region.getByRole('button',{name:'帮我表达',exact:true});
-  await expect(generate).toBeEnabled();await generate.click();
-  await expect(region.getByRole('textbox',{name:'有什么想说的',exact:true})).toHaveValue('');
- }
- assert.equal(f.commands.filter(c=>c.action==='generate').length,3);
- assert.ok(f.commands.filter(c=>c.action==='generate').every(c=>c.acceptIncomplete===false));
- await expect(region.getByText(/完成后才能生成|使用已同步部分继续/)).toHaveCount(0);
-});
-
 test('来源失效立即移除草稿、候选、依据及Skill，迟到读取和生成均不能恢复旧快照',{timeout:30000},async t=>{
  let mode='ready';const readEntered=Promise.withResolvers(),lateRead=Promise.withResolvers(),generateEntered=Promise.withResolvers(),lateGenerate=Promise.withResolvers();
  const f=await panel(t,async operation=>{
@@ -613,7 +573,7 @@ test('切换联系人撤下旧草稿与快照，旧读取迟到不能跨范围�
  let deferOld=false;const entered=Promise.withResolvers(),release=Promise.withResolvers();
  const f=await panel(t,async operation=>{
   if(operation.action==='read'){
-   if(operation.contactId===ids.other)return {requests:[],coverage:{phase:'complete'}};
+   if(operation.contactId===ids.other)return {requests:[]};
    if(deferOld){entered.resolve();return release.promise;}return pageData();
   }
   if(operation.action==='generate')return receipt(operation);
@@ -690,7 +650,7 @@ test('重读历史失败显示准备超时、资料服务中断与应用中断�
   ['runtime_interrupted',true,'应用在生成期间中断，请重新生成。',false],
   ['reply_output_invalid',true,'本次候选生成失败，没有可选正文。',false],
  ];
- const data={coverage:{phase:'complete'},requests:cases.map(([generationErrorCode,generationSent,,generationAbandoned],index)=>({requestId:`${index+1}1111111-1111-4111-8111-111111111111`,generationState:'failed',generationErrorCode,generationSent,...(generationAbandoned===undefined?{}:{generationAbandoned}),coverageWarning:null,sourceState:'unavailable',candidates:[],selections:[],loadedSkills:[]}))};
+ const data={requests:cases.map(([generationErrorCode,generationSent,,generationAbandoned],index)=>({requestId:`${index+1}1111111-1111-4111-8111-111111111111`,generationState:'failed',generationErrorCode,generationSent,...(generationAbandoned===undefined?{}:{generationAbandoned}),coverageWarning:null,sourceState:'unavailable',candidates:[],selections:[],loadedSkills:[]}))};
  const f=await panel(t,async()=>data),region=f.page.getByRole('region',{name:'表达工作区'});
  await expect(region.locator('details.sqlite-candidate-request')).toHaveCount(cases.length);
  for(let index=0;index<cases.length;index++){
@@ -705,7 +665,7 @@ test('重读历史失败显示准备超时、资料服务中断与应用中断�
 test('本轮进度独立于历史失败，轻量状态显示真实阶段且未发送失败可新请求重试',{timeout:30000},async t=>{
  let phase='preparing',calls=0;const gate=Promise.withResolvers();
  const f=await panel(t,async op=>{
-  if(op.action==='read')return {requests:[{requestId:ids.request,generationState:'failed',coverageWarning:null,sourceState:'unavailable',candidates:[],selections:[],loadedSkills:[]}],coverage:{phase:'complete'}};
+  if(op.action==='read')return {requests:[{requestId:ids.request,generationState:'failed',coverageWarning:null,sourceState:'unavailable',candidates:[],selections:[],loadedSkills:[]}]};
   if(op.action==='status')return {requestKey:op.requestKey,phase,sent:phase==='generating',errorCode:phase==='failed'?'discussion_preparation_timeout':null,retryable:phase==='failed',startedAt:1000,finishedAt:phase==='failed'?2000:null};
   if(op.action==='generate'){if(++calls===1)return gate.promise;return receipt(op);}
   throw new Error('未授权操作');
@@ -751,7 +711,7 @@ test('状态核对失败不继续宣称正在整理，恢复后显示真实阶�
 const uid=n=>`${n.toString(16).padStart(8,'0')}-0000-4000-8000-${n.toString(16).padStart(12,'0')}`;
 const versionOf=(candidateId,parts=['合成说法正文'],extra={})=>({candidateId,versionNo:1,origin:'model',parentVersionNo:null,parts,basis:[{itemNo:1,kind:'message',text:'同联系人实际输入依据',verification:'actual_input'}],...extra});
 const requestOf=(requestId,candidates=[],extra={})=>({requestId,coverageWarning:null,sourceState:'available',candidates,selections:[],loadedSkills:[],...extra});
-const pageOf=(requests,extra={})=>({requests,coverage:{phase:'complete'},...extra});
+const pageOf=(requests,extra={})=>({requests,...extra});
 const requestSection=(region,index)=>region.locator('details.sqlite-candidate-request').nth(index);
 const requestSummary=request=>request.locator('summary').first();
 const candidateInput=(request,index=1)=>request.locator(`textarea[aria-label="候选第${index}条"]`);

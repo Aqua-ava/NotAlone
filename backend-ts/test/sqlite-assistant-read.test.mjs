@@ -231,14 +231,14 @@ test('来源删除撤销在途候选版本读取，助手reader重开后仍不�
  }finally{release.resolve();await loading;}
 });
 
-test('来源连续性变化废弃旧最近聊天快照，重新读取保留权威覆盖状态',async t=>{
+test('来源连续性变化废弃旧候选快照，重新读取不投影聊天并保留权威覆盖状态',async t=>{
  const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs'),f=await realFixture(t),contactId=f.ids[0],discussion=await f.discussions.newDiscussion(contactId),entered=Promise.withResolvers(),release=Promise.withResolvers();let held=false,opened=0,closed=0;
- const channel=await createAssistantReadChannel({storage:{openReader:async actions=>{opened++;const actual=await f.storage.openReader(actions);return {execute:async(name,input)=>{const value=await actual.execute(name,input);if(name==='history.readRecent'&&!held){held=true;entered.resolve(value);await release.promise;}return value;},close:async()=>{await actual.close();closed++;}};}},ownerId:f.owner,holders:f.holders});t.after(()=>channel.close());
+ const channel=await createAssistantReadChannel({storage:{openReader:async actions=>{opened++;const actual=await f.storage.openReader(actions);return {execute:async(name,input)=>{const value=await actual.execute(name,input);if(name==='reply.view'&&!held){held=true;entered.resolve(value);await release.promise;}return value;},close:async()=>{await actual.close();closed++;}};}},ownerId:f.owner,holders:f.holders});t.after(()=>channel.close());
  const service=new SqliteReplyCandidateService(f.storage,f.owner,channel),http=new SqliteReplyCandidateHttp({storage:f.storage,service,authorize:()=>true}),server=createServer((req,res)=>http.handle(req,res));server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>{server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
- const url=`http://127.0.0.1:${server.address().port}/api/contacts/${contactId}/assistant-sessions/${discussion.id}/reply-candidates`,loading=fetch(url),captured=await entered.promise,original=f.messages[0][0].text;assert.equal(typeof original,'string');assert.equal(captured.messages[0].text,original);
+ const url=`http://127.0.0.1:${server.address().port}/api/contacts/${contactId}/assistant-sessions/${discussion.id}/reply-candidates`,loading=fetch(url),captured=await entered.promise,original=f.messages[0][0].text;assert.equal(typeof original,'string');assert.deepEqual(captured,[]);
  try{
   await f.storage.execute('history.markContinuityLost',{token:await f.contacts.eligibility(contactId)});release.resolve();
   const late=await loading;assert.notEqual(late.status,200);assert.equal((await late.text()).includes(original),false);assert.equal(closed,2,'范围失效关闭已打开的两类读者');
-  const fresh=await fetch(url);assert.equal(fresh.status,200);const current=await fresh.json();assert.deepEqual(current.coverage,{phase:'incomplete'});assert.equal((await f.history.coverage(contactId)).failureCode,'history_source_continuity_unverified');assert.equal(opened,3,'仅懒重开候选读者，轻讨论读者不额外创建');
+  const fresh=await fetch(url);assert.equal(fresh.status,200);const current=await fresh.json();assert.equal(Object.hasOwn(current,'coverage'),false);assert.equal(Object.hasOwn(current,'recentMessages'),false);assert.equal((await f.history.coverage(contactId)).failureCode,'history_source_continuity_unverified');assert.equal(opened,3,'仅懒重开候选读者，轻讨论读者不额外创建');
  }finally{release.resolve();await loading;}
 });

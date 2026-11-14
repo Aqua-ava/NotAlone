@@ -5,27 +5,22 @@ import { createRequire } from 'node:module';
 
 const bundled=await build({stdin:{contents:`
  import React from 'react'; import { renderToStaticMarkup } from 'react-dom/server';
- import { UnifiedReplyWorkspace } from './src/renderer/UnifiedReplyWorkspace';
  import { ContactHistoryCoverage } from './src/renderer/HistoryCoverageStatus';
  export { readReplyMessages, mergeReplyMessages } from './src/main/reply/messages';
- export function render(items,extra={}) { return renderToStaticMarkup(<UnifiedReplyWorkspace contacts={{state:{selectedContactId:'c',scopeRevision:1,draft:''}}} replies={{state:{contactId:'c',scopeRevision:1,phase:'idle',mode:'rewrite_draft',options:{tone:'original',instruction:'',inputKind:'workspace',includeRelationshipContext:true},savedSession:{phase:'ready',sessionId:'s'},messages:{phase:'ready',items},...extra}}} />); }
  export function renderCoverage(row) { return renderToStaticMarkup(<ContactHistoryCoverage contactId='c' bodyAvailable={true} coverages={[{bindingId:'b',contactId:'c',phase:'complete',failureCode:null,messageCount:0,nonTextCount:0,pageCount:1,...row}]} />); }
 `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'node',format:'cjs',write:false,loader:{'.css':'empty'}});
 const loaded={exports:{}};new Function('require','module','exports',bundled.outputFiles[0].text)(createRequire(import.meta.url),loaded,loaded.exports);
-const {readReplyMessages,mergeReplyMessages,render,renderCoverage}=loaded.exports;
+const {readReplyMessages,mergeReplyMessages,renderCoverage}=loaded.exports;
 const id='00000000-0000-4000-8000-000000000001';
 const wire=(changes={})=>({message_id:id,speaker:'contact',message_type:'voice',text:null,media_placeholder:'[语音]',occurred_at:'2026-01-01T00:00:00.000Z',quoted:null,ordering:'unknown',display_position:'9007199254740993',...changes});
 const backend=items=>({requestJson:async()=>({generation:1,data:{messages:items,next_cursor:null}})});
-test('最近聊天按发送时间展示并保留未知先后声明，晚保存旧消息不挤占近期消息',async()=>{
+test('最近聊天保留未知先后声明，晚保存旧消息不挤占近期消息',async()=>{
  const read=await readReplyMessages(backend([wire()]),id,null,new AbortController().signal);
  assert.equal(read.messages[0].ordering,'unknown');
  assert.equal(read.messages[0].displayPosition,'9007199254740993');
  const other={...read.messages[0],messageId:'00000000-0000-4000-8000-000000000002',displayPosition:'9007199254740992',occurredAt:'2026-02-01T00:00:00.000Z'};
  assert.deepEqual(mergeReplyMessages([other],read.messages).map(m=>m.messageId),[other.messageId,id]);
  assert.equal(mergeReplyMessages([other],read.messages).length,2);
- const html=render(read.messages);
- assert.match(html,/顺序未核验/);assert.match(html,/\[语音\]/);
- assert.doesNotMatch(html,/最近一条：/);
 });
 test('最近聊天使用时间分页接口并原样续接同范围游标',async()=>{
  const requests=[],before='00000000-0000-4000-8000-000000000003';
@@ -46,11 +41,6 @@ test('消息解析拒绝缺少顺序声明或非法展示位置，保留旧消�
  const old=wire();delete old.ordering;delete old.display_position;
  const read=await readReplyMessages(backend([old]),id,null,new AbortController().signal);
  assert.equal(read.messages[0].ordering,undefined);
-});
-
-test('已保存历史可独立刷新，不要求助手生成资格',()=>{
- const html=render([], {generationBlock:'contact_unconfirmed',savedSession:{phase:'failed',sessionId:null}});
- assert.match(html,/<button(?![^>]*\bdisabled)[^>]*>刷新最近聊天<\/button>/);
 });
 
 test('系统等独立元数据单独计数，不误称为空历史或聊天正文',()=>{

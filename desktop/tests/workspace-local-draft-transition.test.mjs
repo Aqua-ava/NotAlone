@@ -24,7 +24,6 @@ test('本地草稿在确认进入工作区后保留，换联系人不继承旧�
         savedSession:{phase:ready?'ready':'failed',sessionId:ready?'session-'+contact:null},
         messages:{phase:'ready',items:[]},result:null},
         enterWorkspace:async()=>window.fixture.commands.push('enter'),
-        loadMessages:async()=>window.fixture.commands.push('load'),
         generateWorkspace:async()=>window.fixture.commands.push('generate')};
       return <><button onClick={()=>setReady(true)}>模拟当前联系人确认和恢复完成</button>
         <button onClick={()=>{setContact('b');setRevision(2);setDraft('');setReady(false);}}>模拟切换联系人</button>
@@ -38,8 +37,6 @@ test('本地草稿在确认进入工作区后保留，换联系人不继承旧�
   await draft.fill('甲的独立本地想法');
   await expect(page.getByRole('button', { name: '帮我表达', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: '帮我想想', exact: true })).toBeDisabled();
-  await page.getByText('最近聊天 · 查看／补充', { exact: true }).click();
-  await expect(page.getByRole('textbox', { name: '补充聊天上下文', exact: true })).toBeDisabled();
   assert.deepEqual(await page.evaluate(() => window.fixture.commands), []);
   const originalEditor = await draft.elementHandle();
   await page.getByRole('button', { name: '模拟当前联系人确认和恢复完成', exact: true }).click();
@@ -72,7 +69,7 @@ test('旧讨论加载失败后可重试或开始新讨论，期间写下的独�
       const replies={state:{contactId:'a',scopeRevision:1,phase:'idle',mode:'rewrite_draft',generationBlock:null,
         options:{tone:'original',instruction:'',includeRelationshipContext:true,...(workspace?{inputKind:'workspace'}:{})},
         savedSession:{phase,sessionId},messages:{phase:'ready',items:[]},result:null},
-        enterWorkspace:async()=>{},loadMessages:async()=>{},
+        enterWorkspace:async()=>{},
         readSavedSession:async()=>setPhase('loading'),
         newSavedSession:async()=>{setSessionId('new-discussion');setPhase('ready');}};
       return <><button onClick={()=>setPhase('failed')}>模拟读取失败</button>
@@ -125,7 +122,7 @@ test('讨论恢复先于草稿回显时保留新按键，明确删除和切换�
       const replies={state:{contactId:contact,scopeRevision:scope,phase:'idle',mode:'rewrite_draft',generationBlock:null,
         options:{tone:'original',instruction:'',includeRelationshipContext:true,...(restored?{inputKind:'workspace'}:{})},
         inputClearRevision:restored?1:0,savedSession:{phase:restored?'ready':'loading',sessionId:'session-'+contact},
-        messages:{phase:'ready',items:[]},result:null},enterWorkspace:async()=>{},loadMessages:async()=>{}};
+        messages:{phase:'ready',items:[]},result:null},enterWorkspace:async()=>{}};
       return <><button onClick={()=>setRestored(true)}>完成讨论读取</button>
         <button onClick={()=>setDraft(window.pendingDraft)}>回显本地输入</button>
         <button onClick={()=>{setDraft('');setCleared(value=>value+1);}}>确认删除草稿</button>

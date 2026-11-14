@@ -14,8 +14,7 @@ export type SqliteCandidateOperation=SqliteCandidateScope & (
 export interface SqliteCandidateVersion {candidateId:string;versionNo:number;origin:'model'|'manual';parentVersionNo:number|null;parts:string[];basis:(SqliteCandidateInputMaterial&{verification:'actual_input'|'inherited_unverified'})[]}
 export interface SqliteCandidateLoadedSkill {packageId:string;name?:string;title?:string;revisionNo:number;relativePath:string;text?:string;origin?:'explicit'|'auto_preload'|null;catalogRevision?:string|null}
 export interface SqliteCandidateRequest {requestId:string;generationState?:'committed'|'running'|'failed'|'unknown'|'invalidated';generationErrorCode?:string|null;generationSent?:boolean;generationAbandoned?:boolean;coverageWarning:string|null;skillWarning?:string|null;sourceState:'available'|'unavailable';candidates:SqliteCandidateVersion[];selections:{id:string;candidateId:string;versionNo:number;selectionNo:number}[];loadedSkills:SqliteCandidateLoadedSkill[];preloadedSkills?:{packageId:string;name?:string;revisionNo:number;origin:'explicit'|'auto_preload';catalogRevision?:string}[]}
-export interface SqliteCandidateRecentMessage {messageId:string;sender:'owner'|'contact'|'unknown';text:string;occurredAt:string|null;timePrecision:'millisecond'|'second'|null;displayPosition:string;ordering:'verified'|'unknown'}
-export interface SqliteCandidatePage {recentMessages?:SqliteCandidateRecentMessage[];requests:SqliteCandidateRequest[];coverage:{phase:'not_started'|'running'|'incomplete'|'complete'};hasMoreRequests?:boolean}
+export interface SqliteCandidatePage {requests:SqliteCandidateRequest[];hasMoreRequests?:boolean}
 export interface SqliteCandidateSkillPage {items:(SqliteCandidateLoadedSkill&{text:string})[];nextOffset:number|null;total:number}
 export interface SqliteCandidateInputMaterial {itemNo:number;kind:string;text:string;versionNo?:number;scopeKind?:'owner'|'contact';workspaceItem?:'request'|'draft'|'instruction'|'supplemental_context';qualification?:'confirmed'|'auto'|'unconfirmed'|'published';projectionKind?:'directory'|'profile'|'blocks'}
 export interface SqliteCandidateInputPage {items:SqliteCandidateInputMaterial[];nextOffset:number|null;total:number;recorded:boolean}
@@ -71,17 +70,9 @@ export function readSqliteCandidateVersion(value:unknown):SqliteCandidateVersion
  return v as unknown as SqliteCandidateVersion;
 }
 export function readSqliteCandidatePage(value:unknown):SqliteCandidatePage{
- const v=object(value);exact(v,['requests','coverage'],['recentMessages','hasMoreRequests']);
+ const v=object(value);exact(v,['requests'],['hasMoreRequests']);
  if(!Array.isArray(v.requests))invalid();
  if(v.hasMoreRequests!==undefined&&typeof v.hasMoreRequests!=='boolean')invalid();
- const coverage=object(v.coverage);exact(coverage,['phase']);if(!['not_started','running','incomplete','complete'].includes(String(coverage.phase)))invalid();
- if(v.recentMessages!==undefined){
-  if(!Array.isArray(v.recentMessages)||v.recentMessages.length>50)invalid();
-  for(const value of v.recentMessages){const m=object(value);exact(m,['messageId','sender','text','occurredAt','timePrecision','displayPosition','ordering']);
-   if(!uuid(m.messageId)||!['owner','contact','unknown'].includes(String(m.sender))||typeof m.text!=='string'||!m.text.trim()||m.text.length>100000
-    ||!(m.occurredAt===null||typeof m.occurredAt==='string'&&m.occurredAt.length<=64)||!(m.timePrecision===null||['second','millisecond'].includes(String(m.timePrecision)))
-    ||typeof m.displayPosition!=='string'||m.displayPosition.length>64||!['verified','unknown'].includes(String(m.ordering)))invalid();}
- }
  for(const value of v.requests){const r=object(value);exact(r,['requestId','coverageWarning','sourceState','candidates','selections','loadedSkills'],['generationState','generationErrorCode','generationSent','generationAbandoned','skillWarning','preloadedSkills']);
   if(!uuid(r.requestId)||!(r.coverageWarning===null||typeof r.coverageWarning==='string')||!['available','unavailable'].includes(String(r.sourceState))
    ||r.generationState!==undefined&&!['committed','running','failed','unknown','invalidated'].includes(String(r.generationState))

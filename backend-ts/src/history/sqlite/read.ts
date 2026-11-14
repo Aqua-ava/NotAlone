@@ -136,7 +136,7 @@ export function readCoverage(tx:StorageTransaction,owner:string,contact:string):
   messageCount:safeCount(counts.messages),nonTextCount:safeCount(counts.nontext),nonTextTypes,pageCount:safeCount(pages),quarantinedCount:quarantined,metadataOnlyCount:summary.metadataOnly,
   incremental:effectiveContinuityBlocked?{...incrementalCoverage(resolvedGoal,safeIncremental),phase:'invalidated',failureCode:'history_source_continuity_unverified'}:stateQuarantined&&!normalUseTraversal?{...incrementalCoverage(resolvedGoal,safeIncremental),phase:'incomplete',failureCode:'history_identity_quarantined'}:incrementalCoverage(resolvedGoal,safeIncremental,emptyTargetAwaitingMessages)};
 }
-function readRows(tx:StorageTransaction,owner:string,contact:string,coverage:HistoryCoverage,rows:StorageRow[],includeQuotes=true):HistoryRead {
+function readRows(tx:StorageTransaction,owner:string,contact:string,coverage:HistoryCoverage,rows:StorageRow[]):HistoryRead {
  const sources=new Map<string,string[]>();
  if(rows.length)for(const source of tx.all(`WITH ${currentSourceScopeCTE} SELECT r.id,r.message_id FROM capture_record r
   JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
@@ -146,7 +146,7 @@ function readRows(tx:StorageTransaction,owner:string,contact:string,coverage:His
   }
  const quotes=new Map<string,StoredHistoryQuote>();
  const quoteErrors=new Map<string,HistoryQuoteErrorCode>();
- if(includeQuotes&&rows.some(row=>row.original_type==='244813135921')){
+ if(rows.some(row=>row.original_type==='244813135921')){
   const selected=rows.filter(row=>row.original_type==='244813135921').map(row=>String(row.id));
   const safeQuoteErrors:readonly HistoryQuoteErrorCode[]=['history_quote_unavailable','history_quote_metadata_invalid','history_quote_too_large',
    'history_quote_state_unverified','history_quote_association_unverified','history_quote_read_failed'];
@@ -245,14 +245,4 @@ export function readMessages(tx:StorageTransaction,owner:string,contact:string,l
 /** 聊天按已知发送时间取最近消息；同时间及未知时间只用保存位置稳定分页，不认证因果。 */
 export function readChatMessages(tx:StorageTransaction,owner:string,contact:string,limit=101,before?:string):HistoryRead {
  return readMessagePage(tx,owner,contact,limit,before,'message-time');
-}
-/** 候选工作区按有时间的文字消息选最新材料；不改变历史页的 display_no 游标语义。 */
-export function readRecentMessages(tx:StorageTransaction,owner:string,contact:string,limit=50):HistoryRead {
- const coverage=readCoverage(tx,owner,contact);
- if(!Number.isSafeInteger(limit)||limit<1||limit>50)throw new StorageFailure('history_request_invalid');
- const rows=tx.all(`WITH ${currentSourceScopeCTE} SELECT * FROM message m WHERE owner_id=? AND contact_id=? AND availability='available'
-  AND kind='text' AND text_body IS NOT NULL AND length(text_body)>0 AND sent_at IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
-  AND ${currentMessageSource} ORDER BY sent_at DESC,display_no DESC LIMIT ?`,[owner,contact,contact,owner,contact,limit]);
- return readRows(tx,owner,contact,coverage,rows,false);
 }

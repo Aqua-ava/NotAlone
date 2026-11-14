@@ -110,8 +110,7 @@ export function App() {
       && replies.state.savedSession?.phase === 'loading' && <p role="status" className="rewrite-privacy">
         正在加载这位联系人的助手讨论…
       </p>}
-    {replies.state.savedSession?.discussionEntries===undefined&&<UnifiedReplyWorkspace contacts={contactSession} replies={replies}
-      historyCoverage={historyCoverage} media={window.notalone.media} />}
+    {replies.state.savedSession?.discussionEntries===undefined&&<UnifiedReplyWorkspace contacts={contactSession} replies={replies} />}
     <PrioritySyncStatus contactId={contactSession.state.selectedContactId} bridge={window.notalone.syncControl} />
     {replies.state.messageNotice.phase === 'connected' && <>
       {replies.state.messageNotice.needsRefresh && <p role="status">消息提醒有待核对，请主动刷新消息。生成依据仍是原快照。</p>}

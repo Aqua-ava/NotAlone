@@ -18,7 +18,7 @@
 
 服务使用 `MediaContactPort` 和 `MediaSourcePort` 窄接口；联系人资格应代理当前统一删除生命周期持有的联系人服务，不能另造元数据缓存，也不能在联系人删除后重新装载旧对象。`initialize()` 只中断旧runtime未完成尝试并恢复已登记本地清理；GET不会领取提取。`stop(contactId?)` 用于取消选中并排空全部在途分支；关闭读取总开关使用 `stop(undefined, 'wechat')`，保留仍合法的本地转换，每段及发布事务仍独立复验。所有领域服务及删除协调器必须共享一个 `ActiveHolders`。
 
-正常宿主将 `SqliteMediaHttp.handle` 放在Bearer/无Origin认证之后。未认证真实类型时传 `adapters:[]`，页面明确不可用。桌面桥 `installMessageMediaBridge` 与 `createMessageMediaBridge` 使用固定方法；`MessageMediaPanel` 只挂到image/video/voice聊天行。连接准备与退出必须等待 `invalidateAndDrain` / `prepareClosing`；来源或联系人删除开始撤下旧快照。前端撤下DOM/blob后才 `releasePreview`；后端 `close` 也不把仅取消视为释放。
+正常宿主将 `SqliteMediaHttp.handle` 放在Bearer/无Origin认证之后。未认证真实类型时传 `adapters:[]`，页面明确不可用。桌面桥 `installMessageMediaBridge` 与 `createMessageMediaBridge` 使用固定方法；联系人历史中的图片由 `HistoryImageBubble` 查看，表达工作区不再单独展示聊天媒体面板。连接准备与退出必须等待 `invalidateAndDrain` / `prepareClosing`；来源或联系人删除开始撤下旧快照。前端撤下DOM/blob后才 `releasePreview`；后端 `close` 也不把仅取消视为释放。
 
 创建后、身份登记前崩溃会保留未知身份阻塞；不会据随机文件名猜测归属或删除。容量/类型/文件写入故障只清本次安全目标，旧合法结果保留。当前单文件保存及可撤销预览统一上限32MiB；超过时在读取字节前拒绝本次新增，不谎报可在App内播放。上述限制是本模块有界资源合同，类型能力与真实播放仍由对应类型适配器验收。
 

@@ -20,7 +20,7 @@ test('已选联系人会话待核对时直接只读恢复，保留草稿且不�
     import { AssistantSessionPanel } from './src/renderer/AssistantSessionPanel';
     window.__calls = [];
     window.notalone = { sqliteDiscussion: {
-      candidates: {execute: async request => {window.__calls.push(request.action); return {requests:[],coverage:{phase:'complete'}};}},
+      candidates: {execute: async request => {window.__calls.push(request.action); return {requests:[]};}},
       submit: async () => {window.__calls.push('submit');}, onInvalidated: () => () => {}
     }};
     let state = {contactId:${JSON.stringify(contactId)},scopeRevision:7,phase:'idle',generationBlock:null,generationJobs:[],
@@ -184,7 +184,7 @@ test('正式会话面板消费联系人初始草稿且用户编辑后不会重�
     import { AssistantSessionPanel } from './src/renderer/AssistantSessionPanel';
     const sessionId=${JSON.stringify(sessionId)},nextSessionId=${JSON.stringify(nextSessionId)};
     window.notalone = { sqliteDiscussion: {
-      candidates: { execute: async () => ({ coverage: { phase: 'complete' }, requests: [] }) },
+      candidates: { execute: async () => ({ requests: [] }) },
       submit: async () => ({}),
       onInvalidated: () => () => {}
     }};

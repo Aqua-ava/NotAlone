@@ -6,11 +6,11 @@ import {randomUUID} from 'node:crypto';
 // 仅供助手回看；生成受理、编辑、选择、来源冻结和最终资格仍交给唯一写者。
 export const assistantReadActions=[
  'discussion.list','discussion.view','discussion.trace',
- 'reply.view','reply.status','reply.version','reply.skillInputs','reply.inputs','history.readRecent',
+ 'reply.view','reply.status','reply.version','reply.skillInputs','reply.inputs',
  'deletion.list','deletion.status',
 ] as const;
 const allowed=new Set<string>(assistantReadActions),metadata=new Set(['deletion.list','deletion.status']);
-const candidateActions=new Set<string>(['reply.view','reply.version','reply.skillInputs','reply.inputs','history.readRecent']);
+const candidateActions=new Set<string>(['reply.view','reply.version','reply.skillInputs','reply.inputs']);
 const terminal=new Set(['readonly_closed','stale_lease','storage_identity_changed','unsafe_storage_path','storage_missing','schema_drift','migration_drift','worker_failed','assistant_read_invalidated','assistant_read_scope_unavailable','discussion_deletion_pending','deletion_holder_fenced']);
 type Options={storage:Pick<SqliteStorage,'openReader'>;ownerId:string;holders:ActiveHolders};
 type Lane='discussion'|'candidate';

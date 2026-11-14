@@ -14,7 +14,7 @@ const bundle = await build({ stdin: { contents: `
   const candidate={candidateId:'22222222-2222-4222-8222-222222222222',versionNo:1,origin:'model',parentVersionNo:null,
     parts:['合成候选'],basis:[{itemNo:1,kind:'message',text:'合成依据',verification:'actual_input'}]};
   const bridge={onInvalidated:listener=>{listeners.add(listener);return()=>listeners.delete(listener);},
-    candidates:{execute:async request=>{window.fixture.commands.push(request.action);if(window.fixture.sourceFailure)throw new Error('参考资料已失效，请重新读取。');return {coverage:{phase:'complete'},
+    candidates:{execute:async request=>{window.fixture.commands.push(request.action);if(window.fixture.sourceFailure)throw new Error('参考资料已失效，请重新读取。');return {
       requests:[{requestId,coverageWarning:null,sourceState:window.fixture.sourceUnavailable?'unavailable':'available',
         candidates:window.fixture.sourceUnavailable?[]:[candidate],selections:[],loadedSkills:[]}]};}}};
   function View(){

@@ -39,7 +39,7 @@ test('SQLite会话先显示表达工作区，讨论输入与空状态收在折�
   const page = await browser.newPage(); page.setDefaultTimeout(5000);
   await page.exposeFunction('__candidateExecute', async request => {
     assert.equal(request.action, 'read');
-    return { requests: [], coverage: { phase: 'complete' } };
+    return { requests: [] };
   });
   await page.goto(`http://127.0.0.1:${server.address().port}`);
   const stylesheet = compiled.outputFiles.find(file => file.path.endsWith('.css'));

@@ -25,7 +25,6 @@ export function replyCandidateQueryAllowed(method:string|undefined,url:URL):bool
 }
 function invalid():never{throw new StorageFailure('reply_input_invalid');}
 function respond(res:ServerResponse,status:number,value:unknown){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));}
-function occurredAt(value:string|null):string|null{if(value===null)return null;const timestamp=Number(value);if(!Number.isSafeInteger(timestamp))return null;const date=new Date(timestamp);return Number.isFinite(date.valueOf())?date.toISOString():null;}
 const requestWindowLimit=20,pageMaxBytes=1_800_000;
 export class SqliteReplyCandidateHttp {
  private readonly options:{storage:SqliteStorage;service:SqliteReplyCandidateService;turns?:SqliteReplyTurns;authorize:(request:IncomingMessage)=>boolean};
@@ -49,8 +48,6 @@ export class SqliteReplyCandidateHttp {
     respond(res,200,await o.service.status(contactId,discussionId,requestKey));
    }else if(req.method==='GET'&&!candidateId){
     const requests=await o.service.view(contactId,discussionId,{includeSkillText:false,limit:requestWindowLimit+1});
-    const history=await o.service.recentHistory(contactId);
-    const recentMessages=history.messages.map((m:any)=>({messageId:m.id,sender:m.sender,text:m.text,occurredAt:occurredAt(m.sentAt),timePrecision:m.timePrecision,displayPosition:m.displayPosition,ordering:m.ordering}));
     const compact=(request:any)=>({
      requestId:request.requestId,
      ...(request.generationState===undefined?{}:{generationState:request.generationState}),
@@ -66,7 +63,7 @@ export class SqliteReplyCandidateHttp {
      ...(request.preloadedSkills===undefined?{}:{preloadedSkills:request.preloadedSkills.map(({catalogRevision:_catalogRevision,...skill}:any)=>skill)}),
     });
     let visible=requests.slice(-requestWindowLimit),hasMoreRequests=requests.length>requestWindowLimit;
-    const build=()=>({requests:visible.map(compact),coverage:{phase:history.coverage.phase},recentMessages,hasMoreRequests});
+    const build=()=>({requests:visible.map(compact),hasMoreRequests});
     while(visible.length>1&&Buffer.byteLength(JSON.stringify(build()),'utf8')>pageMaxBytes){visible=visible.slice(1);hasMoreRequests=true;}
     if(Buffer.byteLength(JSON.stringify(build()),'utf8')>pageMaxBytes)throw new StorageFailure('reply_page_too_large');
     respond(res,200,build());
