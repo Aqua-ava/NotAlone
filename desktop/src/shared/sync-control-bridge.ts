@@ -67,6 +67,7 @@ export interface SyncStatusReport {
   backgroundFailureCode: string | null;
   cliAvailable: boolean;
   confirmedBindingCount: number;
+  contactAvatarRevision?: string;
   foregroundPhase: ForegroundReportPhase;
   foregroundFailureCode: string | null;
   probeAvailable: boolean;

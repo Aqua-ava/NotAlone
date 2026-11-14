@@ -4,7 +4,9 @@
 
 此模块拥有 owner、contact、channel_account、channel_conversation、conversation_binding、binding_verification、read_grant、manual_confirmation。领域迁移由 `identityMigration(version)` 生成，注册版本由集成顺序确定；已集成 SQL 不重写。下游模块引用这些主键，不重复建身份表。
 
-`SqliteContactService` 的 metadata port 只提供账号、来源代次及私聊身份元数据。`createWechatContactMetadata` 经窄客户端读取账号证据；私聊名单和头像读取要求当前证据为 `verified` 且与先前固定账号一致，否则拒绝。元数据资格不能替代历史正文读取支持，也不能独立证明前台登录账号。
+`SqliteContactService` 的 metadata port 提供账号、来源代次、私聊身份及本地头像位图。`createWechatContactMetadata` 经窄客户端读取账号证据；新增微信资料读取要求当前证据为 `verified` 且与先前固定账号一致，否则拒绝。元数据资格不能替代历史正文读取支持，也不能独立证明前台登录账号。
+
+联系人头像随历史／增量同步的启停与调度周期从微信本地 `head_image` 库定向读取；整个头像路径禁止网络请求。原始位图限制 256 KiB，实际解码后重编码为 96×96 PNG，按 `owner_id + contact_id` 存在 `contact_avatar`，来源缺图或失败保留旧副本。页面 GET 只读已保存的本地图片，不要求微信在线或读取开关开启；目录提供内容摘要 `avatar_revision`，同步状态提供 `contact_avatar_revision`，用于落图后的定向刷新。联系人与账户删除显式清理图片，聊天历史清空保留独立头像；在途写入仍在同一短事务复验读取资格及删除代次。
 
 名单须明确同意；快照短时驻内存，确认再次核对账号/名单。保存只含稳定身份、名称和最小证明，丢弃上游摘要。快照 token 和勾选时的 selection_generation 一起提交，不能在提交前刷新时自动换成新代次。重复同快照确认幂等；撤销过的快照不能恢复。
 

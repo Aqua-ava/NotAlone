@@ -24,7 +24,7 @@ export class SqliteContactHttp {
  async syncStatus(){
   const directory=await this.service.syncDirectory();
   return {identity_protocol:'sqlite-selected-v1',body_available:false,sync_mode:'cli_background',sync_enabled:directory.read_enabled,sync_scope:'selected',sync_scope_failure_code:null,
-   cli_available:false,probe_available:false,wechat_in_front:false,cli_sync_phase:directory.read_enabled?'degraded':'disabled',
+   contact_avatar_revision:await this.service.avatarRevision(),cli_available:false,probe_available:false,wechat_in_front:false,cli_sync_phase:directory.read_enabled?'degraded':'disabled',
    foreground_phase:directory.read_enabled?'unavailable':'sync_disabled',cli_failure_code:'wechat_body_unavailable',foreground_failure_code:null,
    cli_bound_count:directory.bindings.filter(b=>b.status==='active').length,
    cli_backfill_phase:'not_required',cli_backfill_failure_code:null,cli_backfill_total_contacts:0,cli_backfill_completed_contacts:0,

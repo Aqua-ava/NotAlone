@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -11,10 +14,10 @@ func avatarMetadataRequest(h *notaloneHistorySession, username string) notaloneH
 	return notaloneHistoryRequest{Operation: "metadata-avatar", Account: h.server.cfg.Wxid, Conversation: username, Consent: "selected-contact-avatar-metadata-v1"}
 }
 
-func TestNotAloneAvatarReadsOnlyExactPrivateContact(t *testing.T) {
-	h := accountMetadataFixture(t, true)
+func TestNotAloneAvatarReadsOnlyExactLocalPrivateContact(t *testing.T) {
+	h := localAvatarFixture(t)
 	writer := accountMetadataWriter(t, h, "contact")
-	if err := writer.Exec(`UPDATE contact SET small_head_url='https://wx.qlogo.cn/mmhead/synthetic-small/132',big_head_url='https://wx.qlogo.cn/mmhead/synthetic-big/0',description='BODY_SENTINEL' WHERE username='friend-a'; UPDATE contact SET small_head_url='https://wx.qlogo.cn/mmhead/OTHER_CONTACT/132' WHERE username='friend-b';`); err != nil {
+	if err := writer.Exec(`UPDATE contact SET small_head_url='https://example.invalid/NEVER_REQUEST',big_head_url='https://example.invalid/NEVER_REQUEST',description='BODY_SENTINEL' WHERE username='friend-a';`); err != nil {
 		t.Fatal(err)
 	}
 	value, err := h.handle(context.Background(), avatarMetadataRequest(h, "friend-a"))
@@ -22,22 +25,36 @@ func TestNotAloneAvatarReadsOnlyExactPrivateContact(t *testing.T) {
 		t.Fatal(err)
 	}
 	report := value.(notaloneContactAvatarMetadata)
-	if report.Username != "friend-a" || report.AvatarURL == nil || *report.AvatarURL != "https://wx.qlogo.cn/mmhead/synthetic-small/132" || report.Account.Status != "verified" {
-		t.Fatal(report)
+	if report.Format != "wechat-contact-avatar-local-v1" || report.Username != "friend-a" || report.Avatar == nil || report.Avatar.MIMEType != "image/png" || report.Avatar.DataBase64 != syntheticAvatarPNG || report.Account.Status != "verified" {
+		t.Fatal("本机头像未按精确联系人返回")
 	}
 	encoded, _ := json.Marshal(report)
-	for _, forbidden := range []string{"OTHER_CONTACT", "BODY_SENTINEL", "displayName", "big_head_url"} {
+	for _, forbidden := range []string{"OTHER_CONTACT", "BODY_SENTINEL", "displayName", "avatarUrl", "NEVER_REQUEST"} {
 		if strings.Contains(string(encoded), forbidden) {
-			t.Fatal("头像响应越过单个联系人的最小展示范围")
+			t.Fatal("头像响应越过单个联系人的本机位图范围")
 		}
 	}
-	if err := writer.Exec(`UPDATE contact SET small_head_url='',big_head_url='https://thirdwx.qlogo.cn/mmopen/synthetic/0' WHERE username='friend-a'`); err != nil {
+}
+
+const syntheticAvatarPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+
+func localAvatarFixture(t *testing.T) *notaloneHistorySession {
+	t.Helper()
+	h := accountMetadataFixture(t, true)
+	notaloneTestDB(t, h.server.cfg.DBRoot, h.server.cfg, "head_image", "head_image.db", `CREATE TABLE head_image(username TEXT PRIMARY KEY,md5 TEXT,image_buffer BLOB,update_time INTEGER);`, strings.Repeat("55", 16))
+	data, _ := json.Marshal(h.server.cfg)
+	if err := os.WriteFile(os.Getenv("WECHAT_CLI_CONFIG"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	value, err = h.handle(context.Background(), avatarMetadataRequest(h, "friend-a"))
-	if err != nil || value.(notaloneContactAvatarMetadata).AvatarURL == nil || *value.(notaloneContactAvatarMetadata).AvatarURL != "https://thirdwx.qlogo.cn/mmopen/synthetic/0" {
-		t.Fatal("未使用合法大头像兜底", err)
+	db := accountMetadataWriter(t, h, "head_image")
+	image, _ := base64.StdEncoding.DecodeString(syntheticAvatarPNG)
+	if err := db.ExecArgs("INSERT INTO head_image(username,image_buffer) VALUES(?,?)", "friend-a", image); err != nil {
+		t.Fatal(err)
 	}
+	if err := db.ExecArgs("INSERT INTO head_image(username,image_buffer) VALUES(?,?)", "friend-b", []byte("OTHER_CONTACT")); err != nil {
+		t.Fatal(err)
+	}
+	return h
 }
 
 func TestNotAloneAvatarRejectsUnverifiedOrAmbiguousIdentity(t *testing.T) {
@@ -62,22 +79,51 @@ func TestNotAloneAvatarRejectsUnverifiedOrAmbiguousIdentity(t *testing.T) {
 	}
 }
 
-func TestNotAloneAvatarMissingOrUnsafeURLIsNull(t *testing.T) {
-	for _, raw := range []string{"", "http://example.invalid/x", "https://wx.qlogo.cn.evil.invalid/x", "https://example.invalid/x", "https://user@wx.qlogo.cn/x", "https://wx.qlogo.cn:444/x", "file:///private/avatar", "https://wx.qlogo.cn/x#fragment", "https://wx.qlogo.cn", "https://wx.qlogo.cn\\evil.invalid/x", "https://wx.qlogo.cn/ a"} {
-		if notaloneAvatarURL(raw) != nil {
-			t.Fatalf("接收了不安全头像地址 %q", raw)
+func TestNotAloneLocalAvatarMissingOrInvalidImageIsNull(t *testing.T) {
+	for _, data := range [][]byte{nil, []byte("https://wx.qlogo.cn/NEVER_REQUEST"), []byte("<svg/>"), append([]byte{137, 80, 78, 71, 13, 10, 26, 10}, make([]byte, notaloneAvatarByteLimit)...)} {
+		if notaloneLocalAvatar(data) != nil {
+			t.Fatal("无效本机头像取得位图回执")
 		}
 	}
-	for _, host := range []string{"wx.qlogo.cn", "thirdwx.qlogo.cn"} {
-		secure := notaloneAvatarURL("http://" + host + "/mmhead/synthetic/132")
-		if secure == nil || *secure != "https://"+host+"/mmhead/synthetic/132" {
-			t.Fatal("固定头像CDN旧地址没有升级为HTTPS")
-		}
+	h := localAvatarFixture(t)
+	if err := accountMetadataWriter(t, h, "head_image").Exec("DELETE FROM head_image WHERE username='friend-a'"); err != nil {
+		t.Fatal(err)
 	}
-	h := accountMetadataFixture(t, true)
 	value, err := h.handle(context.Background(), avatarMetadataRequest(h, "friend-a"))
-	if err != nil || value.(notaloneContactAvatarMetadata).AvatarURL != nil {
-		t.Fatal("缺少头像应返回null", err)
+	if err != nil || value.(notaloneContactAvatarMetadata).Avatar != nil {
+		t.Fatal("缺少本机头像应返回null", err)
+	}
+	missing := accountMetadataFixture(t, true)
+	value, err = missing.handle(context.Background(), avatarMetadataRequest(missing, "friend-a"))
+	if err != nil || value.(notaloneContactAvatarMetadata).Avatar != nil {
+		t.Fatal("没有头像库不得回退网址", err)
+	}
+}
+
+func TestNotAloneLocalAvatarRejectsUnknownSchemaSymlinkAndCancellation(t *testing.T) {
+	h := localAvatarFixture(t)
+	if err := accountMetadataWriter(t, h, "head_image").Exec("ALTER TABLE head_image ADD COLUMN unexpected TEXT"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.handle(context.Background(), avatarMetadataRequest(h, "friend-a")); err == nil {
+		t.Fatal("未知头像结构被接受")
+	}
+	linked := localAvatarFixture(t)
+	file := filepath.Join(linked.server.cfg.DBRoot, "db_storage/head_image/head_image.db")
+	if err := os.Rename(file, file+".saved"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(file+".saved", file); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := linked.handle(context.Background(), avatarMetadataRequest(linked, "friend-a")); err == nil {
+		t.Fatal("符号链接头像库被接受")
+	}
+	cancelled := localAvatarFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := cancelled.handle(ctx, avatarMetadataRequest(cancelled, "friend-a")); err == nil {
+		t.Fatal("取消仍读取头像")
 	}
 }
 

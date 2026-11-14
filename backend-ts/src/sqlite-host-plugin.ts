@@ -225,7 +225,11 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
     await contacts.initialize();
     if (shutdown.state !== 'running') throw new Error('SQLITE_HOST_STOPPING');
     const createHistoryChannel=()=>createWechatHistoryChannel(sqlite.wechatCliPath,scope=>checkpointCache?.track(scope)??Promise.resolve(),wechat);
-    const syncDirectory={directory:contacts.syncDirectory.bind(contacts)};
+    const syncDirectory={directory:async()=>{
+      // 头像复用历史/增量调度的唤醒周期；页面读取仅消费本地已保存副本。
+      if(automaticBackground)contacts!.wakeAvatarSync();
+      return contacts!.syncDirectory();
+    }};
     if(capabilities.capabilities.some(capability=>capability==='history')){
       checkpointCache=new WechatHistoryCheckpointCache(storage,ownerId,deletionHolders,sqlite.wechatCliPath,contactId=>history?.stop(contactId)??Promise.resolve());
       await checkpointCache.initialize();
@@ -235,8 +239,8 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
       history.setFirstHistoryWake(contactId=>{if(automaticBackground)firstHistory?.wakeContact(contactId);});
       incremental=new IncrementalHistoryCoordinator(syncDirectory,history,{firstHistoryManagedExternally:true});
       // 开启/重选只唤醒合法读取；关闭/取消/退出由 readStop 停止后续查询并等待在途释放。
-      contacts.setReadStart(()=>{if(automaticImages)imageSync?.wake();if(automaticBackground){firstHistory!.wake();incremental!.wake();quoteSync?.wake();memory?.wake();}});
     }
+    contacts.setReadStart(()=>{if(automaticImages)imageSync?.wake();if(automaticBackground){firstHistory?.wake();incremental?.wake();quoteSync?.wake();memory?.wake();}});
     if(history&&process.env.NOTALONE_SYNC_PROBE&&path.isAbsolute(process.env.NOTALONE_SYNC_PROBE)) foreground=SqliteForeground.create(ownerId,process.env.NOTALONE_SYNC_PROBE,sqlite.wechatCliPath??'',()=>contacts!.foregroundSnapshot(),proof=>contacts!.confirmForeground(proof));
     const historyHttp=history?new SqliteHistoryHttp(history,(contactId,messageIds)=>{if(automaticImages)imageSync?.retryViewed(contactId,messageIds);}):undefined;
     let historyStatusInFlight:Promise<Record<string,unknown>>|undefined;
@@ -263,7 +267,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
     await media.initialize();
     if(originalImages)imageSync=new SqliteImageSyncCoordinator(backgroundReads,syncDirectory,media);
     if(history&&await supportsWechatQuotes(sqlite.wechatCliPath))quoteSync=new SqliteQuoteSyncCoordinator(syncDirectory,history);
-    contacts.setReadStop(async contactId=>{await Promise.all([imageSync?.stop(contactId),quoteSync?.stop(contactId),firstHistory?firstHistory.stop(contactId):history?.stop(contactId),incremental?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);if(contactId)await checkpointCache?.forget(contactId);else await wechat?.stop();});
+    contacts.setReadStop(async contactId=>{await Promise.all([contacts!.stopAvatarSync(contactId),imageSync?.stop(contactId),quoteSync?.stop(contactId),firstHistory?firstHistory.stop(contactId):history?.stop(contactId),incremental?.stop(contactId),media!.stop(contactId,contactId?'all':'wechat')]);if(contactId)await checkpointCache?.forget(contactId);else await wechat?.stop();});
     const mediaHttp = new SqliteMediaHttp(media);
     const discussionsEnabled=capabilities.capabilities.includes('discussions'),memoryEnabled=capabilities.capabilities.includes('memory');
     if(discussionsEnabled||memoryEnabled)models=await createSqliteModelRuntime({ctx,environment:modelEnvironment,userData:sqlite.userData,businessHome:config.businessHome,infoPath:config.infoPath,envFilePath:config.envFilePath,
@@ -404,7 +408,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
           await clearStartupDiagnostic(config.infoPath);
         } finally { await rm(pending, { force: true }); }
       })();
-      void publication.then(()=>{if(shutdown.state!=='running')return;if(automaticImages)imageSync?.wake();if(automaticBackground){firstHistory?.wake();incremental?.wake();incremental?.start();quoteSync?.wake();}}).catch(async error => {await finishStartupDiagnostic(config.infoPath, startupFailureCause(error));ctx.appExit!(1);});
+      void publication.then(()=>{if(shutdown.state!=='running')return;if(automaticBackground)contacts?.wakeAvatarSync();if(automaticImages)imageSync?.wake();if(automaticBackground){firstHistory?.wake();incremental?.wake();incremental?.start();quoteSync?.wake();}}).catch(async error => {await finishStartupDiagnostic(config.infoPath, startupFailureCause(error));ctx.appExit!(1);});
     });
   } catch (error) {
     await finishStartupDiagnostic(config.infoPath, startupFailureCause(error));

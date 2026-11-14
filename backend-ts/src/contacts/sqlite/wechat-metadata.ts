@@ -50,11 +50,11 @@ export function createWechatContactMetadata(executable?: string, shared?: Shared
         return report.sessions.map(row => ({externalKey:row.username, displayName:row.displayName, kind:row.kind, identityAssurance:row.identityAssurance}));
       },signal);
     },
-    async avatarUrl(expected, externalKey, signal) {
+    async avatar(expected, externalKey, signal) {
       return read(async (native,currentSignal) => {
         const current = await native.accountMetadata(currentSignal);
         if (current.status !== 'verified' || JSON.stringify(evidence(current)) !== JSON.stringify(expected)) throw new StorageFailure('metadata_identity_conflict');
-        return (await native.contactAvatarMetadata(current, externalKey, currentSignal)).avatarUrl;
+        return (await native.contactAvatarMetadata(current, externalKey, currentSignal)).avatar;
       },signal);
     },
     async close() { closed = true; lifetime.abort();await Promise.allSettled([...active]); const opening = pending; await (await opening?.catch(() => undefined))?.close(); if (pending === opening) pending = undefined; },

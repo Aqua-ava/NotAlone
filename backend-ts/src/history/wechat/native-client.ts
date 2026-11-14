@@ -50,8 +50,8 @@ export interface WechatPrivateSessionMetadata {
   sessions: {username: string; displayName: string; kind: 'private'; identityAssurance: 'verified'}[];
 }
 export interface WechatContactAvatarMetadata {
-  format: 'wechat-contact-avatar-metadata-v1'; account: WechatAccountMetadata;
-  username: string; avatarUrl: string | null;
+  format: 'wechat-contact-avatar-local-v1'; account: WechatAccountMetadata;
+  username: string; avatar: {mimeType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; dataBase64: string} | null;
 }
 export interface WechatMessageMetadataRecord {
   partition: string; table: string; localId: string | null; serverId: string | null;
@@ -851,17 +851,21 @@ export class NarrowWechatClient {
     return this.#enqueue(() => {
       if (!this.#account || this.#account.status !== 'verified' || JSON.stringify(evidence) !== JSON.stringify(this.#account)) return fail('history_scope_unverified');
       return this.#request({op: 'metadata-avatar', account: evidence.accountKey, conversation: username, consent: 'selected-contact-avatar-metadata-v1'}, value => {
-        const row = object(value, ['format', 'account', 'username', 'avatarUrl']);
+        const row = object(value, ['format', 'account', 'username', 'avatar']);
         const account = accountMetadata(row.account, this.#options);
-        if (row.format !== 'wechat-contact-avatar-metadata-v1' || JSON.stringify(account) !== JSON.stringify(evidence) || row.username !== username) return fail();
-        if (row.avatarUrl !== null) {
-          if (typeof row.avatarUrl !== 'string' || Buffer.byteLength(row.avatarUrl) > 2048 || /[\s\\\u0000-\u001f\u007f]/.test(row.avatarUrl)) return fail();
-          let url: URL; try { url = new URL(row.avatarUrl); } catch { return fail(); }
-          if (url.protocol !== 'https:' || !['wx.qlogo.cn', 'thirdwx.qlogo.cn'].includes(url.hostname) || url.username || url.password || url.port || url.hash
-            || !row.avatarUrl.startsWith(`https://${url.hostname}/`)) return fail();
+        if (row.format !== 'wechat-contact-avatar-local-v1' || JSON.stringify(account) !== JSON.stringify(evidence) || row.username !== username) return fail();
+        let avatar: WechatContactAvatarMetadata['avatar'] = null;
+        if (row.avatar !== null) {
+          const image = object(row.avatar, ['mimeType', 'dataBase64']);
+          if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(image.mimeType as string)
+            || typeof image.dataBase64 !== 'string' || !image.dataBase64.length || image.dataBase64.length > Math.ceil(256 * 1024 / 3) * 4
+            || image.dataBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(image.dataBase64)) return fail();
+          const bytes = Buffer.from(image.dataBase64, 'base64');
+          if (bytes.length > 256 * 1024 || bytes.toString('base64') !== image.dataBase64) return fail();
+          avatar = {mimeType: image.mimeType as NonNullable<WechatContactAvatarMetadata['avatar']>['mimeType'], dataBase64: image.dataBase64};
         }
-        return {format: 'wechat-contact-avatar-metadata-v1', account, username, avatarUrl: row.avatarUrl as string | null};
-      }, 16 * 1024);
+        return {format: 'wechat-contact-avatar-local-v1', account, username, avatar};
+      }, Math.ceil(256 * 1024 / 3) * 4 + 16 * 1024);
     }, signal);
   }
   /** 仅释放会话资源；账号级来源守卫与一次性图片密钥通道继续属于当前进程。 */

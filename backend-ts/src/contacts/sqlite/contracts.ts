@@ -21,7 +21,7 @@ export interface PrivateSessionMetadata { externalKey: string; displayName: stri
 export interface ContactMetadataPort {
   account(signal?: AbortSignal): Promise<AccountEvidence>;
   sessions(account: AccountEvidence, signal?: AbortSignal): Promise<readonly PrivateSessionMetadata[]>;
-  avatarUrl?(account: AccountEvidence, externalKey: string, signal?: AbortSignal): Promise<string | null>;
+  avatar?(account: AccountEvidence, externalKey: string, signal?: AbortSignal): Promise<import('./avatar.ts').LocalContactAvatar | null>;
   close?(): Promise<void>;
 }
 export interface ContactSelection {

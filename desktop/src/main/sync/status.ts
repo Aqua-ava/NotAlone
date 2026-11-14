@@ -153,6 +153,8 @@ export function parseSyncReport(value: unknown): SyncStatusReport {
     || typeof fields.cli_bound_count !== 'number' || !Number.isSafeInteger(fields.cli_bound_count)
     || fields.cli_bound_count < 0) throw new Error('同步报告不可用。');
   if ('sync_scope' in fields && fields.sync_scope !== 'all_private' && fields.sync_scope !== 'selected') throw new Error('同步报告不可用。');
+  if ('contact_avatar_revision' in fields && (typeof fields.contact_avatar_revision !== 'string'
+    || fields.contact_avatar_revision.length > 128)) throw new Error('同步报告不可用。');
   return { ...(fields.identity_protocol === 'sqlite-selected-v1' ? { selectionOnly: true, bodyAvailable: fields.body_available === true } : {}), syncScope: (fields.sync_scope ?? 'selected') as SyncScope,
     syncScopeFailureCode: 'sync_scope_failure_code' in fields ? failureCode(fields.sync_scope_failure_code) : null,
     ...historyAuthorization(fields),
@@ -160,6 +162,7 @@ export function parseSyncReport(value: unknown): SyncStatusReport {
     enabled: fields.sync_enabled, backgroundPhase: fields.cli_sync_phase as BackgroundSyncPhase,
     backgroundFailureCode: failureCode(fields.cli_failure_code), cliAvailable: fields.cli_available,
     confirmedBindingCount: fields.cli_bound_count, foregroundPhase: fields.foreground_phase as ForegroundReportPhase,
+    ...(typeof fields.contact_avatar_revision === 'string' ? { contactAvatarRevision: fields.contact_avatar_revision } : {}),
     foregroundFailureCode: failureCode(fields.foreground_failure_code), probeAvailable: fields.probe_available,
     wechatInFront: fields.wechat_in_front, backfill: backfillReport(fields),
     ...('cli_priority_contact_id' in fields ? { priority: priorityReport(fields) } : {}),

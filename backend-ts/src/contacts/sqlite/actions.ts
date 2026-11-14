@@ -104,6 +104,25 @@ export const identityActions: StorageAction[] = [
   const owner=text(i.ownerId);
   return {bindings:bindings(tx,owner),read_enabled:tx.get('SELECT read_enabled FROM owner WHERE owner_id=?',[owner])?.read_enabled===1n};
  }),
+ action('identity.avatarRead','read',(tx,i)=>{
+  const row=tx.get(`SELECT a.mime_type,a.image FROM contact_avatar a JOIN contact c ON c.owner_id=a.owner_id AND c.id=a.contact_id
+   JOIN owner o ON o.owner_id=c.owner_id WHERE a.owner_id=? AND a.contact_id=? AND c.state='active' AND o.state='active'`,[text(i.ownerId),text(i.contactId)]);
+  return row?{mime_type:'image/png',base64:Buffer.from(row.image as Uint8Array).toString('base64')}:null;
+ }),
+ action('identity.avatarRevision','read',(tx,i)=>tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='contact_avatar_clock'")?String(tx.get('SELECT revision FROM contact_avatar_clock WHERE owner_id=?',[text(i.ownerId)])?.revision??0n):'0'),
+ action('identity.avatarSave','write',(tx,i)=>{
+  const owner=text(i.ownerId),token=i.token as ReadEligibility|undefined;
+  if(!token||token.owner_id!==owner)return fail('read_not_authorized');
+  assertReadEligibility(tx,token);
+  if(typeof i.base64!=='string'||i.base64.length>349528||typeof i.digest!=='string'||!/^[0-9a-f]{64}$/.test(i.digest))return fail('identity_request_invalid');
+  const image=Buffer.from(i.base64,'base64');
+  if(!image.length||image.length>262144||image.toString('base64')!==i.base64)return fail('identity_request_invalid');
+  const old=tx.get('SELECT digest FROM contact_avatar WHERE owner_id=? AND contact_id=?',[owner,token.contact_id]);
+  if(old?.digest===i.digest)return false;
+  tx.run(`INSERT INTO contact_avatar(owner_id,contact_id,mime_type,image,digest,updated_at) VALUES(?,?,'image/png',?,?,?)
+   ON CONFLICT(owner_id,contact_id) DO UPDATE SET image=excluded.image,digest=excluded.digest,updated_at=excluded.updated_at`,[owner,token.contact_id,image,i.digest,i.at]);
+  return true;
+ }),
  action('identity.avatarScope','read',(tx,i)=>{
   const owner=text(i.ownerId),token=i.token as ReadEligibility|undefined;
   if(!token||token.owner_id!==owner)return fail('read_not_authorized');
@@ -116,7 +135,8 @@ export const identityActions: StorageAction[] = [
  }),
  action('identity.directory','read',(tx,i)=>{
   const owner=text(i.ownerId),counts=visibleMessageCounts(tx,owner);
-  return {contacts:tx.all("SELECT id AS contact_id,display_name,selection_generation,data_generation FROM contact WHERE owner_id=? AND state='active' ORDER BY id",[owner]).map(c=>({...c,selection_generation:String(c.selection_generation),data_generation:String(c.data_generation),data_status:{message_count:counts.get(String(c.contact_id))??0,source_count:0}})),bindings:bindings(tx,owner),account:tx.get("SELECT id,external_key,identity_scheme,source_generation,scope_revision FROM channel_account WHERE owner_id=? AND identity_state='verified'",[owner])??null,read_enabled:tx.get('SELECT read_enabled FROM owner WHERE owner_id=?',[owner])?.read_enabled===1n};
+  const avatar=tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='contact_avatar'")?'(SELECT digest FROM contact_avatar a WHERE a.owner_id=contact.owner_id AND a.contact_id=contact.id)':'NULL';
+  return {contacts:tx.all(`SELECT id AS contact_id,display_name,selection_generation,data_generation,${avatar} AS avatar_revision FROM contact WHERE owner_id=? AND state='active' ORDER BY id`,[owner]).map(c=>({...c,selection_generation:String(c.selection_generation),data_generation:String(c.data_generation),data_status:{message_count:counts.get(String(c.contact_id))??0,source_count:0}})),bindings:bindings(tx,owner),account:tx.get("SELECT id,external_key,identity_scheme,source_generation,scope_revision FROM channel_account WHERE owner_id=? AND identity_state='verified'",[owner])??null,read_enabled:tx.get('SELECT read_enabled FROM owner WHERE owner_id=?',[owner])?.read_enabled===1n};
  }),
  action('identity.sourceReconfirmation','read',(tx,i)=>{
   const old=tx.get("SELECT id,source_generation,scope_revision FROM channel_account WHERE owner_id=? AND identity_scheme=? AND external_key=? AND identity_state<>'revoked'",[i.ownerId,text(i.evidence.identityScheme),text(i.evidence.externalKey)]);

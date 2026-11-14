@@ -31,12 +31,15 @@ export function contactSummaries(value: unknown): ContactSummary[] {
     if (contactId === null
       || typeof entry.display_name !== 'string' || !entry.display_name.trim()
       || !record(entry.data_status)) throw new Error('联系人目录不可用。');
+    if (entry.avatar_revision !== undefined && entry.avatar_revision !== null
+      && (typeof entry.avatar_revision !== 'string' || entry.avatar_revision.length > 128)) throw new Error('联系人目录不可用。');
     const { message_count: messageCount, source_count: sourceCount } = entry.data_status;
     if (known.has(contactId) || typeof messageCount !== 'number' || !Number.isSafeInteger(messageCount) || messageCount < 0
       || typeof sourceCount !== 'number' || !Number.isSafeInteger(sourceCount) || sourceCount < 0) {
       throw new Error('联系人目录不可用。');
     }
     known.add(contactId);
-    return { contactId, displayName: entry.display_name, messageCount, sourceCount };
+    return { contactId, displayName: entry.display_name, messageCount, sourceCount,
+      ...(entry.avatar_revision === undefined ? {} : { avatarRevision: entry.avatar_revision ?? '' }) };
   });
 }

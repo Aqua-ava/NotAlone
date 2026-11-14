@@ -38,8 +38,9 @@ function fixture(t, failures = 1, priority = false, quiet, failureCode = 'sync_s
   } };
  const contact={directoryPhase:'ready',scopeRevision:1,selectedContactId:id,contacts:[{contactId:id}]};
  const contactListeners=new Set();
+ let directoryReads=0;
  const contacts={getState:()=>contact,onStateChanged:listener=>{contactListeners.add(listener);return()=>contactListeners.delete(listener);},
-  selectContact:()=>contact};
+  selectContact:()=>contact,refreshContactsInBackground:async()=>{directoryReads++;return true;}};
  const foreground=new ports.ForegroundController(backend,contacts,{schedule:()=>1,cancel:()=>{}});
  const permits=[];foreground.attachChangeSource({update:permit=>permits.push(permit),dispose(){}});
  const sync=new ports.SyncControlController(backend,contacts,undefined,quiet);
@@ -47,8 +48,23 @@ function fixture(t, failures = 1, priority = false, quiet, failureCode = 'sync_s
  foreground.setSyncControlState(sync.getState());foreground.startContinuous();
  const connect=value=>{generation=value;for(const listener of listeners)listener();};
  t.after(()=>{connect(undefined);sync.dispose();unsubscribe();foreground.dispose();});
- return {sync,foreground,permits,control,requests,connect,contacts,contactListeners,contact};
+ return {sync,foreground,permits,control,requests,connect,contacts,contactListeners,contact,directoryReads:()=>directoryReads};
 }
+
+test('所选范围头像同步版本变化自动刷新目录，同版本及切换联系人不重复刷新', async t=>{
+ const f=fixture(t,0);await flush();
+ f.control.extra={contact_avatar_revision:'saved-1'};
+ await f.sync.refresh();await flush();
+ assert.equal(f.directoryReads(),1);
+ t.mock.timers.tick(3000);await flush();
+ assert.equal(f.directoryReads(),1);
+ f.control.extra={contact_avatar_revision:'saved-2'};
+ t.mock.timers.tick(3000);await flush();
+ assert.equal(f.directoryReads(),2);
+ f.contact.scopeRevision++;for(const listener of f.contactListeners)listener(f.contact);
+ t.mock.timers.tick(3000);await flush();
+ assert.equal(f.directoryReads(),2);
+});
 
 test('启动首次状态503后自动恢复ready，既有前台观察取得加速许可', async t=>{
  const f=fixture(t);await flush();await f.foreground.observeBeforeShow();

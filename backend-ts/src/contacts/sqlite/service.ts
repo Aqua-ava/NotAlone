@@ -1,9 +1,9 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import type { SqliteStorage } from '../../storage/sqlite/client.ts';
 import type { AccountEvidence, ContactMetadataPort, ContactSelection, ReadEligibility, SavedContactBinding, WechatVersionCompatibility } from './contracts.ts';
 import { WECHAT_METADATA_SUPPORT } from '../../history/wechat/support-profile.ts';
-import { fetchContactAvatar, type ContactAvatar } from './avatar.ts';
+import { normalizeContactAvatar, type ContactAvatar } from './avatar.ts';
 function fail(code:string):never {throw new StorageFailure(code);}
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
 const identity=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9_.@-]{1,255}$/.test(v);
@@ -15,7 +15,7 @@ function compatibilityFor(evidence:AccountEvidence):WechatVersionCompatibility|u
   supported_program_version:WECHAT_METADATA_SUPPORT.programVersion,supported_build:WECHAT_METADATA_SUPPORT.build};
 }
 function assertAccountEvidence(evidence:AccountEvidence):void {if(!identity(evidence.externalKey)||!identity(evidence.identityScheme)||!identity(evidence.sourceGeneration)||!identity(evidence.supportProfile)||!['verified','unverified'].includes(evidence.assurance)||evidence.programVersion!==undefined&&!version(evidence.programVersion)||evidence.build!==undefined&&!build(evidence.build))fail('metadata_identity_unverified');}
-interface Directory { contacts: {contact_id:string;display_name:string;selection_generation:string;data_generation:string;data_status:{message_count:number;source_count:number}}[]; bindings:SavedContactBinding[];account:{id:string;external_key:string;identity_scheme:string;source_generation:string;scope_revision:bigint}|null;read_enabled:boolean }
+interface Directory { contacts: {contact_id:string;display_name:string;selection_generation:string;data_generation:string;avatar_revision:string|null;data_status:{message_count:number;source_count:number}}[]; bindings:SavedContactBinding[];account:{id:string;external_key:string;identity_scheme:string;source_generation:string;scope_revision:bigint}|null;read_enabled:boolean }
 interface SourceReconfirmation {accountId:string;sourceGeneration:string;scopeRevision:string}
 interface Snapshot {at:number; evidence:AccountEvidence;accountId:string;scopeRevision:string;rows:Map<string,{displayName:string;generation:string;contactId?:string;verificationId:string;grantId:string;bindingId:string;conversationId:string;newContactId:string}>}
 /** 所有渠道 I/O 在事务外；身份和提交资格在具名短事务内复验。 */
@@ -34,9 +34,14 @@ export class SqliteContactService {
  private execute<T=any>(name:string,input:object):Promise<T>{if(this.closed)fail('identity_closed');return this.storage.execute(name,{ownerId:this.ownerId,at:this.clock(),...input});}
  initialize(){return this.execute('identity.initialize',{});}
  directory(){return this.execute<Directory>('identity.directory',{});}
- async avatar(contactId:string,signal?:AbortSignal,load=fetchContactAvatar):Promise<ContactAvatar|null>{
+ async avatar(contactId:string,_signal?:AbortSignal):Promise<ContactAvatar|null>{
   if(!uuid(contactId))fail('identity_request_invalid');
-  if(!this.metadata.avatarUrl||this.closed)return null;
+  return this.execute<ContactAvatar|null>('identity.avatarRead',{contactId});
+ }
+ avatarRevision(){return this.execute<string>('identity.avatarRevision',{});}
+ async syncAvatar(contactId:string,signal?:AbortSignal):Promise<boolean>{
+  if(!uuid(contactId))fail('identity_request_invalid');
+  if(!this.metadata.avatar||this.closed)return false;
   const controller=new AbortController();this.avatarReads.set(controller,contactId);
   const combined=AbortSignal.any([controller.signal,AbortSignal.timeout(10_000),...(signal?[signal]:[])]);
   try{return await this.readMetadata(async()=>{
@@ -44,16 +49,16 @@ export class SqliteContactService {
    const scope=await this.execute<{accountKey:string;identityScheme:string;sourceGeneration:string;conversationKey:string}>('identity.avatarScope',{token});
    combined.throwIfAborted();
    const evidence=await this.metadata.account(combined);
-   if(evidence.assurance!=='verified'||evidence.externalKey!==scope.accountKey||evidence.identityScheme!==scope.identityScheme||evidence.sourceGeneration!==scope.sourceGeneration)return null;
-   await this.validate(token);combined.throwIfAborted();
-   const address=await this.metadata.avatarUrl!(evidence,scope.conversationKey,combined);
-   await this.validate(token);combined.throwIfAborted();
-   if(!address)return null;
-   const avatar=await load(address,combined);
-   await this.validate(token);combined.throwIfAborted();
-   return avatar;
-  });}catch{return null;}finally{this.avatarReads.delete(controller);}
+   if(evidence.assurance!=='verified'||evidence.externalKey!==scope.accountKey||evidence.identityScheme!==scope.identityScheme||evidence.sourceGeneration!==scope.sourceGeneration)return false;
+   const input=await this.metadata.avatar!(evidence,scope.conversationKey,combined);
+   combined.throwIfAborted();if(!input)return false;
+   const avatar=await normalizeContactAvatar(input,combined);
+   combined.throwIfAborted();if(!avatar)return false;
+   await this.execute('identity.avatarSave',{token,base64:avatar.base64,digest:createHash('sha256').update(Buffer.from(avatar.base64,'base64')).digest('hex')});
+   combined.throwIfAborted();return true;
+  });}catch{return false;}finally{this.avatarReads.delete(controller);}
  }
+
  syncDirectory(){return this.execute<Pick<Directory,'read_enabled'|'bindings'>>('identity.syncDirectory',{});}
  foregroundSnapshot(){return this.execute<import('../../foreground/sqlite-foreground.ts').ForegroundSnapshot>('identity.foregroundSnapshot',{});}
  async confirmForeground(proof:import('../../foreground/sqlite-foreground.ts').ForegroundBindingConfirmation){await this.execute('identity.confirmForeground',{proof});}

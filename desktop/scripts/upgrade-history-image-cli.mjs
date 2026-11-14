@@ -628,6 +628,31 @@ const imageDuplicateResourcePolicy=Object.freeze({
  imageTestSha256:'70277c9183e8d7ee035ad93e82ee2d75c9a1093446b684c2c0c5b385a671423f',
 });
 
+
+// 头像改为本机 head_image 位图，并纳入已提交的快照句柄修复；来源身份算法不变。
+const localContactAvatarPolicy=Object.freeze({
+ ...imageDuplicateResourcePolicy,
+ oldName:imageDuplicateResourcePolicy.newName,
+ newName:'local-contact-avatar-20261114-v2',
+ oldCliSha256:imageDuplicateResourcePolicy.newCliSha256,
+ newCliSha256:'ac7cd942f5652bc65b1bfb6b3159b23209d92ce201a963bdf9ee755451dfee0b',
+ oldOverlaySha256:imageDuplicateResourcePolicy.newOverlaySha256,
+ newOverlaySha256:'66295181948dd2c996ee3d2d27f7c012dd3a31d352d73857319233fd66662472',
+ oldImageSha256:imageDuplicateResourcePolicy.imageSha256,
+ oldImageTestSha256:imageDuplicateResourcePolicy.imageTestSha256,
+ newAvatarMetadataProtocol:'wechat-contact-avatar-local-v1',
+ snapshotHandleLifetime:'sqlite-snapshot-source-handles-v1',
+ identityAlgorithmSha256:'b4ec50f415bd45422e0f40223e7786daa94c79cebd06bd6c5e0b073325765cf6',
+ sourceChanges:Object.freeze({
+  // 已提交的 57686962f 仅修正快照句柄释放次序；来源身份计算保持原义。
+  'cmd/wechat-cli/notalone_delta_locks_test.go':{old:null,new:'0e7730864c4dc86d92af624494deab19d1b4f4736f11ec2d14fb69c5607a3ccd'},
+  'cmd/wechat-cli/notalone_delta.go':{old:'9221850ede116485666e51b27314ab0c0c76021e1415579b7faadcc0ebb421c4',new:'ea51a68edae960c8004da2d4bfba48999c61c563807fcf9c2e6466d47f1ad138'},
+  'cmd/wechat-cli/notalone_snapshot.go':{old:'465af9405565837861800af4f997b716f0238c54ee658791b55d4d674bd9b7a2',new:'5d93972f4c187632f1fa31e760c90e8494b72d2d01d2ee786e2d03b9feb874e4'},
+  'cmd/wechat-cli/notalone_contact_avatar.go':{old:'e8113eeb5bbe58084c27b3496c1c8e1b491be131b3f732c7e87090e298ac7d3e',new:'e15e2635b63669d5e07545ff14aaa22e123da04510f98ca933af71a7e39e2797'},
+  'cmd/wechat-cli/notalone_contact_avatar_test.go':{old:'bc989d2355e7e1f72d63b233a8f83d3aac4263d47fd4e5ab417c2bb6f0570192',new:'8c0e8ae482e5c6e493f74397e781a81437f665978b362bafbded5dc71196272e'},
+ }),
+});
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -798,10 +823,11 @@ function assertSourcePair(oldFiles, newFiles, policy) {
   const permitted = new Set([protocol, image, imageTest]);
   for(const [name,pair] of Object.entries(policy.sourceChanges??{})){
     // 每项扩展只开放对应固定源码；每份仍绑定旧、新摘要，不接受任意身份源码变化。
-    const allowed=/^cmd\/wechat-cli\/notalone_quote(?:_[a-z0-9]+)*\.go$/.test(name)
+    const allowed=policy.snapshotHandleLifetime==='sqlite-snapshot-source-handles-v1'&&/^cmd\/wechat-cli\/notalone_(?:delta(?:_locks_test)?|snapshot)\.go$/.test(name)
+      ||/^cmd\/wechat-cli\/notalone_quote(?:_[a-z0-9]+)*\.go$/.test(name)
       ||policy.newQuoteInline==='wechat-quote-inline-sync-v1'&&/^cmd\/wechat-cli\/notalone_(?:snapshot|tail)(?:_test)?\.go$/.test(name)
       ||policy.newSharedProcessProtocol==='wechat-shared-process-v1'&&/^cmd\/wechat-cli\/notalone_(?:account_metadata|selection)(?:_test)?\.go$/.test(name)
-      ||policy.newAvatarMetadataProtocol==='wechat-contact-avatar-metadata-v1'&&/^cmd\/wechat-cli\/notalone_contact_avatar(?:_test)?\.go$/.test(name)
+      ||['wechat-contact-avatar-metadata-v1','wechat-contact-avatar-local-v1'].includes(policy.newAvatarMetadataProtocol)&&/^cmd\/wechat-cli\/notalone_contact_avatar(?:_test)?\.go$/.test(name)
       ||policy.guardRegistrationFix==='wechat-guard-registration-v1'&&/^cmd\/wechat-cli\/notalone_(?:watch|process)_darwin(?:_test)?\.go$/.test(name)
       ||policy.localIdRecoveryFix==='wechat-local-id-recovery-v1'&&['notalone_checkpoint.go','notalone_history_resume.go','notalone_recovery.go','notalone_recovery_test.go','notalone_snapshot.go'].some(file=>name===`cmd/wechat-cli/${file}`)
       ||policy.newDurableHistoryProtocol==='wechat-partial-history-checkpoint-v1'&&/^cmd\/wechat-cli\/notalone_(?:checkpoint|delta|snapshot|tail|history_resume)(?:_test)?\.go$/.test(name);
@@ -1051,7 +1077,10 @@ const guardRegistrationTools=createUpgradeImageCliTools({repositoryRoot,policy:g
 const localIdRecoveryTools=createUpgradeImageCliTools({repositoryRoot,policy:localIdRecoveryPolicy});
 const imageMainFailureTools=createUpgradeImageCliTools({repositoryRoot,policy:imageMainFailurePolicy});
 const imageDuplicateResourceTools=createUpgradeImageCliTools({repositoryRoot,policy:imageDuplicateResourcePolicy});
-export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageDuplicateResourcePolicy.oldName)
+const localContactAvatarTools=createUpgradeImageCliTools({repositoryRoot,policy:localContactAvatarPolicy});
+export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',localContactAvatarPolicy.oldName)
+ &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',localContactAvatarPolicy.newName)
+ ?localContactAvatarTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageDuplicateResourcePolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageDuplicateResourcePolicy.newName)
  ?imageDuplicateResourceTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageMainFailurePolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageMainFailurePolicy.newName)

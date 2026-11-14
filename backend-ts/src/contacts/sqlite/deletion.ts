@@ -43,13 +43,13 @@ export const identityDeletionAuthority={
 interface IdentityRowTarget {
   kind:'row'; domain:string; rowKind:string; key:Record<string,string>; identity:string; holderKeys:string[];
 }
-const rowKinds={manual_confirmation:{keys:['owner_id','id'],ownerKey:'owner_id'},
+const rowKinds={contact_avatar:{keys:['owner_id','contact_id'],ownerKey:'owner_id'},manual_confirmation:{keys:['owner_id','id'],ownerKey:'owner_id'},
   read_grant:{keys:['owner_id','id'],ownerKey:'owner_id'},binding_verification:{keys:['owner_id','id'],ownerKey:'owner_id'},
   conversation_binding:{keys:['owner_id','id'],ownerKey:'owner_id'},channel_conversation:{keys:['owner_id','id'],ownerKey:'owner_id'},
   contact:{keys:['owner_id','id'],ownerKey:'owner_id'},channel_account:{keys:['owner_id','id'],ownerKey:'owner_id'},
   owner_control:{keys:['owner_id'],ownerKey:'owner_id'}};
 function target(ownerId:string,rowKind:string,id:string):IdentityRowTarget {
- const key:Record<string,string>=rowKind==='owner_control'?{owner_id:ownerId}:{owner_id:ownerId,id};
+ const key:Record<string,string>=rowKind==='owner_control'?{owner_id:ownerId}:rowKind==='contact_avatar'?{owner_id:ownerId,contact_id:id}:{owner_id:ownerId,id};
  return {kind:'row',domain:'identity',rowKind,key,identity:JSON.stringify([ownerId,rowKind,id]),holderKeys:[]};
 }
 function collectIdentityTargets(tx:StorageTransaction,operation:IdentityDeletionOperation):IdentityRowTarget[]{
@@ -58,6 +58,7 @@ function collectIdentityTargets(tx:StorageTransaction,operation:IdentityDeletion
  const ids=all?tx.all('SELECT id FROM contact WHERE owner_id=?',[ownerId]).map(c=>String(c.id)):[scope.contactId!];
  const targets:IdentityRowTarget[]=[];
  for(const contactId of ids){
+  if(scope.kind!=='contact_history'&&tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='contact_avatar'")&&tx.get('SELECT 1 FROM contact_avatar WHERE owner_id=? AND contact_id=?',[ownerId,contactId]))targets.push(target(ownerId,'contact_avatar',contactId));
   for(const kind of ['manual_confirmation','read_grant']){
    // 聊天清空保留独立助手讨论的手动归属依据；旧资料代次仍使它不可用于新写入。
    if(scope.kind==='contact_history')continue;
@@ -83,13 +84,14 @@ export const identityDeletionDomain={
  collect:collectIdentityTargets,
  clearRow(tx:StorageTransaction,operation:IdentityDeletionOperation,row:IdentityRowTarget):void {
   if(row.domain!=='identity'||!Object.hasOwn(rowKinds,row.rowKind)||row.key.owner_id!==operation.ownerId)throw new StorageFailure('identity_deletion_target_invalid');
-  const id=row.rowKind==='owner_control'?operation.ownerId:row.key.id;
+  const id=row.rowKind==='owner_control'?operation.ownerId:row.rowKind==='contact_avatar'?row.key.contact_id:row.key.id;
   if(row.identity!==JSON.stringify([operation.ownerId,row.rowKind,id]))throw new StorageFailure('identity_deletion_target_invalid');
   if(identityDeletionAuthority.verify(tx,operation).result!=='passed')throw new StorageFailure('identity_deletion_generation_stale');
   const current=collectIdentityTargets(tx,operation).find(t=>t.rowKind===row.rowKind&&t.identity===row.identity);
   if(!current)return;
   const args=[operation.ownerId,id];
-  if(['manual_confirmation','read_grant','binding_verification'].includes(row.rowKind))tx.run(`DELETE FROM ${row.rowKind} WHERE owner_id=? AND id=?`,args);
+  if(row.rowKind==='contact_avatar')tx.run('DELETE FROM contact_avatar WHERE owner_id=? AND contact_id=?',args);
+  else if(['manual_confirmation','read_grant','binding_verification'].includes(row.rowKind))tx.run(`DELETE FROM ${row.rowKind} WHERE owner_id=? AND id=?`,args);
   else if(row.rowKind==='conversation_binding')tx.run("UPDATE conversation_binding SET state='revoked',identity_generation=identity_generation+1 WHERE owner_id=? AND id=?",args);
   else if(row.rowKind==='channel_conversation')tx.run('UPDATE channel_conversation SET display_name=NULL WHERE owner_id=? AND id=?',args);
   else if(row.rowKind==='contact')tx.run("UPDATE contact SET state='deleted',display_name=NULL,remark=NULL,current_publication_id=NULL WHERE owner_id=? AND id=?",args);

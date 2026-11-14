@@ -22,6 +22,13 @@ function report() {
 }
 const read = (data) => readSyncStatus({ requestJson: async () => ({ generation: 3, data }) }, new AbortController().signal);
 
+test('同步报告传递本地头像修订，未知类型和超长版本拒绝', async () => {
+  assert.equal((await read({ ...report(), contact_avatar_revision: '2' })).report.contactAvatarRevision, '2');
+  for (const revision of [null, 2, 'x'.repeat(129)]) {
+    await assert.rejects(() => read({ ...report(), contact_avatar_revision: revision }), /同步报告不可用/);
+  }
+});
+
 test('公开同步状态保留当前优先联系人的成功时间与分阶段耗时', async () => {
   const result = await read(report());
   assert.equal(result.generation, 3);

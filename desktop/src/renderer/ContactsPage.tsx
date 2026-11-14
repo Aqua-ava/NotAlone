@@ -82,7 +82,7 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
           aria-pressed={state.selectedContactId === contact.contactId}
           onClick={() => { if (state.selectedContactId !== contact.contactId) void session.selectContact(contact.contactId); }}>
           <ContactAvatar contactId={contact.contactId} displayName={contact.displayName}
-            scopeRevision={state.scopeRevision} bridge={window.notalone.contacts} refreshKey={avatarRefresh} />
+            scopeRevision={state.scopeRevision} bridge={window.notalone.contacts} refreshKey={avatarRefresh} avatarRevision={contact.avatarRevision} />
           <div className="contact-row-copy"><div className="contact-row-name"><b>{contact.displayName}</b>
             {state.selectedContactId === contact.contactId && <span className="contact-row-choice">当前</span>}</div>
             <small>{contact.messageCount} 条消息</small>

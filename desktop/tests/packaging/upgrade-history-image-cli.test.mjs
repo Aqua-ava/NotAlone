@@ -521,6 +521,20 @@ test('头像升级只新增固定窄元数据文件，沿用全部原来源别�
  }
 });
 
+
+test('本机头像协议升级保留来源别名，仍拒绝未审查头像源码', async t => {
+ const f=await syntheticUpgradeFixture({existingImage:true,contactAvatar:true});t.after(()=>rm(f.repositoryRoot,{recursive:true,force:true}));
+ f.policy.newAvatarMetadataProtocol='wechat-contact-avatar-local-v1';
+ f.tools=createUpgradeImageCliTools({repositoryRoot:f.repositoryRoot,policy:f.policy});
+ assert.equal((await f.tools.prepareAliases(f)).status,'prepared');
+ assert.deepEqual(JSON.parse(await readFile(path.join(f.toRoot,'source-identity-aliases.json'),'utf8')).aliases,f.aliases);
+ const invalid=await syntheticUpgradeFixture({existingImage:true,contactAvatar:true});t.after(()=>rm(invalid.repositoryRoot,{recursive:true,force:true}));
+ invalid.policy.newAvatarMetadataProtocol='wechat-contact-avatar-local-v1';
+ invalid.tools=createUpgradeImageCliTools({repositoryRoot:invalid.repositoryRoot,policy:invalid.policy});
+ await writeFile(path.join(invalid.toRoot,'source/cmd/wechat-cli/notalone_contact_avatar.go'),'unreviewed local avatar reader');
+ await assert.rejects(invalid.tools.prepareAliases(invalid),/history_image_upgrade_source_mismatch/);
+});
+
 // 恢复协议的源码配对仍精确绑定，不允许夹带未审查的账号或来源身份改写。
 test('分段历史恢复升级核验固定检查点源码并保留旧别名', async t => {
  const f=await syntheticUpgradeFixture({durableHistory:true});

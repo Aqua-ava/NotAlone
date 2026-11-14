@@ -2,14 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import type { ContactSessionBridge } from '../shared/contact-session-bridge';
 
 const avatarRequests: { run: () => Promise<void> }[] = [];
-let readingAvatar = false;
+const maxConcurrentAvatarReads = 4;
+let activeAvatarReads = 0;
 
-async function drainAvatarRequests() {
-  if (readingAvatar) return;
-  readingAvatar = true;
-  try {
-    while (avatarRequests.length) await avatarRequests.shift()!.run();
-  } finally { readingAvatar = false; }
+function drainAvatarRequests() {
+  while (activeAvatarReads < maxConcurrentAvatarReads && avatarRequests.length) {
+    const request = avatarRequests.shift()!;
+    activeAvatarReads++;
+    void request.run().catch(() => {}).finally(() => {
+      activeAvatarReads--;
+      drainAvatarRequests();
+    });
+  }
 }
 
 function enqueueAvatarRequest(run: () => Promise<void>) {
@@ -22,15 +26,15 @@ function enqueueAvatarRequest(run: () => Promise<void>) {
   };
 }
 
-export function ContactAvatar({ contactId, displayName, scopeRevision, bridge, refreshKey = 0 }: {
-  contactId: string; displayName: string; scopeRevision: number; bridge?: Pick<ContactSessionBridge, 'readAvatar'>; refreshKey?: number;
+export function ContactAvatar({ contactId, displayName, scopeRevision, bridge, refreshKey = 0, avatarRevision = '' }: {
+  contactId: string; displayName: string; scopeRevision: number; bridge?: Pick<ContactSessionBridge, 'readAvatar'>; refreshKey?: number; avatarRevision?: string;
 }) {
   const element = useRef<HTMLSpanElement>(null);
   const latestScopeRevision = useRef(scopeRevision);
   latestScopeRevision.current = scopeRevision;
   const [image, setImage] = useState<{ scope: string; url: string }>();
   const loadedImage = useRef<typeof image>(undefined);
-  const scope = `${contactId}:${refreshKey}`;
+  const scope = `${contactId}:${avatarRevision}:${refreshKey}`;
   useEffect(() => {
     return () => {
       if (loadedImage.current) URL.revokeObjectURL(loadedImage.current.url);

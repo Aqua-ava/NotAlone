@@ -3,6 +3,7 @@ export interface ContactSummary {
   displayName: string;
   messageCount: number;
   sourceCount: number;
+  avatarRevision?: string;
 }
 
 export type ContactDirectoryPhase = 'unavailable' | 'loading' | 'ready' | 'owner-unconfigured' | 'error';

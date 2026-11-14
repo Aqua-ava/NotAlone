@@ -31,10 +31,10 @@ async function mount(t, { count = 1, offscreen = false, hold = false, outcome = 
     }};
     const root=createRoot(document.getElementById('root'));window.unmount=()=>root.unmount();
     function App(){
-      const [scope,setScope]=useState(1),[refresh,setRefresh]=useState(0);
+      const [scope,setScope]=useState(1),[refresh,setRefresh]=useState(0),[avatarRevision,setAvatarRevision]=useState('saved-1');
       const [contacts,setContacts]=useState(Array.from({length:${count}},(_,i)=>'contact-'+i));
-      window.nextScope=()=>setScope(s=>s+1);window.refreshAvatars=()=>setRefresh(r=>r+1);window.setContacts=setContacts;
-      return <>{contacts.map(contactId=><ContactAvatar key={contactId} contactId={contactId} displayName="合成联系人" scopeRevision={scope} bridge={bridge} refreshKey={refresh}/>)}
+      window.nextScope=()=>setScope(s=>s+1);window.refreshAvatars=()=>setRefresh(r=>r+1);window.setContacts=setContacts;window.updateAvatarRevision=setAvatarRevision;
+      return <>{contacts.map(contactId=><ContactAvatar key={contactId} contactId={contactId} displayName="合成联系人" scopeRevision={scope} bridge={bridge} refreshKey={refresh} avatarRevision={avatarRevision}/>)}
         ${offscreen ? '<div style={{height:1600}}/><ContactAvatar contactId="offscreen" displayName="离屏合成联系人" scopeRevision={scope} bridge={bridge}/>' : ''}
       </>;
     };root.render(<App/>);
@@ -53,6 +53,23 @@ async function mount(t, { count = 1, offscreen = false, hold = false, outcome = 
 }
 
 const settle = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
+test('同步补齐头像后按内容版本刷新，无需切换联系人或手动刷新', async t => {
+  const page = await mount(t, { outcome: 'null' });
+  const avatar = page.locator('.contact-avatar');
+  await expect.poll(() => page.evaluate(() => window.calls.length)).toBe(1);
+  await expect(avatar).toHaveText('合');
+  await page.evaluate(() => { window.outcome = 'image'; window.updateAvatarRevision('saved-2'); });
+  await expect(avatar.locator('img')).toBeVisible();
+  assert.equal(await page.evaluate(() => window.calls.length), 2);
+  const oldUrl = await avatar.locator('img').getAttribute('src');
+  await page.evaluate(() => window.nextScope());
+  await settle(page);
+  assert.equal(await page.evaluate(() => window.calls.length), 2);
+  await page.evaluate(() => window.updateAvatarRevision('saved-3'));
+  await expect(avatar.locator('img')).not.toHaveAttribute('src', oldUrl);
+  assert.deepEqual(await page.evaluate(() => window.revoked), [oldUrl]);
+});
 
 test('已加载头像跨选择范围保持显示，离屏不读取，显式刷新与卸载释放图片', async t => {
   const page = await mount(t, { offscreen: true });
@@ -114,55 +131,59 @@ test('请求中范围变化丢弃迟到图片，并用最新范围重新读取',
   await expect(page.locator('.contact-avatar img')).toBeVisible();
 });
 
-test('六个可见头像按先进先出依次加载，任意时刻只有一个在途请求', async t => {
+test('六个可见本地头像有界并发读取，慢头像不会阻塞其余头像', async t => {
   const page = await mount(t, { count: 6, hold: true, controlledVisibility: true });
-  await expect.poll(() => page.evaluate(() => window.calls.length)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.calls.length)).toBe(4);
   await settle(page);
-  assert.equal(await page.evaluate(() => window.maxInFlight), 1);
+  assert.equal(await page.evaluate(() => window.maxInFlight), 4);
+  await page.evaluate(() => window.pending.splice(1,1)[0]());
+  await expect(page.locator('.contact-avatar').nth(1).locator('img')).toBeVisible();
+  await expect(page.locator('.contact-avatar').first()).toHaveText('合');
+  await expect.poll(() => page.evaluate(() => window.calls.length)).toBe(5);
   for (let index = 0; index < 6; index++) {
-    await expect.poll(() => page.evaluate(() => window.calls.length)).toBe(index + 1);
+    if (index === 1) continue;
     await page.evaluate(() => window.pending.shift()());
     await expect(page.locator('.contact-avatar').nth(index).locator('img')).toBeVisible();
   }
   assert.deepEqual(await page.evaluate(() => window.calls.map(call => call.contactId)),
     Array.from({ length: 6 }, (_, index) => `contact-${index}`));
-  assert.equal(await page.evaluate(() => window.maxInFlight), 1);
+  assert.equal(await page.evaluate(() => window.maxInFlight), 4);
   const urls = await page.locator('.contact-avatar img').evaluateAll(images => images.map(image => image.src));
   await page.evaluate(() => window.unmount());
   assert.deepEqual(await page.evaluate(() => window.revoked), urls);
 });
 
 test('移除排队联系人和卸载不发出未开始的请求，迟到结果不生成图片', async t => {
-  const page = await mount(t, { count: 3, hold: true, controlledVisibility: true });
-  await expect.poll(() => page.evaluate(() => window.calls.length)).toBe(1);
-  await page.evaluate(() => window.setContacts(['contact-0', 'contact-2']));
-  await expect(page.locator('.contact-avatar')).toHaveCount(2);
+  const page = await mount(t, { count: 6, hold: true, controlledVisibility: true });
+  await expect.poll(() => page.evaluate(() => window.calls.length)).toBe(4);
+  await page.evaluate(() => window.setContacts(['contact-0', 'contact-1', 'contact-2', 'contact-3', 'contact-5']));
+  await expect(page.locator('.contact-avatar')).toHaveCount(5);
   await page.evaluate(() => window.pending.shift()());
   await expect(page.locator('.contact-avatar img')).toHaveCount(1);
-  await expect.poll(() => page.evaluate(() => window.calls.map(call => call.contactId))).toEqual(['contact-0', 'contact-2']);
+  await expect.poll(() => page.evaluate(() => window.calls.map(call => call.contactId))).toEqual(['contact-0', 'contact-1', 'contact-2', 'contact-3', 'contact-5']);
   const url = await page.locator('.contact-avatar img').getAttribute('src');
   await page.evaluate(() => window.unmount());
   assert.deepEqual(await page.evaluate(() => window.revoked), [url]);
-  await page.evaluate(() => window.pending.shift()());
+  await page.evaluate(() => window.pending.splice(0).forEach(resolve=>resolve()));
   await settle(page);
   assert.deepEqual(await page.evaluate(() => window.revoked), [url]);
-  assert.equal(await page.evaluate(() => window.calls.length), 2);
+  assert.equal(await page.evaluate(() => window.calls.length), 5);
 });
 
 test('刷新取消旧排队项，新请求在轮到时使用最新范围，整体卸载清空队列', async t => {
   const page = await mount(t, { count: 6, hold: true, controlledVisibility: true });
-  await expect.poll(() => page.evaluate(() => window.calls.length)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.calls.length)).toBe(4);
   await page.evaluate(() => { window.refreshAvatars(); window.nextScope(); });
   await expect.poll(() => page.evaluate(() => window.observers.size)).toBe(6);
   await page.evaluate(() => window.reveal());
-  assert.equal(await page.evaluate(() => window.calls.length), 1);
+  assert.equal(await page.evaluate(() => window.calls.length), 4);
   await page.evaluate(() => window.pending.shift()());
-  await expect.poll(() => page.evaluate(() => window.calls.length)).toBe(2);
-  assert.deepEqual(await page.evaluate(() => window.calls[1]), { contactId: 'contact-0', scopeRevision: 2 });
+  await expect.poll(() => page.evaluate(() => window.calls.length)).toBe(5);
+  assert.deepEqual(await page.evaluate(() => window.calls[4]), { contactId: 'contact-0', scopeRevision: 2 });
   await expect(page.locator('.contact-avatar img')).toHaveCount(0);
   await page.evaluate(() => window.unmount());
-  await page.evaluate(() => window.pending.shift()());
+  await page.evaluate(() => window.pending.splice(0).forEach(resolve=>resolve()));
   await settle(page);
-  assert.equal(await page.evaluate(() => window.calls.length), 2);
+  assert.equal(await page.evaluate(() => window.calls.length), 5);
   assert.deepEqual(await page.evaluate(() => window.revoked), []);
 });

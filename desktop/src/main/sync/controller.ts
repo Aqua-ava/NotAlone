@@ -18,7 +18,8 @@ export class SyncControlController {
   private snapshotTimer: ReturnType<typeof setTimeout> | undefined;
   private snapshotRefreshing = false;
   private knownBindingCount: number | undefined;
-  private directoryRefresh: { scope: Scope; count: number } | undefined;
+  private knownAvatarRevision: string | undefined;
+  private directoryRefresh: { scope: Scope; count: number; avatarRevision?: string } | undefined;
   private disposed = false;
   private readonly unsubscribe: (() => void)[];
   private readonly listeners = new Set<(state: SyncControlState) => void>();
@@ -49,7 +50,8 @@ export class SyncControlController {
   }
   private scheduleSnapshot(scope: Scope): void {
     if (this.disposed || this.snapshotTimer !== undefined || scope !== this.scope
-      || this.state.phase !== 'ready' || !this.state.report?.enabled || (!this.state.report.priority && this.state.report.syncScope !== 'all_private' && !this.state.report.historyCoverages?.length)) return;
+      || this.state.phase !== 'ready' || !this.state.report?.enabled || (!this.state.report.priority && this.state.report.syncScope !== 'all_private' && !this.state.report.historyCoverages?.length
+        && !(this.state.report.contactAvatarRevision !== undefined && this.state.report.confirmedBindingCount > 0))) return;
     this.snapshotTimer = setTimeout(() => {
       this.snapshotTimer = undefined;
       if (this.disposed || this.pending || scope !== this.scope
@@ -88,6 +90,7 @@ export class SyncControlController {
     this.pending?.abort(); this.pending = undefined; ++this.epoch;
     this.scope = next;
     this.knownBindingCount = undefined;
+    this.knownAvatarRevision = undefined;
     this.directoryRefresh = undefined;
     this.publish({ scopeRevision: contact.scopeRevision, phase: generation === undefined ? 'offline' : 'unavailable',
       report: null, busy: null, errorCode: null });
@@ -179,7 +182,9 @@ export class SyncControlController {
       }
       this.cancelRecovery();
       this.publish({ phase: 'ready', report: result.report, errorCode: null });
-      if (result.report.syncScope === 'all_private') this.refreshContactDirectory(scope, result.report.confirmedBindingCount);
+      if (result.report.syncScope === 'all_private' || result.report.contactAvatarRevision !== undefined) {
+        this.refreshContactDirectory(scope, result.report.confirmedBindingCount, result.report.contactAvatarRevision);
+      }
     } catch (error) {
       if (!current()) return;
       const unavailable = error instanceof BackendRequestFailure
@@ -215,14 +220,17 @@ export class SyncControlController {
     if (error.status === 409 || error.status === 429 || error.status >= 500) return error.code !== 'sync_unavailable';
     return false;
   }
-  private refreshContactDirectory(scope: Scope, count: number): void {
-    if (this.directoryRefresh || this.knownBindingCount === count) return;
-    const refresh = { scope, count };
+  private refreshContactDirectory(scope: Scope, count: number, avatarRevision?: string): void {
+    if (this.directoryRefresh || (this.knownBindingCount === count && this.knownAvatarRevision === avatarRevision)) return;
+    const refresh = { scope, count, avatarRevision };
     this.directoryRefresh = refresh;
     // 只有共享目录实际接收成功才记住数量；失败或用户切换使读取失效时，下次快照继续重试。
     void this.contacts.refreshContactsInBackground().then((applied) => {
       if (applied && !this.disposed && this.directoryRefresh === refresh && this.scope === scope
-        && scope.generation === this.backend.getConnectionGeneration()) this.knownBindingCount = count;
+        && scope.generation === this.backend.getConnectionGeneration()) {
+        this.knownBindingCount = count;
+        this.knownAvatarRevision = avatarRevision;
+      }
     }).catch(() => {}).finally(() => {
       if (this.directoryRefresh === refresh) this.directoryRefresh = undefined;
     });

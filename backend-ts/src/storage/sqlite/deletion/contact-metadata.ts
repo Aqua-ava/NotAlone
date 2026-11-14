@@ -1,3 +1,4 @@
+import {ContactAvatarSynchronizer} from '../../../contacts/sqlite/avatar-sync.ts';
 import { randomUUID } from 'node:crypto';
 import { SqliteContactService } from '../../../contacts/sqlite/service.ts';
 import { SqliteContactHttp } from '../../../contacts/sqlite/http.ts';
@@ -59,6 +60,7 @@ export class ContactMetadataLifetime {
   readonly ownerId: string;
   private readonly holders: ActiveHolders;
   private readonly createMetadata: () => ContactMetadataPort;
+  private readonly avatars:ContactAvatarSynchronizer;
   private service?: SqliteContactService;
   private http?: SqliteContactHttp;
   private admission: MetadataAdmission = closedAdmission;
@@ -69,6 +71,7 @@ export class ContactMetadataLifetime {
   private startReaders:()=>void=()=>{};
   constructor(storage: SqliteStorage, ownerId: string, holders: ActiveHolders, createMetadata: () => ContactMetadataPort) {
     this.storage = storage; this.ownerId = ownerId; this.holders = holders; this.createMetadata = createMetadata;
+    this.avatars=new ContactAvatarSynchronizer(this);
   }
   async initialize(): Promise<void> {
     const service = this.create();
@@ -84,7 +87,10 @@ export class ContactMetadataLifetime {
   }
   private create(): SqliteContactService { return new ControlledContactService(this.storage, this.ownerId, this.createMetadata(),contactId=>this.stopReaders(contactId),()=>{if(!this.stopping&&!this.released)this.startReaders();}); }
   setReadStop(stopReaders:StopReaders):void {this.stopReaders=stopReaders;}
-  setReadStart(startReaders:()=>void):void {this.startReaders=startReaders;}
+  setReadStart(startReaders:()=>void):void {this.startReaders=()=>{this.wakeAvatarSync();startReaders();};}
+  wakeAvatarSync():void {if(!this.stopping&&!this.released)this.avatars.wake();}
+  async stopAvatarSync(contactId?:string){await this.avatars.stop(contactId);}
+  async syncAvatar(contactId:string,signal?:AbortSignal){return (await this.current()).syncAvatar(contactId,signal);}
   private admit(): Promise<MetadataAdmission> {
     return this.storage.execute<MetadataAdmission>('deletion.metadataAdmission', {ownerId: this.ownerId});
   }
@@ -161,6 +167,7 @@ export class ContactMetadataLifetime {
   }
   async close(): Promise<void> {
     this.stopping = true;
+    await this.avatars.close();
     await this.reopening;
     const service = this.service;
     if (service) await this.release(service);
