@@ -50,6 +50,12 @@ test('未命中、拒绝、耗尽和能力错误返回区分的无正文回执�
  assert.equal(new Set(receipts).size,4);assert.deepEqual(failures,[]);
 });
 
+test('搜索超时回执明确尚未完成全部历史搜索，不冒充未命中',async t=>{
+ const f=await scopedTools(t,{search:async()=>({status:'error',items:[],code:'reply_search_timeout'})});
+ const result=await f.execute('search_relationship_history',{query:'合成约定'});
+ assert.equal(result.isError,false);assert.match(result.content.map(block=>block.text).join(''),/超时.*未完成.*不能据此认定资料不存在/);
+});
+
 test('查询只接受非空且最多400个Unicode字符的query，不接收身份或范围参数',async t=>{
  const searches=[],failures=[];
  const f=await scopedTools(t,{failed:error=>failures.push(error),search:async(_kind,query)=>{searches.push(query);return {status:'empty',items:[]};}});

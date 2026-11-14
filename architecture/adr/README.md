@@ -189,3 +189,5 @@
 - [ADR-184：有来源支持的记忆变化自动更新与合并](184-source-grounded-memory-update-and-merge.md)——局部替代 ADR-174／081 的动作与变化拦截限制，保留来源和人工保护。
 
 - [ADR-185：先读近期语境，再按需检索记忆和历史](185-on-demand-reply-memory-and-history-search.md)——局部替代固定预检索，保留 DSH 官方装配、联系人范围、来源与有界读取。
+
+- [ADR-186：按需搜索当前联系人全部获准历史](186-full-contact-history-search.md)——取消五百条候选窗口，保留 DSH 官方工具与返回量、耗时、次数上限。

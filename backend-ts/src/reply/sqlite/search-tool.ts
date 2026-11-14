@@ -6,6 +6,7 @@ export type RelationshipSearchKind='memory'|'history';
 interface SearchResult {status:string;items:{itemNo:number;kind:string;text:string}[];code?:string;scope?:string}
 function renderSearchResult(result:SearchResult):string{
  if(result.status==='ok'&&result.items.length)return result.items.map(item=>`实际输入材料[${item.itemNo}] ${item.kind}\n${item.text}`).join('\n\n');
+ if(result.code==='reply_search_timeout')return '本次历史检索已超时，未完成当前联系人的全部获准历史搜索；不能据此认定资料不存在，请使用已有信息或在剩余次数内重试。';
  if(result.status==='empty'||result.status==='ok')return '本次查询未命中；这不代表相关资料不存在，请保持未知，不据此补写事实。';
  if(result.code==='reply_search_budget_exceeded'||['exhausted','budget_exceeded'].includes(result.status))return '本轮检索预算已耗尽，未读取更多正文。请使用已有材料，缺失信息保持未知。';
  if(['rejected','denied'].includes(result.status))return '本次查询被拒绝，未读取正文。请使用已有材料，不扩大本轮范围。';
@@ -16,7 +17,7 @@ function renderSearchResult(result:SearchResult):string{
 export function installRelationshipSearchTools(ctx:Context,search:(kind:RelationshipSearchKind,query:string,signal:AbortSignal)=>Promise<SearchResult>,check:()=>Promise<void>,failed:(error:unknown)=>void):void{
  for(const [index,name] of RELATIONSHIP_SEARCH_TOOLS.entries()){
   const kind:RelationshipSearchKind=index===0?'memory':'history';
-  ctx.tools.register(defineTool({name,description:kind==='memory'?'信息不足时，搜索本轮已确认联系人范围内获准的L1记忆。只读，不改变联系人或读取授权。':'信息不足时，搜索本轮已确认联系人范围内获准的历史消息。只读，不读取微信或扩大联系人范围。',
+  ctx.tools.register(defineTool({name,description:kind==='memory'?'信息不足时，搜索本轮已确认联系人范围内获准的L1记忆。只读，不改变联系人或读取授权。':'信息不足时，搜索本轮接纳边界内当前联系人的全部获准历史。无候选条数截断；每次计算预算5秒，累计返回最多16条且2048估算token。只读，不读取微信或扩大联系人范围。',
    parameters:{query:{type:'string',required:true,description:'与本次回复有关的具体查询词，非空且最多400个字符。'}},
    async execute(args,exec){
     try{

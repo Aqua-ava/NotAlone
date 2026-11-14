@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {sha256} from '../../../platform/sha256.ts';
 import {StorageFailure,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
-import {savedSourceScopeCTE,currentSourcePredicate} from '../../../history/sqlite/current-scope.ts';
+import {searchAllReplyHistory,ReplyHistorySearchTimeout,type ReplyHistoryBoundary} from './search-history.ts';
 import {buildQueryTokens,scoreTokens,RELEVANCE_THRESHOLD} from '../../../retrieval/retrieval-lexical.ts';
 import type {DiscussionAttempt} from '../contracts.ts';
 import {requireAttempt,encode,decode} from '../requests.ts';
@@ -10,12 +10,14 @@ import {selectReplyKnowledge} from './knowledge-budget.ts';
 import {readSemanticScores,type SemanticMemory} from './memory-semantics.ts';
 import {requireReplyInput,messageTimePrefix,memorySourceTimeLabel,sources,knowledge,type FrozenReplyInput} from './input.ts';
 
-export const REPLY_SEARCH_BUDGET={attempts:3,queryChars:400,historyPool:500,historyCount:16,historyTokens:2048,contactMemories:5,ownerMemories:3} as const;
+export const REPLY_SEARCH_BUDGET={attempts:3,queryChars:400,historyTimeoutMs:5000,historyCount:16,historyTokens:2048,contactMemories:5,ownerMemories:3} as const;
 export type ReplySearchKind='memory'|'history';
 export type ReplySearchAttempt=DiscussionAttempt&{contextId:string};
 interface MemoryAnchor {id:string;versionNo:bigint;textSeal:string}
 interface HistoryAnchor {id:string;recordId:string;acceptedRevision:bigint;senderRole:string;sentAt:bigint|null}
-interface SearchScope {phase:'scope';version:1;contextId:string;memories:MemoryAnchor[];history:HistoryAnchor[]}
+interface LegacySearchScope {phase:'scope';version:1;contextId:string;memories:MemoryAnchor[];history:HistoryAnchor[]}
+interface FullSearchScope {phase:'scope';version:2;contextId:string;memories:MemoryAnchor[];historyBoundary:ReplyHistoryBoundary}
+type SearchScope=LegacySearchScope|FullSearchScope;
 interface SearchBegin {phase:'begin';kind:ReplySearchKind;querySeal:string;scopeId:string;memories:MemoryAnchor[]}
 interface SearchEvent {id:string;payload:Record<string,unknown>}
 export interface ReplySearchResult {status:'ok'|'empty'|'error'|'rejected';kind:ReplySearchKind;scope:'frozen_l1'|'frozen_contact_history';items:FrozenReplyInput[];code?:string}
@@ -44,30 +46,17 @@ function backgroundEnabled(tx:StorageTransaction,i:ReplySearchAttempt):boolean{
 const headers=(tx:StorageTransaction,i:ReplySearchAttempt,reader:ReplyKnowledgeReader)=>reader.list?reader.list(tx,i):reader.read(tx,i);
 function memoryAnchor(item:ReplyKnowledgeHeader):MemoryAnchor{return {id:item.id,versionNo:item.versionNo,textSeal:sha256(item.text)};}
 function frozenScope(rows:SearchEvent[]):{id:string;scope:SearchScope}|null{
- const row=rows.find(row=>row.payload.phase==='scope'&&row.payload.version===1);
+ const row=rows.find(row=>row.payload.phase==='scope'&&(row.payload.version===1||row.payload.version===2));
  return row?{id:row.id,scope:row.payload as unknown as SearchScope}:null;
 }
 /** 与初始材料同事务冻结只读检索范围；元数据不作为已读正文或实际来源依赖。 */
 export function initializeReplySearch(tx:StorageTransaction,i:ReplySearchAttempt,reader:ReplyKnowledgeReader):void{
  context(tx,i,reader);if(!backgroundEnabled(tx,i)||frozenScope(events(tx,i)))return;
  const memories=headers(tx,i,reader).filter(item=>item.kind==='memory'&&(item.scopeKind==='owner'&&item.contactId===null||item.scopeKind==='contact'&&item.contactId===i.contactId)).map(memoryAnchor);
- // 先按联系人接受顺序使用已有索引选取；来源资格在SQL中过滤，未展开500条正文或逐条调用知识读取器。
- const history=tx.all(`WITH ${savedSourceScopeCTE} SELECT m.id,m.interpretation_revision,m.sender_role,m.sent_at,
-  (SELECT r.id FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.contact_id=r.contact_id AND c.id=r.capture_id
-   JOIN read_goal g ON g.owner_id=c.owner_id AND g.contact_id=c.contact_id AND g.id=c.goal_id
-   WHERE r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id AND m.binding_id=g.binding_id
-    AND r.state='normalized' AND r.availability='available' AND ${currentSourcePredicate()} ORDER BY r.id LIMIT 1) record_id
-  FROM message m WHERE m.owner_id=? AND m.contact_id=? AND m.availability='available' AND m.kind='text' AND length(m.text_body)>0
-   AND EXISTS(SELECT 1 FROM source_proof p WHERE p.owner_id=m.owner_id AND p.contact_id=m.contact_id AND p.state='ok')
-   AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
-   AND record_id IS NOT NULL ORDER BY m.display_no DESC LIMIT ?`,[i.ownerId,i.contactId,i.contactId,i.ownerId,i.contactId,REPLY_SEARCH_BUDGET.historyPool]).map(row=>({id:String(row.id),recordId:String(row.record_id),acceptedRevision:row.interpretation_revision as bigint,senderRole:String(row.sender_role),sentAt:row.sent_at as bigint|null}));
- const seen=new Set(history.map(row=>row.id));
- for(const row of tx.all(`SELECT x.message_id,x.record_id,x.accepted_revision,m.sender_role,m.sent_at FROM reply_context_item x
-  JOIN message m ON m.owner_id=x.owner_id AND m.contact_id=x.source_contact_id AND m.id=x.message_id
-  WHERE x.owner_id=? AND x.context_id=? AND x.kind='message' AND x.source_contact_id=? ORDER BY x.item_no`,[i.ownerId,i.contextId,i.contactId]))if(!seen.has(String(row.message_id))){
-  history.push({id:String(row.message_id),recordId:String(row.record_id),acceptedRevision:row.accepted_revision as bigint,senderRole:String(row.sender_role),sentAt:row.sent_at as bigint|null});seen.add(String(row.message_id));
- }
- record(tx,i,{phase:'scope',version:1,contextId:i.contextId,memories,history} satisfies SearchScope);
+ // 只保存接纳序号与资料代次，不复制逐条历史身份或正文。
+ const displayNo=tx.get('SELECT COALESCE(MAX(display_no),0) n FROM message WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId])!.n as bigint;
+ const dataGeneration=tx.get('SELECT data_generation FROM contact WHERE owner_id=? AND id=?',[i.ownerId,i.contactId])!.data_generation as bigint;
+ record(tx,i,{phase:'scope',version:2,contextId:i.contextId,memories,historyBoundary:{displayNo,dataGeneration}} satisfies FullSearchScope);
 }
 /** 旧输入没有冻结范围时不补造历史资格；Skill降级沿原请求找到同一范围。 */
 export function hasReplySearchScope(tx:StorageTransaction,i:ReplySearchAttempt,reader:ReplyKnowledgeReader):boolean{
@@ -103,7 +92,7 @@ function memories(tx:StorageTransaction,i:ReplySearchAttempt,query:string,ticket
  }},query,readSemanticScores(semantic,query));
  return selected.map(item=>({kind:'memory',identity:item,text:item.text+memorySourceTimeLabel(tx,i.ownerId,(item as ReplyKnowledgeItem&{citationSources?:ReplySource[]}).citationSources??item.sources,Date.now()),sources:item.sources}));
 }
-function history(tx:StorageTransaction,i:ReplySearchAttempt,query:string,scope:SearchScope):Omit<FrozenReplyInput,'itemNo'>[]{
+function history(tx:StorageTransaction,i:ReplySearchAttempt,query:string,scope:LegacySearchScope):Omit<FrozenReplyInput,'itemNo'>[]{
  const prior=tx.all("SELECT identity_json,text_body FROM reply_candidate_input WHERE owner_id=? AND context_id=? AND kind='message'",[i.ownerId,i.contextId]);
  const used=new Set(tx.all(`SELECT s.message_id FROM reply_candidate_input_source s JOIN reply_candidate_input x
   ON x.owner_id=s.owner_id AND x.context_id=s.context_id AND x.item_no=s.item_no
@@ -129,7 +118,7 @@ function history(tx:StorageTransaction,i:ReplySearchAttempt,query:string,scope:S
  return selected;
 }
 /** 不接受外层传入正文或结果ID；按持久ticket的冻结成员重新读取、核验并原子追加。 */
-export function finishReplySearch(tx:StorageTransaction,i:ReplySearchAttempt&{ticketId:string;query:string;semantic?:unknown;error?:'timeout'|'failed'},reader:ReplyKnowledgeReader):ReplySearchResult{
+export function finishReplySearch(tx:StorageTransaction,i:ReplySearchAttempt&{ticketId:string;query:string;semantic?:unknown;error?:'timeout'|'failed'},reader:ReplyKnowledgeReader,options:{clock?:()=>number}={}):ReplySearchResult{
  context(tx,i,reader);const rows=events(tx,i),event=rows.find(row=>row.id===i.ticketId&&row.payload.phase==='begin'),ticket=event?.payload as unknown as SearchBegin|undefined,kind=ticket?.kind??'memory';
  if(!ticket||typeof i.query!=='string'||sha256(i.query.trim())!==ticket.querySeal)return reject(tx,i,kind,'reply_search_ticket_invalid');
  if(rows.some(row=>row.payload.phase==='finish'&&row.payload.ticketId===i.ticketId))return reject(tx,i,kind,'reply_search_ticket_finished',{ticketId:i.ticketId});
@@ -139,7 +128,16 @@ export function finishReplySearch(tx:StorageTransaction,i:ReplySearchAttempt&{ti
   if(!['timeout','failed'].includes(i.error))return reject(tx,i,kind,'reply_search_result_invalid',{ticketId:i.ticketId});
   record(tx,i,{phase:'finish',ticketId:i.ticketId,kind,status:'error',code:i.error});return {status:'error',kind,scope:resultScope(kind),items:[],code:i.error};
  }
- const selected=kind==='memory'?memories(tx,i,i.query.trim(),ticket,reader,i.semantic):history(tx,i,i.query.trim(),frozen.payload as unknown as SearchScope);
+ let selected:Omit<FrozenReplyInput,'itemNo'>[];
+ try{
+  const scope=frozen.payload as unknown as SearchScope;
+  selected=kind==='memory'?memories(tx,i,i.query.trim(),ticket,reader,i.semantic):scope.version===1?history(tx,i,i.query.trim(),scope)
+   :searchAllReplyHistory(tx,i,i.query.trim(),scope.historyBoundary,REPLY_SEARCH_BUDGET,options.clock??(()=>performance.now()));
+ }catch(error){
+  if(!(error instanceof ReplyHistorySearchTimeout))throw error;
+  record(tx,i,{phase:'finish',ticketId:i.ticketId,kind,status:'error',code:'timeout'});
+  return {status:'error',kind,scope:resultScope(kind),items:[],code:'reply_search_timeout'};
+ }
  const items=selected.map(item=>append(tx,i,item));requireReplyInput(tx,i,i.contextId,reader);
  const status=items.length?'ok':'empty';record(tx,i,{phase:'finish',ticketId:i.ticketId,kind,status,itemNos:items.map(item=>item.itemNo)});
  return {status,kind,scope:resultScope(kind),items};

@@ -8,7 +8,7 @@
 
 普通生成从本机已有的合法资料冻结输入；不为首轮生成恢复来源、补历史或等待未完成的后台任务。实际已选依赖失效时拒绝沿用，不能把失效材料当作无资料继续；具体降级和重试语义见现行回复生成合同。
 
-初始只提供最近五十条、本次独立输入和合法 L3/L2 资料，不自动召回 L1。官方 DSH scoped Tools `search_relationship_memory`／`search_relationship_history` 由模型按信息缺口调用；`reply.beginSearch` 先持久占用尝试，语义评分在事务外进行，`reply.finishSearch` 重新核验并追加真实材料。搜索准备范围不当作已读依据，删除时定向剪除锚点；每次后续真实模型请求继续核验实际结果，Skill 降级重放已读材料且不重置预算。
+初始只提供最近五十条、本次独立输入和合法 L3/L2 资料，不自动召回 L1。官方 DSH scoped Tools `search_relationship_memory`／`search_relationship_history` 由模型按信息缺口调用；`reply.beginSearch` 先持久占用尝试，语义评分在事务外进行，`reply.finishSearch` 重新核验并追加真实材料。历史搜索使用 v2 接纳边界分页覆盖当前联系人全部获准历史，不列举五百条身份或截断候选；五秒计算预算超时返回未完成，不追加部分结果。L1 与旧历史准备池不当作已读依据，删除时定向剪除锚点；每次后续真实模型请求继续核验实际结果，Skill 降级重放已读材料且不重置预算。
 
 `replyCandidateMigration(version)` 仅追加新版本。候选稳定身份不保存正文，模型原稿从 v1 起；手工编辑追加同候选父版本，多条消息分别按 `part_no` 保存。选稿是固定版本的追加事件，不证明复制或发送。
 

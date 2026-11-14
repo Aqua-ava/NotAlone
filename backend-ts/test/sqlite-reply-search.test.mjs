@@ -55,10 +55,11 @@ test('按需检索把冻结范围内L1与原始作者时间历史追加为可引
  assert.ok(history.items.every(item=>item.itemNo>memories.items[0].itemNo));assert.equal(history.scope,'frozen_contact_history');
 });
 
-test('历史冻结最多500合法ID加初始ID，后入库及其他联系人消息不混入',async t=>{
+test('历史搜索固定接纳边界而不复制消息ID，后入库及其他联系人消息不混入',async t=>{
  const f=await setup(t,{count:501,initialFirst:true});f.act(tx=>initializeReplySearch(tx,f.scope,f.reader));
  const scope=JSON.parse(f.tx.get("SELECT payload FROM execution_event WHERE owner_id=? AND kind='reply_search' AND json_extract(payload,'$.phase')='scope'",[owner]).payload);
- assert.equal(scope.history.length,501,'500条索引候选额外补齐本次初始消息ID');
+ assert.equal(scope.version,2);assert.equal(scope.history,undefined,'范围元数据不保存逐条历史身份');
+ assert.ok(scope.historyBoundary);assert.ok(JSON.stringify(scope).length<1000,'准备范围大小不随历史条数增长');
  f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('502',{text:'后来新增的航海正文'})],completedPartitions:['shard-a'],exhausted:true});
  await f.service.synchronize(f.scope.contactId);
  await f.service.synchronize(f.saved[1].contact_id);
@@ -67,6 +68,29 @@ test('历史冻结最多500合法ID加初始ID，后入库及其他联系人消�
  const inScope=f.act(tx=>beginReplySearch(tx,{...f.scope,kind:'history',query:'园艺'},f.reader));
  const result=f.act(tx=>finishReplySearch(tx,{...f.scope,ticketId:inScope.ticketId,query:'园艺'},f.reader));
  assert.ok(result.items.length>0&&result.items.every(item=>item.sources[0].contactId===f.scope.contactId));assert.ok(result.items.every(item=>item.sources[0].messageId!==f.initialMessageId),'已在初始输入中的消息不重复返回');
+});
+
+test('超过500条的当前联系人历史仍可命中早期约定，只向模型返回匹配结果',async t=>{
+ const text='合成北极星约定：早年约好看流星雨。';
+ const f=await setup(t,{count:1000,messageText:index=>index===0?text:`无关日常消息${index}`});
+ f.act(tx=>initializeReplySearch(tx,f.scope,f.reader));
+ const ticket=f.act(tx=>beginReplySearch(tx,{...f.scope,kind:'history',query:'北极星 流星雨'},f.reader));
+ const result=f.act(tx=>finishReplySearch(tx,{...f.scope,ticketId:ticket.ticketId,query:ticket.query},f.reader));
+ assert.equal(result.status,'ok');assert.equal(result.items.length,1);assert.ok(result.items[0].text.includes(text));
+ assert.ok(result.items[0].sources.every(source=>source.contactId===f.scope.contactId));
+});
+
+test('删除后新消息复用接纳序号时，既有请求仍由真实删除围栏拒绝',async t=>{
+ const f=await setup(t,{count:2});f.act(tx=>initializeReplySearch(tx,f.scope,f.reader));
+ const old=f.tx.get(`SELECT m.display_no,r.id record_id FROM message m JOIN capture_record r ON r.owner_id=m.owner_id AND r.message_id=m.id
+  WHERE m.owner_id=? AND m.contact_id=? ORDER BY m.display_no DESC LIMIT 1`,[owner,f.scope.contactId]);
+ const deletion=new DeletionService(f.storage,f.service.holders,new ManagedFiles(f.root)),operation=await deletion.plan({ownerId:owner,requestKey:randomUUID(),scope:{kind:'source',contactId:f.scope.contactId,sourceId:old.record_id}});
+ assert.equal((await deletion.advance(operation)).state,'completed');
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('3',{text:'后来新增的航海约定'})],completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(f.scope.contactId);
+ const added=f.tx.get('SELECT display_no FROM message WHERE owner_id=? AND contact_id=? AND text_body=?',[owner,f.scope.contactId,'后来新增的航海约定']);
+ assert.ok(added.display_no<=old.display_no,'夹具确实覆盖删除后序号复用');
+ assert.throws(()=>f.act(tx=>beginReplySearch(tx,{...f.scope,kind:'history',query:'航海'},f.reader)),{code:'discussion_request_stale'});
 });
 
 test('来源失效先跳过未读取结果，已追加材料仍在下一轮资格复验时拒绝',async t=>{
@@ -174,12 +198,31 @@ test('历史累计最多16条且2048估算token，超长完整消息跳过',asyn
  assert.equal(limited.items.length,1);assert.match(limited.items[0].text,new RegExp('字'.repeat(400)+'$'));assert.ok(Buffer.byteLength(limited.items[0].text,'utf8')<=2048);
 });
 
-for(const count of [10,100,500])test(`历史冻结${count}条时只用集合来源查询，实际打开不超过16条`,async t=>{
+test('全历史排序保留能填入剩余预算的较低分短消息，不截断候选集',async t=>{
+ const f=await setup(t,{count:40,messageText:index=>index<39?'园艺玫瑰'+'字'.repeat(600):'园艺'});
+ f.act(tx=>initializeReplySearch(tx,f.scope,f.reader));
+ const ticket=f.act(tx=>beginReplySearch(tx,{...f.scope,kind:'history',query:'园艺 玫瑰'},f.reader));
+ const result=f.act(tx=>finishReplySearch(tx,{...f.scope,ticketId:ticket.ticketId,query:ticket.query},f.reader));
+ assert.equal(result.items.length,2);assert.ok(result.items.some(item=>item.text.endsWith('：园艺')));
+ assert.ok(result.items.reduce((sum,item)=>sum+Buffer.byteLength(item.text,'utf8'),0)<=2048);
+});
+
+test('历史搜索超时返回未完成回执，不追加部分结果，已消费尝试保留',async t=>{
+ const f=await setup(t,{count:10});f.act(tx=>initializeReplySearch(tx,f.scope,f.reader));
+ const ticket=f.act(tx=>beginReplySearch(tx,{...f.scope,kind:'history',query:'园艺'},f.reader));let elapsed=0;
+ const result=f.act(tx=>finishReplySearch(tx,{...f.scope,ticketId:ticket.ticketId,query:ticket.query},f.reader,{clock:()=>elapsed+=2000}));
+ assert.equal(result.status,'error');assert.equal(result.code,'reply_search_timeout');assert.deepEqual(result.items,[]);
+ assert.equal(f.tx.get("SELECT count(*) n FROM reply_candidate_input WHERE owner_id=? AND context_id=? AND kind='message'",[owner,f.scope.contextId]).n,0n);
+ const receipts=f.tx.all("SELECT payload FROM execution_event WHERE owner_id=? AND kind='reply_search'",[owner]).map(row=>JSON.parse(row.payload));
+ assert.equal(receipts.filter(row=>row.phase==='begin').length,1);assert.ok(receipts.some(row=>row.phase==='finish'&&row.status==='error'&&row.code==='timeout'));
+});
+
+for(const count of [10,100,1000])test(`全部历史有${count}条时分页搜索，实际返回来源不超过16条`,async t=>{
  const f=await setup(t,{count});let queries=0,sourceQueries=0;
  const counted={...f.tx,get(sql,values){queries++;if(sql.includes('wanted AS ('))sourceQueries++;return f.tx.get(sql,values);},all(sql,values){queries++;if(sql.includes('wanted AS ('))sourceQueries++;return f.tx.all(sql,values);}};
  f.act(()=>withReplyValidation(counted,tx=>initializeReplySearch(tx,f.scope,f.reader)));const initializeQueries=queries,initializeSourceQueries=sourceQueries;
  const ticket=f.act(tx=>beginReplySearch(tx,{...f.scope,kind:'history',query:'园艺'},f.reader));queries=0;sourceQueries=0;
  const result=f.act(()=>withReplyValidation(counted,tx=>finishReplySearch(tx,{...f.scope,ticketId:ticket.ticketId,query:'园艺'},f.reader)));
- assert.equal(result.items.length,Math.min(count,16));assert.equal(initializeSourceQueries,0,'初始化来源范围在SQL内筛选，不逐条打开来源');assert.ok(initializeQueries<=40,`初始化查询不应随500条消息逐条增长：${initializeQueries}`);assert.ok(sourceQueries<=17,`只核可能入选的来源：${sourceQueries}`);
+ assert.equal(result.items.length,Math.min(count,16));assert.equal(initializeSourceQueries,0,'初始化只记录接纳边界，不逐条打开来源');assert.ok(initializeQueries<=40,`准备查询不随历史条数逐条增长：${initializeQueries}`);assert.ok(sourceQueries<=17,`只核实际返回来源：${sourceQueries}`);
  t.diagnostic(JSON.stringify({historyCount:count,initializeQueries,finishQueries:queries,sourceQueries,returned:result.items.length}));
 });
