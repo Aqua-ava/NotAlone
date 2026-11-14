@@ -27,9 +27,9 @@ const monotonicMs=()=>Number(process.hrtime.bigint())/1e6;
 const milliseconds=(value:number)=>Math.round(Math.max(0,value)*1000)/1000;
 /**
  * 前台回复链路的动作：与后台提取、同步共用唯一写者线程，但优先出队。
- * 白名单只含回复、助手讨论、运行副本、Skill 核验与手动确认；其余一律走后台通道，未知动作不会插队。
+ * 白名单只含回复、助手讨论、运行副本、Skill 核验、只读分组范围与手动确认；分组管理写入和未知动作走后台通道。
  */
-const foregroundAction=/^(?:reply|discussion|runtime|skills)\.|^identity\.manualConfirm$/;
+const foregroundAction=/^(?:reply|discussion|runtime|skills)\.|^(?:identity\.manualConfirm|skillGroups\.scope)$/;
 const actionName=(value:string)=>/^[a-z][a-zA-Z0-9]*\.[a-zA-Z][a-zA-Z0-9]{0,95}$/.test(value)&&value.length<=128?value:'invalid_action';
 
 export class SqliteStorage {

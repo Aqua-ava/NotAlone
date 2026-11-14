@@ -42,6 +42,24 @@ test('前台回复动作优先于已排队的后台动作，且各通道内保�
  assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
+test('生成所需的分组范围优先读取，分组管理写入及相近动作仍按后台顺序完成',async t=>{
+ const storage=await fixture(t),order=[];
+ const track=(label,name,input)=>storage.execute(name,{...input,sequence:label}).then(value=>{assert.equal(value,label);order.push(label);});
+ const work=[track('running','timing.block',{milliseconds:150}),
+  track('background-1','timing.block',{milliseconds:10}),
+  track('management-1','skillGroups.assign',{}),
+  track('scope-1','skillGroups.scope',{}),
+  track('reply','discussion.timingProbe',{}),
+  track('scope-2','skillGroups.scope',{}),
+  track('management-2','skillGroups.assign',{}),
+  track('unknown-scope','skillGroups.scopeExtra',{}),
+  track('background-2','timing.block',{milliseconds:10})];
+ await Promise.all(work);
+ assert.deepEqual(order,['running','scope-1','reply','scope-2','background-1','management-1','management-2','unknown-scope','background-2']);
+ assert.equal(storage.timingDiagnostic.pendingCount,0);assert.equal(storage.timingDiagnostic.queuedCount,0);
+ assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
 test('单个动作超过15秒仍关闭Worker并拒绝其后排队动作',async t=>{
  const storage=await fixture(t),started=performance.now();
  const results=await Promise.allSettled([

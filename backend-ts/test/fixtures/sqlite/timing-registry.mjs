@@ -9,6 +9,10 @@ export const registry={migrations:base.migrations,actions:[
  }},
  // 名称落在前台回复白名单内，用于验证前台通道优先出队；不读写业务表。
  {name:'discussion.timingProbe',mode:'read',retryBusy:false,execute(_tx,input){return input.sequence;}},
+ // 使用正式分组动作名和相近未知名，只验证调度分类，不读写分组资料。
+ {name:'skillGroups.scope',mode:'read',retryBusy:false,execute(_tx,input){return input.sequence;}},
+ {name:'skillGroups.assign',mode:'write',retryBusy:false,execute(_tx,input){return input.sequence;}},
+ {name:'skillGroups.scopeExtra',mode:'read',retryBusy:false,execute(_tx,input){return input.sequence;}},
  // 模拟压缩这类无法中途打断的同步维护动作：与 VACUUM 一样占满 Worker，只在结束时返回。
  {name:'timing.maintain',mode:'maintenance',retryBusy:false,execute(_maintenance,input){
   if(!Number.isSafeInteger(input.milliseconds)||input.milliseconds<0||input.milliseconds>20_000)throw new Error('invalid_synthetic_duration');
