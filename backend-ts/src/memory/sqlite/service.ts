@@ -25,8 +25,9 @@ export interface ExtractionModelPort {
  close?():Promise<void>;
 }
 interface ClaimedStep {attemptId:string;stepId:string;taskId:string;runId:string;contactId:string;rows:StorageRow[];policyConfig:unknown;claim:ModelTaskClaim}
+export interface ContactFollowupOptions {onlyContactId:string;completeDocuments?:boolean}
 export class SqliteMemoryExtraction {
- private afterRunSettled?:((runId:string,contactIds?:readonly string[])=>Promise<unknown>);
+ private afterRunSettled?:((runId:string,contactIds?:readonly string[],options?:ContactFollowupOptions)=>Promise<unknown>);
  private readonly ensureSourceReady?:((contactId:string)=>Promise<void>);
  private readonly content:{registry:MemoryContentRegistry;resources?:MemoryContentResources};
  private readonly afterStepSettled?:()=>Promise<void>;
@@ -37,7 +38,7 @@ export class SqliteMemoryExtraction {
  private turnTail:Promise<void>=Promise.resolve();
  private runs=new Map<string,Promise<void>>();private active=new Map<string,{abort:AbortController;done:Promise<void>}>();
  readonly accounting:ModelPermitAccounting;
- constructor(storage:SqliteStorage,ownerId:string,model:ExtractionModelPort,holders=new ActiveHolders(),afterRunSettled?:((runId:string,contactIds?:readonly string[])=>Promise<unknown>),ensureSourceReady?:((contactId:string)=>Promise<void>),afterStepSettled?:()=>Promise<void>,content?:{registry:MemoryContentRegistry;resources?:MemoryContentResources}){
+ constructor(storage:SqliteStorage,ownerId:string,model:ExtractionModelPort,holders=new ActiveHolders(),afterRunSettled?:((runId:string,contactIds?:readonly string[],options?:ContactFollowupOptions)=>Promise<unknown>),ensureSourceReady?:((contactId:string)=>Promise<void>),afterStepSettled?:()=>Promise<void>,content?:{registry:MemoryContentRegistry;resources?:MemoryContentResources}){
   this.content=content??{registry:createBuiltinMemoryContentRegistry()};
   this.storage=storage;this.ownerId=ownerId;this.model=model;this.holders=holders;this.afterRunSettled=afterRunSettled;this.ensureSourceReady=ensureSourceReady;this.afterStepSettled=afterStepSettled;
   this.accounting={reserve:async(receipt,claim)=>{await this.storage.execute(claim?.step_name==='extraction_verification'?'memoryExtraction.reserve':claim?.step_name==='document_scene'||claim?.step_name==='document_profile'?'memoryDocuments.reserve':'memoryAdjudication.reserve',{receipt,claim});},recordReserved:async receipt=>{await this.storage.execute('memoryExtraction.receipt',{receipt});},unconfirmedRequests:scope=>this.storage.execute('memoryExtraction.unconfirmed',scope)};
@@ -183,14 +184,17 @@ export class SqliteMemoryExtraction {
   * 用户显式让当前联系人遗留的待处理候选重新进入裁决：沿该轮已有的后续链执行，不新建提取轮、不领取提取目标，
   * 也不触碰其他联系人。后续链异步执行，调用方通过联系人视图观察进度；与自动处理一样受总开关约束。
   */
- async readjudicate(contactId:string){
+ async readjudicate(contactId:string){return this.contactFollowup(contactId,false);}
+ /** 用户明确要求单联系人完整收尾；不恢复其他联系人或独立本人任务。 */
+ async completeContact(contactId:string){return this.contactFollowup(contactId,true);}
+ private contactFollowup(contactId:string,completeDocuments:boolean){
   return this.admit(async()=>{
    await this.initialize();this.requireAutomatic();this.available();
    if(!this.afterRunSettled)throw new StorageFailure('memory_extraction_unavailable');
-   const runId=await this.storage.execute<string|null>('memoryExtraction.pendingAdjudicationRun',{ownerId:this.ownerId,contactId});
+   const runId=await this.storage.execute<string|null>(completeDocuments?'memoryExtraction.contactCompletionRun':'memoryExtraction.pendingAdjudicationRun',{ownerId:this.ownerId,contactId});
    if(!runId)throw new StorageFailure('memory_extraction_no_pending_adjudication');
    if(this.runs.has(runId))throw new StorageFailure('memory_extraction_contact_busy');
-   const work=this.executeFollowup(runId,false,[contactId]).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});
+   const work=this.executeFollowup(runId,false,[contactId],{onlyContactId:contactId,...(completeDocuments?{completeDocuments:true}:{})}).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});
    return this.readContact(contactId);
   });
  }
@@ -206,13 +210,13 @@ export class SqliteMemoryExtraction {
   if(this.runs.has(runId)||this.stopped||!this.afterRunSettled||!this.automatic)return false;
   const work=this.executeFollowup(runId).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});return true;
  }
- private async executeFollowup(runId:string,recovering=true,contactIds?:readonly string[]):Promise<void>{
+ private async executeFollowup(runId:string,recovering=true,contactIds?:readonly string[],options?:ContactFollowupOptions):Promise<void>{
   await this.turn(async()=>{
    if(this.stopped||!this.afterRunSettled||!this.automatic)return;
    // 启动恢复必须整轮安全；本次正常收尾仍由各领域门禁隔离单联系人失败。
    const eligible=!recovering||await this.storage.execute<boolean>('memoryExtraction.followupEligible',{ownerId:this.ownerId,runId});
    if(!eligible||this.stopped)return;
-   try{await this.afterRunSettled(runId,contactIds);}
+   try{await this.afterRunSettled(runId,contactIds,options);}
    finally{if(!this.stopped)await this.storage.execute('memoryExtraction.finishLater',{ownerId:this.ownerId,runId});}
   });
  }

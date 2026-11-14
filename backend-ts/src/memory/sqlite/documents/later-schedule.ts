@@ -6,7 +6,7 @@ import type {StorageAction,StorageMigration,StorageTransaction,StorageRow,Storag
 import type {MemoryScope} from '../management/contracts.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import {available} from '../management/qualification.ts';
-import {assertContribution,assertInputs} from '../qualification.ts';
+import {assertContribution,assertInputs,textId} from '../qualification.ts';
 import {currentContent,freezeContent} from '../content.ts';
 import {memoryBasis,documentSources,withDocumentSourceQualifications} from './basis.ts';
 import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
@@ -80,7 +80,15 @@ function transferRequirements(tx:StorageTransaction,ownerId:string,scope:MemoryS
   tx.run('UPDATE memory_document_later_run_requirement SET paused=?,updated_at=? WHERE owner_id=? AND run_id=? AND scope_key=?',[row.paused,now,ownerId,row.run_id,p.scopeKey]);
  }
 }
+/** 只完成一个 scope 不能消费整轮恢复标记；所有任务范围均登记后才可结清整轮。 */
+function allRunScopesEnrolled(tx:StorageTransaction,ownerId:string,runId:string):boolean {
+ return !tx.get(`SELECT 1 FROM processing_task t WHERE t.owner_id=? AND t.run_id=? AND NOT EXISTS(
+  SELECT 1 FROM memory_document_later_run_requirement q WHERE q.owner_id=t.owner_id AND q.run_id=t.run_id
+   AND q.scope_key=CASE WHEN t.scope_kind='self' THEN 'self' ELSE t.contact_id END
+   AND q.scope_kind=t.scope_kind AND q.contact_id IS t.contact_id) LIMIT 1`,[ownerId,runId]);
+}
 function maybeCompleteL1Run(tx:StorageTransaction,ownerId:string,runId:string):void {
+ if(!allRunScopesEnrolled(tx,ownerId,runId))return;
  const run=tx.get('SELECT state,pause_requested_at FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);
  if(!run||run.pause_requested_at!==null||!['running','incomplete'].includes(String(run.state)))return;
  const tasks=tx.all('SELECT state,scope_kind FROM processing_task WHERE owner_id=? AND run_id=?',[ownerId,runId]);
@@ -121,16 +129,16 @@ export function scheduleMemoryChange(tx:StorageTransaction,ownerId:string,scope:
 }
 
 /** 即时 L1 轮登记：仅绑定本轮同一 scope 的 dirty generation，其他 scope 落为持久 no-op。 */
-export function enrollRun(tx:StorageTransaction,ownerId:string,runId:string,now=Date.now()):boolean {
+export function enrollRun(tx:StorageTransaction,ownerId:string,runId:string,now=Date.now(),contactId?:string):boolean {
  if(!exists(tx))return false;
  if(!tx.get('SELECT 1 FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]))return false;
  const changed=safeTime(now);
- for(const t of tx.all('SELECT scope_kind,contact_id FROM processing_task WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[ownerId,runId])){
+ for(const t of tx.all(`SELECT scope_kind,contact_id FROM processing_task WHERE owner_id=? AND run_id=?${contactId===undefined?'':" AND scope_kind='contact' AND contact_id=?"} ORDER BY scope_kind,contact_id`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId])){
   const scope={scopeKind:String(t.scope_kind) as MemoryScope['scopeKind'],contactId:t.contact_id===null?null:String(t.contact_id)} as MemoryScope;
   if(tx.get('SELECT 1 FROM memory_document_later_run_requirement WHERE owner_id=? AND run_id=? AND scope_key=?',[ownerId,runId,scopeParts(scope).scopeKey]))continue;
   requirement(tx,ownerId,runId,scope,null,'no_formal_change','no_formal_memory_change',changed);
  }
- tx.run("UPDATE processing_run SET followup_state='enrolled' WHERE owner_id=? AND id=? AND followup_state='pending'",[ownerId,runId]);
+ if(allRunScopesEnrolled(tx,ownerId,runId))tx.run("UPDATE processing_run SET followup_state='enrolled' WHERE owner_id=? AND id=? AND followup_state='pending'",[ownerId,runId]);
  maybeCompleteL1Run(tx,ownerId,runId);
  return true;
 }
@@ -429,7 +437,7 @@ function finishLegacyFullPublication(tx:StorageTransaction,ownerId:string,taskId
    [taskId,task.accepted_memory_revision,task.accepted_document_revision,publication.id,digest,ownerId,parts.scopeKey,row.generation,task.accepted_memory_revision]);
   const runIds=tx.all("SELECT run_id FROM memory_document_later_run_requirement WHERE owner_id=? AND scope_key=? AND generation=? AND outcome='pending'",[ownerId,parts.scopeKey,row.generation]);
   tx.run("UPDATE memory_document_later_run_requirement SET outcome='completed',reason='legacy_full_publication',updated_at=? WHERE owner_id=? AND scope_key=? AND generation=? AND outcome='pending'",[instant,ownerId,parts.scopeKey,row.generation]);
-  for(const item of runIds){tx.run("UPDATE processing_run SET followup_state='enrolled' WHERE owner_id=? AND id=? AND followup_state='pending'",[ownerId,item.run_id]);maybeCompleteL1Run(tx,ownerId,String(item.run_id));}
+  for(const item of runIds){if(allRunScopesEnrolled(tx,ownerId,String(item.run_id)))tx.run("UPDATE processing_run SET followup_state='enrolled' WHERE owner_id=? AND id=? AND followup_state='pending'",[ownerId,item.run_id]);maybeCompleteL1Run(tx,ownerId,String(item.run_id));}
  }
  return eligible.length>0;
 }
@@ -513,7 +521,7 @@ export function failLaterStage(tx:StorageTransaction,ownerId:string,taskId:strin
 
 export const memoryDocumentsLaterScheduleActions:StorageAction[]=[
  action('scheduleMemoryChange','write',(tx,i)=>scheduleMemoryChange(tx,String(i.ownerId),i.scope as MemoryScope,safeTime(i.changedAt??Date.now()),typeof i.runId==='string'?i.runId:undefined)),
- action('enrollRun','write',(tx,i)=>enrollRun(tx,String(i.ownerId),String(i.runId))),
+ action('enrollRun','write',(tx,i)=>enrollRun(tx,String(i.ownerId),String(i.runId),Date.now(),i.contactId===undefined?undefined:textId(i.contactId))),
  action('pauseRunSchedule','write',(tx,i)=>setRunSchedulePaused(tx,String(i.ownerId),String(i.runId),i.paused===true)),
  action('resumeRunSchedule','write',(tx,i)=>resumeRunSchedule(tx,String(i.ownerId),String(i.runId),safeTime(i.now??Date.now()))),
  action('readSchedule','read',(tx,i)=>snapshot(tx,String(i.ownerId),i.scope as MemoryScope)),

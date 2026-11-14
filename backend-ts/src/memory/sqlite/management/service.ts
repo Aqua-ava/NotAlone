@@ -6,7 +6,7 @@ type ReadOptions={reader?:Pick<StorageReader,'execute'>};
 export class SqliteMemoryManagement {
  private storage:Pick<SqliteStorage,'execute'>;readonly ownerId:string;private reads:Pick<StorageReader,'execute'>;
  constructor(storage:Pick<SqliteStorage,'execute'>,ownerId:string,options:ReadOptions={}){this.storage=storage;this.ownerId=ownerId;this.reads=options.reader??storage;}
- importRun(runId:string){return this.storage.execute<{candidateIds:string[]}>('memory.importRun',{ownerId:this.ownerId,runId});}
+ importRun(runId:string,contactId?:string){return this.storage.execute<{candidateIds:string[]}>('memory.importRun',{ownerId:this.ownerId,runId,...(contactId===undefined?{}:{contactId})});}
  publishRun(runId:string){return this.storage.execute<{candidateIds:string[];decisions:MemoryDecisionResult[]}>('memory.publishRun',{ownerId:this.ownerId,runId});}
  async read(scope:MemoryScope,query:MemoryManagementQuery={},options:{signal?:AbortSignal}={}){
   const current=()=>{if(options.signal?.aborted)throw new StorageFailure('memory_read_cancelled');};current();

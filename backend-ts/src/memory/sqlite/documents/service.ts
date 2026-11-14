@@ -21,14 +21,14 @@ export interface DocumentModelPort {
 /** 一个owner的文档处理服务；输入由真实任务及存储事务产生。 */
 export class SqliteMemoryDocuments {
  private readonly storage:SqliteStorage;readonly ownerId:string;private readonly model:DocumentModelPort|undefined;private readonly holders:ActiveHolders;
- private readonly stop=new AbortController();private pending=new Set<Promise<unknown>>();private active=new Map<string,Promise<unknown>>();private closing?:Promise<void>;
+ private readonly stop=new AbortController();private pending=new Set<Promise<unknown>>();private active=new Map<string,{contactId:string|undefined;work:Promise<unknown>}>();private closing?:Promise<void>;
  constructor(storage:SqliteStorage,ownerId:string,model:DocumentModelPort|undefined,holders:ActiveHolders){this.storage=storage;this.ownerId=ownerId;this.model=model;this.holders=holders;}
  async initialize(){
   await this.storage.execute('memoryDocuments.recover',{ownerId:this.ownerId});
   const runs=await this.storage.execute<string[]>('memoryDocuments.recoverableLaterRuns',{ownerId:this.ownerId});
   for(const runId of runs)await this.publishRun(runId);
  }
- enrollRun(runId:string):Promise<boolean>{return this.storage.execute('memoryDocuments.enrollRun',{ownerId:this.ownerId,runId});}
+ enrollRun(runId:string,contactId?:string):Promise<boolean>{return this.storage.execute('memoryDocuments.enrollRun',{ownerId:this.ownerId,runId,...(contactId===undefined?{}:{contactId})});}
  scheduleMemoryChange(scope:MemoryScope,changedAt=Date.now(),runId?:string):Promise<LaterScheduleSnapshot|null>{return this.storage.execute('memoryDocuments.scheduleMemoryChange',{ownerId:this.ownerId,scope,changedAt,runId});}
  readSchedule(scope:MemoryScope):Promise<LaterScheduleSnapshot>{return this.storage.execute('memoryDocuments.readSchedule',{ownerId:this.ownerId,scope});}
  queueSummary():Promise<{pending:number;nextDueAt:number|null;stage:'document_scene'|'document_profile'|null}>{return this.storage.execute('memoryDocuments.queueSummary',{ownerId:this.ownerId});}
@@ -49,17 +49,18 @@ export class SqliteMemoryDocuments {
   return results;
   });
  }
- publishRun(runId:string):Promise<unknown>{
+ /** 同轮重复请求只复用相同范围，不能把另一联系人的在途工作当作本次完成。 */
+ publishRun(runId:string,contactId?:string):Promise<unknown>{
   if(this.stop.signal.aborted)return Promise.reject(new StorageFailure('document_service_closed'));
-  const prior=this.active.get(runId);if(prior)return prior;
-  const work=withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>this.run(runId));this.active.set(runId,work);this.pending.add(work);void work.then(()=>{this.pending.delete(work);this.active.delete(runId);},()=>{this.pending.delete(work);this.active.delete(runId);});return work;
+  const prior=this.active.get(runId);if(prior)return prior.contactId===contactId?prior.work:Promise.reject(new StorageFailure('document_run_busy'));
+  const work=withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>this.run(runId,contactId));this.active.set(runId,{contactId,work});this.pending.add(work);void work.then(()=>{this.pending.delete(work);this.active.delete(runId);},()=>{this.pending.delete(work);this.active.delete(runId);});return work;
  }
  /** 用户显式恢复已知回执的画像；只重放本地材料，不获取模型许可或发起模型调用。 */
  replayVerifiedProfile(taskId:string):Promise<unknown>{
   if(this.stop.signal.aborted)return Promise.reject(new StorageFailure('document_service_closed'));
-  const key=`profile-replay:${taskId}`,prior=this.active.get(key);if(prior)return prior;
+  const key=`profile-replay:${taskId}`,prior=this.active.get(key);if(prior)return prior.work;
   const work=withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>this.replayProfile(taskId));
-  this.active.set(key,work);this.pending.add(work);void work.then(()=>{this.active.delete(key);this.pending.delete(work);},()=>{this.active.delete(key);this.pending.delete(work);});return work;
+  this.active.set(key,{contactId:undefined,work});this.pending.add(work);void work.then(()=>{this.active.delete(key);this.pending.delete(work);},()=>{this.active.delete(key);this.pending.delete(work);});return work;
  }
  private async replayProfile(taskId:string):Promise<unknown>{
   const prepared=await this.storage.execute<VerifiedProfileReplay>('memoryDocuments.prepareVerifiedProfileReplay',{ownerId:this.ownerId,taskId});
@@ -79,8 +80,8 @@ export class SqliteMemoryDocuments {
    await this.storage.execute('memoryDocuments.noteFailure',{ownerId:this.ownerId,taskId,code}).catch(()=>{});throw error;
   }finally{finish();await Promise.all(releases.map(release=>release()));}
  }
- private async run(runId:string){
-  const tasks=await this.storage.execute<string[]>('memoryDocuments.tasks',{ownerId:this.ownerId,runId});const results=[];
+ private async run(runId:string,contactId?:string){
+  const tasks=await this.storage.execute<string[]>('memoryDocuments.tasks',{ownerId:this.ownerId,runId,...(contactId===undefined?{}:{contactId})});const results=[];
   for(const taskId of tasks){
    if(this.stop.signal.aborted)break;
    try{

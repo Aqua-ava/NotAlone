@@ -576,7 +576,17 @@ function restartPolicyRun(tx:StorageTransaction,raw:unknown){
 }
 const processingRunActions:StorageAction[]=[...scheduleActions,...backlogRecoveryActions,...autoProcessingActions,{name:'memoryExtraction.restartPolicy',mode:'write',retryBusy:true,execute:restartPolicyRun},{name:'memoryExtraction.readPolicy',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;runId:string};const row=tx.get('SELECT policy_config FROM processing_run WHERE owner_id=? AND id=?',[i.ownerId,i.runId]);if(!row)fail('memory_extraction_not_found');return JSON.parse(String(row!.policy_config));}},{name:'memoryExtraction.startHistory',mode:'write',retryBusy:true,execute:startHistory},{name:'memoryExtraction.readContact',mode:'read',retryBusy:false,execute:contactView},{name:'memoryExtraction.findRequest',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;requestKey:string};const r=tx.get('SELECT id FROM processing_run WHERE owner_id=? AND start_request_key=?',[textId(i.ownerId),textId(i.requestKey)]);return r?snapshot(tx,i.ownerId,String(r.id)):null;}},{name:'memoryExtraction.contactGeneration',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;contactId:string};const r=tx.get('SELECT data_generation FROM contact WHERE owner_id=? AND id=?',[i.ownerId,i.contactId]);if(!r)fail('memory_extraction_scope_stale');return {generation:String(r!.data_generation)};}},{name:'memoryExtraction.start',mode:'write',retryBusy:true,execute(tx,raw){return startRun(tx,raw);}},{name:'memoryExtraction.startContact',mode:'write',retryBusy:true,execute(tx,raw){return startRun(tx,raw,true);}},{name:'memoryExtraction.read',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;runId?:string};const owner=textId(i.ownerId);if(i.runId)return snapshot(tx,owner,textId(i.runId));const r=tx.get(`SELECT id FROM processing_run WHERE owner_id=? AND coalesce(json_extract(policy_config,'$.intent'),'')<>'memory_document_later_stage'
  AND EXISTS(SELECT 1 FROM run_input i WHERE i.owner_id=processing_run.owner_id AND i.run_id=processing_run.id AND i.role='target')
- ORDER BY started_at DESC,rowid DESC LIMIT 1`,[owner]);return r?snapshot(tx,owner,String(r.id)):null;}},{name:'memoryExtraction.pendingFollowups',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string};return pendingFollowupIds(tx,textId(i.ownerId));}},{name:'memoryExtraction.followupEligible',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;runId:string};return pendingFollowupIds(tx,textId(i.ownerId),textId(i.runId)).length===1;}},{name:'memoryExtraction.pendingAdjudicationRun',mode:'read',retryBusy:false,execute(tx,raw){
+ ORDER BY started_at DESC,rowid DESC LIMIT 1`,[owner]);return r?snapshot(tx,owner,String(r.id)):null;}},{name:'memoryExtraction.pendingFollowups',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string};return pendingFollowupIds(tx,textId(i.ownerId));}},{name:'memoryExtraction.followupEligible',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;runId:string};return pendingFollowupIds(tx,textId(i.ownerId),textId(i.runId)).length===1;}},{name:'memoryExtraction.contactCompletionRun',mode:'read',retryBusy:false,execute(tx,raw){
+ const i=raw as {ownerId:string;contactId:string};
+ const row=tx.get(`SELECT r.id FROM processing_run r JOIN run_contact rc ON rc.owner_id=r.owner_id AND rc.run_id=r.id
+  JOIN processing_task t ON t.owner_id=r.owner_id AND t.run_id=r.id AND t.scope_kind='contact' AND t.contact_id=rc.contact_id
+  WHERE rc.owner_id=? AND rc.contact_id=? AND rc.state='active' AND ${currentRunContactScope}
+   AND r.state IN ('incomplete','completed','failed') AND r.pause_requested_at IS NULL
+   AND t.state IN ('succeeded','awaiting_decision')
+   AND coalesce(json_extract(r.policy_config,'$.intent'),'')<>'memory_document_later_stage'
+  ORDER BY r.started_at DESC,r.rowid DESC LIMIT 1`,[textId(i.ownerId),textId(i.contactId)]);
+ return row?String(row.id):null;
+}},{name:'memoryExtraction.pendingAdjudicationRun',mode:'read',retryBusy:false,execute(tx,raw){
  // 该联系人当前范围内、尚有待处理候选且已收尾（未运行、未暂停）的最近一轮；用于用户显式触发的重新裁决。
  const i=raw as {ownerId:string;contactId:string};
  const row=tx.get(`SELECT r.id FROM processing_run r JOIN run_contact rc ON rc.owner_id=r.owner_id AND rc.run_id=r.id
@@ -586,7 +596,7 @@ const processingRunActions:StorageAction[]=[...scheduleActions,...backlogRecover
    AND EXISTS(SELECT 1 FROM memory_candidate c JOIN step_attempt a ON a.owner_id=c.owner_id AND a.id=c.produced_attempt_id
     JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
     JOIN task_contribution tc ON tc.owner_id=t.owner_id AND tc.task_id=t.id
-    WHERE t.owner_id=r.owner_id AND t.run_id=r.id AND tc.source_contact_id=rc.contact_id AND c.state='pending')
+    WHERE t.owner_id=r.owner_id AND t.run_id=r.id AND tc.source_contact_id=rc.contact_id AND c.scope_kind='contact' AND c.contact_id=rc.contact_id AND c.state='pending')
   ORDER BY r.started_at DESC,r.rowid DESC LIMIT 1`,[textId(i.ownerId),textId(i.contactId)]);
  return row?String(row.id):null;
 }}];

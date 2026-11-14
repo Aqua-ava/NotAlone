@@ -71,7 +71,13 @@ export async function createSqliteMemoryRuntime(options:{ctx:Context;contentReso
    const documentPort=options.sharedModel&&configuration.status==='configured'?createSqliteDocumentsModelPort({ctx:options.ctx,configuration,provider:options.sharedModel.provider,permit:options.sharedModel.permit,ownerId:options.ownerId}):undefined;
    documents=new SqliteMemoryDocuments(options.storage,options.ownerId,documentPort,options.holders);await documents.initialize();
   }
-  service=new SqliteMemoryExtraction(options.storage,options.ownerId,port,options.holders,adjudication?async(runId,contactIds)=>{
+  service=new SqliteMemoryExtraction(options.storage,options.ownerId,port,options.holders,adjudication?async(runId,contactIds,followup)=>{
+   if(followup?.onlyContactId){
+    await adjudication!.publishRun(runId,followup.onlyContactId);
+    await documents!.enrollRun(runId,followup.onlyContactId);
+    if(followup.completeDocuments)await documents!.publishRun(runId,followup.onlyContactId);
+    return;
+   }
    await adjudication!.publishRun(runId);await documents!.enrollRun(runId);
    // 只安排持久队列，不同步等候一小时／一天的后续阶段。
    if(schedulingStarted)laterWorker?.wake();

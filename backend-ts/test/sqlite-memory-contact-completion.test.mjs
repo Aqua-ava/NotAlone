@@ -1,0 +1,65 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {createServer} from 'node:http';
+import {join} from 'node:path';
+import {fixture,owner,modelPort} from './fixtures/memory-sqlite/support.mjs';
+import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
+import {SqliteMemoryExtractionHttp} from '../src/memory/sqlite/http.ts';
+import {createSqliteMemoryRuntime} from '../src/memory/sqlite/runtime.ts';
+import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
+import {createBuiltinMemoryContentRegistry} from '../src/memory/content/builtins.ts';
+
+test('单联系人完整收尾不重提取，明确传递联系人和文档执行范围，并遵守总开关',async t=>{
+ const f=await fixture(t),contactId=f.saved[0].contact_id;
+ await f.service.synchronize(contactId);
+ const followups=[];let memory;
+ const port=modelPort(()=>memory.accounting);
+ memory=new SqliteMemoryExtraction(f.storage,owner,port,undefined,async(...args)=>{followups.push(args);});
+ t.after(()=>memory.close());
+ const started=await memory.startHistory(contactId,randomUUID());
+ await memory.waitForIdle(started.run.runId);followups.length=0;
+ const priorCalls=port.calls;
+ await memory.completeContact(contactId);await memory.waitForIdle(started.run.runId);
+ assert.equal(port.calls,priorCalls,'收尾不重新发送提取请求');
+ assert.deepEqual(followups,[[started.run.runId,[contactId],{onlyContactId:contactId,completeDocuments:true}]]);
+ await memory.setAutomatic(false);
+ await assert.rejects(memory.completeContact(contactId),{code:'memory_auto_processing_disabled'});
+ await assert.rejects(memory.completeContact(randomUUID()),{code:'memory_auto_processing_disabled'});
+});
+
+test('单联系人完整收尾HTTP只接受认证POST空对象，范围固定在路径中',async t=>{
+ const calls=[],contactId=randomUUID();
+ const service={completeContact:async id=>{calls.push(id);return {contactId:id};}};
+ const handler=new SqliteMemoryExtractionHttp(service,req=>req.headers.authorization==='Bearer synthetic-contact-token');
+ const server=createServer(async(req,res)=>{if(!await handler.handle(req,res)){res.writeHead(404);res.end();}});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const url=`http://127.0.0.1:${server.address().port}/api/memory-processing/contacts/${contactId}/complete`;
+ const headers={authorization:'Bearer synthetic-contact-token','content-type':'application/json'};
+ assert.equal((await fetch(url,{method:'POST',body:'{}'})).status,401);
+ assert.equal((await fetch(url,{method:'POST',headers:{...headers,origin:'https://invalid.example'},body:'{}'})).status,401);
+ assert.equal((await fetch(url,{headers})).status,400);
+ assert.equal((await fetch(url,{method:'POST',headers,body:JSON.stringify({contact_id:randomUUID()})})).status,400);
+ assert.equal(calls.length,0);
+ const response=await fetch(url,{method:'POST',headers,body:'{}'});
+ assert.equal(response.status,200);assert.deepEqual(calls,[contactId]);
+});
+
+test('正式manual装配将完整收尾限定在路径联系人，不启动全owner调度',async t=>{
+ const f=await fixture(t),contactId=f.saved[0].contact_id;
+ for(const contact of f.saved)await f.service.synchronize(contact.contact_id);
+ let memory;const port=modelPort(()=>memory.accounting);
+ memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
+ const started=await memory.start(randomUUID());await memory.waitForIdle(started.runId);
+ const calls=[],execute=f.storage.execute.bind(f.storage);
+ f.storage.execute=async(name,input,...rest)=>{calls.push({name,input});return execute(name,input,...rest);};
+ const runtime=await createSqliteMemoryRuntime({ctx:{},contentRegistry:createBuiltinMemoryContentRegistry(),storage:f.storage,ownerId:owner,userData:f.root,businessHome:f.root,infoPath:join(f.root,'info'),envFilePath:join(f.root,'unused.env'),environment:{},holders:new ActiveHolders(),authorize:()=>false,adjudicationEnabled:true});
+ t.after(()=>runtime.close());calls.length=0;
+ await runtime.service.completeContact(contactId);await runtime.service.waitForIdle(started.runId);
+ const imports=calls.filter(call=>call.name==='memory.importRun');
+ assert.ok(imports.length>0);assert.ok(imports.every(call=>call.input.contactId===contactId));
+ const tasks=calls.filter(call=>call.name==='memoryDocuments.tasks');
+ assert.ok(tasks.length>0);assert.ok(tasks.every(call=>call.input.contactId===contactId));
+ assert.equal(calls.some(call=>call.name==='memoryDocuments.claimDue'||call.name==='memoryExtraction.scheduleContacts'),false);
+});

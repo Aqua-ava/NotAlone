@@ -9,6 +9,13 @@ import {memoryDeletionImpact} from '../../../src/memory/sqlite/deletion-impact.t
 const config={...installedDeletionRegistration,domains:[memoryDocumentsDeletionDomain,...installedDeletionRegistration.domains.filter(d=>d.id!=='memory_documents')],requiredDomains:[...new Set(['memory_documents',...installedDeletionRegistration.requiredDomains])]};
 const replacement=createDeletionActions(config),replaced=new Set(replacement.map(a=>a.name));
 export const registry={...base,actions:[...base.actions.filter(a=>!replaced.has(a.name)),...replacement,historicalSourceCopy,
+ {name:'fixture.documentFollowupPending',mode:'write',retryBusy:false,execute(tx,{ownerId,runId}){
+  tx.run("UPDATE processing_run SET followup_state='pending',state='incomplete' WHERE owner_id=? AND id=?",[ownerId,runId]);return true;
+ }},
+ {name:'fixture.documentFollowupState',mode:'read',retryBusy:false,execute(tx,{ownerId,runId}){
+  return {run:tx.get('SELECT state,followup_state FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]),
+   scopes:tx.all('SELECT scope_kind,contact_id,outcome FROM memory_document_later_run_requirement WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[ownerId,runId])};
+ }},
  {name:'fixture.failedRunWithoutPause',mode:'write',retryBusy:false,execute(tx,{ownerId,runId}){
   tx.run("UPDATE processing_run SET state='failed',pause_requested_at=NULL WHERE owner_id=? AND id=?",[ownerId,runId]);
  }},

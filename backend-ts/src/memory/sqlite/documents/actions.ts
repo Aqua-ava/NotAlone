@@ -121,7 +121,11 @@ function readProfileSelection(tx:StorageTransaction,ownerId:string,taskId:string
 }
 const action=(name:string,mode:'read'|'write',fn:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:(tx,input)=>withDocumentSourceQualifications(tx,()=>fn(tx,input))});
 export const memoryDocumentsActions:StorageAction[]=[
- action('tasks','read',(tx,i)=>tx.all('SELECT id FROM processing_task WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[textId(i.ownerId),textId(i.runId)]).map(row=>String(row.id))),
+ action('tasks','read',(tx,i)=>{
+  const ownerId=textId(i.ownerId),runId=textId(i.runId),contactId=i.contactId===undefined?undefined:textId(i.contactId);
+  // 显式联系人请求在存储边界限制领取，不携带同轮本人或其他联系人的任务。
+  return tx.all(`SELECT id FROM processing_task WHERE owner_id=? AND run_id=?${contactId===undefined?'':" AND scope_kind='contact' AND contact_id=?"} ORDER BY scope_kind,contact_id`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]).map(row=>String(row.id));
+ }),
  action('readTask','read',(tx,i)=>taskView(tx,textId(i.ownerId),textId(i.taskId))),
  action('read','read',(tx,i)=>withSourceMemo(()=>{
   const ownerId=textId(i.ownerId),s=readScope(i.scope);available(tx,ownerId,s);

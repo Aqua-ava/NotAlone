@@ -220,9 +220,10 @@ export function applyDecision(tx:StorageTransaction,input:unknown,system=false,a
  advance(tx,ownerId,s,!noVersion||action==='withdraw',runIds);return result(tx,ownerId,tx.get('SELECT * FROM memory_decision WHERE owner_id=? AND id=?',[ownerId,decisionId])!);
 }
 function importRun(tx:StorageTransaction,input:unknown):{candidateIds:string[]}{
- const q=input as any,ownerId=id(q?.ownerId),runId=id(q?.runId),ids:string[]=[];
+ const q=input as any,ownerId=id(q?.ownerId),runId=id(q?.runId),contactId=q?.contactId===undefined?undefined:id(q.contactId),ids:string[]=[];
  if(!tx.get('SELECT 1 FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]))fail('memory_run_not_found');
- for(const e of tx.all(`SELECT e.id FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE e.owner_id=? AND t.run_id=? AND e.kind='verified_output' ORDER BY e.id`,[ownerId,runId])){
+ // 先在产物查询中限定联系人，不导入同轮本人或其他联系人的候选。
+ for(const e of tx.all(`SELECT e.id FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE e.owner_id=? AND t.run_id=? AND e.kind='verified_output'${contactId===undefined?'':" AND t.scope_kind='contact' AND t.contact_id=?"} ORDER BY e.id`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId])){
   try{ids.push(importOutput(tx,ownerId,String(e.id)));}
   catch(error){if(!(error instanceof StorageFailure)||!['memory_extraction_scope_stale','memory_extraction_source_stale','memory_extraction_output_not_eligible','history_source_not_available'].includes(error.code))throw error;}
  }

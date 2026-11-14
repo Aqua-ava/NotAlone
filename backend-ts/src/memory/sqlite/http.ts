@@ -29,7 +29,7 @@ export class SqliteMemoryExtractionHttp {
    }catch(error){const code=error instanceof StorageFailure?error.code:'memory_extraction_request_invalid';send(res,code==='memory_extraction_request_invalid'?400:409,{error:code});}
    return true;
   }
-  const contact=/^\/api\/memory-processing\/contacts\/([a-f0-9-]{36})\/(current|history|readjudicate)$/.exec(url.pathname);
+  const contact=/^\/api\/memory-processing\/contacts\/([a-f0-9-]{36})\/(current|history|readjudicate|complete)$/.exec(url.pathname);
   const task=/^\/api\/memory-processing\/tasks\/([a-f0-9-]{36})\/events$/.exec(url.pathname);
   const run=/^\/api\/memory-processing\/runs(?:\/(current|[a-f0-9-]{36})(?:\/(pause|continue|abandon-unknown|retry-images))?)?$/.exec(url.pathname);
   if(!contact&&!task&&!run){send(res,404,{error:'memory_extraction_not_found'});return true;}
@@ -39,12 +39,12 @@ export class SqliteMemoryExtractionHttp {
    if(contact){
     if(!uuid.test(contact[1]!))throw new StorageFailure('memory_extraction_request_invalid');
     if(contact[2]==='current'){if(req.method!=='GET')throw new StorageFailure('memory_extraction_request_invalid');value=await this.service.readContact(contact[1]!);}
-    else if(contact[2]==='readjudicate'){
+    else if(contact[2]==='readjudicate'||contact[2]==='complete'){
      // 只让该联系人遗留的待处理候选重新进入裁决；不接收任何字段，范围由路径中的联系人固定。
      if(req.method!=='POST')throw new StorageFailure('memory_extraction_request_invalid');
      const body=JSON.parse((await readWechatHttpBody(req,64,10_000)).toString('utf8')||'{}');
      if(!body||Array.isArray(body)||typeof body!=='object'||Object.keys(body).length)throw new StorageFailure('memory_extraction_request_invalid');
-     value=await this.service.readjudicate(contact[1]!);
+     value=await (contact[2]==='complete'?this.service.completeContact(contact[1]!):this.service.readjudicate(contact[1]!));
     }
     else{
      if(req.method!=='POST')throw new StorageFailure('memory_extraction_request_invalid');

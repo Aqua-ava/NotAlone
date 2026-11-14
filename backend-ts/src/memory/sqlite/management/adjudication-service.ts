@@ -14,17 +14,18 @@ function providerFailureOf(error:unknown):{name:string;code:string;status?:numbe
  return {name:v.name,code:v.code,...(typeof v.status==='number'?{status:v.status}:{})};
 }
 export class SqliteMemoryAdjudication {
- private readonly stopped=new AbortController();private pending=new Set<Promise<unknown>>();private active=new Map<string,Promise<unknown>>();private closing?:Promise<void>;
+ private readonly stopped=new AbortController();private pending=new Set<Promise<unknown>>();private active=new Map<string,{contactId:string|undefined;work:Promise<unknown>}>();private closing?:Promise<void>;
  private storage:SqliteStorage;readonly ownerId:string;private port:SqliteAdjudicationModelPort|undefined;private holders:ActiveHolders;
  constructor(storage:SqliteStorage,ownerId:string,port:SqliteAdjudicationModelPort|undefined,holders:ActiveHolders){this.storage=storage;this.ownerId=ownerId;this.port=port;this.holders=holders;}
  async initialize(){const attempts=await this.storage.execute<string[]>('memoryAdjudication.interrupted',{ownerId:this.ownerId});if(attempts.length)await this.storage.execute('memoryAdjudication.fail',{ownerId:this.ownerId,attemptIds:attempts,code:'runtime_interrupted'});}
- publishRun(runId:string):Promise<unknown>{
+ /** 显式联系人只处理该范围的候选；省略时保持整轮裁决，同轮在途工作不得借重复请求更换范围。 */
+ publishRun(runId:string,contactId?:string):Promise<unknown>{
   if(this.stopped.signal.aborted)return Promise.reject(new StorageFailure('memory_adjudication_closed'));
-  const prior=this.active.get(runId);if(prior)return prior;
-  const work=this.publish(runId);this.active.set(runId,work);this.pending.add(work);void work.finally(()=>{this.active.delete(runId);this.pending.delete(work);}).catch(()=>{});return work;
+  const prior=this.active.get(runId);if(prior)return prior.contactId===contactId?prior.work:Promise.reject(new StorageFailure('memory_adjudication_run_busy'));
+  const work=this.publish(runId,contactId);this.active.set(runId,{contactId,work});this.pending.add(work);void work.finally(()=>{this.active.delete(runId);this.pending.delete(work);}).catch(()=>{});return work;
  }
- private async publish(runId:string){
-  const imported=await new SqliteMemoryManagement(this.storage,this.ownerId).importRun(runId),results:unknown[]=[];
+ private async publish(runId:string,contactId?:string){
+  const imported=await new SqliteMemoryManagement(this.storage,this.ownerId).importRun(runId,contactId),results:unknown[]=[];
   for(const candidateId of imported.candidateIds){
    if(this.stopped.signal.aborted)break;
    let first:AdjudicationClaim|null;
