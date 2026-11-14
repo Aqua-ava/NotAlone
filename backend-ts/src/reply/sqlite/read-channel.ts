@@ -10,36 +10,43 @@ export const assistantReadActions=[
  'deletion.list','deletion.status',
 ] as const;
 const allowed=new Set<string>(assistantReadActions),metadata=new Set(['deletion.list','deletion.status']);
+const candidateActions=new Set<string>(['reply.view','reply.version','reply.skillInputs','reply.inputs','history.readRecent']);
 const terminal=new Set(['readonly_closed','stale_lease','storage_identity_changed','unsafe_storage_path','storage_missing','schema_drift','migration_drift','worker_failed','assistant_read_invalidated','assistant_read_scope_unavailable','discussion_deletion_pending','deletion_holder_fenced']);
 type Options={storage:Pick<SqliteStorage,'openReader'>;ownerId:string;holders:ActiveHolders};
-interface ReaderSlot {reader:StorageReader;controller:AbortController;closing?:Promise<void>}
+type Lane='discussion'|'candidate';
+interface ReaderSlot {lane:Lane;reader:StorageReader;controller:AbortController;closing?:Promise<void>}
+interface ReaderLane {slot?:ReaderSlot;opening?:Promise<ReaderSlot>;version:number}
 interface ReadBoundary {generation:bigint;revision:string}
 const invalidated=()=>new StorageFailure('assistant_read_invalidated');
 
 class AssistantReadChannel implements StorageReader {
  private readonly options:Options;
- private slot?:ReaderSlot;
- private opening?:Promise<ReaderSlot>;
+ // 固定两类读者，候选重核验不能阻塞轻讨论与请求状态；不按联系人或请求增加线程。
+ private readonly lanes:Record<Lane,ReaderLane>={discussion:{version:0},candidate:{version:0}};
  private closed=false;
- private version=0;
  private closing?:Promise<void>;
  private readonly pending=new Set<Promise<unknown>>();
  private readonly retiring=new Set<ReaderSlot>();
+ private readonly retiringOpenings=new Set<Promise<ReaderSlot>>();
+ private invalidating?:Promise<void>;
  constructor(options:Options){this.options=options;}
- async ready():Promise<void>{await this.current();}
- private current():Promise<ReaderSlot>{
+ async ready():Promise<void>{await this.current('discussion');}
+ private current(lane:Lane):Promise<ReaderSlot>{
   if(this.closed)return Promise.reject(new StorageFailure('readonly_closed'));
-  if(this.slot)return Promise.resolve(this.slot);
-  if(this.opening)return this.opening;
-  const version=this.version;
-  const opening=this.options.storage.openReader([...assistantReadActions,'discussion.readBoundary']).then(async reader=>{
-   const slot={reader,controller:new AbortController()};
-   if(this.closed||version!==this.version){await this.retire(slot);throw invalidated();}
-   this.slot=slot;return slot;
-  }).finally(()=>{if(this.opening===opening)this.opening=undefined;});
-  this.opening=opening;return opening;
+  if(this.invalidating)return this.invalidating.then(()=>this.current(lane));
+  if(this.retiring.size||this.retiringOpenings.size)return this.retireAll().then(()=>this.current(lane));
+  const state=this.lanes[lane];
+  if(state.slot)return Promise.resolve(state.slot);
+  if(state.opening)return state.opening;
+  const version=state.version,actions=assistantReadActions.filter(name=>candidateActions.has(name)===(lane==='candidate'));
+  const opening=this.options.storage.openReader([...actions,'discussion.readBoundary']).then(async reader=>{
+   const slot:ReaderSlot={lane,reader,controller:new AbortController()};
+   if(this.closed||version!==state.version){await this.retire(slot);throw invalidated();}
+   state.slot=slot;return slot;
+  }).finally(()=>{if(state.opening===opening)state.opening=undefined;});
+  state.opening=opening;return opening;
  }
- private assertCurrent(slot:ReaderSlot):void{if(this.closed||slot!==this.slot)throw invalidated();}
+ private assertCurrent(slot:ReaderSlot):void{if(this.closed||slot!==this.lanes[slot.lane].slot)throw invalidated();}
  private read<T>(slot:ReaderSlot,name:string,input:unknown):Promise<T>{
   const signal=slot.controller.signal;if(signal.aborted)return Promise.reject(invalidated());
   return new Promise((resolve,reject)=>{
@@ -50,7 +57,7 @@ class AssistantReadChannel implements StorageReader {
   });
  }
  private retire(slot:ReaderSlot):Promise<void>{
-  if(this.slot===slot){this.slot=undefined;this.version++;}
+  const state=this.lanes[slot.lane];if(state.slot===slot){state.slot=undefined;state.version++;}
   slot.controller.abort();
   if(!slot.closing){
    // 退休后仍保留关闭责任；明确失败允许删除或宿主退出重试，确认关闭才移除。
@@ -59,6 +66,26 @@ class AssistantReadChannel implements StorageReader {
   }
   return slot.closing;
  }
+ private retireAll():Promise<void>{
+  if(this.invalidating)return this.invalidating;
+  const slots=new Set(this.retiring),openings=new Set(this.retiringOpenings);
+  // 先同时撤下两类连接及尚未完成的打开请求，迟到打开不能重新挂回旧范围。
+  for(const state of Object.values(this.lanes)){
+   state.version++;
+   if(state.slot){slots.add(state.slot);state.slot=undefined;}
+   if(state.opening){openings.add(state.opening);this.retiringOpenings.add(state.opening);state.opening=undefined;}
+  }
+  const work=(async()=>{
+   const attempts=[...slots].map(slot=>this.retire(slot));
+   for(const opening of openings)attempts.push(opening.then(slot=>this.retire(slot),error=>{
+    if((error as {code?:string})?.code!=='assistant_read_invalidated')throw error;
+   }).finally(()=>{this.retiringOpenings.delete(opening);}));
+   const results=await Promise.allSettled(attempts),failed=results.find(result=>result.status==='rejected');
+   if(failed?.status==='rejected')throw failed.reason;
+  })();
+  const invalidating=work.finally(()=>{if(this.invalidating===invalidating)this.invalidating=undefined;});
+  this.invalidating=invalidating;return invalidating;
+ }
  execute<T=unknown>(name:string,input:unknown):Promise<T>{
   if(this.closed)return Promise.reject(new StorageFailure('readonly_closed'));
   if(!allowed.has(name))return Promise.reject(new StorageFailure('readonly_action_forbidden'));
@@ -66,7 +93,7 @@ class AssistantReadChannel implements StorageReader {
   const work=this.executeOwned<T>(name,input as Record<string,unknown>);this.pending.add(work);work.then(()=>this.pending.delete(work),()=>this.pending.delete(work));return work;
  }
  private async executeOwned<T>(name:string,input:Record<string,unknown>):Promise<T>{
-  const slot=await this.current();
+  const slot=await this.current(candidateActions.has(name)?'candidate':'discussion');
   try{
    if(metadata.has(name)){const value=await this.read<T>(slot,name,input);this.assertCurrent(slot);return value;}
    if(typeof input.contactId!=='string'||!input.contactId)throw new StorageFailure('assistant_read_scope_invalid');
@@ -74,7 +101,7 @@ class AssistantReadChannel implements StorageReader {
    const before=await this.read<ReadBoundary>(slot,'discussion.readBoundary',scope);this.assertCurrent(slot);
    let finished=false,cancelled=false;
    const release=this.options.holders.register({key:'assistant-read:'+randomUUID(),scopeKeys:typeof input.discussionId==='string'?['discussion:'+input.discussionId]:[],ownerId:this.options.ownerId,contactId:input.contactId,generation:before.generation,coversAllSources:true,
-    close:async()=>{if(!finished)cancelled=true;if(cancelled)await this.retire(slot);}});
+    close:async()=>{if(!finished)cancelled=true;if(cancelled)await this.retireAll();}});
    try{
     const value=await this.read<T>(slot,name,input);this.assertCurrent(slot);
     const after=await this.read<ReadBoundary>(slot,'discussion.readBoundary',scope);this.assertCurrent(slot);
@@ -90,19 +117,15 @@ class AssistantReadChannel implements StorageReader {
     throw error;
    }
    finally{finished=true;await release();}
-  }catch(error){const code=(error as {code?:string})?.code??'';if(terminal.has(code))await this.retire(slot);throw code==='assistant_read_scope_unavailable'?new StorageFailure('discussion_unavailable'):error;}
+  }catch(error){const code=(error as {code?:string})?.code??'';if(terminal.has(code))await this.retireAll();throw code==='assistant_read_scope_unavailable'?new StorageFailure('discussion_unavailable'):error;}
  }
  close():Promise<void>{
-  this.closed=true;this.version++;
+  this.closed=true;
   return this.closing??=(async()=>{
-   const slot=this.slot,opening=this.opening,attempts=new Set<Promise<unknown>>();
-   if(slot)attempts.add(this.retire(slot));
-   for(const retired of this.retiring)attempts.add(this.retire(retired));
-   if(opening)attempts.add(opening.then(current=>this.retire(current),()=>{}));
-   const results=await Promise.allSettled(attempts);
+   let failure:unknown;try{await this.retireAll();}catch(error){failure=error;}
    await Promise.allSettled([...this.pending]);
-   const failed=results.find(result=>result.status==='rejected');if(failed?.status==='rejected')throw failed.reason;
-   await Promise.all([...this.retiring].map(retired=>this.retire(retired)));
+   if(failure)throw failure;
+   if(this.retiring.size||this.retiringOpenings.size)await this.retireAll();
   })().catch(error=>{this.closing=undefined;throw error;});
  }
 }

@@ -1,4 +1,5 @@
 import {cleanupPreSourceProofFixtures} from './fixtures/sqlite/pre-source-proof-registry.mjs';
+import {registry as currentRegistry} from '../src/storage/sqlite/registry.ts';
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
@@ -103,7 +104,7 @@ test('认证HTTP读取并设置总开关，拒绝额外字段、非布尔值与�
 });
 
 const registryModule=mode=>new URL(`./fixtures/memory-management/auto-switch-upgrade-registry.mjs?mode=${mode}`,import.meta.url).href;
-test('41升级46保留自动处理默认关闭与既有消息，来源证明折叠且旧迁移账本不变',{timeout:20000},async t=>{
+test('41版升级当前结构保留自动处理默认关闭与既有消息，来源证明折叠且旧迁移账本不变',{timeout:20000},async t=>{
  const cleanup=[];let upgraded,memory;
  t.after(async()=>{await memory?.close();await upgraded?.close();for(const close of cleanup.reverse())await close();});
  const f=await fixture({after:close=>cleanup.push(close)},{registryModule:registryModule('legacy'),automatic:false});
@@ -114,8 +115,8 @@ test('41升级46保留自动处理默认关闭与既有消息，来源证明折�
  const read=()=>{const db=new DatabaseSync(path,{readOnly:true});try{return {messages:db.prepare('SELECT id,text_body FROM message ORDER BY id').all(),migrations:db.prepare('SELECT version,checksum FROM schema_migration ORDER BY version').all(),columns:db.prepare("SELECT name FROM pragma_table_info('database_instance')").all().map(row=>row.name),tables:db.prepare("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name").all().map(row=>row.name)};}finally{db.close();}};
  const before=read();assert.equal(before.tables.includes('source_proof'),false);for(const name of ['history_continuity_fence','history_continuity_scope','history_guard_lease'])assert.equal(before.tables.includes(name),true);assert.ok(before.messages.length>0);assert.equal(before.columns.includes('memory_auto_processing'),false);
  upgraded=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:databaseId,registryModule:registryModule('current')});
- assert.equal(upgraded.status.schemaVersion,53);await upgraded.close();upgraded=undefined;
- const after=read();assert.equal(after.tables.includes('source_proof'),true);for(const name of ['history_continuity_fence','history_continuity_scope','history_guard_lease'])assert.equal(after.tables.includes(name),false);assert.deepEqual(after.messages,before.messages);assert.deepEqual(after.migrations.slice(0,41),before.migrations);assert.equal(after.migrations.length,53);
+ assert.equal(upgraded.status.schemaVersion,currentRegistry.migrations.length);await upgraded.close();upgraded=undefined;
+ const after=read();assert.equal(after.tables.includes('source_proof'),true);for(const name of ['history_continuity_fence','history_continuity_scope','history_guard_lease'])assert.equal(after.tables.includes(name),false);assert.deepEqual(after.messages,before.messages);assert.deepEqual(after.migrations.slice(0,41),before.migrations);assert.equal(after.migrations.length,currentRegistry.migrations.length);
  const db=new DatabaseSync(path,{readOnly:true});assert.equal(db.prepare('SELECT memory_auto_processing AS v FROM database_instance WHERE slot=1').get().v,0,'升级后默认关闭');db.close();
  upgraded=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:databaseId,registryModule:registryModule('current')});
  memory=new SqliteMemoryExtraction(upgraded,owner,{prepare:async()=>{throw new Error('not invoked');},invoke:async()=>{throw new Error('not invoked');}});

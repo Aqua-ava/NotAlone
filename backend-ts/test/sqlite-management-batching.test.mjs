@@ -3,6 +3,7 @@ import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts
 import test from 'node:test';import assert from 'node:assert/strict';import {mkdtemp,realpath,rm} from 'node:fs/promises';import {tmpdir} from 'node:os';import path from 'node:path';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {managementDerivedTriggerNames} from '../src/memory/sqlite/management/batching-schema.ts';
+import {registry as currentRegistry} from '../src/storage/sqlite/registry.ts';
 async function fixture(t,legacy=false){
  const userData=await realpath(await mkdtemp(path.join(tmpdir(),'na-d-batch-'))),module=new URL('./fixtures/memory-management/d-batch-registry.mjs',import.meta.url);
  if(legacy)module.searchParams.set('legacy','1');
@@ -64,7 +65,7 @@ test('49升级50只移走20条派生维护，旧账本和5条业务原子触发�
  const f=await fixture(t,true);await f.storage.execute('fixture.batchManual',{count:3});
  const state=await f.storage.execute('fixture.batchState',{}),schema=await f.storage.execute('fixture.batchSchema',{}),databaseId=f.storage.status.databaseId;
  await f.storage.close();f.storage=await SqliteStorage.open({userData:f.userData,intent:'open',expectedDatabaseId:databaseId,role:'test',registryModule:new URL('./fixtures/memory-management/d-batch-registry.mjs',import.meta.url).href});
- assert.equal(f.storage.status.schemaVersion,53);assert.deepEqual(await f.storage.execute('fixture.batchState',{}),state);
+ assert.equal(f.storage.status.schemaVersion,currentRegistry.migrations.length);assert.deepEqual(await f.storage.execute('fixture.batchState',{}),state);
  const next=await f.storage.execute('fixture.batchSchema',{});assert.deepEqual(next.ledger.slice(0,49),schema.ledger);
  // 53版仅调整来源资格递归的连接顺序，其余业务触发器仍与49版逐项一致。
  const expected=schema.triggers.filter(row=>!managementDerivedTriggerNames.includes(row.name));

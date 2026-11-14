@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 53,
+  "schemaVersion": 54,
   "migrationVersions": [
    1,
    2,
@@ -54,9 +54,10 @@
    50,
    51,
    52,
-   53
+   53,
+   54
   ],
-  "userVersion": 53,
+  "userVersion": 54,
   "sqliteVersion": "3.53.4",
   "tableCount": 95,
   "fieldCount": 946,
@@ -3356,6 +3357,18 @@
     }
    ],
    "indexes": [
+    {
+     "name": "execution_event_call_kind",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "originated_call_id",
+      "kind"
+     ],
+     "sql": "CREATE INDEX execution_event_call_kind ON execution_event(owner_id,originated_call_id,kind)"
+    },
     {
      "name": "sqlite_autoindex_execution_event_3",
      "unique": 1,

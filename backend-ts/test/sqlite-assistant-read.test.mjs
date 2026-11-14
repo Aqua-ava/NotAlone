@@ -25,7 +25,7 @@ async function fixture(t,options={}){
  const contacts=new SqliteContactService(storage,ownerId,{account:async()=>({externalKey:'synthetic-read-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-1',assurance:'verified',supportProfile:'synthetic-v1'}),sessions:async()=>['a','b'].map(externalKey=>({externalKey,displayName:'合成联系人'+externalKey,kind:'private',identityAssurance:'verified'}))});
  await contacts.confirmAccount((await contacts.detectAccount()).candidate_token);const snapshot=await contacts.candidates(true);await contacts.confirm(snapshot.snapshot_token,snapshot.sessions.map(row=>({locator:row.username,observed_display_name:row.display_name,expected_selection_generation:'0'})));
  const ids=(await contacts.directory()).contacts.map(c=>c.contact_id),holders=new ActiveHolders();
- const readStorage=options.beforeRead||options.afterRead||options.closeReader?{openReader:async actions=>{const actual=await storage.openReader(actions);return {execute:async(name,input)=>{await options.beforeRead?.(name,input);const value=await actual.execute(name,input);await options.afterRead?.(name,input,value);return value;},close:()=>options.closeReader?options.closeReader(actual):actual.close()};}}:storage;
+ const readStorage=options.beforeRead||options.afterRead||options.closeReader||options.onOpen?{openReader:async actions=>{const actual=await storage.openReader(actions);await options.onOpen?.(actions,actual);return {execute:async(name,input)=>{await options.beforeRead?.(name,input);const value=await actual.execute(name,input);await options.afterRead?.(name,input,value);return value;},close:()=>options.closeReader?options.closeReader(actual):actual.close()};}}:storage;
  reader=await createAssistantReadChannel({storage:readStorage,ownerId,holders});
  host=await createSqliteDiscussionHost({ctx:{},storage,ownerId,userData:root,holders,reader,authorizeRequest:()=>true});
  const deletionService=new DeletionService(storage,holders,new ManagedFiles(root),{reader}),deletions=new SqliteDeletionHttp(deletionService,ownerId);
@@ -50,6 +50,79 @@ test('后台队列占用时助手删除状态、目录、正文和候选回看�
  })();
  const began=performance.now();
  try{await bounded(loading);assert.equal(backgroundSettled,false);t.diagnostic(JSON.stringify({assistantMs:Math.round((performance.now()-began)*100)/100,backgroundStillPending:true}));}finally{Atomics.store(new Int32Array(barrier),1,1);Atomics.notify(new Int32Array(barrier),1);await background;await loading;}
+});
+
+test('候选 Worker 仍被占用时，讨论正文、目录和请求状态可独立完成且读取通道有界',async t=>{
+ const opened=[],f=await fixture(t,{onOpen:actions=>opened.push(actions)}),contactId=f.ids[0],discussion=await f.host.service.newDiscussion(contactId),key=randomUUID(),confirmationId=await f.contacts.manualConfirm(contactId,key);
+ await f.host.service.begin(contactId,key,'候选读取阻塞时仍可查看的合成讨论',{kind:'manual',confirmationId},discussion.id);
+ const barrier=new Int32Array(new SharedArrayBuffer(8));let candidateSettled=false;
+ const candidate=f.reader.execute('reply.view',{ownerId:f.ownerId,contactId,discussionId:discussion.id,barrier:barrier.buffer}).finally(()=>{candidateSettled=true;});
+ await Atomics.waitAsync(barrier,0,0,5000).value;assert.equal(Atomics.load(barrier,0),1);
+ const loading=(async()=>{
+  const view=await f.api(`/api/contacts/${contactId}/assistant-sessions/${discussion.id}`);assert.equal(view.status,200);assert.equal(view.data.entries[0].text,'候选读取阻塞时仍可查看的合成讨论');
+  const catalog=await f.api(`/api/contacts/${contactId}/assistant-sessions`);assert.equal(catalog.status,200);assert.equal(catalog.data.current_session_id,discussion.id);
+  const status=await f.api(`/api/contacts/${contactId}/assistant-sessions/${discussion.id}/reply-candidates/status?request_key=${randomUUID()}`);assert.equal(status.status,200);assert.equal(status.data.phase,'not_found');
+  await f.reader.execute('discussion.list',{ownerId:f.ownerId,contactId:f.ids[1]});
+ })();
+ try{
+  await bounded(loading);assert.equal(candidateSettled,false,'轻读取不能等候选 Worker 放行');assert.equal(opened.length,2,'动作和联系人变化不会继续创建 Worker');
+ }finally{Atomics.store(barrier,1,1);Atomics.notify(barrier,1);await candidate;await loading;}
+});
+
+async function dualReads(t,beforeClose=async()=>{}){
+ const entered=Promise.withResolvers(),release=Promise.withResolvers(),candidateReaders=new WeakSet(),closed=[];let held=false;
+ const f=await fixture(t,{onOpen:(actions,actual)=>{if(actions.includes('reply.view'))candidateReaders.add(actual);},afterRead:async name=>{if(name==='discussion.view'&&!held){held=true;entered.resolve();await release.promise;}},closeReader:async actual=>{await beforeClose(candidateReaders.has(actual));await actual.close();closed.push(actual);}});
+ const contactId=f.ids[0],discussion=await f.host.service.newDiscussion(contactId),key=randomUUID(),confirmationId=await f.contacts.manualConfirm(contactId,key);
+ await f.host.service.begin(contactId,key,'双读取通道删除前的合成正文',{kind:'manual',confirmationId},discussion.id);
+ const barrier=new Int32Array(new SharedArrayBuffer(8)),candidate=f.reader.execute('reply.view',{ownerId:f.ownerId,contactId,discussionId:discussion.id,barrier:barrier.buffer}),candidateResult=candidate.then(value=>({value}),error=>({error}));
+ await Atomics.waitAsync(barrier,0,0,5000).value;assert.equal(Atomics.load(barrier,0),1);
+ const loading=f.api(`/api/contacts/${contactId}/assistant-sessions/${discussion.id}`);await entered.promise;
+ const finish=async()=>{release.resolve();Atomics.store(barrier,1,1);Atomics.notify(barrier,1);await Promise.allSettled([candidate,loading]);};
+ return {...f,contactId,discussion,closed,candidateResult,loading,finish};
+}
+
+for(const kind of ['discussion','contact','account'])test(`${kind}删除同时排空两类在途读者，迟到正文与候选均不返回`,async t=>{
+ const f=await dualReads(t);
+ try{
+  const scope=kind==='account'?{kind}:kind==='contact'?{kind,contactId:f.contactId}:{kind,contactId:f.contactId,discussionId:f.discussion.id};
+  const operation=await f.deletionService.plan({ownerId:f.ownerId,requestKey:randomUUID(),scope}),done=await bounded(f.deletionService.advance(operation)),keys=operation.targets.flatMap(target=>target.target?.holderKeys??[]);
+  assert.equal(done.state,'completed');assert.equal(f.closed.length,2,'删除回执必须等两类实际读者均关闭');assert.equal(f.holders.verify(operation,keys),true);
+  assert.ok((await f.candidateResult).error,'候选 Worker 的迟到结果必须拒绝');
+  const late=await f.loading;assert.notEqual(late.status,200);assert.equal(JSON.stringify(late.data).includes('双读取通道删除前的合成正文'),false);
+ }finally{await f.finish();}
+});
+
+test('两类读者中一类关闭失败时删除保持阻塞，重试确认全部关闭后才完成',async t=>{
+ let allowCandidateClose=false;const f=await dualReads(t,async candidate=>{if(candidate&&!allowCandidateClose)throw new Error('合成候选读者关闭失败');});
+ try{
+  const operation=await f.deletionService.plan({ownerId:f.ownerId,requestKey:randomUUID(),scope:{kind:'discussion',contactId:f.contactId,discussionId:f.discussion.id}}),first=await bounded(f.deletionService.advance(operation)),keys=operation.targets.flatMap(target=>target.target?.holderKeys??[]);
+  assert.equal(first.state,'blocked');assert.equal(f.closed.length,1);assert.equal(f.holders.verify(operation,keys),false);
+  assert.ok((await f.candidateResult).error);assert.notEqual((await f.loading).status,200);
+  allowCandidateClose=true;const retry=await bounded(f.deletionService.advance(operation));
+  assert.equal(retry.state,'completed');assert.equal(f.closed.length,2);assert.equal(f.holders.verify(operation,keys),true);
+ }finally{allowCandidateClose=true;await f.finish();}
+});
+
+test('候选读者尚未打开完成时关闭通道，迟到连接仍须实际关闭且不能回挂',async t=>{
+ const entered=Promise.withResolvers(),release=Promise.withResolvers();let opened=0,closed=0;
+ const f=await fixture(t,{onOpen:async actions=>{opened++;if(actions.includes('reply.view')){entered.resolve();await release.promise;}},closeReader:async actual=>{await actual.close();closed++;}}),contactId=f.ids[0],discussion=await f.host.service.newDiscussion(contactId);
+ const loading=f.reader.execute('reply.view',{ownerId:f.ownerId,contactId,discussionId:discussion.id}),outcome=loading.then(value=>({value}),error=>({error}));await entered.promise;
+ let completed=false;const closing=f.reader.close().then(()=>{completed=true;});
+ try{
+  await assert.rejects(f.reader.execute('discussion.list',{ownerId:f.ownerId,contactId}),{code:'readonly_closed'});assert.equal(completed,false);
+  release.resolve();await bounded(closing);assert.equal(opened,2);assert.equal(closed,2);assert.ok((await outcome).error);
+ }finally{release.resolve();await closing;await outcome;}
+});
+
+test('打开中的候选读者关闭失败仍保留退休责任，通道关闭重试不得漏掉连接',async t=>{
+ const entered=Promise.withResolvers(),release=Promise.withResolvers(),candidates=new WeakSet();let closed=0,failed=false;
+ const f=await fixture(t,{onOpen:async(actions,actual)=>{if(actions.includes('reply.view')){candidates.add(actual);entered.resolve();await release.promise;}},closeReader:async actual=>{if(candidates.has(actual)&&!failed){failed=true;throw new Error('合成打开中读者关闭失败');}await actual.close();closed++;}}),contactId=f.ids[0],discussion=await f.host.service.newDiscussion(contactId);
+ const loading=f.reader.execute('reply.view',{ownerId:f.ownerId,contactId,discussionId:discussion.id}),outcome=loading.then(value=>({value}),error=>({error}));await entered.promise;
+ const closing=f.reader.close();
+ try{
+  release.resolve();await assert.rejects(closing,/合成打开中读者关闭失败/);assert.equal(closed,1);assert.ok((await outcome).error);
+  await bounded(f.reader.close());assert.equal(closed,2);
+ }finally{release.resolve();await closing.catch(()=>{});await outcome;}
 });
 
 test('助手只读通道固定所有者并拒绝写入、维护和前台专用动作',async t=>{
@@ -165,7 +238,7 @@ test('来源连续性变化废弃旧最近聊天快照，重新读取保留权�
  const url=`http://127.0.0.1:${server.address().port}/api/contacts/${contactId}/assistant-sessions/${discussion.id}/reply-candidates`,loading=fetch(url),captured=await entered.promise,original=f.messages[0][0].text;assert.equal(typeof original,'string');assert.equal(captured.messages[0].text,original);
  try{
   await f.storage.execute('history.markContinuityLost',{token:await f.contacts.eligibility(contactId)});release.resolve();
-  const late=await loading;assert.notEqual(late.status,200);assert.equal((await late.text()).includes(original),false);assert.equal(closed,1);
-  const fresh=await fetch(url);assert.equal(fresh.status,200);const current=await fresh.json();assert.deepEqual(current.coverage,{phase:'incomplete'});assert.equal((await f.history.coverage(contactId)).failureCode,'history_source_continuity_unverified');assert.equal(opened,2);
+  const late=await loading;assert.notEqual(late.status,200);assert.equal((await late.text()).includes(original),false);assert.equal(closed,2,'范围失效关闭已打开的两类读者');
+  const fresh=await fetch(url);assert.equal(fresh.status,200);const current=await fresh.json();assert.deepEqual(current.coverage,{phase:'incomplete'});assert.equal((await f.history.coverage(contactId)).failureCode,'history_source_continuity_unverified');assert.equal(opened,3,'仅懒重开候选读者，轻讨论读者不额外创建');
  }finally{release.resolve();await loading;}
 });

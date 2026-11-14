@@ -3,6 +3,7 @@ import {currentReplyKnowledgeReader} from './candidates/knowledge-context.ts';
 import {StorageFailure,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import {assertReplyLocalSources} from '../../history/sqlite/reply-local-source.ts';
 import type {MessageSourceReference} from '../../history/sqlite/contracts.ts';
+import {requireFrozenReplyKnowledge} from './candidates/validation.ts';
 
 export interface ReplyDependencyScope {ownerId:string;contextIds?:readonly string[];requestIds?:readonly string[];copyIds?:readonly string[]}
 interface AcceptedSource extends MessageSourceReference {acceptedRevision:bigint}
@@ -34,8 +35,7 @@ export function requireCurrentReplyDependencies(tx:StorageTransaction,scope:Repl
     .map(item=>JSON.parse(String(item.identity_json),(_key,value)=>value&&typeof value==='object'&&Object.keys(value).length===1&&typeof value.$integer==='string'?BigInt(value.$integer):value) as ReplyKnowledgeItem);
    try{
     const reader=currentReplyKnowledgeReader(),knowledgeScope={ownerId,contactId:String(context.contact_id),discussionId:String(context.discussion_id)};
-    if(reader.requireFrozenBatch)reader.requireFrozenBatch(tx,knowledgeScope,identities);
-    else for(const identity of identities)(reader.requireFrozen??reader.requireCurrent)(tx,knowledgeScope,identity);
+    requireFrozenReplyKnowledge(tx,knowledgeScope,identities,reader);
    }catch{unavailable();}
   }
   const rows=tx.all(`SELECT source_contact_id,record_id,message_id,accepted_revision FROM reply_context_item WHERE owner_id=? AND context_id=? AND kind='message'

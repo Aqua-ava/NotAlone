@@ -18,7 +18,7 @@ test('52版带来源消息的旧库经正式open升级53，历史迁移校验和
  for(const contact of f.saved)await f.service.synchronize(contact.contact_id);
  const before=snapshot(f.root),databaseId=f.storage.status.databaseId;
  await f.service.close();await f.storage.close();
- const storage=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:databaseId});t.after(()=>storage.close());
+ const storage=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:databaseId,registryModule:new URL('./fixtures/sqlite/schema-53-registry.mjs',import.meta.url).href});t.after(()=>storage.close());
  assert.equal(storage.status.schemaVersion,53);assert.equal(storage.status.databaseId,databaseId);
  const after=snapshot(f.root);assert.deepEqual(after.ledger.slice(0,52),before.ledger);assert.deepEqual(after.business,before.business);
  assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});

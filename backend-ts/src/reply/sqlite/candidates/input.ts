@@ -11,6 +11,7 @@ import type {DiscussionScope} from '../contracts.ts';
 import type {ReplyKnowledgeItem,ReplyKnowledgeReader,ReplySource} from './contracts.ts';
 import type {ReplyWorkspaceSnapshot} from './workspace.ts';
 import {toneLabel} from './workspace.ts';
+import {requireFrozenReplyKnowledge,requireReplyValidation} from './validation.ts';
 function fail(code:string):never{throw new StorageFailure(code);}
 function coverageSnapshot(value:string):unknown{const parsed=JSON.parse(value);return parsed?.kind==='reply_candidate_request_v1'?parsed.coverage:parsed;}
 export interface FrozenReplyInput {itemNo:number;kind:string;text:string;identity:object;sources:ReplySource[]}
@@ -67,8 +68,9 @@ function knowledge(tx:StorageTransaction,scope:DiscussionScope,items:readonly Re
  if(item.scopeKind==='contact'&&item.sources.some(s=>s.contactId!==scope.contactId))fail('reply_knowledge_scope');
   sources(tx,scope.ownerId,item.sources);
  }
- const batch=frozen?reader.requireFrozenBatch:reader.requireCurrentBatch;
- if(batch)batch(tx,scope,items);else for(const item of items)(frozen&&reader.requireFrozen?reader.requireFrozen:reader.requireCurrent)(tx,scope,item);
+ if(frozen)requireFrozenReplyKnowledge(tx,scope,items,reader);
+ else if(reader.requireCurrentBatch)reader.requireCurrentBatch(tx,scope,items);
+ else for(const item of items)reader.requireCurrent(tx,scope,item);
 }
 const DAY_MS=86_400_000;
 const sourceDate=new Intl.DateTimeFormat('sv-SE',{year:'numeric',month:'2-digit',day:'2-digit'});
@@ -162,6 +164,7 @@ export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contex
  });
 }
 export function requireReplyInput(tx:StorageTransaction,scope:DiscussionScope,contextId:string,reader:ReplyKnowledgeReader,options:{ignoreSkill?:boolean}={}):void{
+ requireReplyValidation(tx,reader,scope,'context',[contextId,Boolean(options.ignoreSkill)],()=>{
  requireDiscussion(tx,scope);
  const context=tx.get("SELECT * FROM reply_context WHERE owner_id=? AND id=? AND contact_id=? AND discussion_id=? AND state='active'",[scope.ownerId,contextId,scope.contactId,scope.discussionId])??fail('reply_source_unavailable');
  const request=tx.get("SELECT state FROM reply_request WHERE owner_id=? AND id=? AND state IN ('running','committed')",[scope.ownerId,context.request_id])??fail('reply_source_unavailable');
@@ -174,12 +177,18 @@ export function requireReplyInput(tx:StorageTransaction,scope:DiscussionScope,co
   if(item.kind==='selection'){const id=decode<{selectionId:string}>(String(item.identity_json)).selectionId;requireSelection(tx,scope,id,reader);}
  }
  sources(tx,scope.ownerId,tx.all('SELECT * FROM reply_candidate_input_source WHERE owner_id=? AND context_id=?',[scope.ownerId,contextId]).map(s=>({contactId:String(s.source_contact_id),recordId:String(s.record_id),messageId:String(s.message_id),acceptedRevision:s.accepted_revision as bigint})));
+ });
+}
+export function requireReplyRequestInput(tx:StorageTransaction,scope:DiscussionScope,requestId:string,reader:ReplyKnowledgeReader):void{
+ requireReplyValidation(tx,reader,scope,'request',requestId,()=>{
+  if(!hasCurrentReplyDependencies(tx,{ownerId:scope.ownerId,requestIds:[requestId]}))fail('reply_source_unavailable');
+  for(const context of tx.all('SELECT id FROM reply_context WHERE owner_id=? AND request_id=?',[scope.ownerId,requestId]))requireReplyInput(tx,scope,String(context.id),reader);
+ });
 }
 export function requireSelection(tx:StorageTransaction,scope:DiscussionScope,id:string,reader:ReplyKnowledgeReader){
  const row=tx.get(`SELECT s.*,v.part_count FROM reply_selection s JOIN reply_candidate k ON k.owner_id=s.owner_id AND k.id=s.candidate_id JOIN reply_request r ON r.owner_id=k.owner_id AND r.id=k.request_id JOIN reply_candidate_version v ON v.owner_id=s.owner_id AND v.candidate_id=s.candidate_id AND v.version_no=s.version_no WHERE s.owner_id=? AND s.id=? AND r.contact_id=? AND r.discussion_id=? AND r.state='committed' AND v.content_state='available'`,[scope.ownerId,id,scope.contactId,scope.discussionId])??fail('reply_selection_unavailable');
- if(!hasCurrentReplyDependencies(tx,{ownerId:scope.ownerId,requestIds:[String(row.request_id)]}))fail('reply_source_unavailable');
+ requireReplyRequestInput(tx,scope,String(row.request_id),reader);
  const parts=tx.all('SELECT part_no FROM reply_version_part WHERE owner_id=? AND candidate_id=? AND version_no=? ORDER BY part_no',[scope.ownerId,row.candidate_id,row.version_no]);
  if(BigInt(parts.length)!==row.part_count||parts.some((p,index)=>p.part_no!==BigInt(index+1)))fail('reply_content_unavailable');
- for(const c of tx.all('SELECT id FROM reply_context WHERE owner_id=? AND request_id=?',[scope.ownerId,row.request_id]))requireReplyInput(tx,scope,String(c.id),reader);
  return row;
 }

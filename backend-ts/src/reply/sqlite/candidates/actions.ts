@@ -1,6 +1,6 @@
 import {hasReplyDocumentTool,readReplyDocument} from './document-input.ts';
 import {randomUUID} from 'node:crypto';
-import {withReplyLocalSourceEligibility} from '../../../history/sqlite/reply-local-source.ts';
+import {withReplyValidation} from './validation.ts';
 import {StorageFailure,type StorageAction,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {readCoverage} from '../../../history/sqlite/read.ts';
 import {discussionRequestActions,requireAttempt,decode} from '../requests.ts';
@@ -54,7 +54,7 @@ const commit=discussionModelActions.find((a):a is Extract<StorageAction,{mode:'r
 const dispatch=discussionModelActions.find((a):a is Extract<StorageAction,{mode:'read'|'write'}>=>a.name==='discussion.dispatchCall'&&a.mode!=='maintenance')!;
 /** 只由受信任注册表安装正式08/09消费者；HTTP不能指定适配器。 */
 export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyReplyKnowledge):StorageAction[]{
- const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any,lease:any)=>unknown):StorageAction=>({name:`reply.${name}`,mode,retryBusy:mode==='write',execute:(tx,i,lease)=>withReplyLocalSourceEligibility(tx,scoped=>execute(scoped,i,lease))});
+ const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any,lease:any)=>unknown):StorageAction=>({name:`reply.${name}`,mode,retryBusy:mode==='write',execute:(tx,i,lease)=>withReplyValidation(tx,scoped=>execute(scoped,i,lease))});
  return [
  action('status','read',(tx,i)=>{
   requireDiscussion(tx,i);
