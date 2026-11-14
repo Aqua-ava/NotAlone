@@ -9,6 +9,7 @@ import {current} from './stages.ts';
 import {preconditions,revisions,task,taskView} from './actions.ts';
 import {fail,textId} from '../qualification.ts';
 import {finishLaterStagePublication} from './later-schedule.ts';
+import {currentDocumentSteps,hasUnresolvedDocumentWork} from './stage-selection.ts';
 const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:(tx,input,lease)=>withDocumentSourceQualifications(tx,()=>execute(tx,input,lease))} as StorageAction);
 function verification(tx:StorageTransaction,ownerId:string,attemptId:string,eventId:string,tool:string):unknown {
  const e=tx.get(`SELECT e.payload FROM execution_event e JOIN model_call c ON c.owner_id=e.owner_id AND c.id=coalesce(e.originated_call_id,e.reused_call_id)
@@ -67,9 +68,9 @@ function validatedPublication(tx:StorageTransaction,ownerId:string,taskId:string
  return withSourceMemo(()=>{
   const t=task(tx,ownerId,taskId);preconditions(tx,ownerId,t,{allowPaused:true});const r=revisions(tx,ownerId,t);
   if(t.document_basis_state!=='frozen'||r.memory_revision!==t.accepted_memory_revision||r.document_revision!==t.accepted_document_revision||r.current_publication_id!==t.accepted_publication_id)fail('document_publication_conflict');
-  const stages=tx.all("SELECT kind,state FROM processing_step WHERE owner_id=? AND task_id=? AND kind IN ('document_scene','document_profile')",[ownerId,t.id]);
+  const stages=currentDocumentSteps(tx,ownerId,taskId);
   const mode=laterStage(tx,ownerId,t),completed=stages.every(s=>s.state==='succeeded'||s.state==='not_applicable');
-  if(!completed||(mode==='document_scene'?(stages.length!==1||stages[0]?.kind!=='document_scene'||stages[0]?.state!=='succeeded'):
+  if(!completed||hasUnresolvedDocumentWork(tx,ownerId,taskId)||(mode==='document_scene'?(stages.length!==1||stages[0]?.kind!=='document_scene'||stages[0]?.state!=='succeeded'):
    mode==='document_profile'?(stages.length!==1||stages[0]?.kind!=='document_profile'||stages[0]?.state!=='succeeded'):stages.length!==2))fail('document_stage_incomplete');
   const prior=members(tx,ownerId,t),created=tx.all(`SELECT v.*,d.kind,d.scope_kind,d.contact_id,d.state FROM memory_document_version v JOIN memory_document d ON d.owner_id=v.owner_id AND d.id=v.document_id JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE v.owner_id=? AND s.task_id=? AND s.kind IN ('document_scene','document_profile') AND s.state='succeeded' AND a.state='succeeded' AND v.content_state='present'`,[ownerId,t.id]);
   const replacements=tx.all(`SELECT r.old_document_id,r.old_version_no FROM document_replacement r JOIN memory_document_version v ON v.owner_id=r.owner_id AND v.document_id=r.document_id AND v.version_no=r.version_no JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE r.owner_id=? AND s.task_id=?`,[ownerId,t.id]);

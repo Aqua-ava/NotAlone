@@ -5,6 +5,7 @@ import {available,scope as readScope} from '../management/qualification.ts';
 import {memoryBasis,publicationMembers,renderDocuments,withSourceMemo,documentSourceEligibility,withDocumentSourceQualifications} from './basis.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import {laterStagesState as scheduledLaterStagesState,type LaterStagesProjection} from './later-schedule.ts';
+import {currentDocumentSteps,hasUnresolvedDocumentWork} from './stage-selection.ts';
 
 export function task(tx:StorageTransaction,ownerId:string,taskId:string):StorageRow {
  const row=tx.get('SELECT * FROM processing_task WHERE owner_id=? AND id=?',[ownerId,taskId]);
@@ -46,12 +47,12 @@ export function preconditions(tx:StorageTransaction,ownerId:string,t:StorageRow,
   WHERE e.owner_id=? AND s.task_id=? AND e.kind='verified_output' AND (c.id IS NULL OR c.state='pending') LIMIT 1`,[ownerId,t.id]))fail('document_preceding_stage_incomplete');
 }
 export function stages(tx:StorageTransaction,ownerId:string,taskId:string){
- return tx.all("SELECT s.kind,s.state,s.not_applicable_reason,(SELECT a.error_code FROM step_attempt a WHERE a.owner_id=s.owner_id AND a.step_id=s.id ORDER BY a.attempt_no DESC LIMIT 1) AS error_code FROM processing_step s WHERE s.owner_id=? AND s.task_id=? AND s.kind IN ('document_scene','document_profile') ORDER BY s.step_no",[ownerId,taskId]).map(s=>({kind:s.kind==='document_scene'?'scene':'profile',status:String(s.state),reason:s.not_applicable_reason===null?null:String(s.not_applicable_reason),errorCode:s.error_code===null?null:String(s.error_code)}));
+ return currentDocumentSteps(tx,ownerId,taskId).map(s=>({kind:s.kind==='document_scene'?'scene':'profile',status:String(s.state),reason:s.not_applicable_reason===null?null:String(s.not_applicable_reason),errorCode:s.error_code===null?null:String(s.error_code)}));
 }
 export function taskView(tx:StorageTransaction,ownerId:string,taskId:string){
  const t=task(tx,ownerId,taskId),steps=stages(tx,ownerId,taskId);
  const publication=tx.get('SELECT id FROM document_publication WHERE owner_id=? AND basis_task_id=? AND availability=\'available\'',[ownerId,taskId]);
- const mode=laterStageForTask(tx,ownerId,t),complete=publication&&steps.every(s=>['succeeded','not_applicable'].includes(s.status))&&
+ const mode=laterStageForTask(tx,ownerId,t),complete=publication&&!hasUnresolvedDocumentWork(tx,ownerId,taskId)&&steps.every(s=>['succeeded','not_applicable'].includes(s.status))&&
   (mode?steps.some(s=>s.kind===(mode==='document_scene'?'scene':'profile')):steps.length===2);
  const run=tx.get('SELECT started_at FROM processing_run WHERE owner_id=? AND id=?',[ownerId,t.run_id]);
  return {taskId,laterStage:mode,scheduleNow:mode&&run?Number(run.started_at):null,publicationId:publication?String(publication.id):null,basis:{state:String(t.document_basis_state),memoryRevision:t.accepted_memory_revision===null?null:String(t.accepted_memory_revision),documentRevision:t.accepted_document_revision===null?null:String(t.accepted_document_revision),publicationId:t.accepted_publication_id===null?null:String(t.accepted_publication_id)},stages:steps,errorCode:t.error_code===null?null:String(t.error_code),outcome:complete?'completed':'incomplete'};

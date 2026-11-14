@@ -9,6 +9,20 @@ import {memoryDeletionImpact} from '../../../src/memory/sqlite/deletion-impact.t
 const config={...installedDeletionRegistration,domains:[memoryDocumentsDeletionDomain,...installedDeletionRegistration.domains.filter(d=>d.id!=='memory_documents')],requiredDomains:[...new Set(['memory_documents',...installedDeletionRegistration.requiredDomains])]};
 const replacement=createDeletionActions(config),replaced=new Set(replacement.map(a=>a.name));
 export const registry={...base,actions:[...base.actions.filter(a=>!replaced.has(a.name)),...replacement,historicalSourceCopy,
+ {name:'fixture.documentRetryFault',mode:'write',retryBusy:false,execute(tx,{ownerId,taskId,fault}){
+  const task=tx.get('SELECT run_id FROM processing_task WHERE owner_id=? AND id=?',[ownerId,taskId]);
+  const call=tx.get("SELECT c.id,c.operation_id FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id JOIN processing_step s ON s.owner_id=o.owner_id AND s.id=o.memory_step_id WHERE s.owner_id=? AND s.task_id=? AND s.kind='document_scene' ORDER BY c.rowid LIMIT 1",[ownerId,taskId]);
+  if(fault==='unknown')tx.run("UPDATE model_call SET state='unknown',settlement_state='unknown' WHERE owner_id=? AND id=?",[ownerId,call.id]);
+  else if(fault==='unsettled')tx.run("UPDATE model_call SET settlement_state='unknown' WHERE owner_id=? AND id=?",[ownerId,call.id]);
+  else if(fault==='sealed')tx.run("UPDATE model_operation SET state='sealed',commit_forbidden_at=? WHERE owner_id=? AND id=?",[Date.now(),ownerId,call.operation_id]);
+  else if(fault==='paused')tx.run("UPDATE processing_run SET state='paused',pause_requested_at=? WHERE owner_id=? AND id=?",[Date.now(),ownerId,task.run_id]);
+  else throw new Error('合成文档故障无效');return true;
+ }},
+ {name:'fixture.documentRetryHistory',mode:'read',retryBusy:false,execute(tx,{ownerId,taskId}){
+  return {steps:tx.all("SELECT * FROM processing_step WHERE owner_id=? AND task_id=? AND kind IN ('document_scene','document_profile') ORDER BY step_no",[ownerId,taskId]),
+   attempts:tx.all("SELECT a.* FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE s.owner_id=? AND s.task_id=? AND s.kind IN ('document_scene','document_profile') ORDER BY s.step_no,a.attempt_no",[ownerId,taskId]),
+   calls:tx.all("SELECT c.*,o.state AS operation_state,o.commit_forbidden_at FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id JOIN processing_step s ON s.owner_id=o.owner_id AND s.id=o.memory_step_id WHERE s.owner_id=? AND s.task_id=? AND s.kind IN ('document_scene','document_profile') ORDER BY c.rowid",[ownerId,taskId])};
+ }},
  {name:'fixture.documentFollowupPending',mode:'write',retryBusy:false,execute(tx,{ownerId,runId}){
   tx.run("UPDATE processing_run SET followup_state='pending',state='incomplete' WHERE owner_id=? AND id=?",[ownerId,runId]);return true;
  }},

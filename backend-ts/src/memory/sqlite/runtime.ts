@@ -75,7 +75,7 @@ export async function createSqliteMemoryRuntime(options:{ctx:Context;contentReso
    if(followup?.onlyContactId){
     await adjudication!.publishRun(runId,followup.onlyContactId,{retryKnownFailures:followup.retryKnownFailures});
     await documents!.enrollRun(runId,followup.onlyContactId);
-    if(followup.completeDocuments)await documents!.publishRun(runId,followup.onlyContactId);
+    if(followup.completeDocuments)await documents!.publishRun(runId,followup.onlyContactId,{retryKnownFailures:followup.retryKnownFailures});
     return;
    }
    await adjudication!.publishRun(runId);await documents!.enrollRun(runId);
