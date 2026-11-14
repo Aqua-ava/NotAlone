@@ -13,7 +13,7 @@ import {fixture,record} from './fixtures/memory-sqlite/support.mjs';
 
 test('同步退役迁移保留新来源事实但不再创建认证和副本清理表',async t=>{
  const f=await fixture(t,{automatic:false});
- assert.equal(f.storage.status.schemaVersion,52);
+ assert.equal(f.storage.status.schemaVersion,53);
  await f.service.close();await f.storage.close();
  const db=new DatabaseSync(join(f.root,'managed/sqlite/notalone.sqlite'),{readOnly:true});
  try{
@@ -41,7 +41,7 @@ async function upgradeArchive(t,variant){
 }
 test('47迁移只保留完成且独立证明的表前缀及逐键删除等价',async t=>{
  const {next,db}=await upgradeArchive(t);
- assert.equal(next.status.schemaVersion,52);
+ assert.equal(next.status.schemaVersion,53);
  const facts=db.prepare('SELECT kind,generation_a,generation_b,partition_id,table_instance,local_id FROM history_source_equivalence ORDER BY kind').all().map(row=>({...row}));
  assert.deepEqual(facts,[{kind:'point',generation_a:'covered-point-generation',generation_b:'source-1',partition_id:'shard-a',table_instance:'table-instance-1',local_id:'99'},{kind:'prefix',generation_a:'legacy-proof-generation',generation_b:'source-1',partition_id:'shard-a',table_instance:'table-instance-1',local_id:''}]);
  assert.equal(db.prepare('SELECT count(*) n FROM conversation_binding').get().n,3);
