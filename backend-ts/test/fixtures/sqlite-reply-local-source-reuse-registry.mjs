@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {registry as base} from '../../src/storage/sqlite/registry.ts';
 import {withReplyLocalSourceEligibility} from '../../src/history/sqlite/reply-local-source.ts';
 import {createReplyCandidateActions} from '../../src/reply/sqlite/candidates/actions.ts';
+import {decode} from '../../src/reply/sqlite/requests.ts';
 
 const freeze=base.actions.find(action=>action.name==='reply.freezeInput');
 const assertInput=base.actions.find(action=>action.name==='reply.assertInput');
@@ -47,6 +48,7 @@ export const registry={...base,actions:[...base.actions,{
   actions.find(action=>action.name==='reply.freezeInput').execute(tx,context,lease);
   for(const key of Object.keys(calls))calls[key]=0;
   const ticket=actions.find(action=>action.name==='reply.beginSearch').execute(tx,{...context,kind:'memory',query:i.legacy?'旧读者合成查询':'合成查询'},lease);
-  return {pool:ticket.pool.map(item=>({...item,versionNo:String(item.versionNo)})),calls};
+  const event=decode(String(tx.get('SELECT payload FROM execution_event WHERE owner_id=? AND id=?',[i.ownerId,ticket.ticketId]).payload));
+  return {ticket,anchors:event.memories.map(item=>({...item,versionNo:String(item.versionNo)})),calls};
  },
 }]};

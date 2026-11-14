@@ -15,12 +15,13 @@ import {SqliteDiscussionRuntime} from './runtime.ts';
 import {SqliteDiscussionTurns} from './turns.ts';
 import {SqliteDiscussionHttp} from './http.ts';
 import {createBusinessEmbeddingFactory,createLocalEmbeddingLifecycle,projectEmbeddingCache} from '../../platform/models/local-embedding-lifecycle.ts';
+import {createRetrievalIndex} from '../../retrieval/index-runtime.ts';
 
 /** 宿主唯一装配点共享模型提供者与许可；讨论只拥有自己的官方运行副本。 */
 export async function createSqliteDiscussionHost(options:{
  ctx:Context;storage:SqliteStorage;ownerId:string;userData:string;holders:ActiveHolders;
  reader?:StorageReader;
- /** 项目目录；提供时回复记忆检索使用其 `.models/memory-embedding` 下的本机语义模型（ADR-182），缺省为纯词法。 */
+ /** 项目目录；检索与后台索引共享其 `.models/memory-embedding` 本机模型，缺省仅用BM25。 */
  projectDirectory?:string;
  authorizeRequest:(request:IncomingMessage)=>boolean;library?:SqliteSkillLibrary;
  model?:{configuration:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter};
@@ -33,20 +34,23 @@ export async function createSqliteDiscussionHost(options:{
   model:options.model.configuration,provider:options.model.provider,arbiter:options.model.arbiter,library:options.library,
   authorize:async()=>{if(stopping)throw new StorageFailure('discussion_runtime_closed');},
  }):undefined;
- // 语义模型惰性打开：首次需要时才加载；模型未准备时由回复链路降级为词法。
+ // 同一生命周期复用已准备的本机模型；正文向量小批回填，查询只计算query表示。
  const embedding=options.projectDirectory?createLocalEmbeddingLifecycle(createBusinessEmbeddingFactory(options.projectDirectory,projectEmbeddingCache(options.projectDirectory))):undefined;
+ const retrieval=createRetrievalIndex({storage:options.storage,ownerId:options.ownerId,holders:options.holders,...(embedding?{embed:embedding.embed}:{})});
  const candidates=new SqliteReplyCandidateService(options.storage,options.ownerId,options.reader);
- const candidateTurns=options.model?new SqliteReplyTurns({storage:options.storage,service:candidates,discussions:service,runtime,model:options.model.configuration,provider:options.model.provider,arbiter:options.model.arbiter,library:options.library,...(embedding?{embed:embedding.embed}:{}),authorize:async()=>{if(stopping)throw new StorageFailure('reply_runtime_closed');}}):undefined;
+ const candidateTurns=options.model?new SqliteReplyTurns({storage:options.storage,service:candidates,discussions:service,runtime,model:options.model.configuration,provider:options.model.provider,arbiter:options.model.arbiter,library:options.library,retrieval,authorize:async()=>{if(stopping)throw new StorageFailure('reply_runtime_closed');}}):undefined;
  const candidateHttp=new SqliteReplyCandidateHttp({storage:options.storage,service:candidates,turns:candidateTurns,authorize:options.authorizeRequest});
  const handler=new SqliteDiscussionHttp(service,options.authorizeRequest,turns),requests=new Set<Promise<boolean>>();
  const http={handle(request:IncomingMessage,response:ServerResponse):Promise<boolean>{
   if(stopping){response.writeHead(503,{'Content-Type':'application/json','Cache-Control':'no-store'});response.end(JSON.stringify({error:'discussion_runtime_closed'}));return Promise.resolve(true);}
   const pending=(async()=>await candidateHttp.handle(request,response)||await handler.handle(request,response))();requests.add(pending);const release=()=>requests.delete(pending);pending.then(release,release);return pending;
  }};
- return {service,runtime,turns,candidates,candidateTurns,http,
+ // 启动不等待全库索引；未完成回填时查询保留明确的状态与可用BM25路径。
+ retrieval.start();
+ return {service,runtime,turns,candidates,candidateTurns,http,retrieval,
   close():Promise<void>{
    stopping=true;
-   return closing??=(async()=>{await options.reader?.close();await Promise.all([turns?.close(),candidateTurns?.close()]);await embedding?.close();await runtime.close();await Promise.allSettled([...requests]);})().catch(error=>{closing=undefined;throw error;});
+   return closing??=(async()=>{await options.reader?.close();await Promise.all([turns?.close(),candidateTurns?.close()]);await retrieval.close();await embedding?.close();await runtime.close();await Promise.allSettled([...requests]);})().catch(error=>{closing=undefined;throw error;});
   },
  };
 }

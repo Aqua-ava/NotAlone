@@ -11,6 +11,7 @@ import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/servic
 import {assertReplyLocalSource,assertReplyLocalSources,withReplyLocalSourceEligibility} from '../src/history/sqlite/reply-local-source.ts';
 import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
 import {registry} from '../src/storage/sqlite/registry.ts';
+import {sha256} from '../src/platform/sha256.ts';
 
 const registryModule=new URL('./fixtures/sqlite-reply-local-source-reuse-registry.mjs',import.meta.url).href;
 
@@ -155,14 +156,16 @@ test('同一事务写入删除、隔离及来源失证后，重复引用仍重�
  }finally{f.db.exec('ROLLBACK');}
 });
 
-test('主动搜索的语义记忆池只列记忆头部，不遍历文档；旧读者保持只读兼容',async t=>{
+test('主动搜索只冻结记忆头部身份与摘要，不复制正文或遍历文档；旧读者保持只读兼容',async t=>{
  const f=await fixture(t,{registryModule}),contactId=f.saved[0].contact_id;
  const discussion=await new SqliteDiscussionService(f.storage,owner).newDiscussion(contactId),requestKey=randomUUID();
  const confirmationId=await f.storage.execute('identity.manualConfirm',{ownerId:owner,contactId,contextToken:requestKey,id:randomUUID(),at:Date.now()});
  const {attempt}=await new SqliteReplyCandidateService(f.storage,owner).begin({contactId,discussionId:discussion.id,requestKey,text:'合成记忆池',identity:{kind:'manual',confirmationId}});
  const listed=await f.storage.execute('fixture.searchPoolReads',attempt);
- assert.deepEqual(listed.pool,[{id:'synthetic-memory',versionNo:'1',text:'合成记忆头部'}]);
+ assert.equal(listed.ticket.status,'accepted');assert.equal(listed.ticket.pool,undefined);
+ assert.deepEqual(listed.anchors,[{id:'synthetic-memory',versionNo:'1',textSeal:sha256('合成记忆头部')}]);
+ assert.doesNotMatch(JSON.stringify(listed),/合成记忆头部|未确认候选|文档不进入语义记忆池/);
  assert.deepEqual(listed.calls,{list:1,read:0,documents:0},'仅提取记忆头部不应展开文档和来源');
  const legacy=await f.storage.execute('fixture.searchPoolReads',{...attempt,legacy:true});
- assert.deepEqual(legacy.pool,listed.pool);assert.deepEqual(legacy.calls,{list:0,read:1,documents:0});
+ assert.equal(legacy.ticket.pool,undefined);assert.deepEqual(legacy.anchors,listed.anchors);assert.deepEqual(legacy.calls,{list:0,read:1,documents:0});
 });

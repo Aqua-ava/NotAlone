@@ -61,46 +61,42 @@ test('较长记忆不再挤掉后面的相关记忆',()=>{
  assert.equal(selected.includes(long),true);assert.equal(selected.includes(short),true);
 });
 
-test('混合检索：语义为主的综合分入选，词法只加少量分，词法命中但语义很低的不入选',async()=>{
- const {semanticKey}=await import('../src/reply/sqlite/candidates/memory-semantics.ts');
- const hike=memory('hike','contact','memory','他喜欢爬山。'),boosted=memory('boosted','contact','memory','徒步装备已经买好。'),plain=memory('plain','contact','memory','公司报销流程复杂。'),lexicalOnly=memory('lex','contact','memory','徒步徒步徒步。');
- const semantic=new Map([[semanticKey('hike',1n),0.72],[semanticKey('boosted',1n),0.55],[semanticKey('plain',1n),0.55],[semanticKey('lex',1n),0.2]]);
- // hike 仅凭语义 0.72×0.8 入选；boosted 与 plain 语义同为 0.55（0.44），只有词法命中的 boosted 加分后越过 0.48；lex 词法命中但语义仅 0.2，综合分不足。
- const selected=selectReplyKnowledge([plain,lexicalOnly,boosted,hike],'想去徒步',semantic);
- assert.deepEqual(selected.map(item=>item.id),['hike','boosted']);
- assert.deepEqual(selectReplyKnowledge([plain,lexicalOnly,boosted,hike],'想去徒步').map(item=>item.id).sort(),['boosted','lex']);
+test('正式记忆服从检索锚点的全局顺序，不按词法、分数或确认方式重排',()=>{
+ const contact={...memory('contact','contact','memory','他喜欢爬山。'),qualification:'auto'},owner=memory('owner','owner','memory','公司报销流程复杂。'),other=memory('other','contact','memory','徒步装备已经买好。');
+ const ranked=[{id:owner.id,versionNo:1n,score:0},{id:contact.id,versionNo:1n,score:0.01},{id:other.id,versionNo:1n,score:1}];
+ assert.deepEqual(selectReplyKnowledge([contact,other,owner],'徒步',ranked),[owner,contact,other]);
+ assert.deepEqual(selectReplyKnowledge([contact,other,owner],'',ranked),[owner,contact,other],'词法查询为空不改变已完成的检索排序');
 });
 
-test('混合检索：综合分门槛为 0.48（语义 0.8＋词法 0.2），缺少语义得分或为候选的资料不入选',async()=>{
- const {semanticKey,HYBRID_THRESHOLD,DENSE_WEIGHT,SPARSE_WEIGHT}=await import('../src/reply/sqlite/candidates/memory-semantics.ts');
- assert.equal(HYBRID_THRESHOLD,0.48);assert.equal(DENSE_WEIGHT,0.8);assert.equal(SPARSE_WEIGHT,0.2);
- const items=[memory('below'),memory('at'),memory('missing'),memory('candidate','contact','memory_candidate')].map((item,n)=>({...item,text:`无关文字${n}。`}));
- const semantic=new Map([[semanticKey('below',1n),0.59],[semanticKey('at',1n),0.61],[semanticKey('candidate',1n),0.99]]);
- assert.deepEqual(selectReplyKnowledge(items,'完全不同的查询',semantic).map(item=>item.id),['at']);
+test('正式记忆只选精确ID和版本锚点，未列出、过期、未知或候选锚点均不获得准入',()=>{
+ const current={...memory('current'),versionNo:2n},unlisted=memory('unlisted'),candidate=memory('candidate','contact','memory_candidate','星际资料。');
+ const ranked=[{id:'missing',versionNo:1n,score:1},{id:current.id,versionNo:1n,score:1},{id:candidate.id,versionNo:1n,score:1}];
+ const {source,opened}=lazySource([unlisted,candidate,current]);
+ assert.deepEqual(selectReplyKnowledge(source,'园艺',ranked),[]);
+ assert.deepEqual(opened,[],'不合锚点的正文不进入来源核验');
+ assert.deepEqual(selectReplyKnowledge(source,'园艺',[...ranked,{id:current.id,versionNo:2n,score:0}]),[current]);
+ assert.deepEqual(selectReplyKnowledge([current,unlisted],'园艺',[]),[],'空检索结果不回退到词法准入');
 });
 
-test('混合检索仍受条数上限约束，且不设字符上限',async()=>{
- const {semanticKey}=await import('../src/reply/sqlite/candidates/memory-semantics.ts');
- const long=n=>'𠀀'.repeat(900)+n;
- const contacts=Array.from({length:7},(_,n)=>memory(`c${n}`,'contact','memory',long(n))),owners=Array.from({length:5},(_,n)=>memory(`o${n}`,'owner','memory',long(n)));
- const semantic=new Map([...contacts,...owners].map((item,n)=>[semanticKey(item.id,1n),0.9-n*0.01]));
- const selected=selectReplyKnowledge([...contacts,...owners],'毫无词法重合',semantic);
- assert.equal(selected.filter(item=>item.scopeKind==='contact').length,5);assert.equal(selected.filter(item=>item.scopeKind==='owner').length,3);
- assert.deepEqual(selected.filter(item=>item.scopeKind==='contact').map(item=>item.id),['c0','c1','c2','c3','c4']);
+test('检索锚点仍按联系人五条本人三条独立限额，完整长记忆不挤占候选词法预算',()=>{
+ const contacts=Array.from({length:7},(_,n)=>memory(`c${n}`,'contact','memory','𠀀'.repeat(900)+n)),owners=Array.from({length:5},(_,n)=>memory(`o${n}`,'owner','memory','𠀀'.repeat(500)+n));
+ const candidates=Array.from({length:5},(_,n)=>memory(`candidate-${n}`,n%2?'owner':'contact','memory_candidate','园艺'+'𠀀'.repeat(98)));
+ const ranked=Array.from({length:7},(_,n)=>[contacts[n],owners[n]].filter(Boolean)).flat().map(item=>({id:item.id,versionNo:item.versionNo,score:0.01}));
+ const selected=selectReplyKnowledge([...candidates,...owners,...contacts],'园艺',ranked);
+ assert.deepEqual(selected.filter(item=>item.kind==='memory'&&item.scopeKind==='contact'),contacts.slice(0,5));
+ assert.deepEqual(selected.filter(item=>item.kind==='memory'&&item.scopeKind==='owner'),owners.slice(0,3));
+ assert.deepEqual(selected.filter(item=>item.kind==='memory_candidate'),candidates.slice(0,3));
+ assert.ok(selected.filter(item=>item.kind==='memory').every(item=>Array.from(item.text).length===(item.scopeKind==='contact'?901:501)));
+ assert.deepEqual(selectReplyKnowledge(candidates,'园艺',[]),candidates.slice(0,3),'未确认候选始终以词法排序和独立300字符预算准入');
 });
 
-test('语义得分：事务外按余弦计算，模型失败返回 null，检索词不一致时被忽略',async()=>{
- const {scoreMemorySemantics,readSemanticScores,semanticKey}=await import('../src/reply/sqlite/candidates/memory-semantics.ts');
- const embed=async texts=>texts.map(text=>text.includes('徒步')||text.includes('爬山')?[1,0]:[0,1]);
- const pool=[{id:'a',versionNo:'1',text:'他喜欢爬山'},{id:'b',versionNo:'2',text:'报销流程'}];
- const scored=await scoreMemorySemantics('想去徒步',pool,embed);
- assert.equal(scored.query,'想去徒步');assert.equal(scored.scores[semanticKey('a','1')],1);assert.equal(scored.scores[semanticKey('b','2')],0);
- assert.equal(await scoreMemorySemantics('想去徒步',pool,async()=>{throw new Error('模型不可用');}),null);
- assert.equal(await scoreMemorySemantics('想去徒步',pool,async texts=>texts.map(()=>[Number.NaN,1])),null);
- assert.equal(await scoreMemorySemantics('  ',pool,embed),null);assert.equal(await scoreMemorySemantics('想去徒步',[],embed),null);
- assert.equal(readSemanticScores(scored,'另一个查询'),undefined);
- assert.equal(readSemanticScores({query:'想去徒步',scores:{a:'x'}},'想去徒步'),undefined);
- assert.equal(readSemanticScores(scored,'想去徒步').get(semanticKey('a','1')),1);
+test('检索锚点来源失败后沿原顺序补位，重复锚点不重复核验或消费预算',()=>{
+ const contacts=Array.from({length:8},(_,n)=>memory(`contact-${n}`));
+ const ranked=contacts.map(item=>({id:item.id,versionNo:item.versionNo,score:1}));ranked.splice(1,0,ranked[0]);
+ const {source,opened}=lazySource(contacts,{stale:new Set(['contact-1','contact-3'])});
+ const selected=selectReplyKnowledge(source,'不相关查询',ranked);
+ assert.deepEqual(selected.map(item=>item.id),['contact-0','contact-2','contact-4','contact-5','contact-6']);
+ assert.deepEqual(opened,['contact-0','contact-1','contact-2','contact-3','contact-4','contact-5','contact-6']);
 });
 
 // 按需核验：排序只看正文，入选前才核验；失效条目被跳过且不占预算，也不扩大核验范围。

@@ -8,6 +8,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import sharp from 'sharp';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
+import {registry as currentRegistry} from '../src/storage/sqlite/registry.ts';
 import {SqliteContactService} from '../src/contacts/sqlite/service.ts';
 import {normalizeContactAvatar} from '../src/contacts/sqlite/avatar.ts';
 import {ContactAvatarSynchronizer} from '../src/contacts/sqlite/avatar-sync.ts';
@@ -132,7 +133,7 @@ test('已有54版数据库原地升级，联系人保留且新增头像表可用
  const savedContacts=(await oldContacts.directory()).contacts,databaseId=previous.status.databaseId;assert.equal(savedContacts.length,1);
  assert.equal(previous.status.schemaVersion,54);await oldContacts.close();await previous.close();
  const upgraded=await SqliteStorage.open({userData:root,intent:'open',role:'test',expectedDatabaseId:databaseId});
- t.after(()=>upgraded.close());assert.equal(upgraded.status.schemaVersion,55);
+ t.after(()=>upgraded.close());assert.equal(upgraded.status.schemaVersion,currentRegistry.migrations.at(-1).version);
  const contacts=new SqliteContactService(upgraded,owner,{});t.after(()=>contacts.close());
  assert.equal(await contacts.avatarRevision(),'0');assert.deepEqual((await contacts.directory()).contacts,savedContacts);
  assert.deepEqual(await upgraded.check(),{integrity:'ok',foreignKeys:'ok'});

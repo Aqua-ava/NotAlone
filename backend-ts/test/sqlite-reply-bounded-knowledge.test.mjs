@@ -7,6 +7,7 @@ import {fixture} from './fixtures/sqlite-reply-candidates/support.mjs';
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/service.ts';
 import {SqliteReplyTurns} from '../src/reply/sqlite/candidates/turns.ts';
+import {createRetrievalIndex} from '../src/retrieval/index-runtime.ts';
 
 test('100条真实记忆由模型按需搜索，仅后续请求使用相关完整条目并遵守联系人与本人限额',async t=>{
  const f=await fixture(t,{synchronizeHistory:false,onRequest:async(_req,res,request,n)=>{
@@ -225,25 +226,49 @@ test('来源状态更新使派生文档失效时初始召回省略，旧冻结�
  await assert.rejects(f.storage.execute('fixture.readDocument',{...scope,item:directory,range:{startBlock:1,blockCount:1}}),{code:'document_knowledge_stale'});
 });
 
-test('模型显式查询后才计算语义，同义记忆可召回，语义模型缺失或失败仍以词法继续生成',async t=>{
- const query='想去徒步';
+test('正文向量冷准备一次，模型显式查询仅计算query；模型缺失或失败如实退回BM25',async t=>{
+ const query='想去徒步',calls=[],searches=[];
  const f=await fixture(t,{synchronizeHistory:false,onRequest:async(_req,res,request,n)=>{
   if(n%2===0)return;assert.doesNotMatch(JSON.stringify(request),/他喜欢爬山|公司报销流程/);toolResponse(res,'search_relationship_memory',{query});return true;
  },content:memoryReply}),contactId=f.ids[0];
+ const execute=f.storage.execute.bind(f.storage);
+ f.storage.execute=async(name,input,...rest)=>{const value=await execute(name,input,...rest);if(name==='reply.finishSearch')searches.push(value);return value;};
  const management=new SqliteMemoryManagement(f.storage,f.owner);
  for(const [index,body] of ['他喜欢爬山。','公司报销流程复杂。'].entries())await management.decide({requestKey:`semantic-${index}`,action:'manual',scope:{scopeKind:'contact',contactId},body});
- const workspace={action:'express',draftText:'想去徒步',contextText:'',includeRelationshipContext:true};
- const embed=async texts=>texts.map(text=>/徒步|爬山/.test(text)?[1,0]:[0,1]);
- const run=async options=>{
-  const before=f.requests.length,queries=[];
-  const measuredEmbed=options.embed?async texts=>{assert.equal(f.requests.length,before+1,'语义评分只能在初次provider请求返回工具调用后运行');queries.push(texts[0]);return options.embed(texts);}:undefined;
-  const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},...(measuredEmbed?{embed:measuredEmbed}:{})});t.after(()=>turns.close());
-  await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:workspace.draftText,confirmedContact:true,workspace});
-  assert.equal(f.requests.length,before+2);assert.deepEqual(queries,measuredEmbed?[query]:[]);
-  return JSON.stringify(f.requests[before+1]);
+ const workspace={action:'express',draftText:query,contextText:'',includeRelationshipContext:true};
+ let cold=true,expectedRequest=0;
+ const embed=async texts=>{
+  calls.push([...texts]);
+  if(cold)assert.equal(f.requests.length,0,'冷准备正文发生在候选请求之外');
+  else{assert.equal(f.requests.length,expectedRequest,'query表示只能在模型明确返回搜索Tool后计算');assert.deepEqual(texts,[query]);}
+  return texts.map(text=>[...(/徒步|爬山/.test(text)?[1,0]:[0,1]),...Array(510).fill(0)]);
  };
- const withSemantics=await run({embed});
- assert.ok(withSemantics.includes('他喜欢爬山'),'语义相近的记忆应被补充');assert.ok(!withSemantics.includes('公司报销流程'),'语义无关的记忆不进入');
- assert.ok(!(await run({})).includes('他喜欢爬山'),'未装配语义模型时退回词法');
- assert.ok(!(await run({embed:async()=>{throw new Error('模型未准备');}})).includes('他喜欢爬山'),'语义模型失败时退回词法且不阻断生成');
+ const makeIndex=embedding=>createRetrievalIndex({storage:f.storage,ownerId:f.owner,holders:f.holders,...(embedding?{embed:embedding}:{})});
+ const semantic=makeIndex(embed);await semantic.flushForTests();cold=false;const coldCalls=calls.length;
+ assert.deepEqual(calls.flat().sort(),['他喜欢爬山。','公司报销流程复杂。'].sort());
+ const run=async retrieval=>{
+  const before=f.requests.length;expectedRequest=before+1;
+  const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},retrieval});
+  try{
+   await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:workspace.draftText,confirmedContact:true,workspace});
+   assert.equal(f.requests.length,before+2);
+   return {wire:JSON.stringify(f.requests[before+1]),view:(await service.view(contactId,d.id))[0],search:searches.at(-1)};
+  }finally{await turns.close();}
+ };
+ try{
+  const withSemantics=await run(semantic);
+  assert.match(withSemantics.search.items[0].text,/他喜欢爬山/,'RRF没有旧分数门槛；相近项应排在候选首位');
+  assert.equal(withSemantics.search.strategy,'vector');assert.equal(withSemantics.search.indexIncomplete,false);
+  assert.match(withSemantics.wire,/他喜欢爬山/);
+  assert.equal(withSemantics.view.candidates[0].basis[0].verification,'actual_input');
+  assert.match(withSemantics.view.candidates[0].basis[0].text,/他喜欢爬山/);
+  assert.deepEqual(calls.slice(coldCalls),[[query]],'正文不因本次搜索重新embedding');
+  const noModel=makeIndex();
+  try{const result=await run(noModel);assert.equal(result.search.strategy,'bm25');assert.equal(result.search.status,'empty');assert.ok(!result.wire.includes('他喜欢爬山'));}
+  finally{await noModel.close();}
+  let failures=0;
+  const failed=makeIndex(async texts=>{failures++;assert.deepEqual(texts,[query]);assert.equal(f.requests.length,expectedRequest);throw new Error('合成本机模型未准备');});
+  try{const result=await run(failed);assert.equal(result.search.strategy,'bm25');assert.equal(result.search.status,'empty');assert.ok(!result.wire.includes('他喜欢爬山'));assert.equal(failures,1);}
+  finally{await failed.close();}
+ }finally{await semantic.close();}
 });

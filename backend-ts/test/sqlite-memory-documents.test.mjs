@@ -126,10 +126,11 @@ test('场景执行中普通暂停后不领取画像小批，继续后从画像�
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('正式SQLite profile中L1记忆立即进入回复，主题窗口未到期不调用文档模型',{timeout:30000},async t=>{
+test('正式SQLite profile中L1记忆按需进入回复，主题窗口未到期不调用文档模型',{timeout:30000},async t=>{
  const {watch}=await import('node:fs');const {readFile,writeFile,access}=await import('node:fs/promises');
  const {join,dirname,resolve}=await import('node:path');const {createServer}=await import('node:http');const {once}=await import('node:events');const {randomUUID}=await import('node:crypto');
  const {launchDsh}=await import('../src/launch.ts');const {documentProfileSupplier}=await import('./fixtures/memory-documents/profile-supplier.mjs');
+ const {Readable}=await import('node:stream');
  const cleanups=[];let host,provider,info;
  const f=await fixture({after:cleanup=>cleanups.push(cleanup)}),root=f.root,contactId=f.saved[0].contact_id;
  t.after(async()=>{
@@ -148,7 +149,25 @@ test('正式SQLite profile中L1记忆立即进入回复，主题窗口未到期�
  await writeFile(envFile,'NOTALONE_DEEPSEEK_API_KEY=synthetic-only\nNOTALONE_BACKGROUND_PROCESSING=manual\n',{mode:0o600,flag:'wx'});await writeFile(audit,'',{mode:0o600,flag:'wx'});await writeFile(stderr,'',{mode:0o600,flag:'wx'});
  const quote=value=>"'"+value.replaceAll("'","'\\''")+"'",guard=new URL('./fixtures/sqlite-memory-profile-network-guard.mjs',import.meta.url).pathname;
  await writeFile(wrapper,`#!/bin/sh\nexec ${quote(process.execPath)} --import ${quote(guard)} "$@" 2>> ${quote(stderr)}\n`,{mode:0o700,flag:'wx'});
- const supplier=documentProfileSupplier();provider=createServer(supplier.handler);provider.listen(0,'127.0.0.1');await once(provider,'listening');
+ const supplier=documentProfileSupplier();
+ const replyResponse=(res,tool,value)=>{
+  const events=[{type:'message_start',message:{id:randomUUID(),type:'message',role:'assistant',model:'synthetic',content:[],usage:{input_tokens:3,output_tokens:0}}},
+   {type:'content_block_start',index:0,content_block:tool?{type:'tool_use',id:randomUUID(),name:tool,input:{}}:{type:'text',text:''}},
+   {type:'content_block_delta',index:0,delta:tool?{type:'input_json_delta',partial_json:JSON.stringify(value)}:{type:'text_delta',text:JSON.stringify(value)}},
+   {type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:tool?'tool_use':'end_turn'},usage:{output_tokens:7}},{type:'message_stop'}];
+  res.setHeader('Content-Type','text/event-stream');res.end(events.map(event=>`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''));
+ };
+ // 只替换供应商响应；实际检索仍由正式DSH工具循环、SQLite范围与来源核验执行。
+ provider=createServer((req,res)=>{void(async()=>{
+  let raw='';for await(const part of req)raw+=part;const body=JSON.parse(raw);
+  if((body.tools??[]).some(tool=>tool.name==='search_relationship_memory')){
+   const text=JSON.stringify(body),match=text.match(/实际输入材料\[(\d+)\] memory/);supplier.replies.push({text});
+   if(!match){replyResponse(res,'search_relationship_memory',{query:'合成园艺'});return;}
+   replyResponse(res,null,{candidates:[{parts:['结合合成资料的候选。'],basis:[Number(match[1])]}]});return;
+  }
+  const copy=Readable.from([raw]);copy.url=req.url;copy.headers=req.headers;await supplier.handler(copy,res);
+ })().catch(error=>{supplier.errors.push(error instanceof Error?error.message:'synthetic_reply_supplier_failed');res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({error:'synthetic_reply_supplier_failed'}));});});
+ provider.listen(0,'127.0.0.1');await once(provider,'listening');
  host=await launchDsh({nodeExecutable:wrapper,projectDirectory:resolve('..'),envFilePath:envFile,infoPath,businessHome:root,environment:{NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${provider.address().port}`,NOTALONE_SYNTHETIC_NETWORK_AUDIT:audit},sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts','history','discussions','memory']}},()=>true);
  const changed=(directory,probe,accept)=>new Promise((resolveValue,reject)=>{
   let ended=false,running=false,dirty=false;const finish=(error,value)=>{if(ended)return;ended=true;clearTimeout(timer);watcher.close();error?reject(error):resolveValue(value);};
@@ -167,6 +186,7 @@ test('正式SQLite profile中L1记忆立即进入回复，主题窗口未到期�
  const route=`/api/contacts/${contactId}/assistant-sessions/${session.data.session_id}/reply-candidates`;
  const generated=await api(route,{request_key:randomUUID(),text:'结合资料表达',confirmed_contact:true});assert.equal(generated.status,200,JSON.stringify(generated.data));
  const replies=await api(route);assert.equal(replies.status,200,JSON.stringify(replies.data));assert.ok(replies.data.requests[0].candidates[0].basis.some(b=>b.kind==='memory'));assert.ok(!replies.data.requests[0].candidates[0].basis.some(b=>b.kind==='document'));
- assert.equal(supplier.errors.length,0);assert.equal(supplier.base.errors.length,0);assert.ok(supplier.replies.length>0);
+ assert.equal(supplier.errors.length,0);assert.equal(supplier.base.errors.length,0);assert.equal(supplier.replies.length,2);
+ assert.doesNotMatch(supplier.replies[0].text,/实际输入材料\[\d+\] memory/);assert.match(supplier.replies[1].text,/实际输入材料\[\d+\] memory/);
  const network=(await readFile(audit,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));assert.ok(network.length>0);assert.ok(network.every(item=>item.kind==='redirect'));
 });

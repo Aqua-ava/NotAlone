@@ -10,10 +10,12 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { SqliteStorage } from '../../../src/storage/sqlite/client.ts';
+import {loadRetrievalExtension} from '../../../src/retrieval/sqlite/extension.ts';
 
 export const normalizeSql = (sql) => String(sql).replace(/\s+/g, ' ').trim();
 export function dumpSchema(database) {
-  const db = new DatabaseSync(database, { readOnly: true });
+  const db = new DatabaseSync(database, { readOnly: true,allowExtension:true });
+  loadRetrievalExtension(db);
   try {
     const tables = {};
     for (const { name } of db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT GLOB 'sqlite_*' ORDER BY name").all()) {

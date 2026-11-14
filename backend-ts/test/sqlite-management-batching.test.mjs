@@ -67,10 +67,11 @@ test('49升级50只移走20条派生维护，旧账本和5条业务原子触发�
  await f.storage.close();f.storage=await SqliteStorage.open({userData:f.userData,intent:'open',expectedDatabaseId:databaseId,role:'test',registryModule:new URL('./fixtures/memory-management/d-batch-registry.mjs',import.meta.url).href});
  assert.equal(f.storage.status.schemaVersion,currentRegistry.migrations.length);assert.deepEqual(await f.storage.execute('fixture.batchState',{}),state);
  const next=await f.storage.execute('fixture.batchSchema',{});assert.deepEqual(next.ledger.slice(0,49),schema.ledger);
- // 53版仅调整来源资格递归的连接顺序，其余业务触发器仍与49版逐项一致。
+ // 53版调整来源资格递归的连接顺序，55版新增头像时钟；其余业务触发器仍与49版逐项一致。
  const expected=schema.triggers.filter(row=>!managementDerivedTriggerNames.includes(row.name));
- assert.deepEqual(next.triggers.map(row=>row.name),expected.map(row=>row.name));
- assert.deepEqual(next.triggers.filter(row=>row.name!=='step_input_scope'),expected.filter(row=>row.name!=='step_input_scope'));
+ const avatarClocks=['contact_avatar_delete_clock','contact_avatar_insert_clock','contact_avatar_update_clock'];
+ assert.deepEqual(next.triggers.map(row=>row.name),[...expected.map(row=>row.name),...avatarClocks].sort());
+ assert.deepEqual(next.triggers.filter(row=>row.name!=='step_input_scope'&&!avatarClocks.includes(row.name)),expected.filter(row=>row.name!=='step_input_scope'));
  assert.equal(next.temporary.filter(row=>managementDerivedTriggerNames.includes(row.name)).length,20);
  for(const name of ['auto_noop_consume','noop_candidate_removed','document_publication_identity_insert','document_identity_task_cleanup','document_identity_input_cleanup'])assert.ok(next.triggers.some(row=>row.name===name),name);
  await f.storage.close();f.storage=await SqliteStorage.open({userData:f.userData,intent:'open',expectedDatabaseId:databaseId,role:'test',registryModule:new URL('./fixtures/memory-management/d-batch-registry.mjs',import.meta.url).href});

@@ -3,9 +3,11 @@ import {defineTool} from '@deepseek-ai/dsh-tools';
 import {RELATIONSHIP_SEARCH_DEFINITIONS,REPLY_SEARCH_BUDGET,type RelationshipSearchKind} from './retrieval-policy.ts';
 
 export {RELATIONSHIP_SEARCH_TOOLS,type RelationshipSearchKind} from './retrieval-policy.ts';
-interface SearchResult {status:string;items:{itemNo:number;kind:string;text:string}[];code?:string;scope?:string}
+interface SearchResult {status:string;items:{itemNo:number;kind:string;text:string}[];code?:string;scope?:string;kind?:'memory'|'history';indexIncomplete?:boolean}
 function renderSearchResult(result:SearchResult):string{
- if(result.status==='ok'&&result.items.length)return result.items.map(item=>`实际输入材料[${item.itemNo}] ${item.kind}\n${item.text}`).join('\n\n');
+ if(result.status==='ok'&&result.items.length)return (result.indexIncomplete?'本机检索索引仍在补齐；以下仅为当前可用检索路径返回的实际材料，不能据此断言已找到所有相关资料。\n\n':'')+result.items.map(item=>`实际输入材料[${item.itemNo}] ${item.kind}\n${item.text}`).join('\n\n');
+ if(result.code==='reply_search_index_incomplete')return '本机检索索引尚未补齐，本次未取得可引用结果；这不是完整检索后的未命中，不能据此认定资料不存在。请使用已有材料，缺失信息保持未知。';
+ if(result.code==='reply_search_timeout'&&result.kind==='memory')return '本次记忆检索已超时，未完成本次获准记忆搜索；不能据此认定资料不存在，请使用已有信息或在剩余次数内重试。';
  if(result.code==='reply_search_timeout')return '本次历史检索已超时，未完成当前联系人的全部获准历史搜索；不能据此认定资料不存在，请使用已有信息或在剩余次数内重试。';
  if(result.status==='empty'||result.status==='ok')return '本次查询未命中；这不代表相关资料不存在，请保持未知，不据此补写事实。';
  if(result.code==='reply_search_budget_exceeded'||['exhausted','budget_exceeded'].includes(result.status))return '本轮检索预算已耗尽，未读取更多正文。请使用已有材料，缺失信息保持未知。';

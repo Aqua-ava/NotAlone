@@ -18,6 +18,7 @@ import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
 import {createReplyKnowledgeStorageRegistry} from '../src/reply/sqlite/candidates/knowledge-context.ts';
 import {memoryManagementDeletionDomain} from '../src/memory/sqlite/management/deletion.ts';
 import {sha256} from '../src/platform/sha256.ts';
+import {configureRetrievalConnection} from '../src/retrieval/sqlite/extension.ts';
 
 async function setup(t,{count=2,background=true,initialFirst=false,messageText=index=>`园艺聊天${index+1}`}={}){
  const f=await fixture(t),contactId=f.saved[0].contact_id;
@@ -29,7 +30,7 @@ async function setup(t,{count=2,background=true,initialFirst=false,messageText=i
  const confirmationId=await f.storage.execute('identity.manualConfirm',{ownerId:owner,contactId,contextToken:requestKey,id:randomUUID(),at:Date.now()});
  const {attempt}=await new SqliteReplyCandidateService(f.storage,owner).begin({contactId,discussionId:discussion.id,requestKey,text:'园艺',identity:{kind:'manual',confirmationId}});
  const scope={...attempt,contextId:randomUUID()};
- const db=new DatabaseSync(join(f.root,'managed/sqlite/notalone.sqlite'));t.after(()=>db.close());
+ const db=new DatabaseSync(join(f.root,'managed/sqlite/notalone.sqlite'),{allowExtension:true});const index=configureRetrievalConnection(db);t.after(()=>db.close());
  const all=(sql,values=[])=>{const statement=db.prepare(sql);statement.setReadBigInts(true);return statement.all(...values);};
  const tx={all,get:(sql,values)=>all(sql,values)[0],run:(sql,values=[])=>{db.prepare(sql).run(...values);}};
  const reader=createMemoryKnowledgeReader({includeUnconfirmed:false},assertReplyLocalSource);
@@ -37,7 +38,7 @@ async function setup(t,{count=2,background=true,initialFirst=false,messageText=i
  const selected=first?await f.storage.execute('discussion.messages',{...attempt,messageIds:[first.id]}):[];
  await f.storage.execute('discussion.freezeContext',{...scope,skillRun:{packages:[],eligible:[]},items:selected.map(row=>({kind:'message',sourceContactId:contactId,messageId:row.id,recordId:row.record_id,acceptedRevision:row.interpretation_revision})),at:Date.now()});
  const action=createReplyKnowledgeStorageRegistry({migrations:[],actions:[{name:'test.search',mode:'write',retryBusy:false,execute:(tx,work)=>withReplyValidation(tx,work)}]},reader).actions[0];
- const act=work=>{db.exec('BEGIN IMMEDIATE');try{const value=action.execute(tx,work,f.storage.status);db.exec('COMMIT');return value;}catch(error){db.exec('ROLLBACK');throw error;}};
+ const act=work=>{index?.begin();db.exec('BEGIN IMMEDIATE');try{const value=action.execute(tx,work,f.storage.status);index?.flush();db.exec('COMMIT');return value;}catch(error){db.exec('ROLLBACK');throw error;}};
  act(tx=>freezeReplyInput(tx,{...scope,workspace:{action:'suggest',draftText:'',contextText:'',includeRelationshipContext:background,selectedPackageId:null,carriedSelectionId:null},at:Date.now()},reader));
  return {...f,scope,reader,act,db,tx,memory,management,initialMessageId:first?.id??null};
 }
@@ -149,7 +150,7 @@ test('冻结L1范围排除新记忆与修正版本，关闭背景和旧上下文
  f.act(tx=>initializeReplySearch(tx,f.scope,f.reader));
  await f.management.decide({requestKey:randomUUID(),action:'manual',scope:{scopeKind:'contact',contactId:f.scope.contactId},body:'后来新建的合成航海记忆。'});
  const later=f.act(tx=>beginReplySearch(tx,{...f.scope,kind:'memory',query:'航海'},f.reader));
- assert.equal(later.pool.length,1,'临时池只含初始化时已有的版本');
+ assert.equal(later.pool,undefined,'工具票据不再向宿主复制记忆池正文');
  assert.equal(f.act(tx=>finishReplySearch(tx,{...f.scope,ticketId:later.ticketId,query:'航海'},f.reader)).status,'empty');
  const before=f.act(tx=>beginReplySearch(tx,{...f.scope,kind:'memory',query:'玫瑰'},f.reader));
  const current=(await f.management.read({scopeKind:'contact',contactId:f.scope.contactId})).memories.find(item=>item.id===f.memory.memoryId);
@@ -173,14 +174,12 @@ test('空结果和执行失败占尝试，重复和400字符校验拒绝有无�
  const wire=JSON.stringify(receipts);assert.doesNotMatch(wire,/合成无匹配火山|园艺|玫瑰|喜欢|🚀/,'事件只记录摘要和身份元数据');
 });
 
-test('整轮L1按联系人5条本人3条去重，语义池以冻结ID版本限制',async t=>{
+test('整轮L1按联系人5条本人3条去重，索引只允许冻结ID版本',async t=>{
  const f=await setup(t);
  for(const [scope,count] of [[{scopeKind:'contact',contactId:f.scope.contactId},6],[{scopeKind:'self',contactId:null},4]])for(let index=0;index<count;index++)await f.management.decide({requestKey:randomUUID(),action:'manual',scope,body:`园艺玫瑰合成资料${index}。`});
  f.act(tx=>initializeReplySearch(tx,f.scope,f.reader));
  const first=f.act(tx=>beginReplySearch(tx,{...f.scope,kind:'memory',query:'园艺'},f.reader));
- const semantic={query:'园艺',scores:Object.fromEntries(first.pool.map(item=>[`${item.id}:${item.versionNo}`,1]))};
- semantic.scores['forged-id:1']=1;
- const result=f.act(tx=>finishReplySearch(tx,{...f.scope,ticketId:first.ticketId,query:'园艺',semantic},f.reader));
+ const result=f.act(tx=>finishReplySearch(tx,{...f.scope,ticketId:first.ticketId,query:'园艺'},f.reader));
  assert.equal(result.items.filter(item=>item.identity.scopeKind==='contact').length,5);assert.equal(result.items.filter(item=>item.identity.scopeKind==='owner').length,3);assert.ok(result.items.every(item=>item.identity.id!=='forged-id'));
  const second=f.act(tx=>beginReplySearch(tx,{...f.scope,kind:'memory',query:'玫瑰'},f.reader));
  assert.equal(f.act(tx=>finishReplySearch(tx,{...f.scope,ticketId:second.ticketId,query:'玫瑰'},f.reader)).status,'empty','新关键词不重新获得5+3额度');
@@ -225,4 +224,33 @@ for(const count of [10,100,1000])test(`全部历史有${count}条时分页搜索
  const result=f.act(()=>withReplyValidation(counted,tx=>finishReplySearch(tx,{...f.scope,ticketId:ticket.ticketId,query:'园艺'},f.reader)));
  assert.equal(result.items.length,Math.min(count,16));assert.equal(initializeSourceQueries,0,'初始化只记录接纳边界，不逐条打开来源');assert.ok(initializeQueries<=40,`准备查询不随历史条数逐条增长：${initializeQueries}`);assert.ok(sourceQueries<=17,`只核实际返回来源：${sourceQueries}`);
  t.diagnostic(JSON.stringify({historyCount:count,initializeQueries,finishQueries:queries,sourceQueries,returned:result.items.length}));
+});
+
+
+test('L1高排名时间资格失效项先排除，合法尾部仍能补位并成为实际材料',async t=>{
+ const f=await setup(t),created=[];
+ for(let n=0;n<25;n++)created.push((await f.management.decide({requestKey:randomUUID(),action:'manual',scope:{scopeKind:'contact',contactId:f.scope.contactId},body:'合成花艺北斗约定。'})).memoryId);
+ const sorted=created.sort(),valid=sorted.at(-1),invalid=sorted.slice(0,-1);
+ // 合成损坏时间依据：accepted动作缺少原候选，正式memoryTimeEligibility应判invalid。
+ // 保持active/body/provenance及FTS不变，复现仅靠索引头部无法辨别的资格变化。
+ f.act(tx=>tx.run(`UPDATE memory_decision SET action='accept' WHERE owner_id=? AND id IN(SELECT decision_id FROM memory_version WHERE owner_id=? AND memory_id IN(${invalid.map(()=>'?').join(',')}))`,[owner,owner,...invalid]));
+ const headers=f.reader.list(f.tx,f.scope);assert.equal(headers.filter(x=>created.includes(x.id)).length,25);
+ assert.equal(f.reader.read(f.tx,f.scope).filter(x=>created.includes(x.id)).length,1,'真实领域读者只认可合法尾部');
+ f.act(tx=>initializeReplySearch(tx,f.scope,f.reader));
+ const ticket=f.act(tx=>beginReplySearch(tx,{...f.scope,kind:'memory',query:'花艺北斗'},f.reader));
+ const result=f.act(tx=>finishReplySearch(tx,{...f.scope,ticketId:ticket.ticketId,query:ticket.query},f.reader));
+ assert.equal(result.status,'ok');assert.deepEqual(result.items.map(x=>x.identity.id),[valid]);assert.equal(result.indexIncomplete,false);
+});
+
+
+test('最终追加和来源复验跨过预算时回滚本次材料，只保留超时回执',async t=>{
+ const f=await setup(t);f.act(tx=>initializeReplySearch(tx,f.scope,f.reader));
+ const ticket=f.act(tx=>beginReplySearch(tx,{...f.scope,kind:'history',query:'园艺'},f.reader));
+ const before=f.tx.get('SELECT count(*) n FROM reply_candidate_input WHERE owner_id=? AND context_id=?',[owner,f.scope.contextId]).n;
+ let appended=false;
+ const result=f.act(tx=>finishReplySearch({...tx,run(sql,args){tx.run(sql,args);if(sql.startsWith('INSERT INTO reply_candidate_input VALUES'))appended=true;}},{...f.scope,ticketId:ticket.ticketId,query:ticket.query},f.reader,{clock:()=>appended?10_000:0}));
+ assert.equal(appended,true);assert.equal(result.code,'reply_search_timeout');assert.deepEqual(result.items,[]);
+ assert.equal(f.tx.get('SELECT count(*) n FROM reply_candidate_input WHERE owner_id=? AND context_id=?',[owner,f.scope.contextId]).n,before);
+ const receipts=f.tx.all("SELECT payload FROM execution_event WHERE owner_id=? AND kind='reply_search'",[owner]).map(x=>JSON.parse(x.payload));
+ assert.equal(receipts.filter(x=>x.phase==='begin').length,1);assert.equal(receipts.filter(x=>x.phase==='finish'&&x.status==='error'&&x.code==='timeout').length,1);
 });

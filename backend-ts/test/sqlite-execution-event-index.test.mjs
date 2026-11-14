@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import {fixture} from './fixtures/memory-sqlite/support.mjs';
 import {executionEventCallIndexMigration} from '../src/storage/sqlite/migrations/execution-event-call-index.ts';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
+import {registry as currentRegistry} from '../src/storage/sqlite/registry.ts';
 
 const legacy=new URL('./fixtures/sqlite/schema-53-registry.mjs',import.meta.url).href;
 function snapshot(root){
@@ -13,13 +14,13 @@ function snapshot(root){
  finally{db.close();}
 }
 
-test('53版已保存来源的旧库原地升级54，仅增加调用索引并保留业务行和历史迁移校验和',async t=>{
+test('53版已保存来源的旧库升级至当前版，保留业务行和历史迁移校验和',async t=>{
  const f=await fixture(t,{registryModule:legacy});assert.equal(f.storage.status.schemaVersion,53);
  for(const contact of f.saved)await f.service.synchronize(contact.contact_id);
  const before=snapshot(f.root),databaseId=f.storage.status.databaseId;
  await f.service.close();await f.storage.close();
  const storage=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:databaseId});t.after(()=>storage.close());
- assert.equal(storage.status.schemaVersion,54);assert.equal(storage.status.databaseId,databaseId);
+ assert.equal(storage.status.schemaVersion,currentRegistry.migrations.at(-1).version);assert.equal(storage.status.databaseId,databaseId);
  const after=snapshot(f.root);assert.deepEqual(after.ledger.slice(0,53),before.ledger);assert.deepEqual(after.business,before.business);
  assert.deepEqual(await storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

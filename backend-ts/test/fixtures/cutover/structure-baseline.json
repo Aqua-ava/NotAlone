@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 55,
+  "schemaVersion": 57,
   "migrationVersions": [
    1,
    2,
@@ -56,15 +56,17 @@
    52,
    53,
    54,
-   55
+   55,
+   56,
+   57
   ],
-  "userVersion": 55,
+  "userVersion": 57,
   "sqliteVersion": "3.53.4",
-  "tableCount": 97,
-  "fieldCount": 954,
-  "foreignKeyGroups": 199,
+  "tableCount": 111,
+  "fieldCount": 1000,
+  "foreignKeyGroups": 203,
   "triggerCount": 85,
-  "checkCount": 311,
+  "checkCount": 316,
   "viewCount": 0
  },
  "tables": {
@@ -12986,6 +12988,649 @@
     }
    ],
    "sql": "CREATE TABLE request_tombstone ( owner_identity TEXT NOT NULL, request_namespace TEXT NOT NULL, request_key TEXT NOT NULL, invalidation_kind TEXT NOT NULL, authority_generation INTEGER NOT NULL CHECK(authority_generation>=0), deletion_operation_id TEXT, created_at INTEGER NOT NULL, PRIMARY KEY(owner_identity,request_namespace,request_key), FOREIGN KEY(owner_identity,deletion_operation_id) REFERENCES deletion_operation(owner_identity,operation_id) ) STRICT"
+  },
+  "retrieval_document": {
+   "columns": [
+    {
+     "name": "id",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "entity_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "message_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "memory_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "memory_version_no",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "text_seal",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "tokenizer_fingerprint",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "vector_seal",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "model_fingerprint",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [
+    {
+     "id": 0,
+     "seq": 0,
+     "table": "memory_version",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 1,
+     "table": "memory_version",
+     "from": "memory_id",
+     "to": "memory_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 0,
+     "seq": 2,
+     "table": "memory_version",
+     "from": "memory_version_no",
+     "to": "version_no",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 0,
+     "table": "message",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 1,
+     "table": "message",
+     "from": "contact_id",
+     "to": "contact_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 1,
+     "seq": 2,
+     "table": "message",
+     "from": "message_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 2,
+     "seq": 0,
+     "table": "contact",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 2,
+     "seq": 1,
+     "table": "contact",
+     "from": "contact_id",
+     "to": "id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    },
+    {
+     "id": 3,
+     "seq": 0,
+     "table": "owner",
+     "from": "owner_id",
+     "to": "owner_id",
+     "on_update": "NO ACTION",
+     "on_delete": "NO ACTION",
+     "match": "NONE"
+    }
+   ],
+   "indexes": [
+    {
+     "name": "retrieval_document_vector_pending",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "model_fingerprint",
+      "vector_seal",
+      "id"
+     ],
+     "sql": "CREATE INDEX retrieval_document_vector_pending ON retrieval_document(owner_id,model_fingerprint,vector_seal,id)"
+    },
+    {
+     "name": "retrieval_document_scope",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "kind",
+      "id"
+     ],
+     "sql": "CREATE INDEX retrieval_document_scope ON retrieval_document(owner_id,contact_id,kind,id)"
+    },
+    {
+     "name": "sqlite_autoindex_retrieval_document_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "u",
+     "columns": [
+      "owner_id",
+      "kind",
+      "entity_id"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE retrieval_document ( id INTEGER PRIMARY KEY AUTOINCREMENT,owner_id TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('history','memory')), entity_id TEXT NOT NULL,contact_id TEXT,message_id TEXT,memory_id TEXT,memory_version_no INTEGER, text_seal TEXT NOT NULL,tokenizer_fingerprint TEXT NOT NULL,vector_seal TEXT,model_fingerprint TEXT, UNIQUE(owner_id,kind,entity_id), FOREIGN KEY(owner_id) REFERENCES owner(owner_id) DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(owner_id,contact_id) REFERENCES contact(owner_id,id) DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(owner_id,contact_id,message_id) REFERENCES message(owner_id,contact_id,id) DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(owner_id,memory_id,memory_version_no) REFERENCES memory_version(owner_id,memory_id,version_no) DEFERRABLE INITIALLY DEFERRED, CHECK((kind='history' AND contact_id IS NOT NULL AND message_id=entity_id AND memory_id IS NULL AND memory_version_no IS NULL) OR(kind='memory' AND message_id IS NULL AND memory_id=entity_id AND memory_version_no IS NOT NULL)), CHECK((vector_seal IS NULL)=(model_fingerprint IS NULL)) ) STRICT"
+  },
+  "retrieval_fts": {
+   "columns": [
+    {
+     "name": "tokens",
+     "type": "",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [],
+   "sql": "CREATE VIRTUAL TABLE retrieval_fts USING fts5(tokens)"
+  },
+  "retrieval_fts_config": {
+   "columns": [
+    {
+     "name": "k",
+     "type": "",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "v",
+     "type": "",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_retrieval_fts_config_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "k"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE 'retrieval_fts_config'(k PRIMARY KEY, v) WITHOUT ROWID"
+  },
+  "retrieval_fts_content": {
+   "columns": [
+    {
+     "name": "id",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "c0",
+     "type": "",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [],
+   "sql": "CREATE TABLE 'retrieval_fts_content'(id INTEGER PRIMARY KEY, c0)"
+  },
+  "retrieval_fts_data": {
+   "columns": [
+    {
+     "name": "id",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "block",
+     "type": "BLOB",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [],
+   "sql": "CREATE TABLE 'retrieval_fts_data'(id INTEGER PRIMARY KEY, block BLOB)"
+  },
+  "retrieval_fts_docsize": {
+   "columns": [
+    {
+     "name": "id",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "sz",
+     "type": "BLOB",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [],
+   "sql": "CREATE TABLE 'retrieval_fts_docsize'(id INTEGER PRIMARY KEY, sz BLOB)"
+  },
+  "retrieval_fts_idx": {
+   "columns": [
+    {
+     "name": "segid",
+     "type": "",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "term",
+     "type": "",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "pgno",
+     "type": "",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_retrieval_fts_idx_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "segid",
+      "term"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE 'retrieval_fts_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID"
+  },
+  "retrieval_text_pending": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "kind",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "entity_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 3
+    },
+    {
+     "name": "contact_id",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [
+    {
+     "name": "retrieval_text_pending_scope",
+     "unique": 0,
+     "partial": 0,
+     "origin": "c",
+     "columns": [
+      "owner_id",
+      "contact_id",
+      "kind",
+      "entity_id"
+     ],
+     "sql": "CREATE INDEX retrieval_text_pending_scope ON retrieval_text_pending(owner_id,contact_id,kind,entity_id)"
+    },
+    {
+     "name": "sqlite_autoindex_retrieval_text_pending_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "kind",
+      "entity_id"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE retrieval_text_pending ( owner_id TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('history','memory')),entity_id TEXT NOT NULL,contact_id TEXT, PRIMARY KEY(owner_id,kind,entity_id) ) STRICT,WITHOUT ROWID"
+  },
+  "retrieval_vec": {
+   "columns": [
+    {
+     "name": "doc_id",
+     "type": "",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "embedding",
+     "type": "",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [
+    {
+     "name": "sqlite_butoindex_x_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE VIRTUAL TABLE retrieval_vec USING vec0(doc_id INTEGER PRIMARY KEY,embedding FLOAT[512] distance_metric=cosine)"
+  },
+  "retrieval_vec_chunks": {
+   "columns": [
+    {
+     "name": "chunk_id",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "size",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "validity",
+     "type": "BLOB",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "rowids",
+     "type": "BLOB",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [],
+   "sql": "CREATE TABLE \"retrieval_vec_chunks\"(chunk_id INTEGER PRIMARY KEY AUTOINCREMENT,size INTEGER NOT NULL,validity BLOB NOT NULL,rowids BLOB NOT NULL)"
+  },
+  "retrieval_vec_info": {
+   "columns": [
+    {
+     "name": "key",
+     "type": "TEXT",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "value",
+     "type": "ANY",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_retrieval_vec_info_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "key"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE \"retrieval_vec_info\" (key text primary key, value any)"
+  },
+  "retrieval_vec_rowids": {
+   "columns": [
+    {
+     "name": "rowid",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "id",
+     "type": "",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "chunk_id",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    },
+    {
+     "name": "chunk_offset",
+     "type": "INTEGER",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [],
+   "sql": "CREATE TABLE \"retrieval_vec_rowids\"(rowid INTEGER PRIMARY KEY AUTOINCREMENT,id,chunk_id INTEGER,chunk_offset INTEGER)"
+  },
+  "retrieval_vec_vector_chunks00": {
+   "columns": [
+    {
+     "name": "rowid",
+     "type": "",
+     "notnull": 0,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "vectors",
+     "type": "BLOB",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_retrieval_vec_vector_chunks00_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "rowid"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE \"retrieval_vec_vector_chunks00\"(rowid PRIMARY KEY,vectors BLOB NOT NULL)"
+  },
+  "retrieval_vector_cursor": {
+   "columns": [
+    {
+     "name": "owner_id",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 1
+    },
+    {
+     "name": "contact_key",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 2
+    },
+    {
+     "name": "model_fingerprint",
+     "type": "TEXT",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 3
+    },
+    {
+     "name": "last_doc_id",
+     "type": "INTEGER",
+     "notnull": 1,
+     "dflt_value": null,
+     "pk": 0
+    }
+   ],
+   "foreignKeys": [],
+   "indexes": [
+    {
+     "name": "sqlite_autoindex_retrieval_vector_cursor_1",
+     "unique": 1,
+     "partial": 0,
+     "origin": "pk",
+     "columns": [
+      "owner_id",
+      "contact_key",
+      "model_fingerprint"
+     ],
+     "sql": null
+    }
+   ],
+   "sql": "CREATE TABLE retrieval_vector_cursor ( owner_id TEXT NOT NULL,contact_key TEXT NOT NULL,model_fingerprint TEXT NOT NULL,last_doc_id INTEGER NOT NULL CHECK(last_doc_id>=0), PRIMARY KEY(owner_id,contact_key,model_fingerprint) ) STRICT,WITHOUT ROWID"
   },
   "run_contact": {
    "columns": [

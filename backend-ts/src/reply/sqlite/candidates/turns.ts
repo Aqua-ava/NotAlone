@@ -4,7 +4,7 @@ import {observeReply,replyFailureReason,type ReplyDiagnosticPhase} from '../diag
 import {sha256} from '../../../platform/sha256.ts';
 import type {SqliteStorage} from '../../../storage/sqlite/client.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
-import {RELATIONSHIP_RETRIEVAL_GUIDE,type RelationshipSearchKind} from '../retrieval-policy.ts';
+import {RELATIONSHIP_RETRIEVAL_GUIDE,REPLY_SEARCH_BUDGET,type RelationshipSearchKind} from '../retrieval-policy.ts';
 import type {HostReplyModelConfiguration} from '../../../host/host-reply-config.ts';
 import type {installModelProvider} from '../../../platform/models/model-provider.ts';
 import type {ModelPermitArbiter} from '../../../platform/models/model-permits.ts';
@@ -21,15 +21,14 @@ import {isSkillReadFailure} from '../skill-loop.ts';
 import {encode} from '../requests.ts';
 import type {FrozenReplyInput} from './input.ts';
 import type {SqliteReplyCandidateService} from './service.ts';
-import {scoreMemorySemantics} from './memory-semantics.ts';
+import type {RetrievalIndexLifecycle} from '../../../retrieval/index-runtime.ts';
 import type {ReplySearchTicket,ReplySearchResult} from './search.ts';
-import type {EmbedTexts} from '../../../retrieval/retrieval-hybrid.ts';
 import {readReplyWorkspace,replyWorkspaceEntryText,replyWorkspaceFingerprint,type ReplyWorkspace,type ReplyWorkspaceSnapshot} from './workspace.ts';
 const systemPrompt='你是面向用户真实联系人的中文关系沟通回复助手。只围绕本次已确认联系人。依据本次输入和获准资料生成1至3组可编辑候选，不虚构经历、情绪、立场或承诺。事实、推测和未确认候选必须区分。workspace suggest动作只代表用户要可选思路；未提供或未确认的草稿、立场和关系意图保持未知，候选不得写成用户已采纳的主张或承诺。workspace express动作只围绕本次想法组织表达；草稿是用户对助手的任务描述，不一定是要逐句发送的私聊原文。补充背景、写作要求和最近聊天各自标注，不相互冒充。一次性写作要求仅作用本次，不读取或形成长期表达偏好。最终消息始终由用户选择、修改并亲自发送。每组候选的parts默认只写1条完整消息；只有两种情况才拆成2条（最多2条）：该联系人最近聊天里确有连发短消息的习惯，或内容天然分成两层意思（如先回应、再另起一个问题）。同组多条会按顺序依次发送，不是备选。只输出JSON：{"candidates":[{"parts":["一条完整的消息"],"basis":[1]}]}。basis是每条候选必填的非空整数数组；示例中的1只演示格式，实际必须引用本次已编号材料，不得照抄无关编号。即使只依据用户本次请求，也要填写对应的材料编号。不得省略basis、臆造资料或把Skill选择当作已加载。';
 const candidateSystemPrompt=systemPrompt+'\n\n'+RELATIONSHIP_RETRIEVAL_GUIDE;
 export interface ReplyGenerationInput {contactId:string;discussionId:string;requestKey:string;text:string;confirmedContact:true;acceptIncomplete?:boolean;carriedSelectionId?:string;selectedPackageId?:string;contextMessageIds?:string[];workspace?:ReplyWorkspace;signal?:AbortSignal}
 export type ReplyPreparationStage='accepted'|'context-frozen'|'runtime-available';
-interface Options {storage:SqliteStorage;service:SqliteReplyCandidateService;discussions:SqliteDiscussionService;runtime:SqliteDiscussionRuntime;model:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;library?:SqliteSkillLibrary;authorize:(contactId:string)=>Promise<void>;onPreparationStage?:(stage:ReplyPreparationStage)=>void;/** 本机语义向量（ADR-182）；缺省或失败时记忆检索退回纯词法。 */embed?:EmbedTexts}
+interface Options {storage:SqliteStorage;service:SqliteReplyCandidateService;discussions:SqliteDiscussionService;runtime:SqliteDiscussionRuntime;model:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;library?:SqliteSkillLibrary;authorize:(contactId:string)=>Promise<void>;onPreparationStage?:(stage:ReplyPreparationStage)=>void;/** 共享的本机检索索引；缺少语义模型时仍可使用BM25。 */retrieval?:Pick<RetrievalIndexLifecycle,'queryVector'|'wake'>;/** 可信装配仅可缩短历史搜索预算，供有界验证使用；页面与Tool不接收此参数。 */historySearchTimeoutMs?:number}
 /** 与11共享实际DSH执行、provider和arbiter；候选不创建第二套调用身份或账本。 */
 export class SqliteReplyTurns {
  private readonly options:Options;private stopping=false;private readonly pending=new Set<Promise<unknown>>();private readonly controllers=new Set<AbortController>();
@@ -37,16 +36,26 @@ export class SqliteReplyTurns {
  private stage(stage:ReplyPreparationStage):void{try{this.options.onPreparationStage?.(stage);}catch{}}
  private digest(requestId:string,revision:SkillRunRevision){return sha256(encode({format:1,systemPrompt:candidateSystemPrompt,model:this.options.model,revision,requestId}));}
  private async search(attempt:DiscussionAttempt,contextId:string,kind:RelationshipSearchKind,query:string,signal:AbortSignal):Promise<ReplySearchResult>{
-  const o=this.options,ticket=await o.storage.execute<ReplySearchTicket>('reply.beginSearch',{...attempt,contextId,kind,query});
+  const o=this.options;
+  // epoch毫秒跨宿主与SQLite Worker共享；资格、推理lane与SQL排队共用同一个截止点。
+  const budget=kind==='history'?Math.max(1,Math.floor(Math.min(o.historySearchTimeoutMs??REPLY_SEARCH_BUDGET.historyTimeoutMs,REPLY_SEARCH_BUDGET.historyTimeoutMs))):undefined;
+  const deadlineAt=budget===undefined?undefined:Date.now()+budget,budgetSignal=budget===undefined?undefined:AbortSignal.timeout(budget);
+  const searchSignal=budgetSignal?AbortSignal.any([signal,budgetSignal]):signal;
+  const ticket=await o.storage.execute<ReplySearchTicket>('reply.beginSearch',{...attempt,contextId,kind,query});
   if(ticket.status!=='accepted')return ticket;
+  const finishInput={...attempt,contextId,ticketId:ticket.ticketId,query,...(deadlineAt===undefined?{}:{deadlineAt})};
+  const timedOut=()=>budgetSignal?.aborted===true||deadlineAt!==undefined&&Date.now()>=deadlineAt;
   try{
    signal.throwIfAborted();
-   const semantic=kind==='memory'&&o.embed?await scoreMemorySemantics(query,ticket.pool,o.embed,signal):null;
-   if(kind==='memory'&&o.embed&&!semantic&&ticket.pool.length)diagnose({event:'diagnostics.error',module:'reply',caller:'reply_memory_semantics',reasonCode:'embedding_unavailable'});
+   if(timedOut())return await o.storage.execute<ReplySearchResult>('reply.finishSearch',{...finishInput,error:'timeout'});
+   searchSignal.throwIfAborted();
+   const vector=await o.retrieval?.queryVector(query,searchSignal,{contactId:attempt.contactId,kind,generation:attempt.dataGeneration});
    signal.throwIfAborted();
-   return await o.storage.execute<ReplySearchResult>('reply.finishSearch',{...attempt,contextId,ticketId:ticket.ticketId,query,...(semantic?{semantic}:{})});
+   if(timedOut())return await o.storage.execute<ReplySearchResult>('reply.finishSearch',{...finishInput,error:'timeout'});
+   return await o.storage.execute<ReplySearchResult>('reply.finishSearch',{...finishInput,...(vector?.vector?{queryVector:vector.vector}:{})});
   }catch(error){
-   await o.storage.execute('reply.finishSearch',{...attempt,contextId,ticketId:ticket.ticketId,query,error:'failed'}).catch(()=>{});
+   if(!signal.aborted&&timedOut())return await o.storage.execute<ReplySearchResult>('reply.finishSearch',{...finishInput,error:'timeout'});
+   await o.storage.execute('reply.finishSearch',{...finishInput,error:'failed'}).catch(()=>{});
    throw error;
   }
  }

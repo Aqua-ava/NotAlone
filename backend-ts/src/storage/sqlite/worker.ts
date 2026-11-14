@@ -1,5 +1,8 @@
 import {DiagnosticBuffer,diagnosticOverflow} from '../../diagnostics/buffer.mjs';
 import {installManagementBatching} from '../../memory/sqlite/management/batching.ts';
+import {loadRetrievalExtension} from '../../retrieval/sqlite/extension.ts';
+import {installRetrievalIndexMaintenance} from '../../retrieval/sqlite/text-index.ts';
+import {retrievalIndexMigration} from '../../retrieval/sqlite/schema.ts';
 import {checkedDiagnosticEvent,type DiagnosticEvent} from '../../diagnostics/unified-contract.mjs';
 import {SqlDiagnosticSummary,storageDiagnosticModule} from '../../diagnostics/sql-summary.ts';
 import {memoryManagementBatchingMigration} from '../../memory/sqlite/management/batching-schema.ts';
@@ -56,7 +59,8 @@ try {
     try { statSync(files.database + suffix); return true; }
     catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; return false; }
   });
-  db = new DatabaseSync(files.database, { enableForeignKeyConstraints: true, allowExtension: false, timeout: 100 });
+  db = new DatabaseSync(files.database, { enableForeignKeyConstraints: true, allowExtension: true, timeout: 100 });
+  loadRetrievalExtension(db);
   const connection = db;
   // 结构迁移为既有删除目标重建固定摘要；不接受扩展模块或任意脚本。
   connection.function('notalone_sha256',{deterministic:true},value=>{
@@ -162,6 +166,7 @@ try {
     }
   }
   const managementBatching=registry.migrations.some(migration=>migration.sql===memoryManagementBatchingMigration(50).sql)?installManagementBatching(connection):undefined;
+  const retrievalIndex=registry.migrations.some(migration=>migration.sql===retrievalIndexMigration(56).sql)?installRetrievalIndexMaintenance(connection):undefined;
   files.verify();
   const status = {databaseId, runtimeId, epoch: get('SELECT epoch FROM database_instance WHERE slot=1')!.epoch,
     role: options.role, schemaVersion: registry.migrations.length, sqliteVersion: get('SELECT sqlite_version() AS v')!.v};
@@ -220,6 +225,7 @@ try {
         const runtimeOverlay=new Map<string,unknown>();
         try {
           managementBatching?.begin();
+          retrievalIndex?.begin();
           const invoke = () => {
             assertLease(lease);
             let active = true;
@@ -244,7 +250,7 @@ try {
               runtimeOverlay.set(scoped,value===removedRuntimeValue?value:structuredClone(value));
             };
             const tx: StorageTransaction = {
-              flushDerived(){permitted();managementBatching?.flush();},
+              flushDerived(){permitted();managementBatching?.flush();retrievalIndex?.flush();},
               runtimeGet<T>(namespace:string,key:string):T|undefined {
                 const scoped=runtimeKey(namespace,key),value=runtimeOverlay.has(scoped)?runtimeOverlay.get(scoped):runtimeValues.get(scoped);
                 return value===removedRuntimeValue?undefined:structuredClone(value) as T|undefined;
@@ -271,6 +277,7 @@ try {
                 void Promise.resolve(value).catch(() => {}); throw new StorageFailure('async_transaction_forbidden');
               }
               managementBatching?.flush();
+              retrievalIndex?.flush();
               // 提交前确认结果可安全穿过Worker协议，避免已提交后才因序列化报失败。
               assertLease(lease);
               return structuredClone(value);

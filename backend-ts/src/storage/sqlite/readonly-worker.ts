@@ -1,6 +1,7 @@
 import {parentPort,workerData} from 'node:worker_threads';
 import {SqlDiagnosticSummary,storageDiagnosticModule} from '../../diagnostics/sql-summary.ts';
 import {DatabaseSync,type SQLInputValue} from 'node:sqlite';
+import {loadRetrievalExtension} from '../../retrieval/sqlite/extension.ts';
 import {statSync} from 'node:fs';
 import {sha256} from '../../platform/sha256.ts';
 import {controlledFiles} from './files.ts';
@@ -25,7 +26,8 @@ try{
   const allowed=new Set(options.actions),status=options.status;
   const files=controlledFiles(options.userData,false),identity=statSync(files.database);
   if(identity.dev!==options.fileIdentity.dev||identity.ino!==options.fileIdentity.ino)throw new StorageFailure('storage_identity_changed');
-  connection=new DatabaseSync(files.database,{readOnly:true,enableForeignKeyConstraints:true,allowExtension:false,timeout:100});
+  connection=new DatabaseSync(files.database,{readOnly:true,enableForeignKeyConstraints:true,allowExtension:true,timeout:100});
+  loadRetrievalExtension(connection);
   const db=connection;
   db.exec('PRAGMA query_only=ON; PRAGMA foreign_keys=ON; PRAGMA trusted_schema=OFF; PRAGMA temp_store=MEMORY;');
   const prepared=statementCache(db);

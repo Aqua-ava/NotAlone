@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { Tokenizer } from '@huggingface/tokenizers';
 import { InferenceSession, Tensor } from 'onnxruntime-node';
-export const EMBEDDING_REVISION='46fbe35fd4374a00fee7de77dfddaeb6dd6a2c59';
-export const EMBEDDING_MODEL='BAAI/bge-small-zh-v1.5';
+import {EMBEDDING_REVISION} from './embedding-model.ts';
+export {EMBEDDING_REVISION,EMBEDDING_MODEL} from './embedding-model.ts';
 export function embeddingSnapshot(cache=join(homedir(),'.cache/notalone/memory-embedding')):string {
  return join(cache,'models--Qdrant--bge-small-zh-v1.5/snapshots',EMBEDDING_REVISION);
 }

@@ -197,3 +197,5 @@
 - [ADR-188：想法、语气和要求统一为主输入](188-unify-workspace-writing-input.md)——移除独立设置及新请求字段，保留历史快照只读回看。
 
 - [ADR-189：分别手动配置回复与记忆的模型参数](189-editable-model-thinking-and-temperature.md)——开放独立思考档位与温度，复用受控配置重载和唯一 DSH provider。
+
+- [ADR-190：L1 与 L0 统一采用腾讯式本机混合检索](190-tencent-style-local-hybrid-retrieval.md)——共享 BM25、向量与 RRF，正文表示增量维护并纳入删除。

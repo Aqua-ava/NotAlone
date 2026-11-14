@@ -91,6 +91,12 @@ importers:
       yaml:
         specifier: 2.9.1
         version: 2.9.1
+      "@node-rs/jieba":
+        specifier: 2.0.1
+        version: 2.0.1
+      sqlite-vec:
+        specifier: 0.1.7-alpha.2
+        version: 0.1.7-alpha.2
     devDependencies:
       "@types/node":
         specifier: 26.6.4
@@ -4997,6 +5003,9 @@ packages:
       tarball: https://registry.npmjs.org/@smithy/core/-/core-3.36.2.tgz
     engines:
       node: ">=18.0.0"
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
+        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
   "@smithy/credential-provider-imds@4.5.2":
     resolution:
       integrity: sha512-A9uSdn72ozbRUSit0eib0TW7nXuNPlaeM0zcGkJ+nE6tFcSDbnmtwoxbTCFBukVQcszDAyvsd7+rTduPTXpygg==
@@ -6293,8 +6302,8 @@ packages:
     resolution:
       integrity: sha512-mXPwLRtZxrYV3TZx41jMAeKc80wvmyrcXIcs8HctFxK15Ahz2OJQENYhNgEPeCEOdI6Mbx1NxQsqxzwc3DKerw==
       tarball: https://registry.npmjs.org/silk-wasm/-/silk-wasm-3.7.1.tgz
-    engines: {node: ">=16.11.0"}
-
+    engines:
+      node: ">=16.11.0"
   "@pinojs/redact@0.4.0":
     resolution:
       integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==
@@ -6358,6 +6367,218 @@ packages:
       tarball: https://registry.npmjs.org/thread-stream/-/thread-stream-4.2.1.tgz
     engines:
       node: ">=20"
+  "@emnapi/core@1.11.3":
+    resolution:
+      integrity: sha512-zLpS5asjEb7lq8jYLq37N6XKaE41DIexlY1rF/z4/tIl3wo13Sqm28fRyfIsKZD+NZ8mM5RoKkpW/rBcuoSZSg==
+      tarball: https://registry.npmjs.org/@emnapi/core/-/core-1.11.3.tgz
+  "@emnapi/wasi-threads@1.2.3":
+    resolution:
+      integrity: sha512-ELEBe8PsLvvJ6QMr0zLt8ffvOHW/dc1m3CEzNMg7aJUv3bMaoDtw2TXyDAwkYBuroxxuHEwhRTLJSe5sya547g==
+      tarball: https://registry.npmjs.org/@emnapi/wasi-threads/-/wasi-threads-1.2.3.tgz
+  "@napi-rs/wasm-runtime@0.2.12":
+    resolution:
+      integrity: sha512-ZVWUcfwY4E/yPitQJl481FjFo3K22D6qF0DuFH6Y/nbnE11GY5uguDxZMGXPQ8WQ0128MXQD7TnfHyK4oWoIJQ==
+      tarball: https://registry.npmjs.org/@napi-rs/wasm-runtime/-/wasm-runtime-0.2.12.tgz
+  "@node-rs/jieba-android-arm-eabi@2.0.1":
+    resolution:
+      integrity: sha512-tavsIaxybnlA9tRbJ+oc3NW3zhx0d5rNiCGdpIdGWjflwS7HyeUTVAZmAFDlg58Mc6EjTdVKZH+RolBbAJtgcQ==
+      tarball: https://registry.npmjs.org/@node-rs/jieba-android-arm-eabi/-/jieba-android-arm-eabi-2.0.1.tgz
+    engines:
+      node: ">= 10"
+    cpu:
+      - arm
+    os:
+      - android
+  "@node-rs/jieba-android-arm64@2.0.1":
+    resolution:
+      integrity: sha512-AwdyqKvVNuSDnDq3anUfq+nJ5J/kzXjkfbr/1WY6TfaAlTNuuGVskuQv72/wIx/jn7NoXfm/UPuJrWYG16NC6w==
+      tarball: https://registry.npmjs.org/@node-rs/jieba-android-arm64/-/jieba-android-arm64-2.0.1.tgz
+    engines:
+      node: ">= 10"
+    cpu:
+      - arm64
+    os:
+      - android
+  "@node-rs/jieba-darwin-arm64@2.0.1":
+    resolution:
+      integrity: sha512-10+nwGQ6KzXXJlIL/sELA6Fi6m7eJ7xJksBiKuw1kxKUgaJwtVfAG0iqRF+NRQv0Sdq7r3k5ew9K9y0+IYaEcA==
+      tarball: https://registry.npmjs.org/@node-rs/jieba-darwin-arm64/-/jieba-darwin-arm64-2.0.1.tgz
+    engines:
+      node: ">= 10"
+    cpu:
+      - arm64
+    os:
+      - darwin
+  "@node-rs/jieba-darwin-x64@2.0.1":
+    resolution:
+      integrity: sha512-IJ5RK0X/uPQa1XRmTvwKSieya+w1IJeiKLw0EekoBFJKybXQdvo8/uqM/8z2eVJ8vQxW9X6K2vkVGFvYQa9dYA==
+      tarball: https://registry.npmjs.org/@node-rs/jieba-darwin-x64/-/jieba-darwin-x64-2.0.1.tgz
+    engines:
+      node: ">= 10"
+    cpu:
+      - x64
+    os:
+      - darwin
+  "@node-rs/jieba-freebsd-x64@2.0.1":
+    resolution:
+      integrity: sha512-yg7vyhqzP2weJu5DJ3q9q4pb0b4GWWRwcv54zK7MSSA6KNJ/uQv2a4R9/qmptLU/fZv14gWuJBEMFdL7y1Dv2w==
+      tarball: https://registry.npmjs.org/@node-rs/jieba-freebsd-x64/-/jieba-freebsd-x64-2.0.1.tgz
+    engines:
+      node: ">= 10"
+    cpu:
+      - x64
+    os:
+      - freebsd
+  "@node-rs/jieba-linux-arm-gnueabihf@2.0.1":
+    resolution:
+      integrity: sha512-fxQYunS7w2tv8XV9GigkWJPzHnbcw6tjrUdDu5/qU0FdQVEzGuEYG85DjlNf8lZTDGSUKHBVyAQs7bBIvq8yqg==
+      tarball: https://registry.npmjs.org/@node-rs/jieba-linux-arm-gnueabihf/-/jieba-linux-arm-gnueabihf-2.0.1.tgz
+    engines:
+      node: ">= 10"
+    cpu:
+      - arm
+    os:
+      - linux
+  "@node-rs/jieba-linux-arm64-gnu@2.0.1":
+    resolution:
+      integrity: sha512-VnLU630hQIyO/fwyxh2vqZi72mO+hXkVUC3jVLPfOAlppinmsGX9N81tpTPUK3840hbV8WLtbYTWN1XodI38eg==
+      tarball: https://registry.npmjs.org/@node-rs/jieba-linux-arm64-gnu/-/jieba-linux-arm64-gnu-2.0.1.tgz
+    engines:
+      node: ">= 10"
+    cpu:
+      - arm64
+    os:
+      - linux
+    libc:
+      - glibc
+  "@node-rs/jieba-linux-arm64-musl@2.0.1":
+    resolution:
+      integrity: sha512-K4EDyNixSLVdTNYnHwD+7I/ytvzpo7tt+vdCLqwQViiek2PMpL/FFRvA39uU2tk99jXIxvkczdxARG20BRZppg==
+      tarball: https://registry.npmjs.org/@node-rs/jieba-linux-arm64-musl/-/jieba-linux-arm64-musl-2.0.1.tgz
+    engines:
+      node: ">= 10"
+    cpu:
+      - arm64
+    os:
+      - linux
+    libc:
+      - musl
+  "@node-rs/jieba-linux-x64-gnu@2.0.1":
+    resolution:
+      integrity: sha512-sq3J6L2ANTE25I9eVFq/nb57OtXcvUIeUD1CTKJxwgTKIVmcB2LyOZpWf20AjHRUfbMER9Klqg5dgyyO+Six+w==
+      tarball: https://registry.npmjs.org/@node-rs/jieba-linux-x64-gnu/-/jieba-linux-x64-gnu-2.0.1.tgz
+    engines:
+      node: ">= 10"
+    cpu:
+      - x64
+    os:
+      - linux
+    libc:
+      - glibc
+  "@node-rs/jieba-linux-x64-musl@2.0.1":
+    resolution:
+      integrity: sha512-0zfP9Qy68yEXrhBFknfhF6WUJDPU/8eRuyIrkMGdMjfRpxhpSbr2fMfnsqhOQLvhuK4w3iDFvTy4t5d0s6JKMA==
+      tarball: https://registry.npmjs.org/@node-rs/jieba-linux-x64-musl/-/jieba-linux-x64-musl-2.0.1.tgz
+    engines:
+      node: ">= 10"
+    cpu:
+      - x64
+    os:
+      - linux
+    libc:
+      - musl
+  "@node-rs/jieba-wasm32-wasi@2.0.1":
+    resolution:
+      integrity: sha512-7I5rJya5rlQNJIhv8PvPzIVT1/gVc0vFzHmlfRGwCPGDJ3tHVxkSPW34dDx3OgDmbIeadNpmgIyC1RaS9djPJg==
+      tarball: https://registry.npmjs.org/@node-rs/jieba-wasm32-wasi/-/jieba-wasm32-wasi-2.0.1.tgz
+    engines:
+      node: ">=14.0.0"
+    cpu:
+      - wasm32
+  "@node-rs/jieba-win32-arm64-msvc@2.0.1":
+    resolution:
+      integrity: sha512-Aj/2EwYSaPgAbKnSl+vKM/2kOaZNMZWnShiZzbSNyzlLy3eIOyOYVLbYRDno4547KngRxer8uzROhIQIwXwkvw==
+      tarball: https://registry.npmjs.org/@node-rs/jieba-win32-arm64-msvc/-/jieba-win32-arm64-msvc-2.0.1.tgz
+    engines:
+      node: ">= 10"
+    cpu:
+      - arm64
+    os:
+      - win32
+  "@node-rs/jieba-win32-ia32-msvc@2.0.1":
+    resolution:
+      integrity: sha512-tpJt3uuBlGrcOInQLTYvcgamQgfadl5cwExLYU+CX9rXKpXLDO31dIujUDBgNWoiQq3tOiU1/AKbT7ZdNd4lBQ==
+      tarball: https://registry.npmjs.org/@node-rs/jieba-win32-ia32-msvc/-/jieba-win32-ia32-msvc-2.0.1.tgz
+    engines:
+      node: ">= 10"
+    cpu:
+      - ia32
+    os:
+      - win32
+  "@node-rs/jieba-win32-x64-msvc@2.0.1":
+    resolution:
+      integrity: sha512-LDOyo2/2CO8UnpSGLJdgqtH8mOnsABPhNxkfIky7UT9cyLEzOaU44nbA5YzPGpBI3qzMbWcwJYQsjBcgK2VqAg==
+      tarball: https://registry.npmjs.org/@node-rs/jieba-win32-x64-msvc/-/jieba-win32-x64-msvc-2.0.1.tgz
+    engines:
+      node: ">= 10"
+    cpu:
+      - x64
+    os:
+      - win32
+  "@node-rs/jieba@2.0.1":
+    resolution:
+      integrity: sha512-tnfzXOMqzVQF2dSKMhPC9HrHzzWmN6KheL/zYtGenhOpq/bCKHJWVASSggEnHlkmHgXGeIJHR2N/IuPzewz1BQ==
+      tarball: https://registry.npmjs.org/@node-rs/jieba/-/jieba-2.0.1.tgz
+    engines:
+      node: ">= 10"
+  "@tybys/wasm-util@0.10.4":
+    resolution:
+      integrity: sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A==
+      tarball: https://registry.npmjs.org/@tybys/wasm-util/-/wasm-util-0.10.4.tgz
+  sqlite-vec-darwin-arm64@0.1.7-alpha.2:
+    resolution:
+      integrity: sha512-raIATOqFYkeCHhb/t3r7W7Cf2lVYdf4J3ogJ6GFc8PQEgHCPEsi+bYnm2JT84MzLfTlSTIdxr4/NKv+zF7oLPw==
+      tarball: https://registry.npmjs.org/sqlite-vec-darwin-arm64/-/sqlite-vec-darwin-arm64-0.1.7-alpha.2.tgz
+    cpu:
+      - arm64
+    os:
+      - darwin
+  sqlite-vec-darwin-x64@0.1.7-alpha.2:
+    resolution:
+      integrity: sha512-jeZEELsQjjRsVojsvU5iKxOvkaVuE+JYC8Y4Ma8U45aAERrDYmqZoHvgSG7cg1PXL3bMlumFTAmHynf1y4pOzA==
+      tarball: https://registry.npmjs.org/sqlite-vec-darwin-x64/-/sqlite-vec-darwin-x64-0.1.7-alpha.2.tgz
+    cpu:
+      - x64
+    os:
+      - darwin
+  sqlite-vec-linux-arm64@0.1.7-alpha.2:
+    resolution:
+      integrity: sha512-6Spj4Nfi7tG13jsUG+W7jnT0bCTWbyPImu2M8nWp20fNrd1SZ4g3CSlDAK8GBdavX7wRlbBHCZ+BDa++rbDewA==
+      tarball: https://registry.npmjs.org/sqlite-vec-linux-arm64/-/sqlite-vec-linux-arm64-0.1.7-alpha.2.tgz
+    cpu:
+      - arm64
+    os:
+      - linux
+  sqlite-vec-linux-x64@0.1.7-alpha.2:
+    resolution:
+      integrity: sha512-IcgrbHaDccTVhXDf8Orwdc2+hgDLAFORl6OBUhcvlmwswwBP1hqBTSEhovClG4NItwTOBNgpwOoQ7Qp3VDPWLg==
+      tarball: https://registry.npmjs.org/sqlite-vec-linux-x64/-/sqlite-vec-linux-x64-0.1.7-alpha.2.tgz
+    cpu:
+      - x64
+    os:
+      - linux
+  sqlite-vec-windows-x64@0.1.7-alpha.2:
+    resolution:
+      integrity: sha512-TRP6hTjAcwvQ6xpCZvjP00pdlda8J38ArFy1lMYhtQWXiIBmWnhMaMbq4kaeCYwvTTddfidatRS+TJrwIKB/oQ==
+      tarball: https://registry.npmjs.org/sqlite-vec-windows-x64/-/sqlite-vec-windows-x64-0.1.7-alpha.2.tgz
+    cpu:
+      - x64
+    os:
+      - win32
+  sqlite-vec@0.1.7-alpha.2:
+    resolution:
+      integrity: sha512-rNgRCv+4V4Ed3yc33Qr+nNmjhtrMnnHzXfLVPeGb28Dx5mmDL3Ngw/Wk8vhCGjj76+oC6gnkmMG8y73BZWGBwQ==
+      tarball: https://registry.npmjs.org/sqlite-vec/-/sqlite-vec-0.1.7-alpha.2.tgz
 snapshots:
   "@electron-internal/extract-zip@1.0.5": {}
   "@electron/asar@4.3.1":
@@ -6529,7 +6750,8 @@ snapshots:
       csstype: 3.2.3
   "@typescript/typescript-aix-ppc64@7.0.2":
     optional: true
-  "@typescript/typescript-darwin-arm64@7.0.2": {}
+  "@typescript/typescript-darwin-arm64@7.0.2":
+    optional: true
   "@typescript/typescript-darwin-x64@7.0.2":
     optional: true
   "@typescript/typescript-freebsd-arm64@7.0.2":
@@ -10851,7 +11073,6 @@ snapshots:
   yoctocolors@2.2.0: {}
   zod@4.4.3: {}
   zod@4.6.7: {}
-
   silk-wasm@3.7.1: {}
   "@pinojs/redact@0.4.0": {}
   atomic-sleep@1.0.0: {}
@@ -10884,3 +11105,85 @@ snapshots:
   thread-stream@4.2.1:
     dependencies:
       real-require: 1.0.0
+  "@emnapi/core@1.11.3":
+    dependencies:
+      "@emnapi/wasi-threads": 1.2.3
+      tslib: 2.8.1
+    optional: true
+  "@emnapi/wasi-threads@1.2.3":
+    dependencies:
+      tslib: 2.8.1
+    optional: true
+  "@napi-rs/wasm-runtime@0.2.12":
+    dependencies:
+      "@emnapi/core": 1.11.3
+      "@emnapi/runtime": 1.11.3
+      "@tybys/wasm-util": 0.10.4
+    optional: true
+  "@node-rs/jieba-android-arm-eabi@2.0.1":
+    optional: true
+  "@node-rs/jieba-android-arm64@2.0.1":
+    optional: true
+  "@node-rs/jieba-darwin-arm64@2.0.1":
+    optional: true
+  "@node-rs/jieba-darwin-x64@2.0.1":
+    optional: true
+  "@node-rs/jieba-freebsd-x64@2.0.1":
+    optional: true
+  "@node-rs/jieba-linux-arm-gnueabihf@2.0.1":
+    optional: true
+  "@node-rs/jieba-linux-arm64-gnu@2.0.1":
+    optional: true
+  "@node-rs/jieba-linux-arm64-musl@2.0.1":
+    optional: true
+  "@node-rs/jieba-linux-x64-gnu@2.0.1":
+    optional: true
+  "@node-rs/jieba-linux-x64-musl@2.0.1":
+    optional: true
+  "@node-rs/jieba-wasm32-wasi@2.0.1":
+    dependencies:
+      "@napi-rs/wasm-runtime": 0.2.12
+    optional: true
+  "@node-rs/jieba-win32-arm64-msvc@2.0.1":
+    optional: true
+  "@node-rs/jieba-win32-ia32-msvc@2.0.1":
+    optional: true
+  "@node-rs/jieba-win32-x64-msvc@2.0.1":
+    optional: true
+  "@node-rs/jieba@2.0.1":
+    optionalDependencies:
+      "@node-rs/jieba-android-arm-eabi": 2.0.1
+      "@node-rs/jieba-android-arm64": 2.0.1
+      "@node-rs/jieba-darwin-arm64": 2.0.1
+      "@node-rs/jieba-darwin-x64": 2.0.1
+      "@node-rs/jieba-freebsd-x64": 2.0.1
+      "@node-rs/jieba-linux-arm-gnueabihf": 2.0.1
+      "@node-rs/jieba-linux-arm64-gnu": 2.0.1
+      "@node-rs/jieba-linux-arm64-musl": 2.0.1
+      "@node-rs/jieba-linux-x64-gnu": 2.0.1
+      "@node-rs/jieba-linux-x64-musl": 2.0.1
+      "@node-rs/jieba-wasm32-wasi": 2.0.1
+      "@node-rs/jieba-win32-arm64-msvc": 2.0.1
+      "@node-rs/jieba-win32-ia32-msvc": 2.0.1
+      "@node-rs/jieba-win32-x64-msvc": 2.0.1
+  "@tybys/wasm-util@0.10.4":
+    dependencies:
+      tslib: 2.8.1
+    optional: true
+  sqlite-vec-darwin-arm64@0.1.7-alpha.2:
+    optional: true
+  sqlite-vec-darwin-x64@0.1.7-alpha.2:
+    optional: true
+  sqlite-vec-linux-arm64@0.1.7-alpha.2:
+    optional: true
+  sqlite-vec-linux-x64@0.1.7-alpha.2:
+    optional: true
+  sqlite-vec-windows-x64@0.1.7-alpha.2:
+    optional: true
+  sqlite-vec@0.1.7-alpha.2:
+    optionalDependencies:
+      sqlite-vec-darwin-arm64: 0.1.7-alpha.2
+      sqlite-vec-darwin-x64: 0.1.7-alpha.2
+      sqlite-vec-linux-arm64: 0.1.7-alpha.2
+      sqlite-vec-linux-x64: 0.1.7-alpha.2
+      sqlite-vec-windows-x64: 0.1.7-alpha.2

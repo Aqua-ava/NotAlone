@@ -21,7 +21,11 @@ export const IMPLEMENTATION_TABLES = ['contact_avatar', 'contact_avatar_clock', 
   'document_replacement', 'history_cutoff_member', 'history_deletion_fence', 'source_proof', 'history_source_equivalence', 'history_message_quarantine', 'history_quote', 'history_quote_attempt', 'history_restore', 'history_source_exclusion', 'history_source_terminal',
   'message_alias', 'reply_candidate_context', 'reply_candidate_input', 'reply_candidate_input_source', 'reply_candidate_request',
   'reply_execution_input', 'run_content_input', 'runtime_file'] as const;
-export const EXPECTED_TABLES: readonly string[] = [...IMPLEMENTED_DESIGN_TABLES, ...IMPLEMENTATION_TABLES].sort();
+/** 固定版本FTS5/vec0的真实主表与影子表都纳入结构核验。 */
+export const RETRIEVAL_INDEX_TABLES=['retrieval_document','retrieval_text_pending','retrieval_vector_cursor',
+  'retrieval_fts','retrieval_fts_config','retrieval_fts_content','retrieval_fts_data','retrieval_fts_docsize','retrieval_fts_idx',
+  'retrieval_vec','retrieval_vec_chunks','retrieval_vec_info','retrieval_vec_rowids','retrieval_vec_vector_chunks00'] as const;
+export const EXPECTED_TABLES: readonly string[] = [...IMPLEMENTED_DESIGN_TABLES, ...IMPLEMENTATION_TABLES,...RETRIEVAL_INDEX_TABLES].sort();
 export const RETIRED_IMPLEMENTATION_TABLES = ['history_continuity_fence','history_continuity_scope','history_guard_lease','history_source_recertification','history_source_recertification_cancel','history_superseded_cleanup'] as const;
 export const FORBIDDEN_TABLES: readonly string[] = [...DEFERRED_DESIGN_TABLES, ...REPLACED_DESIGN_TABLES, ...RETIRED_IMPLEMENTATION_TABLES].sort();
 export const LOGICAL_CATALOG_TABLES = [...IMPLEMENTED_DESIGN_TABLES, ...DEFERRED_DESIGN_TABLES, ...REPLACED_DESIGN_TABLES].sort();

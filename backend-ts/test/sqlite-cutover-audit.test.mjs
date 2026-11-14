@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { registry } from '../src/storage/sqlite/registry.ts';
-import { DEFERRED_DESIGN_TABLES, EXPECTED_TABLES, IMPLEMENTED_DESIGN_TABLES, LOGICAL_CATALOG_TABLES, REPLACED_DESIGN_TABLES } from '../src/platform/cutover/structure.ts';
+import { DEFERRED_DESIGN_TABLES, EXPECTED_TABLES, IMPLEMENTED_DESIGN_TABLES,IMPLEMENTATION_TABLES,RETRIEVAL_INDEX_TABLES, LOGICAL_CATALOG_TABLES, REPLACED_DESIGN_TABLES } from '../src/platform/cutover/structure.ts';
 
 const directory = new URL('./fixtures/cutover/', import.meta.url);
 const catalog = JSON.parse(await readFile(new URL('logical-catalog.json', directory), 'utf8'));
@@ -20,13 +20,13 @@ test('77 表／778 字段／215 FK 逻辑目录逐项 disposition 与实现集�
   assert.deepEqual([...deferred].sort(), [...DEFERRED_DESIGN_TABLES].sort());
   const replaced = catalog.tables.filter(table => table.disposition === 'replaced').map(table => table.name);
   assert.deepEqual(replaced, [...REPLACED_DESIGN_TABLES]);
-  // 实际结构基线只含实现逻辑表与 25 张实现关联表，不建暂缓／替代表。
+  // 实际结构只含实现逻辑表、关联账本及固定检索索引，不建暂缓／替代表。
   assert.deepEqual(Object.keys(structure.tables), EXPECTED_TABLES);
-  assert.equal(EXPECTED_TABLES.length, 95);
-  assert.equal(IMPLEMENTED_DESIGN_TABLES.length + 28, EXPECTED_TABLES.length);
+  assert.equal(EXPECTED_TABLES.length, 111);
+  assert.equal(IMPLEMENTED_DESIGN_TABLES.length+IMPLEMENTATION_TABLES.length+RETRIEVAL_INDEX_TABLES.length,EXPECTED_TABLES.length);
   assert.match(structure.metadata.sqliteVersion, /^\d+\.\d+\.\d+$/);
   assert.deepEqual(structure.metadata, { schemaVersion: registry.migrations.at(-1).version, migrationVersions: registry.migrations.map(migration => migration.version), userVersion: registry.migrations.at(-1).version,
-    sqliteVersion: structure.metadata.sqliteVersion, tableCount: 95, fieldCount: 946, foreignKeyGroups: 197, triggerCount: 82, checkCount: 307, viewCount: 0 });
+    sqliteVersion: structure.metadata.sqliteVersion, tableCount: 111, fieldCount: 1000, foreignKeyGroups: 203, triggerCount: 85, checkCount: 316, viewCount: 0 });
 });
 
 test('115 个迁移来源名称逐项 disposition 闭合且落点集合可核验', () => {

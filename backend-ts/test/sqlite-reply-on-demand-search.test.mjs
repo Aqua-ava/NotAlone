@@ -52,7 +52,7 @@ test('候选先看最近50条，首次请求不预检索记忆或计算语义向
  const page=f.channel.page;f.channel.page=async(...args)=>{const value=await page(...args);return {...value,records:Array.from({length:55},(_,i)=>({...value.records[0],localId:String(i+1),text:`园艺话题${i}`,sentAt:String(1700000000000+i*1000)}))};};
  await f.contacts.setReading(true);await f.history.synchronize(f.ids[0]);
  await new SqliteMemoryManagement(f.storage,f.owner).decide({requestKey:'no-pre-recall',action:'manual',scope:{scopeKind:'contact',contactId:f.ids[0]},body:memory});
- await turn(f,t,{embed:async texts=>{embeddings++;return texts.map(()=>[1,0]);}});
+ await turn(f,t,{retrieval:{wake(){},async queryVector(){embeddings++;return {strategy:'bm25',indexIncomplete:false};}}});
  const request=f.requests[0],text=JSON.stringify(request);
  assertRetrievalGuide(request);assert.equal(f.requests.length,1,'材料足够时宿主不强制额外检索');
  assert.ok(!text.includes(memory),'首次请求不应自动注入相关L1');
@@ -93,7 +93,7 @@ test('背景关闭时不发布搜索工具，不计算向量或读取自动聊�
  const f=await fixture(t,{content:JSON.stringify({candidates:[{parts:['仅依据本次想法。'],basis:[1]}]})}),contactId=f.ids[0];
  await new SqliteMemoryManagement(f.storage,f.owner).decide({requestKey:'closed-search',action:'manual',scope:{scopeKind:'contact',contactId},body:'不应被带入的长期记忆。'});
  const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner);
- const turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},embed:async()=>assert.fail('背景关闭不应计算向量')});t.after(()=>turns.close());
+ const turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},retrieval:{wake(){},queryVector:async()=>assert.fail('背景关闭不应计算向量')}});t.after(()=>turns.close());
  await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'',confirmedContact:true,workspace:{...workspace,includeRelationshipContext:false}});
  assert.deepEqual(f.requests[0].tools??[],[]);
  assertRetrievalGuide(f.requests[0]);
@@ -122,7 +122,7 @@ test('已读取的记忆在Skill降级后的新运行副本仍真实入模且可
  await writeFile(path,'---\nname: gentle\ndescription: 合成园艺聊天方法\n---\n自然回应当前话题。\n');
  let skill=await f.library.discover('gentle');await f.library.setEnabled(skill.id,skill.headRevision,'enabled');
  await new SqliteMemoryManagement(f.storage,f.owner).decide({requestKey:'fallback-memory',action:'manual',scope:{scopeKind:'contact',contactId:f.ids[0]},body:memory});
- const view=await turn(f,t,{embed:async texts=>{if(!changed){changed=true;await writeFile(path,'已改变的合成Skill内容。');}return texts.map(()=>[1,0]);}});
+ const view=await turn(f,t,{retrieval:{wake(){},async queryVector(){if(!changed){changed=true;await writeFile(path,'已改变的合成Skill内容。');}return {strategy:'bm25',indexIncomplete:false};}}});
  assert.equal(changed,true);assert.equal(f.requests.length,2);
  assert.ok(JSON.stringify(f.requests[1]).includes(memory));
  assert.match(view.candidates[0].basis[0].text,/降级后保留的关系记忆/);

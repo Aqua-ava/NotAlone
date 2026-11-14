@@ -33,7 +33,11 @@ async function prepared(t){
  const discussions=new SqliteDiscussionService(f.storage,owner),reply=new SqliteReplyCandidateService(f.storage,owner),discussion=await discussions.newDiscussion(b),requestKey=randomUUID();
  const confirmationId=await f.storage.execute('identity.manualConfirm',{ownerId:owner,contactId:b,contextToken:requestKey,id:randomUUID(),at:Date.now()});
  const accepted=await reply.begin({contactId:b,discussionId:discussion.id,requestKey,text:'合成回复请求',identity:{kind:'manual',confirmationId}}),contextId=randomUUID();
- const frozen=await f.storage.execute('reply.freezeInput',{...accepted.attempt,contextId,skillRun:{packages:[],eligible:[]},items:[],queryText:'合成后继版本',at:Date.now()});
+ const scope={...accepted.attempt,contextId},query='合成后继版本';
+ const initial=await f.storage.execute('reply.freezeInput',{...scope,skillRun:{packages:[],eligible:[]},items:[],workspace:{action:'suggest',draftText:'',contextText:'',includeRelationshipContext:true,selectedPackageId:null,carriedSelectionId:null},at:Date.now()});
+ const ticket=await f.storage.execute('reply.beginSearch',{...scope,kind:'memory',query});assert.equal(ticket.status,'accepted');
+ const result=await f.storage.execute('reply.finishSearch',{...scope,ticketId:ticket.ticketId,query});assert.equal(result.status,'ok');
+ const frozen=[...initial,...result.items];
  assert.ok(frozen.some(item=>item.identity.id===published.memoryId),'回复冻结必须实际取到本次要验证删除依赖的资料');
  return {...f,a,b,source,self,management,execution,published,head,contextId,accepted,frozen,deletion:new DeletionService(f.storage,new ActiveHolders(),new ManagedFiles(f.root))};
 }

@@ -9,8 +9,10 @@ import { registry } from '../src/storage/sqlite/registry.ts';
 import { SqliteSkillLibrary } from '../src/skills/sqlite/library.ts';
 import { EXPECTED_TABLES, FORBIDDEN_TABLES, DEFERRED_DESIGN_TABLES, REPLACED_DESIGN_TABLES } from '../src/platform/cutover/structure.ts';
 import { dumpSchema, readBaseline } from './fixtures/cutover/build-structure-baseline.mjs';
+import {loadRetrievalExtension} from '../src/retrieval/sqlite/extension.ts';
 
 const baseline = await readBaseline();
+function openDatabase(database,options={}){const db=new DatabaseSync(database,{...options,allowExtension:true});loadRetrievalExtension(db);return db;}
 
 async function fixture(t) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-cutover-structure-')));
@@ -21,7 +23,7 @@ async function fixture(t) {
   return { root, database: path.join(root, 'managed/sqlite/notalone.sqlite'), status };
 }
 
-test('实际 DDL 与 97 表结构基线逐表一致（含 CHECK、触发器 body、FK action、索引 SQL 与视图）', async t => {
+test('实际 DDL 与 111 表结构基线逐表一致（含 CHECK、触发器 body、FK action、索引 SQL 与视图）', async t => {
   const f = await fixture(t);
   const actual = dumpSchema(f.database);
   // sqliteVersion 随运行构建的 SQLite 版本变化，不参与结构等价；其余元数据必须逐项一致。
@@ -30,7 +32,7 @@ test('实际 DDL 与 97 表结构基线逐表一致（含 CHECK、触发器 body
   assert.match(actualSqliteVersion, /^\d+\.\d+\.\d+$/);
   if (baselineSqliteVersion !== undefined) assert.match(baselineSqliteVersion, /^\d+\.\d+\.\d+$/);
   assert.deepEqual(actualStable, baselineStable, '结构元数据与基线不一致');
-  assert.equal(actual.metadata.checkCount, 311);
+  assert.equal(actual.metadata.checkCount, 316);
   assert.equal(actual.metadata.triggerCount, 85);
   assert.deepEqual(actual.metadata.migrationVersions, registry.migrations.map(migration => migration.version));
   assert.equal(actual.metadata.userVersion, baseline.metadata.schemaVersion);
@@ -45,7 +47,7 @@ test('实际 DDL 与 97 表结构基线逐表一致（含 CHECK、触发器 body
   }
   assert.deepEqual(actual.triggers, baseline.triggers, '范围触发器 body 与基线不一致');
   assert.deepEqual(actual.views, baseline.views, '视图与基线不一致');
-  const db = new DatabaseSync(f.database, { readOnly: true });
+  const db = openDatabase(f.database, { readOnly: true });
   try {
     assert.equal(db.prepare('PRAGMA integrity_check').all()[0].integrity_check, 'ok');
     assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
@@ -54,7 +56,7 @@ test('实际 DDL 与 97 表结构基线逐表一致（含 CHECK、触发器 body
 
 test('暂缓与替代表不建空表，77 项逻辑目录分类闭合', async t => {
   const f = await fixture(t);
-  const db = new DatabaseSync(f.database, { readOnly: true });
+  const db = openDatabase(f.database, { readOnly: true });
   try {
     const names = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(row => row.name));
     for (const name of [...FORBIDDEN_TABLES, ...DEFERRED_DESIGN_TABLES, ...REPLACED_DESIGN_TABLES]) assert.equal(names.has(name), false, `${name} 不应创建`);
@@ -63,7 +65,7 @@ test('暂缓与替代表不建空表，77 项逻辑目录分类闭合', async t 
 
 test('迁移账本、结构版本与重开身份稳定', async t => {
   const f = await fixture(t);
-  const db = new DatabaseSync(f.database, { readOnly: true });
+  const db = openDatabase(f.database, { readOnly: true });
   try {
     const ledger = db.prepare('SELECT version FROM schema_migration ORDER BY version').all().map(row => Number(row.version));
     assert.deepEqual(ledger, registry.migrations.map(migration => migration.version));
@@ -86,7 +88,7 @@ test('迁移账本、结构版本与重开身份稳定', async t => {
     const snapshot = await reopened.execute('cutover.snapshot', { ownerId });
     assert.deepEqual(snapshot.missingTables, []);
     assert.deepEqual(snapshot.unexpectedTables, []);
-    assert.equal(snapshot.tables.length, 97);
+    assert.equal(snapshot.tables.length, 111);
     assert.deepEqual(snapshot.media, { message_media: 0, current_files: 0, staged_files: 0, cleanup_pending: 0, attempts_running: 0 });
     assert.deepEqual(snapshot.skills, { packages: 1, revisions: 1, enabled: 1, unknown: 0 });
   } finally { await reopened.close(); }
@@ -94,7 +96,7 @@ test('迁移账本、结构版本与重开身份稳定', async t => {
 
 test('必要事务与约束：外键、CHECK、唯一键、幂等与范围触发器都在SQLite内拒绝非法写入', async t => {
   const f = await fixture(t);
-  const db = new DatabaseSync(f.database, { enableForeignKeyConstraints: true });
+  const db = openDatabase(f.database, { enableForeignKeyConstraints: true });
   try {
     assert.throws(() => db.prepare("INSERT INTO channel_conversation(owner_id,id,account_id,identity_scheme,external_key) VALUES('o','c','missing-account','wx','k')").run(), /FOREIGN KEY/);
     assert.throws(() => db.prepare("INSERT INTO database_instance(slot,database_id,format_family,role,created_at,runtime_id,epoch,schema_digest) VALUES(2,'id','notalone-sqlite-v1','test',1,'r',0,'')").run(), /CHECK/);
