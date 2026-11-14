@@ -41,6 +41,42 @@ test('每种裁决动作的目标字段互斥，矛盾结构不得伪装为合�
   {...empty,action:'update'}])assert.throws(()=>parse(invalid),/adjudication_model_output_invalid/);
 });
 
+test('裁决、关系核验与合并统一接收文字引文和实际图片的观察证据',async()=>{
+ const imageId=randomUUID(),fileId=randomUUID(),evidence=[{message_id:priorMessage,quote:'合成联系人喜欢周三散步'},
+  {message_id:imageId,quote:null,description:'图片中的日程表写着周四散步。'}];
+ const imageItem={...item,candidate:{...item.candidate,source_message_ids:[imageId]},candidate_source_texts:[{message_id:imageId,text:null,occurred_at:null,content_kind:'image',
+  content_ref:{file_id:fileId,sha256:'a'.repeat(64),mime_type:'image/png',media_generation:'1'}}]};
+ const seen=[];
+ const runtime=new DshMemoryAdjudicationRuntime({batchKey:'joint-content',port:{async call(input){
+  seen.push(input);const title=input.schema.title;
+  const args=title==='BatchMemoryAdjudicationOutput'?{decisions:[{...decision,relation:{...relation,evidence}}]}
+   :title==='BatchMemoryRelationVerificationOutput'?{results:[{candidate_index:0,supported:true,evidence,claim_changed:true,condition_changed:false}]}
+   :{supported:true,text:'合成日程已经改为周四散步。',evidence};
+  const blocks=[{type:'tool-call',name:title,arguments:JSON.stringify(args)}];
+  input.validateOutput(blocks);return {blocks};
+ }}});
+ const signal=AbortSignal.timeout(1000),decisions=await runtime.adjudicate([imageItem],signal);
+ assert.deepEqual(decisions[0].relation.evidence,evidence);
+ assert.deepEqual((await runtime.verifyRelations([imageItem],decisions,signal))[0].evidence,evidence);
+ const second={...item.similar[0],memory_id:randomUUID()},unselectedMessage=randomUUID(),unselected={...second,memory_id:randomUUID(),
+  source_message_ids:[unselectedMessage],source_texts:[{message_id:unselectedMessage,text:'未被选中的合成来源',occurred_at:null}]};
+ const mergeItem={...imageItem,similar:[...item.similar,second,unselected]};
+ assert.deepEqual((await runtime.verifyMerge(mergeItem,{...decision,action:'merge',replaced_memory_id:null,
+  merged_memory_ids:[memory,second.memory_id],merged_text:'合成日程已经改为周四散步。'},[imageId,priorMessage],'joint-receipt',signal)).evidence,evidence);
+ for(const request of seen)assert.match(request.system,/quote=null/,'视觉证据保留观察描述，不伪造逐字引文');
+ assert.deepEqual(seen.at(-1).sources.map(source=>source.message_id),[imageId,priorMessage],'合并阶段仅准备候选及选中父记忆的实际来源');
+ assert.equal(seen.at(-1).user.includes(unselectedMessage),false);
+});
+
+test('媒体证据必须有非空观察描述，文字证据不夹带媒体字段',()=>{
+ const parse=evidence=>parseAdjudications([{type:'tool-call',name:'BatchMemoryAdjudicationOutput',arguments:JSON.stringify({decisions:[{...decision,relation:{...relation,evidence:[evidence]}}]})}]);
+ for(const invalid of [{message_id:candidateMessage,quote:null},{message_id:candidateMessage,quote:null,description:''},
+  {message_id:candidateMessage,quote:'合成原文',description:'混合解释'},
+  {message_id:candidateMessage,quote:null,description:'图片观察',file_id:randomUUID()}])
+  assert.throws(()=>parse(invalid),/adjudication_model_output_invalid/);
+ assert.deepEqual(parse({message_id:candidateMessage,quote:'合成原文'})[0].relation.evidence,[{message_id:candidateMessage,quote:'合成原文'}]);
+});
+
 test('DSH结构化裁决：批量、独立关系核验与合并核验各自独立调用并保留usage',async()=>{
  const prompts=[],requests=[];let calls=0;
  const port={async call(input){

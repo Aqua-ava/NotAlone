@@ -1,7 +1,7 @@
 import type {MemoryTimeEligibility} from './temporal.ts';
 export interface MemoryScope {scopeKind:'self'|'contact';contactId:string|null}
 // sentAt 沿用来源消息的 epoch 毫秒；timePrecision 表示来源精度，不是事件发生时间。
-export interface MemorySource {contactId:string;messageId:string;recordId:string;acceptedRevision:string;sentAt:string|null;timePrecision:'second'|'millisecond'|null;quote:string;contentKind?:'image';contentRef?:{file_id:string;sha256:string;mime_type:string;media_generation:string};description?:string}
+export interface MemorySource {contactId:string;messageId:string;recordId:string;acceptedRevision:string;sentAt:string|null;timePrecision:'second'|'millisecond'|null;quote:string;contentKind?:string;contentRef?:import('../../content/evidence.ts').ContentCitationReference;description?:string}
 export interface MergedParentSnapshot {memoryId:string;versionNo:string;headRevision:string}
 export interface MemoryDecisionRequest {
  requestKey:string;action:'accept'|'edit_accept'|'reject'|'correct'|'change'|'restore'|'withdraw'|'protect'|'unprotect'|'manual';

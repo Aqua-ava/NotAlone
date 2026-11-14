@@ -3,6 +3,8 @@ import type {StorageRow,StorageTransaction} from '../../storage/sqlite/contracts
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {ExtractionMessage} from '../extraction/protocol.ts';
 import type {ExtractionInvocation} from '../extraction/flow.ts';
+import {contentEvidence,contentCitation,contentSource,imageContentReference,contentManagedFiles,type ContentRepresentation,type ContentEvidence,type ContentCitation,type ContentSource,type VersionedContentReference} from './evidence.ts';
+import {canonicalJSON} from '../evidence/canonical-json.ts';
 
 export interface FrozenMemoryContent {
  pluginId:string;pluginVersion:string;kind:string;identity:Record<string,unknown>;
@@ -18,9 +20,13 @@ export interface MemoryContentPlugin {
  id:string;version:string;kinds:readonly string[];
  /** 组批前声明原始输入占用；文字与转换后的协议开销仍由正式模型预算复核。 */
  modelInputCost(identity:Record<string,unknown>):{images:number;bytes:number};
+ /** 冻结实际依赖的受管文件身份；删除读取持久清单，不依赖插件继续安装。 */
+ managedFiles?(identity:Record<string,unknown>):readonly string[];
  snapshot(tx:StorageTransaction,scope:MemoryContentScope):Record<string,unknown>|null;
  /** 调度只判定当前内容可用性，不冻结正文、计算摘要或准备模型输入。 */
  availableMany?(tx:StorageTransaction,scope:MemoryContentBatchScope):ReadonlySet<string>;
+ /** 返回冻结内容的真实证据表示；不判断来源是否在语义上支持记忆。 */
+ evidence?(tx:StorageTransaction,scope:MemoryContentScope&{frozen:FrozenMemoryContent}):ContentRepresentation;
  prepare(input:MemoryContentScope&{frozen:FrozenMemoryContent;resources?:MemoryContentResources;signal:AbortSignal;requireCurrent():Promise<void>}):Promise<PreparedMemoryContent>;
 }
 export class MemoryContentRegistry {
@@ -62,6 +68,25 @@ export class MemoryContentRegistry {
  require(frozen:FrozenMemoryContent):MemoryContentPlugin {
   const plugin=this.plugins.get(frozen.pluginId);
   if(!plugin||plugin.version!==frozen.pluginVersion||!plugin.kinds.includes(frozen.kind))throw new StorageFailure('memory_content_plugin_unavailable');return plugin;
+ }
+ managedFiles(frozen:FrozenMemoryContent):readonly string[]{return contentManagedFiles(this.require(frozen).managedFiles?.(frozen.identity)??[]);}
+ evidence(tx:StorageTransaction,scope:MemoryContentScope,frozen:FrozenMemoryContent):ContentRepresentation{return contentEvidence(this,tx,scope,frozen);}
+ citation(tx:StorageTransaction,scope:MemoryContentScope,frozen:FrozenMemoryContent,evidence:ContentEvidence):ContentCitation{return contentCitation(this,tx,scope,frozen,evidence);}
+ source(tx:StorageTransaction,scope:MemoryContentScope,citation:ContentCitation):ContentSource{return contentSource(this,tx,scope,citation);}
+ /** 事务内已复验的冻结来源在发送前后仍通过 requireCurrent 核对，异步读取不持有存储事务。 */
+ async prepareCitation(input:Parameters<MemoryContentPlugin['prepare']>[0]&{citation:ContentCitation}):Promise<PreparedMemoryContent>{
+  const {frozen,citation}=input;
+  if(citation.contentKind!==frozen.kind)throw new StorageFailure('memory_content_source_stale');
+  if(frozen.kind==='text'){
+   if(citation.contentRef!==null)throw new StorageFailure('memory_content_source_stale');
+  }else if(frozen.kind==='image'){
+   const ref=imageContentReference(citation.contentRef),identity=frozen.identity;
+   if(ref.file_id!==identity.fileId||ref.sha256!==identity.sha256||ref.mime_type!==identity.mimeType||ref.media_generation!==identity.mediaGeneration)throw new StorageFailure('memory_content_source_stale');
+  }else{
+   const ref=citation.contentRef as VersionedContentReference;
+   if(!ref||ref.version!==1||ref.ownerId!==input.ownerId||ref.contactId!==input.contactId||ref.messageId!==input.message.id||canonicalJSON(ref.frozen)!==canonicalJSON(frozen))throw new StorageFailure('memory_content_source_stale');
+  }
+  return this.prepare(input);
  }
  async prepare(input:Parameters<MemoryContentPlugin['prepare']>[0]):Promise<PreparedMemoryContent>{
   input.signal.throwIfAborted();await input.requireCurrent();

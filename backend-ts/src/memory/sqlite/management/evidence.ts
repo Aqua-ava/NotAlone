@@ -1,6 +1,7 @@
 import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
 import type {StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {archivedExtractionOutput} from '../outputs.ts';
+import {isContentUnavailable} from '../../content/evidence.ts';
 interface Parent {candidateId?:string;memoryId?:string;versionNo?:bigint}
 function candidateEvents(tx:StorageTransaction,ownerId:string,parent:Parent):StorageRow[]{
  return parent.candidateId?tx.all('SELECT event_id FROM memory_candidate WHERE owner_id=? AND id=?',[ownerId,parent.candidateId]):tx.all(`WITH RECURSIVE versions(memory_id,version_no) AS (
@@ -20,7 +21,7 @@ function candidateEvents(tx:StorageTransaction,ownerId:string,parent:Parent):Sto
 /** 旧整窗引用只作为存档保留；展示和消费均沿原候选事实投影其真实来源范围。 */
 export function projectCitations(tx:StorageTransaction,ownerId:string,parent:Parent,rows:StorageRow[],sourceEligibility:SourceEligibility=assertSourceEligibility):StorageRow[]{
  const candidates=candidateEvents(tx,ownerId,parent);if(!candidates.length)return rows;
- const expected=candidates.flatMap(c=>{try{return archivedExtractionOutput(tx,{ownerId,eventId:String(c.event_id)},sourceEligibility).citations;}catch{return [];}});
+ const expected=candidates.flatMap(c=>{try{return archivedExtractionOutput(tx,{ownerId,eventId:String(c.event_id)},sourceEligibility).citations;}catch(error){if(isContentUnavailable(error))throw error;return [];}});
  const seen=new Set<string>();
  return expected.flatMap(c=>{
   const original=rows.find(r=>r.source_contact_id===c.contactId&&r.message_id===c.messageId&&r.record_id===c.recordId&&r.accepted_revision===c.interpretationRevision

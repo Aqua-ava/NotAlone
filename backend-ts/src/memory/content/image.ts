@@ -2,11 +2,14 @@ import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import {assertSourceEligibility,eligibleSourceReferences} from '../../history/sqlite/source.ts';
 import type {MemoryContentPlugin} from './registry.ts';
 import {MODEL_IMAGE_LIMITS,normalizeModelImageInput} from '../../platform/models/image-normalization.ts';
+import {imageContentReference} from './evidence.ts';
 const imageMime=new Set(['image/png','image/jpeg','image/webp','image/gif']);
 // 记忆只用当前可查看的已保存图片：图片提取不保存缩略图，已保存的一律是标准图或高清图，无需再分级。
 export const imageMemoryContent:MemoryContentPlugin={
  id:'notalone.image',version:'1',kinds:['image'],
  modelInputCost:()=>({images:1,bytes:MODEL_IMAGE_LIMITS.maxImageBytes}),
+ managedFiles:identity=>[String(identity.fileId)],
+ evidence(_tx,{frozen}){const ref=frozen.identity;return {representation:'image',reference:imageContentReference({file_id:ref.fileId,sha256:ref.sha256,mime_type:ref.mimeType,media_generation:ref.mediaGeneration})};},
  snapshot(tx,{ownerId,contactId,message}){
   if(!tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='media_file'"))return null;
   const file=tx.get(`SELECT f.*,h.media_generation,a.record_id FROM media_file f

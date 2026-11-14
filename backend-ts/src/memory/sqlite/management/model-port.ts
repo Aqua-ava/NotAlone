@@ -5,6 +5,7 @@ import type {HostReplyConfiguration} from '../../../host/host-reply-config.ts';
 import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
 import type {ModelTaskClaim} from '../../../platform/models/model-permit-port.ts';
 import type {installModelProvider} from '../../../platform/models/model-provider.ts';
+import type {ModelImageInput,ModelImageManifest} from '../../../platform/models/model-images.ts';
 import {createExtractionModelCaller,type ExtractionPermitEndpoint} from '../../extraction/model.ts';
 import type {SqliteExtractionModelPreparation} from '../model-port.ts';
 
@@ -12,6 +13,7 @@ export type SqliteAdjudicationModelPurpose='adjudication'|'relation_verification
 export interface SqliteAdjudicationModelRequest {
   purpose:SqliteAdjudicationModelPurpose;
   system:string;user:string;
+  images?:readonly ModelImageInput[];
   tool:{name:string;description:string;parameters:Record<string,unknown>};
   validateOutput(blocks:readonly unknown[]):void|Promise<void>;
 }
@@ -21,6 +23,7 @@ export interface SqliteAdjudicationModelInvocation {
   signal:AbortSignal;
   requireCurrent():Promise<void>;
   onReceipt(receipt:ModelLedgerReceipt):Promise<void>;
+  onImageInputs?(images:readonly ModelImageManifest[]):Promise<void>;
 }
 export type SqliteAdjudicationModelPreparation=SqliteExtractionModelPreparation;
 export interface SqliteAdjudicationModelPortOptions {
@@ -45,7 +48,8 @@ function snapshot(request:SqliteAdjudicationModelRequest):SqliteAdjudicationMode
   if(typeof request.tool.description!=='string'||!request.tool.description.trim()||!schema
     ||typeof schema!=='object'||Array.isArray(schema)||schema.title!==request.tool.name||schema.type!=='object'
     ||typeof request.validateOutput!=='function')fail('adjudication_model_schema_invalid');
-  return {...request,tool:structuredClone(request.tool)};
+  if(request.images!==undefined&&!Array.isArray(request.images))fail('adjudication_model_image_invalid');
+  return {...request,tool:structuredClone(request.tool),...(request.images?{images:structuredClone(request.images)}:{})};
 }
 
 export function createSqliteAdjudicationModelPort(options:SqliteAdjudicationModelPortOptions) {
@@ -74,6 +78,8 @@ export function createSqliteAdjudicationModelPort(options:SqliteAdjudicationMode
   async function prepareCurrent(request:SqliteAdjudicationModelRequest,input:Pick<SqliteAdjudicationModelInvocation,'scope'|'signal'|'requireCurrent'>):Promise<SqliteAdjudicationModelPreparation> {
     if(stopped.signal.aborted)fail('adjudication_model_closed');
     input.signal.throwIfAborted();await input.requireCurrent();
+    if(request.images?.length&&!providerConfiguration.connection.models.find(entry=>entry.id===binding.model)?.inputModalities?.includes('image'))
+      fail('adjudication_model_image_unsupported');
     await options.authorizePurpose({purpose:request.purpose,scope:{...input.scope}},input.signal);
     const auth=await providerConfiguration.resolveAuth(providerConfiguration.connection);
     if(!auth?.headers||!Object.entries(auth.headers).some(([name,value])=>
@@ -92,15 +98,16 @@ export function createSqliteAdjudicationModelPort(options:SqliteAdjudicationMode
       return track((async()=>{
         if(stopped.signal.aborted)fail('adjudication_model_closed');
         const frozenRequest=snapshot(request),scope={...input.scope},claim={...input.claim};
-        const {requestId,attemptId,requireCurrent,onReceipt}=input,signal=signalFor(input.signal);
+        const {requestId,attemptId,requireCurrent,onReceipt,onImageInputs}=input,signal=signalFor(input.signal);
         const current=async()=>{
           signal.throwIfAborted();await requireCurrent();
           await options.authorizePurpose({purpose:frozenRequest.purpose,scope:{...scope}},signal);signal.throwIfAborted();
         };
         await prepareCurrent(frozenRequest,{scope,signal,requireCurrent});
-        return caller.call({request_id:requestId,attempt_id:attemptId,...scope,claim,binding,profile,
-          signal,requireCurrent:current,onReceipt,system:frozenRequest.system,
-          messages:[{role:'user',content:[{type:'text',text:frozenRequest.user}]}],tools:[frozenRequest.tool],validateOutput:frozenRequest.validateOutput});
+        const invoke=(images:Parameters<Parameters<typeof options.provider.withImages>[2]>[0])=>caller.call({request_id:requestId,attempt_id:attemptId,...scope,claim,binding,profile,
+          signal,requireCurrent:current,onReceipt,onImageInputs,system:frozenRequest.system,
+          messages:[{role:'user',content:[{type:'text',text:frozenRequest.user},...images]}],tools:[frozenRequest.tool],validateOutput:frozenRequest.validateOutput});
+        return frozenRequest.images?.length?options.provider.withImages(frozenRequest.images,signal,invoke):invoke([]);
       })());
     },
     close():Promise<void>{return closing??=(async()=>{stopped.abort();await Promise.allSettled([...active]);})();},

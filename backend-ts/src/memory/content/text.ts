@@ -6,6 +6,7 @@ export const textMemoryContent:MemoryContentPlugin={
  id:'notalone.text',version:'1',kinds:['text'],
  modelInputCost:()=>({images:0,bytes:0}),
  snapshot(_tx,{message}){return typeof message.text_body==='string'&&message.text_body.trim()?{sha256:sha256(message.text_body)}:null;},
+ evidence(_tx,{message}){return {representation:'text',text:String(message.text_body)};},
  availableMany(tx,{ownerId,contactId,messages}){
   const rows=tx.all(`SELECT id FROM message WHERE owner_id=? AND contact_id=? AND kind='text'
    AND typeof(text_body)='text' AND trim(text_body,?)<>'' AND id IN (SELECT value FROM json_each(?))`,

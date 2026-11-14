@@ -10,6 +10,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {spawn} from 'node:child_process';
 import {validateModelLedgerReceipt} from '../src/platform/models/model-ledger-contract.ts';
+import sharp from 'sharp';
 
 const tools={adjudication:'BatchMemoryAdjudicationOutput',relation_verification:'BatchMemoryRelationVerificationOutput',merge_verification:'MergedMemoryVerificationOutput'};
 const request=(purpose='adjudication')=>({purpose,system:'合成裁决提示',user:'合成候选',
@@ -39,10 +40,20 @@ test('prepare限定真实purpose与schema，所有目的共用相同预算身份
   await assert.rejects(port.prepare(request(),context),{code:'adjudication_model_closed'});
 });
 
+test('未声明视觉能力的模型在准备阶段拒绝图片，不降级成文字描述',async()=>{
+ const configuration=resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-only'});
+ configuration.provider.connection.models=configuration.provider.connection.models.map(model=>({...model,inputModalities:['text']}));
+ const port=createSqliteAdjudicationModelPort({ctx:{},configuration,provider:{dispose:async()=>{}},permit:{},authorizePurpose:async()=>{}});
+ try{
+  await assert.rejects(port.prepare({...request(),images:[{id:'synthetic-image',mimeType:'image/png',dataBase64:'eA=='}]},input()),{code:'adjudication_model_image_unsupported'});
+  await assert.rejects(port.prepare({...request(),images:'synthetic-invalid'},input()),{code:'adjudication_model_image_invalid'});
+ }finally{await port.close();}
+});
+
 test('官方DSH与唯一ModelHost：三种裁决purpose、owner/contact回执、预算、资格与关闭排空', {timeout:25000},async t=>{
   const directory=await mkdtemp(join(tmpdir(),'na-sqlite-adjudication-port-'));
   let host,child,exited,provider,requests=0,failReceipt=false;
-  const reserved=new Map(),receipts=[],claims=[];
+  const reserved=new Map(),receipts=[],claims=[],payloads=[];
   t.after(async()=>{
     if(child&&child.exitCode===null&&child.signalCode===null)child.kill('SIGTERM');
     await exited;await host?.shutdown();
@@ -59,7 +70,7 @@ test('官方DSH与唯一ModelHost：三种裁决purpose、owner/contact回执、
     if(req.url==='/synthetic-accounting'){const input=JSON.parse(raw);try{const result=await accounting[input.op](...input.args);res.end(JSON.stringify(result??null));}catch{res.writeHead(409);res.end('{}');}return;}
     requests++;
     assert.equal(req.headers['x-api-key'],'synthetic-only');
-    const body=JSON.parse(raw);assert.equal(body.tools.length,1);assert.ok(Object.values(tools).includes(body.tools[0].name));
+    const body=JSON.parse(raw);payloads.push(body);assert.equal(body.tools.length,1);assert.ok(Object.values(tools).includes(body.tools[0].name));
     const events=[{type:'message_start',message:{id:'synthetic',model:'deepseek-flash',usage:{input_tokens:3,output_tokens:0}}},
       {type:'content_block_start',index:0,content_block:{type:'text',text:''}},
       {type:'content_block_delta',index:0,delta:{type:'text_delta',text:'合成裁决输出'}},
@@ -86,15 +97,27 @@ test('官方DSH与唯一ModelHost：三种裁决purpose、owner/contact回执、
   const context=()=>({scope,claim,requestId:randomUUID(),attemptId:randomUUID()});
   const call=async(body={})=>await(await fetch(url,{method:'POST',body:JSON.stringify({context:context(),...body})})).json();
   const prepared=await call({prepare:true});assert.equal(prepared.maxOutputTokens,512);assert.equal(prepared.maxInputTokens,126464);assert.equal(requests,0);
+  const png=await sharp({create:{width:12,height:12,channels:3,background:'#aacc88'}}).png().toBuffer();
+  const imageId=randomUUID(),images=[{id:imageId,mimeType:'image/png',dataBase64:png.toString('base64')}];
   for(const purpose of Object.keys(tools)){
-    const success=await call({purpose,context:{...context(),claim:{...claim,step_name:purpose}}});
+    const success=await call({purpose,images,mutateImages:purpose==='relation_verification',context:{...context(),claim:{...claim,step_name:purpose}}});
     assert.equal(success.text,'合成裁决输出');assert.equal(success.receipt.outcome,'succeeded');
     assert.equal(success.receipt.contact_id,null);assert.equal(success.receipt.scope_kind,'owner_memory');
     assert.ok(success.checks>=4);assert.equal(claims.at(-1).step_name,purpose);
+    assert.equal(success.imageInputs?.length,1,'每种裁决用途都必须携带真实图片并形成发送清单');
+    assert.equal(success.imageInputs[0].id,imageId);assert.equal(success.imageInputs[0].originalBytes,png.length);
+    const visual=payloads.at(-1).messages[0].content.find(block=>block.type==='image');
+    assert.equal(visual.source.type,'base64');assert.equal(visual.source.media_type,'image/jpeg');
+    assert.equal(Buffer.from(visual.source.data,'base64').length,success.imageInputs[0].bytes);
   }
   const contact=await call({context:{...context(),scope:{...scope,contact_id:randomUUID()}}});
   assert.equal(contact.receipt.scope_kind,'contact');assert.match(contact.receipt.contact_id,/^[a-f0-9-]{36}$/);
   assert.equal(requests,4);assert.equal(receipts.length,4);assert.equal(reserved.size,0);
+  assert.ok(receipts[0].input_budget.serialized_bytes>contact.receipt.input_budget.serialized_bytes,'图片实际请求计入预算');
+  const malformed=await call({images:[{...images[0],dataBase64:Buffer.from('合成损坏图片').toString('base64')}]});
+  assert.ok(malformed.error);assert.equal(requests,4,'损坏图片在发送前被拒绝');
+  const tooMany=await call({images:Array.from({length:9},()=>({...images[0],id:randomUUID()}))});
+  assert.ok(tooMany.error);assert.equal(requests,4,'图片数量预算在发送前生效');
   assert.equal((await call({purpose:'extraction'})).error,'adjudication_model_purpose_invalid');
   assert.equal((await call({toolName:tools.merge_verification})).error,'adjudication_model_purpose_invalid');
   assert.equal((await call({parameters:{title:'Other',type:'object'}})).error,'adjudication_model_schema_invalid');

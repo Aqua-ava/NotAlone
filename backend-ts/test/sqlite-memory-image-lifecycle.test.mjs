@@ -187,28 +187,44 @@ for(const action of ['clear','replace'])test(`在途图文模型被${action==='c
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('图片记忆无旧资料时可自动采纳，后续图文关系比较保留带类型来源并安静待确认',async t=>{
+function automaticImageAdjudication(t,f){
+ const requests=[],sourceEvidence=source=>typeof source.text==='string'?{message_id:source.message_id,quote:source.text}:
+  {message_id:source.message_id,quote:null,description:'实际附图中可见一个蓝色杯子。'};
+ const port=modelPort(()=>f.extraction.accounting,async request=>{
+  requests.push(request);const payload=JSON.parse(request.user),tool=value=>({blocks:[{type:'tool-call',name:request.tool.name,arguments:JSON.stringify(value)}]});
+  if(request.purpose==='adjudication')return tool({decisions:payload.new_memories.map(candidate=>({candidate_index:candidate.candidate_index,action:'add',replaced_memory_id:null,merged_memory_ids:[],merged_text:null,duplicate_memory_id:null,
+   relation:{kind:'independent',related_memory_ids:candidate.related_memory_ids,explanation:'合成文字候选和既有图片观察互不改变。',evidence:candidate.source_texts.map(sourceEvidence),claim_changed:false,condition_changed:false}}))});
+  if(request.purpose==='relation_verification')return tool({results:payload.map(item=>({candidate_index:item.candidate_index,supported:true,evidence:[...item.sources.candidate,...item.sources.prior.flatMap(parent=>parent.sources)].map(sourceEvidence),claim_changed:false,condition_changed:false}))});
+  throw new Error('合成独立关系不接受其他模型用途');
+ });
+ const adjudication=new SqliteMemoryAdjudication(f.storage,owner,port,f.holders,{registry:createBuiltinMemoryContentRegistry(),resources:{readImage:input=>f.media.readMemoryImage(input)}});
+ t.after(()=>adjudication.close());return {adjudication,requests};
+}
+
+test('图片记忆可自动采纳，后续图文关系比较复用实际图片证据并完成裁决',async t=>{
  const f=await memoryFixture(t,{imageFact:true}),{file}=await saveImage(f),run=await f.extract('automatic-image-memory');
- const adjudication=new SqliteMemoryAdjudication(f.storage,owner,undefined,f.holders);t.after(()=>adjudication.close());
+ const {adjudication,requests}=automaticImageAdjudication(t,f);
  await adjudication.publishRun(run.runId);
  const initial=await f.management.read(f.scope),memory=initial.memories.find(item=>item.current?.body==='聊天图片中有一个蓝色杯子。');
  assert.ok(memory);assert.equal(memory.current.adoptionMode,'auto');assert.equal(memory.current.versionNo,'1');
- await f.sync([record('3',{text:'我长期喜欢合成木雕。'})]);const next=await f.extract('image-relation-pending');
+ await f.sync([record('3',{text:'我长期喜欢合成木雕。'})]);const next=await f.extract('automatic-image-relation');
  await adjudication.publishRun(next.runId);
  const after=await f.management.read(f.scope),retained=after.memories.find(item=>item.id===memory.id);
  assert.equal(retained.current.versionNo,'1');assert.equal(retained.current.body,memory.current.body);
- assert.equal(after.candidates.find(item=>item.body==='联系人长期喜欢合成木雕。').state,'pending');
+ assert.equal(after.memories.find(item=>item.current?.body==='联系人长期喜欢合成木雕。').current.adoptionMode,'auto');
+ assert.equal(after.candidates.filter(item=>item.state==='pending').length,0);
  const trace=await f.extraction.trace(next.tasks.find(task=>task.scopeKind==='contact').taskId);
- assert.ok(trace.events.some(event=>event.kind==='adjudication_result'&&event.payload.reason==='memory_media_relation_pending'));
+ assert.ok(trace.events.some(event=>event.kind==='adjudication_result'&&event.payload.reason===null));
+ for(const purpose of ['adjudication','relation_verification'])assert.ok(requests.some(request=>request.purpose===purpose&&request.images?.some(image=>image.id===file.fileId&&image.dataBase64)));
  const imageSources=[];const visit=value=>{if(!value||typeof value!=='object')return;if(value.content_kind==='image'&&value.content_ref)imageSources.push(value);for(const child of Object.values(value))visit(child);};
  for(const event of trace.events.filter(item=>item.kind==='adjudication_basis'))visit(event.payload);
  assert.ok(imageSources.length);assert.ok(imageSources.every(source=>source.text===null&&source.content_ref.file_id===file.fileId&&source.observation.kind==='model_observation'));
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('图片记忆与文字候选主题不同时不拦截自动裁决，主题相同才保留待确认',async t=>{
- const f=await memoryFixture(t,{imageFact:true,imageTopic:'travel'});await saveImage(f);const run=await f.extract('automatic-image-memory-topic');
- const adjudication=new SqliteMemoryAdjudication(f.storage,owner,undefined,f.holders);t.after(()=>adjudication.close());
+test('图片记忆与文字候选主题不同时仍沿同一图文关系核验完成自动裁决',async t=>{
+ const f=await memoryFixture(t,{imageFact:true,imageTopic:'travel'}),{file}=await saveImage(f);const run=await f.extract('automatic-image-memory-topic');
+ const {adjudication,requests}=automaticImageAdjudication(t,f);
  await adjudication.publishRun(run.runId);
  const initial=await f.management.read(f.scope),imageMemory=initial.memories.find(item=>item.current?.body==='聊天图片中有一个蓝色杯子。');
  assert.ok(imageMemory);
@@ -221,6 +237,7 @@ test('图片记忆与文字候选主题不同时不拦截自动裁决，主题�
  assert.equal(after.candidates.filter(item=>item.state==='pending').length,0);
  const trace=await f.extraction.trace(next.tasks.find(task=>task.scopeKind==='contact').taskId);
  assert.ok(!trace.events.some(event=>event.kind==='adjudication_result'&&event.payload.reason==='memory_media_relation_pending'));
+ for(const purpose of ['adjudication','relation_verification'])assert.ok(requests.some(request=>request.purpose===purpose&&request.images?.some(image=>image.id===file.fileId&&image.dataBase64)));
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
@@ -294,6 +311,7 @@ test('独立文档轮已冻结图片后复验当前原图摘要，摘要变化�
 test('后续文档来源已失去可冻结内容时不留下preparing半轮或发起模型调用',{timeout:20000},async t=>{
  const f=await imageLaterFixture(t,'image-later-missing-snapshot'),schedule=await f.documents.readSchedule(f.scope);
  const observed=await f.storage.execute('fixture.imageLaterMissingSnapshot',{ownerId:owner,now:schedule.scene.dueAt});
- assert.deepEqual(observed.result,{failed:true,errorCode:'memory_content_source_stale'});assert.equal(observed.after,observed.before);
+ assert.deepEqual(observed.result,{failed:true,errorCode:'memory_content_source_stale'},JSON.stringify(observed,(_key,value)=>typeof value==='bigint'?String(value):value));assert.equal(observed.after,observed.before);
+ assert.ok(observed.snapshotCalls>0,'夹具必须实际经过不可冻结内容检查');
  assert.equal(f.documentRequests.length,0);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

@@ -5,9 +5,11 @@ import type {FrozenMemoryContent} from '../content/registry.ts';
 import type {MemoryContentRegistry} from '../content/registry.ts';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {MODEL_IMAGE_LIMITS} from '../../platform/models/image-normalization.ts';
+import {storeContentIdentity,storedContentResources} from '../content/evidence.ts';
 const builtinRegistry=createBuiltinMemoryContentRegistry();
 const scopes=new AsyncLocalStorage<MemoryContentRegistry>();
 const registry=()=>scopes.getStore()??builtinRegistry;
+export const getMemoryContentRegistry=registry;
 export const installedMemoryContentKinds=()=>registry().kinds;
 /** Worker 与宿主由同一可信插件清单装配；嵌套的基础 registry 不覆盖外层装配。 */
 export function withMemoryContentRegistry<T>(value:MemoryContentRegistry,work:()=>T):T{return scopes.getStore()?work():scopes.run(value,work);}
@@ -21,12 +23,23 @@ export function currentContentAvailability(tx:StorageTransaction,ownerId:string,
 }
 export function freezeContent(tx:StorageTransaction,ownerId:string,runId:string,inputNo:number,frozen:FrozenMemoryContent):void {
  if(!hasMemoryContent(tx))return;
- tx.run('INSERT INTO run_content_input VALUES(?,?,?,?,?,?,?)',[ownerId,runId,inputNo,frozen.pluginId,frozen.pluginVersion,frozen.kind,JSON.stringify(frozen.identity)]);
+ const identity=storeContentIdentity(frozen.identity,registry().managedFiles(frozen));
+ tx.run('INSERT INTO run_content_input VALUES(?,?,?,?,?,?,?)',[ownerId,runId,inputNo,frozen.pluginId,frozen.pluginVersion,frozen.kind,JSON.stringify(identity)]);
 }
 export function readFrozenContent(tx:StorageTransaction,ownerId:string,input:StorageRow):FrozenMemoryContent|null {
  if(!hasMemoryContent(tx))return null;
  const row=tx.get('SELECT * FROM run_content_input WHERE owner_id=? AND run_id=? AND input_no=?',[ownerId,input.run_id,input.input_no]);
- return row?{pluginId:String(row.plugin_id),pluginVersion:String(row.plugin_version),kind:String(row.content_kind),identity:JSON.parse(String(row.identity_json))}:null;
+ return row?{pluginId:String(row.plugin_id),pluginVersion:String(row.plugin_version),kind:String(row.content_kind),identity:storedContentResources(String(row.content_kind),JSON.parse(String(row.identity_json))).identity}:null;
+}
+/** 媒体清除只定向扫描该消息的冻结输入；插件卸载或升级不影响既有删除依赖。 */
+export function contentInputsUsingFiles(tx:StorageTransaction,ownerId:string,contactId:string,messageId:string,fileIds:readonly string[]):StorageRow[] {
+ const files=new Set(fileIds);
+ if(!files.size||!hasMemoryContent(tx))return [];
+ return tx.all(`SELECT i.*,content.content_kind,content.identity_json FROM capture_record source INDEXED BY capture_record_message
+  CROSS JOIN run_input i INDEXED BY run_inputs_source ON i.owner_id=source.owner_id AND i.source_contact_id=source.contact_id AND i.record_id=source.id
+  JOIN run_content_input content ON content.owner_id=i.owner_id AND content.run_id=i.run_id AND content.input_no=i.input_no
+  WHERE source.owner_id=? AND source.contact_id=? AND source.message_id=?`,[ownerId,contactId,messageId])
+  .filter(row=>storedContentResources(String(row.content_kind),JSON.parse(String(row.identity_json))).managedFiles.some(file=>files.has(file)));
 }
 export function assertFrozenContent(tx:StorageTransaction,ownerId:string,input:StorageRow,message:StorageRow):void {
  const frozen=readFrozenContent(tx,ownerId,input);

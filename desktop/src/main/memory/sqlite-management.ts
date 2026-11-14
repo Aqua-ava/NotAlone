@@ -23,15 +23,32 @@ function array(value:unknown):unknown[]{if(!Array.isArray(value)||value.length>1
 function member<T extends string>(value:unknown,values:readonly T[]):T{if(!values.includes(value as T))throw invalid();return value as T;}
 function scope(raw:unknown):MemoryScope{const s=object(raw);exact(s,['scopeKind','contactId']);const scopeKind=member(s.scopeKind,['self','contact']);if(scopeKind==='self'&&s.contactId!==null)throw invalid();return {scopeKind,contactId:scopeKind==='self'?null:uuid(s.contactId)};}
 const sameScope=(a:MemoryScope,b:MemoryScope)=>a.scopeKind===b.scopeKind&&a.contactId===b.contactId;
+function imageReference(raw:unknown){
+ const ref=object(raw),sha256=text(ref.sha256,64),mimeType=member(ref.mime_type,['image/png','image/jpeg','image/webp','image/gif']);
+ if(!/^[a-f0-9]{64}$/.test(sha256))throw invalid();
+ return {file_id:uuid(ref.file_id),sha256,mime_type:mimeType,media_generation:decimal(ref.media_generation)};
+}
 function sources(raw:unknown):MemorySource[]{return array(raw).map(value=>{
  const s=object(value),sentAt=s.sentAt==null?null:decimal(s.sentAt),timePrecision=s.timePrecision==null?null:member(s.timePrecision,['second','millisecond']);
  if((sentAt===null)!==(timePrecision===null)||sentAt!==null&&BigInt(sentAt)>253402300799999n)throw invalid();
  const base={contactId:uuid(s.contactId),messageId:uuid(s.messageId),recordId:uuid(s.recordId),acceptedRevision:decimal(s.acceptedRevision),sentAt,timePrecision,quote:text(s.quote)};
  if(s.contentKind===undefined)return base;
+ const contentKind=text(s.contentKind,96),reference=object(s.contentRef);
+ if(reference.version===1){
+  const frozen=object(reference.frozen),kind=text(frozen.kind,96),pluginId=text(frozen.pluginId,96),pluginVersion=text(frozen.pluginVersion,96);
+  if(!/^[a-z][a-z0-9.-]*$/.test(contentKind)||kind!==contentKind||!/^[a-z][a-z0-9.-]*$/.test(pluginId)||!pluginVersion
+   ||uuid(reference.contactId)!==base.contactId||uuid(reference.messageId)!==base.messageId||JSON.stringify(reference).length>64000)throw invalid();
+  uuid(reference.ownerId);object(frozen.identity);
+  const representation=member(reference.representation,['text','image']);
+  if(representation==='text'){
+   const start=reference.start,end=reference.end;
+   if(!base.quote||!Number.isSafeInteger(start)||Number(start)<0||!Number.isSafeInteger(end)||Number(end)-Number(start)!==[...base.quote].length)throw invalid();
+  }else if(base.quote!=='')throw invalid();
+  const contentRef={...structuredClone(reference),...(representation==='image'?{reference:imageReference(reference.reference)}:{})};
+  return {...base,contentKind,contentRef:contentRef as MemorySource['contentRef'],...(representation==='image'?{description:text(s.description??'',4000)}:{})};
+ }
  if(s.contentKind!=='image'||s.quote!=='')throw invalid();
- const ref=object(s.contentRef),sha256=text(ref.sha256,64),mimeType=member(ref.mime_type,['image/png','image/jpeg','image/webp','image/gif']);
- if(!/^[a-f0-9]{64}$/.test(sha256))throw invalid();
- return {...base,contentKind:'image' as const,contentRef:{file_id:uuid(ref.file_id),sha256,mime_type:mimeType,media_generation:decimal(ref.media_generation)},description:text(s.description??'',4000)};
+ return {...base,contentKind:'image' as const,contentRef:imageReference(s.contentRef),description:text(s.description??'',4000)};
 });}
 function contributingContacts(raw:unknown):string[]{const ids=array(raw).map(uuid);if(new Set(ids).size!==ids.length)throw invalid();return ids;}
 function mergeParents(raw:unknown):MemoryMergeParent[]{const values=array(raw);if(values.length>7)throw invalid();const parents=values.map(raw=>{const p=object(raw);exact(p,['memoryId','versionNo','headRevision']);const versionNo=decimal(p.versionNo);if(versionNo==='0')throw invalid();return {memoryId:uuid(p.memoryId),versionNo,headRevision:decimal(p.headRevision)};});if(new Set(parents.map(p=>p.memoryId)).size!==parents.length)throw invalid();return parents.sort((a,b)=>a.memoryId.localeCompare(b.memoryId));}
