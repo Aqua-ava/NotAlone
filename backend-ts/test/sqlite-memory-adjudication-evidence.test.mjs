@@ -62,6 +62,30 @@ test('add 声称补充关系时仍待确认',async t=>{
  assert.equal(latest.payload.reason,'memory_relation_inconsistent');
 });
 
+test('技术性关系不一致在同轮依据变化后重新自动核验，依据未变时不重复请求',async t=>{
+ const f=await adjudicationFixture(t);await seed(f);
+ f.setRespond(adjudicationSupplier({action:'add',kind:'supplement'}));
+ const runId=await f.extract(['我新增一项独立的合成长期安排。']);
+ await f.adjudication.publishRun(runId,f.contactId);
+ const pending=(await f.read()).candidates[0],version=(await f.extraction.read(runId)).controlVersion;
+ assert.equal(pending.pendingReason,'memory_relation_inconsistent');assert.equal(f.calls.length,2);
+
+ f.setRespond(adjudicationSupplier());
+ await f.adjudication.publishRun(runId,f.contactId);
+ assert.equal(f.calls.length,2,'依据没有变化时复用已完成裁决，不重发模型请求');
+ await f.management.decide({requestKey:'synthetic-new-comparison-memory',action:'manual',scope:f.scope,body:'联系人长期保留另一项合成背景。'});
+ assert.equal((await f.extraction.read(runId)).controlVersion,version,'资料变化不伪装成用户暂停或继续');
+ await f.adjudication.publishRun(runId,f.contactId);
+
+ assert.equal(f.calls.length,4,'新比较池须重新经过裁决与关系核验');
+ const view=await f.read();assert.equal(view.candidates.length,0);
+ const saved=view.memories.find(memory=>memory.current?.body==='联系人新增一项独立的合成长期安排。');
+ assert.equal(saved.current.adoptionMode,'auto','技术性复核通过后由系统自动采纳');
+ const original=await f.management.read(f.scope,{candidateId:pending.id});
+ assert.equal(original.candidates[0].state,'adopted');
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
 test('合并核验仅引用新候选，缺任一选定父的来源时不得合并',async t=>{
  const f=await adjudicationFixture(t);await seed(f,2);const normal=adjudicationSupplier({action:'merge'}),before=(await f.read()).memories;
  f.setRespond(async(request,input)=>{const result=await normal(request,input);if(request.purpose!=='merge_verification')return result;const payload=JSON.parse(request.user).candidate_and_parents;return modify(result,request.tool.name,value=>{value.evidence=payload.sources.candidate.map(s=>({message_id:s.message_id,quote:s.text}));});});

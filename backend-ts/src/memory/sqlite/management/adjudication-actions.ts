@@ -264,7 +264,9 @@ export const memoryAdjudicationActions:StorageAction[]=[
   const i=raw as {ownerId:string;candidateId:string};id(i.ownerId);id(i.candidateId);
   const prior=tx.all(`SELECT s.state,e.payload FROM step_input i JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id JOIN execution_event e ON e.owner_id=a.owner_id AND e.step_attempt_id=a.id AND e.kind='adjudication_basis' WHERE i.owner_id=? AND i.candidate_id=? AND s.kind='adjudication' ORDER BY s.step_no DESC`,[i.ownerId,i.candidateId]);
   if(prior.some(p=>p.state==='running'||p.state==='unknown'))return null;
-  try{const basis=freeze(tx,i.ownerId,i.candidateId);if(prior.length&&BigInt(basis.intentRevision)<=BigInt((JSON.parse(String(prior[0]!.payload)) as Basis).intentRevision))return null;
+  try{const basis=freeze(tx,i.ownerId,i.candidateId);
+  // 未完成或失败尝试仍须显式推进控制修订；已完成裁决则按实际依据决定是否需要重新核验。
+  if(prior.length&&prior[0]!.state!=='succeeded'&&BigInt(basis.intentRevision)<=BigInt((JSON.parse(String(prior[0]!.payload)) as Basis).intentRevision))return null;
   // 已有完成裁决且依据（候选、同范围记忆版本、对比池）完全未变：控制修订推进（继续／放弃重试）不重复发送模型请求。
   if(prior.length&&decidedWithSameBasis(tx,i.ownerId,i.candidateId,basis))return null;
   // 同一任务的目标资料已被未知裁决调用占位：继续领取只会在建调用前撞唯一索引，改为明确停止。

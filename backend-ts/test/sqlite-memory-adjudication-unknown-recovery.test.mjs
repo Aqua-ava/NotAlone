@@ -30,6 +30,32 @@ test('一次未知回执后同轮其余候选停止领取，不再制造无调�
  assert.ok(view.actions.includes('abandon_unknown'),'裁决类未知应提供放弃动作');
 });
 
+test('比较池变化不解除原裁决的未知回执保护',async t=>{
+ const {f,runId}=await unknownRun(t),version=(await f.extraction.read(runId)).controlVersion;
+ await f.management.decide({requestKey:'synthetic-pool-change-while-unknown',action:'manual',scope:f.scope,body:'联系人另有一条合成长期背景。'});
+ f.setRespond(adjudicationSupplier());await f.adjudication.publishRun(runId,f.contactId);
+ assert.equal(f.calls.length,1,'旧调用未知时即使依据变化也不能自动重发');
+ const current=await f.extraction.read(runId);assert.equal(current.controlVersion,version);assert.equal(current.statusReason,'model_receipt_unknown');
+ assert.equal((await f.read()).candidates.length,2);
+ assert.deepEqual(unresolved(await f.trace()),['unknown']);
+});
+
+test('已知失败即使比较池变化，同一控制修订也不盲目重发',async t=>{
+ const f=await adjudicationFixture(t);await f.extract(['我长期保留一项合成事项。'],{publish:true});f.calls.length=0;
+ const runId=await f.extract(['我新增另一项合成长期安排。']),prepare=f.port.prepare;
+ f.port.prepare=async()=>{throw Object.assign(new Error('合成配置暂不可用'),{code:'extraction_model_configuration_invalid'});};
+ await f.adjudication.publishRun(runId,f.contactId);
+ const version=(await f.extraction.read(runId)).controlVersion;
+ assert.equal((await f.read()).candidates.length,1);
+ f.port.prepare=prepare;
+ await f.management.decide({requestKey:'synthetic-pool-change-after-failure',action:'manual',scope:f.scope,body:'联系人新增一项合成背景。'});
+ await f.adjudication.publishRun(runId,f.contactId);
+ assert.equal(f.calls.length,0,'真实失败仍需受控恢复，不能借资料变化自动重新调用');
+ assert.equal((await f.extraction.read(runId)).controlVersion,version);
+ assert.equal((await f.read()).candidates.length,1);
+ assert.deepEqual(unresolved(await f.trace()),['failed']);
+});
+
 test('放弃未知裁决调用：账本成本保持未知、占位释放，并重新裁决全部候选',async t=>{
  const {f,runId}=await unknownRun(t);
  const before=await f.extraction.read(runId),receiptBefore=(await f.trace()).calls[0].receipt;
