@@ -160,18 +160,53 @@ function makeStep(tx:StorageTransaction,ownerId:string,basis:Basis,kind:SqliteAd
  record(tx,ownerId,attemptId,'adjudication_basis',basis);
  return {attemptId,stepId,basis,claim:{task_id:basis.taskId,step_id:stepId,step_name:kind,worker_id:lease.runtimeId,lease_generation:Number(task.resume_no)}};
 }
-function current(tx:StorageTransaction,ownerId:string,attemptId:string,lease:StorageLease) {
- const a=tx.get("SELECT a.*,s.kind,s.accepted_memory_revision,t.control_revision,t.run_id,t.id AS task_id FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE a.owner_id=? AND a.id=? AND a.state='running' AND s.state='running' AND t.state IN ('succeeded','awaiting_decision')",[ownerId,attemptId]);
- if(!a||a.runtime_token!==lease.runtimeId||BigInt(Date.now())>(a.lease_expires_at as bigint)||a.accepted_control_revision!==a.control_revision)return fail('memory_adjudication_stale');
+function current(tx:StorageTransaction,ownerId:string,attemptId:string,lease:StorageLease,validatedBasis?:Basis) {
+ const a=tx.get("SELECT a.*,s.kind,s.accepted_memory_revision,t.control_revision,t.resume_no AS current_resume_no,t.run_id,t.id AS task_id FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE a.owner_id=? AND a.id=? AND a.state='running' AND s.state='running' AND t.state IN ('succeeded','awaiting_decision')",[ownerId,attemptId]);
+ if(!a||a.runtime_token!==lease.runtimeId||BigInt(Date.now())>(a.lease_expires_at as bigint)||a.accepted_control_revision!==a.control_revision||a.resume_no!==a.current_resume_no)return fail('memory_adjudication_stale');
  const event=tx.get("SELECT payload FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND kind='adjudication_basis'",[ownerId,attemptId]);if(!event)fail('memory_adjudication_stale');const basis=JSON.parse(String(event!.payload)) as Basis;
  if(BigInt(basis.memoryRevision)!==a.accepted_memory_revision||revision(tx,ownerId,basis.scopeKind,basis.contactId)!==a.accepted_memory_revision)fail('memory_head_conflict');
  assertTaskContributions(tx,ownerId,basis.runId,basis.taskId);
- const fresh={...freeze(tx,ownerId,basis.candidateId),pageIndex:basis.pageIndex};if(digest(fresh)!==digest(basis))fail('memory_adjudication_stale');
+ // 同步组校验只重建一次完整冻结池；其他成员仍须逐项通过租约、控制及自身消息修订检查。
+ const fresh={...(validatedBasis??freeze(tx,ownerId,basis.candidateId)),pageIndex:basis.pageIndex};if(digest(fresh)!==digest(basis))fail('memory_adjudication_stale');
  for(const s of tx.all("SELECT * FROM step_input WHERE owner_id=? AND step_id=? AND kind='message'",[ownerId,a.step_id])){
   adjudicationSourceEligibility(tx,{owner_id:ownerId,contact_id:String(s.source_contact_id),message_id:String(s.message_id),record_id:String(s.record_id)});
   if(!tx.get('SELECT 1 FROM message WHERE owner_id=? AND contact_id=? AND id=? AND interpretation_revision=?',[ownerId,s.source_contact_id,s.message_id,s.accepted_revision]))fail('memory_source_stale');
  }
  return {attempt:a,basis};
+}
+/** 已结算成功输出是唯一续期进展；不扩大租期、不复活过期或未知的执行组。 */
+function renew(tx:StorageTransaction,input:unknown,lease:StorageLease) {
+ const i=input as {ownerId:string;attemptIds:string[];progressCallId:string},ownerId=id(i.ownerId),progressCallId=id(i.progressCallId);
+ if(!Array.isArray(i.attemptIds)||!i.attemptIds.length||i.attemptIds.length>10000||new Set(i.attemptIds).size!==i.attemptIds.length)fail('memory_adjudication_progress_invalid');
+ const attemptIds=i.attemptIds.map(id).sort();
+ const progress=tx.get(`SELECT c.*,o.commit_forbidden_at FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
+  WHERE c.owner_id=? AND c.id=?`,[ownerId,progressCallId]);
+ if(!progress||progress.state!=='succeeded'||progress.settlement_state!=='settled'||progress.commit_forbidden_at!==null
+  ||!attemptIds.includes(String(progress.step_attempt_id)))return fail('memory_adjudication_progress_invalid');
+ const anchor=current(tx,ownerId,String(progress.step_attempt_id),lease),members=[anchor];
+ for(const attemptId of attemptIds)if(attemptId!==progress.step_attempt_id)members.push(current(tx,ownerId,attemptId,lease,anchor.basis));
+ const active=tx.all(`SELECT DISTINCT a.id FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
+  JOIN step_input ci ON ci.owner_id=s.owner_id AND ci.step_id=s.id AND ci.kind='candidate'
+  WHERE a.owner_id=? AND s.task_id=? AND ci.candidate_id=? AND a.state='running' AND s.state='running' ORDER BY a.id`,[ownerId,anchor.basis.taskId,anchor.basis.candidateId]);
+ if(JSON.stringify(active.map(row=>String(row.id)))!==JSON.stringify(attemptIds))fail('memory_adjudication_progress_invalid');
+ for(const member of members){
+  if(tx.get(`SELECT 1 FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
+   WHERE c.owner_id=? AND c.step_attempt_id=? AND (o.commit_forbidden_at IS NOT NULL OR o.state='sealed') LIMIT 1`,[ownerId,member.attempt.id]))fail('memory_adjudication_stale');
+  if(tx.get("SELECT 1 FROM model_call WHERE owner_id=? AND step_attempt_id=? AND (state<>'succeeded' OR settlement_state<>'settled') LIMIT 1",[ownerId,member.attempt.id]))fail('memory_adjudication_receipt_unknown');
+  if(!tx.get(`SELECT 1 FROM execution_event e JOIN model_call c ON c.owner_id=e.owner_id AND c.id=e.originated_call_id
+   WHERE e.owner_id=? AND e.step_attempt_id=? AND e.kind='adjudication_output' AND c.step_attempt_id=e.step_attempt_id
+    AND c.state='succeeded' AND c.settlement_state='settled'`,[ownerId,member.attempt.id]))fail('memory_adjudication_output_unbound');
+ }
+ if(!tx.get("SELECT 1 FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND originated_call_id=? AND kind='adjudication_output'",[ownerId,progress.step_attempt_id,progressCallId]))fail('memory_adjudication_output_unbound');
+ const prior=tx.get("SELECT payload FROM execution_event WHERE owner_id=? AND originated_call_id=? AND kind='adjudication_lease_progress'",[ownerId,progressCallId]);
+ if(prior){if(JSON.stringify(JSON.parse(String(prior.payload)).attemptIds)!==JSON.stringify(attemptIds))fail('memory_adjudication_progress_invalid');return {renewed:false};}
+ const now=Date.now(),expiresAt=now+300_000;
+ if(members.some(member=>(member.attempt.lease_expires_at as bigint)<BigInt(now)))fail('memory_adjudication_stale');
+ for(const member of members)tx.run("UPDATE step_attempt SET lease_expires_at=max(lease_expires_at,?) WHERE owner_id=? AND id=? AND state='running'",[expiresAt,ownerId,member.attempt.id]);
+ // 续期只记录控制元数据，不复制正文、冻结输入或来源索引。
+ const eventNo=tx.get('SELECT coalesce(max(event_no),0)+1 AS n FROM execution_event WHERE owner_id=? AND step_attempt_id=?',[ownerId,progress.step_attempt_id])!.n;
+ tx.run("INSERT INTO execution_event(owner_id,id,step_attempt_id,event_no,kind,originated_call_id,payload,created_at) VALUES(?,?,?,?,'adjudication_lease_progress',?,?,?)",[ownerId,randomUUID(),progress.step_attempt_id,eventNo,progressCallId,JSON.stringify({attemptIds,progressCallId,leaseExpiresAt:expiresAt}),now]);
+ return {renewed:true,leaseExpiresAt:expiresAt};
 }
 function blocks(tx:StorageTransaction,ownerId:string,attemptId:string):readonly unknown[] {
  const event=tx.get(`SELECT e.payload FROM execution_event e JOIN model_call c ON c.owner_id=e.owner_id AND c.id=coalesce(e.originated_call_id,e.reused_call_id) JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE e.owner_id=? AND e.step_attempt_id=? AND e.kind='adjudication_output' AND c.state='succeeded' AND o.commit_forbidden_at IS NULL`,[ownerId,attemptId]);
@@ -264,12 +299,25 @@ function finish(tx:StorageTransaction,raw:unknown,lease:StorageLease) {
 }
 export const memoryAdjudicationActions:StorageAction[]=[
  act('claim','write',(tx,raw,lease)=>{
-  const i=raw as {ownerId:string;candidateId:string};id(i.ownerId);id(i.candidateId);
+  const i=raw as {ownerId:string;candidateId:string;contactId?:string;retryKnownFailures?:boolean};id(i.ownerId);id(i.candidateId);
+  if(i.retryKnownFailures===true&&!i.contactId)fail('memory_adjudication_scope_invalid');
+  if(i.contactId!==undefined){id(i.contactId);const candidate=tx.get('SELECT scope_kind,contact_id FROM memory_candidate WHERE owner_id=? AND id=?',[i.ownerId,i.candidateId]);if(!candidate||candidate.scope_kind!=='contact'||candidate.contact_id!==i.contactId)fail('memory_adjudication_scope_invalid');}
   const prior=tx.all(`SELECT s.state,e.payload FROM step_input i JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id JOIN execution_event e ON e.owner_id=a.owner_id AND e.step_attempt_id=a.id AND e.kind='adjudication_basis' WHERE i.owner_id=? AND i.candidate_id=? AND s.kind='adjudication' ORDER BY s.step_no DESC`,[i.ownerId,i.candidateId]);
   if(prior.some(p=>p.state==='running'||p.state==='unknown'))return null;
   try{const basis=freeze(tx,i.ownerId,i.candidateId);
-  // 未完成或失败尝试仍须显式推进控制修订；已完成裁决则按实际依据决定是否需要重新核验。
-  if(prior.length&&prior[0]!.state!=='succeeded'&&BigInt(basis.intentRevision)<=BigInt((JSON.parse(String(prior[0]!.payload)) as Basis).intentRevision))return null;
+  // 仅显式联系人收尾可重试已知失败；历史尝试和回执全部结清后才允许建立新调用，不改写旧账本或整轮控制修订。
+  const retryKnownFailure=i.retryKnownFailures===true&&prior[0]?.state==='failed'&&!tx.get(`SELECT 1 FROM step_input i
+   JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id
+   JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id
+   LEFT JOIN model_call c ON c.owner_id=a.owner_id AND c.step_attempt_id=a.id
+   LEFT JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
+   WHERE i.owner_id=? AND i.candidate_id=? AND s.kind IN ('adjudication','relation_verification','merge_verification')
+    AND (s.task_id<>? OR s.state NOT IN ('succeeded','failed') OR a.state NOT IN ('succeeded','failed')
+     OR c.id IS NOT NULL AND (c.state NOT IN ('succeeded','failed') OR c.settlement_state<>'settled' OR o.commit_forbidden_at IS NOT NULL OR o.state NOT IN ('resolved','applied','failed')))
+   LIMIT 1`,[i.ownerId,i.candidateId,basis.taskId]);
+  if(i.retryKnownFailures===true&&prior[0]?.state==='failed'&&!retryKnownFailure)return null;
+  // 默认未完成或失败尝试仍须推进控制修订；显式联系人可恢复已知失败，已完成裁决按实际依据决定是否重新核验。
+  if(prior.length&&prior[0]!.state!=='succeeded'&&!retryKnownFailure&&BigInt(basis.intentRevision)<=BigInt((JSON.parse(String(prior[0]!.payload)) as Basis).intentRevision))return null;
   // 已有完成裁决且依据（候选、同范围记忆版本、对比池）完全未变：控制修订推进（继续／放弃重试）不重复发送模型请求。
   if(prior.length&&decidedWithSameBasis(tx,i.ownerId,i.candidateId,basis))return null;
   // 同一任务的目标资料已被未知裁决调用占位：继续领取只会在建调用前撞唯一索引，改为明确停止。
@@ -279,6 +327,7 @@ export const memoryAdjudicationActions:StorageAction[]=[
  act('stage','write',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string;purpose:SqliteAdjudicationModelPurpose;pageIndex:number};if(!purposes.includes(i.purpose)||!Number.isSafeInteger(i.pageIndex)||i.pageIndex<0)fail('memory_adjudication_purpose_invalid');const {basis}=current(tx,i.ownerId,i.attemptId,lease);if(i.pageIndex>=Math.max(1,Math.ceil(basis.item.similar.length/8)))fail('memory_adjudication_purpose_invalid');return makeStep(tx,i.ownerId,{...basis,pageIndex:i.pageIndex},i.purpose,lease);}),
  act('holders','read',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string};const {attempt}=current(tx,i.ownerId,i.attemptId,lease);return tx.all("SELECT c.id AS contactId,c.data_generation AS generation FROM step_input i JOIN contact c ON c.owner_id=i.owner_id AND c.id=i.source_contact_id WHERE i.owner_id=? AND i.step_id=? AND i.kind='message' UNION SELECT c.id AS contactId,c.data_generation AS generation FROM task_contribution tc JOIN contact c ON c.owner_id=tc.owner_id AND c.id=tc.source_contact_id WHERE tc.owner_id=? AND tc.task_id=?",[i.ownerId,attempt.step_id,i.ownerId,attempt.task_id]).map(r=>({contactId:String(r.contactId),generation:String(r.generation)}));}),
  act('current','read',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string};current(tx,id(i.ownerId),id(i.attemptId),lease);return true;}),
+ act('renew','write',renew),
  act('prepareCall','write',(tx,raw,lease)=>{
   const i=raw as {ownerId:string;attemptId:string;purpose:SqliteAdjudicationModelPurpose;request:unknown;provider:string;model:string;configurationId:string;inputCap:number;outputCap:number};const {attempt,basis}=current(tx,i.ownerId,i.attemptId,lease);
   if(!purposes.includes(i.purpose)||attempt.kind!==i.purpose||!Number.isSafeInteger(i.inputCap)||i.inputCap<1||!Number.isSafeInteger(i.outputCap)||i.outputCap<1)fail('memory_adjudication_configuration_invalid');

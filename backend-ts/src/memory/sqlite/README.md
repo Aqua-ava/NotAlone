@@ -26,6 +26,8 @@
 
 POST `/contacts/:id/complete` 只接受空对象，显式恢复该联系人已完成提取的原任务：仅裁决其 contact 范围候选，再执行并发布该 contact 的主题资料和长期概览。独立本人任务及其他联系人不进入这条执行链；默认自动整轮链保持原行为。该操作受记忆总开关、有效来源、暂停、未知回执及真实待确认门槛约束，异步进度仍从联系人状态和管理接口读取。手动调度下无需开启全局队列，也不通过修改时钟跳过自动整理窗口。
 
+该完整收尾入口允许仅在指定联系人的旧裁决步骤明确失败、调用均为已结算的已知终态时重试；普通自动发布不因此重发失败调用，也不推进其他任务。分页裁决只在成功输出落盘后续期整个有效执行组，不恢复已过期或未知执行；重复进展不延长租约。重试新建调用并保留原账本，不宣称复用了旧回执。
+
 记忆自动处理总开关（[ADR-166](../../../../architecture/adr/166-memory-auto-processing-switch.md)）：`auto-processing.ts` 提供迁移 42 与 `memoryExtraction.readAutomatic|setAutomatic` 动作，开关存于 `database_instance.memory_auto_processing`，默认 0（关闭）。服务 `initialize()` 读入内存镜像，`start|startHistory|continue` 在关闭时抛 `memory_auto_processing_disabled`，`startContact|startHistoryBatch|recoverBacklog|resumeFollowups` 与 `launch` 在关闭时不建轮、不恢复；调度器经 `enabled()` 停止扫描，后续整理 worker 在关闭时不取到期阶段。`setAutomatic(false)` 对在途轮次施加内部暂停（步骤边界停止），`setAutomatic(true)` 只继续由它暂停的轮次。GET／POST `/api/memory-processing/automatic` 读取与设置，`/schedule` 附带 `automatic` 字段。测试夹具创建库后须显式开启（`memory-sqlite/support.mjs` 的 `automatic:false` 选项可保留默认关闭）。
 
 `outputs.ts`导出`verifiedExtractionOutput(tx,{ownerId,eventId})`，管理域在正式候选提交的同一短事务内调用。返回真实`producedAttemptId/outputNo`、scope、原fact、auto来历和全部实际来源。本人产物由独立self attempt产生，通过`execution_input`的`verified_contribution`事件材料分支，以同owner复合外键引用原联系人窗口的`verified_self_contribution`事件，并同时保存实际消息窗口和全部来源；不改写事实、不作裁决、不冒充用户确认。

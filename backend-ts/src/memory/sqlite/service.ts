@@ -25,7 +25,7 @@ export interface ExtractionModelPort {
  close?():Promise<void>;
 }
 interface ClaimedStep {attemptId:string;stepId:string;taskId:string;runId:string;contactId:string;rows:StorageRow[];policyConfig:unknown;claim:ModelTaskClaim}
-export interface ContactFollowupOptions {onlyContactId:string;completeDocuments?:boolean}
+export interface ContactFollowupOptions {onlyContactId:string;completeDocuments?:boolean;retryKnownFailures?:boolean}
 export class SqliteMemoryExtraction {
  private afterRunSettled?:((runId:string,contactIds?:readonly string[],options?:ContactFollowupOptions)=>Promise<unknown>);
  private readonly ensureSourceReady?:((contactId:string)=>Promise<void>);
@@ -194,7 +194,7 @@ export class SqliteMemoryExtraction {
    const runId=await this.storage.execute<string|null>(completeDocuments?'memoryExtraction.contactCompletionRun':'memoryExtraction.pendingAdjudicationRun',{ownerId:this.ownerId,contactId});
    if(!runId)throw new StorageFailure('memory_extraction_no_pending_adjudication');
    if(this.runs.has(runId))throw new StorageFailure('memory_extraction_contact_busy');
-   const work=this.executeFollowup(runId,false,[contactId],{onlyContactId:contactId,...(completeDocuments?{completeDocuments:true}:{})}).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});
+   const work=this.executeFollowup(runId,false,[contactId],{onlyContactId:contactId,...(completeDocuments?{completeDocuments:true,retryKnownFailures:true}:{})}).finally(()=>this.runs.delete(runId));this.runs.set(runId,work);void work.catch(()=>{});
    return this.readContact(contactId);
   });
  }

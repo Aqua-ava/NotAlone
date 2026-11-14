@@ -14,22 +14,24 @@ function providerFailureOf(error:unknown):{name:string;code:string;status?:numbe
  return {name:v.name,code:v.code,...(typeof v.status==='number'?{status:v.status}:{})};
 }
 export class SqliteMemoryAdjudication {
- private readonly stopped=new AbortController();private pending=new Set<Promise<unknown>>();private active=new Map<string,{contactId:string|undefined;work:Promise<unknown>}>();private closing?:Promise<void>;
+ private readonly stopped=new AbortController();private pending=new Set<Promise<unknown>>();private active=new Map<string,{contactId:string|undefined;retryKnownFailures:boolean;work:Promise<unknown>}>();private closing?:Promise<void>;
  private storage:SqliteStorage;readonly ownerId:string;private port:SqliteAdjudicationModelPort|undefined;private holders:ActiveHolders;
  constructor(storage:SqliteStorage,ownerId:string,port:SqliteAdjudicationModelPort|undefined,holders:ActiveHolders){this.storage=storage;this.ownerId=ownerId;this.port=port;this.holders=holders;}
  async initialize(){const attempts=await this.storage.execute<string[]>('memoryAdjudication.interrupted',{ownerId:this.ownerId});if(attempts.length)await this.storage.execute('memoryAdjudication.fail',{ownerId:this.ownerId,attemptIds:attempts,code:'runtime_interrupted'});}
  /** 显式联系人只处理该范围的候选；省略时保持整轮裁决，同轮在途工作不得借重复请求更换范围。 */
- publishRun(runId:string,contactId?:string):Promise<unknown>{
+ publishRun(runId:string,contactId?:string,options:{retryKnownFailures?:boolean}={}):Promise<unknown>{
   if(this.stopped.signal.aborted)return Promise.reject(new StorageFailure('memory_adjudication_closed'));
-  const prior=this.active.get(runId);if(prior)return prior.contactId===contactId?prior.work:Promise.reject(new StorageFailure('memory_adjudication_run_busy'));
-  const work=this.publish(runId,contactId);this.active.set(runId,{contactId,work});this.pending.add(work);void work.finally(()=>{this.active.delete(runId);this.pending.delete(work);}).catch(()=>{});return work;
+  const retryKnownFailures=options.retryKnownFailures===true;
+  if(retryKnownFailures&&!contactId)return Promise.reject(new StorageFailure('memory_adjudication_scope_invalid'));
+  const prior=this.active.get(runId);if(prior)return prior.contactId===contactId&&prior.retryKnownFailures===retryKnownFailures?prior.work:Promise.reject(new StorageFailure('memory_adjudication_run_busy'));
+  const work=this.publish(runId,contactId,retryKnownFailures);this.active.set(runId,{contactId,retryKnownFailures,work});this.pending.add(work);void work.finally(()=>{this.active.delete(runId);this.pending.delete(work);}).catch(()=>{});return work;
  }
- private async publish(runId:string,contactId?:string){
+ private async publish(runId:string,contactId?:string,retryKnownFailures=false){
   const imported=await new SqliteMemoryManagement(this.storage,this.ownerId).importRun(runId,contactId),results:unknown[]=[];
   for(const candidateId of imported.candidateIds){
    if(this.stopped.signal.aborted)break;
    let first:AdjudicationClaim|null;
-   try{first=await this.storage.execute('memoryAdjudication.claim',{ownerId:this.ownerId,candidateId});}
+   try{first=await this.storage.execute('memoryAdjudication.claim',{ownerId:this.ownerId,candidateId,...(contactId?{contactId}:{}),...(retryKnownFailures?{retryKnownFailures:true}:{})});}
    catch(error){
     if(error instanceof StorageFailure&&['memory_candidate_stale','memory_source_stale','memory_extraction_scope_stale','memory_extraction_source_stale','memory_extraction_output_not_eligible'].includes(error.code))continue;
     // 未知回执尚未核实：本轮裁决整体停止，不再为其余候选制造注定失败的尝试；候选保持待处理。
@@ -50,7 +52,7 @@ export class SqliteMemoryAdjudication {
       const runtime=new DshMemoryAdjudicationRuntime({batchKey:`${first.attemptId}:${pageIndex}`,port:{call:async input=>{
        const purpose=input.purpose;if(!purpose)throw new StorageFailure('memory_adjudication_purpose_invalid');
        const stage=purpose==='adjudication'&&pageIndex===0?first!:await this.storage.execute<AdjudicationClaim>('memoryAdjudication.stage',{ownerId:this.ownerId,attemptId:first!.attemptId,purpose,pageIndex});if(stage!==first)claims.push(stage);
-       return this.call(input,stage,signal);
+       return this.call(input,stage,signal,claims);
       }}});
       const decisions=await runtime.adjudicate([pageItem],signal);
       await runtime.verifyRelations([pageItem],decisions,signal);
@@ -67,14 +69,15 @@ export class SqliteMemoryAdjudication {
   }
   return {candidateIds:imported.candidateIds,decisions:results};
  }
- private async call(input:StructuredAdjudicationCallInput,stage:AdjudicationClaim,signal:AbortSignal){
+ private async call(input:StructuredAdjudicationCallInput,stage:AdjudicationClaim,signal:AbortSignal,claims:readonly AdjudicationClaim[]){
   const request:SqliteAdjudicationModelRequest={purpose:input.purpose!,system:input.system,user:input.user,tool:{name:String(input.schema.title),description:'按固定结构返回记忆裁决与逐字来源核验。',parameters:input.schema},validateOutput:input.validateOutput};
   const scope={owner_id:this.ownerId,contact_id:stage.basis.contactId};
   const requireCurrent=async()=>{signal.throwIfAborted();await this.storage.execute('memoryAdjudication.current',{ownerId:this.ownerId,attemptId:stage.attemptId});};
   const prepared=await this.port!.prepare(request,{scope,signal,requireCurrent});
   const call=await this.storage.execute<{callId:string;requestId:string}>('memoryAdjudication.prepareCall',{ownerId:this.ownerId,attemptId:stage.attemptId,purpose:request.purpose,request:{purpose:request.purpose,system:request.system,user:request.user,tool:request.tool},provider:prepared.provider,model:prepared.model,configurationId:prepared.configurationId,inputCap:prepared.maxInputTokens,outputCap:prepared.maxOutputTokens});
   const result=await this.port!.invoke(request,{scope,signal,requireCurrent,claim:stage.claim,requestId:call.requestId,attemptId:call.callId,onReceipt:async receipt=>{await this.storage.execute('memoryExtraction.receipt',{receipt});}});
-  await requireCurrent();await this.storage.execute('memoryAdjudication.output',{ownerId:this.ownerId,attemptId:stage.attemptId,callId:call.callId,blocks:result.blocks});return result;
+  await requireCurrent();await this.storage.execute('memoryAdjudication.output',{ownerId:this.ownerId,attemptId:stage.attemptId,callId:call.callId,blocks:result.blocks});
+  signal.throwIfAborted();await this.storage.execute('memoryAdjudication.renew',{ownerId:this.ownerId,attemptIds:claims.map(claim=>claim.attemptId),progressCallId:call.callId});return result;
  }
  close():Promise<void>{return this.closing??=(async()=>{this.stopped.abort();await Promise.allSettled([...this.pending]);await this.port?.close();})().catch(error=>{this.closing=undefined;throw error;});}
 }

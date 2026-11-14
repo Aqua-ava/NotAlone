@@ -73,7 +73,7 @@ export async function createSqliteMemoryRuntime(options:{ctx:Context;contentReso
   }
   service=new SqliteMemoryExtraction(options.storage,options.ownerId,port,options.holders,adjudication?async(runId,contactIds,followup)=>{
    if(followup?.onlyContactId){
-    await adjudication!.publishRun(runId,followup.onlyContactId);
+    await adjudication!.publishRun(runId,followup.onlyContactId,{retryKnownFailures:followup.retryKnownFailures});
     await documents!.enrollRun(runId,followup.onlyContactId);
     if(followup.completeDocuments)await documents!.publishRun(runId,followup.onlyContactId);
     return;

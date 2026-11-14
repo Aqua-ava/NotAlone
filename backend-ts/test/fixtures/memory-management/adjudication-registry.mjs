@@ -14,6 +14,30 @@ const versionClosurePlans={name:'fixture.versionClosurePlans',mode:'read',retryB
  return plans;
 }};
 export const registry={...base,actions:[...base.actions,versionClosurePlans,{
+ name:'fixture.adjudicationLeaseState',mode:'read',retryBusy:false,execute(tx,{ownerId,attemptIds}){
+  return tx.all(`SELECT id,lease_expires_at FROM step_attempt WHERE owner_id=? AND id IN (${attemptIds.map(()=>'?').join(',')}) ORDER BY id`,[ownerId,...attemptIds]);
+ }
+},{
+ name:'fixture.alterAdjudicationLease',mode:'write',retryBusy:false,execute(tx,{ownerId,attemptId,fault}){
+  const context=tx.get('SELECT a.step_id,s.task_id,t.run_id FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE a.owner_id=? AND a.id=?',[ownerId,attemptId]);
+  if(!context)throw new Error('合成租约不存在');
+  if(fault==='expired')tx.run('UPDATE step_attempt SET lease_expires_at=0 WHERE owner_id=? AND id=?',[ownerId,attemptId]);
+  else if(fault==='runtime')tx.run("UPDATE step_attempt SET runtime_token='synthetic-other-runtime' WHERE owner_id=? AND id=?",[ownerId,attemptId]);
+  else if(fault==='generation')tx.run('UPDATE processing_task SET resume_no=resume_no+1 WHERE owner_id=? AND id=?',[ownerId,context.task_id]);
+  else if(fault==='control')tx.run('UPDATE processing_task SET control_revision=control_revision+1 WHERE owner_id=? AND id=?',[ownerId,context.task_id]);
+  else if(fault==='paused')tx.run("UPDATE processing_run SET pause_requested_at=?,state='paused' WHERE owner_id=? AND id=?",[Date.now(),ownerId,context.run_id]);
+  else if(fault==='unknown')tx.run("UPDATE model_call SET state='unknown',settlement_state='unknown' WHERE owner_id=? AND step_attempt_id=?",[ownerId,attemptId]);
+  else if(fault==='sealed')tx.run("UPDATE model_operation SET state='sealed',commit_forbidden_at=? WHERE owner_id=? AND memory_step_id=?",[Date.now(),ownerId,context.step_id]);
+  else if(fault==='source')tx.run("INSERT OR IGNORE INTO history_message_quarantine(owner_id,contact_id,message_id,reason) SELECT DISTINCT owner_id,source_contact_id,message_id,'synthetic_lease_source' FROM step_input WHERE owner_id=? AND step_id=? AND kind='message'",[ownerId,context.step_id]);
+  else if(fault==='future')tx.run('UPDATE step_attempt SET lease_expires_at=? WHERE owner_id=? AND id=?',[Date.now()+600000,ownerId,attemptId]);
+  else throw new Error('合成租约故障无效');return true;
+ }
+},{
+ name:'fixture.ageAdjudicationLeases',mode:'write',retryBusy:false,execute(tx,{ownerId,milliseconds}){
+  if(!Number.isSafeInteger(milliseconds)||milliseconds<0||milliseconds>600000)throw new Error('合成租约时间无效');
+  tx.run("UPDATE step_attempt SET lease_expires_at=lease_expires_at-? WHERE owner_id=? AND state='running' AND step_id IN (SELECT id FROM processing_step WHERE owner_id=? AND kind IN ('adjudication','relation_verification','merge_verification'))",[milliseconds,ownerId,ownerId]);return true;
+ }
+},{
  name:'fixture.adjudicationTrace',mode:'read',retryBusy:false,execute(tx,{ownerId}){
   return {
    steps:tx.all("SELECT s.*,a.id AS attempt_id,a.state AS attempt_state,a.error_code FROM processing_step s LEFT JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id WHERE s.owner_id=? AND s.kind<>'extraction_verification' ORDER BY s.task_id,s.step_no",[ownerId]),

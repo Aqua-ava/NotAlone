@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
 import {join} from 'node:path';
-import {fixture,owner,modelPort} from './fixtures/memory-sqlite/support.mjs';
+import {fixture,owner,record,modelPort} from './fixtures/memory-sqlite/support.mjs';
+import {supplier} from './fixtures/memory-management/supplier.mjs';
 import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 import {SqliteMemoryExtractionHttp} from '../src/memory/sqlite/http.ts';
 import {createSqliteMemoryRuntime} from '../src/memory/sqlite/runtime.ts';
@@ -22,7 +23,7 @@ test('单联系人完整收尾不重提取，明确传递联系人和文档执�
  const priorCalls=port.calls;
  await memory.completeContact(contactId);await memory.waitForIdle(started.run.runId);
  assert.equal(port.calls,priorCalls,'收尾不重新发送提取请求');
- assert.deepEqual(followups,[[started.run.runId,[contactId],{onlyContactId:contactId,completeDocuments:true}]]);
+ assert.deepEqual(followups,[[started.run.runId,[contactId],{onlyContactId:contactId,completeDocuments:true,retryKnownFailures:true}]]);
  await memory.setAutomatic(false);
  await assert.rejects(memory.completeContact(contactId),{code:'memory_auto_processing_disabled'});
  await assert.rejects(memory.completeContact(randomUUID()),{code:'memory_auto_processing_disabled'});
@@ -48,10 +49,12 @@ test('单联系人完整收尾HTTP只接受认证POST空对象，范围固定在
 
 test('正式manual装配将完整收尾限定在路径联系人，不启动全owner调度',async t=>{
  const f=await fixture(t),contactId=f.saved[0].contact_id;
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'我长期偏好合成园艺。'})],completedPartitions:['shard-a'],exhausted:true});
  for(const contact of f.saved)await f.service.synchronize(contact.contact_id);
- let memory;const port=modelPort(()=>memory.accounting);
+ let memory;const port=modelPort(()=>memory.accounting,supplier().respond);
  memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
  const started=await memory.start(randomUUID());await memory.waitForIdle(started.runId);
+ assert.ok((await memory.read(started.runId)).candidates.length>0,'正常提取确实产出待收尾候选');
  const calls=[],execute=f.storage.execute.bind(f.storage);
  f.storage.execute=async(name,input,...rest)=>{calls.push({name,input});return execute(name,input,...rest);};
  const runtime=await createSqliteMemoryRuntime({ctx:{},contentRegistry:createBuiltinMemoryContentRegistry(),storage:f.storage,ownerId:owner,userData:f.root,businessHome:f.root,infoPath:join(f.root,'info'),envFilePath:join(f.root,'unused.env'),environment:{},holders:new ActiveHolders(),authorize:()=>false,adjudicationEnabled:true});
@@ -59,6 +62,8 @@ test('正式manual装配将完整收尾限定在路径联系人，不启动全ow
  await runtime.service.completeContact(contactId);await runtime.service.waitForIdle(started.runId);
  const imports=calls.filter(call=>call.name==='memory.importRun');
  assert.ok(imports.length>0);assert.ok(imports.every(call=>call.input.contactId===contactId));
+ const claims=calls.filter(call=>call.name==='memoryAdjudication.claim');
+ assert.ok(claims.length>0);assert.ok(claims.every(call=>call.input.contactId===contactId&&call.input.retryKnownFailures===true));
  const tasks=calls.filter(call=>call.name==='memoryDocuments.tasks');
  assert.ok(tasks.length>0);assert.ok(tasks.every(call=>call.input.contactId===contactId));
  assert.equal(calls.some(call=>call.name==='memoryDocuments.claimDue'||call.name==='memoryExtraction.scheduleContacts'),false);

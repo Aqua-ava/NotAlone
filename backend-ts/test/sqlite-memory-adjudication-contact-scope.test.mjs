@@ -57,7 +57,8 @@ test('同轮裁决进行中只复用相同联系人范围，其他联系人或�
   const repeated=f.adjudication.publishRun(runId,f.contactId);
   const other=assert.rejects(f.adjudication.publishRun(runId,f.saved[1].contact_id),{code:'memory_adjudication_run_busy'});
   const unscoped=assert.rejects(f.adjudication.publishRun(runId),{code:'memory_adjudication_run_busy'});
-  release();await Promise.all([first,repeated,other,unscoped]);
+  const retry=assert.rejects(f.adjudication.publishRun(runId,f.contactId,{retryKnownFailures:true}),{code:'memory_adjudication_run_busy'});
+  release();await Promise.all([first,repeated,other,unscoped,retry]);
  }finally{release();}
  assert.equal((await f.read()).memories.length,2);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
