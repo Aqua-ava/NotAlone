@@ -5,7 +5,7 @@ import type {L3ProfileDocument,L3ProfileEntry} from '../../profiles/workspace.ts
 import {sha256} from '../../../platform/sha256.ts';
 import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
 import type {MessageSourceReference} from '../../../history/sqlite/contracts.ts';
-import {qualificationSources,mergeKnowledgeSources} from '../management/dependencies.ts';
+import {qualificationSources,mergeKnowledgeSources,withQualificationSources} from '../management/dependencies.ts';
 import {sourceVerificationState} from '../management/evidence.ts';
 import {memoryTimeEligibility} from '../management/temporal.ts';
 import {fail,requireVersion} from '../management/qualification.ts';
@@ -19,8 +19,10 @@ export const documentSourceEligibility:SourceEligibility=(tx,ref:MessageSourceRe
  assertSourceEligibility(tx,ref);cache?.add(key);
 };
 export function withDocumentSourceQualifications<T>(tx:StorageTransaction,work:()=>T):T{
- if(sourceQualifications.has(tx))return work();
- sourceQualifications.set(tx,new Set());try{return work();}finally{sourceQualifications.delete(tx);}
+ return withQualificationSources(tx,()=>{
+  if(sourceQualifications.has(tx))return work();
+  sourceQualifications.set(tx,new Set());try{return work();}finally{sourceQualifications.delete(tx);}
+ });
 }
 function safeNumber(value:bigint):number {if(value<0n||value>BigInt(Number.MAX_SAFE_INTEGER))fail('document_revision_invalid');return Number(value);}
 function fact(tx:StorageTransaction,ownerId:string,decisionId:string):Record<string,any>|null {

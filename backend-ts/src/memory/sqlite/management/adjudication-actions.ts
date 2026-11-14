@@ -18,7 +18,7 @@ import {applyDecision,recordCandidateGate,retireMergedParents} from './actions.t
 import {sourceVerificationState} from './evidence.ts';
 import {memoryTimeEligibility} from './temporal.ts';
 import {available,fail,id,requireAutomaticCandidate,requireVersion,requireSources} from './qualification.ts';
-import {qualificationSources,mergeKnowledgeSources} from './dependencies.ts';
+import {qualificationSources,mergeKnowledgeSources,withQualificationSources} from './dependencies.ts';
 import type {SqliteAdjudicationModelPurpose} from './model-port.ts';
 const purposes=['adjudication','relation_verification','merge_verification'] as const;
 const digest=(value:unknown)=>sha256(JSON.stringify(value,(_key,v)=>typeof v==='bigint'?v.toString():v));
@@ -32,8 +32,10 @@ const adjudicationSourceEligibility:SourceEligibility=(tx,ref:MessageSourceRefer
  assertSourceEligibility(tx,ref);cache?.add(key);
 };
 function withSourceQualifications<T>(tx:StorageTransaction,work:()=>T):T{
- if(sourceScopes.has(tx))return work();
- sourceScopes.set(tx,new Set());try{return work();}finally{sourceScopes.delete(tx);}
+ return withQualificationSources(tx,()=>{
+  if(sourceScopes.has(tx))return work();
+  sourceScopes.set(tx,new Set());try{return work();}finally{sourceScopes.delete(tx);}
+ });
 }
 const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>unknown):StorageAction=>({name:`memoryAdjudication.${name}`,mode,retryBusy:mode==='write',execute:(tx,input,lease)=>withSourceQualifications(tx,()=>execute(tx,input,lease))} as StorageAction);
 /** 候选最近一次已记录裁决结果所依据的冻结快照，与当前快照（忽略控制修订与分页）是否一致。 */
@@ -48,8 +50,9 @@ function decidedWithSameBasis(tx:StorageTransaction,ownerId:string,candidateId:s
 }
 /** 本任务目标资料是否仍被未知回执的裁决类调用占位；占位按整轮目标资料登记，与具体候选无关。 */
 function unknownOccupancy(tx:StorageTransaction,ownerId:string,taskId:string):boolean {
+ // 显式匹配现有部分索引的状态谓词，使未知占位按目标身份定向查找。
  return !!tx.get(`SELECT 1 FROM task_contribution t JOIN run_input i ON i.owner_id=t.owner_id AND i.run_id=t.run_id AND i.source_contact_id=t.source_contact_id AND i.role='target'
-  JOIN operation_item oi ON oi.owner_id=i.owner_id AND oi.item_id=i.item_id AND oi.state='unknown' AND oi.effect_kind IN ('adjudication','relation_verification','merge_verification')
+  JOIN operation_item oi ON oi.owner_id=i.owner_id AND oi.item_id=i.item_id AND oi.state IN ('reserved','sent','unknown') AND oi.state='unknown' AND oi.effect_kind IN ('adjudication','relation_verification','merge_verification')
   WHERE t.owner_id=? AND t.task_id=? LIMIT 1`,[ownerId,taskId]);
 }
 /** 失败事件只保留供应商失败的稳定分类；形状不符时直接忽略，不让诊断信息阻断失败收尾。 */
