@@ -22,8 +22,9 @@ export const registry={...base,actions:[...base.actions,{
 },{
  name:'fixture.imageLaterMissingSnapshot',mode:'write',retryBusy:false,execute(tx,input,lease){
   const count=()=>tx.get('SELECT count(*) AS n FROM processing_run WHERE owner_id=?',[input.ownerId]).n;
-  const before=count(),contents=new MemoryContentRegistry();contents.register({...imageMemoryContent,snapshot:()=>null});
+  let snapshotCalls=0;
+  const before=count(),contents=new MemoryContentRegistry();contents.register({...imageMemoryContent,snapshot:()=>{snapshotCalls++;return null;}});
   const claim=memoryDocumentsLaterScheduleActions.find(action=>action.name==='memoryDocuments.claimDue');
-  const result=withMemoryContentRegistry(contents,()=>claim.execute(tx,input,lease));return {result,before,after:count()};
+  const result=withMemoryContentRegistry(contents,()=>claim.execute(tx,input,lease));return {result,before,after:count(),snapshotCalls};
  }
 }]};

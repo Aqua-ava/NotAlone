@@ -16,6 +16,10 @@ export interface ContentSource {
  observation?:{kind:'model_observation';text:string};
 }
 const fail=(code='memory_source_stale'):never=>{throw new StorageFailure(code);};
+/** 内容版本或适配能力不可用须保留技术阻碍，不能降级成候选语义待定或空资料。 */
+export function isContentUnavailable(error:unknown):boolean {
+ return error instanceof StorageFailure&&['memory_content_source_stale','memory_content_plugin_unavailable','memory_content_evidence_unavailable'].includes(error.code);
+}
 const same=(a:unknown,b:unknown)=>canonicalJSON(a)===canonicalJSON(b);
 const nonempty=(value:unknown):value is string=>typeof value==='string'&&value.trim().length>0;
 const resourceKey='__notalone_content_resources';

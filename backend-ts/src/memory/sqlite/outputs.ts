@@ -4,7 +4,7 @@ import type {StorageRow,StorageTransaction} from '../../storage/sqlite/contracts
 import type {VerifiedExtractionOutputReference} from './contracts.ts';
 import {assertInputs,assertTaskContributions,fail,textId} from './qualification.ts';
 import {citationFromEvidence} from './content-citation.ts';
-import type {ContentCitationReference} from '../content/evidence.ts';
+import {isContentUnavailable,type ContentCitationReference} from '../content/evidence.ts';
 interface OutputCitation {contactId:string;recordId:string;messageId:string;interpretationRevision:bigint;spanStart:bigint|null;spanEnd:bigint|null;explanation:string|null;contentKind?:string;contentRef?:ContentCitationReference}
 /** 08须在创建正式候选的同一短事务调用；阶段产物不授予自动采纳资格。 */
 function extractionOutput(tx:StorageTransaction,ref:VerifiedExtractionOutputReference,published=false,sourceEligibility:SourceEligibility=assertSourceEligibility){
@@ -33,7 +33,7 @@ function extractionOutput(tx:StorageTransaction,ref:VerifiedExtractionOutputRefe
    const citation=citationFromEvidence(tx,ownerId,i,{message_id:reference.messageId,quote:reference.quote,...(reference.description?{description:reference.description}:{})});
    return [{contactId:String(i.source_contact_id),recordId:String(i.record_id),messageId:String(i.message_id),interpretationRevision:i.accepted_interpretation_revision as bigint,
     spanStart:citation.spanStart,spanEnd:citation.spanEnd,explanation:citation.explanation,...(citation.contentKind!=='text'?{contentKind:citation.contentKind,contentRef:citation.contentRef!}:{})}];
-  }catch{return [];}
+  }catch(error){if(isContentUnavailable(error))throw error;return [];}
 
  }));
  if(semanticVerification.state==='verified'&&semanticVerification.evidence.some(reference=>!verifiedCitations.some(c=>c.messageId===reference.messageId)))semanticVerification={state:'pending',eventId:null,mode:null,evidence:[]};

@@ -1,4 +1,5 @@
 import type {StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
+import {isContentUnavailable} from '../../content/evidence.ts';
 import {canonicalJSON} from '../../evidence/canonical-json.ts';
 import {replayCompleteClaimVerification} from '../../extraction/verification/complete-claim.ts';
 import {replayMultimodalVerification} from '../../extraction/multimodal.ts';
@@ -75,5 +76,5 @@ export function candidateAdmission(tx:StorageTransaction,ownerId:string,output:S
   if(evidence.some(e=>!fact.source_message_ids.includes(e.message_id)||!inputs.some(i=>i.message_id===e.message_id)||typeof e.quote!=='string'||!e.quote.length)
    ||(fact.requires_all_sources||fact.source_dependency_mode==='all')&&fact.source_message_ids.some((id:string)=>!evidence.some(e=>e.message_id===id)))return pending();
   return {state:'verified' as const,eventId:ref.eventId,mode:'complete-claim-v1' as const,evidence:evidence.map(e=>({messageId:e.message_id,quote:e.quote}))};
- }catch{return pending();}
+ }catch(error){if(isContentUnavailable(error))throw error;return pending();}
 }

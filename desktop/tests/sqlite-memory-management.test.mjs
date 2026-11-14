@@ -228,13 +228,17 @@ test('主进程保留图片来源类型、固定版本与模型观察，拒绝�
 
 test('主进程按通用内容引用接收第三类型原文并拒绝跨联系人定位',async t=>{
  const original='合成文件的每周安排';
+ let quote=original;
  let ref={version:1,ownerId:requestKey,contactId:contact,messageId:candidate,representation:'text',start:0,end:[...original].length,
   frozen:{pluginId:'synthetic.file',pluginVersion:'1',kind:'file',identity:{sha256:'a'.repeat(64)}}};
- const f=await fixture(t,async()=>({candidates:[item(candidate,[{...source(contact),quote:original,contentKind:'file',contentRef:ref}])],memories:[]}));
+ const f=await fixture(t,async()=>({candidates:[item(candidate,[{...source(contact),quote,contentKind:'file',contentRef:ref,description:'实际视觉依据'}])],memories:[]}));
  const actual=(await f.controller.read(read)).view.candidates[0].sources[0];
  assert.equal(actual.quote,original);assert.equal(actual.contentRef.frozen.pluginId,'synthetic.file');
  ref={...ref,contactId:other};await assert.rejects(f.controller.read(read));
  ref={...ref,contactId:contact,end:0};await assert.rejects(f.controller.read(read));
+ quote='';ref={...ref,representation:'image',reference:{file_id:requestKey,sha256:'a'.repeat(64),mime_type:'image/png',media_generation:'0'}};
+ assert.equal((await f.controller.read(read)).view.candidates[0].sources[0].contentRef.reference.file_id,requestKey);
+ ref={...ref,reference:{...ref.reference,sha256:'invalid'}};await assert.rejects(f.controller.read(read));
 });
 
 test('记忆桥只在连接代次变化时撤下资料，同连接资格通知保留快照',async()=>{
