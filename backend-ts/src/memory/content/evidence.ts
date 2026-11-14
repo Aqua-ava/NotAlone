@@ -18,6 +18,26 @@ export interface ContentSource {
 const fail=(code='memory_source_stale'):never=>{throw new StorageFailure(code);};
 const same=(a:unknown,b:unknown)=>canonicalJSON(a)===canonicalJSON(b);
 const nonempty=(value:unknown):value is string=>typeof value==='string'&&value.trim().length>0;
+const resourceKey='__notalone_content_resources';
+
+/** 资源清单只保存受管文件身份；文件与来源范围仍由现有媒体删除合同核对。 */
+export function contentManagedFiles(value:unknown):readonly string[] {
+ if(!Array.isArray(value)||value.some(id=>typeof id!=='string'||!/^[0-9a-f-]{36}$/i.test(id)))return fail('memory_content_resources_invalid');
+ return [...new Set(value)];
+}
+export function storeContentIdentity(identity:Record<string,unknown>,managedFiles:readonly string[]):Record<string,unknown> {
+ if(Object.hasOwn(identity,resourceKey))return fail('memory_content_resources_invalid');
+ const files=contentManagedFiles(managedFiles);
+ return files.length?{...identity,[resourceKey]:{version:1,managedFiles:files}}:identity;
+}
+/** 不加载插件即可读取冻结依赖；旧图片的 fileId 路径与身份保持兼容。 */
+export function storedContentResources(kind:string,value:Record<string,unknown>):{identity:Record<string,unknown>;managedFiles:readonly string[]} {
+ if(!Object.hasOwn(value,resourceKey))return {identity:value,managedFiles:kind==='image'?contentManagedFiles([value.fileId]):[]};
+ const metadata=value[resourceKey] as {version?:unknown;managedFiles?:unknown}|null;
+ if(!metadata||metadata.version!==1)return fail('memory_content_resources_invalid');
+ const managedFiles=contentManagedFiles(metadata.managedFiles),identity={...value};delete identity[resourceKey];
+ return {identity,managedFiles};
+}
 
 /** 引句按 Unicode 码点定位；重复引句不能猜测其原文位置。 */
 export function quoteSpan(text:string,quote:string):{start:bigint;end:bigint}|null {

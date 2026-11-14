@@ -11,7 +11,7 @@ import type {ModelTaskClaim} from '../../../platform/models/model-permit-port.ts
 import {adjudicationPages} from '../../adoption/pages.ts';
 import type {AdjudicationItem,AdjudicationSource,SimilarMemory} from '../../adoption/contracts.ts';
 import {resolveContentCitation} from '../content-citation.ts';
-import {matchesContentEvidence,type ContentEvidence,type ContentSource} from '../../content/evidence.ts';
+import {matchesContentEvidence,sourceImageReference,type ContentEvidence,type ContentSource} from '../../content/evidence.ts';
 import {parseAdjudications,parseRelations,mergeResult,adjudicationPolicyRevision} from '../../adoption/adjudication-dsh.ts';
 import {readExtractionToolArguments} from '../../extraction/arguments.ts';
 import {AMBIGUITY_NOTE} from '../../extraction/bounded.ts';
@@ -319,11 +319,14 @@ export const memoryAdjudicationActions:StorageAction[]=[
   const page=adjudicationPages(basis.item)[basis.pageIndex]?.similar??[];
   const allowed=[...basis.item.candidate_source_texts,...page.flatMap(parent=>parent.source_texts)];
   if(i.sources.some(source=>!allowed.some(actual=>digest(source)===digest(actual))))fail('memory_adjudication_output_unbound');
+  // 原文已随当前来源快照进入请求；只为视觉附件异步物化，避免逐条原文重建完整比较池。
+  const visual=i.sources.filter(source=>sourceImageReference(source)!==null);
+  if(!visual.length)return [];
   const rows=[...requireSources(tx,i.ownerId,{candidateId:basis.candidateId},false,adjudicationSourceEligibility),
    ...basis.parents.filter(parent=>page.some(memory=>memory.memory_id===parent.id))
     .flatMap(parent=>requireSources(tx,i.ownerId,{memoryId:parent.id,versionNo:BigInt(parent.versionNo)},true,adjudicationSourceEligibility))];
   const resolved=rows.map(row=>resolveContentCitation(tx,i.ownerId,row)),seen=new Set<string>();
-  return i.sources.flatMap(source=>{
+  return visual.flatMap(source=>{
    const material=resolved.find(value=>digest(value.source)===digest(source));if(!material)fail('memory_source_stale');
    const key=digest([material!.contactId,source.message_id,material!.frozen]);if(seen.has(key))return [];seen.add(key);
    return [{contactId:material!.contactId,message:material!.message,frozen:material!.frozen,citation:material!.citation}];

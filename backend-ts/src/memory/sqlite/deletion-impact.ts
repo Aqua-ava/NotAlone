@@ -2,6 +2,7 @@ import {sourceDeletionIds} from '../../history/sqlite/source-deletion.ts';
 import {isMediaDeletionScope,mediaDeletionFileIds} from '../../media/sqlite/deletion.ts';
 import type {StorageRow,StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import type {DeletionOperation,RowDeletionTarget} from '../../storage/sqlite/deletion/contracts.ts';
+import {contentInputsUsingFiles} from './content.ts';
 
 type Kind='event'|'input'|'task'|'candidate'|'version'|'memory'|'decision';
 interface Identity {kind:Kind;id:string;slot:string|null}
@@ -26,10 +27,7 @@ export function memoryDeletionImpact(tx:StorageTransaction,op:DeletionOperation)
  if(isMediaDeletionScope(scope)){
   if(tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='run_content_input'")){
    const files=mediaDeletionFileIds(tx,op);
-   inputs=tx.all(`SELECT i.* FROM run_input i JOIN run_content_input content
-    ON content.owner_id=i.owner_id AND content.run_id=i.run_id AND content.input_no=i.input_no
-    WHERE i.owner_id=? AND i.source_contact_id=? AND i.message_id=? AND content.content_kind='image'
-    AND json_extract(content.identity_json,'$.fileId') IN (SELECT value FROM json_each(?))`,[ownerId,scope.contactId,scope.messageId,deletionIds(files)]);
+   inputs=contentInputsUsingFiles(tx,ownerId,scope.contactId,scope.messageId,files);
    for(const input of inputs){
     for(const row of tx.all('SELECT step_id,input_no FROM step_input WHERE owner_id=? AND run_id=? AND run_input_no=?',[ownerId,input.run_id,input.input_no]))add('input',row.step_id,row.input_no);
     // 尚未创建步骤的冻结输入也必须停止；同轮独立成功步骤不因此扩散。

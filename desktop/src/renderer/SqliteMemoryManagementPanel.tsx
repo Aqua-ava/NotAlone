@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import type {MemoryCandidateView,MemoryDecisionRequest,MemoryManagementOutcome,MemoryManagementSnapshot,MemoryManagementRead,MemoryHistorySnapshot,MemorySource,MemoryVerificationState,MemoryVersionView,MemoryView,SqliteMemoryManagementBridge} from '../shared/sqlite-memory-management';
-import {memoryReadResult,memoryReadFailureCode,withdrawnProtectionVersion} from '../shared/sqlite-memory-management';
+import {memoryReadResult,memoryReadFailureCode,withdrawnProtectionVersion,memorySourceImage} from '../shared/sqlite-memory-management';
 import {SqliteMemoryDocumentsPanel} from './SqliteMemoryDocumentsPanel';
 import {useVisibleRefresh} from './use-visible-refresh';
 import {memoriesBySourceTime,memorySourceDateLabel,memorySourceTime} from './memory-source-time';
@@ -21,7 +21,7 @@ function Verification({state}:{state:MemoryVerificationState}){
 }
 function Sources({sources,verification}:{sources:MemorySource[];verification?:MemoryVerificationState}){
  return <details className="sqlite-memory-sources"><summary>查看来源</summary>{verification&&<Verification state={verification}/>}{sources.length===0?<p>无可展示的来源。</p>:<ol>{sources.map((source,index)=><li key={`${source.recordId}:${index}`}>
-  {source.contentKind==='image'?<><p>图片依据</p>{source.description&&<p>模型观察：{source.description}</p>}</>:<blockquote>{source.quote}</blockquote>}<details><summary>来源定位</summary><p>消息：{source.messageId}</p><p>来源记录：{source.recordId}</p><p>解释修订：{source.acceptedRevision}</p>{source.contentRef&&'file_id' in source.contentRef&&<p>图片版本：{source.contentRef.file_id}</p>}</details>
+  {memorySourceImage(source)?<><p>图片依据</p>{source.description&&<p>模型观察：{source.description}</p>}</>:<blockquote>{source.quote}</blockquote>}<details><summary>来源定位</summary><p>消息：{source.messageId}</p><p>来源记录：{source.recordId}</p><p>解释修订：{source.acceptedRevision}</p>{memorySourceImage(source)&&<p>图片版本：{memorySourceImage(source)!.file_id}</p>}</details>
  </li>)}</ol>}</details>;
 }
 function Editor({label,initial,submitLabel,busy,save,cancel}:{label:string;initial:string;submitLabel:string;busy:boolean;save:(body:string)=>void;cancel:()=>void}){

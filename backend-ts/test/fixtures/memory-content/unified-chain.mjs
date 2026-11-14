@@ -13,6 +13,7 @@ import {ActiveHolders} from '../../../src/storage/sqlite/deletion/holders.ts';
 import {DeletionService} from '../../../src/storage/sqlite/deletion/service.ts';
 import {ManagedFiles} from '../../../src/storage/sqlite/deletion/managed-files.ts';
 import {fileMemoryContent} from './file-plugin.mjs';
+import {visualMemoryContent} from './visual-plugin.mjs';
 
 const fields=['category','topic','scene_name','alternatives','interpretation_reason','valid_at','invalid_at','speech_act','assertion_status','figurative_type','event','conditions'];
 export const imageStatement='联系人有一个蓝色杯子。';
@@ -21,18 +22,19 @@ const evidence=source=>typeof source.text==='string'?{message_id:source.message_
 const tool=(name,value)=>({blocks:[{type:'tool-call',name,arguments:JSON.stringify(value)}]});
 
 /** 真实SQLite、受管PNG、普通任务与会计接线；仅外部语义选择使用合成供应商。 */
-export async function unifiedChainFixture(t,{action='add',mergedText='联系人长期喜欢园艺，也有一个蓝色杯子。',fileContent=false,preferredText='蓝色杯子'}={}){
- const f=await fixture(t,fileContent?{registryModule:new URL('./registry.mjs',import.meta.url).href}:{}),contactId=f.saved[0].contact_id,scope={scopeKind:'contact',contactId},records=[],holders=new ActiveHolders();
+export async function unifiedChainFixture(t,{action='add',mergedText='联系人长期喜欢园艺，也有一个蓝色杯子。',fileContent=false,visualContent=false,preferredText='蓝色杯子'}={}){
+ const f=await fixture(t,visualContent?{registryModule:new URL('./visual-registry.mjs',import.meta.url).href}:fileContent?{registryModule:new URL('./registry.mjs',import.meta.url).href}:{}),contactId=f.saved[0].contact_id,scope={scopeKind:'contact',contactId},records=[],holders=new ActiveHolders();
  let imageRevision=0;
- const adapter={version:'synthetic-unified-content-v1',supports:kind=>kind==='image',async execute(context){
+ const adapter={version:'synthetic-unified-content-v1',supports:kind=>kind==='image'||visualContent&&kind==='video',async execute(context){
   const bytes=await sharp({create:{width:12,height:10,channels:3,background:{r:++imageRevision*30,g:20,b:230}}}).png().toBuffer();
-  await context.save({role:'image_display',bytes:(async function*(){yield bytes;})(),expectedBytes:bytes.length,expectedSha256:createHash('sha256').update(bytes).digest('hex'),
-   validate:async()=>({format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:false})});
+  await context.save({role:context.kind==='video'?'video_playback':'image_display',bytes:(async function*(){yield bytes;})(),expectedBytes:bytes.length,expectedSha256:createHash('sha256').update(bytes).digest('hex'),
+   validate:async()=>({format:'png',mimeType:'image/png',containerValid:true,viewable:true,playable:context.kind==='video'})});
   return {association:{protocol:'media-association-v1',profileId:'synthetic-unified-content-v1',recordId:context.source.recordId,messageId:context.messageId,resourceIdentity:'synthetic-cup'}};
  }};
  const media=new SqliteMediaService({storage:f.storage,contacts:f.contacts,history:f.service,userData:f.root,adapters:[adapter],holders});await media.initialize();
  const content={registry:createBuiltinMemoryContentRegistry(),resources:{readImage:input=>media.readMemoryImage(input)}};
  if(fileContent)content.registry.register(fileMemoryContent);
+ if(visualContent)content.registry.register(visualMemoryContent);
  f.channel.page=async(_scope,target)=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[...records],completedPartitions:['shard-a'],exhausted:true});
  const requests=[],documentRequests=[],failures=[],sourceMessages=new Map(),normal=supplier();let extraction;
  const extractionResponse=async(request,input)=>{

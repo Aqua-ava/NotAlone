@@ -8,6 +8,7 @@ const imageMime=new Set(['image/png','image/jpeg','image/webp','image/gif']);
 export const imageMemoryContent:MemoryContentPlugin={
  id:'notalone.image',version:'1',kinds:['image'],
  modelInputCost:()=>({images:1,bytes:MODEL_IMAGE_LIMITS.maxImageBytes}),
+ managedFiles:identity=>[String(identity.fileId)],
  evidence(_tx,{frozen}){const ref=frozen.identity;return {representation:'image',reference:imageContentReference({file_id:ref.fileId,sha256:ref.sha256,mime_type:ref.mimeType,media_generation:ref.mediaGeneration})};},
  snapshot(tx,{ownerId,contactId,message}){
   if(!tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='media_file'"))return null;

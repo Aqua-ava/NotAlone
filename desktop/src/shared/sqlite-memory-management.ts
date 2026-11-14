@@ -1,8 +1,13 @@
-import type {MemoryCandidateView,MemoryDecisionRequest,MemoryDecisionResult,MemoryManagementView,MemoryScope,MemoryVersionView,MemoryView,MemoryHistoryView} from '../../../backend-ts/src/memory/sqlite/management/contracts';
+import type {MemoryCandidateView,MemoryDecisionRequest,MemoryDecisionResult,MemoryManagementView,MemoryScope,MemorySource,MemoryVersionView,MemoryView,MemoryHistoryView} from '../../../backend-ts/src/memory/sqlite/management/contracts';
 export type {MemoryCandidateView,MemoryDecisionRequest,MemoryDecisionResult,MemoryManagementView,MemoryScope,MemorySource,MemoryVersionView,MemoryView} from '../../../backend-ts/src/memory/sqlite/management/contracts';
 /** 核验状态与用户采纳方式分别展示；可查看原话不代表来源已核验。 */
 export type MemoryVerificationState=MemoryCandidateView['verificationState'];
 export type MemoryMergeParent=MemoryVersionView['mergeParents'][number];
+/** 展示按实际表示选择，新增来源类型继续复用文字或视觉依据。 */
+export function memorySourceImage(source:MemorySource){
+ const ref=source.contentRef;if(!ref)return null;
+ return 'version' in ref?(ref.representation==='image'?ref.reference:null):ref;
+}
 /** 撤回资料只能借具备有效来源的最新历史版调整保护，不赋予单独恢复或编辑能力。 */
 export function withdrawnProtectionVersion(memory:MemoryView):MemoryVersionView|null{
  if(memory.state!=='withdrawn'||memory.current!==null)return null;

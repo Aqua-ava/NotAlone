@@ -3,7 +3,7 @@ import type {StorageRow,StorageTransaction} from '../../storage/sqlite/contracts
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {ExtractionMessage} from '../extraction/protocol.ts';
 import type {ExtractionInvocation} from '../extraction/flow.ts';
-import {contentEvidence,contentCitation,contentSource,imageContentReference,type ContentRepresentation,type ContentEvidence,type ContentCitation,type ContentSource,type VersionedContentReference} from './evidence.ts';
+import {contentEvidence,contentCitation,contentSource,imageContentReference,contentManagedFiles,type ContentRepresentation,type ContentEvidence,type ContentCitation,type ContentSource,type VersionedContentReference} from './evidence.ts';
 import {canonicalJSON} from '../evidence/canonical-json.ts';
 
 export interface FrozenMemoryContent {
@@ -20,6 +20,8 @@ export interface MemoryContentPlugin {
  id:string;version:string;kinds:readonly string[];
  /** 组批前声明原始输入占用；文字与转换后的协议开销仍由正式模型预算复核。 */
  modelInputCost(identity:Record<string,unknown>):{images:number;bytes:number};
+ /** 冻结实际依赖的受管文件身份；删除读取持久清单，不依赖插件继续安装。 */
+ managedFiles?(identity:Record<string,unknown>):readonly string[];
  snapshot(tx:StorageTransaction,scope:MemoryContentScope):Record<string,unknown>|null;
  /** 调度只判定当前内容可用性，不冻结正文、计算摘要或准备模型输入。 */
  availableMany?(tx:StorageTransaction,scope:MemoryContentBatchScope):ReadonlySet<string>;
@@ -67,6 +69,7 @@ export class MemoryContentRegistry {
   const plugin=this.plugins.get(frozen.pluginId);
   if(!plugin||plugin.version!==frozen.pluginVersion||!plugin.kinds.includes(frozen.kind))throw new StorageFailure('memory_content_plugin_unavailable');return plugin;
  }
+ managedFiles(frozen:FrozenMemoryContent):readonly string[]{return contentManagedFiles(this.require(frozen).managedFiles?.(frozen.identity)??[]);}
  evidence(tx:StorageTransaction,scope:MemoryContentScope,frozen:FrozenMemoryContent):ContentRepresentation{return contentEvidence(this,tx,scope,frozen);}
  citation(tx:StorageTransaction,scope:MemoryContentScope,frozen:FrozenMemoryContent,evidence:ContentEvidence):ContentCitation{return contentCitation(this,tx,scope,frozen,evidence);}
  source(tx:StorageTransaction,scope:MemoryContentScope,citation:ContentCitation):ContentSource{return contentSource(this,tx,scope,citation);}
