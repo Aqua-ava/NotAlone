@@ -52,7 +52,6 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
   const sourceNeedsConfirmation = enabled === true && consent.state.phase === 'ready' && !consent.state.busy
     && consent.state.bindings.some(binding => binding.contactId === selected?.contactId) && sync.report?.historyCoverages?.some(row => row.contactId === selected?.contactId
     && (row.failureCode === 'history_source_continuity_unverified' || row.incrementalFailureCode === 'history_source_continuity_unverified')) === true;
-  const visibleContacts = selected ? [selected, ...state.contacts.filter(contact => contact.contactId !== selected.contactId)] : state.contacts;
   if (addingWechat) return <section className="contacts-panel" aria-label="联系人目录">
     {deletionBridge && <ContactDeletionStatus bridge={deletionBridge} state={deletion.state} />}
     <BindingConsentPage contacts={session} consent={consent} navigate={navigate} targetContactId={targetContactId} allPrivate={allPrivate}
@@ -78,7 +77,7 @@ export function ContactsPage({ session, navigate, initialSelection = false, onSe
     {state.directoryPhase === 'ready' && state.contacts.length === 0 && <div className="contacts-empty"><h3>还没有联系人</h3>
       <p>{selectionOnly ? '逐人确认微信私聊后加入联系人；未选中的会话和以后新增的私聊不会获得读取授权。' : allPrivate ? '开启后台同步后会自动关联微信私聊；联系人出现后，可在顶部搜索本次对象。' : '首次使用可到同步设置连接微信，默认仅同步你选择并确认的私聊；也可以明确选择全部私聊。'}</p><button className="button primary" onClick={() => navigate('sync')}>前往同步设置连接微信</button></div>}
     {state.contacts.length > 0 && <div className="contacts-columns"><ul className="contact-list" aria-label="联系人列表">
-      {visibleContacts.map((contact) => <li key={contact.contactId} className="contact-card" data-current={state.selectedContactId === contact.contactId}>
+      {state.contacts.map((contact) => <li key={contact.contactId} className="contact-card" data-current={state.selectedContactId === contact.contactId}>
         <button type="button" className="contact-row" aria-label={`选择${contact.displayName}`}
           aria-pressed={state.selectedContactId === contact.contactId}
           onClick={() => { if (state.selectedContactId !== contact.contactId) void session.selectContact(contact.contactId); }}>

@@ -63,15 +63,28 @@ test('删除菜单须经二次确认；同名联系人显示内部标识且仅�
   assert.deepEqual(await page.evaluate(() => window.calls), [{ contactId: 'contact-001', scopeRevision: 7, confirmed: true }]);
 });
 
-test('点击左侧联系人卡片即可切换当前联系人，再点当前项不重复提交', async t => {
+test('已有当前联系人位于列表末尾时，首次展示仍保持目录顺序', async t => {
+  const page = await mount(t, { selectedContactId: 'contact-003' });
+  const list = page.getByRole('list', { name: '联系人列表' });
+  await expect(list.locator('.contact-row-name b')).toHaveText(['王小明', '王小明', '林晓雨']);
+  await expect(list.getByRole('button', { name: '选择林晓雨', exact: true })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('点击联系人只切换聊天内容且保持列表顺序，再点当前项不重复提交', async t => {
   const page = await mount(t);
   const list = page.getByRole('list', { name: '联系人列表' });
+  const originalOrder = ['王小明', '王小明', '林晓雨'];
+  await expect(list.locator('.contact-row-name b')).toHaveText(originalOrder);
   await expect(list.getByRole('button', { name: '选择林晓雨', exact: true })).toHaveAttribute('aria-pressed', 'false');
   await list.getByRole('button', { name: '选择林晓雨', exact: true }).click();
   await expect(page.getByRole('region', { name: '联系人聊天记录' }).getByRole('heading', { name: '林晓雨' })).toBeVisible();
   await expect(list.getByRole('button', { name: '选择林晓雨', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(list.locator('.contact-row-name b')).toHaveText(originalOrder);
   await list.getByRole('button', { name: '选择林晓雨', exact: true }).click();
   assert.deepEqual(await page.evaluate(() => window.selectedByList), ['contact-003']);
+  await page.evaluate(() => window.selectContact('contact-002'));
+  await expect(list.getByRole('button', { name: '选择王小明', exact: true }).nth(1)).toHaveAttribute('aria-pressed', 'true');
+  await expect(list.locator('.contact-row-name b')).toHaveText(originalOrder);
 });
 
 test('切换联系人会关闭旧确认框，之后的确认只针对当前选择', async t => {
