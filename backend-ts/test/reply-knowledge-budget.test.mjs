@@ -61,12 +61,12 @@ test('较长记忆不再挤掉后面的相关记忆',()=>{
  assert.equal(selected.includes(long),true);assert.equal(selected.includes(short),true);
 });
 
-test('工作区检索词：帮我表达以草稿为准，帮我想想只用最近5条消息原文',async()=>{
+test('工作区检索词：帮我表达以草稿为准，最新优先的消息只取前5条原文',async()=>{
  const {workspaceRetrievalQuery}=await import('../src/reply/sqlite/candidates/input.ts');
- const bodies=['甲一','甲二','甲三','甲四','甲五','甲六','甲七'];
+ const bodies=['最新一条','次新一条','第三新','第四新','第五新','旧话题甲','旧话题乙'];
  assert.equal(workspaceRetrievalQuery({action:'express',draftText:'我想请假'},bodies),'我想请假');
- assert.equal(workspaceRetrievalQuery({action:'express',draftText:'  '},bodies),'甲三\n甲四\n甲五\n甲六\n甲七');
- assert.equal(workspaceRetrievalQuery({action:'suggest',draftText:'我想请假'},bodies),'甲三\n甲四\n甲五\n甲六\n甲七');
+ assert.equal(workspaceRetrievalQuery({action:'express',draftText:'  '},bodies),'最新一条\n次新一条\n第三新\n第四新\n第五新');
+ assert.equal(workspaceRetrievalQuery({action:'suggest',draftText:'我想请假'},bodies),'最新一条\n次新一条\n第三新\n第四新\n第五新');
  assert.equal(workspaceRetrievalQuery({action:'suggest',draftText:''},['只有一条']),'只有一条');
  assert.equal(workspaceRetrievalQuery({action:'suggest',draftText:''},[]),'');
 });

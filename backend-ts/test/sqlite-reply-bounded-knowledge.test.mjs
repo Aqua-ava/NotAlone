@@ -213,6 +213,32 @@ test('来源状态更新使派生文档失效时初始召回省略，旧冻结�
  await assert.rejects(f.storage.execute('fixture.readDocument',{...scope,item:directory,range:{startBlock:1,blockCount:1}}),{code:'document_knowledge_stale'});
 });
 
+test('工作区记忆检索使用真实消息顺序中的最新5条，词法与语义查询保持一致',async t=>{
+ const f=await fixture(t,{synchronizeHistory:false,content:JSON.stringify({candidates:[{parts:['合成建议'],basis:[1]}]})}),contactId=f.ids[0];
+ const latest=['园艺月季','园艺玫瑰','园艺牡丹','园艺兰花','园艺郁金香'],page=f.channel.page;
+ f.channel.page=async(...args)=>{
+  const result=await page(...args),base=result.records[0];
+  return {...result,records:Array.from({length:55},(_,index)=>({...base,localId:String(index+1),sender:index%2?'owner':'contact',
+   text:index<50?`归档天文${index}`:latest[index-50],sentAt:String(1700000000000+index*1000)}))};
+ };
+ await f.contacts.setReading(true);await f.history.synchronize(contactId);
+ const currentMemory='最新话题记忆：喜欢园艺月季、园艺玫瑰、园艺牡丹、园艺兰花、园艺郁金香。',oldMemory='过早话题记忆：喜欢归档天文。';
+ const management=new SqliteMemoryManagement(f.storage,f.owner);
+ for(const [index,body] of [currentMemory,oldMemory].entries())await management.decide({requestKey:`recent-query-${index}`,action:'manual',scope:{scopeKind:'contact',contactId},body});
+ const workspace={action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true};
+ for(const hybrid of [false,true]){
+  const queries=[],embed=async texts=>{queries.push(texts[0]);return texts.map(text=>text.includes('园艺')?[1,0]:[0,1]);};
+  const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},...(hybrid?{embed}:{})});t.after(()=>turns.close());
+  const before=f.requests.length;await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'',confirmedContact:true,workspace});
+  const request=JSON.stringify(f.requests[before]);
+  assert.ok(request.includes(currentMemory),`${hybrid?'混合':'词法'}检索应使用最新话题召回记忆`);
+  assert.ok(!request.includes(oldMemory),'较早聊天不能成为本次记忆查询');
+  assert.ok(request.includes('归档天文5'),'记忆查询限于最新5条时，完整近期聊天仍进入模型输入');
+  assert.ok(!request.includes('归档天文4\\n'),'超出最近50条的聊天不进入模型输入');
+  if(hybrid)assert.deepEqual(queries,['园艺郁金香\n园艺兰花\n园艺牡丹\n园艺玫瑰\n园艺月季']);
+ }
+});
+
 test('回复链路：本机语义补充词法漏召回的同义记忆，语义模型缺失或失败时降级为词法仍可生成',async t=>{
  const f=await fixture(t,{synchronizeHistory:false,content:JSON.stringify({candidates:[{parts:['合成建议'],basis:[1]}]})}),contactId=f.ids[0];
  const management=new SqliteMemoryManagement(f.storage,f.owner);

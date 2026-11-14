@@ -104,9 +104,9 @@ export function memorySourceTimeLabel(tx:StorageTransaction,ownerId:string,sourc
 }
 /** 帮我想想用于记忆检索的最近消息条数（含双方）。 */
 const RECENT_QUERY_MESSAGES=5;
-/** 工作区记忆检索词：帮我表达以草稿为准；帮我想想（及草稿为空时）只用最近几条消息原文，不拼入全部近期聊天、一次性要求或补充背景。 */
+/** 工作区记忆检索词：消息按最新优先传入，取前5条原文；帮我表达以非空草稿为准，不拼入一次性要求或补充背景。 */
 export function workspaceRetrievalQuery(workspace:Pick<ReplyWorkspaceSnapshot,'action'|'draftText'>,messageBodies:readonly string[]):string{
- return workspace.action==='express'&&workspace.draftText.trim()?workspace.draftText:messageBodies.slice(-RECENT_QUERY_MESSAGES).join('\n');
+ return workspace.action==='express'&&workspace.draftText.trim()?workspace.draftText:messageBodies.slice(0,RECENT_QUERY_MESSAGES).join('\n');
 }
 export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contextId:string;requestId:string;workspace?:ReplyWorkspaceSnapshot;queryText?:string;at?:number;semantic?:unknown},reader:ReplyKnowledgeReader):FrozenReplyInput[]{
  requireDiscussion(tx,i);
