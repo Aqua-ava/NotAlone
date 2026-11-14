@@ -25,6 +25,7 @@ test('每种裁决动作的目标字段互斥，矛盾结构不得伪装为合�
  const parse=value=>parseAdjudications([{type:'tool-call',name:'BatchMemoryAdjudicationOutput',arguments:JSON.stringify({decisions:[value]})}]);
  const empty={...decision,replaced_memory_id:null,merged_memory_ids:[],merged_text:null,duplicate_memory_id:null};
  const legal=[{...empty,action:'add'},{...empty,action:'keep'},decision,{...empty,action:'noop',duplicate_memory_id:memory},
+  {...empty,action:'merge',merged_memory_ids:[memory],merged_text:'一条旧资料与新补充合并后的完整资料'},
   {...empty,action:'merge',merged_memory_ids:[memory,randomUUID()],merged_text:'合并后的完整资料'}];
  for(const value of legal)assert.equal(parse(value)[0].action,value.action);
  for(const value of legal){
@@ -68,32 +69,53 @@ test('DSH结构化裁决：批量、独立关系核验与合并核验各自独�
   {supported:true,receipt:'merge-receipt',usage:'merge_verification'});
  assert.equal(calls,3);assert.equal(prompts.length,3);
  const [adjudication,verification,merge]=requests;
+ assert.deepEqual(new Set(adjudication.schema.properties.decisions.items.properties.action.enum),new Set(['add','noop','update','merge']),'新模型只选择四种产品动作；keep只保留历史解析兼容');
  assert.equal(JSON.parse(verification.user)[0].proposed_action,'update','关系核验必须同时看到动作，不能只支持关系却漏掉组合矛盾');
  assert.deepEqual(JSON.parse(verification.user)[0].proposed_targets,{replaced_memory_id:memory,merged_memory_ids:[],duplicate_memory_id:null},'独立核验须得到兼容表要求的目标，不能因缺少目标上下文误拒合法动作');
  for(const request of [adjudication,verification]){
-  assert.match(request.system,/add[^\n]*kind=independent[^\n]*claim_changed=false[^\n]*condition_changed=false/);
-  assert.match(request.system,/keep[^\n]*independent[^\n]*supplement[^\n]*historical_supplement[^\n]*claim_changed=false[^\n]*condition_changed=false/);
-  assert.match(request.system,/update[^\n]*state_change[^\n]*error_correction[^\n]*claim_changed=true[^\n]*condition_changed=false/);
-  assert.match(request.system,/merge[^\n]*kind=supplement[^\n]*claim_changed=false[^\n]*condition_changed=false/);
-  assert.match(request.system,/noop[^\n]*claim_changed=false[^\n]*condition_changed=false/);
+  assert.match(request.system,/add[^\n]*store/);
+  assert.match(request.system,/noop[^\n]*skip/);
+  assert.match(request.system,/update/);assert.match(request.system,/merge/);
+  assert.match(request.system,/来源/);assert.match(request.system,/时间|阶段/);assert.match(request.system,/条件/);
  }
- const policy={compatibilityVersion:1,adjudication:{system:adjudication.system,schema:adjudication.schema},
+ const policy={compatibilityVersion:2,adjudication:{system:adjudication.system,schema:adjudication.schema},
   relation_verification:{system:verification.system,schema:verification.schema},merge_verification:{system:merge.system,schema:merge.schema}};
  assert.equal(adjudicationModule.adjudicationPolicyRevision,createHash('sha256').update(JSON.stringify(policy)).digest('hex'),'策略版本必须绑定实际使用的全部提示词、工具schema及兼容规则版本');
 });
 
-test('关系核验明确收到keep与state_change组合，依据原文保留主张变化而拒绝不兼容动作',async()=>{
- const runtime=new DshMemoryAdjudicationRuntime({batchKey:'synthetic-incompatible-action',port:{async call(input){
+test('关系核验收到完整更新动作、目标与新旧条件，保留有据的主张和条件变化',async()=>{
+ const updatedText='合成联系人现在只在晴天周四散步',priorText='合成联系人之前无论天气都周三散步';
+ const conditionalItem={...item,candidate:{...item.candidate,text:updatedText,conditions:{version:1,items:[{text:'只在晴天',source_supported:true}]}},
+  candidate_source_texts:[{...item.candidate_source_texts[0],text:updatedText}],
+  similar:[{...item.similar[0],text:priorText,conditions:{version:1,items:[{text:'无论天气',source_supported:true}]},source_texts:[{...item.similar[0].source_texts[0],text:priorText}]}]};
+ const conditionalRelation={...relation,condition_changed:true,evidence:[{message_id:priorMessage,quote:priorText},{message_id:candidateMessage,quote:updatedText}]};
+ const runtime=new DshMemoryAdjudicationRuntime({batchKey:'synthetic-condition-change',port:{async call(input){
   assert.equal(input.purpose,'relation_verification');
-  const proposed=JSON.parse(input.user)[0];assert.equal(proposed.proposed_action,'keep');assert.equal(proposed.proposed_relation.kind,'state_change');
-  assert.equal(proposed.proposed_relation.claim_changed,true);
-  assert.match(input.system,/动作与关系不兼容[^\n]*supported=false/);
-  assert.match(input.system,/不得[^\n]*changed[^\n]*false[^\n]*迎合动作/);
-  const blocks=[{type:'tool-call',name:input.schema.title,arguments:JSON.stringify({results:[{candidate_index:0,supported:false,evidence:relation.evidence,claim_changed:true,condition_changed:false}]})}];
+  const proposed=JSON.parse(input.user)[0];assert.equal(proposed.proposed_action,'update');assert.equal(proposed.proposed_relation.kind,'state_change');
+  assert.deepEqual(proposed.proposed_targets,{replaced_memory_id:memory,merged_memory_ids:[],duplicate_memory_id:null});
+  assert.equal(proposed.proposed_relation.claim_changed,true);assert.equal(proposed.proposed_relation.condition_changed,true);
+  assert.deepEqual(proposed.candidate.conditions,conditionalItem.candidate.conditions);
+  assert.deepEqual(proposed.sources.prior[0].conditions,conditionalItem.similar[0].conditions);
+  const blocks=[{type:'tool-call',name:input.schema.title,arguments:JSON.stringify({results:[{candidate_index:0,supported:true,evidence:conditionalRelation.evidence,claim_changed:true,condition_changed:true}]})}];
   input.validateOutput(blocks);return {blocks};
  }}});
- const result=await runtime.verifyRelations([item],[{...decision,action:'keep',replaced_memory_id:null}],AbortSignal.timeout(1000));
- assert.equal(result[0].supported,false);assert.equal(result[0].claim_changed,true,'技术动作矛盾不能把来源中的真实变化改成false');
+ const result=await runtime.verifyRelations([conditionalItem],[{...decision,relation:conditionalRelation}],AbortSignal.timeout(1000));
+ assert.equal(result[0].supported,true);assert.equal(result[0].claim_changed,true);assert.equal(result[0].condition_changed,true,'来源支持的变化不能为旧兼容表降成false');
+});
+
+test('新记忆与一条旧记忆合并时只核验所选目标及双方来源',async()=>{
+ const ignored={...item.similar[0],memory_id:randomUUID(),text:'另一条不参与合并的旧资料'};
+ const runtime=new DshMemoryAdjudicationRuntime({batchKey:'synthetic-single-parent',port:{async call(input){
+  assert.equal(input.purpose,'merge_verification');
+  const payload=JSON.parse(input.user);assert.equal(payload.candidate_and_parents.sources.prior.length,1);
+  assert.equal(payload.candidate_and_parents.sources.prior[0].memory_id,memory);
+  const blocks=[{type:'tool-call',name:input.schema.title,arguments:JSON.stringify({supported:true,text:'合成联系人以前周三散步，现在改为周四散步',evidence:relation.evidence})}];
+  input.validateOutput(blocks);return {blocks};
+ }}});
+ const result=await runtime.verifyMerge({...item,similar:[...item.similar,ignored]},
+  {...decision,action:'merge',replaced_memory_id:null,merged_memory_ids:[memory],merged_text:'合成联系人以前周三散步，现在改为周四散步'},
+  [candidateMessage,priorMessage],'single-parent-receipt',AbortSignal.timeout(1000));
+ assert.equal(result.supported,true);assert.equal(result.source_receipt,'single-parent-receipt');assert.deepEqual(result.source_message_ids,[candidateMessage,priorMessage]);
 });
 
 test('DSH结构化裁决：坏字段和错误候选索引在记账前被拒绝',async()=>{

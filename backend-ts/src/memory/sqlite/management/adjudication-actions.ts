@@ -17,6 +17,7 @@ import {AMBIGUITY_UNCONFIRMED,unconfirmedAmbiguity} from '../../extraction/ambig
 import {applyDecision,recordCandidateGate,retireMergedParents} from './actions.ts';
 import {sourceVerificationState} from './evidence.ts';
 import {memoryTimeEligibility} from './temporal.ts';
+import {versionFact} from './version-fact.ts';
 import {available,fail,id,requireAutomaticCandidate,requireVersion,requireSources} from './qualification.ts';
 import {qualificationSources,mergeKnowledgeSources,withQualificationSources} from './dependencies.ts';
 import type {SqliteAdjudicationModelPurpose} from './model-port.ts';
@@ -80,10 +81,6 @@ function sources(tx:StorageTransaction,ownerId:string,parent:{candidateId?:strin
 /** 旧关系核验只认证逐字文字；图像比较保留候选，不能把观察描述当原文签证。 */
 export function requiresMultimodalRelationReview(item:AdjudicationItem):boolean {
  return item.similar.length>0&&[...item.candidate_source_texts,...item.similar.flatMap(parent=>parent.source_texts)].some(source=>source.content_kind==='image');
-}
-function versionFact(tx:StorageTransaction,ownerId:string,v:StorageRow):Record<string,any>|null {
- const event=tx.get(`SELECT e.payload FROM decision_candidate dc JOIN memory_candidate c ON c.owner_id=dc.owner_id AND c.id=dc.candidate_id JOIN execution_event e ON e.owner_id=c.owner_id AND e.id=c.event_id WHERE dc.owner_id=? AND dc.decision_id=? ORDER BY c.id LIMIT 1`,[ownerId,v.decision_id]);
- return event?JSON.parse(String(event.payload)).fact:null;
 }
 function freeze(tx:StorageTransaction,ownerId:string,candidateId:string):Basis {
  const c=tx.get('SELECT * FROM memory_candidate WHERE owner_id=? AND id=?',[ownerId,candidateId]);if(!c)fail('memory_candidate_stale');requireAutomaticCandidate(tx,ownerId,c!,adjudicationSourceEligibility);
@@ -245,24 +242,23 @@ function finish(tx:StorageTransaction,raw:unknown,lease:StorageLease) {
   if(!relation||relation.kind==='unresolved_conflict'||!verification.supported||!relationEvidenceOK||!relationCoveredOK||!ids.length||new Set(ids).size!==ids.length||ids.some(p=>!item.similar.some(m=>m.memory_id===p))||relation.claim_changed!==verification.claim_changed||relation.condition_changed!==verification.condition_changed)
    reason=!relation||relation.kind==='unresolved_conflict'?'memory_relation_conflict':!verification.supported?'memory_relation_unsupported':!(relationEvidenceOK&&relationCoveredOK)?'memory_relation_evidence_incomplete':'memory_relation_inconsistent';
   else if(decision.action==='add'||decision.action==='keep'){
-   // add 对齐腾讯 store 的「全新独立」；keep 对齐「相关并存」，由模型并核验确认与旧记忆互不改动时自动并存。
-   const kindAllowed=decision.action==='add'?relation.kind==='independent':['independent','supplement','historical_supplement'].includes(relation.kind);
-   if(!kindAllowed||relation.claim_changed||relation.condition_changed)reason='memory_relation_inconsistent';
+   // 新增也可保存有来源支持的补充和历史阶段；旧 keep 兼容同一语义，人工决定仍不能借新身份绕过。
+   if((relation.claim_changed||relation.condition_changed||['state_change','error_correction'].includes(relation.kind))
+    &&ids.some(id=>basis.parents.find(parent=>parent.id===id)?.protected||item.similar.find(memory=>memory.memory_id===id)?.adoption_method!=='auto'))reason='memory_protected';
   }else if(decision.action==='update'){
    if(target){reason='memory_multiple_targets_pending';continue;}
    target=basis.parents.find(p=>p.id===decision.replaced_memory_id&&item.similar.some(m=>m.memory_id===p.id));const prior=item.similar.find(p=>p.memory_id===target?.id);
    if(!target||ids.length!==1||ids[0]!==target.id||target.protected||prior?.adoption_method!=='auto')reason='memory_protected';
-   else if(!['state_change','error_correction'].includes(relation.kind)||!relation.claim_changed||relation.condition_changed||!item.candidate.source_message_ids.some(s=>!prior.source_message_ids.includes(s)))reason='memory_relation_pending';
-   else if(item.candidate.event||prior.event||item.candidate.conditions||prior.conditions||item.candidate.valid_at!==prior.valid_at||item.candidate.invalid_at!==prior.invalid_at)reason='memory_timeline_pending';
+   else if(!['supplement','state_change','error_correction','historical_supplement'].includes(relation.kind))reason='memory_relation_pending';
    else if(prior.statement_time&&item.candidate_source_texts.every(s=>s.occurred_at===null||s.occurred_at<prior.statement_time!))reason='memory_timeline_pending';
    else {action='auto_update';formation=relation.kind==='error_correction'?'correction':'change';parents=[target];}
   }else if(decision.action==='merge'){
    if(target){reason='memory_multiple_targets_pending';continue;}
    const mergedIds=decision.merged_memory_ids??[];parents=mergedIds.map(p=>basis.parents.find(m=>m.id===p)!).filter(Boolean);target=parents[0];
    const stage=stages.find(s=>s.attempt.kind==='merge_verification'&&s.basis.pageIndex===pageIndex);if(!stage)fail('memory_adjudication_output_unbound');const merge=mergeResult(readExtractionToolArguments(blocks(tx,ownerId,stage!.id),'MergedMemoryVerificationOutput').value);const mergeItem={...item,similar:item.similar.filter(p=>mergedIds.includes(p.memory_id))};const requiredMergeSources=new Set([...item.candidate.source_message_ids,...mergeItem.similar.flatMap(p=>p.source_message_ids)]),citedMergeSources=new Set(merge.evidence.map(e=>e.message_id));
-   if(mergedIds.length<2||mergedIds.length>8||new Set(mergedIds).size!==mergedIds.length||parents.length!==mergedIds.length||mergedIds.some(p=>!ids.includes(p))||ids.some(p=>!mergedIds.includes(p))||parents.some(p=>p.protected||item.similar.find(m=>m.memory_id===p.id)?.adoption_method!=='auto'))reason='memory_protected';
-   else if(relation.kind!=='supplement'||relation.claim_changed||relation.condition_changed||!merge.supported||merge.text!==decision.merged_text||!evidenceSupported(mergeItem,merge.evidence)||[...requiredMergeSources].some(source=>!citedMergeSources.has(source))||item.candidate.event||item.candidate.conditions||parents.some(p=>{const m=item.similar.find(m=>m.memory_id===p.id)!;return m.event||m.conditions||m.valid_at!==item.candidate.valid_at||m.invalid_at!==item.candidate.invalid_at;}))reason='memory_merge_pending';
-   else {action='auto_update';text=merge.text;}
+   if(mergedIds.length<1||mergedIds.length>8||new Set(mergedIds).size!==mergedIds.length||parents.length!==mergedIds.length||mergedIds.some(p=>!ids.includes(p))||ids.some(p=>!mergedIds.includes(p))||parents.some(p=>p.protected||item.similar.find(m=>m.memory_id===p.id)?.adoption_method!=='auto'))reason='memory_protected';
+   else if(!['supplement','state_change','error_correction','historical_supplement'].includes(relation.kind)||!merge.supported||merge.text!==decision.merged_text||!evidenceSupported(mergeItem,merge.evidence)||[...requiredMergeSources].some(source=>!citedMergeSources.has(source)))reason='memory_merge_pending';
+   else {action='auto_update';text=merge.text;formation=relation.kind==='error_correction'?'correction':relation.claim_changed||relation.condition_changed?'change':'adoption';}
   }else if(decision.action==='noop'){
    const duplicate=basis.parents.find(p=>p.id===decision.duplicate_memory_id&&item.similar.some(m=>m.memory_id===p.id)),prior=item.similar.find(m=>m.memory_id===duplicate?.id);
    const fact=item.candidate;

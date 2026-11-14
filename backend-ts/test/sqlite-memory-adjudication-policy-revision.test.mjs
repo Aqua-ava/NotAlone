@@ -8,7 +8,12 @@ import {StorageFailure} from '../src/storage/sqlite/contracts.ts';
 test('旧策略已完成但技术不一致的候选通过单联系人完整收尾重核，同策略重复请求不重发',async t=>{
  const f=await adjudicationFixture(t);
  await f.extract(['我长期保留合成背景。'],{publish:true});
- f.setRespond(adjudicationSupplier({action:'add',kind:'supplement'}));
+ const normal=adjudicationSupplier();
+ f.setRespond(async(request,input)=>{
+  const result=await normal(request,input);if(request.purpose!=='relation_verification')return result;
+  const value=JSON.parse(result.blocks[0].arguments);value.results[0].claim_changed=true;
+  return {blocks:[{type:'tool-call',name:request.tool.name,arguments:JSON.stringify(value)}]};
+ });
  const runId=await f.extract(['我长期偏好合成园艺。']);await f.adjudication.publishRun(runId,f.contactId);
  const before=await f.trace();assert.equal(before.calls.length,2);assert.ok(before.steps.every(step=>step.state==='succeeded'));
  assert.equal((await f.read()).candidates[0].pendingReason,'memory_relation_inconsistent');

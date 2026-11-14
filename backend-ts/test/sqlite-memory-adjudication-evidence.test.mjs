@@ -3,6 +3,10 @@ import {adjudicationFixture,adjudicationSupplier,owner} from './fixtures/memory-
 import {AMBIGUITY_NOTE} from '../src/memory/extraction/bounded.ts';
 const seed=async(f,count=1)=>{await f.extract(Array.from({length:count},(_,i)=>`我长期保留合成事项${i}。`),{publish:true});f.calls.length=0;};
 const modify=(result,tool,transform)=>{const value=JSON.parse(result.blocks[0].arguments);transform(value);return {blocks:[{type:'tool-call',name:tool,arguments:JSON.stringify(value)}]};};
+const inconsistentRelationSupplier=()=>{
+ const normal=adjudicationSupplier();
+ return async(request,input)=>{const result=await normal(request,input);return request.purpose==='relation_verification'?modify(result,request.tool.name,value=>{value.results[0].claim_changed=true;}):result;};
+};
 for(const side of ['new','old'])test(`关系核验仅引用${side==='new'?'新':'旧'}来源不得发布更新`,async t=>{
  const f=await adjudicationFixture(t);await seed(f);const normal=adjudicationSupplier({action:'update'});
  f.setRespond(async(request,input)=>{const result=await normal(request,input);if(request.purpose!=='relation_verification')return result;const payload=JSON.parse(request.user)[0],source=side==='new'?payload.sources.candidate:payload.sources.prior.flatMap(p=>p.sources);return modify(result,request.tool.name,value=>{value.results[0].evidence=source.map(s=>({message_id:s.message_id,quote:s.text}));});});
@@ -52,19 +56,19 @@ test('keep 声称补充关系时通过关系核验即可自动并存',async t=>{
  assert.equal(latest.payload.reason,null);assert.equal(latest.payload.action,'auto_accept');
 });
 
-test('add 声称补充关系时仍待确认',async t=>{
+test('新增的补充信息通过来源和关系核验后自动保存，不因主题相关转待确认',async t=>{
  const f=await adjudicationFixture(t);await seed(f);
  const normal=adjudicationSupplier({action:'add',kind:'supplement'});
  f.setRespond(async(request,input)=>normal(request,input));
  await f.extract(['我新增一项补充性质的合成事项。'],{publish:true});
- const view=await f.read();assert.equal(view.memories.length,1);
+ const view=await f.read();assert.equal(view.memories.length,2);assert.equal(view.candidates.length,0);
  const latest=(await f.trace()).events.filter(e=>e.kind==='adjudication_result').at(-1);
- assert.equal(latest.payload.reason,'memory_relation_inconsistent');
+ assert.equal(latest.payload.reason,null);assert.equal(latest.payload.action,'auto_accept');
 });
 
 test('技术性关系不一致在同轮依据变化后重新自动核验，依据未变时不重复请求',async t=>{
  const f=await adjudicationFixture(t);await seed(f);
- f.setRespond(adjudicationSupplier({action:'add',kind:'supplement'}));
+ f.setRespond(inconsistentRelationSupplier());
  const runId=await f.extract(['我新增一项独立的合成长期安排。']);
  await f.adjudication.publishRun(runId,f.contactId);
  const pending=(await f.read()).candidates[0],version=(await f.extraction.read(runId)).controlVersion;
