@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import type {StorageAction,StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {assertInputs,assertTaskContributions,fail,textId} from '../qualification.ts';
 import {available,scope as readScope} from '../management/qualification.ts';
-import {memoryBasis,publicationMembers,renderDocuments,withSourceMemo,documentSourceEligibility,withDocumentSourceQualifications} from './basis.ts';
+import {memoryBasis,publicationMembers,renderDocuments,withSourceMemo,documentSourceEligibility,withDocumentSourceQualifications,primeDocumentSourceQualifications} from './basis.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import {laterStagesState as scheduledLaterStagesState,type LaterStagesProjection} from './later-schedule.ts';
 import {currentDocumentSteps,hasUnresolvedDocumentWork} from './stage-selection.ts';
@@ -40,6 +40,7 @@ export function preconditions(tx:StorageTransaction,ownerId:string,t:StorageRow,
  if(contributions||!laterStageForTask(tx,ownerId,t))assertTaskContributions(tx,ownerId,String(t.run_id),String(t.id));
  const inputs=tx.all(`SELECT i.* FROM run_input i JOIN task_contribution c ON c.owner_id=i.owner_id AND c.run_id=i.run_id AND c.source_contact_id=i.source_contact_id
   WHERE c.owner_id=? AND c.task_id=? ORDER BY i.input_no`,[ownerId,t.id]);
+ primeDocumentSourceQualifications(tx,inputs.map(input=>({owner_id:ownerId,contact_id:String(input.source_contact_id),message_id:String(input.message_id),record_id:String(input.record_id)})));
  assertInputs(tx,ownerId,String(t.run_id),inputs,documentSourceEligibility);
  if(tx.get(`SELECT 1 FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id
   JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id

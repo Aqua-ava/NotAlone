@@ -3,7 +3,7 @@ import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 import type {L2ScenarioMemory,L2ScenarioReference,L2ScenarioVersion} from '../../scenarios/workspace.ts';
 import type {L3ProfileDocument,L3ProfileEntry} from '../../profiles/workspace.ts';
 import {sha256} from '../../../platform/sha256.ts';
-import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
+import {assertSourceEligibility,assertSourcesEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
 import type {MessageSourceReference} from '../../../history/sqlite/contracts.ts';
 import {qualificationSources,mergeKnowledgeSources,withQualificationSources} from '../management/dependencies.ts';
 import {sourceVerificationState} from '../management/evidence.ts';
@@ -13,12 +13,19 @@ import {fail,requireVersion} from '../management/qualification.ts';
 import {documentActualInputs,type DocumentActualInput} from './inputs.ts';
 
 const sourceQualifications=new WeakMap<StorageTransaction,Set<string>>();
+const sourceQualificationKey=(ref:MessageSourceReference)=>JSON.stringify([ref.owner_id,ref.contact_id,ref.record_id,ref.message_id]);
 /** 一个同步动作内只复用当前来源身份的核验；不缓存正文、版本修订或文档依赖结果。 */
 export const documentSourceEligibility:SourceEligibility=(tx,ref:MessageSourceReference)=>{
- const cache=sourceQualifications.get(tx),key=JSON.stringify([ref.owner_id,ref.contact_id,ref.record_id,ref.message_id]);
+ const cache=sourceQualifications.get(tx),key=sourceQualificationKey(ref);
  if(cache?.has(key))return;
  assertSourceEligibility(tx,ref);cache?.add(key);
 };
+/** 同一动作先批验精确冻结来源；全部分组成功后才公开缓存，消息修订仍由原消费者逐项复验。 */
+export function primeDocumentSourceQualifications(tx:StorageTransaction,refs:readonly MessageSourceReference[]):void {
+ const cache=sourceQualifications.get(tx),pending=refs.filter(ref=>!cache?.has(sourceQualificationKey(ref)));
+ assertSourcesEligibility(tx,pending);
+ for(const ref of pending)cache?.add(sourceQualificationKey(ref));
+}
 export function withDocumentSourceQualifications<T>(tx:StorageTransaction,work:()=>T):T{
  return withQualificationSources(tx,()=>{
   if(sourceQualifications.has(tx))return work();
