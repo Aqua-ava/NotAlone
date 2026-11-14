@@ -30,8 +30,7 @@ import { readReplyScene, sceneSnapshot } from './scene';
 import { AssistantSessionProjection, type AssistantProjectionRead, type AssistantProjectionScope, type AssistantProjectionVerification } from './assistant-session-projection';
 import { AssistantMessageNotices, type MessageNoticeAdoption } from './assistant-message-notices';
 
-const defaults = () => ({ tone: 'original' as const, instruction: '', includeRelationshipContext: false });
-const tones = { original: '', warm: '本次语气自然温和。', concise: '本次表达简洁直接。', polite: '本次语气礼貌克制。' };
+const defaults = () => ({ includeRelationshipContext: false });
 
 type CandidateSourceCheck = {
   pending: AbortController;
@@ -47,8 +46,7 @@ type MessageAdoptionCommand = Readonly<{ notice: MessageNoticeAdoption; messageI
 export class ReplySession {
   hasEdits(): boolean {
     return Boolean(this.state.result || this.heldResult || this.state.phase === 'waiting' || this.state.targetMessageId
-      || this.state.direction || this.state.purpose || this.state.mode !== 'rewrite_draft' || this.state.options.instruction
-      || this.state.options.tone !== 'original' || this.state.options.includeRelationshipContext || this.state.scene
+      || this.state.direction || this.state.purpose || this.state.mode !== 'rewrite_draft' || this.state.options.includeRelationshipContext || this.state.scene
       || this.state.options.contextText);
   }
   private state: ReplySessionState = { revision: 0, scopeRevision: 0, contactId: null, generationBlock: null,
@@ -862,9 +860,7 @@ export class ReplySession {
                   Object.assign(input, { [key]: latest.input[key] });
                 }
               }
-              const requirementsChanged = latest.input.options.tone !== displayedContent.input.options.tone
-                || latest.input.options.instruction !== displayedContent.input.options.instruction
-                || latest.input.options.inputKind !== displayedContent.input.options.inputKind
+              const requirementsChanged = latest.input.options.inputKind !== displayedContent.input.options.inputKind
                 || latest.input.mode !== displayedContent.input.mode;
               this.pendingContent = { ...clean, input,
                 workspaceRequirementInputVersion: requirementsChanged ? undefined : clean.workspaceRequirementInputVersion,
@@ -903,8 +899,9 @@ export class ReplySession {
       : mode === 'initiate_conversation' && this.derivedIntent.purpose;
     const mixedSupplement = scenario && Boolean(this.state.correction
       || this.state.requirements && this.state.supplementInput !== false);
-    const draft = pasted ? previous.pastedDirection ?? '' : mode === 'reply_to_message'
+    const intention = pasted ? previous.pastedDirection ?? '' : mode === 'reply_to_message'
       ? derived ? '' : this.state.direction : mode === 'initiate_conversation' ? derived ? '' : this.state.purpose : contact.draft;
+    const draft = [intention, scenario && this.state.supplementInput === false ? this.state.requirements : ''].filter(Boolean).join('\n');
     const { pastedDirection: _legacyDirection, workspaceAction: _legacyAction, ...options } = previous;
     this.invalidateInput();
     // 同一同步命令先更新内部草稿，避免联系人通知把这次迁移当成独立编辑。
@@ -912,7 +909,6 @@ export class ReplySession {
     this.contacts.setDraft({ ...selection, text: draft });
     this.publish({ mode: 'rewrite_draft', targetMessageId: null,
       options: { ...options, inputKind: 'workspace', includeRelationshipContext: true,
-        instruction: scenario ? this.state.supplementInput === false ? this.state.requirements : '' : previous.instruction,
         ...(pasted ? { contextText: contact.draft } : {}) },
       inputClearRevision: (this.state.inputClearRevision ?? 0) + 1,
       workspaceMigrationNotice: derived || mixedSupplement
@@ -923,8 +919,7 @@ export class ReplySession {
   updateOptions(update: RewriteOptionsUpdate, snapshot = true): ReplySessionState | void {
     this.assertScope(update);
     if (JSON.stringify(update.options) !== JSON.stringify(this.state.options)) {
-      if (update.options.tone !== this.state.options.tone || update.options.instruction !== this.state.options.instruction
-        || update.options.inputKind !== this.state.options.inputKind) {
+      if (update.options.inputKind !== this.state.options.inputKind) {
         this.workspaceRequirementInputVersion = undefined;
       }
       this.notifyInputChanged();
@@ -1163,7 +1158,7 @@ export class ReplySession {
       ...(selection.allowIncompleteHistory === true ? { allowIncompleteHistory: true } : {}) };
     const input: ReplyInputSnapshot = this.state.mode === 'rewrite_draft'
       ? { ...common, mode: 'rewrite_draft', draftText: contactState.draft.trim(),
-        userInstruction: [tones[options.tone], options.instruction.trim()].filter(Boolean).join('\n') || null,
+        userInstruction: null,
         includeRelationshipContext: options.includeRelationshipContext,
         ...(options.inputKind === 'workspace' ? { inputKind: 'workspace', workspaceAction: options.workspaceAction,
           skillChoice: { ...this.state.skillChoice },
@@ -1881,7 +1876,7 @@ export class ReplySession {
       ? { contactId: common.contactId, contactDisplayName: common.contactDisplayName, ...sceneSnapshot(this.state.scene || null),
         mode, inputKind: 'workspace', workspaceAction: options.workspaceAction,
         draftText: contacts.draft.trim(),
-        userInstruction: [tones[options.tone], options.instruction.trim()].filter(Boolean).join('\n') || null,
+        userInstruction: null,
         includeRelationshipContext: options.includeRelationshipContext,
         skillChoice: { ...this.state.skillChoice },
         ...(options.contextText?.trim() ? { contextText: options.contextText.trim() } : {}) }

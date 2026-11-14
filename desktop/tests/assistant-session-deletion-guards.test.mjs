@@ -67,7 +67,7 @@ test('删除工作区讨论后保留空白输入入口，不自动重建会话�
   await f.bridge.enterWorkspace(f.scope);
   const before = await f.bridge.getState();
   await f.bridge.updateOptions({ ...f.scope, options: { ...before.options,
-    tone: 'polite', instruction: '删除时清除的合成要求。', includeRelationshipContext: true,
+    includeRelationshipContext: true,
     contextText: '删除时清除的合成聊天。' } });
   const readsBefore = f.calls.filter(request => request.path.endsWith('/assistant-session/default')).length;
   f.controls.deleteFailure = false;
@@ -76,8 +76,8 @@ test('删除工作区讨论后保留空白输入入口，不自动重建会话�
   assert.equal(state.sessionDeletion, 'deleted');
   assert.equal(state.mode, 'rewrite_draft');
   assert.equal(state.options.inputKind, 'workspace');
-  assert.equal(state.options.tone, 'original');
-  assert.equal(state.options.instruction, '');
+  assert.equal(state.options.tone, undefined);
+  assert.equal(state.options.instruction, undefined);
   assert.equal(state.options.includeRelationshipContext, false);
   assert.equal(state.options.contextText, undefined);
   assert.equal(state.savedSession.sessionId, null);

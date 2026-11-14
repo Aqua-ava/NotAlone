@@ -12,7 +12,7 @@ import {DeletionService} from '../src/storage/sqlite/deletion/service.ts';
 import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
 import {decode,encode} from '../src/reply/sqlite/requests.ts';
 
-const workspace={action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true};
+const workspace={action:'suggest',draftText:'',contextText:'',includeRelationshipContext:true};
 function toolResponse(res,name,query){
  const events=[{type:'message_start',message:{id:randomUUID(),model:'synthetic-model',usage:{input_tokens:3,output_tokens:0}}},
   {type:'content_block_start',index:0,content_block:{type:'tool_use',id:randomUUID(),name,input:{}}},

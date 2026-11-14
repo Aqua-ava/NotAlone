@@ -12,7 +12,7 @@ import {DeletionService} from '../src/storage/sqlite/deletion/service.ts';
 import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
 
 const content=JSON.stringify({candidates:[{parts:['合成候选'],basis:[1]}]});
-const workspace={action:'express',draftText:'本次想法原文',tone:'warm',instruction:'不要添加承诺',contextText:'本次补充聊天原文',includeRelationshipContext:true};
+const workspace={action:'express',draftText:'本次想法原文；语气温和，不要添加承诺',contextText:'本次补充聊天原文',includeRelationshipContext:true};
 async function setup(t,options={}){
  const f=await fixture(t,{content,...options}),contactId=f.ids[0],discussion=await f.discussions.newDiscussion(contactId);
  const service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
@@ -22,10 +22,10 @@ async function setup(t,options={}){
 test('本次其他参考保留冻结输入与选稿版本，聊天原文仍由候选引用展示',async t=>{
  const f=await setup(t,{content:JSON.stringify({candidates:[{parts:['合成候选'],basis:[3]}]})});await f.turns.generate({...f.scope,requestKey:randomUUID(),text:workspace.draftText,workspace,confirmedContact:true});
  const view=(await f.service.view(f.scope.contactId,f.scope.discussionId))[0],page=await f.service.inputMaterials({...f.scope,requestId:view.requestId,offset:0});
- assert.equal(page.recorded,true);assert.equal(page.nextOffset,null);assert.equal(page.total,4);assert.equal(view.candidates[0].basis.length,1);
- assert.deepEqual(page.items.map(item=>item.kind),['entry','entry','entry','entry']);
- assert.deepEqual(page.items.map(item=>item.itemNo),[2,3,4,5]);
- assert.deepEqual(page.items.map(item=>item.workspaceItem),['request','draft','instruction','supplemental_context']);
+ assert.equal(page.recorded,true);assert.equal(page.nextOffset,null);assert.equal(page.total,3);assert.equal(view.candidates[0].basis.length,1);
+ assert.deepEqual(page.items.map(item=>item.kind),['entry','entry','entry']);
+ assert.deepEqual(page.items.map(item=>item.itemNo),[2,3,4]);
+ assert.deepEqual(page.items.map(item=>item.workspaceItem),['request','draft','supplemental_context']);
  assert.equal(view.candidates[0].basis[0].workspaceItem,'draft');
  assert.doesNotMatch(JSON.stringify(page),/合成会话/);
  for(const item of page.items)assert.ok(JSON.stringify(f.requests[0]).includes(item.text.replaceAll('\n','\\n')));
@@ -41,6 +41,24 @@ test('本次其他参考保留冻结输入与选稿版本，聊天原文仍由�
  const deletion=new DeletionService(f.storage,f.holders,new ManagedFiles(f.root));
  await deletion.plan({ownerId:f.owner,requestKey:randomUUID(),scope:{kind:'source',contactId:f.scope.contactId,sourceId:f.messages[0][0].sourceRecordIds[0]}});
  await assert.rejects(f.service.inputMaterials({...f.scope,requestId:view.requestId,offset:0}));
+});
+
+test('退役前冻结的独立写作要求仍可回看，不重新调用或改写历史',async t=>{
+ const f=await setup(t);await f.turns.generate({...f.scope,requestKey:randomUUID(),text:workspace.draftText,workspace,confirmedContact:true});
+ const view=(await f.service.view(f.scope.contactId,f.scope.discussionId))[0],legacyText='本次一次性写作要求：\n简短一些，不增加承诺';
+ // 用合成数据库构造退役前的已冻结材料，历史读取不通过当前新请求解析器。
+ const db=new DatabaseSync(join(f.root,'managed/sqlite/notalone.sqlite'));
+ try{
+  const context=db.prepare('SELECT id FROM reply_context WHERE owner_id=? AND request_id=?').get(f.owner,view.requestId);
+  const event=db.prepare(`SELECT e.id FROM execution_event e JOIN model_call c ON c.owner_id=e.owner_id AND c.id=e.originated_call_id WHERE e.owner_id=? AND c.reply_context_id=? AND e.kind='model_request' ORDER BY e.event_no DESC LIMIT 1`).get(f.owner,context.id);
+  db.prepare('INSERT INTO reply_candidate_input VALUES(?,?,?,?,?,?)').run(f.owner,context.id,5,'entry',JSON.stringify({workspaceItem:'instruction'}),legacyText);
+  db.prepare('INSERT INTO reply_execution_input VALUES(?,?,?,?)').run(f.owner,event.id,context.id,5);
+ }finally{db.close();}
+ const page=await f.service.inputMaterials({...f.scope,requestId:view.requestId,offset:0});
+ const legacy=page.items.find(item=>item.workspaceItem==='instruction');assert.equal(legacy?.text,legacyText);
+ assert.deepEqual(await f.service.inputMaterials({...f.scope,requestId:view.requestId,offset:0}),page);
+ assert.equal((await f.service.view(f.scope.contactId,f.scope.discussionId))[0].candidates[0].parts[0],'合成候选');
+ assert.equal(f.requests.length,1);
 });
 
 test('实际输入缺少历史请求事件时明确标记记录缺失',async t=>{
@@ -63,10 +81,10 @@ test('50条聊天不占其他参考的首屏和计数，HTTP保留候选引用�
  const base=`http://127.0.0.1:${server.address().port}/api/contacts/${f.scope.contactId}/assistant-sessions/${f.scope.discussionId}/reply-candidates/${view.requestId}/inputs`;
  assert.equal((await fetch(base)).status,401);
  const read=async suffix=>{const response=await fetch(base+suffix,{headers:{authorization:'Bearer synthetic'}}),wire=await response.text();return {status:response.status,wire,body:JSON.parse(wire)};};
- const first=await read('?offset=0');assert.equal(first.status,200,first.wire);assert.equal(first.body.recorded,true);assert.equal(first.body.total,4);assert.equal(first.body.items.length,4);assert.equal(first.body.nextOffset,null);assert.ok(Buffer.byteLength(first.wire)<1_501_000);
- assert.deepEqual(first.body.items.map(item=>item.itemNo),[51,52,53,54]);
- assert.deepEqual(first.body.items.map(item=>item.workspaceItem),['request','draft','instruction','supplemental_context']);
+ const first=await read('?offset=0');assert.equal(first.status,200,first.wire);assert.equal(first.body.recorded,true);assert.equal(first.body.total,3);assert.equal(first.body.items.length,3);assert.equal(first.body.nextOffset,null);assert.ok(Buffer.byteLength(first.wire)<1_501_000);
+ assert.deepEqual(first.body.items.map(item=>item.itemNo),[51,52,53]);
+ assert.deepEqual(first.body.items.map(item=>item.workspaceItem),['request','draft','supplemental_context']);
  assert.ok(first.body.items.every(item=>item.kind!=='message'));assert.doesNotMatch(first.wire,/合成消息/);
- const second=await read('?offset=4');assert.equal(second.status,200,second.wire);assert.deepEqual(second.body,{recorded:true,items:[],nextOffset:null,total:4});
+ const second=await read('?offset=3');assert.equal(second.status,200,second.wire);assert.deepEqual(second.body,{recorded:true,items:[],nextOffset:null,total:3});
  assert.equal((await read('?offset=-1')).status,400);assert.equal((await read('?offset=0&owner_id=foreign')).status,400);assert.equal((await read('?offset=0&offset=1')).status,400);
 });

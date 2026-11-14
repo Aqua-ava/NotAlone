@@ -15,7 +15,7 @@ test('真实准备动作超时：原请求立即核对为未发送失败，重�
  await f.storage.execute('preparationFailureTest.hangNextFreeze',{});
  const discussion=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner);
  const turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},embed:async()=>assert.fail('准备失败后不能执行语义模型')});t.after(()=>turns.close());
- const workspace={action:'express',draftText:'合成准备超时请求',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true};
+ const workspace={action:'express',draftText:'合成准备超时请求',contextText:'',includeRelationshipContext:true};
  const input={contactId,discussionId:discussion.id,requestKey:randomUUID(),text:workspace.draftText,workspace,confirmedContact:true};
  await assert.rejects(turns.generate(input),{code:'discussion_preparation_timeout'});
  assert.equal(f.storage.failureDiagnostic.cause,'action_timeout');assert.equal(f.storage.failureDiagnostic.action,'reply.freezeInput');

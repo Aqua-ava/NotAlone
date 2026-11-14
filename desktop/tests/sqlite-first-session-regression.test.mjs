@@ -46,7 +46,7 @@ test('空目录页面提供明确开始入口并保留当前草稿', async () =>
   const markup = ports.renderToStaticMarkup(ports.createElement(ports.UnifiedReplyWorkspace, {
     contacts: { state: { selectedContactId: 'contact', scopeRevision: 1, draft: '首次的合成想法' } },
     replies: { state: { contactId: 'contact', scopeRevision: 1, phase: 'idle', mode: 'rewrite_draft',
-      generationBlock: null, options: { inputKind: 'workspace', tone: 'original', instruction: '', includeRelationshipContext: true },
+      generationBlock: null, options: { inputKind: 'workspace', includeRelationshipContext: true },
       savedSession: { phase: 'ready', sessionId: null }, messages: { phase: 'idle', items: [] } } },
   }));
   assert.match(markup, /开始助手会话/);
@@ -68,7 +68,7 @@ test('旧会话读取失败后明确新开讨论保留当前独立草稿，并�
   };
   try {
     await f.bridge.updateOptions({ ...f.scope, options: { ...f.replies.getState().options,
-      inputKind: 'workspace', contextText: '旧讨论补充的合成聊天', instruction: '旧讨论的合成要求' } });
+      inputKind: 'workspace', contextText: '旧讨论补充的合成聊天' } });
     await f.bridge.readSavedSession(f.scope);
     assert.equal(f.replies.getState().savedSession.phase, 'failed');
     f.contacts.setDraft({ ...f.scope, text: '读取失败时新写下的合成想法' });
@@ -80,7 +80,7 @@ test('旧会话读取失败后明确新开讨论保留当前独立草稿，并�
     assert.deepEqual(state.savedSession.discussionEntries, []);
     assert.equal(state.result, null);
     assert.equal(state.options.contextText, undefined);
-    assert.equal(state.options.instruction, '');
+    assert.equal(state.options.instruction, undefined);
     assert.equal(state.targetMessageId, null);
     assert.equal(state.requirements, '');
   } finally { await f.replies.beginGenerationClosing(() => {}); }

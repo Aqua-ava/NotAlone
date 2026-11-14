@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { RewriteOptions, RewriteTone } from '../shared/reply-bridge';
-import { replyTextLimit } from '../shared/reply-contract';
+import type { RewriteOptions } from '../shared/reply-bridge';
 import type { ContactSessionView } from './contact-session';
 import { HelperDraft } from './contact-session';
 import type { ReplySessionView } from './RewritePanel';
@@ -13,12 +12,11 @@ interface WorkspaceSubmission { contactId: string | null; scopeRevision: number;
 
 export function UnifiedReplyWorkspace({ contacts, replies }: { contacts: ContactSessionView; replies: ReplySessionView }) {
   const { state } = replies;
-  const [options, setOptions] = useState(() => workspaceOptions(state.options));
+  const options = workspaceOptions(state.options);
   const [submission, setSubmission] = useState<WorkspaceSubmission | null>(null);
   const submitting = submission !== null && submission.contactId === state.contactId
     && submission.scopeRevision === state.scopeRevision && submission.sessionId === state.savedSession?.sessionId;
   const workspaceReady = state.options.inputKind === 'workspace' && state.mode === 'rewrite_draft';
-  useEffect(() => { setOptions(workspaceOptions(state.options)); }, [state.scopeRevision, state.inputClearRevision]);
   useEffect(() => {
     if (state.contactId && state.contactId === contacts.state.selectedContactId && state.savedSession?.phase === 'ready'
       && state.sessionCatalog?.phase !== 'loading' && !state.sessionCatalog?.selectionPending
@@ -40,9 +38,6 @@ export function UnifiedReplyWorkspace({ contacts, replies }: { contacts: Contact
   const draftDisabled = inputBlocked || !workspaceReady && !localDraftOnly;
   const disabled = inputBlocked || !workspaceReady || Boolean(state.generationBlock)
     || state.savedSession?.phase !== 'ready' || !state.savedSession.sessionId;
-  const update = (value: Partial<RewriteOptions>) => {
-    const next = { ...options, ...value }; setOptions(next); void replies.updateOptions(next);
-  };
   async function generate(action: 'express' | 'suggest') {
     const pending = { contactId: state.contactId, scopeRevision: state.scopeRevision, sessionId: state.savedSession?.sessionId };
     setSubmission(pending);
@@ -64,7 +59,7 @@ export function UnifiedReplyWorkspace({ contacts, replies }: { contacts: Contact
   }
   return <section className="compose-panel unified-workspace" aria-label="表达工作区">
     <header className="compose-heading"><span className="section-eyebrow">一起想，把话说好</span>
-      <h2>有什么想说的？</h2><p>写下想法、方向或草稿；没有思路，也可以让我帮你想。</p></header>
+      <h2>有什么想说的？</h2><p>想说什么、希望什么语气，都可以写在这里；没有思路，也可以让我帮你想。</p></header>
     {workspaceReady || localDraftOnly || !contacts.state.selectedContactId ? <HelperDraft
       key={`${contacts.state.selectedContactId}:${contacts.state.scopeRevision}`} session={contacts} workspace disabled={draftDisabled} restoreRevision={state.inputClearRevision} />
       : null}
@@ -81,17 +76,6 @@ export function UnifiedReplyWorkspace({ contacts, replies }: { contacts: Contact
         onClick={() => void generate('suggest')}><Icon name="sparkle" size={18} />帮我想想</button>
     </div>
     <p className="workspace-action-hint">有想法，帮你组织表达；没思路，给你几种说法和建议理由。</p>
-    <details className="compose-settings"><summary>语气和本次要求</summary>
-      <div className="rewrite-options">
-        <label>本次语气<select aria-label="本次语气" value={options.tone} disabled={disabled}
-          onChange={event => update({ tone: event.target.value as RewriteTone })}>
-          <option value="original">自然表达</option><option value="warm">自然温和</option>
-          <option value="concise">简洁直接</option><option value="polite">礼貌克制</option></select></label>
-        <label className="rewrite-instruction">本次要求<input aria-label="本次要求" maxLength={replyTextLimit} disabled={disabled}
-          value={options.instruction} placeholder="可选，如简短一点、不增加承诺"
-          onChange={event => update({ instruction: event.target.value })} /></label>
-      </div>
-    </details>
     <p className="rewrite-privacy">候选供你选择和修改，由你亲自发送。想法和要求只作用于本次生成。</p>
     {state.canRetry && <button className="button" disabled={disabled} onClick={() => void replies.generate()}>重试同一次生成</button>}
   </section>;

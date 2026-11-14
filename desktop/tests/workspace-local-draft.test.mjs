@@ -10,7 +10,7 @@ const bundle = await build({ stdin: { contents: `
 // React 的服务端入口只在编译时解析依赖，渲染不执行订阅和生成命令。
 const { UnifiedReplyWorkspace, createElement, renderToStaticMarkup } =
   await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
-const options = { inputKind: 'workspace', tone: 'original', instruction: '', includeRelationshipContext: true };
+const options = { inputKind: 'workspace', includeRelationshipContext: true };
 function render(overrides = {}, contactOverrides = {}) {
   return renderToStaticMarkup(createElement(UnifiedReplyWorkspace, {
     contacts: { state: { selectedContactId: 'contact-b', scopeRevision: 2, draft: '乙的本地草稿', ...contactOverrides } },

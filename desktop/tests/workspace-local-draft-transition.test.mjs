@@ -19,7 +19,7 @@ test('本地草稿在确认进入工作区后保留，换联系人不继承旧�
       const [ready,setReady]=useState(false);
       const contacts={state:{selectedContactId:contact,scopeRevision:revision,draft},setDraft:async value=>setDraft(value)};
       const replies={state:{contactId:contact,scopeRevision:revision,phase:'idle',mode:'rewrite_draft',
-        options:{tone:'original',instruction:'',includeRelationshipContext:true,...(ready?{inputKind:'workspace'}:{})},
+        options:{includeRelationshipContext:true,...(ready?{inputKind:'workspace'}:{})},
         generationBlock:ready?null:'foreground-confirmation-required',
         savedSession:{phase:ready?'ready':'failed',sessionId:ready?'session-'+contact:null},
         messages:{phase:'ready',items:[]},result:null},
@@ -67,7 +67,7 @@ test('旧讨论加载失败后可重试或开始新讨论，期间写下的独�
       const [workspace,setWorkspace]=useState(false);
       const contacts={state:{selectedContactId:'a',scopeRevision:1,draft},setDraft:async value=>setDraft(value)};
       const replies={state:{contactId:'a',scopeRevision:1,phase:'idle',mode:'rewrite_draft',generationBlock:null,
-        options:{tone:'original',instruction:'',includeRelationshipContext:true,...(workspace?{inputKind:'workspace'}:{})},
+        options:{includeRelationshipContext:true,...(workspace?{inputKind:'workspace'}:{})},
         savedSession:{phase,sessionId},messages:{phase:'ready',items:[]},result:null},
         enterWorkspace:async()=>{},
         readSavedSession:async()=>setPhase('loading'),
@@ -120,7 +120,7 @@ test('讨论恢复先于草稿回显时保留新按键，明确删除和切换�
       const contacts={state:{selectedContactId:contact,scopeRevision:scope,draft,draftClearRevision:cleared},
         setDraft:async value=>{window.pendingDraft=value;}};
       const replies={state:{contactId:contact,scopeRevision:scope,phase:'idle',mode:'rewrite_draft',generationBlock:null,
-        options:{tone:'original',instruction:'',includeRelationshipContext:true,...(restored?{inputKind:'workspace'}:{})},
+        options:{includeRelationshipContext:true,...(restored?{inputKind:'workspace'}:{})},
         inputClearRevision:restored?1:0,savedSession:{phase:restored?'ready':'loading',sessionId:'session-'+contact},
         messages:{phase:'ready',items:[]},result:null},enterWorkspace:async()=>{}};
       return <><button onClick={()=>setRestored(true)}>完成讨论读取</button>

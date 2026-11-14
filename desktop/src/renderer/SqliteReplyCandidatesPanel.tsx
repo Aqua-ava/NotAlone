@@ -1,12 +1,9 @@
 import {useEffect,useRef,useState} from 'react';
 import {Icon} from './icons';
 import {CandidateBasis,SqliteCandidateReferences} from './SqliteCandidateReferences';
-import type {RewriteTone} from '../shared/reply-bridge';
 import type {SqliteDiscussionBridge,SqliteDiscussionReceipt} from '../shared/sqlite-discussion-bridge';
-import {sqliteReplySourceUnavailableMessage,readSqliteCandidatePage,readSqliteCandidateVersion,readSqliteCandidateStatus,type SqliteCandidateStatus,type SqliteCandidatePage,type SqliteCandidateVersion,type SqliteCandidateOperation} from '../shared/sqlite-reply-candidates';
-type WorkspaceInput={action:'express'|'suggest';draftText:string;tone:RewriteTone;instruction:string;contextText:string;includeRelationshipContext:boolean};
+import {sqliteReplySourceUnavailableMessage,readSqliteCandidatePage,readSqliteCandidateVersion,readSqliteCandidateStatus,type SqliteCandidateStatus,type SqliteCandidatePage,type SqliteCandidateVersion,type SqliteCandidateOperation,type SqliteReplyWorkspace} from '../shared/sqlite-reply-candidates';
 type CandidateRequest=SqliteCandidatePage['requests'][number];
-const defaultOptions=()=>({tone:'original' as RewriteTone,instruction:''});
 const progressLabel=(phase:SqliteCandidateStatus['phase'])=>({not_found:'正在接纳本次请求…',preparing:'正在整理本次资料…',queued:'正在等待生成…',generating:'正在等待模型回复…',saving:'正在保存候选…',committed:'正在读取已保存候选…',failed:'正在核对本次结果…',unknown:'正在核对本次结果…'}[phase]);
 function interruptionMessage(code:string|null|undefined,sent:boolean|undefined,abandoned:boolean|undefined):string|undefined{
  // 仅本机确认“已发出但未收到结果”并自动放弃时才这样说；已收到响应的失败同样已发送，不能套用。
@@ -31,13 +28,12 @@ interface Props {bridge:SqliteDiscussionBridge;contactId:string|null;scopeRevisi
 export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessionId,disabled=false,initialDraft='',onInitialDraftTaken,onDraftChange,onSubmitted}:Props){
  const scopeKey=JSON.stringify([contactId,scopeRevision,sessionId]),latest=useRef({scopeKey,bridge});latest.current={scopeKey,bridge};
  const revision=useRef(0),mounted=useRef(false),operation=useRef<object|null>(null);
- const retry=useRef<{fingerprint:string;requestKey:string;text:string;workspace:WorkspaceInput;carry?:string}|null>(null);
+ const retry=useRef<{requestKey:string;text:string;workspace:SqliteReplyWorkspace;carry?:string}|null>(null);
  const seeded=useRef<string|null>(null),consumedHandoff=useRef<string|null>(null),stopProgress=useRef<(()=>void)|null>(null);
  const [progress,setProgress]=useState<SqliteCandidateStatus|null>(null);
  const [progressUnreadable,setProgressUnreadable]=useState(false);
  const qualifiedRequests=useRef<string[]>([]),generationFailure=useRef<{requestKey:string;message:string}|null>(null);
  const [page,setPage]=useState<SqliteCandidatePage|null>(null),[draft,setDraft]=useState(''),[carry,setCarry]=useState<string|undefined>();
- const [options,setOptions]=useState(defaultOptions);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [edits,setEdits]=useState<Record<string,string[]>>({}),[inspected,setInspected]=useState<Record<string,SqliteCandidateVersion>>({});
  // 折叠状态按 requestId 覆盖默认值：最新一次默认展开，用户手动切换后以手动为准；clear() 时重置。
@@ -45,7 +41,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  const [referenceRevision,setReferenceRevision]=useState(0);
  const available=!!bridge.candidates&&!!contactId&&!!sessionId&&!disabled;
  const unresolved=!!retry.current&&!(progress?.phase==='failed'&&progress.retryable);
- function clear(){stopProgress.current?.();setProgress(null);setProgressUnreadable(false);++revision.current;operation.current=null;retry.current=null;generationFailure.current=null;qualifiedRequests.current=[];setPage(null);setDraft('');setOptions(defaultOptions());setCarry(undefined);setBusy(false);setError('');setNotice('');setEdits({});setInspected({});setOpenRequests({});}
+ function clear(){stopProgress.current?.();setProgress(null);setProgressUnreadable(false);++revision.current;operation.current=null;retry.current=null;generationFailure.current=null;qualifiedRequests.current=[];setPage(null);setDraft('');setCarry(undefined);setBusy(false);setError('');setNotice('');setEdits({});setInspected({});setOpenRequests({});}
  useEffect(()=>{mounted.current=true;const off=bridge.onInvalidated(()=>{seeded.current=scopeKey;clear();if(contactId)onDraftChange?.('',{contactId,scopeRevision});});return()=>{mounted.current=false;stopProgress.current?.();++revision.current;operation.current=null;off();};},[bridge,scopeKey]);
  useEffect(()=>{clear();if(available)void run({action:'read'});},[scopeKey,bridge]);
  // 临时禁用只暂停新操作；来源及范围失效仍由订阅和scopeKey立即清除。
@@ -139,9 +135,9 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  }
  async function generate(action:'express'|'suggest'){
   if(action==='express'&&!draft.trim()||!page||unresolved||operation.current)return;
-  const workspace:WorkspaceInput={action,draftText:draft,...options,contextText:'',includeRelationshipContext:true};
-  const fingerprint=JSON.stringify({workspace,carry}),requestKey=crypto.randomUUID();
-  retry.current={fingerprint,requestKey,text:draft,workspace,carry};
+  const workspace:SqliteReplyWorkspace={action,draftText:draft,contextText:'',includeRelationshipContext:true};
+  const requestKey=crypto.randomUUID();
+  retry.current={requestKey,text:draft,workspace,carry};
   await run({action:'generate',requestKey,text:draft,workspace,acceptIncomplete:false,...(carry?{carriedSelectionId:carry}:{})});
  }
  async function retryOriginal(){
@@ -188,19 +184,15 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   setOpenRequests(old=>old[requestId]===open?old:{...old,[requestId]:open});
  }
  return <section aria-label="表达工作区" className="compose-panel unified-workspace sqlite-reply-candidates">
-  <header className="compose-heading"><span className="section-eyebrow">一起想，把话说好</span><h2>有什么想说的？</h2><p>写下想法、方向或草稿；没有思路，也可以让我帮你想。</p></header>
+  <header className="compose-heading"><span className="section-eyebrow">一起想，把话说好</span><h2>有什么想说的？</h2><p>想说什么、希望什么语气，都可以写在这里；没有思路，也可以让我帮你想。</p></header>
   {!available&&<p role="status">{!contactId ? '请先选择本次联系人。'
    : !sessionId ? '联系人已选中，请先打开当前助手讨论。' : '联系人已选中，助手讨论暂不可用，请核对上方状态。'}</p>}
-  <textarea aria-label="有什么想说的" rows={3} maxLength={65536} value={draft} placeholder="写下你的想法或草稿，也可以留空，点击「帮我想想」…" disabled={!available||busy} onChange={e=>{seeded.current=scopeKey;setDraft(e.target.value);if(contactId)onDraftChange?.(e.target.value,{contactId,scopeRevision});}} />
+  <textarea aria-label="有什么想说的" rows={3} maxLength={65536} value={draft} placeholder="例如：想问问她最近怎么样，语气自然一点，简短一些。也可以留空，点击「帮我想想」…" disabled={!available||busy} onChange={e=>{seeded.current=scopeKey;setDraft(e.target.value);if(contactId)onDraftChange?.(e.target.value,{contactId,scopeRevision});}} />
   <div className="workspace-actions">
     <button className="generate-button" aria-label="帮我表达" disabled={!available||busy||unresolved||!page||!draft.trim()} onClick={()=>void generate('express')}><Icon name="write" size={18}/>帮我表达</button>
     <button className="compose-primary workspace-suggest" aria-label="帮我想想" disabled={!available||busy||unresolved||!page} onClick={()=>void generate('suggest')}><Icon name="sparkle" size={18}/>帮我想想</button>
   </div>
   <p className="workspace-action-hint">有想法，帮你组织表达；没思路，给你几种说法和建议理由。</p>
-  <details className="compose-settings"><summary>语气和本次要求</summary><div className="rewrite-options">
-    <label>本次语气<select aria-label="本次语气" value={options.tone} disabled={!available||busy} onChange={e=>setOptions(v=>({...v,tone:e.target.value as RewriteTone}))}><option value="original">自然表达</option><option value="warm">自然温和</option><option value="concise">简洁直接</option><option value="polite">礼貌克制</option></select></label>
-    <label>本次要求<textarea aria-label="本次要求" rows={2} maxLength={4096} value={options.instruction} disabled={!available||busy} placeholder="例如：不要催促、简短一些…" onChange={e=>setOptions(v=>({...v,instruction:e.target.value}))}/></label>
-  </div></details>
   {(busy||retry.current&&progressUnreadable)&&<p className="rewrite-privacy" aria-live="polite">{progressUnreadable?'暂时无法核对本次进度，请保留原请求，勿重复生成。':progress?progressLabel(progress.phase):'正在读取候选…'}</p>}
   {retry.current&&!busy&&<button className="button" onClick={()=>void retryOriginal()}>{progress?.phase==='failed'&&progress.retryable?progress.errorCode==='reply_sources_not_ready'?'重试生成':'重新生成':'核对原请求'}</button>}
   <button className="button" disabled={!available||busy} onClick={()=>void run({action:'read'})}>刷新候选</button>

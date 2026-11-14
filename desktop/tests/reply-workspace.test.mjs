@@ -21,8 +21,7 @@ test('帮我想想允许空输入，从旧场景原子切到统一工作区并�
 test('补充聊天独立冻结，联系人往返恢复空输入建议', async () => {
   const f = await replyWorkspaceFixture();
   try {
-    await f.bridge.updateOptions({ ...f.scope(), options: { tone: 'original', instruction: '',
-      includeRelationshipContext: true, inputKind: 'workspace', workspaceAction: 'suggest',
+    await f.bridge.updateOptions({ ...f.scope(), options: { includeRelationshipContext: true, inputKind: 'workspace', workspaceAction: 'suggest',
       contextText: '对方：最近工作很累。' } });
     await f.bridge.generate({ ...f.scope(), newRequest: true, workspaceAction: 'suggest' });
     const original = f.records.calls.find(item => item.path.endsWith('/replies')).body;
@@ -44,8 +43,7 @@ test('帮我表达要求本人想法，显式关闭关系背景及两种动作�
     await f.bridge.updatePurpose({ ...f.scope(), purpose: '' });
     await f.bridge.generate({ ...f.scope(), newRequest: true, workspaceAction: 'express' });
     assert.equal(f.records.entries.length, 0);
-    await f.bridge.updateOptions({ ...f.scope(), options: { tone: 'original', instruction: '',
-      includeRelationshipContext: false, inputKind: 'workspace', contextText: '对方：周末来吗？' } });
+    await f.bridge.updateOptions({ ...f.scope(), options: { includeRelationshipContext: false, inputKind: 'workspace', contextText: '对方：周末来吗？' } });
     f.contacts.setDraft({ ...f.scope(), text: '想婉拒，不增加承诺' });
     await f.bridge.generate({ ...f.scope(), newRequest: true, workspaceAction: 'express' });
     const original = f.records.calls.find(item => item.path.endsWith('/replies')).body;
@@ -63,8 +61,7 @@ test('帮我表达要求本人想法，显式关闭关系背景及两种动作�
 test('空输入建议的失败重试沿用原请求，中断恢复读取权威动作与补充聊天', async () => {
   const f = await replyWorkspaceFixture();
   try {
-    await f.bridge.updateOptions({ ...f.scope(), options: { tone: 'original', instruction: '',
-      includeRelationshipContext: true, inputKind: 'workspace', contextText: '对方：最近工作很累。' } });
+    await f.bridge.updateOptions({ ...f.scope(), options: { includeRelationshipContext: true, inputKind: 'workspace', contextText: '对方：最近工作很累。' } });
     f.records.failExecution = true;
     await f.bridge.generate({ ...f.scope(), newRequest: true, workspaceAction: 'suggest' });
     assert.equal(f.replies.getState().phase, 'failed');
@@ -86,7 +83,9 @@ test('公开工作区入口拒绝伪造动作与已退役的排除字段', async
   const f = await replyWorkspaceFixture();
   try {
     await assert.rejects(f.bridge.generate({ ...f.scope(), newRequest: true, workspaceAction: 'send' }));
-    const options = { tone: 'original', instruction: '', includeRelationshipContext: true, inputKind: 'workspace' };
+    const options = { includeRelationshipContext: true, inputKind: 'workspace' };
+    await assert.rejects(f.bridge.updateOptions({ ...f.scope(), options: { ...options, tone: 'warm' } }));
+    await assert.rejects(f.bridge.updateOptions({ ...f.scope(), options: { ...options, instruction: '简短一点' } }));
     // 已退役字段即使值合法也不能被接受；设置更新和生成请求都必须拒绝。
     await assert.rejects(f.bridge.updateOptions({ ...f.scope(), options: { ...options, excludedMessageIds: [randomUUID()] } }));
     await assert.rejects(f.bridge.updateOptions({ ...f.scope(), options: { ...options, excludedMessageIds: [] } }));
@@ -101,8 +100,7 @@ test('进入工作区原子迁移旧粘贴来话与本人方向，保持历史�
   try {
     await f.bridge.setMode({ ...f.scope(), mode: 'rewrite_draft' });
     f.contacts.setDraft({ ...f.scope(), text: '周末要不要过来？' });
-    await f.bridge.updateOptions({ ...f.scope(), options: { tone: 'original', instruction: '自然一点',
-      includeRelationshipContext: false, inputKind: 'current_chat', pastedDirection: '想婉拒，不增加承诺' } });
+    await f.bridge.updateOptions({ ...f.scope(), options: { includeRelationshipContext: false, inputKind: 'current_chat', pastedDirection: '想婉拒，不增加承诺' } });
     await f.bridge.generate({ ...f.scope(), newRequest: true });
     await f.bridge.readSavedSession(f.scope());
     await f.bridge.enterWorkspace(f.scope());
@@ -126,8 +124,8 @@ test('旧主动目的与独立表达要求迁移为本人输入，等待联系�
   try {
     await f.bridge.updateRequirements({ ...f.scope(), requirements: '简短一点' });
     await f.bridge.enterWorkspace(f.scope());
-    assert.equal(f.contacts.getState().draft, '先核对安排，不增加承诺。');
-    assert.equal(f.replies.getState().options.instruction, '简短一点');
+    assert.equal(f.contacts.getState().draft, '先核对安排，不增加承诺。\n简短一点');
+    assert.equal(f.replies.getState().options.instruction, undefined);
     f.contacts.selectContact({ contactId: f.otherContactId, scopeRevision: f.scope().scopeRevision });
     await assert.rejects(f.bridge.enterWorkspace(f.scope()));
     assert.equal(f.contacts.getState().draft, '');
@@ -137,8 +135,8 @@ test('旧主动目的与独立表达要求迁移为本人输入，等待联系�
     f.contacts.selectContact({ contactId: f.contactId, scopeRevision: f.scope().scopeRevision });
     await assert.rejects(f.bridge.enterWorkspace(f.scope()));
     await f.bridge.readSavedSession(f.scope());
-    assert.equal(f.contacts.getState().draft, '先核对安排，不增加承诺。');
-    assert.equal(f.replies.getState().options.instruction, '简短一点');
+    assert.equal(f.contacts.getState().draft, '先核对安排，不增加承诺。\n简短一点');
+    assert.equal(f.replies.getState().options.instruction, undefined);
   } finally { await f.replies.beginGenerationClosing(() => {}); }
 });
 
@@ -164,8 +162,7 @@ test('历史完成候选含旧排除载荷时仍可回看，但不恢复为可�
 test('历史载荷含已退役排除设置时拒绝恢复且不创建请求', async () => {
   const f = await replyWorkspaceFixture();
   try {
-    await f.bridge.updateOptions({ ...f.scope(), options: { tone: 'original', instruction: '',
-      includeRelationshipContext: true, inputKind: 'workspace', workspaceAction: 'suggest',
+    await f.bridge.updateOptions({ ...f.scope(), options: { includeRelationshipContext: true, inputKind: 'workspace', workspaceAction: 'suggest',
       contextText: '对方：最近工作很累。' } });
     await f.bridge.generate({ ...f.scope(), newRequest: true, workspaceAction: 'suggest' });
     const original = f.records.entries[0];

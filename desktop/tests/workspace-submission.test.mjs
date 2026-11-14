@@ -10,7 +10,7 @@ test('工作区提交只阻止当前范围，旧范围完成不能解除新范�
     import React, { useState } from 'react';
     import { createRoot } from 'react-dom/client';
     import { UnifiedReplyWorkspace } from './src/renderer/UnifiedReplyWorkspace';
-    const initialOptions = {inputKind:'workspace',includeRelationshipContext:true,tone:'original',instruction:''};
+    const initialOptions = {inputKind:'workspace',includeRelationshipContext:true,};
     window.fixture = {requests:[], releases:[], completed:[]};
     function View() {
       const [scope, setScope] = useState({contactId:'contact-a',sessionId:'session-a',scopeRevision:1,inputClearRevision:0});

@@ -16,7 +16,7 @@ import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
 
 export function useReplySession(enabled = true) {
   const { state, error, setError, latest, active, receive, retry } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null, generationBlock: 'foreground-confirmation-required',
-    options: { tone: 'original', instruction: '', includeRelationshipContext: false },
+    options: { includeRelationshipContext: false },
     mode: 'rewrite_draft', scene: '', messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null, direction: '', purpose: '',
     correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [],
     messageNotice: { phase: 'idle', changed: false, needsRefresh: false },

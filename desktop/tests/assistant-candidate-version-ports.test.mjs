@@ -297,7 +297,7 @@ test('公开四版本RPC只接受完整身份与整组编辑，选择重读实�
 test('普通读取连接故障保留用户草稿、要求与已知版本，明确会话失效清除旧正文', async () => {
   const f = await fixture();
   f.contacts.setDraft({ ...f.scope, text: '用户正在编辑的新草稿。' });
-  const options = { tone: 'warm', instruction: '本次用户要求。', includeRelationshipContext: false };
+  const options = { includeRelationshipContext: false };
   await f.bridge.updateOptions({ ...f.scope, options });
   f.records.failure = new f.BackendRequestFailure('connection');
   await f.bridge.readSavedSession(f.scope);
@@ -340,7 +340,7 @@ test('公开保存和明确选择的source409同步清原结果与同turn副本�
   for (const operation of ['save', 'select']) {
     const f = await fixture();
     f.contacts.setDraft({ ...f.scope, text: '用户仍在编辑的新草稿。' });
-    const options = { tone: 'warm', instruction: '只保留用户当前要求。', includeRelationshipContext: false };
+    const options = { includeRelationshipContext: false };
     await f.bridge.updateOptions({ ...f.scope, options });
     await f.bridge.generate({ ...f.scope, newRequest: true });
     await f.bridge.readSavedSession(f.scope);
@@ -410,7 +410,7 @@ test('生成保留已核验投影后来源复验仍清历史版本缓存，消�
     const independent = appendCandidate(f, { text: '权威仍有效的独立历史合成正文。' });
     await f.bridge.readSavedSession(f.scope);
     f.contacts.setDraft({ ...f.scope, text: '保留用户生成后的手工合成草稿。' });
-    const options = { tone: 'warm', instruction: '保留本次手工合成要求。', includeRelationshipContext: false };
+    const options = { includeRelationshipContext: false };
     await f.bridge.updateOptions({ ...f.scope, options });
     const fullReads = () => f.calls.filter((request) => request.method === 'GET'
       && request.path.endsWith(`/assistant-sessions/${f.sessionId}`)).length;
@@ -536,7 +536,7 @@ for (const operation of ['read', 'save', 'select']) {
     test(`公开${operation}来源${status}完整复验同源两个turn，第二turn旧版不能继续展开`, async () => {
       const f = await fixture(), dependent = appendCandidate(f, { text: '同来源第二轮合成候选。' });
       f.contacts.setDraft({ ...f.scope, text: '来源复验保留用户手工草稿。' });
-      const options = { tone: 'warm', instruction: '来源复验保留本次用户要求。', includeRelationshipContext: false };
+      const options = { includeRelationshipContext: false };
       await f.bridge.updateOptions({ ...f.scope, options });
       await f.bridge.generate({ ...f.scope, newRequest: true });
       await f.bridge.readSavedSession(f.scope);
@@ -633,7 +633,7 @@ for (const [operation, failure] of [['read', 'connection'], ['save', 'server'], 
   test(`公开${operation}确认来源坏后完整GET的${failure}失败清全会话RAM`, async () => {
     const f = await fixture(), dependent = appendCandidate(f, { text: '权威失败必须清除的第二轮合成正文。' });
     f.contacts.setDraft({ ...f.scope, text: '权威失败保留用户手工草稿。' });
-    const options = { tone: 'polite', instruction: '权威失败保留本次用户要求。', includeRelationshipContext: false };
+    const options = { includeRelationshipContext: false };
     await f.bridge.updateOptions({ ...f.scope, options });
     await f.bridge.generate({ ...f.scope, newRequest: true });
     await f.bridge.readSavedSession(f.scope);
@@ -817,7 +817,7 @@ test('选择GET失效后完整权威读取缺失旧turn时不恢复其结果或�
 test('已确认选择来源失效后权威重读连接失败清会话RAM，保留用户新输入', async () => {
   const f = await fixture();
   f.contacts.setDraft({ ...f.scope, text: '确认失效后仍保留用户新草稿。' });
-  const options = { tone: 'warm', instruction: '确认失效后仍保留本次用户要求。', includeRelationshipContext: false };
+  const options = { includeRelationshipContext: false };
   await f.bridge.updateOptions({ ...f.scope, options });
   await f.bridge.generate({ ...f.scope, newRequest: true });
   await f.bridge.readSavedSession(f.scope);
@@ -875,7 +875,7 @@ test('版本读写连接与非来源冲突保留可恢复历史、原结果和�
     for (const failure of ['connection', 'server', 'conflict']) {
       const f = await fixture();
       f.contacts.setDraft({ ...f.scope, text: '连接失败仍保留本次新草稿。' });
-      const options = { tone: 'concise', instruction: '用户本次要求仍在。', includeRelationshipContext: false };
+      const options = { includeRelationshipContext: false };
       await f.bridge.updateOptions({ ...f.scope, options });
       await f.bridge.generate({ ...f.scope, newRequest: true });
       await f.bridge.readSavedSession(f.scope);

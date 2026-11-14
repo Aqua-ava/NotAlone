@@ -110,8 +110,7 @@ test('会话目录报告切换完成时可立即进入工作区，清空临时�
   await f.bridge.readSavedSession(f.scope);
   await f.bridge.enterWorkspace(f.scope);
   f.contacts.setDraft({ ...f.scope, text: '未提交的合成想法' });
-  await f.bridge.updateOptions({ ...f.scope, options: { tone: 'warm', instruction: '临时要求',
-    inputKind: 'workspace', includeRelationshipContext: false, contextText: '临时聊天背景' } });
+  await f.bridge.updateOptions({ ...f.scope, options: { inputKind: 'workspace', includeRelationshipContext: false, contextText: '临时聊天背景' } });
   let attempted = false, migration;
   const unsubscribe = f.replies.onStateChanged(state => {
     if (!attempted && state.savedSession?.sessionId === emptyId && state.sessionCatalog?.phase === 'ready') {
@@ -126,9 +125,9 @@ test('会话目录报告切换完成时可立即进入工作区，清空临时�
     assert.equal(f.contacts.getState().draft, '');
     const state = await f.bridge.getState();
     assert.equal(state.options.inputKind, 'workspace');
-    assert.equal(state.options.instruction, '');
+    assert.equal(state.options.instruction, undefined);
     assert.equal(state.options.contextText ?? '', '');
-    assert.equal(state.options.tone, 'original');
+    assert.equal(state.options.tone, undefined);
     assert.deepEqual(state.savedSession.turns, []);
   } finally { unsubscribe(); await f.replies.beginGenerationClosing(() => {}); }
 });

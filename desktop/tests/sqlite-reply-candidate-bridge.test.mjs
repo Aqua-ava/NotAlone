@@ -36,14 +36,14 @@ test('候选preload与主进程将五种操作映射到固定SQLite HTTP路径',
  const base=`/api/contacts/${ids.contact}/assistant-sessions/${ids.session}/reply-candidates`;
  f.respond(async request=>({generation:3,data:request.path.endsWith('/edit')?{...version(),versionNo:2,parentVersionNo:1,origin:'manual'}:request.path.endsWith('/select')?{id:ids.selection,candidateId:ids.candidate,versionNo:1,selectionNo:1}:request.path.includes('/versions/')?version():request.method==='POST'?{session_id:ids.session,request_key:ids.request,segmented:false,replayed:false}:pageData()}));
  assert.deepEqual(await f.bridge.candidates.execute({...scope,action:'read'}),pageData());
- const workspace={action:'express',draftText:'本次合成表达要求',tone:'warm',instruction:'简洁些',contextText:'本次补充情况',includeRelationshipContext:true};
+ const workspace={action:'express',draftText:'本次合成表达要求，温和简洁些',contextText:'本次补充情况',includeRelationshipContext:true};
  await f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:workspace.draftText,acceptIncomplete:true,workspace});
  assert.equal((await f.bridge.candidates.execute({...scope,action:'edit',candidateId:ids.candidate,versionNo:1,parts:['手改第一条','手改第二条']})).versionNo,2);
  assert.equal((await f.bridge.candidates.execute({...scope,action:'select',candidateId:ids.candidate,versionNo:1})).id,ids.selection);
  assert.deepEqual((await f.bridge.candidates.execute({...scope,action:'version',candidateId:ids.candidate,versionNo:1})).parts,['合成候选第一条','合成候选第二条']);
  assert.deepEqual(f.requests.map(({method,path,body})=>({method,path,body})),[
   {method:'GET',path:base,body:undefined},
-  {method:'POST',path:base,body:{request_key:ids.request,text:'本次合成表达要求',confirmed_contact:true,accept_incomplete:true,workspace}},
+  {method:'POST',path:base,body:{request_key:ids.request,text:workspace.draftText,confirmed_contact:true,accept_incomplete:true,workspace}},
   {method:'POST',path:`${base}/${ids.candidate}/edit`,body:{version_no:1,parts:['手改第一条','手改第二条']}},
   {method:'POST',path:`${base}/${ids.candidate}/select`,body:{version_no:1}},
   {method:'GET',path:`${base}/${ids.candidate}/versions/1`,body:undefined},
@@ -59,9 +59,13 @@ test('preload及主进程均拒绝通用owner、路径、SQL字段和额外参�
   await assert.rejects(handler({...read,...extra}),/无效/);
  }
  await assert.rejects(f.bridge.candidates.execute(read,'extra'),/无效/);await assert.rejects(handler(read,'extra'),/无效/);
- const workspace={action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:false};
+ const workspace={action:'suggest',draftText:'',contextText:'',includeRelationshipContext:false};
  await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'伪造的既定立场',acceptIncomplete:false,workspace}),/无效/);
- await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'',acceptIncomplete:false,workspace:{...workspace,tone:'firm'}}),/无效/);
+ for(const retired of [{tone:'original'},{instruction:'简短一些'}]){
+  const command={...scope,action:'generate',requestKey:ids.request,text:'',acceptIncomplete:false,workspace:{...workspace,...retired}};
+  await assert.rejects(f.bridge.candidates.execute(command),/无效/);
+  await assert.rejects(handler(command),/无效/);
+ }
  for(const key of ['excludedMessageIds','excluded_message_ids']){
   await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'',acceptIncomplete:false,workspace:{...workspace,[key]:[]}}),/无效/);
   await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'',acceptIncomplete:false,[key]:[]}),/无效/);

@@ -10,10 +10,7 @@ import type { SkillPublicationScope } from './skill-learning-bridge';
 import type { MessageQuoteSnapshot } from './message-quote';
 
 export type WorkspaceAction = 'express' | 'suggest';
-export type RewriteTone = 'original' | 'warm' | 'concise' | 'polite';
 export interface RewriteOptions {
-  tone: RewriteTone;
-  instruction: string;
   includeRelationshipContext: boolean;
   inputKind?: 'draft' | 'current_chat' | 'workspace';
   workspaceAction?: WorkspaceAction;

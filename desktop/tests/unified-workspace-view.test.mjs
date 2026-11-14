@@ -25,7 +25,7 @@ await writeFile(entry, bundled.outputFiles[0].text);
 const view = await import(pathToFileURL(entry).href);
 function render({ draft = '', contactId = 'synthetic-contact', ...overrides } = {}) {
   const state = { contactId, scopeRevision: 1, phase: 'idle', mode: 'rewrite_draft', options: {
-    tone: 'original', instruction: '', includeRelationshipContext: true, inputKind: 'workspace',
+    includeRelationshipContext: true, inputKind: 'workspace',
   }, savedSession: { phase: 'ready', sessionId: 'synthetic-session' },
   messages: { phase: 'ready', items: [], nextCursor: null }, exploration: { phase: 'idle' }, ...overrides };
   return view.renderToStaticMarkup(view.createElement(view.UnifiedReplyWorkspace, {

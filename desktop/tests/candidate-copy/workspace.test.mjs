@@ -92,7 +92,7 @@ test('完整字段仍须属于当前工作区联系人、版本和消息', async
 test('旧非工作区改写继续兼容五字段复制命令', async () => {
   const f = await workspaceCopyFixture();
   try {
-    await f.bridge.updateOptions({ ...f.scope(), options: { tone: 'original', instruction: '', includeRelationshipContext: false } });
+    await f.bridge.updateOptions({ ...f.scope(), options: { includeRelationshipContext: false } });
     await f.bridge.generate({ ...f.scope(), newRequest: true });
     const result = f.replies.getState().result;
     assert.equal(result.input.mode, 'rewrite_draft');

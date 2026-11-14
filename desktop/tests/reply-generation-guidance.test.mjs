@@ -23,7 +23,7 @@ const view = await import(pathToFileURL(entry).href);
 function state() {
   const candidate = { candidateId: 'synthetic-candidate', text: '先按原想法表达。', basis: '按本人想法表达。', citationIds: [], riskNotes: [] };
   return { contactId: 'synthetic-contact', scopeRevision: 1, phase: 'ready', mode: 'rewrite_draft',
-    options: { inputKind: 'workspace', workspaceAction: 'express', tone: 'original', instruction: '不增加承诺', includeRelationshipContext: true },
+    options: { inputKind: 'workspace', workspaceAction: 'express', includeRelationshipContext: true },
     skillChoices: [], exploration: { phase: 'idle', result: null }, messageNotice: { changed: false }, messages: { items: [] },
     savedSession: { phase: 'idle', sessionId: 'synthetic-session', turns: [], inputs: [] },
     result: { replyRequestId: 'synthetic-request', assistantSessionId: 'synthetic-session', contextEvidenceIds: [],
@@ -40,15 +40,11 @@ test('想法变化提示旧候选；恢复原输入或只改首尾空白不误�
   assert.equal(current.result.input.draftText, '先聊近况');
 });
 
-test('本次要求和语气按实际生成指令比较，未变更的非默认语气不误报', () => {
+test('历史独立要求保留回看，不再与已退役的编辑选项比较', () => {
   const current = state();
-  current.options.instruction = '简短一点';
-  assert.equal(view.hasChangedReplyInput(current, '先聊近况'), true);
-  current.options.instruction = '不增加承诺';
-  current.options.tone = 'warm';
-  assert.equal(view.hasChangedReplyInput(current, '先聊近况'), true);
   current.result.input.userInstruction = '本次语气自然温和。\n不增加承诺';
   assert.equal(view.hasChangedReplyInput(current, '先聊近况'), false);
+  assert.equal(current.result.input.userInstruction, '本次语气自然温和。\n不增加承诺');
 });
 
 test('帮我想想的问题变化也令旧建议过期，已退役排除字段不参与比较', () => {

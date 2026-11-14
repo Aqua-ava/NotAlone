@@ -38,7 +38,7 @@ async function setup(t,{count=2,background=true,initialFirst=false,messageText=i
  await f.storage.execute('discussion.freezeContext',{...scope,skillRun:{packages:[],eligible:[]},items:selected.map(row=>({kind:'message',sourceContactId:contactId,messageId:row.id,recordId:row.record_id,acceptedRevision:row.interpretation_revision})),at:Date.now()});
  const action=createReplyKnowledgeStorageRegistry({migrations:[],actions:[{name:'test.search',mode:'write',retryBusy:false,execute:(tx,work)=>withReplyValidation(tx,work)}]},reader).actions[0];
  const act=work=>{db.exec('BEGIN IMMEDIATE');try{const value=action.execute(tx,work,f.storage.status);db.exec('COMMIT');return value;}catch(error){db.exec('ROLLBACK');throw error;}};
- act(tx=>freezeReplyInput(tx,{...scope,workspace:{action:'suggest',draftText:'',instruction:'',contextText:'',tone:'warm',includeRelationshipContext:background,selectedPackageId:null,carriedSelectionId:null},at:Date.now()},reader));
+ act(tx=>freezeReplyInput(tx,{...scope,workspace:{action:'suggest',draftText:'',contextText:'',includeRelationshipContext:background,selectedPackageId:null,carriedSelectionId:null},at:Date.now()},reader));
  return {...f,scope,reader,act,db,tx,memory,management,initialMessageId:first?.id??null};
 }
 

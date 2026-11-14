@@ -10,7 +10,7 @@ for (const rounds of [10, 100, 1000]) test(`${rounds}轮历史输入只传增量
   f.events.length = 0; f.responses.length = 0;
   const started = performance.now();
   for (let i = 0; i < 20; i++) {
-    const options = { tone: 'original', instruction: `合成输入${i}`, includeRelationshipContext: false };
+    const options = { contextText: `合成输入${i}`, includeRelationshipContext: false };
     await f.bridge.updateInput({ type: 'options', update: { ...f.scope(), options } });
   }
   const bytes = f.events.reduce((sum, event) => sum + Buffer.byteLength(JSON.stringify(event.state)) * (event.role ? 1 : 2), 0)
@@ -21,10 +21,10 @@ for (const rounds of [10, 100, 1000]) test(`${rounds}轮历史输入只传增量
   assert.equal(f.responses.filter(response => response.value?.savedSession).length, 0, '输入响应不重复携带完整历史');
   assert.equal(updates.length, 20);
   assert.equal(updates[0].baseRevision, before.revision);
-  assert.equal(updates.at(-1).changes.options.instruction, '合成输入19');
+  assert.equal(updates.at(-1).changes.options.contextText, '合成输入19');
   const after = await f.bridge.getState();
   assert.equal(after.savedSession.turns.length, rounds);
-  assert.equal(after.options.instruction, '合成输入19');
+  assert.equal(after.options.contextText, '合成输入19');
 });
 
 test('完整读取和命令回显同修订只通知一次，切换后旧范围增量不能恢复', async () => {
@@ -34,16 +34,16 @@ test('完整读取和命令回显同修订只通知一次，切换后旧范围�
     await f.bridge.getState();
     const initial = seen.length;
     await f.bridge.updateInput({ type: 'options', update: { ...f.scope(), options: {
-      tone: 'original', instruction: '当前最新要求。', includeRelationshipContext: false } } });
+      contextText: '当前最新输入。', includeRelationshipContext: false } } });
     assert.equal(seen.length, initial + 1);
     await f.bridge.getState();
     assert.equal(seen.length, initial + 1);
     const previous = f.scope();
     f.contacts.selectContact({ ...previous, contactId: f.otherContactId });
     await assert.rejects(f.bridge.updateInput({ type: 'options', update: { ...previous, options: {
-      tone: 'original', instruction: '迟到旧范围要求。', includeRelationshipContext: false } } }));
+      contextText: '迟到旧范围输入。', includeRelationshipContext: false } } }));
     assert.equal(seen.at(-1).contactId, f.otherContactId);
-    assert.equal(seen.at(-1).options.instruction, '');
+    assert.equal(seen.at(-1).options.instruction, undefined);
   } finally { unsubscribe(); }
 });
 

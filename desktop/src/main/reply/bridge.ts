@@ -62,10 +62,8 @@ function candidate(args: unknown[], editing = false): ReplyCandidateSelection | 
 function options(args: unknown[]): RewriteOptionsUpdate {
   const value = fields(args, ['contactId', 'scopeRevision', 'options']);
   const settings = value.options as Record<string, unknown> | undefined;
-  if (!settings || typeof settings !== 'object' || Array.isArray(settings) || Object.keys(settings).length < 3
-    || !Object.keys(settings).every((key) => ['tone', 'instruction', 'includeRelationshipContext', 'inputKind', 'pastedDirection', 'workspaceAction', 'contextText'].includes(key))
-    || !['original', 'warm', 'concise', 'polite'].includes(settings.tone as string)
-    || typeof settings.instruction !== 'string' || !fitsReplyTextLimit(settings.instruction)
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings) || Object.keys(settings).length < 1
+    || !Object.keys(settings).every((key) => ['includeRelationshipContext', 'inputKind', 'pastedDirection', 'workspaceAction', 'contextText'].includes(key))
     || typeof settings.includeRelationshipContext !== 'boolean'
     || settings.inputKind !== undefined && !['draft', 'current_chat', 'workspace'].includes(settings.inputKind as string)
     || settings.workspaceAction !== undefined && !['express', 'suggest'].includes(settings.workspaceAction as string)

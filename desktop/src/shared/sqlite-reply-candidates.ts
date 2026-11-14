@@ -1,7 +1,6 @@
 export const sqliteReplySourceUnavailableMessage='聊天来源待重新核验，请到联系人页处理同步问题。';
 export interface SqliteCandidateScope {contactId:string;scopeRevision:number;sessionId:string}
-export type SqliteWorkspaceTone='original'|'warm'|'concise'|'polite';
-export interface SqliteReplyWorkspace {action:'express'|'suggest';draftText:string;tone:SqliteWorkspaceTone;instruction:string;contextText:string;includeRelationshipContext:boolean}
+export interface SqliteReplyWorkspace {action:'express'|'suggest';draftText:string;contextText:string;includeRelationshipContext:boolean}
 export type SqliteCandidateOperation=SqliteCandidateScope & (
  | {action:'read'}
  | {action:'status';requestKey:string}
@@ -23,11 +22,11 @@ const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}(?:-[0-9a-
 function invalid():never{throw new Error('本次候选操作无效。');}
 function validWorkspace(value:unknown):value is SqliteReplyWorkspace{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;const w=value as Record<string,unknown>;
- if(Object.keys(w).some(k=>!['action','draftText','tone','instruction','contextText','includeRelationshipContext'].includes(k))
+ if(Object.keys(w).some(k=>!['action','draftText','contextText','includeRelationshipContext'].includes(k))
   ||!['express','suggest'].includes(String(w.action))||typeof w.draftText!=='string'||w.draftText.length>100000
-  ||w.draftText.length+(typeof w.instruction==='string'?w.instruction.length:0)+(typeof w.contextText==='string'?w.contextText.length:0)>99744
-  ||w.action==='express'&&!w.draftText.trim()||!['original','warm','concise','polite'].includes(String(w.tone))
-  ||typeof w.instruction!=='string'||w.instruction.length>100000||typeof w.contextText!=='string'||w.contextText.length>100000
+  ||w.draftText.length+(typeof w.contextText==='string'?w.contextText.length:0)>99744
+  ||w.action==='express'&&!w.draftText.trim()
+  ||typeof w.contextText!=='string'||w.contextText.length>100000
   ||typeof w.includeRelationshipContext!=='boolean')return false;
  return true;
 }

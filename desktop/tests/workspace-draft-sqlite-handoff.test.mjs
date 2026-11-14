@@ -22,7 +22,7 @@ const bundle = await build({ stdin: { contents: `
     const contacts={state:{selectedContactId:'contact-a',scopeRevision:1,draft},
       setDraft:async value=>{window.fixture.pendingDraft=value;}};
     const replies={state:{contactId:'contact-a',scopeRevision:1,phase:'idle',mode:'rewrite_draft',generationBlock:null,
-      options:{tone:'original',instruction:'',includeRelationshipContext:true},
+      options:{includeRelationshipContext:true},
       savedSession:{phase:'loading',sessionId:'session-a'},messages:{phase:'ready',items:[]},result:null}};
     return <><button onClick={()=>setSqlite(true)}>完成SQLite讨论读取</button>
       <button onClick={()=>setDraft(window.fixture.pendingDraft)}>回显加载时的草稿</button>

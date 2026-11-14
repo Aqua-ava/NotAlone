@@ -193,3 +193,5 @@
 - [ADR-186：按需搜索当前联系人全部获准历史](186-full-contact-history-search.md)——取消五百条候选窗口，保留 DSH 官方工具与返回量、耗时、次数上限。
 
 - [ADR-187：退役表达工作区最近聊天区块及专用读取链](187-retire-workspace-recent-chat.md)——保留自动背景和候选依据，移除区块与候选列表的额外聊天读取。
+
+- [ADR-188：想法、语气和要求统一为主输入](188-unify-workspace-writing-input.md)——移除独立设置及新请求字段，保留历史快照只读回看。

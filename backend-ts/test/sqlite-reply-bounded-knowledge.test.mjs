@@ -152,7 +152,7 @@ test('空suggest不自动召回记忆；模型主动查询后返回超长完整�
  const management=new SqliteMemoryManagement(f.storage,f.owner);
  for(const [index,body] of ['工作区动作帮我想想关系背景已启用尚未确认立场。','园艺'+ '甲'.repeat(599),'园艺短条目完整结束。'].entries())await management.decide({requestKey:`query-${index}`,action:'manual',scope:{scopeKind:'contact',contactId},body});
  const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
- const workspace={action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true};
+ const workspace={action:'suggest',draftText:'',contextText:'',includeRelationshipContext:true};
  await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'',confirmedContact:true,workspace});
  assert.doesNotMatch(JSON.stringify(f.requests[0]),/工作区动作帮我想想关系背景已启用尚未确认立场。|园艺甲|园艺短条目完整结束/);
  await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'园艺',confirmedContact:true});
@@ -232,7 +232,7 @@ test('模型显式查询后才计算语义，同义记忆可召回，语义模�
  },content:memoryReply}),contactId=f.ids[0];
  const management=new SqliteMemoryManagement(f.storage,f.owner);
  for(const [index,body] of ['他喜欢爬山。','公司报销流程复杂。'].entries())await management.decide({requestKey:`semantic-${index}`,action:'manual',scope:{scopeKind:'contact',contactId},body});
- const workspace={action:'express',draftText:'想去徒步',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true};
+ const workspace={action:'express',draftText:'想去徒步',contextText:'',includeRelationshipContext:true};
  const embed=async texts=>texts.map(text=>/徒步|爬山/.test(text)?[1,0]:[0,1]);
  const run=async options=>{
   const before=f.requests.length,queries=[];

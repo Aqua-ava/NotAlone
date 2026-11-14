@@ -11,7 +11,7 @@ const original=()=>({candidateId:ids.candidate,versionNo:1,origin:'model',parent
 const pageData=(version=original())=>({requests:[{requestId:ids.request,coverageWarning:null,sourceState:'available',candidates:[version],selections:[],loadedSkills:[{packageId:ids.skill,revisionNo:1,relativePath:'SKILL.md',text:'本次实际加载的合成Skill正文'}]}]});
 const receipt=(request,replayed=false)=>({session_id:request.sessionId,request_key:request.requestKey,segmented:false,replayed});
 
-test('SQLite表达工作区保留两种动作、默认关系背景和本次语气设置',{timeout:30000},async t=>{
+test('SQLite表达工作区用同一个输入表达想法、语气与要求，保留两种动作和默认关系背景',{timeout:30000},async t=>{
  const f=await panel(t,async operation=>operation.action==='generate'?receipt(operation):pageData());
  const region=f.page.getByRole('region',{name:'表达工作区'});
  const draft=region.getByRole('textbox',{name:'有什么想说的',exact:true});
@@ -23,12 +23,12 @@ test('SQLite表达工作区保留两种动作、默认关系背景和本次语�
  assert.equal(f.commands.find(c=>c.action==='generate').workspace.draftText,'');
  await expect(region.getByText('最近聊天 · 查看／补充',{exact:true})).toHaveCount(0);
  await expect(region.getByRole('textbox',{name:'补充聊天上下文',exact:true})).toHaveCount(0);
- await region.getByText('语气和本次要求',{exact:true}).click();
- await region.getByRole('combobox',{name:'本次语气',exact:true}).selectOption('concise');
- await region.getByRole('textbox',{name:'本次要求',exact:true}).fill('简短一些');
- await draft.fill('想问问下班了吗');await express.click();
+ await expect(region.getByText('语气和本次要求',{exact:true})).toHaveCount(0);
+ await expect(region.getByRole('combobox',{name:'本次语气',exact:true})).toHaveCount(0);
+ await expect(region.getByRole('textbox',{name:'本次要求',exact:true})).toHaveCount(0);
+ await draft.fill('想问问下班了吗，语气自然一点，简短一些');await express.click();
  await expect.poll(()=>f.commands.filter(c=>c.action==='generate').length).toBe(2);
- assert.deepEqual(f.commands.filter(c=>c.action==='generate')[1].workspace,{action:'express',draftText:'想问问下班了吗',tone:'concise',instruction:'简短一些',contextText:'',includeRelationshipContext:true});
+ assert.deepEqual(f.commands.filter(c=>c.action==='generate')[1].workspace,{action:'express',draftText:'想问问下班了吗，语气自然一点，简短一些',contextText:'',includeRelationshipContext:true});
  await expect(draft).toHaveValue('');
 });
 
@@ -43,7 +43,7 @@ test('候选继续可显式取消，随后生成不携入旧选稿',{timeout:300
  await region.getByRole('button',{name:'帮我想想',exact:true}).click();
  await expect.poll(()=>f.commands.filter(c=>c.action==='generate').length).toBe(1);
  assert.equal(f.commands.find(c=>c.action==='generate').carriedSelectionId,undefined);
- assert.deepEqual(f.commands.find(c=>c.action==='generate').workspace,{action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true});
+ assert.deepEqual(f.commands.find(c=>c.action==='generate').workspace,{action:'suggest',draftText:'',contextText:'',includeRelationshipContext:true});
  assert.equal(Object.hasOwn(f.commands.find(c=>c.action==='generate').workspace,'excludedMessageIds'),false);
 });
 

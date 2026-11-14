@@ -6,7 +6,7 @@ import {SqliteReplyTurns} from '../src/reply/sqlite/candidates/turns.ts';
 import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/service.ts';
 const registryModule=new URL('./fixtures/sqlite/reply-source-recovery-registry.mjs',import.meta.url).href;
 const content=JSON.stringify({candidates:[{parts:['合成本机候选'],basis:[1]}]});
-const workspace=()=>({action:'express',draftText:'我想说晚点再聊',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true});
+const workspace=()=>({action:'express',draftText:'我想说晚点再聊',contextText:'',includeRelationshipContext:true});
 function memoryToolResponse(res,query){
  const events=[{type:'message_start',message:{id:randomUUID(),model:'synthetic-model',usage:{input_tokens:3,output_tokens:0}}},
   {type:'content_block_start',index:0,content_block:{type:'tool_use',id:randomUUID(),name:'search_relationship_memory',input:{query}}},

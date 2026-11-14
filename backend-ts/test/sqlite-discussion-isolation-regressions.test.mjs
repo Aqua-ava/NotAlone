@@ -67,7 +67,7 @@ async function generateToFrozenFailure(f){
  const turns=new SqliteReplyTurns({storage:recording,service,discussions,runtime,model,provider,arbiter:new ModelPermitArbiter(),authorize:async()=>{}});
  try{
   await assert.rejects(turns.generate({contactId:f.contactId,discussionId:f.current.id,requestKey:randomUUID(),text:'用当前聊天和本次想法生成',
-   confirmedContact:true,workspace:{action:'suggest',draftText:'用当前聊天和本次想法生成',tone:'original',instruction:'',contextText:'',
+   confirmedContact:true,workspace:{action:'suggest',draftText:'用当前聊天和本次想法生成',contextText:'',
     includeRelationshipContext:true}}),/synthetic_runtime_stop/);
  }finally{await turns.close();}
  return calls;

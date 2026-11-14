@@ -314,13 +314,13 @@ test('较晚的依据变化读取更新提醒，保留当前草稿、要求和�
   const reading = f.bridge.readSavedSession(f.scope);
   await held;
   f.contacts.setDraft({ ...f.scope, text: '用户正在写的新合成草稿。' });
-  await f.bridge.updateOptions({ ...f.scope, options: { tone: 'concise', instruction: '保留本次合成意图。', includeRelationshipContext: false } });
+  await f.bridge.updateOptions({ ...f.scope, options: { includeRelationshipContext: false } });
   await f.bridge.editCandidate({ ...f.scope, replyRequestId: f.requestId, candidateId: f.candidateId, text: '用户正在编辑的合成候选。' });
   release(); await reading;
   const state = await f.bridge.getState();
   assert.equal(state.result.candidates[0].editedText, '用户正在编辑的合成候选。');
   assert.equal(f.contacts.getState().draft, '用户正在写的新合成草稿。');
-  assert.equal(state.options.instruction, '保留本次合成意图。');
+  assert.equal(state.options.instruction, undefined);
   assert.deepEqual(state.result.basisChanges, [{ evidenceId: f.memoryId, kind: 'confirmed_memory', reason: 'memory_expired' }]);
 });
 

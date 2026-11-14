@@ -27,13 +27,9 @@
 .compose-panel > label, .compose-panel .ime-input > label { display: grid; gap: 8px; font-size: 13px; font-weight: 500; flex: 1; min-width: 0; }
 .ime-pane .ime-input { padding: 0; gap: 12px; align-items: flex-end; margin: 12px 0 16px; }
 .ime-pane .generate-button, .ime-pane .compose-primary, .ime-pane .strategy-actions .primary { width: auto; height: auto; min-height: 42px; padding: 11px 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; font-size: 13px; }
-.ime-pane .rewrite-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 0; font-size: 13px; }
-.ime-pane .rewrite-options label { display: grid; gap: 8px; align-items: start; }
-.ime-pane .rewrite-options label:has(textarea), .ime-pane .rewrite-options .rewrite-instruction { grid-column: 1 / -1; }
-.ime-pane .rewrite-options .rewrite-context { display: flex; align-items: center; align-self: center; }
 .ime-pane .rewrite-privacy { font-size: 12px; padding: 12px 0 0; color: #7a8892; }
 .ime-pane .rewrite-retry { min-height: 0; padding: 0; margin-top: 10px; flex-wrap: wrap; }
-.compose-settings, .strategy-settings, .strategy-details { border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); padding: 12px 14px; margin-top: 14px; }
+.strategy-settings, .strategy-details { border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); padding: 12px 14px; margin-top: 14px; }
 .ime-pane summary { color: #526e80; cursor: pointer; font-size: 13px; line-height: 1.6; }
 .ime-pane details[open] > summary { margin-bottom: 12px; }
 .ime-pane .reply-scene-input { padding: 10px 0; font-size: 13px; }
@@ -96,7 +92,7 @@
   .ime-pane .ime-footer { padding: 8px 12px; gap: 6px; }
   .ime-pane .ime-footer > span:last-child { flex-basis: 100%; font-size: 11px; }
   .ime-pane .compose-panel, .ime-pane .reply-candidates { padding: 16px; }
-  .strategy-form-grid, .ime-pane .rewrite-options { grid-template-columns: minmax(0, 1fr); }
+  .strategy-form-grid { grid-template-columns: minmax(0, 1fr); }
   .ime-pane .ime-input { flex-wrap: wrap; }
   .ime-pane .ime-input > label { flex-basis: 100%; }
   .ime-pane .ime-input > textarea { flex-basis: 100%; }

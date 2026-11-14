@@ -15,7 +15,7 @@ test('历史各阶段均可直接生成，切换联系人或重开无需额外�
       <UnifiedReplyWorkspace historyCoverage={phase}
         contacts={{ state: { selectedContactId: contactId, scopeRevision: 1, draft: '合成想法' } }}
         replies={{ state: { contactId, scopeRevision: 1, phase: 'idle', mode: 'rewrite_draft',
-          options: { tone: 'original', instruction: '', inputKind: 'workspace', includeRelationshipContext: true },
+          options: { inputKind: 'workspace', includeRelationshipContext: true },
           savedSession: { phase: 'ready', sessionId }, messages: { phase: 'ready', items: [] } },
           generateWorkspace: async (...args) => window.calls.push(args) }} />);
     window.render();
