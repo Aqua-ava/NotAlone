@@ -92,6 +92,20 @@ test('L3画像拒绝行动建议，不把一次性策略写成人物资料', () 
   }]}, [memory], budget), /action|建议|策略/i);
 });
 
+test('L3事实正文与依据中的联系人名词不会被当成联系行动',()=>{
+ const text='合成车票的版式应该相同，联系人的票根标注甲区。';
+ for(const field of ['text','basis']){
+  const checked=validateProfile({entries:[{...entry,[field]:text}]},[{...memory,text}],budget);
+  assert.equal(checked.entries[0][field],text);
+ }
+});
+
+test('L3正文与依据中的真实联系、回复建议仍被拒绝',()=>{
+ for(const text of ['以后应该联系对方核对合成行程。','建议联系合成组织者，并回复确认。','下次应该联系人事部门。','建议联系人员核对。'])for(const field of ['text','basis']){
+  assert.throws(()=>validateProfile({entries:[{...entry,[field]:text}]},[memory],budget),/l3_profile_action_guidance/);
+ }
+});
+
 test('L3画像文档工具为常见 schema 字段错误返回可区分且可纠正的工具结果', () => {
   const cases = [
     {
