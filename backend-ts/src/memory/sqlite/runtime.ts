@@ -33,7 +33,7 @@ export interface SqliteMemorySharedModel {
 export async function createSqliteMemoryRuntime(options:{ctx:Context;contentResources?:MemoryContentResources;contentRegistry?:MemoryContentRegistry;storage:SqliteStorage;ownerId:string;userData:string;businessHome:string;infoPath:string;envFilePath:string;environment:Readonly<NodeJS.ProcessEnv>;sharedModel?:SqliteMemorySharedModel;holders:ActiveHolders;authorize(req:IncomingMessage):boolean;afterRunSettled?:(runId:string)=>Promise<unknown>;adjudicationEnabled?:boolean;ensureSourceReady?:(contactId:string)=>Promise<void>}){
  const contentRegistry=options.contentRegistry??new MemoryContentRegistry();
  if(!options.contentRegistry)await options.ctx.plugin(memoryContentPlugin,{registry:contentRegistry,plugins:builtinMemoryContentPlugins});
- const configuration=options.sharedModel?.configuration??resolveHostReplyConfiguration(options.environment);
+ const configuration=options.sharedModel?.configuration??resolveHostReplyConfiguration(options.environment,{purpose:'memory'});
  let service:SqliteMemoryExtraction;let adjudication:SqliteMemoryAdjudication|undefined;let documents:SqliteMemoryDocuments|undefined;
  let l1Scheduler:SqliteMemoryL1Scheduler|undefined;let laterWorker:SqliteMemoryLaterWorker|undefined;let schedulingStarted=false;let incrementalAdmissionAll=false;
  const incrementalAdmissionContacts=new Set<string>();

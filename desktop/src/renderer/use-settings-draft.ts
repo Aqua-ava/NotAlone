@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { BackendBridge, BackendState } from '../shared/backend-bridge';
 
-type DraftKey = 'helper-shortcut' | 'setup-base-url' | 'setup-owner-name' | 'startup-paths';
+type DraftKey = 'helper-shortcut' | 'setup-base-url' | 'setup-owner-name' | 'setup-model-parameters' | 'startup-paths';
 type Draft = { baseline: string; value: unknown };
 // 仅在当前管理窗口内保留非秘密编辑；不写磁盘，不接收 API Key。
 const drafts = new Map<DraftKey, Draft>();

@@ -1,4 +1,5 @@
 import { isDeepSeekConfiguration } from '../shared/ai-service-configuration';
+import { isModelParameters } from '../shared/model-parameters';
 import { ipcRenderer } from 'electron';
 import type { SetupBridge, SetupState } from '../shared/setup-bridge';
 
@@ -13,6 +14,8 @@ export function createSetupBridge(): SetupBridge {
       ? ipcRenderer.invoke('setup:initialize-owner', args[0]) : Promise.reject(new Error('首次配置操作不可用')),
     saveDeepSeekConfiguration: (...args: unknown[]) => args.length === 1 && isDeepSeekConfiguration(args[0])
       ? ipcRenderer.invoke('setup:save-deepseek-configuration', { baseUrl: args[0].baseUrl, apiKey: args[0].apiKey }) : Promise.reject(new Error('AI 服务配置无效')),
+    saveModelParameters: (...args: unknown[]) => args.length === 1 && isModelParameters(args[0])
+      ? ipcRenderer.invoke('setup:save-model-parameters', structuredClone(args[0])) : Promise.reject(new Error('模型参数无效')),
     saveDeepSeekKey: (...args: unknown[]) => args.length === 1 && typeof args[0] === 'string'
       ? ipcRenderer.invoke('setup:save-deepseek-key', args[0]) : Promise.reject(new Error('首次配置操作不可用')),
     saveOfficialDeepSeekKey: (...args: unknown[]) => args.length === 2 && typeof args[0] === 'string' && args[1] === true

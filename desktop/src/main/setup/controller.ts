@@ -1,4 +1,5 @@
 import { isAiServiceBaseUrl, isDeepSeekConfiguration, type DeepSeekConfiguration } from '../../shared/ai-service-configuration';
+import { DEFAULT_MODEL_PARAMETERS, equalModelParameters, isModelParameters, modelParametersFromApi, modelParametersToApi, type ModelParameters } from '../../shared/model-parameters';
 import { isUuid } from '../uuid';
 import { BackendRequestFailure } from '../backend/json-client';
 import type { SetupState } from '../../shared/setup-bridge';
@@ -12,7 +13,8 @@ export class SetupController {
   private epoch = 0;
   private busy = false;
   private savedConfigPending = false;
-  private savedExpectation: 'owner' | 'credentials' | 'official' = 'owner';
+  private savedExpectation: 'owner' | 'credentials' | 'official' | 'parameters' = 'owner';
+  private savedModelParameters: ModelParameters | undefined;
   private readonly listeners = new Set<(state: SetupState) => void>();
 
   constructor(private readonly backend: BackendHost) {
@@ -27,7 +29,7 @@ export class SetupController {
       else void this.refresh();
     });
   }
-  getState(): SetupState { return { ...this.state }; }
+  getState(): SetupState { return structuredClone(this.state); }
   onStateChanged(listener: (state: SetupState) => void): () => void {
     this.listeners.add(listener); return () => this.listeners.delete(listener);
   }
@@ -39,13 +41,16 @@ export class SetupController {
     this.publish({ phase: 'loading', ownerReady: false, credentialsConfigured: false, errorCode: undefined });
     try {
       const { data } = await this.backend.requestJson({ method: 'GET', path: '/api/setup/status', maxResponseBytes: 4096 });
-      const status = data as { initialized?: unknown; owner_configured?: unknown; credentials_configured?: unknown; runtime_owner_configured?: unknown; official_deepseek_defaults?: unknown; recoverable_owner?: unknown; deepseek_base_url?: unknown; runtime_configuration_pending?: unknown; semantic_model_ready?: unknown; runtime_configuration_environment_override?: unknown };
+      const status = data as { initialized?: unknown; owner_configured?: unknown; credentials_configured?: unknown; runtime_owner_configured?: unknown; official_deepseek_defaults?: unknown; recoverable_owner?: unknown; deepseek_base_url?: unknown; model_parameters?: unknown; runtime_configuration_pending?: unknown; semantic_model_ready?: unknown; runtime_configuration_environment_override?: unknown };
       if (!status || typeof status.initialized !== 'boolean' || typeof status.owner_configured !== 'boolean'
         || typeof status.credentials_configured !== 'boolean' || typeof status.runtime_owner_configured !== 'boolean'
         || status.runtime_configuration_pending !== undefined && typeof status.runtime_configuration_pending !== 'boolean'
         || status.semantic_model_ready !== undefined && typeof status.semantic_model_ready !== 'boolean'
         || status.runtime_configuration_environment_override !== undefined && typeof status.runtime_configuration_environment_override !== 'boolean') throw new Error();
       const ownerReady = status.runtime_owner_configured;
+      const modelParametersInvalid = status.model_parameters === null;
+      const modelParameters = status.model_parameters === undefined ? structuredClone(DEFAULT_MODEL_PARAMETERS) : modelParametersFromApi(status.model_parameters);
+      if (!modelParameters && !modelParametersInvalid) throw new Error();
       if (!this.isCurrent(operation)) return;
       const pending = status.runtime_configuration_pending === true;
       if (pending) {
@@ -55,6 +60,8 @@ export class SetupController {
       this.publish({ phase: pending ? 'restart-failed' : ownerReady ? 'ready' : status.owner_configured ? 'identity-unbound' : 'needs-owner',
         ownerReady, configurationPending: pending, errorCode: pending ? status.runtime_configuration_environment_override === true ? 'configuration-environment-override' : 'reload-failed' : undefined, recoverableOwner: !ownerReady && status.recoverable_owner === true, credentialsConfigured: status.credentials_configured,
         semanticModelReady: typeof status.semantic_model_ready === 'boolean' ? status.semantic_model_ready : undefined,
+        modelParameters,
+        modelParametersInvalid,
         baseUrl: isAiServiceBaseUrl(status.deepseek_base_url) ? status.deepseek_base_url : undefined,
         officialDefaults: typeof status.official_deepseek_defaults === 'boolean' ? status.official_deepseek_defaults : undefined });
     } catch { if (this.isCurrent(operation)) this.publish({ phase: 'failed', ownerReady: false, credentialsConfigured: false }); }
@@ -99,6 +106,21 @@ export class SetupController {
       if (value?.provider !== 'deepseek' || value.configured !== true) throw new Error();
     });
   }
+  async saveModelParameters(parameters: ModelParameters): Promise<void> {
+    if (!isModelParameters(parameters)) throw new Error('模型参数无效');
+    if (this.state.phase !== 'ready') throw new Error('模型设置暂不可用');
+    const submitted = structuredClone(parameters);
+    let written = false;
+    await this.writeConfiguration('parameters', async () => {
+      const { data } = await this.backend.requestJson({ method: 'POST', path: '/api/setup/model-parameters',
+        body: modelParametersToApi(submitted), maxResponseBytes: 4096 });
+      const value = data as { configured?: unknown; restart_required?: unknown };
+      if (value?.configured !== true || value.restart_required !== true) throw new Error();
+      this.savedModelParameters = submitted;
+      written = true;
+    });
+    if (!written) throw new Error('模型参数未能保存，请重试。');
+  }
   async saveOfficialDeepSeekKey(apiKey: string): Promise<void> {
     if (this.state.phase !== 'ready') return;
     await this.writeConfiguration('official', async () => {
@@ -108,7 +130,7 @@ export class SetupController {
       if (value.configured !== true || value.official_deepseek_defaults !== true) throw new Error();
     });
   }
-  private async writeConfiguration(kind: 'owner' | 'credentials' | 'official', write: () => Promise<void>): Promise<void> {
+  private async writeConfiguration(kind: 'owner' | 'credentials' | 'official' | 'parameters', write: () => Promise<void>): Promise<void> {
     if (this.busy) return;
     const operation = this.beginOperation();
     if (!operation) return;
@@ -128,7 +150,7 @@ export class SetupController {
       if (!recovery || recovery.generation !== operation.generation) return;
       await this.readStatus(recovery);
       // 自己的恢复查询返回也需复核；断线或较新查询不能被旧保存错误覆盖。
-      if (this.isCurrent(recovery)) this.publish({ errorCode: kind === 'owner' ? 'initialize-failed' : environmentOverride ? 'configuration-environment-override' : 'credentials-failed' });
+      if (this.isCurrent(recovery)) this.publish({ errorCode: kind === 'owner' ? 'initialize-failed' : environmentOverride ? 'configuration-environment-override' : kind === 'parameters' ? 'parameters-failed' : 'credentials-failed' });
     } finally { this.busy = false; }
   }
   async retryRestart(): Promise<void> {
@@ -154,9 +176,13 @@ export class SetupController {
     if (!operation) { this.publish({ phase: 'restart-failed', errorCode: 'reload-failed' }); return; }
     await this.readStatus(operation);
     if (!this.isCurrent(operation)) return;
-    if (this.state.phase === 'ready' && (this.savedExpectation === 'owner' || this.state.credentialsConfigured
-      && (this.savedExpectation !== 'official' || this.state.officialDefaults === true))) this.savedConfigPending = false;
-    else this.publish({ phase: 'restart-failed', errorCode: this.state.errorCode === 'configuration-environment-override' ? 'configuration-environment-override' : 'reload-failed' });
+    const parametersConfirmed = this.savedExpectation !== 'parameters' || equalModelParameters(this.state.modelParameters, this.savedModelParameters);
+    if (this.state.phase === 'ready' && parametersConfirmed && (this.savedExpectation === 'owner' || this.savedExpectation === 'parameters' || this.state.credentialsConfigured
+      && (this.savedExpectation !== 'official' || this.state.officialDefaults === true))) {
+      this.savedConfigPending = false;
+      this.savedModelParameters = undefined;
+    }
+    else this.publish({ phase: 'restart-failed', configurationPending: true, errorCode: this.state.errorCode === 'configuration-environment-override' ? 'configuration-environment-override' : 'reload-failed' });
   }
   private beginOperation(): Operation | undefined {
     const generation = this.backend.getConnectionGeneration();

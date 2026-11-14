@@ -1,4 +1,5 @@
 import { isDeepSeekConfiguration } from '../../shared/ai-service-configuration';
+import { isModelParameters } from '../../shared/model-parameters';
 import { ipcMain } from 'electron';
 import type { AppWindows } from '../windows';
 import type { SetupController } from './controller';
@@ -37,6 +38,12 @@ export function installSetupBridge(windows: AppWindows, setup: SetupController):
     const value = args[0];
     if (!window.webContents.getURL().endsWith('#manager') || args.length !== 1 || !isDeepSeekConfiguration(value)) throw new Error('AI 服务配置无效');
     return setup.saveDeepSeekConfiguration({ baseUrl: value.baseUrl, apiKey: value.apiKey });
+  });
+  ipcMain.handle('setup:save-model-parameters', (event, ...args: unknown[]) => {
+    const window = windows.validateCaller(event, []);
+    const value = args[0];
+    if (!window.webContents.getURL().endsWith('#manager') || args.length !== 1 || !isModelParameters(value)) throw new Error('模型参数无效');
+    return setup.saveModelParameters(structuredClone(value));
   });
   ipcMain.handle('setup:save-deepseek-key', (event, ...args: unknown[]) => {
     const window = windows.validateCaller(event, []);

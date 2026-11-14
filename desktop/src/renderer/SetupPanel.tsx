@@ -3,6 +3,7 @@ import { isAiServiceBaseUrl } from '../shared/ai-service-configuration';
 import type { SetupState } from '../shared/setup-bridge';
 import { FirstFrameError } from './FirstFrameError';
 import { useSettingsDraft } from './use-settings-draft';
+import { ModelParametersPanel } from './ModelParametersPanel';
 import './setup.css';
 
 export function SetupPanel() {
@@ -86,8 +87,10 @@ export function SetupPanel() {
                   value={key} onChange={(event) => setKey(event.target.value)} />
                 <button className="button primary" type="submit" disabled={savingConfiguration || !isAiServiceBaseUrl(baseUrl.trim()) || !key.trim()}>{savingConfiguration ? '正在保存配置…' : '保存 AI 服务配置'}</button>
               </form>}
+            {state.phase === 'ready' && <ModelParametersPanel state={state} />}
           </>}
     {state.errorCode === 'configuration-environment-override' && state.phase !== 'restart-failed' && <p role="alert">启动环境覆盖或禁止读取受控配置文件，本次更改未保存。请由启动方更新环境后重试。</p>}
+    {state.errorCode === 'parameters-failed' && <p role="alert">模型参数未能保存，请重试。</p>}
     {(error || state.errorCode === 'initialize-failed' || state.errorCode === 'credentials-failed') && <p role="alert">{error || (state.errorCode === 'credentials-failed'
       ? 'AI 服务配置未能保存，请重新输入密钥后重试。' : '本人初始化未完成，请重试。')}</p>}
     <FirstFrameError message={readError} retry={() => { setReadError(''); setReadAttempt((value) => value + 1); }} />

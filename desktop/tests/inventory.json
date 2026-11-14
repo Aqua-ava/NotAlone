@@ -166,7 +166,8 @@
   "tests/backend-lost-connection.test.mjs",
   "tests/backend-storage-loss.test.mjs",
   "tests/contact-session-deletion.test.mjs",
-  "tests/history-clear-bridge.test.mjs"
+  "tests/history-clear-bridge.test.mjs",
+  "tests/model-parameters.test.mjs"
  ],
  "headless": [
   "tests/usage/continuity-view.test.mjs",
@@ -213,7 +214,8 @@
   "tests/usage/connection-view.test.mjs",
   "tests/first-frame-state-view.test.mjs",
   "tests/memory-automatic-switch.test.mjs",
-  "tests/sqlite-memory-source-recheck.test.mjs"
+  "tests/sqlite-memory-source-recheck.test.mjs",
+  "tests/model-parameters-view.test.mjs"
  ],
  "isolated-http": [
   "tests/overview-reply-retrieval.test.mjs"

@@ -21,6 +21,14 @@ test('SQLite 正式宿主提供模型设置，保存后重开生效且不泄露�
  }
  let running=await start();let result=await running.request('/api/setup/status');
  assert.equal(result.status,200);assert.equal(result.data.initialized,true);assert.equal(result.data.owner_configured,true);assert.equal(result.data.credentials_configured,false);assert.equal(result.data.runtime_owner_configured,true);assert.equal(typeof result.data.semantic_model_ready,'boolean');
+ const parameters={reply:{thinking_effort:'off',temperature:0.7},memory:{thinking_effort:'max',temperature:1.2}};
+ assert.deepEqual(result.data.model_parameters,{reply:{thinking_effort:'off',temperature:0},memory:{thinking_effort:'off',temperature:0}});
+ const beforeParameters=await readFile(envFilePath,'utf8');
+ result=await running.request('/api/setup/model-parameters',parameters,{Origin:'https://untrusted.invalid'});assert.equal(result.status,401);assert.equal(await readFile(envFilePath,'utf8'),beforeParameters);
+ for(const invalid of [{}, {...parameters,extra:true},{...parameters,memory:{thinking_effort:'high',temperature:2.01}},{...parameters,reply:{thinking_effort:'low',temperature:'1'}}])assert.equal((await running.request('/api/setup/model-parameters',invalid)).status,400);
+ assert.equal(await readFile(envFilePath,'utf8'),beforeParameters);
+ result=await running.request('/api/setup/model-parameters',parameters);assert.deepEqual(result,{status:200,data:{configured:true,restart_required:true}});
+ result=await running.request('/api/setup/status');assert.deepEqual(result.data.model_parameters,parameters);assert.equal(result.data.runtime_configuration_pending,true);assert.equal(result.data.credentials_configured,false);
  result=await running.request('/api/setup/official-deepseek',{api_key:'synthetic-rejected-key',confirm_official_defaults:false});assert.equal(result.status,400);
  result=await running.request('/api/setup/credentials',{provider:'deepseek',api_key:'synthetic-test-key',extra:true});assert.equal(result.status,400);
  result=await running.request('/api/setup/credentials',{provider:'deepseek',api_key:'synthetic-test-key'});assert.equal(result.status,200);assert.equal(result.data.configured,true);assert.doesNotMatch(JSON.stringify(result),/synthetic-test-key/);
@@ -35,7 +43,7 @@ test('SQLite 正式宿主提供模型设置，保存后重开生效且不泄露�
  result=await running.request('/api/setup/status');assert.equal(result.data.deepseek_base_url,'https://gateway.invalid/custom/v1');assert.doesNotMatch(JSON.stringify(result),/synthetic-custom-key/);
  assert.match(await readFile(envFilePath,'utf8'),/UNRELATED=keep/);assert.equal((await stat(envFilePath)).mode&0o777,0o600);
  await running.request('/api/runtime/shutdown',{});assert.equal(await running.host.waitForExit(15000),true);
- running=await start();result=await running.request('/api/setup/status');assert.equal(result.data.credentials_configured,true);assert.equal(result.data.runtime_configuration_pending,false);assert.equal(result.data.deepseek_base_url,'https://gateway.invalid/custom/v1');
+ running=await start();result=await running.request('/api/setup/status');assert.equal(result.data.credentials_configured,true);assert.equal(result.data.runtime_configuration_pending,false);assert.equal(result.data.deepseek_base_url,'https://gateway.invalid/custom/v1');assert.deepEqual(result.data.model_parameters,parameters);
  await running.request('/api/runtime/shutdown',{});assert.equal(await running.host.waitForExit(15000),true);
 });
 

@@ -4,11 +4,13 @@ import {normalizeModelBaseUrl} from './model-base-url.ts';
 import {REPLY_EXECUTION_DEADLINE_MS} from '../reply/generation/reply-execution-budget.ts';
 import {PUBLIC_BASE_URL, resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import type {DeepSeekAdapterOptions, DeepSeekConnectionOptions} from '@deepseek-ai/dsh-llm-deepseek';
+import {readPurposeParameters} from './model-parameters.ts';
 
 export type HostReplyEnvironment = Readonly<Record<string, string | undefined>>;
 export type HostReplyThinkingEffort = 'low' | 'high' | 'max';
 export interface HostReplyConfigOptions {
   replyThinkingEffort?: HostReplyThinkingEffort | null;
+  purpose?: 'reply' | 'memory';
 }
 export interface HostMessagesProviderConfiguration {
   provider: string;
@@ -79,6 +81,8 @@ export function resolveHostReplyConfiguration(
   const key = normalizeApiKey(rawKey);
   if (!key.ok) return unavailable(key.reason === 'empty'
     ? 'reply_model_unconfigured' : 'reply_model_configuration_invalid');
+  const parameters=readPurposeParameters(environment,options.purpose??'reply');
+  if(!parameters)return unavailable('reply_model_configuration_invalid');
   const effort = options.replyThinkingEffort;
   if (effort != null && effort !== 'low' && effort !== 'high' && effort !== 'max') {
     return unavailable('reply_thinking_configuration_invalid');
@@ -110,7 +114,7 @@ export function resolveHostReplyConfiguration(
   const strictVerificationEndpoint=openCodeGo
     ? (url.pathname.startsWith('/inference/go/') ? 'https://opencode.ai/inference/go/openai/v1/chat/completions' : 'https://opencode.ai/zen/go/v1/chat/completions')
     : `${strictRoot}/beta/chat/completions`;
-  const reasoningEffort = effort ?? 'off';
+  const reasoningEffort = effort ?? parameters.thinking_effort;
   const connection = resolveAdapterOptions({
     // 官方旧root/v1映射Messages入口，自填地址作为Messages根交给官方适配器。
     baseURL: messagesBaseURL,
@@ -140,7 +144,7 @@ export function resolveHostReplyConfiguration(
     },
     model: {
       provider: PROVIDER, model, maxTokens: outputTokens,
-      temperature: 0, reasoningEffort,
+      temperature: parameters.temperature, reasoningEffort,
       // 两层场景预算各至多8；业务层仍须按请求执行min(24, 8 + 实际call_limit)。
       physical_limit: 24, deadline_ms: REPLY_EXECUTION_DEADLINE_MS, warning_ratio: 0.8,
       budgetProfile: {context_window_tokens: contextWindowTokens,

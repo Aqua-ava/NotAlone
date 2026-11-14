@@ -195,3 +195,5 @@
 - [ADR-187：退役表达工作区最近聊天区块及专用读取链](187-retire-workspace-recent-chat.md)——保留自动背景和候选依据，移除区块与候选列表的额外聊天读取。
 
 - [ADR-188：想法、语气和要求统一为主输入](188-unify-workspace-writing-input.md)——移除独立设置及新请求字段，保留历史快照只读回看。
+
+- [ADR-189：分别手动配置回复与记忆的模型参数](189-editable-model-thinking-and-temperature.md)——开放独立思考档位与温度，复用受控配置重载和唯一 DSH provider。
