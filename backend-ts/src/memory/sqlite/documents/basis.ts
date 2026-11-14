@@ -8,6 +8,7 @@ import type {MessageSourceReference} from '../../../history/sqlite/contracts.ts'
 import {qualificationSources,mergeKnowledgeSources,withQualificationSources} from '../management/dependencies.ts';
 import {sourceVerificationState} from '../management/evidence.ts';
 import {memoryTimeEligibility} from '../management/temporal.ts';
+import {versionFact} from '../management/version-fact.ts';
 import {fail,requireVersion} from '../management/qualification.ts';
 import {documentActualInputs,type DocumentActualInput} from './inputs.ts';
 
@@ -25,11 +26,6 @@ export function withDocumentSourceQualifications<T>(tx:StorageTransaction,work:(
  });
 }
 function safeNumber(value:bigint):number {if(value<0n||value>BigInt(Number.MAX_SAFE_INTEGER))fail('document_revision_invalid');return Number(value);}
-function fact(tx:StorageTransaction,ownerId:string,decisionId:string):Record<string,any>|null {
- const row=tx.get(`SELECT e.payload FROM decision_candidate dc JOIN memory_candidate c ON c.owner_id=dc.owner_id AND c.id=dc.candidate_id
-  JOIN execution_event e ON e.owner_id=c.owner_id AND e.id=c.event_id WHERE dc.owner_id=? AND dc.decision_id=? ORDER BY c.id LIMIT 1`,[ownerId,decisionId]);
- return row?JSON.parse(String(row.payload)).fact:null;
-}
 /**
  * 只读动作内的单次读取记忆：同一事务快照里，同一记忆版本的来源核验结果相同，多篇文档共享记忆时不再逐篇重算。
  * 仅包裹同步纯读取闭包，退出后即销毁。指定事务与资格策略时仅对完全相同的二者复用；旧入口仍只支持默认资格。
@@ -57,7 +53,7 @@ export function memoryBasis(tx:StorageTransaction,ownerId:string,m:StorageRow,v:
  const time=memoryTimeEligibility(tx,ownerId,{memoryId:String(m.id),versionNo:v.version_no as bigint});
  if(time==='invalid')fail('document_time_invalid');if(time==='needs_revalidation')fail('document_time_pending');if(time==='out_of_window')fail('document_memory_stale');
  const sources=memorySources(tx,ownerId,m,v);
- const f=fact(tx,ownerId,String(v.decision_id));
+ const f=versionFact(tx,ownerId,v);
  return {memory:{memory_id:String(m.id),revision:safeNumber(v.version_no as bigint),level:m.scope_kind==='self'?'owner':'contact',text:String(v.body),
   category:typeof f?.category==='string'?f.category:'user_memory',provenance_kind:v.adoption_mode==='manual'?'manual_entry':'source_supported',
   timing:{},event:f?.event??null,conditions:f?.conditions??null,evolution:null,valid_at:f?.valid_at??null,invalid_at:f?.invalid_at??null,

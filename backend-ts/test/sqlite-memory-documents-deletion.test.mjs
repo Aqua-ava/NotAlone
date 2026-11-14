@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {DatabaseSync} from 'node:sqlite';
+import {join} from 'node:path';
 import {deletionFixture} from './fixtures/memory-documents/deletion-support.mjs';
 
 test('来源删除立即撤下发布集合并清除文档正文与实际输入追踪',async t=>{
@@ -62,10 +64,15 @@ test('本人混合资料删除一位实际来源后撤下完整集合，另一�
  const self={scopeKind:'self',contactId:null},other={scopeKind:'contact',contactId:f.otherContactId};
  const ownerBefore=await f.documents.read(self),otherBefore=await f.documents.read(other);
  assert.equal(ownerBefore.documents.length,2);assert.equal(otherBefore.documents.length,2);
+ const db=new DatabaseSync(join(f.root,'managed/sqlite/notalone.sqlite'),{readOnly:true});t.after(()=>db.close());
+ const audit=()=>db.prepare("SELECT e.* FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task task ON task.owner_id=s.owner_id AND task.id=s.task_id WHERE e.owner_id=? AND task.scope_kind='contact' AND task.contact_id=? ORDER BY e.id").all(f.owner,f.otherContactId),otherAudit=audit();
+ assert.ok(otherAudit.length>0,'独立联系人须确实存在需要保留的执行审计');
+ assert.ok(db.prepare("SELECT 1 FROM execution_event e JOIN step_attempt a ON a.owner_id=e.owner_id AND a.id=e.step_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task task ON task.owner_id=s.owner_id AND task.id=s.task_id WHERE e.owner_id=? AND task.scope_kind='self' AND e.kind='adjudication_lease_progress' AND NOT EXISTS(SELECT 1 FROM execution_input x WHERE x.owner_id=e.owner_id AND x.event_id=e.id) LIMIT 1").get(f.owner),'覆盖已有无输入边的续期控制事件，不能要求重写旧审计');
  const plan=await f.deletion.plan({ownerId:f.owner,requestKey:randomUUID(),scope:{kind:'source',contactId:f.contactId,sourceId:f.ownerMessage.sourceRecordIds[0]}});
  const done=await f.deletion.advance({ownerId:f.owner,operationId:plan.operationId});assert.equal(done.state,'completed',JSON.stringify(done.checks));
  assert.deepEqual((await f.documents.read(self)).documents,[]);
  assert.deepEqual(await f.documents.read(other),otherBefore,'独立B的合法发布和正文不能被删除');
+ assert.deepEqual(audit(),otherAudit,'无关联系人的执行审计须逐字节保持');
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 

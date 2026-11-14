@@ -10,6 +10,7 @@ import {assertContribution,assertInputs,textId} from '../qualification.ts';
 import {currentContent,freezeContent} from '../content.ts';
 import {memoryBasis,documentSources,withDocumentSourceQualifications} from './basis.ts';
 import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
+import {currentDocumentSteps,hasUnresolvedDocumentWork} from './stage-selection.ts';
 
 const sceneWindowMs=60*60*1000,profileWindowMs=24*60*60*1000;
 const schema=`CREATE TABLE memory_document_later_schedule (
@@ -422,8 +423,8 @@ function finishLegacyFullPublication(tx:StorageTransaction,ownerId:string,taskId
  const task=tx.get(`SELECT t.*,r.policy_config FROM processing_task t JOIN processing_run r ON r.owner_id=t.owner_id AND r.id=t.run_id WHERE t.owner_id=? AND t.id=?`,[ownerId,taskId]);
  if(!task||task.document_basis_state!=='frozen')return false;
  try{if(JSON.parse(String(task.policy_config))?.intent==='memory_document_later_stage')return false;}catch{return false;}
- const stages=tx.all("SELECT kind,state FROM processing_step WHERE owner_id=? AND task_id=? AND kind IN ('document_scene','document_profile') ORDER BY kind",[ownerId,taskId]);
- if(stages.length!==2||stages.some(row=>row.state!=='succeeded')||new Set(stages.map(row=>String(row.kind))).size!==2)return false;
+ const stages=currentDocumentSteps(tx,ownerId,taskId);
+ if(stages.length!==2||stages.some(row=>row.state!=='succeeded')||hasUnresolvedDocumentWork(tx,ownerId,taskId))return false;
  const scope={scopeKind:String(task.scope_kind) as MemoryScope['scopeKind'],contactId:task.contact_id===null?null:String(task.contact_id)} as MemoryScope,parts=scopeParts(scope),base=scopeRow(tx,ownerId,scope);
  if(!base||base.memory_revision!==task.accepted_memory_revision||base.current_publication_id===null)return false;
  const publication=tx.get("SELECT id FROM document_publication WHERE owner_id=? AND id=? AND basis_task_id=? AND scope_kind=? AND contact_id IS ? AND availability='available'",[ownerId,base.current_publication_id,taskId,parts.scopeKind,parts.contactId]);

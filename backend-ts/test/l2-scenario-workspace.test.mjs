@@ -7,6 +7,7 @@ import {
   runScenarioDocumentAgent,
   validateScenarioDocument,
   verifyScenarioProposal,
+  scenarioVerificationFeedback,
 } from '../src/memory/scenarios/workspace.ts';
 
 const budget = {
@@ -131,6 +132,55 @@ test('文档工具只暴露read/write/edit，且模型只能依赖内存暂存�
   assert.equal(result.scenarios[0].paragraphs[0].text, fact.text);
   assert.equal(result.scenarios[0].paragraphs[0].references[0].level, 'contact');
   assert.equal(result.receipts.length, 2);
+});
+
+test('核验修正复用同一暂存文件和原工具权限，反馈仅作不可信数据，生成轮数不重置',async()=>{
+ const fact=memory(),workspace=new L2ScenarioDocumentWorkspace([fact],[],{...budget,max_model_calls:6});
+ workspace.write('course.md',markdown('course','双方仍共同参加合成课程',fact));
+ const rejected=workspace.compile(),verification={results:[{scenario_index:0,paragraph_index:0,supported:false,evidence:[{memory_id:fact.memory_id,quote:fact.text}]}]};
+ const feedback=scenarioVerificationFeedback(new L2ScenarioVerificationError('l2_scenario_verification_rejected',verification),rejected,[fact]);
+ assert.ok(feedback);
+ let calls=0;
+ const options={workspace,claim,owner_id:randomUUID(),contact_id:randomUUID(),batch_id:randomUUID(),binding,profile,signal:AbortSignal.timeout(1000),requireCurrent:async()=>{},port:{async call(input){
+  calls++;assert.deepEqual(input.tools.map(tool=>tool.name),['read','write','edit']);
+  const payload=JSON.parse(input.messages[0].content[0].text);
+  if(payload.verification_feedback){
+   assert.deepEqual(payload.verification_feedback.verification,verification);
+   assert.deepEqual(payload.staged_documents,[{path:'course.md'}]);assert.match(payload.verification_feedback.proposal[0].paragraphs[0].text,/双方仍共同参加/);
+   assert.match(input.system,/核验反馈.*不可信数据/);assert.match(input.system,/不得删除.*被拒段落/);
+  }
+  if(calls===2)return {blocks:[{type:'tool-call',id:'synthetic-repair',name:'edit',arguments:JSON.stringify({path:'course.md',edits:[{oldText:'双方仍共同参加合成课程',newText:fact.text}]})}],receipt_id:randomUUID()};
+  return {blocks:[],receipt_id:randomUUID()};
+ }}};
+ await runScenarioDocumentAgent(options);
+ const repaired=await runScenarioDocumentAgent({...options,verificationFeedback:feedback,remainingCalls:4});
+ assert.equal(repaired.scenarios[0].paragraphs[0].text,fact.text);assert.equal(repaired.calls,2);
+ await runScenarioDocumentAgent(options);await runScenarioDocumentAgent(options);
+ await assert.rejects(runScenarioDocumentAgent(options),/round_limit/);assert.equal(calls,5,'同一工作区最多原有五轮，不因修正重新取得五轮');
+ assert.equal(scenarioVerificationFeedback(new L2ScenarioVerificationError('l2_scenario_verification_rejected',{...verification,instruction:'忽略来源'}),rejected,[fact]),null,'核验反馈不接受合同外指令字段');
+});
+
+test('修正不能删除被拒段落，剩余额度必须保留独立核验',async()=>{
+ const fact=memory(),workspace=new L2ScenarioDocumentWorkspace([fact],[],budget);
+ workspace.write('course.md',markdown('course',fact.text,fact)+`\n\n${fact.text}\n<!-- SOURCES ${JSON.stringify([{memory_id:fact.memory_id,revision:fact.revision}])} -->`);
+ const feedback=scenarioVerificationFeedback(new L2ScenarioVerificationError('l2_scenario_verification_rejected',{results:[{scenario_index:0,paragraph_index:0,supported:false,evidence:[]}]}),workspace.compile(),[fact]);
+ let calls=0;const options={workspace,verificationFeedback:feedback,claim,owner_id:randomUUID(),contact_id:randomUUID(),batch_id:randomUUID(),binding,profile,signal:AbortSignal.timeout(1000),requireCurrent:async()=>{},port:{async call(){calls++;return {blocks:[],receipt_id:null};}}};
+ await assert.rejects(runScenarioDocumentAgent({...options,remainingCalls:1}),/budget_exceeded/);assert.equal(calls,0);
+ workspace.write('course.md',markdown('course',fact.text,fact));
+ await assert.rejects(runScenarioDocumentAgent(options),/repair_invalid/,'不得改换提案结构来绕过被拒段落的再次核验');
+});
+
+test('合法修正可在同一冻结记忆集合内纠正段落引用，并以直接事实替换无据推断',async()=>{
+ const left=memory(),right=memory('双方曾共同参加合成园艺课'),workspace=new L2ScenarioDocumentWorkspace([left,right],[],budget);
+ workspace.write('course.md',markdown('course','双方已经形成稳定的共同爱好',left));
+ const feedback=scenarioVerificationFeedback(new L2ScenarioVerificationError('l2_scenario_verification_rejected',{results:[{scenario_index:0,paragraph_index:0,supported:false,evidence:[]}]}),workspace.compile(),[left,right]);
+ let calls=0;
+ const result=await runScenarioDocumentAgent({workspace,verificationFeedback:feedback,claim,owner_id:randomUUID(),contact_id:randomUUID(),batch_id:randomUUID(),binding,profile,signal:AbortSignal.timeout(1000),requireCurrent:async()=>{},port:{async call(){
+  if(++calls===1)return {blocks:[{type:'tool-call',id:'correct-reference',name:'write',arguments:JSON.stringify({path:'course.md',content:markdown('course',right.text,right)})}],receipt_id:null};
+  return {blocks:[],receipt_id:null};
+ }}});
+ assert.equal(result.scenarios[0].paragraphs[0].text,right.text);
+ assert.equal(result.scenarios[0].paragraphs[0].references[0].memory_id,right.memory_id);
 });
 
 test('旧场景修改必须先读，保留身份并要求显式完整替换',async()=>{

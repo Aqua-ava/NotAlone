@@ -7,7 +7,7 @@ import {SqliteMemoryManagement} from '../../../src/memory/sqlite/management/serv
 import {SqliteMemoryDocuments} from '../../../src/memory/sqlite/documents/service.ts';
 import {ActiveHolders} from '../../../src/storage/sqlite/deletion/holders.ts';
 
-export async function documentFixture(t,{beforeCall,documentModel,documentPrepare,registryModule,laterScheduling=false,sceneBody,baseFixture,sceneCount=1,profileBodies}={}){
+export async function documentFixture(t,{beforeCall,documentModel,documentPrepare,documentRespond,registryModule,laterScheduling=false,sceneBody,baseFixture,sceneCount=1,profileBodies}={}){
  const f=baseFixture??await fixture(t,registryModule?{registryModule}:{}),contactId=f.saved[0].contact_id;
  f.channel.page=async(_scope,target)=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'我长期喜欢合成园艺。'})],completedPartitions:['shard-a'],exhausted:true});
  await f.service.synchronize(contactId);await f.contacts.setReading(false);
@@ -28,7 +28,7 @@ export async function documentFixture(t,{beforeCall,documentModel,documentPrepar
  };
  const adjudication=new SqliteMemoryAdjudication(f.storage,owner,modelPort(()=>extraction.accounting,adjudicationSupplier()),holders);
  const documentAccounting=()=>{const accounting=extraction.accounting;return {...accounting,reserve:async(receipt,claim)=>{receipts.push(structuredClone(receipt));return accounting.reserve(receipt,claim);}};};
- const documentPort=documentModel==='unconfigured'?undefined:modelPort(documentAccounting,respond);
+ const documentPort=documentModel==='unconfigured'?undefined:modelPort(documentAccounting,documentRespond??respond);
  if(documentPort&&documentPrepare){const prepare=documentPort.prepare.bind(documentPort);documentPort.prepare=async(request,input)=>{const prepared=await prepare(request,input);await documentPrepare({request,input,contactId,fixture:f});return prepared;};}
  const documents=new SqliteMemoryDocuments(f.storage,owner,documentPort,holders);
  const extractionPort=modelPort(()=>extraction.accounting,supplier().respond);

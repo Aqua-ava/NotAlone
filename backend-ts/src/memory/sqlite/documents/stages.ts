@@ -13,6 +13,7 @@ import {preconditions,revisions,task,taskView} from './actions.ts';
 import {fail,textId} from '../qualification.ts';
 import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 import {failLaterStage,finishLaterStagePublication,laterTaskPaused,reconcileTerminalLaterRuns} from './later-schedule.ts';
+import {currentDocumentSteps} from './stage-selection.ts';
 
 export interface DocumentClaim {attemptId:string;stepId:string;taskId:string;runId:string;kind:'document_scene'|'document_profile';laterStage:string|null;scheduleNow:number|null;scopeKind:'self'|'contact';contactId:string|null;claim:ModelTaskClaim;memories:L2ScenarioMemory[];scenarios:any[];profile:any;}
 const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:(tx,input,lease)=>withDocumentSourceQualifications(tx,()=>execute(tx,input,lease))} as StorageAction);
@@ -81,6 +82,35 @@ function createStep(tx:StorageTransaction,ownerId:string,t:StorageRow,kind:Docum
   }
   const rendered=renderDocuments(tx,ownerId,renderMembers,selected.map(x=>x.memory));
  return {attemptId,stepId,taskId:String(t.id),runId:String(t.run_id),kind,laterStage:laterStage(tx,ownerId,t),scheduleNow:laterNow(tx,ownerId,t),scopeKind:t.scope_kind as 'self'|'contact',contactId:t.contact_id as string|null,claim:{task_id:String(t.id),step_id:stepId,step_name:kind,worker_id:lease.runtimeId,lease_generation:Number(t.resume_no)},memories:selected.map(x=>x.memory),scenarios:rendered.scenarios,profile:rendered.profile};
+}
+function requireRetryScope(t:StorageRow,input:any):void {
+ if(input.retryKnownFailures===true&&(t.scope_kind!=='contact'||t.contact_id!==input.contactId))fail('document_scope_invalid');
+}
+/** 显式联系人恢复只新建已知失败阶段，保留旧尝试及调用，并沿用原冻结版本。 */
+function retryKnownStep(tx:StorageTransaction,ownerId:string,t:StorageRow,kind:DocumentClaim['kind'],lease:StorageLease):DocumentClaim|null {
+ const previous=tx.get('SELECT * FROM processing_step WHERE owner_id=? AND task_id=? AND kind=? ORDER BY step_no DESC LIMIT 1',[ownerId,t.id,kind]);
+ if(!previous||previous.state!=='failed'||t.document_basis_state!=='frozen')return null;
+ if(kind==='document_scene'&&tx.get("SELECT 1 FROM processing_step WHERE owner_id=? AND task_id=? AND kind='document_profile' LIMIT 1",[ownerId,t.id]))return null;
+ if(kind==='document_profile'&&currentDocumentSteps(tx,ownerId,String(t.id)).find(step=>step.kind==='document_scene')?.state!=='succeeded')return null;
+ if(tx.get('SELECT 1 FROM document_publication WHERE owner_id=? AND basis_task_id=? LIMIT 1',[ownerId,t.id]))return null;
+ if(tx.get(`SELECT 1 FROM processing_step s LEFT JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id
+  WHERE s.owner_id=? AND s.task_id=? AND s.kind IN ('document_scene','document_profile')
+   AND (s.state IN ('running','unknown') OR a.state IN ('running','unknown')) LIMIT 1`,[ownerId,t.id]))return null;
+ const calls=tx.all(`SELECT c.*,o.state AS operation_state,o.commit_forbidden_at FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id
+  JOIN processing_step s ON s.owner_id=o.owner_id AND s.id=o.memory_step_id WHERE s.owner_id=? AND s.task_id=? AND s.kind IN ('document_scene','document_profile')`,[ownerId,t.id]);
+ if(calls.some(call=>!['succeeded','failed'].includes(String(call.state))||call.settlement_state!=='settled'
+  ||!['resolved','failed','applied'].includes(String(call.operation_state))||call.commit_forbidden_at!==null
+  ||call.receipt===null&&call.error_code!=='not_dispatched'))return null;
+ for(const call of calls)for(const table of ['operation_item','operation_scope','document_effect_scope']){
+  if(tx.get(`SELECT 1 FROM ${table} WHERE owner_id=? AND operation_id=? AND state<>'released' LIMIT 1`,[ownerId,call.operation_id]))return null;
+ }
+ if(tx.get("SELECT 1 FROM document_effect_scope WHERE owner_id=? AND scope_kind='contact' AND contact_id=? AND state IN ('reserved','sent','unknown') LIMIT 1",[ownerId,t.contact_id]))return null;
+ preconditions(tx,ownerId,t);const base=revisions(tx,ownerId,t);
+ if(base.memory_revision!==t.accepted_memory_revision||base.document_revision!==t.accepted_document_revision||base.current_publication_id!==t.accepted_publication_id)fail('document_publication_conflict');
+ frozenMemories(tx,ownerId,String(previous.id));
+ for(const source of tx.all("SELECT * FROM step_input WHERE owner_id=? AND step_id=? AND kind='message'",[ownerId,previous.id]))sourceStillValid(tx,ownerId,{contactId:String(source.source_contact_id),messageId:String(source.message_id),recordId:String(source.record_id),acceptedRevision:source.accepted_revision as bigint});
+ const claim=createStep(tx,ownerId,t,kind,lease);
+ tx.run('UPDATE processing_task SET error_code=NULL WHERE owner_id=? AND id=?',[ownerId,t.id]);return claim;
 }
 export function current(tx:StorageTransaction,ownerId:string,attemptId:string,lease:StorageLease):{attempt:StorageRow;t:StorageRow} {
  const a=tx.get(`SELECT a.*,s.kind,s.state AS step_state,t.id AS task_id FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE a.owner_id=? AND a.id=?`,[ownerId,attemptId]);
@@ -172,12 +202,13 @@ export const memoryDocumentsStageActions:StorageAction[]=[
  }),
  act('claimScene','write',(tx,i,lease)=>{
   const ownerId=textId(i.ownerId),t=task(tx,ownerId,textId(i.taskId));
+  requireRetryScope(t,i);
   const later=laterStage(tx,ownerId,t);
   if(later==='document_profile')return null;
   if(later&&(!laterTaskOwnsSchedule(tx,ownerId,t)||laterTaskPaused(tx,ownerId,String(t.id))))return null;
   // 普通暂停只阻止新小批；已完成的提取核验与正在执行的场景批次可收尾，继续后再领取主题。
   if(runPaused(tx,ownerId,String(t.run_id)))return null;
-  if(t.document_basis_state!=='pending')return null;
+  if(t.document_basis_state!=='pending')return i.retryKnownFailures===true?retryKnownStep(tx,ownerId,t,'document_scene',lease):null;
   preconditions(tx,ownerId,t);const base=revisions(tx,ownerId,t),selected=eligible(tx,ownerId,t);
   tx.run("UPDATE processing_task SET document_basis_state='frozen',accepted_memory_revision=?,accepted_document_revision=?,accepted_publication_id=? WHERE owner_id=? AND id=? AND document_basis_state='pending'",[base.memory_revision,base.document_revision,base.current_publication_id,ownerId,t.id]);
   const frozen=task(tx,ownerId,String(t.id));
@@ -188,11 +219,16 @@ export const memoryDocumentsStageActions:StorageAction[]=[
  }),
  act('claimProfile','write',(tx,i,lease)=>{
   const ownerId=textId(i.ownerId),original=task(tx,ownerId,textId(i.taskId)),mode=laterStage(tx,ownerId,original);let t=original;
-  if(tx.get("SELECT 1 FROM processing_step WHERE owner_id=? AND task_id=? AND kind='document_profile'",[ownerId,t.id]))return null;
+  requireRetryScope(t,i);
+  if(mode&&!laterTaskOwnsSchedule(tx,ownerId,t))return null;
+  if(tx.get("SELECT 1 FROM processing_step WHERE owner_id=? AND task_id=? AND kind='document_profile'",[ownerId,t.id])){
+   if(runPaused(tx,ownerId,String(t.run_id))||laterTaskPaused(tx,ownerId,String(t.id)))return null;
+   return i.retryKnownFailures===true?retryKnownStep(tx,ownerId,t,'document_profile',lease):null;
+  }
   if(mode&&!laterTaskOwnsSchedule(tx,ownerId,t))return null;
   if(runPaused(tx,ownerId,String(t.run_id)))return null;
   if(laterTaskPaused(tx,ownerId,String(t.id)))return null;
-  const scene=tx.get("SELECT successful_attempt_id FROM processing_step WHERE owner_id=? AND task_id=? AND kind='document_scene' AND state='succeeded'",[ownerId,t.id]);
+  const scene=currentDocumentSteps(tx,ownerId,String(t.id)).find(step=>step.kind==='document_scene'&&step.state==='succeeded');
   if(!scene&&mode!=='document_profile')fail('document_scene_incomplete');
   preconditions(tx,ownerId,t);
   if(t.document_basis_state==='pending'){

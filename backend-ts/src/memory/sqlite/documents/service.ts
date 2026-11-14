@@ -7,7 +7,7 @@ import type {LaterScheduleSnapshot} from './later-schedule.ts';
 import type {ModelTaskClaim} from '../../../platform/models/model-permit-port.ts';
 import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
 import type {SqliteExtractionModelPreparation} from '../model-port.ts';
-import {DEFAULT_L2_SCENARIO_BUDGET,L2ScenarioDocumentWorkspace,runScenarioDocumentAgent,verifyScenarioProposal,type ScenarioDocumentCallPort} from '../../scenarios/workspace.ts';
+import {DEFAULT_L2_SCENARIO_BUDGET,L2ScenarioDocumentWorkspace,L2ScenarioError,L2ScenarioVerificationError,runScenarioDocumentAgent,scenarioVerificationFeedback,verifyScenarioProposal,type ScenarioDocumentCallPort} from '../../scenarios/workspace.ts';
 import {L3ProfileWorkspace,runProfileDocumentAgent,verifyProfileProposal} from '../../profiles/workspace.ts';
 import type {DocumentClaim} from './stages.ts';
 import type {VerifiedProfileReplay} from './replay.ts';
@@ -21,7 +21,7 @@ export interface DocumentModelPort {
 /** 一个owner的文档处理服务；输入由真实任务及存储事务产生。 */
 export class SqliteMemoryDocuments {
  private readonly storage:SqliteStorage;readonly ownerId:string;private readonly model:DocumentModelPort|undefined;private readonly holders:ActiveHolders;
- private readonly stop=new AbortController();private pending=new Set<Promise<unknown>>();private active=new Map<string,{contactId:string|undefined;work:Promise<unknown>}>();private closing?:Promise<void>;
+ private readonly stop=new AbortController();private pending=new Set<Promise<unknown>>();private active=new Map<string,{contactId:string|undefined;retryKnownFailures:boolean;work:Promise<unknown>}>();private closing?:Promise<void>;
  constructor(storage:SqliteStorage,ownerId:string,model:DocumentModelPort|undefined,holders:ActiveHolders){this.storage=storage;this.ownerId=ownerId;this.model=model;this.holders=holders;}
  async initialize(){
   await this.storage.execute('memoryDocuments.recover',{ownerId:this.ownerId});
@@ -50,17 +50,19 @@ export class SqliteMemoryDocuments {
   });
  }
  /** 同轮重复请求只复用相同范围，不能把另一联系人的在途工作当作本次完成。 */
- publishRun(runId:string,contactId?:string):Promise<unknown>{
+ publishRun(runId:string,contactId?:string,options:{retryKnownFailures?:boolean}={}):Promise<unknown>{
   if(this.stop.signal.aborted)return Promise.reject(new StorageFailure('document_service_closed'));
-  const prior=this.active.get(runId);if(prior)return prior.contactId===contactId?prior.work:Promise.reject(new StorageFailure('document_run_busy'));
-  const work=withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>this.run(runId,contactId));this.active.set(runId,{contactId,work});this.pending.add(work);void work.then(()=>{this.pending.delete(work);this.active.delete(runId);},()=>{this.pending.delete(work);this.active.delete(runId);});return work;
+  const retryKnownFailures=options.retryKnownFailures===true;
+  if(retryKnownFailures&&!contactId)return Promise.reject(new StorageFailure('document_scope_invalid'));
+  const prior=this.active.get(runId);if(prior)return prior.contactId===contactId&&prior.retryKnownFailures===retryKnownFailures?prior.work:Promise.reject(new StorageFailure('document_run_busy'));
+  const work=withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>this.run(runId,contactId,retryKnownFailures));this.active.set(runId,{contactId,retryKnownFailures,work});this.pending.add(work);void work.then(()=>{this.pending.delete(work);this.active.delete(runId);},()=>{this.pending.delete(work);this.active.delete(runId);});return work;
  }
  /** 用户显式恢复已知回执的画像；只重放本地材料，不获取模型许可或发起模型调用。 */
  replayVerifiedProfile(taskId:string):Promise<unknown>{
   if(this.stop.signal.aborted)return Promise.reject(new StorageFailure('document_service_closed'));
   const key=`profile-replay:${taskId}`,prior=this.active.get(key);if(prior)return prior.work;
   const work=withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>this.replayProfile(taskId));
-  this.active.set(key,{contactId:undefined,work});this.pending.add(work);void work.then(()=>{this.active.delete(key);this.pending.delete(work);},()=>{this.active.delete(key);this.pending.delete(work);});return work;
+  this.active.set(key,{contactId:undefined,retryKnownFailures:false,work});this.pending.add(work);void work.then(()=>{this.active.delete(key);this.pending.delete(work);},()=>{this.active.delete(key);this.pending.delete(work);});return work;
  }
  private async replayProfile(taskId:string):Promise<unknown>{
   const prepared=await this.storage.execute<VerifiedProfileReplay>('memoryDocuments.prepareVerifiedProfileReplay',{ownerId:this.ownerId,taskId});
@@ -80,22 +82,22 @@ export class SqliteMemoryDocuments {
    await this.storage.execute('memoryDocuments.noteFailure',{ownerId:this.ownerId,taskId,code}).catch(()=>{});throw error;
   }finally{finish();await Promise.all(releases.map(release=>release()));}
  }
- private async run(runId:string,contactId?:string){
+ private async run(runId:string,contactId?:string,retryKnownFailures=false){
   const tasks=await this.storage.execute<string[]>('memoryDocuments.tasks',{ownerId:this.ownerId,runId,...(contactId===undefined?{}:{contactId})});const results=[];
   for(const taskId of tasks){
    if(this.stop.signal.aborted)break;
    try{
-    const claim=await this.storage.execute<DocumentClaim|null>('memoryDocuments.claimScene',{ownerId:this.ownerId,taskId});
+    const claim=await this.storage.execute<DocumentClaim|null>('memoryDocuments.claimScene',{ownerId:this.ownerId,taskId,...(contactId===undefined?{}:{contactId}),...(retryKnownFailures?{retryKnownFailures:true}:{})});
     if(!claim){
      // 已冻结且场景成功的任务可能停在暂停/中断的小批边界；继续时单独领取画像，不重新整理主题。
      const view=await this.readTask(taskId),stages=Array.isArray(view?.stages)?view.stages as {kind:string;status:string}[]:[];
-     const sceneDone=stages.some(stage=>stage.kind==='scene'&&stage.status==='succeeded'),profileDone=stages.some(stage=>stage.kind==='profile');
+     const sceneDone=stages.some(stage=>stage.kind==='scene'&&stage.status==='succeeded'),profileDone=stages.some(stage=>stage.kind==='profile'&&['succeeded','not_applicable'].includes(stage.status));
      if(view?.laterStage==='document_scene'&&sceneDone&&!view.publicationId){
       const result=await this.storage.execute('memoryDocuments.publish',{ownerId:this.ownerId,taskId,now:view.scheduleNow??undefined});
       await this.storage.execute('memoryDocuments.settle',{ownerId:this.ownerId,runId}).catch(()=>false);results.push(result);continue;
      }
-     if(view?.laterStage==='document_profile'||sceneDone&&!profileDone){
-      const profileClaim=await this.storage.execute<DocumentClaim|null>('memoryDocuments.claimProfile',{ownerId:this.ownerId,taskId});
+     if(view?.laterStage==='document_profile'||sceneDone&&(!profileDone||retryKnownFailures)){
+      const profileClaim=await this.storage.execute<DocumentClaim|null>('memoryDocuments.claimProfile',{ownerId:this.ownerId,taskId,...(contactId===undefined?{}:{contactId}),...(retryKnownFailures?{retryKnownFailures:true}:{})});
       if(profileClaim){const result=await this.processTask(profileClaim);results.push(result);if(result.errorCode==='document_model_unconfigured')break;continue;}
      }
      if(view?.laterStage&&stages.some(stage=>stage.status==='succeeded')&&!view.publicationId){
@@ -167,9 +169,19 @@ export class SqliteMemoryDocuments {
  private options(claim:DocumentClaim,port:ScenarioDocumentCallPort,signal:AbortSignal){return {port,claim:{...claim.claim,step_name:'organize_memory' as const},owner_id:this.ownerId,contact_id:claim.contactId,batch_id:claim.attemptId,
   binding:{provider:'configured',model:'configured',maxTokens:1024,temperature:0,reasoningEffort:'off' as const},profile:{context_window_tokens:128_000,safety_margin_tokens:512},signal,requireCurrent:async()=>{signal.throwIfAborted();await this.storage.execute('memoryDocuments.current',{ownerId:this.ownerId,attemptId:claim.attemptId});}};}
  private async processScene(claim:DocumentClaim,signal:AbortSignal){
-  const port=this.port(claim,signal),options=this.options(claim,port,signal),workspace=new L2ScenarioDocumentWorkspace(claim.memories,claim.scenarios,DEFAULT_L2_SCENARIO_BUDGET);
-  const proposal=await runScenarioDocumentAgent({...options,workspace});
-  const checked=await verifyScenarioProposal({...options,scenarios:proposal.scenarios,memories:claim.memories});
+  const originalPort=this.port(claim,signal);let calls=0;
+  const port:ScenarioDocumentCallPort={call:async input=>{if(calls>=DEFAULT_L2_SCENARIO_BUDGET.max_model_calls)throw new L2ScenarioError('l2_scenario_budget_exceeded');calls++;return originalPort.call(input);}};
+  const options=this.options(claim,port,signal),workspace=new L2ScenarioDocumentWorkspace(claim.memories,claim.scenarios,DEFAULT_L2_SCENARIO_BUDGET);
+  let proposal=await runScenarioDocumentAgent({...options,workspace,remainingCalls:DEFAULT_L2_SCENARIO_BUDGET.max_model_calls-calls}),checked;
+  try{checked=await verifyScenarioProposal({...options,scenarios:proposal.scenarios,memories:claim.memories});}
+  catch(error){
+   if(!(error instanceof L2ScenarioVerificationError))throw error;
+   const feedback=scenarioVerificationFeedback(error,proposal.scenarios,claim.memories);
+   if(!feedback||DEFAULT_L2_SCENARIO_BUDGET.max_model_calls-calls<2)throw error;
+   // 同一授权、快照和暂存区只修正一次；原核验输出已留痕，修正后仍须独立核验。
+   proposal=await runScenarioDocumentAgent({...options,workspace,verificationFeedback:feedback,remainingCalls:DEFAULT_L2_SCENARIO_BUDGET.max_model_calls-calls});
+   checked=await verifyScenarioProposal({...options,scenarios:proposal.scenarios,memories:claim.memories});
+  }
   const verificationEventId=checked.receipts.at(-1);if(!verificationEventId)throw new StorageFailure('document_verification_unbound');
   return this.storage.execute<{scenarios:any[]}>('memoryDocuments.saveScene',{ownerId:this.ownerId,attemptId:claim.attemptId,scenarios:proposal.scenarios,verificationEventId});
  }
