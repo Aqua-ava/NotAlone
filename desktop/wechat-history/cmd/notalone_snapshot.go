@@ -203,6 +203,7 @@ type notaloneSnapshot struct {
 	closed            bool
 	closeErr          error
 	guard             *notaloneSourceGuard
+	rawSources        []*os.File // 见 retainRawSource：只在 SQLite 连接关闭后关闭
 	shards            []*notaloneSnapshotShard
 	checkedPartitions []string
 	selected          notaloneResolved
@@ -837,6 +838,11 @@ func (n *notaloneSnapshot) closeLocked() error {
 			shard.observer = nil
 		}
 	}
+	// 连接已关闭、其锁已释放，此时关闭原始页分析的句柄不再影响 SQLite 的锁。
+	for _, source := range n.rawSources {
+		_ = source.Close()
+	}
+	n.rawSources = nil
 	if n.guard.Close() != nil {
 		failed = true
 	}

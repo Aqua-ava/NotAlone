@@ -17,6 +17,16 @@ type notaloneDeltaShardState struct {
 	Names string                 `json:"names"`
 }
 
+// 原始页分析的 db／-wal／-shm 句柄必须留到该快照的 SQLite 连接全部关闭之后才能关闭：
+// macOS 的 POSIX 劝告锁按“进程＋文件”记录，同一进程对同一文件的任一句柄关闭都会释放该进程在此文件上的全部锁，
+// 包括 SQLite 连接持有的共享内存存活标记与固定快照的读标记，让其他进程把仍在使用的 -shm 当作无人使用。
+// 因此这里只登记，由 closeLocked 在关闭 reader／observer 之后统一关闭。调用者须持有 n.mu。
+func (n *notaloneSnapshot) retainRawSource(f *os.File) {
+	if f != nil {
+		n.rawSources = append(n.rawSources, f)
+	}
+}
+
 func notaloneOpenDeltaFile(path string, optional bool) (*os.File, int64, error) {
 	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
 	if optional && os.IsNotExist(err) {
@@ -84,32 +94,23 @@ func (n *notaloneSnapshot) initializeDelta(ctx context.Context, s *server, prior
 		if e != nil {
 			return e
 		}
+		n.retainRawSource(f)
 		wal, walSize, e := notaloneOpenDeltaFile(shard.path+"-wal", true)
 		if e != nil {
-			f.Close()
 			return e
 		}
+		n.retainRawSource(wal)
 		shm, shmSize, e := notaloneOpenDeltaFile(shard.path+"-shm", true)
 		if e != nil {
-			f.Close()
-			if wal != nil {
-				wal.Close()
-			}
 			return e
 		}
+		n.retainRawSource(shm)
 		header := make([]byte, 16)
 		_, e = f.ReadAt(header, 0)
 		var key []byte
 		if e == nil && !bytes.Equal(header, []byte("SQLite format 3\x00")) {
 			key, e = hex.DecodeString(s.cfg.Keys[hex.EncodeToString(header)])
 			if e != nil || len(key) != 32 {
-				f.Close()
-				if wal != nil {
-					wal.Close()
-				}
-				if shm != nil {
-					shm.Close()
-				}
 				return notaloneFailure("history_delta_key_unavailable")
 			}
 		}
@@ -128,13 +129,6 @@ func (n *notaloneSnapshot) initializeDelta(ctx context.Context, s *server, prior
 		}
 		for index := range key {
 			key[index] = 0
-		}
-		f.Close()
-		if wal != nil {
-			wal.Close()
-		}
-		if shm != nil {
-			shm.Close()
 		}
 		after, versionErr := notaloneSnapshotDataVersion(ctx, shard.observer)
 		if versionErr != nil || after != before {

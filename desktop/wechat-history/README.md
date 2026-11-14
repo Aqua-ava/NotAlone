@@ -44,6 +44,8 @@ App 运行目录也位于 `.notalone-builds/`。切换前先用 `pnpm run dev:st
 
 历史终页返回不透明 `resumeCursor`，后续按 [ADR-133](../../architecture/adr/133-page-delta-private-history-sync.md)的变化页和持久检查点补差，不能描述为每轮完整重扫正文。声明 `durableHistory` 的读取器另支持 [ADR-164](../../architecture/adr/164-resumable-history-slices.md)：`page` 请求 `checkpoint: true` 可在非终页返回独立 `checkpointCursor`，应用同事务接受后才允许切片和恢复。部分点不表示历史完整；恢复重新核验来源并建立新快照，补读未完成身份、已读行变化及待核对缺失。最后未持久片段可能安全回放，旧进程内分页游标不继承；相同身份下不可辨认的原位回滚仍不在保证内。
 
+快照补差读取的原始页（分片 `.db`、`-wal`、`-shm`）句柄随快照持有，直到该快照的 SQLite 连接全部关闭后才关闭。macOS 的 POSIX 劝告锁按“进程＋文件”记录，同一进程对同一文件的任一句柄关闭都会释放该进程在其上的全部锁，使 SQLite 共享内存的存活标记与固定快照的读标记失效；新增对来源文件的额外打开须遵守同一顺序，由 [锁保持测试](cmd/notalone_delta_locks_test.go) 覆盖。
+
 `boundary-snapshot` 使用 `selected-history-boundary-v1`，只枚举所选会话的有界完整身份集合，不读正文或媒体。独立 observer／reader 的采样与读完成证据、精确成员及计数共同组成客户端复验的 manifest；未认证、超限或失证时不能宣称完整清空边界。
 
 ## 消息类型与正文资格
