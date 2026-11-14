@@ -7,8 +7,9 @@ import type {SkillRunRevision} from '../../skills/sqlite/contracts.ts';
 import {requireDiscussion,requireDiscussionContact,runtimeView,identifier} from './actions.ts';
 import {requireAttempt,decode} from './requests.ts';
 import {requireCurrentReplyDependencies} from './provenance.ts';
+import {withReplyLocalSourceEligibility} from '../../history/sqlite/reply-local-source.ts';
 const fail=(code:string):never=>{throw new StorageFailure(code);};
-const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any)=>unknown):StorageAction=>({name:`runtime.${name}`,mode,retryBusy:mode==='write',execute});
+const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any)=>unknown):StorageAction=>({name:`runtime.${name}`,mode,retryBusy:mode==='write',execute:(tx,i)=>withReplyLocalSourceEligibility(tx,scoped=>execute(scoped,i))});
 function copy(tx:StorageTransaction,i:any):StorageRow{return tx.get('SELECT * FROM runtime_copy WHERE owner_id=? AND contact_id=? AND discussion_id=? AND id=?',[identifier(i.ownerId),identifier(i.contactId),identifier(i.discussionId),identifier(i.copyId)])??fail('discussion_runtime_unavailable');}
 function requireRuntimeActive(tx:StorageTransaction,i:any):StorageRow{
  const row=copy(tx,i),d=requireDiscussion(tx,i),c=requireDiscussionContact(tx,i.ownerId,i.contactId);

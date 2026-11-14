@@ -3,13 +3,78 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {join} from 'node:path';
+import {mkdir} from 'node:fs/promises';
 import {fixture,owner,record} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 import {SqliteDiscussionService} from '../src/reply/sqlite/service.ts';
 import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/service.ts';
 import {assertReplyLocalSource,assertReplyLocalSources,withReplyLocalSourceEligibility} from '../src/history/sqlite/reply-local-source.ts';
+import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
+import {registry} from '../src/storage/sqlite/registry.ts';
 
 const registryModule=new URL('./fixtures/sqlite-reply-local-source-reuse-registry.mjs',import.meta.url).href;
+
+async function committedRuntime(t,sourceCount){
+ const f=await fixture(t,{registryModule}),contactId=f.saved[0].contact_id;
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:Array.from({length:sourceCount},(_,i)=>record(String(i+1))),completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(contactId);
+ const sources=await f.storage.execute('fixture.replySourceReferences',{ownerId:owner,contactId}),management=new SqliteMemoryManagement(f.storage,owner);
+ for(let index=0;index<5;index++){
+  const saved=await management.decide({requestKey:randomUUID(),action:'manual',scope:{scopeKind:'contact',contactId},body:`园艺合成记忆${index}`});
+  await f.storage.execute('fixture.attachReplySources',{ownerId:owner,memoryId:saved.memoryId,sources});
+ }
+ const discussion=await new SqliteDiscussionService(f.storage,owner).newDiscussion(contactId),requestKey=randomUUID(),service=new SqliteReplyCandidateService(f.storage,owner);
+ const confirmationId=await f.storage.execute('identity.manualConfirm',{ownerId:owner,contactId,contextToken:requestKey,id:randomUUID(),at:Date.now()});
+ const {attempt}=await service.begin({contactId,discussionId:discussion.id,requestKey,text:'园艺',identity:{kind:'manual',confirmationId}});
+ const input={...attempt,contextId:randomUUID(),callId:randomUUID(),copyId:randomUUID(),configurationDigest:'c'.repeat(64)},skillRun={packages:[],eligible:[]};
+ await f.storage.execute('reply.freezeInput',{...input,skillRun,items:[],queryText:'园艺',at:Date.now()});
+ const budget={provider:'synthetic-official',model:'synthetic-model',maxTokens:512,input_tokens:12,serialized_bytes:128,measurement_kind:'approximate',measurement_id:'synthetic-estimate',request_sha256:'a'.repeat(64)};
+ await f.storage.execute('discussion.prepareCall',{...input,operationId:randomUUID(),provider:budget.provider,requestKey:input.callId,inputSeal:'b'.repeat(64),model:budget.model,configurationId:input.configurationDigest,inputCap:1024,outputCap:512});
+ await f.storage.execute('runtime.prepare',{...input,sdkInstanceId:randomUUID(),locator:input.copyId});
+ const files=new ManagedFiles(f.root);files.prepareArea('runtime');await mkdir(join(f.root,'managed/runtime-copies',input.copyId),{mode:0o700});
+ const address=files.capture('runtime',input.copyId,'directory');
+ await f.storage.execute('runtime.attach',{...input,address});await f.storage.execute('runtime.incorporate',input);
+ // 供应商响应由合成事件代替；出站、结算及业务提交沿用真实存储动作，不调用外部模型。
+ await f.storage.execute('reply.dispatchCall',{...input,skillRun,budget,requestPayload:{messages:['园艺合成请求']}});
+ await f.storage.execute('discussion.settleStep',{...input,usage:{inputTokens:5,outputTokens:3},reason:'stop'});
+ const text=JSON.stringify({candidates:[{parts:['合成园艺候选'],basis:[1]}]});
+ await f.storage.execute('reply.commitCandidates',{...input,skillRun,text,sessionEvent:{type:'assistant/message',seq:1,data:{message:{source:{provider:budget.provider,model:budget.model},content:[{type:'text',text}]},usage:{inputTokens:5,outputTokens:3},interrupted:false}}});
+ await f.storage.execute('runtime.manifest',{...input,rootAbsent:false,files:[address]});
+ input.eventBoundary=JSON.stringify({formatVersion:4,eventCount:1,lastSeq:1,eventSha256:'d'.repeat(64)});
+ const db=new DatabaseSync(join(f.root,'managed/sqlite/notalone.sqlite'));t.after(()=>db.close());
+ let sourceQueries=0;
+ const all=(sql,values=[])=>{if(sql.includes('wanted AS ('))sourceQueries++;const statement=db.prepare(sql);statement.setReadBigInts(true);return statement.all(...values);};
+ const tx={all,get:(sql,values)=>all(sql,values)[0],run:(sql,values=[])=>{db.prepare(sql).run(...values);}};
+ function measure(name){
+  sourceQueries=0;const start=performance.now(),value=registry.actions.find(action=>action.name===name).execute(tx,input,f.storage.status);
+  return {value,sourceQueries,elapsedMs:performance.now()-start};
+ }
+ return {...f,db,tx,input,sources,service,requestKey,measure};
+}
+
+for(const sourceCount of [10,100,400])test(`已提交候选的运行副本复验5条记忆共享${sourceCount}条来源时，不重复放大资格查询`,async t=>{
+ const f=await committedRuntime(t,sourceCount);
+ assert.equal((await f.service.status(f.input.contactId,f.input.discussionId,f.requestKey)).phase,'committed');
+ f.db.exec('BEGIN IMMEDIATE');
+ try{
+  const inspected=f.measure('runtime.inspect'),ready=f.measure('runtime.ready');
+  assert.equal(inspected.value.state,'dirty');assert.equal(ready.value.state,'ready');
+  t.diagnostic(JSON.stringify({sourceCount,memoryCount:5,inspect:{sourceQueries:inspected.sourceQueries,elapsedMs:inspected.elapsedMs},ready:{sourceQueries:ready.sourceQueries,elapsedMs:ready.elapsedMs}}));
+  assert.ok(inspected.sourceQueries<=sourceCount,`回看共享${sourceCount}条来源不应执行${inspected.sourceQueries}次资格查询`);
+  assert.ok(ready.sourceQueries<=sourceCount,`保存后共享${sourceCount}条来源不应执行${ready.sourceQueries}次资格查询`);
+ }finally{f.db.exec('ROLLBACK');}
+ // 下一动作重新核验来源；已有成功不能跨动作或消息修订复用。
+ const source=f.sources[0];f.db.exec('BEGIN IMMEDIATE');
+ try{
+  f.tx.run('UPDATE message SET interpretation_revision=interpretation_revision+1 WHERE owner_id=? AND contact_id=? AND id=?',[owner,source.contact_id,source.message_id]);
+  assert.throws(()=>f.measure('runtime.ready'),{code:'discussion_runtime_invalidated'});
+ }finally{f.db.exec('ROLLBACK');}
+ f.db.exec('BEGIN IMMEDIATE');
+ try{
+  f.tx.run("UPDATE capture_record SET availability='deleting' WHERE owner_id=? AND contact_id=? AND id=?",[owner,source.contact_id,source.record_id]);
+  assert.throws(()=>f.measure('runtime.inspect'),{code:'discussion_runtime_invalidated'});
+ }finally{f.db.exec('ROLLBACK');}
+});
 
 for(const sourceCount of [10,100,400])test(`正式候选冻结的5条记忆共享${sourceCount}条来源时，资格核验不随重复引用放大`,async t=>{
  const f=await fixture(t,{registryModule}),contactId=f.saved[0].contact_id;
