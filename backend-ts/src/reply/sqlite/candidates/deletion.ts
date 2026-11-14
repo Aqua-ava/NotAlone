@@ -2,6 +2,7 @@ import {sha256StableJson} from '../../../platform/stable-json.ts';
 import {StorageFailure,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {DeletionDomain,DeletionOperation,RowDeletionTarget,CheckResult} from '../../../storage/sqlite/deletion/contracts.ts';
 import {collectDiscussionDeletionImpact} from '../deletion.ts';
+import {pruneReplySearchMetadata} from './search-deletion.ts';
 const domain='reply_candidates';
 /** 身份=[domain,ownerId,operationId,id] 纯字符串数组，无键排序语义，序列化不变仅共用哈希入口。 */
 export const identity=(op:DeletionOperation,id:string)=>sha256StableJson([domain,op.ownerId,op.operationId,id]);
@@ -13,6 +14,7 @@ function collect(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget[]
 export const replyCandidateDeletionDomain:DeletionDomain={
  id:domain,rowKinds:{reply_candidate_scope:{keys:['owner_id','request_id'],ownerKey:'owner_id'}},
  fence(tx,op){
+  pruneReplySearchMetadata(tx,op);
   for(const id of collectDiscussionDeletionImpact(tx,op).requestIds){
    for(const candidate of tx.all('SELECT id FROM reply_candidate WHERE owner_id=? AND request_id=?',[op.ownerId,id])){
     tx.run('DELETE FROM reply_basis WHERE owner_id=? AND candidate_id=?',[op.ownerId,candidate.id]);

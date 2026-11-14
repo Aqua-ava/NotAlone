@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/service.ts';
 const knowledgeRegistry=new URL('./fixtures/sqlite-reply-candidates/knowledge-registry.mjs',import.meta.url).href;
+function memoryToolResponse(res,query){
+ const events=[{type:'message_start',message:{id:randomUUID(),model:'synthetic-model',usage:{input_tokens:3,output_tokens:0}}},
+  {type:'content_block_start',index:0,content_block:{type:'tool_use',id:randomUUID(),name:'search_relationship_memory',input:{query}}},
+  {type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:'tool_use'},usage:{output_tokens:8}},{type:'message_stop'}];
+ res.setHeader('content-type','text/event-stream');res.end(events.map(event=>`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''));
+}
 test('媒体占位和文字混合的近期会话仍可生成，媒体占位不冒充正文进入候选输入',async t=>{
  const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
  const f=await realFixture(t,{synchronizeHistory:false,content:JSON.stringify({candidates:[{parts:['混合会话的合成候选'],basis:[1]}]})}),original=f.channel.page;
@@ -33,10 +39,17 @@ test('普通候选默认上下文取消息时间最近页，晚导入旧文字�
 
 test('合成本人记忆消费者保留跨联系人真实来源，删除贡献联系人也清另一讨论候选完整闭包',async t=>{
  const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts');const {ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
- const f=await realFixture(t,{registryModule:knowledgeRegistry,content:JSON.stringify({candidates:[{parts:['依据本人资料形成的合成候选'],basis:[3]}]})});const contactId=f.ids[1],sourceContact=f.ids[0];
+ const f=await realFixture(t,{registryModule:knowledgeRegistry,onRequest:async(_req,res,request,n)=>{
+  if(n!==1)return;assert.doesNotMatch(JSON.stringify(request),/合成本人已采纳资料/);memoryToolResponse(res,'喜欢安静散步');return true;
+ },content:request=>{
+  const wire=JSON.stringify(request);assert.match(wire,/合成本人已采纳资料/);
+  const itemNo=Number(wire.match(/实际输入材料\[(\d+)\] memory/)[1]);
+  return JSON.stringify({candidates:[{parts:['依据本人资料形成的合成候选'],basis:[itemNo]}]});
+ }});const contactId=f.ids[1],sourceContact=f.ids[0];
  await f.storage.execute('synthetic.publishReplyKnowledge',{ownerId:f.owner,contactId,sourceContactId:sourceContact,mode:'owner'});
  const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
- await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'结合本人资料表达',confirmedContact:true});assert.match((await service.view(contactId,d.id))[0].candidates[0].basis[0].text,/本人已采纳/);
+ await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'结合本人资料表达',confirmedContact:true});
+ const basis=(await service.view(contactId,d.id))[0].candidates[0].basis[0];assert.match(basis.text,/本人已采纳/);assert.equal(basis.verification,'actual_input');assert.equal(f.requests.length,2);
  const deletion=new DeletionService(f.storage,f.holders,new ManagedFiles(f.root)),op=await deletion.plan({ownerId:f.owner,requestKey:randomUUID(),scope:{kind:'contact',contactId:sourceContact}}),done=await deletion.advance(op);assert.equal(done.state,'completed',JSON.stringify(done.checks));assert.deepEqual(await service.view(contactId,d.id),[]);assert.equal((await f.contacts.directory()).contacts.length,1);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 

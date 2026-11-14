@@ -12,12 +12,13 @@ const registryModule=new URL('./fixtures/sqlite/reply-preparation-failure-regist
 
 test('真实准备动作超时：原请求立即核对为未发送失败，重开后历史仍有明确中断原因',{timeout:10000},async t=>{
  const f=await fixture(t,{registryModule,actionTimeoutMs:500}),contactId=f.ids[0];
+ await f.storage.execute('preparationFailureTest.hangNextFreeze',{});
  const discussion=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner);
- const turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},embed:async()=>assert.fail('记忆池读取失败后不能执行语义模型')});t.after(()=>turns.close());
+ const turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},embed:async()=>assert.fail('准备失败后不能执行语义模型')});t.after(()=>turns.close());
  const workspace={action:'express',draftText:'合成准备超时请求',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true};
  const input={contactId,discussionId:discussion.id,requestKey:randomUUID(),text:workspace.draftText,workspace,confirmedContact:true};
  await assert.rejects(turns.generate(input),{code:'discussion_preparation_timeout'});
- assert.equal(f.storage.failureDiagnostic.cause,'action_timeout');assert.equal(f.storage.failureDiagnostic.action,'reply.memoryPool');
+ assert.equal(f.storage.failureDiagnostic.cause,'action_timeout');assert.equal(f.storage.failureDiagnostic.action,'reply.freezeInput');
  const failed=await service.status(contactId,discussion.id,input.requestKey);
  assert.equal(failed.phase,'failed');assert.equal(failed.sent,false);assert.equal(failed.retryable,true);
  assert.equal(failed.errorCode,'discussion_preparation_timeout');assert.ok(failed.startedAt<=failed.finishedAt);

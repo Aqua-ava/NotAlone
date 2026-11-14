@@ -1,5 +1,4 @@
-import {readReplyKnowledgeSource,selectReplyKnowledge} from './knowledge-budget.ts';
-import {readSemanticScores} from './memory-semantics.ts';
+import {selectReplyKnowledge} from './knowledge-budget.ts';
 import {requireSkillRun} from '../../../skills/sqlite/storage.ts';
 import type {SkillRunRevision} from '../../../skills/sqlite/contracts.ts';
 import {StorageFailure,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
@@ -14,6 +13,10 @@ import {toneLabel} from './workspace.ts';
 import {requireFrozenReplyKnowledge,requireReplyValidation} from './validation.ts';
 function fail(code:string):never{throw new StorageFailure(code);}
 function coverageSnapshot(value:string):unknown{const parsed=JSON.parse(value);return parsed?.kind==='reply_candidate_request_v1'?parsed.coverage:parsed;}
+function initialReplyKnowledge(tx:StorageTransaction,scope:DiscussionScope,reader:ReplyKnowledgeReader):ReplyKnowledgeItem[]{
+ const documents=reader.readDocuments?reader.readDocuments(tx,scope):reader.read(tx,scope).filter(item=>item.kind==='document');
+ return selectReplyKnowledge({memories:[],open:()=>null,documents},'');
+}
 export interface FrozenReplyInput {itemNo:number;kind:string;text:string;identity:object;sources:ReplySource[]}
 export function selectionSourceContacts(tx:StorageTransaction,i:DiscussionScope&{selectionId:string}):string[]{
  const row=tx.get(`SELECT r.id FROM reply_selection s JOIN reply_candidate k ON k.owner_id=s.owner_id AND k.id=s.candidate_id
@@ -30,7 +33,7 @@ export function replySourceContacts(tx:StorageTransaction,i:DiscussionScope&{req
   if(item.kind==='message'&&item.sourceContactId===i.contactId)contacts.add(i.contactId);
  }
  if(!i.workspace||i.workspace.includeRelationshipContext){
-  for(const item of reader.read(tx,i))for(const source of item.sources)contacts.add(source.contactId);
+  for(const item of initialReplyKnowledge(tx,i,reader))for(const source of item.sources)contacts.add(source.contactId);
   const carried=tx.get('SELECT carried_selection_id FROM reply_candidate_request WHERE owner_id=? AND request_id=?',[i.ownerId,i.requestId]);
   if(carried?.carried_selection_id)for(const contactId of selectionSourceContacts(tx,{...i,selectionId:String(carried.carried_selection_id)}))contacts.add(contactId);
  }
@@ -42,7 +45,7 @@ export function replySourceValidationSql(rows:number):string{
   SELECT count(*) n FROM expected e JOIN message m ON m.owner_id=? AND m.contact_id=e.contact_id AND m.id=e.message_id
   AND m.interpretation_revision=e.revision AND m.availability='available'`;
 }
-function sources(tx:StorageTransaction,ownerId:string,items:readonly ReplySource[]):void{
+export function sources(tx:StorageTransaction,ownerId:string,items:readonly ReplySource[]):void{
  if(!items.length)return;
  assertReplyLocalSources(tx,items.map(s=>({owner_id:ownerId,contact_id:s.contactId,record_id:s.recordId,message_id:s.messageId})));
  // 用 VALUES 常量表逐行按 (owner,contact,id) 主键查找；json_each 加 json_extract 的写法会让规划器退化为按 owner 全表扫描（约16万行消息上每次约1.6秒）。
@@ -55,7 +58,7 @@ function sources(tx:StorageTransaction,ownerId:string,items:readonly ReplySource
  }
  if(valid!==BigInt(items.length))fail('reply_source_unavailable');
 }
-function knowledge(tx:StorageTransaction,scope:DiscussionScope,items:readonly ReplyKnowledgeItem[],reader:ReplyKnowledgeReader,frozen=false):void{
+export function knowledge(tx:StorageTransaction,scope:DiscussionScope,items:readonly ReplyKnowledgeItem[],reader:ReplyKnowledgeReader,frozen=false):void{
  if(!items.length)return;
  for(const item of items){
  if(!['memory','memory_candidate','document'].includes(item.kind)||typeof item.id!=='string'||!item.id||typeof item.versionNo!=='bigint'||item.versionNo<1n
@@ -104,25 +107,16 @@ export function memorySourceTimeLabel(tx:StorageTransaction,ownerId:string,sourc
  const start=Math.min(...times),end=Math.max(...times),first=sourceDate.format(start),last=sourceDate.format(end),age=ageLabel(end,at);
  return `（聊天时间：${first===last?first:`${first} 至 ${last}`}${age?`，${age}`:''}${times.length<sources.length?'，部分来源时间未知':''}）`;
 }
-/** 帮我想想用于记忆检索的最近消息条数（含双方）。 */
-const RECENT_QUERY_MESSAGES=5;
-/** 工作区记忆检索词：消息按最新优先传入，取前5条原文；帮我表达以非空草稿为准，不拼入一次性要求或补充背景。 */
-export function workspaceRetrievalQuery(workspace:Pick<ReplyWorkspaceSnapshot,'action'|'draftText'>,messageBodies:readonly string[]):string{
- return workspace.action==='express'&&workspace.draftText.trim()?workspace.draftText:messageBodies.slice(0,RECENT_QUERY_MESSAGES).join('\n');
-}
-export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contextId:string;requestId:string;workspace?:ReplyWorkspaceSnapshot;queryText?:string;at?:number;semantic?:unknown},reader:ReplyKnowledgeReader):FrozenReplyInput[]{
+export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contextId:string;requestId:string;workspace?:ReplyWorkspaceSnapshot;queryText?:string;at?:number},reader:ReplyKnowledgeReader):FrozenReplyInput[]{
  requireDiscussion(tx,i);
  const frozenAt=typeof i.at==='number'&&Number.isSafeInteger(i.at)?i.at:Date.now();
  const includeRelatedData=!i.workspace||i.workspace.includeRelationshipContext;
  const items:Omit<FrozenReplyInput,'itemNo'>[]=[];
  // 候选只冻结本次消息；entry 是旧讨论兼容槽，Skill 走独立受控读取，均不隐式成为候选材料，也不读取 discussion_entry 正文。
- // 召回查询只用不含时间的原话，避免日期数字混入词法检索。
- const messageQuery:string[]=[],messageBodies:string[]=[];
  for(const row of tx.all('SELECT x.*,m.text_body,m.sender_role,m.sent_at FROM reply_context_item x LEFT JOIN message m ON m.owner_id=x.owner_id AND m.id=x.message_id WHERE x.owner_id=? AND x.context_id=? ORDER BY x.item_no',[i.ownerId,i.contextId])){
   if(row.kind!=='message')continue;
   const sources:ReplySource[]=[{contactId:String(row.source_contact_id),messageId:String(row.message_id),recordId:String(row.record_id),acceptedRevision:row.accepted_revision as bigint}];
   const plain=`${row.sender_role==='owner'?'我':'对方'}：${row.text_body}`;
-  messageQuery.push(plain);messageBodies.push(String(row.text_body??''));
   items.push({kind:'message',identity:{contextItemNo:row.item_no},text:messageTimePrefix(row.sent_at)+plain,sources});
  }
  // 旧输入合同的文字兼容入口仍保留，但当前请求正文由本次具名请求直接冻结，不从 discussion_entry 回读。
@@ -136,9 +130,8 @@ export function freezeReplyInput(tx:StorageTransaction,i:DiscussionScope&{contex
   if(w.instruction.trim())items.push({kind:'entry',identity:{workspaceItem:'instruction'},text:`本次一次性写作要求：\n${w.instruction}`,sources:[]});
   if(w.contextText.trim())items.push({kind:'entry',identity:{workspaceItem:'supplemental_context'},text:`本次补充背景（独立于想法/草稿，仅作用本次）：\n${w.contextText}`,sources:[]});
  }
- const query=i.workspace?workspaceRetrievalQuery(i.workspace,messageBodies):[i.queryText??items.filter(item=>item.kind==='entry').at(-1)?.text??'',...messageQuery].join('\n');
- // 事务外算好的语义得分仅在检索词与本次完全一致时采用，否则退回纯词法。
- const related=includeRelatedData?selectReplyKnowledge(readReplyKnowledgeSource(tx,i,reader),query,i.workspace?readSemanticScores(i.semantic,query):undefined):[];
+ // 初始仅提供合法长期背景和场景目录；L1 由模型按信息缺口主动检索。
+ const related=includeRelatedData?initialReplyKnowledge(tx,i,reader):[];
  knowledge(tx,i,related,reader);
  for(const item of related){
   // 记忆／候选末尾附来源聊天时间；文档是多来源整理，不在此处标注。
@@ -174,6 +167,13 @@ export function requireReplyInput(tx:StorageTransaction,scope:DiscussionScope,co
  const inputs=tx.all('SELECT * FROM reply_candidate_input WHERE owner_id=? AND context_id=?',[scope.ownerId,contextId]);
  knowledge(tx,scope,inputs.filter(item=>['memory','memory_candidate','document'].includes(String(item.kind))).map(item=>decode<ReplyKnowledgeItem>(String(item.identity_json))),reader,true);
  for(const item of inputs){
+  if(item.kind==='message'){
+   const identity=decode<{retrieved?:boolean;messageId?:string;senderRole?:string;sentAt?:bigint|null}>(String(item.identity_json));
+   if(identity.retrieved){
+    const message=tx.get('SELECT sender_role,sent_at FROM message WHERE owner_id=? AND contact_id=? AND id=?',[scope.ownerId,scope.contactId,identity.messageId??'']);
+    if(!message||message.sender_role!==identity.senderRole||message.sent_at!==identity.sentAt)fail('reply_source_unavailable');
+   }
+  }
   if(item.kind==='selection'){const id=decode<{selectionId:string}>(String(item.identity_json)).selectionId;requireSelection(tx,scope,id,reader);}
  }
  sources(tx,scope.ownerId,tx.all('SELECT * FROM reply_candidate_input_source WHERE owner_id=? AND context_id=?',[scope.ownerId,contextId]).map(s=>({contactId:String(s.source_contact_id),recordId:String(s.record_id),messageId:String(s.message_id),acceptedRevision:s.accepted_revision as bigint})));

@@ -20,11 +20,13 @@ import {isSkillReadFailure} from '../skill-loop.ts';
 import {encode} from '../requests.ts';
 import type {FrozenReplyInput} from './input.ts';
 import type {SqliteReplyCandidateService} from './service.ts';
-import {scoreMemorySemantics,type SemanticMemory} from './memory-semantics.ts';
-import {workspaceRetrievalQuery} from './input.ts';
+import {scoreMemorySemantics} from './memory-semantics.ts';
+import type {ReplySearchTicket,ReplySearchResult} from './search.ts';
+import type {RelationshipSearchKind} from '../search-tool.ts';
 import type {EmbedTexts} from '../../../retrieval/retrieval-hybrid.ts';
 import {readReplyWorkspace,replyWorkspaceEntryText,replyWorkspaceFingerprint,type ReplyWorkspace,type ReplyWorkspaceSnapshot} from './workspace.ts';
 const systemPrompt='你是面向用户真实联系人的中文关系沟通回复助手。只围绕本次已确认联系人。依据本次输入和获准资料生成1至3组可编辑候选，不虚构经历、情绪、立场或承诺。事实、推测和未确认候选必须区分。workspace suggest动作只代表用户要可选思路；未提供或未确认的草稿、立场和关系意图保持未知，候选不得写成用户已采纳的主张或承诺。workspace express动作只围绕本次想法组织表达；草稿是用户对助手的任务描述，不一定是要逐句发送的私聊原文。补充背景、写作要求和最近聊天各自标注，不相互冒充。一次性写作要求仅作用本次，不读取或形成长期表达偏好。最终消息始终由用户选择、修改并亲自发送。每组候选的parts默认只写1条完整消息；只有两种情况才拆成2条（最多2条）：该联系人最近聊天里确有连发短消息的习惯，或内容天然分成两层意思（如先回应、再另起一个问题）。同组多条会按顺序依次发送，不是备选。只输出JSON：{"candidates":[{"parts":["一条完整的消息"],"basis":[1]}]}。basis是每条候选必填的非空整数数组；示例中的1只演示格式，实际必须引用本次已编号材料，不得照抄无关编号。即使只依据用户本次请求，也要填写对应的材料编号。不得省略basis、臆造资料或把Skill选择当作已加载。';
+const retrievalGuide='先阅读本次请求、最近聊天及已提供的长期背景和场景目录。信息足够时直接生成，不为凑资料搜索。需要当前输入之外的偏好、约定或历史事实时，结合完整当前语境构造具体query，调用search_relationship_memory；需要核对原话、时间或上下文时调用search_relationship_history。不要机械复制最后几条短回复作为query。两个搜索工具共用本轮3次尝试；空结果与失败也计数。结果可能只覆盖本轮冻结的最多500条合法历史，不代表全部历史；没找到与检索失败分别处理，不猜测不存在。工具返回的编号才是新增实际依据，目录不是已读正文。';
 export interface ReplyGenerationInput {contactId:string;discussionId:string;requestKey:string;text:string;confirmedContact:true;acceptIncomplete?:boolean;carriedSelectionId?:string;selectedPackageId?:string;contextMessageIds?:string[];workspace?:ReplyWorkspace;signal?:AbortSignal}
 export type ReplyPreparationStage='accepted'|'context-frozen'|'runtime-available';
 interface Options {storage:SqliteStorage;service:SqliteReplyCandidateService;discussions:SqliteDiscussionService;runtime:SqliteDiscussionRuntime;model:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;library?:SqliteSkillLibrary;authorize:(contactId:string)=>Promise<void>;onPreparationStage?:(stage:ReplyPreparationStage)=>void;/** 本机语义向量（ADR-182）；缺省或失败时记忆检索退回纯词法。 */embed?:EmbedTexts}
@@ -33,7 +35,21 @@ export class SqliteReplyTurns {
  private readonly options:Options;private stopping=false;private readonly pending=new Set<Promise<unknown>>();private readonly controllers=new Set<AbortController>();
  constructor(options:Options){this.options=options;}
  private stage(stage:ReplyPreparationStage):void{try{this.options.onPreparationStage?.(stage);}catch{}}
- private digest(requestId:string,revision:SkillRunRevision){return sha256(encode({format:1,systemPrompt,model:this.options.model,revision,requestId}));}
+ private digest(requestId:string,revision:SkillRunRevision){return sha256(encode({format:1,systemPrompt:systemPrompt+'\n'+retrievalGuide,model:this.options.model,revision,requestId}));}
+ private async search(attempt:DiscussionAttempt,contextId:string,kind:RelationshipSearchKind,query:string,signal:AbortSignal):Promise<ReplySearchResult>{
+  const o=this.options,ticket=await o.storage.execute<ReplySearchTicket>('reply.beginSearch',{...attempt,contextId,kind,query});
+  if(ticket.status!=='accepted')return ticket;
+  try{
+   signal.throwIfAborted();
+   const semantic=kind==='memory'&&o.embed?await scoreMemorySemantics(query,ticket.pool,o.embed,signal):null;
+   if(kind==='memory'&&o.embed&&!semantic&&ticket.pool.length)diagnose({event:'diagnostics.error',module:'reply',caller:'reply_memory_semantics',reasonCode:'embedding_unavailable'});
+   signal.throwIfAborted();
+   return await o.storage.execute<ReplySearchResult>('reply.finishSearch',{...attempt,contextId,ticketId:ticket.ticketId,query,...(semantic?{semantic}:{})});
+  }catch(error){
+   await o.storage.execute('reply.finishSearch',{...attempt,contextId,ticketId:ticket.ticketId,query,error:'failed'}).catch(()=>{});
+   throw error;
+  }
+ }
  async configurationFor(contactId:string,discussionId:string):Promise<string|null>{
   const o=this.options,scope={ownerId:o.service.ownerId,contactId,discussionId};
   const read=()=>o.storage.execute<{requestId:string;revision:SkillRunRevision}|null>('reply.configuration',scope);
@@ -94,23 +110,14 @@ export class SqliteReplyTurns {
     // 候选只使用本次请求的显式消息；旧讨论 entry 兼容槽不参与候选装配，避免把助手讨论正文或来源带入新候选。
     const history=workspace
      ?workspace.includeRelationshipContext?await o.storage.execute<any[]>('discussion.localMessages',{...attempt,limit:50,knownTimeOnly:true}):[]
-     :await o.storage.execute<any[]>('discussion.localMessages',{...attempt,limit:20});
+     :await o.storage.execute<any[]>('discussion.localMessages',{...attempt,limit:50,knownTimeOnly:true});
     const recentIds=history.map((m:any)=>m.id);
     const messageIds=workspace?recentIds:input.contextMessageIds??recentIds;
     const messages=await o.storage.execute<any[]>('discussion.messages',{...attempt,messageIds});
-    messageBodies=messages.map(m=>String(m.text_body??''));
     return messages.map(m=>({kind:'message',sourceContactId:input.contactId,messageId:m.id,recordId:m.record_id,acceptedRevision:m.interpretation_revision}));
    };
-   let messageBodies:string[]=[];
    const items=await readItems();
-   // 记忆检索的语义得分在事务外异步算好再随冻结传入；失败只降级为词法，不阻断回复。
-   let semantic:Awaited<ReturnType<typeof scoreMemorySemantics>>=null;
-   if(o.embed&&workspaceSnapshot?.includeRelationshipContext){
-    const pool=await o.storage.execute<SemanticMemory[]>('reply.memoryPool',attempt);
-    semantic=await scoreMemorySemantics(workspaceRetrievalQuery(workspaceSnapshot,messageBodies),pool,o.embed,input.signal);
-    if(!semantic&&pool.length)diagnose({event:'diagnostics.error',module:'reply',caller:'reply_memory_semantics',reasonCode:'embedding_unavailable'});
-   }
-   const frozen=await o.storage.execute<FrozenReplyInput[]>('reply.freezeInput',{...attempt,contextId,skillRun:revision,items,workspace:workspaceSnapshot,queryText:input.text,at:Date.now(),...(semantic?{semantic}:{})});
+   const frozen=await o.storage.execute<FrozenReplyInput[]>('reply.freezeInput',{...attempt,contextId,skillRun:revision,items,workspace:workspaceSnapshot,queryText:input.text,at:Date.now()});
    this.stage('context-frozen');observe('preparing','context_frozen');
    const requestIntent=workspace?workspace.action==='suggest'?'本次工作区动作：帮我想想。用户没有提供草稿时尚未确认任何立场，所有说法都只是可选思路。':'本次工作区动作：帮我表达。只按本次想法整理，不添加用户未确认的立场。':'本次明确请求：'+input.text;
    const prompt=requestIntent+'\n\n实际输入材料（编号用于basis）：\n'+frozen.map(item=>`[${item.itemNo}] ${item.kind}\n${item.text}`).join('\n\n')+'\n\n输出检查：每条候选必须同时包含parts和basis两个字段；basis至少填写一个本次实际材料编号。只写parts的候选无法交付。';
@@ -126,7 +133,7 @@ export class SqliteReplyTurns {
    ?openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,{selectedPackageId:input.selectedPackageId,signal:input.signal})
    :openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,undefined,input.signal):undefined;
   modelExecutionStarted=true;
-  await runSingleDiscussionTurn({runtime:o.runtime,storage:o.storage,attempt,contextId,callId,configurationDigest,prompt,rebuildPrompt:prompt,systemPrompt,model:o.model,provider:o.provider,arbiter:o.arbiter,skillRun:null,openSkillRun,skillProtection:protection,skillRevision:revision,commitAction:'reply.commitCandidates',dispatchAction:'reply.dispatchCall',onPhase:phase=>{observe(phase);o.service.phase(input.contactId,attempt.discussionId,input.requestKey,phase);},onRuntimeAvailable:()=>{this.stage('runtime-available');observe('ready','runtime_ready');},configurationForRevision:revision=>this.digest(attempt.requestId,revision),assertAuthorized:()=>o.authorize(input.contactId),signal:input.signal});
+  await runSingleDiscussionTurn({runtime:o.runtime,storage:o.storage,attempt,contextId,callId,configurationDigest,prompt,rebuildPrompt:prompt,systemPrompt:systemPrompt+'\n'+retrievalGuide,search:(contextId,kind,query,signal)=>this.search(attempt,contextId,kind,query,signal),model:o.model,provider:o.provider,arbiter:o.arbiter,skillRun:null,openSkillRun,skillProtection:protection,skillRevision:revision,commitAction:'reply.commitCandidates',dispatchAction:'reply.dispatchCall',onPhase:phase=>{observe(phase);o.service.phase(input.contactId,attempt.discussionId,input.requestKey,phase);},onRuntimeAvailable:()=>{this.stage('runtime-available');observe('ready','runtime_ready');},configurationForRevision:revision=>this.digest(attempt.requestId,revision),assertAuthorized:()=>o.authorize(input.contactId),signal:input.signal});
    return {discussionId:attempt.discussionId,replayed:false,segmented:accepted.segmented};
   }catch(error){
    const storageFailure=!modelExecutionStarted&&error instanceof StorageFailure&&error.code==='worker_failed'?o.storage.failureDiagnostic:null;

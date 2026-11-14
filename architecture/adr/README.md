@@ -187,3 +187,5 @@
 - [ADR-182：回复时联系人／本人记忆改用本机混合检索](182-reply-memory-hybrid-retrieval.md)
 - [ADR-183：回复模型调用结果未知时自动放弃，不锁定联系人](183-auto-abandon-unknown-reply-model-calls.md)——局部修订 ADR-121 的 unknown 阻断口径。
 - [ADR-184：有来源支持的记忆变化自动更新与合并](184-source-grounded-memory-update-and-merge.md)——局部替代 ADR-174／081 的动作与变化拦截限制，保留来源和人工保护。
+
+- [ADR-185：先读近期语境，再按需检索记忆和历史](185-on-demand-reply-memory-and-history-search.md)——局部替代固定预检索，保留 DSH 官方装配、联系人范围、来源与有界读取。

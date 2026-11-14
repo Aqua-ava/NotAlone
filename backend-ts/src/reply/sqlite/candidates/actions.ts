@@ -1,4 +1,5 @@
 import {hasReplyDocumentTool,readReplyDocument} from './document-input.ts';
+import {initializeReplySearch,hasReplySearchScope,beginReplySearch,finishReplySearch} from './search.ts';
 import {randomUUID} from 'node:crypto';
 import {withReplyValidation} from './validation.ts';
 import {StorageFailure,type StorageAction,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
@@ -92,10 +93,13 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
  }),
  action('freezeInput','write',(tx,i,lease)=>{
   // 使用本次受理时冻结的覆盖事实，后台同步进展不阻断或改写当前请求。
-  freeze.execute(tx,i,lease);return freezeReplyInput(tx,i,reader);
+  freeze.execute(tx,i,lease);const inputs=freezeReplyInput(tx,i,reader);
+  if(!i.workspace||i.workspace.includeRelationshipContext)initializeReplySearch(tx,i,reader);
+  return inputs;
  }),
- // 供事务外计算语义得分：只列记忆头部，不展开文档；冻结入选项时另核来源。
- action('memoryPool','read',(tx,i)=>{requireAttempt(tx,i);return (reader.list?reader.list(tx,i):reader.read(tx,i)).filter(item=>item.kind==='memory').map(item=>({id:item.id,versionNo:String(item.versionNo),text:item.text}));}),
+ action('searchAvailable','read',(tx,i)=>hasReplySearchScope(tx,i,reader)),
+ action('beginSearch','write',(tx,i)=>beginReplySearch(tx,i,reader)),
+ action('finishSearch','write',(tx,i)=>finishReplySearch(tx,i,reader)),
  action('sourceContacts','read',(tx,i)=>{requireAttempt(tx,i);return replySourceContacts(tx,i,reader);}),
  action('selectionSourceContacts','read',(tx,i)=>{requireDiscussion(tx,i);return selectionSourceContacts(tx,i);}),
  action('configuration','read',(tx,i)=>{
@@ -112,10 +116,10 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
   requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader,{ignoreSkill:true});
   const result=dropSkillForCurrentCall(tx,i);
   // 新运行副本没有旧工具事件；把仍保留并计入预算的实际正文重新放入输入。
-  const documentInputs=tx.all("SELECT item_no,identity_json,text_body FROM reply_candidate_input WHERE owner_id=? AND context_id=? AND kind='document' ORDER BY item_no",[i.ownerId,result.contextId])
-   .filter(row=>decode<ReplyKnowledgeItem>(String(row.identity_json)).projection?.kind==='blocks')
-   .map(row=>({itemNo:Number(row.item_no),text:String(row.text_body)}));
-  return {...result,documentInputs};
+  const retrievedInputs=tx.all('SELECT item_no,kind,identity_json,text_body FROM reply_candidate_input WHERE owner_id=? AND context_id=? ORDER BY item_no',[i.ownerId,result.contextId])
+   .filter(row=>row.kind==='memory'||row.kind==='message'&&decode<{retrieved?:boolean}>(String(row.identity_json)).retrieved===true||row.kind==='document'&&decode<ReplyKnowledgeItem>(String(row.identity_json)).projection?.kind==='blocks')
+   .map(row=>({itemNo:Number(row.item_no),kind:String(row.kind),text:String(row.text_body)}));
+  return {...result,retrievedInputs};
  }),
  action('commitCandidates','write',(tx,i,lease)=>{
   requireDiscussionCall(tx,i);requireReplyInput(tx,i,i.contextId,reader);parseReplyOutput(i.text);

@@ -61,16 +61,6 @@ test('较长记忆不再挤掉后面的相关记忆',()=>{
  assert.equal(selected.includes(long),true);assert.equal(selected.includes(short),true);
 });
 
-test('工作区检索词：帮我表达以草稿为准，最新优先的消息只取前5条原文',async()=>{
- const {workspaceRetrievalQuery}=await import('../src/reply/sqlite/candidates/input.ts');
- const bodies=['最新一条','次新一条','第三新','第四新','第五新','旧话题甲','旧话题乙'];
- assert.equal(workspaceRetrievalQuery({action:'express',draftText:'我想请假'},bodies),'我想请假');
- assert.equal(workspaceRetrievalQuery({action:'express',draftText:'  '},bodies),'最新一条\n次新一条\n第三新\n第四新\n第五新');
- assert.equal(workspaceRetrievalQuery({action:'suggest',draftText:'我想请假'},bodies),'最新一条\n次新一条\n第三新\n第四新\n第五新');
- assert.equal(workspaceRetrievalQuery({action:'suggest',draftText:''},['只有一条']),'只有一条');
- assert.equal(workspaceRetrievalQuery({action:'suggest',draftText:''},[]),'');
-});
-
 test('混合检索：语义为主的综合分入选，词法只加少量分，词法命中但语义很低的不入选',async()=>{
  const {semanticKey}=await import('../src/reply/sqlite/candidates/memory-semantics.ts');
  const hike=memory('hike','contact','memory','他喜欢爬山。'),boosted=memory('boosted','contact','memory','徒步装备已经买好。'),plain=memory('plain','contact','memory','公司报销流程复杂。'),lexicalOnly=memory('lex','contact','memory','徒步徒步徒步。');

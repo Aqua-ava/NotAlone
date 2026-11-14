@@ -92,7 +92,7 @@ test('正式SQLite profile的图文后台在途时前台已到共享供应商，
   assert.equal(body.model,normal.model.model);assert.equal(body.max_tokens,normal.model.maxTokens);
   requests.push({background,body});
   if(background){backgroundArrived.release(body);await releaseBackground.promise;respond(res,body.model,'DirectMemoryExtractionOutput',{scenes:[]});}
-  else{assert.ok(!body.tools?.length);foregroundArrived.release(body);await releaseForeground.promise;respond(res,body.model,null,{candidates:[{parts:['合成甲周一见。'],basis:[1]}]});}
+  else{assert.deepEqual(body.tools.map(tool=>tool.name).sort(),['search_relationship_history','search_relationship_memory']);foregroundArrived.release(body);await releaseForeground.promise;respond(res,body.model,null,{candidates:[{parts:['合成甲周一见。'],basis:[1]}]});}
  })().catch(error=>{supplierErrors.push(error.message);res.destroy();});});
  supplier.listen(0,'127.0.0.1');await once(supplier,'listening',{signal:AbortSignal.timeout(2000)});
  host=await launchDsh({nodeExecutable:wrapper,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath,infoPath,businessHome:root,environment:{NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${supplier.address().port}`,NOTALONE_SYNTHETIC_NETWORK_AUDIT:auditPath},sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts','history','discussions','memory']}},()=>true);

@@ -28,6 +28,8 @@ async function committedRuntime(t,sourceCount){
  const {attempt}=await service.begin({contactId,discussionId:discussion.id,requestKey,text:'园艺',identity:{kind:'manual',confirmationId}});
  const input={...attempt,contextId:randomUUID(),callId:randomUUID(),copyId:randomUUID(),configurationDigest:'c'.repeat(64)},skillRun={packages:[],eligible:[]};
  await f.storage.execute('reply.freezeInput',{...input,skillRun,items:[],queryText:'园艺',at:Date.now()});
+ const ticket=await f.storage.execute('reply.beginSearch',{...input,kind:'memory',query:'园艺'});
+ assert.equal(ticket.status,'accepted');await f.storage.execute('reply.finishSearch',{...input,ticketId:ticket.ticketId,query:'园艺'});
  const budget={provider:'synthetic-official',model:'synthetic-model',maxTokens:512,input_tokens:12,serialized_bytes:128,measurement_kind:'approximate',measurement_id:'synthetic-estimate',request_sha256:'a'.repeat(64)};
  await f.storage.execute('discussion.prepareCall',{...input,operationId:randomUUID(),provider:budget.provider,requestKey:input.callId,inputSeal:'b'.repeat(64),model:budget.model,configurationId:input.configurationDigest,inputCap:1024,outputCap:512});
  await f.storage.execute('runtime.prepare',{...input,sdkInstanceId:randomUUID(),locator:input.copyId});
@@ -153,14 +155,14 @@ test('同一事务写入删除、隔离及来源失证后，重复引用仍重�
  }finally{f.db.exec('ROLLBACK');}
 });
 
-test('语义记忆池只列记忆头部，不遍历文档；旧读者保持只读兼容',async t=>{
+test('主动搜索的语义记忆池只列记忆头部，不遍历文档；旧读者保持只读兼容',async t=>{
  const f=await fixture(t,{registryModule}),contactId=f.saved[0].contact_id;
  const discussion=await new SqliteDiscussionService(f.storage,owner).newDiscussion(contactId),requestKey=randomUUID();
  const confirmationId=await f.storage.execute('identity.manualConfirm',{ownerId:owner,contactId,contextToken:requestKey,id:randomUUID(),at:Date.now()});
  const {attempt}=await new SqliteReplyCandidateService(f.storage,owner).begin({contactId,discussionId:discussion.id,requestKey,text:'合成记忆池',identity:{kind:'manual',confirmationId}});
- const listed=await f.storage.execute('fixture.memoryPoolReads',attempt);
+ const listed=await f.storage.execute('fixture.searchPoolReads',attempt);
  assert.deepEqual(listed.pool,[{id:'synthetic-memory',versionNo:'1',text:'合成记忆头部'}]);
  assert.deepEqual(listed.calls,{list:1,read:0,documents:0},'仅提取记忆头部不应展开文档和来源');
- const legacy=await f.storage.execute('fixture.memoryPoolReads',{...attempt,legacy:true});
+ const legacy=await f.storage.execute('fixture.searchPoolReads',{...attempt,legacy:true});
  assert.deepEqual(legacy.pool,listed.pool);assert.deepEqual(legacy.calls,{list:0,read:1,documents:0});
 });

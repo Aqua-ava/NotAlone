@@ -5,6 +5,8 @@ import {createReplyCandidateActions} from '../../src/reply/sqlite/candidates/act
 
 const freeze=base.actions.find(action=>action.name==='reply.freezeInput');
 const assertInput=base.actions.find(action=>action.name==='reply.assertInput');
+const beginSearch=base.actions.find(action=>action.name==='reply.beginSearch');
+const finishSearch=base.actions.find(action=>action.name==='reply.finishSearch');
 export const registry={...base,actions:[...base.actions,{
  name:'fixture.replySourceReferences',mode:'read',retryBusy:false,
  execute(tx,i){return tx.all(`SELECT r.owner_id,r.contact_id,r.id record_id,r.message_id,m.interpretation_revision,m.text_body
@@ -24,7 +26,9 @@ export const registry={...base,actions:[...base.actions,{
   const counted={...tx};for(const method of ['get','all','run'])counted[method]=(sql,values)=>{
    queries++;if(sql.includes('wanted AS ('))sourceQueries++;return tx[method](sql,values);
   };
-  const start=performance.now(),items=freeze.execute(counted,i,lease);
+  const start=performance.now();freeze.execute(counted,i,lease);
+  const ticket=beginSearch.execute(counted,{...i,kind:'memory',query:'园艺'},lease);
+  const {items}=finishSearch.execute(counted,{...i,ticketId:ticket.ticketId,query:'园艺'},lease);
   return {sourceQueries,queries,elapsedMs:performance.now()-start,memories:items.filter(item=>item.kind==='memory').map(item=>({id:item.identity.id,sources:item.sources.length}))};
  },
 },{
@@ -35,11 +39,14 @@ export const registry={...base,actions:[...base.actions,{
   try{assertInput.execute(scoped,i,lease);return {before,errorCode:null};}catch(error){return {before,errorCode:error.code};}
  });},
 },{
- name:'fixture.memoryPoolReads',mode:'read',retryBusy:false,
+ name:'fixture.searchPoolReads',mode:'write',retryBusy:false,
  execute(tx,i,lease){
-  const calls={list:0,read:0,documents:0},items=[{kind:'memory',id:'synthetic-memory',versionNo:1n,text:'合成记忆头部'},{kind:'memory_candidate',id:'synthetic-candidate',versionNo:1n,text:'未确认候选'},{kind:'document',id:'synthetic-document',versionNo:1n,text:'文档不进入语义记忆池'}];
+  const calls={list:0,read:0,documents:0},items=[{kind:'memory',id:'synthetic-memory',versionNo:1n,text:'合成记忆头部',scopeKind:'contact',contactId:i.contactId,qualification:'confirmed',sources:[]},{kind:'memory_candidate',id:'synthetic-candidate',versionNo:1n,text:'未确认候选'},{kind:'document',id:'synthetic-document',versionNo:1n,text:'文档不进入语义记忆池'}];
   const reader={read(){calls.read++;return items;},readDocuments(){calls.documents++;return [];},open(){throw new Error('语义记忆池不核验来源正文');},requireCurrent(){},...(i.legacy?{}:{list(){calls.list++;return items;}})};
-  const action=createReplyCandidateActions(reader).find(action=>action.name==='reply.memoryPool');
-  return {pool:action.execute(tx,i,lease),calls};
+  const actions=createReplyCandidateActions(reader),context={...i,contextId:randomUUID(),skillRun:{packages:[],eligible:[]},items:[],queryText:'合成记忆池',at:Date.now()};
+  actions.find(action=>action.name==='reply.freezeInput').execute(tx,context,lease);
+  for(const key of Object.keys(calls))calls[key]=0;
+  const ticket=actions.find(action=>action.name==='reply.beginSearch').execute(tx,{...context,kind:'memory',query:i.legacy?'旧读者合成查询':'合成查询'},lease);
+  return {pool:ticket.pool.map(item=>({...item,versionNo:String(item.versionNo)})),calls};
  },
 }]};

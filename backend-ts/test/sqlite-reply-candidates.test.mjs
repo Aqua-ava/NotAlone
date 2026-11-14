@@ -264,6 +264,8 @@ test('候选HTTP接受明确的空suggest，要求express草稿与工作区输�
 test('统一工作区预览与生成按消息时间使用最新50条，不把旧位置当作新消息',async t=>{
  const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');const {SqliteReplyCandidateHttp}=await import('../src/reply/sqlite/candidates/http.ts');const {createServer}=await import('node:http');
  const f=await realFixture(t,{synchronizeHistory:false,content:JSON.stringify({candidates:[{parts:['合成建议'],basis:[1]}]})}),contactId=f.ids[0];await f.contacts.setReading(true);
+ // 该用例验证50条中文消息与新增工具的完整输入；合成容量独立于正式模型预算，不截断正文。
+ f.model.budgetProfile.context_window_tokens=16_384;
  const rows=[...Array.from({length:50},(_,index)=>({localId:String(index+1),text:`合成最近-${index}`,sentAt:String(1800000000000+index*1000)})),{localId:'51',text:'合成旧消息但保存位置较新',sentAt:'1600000000000'}];
  f.channel.page=async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:rows.map(row=>({partition:'shard-a',table:'table-instance-1',localId:row.localId,serverId:'0',sender:'contact',kind:'text',text:row.text,originalType:'1',sentAt:row.sentAt,timePrecision:'second',orderScheme:null,orderKey:null,stateAssurance:'verified'})),completedPartitions:['shard-a'],exhausted:true});
  await f.history.synchronize(contactId);const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());

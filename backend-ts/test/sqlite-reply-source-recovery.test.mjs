@@ -7,6 +7,12 @@ import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/servic
 const registryModule=new URL('./fixtures/sqlite/reply-source-recovery-registry.mjs',import.meta.url).href;
 const content=JSON.stringify({candidates:[{parts:['合成本机候选'],basis:[1]}]});
 const workspace=()=>({action:'express',draftText:'我想说晚点再聊',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true});
+function memoryToolResponse(res,query){
+ const events=[{type:'message_start',message:{id:randomUUID(),model:'synthetic-model',usage:{input_tokens:3,output_tokens:0}}},
+  {type:'content_block_start',index:0,content_block:{type:'tool_use',id:randomUUID(),name:'search_relationship_memory',input:{query}}},
+  {type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:'tool_use'},usage:{output_tokens:8}},{type:'message_stop'}];
+ res.setHeader('content-type','text/event-stream');res.end(events.map(event=>`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''));
+}
 
 for(const state of ['lost','old-runtime','binding-unverified'])test(`本机回复忽略 ${state}，挂起的微信恢复器不被调用且回放不重复生成`,{timeout:10000},async t=>{
  const f=await fixture(t,{registryModule,content}),contactId=f.ids[0],discussion=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner);
@@ -27,16 +33,20 @@ for(const state of ['lost','old-runtime','binding-unverified'])test(`本机回�
 });
 
 test('旧选稿与跨联系人本人资料也只核验本机实际来源',async t=>{
- const f=await fixture(t,{registryModule,content}),contactId=f.ids[0],sourceContactId=f.ids[1],discussion=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner);
+ const f=await fixture(t,{registryModule,onRequest:async(_req,res,_request,n)=>{if(n%2===0)return;memoryToolResponse(res,'安静散步');return true;},content:request=>{
+  const itemNo=Number(JSON.stringify(request).match(/实际输入材料\[(\d+)\] memory/)[1]);
+  return JSON.stringify({candidates:[{parts:['合成本机候选'],basis:[itemNo]}]});
+ }}),contactId=f.ids[0],sourceContactId=f.ids[1],discussion=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner);
  await f.storage.execute('synthetic.publishReplyKnowledge',{ownerId:f.owner,contactId,sourceContactId,mode:'owner'});
  const turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},prepareSources:()=>assert.fail('不应访问微信')});t.after(()=>turns.close());
  const w={...workspace(),draftText:'我想安静散步'},base={contactId,discussionId:discussion.id,text:w.draftText,workspace:w,confirmedContact:true};
  await turns.generate({...base,requestKey:randomUUID()});
- assert.match(JSON.stringify(f.requests[0]),/合成本人已采纳资料/);
+ assert.doesNotMatch(JSON.stringify(f.requests[0]),/合成本人已采纳资料/);assert.match(JSON.stringify(f.requests[1]),/合成本人已采纳资料/);
  const candidate=(await service.view(contactId,discussion.id))[0].candidates[0],selection=await service.select({contactId,discussionId:discussion.id,candidateId:candidate.candidateId,versionNo:1});
+ assert.equal(candidate.basis[0].verification,'actual_input');assert.match(candidate.basis[0].text,/合成本人已采纳资料/);
  for(const id of f.ids)await f.storage.execute('sourceRecoveryTest.runtimeState',{ownerId:f.owner,contactId:id,state:'lost'});
  await turns.generate({...base,requestKey:randomUUID(),carriedSelectionId:selection.id});
- assert.equal(f.requests.length,2);assert.match(JSON.stringify(f.requests[1]),/合成本人已采纳资料/);
+ assert.equal(f.requests.length,4);assert.match(JSON.stringify(f.requests[3]),/合成本人已采纳资料/);
 });
 
 test('撤销读取授权后禁止新外部读取，已接纳的ok本机资料仍可幂等使用',{timeout:10000},async t=>{

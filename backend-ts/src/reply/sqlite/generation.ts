@@ -1,4 +1,6 @@
 import {installRelationshipDocumentTool,RELATIONSHIP_DOCUMENT_TOOL} from './document-tool.ts';
+import {installRelationshipSearchTools,RELATIONSHIP_SEARCH_TOOLS,type RelationshipSearchKind} from './search-tool.ts';
+import type {ReplySearchResult} from './candidates/search.ts';
 /** 一次明确讨论的执行壳；SQL资格、实际输入及发言提交均走具名业务动作。 */
 import {randomUUID} from 'node:crypto';
 import {sha256} from '../../platform/sha256.ts';
@@ -31,6 +33,7 @@ export interface SingleDiscussionTurnOptions {
  skillRun:SqliteSkillRun|null;openSkillRun?:()=>Promise<SqliteSkillRun>;skillProtection:SkillRunProtection;skillRevision:SkillRunRevision;
  commitAction?:'reply.commitCandidates';dispatchAction?:'reply.dispatchCall';onPhase?:(phase:'queued'|'preparing'|'generating'|'saving')=>void;onRuntimeAvailable?:()=>void;
  configurationForRevision?:(revision:SkillRunRevision)=>string;assertAuthorized?:()=>Promise<void>;signal?:AbortSignal;
+ search?:(contextId:string,kind:RelationshipSearchKind,query:string,signal:AbortSignal)=>Promise<ReplySearchResult>;
 }
 export interface SingleDiscussionTurnResult {text:string;copyId:string;callId:string;sessionEvent:SessionEvent<'assistant/message'>}
 function fail(code='discussion_generation_failed'):never{throw new StorageFailure(code);}
@@ -43,7 +46,7 @@ function payload(options:GenerateOptions):object {
 /** 调用前宿主已prepareCall；准备、取消与失败都不会自动重送模型请求。 */
 export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOptions):Promise<SingleDiscussionTurnResult>{
  const {attempt,callId,model}=options;let contextId=options.contextId,skillRevision=options.skillRevision,configurationDigest=options.configurationDigest;
- let fallback=false,totalCalls=0,lastCopyId:string|undefined,lastPhysicalCallId=callId,retainedDocumentPrompt='',budgetRejected=false;
+ let fallback=false,totalCalls=0,lastCopyId:string|undefined,lastPhysicalCallId=callId,retainedInputPrompt='',budgetRejected=false;
  if(!options.prompt.trim()||options.prompt.length>100_000||!options.systemPrompt.trim()
   ||!Number.isSafeInteger(model.deadline_ms)||model.deadline_ms<1||model.deadline_ms>REPLY_EXECUTION_DEADLINE_MS)fail('discussion_input_invalid');
  let dispatched=false,committed=false,failureEvidence:DiscussionFailureEvidence|undefined;
@@ -77,8 +80,10 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
    const allowedToolNames=skillRun?skillRun.preloadOrigin!==null?['skill_resource']:['skill','skill_resource']:[];
    const setup=async(agentCtx:Context)=>{
     const documents=options.commitAction==='reply.commitCandidates'&&await options.storage.execute<boolean>('reply.documentToolAvailable',{...attempt,contextId});
-    installReplySkillTools(agentCtx,skillRun,requireCurrent,error=>{failure??=error;},documents);
+    const searches=!!options.search&&options.commitAction==='reply.commitCandidates'&&await options.storage.execute<boolean>('reply.searchAvailable',{...attempt,contextId});
+    installReplySkillTools(agentCtx,skillRun,requireCurrent,error=>{failure??=error;},documents,searches?RELATIONSHIP_SEARCH_TOOLS:[]);
     if(documents)installRelationshipDocumentTool(agentCtx,range=>options.storage.execute('reply.readDocument',{...attempt,contextId,...range}),requireCurrent,error=>{failure??=error;});
+    if(searches)installRelationshipSearchTools(agentCtx,(kind,query,signal)=>options.search!(contextId,kind,query,signal),requireCurrent,error=>{failure??=error;});
     agentCtx.on('agent/error',()=>{failure??=new StorageFailure('discussion_generation_failed');});
     agentCtx.on('agent/request',async(_position,next)=>({...await next(),temperature:model.temperature}));
     agentCtx.on('agent/request-error',async()=>undefined);
@@ -93,7 +98,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
       await requireCurrent();if(++totalCalls>REPLY_MODEL_CALL_LIMIT)fail('discussion_call_limit');streamCalls++;finished=false;
       if(request.provider!==binding.provider||request.model!==binding.model||request.maxTokens!==binding.maxTokens
        ||request.temperature!==binding.temperature||request.reasoningEffort!==binding.reasoningEffort||request.purpose!==undefined
-       ||request.tools?.some(t=>![...allowedToolNames,...(documents?[RELATIONSHIP_DOCUMENT_TOOL]:[])].includes(t.name)))fail('discussion_model_configuration_changed');
+       ||request.tools?.some(t=>![...allowedToolNames,...(documents?[RELATIONSHIP_DOCUMENT_TOOL]:[]),...(searches?RELATIONSHIP_SEARCH_TOOLS:[])].includes(t.name)))fail('discussion_model_configuration_changed');
       const requestPayload=payload(request);
       lastPhysicalCallId=physicalCallId;
       call=options.provider.beginCall({sessionId:work.sessionId,attempt_id:physicalCallId,permit_id:permit!.id,binding,profile:model.budgetProfile,
@@ -153,7 +158,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
     const agentOptions={signal:combined,agentOptions:{provider:model.provider,model:model.model,maxTokens:model.maxTokens,reasoningEffort:ReasoningEffortId(model.reasoningEffort)},setup};
     handle=work.restoring?await work.driver.resumeAgent({...agentOptions,resumeSessionId:work.sessionId}):await work.driver.createAgent({...agentOptions,sessionId:work.sessionId});
     await requireCurrent();
-    handle.agent.followup(createUserMessage({source:{kind:'user'},content:[{type:'text',text:(work.restoring?options.prompt:options.rebuildPrompt??options.prompt)+retainedDocumentPrompt}]}));
+    handle.agent.followup(createUserMessage({source:{kind:'user'},content:[{type:'text',text:(work.restoring?options.prompt:options.rebuildPrompt??options.prompt)+retainedInputPrompt}]}));
     await handle.agent.whenIdle();combined.throwIfAborted();if(failure)throw failure;
     if(streamCalls<1||!finished)fail('discussion_generation_failed');
     options.onPhase?.('saving');
@@ -182,8 +187,9 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
    signal.throwIfAborted();await options.assertAuthorized();
    if(options.commitAction)await options.storage.execute('reply.assertInputWithoutSkill',{...attempt,contextId});
    await options.runtime.discard(attempt,lastCopyId);
-   const dropped=await options.storage.execute<{contextId:string;newRevision:SkillRunRevision;documentInputs?:{itemNo:number;text:string}[]}>(options.commitAction?'reply.dropSkill':'discussion.dropSkill',{...attempt,contextId,callId});
-   retainedDocumentPrompt=dropped.documentInputs?.length?'\n\n已读取的实际输入材料（编号保持，用于basis）：\n'+dropped.documentInputs.map(item=>`[${item.itemNo}] document\n${item.text}`).join('\n\n'):'';
+   const dropped=await options.storage.execute<{contextId:string;newRevision:SkillRunRevision;retrievedInputs?:{itemNo:number;kind:string;text:string}[];documentInputs?:{itemNo:number;text:string}[]}>(options.commitAction?'reply.dropSkill':'discussion.dropSkill',{...attempt,contextId,callId});
+   const retained=dropped.retrievedInputs??dropped.documentInputs?.map(item=>({...item,kind:'document'}));
+   retainedInputPrompt=retained?.length?'\n\n已读取的实际输入材料（编号保持，用于basis）：\n'+retained.map(item=>`[${item.itemNo}] ${item.kind}\n${item.text}`).join('\n\n'):'';
    contextId=dropped.contextId;skillRevision=dropped.newRevision;configurationDigest=options.configurationForRevision?.(skillRevision)??sha256(options.configurationDigest+'no-skill');
    options.skillRun?.close();fallback=true;
   }}

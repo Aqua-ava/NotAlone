@@ -13,7 +13,7 @@ export function isSkillReadFailure(error:unknown):boolean{
  const code=(error as {code?:string})?.code;
  return typeof code==='string'&&(/^skill_(reader_unavailable|directory_unavailable|directory_conflict|content_changed|package_invalid|run_invalidated|revision_unavailable|unverified|source_verification_required|preload_limit)$/.test(code)||['discussion_resource_limit','discussion_skill_tool_failed'].includes(code));
 }
-export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check:()=>Promise<void>,failed:(error:unknown)=>void,documents=false):void{
+export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check:()=>Promise<void>,failed:(error:unknown)=>void,documents=false,allowedTools:readonly string[]=[]):void{
  const active=run;
  const preloaded=!!active&&active.preloadOrigin!==null;
  const loaded=()=>!!active&&active.loadedSkills.length>0;
@@ -22,6 +22,7 @@ export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check
  ctx.tools.restrict({allow:demandCatalog?['skill']:[]});
  let resources=0;
  ctx.tools.guard(exec=>{
+  if(allowedTools.includes(exec.name))return;
   if(documents&&exec.name===RELATIONSHIP_DOCUMENT_TOOL)return;
   if(!active)return 'discussion_tools_forbidden';
   if(exec.name==='skill_resource'){
@@ -44,7 +45,7 @@ export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check
  ctx.on('tools/pre-execute',async(_exec,next)=>{await check();return next();});
  ctx.on('tools/post-execute',async(exec,result,next)=>{
   if(result.isError){
-   failed(isSkillReadFailure(active.failure)?new ReplySkillUnavailable():active.failure??new StorageFailure('discussion_skill_tool_failed'));
+   if(exec.name==='skill'||exec.name==='skill_resource')failed(isSkillReadFailure(active.failure)?new ReplySkillUnavailable():active.failure??new StorageFailure('discussion_skill_tool_failed'));
    return next();
   }
   await check();

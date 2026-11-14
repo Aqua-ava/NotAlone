@@ -8,6 +8,7 @@ import {fixture} from './fixtures/sqlite-reply-candidates/support.mjs';
 import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/service.ts';
 import {SqliteReplyTurns} from '../src/reply/sqlite/candidates/turns.ts';
 const answer=JSON.stringify({candidates:[{parts:['合成候选仍可编辑。'],basis:[1]}]});
+const searchTools=['search_relationship_history','search_relationship_memory'],skillTools=[...searchTools,'skill','skill_resource'];
 function stream(res,name,args){
  const calls=Array.isArray(name)?name:name?[{name,args}]:[],tool=calls.length>0;
  const content=tool?calls.map(call=>({type:'tool_use',id:randomUUID(),name:call.name,input:call.args})):[{type:'text',text:answer}];
@@ -51,7 +52,7 @@ test('正常候选先给官方简介目录，模型按需加载正文后才进�
  assert.equal(f.requests.length,2);assert.equal(trace.calls.length,2);
  assert.match(first,/available_skills/);assert.match(first,/安慰时可用的合成策略/);assert.match(first,/表达边界时可用的合成策略/);
  assert.doesNotMatch(first,/先回应感受|清晰说明边界|<skill_instructions>/);
- assert.deepEqual(toolNames(f.requests[0]).sort(),['skill','skill_resource']);
+ assert.deepEqual(toolNames(f.requests[0]).sort(),skillTools);
  assert.match(next,/先回应感受/);assert.doesNotMatch(next,/清晰说明边界|辅助资料的唯一合成教学句/);
  assert.deepEqual(view.loadedSkills.map(skill=>[skill.name,skill.relativePath]),[['gentle','SKILL.md']]);
  assert.deepEqual(view.preloadedSkills,[]);
@@ -86,7 +87,7 @@ test('没有eligible Skill时仍只调用一次模型且不暴露Skill工具',as
  const f=await setup(t,(_f,res)=>stream(res));await f.library.setEnabled(f.skill.id,f.skill.headRevision,'disabled');
  await f.turns.generate(f.input);
  const request=JSON.stringify(f.requests[0]),view=await f.view();
- assert.equal(f.requests.length,1);assert.deepEqual(toolNames(f.requests[0]),[]);
+ assert.equal(f.requests.length,1);assert.deepEqual(toolNames(f.requests[0]).sort(),searchTools);
  assert.ok(!request.includes('<skill_content'));assert.ok(!request.includes('available_skills'));
  assert.deepEqual(view.loadedSkills,[]);assert.equal(view.skillWarning,null);assert.equal((await f.trace()).calls.length,1);
 });
@@ -161,7 +162,7 @@ test('257个eligible Skill只提供简介，不再受批量预加载256包上限
  const catalog=await addScaleSkills(f,256);assert.equal(catalog.length,257);
  await f.turns.generate({...f.input,requestKey:randomUUID()});
  const first=JSON.stringify(f.requests[0]),view=await f.view();
- assert.equal(f.requests.length,1);assert.deepEqual(toolNames(f.requests[0]).sort(),['skill','skill_resource']);
+ assert.equal(f.requests.length,1);assert.deepEqual(toolNames(f.requests[0]).sort(),skillTools);
  assert.match(first,/bulk-256/);assert.doesNotMatch(first,/合成规模化策略正文|先回应感受/);
  assert.equal(view.skillWarning,null);assert.deepEqual(view.loadedSkills,[]);assert.deepEqual(view.preloadedSkills,[]);
 });
@@ -185,7 +186,7 @@ test('skill_resource先加载正文再读取两份资源，未请求资源不进
  ]):stream(res));
  await f.turns.generate(f.input);
  const view=await f.view(),trace=await f.trace();
- assert.equal(f.requests.length,3);assert.deepEqual(toolNames(f.requests[0]).sort(),['skill','skill_resource']);
+ assert.equal(f.requests.length,3);assert.deepEqual(toolNames(f.requests[0]).sort(),skillTools);
  assert.equal(view.loadedSkills.filter(skill=>skill.relativePath==='references/example.md').length,2);
  assert.equal(view.loadedSkills.filter(skill=>skill.relativePath==='SKILL.md').length,1);assert.deepEqual(view.preloadedSkills,[]);
  assert.ok(view.loadedSkills.every(skill=>skill.origin===null&&skill.catalogRevision===null));
@@ -203,7 +204,7 @@ test('skill_resource第三次读取硬拒绝并整体降级为无Skill请求',as
  ]):stream(res));
  await f.turns.generate(f.input);
  const view=await f.view();assert.equal(f.requests.length,3);
- assert.deepEqual(f.requests.map(request=>toolNames(request).sort()),[['skill','skill_resource'],['skill','skill_resource'],[]]);
+ assert.deepEqual(f.requests.map(request=>toolNames(request).sort()),[skillTools,skillTools,searchTools]);
  assert.equal(view.skillWarning,'回复策略暂不可用');assert.deepEqual(view.loadedSkills,[]);assert.deepEqual(view.preloadedSkills,[]);
  const fallback=JSON.stringify(f.requests[2]);for(const text of ['gentle','先回应感受','references/example.md','tool_result'])assert.ok(!fallback.includes(text));
 });

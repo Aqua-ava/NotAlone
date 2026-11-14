@@ -1,5 +1,7 @@
 # ADR-182：回复时联系人／本人记忆改用本机混合检索
 
+> 2026-11-14 局部替代：见 [ADR-185](185-on-demand-reply-memory-and-history-search.md)。生成前预计算与不开放主动搜索的条款被替代；本机混合评分、失败词法降级和内存向量要求保留。
+
 状态：已接受，已实现；真实模型效果待验收；2026-11-12 用户明确决定。
 
 局部修订 [ADR-028](028-lexical-memory-recall-phase-1.md) 的匹配方式（纯词法）和 [ADR-035](035-pending-candidate-unconfirmed-reply-reference.md) 以外的 L1 召回。词法评分器、联系人／本人独立预算、来源与删除规则继续适用；未确认候选轨仍只用词法。

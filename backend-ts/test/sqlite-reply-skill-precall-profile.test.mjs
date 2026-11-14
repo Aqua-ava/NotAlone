@@ -27,7 +27,7 @@ test('正式 DSH profile 首请求仅含简介，官方工具载入选定Skill�
  });
  const calls=output.split('\n').filter(line=>line.startsWith('PRECALL_MODEL_CALL ')).map(line=>JSON.parse(line.slice('PRECALL_MODEL_CALL '.length)));
  assert.equal(calls.length,2,'正式 profile 先经官方工具读取Skill，再生成候选');
- assert.equal(calls[0].hasSkillBody,false);assert.equal(calls[0].hasSkillCatalog,true);assert.deepEqual(calls[0].tools.sort(),['skill','skill_resource']);
+ assert.equal(calls[0].hasSkillBody,false);assert.equal(calls[0].hasSkillCatalog,true);assert.deepEqual(calls[0].tools.sort(),['search_relationship_history','search_relationship_memory','skill','skill_resource']);
  assert.equal(calls[1].hasSkillBody,true);
  assert.equal(result.candidates,1);assert.deepEqual(result.preloadedSkills,[]);
  assert.deepEqual(result.loadedSkills.map(skill=>[skill.name,skill.relativePath]),[['gentle','SKILL.md']]);

@@ -8,6 +8,8 @@
 
 普通生成从本机已有的合法资料冻结输入；不为首轮生成恢复来源、补历史或等待未完成的后台任务。实际已选依赖失效时拒绝沿用，不能把失效材料当作无资料继续；具体降级和重试语义见现行回复生成合同。
 
+初始只提供最近五十条、本次独立输入和合法 L3/L2 资料，不自动召回 L1。官方 DSH scoped Tools `search_relationship_memory`／`search_relationship_history` 由模型按信息缺口调用；`reply.beginSearch` 先持久占用尝试，语义评分在事务外进行，`reply.finishSearch` 重新核验并追加真实材料。搜索准备范围不当作已读依据，删除时定向剪除锚点；每次后续真实模型请求继续核验实际结果，Skill 降级重放已读材料且不重置预算。
+
 `replyCandidateMigration(version)` 仅追加新版本。候选稳定身份不保存正文，模型原稿从 v1 起；手工编辑追加同候选父版本，多条消息分别按 `part_no` 保存。选稿是固定版本的追加事件，不证明复制或发送。
 
 `SqliteReplyCandidateService` 提供 begin/view/version/edit/select；`SqliteReplyTurns` 复用讨论域的真实DSH运行、共享provider/arbiter及共享调用账本。`reply.begin`复用讨论域请求键、身份与unknown保护，保存真实触发发言和历史覆盖依据。联系人资格通过后可立即生成，历史未开始、同步中或不完整均不阻塞，也不要求额外确认；覆盖事实和当前可用资料限制进入冻结输入与输出依据，不将部分覆盖标成完整。旧 `accept_incomplete` 字段仅兼容已有调用，不授予读取或改变生成资格。原请求重试使用受理时的覆盖快照，不随后台历史进度改写或重复调用。任何重开、选稿、编辑和回看均不发送模型请求。

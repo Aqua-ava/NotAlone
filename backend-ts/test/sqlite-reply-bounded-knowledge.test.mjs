@@ -8,15 +8,18 @@ import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts
 import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/service.ts';
 import {SqliteReplyTurns} from '../src/reply/sqlite/candidates/turns.ts';
 
-test('100条真实记忆只召回本次请求相关的完整条目并遵守联系人与本人限额',async t=>{
- const f=await fixture(t,{synchronizeHistory:false,content:JSON.stringify({candidates:[{parts:['合成建议'],basis:[1]}]})});
+test('100条真实记忆由模型按需搜索，仅后续请求使用相关完整条目并遵守联系人与本人限额',async t=>{
+ const f=await fixture(t,{synchronizeHistory:false,onRequest:async(_req,res,request,n)=>{
+  if(n!==1)return;assert.doesNotMatch(JSON.stringify(request),/园艺偏好条目|无关星际课题/);toolResponse(res,'search_relationship_memory',{query:'园艺偏好'});return true;
+ },content:memoryReply});
  const contactId=f.ids[0],management=new SqliteMemoryManagement(f.storage,f.owner);
  for(let n=0;n<100;n++)await management.decide({requestKey:`bounded-${n}`,action:'manual',scope:n<90?{scopeKind:'contact',contactId}:{scopeKind:'self',contactId:null},body:n<80?`无关星际课题编号${n}。`:`园艺偏好条目${n}：喜欢种植月季。`});
  const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
  const started=performance.now();await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'园艺偏好',confirmedContact:true});
- const request=JSON.stringify(f.requests[0]);
+ assert.equal(f.requests.length,2);const request=JSON.stringify(f.requests[1]);
  assert.ok(!request.includes('无关星际课题'),'无关记忆不能进入真实provider请求');
  assert.equal((request.match(/园艺偏好条目/g)??[]).length,8);
+ const basis=(await service.view(contactId,d.id))[0].candidates[0].basis[0];assert.equal(basis.verification,'actual_input');assert.match(basis.text,/园艺偏好条目/);
  t.diagnostic(`100条记忆；实际输入8条；provider请求${request.length}字符；生成${Math.round(performance.now()-started)}ms`);
 });
 
@@ -46,6 +49,10 @@ function toolResponse(res,name,args){
   {type:'content_block_delta',index:0,delta:{type:'input_json_delta',partial_json:JSON.stringify(args)}},
   {type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:'tool_use'},usage:{output_tokens:8}},{type:'message_stop'}];
  res.setHeader('content-type','text/event-stream');res.end(events.map(event=>`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''));
+}
+function memoryReply(request){
+ const material=JSON.stringify(request).match(/实际输入材料\[(\d+)\] memory/);
+ return JSON.stringify({candidates:[{parts:['合成建议'],basis:[material?Number(material[1]):1]}]});
 }
 async function publishedReplyFixture(t,options={}){
  const f=await fixture(t,{synchronizeHistory:false,registryModule:new URL('./fixtures/sqlite-reply-candidates/document-registry.mjs',import.meta.url).href,...options});
@@ -138,16 +145,19 @@ test('正文追加后删除实际来源，取消迟到候选并清除新增输�
  assert.equal(f.requests.length,2);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-test('空suggest不以工作区提示模板召回记忆；联系人记忆不设字符预算，超长完整条目照常注入且不截断',async t=>{
- const f=await fixture(t,{synchronizeHistory:false,content:JSON.stringify({candidates:[{parts:['合成建议'],basis:[1]}]})}),contactId=f.ids[0];
+test('空suggest不自动召回记忆；模型主动查询后返回超长完整条目且不截断',async t=>{
+ const f=await fixture(t,{synchronizeHistory:false,onRequest:async(_req,res,request,n)=>{
+  if(n!==2)return;assert.doesNotMatch(JSON.stringify(request),/园艺甲|园艺短条目完整结束/);toolResponse(res,'search_relationship_memory',{query:'园艺'});return true;
+ },content:memoryReply}),contactId=f.ids[0];
  const management=new SqliteMemoryManagement(f.storage,f.owner);
  for(const [index,body] of ['工作区动作帮我想想关系背景已启用尚未确认立场。','园艺'+ '甲'.repeat(599),'园艺短条目完整结束。'].entries())await management.decide({requestKey:`query-${index}`,action:'manual',scope:{scopeKind:'contact',contactId},body});
  const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
  const workspace={action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true};
  await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'',confirmedContact:true,workspace});
- assert.ok(!JSON.stringify(f.requests[0]).includes('记忆'));assert.ok(!JSON.stringify(f.requests[0]).includes('园艺短条目完整结束'));
+ assert.doesNotMatch(JSON.stringify(f.requests[0]),/工作区动作帮我想想关系背景已启用尚未确认立场。|园艺甲|园艺短条目完整结束/);
  await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'园艺',confirmedContact:true});
- assert.ok(JSON.stringify(f.requests[1]).includes('园艺'+'甲'.repeat(599)));assert.match(JSON.stringify(f.requests[1]),/园艺短条目完整结束。/);
+ assert.equal(f.requests.length,3);assert.ok(JSON.stringify(f.requests[2]).includes('园艺'+'甲'.repeat(599)));assert.match(JSON.stringify(f.requests[2]),/园艺短条目完整结束。/);
+ assert.equal((await service.view(contactId,d.id)).at(-1).candidates[0].basis[0].verification,'actual_input');
 });
 
 test('固定合成容量标定：15个场景、8条画像和两次大段正文仍受完整provider预算约束',async t=>{
@@ -155,7 +165,8 @@ test('固定合成容量标定：15个场景、8条画像和两次大段正文�
  const f=await publishedReplyFixture(t,{documents:{sceneCount:15,sceneBody:'园艺场景完整段落。'+'合'.repeat(1735)+'。',profileBodies:Array.from({length:8},(_,n)=>`园艺画像完整陈述${n}：`+'成'.repeat(120)+'。')},
   onRequest:async(_req,res,request,n)=>{
    if(n===1)directoryNos=[...JSON.stringify(request).matchAll(/\[(\d+)\] document\\n【主题目录】/g)].map(match=>Number(match[1]));
-   if(n>2)return;toolResponse(res,'read_relationship_document',{itemNo:directoryNos[n-1],startBlock:1,blockCount:1});return true;
+   if(n===1){toolResponse(res,'search_relationship_memory',{query:'园艺'});return true;}
+   if(n>3)return;toolResponse(res,'read_relationship_document',{itemNo:directoryNos[n-2],startBlock:1,blockCount:1});return true;
   },content:JSON.stringify({candidates:[{parts:['有界合成建议。'],basis:[1]}]})});
  const {resolveHostReplyConfiguration}=await import('../src/host/host-reply-config.ts');
  const normal=resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-only'});assert.equal(normal.status,'configured');
@@ -163,12 +174,13 @@ test('固定合成容量标定：15个场景、8条画像和两次大段正文�
  f.model.budgetProfile=normal.model.budgetProfile;f.model.deadline_ms=normal.model.deadline_ms;
  for(let n=0;n<8;n++)await f.docs.management.decide({requestKey:`capacity-${n}`,action:'manual',scope:n<5?{scopeKind:'contact',contactId:f.contactId}:{scopeKind:'self',contactId:null},body:`园艺偏好${n}：`+'植'.repeat(n<5?100:60)+'。'});
  await f.turns.generate({contactId:f.contactId,discussionId:f.discussionId,requestKey:randomUUID(),text:'园艺',confirmedContact:true}).catch(error=>{t.diagnostic(JSON.stringify({requests:f.requests.length,supplierErrors:f.supplierErrors.map(e=>e.message)}));throw error;});
- assert.equal(f.requests.length,3);
+ assert.equal(f.requests.length,4);
  const actual=await f.storage.execute('fixture.input',{ownerId:f.owner,discussionId:f.discussionId}),documents=actual.filter(row=>row.kind==='document').map(row=>({text:row.text_body,projection:JSON.parse(row.identity_json).projection}));
  assert.equal(documents.filter(row=>row.projection.kind==='directory').length,12);
  const profile=documents.find(row=>row.projection.kind==='profile');assert.ok(profile.text.length<=1200);assert.equal(profile.projection.statementNos.length,7);assert.match(profile.text,/成。/);
  assert.equal(documents.filter(row=>row.projection.kind==='blocks').length,2);
- const budgets=await f.storage.execute('fixture.budgets',{ownerId:f.owner});assert.equal(budgets.length,3);
+ assert.equal(actual.filter(row=>row.kind==='memory').length,8);
+ const budgets=await f.storage.execute('fixture.budgets',{ownerId:f.owner});assert.equal(budgets.length,4);
  assert.ok(budgets.every(b=>b.input_tokens+b.maxTokens+b.safety_margin_tokens<=b.context_window_tokens));
  t.diagnostic('完整provider预算：'+JSON.stringify(budgets.map(b=>({tokens:b.input_tokens,bytes:b.serialized_bytes,context:b.context_window_tokens,output:b.maxTokens,margin:b.safety_margin_tokens}))));
  t.diagnostic('实际资料：'+JSON.stringify({directory:12,profileStatements:profile.projection.statementNos.length,profileChars:profile.text.length,documentReads:2,documentChars:documents.filter(row=>row.projection.kind==='blocks').map(row=>row.text.length),memory:actual.filter(row=>row.kind==='memory').length}));
@@ -213,42 +225,22 @@ test('来源状态更新使派生文档失效时初始召回省略，旧冻结�
  await assert.rejects(f.storage.execute('fixture.readDocument',{...scope,item:directory,range:{startBlock:1,blockCount:1}}),{code:'document_knowledge_stale'});
 });
 
-test('工作区记忆检索使用真实消息顺序中的最新5条，词法与语义查询保持一致',async t=>{
- const f=await fixture(t,{synchronizeHistory:false,content:JSON.stringify({candidates:[{parts:['合成建议'],basis:[1]}]})}),contactId=f.ids[0];
- const latest=['园艺月季','园艺玫瑰','园艺牡丹','园艺兰花','园艺郁金香'],page=f.channel.page;
- f.channel.page=async(...args)=>{
-  const result=await page(...args),base=result.records[0];
-  return {...result,records:Array.from({length:55},(_,index)=>({...base,localId:String(index+1),sender:index%2?'owner':'contact',
-   text:index<50?`归档天文${index}`:latest[index-50],sentAt:String(1700000000000+index*1000)}))};
- };
- await f.contacts.setReading(true);await f.history.synchronize(contactId);
- const currentMemory='最新话题记忆：喜欢园艺月季、园艺玫瑰、园艺牡丹、园艺兰花、园艺郁金香。',oldMemory='过早话题记忆：喜欢归档天文。';
- const management=new SqliteMemoryManagement(f.storage,f.owner);
- for(const [index,body] of [currentMemory,oldMemory].entries())await management.decide({requestKey:`recent-query-${index}`,action:'manual',scope:{scopeKind:'contact',contactId},body});
- const workspace={action:'suggest',draftText:'',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true};
- for(const hybrid of [false,true]){
-  const queries=[],embed=async texts=>{queries.push(texts[0]);return texts.map(text=>text.includes('园艺')?[1,0]:[0,1]);};
-  const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},...(hybrid?{embed}:{})});t.after(()=>turns.close());
-  const before=f.requests.length;await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'',confirmedContact:true,workspace});
-  const request=JSON.stringify(f.requests[before]);
-  assert.ok(request.includes(currentMemory),`${hybrid?'混合':'词法'}检索应使用最新话题召回记忆`);
-  assert.ok(!request.includes(oldMemory),'较早聊天不能成为本次记忆查询');
-  assert.ok(request.includes('归档天文5'),'记忆查询限于最新5条时，完整近期聊天仍进入模型输入');
-  assert.ok(!request.includes('归档天文4\\n'),'超出最近50条的聊天不进入模型输入');
-  if(hybrid)assert.deepEqual(queries,['园艺郁金香\n园艺兰花\n园艺牡丹\n园艺玫瑰\n园艺月季']);
- }
-});
-
-test('回复链路：本机语义补充词法漏召回的同义记忆，语义模型缺失或失败时降级为词法仍可生成',async t=>{
- const f=await fixture(t,{synchronizeHistory:false,content:JSON.stringify({candidates:[{parts:['合成建议'],basis:[1]}]})}),contactId=f.ids[0];
+test('模型显式查询后才计算语义，同义记忆可召回，语义模型缺失或失败仍以词法继续生成',async t=>{
+ const query='想去徒步';
+ const f=await fixture(t,{synchronizeHistory:false,onRequest:async(_req,res,request,n)=>{
+  if(n%2===0)return;assert.doesNotMatch(JSON.stringify(request),/他喜欢爬山|公司报销流程/);toolResponse(res,'search_relationship_memory',{query});return true;
+ },content:memoryReply}),contactId=f.ids[0];
  const management=new SqliteMemoryManagement(f.storage,f.owner);
  for(const [index,body] of ['他喜欢爬山。','公司报销流程复杂。'].entries())await management.decide({requestKey:`semantic-${index}`,action:'manual',scope:{scopeKind:'contact',contactId},body});
  const workspace={action:'express',draftText:'想去徒步',tone:'original',instruction:'',contextText:'',includeRelationshipContext:true};
  const embed=async texts=>texts.map(text=>/徒步|爬山/.test(text)?[1,0]:[0,1]);
  const run=async options=>{
-  const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},...options});t.after(()=>turns.close());
-  const before=f.requests.length;await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:workspace.draftText,confirmedContact:true,workspace});
-  return JSON.stringify(f.requests[before]);
+  const before=f.requests.length,queries=[];
+  const measuredEmbed=options.embed?async texts=>{assert.equal(f.requests.length,before+1,'语义评分只能在初次provider请求返回工具调用后运行');queries.push(texts[0]);return options.embed(texts);}:undefined;
+  const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},...(measuredEmbed?{embed:measuredEmbed}:{})});t.after(()=>turns.close());
+  await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:workspace.draftText,confirmedContact:true,workspace});
+  assert.equal(f.requests.length,before+2);assert.deepEqual(queries,measuredEmbed?[query]:[]);
+  return JSON.stringify(f.requests[before+1]);
  };
  const withSemantics=await run({embed});
  assert.ok(withSemantics.includes('他喜欢爬山'),'语义相近的记忆应被补充');assert.ok(!withSemantics.includes('公司报销流程'),'语义无关的记忆不进入');

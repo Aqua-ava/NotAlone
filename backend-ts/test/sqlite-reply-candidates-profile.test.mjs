@@ -10,6 +10,7 @@ import {launchDsh} from '../src/launch.ts';
 import {readDiagnosticRecords} from '../src/diagnostics/unified-log.mjs';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {SqliteDiscussionService} from '../src/reply/sqlite/service.ts';
+import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 import {resolveHostReplyConfiguration} from '../src/host/host-reply-config.ts';
 import {fixture,owner,record} from './fixtures/memory-sqlite/support.mjs';
 
@@ -72,13 +73,11 @@ test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双�
   await assert.rejects(access(root),error=>error.code==='ENOENT');
  });
  const ids=f.saved.map(binding=>binding.contact_id),texts=['我长期喜欢合成园艺。','合成乙已确认周末休息。'];
- const {documentFixture}=await import('./fixtures/memory-documents/support.mjs');
- const docs=await documentFixture({after:cleanup=>cleanups.push(cleanup)},{baseFixture:f,sceneBody:'正式资料工具专有正文：合成园艺需要耐心照料。'});
- await docs.extraction.start('profile-bounded-documents');await docs.extraction.waitForIdle();
- await docs.extraction.close();await docs.adjudication.close();await docs.documents.close();
+ const memoryText='正式L1工具专有正文：合成园艺需要先确认月季的养护安排。';
  await f.contacts.setReading(true);
  f.channel.page=async(scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[record('1',{text:texts[ids.indexOf(scope.token.contact_id)]}),record('2',{kind:'voice',text:'媒体占位不得作为正文输入'})],completedPartitions:['shard-a'],exhausted:true});
  for(const id of ids){await f.service.synchronize(id);assert.equal((await f.service.coverage(id)).phase,'complete');}
+ await new SqliteMemoryManagement(f.storage,owner).decide({requestKey:'profile-on-demand-memory',action:'manual',scope:{scopeKind:'contact',contactId:ids[0]},body:memoryText});
  await f.contacts.setReading(false);const databaseId=f.storage.status.databaseId;
  await f.service.close();await f.contacts.close();await f.storage.close();
  // 只提供合成认证；模型、预算、用途与官方供应商地址保持正常配置。
@@ -92,15 +91,14 @@ test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双�
   let raw='';for await(const part of req)raw+=part;const body=JSON.parse(raw);requests.push(body);
   assert.equal(body.model,normal.model.model);assert.equal(body.max_tokens,normal.model.maxTokens);
   if(requests.length===1){
-   assert.deepEqual(body.tools.map(tool=>tool.name),['read_relationship_document']);
-   const wire=JSON.stringify(body);assert.ok(!wire.includes('正式资料工具专有正文'));
-   const itemNo=Number(wire.match(/\[(\d+)\] document\\n【主题目录】/)[1]);
-   const events=[{type:'message_start',message:{id:randomUUID(),model:body.model,usage:{input_tokens:3,output_tokens:0}}},{type:'content_block_start',index:0,content_block:{type:'tool_use',id:randomUUID(),name:'read_relationship_document',input:{}}},{type:'content_block_delta',index:0,delta:{type:'input_json_delta',partial_json:JSON.stringify({itemNo,startBlock:1,blockCount:1})}},{type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:'tool_use'},usage:{output_tokens:8}},{type:'message_stop'}];
+   assert.deepEqual(body.tools.map(tool=>tool.name).sort(),['search_relationship_history','search_relationship_memory']);
+   const wire=JSON.stringify(body);assert.ok(!wire.includes(memoryText));
+   const events=[{type:'message_start',message:{id:randomUUID(),model:body.model,usage:{input_tokens:3,output_tokens:0}}},{type:'content_block_start',index:0,content_block:{type:'tool_use',id:randomUUID(),name:'search_relationship_memory',input:{}}},{type:'content_block_delta',index:0,delta:{type:'input_json_delta',partial_json:JSON.stringify({query:'园艺'})}},{type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:'tool_use'},usage:{output_tokens:8}},{type:'message_stop'}];
    res.setHeader('Content-Type','text/event-stream');res.end(events.map(event=>`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''));return;
   }
-  if(requests.length===2)assert.match(JSON.stringify(body),/正式资料工具专有正文/);
-  else assert.ok(!body.tools?.length);
-  const bodyOutput=requests.length===2?JSON.stringify({candidates:[{parts:['合成正式候选','第二条'],basis:[Number(JSON.stringify(body).match(/实际输入材料\[(\d+)\]/)[1])]}]}):output;
+  if(requests.length===2)assert.ok(JSON.stringify(body).includes(memoryText));
+  else{assert.deepEqual(body.tools.map(tool=>tool.name).sort(),['search_relationship_history','search_relationship_memory']);assert.ok(!JSON.stringify(body).includes(memoryText));}
+  const bodyOutput=requests.length===2?JSON.stringify({candidates:[{parts:['合成正式候选','第二条'],basis:[Number(JSON.stringify(body).match(/实际输入材料\[(\d+)\] memory/)[1])]}]}):output;
   const events=[{type:'message_start',message:{id:randomUUID(),type:'message',role:'assistant',model:body.model,content:[],usage:{input_tokens:3,output_tokens:0}}},{type:'content_block_start',index:0,content_block:{type:'text',text:''}},{type:'content_block_delta',index:0,delta:{type:'text_delta',text:bodyOutput}},{type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:8}},{type:'message_stop'}];
   res.setHeader('Content-Type','text/event-stream');res.end(events.map(event=>`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''));
  })().catch(error=>{supplierErrors.push(error.message);res.destroy();});});
@@ -138,7 +136,7 @@ test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双�
   assert.equal((await api(`/api/contacts/${id}/assistant-sessions/${created.data.session_id}`)).data.runtime_recovery,'unchecked');
   const read=await api(path);assert.equal(read.status,200);assert.equal(read.data.coverage.phase,'complete');assert.equal(read.data.requests.length,1);
   const version=read.data.requests[0].candidates[0];versions.push({requestId:read.data.requests[0].requestId,...version});
-  assert.equal(version.versionNo,1);assert.deepEqual(version.parts,['合成正式候选','第二条']);assert.equal(version.basis[0].verification,'actual_input');assert.match(version.basis[0].text,new RegExp(index?texts[index]:'正式资料工具专有正文'));
+  assert.equal(version.versionNo,1);assert.deepEqual(version.parts,['合成正式候选','第二条']);assert.equal(version.basis[0].verification,'actual_input');assert.ok(version.basis[0].text.includes(index?texts[index]:memoryText));
   const wire=JSON.stringify(requests[index?2:0]);assert.ok(wire.includes(texts[index]));assert.ok(!wire.includes(texts[1-index]));assert.ok(!wire.includes('媒体占位不得作为正文输入'));
   assert.equal((await api(path,{body:request})).data.replayed,true);assert.equal(requests.length,index+2);
  }

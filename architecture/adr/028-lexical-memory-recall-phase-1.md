@@ -1,5 +1,7 @@
 # ADR-028：记忆召回第一期采用确定性中文词法评分
 
+> 2026-11-14 局部替代：见 [ADR-185](185-on-demand-reply-memory-and-history-search.md)。固定查询构造由新方案替代；词法评分与来源要求保留。
+
 > 2026-10-21 设计审查：[ADR-080](080-unified-memory-list-and-retired-exclusion.md)取消 ADR-071 的失效状态变化旧版生成例外；失效／过期记忆仅供管理回看，有效的历史事实仍可检索。本文回复上下文词法召回与 [ADR-074（腾讯记忆）](074-tencent-reference-python-memory.md)的写入裁决候选召回属于不同阶段，不互相替代。
 
 > 状态：已采纳
@@ -25,7 +27,7 @@
 
 ### 1. 查询只取当前正文
 
-召回 query 就是本次要处理的文字：`reply_to_message` 取待回复消息正文，`rewrite_draft` 取草稿正文。表达方向只约束说法，不进入 query；近期消息继续作为上下文证据，不参与记忆评分。当前实现先归一化 query；不超过 200 个字符时完整参与分词，超出时取开头 100 字和结尾 100 字，并以分隔符隔开，避免截断处拼出不存在的词。此策略修复长消息尾部关键词漏召回，中段仍可能遗漏；见[召回评测记录](../../docs/evaluations/memory/memory-recall-evaluation-baseline.md)与[实现](../../backend/src/notalone/retrieval/lexical.py)。
+召回 query 就是本次要处理的文字：`reply_to_message` 取待回复消息正文，`rewrite_draft` 取草稿正文。表达方向只约束说法，不进入 query；近期消息继续作为上下文证据，不参与记忆评分。当前实现先归一化 query；不超过 200 个字符时完整参与分词，超出时取开头 100 字和结尾 100 字，并以分隔符隔开，避免截断处拼出不存在的词。此策略修复长消息尾部关键词漏召回，中段仍可能遗漏；见[召回评测记录](../../docs/evaluations/memory/memory-recall-evaluation-baseline.md)与[实现](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/retrieval/lexical.py)。
 
 ### 2. 第一期只对记忆正文做中文词法评分
 

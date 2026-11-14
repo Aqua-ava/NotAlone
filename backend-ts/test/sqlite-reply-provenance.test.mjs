@@ -77,6 +77,9 @@ test('本人记忆引用的另一联系人来源属于本次实际依赖，同�
  const f=await fixture(t);
  await f.storage.execute('synthetic.publishReplyKnowledge',{ownerId,contactId:f.ids[0],sourceContactId:f.ids[1],mode:'owner'});
  const next=await f.context(f.ids[0],{messageIds:[],candidate:true,queryText:'喜欢安静散步'});
+ const ticket=await f.storage.execute('reply.beginSearch',{...next,kind:'memory',query:'喜欢安静散步'});assert.equal(ticket.status,'accepted');
+ const retrieved=await f.storage.execute('reply.finishSearch',{...next,ticketId:ticket.ticketId,query:ticket.query});
+ assert.equal(retrieved.status,'ok');assert.ok(retrieved.items.some(item=>item.kind==='memory'&&item.sources.some(source=>source.contactId===f.ids[1])));
  assert.equal(await f.check({contextIds:[next.contextId]}),true);
  await f.storage.execute('provenanceTest.guardLost',{ownerId,contactId:f.ids[1]});
  assert.equal(await f.check({contextIds:[next.contextId]}),true);
