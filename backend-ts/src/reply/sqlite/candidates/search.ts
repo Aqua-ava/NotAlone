@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {sha256} from '../../../platform/sha256.ts';
 import {StorageFailure,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {searchAllReplyHistory,ReplyHistorySearchTimeout,type ReplyHistoryBoundary} from './search-history.ts';
+import {REPLY_SEARCH_BUDGET,type RelationshipSearchKind} from '../retrieval-policy.ts';
 import {buildQueryTokens,scoreTokens,RELEVANCE_THRESHOLD} from '../../../retrieval/retrieval-lexical.ts';
 import type {DiscussionAttempt} from '../contracts.ts';
 import {requireAttempt,encode,decode} from '../requests.ts';
@@ -10,8 +11,8 @@ import {selectReplyKnowledge} from './knowledge-budget.ts';
 import {readSemanticScores,type SemanticMemory} from './memory-semantics.ts';
 import {requireReplyInput,messageTimePrefix,memorySourceTimeLabel,sources,knowledge,type FrozenReplyInput} from './input.ts';
 
-export const REPLY_SEARCH_BUDGET={attempts:3,queryChars:400,historyTimeoutMs:5000,historyCount:16,historyTokens:2048,contactMemories:5,ownerMemories:3} as const;
-export type ReplySearchKind='memory'|'history';
+export {REPLY_SEARCH_BUDGET} from '../retrieval-policy.ts';
+export type ReplySearchKind=RelationshipSearchKind;
 export type ReplySearchAttempt=DiscussionAttempt&{contextId:string};
 interface MemoryAnchor {id:string;versionNo:bigint;textSeal:string}
 interface HistoryAnchor {id:string;recordId:string;acceptedRevision:bigint;senderRole:string;sentAt:bigint|null}

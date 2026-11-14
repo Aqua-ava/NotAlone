@@ -43,7 +43,8 @@ export async function apply(ctx:Context):Promise<void>{
  const configuration=resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-only'});if(configuration.status!=='configured')throw new Error('synthetic host configuration unavailable');
  const connection=resolveAdapterOptions({baseURL:process.env.NOTALONE_PRECALL_PROVIDER_URL!,thinking:configuration.provider.connection.defaults.thinking,maxTokens:configuration.model.maxTokens,retryPolicy:{mode:'normal',maxRetries:0}});
  const provider=installModelProvider(ctx,{provider:'synthetic-official',connection,resolveAuth:async()=>({headers:{}}),resolveUserId:()=> 'synthetic-anonymous'});cleanups.push(()=>provider.dispose());
- const model={...configuration.model,provider:'synthetic-official',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off' as const,physical_limit:1,deadline_ms:5000,warning_ratio:0.8,budgetProfile:{context_window_tokens:8192,safety_margin_tokens:512}};
+ // 合成供应商按字节估算token，完整检索指引和官方Skill目录使用16K窗口。
+ const model={...configuration.model,provider:'synthetic-official',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off' as const,physical_limit:1,deadline_ms:5000,warning_ratio:0.8,budgetProfile:{context_window_tokens:16384,safety_margin_tokens:512}};
  const discussions=new SqliteDiscussionService(storage,owner),runtime=new SqliteDiscussionRuntime({storage,ownerId:owner,userData:root,ctx,holders});cleanups.push(()=>runtime.close());await runtime.initialize();
  const service=new SqliteReplyCandidateService(storage,owner),turns=new SqliteReplyTurns({storage,service,discussions,runtime,model,provider,arbiter:new ModelPermitArbiter(),library,authorize:async()=>{}});cleanups.push(()=>turns.close());
  const discussion=await discussions.newDiscussion(contactId),startedAt=performance.now();

@@ -29,6 +29,9 @@ test('按需检索工具只在当前官方scope可见，返回可引用的真实
   return {status:'ok',items:[{itemNo:7,kind:'memory',text:'合成联系人本周轮夜班。'}]};
  }});
  assert.deepEqual(f.ctx.tools.schemas(f.key).map(tool=>tool.name).sort(),['search_relationship_history','search_relationship_memory']);
+ const schemas=f.ctx.tools.schemas(f.key);
+ assert.match(schemas.find(tool=>tool.name==='search_relationship_memory').description,/身份.*偏好.*直接依据/);
+ assert.match(schemas.find(tool=>tool.name==='search_relationship_history').description,/原话.*时间.*直接依据/);
  assert.deepEqual(f.ctx.tools.schemas(),[]);assert.deepEqual(f.ctx.tools.schemas(f.otherKey),[]);
  const result=await f.execute('search_relationship_memory',{query:' 合成夜班 '});
  assert.equal(result.isError,false);assert.deepEqual(result.content,[{type:'text',text:'实际输入材料[7] memory\n合成联系人本周轮夜班。'}]);

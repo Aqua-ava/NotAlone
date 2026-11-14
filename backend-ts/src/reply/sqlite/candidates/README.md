@@ -10,6 +10,8 @@
 
 初始只提供最近五十条、本次独立输入和合法 L3/L2 资料，不自动召回 L1。官方 DSH scoped Tools `search_relationship_memory`／`search_relationship_history` 由模型按信息缺口调用；`reply.beginSearch` 先持久占用尝试，语义评分在事务外进行，`reply.finishSearch` 重新核验并追加真实材料。历史搜索使用 v2 接纳边界分页覆盖当前联系人全部获准历史，不列举五百条身份或截断候选；五秒计算预算超时返回未完成，不追加部分结果。L1 与旧历史准备池不当作已读依据，删除时定向剪除锚点；每次后续真实模型请求继续核验实际结果，Skill 降级重放已读材料且不重置预算。
 
+`../retrieval-policy.ts` 是不依赖框架和存储的检索合同：集中四类触发、已有直接依据的例外、工具元数据及共享预算。`turns.ts` 使用同一完整提示生成配置摘要并出站；`search-tool.ts` 只负责官方工具注册、参数校验与执行，存储模块仍负责授权、来源和预算。触发指引参考腾讯固定提交 `42d4cde50c5a83182fced8c584f9ddb32a620615` 的 `tdai-profile-memory-injector.ts:179–209`，并保留本项目的数据／指令区分及未命中不证明不存在的约束；DSH 接线沿既有 `0.2.1-rc.2` 官方 `systemPrompt.section`、`defineTool` 和 scoped `tools.register`，不改 Agent loop。
+
 `replyCandidateMigration(version)` 仅追加新版本。候选稳定身份不保存正文，模型原稿从 v1 起；手工编辑追加同候选父版本，多条消息分别按 `part_no` 保存。选稿是固定版本的追加事件，不证明复制或发送。
 
 `SqliteReplyCandidateService` 提供 begin/view/version/edit/select；`SqliteReplyTurns` 复用讨论域的真实DSH运行、共享provider/arbiter及共享调用账本。`reply.begin`复用讨论域请求键、身份与unknown保护，保存真实触发发言和历史覆盖依据。联系人资格通过后可立即生成，历史未开始、同步中或不完整均不阻塞，也不要求额外确认；覆盖事实和当前可用资料限制进入冻结输入与输出依据，不将部分覆盖标成完整。旧 `accept_incomplete` 字段仅兼容已有调用，不授予读取或改变生成资格。原请求重试使用受理时的覆盖快照，不随后台历史进度改写或重复调用。任何重开、选稿、编辑和回看均不发送模型请求。

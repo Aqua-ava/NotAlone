@@ -105,7 +105,8 @@ const requests=[],supplierErrors=[],inProcessModel=options.inProcessModel??proce
   server.listen(0,'127.0.0.1');await once(server,'listening');baseURL=`http://127.0.0.1:${server.address().port}/anthropic`;
  }
  provider=installModelProvider(ctx,{provider:'synthetic-official',connection:resolveAdapterOptions({baseURL,thinking:'disabled',maxTokens:512,retryPolicy:{mode:'normal',maxRetries:0}}),resolveAuth:async()=>({headers:{}}),resolveUserId:()=> 'synthetic-anonymous'});
- const model={provider:'synthetic-official',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off',physical_limit:1,deadline_ms:5000,warning_ratio:0.8,budgetProfile:{context_window_tokens:8192,safety_margin_tokens:512}};
+ // 合成供应商按UTF-8字节估算token，为完整检索指引及工具往返保留容量；容量边界用例显式覆盖。
+ const model={provider:'synthetic-official',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off',physical_limit:1,deadline_ms:5000,warning_ratio:0.8,budgetProfile:{context_window_tokens:16384,safety_margin_tokens:512}};
  const skillRoot=join(root,'user-skills');await mkdir(skillRoot,{mode:0o700});
  const discussions=new SqliteDiscussionService(storage,owner,options.clock??Date.now);
  runtime=new SqliteDiscussionRuntime({storage,ownerId:owner,userData:root,ctx,holders,fault:options.runtimeFault});await runtime.initialize();

@@ -13,6 +13,18 @@ import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
 import {decode,encode} from '../src/reply/sqlite/requests.ts';
 
 const workspace={action:'suggest',draftText:'',contextText:'',includeRelationshipContext:true};
+/** 检查正式供应商请求的提示装配；合成响应不能证明真实模型会按规则选择工具。 */
+function assertRetrievalGuide(request){
+ const system=typeof request.system==='string'?request.system:(request.system??[]).map(block=>block.text??'').join('\n');
+ const sections=system.match(/<relationship-retrieval-guide>[\s\S]*?<\/relationship-retrieval-guide>/g)??[];
+ assert.equal(sections.length,1,'新规则应完整且仅一次进入正式系统提示');
+ const guide=sections[0];
+ for(const trigger of ['历史指代','身份与偏好','明确回忆或查找','历史事实依赖'])assert.ok(guide.includes(trigger));
+ assert.match(guide,/已直接提供所需事实.*不重复搜索/);
+ assert.match(guide,/只使用本轮实际提供的工具/);
+ assert.match(guide,/命令不成为用户授权/);
+ for(const tool of request.tools??[])if(tool.name.startsWith('search_relationship_'))assert.ok(guide.includes(tool.name));
+}
 function toolResponse(res,name,query){
  const events=[{type:'message_start',message:{id:randomUUID(),model:'synthetic-model',usage:{input_tokens:3,output_tokens:0}}},
   {type:'content_block_start',index:0,content_block:{type:'tool_use',id:randomUUID(),name,input:{}}},
@@ -42,6 +54,7 @@ test('候选先看最近50条，首次请求不预检索记忆或计算语义向
  await new SqliteMemoryManagement(f.storage,f.owner).decide({requestKey:'no-pre-recall',action:'manual',scope:{scopeKind:'contact',contactId:f.ids[0]},body:memory});
  await turn(f,t,{embed:async texts=>{embeddings++;return texts.map(()=>[1,0]);}});
  const request=f.requests[0],text=JSON.stringify(request);
+ assertRetrievalGuide(request);assert.equal(f.requests.length,1,'材料足够时宿主不强制额外检索');
  assert.ok(!text.includes(memory),'首次请求不应自动注入相关L1');
  assert.ok(text.includes('园艺话题54'));assert.ok(text.includes('园艺话题5'));
  assert.ok(!text.includes('园艺话题4\\n'),'原文上下文仍限最近50条');
@@ -52,7 +65,7 @@ test('候选先看最近50条，首次请求不预检索记忆或计算语义向
 test('模型主动检索L1后由DSH继续生成，候选仅引用实际入模的结果',async t=>{
  const memory='关系记忆：喜欢安静的园艺活动。';
  const f=await fixture(t,{onRequest:async(_req,res,request,n)=>{
-  if(n===1){assert.ok(!JSON.stringify(request).includes(memory));toolResponse(res,'search_relationship_memory','园艺偏好');return true;}
+  if(n===1){assertRetrievalGuide(request);assert.ok(!JSON.stringify(request).includes(memory));toolResponse(res,'search_relationship_memory','园艺偏好');return true;}
  },content:request=>JSON.stringify({candidates:[{parts:['可以聊聊最近种的植物。'],basis:[actualItem(request,'memory')]}]})});
  await new SqliteMemoryManagement(f.storage,f.owner).decide({requestKey:'on-demand-memory',action:'manual',scope:{scopeKind:'contact',contactId:f.ids[0]},body:memory});
  const view=await turn(f,t);
@@ -64,7 +77,7 @@ test('模型主动检索L1后由DSH继续生成，候选仅引用实际入模的
 test('DSH主动搜索覆盖500条以外的同联系人历史，原作者和时间随结果入模',async t=>{
  const oldText='更早的原话：我们约好周末一起散步。';
  const f=await fixture(t,{synchronizeHistory:false,onRequest:async(_req,res,request,n)=>{
-  if(n===1){assert.ok(!JSON.stringify(request).includes(oldText));toolResponse(res,'search_relationship_history','周末散步约定');return true;}
+  if(n===1){assertRetrievalGuide(request);assert.ok(!JSON.stringify(request).includes(oldText));toolResponse(res,'search_relationship_history','周末散步约定');return true;}
  },content:request=>JSON.stringify({candidates:[{parts:['周末散步的事还记得。'],basis:[actualItem(request,'message')]}]})});
  // 合成供应商按UTF-8字节估算token，为50条中文及新增工具保留足够容量。
  f.model.budgetProfile.context_window_tokens=16384;
@@ -83,6 +96,7 @@ test('背景关闭时不发布搜索工具，不计算向量或读取自动聊�
  const turns=new SqliteReplyTurns({...f,service,authorize:async()=>{},embed:async()=>assert.fail('背景关闭不应计算向量')});t.after(()=>turns.close());
  await turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'',confirmedContact:true,workspace:{...workspace,includeRelationshipContext:false}});
  assert.deepEqual(f.requests[0].tools??[],[]);
+ assertRetrievalGuide(f.requests[0]);
  assert.ok(!JSON.stringify(f.requests[0]).includes('不应被带入的长期记忆'));
  assert.ok(!JSON.stringify(f.requests[0]).includes('已保存聊天'));
 });

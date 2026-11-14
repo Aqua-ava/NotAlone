@@ -222,6 +222,8 @@ test('目录核验失败整体无Skill降级，首次且唯一物理调用不含
 
 test('按需读取的Skill正文超出完整请求预算时撤下，未发送超限正文并干净降级',async t=>{
  const f=await setup(t,(_f,res,_request,n)=>n===1?stream(res,'skill',{name:'gentle'}):stream(res));
+ // 显式固定容量，初始目录可发送，加载完整正文后仍必须触发预算降级。
+ f.model.budgetProfile.context_window_tokens=12000;
  await writeFile(join(f.skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 安慰时可用的合成策略\n---\n'+('超长合成策略正文'.repeat(400))+'\n');
  await f.turns.generate(f.input);
  const view=await f.view(),trace=await f.trace();assert.equal(f.requests.length,2);assert.equal(trace.calls.length,2);
