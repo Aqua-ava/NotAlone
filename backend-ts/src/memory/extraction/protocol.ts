@@ -79,7 +79,7 @@ export function validateExtractionWindow(window:ExtractionWindow):void {
     if(message.image){
       uuid(message.image.file_id);requireValid(message.image.id===message.image.file_id&&/^[a-f0-9]{64}$/.test(message.image.sha256)
         &&['image/png','image/jpeg','image/webp','image/gif'].includes(message.image.mime_type)&&/^(0|[1-9][0-9]*)$/.test(message.image.media_generation)
-        &&typeof message.text==='string'&&message.content_kind==='image');
+        &&typeof message.text==='string'&&typeof message.content_kind==='string'&&message.content_kind.length>0);
     }else text(message.text);
     choices(message.sender,['self','contact']);
     when(message.occurred_at);if(message.occurred_at!==null){const time=instantMicros(message.occurred_at);requireValid(last===null||time>=last);last=time;}}

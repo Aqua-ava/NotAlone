@@ -1,5 +1,7 @@
 /** SQLite记忆裁决与DSH适配共用的纯数据合同。 */
 import type {ExtractedFact,MemoryConditions,MemoryEvent} from '../extraction/protocol.ts';
+import type {ContentEvidence,ContentSource} from '../content/evidence.ts';
+export type {ContentEvidence} from '../content/evidence.ts';
 
 export type AdoptionAction='add'|'update'|'noop'|'keep'|'merge';
 export type EvolutionKind='supplement'|'state_change'|'error_correction'|'historical_supplement'|'unresolved_conflict'|'independent';
@@ -20,7 +22,7 @@ export interface AdjudicationRelation {
  kind:EvolutionKind;
  related_memory_ids:string[];
  explanation:string;
- evidence:{message_id:string;quote:string}[];
+ evidence:ContentEvidence[];
  claim_changed:boolean;
  condition_changed:boolean;
 }
@@ -38,7 +40,7 @@ export interface RelationVerification {
  candidate_index:number;
  supported:boolean;
  source_receipt:string;
- evidence:{message_id:string;quote:string}[];
+ evidence:ContentEvidence[];
  claim_changed:boolean;
  condition_changed:boolean;
  usage?:ModelUsage|null;
@@ -49,16 +51,11 @@ export interface MergeVerification {
  text:string;
  source_message_ids:string[];
  source_receipt:string;
- evidence:{message_id:string;quote:string}[];
+ evidence:ContentEvidence[];
  usage?:ModelUsage|null;
 }
-/** 图片描述是已经核验的观察记录，不是可作逐字引文的聊天原文。 */
-export interface AdjudicationSource {
- message_id:string;text:string|null;occurred_at:string|null;
- content_kind?:'image';
- content_ref?:{file_id:string;sha256:string;mime_type:string;media_generation:string};
- observation?:{kind:'model_observation';text:string};
-}
+/** 内容模块统一提供真实文字或视觉来源，原生消息类型不影响裁决流程。 */
+export type AdjudicationSource=ContentSource;
 export interface SimilarMemory {
  memory_id:string;
  revision:number|string;

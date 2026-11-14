@@ -1,6 +1,6 @@
 import {qualificationSources} from './dependencies.ts';
 import {projectCitations} from './evidence.ts';
-import {requireImageCitation} from '../content-citation.ts';
+import {resolveContentCitation} from '../content-citation.ts';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
 import {verifiedExtractionOutput} from '../outputs.ts';
@@ -35,8 +35,7 @@ export function requireSources(tx:StorageTransaction,ownerId:string,parent:{cand
   sourceEligibility(tx,{owner_id:ownerId,contact_id:String(r.source_contact_id),message_id:String(r.message_id),record_id:String(r.record_id)});
   const m=tx.get('SELECT interpretation_revision,text_body FROM message WHERE owner_id=? AND contact_id=? AND id=?',[ownerId,r.source_contact_id,r.message_id]);
   if(!m||m.interpretation_revision!==r.accepted_revision)fail('memory_source_stale');
-  if(r.content_kind==='image')requireImageCitation(tx,ownerId,String(r.source_contact_id),String(r.message_id),r.content_ref_json);
-  else if(r.content_kind&&r.content_kind!=='text'||typeof m!.text_body!=='string'||typeof r.span_start!=='bigint'||typeof r.span_end!=='bigint'||BigInt([...m!.text_body].length)<r.span_end)fail('memory_source_stale');
+  resolveContentCitation(tx,ownerId,r);
  }
  return rows;
 }

@@ -5,7 +5,7 @@ import {Context} from '@deepseek-ai/cordis';
 import sharp from 'sharp';
 import {fixture} from './media-support.mjs';
 import {fixture as memoryFixture,record} from './fixtures/memory-sqlite/support.mjs';
-import {fileMemoryContent} from './fixtures/memory-content/file-plugin.mjs';
+import {fileMemoryContent,fileContentText} from './fixtures/memory-content/file-plugin.mjs';
 import {modelPort} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 import {MemoryContentRegistry,memoryContentPlugin} from '../src/memory/content/registry.ts';
@@ -78,7 +78,7 @@ test('宿主与Worker使用同一插件模块后，新增文件类型贯通正�
  service=new SqliteMemoryExtraction(f.storage,f.contacts.ownerId,model,undefined,undefined,undefined,undefined,{registry});t.after(()=>service.close());
  const run=await service.start(randomUUID());assert.equal(run.total,1);await service.waitForIdle(run.runId);
  const done=await service.read(run.runId);assert.equal(done.succeeded,1,JSON.stringify(done.tasks));
- assert.equal(JSON.parse(requests[0].user).messages[0].text,'合成文件中的固定每周安排');
+ assert.equal(JSON.parse(requests[0].user).messages[0].text,fileContentText);
  assert.deepEqual(done.contentCounts,[{kind:'file',total:1,succeeded:1}]);
 });
 test('九张图片按正式模型八张上限分批，恢复不会重复超限的固定输入',async t=>{

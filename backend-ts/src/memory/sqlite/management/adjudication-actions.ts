@@ -8,8 +8,10 @@ import {assertTaskContributions} from '../qualification.ts';
 import {verifiedExtractionOutput} from '../outputs.ts';
 import {validateModelLedgerReceipt,type ModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
 import type {ModelTaskClaim} from '../../../platform/models/model-permit-port.ts';
+import {adjudicationPages} from '../../adoption/pages.ts';
 import type {AdjudicationItem,AdjudicationSource,SimilarMemory} from '../../adoption/contracts.ts';
-import {requireImageCitation} from '../content-citation.ts';
+import {resolveContentCitation} from '../content-citation.ts';
+import {matchesContentEvidence,type ContentEvidence,type ContentSource} from '../../content/evidence.ts';
 import {parseAdjudications,parseRelations,mergeResult,adjudicationPolicyRevision} from '../../adoption/adjudication-dsh.ts';
 import {readExtractionToolArguments} from '../../extraction/arguments.ts';
 import {AMBIGUITY_NOTE} from '../../extraction/bounded.ts';
@@ -68,18 +70,7 @@ function revision(tx:StorageTransaction,ownerId:string,scopeKind:string,contactI
 }
 function sources(tx:StorageTransaction,ownerId:string,parent:{candidateId?:string;memoryId?:string;versionNo?:bigint}):AdjudicationSource[] {
  const rows=requireSources(tx,ownerId,parent,!!parent.memoryId&&tx.get('SELECT adoption_mode FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,parent.memoryId,parent.versionNo!])?.adoption_mode==='manual',adjudicationSourceEligibility);
- return rows.map(r=>{
-  const occurredAt=tx.get('SELECT sent_at FROM message WHERE owner_id=? AND contact_id=? AND id=?',[ownerId,r.source_contact_id,r.message_id])?.sent_at;
-  const base={message_id:String(r.message_id),occurred_at:occurredAt==null?null:new Date(Number(occurredAt)).toISOString()};
-  return r.content_kind==='image'?{...base,text:null,content_kind:'image' as const,
-   content_ref:requireImageCitation(tx,ownerId,String(r.source_contact_id),String(r.message_id),r.content_ref_json),
-   observation:{kind:'model_observation' as const,text:String(r.explanation??'')}}:
-   {...base,text:[...String(r.text_body)].slice(Number(r.span_start),Number(r.span_end)).join('')};
- });
-}
-/** 旧关系核验只认证逐字文字；图像比较保留候选，不能把观察描述当原文签证。 */
-export function requiresMultimodalRelationReview(item:AdjudicationItem):boolean {
- return item.similar.length>0&&[...item.candidate_source_texts,...item.similar.flatMap(parent=>parent.source_texts)].some(source=>source.content_kind==='image');
+ return rows.map(row=>resolveContentCitation(tx,ownerId,row).source);
 }
 function versionFact(tx:StorageTransaction,ownerId:string,v:StorageRow):Record<string,any>|null {
  const event=tx.get(`SELECT e.payload FROM decision_candidate dc JOIN memory_candidate c ON c.owner_id=dc.owner_id AND c.id=dc.candidate_id JOIN execution_event e ON e.owner_id=c.owner_id AND e.id=c.event_id WHERE dc.owner_id=? AND dc.decision_id=? ORDER BY c.id LIMIT 1`,[ownerId,v.decision_id]);
@@ -120,11 +111,7 @@ function freeze(tx:StorageTransaction,ownerId:string,candidateId:string):Basis {
   similar.push({memory_id:String(m.id),revision:String(v!.version_no),text:String(v!.body),category:prior?.category??'user_memory',topic:prior?.topic??'',subject:scopeKind==='self'?'self':'contact',adoption_method:v!.adoption_mode==='auto'&&m.state==='active'&&sourceVerificationState(tx,ownerId,{memoryId:String(m.id),versionNo:v!.version_no as bigint},adjudicationSourceEligibility)==='verified'?'auto':'manual',source_message_ids:[...new Set(textSources.map(s=>s.message_id))],source_texts:textSources,statement_time:textSources.map(s=>s.occurred_at).filter((s):s is string=>s!==null).sort().at(-1)??null,valid_at:prior?.valid_at??null,invalid_at:prior?.invalid_at??null,event:prior?.event??null,conditions:prior?.conditions??null,source_receipt:digest(textSources),source_dependency_mode:prior?.source_dependency_mode??'all',requires_all_sources:prior?.requires_all_sources??true});
  }
  const candidateSources=sources(tx,ownerId,{candidateId});
- // 关系核验只认证逐字文字：文字候选不与“主题明确不同”的图片来源记忆比较，免得池里一条图片记忆拦下之后所有候选；
- // 候选自身含图片，或主题相同、缺失而无法证明无关时，仍保留比较并交由待确认。
- const candidateHasImage=candidateSources.some(source=>source.content_kind==='image');
- const comparable=candidateHasImage?similar:similar.filter(memory=>!memory.source_texts.some(source=>source.content_kind==='image')||!memory.topic||!fact.topic||memory.topic===fact.topic);
- const item:AdjudicationItem={candidate_index:0,candidate:effectiveFact,candidate_source_receipt:digest(candidateSources),candidate_source_texts:candidateSources,relation_source_receipt:digest({candidateSources,similar:comparable}),similar:comparable};
+ const item:AdjudicationItem={candidate_index:0,candidate:effectiveFact,candidate_source_receipt:digest(candidateSources),candidate_source_texts:candidateSources,relation_source_receipt:digest({candidateSources,similar}),similar};
  return {policyRevision:adjudicationPolicyRevision,pageIndex:0,candidateId,candidateRevision:String(c!.state_revision),runId:String(task.run_id),taskId:String(task.id),scopeKind,contactId,memoryRevision:String(revision(tx,ownerId,scopeKind,contactId)),intentRevision:String(task.intent_revision),...(eventTimeUnverified?{eventTimeUnverified}:{}),item,parents};
 }
 function record(tx:StorageTransaction,ownerId:string,attemptId:string,kind:string,payload:unknown,callId?:string,reused=false,pageOnly=false):string {
@@ -212,11 +199,11 @@ function blocks(tx:StorageTransaction,ownerId:string,attemptId:string):readonly 
  const event=tx.get(`SELECT e.payload FROM execution_event e JOIN model_call c ON c.owner_id=e.owner_id AND c.id=coalesce(e.originated_call_id,e.reused_call_id) JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE e.owner_id=? AND e.step_attempt_id=? AND e.kind='adjudication_output' AND c.state='succeeded' AND o.commit_forbidden_at IS NULL`,[ownerId,attemptId]);
  if(!event)fail('memory_adjudication_output_unbound');return JSON.parse(String(event!.payload)).blocks;
 }
-function evidenceSupported(item:AdjudicationItem,evidence:readonly {message_id:string;quote:string}[]):boolean {
- const source=[...item.candidate_source_texts,...item.similar.flatMap(p=>p.source_texts)];return evidence.length>0&&evidence.every(e=>e.quote.trim()&&source.some(s=>s.content_kind!=='image'&&s.message_id===e.message_id&&typeof s.text==='string'&&s.text.includes(e.quote)));
+function evidenceSupported(item:AdjudicationItem,evidence:readonly ContentEvidence[]):boolean {
+ return evidence.length>0&&evidence.every(reference=>matchesContentEvidence(reference,[...item.candidate_source_texts,...item.similar.flatMap(parent=>parent.source_texts)]));
 }
 /** 关系核验证据须逐字有效并覆盖所声称关联的旧记忆；independent 关系只依赖候选自身来源，不要求引用无关旧记忆原文。 */
-function relationCovered(item:AdjudicationItem,kind:string,ids:readonly string[],evidence:readonly {message_id:string;quote:string}[]):boolean {
+function relationCovered(item:AdjudicationItem,kind:string,ids:readonly string[],evidence:readonly ContentEvidence[]):boolean {
  if(!evidenceSupported(item,evidence))return false;
  const cited=new Set(evidence.map(e=>e.message_id));
  if(!item.candidate.source_message_ids.some(id=>cited.has(id)))return false;
@@ -229,12 +216,10 @@ function finish(tx:StorageTransaction,raw:unknown,lease:StorageLease) {
  const stages=i.attemptIds.map(a=>({id:a,...current(tx,ownerId,id(a),lease)})),first=stages[0]!,basis=first.basis,item=basis.item;
  if(first.attempt.kind!=='adjudication'||stages.some(s=>digest({...s.basis,pageIndex:0})!==digest({...basis,pageIndex:0}))||new Set(stages.map(s=>`${s.attempt.kind}:${s.basis.pageIndex}`)).size!==stages.length)fail('memory_adjudication_stale');
  let action:'auto_accept'|'auto_update'|'auto_noop'='auto_accept',target:Basis['parents'][number]|undefined,text:string|undefined,formation:'adoption'|'change'|'correction'='adoption',parents:Basis['parents']=[],reason:string|null=null,skippedSources:{duplicateMemoryId:string;newSources:string[]}|undefined;
- const mediaRelationPending=requiresMultimodalRelationReview(item);
- if(mediaRelationPending)reason='memory_media_relation_pending';
- const pageCount=mediaRelationPending?0:Math.ceil(item.similar.length/8);
+ const pages=adjudicationPages(item),pageCount=pages.length;
  if(stages.filter(s=>s.attempt.kind==='adjudication').length!==Math.max(1,pageCount)||stages.some(s=>s.basis.pageIndex<0||s.basis.pageIndex>=Math.max(1,pageCount)))fail('memory_adjudication_output_unbound');
  for(let pageIndex=0;pageIndex<pageCount;pageIndex++){
-  const item={...basis.item,similar:basis.item.similar.slice(pageIndex*8,pageIndex*8+8)};
+  const item=pages[pageIndex]!;
   const pageStage=stages.find(s=>s.attempt.kind==='adjudication'&&s.basis.pageIndex===pageIndex);if(!pageStage)fail('memory_adjudication_output_unbound');
   const decisions=parseAdjudications(blocks(tx,ownerId,pageStage!.id));if(decisions.length!==1||decisions[0]!.candidate_index!==0)fail('memory_adjudication_output_unbound');const decision=decisions[0]!;
   const stage=stages.find(s=>s.attempt.kind==='relation_verification'&&s.basis.pageIndex===pageIndex);if(!stage)fail('memory_adjudication_output_unbound');
@@ -324,10 +309,26 @@ export const memoryAdjudicationActions:StorageAction[]=[
   if(unknownOccupancy(tx,i.ownerId,basis.taskId))fail('memory_adjudication_receipt_unknown');
   return makeStep(tx,i.ownerId,basis,'adjudication',lease);} catch(error){if(error instanceof StorageFailure&&['memory_conditions_pending','memory_verification_pending','memory_withdrawn_scope_pending','memory_adjudication_pool_limit','memory_adjudication_paused',AMBIGUITY_UNCONFIRMED].includes(error.code)){try{if(error.code==='memory_conditions_pending'||error.code===AMBIGUITY_UNCONFIRMED)recordCandidateGate(tx,i.ownerId,id(i.candidateId),error.code);}catch{/* 留痕失败不改变原有门槛失败语义 */}return null;}throw error;}
  }),
- act('stage','write',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string;purpose:SqliteAdjudicationModelPurpose;pageIndex:number};if(!purposes.includes(i.purpose)||!Number.isSafeInteger(i.pageIndex)||i.pageIndex<0)fail('memory_adjudication_purpose_invalid');const {basis}=current(tx,i.ownerId,i.attemptId,lease);if(i.pageIndex>=Math.max(1,Math.ceil(basis.item.similar.length/8)))fail('memory_adjudication_purpose_invalid');return makeStep(tx,i.ownerId,{...basis,pageIndex:i.pageIndex},i.purpose,lease);}),
+ act('stage','write',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string;purpose:SqliteAdjudicationModelPurpose;pageIndex:number};if(!purposes.includes(i.purpose)||!Number.isSafeInteger(i.pageIndex)||i.pageIndex<0)fail('memory_adjudication_purpose_invalid');const {basis}=current(tx,i.ownerId,i.attemptId,lease);if(i.pageIndex>=Math.max(1,adjudicationPages(basis.item).length))fail('memory_adjudication_purpose_invalid');return makeStep(tx,i.ownerId,{...basis,pageIndex:i.pageIndex},i.purpose,lease);}),
  act('holders','read',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string};const {attempt}=current(tx,i.ownerId,i.attemptId,lease);return tx.all("SELECT c.id AS contactId,c.data_generation AS generation FROM step_input i JOIN contact c ON c.owner_id=i.owner_id AND c.id=i.source_contact_id WHERE i.owner_id=? AND i.step_id=? AND i.kind='message' UNION SELECT c.id AS contactId,c.data_generation AS generation FROM task_contribution tc JOIN contact c ON c.owner_id=tc.owner_id AND c.id=tc.source_contact_id WHERE tc.owner_id=? AND tc.task_id=?",[i.ownerId,attempt.step_id,i.ownerId,attempt.task_id]).map(r=>({contactId:String(r.contactId),generation:String(r.generation)}));}),
  act('current','read',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string};current(tx,id(i.ownerId),id(i.attemptId),lease);return true;}),
  act('renew','write',renew),
+ act('materials','read',(tx,raw,lease)=>{
+  const i=raw as {ownerId:string;attemptId:string;sources:ContentSource[]};const {basis}=current(tx,i.ownerId,i.attemptId,lease);
+  if(!Array.isArray(i.sources))fail('memory_adjudication_input_invalid');
+  const page=adjudicationPages(basis.item)[basis.pageIndex]?.similar??[];
+  const allowed=[...basis.item.candidate_source_texts,...page.flatMap(parent=>parent.source_texts)];
+  if(i.sources.some(source=>!allowed.some(actual=>digest(source)===digest(actual))))fail('memory_adjudication_output_unbound');
+  const rows=[...requireSources(tx,i.ownerId,{candidateId:basis.candidateId},false,adjudicationSourceEligibility),
+   ...basis.parents.filter(parent=>page.some(memory=>memory.memory_id===parent.id))
+    .flatMap(parent=>requireSources(tx,i.ownerId,{memoryId:parent.id,versionNo:BigInt(parent.versionNo)},true,adjudicationSourceEligibility))];
+  const resolved=rows.map(row=>resolveContentCitation(tx,i.ownerId,row)),seen=new Set<string>();
+  return i.sources.flatMap(source=>{
+   const material=resolved.find(value=>digest(value.source)===digest(source));if(!material)fail('memory_source_stale');
+   const key=digest([material!.contactId,source.message_id,material!.frozen]);if(seen.has(key))return [];seen.add(key);
+   return [{contactId:material!.contactId,message:material!.message,frozen:material!.frozen,citation:material!.citation}];
+  });
+ }),
  act('prepareCall','write',(tx,raw,lease)=>{
   const i=raw as {ownerId:string;attemptId:string;purpose:SqliteAdjudicationModelPurpose;request:unknown;provider:string;model:string;configurationId:string;inputCap:number;outputCap:number};const {attempt,basis}=current(tx,i.ownerId,i.attemptId,lease);
   if(!purposes.includes(i.purpose)||attempt.kind!==i.purpose||!Number.isSafeInteger(i.inputCap)||i.inputCap<1||!Number.isSafeInteger(i.outputCap)||i.outputCap<1)fail('memory_adjudication_configuration_invalid');
@@ -346,6 +347,11 @@ export const memoryAdjudicationActions:StorageAction[]=[
   if(!claim||claim.task_id!==basis.taskId||claim.step_id!==attempt.step_id||claim.step_name!==attempt.kind||claim.worker_id!==lease.runtimeId||BigInt(claim.lease_generation)!==task.resume_no||r.contact_id!==basis.contactId||r.provider!==c!.provider||r.model!==c!.model)fail('memory_adjudication_scope_invalid');
   const b=r.input_budget;if(!b||b.input_tokens>Number(c!.input_cap)||b.max_output_tokens!==Number(c!.output_cap)||c!.state!=='prepared')fail('memory_adjudication_budget_invalid');
   tx.run("UPDATE model_call SET state='sending',sent_at=?,reserved_budget_units=?,receipt=? WHERE owner_id=? AND id=?",[Date.now(),b!.input_tokens+b!.max_output_tokens,JSON.stringify(r),r.owner_id,c!.id]);tx.run("UPDATE model_operation SET state='in_flight' WHERE owner_id=? AND id=?",[r.owner_id,c!.operation_id]);for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='sent' WHERE owner_id=? AND operation_id=?`,[r.owner_id,c!.operation_id]);return true;
+ }),
+ act('imageInputs','write',(tx,raw,lease)=>{
+  const i=raw as {ownerId:string;attemptId:string;callId:string;images:unknown[]};current(tx,i.ownerId,i.attemptId,lease);
+  if(!Array.isArray(i.images)||!tx.get('SELECT 1 FROM model_call WHERE owner_id=? AND id=? AND step_attempt_id=?',[i.ownerId,i.callId,i.attemptId]))fail('memory_adjudication_output_unbound');
+  return record(tx,i.ownerId,i.attemptId,'image_inputs',{images:i.images},i.callId,false,true);
  }),
  act('output','write',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string;callId:string;blocks:readonly unknown[]};current(tx,i.ownerId,i.attemptId,lease);if(!tx.get("SELECT 1 FROM model_call WHERE owner_id=? AND id=? AND step_attempt_id=? AND state='succeeded'",[i.ownerId,i.callId,i.attemptId]))fail('memory_adjudication_output_unbound');const eventId=record(tx,i.ownerId,i.attemptId,'adjudication_output',{blocks:i.blocks},i.callId,false,true);for(const table of ['operation_item','operation_scope'])tx.run(`UPDATE ${table} SET state='released' WHERE owner_id=? AND operation_id=(SELECT operation_id FROM model_call WHERE owner_id=? AND id=?)`,[i.ownerId,i.ownerId,i.callId]);return eventId;}),
  act('finish','write',finish),

@@ -67,7 +67,7 @@ export async function createSqliteMemoryRuntime(options:{ctx:Context;contentReso
   }
   if(options.adjudicationEnabled){
    const adjudicationPort=options.sharedModel&&configuration.status==='configured'?createSqliteAdjudicationModelPort({ctx:options.ctx,configuration,provider:options.sharedModel.provider,permit:options.sharedModel.permit,authorizePurpose:async({scope},signal)=>{signal.throwIfAborted();if(scope.owner_id!==options.ownerId)throw new StorageFailure('memory_adjudication_scope_invalid');}}):undefined;
-   adjudication=new SqliteMemoryAdjudication(options.storage,options.ownerId,adjudicationPort,options.holders);await adjudication.initialize();
+   adjudication=new SqliteMemoryAdjudication(options.storage,options.ownerId,adjudicationPort,options.holders,{registry:contentRegistry,resources:options.contentResources});await adjudication.initialize();
    const documentPort=options.sharedModel&&configuration.status==='configured'?createSqliteDocumentsModelPort({ctx:options.ctx,configuration,provider:options.sharedModel.provider,permit:options.sharedModel.permit,ownerId:options.ownerId}):undefined;
    documents=new SqliteMemoryDocuments(options.storage,options.ownerId,documentPort,options.holders);await documents.initialize();
   }

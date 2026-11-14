@@ -2,11 +2,12 @@ import type {StorageRow,StorageTransaction} from '../../../storage/sqlite/contra
 import {canonicalJSON} from '../../evidence/canonical-json.ts';
 import {replayCompleteClaimVerification} from '../../extraction/verification/complete-claim.ts';
 import {replayMultimodalVerification} from '../../extraction/multimodal.ts';
-import type {ImageCitationReference} from '../content-citation.ts';
+import {getMemoryContentRegistry} from '../content.ts';
+export {quoteSpan} from '../../content/evidence.ts';
 import {readFrozenContent} from '../content.ts';
 
 export interface CandidateVerificationReference {eventId:string;candidateTraceId:string;policyFingerprint:string;callId:string;inputEventId:string;}
-export interface AdmissionEvidence {messageId:string;quote:string|null;contentKind?:'image';contentRef?:ImageCitationReference;description?:string}
+export interface AdmissionEvidence {messageId:string;quote:string|null;description?:string}
 const same=(a:unknown,b:unknown)=>canonicalJSON(a)===canonicalJSON(b);
 const payload=(row:StorageRow)=>JSON.parse(String(row.payload));
 /** 新产物的逐事实引用必须沿具名事件和真实模型回执闭合；旧产物不推测补证。 */
@@ -55,10 +56,16 @@ export function candidateAdmission(tx:StorageTransaction,ownerId:string,output:S
     if(item.kind==='text')return {messageId:item.message_id,quote:item.quote};
     const image=prepared.window.messages.find((message:any)=>message.message_id===item.message_id)?.image;
     if(!image||image.file_id!==item.file_id||image.sha256!==item.sha256)throw new Error('memory_content_evidence_version');
-    const frozen=inputs.filter(input=>input.message_id===item.message_id).map(input=>readFrozenContent(tx,ownerId,input));
-    if(!frozen.length||frozen.some(content=>!content||content.kind!=='image'||content.identity.fileId!==image.file_id||content.identity.sha256!==image.sha256
-     ||content.identity.mimeType!==image.mime_type||content.identity.mediaGeneration!==image.media_generation))throw new Error('memory_content_evidence_unbound');
-    return {messageId:item.message_id,quote:null,contentKind:'image',contentRef:{file_id:image.file_id,sha256:image.sha256,mime_type:image.mime_type,media_generation:image.media_generation},description:item.description};
+    const frozenInputs=inputs.filter(input=>input.message_id===item.message_id);
+    if(!frozenInputs.length)throw new Error('memory_content_evidence_unbound');
+    for(const input of frozenInputs){
+     const frozen=readFrozenContent(tx,ownerId,input),message=tx.get('SELECT * FROM message WHERE owner_id=? AND contact_id=? AND id=?',[ownerId,input.source_contact_id,input.message_id]);
+     if(!frozen||!message)throw new Error('memory_content_evidence_unbound');
+     const representation=getMemoryContentRegistry().evidence(tx,{ownerId,contactId:String(input.source_contact_id),message},frozen);
+     if(representation.representation!=='image'||representation.reference.file_id!==image.file_id||representation.reference.sha256!==image.sha256
+      ||representation.reference.mime_type!==image.mime_type||representation.reference.media_generation!==image.media_generation)throw new Error('memory_content_evidence_unbound');
+    }
+    return {messageId:item.message_id,quote:null,description:item.description};
    });
    if(fact.source_message_ids.some((id:string)=>!evidence.some(item=>item.messageId===id)))return pending();
    return {state:'verified' as const,eventId:ref.eventId,mode:'multimodal-claim-v1' as const,evidence};
@@ -69,11 +76,4 @@ export function candidateAdmission(tx:StorageTransaction,ownerId:string,output:S
    ||(fact.requires_all_sources||fact.source_dependency_mode==='all')&&fact.source_message_ids.some((id:string)=>!evidence.some(e=>e.message_id===id)))return pending();
   return {state:'verified' as const,eventId:ref.eventId,mode:'complete-claim-v1' as const,evidence:evidence.map(e=>({messageId:e.message_id,quote:e.quote}))};
  }catch{return pending();}
-}
-/** 引句按 Unicode 代码点定位；重复引句不能猜测其原文位置。 */
-export function quoteSpan(text:string,quote:string):{start:bigint;end:bigint}|null{
- const body=[...text],needle=[...quote],starts:number[]=[];
- if(!needle.length)return null;
- for(let n=0;n<=body.length-needle.length;n++)if(needle.every((c,i)=>body[n+i]===c))starts.push(n);
- return starts.length===1?{start:BigInt(starts[0]!),end:BigInt(starts[0]!+needle.length)}:null;
 }

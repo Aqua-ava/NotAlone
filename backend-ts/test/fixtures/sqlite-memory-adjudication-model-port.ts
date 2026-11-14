@@ -35,17 +35,21 @@ export async function apply(ctx:Context) {
     const purpose=(input.purpose??'adjudication') as SqliteAdjudicationModelPurpose;
     const toolName=toolNames[purpose];
     const request={purpose,system:'合成裁决提示',user:input.oversized?'合成'.repeat(300000):input.wait?'合成待关闭':'合成候选',
+      ...(input.images?{images:input.images}:{}),
       tool:{name:input.toolName??toolName,description:'合成裁决',parameters:input.parameters??{title:toolName,type:'object',properties:{}}},
       validateOutput:()=>{if(input.invalidOutput)throw Object.assign(new Error('synthetic_invalid_output'),{failure_kind:'invalid_output'});}};
-    let checks=0;
+    let checks=0,imageInputs:unknown;
     const context={...input.context,signal:new AbortController().signal,
       requireCurrent:async()=>{checks++;if(!current||input.revokeBeforeDispatch&&checks>=4)throw new Error('synthetic_scope_deleted');},
+      onImageInputs:async(value:unknown)=>{imageInputs=value;},
       onReceipt:async()=>{if(input.lateDeletion)current=false;}};
     try{
       if(input.close){await port.close();res.end(JSON.stringify({closed:true,disposals}));return;}
       if(input.sharedProbe){const probe=createPort();try{const result=await probe.invoke(request,context);res.end(JSON.stringify({...result,sharedCalls,disposals}));}finally{await probe.close();}return;}
       if(input.prepare){res.end(JSON.stringify(await port.prepare(request,context)));return;}
-      const result=await port.invoke(request,context);res.end(JSON.stringify({...result,sharedCalls,checks}));
+      const pending=port.invoke(request,context);
+      if(input.mutateImages&&request.images?.length)request.images[0].dataBase64=Buffer.from('合成发送后的外部修改').toString('base64');
+      const result=await pending;res.end(JSON.stringify({...result,sharedCalls,checks,...(imageInputs?{imageInputs}:{})}));
     }catch(error){res.end(JSON.stringify({error:error&&typeof error==='object'&&'code'in error?error.code:error instanceof Error?error.message:'synthetic_unknown',
       ...((error as any)?.receipt?{receipt:(error as any).receipt}:{})}));}
   });

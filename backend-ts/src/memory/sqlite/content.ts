@@ -8,6 +8,7 @@ import {MODEL_IMAGE_LIMITS} from '../../platform/models/image-normalization.ts';
 const builtinRegistry=createBuiltinMemoryContentRegistry();
 const scopes=new AsyncLocalStorage<MemoryContentRegistry>();
 const registry=()=>scopes.getStore()??builtinRegistry;
+export const getMemoryContentRegistry=registry;
 export const installedMemoryContentKinds=()=>registry().kinds;
 /** Worker 与宿主由同一可信插件清单装配；嵌套的基础 registry 不覆盖外层装配。 */
 export function withMemoryContentRegistry<T>(value:MemoryContentRegistry,work:()=>T):T{return scopes.getStore()?work():scopes.run(value,work);}
