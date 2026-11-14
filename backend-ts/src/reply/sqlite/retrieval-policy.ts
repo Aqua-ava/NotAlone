@@ -1,3 +1,4 @@
+import {RELATIONSHIP_EVIDENCE_GUIDE} from './evidence-use.ts';
 /** 回复检索的纯业务合同：存储执行预算、工具说明与模型指引共用，不依赖 DSH 或 SQLite。 */
 export const REPLY_SEARCH_BUDGET={attempts:3,queryChars:400,historyTimeoutMs:5000,historyCount:16,historyTokens:2048,contactMemories:5,ownerMemories:3} as const;
 
@@ -28,4 +29,5 @@ export const RELATIONSHIP_RETRIEVAL_GUIDE=`<relationship-retrieval-guide>
 
 补查与回执：
 ${memoryTool}与${historyTool}共用本轮${REPLY_SEARCH_BUDGET.attempts}次尝试，空结果、失败及超时也计数。结果不足时可在剩余次数内换具体关键词或换工具核对，信息足够就停止。历史搜索覆盖本轮接纳边界内当前联系人的全部获准历史，每次计算预算${REPLY_SEARCH_BUDGET.historyTimeoutMs/1000}秒；超时表示搜索未完成。未命中不代表资料不存在，失败不冒充未命中，仍缺依据时保持未知，不补写事实。只有工具实际返回并进入后续请求的材料编号才是新增依据。
+${RELATIONSHIP_EVIDENCE_GUIDE}
 </relationship-retrieval-guide>`;

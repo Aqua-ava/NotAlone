@@ -78,6 +78,8 @@ test('L0最近50条之外且无字面重合的旧原话由vector命中，保留�
   assert.ok(!JSON.stringify(request).includes(old),'首次请求的最近50条不应夹带更早原话');
   assert.match(JSON.stringify(request),/近期消息59/);
  })),results=searches(f),page=f.channel.page;
+ // 本例验证完整50条上下文与工具往返的检索语义；容量边界由独立预算测试覆盖。
+ f.model.budgetProfile.context_window_tokens=32_768;
  f.channel.page=async(...args)=>{
   const value=await page(...args);return {...value,records:Array.from({length:60},(_,i)=>({...value.records[0],localId:String(i+1),sender:i===0?'owner':'contact',text:i===0?old:`近期消息${i}`,sentAt:String(1700000000000+i*1000)}))};
  };

@@ -34,7 +34,7 @@ test('按需检索工具只在当前官方scope可见，返回可引用的真实
  assert.match(schemas.find(tool=>tool.name==='search_relationship_history').description,/原话.*时间.*直接依据/);
  assert.deepEqual(f.ctx.tools.schemas(),[]);assert.deepEqual(f.ctx.tools.schemas(f.otherKey),[]);
  const result=await f.execute('search_relationship_memory',{query:' 合成夜班 '});
- assert.equal(result.isError,false);assert.deepEqual(result.content,[{type:'text',text:'实际输入材料[7] memory\n合成联系人本周轮夜班。'}]);
+ assert.equal(result.isError,false);assert.match(result.content.map(block=>block.text).join(''),/已返回1条实际材料[\s\S]*实际输入材料\[7\] memory\n合成联系人本周轮夜班。/);
  assert.equal((await f.execute('search_relationship_memory',{query:'合成夜班'},undefined,f.otherKey)).isError,true);
  await f.scope.dispose();assert.deepEqual(f.ctx.tools.schemas(f.key),[]);
 });
@@ -57,6 +57,34 @@ test('搜索超时回执明确尚未完成全部历史搜索，不冒充未命�
  const f=await scopedTools(t,{search:async()=>({status:'error',items:[],code:'reply_search_timeout'})});
  const result=await f.execute('search_relationship_history',{query:'合成约定'});
  assert.equal(result.isError,false);assert.match(result.content.map(block=>block.text).join(''),/超时.*未完成.*不能据此认定资料不存在/);
+});
+
+test('成功搜索保留已找到的事实，并把邻近语境与独立命中分开呈现',async t=>{
+ const f=await scopedTools(t,{search:async()=>({status:'ok',items:[
+  {itemNo:7,kind:'memory',text:'合成联系人从第三阶段开始研讨课。'},
+  {itemNo:8,kind:'message',text:'对方：说的是工作室值班。',identity:{evidenceRole:'context',evidenceGroup:2,contextOf:'internal-message-id',contextPosition:'same_time'}},
+ ]})});
+ const result=await f.execute('search_relationship_history',{query:'研讨课安排'}),text=result.content.map(block=>block.text).join('');
+ assert.match(text,/已返回2条实际材料/);
+ assert.match(text,/已找到的事实.*仍缺失的信息/);
+ assert.match(text,/只在basis引用.*不算完成核对/);
+ assert.match(text,/实际输入材料\[7\] memory\n合成联系人从第三阶段开始研讨课。/);
+ assert.match(text,/实际输入材料\[8\] message.*邻近语境/);
+ assert.match(text,/本次工具返回的片段组2/);
+ assert.match(text,/时间接近不代表同一话题/);assert.match(text,/先后顺序未核验/);
+ assert.doesNotMatch(text,/internal-message-id/);
+});
+
+test('同组命中与语境按已知时间呈现，读取优先级不改变原引用编号',async t=>{
+ const f=await scopedTools(t,{search:async()=>({status:'ok',items:[
+  {itemNo:7,kind:'message',text:'对方：合成比例要求。',identity:{evidenceRole:'match',evidenceGroup:1,sentAt:2000n}},
+  {itemNo:8,kind:'message',text:'对方：后续限定。',identity:{evidenceRole:'context',evidenceGroup:1,contextPosition:'after',sentAt:3000n}},
+  {itemNo:9,kind:'message',text:'对方：前话所指的是工作室。',identity:{evidenceRole:'context',evidenceGroup:1,contextPosition:'before',sentAt:1000n}},
+ ]})});
+ const result=await f.execute('search_relationship_history',{query:'合成比例'}),text=result.content.map(block=>block.text).join('');
+ assert.ok(text.indexOf('实际输入材料[9]')<text.indexOf('实际输入材料[7]'));
+ assert.ok(text.indexOf('实际输入材料[7]')<text.indexOf('实际输入材料[8]'));
+ assert.match(text,/有界取样不保证完整会话/);
 });
 
 test('查询只接受非空且最多400个Unicode字符的query，不接收身份或范围参数',async t=>{

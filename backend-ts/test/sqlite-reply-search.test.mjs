@@ -71,14 +71,17 @@ test('历史搜索固定接纳边界而不复制消息ID，后入库及其他联
  assert.ok(result.items.length>0&&result.items.every(item=>item.sources[0].contactId===f.scope.contactId));assert.ok(result.items.every(item=>item.sources[0].messageId!==f.initialMessageId),'已在初始输入中的消息不重复返回');
 });
 
-test('超过500条的当前联系人历史仍可命中早期约定，只向模型返回匹配结果',async t=>{
+test('超过500条的当前联系人历史仍可命中早期约定，独立区分命中与有界语境',async t=>{
  const text='合成北极星约定：早年约好看流星雨。';
  const f=await setup(t,{count:1000,messageText:index=>index===0?text:`无关日常消息${index}`});
  f.act(tx=>initializeReplySearch(tx,f.scope,f.reader));
  const ticket=f.act(tx=>beginReplySearch(tx,{...f.scope,kind:'history',query:'北极星 流星雨'},f.reader));
  const result=f.act(tx=>finishReplySearch(tx,{...f.scope,ticketId:ticket.ticketId,query:ticket.query},f.reader));
- assert.equal(result.status,'ok');assert.equal(result.items.length,1);assert.ok(result.items[0].text.includes(text));
- assert.ok(result.items[0].sources.every(source=>source.contactId===f.scope.contactId));
+ assert.equal(result.status,'ok');
+ const matches=result.items.filter(item=>item.identity.evidenceRole==='match');
+ assert.equal(matches.length,1);assert.ok(matches[0].text.includes(text));
+ assert.ok(result.items.filter(item=>item.identity.evidenceRole==='context').length<=4);
+ assert.ok(result.items.every(item=>item.sources.every(source=>source.contactId===f.scope.contactId)));
 });
 
 test('删除后新消息复用接纳序号时，既有请求仍由真实删除围栏拒绝',async t=>{

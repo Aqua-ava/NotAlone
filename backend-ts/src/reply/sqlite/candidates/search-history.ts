@@ -1,11 +1,11 @@
 import type {StorageTransaction} from '../../../storage/sqlite/contracts.ts';
-import {savedSourceScopeCTE,currentSourcePredicate} from '../../../history/sqlite/current-scope.ts';
 import {rankReplyRetrieval} from '../../../retrieval/sqlite/search.ts';
 import {decode} from '../requests.ts';
-import {messageTimePrefix,sources,type FrozenReplyInput} from './input.ts';
+import type {FrozenReplyInput} from './input.ts';
+import {createHistoryEvidenceReader,freezeHistoryEvidence,type HistoryEvidenceBoundary,type HistoryEvidenceMessage,type HistoryContextPosition} from './history-evidence.ts';
 import type {ReplySearchAttempt} from './search.ts';
 
-export interface ReplyHistoryBoundary {displayNo:bigint;dataGeneration:bigint}
+export type ReplyHistoryBoundary=HistoryEvidenceBoundary;
 interface Budget {historyCount:number;historyTokens:number;historyTimeoutMs:number}
 interface LegacyAnchor {id:string;recordId:string;acceptedRevision:bigint;senderRole:string;sentAt:bigint|null}
 export class ReplyHistorySearchTimeout extends Error {}
@@ -23,27 +23,39 @@ export function searchAllReplyHistory(tx:StorageTransaction,i:ReplySearchAttempt
  check();
  const result=rankReplyRetrieval(tx,{ownerId:i.ownerId,contactId:i.contactId,kind:'history',query,queryVector,
   scope:{kind:'history',...boundary,...(legacy?{messageIds:legacy.map(item=>item.id)}:{})},excludeIds:[...used],limit:(budget.historyCount-count)*3,check});
- check();const legacyById=new Map(legacy?.map(item=>[item.id,item]));
+ check();const legacyById=new Map(legacy?.map(item=>[item.id,item])),reader=createHistoryEvidenceReader(tx,i,boundary,check);
+ const anchors:{message:HistoryEvidenceMessage;group:number}[]=[];
+ const append=(message:HistoryEvidenceMessage,evidence:{group:number;position?:HistoryContextPosition}):boolean=>{
+  check();if(used.has(message.id)||count>=budget.historyCount)return false;
+  const size=Buffer.byteLength(message.text,'utf8');if(tokens+size>budget.historyTokens)return false;
+  items.push(freezeHistoryEvidence(tx,i,message,evidence));used.add(message.id);count++;tokens+=size;return true;
+ };
+ const readHit=(id:string):HistoryEvidenceMessage|null=>{
+  let message=reader.read(id);if(!message)return null;
+  const anchor=legacyById.get(id);
+  if(legacy&&(!anchor||message.acceptedRevision!==anchor.acceptedRevision||message.senderRole!==anchor.senderRole||message.sentAt!==anchor.sentAt))return null;
+  if(anchor)message={...message,recordId:anchor.recordId};
+  return message;
+ };
  for(const hit of result.hits){
   check();if(count>=budget.historyCount)break;
-  const row=tx.get(`WITH ${savedSourceScopeCTE} SELECT m.text_body,m.sender_role,m.sent_at,m.interpretation_revision,
-   (SELECT r.id FROM capture_record r INDEXED BY capture_record_message JOIN sync_capture c ON c.owner_id=r.owner_id AND c.contact_id=r.contact_id AND c.id=r.capture_id
-    JOIN read_goal g ON g.owner_id=c.owner_id AND g.contact_id=c.contact_id AND g.id=c.goal_id
-    WHERE r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id AND m.binding_id=g.binding_id
-     AND g.accepted_data_generation<=? AND r.state='normalized' AND r.availability='available' AND ${currentSourcePredicate()} ORDER BY r.id LIMIT 1) record_id
-   FROM message m WHERE m.owner_id=? AND m.contact_id=? AND m.id=? AND m.kind='text' AND m.availability='available' AND length(m.text_body)>0
-    AND EXISTS(SELECT 1 FROM source_proof p WHERE p.owner_id=m.owner_id AND p.contact_id=m.contact_id AND p.state='ok')
-    AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
-    AND record_id IS NOT NULL`,[i.ownerId,i.contactId,i.contactId,boundary.dataGeneration,i.ownerId,i.contactId,hit.id]);
-  if(!row)continue;
-  const anchor=legacyById.get(hit.id);
-  if(legacy&&(!anchor||row.interpretation_revision!==anchor.acceptedRevision||row.sender_role!==anchor.senderRole||row.sent_at!==anchor.sentAt))continue;
-  const senderRole=String(row.sender_role),author=senderRole==='owner'?'我':senderRole==='contact'?'对方':senderRole==='system'?'系统':'未知作者';
-  const text=messageTimePrefix(row.sent_at)+author+'：'+String(row.text_body),size=Buffer.byteLength(text,'utf8');
-  if(tokens+size>budget.historyTokens)continue;
-  const recordId=anchor?.recordId??String(row.record_id),acceptedRevision=row.interpretation_revision as bigint;
-  const refs=[{contactId:i.contactId,messageId:hit.id,recordId,acceptedRevision}];sources(tx,i.ownerId,refs);
-  items.push({kind:'message',identity:{retrieved:true,messageId:hit.id,recordId,acceptedRevision,senderRole,sentAt:row.sent_at},text,sources:refs});count++;tokens+=size;
+  const message=readHit(hit.id);if(!message)continue;
+  const group=anchors.length+1;if(append(message,{group}))anchors.push({message,group});
+  // 旧冻结身份集合继续原有行为；新请求优先保留三个命中，为各自语境共同留出预算。
+  if(!legacy&&anchors.length>=3)break;
+ }
+ if(!legacy&&count<budget.historyCount&&tokens<budget.historyTokens){
+  // 先保证最高命中有较连贯的语境；余量再补后续片段，避免每组只有两三句碎片。
+  for(const anchor of anchors){
+   check();if(count>=budget.historyCount||tokens>=budget.historyTokens)break;
+   for(const row of reader.nearby(anchor.message,used,budget.historyCount-count))append(row.message,{group:anchor.group,position:row.position});
+  }
+ }
+ // 语境预留不是命中条数上限；仍有预算时继续接纳同一排名中的合法匹配项。
+ if(!legacy)for(const hit of result.hits){
+  check();if(count>=budget.historyCount)break;if(used.has(hit.id))continue;
+  const message=readHit(hit.id);if(!message)continue;
+  const group=anchors.length+1;if(append(message,{group}))anchors.push({message,group});
  }
  check();return {items,strategy:result.strategy,indexIncomplete:result.indexIncomplete};
 }

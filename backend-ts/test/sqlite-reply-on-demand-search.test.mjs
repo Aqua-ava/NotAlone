@@ -19,6 +19,10 @@ function assertRetrievalGuide(request){
  const sections=system.match(/<relationship-retrieval-guide>[\s\S]*?<\/relationship-retrieval-guide>/g)??[];
  assert.equal(sections.length,1,'新规则应完整且仅一次进入正式系统提示');
  const guide=sections[0];
+ assert.equal((guide.match(/<relationship-evidence-guide>/g)??[]).length,1,'证据使用合同应一次进入真实系统提示');
+ assert.match(guide,/已知阶段.*不能概括成整个安排/);
+ assert.match(guide,/活动或场所.*不能.*矛盾/);
+ assert.match(guide,/候选是用户发给联系人的话/);
  for(const trigger of ['历史指代','身份与偏好','明确回忆或查找','历史事实依赖'])assert.ok(guide.includes(trigger));
  assert.match(guide,/已直接提供所需事实.*不重复搜索/);
  assert.match(guide,/只使用本轮实际提供的工具/);
@@ -79,8 +83,8 @@ test('DSH主动搜索覆盖500条以外的同联系人历史，原作者和时�
  const f=await fixture(t,{synchronizeHistory:false,onRequest:async(_req,res,request,n)=>{
   if(n===1){assertRetrievalGuide(request);assert.ok(!JSON.stringify(request).includes(oldText));toolResponse(res,'search_relationship_history','周末散步约定');return true;}
  },content:request=>JSON.stringify({candidates:[{parts:['周末散步的事还记得。'],basis:[actualItem(request,'message')]}]})});
- // 合成供应商按UTF-8字节估算token，为50条中文及新增工具保留足够容量。
- f.model.budgetProfile.context_window_tokens=16384;
+ // 本例验证完整50条上下文与工具往返的检索语义；容量边界由独立预算测试覆盖。
+ f.model.budgetProfile.context_window_tokens=32_768;
  const page=f.channel.page;f.channel.page=async(...args)=>{const value=await page(...args);return {...value,records:Array.from({length:1000},(_,i)=>({...value.records[0],localId:String(i+1),sender:i===0?'owner':'contact',text:i===0?oldText:`近期无关消息${i}`,sentAt:String(1700000000000+i*1000)}))};};
  await f.contacts.setReading(true);await f.history.synchronize(f.ids[0]);
  const view=await turn(f,t);
