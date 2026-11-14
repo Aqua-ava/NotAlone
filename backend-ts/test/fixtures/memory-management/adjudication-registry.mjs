@@ -14,6 +14,10 @@ const versionClosurePlans={name:'fixture.versionClosurePlans',mode:'read',retryB
  return plans;
 }};
 export const registry={...base,actions:[...base.actions,versionClosurePlans,{
+ name:'fixture.oldAdjudicationPolicy',mode:'write',retryBusy:false,execute(tx,{ownerId,runId}){
+  tx.run("UPDATE execution_event SET payload=json_remove(payload,'$.policyRevision') WHERE owner_id=? AND kind='adjudication_basis' AND step_attempt_id IN (SELECT a.id FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE t.owner_id=? AND t.run_id=?)",[ownerId,ownerId,runId]);return true;
+ }
+},{
  name:'fixture.adjudicationLeaseState',mode:'read',retryBusy:false,execute(tx,{ownerId,attemptIds}){
   return tx.all(`SELECT id,lease_expires_at FROM step_attempt WHERE owner_id=? AND id IN (${attemptIds.map(()=>'?').join(',')}) ORDER BY id`,[ownerId,...attemptIds]);
  }

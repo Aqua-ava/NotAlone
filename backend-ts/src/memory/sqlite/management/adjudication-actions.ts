@@ -10,7 +10,7 @@ import {validateModelLedgerReceipt,type ModelLedgerReceipt} from '../../../platf
 import type {ModelTaskClaim} from '../../../platform/models/model-permit-port.ts';
 import type {AdjudicationItem,AdjudicationSource,SimilarMemory} from '../../adoption/contracts.ts';
 import {requireImageCitation} from '../content-citation.ts';
-import {parseAdjudications,parseRelations,mergeResult} from '../../adoption/adjudication-dsh.ts';
+import {parseAdjudications,parseRelations,mergeResult,adjudicationPolicyRevision} from '../../adoption/adjudication-dsh.ts';
 import {readExtractionToolArguments} from '../../extraction/arguments.ts';
 import {AMBIGUITY_NOTE} from '../../extraction/bounded.ts';
 import {AMBIGUITY_UNCONFIRMED,unconfirmedAmbiguity} from '../../extraction/ambiguity-guard.ts';
@@ -22,7 +22,7 @@ import {qualificationSources,mergeKnowledgeSources,withQualificationSources} fro
 import type {SqliteAdjudicationModelPurpose} from './model-port.ts';
 const purposes=['adjudication','relation_verification','merge_verification'] as const;
 const digest=(value:unknown)=>sha256(JSON.stringify(value,(_key,v)=>typeof v==='bigint'?v.toString():v));
-interface Basis {pageIndex:number;candidateId:string;candidateRevision:string;runId:string;taskId:string;scopeKind:'self'|'contact';contactId:string|null;memoryRevision:string;intentRevision:string;eventTimeUnverified?:1;item:AdjudicationItem;parents:{id:string;versionNo:string;headRevision:string;protected:boolean}[];}
+interface Basis {policyRevision:string;pageIndex:number;candidateId:string;candidateRevision:string;runId:string;taskId:string;scopeKind:'self'|'contact';contactId:string|null;memoryRevision:string;intentRevision:string;eventTimeUnverified?:1;item:AdjudicationItem;parents:{id:string;versionNo:string;headRevision:string;protected:boolean}[];}
 export interface AdjudicationClaim {attemptId:string;stepId:string;basis:Basis;claim:ModelTaskClaim;}
 const sourceScopes=new WeakMap<StorageTransaction,Set<string>>();
 /** 只在一次同步动作内复用已核验来源身份；消息修订、图片身份及完整任务贡献仍逐项复验。 */
@@ -125,7 +125,7 @@ function freeze(tx:StorageTransaction,ownerId:string,candidateId:string):Basis {
  const candidateHasImage=candidateSources.some(source=>source.content_kind==='image');
  const comparable=candidateHasImage?similar:similar.filter(memory=>!memory.source_texts.some(source=>source.content_kind==='image')||!memory.topic||!fact.topic||memory.topic===fact.topic);
  const item:AdjudicationItem={candidate_index:0,candidate:effectiveFact,candidate_source_receipt:digest(candidateSources),candidate_source_texts:candidateSources,relation_source_receipt:digest({candidateSources,similar:comparable}),similar:comparable};
- return {pageIndex:0,candidateId,candidateRevision:String(c!.state_revision),runId:String(task.run_id),taskId:String(task.id),scopeKind,contactId,memoryRevision:String(revision(tx,ownerId,scopeKind,contactId)),intentRevision:String(task.intent_revision),...(eventTimeUnverified?{eventTimeUnverified}:{}),item,parents};
+ return {policyRevision:adjudicationPolicyRevision,pageIndex:0,candidateId,candidateRevision:String(c!.state_revision),runId:String(task.run_id),taskId:String(task.id),scopeKind,contactId,memoryRevision:String(revision(tx,ownerId,scopeKind,contactId)),intentRevision:String(task.intent_revision),...(eventTimeUnverified?{eventTimeUnverified}:{}),item,parents};
 }
 function record(tx:StorageTransaction,ownerId:string,attemptId:string,kind:string,payload:unknown,callId?:string,reused=false,pageOnly=false):string {
  const a=tx.get('SELECT step_id FROM step_attempt WHERE owner_id=? AND id=?',[ownerId,attemptId]);if(!a)fail('memory_adjudication_stale');

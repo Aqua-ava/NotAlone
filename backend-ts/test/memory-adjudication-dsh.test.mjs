@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
-import {DshMemoryAdjudicationRuntime,parseAdjudications} from '../src/memory/adoption/adjudication-dsh.ts';
+import {randomUUID,createHash} from 'node:crypto';
+import * as adjudicationModule from '../src/memory/adoption/adjudication-dsh.ts';
+const {DshMemoryAdjudicationRuntime,parseAdjudications}=adjudicationModule;
 
 const scope={owner_id:randomUUID(),contact_id:randomUUID()},memory=randomUUID(),candidateMessage=randomUUID(),priorMessage=randomUUID();
 const item={candidate_index:0,
@@ -40,9 +41,9 @@ test('每种裁决动作的目标字段互斥，矛盾结构不得伪装为合�
 });
 
 test('DSH结构化裁决：批量、独立关系核验与合并核验各自独立调用并保留usage',async()=>{
- const prompts=[];let calls=0;
+ const prompts=[],requests=[];let calls=0;
  const port={async call(input){
-  calls++;prompts.push(input.user);
+  calls++;prompts.push(input.user);requests.push(input);
   assert.equal(input.request_key.startsWith(`${input.purpose}:`),true);
   assert.equal(input.user.includes('candidate-receipt'),false);
   assert.equal(input.user.includes('"dimension_evidence"'),false);
@@ -66,6 +67,33 @@ test('DSH结构化裁决：批量、独立关系核验与合并核验各自独�
  assert.deepEqual({supported:merged.supported,receipt:merged.source_receipt,usage:merged.usage.purpose},
   {supported:true,receipt:'merge-receipt',usage:'merge_verification'});
  assert.equal(calls,3);assert.equal(prompts.length,3);
+ const [adjudication,verification,merge]=requests;
+ assert.equal(JSON.parse(verification.user)[0].proposed_action,'update','关系核验必须同时看到动作，不能只支持关系却漏掉组合矛盾');
+ assert.deepEqual(JSON.parse(verification.user)[0].proposed_targets,{replaced_memory_id:memory,merged_memory_ids:[],duplicate_memory_id:null},'独立核验须得到兼容表要求的目标，不能因缺少目标上下文误拒合法动作');
+ for(const request of [adjudication,verification]){
+  assert.match(request.system,/add[^\n]*kind=independent[^\n]*claim_changed=false[^\n]*condition_changed=false/);
+  assert.match(request.system,/keep[^\n]*independent[^\n]*supplement[^\n]*historical_supplement[^\n]*claim_changed=false[^\n]*condition_changed=false/);
+  assert.match(request.system,/update[^\n]*state_change[^\n]*error_correction[^\n]*claim_changed=true[^\n]*condition_changed=false/);
+  assert.match(request.system,/merge[^\n]*kind=supplement[^\n]*claim_changed=false[^\n]*condition_changed=false/);
+  assert.match(request.system,/noop[^\n]*claim_changed=false[^\n]*condition_changed=false/);
+ }
+ const policy={compatibilityVersion:1,adjudication:{system:adjudication.system,schema:adjudication.schema},
+  relation_verification:{system:verification.system,schema:verification.schema},merge_verification:{system:merge.system,schema:merge.schema}};
+ assert.equal(adjudicationModule.adjudicationPolicyRevision,createHash('sha256').update(JSON.stringify(policy)).digest('hex'),'策略版本必须绑定实际使用的全部提示词、工具schema及兼容规则版本');
+});
+
+test('关系核验明确收到keep与state_change组合，依据原文保留主张变化而拒绝不兼容动作',async()=>{
+ const runtime=new DshMemoryAdjudicationRuntime({batchKey:'synthetic-incompatible-action',port:{async call(input){
+  assert.equal(input.purpose,'relation_verification');
+  const proposed=JSON.parse(input.user)[0];assert.equal(proposed.proposed_action,'keep');assert.equal(proposed.proposed_relation.kind,'state_change');
+  assert.equal(proposed.proposed_relation.claim_changed,true);
+  assert.match(input.system,/动作与关系不兼容[^\n]*supported=false/);
+  assert.match(input.system,/不得[^\n]*changed[^\n]*false[^\n]*迎合动作/);
+  const blocks=[{type:'tool-call',name:input.schema.title,arguments:JSON.stringify({results:[{candidate_index:0,supported:false,evidence:relation.evidence,claim_changed:true,condition_changed:false}]})}];
+  input.validateOutput(blocks);return {blocks};
+ }}});
+ const result=await runtime.verifyRelations([item],[{...decision,action:'keep',replaced_memory_id:null}],AbortSignal.timeout(1000));
+ assert.equal(result[0].supported,false);assert.equal(result[0].claim_changed,true,'技术动作矛盾不能把来源中的真实变化改成false');
 });
 
 test('DSH结构化裁决：坏字段和错误候选索引在记账前被拒绝',async()=>{
