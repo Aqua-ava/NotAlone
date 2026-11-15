@@ -64,10 +64,10 @@ const claimSchema={type:'object',additionalProperties:false,properties:{
   required:['candidate_span','attribution','arguments_and_relation','temporal_and_modality']}},
  },required:['version','parts','field_checks']};
 const claimInstructions=`\n逐条核验完整候选，不改写正文或字段。每项results必须填写claim_check。
-claim_check.version固定为2；field_checks逐字段独立核验category、topic、scene_name、alternatives、interpretation_reason、valid_at、invalid_at、speech_act、assertion_status、figurative_type、event、conditions。分类、场景、解释不能引入原话未确定的领域、人物状态或长短期性质；不要求分类标签逐字出现在原话，但须由具体来源支持。备选解释保留原有不确定性，不扩成已证实事实。空数组和null不声明额外事实，可用空evidence_indices表示；非空语义字段的supported必须引用支持它的逐字依据。除event（发生时间标注）外，任一字段uncertain/unsupported均阻止接纳，不能以正文或总verdict代签；event是可选的标注，时间不确定时按未核实处理，不用它否决有据的正文。
+claim_check.version固定为2；field_checks逐字段独立核验category、topic、scene_name、alternatives、interpretation_reason、valid_at、invalid_at、speech_act、assertion_status、figurative_type、event、conditions。分类、场景、解释不能引入原话未确定的领域、人物状态或长短期性质；不要求分类标签逐字出现在原话，但须由具体来源支持。备选解释保留原有不确定性，不扩成已证实事实。空数组和null不声明额外事实，可用空evidence_indices表示；figurative_type=literal仅表示按字面理解，不新增解释，其supported也可使用空evidence_indices，但字段和判定不可省略，正文仍须完整核验。非literal表达及其他非空语义字段的supported必须引用支持它的逐字依据。除event（发生时间标注）外，任一字段uncertain/unsupported均阻止接纳，不能以正文或总verdict代签；event是可选的标注，时间不确定时按未核实处理，不用它否决有据的正文。
 confidence、risk_flags、requires_all_sources、source_dependency_mode、timing和来源ID是结构、策略或来源定位信息，不要求原话声明这些配置；低confidence、有风险标签或合法any与requires_all_sources=true组合本身不表示命题无支持。结构不授予语义支持。
 claim_check.parts按Unicode码点覆盖完整正文（包括空白与标点），默认一段覆盖全文，最多四段，连续、不重叠、不遗漏。
-每段分别判断归属、对象与关系、时间与认知模态；evidence_indices只引用本项evidence的0起索引。每个supported facet必须有逐字依据。资料scope_subject只取self/contact；原shared共同事实仍属contact关系范围，actor_kind可为shared或third_party，不能把亲友或转述中的人物变成说话人本人。
+每段分别判断归属、对象与关系、时间与认知模态；evidence_indices只引用本项evidence的0起索引。每段的supported facet必须有逐字依据。资料scope_subject只取self/contact；原shared共同事实仍属contact关系范围，actor_kind可为shared或third_party，不能把亲友或转述中的人物变成说话人本人。
 听成、理解为、猜测与获悉确定消息不同；不能新增原文未明示的对象、信息确证事件或先后关系。event=null仍须核对正文时间与模态，不以消息时间证明得知或事件发生。来源明确表达尚未确定时，忠实保留该未知可supported。
 归属supported还须提供subject_mentions：evidence_index指向本项evidence，source_span按Unicode码点定位该引文内实际承担语义主体的提及，candidate_span定位本段候选中对应的主体。用于主体定位的引文须在对应原消息中唯一，重复时扩大引文；不得裁掉复数限定。first_person仅用于原话中的我/本人/我们/咱们，second_person仅用于你/您/你们；在已定位的人称提及基础上，才能结合sender判断归属，sender本身不证明省略的主体；唯一例外是程序侧的省略主语兜底：全部引文来自同一发送者、引文不含你/您或复数人称词、且你判定的主体恰为该发送者时，可以subject_mentions留空并填resolution=unique_context（actor_kind取该发送者），程序再按消息发送者核对；含你/您、复数、第三方或共同主体仍须逐字提及。literal_subject用于原话和候选均逐字保留的第三方主体或对象；不能凭没有命中人称词就断定它是名字，也不能把宾语、所有者或任意重合字当主体。共同主体逐个列出提及，或定位明确的复数人称。指代链须保留上下文中的真实先行主体及对应候选位置；仍有多解时用unresolved/uncertain。省略主体且无实际指代依据时subject_mentions留空，不能把对事物的评价扩成发言者的状态，更不能签explicit（上述兜底只用resolution=unique_context）。
 subject_mentions只列实际出现的主体词，不是每条evidence必须填写一次的清单。多条引文共同支持一个候选时，可以只有一条含真实主体词；其他引文仍可支持谓词，但不得给它们虚构人称提及。例如候选“联系人住在海城，目前没有搬家。”，引文0“我住在海城。”、引文1“目前没有搬家。”：若上下文确实支持同一主体，只列引文0的first_person、source_span={start:0,end:1}、candidate_span={start:0,end:3}；不能给引文1也标first_person并把“目”当成“我”。仍须逐项核验后句与该主体的实际关系；没有真实主体依据时继续用unresolved/uncertain。
@@ -80,12 +80,12 @@ function object(value:unknown,keys:readonly string[]):Row{
  if(Object.keys(row).sort().join('|')!==[...keys].sort().join('|'))fail('structure_invalid');
  return row;
 }
-function checkFacet(value:unknown,evidenceCount:number,attribution=false,emptyValue=false):Row{
+function checkFacet(value:unknown,evidenceCount:number,attribution=false,optionalEvidence=false):Row{
  const row=object(value,attribution?['verdict','evidence_indices','scope_subject','actor_kind','resolution','subject_mentions']:['verdict','evidence_indices']);
  if(!supports.includes(row.verdict)||!Array.isArray(row.evidence_indices)||row.evidence_indices.length>60
   ||new Set(row.evidence_indices).size!==row.evidence_indices.length
   ||row.evidence_indices.some((index:unknown)=>!Number.isSafeInteger(index)||Number(index)<0||Number(index)>=evidenceCount)
-  ||row.verdict==='supported'&&!row.evidence_indices.length&&!emptyValue)fail('facet_invalid');
+  ||row.verdict==='supported'&&!row.evidence_indices.length&&!optionalEvidence)fail('facet_invalid');
  if(attribution&&(!['self','contact','unknown'].includes(row.scope_subject)
   ||!['self','contact','shared','third_party','unknown'].includes(row.actor_kind)
   ||!['explicit','unique_context','unresolved'].includes(row.resolution)))fail('attribution_invalid');
@@ -168,7 +168,9 @@ function checkClaim(value:unknown,fact:ExtractedFact,evidence:SourceVerification
  const fields=object(root.field_checks,semanticFields);
  for(const field of semanticFields){
   const fieldValue=field==='scene_name'?fact._scene_name:fact[field];
-  const checked=checkFacet(fields[field],evidence.length,false,fieldValue===null||Array.isArray(fieldValue)&&!fieldValue.length);
+  const optionalEvidence=fieldValue===null||Array.isArray(fieldValue)&&!fieldValue.length
+   ||field==='figurative_type'&&fieldValue==='literal';
+  const checked=checkFacet(fields[field],evidence.length,false,optionalEvidence);
   // 发生时间标注是可选信息：仍校验结构，但不参与整条候选的准入聚合；不可采纳时由 validateSourceVerification 丢弃。
   if(field==='event'){eventSupport=checked.verdict;continue;}
   statuses.push(checked.verdict);

@@ -73,6 +73,30 @@ function response(input, prepared, {version = 2, fields = completeFields(), attr
   })}];
 }
 
+test('字面标记的引用例外不放过未定判定、非法引用或其他字段缺证据', async () => {
+  const cases = [
+    {name: '非字面表达', figurative_type: 'joke', field: 'figurative_type', check: facet('supported', [])},
+    {name: '字面判定未定', field: 'figurative_type', check: facet('uncertain', [])},
+    {name: '字面判定无支持', field: 'figurative_type', check: facet('unsupported', [])},
+    {name: '字面字段缺失', field: 'figurative_type', omit: true},
+    {name: '引用超界', field: 'figurative_type', check: facet('supported', [1])},
+    {name: '分类缺证据', field: 'category', check: facet('supported', [])},
+    {name: '领域缺证据', field: 'topic', check: facet('supported', [])},
+  ];
+  for (const example of cases) {
+    const input = scenario({source: '我住在海城。', candidate: '联系人住在海城。',
+      figurative_type: example.figurative_type ?? 'literal'});
+    const prepared = prepareSourceVerification({...input, policy, requireCurrent: async () => {}});
+    const fields = completeFields();
+    fields.figurative_type = facet('supported', []);
+    if (example.omit) delete fields[example.field];
+    else fields[example.field] = example.check;
+    const item = (await prepared.decode(response(input, prepared, {fields,
+      attribution: {actor_kind: 'contact', subject_mentions: [mention('first_person', 0, 1, 0, 3)]}}))).items[0];
+    assert.equal(item.admitted, false, example.name);
+  }
+});
+
 test('现代核验请求包含完整提议；场景、解释及备选含义不能只留在 E', () => {
   const input = scenario({topic: 'finance', scene: '金融标记', alternatives: ['Z 可能表示账户等级'],
     interpretation_reason: '把 Z 理解为金融等级。', confidence: 0.07, risk_flags: ['sensitive']});

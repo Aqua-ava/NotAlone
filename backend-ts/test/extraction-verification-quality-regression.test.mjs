@@ -8,6 +8,32 @@ const contact = '22222222-2222-4222-8222-222222222222';
 const question = '33333333-3333-4333-8333-333333333333';
 const answer = '44444444-4444-4444-8444-444444444444';
 
+test('字面表达标记无独立引文仍保留已通过正文核验的记忆', async () => {
+  const window = {owner_id: owner, contact_id: contact, target_message_ids: [answer], messages: [
+    {message_id: answer, sender: 'contact', occurred_at: null, text: '我住在海城。'},
+  ]};
+  const fact = {text: '联系人住在海城。', category: 'common_fact', subject: 'contact', topic: 'other',
+    source_message_ids: [answer], confidence: 0.9, risk_flags: [], valid_at: null, invalid_at: null,
+    speech_act: 'assertion', assertion_status: 'asserted', figurative_type: 'literal', alternatives: [],
+    interpretation_reason: '仅保留本人明确自述的居住地。', event: null, conditions: null};
+  const events = [];
+  const result = await runExtractionFlow({window, verificationPolicy, signal: new AbortController().signal,
+    max_retries: 0, retry_delay_ms: 0, requireCurrent: async () => {}, record: async event => {events.push(event);},
+    invoke: async request => {
+      const row = completeClaimRow(fact, {candidate_index: 0, verdict: 'supported', issues: [],
+        evidence: [{message_id: answer, quote: '我住在海城。'}]}, window);
+      row.claim_check.field_checks.figurative_type = {verdict: 'supported', evidence_indices: []};
+      const blocks = [{type: 'tool-call', name: request.tool.name, arguments: JSON.stringify(
+        request.purpose === 'extraction' ? {scenes: [{scene_name: '居住资料', memories: [fact]}]}
+          : {results: [row]})}];
+      await request.validateOutput?.(blocks);
+      return {blocks};
+    }});
+  assert.ok(events.some(event => event.stage === 'verification_return'));
+  assert.deepEqual(result.accepted.map(item => item.text), ['联系人住在海城。']);
+  assert.deepEqual(result.verification[0].result.model_claim_check.field_checks.figurative_type.evidence_indices, []);
+});
+
 test('声明依赖相连问答的确定主张不能凭单条含糊回答直接通过核验', async () => {
   const events = [];
   const window = {owner_id: owner, contact_id: contact, target_message_ids: [answer], messages: [
