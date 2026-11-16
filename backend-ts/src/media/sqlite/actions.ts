@@ -7,7 +7,7 @@ import {assertSourceEligibility} from '../../history/sqlite/source.ts';
 import {planDeletion, requestAllowed} from '../../storage/sqlite/deletion/actions.ts';
 import type {DeletionRegistration, ManagedAddress} from '../../storage/sqlite/deletion/contracts.ts';
 import type {MediaKind, MediaSnapshot, MediaValidation, MediaAssociationProof, MediaAttemptView} from './contracts.ts';
-import {imageReconcilePrefix,imagePreparationVersion,automaticImageGeneration} from './image-refresh.ts';
+import {imageReconcilePrefix,imageRetryPrefix,imagePreparationVersion,automaticImageGeneration} from './image-refresh.ts';
 import {createImageSyncActions} from './image-sync-actions.ts';
 
 const fail=(code:string):never=>{throw new StorageFailure(code);};
@@ -108,7 +108,7 @@ export function createMediaActions(registration:DeletionRegistration):StorageAct
    tx.run("UPDATE media_extraction_attempt SET state='interrupted',lease_token=NULL,lease_expires_at=NULL,finished_at=?,error_code='media_lease_expired' WHERE owner_id=? AND id=?",[Date.now(),i.ownerId,active.id]);cleanup(tx,lease,registration,active);if(unfinished(tx,i))return {reused:false,cleanupRequired:true,attemptId:String(active.id)};}
   const p=selected(tx,i.ownerId,i.contactId),m=message(tx,i);
   // 补查只在消息还没有可查看的已保存图片时进行；已保存的图片不再重复读取。
-  if(i.requestKey.startsWith(imageReconcilePrefix)&&(m.kind!=='image'||i.goal!=='extract'||tx.get("SELECT 1 FROM media_file f WHERE f.owner_id=? AND f.contact_id=? AND f.message_id=? AND f.role='image_display' AND f.publish_state='current' AND f.content_state='present' AND f.container_valid=1 AND f.viewable=1",[i.ownerId,i.contactId,i.messageId])))fail('media_refresh_not_required');
+  if((i.requestKey.startsWith(imageReconcilePrefix)||i.requestKey.startsWith(imageRetryPrefix))&&(m.kind!=='image'||i.goal!=='extract'||tx.get("SELECT 1 FROM media_file f WHERE f.owner_id=? AND f.contact_id=? AND f.message_id=? AND f.role='image_display' AND f.publish_state='current' AND f.content_state='present' AND f.container_valid=1 AND f.viewable=1",[i.ownerId,i.contactId,i.messageId])))fail('media_refresh_not_required');
   if(i.goal==='audio_conversion'&&m.kind!=='voice')fail('media_goal_invalid');
   let token:ReadEligibility|null=null,record:string|null=null,input:StorageRow|undefined;
   if(i.goal==='audio_conversion'){

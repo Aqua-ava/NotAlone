@@ -5,7 +5,7 @@ import type {ActiveHolders} from './deletion/holders.ts';
 
 // 仅由宿主装配的后台目录与列表读取使用；页面、Tool 和任意调用方不能传入 SQL、动作名、连接或 reader。
 export const backgroundReadActions=[
- 'media.imageSyncTargets','media.imageRefreshPending','media.imageViewTargets','memory.read','memory.history',
+ 'media.imageSyncTargets','media.imageRefreshPending','media.imageRefreshNext','media.imageViewTargets','memory.read','memory.history',
 ] as const;
 export const backgroundReadBoundaryAction:StorageAction={name:'background.readBoundary',mode:'read',retryBusy:false,execute(tx,input){
  const value=input&&typeof input==='object'&&!Array.isArray(input)?input as Record<string,unknown>:undefined;

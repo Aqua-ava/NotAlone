@@ -12,10 +12,10 @@ const key=(messageId,index)=>`image_sync_v5_${messageId}_${index}`;
 function seed(f,{attempts}){
  return withTransaction(f.root,f.owner,seeder=>{
   const scope=seeder.contact('policy');
-  const entries=Object.entries(attempts).map(([name,{states=[],errorCode,requestKey}],index)=>{
+  const entries=Object.entries(attempts).map(([name,{states=[],errorCode,requestKey,requestedAt=ATTEMPT_AT}],index)=>{
    const message=seeder.message(scope,{displayNo:100+index});seeder.media(scope,{messageId:message.messageId});
    states.forEach((state,attempt)=>seeder.attempt(scope,{messageId:message.messageId,recordId:message.recordId,version:VERSION,
-    requestKey:requestKey?.(message.messageId,attempt)??key(message.messageId,attempt),state,requestedAt:ATTEMPT_AT,...(errorCode?{errorCode}:{})}));
+    requestKey:requestKey?.(message.messageId,attempt)??key(message.messageId,attempt),state,requestedAt:typeof requestedAt==='function'?requestedAt(state):requestedAt,...(errorCode?{errorCode:typeof errorCode==='function'?errorCode(state):errorCode}:{})}));
    return [name,{displayNo:String(100+index),messageId:message.messageId}];
   });
   return {scope,items:Object.fromEntries(entries)};
@@ -27,7 +27,7 @@ const pending=(f,scenario)=>f.storage.execute('media.imageRefreshPending',{owner
 const viewTargets=(f,scenario,messageIds,{now=SCENARIO_NOW}={})=>f.storage.execute('media.imageViewTargets',{
  ownerId:f.owner,contactId:scenario.scope.contactId,messageIds,now});
 
-test('没有尝试过的图片到期；已有结果的图片不论失败原因都不再按时间到期',async t=>{
+test('没有尝试过的图片立即到期，暂缺图片一分钟后补查，确定性失败不排队',async t=>{
  const f=await fixture(t);
  const scenario=seed(f,{attempts:{
   fresh:{},
@@ -39,7 +39,8 @@ test('没有尝试过的图片到期；已有结果的图片不论失败原因�
  }});
  const {items}=scenario;
  assert.deepEqual(await targets(f,scenario),[items.fresh.displayNo]);
- assert.deepEqual(await targets(f,scenario,{now:ATTEMPT_AT+DAY*30}),[items.fresh.displayNo],'数天之后也不会因为时间再入选');
+ assert.deepEqual(await targets(f,scenario,{now:ATTEMPT_AT+60_000}),[items.fresh.displayNo,items.failed.displayNo],'仅缩略图到期后自动补查');
+ assert.deepEqual(await targets(f,scenario,{now:ATTEMPT_AT+DAY*30}),[items.fresh.displayNo,items.failed.displayNo],'确定性失败不会因时间重新入选');
 });
 
 test('被中断或撤销的自动尝试不算已有结果，仍按首次尝试处理',async t=>{
@@ -62,6 +63,33 @@ test('只有尚未试过的图片才需要安排定时刷新',async t=>{
  const fresh=await fixture(t);
  const waiting=seed(fresh,{attempts:{failed:{states:['failed']},fresh:{}}});
  assert.equal(await pending(fresh,waiting),true,'仍有尚未试过的图片时需要刷新');
+});
+
+test('旧高次数与查看失败不抬高新自动退避，新自动次数持久决定下一次到期',async t=>{
+ const f=await fixture(t);
+ const scenario=seed(f,{attempts:{
+  old:{states:Array(200).fill('failed'),errorCode:'media_thumbnail_only'},
+  viewed:{states:Array(100).fill('failed'),errorCode:'media_local_file_missing',requestKey:(id,n)=>`image_reconcile_v1_${id}_0_${n}`},
+  retried:{states:['failed','failed'],errorCode:'media_thumbnail_only',requestKey:(id,n)=>`image_retry_v1_${id}_0_${n}`},
+ }});
+ const {items}=scenario;
+ assert.deepEqual(await targets(f,scenario,{now:ATTEMPT_AT+59_999}),[]);
+ assert.equal(await f.storage.execute('media.imageRefreshNext',{ownerId:f.owner,contactId:scenario.scope.contactId}),ATTEMPT_AT+60_000);
+ assert.deepEqual(await targets(f,scenario,{now:ATTEMPT_AT+60_000}),[items.old.displayNo,items.viewed.displayNo]);
+ assert.deepEqual(await targets(f,scenario,{now:ATTEMPT_AT+1_799_999}),[items.old.displayNo,items.viewed.displayNo]);
+ assert.deepEqual(await targets(f,scenario,{now:ATTEMPT_AT+1_800_000}),[items.old.displayNo,items.viewed.displayNo,items.retried.displayNo]);
+ assert.equal(await pending(f,scenario),true);
+});
+
+test('中断或撤销的后续尝试不掩盖先前可恢复结果，重启仍可自动补查',async t=>{
+ const f=await fixture(t);
+ const scenario=seed(f,{attempts:{
+  interrupted:{states:['failed','interrupted'],errorCode:state=>state==='failed'?'media_thumbnail_only':'media_host_interrupted',requestedAt:state=>state==='failed'?ATTEMPT_AT:ATTEMPT_AT+120_000},
+  revoked:{states:['failed','revoked'],errorCode:state=>state==='failed'?'media_local_file_missing':'read_eligibility_stale',requestedAt:state=>state==='failed'?ATTEMPT_AT:ATTEMPT_AT+120_000},
+ }});
+ assert.deepEqual(await targets(f,scenario,{now:ATTEMPT_AT+120_000}),[scenario.items.interrupted.displayNo,scenario.items.revoked.displayNo]);
+ assert.equal(await f.storage.execute('media.imageRefreshNext',{ownerId:f.owner,contactId:scenario.scope.contactId}),ATTEMPT_AT+60_000,'被取消的尝试不延后既有退避');
+ assert.equal(await pending(f,scenario),true);
 });
 
 test('打开聊天：只返回仍未保存的图片，已有结果的失败图片也可再试一次',async t=>{

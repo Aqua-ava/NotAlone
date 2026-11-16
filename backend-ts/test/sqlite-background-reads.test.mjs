@@ -10,7 +10,7 @@ import {SqliteImageSyncCoordinator} from '../src/media/sqlite/image-sync.ts';
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 import {fixture,owner,record} from './fixtures/memory-sqlite/support.mjs';
 
-const expectedActions=['media.imageRefreshPending','media.imageSyncTargets','media.imageViewTargets','memory.history','memory.read'];
+const expectedActions=['media.imageRefreshNext','media.imageRefreshPending','media.imageSyncTargets','media.imageViewTargets','memory.history','memory.read'];
 function bounded(work,label='后台慢读不应阻塞前台写入',ms=750){
  let timer;return Promise.race([work,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(label)),ms);})]).finally(()=>clearTimeout(timer));
 }
@@ -23,7 +23,7 @@ function gatedStorage(storage,action,entered,release,{failCloses=0}={}){
   get opened(){return opened;},get closeAttempts(){return closeAttempts;}};
 }
 
-test('后台只读通道固定声明四个动作并拒绝写者、维护和任意动作',async t=>{
+test('后台只读通道固定声明窄动作并拒绝写者、维护和任意动作',async t=>{
  const f=await fixture(t),channel=await createBackgroundReads({storage:f.storage,ownerId:owner,holders:new ActiveHolders()});t.after(()=>channel.close());
  assert.deepEqual([...backgroundReadActions].sort(),expectedActions);
  for(const name of ['memory.applyDecision','media.request','identity.foregroundSnapshot','discussion.list','arbitrary.sql']){
@@ -52,13 +52,13 @@ test('后台慢读占用附属读者时主存储的前台写入不被串行阻�
  }finally{released=true;release.resolve();await sync.waitForIdle();await write;}
 });
 
-test('图片同步目录查询与 pending 探测经后台只读通道执行',async t=>{
+test('图片同步目录查询与最早到期探测经后台只读通道执行',async t=>{
  const f=await fixture(t),channel=await createBackgroundReads({storage:f.storage,ownerId:owner,holders:new ActiveHolders()});t.after(()=>channel.close());
  const calls=[];const reader={execute:(name,input)=>{calls.push(name);return channel.execute(name,input);}};
  const sync=new SqliteImageSyncCoordinator(reader,{directory:()=>f.contacts.syncDirectory()},{ownerId:owner,extract:async()=>{}});t.after(()=>sync.close());
  sync.wake();await sync.waitForIdle();
  assert.ok(calls.includes('media.imageSyncTargets'));
- assert.ok(calls.includes('media.imageRefreshPending'));
+ assert.ok(calls.includes('media.imageRefreshNext'));
  assert.deepEqual(calls.filter(name=>!expectedActions.includes(name)),[]);
  assert.equal(sync.status().failed,0);
 });

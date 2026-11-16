@@ -20,17 +20,38 @@ function imageAdapter(onRead=()=>{},variant=()=> 'main',contentOf=()=>bytes){
  }};
 }
 
-test('缺副本失败只自动尝试一次，不按时间重试；重复唤醒与重启也不再读图',async t=>{
+test('查看重试后标准图才可用，同一运行自动补取并更新聊天图片状态',async t=>{
+ let variant='thumbnail',reads=0;
+ const f=await fixture(t,imageAdapter(()=>reads++,()=>variant)),image=f.messages.find(m=>m.kind==='image');
+ t.mock.timers.enable({apis:['setTimeout','Date']});
+ const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());
+ sync.wake();await sync.waitForIdle();
+ sync.retryViewed(f.contact,[image.id]);await sync.waitForIdle();assert.equal(reads,2);
+ t.mock.timers.tick(12_000);variant='main';
+ t.mock.timers.tick(48_000);await sync.waitForIdle();
+ const saved=await f.media.read(f.contact,image.id);
+ assert.equal(saved.files.length,1,'无需重启或重新打开聊天，图片后来可用后自动保存');
+ assert.equal((await f.history.imageMedia(f.contact,[image.id])).get(image.id).state,'available');
+ t.mock.timers.tick(86_400_000);await sync.waitForIdle();sync.wake();await sync.waitForIdle();
+ assert.equal(reads,3,'已保存的图片停止重试');
+});
+
+test('缺副本按自动退避重试，重复唤醒与重启不提前读取',async t=>{
  let reads=0;const adapter=imageAdapter();adapter.execute=async()=>{reads++;throw new StorageFailure('media_local_file_missing');};
  const f=await fixture(t,adapter);t.mock.timers.enable({apis:['setTimeout','Date']});
  const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());
  sync.wake();await sync.waitForIdle();assert.equal(reads,1);
  sync.wake();await sync.waitForIdle();assert.equal(reads,1);
- for(const delay of [60_000,300_000,1_800_000,21_600_000,86_400_000]){t.mock.timers.tick(delay);sync.wake();await sync.waitForIdle();}
- assert.equal(reads,1,'已有结果的图片不再按时间排队');
+ let expected=1;
+ for(const delay of [60_000,300_000,1_800_000,21_600_000,86_400_000]){
+  t.mock.timers.tick(delay-1);sync.wake();await sync.waitForIdle();assert.equal(reads,expected,'到期前不读取');
+  t.mock.timers.tick(1);await sync.waitForIdle();assert.equal(reads,++expected,'到期后自动补查');
+ }
  await sync.close();
  const next=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>next.close());
- next.wake();await next.waitForIdle();t.mock.timers.tick(86_400_000);next.wake();await next.waitForIdle();assert.equal(reads,1,'重启也不重试');
+ next.wake();await next.waitForIdle();assert.equal(reads,expected,'重启不提前读取');
+ t.mock.timers.tick(86_399_999);await next.waitForIdle();assert.equal(reads,expected);
+ t.mock.timers.tick(1);await next.waitForIdle();assert.equal(reads,expected+1,'封顶后仍按一天退避');
 });
 
 test('打开聊天时对未保存的图片各再试一次，同一运行内不重复；取得图片后保存',async t=>{
@@ -43,8 +64,8 @@ test('打开聊天时对未保存的图片各再试一次，同一运行内不�
  sync.retryViewed(f.contact,[image.id]);await sync.waitForIdle();assert.equal(reads,2,'同一运行内不重复');
  await sync.close();missing=false;t.mock.timers.tick(60_000);
  const restarted=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>restarted.close());
- restarted.wake();await restarted.waitForIdle();assert.equal(reads,2,'重启后不自动读图');
- restarted.retryViewed(f.contact,[image.id]);await restarted.waitForIdle();assert.equal(reads,3,'重启后再次打开聊天才试');
+ restarted.wake();await restarted.waitForIdle();assert.equal(reads,3,'到期且文件已可用时自动恢复');
+ restarted.retryViewed(f.contact,[image.id]);await restarted.waitForIdle();assert.equal(reads,3,'已保存的图片不因打开聊天重读');
  assert.equal((await f.media.read(f.contact,image.id)).files.length,1);
  restarted.retryViewed(f.contact,[image.id]);await restarted.waitForIdle();assert.equal(reads,3,'已保存的图片不再读');
 });
@@ -89,7 +110,7 @@ test('全部授权联系人未保存的图片自动取得，已保存的重启�
  restarted.wake();await restarted.waitForIdle();assert.equal(reads,images.length);
 });
 
-test('仅有缩略图时不保存任何文件，不按时间重试，打开聊天时再试，取得标准图后保存',async t=>{
+test('仅有缩略图不保存文件，按退避自动补查，取得标准图后保存',async t=>{
  let variant='thumbnail',reads=0;const f=await fixture(t,imageAdapter(()=>reads++,()=>variant)),image=f.messages.find(m=>m.kind==='image');
  t.mock.timers.enable({apis:['setTimeout','Date']});
  const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());
@@ -100,37 +121,38 @@ test('仅有缩略图时不保存任何文件，不按时间重试，打开聊�
  assert.equal((await readdir(join(f.root,'managed','media'))).length,0);
  assert.equal((await f.history.imageMedia(f.contact,[image.id])).get(image.id).state,'thumbnail_only');
  sync.wake();await sync.waitForIdle();assert.equal(reads,1);
- t.mock.timers.tick(86_400_000);await sync.waitForIdle();sync.wake();await sync.waitForIdle();assert.equal(reads,1,'不按时间重试');
- sync.retryViewed(f.contact,[image.id]);await sync.waitForIdle();assert.equal(reads,2,'打开聊天时再试，仍只有缩略图');
- variant='main';t.mock.timers.tick(60_000);
- const next=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>next.close());
- next.retryViewed(f.contact,[image.id]);await next.waitForIdle();assert.equal(reads,3);
+ t.mock.timers.tick(60_000);await sync.waitForIdle();assert.equal(reads,2,'首次自动补查仍只有缩略图');
+ variant='main';t.mock.timers.tick(300_000);await sync.waitForIdle();assert.equal(reads,3);
  const saved=await f.media.read(f.contact,image.id);
  assert.equal(saved.files.length,1);assert.equal(saved.latestAttempt.outcome,'full');assert.equal(saved.latestAttempt.errorCode,null);
  const projected=(await f.history.imageMedia(f.contact,[image.id])).get(image.id);
  assert.deepEqual(projected,{state:'available',fileId:saved.files[0].fileId,mimeType:'image/png'});
- t.mock.timers.tick(86_400_000);await next.waitForIdle();next.wake();await next.waitForIdle();assert.equal(reads,3);
+ t.mock.timers.tick(86_400_000);await sync.waitForIdle();sync.wake();await sync.waitForIdle();assert.equal(reads,3);
  assert.equal((await readdir(join(f.root,'managed','media'))).length,1);
 });
 
-test('仅缩略图的结果跨协调器重建保持，重启后不自动再读',async t=>{
+test('仅缩略图的自动退避跨协调器重建保持，重启不重置次数和到期时间',async t=>{
  let reads=0;const f=await fixture(t,imageAdapter(()=>reads++,()=> 'thumbnail'));t.mock.timers.enable({apis:['setTimeout','Date']});
  const first=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>first.close());
  first.wake();await first.waitForIdle();assert.equal(reads,1);await first.close();
  const next=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>next.close());
- next.wake();await next.waitForIdle();t.mock.timers.tick(86_400_000);next.wake();await next.waitForIdle();assert.equal(reads,1);
+ next.wake();await next.waitForIdle();assert.equal(reads,1);
+ t.mock.timers.tick(60_000);await next.waitForIdle();assert.equal(reads,2);await next.close();
+ const third=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>third.close());third.wake();await third.waitForIdle();
+ t.mock.timers.tick(299_999);await third.waitForIdle();assert.equal(reads,2);
+ t.mock.timers.tick(1);await third.waitForIdle();assert.equal(reads,3);
 });
 
-test('关闭读取和退出会停止补查，重新开启后只做尚未试过的图片',async t=>{
+test('关闭读取和退出停止补查，重新开启恢复到期图片，已清除图片不恢复',async t=>{
  let reads=0;const f=await fixture(t,imageAdapter(()=>reads++,()=> 'thumbnail'));t.mock.timers.enable({apis:['setTimeout','Date']});
  const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());
  sync.wake();await sync.waitForIdle();assert.equal(reads,1);
  await f.contacts.setReading(false);await sync.stop();t.mock.timers.tick(120_000);await sync.waitForIdle();assert.equal(reads,1);
- await f.contacts.setReading(true);sync.wake();await sync.waitForIdle();assert.equal(reads,1,'已有结果的图片不因重新开启而重读');
+ await f.contacts.setReading(true);sync.wake();await sync.waitForIdle();assert.equal(reads,2,'重新开启后恢复已到期的暂缺图片');
  const image=f.messages.find(m=>m.kind==='image');await f.media.clear(f.contact,image.id,'clear-thumbnail-only');
- t.mock.timers.tick(1_800_000);await sync.waitForIdle();sync.wake();await sync.waitForIdle();assert.equal(reads,1);
+ t.mock.timers.tick(1_800_000);await sync.waitForIdle();sync.wake();await sync.waitForIdle();assert.equal(reads,2);
  assert.deepEqual((await f.media.read(f.contact,image.id)).files,[]);
- await sync.close();t.mock.timers.tick(120_000);assert.equal(reads,1);
+ await sync.close();t.mock.timers.tick(120_000);assert.equal(reads,2);
 });
 
 test('自动取图在来源准备期间遇到清除时，仅缩略图和缺副本均不恢复',{timeout:15000},async t=>{
@@ -175,7 +197,7 @@ test('来源恢复后首张图片内容失败也解除联系人准备退避，�
  assert.equal((await f.media.read(f.contact,images.find(m=>m.id!==firstImage).id)).files.length,1);assert.equal(reads,2);
 });
 
-test('来源准备失败按联系人退避，恢复后首次读图；图片失败之后不再按时间重试',async t=>{
+test('来源准备失败按联系人退避，恢复后暂缺图片继续自动补查',async t=>{
  let unavailable=true,missing=true,reads=0;const adapter=imageAdapter(),execute=adapter.execute;
  adapter.execute=async context=>{reads++;if(missing)throw new StorageFailure('media_local_file_missing');return execute(context);};
  const f=await fixture(t,adapter,{ensureSourceReady:async()=>{if(unavailable)throw new StorageFailure('history_support_unverified');}}),image=f.messages.find(m=>m.kind==='image');
@@ -183,8 +205,8 @@ test('来源准备失败按联系人退避，恢复后首次读图；图片失�
  const sync=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>sync.close());sync.wake();await sync.waitForIdle();assert.equal(reads,0);
  unavailable=false;t.mock.timers.tick(60_000);await sync.waitForIdle();assert.equal(reads,1);await sync.close();
  const restarted=new SqliteImageSyncCoordinator(f.storage,f.contacts,f.media);t.after(()=>restarted.close());restarted.wake();await restarted.waitForIdle();assert.equal(reads,1);
- missing=false;t.mock.timers.tick(86_400_000);await restarted.waitForIdle();assert.equal(reads,1,'图片失败后不按时间重试');
- restarted.retryViewed(f.contact,[image.id]);await restarted.waitForIdle();assert.equal(reads,2);assert.equal((await f.media.read(f.contact,image.id)).files.length,1);
+ missing=false;t.mock.timers.tick(60_000);await restarted.waitForIdle();assert.equal(reads,2,'来源恢复后图片可用时自动补齐');
+ assert.equal((await f.media.read(f.contact,image.id)).files.length,1);
 });
 
 test('来源准备抛普通错误也停止该联系人本批，不回显私密错误正文',async t=>{

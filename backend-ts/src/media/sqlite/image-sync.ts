@@ -1,6 +1,6 @@
 import type {SavedContactBinding} from '../../contacts/sqlite/contracts.ts';
 import type {SqliteMediaService} from './service.ts';
-import {imageRefreshIntervalMs,imageRefreshWindow,ImagePreparationFailure} from './image-refresh.ts';
+import {ImagePreparationFailure} from './image-refresh.ts';
 import {StorageFailure,type StorageReader} from '../../storage/sqlite/contracts.ts';
 
 interface ImageSyncDirectory {
@@ -13,7 +13,7 @@ export class SqliteImageSyncCoordinator {
  readonly #reads:Pick<StorageReader,'execute'>;readonly #contacts:ImageSyncDirectory;readonly #media:SqliteMediaService;
  readonly #pending=new Set<string>();readonly #viewed=new Map<string,Set<string>>();readonly #viewedTried=new Set<string>();readonly #stoppedContacts=new Set<string>();#all=false;#paused=false;#closed=false;#work?:Promise<void>;
  #active?:{contactId:string;controller:AbortController;done:Promise<void>};
- #refreshTimer?:ReturnType<typeof setTimeout>;
+ #refreshTimer?:ReturnType<typeof setTimeout>;#refreshAt?:number;
  #checked=0;#failed=0;#lastFailure:string|null=null;
  constructor(reads:Pick<StorageReader,'execute'>,contacts:ImageSyncDirectory,media:SqliteMediaService){this.#reads=reads;this.#contacts=contacts;this.#media=media;}
  status(){return {processing:!!this.#work,checked:this.#checked,failed:this.#failed,last_failure_code:this.#lastFailure};}
@@ -40,10 +40,11 @@ export class SqliteImageSyncCoordinator {
   // 读取资格失效由原同步状态展示；不得把内部异常或来源内容写进普通日志。
   void this.#work.catch(error=>this.#failure(error));
  }
- #scheduleRefresh():void {
-  if(this.#refreshTimer||this.#closed||this.#paused)return;
-  const now=Date.now(),delay=(imageRefreshWindow(now)+1)*imageRefreshIntervalMs-now;
-  this.#refreshTimer=setTimeout(()=>{this.#refreshTimer=undefined;if(this.#closed||this.#paused)return;this.#all=true;this.#launch();},delay);
+ #scheduleRefresh(at:number):void {
+  if(this.#closed||this.#paused||this.#refreshAt!==undefined&&this.#refreshAt<=at)return;
+  if(this.#refreshTimer)clearTimeout(this.#refreshTimer);
+  this.#refreshAt=Math.max(Date.now()+1000,at);
+  this.#refreshTimer=setTimeout(()=>{this.#refreshTimer=undefined;this.#refreshAt=undefined;if(this.#closed||this.#paused)return;this.#all=true;this.#launch();},this.#refreshAt-Date.now());
   this.#refreshTimer.unref?.();
  }
  async #extract(contactId:string,target:ImageTarget,controller:AbortController):Promise<'next'|'stop'>{
@@ -76,7 +77,6 @@ export class SqliteImageSyncCoordinator {
         if(await this.#extract(contactId,target,controller)==='stop')break images;
        }
       }
-      if(!this.#closed&&!controller.signal.aborted&&await this.#reads.execute<boolean>('media.imageRefreshPending',{ownerId:this.#media.ownerId,contactId}))this.#scheduleRefresh();
      }
      const ids=viewed.get(contactId);
      if(ids?.size&&!this.#closed&&!controller.signal.aborted){
@@ -86,12 +86,16 @@ export class SqliteImageSyncCoordinator {
        if(await this.#extract(contactId,target,controller)==='stop')break;
       }
      }
+     if(!this.#closed&&!controller.signal.aborted){
+      const next=await this.#reads.execute<number|null>('media.imageRefreshNext',{ownerId:this.#media.ownerId,contactId});
+      if(next!==null)this.#scheduleRefresh(next);
+     }
     }finally{finish();if(this.#active?.controller===controller)this.#active=undefined;}
    }
   }
  }
  async stop(contactId?:string):Promise<void>{
-  if(contactId){this.#stoppedContacts.add(contactId);this.#pending.delete(contactId);this.#viewed.delete(contactId);}else{this.#paused=true;this.#pending.clear();this.#viewed.clear();this.#all=false;if(this.#refreshTimer)clearTimeout(this.#refreshTimer);this.#refreshTimer=undefined;}
+  if(contactId){this.#stoppedContacts.add(contactId);this.#pending.delete(contactId);this.#viewed.delete(contactId);}else{this.#paused=true;this.#pending.clear();this.#viewed.clear();this.#all=false;if(this.#refreshTimer)clearTimeout(this.#refreshTimer);this.#refreshTimer=undefined;this.#refreshAt=undefined;}
   const active=this.#active;
   if(active&&(!contactId||active.contactId===contactId)){active.controller.abort();await active.done;}
   if(!contactId)await this.#work?.catch(()=>{});

@@ -98,6 +98,16 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','available'));
   await expect(image).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.mediaCalls.length)).toBe(2);
+  // 后台补取完成后，同一聊天页直接从缩略图占位恢复图片，不请求重载聊天。
+  await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','thumbnail_only'));
+  await expect(image).toHaveCount(0);
+  await expect(chat.getByText('仅有缩略图，暂未取得图片', { exact: true })).toHaveCount(2);
+  const loadsBeforeImageRecovery = await page.evaluate(() => window.calls);
+  await page.evaluate(() => window.updateImage('00000000-0000-4000-8000-000000000012','available'));
+  await expect(image).toBeVisible();
+  await expect.poll(() => image.evaluate(element => element.naturalWidth)).toBe(1);
+  await expect(chat.getByText('仅有缩略图，暂未取得图片', { exact: true })).toHaveCount(1);
+  assert.deepEqual(await page.evaluate(() => window.calls), loadsBeforeImageRecovery);
   await chat.locator('.contact-chat-order > summary').click();
   await expect(chat.getByText('按消息时间展示；同一时间或时间未知的消息先后未核验。')).toBeVisible();
   await expect(page.locator('.contact-history-status')).toHaveText('本机历史已读完');
@@ -164,8 +174,8 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
   await expect(settings).toBeHidden();
   await expect(chat.getByText('合成聊天正文\n第二行', { exact: true })).toHaveCount(0);
   await expect(image).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => window.mediaReleases.length)).toBe(3);
-  assert.equal((await page.evaluate(() => window.mediaReleases[2])).src, null);
+  await expect.poll(() => page.evaluate(() => window.mediaReleases.length)).toBe(4);
+  assert.equal((await page.evaluate(() => window.mediaReleases[3])).src, null);
   await expect(chat.getByRole('button', { name: '重试加载聊天' })).toHaveCount(0);
   await page.evaluate(() => window.publishHistory({contactId:'b',scopeRevision:2,messages:{phase:'idle',items:[],nextCursor:null},error:null}));
   await expect(chat.getByText('还没有已保存的聊天记录', { exact: true })).toBeVisible();

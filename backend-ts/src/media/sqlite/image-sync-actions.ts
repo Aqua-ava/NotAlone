@@ -1,8 +1,8 @@
 import type {StorageAction,StorageRow} from '../../storage/sqlite/contracts.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
-import {imageReconcileRequestKey,imageReconcilePrefix,imageRetryDelaysMs,imagePreparationVersion} from './image-refresh.ts';
+import {imageReconcileRequestKey,imageReconcilePrefix,imageRetryRequestKey,imageRetryPrefix,imageRetryDelaysMs,imagePreparationVersion} from './image-refresh.ts';
 
-const retryDelaySql=(alias:string)=>`CASE ${imageRetryDelaysMs.slice(0,-1).map((delay,index)=>`WHEN ${alias}.retry_count=${index+1} THEN ${delay}`).join(' ')} ELSE ${imageRetryDelaysMs.at(-1)} END`;
+const retryDelaySql=(count:string)=>`CASE ${imageRetryDelaysMs.slice(0,-1).map((delay,index)=>`WHEN ${count}=${index+1} THEN ${delay}`).join(' ')} ELSE ${imageRetryDelaysMs.at(-1)} END`;
 // 只枚举待办消息身份；旧运行时守卫由媒体服务先合法重验，实际读取与发布仍逐条核验来源。
 // legacy cutoff 只需按联系人计算一次；相关子查询会被 SQLite 按 preparation 的每一行重算，
 // 因此提升为一次性 CTE。导出仅用于回归测试与基准脚本读取实际查询计划，不参与产品装配。
@@ -12,8 +12,9 @@ export const imageSyncWorkSql=`WITH legacy AS (
 ), attempts AS (
  -- 只数已得出结果（完成或失败）的自动尝试；被中断或撤销的不算，仍属“尚未试过”。
  SELECT owner_id,message_id,accepted_media_generation,
-  max(requested_at) last_attempt_at,
-  count(CASE WHEN adapter_version<>'${imagePreparationVersion}' AND state IN ('completed','failed') AND (request_key GLOB 'image_sync_v5_*' OR request_key GLOB '${imageReconcilePrefix}*') THEN 1 END) retry_count
+  max(requested_at) last_attempt_at,max(CASE WHEN adapter_version<>'${imagePreparationVersion}' AND state IN ('completed','failed') THEN attempt_no END) latest_attempt_no,
+  count(CASE WHEN adapter_version<>'${imagePreparationVersion}' AND state IN ('completed','failed') AND (request_key GLOB 'image_sync_v5_*' OR request_key GLOB '${imageReconcilePrefix}*' OR request_key GLOB '${imageRetryPrefix}*') THEN 1 END) retry_count,
+  count(CASE WHEN adapter_version<>'${imagePreparationVersion}' AND state IN ('completed','failed') AND request_key GLOB '${imageRetryPrefix}*' THEN 1 END) availability_retry_count
  FROM media_extraction_attempt WHERE owner_id=? AND contact_id=? AND goal='extract'
  GROUP BY owner_id,message_id,accepted_media_generation
 ), preparation AS (
@@ -27,14 +28,17 @@ export const imageSyncWorkSql=`WITH legacy AS (
 ), work AS (
  SELECT m.id,m.display_no,coalesce(h.media_generation,0) media_generation,
   coalesce(a.retry_count,0) retry_count,a.last_attempt_at,
-  coalesce(p.last_retry_at+${retryDelaySql('p')},0) prep_due,
-  -- 定时自动尝试只做首次：已有结果的图片不再按时间排队，之后只在用户打开聊天看到它时再试（见 media.imageViewTargets）。
-  -- 首次尝试仅受联系人级准备失败的退避限制。
-  CASE WHEN coalesce(a.retry_count,0)=0 THEN coalesce(p.last_retry_at+${retryDelaySql('p')},0) ELSE 9223372036854775807 END next_due
+  coalesce(p.last_retry_at+${retryDelaySql('p.retry_count')},0) prep_due,
+  -- 暂缺图片可能在当前运行稍后落盘；旧失败只确定最近时间，不抬高新自动策略的退避级别。
+  CASE WHEN coalesce(a.retry_count,0)=0 THEN coalesce(p.last_retry_at+${retryDelaySql('p.retry_count')},0)
+   WHEN latest.error_code IN ('media_thumbnail_only','media_local_file_missing','media_original_unavailable','media_saved_file_unavailable')
+   THEN max(coalesce(p.last_retry_at+${retryDelaySql('p.retry_count')},0),latest.requested_at+${retryDelaySql('(coalesce(a.availability_retry_count,0)+1)')})
+   ELSE 9223372036854775807 END next_due
  FROM message m JOIN contact c ON c.owner_id=m.owner_id AND c.id=m.contact_id AND c.state='active'
  JOIN owner o ON o.owner_id=m.owner_id AND o.state='active'
  LEFT JOIN message_media h ON h.owner_id=m.owner_id AND h.message_id=m.id
  LEFT JOIN attempts a ON a.owner_id=m.owner_id AND a.message_id=m.id AND a.accepted_media_generation=coalesce(h.media_generation,0)
+ LEFT JOIN media_extraction_attempt latest ON latest.owner_id=a.owner_id AND latest.message_id=a.message_id AND latest.attempt_no=a.latest_attempt_no
  LEFT JOIN preparation p ON p.owner_id=m.owner_id AND p.contact_id=m.contact_id
  WHERE m.owner_id=? AND m.contact_id=? AND m.kind='image' AND m.availability='available'
  AND EXISTS(SELECT 1 FROM read_grant g JOIN conversation_binding b ON b.owner_id=g.owner_id AND b.id=g.binding_id
@@ -59,10 +63,15 @@ export function createImageSyncActions():StorageAction[]{return [
   const rows=tx.all(imageSyncWorkSql+'SELECT * FROM work WHERE display_no>? AND next_due<=? ORDER BY display_no LIMIT 64',[...parameters,BigInt(input.after),BigInt(now)]);
   return rows.map((row:StorageRow)=>({messageId:String(row.id),displayNo:String(row.display_no),requestKey:row.last_attempt_at===null
    ?`image_sync_v5_${row.id}_${row.media_generation}`
-   :imageReconcileRequestKey(String(row.id),String(row.media_generation),now)}));
+   :Number(row.retry_count)===0?imageReconcileRequestKey(String(row.id),String(row.media_generation),now)
+   :imageRetryRequestKey(String(row.id),String(row.media_generation),now)}));
  }},
- // 还有尚未试过、只是被准备退避挡住的图片时，才需要定时再醒。已有结果的图片不再排队。
- {name:'media.imageRefreshPending',mode:'read',retryBusy:false,execute:(tx,input:any)=>!!tx.get(imageSyncWorkSql+'SELECT 1 FROM work WHERE retry_count=0 LIMIT 1',scope(input))},
+ {name:'media.imageRefreshPending',mode:'read',retryBusy:false,execute:(tx,input:any)=>!!tx.get(imageSyncWorkSql+'SELECT 1 FROM work WHERE next_due<9223372036854775807 LIMIT 1',scope(input))},
+ // 直接返回最早到期时间；长期退避期间无需每分钟遍历所有联系人。
+ {name:'media.imageRefreshNext',mode:'read',retryBusy:false,execute:(tx,input:any)=>{
+  const row=tx.get(imageSyncWorkSql+'SELECT min(next_due) next_due FROM work WHERE next_due<9223372036854775807',scope(input));
+  return row?.next_due==null?null:Number(row.next_due);
+ }},
  // 用户打开聊天、看到这些尚未保存的图片时，各再试一次；资格与来源核验沿用同一份待办定义。
  {name:'media.imageViewTargets',mode:'read',retryBusy:false,execute:(tx,input:any)=>{
   const parameters=scope(input),now=input.now??Date.now();
