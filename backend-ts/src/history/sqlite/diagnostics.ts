@@ -7,6 +7,7 @@ const states:Record<string,string>={complete:'completed',caught_up:'ready',waiti
 export function syncReason(code:string|null,phase:string):string {
  if(code==='read_not_authorized'||code==='read_eligibility_stale')return 'authorization_revoked';
  if(code==='history_native_timeout')return 'timeout';
+ if(code==='history_source_temporarily_unavailable')return 'failed';
  if(code==='history_native_cancelled'||code==='history_interrupted'||code==='history_incremental_interrupted')return 'aborted';
  if(code==='history_page_budget_exhausted'||code==='history_tail_baseline_too_large')return 'budget_exhausted';
  if(code&&/source|scope|account|identity|suppression/.test(code))return 'source_changed';

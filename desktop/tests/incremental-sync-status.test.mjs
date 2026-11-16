@@ -43,6 +43,20 @@ const coverage = changes => {
   return { savedHistoryComplete: row.phase === 'complete', ...row };
 };
 
+test('原件暂不可读显示临时失败，不要求重新核验聊天来源', () => {
+  for (const changes of [
+    { phase: 'incomplete', failureCode: 'history_source_temporarily_unavailable' },
+    { incrementalPhase: 'unavailable', incrementalFailureCode: 'history_source_temporarily_unavailable' },
+  ]) {
+    const markup = renderContact(coverage(changes), true, true);
+    assert.match(markup, /暂时读取失败/);
+    assert.doesNotMatch(markup, /聊天来源需要核验|同步状态需要检查/);
+    const detail = renderContact(coverage(changes), true);
+    assert.match(detail, /开启同步时会自动重试/);
+    assert.doesNotMatch(detail, /请检查同步状态与来源核验结果|请查看同步状态与来源核验结果/);
+  }
+});
+
 test('增量状态解析：缺失字段不推断已同步，非法枚举整份失败', () => {
   const parsed = parseSyncReport(base);
   assert.equal(parsed.historyCoverages[0].incrementalPhase, 'blocked');

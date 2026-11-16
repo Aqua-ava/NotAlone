@@ -69,12 +69,12 @@ func (h *notaloneHistorySession) metadataAvatar(ctx context.Context, username st
 	}
 	contact, err := h.server.openDBNoRefresh("contact", "contact.db")
 	if err != nil {
-		return report, notaloneFailure("history_metadata_unavailable")
+		return report, notaloneReadFailure(err, "history_metadata_unavailable")
 	}
 	rows, err := contact.QueryBounded(ctx, 2, "SELECT username,verify_flag FROM contact WHERE username=? LIMIT 2", username)
 	contact.Close()
 	if err != nil || len(rows) != 1 || rowString(rows[0], "username") != username {
-		return report, notaloneFailure("history_identity_unverified")
+		return report, notaloneReadFailure(err, "history_identity_unverified")
 	}
 	verified, known := rows[0]["verify_flag"].(int64)
 	if !known || agentChatType(username, wxkind.ClassifyUsername(username), verified != 0) != "private" {
@@ -92,17 +92,17 @@ func (h *notaloneHistorySession) metadataAvatar(ctx context.Context, username st
 	defer guard.Close()
 	avatarDB, err := h.server.openDBNoRefresh("head_image", "head_image.db")
 	if err != nil {
-		return report, notaloneFailure("history_metadata_unavailable")
+		return report, notaloneReadFailure(err, "history_metadata_unavailable")
 	}
 	defer avatarDB.Close()
 	schema, err := inspectNotaloneTable(ctx, avatarDB, "head_image", "head_image")
 	if err != nil || !notaloneAvatarSchemaVerified(schema) {
-		return report, notaloneFailure("history_metadata_profile_unverified")
+		return report, notaloneReadFailure(err, "history_metadata_profile_unverified")
 	}
 	// 限制读取字节；超限、缺失或非位图均保持空头像，不读取其他联系人。
 	images, err := avatarDB.QueryBounded(ctx, 2, "SELECT image_buffer FROM head_image WHERE username=? AND typeof(image_buffer)='blob' AND length(image_buffer) BETWEEN 1 AND ? LIMIT 2", username, notaloneAvatarByteLimit)
 	if err != nil || len(images) > 1 {
-		return report, notaloneFailure("history_metadata_unavailable")
+		return report, notaloneReadFailure(err, "history_metadata_unavailable")
 	}
 	if len(images) == 1 {
 		if data, ok := images[0]["image_buffer"].([]byte); ok {

@@ -30,6 +30,7 @@ async function fixture(t,{images=false,recovery=false}={}){
  await writeFile(planFile,JSON.stringify({history:'supported'}));
  // 所有认证档、账号、会话和正文均为自建合成值；固定版本仅用于走正式解析与接线。
  const script=`#!${process.execPath}
+ // notalone-raw-source-safety:wechat-raw-source-readonly-v2
 const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline');
 const hash=x=>crypto.createHash('sha256').update(x).digest('hex'),schema=${JSON.stringify(schema)};
 const cli=hash(fs.readFileSync(__filename)),wcdb=hash(fs.readFileSync(${JSON.stringify(wcdbFile)}));
@@ -58,7 +59,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
  process.stdout.write(JSON.stringify({ok:true,data})+'\\n');
 });`;
  await writeFile(executable,script,{mode:0o700});const wcdb=Buffer.from('synthetic-startup-WCDB');await writeFile(wcdbFile,wcdb);
- await writeFile(join(artifact,'manifest.json'),JSON.stringify({formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',signing:'ad-hoc-development',realWechatVerified:false,sharedProcessProtocol:'wechat-shared-process-v1',...(images?{originalImageProtocol:'wechat-original-image-v1',originalImageQualityProof:'wechat-message-image-content-v2'}:{}),cliSha256:hash(script),wcdbSha256:hash(wcdb)}));
+ await writeFile(join(artifact,'manifest.json'),JSON.stringify({formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',historyPatchSha256:'a0fc0989b3d65e5d0b094789df36e8753c3ac675bd1a93fa83534b24e71bf440',rawSourceSafety:'wechat-raw-source-readonly-v2',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',signing:'ad-hoc-development',realWechatVerified:false,sharedProcessProtocol:'wechat-shared-process-v1',...(images?{originalImageProtocol:'wechat-original-image-v1',originalImageQualityProof:'wechat-message-image-content-v2'}:{}),cliSha256:hash(script),wcdbSha256:hash(wcdb)}));
  const storage=await SqliteStorage.open({userData,intent:'create',role:'test'}),databaseId=storage.status.databaseId;await storage.close();
  const hosts=[],routes=[];
  t.after(async()=>{for(const host of hosts.reverse())await host.terminate();await rm(root,{recursive:true,force:true});});

@@ -13,8 +13,9 @@ import (
 
 var boundedBootstrap struct {
 	sync.Mutex
-	path      string
-	interrupt func(uintptr)
+	path              string
+	interrupt         func(uintptr)
+	extendedErrorCode func(uintptr) int32
 }
 
 const notaloneBoundedCellByteLimit = 8 << 20
@@ -55,13 +56,20 @@ func BootstrapBounded(library string) (err error) {
 	if symbolErr != nil {
 		return errors.New("bounded_bootstrap_interrupt_unavailable")
 	}
+	extendedSymbol, symbolErr := purego.Dlsym(handle, "sqlite3_extended_errcode")
+	if symbolErr != nil {
+		return errors.New("bounded_bootstrap_error_code_unavailable")
+	}
 	if Bootstrap(library) != nil {
 		return errors.New("bounded_bootstrap_failed")
 	}
 	var interrupt func(uintptr)
 	purego.RegisterFunc(&interrupt, symbol)
+	var extendedErrorCode func(uintptr) int32
+	purego.RegisterFunc(&extendedErrorCode, extendedSymbol)
 	boundedBootstrap.path = library
 	boundedBootstrap.interrupt = interrupt
+	boundedBootstrap.extendedErrorCode = extendedErrorCode
 	return nil
 }
 
@@ -104,6 +112,9 @@ func (d *DB) QueryBounded(ctx context.Context, maxRows int, sql string, args ...
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		if err := notaloneSQLiteSourceReadError(handle, rc); err != nil {
+			return nil, err
+		}
 		return nil, fmt.Errorf("bounded_query_prepare_failed:%d", rc)
 	}
 	if err := bindArgs(stmt, args); err != nil {
@@ -127,6 +138,9 @@ func (d *DB) QueryBounded(ctx context.Context, maxRows int, sql string, args ...
 			return rows, nil
 		}
 		if rc != SQLITE_ROW {
+			if err := notaloneSQLiteSourceReadError(handle, rc); err != nil {
+				return nil, err
+			}
 			return nil, fmt.Errorf("bounded_query_step_failed:%d", rc)
 		}
 		if len(rows) == maxRows {

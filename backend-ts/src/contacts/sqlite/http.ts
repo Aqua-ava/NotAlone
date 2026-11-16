@@ -15,7 +15,7 @@ const setup=({state,accountId=null,token=null,code=null,extra={}}:SetupInput)=>(
 const detectionFailures = new Set(['wechat_tool_unavailable', 'history_artifact_manifest_missing', 'history_artifact_unverified',
  'history_account_unavailable', 'history_program_version_uncertified', 'history_program_version_unavailable',
  'history_metadata_profile_unverified', 'metadata_identity_unverified', 'metadata_identity_conflict',
- 'history_native_unavailable', 'history_native_timeout', 'history_protocol_invalid', 'history_source_unverified', 'history_source_changed', 'history_scope_changed']);
+ 'history_native_unavailable', 'history_native_timeout', 'history_protocol_invalid', 'history_source_unverified', 'history_source_temporarily_unavailable', 'history_source_changed', 'history_scope_changed']);
 /** 必须由宿主先执行唯一 Bearer/Origin 认证；不接收 owner、SQL 或适配器配置。 */
 export class SqliteContactHttp {
  private readonly service:SqliteContactService;

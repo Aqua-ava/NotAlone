@@ -21,6 +21,12 @@ App 运行目录也位于 `.notalone-builds/`。切换前先用 `pnpm run dev:st
 
 旧组件构建器 `prepare-wechat.mjs` 的存在不恢复第三方组件捆绑分发或 App 发布权限。完整源码、运行目录和本机输出均不提交；App 打包仍按[发布门禁](../README.md#资源构建与发布边界)执行。
 
+## 原库访问安全
+
+所有账号、会话、联系人、消息、图片和头像库统一从首次连接使用只读主库及只读 SHM。原始路径按 `file:` URI 编码，以 `SQLITE_OPEN_URI`、`mode=ro` 和 `readonly_shm=1` 打开；文件名中的 URI 特殊字符不能覆盖这些参数。独立的原库只读 VFS 将 DB、WAL 与主 journal 的打开强制降为只读，并把真实只读 outFlags 返回 SQLite；保留原 Unix 锁及 SHM 实现、临时文件的正常行为。仅主库 mode=ro 仍可能让底层库以读写方式打开 WAL，不能替代该防护。缺少 SHM、无法安全初始化、锁忙或 I/O 暂不可用时停止本次读取并按既有调度重试，不创建旁车，不回退到可写连接、`immutable=1` 或 `nolock=1`。
+
+应用在启动任何原库读取进程前核验制品摘要、`rawSourceSafety: wechat-raw-source-readonly-v2` 及实际二进制安全标记；只有给旧 manifest 添加字段不能获得读取资格。更新制品不恢复授权，也不放宽来源身份核验。原件打开模式、截短和跨进程锁的回归要求见[共享内存崩溃防复发](../../docs/guides/wechat-shm-crash-safety.md)。
+
 ## 账号、许可与共享进程
 
 `notalone-history` 使用有界 JSONL；未知操作、身份或许可不合法时在打开来源前拒绝，不开放 SQL、任意路径、发送或密钥扫描。操作字段与验证以 [notalone_protocol.go](cmd/notalone_protocol.go) 为准。
@@ -44,7 +50,7 @@ App 运行目录也位于 `.notalone-builds/`。切换前先用 `pnpm run dev:st
 
 历史终页返回不透明 `resumeCursor`，后续按 [ADR-133](../../architecture/adr/133-page-delta-private-history-sync.md)的变化页和持久检查点补差，不能描述为每轮完整重扫正文。声明 `durableHistory` 的读取器另支持 [ADR-164](../../architecture/adr/164-resumable-history-slices.md)：`page` 请求 `checkpoint: true` 可在非终页返回独立 `checkpointCursor`，应用同事务接受后才允许切片和恢复。部分点不表示历史完整；恢复重新核验来源并建立新快照，补读未完成身份、已读行变化及待核对缺失。最后未持久片段可能安全回放，旧进程内分页游标不继承；相同身份下不可辨认的原位回滚仍不在保证内。
 
-快照补差读取的原始页（分片 `.db`、`-wal`、`-shm`）句柄随快照持有，直到该快照的 SQLite 连接全部关闭后才关闭。macOS 的 POSIX 劝告锁按“进程＋文件”记录，同一进程对同一文件的任一句柄关闭都会释放该进程在其上的全部锁，使 SQLite 共享内存的存活标记与固定快照的读标记失效；新增对来源文件的额外打开须遵守同一顺序，由 [锁保持测试](cmd/notalone_delta_locks_test.go) 覆盖。
+快照补差的原始页（分片 `.db`、`-wal`、`-shm`）、读盐和来源守卫的额外句柄按文件身份与打开方式复用，并在仍有源 SQLite 连接时保护实际关闭；原库连接全部结束后排空。关闭单个快照不足以证明其他快照的锁已释放。macOS 的 POSIX 劝告锁按“进程＋文件”记录，同一进程对同一文件的任一句柄关闭都会释放该进程在其上的全部锁，使 SQLite 共享内存的存活标记与固定快照的读标记失效。与原库无关的图片守卫及时释放；共用读句柄的读盐使用固定偏移，不共用可变游标。新增原件打开须经过同一生命周期入口，由 [锁保持测试](cmd/notalone_delta_locks_test.go) 和 [原件只读回归](wcdb/notalone_source_readonly_darwin_test.go) 覆盖。
 
 `boundary-snapshot` 使用 `selected-history-boundary-v1`，只枚举所选会话的有界完整身份集合，不读正文或媒体。独立 observer／reader 的采样与读完成证据、精确成员及计数共同组成客户端复验的 manifest；未认证、超限或失证时不能宣称完整清空边界。
 

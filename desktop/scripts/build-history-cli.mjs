@@ -154,7 +154,7 @@ export async function buildHistoryCli(input) {
     wcdbSha256, cliSha256: await hashWechatFile(executable), signing: 'ad-hoc-development', realWechatVerified: false,
     originalImageProtocol:'wechat-original-image-v1',originalImageQualityProof:'wechat-message-image-content-v2',quoteProtocol:'wechat-quote-message-v1',quoteReader:'wechat-quote-normal-tail-v2',quoteInline:'wechat-quote-inline-sync-v1',sharedProcessProtocol:'wechat-shared-process-v1',
     // 单张图片取不到时只拒绝该次 image-open（见 notalone_image.go 的错误分类与 native-client 的封闭可恢复集合）。
-    imageOpenIsolation:'wechat-image-open-local-v1' };
+    imageOpenIsolation:'wechat-image-open-local-v1',rawSourceSafety:'wechat-raw-source-readonly-v2' };
   await writeFile(path.join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
   return manifest;
 }

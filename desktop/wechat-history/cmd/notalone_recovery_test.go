@@ -136,10 +136,11 @@ func TestNotAloneRecoverKnownFileNewTableReadsOnlyNewTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { original.Close() })
-	if err = writer.Exec("PRAGMA journal_mode=WAL"); err != nil {
+	// 只读来源不创建 SHM；合成写者须先实际读取 WAL 数据库以初始化旁车。
+	if err = writer.Exec("PRAGMA journal_mode=WAL;PRAGMA user_version=1"); err != nil {
 		t.Fatal(err)
 	}
-	if err = original.Exec("PRAGMA journal_mode=WAL"); err != nil {
+	if err = original.Exec("PRAGMA journal_mode=WAL;PRAGMA user_version=1"); err != nil {
 		t.Fatal(err)
 	}
 	value, err := h.handle(context.Background(), notaloneHistoryRequest{Operation: "target", Account: h.selected.Account, Conversation: h.selected.Conversation, Consent: "selected-history-v1"})

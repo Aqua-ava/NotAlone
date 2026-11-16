@@ -25,16 +25,16 @@ test('首次同步的完成、撤权及重试可由固定原因和前后状态�
  assert.ok(rows.some(row=>row.durationMs>=0));
  const safe=JSON.stringify(rows);assert.equal(safe.includes(contactId),false);assert.equal(safe.includes('read_not_authorized'),false);
 });
-test('增量瞬时超时记录降级并在明确唤醒后恢复，保持同次读取trace',async t=>{
+for(const failureCode of ['history_native_timeout','history_source_temporarily_unavailable'])test(`增量${failureCode}记录降级并在明确唤醒后恢复，保持同次读取trace`,async t=>{
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-incremental-diag-'))),log=configureDiagnosticLog(root,{proc:'backend',development:true});
  let timeout=true;
  const directory={directory:async()=>({read_enabled:true,bindings:[{contact_id:contactId,binding_id:'binding',grant_id:'grant',selection_generation:'1',status:'active'}]})};
- const history={coverage:async()=>({phase:'complete',incremental:{phase:'ready'}}),synchronizeIncremental:async()=>{if(timeout)throw new StorageFailure('history_native_timeout');return {phase:'complete',incremental:{phase:'ready'}};},stop:async()=>{}};
+ const history={coverage:async()=>({phase:'complete',incremental:{phase:'ready'}}),synchronizeIncremental:async()=>{if(timeout)throw new StorageFailure(failureCode);return {phase:'complete',incremental:{phase:'ready'}};},stop:async()=>{}};
  const coordinator=new IncrementalHistoryCoordinator(directory,history);
  t.after(async()=>{await coordinator.close();await log.close();await rm(root,{recursive:true,force:true});});
  coordinator.wake();await coordinator.waitForIdle();timeout=false;coordinator.wake();await coordinator.waitForIdle();
  await log.flush();const rows=(await readDiagnosticRecords(root)).filter(row=>row.event==='sync.state_changed'&&row.caller==='history_incremental');
- assert.ok(rows.some(row=>row.fromState==='running'&&row.toState==='partial'&&row.reasonCode==='timeout'));
+ assert.ok(rows.some(row=>row.fromState==='running'&&row.toState==='partial'&&row.reasonCode===(failureCode==='history_native_timeout'?'timeout':'failed')));
  assert.ok(rows.some(row=>row.fromState==='running'&&row.toState==='ready'&&row.reasonCode==='completed'));
  const failed=rows.find(row=>row.toState==='partial');assert.ok(rows.some(row=>row.toState==='running'&&row.traceId===failed.traceId));
 });

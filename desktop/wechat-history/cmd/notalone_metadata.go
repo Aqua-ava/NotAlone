@@ -106,7 +106,7 @@ func (n *notaloneSnapshot) observeMetadata(ctx context.Context, kind string) (*n
 			return nil, notaloneFailure("history_snapshot_cancelled")
 		}
 		if err != nil {
-			return nil, notaloneFailure("history_metadata_unavailable")
+			return nil, notaloneReadFailure(err, "history_metadata_unavailable")
 		}
 		if len(rows) == 0 {
 			continue
@@ -115,6 +115,9 @@ func (n *notaloneSnapshot) observeMetadata(ctx context.Context, kind string) (*n
 		observation = &notaloneMetadataObservation{Partition: shard.partition, Table: shard.instance, LocalID: notaloneSnapshotDecimal(row["local_id"]), ServerID: notaloneSnapshotDecimal(row["server_id"]), OriginalType: notaloneSnapshotDecimal(row["local_type"]), Status: notaloneSnapshotDecimal(row["status"]), CreateTime: notaloneSnapshotDecimal(row["create_time"]), Sender: "unknown", StatusSemantics: "unverified", NormalHistory: false, ObservationScope: "single-fixed-snapshot"}
 		if senderID, known := row["real_sender_id"].(int64); known {
 			names, err := shard.reader.QueryBounded(op, 1, "SELECT user_name FROM Name2Id WHERE rowid=? LIMIT 1", senderID)
+			if notaloneIsTemporaryReadFailure(err) {
+				return nil, notaloneReadFailure(err, "history_metadata_unavailable")
+			}
 			if err == nil && len(names) == 1 {
 				switch rowString(names[0], "user_name") {
 				case n.senderOwner:

@@ -1149,7 +1149,7 @@ func (h *notaloneHistorySession) openImageMessage(ctx context.Context, request n
 	rows, err := shard.reader.QueryBounded(ctx, 2, query, int64(notaloneImagePackedInfoByteLimit), int64(notaloneImageXMLByteLimit), localID)
 	if err != nil {
 		// 查询失败（含取消）无法证明只影响这张图片，按读取失败终止。
-		return message, target, notaloneFailure("history_image_read_failed")
+		return message, target, notaloneReadFailure(err, "history_image_read_failed")
 	}
 	if len(rows) != 1 {
 		return message, target, notaloneFailure("history_image_association_unverified")
@@ -1229,7 +1229,7 @@ func (h *notaloneHistorySession) findMessageImageResource(ctx context.Context, m
 	}()
 	db, err := h.server.openDBNoRefresh("message", "message_resource.db")
 	if err != nil {
-		return resource, nil, notaloneFailure("history_image_read_failed")
+		return resource, nil, notaloneReadFailure(err, "history_image_read_failed")
 	}
 	defer db.Close()
 	if resourceGuard.Check() != nil {
@@ -1238,7 +1238,7 @@ func (h *notaloneHistorySession) findMessageImageResource(ctx context.Context, m
 	infoQuery := `SELECT i.message_id,CASE WHEN length(CAST(i.packed_info AS BLOB))<=? THEN i.packed_info ELSE NULL END AS info_packed_info,length(CAST(i.packed_info AS BLOB)) AS info_packed_info_length FROM MessageResourceInfo i JOIN ChatName2Id c ON c.rowid=i.chat_id WHERE c.user_name=? AND i.message_local_type=? AND i.message_create_time=? AND i.message_local_id=? AND i.message_svr_id=? ORDER BY i.message_id DESC LIMIT 3`
 	infoRows, err := db.QueryBounded(ctx, 3, infoQuery, int64(notaloneImagePackedInfoByteLimit), h.selected.Conversation, message.localType, message.createTime, message.localID, message.serverID)
 	if err != nil {
-		return resource, nil, notaloneFailure("history_image_read_failed")
+		return resource, nil, notaloneReadFailure(err, "history_image_read_failed")
 	}
 	zeroFallback := false
 	if len(infoRows) == 0 {
@@ -1247,7 +1247,7 @@ func (h *notaloneHistorySession) findMessageImageResource(ctx context.Context, m
 		// 且必须恰好一行；其缓存 MD5 仍须与消息自身的缓存 MD5 一致（见下方核验），不放宽任何其他条件。
 		infoRows, err = db.QueryBounded(ctx, 3, infoQuery, int64(notaloneImagePackedInfoByteLimit), h.selected.Conversation, message.localType, message.createTime, message.localID, int64(0))
 		if err != nil {
-			return resource, nil, notaloneFailure("history_image_read_failed")
+			return resource, nil, notaloneReadFailure(err, "history_image_read_failed")
 		}
 		zeroFallback = true
 		resource.InfoServerIDZero = len(infoRows) == 1
@@ -1270,7 +1270,7 @@ func (h *notaloneHistorySession) findMessageImageResource(ctx context.Context, m
 		detailQuery := `SELECT resource_id,type AS resource_type_raw,size AS resource_size,status AS resource_status,data_index AS resource_data_index,create_time AS resource_create_time,access_time AS resource_access_time,CASE WHEN length(CAST(packed_info AS BLOB))<=? THEN packed_info ELSE NULL END AS detail_packed_info,length(CAST(packed_info AS BLOB)) AS detail_packed_info_length FROM MessageResourceDetail WHERE message_id=? AND (type & 65535)=1 ORDER BY resource_id LIMIT 33`
 		detailRows, err := db.QueryBounded(ctx, 33, detailQuery, int64(notaloneImagePackedInfoByteLimit), messageID)
 		if err != nil {
-			return resource, nil, notaloneFailure("history_image_read_failed")
+			return resource, nil, notaloneReadFailure(err, "history_image_read_failed")
 		}
 		if len(detailRows) == 0 || len(detailRows) > 32 {
 			return resource, nil, notaloneFailure("history_image_association_unverified")

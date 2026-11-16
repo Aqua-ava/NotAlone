@@ -355,17 +355,17 @@ func newNotaloneSnapshotWithIdleTimeout(ctx context.Context, s *server, selected
 		}
 		reader, e := s.openDBNoRefresh("message", filepath.Base(file))
 		if e != nil {
-			return nil, notaloneFailure("history_shard_unavailable")
+			return nil, notaloneReadFailure(e, "history_shard_unavailable")
 		}
 		shard := &notaloneSnapshotShard{reader: reader, path: file, partition: partition}
 		n.shards = append(n.shards, shard)
 		shard.observer, e = s.openDBNoRefresh("message", filepath.Base(file))
 		if e != nil {
-			return nil, notaloneFailure("history_shard_unavailable")
+			return nil, notaloneReadFailure(e, "history_shard_unavailable")
 		}
 		presence, e := reader.QueryBounded(life, 2, "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?", n.table)
 		if e != nil {
-			return nil, notaloneFailure("history_schema_unavailable")
+			return nil, notaloneReadFailure(e, "history_schema_unavailable")
 		}
 		schema, hasExpected := expected[partition]
 		shard.present = len(presence) == 1
@@ -401,7 +401,7 @@ func newNotaloneSnapshotWithIdleTimeout(ctx context.Context, s *server, selected
 	}
 	for _, shard := range n.shards {
 		if _, e := shard.reader.QueryBounded(life, 1, "BEGIN"); e != nil {
-			return nil, notaloneFailure("history_snapshot_unavailable")
+			return nil, notaloneReadFailure(e, "history_snapshot_unavailable")
 		}
 		query := "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?"
 		args := []any{n.table}
@@ -411,7 +411,7 @@ func newNotaloneSnapshotWithIdleTimeout(ctx context.Context, s *server, selected
 		}
 		rows, e := shard.reader.QueryBounded(life, 1, query, args...)
 		if e != nil {
-			return nil, notaloneFailure("history_snapshot_unavailable")
+			return nil, notaloneReadFailure(e, "history_snapshot_unavailable")
 		}
 		if !shard.present && len(rows) != 0 {
 			return nil, notaloneFailure("history_schema_changed")
@@ -485,7 +485,7 @@ func (n *notaloneSnapshot) renewIdle() error {
 func notaloneSnapshotDataVersion(ctx context.Context, db *wcdb.DB) (int64, error) {
 	rows, err := db.QueryBounded(ctx, 1, "PRAGMA data_version")
 	if err != nil || len(rows) != 1 {
-		return 0, notaloneFailure("history_snapshot_unavailable")
+		return 0, notaloneReadFailure(err, "history_snapshot_unavailable")
 	}
 	version, ok := rows[0]["data_version"].(int64)
 	if !ok {
@@ -606,7 +606,7 @@ func (n *notaloneSnapshot) Page(ctx context.Context, cursor string, inlineQuotes
 		args = append(args, int64(remaining+1))
 		rows, e := shard.reader.QueryBounded(op, remaining+1, query, args...)
 		if e != nil {
-			return page, notaloneFailure("history_page_read_failed")
+			return page, notaloneReadFailure(e, "history_page_read_failed")
 		}
 		exhausted := len(rows) <= remaining
 		if n.deltaOnly {
@@ -727,6 +727,9 @@ func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnaps
 		}
 		if senderID, ok := row["real_sender_id"].(int64); (n.profile.StatusSemanticsVerified || quarantine) && ok {
 			names, e := shard.reader.QueryBounded(ctx, 1, "SELECT user_name FROM Name2Id WHERE rowid=? LIMIT 1", senderID)
+			if wcdb.IsSourceTemporarilyUnavailable(e) {
+				return nil, notaloneReadFailure(e, "history_page_read_failed")
+			}
 			if e == nil && len(names) == 1 {
 				switch rowString(names[0], "user_name") {
 				case n.senderOwner:
@@ -769,7 +772,7 @@ func (n *notaloneSnapshot) projectRows(ctx context.Context, shard *notaloneSnaps
 		args := append([]any{int64(notaloneTextByteLimit)}, bodyIDs...)
 		bodies, e := shard.reader.QueryBounded(ctx, len(bodyIDs), query, args...)
 		if e != nil {
-			return nil, notaloneFailure("history_page_read_failed")
+			return nil, notaloneReadFailure(e, "history_page_read_failed")
 		}
 		for _, body := range bodies {
 			id, ok := body["local_id"].(int64)
@@ -838,9 +841,9 @@ func (n *notaloneSnapshot) closeLocked() error {
 			shard.observer = nil
 		}
 	}
-	// 连接已关闭、其锁已释放，此时关闭原始页分析的句柄不再影响 SQLite 的锁。
+	// 当前快照已结束；其他源连接仍活跃时，注册表继续保护共享原件 FD。
 	for _, source := range n.rawSources {
-		_ = source.Close()
+		_ = wcdb.CloseSourceFile(source)
 	}
 	n.rawSources = nil
 	if n.guard.Close() != nil {

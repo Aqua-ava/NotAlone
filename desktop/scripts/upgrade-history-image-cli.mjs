@@ -1,3 +1,4 @@
+import { hasRawSourceSafety, rawSourceSafetyProtocol } from '../../backend-ts/src/history/wechat/raw-source-safety.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { link, lstat, open, readdir, realpath, unlink } from 'node:fs/promises';
@@ -216,6 +217,14 @@ export function compareUpgradeScopeEvidence(before, after, options = {}) {
   }
   return { status: 'verified', scopeCount: prior.size };
 }
+
+// 原库安全升级只开放连接生命周期与可恢复技术错误的固定实现文件；每份仍逐字节绑定摘要。
+const rawSourceSafetyFiles = new Set([
+  'internal/wcdb/wcdb.go','internal/wcdb/resource_test.go','internal/wcdb/notalone_read.go','internal/wcdb/notalone_read_test.go',
+  'internal/wcdb/notalone_source_readonly.go','internal/wcdb/notalone_source_files.go','internal/wcdb/notalone_source_vfs.go',
+  'internal/wcdb/notalone_source_readonly_darwin_test.go','internal/wcdb/notalone_source_error.go','internal/wcdb/notalone_source_error_test.go',
+  ...['source_error','source_error_test','snapshot','history','protocol','account_metadata','delta','delta_locks_test','watch_darwin','quote','quote_inline','image','contact_avatar','recovery','recovery_test','boundary','metadata','test_metadata'].map(name=>`cmd/wechat-cli/notalone_${name}.go`),
+]);
 
 const productionPolicy = Object.freeze({
   oldName: 'true-delta-20261031-c2',
@@ -653,6 +662,165 @@ const localContactAvatarPolicy=Object.freeze({
  }),
 });
 
+// 原始 DB/WAL/SHM 只读及跨快照句柄生命周期的固定安全升级；仅静态迁移来源别名。
+const rawSourceSafetyUpgradePolicy=Object.freeze({
+  "oldName": "local-contact-avatar-20261114-v2",
+  "newName": "local-shm-readonly-20261116-v2",
+  "commonManifest": {
+    "formatVersion": 1,
+    "kind": "notalone-history-cli-development",
+    "architecture": "arm64",
+    "version": "2.0.1-rc.5",
+    "sourceCommit": "795071fa0591da5fc2c6ab94a70f22ccd93ef06c",
+    "sourceTree": "5d617ff3250c27fd9b33a60cb0182e153c521057",
+    "sourceLockSha256": "ecb388fc62750b6f89d2f6d80792811c8b4d4514fa14def9ca702d017d20744a",
+    "goVersion": "1.26.5",
+    "goArchiveSha256": "efb87ff28af9a188d0536ef5d42e63dd52ba8263cd7344a993cc48dd11dedb6a",
+    "readonlyPatchSha256": "c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa",
+    "historyPatchSha256": "a0fc0989b3d65e5d0b094789df36e8753c3ac675bd1a93fa83534b24e71bf440",
+    "wcdbSha256": "4f05cafc4626a142afca1818f0a88c4092a13d5f4c83e30cd5125b558ba0417d",
+    "signing": "ad-hoc-development",
+    "realWechatVerified": false
+  },
+  "oldCliSha256": "ac7cd942f5652bc65b1bfb6b3159b23209d92ce201a963bdf9ee755451dfee0b",
+  "newCliSha256": "3f4320870faf7f47236e1e30216e096d340b23d0f5b85ea39cfd3739d52eaa0a",
+  "oldOverlaySha256": "66295181948dd2c996ee3d2d27f7c012dd3a31d352d73857319233fd66662472",
+  "newOverlaySha256": "bfda5c2ec30d91d8e287bdf0530ff415d9683cbb220cc15d6d70ba6c27ffc854",
+  "oldHistoryPatchSha256": "3f862837a6fed12296456c06beeea9c26eda64e7a1751c894c18c4cad2ecebfa",
+  "oldImageProtocol": "wechat-original-image-v1",
+  "newImageProtocol": "wechat-original-image-v1",
+  "oldImageQualityProof": "wechat-message-image-content-v2",
+  "newImageQualityProof": "wechat-message-image-content-v2",
+  "oldQuoteProtocol": "wechat-quote-message-v1",
+  "newQuoteProtocol": "wechat-quote-message-v1",
+  "oldQuoteReader": "wechat-quote-normal-tail-v2",
+  "newQuoteReader": "wechat-quote-normal-tail-v2",
+  "oldQuoteInline": "wechat-quote-inline-sync-v1",
+  "newQuoteInline": "wechat-quote-inline-sync-v1",
+  "oldSharedProcessProtocol": "wechat-shared-process-v1",
+  "newSharedProcessProtocol": "wechat-shared-process-v1",
+  "oldImageOpenIsolation": "wechat-image-open-local-v1",
+  "newImageOpenIsolation": "wechat-image-open-local-v1",
+  "newRawSourceSafety": "wechat-raw-source-readonly-v2",
+  "identityFiles": {
+    "cmd/wechat-cli/notalone_identity_aliases.go": "a2060c261101e537a477b16e8ea706c7ccb1e90bbc1c99ebb203b23c9681193c",
+    "cmd/wechat-cli/notalone_watch_darwin.go": "88f8955abe91ef5d59dfefeea031cb6088a3ae9a6a71b67efa63008943ca2027",
+    "cmd/wechat-cli/notalone_history.go": "735ea75af0e2202e40d7cce08a2501b9e4bd5bf855077427bb8337ff34d4ca4f",
+    "cmd/wechat-cli/notalone_snapshot.go": "5d93972f4c187632f1fa31e760c90e8494b72d2d01d2ee786e2d03b9feb874e4",
+    "cmd/wechat-cli/notalone_account_metadata.go": "934b33f197171a3eb4b0ccaf38ed0bf43996efd0fb761343360f7926acb1a78d"
+  },
+  "protocolOldSha256": "e24adbba5e1aeb1cbedfb6c767c607c02902048f11d12b4e375884e5f7b6cac2",
+  "protocolNewSha256": "3391305ff82d8c1426115ba34b1385444ccd53701eade510ef1348a9385ad27d",
+  "oldImageSha256": "4a53dce004bccb757e94fb669039eadddde85cd63619280c5b1e63af47efdd8d",
+  "oldImageTestSha256": "70277c9183e8d7ee035ad93e82ee2d75c9a1093446b684c2c0c5b385a671423f",
+  "imageSha256": "ffd00fa6ec1026be1c268c490bb5fa05c7c4c352e4505d6bd9114605d171f622",
+  "imageTestSha256": "70277c9183e8d7ee035ad93e82ee2d75c9a1093446b684c2c0c5b385a671423f",
+  "readonlyTestSha256": "a534c8322564cb5ea409fe689aa775e1f5f4d59354ec63ec6be62f31bf0e02ce",
+  "sourceChanges": {
+    "cmd/wechat-cli/notalone_account_metadata.go": {
+      "old": "934b33f197171a3eb4b0ccaf38ed0bf43996efd0fb761343360f7926acb1a78d",
+      "new": "3144bf8d50b36c4881ed1bed34345752de857c1b682af9761dc2c42c70021c02"
+    },
+    "cmd/wechat-cli/notalone_boundary.go": {
+      "old": "dcd86fb72496be8e49f1fa24d82938279b849df080119062e0181907c9f5b181",
+      "new": "e43d8205b7c7e35393c293ff4f625955c501b341ddcb26071076704c88a5d728"
+    },
+    "cmd/wechat-cli/notalone_contact_avatar.go": {
+      "old": "e15e2635b63669d5e07545ff14aaa22e123da04510f98ca933af71a7e39e2797",
+      "new": "4c806d9cc31474f937b4d8b949d8b0b65ce4e49f02f0912389a34ee16a95572a"
+    },
+    "cmd/wechat-cli/notalone_delta.go": {
+      "old": "ea51a68edae960c8004da2d4bfba48999c61c563807fcf9c2e6466d47f1ad138",
+      "new": "8047c2aac2e596502e7fc5be545b788380fa1d5f1e010e096b28709378b77611"
+    },
+    "cmd/wechat-cli/notalone_delta_locks_test.go": {
+      "old": "0e7730864c4dc86d92af624494deab19d1b4f4736f11ec2d14fb69c5607a3ccd",
+      "new": "e6609e293536e6220238b57d90f567b54d321f5d573ba6722cec8405b22e9104"
+    },
+    "cmd/wechat-cli/notalone_history.go": {
+      "old": "735ea75af0e2202e40d7cce08a2501b9e4bd5bf855077427bb8337ff34d4ca4f",
+      "new": "94fdbee38158124ec35e721b34dfdaf39c65633f6a0342b01fc749bdc92ad5f5"
+    },
+    "cmd/wechat-cli/notalone_metadata.go": {
+      "old": "6eaf883d66aa4f1050b750da6033c7c8b5a891f644eed06df5eb74c9ee2f85e9",
+      "new": "794646d7383aa16512fd7d8dd9bf463d3fccd4bf5cf85e09884d2d788bf01b5b"
+    },
+    "cmd/wechat-cli/notalone_quote.go": {
+      "old": "12097d887c1b01f079bf5d90871f8b48a86736e2e2193c4c5d0e94fd6ab95f9d",
+      "new": "7fcf9874e75978d867fc22ad0ee6630b6199ddec8656293b858a950e3c7d7dac"
+    },
+    "cmd/wechat-cli/notalone_quote_inline.go": {
+      "old": "22786a35d6187ff689e09bb355ae26d855a7bbea107ad1491163f1f6ad110ef4",
+      "new": "b1a3c6cb7bf0db155f6fdbd6cd0071858a8e2994fda44b51d2ce2e6069dc8265"
+    },
+    "cmd/wechat-cli/notalone_recovery.go": {
+      "old": "0cfe15b70cec4ee5d3945869963c03c48ff4c823a9aec8d3e3f15003c344f3c4",
+      "new": "2fe5982811ea4cd66eb4ed43f6c44898d147a611eb8aba259b178afe582aa6d0"
+    },
+    "cmd/wechat-cli/notalone_recovery_test.go": {
+      "old": "3e2756e066f722defcb893a4d403d1033639828f94a891c0887286dea36de6ed",
+      "new": "3c4a8c8dc4e118cc19105bc7ead3f2178f0729f3a25d112e39f15713e581b040"
+    },
+    "cmd/wechat-cli/notalone_snapshot.go": {
+      "old": "5d93972f4c187632f1fa31e760c90e8494b72d2d01d2ee786e2d03b9feb874e4",
+      "new": "29a6903400c10ff041ce2222b69e9e34e32ed6b6ccfcd4a237373610f119b51e"
+    },
+    "cmd/wechat-cli/notalone_source_error.go": {
+      "old": null,
+      "new": "ed3ae945e9441acf214940076279b2d6ce009b5b169b1e7d3ed2c0a038c08205"
+    },
+    "cmd/wechat-cli/notalone_source_error_test.go": {
+      "old": null,
+      "new": "c54b6ccbbee8781677651fc85b11238ccbe16a1bf4c9305f8bc3750087958b9a"
+    },
+    "cmd/wechat-cli/notalone_test_metadata.go": {
+      "old": "96743f848ce441a7edddaaf20466a796b8808df4c41b850a1facae80c226f5b1",
+      "new": "84a2ccdaa9c11fd72bd17123ed59f27cedcd746694a8efcaa38fcfd53c13a368"
+    },
+    "cmd/wechat-cli/notalone_watch_darwin.go": {
+      "old": "88f8955abe91ef5d59dfefeea031cb6088a3ae9a6a71b67efa63008943ca2027",
+      "new": "5d8ca2a6426e842b567d94ba67ef9d4a518e0db55f31ed64dca9b405439c8142"
+    },
+    "internal/wcdb/notalone_read.go": {
+      "old": "b3f8a7b2d44a4037fd718ba0cc98a1ca8caf46f43a6461ab692a50ff6a00898d",
+      "new": "36b40192e11971bf90b34abfc1a70aec8e673b208d1a4dde1849f20c65562d5a"
+    },
+    "internal/wcdb/notalone_source_error.go": {
+      "old": null,
+      "new": "da0e1cb9e9bda557fe7ff79aaf28fab4d42dcccac713c26755af3e096462bf1f"
+    },
+    "internal/wcdb/notalone_source_error_test.go": {
+      "old": null,
+      "new": "29fe630d77587f946bf097d1fd3fea9f5b300c5680c4c20174a6586bb53b7ec4"
+    },
+    "internal/wcdb/notalone_source_files.go": {
+      "old": null,
+      "new": "244dd7844b1a99abc6e275e24252062e2f20c5cb4e89778f79af515cdcbcf946"
+    },
+    "internal/wcdb/notalone_source_readonly.go": {
+      "old": null,
+      "new": "f6b9cdcc0e2044c51b999af8696c7c366f4700a2ce9b7dcc070c0f800b11ca03"
+    },
+    "internal/wcdb/notalone_source_readonly_darwin_test.go": {
+      "old": null,
+      "new": "97d852e665db762d74abe5d3949dbbb2c6adf6224e064e01923e1f180cc7bab3"
+    },
+    "internal/wcdb/notalone_source_vfs.go": {
+      "old": null,
+      "new": "505492388b1fdad472f182b75d6bd1a7d3bf421f44a8788830dfcad10dfb6648"
+    },
+    "internal/wcdb/resource_test.go": {
+      "old": "af30a87c29502dbb3d4359e50b7954f704b54654797ff31da4450ba437f58589",
+      "new": "171ead053fdcd4d3f164bc17ac59c89069aa361fe96a0d43ebb77fb0c5c4baa6"
+    },
+    "internal/wcdb/wcdb.go": {
+      "old": "e69a31fa5d2966ab7ef21ebeb6a135699613c56bf89cecb07ea6e5a9218e9f13",
+      "new": "1c47afece02283d7dc0d526573a8050ee51bb85aae1de5e4559fc0dc879a25e2"
+    }
+  },
+  "identityAlgorithmSha256": "7e0a35f7517250b45cd0a3715c1eb2ab5666896925b44826ad57ae3e99cfcfea"
+});
+
 function exactKeys(value, keys, code) {
   if (!isObject(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) fail(code);
 }
@@ -823,7 +991,8 @@ function assertSourcePair(oldFiles, newFiles, policy) {
   const permitted = new Set([protocol, image, imageTest]);
   for(const [name,pair] of Object.entries(policy.sourceChanges??{})){
     // 每项扩展只开放对应固定源码；每份仍绑定旧、新摘要，不接受任意身份源码变化。
-    const allowed=policy.snapshotHandleLifetime==='sqlite-snapshot-source-handles-v1'&&/^cmd\/wechat-cli\/notalone_(?:delta(?:_locks_test)?|snapshot)\.go$/.test(name)
+    const allowed=policy.newRawSourceSafety===rawSourceSafetyProtocol&&rawSourceSafetyFiles.has(name)
+      ||policy.snapshotHandleLifetime==='sqlite-snapshot-source-handles-v1'&&/^cmd\/wechat-cli\/notalone_(?:delta(?:_locks_test)?|snapshot)\.go$/.test(name)
       ||/^cmd\/wechat-cli\/notalone_quote(?:_[a-z0-9]+)*\.go$/.test(name)
       ||policy.newQuoteInline==='wechat-quote-inline-sync-v1'&&/^cmd\/wechat-cli\/notalone_(?:snapshot|tail)(?:_test)?\.go$/.test(name)
       ||policy.newSharedProcessProtocol==='wechat-shared-process-v1'&&/^cmd\/wechat-cli\/notalone_(?:account_metadata|selection)(?:_test)?\.go$/.test(name)
@@ -909,6 +1078,8 @@ function manifestForSide(policy, side) {
   return { ...policy.commonManifest,
     overlaySha256: isNew ? policy.newOverlaySha256 : policy.oldOverlaySha256,
     cliSha256: isNew ? policy.newCliSha256 : policy.oldCliSha256,
+    ...(!isNew&&policy.oldHistoryPatchSha256?{historyPatchSha256:policy.oldHistoryPatchSha256}:{}),
+    ...((isNew?policy.newRawSourceSafety:policy.oldRawSourceSafety)?{rawSourceSafety:isNew?policy.newRawSourceSafety:policy.oldRawSourceSafety}:{}),
     ...((isNew ? policy.newImageProtocol : policy.oldImageProtocol)
       ? { originalImageProtocol: isNew ? policy.newImageProtocol : policy.oldImageProtocol } : {}),
     ...((isNew ? policy.newImageQualityProof : policy.oldImageQualityProof)
@@ -925,6 +1096,8 @@ export function createUpgradeImageCliTools({ repositoryRoot, policy, afterReceip
     || afterReceiptPublished !== undefined && typeof afterReceiptPublished !== 'function') {
     fail('history_image_upgrade_arguments_invalid');
   }
+  if (policy.newRawSourceSafety !== undefined && policy.newRawSourceSafety !== rawSourceSafetyProtocol
+    || policy.oldHistoryPatchSha256 !== undefined && (policy.newRawSourceSafety !== rawSourceSafetyProtocol || !hashPattern.test(policy.oldHistoryPatchSha256))) fail('history_image_upgrade_policy_invalid');
   if (identityAlgorithmDigest(policy) !== policy.identityAlgorithmSha256) fail('history_image_upgrade_policy_invalid');
 
   async function prepareAliases({ fromRoot, toRoot, accountKey, dbRoot } = {}) {
@@ -974,7 +1147,7 @@ export function createUpgradeImageCliTools({ repositoryRoot, policy, afterReceip
 
     if (digest(lockBytes) !== policy.commonManifest.sourceLockSha256 || digest(historyPatchBytes) !== policy.commonManifest.historyPatchSha256
       || digest(readonlyPatchBytes) !== policy.commonManifest.readonlyPatchSha256 || digest(readonlyTestBytes) !== policy.readonlyTestSha256
-      || digest(oldPatchBytes) !== policy.commonManifest.historyPatchSha256 || digest(newPatchBytes) !== policy.commonManifest.historyPatchSha256
+      || digest(oldPatchBytes) !== (policy.oldHistoryPatchSha256??policy.commonManifest.historyPatchSha256) || digest(newPatchBytes) !== policy.commonManifest.historyPatchSha256
       || digest(oldReadonlyBytes) !== policy.commonManifest.readonlyPatchSha256 || digest(newReadonlyBytes) !== policy.commonManifest.readonlyPatchSha256) {
       fail('history_image_upgrade_patch_mismatch');
     }
@@ -996,6 +1169,7 @@ export function createUpgradeImageCliTools({ repositoryRoot, policy, afterReceip
     const newManifest = parseStrictJson(newManifestBytes, 'history_image_upgrade_manifest_invalid');
     if (canonical(oldManifest) !== canonical(manifestForSide(policy, 'old'))
       || canonical(newManifest) !== canonical(manifestForSide(policy, 'new'))) fail('history_image_upgrade_manifest_mismatch');
+    if (policy.newRawSourceSafety === rawSourceSafetyProtocol && !hasRawSourceSafety(newManifest,newCliBytes)) fail('history_image_upgrade_artifact_mismatch');
     if (digest(oldCliBytes) !== oldManifest.cliSha256 || digest(newCliBytes) !== newManifest.cliSha256
       || digest(oldWcdbBytes) !== oldManifest.wcdbSha256 || digest(newWcdbBytes) !== newManifest.wcdbSha256
       || oldManifest.wcdbSha256 !== newManifest.wcdbSha256 || oldManifest.wcdbSha256 !== policy.commonManifest.wcdbSha256) {
@@ -1078,7 +1252,10 @@ const localIdRecoveryTools=createUpgradeImageCliTools({repositoryRoot,policy:loc
 const imageMainFailureTools=createUpgradeImageCliTools({repositoryRoot,policy:imageMainFailurePolicy});
 const imageDuplicateResourceTools=createUpgradeImageCliTools({repositoryRoot,policy:imageDuplicateResourcePolicy});
 const localContactAvatarTools=createUpgradeImageCliTools({repositoryRoot,policy:localContactAvatarPolicy});
-export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',localContactAvatarPolicy.oldName)
+const rawSourceSafetyUpgradeTools=createUpgradeImageCliTools({repositoryRoot,policy:rawSourceSafetyUpgradePolicy});
+export const prepareAliases = input => input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',rawSourceSafetyUpgradePolicy.oldName)
+ &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',rawSourceSafetyUpgradePolicy.newName)
+ ?rawSourceSafetyUpgradeTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',localContactAvatarPolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',localContactAvatarPolicy.newName)
  ?localContactAvatarTools.prepareAliases(input):input?.fromRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageDuplicateResourcePolicy.oldName)
  &&input?.toRoot===path.join(repositoryRoot,'local-tools/wx-cli/.notalone-builds',imageDuplicateResourcePolicy.newName)

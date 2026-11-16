@@ -109,7 +109,7 @@ func (h *notaloneHistorySession) inspectAccountSchema(ctx context.Context) (repo
 		}
 		db, e := h.server.openDBNoRefresh(part.dir, part.file)
 		if e != nil {
-			return report, notaloneFailure("history_metadata_unavailable")
+			return report, notaloneReadFailure(e, "history_metadata_unavailable")
 		}
 		schema, e := inspectNotaloneTable(ctx, db, part.table, partition)
 		db.Close()
@@ -196,12 +196,12 @@ func (h *notaloneHistorySession) metadataAccount(ctx context.Context) (report no
 			// 只证明固定配置账号可读，不投影username/列表/摘要，也不证明微信前台登录。
 			db, e := h.server.openDBNoRefresh("session", "session.db")
 			if e != nil {
-				return report, notaloneFailure("history_metadata_unavailable")
+				return report, notaloneReadFailure(e, "history_metadata_unavailable")
 			}
 			_, e = db.QueryBounded(ctx, 1, "SELECT 1 AS readable FROM SessionTable LIMIT 1")
 			db.Close()
 			if e != nil {
-				return report, notaloneFailure("history_metadata_unavailable")
+				return report, notaloneReadFailure(e, "history_metadata_unavailable")
 			}
 			after, e := h.inspectAccountSchema(ctx)
 			if e != nil {
@@ -226,16 +226,16 @@ func (h *notaloneHistorySession) metadataSessions(ctx context.Context) (report n
 	}
 	session, err := h.server.openDBNoRefresh("session", "session.db")
 	if err != nil {
-		return report, notaloneFailure("history_metadata_unavailable")
+		return report, notaloneReadFailure(err, "history_metadata_unavailable")
 	}
 	defer session.Close()
 	rows, err := session.QueryBounded(ctx, 5000, "SELECT username FROM SessionTable WHERE is_hidden=0 LIMIT 5001")
 	if err != nil {
-		return report, notaloneFailure("history_metadata_unavailable")
+		return report, notaloneReadFailure(err, "history_metadata_unavailable")
 	}
 	contact, err := h.server.openDBNoRefresh("contact", "contact.db")
 	if err != nil {
-		return report, notaloneFailure("history_metadata_unavailable")
+		return report, notaloneReadFailure(err, "history_metadata_unavailable")
 	}
 	defer contact.Close()
 	seen := map[string]bool{}
@@ -252,7 +252,7 @@ func (h *notaloneHistorySession) metadataSessions(ctx context.Context) (report n
 		}
 		contacts, e := contact.QueryBounded(ctx, 2, "SELECT username,verify_flag,COALESCE(NULLIF(remark,''),NULLIF(nick_name,''),username) AS display_name FROM contact WHERE username=? LIMIT 2", username)
 		if e != nil || len(contacts) != 1 || rowString(contacts[0], "username") != username {
-			return report, notaloneFailure("history_identity_unverified")
+			return report, notaloneReadFailure(e, "history_identity_unverified")
 		}
 		verified, known := contacts[0]["verify_flag"].(int64)
 		displayName := rowString(contacts[0], "display_name")
@@ -297,16 +297,16 @@ func (h *notaloneHistorySession) metadataAllSessions(ctx context.Context, limit 
 	}
 	session, err := h.server.openDBNoRefresh("session", "session.db")
 	if err != nil {
-		return report, notaloneFailure("history_metadata_unavailable")
+		return report, notaloneReadFailure(err, "history_metadata_unavailable")
 	}
 	defer session.Close()
 	rows, err := session.QueryBounded(ctx, 5000, "SELECT username FROM SessionTable WHERE COALESCE(is_hidden,0)=0 ORDER BY sort_timestamp DESC,username DESC LIMIT 5001")
 	if err != nil {
-		return report, notaloneFailure("history_metadata_unavailable")
+		return report, notaloneReadFailure(err, "history_metadata_unavailable")
 	}
 	contact, err := h.server.openDBNoRefresh("contact", "contact.db")
 	if err != nil {
-		return report, notaloneFailure("history_metadata_unavailable")
+		return report, notaloneReadFailure(err, "history_metadata_unavailable")
 	}
 	defer contact.Close()
 	result := []notaloneAllSessionMetadata{}
@@ -324,7 +324,7 @@ func (h *notaloneHistorySession) metadataAllSessions(ctx context.Context, limit 
 		matched := strings.Contains(normalize(username), needle)
 		contacts, e := contact.QueryBounded(ctx, 2, "SELECT username,verify_flag,remark,nick_name,alias FROM contact WHERE username=? LIMIT 2", username)
 		if e != nil {
-			return report, notaloneFailure("history_metadata_unavailable")
+			return report, notaloneReadFailure(e, "history_metadata_unavailable")
 		}
 		if len(contacts) > 1 {
 			return report, notaloneFailure("history_identity_ambiguous")

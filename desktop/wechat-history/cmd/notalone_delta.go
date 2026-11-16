@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"syscall"
+
+	"github.com/r266-tech/wx-cli/v2/internal/wcdb"
 )
 
 type notaloneDeltaShardState struct {
@@ -17,10 +19,9 @@ type notaloneDeltaShardState struct {
 	Names string                 `json:"names"`
 }
 
-// 原始页分析的 db／-wal／-shm 句柄必须留到该快照的 SQLite 连接全部关闭之后才能关闭：
-// macOS 的 POSIX 劝告锁按“进程＋文件”记录，同一进程对同一文件的任一句柄关闭都会释放该进程在此文件上的全部锁，
-// 包括 SQLite 连接持有的共享内存存活标记与固定快照的读标记，让其他进程把仍在使用的 -shm 当作无人使用。
-// 因此这里只登记，由 closeLocked 在关闭 reader／observer 之后统一关闭。调用者须持有 n.mu。
+// 原始页分析的 db／-wal／-shm 句柄先归属当前快照；释放时由 wcdb 的进程级注册表
+// 等全部源 SQLite 连接关闭后再实际关闭，避免一个快照释放另一个快照的 POSIX 锁。
+// 同一文件的额外只读 FD 按文件身份共享，连续图片或元数据读取不会累积待关句柄。
 func (n *notaloneSnapshot) retainRawSource(f *os.File) {
 	if f != nil {
 		n.rawSources = append(n.rawSources, f)
@@ -28,17 +29,16 @@ func (n *notaloneSnapshot) retainRawSource(f *os.File) {
 }
 
 func notaloneOpenDeltaFile(path string, optional bool) (*os.File, int64, error) {
-	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+	f, err := wcdb.OpenSourceFile(path, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC)
 	if optional && os.IsNotExist(err) {
 		return nil, 0, nil
 	}
 	if err != nil {
 		return nil, 0, notaloneFailure("history_delta_source_unavailable")
 	}
-	f := os.NewFile(uintptr(fd), path)
 	st, err := f.Stat()
 	if err != nil || !st.Mode().IsRegular() || st.Size() < 0 {
-		f.Close()
+		wcdb.CloseSourceFile(f)
 		return nil, 0, notaloneFailure("history_delta_source_unavailable")
 	}
 	return f, st.Size(), nil
@@ -70,7 +70,7 @@ func (n *notaloneSnapshot) initializeDelta(ctx context.Context, s *server, prior
 		}
 		rootRows, e := shard.reader.QueryBounded(ctx, 1, "SELECT rootpage FROM sqlite_master WHERE type='table' AND name=?", n.table)
 		if e != nil || len(rootRows) != 1 {
-			return notaloneFailure("history_schema_unavailable")
+			return notaloneReadFailure(e, "history_schema_unavailable")
 		}
 		root, ok := rootRows[0]["rootpage"].(int64)
 		if !ok || root < 1 || root > int64(^uint32(0)) {
@@ -78,7 +78,7 @@ func (n *notaloneSnapshot) initializeDelta(ctx context.Context, s *server, prior
 		}
 		names, e := shard.reader.QueryBounded(ctx, 4, "SELECT rowid,user_name FROM Name2Id WHERE user_name IN (?,?) ORDER BY rowid", n.senderOwner, n.selected.Conversation)
 		if e != nil {
-			return notaloneFailure("history_identity_unverified")
+			return notaloneReadFailure(e, "history_identity_unverified")
 		}
 		encoded, _ := json.Marshal(names)
 		namesHash := notaloneHash(string(encoded))

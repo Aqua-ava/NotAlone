@@ -4,7 +4,7 @@ import { fixture, record } from './sqlite-clear-support.mjs';
 import { SqliteHistoryService } from '../src/history/sqlite/service.ts';
 import { FirstHistoryCoordinator } from '../src/history/sqlite/coordinator.ts';
 
-for (const checkAction of ['history.guardCheck', 'history.acceptPage']) for (const failureCode of ['history_native_timeout', 'history_source_unverified', 'history_source_changed']) {
+for (const checkAction of ['history.guardCheck', 'history.acceptPage']) for (const failureCode of ['history_native_timeout', 'history_source_unverified', 'history_source_temporarily_unavailable', 'history_source_changed']) {
   test(`首次页${checkAction}期间${failureCode}保留真实原因及对应恢复边界`, { timeout: 5000 }, async t => {
     const cleanup = [], f = await fixture({ after: callback => cleanup.push(callback) }), storage = f.current.storage;
     let channels = 0, current;

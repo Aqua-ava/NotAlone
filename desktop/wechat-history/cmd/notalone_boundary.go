@@ -219,7 +219,7 @@ func notaloneBoundaryMembers(ctx context.Context, snapshot *notaloneSnapshot, sc
 				if op.Err() != nil || snapshot.life.Err() != nil {
 					return empty, notaloneFailure("history_snapshot_cancelled")
 				}
-				return empty, notaloneFailure("history_boundary_read_failed")
+				return empty, notaloneReadFailure(err, "history_boundary_read_failed")
 			}
 			if op.Err() != nil || snapshot.life.Err() != nil {
 				return empty, notaloneFailure("history_snapshot_cancelled")

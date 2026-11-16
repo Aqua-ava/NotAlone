@@ -110,7 +110,7 @@ func (h *notaloneHistorySession) readQuoteFromSnapshotRowLocked(ctx context.Cont
 		if snapshot.checkLocked() != nil || h.ensureMessageGuard() != nil {
 			return failed, notaloneFailure("history_quote_source_changed")
 		}
-		return failed, notaloneFailure("history_quote_read_failed")
+		return failed, notaloneReadFailure(err, "history_quote_read_failed")
 	}
 	if len(names) != 1 {
 		return failed, notaloneFailure("history_quote_association_unverified")
@@ -151,7 +151,7 @@ FROM ` + quoteIdent(snapshot.table) + ` WHERE local_id=? LIMIT 2`
 		if snapshot.checkLocked() != nil || h.ensureMessageGuard() != nil {
 			return failed, notaloneFailure("history_quote_source_changed")
 		}
-		return failed, notaloneFailure("history_quote_read_failed")
+		return failed, notaloneReadFailure(err, "history_quote_read_failed")
 	}
 	if len(contentRows) != 1 {
 		return failed, notaloneFailure("history_quote_source_changed")
@@ -176,7 +176,7 @@ THEN message_content ELSE NULL END AS quote_xml FROM ` + quoteIdent(snapshot.tab
 		if snapshot.checkLocked() != nil || h.ensureMessageGuard() != nil {
 			return failed, notaloneFailure("history_quote_source_changed")
 		}
-		return failed, notaloneFailure("history_quote_read_failed")
+		return failed, notaloneReadFailure(err, "history_quote_read_failed")
 	}
 	if len(bodyRows) != 1 {
 		return failed, notaloneFailure("history_quote_source_changed")

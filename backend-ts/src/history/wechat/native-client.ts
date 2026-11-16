@@ -1,3 +1,4 @@
+import { hasRawSourceSafety, rawSourceSafetyHistoryPatchSha256 } from './raw-source-safety.ts';
 import { spawn, type ChildProcessWithoutNullStreams, type StdioOptions } from 'node:child_process';
 import { sha256 } from '../../platform/sha256.ts';
 import { constants } from 'node:fs';
@@ -191,7 +192,7 @@ const allowedErrors = new Set([
   'history_quote_association_unverified','history_quote_source_changed','history_quote_read_failed','history_quote_request_invalid',
   'history_account_unavailable', 'history_account_changed', 'history_native_unavailable',
   'history_metadata_unavailable', 'history_identity_unverified', 'history_identity_ambiguous',
-  'history_source_changed', 'history_source_unverified', 'history_shards_unavailable',
+  'history_source_changed', 'history_source_unverified','history_source_temporarily_unavailable', 'history_shards_unavailable',
   'history_shard_unavailable', 'history_schema_unavailable', 'history_schema_missing',
   'history_target_table_missing', 'history_target_ambiguous', 'history_target_not_private',
   'history_target_unverified', 'history_index_unavailable', 'history_trigger_unavailable',
@@ -755,6 +756,7 @@ async function verifyArtifacts(options: NarrowWechatClientOptions): Promise<void
       || manifest.formatVersion !== 1 || manifest.kind !== 'notalone-history-cli-development' || manifest.architecture !== process.arch
       || manifest.sourceCommit !== '795071fa0591da5fc2c6ab94a70f22ccd93ef06c' || manifest.sourceTree !== '5d617ff3250c27fd9b33a60cb0182e153c521057'
       || manifest.readonlyPatchSha256 !== 'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa'
+      || !hasRawSourceSafety(manifest, cli) || manifest.historyPatchSha256 !== rawSourceSafetyHistoryPatchSha256
       || manifest.signing !== 'ad-hoc-development' || manifest.realWechatVerified !== false
       || options.imageKeyChannel===true&&(manifest.originalImageProtocol!=='wechat-original-image-v1'||!['wechat-cdn-big-hd-exact-content-v4','wechat-message-image-content-v1','wechat-message-image-content-v2'].includes(manifest.originalImageQualityProof as string))
       || options.imageOpenIsolation===true&&(manifest.imageOpenIsolation!=='wechat-image-open-local-v1'||manifest.originalImageProtocol!=='wechat-original-image-v1')

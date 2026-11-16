@@ -102,11 +102,11 @@ test('同一服务的下一次读取也必须核对恢复锚点，改写不能�
 });
 
 
-test('来源暂不可核验时五次重启均停读但不新增围栏，元数据恢复后自动接续',async t=>{
- const reader=readerFixture();const f=await fixture(t,{channel:reader.create(),state:reader.state,registryModule:new URL('./fixtures/history/recovery-snapshot-registry.mjs',import.meta.url).href});await f.current.history.synchronize(f.contactA);reader.state.inspectError='history_source_unverified';reader.state.readIds=[];
+for(const failureCode of ['history_source_unverified','history_source_temporarily_unavailable'])test(`来源${failureCode}时五次重启均停读但不新增围栏，元数据恢复后自动接续`,async t=>{
+ const reader=readerFixture();const f=await fixture(t,{channel:reader.create(),state:reader.state,registryModule:new URL('./fixtures/history/recovery-snapshot-registry.mjs',import.meta.url).href});await f.current.history.synchronize(f.contactA);reader.state.inspectError=failureCode;reader.state.readIds=[];
  for(let i=0;i<5;i++){
-  f.channel=reader.create();await restart(f,t);await assert.rejects(f.current.history.synchronize(f.contactA),{code:'history_source_unverified'});
-  const snapshot=await f.current.storage.execute('fixture.recoverySnapshot',{ownerId:owner,contactId:f.contactA});assert.equal(snapshot.fences.length,0);assert.deepEqual(reader.state.readIds,[]);
+  f.channel=reader.create();await restart(f,t);await assert.rejects(f.current.history.synchronize(f.contactA),{code:failureCode});
+  const snapshot=await f.current.storage.execute('fixture.recoverySnapshot',{ownerId:owner,contactId:f.contactA});assert.equal(snapshot.fences.length,0);assert.equal(snapshot.proofs[0].state,'ok','技术故障不改变来源确认事实');assert.deepEqual(reader.state.readIds,[]);
  }
  reader.state.inspectError=null;reader.state.records.push(record('shard-a','3'));f.channel=reader.create();await f.current.history.synchronize(f.contactA);assert.deepEqual(reader.state.readIds,['3']);
 });

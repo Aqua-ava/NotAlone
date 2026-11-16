@@ -281,12 +281,12 @@ func (h *notaloneHistorySession) resolve(ctx context.Context, name string) (nota
 	}
 	contact, err := h.server.openDBNoRefresh("contact", "contact.db")
 	if err != nil {
-		return result, notaloneFailure("history_metadata_unavailable")
+		return result, notaloneReadFailure(err, "history_metadata_unavailable")
 	}
 	defer contact.Close()
 	rows, err := contact.QueryBounded(ctx, 16, `SELECT username,verify_flag,COALESCE(NULLIF(remark,''),NULLIF(nick_name,''),username) AS display_name FROM contact WHERE COALESCE(NULLIF(remark,''),NULLIF(nick_name,''),username)=? OR username=? LIMIT 16`, name, name)
 	if err != nil || len(rows) != 1 {
-		return result, notaloneFailure("history_target_ambiguous")
+		return result, notaloneReadFailure(err, "history_target_ambiguous")
 	}
 	username := rowString(rows[0], "username")
 	if !notaloneIdentity.MatchString(username) || agentChatType(username, wxkind.ClassifyUsername(username), rowInt64(rows[0], "verify_flag") != 0) != "private" {
@@ -294,12 +294,12 @@ func (h *notaloneHistorySession) resolve(ctx context.Context, name string) (nota
 	}
 	session, err := h.server.openDBNoRefresh("session", "session.db")
 	if err != nil {
-		return result, notaloneFailure("history_metadata_unavailable")
+		return result, notaloneReadFailure(err, "history_metadata_unavailable")
 	}
 	defer session.Close()
 	sessions, err := session.QueryBounded(ctx, 2, "SELECT username FROM SessionTable WHERE username=? AND COALESCE(is_hidden,0)=0 LIMIT 2", username)
 	if err != nil || len(sessions) != 1 {
-		return result, notaloneFailure("history_target_unverified")
+		return result, notaloneReadFailure(err, "history_target_unverified")
 	}
 	result = notaloneResolved{Account: h.server.cfg.Wxid, Conversation: username, DisplayName: rowString(rows[0], "display_name")}
 	return result, nil
@@ -363,7 +363,7 @@ func (h *notaloneHistorySession) inspect(ctx context.Context) (notaloneInspectio
 		}
 		db, e := h.server.openDBNoRefresh("message", filepath.Base(file))
 		if e != nil {
-			return result, notaloneFailure("history_shard_unavailable")
+			return result, notaloneReadFailure(e, "history_shard_unavailable")
 		}
 		partition, e := guard.FileFingerprint(file)
 		if e != nil {
@@ -373,7 +373,7 @@ func (h *notaloneHistorySession) inspect(ctx context.Context) (notaloneInspectio
 		present, e := db.QueryBounded(ctx, 2, "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?", table)
 		if e != nil {
 			db.Close()
-			return result, notaloneFailure("history_schema_unavailable")
+			return result, notaloneReadFailure(e, "history_schema_unavailable")
 		}
 		if len(present) > 0 {
 			schema, e := inspectNotaloneTable(ctx, db, table, partition)

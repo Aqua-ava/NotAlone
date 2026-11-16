@@ -246,7 +246,7 @@ func (h *notaloneHistorySession) quoteReadSnapshot(ctx context.Context, request 
 	snapshot, err := newNotaloneSnapshot(life, h.server, *h.selected, *h.inspected, *h.supportProfile)
 	if err != nil {
 		cancel()
-		return nil, notaloneSnapshotTarget{}, nil, notaloneFailure("history_quote_source_changed")
+		return nil, notaloneSnapshotTarget{}, nil, notaloneReadFailure(err, "history_quote_source_changed")
 	}
 	cleanup := func() error {
 		closeErr := notaloneQuoteSnapshotCloser(snapshot)
@@ -261,7 +261,7 @@ func (h *notaloneHistorySession) quoteReadSnapshot(ctx context.Context, request 
 		proof.Scope != "single-fixed-snapshot" || proof.AuthorizesSubsequentRead || proof.ExpectedPartitionCount == 0 ||
 		proof.ExpectedPartitionCount != proof.CompletedPartitionCount || !notaloneSameSnapshotInstances(tail.target, snapshot.Target()) {
 		_ = cleanup()
-		return nil, notaloneSnapshotTarget{}, nil, notaloneFailure("history_quote_source_changed")
+		return nil, notaloneSnapshotTarget{}, nil, notaloneReadFailure(proofErr, "history_quote_source_changed")
 	}
 	return snapshot, tail.target, cleanup, nil
 }
@@ -329,7 +329,7 @@ func (h *notaloneHistorySession) readQuote(ctx context.Context, request notalone
 		if snapshot.checkLocked() != nil || h.ensureMessageGuard() != nil {
 			return failed, notaloneFailure("history_quote_source_changed")
 		}
-		return failed, notaloneFailure("history_quote_read_failed")
+		return failed, notaloneReadFailure(err, "history_quote_read_failed")
 	}
 	if len(rows) != 1 {
 		return failed, notaloneFailure("history_quote_unavailable")

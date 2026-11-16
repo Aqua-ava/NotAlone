@@ -1,3 +1,4 @@
+import { rawSourceSafetyProtocol, rawSourceSafetyHistoryPatchSha256 } from './raw-source-safety.ts';
 import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
@@ -39,7 +40,7 @@ async function readNarrowWechatManifest(executable: string): Promise<{options:Na
       const manifest: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, length)));
       if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) return reject();
       const row = manifest as Record<string, unknown>;
-      if (typeof row.cliSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.cliSha256)
+      if (row.rawSourceSafety !== rawSourceSafetyProtocol || row.historyPatchSha256 !== rawSourceSafetyHistoryPatchSha256 || typeof row.cliSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.cliSha256)
         || typeof row.wcdbSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(row.wcdbSha256)) return reject();
       const imageKeyChannel=row.originalImageProtocol==='wechat-original-image-v1'&&['wechat-cdn-big-hd-exact-content-v4','wechat-message-image-content-v1','wechat-message-image-content-v2'].includes(row.originalImageQualityProof as string);
       const inlineQuotes=row.quoteProtocol==='wechat-quote-message-v1'&&row.quoteReader==='wechat-quote-normal-tail-v2'&&row.quoteInline==='wechat-quote-inline-sync-v1';
@@ -55,7 +56,7 @@ async function readNarrowWechatManifest(executable: string): Promise<{options:Na
 export async function loadNarrowWechatOptions(executable:string):Promise<NarrowWechatClientOptions>{
  return (await readNarrowWechatManifest(executable)).options;
 }
-/** 共享宿主在启动进程前要求明确的切换协议；独立旧读取器仍可用于升级对照。 */
+/** 共享宿主在原库安全门禁之上要求明确的进程切换协议。 */
 export async function loadSharedNarrowWechatOptions(executable:string):Promise<NarrowWechatClientOptions>{
  const manifest=await readNarrowWechatManifest(executable);
  if(manifest.sharedProcessProtocol!=='wechat-shared-process-v1')return reject();

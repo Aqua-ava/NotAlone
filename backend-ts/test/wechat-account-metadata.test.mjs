@@ -24,6 +24,7 @@ async function fixture(t, mode = 'normal') {
   const executable = join(root, 'bin', 'wx-cli'), stateFile = join(root, 'state.json'), logFile = join(root, 'requests'), pidFile = join(root, 'pid');
   await writeFile(stateFile, JSON.stringify({mode,account:accountKey,generation}));
   const script = `#!${process.execPath}
+ // notalone-raw-source-safety:wechat-raw-source-readonly-v2
 const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline');
 const stateFile=${JSON.stringify(stateFile)},logFile=${JSON.stringify(logFile)},pidFile=${JSON.stringify(pidFile)};
 const hash=x=>crypto.createHash('sha256').update(x).digest('hex');fs.writeFileSync(pidFile,String(process.pid));
@@ -33,8 +34,8 @@ const account=s=>({format:'wechat-account-metadata-v1',status:s.mode==='unknown-
 readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line),s=JSON.parse(fs.readFileSync(stateFile));fs.appendFileSync(logFile,JSON.stringify(r)+'\\n');let data;
 if(s.mode==='cancel-all'&&r.op==='metadata-sessions-all')return;
 if(s.mode==='no-config'){console.log(JSON.stringify({ok:false,error:{code:'history_account_unavailable'}}));return;}
-if(s.mode==='unverified-source'){console.log(JSON.stringify({ok:false,error:{code:'history_source_unverified'}}));return;}
-if(s.mode==='unverified-once'){const m=stateFile+'.once';if(!fs.existsSync(m)){fs.writeFileSync(m,'1');console.log(JSON.stringify({ok:false,error:{code:'history_source_unverified'}}));return;}}
+if(s.mode==='unverified-source'||s.mode==='temporary-source'){console.log(JSON.stringify({ok:false,error:{code:s.mode==='temporary-source'?'history_source_temporarily_unavailable':'history_source_unverified'}}));return;}
+if(s.mode==='unverified-once'||s.mode==='temporary-once'){const m=stateFile+'.once';if(!fs.existsSync(m)){fs.writeFileSync(m,'1');console.log(JSON.stringify({ok:false,error:{code:s.mode==='temporary-once'?'history_source_temporarily_unavailable':'history_source_unverified'}}));return;}}
 if(s.mode==='explicit-config'&&(process.env.WECHAT_CLI_CONFIG!==stateFile||process.env.HOME!==s.expectedHome||process.env.NOTALONE_UNRELATED_SECRET)){console.log(JSON.stringify({ok:false,error:{code:'history_account_unavailable'}}));return;}
 if(r.op==='metadata-account'){data=account(s);if(s.mode==='account-body')data.body='BODY_SENTINEL';if(s.mode==='account-promoted')data.normalHistory=true;if(s.mode==='account-artifact')data.artifactSha256='f'.repeat(64);}
 if(r.op==='metadata-avatar'){
@@ -71,7 +72,7 @@ if(data===undefined){console.log(JSON.stringify({ok:false,error:{code:'history_o
 });`;
   await writeFile(executable, script, {mode:0o700}); await writeFile(join(root,'lib','libWCDB.dylib'), 'synthetic-wcdb');
   await writeFile(join(root,'manifest.json'), JSON.stringify({formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,
-    sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',signing:'ad-hoc-development',realWechatVerified:false,cliSha256:digest(script),wcdbSha256:digest('synthetic-wcdb')}));
+    sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',historyPatchSha256:'a0fc0989b3d65e5d0b094789df36e8753c3ac675bd1a93fa83534b24e71bf440',rawSourceSafety:'wechat-raw-source-readonly-v2',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',signing:'ad-hoc-development',realWechatVerified:false,cliSha256:digest(script),wcdbSha256:digest('synthetic-wcdb')}));
   const options = await loadNarrowWechatOptions(executable), client = new NarrowWechatClient(options), cleanups=[];
   t.after(async()=>{for(const cleanup of cleanups.reverse())await cleanup();await client.close();await rm(root,{recursive:true,force:true});});
   return {root,executable,stateFile,logFile,pidFile,client,cleanups,update:async change=>writeFile(stateFile,JSON.stringify({...JSON.parse(await readFile(stateFile,'utf8')),...change}))};
@@ -202,6 +203,8 @@ test('账号检测报告缺失的工具清单，恢复完整制品后可重试�
   assert.equal((await detect()).failure_code, 'history_account_unavailable');
   await f.update({mode: 'unverified-source'});
   assert.equal((await detect()).failure_code, 'history_source_unverified');
+  await f.update({mode:'temporary-source'});
+  assert.equal((await detect()).failure_code, 'history_source_temporarily_unavailable');
   assert.ok((await requests(f)).every(row => row.op === 'metadata-account'));
 });
 
@@ -336,14 +339,14 @@ test('后台持有CLI租约时，前台名单仍以独立进程在原预算内�
  }finally{await held.release();}
 });
 
-test('前台名单遇到瞬时来源守卫失败时换新进程重试一次；持续失败仍上报',async t=>{
+for(const failureCode of ['history_source_unverified','history_source_temporarily_unavailable'])test(`前台名单遇到${failureCode}时换新进程重试一次；持续失败仍上报`,async t=>{
  const account={id:'synthetic-id',key:accountKey,sourceGeneration:generation,revision:'1'},opts={signal:new AbortController().signal,timeoutMs:3000,limit:100};
- const once=await fixture(t,'unverified-once'),a=new ForegroundSessionList(once.executable);
+ const once=await fixture(t,failureCode==='history_source_unverified'?'unverified-once':'temporary-once'),a=new ForegroundSessionList(once.executable);
  once.cleanups.push(()=>a.close());
  assert.equal((await a.sessions(account,opts)).length>0,true);
- const always=await fixture(t,'unverified-source'),b=new ForegroundSessionList(always.executable);
+ const always=await fixture(t,failureCode==='history_source_unverified'?'unverified-source':'temporary-source'),b=new ForegroundSessionList(always.executable);
  always.cleanups.push(()=>b.close());
- await assert.rejects(b.sessions(account,opts),{code:'history_source_unverified'});
+ await assert.rejects(b.sessions(account,opts),{code:failureCode});
 });
 
 test('前台专用名单的账号变化仍拒绝旧范围，关闭及重置排空自有进程',async t=>{

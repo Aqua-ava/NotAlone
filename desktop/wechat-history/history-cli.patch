@@ -20,3 +20,85 @@
  	if maybeRunCLI(os.Args[1:]) {
  		return
  	}
+--- a/internal/wcdb/wcdb.go
++++ b/internal/wcdb/wcdb.go
+@@ -111,6 +111,7 @@
+ 	} {
+ 		purego.RegisterLibFunc(reg.fn, h, reg.name)
+ 	}
++	if err := notaloneBootstrapSourceVFS(h); err != nil { return err }
+ 	loaded = true
+ 	return nil
+ }
+@@ -118,6 +119,7 @@
+ type DB struct {
+ 	handle uintptr
+ 	path   string
++	sourceLease *notaloneSourceFileLease
+ }
+ 
+ // OpenWithEncKey opens a WCDB-encrypted SQLite file using the raw-key path:
+@@ -178,6 +180,7 @@
+ // OpenPlain opens an unencrypted SQLite database with the bundled WCDB SQLite
+ // symbols. The caller must Bootstrap first. writable=false opens readonly.
+ func OpenPlain(dbPath string, writable bool) (*DB, error) {
++	if !writable { return notaloneOpenReadOnlySource(dbPath, nil) }
+ 	flags := int32(SQLITE_OPEN_READONLY)
+ 	if writable {
+ 		flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE
+@@ -196,6 +199,7 @@
+ }
+ 
+ func openWithKeyBlob(dbPath string, blob []byte, flags int32) (*DB, error) {
++	if flags&SQLITE_OPEN_READONLY != 0 { return notaloneOpenReadOnlySource(dbPath, blob) }
+ 	var h uintptr
+ 	if rc := sqlite3_open_v2(dbPath, &h, flags, nil); rc != SQLITE_OK {
+ 		msg := errmsg(h)
+@@ -429,13 +433,13 @@
+ // readDBSalt reads the first 16 bytes of dbPath — these are the SQLCipher
+ // salt and uniquely identify which enc_key opens the file.
+ func readDBSalt(dbPath string) ([]byte, error) {
+-	f, err := os.Open(dbPath)
++	f, err := OpenSourceFile(dbPath, 0)
+ 	if err != nil {
+ 		return nil, fmt.Errorf("open %s: %w", dbPath, err)
+ 	}
+-	defer f.Close()
++	defer CloseSourceFile(f)
+ 	salt := make([]byte, 16)
+-	n, err := f.Read(salt)
++	n, err := f.ReadAt(salt, 0)
+ 	if err != nil || n != 16 {
+ 		return nil, fmt.Errorf("read salt %s: %w (n=%d)", dbPath, err, n)
+ 	}
+@@ -446,8 +450,10 @@
+ 	if d == nil || d.handle == 0 {
+ 		return
+ 	}
+-	sqlite3_close_v2(d.handle)
++	if sqlite3_close_v2(d.handle) != SQLITE_OK { return }
+ 	d.handle = 0
++	d.sourceLease.release()
++	d.sourceLease = nil
+ }
+ 
+ func (d *DB) Exec(sql string) error {
+--- a/internal/wcdb/resource_test.go
++++ b/internal/wcdb/resource_test.go
+@@ -2,6 +2,7 @@
+ 
+ import (
+ 	"strings"
++ "path/filepath"
+ 	"testing"
+ 	"unsafe"
+ )
+@@ -26,7 +27,7 @@
+ 		return SQLITE_OK
+ 	}
+ 	sqlite3_errmsg = func(uintptr) unsafe.Pointer { return nil }
+-	if _, err := OpenPlain("unopenable.db", false); err == nil {
++	if _, err := OpenPlain(filepath.Join(t.TempDir(),"unopenable.db"), false); err == nil {
+ 		t.Fatal("OpenPlain should report sqlite3_open_v2 failure")
+ 	}
+ 	if closed != allocated {

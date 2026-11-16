@@ -31,6 +31,7 @@ const reasonKinds: Readonly<Record<string, SyncIssueKind>> = {
   cli_timeout: 'temporary', cli_output_invalid: 'temporary', cli_freshness_unknown: 'temporary',
   cli_normalization_failed: 'temporary', cli_message_table_missing: 'temporary', history_page_stalled: 'temporary',
   history_native_unavailable: 'temporary', history_native_timeout: 'temporary', history_interrupted: 'temporary',
+  history_source_temporarily_unavailable: 'temporary',
   history_incomplete: 'history',
 };
 const issuePriority: Readonly<Record<SyncIssueKind, number>> = { source: 0, identity: 1, capability: 2, unknown: 3, local: 4, temporary: 5, history: 6 };

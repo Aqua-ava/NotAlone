@@ -12,6 +12,8 @@ import (
 	"sort"
 	"sync"
 	"syscall"
+
+	"github.com/r266-tech/wx-cli/v2/internal/wcdb"
 )
 
 type notaloneKeventCall func(int, []syscall.Kevent_t, []syscall.Kevent_t, *syscall.Timespec) (int, error)
@@ -128,7 +130,7 @@ func (guard *notaloneSourceGuard) add(path string, directory bool) error {
 	if before.Mode&syscall.S_IFMT != kind {
 		return errors.New("source_guard_instance_invalid")
 	}
-	fd, err := syscall.Open(path, syscall.O_EVTONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	fd, err := wcdb.OpenSourceDescriptor(path, syscall.O_EVTONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC)
 	if err != nil {
 		return errors.New("source_guard_instance_unavailable")
 	}
@@ -361,7 +363,7 @@ func (guard *notaloneSourceGuard) Close() error {
 	}
 	guard.queue = -1
 	for i := range guard.watches {
-		if syscall.Close(guard.watches[i].fd) != nil {
+		if wcdb.CloseSourceDescriptor(guard.watches[i].fd) != nil {
 			failed = true
 		}
 		guard.watches[i].fd = -1

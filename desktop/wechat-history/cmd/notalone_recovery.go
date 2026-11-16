@@ -160,7 +160,7 @@ func (n *notaloneSnapshot) recoverPositions(ctx context.Context, positions map[s
 			}
 			rows, e := shard.reader.QueryBounded(ctx, 8, query, args...)
 			if e != nil {
-				return nil, notaloneFailure("history_page_read_failed")
+				return nil, notaloneReadFailure(e, "history_page_read_failed")
 			}
 			records, e := n.projectRows(ctx, shard, rows, nil)
 			if e != nil {

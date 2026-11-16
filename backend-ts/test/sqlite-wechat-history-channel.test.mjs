@@ -31,6 +31,7 @@ async function fixture(t,sharedMode=false,storageOptions={},contactCount=2,manif
  const executable=join(artifact,'bin','wx-cli'),manifestPath=join(artifact,'manifest.json'),planFile=join(root,'plan'),logFile=join(root,'requests'),pidFile=join(root,'pid');
  await writeFile(planFile,JSON.stringify({mode:'supported',serverId:'0'}));
  const script=`#!${process.execPath}
+ // notalone-raw-source-safety:wechat-raw-source-readonly-v2
  const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline');
  const schema=${JSON.stringify(schema)},planFile=${JSON.stringify(planFile)},logFile=${JSON.stringify(logFile)};
  let resumed=false,tailSerial=2,targetSerial=0,currentTarget=null,selected='${conversation}',sliceIndex=0,sliceCursor=null;
@@ -81,7 +82,7 @@ async function fixture(t,sharedMode=false,storageOptions={},contactCount=2,manif
  });
 `;
  await writeFile(executable,script,{mode:0o700});const wcdb=Buffer.from('synthetic-channel-WCDB');await writeFile(join(artifact,'lib','libWCDB.dylib'),wcdb);
- const manifest={formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',cliSha256:hash(script),wcdbSha256:hash(wcdb),signing:'ad-hoc-development',realWechatVerified:false,...manifestExtra};
+ const manifest={formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',historyPatchSha256:'a0fc0989b3d65e5d0b094789df36e8753c3ac675bd1a93fa83534b24e71bf440',rawSourceSafety:'wechat-raw-source-readonly-v2',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',cliSha256:hash(script),wcdbSha256:hash(wcdb),signing:'ad-hoc-development',realWechatVerified:false,...manifestExtra};
  await writeFile(manifestPath,JSON.stringify(manifest));
  const storage=await SqliteStorage.open({userData:join(root,'state'),intent:'create',role:'test',registryModule:new URL('./fixtures/history-parked-registry.mjs',import.meta.url).href,...storageOptions});
  const contacts=new SqliteContactService(storage,owner,{account:async()=>({externalKey:account,identityScheme:'wechat.account.v1',sourceGeneration:generation,assurance:'verified',supportProfile:'synthetic-metadata-v1'}),sessions:async()=>[conversation,...(sharedMode?Array.from({length:contactCount-1},(_,index)=>index===0?'synthetic-second':`synthetic-friend-${index+2}`):[])].map(externalKey=>({externalKey,displayName:externalKey,kind:'private',identityAssurance:'verified'}))});

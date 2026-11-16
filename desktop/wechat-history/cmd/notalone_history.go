@@ -135,12 +135,12 @@ func inspectNotaloneTable(ctx context.Context, db *wcdb.DB, table, partition str
 	result := notaloneTableSchema{Target: notaloneHash(partition, table), Partition: partition, Role: "private_message", Columns: []notaloneColumn{}, Indexes: []notaloneIndex{}, DeclaredPrimaryKey: []string{}, TriggerFingerprints: []string{}}
 	versions, e := db.QueryBounded(ctx, 1, "PRAGMA schema_version")
 	if e != nil || len(versions) != 1 {
-		return result, notaloneFailure("history_schema_unavailable")
+		return result, notaloneReadFailure(e, "history_schema_unavailable")
 	}
 	result.SchemaVersion = fmt.Sprint(versions[0]["schema_version"])
 	definitions, err := db.QueryBounded(ctx, 2, "SELECT sql,rootpage FROM sqlite_master WHERE type='table' AND name=?", table)
 	if err != nil || len(definitions) != 1 {
-		return result, notaloneFailure("history_schema_missing")
+		return result, notaloneReadFailure(err, "history_schema_missing")
 	}
 	result.RootPage = fmt.Sprint(definitions[0]["rootpage"])
 	definition := rowString(definitions[0], "sql")
@@ -150,7 +150,7 @@ func inspectNotaloneTable(ctx context.Context, db *wcdb.DB, table, partition str
 	result.AutoIncrement = notaloneSQLHasKeyword(definition, "AUTOINCREMENT")
 	columns, err := db.QueryBounded(ctx, 128, "PRAGMA table_xinfo("+quoteIdent(table)+")")
 	if err != nil || len(columns) == 0 {
-		return result, notaloneFailure("history_schema_unavailable")
+		return result, notaloneReadFailure(err, "history_schema_unavailable")
 	}
 	for _, r := range columns {
 		column := notaloneColumn{Name: rowString(r, "name"), Type: rowString(r, "type"), NotNull: rowInt64(r, "notnull") != 0, PrimaryKey: rowInt64(r, "pk"), Hidden: rowInt64(r, "hidden")}
@@ -165,7 +165,7 @@ func inspectNotaloneTable(ctx context.Context, db *wcdb.DB, table, partition str
 	}
 	indexes, err := db.QueryBounded(ctx, 64, "PRAGMA index_list("+quoteIdent(table)+")")
 	if err != nil {
-		return result, notaloneFailure("history_index_unavailable")
+		return result, notaloneReadFailure(err, "history_index_unavailable")
 	}
 	for _, r := range indexes {
 		name := rowString(r, "name")
@@ -173,7 +173,7 @@ func inspectNotaloneTable(ctx context.Context, db *wcdb.DB, table, partition str
 		index := notaloneIndex{ID: notaloneHash(notaloneHash(partition, table), name), name: name, Unique: rowInt64(r, "unique") != 0, Origin: rowString(r, "origin"), Partial: rowInt64(r, "partial") != 0, Columns: []notaloneIndexColumn{}}
 		parts, e := db.QueryBounded(ctx, 128, "PRAGMA index_xinfo("+quoteIdent(name)+")")
 		if e != nil {
-			return result, notaloneFailure("history_index_unavailable")
+			return result, notaloneReadFailure(e, "history_index_unavailable")
 		}
 		for _, p := range parts {
 			index.Columns = append(index.Columns, notaloneIndexColumn{Sequence: rowInt64(p, "seqno"), Name: rowString(p, "name"), Descending: rowInt64(p, "desc") != 0, Collation: rowString(p, "coll"), Key: rowInt64(p, "key") != 0})
@@ -182,14 +182,14 @@ func inspectNotaloneTable(ctx context.Context, db *wcdb.DB, table, partition str
 	}
 	triggers, err := db.QueryBounded(ctx, 64, "SELECT sql FROM sqlite_master WHERE type='trigger' AND tbl_name=? ORDER BY name", table)
 	if err != nil {
-		return result, notaloneFailure("history_trigger_unavailable")
+		return result, notaloneReadFailure(err, "history_trigger_unavailable")
 	}
 	for _, r := range triggers {
 		result.TriggerFingerprints = append(result.TriggerFingerprints, notaloneHash(rowString(r, "sql")))
 	}
 	after, e := db.QueryBounded(ctx, 1, "PRAGMA schema_version")
 	if e != nil || len(after) != 1 || fmt.Sprint(after[0]["schema_version"]) != result.SchemaVersion {
-		return result, notaloneFailure("history_schema_changed")
+		return result, notaloneReadFailure(e, "history_schema_changed")
 	}
 	return result, nil
 }

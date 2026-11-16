@@ -457,17 +457,18 @@ test('关闭协调器取消在途增量读取，迟到页不提交且关闭不�
   assert.equal(f.coordinator.getState().phase,'closed');
 });
 
-test('瞬时故障降级后恢复成功时清除可见错误，不残留旧失败',async t=>{
+for(const failureCode of ['history_snapshot_window_changed','history_source_temporarily_unavailable'])test(`瞬时故障${failureCode}降级后恢复成功时清除可见错误，不残留旧失败`,async t=>{
   const f=await fixture(t);
   f.state.historyRecords=[record('1')];
   const [binding]=await select(f); await f.contacts.setReading(true);
   await f.history.synchronize(binding.contact_id);
   let attempts=0;
-  f.state.tailHook=async(scope,target,cursor)=>{ if(++attempts===1)throw new StorageFailure('history_snapshot_window_changed'); return {records:[record('2')],caughtUp:true,cursorOut:'tail-2'}; };
+  f.state.tailHook=async(scope,target,cursor)=>{ if(++attempts===1)throw new StorageFailure(failureCode); return {records:[record('2')],caughtUp:true,cursorOut:'tail-2'}; };
   await wake(f);
   let state=f.coordinator.getState();
   assert.equal(state.contacts[0].phase,'degraded');
-  assert.equal(state.lastError,'history_snapshot_window_changed');
+  assert.equal(state.lastError,failureCode);
+  assert.equal((await f.history.read(binding.contact_id)).messages.length,1,'失败页不能入库或推进已保存消息');
   await wake(f);
   state=f.coordinator.getState();
   assert.equal(state.contacts[0].phase,'caught_up');

@@ -19,6 +19,7 @@ async function fixture(t,replies) {
  await mkdir(join(root,'bin'));await mkdir(join(root,'lib'));
  const executable=join(root,'bin','wx-cli'),logFile=join(root,'requests'),pidFile=join(root,'pid');
  const script=`#!${process.execPath}
+ // notalone-raw-source-safety:wechat-raw-source-readonly-v2
  const fs=require('node:fs');const readline=require('node:readline');
  const schema=${JSON.stringify(schema)},replies=${JSON.stringify(replies)};let offset=0;
  fs.writeFileSync(process.env.PID_FILE,String(process.pid));
@@ -35,7 +36,7 @@ async function fixture(t,replies) {
  });
 `;
  await writeFile(executable,script,{mode:0o700});const wcdb=Buffer.from('synthetic-lifecycle-WCDB');await writeFile(join(root,'lib','libWCDB.dylib'),wcdb);
- const manifest={formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',cliSha256:hash(script),wcdbSha256:hash(wcdb),signing:'ad-hoc-development',realWechatVerified:false};
+ const manifest={formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',historyPatchSha256:'a0fc0989b3d65e5d0b094789df36e8753c3ac675bd1a93fa83534b24e71bf440',rawSourceSafety:'wechat-raw-source-readonly-v2',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',cliSha256:hash(script),wcdbSha256:hash(wcdb),signing:'ad-hoc-development',realWechatVerified:false};
  await writeFile(join(root,'manifest.json'),JSON.stringify(manifest));
  const client=new NarrowWechatClient({executable,expectedCliSha256:manifest.cliSha256,expectedWcdbSha256:manifest.wcdbSha256,environment:{PID_FILE:pidFile,LOG_FILE:logFile}});
  t.after(async()=>{await client.close();await rm(root,{recursive:true,force:true});});

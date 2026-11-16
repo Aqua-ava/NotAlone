@@ -92,6 +92,7 @@ async function fixture(t,{proof:proofOverride,nativeError=null,otherError=null,m
  const expectedSha256=hash(bytes),resourceSourceGeneration=hash('synthetic-message-resource-instance'),base64=bytes.toString('base64');
  const proof=proofOverride??{kind:'wechat-cdn-big-hd-exact-content-v1',messageMd5:'f'.repeat(32),hdLength:bytes.length,hdWidth:1,hdHeight:1,bigImageUrlPresent:true,resourceSize:bytes.length,verifiedBytes:bytes.length,verifiedSha256:expectedSha256};
  const script=`#!${process.execPath}
+ // notalone-raw-source-safety:wechat-raw-source-readonly-v2
 const fs=require('node:fs'),crypto=require('node:crypto'),readline=require('node:readline');
 const log=${JSON.stringify(requestsFile)},pidFile=${JSON.stringify(pidFile)},keySeenFile=${JSON.stringify(keySeenFile)},data=Buffer.from(${JSON.stringify(base64)},'base64'),audit=${JSON.stringify(openAudit)},representativeId=${JSON.stringify(representativeId)};
 const generation=${JSON.stringify(generation)},partition=${JSON.stringify(partition)},table=${JSON.stringify(table)},fingerprint=${JSON.stringify(schemaFingerprint)};
@@ -117,7 +118,7 @@ else{console.log(JSON.stringify({ok:false,error:{code:'history_operation_unsuppo
 console.log(JSON.stringify({ok:true,data:value}));});`;
  await writeFile(executable,script,{mode:0o700});const wcdb=Buffer.from('synthetic-wcdb');await writeFile(join(artifact,'lib','libWCDB.dylib'),wcdb);
  await writeFile(join(artifact,'manifest.json'),JSON.stringify({formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,
-  sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',
+  sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',historyPatchSha256:'a0fc0989b3d65e5d0b094789df36e8753c3ac675bd1a93fa83534b24e71bf440',rawSourceSafety:'wechat-raw-source-readonly-v2',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',
   signing:'ad-hoc-development',realWechatVerified:false,cliSha256:hash(script),wcdbSha256:hash(wcdb),
   originalImageProtocol:'wechat-original-image-v1',originalImageQualityProof:capability,...manifestExtra}));
  t.after(()=>rm(root,{recursive:true,force:true}));

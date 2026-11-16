@@ -187,7 +187,7 @@ func (w *notaloneTestMetadataWatch) observeAs(ctx context.Context, s *server, se
 			where, args := notaloneTestMetadataAfter(w.baseline[shard.partition])
 			rows, e := shard.reader.QueryBounded(op, 1, "SELECT count(*) AS count FROM (SELECT 1 FROM "+quoteIdent(snapshot.table)+where+" LIMIT 2)", args...)
 			if e != nil || len(rows) != 1 {
-				return report, notaloneFailure("history_metadata_unavailable")
+				return report, notaloneReadFailure(e, "history_metadata_unavailable")
 			}
 			count, ok := rows[0]["count"].(int64)
 			if !ok || count < 0 {
@@ -278,7 +278,7 @@ func (n *notaloneSnapshot) testMetadataBaseline(ctx context.Context) (map[string
 		}
 		rows, err := shard.reader.QueryBounded(ctx, 1, "SELECT MAX(local_id) AS maximum FROM "+quoteIdent(n.table))
 		if err != nil || len(rows) != 1 {
-			return nil, notaloneFailure("history_metadata_unavailable")
+			return nil, notaloneReadFailure(err, "history_metadata_unavailable")
 		}
 		if rows[0]["maximum"] == nil {
 			result[shard.partition] = nil
@@ -295,7 +295,7 @@ func (n *notaloneSnapshot) testMetadataBaseline(ctx context.Context) (map[string
 func (n *notaloneSnapshot) testMetadataRecord(ctx context.Context, shard *notaloneSnapshotShard, where string, args ...any) (*notaloneMetadataObservation, error) {
 	rows, err := shard.reader.QueryBounded(ctx, 1, "SELECT local_id,server_id,local_type,status,real_sender_id,create_time FROM "+quoteIdent(n.table)+where+" LIMIT 1", args...)
 	if err != nil {
-		return nil, notaloneFailure("history_metadata_unavailable")
+		return nil, notaloneReadFailure(err, "history_metadata_unavailable")
 	}
 	if len(rows) == 0 {
 		return nil, nil
@@ -305,7 +305,7 @@ func (n *notaloneSnapshot) testMetadataRecord(ctx context.Context, shard *notalo
 	if id, ok := row["real_sender_id"].(int64); ok {
 		names, err := shard.reader.QueryBounded(ctx, 1, "SELECT user_name FROM Name2Id WHERE rowid=? LIMIT 1", id)
 		if err != nil {
-			return nil, notaloneFailure("history_metadata_unavailable")
+			return nil, notaloneReadFailure(err, "history_metadata_unavailable")
 		}
 		if len(names) == 1 {
 			switch rowString(names[0], "user_name") {
@@ -332,7 +332,7 @@ func (n *notaloneSnapshot) testMetadataSenderPreflight(ctx context.Context) erro
 		count := func(name string) (int64, error) {
 			rows, err := shard.reader.QueryBounded(ctx, 1, "SELECT count(*) AS count FROM (SELECT 1 FROM Name2Id WHERE user_name=? LIMIT 2)", name)
 			if err != nil || len(rows) != 1 {
-				return 0, notaloneFailure("history_test_sender_unverified")
+				return 0, notaloneReadFailure(err, "history_test_sender_unverified")
 			}
 			value, ok := rows[0]["count"].(int64)
 			if !ok || value < 0 || value > 2 {
@@ -376,7 +376,7 @@ func (n *notaloneSnapshot) testMetadataReceivedSenderPreflight(ctx context.Conte
 		count := func(name string) (int64, error) {
 			rows, err := shard.reader.QueryBounded(ctx, 1, "SELECT count(*) AS count FROM (SELECT 1 FROM Name2Id WHERE user_name=? LIMIT 2)", name)
 			if err != nil || len(rows) != 1 {
-				return 0, notaloneFailure("history_test_sender_unverified")
+				return 0, notaloneReadFailure(err, "history_test_sender_unverified")
 			}
 			value, ok := rows[0]["count"].(int64)
 			if !ok || value < 0 || value > 2 {

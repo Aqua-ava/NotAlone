@@ -17,7 +17,7 @@ export interface ForegroundBindingConfirmation {
  */
 const sessionRefreshAfterMs=30_000,sessionMaxAgeMs=300_000,sessionRefreshGapMs=5_000,sessionReadTimeoutMs=15_000;
 const sourceGuardRetryAttempts=2;
-const sourceGuardTransientCodes=new Set(['history_source_unverified','history_source_changed']);
+const sourceGuardTransientCodes=new Set(['history_source_unverified','history_source_temporarily_unavailable','history_source_changed']);
 const scopeFailureCodes=new Set(['foreground_scope_unavailable','history_scope_changed','history_account_changed','history_source_changed']);
 type SessionParams={limit:number;keyword?:string};
 type SessionAccount=NonNullable<ForegroundSnapshot['account']>;

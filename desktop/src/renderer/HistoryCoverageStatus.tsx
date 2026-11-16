@@ -40,6 +40,7 @@ const incrementalReasons: Record<string, string> = {
   history_incomplete: '历史尚未读完，新消息同步会先补齐历史。',
 };
 const reasons: Record<string, string> = {
+  history_source_temporarily_unavailable: '本机微信记录暂时无法读取，开启同步时会自动重试。',
   cli_timeout: '读取暂时超时，开启同步时会自动重试。',
   cli_output_invalid: '暂时无法读取微信记录，开启同步时会自动重试。',
   cli_freshness_unknown: '暂时无法确认是否读到了最新记录，开启同步时会自动重试。',

@@ -67,7 +67,7 @@ function overlaySha(files) {
   return hash(JSON.stringify(rows));
 }
 
-async function syntheticUpgradeFixture({ existingImage = false, quotes = false, quoteTail = false, quoteInline = false, sharedProcess = false, contactAvatar = false, durableHistory = false, imageOpenIsolation = false, guardRegistration = false, localIdRecovery = false } = {}) {
+async function syntheticUpgradeFixture({ existingImage = false, quotes = false, quoteTail = false, quoteInline = false, sharedProcess = false, contactAvatar = false, durableHistory = false, imageOpenIsolation = false, guardRegistration = false, localIdRecovery = false, rawSourceSafety = false, safetyMarker = true } = {}) {
   const repositoryRoot = await mkdtemp(path.join(process.cwd(), '.tmp-notalone-image-upgrade-'));
   const buildsRoot = path.join(repositoryRoot, 'local-tools/wx-cli/.notalone-builds');
   const oldName = existingImage ? 'original-image-20261031-v1' : 'true-delta-20261031-c2';
@@ -76,7 +76,8 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
   const toRoot = path.join(buildsRoot, newName);
   const dbRoot = path.join(repositoryRoot, 'synthetic-wechat-root');
   const accountKey = 'synthetic-account';
-  const historyPatch = 'synthetic history patch\n';
+  const oldHistoryPatch = 'synthetic history patch\n';
+  const historyPatch = oldHistoryPatch+(rawSourceSafety?'synthetic SHM readonly patch\n':'');
   const readonlyPatch = 'synthetic readonly patch\n';
   const readonlyTest = 'readonly-overlay-test';
   const wcdbBytes = 'synthetic WCDB library bytes';
@@ -95,7 +96,7 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
     readonlyPatchSha256: hash(readonlyPatch), historyPatchSha256: hash(historyPatch), wcdbSha256,
     signing: 'ad-hoc-development', realWechatVerified: false };
   const oldCliBytes = 'synthetic old CLI';
-  const newCliBytes = 'synthetic new CLI';
+  const newCliBytes = 'synthetic new CLI'+(rawSourceSafety&&safetyMarker?' notalone-raw-source-safety:wechat-raw-source-readonly-v2':'');
   const oldCliSha256 = hash(oldCliBytes);
   const newCliSha256 = hash(newCliBytes);
   const newProtocol = 'protocol with original image operation';
@@ -110,6 +111,7 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
     'cmd/wechat-cli/notalone_protocol.go': newProtocol,
     'cmd/wechat-cli/notalone_image.go': newImage,
     'cmd/wechat-cli/notalone_image_test.go': newImageTest };
+  if(rawSourceSafety){oldFiles['internal/wcdb/wcdb.go']='old SQLite open';newFiles['internal/wcdb/wcdb.go']='readonly URI SQLite open';newFiles['internal/wcdb/notalone_source_readonly.go']='SHM readonly source helper';newFiles['internal/wcdb/notalone_source_vfs.go']='readonly WAL VFS';}
   if(quotes)newFiles['cmd/wechat-cli/notalone_quote.go']='bounded exact quote reader';
   if(quoteTail){
     oldFiles['cmd/wechat-cli/notalone_quote.go']='bounded fixed snapshot quote reader';
@@ -156,11 +158,11 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
   ]) {
     await mkdir(root, { recursive: true, mode: 0o700 });
     for (const [name, content] of Object.entries(files)) await write(path.join(root, 'source', name), content);
-    await write(path.join(root, 'history-cli.patch'), historyPatch);
+    await write(path.join(root, 'history-cli.patch'), root===fromRoot?oldHistoryPatch:historyPatch);
     await write(path.join(root, 'readonly-cli.patch'), readonlyPatch);
     await write(path.join(root, 'lib/libWCDB.dylib'), wcdbBytes);
     await write(path.join(root, 'bin/wechat-cli'), cliBytes, 0o700);
-    const manifest = { ...common, overlaySha256: overlaySha(files), cliSha256,
+    const manifest = { ...common, ...(rawSourceSafety&&root===fromRoot?{historyPatchSha256:hash(oldHistoryPatch)}:{}),...(rawSourceSafety&&root===toRoot?{rawSourceSafety:'wechat-raw-source-readonly-v2'}:{}),overlaySha256: overlaySha(files), cliSha256,
       ...(imageProtocol ? { originalImageProtocol: imageProtocol } : {}),
       ...(quoteTail?{originalImageQualityProof:'wechat-message-image-content-v1'}:existingImage && root === toRoot ? { originalImageQualityProof: 'wechat-cdn-big-hd-exact-content-v3' } : {}),
       ...(quotes&&(root===toRoot||quoteTail)?{quoteProtocol:'wechat-quote-message-v1'}:{}),
@@ -189,7 +191,7 @@ async function syntheticUpgradeFixture({ existingImage = false, quotes = false, 
   const updates=Object.entries({...inlineSourceChanges,...sharedSourceChanges,...guardSourceChanges,...recoverySourceChanges}).filter(([name])=>Object.hasOwn(identityFiles,name)).sort(([a],[b])=>a.localeCompare(b));
   const identityAlgorithmSha256 = hash(JSON.stringify({ files: Object.entries(identityFiles).sort((left, right) => left[0].localeCompare(right[0])),
     protocol: [protocolOldSha256, protocolNewSha256],...(updates.length?{updates}:{}) }));
-  const policy = { oldName, newName, commonManifest: common,
+  const policy = { oldName, newName, commonManifest: common,...(rawSourceSafety?{newRawSourceSafety:'wechat-raw-source-readonly-v2',oldHistoryPatchSha256:hash(oldHistoryPatch),sourceChanges:Object.fromEntries(['internal/wcdb/wcdb.go','internal/wcdb/notalone_source_readonly.go','internal/wcdb/notalone_source_vfs.go'].map(name=>[name,{old:oldFiles[name]?hash(oldFiles[name]):null,new:hash(newFiles[name])}]))}:{}),
     ...(quotes?{newQuoteProtocol:'wechat-quote-message-v1',sourceChanges:{'cmd/wechat-cli/notalone_quote.go':{old:quoteTail?hash(oldFiles['cmd/wechat-cli/notalone_quote.go']):null,new:hash(newFiles['cmd/wechat-cli/notalone_quote.go'])},...inlineSourceChanges,...sharedSourceChanges}}:{}),
     ...(quoteTail?{oldQuoteProtocol:'wechat-quote-message-v1',newQuoteReader:'wechat-quote-normal-tail-v2'}:{}),
     ...(quoteInline?{newQuoteInline:'wechat-quote-inline-sync-v1'}:{}),
@@ -615,4 +617,36 @@ test('本机水位恢复scope对照仅显式新增恢复能力，来源与其他
  assert.deepEqual(after,original);
  after.scopes[0].support.capabilities.incrementalTail='unsupported';
  assert.throws(()=>compareUpgradeScopeEvidence(before,after,{localIdRecoveryUpgrade:true}),/history_image_upgrade_scope_mismatch/);
+});
+
+test('原库安全升级静态保留旧来源别名，不启动旧组件或改业务库',async t=>{
+ const f=await syntheticUpgradeFixture({rawSourceSafety:true});t.after(()=>rm(f.repositoryRoot,{recursive:true,force:true}));
+ const business=path.join(f.dbRoot,'business.sqlite'),before=await readFile(business),alias=await readFile(f.oldAliasPath);
+ const result=await f.tools.prepareAliases({fromRoot:f.fromRoot,toRoot:f.toRoot,accountKey:f.accountKey,dbRoot:f.dbRoot});
+ assert.equal(result.status,'prepared');
+ assert.deepEqual(JSON.parse(await readFile(path.join(f.toRoot,'source-identity-aliases.json'),'utf8')).aliases,f.aliases);
+ assert.deepEqual(await readFile(f.oldAliasPath),alias);assert.deepEqual(await readFile(business),before);
+});
+
+test('安全升级拒绝仅补manifest声明而没有真实安全实现标记的旧组件',async t=>{
+ const f=await syntheticUpgradeFixture({rawSourceSafety:true,safetyMarker:false});t.after(()=>rm(f.repositoryRoot,{recursive:true,force:true}));
+ await assert.rejects(f.tools.prepareAliases({fromRoot:f.fromRoot,toRoot:f.toRoot,accountKey:f.accountKey,dbRoot:f.dbRoot}),/history_image_upgrade_artifact_mismatch/);
+ await assert.rejects(lstat(path.join(f.toRoot,'source-identity-aliases.json')),{code:'ENOENT'});
+});
+
+test('安全升级拒绝回退声明、改变受信helper或借安全修复改写无关入口',async t=>{
+ for(const kind of ['declaration','helper','unrelated'])await t.test(kind,async t=>{
+  const f=await syntheticUpgradeFixture({rawSourceSafety:true});t.after(()=>rm(f.repositoryRoot,{recursive:true,force:true}));
+  let tools=f.tools;
+  if(kind==='declaration'){
+   const file=path.join(f.toRoot,'manifest.json'),manifest=JSON.parse(await readFile(file,'utf8'));delete manifest.rawSourceSafety;await writeFile(file,JSON.stringify(manifest));
+  }else if(kind==='helper')await writeFile(path.join(f.toRoot,'source/internal/wcdb/notalone_source_readonly.go'),'unsafe changed source');
+  else{
+   const name='cmd/wechat-cli/main.go',before=await readFile(path.join(f.fromRoot,'source',name));
+   await writeFile(path.join(f.toRoot,'source',name),'unrelated main change');
+   tools=createUpgradeImageCliTools({repositoryRoot:f.repositoryRoot,policy:{...f.policy,sourceChanges:{...f.policy.sourceChanges,[name]:{old:hash(before),new:hash('unrelated main change')}}}});
+  }
+  await assert.rejects(tools.prepareAliases({fromRoot:f.fromRoot,toRoot:f.toRoot,accountKey:f.accountKey,dbRoot:f.dbRoot}),/history_image_upgrade_(?:manifest|source)_mismatch/);
+  await assert.rejects(lstat(path.join(f.toRoot,'source-identity-aliases.json')),{code:'ENOENT'});
+ });
 });

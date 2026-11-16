@@ -18,6 +18,7 @@ async function fixture(t,mode='normal',extraOptions={}) {
  await mkdir(join(root,'bin'));await mkdir(join(root,'lib'));
  const executable=join(root,'bin','wx-cli'),pidFile=join(root,'pid'),logFile=join(root,'requests');
  const script=`#!${process.execPath}
+ // notalone-raw-source-safety:wechat-raw-source-readonly-v2
  const fs=require('node:fs'); const readline=require('node:readline');const crypto=require('node:crypto');
  fs.writeFileSync(process.env.PID_FILE,String(process.pid));
  if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['notalone-history']))process.exit(91);
@@ -46,6 +47,7 @@ async function fixture(t,mode='normal',extraOptions={}) {
   if(mode==='invalid-json'){process.stdout.write('{broken\\n');return;}
   if(mode==='invalid-utf8'){process.stdout.write(Buffer.from([0x7b,0xff,0x7d,0x0a]));return;}
   if(mode==='unknown-code'){process.stdout.write(JSON.stringify({ok:false,error:{code:'sensitive-arbitrary-native-value'}})+'\\n');return;}
+  if(mode==='known-shm-readonly-code'){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_source_temporarily_unavailable'}})+'\\n');return;}
   if(mode==='known-code'){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_account_changed'}})+'\\n');return;}
   if(mode==='known-wal-index-code'){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_delta_wal_index_invalid'}})+'\\n');return;}
   if(mode==='known-growth-code'){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_target_growth_required'}})+'\\n');return;}
@@ -233,7 +235,7 @@ async function fixture(t,mode='normal',extraOptions={}) {
 `;
  await writeFile(executable,script,{mode:0o700});const wcdb=Buffer.from('synthetic-WCDB-artifact');
  await writeFile(join(root,'lib','libWCDB.dylib'),wcdb);
- const manifest={formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',cliSha256:hash(script),wcdbSha256:hash(wcdb),signing:'ad-hoc-development',realWechatVerified:false};
+ const manifest={formatVersion:1,kind:'notalone-history-cli-development',architecture:process.arch,sourceCommit:'795071fa0591da5fc2c6ab94a70f22ccd93ef06c',sourceTree:'5d617ff3250c27fd9b33a60cb0182e153c521057',historyPatchSha256:'a0fc0989b3d65e5d0b094789df36e8753c3ac675bd1a93fa83534b24e71bf440',rawSourceSafety:'wechat-raw-source-readonly-v2',readonlyPatchSha256:'c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa',cliSha256:hash(script),wcdbSha256:hash(wcdb),signing:'ad-hoc-development',realWechatVerified:false};
  await writeFile(join(root,'manifest.json'),JSON.stringify(manifest));
  const options={executable,expectedCliSha256:manifest.cliSha256,expectedWcdbSha256:manifest.wcdbSha256,environment:{TEST_MODE:mode,PID_FILE:pidFile,LOG_FILE:logFile},...extraOptions};
  const client=new NarrowWechatClient(options);
@@ -370,6 +372,38 @@ test('inspect未resolve时不启动子进程，非法名称与scope参数不进�
  await assert.rejects(client.inspectSelected(),{code:'history_scope_unverified'});
  for(const name of ['',null,'a\nother','甲'.repeat(86)])await assert.rejects(client.resolveSelected(name),{code:'history_request_invalid'});
  await assert.rejects(readFile(pidFile),{code:'ENOENT'});
+});
+test('未证明原始SHM只读的组件在任何原库请求前拒绝启动',async t=>{
+ const f=await fixture(t);
+ const manifest={...f.manifest};delete manifest.rawSourceSafety;
+ await writeFile(join(f.root,'manifest.json'),JSON.stringify(manifest));
+ await assert.rejects(f.client.resolveSelected('合成目标'),{code:'history_artifact_unverified'});
+ await assert.rejects(readFile(f.pidFile),{code:'ENOENT'});
+});
+test('只修改manifest安全声明不能让旧读取器启动',async t=>{
+ const f=await fixture(t);
+ const oldScript=(await readFile(f.options.executable,'utf8')).replace('notalone-raw-source-safety:wechat-raw-source-readonly-v2','synthetic-old-reader');
+ await writeFile(f.options.executable,oldScript);
+ const manifest={...f.manifest,historyPatchSha256:'a0fc0989b3d65e5d0b094789df36e8753c3ac675bd1a93fa83534b24e71bf440',rawSourceSafety:'wechat-raw-source-readonly-v2',cliSha256:hash(oldScript)};
+ await writeFile(join(f.root,'manifest.json'),JSON.stringify(manifest));
+ const client=new NarrowWechatClient({...f.options,expectedCliSha256:manifest.cliSha256});t.after(()=>client.close());
+ await assert.rejects(client.resolveSelected('合成目标'),{code:'history_artifact_unverified'});
+ await assert.rejects(readFile(f.pidFile),{code:'ENOENT'});
+});
+test('仅SHM只读的v1制品不能进入最终原库读取通道',async t=>{
+ const f=await fixture(t),legacySafety='wechat-raw-'+'shm-readonly-v1';
+ const script=(await readFile(f.options.executable,'utf8')).replace('notalone-raw-source-safety:wechat-raw-source-readonly-v2','notalone-raw-source-safety:'+legacySafety);
+ await writeFile(f.options.executable,script);
+ const manifest={...f.manifest,rawSourceSafety:legacySafety,historyPatchSha256:'20bc9378'+'d32725865812328c591c3ff5acbe7081e796d71d861a2b07fcb79682',cliSha256:hash(script)};
+ await writeFile(join(f.root,'manifest.json'),JSON.stringify(manifest));
+ const client=new NarrowWechatClient({...f.options,expectedCliSha256:manifest.cliSha256});t.after(()=>client.close());
+ await assert.rejects(client.resolveSelected('合成目标'),{code:'history_artifact_unverified'});
+ await assert.rejects(readFile(f.pidFile),{code:'ENOENT'});
+});
+test('安全标记不能代替受信连接补丁摘要',async t=>{
+ const f=await fixture(t);await writeFile(join(f.root,'manifest.json'),JSON.stringify({...f.manifest,historyPatchSha256:'0'.repeat(64)}));
+ await assert.rejects(f.client.resolveSelected('合成目标'),{code:'history_artifact_unverified'});
+ await assert.rejects(readFile(f.pidFile),{code:'ENOENT'});
 });
 test('CLI/WCDB哈希与manifest固定身份不匹配时均不启动',async t=>{
  for(const field of ['cli','wcdb','commit','tree','patch','kind','architecture','symlink']){
@@ -804,4 +838,10 @@ test('关闭订阅可撤销且只通知仍存活的守卫一次',async t=>{
  await f.client.resolveSelected('合成目标');await f.client.close();await f.client.close();
  assert.equal(retired,0);assert.equal(active,1);
  let late=0;f.client.onStopped(()=>{late++;})();assert.equal(late,1);
+});
+
+test('原库SHM暂不可读保留明确技术错误且关闭读取进程',async t=>{
+ const f=await fixture(t,'known-shm-readonly-code');
+ await assert.rejects(f.client.resolveSelected('合成目标'),{code:'history_source_temporarily_unavailable'});
+ noProcess(Number(await readFile(f.pidFile,'utf8')));
 });
