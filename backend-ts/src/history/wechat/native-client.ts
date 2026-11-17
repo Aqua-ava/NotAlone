@@ -1186,7 +1186,9 @@ export class NarrowWechatClient {
       if(!current||!historyTargetTransition(old,current,this.#support.capabilities?.partitionGrowth==='supported'))return fail('history_target_unverified');
       return this.#request({op:'resume-target',account:scope.accountKey,conversation:scope.conversationKey,consent:'selected-history-v1',target:old.descriptor,cursor},value=>{
         if(value===null)return null;
-        const parsed=historyTarget(value,scope,this.#schema);this.#target=structuredClone(parsed);this.#tailCursor=undefined;this.#lastTail=undefined;return parsed;
+        const parsed=historyTarget(value,scope,this.#schema);
+        if(!historyTargetTransition(old,parsed,this.#support?.capabilities?.partitionGrowth==='supported'))return fail('history_target_unverified');
+        this.#target=structuredClone(parsed);this.#tailCursor=undefined;this.#lastTail=undefined;return parsed;
       });
     },signal);
   }
@@ -1212,7 +1214,7 @@ export class NarrowWechatClient {
       }, pageResponseLimit);
     }, signal);
   }
-  /** 同一活守卫的固定切面检查点；不接受由调用方拼接或跨进程恢复的游标。 */
+  /** 恢复检查点先读完本轮差异快照；增量只接受本轮终页给出的游标。 */
   tailSelected(target: HistoryTarget, cursor: string, signal?: AbortSignal): Promise<HistoryTailPage> {
     try { signalValid(signal); opaque(cursor); }
     catch { return Promise.reject(new StorageFailure('history_request_invalid')); }

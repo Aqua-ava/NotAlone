@@ -26,7 +26,7 @@ async function sharedFixture(t,{durableHistory=true}={}) {
     state.channels.push(current);current.closed=0;
     return { ...f.channel,
       target:async scope=>{current.descriptor=`synthetic-snapshot-${state.dynamicSnapshots?++state.serial:state.targetRevision??0}`;return {...await f.channel.target(scope),descriptor:current.descriptor};},
-      resumeTarget:async(_scope,previous)=>{state.resumes++;if(state.resumeUnavailable)return null;current.descriptor=`synthetic-snapshot-${state.dynamicSnapshots?++state.serial:state.targetRevision??0}`;return {...previous,descriptor:current.descriptor,...state.resumeOverride};},
+      resumeTarget:async(_scope,previous,cursor)=>{state.resumes++;current.tailCursor=cursor;if(state.resumeUnavailable)return null;current.descriptor=`synthetic-snapshot-${state.dynamicSnapshots?++state.serial:state.targetRevision??0}`;return {...previous,descriptor:current.descriptor,...state.resumeOverride};},
       guardSession: { loss: loss.promise, failureCode: () => current.code },
       inspect: async scope => {
         current.scope = scope;
@@ -49,16 +49,15 @@ async function sharedFixture(t,{durableHistory=true}={}) {
 
 
 
-test('成功同步轮保留已停车守卫并复用通道对象，两位联系人两轮不遗留未收编通道',async t=>{
+test('每轮同步都释放守卫与通道，两位联系人轮转不保留空闲读者',async t=>{
  const f=await sharedFixture(t),[a,b]=f.saved;f.state.dynamicSnapshots=true;
  for(let round=0;round<2;round++)for(const contact of [a,b]){
   await f.history.synchronize(contact.contact_id);
   const token=await f.contacts.eligibility(contact.contact_id);
   assert.equal(await f.storage.execute('history.guardCheck',{token,guardId:'not-a-current-read'}),false);
  }
- // 保留语义等价安全断言：不遗留持有原生选择的空闲租约——续租开始前先释放上轮选择（park）再用同守卫换新通道；旧通道对象换出时必须关闭，轮内仍在保留表的通道不得关闭
- assert.deepEqual(f.state.channels.map(channel=>channel.closed),[1,1,0,0]);
- assert.equal(f.state.parks,3); // a→b→a→b 三次换主都会先停车上一位 owner 的选择
+ assert.deepEqual(f.state.channels.map(channel=>channel.closed),[1,1,1,1]);
+ assert.equal(f.state.parks,0,'服务层不再维护跨轮停车状态');
 });
 
 test('多联系人轮转后新快照在同一租约接纳交接与增量，连续两轮不饿死tail',{timeout:20000},async t=>{
@@ -83,7 +82,7 @@ test('多联系人轮转后新快照在同一租约接纳交接与增量，连�
  assert.ok(f.state.resumes>=2,'每次重新连接后沿持久检查点恢复');
 });
 
-test('旧读取器缺少持久历史检查点时交回原首次路径并在同一租约扫完33页',{timeout:20000},async t=>{
+test('旧读取器仅有持久增量检查点时同租约扫完33页再接增量',{timeout:20000},async t=>{
  const f=await sharedFixture(t,{durableHistory:false}),[a,b]=f.saved;f.state.dynamicSnapshots=true;
  for(const contact of [a,b])await f.history.synchronize(contact.contact_id);
  f.state.pageFactory=(_scope,target,cursor,current)=>{
@@ -94,23 +93,18 @@ test('旧读取器缺少持久历史检查点时交回原首次路径并在同�
    ...(exhausted?{resumeCursor:current.tailCursor}:{})};
  };
  const pages=f.state.pages,tails=f.state.tails.length;
- await f.history.synchronizeIncremental(a.contact_id,undefined,{followHistoryHandoff:true});
- // 保留语义等价安全断言：非持久读取器不得进入 32 页交接切片；页必须全部交回首次协调器续办，普通游标在同一租约内保留到终页
- assert.equal(f.state.pages,pages,'缺少持久历史检查点时不能进入32页交接切片');
- assert.equal(f.state.tails.length,tails);
- assert.deepEqual(f.state.wakes,[a.contact_id],'保留原首次历史交接');
- const directory={directory:async()=>{const saved=await f.contacts.syncDirectory();return {...saved,bindings:saved.bindings.filter(row=>row.contact_id===a.contact_id)};}};
- const first=new FirstHistoryCoordinator(directory,f.history);t.after(()=>first.close());
- first.wakeContact(a.contact_id);await first.waitForIdle();
- assert.equal(f.state.pages-pages,33,'旧读取器在同一租约保留普通游标直到终页');
+ await f.history.synchronizeIncremental(a.contact_id,undefined);
+ assert.equal(f.state.pages-pages,33,'没有持久历史检查点时不释放普通分页游标，直接读到终页');
+ assert.equal(f.state.tails.length,tails+1,'历史终页与tail共用同一租约');
+ assert.deepEqual(f.state.wakes,[],'已在本租约完成的交接不再派发另一套首次任务');
  assert.equal((await f.history.coverage(a.contact_id)).phase,'complete');
  assert.equal((await f.history.read(a.contact_id)).messages.length,34);
 });
 
-test('新完整历史的守卫重验作废旧增量后仍自动续读两轮',{timeout:20000},async t=>{
+test('新nonce来源准备保留恢复点，定时同步经差异交接后续读两轮',{timeout:20000},async t=>{
  t.mock.timers.enable({apis:['setInterval']});
  const f=await sharedFixture(t),[a,b]=f.saved;
- await f.history.synchronize(a.contact_id);await f.history.synchronizeIncremental(a.contact_id,undefined,{followHistoryHandoff:true});
+ await f.history.synchronize(a.contact_id);await f.history.synchronizeIncremental(a.contact_id,undefined);
  await f.history.synchronize(b.contact_id);
  const directory={directory:async()=>{const saved=await f.contacts.syncDirectory();return {...saved,bindings:saved.bindings.filter(row=>row.contact_id===a.contact_id)};}};
  const incremental=new IncrementalHistoryCoordinator(directory,f.history,{intervalMs:30_000,firstHistoryManagedExternally:true});
@@ -127,7 +121,7 @@ test('新完整历史的守卫重验作废旧增量后仍自动续读两轮',{ti
   await f.history.prepareSource(a.contact_id);await first.waitForIdle();
   const before=await f.history.coverage(a.contact_id),tails=f.state.tails.length;
   assert.equal(before.phase,'complete');
-  assert.equal(before.incremental.failureCode,'history_runtime_revalidated','仅元数据重验使旧增量失效');
+  assert.equal(before.incremental.failureCode,null,'同源新nonce元数据重验保留已证明恢复点');
   t.mock.timers.tick(30_000);await incremental.waitForIdle();await first.waitForIdle();await incremental.waitForIdle();
   assert.equal(incremental.getState().contacts[0].phase,'caught_up',`第${round+1}轮自动接上增量`);
   assert.ok(f.state.tails.length>tails,`第${round+1}轮确实读到增量页`);
@@ -141,7 +135,7 @@ for(const mode of ['source_changed','revoked'])test(`同租约交接${mode}仍�
  const tails=f.state.tails.length,pages=f.state.pages;
  if(mode==='source_changed')f.state.resumeOverride={sourceGeneration:'different-source'};
  else f.state.beforePage=async()=>{f.state.beforePage=null;await f.contacts.revoke(a.contact_id,a.binding_id,a.selection_generation);};
- await assert.rejects(f.history.synchronizeIncremental(a.contact_id,undefined,{followHistoryHandoff:true}),error=>
+ await assert.rejects(f.history.synchronizeIncremental(a.contact_id,undefined),error=>
   mode==='source_changed'?error.code==='history_target_unverified':['read_not_authorized','read_eligibility_stale'].includes(error.code));
  assert.equal(f.state.tails.length,tails,'失败交接不能进入tail');
  if(mode==='source_changed')assert.equal(f.state.pages,pages,'变来源不能读取新历史页');

@@ -10,7 +10,7 @@ const normalUse = scope => ({...report, accountKey: scope.accountKey, conversati
 
 /**
  * 共享读取器失证回归夹具：一个合成共享进程承载多位联系人，进程停止时同一 failureCode 会送达所有守卫，
- * 与真实 SharedWechatClient/WechatHistoryChannel 的 guardSession.failureCode 行为一致。
+ * 仅在途守卫接收失证；已完成读取的渠道真实关闭，不保留空闲失证订阅。
  */
 async function sharedFixture(t, options = {}) {
   // fixture() 的清理钩子收集到本地，和本夹具服务一起按“先关服务、再关存储”的顺序注册，
@@ -73,15 +73,17 @@ const stopSharedProcess = async (f, code) => {
   }, '共享读取器整体停止后守卫应降级为 lost');
 };
 
-test('共享读取器整体停止时来源错误码不批量围栏空闲守卫，下一次读取完整重验后续租', {timeout: 10000}, async t => {
+test('读取轮结束不保留空闲守卫，共享进程随后停止不围栏，下一轮完整重验', {timeout: 10000}, async t => {
   const f = await sharedFixture(t);
   await f.service.synchronize(f.contactA);
   await f.service.synchronize(f.contactB);
   let state = await stateOf(f);
   assert.equal(state.fences.length, 0);
-  assert.deepEqual(state.leases.map(row => row.state).sort(), ['active', 'active']);
+  assert.deepEqual(state.leases.map(row => row.state).sort(), ['lost', 'lost']);
 
-  // 共享进程以来源连续性错误码整体停止：两个空闲守卫都收到同一错误码。
+  assert.equal(f.lane.closes,f.lane.channels.length,'本轮结束即关闭全部自有渠道');
+  assert.equal(f.lane.parks,0,'不停车保留空闲守卫');
+  // 共享进程随后以来源连续性错误码停止，已结束的读取不再接收旧资源事件。
   await stopSharedProcess(f, 'history_source_changed');
   state = await stateOf(f);
   assert.equal(state.fences.length, 0, '共享进程整体停止不能把空闲联系人批量围栏');
@@ -92,17 +94,22 @@ test('共享读取器整体停止时来源错误码不批量围栏空闲守卫�
   assert.equal(coverage.phase, 'complete');
   state = await stateOf(f);
   assert.equal(fenceFor(state, f.contactA), null, '元数据重验通过后不得围栏');
-  assert.equal(leaseFor(state, f.contactA).state, 'active', '重验成功须在当前运行代次续租');
+  assert.equal(leaseFor(state, f.contactA).state, 'lost', '重验和正文读取结束后释放当轮守卫');
+  assert.equal(f.lane.closes,f.lane.channels.length);
   assert.ok(goalsFor(state, f.contactA).length > before, '重验成功须用当前读取器建立新目标');
 });
 
-test('共享读取器整体停止时只有正在读取的联系人按自身错误围栏，其他守卫只降级', {timeout: 10000}, async t => {
+test('共享进程停止时在途守卫仍保护读取，仅当前联系人按自身来源错误围栏', {timeout: 10000}, async t => {
+  const gate=Promise.withResolvers();t.after(()=>gate.resolve());
   const f = await sharedFixture(t);
   await f.service.synchronize(f.contactB);
-  f.lane.pageGate = Promise.withResolvers();
+  f.lane.pageGate = gate;
   f.lane.pageError = 'history_source_changed';
   const reading = f.service.synchronize(f.contactA).catch(error => error);
-  await waitFor(() => f.lane.pages.length > 0, '联系人A应进入页读取');
+  await waitFor(() => f.lane.pages.some(page=>page.contactId===f.contactA), '联系人A应进入页读取');
+  const inFlight=await stateOf(f);
+  assert.equal(leaseFor(inFlight,f.contactA).state,'active','在途页仍须由实际活守卫保护');
+  assert.equal(leaseFor(inFlight,f.contactB).state,'lost','另一联系人已完成读取不得保留空闲守卫');
   f.lane.code = 'history_source_changed';
   for (const {loss} of f.lane.channels) loss.resolve();
   f.lane.pageGate.resolve();
@@ -155,7 +162,7 @@ test('共享读取器停止后重验不可用仍停读，恢复后完整重验�
   assert.equal(coverage.phase, 'complete');
   state = await stateOf(f);
   assert.equal(state.fences.length, 0);
-  assert.equal(leaseFor(state, f.contactA).state, 'active');
+  assert.equal(leaseFor(state, f.contactA).state, 'lost');
 });
 
 test('读取器缺少受控恢复能力时保留围栏，不建立目标或读取正文', {timeout: 10000}, async t => {
@@ -189,27 +196,30 @@ test('干净关闭（守卫 lost）后新运行代次首次读取完整重验并
   assert.equal(coverage.phase, 'complete');
   const state = await stateOf(f);
   assert.equal(fenceFor(state, f.contactA), null, '干净关闭后的重验不得围栏');
-  assert.equal(leaseFor(state, f.contactA).state, 'active');
+  assert.equal(leaseFor(state, f.contactA).state, 'lost');
   assert.equal(leaseFor(state, f.contactA).runtimeId, nextState.runtimeId, '新运行代次重验后应续租当前运行代次');
 });
 
-test('硬中断（守卫 active 旧运行代次）后新运行代次首次读取完整重验并续租，不围栏', {timeout: 15000}, async t => {
-  const f = await sharedFixture(t);
+test('在途活守卫随Worker中断失效，新运行代次重新核对，不接受旧页', {timeout:15000}, async t => {
+  const gate=Promise.withResolvers();t.after(()=>gate.resolve());
+  const f=await sharedFixture(t);
   await f.service.synchronize(f.contactA);
-  let state = await stateOf(f);
-  assert.equal(leaseFor(state, f.contactA).state, 'active');
-  const crashedRuntime = leaseFor(state, f.contactA).runtimeId;
-  // 硬中断不经过服务释放：新Worker没有旧内存守卫，持久来源事实仍须重新核对。
-  await restart(f, t);
-  state = await stateOf(f);
-  assert.notEqual(state.runtimeId, crashedRuntime);
-  assert.equal(leaseFor(state,f.contactA),null,'硬中断不恢复旧内存守卫');assert.equal(state.proofs.find(p=>p.contact_id===f.contactA).state,'ok');
-  const coverage = await f.open().synchronize(f.contactA);
-  assert.equal(coverage.phase, 'complete');
-  state = await stateOf(f);
-  assert.equal(fenceFor(state, f.contactA), null, '硬中断后的首次读取不得只因运行代次变化围栏');
-  assert.equal(leaseFor(state, f.contactA).state, 'active');
-  assert.equal(leaseFor(state, f.contactA).runtimeId, state.runtimeId, '硬中断后的首次读取应在新运行代次续租');
+  f.lane.pageGate=gate;
+  const pages=f.lane.pages.length,interrupted=f.service.synchronize(f.contactA).catch(error=>error);
+  await waitFor(()=>f.lane.pages.length>pages,'新的本轮读取须进入受守卫保护的页');
+  const before=await stateOf(f),crashedRuntime=before.runtimeId;
+  assert.equal(leaseFor(before,f.contactA).state,'active','只在真实在途读取时模拟Worker中断');
+  await restart(f,t);
+  let state=await stateOf(f);
+  assert.notEqual(state.runtimeId,crashedRuntime);
+  assert.equal(leaseFor(state,f.contactA),null,'重开Worker不继承旧内存守卫');
+  assert.equal(state.proofs.find(p=>p.contact_id===f.contactA).state,'ok');
+  f.lane.pageGate.resolve();assert.ok(await interrupted instanceof Error,'旧Worker迟到页必须拒绝，不返回接纳结果');f.lane.pageGate=null;
+  const coverage=await f.open().synchronize(f.contactA);
+  assert.equal(coverage.phase,'complete');state=await stateOf(f);
+  assert.equal(fenceFor(state,f.contactA),null);
+  assert.equal(leaseFor(state,f.contactA).state,'lost','新运行代次完成本轮后也须释放');
+  assert.equal(leaseFor(state,f.contactA).runtimeId,state.runtimeId);
 });
 
 test('共享读取器停止后的旧渠道仍须核对物理目标，实际变化继续围栏', {timeout: 10000}, async t => {
@@ -220,7 +230,7 @@ test('共享读取器停止后的旧渠道仍须核对物理目标，实际变�
   await f.service.synchronize(f.contactA);
   let state = await stateOf(f);
   assert.equal(state.fences.length, 0);
-  assert.equal(leaseFor(state, f.contactA).state, 'active');
+  assert.equal(leaseFor(state, f.contactA).state, 'lost');
   await stopSharedProcess(f, 'history_source_changed');
   state = await stateOf(f);
   assert.equal(state.fences.length, 0, '共享进程错误码不得直接围栏空闲守卫');

@@ -27,44 +27,52 @@ function support(scope, overrides = {}) {
     programVersion: 'synthetic', build: '1', artifactSha256: 'a'.repeat(64), schemaFingerprint: 'b'.repeat(64),
     declaredPrimaryKey: ['local_id'], identity: 'source-table-local-v1', statusSemantics: 'synthetic-raw-codes',
     continuity: normalUseContinuity, serverAliasSemantics: 'unverified',
-    capabilities: { incrementalTail: 'supported', normalHistory: 'supported', snapshotBarrier: 'supported',
+    capabilities: { incrementalTail: 'supported',durableIncremental:'supported',durableHistory:'supported', normalHistory: 'supported', snapshotBarrier: 'supported',
       partitionCoverage: 'supported', sourceLifecycle: 'supported', restartContinuity: 'supported',
       recoveryMapping: 'supported', exactSchema: 'supported', declaredLocalKey: 'supported',
       automaticAllocation: 'supported', statusColumn: 'supported' }, ...overrides,
   };
 }
 function createChannel(state) {
-  const factory = () => {
-    let heldScope;
+  return () => {
     const loss = Promise.withResolvers();
+    let current, resumed=false, tailCursor;
+    const target = scope => current = {
+      protocol:'private-history-v1',descriptor:`synthetic:${scope.conversationKey}:${++state.serial}${state.descriptorSuffix??''}`,
+      partitions:['p'],tables:[{partition:'p',instance:state.table??'t'}],sourceGeneration:'source-1',
+    };
     return {
-      guardSession: { loss: loss.promise },
-      inspect: async scope => { heldScope = scope; return support(scope, state.supportOverrides); },
-      target: async scope => ({
-        protocol: 'private-history-v1',
-        descriptor: `synthetic:${scope.conversationKey}${state.descriptorSuffix ?? ''}`,
-        partitions: ['p'], tables: [{ partition: 'p', instance: 't' }], sourceGeneration: 'source-1',
-      }),
-      page: async (_scope, target, cursor) => ({
-        target: target.descriptor, cursorIn: cursor, cursorOut: null,
-        records: state.historyRecords, completedPartitions: ['p'], exhausted: true,
-        resumeCursor: state.resumeCursor ?? 'tail-1',
-      }),
-      tail: async (scope, target, cursor) => {
-        state.tails.push({ contactId: scope.token.contact_id, cursor });
-        const batch = state.tailBatches.length ? state.tailBatches.shift() : { records: [], caughtUp: true, cursorOut: cursor };
-        return { target: target.descriptor, cursorIn: cursor, cursorOut: batch.cursorOut ?? cursor,
-          caughtUp: batch.caughtUp ?? true, records: batch.records ?? [] };
+      guardSession:{loss:loss.promise},
+      inspect:async scope=>support(scope,state.supportOverrides),
+      target:async scope=>target(scope),
+      resumeTarget:async(scope,previous,cursor)=>{
+        state.resumes.push({previous,cursor});
+        if(state.resumeUnavailable)return null;
+        resumed=true;return target(scope);
       },
-      park: async () => {},
-      close: async () => { loss.resolve(); },
+      page:async(_scope,requested,cursor)=>{
+        state.pages++;
+        assert.equal(requested.descriptor,current.descriptor);
+        if(state.pageFailure){state.pageFailure=false;throw new Error('synthetic_page_interrupted');}
+        tailCursor=state.resumeCursor;
+        return {target:current.descriptor,cursorIn:cursor,cursorOut:null,records:resumed?(state.resumeRecords??[]):state.historyRecords,
+          completedPartitions:['p'],exhausted:true,resumeCursor:tailCursor};
+      },
+      tail:async(scope,requested,cursor)=>{
+        assert.equal(requested.descriptor,current.descriptor);
+        assert.equal(cursor,tailCursor,'resume只恢复差异snapshot，必须本轮page终页后才能tail');
+        state.tails.push({contactId:scope.token.contact_id,cursor});
+        const batch=state.tailBatches.length?state.tailBatches.shift():{records:[],caughtUp:true,cursorOut:cursor};
+        tailCursor=batch.cursorOut??cursor;
+        return {target:current.descriptor,cursorIn:cursor,cursorOut:tailCursor,caughtUp:batch.caughtUp??true,records:batch.records??[]};
+      },
+      close:async()=>{state.closes++;if(state.closeFailure)throw new Error('synthetic_close_failed');loss.resolve();},
     };
   };
-  return factory;
 }
 async function fixture(t, { names = ['a'] } = {}) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'notalone-goal-reuse-')));
-  const state = { historyRecords: [], tailBatches: [], tails: [], resumeCursor: 'tail-1', descriptorSuffix: null, supportOverrides: {} };
+  const state = { historyRecords: [], tailBatches: [], tails: [], resumes:[], serial:0, pages:0, closes:0, resumeCursor: 'tail-1', descriptorSuffix: null, supportOverrides: {} };
   const f = { root, state, names };
   const openStorage = async intent => SqliteStorage.open({ userData: root, intent, role: 'test',
     expectedDatabaseId: intent === 'open' ? f.storage.status.databaseId : undefined, registryModule: registryUrl() });
@@ -130,116 +138,53 @@ const invalidatedCount = rows => rows.filter(row => row.state === 'invalidated' 
   ['history_runtime_revalidated', 'history_snapshot_replaced'].includes(String(row.failure_code))).length;
 const goalsOfAll = (f, bindings) => Promise.all(bindings.map(binding => goals(f, binding.contact_id))).then(list => list.flat());
 
-test('重启重验后同范围 0 页空增量目标被复用：不再新建交接、不再作废', async t => {
-  const f = await fixture(t);
-  f.state.historyRecords = [record('1')];
-  const [binding] = await select(f);
-  await f.history.synchronize(binding.contact_id);
-  const before = await goals(f, binding.contact_id);
-  const incrementalBefore = before.find(row => row.kind === 'incremental');
-  assert.equal(incrementalBefore.state, 'running');
-  assert.equal(Number(incrementalBefore.pages_accepted), 0, '初次交接的增量目标尚未接受任何页');
-  assert.equal(incrementalBefore.cursor, 'tail-1');
-  assert.equal(invalidatedCount(before), 0);
+test('重启恢复新nonce差异快照，page终页后tail且来源目标不改写',async t=>{
+ const f=await fixture(t);f.state.historyRecords=[record('1')];const [binding]=await select(f);
+ await f.history.synchronize(binding.contact_id);
+ const before=await goals(f,binding.contact_id),historyBefore=before.find(row=>row.kind==='history'),incrementalBefore=before.find(row=>row.kind==='incremental');
+ await f.restart();const pages=f.state.pages;
+ await f.history.synchronizeIncremental(binding.contact_id);
+ const after=await goals(f,binding.contact_id),running=after.find(row=>row.kind==='incremental'&&row.state==='running');
+ assert.equal(f.state.pages,pages+1,'恢复必须读取本轮差异page');
+ assert.equal(f.state.tails.length,1);assert.notEqual(running.id,incrementalBefore.id);
+ assert.equal(after.find(row=>row.id===incrementalBefore.id),undefined,'已被新持久恢复点替代的空增量退役');
+ assert.equal(after.find(row=>row.id===historyBefore.id).target_json,historyBefore.target_json,'有来源资料的旧目标不改写');
+ assert.notEqual(running.target_json,historyBefore.target_json,'真实恢复使用新nonce目标');
+ assert.equal(after.length,3);assert.equal((await f.history.read(binding.contact_id)).messages.length,1);
+ assert.equal((await f.history.coverage(binding.contact_id)).phase,'complete');
+});
 
-  await f.restart();
-  // 重开后的第一轮仍执行跨运行代次重验；重验识别出同范围 0 页空目标后保存原值并续用。
+test('真实nonce轮换的空闲多轮只保留来源目标与当前恢复链',async t=>{
+ const f=await fixture(t);f.state.historyRecords=[record('1')];const [binding]=await select(f);
+ await f.history.synchronize(binding.contact_id);
+ for(let round=0;round<6;round++){
   await f.history.synchronizeIncremental(binding.contact_id);
-  await f.history.synchronize(binding.contact_id);
-  const after = await goals(f, binding.contact_id);
-  assert.equal(after.length, before.length + 1, '只新增重验轮的历史目标行，不再重建增量目标');
-  const incrementalAfter = after.find(row => row.id === incrementalBefore.id);
-  assert.ok(incrementalAfter, '旧增量目标被复用');
-  assert.equal(incrementalAfter.state, 'running');
-  assert.equal(incrementalAfter.cursor, incrementalBefore.cursor);
-  assert.equal(Number(incrementalAfter.pages_accepted), 0);
-  assert.equal(invalidatedCount(after), 0, '复用成立时重验链不产生作废行');
-  const coverage = await f.history.coverage(binding.contact_id);
-  assert.equal(coverage.phase, 'complete');
-  assert.equal(coverage.incremental.goalId, incrementalBefore.id, '覆盖继续指向被复用的增量目标');
-  assert.equal(coverage.incremental.cursorPresent, true);
-  assert.equal((await f.history.read(binding.contact_id)).messages.length, 1, '消息与来源追溯不变');
-  // 被复用的增量目标可继续接住本轮读取：接收一次空"追平"页后仍是同一目标行。
-  f.state.tailBatches.push({ records: [], caughtUp: true, cursorOut: 'tail-1' });
-  await f.history.synchronizeIncremental(binding.contact_id);
-  const continued = await goals(f, binding.contact_id);
-  const continuedIncremental = continued.find(row => row.id === incrementalBefore.id);
-  assert.equal(continuedIncremental.state, 'running');
-  assert.equal(Number(continuedIncremental.pages_accepted), 1, '被复用目标按既有游标接续空页');
-  assert.equal(continued.length, after.length, '接读取只更新行，不新建');
+  const rows=await goals(f,binding.contact_id);assert.equal(rows.length,3,`第${round+1}轮目标有界`);
+  assert.equal(rows.filter(row=>row.kind==='incremental'&&row.state==='running').length,1);
+ }
+ assert.equal((await f.history.read(binding.contact_id)).messages.length,1);
+ assert.equal(f.state.pages,7);assert.equal(f.state.tails.length,6);
 });
 
-test('空闲多轮（无重启、无新消息）不新增任何目标行', async t => {
-  const f = await fixture(t);
-  f.state.historyRecords = [record('1')];
-  const bindings = await select(f);
-  await settle(f);
-  const before = await goalsOfAll(f, bindings);
-  assert.equal(before.length, bindings.length * 2, '每位联系人一个完成历史目标和一个运行增量目标');
-  for (let round = 0; round < 3; round++) {
-    f.state.tailBatches.push({ records: [], caughtUp: true, cursorOut: `tail-idle-${round}` });
-    await settle(f);
-  }
-  const after = await goalsOfAll(f, bindings);
-  assert.equal(after.length, before.length, '空闲轮只更新增量目标，不新建目标');
-  assert.equal(invalidatedCount(after), 0, '空闲轮不作废既有目标');
+test('多联系人重启后每位保留来源与当前nonce恢复链',async t=>{
+ const f=await fixture(t,{names:['a','b','c']});f.state.historyRecords=[record('1')];const bindings=await select(f);
+ for(const binding of bindings)await f.history.synchronize(binding.contact_id);
+ await f.restart();await settle(f);
+ for(const binding of bindings){
+  const rows=await goals(f,binding.contact_id);assert.equal(rows.length,3);
+  assert.equal(rows.filter(row=>row.kind==='incremental'&&row.state==='running').length,1);
+  assert.equal((await f.history.read(binding.contact_id)).messages.length,1);
+  assert.equal((await f.history.coverage(binding.contact_id)).phase,'complete');
+ }
 });
 
-test('合成夹具：N 位联系人一次后台重启，每联系人新增 ≤1 行且旧增量目标被复用', async t => {
-  const f = await fixture(t, { names: ['a', 'b', 'c'] });
-  f.state.historyRecords = [record('1')];
-  const bindings = await select(f);
-  for (const binding of bindings) await f.history.synchronize(binding.contact_id);
-  const before = await goalsOfAll(f, bindings);
-  await f.restart();
-  const restartMark = Date.now() - 10;
-  await settle(f);
-  const after = await goalsOfAll(f, bindings);
-  for (const binding of bindings) {
-    const beforeContact = contactRows(before, binding.contact_id);
-    const afterContact = contactRows(after, binding.contact_id);
-    assert.ok(afterContact.length <= beforeContact.length + 1, `每联系人新增 ≤1（${binding.contact_id.slice(0, 8)}：${afterContact.length - beforeContact.length}）`);
-    assert.equal(invalidatedCount(afterContact), 0, '复用成立时重验链不产生作废行');
-    const incremental = afterContact.find(row => row.kind === 'incremental');
-    const incrementalBefore = beforeContact.find(row => row.kind === 'incremental');
-    if (!incremental) console.error('DEBUG-METRIC', {contactId: binding.contact_id.slice(0, 8),
-      after: afterContact.map(row => `${row.kind}/${row.state}/${row.failure_code}`),
-      before: beforeContact.map(row => `${row.kind}/${row.state}/${row.failure_code}`)});
-    assert.equal(String(incremental.id), String(incrementalBefore.id), '增量目标单行续用');
-    const coverage = await f.history.coverage(binding.contact_id);
-    assert.equal(coverage.phase, 'complete');
-    assert.equal(coverage.incremental.goalId, String(coverage.incremental.goalId) === String(incremental.id) ? incremental.id : coverage.incremental.goalId);
-    assert.ok(coverage.incremental.cursorPresent, '覆盖沿用被复用增量的游标');
-  }
-});
-
-test('快照真被替换（descriptor 变化）时仍作废旧增量且旧游标不会交给读取器', async t => {
-  const f = await fixture(t);
-  f.state.historyRecords = [record('1')];
-  const [binding] = await select(f);
-  await f.history.synchronize(binding.contact_id);
-  const before = await goals(f, binding.contact_id);
-  const incrementalBefore = before.find(row => row.kind === 'incremental');
-  assert.equal(incrementalBefore.cursor, 'tail-1');
-  // 下一轮读取器打开不同 descriptor 的快照：摘要失配，必须保持旧行为（作废＋新建），不得沿用旧游标。
-  f.state.descriptorSuffix = '-replaced';
-  f.state.historyRecords = [];
-  f.state.resumeCursor = 'tail-2';
-  f.state.tailBatches.length = 0;
-  await f.restart();
-  await settle(f);
-  const after = await goals(f, binding.contact_id);
-  assert.ok(after.length > before.length, '复用前提不成立时保持旧行为（新建目标）');
-  const invalidatedOld = after.find(row => row.id === incrementalBefore.id);
-  assert.ok(invalidatedOld, '旧增量目标行保留为审计记录');
-  assert.equal(invalidatedOld.state, 'invalidated');
-  const runningIncremental = after.find(row => row.kind === 'incremental' && row.state === 'running');
-  assert.ok(runningIncremental, '替换后新建增量目标续读');
-  assert.notEqual(String(runningIncremental.id), String(incrementalBefore.id), '旧目标行不再承担读取职责（旧游标不外泄）');
-  assert.equal(runningIncremental.cursor, 'tail-2', '新目标持有替换后快照的续读游标');
-  const lastTail = f.state.tails.at(-1);
-  assert.ok(lastTail, '读取器被调用过');
-  assert.equal(lastTail.cursor, 'tail-2', '读取器拿到替换后快照的游标，而不是被作废目标的旧游标');
+test('真实表实例变化不因成功resume而保留旧goal',async t=>{
+ const f=await fixture(t);f.state.historyRecords=[record('1')];const [binding]=await select(f);await f.history.synchronize(binding.contact_id);
+ const before=await goals(f,binding.contact_id),old=before.find(row=>row.kind==='incremental');
+ f.state.table='different-instance';
+ await assert.rejects(f.history.synchronizeIncremental(binding.contact_id),{code:'history_source_continuity_unverified'});
+ assert.ok((await goals(f,binding.contact_id)).some(row=>row.id===old.id),'真实来源变化保留旧恢复事实供围栏/删除');
+ assert.equal(f.state.tails.length,0);
 });
 
 /** 端到端复用判据负向：条件破坏后重验链仍回旧路径（作废＋新建）。 */
@@ -252,38 +197,57 @@ async function settledContact(t) {
   return { f, binding, before };
 }
 
-test('端到端负向：接受过空页的增量目标（pages_accepted>0）重启后按旧行为重建', async t => {
-  const { f, binding, before } = await settledContact(t);
-  const incrementalBefore = before.find(row => row.kind === 'incremental');
-  f.state.tailBatches.push({ records: [], caughtUp: true, cursorOut: 'tail-1' });
-  await f.history.synchronizeIncremental(binding.contact_id);
-  assert.equal(Number(incrementalBefore.pages_accepted) + 1, 1, '空页计入 pages_accepted');
-  await f.restart();
-  await settle(f);
-  const after = await goals(f, binding.contact_id);
-  assert.ok(after.length > before.length, '复用前提破坏后仍新建目标');
-  assert.equal(after.find(row => row.id === incrementalBefore.id).state, 'invalidated', '旧增量目标仍被作废');
-  const running = after.find(row => row.kind === 'incremental' && row.state === 'running');
-  assert.ok(running && String(running.id) !== String(incrementalBefore.id), '新建增量目标接续');
-  const coverage = await f.history.coverage(binding.contact_id);
-  assert.equal(coverage.phase, 'complete');
+test('接受过空页的旧增量在新持久恢复点和真实关闭后退役',async t=>{
+ const {f,binding}=await settledContact(t);
+ await f.history.synchronizeIncremental(binding.contact_id);
+ const old=(await goals(f,binding.contact_id)).find(row=>row.kind==='incremental'&&row.state==='running');
+ assert.equal(Number(old.pages_accepted),1);
+ await f.restart();await f.history.synchronizeIncremental(binding.contact_id);
+ const rows=await goals(f,binding.contact_id);assert.equal(rows.length,3);assert.equal(rows.find(row=>row.id===old.id),undefined);
+ assert.equal((await f.history.coverage(binding.contact_id)).phase,'complete');
 });
 
-test('端到端负向：名下有 capture_record 的增量目标重启后按旧行为重建', async t => {
-  const { f, binding, before } = await settledContact(t);
-  const incrementalBefore = before.find(row => row.kind === 'incremental');
-  f.state.tailBatches.push({ records: [record('2', { text: '重启前的增量消息' })], caughtUp: true, cursorOut: 'tail-2' });
-  await f.history.synchronizeIncremental(binding.contact_id);
-  const read = await f.history.read(binding.contact_id);
-  assert.equal(read.messages.length, 2, '增量消息已保存');
-  await f.restart();
-  await settle(f);
-  const after = await goals(f, binding.contact_id);
-  assert.ok(after.length > before.length, '复用前提破坏后仍新建目标');
-  assert.equal(after.find(row => row.id === incrementalBefore.id).state, 'invalidated', '旧增量目标仍被作废');
-  const running = after.find(row => row.kind === 'incremental' && row.state === 'running');
-  assert.ok(running && String(running.id) !== String(incrementalBefore.id));
-  assert.equal((await f.history.read(binding.contact_id)).messages.length, 2, '既有消息与来源不因重建而重复');
+test('有来源记录的旧增量保留原身份，不参与空节点退役',async t=>{
+ const {f,binding}=await settledContact(t);
+ f.state.tailBatches.push({records:[record('2',{text:'重启前的增量消息'})],caughtUp:true,cursorOut:'tail-2'});
+ await f.history.synchronizeIncremental(binding.contact_id);
+ const old=(await goals(f,binding.contact_id)).find(row=>row.kind==='incremental'&&row.state==='running');
+ await f.restart();await f.history.synchronizeIncremental(binding.contact_id);
+ const rows=await goals(f,binding.contact_id),saved=rows.find(row=>row.id===old.id);
+ assert.ok(saved);assert.equal(saved.target_json,old.target_json);assert.equal(saved.cursor,old.cursor);assert.equal(saved.state,'invalidated');
+ assert.equal((await f.history.read(binding.contact_id)).messages.length,2);
+});
+
+for(const failure of ['page','close'])test(`恢复${failure}失败保留原持久checkpoint，不提前清理空目标`,async t=>{
+ const {f,binding}=await settledContact(t),old=(await goals(f,binding.contact_id)).find(row=>row.kind==='incremental');
+ f.state[failure==='page'?'pageFailure':'closeFailure']=true;
+ await assert.rejects(f.history.synchronizeIncremental(binding.contact_id));
+ const saved=(await goals(f,binding.contact_id)).find(row=>row.id===old.id);
+ assert.ok(saved);assert.equal(saved.cursor,old.cursor);assert.equal(saved.target_json,old.target_json);
+ f.state.closeFailure=false;await f.history.stop(binding.contact_id);
+});
+
+for(const protection of ['restore','handoff','quarantine'])test(`已替换的空增量仍被${protection}依赖时不退役`,async t=>{
+ const {f,binding}=await settledContact(t),old=(await goals(f,binding.contact_id)).find(row=>row.kind==='incremental');
+ const token=await f.contacts.eligibility(binding.contact_id);
+ if(protection==='quarantine')await f.storage.execute('fixture.patchGoal',{ownerId:owner,goalId:old.id,patch:{coverage_state:'partial'}});
+ else if(protection==='restore')await f.storage.execute('fixture.protectGoal',{token,goalId:old.id,id:randomUUID(),kind:'restore'});
+ else await f.storage.execute('fixture.cloneGoal',{ownerId:owner,goalId:old.id,id:randomUUID(),patch:{creation_no:null,state:'invalidated',failure_code:'synthetic',handoff_from_goal_id:old.id}});
+ await f.history.synchronizeIncremental(binding.contact_id);
+ const saved=(await goals(f,binding.contact_id)).find(row=>row.id===old.id);
+ assert.ok(saved,'被恢复或后继引用的原检查点不能定向清理');assert.equal(saved.target_json,old.target_json);assert.equal(saved.cursor,old.cursor);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('非共享读者关闭后仍等待本轮空目标退役完成，close不提前结束',async t=>{
+ const {f,binding}=await settledContact(t),entered=Promise.withResolvers(),allow=Promise.withResolvers();
+ const execute=f.storage.execute.bind(f.storage);
+ f.storage.execute=async(name,...args)=>{if(name==='history.retireResumedEmptyGoals'){entered.resolve();await allow.promise;}return execute(name,...args);};
+ const reading=f.history.synchronizeIncremental(binding.contact_id);await entered.promise;
+ assert.equal(f.state.closes,2,'读者已实际关闭，退役仍属于本轮生命周期');
+ let closed=false;const closing=f.history.close().then(()=>{closed=true;});
+ await Promise.resolve();await Promise.resolve();assert.equal(closed,false,'close必须等退役写排空');
+ allow.resolve();await Promise.all([reading,closing]);assert.equal(closed,true);
 });
 
 test('端到端负向：读取开关回转（read_epoch 变化）后资格不匹配，保持旧行为', async t => {
@@ -354,4 +318,52 @@ test('复用判据逐一单独破坏：基础行被识别，任一前提破坏�
       assert.ok(outcome.some(row => row.id === incremental.id), `原始行不受 ${single.name} 影响仍可续用`);
     }
   }
+});
+
+for(const variant of ['goal','cursor','changed_cursor','digest','generation','target','support','capability','newer_goal'])test(`持久增量目标的恢复事务拒绝保留${variant}不一致的原行`,async t=>{
+ const {f,binding}=await settledContact(t);
+ f.state.tailBatches.push({records:[],caughtUp:true,cursorOut:'accepted-cursor'});
+ await f.history.synchronizeIncremental(binding.contact_id);
+ const token=await f.contacts.eligibility(binding.contact_id),scope=await f.storage.execute('history.scope',{token}),report=support(scope);
+ const checkpoint=await f.storage.execute('history.resumeCheckpoint',{token,report});assert.ok(checkpoint);
+ const request={token,report,target:checkpoint.target,guardId:randomUUID(),resumedCheckpoint:{goalId:checkpoint.goalId,cursor:checkpoint.cursor,target:checkpoint.target}};
+ if(variant==='goal')request.resumedCheckpoint.goalId=randomUUID();
+ if(variant==='cursor')request.resumedCheckpoint.cursor='forged-cursor';
+ if(variant==='changed_cursor')await f.storage.execute('fixture.patchGoal',{ownerId:owner,goalId:checkpoint.goalId,patch:{cursor:'later-accepted-cursor'}});
+ if(variant==='digest')await f.storage.execute('fixture.patchGoal',{ownerId:owner,goalId:checkpoint.goalId,patch:{cursor_scope_digest:'different-scope'}});
+ if(variant==='generation')await f.storage.execute('fixture.patchGoal',{ownerId:owner,goalId:checkpoint.goalId,patch:{accepted_data_generation:BigInt(token.data_generation)+1n}});
+ if(variant==='target')request.resumedCheckpoint.target={...checkpoint.target,descriptor:'forged-original-target'};
+ if(variant==='support')request.report={...report,profileId:'different-supported-profile'};
+ if(variant==='capability')request.report={...report,capabilities:{...report.capabilities,durableIncremental:'unsupported'}};
+ if(variant==='newer_goal'){
+  const current=(await goals(f,binding.contact_id)).find(goal=>goal.id===checkpoint.goalId);
+  assert.equal(await f.storage.execute('fixture.cloneGoal',{ownerId:owner,goalId:current.id,id:randomUUID(),patch:{creation_no:current.creation_no+1n}}),undefined);
+ }
+ const prepared=await f.storage.execute('history.prepareNormalUseGuard',request);
+ assert.equal(prepared.resumedGoalId,undefined,'复核不一致不能保留原目标及其普通游标');
+ assert.equal((await goals(f,binding.contact_id)).find(goal=>goal.id===checkpoint.goalId).state,'invalidated');
+ await f.storage.execute('history.guardRelease',{token,guardId:request.guardId});
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('读取器未实际恢复检查点时，即使当前descriptor相同也不保留旧增量目标',async t=>{
+ const {f,binding}=await settledContact(t);
+ f.state.tailBatches.push({records:[],caughtUp:true,cursorOut:'accepted-cursor'});await f.history.synchronizeIncremental(binding.contact_id);
+ const old=(await goals(f,binding.contact_id)).find(goal=>goal.kind==='incremental'&&goal.state==='running');
+ const tails=f.state.tails.length;f.state.resumeUnavailable=true;
+ await f.history.synchronizeIncremental(binding.contact_id);
+ assert.equal(f.state.tails.length,tails,'未恢复的旧游标不能发给当前读取器');
+ assert.equal((await goals(f,binding.contact_id)).find(goal=>goal.id===old.id).state,'invalidated');
+});
+
+test('来源准备恢复持久目标时不读page或tail、不改目标或未知覆盖',async t=>{
+ const f=await fixture(t);f.state.historyRecords=[record('1'),record('2',{stateAssurance:'unverified',text:null})];
+ const [binding]=await select(f);await f.history.synchronize(binding.contact_id);await f.history.synchronizeIncremental(binding.contact_id);
+ const before=await goals(f,binding.contact_id),coverage=await f.history.coverage(binding.contact_id),pages=f.state.pages,tails=f.state.tails.length;
+ assert.equal(coverage.phase,'incomplete');assert.equal(coverage.failureCode,'history_identity_quarantined');assert.equal(coverage.traversalComplete,true);
+ await f.history.prepareSource(binding.contact_id);
+ assert.deepEqual(await goals(f,binding.contact_id),before,'元数据准备不创建、复位或推进同步目标');
+ assert.deepEqual(await f.history.coverage(binding.contact_id),coverage,'不能把来源准备当作未知行核验或完整遍历');
+ assert.equal(f.state.pages,pages);assert.equal(f.state.tails.length,tails);
+ const guards=await f.storage.execute('fixture.guardLease',{ownerId:owner});assert.ok(guards.every(guard=>guard.state==='lost'));
 });

@@ -31,7 +31,7 @@ async function strictTargetFixture(t, { sharedReader = true } = {}) {
    target: async scope => select(scope, f.target).target,
    resumeTarget: async (scope, previous) => { state.resumes++; return select(scope, previous).target; },
    page: async (scope, target, cursor) => {
-    const selected = current(scope, target); state.pages.push({ contactId: scope.token.contact_id, target: target.descriptor });
+    const selected = current(scope, target);if(state.pageFailure)throw new StorageFailure(state.pageFailure);state.pages.push({ contactId: scope.token.contact_id, target: target.descriptor });
     selected.tailCursor = `checkpoint-${state.serial}`;
     return { target: target.descriptor, cursorIn: cursor, cursorOut: null,
      records: [record('1', { text: `合成历史：${scope.conversationKey}` }),record('99',{kind:'other',text:null,originalType:'244813135921',status:'2',serverId:'0',metadataOnly:true,stateAssurance:'unverified'})], completedPartitions: ['shard-a'],
@@ -58,7 +58,7 @@ async function pendingQuoteFixture(t,{lost=true}={}) {
  let first;
  t.after(async()=>{await first?.close();for(const clean of cleanup.reverse())await clean();});
  await f.history.synchronize(a.contact_id);
- if(lost){await f.history.synchronize(b.contact_id);await f.history.synchronizeIncremental(a.contact_id);await f.history.stop(a.contact_id);}
+ if(lost){await f.history.synchronize(b.contact_id);f.state.pageFailure='history_native_timeout';await assert.rejects(f.history.synchronizeIncremental(a.contact_id),{code:'history_native_timeout'});f.state.pageFailure=null;await f.history.stop(a.contact_id);}
  const wakes=[],pageCount=f.state.pages.length;
  first=new FirstHistoryCoordinator({directory:async()=>{const directory=await f.contacts.syncDirectory();return {...directory,bindings:directory.bindings.filter(row=>row.contact_id===a.contact_id)};}},f.history);
  f.history.setFirstHistoryWake(id=>{assert.equal(f.state.pages.length,pageCount,'引用重验只处理引用，不直接读取历史分页');wakes.push(id);first.wakeContact(id);});
@@ -93,7 +93,7 @@ for(const failure of ['source-changed','revoked'])test(`引用重验后${failure
  if(failure==='source-changed'){
   assert.equal(await f.storage.execute('history.normalUseRevalidationCandidate',{token:await f.contacts.eligibility(f.a.contact_id)}),true,'只允许再次核元数据，不开放旧来源');
   const source=(await f.history.read(f.a.contact_id)).messages[0].sourceRecordIds[0];await assert.rejects(f.history.source(f.a.contact_id,source),{code:'history_source_not_found'});
-  const quoteReads=f.state.quoteReads;await assert.rejects(f.history.ensureSourceReady(f.a.contact_id),{code:'history_source_continuity_unverified'});
+  const quoteReads=f.state.quoteReads;await assert.rejects(f.history.ensureSourceReady(f.a.contact_id),{code:'history_source_recovery_unsupported'});
   assert.equal(f.state.quoteReads,quoteReads,'物理表已替换不能继续读取引用');assert.equal(f.state.pages.length,f.pageCount);assert.deepEqual(f.wakes,[]);assert.equal((await f.history.coverage(f.a.contact_id)).failureCode,'history_source_continuity_unverified');
  }
 });

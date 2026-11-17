@@ -77,11 +77,11 @@ export interface HistoryRecoveryResult {
   target:HistoryTarget; cursor:string|null; anchors:readonly HistoryRecord[];
 }
 export interface HistoryChannel {
-  // 仅已实现持续原生守卫的渠道可声明；loss 在守卫无法继续时结束。
+  // 仅已实现本轮原生守卫的渠道可声明；loss 在守卫无法继续时结束。
   readonly guardSession?: { readonly loss: Promise<void>; failureCode?():string|null };
   inspect(scope: HistoryScope, signal?: AbortSignal): Promise<HistorySupportReport>;
   target(scope: HistoryScope, signal?: AbortSignal): Promise<HistoryTarget>;
-  // 只接续业务事务已接受且作用域未变的本机检查点；缺失返回 null，不能猜测水位。
+  // 接续业务已接受的本机检查点并建立本轮差异快照；必须 page 至终页才能 tail，缺失返回 null。
   resumeTarget?(scope: HistoryScope, previous: HistoryTarget, cursor: string, signal?: AbortSignal): Promise<HistoryTarget | null>;
   recoverTarget?(scope:HistoryScope, previous:HistoryTarget, positions:readonly HistoryRecoveryPosition[], signal?:AbortSignal):Promise<HistoryRecoveryResult>;
   page(scope: HistoryScope, target: HistoryTarget, cursor: string | null, signal?: AbortSignal, options?: {checkpoint?:boolean}): Promise<HistoryPage>;
@@ -89,8 +89,6 @@ export interface HistoryChannel {
   readQuote?(scope: HistoryScope, target: HistoryTarget, source: HistorySource, signal?: AbortSignal): Promise<HistoryQuoteContent & {proofDigest: string}>;
   // 可选增量尾部能力：只由支持档声明 incrementalTail=supported 的已认证适配器提供。
   tail?(scope: HistoryScope, target: HistoryTarget, cursor: string, signal?: AbortSignal): Promise<HistoryTailPage>;
-  // 共享读取器换联系人前释放本通道选择并保留进程；重试幂等，失败须确认原进程停止。
-  park?(): Promise<void>;
   // 06 精确历史边界能力：仅已认证适配器提供，生产适配器不实现（空缺即拒绝）。
   boundarySnapshot?(scope: HistoryScope, signal?: AbortSignal): Promise<unknown>;
   close?(): Promise<void>;

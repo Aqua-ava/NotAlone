@@ -33,6 +33,10 @@ const quote=value=>"'"+value.replaceAll("'","'\\''")+"'";
 test('正式SQLite profile共用唯一模型宿主完成L1并持久等待主题窗口',{timeout:30000},async t=>{
  const cleanups=[];let host,provider,reopened,info;
  const f=await fixture({after:cleanup=>cleanups.push(cleanup)});
+ const inspect=f.channel.inspect,releasedGuards=[],execute=f.storage.execute.bind(f.storage);
+ f.channel.inspect=async(...args)=>({...await inspect(...args),continuity:'same-source-instances-normal-use-v1',capabilities:{normalHistory:'supported',incrementalTail:'supported'}});
+ f.channel.guardSession={loss:new Promise(()=>{})};
+ f.storage.execute=async(name,...args)=>{const result=await execute(name,...args);if(name==='history.guardRelease'&&result)releasedGuards.push(args[0]);return result;};
  const root=f.root,infoPath=join(root,'managed/sqlite-backend.info'),envFilePath=join(root,'synthetic.env');
  const auditPath=join(root,'synthetic-network.jsonl'),stderrPath=join(root,'synthetic-host.stderr'),wrapper=join(root,'synthetic-node');
  t.after(async()=>{
@@ -60,6 +64,11 @@ test('正式SQLite profile共用唯一模型宿主完成L1并持久等待主题�
   ],completedPartitions:[],exhausted:false};
  };
  for(const contactId of contactIds){await assert.rejects(f.service.synchronize(contactId),/synthetic-manual-history-kept-open/);assert.equal((await f.service.coverage(contactId)).traversalComplete,false);}
+ for(const contactId of contactIds){
+  const token=await f.contacts.eligibility(contactId),released=releasedGuards.find(item=>item.token.contact_id===contactId);assert.ok(released,'导入结束必须真实释放本轮守卫');
+  assert.equal(await f.storage.execute('history.guardCheck',{token,guardId:released.guardId}),false);
+  assert.equal(await f.storage.execute('history.bodyAvailable',{token}),true,'持久来源事实仍合法，不要求空闲守卫');
+ }
  await f.contacts.setReading(false);const prepared=[],contactForMessage=new Map(),contactForRecord=new Map();
  for(const contactId of contactIds){
   const messages=(await f.service.read(contactId)).messages;assert.equal(messages.length,2);

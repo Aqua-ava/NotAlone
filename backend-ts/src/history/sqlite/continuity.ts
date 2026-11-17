@@ -2,7 +2,8 @@ import { StorageFailure, type StorageTransaction, type StorageDiagnostic } from 
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistorySupportReport, HistoryTarget } from './contracts.ts';
 import { historyTargetTransition, isPartitionGrowthTargetChange, type HistoryTargetTransition } from '../partition-growth.ts';
-import { reusableEmptyGoals } from './goal-reuse.ts';
+import { reusableEmptyGoals,serializeSupport } from './goal-reuse.ts';
+import {historyCursorScopeDigest} from './cursor.ts';
 import {getProof,incompleteLegacySource,isSourceBlocked,fenceSource,putScope,deleteProof} from './source-proof.ts';
 import {getSourceGuard,putSourceGuard} from './source-guard.ts';
 
@@ -122,8 +123,23 @@ export function normalUseRevalidationCandidate(tx:StorageTransaction,token:ReadE
   &&guard.conversation_id===token.conversation_id&&guard.source_generation===token.source_generation)return false;
  return priorNormalUse(tx,token,scope.tables_json);
 }
+export interface ResumedCheckpoint {goalId:string;cursor:string;target:HistoryTarget}
+/** 仅保留读取器已实际恢复、且事务内仍是同一最新身份与游标的持久增量目标。 */
+function resumedIncrementalGoal(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,report:HistorySupportReport,resume:ResumedCheckpoint|undefined):{id:string}|undefined {
+ if(!resume||report.capabilities?.durableIncremental!=='supported'||typeof resume.goalId!=='string'||typeof resume.cursor!=='string'||!resume.target)return;
+ // 原生恢复会为本轮差异快照分配新 descriptor；保留的是原恢复点事实，不能把旧游标当成本轮 tail。
+ if(!historyTargetTransition(resume.target,target,false))return;
+ const goal=tx.get(`SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND creation_no IS NOT NULL ORDER BY creation_no DESC,created_at DESC,id DESC LIMIT 1`,[token.owner_id,token.contact_id]);
+ if(!goal||goal.id!==resume.goalId||goal.kind!=='incremental'||goal.cursor!==resume.cursor
+  ||!(['running','incomplete'].includes(String(goal.state))||goal.state==='invalidated'&&goal.failure_code==='history_runtime_revalidated')
+  ||goal.binding_id!==token.binding_id||goal.grant_id!==token.grant_id
+  ||goal.accepted_data_generation!==BigInt(token.data_generation)||goal.accepted_barrier_generation!==BigInt(token.barrier_generation)
+  ||goal.eligibility_json!==JSON.stringify(token)||goal.support_json!==serializeSupport(report)||goal.target_json!==JSON.stringify(resume.target)
+  ||goal.cursor_scope_digest!==historyCursorScopeDigest(token,report,resume.target))return;
+ return {id:String(goal.id)};
+}
 /** 当前元数据通过后更新唯一事实，并在同一事务发布本次读取的易失守卫。 */
-export function prepareNormalUseTarget(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,report:HistorySupportReport,guardId:string,verifiedRecovery=false):{ok:boolean;revalidated:boolean} {
+export function prepareNormalUseTarget(tx:StorageTransaction,token:ReadEligibility,target:HistoryTarget,report:HistorySupportReport,guardId:string,verifiedRecovery=false,resume?:ResumedCheckpoint):{ok:boolean;revalidated:boolean;resumedGoalId?:string} {
  const runtime=tx.get('SELECT runtime_id FROM database_instance WHERE slot=1'),accountKey=report.accountKey;
  if(!runtime?.runtime_id||!accountKey||!guardId)return {ok:false,revalidated:false};
  const scope=getProof(tx,token.owner_id,token.contact_id),guard=getSourceGuard(tx,token.owner_id,token.contact_id);
@@ -144,15 +160,25 @@ export function prepareNormalUseTarget(tx:StorageTransaction,token:ReadEligibili
  if(active&&(guard.guard_id!==guardId||guard.binding_id!==token.binding_id||guard.conversation_id!==token.conversation_id||guard.source_generation!==token.source_generation))return {ok:false,revalidated:false};
  const revalidated=Boolean(scope?.tables_json)&&!active;
  if(revalidated&&!verifiedRecovery&&!priorNormalUse(tx,token,scope!.tables_json))return {ok:fenceContinuity(tx,token,'N06'),revalidated:false};
+ const resumed=resumedIncrementalGoal(tx,token,target,report,resume),resumedGoalId=resumed?.id;
  putScope(tx,token,identity(target,accountKey),{accountKey,conversationKey:report.conversationKey,state:'ok',checkedAt:Date.now()});
  if(revalidated){
-  const keepIds=reusableEmptyGoals(tx,token,report,target).map(goal=>goal.id);
-  if(keepIds.length)tx.run(`UPDATE read_goal SET state='invalidated',failure_code='history_runtime_revalidated' WHERE owner_id=? AND contact_id=? AND kind IN ('history','incremental') AND state IN ('running','incomplete') AND id NOT IN (${keepIds.map(()=>'?').join(',')})`,[token.owner_id,token.contact_id,...keepIds]);
-  else tx.run("UPDATE read_goal SET state='invalidated',failure_code='history_runtime_revalidated' WHERE owner_id=? AND contact_id=? AND kind IN ('history','incremental') AND state IN ('running','incomplete')",[token.owner_id,token.contact_id]);
+  const keepIds=[...new Set([...reusableEmptyGoals(tx,token,report,target).map(goal=>goal.id),...(resumedGoalId?[resumedGoalId]:[])])];
+  // 已接受终页但仍含未知行的是持久遍历事实，不属于需要作废的活快照；在原 UPDATE 内判定，避免加载历史池重算摘要。
+  const terminalHistory=`kind='history' AND state='incomplete' AND cursor IS NULL AND resume_cursor IS NOT NULL
+   AND eligibility_json=? AND support_json=? AND json_remove(target_json,'$.descriptor')=json_remove(?,'$.descriptor')
+   AND EXISTS (SELECT 1 FROM sync_capture c WHERE c.owner_id=read_goal.owner_id AND c.goal_id=read_goal.id)
+   AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(target_json,'$.partitions')) p
+    WHERE NOT EXISTS (SELECT 1 FROM json_each(completed_partitions) done WHERE done.value=p.value))`;
+  tx.run(`UPDATE read_goal SET state='invalidated',failure_code='history_runtime_revalidated'
+   WHERE owner_id=? AND contact_id=? AND kind IN ('history','incremental') AND state IN ('running','incomplete')
+   ${keepIds.length?`AND id NOT IN (${keepIds.map(()=>'?').join(',')})`:''} AND NOT (${terminalHistory})`,
+   [token.owner_id,token.contact_id,...keepIds,JSON.stringify(token),serializeSupport(report),JSON.stringify(target)]);
  }
  putSourceGuard(tx,{owner_id:token.owner_id,contact_id:token.contact_id,binding_id:token.binding_id,conversation_id:token.conversation_id,
   source_generation:token.source_generation,guard_id:guardId,runtime_id:String(runtime.runtime_id),state:'active'});
- return {ok:true,revalidated};
+ if(resumedGoalId)tx.run("UPDATE read_goal SET state='running',failure_code=NULL WHERE owner_id=? AND id=? AND state='invalidated' AND failure_code='history_runtime_revalidated'",[token.owner_id,resumedGoalId]);
+ return {ok:true,revalidated,...(resumedGoalId?{resumedGoalId}:{})};
 }
 function priorPartitionGrowth(tx:StorageTransaction,token:ReadEligibility,current:HistorySupportReport):boolean {
  const previous=tx.get(`SELECT support_json FROM read_goal WHERE owner_id=? AND contact_id=? AND binding_id=? AND grant_id=?

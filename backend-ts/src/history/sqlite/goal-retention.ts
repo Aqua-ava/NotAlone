@@ -1,4 +1,51 @@
 import type {StorageTransaction} from '../../storage/sqlite/contracts.ts';
+import type {ReadEligibility} from '../../contacts/sqlite/contracts.ts';
+import type {HistorySupportReport,HistoryTarget} from './contracts.ts';
+import {assertSourceContinuity,type ResumedCheckpoint} from './continuity.ts';
+import {historyCursorScopeDigest} from './cursor.ts';
+import {historyTargetTransition} from '../partition-growth.ts';
+import {serializeSupport} from './goal-reuse.ts';
+
+/** 仅本轮真实恢复链可立即退役空节点；新持久恢复点和读者关闭均已成功后调用。 */
+export function retireResumedEmptyGoals(tx:StorageTransaction,token:ReadEligibility,replacementGoalId:string,checkpoint:ResumedCheckpoint):number{
+ const old=tx.get('SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND id=?',[token.owner_id,token.contact_id,checkpoint?.goalId]);
+ const replacement=tx.get('SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND id=?',[token.owner_id,token.contact_id,replacementGoalId]);
+ if(!old||!replacement||old.creation_no===null||replacement.creation_no===null||old.kind!=='incremental'||old.state!=='invalidated'||old.failure_code!=='history_snapshot_replaced'||!['ready','caught_up'].includes(String(old.coverage_state))
+  ||old.cursor!==checkpoint.cursor||old.target_json!==JSON.stringify(checkpoint.target)||replacement.kind!=='history'
+  ||typeof replacement.resume_cursor!=='string'||BigInt(String(replacement.creation_no))<=BigInt(String(old.creation_no)))return 0;
+ let report:HistorySupportReport,target:HistoryTarget;
+ try{report=JSON.parse(String(replacement.support_json));target=JSON.parse(String(replacement.target_json));}catch{return 0;}
+ assertSourceContinuity(tx,token,target,report.accountKey);
+ if(report.capabilities?.durableIncremental!=='supported'||!historyTargetTransition(checkpoint.target,target,false))return 0;
+ for(const row of [old,replacement]){
+  const expectedTarget=row===old?checkpoint.target:target;
+  if(row.binding_id!==token.binding_id||row.grant_id!==token.grant_id||row.eligibility_json!==JSON.stringify(token)
+   ||row.accepted_data_generation!==BigInt(token.data_generation)||row.accepted_barrier_generation!==BigInt(token.barrier_generation)
+   ||row.support_json!==serializeSupport(report)||row.cursor_scope_digest!==historyCursorScopeDigest(token,report,expectedTarget))return 0;
+ }
+ if(replacement.cursor!==null){
+  if(report.capabilities?.durableHistory!=='supported'||!['running','incomplete'].includes(String(replacement.state)))return 0;
+ }else{
+  try{const completed=JSON.parse(String(replacement.completed_partitions));if(!['complete','incomplete'].includes(String(replacement.state))||!Array.isArray(completed)||!target.partitions.every(partition=>completed.includes(partition)))return 0;}catch{return 0;}
+ }
+ const parent=typeof old.handoff_from_goal_id==='string'?tx.get('SELECT * FROM read_goal WHERE owner_id=? AND contact_id=? AND id=?',[token.owner_id,token.contact_id,old.handoff_from_goal_id]):undefined;
+ const remove=(id:string):number=>{
+  const candidate=tx.get(`SELECT id FROM read_goal g WHERE owner_id=? AND contact_id=? AND id=?
+   AND NOT EXISTS (SELECT 1 FROM sync_capture c WHERE c.owner_id=g.owner_id AND c.goal_id=g.id
+    AND EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=c.owner_id AND r.capture_id=c.id))
+   AND NOT EXISTS (SELECT 1 FROM history_restore r WHERE r.owner_id=g.owner_id AND r.contact_id=g.contact_id AND r.goal_id=g.id)
+   AND NOT EXISTS (SELECT 1 FROM read_goal n WHERE n.owner_id=g.owner_id AND n.contact_id=g.contact_id AND n.handoff_from_goal_id=g.id)`,[token.owner_id,token.contact_id,id]);
+  if(!candidate)return 0;
+  tx.run('DELETE FROM sync_capture WHERE owner_id=? AND goal_id=?',[token.owner_id,id]);
+  tx.run('DELETE FROM read_goal WHERE owner_id=? AND id=?',[token.owner_id,id]);return 1;
+ };
+ let removed=remove(String(old.id));
+ // 未知或未完历史仍表达独立覆盖事实；不因空节点清理改写它。
+ if(removed&&parent?.kind==='history'&&parent.state==='complete'&&parent.failure_code===null
+  &&parent.eligibility_json===JSON.stringify(token)&&parent.target_json===old.target_json&&parent.support_json===old.support_json
+  &&parent.cursor_scope_digest===old.cursor_scope_digest)removed+=remove(String(parent.id));
+ return removed;
+}
 
 /** 每次最多清理的目标数：在已有写事务内有界执行，不阻塞同步。 */
 export const goalRetentionBatch=50;

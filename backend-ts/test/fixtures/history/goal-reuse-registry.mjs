@@ -4,6 +4,20 @@ import { reusableEmptyGoals } from '../../../src/history/sqlite/goal-reuse.ts';
 
 /** 仅供本测试夹具使用的合成数据动作；不是产品路径。 */
 export const registry = { ...base, actions: [...base.actions,
+  {name:'fixture.protectGoal',mode:'write',retryBusy:false,execute(tx,i){
+    const token=i.token;
+    if(i.kind==='restore')tx.run(`INSERT INTO history_restore(owner_id,request_key,contact_id,authorization_id,conversation_id,binding_id,verification_id,grant_id,
+      selection_generation,barrier_generation,goal_id,state,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,'active',1)`,
+      [token.owner_id,i.id,token.contact_id,i.id,token.conversation_id,token.binding_id,token.verification_id,token.grant_id,BigInt(token.selection_generation),BigInt(token.barrier_generation),i.goalId]);
+    else throw new Error('synthetic_goal_protection_invalid');
+  }},
+  {name:'fixture.patchGoal',mode:'write',retryBusy:false,execute(tx,i){
+    const allowed=new Set(['cursor','cursor_scope_digest','accepted_data_generation','coverage_state']);
+    for(const [key,value] of Object.entries(i.patch)){
+      if(!allowed.has(key))throw new Error('synthetic_goal_patch_invalid');
+      tx.run(`UPDATE read_goal SET ${key}=? WHERE owner_id=? AND id=?`,[value,i.ownerId,i.goalId]);
+    }
+  }},
   { name: 'fixture.cloneGoal', mode: 'write', retryBusy: false, execute(tx, i) {
     // 复制一条现有目标并按字段覆写；仅用于隔离验收制造"某一复用条件破坏"的行。
     const source = tx.get('SELECT * FROM read_goal WHERE owner_id=? AND id=?', [i.ownerId, i.goalId]);

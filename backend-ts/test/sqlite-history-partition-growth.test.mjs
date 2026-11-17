@@ -58,9 +58,9 @@ function installGrowthChannel(f) {
 test('新增表目标尚无检查点就中断时，仍能从已核验旧分片的恢复点接续',async t=>{
  const f=await fixture(t),contactId=f.saved[0].contact_id,state=installGrowthChannel(f);
  await f.service.synchronize(contactId);state.growing=true;
- // 保留语义等价：非持久读取器不进入交接切片，新增表目标在租约边界交回首次历史；
- // 安全性质等“中断表达式”用进程重启覆盖：重启不得丢失已核验恢复点，仍以旧分片游标接续
- await f.service.synchronizeIncremental(contactId,undefined,{followHistoryHandoff:true});await f.service.close();
+ // 新目标尚未接受恢复点就真实失败；重启仍须使用上次已接受的旧分片检查点。
+ state.pageHook=async()=>{throw new StorageFailure('history_native_timeout');};
+ await assert.rejects(f.service.synchronizeIncremental(contactId),{code:'history_native_timeout'});await f.service.close();state.pageHook=null;
  const restarted=new SqliteHistoryService(f.storage,f.contacts,()=>f.channel);t.after(()=>restarted.close());
  const result=await restarted.synchronize(contactId);assert.equal(result.phase,'complete');
  assert.equal(state.resumes.length,2);assert.ok(state.resumes.every(row=>row.cursor==='resume-v1'));
@@ -76,10 +76,9 @@ test('已接受单分片历史遇到安全表增长时从原游标建立新目�
   assert.deepEqual((await f.service.read(contactId)).messages.map(item => item.text), ['合成table-v1-1']);
 
   state.growing = true;
-  // 保留语义等价：安全表增长的读取交回首次历史（定向唤醒），已核验旧分片恢复点保持；随后一轮必须从原游标建立新目标且只收新表消息
-  const pending = await f.service.synchronizeIncremental(contactId,undefined,{followHistoryHandoff:true});
-  assert.equal(pending.phase, 'running');
-  assert.deepEqual(state.wakeups, [contactId]);
+  const pending=await f.service.synchronizeIncremental(contactId);
+  assert.equal(pending.phase,'complete','安全增长在本轮租约从原检查点补齐后接续tail');
+  assert.deepEqual(state.wakeups,[],'本轮已经完成的交接不另派首次任务');
   assert.equal(state.resumes.length, 1);
   assert.equal(state.resumes[0].cursor, 'resume-v1');
   assert.deepEqual(state.resumes[0].previous.tables, oldTarget.tables);
@@ -103,7 +102,7 @@ test('增量尾部发现安全表增长时不接受旧目标页并定向唤醒�
       records: [message('stale', fileA, 'table-v1')], caughtUp: false };
   };
 
-  const interrupted = await f.service.synchronizeIncremental(contactId,undefined,{followHistoryHandoff:true});
+  const interrupted = await f.service.synchronizeIncremental(contactId,undefined);
   assert.equal(interrupted.incremental.failureCode, 'history_target_growth_required');
   assert.deepEqual(state.wakeups, [contactId]);
   assert.equal((await f.service.read(contactId)).messages.length, 1, '变化检测前返回的旧目标页不能入库');

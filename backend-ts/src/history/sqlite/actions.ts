@@ -15,7 +15,7 @@ import { clearBoundaryExclusion, completeRestoreGoal, restoreOperationForGoal } 
 import { assertHistoryCursor, historyCursorScheme, historyCursorScopeDigest } from './cursor.ts';
 import { isPartitionGrowthReportChange, isPartitionGrowthTargetChange } from '../partition-growth.ts';
 import { assertHistoryReadBoundary } from './suppression.ts';
-import { purgeStaleGoals } from './goal-retention.ts';
+import { purgeStaleGoals, retireResumedEmptyGoals } from './goal-retention.ts';
 // 规范化与空目标复用判据集中在 goal-reuse.ts；这里 re-export 保持既有导入点不变。
 import { serializeSupport, reusableEmptyGoals } from './goal-reuse.ts';
 import { assertSourceContinuity, assertCheckpointSourceContinuity, assertLiveGuard, fenceContinuity, isSourceContinuityLost, normalUseContinuity, normalUseRevalidationCandidate, prepareNormalUseTarget, preflightGeneration, preflightTarget } from './continuity.ts';
@@ -111,7 +111,7 @@ export const historyActions:StorageAction[]=[
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertSupport(i.report);
   if(i.report.continuity!==normalUseContinuity||typeof i.guardId!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(i.guardId))return {ok:false,revalidated:false};
   const target=targetOf(i.target,token,i.report);
-  return prepareNormalUseTarget(tx,token,target,i.report as HistorySupportReport,i.guardId);
+  return prepareNormalUseTarget(tx,token,target,i.report as HistorySupportReport,i.guardId,false,i.resumedCheckpoint);
  }),
  action('history.guardAcquire','write',(tx,i)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);
@@ -137,8 +137,8 @@ export const historyActions:StorageAction[]=[
   const token=i.token as ReadEligibility,guard=getSourceGuard(tx,token.owner_id,token.contact_id);
   if(!guard||guard.binding_id!==token.binding_id||guard.conversation_id!==token.conversation_id||guard.source_generation!==token.source_generation||guard.guard_id!==i.guardId)return false;
   loseSourceGuard(tx,token.owner_id,token.contact_id,{guardId:i.guardId});
-  // 与基线一致：非共享或正在读取的守卫确证失联时持久围栏（R02）；共享进程整体停止的空闲守卫先降级，由完整重验裁决。
-  if(i.deferVerification!==true&&i.sourceLost===true)fenceContinuity(tx,token,'R02');return true;
+  // 守卫只属于本轮读取；确证来源失联时持久围栏，普通完成或取消仅释放易失资格。
+  if(i.sourceLost===true)fenceContinuity(tx,token,'R02');return true;
  }),
  action('history.markContinuityLost','write',(tx,i)=>{const token=i.token as ReadEligibility;
   if(!tx.get("SELECT 1 FROM conversation_binding WHERE owner_id=? AND contact_id=? AND id=? AND state='verified'",[token.owner_id,token.contact_id,token.binding_id]))return false;
@@ -181,7 +181,7 @@ export const historyActions:StorageAction[]=[
   if(supportGrowth&&target.checkedPartitions===undefined)return null;
   assertHistoryReadBoundary(tx,token,{kind:'history'});assertCheckpointSourceContinuity(tx,token,target,i.report.accountKey,supportGrowth);
   if(historyCursorScopeDigest(token,previousReport,target)!==goal.cursor_scope_digest)return null;
-  return {target,cursor:assertHistoryCursor(goal.kind==='history'&&(goal.cursor===null||durableHistory)?goal.resume_cursor:goal.cursor,'history_cursor_invalid')};
+  return {goalId:String(goal.id),target,cursor:assertHistoryCursor(goal.kind==='history'&&(goal.cursor===null||durableHistory)?goal.resume_cursor:goal.cursor,'history_cursor_invalid')};
  }),
  action('history.partitionGrowthCandidate','read',(tx,i)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertSupport(i.report);
@@ -199,15 +199,8 @@ export const historyActions:StorageAction[]=[
   // 任一复用前提不成立则建立新的目标。
   const reusable=reusableEmptyGoals(tx,token,i.report,target);
   const reusableHistory=reusable.find(goal=>goal.kind==='history');
-  const reusableIds=new Set(reusable.map(goal=>goal.id));
-  if(reusable.length){
-   const staleCandidates=tx.all("SELECT id FROM read_goal WHERE owner_id=? AND contact_id=? AND kind='incremental' AND state IN ('running','incomplete')",[token.owner_id,token.contact_id])
-    .map(row=>String(row.id)).filter(id=>!reusableIds.has(id));
-   // 新固定快照会替换原生读取器中的目标；旧目标的增量游标不能再交给该读取器。
-   if(staleCandidates.length)tx.run(`UPDATE read_goal SET state='invalidated',failure_code='history_snapshot_replaced' WHERE owner_id=? AND contact_id=? AND kind='incremental' AND state IN ('running','incomplete') AND id IN (${staleCandidates.map(()=>'?').join(',')})`,[token.owner_id,token.contact_id,...staleCandidates]);
-  }else{
-   tx.run("UPDATE read_goal SET state='invalidated',failure_code='history_snapshot_replaced' WHERE owner_id=? AND contact_id=? AND kind='incremental' AND state IN ('running','incomplete')",[token.owner_id,token.contact_id]);
-  }
+  // 本轮差异快照必须从 page 交接，哪怕 descriptor 相同也不能沿用旧 tail 会话。
+  tx.run("UPDATE read_goal SET state='invalidated',failure_code='history_snapshot_replaced' WHERE owner_id=? AND contact_id=? AND kind='incremental' AND state IN ('running','incomplete')",[token.owner_id,token.contact_id]);
   if(reusableHistory){
    // 空探测轮遗留（任务 01）：complete 空 history 行同身份复用时，在同事务把该行进度复位到本轮重验起点
    // （acceptPage 只收 running/incomplete 行）；行数不变、读取流与新目标完全同路径，轮次校验与守卫链照旧。
@@ -277,6 +270,7 @@ export const historyActions:StorageAction[]=[
  }),
  action('history.interrupt','write',(tx,i)=>{const goal=currentGoal(tx,i.token,i.goalId);if(goal.state==='running'||goal.state==='incomplete')tx.run("UPDATE read_goal SET state='incomplete',failure_code=? WHERE owner_id=? AND id=?",[i.code,i.token.owner_id,goal.id]);return readCoverage(tx,i.token.owner_id,i.token.contact_id);}),
  action('history.incrementalPending','read',(tx,i)=>{assertReadEligibility(tx,i.token);const goal=currentIncremental(tx,i.token,i.report);return goal?{id:String(goal.id),target:JSON.parse(String(goal.target_json)),cursor:String(goal.cursor)}:null;}),
+ action('history.retireResumedEmptyGoals','write',(tx,i)=>{assertReadEligibility(tx,i.token);return retireResumedEmptyGoals(tx,i.token,i.replacementGoalId,i.checkpoint);}),
  action('history.beginIncremental','write',(tx,i)=>{
   const token=i.token as ReadEligibility;const report=i.report as HistorySupportReport;assertReadEligibility(tx,token);assertSupport(report);
   assertHistoryReadBoundary(tx,token,{kind:'incremental'});

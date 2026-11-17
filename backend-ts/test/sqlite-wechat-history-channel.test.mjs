@@ -98,8 +98,8 @@ const proofStates=f=>f.storage.execute('fixture.sourceProofStates',{ownerId:owne
 const proofState=async(f,contactId)=>(await proofStates(f)).find(row=>row.contact_id===contactId)?.state;
 async function requests(file){try{return (await readFile(file,'utf8')).trim().split('\n').map(JSON.parse);}catch(error){if(error.code==='ENOENT')return [];throw error;}}
 function noProcess(pid){assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});}
-async function waitForOperation(file,operation){return new Promise((resolve,reject)=>{
- const check=()=>requests(file).then(rows=>{if(rows.some(row=>row.op===operation)){clearTimeout(timer);watcher.close();resolve();}});
+async function waitForOperation(file,operation,afterCount=0){return new Promise((resolve,reject)=>{
+ const check=()=>requests(file).then(rows=>{if(rows.filter(row=>row.op===operation).length>afterCount){clearTimeout(timer);watcher.close();resolve();}});
  const watcher=watch(join(file,'..'),check),timer=setTimeout(()=>{watcher.close();reject(new Error('synthetic_operation_missing'));},5000);check();
 });}
 const waitForPage=file=>waitForOperation(file,'page');
@@ -129,40 +129,41 @@ test('正式受控渠道驱动联系人历史服务入库，非文字空正文�
  const after=(await f.history.read(contact)).messages;assert.equal(after.length,2);assert.equal(after.find(row=>row.kind==='text').id,text.id);assert.equal(after.find(row=>row.kind==='text').sourceRecordIds.length,1,'同一来源重复观察不再累计来源记录');
  const rows=await requests(f.logFile);assert.ok(rows.filter(row=>row.op==='resolve').every(row=>row.displayName===conversation));
  assert.deepEqual(rows.slice(0,4).map(row=>row.op),['resolve','inspect','support','target']);
- const pid=Number(await readFile(f.pidFile,'utf8'));assert.equal(f.channels.length,1);assert.doesNotThrow(()=>process.kill(pid,0));
+ const pid=Number(await readFile(f.pidFile,'utf8'));assert.equal(f.channels.length,2);noProcess(pid);
+ await Promise.all(f.channels.map(channel=>channel.guardSession.loss));
  await f.history.stop(contact);noProcess(pid);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
 test('正式历史终页游标交接到同scope增量尾部并原子写入更新与新消息',async t=>{
- const f=await fixture(t),contact=f.binding.contact_id;
- await f.setPlan({resumeCursor:'tail-1',capabilities:capabilities({incrementalTail:'supported'})});
+ const f=await fixture(t,true),contact=f.binding.contact_id,caps=Object.fromEntries([...statusCapabilityKeys,'incrementalTail','durableIncremental'].map(key=>[key,'supported']));
+ await f.setPlan({resumeCursor:'tail-1',capabilities:caps});
  assert.equal((await f.history.synchronize(contact)).phase,'complete');
  const before=(await f.history.read(contact)).messages.find(message=>message.kind==='text');assert.equal(before.status,'0');
- await f.setPlan({resumeCursor:'tail-1',capabilities:capabilities({incrementalTail:'supported'}),tailRows:[
-  {partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'77',sender:'contact',kind:'text',text:'合成历史正文',originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,status:'2',stateAssurance:'verified'},
+ await f.setPlan({resumeCursor:'tail-1',capabilities:caps,tailRows:[
+  {partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'77',sender:'contact',kind:'text',text:'合成历史正文:'+f.binding.conversation_locator,originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,status:'2',stateAssurance:'verified'},
   {partition:'d'.repeat(64),table:'c'.repeat(64),localId:'3',serverId:'0',sender:'contact',kind:'text',text:'合成增量新消息',originalType:'1',sentAt:'1700000001000',timePrecision:'second',orderScheme:null,orderKey:null,status:'3',stateAssurance:'verified'}]});
  const coverage=await f.history.synchronizeIncremental(contact);assert.equal(coverage.incremental.phase,'ready');assert.equal(coverage.incremental.pagesAccepted,1);
  const after=(await f.history.read(contact)).messages,texts=after.filter(message=>message.kind==='text');
  assert.equal(after.length,3);assert.equal(texts.length,2);assert.equal(texts.find(message=>message.id===before.id).status,'2');assert.ok(texts.some(message=>message.text==='合成增量新消息'));
- const rows=await requests(f.logFile);assert.equal(rows.filter(row=>row.op==='resolve').length,1);assert.equal(rows.filter(row=>row.op==='target').length,1);
- const tail=rows.find(row=>row.op==='tail');assert.ok(tail);assert.equal(tail.consent,'selected-history-v1');assert.equal(tail.account,account);assert.equal(tail.conversation,conversation);assert.equal(tail.target,'synthetic-target');assert.equal(tail.cursor,'tail-1');
- assert.equal(f.channels.length,1);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});await f.history.stop(contact);
+ const rows=await requests(f.logFile);assert.equal(rows.filter(row=>row.op==='resolve').length,2);assert.equal(rows.filter(row=>row.op==='target').length,1);assert.equal(rows.filter(row=>row.op==='resume-target').length,1);
+ const tail=rows.find(row=>row.op==='tail');assert.ok(tail);assert.equal(tail.consent,'selected-history-v1');assert.equal(tail.account,account);assert.equal(tail.conversation,f.binding.conversation_locator);assert.equal(tail.target,rows.filter(row=>row.op==='page').at(-1).target);assert.equal(tail.cursor,'tail-1');
+ assert.equal(f.channels.length,2);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});await f.history.stop(contact);
 });
 
 test('增量消失记录的未知墓碑隔离旧文字并降低历史覆盖资格',async t=>{
- const f=await fixture(t),contact=f.binding.contact_id;
- await f.setPlan({resumeCursor:'tail-1',capabilities:capabilities({incrementalTail:'supported'})});
+ const f=await fixture(t,true),contact=f.binding.contact_id,caps=Object.fromEntries([...statusCapabilityKeys,'incrementalTail','durableIncremental'].map(key=>[key,'supported']));
+ await f.setPlan({resumeCursor:'tail-1',capabilities:caps});
  assert.equal((await f.history.synchronize(contact)).phase,'complete');
  const before=(await f.history.read(contact)).messages.find(message=>message.kind==='text');
- assert.ok(before);assert.equal(before.text,'合成历史正文');
+ assert.ok(before);assert.equal(before.text,'合成历史正文:'+f.binding.conversation_locator);
  const source=await f.history.source(contact,before.sourceRecordIds[0]);
  assert.equal(source.raw.localId,'9007199254740993');assert.equal(source.raw.stateAssurance,'verified');
 
- await f.setPlan({resumeCursor:'tail-1',capabilities:capabilities({incrementalTail:'supported'}),tailCursorOut:'tail-2',tailRows:[
+ await f.setPlan({resumeCursor:'tail-1',capabilities:caps,tailCursorOut:'tail-2',tailRows:[
   {partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'unknown',kind:'other',text:null,originalType:'unknown',sentAt:null,timePrecision:null,orderScheme:null,orderKey:null,status:null,stateAssurance:'unverified'}]});
  const coverage=await f.history.synchronizeIncremental(contact);
  const after=await f.history.read(contact);
- assert.equal(after.messages.some(message=>message.id===before.id||message.text==='合成历史正文'),false);
+ assert.equal(after.messages.some(message=>message.id===before.id||message.text==='合成历史正文:'+f.binding.conversation_locator),false);
  assert.equal(after.messages.length,1);assert.equal(after.messages[0].kind,'voice');
  assert.equal(after.coverage.phase,'incomplete');
  assert.equal(coverage.phase,'incomplete');assert.equal(coverage.failureCode,'history_identity_quarantined');
@@ -183,6 +184,39 @@ test('增量上一页可经原生复验后重放，改变的缓存响应拒绝�
  await f.setPlan({resumeCursor:'tail-1',capabilities:capabilities({incrementalTail:'supported'}),tailCursorOut:'tail-changed'});
  await assert.rejects(channel.tail(scope,target,'tail-1'),{code:'history_protocol_invalid'});
  await channel.close();noProcess(Number(await readFile(f.pidFile,'utf8')));
+});
+
+test('持久目标恢复不授予增量资格，当前目标终页后才接受返回游标',async t=>{
+ const f=await fixture(t),scope=await f.scope(),caps=capabilities({incrementalTail:'supported',durableIncremental:'supported'});
+ await f.setPlan({capabilities:caps,resumeCursor:'tail-1',tailCursorOut:'tail-2'});
+ const original=createWechatHistoryChannel(f.executable);t.after(()=>original.close());await original.inspect(scope);
+ const previous=await original.target(scope);await original.page(scope,previous,null);await original.close();
+ const resumed=createWechatHistoryChannel(f.executable);t.after(()=>resumed.close());await resumed.inspect(scope);
+ await assert.rejects(resumed.tail(scope,previous,'tail-1'),{code:'history_target_unverified'});
+ const target=await resumed.resumeTarget(scope,previous,'tail-1');assert.ok(target);
+ await assert.rejects(resumed.tail(scope,target,'tail-1'),{code:'history_cursor_invalid'});
+ assert.equal((await requests(f.logFile)).filter(row=>row.op==='tail').length,0,'持久恢复游标不能冒充当前目标终页游标');
+ const terminal=await resumed.page(scope,target,null);assert.equal(terminal.exhausted,true);assert.equal(terminal.resumeCursor,'tail-1');
+ await assert.rejects(resumed.tail(scope,target,'never-issued'),{code:'history_cursor_invalid'});
+ assert.equal((await requests(f.logFile)).filter(row=>row.op==='tail').length,0,'未认证游标不能触碰原生读取');
+ const page=await resumed.tail(scope,target,terminal.resumeCursor);assert.equal(page.cursorIn,'tail-1');assert.equal(page.cursorOut,'tail-2');
+ const rows=await requests(f.logFile);assert.equal(rows.filter(row=>row.op==='page').length,2,'恢复的新目标必须先读到终页');
+ assert.deepEqual(rows.filter(row=>row.op==='resume-target').map(row=>[row.target,row.cursor]),[[previous.descriptor,'tail-1']]);
+ assert.deepEqual(rows.filter(row=>row.op==='tail').map(row=>[row.target,row.cursor]),[[target.descriptor,'tail-1']]);
+});
+
+for(const result of ['null','unsupported'])test(`持久目标恢复${result}不给新渠道增量资格，也不发送tail RPC`,async t=>{
+ const f=await fixture(t),scope=await f.scope(),caps=capabilities({incrementalTail:'supported',durableIncremental:'supported',durableHistory:'supported'});
+ await f.setPlan({mode:'slices',capabilities:caps});
+ const original=createWechatHistoryChannel(f.executable);t.after(()=>original.close());await original.inspect(scope);
+ const previous=await original.target(scope);await original.close();
+ if(result==='unsupported')await f.setPlan({capabilities:{...caps,durableIncremental:'unverified'}});
+ const resumed=createWechatHistoryChannel(f.executable);t.after(()=>resumed.close());await resumed.inspect(scope);
+ if(result==='null')assert.equal(await resumed.resumeTarget(scope,previous,'never-issued'),null);
+ else await assert.rejects(resumed.resumeTarget(scope,previous,'never-issued'),{code:'history_tail_unsupported'});
+ await assert.rejects(resumed.tail(scope,previous,'never-issued'),{code:'history_target_unverified'});
+ const rows=await requests(f.logFile);assert.equal(rows.filter(row=>row.op==='tail').length,0);
+ assert.equal(rows.filter(row=>row.op==='resume-target').length,result==='null'?1:0);
 });
 
 test('增量能力未认证时正式渠道不发送tail RPC',async t=>{
@@ -230,26 +264,31 @@ test('正式渠道拒绝带额外字段的边界结果及超限tail，且坏页�
   await assert.rejects(channel.boundarySnapshot(scope),{code:'history_protocol_invalid'});await channel.close();noProcess(Number(await readFile(f.pidFile,'utf8')));
  }
  {
-  const f=await fixture(t),contact=f.binding.contact_id;
-  await f.setPlan({resumeCursor:'tail-1',capabilities:capabilities({incrementalTail:'supported'})});await f.history.synchronize(contact);
+  const f=await fixture(t,true),contact=f.binding.contact_id,caps=Object.fromEntries([...statusCapabilityKeys,'incrementalTail','durableIncremental'].map(key=>[key,'supported']));
+  await f.setPlan({resumeCursor:'tail-1',capabilities:caps});await f.history.synchronize(contact);
   const excessive=Array.from({length:17},(_,index)=>({partition:'d'.repeat(64),table:'c'.repeat(64),localId:String(index+10),serverId:'0',sender:'contact',kind:'text',text:'超限合成记录',originalType:'1',sentAt:null,timePrecision:null,orderScheme:null,orderKey:null,status:'3',stateAssurance:'verified'}));
-  await f.setPlan({resumeCursor:'tail-1',capabilities:capabilities({incrementalTail:'supported'}),tailRows:excessive});
+  await f.setPlan({resumeCursor:'tail-1',capabilities:caps,tailRows:excessive});
   await assert.rejects(f.history.synchronizeIncremental(contact),{code:'history_protocol_invalid'});assert.equal((await f.history.read(contact)).messages.length,2);
-  const rows=await requests(f.logFile);assert.equal(rows.filter(request=>request.op==='tail').length,1);assert.equal(f.channels.length,1);noProcess(Number(await readFile(f.pidFile,'utf8')));
+  const rows=await requests(f.logFile);assert.equal(rows.filter(request=>request.op==='tail').length,1);assert.equal(f.channels.length,2);noProcess(Number(await readFile(f.pidFile,'utf8')));
   assert.equal(await proofState(f,contact),'ok','坏协议页不篡改已接纳来源事实');
   const before=(await requests(f.logFile)).filter(row=>row.op==='resolve').length;
-  assert.equal((await f.history.synchronize(contact)).phase,'complete');assert.equal(f.channels.length,2);
+  assert.equal((await f.history.synchronize(contact)).phase,'complete');assert.equal(f.channels.length,3);
   assert.ok((await requests(f.logFile)).filter(row=>row.op==='resolve').length>before,'新进程必须重新核验账号会话来源');
   assert.equal((await f.history.read(contact)).messages.length,2);
  }
 });
 
-test('合成原生进程意外退出保留本机事实，新读取核验后恢复且不重复消息',async t=>{
+test('在途合成原生进程意外退出拒收未完成页，保留本机事实且重验后不重复消息',async t=>{
  const f=await fixture(t),contact=f.binding.contact_id;await f.history.synchronize(contact);
- const before=(await f.history.read(contact)).messages.map(row=>row.id),pid=Number(await readFile(f.pidFile,'utf8'));process.kill(pid,'SIGKILL');await f.channels[0].guardSession.loss;
+ const before=(await f.history.read(contact)).messages.map(row=>row.id),pages=(await requests(f.logFile)).filter(row=>row.op==='page').length;
+ await f.setPlan({mode:'blocked'});const pending=f.history.synchronize(contact),rejected=assert.rejects(pending,{code:'history_native_unavailable'});
+ await waitForOperation(f.logFile,'page',pages);
+ const channel=f.channels.at(-1);let lost=false;channel.guardSession.loss.then(()=>{lost=true;});await Promise.resolve();
+ const pid=Number(await readFile(f.pidFile,'utf8'));assert.equal(lost,false,'未完成页面仍持有本轮读者');assert.doesNotThrow(()=>process.kill(pid,0));process.kill(pid,'SIGKILL');await rejected;await channel.guardSession.loss;
  await f.history.stop(contact);noProcess(pid);assert.equal(await proofState(f,contact),'ok');assert.equal(await f.history.bodyAvailable([contact]),false);
+ assert.deepEqual((await f.history.read(contact)).messages.map(row=>row.id),before,'未完成的页不能替换已接纳资料');
  const resolves=(await requests(f.logFile)).filter(row=>row.op==='resolve').length;
- assert.equal((await f.history.synchronize(contact)).phase,'complete');assert.equal(f.channels.length,2);
+ await f.setPlan({});assert.equal((await f.history.synchronize(contact)).phase,'complete');assert.equal(f.channels.length,3);
  assert.ok((await requests(f.logFile)).filter(row=>row.op==='resolve').length>resolves);assert.notEqual(Number(await readFile(f.pidFile,'utf8')),pid);
  assert.deepEqual((await f.history.read(contact)).messages.map(row=>row.id),before);
 });
@@ -335,7 +374,7 @@ test('共享历史进程串行同步两位联系人，切回重验且正文与�
  }
  const rows=await requests(f.logFile);
  assert.deepEqual(rows.filter(row=>row.op==='resolve').map(row=>row.displayName),[a.conversation_locator,b.conversation_locator,a.conversation_locator]);
- assert.equal(rows.filter(row=>row.op==='release-selection').length,2);
+ assert.equal(rows.filter(row=>row.op==='release-selection').length,3);
  assert.equal((await f.history.coverage(a.contact_id)).phase,'complete');
  assert.equal((await f.history.coverage(b.contact_id)).phase,'complete');
  await f.history.stop();await f.shared.stop();noProcess(pid);
@@ -420,7 +459,7 @@ test('共享独立通道重复关闭不能清除后来联系人的选择',async 
 });
 
 
-test('关闭已park联系人不影响当前联系人，原生停止只结束轻量守卫且保留来源事实',async t=>{
+test('每轮关闭联系人选择且互不影响，共享进程停止保留来源与能力摘要',async t=>{
  const f=await fixture(t,true),[a,b]=f.bindings;
  await f.setPlan({capabilities:Object.fromEntries([...statusCapabilityKeys,'incrementalTail'].map(key=>[key,'supported']))});
  await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
@@ -431,9 +470,11 @@ test('关闭已park联系人不影响当前联系人，原生停止只结束轻�
  await f.history.synchronize(b.contact_id);assert.equal(Number(await readFile(f.pidFile,'utf8')),pid);
  await f.history.synchronize(a.contact_id);
  await f.shared.stop();
- assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),false);
+ assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),true);noProcess(pid);
  for(const binding of [a,b]){assert.equal((await f.history.coverage(binding.contact_id)).failureCode,null);assert.equal(await proofState(f,binding.contact_id),'ok');}
+ const resolves=(await requests(f.logFile)).filter(row=>row.op==='resolve').length;
  await f.history.synchronize(a.contact_id);assert.equal((await f.history.coverage(a.contact_id)).phase,'complete');
+ assert.equal((await requests(f.logFile)).filter(row=>row.op==='resolve').length,resolves+1,'摘要不能跳过下一轮来源核验');
 });
 
 
@@ -506,32 +547,37 @@ test('共享切回与记忆来源重验保留持久增量恢复，不把元数�
  const caps=Object.fromEntries([...statusCapabilityKeys,'incrementalTail','durableIncremental'].map(key=>[key,'supported']));
  await f.setPlan({capabilities:caps,resumeCursor:'synthetic-resume'});
  await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
+ const before=(await requests(f.logFile)).length;
  await f.history.ensureSourceReady(a.contact_id);
+ const metadata=(await requests(f.logFile)).slice(before);
+ assert.equal(metadata.filter(row=>row.op==='resume-target').length,1);assert.equal(metadata.some(row=>['page','tail'].includes(row.op)),false,'来源准备仅核验元数据，不读取或推进正文');
  assert.equal((await f.history.coverage(a.contact_id)).phase,'complete');
  await f.history.synchronizeIncremental(a.contact_id);
  await f.history.synchronize(a.contact_id);
  const result=await f.history.synchronizeIncremental(a.contact_id);
  assert.equal(result.incremental.phase,'ready');
- const rows=await requests(f.logFile),resume=rows.filter(row=>row.op==='resume-target');
- assert.equal(resume.length,1);assert.equal(resume[0].conversation,a.conversation_locator);
- assert.equal(rows.filter(row=>row.op==='tail').length,1);
+ const rows=await requests(f.logFile),resume=rows.filter(row=>row.op==='resume-target'),tails=rows.filter(row=>row.op==='tail');
+ assert.equal(resume.length,4);assert.ok(resume.every(row=>row.conversation===a.conversation_locator));
+ assert.deepEqual(resume.map(row=>row.cursor),['synthetic-resume','synthetic-resume','tail-2','synthetic-resume'],'每轮使用上次真实返回的持久检查点');
+ assert.equal(tails.length,2);
+ for(const tail of tails){const at=rows.indexOf(tail),page=rows.slice(0,at).findLast(row=>row.op==='page');assert.equal(tail.target,page.target);assert.equal(tail.cursor,'synthetic-resume');}
  assert.equal((await f.history.read(a.contact_id)).messages.length,2);
 });
 
 
-test('反复切换仅保留当前联系人轻量证明订阅，关闭后无遗留订阅',async t=>{
+test('反复来源重验每轮结束均无读者订阅，关闭后无遗留订阅',async t=>{
  const f=await fixture(t,true),lease=await f.shared.acquire({}),native=lease.client;
  let subscriptions=0;const subscribe=native.onStopped.bind(native);
  native.onStopped=listener=>{subscriptions++;const off=subscribe(listener);let live=true;return ()=>{if(live){live=false;subscriptions--;}off();};};
  await lease.release();
  for(let index=0;index<30;index++){
   await f.history.ensureSourceReady(f.bindings[index%2].contact_id);
-  assert.ok(subscriptions<=2,'来源证明按联系人保留，不随切换次数增长');
+  assert.equal(subscriptions,0,'持久来源证明不持有空闲读者订阅');
  }
  await f.history.close();assert.equal(subscriptions,0);
 });
 
-test('共享parked联系人重新查证和普通进程停止均保留本机来源，真实身份变化才撤销证明',async t=>{
+test('共享联系人每轮重新查证和进程停止均保留本机来源，真实身份变化才撤销证明',async t=>{
  const f=await fixture(t,true,{registryModule:new URL('./fixtures/history-parked-registry.mjs',import.meta.url).href}),[a,b]=f.bindings;
  await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
  const execute=f.storage.execute.bind(f.storage);let checked=0;
@@ -552,7 +598,7 @@ test('共享parked联系人重新查证和普通进程停止均保留本机来�
  await assert.rejects(execute('fixture.currentSourceValid',{ownerId:owner,contactId:a.contact_id}),{code:'history_source_not_available'});
 });
 
-for(const mode of ['wrong-account','wrong-conversation','wrong-generation'])test(`parked联系人重新查证发现${mode}时旧来源立即失效且不读取正文`,async t=>{
+for(const mode of ['wrong-account','wrong-conversation','wrong-generation'])test(`空闲联系人重新查证发现${mode}时旧来源立即失效且不读取正文`,async t=>{
  const f=await fixture(t,true,{registryModule:new URL('./fixtures/history-parked-registry.mjs',import.meta.url).href}),[a,b]=f.bindings;
  await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
  const before=(await requests(f.logFile)).filter(row=>row.op==='page').length;
@@ -565,7 +611,7 @@ for(const mode of ['wrong-account','wrong-conversation','wrong-generation'])test
 
 
 // 单图失败的影响范围：图片请求与历史读取共用同一原生进程。声明了单图隔离的制品只拒绝这一次请求；
-// 旧制品（对照组）仍会关闭进程，使所有原生读取守卫失效，但不据此否定已接纳本机来源。以下全部经过真实 SharedWechatClient、
+// 旧制品（对照组）仍会关闭进程，但不据此否定已接纳本机来源与能力摘要。以下全部经过真实 SharedWechatClient、
 // WechatHistoryChannel、SqliteHistoryService 与 SQLite，原生进程为合成子进程。
 const isolatedImageManifest={originalImageProtocol:'wechat-original-image-v1',originalImageQualityProof:'wechat-cdn-big-hd-exact-content-v4',imageOpenIsolation:'wechat-image-open-local-v1'};
 const legacyImageManifest={originalImageProtocol:'wechat-original-image-v1',originalImageQualityProof:'wechat-cdn-big-hd-exact-content-v4'};
@@ -590,7 +636,7 @@ async function loadMetrics(f,contacts){
   generations:new Set((await requests(f.logFile)).length?[Number(await readFile(f.pidFile,'utf8'))]:[]).size};
 }
 
-test('一张图片取不到时共享进程保留，已读完联系人的历史与守卫不受影响，文字增量继续',async t=>{
+test('一张图片取不到时共享进程保留，已读完联系人的历史与来源摘要不受影响，后续读取继续',async t=>{
  const f=await fixture(t,true,{},2,isolatedImageManifest),[a,b]=f.bindings;
  await f.setPlan({capabilities:supportedCapabilities()});
  await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
@@ -603,14 +649,14 @@ test('一张图片取不到时共享进程保留，已读完联系人的历史�
  const after=await loadMetrics(f,[a,b]);
  assert.deepEqual([after.complete,after.unverified],[2,0],'两位联系人的历史覆盖不得退回待重验');
  assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),true);
- // 文字同步继续：不额外重读历史，另一位联系人仍读自己的正文。
+ // 后续读取重新核验，另一位联系人仍读自己的正文。
  await f.history.synchronize(b.contact_id);
  assert.equal(Number(await readFile(f.pidFile,'utf8')),pid);
  assert.equal((await f.history.read(b.contact_id)).messages.find(row=>row.kind==='text').text,'合成历史正文:'+b.conversation_locator);
  assert.equal((await f.history.coverage(a.contact_id)).phase,'complete');
 });
 
-test('对照：旧制品单图失败关闭所有守卫，已接纳来源保留且下次读取重新核验',async t=>{
+test('对照：旧制品单图失败关闭进程，已接纳来源保留且下次读取重新核验',async t=>{
  const f=await fixture(t,true,{},2,legacyImageManifest),[a,b]=f.bindings;
  await f.setPlan({capabilities:supportedCapabilities()});
  await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
@@ -618,11 +664,13 @@ test('对照：旧制品单图失败关闭所有守卫，已接纳来源保留�
  assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),true);
  assert.deepEqual(await failOneImage(f,a),{code:'history_image_association_unverified',stopped:'history_image_association_unverified'});
  assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});
- assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),false,'旧制品：一张图失败使两位联系人的正文资格同时失效');
+ assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),true,'进程退出不撤销已核验来源与能力摘要');
  for(const binding of [a,b]){
   const coverage=await f.history.coverage(binding.contact_id);
   assert.equal(coverage.phase,'complete');assert.equal(coverage.failureCode,null);assert.equal(await proofState(f,binding.contact_id),'ok');
  }
+ const resolves=await countOps(f,'resolve');await f.history.synchronize(b.contact_id);
+ assert.equal(await countOps(f,'resolve'),resolves+1,'下一次实际读取重新核验来源');assert.notEqual(Number(await readFile(f.pidFile,'utf8')),pid);
 });
 
 test('来源类图片错误终止共享读取，逐联系人重新核验后才据真实冲突围栏',async t=>{
@@ -633,11 +681,12 @@ test('来源类图片错误终止共享读取，逐联系人重新核验后才�
  await f.setPlan({capabilities:supportedCapabilities(),imageError:'history_source_changed'});
  assert.deepEqual(await failOneImage(f,a),{code:'history_source_changed',stopped:'history_source_changed'});
  assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});
- assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),false,'来源错误仍终止整个原生读取进程');
+ assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),true,'能力摘要不以空闲进程存活为前提');
  for(const binding of [a,b])assert.equal(await proofState(f,binding.contact_id),'ok','共享错误码本身不能证明空闲联系人的来源已变');
  const pages=await countOps(f,'page');await f.setPlan({capabilities:supportedCapabilities(),mode:'wrong-account'});
  await assert.rejects(f.history.synchronize(a.contact_id),{code:'history_account_changed'});assert.equal(await countOps(f,'page'),pages);
  assert.equal(await proofState(f,a.contact_id),'needs_confirmation');assert.equal(await proofState(f,b.contact_id),'ok');
+ assert.equal(await f.history.bodyAvailable([a.contact_id]),false);assert.equal(await f.history.bodyAvailable([b.contact_id]),true);
  await f.setPlan({capabilities:supportedCapabilities()});assert.equal((await f.history.synchronize(b.contact_id)).phase,'complete');
 });
 
@@ -653,14 +702,14 @@ for(const contactCount of [10,100])test(`${contactCount}位联系人：同一组
  const after=await loadMetrics(f,contacts);
  t.diagnostic(JSON.stringify({contacts:contactCount,imageFailures:failures.length*2,before,after,imageOpens:await countOps(f,'image-open')}));
  assert.equal(Number(await readFile(f.pidFile,'utf8')),pid,'原生进程代次不变');
- assert.deepEqual([after.complete,after.unverified],[contactCount,0],'守卫失效人数为 0');
+ assert.deepEqual([after.complete,after.unverified],[contactCount,0],'来源围栏人数为 0');
  assert.equal(after.targets-before.targets,failures.length*2,'新增 target 仅来自图片请求本身的 target 调用，历史不重建');
  assert.equal(after.pages,before.pages,'历史正文页读取数不变');
  assert.equal(await countOps(f,'image-open'),failures.length*2);
  assert.equal(await f.history.bodyAvailable(contacts.map(binding=>binding.contact_id)),true);
 });
 
-for(const contactCount of [10,100])test(`对照 ${contactCount}位联系人：未声明隔离的旧制品，首次图片失败即让全部联系人守卫失效`,{timeout:120000},async t=>{
+for(const contactCount of [10,100])test(`对照 ${contactCount}位联系人：未声明隔离的旧制品，首次图片失败关闭进程且保留已核验的本机来源与能力摘要`,{timeout:120000},async t=>{
  const f=await fixture(t,true,{},contactCount,legacyImageManifest),contacts=f.bindings;
  await f.setPlan({capabilities:supportedCapabilities()});
  for(const binding of contacts)await f.history.synchronize(binding.contact_id);
@@ -670,14 +719,14 @@ for(const contactCount of [10,100])test(`对照 ${contactCount}位联系人：�
  t.diagnostic(JSON.stringify({contacts:contactCount,imageFailures:1,before,after}));
  assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});
  assert.deepEqual([after.complete,after.unverified],[contactCount,0],'守卫丢失不改写已保存的来源资格');
- assert.equal(await f.history.bodyAvailable(contacts.map(binding=>binding.contact_id)),false);
+ assert.equal(await f.history.bodyAvailable(contacts.map(binding=>binding.contact_id)),true);
  assert.equal((await proofStates(f)).filter(row=>row.state==='ok').length,contactCount);
  assert.equal(after.pages,before.pages,'进程退出不能偷偷重读历史');
 });
 
 
 // 已保存的历史进度与当前来源资格分开表示：saved_history_complete 只读展示，不改变 phase、正文资格或任何读取判断。
-test('历史读完后连接失守卫保留已保存覆盖，外部正文资格仍须重新核验',async t=>{
+test('历史读完后进程停止保留覆盖与能力摘要，下一次实际读取仍须重验',async t=>{
  const f=await fixture(t,true),[a,b]=f.bindings;
  await f.setPlan({capabilities:supportedCapabilities()});
  const notStarted=await f.history.coverage(a.contact_id);
@@ -687,9 +736,9 @@ test('历史读完后连接失守卫保留已保存覆盖，外部正文资格�
  const live=rows=>projectHistorySyncStatus({body_available:true},rows,{phase:'idle',lastError:null,contacts:[]});
  const projected=live(await Promise.all([a,b].map(binding=>f.history.coverage(binding.contact_id))));
  assert.deepEqual(projected.cli_history_coverages.map(row=>[row.phase,row.saved_history_complete]),[['complete',true],['complete',true]]);
- // 原生进程失守卫：与旧版图片失败后的状态相同。
- await f.shared.stop();
- assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),false);
+ const pid=Number(await readFile(f.pidFile,'utf8')),resolves=await countOps(f,'resolve');
+ await f.shared.stop();noProcess(pid);
+ assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),true);
  for(const binding of [a,b]){
   const row=await f.history.coverage(binding.contact_id);
   assert.deepEqual([row.phase,row.failureCode,row.savedHistoryComplete],['complete',null,true],'已保存历史和来源事实不因易失守卫消失而回退');
@@ -697,9 +746,9 @@ test('历史读完后连接失守卫保留已保存覆盖，外部正文资格�
  const stale=live(await Promise.all([a,b].map(binding=>f.history.coverage(binding.contact_id))));
  assert.deepEqual(stale.cli_history_coverages.map(row=>[row.phase,row.failure_code,row.saved_history_complete]),
   [['complete',null,true],['complete',null,true]]);
- assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),false,'展示字段不使正文重新可用');
- // 正式重验后恢复，两个字段一致。
- await f.history.synchronize(a.contact_id);
+ assert.equal(await f.history.bodyAvailable([a.contact_id,b.contact_id]),true,'能力摘要沿用已核验来源，不依赖空闲读者');
+ assert.equal(await countOps(f,'resolve'),resolves,'查询覆盖与能力摘要不启动外部读取');noProcess(pid);
+ await f.history.synchronize(a.contact_id);assert.equal(await countOps(f,'resolve'),resolves+1,'正式读取重新核验账号与来源');
  const recovered=await f.history.coverage(a.contact_id);
  assert.deepEqual([recovered.phase,recovered.savedHistoryComplete],['complete',true]);
 });
