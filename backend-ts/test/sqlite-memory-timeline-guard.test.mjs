@@ -1,4 +1,4 @@
-import {cleanupPreSourceProofFixtures} from './fixtures/sqlite/pre-source-proof-registry.mjs';
+import {loadPreSourceProofModule,loadPreSourceProofFixture,cleanupPreSourceProofFixtures} from './fixtures/sqlite/pre-source-proof-registry.mjs';
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,owner,record} from './fixtures/memory-sqlite/support.mjs';
@@ -6,16 +6,21 @@ import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 import {registry} from '../src/storage/sqlite/registry.ts';
 after(cleanupPreSourceProofFixtures);
+const {fixture:legacyFixture}=await loadPreSourceProofFixture('memory-sqlite/support.mjs');
+const {SqliteMemoryManagement:LegacyMemoryManagement}=await loadPreSourceProofModule('memory/sqlite/management/service.ts');
 const registryModule=mode=>new URL(`./fixtures/memory-management/timeline-guard-registry.mjs?mode=${mode}`,import.meta.url).href;
 
 async function guardedSource(t,mode='current'){
- const cleanup=[],beforeCleanup=[];const f=await fixture({after:close=>cleanup.push(close)},{registryModule:registryModule(mode)});
+ // 旧结构只用固定历史准备链；现行守卫用例仍覆盖当前正常入口。
+ const cleanup=[],beforeCleanup=[],createFixture=mode==='legacy37'?legacyFixture:fixture;
+ const f=await createFixture({after:close=>cleanup.push(close)},{registryModule:registryModule(mode)});
  const inspect=f.channel.inspect;f.channel.guardSession={loss:new Promise(()=>{})};
  f.channel.inspect=async scope=>({...await inspect(scope),continuity:'same-source-instances-normal-use-v1',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail'].map(key=>[key,'supported']))});
  f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1')],completedPartitions:['shard-a'],exhausted:true});
  const contactId=f.saved[0].contact_id,scope={scopeKind:'contact',contactId};
  await f.service.synchronize(contactId);
- const management=new SqliteMemoryManagement(f.storage,owner);
+ const Management=mode==='legacy37'?LegacyMemoryManagement:SqliteMemoryManagement;
+ const management=new Management(f.storage,owner);
  const made=await management.decide({requestKey:'guard-repro',action:'manual',scope,body:'合成可恢复来源资料'});
  await f.storage.execute('fixture.paginationUpgradeCitations',{ownerId:owner,contactId,memoryId:made.memoryId,count:1});
  t.after(async()=>{await f.service.close();for(const close of beforeCleanup)await close();for(const close of cleanup.reverse())await close();});

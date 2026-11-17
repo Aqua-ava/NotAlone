@@ -1,8 +1,7 @@
-import {certifyLegacyMetadata,cleanupPreSourceProofFixtures} from './fixtures/sqlite/pre-source-proof-registry.mjs';
+import {certifyLegacyMetadata,loadPreSourceProofModule,loadPreSourceProofFixture,cleanupPreSourceProofFixtures} from './fixtures/sqlite/pre-source-proof-registry.mjs';
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {fixture,owner,record} from './fixtures/memory-sqlite/support.mjs';
 import {registry} from '../src/storage/sqlite/registry.ts';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {StorageFailure} from '../src/storage/sqlite/contracts.ts';
@@ -11,6 +10,9 @@ import {DeletionService} from '../src/storage/sqlite/deletion/service.ts';
 import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
 import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
 after(cleanupPreSourceProofFixtures);
+// 升级前的读取与管理决定均按旧结构对应的生产合同准备。
+const {fixture,owner,record}=await loadPreSourceProofFixture('memory-sqlite/support.mjs');
+const {SqliteMemoryManagement:LegacyMemoryManagement}=await loadPreSourceProofModule('memory/sqlite/management/service.ts');
 
 // 已发布35的原始SQL摘要；修改现行触发器须追加迁移，不能重写这个兼容性基线。
 const published35Checksum='70afa5d228f0b927353ed2b60484a86b2eb41f6cf20c210790a9010da52592b5';
@@ -30,7 +32,7 @@ test('旧35升级保留原账本与来源时间，删除失败重试不恢复正
   completedPartitions:['shard-a'],exhausted:true});
  certifyLegacyMetadata(f.channel);
  for(const id of [contactId,independentContactId])await history.synchronize(id);
- const legacyManagement=new SqliteMemoryManagement(f.storage,owner);
+ const legacyManagement=new LegacyMemoryManagement(f.storage,owner);
  const affected=await legacyManagement.decide({requestKey:'upgrade-affected',action:'manual',scope,body:'来源支持的合成资料。'});
  const independent=await legacyManagement.decide({requestKey:'upgrade-independent',action:'manual',scope:{scopeKind:'contact',contactId:independentContactId},body:'另一联系人独立资料。'});
  const sourceId=await f.storage.execute('fixture.paginationUpgradeCitations',{ownerId:owner,contactId,memoryId:affected.memoryId,count:40});

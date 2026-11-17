@@ -1,9 +1,11 @@
 import {certifyLegacyMetadata,loadPreSourceProofModule,loadPreSourceProofFixture,cleanupPreSourceProofFixtures} from './fixtures/sqlite/pre-source-proof-registry.mjs';
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
-import {fixture,owner,record,modelPort} from './fixtures/memory-sqlite/support.mjs';
 
+// 升级前使用同一固定历史版本的完整准备链，避免现行守卫生命周期改写旧来源资格。
 const {SqliteMemoryExtraction}=await loadPreSourceProofModule('memory/sqlite/service.ts');
+const {SqliteMemoryManagement:LegacyMemoryManagement}=await loadPreSourceProofModule('memory/sqlite/management/service.ts');
+const {fixture,owner,record,modelPort}=await loadPreSourceProofFixture('memory-sqlite/support.mjs');
 const {supplier}=await loadPreSourceProofFixture('memory-management/supplier.mjs');
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
@@ -18,7 +20,7 @@ test('图文引用迁移保留旧文字记忆、来源和核验资格，升级�
  extraction=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>extraction.accounting,normal.respond));
  t.after(()=>extraction.close());
  const run=await extraction.start('before-content-citation-upgrade');await extraction.waitForIdle();
- const management=new SqliteMemoryManagement(f.storage,owner);await management.importRun(run.runId);
+ const management=new LegacyMemoryManagement(f.storage,owner);await management.importRun(run.runId);
  assert.equal(f.storage.status.schemaVersion,31);
  const snapshot=storage=>storage.execute('fixture.legacyContentSnapshot',{ownerId:owner,contactId});
  const candidate=(await snapshot(f.storage)).candidates[0];assert.ok(candidate);assert.equal(candidate.verificationState,'verified');
