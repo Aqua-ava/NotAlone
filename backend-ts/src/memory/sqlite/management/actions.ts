@@ -4,7 +4,6 @@ import {sha256} from '../../../platform/sha256.ts';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {verifiedExtractionOutput} from '../outputs.ts';
 import {AMBIGUITY_NOTE} from '../../extraction/bounded.ts';
-import {AMBIGUITY_UNCONFIRMED,unconfirmedAmbiguity} from '../../extraction/ambiguity-guard.ts';
 import {available,body,fail,id,integer,requireCandidate,requireAutomaticCandidate,requireSources,requireVersion,scope} from './qualification.ts';
 import {managementRead,managementHistory} from './read.ts';
 import {prepareManagementTimeline} from './timeline.ts';
@@ -102,7 +101,9 @@ function restoreMergedParents(tx:StorageTransaction,ownerId:string,requestKey:st
   tx.run("UPDATE memory SET current_version_no=?,state='active',head_revision=head_revision+1 WHERE owner_id=? AND id=?",[versionNo,ownerId,memory.id]);advance(tx,ownerId,{scopeKind:memory.scope_kind as 'self'|'contact',contactId:memory.contact_id as string|null});
  }
 }
-export function applyDecision(tx:StorageTransaction,input:unknown,system=false,authority?:AutomaticDecisionAuthority):MemoryDecisionResult{
+/** 自动身份仅由裁决完成事务注入；人工请求中的 system／authority 字段不授予执行资格。 */
+export function applyDecision(tx:StorageTransaction,input:unknown,authority?:AutomaticDecisionAuthority):MemoryDecisionResult{
+ const system=authority!==undefined;
  const q=input as any,ownerId=id(q?.ownerId),request=q?.request??{},requestKey=id(request.requestKey),fingerprint=seal(request);
  if(tx.get('SELECT 1 FROM request_tombstone WHERE owner_identity=? AND request_namespace=? AND request_key=?',[ownerId,'memory.applyDecision',requestKey]))fail('memory_decision_deleted');
  const old=tx.get('SELECT * FROM memory_decision WHERE owner_id=? AND request_key=?',[ownerId,requestKey]);
@@ -122,7 +123,7 @@ export function applyDecision(tx:StorageTransaction,input:unknown,system=false,a
  if(needsCandidate!==!!candidateIds.length)fail('memory_request_invalid');
  const candidates:StorageRow[]=candidateIds.map((value:unknown,index:number)=>{
   const c=tx.get('SELECT * FROM memory_candidate WHERE owner_id=? AND id=?',[ownerId,id(value)]);
-  if(!c||c.state_revision!==integer(revisions[index]))return fail('memory_candidate_stale');requireCandidate(tx,ownerId,c);if(system)requireAutomaticCandidate(tx,ownerId,c);return c;
+  if(!c||c.state_revision!==integer(revisions[index]))return fail('memory_candidate_stale');if(system)requireAutomaticCandidate(tx,ownerId,c);else requireCandidate(tx,ownerId,c);return c;
  });
  let m:StorageRow|undefined,previous:StorageRow|undefined;
  if(request.memoryId){
@@ -133,28 +134,11 @@ export function applyDecision(tx:StorageTransaction,input:unknown,system=false,a
  const s:MemoryScope=m?{scopeKind:m.scope_kind as 'self'|'contact',contactId:m.contact_id as string|null}:candidates[0]?{scopeKind:candidates[0].scope_kind as 'self'|'contact',contactId:candidates[0].contact_id as string|null}:scope(request.scope);
  available(tx,ownerId,s,true);
  if(system&&candidates.length!==1)fail('memory_relationship_pending');
- if(system&&['auto_update','auto_noop'].includes(action)&&!authority)fail('memory_relationship_pending');
- if(action==='auto_accept'&&!authority&&tx.get('SELECT 1 FROM memory WHERE owner_id=? AND scope_kind=? AND contact_id IS ?',[ownerId,s.scopeKind,s.contactId]))fail('memory_relationship_pending');
  if(system){
   const fact=verifiedExtractionOutput(tx,{ownerId,eventId:String(candidates[0]!.event_id)}).fact;
   // 与裁决前置门槛同一口径：整组未决指代、过期事实、条件无来源支持整体拦截；
   // 自由文本 alternatives 降级放行，未核实的事件标注按现行规格丢弃并留痕，都不再变成待确认。
-  const eventTimeUnverified=!!fact.event&&(!fact.event.stage_verified||!fact.event.occurrence_verified&&fact.event.occurrence_start!==null);
   if(Array.isArray(fact.alternatives)&&fact.alternatives.length&&fact.alternatives.every((entry:unknown)=>entry===AMBIGUITY_NOTE)||fact.invalid_at&&Date.parse(fact.invalid_at)<=Date.now()||fact.conditions?.items.some((item:any)=>item.source_supported!==true))fail('memory_conditions_pending');
-  // 代码层兜底：只拦自动路径（system 且无裁决授权）——正文含未标注的易歧义结构且 alternatives 为空时降级待确认；
-  // 用户手动决定（memory.applyDecision，system=false）不经过这里，仍可按原逻辑采纳或修改；不改动已有原因码的含义。
-  const ambiguity=system&&!authority?unconfirmedAmbiguity({text:String(fact.text??''),interpretationReason:fact.interpretation_reason,alternatives:fact.alternatives}):null;
-  if(ambiguity){recordCandidateGate(tx,ownerId,candidates[0]!.id,AMBIGUITY_UNCONFIRMED,{rule:ambiguity.rule,token:ambiguity.token});fail(AMBIGUITY_UNCONFIRMED);}
-  if(!authority){
-   const attemptId=String(candidates[0]!.produced_attempt_id);
-   const trace=(kind:string,payload:Record<string,unknown>)=>{
-    const attempt=tx.get('SELECT step_id FROM step_attempt WHERE owner_id=? AND id=?',[ownerId,attemptId]);if(!attempt)return;
-    const n=tx.get('SELECT coalesce(max(event_no),0)+1 AS n FROM execution_event WHERE owner_id=? AND step_attempt_id=?',[ownerId,attemptId])!.n;
-    tx.run('INSERT INTO execution_event(owner_id,id,step_attempt_id,event_no,kind,originated_call_id,reused_call_id,payload,created_at) VALUES(?,?,?,?,?,NULL,NULL,?,?)',[ownerId,randomUUID(),attemptId,n,kind,JSON.stringify(payload),Date.now()]);
-   };
-   if(eventTimeUnverified)trace('time_unverified',{candidateId:candidates[0]!.id});
-   if(Array.isArray(fact.alternatives)&&fact.alternatives.length)trace('adopted_with_alternatives',{candidateId:candidates[0]!.id,alternatives:[...fact.alternatives]});
-  }
  }
  if(candidates.some(c=>c.scope_kind!==s.scopeKind||c.contact_id!==s.contactId))fail('memory_scope_mismatch');
  if(action==='auto_noop'){
@@ -231,17 +215,7 @@ function importRun(tx:StorageTransaction,input:unknown):{candidateIds:string[]}{
 }
 export const memoryManagementActions:StorageAction[]=[
  {name:'memory.importRun',mode:'write',retryBusy:true,execute:importRun},
- {name:'memory.publishRun',mode:'write',retryBusy:true,execute(tx,input){
-  const ownerId=id((input as any)?.ownerId),imported=importRun(tx,input),results:MemoryDecisionResult[]=[];
-  for(const candidateId of imported.candidateIds){
-   const c=tx.get("SELECT * FROM memory_candidate WHERE owner_id=? AND id=? AND state='pending'",[ownerId,candidateId]);if(!c)continue;
-   try{results.push(applyDecision(tx,{ownerId,request:{requestKey:`memory:auto:${String(c.event_id)}`,action:'auto_accept',candidateIds:[candidateId],candidateRevisions:[String(c.state_revision)]}},true));}
-   catch(error){if(!(error instanceof StorageFailure)||!['memory_relationship_pending','memory_conditions_pending','memory_verification_pending',AMBIGUITY_UNCONFIRMED].includes(error.code))throw error;}
-  }
-  return {candidateIds:imported.candidateIds,decisions:results};
- }},
  {name:'memory.applyDecision',mode:'write',retryBusy:true,execute:(tx,input)=>applyDecision(tx,input)},
- {name:'memory.applyAutomaticDecision',mode:'write',retryBusy:true,execute:(tx,input)=>applyDecision(tx,input,true)},
  {name:'memory.read',mode:'read',retryBusy:false,execute:managementRead},
  {name:'memory.prepareTimeline',mode:'write',retryBusy:true,execute:prepareManagementTimeline},
  {name:'memory.history',mode:'read',retryBusy:false,execute:managementHistory},

@@ -5,6 +5,8 @@ import {fixture,owner,record,modelPort} from './fixtures/memory-sqlite/support.m
 import {supplier} from './fixtures/memory-management/supplier.mjs';
 import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
+import {SqliteMemoryAdjudication} from '../src/memory/sqlite/management/adjudication-service.ts';
+import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
 
 async function prepared(t,{legacy=false,partialQuote=false,archive=false,modernNonreviewable=false,reuse=false,timeline=false}={}){
  const f=await fixture(t,{registryModule:new URL('./fixtures/memory-management/admission-registry.mjs',import.meta.url).href}),contactId=f.saved[0].contact_id;
@@ -32,7 +34,9 @@ async function prepared(t,{legacy=false,partialQuote=false,archive=false,modernN
  const run=await extraction.start('normal-narrow-evidence');
  await extraction.waitForIdle();if(reuse){const current=await extraction.read(run.runId);await extraction.continue(run.runId,current.controlVersion,randomUUID());await extraction.waitForIdle();}const done=await extraction.read(run.runId);assert.ok(done.tasks.filter(x=>x.scopeKind==='contact'&&x.contactId===contactId).every(x=>x.state==='succeeded'),JSON.stringify(done.tasks));
  if(legacy)await f.storage.execute('fixture.legacyPolicyArchive',{ownerId:owner,runId:run.runId});
- const management=new SqliteMemoryManagement(f.storage,owner);await management.importRun(run.runId);return {...f,contactId,extraction,management,runId:run.runId,normal};
+ const management=new SqliteMemoryManagement(f.storage,owner);await management.importRun(run.runId);
+ const adjudication=new SqliteMemoryAdjudication(f.storage,owner,undefined,new ActiveHolders());t.after(()=>adjudication.close());
+ return {...f,contactId,extraction,management,adjudication,runId:run.runId,normal};
 }
 
 test('正常07真实核验引句只引用事实来源，完整窗口仍保留为资格依赖',async t=>{
@@ -70,8 +74,8 @@ test('旧配置存档无逐事实具名核验仍可人工采纳，退役策略�
  assert.equal(f.normal.purposes.filter(x=>x.purpose==='verification').length,1);
  await assert.rejects(f.extraction.continue(f.runId,0,randomUUID()),{code:'extraction_runtime_config_retired'});
  assert.equal(candidate.verificationState,'pending');
- await assert.rejects(f.management.automatic({requestKey:'unverified-auto',action:'auto_accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]}),{code:'memory_verification_pending'});
- await f.management.publishRun(f.runId);assert.equal((await f.management.read(scope)).memories.length,0);
+ assert.equal(await f.storage.execute('memoryAdjudication.claim',{ownerId:owner,candidateId:candidate.id}),null,'来源语义未核验不能取得裁决执行资格');
+ await f.adjudication.publishRun(f.runId,f.contactId);assert.equal((await f.management.read(scope)).memories.length,0);
  await f.management.decide({requestKey:'reviewed-by-user',action:'accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]});
  const after=await f.management.read(scope);assert.equal(after.memories[0].current.adoptionMode,'user');
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
@@ -86,7 +90,7 @@ test('核验子串保留Unicode代码点引句范围，不扩大到整条消息'
 test('旧存档即使同attempt有相同事实的核验事件，无具名产物引用仍待核验',async t=>{
  const f=await prepared(t,{archive:true}),scope={scopeKind:'contact',contactId:f.contactId},candidate=(await f.management.read(scope)).candidates[0];
  assert.ok(candidate);assert.equal(f.normal.purposes.filter(x=>x.purpose==='verification').length,1);assert.equal(candidate.verificationState,'pending');
- await assert.rejects(f.management.automatic({requestKey:'archive-auto',action:'auto_accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]}),{code:'memory_verification_pending'});
+ await f.adjudication.publishRun(f.runId,f.contactId);assert.equal((await f.management.read(scope)).memories.length,0);assert.equal((await f.management.read(scope)).candidates[0].state,'pending');
 });
 
 
@@ -110,7 +114,7 @@ test('非requires_all_sources合法核验证据可为直接来源子集，必要
  const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts'),{ActiveHolders}=await import('../src/storage/sqlite/deletion/holders.ts'),{ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
  const deletion=new DeletionService(f.storage,new ActiveHolders(),new ManagedFiles(f.root)),plan=await deletion.plan({ownerId:owner,requestKey:'delete-uncited-required',scope:{kind:'source',contactId,sourceId:uncited.recordId}});
  assert.equal((await management.read({scopeKind:'contact',contactId})).candidates.length,0);assert.equal((await deletion.advance({ownerId:owner,operationId:plan.operationId})).state,'completed');
- await assert.rejects(management.automatic({requestKey:'late-subset',action:'auto_accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]}));
+ await assert.rejects(f.storage.execute('memoryAdjudication.claim',{ownerId:owner,candidateId:candidate.id}));
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
@@ -173,7 +177,7 @@ test('事实A的必要消息和精准引用仅A，真实role=context的B留在�
  const context=item.qualificationSources.find(s=>s.messageId!==candidate.sources[0].messageId),{DeletionService}=await import('../src/storage/sqlite/deletion/service.ts'),{ActiveHolders}=await import('../src/storage/sqlite/deletion/holders.ts'),{ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
  const deletion=new DeletionService(f.storage,new ActiveHolders(),new ManagedFiles(f.root)),plan=await deletion.plan({ownerId:owner,requestKey:'delete-real-context',scope:{kind:'source',contactId,sourceId:context.recordId}});
  assert.equal((await management.read({scopeKind:'contact',contactId})).candidates.length,0);assert.equal((await deletion.advance({ownerId:owner,operationId:plan.operationId})).state,'completed');
- await assert.rejects(management.automatic({requestKey:'late-context-output',action:'auto_accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]}));
+ await assert.rejects(f.storage.execute('memoryAdjudication.claim',{ownerId:owner,candidateId:candidate.id}));
 });
 
 
@@ -245,7 +249,7 @@ for(const scenario of ['active','withdrawn','replaced_memory_id','merged_memory_
  const first=await f.storage.execute('memoryAdjudication.claim',{ownerId:owner,candidateId:candidates[0].id});await f.storage.execute('memoryAdjudication.finish',{ownerId:owner,attemptIds:[first.attemptId]});
  let memory=(await management.read(scope)).memories[0];await management.decide({requestKey:'before-noop',action:scenario==='withdrawn'?'withdraw':'protect',memoryId:memory.id,expectedVersionNo:memory.current.versionNo,expectedHeadRevision:memory.headRevision});memory=(await management.read(scope)).memories[0];
  const pending=(await management.read(scope)).candidates.find(c=>c.state==='pending'),request={requestKey:'public-noop-rejected',action:'auto_noop',candidateIds:[pending.id],candidateRevisions:[pending.stateRevision],memoryId:memory.id,expectedVersionNo:'1',expectedHeadRevision:memory.headRevision};
- await assert.rejects(management.decide(request),{code:'memory_request_invalid'});await assert.rejects(f.storage.execute('memory.applyAutomaticDecision',{ownerId:owner,request}),{code:'memory_relationship_pending'});
+ await assert.rejects(management.decide(request),{code:'memory_request_invalid'});await assert.rejects(f.storage.execute('memory.applyDecision',{ownerId:owner,request,authority:{executionId:pending.id}}),{code:'memory_request_invalid'});
  const purposes=[],respond=async request=>{
   purposes.push(request.purpose);const payload=JSON.parse(request.user);let value;
   if(request.purpose==='adjudication'){const candidate=payload.new_memories[0],prior=payload.existing_memories[0];value={decisions:[{candidate_index:candidate.candidate_index,action:'noop',replaced_memory_id:null,merged_memory_ids:[],merged_text:null,duplicate_memory_id:prior.memory_id,relation:{kind:'supplement',related_memory_ids:[prior.memory_id],explanation:'同来源同事实没有新信息。',evidence:candidate.source_texts.map(s=>({message_id:s.message_id,quote:s.text})),claim_changed:false,condition_changed:false}}]};}

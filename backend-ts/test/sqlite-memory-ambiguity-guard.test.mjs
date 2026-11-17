@@ -92,11 +92,11 @@ test('alternatives 非空时不降级，保持原逻辑并在采纳事件里保�
  assert.deepEqual(latest.payload.adopted_with_alternatives,['“他是 3000”可能指弟弟的工资，也可能指弟弟的房贷']);
 });
 
-test('发布入口同样降级：系统自动采纳遇到未标注易歧义结构时保持待确认',async t=>{
+test('空池发布同样降级：系统自动采纳遇到未标注易歧义结构时保持待确认',async t=>{
  const f=await adjudicationFixture(t);
  f.setExtractionTransform(memory=>{memory.text='联系人称他弟弟换工作了，联系人称他（弟弟）是 3000；用户问过工资多少、房贷压力大不大。';});
  const runId=await f.extract(['我弟弟最近换了工作。']);
- await f.management.publishRun(runId);
+ await f.adjudication.publishRun(runId);
  const view=await f.read();
  assert.equal(view.memories.length,0,'自动采纳入口命中兜底时不得写记忆');
  const candidate=view.candidates.find(candidate=>(candidate.body??'').includes('3000'));

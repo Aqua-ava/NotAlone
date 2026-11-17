@@ -272,7 +272,7 @@ function finish(tx:StorageTransaction,raw:unknown,lease:StorageLease) {
  record(tx,ownerId,first.id,'adjudication_result',{candidateId:basis.candidateId,reason,action:reason?'pending':action,parentMemoryIds:parents.map(p=>p.id),text:text??item.candidate.text,...notice});
  if(!reason&&skippedSources)record(tx,ownerId,first.id,'skipped_duplicate',{candidateId:basis.candidateId,...skippedSources});
  if(!reason){
-  result=applyDecision(tx,{ownerId,request:{requestKey:`memory:adjudication:${String(first.attempt.step_id)}`,action,candidateIds:[basis.candidateId],candidateRevisions:[basis.candidateRevision],...(target?{memoryId:target.id,expectedVersionNo:target.versionNo,expectedHeadRevision:target.headRevision}:{})}},true,{executionId:first.id,body:text,formation,parents:parents.map(p=>({memoryId:p.id,versionNo:BigInt(p.versionNo)}))});
+  result=applyDecision(tx,{ownerId,request:{requestKey:`memory:adjudication:${String(first.attempt.step_id)}`,action,candidateIds:[basis.candidateId],candidateRevisions:[basis.candidateRevision],...(target?{memoryId:target.id,expectedVersionNo:target.versionNo,expectedHeadRevision:target.headRevision}:{})}},{executionId:first.id,body:text,formation,parents:parents.map(p=>({memoryId:p.id,versionNo:BigInt(p.versionNo)}))});
   if(parents.length>1)retireMergedParents(tx,{ownerId,executionId:first.id,primaryMemoryId:result.memoryId!,requestKey:`memory:adjudication:${String(first.attempt.step_id)}`,parents:parents.map(p=>({memoryId:p.id,versionNo:BigInt(p.versionNo),headRevision:BigInt(p.headRevision)}))});
  }
 

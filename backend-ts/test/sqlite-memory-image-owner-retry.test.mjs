@@ -9,6 +9,7 @@ import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 import {ExtractionModelError} from '../src/memory/extraction/model.ts';
 import {createBuiltinMemoryContentRegistry} from '../src/memory/content/builtins.ts';
+import {finishEmptyPoolCandidate} from './fixtures/memory-management/adjudication-support.mjs';
 
 const png=await sharp({create:{width:1200,height:1600,channels:3,background:'orange'}}).png().toBuffer();
 const adapter={version:'synthetic-image-owner-retry',supports:kind=>kind==='image',async execute(context){
@@ -85,7 +86,7 @@ test('已有本人记忆后仅归集重试新增贡献，旧采纳及独立图�
  const f=await retryFixture(t,{existingFact:true}),management=new SqliteMemoryManagement(f.storage,owner),scope={scopeKind:'self',contactId:null};
  const before=await f.extraction.read(f.run.runId),self=before.tasks.find(task=>task.scopeKind==='self');await management.importRun(f.run.runId);
  const candidate=(await management.read(scope)).candidates[0];assert.equal(candidate.body,'用户有一个蓝色杯子。');
- await management.automatic({requestKey:'adopt-owner-before-image-retry',action:'auto_accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]});
+ await finishEmptyPoolCandidate(f.storage,owner,candidate.id);
  const oldTrace=await f.extraction.trace(self.taskId);f.repair();
  await f.extraction.retryImages(f.run.runId,(await f.extraction.read(f.run.runId)).controlVersion,randomUUID());await f.extraction.waitForIdle(f.run.runId);await management.importRun(f.run.runId);
  const trace=await f.extraction.trace(self.taskId),outputs=trace.events.filter(event=>event.kind==='verified_output');

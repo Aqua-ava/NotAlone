@@ -4,7 +4,9 @@ import {fixture,owner,record,modelPort} from './fixtures/memory-sqlite/support.m
 import {supplier} from './fixtures/memory-management/supplier.mjs';
 import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
-import {adjudicationFixture,adjudicationSupplier} from './fixtures/memory-management/adjudication-support.mjs';
+import {SqliteMemoryAdjudication} from '../src/memory/sqlite/management/adjudication-service.ts';
+import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
+import {adjudicationFixture,adjudicationSupplier,finishEmptyPoolCandidate} from './fixtures/memory-management/adjudication-support.mjs';
 
 async function prepared(t,options={}){
  const f=await fixture(t,{registryModule:options.registryModule??new URL('./fixtures/memory-management/registry.mjs',import.meta.url).href}),[a,b]=f.saved.map(x=>x.contact_id);
@@ -66,7 +68,7 @@ test('05来源删除清候选、版本及敏感决定，本人跨联系人闭包
  const candidate=(await f.management.read(aScope)).candidates[0];
  const adopted=await f.management.decide({requestKey:'before-delete',action:'edit_accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision],body:'保留必要来源的人工改写'});
  const selfBefore=await f.management.read(selfScope);assert.equal(selfBefore.candidates.length,2);
- const affectedSelf=selfBefore.candidates.find(c=>c.sources.every(s=>s.contactId===f.a));await f.management.automatic({requestKey:'self-auto',action:'auto_accept',candidateIds:[affectedSelf.id],candidateRevisions:[affectedSelf.stateRevision]});
+ const affectedSelf=selfBefore.candidates.find(c=>c.sources.every(s=>s.contactId===f.a));await finishEmptyPoolCandidate(f.storage,owner,affectedSelf.id);
  await f.management.decide({requestKey:'independent-self',action:'manual',scope:selfScope,body:'独立手录仍然合法'});
  const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts');
  const {ActiveHolders}=await import('../src/storage/sqlite/deletion/holders.ts');const {ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
@@ -84,7 +86,7 @@ test('05来源删除清候选、版本及敏感决定，本人跨联系人闭包
 
 test('新自动采纳可明确撤回，修正与变化保留不同版本来历且旧正文不参与当前读取',async t=>{
  const f=await prepared(t);await f.management.importRun(f.runId);const s={scopeKind:'contact',contactId:f.a};
- const candidate=(await f.management.read(s)).candidates[0];const adopted=await f.management.automatic({requestKey:'auto-first',action:'auto_accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]});
+ const candidate=(await f.management.read(s)).candidates[0];const adopted=await finishEmptyPoolCandidate(f.storage,owner,candidate.id);
  let m=(await f.management.read(s)).memories[0];await f.management.decide({requestKey:'withdraw',action:'withdraw',memoryId:m.id,expectedVersionNo:'1',expectedHeadRevision:m.headRevision});
  assert.equal((await f.management.read(s)).memories[0].current,null);
  const manual=await f.management.decide({requestKey:'manual',action:'manual',scope:s,body:'原来记错'});
@@ -136,7 +138,7 @@ test('新的关系资料提取固定当前来源，不选择同消息的旧代�
 test('本人完整授权归属与实际消息依赖分开，删除未参与来源保留合法修正版本',async t=>{
  const f=await prepared(t);await f.management.importRun(f.runId);const self={scopeKind:'self',contactId:null};
  const candidate=(await f.management.read(self)).candidates.find(c=>c.sources.every(s=>s.contactId===f.b));assert.ok(candidate);
- const accepted=await f.management.automatic({requestKey:'mixed-self-auto',action:'auto_accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]});
+ const accepted=await finishEmptyPoolCandidate(f.storage,owner,candidate.id);
  const knowledge=(await f.storage.execute('fixture.memoryKnowledge',{ownerId:owner,contactId:f.b,discussionId:'synthetic'})).find(k=>k.id===accepted.memoryId);
  assert.deepEqual(new Set(knowledge.qualificationSources.map(s=>s.contactId)),new Set([f.b]));assert.ok(knowledge.citationSources.every(s=>s.contactId===f.b));assert.deepEqual(new Set(knowledge.sources.map(s=>s.contactId)),new Set([f.b]));
  const m=(await f.management.read(self)).memories.find(m=>m.id===accepted.memoryId);await f.management.decide({requestKey:'mixed-self-correct',action:'correct',memoryId:m.id,expectedVersionNo:'1',expectedHeadRevision:m.headRevision,body:'修正后的本人资料'});
@@ -151,10 +153,11 @@ test('处理结束窄hook从07正常核验输出自动发布，重试不重复�
  const f=await fixture(t),contactId=f.saved[0].contact_id;
  f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:'我长期住在高雄。'})],completedPartitions:['shard-a'],exhausted:true});await f.service.synchronize(contactId);await f.contacts.setReading(false);
  const management=new SqliteMemoryManagement(f.storage,owner);let extraction;
- extraction=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>extraction.accounting,supplier().respond),undefined,runId=>management.publishRun(runId));t.after(()=>extraction.close());
+ const adjudication=new SqliteMemoryAdjudication(f.storage,owner,undefined,new ActiveHolders());t.after(()=>adjudication.close());
+ extraction=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>extraction.accounting,supplier().respond),undefined,runId=>adjudication.publishRun(runId));t.after(()=>extraction.close());
  const run=await extraction.start('normal-hook-auto');await extraction.waitForIdle();
  const before=await management.read({scopeKind:'contact',contactId});assert.equal(before.memories.length,1);assert.equal(before.memories[0].current.adoptionMode,'auto');assert.equal(before.candidates.length,0);assert.equal((await management.readHistory({scopeKind:'contact',contactId},before.memories[0].id)).versions[0].originalCandidates[0].state,'adopted');
- assert.equal((await management.readHistory({scopeKind:'contact',contactId},before.memories[0].id)).decisions[0].actorKind,'system');await management.publishRun(run.runId);const after=await management.read({scopeKind:'contact',contactId});assert.deepEqual(after,before);
+ assert.equal((await management.readHistory({scopeKind:'contact',contactId},before.memories[0].id)).decisions[0].actorKind,'system');await adjudication.publishRun(run.runId);const after=await management.read({scopeKind:'contact',contactId});assert.deepEqual(after,before);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
@@ -162,5 +165,16 @@ test('已有记忆和人工保护时默认发布不能另建身份绕过旧新�
  const f=await prepared(t),s={scopeKind:'contact',contactId:f.a};await f.management.importRun(f.runId);
  const manual=await f.management.decide({requestKey:'protected-old',action:'manual',scope:s,body:'联系人长期住在台北。'});let m=(await f.management.read(s)).memories[0];
  await f.management.decide({requestKey:'protect-old',action:'protect',memoryId:m.id,expectedVersionNo:'1',expectedHeadRevision:m.headRevision});
- await f.management.publishRun(f.runId);const after=await f.management.read(s);assert.equal(after.memories.length,1);assert.equal(after.memories[0].id,manual.memoryId);assert.equal(after.candidates[0].state,'pending');assert.equal(after.memories[0].current.body,'联系人长期住在台北。');
+ const adjudication=new SqliteMemoryAdjudication(f.storage,owner,modelPort(()=>f.extraction.accounting,adjudicationSupplier({action:'update'})),new ActiveHolders());t.after(()=>adjudication.close());
+ await adjudication.publishRun(f.runId,f.a);const after=await f.management.read(s);assert.equal(after.memories.length,1);assert.equal(after.memories[0].id,manual.memoryId);assert.equal(after.candidates[0].state,'pending');assert.equal(after.memories[0].current.body,'联系人长期住在台北。');
+});
+
+test('旧自动写入口退役，人工请求不能夹带执行授权变成自动采纳',async t=>{
+ const f=await prepared(t);await f.management.importRun(f.runId);
+ const scope={scopeKind:'contact',contactId:f.a},candidate=(await f.management.read(scope)).candidates[0];
+ const request={requestKey:'forged-auto-authority',action:'auto_accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]};
+ for(const name of ['memory.publishRun','memory.applyAutomaticDecision'])await assert.rejects(f.storage.execute(name,{ownerId:owner,runId:f.runId,request}),{code:'action_unavailable'});
+ await assert.rejects(f.storage.execute('memory.applyDecision',{ownerId:owner,request,system:true,authority:{executionId:candidate.id}}),{code:'memory_request_invalid'});
+ assert.equal((await f.management.read(scope)).memories.length,0);assert.equal((await f.management.read(scope)).candidates[0].state,'pending');
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

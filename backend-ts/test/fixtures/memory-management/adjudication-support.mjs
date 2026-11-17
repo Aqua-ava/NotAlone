@@ -8,6 +8,14 @@ import {ActiveHolders} from '../../../src/storage/sqlite/deletion/holders.ts';
 import {readAllManagement} from './read-all.mjs';
 export {owner};
 
+/** 精确准备空池自动版本；使用正式裁决事务，不伪造执行授权或跳过模型分支。 */
+export async function finishEmptyPoolCandidate(storage,ownerId,candidateId){
+ const claim=await storage.execute('memoryAdjudication.claim',{ownerId,candidateId});
+ assert.ok(claim,'候选必须仍有裁决资格');assert.deepEqual(claim.basis.item.similar,[],'有旧资料时必须经完整模型裁决');
+ const {result,reason}=await storage.execute('memoryAdjudication.finish',{ownerId,attemptIds:[claim.attemptId]});
+ assert.equal(reason,null);assert.ok(result);return result;
+}
+
 /** 仅合成供应商作语义选择；输入、具名核验、许可预约、回执及正式决定沿真实合同。 */
 export function adjudicationSupplier({action='add',kind,select,mergedText='联系人保留全部合成长期资料。'}={}){
  return async(request)=>{

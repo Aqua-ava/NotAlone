@@ -17,7 +17,8 @@ try{
  const management=new SqliteMemoryManagement(storage,owner);await management.importRun(run.runId);
  const directory=await storage.execute('identity.directory',{ownerId:owner}),[a,b]=directory.contacts.map(c=>c.contact_id);
  const candidateA=(await management.read({scopeKind:'contact',contactId:a})).candidates[0],candidateB=(await management.read({scopeKind:'contact',contactId:b})).candidates[0];
- await management.automatic({requestKey:'08-desktop-first-auto',action:'auto_accept',candidateIds:[candidateA.id],candidateRevisions:[candidateA.stateRevision]});
+ const initialAdjudication=new SqliteMemoryAdjudication(storage,owner,undefined,new ActiveHolders());
+ try{await initialAdjudication.initialize();await initialAdjudication.publishRun(run.runId,a);}finally{await initialAdjudication.close();}
  const holders=new ActiveHolders();contacts=new SqliteContactService(storage,owner,{account:async()=>{throw Error('synthetic_metadata_unused');},sessions:async()=>{throw Error('synthetic_metadata_unused');}});
  const report={protocol:'private-history-v1',profileId:'synthetic-v1',adapterVersion:'1',status:'supported',reason:null,programVersion:'synthetic',build:'1',artifactSha256:'a'.repeat(64),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],identity:'source-table-local-v1',statusSemantics:'synthetic-final-rows',continuity:'synthetic-generation-1'};
  const target={protocol:'private-history-v1',descriptor:'08-synthetic-new-evidence',partitions:['shard-a'],tables:[{partition:'shard-a',instance:'table-instance-1'}],sourceGeneration:'source-1'};

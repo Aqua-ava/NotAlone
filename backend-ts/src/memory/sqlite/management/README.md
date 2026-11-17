@@ -2,9 +2,9 @@
 
 产品合同以[记忆与版本数据](../../../../../architecture/current/domain-data.md)、[裁决流程](../../../../../architecture/current/memory-processing.md)、[依赖与删除](../../../../../architecture/current/privacy-deletion.md)为准；本页只保留本模块的接口、装配和故障处理。
 
-`memoryManagementMigration(version)` 追加独立DDL；已发布迁移不修改。`memoryManagementActions` 注册 `memory.importRun`、`memory.applyDecision`、内部 `memory.applyAutomaticDecision` 与只读 `memory.read`。
+`memoryManagementMigration(version)` 追加独立DDL；已发布迁移不修改。`memoryManagementActions` 注册 `memory.importRun`、人工决定 `memory.applyDecision`、只读 `memory.read/history` 与时间线准备动作。旧 `memory.publishRun`、`memory.applyAutomaticDecision` 及其宿主方法已退役，自动写入只由真实裁决完成事务消费候选。
 
-`SqliteMemoryManagement(storage, ownerId)` 由认证宿主构造；页面不提供owner。`importRun(runId)` 只从提取域真实 `verifiedExtractionOutput` 导入固定原稿。`decide` 接受用户动作、幂等键、候选状态修订或精确记忆版本与头修订；系统 `automatic` 不接受正文、不开放为HTTP或Tool。决定与正式版本、必要消息、精确capture_record引用和当前头在同一短事务闭合。
+`SqliteMemoryManagement(storage, ownerId)` 由认证宿主构造；页面不提供owner。`importRun(runId)` 只从提取域真实 `verifiedExtractionOutput` 导入固定原稿。`decide` 接受用户动作、幂等键、候选状态修订或精确记忆版本与头修订；人工请求不能通过夹带 `system` 或执行授权字段进入自动路径；自动执行授权由裁决完成事务通过内部函数参数注入，不开放为HTTP或Tool。决定与正式版本、必要消息、精确capture_record引用和当前头在同一短事务闭合。
 
 `createMemoryKnowledgeReader(sourceEligibility?)` 实现回复域的 `ReplyMemoryReader`，仅提供正式记忆头部 `list`、精确身份 `open` 与资格复验，不保留整池物化或待确认候选枚举开关。验收通过同一 `list/open` 合同展开，候选管理与来源检查沿各自领域入口。本人self映射owner；正式memory保留auto/confirmed区别。额外 `MemoryKnowledgeItem.headRevision` 必须随消费者的identity_json保留，`requireCurrent`同事务重验精确版本、当前头、来源和正文；保护操作也使旧快照失效。历史已冻结的 `memory_candidate` 只在 `requireCurrent` 内按精确身份复验其原未确认资格、时间和来源，否决、来源失效或删除仍拒绝旧材料；不能经 `list/open` 成为新回复输入。
 
