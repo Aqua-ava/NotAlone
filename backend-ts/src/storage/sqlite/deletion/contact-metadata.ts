@@ -145,7 +145,7 @@ export class ContactMetadataLifetime {
     const service=await this.current();
     await service.confirmForeground(proof);
   }
-  async syncStatus(){await this.current();const http=this.http;if(!http)throw new StorageFailure('history_contact_gateway_unavailable');return http.syncStatus();}
+  async syncSnapshot(){return (await this.current()).syncSnapshot();}
   async handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     if (this.stopping) return this.deny(res);
     const sensitive = req.method !== 'GET' || this.path(req) === '/api/sync/cli-sessions';

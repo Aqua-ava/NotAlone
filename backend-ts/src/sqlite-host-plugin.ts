@@ -245,9 +245,9 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
     const historyHttp=history?new SqliteHistoryHttp(history,(contactId,messageIds)=>{if(automaticImages)imageSync?.retryViewed(contactId,messageIds);}):undefined;
     let historyStatusInFlight:Promise<Record<string,unknown>>|undefined;
     const readHistoryStatus=async()=>{
-      const directory=await contacts!.syncDirectory();
+      const {directory,status}=await contacts!.syncSnapshot();
       const coverage=await readStatusCoverages(directory.bindings,contactId=>history!.coverage(contactId),contactIds=>history!.coverages(contactIds));
-      return projectHistorySyncStatus(await contacts!.syncStatus(),coverage,firstHistory?.getState(),incremental?.getState(),
+      return projectHistorySyncStatus(status,coverage,firstHistory?.getState(),incremental?.getState(),
         await history!.bodyAvailable(coverage.map(row=>row.contactId)));
     };
     // 多个界面同时刷新只共享在途读取；完成后下次查询仍重新核验，不保留状态缓存。
