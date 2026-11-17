@@ -37,19 +37,29 @@ test('候选preload与主进程将五种操作映射到固定SQLite HTTP路径',
  f.respond(async request=>({generation:3,data:request.path.endsWith('/edit')?{...version(),versionNo:2,parentVersionNo:1,origin:'manual'}:request.path.endsWith('/select')?{id:ids.selection,candidateId:ids.candidate,versionNo:1,selectionNo:1}:request.path.includes('/versions/')?version():request.method==='POST'?{session_id:ids.session,request_key:ids.request,segmented:false,replayed:false}:pageData()}));
  assert.deepEqual(await f.bridge.candidates.execute({...scope,action:'read'}),pageData());
  const workspace={action:'express',draftText:'本次合成表达要求，温和简洁些',contextText:'本次补充情况',includeRelationshipContext:true};
- await f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:workspace.draftText,acceptIncomplete:true,workspace});
+ await f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:workspace.draftText,workspace});
  assert.equal((await f.bridge.candidates.execute({...scope,action:'edit',candidateId:ids.candidate,versionNo:1,parts:['手改第一条','手改第二条']})).versionNo,2);
  assert.equal((await f.bridge.candidates.execute({...scope,action:'select',candidateId:ids.candidate,versionNo:1})).id,ids.selection);
  assert.deepEqual((await f.bridge.candidates.execute({...scope,action:'version',candidateId:ids.candidate,versionNo:1})).parts,['合成候选第一条','合成候选第二条']);
  assert.deepEqual(f.requests.map(({method,path,body})=>({method,path,body})),[
   {method:'GET',path:base,body:undefined},
-  {method:'POST',path:base,body:{request_key:ids.request,text:workspace.draftText,confirmed_contact:true,accept_incomplete:true,workspace}},
+  {method:'POST',path:base,body:{request_key:ids.request,text:workspace.draftText,confirmed_contact:true,workspace}},
   {method:'POST',path:`${base}/${ids.candidate}/edit`,body:{version_no:1,parts:['手改第一条','手改第二条']}},
   {method:'POST',path:`${base}/${ids.candidate}/select`,body:{version_no:1}},
   {method:'GET',path:`${base}/${ids.candidate}/versions/1`,body:undefined},
  ]);
  assert.equal(f.invocations.every(call=>call.channel==='sqlite-reply-candidates:execute'),true);
  assert.equal(f.requests.every(request=>request.path.startsWith(base)&&request.timeoutMs===120000&&request.maxResponseBytes===2_000_000),true);
+});
+
+test('preload与主进程拒绝退役的历史完整性确认字段，不再维护无效选择',async t=>{
+ const f=fixture(await modules());t.after(()=>f.controller.close());
+ for(const acceptIncomplete of [true,false,null,undefined]){
+  const command={...scope,action:'generate',requestKey:ids.request,text:'本次合成要求',acceptIncomplete};
+  await assert.rejects(f.bridge.candidates.execute(command),/无效/);
+  await assert.rejects(f.handlers.get('sqlite-reply-candidates:execute')(command),/无效/);
+ }
+ assert.equal(f.requests.length,0);
 });
 
 test('历史显式预加载回执继续按原来源读取，退役新参数不改写旧材料',async t=>{
@@ -69,19 +79,19 @@ test('preload及主进程均拒绝通用owner、路径、SQL字段和额外参�
  }
  await assert.rejects(f.bridge.candidates.execute(read,'extra'),/无效/);await assert.rejects(handler(read,'extra'),/无效/);
  const workspace={action:'suggest',draftText:'',contextText:'',includeRelationshipContext:false};
- await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'伪造的既定立场',acceptIncomplete:false,workspace}),/无效/);
+ await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'伪造的既定立场',workspace}),/无效/);
  for(const retired of [{tone:'original'},{instruction:'简短一些'}]){
-  const command={...scope,action:'generate',requestKey:ids.request,text:'',acceptIncomplete:false,workspace:{...workspace,...retired}};
+  const command={...scope,action:'generate',requestKey:ids.request,text:'',workspace:{...workspace,...retired}};
   await assert.rejects(f.bridge.candidates.execute(command),/无效/);
   await assert.rejects(handler(command),/无效/);
  }
  for(const selectedPackageId of [ids.skill,null]){
-  const command={...scope,action:'generate',requestKey:ids.request,text:'合成请求',acceptIncomplete:false,selectedPackageId};
+  const command={...scope,action:'generate',requestKey:ids.request,text:'合成请求',selectedPackageId};
   await assert.rejects(f.bridge.candidates.execute(command),/无效/);await assert.rejects(handler(command),/无效/);
  }
  for(const key of ['excludedMessageIds','excluded_message_ids']){
-  await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'',acceptIncomplete:false,workspace:{...workspace,[key]:[]}}),/无效/);
-  await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'',acceptIncomplete:false,[key]:[]}),/无效/);
+  await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'',workspace:{...workspace,[key]:[]}}),/无效/);
+  await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'',[key]:[]}),/无效/);
  }
  await assert.rejects(f.bridge.candidates.execute({...read,contactId:ids.other}),/失效/);
  assert.equal(f.requests.length,0);assert.equal(f.invocations.length,1,'只有格式合法但范围错误的请求可到达主进程');
@@ -130,7 +140,7 @@ test('联系人、连接换代或显式来源失效均取消在途候选读取�
 
 test('已知失败按安全中文状态映射，未知错误不将供应商正文带入IPC',async t=>{
  const f=fixture(await modules());t.after(()=>f.controller.close());
- const input={...scope,action:'generate',requestKey:ids.request,text:'仅用于本次的合成要求',acceptIncomplete:false};
+ const input={...scope,action:'generate',requestKey:ids.request,text:'仅用于本次的合成要求'};
  for(const [code,expected] of [
   ['reply_history_syncing','历史状态已变化，请重新读取当前会话后重试。'],
   ['reply_history_incomplete','历史状态已变化，请重新读取当前会话后重试。'],
@@ -172,7 +182,7 @@ test('历史失败仅接收无正文错误码与真实发送标记，拒绝异�
 test('前台确认失效时主进程拒绝候选操作并撤销在途读取，不能仅靠页面按钮门禁',async t=>{
  const f=fixture(await modules());t.after(()=>f.controller.close());f.confirm(false);
  await assert.rejects(f.bridge.candidates.execute({...scope,action:'read'}),/请先确认本次联系人/);assert.equal(f.requests.length,0);
- await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'不能绕过当前确认',acceptIncomplete:false}),/请先确认本次联系人/);assert.equal(f.requests.length,0);
+ await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'不能绕过当前确认'}),/请先确认本次联系人/);assert.equal(f.requests.length,0);
  f.confirm(true);const gate=Promise.withResolvers();f.respond(()=>gate.promise);const pending=f.bridge.candidates.execute({...scope,action:'read'}),rejected=assert.rejects(pending,/请先确认本次联系人/);
  f.confirm(false,true);assert.equal(f.requests[0].signal.aborted,true);gate.resolve({generation:3,data:pageData()});await rejected;
 });

@@ -18,7 +18,7 @@
 
 `replyCandidateMigration(version)` 仅追加新版本。候选稳定身份不保存正文，模型原稿从 v1 起；手工编辑追加同候选父版本，多条消息分别按 `part_no` 保存。选稿是固定版本的追加事件，不证明复制或发送。
 
-`SqliteReplyCandidateService` 提供 begin/view/version/edit/select；`SqliteReplyTurns` 复用讨论域的真实DSH运行、共享provider/arbiter及共享调用账本。`reply.begin`复用讨论域请求键、身份与unknown保护，保存真实触发发言和历史覆盖依据。联系人资格通过后可立即生成，历史未开始、同步中或不完整均不阻塞，也不要求额外确认；覆盖事实和当前可用资料限制进入冻结输入与输出依据，不将部分覆盖标成完整。旧 `accept_incomplete` 字段仅兼容已有调用，不授予读取或改变生成资格。原请求重试使用受理时的覆盖快照，不随后台历史进度改写或重复调用。任何重开、选稿、编辑和回看均不发送模型请求。
+`SqliteReplyCandidateService` 提供 begin/view/version/edit/select；`SqliteReplyTurns` 复用讨论域的真实DSH运行、共享provider/arbiter及共享调用账本。`reply.begin`复用讨论域请求键、身份与unknown保护，保存真实触发发言和历史覆盖依据。联系人资格通过后可立即生成，历史未开始、同步中或不完整均不阻塞，也不要求额外确认；覆盖事实和当前可用资料限制进入冻结输入与输出依据，不将部分覆盖标成完整。新请求不再接收已无资格意义的 `accept_incomplete`／`acceptIncomplete` 字段；历史覆盖快照继续按原来源和删除规则读取。最近消息选取与稳定来源解析由 `discussion.localMessages` 在同一只读事务完成，调用方直接冻结返回的精确来源；冻结、出站及保存继续复验。原请求重试使用受理时的覆盖快照，不随后台历史进度改写或重复调用。任何重开、选稿、编辑和回看均不发送模型请求。
 
 `ReplyKnowledgeReader.list/open/readDocuments/requireCurrent` 在当前 SQLite 短事务运行，HTTP 不能传正文、版本资格、SQL 或 adapter。`ReplyKnowledgeItem` 固定真实版本、本人／联系人范围、publication 成员和精确 `capture_record.id` 来源；写者复验所选版本，候选域复验范围、来源与解释修订。生产 Worker 安装 `replyLocalKnowledgeReader` 组合正式记忆与文档；新回复不选择或注入待确认候选；历史未确认材料的读取、来源、否决与删除仍保留，不把提取原稿视为已采纳记忆。一次性工作区要求不读取或保存长期表达偏好。
 

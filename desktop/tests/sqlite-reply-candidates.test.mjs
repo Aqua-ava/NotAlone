@@ -479,7 +479,7 @@ test('明确未发送失败的新请求保留显式选稿',{timeout:30000},async
  await region.getByRole('button',{name:'以这个说法继续',exact:true}).click();await expect(region.getByRole('status')).toContainText('下一次明确请求');assert.equal(generated,0);
  await generate.click();await expect(region.getByRole('alert')).toContainText('尚未发给模型');await expect(draft).toHaveValue('合成本次表达要求');
  await region.getByRole('button',{name:'重新生成',exact:true}).click();await expect.poll(()=>f.submitted.length).toBe(1);
- const requests=f.commands.filter(c=>c.action==='generate');assert.equal(requests.length,2);assert.equal(requests[0].acceptIncomplete,false);assert.equal(requests[0].selectedPackageId,undefined);assert.equal(requests[1].selectedPackageId,undefined);assert.equal(requests[0].carriedSelectionId,ids.selection);assert.notEqual(requests[1].requestKey,requests[0].requestKey);assert.equal(requests[1].text,requests[0].text);assert.equal(requests[1].carriedSelectionId,ids.selection);
+ const requests=f.commands.filter(c=>c.action==='generate');assert.equal(requests.length,2);assert.equal('acceptIncomplete' in requests[0],false);assert.equal(requests[0].selectedPackageId,undefined);assert.equal(requests[1].selectedPackageId,undefined);assert.equal(requests[0].carriedSelectionId,ids.selection);assert.notEqual(requests[1].requestKey,requests[0].requestKey);assert.equal(requests[1].text,requests[0].text);assert.equal(requests[1].carriedSelectionId,ids.selection);
  await expect(draft).toHaveValue('');await expect(region.getByRole('checkbox',{name:'使用已同步部分继续',exact:true})).toHaveCount(0);
 });
 
@@ -602,7 +602,7 @@ test('切换联系人撤下旧草稿与快照，旧读取迟到不能跨范围�
  release.resolve(pageData());await f.page.waitForFunction(()=>window.__settled===3);
  await expect(region.getByText('同联系人实际输入依据',{exact:true})).toHaveCount(0);await expect(region.getByText('本次实际加载的合成Skill正文',{exact:true})).toHaveCount(0);
  await draft.fill('乙联系人的本次想法');await region.getByRole('button',{name:'帮我表达',exact:true}).click();await expect.poll(()=>f.submitted.length).toBe(1);
- const generated=f.commands.find(c=>c.action==='generate');assert.equal(generated.contactId,ids.other);assert.equal(generated.scopeRevision,2);assert.equal(generated.sessionId,ids.otherSession);assert.equal(generated.text,'乙联系人的本次想法');assert.equal(generated.acceptIncomplete,false);assert.equal(generated.carriedSelectionId,undefined);
+ const generated=f.commands.find(c=>c.action==='generate');assert.equal(generated.contactId,ids.other);assert.equal(generated.scopeRevision,2);assert.equal(generated.sessionId,ids.otherSession);assert.equal(generated.text,'乙联系人的本次想法');assert.equal('acceptIncomplete' in generated,false);assert.equal(generated.carriedSelectionId,undefined);
 });
 
 test('候选继续被后端判定失效时保留独立草稿并清旧携入及实际Skill快照',{timeout:30000},async t=>{

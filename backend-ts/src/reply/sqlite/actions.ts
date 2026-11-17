@@ -39,6 +39,16 @@ function requireDiscussionSources(tx:StorageTransaction,i:any):void {
   catch(error){if(error instanceof StorageFailure&&error.code==='history_source_not_available')throw new StorageFailure('discussion_source_unavailable');throw error;}
  }
 }
+function readDiscussionMessages(tx:StorageTransaction,i:any):StorageRow[]{
+ if(!Array.isArray(i.messageIds)||i.messageIds.length>50||new Set(i.messageIds).size!==i.messageIds.length)throw new StorageFailure('discussion_context_invalid');if(!i.messageIds.length)return [];
+  const ids=i.messageIds.map(identifier),sources=tx.all(`WITH ${savedSourceScopeCTE} SELECT m.id,m.text_body,m.sender_role,m.interpretation_revision,r.id record_id
+   FROM message m JOIN capture_record r ON r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id
+   JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
+   WHERE m.owner_id=? AND m.contact_id=? AND m.id IN (${ids.map(()=>'?').join(',')}) AND m.kind='text' AND m.availability='available'
+   AND r.state='normalized' AND r.availability='available' AND ${currentSourcePredicate()}
+   AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) ORDER BY r.id`,[i.ownerId,i.contactId,i.contactId,i.ownerId,i.contactId,...ids]);
+  return ids.map((id:string)=>{const row=sources.find(source=>source.id===id);if(!row)throw new StorageFailure('discussion_source_unavailable');return row;});
+}
 export const discussionActions:StorageAction[]=[
  action('readBoundary','read',(tx,i)=>{
   const contact=requireDiscussionContact(tx,i.ownerId,i.contactId,'assistant_read_scope_unavailable'),discussion=i.discussionId===undefined?undefined:requireDiscussion(tx,i);
@@ -63,25 +73,18 @@ export const discussionActions:StorageAction[]=[
  action('localMessages','read',(tx,i)=>{
   requireDiscussion(tx,i);
   const limit=i.limit===undefined?20:i.limit;if(!Number.isSafeInteger(limit)||limit<1||limit>50)fail('discussion_context_invalid');
-  return tx.all(`WITH ${savedSourceScopeCTE} SELECT m.id FROM message m WHERE m.owner_id=? AND m.contact_id=? AND m.availability='available'
+  const selected=tx.all(`WITH ${savedSourceScopeCTE} SELECT m.id FROM message m WHERE m.owner_id=? AND m.contact_id=? AND m.availability='available'
    AND m.kind='text' AND m.text_body IS NOT NULL AND length(m.text_body)>0 ${i.knownTimeOnly?'AND m.sent_at IS NOT NULL':''}
    AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
    AND EXISTS (SELECT 1 FROM capture_record r JOIN sync_capture c ON c.owner_id=r.owner_id AND c.contact_id=r.contact_id AND c.id=r.capture_id
     JOIN read_goal g ON g.owner_id=c.owner_id AND g.contact_id=c.contact_id AND g.id=c.goal_id
     WHERE r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id AND r.state='normalized' AND r.availability='available' AND ${currentSourcePredicate()})
    ORDER BY m.sent_at IS NULL ASC,m.sent_at DESC,m.display_no DESC LIMIT ?`,[i.ownerId,i.contactId,i.contactId,i.ownerId,i.contactId,limit]);
+  return readDiscussionMessages(tx,{...i,messageIds:selected.map(row=>row.id)});
  }),
- action('messages','read' ,(tx,i)=>{requireDiscussion(tx,i);if(!Array.isArray(i.messageIds)||i.messageIds.length>50||new Set(i.messageIds).size!==i.messageIds.length)throw new StorageFailure('discussion_context_invalid');if(!i.messageIds.length)return [];
-  const ids=i.messageIds.map(identifier),sources=tx.all(`WITH ${savedSourceScopeCTE} SELECT m.id,m.text_body,m.sender_role,m.interpretation_revision,r.id record_id
-   FROM message m JOIN capture_record r ON r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id
-   JOIN sync_capture c ON c.owner_id=r.owner_id AND c.id=r.capture_id JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
-   WHERE m.owner_id=? AND m.contact_id=? AND m.id IN (${ids.map(()=>'?').join(',')}) AND m.kind='text' AND m.availability='available'
-   AND r.state='normalized' AND r.availability='available' AND ${currentSourcePredicate()}
-   AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) ORDER BY r.id`,[i.ownerId,i.contactId,i.contactId,i.ownerId,i.contactId,...ids]);
-  return ids.map((id:string)=>{const row=sources.find(source=>source.id===id);if(!row)throw new StorageFailure('discussion_source_unavailable');return row;});}),
+ action('messages','read',(tx,i)=>{requireDiscussion(tx,i);return readDiscussionMessages(tx,i);}),
  action('trace','read',(tx,i)=>{requireDiscussion(tx,i);if(!hasCurrentReplyDependencies(tx,{ownerId:i.ownerId,requestIds:[String(i.requestId)]}))throw new StorageFailure('discussion_unavailable');const request=tx.get("SELECT id,state FROM reply_request WHERE owner_id=? AND contact_id=? AND discussion_id=? AND id=? AND state<>'invalidated'",[i.ownerId,i.contactId,i.discussionId,i.requestId]);if(!request)throw new StorageFailure('discussion_unavailable');return {request,events:tx.all('SELECT e.id,e.event_no,e.kind,e.originated_call_id,e.payload FROM execution_event e JOIN reply_attempt a ON a.owner_id=e.owner_id AND a.id=e.reply_attempt_id WHERE a.owner_id=? AND a.request_id=? ORDER BY e.event_no',[i.ownerId,i.requestId]),calls:tx.all('SELECT c.id,c.provider,c.state,c.attempt_no,c.actual_budget_units,c.settlement_state,c.receipt FROM model_call c JOIN reply_attempt a ON a.owner_id=c.owner_id AND a.id=c.reply_attempt_id WHERE a.owner_id=? AND a.request_id=? ORDER BY c.attempt_no',[i.ownerId,i.requestId])};}),
  action('new','write',(tx,i)=>discussionView(create(tx,i))),
- action('forRequest','write',(tx,i)=>{const selected=selectDiscussionForRequest(tx,i);return {discussion:discussionView(selected.row),segmented:selected.segmented};}),
  action('continue','write',(tx,i)=>{
   const target=requireDiscussion(tx,i);at(i.at);requireDiscussionSources(tx,i);
   if(target.is_current===1n)return discussionView(target);

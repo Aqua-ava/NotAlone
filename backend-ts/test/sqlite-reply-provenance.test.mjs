@@ -36,7 +36,7 @@ async function fixture(t){
  async function context(contactId,{entryIds=[],messageIds,candidate=false,queryText='本次合成表达要求'}={}){
   const requestKey=randomUUID(),confirmationId=await storage.execute('identity.manualConfirm',{ownerId,contactId,contextToken:requestKey,id:randomUUID(),at:Date.now()});
   const {attempt}=candidate
-   ?await new SqliteReplyCandidateService(storage,ownerId).begin({contactId,requestKey,text:queryText,identity:{kind:'manual',confirmationId},discussionId:(await discussions.forRequest(contactId)).discussion.id})
+   ?await new SqliteReplyCandidateService(storage,ownerId).begin({contactId,requestKey,text:queryText,identity:{kind:'manual',confirmationId},discussionId:(await discussions.list(contactId)).currentDiscussionId??(await discussions.newDiscussion(contactId)).id})
    :await discussions.begin(contactId,requestKey,queryText,{kind:'manual',confirmationId});
   const messages=await storage.execute('discussion.messages',{...attempt,messageIds:messageIds??(await history.read(contactId)).messages.map(m=>m.id)}),contextId=randomUUID();
   await storage.execute(candidate?'reply.freezeInput':'discussion.freezeContext',{...attempt,contextId,queryText,skillRun:{packages:[],eligible:[]},items:[...messages.map(m=>({kind:'message',sourceContactId:contactId,messageId:m.id,recordId:m.record_id,acceptedRevision:m.interpretation_revision})),...entryIds.map(entryId=>({kind:'entry',entryId}))],at:Date.now()});

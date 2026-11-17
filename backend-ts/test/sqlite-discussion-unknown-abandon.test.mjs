@@ -21,8 +21,9 @@ async function fixture(t){
  t.after(async()=>{await storage.close();await rm(root,{recursive:true,force:true});});
  const begin=async(contactId=ids[0],requestKey=randomUUID())=>{
   const confirmationId=await storage.execute('identity.manualConfirm',{ownerId,contactId,contextToken:requestKey,id:randomUUID(),at:Date.now()});
-  const discussion=await new SqliteDiscussionService(storage,ownerId).forRequest(contactId);
-  return {requestKey,...await new SqliteReplyCandidateService(storage,ownerId).begin({contactId,discussionId:discussion.discussion.id,requestKey,text:'仅用于未知调用恢复的合成想法',identity:{kind:'manual',confirmationId},includeRelationshipContext:false})};
+  const discussions=new SqliteDiscussionService(storage,ownerId);
+  const discussionId=(await discussions.list(contactId)).currentDiscussionId??(await discussions.newDiscussion(contactId)).id;
+  return {requestKey,...await new SqliteReplyCandidateService(storage,ownerId).begin({contactId,discussionId,requestKey,text:'仅用于未知调用恢复的合成想法',identity:{kind:'manual',confirmationId},includeRelationshipContext:false})};
  };
  return {root,ids,begin,get storage(){return storage;},
   inspect:i=>storage.execute('unknownTest.inspect',i),

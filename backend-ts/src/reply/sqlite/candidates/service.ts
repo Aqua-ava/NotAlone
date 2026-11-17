@@ -6,7 +6,7 @@ export class SqliteReplyCandidateService {
  private readonly phases=new Map<string,ReplyGenerationPhase>();
  private readonly preparationFailures=new Map<string,ReplyGenerationStatus>();
  constructor(storage:SqliteStorage,ownerId:string,reader:Pick<StorageReader,'execute'>=storage){this.storage=storage;this.reader=reader;this.ownerId=ownerId;}
- begin(input:{contactId:string;discussionId:string;requestKey:string;text:string;identity:{kind:'manual';confirmationId:string}|{kind:'binding';bindingId:string;verificationId:string};acceptIncomplete?:boolean;carriedSelectionId?:string;includeRelationshipContext?:boolean;workspaceFingerprint?:string}){
+ begin(input:{contactId:string;discussionId:string;requestKey:string;text:string;identity:{kind:'manual';confirmationId:string}|{kind:'binding';bindingId:string;verificationId:string};carriedSelectionId?:string;includeRelationshipContext?:boolean;workspaceFingerprint?:string}){
   return this.storage.execute<any>('reply.begin',{...input,ownerId:this.ownerId,expectedDiscussionId:input.discussionId,at:Date.now()});
  }
  view(contactId:string,discussionId:string,options:{includeSkillText?:boolean;limit?:number}={}){return this.reader.execute<any[]>('reply.view',{ownerId:this.ownerId,contactId,discussionId,...options});}

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
 import {mkdtemp,realpath,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -18,18 +19,27 @@ async function fixture(t){
  return {storage,root,identity,ids,service:new SqliteDiscussionService(storage,owner,()=>now),advance:ms=>now+=ms};
 }
 test('联系人讨论隔离、回看不切换，超过十二小时仅显式请求分段，明确继续刷新旧段',async t=>{
- const {service,ids,advance}=await fixture(t);
+ const {storage,service,ids,advance}=await fixture(t);
+ const begin=async(discussionId,key=randomUUID())=>{
+  const confirmationId=await storage.execute('identity.manualConfirm',{ownerId:owner,contactId:ids[0],contextToken:key,id:randomUUID(),at:Date.now()});
+  return service.begin(ids[0],key,'本次合成讨论',{kind:'manual',confirmationId},discussionId);
+ };
  assert.equal((await service.list(ids[0])).currentDiscussionId,null);
  const first=await service.newDiscussion(ids[0]);const other=await service.newDiscussion(ids[1]);
  advance(12*60*60*1000+1);
  assert.equal((await service.list(ids[0])).currentDiscussionId,first.id);
  assert.equal((await service.view(ids[0],first.id)).discussion.id,first.id);
- const segmented=await service.forRequest(ids[0]);assert.equal(segmented.segmented,true);assert.notEqual(segmented.discussion.id,first.id);
+ await assert.rejects(service.begin(ids[0],randomUUID(),'身份未确认的合成请求',{kind:'manual',confirmationId:randomUUID()},first.id),{code:'discussion_identity_required'});
+ assert.equal((await service.list(ids[0])).currentDiscussionId,first.id,'身份失败须回滚分段与新建');
+ const key=randomUUID(),segmented=await begin(first.id,key);assert.equal(segmented.segmented,true);assert.notEqual(segmented.attempt.discussionId,first.id);
+ advance(12*60*60*1000+1);
+ const replayed=await begin(first.id,key);assert.equal(replayed.replayed,true);assert.equal(replayed.attempt.discussionId,segmented.attempt.discussionId);
+ assert.equal((await service.list(ids[0])).discussions.length,2,'同键重放不能再次空闲分段');
  await service.continueDiscussion(ids[0],first.id);
- assert.equal((await service.forRequest(ids[0])).discussion.id,first.id);
+ assert.equal((await begin(first.id)).attempt.discussionId,first.id);
  assert.equal((await service.list(ids[1])).currentDiscussionId,other.id);
  await assert.rejects(service.view(ids[1],first.id),{code:'discussion_unavailable'});
- assert.equal((await service.view(ids[0],first.id)).entries.length,0);
+ assert.equal((await service.view(ids[0],first.id)).entries.length,1);
 });
 
 test('正常讨论HTTP复用目录与继续入口，认证前不读正文且响应不暴露文件定位',async t=>{

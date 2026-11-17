@@ -140,7 +140,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  function sendGeneration({text,workspace,carry}:GenerationInput){
   if(!writable)return;
   const requestKey=crypto.randomUUID();retry.current={requestKey,text,workspace,carry};
-  return run({action:'generate',requestKey,text,workspace,acceptIncomplete:false,...(carry?{carriedSelectionId:carry}:{})});
+  return run({action:'generate',requestKey,text,workspace,...(carry?{carriedSelectionId:carry}:{})});
  }
  function generate(action:'express'|'suggest'){
   if(action==='express'&&!draft.trim()||!page||unresolved||operation.current)return;

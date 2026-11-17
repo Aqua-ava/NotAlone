@@ -79,6 +79,8 @@ test('认证HTTP不等待历史即可生成、编辑和选稿，拒绝owner和�
  assert.equal((await request('','POST',{owner_id:f.owner})).status,400);
  assert.equal((await request('','POST',{request_key:randomUUID(),text:'未确认联系人不能生成',confirmed_contact:false})).status,400);
  for(const selected_package_id of [randomUUID(),null])assert.equal((await request('','POST',{request_key:randomUUID(),text:'合成请求',confirmed_contact:true,selected_package_id})).status,400);
+ for(const accept_incomplete of [true,false,null])assert.equal((await request('','POST',{request_key:randomUUID(),text:'合成请求',confirmed_contact:true,accept_incomplete})).status,400);
+ for(const acceptIncomplete of [true,false,undefined])await assert.rejects(turns.generate({contactId,discussionId:d.id,requestKey:randomUUID(),text:'合成请求',confirmedContact:true,acceptIncomplete}),{code:'reply_input_invalid'});
  assert.equal(f.requests.length,0);
  const made=await request('','POST',{request_key:randomUUID(),text:'本次写得自然',confirmed_contact:true});assert.equal(made.status,200);
  const view=await request();assert.match(view.body.requests[0].coverageWarning,/历史覆盖不完整/);const v=view.body.requests[0].candidates[0];
@@ -272,9 +274,21 @@ test('统一工作区生成按消息时间使用最新50条，不把旧位置当
  await f.history.synchronize(contactId);const d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
  const http=new SqliteReplyCandidateHttp({storage:f.storage,service,turns,authorize:req=>req.headers.authorization==='Bearer synthetic'}),server=createServer(async(req,res)=>{if(!await http.handle(req,res)){res.writeHead(404);res.end();}});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
  const url=`http://127.0.0.1:${server.address().port}/api/contacts/${contactId}/assistant-sessions/${d.id}/reply-candidates`,headers={authorization:'Bearer synthetic','content-type':'application/json'};
+ const scope={ownerId:f.owner,contactId,discussionId:d.id};
+ const selected=await f.storage.execute('discussion.localMessages',{...scope,limit:50,knownTimeOnly:true});
+ const expected=await f.storage.execute('discussion.messages',{...scope,messageIds:selected.map(row=>row.id)});
+ const execute=f.storage.execute.bind(f.storage),selectionActions=[];let frozenSources;
+ f.storage.execute=(name,input)=>{
+  if(name==='discussion.localMessages'||name==='discussion.messages')selectionActions.push(name);
+  if(name==='reply.freezeInput')frozenSources=input.items;
+  return execute(name,input);
+ };
  const workspace={action:'suggest',draftText:'',contextText:'',includeRelationshipContext:true};
  const accepted=await fetch(url,{method:'POST',headers,body:JSON.stringify({request_key:randomUUID(),text:'',confirmed_contact:true,workspace})}),acceptedBody=await accepted.json();assert.equal(accepted.status,200,JSON.stringify(acceptedBody));
  const request=JSON.stringify(f.requests[0]);assert.ok(request.includes('合成最近-49'));assert.ok(request.includes('合成最近-0'));assert.ok(!request.includes('合成旧消息但保存位置较新'));
+ assert.deepEqual(frozenSources,expected.map(row=>({kind:'message',sourceContactId:contactId,messageId:row.id,recordId:row.record_id,acceptedRevision:row.interpretation_revision})));
+ t.diagnostic(`相同51条合成聊天：最近消息准备跨Worker动作数=${selectionActions.length}，实际冻结=${frozenSources.length}`);
+ assert.deepEqual(selectionActions,['discussion.localMessages']);
 });
 
 const knowledgeRegistry=new URL('./fixtures/sqlite-reply-candidates/knowledge-registry.mjs',import.meta.url).href;
