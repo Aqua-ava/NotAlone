@@ -208,3 +208,5 @@
 - [ADR-192：前台定位仅保留名称观察与已有联系人关联](192-retire-foreground-observation-compatibility.md)——退役旧双区域协议及前台再次确认写证明链，保留名称质量、手选和授权边界。
 
 - [ADR-193：回复 Skill 统一按需目录并退役显式预加载](193-retire-explicit-reply-skill-preload.md)——新请求拒绝显式选包，保留历史材料及删除约束。
+
+- [ADR-194：集中运行事实与回复准备职责](194-single-runtime-facts-and-reply-preparation.md)——统一在途及尝试登记，收敛近期聊天读取，退役新请求的旧历史确认参数。
