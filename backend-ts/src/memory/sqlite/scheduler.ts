@@ -4,13 +4,9 @@ export interface MemoryScheduleContact {contactId:string;incrementalDueAt:number
 export interface MemoryScheduleSnapshot {contacts:MemoryScheduleContact[]}
 export interface MemoryL1SchedulerPort {
  recoverBacklog?():Promise<unknown>;
- scheduleContacts?():Promise<string[]>;
- scanSchedule?(now:number,contactIds:string[]):Promise<MemoryScheduleSnapshot>;
- nextDueAt?(now:number):Promise<number|null>;
- dueContacts?(now:number):Promise<string[]>;
+ scheduleContacts():Promise<string[]>;
+ scanSchedule(now:number,contactIds:string[]):Promise<MemoryScheduleSnapshot>;
  startContact(contactId:string,requestKey:string,now:number):Promise<unknown|null>;
- dueHistoryContacts?(now:number):Promise<string[]>;
- nextHistoryDueAt?(now:number):Promise<number|null>;
  startHistoryBatch?(contactId:string,requestKey:string,now:number):Promise<unknown|null>;
 }
 export interface MemoryL1SchedulerOptions {
@@ -52,7 +48,7 @@ export class SqliteMemoryL1Scheduler {
  /** 历史接受事件、启动或用户处理动作都只唤醒重扫，不扩大已冻结轮次。 */
  wake(contactId?:string):Promise<void>{
   if(!this.#started||this.#closed)return Promise.resolve();
-  if(this.#port.scheduleContacts&&this.#port.scanSchedule){if(contactId===undefined)this.#globalDirty=true;else this.#dirtyContacts.add(contactId);}
+  if(contactId===undefined)this.#globalDirty=true;else this.#dirtyContacts.add(contactId);
   return this.scan();
  }
  private scan():Promise<void>{
@@ -68,67 +64,26 @@ export class SqliteMemoryL1Scheduler {
   this.clearTimer();
   this.#timer=this.#setTimeout(()=>{this.#timer=null;if(!this.#closed)void this.scan().catch(()=>{});},Math.max(0,Math.min(delayMs,2_147_483_647)));
  }
- private async scanOnce():Promise<void>{
-  if(!this.#enabled()){this.clearTimer();return;}
-  if(this.#port.scheduleContacts&&this.#port.scanSchedule)return this.scanUnifiedOnce();
-  this.clearTimer();if(this.#closed)return;
-  let started=0,failed=false;
-  const historyEnabled=Boolean(this.#port.dueHistoryContacts&&this.#port.startHistoryBatch&&this.#port.nextHistoryDueAt);
-  try{
-   const contacts=await this.#port.dueContacts!(this.#now());
-   for(const contactId of contacts){
-    if(this.#closed)return;
-    try{if(await this.#port.startContact(contactId,randomUUID(),this.#now()))started++;}
-    catch{failed=true;}
-   }
-   if(this.#closed)return;
-   if(this.#port.recoverBacklog)await this.#port.recoverBacklog();
-   if(this.#closed)return;
-   if(historyEnabled){
-    const due=await this.#port.dueHistoryContacts!(this.#now());
-    const previous=this.#lastHistoryContact===null?-1:due.indexOf(this.#lastHistoryContact);
-    const ordered=previous<0?due:[...due.slice(previous+1),...due.slice(0,previous+1)];
-    for(const contactId of ordered){
-     if(this.#closed)return;
-     this.#lastHistoryContact=contactId;
-     try{
-      if(await this.#port.startHistoryBatch!(contactId,randomUUID(),this.#now())){started++;break;}
-     }catch{failed=true;}
-    }
-   }
-   if(this.#closed)return;
-   const now=this.#now(),incremental=await this.#port.nextDueAt!(now);
-   const history=historyEnabled?await this.#port.nextHistoryDueAt!(now):null;
-   const due=[incremental,history].filter((value):value is number=>value!==null);
-   // 历史终页可能没有新增文字事件，有限周期重扫保证恢复导入及空终页也能被发现。
-   if(historyEnabled)due.push(now+30_000);
-   if(!due.length){if(failed)this.arm(5_000);return;}
-   const delay=Math.min(...due)-this.#now();
-   // 每次只执行一个历史小批，下一轮优先重新领取增量；资格变化或异常时避免忙重试。
-   this.arm(failed?Math.max(5_000,delay):delay<=0?(started===0?1_000:1):delay);
-  }catch{
-   if(!this.#closed)this.arm(5_000);
-  }
- }
  private async refreshContacts(contactIds:string[]):Promise<void>{
   for(let offset=0;offset<contactIds.length;offset+=32){
    if(this.#closed)return;
    const batch=contactIds.slice(offset,offset+32);
    // 先消费当前唤醒；查询在途新增的同一联系人唤醒仍留给下一轮。
    for(const contactId of batch)this.#dirtyContacts.delete(contactId);
-   const snapshot=await this.#port.scanSchedule!(this.#now(),batch);
+   const snapshot=await this.#port.scanSchedule(this.#now(),batch);
    if(this.#closed)return;
    for(const contactId of batch)this.#schedule.delete(contactId);
    for(const row of snapshot.contacts)if(batch.includes(row.contactId))this.#schedule.set(row.contactId,row);
   }
  }
  private async refreshAll():Promise<void>{
-  const contacts=await this.#port.scheduleContacts!();if(this.#closed)return;
+  const contacts=await this.#port.scheduleContacts();if(this.#closed)return;
   const current=new Set(contacts);
   for(const contactId of this.#schedule.keys())if(!current.has(contactId))this.#schedule.delete(contactId);
   await this.refreshContacts(contacts);this.#globalDueAt=this.#now()+30_000;
  }
- private async scanUnifiedOnce():Promise<void>{
+ private async scanOnce():Promise<void>{
+  if(!this.#enabled()){this.clearTimer();return;}
   this.clearTimer();if(this.#closed)return;
   if(this.#now()<this.#retryAt){this.arm(this.#retryAt-this.#now());return;}
   let started=0,failed=false;

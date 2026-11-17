@@ -77,14 +77,15 @@ test('启动立即扫描并只保留一个最早到期计时器；关闭后不�
  let now=1_000,dueAt=1_100,nextTimer=0,startedResolve,scanResolve;
  const started=new Promise(resolve=>{startedResolve=resolve}),scanDone=new Promise(resolve=>{scanResolve=resolve}),timers=new Map(),runs=[];
  const scheduler=new SqliteMemoryL1Scheduler({
-  nextDueAt:async()=>{if(runs.length){scanResolve();return null;}return dueAt;},
-  dueContacts:async current=>current>=dueAt?['contact-a']:[],
+  scheduleContacts:async()=>['contact-a'],
+  scanSchedule:async(_now,ids)=>({contacts:ids.map(contactId=>({contactId,incrementalDueAt:dueAt,historyDue:false}))}),
   startContact:async(contactId,requestKey,current)=>{runs.push({contactId,requestKey,current});dueAt=null;startedResolve();return {runId:'run-a'};},
- },{now:()=>now,setTimeout:(callback,delay)=>{const id=++nextTimer;timers.set(id,{callback,delay});return id;},clearTimeout:id=>timers.delete(id)});
+ },{now:()=>now,setTimeout:(callback,delay)=>{const id=++nextTimer;timers.set(id,{callback,delay});if(runs.length)scanResolve();return id;},clearTimeout:id=>timers.delete(id)});
  await scheduler.start();assert.equal(timers.size,1);assert.equal([...timers.values()][0].delay,100);
  now=1_100;const [timerId,timer]=[...timers.entries()][0];timers.delete(timerId);timer.callback();await started;await scanDone;
- assert.equal(runs.length,1);assert.equal(runs[0].contactId,'contact-a');assert.equal(timers.size,0);
- await scheduler.close();
+ assert.equal(runs.length,1);assert.equal(runs[0].contactId,'contact-a');assert.equal(timers.size,1);
+ assert.equal([...timers.values()][0].delay,29_900,'无到期目标后保留30秒全局兜底');
+ await scheduler.close();await scheduler.wake();assert.equal(runs.length,1);assert.equal(timers.size,0);
 });
 
 test('L1结算后关闭会留下可恢复的后续登记，不重跑L1',async t=>{
