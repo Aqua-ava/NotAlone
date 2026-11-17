@@ -1,16 +1,16 @@
 import type {StorageRow,StorageTransaction} from '../../storage/sqlite/contracts.ts';
-import {currentSourcePredicate} from '../../history/sqlite/current-scope.ts';
-import {memoryIncrementalBaseline} from '../../storage/sqlite/message-order.ts';
-import {currentContentAvailability,hasMemoryContent,installedMemoryContentKinds} from './content.ts';
+import {currentSourcePredicate,currentSourceScopeCTE} from '../../history/sqlite/current-scope.ts';
+import {memoryIncrementalBaseline,captureAcceptanceOrder} from '../../storage/sqlite/message-order.ts';
+import {currentContentAvailability,installedMemoryContentKinds} from './content.ts';
 import {assignedRunItemsCte} from './run-retirement.ts';
 import {fail} from './qualification.ts';
 
-interface InputScope {ownerId:string;contactId:string;scopeCte:string;sourceOrder:string}
+interface InputScope {ownerId:string;contactId:string}
 interface InputRows extends InputScope {pendingOnly?:boolean}
 interface Stats {count:number;oldestAt:number|null;latestAt:number|null}
 interface Inputs {all?:StorageRow[];pending?:StorageRow[];availableAll?:ReadonlySet<string>;availablePending?:ReadonlySet<string>;baseline?:bigint;history?:Stats;incremental?:Stats}
 const scopes=new WeakMap<StorageTransaction,Map<string,Inputs>>();
-const key=(options:InputScope)=>JSON.stringify([options.ownerId,options.contactId,options.scopeCte,options.sourceOrder]);
+const key=(options:InputScope)=>JSON.stringify([options.ownerId,options.contactId]);
 const pending=(row:StorageRow)=>(row.item_id===null||row.extraction_state==='pending')&&row.target_assigned!==1n&&row.target_assigned!==1;
 
 /** 仅在一个同步具名只读动作内复用候选；退出即丢弃，不跨写入或事务保留资格。 */
@@ -25,20 +25,18 @@ function inputs(tx:StorageTransaction,options:InputScope):Inputs{
 
 /** 来源与首次接受顺序保持分离；统计投影不读取正文，也不生成内容摘要。 */
 export function readScheduleInputRows(tx:StorageTransaction,options:InputRows):StorageRow[]{
- const {ownerId,contactId,scopeCte,sourceOrder}=options,pendingOnly=options.pendingOnly!==false,cache=inputs(tx,options);
+ const {ownerId,contactId}=options,pendingOnly=options.pendingOnly!==false,cache=inputs(tx,options);
  if(pendingOnly&&cache.pending)return cache.pending;
  if(!pendingOnly&&cache.all)return cache.all;
  if(pendingOnly&&cache.all)return cache.pending=cache.all.filter(pending);
- const content=hasMemoryContent(tx),kinds=installedMemoryContentKinds().filter(kind=>content||kind==='text');
+ const kinds=installedMemoryContentKinds();
  if(!kinds.length)return [];
- const quarantine=tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='history_message_quarantine'")
-  ?'AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)':'';
  // run_input 的复合 FK 保证 item 与 source_contact_id 同联系人；分配集合只扫描一次。
- const rows=tx.all(`WITH ${scopeCte},${assignedRunItemsCte('schedule_assigned_items')},schedule_candidate_messages AS MATERIALIZED (
+ const rows=tx.all(`WITH ${currentSourceScopeCTE},${assignedRunItemsCte('schedule_assigned_items')},schedule_candidate_messages AS MATERIALIZED (
   SELECT m.owner_id,m.contact_id,m.id,m.kind,m.display_no,p.id AS item_id,p.extraction_state,p.pipeline_state,
    ${pendingOnly?'0':'CASE WHEN p.id IN (SELECT item_id FROM schedule_assigned_items) THEN 1 ELSE 0 END'} AS target_assigned
   FROM message m LEFT JOIN processing_item p ON p.owner_id=m.owner_id AND p.contact_id=m.contact_id AND p.message_id=m.id AND p.purpose='memory_extraction'
-  WHERE m.owner_id=? AND m.contact_id=? AND m.availability='available' AND m.kind IN (SELECT value FROM json_each(?)) ${quarantine}
+  WHERE m.owner_id=? AND m.contact_id=? AND m.availability='available' AND m.kind IN (SELECT value FROM json_each(?)) AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
    ${pendingOnly?"AND (p.id IS NULL OR p.extraction_state='pending') AND (p.id IS NULL OR p.id NOT IN (SELECT item_id FROM schedule_assigned_items))":''}
  ),schedule_current_records AS MATERIALIZED (
   SELECT source.message_id,min(source.id) AS record_id FROM schedule_candidate_messages m CROSS JOIN capture_record source
@@ -49,7 +47,7 @@ export function readScheduleInputRows(tx:StorageTransaction,options:InputRows):S
   GROUP BY source.message_id
  ),schedule_ranked_first_source AS MATERIALIZED (
   SELECT source.message_id,g.kind AS first_goal_kind,capture.captured_at AS first_captured_at,
-   row_number() OVER(PARTITION BY source.message_id ORDER BY ${sourceOrder}) position
+   row_number() OVER(PARTITION BY source.message_id ORDER BY ${captureAcceptanceOrder}) position
   FROM schedule_candidate_messages m CROSS JOIN capture_record source
    ON source.owner_id=m.owner_id AND source.contact_id=m.contact_id AND source.message_id=m.id
   JOIN sync_capture capture ON capture.owner_id=source.owner_id AND capture.id=source.capture_id

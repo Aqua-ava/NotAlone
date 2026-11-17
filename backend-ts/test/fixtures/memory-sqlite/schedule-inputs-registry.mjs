@@ -1,6 +1,5 @@
 import {randomUUID} from 'node:crypto';
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
-import {currentSourceScopeCTE} from '../../../src/history/sqlite/current-scope.ts';
 import {pendingMemoryInputStats,readScheduleInputRows,scheduleInputAvailability,withScheduleInputStats} from '../../../src/memory/sqlite/schedule-inputs.ts';
 
 export const registry={migrations:base.migrations,actions:[...base.actions,
@@ -9,7 +8,7 @@ export const registry={migrations:base.migrations,actions:[...base.actions,
   const count=(sql,rows)=>{queries++;if(sql.includes('schedule_candidate_messages'))sourceQueries++;bodyRows+=rows.filter(row=>Object.hasOwn(row,'text_body')).length;return rows;};
   const measured={run:tx.run,all:(sql,values)=>count(sql,tx.all(sql,values)),get:(sql,values)=>count(sql,[input.baseline!==undefined&&sql==='SELECT memory_incremental_baseline_display_no AS n FROM database_instance WHERE slot=1'?{n:input.baseline}:tx.get(sql,values)].filter(Boolean))[0]};
   return withScheduleInputStats(measured,()=>{
-   const options={ownerId:input.ownerId,contactId:input.contactId,scopeCte:currentSourceScopeCTE,sourceOrder:'capture.acceptance_no,capture.captured_at,capture.rowid,source.item_no,source.id'};
+   const options={ownerId:input.ownerId,contactId:input.contactId};
    const metadata=input.metadata?readScheduleInputRows(measured,{...options,pendingOnly:false}):[];
    const availableBefore=input.availability==='all-first'?scheduleInputAvailability(measured,{...options,pendingOnly:false}):null;
    const history=pendingMemoryInputStats(measured,{...options,history:true}),incremental=pendingMemoryInputStats(measured,{...options,history:false});

@@ -1,7 +1,7 @@
 import {assignedRunItemsCte,runTargetsReleased,releasedRunSql} from './run-retirement.ts';
 import {isolatedInputs,canRetryIsolatedImages,isolatedContactItemIds} from './image-isolation.ts';
 import {observedProcessingAction} from './diagnostics.ts';
-import {currentContent,freezeContent,hasMemoryContent,readFrozenContent,installedMemoryContentKinds} from './content.ts';
+import {currentContent,freezeContent,readFrozenContent,installedMemoryContentKinds} from './content.ts';
 import {randomUUID} from 'node:crypto';
 import type {StorageAction,StorageTransaction,StorageRow,StorageLease} from '../../storage/sqlite/contracts.ts';
 import {assertContribution,assertInputs,assertTaskContributions,fail,inputRows,textId} from './qualification.ts';
@@ -12,50 +12,12 @@ import {queueSummary as laterQueueSummary} from './documents/later-schedule.ts';
 import {projectControl} from './control.ts';
 import {backlogRecoveryActions,backlogRunRecoverable} from './backlog-recovery.ts';
 import {autoProcessingActions} from './auto-processing.ts';
-import {memoryIncrementalBaseline} from '../../storage/sqlite/message-order.ts';
+import {memoryIncrementalBaseline,captureAcceptanceOrder} from '../../storage/sqlite/message-order.ts';
 import {pendingMemoryInputStats,readScheduleInputRows,scheduleInputAvailability,withScheduleInputStats} from './schedule-inputs.ts';
 const number=(v:unknown):number=>{if(typeof v!=='bigint'||v<0n||v>BigInt(Number.MAX_SAFE_INTEGER))return fail('memory_extraction_count_invalid');return Number(v);};
 const minute=60_000,hour=60*minute,quietThreshold=10*minute,volumeThreshold=50,ageThreshold=6*hour,startCooldown=30*minute;
 const timeNumber=(v:unknown):number=>{if(typeof v!=='bigint'||v<0n||v>BigInt(Number.MAX_SAFE_INTEGER))return fail('memory_extraction_time_invalid');return Number(v);};
 const checkedNow=(v:unknown):number=>{if(!Number.isSafeInteger(v)||Number(v)<0)return fail('memory_extraction_input_invalid');return Number(v);};
-function hasColumn(tx:StorageTransaction,table:'processing_run'|'sync_capture'|'read_goal',column:string):boolean{
- return tx.all(`PRAGMA table_info(${table})`).some(row=>row.name===column);
-}
-export function hasRunFollowupState(tx:StorageTransaction):boolean{return hasColumn(tx,'processing_run','followup_state');}
-function tableExists(tx:StorageTransaction,table:'source_proof'|'history_message_quarantine'|'memory_document_later_schedule'|'memory_document_later_run_requirement'):boolean{
- return !!tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?",[table]);
-}
-/** 20 之前的结构没有不可变创建顺序，沿用 created_at／rowid 的历史排序。 */
-function sourceScopeCTE(tx:StorageTransaction):string{
- if(hasColumn(tx,'read_goal','creation_no')&&tableExists(tx,'source_proof'))return currentSourceScopeCTE;
- const continuity=tableExists(tx,'source_proof')?` UNION ALL
- SELECT c.owner_id,c.contact_id,b.id,json_object('sourceGeneration',c.source_generation,'partitions',json_extract(c.tables_json,'$.partitions'),'tables',json((
-  SELECT json_group_array(json_object('partition',json_extract(t.value,'$[0]'),'instance',json_extract(t.value,'$[1]'))) FROM json_each(c.tables_json,'$.tables') t)))
- FROM source_proof c JOIN history_scope_request q ON q.owner_id=c.owner_id
- JOIN conversation_binding b ON b.owner_id=c.owner_id AND b.contact_id=c.contact_id AND b.conversation_id=c.conversation_id AND b.state='verified'
- WHERE (q.contact_scope IS NULL OR c.contact_id=q.contact_id) AND c.tables_json<>'' AND json_valid(c.tables_json)
- AND NOT EXISTS (SELECT 1 FROM current_history_ranked h WHERE h.owner_id=c.owner_id AND h.contact_id=c.contact_id)` : '';
- return `history_scope_request AS MATERIALIZED (SELECT ? owner_id,? contact_scope,? contact_id),
- current_history_ranked AS MATERIALIZED (
-  SELECT h.owner_id,h.contact_id,h.binding_id,h.target_json,row_number() OVER(PARTITION BY h.owner_id,h.contact_id ORDER BY h.created_at DESC,h.rowid DESC) position
-  FROM read_goal h JOIN history_scope_request q ON q.owner_id=h.owner_id AND (q.contact_scope IS NULL OR h.contact_id=q.contact_id)
-  WHERE h.kind='history'
- ), current_history_scope AS MATERIALIZED (
-  SELECT owner_id,contact_id,binding_id,target_json FROM current_history_ranked WHERE position=1${continuity}
- ), current_source_members AS MATERIALIZED (
-  SELECT h.owner_id,h.contact_id,h.binding_id,json_extract(h.target_json,'$.sourceGeneration') generation,
-   json_extract(t.value,'$.partition') partition,json_extract(t.value,'$.instance') instance,
-   json_array(json_extract(h.target_json,'$.sourceGeneration'),json_extract(t.value,'$.partition'),json_extract(t.value,'$.instance')) closed_prefix
-  FROM current_history_scope h JOIN json_each(h.target_json,'$.tables') t
- ), current_source_ranges AS MATERIALIZED (
-  SELECT *,substr(closed_prefix,1,length(closed_prefix)-1)||',' prefix FROM current_source_members
- )`;
-}
-function acceptedCaptureOrder(tx:StorageTransaction):string{
- return hasColumn(tx,'sync_capture','acceptance_no')
-  ?'capture.acceptance_no,capture.captured_at,capture.rowid,source.item_no,source.id'
-  :'capture.captured_at,capture.rowid,source.item_no,source.id';
-}
 /** 新轮只复用有原始成功提取证明且文档阶段受阻的目标，不重新发送提取。 */
 function reusableExtraction(tx:StorageTransaction,ownerId:string,contactId:string,item:StorageRow):StorageRow|undefined{
  if(item.extraction_state!=='succeeded'||item.pipeline_state!=='pending'||!item.item_id)return;
@@ -108,7 +70,7 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string,conta
  WHERE si.owner_id=? AND si.run_id=? AND s.kind='extraction_verification' AND t.scope_kind='contact' AND t.contact_id=i.source_contact_id`,[ownerId,runId])){
   const key=String(row.run_input_no),states=targetStates.get(key)??new Set<string>();states.add(String(row.state));targetStates.set(key,states);
  }
- if(tx.get('SELECT 1 FROM schema_migration WHERE version=13'))for(const row of tx.all('SELECT input_no FROM document_extraction_reuse WHERE owner_id=? AND run_id=?',[ownerId,runId])){
+ for(const row of tx.all('SELECT input_no FROM document_extraction_reuse WHERE owner_id=? AND run_id=?',[ownerId,runId])){
   if(!currentReuseAttempt(tx,ownerId,runId,row.input_no as bigint))continue;
   const key=String(row.input_no),states=targetStates.get(key)??new Set<string>();states.add('succeeded');targetStates.set(key,states);
  }
@@ -131,8 +93,8 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string,conta
   r={...r!,state};
  }
  const stage=r!.state==='completed'||laterProjection.state==='completed'?'completed':runningDocument?String(runningDocument.kind):laterProjection.stage??'extraction_verification';
- const contentKinds=[...new Set(targets.map(input=>readFrozenContent(tx,ownerId,input)?.kind??'text'))];
- const contentCounts=contentKinds.map(kind=>{const items=targets.filter(input=>(readFrozenContent(tx,ownerId,input)?.kind??'text')===kind),count=items.filter(input=>isolated.has(Number(input.input_no))).length;return {kind,total:items.length,succeeded:items.filter(targetSucceeded).length,...(count?{isolated:count}:{})};});
+ const targetKinds=targets.map(input=>readFrozenContent(tx,ownerId,input)?.kind??'text'),contentKinds=[...new Set(targetKinds)];
+ const contentCounts=contentKinds.map(kind=>{const items=targets.filter((_,index)=>targetKinds[index]===kind),count=items.filter(input=>isolated.has(Number(input.input_no))).length;return {kind,total:items.length,succeeded:items.filter(targetSucceeded).length,...(count?{isolated:count}:{})};});
  const result={contentCounts,...(isolated.size?{isolated:isolated.size}:{}),runId,state:String(r!.state),total:targets.length,succeeded,failed:targets.filter(i=>!targetSucceeded(i)&&!isolated.has(Number(i.input_no))&&targetHasState(i,'failed')).length,unknown:targets.filter(i=>!targetSucceeded(i)&&targetHasState(i,'unknown')).length,
   stage,laterStages,nextDueAt:laterProjection.nextDueAt,tasks:tasks.map(t=>({taskId:String(t.id),scopeKind:String(t.scope_kind),contactId:t.contact_id===null?null:String(t.contact_id),state:taskStates.get(String(t.id))!,
    total:t.scope_kind==='self'?0:targets.filter(i=>i.source_contact_id===t.contact_id).length,succeeded:t.scope_kind==='self'?0:targets.filter(i=>i.source_contact_id===t.contact_id&&targetSucceeded(i)).length,errorCode:t.error_code===null?null:String(t.error_code)})),
@@ -148,9 +110,8 @@ export function snapshot(tx:StorageTransaction,ownerId:string,runId:string,conta
 
 /** 同现有手动入口一样复验当前来源；另外记录首个被接受的目标类型和采集时间。 */
 function currentMessageRows(tx:StorageTransaction,ownerId:string,contactId:string,includeUnavailable=false,pending?:'history'|'incremental'):StorageRow[]{
- const sourceOrder=acceptedCaptureOrder(tx),scopeCte=sourceScopeCTE(tx),quarantine=tableExists(tx,'history_message_quarantine')?`AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)`:'';
  // 固定首个来源在消息表之前，避免 SQLite 为每条消息重新全扫首个来源结果。
- const rows=tx.all(`WITH ${scopeCte},${assignedRunItemsCte('current_assigned_items')},current_records AS MATERIALIZED (
+ const rows=tx.all(`WITH ${currentSourceScopeCTE},${assignedRunItemsCte('current_assigned_items')},current_records AS MATERIALIZED (
   SELECT source.message_id,min(source.id) record_id FROM capture_record source
   JOIN sync_capture capture ON capture.owner_id=source.owner_id AND capture.id=source.capture_id
   JOIN read_goal g ON g.owner_id=capture.owner_id AND g.id=capture.goal_id
@@ -158,7 +119,7 @@ function currentMessageRows(tx:StorageTransaction,ownerId:string,contactId:strin
    AND ${currentSourcePredicate('source','g')} GROUP BY source.message_id
  ),ranked_first_source AS MATERIALIZED (
   SELECT source.message_id,g.kind AS first_goal_kind,capture.captured_at AS first_captured_at,
-   row_number() OVER(PARTITION BY source.message_id ORDER BY ${sourceOrder}) position
+   row_number() OVER(PARTITION BY source.message_id ORDER BY ${captureAcceptanceOrder}) position
   FROM capture_record source JOIN sync_capture capture ON capture.owner_id=source.owner_id AND capture.id=source.capture_id
   JOIN read_goal g ON g.owner_id=capture.owner_id AND g.id=capture.goal_id
   WHERE source.owner_id=? AND source.contact_id=? AND source.state='normalized' AND source.availability='available'
@@ -170,14 +131,14 @@ function currentMessageRows(tx:StorageTransaction,ownerId:string,contactId:strin
  FROM first_source f CROSS JOIN message m ON m.id=f.message_id JOIN current_records r ON r.message_id=m.id
  LEFT JOIN processing_item p ON p.owner_id=m.owner_id AND p.contact_id=m.contact_id AND p.message_id=m.id AND p.purpose='memory_extraction'
  WHERE m.owner_id=? AND m.contact_id=? AND m.availability='available'
-  ${quarantine}
+  AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
  ${pending?`AND (p.id IS NULL OR p.extraction_state='pending') AND (p.id IS NULL OR p.id NOT IN (SELECT item_id FROM current_assigned_items)) AND ${pending==='history'?"(f.first_goal_kind='history' OR m.display_no<="+memoryIncrementalBaseline(tx)+")":"f.first_goal_kind='incremental' AND m.display_no>"+memoryIncrementalBaseline(tx)}`:''}
  ORDER BY m.display_no`,[ownerId,contactId,contactId,ownerId,contactId,ownerId,contactId,ownerId,contactId,ownerId,contactId]);
- const contentAvailable=hasMemoryContent(tx),kinds=installedMemoryContentKinds();
- return rows.filter(row=>(contentAvailable||row.kind==='text')&&kinds.includes(String(row.kind))&&(includeUnavailable||currentContent(tx,ownerId,contactId,row)!==null));
+ const kinds=installedMemoryContentKinds();
+ return rows.filter(row=>kinds.includes(String(row.kind))&&(includeUnavailable||currentContent(tx,ownerId,contactId,row)!==null));
 }
 function pendingIncrementalStats(tx:StorageTransaction,ownerId:string,contactId:string,history=false):{count:number;oldestAt:number|null;latestAt:number|null}{
- return pendingMemoryInputStats(tx,{ownerId,contactId,history,scopeCte:sourceScopeCTE(tx),sourceOrder:acceptedCaptureOrder(tx)});
+ return pendingMemoryInputStats(tx,{ownerId,contactId,history});
 }
 // 仅持久撤销的授权或绑定退出当前进度门；临时来源守卫失证仍须正常恢复。
 const currentRunContactScope=`EXISTS(SELECT 1 FROM read_grant live_grant JOIN conversation_binding live_binding ON live_binding.owner_id=live_grant.owner_id AND live_binding.id=live_grant.binding_id
@@ -209,7 +170,6 @@ function hasNewerSuccessfulL1Run(tx:StorageTransaction,ownerId:string,contactId:
  });
 }
 function followupEligible(tx:StorageTransaction,ownerId:string,runId:string):boolean{
- if(!hasRunFollowupState(tx))return true;
  const run=tx.get(`SELECT * FROM processing_run WHERE owner_id=? AND id=? AND followup_state='pending'
   AND state IN ('running','incomplete') AND pause_requested_at IS NULL
   AND coalesce(json_extract(policy_config,'$.intent'),'')<>'memory_document_later_stage'`,[ownerId,runId]);
@@ -231,7 +191,6 @@ function followupEligible(tx:StorageTransaction,ownerId:string,runId:string):boo
  return true;
 }
 function pendingFollowupIds(tx:StorageTransaction,ownerId:string,runId?:string):string[]{
- if(!hasRunFollowupState(tx))return [];
  const rows=tx.all(`SELECT id FROM processing_run WHERE owner_id=? AND followup_state='pending' AND state IN ('running','incomplete')${runId===undefined?'':' AND id=?'} ORDER BY started_at,rowid`,runId===undefined?[ownerId]:[ownerId,runId]);
  return rows.map(row=>String(row.id)).filter(id=>followupEligible(tx,ownerId,id));
 }
@@ -250,7 +209,7 @@ function safeHistoryProgress(tx:StorageTransaction,ownerId:string,contactId:stri
  if(/^history(?:-auto)?:/.test(String(run.start_request_key)))return true;
  // 旧入口未标记历史类型时，按冻结目标的首次来源与启用边界认定，混合轮保持原阻塞门。
  const rows=tx.all(`WITH first_sources AS (
-  SELECT i.message_id,m.display_no,g.kind,row_number() OVER(PARTITION BY i.message_id ORDER BY ${acceptedCaptureOrder(tx)}) position
+  SELECT i.message_id,m.display_no,g.kind,row_number() OVER(PARTITION BY i.message_id ORDER BY ${captureAcceptanceOrder}) position
   FROM run_input i JOIN message m ON m.owner_id=i.owner_id AND m.contact_id=i.source_contact_id AND m.id=i.message_id
   JOIN capture_record source ON source.owner_id=i.owner_id AND source.contact_id=i.source_contact_id AND source.message_id=i.message_id
   JOIN sync_capture capture ON capture.owner_id=source.owner_id AND capture.id=source.capture_id
@@ -261,7 +220,7 @@ function safeHistoryProgress(tx:StorageTransaction,ownerId:string,contactId:stri
  return rows.length>0&&BigInt(rows.length)===total?.n&&rows.every(row=>row.kind==='history'||(row.display_no as bigint)<=memoryIncrementalBaseline(tx));
 }
 function hasUnresolvedContactBlocker(tx:StorageTransaction,ownerId:string,contactId:string,allowHistoryProgress=false):boolean{
- if(tableExists(tx,'memory_document_later_schedule')&&tableExists(tx,'memory_document_later_run_requirement')&&tx.get(`SELECT 1 FROM memory_document_later_schedule s WHERE s.owner_id=? AND (s.scope_kind='self' OR s.contact_id=?)
+ if(tx.get(`SELECT 1 FROM memory_document_later_schedule s WHERE s.owner_id=? AND (s.scope_kind='self' OR s.contact_id=?)
   AND EXISTS(SELECT 1 FROM memory_document_later_run_requirement q WHERE q.owner_id=s.owner_id AND q.scope_key=s.scope_key AND q.generation=s.generation AND q.outcome='pending' AND q.paused=1 AND EXISTS(SELECT 1 FROM run_contact rc WHERE rc.owner_id=q.owner_id AND rc.run_id=q.run_id AND rc.contact_id=? AND rc.state='active' AND ${currentRunContactScope})) LIMIT 1`,[ownerId,contactId,contactId]))return true;
  const runs=tx.all(`SELECT r.* FROM processing_run r JOIN run_contact rc ON rc.owner_id=r.owner_id AND rc.run_id=r.id
   WHERE rc.owner_id=? AND rc.contact_id=? AND rc.state='active' AND ${currentRunContactScope} AND NOT ${releasedRunSql('r')}`,[ownerId,contactId]);
@@ -344,7 +303,7 @@ function queueStates(tx:StorageTransaction,ownerId:string,now:number,contactId?:
 function scheduleSummary(tx:StorageTransaction,ownerId:string,now:number,contactId?:string){
  const counts=new Map<string,{kind:string;pending:number;unavailable:number;unadmitted?:number;isolated?:number}>();
  for(const contact of validContacts(tx,ownerId,contactId)){
-  const id=String(contact.id),scope={ownerId,contactId:id,scopeCte:sourceScopeCTE(tx),sourceOrder:acceptedCaptureOrder(tx),pendingOnly:false};
+  const id=String(contact.id),scope={ownerId,contactId:id,pendingOnly:false};
   const rows=readScheduleInputRows(tx,scope),available=scheduleInputAvailability(tx,scope);
   const media=rows.filter(row=>row.kind!=='text');
   const cleared=new Set(media.length?tx.all("SELECT message_id FROM message_media WHERE owner_id=? AND contact_id=? AND state='cleared' AND message_id IN (SELECT value FROM json_each(?))",[ownerId,id,JSON.stringify(media.map(row=>String(row.id)))]).map(row=>String(row.message_id)):[]);
@@ -364,7 +323,7 @@ function scheduleSummary(tx:StorageTransaction,ownerId:string,now:number,contact
 /** 历史终页落库后即可处理；旧边界之前的增量资料归入历史补齐。 */
 function historyQueueStates(tx:StorageTransaction,ownerId:string,scope?:string){
  return validContacts(tx,ownerId,scope).flatMap(c=>{
-  const contactId=String(c.id),latest=tx.get(`SELECT state FROM read_goal WHERE owner_id=? AND contact_id=? AND binding_id=? AND kind='history' ORDER BY ${hasColumn(tx,'read_goal','creation_no')?'creation_no':'created_at'} DESC,rowid DESC LIMIT 1`,[ownerId,contactId,c.binding_id]);
+  const contactId=String(c.id),latest=tx.get(`SELECT state FROM read_goal WHERE owner_id=? AND contact_id=? AND binding_id=? AND kind='history' ORDER BY creation_no DESC,rowid DESC LIMIT 1`,[ownerId,contactId,c.binding_id]);
   if(latest?.state!=='complete')return [];
   const stats=pendingIncrementalStats(tx,ownerId,contactId,true);
   return [{contactId,pending:stats.count,ready:true,blocked:contactQueueBlocked(tx,ownerId,contactId,false)}];
@@ -390,14 +349,13 @@ function startRun(tx:StorageTransaction,raw:unknown,scheduled=false,history=fals
   const current=queueStates(tx,ownerId,now,contactId!)[0];if(!current||current.dueAt===null||current.dueAt>now)return null;
  }
  const runId=randomUUID();
- if(hasRunFollowupState(tx))tx.run("INSERT INTO processing_run(owner_id,id,start_request_key,state,started_at,accepted_owner_feedback_revision,policy_config,followup_state) VALUES(?,?,?,'preparing',?,?,?,?)",[ownerId,runId,requestKey,now,owner!.feedback_revision,JSON.stringify(i.policyConfig),i.followupStages===true?'pending':'none']);
- else tx.run("INSERT INTO processing_run(owner_id,id,start_request_key,state,started_at,accepted_owner_feedback_revision,policy_config) VALUES(?,?,?,'preparing',?,?,?)",[ownerId,runId,requestKey,now,owner!.feedback_revision,JSON.stringify(i.policyConfig)]);
+ tx.run("INSERT INTO processing_run(owner_id,id,start_request_key,state,started_at,accepted_owner_feedback_revision,policy_config,followup_state) VALUES(?,?,?,'preparing',?,?,?,?)",[ownerId,runId,requestKey,now,owner!.feedback_revision,JSON.stringify(i.policyConfig),i.followupStages===true?'pending':'none']);
  const contacts=scheduled||history?validContacts(tx,ownerId,contactId):validContacts(tx,ownerId);
  let inputNo=0;const contributing:string[]=[];
  for(const c of contacts){
   const rows=currentMessageRows(tx,ownerId,String(c.id));
   // 只有接线了后续文档阶段的正常宿主才复用已有提取证明；仅提取入口保持“已成功目标不重做”。
-  const canReuse=!scheduled&&!history&&i.followupStages===true&&!!tx.get('SELECT 1 FROM schema_migration WHERE version=13'),reused=new Map<string,StorageRow>();
+  const canReuse=!scheduled&&!history&&i.followupStages===true,reused=new Map<string,StorageRow>();
   if(canReuse)for(const row of rows){const proof=reusableExtraction(tx,ownerId,String(c.id),row);if(proof)reused.set(String(row.id),proof);}
   const baseline=scheduled?memoryIncrementalBaseline(tx):0n,isolatedIds=rows.some(row=>row.kind==='image')?isolatedContactItemIds(tx,ownerId,String(c.id)):new Set<string>();
   const targets=(scheduled?rows.filter(r=>r.first_goal_kind==='incremental'&&(r.display_no as bigint)>baseline&&(r.item_id===null||r.extraction_state==='pending')&&r.target_assigned!==1n&&r.target_assigned!==1):
@@ -450,8 +408,7 @@ export const scheduleActions:StorageAction[]=schedulingActions.map(action=>actio
  execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>withScheduleInputStats(tx,()=>action.execute(tx,input,lease))}:action);
 /** 旧隔离只投影最早一轮的元数据；先在SQL内按当前身份、文件及来源过滤，再复用正式重试门。 */
 function oldImageRetryRun(tx:StorageTransaction,ownerId:string,contactId:string,currentRunId?:string){
- if(!hasMemoryContent(tx)||!tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='media_file'"))return;
- const candidate=tx.get(`WITH ${sourceScopeCTE(tx)},image_retry_candidate AS (
+ const candidate=tx.get(`WITH ${currentSourceScopeCTE},image_retry_candidate AS (
   SELECT r.id,r.intent_revision FROM processing_run r JOIN run_contact rc ON rc.owner_id=r.owner_id AND rc.run_id=r.id
   JOIN contact c ON c.owner_id=rc.owner_id AND c.id=rc.contact_id JOIN owner o ON o.owner_id=c.owner_id
   JOIN read_grant grant_now ON grant_now.owner_id=rc.owner_id AND grant_now.id=rc.grant_id AND grant_now.contact_id=rc.contact_id
@@ -558,8 +515,7 @@ function restartPolicyRun(tx:StorageTransaction,raw:unknown){
  const contacts=[...new Set(remaining.map(row=>String(row.source_contact_id)))],targetNos=new Set(remaining.map(row=>String(row.input_no)));
  const selected=inputs.filter(row=>targetNos.has(String(row.input_no))||row.role==='context'&&contacts.includes(String(row.source_contact_id)));
  const nextId=randomUUID(),now=Math.max(Date.now(),Number(old!.started_at)+1);
- if(hasRunFollowupState(tx))tx.run("INSERT INTO processing_run(owner_id,id,start_request_key,state,started_at,accepted_owner_feedback_revision,policy_config,followup_state) VALUES(?,?,?,'preparing',?,?,?,?)",[ownerId,nextId,key,now,old!.accepted_owner_feedback_revision,JSON.stringify(i.policyConfig),old!.followup_state==='none'?'none':'pending']);
- else tx.run("INSERT INTO processing_run(owner_id,id,start_request_key,state,started_at,accepted_owner_feedback_revision,policy_config) VALUES(?,?,?,'preparing',?,?,?)",[ownerId,nextId,key,now,old!.accepted_owner_feedback_revision,JSON.stringify(i.policyConfig)]);
+ tx.run("INSERT INTO processing_run(owner_id,id,start_request_key,state,started_at,accepted_owner_feedback_revision,policy_config,followup_state) VALUES(?,?,?,'preparing',?,?,?,?)",[ownerId,nextId,key,now,old!.accepted_owner_feedback_revision,JSON.stringify(i.policyConfig),old!.followup_state==='none'?'none':'pending']);
  for(const contactId of contacts){
   tx.run('INSERT INTO run_contact SELECT owner_id,?,contact_id,grant_id,binding_id,accepted_selection_generation,accepted_data_generation,accepted_identity_generation,accepted_account_revision,accepted_source_generation,accepted_feedback_revision,state FROM run_contact WHERE owner_id=? AND run_id=? AND contact_id=?',[nextId,ownerId,oldId,contactId]);
   const taskId=randomUUID();tx.run("INSERT INTO processing_task(owner_id,id,run_id,scope_kind,contact_id,state) VALUES(?,?,?,'contact',?,'pending')",[ownerId,taskId,nextId,contactId]);tx.run('INSERT INTO task_contribution VALUES(?,?,?,?)',[ownerId,taskId,nextId,contactId]);

@@ -10,7 +10,7 @@ import type {ModelTaskClaim} from '../../platform/models/model-permit-port.ts';
 import {assertContribution,assertInputs,currentAttempt,inputRows,fail,textId} from './qualification.ts';
 import {applyControl,takeOverExpiredAttempt} from './control.ts';
 import {abandonUnknownAdjudication} from './unknown-recovery.ts';
-import {hasRunFollowupState,snapshot} from './runs.ts';
+import {snapshot} from './runs.ts';
 import {retireStalePausedRuns} from './run-retirement.ts';
 import {isolatedInputs,recordImageIsolation,retryIsolatedImages} from './image-isolation.ts';
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:unknown,lease:StorageLease)=>unknown):StorageAction=>observedProcessingAction({name:`memoryExtraction.${name}`,mode,retryBusy:mode==='write',execute} as StorageAction);
@@ -84,9 +84,8 @@ function prepareStep(tx:StorageTransaction,i:{ownerId:string;runId:string;taskId
    WHERE i.owner_id=? AND i.run_id=? AND i.source_contact_id=? AND i.role='target' AND p.extraction_state<>'succeeded'
    AND NOT EXISTS(SELECT 1 FROM step_input si JOIN processing_step ps ON ps.owner_id=si.owner_id AND ps.id=si.step_id WHERE si.owner_id=i.owner_id AND si.run_id=i.run_id AND si.run_input_no=i.input_no AND ps.task_id=? AND ps.state<>'revoked') ORDER BY i.input_no LIMIT 20`,[i.ownerId,i.runId,t.contact_id,i.taskId]);
   if(!rows.length){
-   const reuseGuard=tx.get('SELECT 1 FROM schema_migration WHERE version=13')?`AND NOT EXISTS(SELECT 1 FROM document_extraction_reuse reuse JOIN step_attempt a ON a.owner_id=reuse.owner_id AND a.id=reuse.source_attempt_id AND a.state='succeeded' JOIN processing_step original ON original.owner_id=a.owner_id AND original.id=a.step_id AND original.state='succeeded' AND original.successful_attempt_id=a.id WHERE reuse.owner_id=i.owner_id AND reuse.run_id=i.run_id AND reuse.input_no=i.input_no)`:'';
    const elsewhere=!!tx.get(`SELECT 1 FROM run_input i WHERE i.owner_id=? AND i.run_id=? AND i.source_contact_id=? AND i.role='target'
-    ${reuseGuard}
+    AND NOT EXISTS(SELECT 1 FROM document_extraction_reuse reuse JOIN step_attempt a ON a.owner_id=reuse.owner_id AND a.id=reuse.source_attempt_id AND a.state='succeeded' JOIN processing_step original ON original.owner_id=a.owner_id AND original.id=a.step_id AND original.state='succeeded' AND original.successful_attempt_id=a.id WHERE reuse.owner_id=i.owner_id AND reuse.run_id=i.run_id AND reuse.input_no=i.input_no)
     AND NOT EXISTS(SELECT 1 FROM step_input si JOIN processing_step ps ON ps.owner_id=si.owner_id AND ps.id=si.step_id WHERE si.owner_id=i.owner_id AND si.run_id=i.run_id AND si.run_input_no=i.input_no AND ps.task_id=? AND ps.state='succeeded')`,[i.ownerId,i.runId,t.contact_id,i.taskId]);
    tx.run('UPDATE processing_task SET state=?,error_code=? WHERE owner_id=? AND id=?',[elsewhere?'incomplete':'succeeded',elsewhere?'targets_completed_elsewhere':null,i.ownerId,i.taskId]);return null;
   }
@@ -323,7 +322,7 @@ export const executionActions:StorageAction[]=[
    tx.run("UPDATE processing_task SET state=?,error_code='memory_extraction_interrupted' WHERE owner_id=? AND id=(SELECT task_id FROM processing_step WHERE owner_id=? AND id=?) AND state<>'revoked'",[unknown?'unknown':'failed',ownerId,ownerId,a.step_id]);
   }
   // 安全恢复停在L1结算与后续登记之间的持久轮；仅接受新标记的轮次，旧incomplete历史不作猜测。
-  if(hasRunFollowupState(tx))for(const run of tx.all(`SELECT * FROM processing_run WHERE owner_id=? AND state='running' AND followup_state IN ('pending','enrolled')
+  for(const run of tx.all(`SELECT * FROM processing_run WHERE owner_id=? AND state='running' AND followup_state IN ('pending','enrolled')
    AND pause_requested_at IS NULL AND coalesce(json_extract(policy_config,'$.intent'),'')<>'memory_document_later_stage'`,[ownerId])){
    const runId=String(run.id),tasks=tx.all('SELECT * FROM processing_task WHERE owner_id=? AND run_id=?',[ownerId,runId]);
    if(!tasks.length||tasks.some(task=>!['succeeded','awaiting_decision','incomplete'].includes(String(task.state))||task.state==='incomplete'&&(task.scope_kind!=='contact'||task.error_code!=='targets_completed_elsewhere')))continue;

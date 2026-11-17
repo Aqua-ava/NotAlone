@@ -65,8 +65,6 @@ export function laterStagesState(tx:StorageTransaction,ownerId:string,runId:stri
  const run=tx.get('SELECT * FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]);
  if(!run)return {state:'pending',reasons:['document_run_missing'],nextDueAt:null,stage:null};
  if(run.state==='revoked')return {state:'revoked',reasons:['document_run_revoked'],nextDueAt:null,stage:null};
- // 12 及更早结构没有文档表；迁移前的轮次视图不能据此宣称后置阶段完成。
- if(!tx.get('SELECT 1 FROM schema_migration WHERE version=13'))return {state:run.state==='completed'?'completed':run.state==='failed'?'failed':'pending',reasons:['document_schema_unavailable'],nextDueAt:null,stage:null};
  const reasons:string[]=[];
  const tasks=tx.all('SELECT * FROM processing_task WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[ownerId,runId]).filter(task=>contactId===undefined||task.scope_kind==='contact'&&task.contact_id===contactId);
  if(!tasks.length)reasons.push('document_run_without_tasks');
@@ -91,7 +89,6 @@ export function laterStagesState(tx:StorageTransaction,ownerId:string,runId:stri
 }
 function noFormalChangeStatus(tx:StorageTransaction,ownerId:string,s:{scopeKind:'self'|'contact';contactId:string|null},latest:StorageRow):'idle'|'processing'|'needs_revalidation'|null {
  if(latest.state!=='succeeded'&&!(s.scopeKind==='self'&&latest.state==='awaiting_decision'))return null;
- if(tx.all("SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('memory_document_later_schedule','memory_document_later_run_requirement')").length!==2)return null;
  const scopeKey=s.scopeKind==='self'?'self':s.contactId;
  // 空内容和缺少文档步骤都不是完成证明；这里只采用 L1 已登记的同范围无正式变化事实。
  if(!tx.get("SELECT 1 FROM memory_document_later_run_requirement WHERE owner_id=? AND run_id=? AND scope_kind=? AND scope_key=? AND contact_id IS ? AND outcome='no_formal_change' AND reason='no_formal_memory_change' AND generation IS NULL",[ownerId,latest.run_id,s.scopeKind,scopeKey,s.contactId]))return null;
