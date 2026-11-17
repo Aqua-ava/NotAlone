@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,mkdir,writeFile,rename,rm,symlink,link,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join,resolve} from 'node:path';
+import {basename,join,resolve} from 'node:path';
 import {execFileSync,spawn,spawnSync} from 'node:child_process';
 import {once} from 'node:events';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
@@ -113,4 +113,71 @@ test('授权根发现沿既有预算处理目录，不新增1024包数量限制'
  await Promise.all(Array.from({length:1025},(_,i)=>mkdir(join(root,`policy-${i}`))));
  const names=new SecureSkillDirectory(root).names();
  assert.equal(names.length,1026);assert.ok(names.includes('gentle'));assert.ok(names.includes('policy-0'));assert.ok(names.includes('policy-1024'));
+});
+
+/** 只在临时编译夹具中拦截系统调用；正式 CLI、校验及输出仍使用产品 main.c。 */
+async function readerWithStatMutation(dir,mutation){
+ const source=join(dir,'reader-stat-fixture.c'),binary=join(dir,'reader-stat-fixture');
+ await writeFile(source,`#define _DARWIN_C_SOURCE
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+static unsigned target_stats;
+static int mutating_fstatat(int parent,const char *name,struct stat *info,int flags){
+ ${mutation}
+ return fstatat(parent,name,info,flags);
+}
+#define fstatat mutating_fstatat
+#include ${JSON.stringify(resolve('../native/skill-read/main.c'))}
+`);
+ execFileSync('xcrun',['clang','-target','arm64-apple-macosx15.0','-Wall','-Wextra','-Werror','-Wno-unused-variable','-O2',source,'-o',binary],{stdio:'pipe'});
+ return binary;
+}
+function invokeReader(binary,operation,root,rootIdentity,packageIdentity){
+ return spawnSync(binary,[operation,root,operation==='root'?'':'gentle',...rootIdentity,...packageIdentity],{encoding:'utf8',timeout:5000,maxBuffer:12*1024*1024,env:{PATH:'/usr/bin:/bin'}});
+}
+
+test('祖先兄弟目录变化不使正式root、identity与package命令拒绝静态包',{timeout:30000},async t=>{
+ const {dir,root,item,document}=await fixture(t),rootStat=await stat(root,{bigint:true});
+ const rootIdentity=[rootStat.dev.toString(),rootStat.ino.toString()],packageIdentity=JSON.parse(item.directoryIdentity).slice(1);
+ const binary=await readerWithStatMutation(dir,`
+ if(!strcmp(name,${JSON.stringify(basename(dir))})){
+  int ancestor=openat(parent,name,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);if(ancestor<0)abort();
+  struct stat before;if(fstat(ancestor,&before))abort();
+  if(mkdirat(ancestor,"temporary-sibling",0700)||unlinkat(ancestor,"temporary-sibling",AT_REMOVEDIR))abort();
+  struct timespec times[2]={{.tv_nsec=UTIME_OMIT},before.st_mtimespec};times[1].tv_sec++;
+  if(futimens(ancestor,times))abort();close(ancestor);fputs("INJECTED_ANCESTOR_STAT",stderr);
+ }`);
+ for(const operation of ['root','identity','package'])await t.test(operation,()=>{
+  const result=invokeReader(binary,operation,root,rootIdentity,packageIdentity);
+  assert.match(result.stderr,/INJECTED_ANCESTOR_STAT/,'夹具必须在已fstat、未fstatat的祖先窗口实际制造变化');
+  assert.equal(result.status,0,result.stdout);
+  const response=JSON.parse(result.stdout);
+  assert.deepEqual(response.identity,operation==='root'?rootIdentity:packageIdentity);
+  if(operation==='package')assert.equal(Buffer.from(response.files.find(file=>file.path==='SKILL.md').hex,'hex').toString(),document);
+ });
+});
+
+test('最终逐文件快照复核仍拒绝同inode正文、权限和硬链接变化',{timeout:30000},async t=>{
+ for(const target of ['SKILL.md','guide.md'])for(const change of ['content','mode','hardlink'])await t.test(`${target}:${change}`,async t=>{
+  const {dir,root,item}=await fixture(t),rootStat=await stat(root,{bigint:true});
+  const mutation=change==='hardlink'
+   ?`if(linkat(parent,name,AT_FDCWD,${JSON.stringify(join(dir,'outside-hardlink.md'))},0))abort();`
+   :`int file=openat(parent,name,O_RDWR|O_NOFOLLOW);if(file<0)abort();struct stat before;if(fstat(file,&before))abort();
+     ${change==='mode'?'if(fchmod(file,before.st_mode^S_IRGRP))abort();':'if(pwrite(file,"X",1,0)!=1)abort();'}
+     struct timespec times[2]={{.tv_nsec=UTIME_OMIT},before.st_mtimespec};times[1].tv_sec++;
+     if(futimens(file,times))abort();close(file);`;
+  const binary=await readerWithStatMutation(dir,`
+ if(!strcmp(name,${JSON.stringify(target)})&&++target_stats==4){
+  ${mutation}
+  fputs("INJECTED_FINAL_FILE_STAT",stderr);
+ }`);
+  const result=invokeReader(binary,'package',root,[rootStat.dev.toString(),rootStat.ino.toString()],JSON.parse(item.directoryIdentity).slice(1));
+  // 四次依次是枚举、首次打开、读后核验、最终逐节点重新打开；只攻击最后窗口。
+  assert.match(result.stderr,/INJECTED_FINAL_FILE_STAT/,'必须命中最终逐文件fstat→fstatat窗口');
+  assert.equal(result.status,1,result.stdout);assert.deepEqual(JSON.parse(result.stdout),{error:'skill_package_invalid'});
+ });
 });

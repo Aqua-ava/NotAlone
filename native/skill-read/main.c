@@ -41,15 +41,16 @@ static void remember(struct observations *list,const char *path,struct stat befo
  char *saved=strdup(path);if(!saved)fail();
  list->values[list->count++]=(struct observed){.path=saved,.before=before,.directory=directory};
 }
-/** 返回绑定当前父目录的 FD；调用方完成使用后关闭，不累计保留整包 FD。 */
-static int checked_open(int parent,const char *name,int directory,struct stat *info) {
+/** 祖先只定位身份；包内节点还绑定完整快照，避免最终复核窗口漏掉原地变化。 */
+enum binding_check { SNAPSHOT_BINDING, ANCESTOR_BINDING };
+static int checked_open(int parent,const char *name,int directory,struct stat *info,enum binding_check check) {
  if(strlen(name)>NAME_MAX)fail();
  int fd=openat(parent,name,O_RDONLY|O_NOFOLLOW|O_NONBLOCK|(directory?O_DIRECTORY:0));
  if(fd<0)io_fail();
  if(fstat(fd,info)!=0)io_fail();
  if(directory?!S_ISDIR(info->st_mode):(!S_ISREG(info->st_mode)||info->st_nlink!=1))fail();
  struct stat current;if(fstatat(parent,name,&current,AT_SYMLINK_NOFOLLOW)!=0)io_fail();
- if(!same(info,&current))fail();
+ if(check==ANCESTOR_BINDING?!same_identity(info,&current):!same(info,&current))fail();
  return fd;
 }
 static void unchanged(int fd,int parent,const char *name,struct stat *before) {
@@ -63,7 +64,7 @@ static int root_open(const char *path) {
  char copy[PATH_MAX];strcpy(copy,path);char *save=NULL,*part=strtok_r(copy,"/",&save);
  while(part){
   if(!strcmp(part,".")||!strcmp(part,".."))fail();
-  struct stat info;int next=checked_open(current,part,1,&info);
+  struct stat info;int next=checked_open(current,part,1,&info,ANCESTOR_BINDING);
   remember(&ancestors,part,info,1);close(current);current=next;part=strtok_r(NULL,"/",&save);
  }
  return current;
@@ -73,7 +74,7 @@ static void validate_root(int root) {
  int current=open("/",O_RDONLY|O_DIRECTORY|O_NOFOLLOW);if(current<0)io_fail();
  for(size_t i=0;i<ancestors.count;i++){
   struct observed *entry=&ancestors.values[i];struct stat info;
-  int next=checked_open(current,entry->path,1,&info);
+  int next=checked_open(current,entry->path,1,&info,ANCESTOR_BINDING);
   if(!same_identity(&entry->before,&info))fail();
   close(current);current=next;
  }
@@ -101,12 +102,12 @@ static int open_relative(int package,const char *relative,int directory,struct s
  while(part){
   if(!strcmp(part,".")||!strcmp(part,".."))fail();
   char *next_part=strtok_r(NULL,"/",&save);
-  int next=checked_open(current,part,next_part?1:directory,info);close(current);current=next;part=next_part;
+  int next=checked_open(current,part,next_part?1:directory,info,SNAPSHOT_BINDING);close(current);current=next;part=next_part;
  }
  return current;
 }
 static void read_file(int parent,const char *name,const char *relative) {
- if(item_count>=MAX_FILES||strlen(relative)>=PATH_MAX)fail();struct stat before;int fd=checked_open(parent,name,0,&before);
+ if(item_count>=MAX_FILES||strlen(relative)>=PATH_MAX)fail();struct stat before;int fd=checked_open(parent,name,0,&before,SNAPSHOT_BINDING);
  if(before.st_size<0||(!item_count&&before.st_size<1)||before.st_size>MAX_FILE)fail();
  unsigned char *bytes=malloc(MAX_FILE+1);if(!bytes)fail();size_t length=0;
  while(length<=MAX_FILE){ssize_t n=read(fd,bytes+length,MAX_FILE+1-length);if(n<0){if(errno==EINTR)continue;io_fail();}if(!n)break;length+=(size_t)n;}
@@ -123,7 +124,7 @@ static int allowed_resource(const char *path) {
  return 0;
 }
 static void remember_directory(int parent,const char *name,const char *relative) {
- struct stat before;int child=checked_open(parent,name,1,&before);
+ struct stat before;int child=checked_open(parent,name,1,&before,SNAPSHOT_BINDING);
  remember(&nodes,relative,before,1);unchanged(child,parent,name,&before);close(child);
 }
 static void resources(int package,size_t index) {
@@ -170,7 +171,7 @@ int main(int argc,char **argv) {
  if(argc!=8)fail();const char *op=argv[1];int root=root_open(argv[2]);check_root(root,argv[4],argv[5]);
  if(!strcmp(op,"root")){validate_root(root);printf("{\"identity\":");identity(root);putchar('}');return 0;}
  if(!strcmp(op,"list")){list_packages(root);return 0;}
- if(!valid_package(argv[3]))fail();struct stat before;int fd=checked_open(root,argv[3],1,&before);
+ if(!valid_package(argv[3]))fail();struct stat before;int fd=checked_open(root,argv[3],1,&before,SNAPSHOT_BINDING);
  if(!strcmp(op,"identity")){unchanged(fd,root,argv[3],&before);validate_root(root);printf("{\"identity\":");identity(fd);printf("}");return 0;}
  if(strcmp(op,"package"))fail();check_root(fd,argv[6],argv[7]);package_read(fd,before);validate_package(root,fd,argv[3]);
  printf("{\"identity\":");identity(fd);printf(",\"files\":[");for(int i=0;i<item_count;i++){if(i)putchar(',');printf("{\"path\":");quoted(items[i].path);printf(",\"hex\":");hex(items[i].bytes,items[i].length);putchar('}');}printf("]}");return 0;
