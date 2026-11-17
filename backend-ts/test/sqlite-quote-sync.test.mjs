@@ -96,32 +96,45 @@ test('引用读取发现来源变化时建立连续性隔离，不提交内容�
  assert.deepEqual(await store.candidates(f.contact,'wechat-quote-v1'),[]);
 });
 
-test('引用补齐复用活守卫目标，不替换增量目标或游标；重启后等待普通同步建守卫',async t=>{
+test('引用补齐逐轮核验独立目标，保留正文检查点并在重启后复验读取资格',async t=>{
  const f=await historyFixture(t),contact=f.saved[0].contact_id,inspect=f.channel.inspect;
  f.channel.guardSession={loss:new Promise(()=>{})};
- const capabilities=Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail'].map(key=>[key,'supported']));
+ const capabilities=Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','durableIncremental'].map(key=>[key,'supported']));
  f.channel.inspect=async scope=>({...await inspect(scope),continuity:'same-source-instances-normal-use-v1',capabilities});
  let targets=0,quoteReads=0,acceptedTarget;
  f.channel.target=async()=>acceptedTarget={...f.target,descriptor:`target-${++targets}`};
+ f.channel.resumeTarget=async()=>f.channel.target();
  f.channel.page=async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,
   records:[record('1',{kind:'other',text:null,originalType:'244813135921',status:'2',metadataOnly:true,stateAssurance:'unverified'})],
   completedPartitions:target.partitions,exhausted:true,resumeCursor:'accepted-text-cursor'});
  f.channel.tail=async(_scope,target,cursor)=>{assert.deepEqual(target,acceptedTarget);return {target:target.descriptor,cursorIn:cursor,cursorOut:cursor,records:[],caughtUp:true};};
  f.channel.readQuote=async(_scope,target)=>{quoteReads++;assert.deepEqual(target,acceptedTarget);return {replyText:'合成回复',referencedText:'合成原话',referencedSender:null,referencedSenderRole:'unknown',referencedType:'1',referencedServerId:null,proofDigest:'c'.repeat(64)};};
  await f.service.synchronize(contact);await f.service.synchronizeIncremental(contact);
- const before=await f.service.coverage(contact);
+ const token=await f.contacts.eligibility(contact),scope=await f.storage.execute('history.scope',{token}),report=await f.channel.inspect(scope);
+ const checkpoint=()=>f.storage.execute('history.resumeCheckpoint',{token,report});
+ const before=await f.service.coverage(contact),beforeCheckpoint=await checkpoint(),beforeTargets=targets;
+ assert.equal(beforeCheckpoint.cursor,'accepted-text-cursor','先建立实际已接受的正文检查点');
  assert.equal((await f.service.synchronizeQuotes(contact)).processed,1);
- assert.equal(targets,1,'引用不得调用target覆盖正文活守卫的固定目标');
+ assert.equal(targets,beforeTargets+1,'引用为本轮独立建立目标，不复用上轮已释放的守卫');
+ assert.equal((await checkpoint()).cursor,beforeCheckpoint.cursor,'引用补齐不得推进正文恢复点');
  await f.service.synchronizeIncremental(contact);
  const after=await f.service.coverage(contact);assert.equal(after.cursor,before.cursor);assert.notEqual(after.failureCode,'history_source_continuity_unverified');
- const other=f.saved[1].contact_id;await f.service.synchronize(other);assert.equal(targets,2);
- const trustedInspect=f.channel.inspect;f.channel.inspect=async scope=>({...await trustedInspect(scope),statusSemantics:'changed-semantics'});
- assert.deepEqual(await f.service.synchronizeQuotes(other),{processed:0,more:false});assert.equal(targets,2);assert.equal(quoteReads,1);
- f.channel.inspect=trustedInspect;
- await f.service.close();
- const fresh=new SqliteHistoryService(f.storage,f.contacts,()=>f.channel);t.after(()=>fresh.close());
- assert.equal((await new SqliteQuoteStore(f.storage,f.contacts.ownerId).candidates(other,'wechat-quote-v1')).length,1);
- assert.deepEqual(await fresh.synchronizeQuotes(other),{processed:0,more:false});assert.equal(targets,2);assert.equal(quoteReads,1);
+ const other=f.saved[1].contact_id;await f.service.synchronize(other);
+ const store=new SqliteQuoteStore(f.storage,f.contacts.ownerId),trustedInspect=f.channel.inspect,beforeInvalid=targets;
+ f.channel.inspect=async scope=>({...await trustedInspect(scope),status:'unverified',reason:'synthetic_unverified'});
+ await assert.rejects(f.service.synchronizeQuotes(other),{code:'history_support_unverified'});
+ assert.equal(targets,beforeInvalid,'本轮报告未核验时不能建立目标或读取引用');assert.equal(quoteReads,1);
+ assert.equal((await store.candidates(other,'wechat-quote-v2')).length,1,'拒绝不记作已补齐或已失败');
+ f.channel.inspect=trustedInspect;await f.service.close();
+ const fresh=new SqliteHistoryService(f.storage,f.contacts,()=>({...f.channel,guardSession:{loss:new Promise(()=>{})}}));t.after(()=>fresh.close());
+ await f.contacts.setReading(false);
+ await assert.rejects(fresh.synchronizeQuotes(other),{code:'read_not_authorized'});
+ assert.equal(targets,beforeInvalid);assert.equal(quoteReads,1,'重启后的关闭读取状态不能借来源重验放行');
+ await f.contacts.setReading(true);
+ assert.deepEqual(await fresh.synchronizeQuotes(other),{processed:1,more:false});
+ assert.equal(targets,beforeInvalid+1,'新服务独立核验当前目标，不要求上轮守卫继续存活');assert.equal(quoteReads,2);
+ assert.equal((await store.candidates(other,'wechat-quote-v2')).length,0);
+ assert.equal((await fresh.readChat(other)).messages[0].quote.replyText,'合成回复');
 });
 
 test('已保存历史引用经同一消息服务补齐，普通唤醒去重且不重置文字游标',async t=>{
