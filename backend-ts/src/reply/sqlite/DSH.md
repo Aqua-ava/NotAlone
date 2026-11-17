@@ -41,6 +41,8 @@
 - [FileSystem 的公开实现合同](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/fs/fs/src/index.ts#L87)。`createDshRuntime` 通过官方 Loader Group 隔离 fs、Skill registry、working-directory、tools、session 等服务；逐项挂载、排空和卸载，不修改 DSH 核心。
 - `dsh-tools/lib/types/index.d.ts:640-656` 与安装 `lib/index.js:2991-3019`：`restrict` 仅限制全局工具，作用域内注册仍可见；因此本轮仅保留全局 `skill`，按需注册 scoped `skill_resource` 并加单调 `guard`。不存在 Shell、通用文件、网络或外部消息发送工具。`tools/pre-execute/post-execute` 复验业务资格并检查真实读取结果；附加资源目录按准确 Skill 名称关联允许的相对路径与大小；不同 Skill 中同名路径不得串读。
 
+2026-11-17 实现收敛：退役批量正文预加载辅助入口及其专用写事务，显式单包复用既有 `registry.snapshot/get` 分支，自动目录和单包共享 provider、输入记录及资格复验；历史预加载输入和回执仍按原来源及删除合同读取。版本与公开 provider 接口再次核验见 [Skill 模块说明](../../skills/sqlite/README.md#当前版本依据)。
+
 每个包的选择尝试由实际工具调用和对应 `skill_selection` 区分；`skill_input` 逐项记录真实返回的正文或资源及包修订，简介目录不冒充正文输入。候选区不展示 Skill 清单或正文，后台继续保留实际输入追溯。显式版本 API 仍经同一 provider 定向预加载，正常 UI 不要求手选。含 Skill 的本轮总是从合法业务资料建立新运行副本，避免另一轮已加载正文混入当前策略。
 
 任一 Skill 纯读取故障后先停止并排空旧 Agent，登记未提交副本的持久清理意图，逐项核对 `ManagedAddress` 后擦除，恢复时继续该意图。旧运行副本完全清除后，正式事务重新核验所有非 Skill 输入并建立无 Skill 新 context，清除本轮所有 Skill 目录、正文和工具请求载荷，避免部分 Skill 内容残留；只保留无正文调用回执及不可用标记。新副本的配置摘要按新 revision 计算，可正常回看/恢复；联系人资料、授权或来源失效时不降级。

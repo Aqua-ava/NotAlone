@@ -22,6 +22,7 @@ function skillViews(tx:StorageTransaction,ownerId:string,requestId:string,includ
  const loaded=rows.map(p=>{
   const storedName=typeof p.name==='string'&&p.name?p.name:null;
   const name=storedName??tx.get('SELECT display_name FROM skill_package WHERE owner_id=? AND id=?',[ownerId,p.loaded.packageId])?.display_name;
+  // auto_preload 仅解释历史回执；当前写入只产生显式单包来历。
   const origin=p.preload&&['explicit','auto_preload'].includes(p.preload.origin)?p.preload.origin:null;
   const catalogRevision=p.preload&&typeof p.preload.catalogRevision==='string'?p.preload.catalogRevision:null;
   return {packageId:String(p.loaded.packageId),...(name?{name:String(name)}:{}),revisionNo:revisionNumber(p.loaded.revisionNo),relativePath:String(p.relativePath),...(includeText?{text:String(p.text)}:{}),origin,catalogRevision};

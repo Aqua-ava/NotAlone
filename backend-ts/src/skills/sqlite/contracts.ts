@@ -39,19 +39,10 @@ export interface LoadedSkill {
   name: string;
   resources: {relativePath: string; mediaType: string; bytes: number; payloadDigest: string}[];
 }
-/** 显式兼容入口与自动预加载集合分开记录来源，不把自动集合冒称为用户选择。 */
-export type SkillPreloadOrigin = 'explicit' | 'auto_preload';
-export interface SkillPreloadTrace { origin: SkillPreloadOrigin; catalogRevision: string }
-/** 可选追踪补充；名称在读取时冻结，来源与目录快照只由受控预加载链路提供。 */
+/** 显式单包在首次模型请求前载入的来历；历史 auto_preload 仅由读取投影解释。 */
+export interface SkillPreloadTrace { origin: 'explicit'; catalogRevision: string }
+/** 选择记录的可选展示与显式来历。 */
 export interface SkillTrace { name?: string; preload?: SkillPreloadTrace }
-/** 本轮冻结的预加载选择：来源、目录快照及每个 anchor 的包身份与修订。 */
-export interface SkillPreloadSelection {
-  origin: SkillPreloadOrigin;
-  catalogRevision: string;
-  anchors: SkillAnchor[];
-}
-/** 已在打开运行前读取并写入实际输入事件的本轮 Skill 正文。 */
-export interface PreloadedSkill extends LoadedSkill { content: string }
 /** 冻结的联系人分组范围：分配或分组绑定变化会使在途运行失效；缺失时不得带任何可用 Skill。 */
 export interface SkillRunGroup {contactId: string; groupId: string | null; revision: bigint}
 export interface SkillRunRevision {
@@ -70,20 +61,6 @@ export interface SkillInput {
   name?: string;
   preload?: SkillPreloadTrace;
 }
-export interface SkillPreloadEntry {
-  selected: SkillAnchor;
-  loaded: SkillAnchor;
-  name: string;
-  relativePath: 'SKILL.md';
-  text: string;
-  payloadDigest: string;
-}
-export interface SkillPreloadInput {
-  scope: SkillRunScope;
-  runRevision: SkillRunRevision;
-  preload: SkillPreloadTrace;
-  entries: SkillPreloadEntry[];
-}
 /**
  * 必须由受信任宿主提供，缺失时禁止运行；不能以 Skill 内容产生授权。
  * recordInput 须在实际追踪写事务内复验调用/联系人/来源/删除代次，并调用
@@ -97,6 +74,4 @@ export interface SkillRunProtection {
   assertCurrent(scope: SkillRunScope, runRevision: SkillRunRevision | null, signal?: AbortSignal): Promise<void>;
   recordSelection(scope: SkillRunScope, selected: SkillAnchor | null, signal?: AbortSignal, trace?: SkillTrace): Promise<void>;
   recordInput(input: SkillInput, signal?: AbortSignal): Promise<void>;
-  /** 多 anchor 预加载的原子追踪入口；缺失时受控运行时使用逐项兼容路径。 */
-  recordPreload?(input: SkillPreloadInput, signal?: AbortSignal): Promise<void>;
 }

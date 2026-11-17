@@ -139,7 +139,7 @@ test('检索来源失败保持致命错误，启用Skill时不误报Skill失败�
  await writeFile(join(source.skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 合成策略\n---\n保持原意。\n');
  let item=await source.library.discover('gentle');item=await source.library.setEnabled(item.id,item.headRevision,'enabled');
  const protection={assertCurrent:async()=>{},recordSelection:async()=>{},recordInput:async()=>{}};
- const skillRun=await openSqliteSkillRun(source.library,{contactId:source.ids[0],callId:randomUUID()},protection,{selectedPackageId:item.id});
+ const skillRun=await openSqliteSkillRun(source.library,{contactId:source.ids[0],callId:randomUUID()},protection,item.id);
  t.after(()=>skillRun.close());
  const failure=Object.assign(new Error('合成来源失效'),{code:'reply_input_changed'}),failures=[];
  const f=await scopedTools(t,{skillRun,search:async()=>{throw failure;},failed:error=>failures.push(error)});

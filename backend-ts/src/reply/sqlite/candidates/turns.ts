@@ -137,10 +137,8 @@ export class SqliteReplyTurns {
    const base=new SqliteDiscussionSkillProtection({storage:o.storage,attempt,contextId,callId,authorize:()=>o.authorize(input.contactId)});
    // Skill 的中间步骤只核任务及修订；候选实际出站和保存各自原子复验完整资料。
    const protection:SkillRunProtection=base;
-  // 正常候选由官方目录工具按需读取正文；显式兼容入口仍只预加载指定单包。
-  const openSkillRun=o.library&&!skillDegraded?()=>input.selectedPackageId
-   ?openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,{selectedPackageId:input.selectedPackageId,signal:input.signal})
-   :openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,undefined,input.signal):undefined;
+  // 正常候选按需读取；显式单包沿同一官方 registry 在首次请求前载入。
+  const openSkillRun=o.library&&!skillDegraded?()=>openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,input.selectedPackageId,input.signal):undefined;
   modelExecutionStarted=true;
   await runSingleDiscussionTurn({runtime:o.runtime,storage:o.storage,attempt,contextId,callId,configurationDigest,prompt,rebuildPrompt:prompt,systemPrompt:candidateSystemPrompt,search:(contextId,kind,query,signal)=>this.search(attempt,contextId,kind,query,signal),model:o.model,provider:o.provider,arbiter:o.arbiter,skillRun:null,openSkillRun,skillProtection:protection,skillRevision:revision,commitAction:'reply.commitCandidates',dispatchAction:'reply.dispatchCall',onPhase:phase=>{observe(phase);o.service.phase(input.contactId,attempt.discussionId,input.requestKey,phase);},onRuntimeAvailable:()=>{this.stage('runtime-available');observe('ready','runtime_ready');},configurationForRevision:revision=>this.digest(attempt.requestId,revision),assertAuthorized:()=>o.authorize(input.contactId),signal:input.signal});
    return {discussionId:attempt.discussionId,replayed:false,segmented:accepted.segmented};

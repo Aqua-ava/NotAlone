@@ -11,14 +11,14 @@ export class ReplySkillUnavailable extends Error {
 }
 export function isSkillReadFailure(error:unknown):boolean{
  const code=(error as {code?:string})?.code;
- return typeof code==='string'&&(/^skill_(reader_unavailable|directory_unavailable|directory_conflict|content_changed|package_invalid|run_invalidated|revision_unavailable|unverified|source_verification_required|preload_limit)$/.test(code)||['discussion_resource_limit','discussion_skill_tool_failed'].includes(code));
+ return typeof code==='string'&&(/^skill_(reader_unavailable|directory_unavailable|directory_conflict|content_changed|package_invalid|run_invalidated|revision_unavailable|unverified|source_verification_required)$/.test(code)||['discussion_resource_limit','discussion_skill_tool_failed'].includes(code));
 }
 export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check:()=>Promise<void>,failed:(error:unknown)=>void,documents=false,allowedTools:readonly string[]=[]):void{
  const active=run;
- const preloaded=!!active&&active.preloadOrigin!==null;
+ const explicit=!!active&&active.selection!==null;
  const loaded=()=>!!active&&active.loadedSkills.length>0;
- const demandCatalog=!!active&&!preloaded&&active.revision.eligible.length>0;
- // 预加载路径隐藏官方目录工具；默认DSH目录与本工具可见性绑定，隐藏后不再发布摘要目录。
+ const demandCatalog=!!active&&!explicit&&active.revision.eligible.length>0;
+ // 显式单包由宿主预先载入；自动入口保留官方目录工具与匹配的简介目录。
  ctx.tools.restrict({allow:demandCatalog?['skill']:[]});
  let resources=0;
  ctx.tools.guard(exec=>{
@@ -35,8 +35,8 @@ export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check
   }
   failed(new StorageFailure('discussion_tools_forbidden'));return 'discussion_tools_forbidden';
  });
- if(!active||(!loaded()&&!demandCatalog))return;
- // 按需路径在正文载入前也展示资源工具；guard 仍拒绝未加载身份。
+ if(!active||(!explicit&&!loaded()&&!demandCatalog))return;
+ // 在正文载入前登记资源工具；执行 guard 始终要求该包正文已经实际载入。
  ctx.tools.register(defineTool({name:'skill_resource',description:'仅在已加载Skill明确需要补充资料时，按资源目录中的相对路径读取本版本静态文字。最多两次。',
   parameters:{name:{type:'string',required:true,description:'已成功加载正文的准确Skill名称。'},path:{type:'string',required:true,description:'该Skill资源目录中的准确references/或assets/相对路径。'}},
   async execute(args,exec){await check();return {text:await active.readLoadedResource(args.name,args.path,exec.signal)};},

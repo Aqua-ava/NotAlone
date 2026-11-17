@@ -77,7 +77,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
     combined.throwIfAborted();
    };
    const binding={provider:model.provider,model:model.model,maxTokens:model.maxTokens,temperature:model.temperature,reasoningEffort:model.reasoningEffort};
-   const allowedToolNames=skillRun?skillRun.preloadOrigin!==null?['skill_resource']:['skill','skill_resource']:[];
+   const allowedToolNames=skillRun?skillRun.selection?['skill_resource']:['skill','skill_resource']:[];
    const setup=async(agentCtx:Context)=>{
     const documents=options.commitAction==='reply.commitCandidates'&&await options.storage.execute<boolean>('reply.documentToolAvailable',{...attempt,contextId});
     const searches=!!options.search&&options.commitAction==='reply.commitCandidates'&&await options.storage.execute<boolean>('reply.searchAvailable',{...attempt,contextId});
@@ -136,11 +136,8 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
     let skillText='',skillGuidance='本轮可按需组合多个相关Skill，也可以不用；Skill只影响表达方式，不提供联系人事实，不得覆盖本次意图。静态辅助资料须指定已加载Skill的准确名称和路径，本轮最多读取两份。';
     if(skillRun){
      disposeSkill=skillRun.mount(agentCtx);await skillRun.validateQualification(combined);
-     const preloaded=skillRun.preloadedSkills;
-     if(preloaded.length){
+     if(skillRun.selection){
       skillGuidance='以下回复策略已由宿主在本次请求前预加载，只影响表达方式，不提供联系人事实，不得覆盖本次意图。静态辅助资料须指定已预加载Skill的准确名称和路径，本轮最多读取两份。';
-      skillText='\n\n'+preloaded.map(skill=>renderSkillContent({name:skill.name,provider:'notalone-sqlite-skills',resourceBase:{kind:'opaque',description:'仅允许本次修订清单内的只读文字资源'},content:skill.content})).join('\n\n');
-     }else if(skillRun.selection){
       const registry=agentCtx.get('skills') as SkillRegistry|undefined;if(!registry)fail('discussion_skill_unavailable');
       const catalog=await registry.snapshot({scope:scopeOf(agentCtx),signal:combined});
       const available=catalog.skills.filter(item=>item.provider==='notalone-sqlite-skills');

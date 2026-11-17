@@ -40,9 +40,9 @@
 
 ## 官方加载与实际输入
 
-`openSqliteSkillRun(library, {contactId,callId}, protection, selectedPackageId?, signal?)` 冻结 owner/contact/call、目录修订及明确选择；正常候选不传预加载 options 对象，保留官方按需加载路径。未知、停用、未核验或来源失效不进入可加载目录。`run.mount(scopedContext)` 只接受官方独占 scope，调用现有 profile 中的 `ctx.skills.registerProvider`；宿主全局目录为空。已挂载的 `@deepseek-ai/dsh-tool-skill` 负责名称与简介目录及 `skill` 加载工具，工具经官方 `ctx.skills.get` 读取所选正文，可在一轮中按需读取多个 Skill；每个包固定一个当时当前的不可变修订。目录发布本身不生成正文输入记录。
+`openSqliteSkillRun(library, {contactId,callId}, protection, selectedPackageId?, signal?)` 冻结 owner/contact/call、目录修订及明确选择；自动候选保留官方按需加载路径。未知、停用、未核验或来源失效不进入可加载目录。`run.mount(scopedContext)` 只接受官方独占 scope，调用现有 profile 中的 `ctx.skills.registerProvider`；宿主全局目录为空。已挂载的 `@deepseek-ai/dsh-tool-skill` 负责名称与简介目录及 `skill` 加载工具，工具经官方 `ctx.skills.get` 读取所选正文，可在一轮中按需读取多个 Skill；每个包固定一个当时当前的不可变修订。目录发布本身不生成正文输入记录。
 
-兼容的多 anchor 预加载辅助入口为 `openSqliteSkillRun(library, request, protection, {selectedPackageId?|preloadPackageIds?, signal?})`（等价导出 `openSqliteSkillPreload`），正常自动候选不使用该入口。显式 `selectedPackageId` 仍通过该入口定向预加载一个包（来源 `explicit`）；`planSkillPreload` 也保留供内部受信任调用方使用的批量模式，从冻结目录中选择 `enabled + verified + current`。批量辅助入口仍以 `skills.assertRevisions` 在短事务中复验全部 anchor 的 package、修订、目录身份、manifest digest 与 content digest，再一次性读取所选正文，并经 `recordPreload`/`discussion.skillPreload` 原子记录全部选择／实际输入。任一失败整体拒绝并关闭运行，不保留部分正文。其 `run.preloadOrigin`、`run.preloadSelection` 和 `run.preloadedSkills` 保留可追溯输入，不把兼容预加载投影当作正常按需目录的读取证据。
+显式 `selectedPackageId` 使用同一位置参数限定目录，在生成的 `setup` 中经官方 `registry.snapshot/get` 读取指定单包，首次模型请求仍携带该正文（来源 `explicit`），并隐藏不需要的目录加载工具。自动与显式路径共用 `recordSelection`／`recordInput`：选择不冒充实际读取，每项正文及资源在各自写事务内复验并保存精确来源、修订、摘要和删除关系。两条路径不再维护独立的批量选择、正文缓存或批量写入事务。历史候选的 `preloadedSkills` 只读投影继续解释旧 `auto_preload` 回执，不恢复可写批量入口或旧正文。
 
 正常路径仅在官方 `skill` 工具成功加载正文后记录实际读取；对应的辅助资源通过 `skill_resource` 按准确 Skill 名称和相对路径读取本修订清单内路径。一轮回复总计最多读取两份静态辅助资源，只显示虚拟路径，不暴露物理文件能力。
 
@@ -50,9 +50,9 @@
 
 1. `assertCurrent(scope, frozenRevision|null, signal)` 在同一短事务调用 `requireSkillRun(tx, scope.ownerId, frozenRevision)`（非null时）并复验已确认联系人、调用、读取／资料／来源／删除代次、模型用途和出站范围；Skill不能赋予这些资格。
 2. `recordSelection(scope, selected, signal?, trace?)` 记录每次实际选中的包修订；自动模式对各包分别记录，显式定向预加载则记录其指定修订。`trace` 记录读取时冻结的 Skill 名称、`origin` 与目录快照；事件本身不表示正文已读取或内容已进入模型。
-3. `recordInput(input, signal)` 保存正常按需正文及后续资源读取；`recordPreload(input, signal)` 保留兼容预加载路径的原子追踪，在一次事务中保存所选包的全部 selection/input、payloadDigest、精确包修订、名称、相对路径、预加载来源与目录快照。两者都登记来源与受管副本删除关系。写入事务必须复验上述业务资格，并调用导出的 `requireSkillRun(tx, ownerId, input.runRevision)` 与 `requireSkillRevision(tx, ownerId, input.loaded)`。SkillRunRevision带本轮全部包head及可载入锚点；最后一面不能单独异步检查，避免检查另一面时被撤销。单独事务外检查不够。
+3. `recordInput(input, signal)` 逐项保存实际正文及后续资源读取、payloadDigest、精确包修订、名称与相对路径；显式单包另记录来历与目录快照，并登记来源与受管副本删除关系。写入事务必须复验上述业务资格，并调用导出的 `requireSkillRun(tx, ownerId, input.runRevision)` 与 `requireSkillRevision(tx, ownerId, input.loaded)`。SkillRunRevision带本轮全部包head及可载入锚点；最后一面不能单独异步检查，避免检查另一面时被撤销。单独事务外检查不够。
 
-正常候选首次物理模型请求只包含官方 Skill 简介目录，不附带目录中全部正文；后续工具结果只加入模型实际请求的正文与资源。端侧发现及安全核验仍可读取完整包，不等于正文已发送。正常目录按最终序列化请求的完整输入预算约束，不设置 256 包数量门槛，也不截取部分目录；兼容批量预加载辅助入口仍保留 256 包上限及 `skill_preload_limit` 整体无 Skill 降级。每次物理模型发送和业务提交前继续 `run.validate()`：以冻结修订的 `assertCurrent` 前后夹住对全部可载入锚点的目录字节读取，不再另读目录列表或重复分离的 anchor 复验（`assertCurrent` 已在同一短事务核验包集合、head 与全部 anchor）。打开运行、列目录、加载正文和读取资源前使用只做数据库资格复验的 `run.validateQualification()`；正文与资源字节仍在读取时由 `assertAnchor` 对该包复验，输入记录与选择事件在各自写事务内复验。记录真正发出的完整模型输入和模型回执。本模块的读取事件仅证明官方 provider 读取了该正文，不能当作模型实际发送或成功回复的证据。DSH 目录缓存不能替代业务与文件核验；每次读取及返回前均重验，启停或核验变更、来源失效、scope释放及AbortSignal会拒绝迟到结果。
+正常候选首次物理模型请求只包含官方 Skill 简介目录，不附带目录中全部正文；后续工具结果只加入模型实际请求的正文与资源。端侧发现及安全核验仍可读取完整包，不等于正文已发送。正常目录按最终序列化请求的完整输入预算约束，不设置包数量门槛，也不截取部分目录。每次物理模型发送和业务提交前继续 `run.validate()`：以冻结修订的 `assertCurrent` 前后夹住对全部可载入锚点的目录字节读取，不再另读目录列表或重复分离的 anchor 复验（`assertCurrent` 已在同一短事务核验包集合、head 与全部 anchor）。打开运行、列目录、加载正文和读取资源前使用只做数据库资格复验的 `run.validateQualification()`；正文与资源字节仍在读取时由 `assertAnchor` 对该包复验，输入记录与选择事件在各自写事务内复验。记录真正发出的完整模型输入和模型回执。本模块的读取事件仅证明官方 provider 读取了该正文，不能当作模型实际发送或成功回复的证据。DSH 目录缓存不能替代业务与文件核验；每次读取及返回前均重验，启停或核验变更、来源失效、scope释放及AbortSignal会拒绝迟到结果。
 
 ## 删除接入边界
 
@@ -71,6 +71,8 @@
 - [固定源码的 SkillProvider / SkillProviderControl / registerProvider / get](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/skill/skill/src/index.ts#L247)：provider工厂同步注册，list/get异步；scope限定、控制器失效与释放；本地源码HEAD不同，使用 `git show` 固定提交阅读。
 - 锁定安装制品 `lib/types/index.d.ts:188,247,280` 和 `lib/index.js:147,250`：registerProvider生命周期、缓存失效、官方get调用provider、调用方取消。
 - 正式 `profile/sqlite.patch.yml` 使用官方 registry；该 profile 仅增加官方registry与薄宿主接线，不修改DSH核心，也不启用filesystem插件、通用读文件、Shell、网络下载或任意插件安装。
+
+2026-11-17 收敛批量预加载辅助入口时再次核对依赖声明、锁和安装版本：仍为上述版本，未改官方插件或 profile。固定源码的 `SkillProvider.list/get`、`registerProvider` 生命周期与安装 `lib/types/index.d.ts:166-198,247`、`lib/index.js:147-178` 一致；官方 `dsh-tool-skill` 安装 `lib/index.js:876` 仍经 scoped `ctx.skills.get` 载入正文。批量助手函数没有正常自动产品调用，显式候选改复用已有官方单包读取分支；完整制品可复现对应关系仍未验证。
 
 所用公开接口依据保留在上节。核对接口或升级依赖时须重查锁文件、安装制品和固定源码，未证明完整可复现构建一致。`sqlite-skill-profile.test.mjs` 与 `sqlite-host-launch.test.mjs` 是隔离 profile／管理回归入口；实际模型加载与回复生命周期由回复模块验证。
 

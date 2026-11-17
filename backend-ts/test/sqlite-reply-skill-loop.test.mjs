@@ -168,15 +168,18 @@ test('257个eligible Skill只提供简介，不再受批量预加载256包上限
 });
 
 
-test('显式selectedPackageId只预加载指定单包并保持优先',async t=>{
- const f=await setup(t,(_f,res)=>stream(res));await addClearSkill(f);
+test('显式selectedPackageId只预加载指定单包，首次请求可读取该包资源',async t=>{
+ const f=await setup(t,(_f,res,_request,n)=>n===1?stream(res,'skill_resource',{name:'gentle',path:'references/example.md'}):stream(res));await addClearSkill(f);
  await f.turns.generate({...f.input,selectedPackageId:f.skill.id});
- const request=JSON.stringify(f.requests[0]),trace=await f.trace();
- assert.equal(f.requests.length,1);assert.match(request,/先回应感受/);assert.doesNotMatch(request,/清晰说明边界/);
+ const request=JSON.stringify(f.requests[0]),trace=await f.trace(),view=await f.view();
+ assert.equal(f.requests.length,2);assert.match(request,/先回应感受/);assert.doesNotMatch(request,/清晰说明边界|辅助资料的唯一合成教学句/);
+ assert.deepEqual(toolNames(f.requests[0]).sort(),[...searchTools,'skill_resource']);
+ assert.match(JSON.stringify(f.requests[1]),/辅助资料的唯一合成教学句/);
  const inputs=trace.events.filter(event=>event.kind==='skill_input').map(event=>JSON.parse(event.payload));
- assert.deepEqual(inputs.map(item=>item.loaded.packageId),[f.skill.id]);
- assert.equal(inputs[0].preload.origin,'explicit');assert.ok(!toolNames(f.requests[0]).includes('skill'));
- assert.deepEqual((await f.view()).preloadedSkills.map(skill=>[skill.name,skill.origin]),[['gentle','explicit']]);
+ assert.deepEqual(inputs.map(item=>[item.loaded.packageId,item.relativePath]),[[f.skill.id,'SKILL.md'],[f.skill.id,'references/example.md']]);
+ assert.ok(inputs.every(item=>item.preload.origin==='explicit'));
+ assert.deepEqual(view.preloadedSkills.map(skill=>[skill.name,skill.origin]),[['gentle','explicit']]);
+ assert.equal(view.candidates.length,1);assert.deepEqual(f.supplierErrors,[]);
 });
 
 test('skill_resource先加载正文再读取两份资源，未请求资源不进入前两次输入',async t=>{
