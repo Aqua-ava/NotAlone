@@ -6,6 +6,8 @@
 
 同号 ADR-074 有两份，引用时附标题与完整链接，不能只凭编号判断。
 
+`superseded/` 存放已被后续决定整体替代（状态为“已替代”）或默认运行路径已不再使用（状态为“已退役”）的 ADR，仅供追溯；它们描述的机制在现行代码中不再作为默认行为，不得当作新增要求。
+
 ## 决策文件
 
 - [ADR-001：Mac 微信前台会话增量同步](001-macos-wechat-active-session-sync.md)
@@ -33,8 +35,8 @@
 - [ADR-023：全局 CLI 增量同步与前台 OCR 定位分离](023-global-cli-sync-and-ocr-foreground-locator.md)
 - [ADR-024：关系记忆风险门槛与版本化采纳](024-memory-adoption-risk-gate-and-versioning.md)
 - [ADR-025：CLI 后台同步自动补齐可检测缺口](025-cli-background-sync-gap-backfill.md)
-- [ADR-026：语用解释先于关系记忆采纳](026-pragmatic-interpretation-before-memory-adoption.md)
-- [ADR-027：记忆准确率评测门槛与待确认候选的参考边界](027-memory-accuracy-evaluation-gate.md)
+- [ADR-026：语用解释先于关系记忆采纳](superseded/026-pragmatic-interpretation-before-memory-adoption.md)
+- [ADR-027：记忆准确率评测门槛与待确认候选的参考边界](superseded/027-memory-accuracy-evaluation-gate.md)
 - [ADR-028：记忆召回第一期采用确定性中文词法评分](028-lexical-memory-recall-phase-1.md)
 - [ADR-029：提取失败的分类计数与批次跳过恢复](029-extraction-failure-recovery.md)
 - [ADR-030：已确认联系人的后台同步与首次手动选择](030-confirmed-contact-background-sync-consent.md)
@@ -43,7 +45,7 @@
 - [ADR-033：记忆采纳前核验来源语义支持](033-source-semantic-verification-before-adoption.md)
 - [ADR-034：显式失败任务恢复按原任务领取](034-explicit-failed-task-recovery-selection.md)
 - [ADR-035：待确认候选作为强制标注的未确认参考进入回复](035-pending-candidate-unconfirmed-reply-reference.md)
-- [ADR-036：按维度放行自动采纳](036-per-dimension-adoption-release.md)
+- [ADR-036：按维度放行自动采纳](superseded/036-per-dimension-adoption-release.md)
 - [ADR-037：默认保存记忆提取的完整过程](037-complete-memory-extraction-trace.md)
 - [ADR-038：导入触发原记忆任务并让前台回复优先](038-import-triggered-memory-work-and-reply-priority.md)
 - [ADR-039：退役 Swift 主界面，重新设计共享前端](039-retire-swift-main-interface.md)
@@ -51,10 +53,10 @@
 - [ADR-041：观察提交后唤醒联系人记忆任务](041-observation-triggered-memory-work.md)
 - [ADR-042：持续助手会话与单次运行上下文分界](042-assistant-session-context-boundary.md)
 - [ADR-043：聊天场景与有界方向探索](043-conversation-scenarios-and-direction-exploration.md)
-- [ADR-044：主动保存的表达样本独立于助手会话留存](044-explicit-style-sample-retention.md)
+- [ADR-044：主动保存的表达样本独立于助手会话留存](superseded/044-explicit-style-sample-retention.md)
 - [ADR-045：ECNU 回复输入预算采用明确标注的估算与余量](045-explicit-estimated-ecnu-input-budget.md)
-- [ADR-046：维度依据绑定当前来源，第四门采用合取](046-source-bound-dimension-evidence.md)
-- [ADR-047：同次来源核验的有界提案与版本二语义依据](047-bounded-source-semantic-proof.md)
+- [ADR-046：维度依据绑定当前来源，第四门采用合取](superseded/046-source-bound-dimension-evidence.md)
+- [ADR-047：同次来源核验的有界提案与版本二语义依据](superseded/047-bounded-source-semantic-proof.md)
 - [ADR-048：记忆演进与自动 Skill 的受控生命周期](048-memory-skill-evolution-lifecycle.md)
 - [ADR-049：前台微信窗口自动布局与局部名称 OCR](049-automatic-foreground-window-layout.md)
 - [ADR-050：持续单帧前台定位与联系人内容、任务归属](050-continuous-single-frame-contact-follow.md)
@@ -65,13 +67,13 @@
 - [ADR-055：群聊前台暂停与私聊恢复](055-group-foreground-pause.md)
 - [ADR-056：前台观察繁忙恢复与有限执行预算](056-foreground-busy-and-observation-budget.md)
 - [ADR-057：顶部局部变化提示优先触发正式前台观察](057-header-change-triggered-foreground-observation.md)
-- [ADR-058：显式受控歧义标签与程序固定解释](058-controlled-ambiguity-labels.md)
-- [ADR-059：显式未知类型与完整日历月的离线编译](059-closed-unknown-kinds-and-calendar-month.md)
-- [ADR-060：作者到家原事件的有限引句表示](060-author-arrival-quote-representation.md)
+- [ADR-058：显式受控歧义标签与程序固定解释](superseded/058-controlled-ambiguity-labels.md)
+- [ADR-059：显式未知类型与完整日历月的离线编译](superseded/059-closed-unknown-kinds-and-calendar-month.md)
+- [ADR-060：作者到家原事件的有限引句表示](superseded/060-author-arrival-quote-representation.md)
 - [ADR-061：独立本机 App 的首启与兼容更新](061-standalone-local-app-onboarding-and-updates.md)
 - [ADR-062：官方 DeepSeek Flash 回复采用完整请求估算](062-official-deepseek-reply-input-budget.md)
 - [ADR-063：指定任务的有限运行依据与正文来源依赖](063-bounded-runtime-evidence-and-source-dependencies.md)
-- [ADR-064：E2有限负向指代说明保持未知](064-bounded-negative-reference-notes.md)
+- [ADR-064：E2有限负向指代说明保持未知](superseded/064-bounded-negative-reference-notes.md)
 - [ADR-065：独立 App 首版先交付手动输入路径](065-manual-input-standalone-first-release.md)
 - [ADR-066：沿用现有数据库并原地补齐结构](066-in-place-schema-updates-and-database-reuse.md)
 - [ADR-067：场景文档与长期画像的分层加载](067-layered-scenario-and-profile-context.md)
@@ -105,7 +107,7 @@
 - [ADR-094：按删除范围保留或清除最小调用记录](094-ledger-erasure-by-deletion-scope.md)
 - [ADR-095：首次连接微信与一次账号范围授权](095-first-wechat-connection-and-account-grant.md)
 - [ADR-096：目录保存回复 Skill，数据库只管理业务状态](096-directory-backed-reply-skills.md)
-- [ADR-097：维度门运维回退保留来源核验](097-dimension-gate-rollback-keeps-source-verification.md)
+- [ADR-097：维度门运维回退保留来源核验](superseded/097-dimension-gate-rollback-keeps-source-verification.md)
 - [ADR-098：Skill 数据库只保留业务状态](098-skill-business-state-only.md)
 - [ADR-099：提取任务内的批次流水线](099-parallel-batch-extraction.md)
 - [ADR-100：授权私聊首次完整历史同步](100-authorized-private-history-sync.md)
@@ -141,7 +143,7 @@
 - [ADR-141：引用回复随正常消息同步读取](141-inline-quoted-reply-sync.md)
 - [ADR-142：首次连接后先选择联系人，再确认开启同步](142-first-connection-contact-selection.md)
 - [ADR-143：混合记忆处理调度](143-hybrid-memory-processing-schedule.md)
-- [ADR-144：保留旧资料的来源重新认证](144-preserved-history-source-recertification.md)（流程已由ADR-177替代，保留合法旧资料与必要删除事实）
+- [ADR-144：保留旧资料的来源重新认证](superseded/144-preserved-history-source-recertification.md)（流程已由ADR-177替代，保留合法旧资料与必要删除事实）
 - [ADR-145：记忆处理卡跟随当前联系人](145-contact-scoped-memory-processing-view.md)
 - [ADR-146：AI 服务地址与密钥由用户填写](146-editable-deepseek-endpoint.md)
 - [ADR-147：OpenCode Go 的模型环境配置](147-opencode-go-model-configuration.md)
@@ -170,8 +172,9 @@
 - [ADR-170：不保存缩略图，取消原图分类机制](170-no-thumbnail-storage-and-no-original-classification.md)
 - [ADR-171：同一张图有标准图和高清图时取一张保存，不再比较内容](171-image-pick-standard-over-high-definition.md)
 - [ADR-172：JPEG 结束标记后允许少量尾随，WXGF 支持彩色加透明度双帧](172-jpeg-trailing-bytes-and-wxgf-alpha-frames.md)
-- [ADR-173：开发者批量来源重新认证](173-developer-batch-source-recertification.md)（已被ADR-177替代，原开发者入口退役）
-- [ADR-175：修复同步通过后清理被取代绑定下无派生引用的旧副本](175-clean-superseded-binding-copies.md)（已被ADR-177替代，一次性存量清理完成后退役流程；保留引用保护与必要删除事实）
+- [ADR-173：开发者批量来源重新认证](superseded/173-developer-batch-source-recertification.md)（已被ADR-177替代，原开发者入口退役）
+- [ADR-174：对齐腾讯方案——不确定性降级而非拦截候选](174-align-tencent-uncertainty-degrade-not-intercept.md)——部分被 ADR-184 替代
+- [ADR-175：修复同步通过后清理被取代绑定下无派生引用的旧副本](superseded/175-clean-superseded-binding-copies.md)（已被ADR-177替代，一次性存量清理完成后退役流程；保留引用保护与必要删除事实）
 
 - [ADR-176：核对来源后原地续读，不旋转绑定](176-in-place-source-recovery.md)——保留原地来源核对；守卫生命周期及暂留旧流程由ADR-177收敛。
 

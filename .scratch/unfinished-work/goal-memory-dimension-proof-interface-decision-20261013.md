@@ -1,6 +1,6 @@
 # 原03：同一次V证明协议与受限语义合同决策草案
 
-状态：**用户已明确批准D1–D3实施及隔离验证，实施中**。下文提案阶段的未批准、代码／运行均0及`planned_not_run`表述保留原时点；最新批准及精确所有权登记见文末，后续实际结果另记。已有可空JSONB、来源绑定和相关维度AND门的批准继续有效，不重复请求；新决定仅为同一次V扩展协议、可独立验证的窄语义规则及其持久版本。业务迁移、旧回填／重采纳与维度放行继续未授权。[原03](../memory-accuracy-next/issues/03-per-dimension-rollout.md)、[已采纳字段合同ADR-046](../../architecture/adr/046-source-bound-dimension-evidence.md)
+状态：**用户已明确批准D1–D3实施及隔离验证，实施中**。下文提案阶段的未批准、代码／运行均0及`planned_not_run`表述保留原时点；最新批准及精确所有权登记见文末，后续实际结果另记。已有可空JSONB、来源绑定和相关维度AND门的批准继续有效，不重复请求；新决定仅为同一次V扩展协议、可独立验证的窄语义规则及其持久版本。业务迁移、旧回填／重采纳与维度放行继续未授权。[原03](../memory-accuracy-next/issues/03-per-dimension-rollout.md)、[已采纳字段合同ADR-046](../../architecture/adr/superseded/046-source-bound-dimension-evidence.md)
 
 ## 建议一次批准的具体范围
 
@@ -195,7 +195,7 @@ required仍采用现有5–7保守超集；没有proof不能证明某维度无�
 
 P09–P11是相对于此前整句示例尚未出现的词元组合，全部`planned_not_run`；它们不是未知留出，不能称独立质量样本。实现批准后在同一词元／产生式版本冻结下，另由独立Agent选择未用于实现的组合并冻结正负控，选择不能使用model返回或Gold答案。所有组合仍跨同一真实producer Seam；通过这些有限控制只证明参数组合与图关系接线，不能替代原07跨消息／省略／多第三方等完整验收、核心01同批留出或原03四类质量资格。
 
-批准实现后还须实际验证所有来源保真、角色／媒体／转述producer路径和存储；如语法正例不能安全成立，退为UNKNOWN并如实留下未覆盖AC，不把wire绿称四类已完成。≥15例、假事0、记错人0、一般错误≤1的原质量门另用固定公开材料、新有限模型预算与完整停止条件，不改答案、不删难例、不借旧额度；达标后仍由用户逐类批准。[ADR-036](../../architecture/adr/036-per-dimension-adoption-release.md)
+批准实现后还须实际验证所有来源保真、角色／媒体／转述producer路径和存储；如语法正例不能安全成立，退为UNKNOWN并如实留下未覆盖AC，不把wire绿称四类已完成。≥15例、假事0、记错人0、一般错误≤1的原质量门另用固定公开材料、新有限模型预算与完整停止条件，不改答案、不删难例、不借旧额度；达标后仍由用户逐类批准。[ADR-036](../../architecture/adr/superseded/036-per-dimension-adoption-release.md)
 
 Root可集中请求的批准表述为：是否批准按D1–D3上述同一次V、有限句型和version2语义依据合同实现及隔离测试；明确不包含业务库迁移、任何维度放行、旧数据回填、新供应商或追加模型执行授权。此前JSONB／AND批准保持，无需重复确认。本稿自身只是一份待审提案，不代表用户已接受这段表述。
 
@@ -211,6 +211,6 @@ Root后续复核：v3冻结摘要为`55a3be6f3aa9122922d786008716b8f31f18cf02ddf
 
 ## 批准后的最新状态
 
-用户随后明确答复“批准 D1–D3 实施及隔离验证”。本合同架构许可已到位，[ADR-047](../../architecture/adr/047-bounded-source-semantic-proof.md)记录该局部修订；上文未批准／planned_not_run表述保留其提案时点，不再据此重复请求许可。实际producer、隔离验证及质量结果另存，不把批准或新测试回写成旧预注册控制已运行。业务库迁移、旧回填／重采纳和任何维度放行继续未授权。
+用户随后明确答复“批准 D1–D3 实施及隔离验证”。本合同架构许可已到位，[ADR-047](../../architecture/adr/superseded/047-bounded-source-semantic-proof.md)记录该局部修订；上文未批准／planned_not_run表述保留其提案时点，不再据此重复请求许可。实际producer、隔离验证及质量结果另存，不把批准或新测试回写成旧预注册控制已运行。业务库迁移、旧回填／重采纳和任何维度放行继续未授权。
 
 实际文件所有权预先登记：纯模块`memory_extraction/source_proof.py`及新`tests/unit/memory_extraction/test_source_proof.py`；同次V／producer为`memory_extraction/verification.py`、`verification_adapters.py`、`evidence.py`、`dimensions.py`、`flow.py`，测试为该目录的`test_source_verification.py`、`test_verification_adapters.py`、`test_dimension_evidence_flow.py`、`test_dimensions.py`、`test_verification_prompt_contract.py`；存储为`memory/dimension_evidence.py`、`memory/evidence_binding.py`、`persistence/dimension_evidence.py`、`persistence/memory_store.py`及新`database/migrations/057_memory_candidate_semantic_basis.sql`、`tests/unit/memory/test_dimension_evidence_v2.py`、`tests/integration/persistence/test_dimension_evidence_v2.py`。路径均以`backend/src/notalone/`或`backend/`对应根为准；超出精确清单时先核真实必要接缝和并行所有权，不修改Gold或评测驱动。Root串行运行隔离PG与共享Git，子Agent不操作桌面、模型或业务库。

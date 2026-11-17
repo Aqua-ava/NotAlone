@@ -1,6 +1,6 @@
 # 记忆提取日期槽结构拒绝修复（2026-10-13）
 
-承接[运行字段及原红反馈](goal-memory-runtime-fields-20261013.md)、[原03票](../memory-accuracy-next/issues/03-per-dimension-rollout.md)与[ADR-036](../../architecture/adr/036-per-dimension-adoption-release.md)。Root在新V诊断已闭账、剩余App组尚未启动时解除60份源码冻结，明确授权本最小修复；新的四类结构化依据、ADR／DDL／Gold／放行表均未修改。
+承接[运行字段及原红反馈](goal-memory-runtime-fields-20261013.md)、[原03票](../memory-accuracy-next/issues/03-per-dimension-rollout.md)与[ADR-036](../../architecture/adr/superseded/036-per-dimension-adoption-release.md)。Root在新V诊断已闭账、剩余App组尚未启动时解除60份源码冻结，明确授权本最小修复；新的四类结构化依据、ADR／DDL／Gold／放行表均未修改。
 
 ## 问题与实际修复
 

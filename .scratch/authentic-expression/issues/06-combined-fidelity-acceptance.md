@@ -8,7 +8,7 @@ Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bound
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧04；第一版组合。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-044](../../../architecture/adr/044-explicit-style-sample-retention.md)。依赖是完整交付的前置，不代表这些前置已完成；本轮受控自动实现与验收证据见 Answer。
+[正式规格](../spec.md)；旧04；第一版组合。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-044](../../../architecture/adr/superseded/044-explicit-style-sample-retention.md)。依赖是完整交付的前置，不代表这些前置已完成；本轮受控自动实现与验收证据见 Answer。
 
 ## What to build
 

@@ -14,4 +14,4 @@ Conda `NotAlone`下，以socket／DNS、真实HTTPX及HTTPX2默认transport、do
 
 证据根 `/private/tmp/notalone-memory-goal-20261013-ac04d687/`，0700／0600：`diagnostic4-next-prompt-proposal.patch`及元数据、`next-prompt-before-{adapters,verification_adapters}.py`、`next-prompt-projection.json`、`next-prompt-actual-fixed-diff.patch`、`next-prompt-minimal-tests.{txt,status.json}`、`next-prompt-mypy.{txt,status.json}`。源码diff SHA`bbfc2985654a7f414c17447522fa95e62b3c381d3b65bbf5ab804c1612141fef`。独立两轴及Root本地提交另核；全140入口／119份补充参考仍是下一工具主题，本叶不实现它们或激活尚未使用的280／余1。
 
-[ADR-033](../../architecture/adr/033-source-semantic-verification-before-adoption.md)的核验只降不升、[ADR-036](../../architecture/adr/036-per-dimension-adoption-release.md)的默认空放行及逐类批准继续适用。原21窗／全部难例、0.7与风险语义、安全门、四类typed字段缺口和真实核心严格6/12／可选2/6不变，不读取或上传真实聊天。
+[ADR-033](../../architecture/adr/033-source-semantic-verification-before-adoption.md)的核验只降不升、[ADR-036](../../architecture/adr/superseded/036-per-dimension-adoption-release.md)的默认空放行及逐类批准继续适用。原21窗／全部难例、0.7与风险语义、安全门、四类typed字段缺口和真实核心严格6/12／可选2/6不变，不读取或上传真实聊天。

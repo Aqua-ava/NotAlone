@@ -2,7 +2,7 @@
 
 > 后续修订：[ADR-162](162-local-reply-context-and-independent-model-lanes.md)明确回复使用持久接纳的本机资料，不以当前微信活守卫或读取进程为前置；下文当前固定目标的范围继续用于后台读取和覆盖，不恢复旧失证资料或删除排除项。
 
-> 后续补充：[ADR-144](144-preserved-history-source-recertification.md)新增用户明确选择、保留旧资料的独立来源重新认证决定，修订下文恢复实验继续搁置的范围；正常续证、旧来源不可借新捕获恢复资格及删除抑制合同保持。
+> 后续补充：[ADR-144](superseded/144-preserved-history-source-recertification.md)新增用户明确选择、保留旧资料的独立来源重新认证决定，修订下文恢复实验继续搁置的范围；正常续证、旧来源不可借新捕获恢复资格及删除抑制合同保持。
 
 > 后续修订：[ADR-131](131-available-context-without-history-wait.md)取消下文历史进行中阻止生成、不完整后需本次确认的要求；生成使用当前可用资料并保留实际覆盖依据，不改变历史来源合同。
 

@@ -2,7 +2,7 @@
 
 Triage: ready-for-agent
 
-日期：2026-10-16。状态：实施前规格；本文两类规则尚未实现或验收。本片属于[原07](issues/07-reference-resolution.md)及[原准确率规格](spec.md)允许的字段语义与生成后确定性降级，遵循[ADR-027](../../architecture/adr/027-memory-accuracy-evaluation-gate.md)及[ADR-064](../../architecture/adr/064-bounded-negative-reference-notes.md)。原票、旧失败、已封存结果、Gold及默认空放行表保持；实现和实际质量验收继续按核心事实、指代、维度顺序推进。
+日期：2026-10-16。状态：实施前规格；本文两类规则尚未实现或验收。本片属于[原07](issues/07-reference-resolution.md)及[原准确率规格](spec.md)允许的字段语义与生成后确定性降级，遵循[ADR-027](../../architecture/adr/superseded/027-memory-accuracy-evaluation-gate.md)及[ADR-064](../../architecture/adr/superseded/064-bounded-negative-reference-notes.md)。原票、旧失败、已封存结果、Gold及默认空放行表保持；实现和实际质量验收继续按核心事实、指代、维度顺序推进。
 
 ## 问题与交付
 

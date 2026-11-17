@@ -1,6 +1,6 @@
 # 来源证明的候选表示与证据能力：待决策稿
 
-日期：2026-10-16。状态：**用户已明确采纳B并要求实施及验证。** 下文保留决定前的比较和范围理由；当前精确合同见[实施规格](../author-quote-proof-b/spec.md)及[ADR-060](../../architecture/adr/060-author-arrival-quote-representation.md)。尚未完成实现验证或新增真实模型预注册。
+日期：2026-10-16。状态：**用户已明确采纳B并要求实施及验证。** 下文保留决定前的比较和范围理由；当前精确合同见[实施规格](../author-quote-proof-b/spec.md)及[ADR-060](../../architecture/adr/superseded/060-author-arrival-quote-representation.md)。尚未完成实现验证或新增真实模型预注册。
 
 建议选择下文 B：保留原事件作为核验对象，先只为 `AUTHOR_ARRIVAL_H1` 增加显式版本的完整固定包装表示，逐规则规定可生成的依据。它可以缩小 grounded 表示与既有有限证明规则之间的缺口，但不能完成通用指代／转述证明，也不产生维度放行资格。
 
@@ -10,10 +10,10 @@
 
 | 现有合同／实现 | 可支持的结论 | 不能推出的结论 |
 | --- | --- | --- |
-| [ADR-047](../../architecture/adr/047-bounded-source-semantic-proof.md)第 7–15 行及其已批准的 [D2 合同](../unfinished-work/goal-memory-dimension-proof-interface-decision-20261013.md)第 37–89 行要求来源、候选各自全文匹配有限产生式，单来源、单目标且无额外上下文 | 本地可以比较这些有限事件的完整角色、阶段、限定与语用，不依赖 Gold 或整句答案白名单 | 任意引用正文、复杂转述或一般中文都落在已批准的正例语法中 |
+| [ADR-047](../../architecture/adr/superseded/047-bounded-source-semantic-proof.md)第 7–15 行及其已批准的 [D2 合同](../unfinished-work/goal-memory-dimension-proof-interface-decision-20261013.md)第 37–89 行要求来源、候选各自全文匹配有限产生式，单来源、单目标且无额外上下文 | 本地可以比较这些有限事件的完整角色、阶段、限定与语用，不依赖 Gold 或整句答案白名单 | 任意引用正文、复杂转述或一般中文都落在已批准的正例语法中 |
 | [source_proof.py](../../backend/src/notalone/memory_extraction/source_proof.py)第 38–59、237–251、403–407 行将到达候选识别为“用户／联系人刚／刚刚到家” | 已有 `AUTHOR_ARRIVAL_H1/direct_h` 原事件规则 | `联系人原话：“我刚到家”` 已是该规则的合法候选表示 |
 | [grounded.py](../../backend/src/notalone/memory_extraction/grounded.py)第 240–267 行生成作者引句包装，14 槽仍由原 kind／subject 等标签编译；还可能附观察日期、相关原文或续句 | 编译器保留原文定位，并把模型语义标签交后续核验 | 正文出现“原话”就已建立独立的“说过某文本”主张类型，或已证明引句中的人物／事件 |
-| [ADR-051](../../architecture/adr/051-grounded-memory-extraction.md)第 7–18、35–38 行明确编译器不生成 `semantic_basis`；[ADR-058](../../architecture/adr/058-controlled-ambiguity-labels.md)第 23–26 行保持 typed proof 不变 | v3 的受控歧义说明属于候选表达能力 | E 的合法标签、固定模板或引句覆盖能自签 proof |
+| [ADR-051](../../architecture/adr/051-grounded-memory-extraction.md)第 7–18、35–38 行明确编译器不生成 `semantic_basis`；[ADR-058](../../architecture/adr/superseded/058-controlled-ambiguity-labels.md)第 23–26 行保持 typed proof 不变 | v3 的受控歧义说明属于候选表达能力 | E 的合法标签、固定模板或引句覆盖能自签 proof |
 | [evidence.py](../../backend/src/notalone/memory_extraction/evidence.py)第 51–95 行仅在旧全篇逐字相等时生成 v1 对齐；新依据须经 `verify_proposal` 成功；`reference`／`reported` 字段仍为 `None` | v2 可另通过非空、有效的 `semantic_basis` 表达有限语义依据 | 字段仍为 `None` 就表示全部有限依据从未实现；或 V supported 就足以填这些字段 |
 | [dimension_evidence.py](../../backend/src/notalone/memory/dimension_evidence.py)第 328–343、547–565 行只接受有限事件、角色与三种 frame | 已有受控事件图和严格 DTO | 已有通用 `say/utterance/quoted_text` 主张或任意原文的 AST；现有 `ReportedAttribution` 形状本身也不提供这项证明 |
 

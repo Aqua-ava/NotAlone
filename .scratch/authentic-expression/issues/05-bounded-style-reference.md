@@ -8,7 +8,7 @@ Blocked by: [authentic-expression/02 当前意图优先的生成与改写](02-cu
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧03；样本参考。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-044](../../../architecture/adr/044-explicit-style-sample-retention.md)。依赖是完整交付的前置，不代表这些前置已完成；本票原自动验收范围已完成；跨规格组合状态见 E06。
+[正式规格](../spec.md)；旧03；样本参考。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-044](../../../architecture/adr/superseded/044-explicit-style-sample-retention.md)。依赖是完整交付的前置，不代表这些前置已完成；本票原自动验收范围已完成；跨规格组合状态见 E06。
 
 ## What to build
 

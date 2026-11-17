@@ -1,6 +1,6 @@
 # ADR-130：同账号本机来源变化后的明确重新关联
 
-> 正文来源恢复另见 [ADR-144](144-preserved-history-source-recertification.md)。本决定仍仅重新关联账号来源，不恢复正文读取授权。
+> 正文来源恢复另见 [ADR-144](superseded/144-preserved-history-source-recertification.md)。本决定仍仅重新关联账号来源，不恢复正文读取授权。
 
 > 后续修订：[ADR-132](132-existing-contact-name-matching.md)允许名称与既有稳定绑定通过后直接使用，替代逐人新桌面证明的二次门；来源重新关联仍不恢复正文读取授权。
 

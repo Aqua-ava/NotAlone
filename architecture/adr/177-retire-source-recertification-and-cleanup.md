@@ -22,10 +22,10 @@
 
 ## 替代范围
 
-- [ADR-144](144-preserved-history-source-recertification.md)：重新认证入口、旋转绑定、全量重读、独立操作账本及其取消／恢复流程退役；合法旧资料、来源追溯、授权与删除保护继续有效。
+- [ADR-144](superseded/144-preserved-history-source-recertification.md)：重新认证入口、旋转绑定、全量重读、独立操作账本及其取消／恢复流程退役；合法旧资料、来源追溯、授权与删除保护继续有效。
 - [ADR-161](161-proved-legacy-source-suppression-mapping.md)：不再创建或沿重新认证传递旧读取器维护证明；已有有效证明的删除等价事实按本决定迁移保留，其精确范围与不授读取资格的边界不变。
-- [ADR-173](173-developer-batch-source-recertification.md)：开发者批量重新认证整体退役；其联系人隔离、停读、隐私及不自动发送边界仍由现行合同约束。
-- [ADR-175](175-clean-superseded-binding-copies.md)：副本清理流程、请求账本和专用运行能力在本次确认的存量清理完成后退役；被引用旧消息及必要来源和删除事实仍保留。
+- [ADR-173](superseded/173-developer-batch-source-recertification.md)：开发者批量重新认证整体退役；其联系人隔离、停读、隐私及不自动发送边界仍由现行合同约束。
+- [ADR-175](superseded/175-clean-superseded-binding-copies.md)：副本清理流程、请求账本和专用运行能力在本次确认的存量清理完成后退役；被引用旧消息及必要来源和删除事实仍保留。
 - [ADR-176](176-in-place-source-recovery.md)：元数据、锚点、水位、原地续读和 `source_proof` 规则保留；空闲守卫持有、暂留重新认证／清理入口及旧审计存储方式由本决定收敛。
 
 ## 取舍与验收边界

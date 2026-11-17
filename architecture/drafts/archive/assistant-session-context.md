@@ -161,4 +161,4 @@
 
 ## 2026-10-11 复审补充：样本独立留存
 
-用户明确选择：删除助手会话独立保留已主动保存的表达样本，清除讨论与使用痕迹；删除样本或原始聊天来源仍清理相关派生内容。取舍和实现约束见[ADR-044](../../adr/044-explicit-style-sample-retention.md)；该独立留存方案已由 [ADR-082](../../adr/082-retire-explicit-style-samples.md) 整体替代，本节仅历史。
+用户明确选择：删除助手会话独立保留已主动保存的表达样本，清除讨论与使用痕迹；删除样本或原始聊天来源仍清理相关派生内容。取舍和实现约束见[ADR-044](../../adr/superseded/044-explicit-style-sample-retention.md)；该独立留存方案已由 [ADR-082](../../adr/082-retire-explicit-style-samples.md) 整体替代，本节仅历史。

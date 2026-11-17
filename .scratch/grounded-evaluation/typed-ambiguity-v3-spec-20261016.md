@@ -12,9 +12,9 @@
 
 ## 约束与 ADR 边界
 
-遵守 [ADR-027](../../architecture/adr/027-memory-accuracy-evaluation-gate.md)的修错范围、只降不升及逐类质量门槛。`owner_id + contact_id`、目标分句和来源范围、依赖、期间计算、原十四槽下游接口、语用／风险／置信度门、V 只降不升、typed source proof、默认维度放行表为空均不变。不自动采纳歧义候选，不生成 `semantic_basis` 或将结构合法冒充语义证明。
+遵守 [ADR-027](../../architecture/adr/superseded/027-memory-accuracy-evaluation-gate.md)的修错范围、只降不升及逐类质量门槛。`owner_id + contact_id`、目标分句和来源范围、依赖、期间计算、原十四槽下游接口、语用／风险／置信度门、V 只降不升、typed source proof、默认维度放行表为空均不变。不自动采纳歧义候选，不生成 `semantic_basis` 或将结构合法冒充语义证明。
 
-与 [ADR-051](../../architecture/adr/051-grounded-memory-extraction.md)“模型不能提供自由正文、替代解释、理由、日期或任意风险文字”的现有表述存在需明确修订的边界：新增的是封闭枚举标签，解释字符串仍完全由程序固定渲染，模型不能写 `alternatives`。[ADR-058](../../architecture/adr/058-controlled-ambiguity-labels.md)现已明确补充这一例外及版本边界，保留 051 的历史原因；没有直接覆盖旧 ADR。
+与 [ADR-051](../../architecture/adr/051-grounded-memory-extraction.md)“模型不能提供自由正文、替代解释、理由、日期或任意风险文字”的现有表述存在需明确修订的边界：新增的是封闭枚举标签，解释字符串仍完全由程序固定渲染，模型不能写 `alternatives`。[ADR-058](../../architecture/adr/superseded/058-controlled-ambiguity-labels.md)现已明确补充这一例外及版本边界，保留 051 的历史原因；没有直接覆盖旧 ADR。
 
 ## Implementation Decisions
 

@@ -8,7 +8,7 @@ Blocked by: [assistant-session-context/07 默认会话的一次生成与可靠�
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧01；Q10、Q18。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)、[ADR-044](../../../architecture/adr/044-explicit-style-sample-retention.md)。依赖以各票实际交付证据为准；本票自动实现、验证及本地集成已完成，真实App／人工部分未执行，详见Answer。
+[正式规格](../spec.md)；旧01；Q10、Q18。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)、[ADR-044](../../../architecture/adr/superseded/044-explicit-style-sample-retention.md)。依赖以各票实际交付证据为准；本票自动实现、验证及本地集成已完成，真实App／人工部分未执行，详见Answer。
 
 ## What to build
 

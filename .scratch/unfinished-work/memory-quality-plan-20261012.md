@@ -64,7 +64,7 @@
 | P3，候选对照准备 | 仅对已经复现的错误提出一个机制明确的单变量候选，另冻两臂随机种子和顺序、正例保护集、新留出与重复 | **未确定**；按 `2 × 窗口数 × 重复数 × 臂数` 推导 E/V invoke 上限，再确定真实 HTTP 封顶 | 候选机制、窗口数、重复数未确定，不编总额，也不开展候选调用。核心 V-only 对照只能回答核验稳定性，不能完成 E 侧漏提目标 |
 | P4，维度证据 | 只有候选对照无安全/正例损失、失败得到改善，才固定完整维度回归。最先仅考虑运行时可推导的一类；其他合成维度作回归 | 一轮 subject ≤40、truth_intent ≤40、time ≤48；**不自动相加或启动** | 完整冻结分母、工具输出、独立语义复核和运行键都满足才形成“可评审证据”；默认空表仍不修改，逐类放行另走原票与 ADR-036 |
 
-P1/P2 是当前合成样本的观察计划，不把“两轮”视为充分统计把握度；同窗重复不是新独立场景，不做显著性或真实分布外推。若核心两窗原期望/来源无法独立核定，关闭其执行门；不能拿 reference 部分完成宣称核心票基线已成立。候选禁止按句子、姓名、数额或测试答案特判，允许手段仍受 [ADR-027](../../architecture/adr/027-memory-accuracy-evaluation-gate.md) 限定。
+P1/P2 是当前合成样本的观察计划，不把“两轮”视为充分统计把握度；同窗重复不是新独立场景，不做显著性或真实分布外推。若核心两窗原期望/来源无法独立核定，关闭其执行门；不能拿 reference 部分完成宣称核心票基线已成立。候选禁止按句子、姓名、数额或测试答案特判，允许手段仍受 [ADR-027](../../architecture/adr/superseded/027-memory-accuracy-evaluation-gate.md) 限定。
 
 ## 4. 真实 HTTP 封顶如何成立
 
@@ -88,7 +88,7 @@ P1/P2 是当前合成样本的观察计划，不把“两轮”视为充分统�
 
 达标签仍为用例数 ≥15、假事 0、记错人 0、一般错误 ≤1，由[当前 summarize](../../backend/src/notalone/memory_extraction/evaluation.py)输出；语义标注覆盖另报，完整原始分母另核。现有 runner 对未捕获异常只写原始失败记录、没有纳入 `results` 的汇总，未来执行须核对计划全量与失败/未运行，不照抄部分 `summarize()` 冒充整场通过。
 
-当前 evaluator 的 auto 是原有三道门的“若该维度放行”理想去向，不叠加生产第 4 道门、不写库。[运行时键](../../backend/src/notalone/memory_extraction/dimensions.py)仅能推导 subject、time、truth_intent；paraphrase、reference、media、reported 缺结构化字段，达标签也不能放行。质量改善和自动采纳是不同执行门，按 [ADR-033](../../architecture/adr/033-source-semantic-verification-before-adoption.md)、[ADR-036](../../architecture/adr/036-per-dimension-adoption-release.md)及[放行台账](../../docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md)保持来源核验、0.7、风险白名单与语用限制；不关闭维度门、不用 `RELEASE_ALL_DIMENSIONS` 改生产。
+当前 evaluator 的 auto 是原有三道门的“若该维度放行”理想去向，不叠加生产第 4 道门、不写库。[运行时键](../../backend/src/notalone/memory_extraction/dimensions.py)仅能推导 subject、time、truth_intent；paraphrase、reference、media、reported 缺结构化字段，达标签也不能放行。质量改善和自动采纳是不同执行门，按 [ADR-033](../../architecture/adr/033-source-semantic-verification-before-adoption.md)、[ADR-036](../../architecture/adr/superseded/036-per-dimension-adoption-release.md)及[放行台账](../../docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md)保持来源核验、0.7、风险白名单与语用限制；不关闭维度门、不用 `RELEASE_ALL_DIMENSIONS` 改生产。
 
 ## 6. 按原工作流承接
 

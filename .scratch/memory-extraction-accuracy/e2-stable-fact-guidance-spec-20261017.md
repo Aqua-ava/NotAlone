@@ -10,7 +10,7 @@ Triage: ready-for-agent
 
 “目前／现在”仅表示陈述时点时，不凭此把稳定资料当临时state；明确短期期间、当前知情／决策、身体近况和未来安排继续各自原类型。不从稳定资料推真实开始日、永久有效、能力或成果；第三方身份仍用third_party_fact，猜测、否定、引语和未知不能借此变成已证身份。
 
-与[ADR-059](../../architecture/adr/059-closed-unknown-kinds-and-calendar-month.md)历史修订中“event只表示已完成动作、旧E2保持”的局部约定有差异。本片按原07的普通提示语义修复更新**未来E2标签指导**；旧冻结、旧候选、旧评分不重解释，显式v4继续使用stable_fact且不将其身份改标event。不是新增kind、切换默认版本、升级proof或放宽自动采纳。架构记录须如实续接这一差异。
+与[ADR-059](../../architecture/adr/superseded/059-closed-unknown-kinds-and-calendar-month.md)历史修订中“event只表示已完成动作、旧E2保持”的局部约定有差异。本片按原07的普通提示语义修复更新**未来E2标签指导**；旧冻结、旧候选、旧评分不重解释，显式v4继续使用stable_fact且不将其身份改标event。不是新增kind、切换默认版本、升级proof或放宽自动采纳。架构记录须如实续接这一差异。
 
 不选择新增E2 kind或切换全局v4：前者改变schema，后者超出保留默认grounded-v2的范围。本片保留现有公开Runtime／评测Interface；新增一个模式专属常量GROUNDED_V2_PROMPT，由现有E2 Runtime及extraction_contract共用。原GROUNDED_PROMPT作为v3/v4派生基底保持字节，旧v1/v3/v4的提示、schema及同标签编译行为保持。本片不新增profile、wrapper、DTO或模型调用。
 

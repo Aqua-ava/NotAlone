@@ -2,7 +2,7 @@
 
 Triage: ready-for-agent
 
-日期：2026-10-16。状态：仅供Root复核的普通修复规格草稿，尚未实现、测试或运行模型；本稿不授权自行扩大文法，不宣称已覆盖全部公开缺口。归属[原07](issues/07-reference-resolution.md)及[原准确率规格](spec.md)，采用[ADR-027](../../architecture/adr/027-memory-accuracy-evaluation-gate.md)允许的字段语义与确定性只降不升路径，不预设升级模型协议。
+日期：2026-10-16。状态：仅供Root复核的普通修复规格草稿，尚未实现、测试或运行模型；本稿不授权自行扩大文法，不宣称已覆盖全部公开缺口。归属[原07](issues/07-reference-resolution.md)及[原准确率规格](spec.md)，采用[ADR-027](../../architecture/adr/superseded/027-memory-accuracy-evaluation-gate.md)允许的字段语义与确定性只降不升路径，不预设升级模型协议。
 
 ## 问题、目标与不变项
 
@@ -190,7 +190,7 @@ PLACE/OBJECT中不得藏入另一个已识别时间表达、比较边界、未�
 1. 选择E2实际compile路径内的私有策略而非Adapter后置wrapper或新增model kind：原schema/prompt保持，复用现有units／members／dependencies及单次渲染。生产保留原grounded_draft＋最终grounded_compile即可，不为保存基线另加DTO／第二次编译。现有V后加risk不修raw标签，不能作为本片实现替代。
 2. 来源日历是明确期间的字段计算，不等于负向规则，也不认证事实；选择只支持完整封闭TP而非通用中文时间解析。它与现行domain-data“不套固定天数”的约束一致，但不能把任何可算日期当作正确作用域。
 3. 实施记录须局部续接[ADR-051](../../architecture/adr/051-grounded-memory-extraction.md)三点：E2新增有限condition／prefix完整配对许可；保留模型kind但对已列五字段执行完整来源的负向／日历规则；否定从全文一票UNKNOWN收窄为已完整解析C/A节点的作用域处理。未支持修饰继续不正向计算；观察型日期与清期间权限按本稿分别处理。原完成短答、来源／指代guard与原V不改。
-4. 实施记录须局部续接[ADR-059](../../architecture/adr/059-closed-unknown-kinds-and-calendar-month.md)的版本说明：该ADR承诺的旧v2/v3字节是历史v4增量的隔离约束，本片作为后继E2-only普通修复改变当前E2编译表达，保留其旧封存，当前v1/v3/v4字节及模型报码路线继续不变。不能把v4类型／歧义码或其旧质量信用套入E2。此后继记录属于原07允许范围的实施说明，不是新增用户架构许可问题；本起草任务仍不修改ADR。
+4. 实施记录须局部续接[ADR-059](../../architecture/adr/superseded/059-closed-unknown-kinds-and-calendar-month.md)的版本说明：该ADR承诺的旧v2/v3字节是历史v4增量的隔离约束，本片作为后继E2-only普通修复改变当前E2编译表达，保留其旧封存，当前v1/v3/v4字节及模型报码路线继续不变。不能把v4类型／歧义码或其旧质量信用套入E2。此后继记录属于原07允许范围的实施说明，不是新增用户架构许可问题；本起草任务仍不修改ADR。
 5. 首批不把只在条件内部出现的TC推成主动作期间，也不补E2没有引用的质疑；两者列为真实剩余范围。`calendar_unknown`只有完整接管＋period归属＋具体不可靠见证＋无替代计算同时成立时才清期间，观察state／request及范围外正确日期保留。该范围仍由Root审规格后分片实施，不为减少回归恢复短串兜底或泛化为开放语义解析。
 
 ## 测试决定

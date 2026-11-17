@@ -24,4 +24,4 @@ Conda `NotAlone`首叶复用原八模块：E/V适配器、既有核验提示契�
 
 Root原则批准另增fresh cap8工程分配（总530），但注册／HTTP尚未授权：拟固定原位置(4,5,6,7)的A05–A08、4窗／5必需，SDK300／0、raw/full600、最多2小时绝对期限与每HTTP1845秒起发余量。只有旧正式A05–A07可作非盲历史对照，A08旧fullunknown不能伪paired，A04原失败保留；本小控制不签≥15／完整21／140或整体质量。全部旧closed_unused、退休12、专属full280不借，具体freshUUID、共同当前源码、固定时窗及持久真实HTTP计数仍需预注册／两轴／Root终冻，禁止自动后继。
 
-[ADR-033](../../architecture/adr/033-source-semantic-verification-before-adoption.md)的来源核验只降不升与[ADR-036](../../architecture/adr/036-per-dimension-adoption-release.md)的质量门、默认空放行及逐类批准保持；新运行时字段授权由原03另轨实施，不因此放行任何维度。原票各自State及未满足验收、核心旧严格／可选成绩、119待独审参考和原难例不变。
+[ADR-033](../../architecture/adr/033-source-semantic-verification-before-adoption.md)的来源核验只降不升与[ADR-036](../../architecture/adr/superseded/036-per-dimension-adoption-release.md)的质量门、默认空放行及逐类批准保持；新运行时字段授权由原03另轨实施，不因此放行任何维度。原票各自State及未满足验收、核心旧严格／可选成绩、119待独审参考和原难例不变。
