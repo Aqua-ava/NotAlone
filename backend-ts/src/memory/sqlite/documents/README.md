@@ -2,6 +2,8 @@
 
 产品合同以[文档发布](../../../../../architecture/current/memory-processing.md)、[精确版本依赖](../../../../../architecture/current/reply-generation.md)、[来源删除](../../../../../architecture/current/privacy-deletion.md)为准；本页只保留本模块的接口、装配和故障处理。
 
+场景文档的合同、校验与核验结果解析集中在 [`scenarios/document.ts`](../../scenarios/document.ts)，长期画像的校验、渲染与逐项发布选择集中在 [`profiles/document.ts`](../../profiles/document.ts)。两者提供不加载模型执行代码的纯业务规则，供工作区、事务发布和已知回执重放共同使用。各自的 `workspace.ts` 负责内存文档编辑、Tool 和模型执行，并兼容原有公开入口；`service.ts` 编排处理，`publication.ts` 负责来源复验和事务提交。
+
 下游消费合同沿用 `reply/sqlite/candidates/contracts.ts` 的 `ReplyKnowledgeReader`：`read` 和 `requireCurrent` 在同一 SQLite 短事务内接收已确认的 `DiscussionScope`，文档项以 `kind: 'document'`、精确 `versionNo`、`publicationId` 与真实来源返回。联系人文档只属于该联系人，本人文档逐项核验实际来源；正式组合由 `replyLocalKnowledgeReader` 同时提供记忆与文档读取，不能相互替换。发布集合的成员是完整清单，不能逐条回退到其他轮次。
 
 `SqliteMemoryDocuments.read({scopeKind,contactId})` 是范围资料视图；`readTask(taskId)` 返回该任务冻结的记忆／文档修订、前一发布集合及各阶段状态。`publishRun(runId)` 只供正常处理服务在记忆管理域的前置阶段后调用，发布后按同一合同切换范围指针；`laterStagesState(tx,ownerId,runId)` 是只读完成投影，仅当全部任务适用阶段结束、完整发布集合可用且无未解未知文档调用时返回 completed。

@@ -4,8 +4,8 @@ import {validateModelLedgerReceipt,type ModelLedgerReceipt} from '../../../platf
 import type {StorageAction,StorageLease,StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
-import {DEFAULT_L2_SCENARIO_BUDGET} from '../../scenarios/workspace.ts';
-import {isRetryableProfileVerificationError,MAX_PROFILE_VERIFICATION_ATTEMPTS,parseProfileVerificationOutput,validateProfile,type L3ProfileEntry} from '../../profiles/workspace.ts';
+import {DEFAULT_L2_SCENARIO_BUDGET} from '../../scenarios/document.ts';
+import {isRetryableProfileVerificationError,MAX_PROFILE_VERIFICATION_ATTEMPTS,parseProfileVerificationOutput,validateProfile,type L3ProfileEntry} from '../../profiles/document.ts';
 import {observedProcessingAction} from '../diagnostics.ts';
 import {textId} from '../qualification.ts';
 import {preconditions,revisions,task} from './actions.ts';
