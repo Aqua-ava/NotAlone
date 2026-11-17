@@ -73,7 +73,7 @@ test('大量L0在前时L1可按层及联系人直接回填，分层游标不跳�
   next=String(check.tx.get("SELECT min(id) n FROM retrieval_document WHERE kind='history' AND vector_seal IS NULL").n);
   check.db.exec("UPDATE retrieval_document SET tokenizer_fingerprint='synthetic-prior-tokenizer'");
  }finally{check.db.close();}
- assert.deepEqual(await f.storage.execute('retrieval.syncTextBatch',{ownerId:owner,contactId,kind:'memory',limit:128}),{processed:2,remaining:0});
+ assert.deepEqual(await f.storage.execute('retrieval.syncTextBatch',{ownerId:owner,contactId,kind:'memory',limit:128}),{processed:2,scanMore:false});
  assert.equal((await f.storage.execute('retrieval.pending',{ownerId:owner,contactId,kind:'history'})).textPending,count,'L1修复不消费L0队列');
  const resumed=await claim({limit:1});assert.equal(resumed.items[0].kind,'history');assert.equal(resumed.items[0].docId,next,'默认游标继续最早未完成历史，不受L1游标推进影响');
  const history=await claim({contactId,kind:'history',limit:1});assert.ok(history.items.every(item=>item.kind==='history'&&item.contactId===contactId));
@@ -143,7 +143,7 @@ test(`55升级到${currentVersion}仅登记无正文回填身份，小批FTS完�
  try{
   assert.deepEqual(await storage.execute('retrieval.pending',{ownerId:owner}),{textPending:1,vectorPending:0});
   const {db,tx}=connect(f.root);try{assert.deepEqual(tx.all('PRAGMA table_info(retrieval_text_pending)').map(r=>r.name),['owner_id','kind','entity_id','contact_id']);assert.equal(tx.get('SELECT count(*) n FROM retrieval_document').n,0n);}finally{db.close();}
-  assert.deepEqual(await storage.execute('retrieval.syncTextBatch',{ownerId:owner,limit:1}),{processed:1,remaining:0});
+  assert.deepEqual(await storage.execute('retrieval.syncTextBatch',{ownerId:owner,limit:1}),{processed:1,scanMore:false});
   assert.deepEqual(await storage.execute('retrieval.pending',{ownerId:owner}),{textPending:0,vectorPending:1});
   assert.equal((await vectors(storage)).result.committed,1);
  }finally{await storage.close();}
@@ -166,7 +166,7 @@ test('分词版本变化只回填过期词法表示，并复用相同正文的�
  const f=await fixture(t),contactId=f.saved[0].contact_id;await f.service.synchronize(contactId);await vectors(f.storage);
  const old=connect(f.root);old.db.exec("UPDATE retrieval_document SET tokenizer_fingerprint='synthetic-prior-tokenizer'");old.db.close();
  assert.deepEqual(await f.storage.execute('retrieval.pending',{ownerId:owner}),{textPending:1,vectorPending:0});
- assert.deepEqual(await f.storage.execute('retrieval.syncTextBatch',{ownerId:owner,limit:1}),{processed:1,remaining:0});
+ assert.deepEqual(await f.storage.execute('retrieval.syncTextBatch',{ownerId:owner,limit:1}),{processed:1,scanMore:false});
  assert.deepEqual(await f.storage.execute('retrieval.pending',{ownerId:owner}),{textPending:0,vectorPending:0});
  assert.equal((await vectors(f.storage)).batch.items.length,0);
 });
@@ -269,4 +269,39 @@ test('覆盖探测与精确计数在范围、缺向量、分词过期和排队�
   db.exec('DELETE FROM retrieval_text_pending');
  }finally{db.close();}
  await assert.rejects(()=>f.storage.execute('retrieval.coverage',{ownerId:owner,kind:'unknown'}),{code:'retrieval_request_invalid'});
+});
+
+
+test('文本批次去重旧分词与排队身份，有界探测下一项且保持联系人及层级范围',async t=>{
+ const f=await fixture(t),[contactId,otherId]=f.saved.map(binding=>binding.contact_id);
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,
+  records:Array.from({length:3},(_,n)=>record(String(n+1))),completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(contactId);await f.service.synchronize(otherId);
+ const management=new SqliteMemoryManagement(f.storage,owner);
+ for(const contact of [contactId,otherId,null])await management.decide({requestKey:randomUUID(),action:'manual',
+  scope:{scopeKind:contact===null?'self':'contact',contactId:contact},body:'合成文本批次范围偏好'});
+ const {db,tx}=connect(f.root),identity=row=>`${row.kind}:${row.entity_id}`;
+ const rows=tx.all('SELECT id,kind,entity_id,contact_id FROM retrieval_document ORDER BY kind,entity_id');
+ const remaining=()=>{
+  const queued=new Set(tx.all('SELECT kind,entity_id FROM retrieval_text_pending').map(identity));
+  return tx.all('SELECT kind,entity_id,tokenizer_fingerprint FROM retrieval_document ORDER BY kind,entity_id')
+   .filter(row=>queued.has(identity(row))||row.tokenizer_fingerprint==='synthetic-stale-tokenizer').map(identity);
+ };
+ try{
+  for(const scope of [{}, {contactId,kind:'history'}, {contactId,kind:'memory'}])for(const limit of [2,3,128]){
+   db.exec("UPDATE retrieval_document SET tokenizer_fingerprint='synthetic-stale-tokenizer';DELETE FROM retrieval_text_pending;INSERT INTO retrieval_text_pending SELECT owner_id,kind,entity_id,contact_id FROM retrieval_document WHERE id%2=0");
+   const expected=rows.filter(row=>(scope.contactId===undefined||row.contact_id===scope.contactId||row.contact_id===null)
+    &&(scope.kind===undefined||row.kind===scope.kind)).map(identity),untouched=rows.filter(row=>!expected.includes(identity(row))).map(identity);
+   let processed=0;
+   do{
+    const batch=await f.storage.execute('retrieval.syncTextBatch',{ownerId:owner,...scope,limit});
+    const count=Math.min(limit,expected.length-processed);processed+=count;
+    assert.deepEqual(batch,{processed:count,scanMore:processed<expected.length});
+    assert.deepEqual(new Set(remaining()),new Set([...untouched,...expected.slice(processed)]),'探测的下一项不能提前处理，范围外身份保持不变');
+   }while(processed<expected.length);
+   assert.deepEqual(await f.storage.execute('retrieval.syncTextBatch',{ownerId:owner,...scope,limit}),{processed:0,scanMore:false});
+  }
+  assert.deepEqual(await f.storage.execute('retrieval.syncTextBatch',{ownerId:owner,contactId:'synthetic-missing-contact'}),{processed:0,scanMore:false});
+  assert.deepEqual(await f.storage.execute('retrieval.syncTextBatch',{ownerId:'synthetic-missing-owner'}),{processed:0,scanMore:false});
+ }finally{db.close();}
 });

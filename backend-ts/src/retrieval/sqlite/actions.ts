@@ -93,13 +93,14 @@ export const retrievalIndexActions:StorageAction[]=[
   const i=request(input);return admitted(tx,i.ownerId,i.contactId)?pending(tx,i.ownerId,i.contactId,i.modelFingerprint,i.kind):{textPending:0,vectorPending:0};
  }},
  {name:'retrieval.syncTextBatch',mode:'write',retryBusy:true,execute(tx,input){
-  const i=request(input),n=limit(i.limit,64,128);if(!admitted(tx,i.ownerId,i.contactId))return {processed:0,remaining:0};
+  const i=request(input),n=limit(i.limit,64,128);if(!admitted(tx,i.ownerId,i.contactId))return {processed:0,scanMore:false};
   const scopeValues=values(i.ownerId,i.contactId,i.kind),where=scopeWhere(i.contactId,i.kind);
   const rows=tx.all(`SELECT owner_id,kind,entity_id FROM retrieval_text_pending WHERE owner_id=?${where}
    UNION SELECT owner_id,kind,entity_id FROM retrieval_document WHERE owner_id=?${where} AND tokenizer_fingerprint<>?
-   ORDER BY kind,entity_id LIMIT ?`,[...scopeValues,...scopeValues,searchTokenizerFingerprint(),n]);
-  for(const row of rows)synchronizeRetrievalText(tx,i.ownerId,row.kind as RetrievalKind,String(row.entity_id));
-  return {processed:rows.length,remaining:pending(tx,i.ownerId,i.contactId,i.modelFingerprint,i.kind).textPending};
+   ORDER BY kind,entity_id LIMIT ?`,[...scopeValues,...scopeValues,searchTokenizerFingerprint(),n+1]);
+  const batch=rows.slice(0,n);
+  for(const row of batch)synchronizeRetrievalText(tx,i.ownerId,row.kind as RetrievalKind,String(row.entity_id));
+  return {processed:batch.length,scanMore:rows.length>n};
  }},
  {name:'retrieval.claimVectorBatch',mode:'write',retryBusy:true,execute(tx,input):VectorIndexBatch{
   const i=request(input),model=fingerprint(i.modelFingerprint),n=limit(i.limit,8,16);if(!admitted(tx,i.ownerId,i.contactId))return {items:[],scanMore:false};

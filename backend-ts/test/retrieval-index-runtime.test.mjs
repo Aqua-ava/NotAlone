@@ -8,7 +8,7 @@ const item=(id,text)=>({docId:id,kind:'history',id,contactId:'contact',text,body
 function store(documents=[]){
  const pending=[...documents],saved=new Map();let textBatches=1;
  return {saved,pending,async execute(name,input){
-  if(name==='retrieval.syncTextBatch'){const processed=textBatches;textBatches=0;return {processed,remaining:0};}
+  if(name==='retrieval.syncTextBatch'){const processed=textBatches;textBatches=0;return {processed,scanMore:false};}
   if(name==='retrieval.coverage')return {indexIncomplete:textBatches>0||pending.length>0};
   if(name==='retrieval.claimVectorBatch')return {items:pending.slice(0,input.limit),scanMore:pending.length>input.limit};
   if(name==='retrieval.commitVectorBatch'){for(const row of input.items){saved.set(row.docId,row.vector);const index=pending.findIndex(x=>x.docId===row.docId);if(index>=0)pending.splice(index,1);}return {committed:input.items.length,rejected:0};}
@@ -31,6 +31,25 @@ test('正文仅回填一次，重复查询只向模型传入query且复用持久
 });
 
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};};
+test('文本回填只按scanMore继续，全部文本批次完成后才领取向量',async()=>{
+ const storage=store([item('a','合成正文')]),execute=storage.execute.bind(storage),events=[];
+ let textBatches=0;
+ storage.execute=async(name,input)=>{
+  events.push(name);
+  if(name==='retrieval.syncTextBatch')return {processed:++textBatches===1?128:1,scanMore:textBatches===1};
+  return execute(name,input);
+ };
+ const index=createRetrievalIndex({storage,ownerId:'owner',holders:new ActiveHolders(),embed:async texts=>{
+  assert.equal(textBatches,2,'文本仍有下一批时不能先领取向量');return texts.map(vector);
+ }});
+ try{
+  await index.flushForTests();
+  assert.equal(textBatches,2);
+  assert.deepEqual(events.slice(0,3),['retrieval.syncTextBatch','retrieval.syncTextBatch','retrieval.claimVectorBatch']);
+  assert.equal(storage.saved.size,1);
+ }finally{await index.close();}
+});
+
 test('用户查询在当前小批结束后先于下一批正文推理',async()=>{
  const storage=store([item('a','正文甲'),item('b','正文乙')]),calls=[],first=deferred(),started=deferred();
  const index=createRetrievalIndex({storage,ownerId:'owner',holders:new ActiveHolders(),batchSize:1,embed:async texts=>{calls.push([...texts]);if(calls.length===1){started.resolve();await first.promise;}return texts.map(vector);}});
@@ -239,7 +258,7 @@ test('当前查询的联系人及本人资料先于全局长队列回填，其�
  const eligible=contactId=>remaining.filter(row=>contactId===undefined||row.contactId===contactId||row.contactId===null);
  const storage={async execute(name,input){
   if(name==='retrieval.coverage')return {indexIncomplete:eligible(input.contactId).length>0};
-  if(name==='retrieval.syncTextBatch'){scopes.push(input.contactId);return {processed:0,remaining:0};}
+  if(name==='retrieval.syncTextBatch'){scopes.push(input.contactId);return {processed:0,scanMore:false};}
   if(name==='retrieval.claimVectorBatch'){
    const rows=eligible(input.contactId);return {items:rows.slice(0,input.limit),scanMore:rows.length>input.limit};
   }
@@ -281,7 +300,7 @@ test('启动先准备L1小池，当前L1查询只优先联系人与本人记忆�
  const storage={async execute(name,input){
   requests.push({name,contactId:input.contactId,kind:input.kind});
   if(name==='retrieval.coverage')return {indexIncomplete:eligible(input).length>0};
-  if(name==='retrieval.syncTextBatch')return {processed:0,remaining:0};
+  if(name==='retrieval.syncTextBatch')return {processed:0,scanMore:false};
   if(name==='retrieval.claimVectorBatch'){
    const rows=eligible(input);return {items:rows.slice(0,input.limit),scanMore:rows.length>input.limit};
   }

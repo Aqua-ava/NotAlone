@@ -110,9 +110,9 @@ export function createRetrievalIndex(options:Options):RetrievalIndexLifecycle {
      // 每轮固定计算上界；无效前缀逐页推进，达到预算后由单timer续扫。
      if(++pages>64||performance.now()>=deadline){schedule(250);return 'yield';}
      const scope=preferredScopes[0];
-     const text=await execute<{processed:number;remaining:number}>('retrieval.syncTextBatch',{...scope,limit:128});
+     const text=await execute<{processed:number;scanMore:boolean}>('retrieval.syncTextBatch',{...scope,limit:128});
      if(closed)return 'idle';
-     if(text.remaining>0){await new Promise<void>(resolve=>setImmediate(resolve));continue;}
+     if(text.scanMore){await new Promise<void>(resolve=>setImmediate(resolve));continue;}
      if(!options.embed||Date.now()<retryAt){
       if(releasePreference(scope)){await new Promise<void>(resolve=>setImmediate(resolve));continue;}
       schedule(Math.max(idleMs,retryAt-Date.now()));return 'idle';
