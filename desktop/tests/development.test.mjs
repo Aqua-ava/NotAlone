@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { build } from 'esbuild';
@@ -229,4 +230,147 @@ test('日常开发入口解释热更新与重启，不把帮助命令变为桌�
   assert.match(result.stdout, /热更新/);
   assert.match(result.stdout, /DSH\/TypeScript/);
   assert.match(result.stdout, /--user-data-dir/);
+});
+
+test('主进程接口变更不一致时保留原实例，修正后才发布并重启', async t => {
+  const { createDevelopmentUpdates } = await import('../scripts/development-update.mjs');
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const execute = promisify(execFile);
+  const directory = await mkdtemp(path.join(tmpdir(), 'notalone-dev-checked-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const api = path.join(directory, 'api.ts'), caller = path.join(directory, 'caller.ts');
+  const artifact = path.join(directory, 'live.cjs');
+  await writeFile(path.join(directory, 'tsconfig.json'), JSON.stringify({
+    compilerOptions: { noEmit: true, target: 'ES2022', module: 'ESNext', moduleResolution: 'Bundler', types: [], skipLibCheck: true },
+    files: ['api.ts', 'caller.ts'],
+  }));
+  await writeFile(api, 'export const worker = { close() { return "旧退出"; } };');
+  await writeFile(caller, 'import { worker } from "./api"; export const result = worker.close();');
+  let restarts = 0;
+  const failures = [];
+  const updates = createDevelopmentUpdates({
+    debounceMs: 0,
+    check: signal => execute(process.execPath, [path.resolve('node_modules/typescript/bin/tsc'), '--project', directory], { signal }),
+    build: () => build({ entryPoints: [caller], bundle: true, platform: 'node', format: 'cjs', write: false, logLevel: 'silent' }),
+    publish: result => { writeFileSync(artifact, result.outputFiles[0].contents); },
+    restart: () => { restarts++; },
+    report: stage => failures.push(stage),
+  });
+  t.after(() => updates.close());
+  assert.equal(await updates.update(), true);
+  const original = await readFile(artifact, 'utf8');
+  await writeFile(api, 'export const worker = { finish() { return "新退出"; } };');
+  assert.equal(await updates.update(), false, 'esbuild能编译的缺失方法也必须被类型检查拒绝');
+  assert.equal(await readFile(artifact, 'utf8'), original);
+  assert.equal(restarts, 1, '无效组合不能让原实例开始退出');
+  assert.deepEqual(failures, ['check']);
+  await writeFile(caller, 'import { worker } from "./api"; export const result = worker.finish();');
+  assert.equal(await updates.update(), true);
+  assert.notEqual(await readFile(artifact, 'utf8'), original);
+  assert.equal(restarts, 2);
+});
+
+test('类型核验期间的新保存淘汰旧代次，初始失败也不发布产物', async t => {
+  const { createDevelopmentUpdates } = await import('../scripts/development-update.mjs');
+  const entered = Promise.withResolvers(), first = Promise.withResolvers();
+  let source = 'incomplete', checks = 0, builds = 0, restarts = 0;
+  const published = [], failures = [];
+  const updates = createDevelopmentUpdates({
+    debounceMs: 0,
+    check: async () => { if (++checks === 1) { entered.resolve(); await first.promise; } },
+    build: async () => { builds++; return source; },
+    publish: value => { published.push(value); },
+    restart: () => { restarts++; }, report: stage => failures.push(stage),
+  });
+  t.after(() => updates.close());
+  const stale = updates.update();
+  await entered.promise;
+  source = 'complete';
+  const current = updates.update();
+  first.reject(new Error('合成的旧类型检查失败'));
+  assert.deepEqual(await Promise.all([stale, current]), [true, true]);
+  assert.deepEqual(published, ['complete']);
+  assert.equal(checks, 2); assert.equal(builds, 1); assert.equal(restarts, 1);
+  assert.deepEqual(failures, [], '旧代次失败不覆盖新保存结果');
+
+  const failed = createDevelopmentUpdates({ debounceMs: 0, check: async () => { throw new Error('合成的初始接口不一致'); },
+    build: () => assert.fail('初始类型未通过不能构建'), publish: () => assert.fail('不能发布初始无效产物'),
+    restart: () => assert.fail('不能启动或退出实例') });
+  t.after(() => failed.close());
+  assert.equal(await failed.update(), false);
+});
+
+test('构建中再次保存只发布最新产物，停止会取消类型核验且不再重启', async t => {
+  const { createDevelopmentUpdates } = await import('../scripts/development-update.mjs');
+  const entered = Promise.withResolvers(), release = Promise.withResolvers();
+  let builds = 0, source = 'old';
+  const published = [];
+  const updates = createDevelopmentUpdates({ debounceMs: 0, check: async () => {},
+    build: async () => { const value = source; if (++builds === 1) { entered.resolve(); await release.promise; } return value; },
+    publish: value => { published.push(value); } });
+  t.after(() => updates.close());
+  const old = updates.update(); await entered.promise;
+  source = 'new'; const latest = updates.update(); release.resolve();
+  assert.deepEqual(await Promise.all([old, latest]), [true, true]);
+  assert.deepEqual(published, ['new']);
+
+  const checking = Promise.withResolvers();
+  const stopped = createDevelopmentUpdates({ debounceMs: 0,
+    check: signal => new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true }); checking.resolve();
+    }),
+    build: () => assert.fail('已停止不能再构建'), publish: () => assert.fail('已停止不能发布'),
+    restart: () => assert.fail('已停止不能重启'), report: () => assert.fail('正常停止不误报类型失败') });
+  const pending = stopped.update(); await checking.promise; await stopped.close();
+  assert.equal(await pending, false);
+  assert.equal(await stopped.update(), false);
+});
+
+test('在途检查提前完成时取消旧防抖计时，不重复发布同一保存', async t => {
+  const { createDevelopmentUpdates } = await import('../scripts/development-update.mjs');
+  const entered = Promise.withResolvers(), release = Promise.withResolvers();
+  let checks = 0, publishes = 0, restarts = 0;
+  const updates = createDevelopmentUpdates({ debounceMs: 20,
+    check: async () => { if (++checks === 1) { entered.resolve(); await release.promise; } },
+    build: async () => ({}), publish: () => { publishes++; }, restart: () => { restarts++; } });
+  t.after(() => updates.close());
+  const first = updates.update(); await entered.promise;
+  const latest = updates.update(); release.resolve();
+  assert.deepEqual(await Promise.all([first, latest]), [true, true]);
+  await delay(40);
+  assert.equal(checks, 2); assert.equal(publishes, 1); assert.equal(restarts, 1);
+});
+
+test('开发产物提交必须同步，异步发布不能触发安全重启', async t => {
+  const { createDevelopmentUpdates } = await import('../scripts/development-update.mjs');
+  const failures = [];
+  let restarts = 0;
+  const updates = createDevelopmentUpdates({ debounceMs: 0, check: async () => {}, build: async () => ({}),
+    publish: () => Promise.resolve(), restart: () => { restarts++; }, report: stage => failures.push(stage) });
+  t.after(() => updates.close());
+  assert.equal(await updates.update(), false);
+  assert.equal(restarts, 0);
+  assert.deepEqual(failures, ['publish']);
+});
+
+for (const action of ['save', 'close']) test(`同步提交后收到${action === 'save' ? '新保存' : '停止'}时不插入 main/preload 之间`, async t => {
+  const { createDevelopmentUpdates } = await import('../scripts/development-update.mjs');
+  const artifacts = [];
+  let checks = 0, restarts = 0, following, updates;
+  updates = createDevelopmentUpdates({ debounceMs: 0,
+    check: async () => { if (++checks > 1) throw new Error('合成的新保存尚未修正'); },
+    build: async () => ({ main: 'checked-main', preload: 'checked-preload' }),
+    publish: result => {
+      artifacts.push(result.main); artifacts.push(result.preload);
+      queueMicrotask(() => { following = action === 'save' ? updates.update() : updates.close(); });
+    }, restart: () => { restarts++; } });
+  t.after(() => updates.close());
+  assert.equal(await updates.update(), true, '已同步完成的合法提交先于后续事件');
+  assert.deepEqual(artifacts, ['checked-main', 'checked-preload']);
+  assert.equal(restarts, 1);
+  if (action === 'save') assert.equal(await following, false);
+  else { await following; assert.equal(await updates.update(), false); }
+  assert.deepEqual(artifacts, ['checked-main', 'checked-preload']);
+  assert.equal(restarts, 1);
 });

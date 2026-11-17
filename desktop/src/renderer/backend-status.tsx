@@ -46,7 +46,8 @@ export function BackendConnectionNote({ state, startup, onDiagnose }: {
   if (state.phase === 'connected') return null;
   if (startup && startup.phase !== 'ready' && !state.canRetryShutdown && (state.phase === 'connecting' || state.phase === 'disconnected')) return null;
   const failedStop = state.phase === 'shutdown-failed';
-  const title = state.phase === 'connecting' ? '正在连接本机服务' : failedStop ? '后端关闭未获确认'
+  const preparationFailed = failedStop && state.errorCode === 'backend_shutdown_preparation_failed';
+  const title = state.phase === 'connecting' ? '正在连接本机服务' : preparationFailed ? '退出准备未完成' : failedStop ? '后端关闭未获确认'
     : state.phase === 'stopping' ? '正在停止本次后台读取'
       : state.phase === 'stopped' ? '本次后台读取已停止' : '本机服务尚未连接';
   const startupMessages: Partial<Record<NonNullable<BackendState['errorCode']>, string>> = {
@@ -57,6 +58,7 @@ export function BackendConnectionNote({ state, startup, onDiagnose }: {
     backend_startup_handshake_failed: '本机服务连接准备未完成，请查看诊断后重试。',
   };
   const message = state.phase === 'connecting' ? '本机服务正在启动，完成后即可使用联系人、资料与生成。'
+      : preparationFailed ? '退出前的本机清理未完成，请重试或查看诊断。'
       : failedStop ? '后端关闭未获确认，请重试停读。'
       : state.phase === 'stopped' ? '后台读取已停止，联系人、资料与生成暂时不可用。'
       : state.errorCode && startupMessages[state.errorCode] ? startupMessages[state.errorCode]

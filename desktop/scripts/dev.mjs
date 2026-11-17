@@ -2,17 +2,19 @@ import { acquireDevelopmentLease } from './development-lease.mjs';
 import { developmentProcesses, requireDevelopmentOnly, developmentDebugArguments } from './development-policy.mjs';
 import { context } from 'esbuild';
 import { createHash } from 'node:crypto';
-import { watch } from 'node:fs';
+import { watch, mkdirSync, writeFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, execFile, execFileSync } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createInterface } from 'node:readline';
 import electron from 'electron';
 import { requireBuildSpace } from './build-space.mjs';
 import { createDevelopmentServer } from './development-server.mjs';
 import { superviseDevelopmentApp } from './development-app.mjs';
+import { createDevelopmentUpdates } from './development-update.mjs';
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -44,13 +46,9 @@ async function develop() {
   execFileSync('bash', [path.resolve(project, '../native/skill-read/build.sh')], { stdio: 'inherit' });
   await mkdir(appDirectory, { recursive: true });
   await writeFile(path.join(appDirectory, 'package.json'), JSON.stringify({ name: 'notalone-development', version: '0.1.0', main: 'dist/main/index.cjs' }));
-  let builder, renderer, running, input, timer, signature, stopping = false;
+  let builder, renderer, running, input, updates, signature, stopping = false;
   const watchers = [];
-  const restart = () => {
-    if (stopping) return;
-    clearTimeout(timer); timer = setTimeout(() => running?.restart(), 180);
-  };
-  const stop = () => { stopping = true; clearTimeout(timer); void running?.stop(); };
+  const stop = () => { stopping = true; void updates?.close(); void running?.stop(); };
   process.on('SIGINT', stop); process.on('SIGTERM', stop);
   try {
     builder = await context({
@@ -58,45 +56,58 @@ async function develop() {
       entryPoints: { 'main/index': 'src/main/index.ts', 'preload/index': 'src/preload/index.ts' },
       outdir: path.join(appDirectory, 'dist'), outExtension: { '.js': '.cjs' },
       bundle: true, platform: 'node', format: 'cjs', external: ['electron'], write: false,
-      plugins: [{ name: 'notalone-restart-after-build', setup(build) {
-        build.onEnd(async result => {
-          if (result.errors.length) { console.error('编译失败；保留当前 App，修正后保存会自动重试。'); return; }
-          const next = createHash('sha256');
-          for (const file of result.outputFiles) next.update(file.contents);
-          const hash = next.digest('hex');
-          if (hash === signature) return;
-          for (const file of result.outputFiles) {
-            await mkdir(path.dirname(file.path), { recursive: true }); await writeFile(file.path, file.contents);
-          }
-          signature = hash; restart();
-        });
-      } }],
     });
-    await builder.rebuild();
     renderer = await createDevelopmentServer(project);
     if (stopping) return;
-    clearTimeout(timer);
     const environment = { ...process.env, NOTALONE_DEV_SERVER: JSON.stringify({ origin: renderer.origin,
       token: renderer.token, projectDirectory: path.dirname(project) }) };
     delete environment.ELECTRON_RUN_AS_NODE;
-    running = superviseDevelopmentApp(({ background }) => spawn(electron,
-      [appDirectory, '--notalone-dev', ...developmentDebugArguments(process.env.NOTALONE_DEV_CDP, args[1]), ...(background ? ['--notalone-dev-background'] : []), ...(args.length ? [`--user-data-dir=${args[1]}`] : [])], { cwd: project, env: environment, detached: true,
-        stdio: ['ignore', 'inherit', 'inherit', 'ipc'] }));
-    await builder.watch();
-    watchers.push(watch(path.resolve(project, '../backend-ts/src'), { recursive: true }, (_event, filename) => {
-      if (filename?.endsWith('.ts')) restart();
-    }));
+    const execute = promisify(execFile);
+    updates = createDevelopmentUpdates({
+      check: signal => execute('pnpm', ['run', 'typecheck'], { cwd: path.dirname(project), signal, maxBuffer: 4 * 1024 * 1024 }),
+      build: () => builder.rebuild(),
+      publish: result => {
+        const next = createHash('sha256');
+        for (const file of result.outputFiles) next.update(file.contents);
+        const hash = next.digest('hex');
+        if (hash === signature) return;
+        // main 与 preload 在同一个同步提交中落盘；新保存或停止不会插入两份产物之间。
+        for (const file of result.outputFiles) {
+          mkdirSync(path.dirname(file.path), { recursive: true }); writeFileSync(file.path, file.contents);
+        }
+        signature = hash;
+      },
+      restart: () => {
+        if (stopping) return;
+        if (running) { running.restart(); return; }
+        running = superviseDevelopmentApp(({ background }) => spawn(electron,
+          [appDirectory, '--notalone-dev', ...developmentDebugArguments(process.env.NOTALONE_DEV_CDP, args[1]), ...(background ? ['--notalone-dev-background'] : []), ...(args.length ? [`--user-data-dir=${args[1]}`] : [])], { cwd: project, env: environment, detached: true,
+            stdio: ['ignore', 'inherit', 'inherit', 'ipc'] }));
+      },
+      report: (stage, error) => {
+        console.error(`${stage === 'check' ? '类型检查' : '开发构建'}失败；保留当前 App，修正后保存会自动重试。`);
+        if (stage === 'check') console.error(`${error.stdout ?? ''}${error.stderr ?? ''}`.trim());
+      },
+    });
+    // 所有后台与桌面源码共用同一核验队列，不让独立 watcher 绕过类型检查。
+    for (const directory of ['src/main', 'src/preload', 'src/shared', '../backend-ts/src']) {
+      watchers.push(watch(path.resolve(project, directory), { recursive: true }, (_event, filename) => {
+        if (!filename || /\.tsx?$/.test(filename)) void updates.update();
+      }));
+    }
+    if (!await updates.update()) { if (!stopping) process.exitCode = 1; return; }
+    if (stopping) return;
     if (process.stdin.isTTY) {
       input = createInterface({ input: process.stdin, output: process.stdout });
-      input.on('line', line => { if (line.trim() === 'r') restart(); });
+      input.on('line', line => { if (line.trim() === 'r') void updates.update(); });
       input.on('SIGINT', stop);
     }
-    console.log('开发模式：React/CSS 保存即更新；main/preload/后台源码变化会安全重启。沿用现有数据库，仅补齐缺少的结构。');
+    console.log('开发模式：React/CSS 保存即更新；main/preload/后台源码变化会在类型检查通过后安全重启。沿用现有数据库，仅补齐缺少的结构。');
     process.exitCode = await running.closed;
   } finally {
-    stopping = true; clearTimeout(timer); input?.close();
+    stopping = true; input?.close();
     for (const watcher of watchers) watcher.close();
-    await running?.stop(); await builder?.dispose(); await renderer?.server.close();
+    await updates?.close(); await running?.stop(); await builder?.dispose(); await renderer?.server.close();
     process.off('SIGINT', stop); process.off('SIGTERM', stop);
   }
 }

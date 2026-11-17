@@ -10,6 +10,7 @@ import type { MessageStreamCallbacks } from './message-stream';
 import { isRecord } from '../is-record';
 import { isUuid } from '../uuid';
 import { sqliteStartupTimeoutMs } from '../../../../backend-ts/src/storage/sqlite/timeouts';
+import { diagnose } from '../../../../backend-ts/src/diagnostics/context';
 
 export interface MediaPreviewConnection {status(): Promise<'active' | 'revoking'>; release(): Promise<void>}
 
@@ -166,7 +167,7 @@ export class BackendHost {
     this.target?.cancelPending();
     this.publish({ phase: 'connecting', errorCode: undefined, canRetryConnection: false });
     this.initialization = this.initialize(generation).then(() => {
-      if (this.closing) return;
+      if (this.quitting || this.closing) return;
       if (this.state.phase === 'connected') this.recoveryAttempts = 0;
       this.schedulePoll(generation);
     }).catch(async (error: unknown) => {
@@ -175,7 +176,7 @@ export class BackendHost {
         // 已回收的失败启动不再占用下次用户明确重试；旧进程对象不参与新运行时状态。
         if (this.ownedChild === failedChild) this.ownedChild = undefined;
       }
-      if (!this.closing && generation === this.generation) {
+      if (!this.quitting && !this.closing && generation === this.generation) {
         this.publish({ phase: 'disconnected', errorCode: error instanceof BackendFailure ? error.code : 'backend_connection_failed', canRetryConnection: true });
         this.restartForLostStorage(error);
       }
@@ -185,10 +186,13 @@ export class BackendHost {
 
   async stop(beforeShutdown?: () => Promise<void>): Promise<boolean> {
     this.quitting = true;
+    const started = performance.now();
     try { await beforeShutdown?.(); }
-    catch {
+    catch (error) {
+      diagnose({ event: 'startup.shutdown_preparation_failed', caller: 'application_quit',
+        reasonCode: error instanceof TypeError ? 'unexpected_failure' : 'failed', durationMs: performance.now() - started });
       this.quitPreparationFailed = true;
-      this.publish({ phase: 'shutdown-failed', errorCode: 'backend_shutdown_unconfirmed',
+      this.publish({ phase: 'shutdown-failed', errorCode: 'backend_shutdown_preparation_failed',
         canRetryConnection: false, canRetryShutdown: true });
       return false;
     }
@@ -407,19 +411,22 @@ export class BackendHost {
 
   private schedulePoll(generation: number): void {
     clearTimeout(this.pollTimer);
+    if (this.quitting || this.closing) return;
     this.pollTimer = setTimeout(() => void this.refresh(generation), this.pollIntervalMs);
   }
 
   private async refresh(generation: number): Promise<void> {
     const client = this.target;
-    if (!client || this.closing || generation !== this.generation || this.state.phase !== 'connected') return;
+    const current = () => !this.quitting && !this.closing && generation === this.generation
+      && client === this.target && this.state.phase === 'connected';
+    if (!client || !current()) return;
     let lost: unknown;
     try {
       const state = await client.status();
-      if (this.closing || generation !== this.generation || client !== this.target) return;
+      if (!current()) return;
       if (state === 'running') { this.probeFailures = 0; this.schedulePoll(generation); return; }
     } catch (error) {
-      if (this.closing || generation !== this.generation || client !== this.target) return;
+      if (!current()) return;
       lost = error;
       // 单次超时只说明后台忙；自有进程已退出、认证被拒或存储线程已终止是明确失联，不再等待。
       const definitive = error instanceof RetiredBackendRuntime || (this.ownedChild !== undefined && !this.ownedChild.isRunning());

@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
 import { test, after } from 'node:test';
 import { build } from 'esbuild';
-import { mkdtemp, mkdir, readFile, writeFile, rm, access } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm, access, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:http';
 import { spawnSync } from 'node:child_process';
 const directory = await mkdtemp(path.join(tmpdir(), 'notalone-runtime-shutdown-'));
-const built = await build({ stdin: { contents: `export { SetupController } from './src/main/setup/controller'; export { RuntimeClient } from './src/main/backend/runtime-client'; export { OwnedBackendProcess } from './src/main/backend/process'; export { BackendHost } from './src/main/backend/host'; export { BackendConnectionNote } from './src/renderer/backend-status'; export { renderToStaticMarkup } from 'react-dom/server'; export { createElement } from 'react';`, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', write: false });
+const built = await build({ stdin: { contents: `export { SetupController } from './src/main/setup/controller'; export { RuntimeClient } from './src/main/backend/runtime-client'; export { OwnedBackendProcess } from './src/main/backend/process'; export { BackendHost } from './src/main/backend/host'; export { BackendConnectionNote } from './src/renderer/backend-status'; export { renderToStaticMarkup } from 'react-dom/server'; export { createElement } from 'react'; export {configureDiagnosticLog} from '../backend-ts/src/diagnostics/unified'; export {readDiagnosticRecords} from '../backend-ts/src/diagnostics/unified-log.mjs';`, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', write: false });
 await writeFile(path.join(directory, 'subject.cjs'), built.outputFiles[0].text);
-const { SetupController, RuntimeClient, OwnedBackendProcess, BackendHost, BackendConnectionNote, renderToStaticMarkup, createElement } = await import(path.join(directory, 'subject.cjs'));
+const { SetupController, RuntimeClient, OwnedBackendProcess, BackendHost, BackendConnectionNote, renderToStaticMarkup, createElement, configureDiagnosticLog, readDiagnosticRecords } = await import(path.join(directory, 'subject.cjs'));
 after(() => rm(directory, { recursive: true, force: true }));
 const sqliteConfiguration = userData => ({ userData, expectedDatabaseId: `synthetic-${path.basename(userData)}`, role: 'test', capabilities: ['contacts'] });
 const sqliteHost = userData => new BackendHost(userData, async config => { config.sqlite = sqliteConfiguration(userData); });
@@ -48,6 +48,61 @@ test('当前外置启动显式携带SQLite资格并调用DSH入口', async () =>
     while(await readFile(marker,'utf8').catch(()=>'')!=='started' && child.isRunning() && Date.now()<deadline) await new Promise(resolve=>setTimeout(resolve,10));
     assert.equal(await readFile(marker,'utf8'), 'started');
   } finally { assert.equal(await child.terminate(),true); }
+});
+
+test('退出准备异常与后台停读失败分开，修复回调后重试才请求后台停读', async t => {
+  const root = await realpath(await mkdtemp(path.join(directory, 'preparation-')));
+  const log = configureDiagnosticLog(root, {proc: 'main', development: true});
+  t.after(() => log.close());
+  const host = new BackendHost(root);
+  let shutdowns = 0;
+  host.target = { cancelPending() {}, async shutdown() { shutdowns++; return 'stopped'; } };
+  // 模拟重构中方法已删除、退出调用方尚未更新的混合版本。
+  const incomplete = {};
+  const prepare = async () => incomplete.removedClosingHook('synthetic-private-body');
+  assert.equal(await host.stop(prepare), false);
+  assert.equal(await host.stop(prepare), false);
+  assert.equal(shutdowns, 0, '前置清理失败不能冒充后台已停读');
+  assert.equal(host.getState().errorCode, 'backend_shutdown_preparation_failed');
+  const html = renderToStaticMarkup(createElement(BackendConnectionNote, {state: host.getState()}));
+  assert.match(html, /退出准备未完成/);
+  assert.match(html, /重试停读并退出/);
+  await log.flush();
+  const records = (await readDiagnosticRecords(root)).filter(row => row.event === 'startup.shutdown_preparation_failed');
+  assert.equal(records.length, 2);
+  assert.ok(records.every(row => row.reasonCode === 'unexpected_failure' && row.durationMs >= 0));
+  assert.doesNotMatch(JSON.stringify(records), /synthetic-private-body|removedClosingHook|TypeError/);
+  assert.equal(await host.stop(async () => {}), true);
+  assert.equal(shutdowns, 1);
+  assert.equal(host.getState().phase, 'stopped');
+});
+
+for (const outcome of ['stopped', 'failed']) test(`退出准备失败后迟到状态探测${outcome}不能覆盖退出状态`, async () => {
+  const host = new BackendHost(directory);
+  const pending = Promise.withResolvers();
+  host.generation = 1;
+  host.state = {...host.getState(), phase: 'connected', canRetryConnection: false};
+  host.probeFailureLimit = 1;
+  host.target = {status: () => pending.promise, cancelPending() {}};
+  const reading = host.refresh(1);
+  await host.stop(async () => {throw new TypeError('synthetic-callback');});
+  if (outcome === 'stopped') pending.resolve('stopped'); else pending.reject(new Error('synthetic-probe'));
+  await reading;
+  assert.equal(host.getState().phase, 'shutdown-failed');
+  assert.equal(host.getState().errorCode, 'backend_shutdown_preparation_failed');
+  assert.equal(host.getState().canRetryConnection, false);
+  assert.equal(host.getState().canRetryShutdown, true);
+});
+
+test('退出准备失败后迟到连接失败不能重新放开连接入口', async () => {
+  const host = new BackendHost(directory), pending = Promise.withResolvers();
+  host.initialize = () => pending.promise;
+  const connecting = host.connect();
+  await host.stop(async () => {throw new TypeError('synthetic-callback');});
+  pending.reject(new Error('synthetic-connect'));
+  await connecting;
+  assert.equal(host.getState().errorCode, 'backend_shutdown_preparation_failed');
+  assert.equal(host.getState().canRetryConnection, false);
 });
 
 test('启动缺少SQLite资格时失败关闭，不启动DSH进程', async () => {

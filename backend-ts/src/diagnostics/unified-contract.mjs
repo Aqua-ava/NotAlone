@@ -36,6 +36,7 @@ export const diagnosticEvents = Object.freeze({
   'foreground.decision': schema('foreground', 'info', ['count', 'durationMs']),
   'startup.state_changed': schema('startup', 'info', ['fromState', 'toState', 'durationMs']),
   'startup.decision': schema('startup', 'info', ['count', 'durationMs']),
+  'startup.shutdown_preparation_failed': schema('startup', 'error', ['durationMs']),
   'diagnostics.error': schema(null, 'error', ['durationMs', 'count']),
   // 存储线程失效：action 是受控动作名（代码标识符），count 是失效时的未决请求数；不含任何业务内容。
   'storage.failed': schema('startup', 'error', ['durationMs', 'count', 'action']),
