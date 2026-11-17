@@ -2,6 +2,7 @@ import type { ContactHistoryRequest, ContactHistoryState } from '../../shared/co
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { mergeContactHistoryMessages, readContactHistoryMessages } from './messages';
+import { HistoryPageCoverage } from './page-coverage';
 
 type Scope = { generation: number; contactId: string; scopeRevision: number };
 const emptyMessages = (): ContactHistoryState['messages'] => ({ phase: 'idle', items: [], nextCursor: null });
@@ -19,8 +20,7 @@ export class ContactHistoryController {
   private refreshAfterLoad = false;
   private refreshNewestQueued = false;
   private readonly refreshMessageIds = new Set<string>();
-  private readonly messagePageCursors = new Map<string, string | null>();
-  private readonly coveredMessageSuccessors = new Map<string | null, string | null>();
+  private readonly coverage = new HistoryPageCoverage();
   private operation = 0;
   private disposed = false;
   private readonly listeners = new Set<(state: ContactHistoryState) => void>();
@@ -46,7 +46,7 @@ export class ContactHistoryController {
   invalidate(error = '聊天记录已变化，请刷新后核对。'): void {
     this.synchronizeScope();
     this.cancel(); this.stopStream();
-    this.messagePageCursors.clear(); this.coveredMessageSuccessors.clear();
+    this.coverage.clear();
     this.publish({ messages: { phase: 'failed', items: [], nextCursor: null }, error });
   }
 
@@ -87,7 +87,7 @@ export class ContactHistoryController {
       && next.generation === this.scope.generation && next.contactId === this.scope.contactId
       && next.scopeRevision === this.scope.scopeRevision;
     if (unchangedScope || unchangedSelection) return;
-    this.cancel(); this.stopStream(); this.messagePageCursors.clear(); this.coveredMessageSuccessors.clear(); this.scope = next;
+    this.cancel(); this.stopStream(); this.coverage.clear(); this.scope = next;
     this.publish({ contactId: next?.contactId ?? null, scopeRevision: contact.scopeRevision, messages: emptyMessages(), error: null });
     if (next) this.startStream(next);
   }
@@ -115,16 +115,14 @@ export class ContactHistoryController {
     try {
       const page = await readContactHistoryMessages(this.backend, scope.contactId, before, pending.signal);
       if (!current() || page.generation !== scope.generation) return;
-      if (!before) { this.messagePageCursors.clear(); this.coveredMessageSuccessors.clear(); }
-      for (const message of page.messages) this.messagePageCursors.set(message.messageId, before);
-      this.invalidateMovedCoverage(page.messages);
-      this.recordPageCoverage(before, page.messages, page.nextCursor);
+      if (!before) this.coverage.clear();
+      const nextCursor = this.coverage.accept(this.state.messages.items, [{ before, ...page }]);
       this.publish({ messages: { phase: 'ready',
         items: before ? mergeContactHistoryMessages(this.state.messages.items, page.messages) : page.messages,
-        nextCursor: this.nextUncoveredCursor() }, error: null });
+        nextCursor }, error: null });
     } catch {
       if (current()) {
-        this.messagePageCursors.clear(); this.coveredMessageSuccessors.clear();
+        this.coverage.clear();
         this.publish({ messages: { phase: 'failed', items: [], nextCursor: null },
           error: '暂时无法读取这位联系人的聊天记录，请重试。' });
       }
@@ -135,49 +133,6 @@ export class ContactHistoryController {
         this.scheduleRefresh(scope);
       }
     }
-  }
-
-  private invalidateMovedCoverage(messages: ContactHistoryState['messages']['items']): void {
-    const previous = new Map(this.state.messages.items.map(message => [message.messageId, message]));
-    const moved = new Set(messages.filter(message => {
-      const old = previous.get(message.messageId);
-      return old && (old.occurredAt !== message.occurredAt || old.displayPosition !== message.displayPosition);
-    }).map(message => message.messageId));
-    if (!moved.size) return;
-    // 时间补齐会改变分页顺序；移除旧位置的入边和出边，先重读缺口再证明连续。
-    for (const [before, after] of this.coveredMessageSuccessors) {
-      if (before !== null && moved.has(before) || after !== null && moved.has(after)) this.coveredMessageSuccessors.delete(before);
-    }
-  }
-
-  /** 保存实际读取的相邻边界；新页重叠时复用已覆盖的尾部，不跨过未读取的缺口。 */
-  private recordPageCoverage(before: string | null, messages: ContactHistoryState['messages']['items'], nextCursor: string | null): void {
-    let cursor = before;
-    for (const message of messages) {
-      this.coveredMessageSuccessors.set(cursor, message.messageId);
-      cursor = message.messageId;
-    }
-    if (nextCursor !== cursor || nextCursor === null) this.coveredMessageSuccessors.set(cursor, nextCursor);
-    else if (this.coveredMessageSuccessors.get(cursor) === null) {
-      // 后端证明该页尾仍有更早消息，原来在此处“已到底”的结论已失效。
-      this.coveredMessageSuccessors.delete(cursor);
-    }
-  }
-
-  private nextUncoveredCursor(): string | null {
-    let cursor: string | null = null;
-    const seen = new Set<string>();
-    while (this.coveredMessageSuccessors.has(cursor)) {
-      const next: string | null = this.coveredMessageSuccessors.get(cursor)!;
-      if (next === null) return null;
-      if (seen.has(next)) {
-        this.coveredMessageSuccessors.delete(cursor);
-        return cursor;
-      }
-      seen.add(next);
-      cursor = next;
-    }
-    return cursor;
   }
 
   private startStream(scope: Scope): void {
@@ -272,7 +227,7 @@ export class ContactHistoryController {
       };
       if (newest) await readPage(null);
       for (const messageId of messageIds) {
-        const before = this.messagePageCursors.get(messageId) ?? null;
+        const before = this.coverage.beforeMessage(messageId);
         let page = await readPage(before);
         if (page.messages.some(message => message.messageId === messageId)) continue;
 
@@ -289,14 +244,10 @@ export class ContactHistoryController {
         }
       }
       if (!current()) return;
-      const incoming = [...pages.values()].flatMap(page => page.messages);
-      this.invalidateMovedCoverage(incoming);
-      for (const page of pages.values()) {
-        for (const message of page.messages) this.messagePageCursors.set(message.messageId, page.before);
-        this.recordPageCoverage(page.before, page.messages, page.nextCursor);
-      }
+      const refreshed = [...pages.values()];
+      const incoming = refreshed.flatMap(page => page.messages);
+      const nextCursor = this.coverage.accept(this.state.messages.items, refreshed);
       const items = mergeContactHistoryMessages(this.state.messages.items, incoming);
-      const nextCursor = this.nextUncoveredCursor();
       this.publish({ messages: { phase: 'ready', items, nextCursor }, error: null });
     } catch {
       if (current()) this.publish({ error: '聊天记录更新暂时无法读取，请刷新后核对。' });
