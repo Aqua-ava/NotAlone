@@ -11,7 +11,7 @@ import {sameManagedAddress} from '../../storage/sqlite/deletion/file-identity.ts
 import type {ManagedAddress} from '../../storage/sqlite/deletion/contracts.ts';
 import type {DiscussionAttempt,RuntimeCopy} from './contracts.ts';
 import {createDshRuntime,type DshRuntimeDriver,type DshEventBoundary} from './dsh-runtime.ts';
-interface HeldCopy {copy:RuntimeCopy;controller:AbortController;driver?:DshRuntimeDriver;workDone:Promise<void>;finish:()=>void;release:()=>Promise<void>;busy:boolean}
+interface HeldCopy {copy:RuntimeCopy;controller:AbortController;driver?:DshRuntimeDriver;workDone:Promise<void>;release:()=>Promise<void>;busy:boolean}
 export interface RuntimeWork {copy:RuntimeCopy;driver:DshRuntimeDriver;sessionId:SessionId;restoring:boolean;signal:AbortSignal}
 type Fault=(point:'beforeDirectory'|'afterDirectory'|'beforeIdentity'|'afterIdentity'|'afterBusinessCommit'|'beforeClose'|'afterClose'|'beforeReady'|'afterDiscardFile'|'beforeDiscardCommit')=>void|Promise<void>;
 function fail(code:string):never{throw new StorageFailure(code);}
@@ -55,7 +55,7 @@ export class SqliteDiscussionRuntime {
  private bind(copy:RuntimeCopy):HeldCopy{
   const prior=this.held.get(copy.id);if(prior)return prior;
   const done=Promise.withResolvers<void>();done.resolve();
-  const held:HeldCopy={copy,controller:new AbortController(),workDone:done.promise,finish:done.resolve,busy:false,release:async()=>{}};
+  const held:HeldCopy={copy,controller:new AbortController(),workDone:done.promise,busy:false,release:async()=>{}};
   held.release=this.holders.register({key:`runtime:${copy.id}`,ownerId:this.ownerId,contactId:copy.contactId,generation:copy.dataGeneration,close:async()=>{
    held.controller.abort();await held.workDone;await this.fault?.('beforeClose');await held.driver?.close();held.driver=undefined;
    await this.fault?.('afterClose');
@@ -70,7 +70,6 @@ export class SqliteDiscussionRuntime {
   if(this.stopping)return Promise.reject(new StorageFailure('discussion_runtime_closed'));
   const pending=work();this.pending.add(pending);pending.then(()=>this.pending.delete(pending),()=>this.pending.delete(pending));return pending;
  }
- inspect(contactId:string,discussionId:string,copyId:string,configurationDigest:string){return this.track(()=>this.inspectOwned(contactId,discussionId,copyId,configurationDigest));}
  run<T>(attempt:DiscussionAttempt,configurationDigest:string,work:(input:RuntimeWork)=>Promise<T>,signal?:AbortSignal,fresh=false):Promise<T>{return this.track(()=>this.runOwned(attempt,configurationDigest,work,signal,fresh));}
  /** 仅销毁本次尚未提交且已排空的运行副本；原Skill目录不在受管区。 */
  discard(attempt:DiscussionAttempt,copyId:string):Promise<void>{return this.track(async()=>{
@@ -95,19 +94,6 @@ export class SqliteDiscussionRuntime {
   if(copy.state!=='ready'||copy.configurationDigest!==configurationDigest||!copy.address||!copy.eventBoundary)fail('discussion_runtime_recovery_blocked');
   if(!same(this.files.capture('runtime',copy.managedLocator,'directory'),copy.address))fail('discussion_runtime_identity_conflict');
  }
- private async inspectOwned(contactId:string,discussionId:string,copyId:string,configurationDigest:string):Promise<{copy:RuntimeCopy;boundary:DshEventBoundary}>{
-  if(this.stopping)fail('discussion_runtime_closed');
-  const copy=await this.storage.execute<RuntimeCopy>('runtime.inspect',{ownerId:this.ownerId,contactId,discussionId,copyId});
-  this.requireRestorable(copy,configurationDigest);
-  const held=this.bind(copy);if(held.busy)fail('discussion_runtime_busy');held.busy=true;
-  const done=Promise.withResolvers<void>();held.workDone=done.promise;held.finish=done.resolve;
-  try{
-   const driver=await createDshRuntime(this.ctx,{root:this.location(copy)});held.driver=driver;
-   const history=await driver.readHistory(SessionId(copy.sdkInstanceId));
-   if(JSON.stringify(history.boundary)!==copy.eventBoundary)fail('discussion_runtime_recovery_blocked');
-   await this.execute('inspect',copy);return {copy,boundary:history.boundary};
-  }finally{done.resolve();await held.release();}
- }
  private async runOwned<T>(attempt:DiscussionAttempt,configurationDigest:string,work:(input:RuntimeWork)=>Promise<T>,signal?:AbortSignal,fresh=false):Promise<T>{
   if(this.stopping)fail('discussion_runtime_closed');signal?.throwIfAborted();
   // 全新候选不恢复旧执行；恢复普通讨论也只先读取副本定位，不加载旧发言正文。
@@ -125,7 +111,7 @@ export class SqliteDiscussionRuntime {
   const restoring=!!copy;
   if(!copy){const id=randomUUID();copy=await this.storage.execute<RuntimeCopy>('runtime.prepare',{...attempt,copyId:id,sdkInstanceId:randomUUID(),locator:id,configurationDigest});}
   if(this.stopping)fail('discussion_runtime_closed');
-  const held=this.bind(copy);if(held.busy)fail('discussion_runtime_busy');held.busy=true;const done=Promise.withResolvers<void>();held.workDone=done.promise;held.finish=done.resolve;
+  const held=this.bind(copy);if(held.busy)fail('discussion_runtime_busy');held.busy=true;const done=Promise.withResolvers<void>();held.workDone=done.promise;
   const combined=signal?AbortSignal.any([signal,held.controller.signal]):held.controller.signal;
   let result!:T,boundary:DshEventBoundary|undefined,resumeChecked=!restoring,retryFresh=false;
   try{

@@ -47,7 +47,7 @@ test('正式删除接管Skill技术清理的冻结文件清单，部分擦除不
   assert.equal(done.state,'completed',JSON.stringify(done.checks));
   assert.deepEqual(await f.storage.execute('runtime.inventory',{ownerId:f.owner}),[]);
   assert.deepEqual(await readdir(join(f.root,'managed/runtime-copies')),[]);
-  await assert.rejects(f.runtime.inspect(contactId,d.id,copy.id,copy.configurationDigest));
+  await assert.rejects(f.storage.execute('runtime.inspect',{ownerId:f.owner,contactId,discussionId:d.id,copyId:copy.id}),{code:'discussion_runtime_unavailable'});
   if(kind==='source')assert.deepEqual(await service.view(contactId,d.id),[]);
   else await assert.rejects(service.view(contactId,d.id));
   assert.equal(f.requests.length,1,'接管后的技术清理不能续发无Skill模型请求');

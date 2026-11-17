@@ -124,7 +124,7 @@ test('实际业务在目录身份提交关闭等失败窗口不会把preparing�
   const d=await f.service.newDiscussion(f.ids[0]);await assert.rejects(f.turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'故障窗口合成要求',confirmedContact:true}));
   const copies=await f.storage.execute('runtime.inventory',{ownerId:owner});assert.ok(copies.length>0);assert.ok(copies.every(c=>c.state!=='ready'));const count=f.requests.length;
   await f.reopen();assert.equal(f.requests.length,count);
-  for(const copy of await f.storage.execute('runtime.inventory',{ownerId:owner}))await assert.rejects(f.runtime.inspect(f.ids[0],d.id,copy.id,copy.configurationDigest));
+  assert.ok((await f.storage.execute('runtime.inventory',{ownerId:owner})).every(copy=>copy.state!=='ready'));
   assert.equal(f.requests.length,count);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
  });
 });

@@ -49,11 +49,11 @@ async function fixture(t,reply){
  const checks=[];const skillProtection={assertCurrent:async(scope,revision)=>{checks.push({scope,revision});},recordSelection:async()=>{},recordInput:async()=>{}};
  const options={runtime,storage,attempt,contextId:'context-synthetic',callId:'call-synthetic',configurationDigest:'synthetic-config',prompt:'这是合成用户发言。',systemPrompt:'请围绕已确认联系人讨论，消息由用户亲自发送。',
   model:{provider:'synthetic-official',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off',physical_limit:1,deadline_ms:5000,warning_ratio:0.8,budgetProfile:{context_window_tokens:8192,safety_margin_tokens:512}},
-  provider,arbiter,skillRun:null,skillProtection,skillRevision:{packages:[],eligible:[]}};
+  provider,arbiter,skillProtection,skillRevision:{packages:[],eligible:[]},configurationForRevision:()=>'synthetic-config',assertAuthorized:async()=>{}};
  return {options,requests,actions,checks,arbiter,ctx};
 }
 
-test('旧式按需Skill正文载入后可在两次上限内读取声明资源',async t=>{
+test('执行壳独占按需Skill，正文载入后可在两次上限内读取声明资源',async t=>{
  const f=await fixture(t,(_req,res)=>{
   const step=f.requests.length,tool=step<4;
   const content=step===1?{type:'tool_use',id:'skill-call',name:'skill',input:{name:'gentle'}}
@@ -78,9 +78,13 @@ test('旧式按需Skill正文载入后可在两次上限内读取声明资源',a
  await new SqliteContactService(database,f.options.attempt.ownerId,{account:async()=>{throw Error('不得读取渠道');},sessions:async()=>[]}).initialize();
  const library=new SqliteSkillLibrary(database,f.options.attempt.ownerId,original);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');await database.execute('fixture.grantSkills',{ownerId:f.options.attempt.ownerId,contactId:f.options.attempt.contactId});
  const selections=[],inputs=[],protection={assertCurrent:async(scope,revision)=>{if(revision)await database.execute('skills.assertRun',{ownerId:scope.ownerId,revision});},recordSelection:async(_scope,value)=>{selections.push(value);},recordInput:async value=>{inputs.push(value);}};
- f.options.skillRun=await openSqliteSkillRun(library,{contactId:f.options.attempt.contactId,callId:f.options.callId},protection);
- f.options.skillProtection=protection;f.options.skillRevision={packages:[{id:item.id,headRevision:item.headRevision}],eligible:[skillAnchor(item)],group:f.options.skillRun.revision.group};
+ let ownedRun,opened=0;
+ f.options.openSkillRun=async()=>{opened++;return ownedRun=await openSqliteSkillRun(library,{contactId:f.options.attempt.contactId,callId:f.options.callId},protection);};
+ const group=await library.groupScope(f.options.attempt.contactId);
+ f.options.skillProtection=protection;f.options.skillRevision={packages:[{id:item.id,headRevision:item.headRevision}],eligible:[skillAnchor(item)],group:{contactId:f.options.attempt.contactId,groupId:group.groupId,revision:group.revision}};
+ Object.freeze(f.options);
  const result=await runSingleDiscussionTurn(f.options);
+ assert.equal(opened,1);await assert.rejects(ownedRun.validateQualification(),'执行壳返回前须释放自己创建的Skill运行');
  assert.equal(result.text,'按实际策略生成的合成候选。');assert.equal(f.requests.length,4);
  assert.deepEqual(f.requests[0].tools.map(tool=>tool.name).sort(),['skill','skill_resource']);
  assert.ok(!JSON.stringify(f.requests[0]).includes('先回应感受，再说明情况。'));
@@ -134,7 +138,6 @@ test('发送前来源资格拒绝时不调用环回模型，不提交助手发�
 
 test('真实SQLite Skill库经官方scoped provider载入，选择事实与真实请求输入可区分',async t=>{
  const {writeFile,readFile}=await import('node:fs/promises');
- const {default:Skills}=await import('@deepseek-ai/dsh-skill');
  const {SqliteStorage}=await import('../src/storage/sqlite/client.ts');
  const {SqliteContactService}=await import('../src/contacts/sqlite/service.ts');
  const {SqliteSkillLibrary,skillAnchor}=await import('../src/skills/sqlite/library.ts');
@@ -153,10 +156,10 @@ test('真实SQLite Skill库经官方scoped provider载入，选择事实与真�
   recordSelection:async(scope,anchor)=>{selected.push({scope,anchor});},
   recordInput:async input=>{await database.execute('skills.assertRun',{ownerId:input.scope.ownerId,revision:input.runRevision});await database.execute('skills.assertRevision',{ownerId:input.scope.ownerId,anchor:input.loaded});loaded.push(structuredClone(input));},
  };
- const run=await openSqliteSkillRun(library,{contactId:f.options.attempt.contactId,callId:f.options.callId},protection);
- assert.equal(selected.length,1);assert.equal(loaded.length,0);
- await f.ctx.plugin(Skills);
- f.options.skillRun=run;f.options.skillProtection=protection;f.options.skillRevision={packages:[{id:item.id,headRevision:item.headRevision}],eligible:[skillAnchor(item)],group:run.revision.group};
+ f.options.openSkillRun=()=>openSqliteSkillRun(library,{contactId:f.options.attempt.contactId,callId:f.options.callId},protection);
+ assert.equal(selected.length,0);assert.equal(loaded.length,0);
+ const group=await library.groupScope(f.options.attempt.contactId);
+ f.options.skillProtection=protection;f.options.skillRevision={packages:[{id:item.id,headRevision:item.headRevision}],eligible:[skillAnchor(item)],group:{contactId:f.options.attempt.contactId,groupId:group.groupId,revision:group.revision}};
  await runSingleDiscussionTurn(f.options);
  assert.equal(loaded.length,1);assert.equal(loaded[0].relativePath,'SKILL.md');
  assert.equal(JSON.stringify(f.requests[0]).includes('先回应感受，再说明情况。'),false);

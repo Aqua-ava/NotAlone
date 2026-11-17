@@ -7,7 +7,7 @@ import path from 'node:path';
 import type {Context,Fiber} from '@deepseek-ai/cordis';
 import {Group,type Loader} from '@deepseek-ai/cordis-plugin-loader';
 import type {AgentHandle,CreateAgentOptions,ResumeAgentOptions} from '@deepseek-ai/dsh-agent';
-import {SESSION_FORMAT_VERSION,type Session,type SessionEvent,type SessionId} from '@deepseek-ai/dsh-session';
+import {SESSION_FORMAT_VERSION,type SessionEvent,type SessionId} from '@deepseek-ai/dsh-session';
 import type {SessionHandle} from '@deepseek-ai/dsh-session-persistence';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import {SkillDirectory,skillWorkingDirectory} from './skill-directory.ts';
@@ -19,8 +19,6 @@ export interface DshHistory {boundary:DshEventBoundary;events:readonly SessionEv
 export interface DshRuntimeDriver {
  createAgent(options:CreateAgentOptions):Promise<AgentHandle>;
  resumeAgent(options:ResumeAgentOptions):Promise<AgentHandle>;
- /** 仅供从仍合法业务资料构造新副本；不接收任意磁盘路径或原始JSONL。 */
- createSession(id:SessionId,record:(session:Session)=>void|Promise<void>):Promise<DshEventBoundary>;
  /** 必须在Agent释放后调用；以官方独占writer核验真实持久边界。 */
  readHistory(id:SessionId):Promise<DshHistory>;
  close():Promise<void>;
@@ -131,16 +129,6 @@ export async function createDshRuntime(parent:Context,options:{root:string}):Pro
  return {
   createAgent:options=>run(()=>ownAgent(()=>agentContext!.agents.create(options))),
   resumeAgent:options=>run(()=>ownAgent(()=>agentContext!.agents.resume(options))),
-  createSession:(id,record)=>run(async()=>{
-   const session=current.sessions.prepare(id);
-   const writer=await current.sessionPersistence.create(session.header);handles.add(writer);
-   let detach:(()=>void)|undefined;
-   try{
-    detach=current.sessions.enter(session);current.sessions.announce(session);
-    await record(session);await current.sessions.flush(session);await writer.flush();
-    const events=(await writer.read()).events;await releaseHandle(writer);return boundary(events);
-   }finally{try{await releaseHandle(writer);}finally{detach?.();}}
-  }),
   readHistory:id=>run(async()=>{
    const writer=await current.sessionPersistence.open(id,'write');handles.add(writer);
    try{await writer.flush();const events=(await writer.read()).events;return {events,boundary:boundary(events)};}

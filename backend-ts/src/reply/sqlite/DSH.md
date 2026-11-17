@@ -20,6 +20,8 @@
 
 `readHistory` 用官方独占 write-open、flush、read、close 取得实际事件。边界保存当前官方格式版本、事件数、末事件 seq 和完整事件序列的 SHA-256；不持久保存进程内 persistence.identity 或 stat.revision。官方 resume 可追加恢复事件；业务在恢复前核对旧边界并置 dirty，完成真实释放后重新取边界，不能要求恢复后的边界永远等于恢复前。
 
+正式执行只通过 `createAgent`／`resumeAgent` 建立或恢复官方会话；退役仅测试使用的直接会话创建入口。业务副本资格核验集中在 `SqliteDiscussionRuntime.run` 的独占所有者内，不再提供另一条独立打开、核验与关闭副本的公开 `inspect` 流程；回看继续只读 SQLite。具名 `runtime.inspect` 短事务仍服务执行中的资格复验。
+
 `close()` 先拒绝新操作，等待已进入的创建／读档工作，再等待所有官方 AgentHandle 和持久 handle，最后逆序等待每个 Loader fiber 并移除 Group。失败不转换为成功。宿主须保留自己的活动 holder，等待该 Promise 真正结算，不能在超时后清文件。
 
 根目录在进入每个操作及收紧权限前核对 dev/ino/birthtime/uid。官方创建的 `session.lock` 实测可能为 0644；所有者排空后，仅遍历本副本，以不跟随链接的文件描述符复核并收紧目录到 0700、普通单链接文件到 0600，不改变全局 umask，不操作 Skill 原目录。释放或身份复核失败不提供成功关闭证明。完整受管文件清单及删除在讨论领域和统一删除流程执行。
@@ -30,7 +32,7 @@
 
 ## 有界回复与 Skill 工具
 
-`runSingleDiscussionTurn` 复用宿主的请求、调用身份、截止时间和输入预算；每次物理发送重新核验冻结依赖并保存实际输入及用量。物理调用数、资源数与多包选择的统一上限见现行回复／Skill 规格，不在适配层建立另一套预算。没有可用 Skill 时不提供 Skill 相关工具；候选资料工具仍按本轮冻结范围和原预算开放。
+`runSingleDiscussionTurn` 独占按需创建与最终释放的 Skill 运行，不接收预建运行或修改调用参数；回退摘要必须根据真实无 Skill 修订计算。它复用宿主的请求、调用身份、截止时间和输入预算；每次物理发送重新核验冻结依赖并保存实际输入及用量。物理调用数、资源数与多包选择的统一上限见现行回复／Skill 规格，不在适配层建立另一套预算。没有可用 Skill 时不提供 Skill 相关工具；候选资料工具仍按本轮冻结范围和原预算开放。
 
 直接依赖、锁文件及实际安装的 `dsh-tool-skill`、`dsh-working-directory`、`dsh-fs` 均为 `0.2.1-rc.2`。固定官方源码仍为上文 commit，所用合同与安装制品逐项核对；未作全量可复现制品比对：
 
