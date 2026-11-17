@@ -6,14 +6,15 @@ import {chromium} from '@playwright/test';
 /** 开关组件与面板提示在真实 Chromium 中的行为；桥为合成桩，不连接后端。 */
 async function withSwitch(t,command,inspect){
  const compiled=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';
-  import {MemoryAutomaticSwitch} from './src/renderer/MemoryAutomaticSwitch';
-  import {FixedMemoryProcessingPanel} from './src/renderer/FixedMemoryProcessingPanel';
+  import {MemoryProcessingEntry} from './src/renderer/MemoryProcessingEntry';
   const invalidations=new Set();window.invalidate=()=>{for(const listener of invalidations)listener();};
   const bridge=new Proxy({},{get:(_,method)=>method==='onInvalidated'?listener=>{invalidations.add(listener);return()=>invalidations.delete(listener);}
+   :method==='readMode'?async()=>({connectionGeneration:1,mode:'sqlite'})
    // 与真实主进程控制器一致：设置成功后通知所有持有页面重新核对。
    :method==='setAutomatic'?async(...args)=>{const result=await window.command(method,...args);window.invalidate();return result;}
    :(...args)=>window.command(method,...args)});
-  createRoot(document.getElementById('root')).render(<><MemoryAutomaticSwitch bridge={bridge}/><FixedMemoryProcessingPanel bridge={bridge} contactId="33333333-3333-4333-8333-333333333333" releaseOnUnmount={false}/></>);`,
+  new MutationObserver(()=>document.querySelectorAll('details.memory-processing-disclosure').forEach(node=>{node.open=true;})).observe(document.getElementById('root'),{childList:true,subtree:true});
+  createRoot(document.getElementById('root')).render(<MemoryProcessingEntry bridge={bridge} backend={{onStateChanged:()=>()=>{}}} contactId="33333333-3333-4333-8333-333333333333" releaseOnUnmount={false}>{null}</MemoryProcessingEntry>);`,
   resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
  const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());
  const page=await browser.newPage();page.setDefaultTimeout(4000);
@@ -43,12 +44,32 @@ test('默认关闭：显示关闭说明与开启按钮，面板提示并隐藏�
   await card.getByText('已关闭：App 不会自动提取记忆，也不会为此调用模型').waitFor();
   await page.getByText('记忆自动处理已关闭：新消息只保存，不会提取记忆').waitFor();
   assert.equal(await page.getByRole('button',{name:'恢复本轮处理'}).count(),0,'关闭时不提供会被拒绝的恢复入口');
+  assert.equal(calls.filter(method=>method==='readAutomatic').length,1,'开关和面板共用一次权威读取');
   await toggle.click();
   await card.getByText('已开启：已导入的历史和新增消息会自动提取记忆').waitFor();
   assert.equal(await toggle.getAttribute('aria-checked'),'true');
   await page.getByRole('button',{name:'恢复本轮处理'}).waitFor();
   assert.equal(await page.getByText('记忆自动处理已关闭：新消息只保存').count(),0);
   assert.ok(calls.includes('setAutomatic'));
+ });
+});
+
+test('失效后只接受最新开关回执，旧读取不能恢复过时的开启状态',async t=>{
+ const old=Promise.withResolvers();let reads=0;
+ await withSwitch(t,async(method,...args)=>{
+  if(method==='readAutomatic')return ++reads===1?old.promise:{connectionGeneration:1,enabled:false};
+  if(method==='readCurrent')return {connectionGeneration:1,contactId:args[0].contactId,run:blockedRun};
+ },async page=>{
+  await page.waitForFunction(()=>document.querySelector('[role="switch"]')!==null);
+  assert.equal(await page.getByRole('button',{name:'恢复本轮处理'}).count(),0,'开关未核实时不提供恢复动作');
+  await page.evaluate(()=>window.invalidate());
+  const toggle=page.getByRole('switch');
+  await page.getByText('已关闭：App 不会自动提取记忆').waitFor();
+  old.resolve({connectionGeneration:1,enabled:true});
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  assert.equal(await toggle.getAttribute('aria-checked'),'false');
+  assert.equal(await page.getByRole('button',{name:'恢复本轮处理'}).count(),0);
+  assert.equal(reads,2,'一次失效只重新读取一次开关');
  });
 });
 
@@ -69,5 +90,22 @@ test('状态读取失败时不猜测开关：按钮不可用并显示可重试�
   setFails=true;await card.getByRole('switch').click();
   await card.getByRole('alert').filter({hasText:'操作结果暂未确认'}).waitFor();
   assert.equal(await card.getByRole('switch').getAttribute('aria-checked'),'false','保存失败后仍以重新读取的值为准');
+ });
+});
+
+test('保存和随后读取均失败时保留未知状态，不宣称已读到最新值',async t=>{
+ let saving=false;
+ await withSwitch(t,async(method,...args)=>{
+  if(method==='readAutomatic'){if(saving)throw new Error('合成读取失败');return {connectionGeneration:1,enabled:false};}
+  if(method==='setAutomatic'){saving=true;throw new Error('合成保存失败');}
+  if(method==='readCurrent')return {connectionGeneration:1,contactId:args[0].contactId,run:blockedRun};
+ },async page=>{
+  const card=page.getByRole('region',{name:'记忆自动处理开关'});
+  await card.getByText('已关闭：App 不会自动提取记忆').waitFor();
+  await card.getByRole('switch').click();
+  await card.getByRole('alert').filter({hasText:'自动处理状态暂不可用'}).waitFor();
+  assert.equal(await card.getByRole('switch').isDisabled(),true);
+  assert.equal(await card.getByText('已重新读取最新状态').count(),0);
+  assert.equal(await page.getByRole('button',{name:'恢复本轮处理'}).count(),0);
  });
 });

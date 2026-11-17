@@ -17,42 +17,49 @@ export function useAutomaticProcessing(bridge: FixedMemoryProcessingBridge): Aut
   const generation = useRef<number | null>(null);
   const alive = useRef(true);
   const busy = useRef(false);
+  const revision = useRef(0), mutation = useRef(0);
   const read = useCallback(async () => {
+    const accepted = ++revision.current;
     try {
       const next = await bridge.readAutomatic();
-      if (!alive.current) return;
+      if (!alive.current || accepted !== revision.current) return false;
       generation.current = next.connectionGeneration; setEnabled(next.enabled); setError('');
     } catch {
-      if (!alive.current) return;
+      if (!alive.current || accepted !== revision.current) return false;
       generation.current = null; setEnabled(null); setError('自动处理状态暂不可用，正在重试。');
+      return false;
     }
+    return true;
   }, [bridge]);
   useEffect(() => {
-    alive.current = true; void read();
-    const unsubscribe = bridge.onInvalidated(() => { void read(); });
+    alive.current = true; busy.current = false; generation.current = null;
+    setEnabled(null); setPending(false); void read();
+    const unsubscribe = bridge.onInvalidated(() => {
+      generation.current = null; setEnabled(null); void read();
+    });
     const timer = setInterval(() => { if (!document.hidden && !busy.current) void read(); }, 15000);
-    return () => { alive.current = false; unsubscribe(); clearInterval(timer); };
+    return () => { alive.current = false; revision.current++; mutation.current++; unsubscribe(); clearInterval(timer); };
   }, [bridge, read]);
   const set = useCallback(async (next: boolean) => {
     if (busy.current || generation.current === null) return;
     busy.current = true; setPending(true); setError('');
+    const accepted = ++revision.current, operation = ++mutation.current;
     try {
       const result = await bridge.setAutomatic({ enabled: next, connectionGeneration: generation.current });
-      if (alive.current) { generation.current = result.connectionGeneration; setEnabled(result.enabled); }
+      if (alive.current && accepted === revision.current) { generation.current = result.connectionGeneration; setEnabled(result.enabled); }
     } catch {
       // 先以后端权威值覆盖本地状态，再提示；读取成功会清除旧提示，因此提示放在其后。
-      await read();
-      if (alive.current) setError('操作结果暂未确认，已重新读取最新状态。');
+      if (alive.current && operation === mutation.current && await read()) setError('操作结果暂未确认，已重新读取最新状态。');
     } finally {
-      busy.current = false; if (alive.current) setPending(false);
+      if (alive.current && operation === mutation.current) { busy.current = false; setPending(false); }
     }
   }, [bridge, read]);
   return { enabled, pending, error, set };
 }
 
 /** 记忆自动处理总开关：默认关闭，开启后才会在后台提取记忆并向模型服务发送聊天内容。 */
-export function MemoryAutomaticSwitch({ bridge }: { bridge: FixedMemoryProcessingBridge }) {
-  const { enabled, pending, error, set } = useAutomaticProcessing(bridge);
+export function MemoryAutomaticSwitch({ state }: { state: AutomaticProcessingState }) {
+  const { enabled, pending, error, set } = state;
   const known = enabled !== null;
   return <section className="memory-processing-card memory-automatic-switch" aria-label="记忆自动处理开关">
     <header className="memory-processing-bar">

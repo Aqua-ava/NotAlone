@@ -1,8 +1,8 @@
-import { Fragment, useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import type { BackendBridge } from '../shared/backend-bridge';
 import type { FixedMemoryProcessingBridge, FixedProcessingRun } from '../shared/fixed-memory-processing';
 import { FixedMemoryProcessingPanel } from './FixedMemoryProcessingPanel';
-import { MemoryAutomaticSwitch } from './MemoryAutomaticSwitch';
+import { MemoryAutomaticSwitch, useAutomaticProcessing } from './MemoryAutomaticSwitch';
 import { useConnectedSnapshot } from './use-connected-snapshot';
 
 export interface MemoryProcessingEntryProps {
@@ -13,6 +13,21 @@ export interface MemoryProcessingEntryProps {
   children: ReactNode | ((processingRevision: number, completedRunId: string | null) => ReactNode);
   visible?: boolean;
   releaseOnUnmount?: boolean;
+}
+
+/** 已连接页面只持有一份总开关状态，供开关和处理动作共同使用。 */
+function ConnectedMemoryProcessing({ children, ...panel }: {
+  children: ReactNode;
+} & Omit<Parameters<typeof FixedMemoryProcessingPanel>[0], 'automaticEnabled'>) {
+  const automatic = useAutomaticProcessing(panel.bridge);
+  return <>
+    <MemoryAutomaticSwitch state={automatic}/>
+    {children}
+    <details className="memory-processing-disclosure">
+      <summary>记忆处理状态</summary>
+      <FixedMemoryProcessingPanel {...panel} automaticEnabled={automatic.enabled}/>
+    </details>
+  </>;
 }
 
 /** 本机 SQLite 运行状态经桥核验后才挂载记忆页面。 */
@@ -29,15 +44,10 @@ export function MemoryProcessingEntry({ bridge, backend, scopeKey, contactId = n
   }, [bridge]);
   const { state: current, retry } = useConnectedSnapshot(backend, readMode, scopeKey);
   if (current?.phase === 'ready') {
-    return <Fragment key={current.value.connectionGeneration}>
-      <MemoryAutomaticSwitch bridge={bridge}/>
+    return <ConnectedMemoryProcessing key={current.value.connectionGeneration} bridge={bridge} contactId={contactId}
+      releaseOnUnmount={releaseOnUnmount} visible={visible} scopeKey={scopeKey} onRunUpdated={onRunUpdated}>
       {typeof children === 'function' ? children(processingRevision, completedRunId) : children}
-      <details className="memory-processing-disclosure">
-        <summary>记忆处理状态</summary>
-        <FixedMemoryProcessingPanel releaseOnUnmount={releaseOnUnmount} visible={visible} bridge={bridge}
-          contactId={contactId} scopeKey={scopeKey} onRunUpdated={onRunUpdated}/>
-      </details>
-    </Fragment>;
+    </ConnectedMemoryProcessing>;
   }
   if (current?.phase === 'connecting') return <p role="status">正在连接本机服务，连接后可查看记忆。</p>;
   if (current?.phase === 'disconnected') return <p role="status">本机服务尚未连接，连接后可查看记忆。</p>;

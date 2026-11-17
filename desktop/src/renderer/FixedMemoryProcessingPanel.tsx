@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FixedMemoryProcessingBridge, FixedProcessingRun, FixedProcessingView, FixedProcessingQueue, ImageRetryRunSummary } from '../shared/fixed-memory-processing';
-import { useAutomaticProcessing } from './MemoryAutomaticSwitch';
 
 const sharedReasons: Record<string, string> = {
   extraction_model_unconfigured: '模型尚未配置',
@@ -135,10 +134,9 @@ function RecoveryControl({bridge,view,onSettled}:{bridge:FixedMemoryProcessingBr
 }
 
 /** 由记忆页面传入具名桥；scopeKey变化或失效事件先撤下全部本地快照。 */
-export function FixedMemoryProcessingPanel({ bridge, contactId, scopeKey = '', onRunUpdated, visible = true, releaseOnUnmount = true }: { bridge: FixedMemoryProcessingBridge; contactId: string | null; scopeKey?: string | number; onRunUpdated?:(run:FixedProcessingRun|null)=>void; visible?:boolean; releaseOnUnmount?:boolean }) {
+export function FixedMemoryProcessingPanel({ bridge, contactId, automaticEnabled, scopeKey = '', onRunUpdated, visible = true, releaseOnUnmount = true }: { bridge: FixedMemoryProcessingBridge; contactId: string | null; automaticEnabled: boolean | null; scopeKey?: string | number; onRunUpdated?:(run:FixedProcessingRun|null)=>void; visible?:boolean; releaseOnUnmount?:boolean }) {
   const [snapshot, setSnapshot] = useState<{ bridge: FixedMemoryProcessingBridge; contactId: string; scopeKey: string | number; view: FixedProcessingView } | null>(null);
   const [error, setError] = useState('');
-  const automatic = useAutomaticProcessing(bridge);
   const refresh=useRef<()=>Promise<void>>(async()=>{});
   const pageVisible = useRef(visible);
   pageVisible.current = visible;
@@ -207,7 +205,7 @@ export function FixedMemoryProcessingPanel({ bridge, contactId, scopeKey = '', o
       {view && <p role="status">{statusText(run,view.queue)}</p>}
     </header>
     <p className="memory-section-note">历史与增量分别排队；下方进度只表示最近一批消息的处理情况</p>
-    {automatic.enabled === false && <p role="status">记忆自动处理已关闭：新消息只保存，不会提取记忆；在页面顶部开启后才会继续处理。</p>}
+    {automaticEnabled === false && <p role="status">记忆自动处理已关闭：新消息只保存，不会提取记忆；在页面顶部开启后才会继续处理。</p>}
     {error && <p role="alert">{error}</p>}
     {!contactId && <p>请先选择联系人，再查看记忆处理状态。</p>}
     {contactId && !view && !error && <p aria-live="polite">正在核对处理状态…</p>}
@@ -218,11 +216,11 @@ export function FixedMemoryProcessingPanel({ bridge, contactId, scopeKey = '', o
     {unadmittedImages>0&&<p>仍有 {unadmittedImages} 张图片未纳入</p>}
     {previousIsolated>0&&<p>另有 {previousIsolated} 张图片未能送入模型，保留在原处理记录中。</p>}
     {view?.queue?.later && view.queue.later.pending > 0 && <p>主题与长期概览仍有 {view.queue.later.pending} 项待处理。{view.queue.later.nextDueAt != null && run?.statusReason !== 'later_stages_scheduled' ? `预计 ${new Date(view.queue.later.nextDueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 继续。` : ''}</p>}
-    {view?.retryRun&&<ImageRetryControl key={`previous-images:${contactId}:${scopeKey}:${view.connectionGeneration}:${view.retryRun.runId}`} bridge={bridge} view={view} run={view.retryRun} previous enabled={automatic.enabled===true} onSettled={()=>refresh.current()}/>}
+    {view?.retryRun&&<ImageRetryControl key={`previous-images:${contactId}:${scopeKey}:${view.connectionGeneration}:${view.retryRun.runId}`} bridge={bridge} view={view} run={view.retryRun} previous enabled={automaticEnabled===true} onSettled={()=>refresh.current()}/>}
     {run && <>
       {run.status === 'blocked' && <p>{reasonText(failureReason)}</p>}
-      <ImageRetryControl key={`images:${contactId}:${scopeKey}:${view!.connectionGeneration}:${run.runId}`} bridge={bridge} view={view!} run={run} enabled={automatic.enabled===true} onSettled={()=>refresh.current()}/>
-      {automatic.enabled !== false && <RecoveryControl key={`${contactId}:${scopeKey}:${view!.connectionGeneration}:${run.runId}`} bridge={bridge} view={view!} onSettled={()=>refresh.current()}/>}
+      <ImageRetryControl key={`images:${contactId}:${scopeKey}:${view!.connectionGeneration}:${run.runId}`} bridge={bridge} view={view!} run={run} enabled={automaticEnabled===true} onSettled={()=>refresh.current()}/>
+      {automaticEnabled === true && <RecoveryControl key={`${contactId}:${scopeKey}:${view!.connectionGeneration}:${run.runId}`} bridge={bridge} view={view!} onSettled={()=>refresh.current()}/>}
       {run.statusReason === 'later_stages_scheduled' && run.nextDueAt != null && <p>预计 {new Date(run.nextDueAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 开始，执行前会重新核对资料。</p>}
       <p>最近一批提取与核验：已处理 {run.succeeded} / {run.total} 条消息目标</p>
       {run.contentCounts?.map(item=><p key={item.kind}>{item.kind==='text'?'文字':item.kind==='image'?'图片':'其他内容'}：已处理 {item.succeeded} / {item.total} 条</p>)}
