@@ -55,7 +55,7 @@ function gate(t,label){
  return {promise,resolve:value=>{clearTimeout(timer);resolve(value);}};
 }
 
-test('处理进度只刷新发布资料，新的完成轮次才刷新具体记忆',{timeout:20000},async t=>{
+test('处理进度不重读隐藏主题，新的完成轮次仍刷新具体记忆，可见主题立即更新',{timeout:20000},async t=>{
  let reads=0,documentReads=0;
  await panel(t,async(method,input)=>{
   if(method==='read'){reads++;return memories(input);}
@@ -63,16 +63,21 @@ test('处理进度只刷新发布资料，新的完成轮次才刷新具体记�
  },async page=>{
   await page.getByText(candidate.body,{exact:true}).waitFor();
   await page.getByText('第1次主题正文',{exact:true}).waitFor({state:'attached'});
-  await page.evaluate(()=>window.updateHints({documentsRefreshKey:1}));
-  await page.getByText('第2次主题正文',{exact:true}).waitFor({state:'attached'});
-  assert.equal(reads,1,'一般处理进度不能反复读取具体记忆');
-  await page.evaluate(()=>window.updateHints({documentsRefreshKey:2,completedRunId:'completed-round-1'}));
-  await page.getByText('第3次主题正文',{exact:true}).waitFor({state:'attached'});await settle(page);
-  assert.equal(reads,2,'首次完成通知重读一次具体记忆');
-  await page.evaluate(()=>window.updateHints({documentsRefreshKey:3,completedRunId:'completed-round-1'}));
-  await page.getByText('第4次主题正文',{exact:true}).waitFor({state:'attached'});await settle(page);
-  assert.equal(reads,2,'同一轮次的重复通知不重读具体记忆');assert.equal(documentReads,4);
+  for(const hints of [{documentsRefreshKey:1},{documentsRefreshKey:2,completedRunId:'completed-round-1'},{documentsRefreshKey:3,completedRunId:'completed-round-1'}]){
+   await page.evaluate(hints=>window.updateHints(hints),hints);await settle(page);
+  }
+  assert.equal(reads,2,'新的完成通知仍重读具体记忆，同轮通知不重复读取');
+  assert.equal(documentReads,1,'主题隐藏时只保留首次预读，不因处理通知重复读取');
   t.diagnostic(JSON.stringify({workload:'初读、两次普通进度、一次新完成通知',reads,documentReads}));
+  await page.getByRole('button',{name:'主题资料',exact:true}).click();
+  await page.getByText('第2次主题正文',{exact:true}).waitFor();
+  await page.evaluate(()=>window.updateHints({documentsRefreshKey:4}));
+  await page.getByText('第3次主题正文',{exact:true}).waitFor();
+  assert.equal(reads,2,'主题更新不重读具体记忆');
+  await page.evaluate(()=>window.updateHints({visible:false,documentsRefreshKey:5}));await settle(page);
+  assert.equal(documentReads,3,'整个记忆页隐藏时处理通知也不读取主题');
+  await page.evaluate(()=>window.updateHints({visible:true}));
+  await page.getByText('第4次主题正文',{exact:true}).waitFor();
  });
 });
 

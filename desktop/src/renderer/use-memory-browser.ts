@@ -104,7 +104,8 @@ export function useMemoryBrowser({bridge, contactId, scopeRevision, documentsRef
   }, [scope]);
   // 桥由页面入口持有；切换浏览范围只撤下本地快照，卸载才按所有权释放。
   useEffect(() => () => {if (releaseOnUnmount) void bridge.release().catch(() => {});}, [bridge, releaseOnUnmount]);
-  useEffect(() => {if (documentsRefreshKey) void refresh.current.documents();}, [documentsRefreshKey, scope]);
+  // 处理进度只刷新当前展示的主题；隐藏时保留预读，重新展示由可见性入口复验。
+  useEffect(() => {if (documentsRefreshKey && visible && level !== 'L1') void refresh.current.documents();}, [documentsRefreshKey, scope]);
   useEffect(() => {
     if (completedRunId !== completion.current.last) {
       completion.current.last = completedRunId;
