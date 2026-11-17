@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {StorageFailure} from '../storage/sqlite/contracts.ts';
 import type {SqliteStorage} from '../storage/sqlite/client.ts';
 import type {ActiveHolders} from '../storage/sqlite/deletion/holders.ts';
-import type {EmbedTexts} from './retrieval-hybrid.ts';
+import type {EmbedTexts} from './retrieval-embedding.ts';
 import {RETRIEVAL_MODEL_FINGERPRINT,type RetrievalKind,type VectorIndexItem} from './sqlite/contracts.ts';
 
 /** 本机固定表示版本；正文向量可持久复用，query与本轮得分不持久化。 */

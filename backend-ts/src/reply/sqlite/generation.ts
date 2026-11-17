@@ -21,7 +21,7 @@ import {discussionFinishFailure,type DiscussionFailureEvidence} from './failure.
 import {ModelInputBudgetError} from '../../platform/models/model-input-budget.ts';
 import type {installModelProvider} from '../../platform/models/model-provider.ts';
 import type {ModelPermitArbiter} from '../../platform/models/model-permits.ts';
-import {REPLY_EXECUTION_DEADLINE_MS} from '../generation/reply-execution-budget.ts';
+import {REPLY_EXECUTION_DEADLINE_MS} from '../../host/host-reply-config.ts';
 import type {DiscussionAttempt} from './contracts.ts';
 import type {SqliteDiscussionRuntime} from './runtime.ts';
 

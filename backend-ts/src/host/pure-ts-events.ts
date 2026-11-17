@@ -34,8 +34,6 @@ export class PureTsEvents {
   const close=()=>{clearInterval(timer);this.subscribers.delete(res);req.removeListener('aborted',close);};
   req.once('aborted',close);res.once('close',close);
  }
- forgetTask(task:string){for(const key of this.hints.keys())if(key.endsWith(`:task.progress:${task}`))this.hints.delete(key);}
- forgetContact(contact:string){for(const key of this.hints.keys())if(key.startsWith(`${contact}:`))this.hints.delete(key);}
  clear(){this.hints.clear();}
  close(){this.closed=true;for(const res of this.subscribers)res.end();this.subscribers.clear();this.hints.clear();}
 }

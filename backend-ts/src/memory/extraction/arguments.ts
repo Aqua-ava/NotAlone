@@ -112,9 +112,3 @@ export function readExtractionToolArguments(blocks:readonly unknown[],name:strin
  if(!decoded.value||typeof decoded.value!=='object'||Array.isArray(decoded.value))throw new ExtractionArgumentsError();
  return {value:decoded.value as Record<string,unknown>,repaired:decoded.repaired||textJson};
 }
-/** 私有身份协议使用同一严格解码器，绝不启用模型输出修复。 */
-export function decodeExtractionArguments(raw:string):Record<string,unknown>{
- const value=argumentValue(raw,{repair:false,field_names:[],drop_stray_closers:false}).value;
- if(!value||typeof value!=='object'||Array.isArray(value))throw new ExtractionArgumentsError();
- return value as Record<string,unknown>;
-}

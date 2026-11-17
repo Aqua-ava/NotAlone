@@ -31,19 +31,6 @@ export interface ExtractionFlowOptions {
  /** 专用可删除追踪，不得接普通日志。追踪失败直接阻止本批提交。 */
  record(event:{stage:string;payload:unknown;candidate_trace_id?:string}):Promise<void>;
 }
-function pythonISO(raw:string|null):string {
- if(raw===null)return 'unknown';
- const match=raw.match(/^(\d{4}-\d\d-\d\d)[T ](\d\d:\d\d)(:\d\d)?(?:\.(\d+))?(Z|[+-]\d\d:\d\d)$/);
- if(!match)throw new ExtractionProtocolError();
- const micros=(match[4]??'').slice(0,6).padEnd(6,'0');
- return `${match[1]}T${match[2]}${match[3]??':00'}${Number(micros)?'.'+micros:''}${match[5]==='Z'?'+00:00':match[5]}`;
-}
-export function extractionWindowText(window:ExtractionWindow):string {
- validateExtractionWindow(window);
- const targets=new Set(window.target_message_ids??window.messages.map(message=>message.message_id));
- return window.messages.map((message,index)=>`${index+1}. [${targets.has(message.message_id)?'target':'context'}] [message_id=${message.message_id}] occurred_at=${pythonISO(message.occurred_at)} sender=${message.sender}: ${message.text}`
-  +`\n[calendar message_id=${message.message_id}] source_calendar_at=${sourceCalendarPayload(message)} text_length=${Array.from(message.text).length}`).join('\n');
-}
 function directExtractionInput(window:ExtractionWindow):string {
  // 保留窗口顺序及原始时间精度；只传提取所需字段，不展开来源快照。
  return JSON.stringify({

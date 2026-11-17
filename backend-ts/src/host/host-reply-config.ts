@@ -1,7 +1,8 @@
 /** 只解析宿主注入的模型环境；认证、提供者生命周期和业务许可仍由宿主装配。 */
 import {normalizeApiKey} from '@deepseek-ai/dsh-llm';
 import {normalizeModelBaseUrl} from './model-base-url.ts';
-import {REPLY_EXECUTION_DEADLINE_MS} from '../reply/generation/reply-execution-budget.ts';
+/** 前台回复的有界执行预算；运输层120秒，租约同时覆盖循环前后的资格核验。 */
+export const REPLY_EXECUTION_DEADLINE_MS=90_000;
 import {PUBLIC_BASE_URL, resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import type {DeepSeekAdapterOptions, DeepSeekConnectionOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import {readPurposeParameters} from './model-parameters.ts';

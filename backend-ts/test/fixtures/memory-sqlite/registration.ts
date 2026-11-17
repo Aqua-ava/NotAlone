@@ -1,9 +1,9 @@
-import {StorageFailure} from '../../storage/sqlite/contracts.ts';
-import {identityDeletionAuthority,identityDeletionDomain} from '../../contacts/sqlite/deletion.ts';
-import {historyDeletionDomain} from '../../history/sqlite/deletion.ts';
-import {skillMetadataDeletionDomain} from '../../skills/sqlite/deletion.ts';
-import type {DeletionAuthority,DeletionRegistration,DeletionScope} from '../../storage/sqlite/deletion/contracts.ts';
-import {memoryExtractionDeletionDomain} from './deletion.ts';
+import {StorageFailure} from '../../../src/storage/sqlite/contracts.ts';
+import {identityDeletionAuthority,identityDeletionDomain} from '../../../src/contacts/sqlite/deletion.ts';
+import {historyDeletionDomain} from '../../../src/history/sqlite/deletion.ts';
+import {skillMetadataDeletionDomain} from '../../../src/skills/sqlite/deletion.ts';
+import type {DeletionAuthority,DeletionRegistration,DeletionScope} from '../../../src/storage/sqlite/deletion/contracts.ts';
+import {memoryExtractionDeletionDomain} from '../../../src/memory/sqlite/deletion.ts';
 const scopes=new Set(['source','contact','account']);
 function scopeAvailable(scope:DeletionScope):boolean{return scopes.has(scope.kind);}
 /** 复用05的唯一协调器；来源必须实际属于本owner/contact，不能靠空闭包放行。 */

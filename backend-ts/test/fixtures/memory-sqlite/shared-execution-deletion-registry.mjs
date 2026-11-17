@@ -1,6 +1,6 @@
 import {registry as shared} from './shared-producer-registry.mjs';
 import {createDeletionActions} from '../../../src/storage/sqlite/deletion/actions.ts';
-import {memoryExtractionDeletionAuthority} from '../../../src/memory/sqlite/registration.ts';
+import {memoryExtractionDeletionAuthority} from './registration.ts';
 import {discussionCallDeletionDomain} from '../../../src/reply/sqlite/model-deletion.ts';
 import {memoryExtractionDeletionDomain} from '../../../src/memory/sqlite/deletion.ts';
 import {discussionDeletionDomain,withDiscussionDeletionAuthority} from '../../../src/reply/sqlite/deletion.ts';

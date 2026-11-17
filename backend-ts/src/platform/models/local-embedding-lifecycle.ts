@@ -2,7 +2,7 @@
 import {createLocalEmbedding,embeddingSnapshot,EmbeddingUnavailableError} from '../../retrieval/retrieval-embedding.ts';
 import {isAbsolute,join} from 'node:path';
 import {stat} from 'node:fs/promises';
-import type {EmbedTexts} from '../../retrieval/retrieval-hybrid.ts';
+import type {EmbedTexts} from '../../retrieval/retrieval-embedding.ts';
 
 type LocalEmbedding=Pick<Awaited<ReturnType<typeof createLocalEmbedding>>,'embed'|'close'>;
 export interface LocalEmbeddingLifecycle {

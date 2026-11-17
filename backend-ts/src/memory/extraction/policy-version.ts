@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {sha256} from '../../platform/sha256.ts';
 import {resolve,dirname,extname,relative,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {canonicalJSON,digest} from '../evidence/canonical-json.ts';
+import {digest} from '../evidence/canonical-json.ts';
 import type {PreparedVerificationPolicy} from './verification/complete-claim.ts';
 
 /** mode 的 legacy 值是现有 v2 存档字段，不再分派到旧核验策略。 */
@@ -48,16 +48,6 @@ export function resolveExtractionPolicy(value:unknown,baseRuleVersion:string,sou
  if(!hash.test(baseRuleVersion)||!sourceStamp||config.source_stamp!==sourceStamp)unavailable();
  const ruleVersion=digest({version:2,base_rule_version:baseRuleVersion,config});
  return {mode:'legacy',verification:{id:'complete-claim-v1',rule_version:ruleVersion},ruleVersion,config};
-}
-
-/** 同一判定供 A 缓存与 B 写入资格使用；窗口数字保留原 JSONB 精度表示。 */
-export function assertExtractionPolicyWindow(policy:ResolvedExtractionPolicy,runtime:unknown,aRuleVersion?:string):void {
- const row=runtime&&typeof runtime==='object'&&!Array.isArray(runtime)?runtime as Record<string,unknown>:null;
- const v2=canonicalJSON(row?.config_version??null)==='2';
- if(!v2||row?.mode!=='legacy'||row.rule_set_sha256!==null
-   ||row.verification_policy!==policy.config.verification_policy||row.source_stamp!==policy.config.source_stamp
-   ||row.rule_version!==policy.ruleVersion||aRuleVersion!==undefined&&aRuleVersion!==policy.ruleVersion)
-   throw new ExtractionPolicyVersionError('extraction_policy_window_mismatch');
 }
 
 // 收集所有字面依赖（包括类型边和注释中的可疑相对边），宁可拒绝缺失文件，不静默遗漏。

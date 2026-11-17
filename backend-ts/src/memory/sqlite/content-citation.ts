@@ -1,18 +1,8 @@
 import {StorageFailure,type StorageTransaction,type StorageRow} from '../../storage/sqlite/contracts.ts';
 import {getMemoryContentRegistry,readFrozenContent} from './content.ts';
-import {imageContentReference,type ImageContentReference,type ContentCitationReference,type ContentCitation,type ContentEvidence,type ContentSource} from '../content/evidence.ts';
+import {type ImageContentReference,type ContentCitationReference,type ContentCitation,type ContentEvidence,type ContentSource} from '../content/evidence.ts';
 import type {FrozenMemoryContent} from '../content/registry.ts';
 export type ImageCitationReference=ImageContentReference;
-/** 图片引用的是本次真正读取的受管副本，不能用另一版本补证。 */
-export function requireImageCitation(tx:StorageTransaction,ownerId:string,contactId:string,messageId:string,value:unknown):ImageCitationReference{
- let ref:ImageCitationReference;
- try{const parsed=typeof value==='string'?JSON.parse(value):value;ref=imageContentReference(parsed?.version===1&&parsed.representation==='image'?parsed.reference:parsed);}catch{throw new StorageFailure('memory_source_stale');}
- if(!tx.get(`SELECT 1 FROM media_file f JOIN message_media h ON h.owner_id=f.owner_id AND h.message_id=f.message_id
-   WHERE f.owner_id=? AND f.contact_id=? AND f.message_id=? AND f.id=? AND f.content_digest=? AND f.mime_type=?
-   AND h.media_generation=? AND h.state<>'cleared' AND f.content_state='present' AND f.publish_state='current' AND f.viewable=1 AND f.container_valid=1`,
-   [ownerId,contactId,messageId,ref.file_id,ref.sha256,ref.mime_type,BigInt(ref.media_generation)]))throw new StorageFailure('memory_source_stale');
- return ref;
-}
 export function citationContent(row:StorageRow):{contentKind:string;contentRef:ContentCitationReference|null}{
  const contentKind=typeof row.content_kind==='string'?row.content_kind:'text';
  if(contentKind==='text')return {contentKind,contentRef:null};
