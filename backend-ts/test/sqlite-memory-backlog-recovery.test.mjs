@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
 import {fixture,owner,record,modelPort} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
@@ -31,6 +32,19 @@ test('扫描后发生暂停时自动恢复原子复验拒绝领取，保留旧�
  assert.equal(await f.storage.execute('memoryExtraction.autoContinue',{ownerId:owner,...run}),null);
  assert.equal((await f.memory.read(f.run.runId)).state,'paused');
  assert.deepEqual(await f.storage.execute('memoryExtraction.recoverableBacklog',{ownerId:owner}),[]);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('单轮领取只推进指定联系人的恢复轮，其他可恢复轮保持原状态',async t=>{
+ const f=await failed(t),contactId=f.saved[1].contact_id;
+ await f.service.synchronize(contactId);
+ const other=await f.memory.startHistory(contactId,randomUUID());await f.memory.waitForIdle(other.run.runId);
+ const candidates=await f.storage.execute('memoryExtraction.recoverableBacklog',{ownerId:owner});assert.equal(candidates.length,2);
+ const original=await f.memory.read(f.run.runId),selected=candidates.find(run=>run.runId===other.run.runId);assert.ok(selected);
+ assert.equal(await f.storage.execute('memoryExtraction.autoContinue',{ownerId:'other-owner',...selected}),null);
+ const accepted=await f.storage.execute('memoryExtraction.autoContinue',{ownerId:owner,...selected});assert.equal(accepted.runId,selected.runId);
+ assert.deepEqual(await f.memory.read(f.run.runId),original,'另一个联系人的控制版本、失败和调用事实不变化');
+ assert.deepEqual(await f.storage.execute('memoryExtraction.recoverableBacklog',{ownerId:owner}),candidates.filter(run=>run.runId!==selected.runId));
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 

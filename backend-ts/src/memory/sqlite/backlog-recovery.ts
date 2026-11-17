@@ -2,10 +2,8 @@ import type {StorageAction,StorageTransaction} from '../../storage/sqlite/contra
 import {fail,textId} from './qualification.ts';
 import {applyControl} from './control.ts';
 
-/** 已知L1失败仅自动重试一次；明确的应用中断可安全续跑，用户暂停与未决模型调用保持原样。 */
-export function recoverableBacklogRuns(tx:StorageTransaction,ownerId:string):{runId:string;controlVersion:number}[]{
- const rows=tx.all(`SELECT r.id,r.intent_revision FROM processing_run r
-  WHERE r.owner_id=? AND r.state IN ('failed','incomplete') AND r.pause_requested_at IS NULL
+/** 扫描与单轮领取共用同一恢复判据，不能因入口不同放宽未知回执或用户暂停。 */
+const recoverableRun=`r.owner_id=? AND r.state IN ('failed','incomplete') AND r.pause_requested_at IS NULL
    AND NOT EXISTS(SELECT 1 FROM processing_run next WHERE next.owner_id=r.owner_id AND next.start_request_key='policy-recovery:'||r.id)
    AND EXISTS(SELECT 1 FROM processing_task t WHERE t.owner_id=r.owner_id AND t.run_id=r.id AND t.state='failed'
      AND (t.error_code='memory_extraction_interrupted' OR t.resume_no=0 AND (t.error_code='history_source_not_available' OR (t.error_code LIKE 'extraction_%' OR t.error_code LIKE 'memory_extraction_%') AND EXISTS(SELECT 1 FROM processing_step s WHERE s.owner_id=t.owner_id AND s.task_id=t.id AND s.kind='extraction_verification' AND s.state='failed'))))
@@ -23,15 +21,18 @@ export function recoverableBacklogRuns(tx:StorageTransaction,ownerId:string):{ru
     WHERE t.owner_id=r.owner_id AND t.run_id=r.id AND c.state='pending')
    AND NOT EXISTS(SELECT 1 FROM run_contact own JOIN run_contact other ON other.owner_id=own.owner_id AND other.contact_id=own.contact_id
     JOIN processing_run active ON active.owner_id=other.owner_id AND active.id=other.run_id
-    WHERE own.owner_id=r.owner_id AND own.run_id=r.id AND other.run_id<>r.id AND active.state IN ('preparing','pending','running'))
-  ORDER BY r.started_at,r.rowid`,[ownerId]);
- return rows.map(row=>{
-  const version=Number(row.intent_revision);if(!Number.isSafeInteger(version)||version<0)fail('memory_extraction_count_invalid');
-  return {runId:String(row.id),controlVersion:version};
- });
+    WHERE own.owner_id=r.owner_id AND own.run_id=r.id AND other.run_id<>r.id AND active.state IN ('preparing','pending','running'))`;
+function controlVersion(value:unknown):number{
+ const version=Number(value);if(!Number.isSafeInteger(version)||version<0)fail('memory_extraction_count_invalid');return version;
+}
+/** 已知L1失败仅自动重试一次；明确的应用中断可安全续跑，用户暂停与未决模型调用保持原样。 */
+export function recoverableBacklogRuns(tx:StorageTransaction,ownerId:string):{runId:string;controlVersion:number}[]{
+ return tx.all(`SELECT r.id,r.intent_revision FROM processing_run r WHERE ${recoverableRun} ORDER BY r.started_at,r.rowid`,[ownerId])
+  .map(row=>({runId:String(row.id),controlVersion:controlVersion(row.intent_revision)}));
 }
 export function backlogRunRecoverable(tx:StorageTransaction,ownerId:string,runId:string):boolean{
- return recoverableBacklogRuns(tx,ownerId).some(run=>run.runId===runId);
+ const row=tx.get(`SELECT r.intent_revision FROM processing_run r WHERE r.id=? AND ${recoverableRun}`,[runId,ownerId]);
+ if(!row)return false;controlVersion(row.intent_revision);return true;
 }
 export const backlogRecoveryActions:StorageAction[]=[{
  name:'memoryExtraction.recoverableBacklog',mode:'read',retryBusy:false,execute(tx,raw){

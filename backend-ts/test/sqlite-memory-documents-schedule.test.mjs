@@ -9,6 +9,11 @@ import {documentFixture} from './fixtures/memory-documents/support.mjs';
 
 const registryModule=new URL('./fixtures/memory-documents/later-schedule-registry.mjs',import.meta.url).href;
 const deferred=()=>{let resolve;const promise=new Promise(done=>resolve=done);return {promise,resolve};};
+async function controlRun(f,runId,action){
+ const view=await f.extraction.read(runId);
+ const result=await f.extraction[action](runId,view.controlVersion,randomUUID());
+ await f.extraction.waitForIdle(runId);return result;
+}
 async function bounded(promise){let timer;try{return await Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('合成服务生命周期等待超时')),5000);})]);}finally{clearTimeout(timer);}}
 function restoredDocuments(t,f,storage=f.storage){
  let extraction;
@@ -176,7 +181,8 @@ test('文档外发结果unknown时持久锁定且绝不自动重发',async t=>{
  const scope={scopeKind:'contact',contactId:f.contactId},scheduled=await f.documents.readSchedule(scope);
  const first=await f.documents.runDueStages(scheduled.scene.dueAt);
  assert.equal(first.length,1);assert.equal((await f.documents.readSchedule(scope)).scene.state,'unknown');
- assert.equal(await f.storage.execute('memoryDocuments.resumeRunSchedule',{ownerId:f.owner,runId:run.runId,now:scheduled.scene.dueAt+1}),false,'unknown调用不得因continue安排重发');
+ await controlRun(f,run.runId,'continue');
+ assert.equal((await f.documents.readSchedule(scope)).scene.state,'unknown','正式continue不得把unknown安排重发');
  const calls=f.calls.length;assert.ok(calls>0);
  assert.deepEqual(await f.documents.runDueStages(scheduled.scene.dueAt+24*60*60*1000),[]);
  assert.equal(f.calls.length,calls,'unknown调用不会在worker下次扫描时重发');
@@ -236,10 +242,10 @@ test('已排队scope可暂停；恢复后再按原due执行',async t=>{
  const f=await documentFixture(t,{registryModule,laterScheduling:true});
  const run=await f.extraction.start('later-schedule-pause-resume');await f.extraction.waitForIdle(run.runId);
  const scope={scopeKind:'contact',contactId:f.contactId},scheduled=await f.documents.readSchedule(scope),due=scheduled.scene.dueAt;
- assert.equal(await f.storage.execute('memoryDocuments.pauseRunSchedule',{ownerId:f.owner,runId:run.runId,paused:true}),true);
+ assert.equal((await controlRun(f,run.runId,'pause')).status,'paused');
  assert.equal((await f.documents.queueSummary()).nextDueAt,null);
  assert.deepEqual(await f.documents.runDueStages(due),[]);assert.equal(f.calls.length,0);
- assert.equal(await f.storage.execute('memoryDocuments.pauseRunSchedule',{ownerId:f.owner,runId:run.runId,paused:false}),true);
+ await controlRun(f,run.runId,'continue');
  assert.equal(await f.documents.nextDueAt(),due);
  const resumed=await f.documents.runDueStages(due);assert.equal(resumed.length,2);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
@@ -251,9 +257,9 @@ test('continue只重排已知失败，保留旧失败行并立即调度新代次
  const scope={scopeKind:'contact',contactId:f.contactId},initial=await f.documents.readSchedule(scope);
  const failed=await f.documents.runDueStages(initial.scene.dueAt);
  assert.equal(failed.length,1);assert.equal((await f.documents.readSchedule(scope)).scene.state,'failed');
- const retryAt=initial.scene.dueAt+1000;
- assert.equal(await f.storage.execute('memoryDocuments.resumeRunSchedule',{ownerId:f.owner,runId:run.runId,now:retryAt}),true);
+ const earliestRetry=Date.now();await controlRun(f,run.runId,'continue');const latestRetry=Date.now();
  const retry=await f.documents.readSchedule(scope),history=await f.storage.execute('fixture.laterScheduleHistory',{ownerId:f.owner,scopeKey:f.contactId});
+ const retryAt=retry.scene.dueAt;assert.ok(retryAt>=earliestRetry&&retryAt<=latestRetry,'正式continue用实际受理时间立即重排，不伪造未来时钟');
  assert.equal(retry.scene.generation,initial.scene.generation+1);assert.equal(retry.scene.state,'scheduled');assert.equal(retry.scene.dueAt,retryAt);
  assert.equal(history[0].state,'superseded');assert.equal(history[0].error_code,'document_model_unconfigured');
  assert.equal(await f.documents.nextDueAt(),retryAt);

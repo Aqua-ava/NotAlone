@@ -50,6 +50,16 @@ POST `/contacts/:id/complete` 只接受空对象，显式恢复该联系人已�
 
 已退役历史／增量各自的全局到期与最早到期读入口；调度统一使用这份有界快照，不保留无产品消费者的另一套查询接口。历史自动建轮与显式初始化复用同一次来源续证合同；只对来源暂不可用续证一次，再由原写事务复验，同一请求键、策略与预算保持。
 
+积压发现与单轮领取共用相同 SQL 恢复判据。自动继续和旧策略后继的事务复验按 `owner_id + run_id` 读取指定轮，不再为领取一个轮次重新物化该账号全部可恢复轮；未知回执、用户暂停、已用自动次数和其他在途轮的占用判据保持，来源与预算仍在原领取／派发边界复验。
+
+`test/fixtures/memory-backlog-benchmark.mjs` 从正式服务和合成 SQLite 产生已知失败轮，再复制其运行、联系人、任务和步骤至 10／100／1000 轮，对比发现顺序、指定轮资格、SQL 次数与返回行数。每档另复验用户暂停、任务／步骤／调用操作未知、自动次数已用及另一活跃轮占用；无模型或真实资料。旧实现每次返回全部 10／100／1000 行，新实现命中只返回 1 行、未命中 0 行，SQL 次数均为 1；这些数据仅描述恢复资格查询。重现旧／新对照（在 `backend-ts/`）：
+
+```sh
+git show 4677317b4fb7564bc73a34417c3456f2ecd40c4c:backend-ts/src/memory/sqlite/backlog-recovery.ts > src/memory/sqlite/.backlog-baseline.mts
+node test/fixtures/memory-backlog-benchmark.mjs --compare-module "$PWD/src/memory/sqlite/.backlog-baseline.mts"
+rm src/memory/sqlite/.backlog-baseline.mts
+```
+
 `schedule-inputs.ts` 的复用仅存在于一次同步只读动作，结束即释放；不跨写事务或重启保存资格。已分配目标通过一次构建的非空 item 集合判断，避免每条候选扫描同一 owner 的 `run_input`。既有冷却、历史轮转、每轮一个历史小批、未知回执及用户暂停规则保持。
 
 [内容插件](../content/README.md)通过同一可信清单装配宿主与 Worker，追加迁移32冻结插件／文件身份，33保留旧文字引用并增加类型化内容引用。正常提取窗口将实际图片同时带入提取及来源核验；图片进度独立计数，未就绪与已清除图片不冒充成功目标。每批最多8张、原始总量32MiB，目标优先、上下文使用剩余额度。新模型路径不上传 Files API；实际模型请求图片的变换摘要进入可删除追踪。

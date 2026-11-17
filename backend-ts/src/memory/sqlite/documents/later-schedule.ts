@@ -523,8 +523,6 @@ export function failLaterStage(tx:StorageTransaction,ownerId:string,taskId:strin
 export const memoryDocumentsLaterScheduleActions:StorageAction[]=[
  action('scheduleMemoryChange','write',(tx,i)=>scheduleMemoryChange(tx,String(i.ownerId),i.scope as MemoryScope,safeTime(i.changedAt??Date.now()),typeof i.runId==='string'?i.runId:undefined)),
  action('enrollRun','write',(tx,i)=>enrollRun(tx,String(i.ownerId),String(i.runId),Date.now(),i.contactId===undefined?undefined:textId(i.contactId))),
- action('pauseRunSchedule','write',(tx,i)=>setRunSchedulePaused(tx,String(i.ownerId),String(i.runId),i.paused===true)),
- action('resumeRunSchedule','write',(tx,i)=>resumeRunSchedule(tx,String(i.ownerId),String(i.runId),safeTime(i.now??Date.now()))),
  action('readSchedule','read',(tx,i)=>snapshot(tx,String(i.ownerId),i.scope as MemoryScope)),
  action('queueSummary','read',(tx,i)=>queueSummary(tx,String(i.ownerId))),
  action('nextDueAt','read',(tx,i)=>queueSummary(tx,String(i.ownerId)).nextDueAt),
