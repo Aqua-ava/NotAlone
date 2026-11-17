@@ -4,6 +4,7 @@ import {CandidateBasis,SqliteCandidateReferences} from './SqliteCandidateReferen
 import type {SqliteDiscussionBridge,SqliteDiscussionReceipt} from '../shared/sqlite-discussion-bridge';
 import {sqliteReplySourceUnavailableMessage,readSqliteCandidatePage,readSqliteCandidateVersion,readSqliteCandidateStatus,type SqliteCandidateStatus,type SqliteCandidatePage,type SqliteCandidateVersion,type SqliteCandidateOperation,type SqliteReplyWorkspace} from '../shared/sqlite-reply-candidates';
 type CandidateRequest=SqliteCandidatePage['requests'][number];
+type GenerationInput={text:string;workspace:SqliteReplyWorkspace;carry?:string};
 const progressLabel=(phase:SqliteCandidateStatus['phase'])=>({not_found:'正在接纳本次请求…',preparing:'正在整理本次资料…',queued:'正在等待生成…',generating:'正在等待模型回复…',saving:'正在保存候选…',committed:'正在读取已保存候选…',failed:'正在核对本次结果…',unknown:'正在核对本次结果…'}[phase]);
 function interruptionMessage(code:string|null|undefined,sent:boolean|undefined,abandoned:boolean|undefined):string|undefined{
  // 仅本机确认“已发出但未收到结果”并自动放弃时才这样说；已收到响应的失败同样已发送，不能套用。
@@ -28,7 +29,7 @@ interface Props {bridge:SqliteDiscussionBridge;contactId:string|null;scopeRevisi
 export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessionId,disabled=false,initialDraft='',onInitialDraftTaken,onDraftChange,onSubmitted}:Props){
  const scopeKey=JSON.stringify([contactId,scopeRevision,sessionId]),latest=useRef({scopeKey,bridge});latest.current={scopeKey,bridge};
  const revision=useRef(0),mounted=useRef(false),operation=useRef<object|null>(null);
- const retry=useRef<{requestKey:string;text:string;workspace:SqliteReplyWorkspace;carry?:string}|null>(null);
+ const retry=useRef<(GenerationInput&{requestKey:string})|null>(null);
  const seeded=useRef<string|null>(null),consumedHandoff=useRef<string|null>(null),stopProgress=useRef<(()=>void)|null>(null);
  const [progress,setProgress]=useState<SqliteCandidateStatus|null>(null);
  const [progressUnreadable,setProgressUnreadable]=useState(false);
@@ -41,7 +42,9 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
  const [referenceRevision,setReferenceRevision]=useState(0);
  const available=!!bridge.candidates&&!!contactId&&!!sessionId&&!disabled;
  const unresolved=!!retry.current&&!(progress?.phase==='failed'&&progress.retryable);
- function clear(){stopProgress.current?.();setProgress(null);setProgressUnreadable(false);++revision.current;operation.current=null;retry.current=null;generationFailure.current=null;qualifiedRequests.current=[];setPage(null);setDraft('');setCarry(undefined);setBusy(false);setError('');setNotice('');setEdits({});setInspected({});setOpenRequests({});}
+ function clearVersions(){setEdits({});setInspected({});}
+ function discardDraft(){seeded.current=scopeKey;setDraft('');if(contactId)onDraftChange?.('',{contactId,scopeRevision});setCarry(undefined);retry.current=null;}
+ function clear(){stopProgress.current?.();setProgress(null);setProgressUnreadable(false);++revision.current;operation.current=null;retry.current=null;generationFailure.current=null;qualifiedRequests.current=[];setPage(null);setDraft('');setCarry(undefined);setBusy(false);setError('');setNotice('');clearVersions();setOpenRequests({});}
  useEffect(()=>{mounted.current=true;const off=bridge.onInvalidated(()=>{seeded.current=scopeKey;clear();if(contactId)onDraftChange?.('',{contactId,scopeRevision});});return()=>{mounted.current=false;stopProgress.current?.();++revision.current;operation.current=null;off();};},[bridge,scopeKey]);
  useEffect(()=>{clear();if(available)void run({action:'read'});},[scopeKey,bridge]);
  // 临时禁用只暂停新操作；来源及范围失效仍由订阅和scopeKey立即清除。
@@ -55,23 +58,24 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
    consumedHandoff.current=handoffKey;seeded.current=scopeKey;setDraft(initialDraft);onInitialDraftTaken?.();
   }
  },[scopeKey,available,initialDraft,handoffKey,onInitialDraftTaken]);
- type Command=SqliteCandidateOperation extends infer O?O extends SqliteCandidateOperation?Omit<O,'contactId'|'scopeRevision'|'sessionId'>:never:never;
- function showPage(next:SqliteCandidatePage){
+ type Command=(SqliteCandidateOperation extends infer O?O extends SqliteCandidateOperation?Omit<O,'contactId'|'scopeRevision'|'sessionId'>:never:never)|{action:'continue';candidateId:string;versionNo:number};
+ function showPage(value:unknown){
+  const next=readSqliteCandidatePage(value);
   // 仅保留无正文的来源标识，短暂读取失败后仍能核对旧草稿的资格。
   const readable=qualifiedRequests.current;
   if(readable.some(id=>!next.requests.some(r=>r.requestId===id&&r.sourceState==='available'))){
-   seeded.current=scopeKey;setDraft('');if(contactId)onDraftChange?.('',{contactId,scopeRevision});setCarry(undefined);retry.current=null;setNotice('');
+   discardDraft();setNotice('');
   }
   qualifiedRequests.current=next.requests.filter(r=>r.sourceState==='available'&&r.candidates.length).map(r=>r.requestId);
   setPage(next);
   setReferenceRevision(value=>value+1);
-  setEdits({});setInspected({});
+  clearVersions();
  }
  function rejectOperation(error:unknown){
   const text=(error instanceof Error?error.message:'候选结果尚未确认，请重新读取。').replace(/^Error invoking remote method '[^']+': Error: /,'');
-  setEdits({});setInspected({});setNotice('');
+  clearVersions();setNotice('');
   if(text===sqliteReplySourceUnavailableMessage||/失效|已变化|已不可用|请先确认/.test(text)){
-   seeded.current=scopeKey;qualifiedRequests.current=[];setPage(null);setDraft('');if(contactId)onDraftChange?.('',{contactId,scopeRevision});setCarry(undefined);retry.current=null;
+   qualifiedRequests.current=[];setPage(null);discardDraft();
   }else setPage(old=>old?{requests:[]}:null);
   setError(text);return text;
  }
@@ -80,21 +84,23 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   const token={},boundary=revision.current;operation.current=token;setBusy(true);setError('');
   const current=()=>mounted.current&&operation.current===token&&revision.current===boundary&&latest.current.scopeKey===scopeKey&&latest.current.bridge===bridge;
   const scope={contactId,scopeRevision,sessionId};
-  const readStatus=async(requestKey:string)=>{const status=readSqliteCandidateStatus(await bridge.candidates!.execute({...scope,action:'status',requestKey}));if(status.requestKey!==requestKey)throw new Error('候选状态不匹配。');return status;};
+  const execute=(command:Command)=>bridge.candidates!.execute({...scope,...command,action:command.action==='continue'?'select':command.action} as SqliteCandidateOperation);
+  const reloadPage=async()=>{const next=await execute({action:'read'});if(!current())return false;showPage(next);return true;};
+  const readStatus=async(requestKey:string)=>{const status=readSqliteCandidateStatus(await execute({action:'status',requestKey}));if(status.requestKey!==requestKey)throw new Error('候选状态不匹配。');return status;};
   const showStatus=async(status:SqliteCandidateStatus)=>{
    if(!current())return;setProgress(status);setProgressUnreadable(false);
    if(status.phase!=='committed'){
     if(status.phase==='failed'&&!status.sent&&status.errorCode==='reply_sources_not_ready'){
      // 只保留用户独立输入；旧选稿及其派生草稿不能随恢复请求重新带入。
      const carried=!!retry.current?.carry||!!carry;
-     qualifiedRequests.current=[];setCarry(undefined);setEdits({});setInspected({});
+     qualifiedRequests.current=[];setCarry(undefined);clearVersions();
      setPage(old=>old?{requests:[]}:null);
-     if(carried){seeded.current=scopeKey;setDraft('');onDraftChange?.('',{contactId,scopeRevision});retry.current=null;}
+     if(carried)discardDraft();
     }
     setError(status.phase==='not_found'&&generationFailure.current?.requestKey===status.requestKey?generationFailure.current.message:statusFailure(status));return;
    }
-   const next=await bridge.candidates!.execute({...scope,action:'read'});if(!current())return;
-   const original=retry.current;showPage(readSqliteCandidatePage(next));retry.current=null;setError('');setCarry(undefined);
+   const original=retry.current;if(!await reloadPage())return;
+   retry.current=null;setError('');setCarry(undefined);
    if(original&&draft===original.text){setDraft('');onDraftChange?.('',{contactId,scopeRevision});}
    setNotice('已找到原请求保存的候选。');
   };
@@ -108,10 +114,9 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
    timer=setTimeout(()=>void poll(),350);
   }
   try{
-   const response=await bridge.candidates.execute({...scope,...command} as SqliteCandidateOperation);if(!current())return;
-   if(command.action==='status'){
-    const status=readSqliteCandidateStatus(response);if(status.requestKey!==command.requestKey)throw new Error('候选状态不匹配。');await showStatus(status);
-   }else if(command.action==='read'){showPage(readSqliteCandidatePage(response));}
+   if(command.action==='status'){await showStatus(await readStatus(command.requestKey));return;}
+   const response=await execute(command);if(!current())return;
+   if(command.action==='read'){showPage(response);}
    else if(command.action==='version')setInspected(v=>({...v,[command.candidateId]:readSqliteCandidateVersion(response)}));
    else{
     if(command.action==='generate'){
@@ -120,11 +125,12 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
      setProgress({requestKey:command.requestKey,phase:'committed',sent:true,errorCode:null,retryable:false,startedAt:null,finishedAt:Date.now()});setProgressUnreadable(false);retry.current=null;if(draft===command.text){setDraft('');if(contactId)onDraftChange?.('',{contactId,scopeRevision});}setCarry(undefined);setNotice(r.replayed?'已定位原请求，候选已重新核对。':'候选已保存，最终消息请自行发送。');
      onSubmitted?.({sessionId:r.session_id,requestKey:r.request_key,segmented:r.segmented,replayed:r.replayed});
      if(r.session_id!==sessionId)return;
-    }else if(command.action==='select'){
-     const selection=response as {id:string};if(typeof selection.id!=='string')throw new Error('选稿结果尚未确认，请重新读取。');
+    }else if(command.action==='select'||command.action==='continue'){
+     const selection=response as {id:string};if(typeof selection.id!=='string')throw new Error(command.action==='continue'?'选稿结果尚未确认。':'选稿结果尚未确认，请重新读取。');
+     if(command.action==='continue'){setCarry(selection.id);setNotice(`下一次明确请求将继续第${command.versionNo}版候选。`);return;}
      setNotice(`已选用第${command.versionNo}版；选用不表示已发送。`);
     }else setNotice('修改已保存为新版本，继承依据尚未重新核验。');
-    const next=await bridge.candidates.execute({...scope,action:'read'});if(!current())return;showPage(readSqliteCandidatePage(next));
+    await reloadPage();
    }
   }catch(e){
    stop();
@@ -133,26 +139,17 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
   }
   finally{stop();if(current()){operation.current=null;setBusy(false);}}
  }
- async function generate(action:'express'|'suggest'){
+ function sendGeneration({text,workspace,carry}:GenerationInput){
+  const requestKey=crypto.randomUUID();retry.current={requestKey,text,workspace,carry};
+  return run({action:'generate',requestKey,text,workspace,acceptIncomplete:false,...(carry?{carriedSelectionId:carry}:{})});
+ }
+ function generate(action:'express'|'suggest'){
   if(action==='express'&&!draft.trim()||!page||unresolved||operation.current)return;
-  const workspace:SqliteReplyWorkspace={action,draftText:draft,contextText:'',includeRelationshipContext:true};
-  const requestKey=crypto.randomUUID();
-  retry.current={requestKey,text:draft,workspace,carry};
-  await run({action:'generate',requestKey,text:draft,workspace,acceptIncomplete:false,...(carry?{carriedSelectionId:carry}:{})});
+  return sendGeneration({text:draft,workspace:{action,draftText:draft,contextText:'',includeRelationshipContext:true},carry});
  }
- async function retryOriginal(){
+ function retryOriginal(){
   const original=retry.current;if(!original||operation.current)return;
-  if(progress?.phase!=='failed'||!progress.retryable){await run({action:'status',requestKey:original.requestKey});return;}
-  const requestKey=crypto.randomUUID();retry.current={...original,requestKey};
-  await run({action:'generate',requestKey,text:original.text,workspace:original.workspace,acceptIncomplete:false,...(original.carry?{carriedSelectionId:original.carry}:{})});
- }
- async function continueVersion(v:SqliteCandidateVersion){
-  if(!available||!bridge.candidates||!contactId||!sessionId||operation.current)return;
-  const token={},boundary=revision.current;operation.current=token;setBusy(true);setError('');
-  const current=()=>mounted.current&&operation.current===token&&revision.current===boundary&&latest.current.scopeKey===scopeKey&&latest.current.bridge===bridge;
-  try{const result=await bridge.candidates.execute({contactId,scopeRevision,sessionId,action:'select',candidateId:v.candidateId,versionNo:v.versionNo}) as {id:string};if(current()){if(typeof result.id!=='string')throw new Error('选稿结果尚未确认。');setCarry(result.id);setNotice(`下一次明确请求将继续第${v.versionNo}版候选。`);}}
-  catch(e){if(current())rejectOperation(e);}
-  finally{if(current()){operation.current=null;setBusy(false);}}
+  return progress?.phase==='failed'&&progress.retryable?sendGeneration(original):run({action:'status',requestKey:original.requestKey});
  }
  // 请求排序由后端保证升序：最后一项为最新一次。页面只含最近 20 次，标题按倒数计数才不会在 hasMoreRequests 时错位。
  function requestTitle(index:number,total:number){return index===total-1?'最新一次':`倒数第 ${total-index} 次`;}
@@ -213,7 +210,7 @@ export function SqliteReplyCandidatesPanel({bridge,contactId,scopeRevision,sessi
     {parts.map((part,index)=><label key={index}>第{index+1}条{parts.length>1&&(index===0?'（先发）':'（接着发）')}<textarea aria-label={`候选第${index+1}条`} value={part} disabled={busy||!available} onChange={e=>setEdits(old=>({...old,[v.candidateId]:parts.map((p,n)=>n===index?e.target.value:p)}))} /></label>)}
     <button className="button" disabled={busy||!available||!edits[v.candidateId]} onClick={()=>void run({action:'edit',candidateId:v.candidateId,versionNo:v.versionNo,parts})}>保存修改</button>
     <button className="button" title="记录选用当前已保存的版本；消息仍由你亲自发送" disabled={busy||!available} onClick={()=>void run({action:'select',candidateId:v.candidateId,versionNo:v.versionNo})}>选用这个说法</button>
-    <button className="button" title="记录选用，并将当前已保存版本带入下一次明确生成；点击后不会立即生成" disabled={busy||!available} onClick={()=>void continueVersion(v)}>以这个说法继续</button>
+    <button className="button" title="记录选用，并将当前已保存版本带入下一次明确生成；点击后不会立即生成" disabled={busy||!available} onClick={()=>void run({action:'continue',candidateId:v.candidateId,versionNo:v.versionNo})}>以这个说法继续</button>
     {v.versionNo>1&&<button className="button" disabled={busy} onClick={()=>void run({action:'version',candidateId:v.candidateId,versionNo:v.versionNo-1})}>查看上一版</button>}
     {v.versionNo!==candidate.versionNo&&<button className="button" disabled={busy} onClick={()=>{setInspected(old=>{const next={...old};delete next[v.candidateId];return next;});setEdits({});}}>回到最新版本</button>}
     <CandidateBasis version={v}/>

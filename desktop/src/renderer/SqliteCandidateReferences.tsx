@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {memo,useEffect,useRef,useState} from 'react';
 import {readSqliteCandidateInputPage,readSqliteCandidateSkillPage,type SqliteCandidateInputMaterial,type SqliteCandidateInputPage,type SqliteCandidateSkillPage,type SqliteCandidateRequest,type SqliteCandidateScope,type SqliteReplyCandidatesBridge,type SqliteCandidateVersion} from '../shared/sqlite-reply-candidates';
 
 type Material=SqliteCandidateInputMaterial;
@@ -33,14 +33,14 @@ export function CandidateMaterialGroups({items}:{items:Material[]}){
   </div>)}</div>
  </details>)}</div>;
 }
-export function CandidateBasis({version}:{version:SqliteCandidateVersion}){
+export const CandidateBasis=memo(function CandidateBasis({version}:{version:SqliteCandidateVersion}){
  const inherited=version.basis.some(item=>item.verification==='inherited_unverified');
  return <details className="candidate-basis" key={`${version.candidateId}:${version.versionNo}`}><summary><span>依据</span><small> · 引用 {version.basis.length} 项</small></summary>
   <p className="candidate-reference-note">这条说法引用的资料；其他资料及 Skill 见「本次参考」。</p>
   {inherited&&<p className="candidate-reference-note" role="status">继承原依据，手工修改尚未重新核验</p>}
   <CandidateMaterialGroups items={version.basis}/>
  </details>;
-}
+});
 interface Props {bridge:SqliteReplyCandidatesBridge;scope:SqliteCandidateScope;request:SqliteCandidateRequest;disabled:boolean;onUnavailable:()=>void}
 /** 只在展开时读当前请求；关闭、换快照或失效后的迟到正文不再展示。 */
 export function SqliteCandidateReferences({bridge,scope,request,disabled,onUnavailable}:Props){

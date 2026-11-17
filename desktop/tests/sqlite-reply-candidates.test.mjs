@@ -47,6 +47,20 @@ test('候选继续可显式取消，随后生成不携入旧选稿',{timeout:300
  assert.equal(Object.hasOwn(f.commands.find(c=>c.action==='generate').workspace,'excludedMessageIds'),false);
 });
 
+test('选用后重读候选，继续只记录携入且不生成或重读',{timeout:30000},async t=>{
+ const f=await panel(t,async operation=>operation.action==='select'?{id:ids.selection}:pageData());
+ const region=f.page.getByRole('region',{name:'表达工作区'});
+ await region.getByRole('button',{name:'以这个说法继续',exact:true}).click();
+ await expect(region.getByText('下一次明确请求将继续第1版候选。',{exact:true})).toBeVisible();
+ assert.deepEqual(f.commands.map(command=>command.action),['read','select']);
+ await region.getByRole('button',{name:'选用这个说法',exact:true}).click();
+ await expect(region.getByText('已选用第1版；选用不表示已发送。',{exact:true})).toBeVisible();
+ await expect(region.getByRole('button',{name:'选用这个说法',exact:true})).toBeEnabled();
+ assert.deepEqual(f.commands.map(command=>command.action),['read','select','select','read']);
+ assert.equal(f.commands.filter(command=>command.action==='generate').length,0);
+ t.diagnostic(JSON.stringify({workload:'先继续再普通选用',reads:2,selections:2,generations:0}));
+});
+
 test('暂时失去生成资格保留想法，结果未知只核对原请求且保留后来编辑',{timeout:30000},async t=>{
  let checks=0;
  const f=await panel(t,async operation=>{if(operation.action==='read')return pageData();if(operation.action==='status')return {requestKey:operation.requestKey,phase:++checks===1?'unknown':'committed',sent:true,errorCode:null,retryable:false,startedAt:1000,finishedAt:2000};throw new Error('候选结果尚未确认，请保留原请求重试核对。');});
@@ -405,7 +419,7 @@ test('真实样式下本次参考在窄宽窗口紧凑收起，资料区域限�
 });
 
 /** 仅IPC业务边界为显式替身；实际React、浏览器事件及渲染均执行。 */
-async function panel(t,execute,initialDraft='',assistant=false,styled=false){
+async function panel(t,execute,initialDraft='',assistant=false,styled=false,profiled=false){
  const compiled=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{SqliteReplyCandidatesPanel}from'./src/renderer/SqliteReplyCandidatesPanel';import{AssistantSessionPanel}from'./src/renderer/AssistantSessionPanel';
   const listeners=new Set();const bridge={candidates:{execute:request=>window.__execute(request).finally(()=>{window.__settled=(window.__settled||0)+1;})},onInvalidated:listener=>{listeners.add(listener);return()=>listeners.delete(listener);}};
   const root=createRoot(document.getElementById('root'));let props={bridge,contactId:${JSON.stringify(ids.contact)},scopeRevision:1,sessionId:${JSON.stringify(ids.session)},initialDraft:${JSON.stringify(initialDraft)},onSubmitted:receipt=>window.__submitted(receipt)};
@@ -415,7 +429,8 @@ async function panel(t,execute,initialDraft='',assistant=false,styled=false){
     sessionCatalog:{phase:'ready',items:[{sessionId:props.sessionId,isCurrent:true}],currentSessionId:props.sessionId}};
   const replies={listSavedSessions:async()=>{state={...state,sessionCatalog:{...state.sessionCatalog,phase:'loading'}};render();await new Promise(resolve=>window.__finishCatalog=resolve);state={...state,sessionCatalog:{...state.sessionCatalog,phase:'ready'}};render();},
     readSavedSession:async()=>{},newSavedSession:async()=>{},deleteSavedSession:async()=>{},viewSavedSession:async()=>{},resumeSavedSession:async()=>{}};
-  const render=()=>root.render(${assistant}?React.createElement(AssistantSessionPanel,{replies:{...replies,state}}):React.createElement(SqliteReplyCandidatesPanel,props));window.__invalidate=()=>{for(const listener of listeners)listener({revision:2,contactId:props.contactId,scopeRevision:props.scopeRevision});};
+  window.__durations=[];const profile=(_id,phase,duration)=>window.__durations.push({phase,duration});
+  const render=()=>{const view=${assistant}?React.createElement(AssistantSessionPanel,{replies:{...replies,state}}):React.createElement(SqliteReplyCandidatesPanel,props);root.render(${profiled}?React.createElement(React.Profiler,{id:'candidate-workspace',onRender:profile},view):view);};window.__invalidate=()=>{for(const listener of listeners)listener({revision:2,contactId:props.contactId,scopeRevision:props.scopeRevision});};
   window.__setDisabled=disabled=>{props={...props,disabled};render();};window.__switch=()=>{props={...props,contactId:${JSON.stringify(ids.other)},scopeRevision:2,sessionId:${JSON.stringify(ids.otherSession)}};render();};render();`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
  const server=createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end(styled?'<meta name="viewport" content="width=device-width, initial-scale=1"><div class="ime-pane"><main class="ime-workspace"><div id="root"></div></main></div>':'<div id="root"></div>');});server.listen(0,'127.0.0.1');await once(server,'listening');
  const browser=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'});t.after(async()=>{await browser.close();await new Promise(resolve=>server.close(resolve));});
@@ -705,6 +720,52 @@ test('状态核对失败不继续宣称正在整理，恢复后显示真实阶�
  await expect(generate).toBeDisabled();await region.getByRole('button',{name:'核对原请求',exact:true}).click();
  assert.equal(f.commands.filter(c=>c.action==='generate').length,1);
  const requestKey=f.commands.find(c=>c.action==='generate').requestKey;assert.ok(f.commands.filter(c=>c.action==='status').every(c=>c.requestKey===requestKey));
+});
+
+test('生成失败后核对新状态，不借用仍在途的旧进度快照',{timeout:30000},async t=>{
+ const generation=Promise.withResolvers(),oldStatus=Promise.withResolvers(),entered=Promise.withResolvers();
+ let statuses=0,active=0,maxActive=0;
+ const f=await panel(t,async operation=>{
+  if(operation.action==='read')return pageData();
+  if(operation.action==='generate')return generation.promise;
+  if(operation.action!=='status')throw new Error('未授权的合成操作');
+  const number=++statuses;maxActive=Math.max(maxActive,++active);
+  try{
+   if(number===1){entered.resolve();await oldStatus.promise;}
+   return {requestKey:operation.requestKey,phase:number===1?'generating':'unknown',sent:true,errorCode:null,retryable:false,startedAt:1000,finishedAt:null};
+  }finally{active--;}
+ });
+ const region=f.page.getByRole('region',{name:'表达工作区'});
+ await region.getByRole('button',{name:'帮我想想',exact:true}).click();await entered.promise;
+ generation.reject(new Error('合成生成连接中断'));
+ await f.page.waitForFunction(()=>window.__settled>=2);
+ await f.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ const statusRequestsBeforeOldResult=statuses;
+ oldStatus.resolve();
+ await expect(region.getByRole('alert')).toHaveText('模型请求已发出，结果暂未确认。请核对原请求。');
+ await expect(region.getByRole('button',{name:'核对原请求',exact:true})).toBeVisible();
+ const generated=f.commands.filter(command=>command.action==='generate'),checked=f.commands.filter(command=>command.action==='status');
+ assert.equal(generated.length,1);assert.equal(checked.length,2);assert.ok(checked.every(command=>command.requestKey===generated[0].requestKey));
+ t.diagnostic(JSON.stringify({workload:'进度读取在途时生成失败',statusRequests:statuses,statusRequestsBeforeOldResult,maxConcurrentStatusRequests:maxActive,generations:generated.length}));
+});
+
+test('大量历史候选下连续编辑主输入不重读候选或改变已有正文',{timeout:30000},async t=>{
+ const data=pageOf(Array.from({length:20},(_,requestIndex)=>requestOf(uid(1000+requestIndex),Array.from({length:3},(_,candidateIndex)=>versionOf(uid(2000+requestIndex*3+candidateIndex),[`第${requestIndex+1}轮合成候选${candidateIndex+1}`],{basis:Array.from({length:16},(_,index)=>({itemNo:index+1,kind:'message',text:`合成依据${index+1}：${'完整来源文字。'.repeat(24)}`,verification:'actual_input'}))})))));
+ const f=await panel(t,async()=>data,'',false,false,true),region=f.page.getByRole('region',{name:'表达工作区'});
+ const draft=region.getByRole('textbox',{name:'有什么想说的',exact:true}),candidate=region.getByRole('textbox',{name:'候选第1条',exact:true}).last();
+ await expect(candidate).toHaveValue('第20轮合成候选3');
+ for(let index=0;index<5;index++)await draft.fill(`合成预热${index}`);
+ const samples=[];
+ for(let round=0;round<3;round++){
+  await f.page.evaluate(()=>{window.__durations=[];});
+  for(let index=0;index<15;index++)await draft.fill(`连续编辑的合成想法${round}:${index}`);
+  await f.page.evaluate(()=>new Promise(requestAnimationFrame));
+  samples.push(await f.page.evaluate(()=>({commits:window.__durations.length,actualDurationMs:window.__durations.reduce((total,item)=>total+item.duration,0)})));
+ }
+ await expect(draft).toHaveValue('连续编辑的合成想法2:14');await expect(candidate).toHaveValue('第20轮合成候选3');
+ assert.deepEqual(f.commands.map(command=>command.action),['read']);
+ const median=samples.map(sample=>sample.actualDurationMs).sort((a,b)=>a-b)[1];
+ t.diagnostic(JSON.stringify({workload:'20请求×3候选×16引用，每轮连续编辑15次',samples,medianActualDurationMs:median,reads:1}));
 });
 
 // —— 请求分段、说法命名与版本降噪（spec §6）——
