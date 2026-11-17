@@ -9,11 +9,10 @@ import {RETRIEVAL_MODEL_FINGERPRINT,type RetrievalKind,type VectorIndexItem,type
 export const RETRIEVAL_EMBEDDING_FINGERPRINT=RETRIEVAL_MODEL_FINGERPRINT;
 export interface RetrievalWakeScope {contactId?:string;kind?:RetrievalKind}
 export interface RetrievalQueryScope extends RetrievalWakeScope {generation:bigint;holderKeys?:readonly string[];coversAllContacts?:boolean}
-export interface RetrievalQueryVector {vector?:readonly number[];strategy:'hybrid'|'bm25';indexIncomplete:boolean}
 export interface RetrievalIndexLifecycle {
  start():void;
  wake(scope?:RetrievalWakeScope):void;
- queryVector(query:string,signal:AbortSignal,scope?:RetrievalQueryScope):Promise<RetrievalQueryVector>;
+ queryVector(query:string,signal:AbortSignal,scope?:RetrievalQueryScope):Promise<readonly number[]|undefined>;
  flushForTests():Promise<void>;
  close():Promise<void>;
 }
@@ -56,7 +55,6 @@ export function createRetrievalIndex(options:Options):RetrievalIndexLifecycle {
  };
  let laneRunning=false,closed=false,started=false,timer:ReturnType<typeof setTimeout>|undefined,draining:Promise<DrainResult>|undefined,closing:Promise<void>|undefined,retryAt=0;
  const execute=<T>(name:string,input:object)=>options.storage.execute<T>(name,{ownerId:options.ownerId,...input});
- const coverage=(scope?:RetrievalWakeScope)=>execute<{indexIncomplete:boolean}>('retrieval.coverage',{modelFingerprint:fingerprint,...(scope?.contactId?{contactId:scope.contactId}:{}),...(scope?.kind?{kind:scope.kind}:{})});
  const schedule=(delay:number)=>{
   if(!started||closed||timer)return;
   timer=setTimeout(()=>{timer=undefined;void drain().catch(()=>{});},delay);timer.unref();
@@ -150,15 +148,14 @@ export function createRetrievalIndex(options:Options):RetrievalIndexLifecycle {
   },
   async queryVector(query,signal,scope){
    signal.throwIfAborted();if(closed)throw stopped();
-   const {indexIncomplete}=await coverage(scope);signal.throwIfAborted();if(closed)throw stopped();
-   if(!options.embed||Date.now()<retryAt){lifecycle.wake(scope);return {strategy:'bm25',indexIncomplete};}
+   if(!options.embed||Date.now()<retryAt){lifecycle.wake(scope);return undefined;}
    const timeout=AbortSignal.timeout(options.queryTimeoutMs??8000),combined=AbortSignal.any([signal,timeout]);
    const operation=held([scope??{generation:0n,coversAllContacts:true}],ownSignal=>infer([query],'query',AbortSignal.any([combined,ownSignal])));
    lifecycle.wake(scope);
    let abort!:()=>void;
    const cancelled=new Promise<never>((_,reject)=>{abort=()=>reject(combined.reason);if(combined.aborted)abort();else combined.addEventListener('abort',abort,{once:true});});
-   try{const [vector]=await Promise.race([operation,cancelled]);signal.throwIfAborted();return {vector,strategy:'hybrid',indexIncomplete};}
-   catch(error){if(signal.aborted)throw signal.reason;if(closed)throw stopped();retryAt=Date.now()+retryMs;return {strategy:'bm25',indexIncomplete};}
+   try{const [vector]=await Promise.race([operation,cancelled]);signal.throwIfAborted();return vector;}
+   catch(error){if(signal.aborted)throw signal.reason;if(closed)throw stopped();retryAt=Date.now()+retryMs;return undefined;}
    finally{combined.removeEventListener('abort',abort);}
   },
   async flushForTests(){while(!closed&&await drain()==='yield')await new Promise<void>(resolve=>setImmediate(resolve));},

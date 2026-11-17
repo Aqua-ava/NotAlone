@@ -35,25 +35,17 @@ function pending(tx:StorageTransaction,ownerId:string,contactId?:string,model=RE
   vectorPending:Number(tx.get(`SELECT COUNT(*) n FROM retrieval_document WHERE owner_id=?${where} AND ${vectorPredicate}`,[...v,model])!.n)};
 }
 
-/** 前台只判断覆盖是否齐备；待办存在时立即结束，不为每次查询统计整池数量。 */
-function indexIncomplete(tx:StorageTransaction,ownerId:string,contactId?:string,model=RETRIEVAL_MODEL_FINGERPRINT,kind?:RetrievalKind):boolean{
- const v=values(ownerId,contactId,kind),where=scopeWhere(contactId,kind);
- if(tx.get(`SELECT 1 FROM retrieval_text_pending WHERE owner_id=?${where} LIMIT 1`,v))return true;
- return !!tx.get(`SELECT 1 FROM retrieval_document WHERE owner_id=?${where}
-  AND (tokenizer_fingerprint<>? OR ${vectorPredicate}) LIMIT 1`,[...v,searchTokenizerFingerprint(),model]);
-}
-
 /** 所有历史资格查询固定走消息反查索引，不为每条正文重扫联系人全部capture记录。 */
-export function legalHistoryRecord(tx:StorageTransaction,ownerId:string,contactId:string,messageId:string,dataGeneration?:bigint):StorageRow|undefined{
+function legalHistoryRecord(tx:StorageTransaction,ownerId:string,contactId:string,messageId:string):StorageRow|undefined{
  return tx.get(`WITH ${savedSourceScopeCTE} SELECT r.id record_id FROM capture_record r INDEXED BY capture_record_message
   JOIN sync_capture c ON c.owner_id=r.owner_id AND c.contact_id=r.contact_id AND c.id=r.capture_id
   JOIN read_goal g ON g.owner_id=c.owner_id AND g.contact_id=c.contact_id AND g.id=c.goal_id
   JOIN message m ON m.owner_id=r.owner_id AND m.contact_id=r.contact_id AND m.id=r.message_id
   WHERE r.owner_id=? AND r.contact_id=? AND r.message_id=? AND r.state='normalized' AND r.availability='available'
-   AND m.availability='available' AND m.binding_id=g.binding_id ${dataGeneration===undefined?'':'AND g.accepted_data_generation<=?'}
+   AND m.availability='available' AND m.binding_id=g.binding_id
    AND EXISTS(SELECT 1 FROM source_proof p WHERE p.owner_id=m.owner_id AND p.contact_id=m.contact_id AND p.state='ok')
    AND NOT EXISTS(SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
-   AND ${currentSourcePredicate()} ORDER BY r.id LIMIT 1`,[ownerId,contactId,contactId,ownerId,contactId,messageId,...(dataGeneration===undefined?[]:[dataGeneration])]);
+   AND ${currentSourcePredicate()} ORDER BY r.id LIMIT 1`,[ownerId,contactId,contactId,ownerId,contactId,messageId]);
 }
 
 /** 领取与提交均定向核验来源；临时正文只供本机embedding，不写任务或日志。 */
@@ -86,9 +78,6 @@ function vectorItem(tx:StorageTransaction,row:StorageRow,modelFingerprint:string
 }
 
 export const retrievalIndexActions:StorageAction[]=[
- {name:'retrieval.coverage',mode:'read',retryBusy:false,execute(tx,input){
-  const i=request(input);return {indexIncomplete:admitted(tx,i.ownerId,i.contactId)&&indexIncomplete(tx,i.ownerId,i.contactId,i.modelFingerprint,i.kind)};
- }},
  {name:'retrieval.pending',mode:'read',retryBusy:false,execute(tx,input){
   const i=request(input);return admitted(tx,i.ownerId,i.contactId)?pending(tx,i.ownerId,i.contactId,i.modelFingerprint,i.kind):{textPending:0,vectorPending:0};
  }},

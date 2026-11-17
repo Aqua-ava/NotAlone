@@ -51,6 +51,7 @@ function syntheticStorage(texts) {
   return {async execute(name, input) {
     // remaining 仅供固定旧运行时对照；正式文本批次只消费 scanMore。
     if (name === 'retrieval.syncTextBatch') return {processed: 0, scanMore: false, remaining: 0};
+    // 仅固定旧运行时对照仍读取这份提前覆盖投影；当前运行时不调用。
     if (name === 'retrieval.coverage') return {indexIncomplete: pending.length > 0};
     // remaining 只供 --compare-runtime-module 的固定旧实现对照；当前正式合同仅消费 scanMore。
     if (name === 'retrieval.claimVectorBatch') return {items: pending.slice(0, input.limit), scanMore: pending.length > input.limit,
@@ -109,10 +110,11 @@ async function measure(mode, texts, batchSize, createFactory) {
       queryAt = performance.now();
       try {
         const result = await bounded(index.queryVector(query, AbortSignal.any([controller.signal, AbortSignal.timeout(queryBudgetMs)]), scope), '前台查询', error => controller.abort(error));
-        outcome = {strategy: result.strategy, indexIncomplete: result.indexIncomplete, timedOut: false};
+        const queryVector = Array.isArray(result) ? result : result?.vector;
+        outcome = {queryVectorAvailable: !!queryVector, timedOut: false};
       } catch (error) {
         if (error?.name !== 'TimeoutError') throw error;
-        outcome = {strategy: null, indexIncomplete: null, timedOut: true};
+        outcome = {queryVectorAvailable: false, timedOut: true};
       }
       queryElapsedMs = performance.now() - queryAt;
     }
@@ -183,7 +185,7 @@ const summary = runtimes.flatMap(({runtimeLabel}) => options.workloads.flatMap(w
     idleModelEmbedMs: stats(rows.map(row => row.idle.modelEmbedMs)), busyModelEmbedMs: stats(rows.map(row => row.busy.modelEmbedMs)),
     backgroundOnlyModelEmbedMs: stats(rows.map(row => row['backfill-only'].modelEmbedMs)),
     modelCalls: rows.map(row => ({idle: row.idle.modelCalls, busy: row.busy.modelCalls, backgroundOnly: row['backfill-only'].modelCalls})),
-    busyStrategies: rows.reduce((counts, row) => {const key = row.busy.strategy ?? 'timeout'; counts[key] = (counts[key] ?? 0) + 1; return counts;}, {}),
+    busyVectorAvailability: rows.reduce((counts, row) => {const key = row.busy.timedOut ? 'timeout' : row.busy.queryVectorAvailable ? 'available' : 'unavailable'; counts[key] = (counts[key] ?? 0) + 1; return counts;}, {}),
     exceededFiveSeconds: rows.filter(row => row.busy.exceededFiveSeconds).length};
 })));
 console.log(JSON.stringify({node: process.version, runtimeSource, runtimeCodeSHA256, samples: options.samples, batchSizes: options.batchSizes, workloads: options.workloads,

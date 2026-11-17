@@ -49,10 +49,10 @@ export class SqliteReplyTurns {
    signal.throwIfAborted();
    if(timedOut())return await o.storage.execute<ReplySearchResult>('reply.finishSearch',{...finishInput,error:'timeout'});
    searchSignal.throwIfAborted();
-   const vector=await o.retrieval?.queryVector(query,searchSignal,{contactId:attempt.contactId,kind,generation:attempt.dataGeneration});
+   const queryVector=await o.retrieval?.queryVector(query,searchSignal,{contactId:attempt.contactId,kind,generation:attempt.dataGeneration});
    signal.throwIfAborted();
    if(timedOut())return await o.storage.execute<ReplySearchResult>('reply.finishSearch',{...finishInput,error:'timeout'});
-   return await o.storage.execute<ReplySearchResult>('reply.finishSearch',{...finishInput,...(vector?.vector?{queryVector:vector.vector}:{})});
+   return await o.storage.execute<ReplySearchResult>('reply.finishSearch',{...finishInput,...(queryVector?{queryVector}:{})});
   }catch(error){
    if(!signal.aborted&&timedOut())return await o.storage.execute<ReplySearchResult>('reply.finishSearch',{...finishInput,error:'timeout'});
    await o.storage.execute('reply.finishSearch',{...finishInput,error:'failed'}).catch(()=>{});

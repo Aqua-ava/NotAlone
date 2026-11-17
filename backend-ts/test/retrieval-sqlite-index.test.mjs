@@ -99,7 +99,6 @@ test('真实SQLite领取越过失效来源空页，到扫描尾仍保留未覆�
   assert.equal(tail.items.length,1);assert.equal(tail.items[0].contactId,otherId);
   assert.deepEqual(await f.storage.execute('retrieval.commitVectorBatch',{ownerId:owner,items:tail.items.map(item=>({...item,vector:vector()}))}),{committed:1,rejected:0});
   assert.deepEqual(await f.storage.execute('retrieval.pending',{ownerId:owner}),{textPending:0,vectorPending:130});
-  assert.deepEqual(await f.storage.execute('retrieval.coverage',{ownerId:owner}),{indexIncomplete:true});
   // 到达扫描尾不代表全量齐备；下一轮绕回失效前缀，也只完成一次固定扫描段。
   assert.deepEqual(await claim(),{items:[],scanMore:false});
  }finally{db.close();}
@@ -242,35 +241,35 @@ test(`最初56的checksum和无游标结构保持，正常升级到${currentVers
  }finally{await upgraded.close();}
 });
 
-test('覆盖探测与精确计数在范围、缺向量、分词过期和排队状态下等价',async t=>{
+test('最终排名按实际路径及当前范围计算覆盖，独立诊断保留精确积压',async t=>{
  const f=await fixture(t),contactId=f.saved[0].contact_id,otherId=f.saved[1].contact_id;
+ await f.service.synchronize(contactId);await f.service.synchronize(otherId);
  const management=new SqliteMemoryManagement(f.storage,owner);
- const scopes=[{}, {contactId}, {contactId,kind:'history'}, {contactId,kind:'memory'}, {contactId:otherId,kind:'history'}, {modelFingerprint:'synthetic-other-model'}, {ownerId:'synthetic-missing-owner'}, {contactId:'synthetic-missing-contact'}];
- const equivalent=async()=>{
-  for(const scope of scopes){
-   const input={ownerId:owner,...scope};
-   const counts=await f.storage.execute('retrieval.pending',input);
-   assert.deepEqual(await f.storage.execute('retrieval.coverage',input),{indexIncomplete:counts.textPending>0||counts.vectorPending>0});
-  }
- };
- await equivalent();
- await f.service.synchronize(contactId);
- await management.decide({requestKey:randomUUID(),action:'manual',scope:{scopeKind:'self',contactId:null},body:'合成本人喜欢园艺'});
- await equivalent();
- assert.deepEqual(await f.storage.execute('retrieval.coverage',{ownerId:owner,contactId,kind:'history'}),{indexIncomplete:true});
- await vectors(f.storage);await equivalent();
- assert.deepEqual(await f.storage.execute('retrieval.coverage',{ownerId:owner,contactId,kind:'history'}),{indexIncomplete:false});
- const {db}=connect(f.root);
+ const current=await management.decide({requestKey:randomUUID(),action:'manual',scope:{scopeKind:'contact',contactId},body:'合成园艺偏好'});
+ await management.decide({requestKey:randomUUID(),action:'manual',scope:{scopeKind:'contact',contactId:otherId},body:'合成其他联系人的园艺偏好'});
+ const commit=async scope=>{const batch=await f.storage.execute('retrieval.claimVectorBatch',{ownerId:owner,modelFingerprint:RETRIEVAL_MODEL_FINGERPRINT,limit:16,...scope});return f.storage.execute('retrieval.commitVectorBatch',{ownerId:owner,items:batch.items.map(item=>({...item,vector:vector()}))});};
+ const {db,tx}=connect(f.root);
  try{
-  db.exec("UPDATE retrieval_document SET tokenizer_fingerprint='synthetic-stale-tokenizer' WHERE kind='history'");
-  await equivalent();
-  db.exec('INSERT INTO retrieval_text_pending SELECT owner_id,kind,entity_id,contact_id FROM retrieval_document');
-  await equivalent();
-  db.exec('DELETE FROM retrieval_text_pending');
+  const boundary={kind:'history',displayNo:tx.get('SELECT max(display_no) n FROM message').n,dataGeneration:tx.get('SELECT data_generation n FROM contact WHERE owner_id=? AND id=?',[owner,contactId]).n};
+  const history={ownerId:owner,contactId,kind:'history',query:'合成',scope:boundary,limit:8};
+  const memory={ownerId:owner,contactId,kind:'memory',query:'园艺',scope:{kind:'memory',anchors:[{id:current.memoryId,versionNo:1n}]},limit:8};
+  assert.deepEqual(await f.storage.execute('retrieval.pending',{ownerId:owner,contactId}),{textPending:0,vectorPending:2});
+  assert.equal(rankReplyRetrieval(tx,history).indexIncomplete,false,'没有语义模型时，已齐备BM25可正常返回');
+  assert.equal(rankReplyRetrieval(tx,{...history,queryVector:vector()}).indexIncomplete,true,'当前范围尚无向量，不能冒充混合路径已齐备');
+  await commit({contactId,kind:'history'});
+  assert.equal(rankReplyRetrieval(tx,{...history,queryVector:vector()}).indexIncomplete,false,'当前L1和其他联系人的欠账不影响已齐备L0');
+  assert.equal(rankReplyRetrieval(tx,{...memory,queryVector:vector()}).indexIncomplete,true);
+  await commit({contactId,kind:'memory'});
+  assert.equal(rankReplyRetrieval(tx,{...memory,queryVector:vector()}).indexIncomplete,false,'其他联系人L1不扩大冻结范围');
+  tx.run("INSERT INTO retrieval_text_pending SELECT owner_id,kind,entity_id,contact_id FROM retrieval_document WHERE contact_id=?",[otherId]);
+  assert.equal(rankReplyRetrieval(tx,history).indexIncomplete,false,'其他范围文本队列不污染当前覆盖');
+  tx.run("INSERT INTO retrieval_text_pending SELECT owner_id,kind,entity_id,contact_id FROM retrieval_document WHERE contact_id=? AND kind='history'",[contactId]);
+  assert.equal(rankReplyRetrieval(tx,history).indexIncomplete,true,'最终排名重新读取当前文本队列');
+  assert.deepEqual(rankReplyRetrieval(tx,{...history,query:''}).hits,[],'空词不制造命中');
+  assert.deepEqual(await f.storage.execute('retrieval.pending',{ownerId:'synthetic-missing-owner'}),{textPending:0,vectorPending:0});
+  await assert.rejects(()=>f.storage.execute('retrieval.pending',{ownerId:owner,kind:'unknown'}),{code:'retrieval_request_invalid'});
  }finally{db.close();}
- await assert.rejects(()=>f.storage.execute('retrieval.coverage',{ownerId:owner,kind:'unknown'}),{code:'retrieval_request_invalid'});
 });
-
 
 test('文本批次去重旧分词与排队身份，有界探测下一项且保持联系人及层级范围',async t=>{
  const f=await fixture(t),[contactId,otherId]=f.saved.map(binding=>binding.contact_id);

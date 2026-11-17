@@ -9,7 +9,6 @@ function store(documents=[]){
  const pending=[...documents],saved=new Map();let textBatches=1;
  return {saved,pending,async execute(name,input){
   if(name==='retrieval.syncTextBatch'){const processed=textBatches;textBatches=0;return {processed,scanMore:false};}
-  if(name==='retrieval.coverage')return {indexIncomplete:textBatches>0||pending.length>0};
   if(name==='retrieval.claimVectorBatch')return {items:pending.slice(0,input.limit),scanMore:pending.length>input.limit};
   if(name==='retrieval.commitVectorBatch'){for(const row of input.items){saved.set(row.docId,row.vector);const index=pending.findIndex(x=>x.docId===row.docId);if(index>=0)pending.splice(index,1);}return {committed:input.items.length,rejected:0};}
   assert.fail('未知动作 '+name);
@@ -25,8 +24,15 @@ test('正文仅回填一次，重复查询只向模型传入query且复用持久
   const result=await index.queryVector('合成查询',new AbortController().signal);
   await index.queryVector('合成查询二',new AbortController().signal);
   await index.flushForTests();
-  assert.equal(result.strategy,'hybrid');assert.equal(result.indexIncomplete,false);
+  assert.deepEqual(result,vector());
   assert.deepEqual(calls,[['合成正文甲','合成正文乙'],['合成查询'],['合成查询二']]);
+ }finally{await index.close();}
+});
+
+test('queryVector只返回本轮向量，不读取存储或提前声明索引覆盖',async()=>{
+ const index=createRetrievalIndex({storage:{execute:async()=>assert.fail('查询向量不能预读覆盖状态')},ownerId:'owner',holders:new ActiveHolders(),embed:async texts=>texts.map(vector)});
+ try{
+  for(const kind of ['history','memory'])assert.deepEqual(await index.queryVector('合成查询',new AbortController().signal,{contactId:'contact',kind,generation:0n}),vector());
  }finally{await index.close();}
 });
 
@@ -89,12 +95,12 @@ test('本机模型缺失仍补齐FTS，模型失败保留待处理向量并退�
  const storage=store([item('a','合成正文')]),holders=new ActiveHolders();
  const noModel=createRetrievalIndex({storage,ownerId:'owner',holders});
  await noModel.flushForTests();
- assert.deepEqual(await noModel.queryVector('合成查询',new AbortController().signal),{strategy:'bm25',indexIncomplete:true});
+ assert.deepEqual(await noModel.queryVector('合成查询',new AbortController().signal),undefined);
  await noModel.close();
  let calls=0;const failed=createRetrievalIndex({storage,ownerId:'owner',holders,embed:async()=>{calls++;throw Error('合成本机模型缺失');}});
  try{
   await assert.rejects(failed.flushForTests(),/合成本机模型缺失/);
-  assert.deepEqual(await failed.queryVector('合成查询',new AbortController().signal),{strategy:'bm25',indexIncomplete:true});
+  assert.deepEqual(await failed.queryVector('合成查询',new AbortController().signal),undefined);
   assert.equal(calls,1);assert.equal(storage.pending.length,1);
  }finally{await failed.close();}
 });
@@ -219,7 +225,7 @@ test('隔离SQLite中的L0与L1向量在索引生命周期重开后继续复用'
  try{
   await second.flushForTests();assert.equal(calls.flat().length,2);
   const result=await second.queryVector('合成园艺查询',new AbortController().signal);
-  assert.equal(result.strategy,'hybrid');assert.equal(result.indexIncomplete,false);
+  assert.deepEqual(result,vector());
   assert.deepEqual(calls.at(-1),['合成园艺查询']);
  }finally{await second.close();}
 });
@@ -251,13 +257,12 @@ test('连续空扫描每轮最多64页，留待单timer续扫并可正常关闭'
  finally{await index.close();}
 });
 
-test('当前查询的联系人及本人资料先于全局长队列回填，其他联系人随后继续且覆盖状态按当前范围计算',async()=>{
+test('当前查询的联系人及本人资料先于全局长队列回填，完成后继续其他联系人',async()=>{
  const others=Array.from({length:20},(_,n)=>({...item(`other-${n}`,`其他联系人正文${n}`),contactId:'other'}));
  const current={...item('current','当前联系人正文'),contactId:'current'},self={...item('self','本人记忆'),kind:'memory',contactId:null,coversAllContacts:true};
  const remaining=[...others,current,self],calls=[],scopes=[],globalStarted=deferred(),releaseGlobal=deferred(),currentStarted=deferred(),releaseCurrent=deferred();
  const eligible=contactId=>remaining.filter(row=>contactId===undefined||row.contactId===contactId||row.contactId===null);
  const storage={async execute(name,input){
-  if(name==='retrieval.coverage')return {indexIncomplete:eligible(input.contactId).length>0};
   if(name==='retrieval.syncTextBatch'){scopes.push(input.contactId);return {processed:0,scanMore:false};}
   if(name==='retrieval.claimVectorBatch'){
    const rows=eligible(input.contactId);return {items:rows.slice(0,input.limit),scanMore:rows.length>input.limit};
@@ -278,7 +283,7 @@ test('当前查询的联系人及本人资料先于全局长队列回填，其�
   index.start();await globalStarted.promise;
   const querying=index.queryVector('当前查询',new AbortController().signal,{contactId:'current',generation:0n});
   await new Promise(resolve=>setImmediate(resolve));releaseGlobal.resolve();
-  const first=await querying;assert.equal(first.indexIncomplete,true);
+  assert.deepEqual(await querying,vector());
   assert.deepEqual(calls.slice(0,2),[[others[0].text],['当前查询']],'query优先于下一批正文推理');
   await currentStarted.promise;releaseCurrent.resolve();
   await index.flushForTests();
@@ -286,7 +291,7 @@ test('当前查询的联系人及本人资料先于全局长队列回填，其�
   assert.deepEqual(calls.slice(4).flat(),others.slice(1).map(row=>row.text),'优先范围完成后继续全局积压');
   remaining.push({...item('other-pending','其他联系人新增正文'),contactId:'other'});
   const second=await index.queryVector('当前查询二',new AbortController().signal,{contactId:'current',generation:0n});
-  assert.equal(second.indexIncomplete,false,'其他联系人的积压不冒充当前联系人的索引缺口');
+  assert.deepEqual(second,vector());
  }finally{releaseGlobal.resolve();releaseCurrent.resolve();await index.close();}
 });
 
@@ -299,7 +304,6 @@ test('启动先准备L1小池，当前L1查询只优先联系人与本人记忆�
  const eligible=input=>remaining.filter(row=>(input.contactId===undefined||row.contactId===input.contactId||row.contactId===null)&&(input.kind===undefined||row.kind===input.kind));
  const storage={async execute(name,input){
   requests.push({name,contactId:input.contactId,kind:input.kind});
-  if(name==='retrieval.coverage')return {indexIncomplete:eligible(input).length>0};
   if(name==='retrieval.syncTextBatch')return {processed:0,scanMore:false};
   if(name==='retrieval.claimVectorBatch'){
    const rows=eligible(input);return {items:rows.slice(0,input.limit),scanMore:rows.length>input.limit};
@@ -320,13 +324,12 @@ test('启动先准备L1小池，当前L1查询只优先联系人与本人记忆�
   remaining.push(current,owner);
   const querying=index.queryVector('当前L1查询',new AbortController().signal,{contactId:'current',kind:'memory',generation:0n});
   await new Promise(resolve=>setImmediate(resolve));releaseGlobal.resolve();
-  assert.equal((await querying).indexIncomplete,true);await index.flushForTests();
+  assert.deepEqual(await querying,vector());await index.flushForTests();
   assert.deepEqual(calls.slice(3,6).flat(),['当前L1查询',current.text,owner.text]);
   assert.deepEqual(calls.slice(6).flat(),[...histories.slice(1).map(row=>row.text),currentHistory.text],'L1优先完成后仍按全局顺序处理L0');
   assert.deepEqual(requests.filter(row=>row.name==='retrieval.claimVectorBatch').slice(0,2).map(row=>row.kind),['memory','memory']);
   assert.ok(requests.some(row=>row.name==='retrieval.syncTextBatch'&&row.contactId==='current'&&row.kind==='memory'));
   remaining.push({...item('later-history','当前L0新欠账'),contactId:'current'});
-  assert.equal((await index.queryVector('当前L1再查',new AbortController().signal,{contactId:'current',kind:'memory',generation:0n})).indexIncomplete,false,'当前L0欠账不能冒充L1索引缺口');
-  assert.equal(requests.filter(row=>row.name==='retrieval.coverage').at(-1).kind,'memory');
+  assert.deepEqual(await index.queryVector('当前L1再查',new AbortController().signal,{contactId:'current',kind:'memory',generation:0n}),vector());
  }finally{releaseGlobal.resolve();await index.close();}
 });
