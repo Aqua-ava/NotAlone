@@ -63,17 +63,17 @@ test('两位联系人交替建立增量目标后首次接续使用当前原生�
  assert.equal((await f.history.read(a.contact_id)).messages.length, 1, '替换目标不得重复建立规范消息');
 });
 
-test('同一原生目标仍保留时接续现有历史任务而不再次打开目标', async t => {
+test('同联系人下一轮从已接受检查点建立当前目标，不复用已释放快照', async t => {
  const f = await strictTargetFixture(t), [a, b] = f.saved;
  await f.history.synchronize(a.contact_id); await f.history.synchronize(b.contact_id);
  await f.history.synchronizeIncremental(a.contact_id);
- const before = f.state.serial;
+ const before = f.state.serial, resumes = f.state.resumes;
  assert.equal((await f.history.synchronize(a.contact_id)).phase, 'complete');
- assert.equal(f.state.serial, before);
+ assert.equal(f.state.serial, before + 1);assert.equal(f.state.resumes,resumes + 1);
  assert.equal((await f.history.synchronizeIncremental(a.contact_id)).incremental.phase, 'ready');
 });
 
-test('来源准备替换保留守卫目标后按新目标补齐且不重复恢复原生检查点', async t => {
+test('来源准备释放本轮快照，后续历史重新恢复已接受检查点', async t => {
  const f = await strictTargetFixture(t, { sharedReader: false }), [a] = f.saved;
  await f.history.synchronize(a.contact_id);
  await f.history.stop(a.contact_id);
@@ -83,7 +83,8 @@ test('来源准备替换保留守卫目标后按新目标补齐且不重复恢�
  assert.notEqual(f.state.current.target.descriptor, oldPendingTarget);
  const before = f.state.serial, resumes = f.state.resumes;
  assert.equal((await f.history.synchronize(a.contact_id)).phase, 'complete');
- assert.equal(f.state.serial, before); assert.equal(f.state.resumes, resumes);
+ assert.equal(f.state.serial, before + 1); assert.equal(f.state.resumes, resumes + 1);
+ assert.notEqual(f.state.current.target.descriptor, oldPendingTarget);
  assert.equal(f.state.pages.at(-1).target, f.state.current.target.descriptor);
  assert.equal((await f.history.synchronizeIncremental(a.contact_id)).incremental.phase, 'ready');
  assert.equal((await f.history.read(a.contact_id)).messages.length, 1);

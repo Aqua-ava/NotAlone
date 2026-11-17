@@ -8,14 +8,14 @@ import { FirstHistoryCoordinator } from '../src/history/sqlite/coordinator.ts';
 
 async function emptyFixture(t) {
  const cleanup=[],f=await fixture({after:fn=>cleanup.push(fn)}),contactId=f.saved[0].contact_id;
- const state={artifact:'a'.repeat(64),partitions:['shard-a','shard-b'],pages:0,targets:0};
+ const state={artifact:'a'.repeat(64),partitions:['shard-a','shard-b'],pages:0,targets:0,afterTarget:null};
  const create=()=>{
   const loss=Promise.withResolvers();
   return {...f.channel,guardSession:{loss:loss.promise},
    inspect:async scope=>({...await f.channel.inspect(scope),profileId:'wechat-4.0.6-29387-absent-private-target-v1',
     artifactSha256:state.artifact,declaredPrimaryKey:[],statusSemantics:'no-message-table-v1',continuity:'same-source-instances-normal-use-v1',
     capabilities:{normalHistory:'supported',snapshotBarrier:'supported',partitionCoverage:'supported',sourceLifecycle:'supported',restartContinuity:'supported',recoveryMapping:'supported',partitionGrowth:'supported',incrementalTail:'unsupported'}}),
-   target:async()=>({protocol:'private-history-v1',descriptor:`empty-${++state.targets}`,sourceGeneration:'source-1',tables:[],partitions:[...state.partitions],checkedPartitions:[...state.partitions]}),
+   target:async()=>{const target={protocol:'private-history-v1',descriptor:`empty-${++state.targets}`,sourceGeneration:'source-1',tables:[],partitions:[...state.partitions],checkedPartitions:[...state.partitions]};state.afterTarget?.();return target;},
    page:async(_scope,target,cursor)=>{state.pages++;return {target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[],completedPartitions:[...target.partitions],exhausted:true};},
    close:async()=>loss.resolve()};
  };
@@ -62,8 +62,8 @@ test('空目标跨运行时重验仍拒绝完整检查分片变化',async t=>{
  assert.equal(f.state.pages,1);assert.equal((await f.current.history.coverage(f.contactId)).failureCode,'history_source_continuity_unverified');
 });
 
-test('空目标当前活守卫中的支持报告变化仍拒绝，不借重验放宽',async t=>{
- const f=await emptyFixture(t);f.state.artifact='c'.repeat(64);
+test('空目标同轮元数据探测中的支持报告变化仍拒绝，不借重验放宽',async t=>{
+ const f=await emptyFixture(t);f.state.afterTarget=()=>{f.state.artifact='c'.repeat(64);};
  await assert.rejects(f.current.history.synchronizeIncremental(f.contactId),{code:'history_support_changed'});
  assert.equal(f.state.pages,1);
 });

@@ -7,7 +7,7 @@ import { StorageFailure } from '../src/storage/sqlite/contracts.ts';
 
 async function strictTargetFixture(t, { sharedReader = true } = {}) {
  const cleanup = [], f = await fixture({ after: fn => cleanup.push(fn) });
- const state = { owner: null, release: null, tail: Promise.resolve(), current: null, serial: 0, pages: [], tails: [], resumes: 0, channels: [], beforeInspect: null };
+ const state = { owner: null, release: null, tail: Promise.resolve(), current: null, serial: 0, pages: [], tails: [], resumes: 0, resumeAvailable: true, channels: [], beforeInspect: null };
  const shared = { async run(owner, work, release, signal) {
   const previous = state.tail; let unlock; state.tail = new Promise(resolve => { unlock = resolve; }); await previous;
   try {
@@ -29,7 +29,7 @@ async function strictTargetFixture(t, { sharedReader = true } = {}) {
    inspect: async scope => { const before=state.beforeInspect;state.beforeInspect=null;await before?.();return { ...await f.channel.inspect(scope), continuity: 'same-source-instances-normal-use-v1',
     capabilities: { incrementalTail: 'supported', durableIncremental: 'supported' } }; },
    target: async scope => select(scope, f.target).target,
-   resumeTarget: async (scope, previous) => { state.resumes++; return select(scope, previous).target; },
+   resumeTarget: async (scope, previous) => { state.resumes++; return state.resumeAvailable?select(scope, previous).target:null; },
    page: async (scope, target, cursor) => {
     const selected = current(scope, target); state.pages.push({ contactId: scope.token.contact_id, target: target.descriptor });
     selected.tailCursor = `checkpoint-${state.serial}`;
@@ -64,9 +64,11 @@ test('首次派发与来源准备相撞后，来源重验释放读取器再唤�
  f.storage.execute=async(name,input,...rest)=>{const result=await execute(name,input,...rest);if(name==='history.guardRelease'&&input.token.contact_id===a.contact_id)released.resolve();return result;};
  t.after(async()=>{directoryRelease.resolve();inspectRelease.resolve();await preparing?.catch(()=>{});await first.close();f.storage.execute=execute;for(const clean of cleanup.reverse())await clean();});
  const wakes=[];f.history.setFirstHistoryWake(id=>{wakes.push(id);first.wakeContact(id);});
+ // 模拟读取器无法恢复旧检查点：增量只建立待补齐目标，并请求首次协调器接管。
+ f.state.resumeAvailable=false;
  await f.history.synchronizeIncremental(a.contact_id);await directoryEntered.promise;
  assert.equal((await f.history.coverage(a.contact_id)).phase,'running');
- const current=f.state.channels.at(-1);current.code='history_native_timeout';current.loss.resolve();await released.promise;
+ await released.promise;
  f.state.beforeInspect=async()=>{inspectEntered.resolve();await inspectRelease.promise;};
  preparing=f.history.ensureSourceReady(a.contact_id);await inspectEntered.promise;
  directoryRelease.resolve();await first.waitForIdle();
