@@ -74,6 +74,8 @@ export function useMemoryBrowser({bridge, contactId, scopeRevision, documentsRef
   };
   refresh.current.list = async (preserve = false, silent = false) => {
     if (!current() || !scope.request || scope.decision || silent && (busy || list.isReading() || list.notice?.error)) return false;
+    // 只有实际开始的第一页读取才能覆盖此前的完成通知；在途静默读不能提前消费。
+    if (scope.cursor === undefined) completion.current.consumed = completion.current.version;
     const authority = scope.authority;
     const outcome = await list.read(() => bridge.read({...scope.request!, ...(scope.cursor ? {cursor: scope.cursor} : {})}), {preserve, silent});
     if (!current() || authority !== scope.authority || outcome === 'stale') return false;
@@ -108,12 +110,11 @@ export function useMemoryBrowser({bridge, contactId, scopeRevision, documentsRef
       completion.current.last = completedRunId;
       if (completedRunId) completion.current.version++;
     }
-    if (completion.current.consumed !== completion.current.version && !busy && contactId) {
-      completion.current.consumed = completion.current.version;
+    if (completion.current.consumed !== completion.current.version && !busy && !list.reading && !list.notice?.error && contactId) {
       resetPage();
       void refresh.current.list(true, true);
     }
-  }, [completedRunId, busy, scope]);
+  }, [completedRunId, busy, list.reading, list.notice, scope]);
   const wasVisible = useRef(visible);
   useEffect(() => {
     const reopened = visible && !wasVisible.current;
@@ -151,8 +152,6 @@ export function useMemoryBrowser({bridge, contactId, scopeRevision, documentsRef
       return;
     }
     resetPage();
-    // 本次权威重读覆盖此前到达的完成通知；重读开始后新增的通知仍独立处理。
-    completion.current.consumed = completion.current.version;
     const authority = scope.authority;
     const refreshed = await refresh.current.list();
     if (!current() || authority !== scope.authority) return;

@@ -54,7 +54,7 @@ export function useMemoryBrowserRead<T>(scope: object, unavailableMessage: strin
 
   const view = state.session === session ? state : empty();
   return {
-    snapshot: view.snapshot, busy: view.busy, notice: view.notice,
+    snapshot: view.snapshot, busy: view.busy, notice: view.notice, reading: session.request !== null,
     read, clear, isReading: () => session.request !== null,
     notify: (notice: MemoryBrowserNotice | null) => update(value => ({...value, notice})),
   };

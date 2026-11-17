@@ -93,6 +93,29 @@ test('新完成轮次将具体记忆重读到第一页并重置上一页导航',
  });
 });
 
+test('第二页静默刷新中收到完成通知时保留通知，随后重读第一页并保持导航一致',{timeout:20000},async t=>{
+ const started=gate(t,'第二页静默刷新开始'),release=gate(t,'第二页静默刷新返回'),cursors=[];
+ await panel(t,async(method,input)=>{
+  if(method==='readDocuments')return documents(input);
+  cursors.push(input.cursor??null);
+  if(cursors.length===3){started.resolve();await release.promise;}
+  return memories(input);
+ },async page=>{
+  await page.getByText(candidate.body,{exact:true}).waitFor();
+  await page.getByRole('button',{name:'下一页记忆',exact:true}).click();
+  await page.getByText('第二页的合成记忆',{exact:true}).waitFor();
+  await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await started.promise;
+  await page.evaluate(()=>window.updateHints({completedRunId:'completed-during-silent-page-refresh'}));await settle(page);
+  release.resolve();
+  await page.getByText(candidate.body,{exact:true}).waitFor();
+  assert.equal(await page.getByText('第二页的合成记忆',{exact:true}).count(),0);
+  const navigation=page.getByRole('navigation',{name:'记忆列表分页'});
+  assert.equal(await navigation.getByText('第 1 页',{exact:true}).count(),1);
+  assert.equal(await navigation.getByRole('button',{name:'上一页记忆',exact:true}).isDisabled(),true);
+  assert.deepEqual(cursors,[null,'next-page','next-page',null]);
+ });
+});
+
 test('决定期间的完成通知合并到决定后的权威重读，避免重复读取',{timeout:20000},async t=>{
  const started=gate(t,'记忆决定开始'),release=gate(t,'记忆决定结束'),events=[];
  let reads=0,documentReads=0,deciding=false;
