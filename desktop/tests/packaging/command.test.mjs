@@ -67,19 +67,19 @@ test('固定官方离线归档打包保留原始通知，自研探针签名保�
     const userData = path.join(owned, 'userData'); await mkdir(userData);
     const runner = path.join(owned, 'startup.mjs');
     await buildScript({ stdin: { contents: `import { StartupDiagnostics } from './src/main/startup/diagnostics';
-import { loadBackendConfiguration, backendEnvironment } from './src/main/backend/config';
+import { loadBackendConfiguration } from './src/main/backend/config';
 const resources = process.argv[2], userData = process.argv[3];
 const paths = await new StartupDiagnostics(userData, resources).getPaths();
-const config = await loadBackendConfiguration(userData, resources); config.projectDirectory = userData;
-process.stdout.write(JSON.stringify({ paths, environment: backendEnvironment(config, userData) }));`, resolveDir: project, sourcefile: 'package-startup.ts', loader: 'ts' }, outfile: runner, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+const config = await loadBackendConfiguration(userData, resources);
+process.stdout.write(JSON.stringify({ paths, configuredCli: config.wechatCliPath, probe: config.syncProbePath }));`, resolveDir: project, sourcefile: 'package-startup.ts', loader: 'ts' }, outfile: runner, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
     const startup = spawnSync(process.execPath, [runner, resources, userData], { encoding: 'utf8', timeout: 10_000,
       env: { PATH: '/usr/bin:/bin', NOTALONE_BACKEND_INFO: path.join(userData, 'backend.info') } });
     assert.equal(startup.status, 0);
     const result = JSON.parse(startup.stdout);
     assert.equal(result.paths.wechatCliPath, '');
     assert.equal(result.paths.syncProbePath, path.join(resources, 'notalone-probe/notalone-sync-probe'));
-    assert.equal(result.environment.NOTALONE_WECHAT_CLI, path.join(userData, 'unconfigured-cli'));
-    assert.equal(result.environment.NOTALONE_SYNC_PROBE, result.paths.syncProbePath);
+    assert.equal(result.configuredCli, undefined);
+    assert.equal(result.probe, result.paths.syncProbePath);
     const keep = path.join(output, 'keep'); await writeFile(keep, 'synthetic_existing_output');
     const occupied = spawnSync(process.execPath, values, { cwd: fixture, encoding: 'utf8', timeout: 10_000 });
     assert.notEqual(occupied.status, 0);

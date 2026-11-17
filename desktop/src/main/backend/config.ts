@@ -28,8 +28,6 @@ export interface BackendConfiguration {
   runtime?: 'dsh';
   // 仅由通过底座检查的显式开发能力配置注入，不从页面或路径配置接受。
   sqlite?: SqliteLaunchConfiguration;
-  // 默认业务只有 SQLite 一条受控启动路径。
-  source?: 'external';
   infoPath: string;
   envFilePath?: string;
   projectDirectory?: string;
@@ -72,7 +70,6 @@ export async function loadBackendConfiguration(userData: string, resourcesDirect
     || (developmentProject && configuredProject ? path.join(configuredProject, '.env') : undefined);
   if (!path.isAbsolute(infoPath) || (envFilePath && !path.isAbsolute(envFilePath))) throw new BackendFailure('backend_connection_failed');
   return {
-    source: 'external',
     runtime: 'dsh',
     infoPath, envFilePath,
     projectDirectory: developmentProject || configuredProject,
@@ -110,19 +107,6 @@ export async function saveBackendConfiguration(userData: string, paths: unknown,
 
 export function wechatConfigurationPath(): string {
   return process.env.WECHAT_CLI_CONFIG || process.env.WX_MCP_CONFIG || path.join(os.homedir(), '.config', 'wxcli', 'config.json');
-}
-
-export function backendEnvironment(config: BackendConfiguration, userData: string): NodeJS.ProcessEnv {
-  const environment: NodeJS.ProcessEnv = { ...process.env,
-    NOTALONE_MANAGED_USER_DATA: userData,
-    NOTALONE_BACKEND_INFO: config.infoPath,
-    NOTALONE_ENV_FILE: config.envFilePath || path.join(config.projectDirectory!, '.env'),
-    NOTALONE_WECHAT_CLI: config.wechatCliPath || path.join(userData, 'unconfigured-cli'),
-    // 在 DSH 隔离 HOME 前定位已有账号配置，只传路径，不复制密钥或账号资料。
-    NOTALONE_WECHAT_CONFIG: wechatConfigurationPath(),
-    NOTALONE_SYNC_PROBE: config.syncProbePath || path.join(userData, 'unconfigured-probe'),
-    NOTALONE_FOREGROUND_LAYOUT: path.join(userData, 'foreground-layout-profile.json') };
-  return environment;
 }
 
 export async function validateLaunchConfiguration(config: BackendConfiguration): Promise<{ projectDirectory: string }> {

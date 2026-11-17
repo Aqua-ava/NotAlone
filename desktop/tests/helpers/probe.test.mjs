@@ -67,7 +67,7 @@ test('仓库探针公开准备入口仅构建搬运，现场隔离配置沿包�
     assert.equal(occupied.status, 2); assert.equal(JSON.parse(occupied.stdout).code, 'helper_prepare_destination');
     const runner = path.join(owned, 'startup.mjs');
     await build({ stdin: { contents: `import { StartupDiagnostics } from './src/main/startup/diagnostics';
-import { loadBackendConfiguration, backendEnvironment } from './src/main/backend/config';
+import { loadBackendConfiguration } from './src/main/backend/config';
 import { resolveHeaderChangeSourcePath } from './src/main/backend/bundled-helpers';
 const resources = process.env.NOTALONE_SYNTHETIC_NO_RESOURCES === '1' ? undefined : process.argv[2], userData = process.argv[3];
 const diagnostics = new StartupDiagnostics(userData, resources);
@@ -77,14 +77,12 @@ if (process.argv[4] === 'save') {
   paths = await diagnostics.getPaths();
 }
 const config = await loadBackendConfiguration(userData, resources);
-config.projectDirectory = userData;
-process.stdout.write(JSON.stringify({ paths, probe: backendEnvironment(config, userData).NOTALONE_SYNC_PROBE,
+process.stdout.write(JSON.stringify({ paths, probe: config.syncProbePath,
   headerChange: await resolveHeaderChangeSourcePath(resources, process.env.NOTALONE_SYNTHETIC_PROJECT_PATH) }));`, resolveDir: process.cwd(), sourcefile: 'probe-startup.ts', loader: 'ts' }, outfile: runner, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
     const startup = (mode = 'read', extra = {}) => spawnSync(process.execPath, [runner, resources, userData, mode], {
       encoding: 'utf8', timeout: 10_000, env: { PATH: '/usr/bin:/bin', NOTALONE_BACKEND_INFO: path.join(userData, 'backend.info'), ...extra },
     });
     const probe = path.join(destination, 'notalone-sync-probe');
-    const unconfigured = path.join(userData, 'unconfigured-probe');
     const initial = startup(); assert.equal(initial.status, 0);
     // 52ab1a6f7 起 getPaths 只反映显式配置（无配置为空）；包内整组核验结果由 runner 的 probe/headerChange 表达。
     assert.equal(JSON.parse(initial.stdout).paths.syncProbePath, '');
@@ -115,7 +113,7 @@ process.stdout.write(JSON.stringify({ paths, probe: backendEnvironment(config, u
     const helperBytes = await readFile(helper);
     await chmod(helper, 0o644);
     const noExecBit = JSON.parse(startup().stdout);
-    assert.equal(noExecBit.probe, unconfigured, 'helper没有X位时整组停用，探针不再单独可用。');
+    assert.equal(noExecBit.probe, undefined, 'helper没有X位时整组停用，探针不再单独可用。');
     assert.equal(noExecBit.headerChange, undefined, 'helper没有X位时整组停用。');
     await chmod(helper, 0o755);
     const withExecBit = JSON.parse(startup().stdout);
@@ -123,7 +121,7 @@ process.stdout.write(JSON.stringify({ paths, probe: backendEnvironment(config, u
     assert.equal(withExecBit.headerChange, helper, '恢复X位后整组核验重新通过。');
     await rm(helper);
     const noHelper = JSON.parse(startup().stdout);
-    assert.equal(noHelper.probe, unconfigured, '清单声明的helper缺失时整组停用，探针不得单独存活。');
+    assert.equal(noHelper.probe, undefined, '清单声明的helper缺失时整组停用，探针不得单独存活。');
     assert.equal(noHelper.headerChange, undefined, '清单声明的helper缺失时不得回退短probe。');
     await writeFile(helper, helperBytes, { mode: 0o755 });
     const helperBack = JSON.parse(startup().stdout);
@@ -134,7 +132,7 @@ process.stdout.write(JSON.stringify({ paths, probe: backendEnvironment(config, u
     wrongDeclaration.files.find(file => file.name === 'notalone-header-change-source').signingIdentifier = 'com.notalone.sync-probe.cli';
     await writeFile(manifestPath, JSON.stringify(wrongDeclaration));
     const wrongIdentity = JSON.parse(startup().stdout);
-    assert.equal(wrongIdentity.probe, unconfigured, '清单helper身份被换写时整组停用，探针不再单独可用。');
+    assert.equal(wrongIdentity.probe, undefined, '清单helper身份被换写时整组停用，探针不再单独可用。');
     assert.equal(wrongIdentity.headerChange, undefined, '清单中的helper身份必须明确独立。');
     await writeFile(manifestPath, JSON.stringify(manifest));
     const identityRestored = JSON.parse(startup().stdout);
@@ -151,7 +149,7 @@ process.stdout.write(JSON.stringify({ paths, probe: backendEnvironment(config, u
     });
     await writeFile(manifestPath, JSON.stringify(sameIdentity));
     const fakeSignature = JSON.parse(startup().stdout);
-    assert.equal(fakeSignature.probe, unconfigured, '短probe冒充持续源时整组停用，探针不再单独可用。');
+    assert.equal(fakeSignature.probe, undefined, '短probe冒充持续源时整组停用，探针不再单独可用。');
     assert.equal(fakeSignature.headerChange, undefined);
     await assert.rejects(inspectRuntime({ directory: destination, runtimeKind: 'repository-probe',
       arch: manifest.architecture, version: manifest.versionDeclaration }), /helper_check_signature/);
@@ -225,14 +223,14 @@ export function selectMenu() { throw new Error('本检查禁止运行App用例')
     const bytes = await readFile(library);
     await writeFile(library, Buffer.concat([bytes, Buffer.from('synthetic_changed_bytes')]));
     const tamperedLibrary = JSON.parse(startup().stdout);
-    assert.equal(tamperedLibrary.probe, unconfigured, '资源库字节被篡改时整组停用，探针回退unconfigured占位。');
+    assert.equal(tamperedLibrary.probe, undefined, '资源库字节被篡改时整组停用，不再提供可用探针路径。');
     assert.equal(tamperedLibrary.headerChange, undefined);
     const tamperedPackaged = JSON.parse(startup('read', packagedEnvironment).stdout);
-    assert.equal(tamperedPackaged.probe, unconfigured, '打包隔离环境在整组停用时同样回退，不得沿用旧探针路径。');
+    assert.equal(tamperedPackaged.probe, undefined, '打包隔离环境在整组停用时同样回退，不得沿用旧探针路径。');
     await rm(path.join(userData, 'backend-launch.json'));
     const inPackageEnv = JSON.parse(startup('read', { NOTALONE_SYNC_PROBE: probe }).stdout);
     assert.equal(inPackageEnv.paths.syncProbePath, probe, 'getPaths只做配置读写：环境变量显式路径原样返回。');
-    assert.equal(inPackageEnv.probe, unconfigured, '环境变量指向包内探针时不能绕过失效的整组核验注入后台。');
+    assert.equal(inPackageEnv.probe, undefined, '环境变量指向包内探针时不能绕过失效的整组核验注入后台。');
     await writeFile(library, bytes);
     const restoredGroup = JSON.parse(startup('read', { NOTALONE_SYNC_PROBE: probe }).stdout);
     assert.equal(restoredGroup.probe, probe, '整组核验恢复后，环境变量指向的包内探针正常注入。');

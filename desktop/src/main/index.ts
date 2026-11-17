@@ -244,7 +244,7 @@ void app.whenReady().then(async () => {
   void windows.open('manager', { background: development?.background }).then(async () => {
     if (development) notifyDevelopmentReady(() => app.quit());
     const config = await loadBackendConfiguration(app.getPath('userData'), resourcesDirectory).catch(() => undefined);
-    if (config?.source === 'external') await screenPermission.startup();
+    if (config) await screenPermission.startup();
   }).catch(() => {
     if (!quitting) dialog.showErrorBox('NotAlone', '窗口暂时无法打开，请从“窗口”菜单重试。');
   });

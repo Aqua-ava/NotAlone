@@ -63,7 +63,6 @@ export class StartupDiagnostics {
         config.infoPath = path.join(this.userData, 'managed/sqlite-backend.info');
         config.runtime = 'dsh';
         config.projectDirectory = this.developmentProjectDirectory;
-        config.source = 'external';
         const helperWarnings: StartupState['helperWarnings'] = [];
         if (!await executableExists(config.wechatCliPath)) helperWarnings.push('cli_unavailable');
         if (!await executableExists(config.syncProbePath)) helperWarnings.push('probe_unavailable');
