@@ -373,3 +373,24 @@ test('启动预加载等待真实连接，旧初始连接状态不能覆盖新�
   assert.equal(reads,1);assert.equal(await page.getByText('最近一批提取与核验：已处理 1 / 1 条消息目标',{exact:true}).isVisible(),true);
  },false,false,true,true);
 });
+
+test('有效连接推送后迟到的首读失败不能撤下已核验记忆', { timeout: 20000 }, async t => {
+  const initial = deferred();
+  let modeReads = 0;
+  await withEntry(t, async method => {
+    if (method === 'backendState') return initial.promise;
+    if (method === 'readMode') { modeReads++; return { connectionGeneration: 1, mode: 'sqlite' }; }
+  }, async page => {
+    await page.getByText('正在读取本机连接状态…', { exact: true }).waitFor();
+    await page.evaluate(() => window.emitBackend('connected'));
+    await page.getByRole('region', { name: '记忆正文', exact: true }).waitFor();
+    initial.reject(new Error('合成连接首读迟到失败'));
+    // 新状态通知已被接纳，再次通知也不能重新读取或卸载正文。
+    await page.evaluate(() => window.emitBackend('connected'));
+    await modesSettled(page, 1);
+    assert.equal(await page.getByRole('region', { name: '记忆正文', exact: true }).isVisible(), true);
+    assert.equal(await page.getByRole('alert').count(), 0);
+    assert.equal(modeReads, 1);
+    assert.equal(await page.evaluate(() => window.memoryMounts), 1);
+  }, false, false, false, true);
+});

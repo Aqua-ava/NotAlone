@@ -136,6 +136,51 @@ test('Skill页首读失败后有效连接事件恢复，迟到首读失败不覆
  }
 });
 
+test('Skill页断线或停读后迟到的刷新失败不能覆盖连接状态', {timeout:20000}, async t => {
+ const browser=await chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());
+ const compiled=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
+  import React from 'react';import{createRoot}from'react-dom/client';import{SkillLearningPage}from'./src/renderer/SkillLearningPage';
+  const listeners=new Set();let revision=1,reads=0;
+  const snapshot={mode:'sqlite',connectionGeneration:1,skills:[]};
+  window.notalone={backend:{getState:async()=>({phase:'connected',revision}),onStateChanged:listener=>{listeners.add(listener);return()=>listeners.delete(listener);}},
+    skillLearning:{readLibrary:()=>++reads===1?Promise.resolve(snapshot):new Promise((_resolve,reject)=>{window.failRefresh=reject;})}};
+  window.disconnectAndFail=phase=>{listeners.forEach(listener=>listener({phase,revision:++revision}));window.failRefresh(new Error('合成旧连接刷新失败'));};
+  createRoot(document.getElementById('root')).render(<SkillLearningPage session={{state:{contacts:[]}}}/>);
+ `},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false});
+ for(const[phase,text]of [['disconnected','本机服务尚未连接'],['stopping','正在停止本次后台读取'],['stopped','本次后台读取已停止'],['shutdown-failed','后台停读尚未获确认']]){
+  const page=await browser.newPage();await page.setContent('<div id="root"></div>');await page.addScriptTag({content:compiled.outputFiles[0].text});
+  await page.getByRole('button',{name:'刷新状态',exact:true}).click();
+  await page.waitForFunction(()=>typeof window.failRefresh==='function');
+  await page.evaluate(phase=>window.disconnectAndFail(phase),phase);
+  await expect(page.getByRole(phase==='shutdown-failed'?'alert':'status')).toContainText(text);
+  await expect(page.getByRole('button',{name:'重新读取 Skill 状态',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('region',{name:'Skill 管理',exact:true})).toHaveCount(0);
+  await page.close();
+ }
+});
+
+test('Skill页快速重连后旧刷新失败不能作废新连接快照', {timeout:20000}, async t => {
+ const browser=await chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());
+ const page=await browser.newPage();
+ const compiled=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
+  import React from 'react';import{createRoot}from'react-dom/client';import{SkillLearningPage}from'./src/renderer/SkillLearningPage';
+  const listeners=new Set();let revision=1,reads=0;
+  const snapshot=generation=>({mode:'sqlite',connectionGeneration:generation,skills:[]});
+  window.notalone={backend:{getState:async()=>({phase:'connected',revision}),onStateChanged:listener=>{listeners.add(listener);return()=>listeners.delete(listener);}},
+    skillLearning:{readLibrary:()=>{window.reads=++reads;return reads===2?new Promise((_resolve,reject)=>{window.failRefresh=reject;}):Promise.resolve(snapshot(reads===1?1:2));}}};
+  window.reconnectAndFail=()=>{for(const phase of ['disconnected','connected'])listeners.forEach(listener=>listener({phase,revision:++revision}));window.failRefresh(new Error('合成旧连接刷新失败'));};
+  createRoot(document.getElementById('root')).render(<SkillLearningPage session={{state:{contacts:[]}}}/>);
+ `},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false});
+ await page.setContent('<div id="root"></div>');await page.addScriptTag({content:compiled.outputFiles[0].text});
+ await page.getByRole('button',{name:'刷新状态',exact:true}).click();
+ await page.waitForFunction(()=>typeof window.failRefresh==='function');
+ await page.evaluate(()=>window.reconnectAndFail());
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ await expect(page.getByRole('region',{name:'Skill 管理',exact:true})).toBeVisible();
+ await expect(page.getByRole('alert')).toHaveCount(0);
+ assert.equal(await page.evaluate(()=>window.reads),3);
+});
+
 test('Skill页预加载后反复进入保留快照和筛选，不重复核对或闪加载', {timeout:20000}, async t => {
  const browser=await chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());
  const page=await browser.newPage();
