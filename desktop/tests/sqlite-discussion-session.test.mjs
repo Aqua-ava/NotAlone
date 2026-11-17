@@ -24,9 +24,12 @@ test('既有ReplySession来源失效同步擦除实际发言快照，旧快照�
  contacts.selectContact({contactId,scopeRevision:contacts.getState().scopeRevision});const scope={contactId,scopeRevision:contacts.getState().scopeRevision};
  await session.readSavedSession(scope);assert.equal(session.getState().savedSession.discussionEntries[0].text,body);
  const release=Promise.withResolvers();messageGate=release.promise;
+ const withdrawn=[];const off=session.onStateChanged(state=>withdrawn.push(state));t.after(off);
  const invalidating=session.revalidateDeletedSource(contactId);
  assert.equal(JSON.stringify(session.getState()).includes(body),false);
  release.resolve();await invalidating;assert.equal(JSON.stringify(session.getState()).includes(body),false);
+ assert.ok(withdrawn.length>0);
+ assert.ok(withdrawn.every(state=>state.savedSession.phase==='idle'),'没有实际读取时只撤下讨论，不发布虚假的加载阶段');
 });
 
 test('SQLite讨论切换甲乙再回甲不读取旧候选选择端口，独立草稿仍按原联系人恢复',async t=>{
