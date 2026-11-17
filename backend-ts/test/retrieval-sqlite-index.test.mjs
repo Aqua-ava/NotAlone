@@ -218,3 +218,32 @@ test(`最初56的checksum和无游标结构保持，正常升级到${currentVers
   assert.deepEqual(await upgraded.check(),{integrity:'ok',foreignKeys:'ok'});
  }finally{await upgraded.close();}
 });
+
+test('覆盖探测与精确计数在范围、缺向量、分词过期和排队状态下等价',async t=>{
+ const f=await fixture(t),contactId=f.saved[0].contact_id,otherId=f.saved[1].contact_id;
+ const management=new SqliteMemoryManagement(f.storage,owner);
+ const scopes=[{}, {contactId}, {contactId,kind:'history'}, {contactId,kind:'memory'}, {contactId:otherId,kind:'history'}, {modelFingerprint:'synthetic-other-model'}, {ownerId:'synthetic-missing-owner'}, {contactId:'synthetic-missing-contact'}];
+ const equivalent=async()=>{
+  for(const scope of scopes){
+   const input={ownerId:owner,...scope};
+   const counts=await f.storage.execute('retrieval.pending',input);
+   assert.deepEqual(await f.storage.execute('retrieval.coverage',input),{indexIncomplete:counts.textPending>0||counts.vectorPending>0});
+  }
+ };
+ await equivalent();
+ await f.service.synchronize(contactId);
+ await management.decide({requestKey:randomUUID(),action:'manual',scope:{scopeKind:'self',contactId:null},body:'合成本人喜欢园艺'});
+ await equivalent();
+ assert.deepEqual(await f.storage.execute('retrieval.coverage',{ownerId:owner,contactId,kind:'history'}),{indexIncomplete:true});
+ await vectors(f.storage);await equivalent();
+ assert.deepEqual(await f.storage.execute('retrieval.coverage',{ownerId:owner,contactId,kind:'history'}),{indexIncomplete:false});
+ const {db}=connect(f.root);
+ try{
+  db.exec("UPDATE retrieval_document SET tokenizer_fingerprint='synthetic-stale-tokenizer' WHERE kind='history'");
+  await equivalent();
+  db.exec('INSERT INTO retrieval_text_pending SELECT owner_id,kind,entity_id,contact_id FROM retrieval_document');
+  await equivalent();
+  db.exec('DELETE FROM retrieval_text_pending');
+ }finally{db.close();}
+ await assert.rejects(()=>f.storage.execute('retrieval.coverage',{ownerId:owner,kind:'unknown'}),{code:'retrieval_request_invalid'});
+});

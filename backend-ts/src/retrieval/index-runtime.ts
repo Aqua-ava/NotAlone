@@ -17,7 +17,6 @@ export interface RetrievalIndexLifecycle {
  flushForTests():Promise<void>;
  close():Promise<void>;
 }
-interface Pending {textPending:number;vectorPending:number}
 interface Options {
  storage:Pick<SqliteStorage,'execute'>;ownerId:string;holders:ActiveHolders;embed?:EmbedTexts;fingerprint?:string;
  /** 后台单批有界；空闲探测及故障重试各仅保留一个timer。 */
@@ -43,7 +42,7 @@ export function createRetrievalIndex(options:Options):RetrievalIndexLifecycle {
  };
  let laneRunning=false,closed=false,started=false,timer:ReturnType<typeof setTimeout>|undefined,draining:Promise<DrainResult>|undefined,closing:Promise<void>|undefined,retryAt=0;
  const execute=<T>(name:string,input:object)=>options.storage.execute<T>(name,{ownerId:options.ownerId,...input});
- const pending=(scope?:RetrievalWakeScope)=>execute<Pending>('retrieval.pending',{modelFingerprint:fingerprint,...(scope?.contactId?{contactId:scope.contactId}:{}),...(scope?.kind?{kind:scope.kind}:{})});
+ const coverage=(scope?:RetrievalWakeScope)=>execute<{indexIncomplete:boolean}>('retrieval.coverage',{modelFingerprint:fingerprint,...(scope?.contactId?{contactId:scope.contactId}:{}),...(scope?.kind?{kind:scope.kind}:{})});
  const schedule=(delay:number)=>{
   if(!started||closed||timer)return;
   timer=setTimeout(()=>{timer=undefined;void drain().catch(()=>{});},delay);timer.unref();
@@ -133,8 +132,7 @@ export function createRetrievalIndex(options:Options):RetrievalIndexLifecycle {
   },
   async queryVector(query,signal,scope){
    signal.throwIfAborted();if(closed)throw stopped();
-   const state=await pending(scope);signal.throwIfAborted();if(closed)throw stopped();
-   const indexIncomplete=state.textPending>0||state.vectorPending>0;
+   const {indexIncomplete}=await coverage(scope);signal.throwIfAborted();if(closed)throw stopped();
    if(!options.embed||Date.now()<retryAt){lifecycle.wake(scope);return {strategy:'bm25',indexIncomplete};}
    const timeout=AbortSignal.timeout(options.queryTimeoutMs??8000),combined=AbortSignal.any([signal,timeout]);
    const operation=held([scope??{generation:0n,coversAllContacts:true}],ownSignal=>infer([query],'query',AbortSignal.any([combined,ownSignal])));

@@ -35,6 +35,14 @@ function pending(tx:StorageTransaction,ownerId:string,contactId?:string,model=RE
   vectorPending:Number(tx.get(`SELECT COUNT(*) n FROM retrieval_document WHERE owner_id=?${where} AND ${vectorPredicate}`,[...v,model])!.n)};
 }
 
+/** 前台只判断覆盖是否齐备；待办存在时立即结束，不为每次查询统计整池数量。 */
+function indexIncomplete(tx:StorageTransaction,ownerId:string,contactId?:string,model=RETRIEVAL_MODEL_FINGERPRINT,kind?:RetrievalKind):boolean{
+ const v=values(ownerId,contactId,kind),where=scopeWhere(contactId,kind);
+ if(tx.get(`SELECT 1 FROM retrieval_text_pending WHERE owner_id=?${where} LIMIT 1`,v))return true;
+ return !!tx.get(`SELECT 1 FROM retrieval_document WHERE owner_id=?${where}
+  AND (tokenizer_fingerprint<>? OR ${vectorPredicate}) LIMIT 1`,[...v,searchTokenizerFingerprint(),model]);
+}
+
 /** 所有历史资格查询固定走消息反查索引，不为每条正文重扫联系人全部capture记录。 */
 export function legalHistoryRecord(tx:StorageTransaction,ownerId:string,contactId:string,messageId:string,dataGeneration?:bigint):StorageRow|undefined{
  return tx.get(`WITH ${savedSourceScopeCTE} SELECT r.id record_id FROM capture_record r INDEXED BY capture_record_message
@@ -78,6 +86,9 @@ function vectorItem(tx:StorageTransaction,row:StorageRow,modelFingerprint:string
 }
 
 export const retrievalIndexActions:StorageAction[]=[
+ {name:'retrieval.coverage',mode:'read',retryBusy:false,execute(tx,input){
+  const i=request(input);return {indexIncomplete:admitted(tx,i.ownerId,i.contactId)&&indexIncomplete(tx,i.ownerId,i.contactId,i.modelFingerprint,i.kind)};
+ }},
  {name:'retrieval.pending',mode:'read',retryBusy:false,execute(tx,input){
   const i=request(input);return admitted(tx,i.ownerId,i.contactId)?pending(tx,i.ownerId,i.contactId,i.modelFingerprint,i.kind):{textPending:0,vectorPending:0};
  }},

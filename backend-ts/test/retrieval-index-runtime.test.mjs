@@ -9,7 +9,7 @@ function store(documents=[]){
  const pending=[...documents],saved=new Map();let textBatches=1;
  return {saved,pending,async execute(name,input){
   if(name==='retrieval.syncTextBatch'){const processed=textBatches;textBatches=0;return {processed,remaining:0};}
-  if(name==='retrieval.pending')return {textPending:textBatches,vectorPending:pending.length};
+  if(name==='retrieval.coverage')return {indexIncomplete:textBatches>0||pending.length>0};
   if(name==='retrieval.claimVectorBatch')return {items:pending.slice(0,input.limit),remaining:Math.max(0,pending.length-input.limit)};
   if(name==='retrieval.commitVectorBatch'){for(const row of input.items){saved.set(row.docId,row.vector);const index=pending.findIndex(x=>x.docId===row.docId);if(index>=0)pending.splice(index,1);}return {committed:input.items.length,rejected:0};}
   assert.fail('未知动作 '+name);
@@ -135,13 +135,13 @@ test('连续空扫描每轮最多64页，留待单timer续扫并可正常关闭'
  finally{await index.close();}
 });
 
-test('当前查询的联系人及本人资料先于全局长队列回填，其他联系人随后继续且pending按当前范围计算',async()=>{
+test('当前查询的联系人及本人资料先于全局长队列回填，其他联系人随后继续且覆盖状态按当前范围计算',async()=>{
  const others=Array.from({length:20},(_,n)=>({...item(`other-${n}`,`其他联系人正文${n}`),contactId:'other'}));
  const current={...item('current','当前联系人正文'),contactId:'current'},self={...item('self','本人记忆'),kind:'memory',contactId:null,coversAllContacts:true};
  const remaining=[...others,current,self],calls=[],scopes=[],globalStarted=deferred(),releaseGlobal=deferred(),currentStarted=deferred(),releaseCurrent=deferred();
  const eligible=contactId=>remaining.filter(row=>contactId===undefined||row.contactId===contactId||row.contactId===null);
  const storage={async execute(name,input){
-  if(name==='retrieval.pending')return {textPending:0,vectorPending:eligible(input.contactId).length};
+  if(name==='retrieval.coverage')return {indexIncomplete:eligible(input.contactId).length>0};
   if(name==='retrieval.syncTextBatch'){scopes.push(input.contactId);return {processed:0,remaining:0};}
   if(name==='retrieval.claimVectorBatch'){
    const rows=eligible(input.contactId);return {items:rows.slice(0,input.limit),remaining:Math.max(0,rows.length-input.limit),scanMore:rows.length>input.limit};
@@ -183,7 +183,7 @@ test('启动先准备L1小池，当前L1查询只优先联系人与本人记忆�
  const eligible=input=>remaining.filter(row=>(input.contactId===undefined||row.contactId===input.contactId||row.contactId===null)&&(input.kind===undefined||row.kind===input.kind));
  const storage={async execute(name,input){
   requests.push({name,contactId:input.contactId,kind:input.kind});
-  if(name==='retrieval.pending')return {textPending:0,vectorPending:eligible(input).length};
+  if(name==='retrieval.coverage')return {indexIncomplete:eligible(input).length>0};
   if(name==='retrieval.syncTextBatch')return {processed:0,remaining:0};
   if(name==='retrieval.claimVectorBatch'){
    const rows=eligible(input);return {items:rows.slice(0,input.limit),remaining:Math.max(0,rows.length-input.limit),scanMore:rows.length>input.limit};
@@ -211,6 +211,6 @@ test('启动先准备L1小池，当前L1查询只优先联系人与本人记忆�
   assert.ok(requests.some(row=>row.name==='retrieval.syncTextBatch'&&row.contactId==='current'&&row.kind==='memory'));
   remaining.push({...item('later-history','当前L0新欠账'),contactId:'current'});
   assert.equal((await index.queryVector('当前L1再查',new AbortController().signal,{contactId:'current',kind:'memory',generation:0n})).indexIncomplete,false,'当前L0欠账不能冒充L1索引缺口');
-  assert.equal(requests.filter(row=>row.name==='retrieval.pending').at(-1).kind,'memory');
+  assert.equal(requests.filter(row=>row.name==='retrieval.coverage').at(-1).kind,'memory');
  }finally{releaseGlobal.resolve();await index.close();}
 });
