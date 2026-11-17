@@ -55,7 +55,7 @@ test('真实记忆页面仅展示处理进度并自动刷新资料，资格失�
       const session = {state: {revision: 1, scopeRevision: 1, directoryPhase: 'ready',
         contacts: [{contactId: '${ids.contact}', displayName: '合成联系人', messageCount: 1, sourceCount: 1}],
         selectedContactId: '${ids.contact}', draft: ''}, error: '', selectContact: async () => {}};
-      createRoot(document.getElementById('root')).render(<MemoryPage session={session} navigate={() => {}}/>);`,
+      createRoot(document.getElementById('root')).render(<MemoryPage session={session}/>);`,
       resolveDir: process.cwd(), loader: 'tsx' },
     bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', loader: { '.css': 'empty' }, write: false, logLevel: 'silent',
   });
@@ -122,7 +122,7 @@ test('快速重连重新加载新代次，旧子树异步释放不能撤下新�
  sqliteMemoryManagement:{read:async request=>{window.memoryReads++;return {connectionGeneration:window.generation,scope:request.scope,view:{memories:[],candidates:[]}};},
  readDocuments:async request=>({connectionGeneration:window.generation,scope:request.scope,view:{status:'idle',publication:null,documents:[]}}),release:async()=>{window.memoryReleases++;queueMicrotask(()=>publish(memoryInvalidations));},onInvalidated:fn=>{memoryInvalidations.add(fn);return()=>memoryInvalidations.delete(fn);}}};
  window.fastReconnect=()=>{window.generation=2;publish(memoryInvalidations);publish(fixedInvalidations);for(const fn of connections)fn({phase:'connecting',revision:1});for(const fn of connections)fn({phase:'connected',revision:2});};
- const root=createRoot(document.getElementById('root'));window.unmount=()=>root.unmount();root.render(<MemoryPage session={{state:{selectedContactId:'contact',scopeRevision:1}}} navigate={()=>{}}/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false,logLevel:'silent'});
+ const root=createRoot(document.getElementById('root'));window.unmount=()=>root.unmount();root.render(<MemoryPage session={{state:{selectedContactId:'contact',scopeRevision:1}}}/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false,logLevel:'silent'});
  const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(3000);
  await page.route('http://127.0.0.1/memory-page-reconnect-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/memory-page-reconnect-test');await page.addScriptTag({content:compiled.outputFiles[0].text});
  const ready=page.getByText('本页没有可展示的正式记忆。',{exact:true});await ready.waitFor();

@@ -2906,7 +2906,7 @@
     }
   ],
   "protectedAssets": [
-    "desktop/tests/memory-correction/retirement-react.test.mjs"
+    "desktop/tests/sqlite-memory-management-view.test.mjs"
   ],
   "protectedAssetCoverage": [
     {
@@ -2916,9 +2916,9 @@
         "backend-ts/test/memory-management.test.mjs",
         "backend-ts/test/memory-mutations-candidate.test.mjs",
         "desktop/tests/expression-preferences/reprepare.test.mjs",
-        "desktop/tests/memory-correction/retirement-react.test.mjs"
+        "desktop/tests/sqlite-memory-management-view.test.mjs"
       ],
-      "status": "历史 Python 资产已从工作树删除；固定 Git 旧树保留来源，现行 Node 业务和 React 入口单独记录结果"
+      "status": "历史 Python 资产与旧记忆页面已退役；固定 Git 旧树保留来源，现行 Node 合同及 SQLite 编辑、撤销、来源与范围失效分别验证，不代表旧偏好入口等价覆盖"
     },
     {
       "path": "desktop/tests/fixtures/expression-preferences-page.py",
@@ -2927,10 +2927,10 @@
         "backend-ts/test/memory-management.test.mjs",
         "backend-ts/test/memory-mutations-candidate.test.mjs",
         "desktop/tests/expression-preferences/reprepare.test.mjs",
-        "desktop/tests/memory-correction/retirement-react.test.mjs"
+        "desktop/tests/sqlite-memory-management-view.test.mjs"
       ],
-      "status": "历史 Python 资产已从工作树删除；固定 Git 旧树保留来源，现行 Node 业务和 React 入口单独记录结果"
+      "status": "历史 Python 资产与旧记忆页面已退役；固定 Git 旧树保留来源，现行 Node 合同及 SQLite 编辑、撤销、来源与范围失效分别验证，不代表旧偏好入口等价覆盖"
     }
   ],
-  "protectedAssetsPolicy": "保留现行 React 回归；历史 Python 资产按用户授权清理。用户本轮已有未提交资料不纳入清理。"
+  "protectedAssetsPolicy": "保留现行 SQLite 记忆页面回归；旧记忆页面及专用夹具随入口退役，主进程控制器与事件回归继续保留。"
 }

@@ -395,17 +395,24 @@ test('当前联系人本人视图不显示或请求全局本人概览',{timeout:
  },true);
 });
 
-test('修正资料时间待核验时管理页可查看并标明不能用于生成',{timeout:20000},async t=>{
- const version={mergeParents:[],mergeParentCount:0,verificationState:'verified',timeStatus:'needs_revalidation',versionNo:'1',body:'时间待核验的合成记忆',formationKind:'correction',adoptionMode:'user',previousVersionNo:null,restoredFromVersionNo:null,contentState:'present',provenanceState:'eligible',decisionId:id,sources:[source],contributingContactIds:[contact]};
+for(const [timeStatus,label,message,struck] of [
+ ['eligible','有效',null,false],
+ ['out_of_window','不在有效期','不在有效时间内，不再引用。',true],
+ ['needs_revalidation','待核验','时间待核验，暂不用于生成。',false],
+ ['invalid','异常','时间资料异常，暂不用于生成。',false],
+])test(`资料时间${label}时管理页保留正文并展示对应引用资格`,{timeout:20000},async t=>{
+ const version={mergeParents:[],mergeParentCount:0,verificationState:'verified',timeStatus,versionNo:'1',body:'带时间资格的合成记忆',formationKind:'correction',adoptionMode:'user',previousVersionNo:null,restoredFromVersionNo:null,contentState:'present',provenanceState:'eligible',decisionId:id,sources:[source],contributingContactIds:[contact]};
  const snapshot={connectionGeneration:1,scope:{scopeKind:'contact',contactId:contact},view:{candidates:[],memories:[{id,scopeKind:'contact',contactId:contact,headRevision:'1',state:'active',manualProtection:false,current:version,versions:[version],decisions:[]}]}};
  await panel(t,async method=>method==='read'?snapshot:{connectionGeneration:1,scope:snapshot.scope,view:{status:'idle',publication:null,documents:[]}},async page=>{
   const management=page.getByRole('region',{name:'记忆候选与版本'});
   await management.getByRole('button',{name:'具体记忆',exact:true}).click();
+  const card=management.getByRole('article',{name:'正式记忆'});
+  await card.getByText(version.body,{exact:true}).waitFor();
+  if(message)await card.getByText(message,{exact:true}).waitFor();
+  assert.equal(await card.getByText(/^(时间待核验，暂不用于生成。|时间资料异常，暂不用于生成。|不在有效时间内，不再引用。)$/).count(),message?1:0);
+  assert.equal(await card.locator('.sqlite-memory-body s').count(),struck?1:0);
   // 首次保存不展示历史，但影响使用资格的提示仍直接可见。
-  await management.getByText('时间待核验，暂不用于生成。',{exact:true}).first().waitFor({timeout:3000});
-  assert.equal(await management.getByText('时间待核验，暂不用于生成。',{exact:true}).count(),1);
   await openMemoryMore(management);assert.equal(await management.getByText('更新历史',{exact:true}).count(),0);
-  await management.getByText('时间待核验的合成记忆',{exact:true}).first().waitFor();
  },true);
 });
 

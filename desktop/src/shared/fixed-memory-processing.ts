@@ -52,7 +52,7 @@ export interface FixedProcessingRead { contactId: string }
 /** 记忆自动处理总开关：库内持久偏好，默认关闭。 */
 export interface FixedProcessingAutomatic { connectionGeneration: number; enabled: boolean }
 export interface FixedProcessingAutomaticSet { enabled: boolean; connectionGeneration: number }
-export interface FixedProcessingMode { connectionGeneration: number; mode: 'sqlite' | 'legacy' }
+export interface FixedProcessingMode { connectionGeneration: number; mode: 'sqlite' }
 export interface FixedProcessingStart { requestKey: string; connectionGeneration: number }
 export interface FixedProcessingHistoryStart extends FixedProcessingStart { contactId: string; scopeRevision: number }
 export type FixedHistoryFailureReason = 'no_pending_history' | 'busy' | 'blocked' | 'scope_changed' | 'source_stale' | 'source_check_busy';

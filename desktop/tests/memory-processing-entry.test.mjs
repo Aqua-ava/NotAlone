@@ -32,7 +32,7 @@ async function withEntry(t, command, inspect, controller = false, withBrowser = 
         import {MemoryProcessingEntry} from './src/renderer/MemoryProcessingEntry';
         ${controller ? "import {FixedMemoryProcessingController} from './src/main/memory/fixed-processing';" : ''}
         const listeners = new Set(), invalidations = new Set();
-        window.modeSettled = 0; window.legacyMounts = 0;
+        window.modeSettled = 0; window.memoryMounts = 0;
         ${controller ? `const controller = new FixedMemoryProcessingController({
           getConnectionGeneration: () => 1,
           requestJson: async request => ({generation: 1, data: await window.command('requestJson', request.path)}),
@@ -56,20 +56,20 @@ async function withEntry(t, command, inspect, controller = false, withBrowser = 
           if (method === 'readAutomatic') return async () => ({connectionGeneration: 1, enabled: true});
           if (method === 'setAutomatic') return async request => ({connectionGeneration: 1, enabled: request.enabled});
           return async (...args) => {
-            try { const value = await window.command(method, ...args); return method === 'readCurrent' && value ? {...value,contactId:args[0]?.contactId} : value; }
+            try { const value = await window.command(method, ...args); return method === 'readCurrent' ? {...(value ?? {connectionGeneration: 1, run: null}),contactId:args[0]?.contactId} : value; }
             finally { if (method === 'readMode') window.modeSettled++; }
           };
         }});`}
         const backend = {${initialBackendState ? "getState:()=>window.command('backendState')," : ''}onStateChanged: listener => {
           listeners.add(listener); return () => listeners.delete(listener);
         }};
-        function LegacyBody() {
-          useEffect(() => { window.legacyMounts++; }, []);
-          return <section aria-label="旧版记忆正文">合成旧版记忆</section>;
+        function MemoryBody() {
+          useEffect(() => { window.memoryMounts++; }, []);
+          return <section aria-label="${withBrowser ? '记忆层级浏览' : '记忆正文'}">合成记忆</section>;
         }
         const root = createRoot(document.getElementById('root'));
         let scopeKey = 'scope-a', revision = 0, contactId = '33333333-3333-4333-8333-333333333333', scopeRevision = 0;
-        const render = () => root.render(<MemoryProcessingEntry bridge={bridge} backend={backend} contactId={contactId} scopeKey={scopeKey} ${withBrowser ? 'sqliteChildren={<section aria-label="记忆层级浏览">合成记忆层级</section>}' : ''}><LegacyBody/></MemoryProcessingEntry>);
+        const render = () => root.render(<MemoryProcessingEntry bridge={bridge} backend={backend} contactId={contactId} scopeKey={scopeKey}><MemoryBody/></MemoryProcessingEntry>);
         window.emitBackend = phase => {
           for (const listener of listeners) listener({phase, revision: ++revision, reused: false,
             canRetryConnection: false, canRetryShutdown: false, canSaveStartupPaths: false, canPrepareConfiguration: false});
@@ -104,29 +104,29 @@ async function withEntry(t, command, inspect, controller = false, withBrowser = 
   assert.deepEqual(errors, [], '页面没有 React 或桥接异常');
 }
 
-test('模式待核验时不挂载正文，明确 legacy 后才挂载旧版记忆', { timeout: 20000 }, async t => {
+test('模式待核验时不挂载正文，确认 SQLite 后挂载记忆和处理面板', { timeout: 20000 }, async t => {
   const mode = deferred();
   await withEntry(t, async method => method === 'readMode' ? mode.promise : undefined, async page => {
     await page.getByRole('status').filter({ hasText: '正在核对记忆处理模式' }).waitFor();
-    assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
+    assert.equal(await page.getByRole('region', { name: '记忆正文' }).count(), 0);
     assert.equal(await page.getByRole('region', { name: '固定范围记忆处理' }).count(), 0);
-    assert.equal(await page.evaluate(() => window.legacyMounts), 0);
-    mode.resolve({ connectionGeneration: 1, mode: 'legacy' });
-    await page.getByRole('region', { name: '旧版记忆正文' }).waitFor();
-    assert.equal(await page.evaluate(() => window.legacyMounts), 1);
-    assert.equal(await page.getByRole('region', { name: '固定范围记忆处理' }).count(), 0);
+    assert.equal(await page.evaluate(() => window.memoryMounts), 0);
+    mode.resolve({ connectionGeneration: 1, mode: 'sqlite' });
+    await page.getByRole('region', { name: '记忆正文' }).waitFor();
+    assert.equal(await page.evaluate(() => window.memoryMounts), 1);
+    assert.equal(await page.getByRole('region', { name: '固定范围记忆处理' }).count(), 1);
   });
 });
 
-test('明确 sqlite 后挂载固定范围处理，正文失效由面板处理且不切回旧版', { timeout: 20000 }, async t => {
+test('确认 SQLite 后挂载固定范围处理，正文失效由面板处理', { timeout: 20000 }, async t => {
   await withEntry(t, async method => {
     if (method === 'readMode') return { connectionGeneration: 2, mode: 'sqlite' };
     if (method === 'readCurrent') return { connectionGeneration: 2, run: null };
   }, async page => {
     const panel = page.getByRole('region', { name: '固定范围记忆处理' });
     await panel.getByRole('status').filter({ hasText: '等待处理' }).waitFor();
-    assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
-    assert.equal(await page.evaluate(() => window.legacyMounts), 0);
+    assert.equal(await page.getByRole('region', { name: '记忆正文' }).count(), 1);
+    assert.equal(await page.evaluate(() => window.memoryMounts), 1);
     assert.equal(await page.getByRole('region', { name: '历史聊天记忆处理' }).count(), 0);
     assert.equal(await page.getByRole('button', { name: '处理历史聊天', exact: true }).count(), 0);
     await page.evaluate(() => window.invalidate());
@@ -147,7 +147,7 @@ test('SQLite 记忆浏览先行，处理状态默认收起并可手动展开', {
     await disclosure.locator(':scope > summary').click();
     await page.getByRole('region', { name: '固定范围记忆处理' }).waitFor();
     assert.deepEqual(await page.getByRole('region').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label'))), ['记忆自动处理开关', '记忆层级浏览', '固定范围记忆处理']);
-    assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
+    assert.equal(await page.getByRole('region', { name: '记忆正文' }).count(), 0);
   }, false, true, false);
 });
 
@@ -155,7 +155,7 @@ test('记忆页区分连接与停读状态，只在真实连接后读取正文',
   let reads = 0;
   await withEntry(t, async method => {
     if (method === 'backendState') return { phase: 'connecting', revision: 0 };
-    if (method === 'readMode') { reads++; return { connectionGeneration: 1, mode: 'legacy' }; }
+    if (method === 'readMode') { reads++; return { connectionGeneration: 1, mode: 'sqlite' }; }
   }, async page => {
     await page.getByRole('status').filter({ hasText: '正在连接本机服务' }).waitFor();
     for (const [phase, role, text] of [
@@ -168,11 +168,11 @@ test('记忆页区分连接与停读状态，只在真实连接后读取正文',
       await page.evaluate(value => window.emitBackend(value), phase);
       await page.getByRole(role).filter({ hasText: text }).waitFor();
       assert.equal(await page.getByText('本机连接已变化，正在等待重新连接。', { exact: true }).count(), 0);
-      assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
+      assert.equal(await page.getByRole('region', { name: '记忆正文' }).count(), 0);
       assert.equal(reads, 0, '连接未就绪时不读取记忆模式或正文');
     }
     await page.evaluate(() => window.emitBackend('connected'));
-    await page.getByRole('region', { name: '旧版记忆正文' }).waitFor();
+    await page.getByRole('region', { name: '记忆正文' }).waitFor();
     assert.equal(reads, 1);
   }, false, false, false, true);
 });
@@ -198,10 +198,10 @@ test('连接变化先撤下正文，旧连接晚到的模式不能盖过新连�
     await page.getByRole('status').filter({ hasText: '正在停止本次后台读取' }).waitFor();
     await page.evaluate(() => window.emitBackend('connected'));
     await page.getByRole('status').filter({ hasText: '正在核对记忆处理模式' }).waitFor();
-    oldMode.resolve({ connectionGeneration: 2, mode: 'legacy' });
+    oldMode.resolve({ connectionGeneration: 2, mode: 'sqlite' });
     await modesSettled(page, 2);
-    assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
-    assert.equal(await page.evaluate(() => window.legacyMounts), 0);
+    assert.equal(await page.getByRole('region', { name: '记忆正文' }).count(), 0);
+    assert.equal(await page.evaluate(() => window.memoryMounts), 1);
     assert.equal(await page.getByRole('region', { name: '固定范围记忆处理' }).count(), 0);
     generation = 3;
     newMode.resolve({ connectionGeneration: 3, mode: 'sqlite' });
@@ -218,24 +218,24 @@ test('模式读取失败撤下原页面，重试通过核验后才恢复对应�
   await withEntry(t, async method => {
     if (method === 'readMode') {
       reads++;
-      if (reads === 1) return { connectionGeneration: 1, mode: 'legacy' };
+      if (reads === 1) return { connectionGeneration: 1, mode: 'sqlite' };
       if (reads === 2) throw new Error('synthetic_mode_unavailable');
       return retry.promise;
     }
     if (method === 'readCurrent') return currentView(2, 2);
   }, async page => {
-    await page.getByRole('region', { name: '旧版记忆正文' }).waitFor();
+    await page.getByRole('region', { name: '记忆正文' }).waitFor();
     await page.evaluate(() => {window.emitBackend('connecting');window.emitBackend('connected');});
     await page.getByRole('alert').filter({ hasText: '记忆处理模式暂不可用' }).waitFor();
-    assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
+    assert.equal(await page.getByRole('region', { name: '记忆正文' }).count(), 0);
     assert.equal(await page.getByRole('region', { name: '固定范围记忆处理' }).count(), 0);
     await page.getByRole('button', { name: '重新读取记忆模式', exact: true }).click();
     await page.getByRole('status').filter({ hasText: '正在核对记忆处理模式' }).waitFor();
     assert.equal(await page.getByRole('alert').count(), 0);
-    assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
+    assert.equal(await page.getByRole('region', { name: '记忆正文' }).count(), 0);
     retry.resolve({ connectionGeneration: 2, mode: 'sqlite' });
     await page.getByText('最近一批提取与核验：已处理 2 / 2 条消息目标', { exact: true }).waitFor();
-    assert.equal(await page.evaluate(() => window.legacyMounts), 1);
+    assert.equal(await page.evaluate(() => window.memoryMounts), 2);
   });
 });
 
@@ -255,10 +255,10 @@ test('范围变化撤下快照并重新核验，旧范围和卸载后的模式�
     await page.getByRole('status').filter({ hasText: '正在核对记忆处理模式' }).waitFor();
     assert.equal(await page.getByRole('region', { name: '固定范围记忆处理' }).count(), 0);
     await page.evaluate(() => window.changeScope('scope-c'));
-    oldScope.resolve({ connectionGeneration: 1, mode: 'legacy' });
+    oldScope.resolve({ connectionGeneration: 1, mode: 'sqlite' });
     await modesSettled(page, 2);
-    assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
-    assert.equal(await page.evaluate(() => window.legacyMounts), 0);
+    assert.equal(await page.getByRole('region', { name: '记忆正文' }).count(), 0);
+    assert.equal(await page.evaluate(() => window.memoryMounts), 1);
     total = 3;
     newScope.resolve({ connectionGeneration: 1, mode: 'sqlite' });
     await page.getByText('最近一批提取与核验：已处理 3 / 3 条消息目标', { exact: true }).waitFor();
@@ -266,10 +266,10 @@ test('范围变化撤下快照并重新核验，旧范围和卸载后的模式�
     await page.evaluate(() => {window.emitBackend('connecting');window.emitBackend('connected');});
     await page.getByRole('status').filter({ hasText: '正在核对记忆处理模式' }).waitFor();
     await page.evaluate(() => window.hide());
-    afterUnmount.resolve({ connectionGeneration: 1, mode: 'legacy' });
+    afterUnmount.resolve({ connectionGeneration: 1, mode: 'sqlite' });
     await modesSettled(page, 4);
     assert.equal(await page.locator('#root').innerText(), '');
-    assert.equal(await page.evaluate(() => window.legacyMounts), 0);
+    assert.equal(await page.evaluate(() => window.memoryMounts), 2);
   });
 });
 
@@ -297,7 +297,7 @@ test('真实控制器在旧面板释放后仍能完成 connected 触发的合法
     await modesSettled(page, 2);
     assert.equal(await page.getByRole('alert').count(), 0, '旧面板释放不应使新连接的合法模式核验失败');
     await panel.getByRole('status').filter({ hasText: '等待处理' }).waitFor();
-    assert.equal(await page.getByRole('region', { name: '旧版记忆正文' }).count(), 0);
+    assert.equal(await page.getByRole('region', { name: '记忆正文' }).count(), 1);
   }, true);
 });
 
@@ -350,7 +350,7 @@ test('本机连接状态读取失败时可重新读取，核验通过前不读�
   let connectionReads = 0, modeReads = 0;
   await withEntry(t, async method => {
     if (method === 'backendState') return ++connectionReads === 1 ? initial.promise : { phase: 'connected', revision: 1 };
-    if (method === 'readMode') { modeReads++; return { connectionGeneration: 1, mode: 'legacy' }; }
+    if (method === 'readMode') { modeReads++; return { connectionGeneration: 1, mode: 'sqlite' }; }
   }, async page => {
     await page.getByRole('status').filter({ hasText: '正在读取本机连接状态' }).waitFor();
     initial.reject(new Error('合成读取失败'));
@@ -358,7 +358,7 @@ test('本机连接状态读取失败时可重新读取，核验通过前不读�
     assert.equal(modeReads, 0);
     assert.equal(await page.getByText('本机连接已变化，正在等待重新连接。', { exact: true }).count(), 0);
     await page.getByRole('button', { name: '重新读取连接状态', exact: true }).click();
-    await page.getByRole('region', { name: '旧版记忆正文' }).waitFor();
+    await page.getByRole('region', { name: '记忆正文' }).waitFor();
     assert.equal(modeReads, 1);
     assert.equal(await page.getByRole('alert').count(), 0);
   }, false, false, false, true);

@@ -179,8 +179,8 @@ export class FixedMemoryProcessingController {
     try {
       const value = row(response.data);
       if (value.state !== 'running' || value.runtime !== 'dsh' || value.hostRuntime !== 'typescript'
-        || value.storage !== undefined && value.storage !== 'sqlite') throw invalid();
-      return { connectionGeneration: response.generation, mode: value.storage === 'sqlite' ? 'sqlite' : 'legacy' };
+        || value.storage !== 'sqlite') throw invalid();
+      return { connectionGeneration: response.generation, mode: 'sqlite' };
     } catch { this.synchronize(); throw invalid(); }
   }
   async read(input?: FixedProcessingRead): Promise<FixedProcessingView> {

@@ -17,6 +17,8 @@
 
 [test:pages](../scripts/test-pages.mjs)当前仅保留 `--status`、合成租约探针和旧页面指引，旧 `--case` 组合不会在当前树执行。当前页面测试按 inventory 运行；产品历史候选功能的测试名称不等于退役后台测试。
 
+记忆页面回归由 `memory-processing-entry`、`memory-page-fixed-processing` 与 `sqlite-memory-management-view` 覆盖连接核验、资料展示、编辑与范围失效；旧 `LegacyMemoryPage` 专用夹具随入口删除，主进程控制器和事件用例仍保留。旧条件编辑及全局本人页面不计作当前 SQLite 功能覆盖。
+
 [test:app](../scripts/test-app.mjs)保留明确范围、期限、启动数和互斥参数，`pnpm run test:app:status` 只读占用。自动化参数不要求用户额外预约，也不授权打包或执行与热更新约束不兼容的旧夹具。未知残留须先核对归属，不能删除锁或终止未知进程继续。
 
 记录分别说明静态／合成验证、无头页面、Computer Use、真实原生／微信及模型质量覆盖。任何默认测试通过都不能代签完整桌面业务闭环；本文件是入口说明，不是本轮测试成绩。

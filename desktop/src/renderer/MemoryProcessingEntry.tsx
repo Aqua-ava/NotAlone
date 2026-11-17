@@ -9,10 +9,9 @@ export interface MemoryProcessingEntryProps {
   backend: Pick<BackendBridge, 'onStateChanged'> & Partial<Pick<BackendBridge, 'getState'>>;
   scopeKey?: string | number;
   contactId?: string | null;
-  children: ReactNode;
+  children: ReactNode | ((processingRevision: number, completedRunId: string | null) => ReactNode);
   visible?: boolean;
   releaseOnUnmount?: boolean;
-  sqliteChildren?: ReactNode | ((processingRevision:number,completedRunId:string|null)=>ReactNode);
 }
 
 type EntryScope = Pick<MemoryProcessingEntryProps, 'bridge' | 'backend' | 'scopeKey'>;
@@ -20,8 +19,8 @@ type EntryState = { scope: EntryScope } & (
   { phase: 'pending' | 'failed' | 'connection-read-failed' | Exclude<BackendPhase, 'connected'> } | { phase: 'ready'; mode: FixedProcessingMode }
 );
 
-/** 模式经本机桥核验后才挂载对应的记忆页面。 */
-export function MemoryProcessingEntry({ bridge, backend, scopeKey, contactId = null, children, sqliteChildren, visible = true, releaseOnUnmount = true }: MemoryProcessingEntryProps) {
+/** 本机 SQLite 运行状态经桥核验后才挂载记忆页面。 */
+export function MemoryProcessingEntry({ bridge, backend, scopeKey, contactId = null, children, visible = true, releaseOnUnmount = true }: MemoryProcessingEntryProps) {
   const [state, setState] = useState<EntryState | null>(null);
   const [processingRevision,setProcessingRevision]=useState(0);
   const [completedRunId,setCompletedRunId]=useState<string|null>(null);
@@ -42,6 +41,7 @@ export function MemoryProcessingEntry({ bridge, backend, scopeKey, contactId = n
       setState({ scope: acceptedScope, phase: 'pending' });
       try {
         const next = await bridge.readMode();
+        if (next.mode !== 'sqlite') throw new Error('记忆存储模式无效');
         if (active && accepted === revision && scope.current === acceptedScope) {
           setState({ scope: acceptedScope, phase: 'ready', mode: next });
         }
@@ -72,8 +72,15 @@ export function MemoryProcessingEntry({ bridge, backend, scopeKey, contactId = n
   }, [bridge, backend, acceptedScope]);
   const current = state?.scope === acceptedScope ? state : null;
   if (current?.phase === 'ready') {
-    if (current.mode.mode === 'legacy') return visible ? children : null;
-    if (current.mode.mode === 'sqlite') return <Fragment key={current.mode.connectionGeneration}><MemoryAutomaticSwitch bridge={bridge}/>{typeof sqliteChildren==='function'?sqliteChildren(processingRevision,completedRunId):sqliteChildren}<details className="memory-processing-disclosure"><summary>记忆处理状态</summary><FixedMemoryProcessingPanel releaseOnUnmount={releaseOnUnmount} visible={visible} bridge={bridge} contactId={contactId} scopeKey={scopeKey} onRunUpdated={onRunUpdated}/></details></Fragment>;
+    return <Fragment key={current.mode.connectionGeneration}>
+      <MemoryAutomaticSwitch bridge={bridge}/>
+      {typeof children === 'function' ? children(processingRevision, completedRunId) : children}
+      <details className="memory-processing-disclosure">
+        <summary>记忆处理状态</summary>
+        <FixedMemoryProcessingPanel releaseOnUnmount={releaseOnUnmount} visible={visible} bridge={bridge}
+          contactId={contactId} scopeKey={scopeKey} onRunUpdated={onRunUpdated}/>
+      </details>
+    </Fragment>;
   }
   if (current?.phase === 'connecting') return <p role="status">正在连接本机服务，连接后可查看记忆。</p>;
   if (current?.phase === 'disconnected') return <p role="status">本机服务尚未连接，连接后可查看记忆。</p>;
