@@ -30,7 +30,7 @@ test('正式DSH宿主安装媒体真实闭包，默认未认证类型不可执�
  for(let turn=0;turn<100;turn++){const status=await request(`/api/media/previews/${preview.body.sessionId}`);if(status.body.state==='revoking')break;}
  assert.equal((await request(`/api/media/previews/${preview.body.sessionId}`)).body.state,'revoking');await request(`/api/media/previews/${preview.body.sessionId}`,'DELETE');
  const cleared=await deletion;assert.equal(cleared.status,200);assert.equal(cleared.body.state,'cleared');assert.deepEqual(cleared.body.files,[]);assert.equal(cleared.body.cleanup,null);
- assert.equal((await request(`/api/contacts/${f.contact}/messages`)).body.messages.length,4);
+ assert.equal((await request(`/api/contacts/${f.contact}/history-messages`)).body.messages.length,4);
  const account=await request('/api/account','DELETE',{confirmed:true,confirm_scope:'account'},{'idempotency-key':'synthetic-media-account'});assert.equal(account.status,202);const receipt=await request(`/api/deletions/${account.body.operation_id}`);assert.equal(receipt.body.state,'completed');
  assert.equal((await request('/api/runtime/shutdown','POST',{})).body.state,'stopped');assert.equal(await host.waitForExit(15000),true);
 });
@@ -60,7 +60,7 @@ test('正式默认宿主暂缓语音新处理，不创建attempt或读取渠道�
  }
  const after=(await request(route)).body;assert.deepEqual(after.latestAttempt,before.latestAttempt);assert.deepEqual(after.files,before.files);
  const cleared=await request(route,'DELETE',undefined,{'idempotency-key':randomUUID()});assert.equal(cleared.body.state,'cleared');assert.deepEqual(cleared.body.files,[]);
- assert.equal((await request(`/api/contacts/${f.contact}/messages`)).body.messages.length,4);
+ assert.equal((await request(`/api/contacts/${f.contact}/history-messages`)).body.messages.length,4);
  await request('/api/runtime/shutdown','POST',{});assert.equal(await host.waitForExit(15000),true);await assert.rejects(access(marker),{code:'ENOENT'});
  const reopened=await SqliteStorage.open({userData:f.root,intent:'open',expectedDatabaseId:f.storage.status.databaseId,role:'test'});
  try{for(const input of rejected)assert.equal(await reopened.execute('media.request',{ownerId:f.owner,contactId:f.contact,messageId:message.id,...input}),null);}finally{await reopened.close();}

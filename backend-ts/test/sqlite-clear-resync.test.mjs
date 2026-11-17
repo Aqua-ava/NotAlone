@@ -63,7 +63,7 @@ test('S(B)覆盖本机已有而应用从未读过的旧页；旧页迟到只能�
   const read = await history.read(f.contactA);
   assert.equal(read.messages.length, 1, '只有边界后的新消息进入');
   assert.equal(read.messages[0].text, '合成正文6');
-  assert.equal(read.replyEligibility, 'ready');
+  assert.equal(read.coverage.phase,'complete');
   const diagnostics = await clear.statusOf(f.contactA);
   assert.equal(diagnostics.boundary.memberCount, 5);
   f.state.pageRecords = [record('shard-a', '1'), record('shard-a', '2'), record('shard-b', '3'), record('shard-b', '4'), record('shard-a', '5')];

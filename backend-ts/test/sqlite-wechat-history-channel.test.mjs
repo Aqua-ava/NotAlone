@@ -164,7 +164,7 @@ test('增量消失记录的未知墓碑隔离旧文字并降低历史覆盖资�
  const after=await f.history.read(contact);
  assert.equal(after.messages.some(message=>message.id===before.id||message.text==='合成历史正文'),false);
  assert.equal(after.messages.length,1);assert.equal(after.messages[0].kind,'voice');
- assert.equal(after.replyEligibility,'history_incomplete');
+ assert.equal(after.coverage.phase,'incomplete');
  assert.equal(coverage.phase,'incomplete');assert.equal(coverage.failureCode,'history_identity_quarantined');
  assert.equal(coverage.messageCount,1);assert.equal(coverage.quarantinedCount,1);
  assert.equal(coverage.incremental.phase,'incomplete');assert.equal(coverage.incremental.failureCode,'history_identity_quarantined');

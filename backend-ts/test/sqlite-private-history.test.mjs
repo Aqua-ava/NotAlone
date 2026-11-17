@@ -105,9 +105,9 @@ async function reopenHistory(t,root,expectedDatabaseId){
 }
 test('已授权单联系人历史正常入库，精确身份和非文字占位可读且覆盖完整',async t=>{
  const {service,saved,storage}=await fixture(t);const contact=saved[0].contact_id;
- assert.equal((await service.read(contact)).replyEligibility,'history_syncing');
+ assert.equal((await service.read(contact)).coverage.phase,'not_started');
  const coverage=await service.synchronize(contact);assert.equal(coverage.phase,'complete');assert.equal(coverage.messageCount,2);
- const result=await service.read(contact);assert.equal(result.replyEligibility,'ready');assert.equal(result.messages.length,2);
+ const result=await service.read(contact);assert.equal(result.coverage.phase,'complete');assert.equal(result.messages.length,2);
  assert.equal(result.messages.find(m=>m.kind==='voice').text,null);assert.equal(result.messages.find(m=>m.kind==='text').text,'合成正文9007199254740993');
  assert.ok(result.messages.every(m=>m.ordering==='unknown'&&m.sourceRecordIds.length===1));
  assert.equal((await service.read(saved[1].contact_id)).messages.length,0);
@@ -177,18 +177,18 @@ test('未知身份与内容冲突隔离，非文字夹带正文不保存，覆�
  const {service,channel,saved,target}=await fixture(t);
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{serverId:'55'}),record('1',{serverId:'55',text:'冲突内容'}),record(null),record('4',{kind:'other',text:'媒体内容不得保存'})],completedPartitions:['shard-a'],exhausted:true});
  const contact=saved[0].contact_id;const coverage=await service.synchronize(contact);assert.equal(coverage.phase,'incomplete');assert.equal(coverage.quarantinedCount,2);
- const result=await service.read(contact);assert.equal(result.messages.length,2);assert.equal(result.replyEligibility,'history_incomplete');assert.equal(result.messages.find(m=>m.kind==='other').text,null);
+ const result=await service.read(contact);assert.equal(result.messages.length,2);assert.equal(result.coverage.phase,'incomplete');assert.equal(result.messages.find(m=>m.kind==='other').text,null);
 });
 test('未知状态的无正文来源被隔离，合法文字仍可查看但历史不完整',async t=>{
  const {service,channel,saved,target}=await fixture(t);const contact=saved[0].contact_id;
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{status:'99',stateAssurance:'unverified',sender:'unknown',text:null}),record('2',{status:'0',text:'合成合法文字'})],completedPartitions:['shard-a'],exhausted:true});
  const coverage=await service.synchronize(contact);assert.equal(coverage.phase,'incomplete');assert.equal(coverage.quarantinedCount,1);
- const result=await service.read(contact);assert.equal(result.replyEligibility,'history_incomplete');assert.deepEqual(result.messages.map(m=>m.text),['合成合法文字']);
+ const result=await service.read(contact);assert.equal(result.coverage.phase,'incomplete');assert.deepEqual(result.messages.map(m=>m.text),['合成合法文字']);
 });
 test('渠道省略状态认证时不得把正文作为可信消息保存',async t=>{
  const {service,channel,saved,target}=await fixture(t);const contact=saved[0].contact_id;
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{stateAssurance:undefined,text:'不得保存的合成文字'})],completedPartitions:['shard-a'],exhausted:true});
- await service.synchronize(contact);const result=await service.read(contact);assert.equal(result.replyEligibility,'history_incomplete');assert.equal(result.messages.length,0);
+ await service.synchronize(contact);const result=await service.read(contact);assert.equal(result.coverage.phase,'incomplete');assert.equal(result.messages.length,0);
 });
 test('已认证撤回终态撤下旧正文，但不把已完整读取的历史永久判为未知',async t=>{
  const {service,channel,saved,target}=await fixture(t),contact=saved[0].contact_id;
@@ -373,7 +373,7 @@ test('normal-use 完整遍历含未知状态时仍交接尾游标，但历史资
   records:[record('1',{stateAssurance:'unverified',status:'unknown',text:null}),record('2')],completedPartitions:['shard-a'],exhausted:true});
  const coverage=await service.synchronize(contact);
  assert.equal(coverage.phase,'incomplete');assert.equal(coverage.traversalComplete,true);assert.equal(coverage.incremental?.cursorPresent,true);
- assert.equal(coverage.incremental?.phase,'ready');assert.equal((await service.read(contact)).replyEligibility,'history_incomplete');
+ assert.equal(coverage.incremental?.phase,'ready');assert.equal((await service.read(contact)).coverage.phase,'incomplete');
  await service.close();
 });
 test('已见消息后续状态未知时，旧正文不能继续作为可信聊天展示',async t=>{
@@ -386,7 +386,7 @@ test('已见消息后续状态未知时，旧正文不能继续作为可信聊�
  assert.equal((await storage.execute('discussion.messages',{ownerId:owner,contactId:contact,discussionId:d.id,messageIds:[old.id]}))[0].text_body,'合成旧文字');
  channel.page=async()=>({target:target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{status:'99',stateAssurance:'unverified',sender:'unknown',text:null})],completedPartitions:['shard-a'],exhausted:true});
  await service.synchronize(contact);const result=await service.read(contact);
- assert.equal(result.replyEligibility,'history_incomplete');assert.ok(!result.messages.some(m=>m.text==='合成旧文字'));
+ assert.equal(result.coverage.phase,'incomplete');assert.ok(!result.messages.some(m=>m.text==='合成旧文字'));
  await assert.rejects(service.source(contact,old.sourceRecordIds[0]),error=>error.code==='history_source_not_found');
  await assert.rejects(storage.execute('discussion.messages',{ownerId:owner,contactId:contact,discussionId:d.id,messageIds:[old.id]}),{code:'discussion_source_unavailable'});
  assert.equal((await discussion.view(contact,d.id)).entries[0].body,'用户手写的合成内容');
@@ -594,7 +594,7 @@ test('失证来源影响跨联系人本人资料的实际依赖，不影响无�
 test('部分分片和分页中断保持真实缺口，重试从已提交cursor继续',async t=>{
  const {service,channel,saved,target}=await fixture(t);target.partitions=['shard-a','shard-b'];target.tables=target.partitions.map(partition=>({partition,instance:'table-instance-1'}));
  let interrupted=false;channel.page=async(_s,_t,cursor)=>{if(cursor==='page-2'&&!interrupted){interrupted=true;throw new Error('synthetic interruption');}return {target:target.descriptor,cursorIn:cursor,cursorOut:cursor===null?'page-2':null,records:[record(cursor===null?'1':'2')],completedPartitions:cursor===null?['shard-a']:['shard-b'],exhausted:cursor!==null};};
- const contact=saved[0].contact_id;await assert.rejects(service.synchronize(contact));assert.equal((await service.read(contact)).coverage.cursor,'page-2');assert.equal((await service.read(contact)).replyEligibility,'history_incomplete');
+ const contact=saved[0].contact_id;await assert.rejects(service.synchronize(contact));assert.equal((await service.read(contact)).coverage.cursor,'page-2');assert.equal((await service.read(contact)).coverage.phase,'incomplete');
  await service.synchronize(contact);assert.equal((await service.coverage(contact)).phase,'complete');assert.equal((await service.read(contact)).messages.length,2);
 });
 test('读取前未授权不调用正文，停读拒绝迟到页',async t=>{
@@ -638,7 +638,7 @@ test('已删除来源的表实例失证后，重试和重开都在读取正文�
  const history=new SqliteHistoryService(reopened,contacts,f.channel);t.after(()=>history.close());
  await assert.rejects(history.synchronize(contact),{code:'history_source_continuity_unverified'});assert.equal(pages,0);
  assert.equal((await history.coverage(contact)).failureCode,'history_source_continuity_unverified');
- assert.equal((await history.read(contact)).replyEligibility,'history_incomplete');
+ assert.equal((await history.read(contact)).coverage.phase,'incomplete');
 });
 test('原表仍在但新增未经认证的表时，不能读取可能复现旧来源的正文',async t=>{
  const f=await fixture(t);const contact=f.saved[0].contact_id;await f.service.synchronize(contact);
@@ -718,10 +718,12 @@ test('正式HTTP消息路径可分页且只读，跨联系人游标与owner不�
  const {createServer}=await import('node:http');const {SqliteHistoryHttp}=await import('../src/history/sqlite/http.ts');const handler=new SqliteHistoryHttp(service);
  const server=createServer(async(req,res)=>{if(!await handler.handle(req,res)){res.writeHead(404);res.end();}});await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
  const base=`http://127.0.0.1:${server.address().port}`;channel.page=async()=>{throw new Error('GET must not read channel');};
- const first=await (await fetch(`${base}/api/contacts/${contact}/messages?limit=1`)).json();assert.equal(first.messages.length,1);assert.ok(first.next_cursor);assert.equal(first.messages[0].text,null);
- const second=await (await fetch(`${base}/api/contacts/${contact}/messages?limit=1&before=${first.next_cursor}`)).json();assert.equal(second.messages[0].text,'合成正文9007199254740993');
- const denied=await fetch(`${base}/api/contacts/${saved[1].contact_id}/messages?before=${first.next_cursor}`);assert.notEqual(denied.status,200);
- const other=await fetch(`${base}/api/contacts/00000000-0000-4000-8000-000000000099/messages`);assert.notEqual(other.status,200);
+ assert.equal((await fetch(`${base}/api/contacts/${contact}/messages`)).status,404,'退役的消息路由不保留第二套读取协议');
+ const first=await (await fetch(`${base}/api/contacts/${contact}/history-messages?limit=1`)).json();assert.equal(first.messages.length,1);assert.ok(first.next_cursor);assert.equal(first.messages[0].text,null);
+ assert.equal(Object.hasOwn(first,'reply_eligibility'),false,'消息覆盖不冒充生成门禁');
+ const second=await (await fetch(`${base}/api/contacts/${contact}/history-messages?limit=1&before=${first.next_cursor}`)).json();assert.equal(second.messages[0].text,'合成正文9007199254740993');
+ const denied=await fetch(`${base}/api/contacts/${saved[1].contact_id}/history-messages?before=${first.next_cursor}`);assert.notEqual(denied.status,200);
+ const other=await fetch(`${base}/api/contacts/00000000-0000-4000-8000-000000000099/history-messages`);assert.notEqual(other.status,200);
 });
 test('来源消息游标覆盖同事务回滚，响应重放幂等且身份正文受约束',async t=>{
  const {service,saved,storage,contacts,channel,target}=await fixture(t,{registryModule:new URL('./fixtures/history/atomic-registry.mjs',import.meta.url).href});const a=saved[0],b=saved[1];

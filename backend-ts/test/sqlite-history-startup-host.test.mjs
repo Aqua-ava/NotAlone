@@ -93,10 +93,10 @@ function noCliOrphans(rows){for(const pid of new Set(rows.map(row=>row.pid)))ass
 
 test('正式launchDsh/profile通过HTTP授权自动首次capture，无手动sync且body仍不可用',{timeout:45000},async t=>{
  const f=await fixture(t),h=await start(f),selected=await authorize(h);
- assert.equal((await h.request(`/api/contacts/${selected.contactId}/messages`)).body.messages.length,0);assert.equal((await requests(f)).some(row=>row.op==='target'||row.op==='page'),false);
+ assert.equal((await h.request(`/api/contacts/${selected.contactId}/history-messages`)).body.messages.length,0);assert.equal((await requests(f)).some(row=>row.op==='target'||row.op==='page'),false);
  assert.equal((await h.request('/api/sync/enable','POST',{})).status,200);
  const status=await coverage(h,selected.contactId,row=>row?.phase==='complete');assert.equal(status.body_available,false);assert.equal(status.cli_backfill_total_message_count,1);
- const messages=await h.request(`/api/contacts/${selected.contactId}/messages`);assert.equal(messages.body.messages.length,1);assert.equal(messages.body.messages[0].text,'仅合成的启动首次历史');assert.equal(messages.body.messages[0].source_record_ids.length,1);
+ const messages=await h.request(`/api/contacts/${selected.contactId}/history-messages`);assert.equal(messages.body.messages.length,1);assert.equal(messages.body.messages[0].text,'仅合成的启动首次历史');assert.equal(messages.body.messages[0].source_record_ids.length,1);
  const persisted=await h.request(`/api/contacts/${selected.contactId}/history`);assert.equal(persisted.body.phase,'complete');assert.equal(persisted.body.pageCount,1);assert.ok(persisted.body.goalId);
  const rows=await requests(f);assert.equal(new Set(rows.map(row=>row.pid)).size,1);assert.ok(rows.some(row=>row.op==='metadata-account'));assert.ok(rows.some(row=>row.op==='metadata-sessions'));assert.ok(rows.filter(row=>row.op==='resolve').every(row=>row.displayName===conversation));assert.deepEqual(rows.filter(row=>['target','page'].includes(row.op)).map(row=>row.op),['target','page']);assert.ok(f.routes.every(route=>!route.endsWith('/history/sync')));
  await h.shutdown();noCliOrphans(await requests(f));
@@ -105,14 +105,14 @@ test('正式launchDsh/profile通过HTTP授权自动首次capture，无手动sync
 test('正式appReady按持久开关首次派发，未知支持保持缺口且零target/page',{timeout:60000},async t=>{
  for(const support of ['supported','unverified'])await t.test(support,async t=>{
   const f=await fixture(t),initial=await start(f),selected=await authorize(initial);
-  const before=await initial.request(`/api/contacts/${selected.contactId}/history`);assert.equal(before.body.phase,'not_started');assert.equal(before.body.goalId,null);assert.equal((await initial.request('/api/sync/status')).body.sync_enabled,false);assert.equal((await initial.request(`/api/contacts/${selected.contactId}/messages`)).body.messages.length,0);
+  const before=await initial.request(`/api/contacts/${selected.contactId}/history`);assert.equal(before.body.phase,'not_started');assert.equal(before.body.goalId,null);assert.equal((await initial.request('/api/sync/status')).body.sync_enabled,false);assert.equal((await initial.request(`/api/contacts/${selected.contactId}/history-messages`)).body.messages.length,0);
   await initial.shutdown();assert.equal((await requests(f)).some(row=>row.op==='target'||row.op==='page'),false);
   // 只安排重启条件：正式联系人服务持久开启读取，不写goal、capture或message。
   const storage=await SqliteStorage.open({userData:f.userData,intent:'open',expectedDatabaseId:f.databaseId,role:'test'}),contacts=new SqliteContactService(storage,selected.ownerId,createWechatContactMetadata(f.executable));
   try{await contacts.setReading(true);const empty=await storage.execute('history.coverage',{ownerId:selected.ownerId,contactId:selected.contactId});assert.equal(empty.phase,'not_started');assert.equal(empty.goalId,null);assert.equal(empty.messageCount,0);}finally{await contacts.close();await storage.close();}
   await f.setSupport(support);const offset=(await requests(f)).length,reopened=await start(f);
   const status=await coverage(reopened,selected.contactId,row=>support==='supported'?row?.phase==='complete':row?.phase==='not_started'&&row.failure_code==='history_message_state_unverified');assert.equal(status.body_available,false);
-  const messages=await reopened.request(`/api/contacts/${selected.contactId}/messages`),newRows=(await requests(f)).slice(offset);
+  const messages=await reopened.request(`/api/contacts/${selected.contactId}/history-messages`),newRows=(await requests(f)).slice(offset);
   if(support==='supported'){assert.equal(messages.body.messages.length,1);assert.equal(messages.body.messages[0].text,'仅合成的启动首次历史');assert.deepEqual(newRows.filter(row=>['target','page'].includes(row.op)).map(row=>row.op),['target','page']);}
   else{assert.deepEqual(messages.body.messages,[]);assert.equal(status.cli_backfill_phase,'incomplete');assert.equal(newRows.some(row=>row.op==='target'||row.op==='page'),false);assert.equal((await reopened.request(`/api/contacts/${selected.contactId}/history`)).body.goalId,null);}
   assert.ok(newRows.some(row=>row.op==='resolve'));assert.ok(newRows.some(row=>row.op==='support'));assert.ok(f.routes.every(route=>!route.endsWith('/history/sync')));await reopened.shutdown();noCliOrphans(await requests(f));
@@ -128,7 +128,7 @@ test('manual正式profile不自动派发历史或记忆，重启后仍只执行�
  assert.equal((await h.request('/api/memory-processing/runs/current')).body,null);
  assert.equal((await requests(f)).some(row=>row.op==='target'||row.op==='page'),false,'开启读取不唤醒后台控制器');
  const synced=await h.request(`/api/contacts/${selected.contactId}/history/sync`,'POST',{});assert.equal(synced.status,200);
- assert.equal((await h.request(`/api/contacts/${selected.contactId}/messages`)).body.messages.length,1);
+ assert.equal((await h.request(`/api/contacts/${selected.contactId}/history-messages`)).body.messages.length,1);
  assert.equal((await h.request('/api/memory-processing/runs/current')).body,null,'手动同步成功也不自动提取');
  // manual只控制宿主自动派发；显式处理仍须先通过产品默认关闭的记忆总开关。
  assert.deepEqual((await h.request('/api/memory-processing/automatic')).body,{enabled:false});
@@ -155,7 +155,7 @@ test('正式profile可只自动处理全部已授权联系人图片，已保存�
  const messages=[];
  for(const binding of selected.bindings){
   await coverage(initial,binding.contact_id,row=>row?.phase==='complete');
-  const rows=(await initial.request(`/api/contacts/${binding.contact_id}/messages`)).body.messages;assert.equal(rows.length,1);assert.equal(rows[0].message_type,'image');
+  const rows=(await initial.request(`/api/contacts/${binding.contact_id}/history-messages`)).body.messages;assert.equal(rows.length,1);assert.equal(rows[0].message_type,'image');
   messages.push({contactId:binding.contact_id,messageId:rows[0].message_id});
  }
  const old=messages[0],seed=await initial.request(`/api/contacts/${old.contactId}/messages/${old.messageId}/media`,'POST',{request_key:randomUUID(),goal:'extract'});

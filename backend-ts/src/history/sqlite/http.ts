@@ -8,7 +8,6 @@ import type { IncrementalHistoryCoordinatorState } from './incremental-coordinat
 import { displayMessageType, messagePlaceholder } from './message-types.ts';
 
 interface HistoryHttpService {
-  read(contactId: string, options?: { limit?: number; before?: string }): Promise<HistoryRead>;
   readChat(contactId: string, options?: { limit?: number; before?: string }): Promise<HistoryRead>;
   imageMedia(contactId: string, messageIds: readonly string[]): Promise<ReadonlyMap<string, HistoryImageMedia>>;
   coverage(contactId: string): Promise<HistoryCoverage>;
@@ -55,7 +54,6 @@ export function projectHistoryMessages(read: HistoryRead, limit: number, imageMe
       };
     }),
     next_cursor: read.messages.length > limit ? selected.at(-1)!.id : null,
-    reply_eligibility: read.replyEligibility,
   };
 }
 /** 公共宿主负责实际渠道可用性；本函数只投影已持久化的覆盖，不发起读取。 */
@@ -144,7 +142,7 @@ function send(res: ServerResponse, status: number, value: unknown): void {
 }
 /** 全局查询门只放行现有消息分页形状，具体值仍由本处理器验证。 */
 export function historyQueryAllowed(method:string|undefined,url:URL):boolean {
- if(method!=='GET'||!/^\/api\/contacts\/[a-f0-9-]{36}\/(messages|history-messages)$/.test(url.pathname))return false;
+ if(method!=='GET'||!/^\/api\/contacts\/[a-f0-9-]{36}\/history-messages$/.test(url.pathname))return false;
  return [...url.searchParams.keys()].every(key=>['limit','before'].includes(key))&&url.searchParams.getAll('limit').length<=1&&url.searchParams.getAll('before').length<=1;
 }
 /** 宿主先做唯一Bearer/无Origin认证；所有范围由已绑定的服务owner确定。 */
@@ -154,7 +152,7 @@ export class SqliteHistoryHttp {
   constructor(service: HistoryHttpService, imagesViewed?: (contactId: string, messageIds: readonly string[]) => void) { this.service = service; this.#imagesViewed = imagesViewed; }
   async handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const url = new URL(req.url ?? '/', 'http://localhost');
-    const route = /^\/api\/contacts\/([a-f0-9-]{36})\/(messages|history-messages|history|history\/sync)$/.exec(url.pathname);
+    const route = /^\/api\/contacts\/([a-f0-9-]{36})\/(history-messages|history|history\/sync)$/.exec(url.pathname);
     if (!route) return false;
     if (!uuid.test(route[1]!)) { send(res, 400, { error: 'history_request_invalid' }); return true; }
     const contactId = route[1]!.toLowerCase();
@@ -166,7 +164,7 @@ export class SqliteHistoryHttp {
     const abort = () => controller.abort(); req.once('aborted', abort);
     try {
       let value: unknown;
-      if (operation === 'messages'||operation==='history-messages') {
+      if (operation === 'history-messages') {
         const parameters = url.searchParams;
         if ([...parameters.keys()].some(key => !['limit', 'before'].includes(key))
           || parameters.getAll('limit').length > 1 || parameters.getAll('before').length > 1) throw new StorageFailure('history_request_invalid');
@@ -175,15 +173,13 @@ export class SqliteHistoryHttp {
         if (!/^[1-9][0-9]{0,2}$/.test(rawLimit) || Number(rawLimit) > 100 || before !== null && !uuid.test(before)) throw new StorageFailure('history_request_invalid');
         const limit = Number(rawLimit);
         const options = { limit: limit + 1, ...(before ? { before: before.toLowerCase() } : {}) };
-        const read = operation === 'history-messages' ? await this.service.readChat(contactId, options) : await this.service.read(contactId, options);
-        if(operation==='history-messages'){
-          const imageIds = read.messages.slice(0,limit).filter(message=>message.kind==='image').map(message=>message.id);
-          const imageMedia = imageIds.length ? await this.service.imageMedia(contactId,imageIds) : new Map();
-          // 用户打开聊天看到尚未保存的图片：交给图片同步各再试一次；失败不影响聊天读取。
-          const unsaved = imageIds.filter(id => !['available', 'cleared'].includes(imageMedia.get(id)?.state ?? ''));
-          if (unsaved.length) { try { this.#imagesViewed?.(contactId, unsaved); } catch { /* 不影响聊天读取 */ } }
-          value = projectHistoryMessages(read, limit, imageMedia);
-        } else value = projectHistoryMessages(read,limit);
+        const read = await this.service.readChat(contactId, options);
+        const imageIds = read.messages.slice(0,limit).filter(message=>message.kind==='image').map(message=>message.id);
+        const imageMedia = imageIds.length ? await this.service.imageMedia(contactId,imageIds) : new Map();
+        // 用户打开聊天看到尚未保存的图片：交给图片同步各再试一次；失败不影响聊天读取。
+        const unsaved = imageIds.filter(id => !['available', 'cleared'].includes(imageMedia.get(id)?.state ?? ''));
+        if (unsaved.length) { try { this.#imagesViewed?.(contactId, unsaved); } catch { /* 不影响聊天读取 */ } }
+        value = projectHistoryMessages(read, limit, imageMedia);
       } else {
         if (url.search) throw new StorageFailure('history_request_invalid');
         if (operation === 'history') value = await this.service.coverage(contactId);

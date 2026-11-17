@@ -106,7 +106,7 @@ test('正式SQLite profile共用唯一模型宿主完成L1并持久等待主题�
  const state=await api('/api/runtime/status');assert.equal(state.status,200);assert.equal(state.data.runtime,'dsh');assert.equal(state.data.storage,'sqlite');assert.equal(state.data.ownership.memory,'typescript');assert.deepEqual(state.data.capabilities,['contacts','history','memory']);
  const identity=await api('/api/setup/status');assert.equal(identity.data.owner_id,owner);
  const sync=await api('/api/sync/status');assert.equal(sync.status,200);assert.equal(sync.data.sync_enabled,false);assert.equal(sync.data.body_available,false);
- for(const contactId of contactIds){const messages=await api(`/api/contacts/${contactId}/messages`);assert.equal(messages.status,200);assert.equal(messages.data.messages.length,2);}
+ for(const contactId of contactIds){const messages=await api(`/api/contacts/${contactId}/history-messages`);assert.equal(messages.status,200);assert.equal(messages.data.messages.length,2);}
  const requestKey=randomUUID();const first=await api('/api/memory-processing/runs',{body:{request_key:requestKey}});assert.equal(first.status,200,JSON.stringify(first.data));assert.equal(first.data.total,4);
  assert.equal(first.data.inputs.length,prepared.length);assert.deepEqual(new Map(first.data.inputs.map(input=>[input.messageId,input.contactId])),contactForMessage);
  assert.ok(first.data.inputs.every(input=>preparedByMessage.get(input.messageId).sourceRecordIds.includes(input.recordId)&&contactForRecord.get(input.recordId)===input.contactId));

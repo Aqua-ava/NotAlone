@@ -171,7 +171,7 @@ test('数据库重开不复活旧守卫，本机来源保留且重新核验后�
  const guard=(await snapshot(f,contact)).guardAtKey,token=await f.contacts.eligibility(contact);
  const databaseId=f.storage.status.databaseId;await f.storage.close();
  const reopened=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:databaseId,registryModule:guardRegistry});t.after(()=>reopened.close());
- const read=await reopened.execute('history.read',{ownerId:f.contacts.ownerId,contactId:contact,limit:100});assert.equal(read.replyEligibility,'ready');
+ const read=await reopened.execute('history.read',{ownerId:f.contacts.ownerId,contactId:contact,limit:100});assert.equal(read.coverage.phase,'complete');
  assert.ok(await reopened.execute('history.source',{ownerId:f.contacts.ownerId,contactId:contact,recordId:source}));
  assert.equal(await reopened.execute('history.guardCheck',{token,guardId:guard.guard_id}),false);
  const contacts={ownerId:f.contacts.ownerId,
@@ -262,7 +262,7 @@ test('易失守卫释放事务失败时关闭存储，重开后旧凭证失效�
  await history.stop(contact);await history.close();
  assert.equal(releases,1,'存储已关闭后的重试不得再执行守卫写入');assert.equal(storageCloses,1);
  const reopened=await SqliteStorage.open({userData:f.root,intent:'open',role:'test',expectedDatabaseId:databaseId});t.after(()=>reopened.close());
- assert.equal((await reopened.execute('history.read',{ownerId:f.contacts.ownerId,contactId:contact,limit:100})).replyEligibility,'ready');
+ assert.equal((await reopened.execute('history.read',{ownerId:f.contacts.ownerId,contactId:contact,limit:100})).coverage.phase,'complete');
  assert.equal(await reopened.execute('history.guardCheck',{token,guardId:guard.guard_id}),false);
 });
 

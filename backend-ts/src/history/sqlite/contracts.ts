@@ -131,7 +131,6 @@ export interface StoredMessage {
 }
 export interface HistoryRead {
   messages: StoredMessage[]; coverage: HistoryCoverage;
-  replyEligibility: 'ready' | 'history_syncing' | 'history_incomplete';
 }
 export type HistoryImageMediaState = 'pending' | 'available' | 'thumbnail_only' | 'unavailable' | 'failed' | 'cleared';
 export interface HistoryImageMedia {

@@ -88,8 +88,8 @@ test('正式DSH重开读取非空历史及消息分页，真实未认证渠道�
  const f=await seed(t);
  for(let attempt=0;attempt<2;attempt++){
   const {host,request}=await startHost(t,f);const runtime=await request('/api/runtime/status');assert.deepEqual(runtime.body.capabilities,['contacts','history']);assert.equal(runtime.body.ownership.wechatHistory,'typescript');
-  const contact=f.bindings[0].contact_id;const first=await request(`/api/contacts/${contact}/messages?limit=1`);assert.equal(first.status,200);assert.equal(first.body.messages.length,1);assert.ok(first.body.next_cursor);assert.equal(first.body.messages[0].text,null);
-  const second=await request(`/api/contacts/${contact}/messages?limit=1&before=${first.body.next_cursor}`);assert.equal(second.body.messages[0].text,'合成历史');
+  const contact=f.bindings[0].contact_id;const first=await request(`/api/contacts/${contact}/history-messages?limit=1`);assert.equal(first.status,200);assert.equal(first.body.messages.length,1);assert.ok(first.body.next_cursor);assert.equal(first.body.messages[0].text,null);
+  const second=await request(`/api/contacts/${contact}/history-messages?limit=1&before=${first.body.next_cursor}`);assert.equal(second.body.messages[0].text,'合成历史');
   const sync=await request('/api/sync/status');assert.equal(sync.status,200);assert.equal(sync.body.body_available,false);assert.equal(sync.body.cli_history_coverages.length,3);assert.ok(sync.body.cli_history_coverages.every(row=>row.phase==='complete'));
   const denied=await request(`/api/contacts/${contact}/history/sync`,'POST',{});assert.equal(denied.status,503);assert.equal(denied.body.error,'history_support_unverified');
   assert.equal((await request('/api/runtime/shutdown','POST',{})).body.state,'stopped');assert.equal(await host.waitForExit(15000),true);
@@ -100,12 +100,12 @@ test('正式宿主来源、联系人、账号删除均经过history闭包，元�
  const f=await seed(t);const {host,request}=await startHost(t,f);const [a,b,c]=f.bindings;
  const source=await request(`/api/contacts/${a.contact_id}/sources/${f.source}`,'DELETE',{});assert.equal(source.status,202);assert.ok(source.body.operation_id);
  assert.equal((await request(`/api/deletions/${source.body.operation_id}`)).body.state,'completed');
- const remaining=await request(`/api/contacts/${a.contact_id}/messages`);assert.equal(remaining.status,200);assert.equal(remaining.body.messages.length,1);assert.ok(remaining.body.messages.every(message=>!message.source_record_ids.includes(f.source)));
+ const remaining=await request(`/api/contacts/${a.contact_id}/history-messages`);assert.equal(remaining.status,200);assert.equal(remaining.body.messages.length,1);assert.ok(remaining.body.messages.every(message=>!message.source_record_ids.includes(f.source)));
  const contact=await request(`/api/contacts/${b.contact_id}`,'DELETE',{confirmed:true,confirm_contact_id:b.contact_id});assert.equal(contact.status,202);assert.equal((await request(`/api/deletions/${contact.body.operation_id}`)).body.state,'completed');
- assert.equal((await request(`/api/contacts/${b.contact_id}/messages`)).status,404);
+ assert.equal((await request(`/api/contacts/${b.contact_id}/history-messages`)).status,404);
  const afterReopen=await request(`/api/contacts/${c.contact_id}/history/sync`,'POST',{});assert.equal(afterReopen.status,503);assert.equal(afterReopen.body.error,'history_support_unverified');
  const account=await request('/api/account','DELETE',{confirmed:true,confirm_scope:'account'},{'idempotency-key':'synthetic-history-account'});assert.equal(account.status,202);assert.equal((await request(`/api/deletions/${account.body.operation_id}`)).body.state,'completed');
- assert.equal((await request(`/api/contacts/${c.contact_id}/messages`)).status,404);
+ assert.equal((await request(`/api/contacts/${c.contact_id}/history-messages`)).status,404);
  await request('/api/runtime/shutdown','POST',{});assert.equal(await host.waitForExit(15000),true);
 });
 
@@ -160,10 +160,10 @@ test('宿主增量协调器随读取开关/退出启停，真实渠道未提供�
  assert.ok(row);assert.equal(row.phase,'complete','历史覆盖本身仍显示已完成');
  assert.ok(['blocked','incomplete','unavailable'].includes(row.incremental_phase),'增量不得伪报已同步');
  assert.ok(['history_tail_unsupported','history_support_unverified','history_incremental_unavailable'].includes(row.incremental_failure_code));
- assert.deepEqual((await request(`/api/contacts/${contact}/messages`)).body.messages.filter(message=>message.text!==null).map(message=>message.text),['合成历史']);
+ assert.deepEqual((await request(`/api/contacts/${contact}/history-messages`)).body.messages.filter(message=>message.text!==null).map(message=>message.text),['合成历史']);
  // 关闭总开关：停止协调器，保留资料与选择。
  const disabled=await request('/api/sync/disable','POST',{});assert.equal(disabled.status,200);assert.equal(disabled.body.sync_enabled,false);
  const after=await request('/api/sync/status');assert.equal(after.body.sync_enabled,false);
- assert.equal((await request(`/api/contacts/${contact}/messages`)).body.messages.filter(message=>message.text!==null).length,1);
+ assert.equal((await request(`/api/contacts/${contact}/history-messages`)).body.messages.filter(message=>message.text!==null).length,1);
  await request('/api/runtime/shutdown','POST',{});assert.equal(await host.waitForExit(15000),true);
 });

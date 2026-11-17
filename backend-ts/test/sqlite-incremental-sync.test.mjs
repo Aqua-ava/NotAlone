@@ -95,14 +95,14 @@ test('增量出现未知状态后不能继续宣称历史完整',async t=>{
  await f.history.synchronize(binding.contact_id);
  f.state.tailBatches.push(()=>({records:[record('1',{stateAssurance:'unverified',status:'99',sender:'unknown',text:null})],caughtUp:true,cursorOut:'tail-2'}));
  await f.history.synchronizeIncremental(binding.contact_id);
- const result=await f.history.read(binding.contact_id);assert.equal(result.replyEligibility,'history_incomplete');assert.equal(result.coverage.incremental.phase,'incomplete');assert.equal(result.messages.length,0);
+ const result=await f.history.read(binding.contact_id);assert.equal(result.coverage.phase,'incomplete');assert.equal(result.coverage.incremental.phase,'incomplete');assert.equal(result.messages.length,0);
 });
 test('增量未知身份即使后续有正常页也不能恢复完整状态',async t=>{
  const f=await fixture(t);const [binding]=await select(f);await f.contacts.setReading(true);await f.history.synchronize(binding.contact_id);
  f.state.tailBatches.push(()=>({records:[record(null,{stateAssurance:'unverified',status:'99',sender:'unknown',text:null})],caughtUp:true,cursorOut:'tail-2'}));
  await f.history.synchronizeIncremental(binding.contact_id);
  f.state.tailBatches.push(()=>({records:[],caughtUp:true,cursorOut:'tail-3'}));await f.history.synchronizeIncremental(binding.contact_id);
- assert.equal((await f.history.read(binding.contact_id)).replyEligibility,'history_incomplete');
+ assert.equal((await f.history.read(binding.contact_id)).coverage.phase,'incomplete');
 });
 
 test('历史终页与增量交接无缺口，重叠重复读取幂等，续读从持久检查点而不是从头', async t => {

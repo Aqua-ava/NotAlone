@@ -5,31 +5,31 @@ import { historyQueryAllowed, projectHistoryMessages, projectHistorySyncStatus }
 const id='00000000-0000-4000-8000-000000000001';
 const coverage={goalId:id,contactId:id,bindingId:id,phase:'running',failureCode:null,cursor:'opaque',messageCount:2,nonTextCount:1,pageCount:2,quarantinedCount:0};
 const message=(changes={})=>({id,contactId:id,bindingId:id,sender:'contact',kind:'text',text:'合成文字',originalType:'1',sentAt:'1001',timePrecision:'millisecond',orderScheme:null,orderKey:null,ordering:'unknown',displayPosition:'9007199254740993',sourceRecordIds:[id],...changes});
-test('原有消息接口与聊天专用图片状态接口各自限制路径和分页参数',()=>{
- assert.equal(historyQueryAllowed('GET',new URL(`http://localhost/api/contacts/${id}/messages?limit=20`)),true);
+test('聊天消息入口限制路径和分页参数，退役旧消息路由',()=>{
+ assert.equal(historyQueryAllowed('GET',new URL(`http://localhost/api/contacts/${id}/messages?limit=20`)),false);
  assert.equal(historyQueryAllowed('GET',new URL(`http://localhost/api/contacts/${id}/history-messages?limit=20&before=${id}`)),true);
  assert.equal(historyQueryAllowed('POST',new URL(`http://localhost/api/contacts/${id}/history-messages`)),false);
  assert.equal(historyQueryAllowed('GET',new URL(`http://localhost/api/contacts/${id}/history-messages?token=secret`)),false);
 });
 test('消息HTTP投影保留非文字占位、未知顺序与精确显示位置，分页不暴露渠道游标',()=>{
- const projected=projectHistoryMessages({messages:[message(),message({id:'00000000-0000-4000-8000-000000000002',kind:'voice',text:null})],coverage,replyEligibility:'history_syncing'},1);
+ const projected=projectHistoryMessages({messages:[message(),message({id:'00000000-0000-4000-8000-000000000002',kind:'voice',text:null})],coverage},1);
  assert.equal(projected.messages[0].occurred_at,'1970-01-01T00:00:01.001Z');
  assert.equal(projected.messages[0].display_position,'9007199254740993');
  assert.equal(projected.messages[0].ordering,'unknown');
  assert.equal(projected.next_cursor,id);
- assert.equal(projected.reply_eligibility,'history_syncing');
+ assert.equal(Object.hasOwn(projected,'reply_eligibility'),false);
  assert.equal(JSON.stringify(projected).includes('opaque'),false);
- const voice=projectHistoryMessages({messages:[message({kind:'voice',text:null})],coverage,replyEligibility:'history_syncing'},20);
+ const voice=projectHistoryMessages({messages:[message({kind:'voice',text:null})],coverage},20);
  assert.equal(voice.messages[0].text,null);assert.equal(voice.messages[0].media_placeholder,'[语音]');
  assert.deepEqual(voice.messages[0].source_record_ids,[id]);
 });
-test('旧 /messages 路由的默认投影不追加图片状态字段',()=>{
- const image=projectHistoryMessages({messages:[message({kind:'image',text:null})],coverage,replyEligibility:'ready'},20).messages[0];
+test('未提供图片状态时仅投影消息占位',()=>{
+ const image=projectHistoryMessages({messages:[message({kind:'image',text:null})],coverage},20).messages[0];
  assert.equal(image.media_placeholder,'[图片]');assert.equal('image_media' in image,false);
 });
 test('聊天HTTP投影只传递已保存图片的状态与引用，不带版本标签',()=>{
  const media={state:'available',fileId:'00000000-0000-4000-8000-000000000010',mimeType:'image/png',imageQuality:'original',imageVariant:'main'};
- const projected=projectHistoryMessages({messages:[message({kind:'image',text:null})],coverage,replyEligibility:'ready'},20,new Map([[id,media]]));
+ const projected=projectHistoryMessages({messages:[message({kind:'image',text:null})],coverage},20,new Map([[id,media]]));
  assert.deepEqual(projected.messages[0].image_media,{state:'available',file_id:media.fileId,mime_type:'image/png'});
 });
 test('聊天投影可显示已保存图片并准确标记仅缩略图、缺图、失败及清除',()=>{
@@ -39,17 +39,17 @@ test('聊天投影可显示已保存图片并准确标记仅缩略图、缺图�
   [id,{state:'available',fileId:'00000000-0000-4000-8000-000000000010',mimeType:'image/png'}],
   [other.id,{state:'thumbnail_only',fileId:null,mimeType:null,errorCode:'media_thumbnail_only'}],
  ]);
- const projected=projectHistoryMessages({messages:[image,other],coverage,replyEligibility:'ready'},20,imageMedia);
+ const projected=projectHistoryMessages({messages:[image,other],coverage},20,imageMedia);
  assert.equal(projected.messages[0].message_id,id);
  assert.deepEqual(projected.messages[0].image_media,{state:'available',file_id:'00000000-0000-4000-8000-000000000010',mime_type:'image/png'});
  assert.equal(projected.messages[1].image_media.state,'thumbnail_only');
  assert.equal(projected.messages[1].image_media.file_id,null);
  assert.equal(projected.messages[0].media_placeholder,'[图片]');
- assert.deepEqual(projectHistoryMessages({messages:[image],coverage,replyEligibility:'ready'},20,new Map([[id,{state:'unavailable',fileId:null,mimeType:null}],['missing',{state:'failed',fileId:null,mimeType:null,errorCode:'needs_image_key'}]] )).messages[0].image_media,
+ assert.deepEqual(projectHistoryMessages({messages:[image],coverage},20,new Map([[id,{state:'unavailable',fileId:null,mimeType:null}],['missing',{state:'failed',fileId:null,mimeType:null,errorCode:'needs_image_key'}]] )).messages[0].image_media,
   {state:'unavailable',file_id:null,mime_type:null});
- assert.deepEqual(projectHistoryMessages({messages:[image],coverage,replyEligibility:'ready'},20,new Map([[id,{state:'failed',fileId:null,mimeType:null,errorCode:'needs_image_key'}]])).messages[0].image_media,
+ assert.deepEqual(projectHistoryMessages({messages:[image],coverage},20,new Map([[id,{state:'failed',fileId:null,mimeType:null,errorCode:'needs_image_key'}]])).messages[0].image_media,
   {state:'failed',file_id:null,mime_type:null,error_code:'needs_image_key'});
- assert.deepEqual(projectHistoryMessages({messages:[image],coverage,replyEligibility:'ready'},20,new Map([[id,{state:'cleared',fileId:null,mimeType:null}]])).messages[0].image_media,
+ assert.deepEqual(projectHistoryMessages({messages:[image],coverage},20,new Map([[id,{state:'cleared',fileId:null,mimeType:null}]])).messages[0].image_media,
   {state:'cleared',file_id:null,mime_type:null});
 });
 test('已保存消息按精确原始类型显示21类，未知类型不猜测正文或引用内容',()=>{
@@ -72,7 +72,7 @@ test('已保存消息按精确原始类型显示21类，未知类型不猜测正
  ];
  for(const [kind,originalType,type,placeholder] of cases){
   const stored=message({kind,originalType,text:kind==='text'?'合成文字':null});
-  const projected=projectHistoryMessages({messages:[stored],coverage,replyEligibility:'history_incomplete'},20).messages[0];
+  const projected=projectHistoryMessages({messages:[stored],coverage},20).messages[0];
   assert.equal(projected.message_type,type,originalType);assert.equal(projected.media_placeholder,placeholder,originalType);
   assert.equal(projected.text,kind==='text'?'合成文字':null);assert.equal(projected.quoted,null);
   assert.deepEqual(projected.source_record_ids,[id]);assert.equal(projected.ordering,'unknown');

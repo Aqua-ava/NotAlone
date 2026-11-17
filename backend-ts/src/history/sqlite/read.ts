@@ -222,7 +222,7 @@ function readRows(tx:StorageTransaction,owner:string,contact:string,coverage:His
   displayPosition:String(r.display_no),ordering:'unknown',
   sourceRecordIds:sources.get(String(r.id))??[],...(quotes.has(String(r.id))?{quote:quotes.get(String(r.id))}:{}),
   ...(quoteErrors.has(String(r.id))?{quoteErrorCode:quoteErrors.get(String(r.id))}:{})})) as StoredMessage[];
- return {messages,coverage,replyEligibility:coverage.phase==='complete'?'ready':coverage.phase==='incomplete'?'history_incomplete':'history_syncing'};
+ return {messages,coverage};
 }
 function readMessagePage(tx:StorageTransaction,owner:string,contact:string,limit:number,before:string|undefined,order:'stored'|'message-time'):HistoryRead {
  const coverage=readCoverage(tx,owner,contact);
