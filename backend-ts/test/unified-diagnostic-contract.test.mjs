@@ -69,6 +69,32 @@ test('字段值中的模板插值和正则不改变顶层字段边界，缺少�
   assert.deepEqual(result.sites[0].fields, ['event', 'traceId', 'durationMs']);
   assert.deepEqual(result.violations.map(item => item.reason), ['missing_event']);
 });
+test('真实TSX中的独立井号不会使诊断扫描停滞，末尾调用仍完整核验', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const helper = new URL('./support/diagnostic-call-sites.mjs', import.meta.url).href;
+  const file = new URL('../../desktop/src/renderer/SqliteCandidateReferences.tsx', import.meta.url).href;
+  // 在子进程设明确边界，扫描器退化时直接失败，避免测试宿主无限分配 token。
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
+    import { readFileSync } from 'node:fs';
+    import { scanDiagnosticCallSites } from ${JSON.stringify(helper)};
+    const source = readFileSync(new URL(${JSON.stringify(file)}), 'utf8');
+    const suffix = "\\ndiagnose({event:'sql.summary',count:1});";
+    process.stdout.write(JSON.stringify([
+      scanDiagnosticCallSites('#' + suffix),
+      scanDiagnosticCallSites(source),
+      scanDiagnosticCallSites(source + suffix),
+    ]));
+  `], { encoding: 'utf8', timeout: 2000 });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  const [minimal, original, appended] = JSON.parse(result.stdout);
+  assert.deepEqual(original, { sites: [], violations: [], deferredCalls: 0 });
+  for (const scanned of [minimal, appended]) {
+    assert.deepEqual(scanned.sites.map(({ event, fields }) => ({ event, fields })), [{ event: 'sql.summary', fields: ['event', 'count'] }]);
+    assert.deepEqual(scanned.violations, []);
+    assert.equal(scanned.deferredCalls, 0);
+  }
+});
 test('所有产品诊断日志对象调用点只使用已注册事件与字段', async t => {
   const { readdir, readFile } = await import('node:fs/promises');
   const { default: path } = await import('node:path');

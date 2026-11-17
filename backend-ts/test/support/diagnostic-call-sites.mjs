@@ -8,6 +8,9 @@ const regexPrefixes = new Set([':', '=', ',', '(', '[', 'return', '=>', '?', '||
 function tokenize(source) {
   const scanner = createScanner(true, undefined, source), tokens = [], templates = []; let braces = 0;
   for (let kind = scanner.scan(); kind !== K.EndOfFile; kind = scanner.scan()) {
+    // 锁定版本的独立 # 会返回零长度 PrivateIdentifier；官方重扫将其消费为 HashToken。
+    if (kind === K.PrivateIdentifier && scanner.getTokenEnd() === scanner.getTokenStart()) kind = scanner.reScanHashToken();
+    if (scanner.getTokenEnd() <= scanner.getTokenStart()) throw new Error('诊断调用点扫描未推进');
     if (kind === K.CloseBraceToken && templates.at(-1) === braces) {
       kind = scanner.reScanTemplateToken(false);
       if (kind === K.TemplateTail) templates.pop();
