@@ -7,6 +7,7 @@ import { SqliteStorage } from '../src/storage/sqlite/client.ts';
 import { DeletionService } from '../src/storage/sqlite/deletion/service.ts';
 import { ActiveHolders } from '../src/storage/sqlite/deletion/holders.ts';
 import { ManagedFiles } from '../src/storage/sqlite/deletion/managed-files.ts';
+import { StorageFailure } from '../src/storage/sqlite/contracts.ts';
 
 // 隔离合成库：联系人 a 的资料要被删除，联系人 b 的跨联系人贡献必须保留。
 const registryModule = new URL('./fixtures/sqlite/deletion-slow-compact-registry.mjs', import.meta.url).href;
@@ -83,7 +84,8 @@ test('批量推进：多个联系人删除只压缩一次，且每个操作都�
   const service = f.service();
   const a = await service.plan(request), b = await service.plan(requestB);
   const compactions = countCompactions(f.storage);
-  const [doneA, doneB] = await service.advanceBatch([a, b]);
+  const [doneB, doneA] = await service.advanceBatch([b, a]);
+  assert.deepEqual([doneB.operationId, doneA.operationId], [b.operationId, a.operationId], '返回顺序保持输入顺序');
   assert.equal(compactions.n, 1, '批量只做一次压缩');
   for (const done of [doneA, doneB]) {
     assert.equal(done.state, 'completed');
@@ -93,6 +95,50 @@ test('批量推进：多个联系人删除只压缩一次，且每个操作都�
   }
   assert.deepEqual(await f.storage.execute('sample.read', {}), { bodies: [], ledger: 0n, generation: 2n });
   assert.deepEqual(await f.storage.check(), { integrity: 'ok', foreignKeys: 'ok' });
+});
+
+test('批量闭包扩展只重跑原操作，新清理之后重新压缩且旧runner被拒绝', async t => {
+  const f = await fixture(t, 0);await f.storage.execute('sample.seed', {});
+  const service = f.service(),op = await service.plan({...request, scope:{kind:'source',contactId:'a',sourceId:'r1'}});
+  await f.storage.execute('sample.spawnOnClear', {});
+  const execute = f.storage.execute.bind(f.storage),events = [];
+  f.storage.execute = (name, input, ...rest) => {events.push({name,input});return execute(name,input,...rest);};
+  const [done] = await service.advanceBatch([op]);assert.equal(done.state,'completed');
+  const compactIndexes = events.flatMap((event,index)=>event.name==='deletion.compact'?[index]:[]);
+  const verifies = events.filter(event=>event.name==='deletion.verify');
+  assert.equal(compactIndexes.length,2);
+  assert.deepEqual(verifies.map(event=>event.input.planRevision),[op.planRevision,op.planRevision+1n]);
+  const newClear = events.findIndex(event=>event.name==='deletion.clearTarget'&&event.input.planRevision===op.planRevision+1n);
+  assert.ok(newClear>events.indexOf(verifies[0])&&newClear<compactIndexes[1],'扩展闭包清除后才开始第二次压缩');
+  await assert.rejects(f.storage.execute('deletion.recollect',verifies[0].input),{code:'deletion_stale_runner'});
+  assert.deepEqual((await f.storage.execute('sample.read',{})).bodies,[]);
+});
+
+test('批量后续领取失败不压缩或结案早先操作，重开后按原顺序恢复', async t => {
+  const f = await fixture(t,0);await f.storage.execute('sample.seed',{});
+  const service=f.service(),a=await service.plan(request),b=await service.plan(requestB);
+  await f.storage.execute('deletion.claim',b);
+  const compactions=countCompactions(f.storage);
+  await assert.rejects(service.advanceBatch([a,b]),{code:'deletion_busy'});
+  assert.equal(compactions.n,0);
+  for(const op of [a,b]){const status=await service.status(op);assert.equal(status.state,'cleaning');assert.equal(status.completedAt,null);}
+  const sealed=await service.status(a);assert.deepEqual(kinds(sealed),['runtime_files','runtime_live_refs']);
+  await f.reopen(0);
+  const recovered=await f.service().advanceBatch([a,b]);
+  assert.deepEqual(recovered.map(op=>[op.operationId,op.state]),[[a.operationId,'completed'],[b.operationId,'completed']]);
+});
+
+test('批量共用压缩失败逐个保留blocked，原任务重试后才结案', async t => {
+  const f=await fixture(t,0);await f.storage.execute('sample.seed',{});
+  const service=f.service(),a=await service.plan(request),b=await service.plan(requestB);
+  const execute=f.storage.execute.bind(f.storage);let compactions=0;
+  f.storage.execute=(name,...args)=>{if(name==='deletion.compact'){compactions++;return Promise.reject(new StorageFailure('synthetic_compact_failed'));}return execute(name,...args);};
+  const blocked=await service.advanceBatch([b,a]);assert.equal(compactions,1);
+  assert.deepEqual(blocked.map(op=>[op.operationId,op.state,op.completedAt]),[[b.operationId,'blocked',null],[a.operationId,'blocked',null]]);
+  for(const op of blocked)assert.equal(op.checks.some(check=>check.kind==='sqlite_pages_wal'&&check.result.result==='passed'),false);
+  assert.deepEqual((await execute('sample.read',{})).bodies,[],'维护失败不恢复已清除正文');
+  f.storage.execute=execute;
+  const done=await service.advanceBatch([b,a]);assert.deepEqual(done.map(op=>[op.operationId,op.state]),[[b.operationId,'completed'],[a.operationId,'completed']]);
 });
 
 test('批量推进：已结案的操作原样返回且不触发多余压缩', async t => {

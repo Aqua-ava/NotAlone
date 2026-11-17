@@ -91,8 +91,12 @@ test('清理中发现新闭包必须推进计划修订，旧复核不能完成�
   const f = await fixture(t); await f.storage.execute('sample.seed', {});
   const op = await f.service().plan(request());
   await f.storage.execute('sample.spawnOnClear', {});
+  let compactions = 0;
+  const execute = f.storage.execute.bind(f.storage);
+  f.storage.execute = (name, ...args) => {if (name === 'deletion.compact') compactions++;return execute(name, ...args);};
   const extended = await f.service().advance(op);
   assert.equal(extended.state, 'fenced'); assert.equal(extended.planRevision, op.planRevision + 1n);
+  assert.equal(compactions, 1, '单次推进暴露新计划，不在同一调用中重试');
   assert.equal(extended.checks.length, 0);
   assert.equal((await f.service().advance(op)).state, 'completed');
 });

@@ -29,11 +29,7 @@ export class DeletionService {
   status(input: Address): Promise<DeletionSnapshot> { return this.reader.execute('deletion.status', input); }
   list(input: {ownerId: string; contactId?: string}): Promise<DeletionSnapshot[]> { return this.reader.execute('deletion.list', input); }
   async advance(input: Address): Promise<DeletionSnapshot> {
-    return withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),async()=>{
-    const cleaned = await this.clean(input);
-    if ('final' in cleaned) return cleaned.final;
-    return this.compactAndVerify([cleaned.runner]).then(([op]) => op!);
-    });
+    return (await this.advanceOperations([input], 0))[0]!;
   }
   /**
    * 批量推进多个操作：逐个完成清理并封存，随后只做一次全库压缩，再逐个核验结案。
@@ -41,7 +37,11 @@ export class DeletionService {
    * 压缩（VACUUM 加全库校验）随库体积增长，与联系人大小无关，合并后 N 个操作只付一次。
    * 中途崩溃时已封存未核验的操作停在清理态，沿原任务再次 advance 即可补齐（与单个推进的失败现场一致）。
    */
-  async advanceBatch(inputs: Address[]): Promise<DeletionSnapshot[]> {
+  advanceBatch(inputs: Address[]): Promise<DeletionSnapshot[]> {
+    return this.advanceOperations(inputs, 3);
+  }
+  /** 单次与批量共用领取、清理、压缩、核验；闭包扩展后仅批量入口在本次调用内有限续跑。 */
+  private async advanceOperations(inputs: Address[], replanAttempts: number): Promise<DeletionSnapshot[]> {
     return withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),async()=>{
     const results = new Map<string, DeletionSnapshot>();
     const pending: Runner[] = [];
@@ -52,7 +52,7 @@ export class DeletionService {
     if (pending.length) for (const op of await this.compactAndVerify(pending)) results.set(op.operationId, op);
     // 核验时闭包出现新目标的操作（fenced）沿原任务单独推进，与单个删除入口一致。
     for (const input of inputs) {
-      for (let i = 0; i < 3 && results.get(input.operationId)?.state === 'fenced'; i++) results.set(input.operationId, await this.advance(input));
+      for (let i = 0; i < replanAttempts && results.get(input.operationId)?.state === 'fenced'; i++) results.set(input.operationId, await this.advance(input));
     }
     return inputs.map(input => results.get(input.operationId)!);
     });

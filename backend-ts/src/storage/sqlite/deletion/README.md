@@ -44,7 +44,7 @@ HTTP支持`Idempotency-Key`标识一次明确请求，账户删除必须提供�
 
 正常宿主已通过`ContactMetadataLifetime`登记联系人域当前账号候选与跨联系人名单预览（`coversAllContacts:true`），并把同一`ActiveHolders`传给后台只读通道；后台读取先取owner/contact删除代次，再以`background-read:<uuid>`登记，联系人读取按`coversAllSources:true`纳入来源删除闭包。联系人删除先关闭整个旧预览并等待所有metadata读取实际结算，旧SQL等待后的缓存回填同样拒绝；plan事务封禁联系人后，名单服务按`deletion.metadataAdmission`只读重建：重建读者登记`admittedDeletionIds`，只查询活跃联系人，不进入这些已封禁操作的drain/verify闭包，身份写入与可能重新列出已删对象的名单预览仍关闭到completed。账户删除、尚未封禁或缺失联系人的任务仍关闭名单；账号删除后保持关闭，普通重读/再次检测不能重装旧预览。账号范围排空全部owner持有者，不比较不同领域的联系人代次与账号epoch。
 
-`ManagedFiles`只允许`managed/runtime-copies`、`managed/media`、`managed/cache`三个固定区。`prepareArea`只建空私有区；`capture(area,locator,kind)`取得实际dev/ino/birthtimeNs/uid与每级父目录身份。locator是受限相对定位，不能是绝对路径、点段或符号链接。文件必须为当前用户拥有、私有权限且nlink=1；目录目标只用rmdir删除空目录。数据库、Skill原目录、模型密钥、微信原件和用户外部原文件不属于这些可删区。
+`ManagedFiles`只允许`managed/runtime-copies`、`managed/media`、`managed/cache`三个固定区。`prepareArea`只建空私有区；`capture(area,locator,kind)`取得实际ino/birthtimeNs/uid与每级父目录身份；旧记录中的dev只作兼容读取，不参与身份判断。locator是受限相对定位，不能是绝对路径、点段或符号链接。文件必须为当前用户拥有、私有权限且nlink=1；目录目标只用rmdir删除空目录。数据库、Skill原目录、模型密钥、微信原件和用户外部原文件不属于这些可删区。
 
 写者先登记创建意图，以排他方式创建空暂存对象，保存真实文件身份后才能写正文/交给SDK。尚不能证明归属的preparing副本必须由领域verify保持blocked；不能伪造inode、扫描猜测目录或把未知文件当已清理。DSH整副本须由讨论域枚举已登记的文件与目录目标，不能只删猜测的一个JSONL。删除器在受控宿主命名空间内串行复验身份并删除，不能对抗同一系统用户恶意并发替换路径；所有合作写者必须经过代次与持有者门禁。
 
@@ -52,13 +52,13 @@ HTTP支持`Idempotency-Key`标识一次明确请求，账户删除必须提供�
 
 ## 完成、重试与存储面
 
-`advance`领取绑定当前runtime的runner及planRevision，排空持有者，在事务外逐文件复验/精确删除，再短事务确认进度。任何迟到确认使用旧runner、实例或修订都拒绝。当前runtime重复领取返回busy；重开同实例可接管旧runtime未完成操作，不自动调用模型。
+`advance` 与 `advanceBatch` 共用同一条领取、清理、压缩和核验管线。`advance` 领取绑定当前runtime的runner及planRevision，排空持有者，在事务外逐文件复验/精确删除，再短事务确认进度。任何迟到确认使用旧runner、实例或修订都拒绝。当前runtime重复领取返回busy；重开同实例可接管旧runtime未完成操作，不自动调用模型。
 
 `advanceBatch(operations)`逐个完成领取、排空、清除与封存，随后只做一次`deletion.compact`，再逐个`verify`结案；核验时闭包出现新目标（`fenced`）的操作沿原任务单独`advance`。压缩耗时随库体积增长而与联系人大小无关，批量让N个操作只付一次；规格的“结案前必须完成压缩”不变，因为每个操作的核验使用的是其最后一次清除之后才开始的压缩结果。中途崩溃时已封存未核验的操作停在清理态，沿原任务再次`advance`或`advanceBatch`即可补齐。HTTP入口仍逐个`advance`；批量只用于[离线维护工具](../../../../scripts/maintenance/delete-contacts-batch.mjs)（App与后台完全退出后运行，复用同一服务和请求键，只输出联系人ID前8位与耗时，必须显式传`--confirm-delete=<数量>`）。
 
 行/文件失败保留同一操作及逐目标尝试进度。清理完后先确认文件及活动引用，再清除账本中的敏感定位/文件证明，最后执行checkpoint → VACUUM → checkpoint → integrity/FK及维护inspect。维护结果包含空闲页、WAL/SHM/journal大小、内存临时存储、secure_delete与未知辅助文件计数；WAL未截断、checkpoint busy或未知文件均不能完成。当前连接仍存活时SHM为SQLite共享索引元数据，记录大小并核归属，不在活动连接下强删SHM。inspect快照不替代领域/SDK/长读者排空，相关持有者必须另证；长读者实际阻塞checkpoint的反例已覆盖。
 
-所有当前计划的必需面通过、目标清除且闭包复查无新增后才completed。新目标先推进planRevision，旧检查失效，调用方沿同操作再次advance。维护中断或失败保持未完成；重试再次维护，不能仅凭DB行已删宣告跨存储原子成功。本合同不承诺SSD底层、外部备份或模型服务商副本的法证擦除。
+所有当前计划的必需面通过、目标清除且闭包复查无新增后才completed。新目标先推进planRevision，旧检查失效；单次 `advance` 返回 `fenced`，不自动重试，批量入口仅对这些原操作额外续跑最多三次，每次新清理之后重新压缩并核验。维护中断或失败保持未完成；重试再次维护，不能仅凭DB行已删宣告跨存储原子成功。本合同不承诺SSD底层、外部备份或模型服务商副本的法证擦除。
 
 completed是终态：转完成的同一事务内，统一模块按`domain:row_kind`（文件目标记为`domain:file`）把逐行条数汇总成JSON写入`deletion_operation.target_summary`，随后删除该操作的全部`deletion_target`逐行记录；摘要只含条数，不含任何行键、定位或证明。未完成操作（fenced/cleaning/verifying/blocked）的逐行记录原样保留。completed不再领取runner或触发领域回调，公开状态只返回操作级进度，因此完成后没有读取方依赖逐行记录。迁移48为存量已完成操作补写摘要并清理逐行台账；DELETE释放的页进入freelist，文件不会随迁移自动缩小。现有服务只在仍需清理的删除推进（advance/advanceBatch，包括启动恢复未完成的媒体删除）或离线批量删除维护中调用`deletion.compact`的VACUUM回收空间；普通启动、读取和重试已completed操作均不触发压缩。
 

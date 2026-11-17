@@ -64,7 +64,6 @@ export class ContactMetadataLifetime {
   private service?: SqliteContactService;
   private http?: SqliteContactHttp;
   private admission: MetadataAdmission = closedAdmission;
-  private released = true;
   private stopping = false;
   private reopening?: Promise<void>;
   private stopReaders:StopReaders=async()=>{};
@@ -85,10 +84,10 @@ export class ContactMetadataLifetime {
       await service.close();
     }
   }
-  private create(): SqliteContactService { return new ControlledContactService(this.storage, this.ownerId, this.createMetadata(),contactId=>this.stopReaders(contactId),()=>{if(!this.stopping&&!this.released)this.startReaders();}); }
+  private create(): SqliteContactService { return new ControlledContactService(this.storage, this.ownerId, this.createMetadata(),contactId=>this.stopReaders(contactId),()=>{if(!this.stopping&&this.service)this.startReaders();}); }
   setReadStop(stopReaders:StopReaders):void {this.stopReaders=stopReaders;}
   setReadStart(startReaders:()=>void):void {this.startReaders=()=>{this.wakeAvatarSync();startReaders();};}
-  wakeAvatarSync():void {if(!this.stopping&&!this.released)this.avatars.wake();}
+  wakeAvatarSync():void {if(!this.stopping&&this.service)this.avatars.wake();}
   async stopAvatarSync(contactId?:string){await this.avatars.stop(contactId);}
   async syncAvatar(contactId:string,signal?:AbortSignal){return (await this.current()).syncAvatar(contactId,signal);}
   private admit(): Promise<MetadataAdmission> {
@@ -98,18 +97,18 @@ export class ContactMetadataLifetime {
     // admittedOperations 只由可信 lifetime 传入：这些联系人删除已封禁身份，早开的名单读者不进入其闭包。
     this.holders.register({key: `identity:metadata_${randomUUID()}`, ownerId: this.ownerId, generation: 0n,
       coversAllContacts: true, admittedDeletionIds: [...this.admission.admittedOperations], close: () => this.release(service)});
-    this.service = service; this.http = new SqliteContactHttp(service); this.released = false;
+    this.service = service; this.http = new SqliteContactHttp(service);
   }
   private async release(service: SqliteContactService): Promise<void> {
     // 先完成实际关闭再标记可重建；close 失败时保留引用，让 holder drain 在原操作重试。
     await service.close();
     if (this.service !== service) return;
     // http 保留指向已关闭服务，让名单关闭期间的读路由沿用既有 identity_closed 投影；重建时会被替换。
-    this.service = undefined; this.released = true;
+    this.service = undefined;
   }
   private async refresh(known?: MetadataAdmission):Promise<void> {
     // 名单已打开时不在每次读取前访问主 Worker：前台快照等专用读者不能等后台 SQL。
-    if (this.stopping || !this.released) return;
+    if (this.stopping || this.service) return;
     this.reopening ??= (async () => {
       const admission = known ?? await this.admit();
       if (this.stopping) return;
@@ -127,11 +126,11 @@ export class ContactMetadataLifetime {
       if (existing) await this.release(existing);
       return;
     }
-    if (this.released) await this.refresh(admission);
+    if (!this.service) await this.refresh(admission);
   }
   private async current():Promise<SqliteContactService>{
     await this.refresh();
-    if(this.stopping||this.released||!this.service)throw new StorageFailure('history_contact_gateway_unavailable');
+    if(this.stopping||!this.service)throw new StorageFailure('history_contact_gateway_unavailable');
     return this.service;
   }
   async eligibility(contactId:string){return (await this.current()).eligibility(contactId);}
