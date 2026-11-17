@@ -36,12 +36,12 @@ async function fixture(t){
 
 test('自动选择单个 Skill 后公开真实加载名称与版本资源清单，选择和正文分别记录',async t=>{
  const f=await fixture(t),run=await openSqliteSkillRun(f.library,f.scope,f.protection);run.mount(f.layer.ctx);
- assert.deepEqual(run.loadedSkills,[]);assert.equal(run.selection,null);
+ assert.deepEqual(run.loadedSkills,[]);
  await f.ctx.skills.get('gentle',{scope:f.key});
  assert.equal(run.loadedSkills[0].name,'gentle');assert.deepEqual(run.loadedSkills[0].anchor,skillAnchor(f.items[0]));
  assert.equal(run.loadedSkills[0].resources.length,1);assert.equal(run.loadedSkills[0].resources[0].relativePath,'references/guide.md');
  assert.equal(run.loadedSkills[0].resources[0].mediaType,'text/markdown');assert.match(run.loadedSkills[0].resources[0].payloadDigest,/^[a-f0-9]{64}$/);
- assert.equal(run.selection,null);assert.deepEqual(f.selections.at(-1).selected,skillAnchor(f.items[0]));
+ assert.deepEqual(f.selections.at(-1).selected,skillAnchor(f.items[0]));
  const inputs=await f.storage.execute('fixture.inputs',f.scope);assert.equal(inputs.length,1);assert.equal(inputs[0].relative_path,'SKILL.md');
  const revision=run.revision;assert.equal(revision.eligible.length,2);revision.eligible.length=0;assert.equal(run.revision.eligible.length,2);
  const loaded=run.loadedSkills[0];loaded.resources.length=0;assert.equal(run.loadedSkills[0].resources.length,1);
@@ -124,7 +124,7 @@ test('资源读取中取消或来源删除拒绝迟到结果，释放scope不保
    if(input.relativePath!=='SKILL.md'){entered();await gate;}
    await original(input,signal);
   };
-  const controller=new AbortController(),run=await openSqliteSkillRun(f.library,f.scope,f.protection,undefined,controller.signal);run.mount(f.layer.ctx);
+  const controller=new AbortController(),run=await openSqliteSkillRun(f.library,f.scope,f.protection,controller.signal);run.mount(f.layer.ctx);
   await f.ctx.skills.get('gentle',{scope:f.key});
   const pending=assert.rejects(run.readLoadedResource('gentle','references/guide.md'));
   await waiting;

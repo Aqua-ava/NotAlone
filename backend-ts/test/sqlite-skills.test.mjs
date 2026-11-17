@@ -127,10 +127,10 @@ test('官方 scoped provider 只加载已启用修订，选择与真实载入分
  const unknown=await openSqliteSkillRun(library,{contactId:'contact-a',callId:'call-unknown'},trace);unknown.mount(layer.ctx);
  assert.deepEqual((await ctx.skills.snapshot({scope:key})).skills,[]);unknown.close();
  item=await library.setEnabled(item.id,item.headRevision,'enabled');
- const run=await openSqliteSkillRun(library,{contactId:'contact-a',callId:'call-loaded'},trace,item.id);run.mount(layer.ctx);
- assert.equal(trace.inputs.length,0);assert.deepEqual(trace.selections.at(-1).selected,skillAnchor(item));
+ const run=await openSqliteSkillRun(library,{contactId:'contact-a',callId:'call-loaded'},trace);run.mount(layer.ctx);
+ assert.equal(trace.inputs.length,0);assert.equal(trace.selections.at(-1).selected,null);
  assert.equal((await ctx.skills.snapshot()).skills.length,0);
- const loaded=await ctx.skills.get('gentle',{scope:key});assert.match(loaded.content,/先回应感受/);
+ const loaded=await ctx.skills.get('gentle',{scope:key});assert.match(loaded.content,/先回应感受/);assert.deepEqual(trace.selections.at(-1).selected,skillAnchor(item));
  assert.equal(trace.inputs.length,1);assert.equal(trace.inputs[0].text,loaded.content);
  assert.deepEqual(trace.inputs[0].loaded,skillAnchor(item));assert.equal(trace.inputs[0].relativePath,'SKILL.md');
  assert.equal(loaded.resourceBase.kind,'opaque');assert.equal(loaded.path,'/notalone/reply-skills/gentle/SKILL.md');
@@ -214,7 +214,7 @@ test('实际输入在具名追踪事务复验修订，迟到结果不能跨过�
  const {library,storage,item,scope,ctx,key,layer}=await mounted(t);
  let entered,release;const waiting=new Promise(r=>entered=r),gate=new Promise(r=>release=r);
  const port=trackedProtection(storage);port.recordInput=async input=>{entered();await gate;await storage.execute('fixture.input',input);};
- const run=await openSqliteSkillRun(library,scope,port,item.id);run.mount(layer.ctx);
+ const run=await openSqliteSkillRun(library,scope,port);run.mount(layer.ctx);
  const pending=assert.rejects(ctx.skills.get('gentle',{scope:key}),{code:'skill_run_invalidated'});
  await waiting;await library.setEnabled(item.id,item.headRevision,'disabled');release();await pending;
  assert.deepEqual(await storage.execute('fixture.inputs',scope),[]);
@@ -238,7 +238,7 @@ test('官方scope释放立即拒绝在途读取，迟到输入无法重挂provid
  const {library,storage,item,scope,ctx,key,layer}=await mounted(t);
  let entered,release;const waiting=new Promise(r=>entered=r),gate=new Promise(r=>release=r);
  const port=trackedProtection(storage);port.recordInput=async(input,signal)=>{entered();await gate;signal.throwIfAborted();await storage.execute('fixture.input',input);};
- const run=await openSqliteSkillRun(library,scope,port,item.id);run.mount(layer.ctx);
+ const run=await openSqliteSkillRun(library,scope,port);run.mount(layer.ctx);
  const pending=assert.rejects(ctx.skills.get('gentle',{scope:key}),{code:'skill_run_invalidated'});await waiting;
  await layer.dispose();await pending;release();await new Promise(r=>setImmediate(r));
  assert.deepEqual(await storage.execute('fixture.inputs',scope),[]);assert.deepEqual((await ctx.skills.snapshot({scope:key})).skills,[]);

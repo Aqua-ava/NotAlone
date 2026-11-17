@@ -1,3 +1,4 @@
+import {DatabaseSync} from 'node:sqlite';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir,writeFile,unlink,readdir} from 'node:fs/promises';
@@ -168,18 +169,12 @@ test('257个eligible Skill只提供简介，不再受批量预加载256包上限
 });
 
 
-test('显式selectedPackageId只预加载指定单包，首次请求可读取该包资源',async t=>{
- const f=await setup(t,(_f,res,_request,n)=>n===1?stream(res,'skill_resource',{name:'gentle',path:'references/example.md'}):stream(res));await addClearSkill(f);
- await f.turns.generate({...f.input,selectedPackageId:f.skill.id});
- const request=JSON.stringify(f.requests[0]),trace=await f.trace(),view=await f.view();
- assert.equal(f.requests.length,2);assert.match(request,/先回应感受/);assert.doesNotMatch(request,/清晰说明边界|辅助资料的唯一合成教学句/);
- assert.deepEqual(toolNames(f.requests[0]).sort(),[...searchTools,'skill_resource']);
- assert.match(JSON.stringify(f.requests[1]),/辅助资料的唯一合成教学句/);
- const inputs=trace.events.filter(event=>event.kind==='skill_input').map(event=>JSON.parse(event.payload));
- assert.deepEqual(inputs.map(item=>[item.loaded.packageId,item.relativePath]),[[f.skill.id,'SKILL.md'],[f.skill.id,'references/example.md']]);
- assert.ok(inputs.every(item=>item.preload.origin==='explicit'));
- assert.deepEqual(view.preloadedSkills.map(skill=>[skill.name,skill.origin]),[['gentle','explicit']]);
- assert.equal(view.candidates.length,1);assert.deepEqual(f.supplierErrors,[]);
+test('新候选明确拒绝显式选包字段，含null且不产生请求或模型调用',async t=>{
+ const f=await setup(t,(_f,res)=>stream(res));
+ for(const selectedPackageId of [f.skill.id,null,undefined]){
+  await assert.rejects(f.turns.generate({...f.input,selectedPackageId}),{code:'reply_input_invalid'});
+ }
+ assert.deepEqual(f.requests,[]);assert.deepEqual(await f.service.view(f.input.contactId,f.input.discussionId),[]);
 });
 
 test('skill_resource先加载正文再读取两份资源，未请求资源不进入前两次输入',async t=>{
@@ -301,7 +296,15 @@ test('按需加载路径仍保持调用预算和单一运行副本',async t=>{
  const f=await setup(t,(_f,res)=>stream(res));await f.turns.generate(f.input);
  const copies=await f.storage.execute('runtime.inventory',{ownerId:f.owner});
  assert.equal(copies.length,1);assert.equal(copies[0].state,'ready');
- assert.equal(copies[0].configurationDigest,await f.turns.configurationFor(f.input.contactId,f.input.discussionId));
+ assert.equal(f.requests.length,1);
+ const trace=await f.trace();assert.equal(trace.calls.length,1);assert.equal(trace.calls[0].state,'succeeded');
+ assert.equal(trace.calls[0].actual_budget_units,11n);assert.ok(JSON.parse(trace.calls[0].receipt).inputBudget.input_tokens>0);
+ const database=new DatabaseSync(join(f.root,'managed/sqlite/notalone.sqlite'),{readOnly:true});
+ try{
+  const call=database.prepare('SELECT configuration_id,model,input_cap,output_cap FROM model_call WHERE id=?').get(trace.calls[0].id);
+  assert.equal(call.configuration_id,copies[0].configurationDigest,'实际派发调用与ready副本保存同一配置，不在测试中重算摘要');
+  assert.equal(call.model,f.model.model);assert.equal(call.output_cap,f.model.maxTokens);assert.ok(call.input_cap>0);
+ }finally{database.close();}
  assert.equal((await readdir(join(f.root,'managed/runtime-copies'))).length,1);
 });
 

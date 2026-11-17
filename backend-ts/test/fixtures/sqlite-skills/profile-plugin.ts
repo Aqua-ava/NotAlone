@@ -40,9 +40,10 @@ export async function apply(ctx: Context): Promise<void> {
        if(req.url==='/late-load'){const current=await library.get(input.id);await library.setEnabled(current.id,current.headRevision,'disabled');}
        await storage.execute('fixture.input',actual);
       },
-     },input.id);
+     });
      run.mount(layer.ctx);
      const content=await ctx.get('skills')!.get('gentle',{scope:key});
+     if(!content)throw new Error('fixture_skill_unavailable');
      if(req.url==='/load-resource'){
       const resource=await run.readLoadedResource('gentle',input.path);
       const loaded=run.loadedSkills[0]!;

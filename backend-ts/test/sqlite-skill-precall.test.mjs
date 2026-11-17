@@ -4,7 +4,7 @@ import {mkdtemp,realpath,mkdir,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
-import {SqliteSkillLibrary,skillAnchor} from '../src/skills/sqlite/library.ts';
+import {SqliteSkillLibrary} from '../src/skills/sqlite/library.ts';
 import {openSqliteSkillRun} from '../src/skills/sqlite/provider.ts';
 
 /** 合成 Skill 包夹具；只使用匿名化正文，不接触真实资料。 */
@@ -41,25 +41,23 @@ async function bindScope(storage,contactId,callId){
 }
 const request=(callId)=>({contactId:'contact-a',callId});
 
-test('显式单包打开时只冻结定向选择，正文由生成前的官方 registry 载入',async t=>{
+test('打开Skill目录只冻结当前范围，模型读取前不选择或预载正文',async t=>{
  const f=await fixture(t,[{name:'gentle',text:'先回应感受。'},{name:'support',text:'再给出可选做法。'}]);
- const items=await f.library.list(),gentle=items.find(item=>item.directoryName==='gentle');
- await bindScope(f.storage,'contact-a','call-legacy');
- const trace=tracked(f.storage);
- const run=await openSqliteSkillRun(f.library,request('call-legacy'),trace,gentle.id);
+ await bindScope(f.storage,'contact-a','call-catalog');
+ const trace=tracked(f.storage),run=await openSqliteSkillRun(f.library,request('call-catalog'),trace);
  t.after(()=>run.close());
- assert.deepEqual(run.selection,skillAnchor(gentle));
- assert.deepEqual(trace.selections.map(entry=>entry.selected),[skillAnchor(gentle)]);
+ assert.deepEqual(run.revision.eligible.map(anchor=>anchor.packageId).sort(),f.items.map(item=>item.id).sort());
+ assert.deepEqual(trace.selections.map(entry=>entry.selected),[null]);
  assert.deepEqual(trace.inputs,[]);
 });
 
-test('显式单包不可用时拒绝，不写选择或正文',async t=>{
+test('停用Skill不进入运行目录，打开目录不写正文',async t=>{
  const f=await fixture(t,[{name:'gentle',text:'先回应感受。'},{name:'support',text:'再给出可选做法。'}]);
  const support=f.items.find(item=>item.directoryName==='support');
  await f.library.setEnabled(support.id,support.headRevision,'disabled');
- await bindScope(f.storage,'contact-a','call-unavailable');
- const trace=tracked(f.storage);
- await assert.rejects(openSqliteSkillRun(f.library,request('call-unavailable'),trace,support.id),{code:'skill_selection_unavailable'});
- assert.deepEqual(trace.inputs,[]);
- assert.deepEqual(trace.selections,[]);
+ await bindScope(f.storage,'contact-a','call-filtered');
+ const trace=tracked(f.storage),run=await openSqliteSkillRun(f.library,request('call-filtered'),trace);
+ t.after(()=>run.close());
+ assert.equal(run.revision.eligible.some(anchor=>anchor.packageId===support.id),false);
+ assert.deepEqual(trace.inputs,[]);assert.deepEqual(trace.selections.map(entry=>entry.selected),[null]);
 });

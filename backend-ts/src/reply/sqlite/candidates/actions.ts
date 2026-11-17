@@ -22,7 +22,7 @@ function skillViews(tx:StorageTransaction,ownerId:string,requestId:string,includ
  const loaded=rows.map(p=>{
   const storedName=typeof p.name==='string'&&p.name?p.name:null;
   const name=storedName??tx.get('SELECT display_name FROM skill_package WHERE owner_id=? AND id=?',[ownerId,p.loaded.packageId])?.display_name;
-  // auto_preload 仅解释历史回执；当前写入只产生显式单包来历。
+  // explicit／auto_preload 只解释历史回执；当前按需载入不生成预加载来历。
   const origin=p.preload&&['explicit','auto_preload'].includes(p.preload.origin)?p.preload.origin:null;
   const catalogRevision=p.preload&&typeof p.preload.catalogRevision==='string'?p.preload.catalogRevision:null;
   return {packageId:String(p.loaded.packageId),...(name?{name:String(name)}:{}),revisionNo:revisionNumber(p.loaded.revisionNo),relativePath:String(p.relativePath),...(includeText?{text:String(p.text)}:{}),origin,catalogRevision};
@@ -103,11 +103,6 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
  action('finishSearch','write',(tx,i)=>finishReplySearch(tx,i,reader)),
  action('sourceContacts','read',(tx,i)=>{requireAttempt(tx,i);return replySourceContacts(tx,i,reader);}),
  action('selectionSourceContacts','read',(tx,i)=>{requireDiscussion(tx,i);return selectionSourceContacts(tx,i);}),
- action('configuration','read',(tx,i)=>{
-  const d=requireDiscussion(tx,i);if(!d.current_runtime_id)return null;
-  const row=tx.get("SELECT r.id,c.id context_id,c.skill_run_json FROM runtime_copy x JOIN reply_request r ON r.owner_id=x.owner_id AND r.id=x.committed_request_id JOIN reply_context c ON c.owner_id=r.owner_id AND c.request_id=r.id WHERE x.owner_id=? AND x.id=? AND r.kind='reply' AND r.state='committed' AND c.state='active'",[i.ownerId,d.current_runtime_id]);
-  if(!row)return null;requireReplyInput(tx,i,String(row.context_id),reader);return {requestId:String(row.id),revision:decode(String(row.skill_run_json))};
- }),
  action('documentToolAvailable','read',(tx,i)=>hasReplyDocumentTool(tx,i,reader)),
  action('readDocument','write',(tx,i)=>readReplyDocument(tx,i,reader)),
  action('assertInput','read',(tx,i)=>{requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader);return true;}),

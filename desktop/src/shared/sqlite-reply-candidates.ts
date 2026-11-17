@@ -6,7 +6,7 @@ export type SqliteCandidateOperation=SqliteCandidateScope & (
  | {action:'status';requestKey:string}
  | {action:'skills';requestId:string;offset:number}
  | {action:'inputs';requestId:string;offset:number}
- | {action:'generate';requestKey:string;text:string;acceptIncomplete:boolean;carriedSelectionId?:string;selectedPackageId?:string;workspace?:SqliteReplyWorkspace}
+ | {action:'generate';requestKey:string;text:string;acceptIncomplete:boolean;carriedSelectionId?:string;workspace?:SqliteReplyWorkspace}
  | {action:'edit';candidateId:string;versionNo:number;parts:string[]}
  | {action:'select'|'version';candidateId:string;versionNo:number}
 );
@@ -33,11 +33,11 @@ function validWorkspace(value:unknown):value is SqliteReplyWorkspace{
 export function readSqliteCandidateOperation(value:unknown):SqliteCandidateOperation{
  if(!value||typeof value!=='object'||Array.isArray(value))invalid();const v=value as Record<string,unknown>;
  const common=['contactId','scopeRevision','sessionId','action'];
- const extra=v.action==='read'?[]:v.action==='status'?['requestKey']:v.action==='skills'||v.action==='inputs'?['requestId','offset']:v.action==='generate'?['requestKey','text','acceptIncomplete','carriedSelectionId','selectedPackageId','workspace']:v.action==='edit'?['candidateId','versionNo','parts']:v.action==='select'||v.action==='version'?['candidateId','versionNo']:invalid();
+ const extra=v.action==='read'?[]:v.action==='status'?['requestKey']:v.action==='skills'||v.action==='inputs'?['requestId','offset']:v.action==='generate'?['requestKey','text','acceptIncomplete','carriedSelectionId','workspace']:v.action==='edit'?['candidateId','versionNo','parts']:v.action==='select'||v.action==='version'?['candidateId','versionNo']:invalid();
  if(Object.keys(v).some(k=>![...common,...extra].includes(k))||!uuid(v.contactId)||!uuid(v.sessionId)||!Number.isSafeInteger(v.scopeRevision)||(v.scopeRevision as number)<0)invalid();
  if(v.action==='status'&&!uuid(v.requestKey))invalid();
  if((v.action==='skills'||v.action==='inputs')&&(!uuid(v.requestId)||!Number.isSafeInteger(v.offset)||(v.offset as number)<0||(v.offset as number)>1_000_000))invalid();
- if(v.action==='generate'&&(!uuid(v.requestKey)||typeof v.text!=='string'||v.text.length>100000||typeof v.acceptIncomplete!=='boolean'||v.carriedSelectionId!==undefined&&!uuid(v.carriedSelectionId)||v.selectedPackageId!==undefined&&!uuid(v.selectedPackageId)
+ if(v.action==='generate'&&(!uuid(v.requestKey)||typeof v.text!=='string'||v.text.length>100000||typeof v.acceptIncomplete!=='boolean'||v.carriedSelectionId!==undefined&&!uuid(v.carriedSelectionId)
   ||v.workspace!==undefined&&(!validWorkspace(v.workspace)||v.text!==v.workspace.draftText||v.carriedSelectionId!==undefined&&!v.workspace.includeRelationshipContext)
   ||v.workspace===undefined&&!v.text.trim()))invalid();
  if(['edit','select','version'].includes(String(v.action))&&(!uuid(v.candidateId)||!Number.isSafeInteger(v.versionNo)||(v.versionNo as number)<1))invalid();

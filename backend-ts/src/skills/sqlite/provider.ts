@@ -6,11 +6,10 @@ import type {SkillCandidate,SkillProvider,SkillProviderControl} from '@deepseek-
 import {sha256,validateResourcePath} from '../skill-package.ts';
 import {SqliteSkillLibrary,SqliteSkillError,skillAnchor,type VerifiedSkillSnapshot} from './library.ts';
 import {inSkillGroup,skillRunGroup,type SkillGroupScope} from './groups.ts';
-import type {LoadedSkill,SkillAnchor,SkillPackageState,SkillPreloadTrace,SkillRunProtection,SkillRunRevision,SkillRunScope} from './contracts.ts';
+import type {LoadedSkill,SkillAnchor,SkillPackageState,SkillRunProtection,SkillRunRevision,SkillRunScope} from './contracts.ts';
 
 const providerName='notalone-sqlite-skills';
 const virtualRoot='/notalone/reply-skills';
-const catalogRevision=(items: SkillPackageState[])=>JSON.stringify(items.map(i=>[i.id,i.headRevision.toString()]));
 async function abortable<T>(work: Promise<T>,signal: AbortSignal): Promise<T> {
   if(signal.aborted){void work.catch(()=>{});signal.throwIfAborted();}
   return new Promise<T>((resolve,reject)=>{
@@ -19,27 +18,23 @@ async function abortable<T>(work: Promise<T>,signal: AbortSignal): Promise<T> {
   });
 }
 export interface SqliteSkillRunRequest {contactId: string; callId: string}
-/** 打开本轮受控目录；显式单包仍由同一官方 registry 在生成前载入。 */
-export async function openSqliteSkillRun(library: SqliteSkillLibrary,request: SqliteSkillRunRequest,protection: SkillRunProtection,selectedPackageId?: string,signal?: AbortSignal): Promise<SqliteSkillRun> {
+/** 打开本轮受控目录；正文仅由模型通过官方 skill 工具按需载入。 */
+export async function openSqliteSkillRun(library: SqliteSkillLibrary,request: SqliteSkillRunRequest,protection: SkillRunProtection,signal?: AbortSignal): Promise<SqliteSkillRun> {
   if(!request.contactId || !request.callId || !protection?.assertCurrent || !protection.recordInput || !protection.recordSelection)throw new SqliteSkillError('skill_protection_required');
   const scope=Object.freeze({ownerId:library.ownerId,contactId:request.contactId,callId:request.callId});
   signal?.throwIfAborted();await protection.assertCurrent(scope,null,signal);
   const items=await library.list(signal),group=await library.groupScope(request.contactId,signal);
-  const available=inSkillGroup(items.filter(item=>item.enabledState==='enabled' && item.verificationState==='verified' && item.currentRevisionNo!==null),group);
-  const selected=selectedPackageId?available.find(item=>item.id===selectedPackageId):undefined;
-  if(selectedPackageId && !selected)throw new SqliteSkillError('skill_selection_unavailable');
-  const run=new SqliteSkillRun(library,scope,protection,items,{selected:selected?skillAnchor(selected):null,group},signal);
+  const run=new SqliteSkillRun(library,scope,protection,items,{group},signal);
   try {
     // 打开只做数据库资格复验；目录字节在每次读取、每次模型发送和候选提交前复验，不在此重复读取全部目录。
     await run.validateQualification();
     // 选择事件在写事务内复验调用与冻结修订，无需再追加一次分离的资格检查。
-    await protection.recordSelection(scope,run.selection,signal,selected?{name:selected.displayName,preload:{origin:'explicit',catalogRevision:catalogRevision(items)}}:undefined);
+    await protection.recordSelection(scope,null,signal);
     return run;
   }catch(error){run.close();throw error;}
 }
 export class SqliteSkillRun {
   readonly scope: SkillRunScope;
-  private readonly selected: SkillAnchor | null;
   /** 打开时冻结的联系人分组范围；之后的分配或绑定变化由资格复验拒绝。 */
   private readonly group: SkillGroupScope;
   private readonly loadedByName=new Map<string,LoadedSkill>();
@@ -47,17 +42,13 @@ export class SqliteSkillRun {
   private readonly library: SqliteSkillLibrary;
   private readonly protection: SkillRunProtection;
   private readonly catalog: SkillPackageState[];
-  private readonly catalogIdentity: string;
   private readonly controller=new AbortController();
   private unregister?: ()=>void;
-  constructor(library: SqliteSkillLibrary,scope: SkillRunScope,protection: SkillRunProtection,items: SkillPackageState[],options: {selected?: SkillAnchor|null;group: SkillGroupScope},signal?: AbortSignal) {
-    this.library=library;this.scope=scope;this.protection=protection;this.catalog=structuredClone(items);this.catalogIdentity=catalogRevision(items);
+  constructor(library: SqliteSkillLibrary,scope: SkillRunScope,protection: SkillRunProtection,items: SkillPackageState[],options: {group: SkillGroupScope},signal?: AbortSignal) {
+    this.library=library;this.scope=scope;this.protection=protection;this.catalog=structuredClone(items);
     this.group=Object.freeze({groupId:options.group.groupId,revision:options.group.revision,packageIds:[...options.group.packageIds]});
-    this.selected=options.selected?Object.freeze({...options.selected}):null;
     if(signal?.aborted)this.close();else signal?.addEventListener('abort',()=>this.close(),{once:true,signal:this.controller.signal});
   }
-  /** 显式限定的单包；未指定时由模型从当前联系人目录按需选择。 */
-  get selection(): SkillAnchor|null {return this.selected?{...this.selected}:null;}
   get loadedSkills(): LoadedSkill[] {return structuredClone([...this.loadedByName.values()]);}
   get revision(): SkillRunRevision {return this.frozenRevision();}
   /** 官方 Tool 可能归一化异常；保留原始失败供宿主区分授权失效和策略不可读。 */
@@ -128,8 +119,7 @@ export class SqliteSkillRun {
   }
   private eligible(): SkillPackageState[] {
     const available=inSkillGroup(this.catalog.filter(item=>item.enabledState==='enabled' && item.verificationState==='verified' && item.currentRevisionNo!==null),this.group);
-    const selected=this.selected;
-    return selected?available.filter(item=>item.id===selected.packageId):available;
+    return available;
   }
   private provider(control: SkillProviderControl): SkillProvider {
     if(control.signal.aborted)this.close();else control.signal.addEventListener('abort',()=>this.close(),{once:true,signal:this.controller.signal});
@@ -146,10 +136,8 @@ export class SqliteSkillRun {
           if(!trusted || !item)throw new SqliteSkillError('skill_candidate_invalid');
           await this.validateQualification(options.signal);
           const anchor=skillAnchor(item),snapshot=await this.library.assertAnchor(anchor,this.signal(options.signal));
-          if(!this.selected){
-            try{await abortable(this.protection.recordSelection(this.scope,anchor,this.signal(options.signal)),this.signal(options.signal));}
-            catch(error){this.close();throw error;}
-          }
+          try{await abortable(this.protection.recordSelection(this.scope,anchor,this.signal(options.signal)),this.signal(options.signal));}
+          catch(error){this.close();throw error;}
           const content=await this.record(anchor,trusted.name,'SKILL.md',snapshot.pkg.content,options.signal);
           this.signal(options.signal).throwIfAborted();
           this.loadedByName.set(trusted.name,{anchor:{...anchor},name:trusted.name,resources:snapshot.pkg.resources.map(resource=>({relativePath:resource.relative_path,mediaType:resource.media_type,bytes:resource.content.length,payloadDigest:resource.content_sha256}))});
@@ -161,9 +149,8 @@ export class SqliteSkillRun {
     try {
       await this.validateQualification(signal);
       const combined=this.signal(signal);
-      const preload:SkillPreloadTrace|undefined=this.selected?{origin:'explicit',catalogRevision:this.catalogIdentity}:undefined;
       // 输入记录在写事务内复验调用、联系人、来源与冻结修订（合同见 SkillRunProtection.recordInput）。
-      await abortable(this.protection.recordInput({scope:this.scope,runRevision:this.frozenRevision(),selected:{...anchor},loaded:{...anchor},relativePath,text,payloadDigest:sha256(text),name,...(preload?{preload:{...preload}}:{})},combined),combined);
+      await abortable(this.protection.recordInput({scope:this.scope,runRevision:this.frozenRevision(),selected:{...anchor},loaded:{...anchor},relativePath,text,payloadDigest:sha256(text),name},combined),combined);
       combined.throwIfAborted();
       return text;
     }catch(error){this.rememberFailure(error);this.close();throw error;}

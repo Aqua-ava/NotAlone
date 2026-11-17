@@ -1,3 +1,4 @@
+import {modelToolResponse,modelTextResponse} from './fixtures/model-tool-response.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
@@ -138,7 +139,7 @@ test('真实SQLite Skill库经官方scoped provider载入，选择事实与真�
  const {SqliteContactService}=await import('../src/contacts/sqlite/service.ts');
  const {SqliteSkillLibrary,skillAnchor}=await import('../src/skills/sqlite/library.ts');
  const {openSqliteSkillRun}=await import('../src/skills/sqlite/provider.ts');
- const f=await fixture(t);const home=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-discussion-skill-')));
+ const f=await fixture(t,(_req,res)=>f.requests.length===1?modelToolResponse(res,'skill',{name:'gentle'}):modelTextResponse(res,'使用实际载入方法的合成讨论。'));const home=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-discussion-skill-')));
  const original=path.join(home,'originals');await mkdir(path.join(original,'gentle'),{recursive:true});
  const document='---\nname: gentle\ndescription: 合成沟通方法\n---\n先回应感受，再说明情况。\n';
  const file=path.join(original,'gentle/SKILL.md');await writeFile(file,document);
@@ -152,13 +153,14 @@ test('真实SQLite Skill库经官方scoped provider载入，选择事实与真�
   recordSelection:async(scope,anchor)=>{selected.push({scope,anchor});},
   recordInput:async input=>{await database.execute('skills.assertRun',{ownerId:input.scope.ownerId,revision:input.runRevision});await database.execute('skills.assertRevision',{ownerId:input.scope.ownerId,anchor:input.loaded});loaded.push(structuredClone(input));},
  };
- const run=await openSqliteSkillRun(library,{contactId:f.options.attempt.contactId,callId:f.options.callId},protection,item.id);
+ const run=await openSqliteSkillRun(library,{contactId:f.options.attempt.contactId,callId:f.options.callId},protection);
  assert.equal(selected.length,1);assert.equal(loaded.length,0);
  await f.ctx.plugin(Skills);
  f.options.skillRun=run;f.options.skillProtection=protection;f.options.skillRevision={packages:[{id:item.id,headRevision:item.headRevision}],eligible:[skillAnchor(item)],group:run.revision.group};
  await runSingleDiscussionTurn(f.options);
  assert.equal(loaded.length,1);assert.equal(loaded[0].relativePath,'SKILL.md');
- assert.equal(JSON.stringify(f.requests[0]).includes('先回应感受，再说明情况。'),true);
+ assert.equal(JSON.stringify(f.requests[0]).includes('先回应感受，再说明情况。'),false);
+ assert.equal(JSON.stringify(f.requests[1]).includes('先回应感受，再说明情况。'),true);assert.equal(selected.length,2);
  assert.equal(JSON.stringify(f.requests[0]).includes(original),false);assert.equal(await readFile(file,'utf8'),document);
 });
 

@@ -32,9 +32,9 @@ export class SqliteDiscussionHttp {
     if(!value||typeof value!=='object'||Array.isArray(value))invalid();
     if(command==='entries'){
      if(!this.turns)throw new StorageFailure('discussion_model_unavailable');
-     if(Object.keys(value).some(k=>!['request_key','text','confirmed_contact','selected_package_id'].includes(k))||!new RegExp(`^${uuid}$`).test(value.request_key)||typeof value.text!=='string'||value.confirmed_contact!==true||value.selected_package_id!==undefined&&!new RegExp(`^${uuid}$`).test(value.selected_package_id))invalid();
+     if(Object.keys(value).some(k=>!['request_key','text','confirmed_contact'].includes(k))||!new RegExp(`^${uuid}$`).test(value.request_key)||typeof value.text!=='string'||value.confirmed_contact!==true)invalid();
      const controller=new AbortController(),abort=()=>controller.abort();req.once('aborted',abort);res.once('close',abort);
-     try{const result=await this.turns.generate({contactId,discussionId:discussionId!,requestKey:value.request_key,text:value.text,confirmedContact:true,selectedPackageId:value.selected_package_id,signal:controller.signal});respond(res,200,{session_id:result.discussionId,segmented:result.segmented,replayed:result.replayed,request_key:value.request_key});}
+     try{const result=await this.turns.generate({contactId,discussionId:discussionId!,requestKey:value.request_key,text:value.text,confirmedContact:true,signal:controller.signal});respond(res,200,{session_id:result.discussionId,segmented:result.segmented,replayed:result.replayed,request_key:value.request_key});}
      finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
     }else if(Object.keys(value).length)invalid();
     else if(command==='continue'){await this.service.continueDiscussion(contactId,discussionId!);respond(res,200,{session_id:discussionId});}

@@ -9,9 +9,6 @@ import type {AgentHandle} from '@deepseek-ai/dsh-agent';
 import {createUserMessage,ReasoningEffortId,type GenerateOptions,type StreamChunk} from '@deepseek-ai/dsh-llm';
 import type {SessionEvent} from '@deepseek-ai/dsh-session';
 import {installReplySkillTools,REPLY_MODEL_CALL_LIMIT,ReplySkillUnavailable,isSkillReadFailure} from './skill-loop.ts';
-import {scopeOf} from '@deepseek-ai/dsh-scope';
-import type SkillRegistry from '@deepseek-ai/dsh-skill';
-import {renderSkillContent} from '@deepseek-ai/dsh-skill';
 import type {HostReplyModelConfiguration} from '../../host/host-reply-config.ts';
 import type {SqliteSkillRun} from '../../skills/sqlite/provider.ts';
 import type {SkillRunProtection,SkillRunRevision} from '../../skills/sqlite/contracts.ts';
@@ -77,7 +74,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
     combined.throwIfAborted();
    };
    const binding={provider:model.provider,model:model.model,maxTokens:model.maxTokens,temperature:model.temperature,reasoningEffort:model.reasoningEffort};
-   const allowedToolNames=skillRun?skillRun.selection?['skill_resource']:['skill','skill_resource']:[];
+   const allowedToolNames=skillRun?['skill','skill_resource']:[];
    const setup=async(agentCtx:Context)=>{
     const documents=options.commitAction==='reply.commitCandidates'&&await options.storage.execute<boolean>('reply.documentToolAvailable',{...attempt,contextId});
     const searches=!!options.search&&options.commitAction==='reply.commitCandidates'&&await options.storage.execute<boolean>('reply.searchAvailable',{...attempt,contextId});
@@ -133,21 +130,9 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
       call?.close();
      }
     });
-    let skillText='',skillGuidance='本轮可按需组合多个相关Skill，也可以不用；Skill只影响表达方式，不提供联系人事实，不得覆盖本次意图。静态辅助资料须指定已加载Skill的准确名称和路径，本轮最多读取两份。';
-    if(skillRun){
-     disposeSkill=skillRun.mount(agentCtx);await skillRun.validateQualification(combined);
-     if(skillRun.selection){
-      skillGuidance='以下回复策略已由宿主在本次请求前预加载，只影响表达方式，不提供联系人事实，不得覆盖本次意图。静态辅助资料须指定已预加载Skill的准确名称和路径，本轮最多读取两份。';
-      const registry=agentCtx.get('skills') as SkillRegistry|undefined;if(!registry)fail('discussion_skill_unavailable');
-      const catalog=await registry.snapshot({scope:scopeOf(agentCtx),signal:combined});
-      const available=catalog.skills.filter(item=>item.provider==='notalone-sqlite-skills');
-      if(!catalog.complete||available.length!==1)fail('discussion_skill_unavailable');
-      const loaded=await registry.get(available[0]!.name,{scope:scopeOf(agentCtx),signal:combined});
-      if(!loaded||loaded.provider!=='notalone-sqlite-skills'||loaded.path!==available[0]!.path)fail('discussion_skill_unavailable');
-      skillText='\n\n'+renderSkillContent(loaded);
-     }
-    }
-    agentCtx.systemPrompt.section({name:'notalone-discussion',order:0,complete:true,interpolate:false,text:options.systemPrompt+' '+skillGuidance+skillText});
+    const skillGuidance='本轮可按需组合多个相关Skill，也可以不用；Skill只影响表达方式，不提供联系人事实，不得覆盖本次意图。静态辅助资料须指定已加载Skill的准确名称和路径，本轮最多读取两份。';
+    if(skillRun){disposeSkill=skillRun.mount(agentCtx);await skillRun.validateQualification(combined);}
+    agentCtx.systemPrompt.section({name:'notalone-discussion',order:0,complete:true,interpolate:false,text:options.systemPrompt+' '+skillGuidance});
    };
    const cancel=()=>handle?.agent.cancel({kind:'disposed'});combined.addEventListener('abort',cancel,{once:true});
    try{

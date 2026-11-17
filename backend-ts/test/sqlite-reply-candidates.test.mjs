@@ -1,3 +1,4 @@
+import {modelToolResponse} from './fixtures/model-tool-response.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -77,6 +78,7 @@ test('认证HTTP不等待历史即可生成、编辑和选稿，拒绝owner和�
  const request=async(path='',method='GET',body)=>{const res=await fetch(url+path,{method,headers:{authorization:'Bearer synthetic','content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:res.status,body:await res.json()};};
  assert.equal((await request('','POST',{owner_id:f.owner})).status,400);
  assert.equal((await request('','POST',{request_key:randomUUID(),text:'未确认联系人不能生成',confirmed_contact:false})).status,400);
+ for(const selected_package_id of [randomUUID(),null])assert.equal((await request('','POST',{request_key:randomUUID(),text:'合成请求',confirmed_contact:true,selected_package_id})).status,400);
  assert.equal(f.requests.length,0);
  const made=await request('','POST',{request_key:randomUUID(),text:'本次写得自然',confirmed_contact:true});assert.equal(made.status,200);
  const view=await request();assert.match(view.body.requests[0].coverageWarning,/历史覆盖不完整/);const v=view.body.requests[0].candidates[0];
@@ -144,16 +146,16 @@ test('模型已返回但输出无效的失败已发送却不是自动放弃，�
 
 test('真实Skill加载独立于选择记录，资格失效后候选正文、依据和实际Skill快照一起撤下',async t=>{
  const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');const {mkdir,writeFile}=await import('node:fs/promises');
- const f=await realFixture(t,{content:JSON.stringify({candidates:[{parts:['合成Skill候选'],basis:[1]}]})});await mkdir(join(f.skillRoot,'gentle'));await writeFile(join(f.skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 合成温和表达\n---\n先回应感受，再说明情况。\n');let skill=await f.library.discover('gentle');skill=await f.library.setEnabled(skill.id,skill.headRevision,'enabled');
+ const f=await realFixture(t,{onRequest:(_req,res,_body,n)=>n===1&&modelToolResponse(res,'skill',{name:'gentle'}),content:JSON.stringify({candidates:[{parts:['合成Skill候选'],basis:[1]}]})});await mkdir(join(f.skillRoot,'gentle'));await writeFile(join(f.skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 合成温和表达\n---\n先回应感受，再说明情况。\n');let skill=await f.library.discover('gentle');skill=await f.library.setEnabled(skill.id,skill.headRevision,'enabled');
  const d=await f.discussions.newDiscussion(f.ids[0]),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
- await turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'用本次方法回应',confirmedContact:true,selectedPackageId:skill.id});let view=(await service.view(f.ids[0],d.id))[0];assert.equal(view.loadedSkills.length,1);assert.match(view.loadedSkills[0].text,/先回应感受/);assert.match(JSON.stringify(f.requests[0]),/先回应感受/);
- const trace=await f.discussions.trace(f.ids[0],d.id,view.requestId);assert.equal(trace.events.filter(e=>e.kind==='skill_selection').length,1);assert.equal(trace.events.filter(e=>e.kind==='skill_input').length,1);
+ await turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'用本次方法回应',confirmedContact:true});let view=(await service.view(f.ids[0],d.id))[0];assert.equal(view.loadedSkills.length,1);assert.match(view.loadedSkills[0].text,/先回应感受/);assert.doesNotMatch(JSON.stringify(f.requests[0]),/先回应感受/);assert.match(JSON.stringify(f.requests[1]),/先回应感受/);
+ const trace=await f.discussions.trace(f.ids[0],d.id,view.requestId);assert.equal(trace.events.filter(e=>e.kind==='skill_selection').length,2);assert.equal(trace.events.filter(e=>e.kind==='skill_input').length,1);
  const id=view.candidates[0].candidateId;await f.library.setEnabled(skill.id,skill.headRevision,'disabled');view=(await service.view(f.ids[0],d.id))[0];assert.deepEqual(view.candidates,[]);assert.deepEqual(view.loadedSkills,[]);await assert.rejects(service.edit({contactId:f.ids[0],discussionId:d.id,candidateId:id,versionNo:1,parts:['不能洗回']}));
 });
 
 test('Skill分组变化保留已完成候选、编辑与依据，明确继续使用当前分组',async t=>{
  const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');const {mkdir,writeFile}=await import('node:fs/promises');
- const f=await realFixture(t,{skillGroups:'manual',content:JSON.stringify({candidates:[{parts:['分组变化前的合成候选'],basis:[1]}]})});
+ const f=await realFixture(t,{skillGroups:'manual',onRequest:(_req,res,_body,n)=>n===2&&modelToolResponse(res,'skill',{name:'gentle'}),content:JSON.stringify({candidates:[{parts:['分组变化前的合成候选'],basis:[1]}]})});
  await mkdir(join(f.skillRoot,'gentle'));await writeFile(join(f.skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 合成温和表达\n---\n先回应感受，再说明情况。\n');
  let skill=await f.library.discover('gentle');skill=await f.library.setEnabled(skill.id,skill.headRevision,'enabled');
  const contactId=f.ids[0],d=await f.discussions.newDiscussion(contactId),discussionId=d.id,service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
@@ -166,7 +168,7 @@ test('Skill分组变化保留已完成候选、编辑与依据，明确继续使
  assert.equal((await service.inputMaterials({contactId,discussionId,requestId:original.requestId,offset:0})).recorded,true);
  const edited=await service.edit({...scope,versionNo:1,parts:['分组变化后手工编辑的候选']});assert.equal(edited.versionNo,2);
  const selected=await service.select({...scope,versionNo:2});assert.equal(f.requests.length,1,'回看、编辑和选稿不调用模型');
- await turns.generate({...input,requestKey:randomUUID(),text:'按当前分组继续',carriedSelectionId:selected.id,selectedPackageId:skill.id});
+ await turns.generate({...input,requestKey:randomUUID(),text:'按当前分组继续',carriedSelectionId:selected.id});
  const loaded=(await service.view(contactId,discussionId))[1];assert.equal(loaded.loadedSkills.length,1);
  assert.match(JSON.stringify(f.requests[1]),/分组变化后手工编辑的候选/);
  const checkHistory=async()=>{
@@ -182,12 +184,12 @@ test('Skill分组变化保留已完成候选、编辑与依据，明确继续使
  await f.library.deleteGroup(other.id,other.revision);await checkHistory();
  await turns.generate({...input,requestKey:randomUUID(),text:'取消分组后继续',carriedSelectionId:selected.id});
  const latest=(await service.view(contactId,discussionId))[2];assert.equal(latest.sourceState,'available');assert.deepEqual(latest.loadedSkills,[]);
- assert.doesNotMatch(JSON.stringify(f.requests[2]),/先回应感受，再说明情况/);assert.equal(f.requests.length,3);
+ assert.doesNotMatch(JSON.stringify(f.requests[3]),/先回应感受，再说明情况/);assert.equal(f.requests.length,4);
 });
 
 test('Skill分组变化仍拒绝在途旧快照，按既有无Skill路径重新生成',{timeout:10000},async t=>{
  const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
- const entered=Promise.withResolvers(),release=Promise.withResolvers(),f=await realFixture(t,{skillGroups:'manual',content:JSON.stringify({candidates:[{parts:['分组变化后的迟到候选'],basis:[1]}]}),onRequest:async()=>{entered.resolve();await release.promise;}});
+ const entered=Promise.withResolvers(),release=Promise.withResolvers(),f=await realFixture(t,{skillGroups:'manual',onRequest:(_req,res,_body,n)=>n===2&&modelToolResponse(res,'skill',{name:'gentle'}),content:JSON.stringify({candidates:[{parts:['分组变化后的迟到候选'],basis:[1]}]}),onRequest:async()=>{entered.resolve();await release.promise;}});
  const contactId=f.ids[0],d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
  const group=await f.library.createGroup('合成在途分组',[]),input={contactId,discussionId:d.id,requestKey:randomUUID(),text:'生成期间检查分组',confirmedContact:true};
  const pending=turns.generate(input);

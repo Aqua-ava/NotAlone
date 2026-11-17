@@ -26,7 +26,7 @@ import type {ReplySearchTicket,ReplySearchResult} from './search.ts';
 import {readReplyWorkspace,replyWorkspaceEntryText,replyWorkspaceFingerprint,type ReplyWorkspace,type ReplyWorkspaceSnapshot} from './workspace.ts';
 const systemPrompt='你是面向用户真实联系人的中文关系沟通回复助手。只围绕本次已确认联系人。依据本次输入和获准资料生成1至3组可编辑候选，不虚构经历、情绪、立场或承诺。事实、推测和未确认候选必须区分。workspace suggest动作只代表用户要可选思路；未提供或未确认的草稿、立场和关系意图保持未知，候选不得写成用户已采纳的主张或承诺。workspace express动作只围绕本次想法组织表达；草稿是用户对助手的任务描述，不一定是要逐句发送的私聊原文。补充背景、写作要求和最近聊天各自标注，不相互冒充。一次性写作要求仅作用本次，不读取或形成长期表达偏好。最终消息始终由用户选择、修改并亲自发送。每组候选的parts默认只写1条完整消息；只有两种情况才拆成2条（最多2条）：该联系人最近聊天里确有连发短消息的习惯，或内容天然分成两层意思（如先回应、再另起一个问题）。同组多条会按顺序依次发送，不是备选。只输出JSON：{"candidates":[{"parts":["一条完整的消息"],"basis":[1]}]}。basis是每条候选必填的非空整数数组；示例中的1只演示格式，实际必须引用本次已编号材料，不得照抄无关编号。即使只依据用户本次请求，也要填写对应的材料编号。不得省略basis、臆造资料或把Skill选择当作已加载。';
 const candidateSystemPrompt=systemPrompt+'\n\n'+RELATIONSHIP_RETRIEVAL_GUIDE;
-export interface ReplyGenerationInput {contactId:string;discussionId:string;requestKey:string;text:string;confirmedContact:true;acceptIncomplete?:boolean;carriedSelectionId?:string;selectedPackageId?:string;contextMessageIds?:string[];workspace?:ReplyWorkspace;signal?:AbortSignal}
+export interface ReplyGenerationInput {contactId:string;discussionId:string;requestKey:string;text:string;confirmedContact:true;acceptIncomplete?:boolean;carriedSelectionId?:string;contextMessageIds?:string[];workspace?:ReplyWorkspace;signal?:AbortSignal}
 export type ReplyPreparationStage='accepted'|'context-frozen'|'runtime-available';
 interface Options {storage:SqliteStorage;service:SqliteReplyCandidateService;discussions:SqliteDiscussionService;runtime:SqliteDiscussionRuntime;model:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;library?:SqliteSkillLibrary;authorize:(contactId:string)=>Promise<void>;onPreparationStage?:(stage:ReplyPreparationStage)=>void;/** 共享的本机检索索引；缺少语义模型时仍可使用BM25。 */retrieval?:Pick<RetrievalIndexLifecycle,'queryVector'|'wake'>;/** 可信装配仅可缩短历史搜索预算，供有界验证使用；页面与Tool不接收此参数。 */historySearchTimeoutMs?:number}
 /** 与11共享实际DSH执行、provider和arbiter；候选不创建第二套调用身份或账本。 */
@@ -59,13 +59,6 @@ export class SqliteReplyTurns {
    throw error;
   }
  }
- async configurationFor(contactId:string,discussionId:string):Promise<string|null>{
-  const o=this.options,scope={ownerId:o.service.ownerId,contactId,discussionId};
-  const read=()=>o.storage.execute<{requestId:string;revision:SkillRunRevision}|null>('reply.configuration',scope);
-  const current=await read();if(!current)return null;
-  for(const anchor of current.revision.eligible)await o.library?.assertAnchor(anchor);
-  const checked=await read();return checked?this.digest(checked.requestId,checked.revision):null;
- }
  generate(input:ReplyGenerationInput){
   return withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>{
   const observe=observeReply(input.contactId);observe('preparing');
@@ -80,14 +73,15 @@ export class SqliteReplyTurns {
  async close(){this.stopping=true;for(const c of this.controllers)c.abort();await Promise.allSettled([...this.pending]);}
  private async generateOwned(input:ReplyGenerationInput,observe:(phase:ReplyDiagnosticPhase,reasonCode?:string)=>void){
   const o=this.options,ownerId=o.service.ownerId;
+  if(Object.hasOwn(input,'selectedPackageId'))throw new StorageFailure('reply_input_invalid');
   if(input.confirmedContact!==true)throw new StorageFailure('discussion_identity_required');
   const workspace=input.workspace===undefined?undefined:readReplyWorkspace(input.workspace);
   if(workspace&&(input.text!==workspace.draftText||input.contextMessageIds!==undefined||input.carriedSelectionId!==undefined&&!workspace.includeRelationshipContext))throw new StorageFailure('reply_input_invalid');
   await o.authorize(input.contactId);input.signal?.throwIfAborted();
   const confirmationId=await o.storage.execute<string>('identity.manualConfirm',{ownerId,contactId:input.contactId,contextToken:input.requestKey,id:randomUUID(),at:Date.now()});
   const requestText=workspace?replyWorkspaceEntryText(workspace):input.text;
-  const workspaceFingerprint=workspace?replyWorkspaceFingerprint(workspace,input.selectedPackageId,input.carriedSelectionId):undefined;
-  const workspaceSnapshot:ReplyWorkspaceSnapshot|undefined=workspace?{...workspace,selectedPackageId:input.selectedPackageId??null,carriedSelectionId:input.carriedSelectionId??null}:undefined;
+  const workspaceFingerprint=workspace?replyWorkspaceFingerprint(workspace,undefined,input.carriedSelectionId):undefined;
+  const workspaceSnapshot:ReplyWorkspaceSnapshot|undefined=workspace?{...workspace,selectedPackageId:null,carriedSelectionId:input.carriedSelectionId??null}:undefined;
   const begin=()=>o.service.begin({contactId:input.contactId,discussionId:input.discussionId,requestKey:input.requestKey,text:requestText,acceptIncomplete:input.acceptIncomplete,carriedSelectionId:input.carriedSelectionId,includeRelationshipContext:workspace?workspace.includeRelationshipContext:undefined,workspaceFingerprint,identity:{kind:'manual',confirmationId}});
   const accepted=await begin();
   const attempt=accepted.attempt as DiscussionAttempt;
@@ -101,7 +95,7 @@ export class SqliteReplyTurns {
    if(o.library){
     try{catalog=await o.library.refresh(input.signal);}
     catch(error){
-     if(input.selectedPackageId||!isSkillReadFailure(error))throw error;
+     if(!isSkillReadFailure(error))throw error;
      skillDegraded=true;catalog=await o.storage.execute<any[]>('skills.list',{ownerId});
     }
    }else catalog=await o.storage.execute<any[]>('skills.list',{ownerId});
@@ -109,10 +103,9 @@ export class SqliteReplyTurns {
    const group=o.library?await o.library.groupScope(input.contactId,input.signal):null;
    const scope=group??{groupId:null,revision:0n,packageIds:[]};
    const grouped=inSkillGroup(catalog,scope);
-   const eligible=grouped.filter(p=>p.enabledState==='enabled'&&p.verificationState==='verified'&&p.currentRevisionNo!==null&&(!input.selectedPackageId||p.id===input.selectedPackageId));
-   if(input.selectedPackageId&&!eligible.some(p=>p.id===input.selectedPackageId))throw new StorageFailure('discussion_skill_unavailable');
+   const eligible=grouped.filter(p=>p.enabledState==='enabled'&&p.verificationState==='verified'&&p.currentRevisionNo!==null);
    // 本组任一已启用策略缺失、未核验或当前修订不可用时整体撤下，不带其余策略继续。
-   if(!input.selectedPackageId&&grouped.some(p=>p.enabledState==='enabled'&&(p.verificationState!=='verified'||p.currentRevisionNo===null)))skillDegraded=true;
+   if(grouped.some(p=>p.enabledState==='enabled'&&(p.verificationState!=='verified'||p.currentRevisionNo===null)))skillDegraded=true;
    const runnable=skillDegraded?[]:eligible;
    const revision:SkillRunRevision={packages:catalog.map(p=>({id:p.id,headRevision:p.headRevision})),eligible:o.library?runnable.map(skillAnchor):[],...(group?{group:skillRunGroup(input.contactId,group)}:{})};
    const readItems=async()=>{
@@ -137,8 +130,8 @@ export class SqliteReplyTurns {
    const base=new SqliteDiscussionSkillProtection({storage:o.storage,attempt,contextId,callId,authorize:()=>o.authorize(input.contactId)});
    // Skill 的中间步骤只核任务及修订；候选实际出站和保存各自原子复验完整资料。
    const protection:SkillRunProtection=base;
-  // 正常候选按需读取；显式单包沿同一官方 registry 在首次请求前载入。
-  const openSkillRun=o.library&&!skillDegraded?()=>openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,input.selectedPackageId,input.signal):undefined;
+  // 正常候选只通过官方目录按需读取 Skill 正文。
+  const openSkillRun=o.library&&!skillDegraded?()=>openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,input.signal):undefined;
   modelExecutionStarted=true;
   await runSingleDiscussionTurn({runtime:o.runtime,storage:o.storage,attempt,contextId,callId,configurationDigest,prompt,rebuildPrompt:prompt,systemPrompt:candidateSystemPrompt,search:(contextId,kind,query,signal)=>this.search(attempt,contextId,kind,query,signal),model:o.model,provider:o.provider,arbiter:o.arbiter,skillRun:null,openSkillRun,skillProtection:protection,skillRevision:revision,commitAction:'reply.commitCandidates',dispatchAction:'reply.dispatchCall',onPhase:phase=>{observe(phase);o.service.phase(input.contactId,attempt.discussionId,input.requestKey,phase);},onRuntimeAvailable:()=>{this.stage('runtime-available');observe('ready','runtime_ready');},configurationForRevision:revision=>this.digest(attempt.requestId,revision),assertAuthorized:()=>o.authorize(input.contactId),signal:input.signal});
    return {discussionId:attempt.discussionId,replayed:false,segmented:accepted.segmented};

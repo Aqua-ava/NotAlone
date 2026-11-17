@@ -24,7 +24,7 @@
 
 依据 [ADR-178](../../../../architecture/adr/178-contact-skill-groups.md)。内置“恋人”分组（迁移52 `all_packages`，`skillGroups.ensureBuiltin`，分组 GET 时幂等建立）使用全部 Skill，不逐包绑定且不可改名、改绑定或删除；其余分组须逐包绑定。`groups.ts` 导出迁移51 `skillGroupMigration(51)`（`skill_group`、`skill_group_package`、`contact_skill_group`，联系人／包／分组删除级联清除绑定）、`skillGroupActions`（`skillGroups.list|create|update|delete|assign|scope`）以及运行共用的 `inSkillGroup`／`skillRunGroup`。联系人至多一个分组；未分组联系人范围为空，因此首次模型请求不提供 Skill 工具。
 
-- 运行：`openSqliteSkillRun` 的目录、显式 `selectedPackageId`、预加载和 `eligible()` 都先按 `library.groupScope(contactId)` 过滤；冻结的 `SkillRunRevision.group` 带联系人、分组标识和分组修订。回复模块（`reply/sqlite/turns.ts`、`candidates/turns.ts`）用同一函数生成修订，字节须与运行一致。
+- 运行：`openSqliteSkillRun` 的目录与 `eligible()` 都先按 `library.groupScope(contactId)` 过滤；冻结的 `SkillRunRevision.group` 带联系人、分组标识和分组修订。回复模块（`reply/sqlite/turns.ts`、`candidates/turns.ts`）用同一函数生成修订，字节须与运行一致。
 - 资格：`requireSkillRun` 同事务调用 `requireSkillGroupScope`——分配或分组修订变化、可用包越出分组绑定都拒绝；修订缺少 `group` 且 `eligible` 非空同样拒绝（失败即关闭）。无实际变化的 `update` 不推进分组修订。
 - 删除：`skill_metadata` 域在联系人范围收集并清除该联系人的分配，账号范围清除全部分组；原 Skill 目录不受影响。
 - HTTP：`GET /api/skills/groups`；`POST /api/skills/groups`（创建）、`/groups/:id/update`、`/groups/:id/delete`、`/contacts/:contactId/group`，均要求 `confirmed:true` 与预期修订／当前分组，非法请求 400，冲突 409。
@@ -40,17 +40,17 @@
 
 ## 官方加载与实际输入
 
-`openSqliteSkillRun(library, {contactId,callId}, protection, selectedPackageId?, signal?)` 冻结 owner/contact/call、目录修订及明确选择；自动候选保留官方按需加载路径。未知、停用、未核验或来源失效不进入可加载目录。`run.mount(scopedContext)` 只接受官方独占 scope，调用现有 profile 中的 `ctx.skills.registerProvider`；宿主全局目录为空。已挂载的 `@deepseek-ai/dsh-tool-skill` 负责名称与简介目录及 `skill` 加载工具，工具经官方 `ctx.skills.get` 读取所选正文，可在一轮中按需读取多个 Skill；每个包固定一个当时当前的不可变修订。目录发布本身不生成正文输入记录。
+`openSqliteSkillRun(library, {contactId,callId}, protection, signal?)` 冻结 owner/contact/call 与目录修订；按 [ADR-193](../../../../architecture/adr/193-retire-explicit-reply-skill-preload.md)仅保留官方按需加载路径，不接收显式选包，不保存另一套定向预加载状态。未知、停用、未核验或来源失效不进入可加载目录。`run.mount(scopedContext)` 只接受官方独占 scope，调用现有 profile 中的 `ctx.skills.registerProvider`；宿主全局目录为空。已挂载的 `@deepseek-ai/dsh-tool-skill` 负责名称与简介目录及 `skill` 加载工具，工具经官方 `ctx.skills.get` 读取所选正文，可在一轮中按需读取多个 Skill；每个包固定一个当时当前的不可变修订。目录发布本身不生成正文输入记录。
 
-显式 `selectedPackageId` 使用同一位置参数限定目录，在生成的 `setup` 中经官方 `registry.snapshot/get` 读取指定单包，首次模型请求仍携带该正文（来源 `explicit`），并隐藏不需要的目录加载工具。自动与显式路径共用 `recordSelection`／`recordInput`：选择不冒充实际读取，每项正文及资源在各自写事务内复验并保存精确来源、修订、摘要和删除关系。两条路径不再维护独立的批量选择、正文缓存或批量写入事务。历史候选的 `preloadedSkills` 只读投影继续解释旧 `auto_preload` 回执，不恢复可写批量入口或旧正文。
+新请求不提供显式选包或主机预加载分支；`recordSelection`／`recordInput` 只记录目录开放及实际模型工具载入。历史候选的 `preloadedSkills` 只读投影继续解释旧 `explicit`／`auto_preload` 回执，不恢复可写预加载入口或旧正文。
 
 正常路径仅在官方 `skill` 工具成功加载正文后记录实际读取；对应的辅助资源通过 `skill_resource` 按准确 Skill 名称和相对路径读取本修订清单内路径。一轮回复总计最多读取两份静态辅助资源，只显示虚拟路径，不暴露物理文件能力。
 
 必需的 `SkillRunProtection` 是删除／讨论／候选域共同的受信任宿主边界，缺失时拒绝打开：
 
 1. `assertCurrent(scope, frozenRevision|null, signal)` 在同一短事务调用 `requireSkillRun(tx, scope.ownerId, frozenRevision)`（非null时）并复验已确认联系人、调用、读取／资料／来源／删除代次、模型用途和出站范围；Skill不能赋予这些资格。
-2. `recordSelection(scope, selected, signal?, trace?)` 记录每次实际选中的包修订；自动模式对各包分别记录，显式定向预加载则记录其指定修订。`trace` 记录读取时冻结的 Skill 名称、`origin` 与目录快照；事件本身不表示正文已读取或内容已进入模型。
-3. `recordInput(input, signal)` 逐项保存实际正文及后续资源读取、payloadDigest、精确包修订、名称与相对路径；显式单包另记录来历与目录快照，并登记来源与受管副本删除关系。写入事务必须复验上述业务资格，并调用导出的 `requireSkillRun(tx, ownerId, input.runRevision)` 与 `requireSkillRevision(tx, ownerId, input.loaded)`。SkillRunRevision带本轮全部包head及可载入锚点；最后一面不能单独异步检查，避免检查另一面时被撤销。单独事务外检查不够。
+2. `recordSelection(scope, selected, signal?, trace?)` 打开本轮目录时记录 `null`，模型实际加载时分别记录包修订；事件本身不表示正文已读取或内容已进入模型。历史 `trace` 中的 Skill 名称、`origin` 与目录快照仍可读取。
+3. `recordInput(input, signal)` 逐项保存实际正文及后续资源读取、payloadDigest、精确包修订、名称与相对路径，并登记来源与受管副本删除关系；历史显式预加载的来历与目录快照保留原协议。写入事务必须复验上述业务资格，并调用导出的 `requireSkillRun(tx, ownerId, input.runRevision)` 与 `requireSkillRevision(tx, ownerId, input.loaded)`。SkillRunRevision带本轮全部包head及可载入锚点；最后一面不能单独异步检查，避免检查另一面时被撤销。单独事务外检查不够。
 
 正常候选首次物理模型请求只包含官方 Skill 简介目录，不附带目录中全部正文；后续工具结果只加入模型实际请求的正文与资源。端侧发现及安全核验仍可读取完整包，不等于正文已发送。正常目录按最终序列化请求的完整输入预算约束，不设置包数量门槛，也不截取部分目录。每次物理模型发送和业务提交前继续 `run.validate()`：以冻结修订的 `assertCurrent` 前后夹住对全部可载入锚点的目录字节读取，不再另读目录列表或重复分离的 anchor 复验（`assertCurrent` 已在同一短事务核验包集合、head 与全部 anchor）。打开运行、列目录、加载正文和读取资源前使用只做数据库资格复验的 `run.validateQualification()`；正文与资源字节仍在读取时由 `assertAnchor` 对该包复验，输入记录与选择事件在各自写事务内复验。记录真正发出的完整模型输入和模型回执。本模块的读取事件仅证明官方 provider 读取了该正文，不能当作模型实际发送或成功回复的证据。DSH 目录缓存不能替代业务与文件核验；每次读取及返回前均重验，启停或核验变更、来源失效、scope释放及AbortSignal会拒绝迟到结果。
 

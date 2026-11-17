@@ -75,10 +75,7 @@ test('未分组联系人不使用任何 Skill，不同分组只看到各自绑�
  assert.deepEqual(names(stranger),[],'未分组默认不使用 Skill');
  assert.deepEqual(stranger.revision.group,{contactId:'stranger',groupId:null,revision:0n});
  assert.equal(lover.revision.group.groupId,lovers.id);
- await assert.rejects(openSqliteSkillRun(library,{contactId:'lover',callId:'x'},trace,direct.id),{code:'skill_selection_unavailable'});
- await assert.rejects(openSqliteSkillRun(library,{contactId:'stranger',callId:'y'},trace,gentle.id),{code:'skill_selection_unavailable'});
- const selected=await openSqliteSkillRun(library,{contactId:'colleague',callId:'z'},trace,direct.id);
- t.after(()=>selected.close());assert.deepEqual(names(selected),[direct.id]);
+
 });
 
 test('分配、绑定或分组被改动后，已冻结的运行资格立即失效',async t=>{

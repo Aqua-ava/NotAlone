@@ -15,10 +15,9 @@ export function isSkillReadFailure(error:unknown):boolean{
 }
 export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check:()=>Promise<void>,failed:(error:unknown)=>void,documents=false,allowedTools:readonly string[]=[]):void{
  const active=run;
- const explicit=!!active&&active.selection!==null;
  const loaded=()=>!!active&&active.loadedSkills.length>0;
- const demandCatalog=!!active&&!explicit&&active.revision.eligible.length>0;
- // 显式单包由宿主预先载入；自动入口保留官方目录工具与匹配的简介目录。
+ const demandCatalog=!!active&&active.revision.eligible.length>0;
+ // 只保留官方目录工具与匹配的简介目录，正文须经真实工具读取。
  ctx.tools.restrict({allow:demandCatalog?['skill']:[]});
  let resources=0;
  ctx.tools.guard(exec=>{
@@ -35,7 +34,7 @@ export function installReplySkillTools(ctx:Context,run:SqliteSkillRun|null,check
   }
   failed(new StorageFailure('discussion_tools_forbidden'));return 'discussion_tools_forbidden';
  });
- if(!active||(!explicit&&!loaded()&&!demandCatalog))return;
+ if(!active||(!loaded()&&!demandCatalog))return;
  // 在正文载入前登记资源工具；执行 guard 始终要求该包正文已经实际载入。
  ctx.tools.register(defineTool({name:'skill_resource',description:'仅在已加载Skill明确需要补充资料时，按资源目录中的相对路径读取本版本静态文字。最多两次。',
   parameters:{name:{type:'string',required:true,description:'已成功加载正文的准确Skill名称。'},path:{type:'string',required:true,description:'该Skill资源目录中的准确references/或assets/相对路径。'}},

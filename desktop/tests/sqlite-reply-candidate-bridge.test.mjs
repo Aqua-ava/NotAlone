@@ -52,6 +52,15 @@ test('候选preload与主进程将五种操作映射到固定SQLite HTTP路径',
  assert.equal(f.requests.every(request=>request.path.startsWith(base)&&request.timeoutMs===120000&&request.maxResponseBytes===2_000_000),true);
 });
 
+test('历史显式预加载回执继续按原来源读取，退役新参数不改写旧材料',async t=>{
+ const f=fixture(await modules());t.after(()=>f.controller.close());
+ const historical=pageData();
+ historical.requests[0].loadedSkills[0].origin='explicit';historical.requests[0].preloadedSkills[0].origin='explicit';
+ f.respond(async()=>({generation:3,data:historical}));
+ const page=await f.bridge.candidates.execute({...scope,action:'read'});
+ assert.deepEqual(page,historical);assert.equal(page.requests[0].preloadedSkills[0].origin,'explicit');
+});
+
 test('preload及主进程均拒绝通用owner、路径、SQL字段和额外参数',async t=>{
  const f=fixture(await modules());t.after(()=>f.controller.close());const read={...scope,action:'read'},handler=f.handlers.get('sqlite-reply-candidates:execute');
  for(const extra of [{ownerId:ids.other},{owner_id:ids.other},{path:'/api/other'},{sql:'SELECT synthetic_secret'},{body:{text:'不应转发'}},{action:'send'}]){
@@ -65,6 +74,10 @@ test('preload及主进程均拒绝通用owner、路径、SQL字段和额外参�
   const command={...scope,action:'generate',requestKey:ids.request,text:'',acceptIncomplete:false,workspace:{...workspace,...retired}};
   await assert.rejects(f.bridge.candidates.execute(command),/无效/);
   await assert.rejects(handler(command),/无效/);
+ }
+ for(const selectedPackageId of [ids.skill,null]){
+  const command={...scope,action:'generate',requestKey:ids.request,text:'合成请求',acceptIncomplete:false,selectedPackageId};
+  await assert.rejects(f.bridge.candidates.execute(command),/无效/);await assert.rejects(handler(command),/无效/);
  }
  for(const key of ['excludedMessageIds','excluded_message_ids']){
   await assert.rejects(f.bridge.candidates.execute({...scope,action:'generate',requestKey:ids.request,text:'',acceptIncomplete:false,workspace:{...workspace,[key]:[]}}),/无效/);

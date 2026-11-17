@@ -1,3 +1,4 @@
+import {modelToolResponse} from './fixtures/model-tool-response.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -33,7 +34,7 @@ async function fixture(t,options={}){
  const contacts=new SqliteContactService(storage,owner,{account:async()=>({externalKey:'synthetic',identityScheme:'wechat.account.v1',sourceGeneration:'source-1',assurance:'verified',supportProfile:'synthetic-v1'}),sessions:async()=>['a','b'].map(externalKey=>({externalKey,displayName:'合成联系人',kind:'private',identityAssurance:'verified'}))});
  await contacts.initialize();await contacts.confirmAccount((await contacts.detectAccount()).candidate_token);const snap=await contacts.candidates(true);await contacts.confirm(snap.snapshot_token,['a','b'].map(locator=>({locator,observed_display_name:'合成联系人',expected_selection_generation:'0'})));const ids=(await contacts.directory()).contacts.map(c=>c.contact_id);
  const ctx=new Context();await ctx.plugin(Loader);await ctx.plugin(Llm);await ctx.plugin(Skills);
- const requests=[];const server=createServer(async(req,res)=>{let body='';for await(const part of req)body+=part;requests.push(JSON.parse(body));if(options.onRequest&&await options.onRequest(req,res)===true)return;const content='实际环回返回的合成助手发言'+requests.length;const events=[{type:'message_start',message:{id:randomUUID(),model:'synthetic-model',usage:{input_tokens:3,output_tokens:0}}},{type:'content_block_start',index:0,content_block:{type:'text',text:''}},{type:'content_block_delta',index:0,delta:{type:'text_delta',text:content}},{type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:8}},{type:'message_stop'}];res.setHeader('content-type','text/event-stream');res.end(events.map(e=>`event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join(''));});server.listen(0,'127.0.0.1');await once(server,'listening');
+ const requests=[];const server=createServer(async(req,res)=>{let body='';for await(const part of req)body+=part;requests.push(JSON.parse(body));if(options.onRequest&&await options.onRequest(req,res,requests.at(-1),requests.length)===true)return;const content='实际环回返回的合成助手发言'+requests.length;const events=[{type:'message_start',message:{id:randomUUID(),model:'synthetic-model',usage:{input_tokens:3,output_tokens:0}}},{type:'content_block_start',index:0,content_block:{type:'text',text:''}},{type:'content_block_delta',index:0,delta:{type:'text_delta',text:content}},{type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:8}},{type:'message_stop'}];res.setHeader('content-type','text/event-stream');res.end(events.map(e=>`event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join(''));});server.listen(0,'127.0.0.1');await once(server,'listening');
  const provider=installModelProvider(ctx,{provider:'synthetic-official',connection:resolveAdapterOptions({baseURL:`http://127.0.0.1:${server.address().port}/anthropic`,thinking:'disabled',maxTokens:512,retryPolicy:{mode:'normal',maxRetries:0}}),resolveAuth:async()=>({headers:{}}),resolveUserId:()=> 'synthetic-anonymous'});
  const model={provider:'synthetic-official',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off',physical_limit:1,deadline_ms:5000,warning_ratio:0.8,budgetProfile:{context_window_tokens:8192,safety_margin_tokens:512}};
  const skillRoot=join(root,'user-skills');await mkdir(skillRoot,{mode:0o700});const holders=new ActiveHolders();let runtime;let service;let turns;let library;
@@ -65,12 +66,26 @@ test('实际派发后连接中断自动放弃并保留最终测量预留，未�
  await assert.rejects(f.turns.generate(input),{code:'discussion_request_stale'});assert.equal(f.requests.length,1);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
+test('新讨论的HTTP与业务入口拒绝显式选包，旧字段不被静默忽略',async t=>{
+ const f=await fixture(t),d=await f.service.newDiscussion(f.ids[0]);
+ const input={contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'合成请求',confirmedContact:true};
+ for(const selectedPackageId of [randomUUID(),null,undefined])await assert.rejects(f.turns.generate({...input,selectedPackageId}),{code:'discussion_input_invalid'});
+ const {SqliteDiscussionHttp}=await import('../src/reply/sqlite/http.ts'),http=new SqliteDiscussionHttp(f.service,()=>true,f.turns);
+ const server=createServer((req,res)=>http.handle(req,res));server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));
+ for(const selected_package_id of [randomUUID(),null]){
+  const response=await fetch(`http://127.0.0.1:${server.address().port}/api/contacts/${f.ids[0]}/assistant-sessions/${d.id}/entries`,
+   {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({request_key:input.requestKey,text:input.text,confirmed_contact:true,selected_package_id})});
+  assert.equal(response.status,400);assert.equal((await response.json()).error,'discussion_input_invalid');
+ }
+ assert.deepEqual(f.requests,[]);assert.deepEqual((await f.service.view(f.ids[0],d.id)).entries,[]);
+});
+
 test('实际Skill载入经SQLite保护事务保存原文与修订，选择事实不冒充载入',async t=>{
- const f=await fixture(t);await mkdir(join(f.skillRoot,'gentle'),{mode:0o700});await writeFile(join(f.skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 合成沟通方法\n---\n先回应感受，再说明合成情况。\n',{mode:0o600});
+ const f=await fixture(t,{onRequest:(_req,res,_body,n)=>n===1&&modelToolResponse(res,'skill',{name:'gentle'})});await mkdir(join(f.skillRoot,'gentle'),{mode:0o700});await writeFile(join(f.skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 合成沟通方法\n---\n先回应感受，再说明合成情况。\n',{mode:0o600});
  let skill=await f.library.discover('gentle');skill=await f.library.setEnabled(skill.id,skill.headRevision,'enabled');{const group=await f.library.createGroup('合成分组',[skill.id]);await f.library.assignContactGroup(f.ids[0],group.id,null);}
- const d=await f.service.newDiscussion(f.ids[0]);await f.turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'使用指定的合成方法讨论',confirmedContact:true,selectedPackageId:skill.id});
+ const d=await f.service.newDiscussion(f.ids[0]);await f.turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'使用指定的合成方法讨论',confirmedContact:true});
  const view=await f.service.view(f.ids[0],d.id);const trace=await f.service.trace(f.ids[0],d.id,view.entries[1].origin_request_id);
- assert.equal(trace.events.filter(e=>e.kind==='skill_selection').length,1);const loaded=trace.events.filter(e=>e.kind==='skill_input');assert.equal(loaded.length,1);assert.match(loaded[0].payload,/先回应感受/);assert.equal(JSON.stringify(f.requests[0]).includes('先回应感受'),true);
+ assert.equal(trace.events.filter(e=>e.kind==='skill_selection').length,2);const loaded=trace.events.filter(e=>e.kind==='skill_input');assert.equal(loaded.length,1);assert.match(loaded[0].payload,/先回应感受/);assert.equal(JSON.stringify(f.requests[0]).includes('先回应感受'),false);assert.equal(JSON.stringify(f.requests[1]).includes('先回应感受'),true);
  assert.equal((await f.storage.execute('runtime.inventory',{ownerId:owner}))[0].state,'ready');await access(join(f.skillRoot,'gentle/SKILL.md'));assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
@@ -115,8 +130,8 @@ test('真实来源删除沿实际输入和同副本后续发言清理全部副�
 });
 
 test('真实账号清理覆盖讨论调用追踪和受管目录，用户Skill原件保留',async t=>{
- const f=await fixture(t);await mkdir(join(f.skillRoot,'gentle'),{mode:0o700});const original='---\nname: gentle\ndescription: 合成方法\n---\n保留用户自己的选择。\n';await writeFile(join(f.skillRoot,'gentle/SKILL.md'),original,{mode:0o600});let skill=await f.library.discover('gentle');skill=await f.library.setEnabled(skill.id,skill.headRevision,'enabled');{const group=await f.library.createGroup('合成分组',[skill.id]);await f.library.assignContactGroup(f.ids[0],group.id,null);}
- const d=await f.service.newDiscussion(f.ids[0]);await f.turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'账号清理的合成讨论',confirmedContact:true,selectedPackageId:skill.id});
+ const f=await fixture(t,{onRequest:(_req,res,_body,n)=>n===1&&modelToolResponse(res,'skill',{name:'gentle'})});await mkdir(join(f.skillRoot,'gentle'),{mode:0o700});const original='---\nname: gentle\ndescription: 合成方法\n---\n保留用户自己的选择。\n';await writeFile(join(f.skillRoot,'gentle/SKILL.md'),original,{mode:0o600});let skill=await f.library.discover('gentle');skill=await f.library.setEnabled(skill.id,skill.headRevision,'enabled');{const group=await f.library.createGroup('合成分组',[skill.id]);await f.library.assignContactGroup(f.ids[0],group.id,null);}
+ const d=await f.service.newDiscussion(f.ids[0]);await f.turns.generate({contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'账号清理的合成讨论',confirmedContact:true});
  const copies=await f.storage.execute('runtime.inventory',{ownerId:owner});const service=await deletion(f),op=await service.plan({ownerId:owner,requestKey:randomUUID(),scope:{kind:'account'}});const done=await service.advance(op);assert.equal(done.state,'completed',JSON.stringify(done.checks));
  await assert.rejects(f.service.list(f.ids[0]));for(const c of copies)await assert.rejects(access(join(f.root,'managed/runtime-copies',c.managedLocator)),{code:'ENOENT'});const {readFile}=await import('node:fs/promises');assert.equal(await readFile(join(f.skillRoot,'gentle/SKILL.md'),'utf8'),original);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

@@ -33,6 +33,6 @@ function operationRequest(op:SqliteCandidateOperation,path:string){
  if(op.action==='inputs')return {method:'GET' as const,path:`${path}/${op.requestId}/inputs?offset=${op.offset}`};
  if(op.action==='read')return {method:'GET' as const,path};
  if(op.action==='version')return {method:'GET' as const,path:`${path}/${op.candidateId}/versions/${op.versionNo}`};
- if(op.action==='generate')return {method:'POST' as const,path,body:{request_key:op.requestKey,text:op.text,confirmed_contact:true,accept_incomplete:op.acceptIncomplete,...(op.selectedPackageId?{selected_package_id:op.selectedPackageId}:{}),...(op.carriedSelectionId?{carried_selection_id:op.carriedSelectionId}:{}),...(op.workspace?{workspace:op.workspace}:{})}};
+ if(op.action==='generate')return {method:'POST' as const,path,body:{request_key:op.requestKey,text:op.text,confirmed_contact:true,accept_incomplete:op.acceptIncomplete,...(op.carriedSelectionId?{carried_selection_id:op.carriedSelectionId}:{}),...(op.workspace?{workspace:op.workspace}:{})}};
  return {method:'POST' as const,path:`${path}/${op.candidateId}/${op.action}`,body:{version_no:op.versionNo,...(op.action==='edit'?{parts:op.parts}:{})}};
 }

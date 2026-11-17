@@ -5,7 +5,7 @@ import {mkdir,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {Context} from '@deepseek-ai/cordis';
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt';
-import ToolRuntime from '@deepseek-ai/dsh-tools';
+import ToolRuntime,{defineTool} from '@deepseek-ai/dsh-tools';
 import {createScope} from '@deepseek-ai/dsh-scope';
 import {installRelationshipSearchTools,RELATIONSHIP_SEARCH_TOOLS} from '../src/reply/sqlite/search-tool.ts';
 import {installReplySkillTools} from '../src/reply/sqlite/skill-loop.ts';
@@ -15,6 +15,8 @@ import {fixture as candidateFixture} from './fixtures/sqlite-reply-candidates/su
 /** 直接使用官方scope与工具管线；搜索端口只返回合成资料，不启动模型或读取业务库。 */
 async function scopedTools(t,{search,check=async()=>{},failed=()=>{},skillRun=null}={}){
  const root=new Context();await root.plugin(SystemPrompt);await root.plugin(ToolRuntime,{mode:'native'});
+ // 本组只验证搜索错误分类；正式 Skill 加载由 profile/Skill loop 集成覆盖，此哨兵仅提供真实 restrict 所需的全局名称。
+ if(skillRun)root.tools.register(defineTool({name:'skill',description:'合成Skill哨兵，不得实际执行',parameters:{name:{type:'string',required:true}},async execute(){assert.fail('搜索错误用例不应执行Skill加载');},output:{schema:{type:'object',additionalProperties:false,properties:{}},render:()=>[]}}));
  let ctx;await root.plugin({name:'synthetic-search-tools',inject:['tools'],apply(current){ctx=current;}});
  const key={},scope=createScope(ctx,key),otherKey={},other=createScope(ctx,otherKey);
  t.after(async()=>{await other.dispose();await scope.dispose();await root.fiber.dispose();});
@@ -139,7 +141,7 @@ test('检索来源失败保持致命错误，启用Skill时不误报Skill失败�
  await writeFile(join(source.skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 合成策略\n---\n保持原意。\n');
  let item=await source.library.discover('gentle');item=await source.library.setEnabled(item.id,item.headRevision,'enabled');
  const protection={assertCurrent:async()=>{},recordSelection:async()=>{},recordInput:async()=>{}};
- const skillRun=await openSqliteSkillRun(source.library,{contactId:source.ids[0],callId:randomUUID()},protection,item.id);
+ const skillRun=await openSqliteSkillRun(source.library,{contactId:source.ids[0],callId:randomUUID()},protection);
  t.after(()=>skillRun.close());
  const failure=Object.assign(new Error('合成来源失效'),{code:'reply_input_changed'}),failures=[];
  const f=await scopedTools(t,{skillRun,search:async()=>{throw failure;},failed:error=>failures.push(error)});
