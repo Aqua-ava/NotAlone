@@ -39,14 +39,6 @@ export const cutoverActions: StorageAction[] = [{
         enabled: count(tx, 'skill_package', " WHERE enabled_state='enabled' OR default_enabled=1"),
         unknown: count(tx, 'skill_package', " WHERE enabled_state='unknown' AND default_enabled=0"),
       },
-      deletions: {
-        running_operations: count(tx, 'deletion_operation', " WHERE state NOT IN ('completed')"),
-        pending_targets: count(tx, 'deletion_target', " WHERE state IN ('pending','cleaning','failed')"),
-      },
-      runtime: {
-        copies: count(tx, 'runtime_copy'),
-        files: count(tx, 'runtime_file'),
-      },
       counts: { owners: count(tx, 'owner'), contacts: count(tx, 'contact'), messages: count(tx, 'message') },
     };
   },

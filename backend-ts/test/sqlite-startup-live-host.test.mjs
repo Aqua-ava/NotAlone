@@ -1,3 +1,4 @@
+import {prepareDatabaseStartup} from '../src/platform/database-startup.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
@@ -5,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { loadManifest } from '../src/platform/cutover/control.ts';
-import { prepareDefaultDatabaseStartup, runDefaultDatabaseStartup } from '../src/platform/cutover/startup.ts';
+import { runDefaultDatabaseStartup } from '../src/platform/cutover/startup.ts';
 import { launchDsh } from '../src/launch.ts';
 
 async function handshake(host, infoPath) {
@@ -38,7 +39,7 @@ test('真实SQLite宿主存活时：重连预检不改写清单，也不放行�
 
   // 宿主自己的握手与启动锁都真实存在且存活；重连预检必须仍然准备原目标。
   for (let round = 0; round < 3; round++) {
-    const prepared = await prepareDefaultDatabaseStartup({ userData: root });
+    const prepared = await prepareDatabaseStartup({ userData: root });
     assert.equal(prepared.phase, 'prepared', JSON.stringify(prepared));
     assert.equal(prepared.databaseId, first.databaseId);assert.equal(prepared.ownerId, first.ownerId);
   }

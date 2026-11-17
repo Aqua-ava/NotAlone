@@ -6,6 +6,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SqliteStorage } from '../src/storage/sqlite/client.ts';
 import { registry } from '../src/storage/sqlite/registry.ts';
+import {cutoverActions} from '../src/platform/cutover/inspect.ts';
 import { SqliteSkillLibrary } from '../src/skills/sqlite/library.ts';
 import { EXPECTED_TABLES, FORBIDDEN_TABLES, DEFERRED_DESIGN_TABLES, REPLACED_DESIGN_TABLES } from '../src/platform/cutover/structure.ts';
 import { dumpSchema, readBaseline } from './fixtures/cutover/build-structure-baseline.mjs';
@@ -91,6 +92,17 @@ test('迁移账本、结构版本与重开身份稳定', async t => {
     assert.equal(snapshot.tables.length, 111);
     assert.deepEqual(snapshot.media, { message_media: 0, current_files: 0, staged_files: 0, cleanup_pending: 0, attempts_running: 0 });
     assert.deepEqual(snapshot.skills, { packages: 1, revisions: 1, enabled: 1, unknown: 0 });
+    const measuredDatabase = openDatabase(f.database, { readOnly: true }), countQueries = [];
+    try {
+      const measured = cutoverActions[0].execute({
+        get(sql, values = []) { if (/COUNT\s*\(/i.test(sql)) countQueries.push(sql); return measuredDatabase.prepare(sql).get(...values); },
+        all(sql, values = []) { return measuredDatabase.prepare(sql).all(...values); },
+        run() { assert.fail('切换快照不得写入资料'); },
+      }, { ownerId });
+      assert.deepEqual(measured, snapshot, '真实只读快照保留切换核验与现有诊断信息');
+      assert.equal(countQueries.length, 12, '仅统计核验及显式诊断仍使用的媒体、Skill和业务条数，不扫描无消费者的删除与运行副本表');
+    } finally { measuredDatabase.close(); }
+
   } finally { await reopened.close(); }
 });
 
