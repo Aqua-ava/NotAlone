@@ -20,7 +20,7 @@ export interface SourceRecoveryPlan {
 }
 /** 来源核对只读本联系人的索引范围；最多返回每表八个锚点摘要，不返回正文。 */
 export function sourceRecoveryPlan(tx:StorageTransaction,token:ReadEligibility,report:HistorySupportReport,allowUnfenced=false):SourceRecoveryPlan|null {
- assertReadEligibility(tx,token);assertHistoryReadBoundary(tx,token,{kind:'history'});
+ assertReadEligibility(tx,token);assertHistoryReadBoundary(tx,token);
  const fenced=isSourceBlocked(tx,token.owner_id,token.contact_id);
  if(!fenced&&!allowUnfenced)return null;
  const scope=getProof(tx,token.owner_id,token.contact_id);

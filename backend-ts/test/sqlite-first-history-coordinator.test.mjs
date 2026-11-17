@@ -312,3 +312,48 @@ test('实际来源变化不进入瞬时失败重试',async t=>{
  assert.equal(f.coordinator.getState().phase,'blocked');const creates=f.state.creates;
  await delay(40);assert.equal(f.state.creates,creates);
 });
+
+test('目录失败经定点唤醒恢复后，全局状态不残留已经恢复的目录错误',async t=>{
+ const binding={contact_id:'synthetic-contact',binding_id:'synthetic-binding',grant_id:'synthetic-grant',selection_generation:'1',status:'active'};
+ let failed=true,calls=0;
+ const directory={directory:async()=>{if(failed)throw new Error('合成目录暂不可用');return {read_enabled:true,bindings:[binding]};}};
+ const history={coverage:async()=>({phase:'not_started'}),synchronize:async()=>{calls++;return {phase:'complete'};},stop:async()=>{}};
+ const coordinator=new FirstHistoryCoordinator(directory,history);t.after(()=>coordinator.close());
+ coordinator.wake();await coordinator.waitForIdle();
+ assert.equal(coordinator.getState().lastError,'history_first_directory_failed');
+ failed=false;coordinator.wakeContact(binding.contact_id);await coordinator.waitForIdle();
+ assert.equal(calls,1);assert.equal(coordinator.getState().phase,'idle');assert.equal(coordinator.getState().lastError,null);
+});
+
+test('定点恢复只清除当前联系人错误，同身份失败不会因其他联系人唤醒而重复执行',async t=>{
+ const bindings=['a','b'].map(contact_id=>({contact_id,binding_id:`binding-${contact_id}`,grant_id:`grant-${contact_id}`,selection_generation:'1',status:'active'}));
+ const calls=[],failed=new Set(['a','b']);
+ const history={coverage:async()=>({phase:'not_started'}),synchronize:async contactId=>{calls.push(contactId);if(failed.has(contactId))throw new StorageFailure('history_support_unverified');return {phase:'complete'};},stop:async()=>{}};
+ const coordinator=new FirstHistoryCoordinator({directory:async()=>({read_enabled:true,bindings})},history);t.after(()=>coordinator.close());
+ coordinator.wake();await coordinator.waitForIdle();assert.deepEqual(calls,['a','b']);
+ failed.delete('a');coordinator.wakeContact('a');await coordinator.waitForIdle();
+ assert.deepEqual(calls,['a','b','a']);assert.equal(coordinator.getState().lastError,'history_support_unverified');
+ assert.equal(coordinator.getState().contacts.find(row=>row.contactId==='b').phase,'blocked');
+ failed.delete('b');coordinator.wakeContact('b');await coordinator.waitForIdle();
+ assert.deepEqual(calls,['a','b','a','b']);assert.equal(coordinator.getState().lastError,null);
+});
+
+test('成功目录移除失授权联系人后，不保留旧失败或重新读取正文',async t=>{
+ const binding={contact_id:'synthetic-contact',binding_id:'synthetic-binding',grant_id:'synthetic-grant',selection_generation:'1',status:'active'};
+ let bindings=[binding],calls=0;
+ const history={coverage:async()=>({phase:'not_started'}),synchronize:async()=>{calls++;throw new StorageFailure('history_support_unverified');},stop:async()=>{}};
+ const coordinator=new FirstHistoryCoordinator({directory:async()=>({read_enabled:true,bindings})},history);t.after(()=>coordinator.close());
+ coordinator.wake();await coordinator.waitForIdle();assert.equal(coordinator.getState().lastError,'history_support_unverified');
+ bindings=[];coordinator.wake();await coordinator.waitForIdle();
+ assert.equal(calls,1);assert.equal(coordinator.getState().lastError,null);assert.equal(coordinator.getState().phase,'idle');assert.deepEqual(coordinator.getState().contacts,[]);
+});
+
+test('目录撤销在途联系人时等待取消完成，迟到失败不能重新插回旧状态',async t=>{
+ const binding={contact_id:'synthetic-contact',binding_id:'synthetic-binding',grant_id:'synthetic-grant',selection_generation:'1',status:'active'};
+ let bindings=[binding],calls=0,signal;
+ const entered=deferred(),released=deferred();
+ const history={coverage:async()=>({phase:'not_started'}),synchronize:async(_contactId,currentSignal)=>{calls++;signal=currentSignal;entered.resolve();await released.promise;throw new StorageFailure('history_source_changed');},stop:async()=>{released.resolve();}};
+ const coordinator=new FirstHistoryCoordinator({directory:async()=>({read_enabled:true,bindings})},history);t.after(()=>coordinator.close());
+ coordinator.wake();await entered.promise;bindings=[];coordinator.wake();await coordinator.waitForIdle();
+ assert.equal(signal.aborted,true);assert.equal(calls,1);assert.equal(coordinator.getState().lastError,null);assert.deepEqual(coordinator.getState().contacts,[]);
+});

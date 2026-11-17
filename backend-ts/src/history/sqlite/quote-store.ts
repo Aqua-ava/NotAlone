@@ -75,7 +75,7 @@ function revisions(value:unknown,field:string):number {
  const parsed=Number(value);if(!Number.isSafeInteger(parsed)||parsed<1)throw new StorageFailure(`history_quote_${field}_invalid`);return parsed;
 }
 function assertScope(tx:StorageTransaction,token:ReadEligibility):void {
- assertReadEligibility(tx,token);assertHistoryReadBoundary(tx,token,{kind:'history'});
+ assertReadEligibility(tx,token);assertHistoryReadBoundary(tx,token);
 }
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>({name:`history.quote${name}`,mode,retryBusy:mode==='write',execute});
 

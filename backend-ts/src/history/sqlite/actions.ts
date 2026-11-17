@@ -179,7 +179,7 @@ export const historyActions:StorageAction[]=[
    if(!Array.isArray(completed)||!target.partitions.every(partition=>completed.includes(partition)))return null;
   }
   if(supportGrowth&&target.checkedPartitions===undefined)return null;
-  assertHistoryReadBoundary(tx,token,{kind:'history'});assertCheckpointSourceContinuity(tx,token,target,i.report.accountKey,supportGrowth);
+  assertHistoryReadBoundary(tx,token);assertCheckpointSourceContinuity(tx,token,target,i.report.accountKey,supportGrowth);
   if(historyCursorScopeDigest(token,previousReport,target)!==goal.cursor_scope_digest)return null;
   return {goalId:String(goal.id),target,cursor:assertHistoryCursor(goal.kind==='history'&&(goal.cursor===null||durableHistory)?goal.resume_cursor:goal.cursor,'history_cursor_invalid')};
  }),
@@ -192,7 +192,7 @@ export const historyActions:StorageAction[]=[
  }),
  action('history.begin','write',(tx,i)=>{
   const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertSupport(i.report);
-  const target=targetOf(i.target,token,i.report);assertHistoryReadBoundary(tx,token,{kind:'history'});assertSourceContinuity(tx,token,target,i.report?.continuity===normalUseContinuity?i.report.accountKey:undefined);
+  const target=targetOf(i.target,token,i.report);assertHistoryReadBoundary(tx,token);assertSourceContinuity(tx,token,target,i.report?.continuity===normalUseContinuity?i.report.accountKey:undefined);
   const scopeDigest=historyCursorScopeDigest(token,i.report,target);
   // 阶段 B（任务 01）：同一联系人仍有与本次固定快照完全同范围、0 页且无记录进展的空目标时，
   // 直接续用最新的一个（不 INSERT、不重复作废）。摘要一致证明原生读取器目标未被替换。
@@ -233,7 +233,7 @@ export const historyActions:StorageAction[]=[
   const prior=tx.get('SELECT response_digest,contact_id,goal_id,read_epoch,cursor_in,cursor_out FROM sync_capture WHERE owner_id=? AND id=?',[token.owner_id,i.captureId]);
   if(prior){assertCaptureReplay(prior,token,goal,digest,page?.cursorIn,page?.cursorOut);return readCoverage(tx,token.owner_id,token.contact_id);}
   if(goal.state!=='running'&&goal.state!=='incomplete')fail('history_goal_closed');
-  assertHistoryReadBoundary(tx,token,{kind:'history'});
+  assertHistoryReadBoundary(tx,token);
   const target=JSON.parse(String(goal.target_json)) as HistoryTarget;
   const report=JSON.parse(String(goal.support_json)) as HistorySupportReport;
   assertSourceContinuity(tx,token,target,report.continuity===normalUseContinuity?report.accountKey:undefined);
@@ -273,7 +273,7 @@ export const historyActions:StorageAction[]=[
  action('history.retireResumedEmptyGoals','write',(tx,i)=>{assertReadEligibility(tx,i.token);return retireResumedEmptyGoals(tx,i.token,i.replacementGoalId,i.checkpoint);}),
  action('history.beginIncremental','write',(tx,i)=>{
   const token=i.token as ReadEligibility;const report=i.report as HistorySupportReport;assertReadEligibility(tx,token);assertSupport(report);
-  assertHistoryReadBoundary(tx,token,{kind:'incremental'});
+  assertHistoryReadBoundary(tx,token);
   const existing=currentIncremental(tx,token,report);
   if(existing)return {id:String(existing.id),target:JSON.parse(String(existing.target_json)),cursor:String(existing.cursor)};
   // 新历史目标尚未完成时，不能退回它已经替换的旧增量切面。
@@ -304,7 +304,7 @@ export const historyActions:StorageAction[]=[
   const prior=tx.get('SELECT response_digest,contact_id,goal_id,read_epoch,cursor_in,cursor_out FROM sync_capture WHERE owner_id=? AND id=?',[token.owner_id,i.captureId]);
   if(prior){const cursorOut=assertHistoryCursor(page?.cursorOut,'history_page_invalid');assertCaptureReplay(prior,token,goal,digest,page?.cursorIn,cursorOut);return readCoverage(tx,token.owner_id,token.contact_id);}
   if(goal.state!=='running'&&goal.state!=='incomplete')fail('history_goal_closed');
-  assertHistoryReadBoundary(tx,token,{kind:'incremental'});
+  assertHistoryReadBoundary(tx,token);
   if(String(goal.accepted_barrier_generation)!==String(token.barrier_generation))fail('history_suppression_changed');
   const target=JSON.parse(String(goal.target_json)) as HistoryTarget;
   const report=JSON.parse(String(goal.support_json)) as HistorySupportReport;
@@ -347,9 +347,9 @@ export const historyActions:StorageAction[]=[
    cursorIn:row.cursor_in,cursorOut:row.cursor_out,raw,support:JSON.parse(String(row.support_json))};
  }),
  action('history.coverage','read',(tx,i)=>readCoverage(tx,i.ownerId,i.contactId)),
- action('history.emptyTargetProbeCandidate','read',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertHistoryReadBoundary(tx,token,{kind:'history'});return certifiedEmptyGoal(tx,token);}),
+ action('history.emptyTargetProbeCandidate','read',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);assertHistoryReadBoundary(tx,token);return certifiedEmptyGoal(tx,token);}),
  action('history.emptyTargetProbeVerify','write',(tx,i)=>{const token=i.token as ReadEligibility;assertReadEligibility(tx,token);
-  assertHistoryReadBoundary(tx,token,{kind:'history'});
+  assertHistoryReadBoundary(tx,token);
   const candidate=certifiedEmptyGoal(tx,token);if(!candidate||candidate.goalId!==i.goalId||serializeSupport(candidate.report)!==serializeSupport(i.report as HistorySupportReport))return false;
   const target=targetOf(i.target,token,i.report as HistorySupportReport);
   if(sameEmptyTargetGeometry(candidate.target,target)&&isCertifiedEmptyTarget(tx,token,i.report as HistorySupportReport,target))return true;

@@ -255,7 +255,54 @@ test('增量页的旧 cursor_in 无法覆盖已提交检查点', async t => {
 
 test('清空代次与删除围栏下读取边界保持拒绝，不因重试放开', () => {
   const base = { owner_id: 'owner', contact_id: 'contact', barrier_generation: '0' };
-  assert.doesNotThrow(() => assertHistoryReadBoundary({ get: () => undefined }, base, { kind: 'incremental' }));
-  assert.throws(() => assertHistoryReadBoundary({ get: () => undefined }, { ...base, barrier_generation: '1' }, { kind: 'history' }), { code: 'history_suppression_unverified' });
-  assert.throws(() => assertHistoryReadBoundary({ get: () => ({ 1: 1 }) }, base, { kind: 'incremental' }), { code: 'history_suppression_unverified' });
+  assert.doesNotThrow(() => assertHistoryReadBoundary({ get: () => undefined }, base));
+  assert.throws(() => assertHistoryReadBoundary({ get: () => undefined }, { ...base, barrier_generation: '1' }), { code: 'history_suppression_unverified' });
+  assert.throws(() => assertHistoryReadBoundary({ get: () => ({ 1: 1 }) }, base), { code: 'history_suppression_unverified' });
+});
+
+test('历史读取屏障只接受同一本人、会话、清空代次与来源的已核验边界', () => {
+ const token={owner_id:'synthetic-owner',contact_id:'synthetic-contact',conversation_id:'synthetic-conversation',barrier_generation:'2',source_generation:'source-1'};
+ const accepted={owner_id:token.owner_id,conversation_id:token.conversation_id,barrier_generation:2n,source_generation:'source-1',state:'verified'};
+ const cases=[null,{...accepted,state:'pending'},{...accepted,state:'blocked'},{...accepted,owner_id:'other-owner'},{...accepted,conversation_id:'other-conversation'},{...accepted,barrier_generation:1n},{...accepted,source_generation:'source-2'},accepted];
+ for(const cutoff of cases){
+  const queries=[];
+  const tx={get:(sql,args)=>{queries.push({sql,args});if(sql.includes('sqlite_schema'))return {1:1};
+   if(cutoff&&cutoff.owner_id===args[0]&&cutoff.conversation_id===args[1]&&cutoff.barrier_generation===args[2]&&cutoff.state==='verified')return {source_generation:cutoff.source_generation};
+   return undefined;
+  }};
+  if(cutoff===accepted)assert.doesNotThrow(()=>assertHistoryReadBoundary(tx,token));
+  else assert.throws(()=>assertHistoryReadBoundary(tx,token),{code:'history_suppression_unverified'});
+  assert.equal(queries.length,2);assert.match(queries[1].sql,/state='verified'/);
+ }
+});
+
+test('统一屏障校验与重构前基线等价，已核验边界不重复查询', t => {
+ // 固定重构前的实际 SQL 及拒绝顺序，作为相同工作负载的行为和查询数量基线。
+ const previous=(tx,token)=>{
+  const reject=()=>{throw new StorageFailure('history_suppression_unverified');},barrier=BigInt(token.barrier_generation);
+  if(barrier===0n){if(tx.get('SELECT 1 FROM history_deletion_fence WHERE owner_id=? AND contact_id=?',[token.owner_id,token.contact_id]))reject();return;}
+  if(!tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?",['history_cutoff']))reject();
+  if(!tx.get("SELECT 1 FROM history_cutoff WHERE owner_id=? AND conversation_id=? AND barrier_generation=? AND state='verified'",[token.owner_id,token.conversation_id,barrier]))reject();
+  const row=tx.get("SELECT source_generation FROM history_cutoff WHERE owner_id=? AND conversation_id=? AND barrier_generation=? AND state='verified'",[token.owner_id,token.conversation_id,barrier]);
+  if(!row||row.source_generation!==token.source_generation)reject();
+ };
+ const token={owner_id:'synthetic-owner',contact_id:'synthetic-contact',conversation_id:'synthetic-conversation',barrier_generation:'1',source_generation:'source-1'};
+ const cases=[{name:'accepted',table:true,state:'verified',source:'source-1',before:3,after:2},
+  {name:'pending',table:true,state:'pending',before:2,after:2},{name:'missing_cutoff',table:true,before:2,after:2},
+  {name:'missing_table',table:false,before:1,after:1},{name:'other_source',table:true,state:'verified',source:'source-2',before:3,after:2},
+  {name:'legacy_unfenced',barrier:'0',before:1,after:1},{name:'legacy_fenced',barrier:'0',fence:true,before:1,after:1}];
+ for(const scenario of cases)for(const count of [10,100,1000]){
+  const results=[previous,assertHistoryReadBoundary].map(read=>{
+   let queries=0;const outcomes=[];
+   const tx={get:sql=>{queries++;if(sql.includes('history_deletion_fence'))return scenario.fence?{1:1}:undefined;
+    if(sql.includes('sqlite_schema'))return scenario.table?{1:1}:undefined;
+    if(scenario.state==='verified')return sql.includes('source_generation')?{source_generation:scenario.source}:{1:1};return undefined;
+   }};
+   for(let i=0;i<count;i++)try{read(tx,{...token,barrier_generation:scenario.barrier??token.barrier_generation});outcomes.push('accepted');}catch(error){outcomes.push(error.code);}
+   return {queries,outcomes};
+  });
+  assert.deepEqual(results[1].outcomes,results[0].outcomes,scenario.name);
+  assert.equal(results[0].queries,count*scenario.before,scenario.name);assert.equal(results[1].queries,count*scenario.after,scenario.name);
+ }
+ t.diagnostic('7 种合成边界在 10/100/1000 次相同负载下结果一致；已核验边界查询 30/300/3000 → 20/200/2000，其他分支不增加；未测量 SQLite 或 App 耗时');
 });

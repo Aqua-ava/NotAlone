@@ -30,9 +30,6 @@ function safeError(error: unknown): string {
   return error instanceof StorageFailure && allowedErrors.has(error.code) ? error.code : 'history_first_read_failed';
 }
 const bindingKey = (binding: FirstHistoryBinding) => JSON.stringify([binding.contact_id, binding.binding_id, binding.grant_id, binding.selection_generation]);
-function keyContact(key:string):string|null {
- try{const value=JSON.parse(key);return Array.isArray(value)&&typeof value[0]==='string'?value[0]:null;}catch{return null;}
-}
 function notification() { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; }
 const retryableErrors=new Set(['history_native_timeout','history_native_unavailable','history_source_unverified','history_source_temporarily_unavailable','history_native_cancelled',
   'history_snapshot_closed','history_snapshot_unavailable','history_snapshot_window_changed','history_already_running']);
@@ -43,8 +40,7 @@ export class FirstHistoryCoordinator {
   readonly #history: SqliteHistoryService;
   readonly #queued = new Map<string, QueuedRead>();
   readonly #active = new Map<string, ActiveRead>();
-  readonly #attempted = new Set<string>();
-  readonly #cancelledKeys = new Set<string>();
+  readonly #attempted = new Map<string,string>();
   readonly #stoppedContacts = new Set<string>();
   #wakeSerial = 0;
   readonly #states = new Map<string, FirstHistoryCoordinatorState['contacts'][number]>();
@@ -52,14 +48,13 @@ export class FirstHistoryCoordinator {
   #wakePending = false;
   #wakeAllPending = false;
   readonly #contactWakes = new Set<string>();
-  #resetAttemptsOnStart = false;
   #revision = 0;
   #pump?: Promise<void>;
   #closed = false;
   #closeDone = false;
   #closing?: Promise<void>;
-  #lastError: string | null = null;
-  readonly #retryTimers=new Map<string,{timer:ReturnType<typeof setTimeout>;key:string}>();
+  #globalError: string | null = null;
+  readonly #retryTimers=new Map<string,{timer:ReturnType<typeof setTimeout>}>();
   readonly #retryAttempts=new Map<string,number>();
   readonly #retryMinMs:number;readonly #retryMaxMs:number;
   constructor(directory: FirstHistoryDirectoryPort, history: SqliteHistoryService,options:{retryMinMs?:number;retryMaxMs?:number}={}) {
@@ -78,11 +73,11 @@ export class FirstHistoryCoordinator {
     diagnose({event:'sync.decision',caller:'history_first',reasonCode:'retry',count:attempt,...(/^[a-f0-9]{8}/.test(job.contactId)?{contactPrefix:job.contactId.slice(0,8)}:{})});
     const previous=this.#retryTimers.get(job.contactId);if(previous)clearTimeout(previous.timer);
     const delay=Math.min(this.#retryMaxMs,this.#retryMinMs*2**Math.min(attempt-1,16));
-    const entry={key:job.key,timer:setTimeout(()=>{
+    const entry={timer:setTimeout(()=>{
       if(this.#retryTimers.get(job.contactId)!==entry)return;this.#retryTimers.delete(job.contactId);
       if(this.#closed||this.#stoppedContacts.has(job.contactId))return;
       // 每次重探重新读取目录与授权；不复活其他已停止联系人或旧原生游标。
-      this.#attempted.delete(job.key);this.#contactWakes.add(job.contactId);this.#wakePending=true;this.#notify();this.#startPump();
+      this.#attempted.delete(job.contactId);this.#contactWakes.add(job.contactId);this.#wakePending=true;this.#notify();this.#startPump();
     },delay)};
     entry.timer.unref();this.#retryTimers.set(job.contactId,entry);return true;
   }
@@ -90,9 +85,8 @@ export class FirstHistoryCoordinator {
     if (this.#closed) return;
     this.#clearRetry();
     ++this.#wakeSerial;
-    for (const key of this.#cancelledKeys) this.#attempted.delete(key);
-    this.#cancelledKeys.clear(); this.#stoppedContacts.clear();
-    this.#resetAttemptsOnStart = true;
+    this.#stoppedContacts.clear();
+    this.#attempted.clear();this.#globalError=null;
     this.#wakeAllPending = true;
     this.#wakePending = true; this.#notify(); this.#startPump();
   }
@@ -100,28 +94,25 @@ export class FirstHistoryCoordinator {
   wakeContact(contactId:string):void {
     if(this.#closed||typeof contactId!=='string'||!contactId)return;
     this.#clearRetry(contactId);
-    for(const key of this.#attempted)if(keyContact(key)===contactId)this.#attempted.delete(key);
-    for(const key of this.#cancelledKeys)if(keyContact(key)===contactId){this.#cancelledKeys.delete(key);this.#attempted.delete(key);}
+    this.#attempted.delete(contactId);
     this.#stoppedContacts.delete(contactId);++this.#wakeSerial;
     this.#contactWakes.add(contactId);
     this.#wakePending=true;this.#notify();this.#startPump();
   }
   getState(): FirstHistoryCoordinatorState {
-    return { phase: this.#closed ? this.#closeDone ? 'closed' : 'closing' : this.#pump ? this.#active.size ? 'running' : 'scheduled' : this.#retryTimers.size?'scheduled':this.#lastError ? 'blocked' : 'idle',
-      lastError: this.#lastError, contacts: [...this.#states.values()].map(state => ({ ...state })) };
+    const lastError=this.#globalError??[...this.#states.values()].find(state=>state.lastError!==null)?.lastError??null;
+    return { phase: this.#closed ? this.#closeDone ? 'closed' : 'closing' : this.#pump ? this.#active.size ? 'running' : 'scheduled' : this.#retryTimers.size?'scheduled':lastError ? 'blocked' : 'idle',
+      lastError, contacts: [...this.#states.values()].map(state => ({ ...state })) };
   }
   async waitForIdle(): Promise<void> { while (this.#pump) await this.#pump; }
   #notify(): void { this.#changed.resolve(); this.#changed = notification(); }
   #state(contactId: string, phase: FirstHistoryContactPhase, error: string | null = null): void {
-    const previous=this.#states.get(contactId)?.lastError;
     const next={contactId,phase,lastError:error};recordSyncState(this.#states.get(contactId),next,'history_first');
-    this.#states.set(contactId, next); if (error) this.#lastError = error;
-    else if(previous===this.#lastError)this.#lastError=[...this.#states.values()].find(state=>state.lastError!==null)?.lastError??null;
+    this.#states.set(contactId, next);
   }
   #startPump(): void {
     if (this.#pump || this.#closed) return;
-    if(this.#resetAttemptsOnStart){this.#attempted.clear();this.#lastError=null;this.#resetAttemptsOnStart=false;}
-    this.#pump = Promise.resolve().then(() => this.#drain()).catch(() => { this.#lastError = 'history_first_directory_failed'; }).finally(() => {
+    this.#pump = Promise.resolve().then(() => this.#drain()).catch(() => { this.#globalError = 'history_first_directory_failed'; }).finally(() => {
       this.#pump = undefined;
       if (this.#wakePending && !this.#closed) this.#startPump();
     });
@@ -133,14 +124,15 @@ export class FirstHistoryCoordinator {
     this.#wakeAllPending = false;this.#contactWakes.clear();
     let directory: Awaited<ReturnType<FirstHistoryDirectoryPort['directory']>>;
     try { directory = await this.#directory.directory(); }
-    catch { this.#lastError = 'history_first_directory_failed'; await this.#cancel(); return; }
+    catch { this.#globalError = 'history_first_directory_failed'; await this.#cancel(); return; }
     if (this.#closed || revision !== this.#revision) return;
-    if (typeof directory.read_enabled !== 'boolean' || !Array.isArray(directory.bindings)) { this.#lastError = 'history_first_directory_failed'; await this.#cancel(); return; }
-    if (!directory.read_enabled) { await this.#cancel(); return; }
+    if (typeof directory.read_enabled !== 'boolean' || !Array.isArray(directory.bindings)) { this.#globalError = 'history_first_directory_failed'; await this.#cancel(); return; }
+    if(this.#globalError==='history_first_directory_failed')this.#globalError=null;
+    if (!directory.read_enabled) { await this.#cancel(); this.#states.clear(); return; }
     const selected = new Map<string, FirstHistoryBinding>();
     for (const binding of directory.bindings) {
       if (binding.status !== 'active' || this.#stoppedContacts.has(binding.contact_id)) continue;
-      if (selected.has(binding.contact_id)) { this.#lastError = 'history_first_directory_failed'; await this.#cancel(); return; }
+      if (selected.has(binding.contact_id)) { this.#globalError = 'history_first_directory_failed'; await this.#cancel(); return; }
       selected.set(binding.contact_id, binding);
     }
     for (const [contactId, queued] of this.#queued) {
@@ -158,27 +150,29 @@ export class FirstHistoryCoordinator {
         this.#wakeAllPending = true;this.#wakePending = true;
       }
     }
+    // 在途取消及 finally 全部完成后再撤下旧范围，迟到结果不能补回已失授权状态。
+    for(const contactId of this.#states.keys())if(!selected.has(contactId))this.#states.delete(contactId);
     for (const binding of selected.values()) {
       if (this.#closed || revision !== this.#revision) return;
       const key = bindingKey(binding), contactId = binding.contact_id;
       if (focused && !focused.has(contactId)) continue;
-      if (this.#attempted.has(key) || this.#active.has(contactId) || this.#queued.has(contactId)) continue;
+      if (this.#attempted.get(contactId)===key || this.#active.has(contactId) || this.#queued.has(contactId)) continue;
       try {
         const coverage = await this.#history.coverage(contactId);
         if (this.#closed || revision !== this.#revision) return;
         if (coverage.phase === 'complete') { this.#state(contactId, 'complete'); continue; }
         if(coverage.traversalComplete&&coverage.incremental?.cursorPresent&&['ready','incomplete'].includes(coverage.incremental.phase)){
-          this.#attempted.add(key);this.#state(contactId,'incomplete',coverage.failureCode??'history_incomplete');continue;
+          this.#attempted.set(contactId,key);this.#state(contactId,'incomplete',coverage.failureCode??'history_incomplete');continue;
         }
         this.#queued.set(contactId, { contactId, key }); this.#state(contactId, 'queued');
-      } catch (error) { this.#attempted.add(key); this.#state(contactId, 'blocked', safeError(error)); }
+      } catch (error) { this.#attempted.set(contactId,key); this.#state(contactId, 'blocked', safeError(error)); }
     }
   }
   #run(job: QueuedRead): void {
     withDiagnosticTrace(newTraceId(),()=>this.#runTraced(job));
   }
   #runTraced(job:QueuedRead):void {
-    this.#queued.delete(job.contactId); this.#attempted.add(job.key); this.#state(job.contactId, 'running');
+    this.#queued.delete(job.contactId); this.#attempted.set(job.contactId,job.key); this.#state(job.contactId, 'running');
     const active: ActiveRead = { ...job, controller: new AbortController(), done: Promise.resolve() };
     this.#active.set(job.contactId, active);
     active.done = Promise.resolve().then(() => this.#history.synchronize(job.contactId, active.controller.signal)).then(coverage => {
@@ -215,10 +209,10 @@ export class FirstHistoryCoordinator {
     this.#clearRetry(contactId);
     ++this.#revision;
     for (const queued of [...this.#queued.values()]) if (!contactId || queued.contactId === contactId) {
-      this.#attempted.add(queued.key); this.#cancelledKeys.add(queued.key); this.#queued.delete(queued.contactId); this.#state(queued.contactId, 'stopped');
+      this.#attempted.set(queued.contactId,queued.key); this.#queued.delete(queued.contactId); this.#state(queued.contactId, 'stopped');
     }
     const active = [...this.#active.values()].filter(active => !contactId || active.contactId === contactId);
-    for (const entry of active) { this.#attempted.add(entry.key); this.#cancelledKeys.add(entry.key); entry.cancelledAtWake = this.#wakeSerial; entry.controller.abort(); }
+    for (const entry of active) { this.#attempted.set(entry.contactId,entry.key); entry.cancelledAtWake = this.#wakeSerial; entry.controller.abort(); }
     this.#notify();
     await this.#history.stop(contactId); await Promise.all(active.map(entry => entry.done));
   }
@@ -226,7 +220,7 @@ export class FirstHistoryCoordinator {
     if (contactId) { this.#stoppedContacts.add(contactId); this.#state(contactId, 'stopped'); }
     else this.#wakePending = false;
     try { await this.#cancel(contactId); }
-    catch { this.#lastError = 'history_first_stop_failed'; throw new StorageFailure('history_first_stop_failed'); }
+    catch { this.#globalError = 'history_first_stop_failed'; throw new StorageFailure('history_first_stop_failed'); }
     finally {
       // 单人停读使在途扫描失效；重扫其余范围，内部唤醒不解除该人的停读。
       if (contactId && this.#pump && !this.#closed) { this.#wakePending = true; this.#notify(); }

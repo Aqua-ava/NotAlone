@@ -1,5 +1,4 @@
 import { StorageFailure, type StorageAction, type StorageRow, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
-import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import { boundaryProtocol, membersManifestSha256, maxBoundaryMembers, type PreparedBoundary, type PreparedBoundaryMember } from './boundary.ts';
 
 /**
@@ -325,22 +324,6 @@ function restoreView(value: StorageRow) {
     createdAt: String(value.created_at), completedAt: value.completed_at === null ? null : String(value.completed_at) };
 }
 
-/** history.begin 的唯一屏障门：无清空代次沿用旧 fence；有代次必须已接受完整 B。 */
-export function assertVerifiedHistoryBoundary(tx: StorageTransaction, token: ReadEligibility): void {
-  const barrier = BigInt(token.barrier_generation);
-  if (barrier === 0n) {
-    if (tx.get('SELECT 1 FROM history_deletion_fence WHERE owner_id=? AND contact_id=?', [token.owner_id, token.contact_id])) fail('history_suppression_unverified');
-    return;
-  }
-  if (!hasTable(tx, 'history_cutoff')) fail('history_suppression_unverified');
-  const cutoff = tx.get("SELECT 1 FROM history_cutoff WHERE owner_id=? AND conversation_id=? AND barrier_generation=? AND state='verified'",
-    [token.owner_id, token.conversation_id, barrier]);
-  if (!cutoff) fail('history_suppression_unverified');
-  // B 必须绑定同一来源代次：来源换代后旧成员键不再命中，不能借此放行旧消息复活。
-  const row = tx.get("SELECT source_generation FROM history_cutoff WHERE owner_id=? AND conversation_id=? AND barrier_generation=? AND state='verified'",
-    [token.owner_id, token.conversation_id, barrier]);
-  if (!row || row.source_generation !== token.source_generation) fail('history_suppression_unverified');
-}
 /** 接受页时判定一条来源身份是否属于任一已接受 B；显式重读授权可跨该联系人的清空边界恢复。 */
 export function clearBoundaryExclusion(tx: StorageTransaction, input: { ownerId: string; conversationId: string; externalKey: string; restoreOperationId: string | null }): boolean {
   if (!hasTable(tx, 'history_cutoff_member') || !hasTable(tx, 'history_cutoff')) return false;
