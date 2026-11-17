@@ -4,6 +4,7 @@ import {selectRankedReplyMemories} from '../../../src/reply/sqlite/candidates/kn
 import {REPLY_SEARCH_BUDGET} from '../../../src/reply/sqlite/retrieval-policy.ts';
 import {rankReplyRetrieval} from '../../../src/retrieval/sqlite/search.ts';
 import {sha256} from '../../../src/platform/sha256.ts';
+import {readMemories} from '../reply-knowledge.mjs';
 
 const reader=createMemoryKnowledgeReader();
 const counting=tx=>{
@@ -28,7 +29,7 @@ export const registry={...base,actions:[...base.actions,{
   const lazy=select(headers,open);
   const lazyQueries=state.queries,lazyMs=performance.now()-start;
   state.queries=0;
-  const eagerItems=reader.read(counted,input.scope).filter(item=>item.kind==='memory'&&item.scopeKind==='contact'),eagerById=new Map(eagerItems.map(item=>[item.id,item]));
+  const eagerItems=readMemories(reader,counted,input.scope).filter(item=>item.kind==='memory'&&item.scopeKind==='contact'),eagerById=new Map(eagerItems.map(item=>[item.id,item]));
   const eager=select(eagerItems,header=>eagerById.get(header.id)??null);
   return {lazyIds:lazy.map(item=>item.id),eagerIds:eager.map(item=>item.id),lazyQueries,eagerQueries:state.queries,lazyMs,openCount,poolSize:headers.length};
  },
@@ -42,7 +43,7 @@ export const registry={...base,actions:[...base.actions,{
    if(method==='all'&&sql.includes('FROM memory WHERE')&&!sql.includes('AND id='))fullScans++;
    return tx[method](sql,values);
   };
-  const start=performance.now(),items=reader.read(counted,scope);
+  const start=performance.now(),items=readMemories(reader,counted,scope);
   for(const item of items)reader.requireCurrent(counted,scope,item);
   return {count:items.length,ids:items.map(item=>item.id),queries,fullScans,elapsedMs:performance.now()-start};
  },

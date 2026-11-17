@@ -102,7 +102,7 @@ test('过期记忆及其文档不进入页面、回复材料或后续整理',{ti
  });
 });
 
-test('待确认候选按半开有效期进入回复材料，未知时间保持可用且管理页可回看',{timeout:20000},async t=>{
+test('待确认候选按半开有效期进入裁决，未知时间保持可用且管理页可回看',{timeout:20000},async t=>{
  t.mock.timers.enable({apis:['Date'],now:initial});
  const f=await fixture(t,{registryModule:new URL('./fixtures/memory-documents-expiry/registry.mjs',import.meta.url).href,synchronizeHistory:false});
  await f.storage.execute('fixture.setTime',{time:initial});
@@ -129,8 +129,7 @@ test('待确认候选按半开有效期进入回复材料，未知时间保持�
  const management=new SqliteMemoryManagement(f.storage,f.owner);await management.importRun(run.runId);
  const scope={scopeKind:'contact',contactId},view=await management.read(scope);
  assert.equal(view.candidates.filter(candidate=>candidate.state==='pending').length,3);
- const discussion=await f.discussions.newDiscussion(contactId),query={ownerId:f.owner,contactId,discussionId:discussion.id};
- const texts=async()=>(await f.storage.execute('fixture.unconfirmedKnowledge',query)).filter(item=>item.kind==='memory_candidate').map(item=>item.text).sort();
+ const texts=async()=>{const times=await f.storage.execute('fixture.candidateTimes',{ownerId:f.owner,candidateIds:view.candidates.map(candidate=>candidate.id)});return view.candidates.filter(candidate=>times.some(time=>time.candidateId===candidate.id&&time.status==='eligible')).map(candidate=>candidate.body).sort();};
  assert.deepEqual(await texts(),['联系人在2026-01-02T00:00:00Z之前只喝合成花茶。','联系人喜欢合成红茶。'].sort());
  const boundary=Date.parse(expiry);t.mock.timers.setTime(boundary);await f.storage.execute('fixture.setTime',{time:boundary});
  assert.deepEqual(await texts(),['联系人从2026-01-02T00:00:00Z起喝合成白茶。','联系人喜欢合成红茶。'].sort());

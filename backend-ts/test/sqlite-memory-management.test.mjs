@@ -96,11 +96,11 @@ test('新自动采纳可明确撤回，修正与变化保留不同版本来历�
  assert.equal(m.current.body,'后来发生变化');assert.deepEqual((await f.management.readHistory(s,m.id)).versions.map(v=>v.formationKind),['manual','correction','change']);assert.equal(adopted.versionNo,'1');
 });
 
-test('正式知识读取只返回当前版，未确认独立标注并复验头修订、本人及联系人隔离',async t=>{
+test('正式知识只读当前版并复验头修订、本人及联系人隔离',async t=>{
  const f=await prepared(t);await f.management.importRun(f.runId);const s={scopeKind:'contact',contactId:f.a};
  const discussion={ownerId:owner,contactId:f.a,discussionId:'synthetic-consumer'};
- const initial=await f.storage.execute('fixture.memoryKnowledge',discussion);assert.ok(initial.every(k=>k.kind==='memory_candidate'&&k.qualification==='unconfirmed'));
- assert.ok(initial.filter(k=>k.scopeKind==='contact').every(k=>k.contactId===f.a&&k.sources.every(s=>s.contactId===f.a)));
+ const initial=await f.storage.execute('fixture.memoryKnowledge',discussion);assert.deepEqual(initial,[],'待确认候选保留在管理页，不进入正式知识目录');
+ assert.ok((await f.management.read(s)).candidates.length>0);
  const c=(await f.management.read(s)).candidates[0];const accepted=await f.management.decide({requestKey:'knowledge-accept',action:'accept',candidateIds:[c.id],candidateRevisions:[c.stateRevision]});
  const items=await f.storage.execute('fixture.memoryKnowledge',discussion),item=items.find(k=>k.id===accepted.memoryId);assert.equal(item.kind,'memory');assert.equal(item.qualification,'confirmed');
  assert.equal(await f.storage.execute('fixture.memoryRequireCurrent',{scope:discussion,item}),true);
@@ -122,7 +122,7 @@ test('历史状态重新认证不会复活旧候选或旧记忆的冻结来源�
  await f.service.synchronize(f.a);assert.equal((await f.service.read(f.a)).messages.find(message=>message.sender==='contact').id,old.id);
  const after=await f.storage.execute('fixture.memoryKnowledge',discussion);assert.equal(after.some(item=>item.id===adopted.memoryId||item.id===candidate.id),false);
  assert.equal((await f.management.read(scope)).memories.find(memory=>memory.id===adopted.memoryId).current,null);
- assert.ok((await f.storage.execute('fixture.memoryKnowledge',{...discussion,contactId:f.b})).some(item=>item.scopeKind==='contact'));
+ assert.ok((await f.management.read({scopeKind:'contact',contactId:f.b})).candidates.length>0,'另一联系人仍有合法候选');
 });
 test('新的关系资料提取固定当前来源，不选择同消息的旧代次实际捕获',async t=>{
  let legacy;

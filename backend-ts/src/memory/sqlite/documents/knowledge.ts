@@ -1,9 +1,9 @@
 import {REPLY_DOCUMENT_BUDGET} from '../../../reply/sqlite/candidates/knowledge-budget.ts';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {DiscussionScope} from '../../../reply/sqlite/contracts.ts';
-import type {ReplyKnowledgeItem,ReplyKnowledgeReader,ReplyKnowledgeValidation} from '../../../reply/sqlite/candidates/contracts.ts';
+import type {ReplyKnowledgeItem,ReplyKnowledgeReader,ReplyMemoryReader,ReplyKnowledgeValidation} from '../../../reply/sqlite/candidates/contracts.ts';
 import {available} from '../management/qualification.ts';
-import {memoryKnowledgeReader,createMemoryKnowledgeReader,type MemoryKnowledgeReader} from '../management/knowledge.ts';
+import {memoryKnowledgeReader,createMemoryKnowledgeReader} from '../management/knowledge.ts';
 import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
 import {assertReplyLocalSource} from '../../../history/sqlite/reply-local-source.ts';
 import {documentSources,publicationMembers,withSourceMemo} from './basis.ts';
@@ -146,7 +146,7 @@ export function createDocumentKnowledgeReader(sourceEligibility:SourceEligibilit
  };
 }
 export const documentKnowledgeReader=createDocumentKnowledgeReader();
-function combineKnowledge(memory:MemoryKnowledgeReader,documents:DocumentKnowledgeReader):ReplyKnowledgeReader {
+function combineKnowledge(memory:ReplyMemoryReader,documents:DocumentKnowledgeReader):ReplyKnowledgeReader {
  const reader=(item:ReplyKnowledgeItem)=>{
   if(item.kind==='document')return documents;
   if(item.kind==='memory'||item.kind==='memory_candidate')return memory;
@@ -175,6 +175,6 @@ function combineKnowledge(memory:MemoryKnowledgeReader,documents:DocumentKnowled
 export const combinedKnowledgeReader=combineKnowledge(memoryKnowledgeReader,documentKnowledgeReader);
 /** 回复专用可信装配；后台发布和记忆写入继续使用严格默认资格。 */
 export function createReplyLocalKnowledgeReader():ReplyKnowledgeReader {
- return combineKnowledge(createMemoryKnowledgeReader({includeUnconfirmed:false},assertReplyLocalSource),createDocumentKnowledgeReader(assertReplyLocalSource));
+ return combineKnowledge(createMemoryKnowledgeReader(assertReplyLocalSource),createDocumentKnowledgeReader(assertReplyLocalSource));
 }
 export const replyLocalKnowledgeReader=createReplyLocalKnowledgeReader();

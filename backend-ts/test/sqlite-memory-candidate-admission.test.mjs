@@ -40,9 +40,28 @@ test('正常07真实核验引句只引用事实来源，完整窗口仍保留为
  assert.deepEqual(candidate.sources.map(s=>s.quote),['我长期住在高雄。']);
  assert.equal(candidate.verificationState,'verified');
  const original=await f.storage.execute('fixture.archiveState',{ownerId:owner});assert.equal(original.required.filter(r=>r.candidate_id===candidate.id).length,1);
- const knowledge=await f.storage.execute('fixture.memoryKnowledge',{ownerId:owner,contactId:f.contactId,discussionId:'synthetic-admission'}),item=knowledge.find(x=>x.id===candidate.id);
+ const item=await f.storage.execute('fixture.candidateSources',{ownerId:owner,candidateId:candidate.id});
  assert.equal(item.qualificationSources.length,2);assert.equal(item.citationSources.length,1);
  const self=(await f.management.read({scopeKind:'self',contactId:null})).candidates[0];assert.equal(self.verificationState,'verified');assert.deepEqual(self.sources.map(s=>s.quote),['我长期偏好绿茶。']);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+for(const invalidation of ['reject','source','revision'])test(`真实记忆读者只复验历史候选快照，${invalidation}后拒绝旧材料`,async t=>{
+ const f=await prepared(t),scope={ownerId:owner,contactId:f.contactId,discussionId:'legacy-candidate-snapshot'};
+ const candidate=(await f.management.read({scopeKind:'contact',contactId:f.contactId})).candidates[0];
+ const {item,headers,opened}=await f.storage.execute('fixture.legacyCandidateSnapshot',{...scope,candidateId:candidate.id});
+ assert.deepEqual(headers,[],'新输入目录不含待确认候选');assert.equal(opened,null,'不能经公开物化入口恢复候选注入');
+ assert.equal(await f.storage.execute('fixture.legacyCandidateRequireCurrent',{scope,item}),true,'回复实际使用的本机资料读者仍可复验合法历史快照');
+ await assert.rejects(f.storage.execute('fixture.legacyCandidateRequireCurrent',{scope:{...scope,contactId:f.saved[1].contact_id},item}),{code:'memory_knowledge_stale'},'旧材料不能跨联系人复用');
+ await assert.rejects(f.storage.execute('fixture.legacyCandidateRequireCurrent',{scope,item:{...item,text:item.text+'篡改'}}),{code:'memory_knowledge_stale'});
+ if(invalidation==='reject')await f.management.decide({requestKey:'reject-legacy-candidate',action:'reject',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]});
+ else if(invalidation==='revision')await f.storage.execute('fixture.reviseCandidate',{ownerId:owner,candidateId:candidate.id});
+ else{
+  const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts'),{ActiveHolders}=await import('../src/storage/sqlite/deletion/holders.ts'),{ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
+  const deletion=new DeletionService(f.storage,new ActiveHolders(),new ManagedFiles(f.root)),plan=await deletion.plan({ownerId:owner,requestKey:'delete-legacy-candidate-source',scope:{kind:'source',contactId:f.contactId,sourceId:candidate.sources[0].recordId}});
+  assert.equal((await deletion.advance(plan)).state,'completed');
+ }
+ await assert.rejects(f.storage.execute('fixture.legacyCandidateRequireCurrent',{scope,item}),{code:'memory_knowledge_stale'});
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
@@ -84,7 +103,7 @@ test('非requires_all_sources合法核验证据可为直接来源子集，必要
  const {anySourceProducer}=await import('./fixtures/memory-management/any-source-producer.mjs');const run=await anySourceProducer(t,f.storage,contactId);
  const management=new SqliteMemoryManagement(f.storage,owner);await management.importRun(run.runId);const candidate=(await management.read({scopeKind:'contact',contactId})).candidates[0];
  assert.equal(candidate.verificationState,'verified');assert.deepEqual(candidate.sources.map(s=>s.quote),['我长期住在高雄。']);
- const item=(await f.storage.execute('fixture.memoryKnowledge',{ownerId:owner,contactId,discussionId:'synthetic-any-source'})).find(i=>i.id===candidate.id);
+ const item=await f.storage.execute('fixture.candidateSources',{ownerId:owner,candidateId:candidate.id});
  assert.equal(item.qualificationSources.length,2);assert.equal(item.citationSources.length,1);
  const saved=await f.storage.execute('fixture.archiveState',{ownerId:owner});assert.equal(saved.required.filter(r=>r.candidate_id===candidate.id).length,1);
  const uncited=item.qualificationSources.find(s=>!item.citationSources.some(c=>c.messageId===s.messageId));
@@ -150,7 +169,7 @@ test('事实A的必要消息和精准引用仅A，真实role=context的B留在�
  const management=new SqliteMemoryManagement(f.storage,owner);await management.importRun(run.runId);const candidate=(await management.read({scopeKind:'contact',contactId})).candidates[0];
  assert.equal(candidate.verificationState,'verified');assert.deepEqual(candidate.sources.map(s=>s.quote),['我长期住在高雄。']);
  const saved=await f.storage.execute('fixture.archiveState',{ownerId:owner});assert.deepEqual(saved.required.filter(r=>r.candidate_id===candidate.id).map(r=>r.message_id),[candidate.sources[0].messageId]);assert.equal(saved.eventSources.filter(s=>s.event_id===candidate.eventId).length,2);
- const item=(await f.storage.execute('fixture.memoryKnowledge',{ownerId:owner,contactId,discussionId:'real-context'})).find(i=>i.id===candidate.id);assert.equal(item.qualificationSources.length,2);assert.equal(item.citationSources.length,1);
+ const item=await f.storage.execute('fixture.candidateSources',{ownerId:owner,candidateId:candidate.id});assert.equal(item.qualificationSources.length,2);assert.equal(item.citationSources.length,1);
  const context=item.qualificationSources.find(s=>s.messageId!==candidate.sources[0].messageId),{DeletionService}=await import('../src/storage/sqlite/deletion/service.ts'),{ActiveHolders}=await import('../src/storage/sqlite/deletion/holders.ts'),{ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');
  const deletion=new DeletionService(f.storage,new ActiveHolders(),new ManagedFiles(f.root)),plan=await deletion.plan({ownerId:owner,requestKey:'delete-real-context',scope:{kind:'source',contactId,sourceId:context.recordId}});
  assert.equal((await management.read({scopeKind:'contact',contactId})).candidates.length,0);assert.equal((await deletion.advance({ownerId:owner,operationId:plan.operationId})).state,'completed');
@@ -200,7 +219,7 @@ test('本人原A+B冻结任务保持混合归属，单事件A消息资格与存�
  let extraction;extraction=new SqliteMemoryExtraction(f.storage,owner,modelPort(()=>extraction.accounting,supplier().respond));t.after(()=>extraction.close());const run=await extraction.start('frozen-contribution-display');await extraction.waitForIdle();
  const management=new SqliteMemoryManagement(f.storage,owner);await management.importRun(run.runId);const candidate=(await management.read(self)).candidates.find(c=>c.sources.every(s=>s.contactId===a));assert.ok(candidate);
  assert.deepEqual(new Set(candidate.contributingContactIds),new Set([a,b]));
- const before=(await f.storage.execute('fixture.memoryKnowledge',{ownerId:owner,contactId:a,discussionId:'precise-source-mixed-owner'})).find(i=>i.id===candidate.id);assert.deepEqual(before.qualificationSources.map(s=>s.contactId),[a]);assert.deepEqual(before.citationSources.map(s=>s.contactId),[a]);
+ const before=await f.storage.execute('fixture.candidateSources',{ownerId:owner,candidateId:candidate.id});assert.deepEqual(before.qualificationSources.map(s=>s.contactId),[a]);assert.deepEqual(before.citationSources.map(s=>s.contactId),[a]);
  const adopted=await management.decide({requestKey:'mixed-task-user-accept',action:'accept',candidateIds:[candidate.id],candidateRevisions:[candidate.stateRevision]});let version=(await management.read(self)).memories.find(m=>m.id===adopted.memoryId).current;assert.deepEqual(new Set(version.contributingContactIds),new Set([a,b]));
  const binding=f.saved.find(c=>c.contact_id===b);await f.contacts.revoke(b,binding.binding_id,binding.selection_generation);await extraction.pause(run.runId);await extraction.continue(run.runId);await extraction.waitForIdle();
  const archived=await management.read(self);assert.deepEqual(new Set((await management.read(self,{candidateId:candidate.id})).candidates[0].contributingContactIds),new Set([a,b]));version=archived.memories.find(m=>m.id===adopted.memoryId).current;assert.deepEqual(new Set(version.contributingContactIds),new Set([a,b]));

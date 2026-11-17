@@ -1,7 +1,7 @@
 import {readKnowledge} from '../reply-knowledge.mjs';
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 import {combinedKnowledgeReader} from '../../../src/memory/sqlite/documents/knowledge.ts';
-import {createMemoryKnowledgeReader} from '../../../src/memory/sqlite/management/knowledge.ts';
+import {memoryTimeEligibility} from '../../../src/memory/sqlite/management/temporal.ts';
 
 // 只改变隔离测试 Worker 的时钟；不修改任何业务行。
 const RealDate=Date;
@@ -16,5 +16,5 @@ export const registry={...base,actions:[...base.actions,
   time=input.time;globalThis.Date=TestDate;return time;
  }},
  {name:'fixture.knowledge',mode:'read',retryBusy:false,execute:(tx,input)=>readKnowledge(combinedKnowledgeReader,tx,input)},
- {name:'fixture.unconfirmedKnowledge',mode:'read',retryBusy:false,execute:(tx,input)=>createMemoryKnowledgeReader({includeUnconfirmed:true}).read(tx,input)},
+ {name:'fixture.candidateTimes',mode:'read',retryBusy:false,execute:(tx,input)=>input.candidateIds.map(candidateId=>({candidateId,status:memoryTimeEligibility(tx,input.ownerId,{candidateId})}))},
 ]};
