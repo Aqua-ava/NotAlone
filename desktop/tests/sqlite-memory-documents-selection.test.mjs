@@ -13,7 +13,20 @@ test.before(async()=>{
  root=await mkdtemp(path.join(tmpdir(),'notalone-profile-selection-view-'));const output=path.join(root,'controller.mjs');
  await build({entryPoints:['src/main/memory/sqlite-management.ts'],outfile:output,bundle:true,platform:'node',format:'esm',logLevel:'silent'});
  Controller=(await import(pathToFileURL(output))).SqliteMemoryManagementController;
- const result=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {SqliteMemoryDocumentsPanel} from './src/renderer/SqliteMemoryDocumentsPanel';const bridge={readDocuments:input=>window.readSelection(input),onInvalidated:()=>()=>{}};const root=createRoot(document.getElementById('root'));let level='L3';window.setLevel=value=>{level=value;render();};function render(){root.render(<SqliteMemoryDocumentsPanel bridge={bridge} request={${JSON.stringify(request)}} level={level}/>);}render();`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
+ const result=await build({stdin:{contents:`
+  import React from 'react';
+  import {createRoot} from 'react-dom/client';
+  import {SqliteMemoryDocumentsPanel} from './src/renderer/SqliteMemoryDocumentsPanel';
+  const root=createRoot(document.getElementById('root'));
+  let level='L3',state={snapshot:null,busy:false,notice:null,availability:'available'};
+  window.setLevel=value=>{level=value;render();};
+  async function read(){
+   state={...state,busy:true};render();
+   const snapshot=await window.readSelection(${JSON.stringify(request)});
+   state={snapshot,busy:false,notice:null,availability:'available'};render();
+  }
+  function render(){root.render(<SqliteMemoryDocumentsPanel state={state} level={level} onRetry={read}/>);}
+  void read();`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
  browserCode=result.outputFiles[0].text;
 });
 test.after(async()=>{if(root)await rm(root,{recursive:true,force:true});});

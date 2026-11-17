@@ -1,17 +1,15 @@
 import {useEffect,useRef,useState} from 'react';
-import type {MemoryCandidateView,MemoryDecisionRequest,MemoryManagementOutcome,MemoryManagementSnapshot,MemoryManagementRead,MemoryHistorySnapshot,MemorySource,MemoryVerificationState,MemoryVersionView,MemoryView,SqliteMemoryManagementBridge} from '../shared/sqlite-memory-management';
+import type {MemoryCandidateView,MemoryManagementSnapshot,MemoryManagementRead,MemoryHistorySnapshot,MemorySource,MemoryVerificationState,MemoryVersionView,MemoryView,SqliteMemoryManagementBridge} from '../shared/sqlite-memory-management';
 import {memoryReadResult,memoryReadFailureCode,withdrawnProtectionVersion,memorySourceImage} from '../shared/sqlite-memory-management';
 import {SqliteMemoryDocumentsPanel} from './SqliteMemoryDocumentsPanel';
-import {useVisibleRefresh} from './use-visible-refresh';
+import {useMemoryBrowser,type MemoryBrowserDecision} from './use-memory-browser';
+import {successMessages} from './memory-management-messages';
 import {memoriesBySourceTime,memorySourceDateLabel,memorySourceTime} from './memory-source-time';
 
-type Decision=Omit<MemoryDecisionRequest,'requestKey'>;
-const outcomeMessages={conflict:'资料已被其他操作修改，存在并发冲突。请重试读取后重新决定。',source_stale:'来源或范围已失效，已撤下原资料。请重试读取。',protected:'当前记忆受人工保护，请重试读取并核对；撤销前须先明确解除保护。',unavailable:'本次决定暂未确认，请重试读取当前状态后再操作。'};
-const successMessages:Record<string,string>={accept:'采纳成功，已形成正式版本。',edit_accept:'修改采纳成功，固定模型原稿保留。',reject:'已拒绝候选。',correct:'错误修正成功，旧版不再作为当前事实。',change:'变化已记录，旧版不再作为当前事实。',protect:'已开启当前人工保护。',unprotect:'已解除当前人工保护。',restore:'自动更新已撤销，已新增恢复版本。',withdraw:'已撤销首次自动采纳，内容不再作为当前事实。'};
+type Decision=MemoryBrowserDecision;
 const formationNames:Record<string,string>={adoption:'采纳',correction:'纠正错误',change:'记录变化',restore:'撤销恢复',manual:'手动补充'};
 const adoptionNames:Record<string,string>={auto:'自动采纳',user:'用户采纳',manual:'手动补充'};
 const memoryLevelNames={L1:'具体记忆',L2:'主题资料',L3:'长期概览'} as const;
-type MemoryLevel=keyof typeof memoryLevelNames;
 function SourceTime({sources}:{sources:MemorySource[]}){
  const time=memorySourceTime(sources);
  return <p className="memory-source-time">{time?<><span>聊天来源</span><time dateTime={new Date(time.start).toISOString()}>{memorySourceDateLabel(time)}</time>{!time.complete&&<span>部分日期未知</span>}</>:<span>聊天来源日期未知</span>}</p>;
@@ -150,56 +148,11 @@ function Memory({memory,busy,decide,bridge,request:historyRequest,authority}:{me
 
 /** 资格失效或顶部范围变化立即卸载正文、依据和未提交编辑，迟到结果不再挂回。 */
 export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,documentsRefreshKey=0,completedRunId=null,visible=true,releaseOnUnmount=true}:{bridge:SqliteMemoryManagementBridge;contactId:string|null;scopeRevision:number;documentsRefreshKey?:number;completedRunId?:string|null;visible?:boolean;releaseOnUnmount?:boolean}){
- const [scopeKind,setScopeKind]=useState<'contact'|'self'>('contact');
- const [level,setLevel]=useState<MemoryLevel>('L1');
- const pageCursor=useRef<string|undefined>(undefined),[previousPages,setPreviousPages]=useState<(string|undefined)[]>([]);
- const context=useRef({bridge,contactId,scopeRevision,scopeKind});
- if(context.current.bridge!==bridge||context.current.contactId!==contactId||context.current.scopeRevision!==scopeRevision||context.current.scopeKind!==scopeKind)context.current={bridge,contactId,scopeRevision,scopeKind};
- const accepted=context.current;
- const [state,setState]=useState<{context:typeof accepted;snapshot:MemoryManagementSnapshot}|null>(null),[notice,setNotice]=useState<{context:typeof accepted;message:string;error:boolean}|null>(null),[busy,setBusy]=useState(false),[documentsBlocked,setDocumentsBlocked]=useState(false);
- const active=useRef(false),revision=useRef(0),reading=useRef<number|null>(null),refresh=useRef<(preserve?:boolean,silent?:boolean)=>Promise<boolean>>(async()=>false);
- const decisionPending=useRef(false),lastCompletedRun=useRef(completedRunId),completionRefreshPending=useRef(false);
- const scope={scopeKind,contactId:scopeKind==='self'?null:contactId};
- const readRequest=contactId?{scope,displayContactId:contactId,scopeRevision}:null;
- const current=state?.context===accepted?state.snapshot:null,currentNotice=notice?.context===accepted?notice:null;
+ const browser=useMemoryBrowser({bridge,contactId,scopeRevision,documentsRefreshKey,completedRunId,visible,releaseOnUnmount});
+ const {scopeKind,setScopeKind,level,setLevel,readRequest,current,notice:currentNotice,busy,decide,restart}=browser;
  // 旧读视图或旧快照没有 pendingStage 时按待确认展示，避免已有数据改口径。
  const pendingCandidates=current?.view.candidates.filter(candidate=>candidate.state==='pending'&&candidate.pendingStage!=='processing_incomplete')??[];
  const incompleteCandidates=current?.view.candidates.filter(candidate=>candidate.state==='pending'&&candidate.pendingStage==='processing_incomplete')??[];
- refresh.current=async(preserve=false,silent=false)=>{
-  if(!readRequest||decisionPending.current||silent&&(busy||reading.current!==null||currentNotice?.error))return false;
-  const token=++revision.current;reading.current=token;if(!preserve)setState(null);if(!silent){setBusy(true);setNotice(null);}
-  try{const next=memoryReadResult(await bridge.read({...readRequest,...(pageCursor.current?{cursor:pageCursor.current}:{})}));if(active.current&&context.current===accepted&&token===revision.current){setState({context:accepted,snapshot:next});if(!decisionPending.current)setDocumentsBlocked(false);return true;}}
-  catch(error){if(active.current&&context.current===accepted&&token===revision.current){const code=memoryReadFailureCode(error);if(code){setNotice({context:accepted,message:code==='memory_read_timeout'?'读取超时，请重试':'读取暂不可用，请重试',error:true});}else{setState(null);setDocumentsBlocked(true);setNotice({context:accepted,message:'来源或范围暂不可用，已撤下原资料，请重新读取。',error:true});}}}
-  finally{if(reading.current===token)reading.current=null;if(active.current&&context.current===accepted&&token===revision.current&&!silent)setBusy(false);}
-  return false;
- };
- useEffect(()=>{
-  active.current=true;pageCursor.current=undefined;setPreviousPages([]);reading.current=null;decisionPending.current=false;completionRefreshPending.current=false;setState(null);setNotice(null);setBusy(false);setDocumentsBlocked(false);
-  const unsubscribe=bridge.onInvalidated(()=>{revision.current++;reading.current=null;decisionPending.current=false;completionRefreshPending.current=false;setState(null);setDocumentsBlocked(true);setBusy(false);setNotice({context:accepted,message:'资料资格或连接已变化，已撤下正文、依据和编辑，请重试读取。',error:true});});
-  if(contactId)void refresh.current();
-  return()=>{active.current=false;revision.current++;unsubscribe();};
- },[accepted]);
- // 范围切换由 context 撤下旧快照；释放桥会广播失效，只在面板卸载或桥更换时执行。
- useEffect(()=>()=>{if(releaseOnUnmount)void bridge.release().catch(()=>{});},[bridge,releaseOnUnmount]);
- useEffect(()=>{
-  if(completedRunId!==lastCompletedRun.current){lastCompletedRun.current=completedRunId;if(completedRunId)completionRefreshPending.current=true;}
-  if(completionRefreshPending.current&&!busy&&contactId){completionRefreshPending.current=false;pageCursor.current=undefined;setPreviousPages([]);void refresh.current(true,true);}
- },[completedRunId,busy,accepted]);
- // 页面切换保留已核验快照，重新显示时静默更新；隐藏时仍接收资格失效事件。
- const wasVisible=useRef(visible);
- useEffect(()=>{const reopened=visible&&!wasVisible.current;wasVisible.current=visible;if(reopened)void refresh.current(true,true);},[visible]);
- useVisibleRefresh(()=>refresh.current(true,true),visible&&level==='L1'&&!!contactId&&!busy&&!currentNotice?.error,current?.view.page?.preparing?1000:30000);
- function restart(){const preserve=!!current&&pageCursor.current===undefined;pageCursor.current=undefined;setPreviousPages([]);void refresh.current(preserve);}
- function changePage(next:string|undefined,previous:(string|undefined)[]){pageCursor.current=next;setPreviousPages(previous);void refresh.current();}
- async function decide(request:Decision){
-  if(!current||!readRequest||busy)return;const snapshot=current,token=++revision.current;decisionPending.current=true;setDocumentsBlocked(true);setState(null);setBusy(true);setNotice(null);
-  let outcome:MemoryManagementOutcome;
-  try{outcome=await bridge.decide({...readRequest,connectionGeneration:snapshot.connectionGeneration,request:{...request,requestKey:crypto.randomUUID()}});}catch{outcome={status:'unavailable'};}
-  if(!active.current||context.current!==accepted||token!==revision.current){decisionPending.current=false;return;}
-  decisionPending.current=false;
-  if(outcome.status!=='applied'){setBusy(false);setNotice({context:accepted,message:outcomeMessages[outcome.status],error:true});return;}
-  pageCursor.current=undefined;setPreviousPages([]);const refreshed=await refresh.current();if(active.current&&context.current===accepted)setNotice({context:accepted,message:refreshed?(successMessages[request.action]??'决定已保存。'):'决定已保存，但当前资料暂不可读。已撤下原资料，请重新读取。',error:!refreshed});
- }
  return <section className="sqlite-memory-management memory-timeline-browser" aria-label="记忆候选与版本">
   <header className="memory-browser-toolbar"><p className="memory-browser-caption">相处的点滴</p><div className="memory-person-switch" role="group" aria-label="记忆对象">{(['contact','self'] as const).map(kind=><button key={kind} type="button" aria-pressed={scopeKind===kind} disabled={!contactId} onClick={()=>setScopeKind(kind)}>{kind==='contact'?'对方':'我'}</button>)}</div></header>
   <div className="memory-level-tabs" role="group" aria-label="记忆层级">{(['L1','L2','L3'] as const).map(value=><button key={value} type="button" aria-pressed={level===value} onClick={()=>setLevel(value)}>{memoryLevelNames[value]}</button>)}</div>
@@ -214,13 +167,13 @@ export function SqliteMemoryManagementPanel({bridge,contactId,scopeRevision,docu
       <div className="memory-candidate-list">{incompleteCandidates.map(candidate=><Candidate key={`${candidate.id}:${candidate.stateRevision}`} candidate={candidate} busy={busy} decide={request=>void decide(request)}/>)}</div></aside>}
     {pendingCandidates.length>0&&<aside className="memory-candidates-aside" aria-label="待确认记忆"><h3 className="memory-collection-heading">待确认记忆 <span>{current.view.page?'本页 ':''}{pendingCandidates.length} 条</span></h3><div className="memory-candidate-list">{pendingCandidates.map(candidate=><Candidate key={`${candidate.id}:${candidate.stateRevision}`} candidate={candidate} busy={busy} decide={request=>void decide(request)}/>)}</div></aside>}</div><p className="memory-timeline-note">{current.view.page?'本页':''}按已知聊天来源时间排列 · 日期以本机时区显示，不代表事件发生日。</p></>}
    <nav className="sqlite-memory-actions" aria-label="记忆列表分页">
-    <button type="button" disabled={busy||!previousPages.length} onClick={()=>changePage(previousPages.at(-1),previousPages.slice(0,-1))}>上一页记忆</button>
-    <span>第 {previousPages.length+1} 页</span>
-    <button type="button" disabled={busy||!current?.view.page?.nextCursor} onClick={()=>changePage(current!.view.page!.nextCursor!,[...previousPages,pageCursor.current])}>下一页记忆</button>
+    <button type="button" disabled={busy||!browser.hasPreviousPage} onClick={browser.previousPage}>上一页记忆</button>
+    <span>第 {browser.page} 页</span>
+    <button type="button" disabled={busy||!current?.view.page?.nextCursor} onClick={browser.nextPage}>下一页记忆</button>
     <button type="button" disabled={busy} onClick={restart}>重新读取第一页</button>
    </nav>
    </div>
-   <div hidden={level==='L1'}>{readRequest&&scopeKind==='contact'&&typeof bridge.readDocuments==='function'?<SqliteMemoryDocumentsPanel visible={visible&&level!=='L1'} bridge={bridge} request={readRequest} level={level==='L3'?'L3':'L2'} refreshKey={documentsRefreshKey} blocked={documentsBlocked} managementBusy={busy} retryManagement={()=>void refresh.current()}/>:<p className="memory-browser-empty">{scopeKind==='self'?(level==='L3'?'本人全局概览不在当前联系人页面展示。':'本人全局主题资料不在当前联系人页面展示。'):'当前连接暂不支持读取主题资料与长期概览。'}</p>}</div>
+   <div hidden={level==='L1'}>{readRequest&&scopeKind==='contact'&&typeof bridge.readDocuments==='function'?<SqliteMemoryDocumentsPanel level={level==='L3'?'L3':'L2'} state={browser.documents} onRetry={browser.retryDocuments}/>:<p className="memory-browser-empty">{scopeKind==='self'?(level==='L3'?'本人全局概览不在当前联系人页面展示。':'本人全局主题资料不在当前联系人页面展示。'):'当前连接暂不支持读取主题资料与长期概览。'}</p>}</div>
   </div>}
  </section>;
 }

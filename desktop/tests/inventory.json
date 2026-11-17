@@ -200,6 +200,7 @@
   "tests/sqlite-discussion-panel.test.mjs",
   "tests/sqlite-reply-candidates.test.mjs",
   "tests/sqlite-memory-management-view.test.mjs",
+  "tests/sqlite-memory-browser-updates.test.mjs",
   "tests/sqlite-memory-read-failure.test.mjs",
   "tests/sqlite-memory-documents-selection.test.mjs",
   "tests/visible-refresh-view.test.mjs",
