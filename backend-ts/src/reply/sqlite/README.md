@@ -40,7 +40,9 @@
 
 运行attempt还保存受理时database runtime_id与epoch，存储重开后旧业务租约不可继续冻结输入、登记副本或提交。副本preparing_attempt_id通过真实FK固定创建者；正常身份落库必须复验同一attempt，关闭/恢复清理仅能登记身份为blocked或deleting，不改current。来源闭包在尚无runtime_context时仍经request→attempt→preparing copy覆盖准备目录。
 
-run/inspect获取阶段纳入同一pending排空；close开始后拒绝新获取，等待已进入的SQLite读取与实际DSH释放结算。HTTP恢复核验从当前正常模型配置、当前Skill资格及业务选择重新计算预期摘要，不能把副本自己保存的摘要当作当前配置证明。
+run/inspect获取阶段纳入同一pending排空；close开始后拒绝新获取，等待已进入的SQLite读取与实际DSH释放结算。公开HTTP回看与继续只核验业务资料及切换当前讨论，不为此打开DSH或调用模型；用户明确生成时，才用当前模型与Skill资格计算摘要并复验旧副本，不能把副本自己保存的摘要当作当前配置证明。
+
+普通讨论的旧边界核验与继续执行共用本次独占所有者和DSH驱动；核验失败须先真实排空旧所有者，才可按原规则另建合法副本，开始执行后的失败及关闭失败均不自动重试。执行后仍关闭原驱动，再用独立驱动核验最终持久边界并登记完整文件清单，最后才标记ready。同一合成SQLite、官方DSH与环回模型的重开继续用例中，恢复轮的所有者关闭／清单登记各由两次降为一次，`runtime.inspect`由四次降为三次；SessionId、实际发言和模型请求次数保持，不据此推断整体回复耗时。
 
 `createSqliteDiscussionHost` 只拥有本领域 service/runtime/http，接收宿主唯一的 provider 与 arbiter。关闭先停受理，取消并等待尚未进入副本管理器的整轮请求（包括受理、冻结及失败清理），再关闭真实副本并等待所有 HTTP 权威读取；公共宿主只能在这些步骤成功后关闭 SQLite，释放失败保留同操作重试条件。
 

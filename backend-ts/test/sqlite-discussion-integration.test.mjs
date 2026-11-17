@@ -14,6 +14,7 @@ import Llm from '@deepseek-ai/dsh-llm';
 import Skills from '@deepseek-ai/dsh-skill';
 import {resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
+import {StorageFailure} from '../src/storage/sqlite/contracts.ts';
 import {SqliteContactService} from '../src/contacts/sqlite/service.ts';
 import {SqliteSkillLibrary} from '../src/skills/sqlite/library.ts';
 import {SqliteDiscussionService} from '../src/reply/sqlite/service.ts';
@@ -43,7 +44,8 @@ async function fixture(t,options={}){
  return {root,ids,requests,skillRoot,contacts,holders,get service(){return service;},get storage(){return storage;},get runtime(){return runtime;},get turns(){return turns;},get library(){return library;},async reopen(){await runtime.close();const id=storage.status.databaseId;await storage.close();storage=await SqliteStorage.open({userData:root,intent:'open',expectedDatabaseId:id,role:'test',registryModule});await bind();}};
 }
 test('真实SQLite请求与官方运行副本保存实际发言，重送不重复模型，重开后同SessionId继续',async t=>{
- const f=await fixture(t);const d=await f.service.newDiscussion(f.ids[0]),key=randomUUID();
+ const resumeActions=[];let ownedCloses=0;
+ const f=await fixture(t,{runtimeStorageHook:(storage,name,input)=>{resumeActions.push(name);return storage.execute(name,input);},fault:point=>{if(point==='beforeClose')ownedCloses++;}});const d=await f.service.newDiscussion(f.ids[0]),key=randomUUID();
  const input={contactId:f.ids[0],discussionId:d.id,requestKey:key,text:'第一条合成讨论要求',confirmedContact:true};
  await f.turns.generate(input);assert.equal(f.requests.length,1);const view=await f.service.view(f.ids[0],d.id);assert.deepEqual(view.entries.map(e=>e.role),['user','assistant']);assert.equal(view.entries[1].body,'实际环回返回的合成助手发言1');
  const copies=await f.storage.execute('runtime.inventory',{ownerId:owner});assert.equal(copies.length,1);assert.equal(copies[0].state,'ready');const sessionId=copies[0].sdkInstanceId;
@@ -51,8 +53,35 @@ test('真实SQLite请求与官方运行副本保存实际发言，重送不重�
  const [call]=await f.storage.execute('discussionTest.calls',{ownerId:owner});assert.ok(call.reserved_budget_units>512n);assert.equal(call.actual_budget_units,11n);assert.equal(call.settlement_state,'settled');assert.equal(call.model,'synthetic-model');assert.ok(call.input_cap>0n);assert.equal(call.output_cap,512n);assert.ok(JSON.parse(call.receipt).inputBudget.input_tokens>0);
  assert.equal((await f.turns.generate(input)).replayed,true);assert.equal(f.requests.length,1);
  await assert.rejects(f.service.view(f.ids[1],d.id),{code:'discussion_unavailable'});
- await f.reopen();await f.turns.generate({...input,requestKey:randomUUID(),text:'第二条合成讨论要求'});assert.equal(f.requests.length,2);
+ await f.reopen();resumeActions.length=0;ownedCloses=0;await f.turns.generate({...input,requestKey:randomUUID(),text:'第二条合成讨论要求'});assert.equal(f.requests.length,2);
+ t.diagnostic(JSON.stringify({restoredOwnedCloses:ownedCloses,restoredInspect:resumeActions.filter(name=>name==='runtime.inspect').length,restoredManifest:resumeActions.filter(name=>name==='runtime.manifest').length}));
+ assert.equal(ownedCloses,1,'恢复核验与实际继续共用一个独占所有者');
+ assert.equal(resumeActions.filter(name=>name==='runtime.manifest').length,1,'实际关闭后只登记一次完整文件清单');
  const after=await f.storage.execute('runtime.inventory',{ownerId:owner});assert.equal(after.length,1);assert.equal(after[0].sdkInstanceId,sessionId);assert.equal(after[0].state,'ready');assert.equal((await f.service.view(f.ids[0],d.id)).entries.length,4);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
+
+test('恢复边界失败先排空旧所有者，关闭或开始执行失败不能改建新副本重试',async t=>{
+ for(const mode of ['boundary','close','dirty'])await t.test(mode,async t=>{
+  let oldId,failClose=false;
+  // 只注入恢复边界或事务故障；SQLite、官方DSH副本和环回模型仍使用正式实现。
+  const f=await fixture(t,{runtimeStorageHook:async(storage,name,input)=>{
+   if(mode==='dirty'&&oldId&&name==='runtime.dirty')throw new StorageFailure('discussion_runtime_recovery_blocked');
+   const result=await storage.execute(name,input);
+   return mode!=='dirty'&&name==='runtime.inspect'&&input.copyId===oldId?{...result,eventBoundary:'{"changed":true}'}:result;
+  },fault:point=>{if(failClose&&point==='beforeClose'){failClose=false;throw new Error('合成关闭失败');}}});
+  const d=await f.service.newDiscussion(f.ids[0]),input={contactId:f.ids[0],discussionId:d.id,requestKey:randomUUID(),text:'首轮合成输入',confirmedContact:true};
+  await f.turns.generate(input);const [original]=await f.storage.execute('runtime.inventory',{ownerId:owner});oldId=original.id;
+  failClose=mode==='close';const next={...input,requestKey:randomUUID(),text:'继续合成讨论'};
+  if(mode==='boundary'){
+   await f.turns.generate(next);assert.equal(f.requests.length,2);
+   const copies=await f.storage.execute('runtime.inventory',{ownerId:owner}),current=copies.find(copy=>copy.id!==oldId);
+   assert.equal(copies.length,2);assert.ok(current);assert.notEqual(current.sdkInstanceId,original.sdkInstanceId);assert.equal(current.state,'ready');
+  }else{
+   await assert.rejects(f.turns.generate(next),{code:mode==='dirty'?'discussion_runtime_recovery_blocked':'discussion_generation_failed'});assert.equal(f.requests.length,1,'未完成排空或已进入执行时不自动重试');
+   assert.equal((await f.storage.execute('runtime.inventory',{ownerId:owner})).length,1);
+  }
+  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+ });
 });
 
 test('实际派发后连接中断自动放弃并保留最终测量预留，未知实耗不填零且不重发',async t=>{

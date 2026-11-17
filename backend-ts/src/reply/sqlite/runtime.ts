@@ -90,13 +90,15 @@ export class SqliteDiscussionRuntime {
   }
   await this.fault?.('beforeDiscardCommit');await this.execute('discard',copy);
  }
+ private requireRestorable(copy:RuntimeCopy,configurationDigest:string):void{
+  if(this.stopping)fail('discussion_runtime_closed');
+  if(copy.state!=='ready'||copy.configurationDigest!==configurationDigest||!copy.address||!copy.eventBoundary)fail('discussion_runtime_recovery_blocked');
+  if(!same(this.files.capture('runtime',copy.managedLocator,'directory'),copy.address))fail('discussion_runtime_identity_conflict');
+ }
  private async inspectOwned(contactId:string,discussionId:string,copyId:string,configurationDigest:string):Promise<{copy:RuntimeCopy;boundary:DshEventBoundary}>{
   if(this.stopping)fail('discussion_runtime_closed');
   const copy=await this.storage.execute<RuntimeCopy>('runtime.inspect',{ownerId:this.ownerId,contactId,discussionId,copyId});
-  if(copy.state!=='ready'||copy.configurationDigest!==configurationDigest||!copy.address||!copy.eventBoundary)fail('discussion_runtime_recovery_blocked');
-  if(!same(this.files.capture('runtime',copy.managedLocator,'directory'),copy.address))fail('discussion_runtime_identity_conflict');
-  if(this.stopping)fail('discussion_runtime_closed');
-  if(this.stopping)fail('discussion_runtime_closed');
+  this.requireRestorable(copy,configurationDigest);
   const held=this.bind(copy);if(held.busy)fail('discussion_runtime_busy');held.busy=true;
   const done=Promise.withResolvers<void>();held.workDone=done.promise;held.finish=done.resolve;
   try{
@@ -114,20 +116,27 @@ export class SqliteDiscussionRuntime {
   if(discussion?.currentRuntimeId){
    try{
     const candidate=await this.storage.execute<RuntimeCopy>('runtime.inspect',{...attempt,copyId:discussion.currentRuntimeId});
-    if(candidate.state==='ready'&&candidate.configurationDigest===configurationDigest){await this.inspect(attempt.contactId,attempt.discussionId,candidate.id,configurationDigest);copy=candidate;}
+    this.requireRestorable(candidate,configurationDigest);copy=candidate;
    }catch(error){
     // 当前明确请求可从仍合法业务记录另建副本；旧定位和不合格文件继续保留在删除闭包。
     if(!(error instanceof StorageFailure)||!['discussion_runtime_invalidated','discussion_runtime_recovery_blocked'].includes(error.code))throw error;
    }
   }
-  let restoring=!!copy;
+  const restoring=!!copy;
   if(!copy){const id=randomUUID();copy=await this.storage.execute<RuntimeCopy>('runtime.prepare',{...attempt,copyId:id,sdkInstanceId:randomUUID(),locator:id,configurationDigest});}
   if(this.stopping)fail('discussion_runtime_closed');
   const held=this.bind(copy);if(held.busy)fail('discussion_runtime_busy');held.busy=true;const done=Promise.withResolvers<void>();held.workDone=done.promise;held.finish=done.resolve;
   const combined=signal?AbortSignal.any([signal,held.controller.signal]):held.controller.signal;
-  let result!:T,boundary:DshEventBoundary|undefined,succeeded=false;
+  let result!:T,boundary:DshEventBoundary|undefined,resumeChecked=!restoring,retryFresh=false;
   try{
-   if(restoring)await this.execute('dirty',copy,attempt);
+   if(restoring){
+    // 在本次独占所有者内核验旧边界，然后复用同一 driver 执行。
+    held.driver=await createDshRuntime(this.ctx,{root:this.location(copy)});
+    const history=await held.driver.readHistory(SessionId(copy.sdkInstanceId));
+    if(JSON.stringify(history.boundary)!==copy.eventBoundary)fail('discussion_runtime_recovery_blocked');
+    await this.execute('inspect',copy);combined.throwIfAborted();resumeChecked=true;
+    await this.execute('dirty',copy,attempt);
+   }
    else{
     await this.fault?.('beforeDirectory');combined.throwIfAborted();
     await mkdir(this.location(copy),{mode:0o700});
@@ -139,15 +148,20 @@ export class SqliteDiscussionRuntime {
     copy=await this.execute<RuntimeCopy>('attach',copy,{...attempt,address:this.files.capture('runtime',copy.managedLocator,'directory')});held.copy=copy;await this.fault?.('afterIdentity');
    }
    combined.throwIfAborted();await this.execute('inspect',copy);
-   held.driver=await createDshRuntime(this.ctx,{root:this.location(copy)});
+   held.driver??=await createDshRuntime(this.ctx,{root:this.location(copy)});
    result=await work({copy,driver:held.driver,sessionId:SessionId(copy.sdkInstanceId),restoring,signal:combined});
    combined.throwIfAborted();await this.fault?.('afterBusinessCommit');
    // 官方readHistory要求Agent先由实际业务释放；driver.close再次覆盖所有遗漏所有者。
    await held.driver.close();held.driver=undefined;
    const checker=await createDshRuntime(this.ctx,{root:this.location(copy)});held.driver=checker;
-   boundary=(await checker.readHistory(SessionId(copy.sdkInstanceId))).boundary;await checker.close();held.driver=undefined;succeeded=true;
+   boundary=(await checker.readHistory(SessionId(copy.sdkInstanceId))).boundary;await checker.close();held.driver=undefined;
+  }catch(error){
+   // 核验失败后先真实关闭旧所有者，再按原规则从合法业务记录建立新副本；已开始执行的失败不重试。
+   if(!resumeChecked&&error instanceof StorageFailure&&['discussion_runtime_invalidated','discussion_runtime_recovery_blocked'].includes(error.code))retryFresh=true;
+   else throw error;
   }finally{done.resolve();await held.release();}
-  if(succeeded){await this.fault?.('beforeReady');await this.execute('ready',copy,{...attempt,eventBoundary:JSON.stringify(boundary),configurationDigest});}
+  if(retryFresh)return this.runOwned(attempt,configurationDigest,work,signal,true);
+  await this.fault?.('beforeReady');await this.execute('ready',copy,{...attempt,eventBoundary:JSON.stringify(boundary),configurationDigest});
   return result;
  }
  close():Promise<void>{
