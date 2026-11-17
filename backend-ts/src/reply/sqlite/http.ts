@@ -2,7 +2,7 @@ import {replyFailureReason} from './diagnostics.ts';
 import {diagnose} from '../../diagnostics/context.ts';
 import {checkedTraceId,tracedRequest} from '../../diagnostics/request-trace.ts';
 import type {IncomingMessage,ServerResponse} from 'node:http';
-import {readWechatHttpBody,WechatHttpBodyError} from '../../sync/wechat-http-body.ts';
+import {readHttpBody,HttpBodyError} from '../../platform/http/body.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {SqliteDiscussionService} from './service.ts';
 import type {SqliteDiscussionTurns} from './turns.ts';
@@ -28,7 +28,7 @@ export class SqliteDiscussionHttp {
    const contactId=(match??fallback)![1],discussionId=match?.[2],command=match?.[3]??fallback?.[2];
    if(req.method==='POST'){
     // 信封覆盖10万UTF-16字符的JSON转义形式；正文字符限制仍在具名受理事务核验。
-    let value;try{value=JSON.parse((await readWechatHttpBody(req,610000,10000)).toString('utf8'));}catch(error){if(error instanceof WechatHttpBodyError)throw error;invalid();}
+    let value;try{value=JSON.parse((await readHttpBody(req,610000,10000)).toString('utf8'));}catch(error){if(error instanceof HttpBodyError)throw error;invalid();}
     if(!value||typeof value!=='object'||Array.isArray(value))invalid();
     if(command==='entries'){
      if(!this.turns)throw new StorageFailure('discussion_model_unavailable');
@@ -52,7 +52,7 @@ export class SqliteDiscussionHttp {
     }else if(!command){const catalog=await this.service.list(contactId);respond(res,200,{sessions:catalog.discussions.map(d=>({session_id:d.id,is_current:d.isCurrent,last_user_activity_at:new Date(Number(d.lastActivityAt)).toISOString()})),current_session_id:catalog.currentDiscussionId});}
     else respond(res,405,{error:'method_not_allowed'});
    }else respond(res,405,{error:'method_not_allowed'});
-  }catch(error){diagnose({event:'diagnostics.error',module:'reply',caller:'reply_http',reasonCode:replyFailureReason(error),contactPrefix:(match??fallback)![1].slice(0,8)});const code=error instanceof StorageFailure?error.code:error instanceof WechatHttpBodyError?error.code:'discussion_unavailable';respond(res,code==='discussion_input_invalid'?400:code==='discussion_unavailable'?404:409,{error:code==='discussion_unavailable'?'not_found':code});}
+  }catch(error){diagnose({event:'diagnostics.error',module:'reply',caller:'reply_http',reasonCode:replyFailureReason(error),contactPrefix:(match??fallback)![1].slice(0,8)});const code=error instanceof StorageFailure?error.code:error instanceof HttpBodyError?error.code:'discussion_unavailable';respond(res,code==='discussion_input_invalid'?400:code==='discussion_unavailable'?404:409,{error:code==='discussion_unavailable'?'not_found':code});}
   return true;
   });
  }

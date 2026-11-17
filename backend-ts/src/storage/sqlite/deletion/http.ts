@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import {checkedTraceId,tracedRequest} from '../../../diagnostics/request-trace.ts';
 import { sha256 } from '../../../platform/sha256.ts';
 import { StorageFailure } from '../contracts.ts';
-import { readWechatHttpBody, WechatHttpBodyError } from '../../../sync/wechat-http-body.ts';
+import { readHttpBody, HttpBodyError } from '../../../platform/http/body.ts';
 import type { DeletionService } from './service.ts';
 import type { DeletionScope, DeletionSnapshot } from './contracts.ts';
 
@@ -52,7 +52,7 @@ export class SqliteDeletionHttp {
     try {
       let body: Record<string, unknown> = {};
       if (method === 'DELETE' || method === 'POST') {
-        const raw = JSON.parse((await readWechatHttpBody(req, 16384, 10_000)).toString('utf8') || '{}');
+        const raw = JSON.parse((await readHttpBody(req, 16384, 10_000)).toString('utf8') || '{}');
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) invalid();
         body = raw;
       }
@@ -99,8 +99,8 @@ export class SqliteDeletionHttp {
       const op = await this.run(planned.operationId);
       respond(202, source ? {task_id: op.operationId, operation_id: op.operationId, status: publicOperation(op).status} : {operation_id: op.operationId, state: op.state});
     } catch (error) {
-      const code = error instanceof StorageFailure || error instanceof WechatHttpBodyError ? error.code : error instanceof SyntaxError ? 'deletion_request_invalid' : 'deletion_unavailable';
-      const status = error instanceof WechatHttpBodyError ? error.status : /not_found$/.test(code) ? 404 : /invalid|required/.test(code) ? 400 : /unavailable|storage_|stale_lease/.test(code) ? 503 : 409;
+      const code = error instanceof StorageFailure || error instanceof HttpBodyError ? error.code : error instanceof SyntaxError ? 'deletion_request_invalid' : 'deletion_unavailable';
+      const status = error instanceof HttpBodyError ? error.status : /not_found$/.test(code) ? 404 : /invalid|required/.test(code) ? 400 : /unavailable|storage_|stale_lease/.test(code) ? 503 : 409;
       respond(status, {error: code});
     }
     return true;

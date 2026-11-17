@@ -1,12 +1,12 @@
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
-import {readWechatHttpBody,WechatHttpBodyError} from '../../sync/wechat-http-body.ts';
+import {readHttpBody,HttpBodyError} from '../../platform/http/body.ts';
 import type {SqliteMediaService} from './service.ts';
 import type {MediaGoal} from './contracts.ts';
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const send=(res:ServerResponse,status:number,value:unknown)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));};
 async function body(req:IncomingMessage):Promise<Record<string,unknown>> {
- const value=JSON.parse((await readWechatHttpBody(req,2048,10_000)).toString('utf8')||'{}');
+ const value=JSON.parse((await readHttpBody(req,2048,10_000)).toString('utf8')||'{}');
  if(!value||typeof value!=='object'||Array.isArray(value))throw new StorageFailure('media_request_invalid');return value;
 }
 /** 调用前由正常宿主统一Bearer/无Origin认证；owner永远由服务持有。 */
@@ -45,8 +45,8 @@ export class SqliteMediaHttp {
     }else send(res,405,{error:'method_not_allowed'});
    }
   }catch(error){
-   const code=error instanceof StorageFailure?error.code:error instanceof WechatHttpBodyError?error.code:error instanceof SyntaxError?'media_request_invalid':'media_request_failed';
-   send(res,error instanceof WechatHttpBodyError?error.status:code==='media_request_invalid'?400:/not_found/.test(code)?404:409,{error:code});
+   const code=error instanceof StorageFailure?error.code:error instanceof HttpBodyError?error.code:error instanceof SyntaxError?'media_request_invalid':'media_request_failed';
+   send(res,error instanceof HttpBodyError?error.status:code==='media_request_invalid'?400:/not_found/.test(code)?404:409,{error:code});
   }
   return true;
  }

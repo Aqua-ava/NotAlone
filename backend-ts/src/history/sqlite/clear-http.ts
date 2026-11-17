@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
-import { readWechatHttpBody, WechatHttpBodyError } from '../../sync/wechat-http-body.ts';
+import { readHttpBody, HttpBodyError } from '../../platform/http/body.ts';
 import type { HistoryClearStatus } from './clear.ts';
 import type { HistoryResyncStatus } from './resync.ts';
 
@@ -74,18 +74,18 @@ export class SqliteHistoryClearHttp {
           : projectResyncStatus(await this.resync.status(contactId));
       } else if (operation === 'clear') {
         // 请求体必须为空：清空范围只来自已核验联系人与当前同步选择。
-        const body = JSON.parse((await readWechatHttpBody(req, 1024, 10_000)).toString('utf8') || '{}');
+        const body = JSON.parse((await readHttpBody(req, 1024, 10_000)).toString('utf8') || '{}');
         if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 0) throw new StorageFailure('history_request_invalid');
         value = projectClearStatus(await this.clear.clear(contactId, { signal: controller.signal }));
       } else {
-        const raw = JSON.parse((await readWechatHttpBody(req, 4096, 10_000)).toString('utf8'));
+        const raw = JSON.parse((await readHttpBody(req, 4096, 10_000)).toString('utf8'));
         if (!raw || typeof raw !== 'object' || Array.isArray(raw) || Object.keys(raw).sort().join(',') !== 'request_key'
           || typeof raw.request_key !== 'string' || !requestKey.test(raw.request_key)) throw new StorageFailure('history_request_invalid');
         value = projectResyncStatus(await this.resync.resync(contactId, { requestKey: raw.request_key, signal: controller.signal }));
       }
       send(res, 200, value);
     } catch (error) {
-      const code = error instanceof StorageFailure ? error.code : error instanceof WechatHttpBodyError ? error.code
+      const code = error instanceof StorageFailure ? error.code : error instanceof HttpBodyError ? error.code
         : error instanceof SyntaxError ? 'history_request_invalid' : 'history_request_failed';
       if (code === 'history_request_invalid') send(res, 400, { error: code });
       else if (/not_found|not_authorized|unavailable|unverified/.test(code)) send(res, code.includes('not_found') ? 404 : 409, { error: code });

@@ -1,5 +1,5 @@
 import type {IncomingMessage,ServerResponse} from 'node:http';
-import {readWechatHttpBody} from '../../sync/wechat-http-body.ts';
+import {readHttpBody} from '../../platform/http/body.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {SqliteMemoryExtraction} from './service.ts';
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -23,7 +23,7 @@ export class SqliteMemoryExtractionHttp {
     if(url.search)throw new StorageFailure('memory_extraction_request_invalid');
     if(req.method==='GET'){send(res,200,this.service.readAutomatic());return true;}
     if(req.method!=='POST')throw new StorageFailure('memory_extraction_request_invalid');
-    const body=JSON.parse((await readWechatHttpBody(req,512,10_000)).toString('utf8')||'null');
+    const body=JSON.parse((await readHttpBody(req,512,10_000)).toString('utf8')||'null');
     if(!body||Array.isArray(body)||typeof body!=='object'||Object.keys(body).join(',')!=='enabled'||typeof body.enabled!=='boolean')throw new StorageFailure('memory_extraction_request_invalid');
     send(res,200,await this.service.setAutomatic(body.enabled));
    }catch(error){const code=error instanceof StorageFailure?error.code:'memory_extraction_request_invalid';send(res,code==='memory_extraction_request_invalid'?400:409,{error:code});}
@@ -42,13 +42,13 @@ export class SqliteMemoryExtractionHttp {
     else if(contact[2]==='readjudicate'||contact[2]==='complete'){
      // 只让该联系人遗留的待处理候选重新进入裁决；不接收任何字段，范围由路径中的联系人固定。
      if(req.method!=='POST')throw new StorageFailure('memory_extraction_request_invalid');
-     const body=JSON.parse((await readWechatHttpBody(req,64,10_000)).toString('utf8')||'{}');
+     const body=JSON.parse((await readHttpBody(req,64,10_000)).toString('utf8')||'{}');
      if(!body||Array.isArray(body)||typeof body!=='object'||Object.keys(body).length)throw new StorageFailure('memory_extraction_request_invalid');
      value=await (contact[2]==='complete'?this.service.completeContact(contact[1]!):this.service.readjudicate(contact[1]!));
     }
     else{
      if(req.method!=='POST')throw new StorageFailure('memory_extraction_request_invalid');
-     const body=JSON.parse((await readWechatHttpBody(req,2048,10_000)).toString('utf8'));
+     const body=JSON.parse((await readHttpBody(req,2048,10_000)).toString('utf8'));
      if(!body||Array.isArray(body)||Object.keys(body).join(',')!=='request_key'||!uuid.test(body.request_key))throw new StorageFailure('memory_extraction_request_invalid');
      value=await this.service.startHistory(contact[1]!,body.request_key);
     }
@@ -56,12 +56,12 @@ export class SqliteMemoryExtractionHttp {
    else if(task){if(req.method!=='GET'||!uuid.test(task[1]!))throw new StorageFailure('memory_extraction_request_invalid');value=await this.service.trace(task[1]!);}
    else if(!run![1]){
     if(req.method!=='POST')throw new StorageFailure('memory_extraction_request_invalid');
-    const body=JSON.parse((await readWechatHttpBody(req,2048,10_000)).toString('utf8'));
+    const body=JSON.parse((await readHttpBody(req,2048,10_000)).toString('utf8'));
     if(!body||Array.isArray(body)||Object.keys(body).join(',')!=='request_key'||!uuid.test(body.request_key))throw new StorageFailure('memory_extraction_request_invalid');
     value=await this.service.start(body.request_key);
    }else if(run![2]){
     if(req.method!=='POST'||run![1]==='current'||!uuid.test(run![1]!))throw new StorageFailure('memory_extraction_request_invalid');
-    const body=JSON.parse((await readWechatHttpBody(req,1024,10_000)).toString('utf8')||'{}');
+    const body=JSON.parse((await readHttpBody(req,1024,10_000)).toString('utf8')||'{}');
     const fields=body&&typeof body==='object'&&!Array.isArray(body)?Object.keys(body).sort().join(','):'';
     if(fields!=='action_version,operation_id'||!Number.isSafeInteger(body.action_version)||body.action_version<0||!uuid.test(body.operation_id??''))throw new StorageFailure('memory_extraction_request_invalid');
     value=await (run![2]==='pause'?this.service.pause(run![1]!,body.action_version,body.operation_id):run![2]==='abandon-unknown'?this.service.abandonUnknown(run![1]!,body.action_version,body.operation_id):run![2]==='retry-images'?this.service.retryImages(run![1]!,body.action_version,body.operation_id):this.service.continue(run![1]!,body.action_version,body.operation_id));

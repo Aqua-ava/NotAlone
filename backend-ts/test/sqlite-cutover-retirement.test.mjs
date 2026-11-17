@@ -62,7 +62,7 @@ test('旧同步解析、候选协议及已移除导入页的孤立模块不再�
     'desktop/src/renderer/LayeredMemorySections.tsx',
     'desktop/tests/memory-evidence.test.mjs',
   ]) assert.equal(existsSync(path.join(root, file)), false, `${file} 已无当前消费者`);
-  for (const file of ['backend-ts/src/sync/wechat-http-body.ts',
+  for (const file of ['backend-ts/src/platform/http/body.ts',
     'backend-ts/src/history/sqlite/incremental-coordinator.ts',
     'backend-ts/src/memory/extraction/model.ts',
     'backend-ts/src/skills/skill-package.ts',

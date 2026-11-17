@@ -3,7 +3,7 @@ import {sanitizeDiscussionErrorCode} from '../failure.ts';
 import {diagnose} from '../../../diagnostics/context.ts';
 import {checkedTraceId,tracedRequest} from '../../../diagnostics/request-trace.ts';
 import type {IncomingMessage,ServerResponse} from 'node:http';
-import {readWechatHttpBody,WechatHttpBodyError} from '../../../sync/wechat-http-body.ts';
+import {readHttpBody,HttpBodyError} from '../../../platform/http/body.ts';
 import type {SqliteStorage} from '../../../storage/sqlite/client.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import type {SqliteReplyCandidateService} from './service.ts';
@@ -69,7 +69,7 @@ export class SqliteReplyCandidateHttp {
     respond(res,200,build());
    }else if(req.method==='GET'&&command.startsWith('versions/'))respond(res,200,await o.service.version({...scope,candidateId,versionNo:Number(version)}));
    else if(req.method==='POST'){
-    let v;try{v=JSON.parse((await readWechatHttpBody(req,610000,10000)).toString('utf8'));}catch(error){if(error instanceof WechatHttpBodyError)throw error;invalid();}
+    let v;try{v=JSON.parse((await readHttpBody(req,610000,10000)).toString('utf8'));}catch(error){if(error instanceof HttpBodyError)throw error;invalid();}
     if(!v||typeof v!=='object'||Array.isArray(v))invalid();
     if(!candidateId){
      if(Object.keys(v).some(k=>!['request_key','text','confirmed_contact','accept_incomplete','carried_selection_id','selected_package_id','context_message_ids','workspace'].includes(k))||!id(v.request_key)||typeof v.text!=='string'||v.text.length>100000||v.confirmed_contact!==true||v.accept_incomplete!==undefined&&typeof v.accept_incomplete!=='boolean'||v.carried_selection_id!==undefined&&!id(v.carried_selection_id)||v.selected_package_id!==undefined&&!id(v.selected_package_id)||v.context_message_ids!==undefined&&(!Array.isArray(v.context_message_ids)||v.context_message_ids.length>20||v.context_message_ids.some((x:unknown)=>!id(x))))invalid();
@@ -86,7 +86,7 @@ export class SqliteReplyCandidateHttp {
      else respond(res,405,{error:'method_not_allowed'});
     }
    }else respond(res,405,{error:'method_not_allowed'});
-  }catch(error){diagnose({event:'diagnostics.error',module:'reply',caller:'reply_http',reasonCode:replyFailureReason(error),contactPrefix:match[1].slice(0,8)});const code=error instanceof StorageFailure?error.code:error instanceof WechatHttpBodyError?error.code:'reply_unavailable';respond(res,code==='reply_input_invalid'||code==='reply_content_invalid'?400:409,{error:code});}
+  }catch(error){diagnose({event:'diagnostics.error',module:'reply',caller:'reply_http',reasonCode:replyFailureReason(error),contactPrefix:match[1].slice(0,8)});const code=error instanceof StorageFailure?error.code:error instanceof HttpBodyError?error.code:'reply_unavailable';respond(res,code==='reply_input_invalid'||code==='reply_content_invalid'?400:409,{error:code});}
   return true;
   });
  }

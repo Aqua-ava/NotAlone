@@ -1,7 +1,7 @@
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import {checkedTraceId,tracedRequest} from '../../../diagnostics/request-trace.ts';
 import {diagnose} from '../../../diagnostics/context.ts';
-import {readWechatHttpBody} from '../../../sync/wechat-http-body.ts';
+import {readHttpBody} from '../../../platform/http/body.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import type {SqliteMemoryManagement} from './service.ts';
 import type {MemoryDecisionRequest} from './contracts.ts';
@@ -39,7 +39,7 @@ export class SqliteMemoryManagementHttp {
      ...(url.searchParams.has('memory_id')?{memoryId:url.searchParams.get('memory_id')!}:{}),...(url.searchParams.has('candidate_id')?{candidateId:url.searchParams.get('candidate_id')!}:{}),
     },{signal:controller.signal}));}finally{res.removeListener('close',cancel);}
    }else if(url.pathname==='/api/memory-management/decisions'&&req.method==='POST'&&!url.search){
-    const request=JSON.parse((await readWechatHttpBody(req,65536,10000)).toString('utf8'));
+    const request=JSON.parse((await readHttpBody(req,65536,10000)).toString('utf8'));
     if(!request||Array.isArray(request)||Object.keys(request).some(k=>!fields.has(k))||!uuid.test(request.requestKey??'')||['auto_accept','auto_update','auto_retire','auto_noop'].includes(request.action)||request.scope&&Object.keys(request.scope).some(k=>!['scopeKind','contactId'].includes(k)))throw new StorageFailure('memory_request_invalid');
     const result=await this.service.decide(request as MemoryDecisionRequest);this.afterDecision();send(res,200,result);
    }else send(res,404,{error:'memory_not_found'});

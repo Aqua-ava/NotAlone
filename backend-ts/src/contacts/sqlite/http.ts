@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
-import { readWechatHttpBody, WechatHttpBodyError } from '../../sync/wechat-http-body.ts';
+import { readHttpBody, HttpBodyError } from '../../platform/http/body.ts';
 import type { SqliteContactService } from './service.ts';
 import type { ContactSelection, WechatVersionCompatibility } from './contracts.ts';
 import { INCREMENTAL_IDENTITY_LIMIT } from '../../history/limits.ts';
@@ -44,7 +44,7 @@ export class SqliteContactHttp {
   const controller=new AbortController();const abort=()=>controller.abort();req.once('aborted',abort);
   try{
    let body:Record<string,unknown>={};
-   if(req.method==='POST')body=object(JSON.parse((await readWechatHttpBody(req,1024*1024,10_000)).toString('utf8')||'{}'));
+   if(req.method==='POST')body=object(JSON.parse((await readHttpBody(req,1024*1024,10_000)).toString('utf8')||'{}'));
    let value:unknown;
    if(manual){exact(body,[]);const contact=(await this.service.directory()).contacts.find(c=>c.contact_id===manual[1]);if(!contact)throw new StorageFailure('identity_not_found');value={confirmed:true,manual_confirmation_id:await this.service.manualConfirm(manual[1],`${this.manualContext}:${manual[1]}:${contact.data_generation}`)};}
    else if(path==='/api/setup/status')value={runtime_owner_configured:true,owner_id:this.service.ownerId,storage:'sqlite',capabilities:['contacts']};
@@ -84,8 +84,8 @@ export class SqliteContactHttp {
    else{exact(body,[]);await this.service.setReading(path.endsWith('/enable'));value=await this.syncStatus();}
    result(res,200,value);
   }catch(error){
-   const code=error instanceof StorageFailure?error.code:error instanceof WechatHttpBodyError?error.code:'identity_request_failed';
-   const status=error instanceof WechatHttpBodyError?error.status:code==='identity_request_invalid'?400:/unavailable|unverified|not_authorized/.test(code)?503:409;
+   const code=error instanceof StorageFailure?error.code:error instanceof HttpBodyError?error.code:'identity_request_failed';
+   const status=error instanceof HttpBodyError?error.status:code==='identity_request_invalid'?400:/unavailable|unverified|not_authorized/.test(code)?503:409;
    result(res,status,{error:code});
   }finally{req.removeListener('aborted',abort);}
   return true;

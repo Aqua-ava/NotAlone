@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
-import { readWechatHttpBody, WechatHttpBodyError } from '../../sync/wechat-http-body.ts';
+import { readHttpBody, HttpBodyError } from '../../platform/http/body.ts';
 import { INCREMENTAL_IDENTITY_LIMIT } from '../limits.ts';
 import type { HistoryCoverage, HistoryImageMedia, HistoryQuoteErrorCode, HistoryRead, StoredMessage } from './contracts.ts';
 import type { FirstHistoryCoordinatorState } from './coordinator.ts';
@@ -188,15 +188,15 @@ export class SqliteHistoryHttp {
         if (url.search) throw new StorageFailure('history_request_invalid');
         if (operation === 'history') value = await this.service.coverage(contactId);
         else {
-          const body = JSON.parse((await readWechatHttpBody(req, 1024, 10_000)).toString('utf8') || '{}');
+          const body = JSON.parse((await readHttpBody(req, 1024, 10_000)).toString('utf8') || '{}');
           if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 0) throw new StorageFailure('history_request_invalid');
           value = await this.service.synchronize(contactId, controller.signal);
         }
       }
       send(res, 200, value);
     } catch (error) {
-      const code = error instanceof StorageFailure ? error.code : error instanceof WechatHttpBodyError ? error.code : error instanceof SyntaxError ? 'history_request_invalid' : 'history_request_failed';
-      const status = error instanceof WechatHttpBodyError ? error.status : code === 'history_request_invalid' ? 400 : /not_found/.test(code) ? 404 : /unavailable|unverified|not_authorized/.test(code) ? 503 : 409;
+      const code = error instanceof StorageFailure ? error.code : error instanceof HttpBodyError ? error.code : error instanceof SyntaxError ? 'history_request_invalid' : 'history_request_failed';
+      const status = error instanceof HttpBodyError ? error.status : code === 'history_request_invalid' ? 400 : /not_found/.test(code) ? 404 : /unavailable|unverified|not_authorized/.test(code) ? 503 : 409;
       send(res, status, { error: code });
     } finally { req.removeListener('aborted', abort); }
     return true;

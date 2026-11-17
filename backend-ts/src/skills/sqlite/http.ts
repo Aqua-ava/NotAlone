@@ -1,6 +1,6 @@
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
-import {readWechatHttpBody,WechatHttpBodyError} from '../../sync/wechat-http-body.ts';
+import {readHttpBody,HttpBodyError} from '../../platform/http/body.ts';
 import {SqliteSkillLibrary,SqliteSkillError} from './library.ts';
 import type {SkillPackageState} from './contracts.ts';
 import type {SkillGroupState} from './groups.ts';
@@ -69,8 +69,8 @@ export class SqliteSkillHttp {
    if(req.method!==(query?'GET':'POST')){respond(res,405,{error:'method_not_allowed'});return true;}
    if(query){respond(res,200,{storage:'sqlite',mode:'minimal',skills:(await this.library.inspect(controller.signal)).map(skillManagementView)});return true;}
    let parsed: unknown;
-   try {parsed=JSON.parse((await readWechatHttpBody(req,16_384,10_000)).toString('utf8'));}
-   catch(error){if(error instanceof WechatHttpBodyError)throw error;throw new SqliteSkillError('skill_request_invalid');}
+   try {parsed=JSON.parse((await readHttpBody(req,16_384,10_000)).toString('utf8'));}
+   catch(error){if(error instanceof HttpBodyError)throw error;throw new SqliteSkillError('skill_request_invalid');}
    const body=object(parsed);
    exact(body,['expected_head_revision','confirmed']);
    if(body.confirmed!==true)throw new SqliteSkillError('skill_request_invalid');
@@ -78,8 +78,8 @@ export class SqliteSkillHttp {
    const item=action==='verify'?await this.library.verify(id,expectedHead,controller.signal):await this.library.setEnabled(id,expectedHead,action==='enable'?'enabled':'disabled',controller.signal);
    respond(res,200,{skill:skillManagementView(item)});
   }catch(error){
-   const code=error instanceof StorageFailure || error instanceof SqliteSkillError?error.code:error instanceof WechatHttpBodyError?error.code:'skill_operation_failed';
-   if(!controller.signal.aborted)respond(res,error instanceof WechatHttpBodyError?error.status:code==='skill_request_invalid'||/_invalid$/.test(code)?400:409,{error:code});
+   const code=error instanceof StorageFailure || error instanceof SqliteSkillError?error.code:error instanceof HttpBodyError?error.code:'skill_operation_failed';
+   if(!controller.signal.aborted)respond(res,error instanceof HttpBodyError?error.status:code==='skill_request_invalid'||/_invalid$/.test(code)?400:409,{error:code});
   }finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
   return true;
  }
@@ -89,8 +89,8 @@ export class SqliteSkillHttp {
   if(list){await this.library.ensureBuiltinGroup(signal);respond(res,200,{storage:'sqlite',groups:(await this.library.listGroups(signal)).map(skillGroupView)});return;}
   if(req.method!=='POST'){respond(res,405,{error:'method_not_allowed'});return;}
   let parsed: unknown;
-  try {parsed=JSON.parse((await readWechatHttpBody(req,16_384,10_000)).toString('utf8'));}
-  catch(error){if(error instanceof WechatHttpBodyError)throw error;throw new SqliteSkillError('skill_request_invalid');}
+  try {parsed=JSON.parse((await readHttpBody(req,16_384,10_000)).toString('utf8'));}
+  catch(error){if(error instanceof HttpBodyError)throw error;throw new SqliteSkillError('skill_request_invalid');}
   const body=object(parsed);
   if(body.confirmed!==true)throw new SqliteSkillError('skill_request_invalid');
   if(contactRoute){

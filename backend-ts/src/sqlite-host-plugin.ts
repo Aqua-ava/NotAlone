@@ -50,7 +50,7 @@ import { IncrementalHistoryCoordinator } from './history/sqlite/incremental-coor
 import { installedDeletionScopes } from './storage/sqlite/deletion/registration.ts';
 import {SqliteForeground} from './foreground/sqlite-foreground.ts';
 import {readStatusCoverages} from './history/sqlite/status-coverage.ts';
-import {readWechatHttpBody} from './sync/wechat-http-body.ts';
+import {readHttpBody} from './platform/http/body.ts';
 import {PureTsEvents} from './host/pure-ts-events.ts';
 import {WechatHistoryCheckpointCache} from './history/wechat/checkpoint-cache.ts';
 import { clearStartupDiagnostic, finishStartupDiagnostic, startupFailureCause, writeStartupDiagnostic } from './startup-diagnostics.ts';
@@ -331,14 +331,14 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
         }
         if(req.method==='POST'&&url.pathname==='/api/setup/model-parameters'){
           try{
-            const body=await readWechatHttpBody(req,4096,10000);
+            const body=await readHttpBody(req,4096,10000);
             await modelSetup.saveModelParameters(JSON.parse(body.toString('utf8')));
             respond(200,{configured:true,restart_required:true});
           }catch(error){respond(400,{error:error instanceof StorageFailure?error.code:'setup_request_invalid'});}return;
         }
         if(req.method==='POST'&&(url.pathname==='/api/setup/credentials'||url.pathname==='/api/setup/official-deepseek'||url.pathname==='/api/setup/deepseek-configuration')){
           try {
-            const body=await readWechatHttpBody(req,16384,10000);
+            const body=await readHttpBody(req,16384,10000);
             const payload=JSON.parse(body.toString('utf8')),official=url.pathname==='/api/setup/official-deepseek',custom=url.pathname==='/api/setup/deepseek-configuration';
             if(!payload||typeof payload!=='object'||Array.isArray(payload)||typeof payload.api_key!=='string'||
               (custom?(typeof payload.base_url!=='string'||Object.keys(payload).length!==2||Object.keys(payload).some(key=>!['base_url','api_key'].includes(key))):official?(payload.confirm_official_defaults!==true||Object.keys(payload).some(key=>!['api_key','confirm_official_defaults'].includes(key))):
@@ -349,13 +349,13 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
         }
         if(foreground&&url.pathname==='/api/sync/foreground/permission-restored'){
           if(req.method!=='POST'){respond(405,{error:'method_not_allowed'});return;}
-          let body:unknown;try{body=JSON.parse((await readWechatHttpBody(req,1024,3500)).toString('utf8')||'{}');}catch{respond(400,{error:'foreground_observation_invalid'});return;}
+          let body:unknown;try{body=JSON.parse((await readHttpBody(req,1024,3500)).toString('utf8')||'{}');}catch{respond(400,{error:'foreground_observation_invalid'});return;}
           if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length){respond(400,{error:'foreground_observation_invalid'});return;}
           await foreground.screenPermissionRestored();respond(200,{ok:true});return;
         }
         if(foreground&&url.pathname==='/api/sync/foreground/confirm'){
           if(req.method!=='POST'){respond(405,{error:'method_not_allowed'});return;}
-          let body:unknown;try{body=JSON.parse((await readWechatHttpBody(req,1024,3500)).toString('utf8'));}catch{respond(400,{error:'foreground_confirmation_invalid'});return;}
+          let body:unknown;try{body=JSON.parse((await readHttpBody(req,1024,3500)).toString('utf8'));}catch{respond(400,{error:'foreground_confirmation_invalid'});return;}
           const fields=body&&typeof body==='object'&&!Array.isArray(body)?body as Record<string,unknown>:null;
           const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
           if(!fields||Object.keys(fields).length!==2||!Object.keys(fields).every(k=>k==='contact_id'||k==='observation_id')
@@ -369,7 +369,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
         }
         if(foreground&&url.pathname==='/api/sync/foreground/observe'){
           if(req.method!=='POST'){respond(405,{error:'method_not_allowed'});return;}
-          let body:unknown;try{body=JSON.parse((await readWechatHttpBody(req,1024,3500)).toString('utf8')||'{}');}catch{respond(400,{error:'foreground_observation_invalid'});return;}
+          let body:unknown;try{body=JSON.parse((await readHttpBody(req,1024,3500)).toString('utf8')||'{}');}catch{respond(400,{error:'foreground_observation_invalid'});return;}
           if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length){respond(400,{error:'foreground_observation_invalid'});return;}
           const abort=new AbortController(),onAbort=()=>abort.abort();req.once('aborted',onAbort);
           try{const result=await foreground.observe(abort.signal);const {recognized_name,recognition_confidence,...rest}=result;respond(200,{...rest,...(recognized_name===null?{}:{recognized_name,recognition_confidence})});}
