@@ -100,10 +100,10 @@ test('来源待核验错误保留中文原因并提供处理同步问题入口',
   throw new Error(reason);
  });
  const region=f.page.getByRole('region',{name:'表达工作区'});
- await region.getByRole('textbox',{name:'有什么想说的',exact:true}).fill('来源失效时应撤下的合成草稿');
+ await region.getByRole('textbox',{name:'有什么想说的',exact:true}).fill('来源失效时仍保留的独立想法');
  await region.getByRole('button',{name:'帮我想想',exact:true}).click();
  await expect(region.getByRole('alert')).toHaveText(reason);
- await expect(region.getByRole('textbox',{name:'有什么想说的',exact:true})).toHaveValue('');
+ await expect(region.getByRole('textbox',{name:'有什么想说的',exact:true})).toHaveValue('来源失效时仍保留的独立想法');
  await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);
  await f.page.evaluate(()=>{window.__managerNextFails=true;});
  await region.getByRole('button',{name:'处理同步问题',exact:true}).click();
@@ -425,7 +425,7 @@ async function panel(t,execute,initialDraft='',assistant=false,styled=false,prof
   const root=createRoot(document.getElementById('root'));let props={bridge,contactId:${JSON.stringify(ids.contact)},scopeRevision:1,sessionId:${JSON.stringify(ids.session)},initialDraft:${JSON.stringify(initialDraft)},onSubmitted:receipt=>window.__submitted(receipt)};
   window.notalone={sqliteDiscussion:bridge,openManager:async()=>{if(window.__managerNextFails){window.__managerNextFails=false;throw new Error('合成窗口失败');}window.__managerOpened=(window.__managerOpened||0)+1;}};
   let state={contactId:props.contactId,scopeRevision:props.scopeRevision,phase:'idle',generationBlock:null,generationJobs:[],exploration:{phase:'idle'},
-    savedSession:{phase:'ready',sessionId:props.sessionId,turns:[],inputs:[],currentInputVersionId:null,discussionEntries:[],runtimeRecovery:'ready'},
+    savedSession:{phase:'ready',sessionId:props.sessionId,discussionEntries:[],runtimeRecovery:'ready'},
     sessionCatalog:{phase:'ready',items:[{sessionId:props.sessionId,isCurrent:true}],currentSessionId:props.sessionId}};
   const replies={listSavedSessions:async()=>{state={...state,sessionCatalog:{...state.sessionCatalog,phase:'loading'}};render();await new Promise(resolve=>window.__finishCatalog=resolve);state={...state,sessionCatalog:{...state.sessionCatalog,phase:'ready'}};render();},
     readSavedSession:async()=>{},newSavedSession:async()=>{},deleteSavedSession:async()=>{},viewSavedSession:async()=>{},resumeSavedSession:async()=>{}};
@@ -505,7 +505,7 @@ test('聊天读取恢复失败保留独立想法，撤下旧候选后可明确�
  const requests=f.commands.filter(c=>c.action==='generate');assert.equal(requests.length,2);assert.notEqual(requests[0].requestKey,requests[1].requestKey);assert.equal(requests[1].text,'我自己写下的独立想法');assert.equal(requests[1].carriedSelectionId,undefined);
 });
 
-test('聊天读取恢复失败不保留旧选稿及其派生草稿，新生成不再携入旧稿',{timeout:30000},async t=>{
+test('聊天读取恢复失败保留独立输入并撤下旧选稿，新生成不再携入旧稿',{timeout:30000},async t=>{
  let generated=0;
  const f=await panel(t,async operation=>{
   if(operation.action==='read')return pageData();
@@ -519,7 +519,7 @@ test('聊天读取恢复失败不保留旧选稿及其派生草稿，新生成�
  await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();
  await draft.fill('从旧选稿继续修改的想法');await region.getByRole('button',{name:'帮我表达',exact:true}).click();
  await expect(region.getByRole('alert')).toHaveText('聊天读取暂未恢复，请重试生成。');
- await expect(draft).toHaveValue('');await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);
+ await expect(draft).toHaveValue('从旧选稿继续修改的想法');await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);
  await expect(region.getByRole('button',{name:'重试生成',exact:true})).toHaveCount(0);
  await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);
  await draft.fill('重新写下的独立想法');await region.getByRole('button',{name:'帮我表达',exact:true}).click();
@@ -563,7 +563,7 @@ test('模型请求已自动放弃时说明费用风险，重新生成使用新�
  assert.equal(requests[1].contactId,ids.contact);assert.equal(requests[1].sessionId,ids.session);
 });
 
-test('来源失效立即移除草稿、候选、依据及Skill，迟到读取和生成均不能恢复旧快照',{timeout:30000},async t=>{
+test('来源失效保留独立草稿并移除候选依据及Skill，迟到读取和生成均不能恢复旧快照',{timeout:30000},async t=>{
  let mode='ready';const readEntered=Promise.withResolvers(),lateRead=Promise.withResolvers(),generateEntered=Promise.withResolvers(),lateGenerate=Promise.withResolvers();
  const f=await panel(t,async operation=>{
   if(operation.action==='read'){if(mode==='late-read'){readEntered.resolve();return lateRead.promise;}return pageData();}
@@ -571,15 +571,16 @@ test('来源失效立即移除草稿、候选、依据及Skill，迟到读取和
   throw new Error('未授权的合成页面操作');
  });
  const region=f.page.getByRole('region',{name:'表达工作区'}),draft=region.getByRole('textbox',{name:'有什么想说的',exact:true});
+ let independentDraft='来源失效前的草稿';
  const assertCleared=async()=>{
-  await expect(draft).toHaveValue('');await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);
+  await expect(draft).toHaveValue(independentDraft);await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);
   await expect(region.getByText('同联系人实际输入依据',{exact:true})).toHaveCount(0);await expect(region.getByText('本次实际加载的合成Skill正文',{exact:true})).toHaveCount(0);
  };
  await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveValue('合成候选第一条');await draft.fill('来源失效前的草稿');
  mode='late-read';await region.getByRole('button',{name:'刷新候选',exact:true}).click();await readEntered.promise;
  await f.page.evaluate(()=>window.__invalidate());await assertCleared();lateRead.resolve(pageData());await f.page.waitForFunction(()=>window.__settled===2);await assertCleared();
  mode='ready';await region.getByRole('button',{name:'刷新候选',exact:true}).click();await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveValue('合成候选第一条');
- await draft.fill('生成期间失效的草稿');await region.getByRole('button',{name:'帮我表达',exact:true}).click();const pending=await generateEntered.promise;
+ independentDraft='生成期间失效的草稿';await draft.fill(independentDraft);await region.getByRole('button',{name:'帮我表达',exact:true}).click();const pending=await generateEntered.promise;
  await f.page.evaluate(()=>window.__invalidate());await assertCleared();lateGenerate.resolve(receipt(pending));await f.page.waitForFunction(()=>window.__settled===4);await assertCleared();assert.equal(f.submitted.length,0);
  await expect(region.getByText('候选已保存，最终消息请自行发送。',{exact:true})).toHaveCount(0);
 });
@@ -604,7 +605,7 @@ test('切换联系人撤下旧草稿与快照，旧读取迟到不能跨范围�
  const generated=f.commands.find(c=>c.action==='generate');assert.equal(generated.contactId,ids.other);assert.equal(generated.scopeRevision,2);assert.equal(generated.sessionId,ids.otherSession);assert.equal(generated.text,'乙联系人的本次想法');assert.equal(generated.acceptIncomplete,false);assert.equal(generated.carriedSelectionId,undefined);
 });
 
-test('候选继续被后端判定失效时同时清草稿、旧携入及实际Skill快照',{timeout:30000},async t=>{
+test('候选继续被后端判定失效时保留独立草稿并清旧携入及实际Skill快照',{timeout:30000},async t=>{
  let selected=0;const f=await panel(t,async operation=>{
   if(operation.action==='read')return pageData();
   if(operation.action==='select'){if(++selected===1)return {id:ids.selection};throw new Error('本次候选来源已失效，请重新读取。');}
@@ -612,22 +613,22 @@ test('候选继续被后端判定失效时同时清草稿、旧携入及实际Sk
  });
  const region=f.page.getByRole('region',{name:'表达工作区'}),draft=region.getByRole('textbox',{name:'有什么想说的',exact:true});
  await expect(region.getByRole('button',{name:'以这个说法继续',exact:true})).toBeVisible();await region.getByRole('button',{name:'以这个说法继续',exact:true}).click();await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();
- await draft.fill('资格失效时必须清掉的合成草稿');await region.getByRole('button',{name:'以这个说法继续',exact:true}).click();
- await expect(region.getByRole('alert')).toContainText('已失效');await expect(draft).toHaveValue('');await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);await expect(region.getByRole('combobox',{name:'本次回复Skill',exact:true})).toHaveCount(0);await expect(region.getByText('本次实际载入的 Skill',{exact:true})).toHaveCount(0);
+ await draft.fill('资格失效时仍保留的独立草稿');await region.getByRole('button',{name:'以这个说法继续',exact:true}).click();
+ await expect(region.getByRole('alert')).toContainText('已失效');await expect(draft).toHaveValue('资格失效时仍保留的独立草稿');await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);await expect(region.getByRole('combobox',{name:'本次回复Skill',exact:true})).toHaveCount(0);await expect(region.getByText('本次实际载入的 Skill',{exact:true})).toHaveCount(0);
 });
 
-test('权威读取发现已展示候选资格失效时清草稿与旧携入，不只移除候选列表',{timeout:30000},async t=>{
+test('权威读取发现候选资格失效时保留独立草稿并撤下旧携入',{timeout:30000},async t=>{
  let invalid=false;const f=await panel(t,async op=>{
   if(op.action==='select')return {id:ids.selection};
   if(op.action==='read')return invalid?{...pageData(),requests:[{...pageData().requests[0],sourceState:'unavailable',candidates:[],loadedSkills:[],selections:[]}]}:pageData();
   throw new Error('未授权的合成页面操作');
  });
  const region=f.page.getByRole('region',{name:'表达工作区'}),draft=region.getByRole('textbox',{name:'有什么想说的',exact:true});
- await expect(region.getByRole('button',{name:'以这个说法继续',exact:true})).toBeVisible();await region.getByRole('button',{name:'以这个说法继续',exact:true}).click();await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();await draft.fill('后端已判失效时不应残留的草稿');invalid=true;
- await region.getByRole('button',{name:'刷新候选',exact:true}).click();await expect(draft).toHaveValue('');await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);
+ await expect(region.getByRole('button',{name:'以这个说法继续',exact:true})).toBeVisible();await region.getByRole('button',{name:'以这个说法继续',exact:true}).click();await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();await draft.fill('后端判候选失效时保留的独立草稿');invalid=true;
+ await region.getByRole('button',{name:'刷新候选',exact:true}).click();await expect(draft).toHaveValue('后端判候选失效时保留的独立草稿');await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);await expect(region.getByRole('textbox',{name:'候选第1条',exact:true})).toHaveCount(0);
 });
 
-test('短暂读取失败后权威读取确认来源失效，仍撤下旧选稿草稿与携入',{timeout:30000},async t=>{
+test('短暂读取失败后确认来源失效，保留独立草稿并撤下旧携入',{timeout:30000},async t=>{
  let reads=0;const f=await panel(t,async op=>{
   if(op.action==='select')return {id:ids.selection};
   if(op.action==='read'){
@@ -640,7 +641,7 @@ test('短暂读取失败后权威读取确认来源失效，仍撤下旧选稿�
  const region=f.page.getByRole('region',{name:'表达工作区'}),draft=region.getByRole('textbox',{name:'有什么想说的',exact:true}),read=region.getByRole('button',{name:'刷新候选',exact:true});
  await expect(region.getByRole('button',{name:'以这个说法继续',exact:true})).toBeVisible();await region.getByRole('button',{name:'以这个说法继续',exact:true}).click();await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toBeVisible();await draft.fill('短暂读失败后仍挂旧选稿的合成草稿');
  await read.click();await expect(region.getByRole('alert')).toContainText('尚未确认');await expect(draft).toHaveValue('短暂读失败后仍挂旧选稿的合成草稿');
- await read.click();await expect(region.getByText('这次候选的来源已失效，正文与依据已撤下。',{exact:true})).toBeVisible();await expect(draft).toHaveValue('');await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);
+ await read.click();await expect(region.getByText('这次候选的来源已失效，正文与依据已撤下。',{exact:true})).toBeVisible();await expect(draft).toHaveValue('短暂读失败后仍挂旧选稿的合成草稿');await expect(region.getByRole('button',{name:'取消候选继续',exact:true})).toHaveCount(0);
 });
 
 

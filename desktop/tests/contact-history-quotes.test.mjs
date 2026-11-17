@@ -5,9 +5,8 @@ import { randomUUID } from 'node:crypto';
 
 const bundle = await build({ stdin: { contents: `
   export { readContactHistoryMessages, mergeContactHistoryMessages } from './src/main/contact-history/messages';
-  export { readReplyMessages } from './src/main/reply/messages';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false });
-const { readContactHistoryMessages, mergeContactHistoryMessages, readReplyMessages } = await import(
+const { readContactHistoryMessages, mergeContactHistoryMessages } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
 
 const contactId = randomUUID();
@@ -37,8 +36,8 @@ test('联系人历史读取保留引用快照元数据，回复正文独立且�
   assert.equal(merged[0].quoted.state, 'resolved');
 });
 
-test('回复工作区消息读取保留引用作者和类型而不把快照当成回复正文', async () => {
-  const page = await readReplyMessages(backend([wire({ text: '回复上下文中的原话', target_message_id: targetMessageId,
+test('联系人历史保留引用作者和类型，不把引用快照当成当前消息正文', async () => {
+  const page = await readContactHistoryMessages(backend([wire({ text: '回复上下文中的原话', target_message_id: targetMessageId,
     sender: null, sender_role: 'owner', message_type: 'image', state: 'resolved' })]),
   contactId, null, new AbortController().signal);
   assert.equal(page.messages[0].text, '这是本次回复正文');
@@ -47,7 +46,7 @@ test('回复工作区消息读取保留引用作者和类型而不把快照当�
 });
 
 test('旧引用字段继续兼容，非法作者角色或引用状态会被拒绝', async () => {
-  for (const reader of [readContactHistoryMessages, readReplyMessages]) {
+  for (const reader of [readContactHistoryMessages]) {
     const legacy = await reader(backend([wire({ text: '旧版引用快照', target_message_id: targetMessageId })]),
       contactId, null, new AbortController().signal);
     assert.deepEqual(legacy.messages[0].quoted, { text: '旧版引用快照', targetMessageId });

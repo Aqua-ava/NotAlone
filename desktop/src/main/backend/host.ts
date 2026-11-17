@@ -7,8 +7,7 @@ import { loadBackendConfiguration, type BackendConfiguration } from './config';
 import { OwnedBackendProcess, type OwnedProcess } from './process';
 import { BackendRequestFailure, type JsonRequest } from './json-client';
 import type { MessageStreamCallbacks } from './message-stream';
-import { readAssistantGenerationReceipt } from '../reply/assistant-generation-jobs';
-import { isRecord } from '../reply/result-read';
+import { isRecord } from '../is-record';
 import { isUuid } from '../uuid';
 import { sqliteStartupTimeoutMs } from '../../../../backend-ts/src/storage/sqlite/timeouts';
 
@@ -109,50 +108,6 @@ export class BackendHost {
     }
     if (target !== this.target || generation !== this.getConnectionGeneration()) throw new BackendRequestFailure('cancelled');
     return { generation, data };
-  }
-  // 只给已接纳作业保留原认证目标的停止能力，不向页面暴露跨连接业务请求。
-  captureAssistantStoppingConnection(scope: { connectionGeneration: number; contactId: string; sessionId: string }):
-    Pick<BackendHost, 'getConnectionGeneration' | 'requestJson'> | undefined {
-    const target = this.target;
-    if (!target || scope.connectionGeneration !== this.getConnectionGeneration()) return undefined;
-    const path = `/api/contacts/${scope.contactId}/assistant-sessions/${scope.sessionId}`;
-    const generation = scope.connectionGeneration;
-    const recovered = new Map<string, { path: string; inputVersionId: string }>();
-    // 接纳时固定来源；旧连接只准读取原会话与中断原作业，不能据此重新生成。
-    const manualContactId = this.manualContacts.get(scope.contactId) === generation ? scope.contactId : undefined;
-    return Object.freeze({ getConnectionGeneration: () => generation, requestJson: async (options: JsonRequest) => {
-      const body = isRecord(options.body) ? options.body : undefined;
-      const requestKey = body && isUuid(body.request_key) ? body.request_key : undefined;
-      let accepted = requestKey ? recovered.get(requestKey) : undefined;
-      const lookup = options.method === 'POST' && options.path === `${path}/generation-receipt`
-        && requestKey !== undefined && Object.keys(body!).length === 1;
-      const parts = options.path.split('/');
-      if (!accepted && options.method === 'POST' && requestKey && isUuid(body?.input_version_id)
-        && parts.length === 7 && parts[1] === 'api' && parts[2] === 'contacts' && parts[3] === scope.contactId
-        && parts[4] === 'assistant-sessions' && isUuid(parts[5]) && parts[6] === 'interrupt' && parts[5] !== scope.sessionId) {
-        if (recovered.size >= 32) throw new BackendRequestFailure('cancelled');
-        // 正常分段回执也须由原认证目标证明别名；停止能力不接受调用方自行扩展会话范围。
-        const proof = await target.requestJson({ method: 'POST', path: `${path}/generation-receipt`, body: { request_key: requestKey }, maxResponseBytes: 4096, manualContactId });
-        const receipt = readAssistantGenerationReceipt(proof, scope.sessionId, requestKey);
-        if (receipt.sessionId !== parts[5] || receipt.inputVersionId !== body!.input_version_id) throw new BackendRequestFailure('cancelled');
-        accepted = { path: `/api/contacts/${scope.contactId}/assistant-sessions/${receipt.sessionId}`, inputVersionId: receipt.inputVersionId };
-        recovered.set(requestKey, accepted);
-      }
-      const allowedRead = options.method === 'GET' && options.body === undefined
-        && (options.path === '/api/runtime/status'
-          || [path, ...Array.from(recovered.values(), value => value.path)].some(value => options.path === value || options.path.startsWith(`${value}?read_part=`)));
-      const allowedInterrupt = options.method === 'POST' && (options.path === `${path}/interrupt`
-        || accepted && options.path === `${accepted.path}/interrupt` && body?.input_version_id === accepted.inputVersionId);
-      if ((!allowedRead && !allowedInterrupt && !lookup) || (lookup && recovered.size >= 32 && !recovered.has(requestKey!))) {
-        throw new BackendRequestFailure('cancelled');
-      }
-      const data = await target.requestJson({ ...options, manualContactId });
-      if (lookup) {
-        const receipt = readAssistantGenerationReceipt(data, scope.sessionId, requestKey!);
-        recovered.set(requestKey!, { path: `/api/contacts/${scope.contactId}/assistant-sessions/${receipt.sessionId}`, inputVersionId: receipt.inputVersionId });
-      }
-      return { generation, data };
-    } });
   }
   // 预览只保留原认证目标的同一session状态/释放能力，连接换代后仍可确认撤下。
   captureMediaPreviewConnection(input: {sessionId: string; connectionGeneration: number}):

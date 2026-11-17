@@ -9,7 +9,8 @@ const required = {
   'src/renderer/SkillLearningPage.tsx': [/run\(configure\(/, /run\(bridge\.refresh\(/, /run\(bridge\.resume\(/,
     /run\(bridge\.openHistory\(/],
   'src/renderer/backend-status.tsx': [/重试连接未成功/, /重试停读尚未获确认/],
-  'src/renderer/RewritePanel.tsx': [/复制来源记录未保存/],
+  'src/renderer/RewritePanel.tsx': [/setError\('本次表达操作暂时不可用，请重新确认联系人。'\)/, /role="alert"/, /重试读取/],
+  'src/renderer/SqliteReplyCandidatesPanel.tsx': [/\{error&&<p role="alert">\{error\}/, /同步设置暂未打开，请重试。/],
 };
 
 test('用户动作失败不再静默吞掉', async () => {

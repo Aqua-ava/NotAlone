@@ -51,7 +51,7 @@ async function fixture(t, holdFirstRead = false, holdSessionRead = false) {
     if (options.path.endsWith('/selections')) return { selection: null };
     if (options.path === `/api/contacts/${contactId}/assistant-sessions/${sessionId}`) {
       if (holdSessionRead) await sessionRead;
-      return { session_id: sessionId, current_input_version_id: null, turns: [], inputs: [] };
+      return { mode: 'sqlite', session_id: sessionId, runtime_recovery: 'ready', entries: [] };
     }
     throw new Error(`未预期请求：${options.path}`);
   } };
@@ -110,8 +110,7 @@ test('手动确认后的最终讨论读取在资格撤销后成功迟到，不�
   assert.equal(f.replies.getState().generationBlock, 'foreground-confirmation-required');
   f.releaseSession(); await settle();
   assert.notEqual(f.replies.getState().savedSession.phase, 'ready');
-  assert.deepEqual(f.replies.getState().savedSession.turns, []);
-  assert.equal(f.replies.getState().result, null);
+  assert.deepEqual(f.replies.getState().savedSession.discussionEntries ?? [], []);
   await f.confirm(); await settle();
   assert.equal(f.replies.getState().savedSession.phase, 'ready');
 });

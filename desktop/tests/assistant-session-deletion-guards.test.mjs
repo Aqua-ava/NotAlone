@@ -35,14 +35,10 @@ async function fixture({ pendingDeletion = false } = {}) {
       if (request.path.endsWith('/assistant-session/default')) {
         return { generation: 7, data: { session_id: controls.sessionId } };
       }
-      if (request.path.endsWith('/explorations') || request.path.endsWith('/replies')) {
-        throw new ports.BackendRequestFailure('response', 503, 'controlled_generation_failure');
-      }
       if (controls.missing && request.path.endsWith(sessionId)) {
         throw new ports.BackendRequestFailure('response', 404, 'not_found');
       }
-      return { generation: 7, data: { session_id: controls.sessionId,
-        current_input_version_id: null, turns: [], inputs: [] } };
+      return { generation: 7, data: { mode: 'sqlite', session_id: controls.sessionId, runtime_recovery: 'ready', entries: [] } };
     },
   };
   const contacts = new ports.ContactSession(async () => ({ generation: 7,
@@ -54,35 +50,23 @@ async function fixture({ pendingDeletion = false } = {}) {
   contacts.selectContact({ contactId, scopeRevision: contacts.getState().scopeRevision });
   const scope = { contactId, scopeRevision: contacts.getState().scopeRevision };
   await bridge.readSavedSession(scope);
-  await bridge.setMode({ ...scope, mode: 'initiate_conversation' });
-  await bridge.updatePurpose({ ...scope, purpose: '询问合成测试安排。' });
   const remove = () => bridge.deleteSavedSession({ ...scope, sessionId, confirmed: true });
   const generationCalls = () => calls.filter((request) => request.method === 'POST'
     && /\/(?:explorations|replies)(?:\/|$)/.test(request.path));
-  return { bridge, scope, calls, controls, remove, generationCalls, sessionId };
+  return { bridge, contacts, scope, calls, controls, remove, generationCalls, sessionId };
 }
 
-test('删除工作区讨论后保留空白输入入口，不自动重建会话或保留上下文', async () => {
+test('删除讨论只撤下该段上下文，保留未提交独立想法且不自动重建', async () => {
   const f = await fixture();
-  await f.bridge.enterWorkspace(f.scope);
-  const before = await f.bridge.getState();
-  await f.bridge.updateOptions({ ...f.scope, options: { ...before.options,
-    includeRelationshipContext: true,
-    contextText: '删除时清除的合成聊天。' } });
+  f.contacts.setDraft({ ...f.scope, text: '删除讨论后仍保留的合成独立想法' });
   const readsBefore = f.calls.filter(request => request.path.endsWith('/assistant-session/default')).length;
   f.controls.deleteFailure = false;
   await f.remove();
   const state = await f.bridge.getState();
   assert.equal(state.sessionDeletion, 'deleted');
-  assert.equal(state.mode, 'rewrite_draft');
-  assert.equal(state.options.inputKind, 'workspace');
-  assert.equal(state.options.tone, undefined);
-  assert.equal(state.options.instruction, undefined);
-  assert.equal(state.options.includeRelationshipContext, false);
-  assert.equal(state.options.contextText, undefined);
+  assert.equal(f.contacts.getState().draft, '删除讨论后仍保留的合成独立想法');
   assert.equal(state.savedSession.sessionId, null);
-  assert.deepEqual(state.savedSession.turns, []);
-  assert.equal(state.result, null);
+  assert.deepEqual(state.savedSession.discussionEntries ?? [], []);
   assert.equal(f.calls.filter(request => request.path.endsWith('/assistant-session/default')).length, readsBefore);
   assert.equal(f.generationCalls().length, 0);
 });

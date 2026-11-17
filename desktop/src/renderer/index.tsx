@@ -1,8 +1,6 @@
 import { DiagnosticSettings } from './DiagnosticSettings';
 import type { BindingConsentState } from '../shared/binding-consent-bridge';
 import { UsagePanel } from './UsagePanel';
-import { historyReplyEligibility } from '../shared/history-reply-eligibility';
-import type { HistoryCoveragePhase, SyncControlState } from '../shared/sync-control-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
 import { WechatSetupPanel } from './WechatSetupPanel';
 import { ForegroundPanel, useForegroundState } from './ForegroundPanel';
@@ -24,7 +22,7 @@ import { ContactPicker, HelperContactPicker, useContactSession } from './contact
 import { ContactsPage } from './ContactsPage';
 import { useChatHistoryPosition } from './use-chat-history-scroll';
 import { ReplyCandidates, useReplySession } from './RewritePanel';
-import { UnifiedReplyWorkspace } from './UnifiedReplyWorkspace';
+import { AssistantWorkspaceDraft } from './AssistantWorkspaceDraft';
 import { MemoryPage } from './MemoryPage';
 import { SyncControlPanel } from './SyncControlPanel';
 import { SyncDiagnosticsPanel } from './SyncDiagnosticsPanel';
@@ -46,19 +44,8 @@ export function App() {
   const replies = useReplySession(helper);
   const { state: consent } = useRevisionedSession<BindingConsentState>({ revision: -1, scopeRevision: 0, phase: 'offline',
     sessions: [], bindings: [], syncEnabled: null, sessionIssue: 'not-requested', busy: null, errorCode: null, notice: null }, window.notalone.bindings, !helper);
-  const { state: historySync } = useRevisionedSession<SyncControlState>({ revision: -1, scopeRevision: 0,
-    phase: 'offline', report: null, busy: null, errorCode: null }, window.notalone.syncControl, helper);
-  useEffect(() => { if (helper) void window.notalone.syncControl.refresh().catch(() => {}); }, [contactSession.state.selectedContactId]);
-  const historyByContact = useRef(new Map<string, HistoryCoveragePhase>());
-  const historyContact = contactSession.state.selectedContactId;
-  const historyCoverage = historyReplyEligibility(historySync.errorCode ? null : historySync.report, historyContact,
-    historyContact ? historyByContact.current.get(historyContact) : undefined);
-  if (historyContact) {
-    if (historyCoverage) historyByContact.current.set(historyContact, historyCoverage);
-    else historyByContact.current.delete(historyContact);
-  }
   const workspace = useRef<HTMLDivElement>(null);
-  useEffect(() => { workspace.current?.scrollTo({ top: 0 }); }, [replies.state.mode, replies.state.options.inputKind]);
+  useEffect(() => { workspace.current?.scrollTo({ top: 0 }); }, [replies.state.contactId, replies.state.scopeRevision]);
   const foregroundRead = useForegroundState(window.notalone.foreground, helper);
   const foreground = foregroundRead.state;
   const [error, setError] = useState('');
@@ -110,22 +97,11 @@ export function App() {
       && replies.state.savedSession?.phase === 'loading' && <p role="status" className="rewrite-privacy">
         正在加载这位联系人的助手讨论…
       </p>}
-    {replies.state.savedSession?.discussionEntries===undefined&&<UnifiedReplyWorkspace contacts={contactSession} replies={replies} />}
+    <AssistantWorkspaceDraft contacts={contactSession} replies={replies} />
     <PrioritySyncStatus contactId={contactSession.state.selectedContactId} bridge={window.notalone.syncControl} />
-    {replies.state.messageNotice.phase === 'connected' && <>
-      {replies.state.messageNotice.needsRefresh && <p role="status">消息提醒有待核对，请主动刷新消息。生成依据仍是原快照。</p>}
-      {replies.state.messageNotice.changed && <p role="status">当前联系人有新消息，生成依据仍是原快照。由你决定是否重新生成。</p>}
-      {!replies.state.messageNotice.needsRefresh && !replies.state.messageNotice.changed && <p role="status">新消息提醒已连接。</p>}
-    </>}
     <FirstFrameError message={foregroundRead.error} retry={foregroundRead.retry} />
-    {replies.state.messageNotice.phase === 'interrupted' && <p role="status">消息提醒已中断，请重连消息提醒；连接恢复后会自动核对最新消息。</p>}
-    {replies.state.messageNotice.phase === 'interrupted' && <button onClick={() => void replies.reconnectMessages()}>重连消息提醒</button>}
-    {replies.state.mode === 'rewrite_draft' && (replies.state.messageNotice.changed || replies.state.messageNotice.needsRefresh)
-      && <button disabled={replies.state.messages.phase === 'loading'} onClick={() => void replies.loadMessages()}>刷新消息</button>}
     <div className="ime-status-line"><BackendBadge state={backend} compact /></div>
-    <ReplyCandidates onDraftChange={(text,scope) => { void window.notalone.contacts.setDraft({...scope,text}).catch(() => {}); }} replies={replies} currentDraft={replies.state.contactId === contactSession.state.selectedContactId && replies.state.scopeRevision === contactSession.state.scopeRevision ? contactSession.state.draft : ''}
-      onInitialDraftTaken={() => { if (replies.state.contactId === contactSession.state.selectedContactId && replies.state.scopeRevision === contactSession.state.scopeRevision) void contactSession.setDraft(''); }}
-      historyCoverage={historyCoverage} />
+    <ReplyCandidates onDraftChange={(text,scope) => { void window.notalone.contacts.setDraft({...scope,text}).catch(() => {}); }} replies={replies} currentDraft={replies.state.contactId === contactSession.state.selectedContactId && replies.state.scopeRevision === contactSession.state.scopeRevision ? contactSession.state.draft : ''} />
     </div>
     <footer className="ime-footer">
       <span>由你修改并亲自发送</span>

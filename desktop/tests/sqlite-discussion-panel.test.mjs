@@ -24,7 +24,7 @@ test('已选联系人会话待核对时直接只读恢复，保留草稿且不�
       submit: async () => {window.__calls.push('submit');}, onInvalidated: () => () => {}
     }};
     let state = {contactId:${JSON.stringify(contactId)},scopeRevision:7,phase:'idle',generationBlock:null,generationJobs:[],
-      savedSession:{phase:'ready',sessionId:${JSON.stringify(sessionId)},turns:[],inputs:[],currentInputVersionId:null,discussionEntries:[],runtimeRecovery:'ready'},
+      savedSession:{phase:'ready',sessionId:${JSON.stringify(sessionId)},discussionEntries:[],runtimeRecovery:'ready'},
       sessionCatalog:{phase:'ready',items:[{sessionId:${JSON.stringify(sessionId)},isCurrent:true}],currentSessionId:${JSON.stringify(sessionId)},selectionPending:true}};
     const root=createRoot(document.getElementById('root'));
     const render=()=>root.render(React.createElement(AssistantSessionPanel,{initialDraft:'用户的独立草稿',replies:{state,
@@ -87,7 +87,7 @@ test('正式讨论面板从历史回看显式继续，分段回执重新读取�
     const entry = (text, role = 'assistant') => ({entryId:text,position:'1',role,text,requestId:'synthetic',callId:null,contentState:'available'});
     let state = {contactId:${JSON.stringify(contactId)}, scopeRevision:7, phase:'idle', exploration:{phase:'idle'},
       sessionDeletion:undefined, sourceAvailability:undefined, generationBlock:null, generationJobs:[],
-      savedSession:{phase:'ready',sessionId:${JSON.stringify(sessionId)},turns:[],inputs:[],currentInputVersionId:null,
+      savedSession:{phase:'ready',sessionId:${JSON.stringify(sessionId)},
         discussionEntries:[entry('合成已保存助手发言')],runtimeRecovery:'ready'},
       sessionCatalog:{phase:'ready',items:[{sessionId:${JSON.stringify(sessionId)},isCurrent:false}],currentSessionId:${JSON.stringify(nextSessionId)}}};
     const root = createRoot(document.getElementById('root'));
@@ -101,7 +101,6 @@ test('正式讨论面板从历史回看显式继续，分段回执重新读取�
     window.__savedPhase = phase => {state={...state,savedSession:{...state.savedSession,phase}};render();};
     window.__catalogPatch = patch => {state={...state,sessionCatalog:{...state.sessionCatalog,...patch}};render();};
     window.__invalidate = () => invalidated?.({revision:1,contactId:state.contactId,scopeRevision:state.scopeRevision});
-    window.__legacy = () => {const {discussionEntries,runtimeRecovery,...saved}=state.savedSession;state={...state,savedSession:{...saved,inputs:[]}};render();};
     render();
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false, logLevel: 'silent' });
   const server = createServer((_req, res) => { res.setHeader('content-type', 'text/html'); res.end('<div id="root"></div>'); });
@@ -126,12 +125,13 @@ test('正式讨论面板从历史回看显式继续，分段回执重新读取�
   await expect(input).toBeEnabled(); assert.equal(submissions.length, 0);
   await page.evaluate(() => window.__patch({generationBlock:'foreground-confirmation-required'}));
   await expect(input).toBeEnabled();
-  for (const [label, patch] of [['source-checking',{sourceAvailability:'checking'}], ['source-failed',{sourceAvailability:'failed'}], ['deleting',{sessionDeletion:'deleting'}], ['delete-failed',{sessionDeletion:'failed'}], ['waiting',{phase:'waiting'}]]) {
+  for (const [label, patch] of [['source-checking',{sourceAvailability:'checking'}], ['source-failed',{sourceAvailability:'failed'}], ['deleting',{sessionDeletion:'deleting'}], ['delete-failed',{sessionDeletion:'failed'}]]) {
     await page.evaluate(patch => window.__patch(patch), patch); await expect(input, label).toBeDisabled();
     await page.evaluate(() => window.__patch({sourceAvailability:undefined,sessionDeletion:undefined,phase:'idle',generationBlock:null,exploration:{phase:'idle'}})); await expect(input, `${label} reset`).toBeEnabled();
   }
-  await page.evaluate(() => window.__savedPhase('loading')); await expect(input).toBeDisabled();
-  await page.evaluate(() => window.__savedPhase('ready')); await expect(input).toBeEnabled();
+  await page.evaluate(() => window.__savedPhase('loading')); await expect(input).toHaveCount(0);
+  await page.evaluate(() => window.__savedPhase('ready'));
+  await page.locator('summary').filter({ hasText: '与助手讨论' }).click(); await expect(input).toBeEnabled();
   await page.evaluate(() => window.__catalogPatch({selectionPending:true})); await expect(input).toBeDisabled();
   await page.evaluate(() => window.__catalogPatch({selectionPending:false})); await expect(input).toBeEnabled();
   await input.fill('本次合成讨论'); await page.getByRole('button', { name: '与此联系人讨论', exact: true }).click();
@@ -146,8 +146,6 @@ test('正式讨论面板从历史回看显式继续，分段回执重新读取�
   assert.equal(submissions[1].sessionId, nextSessionId);
   assert.deepEqual((await page.evaluate(() => window.__calls)).filter(([method]) => method === 'resume'), [['resume', sessionId]]);
   await input.fill('资料失效前草稿'); await page.evaluate(() => window.__invalidate()); await expect(input).toHaveValue('');
-  await page.evaluate(() => window.__legacy()); await expect(input).toHaveCount(0);
-  await expect(page.getByRole('region', { name: '已保存的讨论', exact: true })).toContainText('当前会话还没有讨论');
 });
 
 test('正式preload只暴露具名讨论、候选操作和失效订阅，拒绝额外权限字段', async t => {
@@ -176,53 +174,4 @@ test('正式preload只暴露具名讨论、候选操作和失效订阅，拒绝�
   let received; const off = bridge.sqliteDiscussion.onInvalidated(event => { received = event; });
   const event = { contactId, scopeRevision: 7, revision: 1 }; listeners.get('sqlite-discussion:invalidated')({}, event);
   assert.deepEqual(received, event); off(); assert.equal(listeners.size, 0);
-});
-
-test('正式会话面板消费联系人初始草稿且用户编辑后不会重复注入', { timeout: 30_000 }, async t => {
-  const compiled = await build({ stdin: { contents: `
-    import React, { useState } from 'react'; import { createRoot } from 'react-dom/client';
-    import { AssistantSessionPanel } from './src/renderer/AssistantSessionPanel';
-    const sessionId=${JSON.stringify(sessionId)},nextSessionId=${JSON.stringify(nextSessionId)};
-    window.notalone = { sqliteDiscussion: {
-      candidates: { execute: async () => ({ requests: [] }) },
-      submit: async () => ({}),
-      onInvalidated: () => () => {}
-    }};
-    const methods = {listSavedSessions:async()=>{},viewSavedSession:async()=>{},resumeSavedSession:async()=>{},
-      readSavedSession:async()=>{},newSavedSession:async()=>{},deleteSavedSession:async()=>{}};
-    function View() {
-      const [draft,setDraft]=useState('联系人初始草稿'),[session,setSession]=useState(sessionId),[taken,setTaken]=useState(0);
-      window.__taken = () => taken;
-      window.__finishClear = () => window.__clearDraftResolve?.();
-      const state = {contactId:${JSON.stringify(contactId)},scopeRevision:7,phase:'idle',generationBlock:null,generationJobs:[],
-        savedSession:{phase:'ready',sessionId:session,turns:[],inputs:[],currentInputVersionId:null,discussionEntries:[],runtimeRecovery:'ready'},
-        sessionCatalog:{phase:'ready',items:[{sessionId:session,isCurrent:true}],currentSessionId:session}};
-      return React.createElement(React.Fragment, null,
-        React.createElement('button', { onClick: () => setSession(nextSessionId) }, '切换讨论'),
-        React.createElement(AssistantSessionPanel, { replies: { state, ...methods }, initialDraft: draft, onDraftChange: () => {},
-          onInitialDraftTaken: () => { setTaken(value => value + 1);
-            window.__clearDraft = new Promise(resolve => { window.__clearDraftResolve = resolve; }).then(() => setDraft('')); } }));
-    }
-    createRoot(document.getElementById('root')).render(React.createElement(View));
-  `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false, logLevel: 'silent' });
-  const server = createServer((_req, res) => { res.setHeader('content-type', 'text/html'); res.end('<div id="root"></div>'); });
-  let browser;
-  t.after(async () => {
-    try { await browser?.close(); }
-    finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
-  });
-  server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  browser = await chromium.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
-  const page = await browser.newPage();
-  await page.goto(`http://127.0.0.1:${server.address().port}`); await page.addScriptTag({ content: compiled.outputFiles[0].text });
-  const input = page.getByRole('textbox', { name: '有什么想说的', exact: true });
-  await expect(input).toHaveValue('联系人初始草稿');
-  await expect.poll(() => page.evaluate(() => window.__taken())).toBe(1);
-  await page.getByRole('button', { name: '切换讨论', exact: true }).click();
-  await expect(input).toHaveValue('');
-  await expect.poll(() => page.evaluate(() => window.__taken())).toBe(1);
-  await page.evaluate(() => window.__finishClear());
-  await input.fill('用户编辑后的新草稿');
-  await expect(input).toHaveValue('用户编辑后的新草稿');
-  await expect.poll(() => page.evaluate(() => window.__taken())).toBe(1);
 });

@@ -10,6 +10,7 @@ test('SQLite会话先显示表达工作区，讨论输入与空状态收在折�
     import React from 'react';
     import { createRoot } from 'react-dom/client';
     import { AssistantSessionPanel } from './src/renderer/AssistantSessionPanel';
+    import './src/renderer/style.css';
     import './src/renderer/helper-layout.css';
     import './src/renderer/rewrite.css';
     const sessionId = 'session';
@@ -17,7 +18,7 @@ test('SQLite会话先显示表达工作区，讨论输入与空状态收在折�
       contactId: 'contact', scopeRevision: 1, phase: 'idle', generationBlock: null,
       exploration: { phase: 'idle' }, generationJobs: [], sourceAvailability: null,
       sessionDeletion: null,
-      savedSession: { phase: 'ready', sessionId, discussionEntries: [], runtimeRecovery: 'none', turns: [], inputs: [] },
+      savedSession: { phase: 'ready', sessionId, discussionEntries: [], runtimeRecovery: 'none' },
       sessionCatalog: { phase: 'ready', items: [], currentSessionId: sessionId, selectionPending: false },
     };
     window.notalone = { sqliteDiscussion: {
@@ -53,7 +54,8 @@ test('SQLite会话先显示表达工作区，讨论输入与空状态收在折�
   await expect(workspace.getByRole('heading', { name: '有什么想说的？', exact: true })).toBeVisible();
   await expect(workspace.getByRole('button', { name: '帮我表达', exact: true })).toBeVisible();
   await expect(workspace.getByRole('button', { name: '帮我想想', exact: true })).toBeVisible();
-  assert.equal(await workspace.getByRole('button', { name: '帮我想想', exact: true }).evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(47, 104, 140)');
+  await expect(workspace.getByRole('button', { name: '帮我想想', exact: true })).toBeEnabled();
+  await expect(workspace.getByRole('button', { name: '帮我想想', exact: true })).toHaveCSS('background-color', 'rgb(255, 253, 247)');
   const sessionPanel = page.getByRole('region', { name: '助手会话' });
   assert.equal(await sessionPanel.evaluate(element => getComputedStyle(element).padding), '0px');
   assert.equal(await sessionPanel.evaluate(element => getComputedStyle(element).borderTopWidth), '0px');

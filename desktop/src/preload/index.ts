@@ -4,7 +4,6 @@ import { createMessageMediaBridge } from './media';
 import { createUsageBridge } from './usage';
 import { createWechatSetupBridge } from './wechat-setup';
 import { createForegroundBridge } from './foreground';
-import { createCandidateCopyBridge } from './candidate-copy';
 import { createSourceDeletionBridge } from './source-deletion';
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type { AppBridge } from '../shared/app-bridge';
@@ -15,8 +14,6 @@ import { createScreenPermissionBridge } from './screen-permission';
 import { createContactSessionBridge } from './contact-session';
 import { createReplyBridge } from './reply';
 import { createSqliteDiscussionBridge } from './sqlite-discussion';
-import { createCandidateProvenanceBridge } from './candidate-provenance';
-import { createExpressionPreferenceBridge } from './expression-preferences';
 import { createSkillLearningBridge } from './skill-learning';
 import { createMemoryBridge } from './memory';
 import { createFixedMemoryProcessingBridge } from './fixed-memory-processing';
@@ -50,10 +47,7 @@ export function createAppBridge(renderer: RendererTransport, development = devel
     contacts: createContactSessionBridge(renderer),
     replies: createReplyBridge(renderer),
     sqliteDiscussion: createSqliteDiscussionBridge(renderer),
-    candidateProvenance: createCandidateProvenanceBridge(renderer),
-    expressionPreferences: createExpressionPreferenceBridge(renderer),
     skillLearning: createSkillLearningBridge(renderer),
-    candidateCopy: createCandidateCopyBridge(renderer),
     sources: createSourceDeletionBridge(renderer),
     memory: createMemoryBridge(renderer),
     fixedMemoryProcessing: createFixedMemoryProcessingBridge(renderer),

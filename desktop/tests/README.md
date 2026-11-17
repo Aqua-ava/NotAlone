@@ -22,3 +22,24 @@
 [test:app](../scripts/test-app.mjs)保留明确范围、期限、启动数和互斥参数，`pnpm run test:app:status` 只读占用。自动化参数不要求用户额外预约，也不授权打包或执行与热更新约束不兼容的旧夹具。未知残留须先核对归属，不能删除锁或终止未知进程继续。
 
 记录分别说明静态／合成验证、无头页面、Computer Use、真实原生／微信及模型质量覆盖。任何默认测试通过都不能代签完整桌面业务闭环；本文件是入口说明，不是本轮测试成绩。
+
+## 旧助手协议退役后的覆盖
+
+旧 `/replies/prepare`、`turns/inputs`、候选 `/versions` 分页及独立方向探索没有当前 SQLite 生产者，其专属桌面套件与模拟夹具已退役。历史实现通过固定 Git 树回看，不在当前树重建后端或向正式读取器注入旧协议。保留的业务要求对应下列现行入口；文件存在不代表本轮已执行或真实渠道已验收。
+
+| 保留要求 | 当前测试入口 |
+| --- | --- |
+| 只读目录与历史，不隐式创建、继续或生成；明确继续后切换当前讨论 | `assistant-session-catalog`、`assistant-session-recovery`、`sqlite-first-session-regression`、`sqlite-discussion-panel`、`sqlite-candidate-history-read` |
+| 回看乱序、连接换代、联系人切换与来源撤下后，迟到正文不能复活 | `assistant-session-projection`、`contact-restore-coalescing`、`manual-confirm-session-recovery`、`sqlite-discussion-session`、`sqlite-discussion-source-lifecycle` |
+| 删除须核实操作终态，404 不冒充完成；失败可重试，旧连接不能确认新范围 | `assistant-session-deletion-guards`；后台 `sqlite-discussion-deletion` |
+| 候选完整消息版本、手工编辑、明确选择、回看与显式携入 | `sqlite-reply-candidate-bridge`、`sqlite-reply-candidates`、`sqlite-candidate-history-read`；后台 `sqlite-reply-candidates` |
+| 来源失效同时撤下候选、依据、选稿、草稿与实际 Skill；迟到读取不能恢复 | `sqlite-reply-candidates`、`sqlite-discussion-source-lifecycle`；后台 `sqlite-reply-candidates`、`sqlite-reply-candidate-input-regressions` |
+| 独立想法在准备、读取失败、新开与合法范围往返时保留；删除及范围失效清除旧副本 | `sqlite-first-session-regression`、`workspace-local-draft-transition`、`workspace-draft-sqlite-handoff`、`desktop-state-optimization` |
+| 编辑独立想法不随累计讨论重传正文；IPC 断档只发一次权威补读 | `reply-input-stream`（10／100／1000 条 SQLite 发言） |
+| 历史设置与要求保持原实际输入，不用当前资料补造历史证明 | 后台 `sqlite-reply-input-materials`；桌面 `sqlite-reply-candidates`、`memory-current-status` |
+| 长期概览保留推断分类、依据、局限与真实底层版本，不升级为稳定事实 | `sqlite-profile-inference`；后台 `l3-profile-workspace`、`sqlite-memory-documents-reply` |
+| 通用 JSON 与真实 HTTP 无损往返大整数，IPC 克隆保留数字类型 | `backend-json-integers` |
+| 历史聊天保留引用作者、类型、精确顺序与未知时间；删除或失败撤下正文 | `contact-history-quotes`、`sqlite-history-messages`、`contact-history-controller` |
+| 取消实际模型请求须排空；重启恢复保留发送及成本未知事实，迟到提交拒收 | 后台 `sqlite-discussion-generation`、`sqlite-discussion-recovery`、`sqlite-discussion-unknown-abandon`；桌面 `sqlite-discussion-bridge`、`sqlite-reply-candidate-bridge` |
+
+表中的后台文件位于 `backend-ts/test/`，其余位于本目录，均省略 `.test.mjs`。旧任务管理器的准备回执、停止原因及退出身份并非 SQLite 的运行协议；其旧单元断言不作为当前退出或配置重载的验收证据。当前读取的响应字节限制、认证、取消和代次校验继续由 `sqlite-discussion-read` 与正式桥测试覆盖。

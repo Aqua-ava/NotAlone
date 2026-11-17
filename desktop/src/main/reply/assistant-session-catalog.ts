@@ -1,7 +1,7 @@
 import type { AssistantSessionCatalog } from '../../shared/assistant-session';
 import type { BackendHost } from '../backend/host';
 import { isUuid } from '../uuid';
-import { isRecord } from './result-read';
+import { isRecord } from '../is-record';
 
 export async function listAssistantSessions(backend: BackendHost, contactId: string, signal: AbortSignal) {
   const response = await backend.requestJson({ method: 'GET',

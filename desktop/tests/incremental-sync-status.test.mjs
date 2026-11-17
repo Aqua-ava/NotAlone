@@ -8,7 +8,6 @@ const bundled = await build({ stdin: { contents: `
   import { renderToStaticMarkup } from 'react-dom/server';
   import { ContactHistoryCoverage, HistoryCoverageStatus } from './src/renderer/HistoryCoverageStatus';
   export { parseSyncReport } from './src/main/sync/status';
-  export { historyReplyEligibility } from './src/shared/history-reply-eligibility';
   export function renderContact(coverage, bodyAvailable, compact = false) {
     return renderToStaticMarkup(React.createElement(ContactHistoryCoverage, { coverages: [coverage], contactId: coverage.contactId, bodyAvailable, compact }));
   }
@@ -18,7 +17,7 @@ const bundled = await build({ stdin: { contents: `
   loader: { '.css': 'empty' } });
 const loaded = { exports: {} };
 new Function('require', 'module', 'exports', bundled.outputFiles[0].text)(createRequire(import.meta.url), loaded, loaded.exports);
-const { parseSyncReport, renderContact, renderPage, historyReplyEligibility } = loaded.exports;
+const { parseSyncReport, renderContact, renderPage } = loaded.exports;
 
 const id = '10000000-0000-4000-8000-000000000001';
 const base = {
@@ -246,11 +245,4 @@ test('旧后台缺少 saved_history_complete 时显示进度待确认，不画�
   assert.doesNotMatch(markup, /\d+ \/ \d+ 位联系人/);
   assert.match(markup, /后台尚未报告已保存的历史进度/);
   assert.doesNotMatch(markup, /已保存当前同步进度/);
-});
-
-test('展示字段不改变回复资格：已保存完成但当前 phase 未完成时，资格仍按 phase 判断', () => {
-  const stale = coverage({ phase: 'incomplete', failureCode: 'history_source_continuity_unverified', savedHistoryComplete: true });
-  const report = { historyAuthorizationState: 'accepted', historyCoverages: [stale] };
-  assert.equal(historyReplyEligibility(report, id), 'incomplete');
-  assert.equal(historyReplyEligibility({ ...report, historyCoverages: [{ ...stale, savedHistoryComplete: false }] }, id), 'incomplete');
 });

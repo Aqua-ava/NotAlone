@@ -1,6 +1,6 @@
 import {isUuid} from '../uuid';
-import {isRecord} from './result-read';
-import type {SavedAssistantTurn,SavedAssistantInput} from '../../shared/assistant-session';
+import {isRecord} from '../is-record';
+import type {SavedAssistantSession} from '../../shared/assistant-session';
 import type {SqliteDiscussionEntry,SqliteRuntimeRecovery} from '../../shared/sqlite-discussion';
 function invalid():never{throw new Error('已保存讨论暂不可用。');}
 /** 正文资格失败时整个新快照拒绝，不把历史候选拼成模型发言。 */
@@ -17,10 +17,10 @@ export function readSqliteDiscussion(value:unknown,sessionId:string,generation:n
   if(item.content_state==='available'?typeof item.text!=='string'||!item.text.trim():item.text!==null)invalid();
   return {entryId:item.entry_id,position:item.position,role:item.role as SqliteDiscussionEntry['role'],text:item.text as string|null,requestId:item.request_id,callId:item.call_id as string|null,contentState:item.content_state as SqliteDiscussionEntry['contentState']};
  });
- return {sessionId,turns:[] as SavedAssistantTurn[],inputs:[] as SavedAssistantInput[],currentInputVersionId:null,generation,discussionEntries:entries,runtimeRecovery:value.runtime_recovery as SqliteRuntimeRecovery};
+ return {sessionId,generation,discussionEntries:entries,runtimeRecovery:value.runtime_recovery as SqliteRuntimeRecovery};
 }
 
 /** 资格变化先清空实际发言；只允许随后新的权威读取恢复仍合法的正文。 */
-export function invalidatedSqliteDiscussion(value?:{discussionEntries?:SqliteDiscussionEntry[]}):{discussionEntries?:SqliteDiscussionEntry[];runtimeRecovery?:SqliteRuntimeRecovery}{
- return value?.discussionEntries===undefined?{}:{discussionEntries:[],runtimeRecovery:'blocked'};
+export function invalidatedSqliteDiscussion(): Pick<SavedAssistantSession,'discussionEntries'|'runtimeRecovery'> {
+ return {discussionEntries:[],runtimeRecovery:'blocked'};
 }

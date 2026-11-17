@@ -153,7 +153,6 @@ async function deletionFixture() {
   await writeFile(entry, [
     `export { SkillLearningController } from ${JSON.stringify(path.resolve('src/main/skill-learning/controller.ts'))};`,
     `export * from ${JSON.stringify(path.resolve('src/main/skill-learning/deletion.ts'))};`,
-    `export { ExpressionPreferenceController } from ${JSON.stringify(path.resolve('src/main/expression-preferences/controller.ts'))};`,
     `export { MemoryReadingController } from ${JSON.stringify(path.resolve('src/main/memory/controller.ts'))};`,
     `export { ReplySession } from ${JSON.stringify(path.resolve('src/main/reply/session.ts'))};`,
     `export { SourceDeletionController } from ${JSON.stringify(path.resolve('src/main/sources/controller.ts'))};`,
@@ -163,12 +162,12 @@ async function deletionFixture() {
   const output = path.join(owned, 'deletion.mjs');
   await build({ entryPoints: [entry], outfile: output, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
   const ports = await import(pathToFileURL(output).href);
-  const contactId = randomUUID(), otherContactId = randomUUID(), preferenceId = randomUUID(), logicalId = randomUUID();
+  const contactId = randomUUID(), otherContactId = randomUUID(), logicalId = randomUUID();
   const memoryId = randomUUID(), sourceId = randomUUID(), sessionId = randomUUID(), taskId = randomUUID();
   const draftId = randomUUID();
   const comparisonId = randomUUID();
   const backendListeners = new Set();
-  const kinds = ['preference', 'memory', 'session', 'source'];
+  const kinds = ['memory', 'session', 'source'];
   const deletions = Object.fromEntries(kinds.map(kind => [kind, Promise.withResolvers()]));
   const records = { generation: 1, calls: [], deleted: new Set(), failure: null, failAfterCommit: false,
     verificationBarrier: null, verificationEntered: null, learningBarrier: null,
@@ -186,9 +185,6 @@ async function deletionFixture() {
       before: { name: null, version_id: null, load_state: 'not_used', candidates: [{ text: '合成旧结果', basis: '同一输入', risk_notes: [] }] },
       after: { name: 'confirm-meaning', version_id: comparisonId, load_state: 'loaded', candidates: [{ text: '合成待删新结果', basis: '合成私人来源', risk_notes: [] }] } },
   }] });
-  const preference = { preference_id: preferenceId, text: '合成待删除偏好。', revision: 1,
-    scope: { contact_id: null, reply_mode: null }, confirmed_operation_key: randomUUID(), origin: { kind: 'manual' },
-    source_ids: [], confirmed_at: '2026-10-15T01:00:00Z', updated_at: '2026-10-15T01:00:00Z' };
   const backend = { getConnectionGeneration: () => records.generation,
     subscribeMessages: (observer) => observer.connected(), onStateChanged: (listener) => {
     backendListeners.add(listener); return () => backendListeners.delete(listener);
@@ -209,8 +205,7 @@ async function deletionFixture() {
     }
     const deleting = request.method === 'DELETE' || request.method === 'POST' && request.path.endsWith('/delete');
     if (deleting) {
-      const kind = request.path.includes('/expression-preferences/') ? 'preference'
-        : request.path.includes('/memories/') ? 'memory'
+      const kind = request.path.includes('/memories/') ? 'memory'
           : request.path.includes('/assistant-sessions/') ? 'session' : 'source';
       await deletions[kind].promise;
       if (records.failure === kind) {
@@ -232,7 +227,7 @@ async function deletionFixture() {
         await records.verificationBarrier.promise;
       }
       if (records.deleted.has('session')) throw new ports.BackendRequestFailure('response', 404, 'not_found');
-      return { generation, data: { session_id: sessionId, current_input_version_id: null, turns: [], inputs: [] } };
+      return { generation, data: { mode: 'sqlite', session_id: sessionId, runtime_recovery: 'ready', entries: [] } };
     }
     if (request.path.endsWith('/memories')) return { generation, data: { memories: records.deleted.has('memory') ? [] : [{
       level: 'contact', contact_id: request.path.split('/')[3], status: 'active', memory_id: memoryId, revision: 1,
@@ -249,7 +244,7 @@ async function deletionFixture() {
       task_type: 'delete', status: 'succeeded', step: 'verify_not_retrievable',
       steps: ['mark_deleted', 'delete_derived', 'delete_index', 'clear_cache', 'verify_not_retrievable']
         .map(name => ({ name, status: 'succeeded' })) } };
-    return { generation, data: { preferences: records.deleted.has('preference') ? [] : [preference] } };
+    throw new Error(`未安排的合成端口：${request.path}`);
   } };
   const contacts = new ports.ContactSession(async () => ({ generation: records.generation,
     contacts: [contactId, otherContactId].map(id => ({ contactId: id, displayName: '合成删除联系人', messageCount: 0, sourceCount: 1 })) }));
@@ -259,9 +254,7 @@ async function deletionFixture() {
   const replies = new ports.ReplySession(contacts, backend);
   memory.onRecordDeletion(phase => records.phases.memory.push(phase));
   replies.onSessionDeletion(phase => records.phases.session.push(phase));
-  const coordinator = ports.coordinateSkillLearningDeletion(learning, memory, replies,
-    { started: () => records.phases.preference.push('started'), settled: async () => records.phases.preference.push('settled') });
-  const preferences = new ports.ExpressionPreferenceController(backend, contacts, coordinator);
+  ports.coordinateSkillLearningDeletion(learning, memory, replies);
   const sources = new ports.SourceDeletionController(backend, contacts, async () => {
     records.sourceAcknowledgments += 1;
     learning.invalidate();
@@ -274,10 +267,8 @@ async function deletionFixture() {
   await memory.refresh({ ...scope(), section: 'contact' });
   await sources.refresh(scope());
   await replies.readSavedSession(scope());
-  await preferences.refresh(scope());
   await learning.refresh(scope());
-  const remove = kind => kind === 'preference' ? preferences.remove({ ...scope(), preferenceId, expectedRevision: 1 })
-    : kind === 'memory' ? memory.remove({ ...scope(), memoryId, level: 'contact', revision: 1 })
+  const remove = kind => kind === 'memory' ? memory.remove({ ...scope(), memoryId, level: 'contact', revision: 1 })
       : kind === 'session' ? replies.deleteSavedSession({ ...scope(), sessionId, confirmed: true })
         : sources.delete({ ...scope(), sourceId });
   const reconnect = async () => {
@@ -286,11 +277,11 @@ async function deletionFixture() {
     contacts.setConnection(records.generation);
     await contacts.refreshContacts(); select(otherContactId);
   };
-  return { owned, records, contacts, backend, deletions, learning, preferences, memory, replies, sources, ports, scope,
+  return { owned, records, contacts, backend, deletions, learning, memory, replies, sources, ports, scope,
     select, reconnect, otherContactId, remove, sessionId };
 }
 
-for (const [kind, label] of [['preference', '偏好'], ['memory', '记忆'], ['session', '助手会话'], ['source', '来源']]) {
+for (const [kind, label] of [['memory', '记忆'], ['session', '助手会话'], ['source', '来源']]) {
 test(`真实${label}删除未结算时迟到GET、轮询、范围切换和重连不能恢复私人草稿`, async () => {
   const f = await deletionFixture();
   const late = f.records.learningBarrier = Promise.withResolvers();
@@ -322,7 +313,7 @@ test(`真实${label}删除未结算时迟到GET、轮询、范围切换和重连
 });
 }
 
-for (const [kind, label] of [['preference', '偏好'], ['memory', '记忆'], ['session', '助手会话'], ['source', '来源']]) {
+for (const [kind, label] of [['memory', '记忆'], ['session', '助手会话'], ['source', '来源']]) {
   test(`真实${label}删除失败结算后可以核对旧资料并精确重试，不能遗留私人草稿门禁`, async () => {
     const f = await deletionFixture();
     try {
@@ -332,12 +323,11 @@ for (const [kind, label] of [['preference', '偏好'], ['memory', '记忆'], ['s
       assert.deepEqual(f.learning.getState().drafts, []);
       f.deletions[kind].resolve();
       const failure = await removing;
-      assert.equal(failure instanceof Error, kind === 'preference', '偏好入口公开报告失败，其他入口通过状态报告');
+      assert.equal(failure instanceof Error, false, '删除入口通过状态报告失败');
       await f.learning.refresh(f.scope());
       assert.equal(f.learning.getState().phase, 'ready');
       assert.equal(f.learning.getState().drafts.length, 1, '公开核对仍存在的资料后允许再次审核');
       f.records.failure = null;
-      if (kind === 'preference') await f.preferences.refresh(f.scope());
       await f.remove(kind);
       await f.learning.refresh(f.scope());
       assert.equal(f.learning.getState().phase, 'ready');
@@ -378,15 +368,15 @@ test('助手会话DELETE响应丢失后保持失败，明确重试核验原opera
 
 test('并行的真实删除逐次结算，来源凭据及原任务重复核验不提前解除或重新开启学习门禁', async () => {
   const f = await deletionFixture();
-  f.records.failure = 'preference';
-  const kinds = ['preference', 'memory', 'session', 'source'];
+  f.records.failure = 'memory';
+  const kinds = ['memory', 'session', 'source'];
   const removing = Object.fromEntries(kinds.map(kind => [kind, f.remove(kind).then(() => undefined, error => error)]));
   try {
     const calls = f.records.calls.filter(call => call.path.endsWith('/skill-learning')).length;
     for (const kind of kinds.slice(0, -1)) {
       f.deletions[kind].resolve();
       const failure = await removing[kind];
-      assert.equal(failure instanceof Error, kind === 'preference');
+      assert.equal(failure instanceof Error, false);
       await f.learning.refresh(f.scope());
       assert.deepEqual(f.learning.getState().drafts, []);
       assert.equal(f.records.calls.filter(call => call.path.endsWith('/skill-learning')).length, calls,

@@ -137,7 +137,7 @@ test('自动恢复正文等待时断开连接，旧复验正常结算且不发�
   const listing = f.replies.listSavedSessions(f.scope); await catalogGate.entered.promise;
   f.replies.beginOwnerContextChange();
   f.control.snapshotGate = snapshotGate;
-  f.control.snapshotGateAt = f.control.snapshotReads + 2;
+  f.control.snapshotGateAt = f.control.snapshotReads + 1;
   const settling = f.replies.revalidateOwnerContextChange(); await snapshotGate.entered.promise;
   f.contacts.setConnection(undefined);
   const before = f.requests.length;

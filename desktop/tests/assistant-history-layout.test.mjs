@@ -11,34 +11,24 @@ const output = await build({ stdin: { contents: `
   banner: { js: `import { createRequire } from 'node:module'; const require = createRequire(${JSON.stringify(path.join(process.cwd(), 'package.json'))});` } });
 const ports = await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
 function render(overrides = {}) {
-  const turn = { turnId: 'synthetic-turn', inputVersionId: 'synthetic-generation', state: 'completed',
-    input: { content: { draft_text: '合成历史输入' } }, reply: { candidates: [{ candidateId: 'synthetic-candidate', text: '合成历史候选' }] },
-    placeholder: null, interruptionReason: null };
-  const state = { contactId: 'synthetic-contact', scopeRevision: 1, phase: 'ready', exploration: { phase: 'idle' },
-    sessionCatalog: { phase: 'ready', items: [{ sessionId: 'synthetic-session', isCurrent: true }] },
-    savedSession: { phase: 'ready', sessionId: 'synthetic-session', turns: [turn], inputs: [
-      { type: 'generation', inputVersionId: turn.inputVersionId, turnId: turn.turnId },
-      { type: 'purpose_exploration', inputVersionId: 'synthetic-direction', content: {
-        type: 'purpose_exploration', purposeHint: '合成历史目的', confirmedIntent: '合成已确认方向', skillMode: 'auto' } },
-      { type: 'candidate_carry', inputVersionId: 'synthetic-carry', content: { type: 'candidate_carry',
-        messages: [{ messageId: 'synthetic-message', text: '合成携入版本' }] } },
+  globalThis.window = { notalone: { sqliteDiscussion: {} } };
+  const state = { contactId: 'synthetic-contact', scopeRevision: 1, phase: 'idle',
+    sessionCatalog: { phase: 'ready', currentSessionId: 'synthetic-session', items: [{ sessionId: 'synthetic-session', isCurrent: true }] },
+    savedSession: { phase: 'ready', sessionId: 'synthetic-session', runtimeRecovery: 'ready', discussionEntries: [
+      { entryId: 'synthetic-user', position: '1', role: 'user', text: '合成历史输入', requestId: 'synthetic-request', callId: null, contentState: 'available' },
+      { entryId: 'synthetic-assistant', position: '2', role: 'assistant', text: '合成历史讨论', requestId: 'synthetic-request', callId: null, contentState: 'available' },
     ] }, ...overrides };
   return ports.renderToStaticMarkup(ports.createElement(ports.AssistantSessionPanel, { replies: { state } }));
 }
 
-test('历史管理与每条旧记录默认折叠，保留可访问操作和原始内容', () => {
+test('SQLite历史管理默认折叠，保留原始发言及可访问操作', () => {
   const html = render();
   assert.match(html, /aria-label="助手会话"/);
   const browser = html.match(/<details[^>]*class="session-browser"[^>]*>/)?.[0];
-  assert.ok(browser);
-  assert.doesNotMatch(browser, /\bopen(?:=|\s|>)/);
+  assert.ok(browser); assert.doesNotMatch(browser, /\bopen(?:=|\s|>)/);
   assert.match(html, /<summary><span>历史讨论<\/span>/);
-  const records = [...html.matchAll(/<details[^>]*class="session-entry-details"[^>]*>/g)];
-  assert.equal(records.length, 3);
-  for (const [record] of records) assert.doesNotMatch(record, /\bopen(?:=|\s|>)/);
-  for (const text of ['合成历史输入', '合成历史候选', '合成历史目的', '合成已确认方向', '合成携入版本']) assert.ok(html.includes(text));
+  assert.ok(html.includes('合成历史输入')); assert.ok(html.includes('合成历史讨论'));
   assert.match(html, /aria-label="查看会话 synthetic-session"[^>]*>查看讨论 1<\/button>/);
-  assert.match(html, /class="session-metadata"><summary>讨论详情<\/summary>/);
   assert.match(html, /aria-label="助手会话操作"/);
   assert.match(html, /aria-label="正在查看的讨论操作"/);
 });
@@ -50,8 +40,7 @@ test('历史讨论明确标注仅回看，当前历史与正在查看状态可�
     sessionCatalog: { phase: 'ready', currentSessionId: currentId, items: [
       { sessionId: currentId, isCurrent: true }, { sessionId: historyId, isCurrent: false },
     ] },
-    savedSession: { phase: 'ready', sessionId: historyId, turns: [], inputs: [], currentInputVersionId: null,
-      runtimeRecovery: 'ready', discussionEntries: [{ entryId: 'synthetic-entry', position: '1', role: 'assistant',
+    savedSession: { phase: 'ready', sessionId: historyId, runtimeRecovery: 'ready', discussionEntries: [{ entryId: 'synthetic-entry', position: '1', role: 'assistant',
         text: '合成历史讨论正文', requestId: 'synthetic-request', callId: null, contentState: 'available' }] },
   });
   assert.match(html, /仅回看，不会自动加入新候选/);

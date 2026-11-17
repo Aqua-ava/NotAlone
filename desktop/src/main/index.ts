@@ -12,8 +12,6 @@ import { coordinateOwnerContextChanges, coordinateSourceContextChanges } from '.
 import { NativeHeaderChangeSource } from './foreground/native-change-source';
 import { createHeaderChangeDiagnosticSink,openHeaderChangeDiagnostics } from './foreground/header-change-diagnostics';
 import { resolveHeaderChangeSourcePath } from './backend/bundled-helpers';
-import { CandidateCopyController } from './candidate-copy/controller';
-import { installElectronCandidateCopy } from './candidate-copy/electron';
 import { app, dialog, ipcMain, Menu, protocol, session, shell } from 'electron';
 import { ScreenPermissionController } from './screen-permission/controller';
 import { inspectConfiguredScreenPermission } from './screen-permission/configured';
@@ -26,15 +24,11 @@ import { AppWindows } from './windows';
 import { BackendHost } from './backend/host';
 import { installBackendBridge } from './backend/bridge';
 import { installQuitLifecycle } from './backend/quit';
-import { interruptAssistantGeneration, recoverAssistantGenerationReceipt } from './reply/assistant-generation-interruption';
 import { installDesktopControls, installWindowActivation } from './desktop-controls';
 import { installContactSessionBridge } from './contacts/bridge';
 import { ContactDeletionQuiet } from './contacts/deletion-quiet';
 import { installReplyBridge } from './reply/bridge';
 import { installSqliteDiscussionBridge } from './reply/sqlite-discussion-bridge';
-import { installCandidateProvenanceBridge } from './candidate-provenance/bridge';
-import { installExpressionPreferenceBridge } from './expression-preferences/bridge';
-import { expressionPreferenceDeletion } from './expression-preferences/deletion';
 import { installSkillLearningBridge } from './skill-learning/bridge';
 import { coordinateSkillLearningDeletion, coordinateSkillLearningSourceDeletion } from './skill-learning/deletion';
 import { installMemoryBridge } from './memory/bridge';
@@ -185,16 +179,10 @@ void app.whenReady().then(async () => {
   memory.onOwnerContextChanged((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   memory.onRecordDeletion((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   replies.onSessionDeletion((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
-  const candidateProvenance = installCandidateProvenanceBridge(commands, backend, contacts, replies);
   const skillLearning = installSkillLearningBridge(commands, backend, contacts,()=>sqliteDiscussion.synchronize(true));
-  const preferenceDeletion = coordinateSkillLearningDeletion(skillLearning, memory, replies,
-    expressionPreferenceDeletion(traces, replies, candidateProvenance));
-  const preferences = installExpressionPreferenceBridge(commands, backend, contacts, {
-    started: () => { sqliteDiscussion.synchronize(true); preferenceDeletion.started(); },
-    settled: () => preferenceDeletion.settled(),
-  });
-  dataLifecycle = new DesktopDataLifecycle({history: contactHistory, media, traces, provenance: candidateProvenance,
-    skills: skillLearning, preferences, memory, processing: fixedMemoryProcessing, management: sqliteMemoryManagement, discussion: sqliteDiscussion, replies});
+  coordinateSkillLearningDeletion(skillLearning, memory, replies);
+  dataLifecycle = new DesktopDataLifecycle({history: contactHistory, media, traces,
+    skills: skillLearning, memory, processing: fixedMemoryProcessing, management: sqliteMemoryManagement, discussion: sqliteDiscussion, replies});
   let settleHistoryClear: (() => Promise<void>) | undefined;
   let resyncWasComplete = false;
   historyClear.onStateChanged(state => {
@@ -218,8 +206,6 @@ void app.whenReady().then(async () => {
     memory.sourceDeletionChanged(phase);
     if (phase === 'started') dataLifecycle.withdraw('source-deletion');
   });
-  installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies,
-    (selection, text) => candidateProvenance.recordCopied(selection, text)));
   backend.setConnectionChangePreparation(() => dataLifecycle.connectionChanging());
   installSetupBridge(windows, new SetupController(backend));
   installWechatSetupBridge(commands, new WechatSetupController(backend));
@@ -232,9 +218,6 @@ void app.whenReady().then(async () => {
     await media.prepareClosing();
     await syncPriority.dispose();
     await headerChanges.shutdown();
-    await replies.beginGenerationClosing(
-      async (receipt) => { await interruptAssistantGeneration(backend, receipt); },
-      (identity) => recoverAssistantGenerationReceipt(backend, identity));
   });
   foreground.startContinuous();
   void backend.connect().catch(() => {});

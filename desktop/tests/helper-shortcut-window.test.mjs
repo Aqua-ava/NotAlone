@@ -7,12 +7,11 @@ import { setImmediate as nextTurn } from 'node:timers/promises';
 import { test } from 'node:test';
 import { build } from 'esbuild';
 
-// 运行生产注册、窗口和复制桥，仅替换 Electron 原生窗口与事件。
+// 运行生产注册与窗口控制，仅替换 Electron 原生窗口与事件。
 const production = await build({ stdin: { contents: `
   export { AppWindows } from './src/main/windows';
   export { ForegroundController } from './src/main/foreground/controller';
   export * from './src/main/desktop-controls';
-  export { installElectronCandidateCopy } from './src/main/candidate-copy/electron';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'cjs', write: false,
   plugins: [{ name: 'synthetic-window-boundary', setup(builder) {
     builder.onResolve({ filter: /^electron$/ }, () => ({ path: 'electron', namespace: 'synthetic' }));
@@ -226,7 +225,7 @@ test('应用激活核对实际可见窗口，仅全部隐藏时恢复管理入�
   });
 });
 
-test('显式打开仍观察并聚焦，复制隐藏保留当前窗口生命周期', async () => {
+test('显式打开仍观察并聚焦，隐藏保留当前窗口生命周期', async () => {
   await fixture(async f => {
     let observations = 0;
     f.controller.setHelperObservation({ beforeShow: async () => { observations += 1; }, onLifecycle: event => f.events.push(event) });
@@ -234,17 +233,8 @@ test('显式打开仍观察并聚焦，复制隐藏保留当前窗口生命周�
     assert.equal(observations, 1);
     assert.equal(f.helper().calls.focus, 1);
     assert.deepEqual(f.events, ['focused']);
-    f.ports.installElectronCandidateCopy(f.controller, { copy: async (_request, surface) => {
-      await surface.writeText('合成候选。'); surface.hideWindow();
-    } });
-    const sender = f.helper().webContents;
-    await f.handlers.get('candidate-copy:copy')({ sender, senderFrame: sender.mainFrame }, {
-      contactId: '11111111-1111-4111-8111-111111111111', scopeRevision: 1,
-      replyRequestId: '22222222-2222-4222-8222-222222222222',
-      candidateId: '33333333-3333-4333-8333-333333333333', hideAfterCopy: true,
-    });
+    await f.controller.toggleHelper();
     assert.equal(f.helper().isVisible(), false);
-    assert.deepEqual(f.copied, ['合成候选。']);
     assert.deepEqual(f.events, ['focused', 'hidden']);
   });
 });

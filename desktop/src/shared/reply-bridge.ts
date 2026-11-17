@@ -1,235 +1,39 @@
 import type { ContactSelection } from './contact-session-bridge';
-import type { ExpressionPreferenceReceipt } from './expression-preference-bridge';
-import type { ReplyEvidenceCommands } from './reply-evidence';
 import type { AssistantSessionCatalog, SavedAssistantSession } from './assistant-session';
-import type { AssistantInputBudget, AssistantInputBudgetNotice } from './assistant-input-budget';
 import type { ConfirmedAssistantSessionDeletion } from './assistant-session-deletion-events';
-import type { AssistantCandidateDraft, ReplyCandidateDraftUpdate, AssistantCandidateVersionsState, ExplicitAssistantCandidateSelection, ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from './assistant-candidate-versions';
-import type { ReplyBasisChange } from './reply-basis-change';
-import type { SkillPublicationScope } from './skill-learning-bridge';
-import type { MessageQuoteSnapshot } from './message-quote';
 
-export type WorkspaceAction = 'express' | 'suggest';
-export interface RewriteOptions {
-  includeRelationshipContext: boolean;
-  inputKind?: 'draft' | 'current_chat' | 'workspace';
-  workspaceAction?: WorkspaceAction;
-  contextText?: string;
-  pastedDirection?: string;
-}
-export interface RewriteOptionsUpdate extends ContactSelection { options: RewriteOptions; }
-export interface GenerateReply extends ContactSelection { newRequest: boolean; workspaceAction?: WorkspaceAction; allowIncompleteHistory?: boolean; }
-export interface AssistantInterruptedRetry extends ContactSelection { sessionId: string; turnId: string; inputVersionId: string; }
-export interface AssistantGenerationStop extends ContactSelection {
-  // 准备阶段尚无输入版本时，用原登记的 scope + 请求键表达停止意图。
-  sessionId: string; requestKey: string; inputVersionId: string | null;
-}
 export interface AssistantSessionDeletion extends ContactSelection { sessionId: string; confirmed: true; }
 export interface AssistantSessionSelection extends ContactSelection { sessionId: string; }
-export interface AssistantCandidateCarry extends AssistantSessionSelection {
-  expectedSelectionId: string; candidateId: string; versionId: string;
-}
-export type ReplyMode = 'rewrite_draft' | 'reply_to_message' | 'initiate_conversation';
-export interface ReplyModeUpdate extends ContactSelection { mode: ReplyMode; }
-export interface ReplyMessagePageRequest extends ContactSelection { older: boolean; }
-export interface ReplyMessageSelection extends ContactSelection { messageId: string; }
-export interface ReplyDirectionUpdate extends ContactSelection { direction: string; }
-export interface ReplyCorrectionUpdate extends ContactSelection { correction: string; }
-export interface ReplySupplementUpdate extends ContactSelection { supplement: string; }
-export interface ReplySkillVersion { name: string; versionId: string; versionNumber: number; }
-export interface ReplyUsedSkill {
-  name: string; versionId: string; loadState: 'loaded' | 'resource_failed';
-  versionNumber?: number | null; scope?: SkillPublicationScope;
-  executionView?: { policyRevision: number; methodIds: string[]; sha256: string };
-}
-export type ReplySkillChoice = { mode: 'auto' | 'disabled'; versionId: null } | { mode: 'user'; versionId: string };
-export interface ReplySkillUpdate extends ContactSelection { skill: ReplySkillChoice; }
-export interface ReplySceneUpdate extends ContactSelection { scene: string; }
-export interface ReplyRequirementsUpdate extends ContactSelection { requirements: string; }
-export interface ReplyPurposeUpdate extends ContactSelection { purpose: string; }
-export interface ReplyMessage {
-  messageId: string;
-  speaker: 'user' | 'contact' | 'system';
-  messageType: string;
-  text: string | null;
-  mediaPlaceholder: string | null;
-  occurredAt: string | null;
-  // SQLite稳定展示位置不代表真实消息先后；旧渠道无此声明时保持旧合同。
-  ordering?: 'verified' | 'unknown';
-  displayPosition?: string;
-  quoted: MessageQuoteSnapshot | null;
-}
-export interface ReplyMessagesState {
-  phase: 'idle' | 'loading' | 'ready' | 'failed';
-  items: ReplyMessage[];
-  nextCursor: string | null;
-}
-export interface ReplyCandidate {
-  candidateId: string;
-  text: string;
-  basis: string;
-  citationIds: string[];
-  riskNotes: string[];
-}
-export interface EditableReplyCandidate { original: ReplyCandidate; editedText: string; }
-export interface RewriteSnapshot {
-  mode: 'rewrite_draft';
-  contactId: string;
-  contactDisplayName: string;
-  draftText: string;
-  userInstruction: string | null;
-  includeRelationshipContext: boolean;
-  scene?: string | null;
-  allowIncompleteHistory?: boolean;
-  inputKind?: 'draft' | 'current_chat' | 'workspace';
-  workspaceAction?: WorkspaceAction;
-  contextText?: string;
-  pastedDirection?: string;
-  skillChoice?: ReplySkillChoice;
-}
-export interface DirectedReplySnapshot {
-  mode: 'reply_to_message';
-  contactId: string;
-  contactDisplayName: string;
-  target: ReplyMessage;
-  direction: string;
-  correction?: string;
-  userInstruction?: string;
-  clarificationAnswer?: string;
-  skillChoice?: ReplySkillChoice;
-  scene?: string | null;
-  allowIncompleteHistory?: boolean;
-}
-export interface ProactiveReplySnapshot {
-  mode: 'initiate_conversation';
-  contactId: string;
-  contactDisplayName: string;
-  purpose: string;
-  correction?: string;
-  userInstruction?: string;
-  clarificationAnswer?: string;
-  skillChoice?: ReplySkillChoice;
-  scene?: string | null;
-  allowIncompleteHistory?: boolean;
-}
-export type ReplyInputSnapshot = RewriteSnapshot | DirectedReplySnapshot | ProactiveReplySnapshot;
-export interface ReplyResult {
-  replyRequestId: string;
-  assistantSessionId?: string;
-  inputVersionId?: string;
-  input: ReplyInputSnapshot;
-  candidates: EditableReplyCandidate[];
-  contextEvidenceIds: string[];
-  basisChanges?: ReplyBasisChange[];
-  expressionPreferenceIds?: string[];
-  expressionPreferences?: ExpressionPreferenceReceipt[];
-  usedSkill?: ReplyUsedSkill | null;
-  inputBudget?: AssistantInputBudget;
-}
-export type ReplyFailureCode = 'resume_required' | 'deletion_pending' | 'history_sync_pending' | 'history_incomplete_confirmation_required' | 'generation_failed' | 'save_failed' | 'timeout' | 'unavailable' | 'rejected' | 'candidates_rejected' | 'target_unavailable' | 'source_unavailable' | 'connection' | 'input_budget_exceeded' | 'input_budget_unavailable' | 'provider_context_limit' | 'prepared_context_reprepare_required' | 'prepared_context_running' | 'prepared_context_unconfirmed';
 export type ReplyGenerationBlock = 'foreground-confirmation-required' | null;
-export interface ReplyMessageNotice { phase: 'idle' | 'connecting' | 'connected' | 'interrupted'; changed: boolean; needsRefresh: boolean; }
-export interface ReplyGenerationJobState {
-  // 轮次与输入版本只取真实后端回执，准备阶段不预造身份。
-  contactId: string; sessionId: string; requestKey: string; turnId: string | null; inputVersionId: string | null;
-  phase: 'preparing' | 'queued' | 'generating' | 'stopping' | 'cancelled' | 'completed' | 'failed' | 'unconfirmed';
-  canRetry?: boolean;
-}
-export interface ReplySessionState {
-  workspaceMigrationNotice?: string;
-  generationJobs?: ReplyGenerationJobState[];
-  generationRecoveryPending?: number;
 
+/** 当前助手只展示SQLite讨论；候选及实际输入由各自的具名接口读取。 */
+export interface ReplySessionState {
   revision: number;
-  confirmedSessionDeletion?: ConfirmedAssistantSessionDeletion;
   scopeRevision: number;
   contactId: string | null;
   generationBlock: ReplyGenerationBlock;
-  options: RewriteOptions;
-  // 与删除后的默认输入一起发布；普通状态回显不覆盖组件内的新编辑。
   inputClearRevision?: number;
-  mode: ReplyMode;
-  messages: ReplyMessagesState;
-  messageNotice: ReplyMessageNotice;
-  targetMessageId: string | null;
-  direction: string;
-  correction: string;
-  requirements: string;
-  supplementInput?: boolean;
-  clarificationAnswer: string;
-  skillChoice: ReplySkillChoice;
-  scene?: string;
-  skillChoices: ReplySkillVersion[];
-  purpose: string;
-  phase: 'idle' | 'waiting' | 'ready' | 'failed';
-  errorCode?: ReplyFailureCode;
   sourceAvailability?: 'checking' | 'failed';
-  result: ReplyResult | null;
-  selectedCandidateId: string | null;
-  candidateVersions?: AssistantCandidateVersionsState;
-  candidateDrafts?: AssistantCandidateDraft[];
-  contentRestoreNotice?: string;
-  explicitCandidateSelection?: ExplicitAssistantCandidateSelection;
-  canRetry: boolean;
   savedSession?: SavedAssistantSession;
   sessionCatalog?: AssistantSessionCatalog;
   contextRefresh?: { sessionId: string };
-  idleRollover?: { sessionId: string; previousSessionId: string };
   sessionDeletion?: 'deleting' | 'failed' | 'deleted' | 'missing';
-  inputBudgetNotice?: AssistantInputBudgetNotice;
+  confirmedSessionDeletion?: ConfirmedAssistantSessionDeletion;
 }
+
 // 增量只在同一联系人范围和连续修订内合并；跨范围发布完整投影。
 export type ReplyStateUpdate = { kind: 'snapshot'; state: ReplySessionState }
   | { kind: 'patch'; baseRevision: number; revision: number; contactId: string | null; scopeRevision: number;
       changes: Partial<ReplySessionState> };
-export type ReplyInputCommand =
-  | { type: 'options'; update: RewriteOptionsUpdate }
-  | { type: 'direction'; update: ReplyDirectionUpdate }
-  | { type: 'purpose'; update: ReplyPurposeUpdate }
-  | { type: 'correction'; update: ReplyCorrectionUpdate }
-  | { type: 'supplement'; update: ReplySupplementUpdate }
-  | { type: 'requirements'; update: ReplyRequirementsUpdate }
-  | { type: 'scene'; update: ReplySceneUpdate }
-  | { type: 'candidate'; update: ReplyCandidateEdit }
-  | { type: 'candidateDraft'; update: ReplyCandidateDraftUpdate };
-export interface ReplyCandidateSelection extends ContactSelection { replyRequestId: string; candidateId: string; }
-export interface ReplyCandidateEdit extends ReplyCandidateSelection { text: string; }
-export interface ReplyBridge extends ReplyEvidenceCommands {
+export interface ReplyBridge {
   getState(): Promise<ReplySessionState>;
-  updateInput(command: ReplyInputCommand): Promise<void>;
   onStateUpdated(listener: (update: ReplyStateUpdate) => void): () => void;
-  enterWorkspace(selection: ContactSelection): Promise<ReplySessionState>;
-  updateOptions(update: RewriteOptionsUpdate): Promise<ReplySessionState>;
-  setMode(update: ReplyModeUpdate): Promise<void>;
-  loadMessages(request: ReplyMessagePageRequest): Promise<void>;
-  reconnectMessages(selection: ContactSelection): Promise<void>;
-  combineNewMessages(selection: ContactSelection): Promise<void>;
   retrySourceValidation(selection: ContactSelection): Promise<void>;
   readSavedSession(selection: ContactSelection): Promise<void>;
   listSavedSessions(selection: ContactSelection): Promise<void>;
   newSavedSession(selection: ContactSelection): Promise<void>;
-  newSavedSessionWithCandidate(selection: AssistantCandidateCarry): Promise<void>;
   viewSavedSession(selection: AssistantSessionSelection): Promise<void>;
   resumeSavedSession(selection: AssistantSessionSelection): Promise<void>;
-  selectSavedSession(selection: AssistantSessionSelection): Promise<void>;
   deleteSavedSession(selection: AssistantSessionDeletion): Promise<void>;
-  selectMessage(selection: ReplyMessageSelection): Promise<ReplySessionState>;
-  updateDirection(update: ReplyDirectionUpdate): Promise<ReplySessionState>;
-  updateCorrection(update: ReplyCorrectionUpdate): Promise<ReplySessionState>;
-  updateSupplement(update: ReplySupplementUpdate): Promise<ReplySessionState>;
-  updateRequirements(update: ReplyRequirementsUpdate): Promise<ReplySessionState>;
-  updateSkill(update: ReplySkillUpdate): Promise<ReplySessionState>;
-  updateScene(update: ReplySceneUpdate): Promise<ReplySessionState>;
-  updatePurpose(update: ReplyPurposeUpdate): Promise<ReplySessionState>;
-  generate(selection: GenerateReply): Promise<void>;
-  stopGeneration(command: AssistantGenerationStop): Promise<void>;
-  retryInterruptedGeneration(request: AssistantInterruptedRetry): Promise<void>;
-  selectCandidate(selection: ReplyCandidateSelection): Promise<ReplySessionState>;
-  editCandidate(edit: ReplyCandidateEdit): Promise<ReplySessionState>;
-  updateCandidateVersionDraft(update: ReplyCandidateDraftUpdate): Promise<ReplySessionState>;
-  readCandidateVersions(request: ReplyCandidateVersionRead): Promise<ReplySessionState>;
-  saveCandidateVersion(edit: ReplyCandidateVersionEdit): Promise<ReplySessionState>;
-  selectCandidateVersion(selection: ReplyCandidateVersionSelection): Promise<ReplySessionState>;
-  showCandidateVersion(selection: ReplyCandidateVersionDisplay): Promise<ReplySessionState>;
   onStateChanged(listener: (state: ReplySessionState) => void): () => void;
 }

@@ -10,8 +10,7 @@ export function coordinateSkillLearningSourceDeletion(learning: SkillLearningCon
 
 export function coordinateSkillLearningDeletion(learning: SkillLearningController,
   memory: Pick<MemoryReadingController, 'onRecordDeletion'>,
-  replies: Pick<ReplySession, 'onStateChanged' | 'onSessionDeletion'>,
-  preferences: { started(): void; settled(): Promise<void> }) {
+  replies: Pick<ReplySession, 'onStateChanged' | 'onSessionDeletion'>) {
   memory.onRecordDeletion(deletionPhases(learning));
   replies.onSessionDeletion(deletionPhases(learning));
   let sessionDeletionRevision = 0;
@@ -22,15 +21,6 @@ export function coordinateSkillLearningDeletion(learning: SkillLearningControlle
       sessionDeletionRevision = deleted.revision;
     }
   }, ['confirmedSessionDeletion']);
-  const preferenceDeletions: Array<() => void> = [];
-  return {
-    started: () => { preferenceDeletions.push(learning.beginDeletion()); preferences.started(); },
-    settled: async () => {
-      const settled = preferenceDeletions.shift();
-      try { await preferences.settled(); }
-      finally { settled?.(); }
-    },
-  };
 }
 
 function deletionPhases(learning: SkillLearningController) {

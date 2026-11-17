@@ -9,12 +9,12 @@ function fixture() {
  const contactId=randomUUID(),sessionId=randomUUID(),requestKey=randomUUID(),gate=Promise.withResolvers(),requests=[];
  const backend={getConnectionGeneration:()=>1,onStateChanged:()=>()=>{},requestJson:request=>{requests.push(request);return gate.promise;}};
  const contacts={getState:()=>({selectedContactId:contactId,scopeRevision:1,directoryPhase:'ready',contacts:[{contactId}]}),onStateChanged:()=>()=>{}};
- const discussion=new SqliteDiscussionController(backend,contacts),state={history:'旧聊天',media:'旧图片',traces:'旧过程',provenance:'旧依据',skills:'旧学习结果',processing:'旧进度',management:'旧记忆'},events=[];
+ const discussion=new SqliteDiscussionController(backend,contacts),state={history:'旧聊天',media:'旧图片',traces:'旧过程',skills:'旧学习结果',processing:'旧进度',management:'旧记忆'},events=[];
  const clear=key=>()=>{state[key]=null;};
  const ports={history:{getState:()=>({contactId}),invalidate:clear('history'),refreshCurrent:async id=>{events.push(['refresh',id]);}},media:{invalidate:clear('media'),invalidateAndDrain:async()=>{clear('media')();events.push(['drain']);}},
-  traces:{invalidateSource:clear('traces')},provenance:{invalidateSource:clear('provenance')},skills:{invalidate:clear('skills')},processing:{synchronize:clear('processing')},management:{synchronize:clear('management')},discussion,
-  replies:{revalidateDeletedSource:async id=>{events.push(['reply',id]);},prepareGenerationConnectionChange:async()=>{events.push(['connection']);},beginHistoryClear:()=>async()=>{}},
-  memory:{revalidateDeletedSource:async id=>{events.push(['memory',id]);}},preferences:{invalidateSource:async id=>{events.push(['preferences',id]);}}};
+  traces:{invalidateSource:clear('traces')},skills:{invalidate:clear('skills')},processing:{synchronize:clear('processing')},management:{synchronize:clear('management')},discussion,
+  replies:{revalidateDeletedSource:async id=>{events.push(['reply',id]);},prepareConnectionChange:async()=>{events.push(['connection']);},beginHistoryClear:()=>async()=>{}},
+  memory:{revalidateDeletedSource:async id=>{events.push(['memory',id]);}}};
  return {lifecycle:new DesktopDataLifecycle(ports),ports,discussion,state,events,requests,gate,request:{contactId,sessionId,requestKey,scopeRevision:1,text:'合成讨论要求'}};
 }
 
@@ -77,8 +77,8 @@ test('原联系人删除迟到回调保留当前联系人聊天、媒体及在�
   assert.equal(history.getState().messages.items[0].messageId,message.message_id);
   assert.equal(f.state.media,'旧图片');assert.equal(reads.length,1);
   assert.ok(streams.every(signal=>!signal.aborted));
-  for(const key of ['traces','provenance','skills','processing','management'])assert.equal(f.state[key],null);
-  assert.deepEqual(f.events,[['reply',oldContact],['memory',oldContact],['preferences',oldContact]]);
+  for(const key of ['traces','skills','processing','management'])assert.equal(f.state[key],null);
+  assert.deepEqual(f.events,[['reply',oldContact],['memory',oldContact]]);
   const pending=history.load(selection);
   await lifecycle.sourceChanged(oldContact);
   assert.equal(reads[1].signal.aborted,false);
@@ -109,34 +109,36 @@ async function replyFixture(t) {
   else if(request.path.endsWith('/selections'))data={selection:null};
   else if(request.path.endsWith('/assistant-sessions/'+sessionId)){
    if(control.failSessionReads)throw new Error('合成权威会话暂不可读');
-   data={mode:'sqlite',session_id:sessionId,runtime_recovery:'blocked',entries:[]};
+   data={mode:'sqlite',session_id:sessionId,runtime_recovery:'blocked',entries:control.deleted?[]:[{entry_id:randomUUID(),position:'1',role:'assistant',text:'清空前的合成讨论',request_id:randomUUID(),call_id:null,content_state:'available'}]};
   }else throw new Error(`未安排的合成端口：${request.path}`);
   return {generation:7,data};
  }};
  const contacts=new ContactSession(async()=>({generation:7,contacts:[contactId,otherId].map(id=>({contactId:id,displayName:'合成联系人',messageCount:1,sourceCount:1}))}));
  contacts.setConnection(7);await contacts.refreshContacts();const replies=new ReplySession(contacts,backend);
  const select=id=>{contacts.selectContact({contactId:id,scopeRevision:contacts.getState().scopeRevision});return {contactId:id,scopeRevision:contacts.getState().scopeRevision};};
- const scope=select(contactId);await replies.readSavedSession(scope);await replies.loadMessages({...scope,older:false});
- t.after(()=>{contacts.setConnection(undefined);f.discussion.close();});
- return {replies,contacts,lifecycle:new DesktopDataLifecycle({...f.ports,replies}),scope,contactId,otherId,select,control,requests,message};
+ const history=new ContactHistoryController(backend,contacts);
+ const scope=select(contactId);await replies.readSavedSession(scope);await history.load({...scope,older:false});
+ t.after(()=>{history.dispose();contacts.setConnection(undefined);f.discussion.close();});
+ return {replies,history,contacts,lifecycle:new DesktopDataLifecycle({...f.ports,replies,history}),scope,contactId,otherId,select,control,requests,message};
 }
 
-test('聊天清空结算前后擦除实际回复消息快照，迟到读取和失败复验不能复活旧正文',async t=>{
+test('聊天清空结算前后撤下实际历史与讨论快照，迟到读取和失败复验不能复活旧正文',async t=>{
  for(const failed of [false,true])await t.test(String(failed),async t=>{
   const f=await replyFixture(t),gate=Promise.withResolvers();f.control.hold=gate;
-  const pending=f.replies.loadMessages({...f.scope,older:false});
+  const pending=f.history.load({...f.scope,older:false});
   const request=f.requests.filter(row=>row.path.includes('/history-messages?')).at(-1);
   const settle=f.lifecycle.beginHistoryClear(f.contactId);
   assert.equal(request.signal.aborted,true);
-  assert.equal(f.replies.getState().messages.items.length,0);
+  assert.equal(f.history.getState().messages.items.length,0);
+  assert.equal(JSON.stringify(f.replies.getState()).includes('清空前的合成讨论'),false);
   f.control.deleted=true;f.control.failSessionReads=failed;
   await settle();gate.resolve();await pending;
-  assert.equal(f.replies.getState().messages.items.length,0);
-  await settle();assert.equal(f.replies.getState().messages.items.length,0);
+  assert.equal(f.history.getState().messages.items.length,0);
+  await settle();assert.equal(f.history.getState().messages.items.length,0);
   f.control.failSessionReads=false;await f.replies.readSavedSession(f.scope);
-  await f.replies.loadMessages({...f.scope,older:false});
-  assert.equal(f.replies.getState().messages.phase,'ready');
-  assert.equal(f.replies.getState().messages.items.length,0);
+  await f.history.load({...f.scope,older:false});
+  assert.equal(f.history.getState().messages.phase,'ready');
+  assert.equal(f.history.getState().messages.items.length,0);
  });
 });
 
@@ -147,12 +149,12 @@ test('聊天清空幂等结算不解除重叠本人变更读锁，另一联系�
  await settle();await settle();
  const before=f.requests.length;await f.replies.readSavedSession(f.scope);
  assert.equal(f.requests.length,before,'重复清空结算不能释放另一操作的读锁');
- assert.equal(f.replies.getState().messages.items.length,0);
+ assert.equal(f.history.getState().messages.items.length,0);
  await f.replies.revalidateOwnerContextChange();
- assert.equal(f.replies.getState().messages.items.length,0);
+ assert.equal(f.history.getState().messages.items.length,0);
  const lateSettle=f.lifecycle.beginHistoryClear(f.contactId),other=f.select(f.otherId);
- await f.replies.loadMessages({...other,older:false});
+ await f.history.load({...other,older:false});
  await lateSettle();
  assert.equal(f.replies.getState().contactId,f.otherId);
- assert.equal(f.replies.getState().messages.items[0].messageId,f.message.message_id);
+ assert.equal(f.history.getState().messages.items[0].messageId,f.message.message_id);
 });

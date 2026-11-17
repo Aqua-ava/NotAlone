@@ -8,6 +8,9 @@ import {fixture} from './fixtures/sqlite-reply-candidates/support.mjs';
 import {SqliteReplyTurns} from '../src/reply/sqlite/candidates/turns.ts';
 import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/service.ts';
 import {SqliteReplyCandidateHttp} from '../src/reply/sqlite/candidates/http.ts';
+import {SqliteDiscussionHttp} from '../src/reply/sqlite/http.ts';
+import {SqliteDiscussionService} from '../src/reply/sqlite/service.ts';
+import {createAssistantReadChannel} from '../src/reply/sqlite/read-channel.ts';
 import {DeletionService} from '../src/storage/sqlite/deletion/service.ts';
 import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
 
@@ -43,7 +46,7 @@ test('本次其他参考保留冻结输入与选稿版本，聊天原文仍由�
  await assert.rejects(f.service.inputMaterials({...f.scope,requestId:view.requestId,offset:0}));
 });
 
-test('退役前冻结的独立写作要求仍可回看，不重新调用或改写历史',async t=>{
+test('认证HTTP仍可回看退役前要求、原讨论和候选版本，不重新调用或改变当前讨论',async t=>{
  const f=await setup(t);await f.turns.generate({...f.scope,requestKey:randomUUID(),text:workspace.draftText,workspace,confirmedContact:true});
  const view=(await f.service.view(f.scope.contactId,f.scope.discussionId))[0],legacyText='本次一次性写作要求：\n简短一些，不增加承诺';
  // 用合成数据库构造退役前的已冻结材料，历史读取不通过当前新请求解析器。
@@ -54,10 +57,31 @@ test('退役前冻结的独立写作要求仍可回看，不重新调用或改�
   db.prepare('INSERT INTO reply_candidate_input VALUES(?,?,?,?,?,?)').run(f.owner,context.id,5,'entry',JSON.stringify({workspaceItem:'instruction'}),legacyText);
   db.prepare('INSERT INTO reply_execution_input VALUES(?,?,?,?)').run(f.owner,event.id,context.id,5);
  }finally{db.close();}
- const page=await f.service.inputMaterials({...f.scope,requestId:view.requestId,offset:0});
- const legacy=page.items.find(item=>item.workspaceItem==='instruction');assert.equal(legacy?.text,legacyText);
- assert.deepEqual(await f.service.inputMaterials({...f.scope,requestId:view.requestId,offset:0}),page);
- assert.equal((await f.service.view(f.scope.contactId,f.scope.discussionId))[0].candidates[0].parts[0],'合成候选');
+ const candidate=view.candidates[0];await f.service.edit({...f.scope,candidateId:candidate.candidateId,versionNo:1,parts:['用户保留的历史修改']});
+ const current=await f.discussions.newDiscussion(f.scope.contactId);
+ // 与正常宿主一致，回看经认证HTTP和独立只读Worker；供应商仅使用夹具环回边界。
+ const reader=await createAssistantReadChannel({storage:f.storage,ownerId:f.owner,holders:f.holders});t.after(()=>reader.close());
+ const authorize=req=>req.headers.authorization==='Bearer synthetic';
+ const candidateHttp=new SqliteReplyCandidateHttp({storage:f.storage,service:new SqliteReplyCandidateService(f.storage,f.owner,reader),authorize});
+ const discussionHttp=new SqliteDiscussionHttp(new SqliteDiscussionService(f.storage,f.owner,Date.now,reader),authorize);
+ const server=createServer(async(req,res)=>{if(!await candidateHttp.handle(req,res)&&!await discussionHttp.handle(req,res)){res.writeHead(404);res.end();}});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const origin=`http://127.0.0.1:${server.address().port}`,catalogPath=`/api/contacts/${f.scope.contactId}/assistant-sessions`,sessionPath=`${catalogPath}/${f.scope.discussionId}`,candidatePath=`${sessionPath}/reply-candidates`;
+ const read=async path=>{const response=await fetch(origin+path,{headers:{authorization:'Bearer synthetic'}});return {status:response.status,body:await response.json()};};
+ assert.equal((await fetch(origin+sessionPath)).status,401);
+ const before=await read(catalogPath),inputs=await read(`${candidatePath}/${view.requestId}/inputs`);assert.equal(inputs.status,200);
+ const page=inputs.body,legacy=page.items.find(item=>item.workspaceItem==='instruction');assert.equal(legacy?.text,legacyText);
+ assert.deepEqual((await read(`${candidatePath}/${view.requestId}/inputs`)).body,page);
+ const discussion=await read(sessionPath);assert.equal(discussion.status,200);
+ assert.deepEqual(Object.keys(discussion.body).sort(),['entries','mode','runtime_recovery','session_id']);
+ assert.equal(discussion.body.entries.length,1);assert.equal(discussion.body.entries[0].role,'user');
+ assert.match(discussion.body.entries[0].text,/本次想法原文/);
+ const candidates=await read(candidatePath);assert.equal(candidates.status,200);
+ assert.deepEqual(candidates.body.requests[0].candidates[0].parts,['用户保留的历史修改']);
+ assert.deepEqual((await read(`${candidatePath}/${candidate.candidateId}/versions/1`)).body.parts,['合成候选']);
+ assert.deepEqual((await read(`${candidatePath}/${candidate.candidateId}/versions/2`)).body.parts,['用户保留的历史修改']);
+ const after=await read(catalogPath);assert.deepEqual(after,before);assert.equal(after.body.current_session_id,current.id);
+ assert.equal((await read(sessionPath.replace(f.scope.contactId,f.ids[1]))).status,404);
  assert.equal(f.requests.length,1);
 });
 

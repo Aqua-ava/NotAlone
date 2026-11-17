@@ -1,239 +1,50 @@
 import { isUuid } from '../uuid';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import { noArguments, type PageCommands } from '../page-commands';
-import type { AssistantGenerationStop, AssistantSessionDeletion, GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyCorrectionUpdate, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, RewriteOptions, RewriteOptionsUpdate } from '../../shared/reply-bridge';
+import type { AssistantSessionDeletion, AssistantSessionSelection, ReplyGenerationBlock } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { ReplySession } from './session';
-import { ReplyEvidenceSession } from './evidence-session';
-import type { AssistantInterruptedRetry, AssistantSessionSelection } from '../../shared/reply-bridge';
-import type { ReplyCandidateDraftUpdate, ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from '../../shared/assistant-candidate-versions';
-import { fitsReplyTextLimit, replyTextLimit } from '../../shared/reply-contract';
 
-function candidateVersion(args: unknown[], operation: 'read' | 'display' | 'select' | 'edit' | 'draft'): ReplyCandidateVersionRead {
-  const additions = operation === 'draft' ? ['versionId', 'messages', 'requirements'] : operation === 'read' ? [] : operation === 'edit'
-    ? ['editKey', 'parentVersionId', 'messages', 'requirements']
-    : ['versionId', ...(operation === 'select' ? ['selectionKey'] : [])];
-  const value = fields(args, ['contactId', 'scopeRevision', 'sessionId', 'candidateId', ...additions]);
-  const identifiers = ['sessionId', 'candidateId', ...(operation === 'edit' ? ['editKey', 'parentVersionId']
-    : operation === 'read' ? [] : ['versionId', ...(operation === 'select' ? ['selectionKey'] : [])])];
-  if (!identifiers.every((key) => isUuid(value[key]))) throw new Error('候选版本操作不可用。');
-  for (const key of identifiers) value[key] = (value[key] as string).toLowerCase();
-  if (operation === 'edit' || operation === 'draft') {
-    const messages = value.messages;
-    if (!Array.isArray(messages) || messages.length < 1 || messages.length > 8
-      || operation === 'draft' && typeof value.requirements !== 'string'
-      || (value.requirements !== null && (typeof value.requirements !== 'string'
-        || operation === 'edit' && !value.requirements.trim() || !fitsReplyTextLimit(value.requirements)))) throw new Error('候选版本操作不可用。');
-    const known = new Set<string>();
-    value.messages = messages.map((message) => {
-      if (!message || typeof message !== 'object' || Array.isArray(message)
-        || Object.keys(message).length !== 2 || !Object.keys(message).every((key) => ['messageId', 'text'].includes(key))) {
-        throw new Error('候选版本操作不可用。');
-      }
-      const item = message as Record<string, unknown>;
-      if (!isUuid(item.messageId) || typeof item.text !== 'string' || operation === 'edit' && !item.text.trim()
-        || item.text.length > (messages.length === 1 ? 65_536 : 8192)
-        || known.has(item.messageId.toLowerCase())) throw new Error('候选版本操作不可用。');
-      const messageId = item.messageId.toLowerCase(); known.add(messageId);
-      return { messageId, text: item.text };
-    });
-  }
-  return value as unknown as ReplyCandidateVersionRead;
-}
-
-function fields(args: unknown[], keys: string[]): Record<string, unknown> {
+function selection(args: unknown[], session = false, deleting = false): ContactSelection | AssistantSessionSelection | AssistantSessionDeletion {
   const value = args[0];
+  const keys = ['contactId', 'scopeRevision', ...(session ? ['sessionId'] : []), ...(deleting ? ['confirmed'] : [])];
   if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)
-    || Object.keys(value).length !== keys.length || !Object.keys(value).every((key) => keys.includes(key))) {
-    throw new Error('本次表达操作不可用。');
+    || Object.keys(value).length !== keys.length || !Object.keys(value).every(key => keys.includes(key))) {
+    throw new Error('助手讨论操作不可用。');
   }
   const record = value as Record<string, unknown>;
-  if (!isUuid(record.contactId) || typeof record.scopeRevision !== 'number'
-    || !Number.isSafeInteger(record.scopeRevision) || record.scopeRevision < 0) throw new Error('本次表达操作不可用。');
-  return { ...record, contactId: record.contactId.toLowerCase() };
-}
-function candidate(args: unknown[], editing = false): ReplyCandidateSelection | ReplyCandidateEdit {
-  const value = fields(args, ['contactId', 'scopeRevision', 'replyRequestId', 'candidateId', ...(editing ? ['text'] : [])]);
-  if (!isUuid(value.replyRequestId) || !isUuid(value.candidateId)
-    || (editing && (typeof value.text !== 'string' || value.text.length > 65_536))) throw new Error('本次候选操作不可用。');
-  return { ...value, replyRequestId: value.replyRequestId.toLowerCase(), candidateId: value.candidateId.toLowerCase() } as unknown as ReplyCandidateEdit;
-}
-function options(args: unknown[]): RewriteOptionsUpdate {
-  const value = fields(args, ['contactId', 'scopeRevision', 'options']);
-  const settings = value.options as Record<string, unknown> | undefined;
-  if (!settings || typeof settings !== 'object' || Array.isArray(settings) || Object.keys(settings).length < 1
-    || !Object.keys(settings).every((key) => ['includeRelationshipContext', 'inputKind', 'pastedDirection', 'workspaceAction', 'contextText'].includes(key))
-    || typeof settings.includeRelationshipContext !== 'boolean'
-    || settings.inputKind !== undefined && !['draft', 'current_chat', 'workspace'].includes(settings.inputKind as string)
-    || settings.workspaceAction !== undefined && !['express', 'suggest'].includes(settings.workspaceAction as string)
-    || settings.contextText !== undefined && (typeof settings.contextText !== 'string' || settings.contextText.length > 65_536)
-    || settings.pastedDirection !== undefined && (typeof settings.pastedDirection !== 'string' || !fitsReplyTextLimit(settings.pastedDirection))) throw new Error('本次改写要求不可用。');
-  return { contactId: value.contactId as string, scopeRevision: value.scopeRevision as number, options: { ...settings } as unknown as RewriteOptions };
+  if (!isUuid(record.contactId) || !Number.isSafeInteger(record.scopeRevision) || (record.scopeRevision as number) < 0
+    || session && !isUuid(record.sessionId) || deleting && record.confirmed !== true) {
+    throw new Error('助手讨论操作不可用。');
+  }
+  return { ...record, contactId: record.contactId.toLowerCase(),
+    ...(session ? { sessionId: (record.sessionId as string).toLowerCase() } : {}) } as AssistantSessionDeletion;
 }
 
 export function installReplyBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession,
   generationBlock?: () => ReplyGenerationBlock): ReplySession {
   const replies = new ReplySession(contacts, backend, generationBlock);
-  const evidence = new ReplyEvidenceSession(backend, replies);
-  evidence.onStateChanged((state) => commands.publish('reply:evidence-changed', state, 'helper'));
-  commands.handle('reply:get-evidence-state', (...args: unknown[]) => { noArguments(args); return evidence.getState(); }, 'helper');
-  commands.handle('reply:load-evidence', (...args: unknown[]) => evidence.load(candidate(args)), 'helper');
-  commands.handle('reply:close-evidence', (...args: unknown[]) => evidence.close(candidate(args)), 'helper');
-  replies.onStateUpdated((event) => commands.publish('reply:state-updated', event, 'helper'));
-  const inputHandlers = new Map<string, (args: unknown[], snapshot: boolean) => unknown>();
-  const input = (type: string, channel: string, handler: (args: unknown[], snapshot: boolean) => unknown) => {
-    inputHandlers.set(type, handler);
-    commands.handle(channel, (...args: unknown[]) => handler(args, true), 'helper');
-  };
-  commands.handle('reply:update-input', (...args: unknown[]) => {
-    const command = args[0];
-    if (args.length !== 1 || !command || typeof command !== 'object' || Array.isArray(command)
-      || Object.keys(command).length !== 2 || !Object.hasOwn(command, 'type') || !Object.hasOwn(command, 'update')) {
-      throw new Error('本次输入操作不可用。');
-    }
-    const { type, update } = command as { type: string; update: unknown };
-    const handler = inputHandlers.get(type);
-    if (!handler) throw new Error('本次输入操作不可用。');
-    handler([update], false);
-  }, 'helper');
+  replies.onStateUpdated(event => commands.publish('reply:state-updated', event, 'helper'));
   commands.handle('reply:subscribe', (...args: unknown[]) => {
     noArguments(args); commands.publish('reply:state-updated', { kind: 'snapshot', state: replies.getState() }, 'helper');
   }, 'helper');
   commands.handle('reply:get-state', (...args: unknown[]) => { noArguments(args); return replies.getState(); });
-  commands.handle('reply:enter-workspace', (...args: unknown[]) =>
-    replies.enterWorkspace(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
-  input('options', 'reply:update-options', (args, snapshot) => { return replies.updateOptions(options(args), snapshot); });
-  commands.handle('reply:set-mode', (...args: unknown[]) => {
-    const value = fields(args, ['contactId', 'scopeRevision', 'mode']);
-    if (!['rewrite_draft', 'reply_to_message', 'initiate_conversation'].includes(value.mode as string)) throw new Error('本次输入方式不可用。');
-    return replies.setMode(value as unknown as ReplyModeUpdate);
-  }, 'helper');
-  commands.handle('reply:load-messages', (...args: unknown[]) => {
-    const value = fields(args, ['contactId', 'scopeRevision', 'older']);
-    if (typeof value.older !== 'boolean') throw new Error('消息列表操作不可用。');
-    return replies.loadMessages(value as unknown as ReplyMessagePageRequest);
-  }, 'helper');
-  commands.handle('reply:retry-source-validation', (...args: unknown[]) =>
-    replies.retrySourceValidation(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
-  commands.handle('reply:read-saved-session', (...args: unknown[]) =>
-    replies.readSavedSession(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
-  commands.handle('reply:list-saved-sessions', (...args: unknown[]) =>
-    replies.listSavedSessions(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
-  commands.handle('reply:new-saved-session', (...args: unknown[]) =>
-    replies.newSavedSession(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
-  commands.handle('reply:new-with-candidate', (...args: unknown[]) => {
-    const value = fields(args, ['contactId', 'scopeRevision', 'sessionId', 'expectedSelectionId', 'candidateId', 'versionId']);
-    for (const key of ['sessionId', 'expectedSelectionId', 'candidateId', 'versionId']) {
-      if (!isUuid(value[key])) throw new Error('请先明确选用要携入的保存版本。');
-      value[key] = (value[key] as string).toLowerCase();
-    }
-    return replies.newSavedSessionWithCandidate(value as unknown as import('../../shared/reply-bridge').AssistantCandidateCarry);
-  }, 'helper');
-  for (const [channel, action] of [['reply:view-saved-session', 'viewSavedSession'], ['reply:resume-saved-session', 'resumeSavedSession']] as const) {
-    commands.handle(channel, (...args: unknown[]) => {
-      const value = fields(args, ['contactId', 'scopeRevision', 'sessionId']);
-      if (!isUuid(value.sessionId)) throw new Error('助手会话不可用。');
-      return replies[action]({ ...value, sessionId: value.sessionId.toLowerCase() } as unknown as AssistantSessionSelection);
-    }, 'helper');
+  for (const [channel, action] of [
+    ['reply:retry-source-validation', 'retrySourceValidation'],
+    ['reply:read-saved-session', 'readSavedSession'],
+    ['reply:list-saved-sessions', 'listSavedSessions'],
+    ['reply:new-saved-session', 'newSavedSession'],
+  ] as const) {
+    commands.handle(channel, (...args: unknown[]) => replies[action](selection(args)), 'helper');
   }
-  commands.handle('reply:select-saved-session', (...args: unknown[]) => {
-    const value = fields(args, ['contactId', 'scopeRevision', 'sessionId']);
-    if (!isUuid(value.sessionId)) throw new Error('助手会话不可用。');
-    return replies.selectSavedSession({ ...value, sessionId: value.sessionId.toLowerCase() } as unknown as AssistantSessionSelection);
-  }, 'helper');
-  commands.handle('reply:delete-saved-session', (...args: unknown[]) => {
-    const value = fields(args, ['contactId', 'scopeRevision', 'sessionId', 'confirmed']);
-    if (!isUuid(value.sessionId) || value.confirmed !== true) throw new Error('助手会话删除尚未确认。');
-    return replies.deleteSavedSession({ ...value, sessionId: value.sessionId.toLowerCase() } as unknown as AssistantSessionDeletion);
-  }, 'helper');
-  commands.handle('reply:reconnect-messages', (...args: unknown[]) =>
-    replies.reconnectMessages(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
-  commands.handle('reply:combine-new-messages', (...args: unknown[]) =>
-    replies.combineNewMessages(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
-  commands.handle('reply:select-message', (...args: unknown[]) => {
-    const value = fields(args, ['contactId', 'scopeRevision', 'messageId']);
-    if (!isUuid(value.messageId)) throw new Error('待回复消息不可用。');
-    return replies.selectMessage({ ...value, messageId: value.messageId.toLowerCase() } as unknown as ReplyMessageSelection);
-  }, 'helper');
-  input('direction', 'reply:update-direction', (args, snapshot) => {
-    const value = fields(args, ['contactId', 'scopeRevision', 'direction']);
-    if (typeof value.direction !== 'string' || !fitsReplyTextLimit(value.direction)) throw new Error('表达方向不可用。');
-    return replies.updateDirection(value as unknown as ReplyDirectionUpdate, snapshot);
-  });
-  input('purpose', 'reply:update-purpose', (args, snapshot) => {
-    const value = fields(args, ['contactId', 'scopeRevision', 'purpose']);
-    if (typeof value.purpose !== 'string' || !fitsReplyTextLimit(value.purpose)) throw new Error('主动目的不可用。');
-    return replies.updatePurpose(value as unknown as import('../../shared/reply-bridge').ReplyPurposeUpdate, snapshot);
-  });
-  commands.handle('reply:generate', (...args: unknown[]) => {
-    const optional = args[0] && typeof args[0] === 'object' && Object.hasOwn(args[0], 'workspaceAction') ? ['workspaceAction'] : [];
-    const history = args[0] && typeof args[0] === 'object' && Object.hasOwn(args[0], 'allowIncompleteHistory') ? ['allowIncompleteHistory'] : [];
-    const value = fields(args, ['contactId', 'scopeRevision', 'newRequest', ...optional, ...history]);
-    if (history.length && typeof value.allowIncompleteHistory !== 'boolean') throw new Error('历史覆盖确认无效。');
-    if (typeof value.newRequest !== 'boolean' || optional.length && !['express', 'suggest'].includes(value.workspaceAction as string)) throw new Error('本次生成操作不可用。');
-    return replies.generate(value as unknown as GenerateReply);
-  }, 'helper');
-  commands.handle('reply:stop-generation', (...args: unknown[]) => {
-    const value = fields(args, ['contactId', 'scopeRevision', 'sessionId', 'requestKey', 'inputVersionId']);
-    for (const key of ['sessionId', 'requestKey', ...(value.inputVersionId === null ? [] : ['inputVersionId'])]) {
-      if (!isUuid(value[key])) throw new Error('本次生成停止身份不可用。');
-      value[key] = (value[key] as string).toLowerCase();
-    }
-    return replies.stopGeneration(value as unknown as AssistantGenerationStop);
-  }, 'helper');
-
-
-  commands.handle('reply:retry-interrupted-generation', (...args: unknown[]) => {
-    const value = fields(args, ['contactId', 'scopeRevision', 'sessionId', 'turnId', 'inputVersionId']);
-    for (const key of ['sessionId', 'turnId', 'inputVersionId']) {
-      if (!isUuid(value[key])) throw new Error('中断生成暂不可重试。');
-      value[key] = (value[key] as string).toLowerCase();
-    }
-    return replies.retryInterruptedGeneration(value as unknown as AssistantInterruptedRetry);
-  }, 'helper');
-  input('supplement', 'reply:update-supplement', (args, snapshot) => {
-    const value = fields(args, ['contactId', 'scopeRevision', 'supplement']);
-    if (typeof value.supplement !== 'string' || !fitsReplyTextLimit(value.supplement)) throw new Error(`补充内容最多${replyTextLimit}个字符。`);
-    return replies.updateSupplement(value as unknown as import('../../shared/reply-bridge').ReplySupplementUpdate, snapshot);
-  });
-  input('correction', 'reply:update-correction', (args, snapshot) => {
-    const value = fields(args, ['contactId', 'scopeRevision', 'correction']);
-    if (typeof value.correction !== 'string' || !fitsReplyTextLimit(value.correction)) throw new Error('纠正内容不可用。');
-    return replies.updateCorrection(value as unknown as ReplyCorrectionUpdate, snapshot);
-  });
-
-
-  input('requirements', 'reply:update-requirements', (args, snapshot) => {
-    const value = fields(args, ['contactId', 'scopeRevision', 'requirements']);
-    if (typeof value.requirements !== 'string' || !fitsReplyTextLimit(value.requirements)) throw new Error('本次要求不可用。');
-    return replies.updateRequirements(value as unknown as import('../../shared/reply-bridge').ReplyRequirementsUpdate, snapshot);
-  });
-  commands.handle('reply:update-skill', (...args: unknown[]) => {
-    const value = fields(args, ['contactId', 'scopeRevision', 'skill']), skill = value.skill;
-    if (!skill || typeof skill !== 'object' || Array.isArray(skill) || Object.keys(skill).length !== 2
-      || !Object.keys(skill).every((key) => ['mode', 'versionId'].includes(key))) throw new Error('策略选择不可用。');
-    const choice = skill as Record<string, unknown>;
-    if (choice.mode === 'user' ? !isUuid(choice.versionId) : !['auto', 'disabled'].includes(choice.mode as string) || choice.versionId !== null) throw new Error('策略版本不可用。');
-    return replies.updateSkill(value as unknown as import('../../shared/reply-bridge').ReplySkillUpdate);
-  }, 'helper');
-  input('scene', 'reply:update-scene', (args, snapshot) => {
-    const value = fields(args, ['contactId', 'scopeRevision', 'scene']);
-    if (typeof value.scene !== 'string' || value.scene.length > 256) throw new Error('精确场景不可用。');
-    return replies.updateScene(value as unknown as import('../../shared/reply-bridge').ReplySceneUpdate, snapshot);
-  });
-
-  commands.handle('reply:select-candidate', (...args: unknown[]) => { return replies.selectCandidate(candidate(args)); }, 'helper');
-  input('candidate', 'reply:edit-candidate', (args, snapshot) => { return replies.editCandidate(candidate(args, true) as ReplyCandidateEdit, snapshot); });
-  input('candidateDraft', 'reply:update-candidate-version-draft', (args, snapshot) =>
-    replies.updateCandidateVersionDraft(candidateVersion(args, 'draft') as ReplyCandidateDraftUpdate, snapshot));
-  commands.handle('reply:read-candidate-versions', (...args: unknown[]) =>
-    replies.readCandidateVersions(candidateVersion(args, 'read')), 'helper');
-  commands.handle('reply:save-candidate-version', (...args: unknown[]) =>
-    replies.saveCandidateVersion(candidateVersion(args, 'edit') as ReplyCandidateVersionEdit), 'helper');
-  commands.handle('reply:select-candidate-version', (...args: unknown[]) =>
-    replies.selectCandidateVersion(candidateVersion(args, 'select') as ReplyCandidateVersionSelection), 'helper');
-  commands.handle('reply:show-candidate-version', (...args: unknown[]) =>
-    replies.showCandidateVersion(candidateVersion(args, 'display') as ReplyCandidateVersionDisplay), 'helper');
+  for (const [channel, action] of [
+    ['reply:view-saved-session', 'viewSavedSession'],
+    ['reply:resume-saved-session', 'resumeSavedSession'],
+  ] as const) {
+    commands.handle(channel, (...args: unknown[]) => replies[action](selection(args, true) as AssistantSessionSelection), 'helper');
+  }
+  commands.handle('reply:delete-saved-session', (...args: unknown[]) =>
+    replies.deleteSavedSession(selection(args, true, true) as AssistantSessionDeletion), 'helper');
   return replies;
 }

@@ -1,9 +1,7 @@
 import type { ContactHistoryController } from './contact-history/controller';
 import type { MessageMediaController } from './media/controller';
 import type { TraceController } from './traces/controller';
-import type { CandidateProvenanceController } from './candidate-provenance/controller';
 import type { SkillLearningController } from './skill-learning/controller';
-import type { ExpressionPreferenceController } from './expression-preferences/controller';
 import type { MemoryReadingController } from './memory/controller';
 import type { FixedMemoryProcessingController } from './memory/fixed-processing';
 import type { SqliteMemoryManagementController } from './memory/sqlite-management';
@@ -20,14 +18,12 @@ interface Dependencies {
  history: Pick<ContactHistoryController, 'getState' | 'invalidate' | 'refreshCurrent'>;
  media: Pick<MessageMediaController, 'invalidate' | 'invalidateAndDrain'>;
  traces: Pick<TraceController, 'invalidateSource'>;
- provenance: Pick<CandidateProvenanceController, 'invalidateSource'>;
  skills: Pick<SkillLearningController, 'invalidate'>;
- preferences: Pick<ExpressionPreferenceController, 'invalidateSource'>;
  memory: Pick<MemoryReadingController, 'revalidateDeletedSource'>;
  processing: Pick<FixedMemoryProcessingController, 'synchronize'>;
  management: Pick<SqliteMemoryManagementController, 'synchronize'>;
  discussion: Pick<SqliteDiscussionController, 'synchronize'>;
- replies: Pick<ReplySession, 'revalidateDeletedSource' | 'prepareGenerationConnectionChange' | 'beginHistoryClear'>;
+ replies: Pick<ReplySession, 'revalidateDeletedSource' | 'prepareConnectionChange' | 'beginHistoryClear'>;
 }
 
 /** 来源变化的撤下清单集中在这里；各控制器继续拥有自己的取消、代次和晚到结果守卫。 */
@@ -48,7 +44,6 @@ export class DesktopDataLifecycle {
  private withdrawDerived(reasonCode:string): void {
   const p = this.ports;
   p.traces.invalidateSource();
-  p.provenance.invalidateSource();
   p.skills.invalidate();
   this.withdrawSqlite(reasonCode);
  }
@@ -74,7 +69,7 @@ export class DesktopDataLifecycle {
    p.media.invalidate();
   }
   this.withdrawDerived('source_changed');
-  await Promise.all([p.replies.revalidateDeletedSource(contactId), p.memory.revalidateDeletedSource(contactId), p.preferences.invalidateSource(contactId)]);
+  await Promise.all([p.replies.revalidateDeletedSource(contactId), p.memory.revalidateDeletedSource(contactId)]);
   await p.history.refreshCurrent(contactId);
   });
  }
@@ -82,6 +77,6 @@ export class DesktopDataLifecycle {
  async connectionChanging(): Promise<void> {
   this.withdrawSqlite('connection_changed');
   await this.ports.media.invalidateAndDrain();
-  await this.ports.replies.prepareGenerationConnectionChange();
+  await this.ports.replies.prepareConnectionChange();
  }
 }

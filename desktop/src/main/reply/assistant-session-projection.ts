@@ -1,4 +1,5 @@
-import type { SavedAssistantSession, SavedAssistantTurn } from '../../shared/assistant-session';
+import { invalidatedSqliteDiscussion } from './sqlite-discussion-read';
+import type { SavedAssistantSession } from '../../shared/assistant-session';
 import type { readAssistantSession } from './assistant-sessions';
 
 export interface AssistantProjectionScope {
@@ -8,7 +9,7 @@ export interface AssistantProjectionScope {
   sessionId: string | null;
 }
 type Snapshot = Awaited<ReturnType<typeof readAssistantSession>>;
-export interface AssistantProjectionVerification {
+interface AssistantProjectionVerification {
   readonly scope: AssistantProjectionScope;
   readonly revision: number;
   readonly boundary: number;
@@ -16,22 +17,9 @@ export interface AssistantProjectionVerification {
 export interface AssistantProjectionRead extends AssistantProjectionVerification {
   readonly epoch: number;
 }
-export interface AssistantCompletionIdentity {
-  requestKey: string;
-  inputVersionId: string;
-  replyRequestId: string;
-}
-export interface AssistantBudgetFailureIdentity { turnId: string; requestKey: string; inputVersionId: string }
-type BudgetRead = { kind: 'snapshot'; snapshot: Snapshot } | { kind: 'unknown' | 'unavailable' | 'missing' };
-type BudgetEvidence = { kind: 'received'; identity: AssistantBudgetFailureIdentity; read: BudgetRead }
-  | { kind: 'unconfirmed'; read: BudgetRead };
-type Rejected = { kind: 'superseded' | 'unknown' } | { kind: 'unavailable'; reason: 'identity' | 'source' };
-export type AssistantCompletionDecision = Rejected | { kind: 'accepted'; snapshot: SavedAssistantSession;
-  turn: SavedAssistantTurn; verifiedTurn: SavedAssistantTurn; retainedDisplay: boolean };
-export type AssistantBudgetFailureDecision = Rejected | { kind: 'accepted'; snapshot: SavedAssistantSession;
-  turn: SavedAssistantTurn };
+type Rejected = { kind: 'superseded' };
 
-// 只持有当前展示的引用；业务响应、网络取消和生成任务的终态仍由各自调用方负责。
+// 只仲裁当前 SQLite 讨论的读取；来源、连接和会话变化立即撤销旧票据。
 export class AssistantSessionProjection {
   private scope: AssistantProjectionScope = { connectionGeneration: undefined, contactId: null, scopeRevision: 0, sessionId: null };
   private revision = 0;
@@ -57,12 +45,8 @@ export class AssistantSessionProjection {
     if (changed || displayChanged) this.revision += 1;
   }
 
-  beginVerification(scope: AssistantProjectionScope): AssistantProjectionVerification {
-    return { scope: { ...scope }, revision: this.revision, boundary: this.boundary };
-  }
-
   beginRead(scope: AssistantProjectionScope): AssistantProjectionRead {
-    return { ...this.beginVerification(scope), epoch: ++this.readEpoch };
+    return { scope: { ...scope }, revision: this.revision, boundary: this.boundary, epoch: ++this.readEpoch };
   }
 
   resolveReadSession(read: AssistantProjectionRead, sessionId: string): AssistantProjectionRead {
@@ -88,75 +72,16 @@ export class AssistantSessionProjection {
   failRead(read: AssistantProjectionRead, failure: 'unavailable' | 'unknown'): Rejected | {
     kind: 'failed'; failure: 'unavailable' | 'unknown'; snapshot: SavedAssistantSession } {
     if (!this.isReadCurrent(read)) return { kind: 'superseded' };
-    return { kind: 'failed', failure, snapshot: { phase: 'failed', sessionId: read.scope.sessionId,
-      turns: [], inputs: [], currentInputVersionId: null } };
+    return { kind: 'failed', failure, snapshot: { phase: 'failed', sessionId: read.scope.sessionId, ...invalidatedSqliteDiscussion() } };
   }
 
-  invalidateSource(owner?: AssistantProjectionRead): AssistantProjectionRead | undefined {
-    const owned = owner && this.isReadCurrent(owner);
+  invalidateSource(): void {
     this.boundary += 1; this.readEpoch += 1;
-    return owned ? { ...owner, boundary: this.boundary, epoch: this.readEpoch } : undefined;
-  }
-
-  acceptSourceProjection(read: AssistantProjectionRead, snapshot: SavedAssistantSession): AssistantProjectionRead | undefined {
-    // 来源核验会先撤下局部正文再发布完整投影；只续接它自己的读取，不夺取较晚读取。
-    if (read.epoch !== this.readEpoch || !this.current(read) || !this.authoritative || snapshot !== this.displayed) return;
-    return { ...read, revision: this.revision };
-  }
-
-  acceptCompletion(verification: AssistantProjectionVerification, saved: Snapshot,
-    identity: AssistantCompletionIdentity): AssistantCompletionDecision {
-    if (!this.current(verification) || saved.generation !== verification.scope.connectionGeneration
-      || saved.sessionId !== verification.scope.sessionId) return { kind: 'superseded' };
-    const retainedDisplay = verification.revision !== this.revision;
-    const snapshot = retainedDisplay ? this.displayed : this.ready(saved);
-    if (!snapshot || snapshot.phase !== 'ready' || snapshot.sessionId !== saved.sessionId
-      || retainedDisplay && !this.authoritative) return { kind: 'superseded' };
-    const turn = this.completed(snapshot, identity);
-    if (!turn) return retainedDisplay ? { kind: 'superseded' } : { kind: 'unavailable', reason: 'identity' };
-    const verifiedTurn = this.completed(saved, identity);
-    if (!verifiedTurn) return { kind: 'unavailable', reason: 'identity' };
-    return { kind: 'accepted', snapshot, turn, verifiedTurn, retainedDisplay };
-  }
-
-  acceptBudgetFailure(verification: AssistantProjectionVerification, evidence: BudgetEvidence): AssistantBudgetFailureDecision {
-    if (!this.current(verification)) return { kind: 'superseded' };
-    if (evidence.read.kind === 'unavailable') return { kind: 'unavailable', reason: 'source' };
-    const retainedDisplay = verification.revision !== this.revision;
-    if (retainedDisplay && (evidence.kind !== 'received' || !this.authoritative
-      || this.displayed?.phase !== 'ready' || this.displayed.sessionId !== verification.scope.sessionId
-      || !this.failed(this.displayed, evidence.identity))) return { kind: 'superseded' };
-    if (evidence.read.kind === 'unknown') return { kind: 'unknown' };
-    if (evidence.kind !== 'received' || evidence.read.kind !== 'snapshot') return { kind: 'unavailable', reason: 'identity' };
-    const saved = evidence.read.snapshot;
-    if (saved.generation !== verification.scope.connectionGeneration || saved.sessionId !== verification.scope.sessionId) {
-      return { kind: 'superseded' };
-    }
-    if (!this.failed(saved, evidence.identity)) return { kind: 'unavailable', reason: 'identity' };
-    const snapshot = retainedDisplay ? this.displayed! : this.ready(saved);
-    return { kind: 'accepted', snapshot, turn: this.failed(snapshot, evidence.identity)! };
-  }
-
-  private failed(saved: Pick<SavedAssistantSession, 'turns' | 'inputs' | 'currentInputVersionId'>,
-    identity: AssistantBudgetFailureIdentity): SavedAssistantTurn | undefined {
-    if (saved.currentInputVersionId !== identity.inputVersionId || !saved.inputs.some((input) =>
-      input.inputVersionId === identity.inputVersionId && input.turnId === identity.turnId && input.state === 'active')) return;
-    return saved.turns.find((turn) => turn.turnId === identity.turnId && turn.requestKey === identity.requestKey
-      && turn.inputVersionId === identity.inputVersionId && turn.state === 'failed');
   }
 
   private ready(saved: Snapshot): SavedAssistantSession {
-    return { phase: 'ready', sessionId: saved.sessionId, turns: saved.turns, inputs: saved.inputs,
-      currentInputVersionId: saved.currentInputVersionId,
-      ...(saved.discussionEntries === undefined ? {} : { discussionEntries:saved.discussionEntries, runtimeRecovery:saved.runtimeRecovery }) };
-  }
-
-  private completed(saved: Pick<SavedAssistantSession, 'turns' | 'inputs' | 'currentInputVersionId'>,
-    identity: AssistantCompletionIdentity): SavedAssistantTurn | undefined {
-    if (saved.currentInputVersionId !== identity.inputVersionId
-      || !saved.inputs.some((input) => input.inputVersionId === identity.inputVersionId && input.state === 'active')) return;
-    return saved.turns.find((turn) => turn.inputVersionId === identity.inputVersionId && turn.requestKey === identity.requestKey
-      && turn.state === 'completed' && turn.reply?.replyRequestId === identity.replyRequestId);
+    return { phase: 'ready', sessionId: saved.sessionId,
+      discussionEntries: saved.discussionEntries, runtimeRecovery: saved.runtimeRecovery };
   }
 
   private current(verification: AssistantProjectionVerification): boolean {

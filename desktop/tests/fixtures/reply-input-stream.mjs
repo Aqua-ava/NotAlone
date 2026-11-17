@@ -4,27 +4,20 @@ import { build } from 'esbuild';
 
 const output = await build({ stdin: { contents: `
   export { ContactSession } from './src/main/contacts/session';
-  export { contactDraftUpdate } from './src/shared/contact-session-bridge';
   export { installReplyBridge } from './src/main/reply/bridge';
   export { createReplyBridge } from './src/preload/reply';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false });
-const { ContactSession, installReplyBridge, createReplyBridge, contactDraftUpdate } = await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
+const { ContactSession, installReplyBridge, createReplyBridge } = await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
 
 export async function replyInputFixture(rounds) {
   const contactId = randomUUID(), otherContactId = randomUUID(), sessionId = randomUUID();
-  const saved = { session_id: sessionId, current_input_version_id: null, turns: [], inputs: [] };
-  for (let i = 0; i < rounds; i++) {
-    const turnId = randomUUID(), inputVersionId = randomUUID();
-    saved.turns.push({ turn_id: turnId, input_version_id: inputVersionId, request_key: randomUUID(), state: 'failed',
-      interruption_reason: null, input: { content: { type: 'rewrite_draft', draft_text: '合成历史正文。'.repeat(40) } }, placeholder: null, reply: null });
-    saved.inputs.push({ input_version_id: inputVersionId, type: 'generation', conversation_binding_id: randomUUID(),
-      turn_id: turnId, state: 'active', content: null, placeholder: null });
-  }
+  const saved = { mode: 'sqlite', session_id: sessionId, runtime_recovery: 'ready', entries: [] };
+  for (let i = 0; i < rounds; i++) saved.entries.push({ entry_id: randomUUID(), position: String(i + 1), role: 'user',
+    text: '合成历史正文。'.repeat(40), request_id: randomUUID(), call_id: null, content_state: 'available' });
   const handlers = new Map(), listeners = new Map(), events = [], responses = [], calls = [];
   let forward = () => {};
   const backend = { getConnectionGeneration: () => 1, onStateChanged: () => () => {},
     subscribeMessages: (observer) => observer.connected(), requestJson: async (request) => { calls.push(request); const { path } = request;
-      if (path.endsWith('/replies/prepare')) throw new Error('合成准备失败，记录输入后停止。');
       if (path.startsWith('/api/deletions?')) return { generation: 1, data: { operations: [] } };
       if (path.endsWith('/assistant-sessions') && request.method === 'GET') return { generation: 1,
         data: path === `/api/contacts/${contactId}/assistant-sessions`
@@ -49,9 +42,9 @@ export async function replyInputFixture(rounds) {
   const scope = () => ({ contactId: contacts.getState().selectedContactId, scopeRevision: contacts.getState().scopeRevision });
   await bridge.readSavedSession(scope());
   assert.equal(replies.getState().savedSession?.sessionId, sessionId);
-  assert.equal(replies.getState().savedSession?.turns.length, rounds);
+  assert.equal(replies.getState().savedSession?.discussionEntries.length, rounds);
   events.length = 0; responses.length = 0;
-  return { bridge, replies, contacts, scope, events, responses, otherContactId, handlers, calls, contactDraftUpdate, setForward: (listener) => { forward = listener; } };
+  return { bridge, replies, contacts, scope, events, responses, otherContactId, handlers, calls, setForward: (listener) => { forward = listener; } };
 }
 
 

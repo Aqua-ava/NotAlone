@@ -3,55 +3,19 @@
 .ime-workspace::-webkit-scrollbar { display: none; }
 .ime-header, .ime-input, .ime-status-line, .ime-footer, .rewrite-privacy { flex-shrink: 0; }
 .ime-input textarea { height: 68px; }
-.reply-scene-input { padding: 5px 4px; font-size: 11px; flex-shrink: 0; }
-.reply-scene-input label { display: grid; gap: 5px; }
-.reply-scene-input input { min-width: 0; padding: 6px; border: 1px solid #c6cfcd; border-radius: 3px; background: #fffdf6; color: inherit; font: inherit; }
-.reply-scene-input p { color: #707980; line-height: 1.6; margin-top: 4px; }
 .rewrite-privacy { color: #707980; font-size: 10px; line-height: 1.6; padding: 6px 4px; }
-.reply-candidates { padding: 8px 4px; }
-.reply-results-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-.reply-results-heading h2 { margin: 0; font-size: 14px; font-weight: 600; }
-.reply-results-heading span { color: #6e797d; font-size: 11px; }
 .assistant-session-panel { margin-top: 16px; padding-top: 10px; border-top: 1px dashed #d8ceba; }
-.reply-generation-guidance { margin: 8px 4px; padding: 8px 10px; border-left: 3px solid #bd9852; background: #f6efdf; font-size: 12px; line-height: 1.6; }
-.reply-generation-guidance p { margin: 4px 0; }
-.reply-candidate-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 8px; }
-.reply-candidate { min-width: 0; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); padding: 8px; }
-.reply-candidate textarea { width: 100%; min-height: 92px; resize: vertical; background: #faf7ef; border: 1px solid #d8d6ca; border-radius: 3px; padding: 7px; font: inherit; font-size: 13px; line-height: 1.7; }
 .candidate-message-group { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: 7px; }
 .candidate-message-group legend { color: #69787f; font-size: 11px; padding: 0 0 6px; }
 .candidate-message label { display: grid; gap: 4px; color: #69787f; font-size: 11px; }
 .candidate-message button { margin-top: 4px; padding: 3px 7px; border: 1px solid #c8d1cf; border-radius: 3px; color: #456b87; font-size: 11px; }
 .candidate-message-group p { margin: 2px 0; font-size: 11px; color: #69787f; }
-.reply-basis, .reply-risk, .reply-original, .reply-input-snapshot p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.7; margin: 6px 0; }
-.reply-basis { color: #69787f; }
+.reply-risk { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.7; margin: 6px 0; }
 .reply-risk { color: #975d3d; background: #f3e4c3; padding: 3px 5px; border-radius: 3px; }
-.reply-candidates summary { cursor: pointer; font-size: 11px; color: #456b87; }
-.reply-input-snapshot { margin-bottom: 8px; }
 .reply-note { padding: 5px 1px; font-size: 11px; color: #6e797d; }
-.rewrite-retry { display: flex; gap: 10px; min-height: 20px; padding: 0 4px; flex-shrink: 0; }
-.rewrite-retry button { font-size: 11px; color: #456b87; border: 1px solid #c8d1cf; border-radius: 3px; padding: 3px 7px; }
-.reply-empty { display: flex; gap: 12px; align-items: center; min-height: 50px; font-size: 12px; color: #707980; }
-.reply-empty small { font-size: 11px; }
-.directed-input { flex-shrink: 0; font-size: 11px; }
-.message-heading { display: flex; justify-content: space-between; align-items: center; padding: 3px; }
-.directed-input button:not(.generate-button) { padding: 3px 7px; border: 1px solid #c8d1cf; border-radius: 3px; color: #456b87; font-size: 11px; }
-.reply-message-list { max-height: 105px; overflow-y: auto; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); }
-.reply-message { display: flex; gap: 7px; align-items: flex-start; padding: 5px 7px; border-bottom: 1px solid #e9e5d9; }
-.reply-message > span { min-width: 0; flex: 1; }
-.reply-message small { display: block; font-size: 10px; color: #707980; }
-.reply-message-text { display: block; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
-.directed-input .ime-input label { flex: 1; min-width: 0; display: grid; gap: 3px; }
-.directed-input .ime-input textarea { height: 58px; }
-.directed-input > [role] { padding: 4px; }
 
-.candidate-version-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.candidate-version-navigation span { color: #69787f; font-size: 12px; }
-
-/* 统一工作区提供两个动作，表达设置按需展开。 */
+/* SQLite 工作区共用主输入和两种生成动作。 */
 .unified-workspace > textarea { width: 100%; min-height: 116px; resize: vertical; }
 .workspace-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
 .workspace-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; }
 .workspace-action-hint { color: var(--muted, #697e8b); font-size: 13px; margin: 10px 0 20px; }
-.candidate-reason > small { color: #54728a; font-weight: 600; }
-.candidate-reason .reply-basis { margin-top: 6px; }

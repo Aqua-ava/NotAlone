@@ -35,7 +35,7 @@ async function fixture(t) {
       if (request.path.endsWith('/selections')) return { generation: 7, data: { selection: null } };
       return { generation: 7, data: request.path.endsWith('/assistant-session/default')
         ? { session_id: sessions.get(id) }
-        : { session_id: sessions.get(id), current_input_version_id: null, turns: [], inputs: [] } };
+        : { mode: 'sqlite', session_id: sessions.get(id), runtime_recovery: 'ready', entries: [] } };
     },
   };
   const contacts = new ContactSession(async () => ({ generation: 7,
@@ -89,17 +89,14 @@ test('切回 A 复用草稿缓存，但已删除讨论不会恢复旧输入', as
   const f = await fixture(t); const [a, b] = f.ids;
   const first = f.select(a); await f.replies.readSavedSession(first);
   f.contacts.setDraft({ ...first, text: '合成未提交草稿' });
-  await f.replies.updateRequirements({ ...first, requirements: '合成临时要求' });
   await f.replies.readSavedSession(f.select(b));
   f.select(a); await f.ready(a);
   assert.equal(f.contacts.getState().draft, '合成未提交草稿');
-  assert.equal(f.replies.getState().requirements, '合成临时要求');
   await f.replies.readSavedSession(f.select(b));
   f.control.missing.add(a);
   await f.replies.readSavedSession(f.select(a));
   assert.equal(f.replies.getState().savedSession.phase, 'failed');
   assert.equal(f.contacts.getState().draft, '');
-  assert.equal(f.replies.getState().requirements, '');
 });
 
 
@@ -125,7 +122,7 @@ test('授权变化保留已选联系人和手工草稿，旧来源读取及删�
   assert.equal(sources.getState().phase, 'ready');
 });
 
-for (const failure of [false, true]) test(`授权撤销及恢复后，消息和关系概览迟到${failure ? '失败' : '成功'}不得复活`, async t => {
+for (const failure of [false, true]) test(`授权撤销及恢复后，关系概览迟到${failure ? '失败' : '成功'}不得复活`, async t => {
   const f = await fixture(t);
   const { MemoryReadingController } = await ports;
   const scope = f.select(f.ids[0]);
@@ -144,21 +141,17 @@ for (const failure of [false, true]) test(`授权撤销及恢复后，消息和�
     version: 1, scope_kind: 'contact', contact_id: scope.contactId,
     projection_revision: 'a'.repeat(64), memory_revision: 1, built_at: '2026-10-23T00:00:00Z', entries: [],
   } } : undefined;
-  const reading = Promise.all([f.replies.loadMessages(scope), memory.refreshOverview(scope)]);
+  const reading = memory.refreshOverview(scope);
   f.contacts.invalidateReadingScope();
   f.contacts.invalidateReadingScope();
   release(); await reading;
-  assert.deepEqual(f.replies.getState().messages.items, []);
-  assert.notEqual(f.replies.getState().messages.phase, 'failed');
   assert.deepEqual(memory.getState().overview, { phase: 'idle', value: null });
-  await assert.rejects(f.replies.loadMessages(scope), /变化|失效/);
   await assert.rejects(memory.refreshOverview(scope), /失效/);
   assert.throws(() => f.contacts.setDraft({ ...scope, text: '旧范围提交' }), /变化/);
   f.control.barrier = undefined;
   const fresh = { ...scope, scopeRevision: f.contacts.getState().scopeRevision };
   await f.replies.readSavedSession(fresh);
-  await Promise.all([f.replies.loadMessages(fresh), memory.refreshOverview(fresh)]);
-  assert.equal(f.replies.getState().messages.items[0].text, '合成旧授权正文');
+  await memory.refreshOverview(fresh);
   assert.equal(memory.getState().overview.phase, 'ready');
 });
 
