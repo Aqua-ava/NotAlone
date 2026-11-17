@@ -1,4 +1,4 @@
-// 仅合成数据和内存适配器；JSON 字节为传输体量代理，不代表 IPC 延迟或 RSS。
+// 默认仅测量当前工作树；传入两个 Git ref 才比较。仅使用合成数据，JSON 字节不代表 IPC 延迟或 RSS。
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -7,7 +7,9 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 
-const baselineRef = process.argv[2] ?? '681fcc38eab77c8fe149b76705419971f3750a86';
+const refs = process.argv.slice(2);
+if (refs.length !== 0 && refs.length !== 2) throw new Error('用法：node scripts/measure-desktop-state.mjs [基线ref 对照ref]');
+const [baselineRef, candidateRef] = refs;
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
 const sha = value => createHash('sha256').update(value).digest('hex');
 const uuid = n => `10000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -19,19 +21,18 @@ async function compile(ref) {
     export { ContactSession } from './src/main/contacts/session';
     export { MemoryReadingController } from './src/main/memory/controller';
     export { OwnerLayeredMemoryController } from './src/main/memory/owner-layered';
-    export { SkillLearningController } from './src/main/skill-learning/controller';
     export * from './src/shared/contact-session-bridge';
   `, resolveDir: process.cwd() }, bundle: true, packages: 'external', platform: 'node', format: 'cjs', write: false,
     plugins: ref ? [{ name: 'fixed-baseline', setup(builder) {
       builder.onLoad({ filter: /\/src\/.*\.tsx?$/ }, ({ path: file }) => ({
-        contents: execFileSync('git', ['show', `${ref}:desktop/${path.relative(process.cwd(), file)}`], { encoding: 'utf8' }), loader: 'ts',
+        contents: execFileSync('git', ['show', `${ref}:${path.posix.normalize(`desktop/${path.relative(process.cwd(), file)}`)}`], { encoding: 'utf8' }), loader: 'ts',
       }));
     } }] : [] });
   const loaded = { exports: {} };
   new Function('require', 'module', 'exports', result.outputFiles[0].text)(createRequire(import.meta.url), loaded, loaded.exports);
   return loaded.exports;
 }
-const base = await compile(baselineRef), candidate = await compile();
+const base = baselineRef ? await compile(baselineRef) : undefined, candidate = await compile(candidateRef);
 async function drafts(ports, count) {
   const handlers = new Map();
   let eventBytes = 0, responseBytes = 0, events = 0, state;
@@ -91,50 +92,27 @@ async function memory(ports, scope) {
     return { hidden, afterReentry };
   } finally { Object.assign(globalThis, saved); }
 }
-const skill = (n, changed) => ({ skill_id: uuid(n + 100), name: '合成方法', status: 'active', revision: 1,
-  current_version_id: uuid(n * 10 + 200), versions: Array.from({ length: 5 }, (_, j) => ({ version_id: uuid(n * 10 + 200 + j),
-    version_number: j + 1, document: '合成方法正文。'.repeat(160) + (changed ? '变更' : ''), is_current: j === 0, enabled: true,
-    scope: { kind: 'contact', contact_id: contactId, scene: null }, methods: [], source_dependency_count: 1 })) });
-async function learning(ports, mode) {
-  let changed = false, failed = false, requests = 0, publishes = 0, jsonBytes = 0;
-  const contacts = { onStateChanged: () => () => {}, getState: () => ({ selectedContactId: contactId, scopeRevision: 1,
-    directoryPhase: 'ready', contacts: [{ contactId }] }) };
-  const backend = { getConnectionGeneration: () => 1, onStateChanged: () => () => {}, requestJson: async request => {
-    ++requests; if (failed) throw new Error('合成断连');
-    return { generation: 1, data: request.path.endsWith('/skills') ? { skills: Array.from({ length: 25 }, (_, n) => skill(n, changed)) }
-      : { enabled: false, scope_revision: 1, drafts: [], task: null, recent_outcomes: [] } };
-  } };
-  const controller = new ports.SkillLearningController(backend, contacts), selection = { contactId, scopeRevision: 1 };
-  await controller.refresh(selection); await controller.openHistory(selection);
-  controller.onStateChanged(state => { ++publishes; jsonBytes += bytes(state); }); requests = 0;
-  const states = [];
-  for (let i = 0; i < 20; i++) {
-    if (i === 10 && mode === 'changed') changed = true;
-    if (i === 10 && mode === 'failed') failed = true;
-    await controller.poll(selection);
-    const state = controller.getState(); delete state.revision; states.push(state);
-  }
-  return { requests, publishes, jsonBytes, states };
-}
-const result = { baseline: git('rev-parse', baselineRef), candidateHead: git('rev-parse', 'HEAD'), node: process.version,
-  inputSummary: { drafts: '10/100/1000联系人，每组100次1–100字符输入，双窗口事件加invoke回包', memory: 'contact/owner各60轮模拟调度',
-    learning: '25个Skill各5版本，每份1120字符，20轮复验；第11轮（索引10）变化或失败' }, drafts: [], memory: [], learning: [] };
+const result = { mode: base ? 'comparison' : 'measurement', baseline: baselineRef ? git('rev-parse', baselineRef) : null,
+  candidateHead: git('rev-parse', candidateRef ?? 'HEAD'), candidateSource: candidateRef ? 'git-ref' : 'working-tree', node: process.version,
+  inputSummary: { drafts: '10/100/1000联系人，每组100次1–100字符输入，双窗口事件加invoke回包', memory: 'contact/owner各60轮模拟调度' }, drafts: [], memory: [] };
 result.inputSha256 = sha(JSON.stringify(result.inputSummary));
 const files = ['src/main/contacts/session.ts', 'src/main/contacts/bridge.ts', 'src/shared/contact-session-bridge.ts',
-  'src/main/memory/controller.ts', 'src/main/memory/owner-layered.ts', 'src/main/skill-learning/controller.ts'];
-result.sourceSha256 = Object.fromEntries(files.map(file => [file, { baseline: sha(execFileSync('git', ['show', `${baselineRef}:desktop/${file}`])),
-  candidate: sha(readFileSync(file)) }]));
-for (const count of [10, 100, 1000]) result.drafts.push({ before: await drafts(base, count), after: await drafts(candidate, count) });
-for (const scope of ['contact', 'owner']) {
-  const before = await memory(base, scope), after = await memory(candidate, scope);
-  assert.deepEqual(before.afterReentry, after.afterReentry);
-  result.memory.push({ scope, before: before.hidden, after: after.hidden, reentryEquivalent: true });
+  'src/main/memory/controller.ts', 'src/main/memory/owner-layered.ts'];
+const sourceHash = (file, ref) => sha(ref ? execFileSync('git', ['show', `${ref}:desktop/${file}`]) : readFileSync(file));
+result.sourceSha256 = Object.fromEntries(files.map(file => [file, {
+  ...(baselineRef ? { baseline: sourceHash(file, baselineRef) } : {}), candidate: sourceHash(file, candidateRef) }]));
+for (const count of [10, 100, 1000]) {
+  const after = await drafts(candidate, count);
+  result.drafts.push(base ? { before: await drafts(base, count), after } : after);
 }
-for (const mode of ['stable', 'changed', 'failed']) {
-  const before = await learning(base, mode), after = await learning(candidate, mode);
-  assert.deepEqual(before.states, after.states);
-  result.learning.push({ mode, before: { ...before, states: undefined }, after: { ...after, states: undefined }, everyStateEquivalent: true });
+for (const scope of ['contact', 'owner']) {
+  const after = await memory(candidate, scope);
+  if (base) {
+    const before = await memory(base, scope);
+    assert.deepEqual(before.afterReentry, after.afterReentry);
+    result.memory.push({ scope, before: before.hidden, after: after.hidden, reentryEquivalent: true });
+  } else result.memory.push({ scope, ...after.hidden });
 }
 result.limitations = ['未启动实际App/微信/数据库或外部模型', '模拟调度次数和JSON字节不等于延迟、CPU或RSS',
-  '联系人主进程内部订阅仍可克隆完整目录；Skill后端GET次数保持不变'];
+  '联系人主进程内部订阅仍可克隆完整目录', '旧Skill学习复验已退役，不再纳入当前测量'];
 console.log(JSON.stringify(result, null, 2));

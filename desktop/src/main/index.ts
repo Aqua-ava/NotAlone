@@ -30,7 +30,6 @@ import { ContactDeletionQuiet } from './contacts/deletion-quiet';
 import { installReplyBridge } from './reply/bridge';
 import { installSqliteDiscussionBridge } from './reply/sqlite-discussion-bridge';
 import { installSkillLearningBridge } from './skill-learning/bridge';
-import { coordinateSkillLearningDeletion, coordinateSkillLearningSourceDeletion } from './skill-learning/deletion';
 import { installMemoryBridge } from './memory/bridge';
 import { installFixedMemoryProcessingBridge } from './memory/fixed-processing';
 import { installSourceDeletionBridge } from './sources/bridge';
@@ -179,10 +178,9 @@ void app.whenReady().then(async () => {
   memory.onOwnerContextChanged((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   memory.onRecordDeletion((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   replies.onSessionDeletion((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
-  const skillLearning = installSkillLearningBridge(commands, backend, contacts,()=>sqliteDiscussion.synchronize(true));
-  coordinateSkillLearningDeletion(skillLearning, memory, replies);
+  installSkillLearningBridge(commands, backend,()=>sqliteDiscussion.synchronize(true));
   dataLifecycle = new DesktopDataLifecycle({history: contactHistory, media, traces,
-    skills: skillLearning, memory, processing: fixedMemoryProcessing, management: sqliteMemoryManagement, discussion: sqliteDiscussion, replies});
+    memory, processing: fixedMemoryProcessing, management: sqliteMemoryManagement, discussion: sqliteDiscussion, replies});
   let settleHistoryClear: (() => Promise<void>) | undefined;
   let resyncWasComplete = false;
   historyClear.onStateChanged(state => {
@@ -201,7 +199,6 @@ void app.whenReady().then(async () => {
     if(next!==candidateGenerationBlock){candidateGenerationBlock=next;sqliteDiscussion.synchronize(true);} });
   const sources = installSourceDeletionBridge(commands, backend, contacts, contactId => dataLifecycle.sourceChanged(contactId));
   coordinateSourceContextChanges(sources, replies);
-  coordinateSkillLearningSourceDeletion(skillLearning, sources);
   sources.onDeletion((phase) => {
     memory.sourceDeletionChanged(phase);
     if (phase === 'started') dataLifecycle.withdraw('source-deletion');

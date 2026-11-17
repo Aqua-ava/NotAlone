@@ -1,7 +1,6 @@
 import type { ContactHistoryController } from './contact-history/controller';
 import type { MessageMediaController } from './media/controller';
 import type { TraceController } from './traces/controller';
-import type { SkillLearningController } from './skill-learning/controller';
 import type { MemoryReadingController } from './memory/controller';
 import type { FixedMemoryProcessingController } from './memory/fixed-processing';
 import type { SqliteMemoryManagementController } from './memory/sqlite-management';
@@ -18,7 +17,6 @@ interface Dependencies {
  history: Pick<ContactHistoryController, 'getState' | 'invalidate' | 'refreshCurrent'>;
  media: Pick<MessageMediaController, 'invalidate' | 'invalidateAndDrain'>;
  traces: Pick<TraceController, 'invalidateSource'>;
- skills: Pick<SkillLearningController, 'invalidate'>;
  memory: Pick<MemoryReadingController, 'revalidateDeletedSource'>;
  processing: Pick<FixedMemoryProcessingController, 'synchronize'>;
  management: Pick<SqliteMemoryManagementController, 'synchronize'>;
@@ -44,7 +42,6 @@ export class DesktopDataLifecycle {
  private withdrawDerived(reasonCode:string): void {
   const p = this.ports;
   p.traces.invalidateSource();
-  p.skills.invalidate();
   this.withdrawSqlite(reasonCode);
  }
 

@@ -32,7 +32,7 @@
 
 ## 正常业务 HTTP 适配
 
-`SqliteSkillHttp(library, authorize).handle(req,res)` 已由 `sqlite-host-plugin.ts` 装配，复用原 `/api/skills` 路径；authorize注入宿主唯一 Bearer/Origin 认证，owner由身份域解析，目录根由受信任启动配置指定，两者不接受请求传入。GET 自动刷新发现，返回含中文 title、场景 tags 与 state_label 的最小状态投影，不含物理路径。`/:id/verify|enable|disable` 对已自动发现的项目以十进制expected_head_revision做CAS，均要求confirmed=true。管理接口不接收手动新增目录或安装路径。未知字段、跨owner参数和SQL被拒绝；旧删除、回滚和学习入口返回不可用，不能回落PG或触碰原目录。现有SkillLearningPage提供最小DTO分支和manager具名桥接，以精确CAS管理中文状态。
+`SqliteSkillHttp(library, authorize).handle(req,res)` 已由 `sqlite-host-plugin.ts` 装配，复用原 `/api/skills` 路径；authorize注入宿主唯一 Bearer/Origin 认证，owner由身份域解析，目录根由受信任启动配置指定，两者不接受请求传入。GET 自动刷新发现，返回含中文 title、场景 tags 与 state_label 的最小状态投影，不含物理路径。`/:id/verify|enable|disable` 对已自动发现的项目以十进制expected_head_revision做CAS，均要求confirmed=true。管理接口不接收手动新增目录或安装路径。未知字段、跨owner参数和SQL被拒绝；旧删除、回滚和学习入口返回不可用，不能回落PG或触碰原目录。桌面 Skill 管理页通过具名桥接，以精确 CAS 管理中文状态。
 
 正常 `launchDsh` 使用 `profile/sqlite.patch.yml` 的官方 registry 和薄宿主；仅显式 `capabilities: [contacts, skills]` 配合宿主配置的 `skillPackageRoot` 开放管理，缺失或无效配置拒绝启动。Skill 根可位于 App 的 `userData` 之外，须为规范化绝对路径；仍拒绝将 App 数据根及其 `managed` 受管区作为 Skill 根。桌面启动探针与后台共用这一校验，不由模型或管理 HTTP 请求指定路径。握手位于 `managed/sqlite-backend.info`，与数据库维护目录分开。管理能力本身不产生模型请求，管理页状态不宣称回复已经加载 Skill。
 

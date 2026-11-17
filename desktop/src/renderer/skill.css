@@ -1,9 +1,3 @@
-.skill-tabs { display: flex; gap: 8px; margin: 0 0 22px; padding-bottom: 12px; border-bottom: 1px solid #c5d0d0; }
-.skill-tabs button { padding: 10px 20px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #627985; font: inherit; cursor: pointer; }
-.skill-tabs button[aria-selected="true"] { border-color: #afc4cd; background: #e1edf0; color: #355f7c; }
-.skill-tabs button:hover { background: #e8efed; }
-.skill-tabs button:focus-visible { outline: 2px solid #426f8a; outline-offset: 2px; }
-
 .sqlite-skill-library { display: grid; gap: 14px; }
 .sqlite-skill-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
 .sqlite-skill-heading h2 { margin-bottom: 8px; }

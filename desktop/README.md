@@ -22,6 +22,8 @@ Electron／React 桌面通过认证连接本机 TypeScript／DSH 后台，当前
 
 记忆页面只装配当前 SQLite 的资料管理与处理状态；后台运行状态缺少 SQLite 标识时显示核验失败，不再回落旧版页面。
 
+Skill 管理页直接连接 SQLite 库与联系人分组管理，提供自动发现、核验、启停与分组配置；不装配旧后端的学习、审核发布、历史回滚或方法政策界面及桥接。未识别为当前 SQLite 库的响应显示核验失败。已采纳的学习与发布目标继续保留在 [Skill Library](../architecture/current/skill-library.md#6-已采纳的学习审核与发布目标)，后续接入当前宿主并独立验收。
+
 当前 SQLite 的旧 JSONL 文件导入、旧方向探索及旧独立连续修改入口已退役；文件导入的已采纳数据约束不代表正常入口开放。Skill 自动学习、表达偏好等已采纳目标也不能仅凭旧页面或组件存在认定当前可用；当前宿主能力见[正式装配](../backend-ts/src/sqlite-host-plugin.ts)。
 
 ### 手动首版使用

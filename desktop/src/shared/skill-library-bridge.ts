@@ -6,7 +6,7 @@ export interface SkillLibraryItem {
  revisions: {revisionNo: string; availability: 'current' | 'unavailable'; manifestDigest: string; contentDigest: string}[];
 }
 export interface SqliteSkillLibrarySnapshot {mode:'sqlite';connectionGeneration:number;skills:SkillLibraryItem[]}
-export type SkillLibrarySnapshot = SqliteSkillLibrarySnapshot | {mode:'legacy';connectionGeneration:number};
+export type SkillLibrarySnapshot = SqliteSkillLibrarySnapshot;
 export interface SkillLibraryCommand {packageId:string;expectedHeadRevision:string;connectionGeneration:number;confirmed:true}
 /** 联系人分组：用户自定义名称，绑定若干回复场景；联系人至多一个分组，未分组不使用任何场景。 */
 export interface SkillGroupItem {groupId: string; name: string; revision: string; /** 内置“恋人”分组：自动使用全部回复场景，不可改名、改绑定或删除。 */ allPackages: boolean; packageIds: string[]; contactIds: string[]}

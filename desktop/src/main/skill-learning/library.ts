@@ -36,7 +36,6 @@ export class SkillLibraryController {
   const result=await this.backend.requestJson({method:'GET',path:'/api/skills',timeoutMs:10_000});
   if(result.generation!==generation||this.backend.getConnectionGeneration()!==generation)throw invalid();
   const data=row(result.data);
-  if(data.storage===undefined&&data.mode===undefined&&Array.isArray(data.skills))return {mode:'legacy',connectionGeneration:generation};
   if(data.storage!=='sqlite'||data.mode!=='minimal'||!Array.isArray(data.skills))throw invalid();
   const skills=data.skills.map(readItem);if(new Set(skills.map(i=>i.packageId)).size!==skills.length)throw invalid();
   return {mode:'sqlite',connectionGeneration:generation,skills};
@@ -110,14 +109,14 @@ export class SkillLibraryController {
  }
  private async write(command:SkillLibraryCommand,path:string,body:unknown):Promise<SqliteSkillLibrarySnapshot>{
   if(command.confirmed!==true||!Number.isSafeInteger(command.connectionGeneration)||this.backend.getConnectionGeneration()!==command.connectionGeneration)throw invalid();
-  const current=await this.read();if(current.mode!=='sqlite'||current.connectionGeneration!==command.connectionGeneration||this.backend.getConnectionGeneration()!==command.connectionGeneration)throw invalid();
+  const current=await this.read();if(current.connectionGeneration!==command.connectionGeneration||this.backend.getConnectionGeneration()!==command.connectionGeneration)throw invalid();
   try {
    const result=await this.backend.requestJson({method:'POST',path,body,timeoutMs:10_000});
    if(result.generation!==command.connectionGeneration||this.backend.getConnectionGeneration()!==command.connectionGeneration)throw invalid();
    const receipt=readItem(row(result.data).skill);
    if(receipt.packageId!==command.packageId
     ||path.endsWith('/enable')&&receipt.enabledState!=='enabled'||path.endsWith('/disable')&&receipt.enabledState!=='disabled')throw invalid();
-   const next=await this.read();if(next.mode!=='sqlite'||next.connectionGeneration!==command.connectionGeneration)throw invalid();return next;
+   const next=await this.read();if(next.connectionGeneration!==command.connectionGeneration)throw invalid();return next;
   }catch{throw new Error('操作结果尚未核对，请刷新 Skill 状态后再操作。');}
  }
 }

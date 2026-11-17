@@ -18,7 +18,7 @@ import type { MemoryBridge } from './memory-bridge';
 import type { FixedMemoryProcessingBridge } from './fixed-memory-processing';
 import type { BindingConsentBridge } from './binding-consent-bridge';
 import type { SyncControlBridge } from './sync-control-bridge';
-import type { SkillLearningBridge } from './skill-learning-bridge';
+import type { SkillLibraryBridge } from './skill-library-bridge';
 import type { BackgroundTaskBridge } from './background-task-bridge';
 import type { HistoryClearBridge } from './history-clear-bridge';
 import type { ContactHistoryBridge } from './contact-history-bridge';
@@ -33,7 +33,7 @@ export type AppBridge = WindowBridge & DesktopBridge & {
   screenPermission: ScreenPermissionBridge;
   contacts: ContactSessionBridge; bindings: BindingConsentBridge; replies: ReplyBridge;
   sqliteDiscussion: SqliteDiscussionBridge;
-  skillLearning: SkillLearningBridge;
+  skillLearning: SkillLibraryBridge;
   memory: MemoryBridge; traces: TraceBridge; sources: SourceDeletionBridge; syncControl: SyncControlBridge; foreground: ForegroundBridge;
   fixedMemoryProcessing: FixedMemoryProcessingBridge;
   sqliteMemoryManagement: SqliteMemoryManagementBridge;

@@ -5,10 +5,9 @@ import type { SkillLibraryBridge, SkillLibraryItem, SkillLibrarySnapshot, Sqlite
 
 const verificationLabels = { pending: '场景文件待核验', missing: '场景文件缺失，请恢复后刷新', conflict: '无法确认场景文件，请检查后刷新', invalid: '场景文件校验未通过，请检查后刷新' };
 
-export function SqliteSkillLibraryPage({ initial, bridge, onModeChange, onUnavailable, visible = true, contacts = [] }: {
+export function SqliteSkillLibraryPage({ initial, bridge, onUnavailable, visible = true, contacts = [] }: {
   initial: SqliteSkillLibrarySnapshot;
   bridge: SkillLibraryBridge;
-  onModeChange: (value: SkillLibrarySnapshot) => void;
   onUnavailable: () => void;
   visible?: boolean;
   contacts?: ContactSummary[];
@@ -44,7 +43,6 @@ export function SqliteSkillLibraryPage({ initial, bridge, onModeChange, onUnavai
     try {
       const next = await operation();
       if (!active.current) return;
-      if (next.mode !== 'sqlite') { onModeChange(next); return; }
       setView(next);
       lastLoadedAt.current = Date.now();
       setStale(false);
