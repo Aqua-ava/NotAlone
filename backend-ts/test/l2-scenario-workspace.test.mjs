@@ -199,6 +199,24 @@ test('旧场景修改必须先读，保留身份并要求显式完整替换',asy
     [fact], [old], budget), /proposal_invalid/);
 });
 
+test('场景工具与手动分派保留精确编辑原子性、错误分类和取消保护', async () => {
+  const fact = memory(), old = scenario(fact);
+  const workspace = new L2ScenarioDocumentWorkspace([fact], [old], budget);
+  const path = `${old.scenario_id}.md`, tools = workspace.tools();
+  const execution = {signal: new AbortController().signal};
+  const before = await tools.find(tool => tool.name === 'read').execute({path}, execution);
+  const edit = tools.find(tool => tool.name === 'edit');
+  const edits = [{oldText: '目前是否继续未核实。', newText: '目前状态仍未知。'}];
+  await assert.rejects(edit.execute({path, edits: [...edits, {oldText: '不存在的合成文本', newText: ''}]}, execution), /edit_invalid/);
+  assert.equal(workspace.read(path), before);
+  assert.throws(() => workspace.edit(path, [null]), /tool_arguments_invalid/);
+  assert.throws(() => workspace.edit(path, [{...edits[0], extra: true}]), /edit_invalid/);
+  await assert.rejects(edit.execute({path, edits}, {signal: AbortSignal.abort()}), {name: 'AbortError'});
+  assert.equal(workspace.read(path), before);
+  await edit.execute({path, edits}, execution);
+  assert.match(workspace.compile()[0].paragraphs[0].text, /目前状态仍未知/);
+});
+
 test('已有场景写入也即时校验并返回可纠正的格式原因',()=>{
   const fact=memory(),old=scenario(fact),workspace=new L2ScenarioDocumentWorkspace([fact],[old],budget);
   const path=`${old.scenario_id}.md`;

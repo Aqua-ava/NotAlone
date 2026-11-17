@@ -9,6 +9,7 @@ import {
   type RequestMessage,
 } from '@deepseek-ai/dsh-llm';
 import {defineTool, type ToolDefinition} from '@deepseek-ai/dsh-tools';
+import {applyExactTextEdits, createDocumentWorkspaceTools} from '../document-workspace-tools.ts';
 import type {MessagesBudgetProfile} from '../../platform/models/model-input-budget.ts';
 import {
   L2ScenarioError,
@@ -137,19 +138,7 @@ export class L3ProfileWorkspace {
   }
 
   edit(edits: unknown): string {
-    if (!Array.isArray(edits) || !edits.length || edits.length > 32) invalid('l3_profile_edit_invalid');
-    let content = this.content;
-    for (const edit of edits) {
-      if (
-        !object(edit)
-        || !exactKeys(edit, ['oldText', 'newText'])
-        || typeof edit.oldText !== 'string'
-        || !edit.oldText
-        || typeof edit.newText !== 'string'
-        || content.split(edit.oldText).length !== 2
-      ) invalid('l3_profile_edit_invalid');
-      content = content.replace(edit.oldText, edit.newText);
-    }
+    const content = applyExactTextEdits(this.content, edits, () => invalid('l3_profile_edit_invalid'));
     return this.write('profile.md', content);
   }
 
@@ -172,46 +161,11 @@ export class L3ProfileWorkspace {
   }
 
   tools(): ToolDefinition[] {
-    const signal = (execution: {signal: AbortSignal}) => execution.signal.throwIfAborted();
-    const workspace = this;
-    return [
-      defineTool({
-        name: 'read',
-        description: '读取profile.md或本次冻结目录内的单个场景Markdown。',
-        parameters: {path:{type:'string', required:true}},
-        output: {schema:{type:'string'}, render: (_args, value) => [{type:'text', text:value}]},
-        async execute(args, execution) {
-          signal(execution);
-          return workspace.read(args.path);
-        },
-      }),
-      defineTool({
-        name: 'write',
-        description: '覆盖本次暂存profile.md；不能写场景或任何外部文件。',
-        parameters: {path:{type:'string', required:true}, content:{type:'string', required:true}},
-        output: {schema:{type:'string'}, render: (_args, value) => [{type:'text', text:value}]},
-        async execute(args, execution) {
-          signal(execution);
-          return workspace.write(args.path, args.content);
-        },
-      }),
-      defineTool({
-        name: 'edit',
-        description: '对profile.md执行唯一精确替换；仅暂存。',
-        parameters: {path:{type:'string', required:true}, edits:{
-          type:'array', required:true, items:{
-            type:'object', additionalProperties:false,
-            properties:{oldText:{type:'string', required:true}, newText:{type:'string', required:true}},
-          },
-        }},
-        output: {schema:{type:'string'}, render: (_args, value) => [{type:'text', text:value}]},
-        async execute(args, execution) {
-          signal(execution);
-          if (args.path !== 'profile.md') invalid('l3_profile_path_forbidden');
-          return workspace.edit(args.edits);
-        },
-      }),
-    ];
+    return createDocumentWorkspaceTools(this, {
+      read: '读取profile.md或本次冻结目录内的单个场景Markdown。',
+      write: '覆盖本次暂存profile.md；不能写场景或任何外部文件。',
+      edit: '对profile.md执行唯一精确替换；仅暂存。',
+    });
   }
 
   compile(): L3ProfileDraft {

@@ -9,6 +9,7 @@ import {
   type RequestMessage,
 } from '@deepseek-ai/dsh-llm';
 import {defineTool, type ToolDefinition} from '@deepseek-ai/dsh-tools';
+import {applyExactTextEdits, createDocumentWorkspaceTools} from '../document-workspace-tools.ts';
 import type {MessagesBudgetProfile} from '../../platform/models/model-input-budget.ts';
 
 import {
@@ -184,23 +185,9 @@ export class L2ScenarioDocumentWorkspace {
     this.validatePath(path);
     const content = this.documents.get(path);
     if (content === undefined) throw new L2ScenarioError('l2_scenario_document_missing');
-    if (!Array.isArray(edits) || !edits.length || edits.length > 32) {
-      throw new L2ScenarioError('l2_scenario_edit_invalid');
-    }
-    let next = content;
-    for (const edit of edits) {
-      const value = parseToolArguments(edit);
-      if (
-        !exactKeys(value, ['oldText', 'newText'])
-        || typeof value.oldText !== 'string'
-        || !value.oldText
-        || typeof value.newText !== 'string'
-        || next.split(value.oldText).length !== 2
-      ) {
-        throw new L2ScenarioError('l2_scenario_edit_invalid');
-      }
-      next = next.replace(value.oldText, value.newText);
-    }
+    const next = applyExactTextEdits(content, edits, reason => {
+      throw new L2ScenarioError(reason === 'arguments' ? 'l2_scenario_tool_arguments_invalid' : 'l2_scenario_edit_invalid');
+    });
     return this.write(path, next);
   }
 
@@ -227,57 +214,11 @@ export class L2ScenarioDocumentWorkspace {
   }
 
   tools(): ToolDefinition[] {
-    const signal = (execution: {signal: AbortSignal}) => execution.signal.throwIfAborted();
-    const workspace = this;
-    return [
-      defineTool({
-        name: 'read',
-        description: '读取本次工作区内的一个场景 Markdown；不接受路径、身份或版本之外的参数。',
-        parameters: {path: {type: 'string', required: true}},
-        output: {schema: {type: 'string'}, render: (_args, value) => [{type: 'text', text: value}]},
-        async execute(args, execution) {
-          signal(execution);
-          return workspace.read(args.path);
-        },
-      }),
-      defineTool({
-        name: 'write',
-        description: '创建或覆盖本次工作区内的暂存文档；[DELETED] 只能作为完整替代合并的一部分。',
-        parameters: {
-          path: {type: 'string', required: true},
-          content: {type: 'string', required: true},
-        },
-        output: {schema: {type: 'string'}, render: (_args, value) => [{type: 'text', text: value}]},
-        async execute(args, execution) {
-          signal(execution);
-          return workspace.write(args.path, args.content);
-        },
-      }),
-      defineTool({
-        name: 'edit',
-        description: '对已读取文档执行唯一精确文本替换；仅暂存，不发布。',
-        parameters: {
-          path: {type: 'string', required: true},
-          edits: {
-            type: 'array',
-            required: true,
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                oldText: {type: 'string', required: true},
-                newText: {type: 'string', required: true},
-              },
-            },
-          },
-        },
-        output: {schema: {type: 'string'}, render: (_args, value) => [{type: 'text', text: value}]},
-        async execute(args, execution) {
-          signal(execution);
-          return workspace.edit(args.path, args.edits);
-        },
-      }),
-    ];
+    return createDocumentWorkspaceTools(this, {
+      read: '读取本次工作区内的一个场景 Markdown；不接受路径、身份或版本之外的参数。',
+      write: '创建或覆盖本次工作区内的暂存文档；[DELETED] 只能作为完整替代合并的一部分。',
+      edit: '对已读取文档执行唯一精确文本替换；仅暂存，不发布。',
+    });
   }
 
   compile(): L2ScenarioDraft[] {

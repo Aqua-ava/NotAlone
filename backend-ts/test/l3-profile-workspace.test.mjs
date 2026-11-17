@@ -220,6 +220,22 @@ test('L3文档工具只能读取场景并写profile.md，增量不得丢弃未�
   }], [memory]), /遗漏|旧条目/i);
 });
 
+test('画像工具保留场景只读权限、精确编辑原子性和取消保护', async () => {
+  const workspace = new L3ProfileWorkspace({version_id: randomUUID(), entries: [entry]}, [scenario], [memory], budget);
+  const before = workspace.read('profile.md'), execution = {signal: new AbortController().signal};
+  const edit = workspace.tools().find(tool => tool.name === 'edit');
+  const edits = [{oldText: entry.text, newText: '双方有合成课程经历，当前状态尚未确认。'}];
+  await assert.rejects(edit.execute({path: `${scenario.scenario_id}.md`, edits}, execution), /path_forbidden/);
+  await assert.rejects(edit.execute({path: 'profile.md', edits: [...edits, {oldText: '不存在的合成文本', newText: ''}]}, execution), /edit_invalid/);
+  assert.equal(workspace.read('profile.md'), before);
+  assert.throws(() => workspace.edit([null]), /edit_invalid/);
+  assert.throws(() => workspace.edit([{...edits[0], extra: true}]), /edit_invalid/);
+  await assert.rejects(edit.execute({path: 'profile.md', edits}, {signal: AbortSignal.abort()}), {name: 'AbortError'});
+  assert.equal(workspace.read('profile.md'), before);
+  await edit.execute({path: 'profile.md', edits}, execution);
+  assert.equal(workspace.compile().entries[0].text, edits[0].newText);
+});
+
 test('L3增量核验接受16条旧内容及来源重排，不改写输入', () => {
   const extra = {memory_id:randomUUID(), revision:1};
   const entries = Array.from({length:16}, (_, index) => ({...entry,
