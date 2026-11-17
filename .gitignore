@@ -18,8 +18,9 @@ __pycache__/
 .coverage
 .pytest_cache/
 
-# 本机调研、聊天导出、会话截图、临时资料与模型许可状态
+# 本机调研、历史实验、聊天导出、会话截图、临时资料与模型许可状态
 /research/
+/experiments/hindsight/
 /chat_exports/
 .dsh-computer-use/
 /model-permits/
