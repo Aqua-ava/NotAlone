@@ -61,16 +61,21 @@ test('定点扫描在途接到全局wake仍处理其他联系人',async t=>{
  assert.deepEqual(new Set(calls),new Set(bindings.map(row=>row.contact_id)));assert.equal(reads,2);
 });
 
-test('定点唤醒仍全量核对在途读取，撤销另一联系人立即取消且不恢复停读',async t=>{
+test('定点唤醒仍全量核对在途读取，撤销另一联系人后排空并撤下旧状态',{timeout:3000},async t=>{
  let entered;const started=new Promise(resolve=>{entered=resolve;}),stops=[],calls=[];
  const state={read_enabled:true,bindings:[bindings[0],bindings[1]]};
  const history={coverage:async id=>{calls.push(id);return id===bindings[0].contact_id?{phase:'incomplete'}:complete;},
   synchronize:async(id,signal)=>{entered();return new Promise(resolve=>signal.addEventListener('abort',()=>resolve({phase:'stopped'}),{once:true}));},stop:async id=>{stops.push(id);}};
  const coordinator=new FirstHistoryCoordinator({directory:async()=>state},history);t.after(()=>coordinator.close());
- coordinator.wakeContact(bindings[0].contact_id);await started;state.bindings=[bindings[1]];
+ coordinator.wakeContact(bindings[0].contact_id);let timer;
+ try{await Promise.race([started,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('缺少首次历史 synchronize 请求，未进入撤销检查')),1000);})]);}
+ finally{clearTimeout(timer);}
+ state.bindings=[bindings[1]];
  coordinator.wakeContact(bindings[1].contact_id);await coordinator.waitForIdle();
  assert.ok(stops.includes(bindings[0].contact_id));assert.equal(calls.filter(id=>id===bindings[0].contact_id).length,1);
- assert.equal(coordinator.getState().contacts.find(row=>row.contactId===bindings[0].contact_id).phase,'stopped');
+ assert.equal(coordinator.getState().contacts.find(row=>row.contactId===bindings[0].contact_id),undefined);
+ assert.equal(coordinator.getState().contacts.find(row=>row.contactId===bindings[1].contact_id).phase,'complete');
+ assert.equal(coordinator.getState().lastError,null);
 });
 
 test('定点瞬时重试重取当前绑定与grant，其他complete联系人不被额外重扫',{timeout:2000},async t=>{

@@ -313,7 +313,7 @@ test('实际来源变化不进入瞬时失败重试',async t=>{
  await delay(40);assert.equal(f.state.creates,creates);
 });
 
-test('目录失败经定点唤醒恢复后，全局状态不残留已经恢复的目录错误',async t=>{
+test('目录失败经定点唤醒恢复后，全局状态不残留已经恢复的目录错误',{timeout:3000},async t=>{
  const binding={contact_id:'synthetic-contact',binding_id:'synthetic-binding',grant_id:'synthetic-grant',selection_generation:'1',status:'active'};
  let failed=true,calls=0;
  const directory={directory:async()=>{if(failed)throw new Error('合成目录暂不可用');return {read_enabled:true,bindings:[binding]};}};
@@ -325,7 +325,7 @@ test('目录失败经定点唤醒恢复后，全局状态不残留已经恢复�
  assert.equal(calls,1);assert.equal(coordinator.getState().phase,'idle');assert.equal(coordinator.getState().lastError,null);
 });
 
-test('定点恢复只清除当前联系人错误，同身份失败不会因其他联系人唤醒而重复执行',async t=>{
+test('定点恢复只清除当前联系人错误，同身份失败不会因其他联系人唤醒而重复执行',{timeout:3000},async t=>{
  const bindings=['a','b'].map(contact_id=>({contact_id,binding_id:`binding-${contact_id}`,grant_id:`grant-${contact_id}`,selection_generation:'1',status:'active'}));
  const calls=[],failed=new Set(['a','b']);
  const history={coverage:async()=>({phase:'not_started'}),synchronize:async contactId=>{calls.push(contactId);if(failed.has(contactId))throw new StorageFailure('history_support_unverified');return {phase:'complete'};},stop:async()=>{}};
@@ -338,7 +338,7 @@ test('定点恢复只清除当前联系人错误，同身份失败不会因其�
  assert.deepEqual(calls,['a','b','a','b']);assert.equal(coordinator.getState().lastError,null);
 });
 
-test('成功目录移除失授权联系人后，不保留旧失败或重新读取正文',async t=>{
+test('成功目录移除失授权联系人后，不保留旧失败或重新读取正文',{timeout:3000},async t=>{
  const binding={contact_id:'synthetic-contact',binding_id:'synthetic-binding',grant_id:'synthetic-grant',selection_generation:'1',status:'active'};
  let bindings=[binding],calls=0;
  const history={coverage:async()=>({phase:'not_started'}),synchronize:async()=>{calls++;throw new StorageFailure('history_support_unverified');},stop:async()=>{}};
