@@ -1,17 +1,11 @@
 .ime-pane { display: flex; flex-direction: column; padding-bottom: 4px; overflow: hidden; }
 .ime-workspace { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; }
 .ime-workspace::-webkit-scrollbar { display: none; }
-.ime-header, .ime-input, .ime-status-line, .ime-footer, .rewrite-privacy { flex-shrink: 0; }
-.ime-input textarea { height: 68px; }
+.ime-header, .ime-status-line, .ime-footer, .rewrite-privacy { flex-shrink: 0; }
+
 .rewrite-privacy { color: #707980; font-size: 10px; line-height: 1.6; padding: 6px 4px; }
 .assistant-session-panel { margin-top: 16px; padding-top: 10px; border-top: 1px dashed #d8ceba; }
-.candidate-message-group { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: 7px; }
-.candidate-message-group legend { color: #69787f; font-size: 11px; padding: 0 0 6px; }
-.candidate-message label { display: grid; gap: 4px; color: #69787f; font-size: 11px; }
-.candidate-message button { margin-top: 4px; padding: 3px 7px; border: 1px solid #c8d1cf; border-radius: 3px; color: #456b87; font-size: 11px; }
-.candidate-message-group p { margin: 2px 0; font-size: 11px; color: #69787f; }
-.reply-risk { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.7; margin: 6px 0; }
-.reply-risk { color: #975d3d; background: #f3e4c3; padding: 3px 5px; border-radius: 3px; }
+
 .reply-note { padding: 5px 1px; font-size: 11px; color: #6e797d; }
 
 /* SQLite 工作区共用主输入和两种生成动作。 */

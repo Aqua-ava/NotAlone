@@ -87,24 +87,17 @@ html:has(.admin-layout)::-webkit-scrollbar { display: none; }
 .ime-header button { -webkit-app-region: no-drag; }
 /* 拖动排除区仅属于标题栏控件，正文滚动后不得覆盖标题栏的原生拖动区域。 */
 .ime-logo { width: 43px; height: auto; margin-right: 1px; }
-.contact-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 5px; border-radius: 4px; }
-.ime-modes { margin-left: auto; display: flex; gap: 2px; }
-.ime-modes button { font-size: 10px; padding: 4px 9px; border-radius: 3px; }
-.ime-modes button.active { color: #2d6086; background: #dce9ee; }
+
 .icon-button { width: 25px; height: 25px; display: inline-grid; place-items: center; color: #6c8291; border-radius: 4px; }
 .icon-button:hover { color: #1f618f; background: #e5eef1; }
-.ime-input { display: flex; align-items: center; gap: 8px; padding: 5px 2px 7px; }
-.ime-input textarea { width: 100%; height: 36px; min-width: 0; resize: none; padding: 6px 9px; font-size: 13px; line-height: 22px; background: #fffdf6; border: 1px solid #c6cfcd; border-radius: 2px 4px 3px 5px; }
-.ime-input textarea::placeholder { color: #7c8587; }
+
 .generate-button { display: flex; align-items: center; justify-content: center; gap: 4px; flex-shrink: 0; min-width: 33px; height: 33px; padding: 0 7px; }
 .ime-status { padding: 2px 5px 8px; font-size: 10px; color: #7a7e7c; }
-.horizontal-candidates { display: flex; align-items: center; gap: 19px; min-height: 39px; padding: 6px 8px; margin: 0 2px 5px; background: #ecefeb66; border-radius: 2px 5px 3px 4px; }
-.horizontal-candidates p { font-size: 12px; color: #758189; }
-.horizontal-candidates small { font-size: 10px; color: #7d807a; }
+
 .ime-footer { display: flex; align-items: center; gap: 9px; height: 34px; border-top: 1px dashed #d8ceba; font-size: 10px; padding: 0 5px; }
 .ime-footer > span { margin-right: auto; color: #7e7e71; }
 .ime-footer button { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; padding: 4px 8px; border-radius: 3px; }
-.ime-footer .copy-hide { border: 1px solid #c5d1d1; background: #e7eff0; }
+
 .ime-pane [role="alert"] { color: #99594e; font-size: 10px; }
 @media (max-width: 950px) {
   .admin-layout { grid-template-columns: 180px minmax(0, 1fr); }
