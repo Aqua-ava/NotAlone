@@ -18,7 +18,6 @@ import type { FixedMemoryProcessingBridge } from './fixed-memory-processing';
 import type { BindingConsentBridge } from './binding-consent-bridge';
 import type { SyncControlBridge } from './sync-control-bridge';
 import type { SkillLibraryBridge } from './skill-library-bridge';
-import type { BackgroundTaskBridge } from './background-task-bridge';
 import type { HistoryClearBridge } from './history-clear-bridge';
 import type { ContactHistoryBridge } from './contact-history-bridge';
 import type { ContactDeletionBridge } from './contact-deletion-bridge';
@@ -36,7 +35,6 @@ export type AppBridge = WindowBridge & DesktopBridge & {
   traces: TraceBridge; sources: SourceDeletionBridge; syncControl: SyncControlBridge; foreground: ForegroundBridge;
   fixedMemoryProcessing: FixedMemoryProcessingBridge;
   sqliteMemoryManagement: SqliteMemoryManagementBridge;
-  backgroundTasks: BackgroundTaskBridge;
   historyClear: HistoryClearBridge;
   /** 仅开发宿主由 preload 暴露；打包宿主没有此入口。 */
   contactHistory: ContactHistoryBridge;

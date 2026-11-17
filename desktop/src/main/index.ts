@@ -43,7 +43,6 @@ import { installSetupBridge } from './setup/bridge';
 import { StartupDiagnostics } from './startup/diagnostics';
 import { installStartupBridge } from './startup/bridge';
 import { configureDevelopmentProject, loadBackendConfiguration } from './backend/config';
-import { installBackgroundTaskBridge } from './background-tasks/bridge';
 import { QuarantineLibrary } from '../../../backend-ts/src/history/quarantine-library.ts';
 import { QuarantineController } from './quarantine/controller';
 import { installQuarantineBridge } from './quarantine/bridge';
@@ -142,7 +141,6 @@ void app.whenReady().then(async () => {
       memoryScopeRevision = state.scopeRevision; fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize('memory_scope_listener','scope_changed');
     }
   });
-  installBackgroundTaskBridge(commands, backend, contacts);
   const traces = installTraceBridge(commands, backend, contacts);
   const beginReadingScopeChange = () => {
     const traceId=currentDiagnosticTrace()??newTraceId();

@@ -19,7 +19,6 @@ import { createFixedMemoryProcessingBridge } from './fixed-memory-processing';
 import { createBindingConsentBridge } from './binding-consent';
 import { createSyncControlBridge } from './sync-control';
 import type { DesktopSettings } from '../shared/desktop-bridge';
-import { createBackgroundTaskBridge } from './background-tasks';
 import { createHistoryClearBridge } from './history-clear';
 import { createContactHistoryBridge } from './contact-history';
 import { createContactDeletionBridge } from './contact-deletion';
@@ -50,7 +49,6 @@ export function createAppBridge(renderer: RendererTransport, development = devel
     sources: createSourceDeletionBridge(renderer),
     fixedMemoryProcessing: createFixedMemoryProcessingBridge(renderer),
     sqliteMemoryManagement: createSqliteMemoryManagementBridge(renderer),
-    backgroundTasks: createBackgroundTaskBridge(renderer),
     traces: createTraceBridge(renderer),
     bindings: createBindingConsentBridge(renderer),
     foreground: createForegroundBridge(renderer),

@@ -24,8 +24,6 @@
   "tests/assistant-session-deletion-guards.test.mjs",
   "tests/assistant-session-projection.test.mjs",
   "tests/backend-startup-budget.test.mjs",
-  "tests/background-task-controller.test.mjs",
-  "tests/background-task-polling.test.mjs",
   "tests/binding-startup.test.mjs",
   "tests/contact-deletion-controller.test.mjs",
   "tests/contact-deletion-http.test.mjs",
