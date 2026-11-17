@@ -1,4 +1,4 @@
-/** 物理调用台账合同和旧010表投影。完整元数据存储必须显式注入，禁止静默丢字段。 */
+/** 物理调用台账合同。完整元数据存储必须显式注入，禁止静默丢字段。 */
 import type {MessagesBudgetReceipt} from './model-input-budget.ts';
 export interface ModelLedgerUsage {
   input_tokens: number; output_tokens: number;
@@ -68,13 +68,4 @@ export function validateModelLedgerReceipt(receipt:ModelLedgerReceipt) {
   if(!cost||!['unknown','known','estimated'].includes(cost.status))invalid();
   if(cost.status==='unknown') {if(cost.amount!==null||cost.currency!==null||cost.pricing_version!==null)invalid();}
   else if(typeof cost.amount!=='string'||!/^\d+(?:\.\d+)?$/.test(cost.amount)||!cost.currency?.trim()||!cost.pricing_version?.trim())invalid();
-}
-/** 这里只投影可确认发生的请求；pending/unknown发送状态仍必须由完整details表持久保存。 */
-export function legacyLedgerProjection(receipt:ModelLedgerReceipt) {
-  validateModelLedgerReceipt(receipt);
-  if(receipt.contact_id===null)return null;
-  if(!['response_observed','http_accepted'].includes(receipt.dispatch)||receipt.outcome==='pending')return null;
-  return {id:receipt.ledger_entry_id??receipt.attempt_id,owner_id:receipt.owner_id,contact_id:receipt.contact_id,provider:receipt.provider,model_name:receipt.model,
-    input_tokens:receipt.usage?.input_tokens??null,output_tokens:receipt.usage?.output_tokens??null,latency_ms:receipt.latency_ms,
-    outcome:receipt.legacy_outcome??(receipt.outcome==='succeeded'?'succeeded':'run_failed'),called_at:receipt.called_at};
 }

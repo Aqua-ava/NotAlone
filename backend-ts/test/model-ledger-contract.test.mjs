@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import {
-  legacyLedgerProjection,
   modelLedgerInputBudget,
   validateModelLedgerReceipt,
 } from '../src/platform/models/model-ledger-contract.ts';
@@ -17,10 +16,11 @@ const receipt = overrides => ({
   ...overrides,
 });
 
-test('未经确认的调用不投影成旧物理台账；可确认的旧UUID和拒绝结果保持原样', () => {
+test('物理调用回执保留未知发送事实，并兼容历史UUID和拒绝结果', () => {
   const pending = receipt();
   assert.equal(validateModelLedgerReceipt(pending), undefined);
-  assert.equal(legacyLedgerProjection(pending), null);
+  assert.equal(pending.dispatch, 'authorized_unconfirmed');
+  assert.equal(pending.outcome, 'pending');
   assert.throws(() => validateModelLedgerReceipt({
     ...pending,
     cost: { ...pending.cost, amount: '0' },
@@ -33,19 +33,11 @@ test('未经确认的调用不投影成旧物理台账；可确认的旧UUID和�
     dispatch: 'response_observed',
     outcome: 'failed',
   });
-  const projected = legacyLedgerProjection(confirmed);
-  assert.deepEqual(projected, {
-    id: legacyId,
-    owner_id: confirmed.owner_id,
-    contact_id: confirmed.contact_id,
-    provider: 'synthetic-provider',
-    model_name: 'synthetic-model',
-    input_tokens: null,
-    output_tokens: null,
-    latency_ms: null,
-    outcome: 'rejected_by_validation',
-    called_at: '2026-10-30T00:00:00.000Z',
-  });
+  const original = structuredClone(confirmed);
+  assert.equal(validateModelLedgerReceipt(confirmed), undefined);
+  assert.deepEqual(confirmed, original);
+  assert.throws(() => validateModelLedgerReceipt({...confirmed, ledger_entry_id:'invalid'}), /model_ledger_receipt_invalid/);
+  assert.throws(() => validateModelLedgerReceipt({...confirmed, legacy_outcome:'invalid'}), /model_ledger_receipt_invalid/);
 });
 
 test('预算只投影请求身份与数值，不保留正文或凭据', () => {
