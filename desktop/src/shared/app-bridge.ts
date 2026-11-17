@@ -21,7 +21,6 @@ import type { SkillLibraryBridge } from './skill-library-bridge';
 import type { HistoryClearBridge } from './history-clear-bridge';
 import type { ContactHistoryBridge } from './contact-history-bridge';
 import type { ContactDeletionBridge } from './contact-deletion-bridge';
-import type { TraceBridge } from './trace-bridge';
 
 export type AppBridge = WindowBridge & DesktopBridge & {
   diagnosticLogs: DiagnosticLogBridge;
@@ -32,7 +31,7 @@ export type AppBridge = WindowBridge & DesktopBridge & {
   contacts: ContactSessionBridge; bindings: BindingConsentBridge; replies: ReplyBridge;
   sqliteDiscussion: SqliteDiscussionBridge;
   skillLearning: SkillLibraryBridge;
-  traces: TraceBridge; sources: SourceDeletionBridge; syncControl: SyncControlBridge; foreground: ForegroundBridge;
+  sources: SourceDeletionBridge; syncControl: SyncControlBridge; foreground: ForegroundBridge;
   fixedMemoryProcessing: FixedMemoryProcessingBridge;
   sqliteMemoryManagement: SqliteMemoryManagementBridge;
   historyClear: HistoryClearBridge;

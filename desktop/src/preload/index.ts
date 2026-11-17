@@ -22,7 +22,6 @@ import type { DesktopSettings } from '../shared/desktop-bridge';
 import { createHistoryClearBridge } from './history-clear';
 import { createContactHistoryBridge } from './contact-history';
 import { createContactDeletionBridge } from './contact-deletion';
-import { createTraceBridge } from './traces';
 
 type RendererTransport = typeof ipcRenderer;
 export function createAppBridge(renderer: RendererTransport): AppBridge {
@@ -42,7 +41,6 @@ export function createAppBridge(renderer: RendererTransport): AppBridge {
     sources: createSourceDeletionBridge(renderer),
     fixedMemoryProcessing: createFixedMemoryProcessingBridge(renderer),
     sqliteMemoryManagement: createSqliteMemoryManagementBridge(renderer),
-    traces: createTraceBridge(renderer),
     bindings: createBindingConsentBridge(renderer),
     foreground: createForegroundBridge(renderer),
     syncControl: createSyncControlBridge(renderer),

@@ -27,7 +27,6 @@ import { MemoryPage } from './MemoryPage';
 import { SyncControlPanel } from './SyncControlPanel';
 import { SyncDiagnosticsPanel } from './SyncDiagnosticsPanel';
 import { SkillLearningPage } from './SkillLearningPage';
-import { DeveloperTraces } from './DeveloperTraces';
 
 const helper = window.location.hash === '#helper';
 document.title = helper ? 'NotAlone · 输入小窗' : 'NotAlone · 管理后台';
@@ -148,7 +147,6 @@ export function App() {
               <summary>同步诊断</summary>
               {advancedOpen && syncDiagnosticsOpen && <SyncDiagnosticsPanel bridge={window.notalone.syncControl} contacts={contactSession.state.contacts} />}
             </details>
-            {advancedOpen && <DeveloperTraces session={contactSession} />}
           </details></>}
         {page === 'contacts' && <ContactsPage session={contactSession} syncDetailsContactId={syncDetailsContactId} readingPosition={readingPosition} navigate={setPage} initialSelection={selectingWechatContacts} onSelectionClosed={() => setSelectingWechatContacts(false)} />}
         <div hidden={page !== 'memory'}><MemoryPage session={contactSession} visible={page === 'memory'} /></div>

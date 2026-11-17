@@ -9,10 +9,10 @@ function fixture() {
  const contactId=randomUUID(),sessionId=randomUUID(),requestKey=randomUUID(),gate=Promise.withResolvers(),requests=[];
  const backend={getConnectionGeneration:()=>1,onStateChanged:()=>()=>{},requestJson:request=>{requests.push(request);return gate.promise;}};
  const contacts={getState:()=>({selectedContactId:contactId,scopeRevision:1,directoryPhase:'ready',contacts:[{contactId}]}),onStateChanged:()=>()=>{}};
- const discussion=new SqliteDiscussionController(backend,contacts),state={history:'旧聊天',media:'旧图片',traces:'旧过程',processing:'旧进度',management:'旧记忆'},events=[];
+ const discussion=new SqliteDiscussionController(backend,contacts),state={history:'旧聊天',media:'旧图片',processing:'旧进度',management:'旧记忆'},events=[];
  const clear=key=>()=>{state[key]=null;};
  const ports={history:{getState:()=>({contactId}),invalidate:clear('history'),refreshCurrent:async id=>{events.push(['refresh',id]);}},media:{invalidate:clear('media'),invalidateAndDrain:async()=>{clear('media')();events.push(['drain']);}},
-  traces:{invalidateSource:clear('traces')},processing:{synchronize:clear('processing')},management:{synchronize:clear('management')},discussion,
+  processing:{synchronize:clear('processing')},management:{synchronize:clear('management')},discussion,
   replies:{revalidateDeletedSource:async id=>{events.push(['reply',id]);},prepareConnectionChange:async()=>{events.push(['connection']);},beginHistoryClear:()=>async()=>{}}};
  return {lifecycle:new DesktopDataLifecycle(ports),ports,discussion,state,events,requests,gate,request:{contactId,sessionId,requestKey,scopeRevision:1,text:'合成讨论要求'}};
 }
@@ -76,7 +76,7 @@ test('原联系人删除迟到回调保留当前联系人聊天、媒体及在�
   assert.equal(history.getState().messages.items[0].messageId,message.message_id);
   assert.equal(f.state.media,'旧图片');assert.equal(reads.length,1);
   assert.ok(streams.every(signal=>!signal.aborted));
-  for(const key of ['traces','processing','management'])assert.equal(f.state[key],null);
+  for(const key of ['processing','management'])assert.equal(f.state[key],null);
   assert.deepEqual(f.events,[['reply',oldContact]]);
   const pending=history.load(selection);
   await lifecycle.sourceChanged(oldContact);

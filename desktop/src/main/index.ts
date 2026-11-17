@@ -130,7 +130,6 @@ void app.whenReady().then(async () => {
       memoryScopeRevision = state.scopeRevision; fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize('memory_scope_listener','scope_changed');
     }
   });
-  const traces = installTraceBridge(commands, backend, contacts);
   const beginReadingScopeChange = () => {
     const traceId=currentDiagnosticTrace()??newTraceId();
     const finishForeground = withDiagnosticTrace(traceId,()=>foreground.beginReadingScopeChange());
@@ -159,7 +158,7 @@ void app.whenReady().then(async () => {
   const sqliteDiscussion = installSqliteDiscussionBridge(commands, backend, contacts,()=>foreground.getGenerationBlock()===null);
   replies.onSessionDeletion((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   installSkillLearningBridge(commands, backend,()=>sqliteDiscussion.synchronize(true));
-  dataLifecycle = new DesktopDataLifecycle({history: contactHistory, media, traces,
+  dataLifecycle = new DesktopDataLifecycle({history: contactHistory, media,
     processing: fixedMemoryProcessing, management: sqliteMemoryManagement, discussion: sqliteDiscussion, replies});
   let settleHistoryClear: (() => Promise<void>) | undefined;
   let resyncWasComplete = false;
@@ -252,4 +251,3 @@ void app.whenReady().then(async () => {
 }).catch(() => {
   dialog.showErrorBox('NotAlone', '应用暂时无法启动，请关闭后重试。');
 });
-import { installTraceBridge } from './traces/bridge';
