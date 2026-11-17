@@ -22,7 +22,6 @@ import type { DesktopSettings } from '../shared/desktop-bridge';
 import { createHistoryClearBridge } from './history-clear';
 import { createContactHistoryBridge } from './contact-history';
 import { createContactDeletionBridge } from './contact-deletion';
-import { createQuarantineBridge } from './quarantine';
 import { createTraceBridge } from './traces';
 
 type RendererTransport = typeof ipcRenderer;
@@ -50,7 +49,6 @@ export function createAppBridge(renderer: RendererTransport): AppBridge {
     historyClear: createHistoryClearBridge(renderer),
     contactHistory: createContactHistoryBridge(renderer),
     contactDeletion: createContactDeletionBridge(renderer),
-    quarantine: createQuarantineBridge(renderer),
     openManager: () => renderer.invoke('window:open-manager'),
     openHelper: () => renderer.invoke('window:open-helper'),
     hideWindow: () => renderer.invoke('window:hide'),

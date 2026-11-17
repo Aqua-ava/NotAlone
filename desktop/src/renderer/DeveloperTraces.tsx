@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { ContactSessionView } from './contact-session';
 import { TracePanel, useTraceReading } from './TracePanel';
-import { QuarantinePanel } from './QuarantinePanel';
 
 function ContactTraces({ session }: { session: ContactSessionView }) {
   const traces = useTraceReading(session);
@@ -18,7 +17,6 @@ export function DeveloperTraces({ session }: { session: ContactSessionView }) {
       {selectedContactId ? <ContactTraces key={`${selectedContactId}:${scopeRevision}`} session={session} />
         : <p>请在顶部选择联系人，再查看其处理过程。</p>}
       {session.error && <p role="alert">{session.error}</p>}
-      {import.meta.env.DEV && <QuarantinePanel />}
     </>}
   </details>;
 }

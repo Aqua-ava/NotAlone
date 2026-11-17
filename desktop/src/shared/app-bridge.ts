@@ -21,7 +21,6 @@ import type { SkillLibraryBridge } from './skill-library-bridge';
 import type { HistoryClearBridge } from './history-clear-bridge';
 import type { ContactHistoryBridge } from './contact-history-bridge';
 import type { ContactDeletionBridge } from './contact-deletion-bridge';
-import type { QuarantineBridge } from './quarantine-bridge';
 import type { TraceBridge } from './trace-bridge';
 
 export type AppBridge = WindowBridge & DesktopBridge & {
@@ -39,5 +38,4 @@ export type AppBridge = WindowBridge & DesktopBridge & {
   historyClear: HistoryClearBridge;
   contactHistory: ContactHistoryBridge;
   contactDeletion: ContactDeletionBridge;
-  quarantine: QuarantineBridge;
 };

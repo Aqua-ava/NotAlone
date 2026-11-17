@@ -12,7 +12,6 @@
   "tests/wechat-db-key-refresh.test.mjs",
   "tests/sqlite-first-session-regression.test.mjs",
   "tests/history-image-message.test.mjs",
-  "tests/quarantine-controller.test.mjs",
   "tests/diagnostic-export.test.mjs",
   "tests/usage/bridge.test.mjs",
   "tests/usage/controller.test.mjs",

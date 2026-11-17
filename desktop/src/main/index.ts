@@ -42,11 +42,6 @@ import { installSetupBridge } from './setup/bridge';
 import { StartupDiagnostics } from './startup/diagnostics';
 import { installStartupBridge } from './startup/bridge';
 import { configureDevelopmentProject, loadBackendConfiguration } from './backend/config';
-import { QuarantineLibrary } from '../../../backend-ts/src/history/quarantine-library.ts';
-import { QuarantineController } from './quarantine/controller';
-import { installQuarantineBridge } from './quarantine/bridge';
-import { presentQuarantine } from './quarantine/window';
-import { resolveQuarantineRoot } from './quarantine/paths';
 
 app.setName('NotAlone');
 const selectedDataPath = app.commandLine.getSwitchValue('user-data-dir');
@@ -101,9 +96,6 @@ void app.whenReady().then(async () => {
     return result.canceled ? undefined : result.filePath;
   });
   app.once('will-quit', () => { void diagnosticLog.close(); });
-  const quarantine = new QuarantineController(new QuarantineLibrary(resolveQuarantineRoot(
-    app.getPath('appData'), app.getPath('userData'), selectedDataPath)),presentQuarantine);
-  installQuarantineBridge(commands, quarantine);
   // 联系人删除窗口先于所有读取方创建：联系人目录、授权目录与同步状态读取在窗口内照常尝试，
   // 失败静默保留旧状态，窗口结束时各自补读一次。
   const contactDeletionQuiet = new ContactDeletionQuiet();
@@ -198,7 +190,6 @@ void app.whenReady().then(async () => {
   app.on('before-quit', () => { fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize('application_quit','application_quit'); sqliteDiscussion.synchronize(true); foreground.stopContinuous(); diagnostics.cancel(); });
   app.on('will-quit', () => sqliteDiscussion.close());
   installQuitLifecycle(backend, windows, async () => {
-    await quarantine.close();
     await media.prepareClosing();
     await headerChanges.shutdown();
   });
