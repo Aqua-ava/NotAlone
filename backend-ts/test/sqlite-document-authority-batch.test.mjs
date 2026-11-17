@@ -24,7 +24,7 @@ async function prepared(t){
 }
 
 test('文档领取同动作批验精确任务来源，authority只解析一次且每条消息修订仍复验',async t=>{
- const f=await prepared(t),claim=memoryDocumentsStageActions.find(action=>action.name==='memoryDocuments.claimScene');
+ const f=await prepared(t),claim=memoryDocumentsStageActions.find(action=>action.name==='memoryDocuments.claim');
  assert.equal(f.refs.length,2);
  f.snapshot(()=>assert.throws(()=>claim.execute(f.tx,{ownerId:f.owner,taskId:f.taskId},f.storage.status),error=>error===f.stop));
  assert.equal(f.authority,1,'同任务两个来源应走一次官方批量authority');
@@ -47,6 +47,6 @@ test('批验跨联系人的任一组失败不种部分缓存，异常退出与�
  f.snapshot(()=>basis.withDocumentSourceQualifications(f.tx,()=>{prime(f.tx,[good]);basis.documentSourceEligibility(f.tx,good);assertSourceEligibility(f.tx,good);}));
  assert.equal(f.authority,2,'doc策略缓存不能代替其他来源策略');
  const binding=f.saved.find(value=>value.contact_id===f.contactId);await f.contacts.revoke(binding.contact_id,binding.binding_id,binding.selection_generation);
- const claim=memoryDocumentsStageActions.find(action=>action.name==='memoryDocuments.claimScene');
+ const claim=memoryDocumentsStageActions.find(action=>action.name==='memoryDocuments.claim');
  f.snapshot(()=>assert.throws(()=>claim.execute(f.tx,{ownerId:f.owner,taskId:f.taskId},f.storage.status),{code:'memory_extraction_scope_stale'}));
 });

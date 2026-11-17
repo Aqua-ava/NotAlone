@@ -5,7 +5,7 @@ type StateRow={id:string;state:string;runId:string;taskId?:string;contactPrefix?
 type State={run?:StateRow;tasks:StateRow[];batches:StateRow[]};
 const text=(value:unknown):string|undefined=>typeof value==='string'?value:undefined;
 const prefix=(value:unknown):string|undefined=>typeof value==='string'&&/^[0-9a-f-]{36}$/i.test(value)?value.slice(0,8).toLowerCase():undefined;
-const watched=new Set(['start','startContact','startHistory','startHistoryBatch','restartPolicy','autoContinue','claim','blockClaim','finish','fail','control','abandonUnknown','settleRun','finishLater','recover','setAutomatic','enrollRun','claimDue','claimScene','claimProfile','prepareVerifiedProfileReplay','saveScene','saveProfile','publish','settle','noteFailure']);
+const watched=new Set(['start','startContact','startHistory','startHistoryBatch','restartPolicy','autoContinue','claim','blockClaim','finish','fail','control','abandonUnknown','settleRun','finishLater','recover','setAutomatic','enrollRun','claimDue','prepareVerifiedProfileReplay','saveScene','saveProfile','publish','settle','noteFailure']);
 const reason=(code:unknown):string=>{
  if(typeof code!=='string')return 'failed';
  if(code.includes('receipt_unknown')||code.includes('call_unknown'))return 'receipt_unknown';

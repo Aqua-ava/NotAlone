@@ -28,7 +28,7 @@ test('新库来源输入触发器保留来源闭包及联系人修订隔离，�
  const f=await deletionFixture(t,{twoContacts:true,laterScheduling:true});
  const run=await f.extraction.start('input-scope-recursion-guard');await f.extraction.waitForIdle(run.runId);
  const task=(await f.extraction.read(run.runId)).tasks.find(value=>value.contactId===f.contactId);
- const claim=await f.storage.execute('memoryDocuments.claimScene',{ownerId:f.owner,taskId:task.taskId});assert.ok(claim);
+ const claim=await f.storage.execute('memoryDocuments.claim',{ownerId:f.owner,taskId:task.taskId});assert.ok(claim);
  const db=new DatabaseSync(join(f.root,'managed/sqlite/notalone.sqlite'));t.after(()=>db.close());db.exec('PRAGMA foreign_keys=ON');
  const all=(sql,values=[])=>{const statement=db.prepare(sql);statement.setReadBigInts(true);return statement.all(...values);};
  const source=all("SELECT source_contact_id,message_id,record_id,accepted_revision FROM step_input WHERE owner_id=? AND step_id=? AND kind='message' ORDER BY input_no LIMIT 1",[f.owner,claim.stepId])[0];

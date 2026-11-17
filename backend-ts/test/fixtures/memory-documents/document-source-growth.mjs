@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {sourceGrowthFixture} from '../memory-management/adjudication-source-growth.mjs';
 import {memoryDocumentsStageActions} from '../../../src/memory/sqlite/documents/stages.ts';
 
-const claimScene=memoryDocumentsStageActions.find(action=>action.name==='memoryDocuments.claimScene');
+const claimScene=memoryDocumentsStageActions.find(action=>action.name==='memoryDocuments.claim');
 
 /** 复用正式合成候选与同源父池；只领取文档步骤，不调用文档模型。 */
 export async function documentSourceGrowthFixture(t,count){

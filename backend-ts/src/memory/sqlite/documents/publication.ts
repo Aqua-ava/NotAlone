@@ -4,12 +4,12 @@ import type {StorageAction,StorageLease,StorageRow,StorageTransaction} from '../
 import {readExtractionToolArguments} from '../../extraction/arguments.ts';
 import {DEFAULT_L2_SCENARIO_BUDGET,L2ScenarioError,parseScenarioVerification,validateScenarioDocument,type L2ScenarioMemory,type L2ScenarioReference} from '../../scenarios/document.ts';
 import {selectProfilePublication,validateProfile,type ProfileVerification} from '../../profiles/document.ts';
-import {documentSources,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,withDocumentSourceQualifications,withSourceMemo} from './basis.ts';
+import {taskSceneVersions,documentSources,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,withDocumentSourceQualifications,withSourceMemo} from './basis.ts';
 import {current} from './stages.ts';
 import {preconditions,revisions,task,taskView} from './actions.ts';
 import {fail,textId} from '../qualification.ts';
 import {finishLaterStagePublication} from './later-schedule.ts';
-import {currentDocumentSteps,hasUnresolvedDocumentWork} from './stage-selection.ts';
+import {documentTaskStage,currentDocumentSteps,hasUnresolvedDocumentWork} from './stage-selection.ts';
 const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:(tx,input,lease)=>withDocumentSourceQualifications(tx,()=>execute(tx,input,lease))} as StorageAction);
 function verification(tx:StorageTransaction,ownerId:string,attemptId:string,eventId:string,tool:string):unknown {
  const e=tx.get(`SELECT e.payload FROM execution_event e JOIN model_call c ON c.owner_id=e.owner_id AND c.id=coalesce(e.originated_call_id,e.reused_call_id)
@@ -18,10 +18,7 @@ function verification(tx:StorageTransaction,ownerId:string,attemptId:string,even
  return readExtractionToolArguments(JSON.parse(String(e!.payload)).blocks,tool).value;
 }
 const members=eligiblePriorMembers;
-function laterStage(tx:StorageTransaction,ownerId:string,t:StorageRow):string|null {
- const row=tx.get('SELECT policy_config FROM processing_run WHERE owner_id=? AND id=?',[ownerId,t.run_id]);if(!row)return null;
- try{const policy=JSON.parse(String(row.policy_config));return policy?.intent==='memory_document_later_stage'&&['document_scene','document_profile'].includes(policy.stage)?String(policy.stage):null;}catch{return null;}
-}
+
 function storeBasis(tx:StorageTransaction,ownerId:string,documentId:string,versionNo:bigint,blockNo:number,statementNo:number,eventId:string,refs:readonly L2ScenarioReference[],relation:'support'|'contradiction'='support'){
  if(!refs.length)fail('document_basis_missing');
  for(const [index,ref] of refs.entries()){
@@ -53,23 +50,14 @@ function replace(tx:StorageTransaction,ownerId:string,t:StorageRow,documentId:st
  if(!old)fail('document_replacement_stale');
  tx.run('INSERT INTO document_replacement VALUES(?,?,?,?,?)',[ownerId,documentId,versionNo,old!.document_id,old!.version_no]);
 }
-function sceneVersions(tx:StorageTransaction,ownerId:string,t:StorageRow,memories:L2ScenarioMemory[]){
- const old=members(tx,ownerId,t);
- const staged=tx.all(`SELECT v.*,d.kind,d.scope_kind,d.contact_id,d.state FROM memory_document_version v JOIN memory_document d ON d.owner_id=v.owner_id AND d.id=v.document_id
-  JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
-  WHERE v.owner_id=? AND s.task_id=? AND s.kind='document_scene' AND s.state='succeeded' AND a.state='succeeded' ORDER BY d.id`,[ownerId,t.id]);
- const replacements=tx.all(`SELECT r.old_document_id,r.old_version_no FROM document_replacement r JOIN memory_document_version v ON v.owner_id=r.owner_id AND v.document_id=r.document_id AND v.version_no=r.version_no
-  JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE r.owner_id=? AND s.task_id=? AND s.kind='document_scene'`,[ownerId,t.id]);
- const retained=old.filter(o=>o.kind==='scene'&&!replacements.some(r=>r.old_document_id===o.document_id&&r.old_version_no===o.version_no));
- return renderDocuments(tx,ownerId,[...retained,...staged],memories).scenarios;
-}
+
 /** 发布前的全部来源与集合核验；局部读取缓存随返回销毁，不能跨入后续SQL写入。 */
 function validatedPublication(tx:StorageTransaction,ownerId:string,taskId:string):{t:StorageRow;all:StorageRow[]}{
  return withSourceMemo(()=>{
   const t=task(tx,ownerId,taskId);preconditions(tx,ownerId,t,{allowPaused:true});const r=revisions(tx,ownerId,t);
   if(t.document_basis_state!=='frozen'||r.memory_revision!==t.accepted_memory_revision||r.document_revision!==t.accepted_document_revision||r.current_publication_id!==t.accepted_publication_id)fail('document_publication_conflict');
   const stages=currentDocumentSteps(tx,ownerId,taskId);
-  const mode=laterStage(tx,ownerId,t),completed=stages.every(s=>s.state==='succeeded'||s.state==='not_applicable');
+  const mode=documentTaskStage(tx,ownerId,t),completed=stages.every(s=>s.state==='succeeded'||s.state==='not_applicable');
   if(!completed||hasUnresolvedDocumentWork(tx,ownerId,taskId)||(mode==='document_scene'?(stages.length!==1||stages[0]?.kind!=='document_scene'||stages[0]?.state!=='succeeded'):
    mode==='document_profile'?(stages.length!==1||stages[0]?.kind!=='document_profile'||stages[0]?.state!=='succeeded'):stages.length!==2))fail('document_stage_incomplete');
   const prior=members(tx,ownerId,t),created=tx.all(`SELECT v.*,d.kind,d.scope_kind,d.contact_id,d.state FROM memory_document_version v JOIN memory_document d ON d.owner_id=v.owner_id AND d.id=v.document_id JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE v.owner_id=? AND s.task_id=? AND s.kind IN ('document_scene','document_profile') AND s.state='succeeded' AND a.state='succeeded' AND v.content_state='present'`,[ownerId,t.id]);
@@ -121,7 +109,7 @@ export const memoryDocumentsPublicationActions:StorageAction[]=[
     storeBasis(tx,ownerId,documentId,v.versionNo,n,1,eventId,paragraph.references);
    }
   }
-  markSuccess(tx,ownerId,attempt);return {scenarios:sceneVersions(tx,ownerId,t,memories)};
+  markSuccess(tx,ownerId,attempt);return {scenarios:taskSceneVersions(tx,ownerId,t,memories)};
  }),
  act('saveProfile','write',(tx,i,lease)=>{
   const ownerId=textId(i.ownerId),{attempt,t}=current(tx,ownerId,textId(i.attemptId),lease);if(attempt.kind!=='document_profile')fail('document_stage_invalid');
@@ -130,7 +118,7 @@ export const memoryDocumentsPublicationActions:StorageAction[]=[
   const checked=verification(tx,ownerId,String(attempt.id),eventId,'ProfileVerificationOutput') as ProfileVerification;
   const prior=new Set(renderDocuments(tx,ownerId,old,memories).scenarios.map(s=>s.version_id));
   const selection=(()=>{try{return selectProfilePublication(proposal,checked,memories,DEFAULT_L2_SCENARIO_BUDGET,previous,
-    previous?sceneVersions(tx,ownerId,t,memories).filter(s=>!prior.has(s.version_id)):[]);
+    previous?taskSceneVersions(tx,ownerId,t,memories).filter(s=>!prior.has(s.version_id)):[]);
    }catch(error){if(error instanceof L2ScenarioError)fail(error.code);throw error;}})();
   const eventNo=tx.get('SELECT coalesce(max(event_no),0)+1 AS n FROM execution_event WHERE owner_id=? AND step_attempt_id=?',[ownerId,attempt.id])!.n;
   tx.run('INSERT INTO execution_event(owner_id,id,step_attempt_id,event_no,kind,payload,created_at) VALUES(?,?,?,?,?,?,?)',
@@ -181,4 +169,3 @@ export const memoryDocumentsPublicationActions:StorageAction[]=[
   tx.run("UPDATE processing_run SET state='completed' WHERE owner_id=? AND id=? AND state<>'revoked'",[ownerId,runId]);return true;
  }),
 ];
-export {sceneVersions};

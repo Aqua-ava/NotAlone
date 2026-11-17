@@ -7,15 +7,15 @@ import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger-con
 import {validateModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
 import type {ModelTaskClaim} from '../../../platform/models/model-permit-port.ts';
 import type {L2ScenarioMemory} from '../../scenarios/document.ts';
-import {actualInputSources,memoryBasis,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,sourceStillValid,withDocumentSourceQualifications} from './basis.ts';
+import {actualInputSources,taskSceneVersions,memoryBasis,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,sourceStillValid,withDocumentSourceQualifications} from './basis.ts';
 import {documentActualInputs} from './inputs.ts';
 import {preconditions,revisions,task,taskView} from './actions.ts';
 import {fail,textId} from '../qualification.ts';
 import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 import {failLaterStage,finishLaterStagePublication,laterTaskPaused,reconcileTerminalLaterRuns} from './later-schedule.ts';
-import {currentDocumentSteps} from './stage-selection.ts';
+import {documentTaskStage,currentDocumentSteps} from './stage-selection.ts';
 
-export interface DocumentClaim {attemptId:string;stepId:string;taskId:string;runId:string;kind:'document_scene'|'document_profile';laterStage:string|null;scheduleNow:number|null;scopeKind:'self'|'contact';contactId:string|null;claim:ModelTaskClaim;memories:L2ScenarioMemory[];scenarios:any[];profile:any;}
+export interface DocumentClaim {attemptId:string;stepId:string;taskId:string;runId:string;kind:'document_scene'|'document_profile';scheduleNow:number|null;contactId:string|null;claim:ModelTaskClaim;memories:L2ScenarioMemory[];scenarios:any[];profile:any;changedScenarioIds:string[];removedScenarioVersionIds:string[];}
 const act=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any,lease:StorageLease)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:(tx,input,lease)=>withDocumentSourceQualifications(tx,()=>execute(tx,input,lease))} as StorageAction);
 /** 普通暂停后不再启动新的文档小批；正在执行的批次允许收尾。 */
 function runPaused(tx:StorageTransaction,ownerId:string,runId:string):boolean {
@@ -23,10 +23,7 @@ function runPaused(tx:StorageTransaction,ownerId:string,runId:string):boolean {
  return !run||run.pause_requested_at!==null;
 }
 const digest=(v:unknown)=>sha256(JSON.stringify(v));
-function laterStage(tx:StorageTransaction,ownerId:string,t:StorageRow):string|null {
- const row=tx.get('SELECT policy_config FROM processing_run WHERE owner_id=? AND id=?',[ownerId,t.run_id]);if(!row)return null;
- try{const policy=JSON.parse(String(row.policy_config));return policy?.intent==='memory_document_later_stage'&&['document_scene','document_profile'].includes(policy.stage)?String(policy.stage):null;}catch{return null;}
-}
+
 function laterTaskOwnsSchedule(tx:StorageTransaction,ownerId:string,t:StorageRow):boolean {
  const run=tx.get('SELECT policy_config FROM processing_run WHERE owner_id=? AND id=?',[ownerId,t.run_id]);if(!run)return false;
  try{
@@ -38,7 +35,7 @@ function laterTaskOwnsSchedule(tx:StorageTransaction,ownerId:string,t:StorageRow
  }catch{return false;}
 }
 function laterNow(tx:StorageTransaction,ownerId:string,t:StorageRow):number|null {
- if(!laterStage(tx,ownerId,t))return null;
+ if(!documentTaskStage(tx,ownerId,t))return null;
  const row=tx.get('SELECT started_at FROM processing_run WHERE owner_id=? AND id=?',[ownerId,t.run_id]);return row?Number(row.started_at):null;
 }
 function eligible(tx:StorageTransaction,ownerId:string,t:StorageRow){
@@ -59,7 +56,7 @@ function createStep(tx:StorageTransaction,ownerId:string,t:StorageRow,kind:Docum
    WHERE s.owner_id=? AND s.task_id=? AND s.kind='document_scene' AND s.state='succeeded' AND i.kind='memory' ORDER BY i.memory_id`,[ownerId,t.id]);
   if(prior.length){
    if(prior.length!==selected.length||prior.some((item,index)=>item.memory_id!==selected[index]?.row.id||item.memory_version_no!==selected[index]?.version.version_no||item.accepted_head_revision!==selected[index]?.row.head_revision))fail('document_memory_stale');
-  }else if(laterStage(tx,ownerId,t)!=='document_profile'||!members.some(member=>member.kind==='scene'))fail('document_scene_incomplete');
+  }else if(documentTaskStage(tx,ownerId,t)!=='document_profile'||!members.some(member=>member.kind==='scene'))fail('document_scene_incomplete');
  }
  const stepId=randomUUID(),attemptId=randomUUID(),now=Date.now(),stepNo=tx.get('SELECT coalesce(max(step_no),0)+1 AS n FROM processing_step WHERE owner_id=? AND task_id=?',[ownerId,t.id])!.n;
  tx.run("INSERT INTO processing_step(owner_id,id,task_id,step_no,kind,state,input_state,accepted_memory_revision) VALUES(?,?,?,?,?,'running','frozen',?)",[ownerId,stepId,t.id,stepNo,kind,t.accepted_memory_revision]);
@@ -71,17 +68,11 @@ function createStep(tx:StorageTransaction,ownerId:string,t:StorageRow,kind:Docum
  if(kind==='document_profile')for(const v of tx.all(`SELECT v.* FROM memory_document_version v JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE v.owner_id=? AND s.task_id=? AND s.kind='document_scene' AND s.state='succeeded' AND a.state='succeeded' AND v.content_state='present' ORDER BY v.document_id`,[ownerId,t.id]))
   tx.run("INSERT INTO step_input(owner_id,step_id,input_no,kind,document_id,document_version_no,publication_id) VALUES(?,?,?,'document',?,?,NULL)",[ownerId,stepId,++inputNo,v.document_id,v.version_no]);
  tx.run("INSERT INTO step_attempt VALUES(?,?,?,1,?,?,?,?,?,'running',?,NULL,NULL)",[ownerId,attemptId,stepId,t.resume_no,randomUUID(),now+300_000,t.control_revision,lease.runtimeId,now]);
-  let renderMembers=members;
-  if(kind==='document_profile'){
-   // 继续暂停前的任务时，主题版本可能已保存但尚未发布；画像输入必须使用本轮真实场景版本。
-   const staged=tx.all(`SELECT v.*,d.kind,d.scope_kind,d.contact_id,d.state FROM memory_document_version v JOIN memory_document d ON d.owner_id=v.owner_id AND d.id=v.document_id
-    JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
-    WHERE v.owner_id=? AND s.task_id=? AND s.kind='document_scene' AND s.state='succeeded' AND a.state='succeeded' AND v.content_state='present' ORDER BY d.id`,[ownerId,t.id]);
-   const stagedIds=new Set(staged.map(row=>String(row.document_id)));
-   renderMembers=[...members.filter(member=>!stagedIds.has(String(member.document_id))),...staged];
-  }
-  const rendered=renderDocuments(tx,ownerId,renderMembers,selected.map(x=>x.memory));
- return {attemptId,stepId,taskId:String(t.id),runId:String(t.run_id),kind,laterStage:laterStage(tx,ownerId,t),scheduleNow:laterNow(tx,ownerId,t),scopeKind:t.scope_kind as 'self'|'contact',contactId:t.contact_id as string|null,claim:{task_id:String(t.id),step_id:stepId,step_name:kind,worker_id:lease.runtimeId,lease_generation:Number(t.resume_no)},memories:selected.map(x=>x.memory),scenarios:rendered.scenarios,profile:rendered.profile};
+ const memories=selected.map(x=>x.memory),rendered=renderDocuments(tx,ownerId,members,memories);
+ const scenarios=kind==='document_profile'?taskSceneVersions(tx,ownerId,t,memories):rendered.scenarios;
+ const previousIds=new Set(rendered.scenarios.map(scene=>scene.version_id)),currentIds=new Set(scenarios.map(scene=>scene.version_id));
+
+ return {attemptId,stepId,taskId:String(t.id),runId:String(t.run_id),kind,scheduleNow:laterNow(tx,ownerId,t),contactId:t.contact_id as string|null,claim:{task_id:String(t.id),step_id:stepId,step_name:kind,worker_id:lease.runtimeId,lease_generation:Number(t.resume_no)},memories,scenarios,profile:rendered.profile,changedScenarioIds:scenarios.filter(scene=>!previousIds.has(scene.version_id)).map(scene=>scene.scenario_id),removedScenarioVersionIds:rendered.scenarios.filter(scene=>!currentIds.has(scene.version_id)).map(scene=>scene.version_id)};
 }
 function requireRetryScope(t:StorageRow,input:any):void {
  if(input.retryKnownFailures===true&&(t.scope_kind!=='contact'||t.contact_id!==input.contactId))fail('document_scope_invalid');
@@ -167,9 +158,60 @@ function fixedPublication(tx:StorageTransaction,ownerId:string,t:StorageRow,base
  else tx.run('UPDATE contact SET current_publication_id=?,document_revision=document_revision+1 WHERE owner_id=? AND id=? AND memory_revision=? AND document_revision=? AND current_publication_id IS ?',[p,ownerId,t.contact_id,base.memory_revision,base.document_revision,base.current_publication_id]);
  if(revisions(tx,ownerId,t).current_publication_id!==p)fail('document_publication_conflict');
 }
+function claimScene(tx:StorageTransaction,i:any,lease:StorageLease):DocumentClaim|null{
+  const ownerId=textId(i.ownerId),t=task(tx,ownerId,textId(i.taskId));
+  requireRetryScope(t,i);
+  const later=documentTaskStage(tx,ownerId,t);
+  if(later==='document_profile')return null;
+  if(later&&(!laterTaskOwnsSchedule(tx,ownerId,t)||laterTaskPaused(tx,ownerId,String(t.id))))return null;
+  // 普通暂停只阻止新小批；已完成的提取核验与正在执行的场景批次可收尾，继续后再领取主题。
+  if(runPaused(tx,ownerId,String(t.run_id)))return null;
+  if(t.document_basis_state!=='pending')return i.retryKnownFailures===true?retryKnownStep(tx,ownerId,t,'document_scene',lease):null;
+  preconditions(tx,ownerId,t);const base=revisions(tx,ownerId,t),selected=eligible(tx,ownerId,t);
+  tx.run("UPDATE processing_task SET document_basis_state='frozen',accepted_memory_revision=?,accepted_document_revision=?,accepted_publication_id=? WHERE owner_id=? AND id=? AND document_basis_state='pending'",[base.memory_revision,base.document_revision,base.current_publication_id,ownerId,t.id]);
+  const frozen=task(tx,ownerId,String(t.id));
+  if(!selected.length){if(base.current_publication_id!==null&&eligiblePriorMembers(tx,ownerId,frozen).length)fail('document_existing_collection_requires_review');fixedPublication(tx,ownerId,frozen,base,[],'no_eligible_memories');if(documentTaskStage(tx,ownerId,frozen)==='document_scene')finishLaterStagePublication(tx,ownerId,String(frozen.id),laterNow(tx,ownerId,frozen)??Date.now());return null;}
+  const unchanged=unchangedMembers(tx,ownerId,frozen,base);
+  if(unchanged){fixedPublication(tx,ownerId,frozen,base,unchanged,'unchanged_memories');if(documentTaskStage(tx,ownerId,frozen)==='document_scene')finishLaterStagePublication(tx,ownerId,String(frozen.id),laterNow(tx,ownerId,frozen)??Date.now());return null;}
+  return createStep(tx,ownerId,frozen,'document_scene',lease);
+ }
+function claimProfile(tx:StorageTransaction,i:any,lease:StorageLease):DocumentClaim|null{
+  const ownerId=textId(i.ownerId),original=task(tx,ownerId,textId(i.taskId)),mode=documentTaskStage(tx,ownerId,original);let t=original;
+  requireRetryScope(t,i);
+  if(mode&&!laterTaskOwnsSchedule(tx,ownerId,t))return null;
+  if(tx.get("SELECT 1 FROM processing_step WHERE owner_id=? AND task_id=? AND kind='document_profile'",[ownerId,t.id])){
+   if(runPaused(tx,ownerId,String(t.run_id))||laterTaskPaused(tx,ownerId,String(t.id)))return null;
+   return i.retryKnownFailures===true?retryKnownStep(tx,ownerId,t,'document_profile',lease):null;
+  }
+  if(runPaused(tx,ownerId,String(t.run_id)))return null;
+  if(laterTaskPaused(tx,ownerId,String(t.id)))return null;
+  const scene=currentDocumentSteps(tx,ownerId,String(t.id)).find(step=>step.kind==='document_scene'&&step.state==='succeeded');
+  if(!scene&&mode!=='document_profile')fail('document_scene_incomplete');
+  preconditions(tx,ownerId,t);
+  if(t.document_basis_state==='pending'){
+   const base=revisions(tx,ownerId,t);
+   tx.run("UPDATE processing_task SET document_basis_state='frozen',accepted_memory_revision=?,accepted_document_revision=?,accepted_publication_id=? WHERE owner_id=? AND id=? AND document_basis_state='pending'",[base.memory_revision,base.document_revision,base.current_publication_id,ownerId,t.id]);
+   t=task(tx,ownerId,String(t.id));
+  }
+  const r=revisions(tx,ownerId,t);
+  if(r.memory_revision!==t.accepted_memory_revision||r.document_revision!==t.accepted_document_revision||r.current_publication_id!==t.accepted_publication_id)fail('document_publication_conflict');
+  return createStep(tx,ownerId,t,'document_profile',lease);
+ }
+/** 领取下一项实际工作；正常运行和恢复均读取同一份最新阶段，不借展示投影调度。 */
+export type DocumentWork=DocumentClaim|{kind:'publication';scheduleNow:number|null}|null;
+function claimDocumentWork(tx:StorageTransaction,i:any,lease:StorageLease):DocumentWork{
+ const ownerId=textId(i.ownerId),t=task(tx,ownerId,textId(i.taskId));requireRetryScope(t,i);
+ if(tx.get('SELECT 1 FROM document_publication WHERE owner_id=? AND basis_task_id=?',[ownerId,t.id]))return null;
+ const mode=documentTaskStage(tx,ownerId,t),steps=currentDocumentSteps(tx,ownerId,String(t.id));
+ const scene=steps.find(step=>step.kind==='document_scene'),profile=steps.find(step=>step.kind==='document_profile');
+ const sceneDone=scene?.state==='succeeded',profileDone=profile?.state==='succeeded'||profile?.state==='not_applicable';
+ if(mode==='document_scene'&&sceneDone||mode==='document_profile'&&profileDone||mode===null&&sceneDone&&profileDone)
+  return {kind:'publication',scheduleNow:laterNow(tx,ownerId,t)};
+ if(mode==='document_profile'||sceneDone)return claimProfile(tx,i,lease);
+ return claimScene(tx,i,lease);
+}
 export const memoryDocumentsStageActions:StorageAction[]=[
  act('noteFailure','write',(tx,i)=>{const ownerId=textId(i.ownerId),taskId=textId(i.taskId),t=task(tx,ownerId,taskId);if(t.state!=='revoked')tx.run('UPDATE processing_task SET error_code=COALESCE(error_code,?) WHERE owner_id=? AND id=?',[textId(i.code),ownerId,taskId]);failLaterStage(tx,ownerId,taskId,textId(i.code));return true;}),
- act('runPaused','read',(tx,i)=>runPaused(tx,textId(i.ownerId),textId(i.runId))),
  act('recover','write',(tx,i,lease)=>{
   const ownerId=textId(i.ownerId);
   const attempts=tx.all(`SELECT a.id,a.step_id FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
@@ -200,46 +242,7 @@ export const memoryDocumentsStageActions:StorageAction[]=[
   reconcileTerminalLaterRuns(tx,ownerId);
   return attempts.length;
  }),
- act('claimScene','write',(tx,i,lease)=>{
-  const ownerId=textId(i.ownerId),t=task(tx,ownerId,textId(i.taskId));
-  requireRetryScope(t,i);
-  const later=laterStage(tx,ownerId,t);
-  if(later==='document_profile')return null;
-  if(later&&(!laterTaskOwnsSchedule(tx,ownerId,t)||laterTaskPaused(tx,ownerId,String(t.id))))return null;
-  // 普通暂停只阻止新小批；已完成的提取核验与正在执行的场景批次可收尾，继续后再领取主题。
-  if(runPaused(tx,ownerId,String(t.run_id)))return null;
-  if(t.document_basis_state!=='pending')return i.retryKnownFailures===true?retryKnownStep(tx,ownerId,t,'document_scene',lease):null;
-  preconditions(tx,ownerId,t);const base=revisions(tx,ownerId,t),selected=eligible(tx,ownerId,t);
-  tx.run("UPDATE processing_task SET document_basis_state='frozen',accepted_memory_revision=?,accepted_document_revision=?,accepted_publication_id=? WHERE owner_id=? AND id=? AND document_basis_state='pending'",[base.memory_revision,base.document_revision,base.current_publication_id,ownerId,t.id]);
-  const frozen=task(tx,ownerId,String(t.id));
-  if(!selected.length){if(base.current_publication_id!==null&&eligiblePriorMembers(tx,ownerId,frozen).length)fail('document_existing_collection_requires_review');fixedPublication(tx,ownerId,frozen,base,[],'no_eligible_memories');if(laterStage(tx,ownerId,frozen)==='document_scene')finishLaterStagePublication(tx,ownerId,String(frozen.id),laterNow(tx,ownerId,frozen)??Date.now());return null;}
-  const unchanged=unchangedMembers(tx,ownerId,frozen,base);
-  if(unchanged){fixedPublication(tx,ownerId,frozen,base,unchanged,'unchanged_memories');if(laterStage(tx,ownerId,frozen)==='document_scene')finishLaterStagePublication(tx,ownerId,String(frozen.id),laterNow(tx,ownerId,frozen)??Date.now());return null;}
-  return createStep(tx,ownerId,frozen,'document_scene',lease);
- }),
- act('claimProfile','write',(tx,i,lease)=>{
-  const ownerId=textId(i.ownerId),original=task(tx,ownerId,textId(i.taskId)),mode=laterStage(tx,ownerId,original);let t=original;
-  requireRetryScope(t,i);
-  if(mode&&!laterTaskOwnsSchedule(tx,ownerId,t))return null;
-  if(tx.get("SELECT 1 FROM processing_step WHERE owner_id=? AND task_id=? AND kind='document_profile'",[ownerId,t.id])){
-   if(runPaused(tx,ownerId,String(t.run_id))||laterTaskPaused(tx,ownerId,String(t.id)))return null;
-   return i.retryKnownFailures===true?retryKnownStep(tx,ownerId,t,'document_profile',lease):null;
-  }
-  if(mode&&!laterTaskOwnsSchedule(tx,ownerId,t))return null;
-  if(runPaused(tx,ownerId,String(t.run_id)))return null;
-  if(laterTaskPaused(tx,ownerId,String(t.id)))return null;
-  const scene=currentDocumentSteps(tx,ownerId,String(t.id)).find(step=>step.kind==='document_scene'&&step.state==='succeeded');
-  if(!scene&&mode!=='document_profile')fail('document_scene_incomplete');
-  preconditions(tx,ownerId,t);
-  if(t.document_basis_state==='pending'){
-   const base=revisions(tx,ownerId,t);
-   tx.run("UPDATE processing_task SET document_basis_state='frozen',accepted_memory_revision=?,accepted_document_revision=?,accepted_publication_id=? WHERE owner_id=? AND id=? AND document_basis_state='pending'",[base.memory_revision,base.document_revision,base.current_publication_id,ownerId,t.id]);
-   t=task(tx,ownerId,String(t.id));
-  }
-  const r=revisions(tx,ownerId,t);
-  if(r.memory_revision!==t.accepted_memory_revision||r.document_revision!==t.accepted_document_revision||r.current_publication_id!==t.accepted_publication_id)fail('document_publication_conflict');
-  return createStep(tx,ownerId,t,'document_profile',lease);
- }),
+ act('claim','write',claimDocumentWork),
  act('current','read',(tx,i,lease)=>{current(tx,textId(i.ownerId),textId(i.attemptId),lease);return true;}),
  act('holders','read',(tx,i,lease)=>{const {t}=current(tx,textId(i.ownerId),textId(i.attemptId),lease);return tx.all('SELECT c.id AS contact_id,c.data_generation FROM task_contribution tc JOIN contact c ON c.owner_id=tc.owner_id AND c.id=tc.source_contact_id WHERE tc.owner_id=? AND tc.task_id=?',[i.ownerId,t.id]).map(r=>({contactId:String(r.contact_id),generation:String(r.data_generation)}));}),
  act('prepareCall','write',(tx,i,lease)=>{

@@ -34,7 +34,7 @@ test('正常重启恢复结清旧版本无调用的假running，不发布失效�
 });
 
 test('专用文档轮有活跃步骤时失败结算不覆盖在途状态',async t=>{
- const f=await claimed(t),claim=await f.storage.execute('memoryDocuments.claimScene',{ownerId:f.owner,taskId:f.job.taskId});assert.ok(claim.attemptId);
+ const f=await claimed(t),claim=await f.storage.execute('memoryDocuments.claim',{ownerId:f.owner,taskId:f.job.taskId});assert.ok(claim.attemptId);
  await f.storage.execute('memoryDocuments.noteFailure',{ownerId:f.owner,taskId:f.job.taskId,code:'synthetic_stage_failure'});
  assert.equal((await state(f)).run.state,'running');
  await f.storage.execute('memoryDocuments.recover',{ownerId:f.owner});assert.equal((await state(f)).run.state,'running','当前runtime活租约不能被恢复扫掉');

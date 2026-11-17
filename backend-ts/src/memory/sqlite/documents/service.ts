@@ -10,7 +10,7 @@ import type {SqliteExtractionModelPreparation} from '../model-port.ts';
 import {DEFAULT_L2_SCENARIO_BUDGET,L2ScenarioError,L2ScenarioVerificationError,scenarioVerificationFeedback} from '../../scenarios/document.ts';
 import {L2ScenarioDocumentWorkspace,runScenarioDocumentAgent,verifyScenarioProposal,type ScenarioDocumentCallPort} from '../../scenarios/workspace.ts';
 import {L3ProfileWorkspace,runProfileDocumentAgent,verifyProfileProposal} from '../../profiles/workspace.ts';
-import type {DocumentClaim} from './stages.ts';
+import type {DocumentClaim,DocumentWork} from './stages.ts';
 import type {VerifiedProfileReplay} from './replay.ts';
 
 export interface DocumentRequest {system:string;user:string;messages:any[];tools:any[];validateOutput(blocks:readonly unknown[]):void;}
@@ -88,27 +88,18 @@ export class SqliteMemoryDocuments {
   for(const taskId of tasks){
    if(this.stop.signal.aborted)break;
    try{
-    const claim=await this.storage.execute<DocumentClaim|null>('memoryDocuments.claimScene',{ownerId:this.ownerId,taskId,...(contactId===undefined?{}:{contactId}),...(retryKnownFailures?{retryKnownFailures:true}:{})});
-    if(!claim){
-     // 已冻结且场景成功的任务可能停在暂停/中断的小批边界；继续时单独领取画像，不重新整理主题。
-     const view=await this.readTask(taskId),stages=Array.isArray(view?.stages)?view.stages as {kind:string;status:string}[]:[];
-     const sceneDone=stages.some(stage=>stage.kind==='scene'&&stage.status==='succeeded'),profileDone=stages.some(stage=>stage.kind==='profile'&&['succeeded','not_applicable'].includes(stage.status));
-     if(view?.laterStage==='document_scene'&&sceneDone&&!view.publicationId){
-      const result=await this.storage.execute('memoryDocuments.publish',{ownerId:this.ownerId,taskId,now:view.scheduleNow??undefined});
-      await this.storage.execute('memoryDocuments.settle',{ownerId:this.ownerId,runId}).catch(()=>false);results.push(result);continue;
+    let result:any;
+    while(!this.stop.signal.aborted){
+     const work=await this.storage.execute<DocumentWork>('memoryDocuments.claim',{ownerId:this.ownerId,taskId,...(contactId===undefined?{}:{contactId}),...(retryKnownFailures?{retryKnownFailures:true}:{})});
+     if(!work||work.kind==='publication'){
+      result=work?await this.storage.execute('memoryDocuments.publish',{ownerId:this.ownerId,taskId,now:work.scheduleNow??undefined}):await this.readTask(taskId);
+      await this.storage.execute('memoryDocuments.settle',{ownerId:this.ownerId,runId}).catch(()=>false);break;
      }
-     if(view?.laterStage==='document_profile'||sceneDone&&(!profileDone||retryKnownFailures)){
-      const profileClaim=await this.storage.execute<DocumentClaim|null>('memoryDocuments.claimProfile',{ownerId:this.ownerId,taskId,...(contactId===undefined?{}:{contactId}),...(retryKnownFailures?{retryKnownFailures:true}:{})});
-      if(profileClaim){const result=await this.processTask(profileClaim);results.push(result);if(result.errorCode==='document_model_unconfigured')break;continue;}
-     }
-     if(view?.laterStage&&stages.some(stage=>stage.status==='succeeded')&&!view.publicationId){
-      const result=await this.storage.execute('memoryDocuments.publish',{ownerId:this.ownerId,taskId,now:view.scheduleNow??undefined});
-      await this.storage.execute('memoryDocuments.settle',{ownerId:this.ownerId,runId}).catch(()=>false);results.push(result);continue;
-     }
-     results.push(view);await this.storage.execute('memoryDocuments.settle',{ownerId:this.ownerId,runId}).catch(()=>false);continue;
+     result=await this.processStage(work);
+     if(result.outcome!=='stage_completed')break;
     }
-    const result=await this.processTask(claim);results.push(result);
-    if(result.errorCode==='document_model_unconfigured')break;
+    results.push(result??{taskId,outcome:'incomplete',errorCode:'runtime_interrupted'});
+    if(result?.errorCode==='document_model_unconfigured')break;
    }catch(error){
     if(this.stop.signal.aborted){results.push({taskId,outcome:'incomplete',errorCode:'runtime_interrupted'});break;}
     const code=this.errorCode(error);await this.storage.execute('memoryDocuments.noteFailure',{ownerId:this.ownerId,taskId,code}).catch(()=>{});
@@ -118,39 +109,19 @@ export class SqliteMemoryDocuments {
   return results;
  }
  private errorCode(error:unknown):string{return typeof (error as {code?:unknown})?.code==='string'?String((error as {code:string}).code):'document_stage_failed';}
- private async processTask(initial:DocumentClaim):Promise<{taskId:string;outcome:string;errorCode?:string}>{
+ private async processStage(initial:DocumentClaim):Promise<{taskId:string;outcome:string;errorCode?:string}>{
   const controller=new AbortController(),signal=AbortSignal.any([this.stop.signal,controller.signal]);let finish!:()=>void;const done=new Promise<void>(resolve=>finish=resolve),releases:(()=>Promise<void>)[]=[];
-  let active:DocumentClaim=initial;
   try{
    const contacts=await this.storage.execute<{contactId:string;generation:string}[]>('memoryDocuments.holders',{ownerId:this.ownerId,attemptId:initial.attemptId});
    for(const contact of contacts)releases.push(this.holders.register({key:`memoryDocuments:${initial.attemptId}_${contact.contactId}`,ownerId:this.ownerId,contactId:contact.contactId,coversAllSources:true,generation:BigInt(contact.generation),close:async()=>{controller.abort();await done;}}));
-   let scene:{scenarios:any[]};
-   if(initial.kind==='document_scene'){
-    scene=await this.processScene(initial,signal);
-    signal.throwIfAborted();
-    if(initial.laterStage==='document_scene'){
-     const result=await this.storage.execute<{taskId:string;outcome:string}>('memoryDocuments.publish',{ownerId:this.ownerId,taskId:initial.taskId,now:initial.scheduleNow??undefined});
-     await this.storage.execute('memoryDocuments.settle',{ownerId:this.ownerId,runId:initial.runId}).catch(()=>false);return result;
-    }
-    // 场景批次收尾后如已请求普通暂停，不再领取画像小批；任务保持可继续而不是失败。
-    if(await this.storage.execute<boolean>('memoryDocuments.runPaused',{ownerId:this.ownerId,runId:initial.runId}))return {taskId:initial.taskId,outcome:'incomplete'};
-    active=await this.storage.execute<DocumentClaim>('memoryDocuments.claimProfile',{ownerId:this.ownerId,taskId:initial.taskId});
-    if(!active)throw new StorageFailure('document_stage_incomplete');
-   }else{
-    // 暂停/中断后继续：画像小批单独领取，使用本轮已保存的主题版本。
-    scene={scenarios:initial.scenarios};
-    active=initial;
-   }
-   await this.processProfile(active,scene,signal);
+   if(initial.kind==='document_scene')await this.processScene(initial,signal);
+   else await this.processProfile(initial,signal);
    signal.throwIfAborted();
-   const result=await this.storage.execute<{taskId:string;outcome:string}>('memoryDocuments.publish',{ownerId:this.ownerId,taskId:initial.taskId,now:initial.scheduleNow??undefined});
-   signal.throwIfAborted();
-   await this.storage.execute('memoryDocuments.settle',{ownerId:this.ownerId,runId:initial.runId}).catch(()=>false);
-   return result;
+   return {taskId:initial.taskId,outcome:'stage_completed'};
   }catch(error){
    if(this.stop.signal.aborted)return {taskId:initial.taskId,outcome:'incomplete',errorCode:'runtime_interrupted'};
    const code=this.errorCode(error);
-   await this.storage.execute('memoryDocuments.fail',{ownerId:this.ownerId,attemptId:active.attemptId,code}).catch(()=>{});
+   await this.storage.execute('memoryDocuments.fail',{ownerId:this.ownerId,attemptId:initial.attemptId,code}).catch(()=>{});
    await this.storage.execute('memoryDocuments.noteFailure',{ownerId:this.ownerId,taskId:initial.taskId,code}).catch(()=>{});
    return {taskId:initial.taskId,outcome:'incomplete',errorCode:code};
   }finally{finish();await Promise.all(releases.map(release=>release()));}
@@ -186,11 +157,9 @@ export class SqliteMemoryDocuments {
   const verificationEventId=checked.receipts.at(-1);if(!verificationEventId)throw new StorageFailure('document_verification_unbound');
   return this.storage.execute<{scenarios:any[]}>('memoryDocuments.saveScene',{ownerId:this.ownerId,attemptId:claim.attemptId,scenarios:proposal.scenarios,verificationEventId});
  }
- private async processProfile(claim:DocumentClaim,scene:{scenarios:any[]},signal:AbortSignal){
-  const port=this.port(claim,signal),options=this.options(claim,port,signal),scenarios=scene.scenarios,workspace=new L3ProfileWorkspace(claim.profile,scenarios,claim.memories,DEFAULT_L2_SCENARIO_BUDGET);
-  const oldIds=new Set(claim.scenarios.map(s=>s.version_id)),newIds=new Set(scenarios.map(s=>s.version_id));
-  const changed=scenarios.filter(s=>!oldIds.has(s.version_id)),removed=claim.scenarios.filter(s=>!newIds.has(s.version_id)).map(s=>s.version_id);
-  const proposal=await runProfileDocumentAgent({...options,workspace,changedScenarioIds:changed.map(s=>s.scenario_id),removedScenarioVersionIds:removed,corrections:[],remainingCalls:DEFAULT_L2_SCENARIO_BUDGET.max_model_calls});
+ private async processProfile(claim:DocumentClaim,signal:AbortSignal){
+  const port=this.port(claim,signal),options=this.options(claim,port,signal),scenarios=claim.scenarios,workspace=new L3ProfileWorkspace(claim.profile,scenarios,claim.memories,DEFAULT_L2_SCENARIO_BUDGET);
+  const proposal=await runProfileDocumentAgent({...options,workspace,changedScenarioIds:claim.changedScenarioIds,removedScenarioVersionIds:claim.removedScenarioVersionIds,corrections:[],remainingCalls:DEFAULT_L2_SCENARIO_BUDGET.max_model_calls});
   const checked=await verifyProfileProposal({...options,entries:proposal.proposal.entries,memories:claim.memories,scenarios,budget:DEFAULT_L2_SCENARIO_BUDGET,corrections:[],remainingCalls:Math.max(0,DEFAULT_L2_SCENARIO_BUDGET.max_model_calls-proposal.calls)});
   const verificationEventId=checked.receipts.at(-1);if(!verificationEventId)throw new StorageFailure('document_verification_unbound');
   await this.storage.execute('memoryDocuments.saveProfile',{ownerId:this.ownerId,attemptId:claim.attemptId,entries:proposal.proposal.entries,verificationEventId});

@@ -79,8 +79,7 @@ test('用户暂停整轮后已成功任务不能开始文档阶段',async t=>{
  const memory=await new SqliteMemoryManagement(f.storage,f.owner).read({scopeKind:'contact',contactId:f.contactId});
  assert.ok(memory.memories.length,'暂停前乙的08前置阶段已完成');
  assert.equal((await f.documents.readTask(task.taskId)).outcome,'incomplete');
- assert.equal(await f.storage.execute('memoryDocuments.claimScene',{ownerId:f.owner,taskId:task.taskId}),null,'普通暂停不领取新文档小批');
- assert.equal(await f.storage.execute('memoryDocuments.claimProfile',{ownerId:f.owner,taskId:task.taskId}),null);
+ assert.equal(await f.storage.execute('memoryDocuments.claim',{ownerId:f.owner,taskId:task.taskId}),null,'普通暂停不领取新文档小批');
  assert.equal(f.calls.length,0);assert.equal((await f.documents.read({scopeKind:'contact',contactId:f.contactId})).publication,null);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
@@ -99,8 +98,8 @@ for(const unpausedFailure of [false,true])test(`公共模型配置失败时${unp
  const failures=await f.storage.execute('fixture.extractionFailures',{ownerId:f.owner,taskId:failed.taskId});
  assert.ok(failures.some(attempt=>attempt.state==='failed'&&attempt.error_code==='extraction_model_unconfigured'),'公共配置故障来自真实07尝试');
  assert.equal((await f.documents.readTask(succeeded.taskId)).outcome,'incomplete');
- if(unpausedFailure)await assert.rejects(f.storage.execute('memoryDocuments.claimScene',{ownerId:f.owner,taskId:succeeded.taskId}),{code:'document_preceding_stage_incomplete'});
- else assert.equal(await f.storage.execute('memoryDocuments.claimScene',{ownerId:f.owner,taskId:succeeded.taskId}),null,'普通暂停不领取新文档小批');
+ if(unpausedFailure)await assert.rejects(f.storage.execute('memoryDocuments.claim',{ownerId:f.owner,taskId:succeeded.taskId}),{code:'document_preceding_stage_incomplete'});
+ else assert.equal(await f.storage.execute('memoryDocuments.claim',{ownerId:f.owner,taskId:succeeded.taskId}),null,'普通暂停不领取新文档小批');
  assert.equal(f.calls.length,0);assert.equal((await f.documents.read({scopeKind:'contact',contactId:successfulContact})).publication,null);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
@@ -113,7 +112,7 @@ test('来源删除fence期间不启动其他已成功联系人的文档阶段',a
  const run=await f.extraction.start('document-deletion-before-publish');await f.extraction.waitForIdle(run.runId);
  const snapshot=await f.extraction.read(run.runId),b=snapshot.tasks.find(task=>task.contactId===f.otherContactId);
  assert.ok(plan);assert.equal(b.state,'succeeded');assert.equal((await f.documents.readTask(b.taskId)).outcome,'incomplete');
- await assert.rejects(f.storage.execute('memoryDocuments.claimScene',{ownerId:f.owner,taskId:b.taskId}),{code:'memory_source_stale'});
+ await assert.rejects(f.storage.execute('memoryDocuments.claim',{ownerId:f.owner,taskId:b.taskId}),{code:'memory_source_stale'});
  assert.equal(f.calls.length,0);assert.equal((await f.documents.read({scopeKind:'contact',contactId:f.otherContactId})).publication,null);
  const done=await f.deletion.advance({ownerId:f.owner,operationId:plan.operationId});assert.equal(done.state,'completed',JSON.stringify(done.checks));
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});

@@ -9,10 +9,9 @@ import {isRetryableProfileVerificationError,MAX_PROFILE_VERIFICATION_ATTEMPTS,pa
 import {observedProcessingAction} from '../diagnostics.ts';
 import {textId} from '../qualification.ts';
 import {preconditions,revisions,task} from './actions.ts';
-import {actualInputSources,eligiblePriorMembers,frozenMemories,renderDocuments,sourceStillValid,withDocumentSourceQualifications,withSourceMemo} from './basis.ts';
+import {actualInputSources,taskSceneVersions,eligiblePriorMembers,frozenMemories,renderDocuments,sourceStillValid,withDocumentSourceQualifications,withSourceMemo} from './basis.ts';
 import {documentActualInputs,type DocumentActualInput} from './inputs.ts';
 import type {DocumentClaim} from './stages.ts';
-import {sceneVersions} from './publication.ts';
 
 export type VerifiedProfileReplay={completed:true;taskId:string;runId:string}|{completed:false;claim:DocumentClaim;entries:readonly L3ProfileEntry[];verificationEventId:string;profileSaved:boolean;contacts:{contactId:string;generation:string}[]};
 interface Packet {call:StorageRow;input:StorageRow;output:StorageRow;actual:DocumentActualInput[];sources:ReplySource[]}
@@ -73,7 +72,7 @@ function validateReplayMaterial(tx:StorageTransaction,ownerId:string,taskId:stri
   if(current.memory_revision!==t.accepted_memory_revision||current.document_revision!==t.accepted_document_revision||current.current_publication_id!==t.accepted_publication_id)fail('document_publication_conflict');
   const memories=frozenMemories(tx,ownerId,stepId);
   for(const row of tx.all("SELECT * FROM step_input WHERE owner_id=? AND step_id=? AND kind='message'",[ownerId,stepId]))sourceStillValid(tx,ownerId,{contactId:String(row.source_contact_id),messageId:String(row.message_id),recordId:String(row.record_id),acceptedRevision:row.accepted_revision as bigint});
-  const rendered={scenarios:sceneVersions(tx,ownerId,t,memories),profile:renderDocuments(tx,ownerId,eligiblePriorMembers(tx,ownerId,t),memories).profile};
+  const rendered={scenarios:taskSceneVersions(tx,ownerId,t,memories),profile:renderDocuments(tx,ownerId,eligiblePriorMembers(tx,ownerId,t),memories).profile};
   const packets:Packet[]=[],sourceCache=new Map<string,ReplySource[]>();let proposal:any,verifyCallId:string|undefined,verificationCount=0;
   for(const call of calls){
    const events=tx.all("SELECT * FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND originated_call_id=? AND kind IN ('document_input','document_output') ORDER BY event_no",[ownerId,original.id,call.id]);
@@ -168,8 +167,8 @@ function prepareReplay(tx:StorageTransaction,ownerId:string,taskId:string,lease:
   tx.run("UPDATE memory_document_later_schedule SET state='running',error_code=NULL WHERE owner_id=? AND scope_key=? AND generation=? AND task_id=?",[ownerId,key,policy.generation,taskId]);
   tx.run("UPDATE memory_document_later_run_requirement SET outcome='pending',reason=NULL,updated_at=? WHERE owner_id=? AND scope_key=? AND generation=? AND outcome='failed'",[now,ownerId,key,policy.generation]);
  }
- const claim:DocumentClaim={attemptId,stepId,taskId,runId:String(t.run_id),kind:'document_profile',laterStage:later?'document_profile':null,scheduleNow:now,scopeKind:t.scope_kind as 'self'|'contact',contactId:t.contact_id as string|null,
-  claim:{task_id:taskId,step_id:stepId,step_name:'document_profile',worker_id:lease.runtimeId,lease_generation:Number(t.resume_no)},memories,scenarios:rendered.scenarios,profile:rendered.profile};
+ const claim:DocumentClaim={attemptId,stepId,taskId,runId:String(t.run_id),kind:'document_profile',scheduleNow:now,contactId:t.contact_id as string|null,
+  changedScenarioIds:[],removedScenarioVersionIds:[],claim:{task_id:taskId,step_id:stepId,step_name:'document_profile',worker_id:lease.runtimeId,lease_generation:Number(t.resume_no)},memories,scenarios:rendered.scenarios,profile:rendered.profile};
  const contacts=tx.all('SELECT c.id,c.data_generation FROM task_contribution tc JOIN contact c ON c.owner_id=tc.owner_id AND c.id=tc.source_contact_id WHERE tc.owner_id=? AND tc.task_id=?',[ownerId,taskId]).map(c=>({contactId:String(c.id),generation:String(c.data_generation)}));
  return {completed:false,claim,entries:proposal.entries,verificationEventId:verificationEventId!,profileSaved,contacts};
 }

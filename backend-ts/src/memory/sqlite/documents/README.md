@@ -10,6 +10,8 @@ L3 工作区在构造时保存旧画像、场景、底层记忆及预算的深�
 
 `SqliteMemoryDocuments.read({scopeKind,contactId})` 是范围资料视图；`readTask(taskId)` 返回该任务冻结的记忆／文档修订、前一发布集合及各阶段状态。`publishRun(runId)` 只供正常处理服务在记忆管理域的前置阶段后调用，发布后按同一合同切换范围指针；`laterStagesState(tx,ownerId,runId)` 是只读完成投影，仅当全部任务适用阶段结束、完整发布集合可用且无未解未知文档调用时返回 completed。
 
+`memoryDocuments.claim` 在同一短事务按任务策略、各阶段最新步骤和发布记录，决定领取主题、领取画像、仅补发布或暂无工作。正常推进、暂停后继续与启动恢复共用这条流程；执行器不解析 `readTask` 的展示投影决定运行，也不另读暂停后再领取。画像的当前主题集合及变更说明也在领取时按冻结基线和实际替换关系生成；`basis.ts` 的 `taskSceneVersions` 供领取、保存核验及已知回执重放共用，执行器不再另传 `saveScene` 的结果。原 `claimScene`／`claimProfile`／`runPaused` 具名动作已退役，内部阶段函数继续复验暂停、真实来源、冻结版本和未知调用。每个实际阶段单独登记及排空持有者，发布前仍由 `publication.ts` 复验完整集合；没有新增任务状态或数据迁移。
+
 主题和概览队列随 `memoryExtraction.control` 的轮次暂停／继续及控制修订在同一事务更新；内部 `setRunSchedulePaused`／`resumeRunSchedule` 不再另注册独立的具名动作。图片显式重试仍在原重试事务中沿用这些内部函数。继续只重排已知失败，未知回执仍保留，正常到期时间不因暂停重新计算。
 
 文档基线在本任务前置记忆阶段成功后、首个文档步骤冻结输入时捕获；零选中记忆也保存修订与原因，冻结后不在运行中追加或刷新。已验证记忆未变化的轮次以 `unchanged_memories` 明确不适用阶段重新发布同一完整集合，仍推进发布身份与范围修订。时间事实（`valid_at` / `invalid_at`）在整理、发布、页面与回复读取时复验，过期、损坏或待核验记忆不进入模型或生成。

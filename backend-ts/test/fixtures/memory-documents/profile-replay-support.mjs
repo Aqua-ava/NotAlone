@@ -5,7 +5,7 @@ import {ActiveHolders} from '../../../src/storage/sqlite/deletion/holders.ts';
 import {SqliteMemoryDocuments} from '../../../src/memory/sqlite/documents/service.ts';
 
 /** 真实存储链路保存旧版的“任一拒绝整份失败”；只在物理模型边界使用合成回复。 */
-export async function profileReplayFixture(t,{retryFirstQuote=false,initialSceneCount=1,initialOldGuard=true}={}){
+export async function profileReplayFixture(t,{retryFirstQuote=false,initialSceneCount=1,initialOldGuard=true,beforeDocumentCall}={}){
  let documents,oldGuard=initialOldGuard,fixture,mergeScenes=false;const calls=[],firstMemory=new Map(),verificationAttempts=new Map();
  fixture=await unknownFixture(t,{unknownScope:'none',registryModule:new URL('./profile-replay-registry.mjs',import.meta.url).href,beforeDocuments:async runId=>{
   if(!documents){
@@ -14,6 +14,7 @@ export async function profileReplayFixture(t,{retryFirstQuote=false,initialScene
     const payload=JSON.parse(request.messages[0].content[0].text),names=request.tools.map(tool=>tool.name),scope=input.scope.contact_id;
     const memory=payload.memories.find(item=>item.memory_id===firstMemory.get(scope))??payload.memories[0];firstMemory.set(scope,memory.memory_id);
     calls.push({id:input.attemptId,scope,stage:input.claim.step_name});
+    await beforeDocumentCall?.({request,input,payload,fixture});
     const block=(name,args,index=0)=>({type:'tool-call',id:`synthetic-replay-${calls.length}-${index}`,name,arguments:JSON.stringify(args)}),tool=(name,args)=>({blocks:[block(name,args)]});
     if(names.includes('ScenarioVerificationOutput'))return tool('ScenarioVerificationOutput',{results:payload.proposal.scenarios.flatMap((scene,scenario_index)=>scene.paragraphs.map((_,paragraph_index)=>({scenario_index,paragraph_index,supported:true,evidence:[{memory_id:memory.memory_id,quote:memory.text}]})))});
     if(names.includes('ProfileVerificationOutput')){

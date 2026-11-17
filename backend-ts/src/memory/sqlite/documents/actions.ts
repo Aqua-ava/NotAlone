@@ -5,17 +5,13 @@ import {available,scope as readScope} from '../management/qualification.ts';
 import {memoryBasis,publicationMembers,renderDocuments,withSourceMemo,documentSourceEligibility,withDocumentSourceQualifications,primeDocumentSourceQualifications} from './basis.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import {laterStagesState as scheduledLaterStagesState,type LaterStagesProjection} from './later-schedule.ts';
-import {currentDocumentSteps,hasUnresolvedDocumentWork} from './stage-selection.ts';
+import {documentTaskStage,currentDocumentSteps,hasUnresolvedDocumentWork} from './stage-selection.ts';
 
 export function task(tx:StorageTransaction,ownerId:string,taskId:string):StorageRow {
  const row=tx.get('SELECT * FROM processing_task WHERE owner_id=? AND id=?',[ownerId,taskId]);
  if(!row)fail('document_task_not_found');return row!;
 }
-function laterStageForTask(tx:StorageTransaction,ownerId:string,t:StorageRow):string|null {
- const run=tx.get('SELECT policy_config FROM processing_run WHERE owner_id=? AND id=?',[ownerId,t.run_id]);
- if(!run)return null;
- try{const policy=JSON.parse(String(run.policy_config));return policy?.intent==='memory_document_later_stage'&&['document_scene','document_profile'].includes(policy.stage)?String(policy.stage):null;}catch{return null;}
-}
+
 export function revisions(tx:StorageTransaction,ownerId:string,t:StorageRow):StorageRow {
  const row=t.scope_kind==='self'?tx.get('SELECT memory_revision,document_revision,current_publication_id FROM owner WHERE owner_id=?',[ownerId]):
   tx.get('SELECT memory_revision,document_revision,current_publication_id FROM contact WHERE owner_id=? AND id=?',[ownerId,t.contact_id]);
@@ -37,7 +33,7 @@ export function preconditions(tx:StorageTransaction,ownerId:string,t:StorageRow,
   if(t.scope_kind!=='contact'||!failedContact||commonFailure)fail('document_preceding_stage_incomplete');
  }
  const contributions=tx.get('SELECT 1 FROM task_contribution WHERE owner_id=? AND task_id=? LIMIT 1',[ownerId,t.id]);
- if(contributions||!laterStageForTask(tx,ownerId,t))assertTaskContributions(tx,ownerId,String(t.run_id),String(t.id));
+ if(contributions||!documentTaskStage(tx,ownerId,t))assertTaskContributions(tx,ownerId,String(t.run_id),String(t.id));
  const inputs=tx.all(`SELECT i.* FROM run_input i JOIN task_contribution c ON c.owner_id=i.owner_id AND c.run_id=i.run_id AND c.source_contact_id=i.source_contact_id
   WHERE c.owner_id=? AND c.task_id=? ORDER BY i.input_no`,[ownerId,t.id]);
  primeDocumentSourceQualifications(tx,inputs.map(input=>({owner_id:ownerId,contact_id:String(input.source_contact_id),message_id:String(input.message_id),record_id:String(input.record_id)})));
@@ -53,7 +49,7 @@ export function stages(tx:StorageTransaction,ownerId:string,taskId:string){
 export function taskView(tx:StorageTransaction,ownerId:string,taskId:string){
  const t=task(tx,ownerId,taskId),steps=stages(tx,ownerId,taskId);
  const publication=tx.get('SELECT id FROM document_publication WHERE owner_id=? AND basis_task_id=? AND availability=\'available\'',[ownerId,taskId]);
- const mode=laterStageForTask(tx,ownerId,t),complete=publication&&!hasUnresolvedDocumentWork(tx,ownerId,taskId)&&steps.every(s=>['succeeded','not_applicable'].includes(s.status))&&
+ const mode=documentTaskStage(tx,ownerId,t),complete=publication&&!hasUnresolvedDocumentWork(tx,ownerId,taskId)&&steps.every(s=>['succeeded','not_applicable'].includes(s.status))&&
   (mode?steps.some(s=>s.kind===(mode==='document_scene'?'scene':'profile')):steps.length===2);
  const run=tx.get('SELECT started_at FROM processing_run WHERE owner_id=? AND id=?',[ownerId,t.run_id]);
  return {taskId,laterStage:mode,scheduleNow:mode&&run?Number(run.started_at):null,publicationId:publication?String(publication.id):null,basis:{state:String(t.document_basis_state),memoryRevision:t.accepted_memory_revision===null?null:String(t.accepted_memory_revision),documentRevision:t.accepted_document_revision===null?null:String(t.accepted_document_revision),publicationId:t.accepted_publication_id===null?null:String(t.accepted_publication_id)},stages:steps,errorCode:t.error_code===null?null:String(t.error_code),outcome:complete?'completed':'incomplete'};

@@ -204,3 +204,15 @@ export function renderDocuments(tx:StorageTransaction,ownerId:string,members:Sto
  }
  return {scenarios,profile,documents};
 }
+
+/** 本任务实际主题集合统一应用替换关系，供画像领取、保存和恢复核验共同使用。 */
+export function taskSceneVersions(tx:StorageTransaction,ownerId:string,t:StorageRow,memories:L2ScenarioMemory[]){
+ const old=eligiblePriorMembers(tx,ownerId,t);
+ const staged=tx.all(`SELECT v.*,d.kind,d.scope_kind,d.contact_id,d.state FROM memory_document_version v JOIN memory_document d ON d.owner_id=v.owner_id AND d.id=v.document_id
+  JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
+  WHERE v.owner_id=? AND s.task_id=? AND s.kind='document_scene' AND s.state='succeeded' AND a.state='succeeded' ORDER BY d.id`,[ownerId,t.id]);
+ const replacements=tx.all(`SELECT r.old_document_id,r.old_version_no FROM document_replacement r JOIN memory_document_version v ON v.owner_id=r.owner_id AND v.document_id=r.document_id AND v.version_no=r.version_no
+  JOIN step_attempt a ON a.owner_id=v.owner_id AND a.id=v.produced_attempt_id JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id WHERE r.owner_id=? AND s.task_id=? AND s.kind='document_scene'`,[ownerId,t.id]);
+ const retained=old.filter(o=>o.kind==='scene'&&!replacements.some(r=>r.old_document_id===o.document_id&&r.old_version_no===o.version_no));
+ return renderDocuments(tx,ownerId,[...retained,...staged],memories).scenarios;
+}

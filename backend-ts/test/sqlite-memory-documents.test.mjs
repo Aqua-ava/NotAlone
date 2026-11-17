@@ -4,6 +4,7 @@ import {fixture, modelPort, owner} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 import {SqliteMemoryAdjudication} from '../src/memory/sqlite/management/adjudication-service.ts';
 import {SqliteMemoryDocuments} from '../src/memory/sqlite/documents/service.ts';
+import {StorageFailure} from '../src/storage/sqlite/contracts.ts';
 import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
 
 test('正常处理无新记忆时仍在前置阶段后冻结零成员基线并记录不适用原因', async t => {
@@ -189,4 +190,41 @@ test('正式SQLite profile中L1记忆按需进入回复，主题窗口未到期�
  assert.equal(supplier.errors.length,0);assert.equal(supplier.base.errors.length,0);assert.equal(supplier.replies.length,2);
  assert.doesNotMatch(supplier.replies[0].text,/实际输入材料\[\d+\] memory/);assert.match(supplier.replies[1].text,/实际输入材料\[\d+\] memory/);
  const network=(await readFile(audit,'utf8')).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));assert.ok(network.length>0);assert.ok(network.every(item=>item.kind==='redirect'));
+});
+
+for(const mode of ['combined','scene','profile'])test(`文档${mode}结果已保存后退出，恢复只发布原结果且不重复模型调用`,{timeout:20000},async t=>{
+ const {documentFixture}=await import('./fixtures/memory-documents/support.mjs');
+ const f=await documentFixture(t,{laterScheduling:mode!=='combined'}),execute=f.storage.execute.bind(f.storage);
+ let interruptedTask,interruptedRun,closing;
+ f.storage.execute=async(name,input)=>{
+  if(name==='memoryDocuments.publish'&&!interruptedTask){
+   const view=await execute('memoryDocuments.readTask',{ownerId:f.owner,taskId:input.taskId});
+   const expectedStage=mode==='scene'?'scene':'profile';
+   if(view.stages.at(-1)?.kind===expectedStage){
+    interruptedTask=input.taskId;
+    closing=f.documents.close();
+    throw new StorageFailure('runtime_interrupted');
+   }
+  }
+  return execute(name,input);
+ };
+ const run=await f.extraction.start(`document-saved-work-${mode}`);await f.extraction.waitForIdle(run.runId);
+ if(mode==='combined')interruptedRun=run.runId;
+ else{
+  const scope={scopeKind:'contact',contactId:f.contactId},schedule=await f.documents.readSchedule(scope);
+  const jobs=await f.documents.runDueStages(schedule.scene.dueAt);
+  interruptedRun=jobs.find(job=>job.taskId===interruptedTask)?.runId;
+ }
+ assert.ok(interruptedTask&&interruptedRun,'必须在真实阶段已保存、发布前退出');await closing;
+ const before=await f.documents.readTask(interruptedTask),calls=f.calls.length;
+ assert.equal(before.publicationId,null);assert.ok(before.stages.every(stage=>stage.status==='succeeded'));
+ // 新执行器没有模型端口；恢复只能复验并发布旧结果。
+ const recovered=new SqliteMemoryDocuments(f.storage,f.owner,undefined,f.holders);t.after(()=>recovered.close());
+ await recovered.initialize();
+ if(mode==='combined')await recovered.publishRun(interruptedRun,f.contactId);
+ const after=await recovered.readTask(interruptedTask);
+ assert.equal(after.outcome,'completed');assert.ok(after.publicationId);
+ assert.deepEqual(after.stages,before.stages,'原成功步骤与回执保持');
+ assert.equal(f.calls.length,calls,'主题、画像均不得因发布恢复重发');
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

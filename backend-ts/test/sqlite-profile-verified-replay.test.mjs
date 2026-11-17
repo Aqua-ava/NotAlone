@@ -98,3 +98,28 @@ test('清除原资料后旧L3不可通过重放恢复，删除闭包完整',{tim
  const plan=await f.deletion.plan({ownerId:f.owner,requestKey:randomUUID(),scope:{kind:'contact',contactId:f.a}}),done=await f.deletion.advance({ownerId:f.owner,operationId:plan.operationId});assert.equal(done.state,'completed');
  await assert.rejects(f.documents.replayVerifiedProfile(f.taskId));assert.equal(f.modelCalls.length,count);assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
+
+for(const paused of [false,true])test(`主题合并后${paused?'暂停再继续':'正常推进'}的画像只使用当前替换集合与真实变更`,{timeout:20000},async t=>{
+ let phase='first',firstPayload,profilePayload,runId,pauseRequested=false;const started=Promise.withResolvers();
+ const f=await profileReplayFixture(t,{initialSceneCount:2,initialOldGuard:false,beforeDocumentCall:async({request,input,payload,fixture})=>{
+  if(input.scope.contact_id!==fixture.a)return;
+  if(payload.layer==='l3'&&request.messages.length===1){if(phase==='first')firstPayload=payload;else profilePayload=payload;}
+  if(paused&&phase==='second'&&payload.layer==='l2'&&!pauseRequested){
+   pauseRequested=true;await started.promise;await fixture.extraction.pause(runId);
+  }
+ }}),scope={scopeKind:'contact',contactId:f.a};
+ assert.equal(firstPayload.scenarios.length,2);f.setMergeScenes(true);
+ await f.add(f.a,[f.record('2',{text:'我周末也喜欢合成园艺。',sentAt:'1700000002000'})]);
+ phase='second';const run=await f.extraction.start(`document-unified-merge-${paused}`);runId=run.runId;started.resolve();await f.extraction.waitForIdle(runId);
+ if(paused){
+  assert.ok(pauseRequested);assert.equal(profilePayload,undefined,'暂停边界不启动画像');
+  const state=await f.extraction.read(runId);assert.equal(state.state,'paused');
+  await f.extraction.continue(runId);await f.extraction.waitForIdle(runId);
+ }
+ assert.ok(profilePayload,'必须进入真实画像模型入口');
+ assert.equal(profilePayload.scenarios.length,1,'被合并替换的旧主题不得在恢复路径重新加入');
+ assert.deepEqual(profilePayload.changed_scenario_ids,profilePayload.scenarios.map(scene=>scene.scenario_id));
+ assert.deepEqual([...profilePayload.removed_scenario_version_ids].sort(),firstPayload.scenarios.map(scene=>scene.version_id).sort());
+ const current=await f.documents.read(scope);assert.equal(current.documents.filter(item=>item.kind==='scene').length,1);assert.ok(current.publication);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});
