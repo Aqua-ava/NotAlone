@@ -27,7 +27,6 @@ import { MemoryPage } from './MemoryPage';
 import { SyncControlPanel } from './SyncControlPanel';
 import { SyncDiagnosticsPanel } from './SyncDiagnosticsPanel';
 import { SkillLearningPage } from './SkillLearningPage';
-import { PrioritySyncStatus } from './PrioritySyncStatus';
 import { DeveloperTraces } from './DeveloperTraces';
 
 const helper = window.location.hash === '#helper';
@@ -98,7 +97,6 @@ export function App() {
         正在加载这位联系人的助手讨论…
       </p>}
     <AssistantWorkspaceDraft contacts={contactSession} replies={replies} />
-    <PrioritySyncStatus contactId={contactSession.state.selectedContactId} bridge={window.notalone.syncControl} />
     <FirstFrameError message={foregroundRead.error} retry={foregroundRead.retry} />
     <div className="ime-status-line"><BackendBadge state={backend} compact /></div>
     <ReplyCandidates onDraftChange={(text,scope) => { void window.notalone.contacts.setDraft({...scope,text}).catch(() => {}); }} replies={replies} currentDraft={replies.state.contactId === contactSession.state.selectedContactId && replies.state.scopeRevision === contactSession.state.scopeRevision ? contactSession.state.draft : ''} />

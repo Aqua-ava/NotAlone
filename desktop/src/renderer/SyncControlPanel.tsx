@@ -59,7 +59,7 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
   const readFailed = !!error || !!state.errorCode || state.phase === 'failed' || state.phase === 'unavailable';
   const report = state.report;
   // 有进度的运行状态已由主进程持续推送；这里只补齐关闭或尚无进度时的只读更新。
-  const hasAutomaticSnapshot = !!report?.enabled && (!!report.priority || report.syncScope === 'all_private' || !!report.historyCoverages?.length);
+  const hasAutomaticSnapshot = !!report?.enabled && (report.syncScope === 'all_private' || !!report.historyCoverages?.length);
   useVisibleRefresh(() => operate(() => bridge.refresh()), state.phase === 'ready' && state.busy === null && !readFailed && !hasAutomaticSnapshot);
   const scopeNotice = syncScopeNotice(report?.backgroundFailureCode);
   const selectionOnly = report?.selectionOnly === true;

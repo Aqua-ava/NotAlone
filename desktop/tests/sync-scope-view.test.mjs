@@ -146,15 +146,12 @@ test('旧增量授权没有历史行时，后台及当前联系人仍明确显�
  const page = await browser.newPage();
  await mount(page, `
  import React from 'react';import {createRoot} from 'react-dom/client';import {SyncControlPanel} from './src/renderer/SyncControlPanel';
- import {PrioritySyncStatus} from './src/renderer/PrioritySyncStatus';
  const state={revision:1,scopeRevision:1,phase:'ready',busy:null,errorCode:null,report:{enabled:true,
- backgroundPhase:'degraded',backgroundFailureCode:'cli_scope_unverified',confirmedBindingCount:1,backfill:{phase:'complete'},
- priority:{contactId:'legacy-contact',lastSuccessAt:null,lastFailureCode:'cli_chat_not_private',localHistoryState:null}}};
+ backgroundPhase:'degraded',backgroundFailureCode:'cli_scope_unverified',confirmedBindingCount:1,backfill:{phase:'complete'}}};
  const bridge={getState:async()=>state,refresh:async()=>{},onStateChanged:()=>()=>{}};
- createRoot(document.getElementById('root')).render(<><SyncControlPanel bridge={bridge}/><PrioritySyncStatus contactId="legacy-contact" bridge={bridge}/></>);
+ createRoot(document.getElementById('root')).render(<SyncControlPanel bridge={bridge}/>);
  `);
  await expect(page.getByRole('alert')).toContainText('暂时无法确认会话属于已授权私聊，已停止读取');
- await expect(page.getByLabel('当前联系人同步状态')).toContainText('会话类型与私聊授权不一致，已停止读取；请在联系人中核对关联。');
 });
 
 test('联系人列表不展开诊断，详情可显示短状态且启停仍需原授权流程', async t => {

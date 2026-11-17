@@ -73,8 +73,6 @@
   "tests/skill-learning/feedback-evidence.test.mjs",
   "tests/source-deletion-tracking.test.ts",
   "tests/startup-continuity.test.mjs",
-  "tests/sync-priority-status.test.mjs",
-  "tests/sync-priority.test.mjs",
   "tests/sync-status-recovery.test.mjs",
   "tests/test-inventory.test.mjs",
   "tests/workspace-local-draft.test.mjs",

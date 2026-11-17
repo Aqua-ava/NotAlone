@@ -42,17 +42,6 @@ export interface SyncBackfillReport {
   nonTextCount: number;
 }
 
-export interface SyncPriorityReport {
-  contactId: string | null;
-  lastSuccessAt: string | null;
-  lastDurationMs: number | null;
-  lastCliDurationMs: number | null;
-  lastStoreDurationMs: number | null;
-  lastFailureCode: string | null;
-  localHistoryState?: 'deleted' | 'empty' | null;
-  queueWaitMs: number | null;
-}
-
 // 只展示最近循环的最小报告，不提供微信定位标识、观察身份或正文。
 export interface SyncStatusReport {
   selectionOnly?: boolean; bodyAvailable?: boolean;
@@ -73,7 +62,6 @@ export interface SyncStatusReport {
   probeAvailable: boolean;
   wechatInFront: boolean;
   backfill: SyncBackfillReport;
-  priority?: SyncPriorityReport;
   incrementalPhase?: BackgroundIncrementalPhase;
   incrementalFailureCode?: string | null;
   incrementalIdentityLimit?: number;

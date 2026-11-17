@@ -50,7 +50,7 @@ export class SyncControlController {
   }
   private scheduleSnapshot(scope: Scope): void {
     if (this.disposed || this.snapshotTimer !== undefined || scope !== this.scope
-      || this.state.phase !== 'ready' || !this.state.report?.enabled || (!this.state.report.priority && this.state.report.syncScope !== 'all_private' && !this.state.report.historyCoverages?.length
+      || this.state.phase !== 'ready' || !this.state.report?.enabled || (this.state.report.syncScope !== 'all_private' && !this.state.report.historyCoverages?.length
         && !(this.state.report.contactAvatarRevision !== undefined && this.state.report.confirmedBindingCount > 0))) return;
     this.snapshotTimer = setTimeout(() => {
       this.snapshotTimer = undefined;

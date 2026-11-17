@@ -21,9 +21,7 @@ function report() {
 function fixture(t, failures = 1, priority = false, quiet, failureCode = 'sync_status_unavailable') {
  t.mock.timers.enable({ apis: ['setTimeout'] });
  const control = { failures, failureCode, mutationFailure:false, barrier:undefined,
-  extra:priority?{cli_priority_contact_id:id,cli_priority_last_success_at:'2026-10-19T06:00:00+00:00',
-   cli_priority_last_duration_ms:100,cli_priority_last_cli_duration_ms:70,cli_priority_last_store_duration_ms:20,
-   cli_priority_last_failure_code:null,cli_priority_queue_wait_ms:10}:{} };
+  extra:priority?{sync_scope:'all_private',cli_backfill_total_message_count:1}:{} };
  let generation=1; const listeners=new Set(), requests=[];
  const backend = { getConnectionGeneration:()=>generation,
   onStateChanged:listener=>{listeners.add(listener);return()=>listeners.delete(listener);},
@@ -117,7 +115,7 @@ test('释放控制器取消恢复定时与订阅，不阻止退出且不再发�
  await f.sync.refresh();assert.equal(f.requests.length,1);
 });
 
-test('优先读取指标自动只读更新，刷新期间保留有效报告且单flight',async t=>{
+test('全部私聊范围状态自动只读更新，刷新期间保留有效报告且单flight',async t=>{
  const f=fixture(t,0,true);await flush();
  assert.equal(f.sync.getState().phase,'ready');
  const original=f.sync.getState().report;
@@ -127,9 +125,9 @@ test('优先读取指标自动只读更新，刷新期间保留有效报告且�
  assert.equal(f.sync.getState().phase,'ready');
  assert.deepEqual(f.sync.getState().report,original);
  t.mock.timers.tick(9000);await flush();assert.equal(f.requests.length,2);
- f.control.extra.cli_priority_last_success_at='2026-10-19T06:00:03+00:00';
+ f.control.extra.cli_backfill_total_message_count=3;
  release();await flush();
- assert.equal(f.sync.getState().report.priority.lastSuccessAt,'2026-10-19T06:00:03+00:00');
+ assert.equal(f.sync.getState().report.backfill.messageCount,3);
  assert.ok(f.requests.every(request=>request.method==='GET'));
 });
 

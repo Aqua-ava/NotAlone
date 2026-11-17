@@ -7,12 +7,9 @@ const bundled = await build({ stdin: { contents: `
   import React from 'react';
   import { renderToStaticMarkup } from 'react-dom/server';
   import { SyncControlPanel } from './src/renderer/SyncControlPanel';
-  import { PrioritySyncStatus } from './src/renderer/PrioritySyncStatus';
-  export function render(state, priority = false) {
+  export function render(state) {
     globalThis.__localHistoryTestState = state;
-    return renderToStaticMarkup(priority
-      ? React.createElement(PrioritySyncStatus, { contactId: 'selected', bridge: {} })
-      : React.createElement(SyncControlPanel, { bridge: {} }));
+    return renderToStaticMarkup(React.createElement(SyncControlPanel, { bridge: {} }));
   }`, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'node', format: 'cjs', write: false,
   loader: { '.css': 'empty' }, plugins: [{ name: 'synthetic-session', setup(builder) {
     builder.onResolve({ filter: /\/use-revisioned-session$/ }, () => ({ path: 'session', namespace: 'synthetic' }));
@@ -31,28 +28,23 @@ function state(code, historyState) {
     enabled: true, backgroundPhase: 'active', confirmedBindingCount: 1, foregroundPhase: 'waiting_foreground',
     backfill: { phase: 'incomplete', failureCode: code, completedContacts: 0, totalContacts: 1,
       pendingContacts: 0, failedContacts: 0, incompleteContacts: 1, messageCount: 0, nonTextCount: 0 },
-    priority: { contactId: 'selected', lastSuccessAt: null, lastFailureCode: null, localHistoryState: historyState },
   } };
 }
 
 test('已删除与本地无记录均为中性覆盖说明，不误报同步完整或故障', () => {
   for (const [code, historyState] of [['local_history_deleted', 'deleted'], ['local_history_empty', 'empty']]) {
-    for (const priority of [false, true]) {
-      const html = render(state(code, historyState), priority);
-      assert.match(html, /历史覆盖尚未确认/);
-      assert.match(html, /收到新消息后会再次检查/);
-      assert.doesNotMatch(html, /role="alert"|补齐已完成|补齐失败|本次读取未成功/);
-      if (!priority) {
-        assert.match(html, /部分已确认会话/);
-        assert.doesNotMatch(html, /此会话/);
-        const paused = state(code, historyState);
-        paused.report.backfill.phase = 'paused';
-        const pausedHtml = render(paused);
-        assert.doesNotMatch(pausedHtml, /补齐已暂停|暂停补齐|重试补齐/);
-        assert.match(pausedHtml, /历史覆盖尚未确认/);
-        assert.doesNotMatch(pausedHtml, /role="alert"|补齐失败/);
-      } else assert.doesNotMatch(html, /部分已确认会话/);
-    }
+    const html = render(state(code, historyState));
+    assert.match(html, /历史覆盖尚未确认/);
+    assert.match(html, /收到新消息后会再次检查/);
+    assert.doesNotMatch(html, /role="alert"|补齐已完成|补齐失败|本次读取未成功/);
+    assert.match(html, /部分已确认会话/);
+    assert.doesNotMatch(html, /此会话/);
+    const paused = state(code, historyState);
+    paused.report.backfill.phase = 'paused';
+    const pausedHtml = render(paused);
+    assert.doesNotMatch(pausedHtml, /补齐已暂停|暂停补齐|重试补齐/);
+    assert.match(pausedHtml, /历史覆盖尚未确认/);
+    assert.doesNotMatch(pausedHtml, /role="alert"|补齐失败/);
   }
 });
 

@@ -37,7 +37,6 @@ import { installSyncControlBridge } from './sync/bridge';
 import { installHistoryClearBridge } from './history-clear/bridge';
 import { installContactDeletionBridge } from './contact-deletion/bridge';
 import { installContactHistoryBridge } from './contact-history/bridge';
-import { SyncPriorityController } from './sync/priority';
 import { SetupController } from './setup/controller';
 import { installSetupBridge } from './setup/bridge';
 import { StartupDiagnostics } from './startup/diagnostics';
@@ -163,8 +162,7 @@ void app.whenReady().then(async () => {
   const sync = installSyncControlBridge(commands, backend, contacts, beginReadingScopeChange, contactDeletionQuiet);
   const contactHistory = installContactHistoryBridge(commands, backend, contacts);
   const historyClear = installHistoryClearBridge(commands, backend, contacts);
-  const syncPriority = new SyncPriorityController(backend, contacts, sync);
-  app.on('before-quit', () => { bindings.dispose(); sync.dispose(); historyClear.dispose(); contactHistory.dispose(); void syncPriority.dispose(); });
+  app.on('before-quit', () => { bindings.dispose(); sync.dispose(); historyClear.dispose(); contactHistory.dispose(); });
   sync.onStateChanged((state) => foreground.setSyncControlState(state));
   foreground.setSyncControlState(sync.getState());
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
@@ -204,7 +202,6 @@ void app.whenReady().then(async () => {
   installQuitLifecycle(backend, windows, async () => {
     await quarantine.close();
     await media.prepareClosing();
-    await syncPriority.dispose();
     await headerChanges.shutdown();
   });
   foreground.startContinuous();

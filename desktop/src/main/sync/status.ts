@@ -1,4 +1,4 @@
-import type { HistoryCoverage, HistoryCoveragePhase, HistoryIncrementalPhase, BackgroundIncrementalPhase, BackgroundSyncPhase, ForegroundReportPhase, HistoryAuthorizationDecision, HistoryAuthorizationState, SyncBackfillPhase, SyncBackfillReport, SyncPriorityReport, SyncStatusReport, SyncScope } from '../../shared/sync-control-bridge';
+import type { HistoryCoverage, HistoryCoveragePhase, HistoryIncrementalPhase, BackgroundIncrementalPhase, BackgroundSyncPhase, ForegroundReportPhase, HistoryAuthorizationDecision, HistoryAuthorizationState, SyncBackfillPhase, SyncBackfillReport, SyncStatusReport, SyncScope } from '../../shared/sync-control-bridge';
 import type { BackendHost } from '../backend/host';
 import { isUuid } from '../uuid';
 
@@ -47,29 +47,6 @@ function nonTextTypes(value: unknown, nonTextCount: number): HistoryCoverage['no
   });
   if (total !== nonTextCount) throw new Error('同步报告不可用。');
   return types;
-}
-function priorityReport(fields: Record<string, unknown>): SyncPriorityReport | undefined {
-  // 旧后台没有优先读取指标；不把未测量的数据填成零。
-  if (!('cli_priority_contact_id' in fields)) return undefined;
-  const contactId = fields.cli_priority_contact_id;
-  const lastSuccessAt = fields.cli_priority_last_success_at;
-  if (!(contactId === null || isUuid(contactId)) || !(lastSuccessAt === null
-    || (typeof lastSuccessAt === 'string' && lastSuccessAt.length <= 64
-      && /^\d{4}-\d{2}-\d{2}T/.test(lastSuccessAt) && Number.isFinite(Date.parse(lastSuccessAt))))) {
-    throw new Error('同步报告不可用。');
-  }
-  const duration = (key: string) => fields[key] === null ? null : count(fields[key]);
-  const localHistoryState = fields.cli_priority_local_history_state;
-  if (localHistoryState !== undefined && localHistoryState !== null && localHistoryState !== 'deleted' && localHistoryState !== 'empty') {
-    throw new Error('同步报告不可用。');
-  }
-  return { contactId: contactId === null ? null : contactId.toLowerCase(), lastSuccessAt,
-    lastDurationMs: duration('cli_priority_last_duration_ms'),
-    lastCliDurationMs: duration('cli_priority_last_cli_duration_ms'),
-    lastStoreDurationMs: duration('cli_priority_last_store_duration_ms'),
-    lastFailureCode: failureCode(fields.cli_priority_last_failure_code),
-    ...('cli_priority_local_history_state' in fields ? { localHistoryState } : {}),
-    queueWaitMs: duration('cli_priority_queue_wait_ms') };
 }
 function backfillReport(fields: Record<string, unknown>): SyncBackfillReport {
   if (!backfillPhases.includes(fields.cli_backfill_phase as SyncBackfillPhase)) throw new Error('同步报告不可用。');
@@ -165,7 +142,6 @@ export function parseSyncReport(value: unknown): SyncStatusReport {
     ...(typeof fields.contact_avatar_revision === 'string' ? { contactAvatarRevision: fields.contact_avatar_revision } : {}),
     foregroundFailureCode: failureCode(fields.foreground_failure_code), probeAvailable: fields.probe_available,
     wechatInFront: fields.wechat_in_front, backfill: backfillReport(fields),
-    ...('cli_priority_contact_id' in fields ? { priority: priorityReport(fields) } : {}),
     ...('cli_incremental_identity_limit' in fields ? { incrementalIdentityLimit: count(fields.cli_incremental_identity_limit) } : {}),
     ...(() => {
       const incrementalPhase = optionalBackgroundIncrementalPhase(fields.cli_incremental_phase);
