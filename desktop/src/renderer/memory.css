@@ -50,10 +50,6 @@
 .memory-source-list p { color: #758184; font-size: 11px; line-height: 1.8; margin-top: 5px; }
 @media (max-width: 900px) { .memory-cards { grid-template-columns: 1fr; } .memory-toolbar { flex-wrap: wrap; } }
 
-.memory-edit-form { display: grid; gap: 12px; margin-top: 12px; padding: 14px; background: var(--panel-background); border-radius: var(--panel-radius); }
-.memory-edit-form label { display: grid; gap: 6px; }
-.memory-edit-form textarea { min-height: 90px; resize: vertical; }
-.memory-edit-form textarea, .memory-edit-form select { font: inherit; padding: 9px; border: 1px solid #b7c6d1; border-radius: 6px; }
 .memory-overview-entries { display: grid; gap: 14px; }
 .memory-overview .memory-card { border-left: 3px solid #aac4c8; }
 .memory-overview details summary { cursor: pointer; color: #426f8a; }
@@ -76,12 +72,6 @@
 
 /* 一级按资料主体导航，核对和管理信息按需展开。 */
 .memory-view-content { display: grid; gap: 14px; min-width: 0; }
-.memory-disclosure { border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); min-width: 0; scroll-margin-top: 145px; }
-.memory-disclosure > summary { padding: 16px 20px; cursor: pointer; color: #426f8a; font-size: 13px; }
-.memory-disclosure > summary:focus-visible { outline: 2px solid #426f8a; outline-offset: 2px; }
-.memory-disclosure[open] > summary { border-bottom: 1px solid #dce1d8; }
-.memory-disclosure > .memory-section { border: 0; background: transparent; }
-.memory-disclosure > .memory-section-note { margin: 16px 20px; }
 .memory-organization-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .memory-organization-settings { margin: 14px 0 20px; }
 .memory-empty { padding: 22px 0; color: #737e80; font-size: 13px; line-height: 1.9; }
@@ -95,20 +85,11 @@
 .fixed-memory-processing .memory-processing-bar { flex-wrap: wrap; }
 .fixed-memory-processing h2 { margin: 0; font-size: 16px; }
 .memory-processing-progress { display: block; width: 100%; height: 8px; margin: 8px 0; accent-color: #426f8a; }
-.memory-processing-bar, .memory-processing-brief, .memory-processing-actions, .memory-processing-detail-heading { display: flex; align-items: center; gap: 8px 16px; }
-.memory-processing-bar, .memory-processing-detail-heading { justify-content: space-between; }
-.memory-processing-brief { flex-wrap: wrap; min-width: 0; }
-.memory-processing-brief strong { font-weight: 500; color: #426f8a; }
-.memory-processing-count { color: #627985; }
+.memory-processing-bar, .memory-processing-actions { display: flex; align-items: center; gap: 8px 16px; }
+.memory-processing-bar { justify-content: space-between; }
 .memory-processing-actions { flex-shrink: 0; gap: 12px; }
 .memory-processing-card .button { padding: 5px 10px; }
-.memory-processing-details-toggle { padding: 5px 0; border: 0; background: none; color: #426f8a; font: inherit; cursor: pointer; }
-.memory-processing-details-toggle:focus-visible { outline: 2px solid #426f8a; outline-offset: 2px; }
-.memory-processing-details { margin-top: 12px; padding-top: 12px; border-top: 1px solid #dce1d8; }
-.memory-processing-details article { border-top: 1px solid #dce1d8; padding: 12px 0; overflow-wrap: anywhere; }
-.memory-processing-details h3 { font-size: 16px; margin: 4px 0; }
-.memory-processing-details progress { display: block; width: 100%; height: 6px; margin: 7px 0; accent-color: #537c8a; }
-@media (max-width: 600px) { .memory-processing-bar { align-items: flex-start; } .memory-processing-brief { gap: 4px; } }
+@media (max-width: 600px) { .memory-processing-bar { align-items: flex-start; } }
 
 /* 默认先看记忆正文，辅助内容按需展开。 */
 .memory-navigation { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; }
@@ -121,12 +102,6 @@
 .memory-card-summary .memory-text { margin: 0; }
 .memory-facts .memory-card-labels { justify-content: flex-start; gap: 12px; }
 .memory-addition { margin: 8px 0; }
-.memory-disclosure.memory-addition { border: 0; background: transparent; }
-.memory-disclosure.memory-addition > summary { padding: 6px 0; font-size: 12px; }
-.memory-disclosure.memory-addition[open] > summary { border-bottom: 0; }
-.memory-secondary { border: 0; border-top: 1px solid #d6dcd3; background: transparent; border-radius: 0; }
-.memory-secondary > summary { padding: 12px 4px; font-size: 12px; }
-.memory-secondary[open] > summary { border-bottom: 0; }
 @media (max-width: 700px) { .memory-toolbar { width: 100%; } .memory-toolbar select { min-width: 120px; max-width: 220px; } }
 
 .memory-facts > .section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
@@ -143,16 +118,7 @@
   color: var(--color-text-muted, #68787c);
 }
 
-/* 整理好的主题资料与长期背景接着记忆卡片下方展示，沿用同一行式列表。 */
 .memory-facts { display: grid; gap: 14px; }
-.layered-scenario + .layered-scenario { margin-top: 18px; padding-top: 16px; border-top: 1px solid #e1e3db; }
-.layered-scenario-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
-.layered-scenario-title { margin: 0 0 6px; color: var(--panel-heading); font-size: 13px; font-weight: 500; }
-.layered-scenario > .memory-section-note { margin: 0; }
-.layered-scenario .memory-list { margin-top: 4px; }
-.layered-memory-references { display: grid; gap: 8px; margin-top: 10px; }
-.layered-memory-reference { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #627985; font-size: 12px; }
-.layered-memory-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 
 .background-tasks-panel {
   padding: 12px 14px;

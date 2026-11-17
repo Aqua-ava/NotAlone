@@ -23,7 +23,7 @@ const sourceRoot=fileURLToPath(new URL('../',import.meta.url));
 const failureOperations=new WeakMap<object,LayeredFailureOperation>();
 const operations=new Set<LayeredFailureOperation>(['model_scope','model_recovery','model_prepare','model_permit','model_reservation','model_stream']);
 const errorNames=new Set(['Error','TypeError','RangeError','ReferenceError','SyntaxError','AbortError','AggregateError',
-  'LlmError','L2ScenarioModelError','L2ScenarioError','L2ScenarioConflict','L2ScenarioVerificationError',
+  'LlmError','L2ScenarioError','L2ScenarioConflict','L2ScenarioVerificationError',
   'L3ProfileDocumentError','L3ProfileVerificationError','L3ProfileServiceConflict','HostStorageError']);
 const providerCodes=new Set(['AUTH','RATE_LIMIT','NO_ADAPTER','NO_MODEL','MODEL_NOT_FOUND','NO_API_KEY',
   'INVALID_RESPONSE','CONTEXT_WINDOW_EXCEEDED','ABORTED','STREAM_FAILED','PROVIDER_ERROR','TRANSPORT_ERROR',

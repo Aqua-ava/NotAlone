@@ -94,7 +94,6 @@
   "tests/memory-current-status.test.mjs",
   "tests/memory-date-precision.test.mjs",
   "tests/memory-event-updates.test.mjs",
-  "tests/memory-evidence.test.mjs",
   "tests/memory-evolution.test.mjs",
   "tests/memory-processing/bridge.test.mjs",
   "tests/packaging/app-platform.test.mjs",
