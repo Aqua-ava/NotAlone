@@ -84,21 +84,6 @@ export const identityActions: StorageAction[] = [
   return {enabled:row?.read_enabled===1n,readEpoch:String(row?.read_epoch??''),account:account?{id:String(account.id),key:String(account.external_key),sourceGeneration:String(account.source_generation),revision:String(account.scope_revision)}:null,
    bindings:currentBindings};
  }),
- action('identity.confirmForeground','write',(tx,i)=>{
-  const proof=i.proof;if(!proof||typeof proof!=='object')fail('foreground_confirmation_stale');
-  const age=Date.now()-Date.parse(proof.observedAt);
-  if(!Number.isFinite(age)||age< -1000||age>=5000)fail('foreground_confirmation_stale');
-  const current=(()=>{try{return eligibility(tx,text(i.ownerId),text(proof.contactId));}catch{return fail('foreground_binding_required');}})();
-  if(current.binding_id!==proof.bindingId||current.account_id!==proof.accountId||current.source_generation!==proof.sourceGeneration
-   ||current.scope_revision!==proof.scopeRevision||current.read_epoch!==proof.readEpoch||current.grant_id!==proof.grantId||current.selection_generation!==proof.selectionGeneration
-   ||current.data_generation!==proof.dataGeneration||current.barrier_generation!==proof.barrierGeneration)fail('foreground_confirmation_stale');
-  if(typeof proof.observationId!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(proof.observationId))fail('foreground_confirmation_stale');
-  const evidence=JSON.stringify({observation_id:proof.observationId,observed_at:proof.observedAt,account_id:current.account_id,source_generation:current.source_generation,grant_id:current.grant_id,selection_generation:current.selection_generation});
-  const old=tx.get('SELECT binding_id,proof FROM binding_verification WHERE owner_id=? AND id=?',[i.ownerId,proof.observationId]);
-  if(old){if(old.binding_id!==current.binding_id||old.proof!==evidence)fail('foreground_confirmation_stale');return {confirmed:true};}
-  tx.run("INSERT INTO binding_verification(owner_id,id,binding_id,identity_generation,method,proof_format,proof,verified_at) VALUES(?,?,?,?,'foreground_confirmation','identity-metadata-v1',?,?)",[i.ownerId,proof.observationId,current.binding_id,BigInt(current.identity_generation),evidence,i.at]);
-  return {confirmed:true};
- }),
  action('identity.syncDirectory','read',(tx,i)=>{
   // 调度仅取授权名单；具体读取和接受仍在原资格门禁中复验。
   const owner=text(i.ownerId);

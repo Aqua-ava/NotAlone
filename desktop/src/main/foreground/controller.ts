@@ -2,7 +2,7 @@ import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import {currentDiagnosticTrace,diagnose,newTraceId,withDiagnosticTrace} from '../../../../backend-ts/src/diagnostics/context';
 import type { ContactSession } from '../contacts/session';
-import { initialForegroundState, type ForegroundState, type ForegroundConfirmation, type GenerationBlock } from '../../shared/foreground-bridge';
+import { initialForegroundState, type ForegroundState, type GenerationBlock } from '../../shared/foreground-bridge';
 import { foregroundObservation } from './observation';
 import type { SyncControlState } from '../../shared/sync-control-bridge';
 import type { ForegroundChangeSource, HeaderChangePermit } from './native-change-source';
@@ -62,7 +62,6 @@ export class ForegroundController {
   private scopeRevision: number;
   private readingScopeChanges = 0;
   // 只由正式观察填入，进入小窗不延长原采集时间；页面不能提供或修改这份回执。
-  private confirmationObservation: { observationId: string; observedAt: string; generation: number; scopeRevision: number } | undefined;
   private qualification: { generation: number; scopeRevision: number; contactId: string;
     kind: 'manual-confirmed' | 'verified-binding' } | undefined;
   private readonly listeners = new Set<(state: ForegroundState) => void>();
@@ -110,7 +109,6 @@ export class ForegroundController {
       && generation !== undefined
       ? { generation } : undefined;
     if (hadPermit && !this.syncPermit) ++this.captureAuthorityRevision;
-    if (!this.syncPermit) this.confirmationObservation = undefined;
     if (!this.syncPermit) this.changePending = false;
     this.updateChangeSource();
   }
@@ -157,44 +155,10 @@ export class ForegroundController {
     this.backend.confirmManualInput(selection.contactId, generation);
     this.state = { ...this.state, unsupportedConversation: false };
     this.qualification = { generation, scopeRevision: selected.scopeRevision, contactId: selection.contactId, kind: 'manual-confirmed' };
-    this.confirmationObservation = undefined;
     this.publish({ phase: this.state.suspendedByHelperFocus ? 'paused' : 'idle', reason: 'contact_selected',
       recognizedName: null, recognitionConfidence: null, observedAt: null,
-      suggestedContactId: null, wechatInFront: null, probeAvailable: null });
+      wechatInFront: null, probeAvailable: null });
     this.scheduleNext();
-    return selected;
-  }
-  // 异步核验绑定前后均检查同一身份，过时操作不能读取或确认新范围。
-  checkConfirmation(selection: ForegroundConfirmation): number {
-    const generation = this.backend.getConnectionGeneration();
-    const contact = this.contacts.getState();
-    if (this.disposed || this.stopped || this.state.unsupportedConversation || this.readingScopeChanges > 0 || generation === undefined || generation !== this.generation
-      || selection.foregroundRevision !== this.state.foregroundRevision
-      || selection.contactScopeRevision !== contact.scopeRevision
-      || !contact.contacts.some((item) => item.contactId === selection.contactId)
-      || (contact.directoryPhase !== 'ready' && contact.directoryPhase !== 'loading')) {
-      throw new Error('联系人确认已失效，请重新选择本次联系人。');
-    }
-    return generation;
-  }
-  desktopConfirmation(selection: ForegroundConfirmation): { contact_id: string; observation_id: string } {
-    const generation = this.checkConfirmation(selection), receipt = this.confirmationObservation;
-    if (!receipt) throw new Error('foreground_confirmation_unavailable');
-    const age = Date.now() - Date.parse(receipt.observedAt);
-    if (receipt.generation !== generation || receipt.scopeRevision !== selection.contactScopeRevision
-      || !Number.isFinite(age) || age < -1000 || age >= 5000) throw new Error('foreground_confirmation_stale');
-    return { contact_id: selection.contactId, observation_id: receipt.observationId };
-  }
-  // 仅由helper具名桥调用；绑定核验成功后同步选择，旧观察不能覆盖资格。
-  confirm(selection: ForegroundConfirmation) {
-    const generation = this.checkConfirmation(selection);
-    this.confirmationObservation = undefined;
-    const contact = this.contacts.getState();
-    this.invalidatePending(); ++this.epoch; ++this.captureAuthorityRevision;
-    const selected = this.contacts.selectContact({ contactId: selection.contactId, scopeRevision: contact.scopeRevision });
-    this.qualification = { generation, scopeRevision: selected.scopeRevision, contactId: selection.contactId, kind: 'manual-confirmed' };
-    this.publish({ foregroundRevision: this.state.foregroundRevision + 1, suggestedContactId: null,
-      observedAt: null, wechatInFront: null, recognizedName: null, recognitionConfidence: null });
     return selected;
   }
   onStateChanged(listener: (state: ForegroundState) => void): () => void {
@@ -269,7 +233,6 @@ export class ForegroundController {
     const scope = this.contacts.getState().scopeRevision;
     const epoch = ++this.epoch;
     const began = performance.now();
-    this.confirmationObservation = undefined;
     this.measure('request_started');
     const abort = new AbortController();
     const current = () => !this.disposed && !abort.signal.aborted && epoch === this.epoch
@@ -299,10 +262,6 @@ export class ForegroundController {
       // 丢弃已过时的身份/待选择结果，避免旧观察恢复资格或显示旧建议；技术失败及安全暂停仍处理。
       if (this.changePending && (observation.phase === 'confirmed'
         || observation.phase === 'manual-required' && isAwaitingForegroundSelection(observation.reason))) return;
-      this.confirmationObservation = observation.phase === 'manual-required'
-        && observation.reason === 'unmatched_requires_selection' && observation.recognizedName
-        ? { observationId: observation.observationId, observedAt: observation.observedAt, generation, scopeRevision: scope }
-        : undefined;
       // 群聊暂停跨助手获焦/失败保留，只有新的完整私聊证据才能解除。
       const privateVerified = observation.phase === 'confirmed'
         || (observation.phase === 'manual-required' && observation.reason === 'unmatched_requires_selection');
@@ -331,11 +290,10 @@ export class ForegroundController {
         this.qualification = { generation, scopeRevision: selected.scopeRevision,
           contactId: observation.contactId, kind: 'verified-binding' };
       }
-      // 保留桥接状态结构兼容；成功直接确认，不再发布待确认联系人建议。
       this.publish({ phase: observation.phase, reason: observation.reason, observedAt: observation.observedAt,
         recognizedName: unsupportedConversation ? null : observation.recognizedName,
         recognitionConfidence: unsupportedConversation ? null : observation.recognitionConfidence,
-        probeAvailable: observation.probeAvailable, wechatInFront: observation.wechatInFront, suggestedContactId: null });
+        probeAvailable: observation.probeAvailable, wechatInFront: observation.wechatInFront });
       this.measure('result_published', performance.now() - began, changedContact);
     }).catch((error: unknown) => {
       if (!current()) return;
@@ -371,7 +329,6 @@ export class ForegroundController {
   }
   notifyHelperLifecycle(event: 'focused' | 'blurred' | 'hidden' | 'closed'): void {
     if (this.disposed) return;
-    if (event !== 'focused') this.confirmationObservation = undefined;
     const focused = event === 'focused';
     const wasFocused = this.state.suspendedByHelperFocus;
     if (focused === wasFocused && (focused || event === 'blurred')) return;
@@ -414,18 +371,16 @@ export class ForegroundController {
     this.changeSource?.dispose(); this.changeSource = undefined; this.changePending = false;
     this.clearQualification();
     this.cancelScheduled(); this.disposed = true; ++this.epoch; this.flight?.abort.abort();
-    this.confirmationObservation = undefined;
     clearTimeout(this.nameExpiry); this.nameExpiry = undefined;
     this.state = { ...this.state, recognizedName: null, recognitionConfidence: null };
     for (const unsubscribe of this.unsubscribe) unsubscribe();
     this.listeners.clear();
   }
   private clearObservation(phase: ForegroundState['phase'], reason: string | null): void {
-    if (reason !== 'helper_focused') this.confirmationObservation = undefined;
     if (phase === 'manual-required' || phase === 'unavailable') this.clearQualification();
     this.publish({ phase, reason, observedAt: null, probeAvailable: null, wechatInFront: null,
       recognizedName: null, recognitionConfidence: null,
-      foregroundRevision: this.state.foregroundRevision + 1, suggestedContactId: null });
+      foregroundRevision: this.state.foregroundRevision + 1 });
   }
   private publish(update: Partial<ForegroundState>): void {
     if (this.disposed) return;

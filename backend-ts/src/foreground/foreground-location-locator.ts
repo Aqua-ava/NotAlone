@@ -1,14 +1,9 @@
 /** 前台定位只投影当轮名称与已验证身份，不读取正文、不改变绑定或后台同步。 */
 import {randomUUID} from 'node:crypto';
-import {safeForegroundProbeCode} from './foreground-location-probe.ts';
+import {safeForegroundProbeCode,type ProbeObservation} from './foreground-location-probe.ts';
 import {canonicalSessionName, matchSessionNames} from './foreground-location-name-matching.ts';
 
-export interface ForegroundProbeObservation {
-  wechat_in_front: boolean; display_name?: string | null; captured_at?: string | null;
-  capture_version?: string; selected_row_name?: string | null;
-  quality?: {layout_verified?: boolean;display_name_confidence:number;name_complete?:boolean;selected_row_name_confidence?:number} | null;
-  text_fallback?: {version:string;text:string;confidence:number;text_complete:boolean;mask_verified:boolean} | null;
-}
+export type ForegroundProbeObservation=ProbeObservation;
 export interface ForegroundProbe {
   start?(options?:{timeoutMs?:number}):Promise<void>;
   resetPermissionGate?():void;
@@ -32,7 +27,7 @@ export class ForegroundLocationError extends Error {
 }
 export interface ForegroundLocatorOptions {
   ownerId:string;accountScope:string;probe:ForegroundProbe;
-  sessions(options:{signal:AbortSignal;timeoutMs:number;keyword?:string;limit:number}):Promise<readonly ForegroundSession[]>;
+  sessions(options:{signal:AbortSignal;timeoutMs:number;limit:number}):Promise<readonly ForegroundSession[]>;
   bindings(signal:AbortSignal,check:()=>void):Promise<readonly ForegroundBinding[]>;
   clock?:()=>number;
 }
@@ -101,27 +96,22 @@ export class ForegroundLocator {
       const age=(this.options.clock??Date.now)()-captured;
       if(!Number.isFinite(captured)||age< -1000||age>=5000)return result('unavailable','observation_timeout');
       const title=observation.display_name??'',quality=observation.quality,tail=observation.text_fallback;
-      const header=['automatic-header-v3','automatic-header-v4'].includes(observation.capture_version??'');
+      if(!['automatic-header-v3','automatic-header-v4'].includes(observation.capture_version??''))return result('unavailable','probe_output_invalid');
       const hasSuffix=suffix.test(title);
-      const preview=header&&quality?.layout_verified===true&&typeof title==='string'&&!!normalize(title)&&[...title].length<=256&&!/[\r\n]/u.test(title);
+      const preview=quality?.layout_verified===true&&typeof title==='string'&&!!normalize(title)&&[...title].length<=256&&!/[\r\n]/u.test(title);
       const failure=(phase:ForegroundObservation['phase'],reason:string)=>hasSuffix?result('paused','group_chat_suspected'):result(phase,reason,phase==='manual-required'&&preview);
-      if(!quality||quality.layout_verified!==true||!preview&&!(!header&&observation.capture_version==='automatic-window-v2'))return failure('manual-required','quality_unverified');
+      if(!quality||quality.layout_verified!==true||!preview)return failure('manual-required','quality_unverified');
       if(hasSuffix&&tail)return result('paused','group_chat_suspected');
       if(tail&&(observation.capture_version!=='automatic-header-v4'||!tail.text_complete||!tail.mask_verified||tail.confidence<0.9))return failure('manual-required','quality_unverified');
       if(tail&&suffix.test(tail.text))return result('paused','group_chat_suspected');
-      const qualityFailure=header?(quality.name_complete!==true||/…|⋯|\.\.\./u.test(title)||!tail&&quality.display_name_confidence<0.3):
-        !normalize(title)||quality.display_name_confidence<0.9||(quality.selected_row_name_confidence??0)<0.9||normalize(title)!==normalize(observation.selected_row_name);
+      const qualityFailure=quality.name_complete!==true||/…|⋯|\.\.\./u.test(title)||!tail&&quality.display_name_confidence<0.3;
       let sessions:readonly ForegroundSession[],bindings:readonly ForegroundBinding[],stage:'sessions'|'bindings'='sessions';
       try {
-        check();sessions=await this.options.sessions({signal,timeoutMs:deadline-performance.now(),limit:header?5000:51,...(!header?{keyword:normalize(title.replace(suffix,''))||normalize(title)}:{})});check();
-        if(sessions.length>=(header?5000:51))return failure('manual-required','session_candidates_truncated');
+        check();sessions=await this.options.sessions({signal,timeoutMs:deadline-performance.now(),limit:5000});check();
+        if(sessions.length>=5000)return failure('manual-required','session_candidates_truncated');
         if(qualityFailure){if(sessions.some(row=>row.chat_type==='group'&&normalize(row.display_name)===normalize(title)))return result('paused','group_chat_unsupported');return failure('manual-required','quality_unverified');}
         if(hasSuffix&&sessions.some(row=>row.chat_type==='group'&&[canonicalSessionName(title),canonicalSessionName(title.replace(suffix,''))].includes(canonicalSessionName(row.display_name))))return result('paused','group_chat_suspected');
-        const exactLegacy=sessions.map((row,index)=>({row,index})).filter(({row})=>normalize(row.display_name)===normalize(title));
-        const decision=header?matchSessionNames(title,quality.display_name_confidence,sessions.map(row=>({displayName:row.display_name,chatType:row.chat_type})),{tailText:tail?.text,tailConfidence:tail?.confidence,checkCurrent:check}):{
-          kind:exactLegacy.some(({row})=>row.chat_type==='group')?'group':exactLegacy.length===1&&exactLegacy[0].row.chat_type==='private'?'unique':'ambiguous',
-          candidateIndex:exactLegacy.length===1?exactLegacy[0].index:null,method:'exact',plausibleIndices:exactLegacy.map(({index})=>index),
-        };
+        const decision=matchSessionNames(title,quality.display_name_confidence,sessions.map(row=>({displayName:row.display_name,chatType:row.chat_type})),{tailText:tail?.text,tailConfidence:tail?.confidence,checkCurrent:check});
         check();
         if(decision.kind==='group')return result('paused',decision.plausibleIndices.some(index=>sessions[index].chat_type==='private')?'group_chat_suspected':'group_chat_unsupported');
         if(decision.kind==='quality-unverified')return failure('manual-required','quality_unverified');

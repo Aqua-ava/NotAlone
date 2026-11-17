@@ -32,7 +32,7 @@ test('真实窗口原位移动缩放均自动识别', async () => {
     let value: Record<string, any> = {};
     try { value = JSON.parse(output); } catch { /* 固定失败投影。 */ }
     const report = { phase, exit, elapsedMs: Math.round(performance.now() - started), ok: value.ok === true,
-      front: value.wechat_in_front === true, versionValid: value.capture_version === 'automatic-header-v3',
+      front: value.wechat_in_front === true, versionValid: value.capture_version === 'automatic-header-v3' || value.capture_version === 'automatic-header-v4',
       namesMatch: value.display_name === expected && value.selected_row_name === undefined,
       headerQuality: value.quality?.name_complete === true && value.quality?.layout_verified === true
         && typeof value.quality?.display_name_confidence === 'number'

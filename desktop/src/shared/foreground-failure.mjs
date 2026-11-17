@@ -64,7 +64,7 @@ const reasons = Object.freeze({
   probe_warming: ['本机 OCR', '识别模型正在预热'],
   probe_warmup_timeout: ['本机 OCR', '识别模型预热超时'],
   probe_timeout: ['探针执行', '正式探针执行超时'],
-  probe_output_invalid: ['探针结果', '正式探针返回格式未通过'],
+  probe_output_invalid: ['探针结果', '正式探针协议或输出无效，请检查并更新探针'],
   probe_failed: ['探针执行', '正式探针失败，尚无分项原因'],
   observation_timeout: ['后端观察', '本轮观察超时，正在等待下一次重试'],
   observation_unavailable: ['本机连接', '与本机服务的连接中断，正在重试'],

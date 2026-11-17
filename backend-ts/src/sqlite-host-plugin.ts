@@ -241,7 +241,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
       // 开启/重选只唤醒合法读取；关闭/取消/退出由 readStop 停止后续查询并等待在途释放。
     }
     contacts.setReadStart(()=>{if(automaticImages)imageSync?.wake();if(automaticBackground){firstHistory?.wake();incremental?.wake();quoteSync?.wake();memory?.wake();}});
-    if(history&&process.env.NOTALONE_SYNC_PROBE&&path.isAbsolute(process.env.NOTALONE_SYNC_PROBE)) foreground=SqliteForeground.create(ownerId,process.env.NOTALONE_SYNC_PROBE,sqlite.wechatCliPath??'',()=>contacts!.foregroundSnapshot(),proof=>contacts!.confirmForeground(proof));
+    if(history&&process.env.NOTALONE_SYNC_PROBE&&path.isAbsolute(process.env.NOTALONE_SYNC_PROBE)) foreground=SqliteForeground.create(ownerId,process.env.NOTALONE_SYNC_PROBE,sqlite.wechatCliPath??'',()=>contacts!.foregroundSnapshot());
     const historyHttp=history?new SqliteHistoryHttp(history,(contactId,messageIds)=>{if(automaticImages)imageSync?.retryViewed(contactId,messageIds);}):undefined;
     let historyStatusInFlight:Promise<Record<string,unknown>>|undefined;
     const readHistoryStatus=async()=>{
@@ -352,20 +352,6 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
           let body:unknown;try{body=JSON.parse((await readHttpBody(req,1024,3500)).toString('utf8')||'{}');}catch{respond(400,{error:'foreground_observation_invalid'});return;}
           if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length){respond(400,{error:'foreground_observation_invalid'});return;}
           await foreground.screenPermissionRestored();respond(200,{ok:true});return;
-        }
-        if(foreground&&url.pathname==='/api/sync/foreground/confirm'){
-          if(req.method!=='POST'){respond(405,{error:'method_not_allowed'});return;}
-          let body:unknown;try{body=JSON.parse((await readHttpBody(req,1024,3500)).toString('utf8'));}catch{respond(400,{error:'foreground_confirmation_invalid'});return;}
-          const fields=body&&typeof body==='object'&&!Array.isArray(body)?body as Record<string,unknown>:null;
-          const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-          if(!fields||Object.keys(fields).length!==2||!Object.keys(fields).every(k=>k==='contact_id'||k==='observation_id')
-            ||typeof fields.contact_id!=='string'||!uuid.test(fields.contact_id)||typeof fields.observation_id!=='string'||!uuid.test(fields.observation_id)){
-            respond(400,{error:'foreground_confirmation_invalid'});return;
-          }
-          const abort=new AbortController(),onAbort=()=>abort.abort();req.once('aborted',onAbort);
-          try{respond(200,await foreground.confirm(fields.contact_id,fields.observation_id,abort.signal));}
-          catch(error){const code=(error as {code?:string}).code;respond(409,{error:code==='foreground_binding_required'?code:'foreground_confirmation_stale'});}
-          finally{req.removeListener('aborted',onAbort);}return;
         }
         if(foreground&&url.pathname==='/api/sync/foreground/observe'){
           if(req.method!=='POST'){respond(405,{error:'method_not_allowed'});return;}

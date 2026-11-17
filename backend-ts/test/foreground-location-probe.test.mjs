@@ -62,8 +62,18 @@ test('权限错误熔断，close不恢复；stderr洪泛不阻塞或泄露',asyn
  const q=probe('stderr');try{assert.equal((await q.observe()).wechat_in_front,true);}finally{await q.dispose();}
 });
 
-test('保留旧单帧协议、完整低置信度及emoji文字候选供领域层判定',async()=>{
- for(const mode of ['legacy','low-confidence','fallback']){const p=probe(mode);try{const result=await p.observe();if(mode==='legacy'){assert.equal(result.capture_version,'automatic-window-v2');assert.equal(result.selected_row_name,result.display_name);}if(mode==='low-confidence')assert.equal(result.quality.display_name_confidence,0.4);if(mode==='fallback')assert.equal(result.text_fallback.text,'合成');}finally{await p.dispose();}}
+test('仅名称v3和v4协议保留完整低分与表情文字候选，非前台接受最小否定结果',async()=>{
+ for(const mode of ['header-v3','normal','low-confidence','fallback','not-in-front']){const p=probe(mode);try{
+  const result=await p.observe();
+  if(mode==='header-v3')assert.equal(result.capture_version,'automatic-header-v3');
+  if(mode==='normal')assert.equal(result.capture_version,'automatic-header-v4');
+  if(mode==='low-confidence')assert.equal(result.quality.display_name_confidence,0.4);
+  if(mode==='fallback')assert.equal(result.text_fallback.text,'合成');
+  if(mode==='not-in-front')assert.deepEqual(result,{wechat_in_front:false});
+ }finally{await p.dispose();}}
+});
+test('旧双区域及最小区域协议不能进入名称识别，并回收不兼容Worker',async()=>{
+ for(const mode of ['legacy','minimal']){const p=probe(mode);try{await assert.rejects(p.observe(),{code:'probe_output_invalid'});}finally{await p.dispose();}}
 });
 test('未知原生错误码不进入公共失败消息',async()=>{
  const p=probe('unknown-error');try{await assert.rejects(p.observe(),{code:'probe_failed',message:'probe_failed'});}finally{await p.dispose();}

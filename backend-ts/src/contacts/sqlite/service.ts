@@ -67,7 +67,6 @@ export class SqliteContactService {
   return {directory,status};
  }
  foregroundSnapshot(){return this.execute<import('../../foreground/sqlite-foreground.ts').ForegroundSnapshot>('identity.foregroundSnapshot',{});}
- async confirmForeground(proof:import('../../foreground/sqlite-foreground.ts').ForegroundBindingConfirmation){await this.execute('identity.confirmForeground',{proof});}
  private readMetadata<T>(read:()=>Promise<T>):Promise<T>{
   if(this.closed)fail('identity_closed');
   const pending=Promise.resolve().then(()=>{if(this.closed)fail('identity_closed');return read();})

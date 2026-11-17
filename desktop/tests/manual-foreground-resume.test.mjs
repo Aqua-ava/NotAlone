@@ -262,7 +262,7 @@ test('探针超时后新的低分唯一绑定匹配自动恢复确认', async t 
  assert.equal(f.foreground.getGenerationBlock(), null);
  assert.equal(f.foreground.getState().confirmation, 'verified-binding');
  assert.equal(f.foreground.getState().confirmedContactId, id);
- assert.equal(f.foreground.getState().suggestedContactId, null);
+ assert.equal('suggestedContactId' in f.foreground.getState(), false);
  assert.equal(f.foreground.getState().recognitionConfidence, Math.fround(0.3));
 });
 

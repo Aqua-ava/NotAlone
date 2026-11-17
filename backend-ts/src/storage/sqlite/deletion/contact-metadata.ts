@@ -139,12 +139,6 @@ export class ContactMetadataLifetime {
   async directory(){return (await this.current()).directory();}
   async syncDirectory(){return (await this.current()).syncDirectory();}
   async foregroundSnapshot(){return (await this.current()).foregroundSnapshot();}
-  async confirmForeground(proof:import('../../../foreground/sqlite-foreground.ts').ForegroundBindingConfirmation){
-    await this.refreshAdmission();
-    if(!this.admission.available||!this.admission.writable)throw new StorageFailure('identity_closed');
-    const service=await this.current();
-    await service.confirmForeground(proof);
-  }
   async syncSnapshot(){return (await this.current()).syncSnapshot();}
   async handle(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     if (this.stopping) return this.deny(res);

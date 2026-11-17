@@ -74,15 +74,19 @@ test('预热期间返回明确状态且不回收同一常驻Worker',async()=>{
   assert.equal(ready.phase,'confirmed');assert.equal(ready.contact_id,contact);assert.equal(closes,0);
   await locator.close();
 });
-test('旧v2协议只允许旧完整名严格匹配，不引入v3名单编辑放宽',async()=>{
-  const f=fixture();f.observation.capture_version='automatic-window-v2';f.observation.display_name='合成甲有';f.observation.selected_row_name='合成甲有';
+test('旧双区域及最小区域协议即使名称完全命中也不能查询名单或授予联系人',async()=>{
+ for(const version of ['automatic-window-v2','automatic-window-v1','minimal-region-v1']){
+  let reads=0;const f=fixture({sessions:async()=>{reads++;throw new Error('旧协议不得进入名单核验');}});
+  f.observation.capture_version=version;
+  f.observation.selected_row_name=f.observation.display_name;
   f.observation.quality={layout_verified:true,display_name_confidence:0.99,selected_row_name_confidence:0.99};
-  assert.notEqual((await f.locator.observe({enabled:true})).phase,'confirmed');await f.locator.close();
-});
-test('旧v2空、null及仅空白名称没有绑定资格',async()=>{
- for(const name of ['',null,' \u001c']){
-  const f=fixture();f.observation.capture_version='automatic-window-v2';f.observation.display_name=name;f.observation.selected_row_name=name;
-  f.observation.quality={layout_verified:true,display_name_confidence:0.99,selected_row_name_confidence:0.99};f.rows[0].display_name=name??'';f.bindings[0].display_name=name;
-  assert.equal((await f.locator.observe({enabled:true})).reason,'quality_unverified');await f.locator.close();
+  try{const result=await f.locator.observe({enabled:true});assert.equal(result.reason,'probe_output_invalid');assert.equal(result.contact_id,null);assert.equal(reads,0);}
+  finally{await f.locator.close();}
  }
+});
+test('非微信前台只消费最小否定结果，不运行会话名称或绑定读取',async()=>{
+ let reads=0;const f=fixture({sessions:async()=>{reads++;return [];},bindings:async()=>{reads++;return [];}});
+ f.observation.wechat_in_front=false;delete f.observation.capture_version;delete f.observation.quality;
+ try{assert.equal((await f.locator.observe({enabled:true})).reason,'wechat_not_in_front');assert.equal(reads,0);}
+ finally{await f.locator.close();}
 });

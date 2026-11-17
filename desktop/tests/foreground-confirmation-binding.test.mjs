@@ -4,139 +4,53 @@ import test from 'node:test';
 import { build } from 'esbuild';
 
 const compiled = await build({ stdin: { contents: `export { installForegroundBridge } from './src/main/foreground/bridge';
-  export { BackendRequestFailure } from './src/main/backend/json-client';`,
+  export { createForegroundBridge } from './src/preload/foreground';`,
   resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'cjs', write: false });
 const module = { exports: {} };
 new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(createRequire(import.meta.url), module, module.exports);
-const { installForegroundBridge, BackendRequestFailure } = module.exports;
+const { installForegroundBridge, createForegroundBridge } = module.exports;
 const contactId = '10000000-0000-4000-8000-000000000001';
-const otherId = '10000000-0000-4000-8000-000000000002';
-const observationId = '40000000-0000-4000-8000-000000000001';
-const binding = (id = contactId, suffix = '1') => ({ binding_id: `20000000-0000-4000-8000-00000000000${suffix}`,
-  contact_id: id, conversation_locator: `wxid_synthetic_${suffix}`, display_name: '合成绑定', status: 'active' });
 
-function fixture(t, bindings = []) {
-  let generation = 1, read = async () => {
-    if (bindings.filter(item => item.contact_id === contactId && item.status === 'active').length !== 1) {
-      throw new BackendRequestFailure('response', 409, 'foreground_binding_required');
-    }
-    return { generation, data: { confirmed: true } };
-  };
-  const calls = [], handlers = new Map();
-  const state = { contacts: [contactId, otherId].map(contactId => ({ contactId, displayName: '合成联系人' })),
-    selectedContactId: contactId, scopeRevision: 1, directoryPhase: 'ready' };
+function fixture(t) {
+  let generation = 1;
+  const state = { scopeRevision: 1, selectedContactId: contactId, directoryPhase: 'ready',
+    contacts: [{ contactId, displayName: '合成联系人' }] };
+  const calls = [], handlers = new Map(), confirmations = [];
   const backend = { getConnectionGeneration: () => generation, onStateChanged: () => () => {},
-    clearManualInput: id => calls.push({ clearManual: id }), confirmManualInput() { throw new Error('不得静默授予手动输入'); },
-    requestJson: options => { calls.push(options); return read(options); } };
-  const contacts = { getState: () => ({ ...state }), onStateChanged: () => () => {},
-    selectContact: selection => { state.selectedContactId = selection.contactId; return { ...state }; } };
+    clearManualInput() {}, confirmManualInput: (...args) => confirmations.push(args),
+    requestJson: async request => { calls.push(request); return { generation, data: { confirmed: true } }; } };
+  const contacts = { getState: () => state, onStateChanged: () => () => {}, selectContact: () => state };
   const foreground = installForegroundBridge({ handle: (name, handler) => handlers.set(name, handler), publish() {} }, backend, contacts);
   t.after(() => foreground.dispose());
-  const selection = () => ({ contactId, contactScopeRevision: state.scopeRevision, foregroundRevision: foreground.getState().foregroundRevision });
-  const observe = async (overrides = {}) => {
-    const confirmationRead = read;
-    read = async () => ({ generation, data: { observation_id: observationId, observed_at: new Date().toISOString(),
-      phase: 'manual-required', reason: 'unmatched_requires_selection', probe_available: true, wechat_in_front: true,
-      binding_id: null, contact_id: null, recognized_name: '合成联系人', recognition_confidence: .98, ...overrides } });
-    await foreground.observeBeforeShow(); read = confirmationRead; calls.length = 0;
-  };
-  return { foreground, state, calls, selection, observe, confirm: value => handlers.get('foreground:confirm')(value ?? selection()),
-    setRead: value => { read = value; }, reconnect: () => { generation += 1; } };
+  return { foreground, calls, handlers, confirmations, backend, reconnect: () => { generation++; } };
 }
 
-for (const [name, bindings] of [['未绑定', []], ['仅另一联系人绑定', [binding(otherId)]],
-  ['已撤销', [{ ...binding(), status: 'revoked' }]], ['绑定歧义', [binding(), binding(contactId, '2')]]]) {
-  test(`${name}不能通过前台确认解除生成门或静默切换手动输入`, async t => {
-    const f = fixture(t, bindings);
-    await f.observe();
-    await assert.rejects(Promise.resolve().then(() => f.confirm()), /foreground_binding_required/);
-    assert.equal(f.foreground.getGenerationBlock(), 'foreground-confirmation-required');
-    assert.equal(f.foreground.getState().confirmation, 'required');
-    assert.equal(f.state.selectedContactId, contactId);
-    assert.deepEqual(f.calls.map(call => [call.method, call.path]), [['POST', '/api/sync/foreground/confirm']]);
-  });
-}
+test('前台桥只读状态，旧桌面证明确认不再注册或暴露给页面', async t => {
+  const f = fixture(t);
+  assert.equal(f.handlers.has('foreground:confirm'), false);
+  const bridge = createForegroundBridge({ invoke: async (name, ...args) => f.handlers.get(name)(...args), on() {}, removeListener() {} });
+  assert.deepEqual(Object.keys(bridge).sort(), ['getState', 'onStateChanged']);
+  await assert.rejects(bridge.getState('extra'));
+  assert.equal((await bridge.getState()).confirmation, 'required');
+  assert.deepEqual(f.calls, []);
+});
 
-test('唯一已有绑定允许显式确认，只核验指定联系人不读取目录或聊天', async t => {
-  const f = fixture(t, [binding(), binding(otherId, '2')]);
-  await f.observe();
-  await f.confirm();
+test('顶栏选择仍走独立人工输入确认，不依赖前台观察或写入桌面证明', async t => {
+  const f = fixture(t), select = f.handlers.get('contacts:confirm-manual');
+  await assert.rejects(Promise.resolve().then(() => select({ contactId, scopeRevision: 1, observationId: contactId })));
+  assert.deepEqual(f.calls, []);
+  await select({ contactId, scopeRevision: 1 });
+  assert.deepEqual(f.calls, [{ method: 'POST', path: `/api/contacts/${contactId}/manual-confirmation`, body: {}, maxResponseBytes: 4096 }]);
+  assert.deepEqual(f.confirmations, [[contactId, 1]]);
   assert.equal(f.foreground.getGenerationBlock(), null);
-  assert.equal(f.foreground.getState().confirmedContactId, contactId);
-  assert.deepEqual(f.calls, [{ method: 'POST', path: '/api/sync/foreground/confirm',
-    body: { contact_id: contactId, observation_id: observationId }, maxResponseBytes: 4096 }, { clearManual: contactId }]);
 });
 
-for (const change of ['contact', 'foreground', 'connection']) {
-  test(`绑定核验中${change}改变，迟到成功不得确认旧范围`, async t => {
-    const f = fixture(t, [binding()]);
-    await f.observe();
-    let release;
-    f.setRead(() => new Promise(resolve => { release = resolve; }));
-    const pending = Promise.resolve().then(() => f.confirm());
-    await new Promise(setImmediate);
-    assert.equal(f.foreground.getGenerationBlock(), 'foreground-confirmation-required');
-    if (change === 'contact') { f.state.selectedContactId = otherId; f.state.scopeRevision += 1; }
-    else if (change === 'foreground') { f.foreground.notifyHelperLifecycle('focused'); }
-    else f.reconnect();
-    release({ generation: 1, data: { confirmed: true } });
-    await assert.rejects(pending);
-    assert.equal(f.foreground.getGenerationBlock(), 'foreground-confirmation-required');
-    assert.equal(f.calls.length, 1);
-  });
-}
-
-test('过时或未知联系人确认在读取授权目录前拒绝', async t => {
-  const f = fixture(t, [binding()]);
-  await assert.rejects(Promise.resolve().then(() => f.confirm({ ...f.selection(), contactScopeRevision: 0 })));
-  await assert.rejects(Promise.resolve().then(() => f.confirm({ ...f.selection(), contactId: '30000000-0000-4000-8000-000000000003' })));
-  assert.deepEqual(f.calls, []);
-});
-
-test('新鲜微信观察进入小窗后仍可显式确认，并把观察回执交给后端保存桌面绑定', async t => {
-  const f = fixture(t, [binding()]);
-  f.setRead(async request => ({ generation: 1, data: request.path.endsWith('/observe') ? {
-    observation_id: observationId, observed_at: new Date().toISOString(), phase: 'manual-required',
-    reason: 'unmatched_requires_selection', probe_available: true, wechat_in_front: true,
-    binding_id: null, contact_id: null, recognized_name: '合成联系人', recognition_confidence: .98,
-  } : { confirmed: true } }));
-  await f.foreground.observeBeforeShow();
-  f.foreground.notifyHelperLifecycle('focused');
-  f.calls.length = 0;
-  await f.confirm();
-  assert.deepEqual(f.calls, [{ method: 'POST', path: '/api/sync/foreground/confirm',
-    body: { contact_id: contactId, observation_id: observationId }, maxResponseBytes: 4096 }, { clearManual: contactId }]);
-  assert.equal(f.foreground.getState().confirmedContactId, contactId);
-});
-
-test('没有新鲜完整观察时不能把已有渠道绑定升级为桌面确认', async t => {
-  const f = fixture(t, [binding()]);
-  await assert.rejects(f.confirm(), /foreground_confirmation_unavailable/);
-  assert.deepEqual(f.calls, []);
-  await f.observe({ observed_at: new Date(Date.now() - 6000).toISOString() });
-  await assert.rejects(f.confirm(), /foreground_confirmation_stale/);
-  assert.deepEqual(f.calls, []);
-});
-
-test('低质量或暂停观察不能持有桌面确认回执，关闭小窗也丢弃已有回执', async t => {
-  const f = fixture(t, [binding()]);
-  await f.observe({ reason: 'quality_unverified' });
-  await assert.rejects(f.confirm(), /foreground_confirmation_unavailable/);
-  await f.observe();
-  f.foreground.notifyHelperLifecycle('closed');
-  await assert.rejects(f.confirm(), /foreground_confirmation_unavailable/);
-  assert.deepEqual(f.calls, []);
-});
-
-test('本轮没有完整会话证据时准确说明尚不可确认，不误报为观察过期', async t => {
-  const f = fixture(t, [binding()]);
-  for (const observation of [
-    { reason: 'quality_unverified' },
-    { phase: 'paused', reason: 'wechat_not_in_front', wechat_in_front: false },
-  ]) {
-    await f.observe(observation);
-    await assert.rejects(f.confirm(), /foreground_confirmation_unavailable/);
-    assert.equal(f.foreground.getGenerationBlock(), 'foreground-confirmation-required');
-    assert.deepEqual(f.calls, []);
-  }
+test('手选等待期间连接换代，旧回执不能确认新范围', async t => {
+  const f = fixture(t), gate = Promise.withResolvers();
+  f.backend.requestJson = async request => { f.calls.push(request); await gate.promise; return { generation: 1, data: { confirmed: true } }; };
+  const selecting = f.handlers.get('contacts:confirm-manual')({ contactId, scopeRevision: 1 });
+  f.reconnect(); gate.resolve();
+  await assert.rejects(selecting);
+  assert.deepEqual(f.confirmations, []);
+  assert.equal(f.foreground.getGenerationBlock(), 'foreground-confirmation-required');
 });

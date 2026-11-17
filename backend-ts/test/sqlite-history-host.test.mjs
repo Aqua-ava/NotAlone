@@ -79,9 +79,9 @@ test('正式前台观察HTTP保留账号范围失效原因，不误报为观察�
   assert.equal(result.status,503);
   assert.deepEqual(result.body,{error:'foreground_scope_unavailable'});
   const confirmation=await request('/api/sync/foreground/confirm','POST',{contact_id:f.bindings[0].contact_id,observation_id:'00000000-0000-4000-8000-000000000001'});
-  assert.equal(confirmation.status,409);assert.deepEqual(confirmation.body,{error:'foreground_confirmation_stale'});
+  assert.equal(confirmation.status,503);assert.deepEqual(confirmation.body,{error:'sqlite_capability_unavailable'});
   const injected=await request('/api/sync/foreground/confirm','POST',{contact_id:f.bindings[0].contact_id,observation_id:'00000000-0000-4000-8000-000000000001',recognized_name:'页面不得提供名称事实'});
-  assert.equal(injected.status,400);assert.deepEqual(injected.body,{error:'foreground_confirmation_invalid'});
+  assert.equal(injected.status,503);assert.deepEqual(injected.body,{error:'sqlite_capability_unavailable'});
  }finally{await request('/api/runtime/shutdown','POST',{});assert.equal(await host.waitForExit(15000),true);}
 });
 test('正式DSH重开读取非空历史及消息分页，真实未认证渠道保持明确拒绝',async t=>{

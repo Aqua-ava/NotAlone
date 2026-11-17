@@ -7,9 +7,8 @@ function fixture(options={}){
  const snapshot={enabled:true,readEpoch:'1',account,bindings:[{binding_id:binding,contact_id:contact,account_id:account.id,conversation_locator:'synthetic-person',display_name:'合成联系人',status:'active',grant_id:randomUUID(),selection_generation:'1',identityGeneration:'0',dataGeneration:'0',barrierGeneration:'0'}]};
  const rows=[{username:'synthetic-person',display_name:'合成联系人',chat_type:'private'}];
  const probe={observe:async()=>({wechat_in_front:true,display_name:'合成联系人',captured_at:new Date().toISOString(),capture_version:'automatic-header-v4',quality:{layout_verified:true,display_name_confidence:.98,name_complete:true}}),close:async()=>{},dispose:async()=>{}};
- const confirmations=[];
- const foreground=new SqliteForeground({ownerId:owner,probe,snapshot:async()=>structuredClone(snapshot),sessions:async()=>rows,closeSessions:async()=>{},confirmBinding:options.confirmBinding??(async proof=>{confirmations.push(proof);}),requestSessionRefresh:options.requestSessionRefresh});
- return {foreground,snapshot,rows,contact,probe,confirmations};
+ const foreground=new SqliteForeground({ownerId:owner,probe,snapshot:async()=>structuredClone(snapshot),sessions:async()=>rows,closeSessions:async()=>{},requestSessionRefresh:options.requestSessionRefresh});
+ return {foreground,snapshot,rows,contact,probe};
 }
 test('已绑定唯一私聊直接关联，同名群聊仍不能误认',async()=>{
  const f=fixture();try{
@@ -29,7 +28,7 @@ test('识别置信度0.30或0.50时仍直接关联多个既有联系人，无关
   f.probe.observe=async()=>({...await probe(),display_name:name,quality:{layout_verified:true,display_name_confidence:confidence,name_complete:true}});
   const result=await f.foreground.observe();assert.equal(result.phase,'confirmed');assert.equal(result.contact_id,contact);assert.equal(result.recognition_confidence,confidence);
  }
- assert.equal(f.confirmations.length,0);
+
  }finally{await f.foreground.close();}
 });
 test('范围变化时丢弃在途观察；同步关闭不运行探针',async()=>{
@@ -47,14 +46,14 @@ test('仅已建联稳定绑定可关联；保存名变化、重名、未知类�
   else if(change==='unknown')f.rows[0].chat_type='unknown';
   else if(change==='no-binding')f.snapshot.bindings=[];
   else{const observe=f.probe.observe;f.probe.observe=async()=>({...await observe(),captured_at:new Date(Date.now()-5001).toISOString()});}
-  try{const result=await f.foreground.observe();assert.notEqual(result.phase,'confirmed',change);assert.equal(result.contact_id,null);assert.equal(f.confirmations.length,0);}finally{await f.foreground.close();}
+  try{const result=await f.foreground.observe();assert.notEqual(result.phase,'confirmed',change);assert.equal(result.contact_id,null);}finally{await f.foreground.close();}
  }
 });
-test('前台确认接口作为可选旧契约，不阻挡已识别联系人直接使用',async()=>{
+test('前台观察只关联既有身份，不开放写桌面证明的旧确认方法',async()=>{
  const f=fixture();try{
-  const result=await f.foreground.observe();assert.equal(result.phase,'confirmed');assert.equal(result.contact_id,f.contact);assert.equal(f.confirmations.length,0);
-  assert.deepEqual(await f.foreground.confirm(f.contact,result.observation_id),{confirmed:true});assert.equal(f.confirmations.length,1);
-  await assert.rejects(f.foreground.confirm(f.contact,result.observation_id),{code:'foreground_confirmation_stale'});
+  const before=structuredClone(f.snapshot),result=await f.foreground.observe();
+  assert.equal(result.phase,'confirmed');assert.equal(result.contact_id,f.contact);
+  assert.equal('confirm' in f.foreground,false);assert.deepEqual(f.snapshot,before);
  }finally{await f.foreground.close();}
 });
 test('权限恢复后重试真实探针，但仍由新观察决定联系人',async()=>{

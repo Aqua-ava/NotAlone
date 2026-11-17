@@ -26,7 +26,9 @@ for await(const line of readline.createInterface({input:process.stdin})) {
  if(mode==='bool-confidence')result.quality.display_name_confidence=true;
  if(mode==='extra-quality')result.quality.body='不得输出正文';
  if(mode==='low-confidence')result.quality.display_name_confidence=0.4;
- if(mode==='legacy'){result.capture_version='automatic-window-v2';result.selected_row_name=result.display_name;result.quality.selected_row_name_confidence=0.95;delete result.quality.name_complete;}
+ if(mode==='header-v3')result.capture_version='automatic-header-v3';
+ if(mode==='not-in-front'){emit({version:1,request_id:request.request_id,result:{ok:true,wechat_in_front:false}});continue;}
+ if(['legacy','minimal'].includes(mode)){result.capture_version=mode==='legacy'?'automatic-window-v2':'minimal-region-v1';result.selected_row_name=result.display_name;result.quality.selected_row_name_confidence=0.95;delete result.quality.name_complete;}
  if(mode==='fallback')result.text_fallback={version:'isolated-color-tail-v1',text:'合成',confidence:0.95,text_complete:true,mask_verified:true};
  if(mode==='bad-fallback')result.text_fallback={version:'isolated-color-tail-v1',text:'合成...',confidence:0.95,text_complete:true,mask_verified:true};
  if(mode==='unknown-error'){emit({version:1,request_id:request.request_id,result:{ok:false,error:'private_secret'}});continue;}

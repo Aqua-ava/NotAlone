@@ -1,5 +1,7 @@
 # ADR-052：顶部名称 OCR 接入正式前台定位
 
+> 后续局部修订：[ADR-192](192-retire-foreground-observation-compatibility.md)退役本文“旧单帧 v2 保持兼容”条款，只保留顶部名称 v3／v4 协议；名称分数和已有联系人关联按 ADR-132 及现行规格核验。
+
 > 后续局部修订：[ADR-105](105-fresh-verified-foreground-recovery.md)以当前新鲜有效绑定观察自动恢复确认，替代历史失败持续阻断及按原因限定恢复的条款；当前识别、绑定和时效规则保持；主动手动模式已由 [ADR-158](158-contact-selection-keeps-foreground-follow.md) 替代，显式选人不再停止跟随。
 
 > 状态：已采纳；代码及正式 App 集成验证分别记录

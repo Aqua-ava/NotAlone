@@ -80,14 +80,8 @@ export function ForegroundPanel({ state, session, permission }: { state: Foregro
     {state.confirmation === 'verified-binding' && <p>已按会话名称匹配到配置账号的已有联系人。</p>}
     {(state.reason === 'confirmed_active_binding_name_match' || state.reason === 'confirmed_active_binding_emoji_fallback')
       && <p>上方是原始 OCR 分数；低分本身不阻止名单中的唯一匹配。</p>}
-    {!selectionConfirmed && (state.phase === 'confirmed' || state.suggestedContactId || state.recognizedName) && state.observedAt && <p>
+    {!selectionConfirmed && (state.phase === 'confirmed' || state.recognizedName) && state.observedAt && <p>
       识别结果对应 <time dateTime={state.observedAt}>{new Date(state.observedAt).toLocaleTimeString('zh-CN', { hour12: false })}</time> 采集时的会话；之后的切换可能尚未反映。
-    </p>}
-    {!selectionConfirmed && session && state.suggestedContactId && <p>
-      采集时的微信会话对应{session.state.contacts.find((item) => item.contactId === state.suggestedContactId)?.displayName}，已有编辑已保留。
-      <button onClick={() => void session.confirmManualContact(state.suggestedContactId!)}>
-        确认微信会话对应联系人
-      </button>
     </p>}
     {session?.error && <p role="alert">{session.error}</p>}
     {state.suspendedByHelperFocus && <p>小窗在前台，暂停新的前台定位；已确认范围的后台同步独立运行。</p>}

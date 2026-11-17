@@ -1,12 +1,6 @@
-import type { ContactSessionState } from './contact-session-bridge';
 
 export type ForegroundPhase = 'idle' | 'observing' | 'confirmed' | 'manual-required' | 'paused' | 'unavailable';
 export type GenerationBlock = 'foreground-confirmation-required' | null;
-export interface ForegroundConfirmation {
-  contactId: string;
-  contactScopeRevision: number;
-  foregroundRevision: number;
-}
 export interface ForegroundState {
   revision: number;
   foregroundRevision: number;
@@ -21,7 +15,6 @@ export interface ForegroundState {
   unsupportedConversation: boolean;
   confirmation: 'required' | 'manual-confirmed' | 'verified-binding';
   confirmedContactId: string | null;
-  suggestedContactId: string | null;
   generationBlock: GenerationBlock;
 }
 export const initialForegroundState: ForegroundState = Object.freeze({
@@ -29,10 +22,9 @@ export const initialForegroundState: ForegroundState = Object.freeze({
   observedAt: null, recognizedName: null, recognitionConfidence: null,
   probeAvailable: null, wechatInFront: null, suspendedByHelperFocus: false,
   unsupportedConversation: false,
-  confirmation: 'required', confirmedContactId: null, suggestedContactId: null, generationBlock: 'foreground-confirmation-required',
+  confirmation: 'required', confirmedContactId: null, generationBlock: 'foreground-confirmation-required',
 });
 export interface ForegroundBridge {
   getState(): Promise<ForegroundState>;
-  confirm(selection: ForegroundConfirmation): Promise<ContactSessionState>;
   onStateChanged(listener: (state: ForegroundState) => void): () => void;
 }

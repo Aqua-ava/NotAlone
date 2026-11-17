@@ -1,9 +1,9 @@
 import {spawn, type ChildProcessWithoutNullStreams} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 
-export interface ProbeQuality {layout_verified:boolean;display_name_confidence:number;name_complete?:boolean;selected_row_name_confidence?:number}
+export interface ProbeQuality {layout_verified:boolean;display_name_confidence:number;name_complete:boolean}
 export interface ProbeTextFallback {version:'isolated-color-tail-v1';text:string;confidence:number;text_complete:boolean;mask_verified:boolean}
-export interface ProbeObservation {wechat_in_front:boolean;display_name?:string|null;selected_row_name?:string|null;last_time_text?:string|null;preview_text?:string|null;capture_version?:string;captured_at?:string;quality?:ProbeQuality|null;text_fallback?:ProbeTextFallback}
+export interface ProbeObservation {wechat_in_front:boolean;display_name?:string|null;capture_version?:string;captured_at?:string;quality?:ProbeQuality|null;text_fallback?:ProbeTextFallback}
 export class ForegroundProbeError extends Error {
   readonly code:string;
   constructor(code:string) {super(code);this.name='ForegroundProbeError';this.code=code;}
@@ -157,7 +157,7 @@ const probeErrors = new Set([
 ]);
 /** 原生与领域边界共享的错误码过滤；未知输出不可进入公共消息。 */
 export function safeForegroundProbeCode(value:unknown):string {return typeof value==='string'&&probeErrors.has(value)?value:'probe_failed';}
-const versions=new Set(['minimal-region-v1','automatic-window-v1','automatic-window-v2','automatic-header-v3','automatic-header-v4']);
+const versions=new Set(['automatic-header-v3','automatic-header-v4']);
 const confidence=(value:unknown):value is number=>typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=1;
 function utcTime(value:unknown):value is string {
   if(typeof value!=='string'||Number(value.slice(0,4))<1||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|\+00:00)$/.test(value))return false;
@@ -168,34 +168,21 @@ function parseObservation(value:Record<string,any>):ProbeObservation {
   if(value.ok!==true)throw failure(safeForegroundProbeCode(value.error));
   if(typeof value.wechat_in_front!=='boolean')throw failure();
   if(!value.wechat_in_front)return {wechat_in_front:false};
-  const result:ProbeObservation={wechat_in_front:true};
-  for(const field of ['display_name','selected_row_name','last_time_text','preview_text'] as const){
-    if(value[field]!=null&&typeof value[field]!=='string')throw failure();
-    result[field]=value[field]??null;
-  }
   const version=value.capture_version;
-  if(versions.has(version)){
-    result.capture_version=version;
-    const header=version==='automatic-header-v3'||version==='automatic-header-v4';
-    if(header){
-      const required=['ok','wechat_in_front','display_name','capture_version','captured_at','quality'];
-      const allowed=version==='automatic-header-v4'?[...required,'text_fallback']:required;
-      if(!required.every(key=>Object.hasOwn(value,key))||Object.keys(value).some(key=>!allowed.includes(key)))throw failure();
-    }
-    if(header||version==='automatic-window-v2'){
-      if(!utcTime(value.captured_at))throw failure();
-      result.captured_at=value.captured_at;
-    }
-    result.quality=null;
-    const quality=value.quality;
-    if(quality!=null){
-      const fields=['layout_verified','display_name_confidence',header?'name_complete':'selected_row_name_confidence'];
-      if(!object(quality)||Object.keys(quality).some(key=>!fields.includes(key)))throw failure();
-      if(fields.every(key=>Object.hasOwn(quality,key))){
-        if(typeof quality.layout_verified!=='boolean'||!confidence(quality.display_name_confidence)
-          ||(header?typeof quality.name_complete!=='boolean':!confidence(quality.selected_row_name_confidence)))throw failure();
-        if(quality.layout_verified)result.quality=quality as ProbeQuality;
-      }
+  if(!versions.has(version))throw failure();
+  const required=['ok','wechat_in_front','display_name','capture_version','captured_at','quality'];
+  const allowed=version==='automatic-header-v4'?[...required,'text_fallback']:required;
+  if(!required.every(key=>Object.hasOwn(value,key))||Object.keys(value).some(key=>!allowed.includes(key))
+    ||value.display_name!==null&&typeof value.display_name!=='string'||!utcTime(value.captured_at))throw failure();
+  const result:ProbeObservation={wechat_in_front:true,display_name:value.display_name,capture_version:version,captured_at:value.captured_at,quality:null};
+  const quality=value.quality;
+  if(quality!=null){
+    const fields=['layout_verified','display_name_confidence','name_complete'];
+    if(!object(quality)||Object.keys(quality).some(key=>!fields.includes(key)))throw failure();
+    if(fields.every(key=>Object.hasOwn(quality,key))){
+      if(typeof quality.layout_verified!=='boolean'||!confidence(quality.display_name_confidence)
+        ||typeof quality.name_complete!=='boolean')throw failure();
+      if(quality.layout_verified)result.quality=quality as ProbeQuality;
     }
   }
   if(Object.hasOwn(value,'text_fallback')){
