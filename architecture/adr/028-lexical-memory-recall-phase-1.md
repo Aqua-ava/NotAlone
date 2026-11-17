@@ -1,5 +1,7 @@
 # ADR-028：记忆召回第一期采用确定性中文词法评分
 
+> 2026-11-17 局部替代：[ADR-191](191-reply-retrieval-contract-simplification.md)退役残留的旧回复字词覆盖率选择器及未确认候选适配。当前正式记忆使用 ADR-190 的共享检索排名，缺少向量时仍可降级 BM25；历史材料及来源、删除合同保持。
+
 > 2026-11-14 局部替代：见 [ADR-185](185-on-demand-reply-memory-and-history-search.md)。固定查询构造由新方案替代；词法评分与来源要求保留。
 
 > 2026-10-21 设计审查：[ADR-080](080-unified-memory-list-and-retired-exclusion.md)取消 ADR-071 的失效状态变化旧版生成例外；失效／过期记忆仅供管理回看，有效的历史事实仍可检索。本文回复上下文词法召回与 [ADR-074（腾讯记忆）](074-tencent-reference-python-memory.md)的写入裁决候选召回属于不同阶段，不互相替代。

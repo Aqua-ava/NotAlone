@@ -202,3 +202,5 @@
 - [ADR-189：分别手动配置回复与记忆的模型参数](189-editable-model-thinking-and-temperature.md)——开放独立思考档位与温度，复用受控配置重载和唯一 DSH provider。
 
 - [ADR-190：L1 与 L0 统一采用腾讯式本机混合检索](190-tencent-style-local-hybrid-retrieval.md)——共享 BM25、向量与 RRF，正文表示增量维护并纳入删除。
+
+- [ADR-191：收敛回复检索合同并退役未使用适配](191-reply-retrieval-contract-simplification.md)——强制按需读者与已有排名，退役旧词法／未确认候选选择接口，保留历史材料和删除合同。

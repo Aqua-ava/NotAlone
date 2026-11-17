@@ -7,8 +7,7 @@ import {fixture,owner,record} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
 import {SqliteDiscussionService} from '../src/reply/sqlite/service.ts';
 import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/service.ts';
-import {createMemoryKnowledgeReader} from '../src/memory/sqlite/management/knowledge.ts';
-import {assertReplyLocalSource} from '../src/history/sqlite/reply-local-source.ts';
+import {createReplyLocalKnowledgeReader} from '../src/memory/sqlite/documents/knowledge.ts';
 import {initializeReplySearch,beginReplySearch,finishReplySearch} from '../src/reply/sqlite/candidates/search.ts';
 import {freezeReplyInput,requireReplyInput} from '../src/reply/sqlite/candidates/input.ts';
 import {withReplyValidation} from '../src/reply/sqlite/candidates/validation.ts';
@@ -33,7 +32,7 @@ async function setup(t,{count=2,background=true,initialFirst=false,messageText=i
  const db=new DatabaseSync(join(f.root,'managed/sqlite/notalone.sqlite'),{allowExtension:true});const index=configureRetrievalConnection(db);t.after(()=>db.close());
  const all=(sql,values=[])=>{const statement=db.prepare(sql);statement.setReadBigInts(true);return statement.all(...values);};
  const tx={all,get:(sql,values)=>all(sql,values)[0],run:(sql,values=[])=>{db.prepare(sql).run(...values);}};
- const reader=createMemoryKnowledgeReader({includeUnconfirmed:false},assertReplyLocalSource);
+ const reader=createReplyLocalKnowledgeReader();
  const first=initialFirst?tx.get('SELECT id FROM message WHERE owner_id=? AND contact_id=? ORDER BY display_no LIMIT 1',[owner,contactId]):null;
  const selected=first?await f.storage.execute('discussion.messages',{...attempt,messageIds:[first.id]}):[];
  await f.storage.execute('discussion.freezeContext',{...scope,skillRun:{packages:[],eligible:[]},items:selected.map(row=>({kind:'message',sourceContactId:contactId,messageId:row.id,recordId:row.record_id,acceptedRevision:row.interpretation_revision})),at:Date.now()});
@@ -238,7 +237,7 @@ test('L1高排名时间资格失效项先排除，合法尾部仍能补位并成
  // 保持active/body/provenance及FTS不变，复现仅靠索引头部无法辨别的资格变化。
  f.act(tx=>tx.run(`UPDATE memory_decision SET action='accept' WHERE owner_id=? AND id IN(SELECT decision_id FROM memory_version WHERE owner_id=? AND memory_id IN(${invalid.map(()=>'?').join(',')}))`,[owner,owner,...invalid]));
  const headers=f.reader.list(f.tx,f.scope);assert.equal(headers.filter(x=>created.includes(x.id)).length,25);
- assert.equal(f.reader.read(f.tx,f.scope).filter(x=>created.includes(x.id)).length,1,'真实领域读者只认可合法尾部');
+ assert.equal(f.reader.list(f.tx,f.scope).filter(x=>created.includes(x.id)&&f.reader.open(f.tx,f.scope,x)).length,1,'真实领域读者只认可合法尾部');
  f.act(tx=>initializeReplySearch(tx,f.scope,f.reader));
  const ticket=f.act(tx=>beginReplySearch(tx,{...f.scope,kind:'memory',query:'花艺北斗'},f.reader));
  const result=f.act(tx=>finishReplySearch(tx,{...f.scope,ticketId:ticket.ticketId,query:ticket.query},f.reader));

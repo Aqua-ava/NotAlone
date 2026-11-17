@@ -1,3 +1,4 @@
+import {readKnowledge} from '../reply-knowledge.mjs';
 import {historicalSourceCopy} from '../history/historical-source-copy.mjs';
 import {simulateSourceGuard} from '../history/runtime-guard-fixture.mjs';
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
@@ -53,7 +54,7 @@ export const registry={...base,actions:[...base.actions.filter(a=>!replaced.has(
    basis:tx.get('SELECT count(*) AS n FROM document_basis WHERE owner_id=? AND document_id=? AND version_no=?',[ownerId,documentId,BigInt(versionNo)]).n,
    events:tx.get('SELECT count(*) AS n FROM execution_event WHERE owner_id=? AND step_attempt_id=?',[ownerId,attemptId]).n}));
  }},
- {name:'fixture.localReplyKnowledge',mode:'read',retryBusy:false,execute(tx,input){return replyLocalKnowledgeReader.read(tx,input);}},
+ {name:'fixture.localReplyKnowledge',mode:'read',retryBusy:false,execute(tx,input){return readKnowledge(replyLocalKnowledgeReader,tx,input);}},
  {name:'fixture.localReplyCurrent',mode:'read',retryBusy:false,execute(tx,input){replyLocalKnowledgeReader.requireCurrent(tx,input.scope,input.item);return true;}},
  {name:'fixture.localReplyFrozen',mode:'read',retryBusy:false,execute(tx,input){replyLocalKnowledgeReader.requireFrozen(tx,input.scope,input.item);return true;}},
  {name:'fixture.localReplyGuardLost',mode:'write',retryBusy:false,execute(tx,{ownerId,contactId}){

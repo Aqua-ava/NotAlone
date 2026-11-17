@@ -22,23 +22,24 @@ test('正式记忆逐项复核只查询指定身份，工作量随资料数线�
  assert.ok(measurements[1].fullScans<=2,'复核指定版本不应重新扫描完整目录');
 });
 
-test('回复挑选记忆只对入选条目核验来源：查询量不随记忆池增长，结果与整体核验后再排序一致',{timeout:60000},async t=>{
+test('联系人BM25召回及预算选择只核验有界排名候选，与整池核验使用同一排名',{timeout:60000},async t=>{
  const f=await fixture(t,{registryModule:new URL('./fixtures/memory-management/knowledge-scaling-registry.mjs',import.meta.url).href});
  const contactId=(await f.contacts.directory()).contacts[0].contact_id;
  const management=new SqliteMemoryManagement(f.storage,owner),scope={scopeKind:'contact',contactId},measurements=[];
- for(let index=0;index<100;index++){
-  // 每条都含共同词“园艺”，全部满足相关性门槛；预算只收前五条，其余无需核验。
+ for(let index=0;index<1000;index++){
+  // 每条都含“园艺”，共享 BM25 召回再按精确来源核验；最终只选择五条，不沿用旧词法门槛。
   await management.decide({requestKey:`selection-${index}`,action:'manual',scope,body:`园艺合成资料第${index}项，种植编号${index}。`});
-  if(index===9||index===99){
+  if(index===99||index===999){
    const result=await f.storage.execute('fixture.measureSelection',{scope:{ownerId:owner,contactId,discussionId:'synthetic'},query:'园艺'});
    assert.equal(result.poolSize,index+1);
    assert.equal(result.lazyIds.length,5,'联系人记忆条数预算');
-   assert.deepEqual(result.lazyIds,result.eagerIds,'按需核验不得改变入选结果与顺序');
+   assert.deepEqual(result.lazyIds,result.eagerIds,'同一BM25排名下按需核验不得改变入选结果与顺序');
+   assert.ok(result.openCount<=60,'当前top-K放大最多核验60个有效排名候选，不把只有五条最终结果误称为只核验五条');
    measurements.push(result);
   }
  }
  t.diagnostic(JSON.stringify(measurements.map(({lazyIds,eagerIds,...value})=>value)));
- // 列出头部是常数次查询，核验次数固定为入选条数：十倍记忆池下总量不变，整体核验则线性增长。
- assert.ok(measurements[1].lazyQueries<=measurements[0].lazyQueries+10,'列出头部是常数次查询，核验只随入选条数增长，不能随记忆池线性增长');
- assert.ok(measurements[1].lazyQueries*5<=measurements[1].eagerQueries,'100 条记忆下按需核验至少少 5 倍查询');
+ // 这里只测共享召回和选择，不把它冒充完整候选请求的来源准备、票据和最终冻结成本。
+ assert.ok(measurements[1].lazyQueries<=measurements[0].lazyQueries+10,'超过召回候选容量后，十倍池大小不应增加逐项来源核验次数');
+ assert.ok(measurements[1].lazyQueries*5<=measurements[1].eagerQueries,'1000条记忆下有界召回应避免整池逐项核验');
 });

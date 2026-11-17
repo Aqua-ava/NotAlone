@@ -46,6 +46,8 @@ test('旧同步解析、候选协议及已移除导入页的孤立模块不再�
     'backend-ts/src/sync/sync-incremental-cli-history.ts',
     'backend-ts/src/sync/sync-incremental-normalize.ts',
     'backend-ts/src/sync/wechat-scope-json.ts',
+    'backend-ts/src/retrieval/retrieval-lexical.ts',
+    'backend-ts/src/retrieval/retrieval-ranking.ts',
     'backend-ts/src/history/runtime.ts',
     'backend-ts/test/history-runtime.test.mjs',
     'backend-ts/src/memory/scenarios/model.ts',

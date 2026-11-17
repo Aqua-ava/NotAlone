@@ -3,11 +3,14 @@ import {sourceVerificationState} from './evidence.ts';
 import {qualificationSources,mergeKnowledgeSources} from './dependencies.ts';
 import type {StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {DiscussionScope} from '../../../reply/sqlite/contracts.ts';
-import type {ReplyKnowledgeHeader,ReplyKnowledgeItem,ReplyKnowledgeReader,ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
+import type {ReplyKnowledgeHeader,ReplyKnowledgeItem,ReplyMemoryReader,ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 import {available,fail,requireAutomaticCandidate,requireSources,requireVersion} from './qualification.ts';
 import {memoryTimeEligibility} from './temporal.ts';
 /** identity_json保留额外修订；版本不变的保护操作也必须使旧快照失效。 */
 export interface MemoryKnowledgeItem extends ReplyKnowledgeItem {headRevision:bigint;citationSources:ReplySource[];qualificationSources:ReplySource[]}
+export interface MemoryKnowledgeReader extends ReplyMemoryReader {
+ read(tx:StorageTransaction,scope:DiscussionScope):MemoryKnowledgeItem[];
+}
 const knowledgeSources=(rows:StorageRow[])=>rows.map(r=>({contactId:String(r.source_contact_id),messageId:String(r.message_id),recordId:String(r.record_id),acceptedRevision:r.accepted_revision as bigint}));
 function items(tx:StorageTransaction,scope:DiscussionScope,includeUnconfirmed:boolean,sourceEligibility:SourceEligibility,selected?:Pick<ReplyKnowledgeItem,'kind'|'id'>):MemoryKnowledgeItem[]{
  const ownerId=scope.ownerId;available(tx,ownerId,{scopeKind:'contact',contactId:scope.contactId});
@@ -44,7 +47,7 @@ function headers(tx:StorageTransaction,scope:DiscussionScope,includeUnconfirmed:
   result.push({kind:'memory_candidate',id:String(c.id),versionNo:1n,scopeKind:c.scope_kind==='self'?'owner':'contact',contactId:c.contact_id as string|null,text:String(c.proposed_body),qualification:'unconfirmed'});
  return result;
 }
-export function createMemoryKnowledgeReader(options={includeUnconfirmed:false},sourceEligibility:SourceEligibility=assertSourceEligibility):ReplyKnowledgeReader{return {
+export function createMemoryKnowledgeReader(options={includeUnconfirmed:false},sourceEligibility:SourceEligibility=assertSourceEligibility):MemoryKnowledgeReader{return {
  read:(tx,scope)=>items(tx,scope,options.includeUnconfirmed,sourceEligibility),
  list:(tx,scope)=>headers(tx,scope,options.includeUnconfirmed),
  open(tx,scope,header){

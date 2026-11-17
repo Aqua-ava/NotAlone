@@ -6,7 +6,7 @@
 
 L3 工作区在构造时保存旧画像、场景、底层记忆及预算的深冻结副本；`generationContext()`、文档读取和编译共同使用它。生成运行器只接收工作区和变更场景 ID 等变更说明，不再另传一套画像、场景或记忆；变更场景仍从本次冻结集合解析，不增加输入范围。模型请求的字段、顺序、提示、工具和调用预算保持原合同。
 
-下游消费合同沿用 `reply/sqlite/candidates/contracts.ts` 的 `ReplyKnowledgeReader`：`read` 和 `requireCurrent` 在同一 SQLite 短事务内接收已确认的 `DiscussionScope`，文档项以 `kind: 'document'`、精确 `versionNo`、`publicationId` 与真实来源返回。联系人文档只属于该联系人，本人文档逐项核验实际来源；正式组合由 `replyLocalKnowledgeReader` 同时提供记忆与文档读取，不能相互替换。发布集合的成员是完整清单，不能逐条回退到其他轮次。
+文档领域的 `DocumentKnowledgeReader` 只提供文档读取、按段读取和资格复验；正式回复组合遵循 `reply/sqlite/candidates/contracts.ts` 的 `ReplyKnowledgeReader`，明确提供记忆 `list/open`、文档 `readDocuments` 和相应复验。所有操作在同一 SQLite 短事务内接收已确认的 `DiscussionScope`，文档项以 `kind: 'document'`、精确 `versionNo`、`publicationId` 与真实来源返回。联系人文档只属于该联系人，本人文档逐项核验实际来源；发布集合的成员是完整清单，不能逐条回退到其他轮次。
 
 `SqliteMemoryDocuments.read({scopeKind,contactId})` 是范围资料视图；`readTask(taskId)` 返回该任务冻结的记忆／文档修订、前一发布集合及各阶段状态。`publishRun(runId)` 只供正常处理服务在记忆管理域的前置阶段后调用，发布后按同一合同切换范围指针；`laterStagesState(tx,ownerId,runId)` 是只读完成投影，仅当全部任务适用阶段结束、完整发布集合可用且无未解未知文档调用时返回 completed。
 

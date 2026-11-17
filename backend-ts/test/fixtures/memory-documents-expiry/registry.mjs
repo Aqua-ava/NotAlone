@@ -1,3 +1,4 @@
+import {readKnowledge} from '../reply-knowledge.mjs';
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 import {combinedKnowledgeReader} from '../../../src/memory/sqlite/documents/knowledge.ts';
 import {createMemoryKnowledgeReader} from '../../../src/memory/sqlite/management/knowledge.ts';
@@ -14,6 +15,6 @@ export const registry={...base,actions:[...base.actions,
   if(!Number.isSafeInteger(input.time))throw new Error('invalid_synthetic_time');
   time=input.time;globalThis.Date=TestDate;return time;
  }},
- {name:'fixture.knowledge',mode:'read',retryBusy:false,execute:(tx,input)=>combinedKnowledgeReader.read(tx,input)},
+ {name:'fixture.knowledge',mode:'read',retryBusy:false,execute:(tx,input)=>readKnowledge(combinedKnowledgeReader,tx,input)},
  {name:'fixture.unconfirmedKnowledge',mode:'read',retryBusy:false,execute:(tx,input)=>createMemoryKnowledgeReader({includeUnconfirmed:true}).read(tx,input)},
 ]};

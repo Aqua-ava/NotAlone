@@ -1,9 +1,9 @@
-import {RELATIONSHIP_BUDGET} from '../../../reply/sqlite/candidates/knowledge-budget.ts';
+import {REPLY_DOCUMENT_BUDGET} from '../../../reply/sqlite/candidates/knowledge-budget.ts';
 import {StorageFailure,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {DiscussionScope} from '../../../reply/sqlite/contracts.ts';
-import type {ReplyKnowledgeHeader,ReplyKnowledgeItem,ReplyKnowledgeReader} from '../../../reply/sqlite/candidates/contracts.ts';
+import type {ReplyKnowledgeItem,ReplyKnowledgeReader,ReplyKnowledgeValidation} from '../../../reply/sqlite/candidates/contracts.ts';
 import {available} from '../management/qualification.ts';
-import {memoryKnowledgeReader,createMemoryKnowledgeReader} from '../management/knowledge.ts';
+import {memoryKnowledgeReader,createMemoryKnowledgeReader,type MemoryKnowledgeReader} from '../management/knowledge.ts';
 import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
 import {assertReplyLocalSource} from '../../../history/sqlite/reply-local-source.ts';
 import {documentSources,publicationMembers,withSourceMemo} from './basis.ts';
@@ -11,6 +11,10 @@ import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 
 /** 发布修订随实际输入冻结；在途只复验原集合，后来新增资料留给下一次请求。 */
 export interface DocumentKnowledgeItem extends ReplyKnowledgeItem {documentRevision:bigint}
+export interface DocumentKnowledgeReader extends ReplyKnowledgeValidation {
+ read(tx:StorageTransaction,scope:DiscussionScope):ReplyKnowledgeItem[];
+ readDocument:NonNullable<ReplyKnowledgeReader['readDocument']>;
+}
 
 const sections:Record<string,string>={basic_information:'基本资料',long_term_preferences:'长期偏好',life_context:'生活背景',interests:'兴趣',insights:'观察与推断',evolution:'变化',contradictions:'待厘清的矛盾'};
 const kinds:Record<string,string>={fact:'事实',preference:'明确偏好',inference:'推断',contradiction:'矛盾'};
@@ -53,21 +57,21 @@ function projected(tx:StorageTransaction,ownerId:string,member:StorageRow,previo
  }
  if(previous?.projection?.kind==='directory')throw new StorageFailure('document_knowledge_stale');
  const range=previous?.projection?.kind==='blocks'?previous.projection:null;
- if(range&&(member.kind!=='scene'||!Number.isSafeInteger(range.startBlock)||range.startBlock<1||!Number.isSafeInteger(range.blockCount)||range.blockCount<1||range.blockCount>RELATIONSHIP_BUDGET.documentBlocks))throw new StorageFailure('reply_document_range_invalid');
+ if(range&&(member.kind!=='scene'||!Number.isSafeInteger(range.startBlock)||range.startBlock<1||!Number.isSafeInteger(range.blockCount)||range.blockCount<1||range.blockCount>REPLY_DOCUMENT_BUDGET.documentBlocks))throw new StorageFailure('reply_document_range_invalid');
  const rows=tx.all(`SELECT s.*,b.heading FROM document_statement s JOIN document_block b ON b.owner_id=s.owner_id AND b.document_id=s.document_id AND b.version_no=s.version_no AND b.block_no=s.block_no
   WHERE s.owner_id=? AND s.document_id=? AND s.version_no=?${range?' AND s.block_no>=? AND s.block_no<?':''} ORDER BY s.block_no,s.statement_no${range?'':' LIMIT ?'}`,
-  [ownerId,member.document_id,member.version_no,...(range?[range.startBlock,range.startBlock+range.blockCount]:[RELATIONSHIP_BUDGET.profileCount])]);
+  [ownerId,member.document_id,member.version_no,...(range?[range.startBlock,range.startBlock+range.blockCount]:[REPLY_DOCUMENT_BUDGET.profileCount])]);
  if(range){
   if(new Set(rows.map(row=>String(row.block_no))).size!==range.blockCount)throw new StorageFailure('reply_document_range_invalid');
   const text=[`【主题资料】${String(member.title)}`,...rows.map(statement)].join('\n');
-  if(Array.from(text).length>RELATIONSHIP_BUDGET.documentChars)throw new StorageFailure('reply_document_budget_exceeded');
+  if(Array.from(text).length>REPLY_DOCUMENT_BUDGET.documentChars)throw new StorageFailure('reply_document_budget_exceeded');
   return {text,projection:{kind:'blocks',startBlock:range.startBlock,blockCount:range.blockCount}};
  }
  const lines=[`【长期背景】${String(member.title)}`],statementNos:number[]=[];
  let chars=Array.from(lines[0]!).length;
  for(const [index,row] of rows.entries()){
   const text=statement(row),size=Array.from(text).length+1;
-  if(chars+size>RELATIONSHIP_BUDGET.profileChars)continue;
+  if(chars+size>REPLY_DOCUMENT_BUDGET.profileChars)continue;
   lines.push(text);chars+=size;statementNos.push(index+1);
  }
  return statementNos.length?{text:lines.join('\n'),projection:{kind:'profile',statementNos}}:null;
@@ -125,11 +129,11 @@ function requireDocuments(tx:StorageTransaction,scope:DiscussionScope,expected:r
   }
  }
 }
-export function createDocumentKnowledgeReader(sourceEligibility:SourceEligibility=assertSourceEligibility):ReplyKnowledgeReader {
+export function createDocumentKnowledgeReader(sourceEligibility:SourceEligibility=assertSourceEligibility):DocumentKnowledgeReader {
  return {
   read:(tx,scope)=>items(tx,scope,sourceEligibility),
   readDocument(tx,scope,item,range){
-   if(item.projection?.kind!=='directory'||!Number.isSafeInteger(range.startBlock)||range.startBlock<1||!Number.isSafeInteger(range.blockCount)||range.blockCount<1||range.blockCount>RELATIONSHIP_BUDGET.documentBlocks||range.startBlock+range.blockCount-1>item.projection.blockCount)throw new StorageFailure('reply_document_range_invalid');
+   if(item.projection?.kind!=='directory'||!Number.isSafeInteger(range.startBlock)||range.startBlock<1||!Number.isSafeInteger(range.blockCount)||range.blockCount<1||range.blockCount>REPLY_DOCUMENT_BUDGET.documentBlocks||range.startBlock+range.blockCount-1>item.projection.blockCount)throw new StorageFailure('reply_document_range_invalid');
    requireDocuments(tx,scope,[item],sourceEligibility,true);
    const found=scopeItems(tx,scope,item.scopeKind==='owner'?'self':'contact',sourceEligibility,[{...item,projection:{kind:'blocks',...range}}],item.publicationId!)[0];
    if(!found)throw new StorageFailure('document_knowledge_stale');
@@ -142,7 +146,7 @@ export function createDocumentKnowledgeReader(sourceEligibility:SourceEligibilit
  };
 }
 export const documentKnowledgeReader=createDocumentKnowledgeReader();
-function combineKnowledge(memory:ReplyKnowledgeReader,documents:ReplyKnowledgeReader):ReplyKnowledgeReader {
+function combineKnowledge(memory:MemoryKnowledgeReader,documents:DocumentKnowledgeReader):ReplyKnowledgeReader {
  const reader=(item:ReplyKnowledgeItem)=>{
   if(item.kind==='document')return documents;
   if(item.kind==='memory'||item.kind==='memory_candidate')return memory;
@@ -156,12 +160,11 @@ function combineKnowledge(memory:ReplyKnowledgeReader,documents:ReplyKnowledgeRe
   }
  };
  return {
-  read:(tx,scope)=>[...memory.read(tx,scope),...documents.read(tx,scope)],
   // 记忆按需逐条核验，文档仍整体读取；回复据此避免每次全量核验全部记忆。
-  ...(memory.list&&memory.open?{list:(tx:StorageTransaction,scope:DiscussionScope)=>memory.list!(tx,scope),
-   open:(tx:StorageTransaction,scope:DiscussionScope,header:ReplyKnowledgeHeader)=>memory.open!(tx,scope,header),
-   readDocuments:(tx:StorageTransaction,scope:DiscussionScope)=>documents.read(tx,scope)}:{}),
-  readDocument:(tx,scope,item,range)=>documents.readDocument!(tx,scope,item,range),
+  list:(tx,scope)=>memory.list(tx,scope),
+  open:(tx,scope,header)=>memory.open(tx,scope,header),
+  readDocuments:(tx,scope)=>documents.read(tx,scope),
+  readDocument:(tx,scope,item,range)=>documents.readDocument(tx,scope,item,range),
   requireCurrent:(tx,scope,item)=>reader(item).requireCurrent(tx,scope,item),
   requireFrozen:(tx,scope,item)=>{const selected=reader(item);(selected.requireFrozen??selected.requireCurrent)(tx,scope,item);},
   requireCurrentBatch:(tx,scope,items)=>requireBatch(tx,scope,items),

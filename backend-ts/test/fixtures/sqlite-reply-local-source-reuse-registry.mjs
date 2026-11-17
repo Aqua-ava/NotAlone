@@ -42,12 +42,12 @@ export const registry={...base,actions:[...base.actions,{
 },{
  name:'fixture.searchPoolReads',mode:'write',retryBusy:false,
  execute(tx,i,lease){
-  const calls={list:0,read:0,documents:0},items=[{kind:'memory',id:'synthetic-memory',versionNo:1n,text:'合成记忆头部',scopeKind:'contact',contactId:i.contactId,qualification:'confirmed',sources:[]},{kind:'memory_candidate',id:'synthetic-candidate',versionNo:1n,text:'未确认候选'},{kind:'document',id:'synthetic-document',versionNo:1n,text:'文档不进入语义记忆池'}];
-  const reader={read(){calls.read++;return items;},readDocuments(){calls.documents++;return [];},open(){throw new Error('语义记忆池不核验来源正文');},requireCurrent(){},...(i.legacy?{}:{list(){calls.list++;return items;}})};
+  const calls={list:0,open:0,documents:0},items=[{kind:'memory',id:'synthetic-memory',versionNo:1n,text:'合成记忆头部',scopeKind:'contact',contactId:i.contactId,qualification:'confirmed',sources:[]},{kind:'memory_candidate',id:'synthetic-candidate',versionNo:1n,text:'未确认候选'},{kind:'document',id:'synthetic-document',versionNo:1n,text:'文档不进入语义记忆池'}];
+  const reader={list(){calls.list++;return items;},readDocuments(){calls.documents++;return [];},open(){calls.open++;throw new Error('语义记忆池不核验来源正文');},requireCurrent(){}};
   const actions=createReplyCandidateActions(reader),context={...i,contextId:randomUUID(),skillRun:{packages:[],eligible:[]},items:[],queryText:'合成记忆池',at:Date.now()};
   actions.find(action=>action.name==='reply.freezeInput').execute(tx,context,lease);
   for(const key of Object.keys(calls))calls[key]=0;
-  const ticket=actions.find(action=>action.name==='reply.beginSearch').execute(tx,{...context,kind:'memory',query:i.legacy?'旧读者合成查询':'合成查询'},lease);
+  const ticket=actions.find(action=>action.name==='reply.beginSearch').execute(tx,{...context,kind:'memory',query:'合成查询'},lease);
   const event=decode(String(tx.get('SELECT payload FROM execution_event WHERE owner_id=? AND id=?',[i.ownerId,ticket.ticketId]).payload));
   return {ticket,anchors:event.memories.map(item=>({...item,versionNo:String(item.versionNo)})),calls};
  },

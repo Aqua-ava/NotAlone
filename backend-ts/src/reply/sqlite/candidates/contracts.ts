@@ -11,26 +11,26 @@ export interface ReplyKnowledgeItem {
 }
 /** 排序所需的低成本字段：正文、版本、范围与资格类型；不含来源，也未核验来源资格。 */
 export type ReplyKnowledgeHeader=Pick<ReplyKnowledgeItem,'kind'|'id'|'versionNo'|'scopeKind'|'contactId'|'text'|'qualification'>;
-export interface ReplyKnowledgeReader {
- read(tx:StorageTransaction,scope:DiscussionScope):ReplyKnowledgeItem[];
- /**
-  * 低成本列出记忆／候选的头部（与 read 中同类条目同序，是其超集：未核验，可能含已失效者）。
-  * 与 open 成对提供；回复据此先按正文排序，只对排在前面的少量条目核验来源，避免每次全量逐条核验。
-  */
- list?(tx:StorageTransaction,scope:DiscussionScope):ReplyKnowledgeHeader[];
- /** 核验并物化一个头部：返回与 read 中完全相同的条目；资格已失效或版本已变则返回 null。 */
- open?(tx:StorageTransaction,scope:DiscussionScope,header:ReplyKnowledgeHeader):ReplyKnowledgeItem|null;
- /** 与 list 配套：记忆／候选以外的条目（文档）。数量由发布集合限定，仍整体读取；读者不产出文档时可省略。 */
- readDocuments?(tx:StorageTransaction,scope:DiscussionScope):ReplyKnowledgeItem[];
+export interface ReplyKnowledgeValidation {
  /** 核验精确版本、来源、保护修订及发布成员，不以替换来源延续旧证明。 */
  requireFrozen?(tx:StorageTransaction,scope:DiscussionScope,item:ReplyKnowledgeItem):void;
  requireCurrent(tx:StorageTransaction,scope:DiscussionScope,item:ReplyKnowledgeItem):void;
  /** 仅共享本次调用内的完整集合资格，仍逐条复验投影；结果不缓存到下一次调用。 */
  requireCurrentBatch?(tx:StorageTransaction,scope:DiscussionScope,items:readonly ReplyKnowledgeItem[]):void;
  requireFrozenBatch?(tx:StorageTransaction,scope:DiscussionScope,items:readonly ReplyKnowledgeItem[]):void;
+}
+export interface ReplyMemoryReader extends ReplyKnowledgeValidation {
+ /** 只列出头部，尚未核验来源；正式检索始终在入选前按需物化，不退化为整池核验。 */
+ list(tx:StorageTransaction,scope:DiscussionScope):ReplyKnowledgeHeader[];
+ /** 核验并物化精确头部；资格已失效或版本已变则返回 null。 */
+ open(tx:StorageTransaction,scope:DiscussionScope,header:ReplyKnowledgeHeader):ReplyKnowledgeItem|null;
+}
+export interface ReplyKnowledgeReader extends ReplyMemoryReader {
+ /** 只读取当前发布集合的文档；初始材料不读取正式记忆或待确认候选。 */
+ readDocuments(tx:StorageTransaction,scope:DiscussionScope):ReplyKnowledgeItem[];
  readDocument?(tx:StorageTransaction,scope:DiscussionScope,item:ReplyKnowledgeItem,range:{startBlock:number;blockCount:number}):ReplyKnowledgeItem;
 }
-export const emptyReplyKnowledge:ReplyKnowledgeReader={read:()=>[],requireCurrent(){throw new Error('reply_knowledge_unavailable');}};
+export const emptyReplyKnowledge:ReplyKnowledgeReader={list:()=>[],open:()=>null,readDocuments:()=>[],requireCurrent(){throw new Error('reply_knowledge_unavailable');}};
 export interface ReplyCandidateVersion {
  candidateId:string;versionNo:number;origin:'model'|'manual';parentVersionNo:number|null;
  parts:string[];basis:({itemNo:number;kind:string;text:string;verification:'actual_input'|'inherited_unverified'}&InputMaterialMetadata)[];

@@ -6,8 +6,7 @@ import {join} from 'node:path';
 import {fixture,owner,record} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteDiscussionService} from '../src/reply/sqlite/service.ts';
 import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/service.ts';
-import {createMemoryKnowledgeReader} from '../src/memory/sqlite/management/knowledge.ts';
-import {assertReplyLocalSource} from '../src/history/sqlite/reply-local-source.ts';
+import {createReplyLocalKnowledgeReader} from '../src/memory/sqlite/documents/knowledge.ts';
 import {initializeReplySearch,beginReplySearch,finishReplySearch} from '../src/reply/sqlite/candidates/search.ts';
 import {freezeReplyInput,requireReplyInput} from '../src/reply/sqlite/candidates/input.ts';
 import {withReplyValidation} from '../src/reply/sqlite/candidates/validation.ts';
@@ -30,7 +29,7 @@ async function setup(t,records,{initialTexts=[]}={}){
  const index=configureRetrievalConnection(db);t.after(()=>db.close());
  const all=(sql,values=[])=>{const statement=db.prepare(sql);statement.setReadBigInts(true);return statement.all(...values);};
  const tx={all,get:(sql,values)=>all(sql,values)[0],run:(sql,values=[])=>{db.prepare(sql).run(...values);}};
- const reader=createMemoryKnowledgeReader({includeUnconfirmed:false},assertReplyLocalSource);
+ const reader=createReplyLocalKnowledgeReader();
  const ids=initialTexts.map(text=>tx.get('SELECT id FROM message WHERE owner_id=? AND contact_id=? AND text_body=?',[owner,contactId,text]).id);
  const selected=ids.length?await f.storage.execute('discussion.messages',{...attempt,messageIds:ids}):[];
  await f.storage.execute('discussion.freezeContext',{...scope,skillRun:{packages:[],eligible:[]},items:selected.map(row=>({kind:'message',sourceContactId:contactId,messageId:row.id,recordId:row.record_id,acceptedRevision:row.interpretation_revision})),at:Date.now()});

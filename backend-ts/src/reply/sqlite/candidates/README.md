@@ -20,11 +20,11 @@
 
 `SqliteReplyCandidateService` 提供 begin/view/version/edit/select；`SqliteReplyTurns` 复用讨论域的真实DSH运行、共享provider/arbiter及共享调用账本。`reply.begin`复用讨论域请求键、身份与unknown保护，保存真实触发发言和历史覆盖依据。联系人资格通过后可立即生成，历史未开始、同步中或不完整均不阻塞，也不要求额外确认；覆盖事实和当前可用资料限制进入冻结输入与输出依据，不将部分覆盖标成完整。旧 `accept_incomplete` 字段仅兼容已有调用，不授予读取或改变生成资格。原请求重试使用受理时的覆盖快照，不随后台历史进度改写或重复调用。任何重开、选稿、编辑和回看均不发送模型请求。
 
-`ReplyKnowledgeReader.read/requireCurrent` 在当前 SQLite 短事务运行，HTTP 不能传正文、版本资格、SQL 或 adapter。`ReplyKnowledgeItem` 固定真实版本、本人／联系人范围、publication 成员和精确 `capture_record.id` 来源；写者复验所选版本，候选域复验范围、来源与解释修订。生产 Worker 安装 `replyLocalKnowledgeReader` 组合正式记忆与文档；未确认参考默认关闭，不把提取原稿视为已采纳记忆。一次性工作区要求不读取或保存长期表达偏好。
+`ReplyKnowledgeReader.list/open/readDocuments/requireCurrent` 在当前 SQLite 短事务运行，HTTP 不能传正文、版本资格、SQL 或 adapter。`ReplyKnowledgeItem` 固定真实版本、本人／联系人范围、publication 成员和精确 `capture_record.id` 来源；写者复验所选版本，候选域复验范围、来源与解释修订。生产 Worker 安装 `replyLocalKnowledgeReader` 组合正式记忆与文档；新回复不选择或注入待确认候选；历史未确认材料的读取、来源、否决与删除仍保留，不把提取原稿视为已采纳记忆。一次性工作区要求不读取或保存长期表达偏好。
 
 候选存储动作的统一入口负责建立同步完整验证作用域：同一动作内按读者、用户、联系人、助手会话及请求／上下文身份，或资料的完整冻结快照，复用已成功的验证。正文、投影、发布集合、来源及修订不同不能借用成功；失败不缓存。任何写入或派生状态结清都会使既有验证失效，退出动作即清除，下一动作／事务重新核验。新增列表或逐条读取入口必须沿用该入口，并运行候选数与历史请求数增长回归；候选版本和正文完整性仍逐条检查。未建立作用域的其他领域调用保留完整核验。
 
-回复挑选记忆走按需核验：读者可选提供 `list`（低成本头部：当前版本正文、范围与资格类型，不核验来源，是 `read` 同类条目的超集且同序）、`open`（核验并物化单个头部，失效或版本已变返回 null）与 `readDocuments`。`selectReplyKnowledge` 消费检索模块给出的 ID／版本顺序和各自预算，不重新计算 L1 相关性，入选前才对排在前面的条目调用 `open`，失效条目被跳过且不占条数或字符预算，结果与逐条核验后再排序完全一致；每次回复的核验次数只随入选条数增长，不随记忆池线性增长。原先 `freezeInput` 与 `memoryPool` 各自整池逐条核验来源（每条数十次查询），池大时单个存储动作会超过 15 秒执行上限而终止 Worker。未提供 `list/open` 的读者退化为整体 `read`。
+正式回复读者必须提供低成本 `list`、精确版本按需 `open` 与文档专用 `readDocuments`，不再保留缺少能力时整池 `read` 的退化。共享 BM25／向量／RRF 检索负责排名、逐候选资格核验及失效补位；`selectRankedReplyMemories` 只按该排名和整轮剩余额度选择完整记忆，额度唯一来自 `retrieval-policy.ts` 的 `REPLY_SEARCH_BUDGET`，不重算旧词法分或给予人工确认排序加成。初始文档由 `selectReplyDocuments` 独立计量目录和长期背景，历史 v1 冻结范围及历史未确认材料的复验与删除继续保留。规模验收区分共享召回／选择的局部成本和完整候选请求成本，不以最终五条结果推断只核验五条来源。
 
 `reply_candidate_context` 留存冻结时本人／联系人的 memory/document 修订作为快照信息；资格复验以本次实际选择的版本、publication 成员及完整来源为准，未改变这些依赖的其他记忆新增、主题或概览发布不使本轮失效。`reply_candidate_input` 在原 context 类型之外保存真实候选输入，不重写已发布表。`reply_execution_input` 将快照绑定真实 `model_request` 事件，`event_source_planned` 保存这一类型化来源分支。展示依据仅引用本次 call 的实际输入，不能替代删除依赖闭包。
 

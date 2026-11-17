@@ -1,0 +1,32 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {fixture} from './fixtures/sqlite-reply-candidates/support.mjs';
+import {SqliteReplyCandidateService} from '../src/reply/sqlite/candidates/service.ts';
+import {SqliteReplyTurns} from '../src/reply/sqlite/candidates/turns.ts';
+import {DeletionService} from '../src/storage/sqlite/deletion/service.ts';
+import {ManagedFiles} from '../src/storage/sqlite/deletion/managed-files.ts';
+
+test('新回复不注入待确认候选，旧保存材料仍按未确认与原时间回看并沿来源删除',async t=>{
+ const f=await fixture(t,{registryModule:new URL('./fixtures/sqlite-reply-candidates/knowledge-registry.mjs',import.meta.url).href,content:JSON.stringify({candidates:[{parts:['合成历史兼容回归'],basis:[1]}]})});
+ const contactId=f.ids[0],discussion=await f.discussions.newDiscussion(contactId),scope={ownerId:f.owner,contactId,discussionId:discussion.id};
+ await f.storage.execute('synthetic.publishReplyKnowledge',{...scope,sourceContactId:contactId,mode:'unconfirmed'});
+ const service=new SqliteReplyCandidateService(f.storage,f.owner),turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ await turns.generate({contactId,discussionId:discussion.id,requestKey:randomUUID(),text:'本次独立想法',confirmedContact:true});
+ assert.doesNotMatch(JSON.stringify(f.requests),/合成待确认记忆/);
+ const requestId=(await service.view(contactId,discussion.id))[0].requestId;
+ const legacy=await f.storage.execute('synthetic.restoreLegacyCandidateInput',{...scope,requestId});
+ const page=await service.inputMaterials({contactId,discussionId:discussion.id,requestId,offset:0});
+ const material=page.items.find(item=>item.kind==='memory_candidate');
+ assert.equal(material.qualification,'unconfirmed');assert.equal(material.text,legacy.text);assert.match(material.text,/聊天时间/);
+ await f.storage.execute('synthetic.invalidateReplyKnowledge',scope);
+ assert.equal((await service.view(contactId,discussion.id))[0].sourceState,'unavailable','旧材料仍复验其资格，不能因新入口退役而豁免');
+ await f.storage.execute('synthetic.publishReplyKnowledge',{...scope,sourceContactId:contactId,mode:'unconfirmed'});
+ const deletion=new DeletionService(f.storage,f.holders,new ManagedFiles(f.root));
+ const operation=await deletion.plan({ownerId:f.owner,requestKey:randomUUID(),scope:{kind:'source',contactId,sourceId:f.messages[0][0].sourceRecordIds[0]}});
+ const done=await deletion.advance(operation);assert.equal(done.state,'completed',JSON.stringify(done.checks));
+ assert.equal(await f.storage.execute('synthetic.legacyCandidateInputCount',scope),0);
+ assert.deepEqual(await service.view(contactId,discussion.id),[]);
+ assert.equal((await f.history.read(f.ids[1])).messages.length,1);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});

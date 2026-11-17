@@ -1,5 +1,7 @@
 # ADR-182：回复时联系人／本人记忆改用本机混合检索
 
+> 2026-11-17 局部修订：[ADR-191](191-reply-retrieval-contract-simplification.md)退役没有正常入口的待确认候选选择适配及旧回复词法回退；正式检索仍按 ADR-190 运行，历史材料、来源及删除保持。
+
 > 2026-11-14 检索修订：见 [ADR-190](190-tencent-style-local-hybrid-retrieval.md)，L1／L0 改用 BM25＋向量＋RRF 及可删除的持久正文索引；原有范围、来源与返回预算继续有效。
 
 > 2026-11-14 局部替代：见 [ADR-185](185-on-demand-reply-memory-and-history-search.md)。生成前预计算与不开放主动搜索的条款被替代；本机混合评分、失败词法降级和内存向量要求保留。

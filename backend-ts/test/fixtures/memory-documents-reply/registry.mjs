@@ -1,8 +1,9 @@
+import {readKnowledge} from '../reply-knowledge.mjs';
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 import {combinedKnowledgeReader} from '../../../src/memory/sqlite/documents/knowledge.ts';
 // 产品回复及删除动作直接复用正式注册表；仅补隔离库只读断言和故障注入。
 export const registry={...base,actions:[...base.actions,
- {name:'fixture.documentKnowledge',mode:'read',retryBusy:false,execute:(tx,input)=>combinedKnowledgeReader.read(tx,input)},
+ {name:'fixture.documentKnowledge',mode:'read',retryBusy:false,execute:(tx,input)=>readKnowledge(combinedKnowledgeReader,tx,input)},
  {name:'fixture.documentBody',mode:'read',retryBusy:false,execute:(tx,input)=>combinedKnowledgeReader.readDocument(tx,input.scope,input.item,{startBlock:1,blockCount:1})},
  {name:'fixture.documentCurrent',mode:'read',retryBusy:false,execute(tx,input){combinedKnowledgeReader.requireCurrent(tx,input.scope,input.item);return true;}},
  {name:'fixture.replyDocumentSources',mode:'read',retryBusy:false,execute(tx,input){return tx.all(`SELECT i.identity_json,s.source_contact_id,s.record_id,s.message_id,s.accepted_revision
