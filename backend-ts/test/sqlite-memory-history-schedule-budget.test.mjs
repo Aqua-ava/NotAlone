@@ -14,6 +14,6 @@ test('两万条历史消息的自动调度在存储动作预算内完成，不�
  await f.service.synchronize(contactId);
  let memory;const port=modelPort(()=>memory.accounting);
  memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
- assert.deepEqual(await memory.dueHistoryContacts(),[contactId]);
+ assert.equal((await memory.scanSchedule(Date.now(),[contactId])).contacts.some(row=>row.historyDue),true);
  assert.equal(port.calls,0);
 });

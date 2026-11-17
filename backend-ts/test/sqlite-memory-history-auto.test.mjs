@@ -12,14 +12,14 @@ test('历史导入完成后自动分批补齐，增量独立且成功目标不�
  let memory;const port=modelPort(()=>memory.accounting);memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
  const at=Date.now(),coverage=await f.service.coverage(contactId),token=await f.contacts.eligibility(contactId);
  await f.storage.execute('history.acceptIncrementalPage',{token,goalId:coverage.incremental.goalId,captureId:randomUUID(),page:{target:f.target.descriptor,cursorIn:'tail-1',cursorOut:'tail-2',caughtUp:true,records:[record('100')]},at,runtimeToken:f.storage.status.runtimeId});
- assert.deepEqual(await memory.dueHistoryContacts(at),[contactId]);
+ assert.equal((await memory.scanSchedule(at,[contactId])).contacts.some(row=>row.historyDue),true);
  const first=await memory.startHistoryBatch(contactId,randomUUID(),at);assert.equal(first.total,50);await memory.waitForIdle(first.runId);
  assert.equal((await memory.read(first.runId)).succeeded,50);
  assert.equal((await memory.readSchedule(at)).pending,1,'新文字仍留在增量队列');
  const second=await memory.startHistoryBatch(contactId,randomUUID(),at+1);assert.equal(second.total,11);await memory.waitForIdle(second.runId);
- assert.deepEqual(await memory.dueHistoryContacts(at+2),[]);
+ assert.equal((await memory.scanSchedule(at+2,[contactId])).contacts.some(row=>row.historyDue),false);
  assert.equal(await memory.startHistoryBatch(contactId,randomUUID(),at+2),null);
- assert.deepEqual(await memory.dueContacts(at+10*60_000),[contactId],'历史批次不能触发增量30分钟冷却');
+ assert.equal((await memory.scanSchedule(at+10*60_000,[contactId])).contacts[0].incrementalDueAt,at+10*60_000,'历史批次不能触发增量30分钟冷却');
  const incremental=await memory.startContact(contactId,randomUUID(),at+10*60_000);assert.equal(incremental.total,1);await memory.waitForIdle(incremental.runId);
  assert.equal((await memory.read(incremental.runId)).succeeded,1);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
@@ -30,10 +30,10 @@ test('未完成的历史导入不提前提取；恢复到终页后自动可领�
  f.channel.page=async(_scope,target,cursor)=>{if(cursor)throw Error('synthetic-import-interrupted');return {target:target.descriptor,cursorIn:null,cursorOut:'page-2',records:[record('1')],completedPartitions:[],exhausted:false};};
  await assert.rejects(f.service.synchronize(contactId));
  let memory;const port=modelPort(()=>memory.accounting);memory=new SqliteMemoryExtraction(f.storage,owner,port);t.after(()=>memory.close());
- assert.deepEqual(await memory.dueHistoryContacts(),[]);assert.equal(port.calls,0);
+ assert.equal((await memory.scanSchedule(Date.now(),[contactId])).contacts.some(row=>row.historyDue),false);assert.equal(port.calls,0);
  f.channel.page=async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:[record('2')],completedPartitions:['shard-a'],exhausted:true});
  await f.service.synchronize(contactId);
- assert.deepEqual(await memory.dueHistoryContacts(),[contactId]);
+ assert.equal((await memory.scanSchedule(Date.now(),[contactId])).contacts.some(row=>row.historyDue),true);
  const run=await memory.startHistoryBatch(contactId,randomUUID());assert.equal(run.total,2);await memory.waitForIdle(run.runId);
  assert.equal((await memory.read(run.runId)).succeeded,2);
 });
@@ -84,4 +84,26 @@ test('模型拒绝输出保留原调用和来源关联，不生成成功输出�
  const trace=await memory.trace(view.tasks.find(t=>t.scopeKind==='contact').taskId),rejected=trace.events.find(e=>e.kind==='model_output_rejected');
  assert.ok(rejected);assert.deepEqual(rejected.payload.blocks,blocks);assert.equal(rejected.payload.truncated,false);assert.ok(rejected.callId);assert.equal(rejected.sources.length,1);
  assert.equal(rejected.sources[0].contactId,contactId);assert.equal(trace.events.some(e=>e.kind==='model_output'),false);
+});
+
+for(const method of ['startHistoryBatch','startHistory'])for(const recovered of [true,false])test(`${method}来源暂不可用时仅续证一次，${recovered?'恢复后沿原请求建轮':'再次失败保留原错误且不建轮'}`,async t=>{
+ const {StorageFailure}=await import('../src/storage/sqlite/contracts.ts');
+ const f=await fixture(t),contactId=f.saved[0].contact_id;await f.service.synchronize(contactId);
+ const execute=f.storage.execute.bind(f.storage),requests=[],failure=new StorageFailure('history_source_not_available');let memory,renewals=0;
+ const port=modelPort(()=>memory.accounting);
+ memory=new SqliteMemoryExtraction(f.storage,owner,port,undefined,undefined,async id=>{assert.equal(id,contactId);renewals++;});
+ f.storage.execute=async(name,input,...rest)=>{
+  if(name===`memoryExtraction.${method}`){requests.push(structuredClone(input));if(requests.length===1||!recovered)throw failure;}
+  return execute(name,input,...rest);
+ };
+ t.after(async()=>{await memory.close();f.storage.execute=execute;});
+ const requestKey=randomUUID();
+ if(recovered){
+  const result=await memory[method](contactId,requestKey),run=method==='startHistory'?result.run:result;
+  await memory.waitForIdle(run.runId);assert.equal((await memory.read(run.runId)).succeeded,1);assert.equal(port.calls,1);
+ }else{
+  await assert.rejects(memory[method](contactId,requestKey),error=>error===failure);
+  assert.equal((await memory.readContact(contactId)).run,null);assert.equal(port.calls,0);
+ }
+ assert.equal(renewals,1);assert.equal(requests.length,2);assert.deepEqual(requests[1],requests[0]);assert.equal(requests[0].requestKey,requestKey);
 });

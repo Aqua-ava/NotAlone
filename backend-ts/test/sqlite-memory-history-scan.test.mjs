@@ -7,7 +7,7 @@ import { controlledFiles } from '../src/storage/sqlite/files.ts';
 import { scheduleActions } from '../src/memory/sqlite/runs.ts';
 import { createExtractionPolicyVersion } from '../src/memory/extraction/policy-version.ts';
 
-test('历史到期扫描保持顺序和阻塞语义，未完成历史不读取正文统计，也不重复计算增量待处理', async t => {
+test('统一到期扫描保持顺序和阻塞语义，每个所选联系人只读取一次轻量候选', async t => {
   const f = await fixture(t), [a, b] = f.saved;
   f.channel.page = async (_scope, target, cursor) => ({ target: target.descriptor, cursorIn: cursor,
     cursorOut: null, records: Array.from({ length: 60 }, (_, index) => record(String(index + 1))),
@@ -15,27 +15,31 @@ test('历史到期扫描保持顺序和阻塞语义，未完成历史不读取�
   await f.service.synchronize(a.contact_id); await f.service.synchronize(b.contact_id);
   const db = new DatabaseSync(controlledFiles(f.root, false).database, { readOnly: true });
   t.after(() => db.close());
-  let incrementalScans = 0; const historyContacts = [];
+  const scannedContacts = [];
   const all = (sql, values = []) => {
-    if (sql.includes("f.first_goal_kind='incremental' AND")) incrementalScans++;
-    if (sql.includes("f.first_goal_kind='history' OR")) historyContacts.push(values[1]);
+    if (sql.includes('schedule_candidate_messages AS MATERIALIZED')) {
+      scannedContacts.push(values[1]);
+      assert.doesNotMatch(sql,/text_body|raw_payload/,'到期扫描不读取聊天正文');
+    }
     const statement = db.prepare(sql); statement.setReadBigInts(true); return statement.all(...values);
   };
   const tx = { all, get: (sql, values) => all(sql, values)[0], run: () => { throw Error('只读扫描不得写入'); } };
   const at = 1700000000000;
-  const due = () => scheduleActions.find(action => action.name === 'memoryExtraction.dueHistoryContacts').execute(tx, { ownerId: owner });
-  const next = () => scheduleActions.find(action => action.name === 'memoryExtraction.nextHistoryDueAt').execute(tx, { ownerId: owner, now: at });
-  assert.deepEqual(due(), [a.contact_id, b.contact_id].sort()); assert.equal(next(), at);
-  assert.equal(incrementalScans, 0, '历史阻塞判定不需要读取未使用的增量消息统计');
+  const ids=[a.contact_id,b.contact_id].sort();
+  const scan = (contactIds=ids) => scheduleActions.find(action => action.name === 'memoryExtraction.scanSchedule').execute(tx, { ownerId: owner, now: at, contactIds });
+  assert.deepEqual(scan(),{contacts:ids.map(contactId=>({contactId,incrementalDueAt:null,historyDue:true}))});
+  assert.deepEqual(scannedContacts,ids,'历史和增量共享同一批候选，不各扫一次');
 
   const policy = await createExtractionPolicyVersion();
   await f.storage.execute('memoryExtraction.startHistoryBatch', { ownerId: owner, contactId: a.contact_id,
     requestKey: randomUUID(), policyConfig: policy.newTaskConfig(), now: at });
-  assert.deepEqual(due(), [b.contact_id], '已有未完成处理轮次的联系人不能再次到期'); assert.equal(next(), at);
+  scannedContacts.length=0;
+  assert.deepEqual(scan(),{contacts:ids.map(contactId=>({contactId,incrementalDueAt:null,historyDue:contactId===b.contact_id}))},'已有未完成处理轮次的联系人不能再次到期');
+  assert.deepEqual(scannedContacts,ids);
   f.channel.page = async () => { throw Error('合成历史中断'); };
   await assert.rejects(f.service.synchronize(b.contact_id));
-  historyContacts.length = 0;
-  assert.deepEqual(due(), []); assert.equal(next(), null);
-  assert.ok(!historyContacts.includes(b.contact_id), '未完成历史应在读取消息统计前退出');
-  assert.equal(incrementalScans, 0);
+  assert.deepEqual(scan(),{contacts:ids.map(contactId=>({contactId,incrementalDueAt:null,historyDue:false}))},'未完成历史保持不可到期');
+  scannedContacts.length=0;
+  assert.deepEqual(scan([a.contact_id]),{contacts:[{contactId:a.contact_id,incrementalDueAt:null,historyDue:false}]});
+  assert.deepEqual(scannedContacts,[a.contact_id],'联系人定向唤醒不读取其他联系人的候选');
 });

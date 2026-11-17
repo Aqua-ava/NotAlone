@@ -64,14 +64,14 @@ test('同联系人历史步骤之间允许到期新增量建轮，历史固定�
  const coverage=await f.service.coverage(contactId),token=await f.contacts.eligibility(contactId),now=Date.now();
  await f.storage.execute('history.acceptIncrementalPage',{token,goalId:coverage.incremental.goalId,captureId:randomUUID(),page:{target:f.target.descriptor,cursorIn:'tail-1',cursorOut:'tail-2',caughtUp:true,records:Array.from({length:50},(_,i)=>record(String(i+100)))},at:now,runtimeToken:f.storage.status.runtimeId});
  const incremental=await memory.startContact(contactId,randomUUID(),now);assert.ok(incremental,'未完历史的纯进度不能挡住同联系人到期增量');
- assert.equal(incremental.total,50);assert.deepEqual(await memory.dueHistoryContacts(now),[],'历史仍不可重复建轮');
+ assert.equal(incremental.total,50);assert.equal((await memory.scanSchedule(now,[contactId])).contacts.some(row=>row.historyDue),false,'历史仍不可重复建轮');
  release.resolve();await memory.waitForIdle();
  assert.equal((await memory.read(history.run.runId)).total,61);assert.equal((await memory.read(history.run.runId)).succeeded,61);
  assert.equal((await memory.read(incremental.runId)).succeeded,50);assert.equal(port.calls,7,'历史四步与增量三步各仅调用一次');
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-for(const boundary of ['unknown','paused','failed'])test(`历史${boundary}仍阻止同联系人新增量，不重放或绕过旧状态`,async t=>{
+for(const boundary of ['unknown','paused','failed'])test(boundary==='failed'?'已释放的已知历史失败允许新增量建轮，原失败和固定目标保持':`历史${boundary}仍阻止同联系人新增量，不重放或绕过旧状态`,async t=>{
  const f=await fixture(t),contactId=f.saved[0].contact_id;
  f.channel.page=async(_scope,target,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:Array.from({length:61},(_,i)=>record(String(i+1))),completedPartitions:['shard-a'],exhausted:true,resumeCursor:'tail-1'});
  await f.service.synchronize(contactId);
@@ -87,8 +87,15 @@ for(const boundary of ['unknown','paused','failed'])test(`历史${boundary}仍�
  if(boundary==='unknown')assert.equal(before.unknown,20);
  const coverage=await f.service.coverage(contactId),token=await f.contacts.eligibility(contactId),now=Date.now();
  await f.storage.execute('history.acceptIncrementalPage',{token,goalId:coverage.incremental.goalId,captureId:randomUUID(),page:{target:f.target.descriptor,cursorIn:'tail-1',cursorOut:'tail-2',caughtUp:true,records:Array.from({length:50},(_,i)=>record(String(i+100)))},at:now,runtimeToken:f.storage.status.runtimeId});
- assert.equal(await memory.startContact(contactId,randomUUID(),now),null);
- assert.equal(port.calls,calls);assert.equal((await memory.read(history.run.runId)).state,before.state);
+ if(boundary==='failed'){
+  assert.equal(before.state,'failed');assert.equal(before.unknown,0);assert.equal(calls,0,'准备失败没有未结算的物理调用');
+  const next=await memory.startContact(contactId,randomUUID(),now);assert.ok(next,'已释放的失败轮不能继续占用联系人');
+  await memory.waitForIdle(next.runId);
+ }else assert.equal(await memory.startContact(contactId,randomUUID(),now),null);
+ assert.equal(port.calls,calls);
+ const after=await memory.read(history.run.runId);assert.equal(after.state,before.state);
+ assert.deepEqual(after.inputs,before.inputs,'新轮不能改写旧历史轮的固定目标');
+ assert.deepEqual(after.tasks,before.tasks,'新轮不能把原失败、暂停或未知任务改成成功');
  release.resolve();await memory.waitForIdle();assert.equal(port.calls,calls);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
@@ -99,13 +106,13 @@ test('历史每步结算自动检查同联系人增量，不依赖恰好命中�
  await f.service.synchronize(contactId);
  const entered=deferred(),release=deferred(),events=[],started=[];let first=true,memory,active=0,maxActive=0;
  const port=modelPort(()=>memory.accounting,async(request,input)=>{active++;maxActive=Math.max(maxActive,active);events.push(input.claim.task_id);try{if(first){first=false;entered.resolve();await release.promise;}return {blocks:[{type:'tool-call',name:request.tool.name,arguments:'{"scenes":[]}'}]};}finally{active--;}});
- const admitIncremental=async()=>{for(const id of await memory.dueContacts()){const run=await memory.startContact(id,randomUUID());if(run)started.push(run);}};
+ const admitIncremental=async()=>{const now=Date.now(),scan=await memory.scanSchedule(now,[contactId]);for(const row of scan.contacts){if(row.incrementalDueAt===null||row.incrementalDueAt>now)continue;const run=await memory.startContact(row.contactId,randomUUID(),now);if(run)started.push(run);}};
  memory=new SqliteMemoryExtraction(f.storage,owner,port,undefined,undefined,undefined,admitIncremental);
  t.after(async()=>{release.resolve();await memory.close();});
  const history=await memory.startHistory(contactId,randomUUID());await entered.promise;
  const coverage=await f.service.coverage(contactId),token=await f.contacts.eligibility(contactId),now=Date.now();
  await f.storage.execute('history.acceptIncrementalPage',{token,goalId:coverage.incremental.goalId,captureId:randomUUID(),page:{target:f.target.descriptor,cursorIn:'tail-1',cursorOut:'tail-2',caughtUp:true,records:Array.from({length:50},(_,i)=>record(String(i+100)))},at:now,runtimeToken:f.storage.status.runtimeId});
- assert.deepEqual(await memory.dueContacts(),[],'真实在途历史步骤不能被新轮绕过');
+ assert.equal((await memory.scanSchedule(Date.now(),[contactId])).contacts[0].incrementalDueAt,null,'真实在途历史步骤不能被新轮绕过');
  release.resolve();await memory.waitForIdle(history.run.runId);await memory.waitForIdle();
  assert.equal(started.length,1,'历史结算后的正常回调必须自动完成增量准入');
  const historyTask=history.run.tasks.find(task=>task.scopeKind==='contact').taskId,incrementalTask=started[0].tasks.find(task=>task.scopeKind==='contact').taskId;

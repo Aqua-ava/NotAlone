@@ -108,10 +108,6 @@ export class SqliteMemoryExtraction {
   this.launch(run.runId);return run;
   });
  }
- /** 自动增量调度的只读入口；返回下一次最早到期时刻（Unix毫秒），不执行处理。 */
- nextDueAt(now=Date.now()):Promise<number|null>{this.available();return this.storage.execute('memoryExtraction.nextDueAt',{ownerId:this.ownerId,now});}
- /** 当前已满足阈值且安全门放行的联系人；实际建轮仍须在写事务内重新复验。 */
- dueContacts(now=Date.now()):Promise<string[]>{this.available();return this.storage.execute('memoryExtraction.dueContacts',{ownerId:this.ownerId,now});}
  /** 调度只取有效联系人和有界摘要，不读取候选正文。 */
  scheduleContacts():Promise<string[]>{return this.admit(()=>this.storage.execute('memoryExtraction.scheduleContacts',{ownerId:this.ownerId}));}
  scanSchedule(now:number,contactIds:string[]):Promise<MemoryScheduleSnapshot>{return this.admit(()=>this.storage.execute('memoryExtraction.scanSchedule',{ownerId:this.ownerId,now,contactIds}));}
@@ -129,17 +125,10 @@ export class SqliteMemoryExtraction {
   });
  }
  /** 历史与增量各自筛选，建轮事务再次核验来源和原任务状态。 */
- dueHistoryContacts(now=Date.now()):Promise<string[]>{this.available();return this.storage.execute('memoryExtraction.dueHistoryContacts',{ownerId:this.ownerId,now});}
- nextHistoryDueAt(now=Date.now()):Promise<number|null>{this.available();return this.storage.execute('memoryExtraction.nextHistoryDueAt',{ownerId:this.ownerId,now});}
  async startHistoryBatch(contactId:string,requestKey:string,now=Date.now()){
   return this.admit(async()=>{
    await this.initialize();if(!this.automatic)return null;const policy=await this.version();await policy.assertCurrent();this.available();
-   const start=()=>this.storage.execute<any>('memoryExtraction.startHistoryBatch',{ownerId:this.ownerId,contactId,requestKey,now,policyConfig:policy.newTaskConfig(),followupStages:this.afterRunSettled!==undefined});
-   let run;
-   try{run=await start();}catch(error){
-    if(!(error instanceof StorageFailure)||error.code!=='history_source_not_available'||!this.ensureSourceReady)throw error;
-    await this.ensureSourceReady(contactId);this.available();run=await start();
-   }
+   const run=await this.withSourceReady(contactId,()=>this.storage.execute<any>('memoryExtraction.startHistoryBatch',{ownerId:this.ownerId,contactId,requestKey,now,policyConfig:policy.newTaskConfig(),followupStages:this.afterRunSettled!==undefined}));
    if(run)this.launch(run.runId);return run;
   });
  }
@@ -170,13 +159,7 @@ export class SqliteMemoryExtraction {
  async startHistory(contactId:string,requestKey:string){
   return this.admit(async()=>{
    await this.initialize();this.requireAutomatic();const policy=await this.version();await policy.assertCurrent();this.available();
-   const start=()=>this.storage.execute<any>('memoryExtraction.startHistory',{ownerId:this.ownerId,contactId,requestKey,policyConfig:policy.newTaskConfig(),followupStages:this.afterRunSettled!==undefined});
-   let result;
-   try{result=await start();}catch(error){
-    // 正常认证会关闭读取守卫；先通过原渠道续证，再由同一事务合同重验，不能直接放行旧来源。
-    if(!(error instanceof StorageFailure)||error.code!=='history_source_not_available'||!this.ensureSourceReady)throw error;
-    await this.ensureSourceReady(contactId);this.available();result=await start();
-   }
+   const result=await this.withSourceReady(contactId,()=>this.storage.execute<any>('memoryExtraction.startHistory',{ownerId:this.ownerId,contactId,requestKey,policyConfig:policy.newTaskConfig(),followupStages:this.afterRunSettled!==undefined}));
    if(result.launchRunId)this.launch(result.launchRunId);return result.view;
   });
  }

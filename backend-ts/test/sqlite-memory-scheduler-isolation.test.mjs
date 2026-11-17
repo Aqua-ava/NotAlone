@@ -33,7 +33,7 @@ test('本人候选等待决定时新联系人增量仍可独立提取，既有�
  await append(f,contactId,[record('3',{text:'我每周参加合成读书会。'})]);
  const now=Date.now()+31*60_000,queue=await memory.readSchedule(now);
  assert.equal(queue.pending,1);assert.equal(queue.blockedContacts,0,'待决定候选不能把已完成提取的联系人堵住');
- assert.deepEqual(await memory.dueContacts(now),[contactId]);
+ assert.equal((await memory.scanSchedule(now,[contactId])).contacts.some(row=>row.incrementalDueAt!==null&&row.incrementalDueAt<=now),true);
  const next=await memory.startContact(contactId,'new-incremental-after-owner-candidate',now);await memory.waitForIdle(next.runId);
  assert.equal((await memory.read(next.runId)).total,1);assert.equal((await memory.read(next.runId)).succeeded,1);
  assert.equal((await memory.read(first.runId)).candidates.length,original.candidates.length,'新提取不自动决定旧候选');
@@ -54,17 +54,23 @@ for(const state of ['failed','unknown'])test(`主题整理${state}保留原状�
  await append(f,contactId,[record('3')]);
  const now=Date.now()+31*60_000;
  assert.equal((await memory.readSchedule(now)).blockedContacts,0);
- assert.deepEqual(await memory.dueContacts(now),[contactId]);
+ assert.equal((await memory.scanSchedule(now,[contactId])).contacts.some(row=>row.incrementalDueAt!==null&&row.incrementalDueAt<=now),true);
  assert.equal((await documents.readSchedule(scope)).scene.state,state,'新L1不伪造后续阶段已恢复');
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
-for(const failure of ['known','unknown'])test(`真实L1${failure}仍保留恢复门，不能借新增量绕过`,async t=>{
+for(const failure of ['known','unknown'])test(failure==='known'?'无调用或占位的已知L1失败释放后允许新增量，原失败记录保持':`真实L1${failure}仍保留恢复门，不能借新增量绕过`,async t=>{
  const {f,contactId,memory,model}=await setup(t,{failure});
  const first=await memory.start(`l1-${failure}-stays-blocked`);await memory.waitForIdle(first.runId);
- const before=model.calls;await append(f,contactId,[record('3')]);
- const now=Date.now()+31*60_000;
- assert.equal((await memory.readSchedule(now)).blockedContacts,1);
- assert.deepEqual(await memory.dueContacts(now),[]);assert.equal(model.calls,before);
+ const before=model.calls,original=await memory.read(first.runId);await append(f,contactId,[record('3')]);
+ const now=Date.now()+31*60_000,released=failure==='known';
+ assert.equal((await memory.readSchedule(now)).blockedContacts,released?0:1);
+ assert.equal((await memory.scanSchedule(now,[contactId])).contacts.some(row=>row.incrementalDueAt!==null&&row.incrementalDueAt<=now),released);
+ if(released){
+  assert.equal(original.state,'failed');assert.equal(original.unknown,0);assert.equal(before,0,'模型准备失败不产生物理调用占位');
+  const next=await memory.startContact(contactId,randomUUID(),now);assert.ok(next);await memory.waitForIdle(next.runId);
+ }
+ const after=await memory.read(first.runId);assert.equal(after.state,original.state);assert.deepEqual(after.inputs,original.inputs);assert.deepEqual(after.tasks,original.tasks);
+ assert.equal(model.calls,before);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

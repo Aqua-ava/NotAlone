@@ -8,14 +8,10 @@ test('统一调度扫描一次返回历史与增量提示，保持联系人顺�
   records:Array.from({length:60},(_,i)=>record(String(i+1))),completedPartitions:['shard-a'],exhausted:true});
  for(const binding of f.saved)await f.service.synchronize(binding.contact_id);
  const ids=f.saved.map(row=>row.contact_id).sort();
- const history=await f.storage.execute('memoryExtraction.dueHistoryContacts',{ownerId:owner,now});
- assert.deepEqual(history,ids);
  const contacts=await f.storage.execute('memoryExtraction.scheduleContacts',{ownerId:owner});
  assert.deepEqual(contacts,ids);
  const scan=await f.storage.execute('memoryExtraction.scanSchedule',{ownerId:owner,now,contactIds:[...ids].reverse()});
  assert.deepEqual(scan,{contacts:ids.map(contactId=>({contactId,incrementalDueAt:null,historyDue:true}))});
- const incremental=await f.storage.execute('memoryExtraction.dueContacts',{ownerId:owner,now});
- assert.deepEqual(incremental,[]);
  const one=await f.storage.execute('memoryExtraction.scanSchedule',{ownerId:owner,now,contactIds:[ids[1]]});
  assert.deepEqual(one.contacts,[{contactId:ids[1],incrementalDueAt:null,historyDue:true}]);
 });

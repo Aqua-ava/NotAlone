@@ -21,7 +21,7 @@ for(const boundary of ['unknown','paused'])test(`重新确认的授权不被旧$
  await f.current.contacts.confirm(candidates.snapshot_token,[{locator:selection.username,observed_display_name:selection.display_name,expected_selection_generation:selection.selection_generation,contact_id:f.contactA}]);
  f.state.pageRecords=[record('shard-a','62')];await f.current.history.synchronize(f.contactA);fail=false;
  const view=await memory.readContact(f.contactA);assert.equal(view.run,null,'新授权视图不能回退到已撤销旧授权的进度');
- assert.deepEqual(await memory.dueHistoryContacts(),[f.contactA]);
+ assert.equal((await memory.scanSchedule(Date.now(),[f.contactA])).contacts.some(row=>row.historyDue),true);
  const run=await memory.startHistoryBatch(f.contactA,randomUUID());assert.ok(run);assert.equal(run.total,1);await memory.waitForIdle(run.runId);
  assert.equal((await memory.read(run.runId)).succeeded,1);
  assert.deepEqual(await execute('fixture.memoryRawControl',{ownerId:owner,runId:old.run.runId}),before,'旧暂停与未知回执不能被新认证改写或重放');

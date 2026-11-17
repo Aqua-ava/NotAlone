@@ -397,11 +397,7 @@ const schedulingActions:StorageAction[]=[
   return {contacts:ids.map(contactId=>({contactId,incrementalDueAt:queueStates(tx,ownerId,now,contactId)[0]?.dueAt??null,
    historyDue:historyQueueStates(tx,ownerId,contactId).some(row=>row.ready&&!row.blocked)}))};
  }},
- {name:'memoryExtraction.dueHistoryContacts',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string};return historyQueueStates(tx,textId(i.ownerId)).filter(row=>row.ready&&!row.blocked).map(row=>row.contactId);}},
- {name:'memoryExtraction.nextHistoryDueAt',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;now:number};return historyQueueStates(tx,textId(i.ownerId)).some(row=>row.ready&&!row.blocked)?checkedNow(i.now):null;}},
  {name:'memoryExtraction.startHistoryBatch',mode:'write',retryBusy:true,execute:startHistoryBatch},
- {name:'memoryExtraction.dueContacts',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;now:number};const ownerId=textId(i.ownerId),now=checkedNow(i.now);return queueStates(tx,ownerId,now).filter(row=>row.dueAt!==null&&row.dueAt<=now).map(row=>row.state.contactId);}},
- {name:'memoryExtraction.nextDueAt',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;now:number};const ownerId=textId(i.ownerId),now=checkedNow(i.now);let earliest:number|null=null;for(const row of queueStates(tx,ownerId,now)){if(row.dueAt!==null&&(earliest===null||row.dueAt<earliest))earliest=row.dueAt;}return earliest;}},
  {name:'memoryExtraction.readSchedule',mode:'read',retryBusy:false,execute(tx,raw){const i=raw as {ownerId:string;now:number};return scheduleSummary(tx,textId(i.ownerId),checkedNow(i.now));}},
 ];
 export const scheduleActions:StorageAction[]=schedulingActions.map(action=>action.mode==='read'?{...action,

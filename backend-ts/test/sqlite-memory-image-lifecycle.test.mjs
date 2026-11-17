@@ -155,8 +155,8 @@ for(const queue of ['history','incremental'])test(`替换图片后${queue==='his
  await f.extract(`before-${queue}-image-upgrade`);await f.accept('聊天图片中有一个蓝色杯子。');
  const upgraded=await f.media.extract(f.contactId,message.id,{requestKey:`replace-${queue}-image`,goal:'extract'});
  assert.notEqual(upgraded.files[0].fileId,file.fileId);
- const now=Date.now()+30*60_000,due=queue==='history'?await f.extraction.dueHistoryContacts(now):await f.extraction.dueContacts(now);
- assert.ok(due.includes(f.contactId),'旧图依赖擦除后，新图必须进入原有自动队列');
+ const now=Date.now()+30*60_000,scan=await f.extraction.scanSchedule(now,[f.contactId]);
+ assert.ok(scan.contacts.some(row=>queue==='history'?row.historyDue:row.incrementalDueAt!==null&&row.incrementalDueAt<=now),'旧图依赖擦除后，新图必须进入原有自动队列');
  const run=queue==='history'?await f.extraction.startHistoryBatch(f.contactId,'history-image-upgrade-auto',now):await f.extraction.startContact(f.contactId,'incremental-image-upgrade-auto',now);
  assert.ok(run);await f.extraction.waitForIdle(run.runId);
  assert.equal((await f.extraction.read(run.runId)).succeeded,1);
@@ -182,7 +182,7 @@ for(const action of ['clear','replace'])test(`在途图文模型被${action==='c
  await extraction.waitForIdle();assert.equal(aborted,true);
  if(action==='clear'){assert.equal(result.state,'cleared');assert.deepEqual(result.files,[]);}else assert.equal(result.files.length,1);
  await assert.rejects(extraction.trace(run.tasks.find(task=>task.scopeKind==='contact').taskId),{code:'memory_extraction_not_found'});
- assert.ok(!(await extraction.dueHistoryContacts(Date.now()+60*60_000)).includes(f.contactId),'未知派发不能通过换图进入自动重发队列');
+ assert.equal((await extraction.scanSchedule(Date.now()+60*60_000,[f.contactId])).contacts.some(row=>row.historyDue),false,'未知派发不能通过换图进入自动重发队列');
  assert.equal(port.calls,1);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

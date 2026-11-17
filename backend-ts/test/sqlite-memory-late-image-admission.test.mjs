@@ -22,14 +22,14 @@ test('运行中晚到图片不扩张冻结输入，正式自动历史下一轮�
  try{
   await f.media.extract(f.contact,image.id,{requestKey:'synthetic-late-ready',goal:'extract'});
   assert.deepEqual(changed,[[f.contact,image.id]]);assert.equal((await memory.read(first.runId)).total,1);assert.equal(requests[0].images?.length??0,0);
-  assert.deepEqual(await memory.dueHistoryContacts(),[],'仍在运行的原轮保持联系人门');
+  assert.equal((await memory.scanSchedule(Date.now(),[f.contact])).contacts.some(row=>row.historyDue),false,'仍在运行的原轮保持联系人门');
  }finally{gate.resolve();}
  await memory.waitForIdle(first.runId);
  const waiting=await memory.readContact(f.contact);assert.equal(waiting.queue.content.find(row=>row.kind==='image').unadmitted,1);
- assert.deepEqual(await memory.dueHistoryContacts(),[f.contact]);
+ assert.equal((await memory.scanSchedule(Date.now(),[f.contact])).contacts.some(row=>row.historyDue),true);
  const second=await memory.startHistoryBatch(f.contact,randomUUID());await memory.waitForIdle(second.runId);
  assert.equal(second.total,1);assert.equal((await memory.read(second.runId)).succeeded,1);assert.equal(requests[1].images.length,1);
  assert.deepEqual(JSON.parse(requests[1].user).target_message_ids,[image.id]);assert.equal(requests.length,2);
- assert.deepEqual(await memory.dueHistoryContacts(),[]);assert.equal((await memory.readContact(f.contact)).queue.content.find(row=>row.kind==='image').unadmitted,0);
+ assert.equal((await memory.scanSchedule(Date.now(),[f.contact])).contacts.some(row=>row.historyDue),false);assert.equal((await memory.readContact(f.contact)).queue.content.find(row=>row.kind==='image').unadmitted,0);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

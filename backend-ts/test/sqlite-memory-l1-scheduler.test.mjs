@@ -37,9 +37,10 @@ test('只对首次增量来源计数；静默十分钟后进入联系人自己�
  const schedule=await memory.readSchedule(at+9*60_000);assert.equal(schedule.pending,1);
  const own=await memory.readContact(contactId),other=await memory.readContact(f.saved[1].contact_id);
  assert.equal(own.queue.pending,1);assert.equal(other.queue.pending,0);
- assert.deepEqual(await memory.dueContacts(at+9*60_000),[]);
- assert.equal(await memory.nextDueAt(at+9*60_000),at+10*60_000);
- assert.deepEqual(await memory.dueContacts(at+10*60_000),[contactId]);
+ const early=await memory.scanSchedule(at+9*60_000,[contactId]);
+ assert.equal(early.contacts[0].incrementalDueAt,at+10*60_000,'未到静默期限时保留未来到期时刻');
+ const due=await memory.scanSchedule(at+10*60_000,[contactId]);
+ assert.equal(due.contacts[0].incrementalDueAt,at+10*60_000);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
@@ -47,17 +48,17 @@ test('增量页重见首次历史消息时仍不作为新的增量目标',async 
  const {f,contactId,memory,at}=await incrementalFixture(t,{records:[record('1')]});
  // 历史内容仍在内容摘要中，不能因此成为新的增量目标。
  assert.deepEqual(await memory.readSchedule(at+7*60*60_000),{pending:0,nextDueAt:null,blockedContacts:0,content:[{kind:'text',pending:1,unavailable:0}]});
- assert.deepEqual(await memory.dueContacts(at+7*60*60_000),[]);
+ assert.equal((await memory.scanSchedule(at+7*60*60_000,[contactId])).contacts[0].incrementalDueAt,null);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
 test('五十条增量目标可立即触发；最旧目标满六小时也能触发',async t=>{
  const at=Date.now(),volume=await incrementalFixture(t,{at,records:Array.from({length:50},(_,index)=>record(String(index+10)))});
- assert.deepEqual(await volume.memory.dueContacts(at),[volume.contactId]);
+ assert.equal((await volume.memory.scanSchedule(at,[volume.contactId])).contacts[0].incrementalDueAt,at);
 
  const current=Date.now(),aged=await incrementalFixture(t,{at:current-6*60*60_000});
  await appendIncrementalPage(aged.f,aged.contactId,{records:[record('3')],at:current});
- assert.deepEqual(await aged.memory.dueContacts(current),[aged.contactId]);
+ assert.equal((await aged.memory.scanSchedule(current,[aged.contactId])).contacts[0].incrementalDueAt,current);
 });
 
 test('后续成功的L1提取解除旧失败门，但联系人冷却仍生效',async t=>{
@@ -69,7 +70,7 @@ test('后续成功的L1提取解除旧失败门，但联系人冷却仍生效',a
  const recovered=await memory.start('later-success');await memory.waitForIdle(recovered.runId);assert.equal((await memory.read(recovered.runId)).succeeded,2);
  const acceptedAt=Date.now()-7*60*60_000;await appendIncrementalPage(f,contactId,{records:[record('3')],at:acceptedAt});
  assert.equal((await memory.readSchedule(Date.now())).pending,1);
- assert.deepEqual(await memory.dueContacts(Date.now()+30*60_000),[contactId]);
+ const now=Date.now()+30*60_000,dueAt=(await memory.scanSchedule(now,[contactId])).contacts[0].incrementalDueAt;assert.ok(dueAt!==null&&dueAt<=now);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
 
