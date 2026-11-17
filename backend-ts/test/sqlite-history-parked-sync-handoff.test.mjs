@@ -103,7 +103,7 @@ test('无持久检查点时协调器接回首次核验，旧进程错误不能�
     const saved = await f.contacts.directory();
     return { ...saved, bindings: saved.bindings.filter(row => row.contact_id === b.contact_id) };
   } };
-  const incremental = new IncrementalHistoryCoordinator(directory, f.history, { intervalMs: 0, firstHistoryManagedExternally: true });
+  const incremental = new IncrementalHistoryCoordinator(directory, f.history, { intervalMs: 0 });
   try {
     incremental.wake(); await incremental.waitForIdle();
     assert.deepEqual(f.state.wakes, [b.contact_id], '缺少持久检查点时仍接回正式首次核验');
@@ -142,7 +142,7 @@ for(const {code,failFirstRecovery} of [{code:'history_native_timeout'},{code:'hi
  const f=await parkedFixture(t,{durable:true}),[a,b]=f.saved;
  await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
  const directory={directory:async()=>{const saved=await f.contacts.syncDirectory();return {...saved,bindings:saved.bindings.filter(row=>row.contact_id===a.contact_id)};}};
- const incremental=new IncrementalHistoryCoordinator(directory,f.history,{intervalMs:30_000,firstHistoryManagedExternally:true});
+ const incremental=new IncrementalHistoryCoordinator(directory,f.history,{intervalMs:30_000});
  const first=new FirstHistoryCoordinator(directory,f.history);t.after(async()=>{await incremental.close();await first.close();});
  incremental.wake();await incremental.waitForIdle();
  // 真实持久恢复在同一租约读完新快照并交接增量，不沿用旧快照身份。
@@ -181,7 +181,7 @@ test('围栏候选仅允许核对，旧读取器缺水位恢复能力仍明确�
     const saved = await f.contacts.syncDirectory();
     return {...saved, bindings: saved.bindings.filter(row => row.contact_id === a.contact_id)};
   }};
-  const incremental = new IncrementalHistoryCoordinator(directory, f.history, {intervalMs: 30_000, firstHistoryManagedExternally: true});
+  const incremental = new IncrementalHistoryCoordinator(directory, f.history, {intervalMs: 30_000});
   const first = new FirstHistoryCoordinator(directory, f.history);
   t.after(async () => { await incremental.close(); await first.close(); });
   const wakes = [];

@@ -65,7 +65,7 @@ test('多联系人轮转后新快照在同一租约接纳交接与增量，连�
  const f=await sharedFixture(t),[a,b]=f.saved;f.state.dynamicSnapshots=true;
  await f.history.synchronize(a.contact_id);await f.history.synchronize(b.contact_id);
  const directory={directory:()=>f.contacts.syncDirectory()};
- const incremental=new IncrementalHistoryCoordinator(directory,f.history,{intervalMs:30_000,firstHistoryManagedExternally:true});
+ const incremental=new IncrementalHistoryCoordinator(directory,f.history,{intervalMs:30_000});
  const first=new FirstHistoryCoordinator(directory,f.history);
  t.after(async()=>{await incremental.close();await first.close();});
  f.history.setFirstHistoryWake(id=>first.wakeContact(id));
@@ -107,7 +107,7 @@ test('新nonce来源准备保留恢复点，定时同步经差异交接后续读
  await f.history.synchronize(a.contact_id);await f.history.synchronizeIncremental(a.contact_id,undefined);
  await f.history.synchronize(b.contact_id);
  const directory={directory:async()=>{const saved=await f.contacts.syncDirectory();return {...saved,bindings:saved.bindings.filter(row=>row.contact_id===a.contact_id)};}};
- const incremental=new IncrementalHistoryCoordinator(directory,f.history,{intervalMs:30_000,firstHistoryManagedExternally:true});
+ const incremental=new IncrementalHistoryCoordinator(directory,f.history,{intervalMs:30_000});
  const first=new FirstHistoryCoordinator(directory,f.history);
  t.after(async()=>{await incremental.close();await first.close();});
  f.history.setFirstHistoryWake(id=>first.wakeContact(id));

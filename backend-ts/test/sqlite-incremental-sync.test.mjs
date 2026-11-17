@@ -307,7 +307,7 @@ test('增量预算响应没有接受新页时不自动空转',async t=>{
  const coverage={phase:'complete',traversalComplete:true,incremental:{goalId:'synthetic-goal',phase:'incomplete',failureCode:'history_page_budget_exhausted',cursorPresent:true,pagesAccepted:0}};
  let calls=0;
  const history={coverage:async()=>coverage,synchronizeIncremental:async()=>{if(++calls>1)throw new Error('不得再次空转');return coverage;},stop:async()=>{}};
- const coordinator=new IncrementalHistoryCoordinator({directory:async()=>({read_enabled:true,bindings:[binding]})},history,{intervalMs:0,firstHistoryManagedExternally:true});
+ const coordinator=new IncrementalHistoryCoordinator({directory:async()=>({read_enabled:true,bindings:[binding]})},history,{intervalMs:0});
  t.after(()=>coordinator.close());coordinator.wake();await coordinator.waitForIdle();
  assert.equal(calls,1);assert.equal(coordinator.getState().contacts[0].phase,'degraded');
 });

@@ -79,7 +79,7 @@ async function stressFixture(t, names = ['a']) {
   f.first = new FirstHistoryCoordinator({ directory: () => f.contacts.syncDirectory() }, f.history);
   f.history.setFirstHistoryWake(contactId => f.first.wakeContact(contactId));
   f.coordinator = new IncrementalHistoryCoordinator({ directory: () => f.contacts.syncDirectory() }, f.history,
-    { intervalMs: 5, firstHistoryManagedExternally: true, now: () => f.now });
+    { intervalMs: 5, now: () => f.now });
   t.after(async () => {
     await f.first?.close(); await f.coordinator?.close(); await f.history.close(); await f.contacts.close();
     await f.storage.close(); await rm(root, { recursive: true, force: true });

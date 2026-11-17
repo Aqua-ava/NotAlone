@@ -23,7 +23,7 @@ test('已遍历但存在未核验消息的历史继续增量，不重复首次�
   incremental:{phase:'ready',cursorPresent:true}};let firstReads=0,tailReads=0;
  const history={coverage:async()=>coverage,synchronize:async()=>{firstReads++;throw new Error('不得重复已遍历的历史');},
   synchronizeIncremental:async()=>{tailReads++;return coverage;},stop:async()=>{}};
- const first=new FirstHistoryCoordinator(directory,history),incremental=new IncrementalHistoryCoordinator(directory,history,{intervalMs:0,firstHistoryManagedExternally:true});
+ const first=new FirstHistoryCoordinator(directory,history),incremental=new IncrementalHistoryCoordinator(directory,history,{intervalMs:0});
  t.after(async()=>{await first.close();await incremental.close();});
  first.wake();incremental.wake();await Promise.all([first.waitForIdle(),incremental.waitForIdle()]);
  assert.equal(firstReads,0);assert.equal(tailReads,1);assert.equal(coverage.phase,'incomplete');
@@ -41,7 +41,7 @@ test('旧empty目标在两协调器启动竞态中仅由新持久证明解除不
   synchronizeIncremental:async()=>{metadataProbes++;return coverage;},stop:async()=>{}};
  const now=()=>1_800_000_000_000;
  const first=new FirstHistoryCoordinator(directory,history);
- const incremental=new IncrementalHistoryCoordinator(directory,history,{intervalMs:10,firstHistoryManagedExternally:true,now});
+ const incremental=new IncrementalHistoryCoordinator(directory,history,{intervalMs:10,now});
  t.after(async()=>{await incremental.close();await first.close();});
  incremental.start();incremental.wake();await incremental.waitForIdle();
  assert.equal(incremental.getState().contacts[0].phase,'blocked');
@@ -123,8 +123,10 @@ async function fixture(t, names = ['a'], coordinatorOptions = { intervalMs: 0 })
   await f.contacts.initialize();
   f.history = new SqliteHistoryService(f.storage, f.contacts, createChannel(state));
   f.coordinator = new IncrementalHistoryCoordinator(f.contacts, f.history, coordinatorOptions);
+  f.first = new FirstHistoryCoordinator(f.contacts, f.history);
+  f.history.setFirstHistoryWake(contactId => f.first.wakeContact(contactId));
   t.after(async () => {
-    await f.coordinator.close(); await f.history.close(); await f.contacts.close(); await f.storage.close();
+    await f.first.close(); await f.coordinator.close(); await f.history.close(); await f.contacts.close(); await f.storage.close();
     await rm(root, { recursive: true, force: true });
   });
   return f;
@@ -156,7 +158,7 @@ test('读取四门禁：未选、总开关关闭、撤销/账号失效或协调�
   await assert.rejects(f.history.synchronizeIncremental(binding.contact_id), { code: 'read_not_authorized' });
   assertNoNewChannel({ creates: 0, inspects: 0, targets: 0, pages: 0, tails: 0 }, f.state);
   // 开启后正常读取一次历史。
-  await f.contacts.setReading(true); await wake(f);
+  await f.contacts.setReading(true); f.first.wake(); await f.first.waitForIdle(); await wake(f);
   assert.equal(f.state.pages.length, 1);
   // 关闭总开关不发起后续查询，也不创建新渠道。
   const beforeClose = channelCounts(f.state);
@@ -175,8 +177,8 @@ test('读取四门禁：未选、总开关关闭、撤销/账号失效或协调�
   assertNoNewChannel(beforeRevoke, f.state);
 });
 
-test('宿主由首次历史协调器管理时，增量协调器等待首次历史完成后才读尾部', async t => {
-  const f = await fixture(t, ['a'], { intervalMs: 0, firstHistoryManagedExternally: true });
+test('增量协调器默认等待首次历史完成，只从已保存检查点读尾部', async t => {
+  const f = await fixture(t, ['a'], { intervalMs: 0 });
   f.state.historyRecords = [record('1')];
   const [binding] = await select(f);
   await f.contacts.setReading(true);
@@ -196,6 +198,37 @@ test('宿主由首次历史协调器管理时，增量协调器等待首次历�
   assert.equal(f.state.tails.length, beforeTail.tails + 1, '首次历史完成后由增量协调器读取尾部');
   assert.equal(f.coordinator.getState().contacts.find(contact => contact.contactId === binding.contact_id).phase, 'caught_up');
   assert.deepEqual((await f.history.read(binding.contact_id)).messages.map(message => message.text).sort(), ['合成1', '合成2']);
+});
+
+test('首次历史部分失败只由首次协调器恢复，增量不接管失败会话且联系人隔离', async t => {
+  const f = await fixture(t, ['a', 'b']);
+  const bindings = await select(f, ['a', 'b']);
+  const failed = bindings.find(binding => binding.conversation_locator === 'friend-a');
+  const healthy = bindings.find(binding => binding.conversation_locator === 'friend-b');
+  f.state.historyRecords = [record('1')];
+  f.state.pageHook = (scope, target, cursor) => {
+    if (scope.token.contact_id === failed.contact_id) throw new StorageFailure('history_native_unavailable');
+    return { target: target.descriptor, cursorIn: cursor, cursorOut: null, completedPartitions: ['p'], exhausted: true,
+      records: f.state.historyRecords, resumeCursor: 'tail-1' };
+  };
+  await f.contacts.setReading(true);
+  f.first.wake(); f.coordinator.wake();
+  await Promise.all([f.first.waitForIdle(), f.coordinator.waitForIdle()]);
+  assert.equal((await f.history.read(failed.contact_id)).messages.length, 0);
+  assert.equal((await f.history.read(healthy.contact_id)).messages.length, 1);
+  const firstPages = f.state.pages.length;
+  await wake(f);
+  assert.equal(f.state.pages.length, firstPages, '增量重试不能自行补跑失败的首次历史');
+  assert.ok(f.state.tails.every(read => read.contactId === healthy.contact_id));
+  f.state.pageHook = null;
+  f.first.wakeContact(failed.contact_id); await f.first.waitForIdle(); await wake(f);
+  assert.equal(f.state.pages.filter(read => read.contactId === failed.contact_id).length, 2);
+  assert.equal(f.state.pages.filter(read => read.contactId === healthy.contact_id).length, 1, '定点恢复不重扫其他联系人');
+  for (const binding of bindings) {
+    const read = await f.history.read(binding.contact_id);
+    assert.equal(read.messages.length, 1, '不同联系人同样的合成正文分别保存');
+    assert.equal(read.coverage.phase, 'complete');
+  }
 });
 
 test('关闭总开关保留资料与选择/授权、不撤销手动处理资格；重开只恢复仍合法允许的读取', async t => {
@@ -289,7 +322,7 @@ test('重选只在新资格下补齐本机仍可读缺口，不复活旧执行�
   const [resumedBinding] = await select(f);
   assert.notEqual(resumedBinding.selection_generation, oldGeneration, '重选建立新资格');
   f.state.tailBatches.push(() => ({ records: [record('1'), record('2'), record('3'), record('4')], caughtUp: true, cursorOut: 'tail-2' }));
-  await wake(f);
+  f.first.wake(); await f.first.waitForIdle(); await wake(f);
   const read = await f.history.read(binding.contact_id);
   // 旧排除不清零：被删除的来源记录即使被重新读到也不复活。
   assert.deepEqual(read.messages.map(message => message.text).sort(), ['合成1', '合成3', '合成4'].sort());
@@ -352,7 +385,7 @@ test('账号变化、支持语义变化、游标失效、目标不连续或交�
     assert.equal(state.lastError, 'history_incremental_unavailable');
   });
   await t.test('未认证的空历史保持不可用且不重探渠道', async t => {
-    const f = await fixture(t, ['a'], { intervalMs: 0, firstHistoryManagedExternally: true });
+    const f = await fixture(t, ['a'], { intervalMs: 0 });
     f.state.resumeCursor = null;
     const [binding] = await select(f); await f.contacts.setReading(true);
     const first = new FirstHistoryCoordinator(f.contacts, f.history);
@@ -368,7 +401,7 @@ test('账号变化、支持语义变化、游标失效、目标不连续或交�
 });
 
 test('已认证空目标低频只重探元数据，首次表出现后无需用户唤醒即可由首次历史入库', async t => {
-  const f = await fixture(t, ['a'], { intervalMs: 10, firstHistoryManagedExternally: true, now: () => now });
+  const f = await fixture(t, ['a'], { intervalMs: 10, now: () => now });
   const [binding] = await select(f); await f.contacts.setReading(true);
   const fileA = 'file-a-stable-id', fileB = 'file-b-stable-id';
   const absentTarget = { protocol: 'private-history-v1', descriptor: 'empty-v1', sourceGeneration: 'source-1',
@@ -412,7 +445,7 @@ test('已认证空目标低频只重探元数据，首次表出现后无需用�
 
   await f.coordinator.close();
   f.coordinator = new IncrementalHistoryCoordinator(f.contacts, f.history,
-    { intervalMs: 10, firstHistoryManagedExternally: true, now: () => now });
+    { intervalMs: 10, now: () => now });
   f.coordinator.start(); f.coordinator.wake(); await f.coordinator.waitForIdle();
   const empty = f.coordinator.getState().contacts.find(contact => contact.contactId === binding.contact_id);
   assert.equal(empty.phase, 'waiting_new_messages');

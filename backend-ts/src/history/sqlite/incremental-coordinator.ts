@@ -46,7 +46,7 @@ function notification() { let resolve!: () => void; const promise = new Promise<
 
 /**
  * 增量读取协调器：仅由启动/开启/重选唤醒并定时运行；总开关关闭、退出、取消或范围变化时停止后续查询并取消在途。
- * 只读取已保存资格允许的联系人；历史未完成时先补齐历史，完整后才从持久检查点续读增量。
+ * 只读取已保存资格允许的联系人；历史未完成时请求首次历史协调器恢复，已有可用检查点后续读增量。
  * 单个联系人的失败只影响该人；范围失效显示可见错误并停止自动重试，等下一次明确唤醒。
  */
 export class IncrementalHistoryCoordinator {
@@ -54,7 +54,6 @@ export class IncrementalHistoryCoordinator {
   readonly #history: SqliteHistoryService;
   readonly #intervalMs: number;
   readonly #now: () => number;
-  readonly #firstHistoryManagedExternally: boolean;
   readonly #queued = new Map<string, QueuedRead>();
   readonly #active = new Map<string, ActiveRead>();
   readonly #attempted = new Map<string, string>();
@@ -71,10 +70,9 @@ export class IncrementalHistoryCoordinator {
   #closeDone = false;
   #closing?: Promise<void>;
   #lastError: string | null = null;
-  constructor(directory: IncrementalHistoryDirectoryPort, history: SqliteHistoryService, options: { intervalMs?: number; firstHistoryManagedExternally?: boolean; now?: () => number } = {}) {
+  constructor(directory: IncrementalHistoryDirectoryPort, history: SqliteHistoryService, options: { intervalMs?: number; now?: () => number } = {}) {
     this.#directory = directory; this.#history = history; this.#intervalMs = options.intervalMs ?? 30_000;
     this.#now = options.now ?? Date.now;
-    this.#firstHistoryManagedExternally = options.firstHistoryManagedExternally ?? false;
   }
   /** 宿主在发布就绪后调用；定时只触发一次有界扫描，不改变持久资格。 */
   start(): void {
@@ -161,7 +159,7 @@ export class IncrementalHistoryCoordinator {
             &&replacedCheckpointErrors.has(coverage.incremental.failureCode??'');
           if(!completeReplacement&&(!coverage.traversalComplete||!coverage.incremental?.cursorPresent||!['ready','incomplete'].includes(coverage.incremental.phase))){
             // 守卫后来失效时，旧增量阻塞也须让当前合法恢复资格接回首次读取。
-            if(this.#firstHistoryManagedExternally)try{await this.#history.requestFirstHistoryRecovery?.(contactId);}
+            try{await this.#history.requestFirstHistoryRecovery(contactId);}
             catch{/* 本轮资格查询失败保留替换阻塞，下轮仍须重新经过持久资格门。 */}
             continue;
           }
@@ -189,15 +187,11 @@ export class IncrementalHistoryCoordinator {
     this.#active.set(job.contactId, active);
     let certifiedEmptyProbe=false;
     active.done = (async () => {
-      let coverage = await this.#history.coverage(job.contactId);
+      const coverage = await this.#history.coverage(job.contactId);
       if (!canContinueIncremental(coverage)) {
-        // 正式宿主有独立 FirstHistoryCoordinator；不能与它并发启动同一联系人的首次历史。
-        if (this.#firstHistoryManagedExternally) {
-          await this.#history.requestFirstHistoryRecovery?.(job.contactId);
-          throw new StorageFailure('history_incomplete');
-        }
-        coverage = await this.#history.synchronize(job.contactId, active.controller.signal);
-        if (!canContinueIncremental(coverage)) throw new StorageFailure(coverage.failureCode ?? 'history_incomplete');
+        // 首次历史及其恢复只由 FirstHistoryCoordinator 执行；此处仅请求正式资格门复核和唤醒。
+        await this.#history.requestFirstHistoryRecovery(job.contactId);
+        throw new StorageFailure('history_incomplete');
       }
       // 交接不可证明（终页没有保守续读游标）时保持可见不可用，不发起渠道读取。
       if (coverage.incremental?.phase === 'unavailable') {

@@ -64,22 +64,6 @@ function createChannel(state) {
   return factory;
 }
 
-/** 仿 SharedWechatClient 的手序：换联系人时先调用上一轮调用方传入的释放闭包（#releaseOwner 合同），再运行新联系人的工作。 */
-function stubShared() {
-  let state = undefined;
-  return {
-    run: async (owner, work, releasePreviousOwner) => {
-      const mine = releasePreviousOwner;
-      if (state && state.owner !== owner) {
-        const previous = state; state = undefined;
-        await previous.release?.();
-      }
-      state = { owner, release: mine };
-      try { return await work(); } finally { /* owner 保留到下一次换手（同 SharedWechatClient 合同） */ }
-    },
-  };
-}
-
 async function fixture(t, { names = ['a'] } = {}) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'notalone-empty-probe-')));
   const state = { inspects: 0, targets: 0, pages: 0, losses: [], lossCode: undefined };
@@ -95,7 +79,7 @@ async function fixture(t, { names = ['a'] } = {}) {
     f.first = new FirstHistoryCoordinator({ directory: () => f.contacts.syncDirectory() }, f.history);
     f.history.setFirstHistoryWake(contactId => f.first.wakeContact(contactId));
     f.coordinator = new IncrementalHistoryCoordinator({ directory: () => f.contacts.syncDirectory() }, f.history,
-      { intervalMs: 5, firstHistoryManagedExternally: true, now: () => f.now });
+      { intervalMs: 5, now: () => f.now });
   };
   attachCoordinators();
   t.after(async () => {
@@ -243,26 +227,30 @@ test('守卫会话失守（observeGuardLoss）：瞬时错误码只置 lost 不�
   assert.equal((await goalRows(f, binding.contact_id)).length, rowsBefore, '失守路径不产生新行（事件驱动不扩大 churn）');
 });
 
-test('协调器停止／范围取消路径（#cancel → history.stop）会释放全部守卫：仅事件级触发，非周期来源', async t => {
+test('首次历史完成即释放守卫，后续协调器停止保持幂等且不围栏', async t => {
   const f = await fixture(t);
   const [binding] = await select(f);
-  f.first.wake();
-  await waitUntil(() => f.first.getState().contacts[0]?.phase === 'complete', { label: '首次历史完成' });
-  assert.equal((await guardLease(f, binding.contact_id))?.state, 'active', '重验完成后租约 active');
+  f.first.wake(); await f.first.waitForIdle();
+  assert.equal(f.first.getState().contacts[0]?.phase, 'complete');
+  assert.equal((await guardLease(f, binding.contact_id))?.state, 'lost', '空闲期间不停车保留守卫');
   await f.coordinator.stop();
-  assert.equal((await guardLease(f, binding.contact_id))?.state, 'lost', '停止路径释放守卫（incremental-coordinator.ts:260 → service.ts:518 release）');
-  assert.equal((await fences(f)).length, 0, '停止释放不围栏');
+  assert.equal((await guardLease(f, binding.contact_id))?.state, 'lost', '停止已释放的读取仍保持安全终态');
+  assert.equal((await fences(f)).length, 0, '正常完成和停止不围栏');
 });
 
-test('共享读取器换手释放上一联系人的守卫租约：非事件源（service.ts:89 else → guard.release → guardRelease 置 lost）', async t => {
+test('共享读取每轮自行释放守卫，不把上轮释放职责留到联系人换手', async t => {
   const f = await fixture(t, { names: ['a', 'b'] });
-  const shared = stubShared();
+  const shared = { run: async (_owner, work, releasePreviousOwner) => {
+    assert.equal(releasePreviousOwner, undefined, '不向共享进程登记空闲守卫释放闭包');
+    return work();
+  } };
+  await f.history.close();
   f.history = new SqliteHistoryService(f.storage, f.contacts, createChannel(f.state), undefined, undefined, undefined, shared);
   const [a, b] = await select(f, ['a', 'b']);
   await f.history.synchronize(a.contact_id);
-  assert.equal((await guardLease(f, a.contact_id))?.state, 'active', 'a 首轮完成时租约 active');
+  assert.equal((await guardLease(f, a.contact_id))?.state, 'lost', 'a 首轮返回前已释放守卫');
   await f.history.synchronize(b.contact_id);
-  assert.equal((await guardLease(f, a.contact_id))?.state, 'lost', `换手后 a 租约：${JSON.stringify(await guardLease(f, a.contact_id))}`);
-  assert.equal((await guardLease(f, b.contact_id))?.state, 'active', 'b 自己的首轮租约 active');
-  assert.equal((await fences(f)).length, 0, '非 sourceLost 换手不围栏');
+  assert.equal((await guardLease(f, a.contact_id))?.state, 'lost', '换手不恢复 a 守卫');
+  assert.equal((await guardLease(f, b.contact_id))?.state, 'lost', 'b 首轮返回前也释放守卫');
+  assert.equal((await fences(f)).length, 0, '正常读取与换手不围栏');
 });

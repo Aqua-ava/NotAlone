@@ -386,7 +386,7 @@ for(const contactCount of [8,32])test(`${contactCount}位联系人共享原生�
  const calls={coverage:0,directory:0,syncDirectory:0},started=performance.now();
  for(const [target,method,label]of [[f.history,'coverage','coverage'],[f.contacts,'directory','directory'],[f.contacts,'syncDirectory','syncDirectory']]){const original=target[method].bind(target);target[method]=(...args)=>{calls[label]++;return original(...args);};}
  const directory={directory:()=>f.contacts.syncDirectory()};
- let first=new FirstHistoryCoordinator(directory,f.history);const initial=first,incremental=new IncrementalHistoryCoordinator(directory,f.history,{intervalMs:30_000,firstHistoryManagedExternally:true});
+ let first=new FirstHistoryCoordinator(directory,f.history);const initial=first,incremental=new IncrementalHistoryCoordinator(directory,f.history,{intervalMs:30_000});
  f.history.setFirstHistoryWake(contactId=>first.wakeContact(contactId));
  t.after(async()=>{await incremental.close();await first.close();if(first!==initial)await initial.close();for(const callback of cleanup.reverse())await callback();});
  const caps=Object.fromEntries([...statusCapabilityKeys,'incrementalTail','durableIncremental'].map(key=>[key,'supported']));
@@ -426,7 +426,7 @@ test('32位联系人真实重开SQLite后首次与增量同时启动，严格新
  contacts=new SqliteContactService(storage,owner,{account:async()=>{throw Error('不应重新确认账号');},sessions:async()=>{throw Error('不应扩大已选范围');}});
  await contacts.initialize();shared=new SharedWechatClient(()=>loadNarrowWechatOptions(f.executable));
  history=new SqliteHistoryService(storage,contacts,()=>createWechatHistoryChannel(f.executable,undefined,shared),undefined,undefined,undefined,shared);
- const directory={directory:()=>contacts.syncDirectory()};first=new FirstHistoryCoordinator(directory,history);incremental=new IncrementalHistoryCoordinator(directory,history,{intervalMs:30_000,firstHistoryManagedExternally:true});
+ const directory={directory:()=>contacts.syncDirectory()};first=new FirstHistoryCoordinator(directory,history);incremental=new IncrementalHistoryCoordinator(directory,history,{intervalMs:30_000});
  history.setFirstHistoryWake(contactId=>first.wakeContact(contactId));
  first.wake();incremental.wake();incremental.start();
  await Promise.all([first.waitForIdle(),incremental.waitForIdle()]);await first.waitForIdle();

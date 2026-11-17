@@ -87,7 +87,7 @@ async function fixture(t, { names = ['a'] } = {}) {
     const first = new FirstHistoryCoordinator({ directory: () => f.contacts.syncDirectory() }, f.history);
     f.history.setFirstHistoryWake(contactId => first.wakeContact(contactId));
     const incremental = new IncrementalHistoryCoordinator({ directory: () => f.contacts.syncDirectory() }, f.history,
-      { intervalMs: 0, firstHistoryManagedExternally: true });
+      { intervalMs: 0 });
     f.first = first; f.coordinator = incremental;
   };
   attachCoordinators();
