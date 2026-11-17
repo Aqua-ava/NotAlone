@@ -487,10 +487,12 @@ export function validateIncrementalProfile(
     .map(reference => `${reference.memory_id}:${reference.revision}`)));
   const presentRefs = new Set(proposal.entries.flatMap(entry =>
     entry.references.map(reference => `${reference.memory_id}:${reference.revision}`)));
+  let presentEntries: Set<string> | undefined;
   for (const old of existing.entries) {
     const refs = old.references.map(reference => `${reference.memory_id}:${reference.revision}`);
     if (!refs.some(reference => changed.has(reference))) {
-      if (!proposal.entries.some(entry => entryIdentity(entry) === entryIdentity(old))) {
+      presentEntries ??= new Set(proposal.entries.map(entryIdentity));
+      if (!presentEntries.has(entryIdentity(old))) {
         invalid('l3_profile_incremental_entry_missing', '增量画像遗漏未变化的有效旧条目');
       }
     }

@@ -220,6 +220,47 @@ test('L3文档工具只能读取场景并写profile.md，增量不得丢弃未�
   }], [memory]), /遗漏|旧条目/i);
 });
 
+test('L3增量核验接受16条旧内容及来源重排，不改写输入', () => {
+  const extra = {memory_id:randomUUID(), revision:1};
+  const entries = Array.from({length:16}, (_, index) => ({...entry,
+    text:`合成背景${index}。`, references:[...entry.references, extra]}));
+  const existing = {version_id:randomUUID(), entries};
+  const proposal = {entries:entries.toReversed().map(item => ({...item, references:item.references.toReversed()}))};
+  const before = structuredClone({existing, proposal});
+  assert.doesNotThrow(() => validateIncrementalProfile(proposal, existing, []));
+  assert.deepEqual({existing, proposal}, before);
+});
+
+test('L3增量核验要求未变化旧条目的完整含义和精确版本保持一致', () => {
+  const existing = {version_id:randomUUID(), entries:[entry]};
+  for (const change of [
+    {text:'另一条合成事实。'}, {basis:'另一份依据。'}, {kind:'inference'},
+    {section:'interests'}, {temporal_status:'uncertain'}, {uncertainty:'仍待确定。'},
+    {references:[{...entry.references[0], revision:2}]},
+  ]) {
+    assert.throws(() => validateIncrementalProfile({entries:[{...entry, ...change}]}, existing, []),
+      {code:'l3_profile_incremental_entry_missing'});
+  }
+});
+
+test('L3增量核验允许变化场景改写，但仍保护原有来源', () => {
+  const existing = {version_id:randomUUID(), entries:[entry]};
+  const rewritten = {...entry, text:'合成课程背景有了新的进展。'};
+  assert.doesNotThrow(() => validateIncrementalProfile({entries:[rewritten]}, existing, [scenario]));
+  assert.throws(() => validateIncrementalProfile({entries:[]}, existing, [scenario]),
+    {code:'l3_profile_incremental_reference_missing'});
+});
+
+test('L3增量核验按旧条目顺序报告缺失内容或缺失来源', () => {
+  const unchanged = {...entry, text:'另一条未变化背景。', references:[{memory_id:randomUUID(), revision:1}]};
+  for (const [entries, code] of [
+    [[entry, unchanged], 'l3_profile_incremental_reference_missing'],
+    [[unchanged, entry], 'l3_profile_incremental_entry_missing'],
+  ]) {
+    assert.throws(() => validateIncrementalProfile({entries:[]}, {version_id:randomUUID(), entries}, [scenario]), {code});
+  }
+});
+
 test('L3核验输入超预算时在物理调用前拒绝', async () => {
   const port = {calls:0, async call(){this.calls++;throw new Error('must_not_call_model');}};
   await assert.rejects(verifyProfileProposal({
