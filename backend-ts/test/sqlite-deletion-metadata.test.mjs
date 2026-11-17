@@ -133,20 +133,15 @@ test('名单准入只在联系人已封禁后提前放行，封禁前与账户�
   {externalKey:'synthetic-b',displayName:'合成乙',kind:'private',identityAssurance:'verified'}],close:async()=>{}}));
  const {contact}=await seeded(f);
  const admission=()=>f.storage.execute('deletion.metadataAdmission',{ownerId});
- const strict=()=>f.storage.execute('deletion.metadataAvailable',{ownerId});
  assert.deepEqual(await admission(),{available:true,writable:true,admittedOperations:[]});
- assert.equal(await strict(),true);
  const op=await f.deletion.plan({ownerId,requestKey:'admission-contact',scope:{kind:'contact',contactId:contact}});
- // 严格门禁仍把未完成的联系人删除视为不可用；读侧准入因联系人已置 deleting 提前放行。
- assert.equal(await strict(),false);
+ // 联系人已置 deleting 后读侧准入提前放行，身份写入保持关闭。
  assert.deepEqual(await admission(),{available:true,writable:false,admittedOperations:[op.operationId]});
  assert.equal((await f.deletion.advance(op)).state,'completed');
  assert.deepEqual(await admission(),{available:true,writable:true,admittedOperations:[]});
- assert.equal(await strict(),true);
  await f.deletion.plan({ownerId,requestKey:'admission-account',scope:{kind:'account'}});
  const account=await admission();
  assert.equal(account.available,false);assert.equal(account.writable,false);
- assert.equal(await strict(),false);
 });
 
 test('联系人封禁后名单服务立即重建，兄弟联系人可读且删除闭包不受早开读者阻塞', async t => {

@@ -62,8 +62,8 @@ test('清空聊天 blocked 操作跨重启不再关闭联系人/绑定读取，�
   const cleared = await clear.clear(contactId, { signal: new AbortController().signal });
   assert.equal(cleared.phase, 'boundary_pending');
   assert.equal(cleared.boundary?.state, 'blocked');
-  const status = await f.storage.execute('deletion.metadataAvailable', { ownerId: owner });
-  assert.equal(status, true, '来源/清空/讨论/媒体删除不关闭联系人身份元数据');
+  const status = await f.storage.execute('deletion.metadataAdmission', { ownerId: owner });
+  assert.deepEqual(status, { available: true, writable: true, admittedOperations: [] }, '来源/清空/讨论/媒体删除不关闭联系人身份元数据');
   // 名单服务保持可读不等于放开身份写入：选择/撤销仍受既有资格与代次 CAS 约束。
   await assert.rejects(() => f.contacts.revoke(contactId, f.saved[0].binding_id, '0'), /identity_generation|selection|stale|invalid|closed/i);
   await assert.rejects(() => f.contacts.confirm('stale-selection-token', []), /selection_stale|identity_request_invalid|stale/i);
@@ -109,7 +109,7 @@ test('未完成联系人或账号删除仍关闭身份元数据服务（安全�
         .run(`${scopeKind}-operation`, ownerId, 'metadata_gate_test', `${scopeKind}-key`, scopeKind, contactIdentity, 1, 'blocked', 1, '{}', 1);
     } finally { db.close(); }
     const opened = await SqliteStorage.open({ userData: root, intent: 'open', expectedDatabaseId: (() => { const d = new DatabaseSync(path.join(root, 'managed/sqlite/notalone.sqlite'), { readOnly: true }); try { return d.prepare('SELECT database_id FROM database_instance WHERE slot=1').all()[0].database_id; } finally { d.close(); } })(), role: 'test' });
-    try { assert.equal(await opened.execute('deletion.metadataAvailable', { ownerId }), false, `${scopeKind} 未完成删除必须关闭名单服务`); }
+    try { assert.deepEqual(await opened.execute('deletion.metadataAdmission', { ownerId }), { available: false, writable: false, admittedOperations: [] }, `${scopeKind} 尚未封禁或账户删除必须关闭名单服务`); }
     finally { await opened.close(); }
     const cleanup = new DatabaseSync(path.join(root, 'managed/sqlite/notalone.sqlite'));
     try { cleanup.prepare('DELETE FROM deletion_operation WHERE operation_id=?').run(`${scopeKind}-operation`); } finally { cleanup.close(); }
