@@ -1,7 +1,6 @@
 import type { ContactHistoryController } from './contact-history/controller';
 import type { MessageMediaController } from './media/controller';
 import type { TraceController } from './traces/controller';
-import type { MemoryReadingController } from './memory/controller';
 import type { FixedMemoryProcessingController } from './memory/fixed-processing';
 import type { SqliteMemoryManagementController } from './memory/sqlite-management';
 import type { SqliteDiscussionController } from './reply/sqlite-discussion-bridge';
@@ -17,7 +16,6 @@ interface Dependencies {
  history: Pick<ContactHistoryController, 'getState' | 'invalidate' | 'refreshCurrent'>;
  media: Pick<MessageMediaController, 'invalidate' | 'invalidateAndDrain'>;
  traces: Pick<TraceController, 'invalidateSource'>;
- memory: Pick<MemoryReadingController, 'revalidateDeletedSource'>;
  processing: Pick<FixedMemoryProcessingController, 'synchronize'>;
  management: Pick<SqliteMemoryManagementController, 'synchronize'>;
  discussion: Pick<SqliteDiscussionController, 'synchronize'>;
@@ -66,7 +64,7 @@ export class DesktopDataLifecycle {
    p.media.invalidate();
   }
   this.withdrawDerived('source_changed');
-  await Promise.all([p.replies.revalidateDeletedSource(contactId), p.memory.revalidateDeletedSource(contactId)]);
+  await p.replies.revalidateDeletedSource(contactId);
   await p.history.refreshCurrent(contactId);
   });
  }

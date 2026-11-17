@@ -13,8 +13,7 @@ function fixture() {
  const clear=key=>()=>{state[key]=null;};
  const ports={history:{getState:()=>({contactId}),invalidate:clear('history'),refreshCurrent:async id=>{events.push(['refresh',id]);}},media:{invalidate:clear('media'),invalidateAndDrain:async()=>{clear('media')();events.push(['drain']);}},
   traces:{invalidateSource:clear('traces')},processing:{synchronize:clear('processing')},management:{synchronize:clear('management')},discussion,
-  replies:{revalidateDeletedSource:async id=>{events.push(['reply',id]);},prepareConnectionChange:async()=>{events.push(['connection']);},beginHistoryClear:()=>async()=>{}},
-  memory:{revalidateDeletedSource:async id=>{events.push(['memory',id]);}}};
+  replies:{revalidateDeletedSource:async id=>{events.push(['reply',id]);},prepareConnectionChange:async()=>{events.push(['connection']);},beginHistoryClear:()=>async()=>{}}};
  return {lifecycle:new DesktopDataLifecycle(ports),ports,discussion,state,events,requests,gate,request:{contactId,sessionId,requestKey,scopeRevision:1,text:'合成讨论要求'}};
 }
 
@@ -36,7 +35,7 @@ test('删除来源、联系人和清空历史均撤下旧资料并拒绝在途�
 
 test('来源复验全部完成后才刷新聊天，复验失败不恢复旧快照',async t=>{
  for(const fail of [false,true])await t.test(String(fail),async()=>{
-  const f=fixture(),gate=Promise.withResolvers();f.ports.memory.revalidateDeletedSource=()=>gate.promise;
+  const f=fixture(),gate=Promise.withResolvers();f.ports.replies.revalidateDeletedSource=()=>gate.promise;
   try{
    const pending=f.lifecycle.sourceChanged(f.request.contactId);
    const result=fail?assert.rejects(pending,/合成复验失败/):pending;
@@ -61,7 +60,7 @@ test('连接切换先撤下SQLite资料并排空媒体，再结算回复任务',
  }finally{f.discussion.close();}
 });
 
-test('原联系人删除迟到回调保留当前联系人聊天、媒体及在途读取，仍复验本人衍生资料',async()=>{
+test('原联系人删除迟到回调保留当前联系人聊天、媒体及在途读取，仍复验回复会话',async()=>{
  const f=fixture(),oldContact=randomUUID(),currentContact=f.request.contactId,reads=[],streams=[],held=Promise.withResolvers();
  const message={message_id:randomUUID(),speaker:'contact',message_type:'text',text:'当前联系人的合成聊天',media_placeholder:null,occurred_at:null,quoted:null};
  const page={generation:1,data:{messages:[message],next_cursor:null}};
@@ -78,7 +77,7 @@ test('原联系人删除迟到回调保留当前联系人聊天、媒体及在�
   assert.equal(f.state.media,'旧图片');assert.equal(reads.length,1);
   assert.ok(streams.every(signal=>!signal.aborted));
   for(const key of ['traces','processing','management'])assert.equal(f.state[key],null);
-  assert.deepEqual(f.events,[['reply',oldContact],['memory',oldContact]]);
+  assert.deepEqual(f.events,[['reply',oldContact]]);
   const pending=history.load(selection);
   await lifecycle.sourceChanged(oldContact);
   assert.equal(reads[1].signal.aborted,false);

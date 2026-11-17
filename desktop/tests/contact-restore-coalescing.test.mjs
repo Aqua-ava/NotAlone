@@ -6,7 +6,6 @@ import { build } from 'esbuild';
 const ports = build({ stdin: { contents: `
   export { ContactSession } from './src/main/contacts/session';
   export { SourceDeletionController } from './src/main/sources/controller';
-  export { MemoryReadingController } from './src/main/memory/controller';
   export { ReplySession } from './src/main/reply/session';
   export { BackendRequestFailure } from './src/main/backend/json-client';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false })
@@ -120,39 +119,6 @@ test('授权变化保留已选联系人和手工草稿，旧来源读取及删�
   const fresh = { ...scope, scopeRevision: f.contacts.getState().scopeRevision };
   await sources.refresh(fresh);
   assert.equal(sources.getState().phase, 'ready');
-});
-
-for (const failure of [false, true]) test(`授权撤销及恢复后，关系概览迟到${failure ? '失败' : '成功'}不得复活`, async t => {
-  const f = await fixture(t);
-  const { MemoryReadingController } = await ports;
-  const scope = f.select(f.ids[0]);
-  const memory = new MemoryReadingController(f.backend, f.contacts);
-  f.contacts.onStateChanged(() => memory.synchronizeScope());
-  let release;
-  const gate = new Promise(resolve => { release = resolve; });
-  const isContext = request => /\/(messages\?|relationship-overview$)/.test(request.path);
-  f.control.barrier = request => isContext(request) ? gate.then(() => {
-    if (failure) throw new Error('合成迟到失败');
-  }) : undefined;
-  f.control.respond = request => request.path.includes('/history-messages?') ? { messages: [{
-    message_id: randomUUID(), speaker: 'contact', message_type: 'text', text: '合成旧授权正文',
-    media_placeholder: null, occurred_at: null, quoted: null,
-  }], next_cursor: null } : request.path.endsWith('/relationship-overview') ? { overview: {
-    version: 1, scope_kind: 'contact', contact_id: scope.contactId,
-    projection_revision: 'a'.repeat(64), memory_revision: 1, built_at: '2026-10-23T00:00:00Z', entries: [],
-  } } : undefined;
-  const reading = memory.refreshOverview(scope);
-  f.contacts.invalidateReadingScope();
-  f.contacts.invalidateReadingScope();
-  release(); await reading;
-  assert.deepEqual(memory.getState().overview, { phase: 'idle', value: null });
-  await assert.rejects(memory.refreshOverview(scope), /失效/);
-  assert.throws(() => f.contacts.setDraft({ ...scope, text: '旧范围提交' }), /变化/);
-  f.control.barrier = undefined;
-  const fresh = { ...scope, scopeRevision: f.contacts.getState().scopeRevision };
-  await f.replies.readSavedSession(fresh);
-  await memory.refreshOverview(fresh);
-  assert.equal(memory.getState().overview.phase, 'ready');
 });
 
 test('授权变化打断目录刷新时重新读取，不停留在旧加载态', async t => {

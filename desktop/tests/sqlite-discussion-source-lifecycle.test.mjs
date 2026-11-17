@@ -13,10 +13,9 @@ const outfile = join(owned, 'ports.mjs');
 await build({ stdin: { contents: `
   export { ContactSession } from './src/main/contacts/session';
   export { ReplySession } from './src/main/reply/session';
-  export { MemoryReadingController } from './src/main/memory/controller';
   export { installSourceDeletionBridge } from './src/main/sources/bridge';
   export { createSourceDeletionBridge } from './src/preload/source-deletion';
-  export { coordinateOwnerContextChanges, coordinateSourceContextChanges } from './src/main/reply/owner-context-changes';
+  export { coordinateSourceContextChanges } from './src/main/reply/owner-context-changes';
 `, resolveDir: process.cwd() }, outfile, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
 const ports = await import(pathToFileURL(outfile).href);
 
@@ -61,20 +60,17 @@ async function fixture(t) {
   t.after(() => contacts.setConnection(undefined));
   contacts.selectContact({ contactId, scopeRevision: contacts.getState().scopeRevision });
   const scope = { contactId, scopeRevision: contacts.getState().scopeRevision };
-  const memory = new ports.MemoryReadingController(backend, contacts);
-  ports.coordinateOwnerContextChanges(memory, replies);
   const handlers = new Map(), listeners = new Map();
   const sources = ports.installSourceDeletionBridge({ handle: (channel, handler) => handlers.set(channel, handler),
     publish: (channel, state) => listeners.get(channel)?.({}, state) }, backend, contacts, async id => { changed.push(id); await replies.revalidateDeletedSource(id); });
   ports.coordinateSourceContextChanges(sources, replies);
-  sources.onDeletion(phase => memory.sourceDeletionChanged(phase));
   const bridge = ports.createSourceDeletionBridge({ invoke: (channel, ...args) => handlers.get(channel)(...args),
     on: (channel, listener) => listeners.set(channel, listener), removeListener: channel => listeners.delete(channel) });
   await replies.readSavedSession(scope); await bridge.refresh(scope);
   assert.equal(replies.getState().savedSession.phase, 'ready');
   assert.equal(replies.getState().savedSession.discussionEntries[0].text, oldText);
   const reads = () => requests.filter(request => request.path.endsWith(`/assistant-sessions/${sessionId}`));
-  return { replies, memory, scope, sourceId, oldText, requests, reads, control, changed, bridge, deletes, entered, revalidations };
+  return { replies, scope, sourceId, oldText, requests, reads, control, changed, bridge, deletes, entered, revalidations };
 }
 
 test('来源DELETE回包挂起或丢失时即撤下实际讨论，期间不再读取，未知失败保持空直到权威重读', async t => {
@@ -95,21 +91,3 @@ test('来源DELETE回包挂起或丢失时即撤下实际讨论，期间不再�
   assert.equal(f.replies.getState().savedSession.discussionEntries[0].text, f.control.text, '配对settled应解除本次读锁');
 });
 
-test('来源started中止既有读取且迟到正文不复活，来源settled不提前解除独立owner变更读锁', async t => {
-  const f = await fixture(t), gate = Promise.withResolvers(); f.control.readGate = gate;
-  const reading = f.replies.readSavedSession(f.scope);
-  const oldRead = f.reads().at(-1);
-  const deleting = f.bridge.delete({ ...f.scope, sourceId: f.sourceId }); await f.entered.promise;
-  assert.equal(oldRead.signal.aborted, true, '来源started必须撤销既有读取令牌');
-  await f.memory.ownerLayeredContextChanged('started');
-  gate.resolve(); await reading;
-  assert.equal(JSON.stringify(f.replies.getState()).includes(f.oldText), false);
-  f.deletes.resolve(); await deleting; await Promise.all(f.revalidations);
-  const before = f.reads().length; await f.replies.readSavedSession(f.scope);
-  assert.equal(f.reads().length, before, 'source的settled不能替owner提前解锁');
-  await f.memory.ownerLayeredContextChanged('settled');
-  f.control.text = '两条生命周期各自结算后的权威讨论';
-  await f.replies.readSavedSession(f.scope);
-  assert.equal(f.replies.getState().savedSession.phase, 'ready');
-  assert.equal(f.replies.getState().savedSession.discussionEntries[0].text, f.control.text);
-});

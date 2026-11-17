@@ -15,7 +15,6 @@ import { createContactSessionBridge } from './contact-session';
 import { createReplyBridge } from './reply';
 import { createSqliteDiscussionBridge } from './sqlite-discussion';
 import { createSkillLearningBridge } from './skill-learning';
-import { createMemoryBridge } from './memory';
 import { createFixedMemoryProcessingBridge } from './fixed-memory-processing';
 import { createBindingConsentBridge } from './binding-consent';
 import { createSyncControlBridge } from './sync-control';
@@ -49,7 +48,6 @@ export function createAppBridge(renderer: RendererTransport, development = devel
     sqliteDiscussion: createSqliteDiscussionBridge(renderer),
     skillLearning: createSkillLearningBridge(renderer),
     sources: createSourceDeletionBridge(renderer),
-    memory: createMemoryBridge(renderer),
     fixedMemoryProcessing: createFixedMemoryProcessingBridge(renderer),
     sqliteMemoryManagement: createSqliteMemoryManagementBridge(renderer),
     backgroundTasks: createBackgroundTaskBridge(renderer),

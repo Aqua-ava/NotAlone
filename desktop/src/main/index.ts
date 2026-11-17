@@ -8,7 +8,7 @@ import { installUsageBridge } from './usage/bridge';
 import { WechatSetupController } from './setup/wechat-controller';
 import { installWechatSetupBridge } from './setup/wechat-bridge';
 import { installForegroundBridge } from './foreground/bridge';
-import { coordinateOwnerContextChanges, coordinateSourceContextChanges } from './reply/owner-context-changes';
+import { coordinateSourceContextChanges } from './reply/owner-context-changes';
 import { NativeHeaderChangeSource } from './foreground/native-change-source';
 import { createHeaderChangeDiagnosticSink,openHeaderChangeDiagnostics } from './foreground/header-change-diagnostics';
 import { resolveHeaderChangeSourcePath } from './backend/bundled-helpers';
@@ -30,7 +30,6 @@ import { ContactDeletionQuiet } from './contacts/deletion-quiet';
 import { installReplyBridge } from './reply/bridge';
 import { installSqliteDiscussionBridge } from './reply/sqlite-discussion-bridge';
 import { installSkillLearningBridge } from './skill-learning/bridge';
-import { installMemoryBridge } from './memory/bridge';
 import { installFixedMemoryProcessingBridge } from './memory/fixed-processing';
 import { installSourceDeletionBridge } from './sources/bridge';
 import { installBindingConsentBridge } from './bindings/bridge';
@@ -135,7 +134,6 @@ void app.whenReady().then(async () => {
   windows.setHelperObservation({ beforeShow: () => foreground.observeBeforeShow(),
     onLifecycle: (event) => { foreground.notifyHelperLifecycle(event); replies.notifyHelperLifecycle(event); } });
   app.on('will-quit', () => foreground.dispose());
-  const memory = installMemoryBridge(commands, backend, contacts);
   const fixedMemoryProcessing = installFixedMemoryProcessingBridge(commands, backend, contacts);
   const sqliteMemoryManagement = installSqliteMemoryManagementBridge(commands, backend, contacts);
   let memoryScopeRevision = contacts.getState().scopeRevision;
@@ -146,7 +144,6 @@ void app.whenReady().then(async () => {
   });
   installBackgroundTaskBridge(commands, backend, contacts);
   const traces = installTraceBridge(commands, backend, contacts);
-  memory.onRecordDeletion((phase) => traces.recordDeletionChanged(phase));
   const beginReadingScopeChange = () => {
     const traceId=currentDiagnosticTrace()??newTraceId();
     const finishForeground = withDiagnosticTrace(traceId,()=>foreground.beginReadingScopeChange());
@@ -174,13 +171,10 @@ void app.whenReady().then(async () => {
   foreground.setSyncControlState(sync.getState());
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
   const sqliteDiscussion = installSqliteDiscussionBridge(commands, backend, contacts,()=>foreground.getGenerationBlock()===null);
-  coordinateOwnerContextChanges(memory, replies);
-  memory.onOwnerContextChanged((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
-  memory.onRecordDeletion((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   replies.onSessionDeletion((phase) => { if (phase === 'started') sqliteDiscussion.synchronize(true); });
   installSkillLearningBridge(commands, backend,()=>sqliteDiscussion.synchronize(true));
   dataLifecycle = new DesktopDataLifecycle({history: contactHistory, media, traces,
-    memory, processing: fixedMemoryProcessing, management: sqliteMemoryManagement, discussion: sqliteDiscussion, replies});
+    processing: fixedMemoryProcessing, management: sqliteMemoryManagement, discussion: sqliteDiscussion, replies});
   let settleHistoryClear: (() => Promise<void>) | undefined;
   let resyncWasComplete = false;
   historyClear.onStateChanged(state => {
@@ -200,7 +194,6 @@ void app.whenReady().then(async () => {
   const sources = installSourceDeletionBridge(commands, backend, contacts, contactId => dataLifecycle.sourceChanged(contactId));
   coordinateSourceContextChanges(sources, replies);
   sources.onDeletion((phase) => {
-    memory.sourceDeletionChanged(phase);
     if (phase === 'started') dataLifecycle.withdraw('source-deletion');
   });
   backend.setConnectionChangePreparation(() => dataLifecycle.connectionChanging());
