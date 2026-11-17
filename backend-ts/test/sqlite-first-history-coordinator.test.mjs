@@ -348,12 +348,15 @@ test('成功目录移除失授权联系人后，不保留旧失败或重新读�
  assert.equal(calls,1);assert.equal(coordinator.getState().lastError,null);assert.equal(coordinator.getState().phase,'idle');assert.deepEqual(coordinator.getState().contacts,[]);
 });
 
-test('目录撤销在途联系人时等待取消完成，迟到失败不能重新插回旧状态',async t=>{
+test('目录撤销在途联系人时等待取消完成，迟到失败不能重新插回旧状态',{timeout:3000},async t=>{
  const binding={contact_id:'synthetic-contact',binding_id:'synthetic-binding',grant_id:'synthetic-grant',selection_generation:'1',status:'active'};
  let bindings=[binding],calls=0,signal;
  const entered=deferred(),released=deferred();
  const history={coverage:async()=>({phase:'not_started'}),synchronize:async(_contactId,currentSignal)=>{calls++;signal=currentSignal;entered.resolve();await released.promise;throw new StorageFailure('history_source_changed');},stop:async()=>{released.resolve();}};
  const coordinator=new FirstHistoryCoordinator({directory:async()=>({read_enabled:true,bindings})},history);t.after(()=>coordinator.close());
- coordinator.wake();await entered.promise;bindings=[];coordinator.wake();await coordinator.waitForIdle();
+ coordinator.wake();let timer;
+ try{await Promise.race([entered.promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('缺少首次历史 synchronize 请求，未进入取消闸门')),1000);})]);}
+ finally{clearTimeout(timer);}
+ bindings=[];coordinator.wake();await coordinator.waitForIdle();
  assert.equal(signal.aborted,true);assert.equal(calls,1);assert.equal(coordinator.getState().lastError,null);assert.deepEqual(coordinator.getState().contacts,[]);
 });
