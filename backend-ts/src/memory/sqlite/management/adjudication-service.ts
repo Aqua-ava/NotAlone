@@ -20,7 +20,7 @@ function providerFailureOf(error:unknown):{name:string;code:string;status?:numbe
  return {name:v.name,code:v.code,...(typeof v.status==='number'?{status:v.status}:{})};
 }
 export class SqliteMemoryAdjudication {
- private readonly stopped=new AbortController();private pending=new Set<Promise<unknown>>();private active=new Map<string,{contactId:string|undefined;retryKnownFailures:boolean;work:Promise<unknown>}>();private closing?:Promise<void>;
+ private readonly stopped=new AbortController();private active=new Map<string,{contactId:string|undefined;retryKnownFailures:boolean;work:Promise<unknown>}>();private closing?:Promise<void>;
  private storage:SqliteStorage;readonly ownerId:string;private port:SqliteAdjudicationModelPort|undefined;private holders:ActiveHolders;private content:{registry:MemoryContentRegistry;resources?:MemoryContentResources};
  constructor(storage:SqliteStorage,ownerId:string,port:SqliteAdjudicationModelPort|undefined,holders:ActiveHolders,content:{registry:MemoryContentRegistry;resources?:MemoryContentResources}={registry:createBuiltinMemoryContentRegistry()}){this.storage=storage;this.ownerId=ownerId;this.port=port;this.holders=holders;this.content=content;}
  async initialize(){const attempts=await this.storage.execute<string[]>('memoryAdjudication.interrupted',{ownerId:this.ownerId});if(attempts.length)await this.storage.execute('memoryAdjudication.fail',{ownerId:this.ownerId,attemptIds:attempts,code:'runtime_interrupted'});}
@@ -30,7 +30,7 @@ export class SqliteMemoryAdjudication {
   const retryKnownFailures=options.retryKnownFailures===true;
   if(retryKnownFailures&&!contactId)return Promise.reject(new StorageFailure('memory_adjudication_scope_invalid'));
   const prior=this.active.get(runId);if(prior)return prior.contactId===contactId&&prior.retryKnownFailures===retryKnownFailures?prior.work:Promise.reject(new StorageFailure('memory_adjudication_run_busy'));
-  const work=this.publish(runId,contactId,retryKnownFailures);this.active.set(runId,{contactId,retryKnownFailures,work});this.pending.add(work);void work.finally(()=>{this.active.delete(runId);this.pending.delete(work);}).catch(()=>{});return work;
+  const work=this.publish(runId,contactId,retryKnownFailures);this.active.set(runId,{contactId,retryKnownFailures,work});void work.then(()=>this.active.delete(runId),()=>this.active.delete(runId));return work;
  }
  private async publish(runId:string,contactId?:string,retryKnownFailures=false){
   const imported=await new SqliteMemoryManagement(this.storage,this.ownerId).importRun(runId,contactId),results:unknown[]=[];
@@ -92,5 +92,5 @@ export class SqliteMemoryAdjudication {
   await requireCurrent();await this.storage.execute('memoryAdjudication.output',{ownerId:this.ownerId,attemptId:stage.attemptId,callId:call.callId,blocks:result.blocks});
   signal.throwIfAborted();await this.storage.execute('memoryAdjudication.renew',{ownerId:this.ownerId,attemptIds:claims.map(claim=>claim.attemptId),progressCallId:call.callId});return result;
  }
- close():Promise<void>{return this.closing??=(async()=>{this.stopped.abort();await Promise.allSettled([...this.pending]);await this.port?.close();})().catch(error=>{this.closing=undefined;throw error;});}
+ close():Promise<void>{return this.closing??=(async()=>{this.stopped.abort();await Promise.allSettled([...this.active.values()].map(entry=>entry.work));await this.port?.close();})().catch(error=>{this.closing=undefined;throw error;});}
 }

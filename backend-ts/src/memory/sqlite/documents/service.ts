@@ -22,7 +22,7 @@ export interface DocumentModelPort {
 /** 一个owner的文档处理服务；输入由真实任务及存储事务产生。 */
 export class SqliteMemoryDocuments {
  private readonly storage:SqliteStorage;readonly ownerId:string;private readonly model:DocumentModelPort|undefined;private readonly holders:ActiveHolders;
- private readonly stop=new AbortController();private pending=new Set<Promise<unknown>>();private active=new Map<string,{contactId:string|undefined;retryKnownFailures:boolean;work:Promise<unknown>}>();private closing?:Promise<void>;
+ private readonly stop=new AbortController();private active=new Map<string,{contactId:string|undefined;retryKnownFailures:boolean;work:Promise<unknown>}>();private closing?:Promise<void>;
  constructor(storage:SqliteStorage,ownerId:string,model:DocumentModelPort|undefined,holders:ActiveHolders){this.storage=storage;this.ownerId=ownerId;this.model=model;this.holders=holders;}
  async initialize(){
   await this.storage.execute('memoryDocuments.recover',{ownerId:this.ownerId});
@@ -56,14 +56,14 @@ export class SqliteMemoryDocuments {
   const retryKnownFailures=options.retryKnownFailures===true;
   if(retryKnownFailures&&!contactId)return Promise.reject(new StorageFailure('document_scope_invalid'));
   const prior=this.active.get(runId);if(prior)return prior.contactId===contactId&&prior.retryKnownFailures===retryKnownFailures?prior.work:Promise.reject(new StorageFailure('document_run_busy'));
-  const work=withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>this.run(runId,contactId,retryKnownFailures));this.active.set(runId,{contactId,retryKnownFailures,work});this.pending.add(work);void work.then(()=>{this.pending.delete(work);this.active.delete(runId);},()=>{this.pending.delete(work);this.active.delete(runId);});return work;
+  const work=withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>this.run(runId,contactId,retryKnownFailures));this.active.set(runId,{contactId,retryKnownFailures,work});void work.then(()=>this.active.delete(runId),()=>this.active.delete(runId));return work;
  }
  /** 用户显式恢复已知回执的画像；只重放本地材料，不获取模型许可或发起模型调用。 */
  replayVerifiedProfile(taskId:string):Promise<unknown>{
   if(this.stop.signal.aborted)return Promise.reject(new StorageFailure('document_service_closed'));
   const key=`profile-replay:${taskId}`,prior=this.active.get(key);if(prior)return prior.work;
   const work=withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>this.replayProfile(taskId));
-  this.active.set(key,{contactId:undefined,retryKnownFailures:false,work});this.pending.add(work);void work.then(()=>{this.active.delete(key);this.pending.delete(work);},()=>{this.active.delete(key);this.pending.delete(work);});return work;
+  this.active.set(key,{contactId:undefined,retryKnownFailures:false,work});void work.then(()=>this.active.delete(key),()=>this.active.delete(key));return work;
  }
  private async replayProfile(taskId:string):Promise<unknown>{
   const prepared=await this.storage.execute<VerifiedProfileReplay>('memoryDocuments.prepareVerifiedProfileReplay',{ownerId:this.ownerId,taskId});
@@ -166,5 +166,5 @@ export class SqliteMemoryDocuments {
  }
  readTask(taskId:string){return this.storage.execute<any>('memoryDocuments.readTask',{ownerId:this.ownerId,taskId});}
  read(scope:MemoryScope){return this.storage.execute<any>('memoryDocuments.read',{ownerId:this.ownerId,scope});}
- close():Promise<void>{return this.closing??=(async()=>{this.stop.abort();await Promise.allSettled([...this.pending]);await this.model?.close?.();})().catch(error=>{this.closing=undefined;throw error;});}
+ close():Promise<void>{return this.closing??=(async()=>{this.stop.abort();await Promise.allSettled([...this.active.values()].map(entry=>entry.work));await this.model?.close?.();})().catch(error=>{this.closing=undefined;throw error;});}
 }
