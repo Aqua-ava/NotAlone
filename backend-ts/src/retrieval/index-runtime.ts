@@ -27,6 +27,20 @@ type DrainResult='idle'|'yield';
 const stopped=()=>new StorageFailure('retrieval_runtime_closed');
 function validVectors(vectors:readonly (readonly number[])[],count:number):boolean{return vectors.length===count&&vectors.every(v=>v.length===512&&v.every(Number.isFinite)&&v.some(x=>x!==0));}
 
+/** 仅估算推理批次的 padding 成本，不是 token 预算，也不截断实际输入。 */
+function* inferenceBatches(items:readonly VectorIndexItem[]):Generator<VectorIndexItem[]> {
+ const budget=512;
+ let batch:VectorIndexItem[]=[],longest=0;
+ for(const item of items){
+  let length=2;
+  for(const _ of item.text){if(++length>=budget)break;}
+  const paddedLength=Math.max(longest,length);
+  if(batch.length&&paddedLength*(batch.length+1)>budget){yield batch;batch=[];longest=0;}
+  batch.push(item);longest=Math.max(longest,length);
+ }
+ if(batch.length)yield batch;
+}
+
 /** 派生索引只处理已接纳本机资料；模型与事务分离，后台不创建Agent或外部调用。 */
 export function createRetrievalIndex(options:Options):RetrievalIndexLifecycle {
  const fingerprint=options.fingerprint??RETRIEVAL_EMBEDDING_FINGERPRINT;
@@ -78,7 +92,11 @@ export function createRetrievalIndex(options:Options):RetrievalIndexLifecycle {
   return vectors;
  });
  const backfill=async(items:VectorIndexItem[])=>held(items.map(item=>({contactId:item.contactId??undefined,generation:item.generation,holderKeys:item.holderKeys,coversAllContacts:item.coversAllContacts})),async signal=>{
-  const vectors=await infer(items.map(item=>item.text),'backfill',signal);
+  const vectors:(readonly number[])[]=[];
+  for(const batch of inferenceBatches(items)){
+   // 每个真实推理完成后重新进入同一 lane，让已排队查询先运行；整批来源仍由 held 持有。
+   vectors.push(...await infer(batch.map(item=>item.text),'backfill',signal));
+  }
   signal.throwIfAborted();if(closed)throw stopped();
   return execute<{committed:number;rejected:number}>('retrieval.commitVectorBatch',{items:items.map((item,n)=>({docId:item.docId,bodySeal:item.bodySeal,generation:item.generation,modelFingerprint:fingerprint,vector:vectors[n]}))});
  });

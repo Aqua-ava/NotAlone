@@ -88,6 +88,103 @@ test('正文在推理期间修订导致CAS拒绝时保留待处理且本轮不�
  finally{await index.close();}
 });
 
+const longItems=(count=8)=>Array.from({length:count},(_,n)=>item('long-'+n,`合成长文${n}：${'长'.repeat(510)}`));
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+const documentIndices=(calls,documents)=>calls.flat().map(text=>documents.findIndex(row=>row.text===text));
+
+test('默认八条短文仍共用一次模型批次与一次完整提交',async()=>{
+ const documents=Array.from({length:8},(_,n)=>item('short-'+n,`合成简短正文${n}`)),storage=store(documents),calls=[],commits=[];
+ const execute=storage.execute.bind(storage);storage.execute=async(name,input)=>{if(name==='retrieval.commitVectorBatch')commits.push(input.items.length);return execute(name,input);};
+ const index=createRetrievalIndex({storage,ownerId:'owner',holders:new ActiveHolders(),embed:async texts=>{calls.push([...texts]);return texts.map(vector);}});
+ try{
+  await index.flushForTests();
+  assert.deepEqual(calls,[documents.map(row=>row.text)]);
+  assert.deepEqual(commits,[8]);assert.equal(storage.saved.size,8);
+ }finally{await index.close();}
+});
+
+test('默认领取八条长文时查询在真实首单元后按FIFO插入，单模型与整批提交保持不变',async()=>{
+ const documents=longItems(),storage=store(documents),calls=[],commits=[],first=deferred(),started=deferred();
+ const execute=storage.execute.bind(storage);let active=0,maxActive=0;
+ storage.execute=async(name,input)=>{if(name==='retrieval.commitVectorBatch')commits.push(input.items.map(row=>row.docId));return execute(name,input);};
+ const index=createRetrievalIndex({storage,ownerId:'owner',holders:new ActiveHolders(),embed:async texts=>{
+  calls.push([...texts]);maxActive=Math.max(maxActive,++active);
+  try{if(calls.length===1){started.resolve();await first.promise;}
+   return texts.map(text=>[Math.max(1,documents.findIndex(row=>row.text===text)+1),...Array(511).fill(0)]);
+  }finally{active--;}
+ }});
+ const filling=index.flushForTests();
+ try{
+  await started.promise;
+  const queries=[index.queryVector('合成查询甲',new AbortController().signal),index.queryVector('合成查询乙',new AbortController().signal)];
+  await tick();assert.equal(calls.length,1,'已开始的模型推理不能被查询假抢占');
+  assert.equal(calls[0].length,1,'长文的不可抢占推理单元不应占满已领取的八条资料');
+  first.resolve();await Promise.all(queries);await filling;
+  assert.deepEqual(calls.slice(1,3),[['合成查询甲'],['合成查询乙']]);
+  assert.equal(maxActive,1);
+  assert.deepEqual(documentIndices(calls,documents).filter(n=>n>=0),documents.map((_,n)=>n));
+  assert.deepEqual(commits,[documents.map(row=>row.docId)],'所有向量完成后才提交整批');
+  for(const [n,row]of documents.entries())assert.equal(storage.saved.get(row.docId)[0],n+1);
+ }finally{first.resolve();await filling.catch(()=>{});await index.close();}
+});
+
+test('删除尚未推理的批内来源仍等待真实首单元，随后停止余下推理且不部分提交',async()=>{
+ const documents=longItems(),storage=store(documents),holders=new ActiveHolders(),first=deferred(),started=deferred(),calls=[];
+ const index=createRetrievalIndex({storage,ownerId:'owner',holders,embed:async texts=>{calls.push([...texts]);if(calls.length===1){started.resolve();await first.promise;}return texts.map(vector);}});
+ const filling=index.flushForTests(),rejected=assert.rejects(filling,error=>error.code==='retrieval_runtime_closed');
+ try{
+  await started.promise;
+  const op={ownerId:'owner',scope:{kind:'source',contactId:'contact'},acceptedGeneration:1n};
+  let drained=false;const draining=holders.drain(op,['doc:'+documents.at(-1).docId],1000).then(()=>{drained=true;});
+  await tick();assert.equal(drained,false,'已登记的后续来源也必须等真实在途推理结束');
+  assert.equal(storage.saved.size,0);
+  first.resolve();await draining;await rejected;
+  assert.deepEqual(documentIndices(calls,documents),[0],'删除后不能继续处理批内剩余正文');
+  assert.equal(storage.saved.size,0);assert.equal(storage.pending.length,documents.length);
+  assert.equal(holders.verify(op,['doc:'+documents.at(-1).docId]),true);
+ }finally{first.resolve();await filling.catch(()=>{});await index.close();}
+});
+
+test('分段回填关闭等待真实推理，并禁止尚未开始的查询和正文进入模型',async()=>{
+ const documents=longItems(),storage=store(documents),first=deferred(),started=deferred(),calls=[];
+ const index=createRetrievalIndex({storage,ownerId:'owner',holders:new ActiveHolders(),embed:async texts=>{calls.push([...texts]);if(calls.length===1){started.resolve();await first.promise;}return texts.map(vector);}});
+ const filling=index.flushForTests(),rejectedFilling=assert.rejects(filling,error=>error.code==='retrieval_runtime_closed');
+ try{
+  await started.promise;
+  const query=index.queryVector('合成关闭前排队查询',new AbortController().signal),rejectedQuery=assert.rejects(query,error=>error.code==='retrieval_runtime_closed');
+  await tick();let closed=false;const closing=index.close().then(()=>{closed=true;});
+  await tick();assert.equal(closed,false);assert.equal(storage.saved.size,0);
+  first.resolve();await closing;await rejectedQuery;await rejectedFilling;
+  assert.deepEqual(documentIndices(calls,documents),[0]);assert.equal(storage.saved.size,0);
+ }finally{first.resolve();await filling.catch(()=>{});await index.close();}
+});
+
+for(const failure of ['error','invalid'])test(`回填中间推理单元${failure}不继续或部分提交`,async()=>{
+ const storage=store(longItems(3));let calls=0,commits=0;
+ const execute=storage.execute.bind(storage);storage.execute=async(name,input)=>{if(name==='retrieval.commitVectorBatch')commits++;return execute(name,input);};
+ const index=createRetrievalIndex({storage,ownerId:'owner',holders:new ActiveHolders(),embed:async texts=>{
+  if(++calls===2){if(failure==='error')throw new Error('合成中间单元失败');return [Array(511).fill(1)];}
+  return texts.map(vector);
+ }});
+ try{
+  await assert.rejects(index.flushForTests(),error=>failure==='error'?error.message==='合成中间单元失败':error.code==='retrieval_embedding_invalid');
+  assert.equal(calls,2);assert.equal(commits,0);assert.equal(storage.saved.size,0);assert.equal(storage.pending.length,3);
+ }finally{await index.close();}
+});
+
+test('等待回填期间取消的未开始查询不调用模型，回填仍能完整提交',async()=>{
+ const documents=longItems(),storage=store(documents),first=deferred(),started=deferred(),calls=[],controller=new AbortController();
+ const index=createRetrievalIndex({storage,ownerId:'owner',holders:new ActiveHolders(),embed:async texts=>{calls.push([...texts]);if(calls.length===1){started.resolve();await first.promise;}return texts.map(vector);}});
+ const filling=index.flushForTests();
+ try{
+  await started.promise;
+  const query=index.queryVector('合成取消排队查询',controller.signal),rejected=assert.rejects(query,/合成排队取消/);
+  await tick();controller.abort(new Error('合成排队取消'));await rejected;
+  assert.equal(calls.length,1);first.resolve();await filling;
+  assert.deepEqual(documentIndices(calls,documents),documents.map((_,n)=>n));assert.equal(storage.saved.size,documents.length);
+ }finally{first.resolve();await filling.catch(()=>{});await index.close();}
+});
+
 test('隔离SQLite中的L0与L1向量在索引生命周期重开后继续复用',async t=>{
  const {fixture,owner}=await import('./fixtures/memory-sqlite/support.mjs');
  const {SqliteMemoryManagement}=await import('../src/memory/sqlite/management/service.ts');
