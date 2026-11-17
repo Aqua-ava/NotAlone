@@ -19,4 +19,6 @@ export interface VectorIndexItem {
  docId:string;kind:RetrievalKind;id:string;contactId:string|null;versionNo?:bigint;text:string;
  bodySeal:string;generation:bigint;modelFingerprint:string;holderKeys:string[];coversAllContacts:boolean;
 }
+/** 仅说明当前固定扫描段是否有后续页，不等同于全范围索引覆盖状态。 */
+export interface VectorIndexBatch {items:VectorIndexItem[];scanMore:boolean}
 export const retrievalHolderKey=(docId:string)=>`retrieval:${docId}`;

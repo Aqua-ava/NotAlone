@@ -10,7 +10,7 @@ function store(documents=[]){
  return {saved,pending,async execute(name,input){
   if(name==='retrieval.syncTextBatch'){const processed=textBatches;textBatches=0;return {processed,remaining:0};}
   if(name==='retrieval.coverage')return {indexIncomplete:textBatches>0||pending.length>0};
-  if(name==='retrieval.claimVectorBatch')return {items:pending.slice(0,input.limit),remaining:Math.max(0,pending.length-input.limit)};
+  if(name==='retrieval.claimVectorBatch')return {items:pending.slice(0,input.limit),scanMore:pending.length>input.limit};
   if(name==='retrieval.commitVectorBatch'){for(const row of input.items){saved.set(row.docId,row.vector);const index=pending.findIndex(x=>x.docId===row.docId);if(index>=0)pending.splice(index,1);}return {committed:input.items.length,rejected:0};}
   assert.fail('未知动作 '+name);
  }};
@@ -205,14 +205,14 @@ test('隔离SQLite中的L0与L1向量在索引生命周期重开后继续复用'
  }finally{await second.close();}
 });
 
-test('无效前缀页不阻塞合法尾部回填，到扫描尾后不根据remaining循环重扫',async()=>{
+test('无效前缀页不阻塞合法尾部回填，scanMore结束后不循环重扫',async()=>{
  const storage=store([item('tail','合法尾部正文')]),execute=storage.execute.bind(storage);let scans=0;
  storage.execute=async(name,input)=>{
   if(name==='retrieval.claimVectorBatch'){
    scans++;
-   if(scans===1)return {items:[],remaining:130,scanMore:true};
-   if(scans===2)return {items:[item('tail','合法尾部正文')],remaining:129,scanMore:false};
-   return {items:[],remaining:129,scanMore:false};
+   if(scans===1)return {items:[],scanMore:true};
+   if(scans===2)return {items:[item('tail','合法尾部正文')],scanMore:false};
+   return {items:[],scanMore:false};
   }
   return execute(name,input);
  };
@@ -224,7 +224,7 @@ test('无效前缀页不阻塞合法尾部回填，到扫描尾后不根据remai
 test('连续空扫描每轮最多64页，留待单timer续扫并可正常关闭',async()=>{
  const storage=store(),execute=storage.execute.bind(storage),atLimit=deferred();let scans=0;
  storage.execute=async(name,input)=>{
-  if(name==='retrieval.claimVectorBatch'){if(++scans===64)atLimit.resolve();return {items:[],remaining:10000,scanMore:true};}
+  if(name==='retrieval.claimVectorBatch'){if(++scans===64)atLimit.resolve();return {items:[],scanMore:true};}
   return execute(name,input);
  };
  const index=createRetrievalIndex({storage,ownerId:'owner',holders:new ActiveHolders(),embed:async texts=>texts.map(vector)});
@@ -241,7 +241,7 @@ test('当前查询的联系人及本人资料先于全局长队列回填，其�
   if(name==='retrieval.coverage')return {indexIncomplete:eligible(input.contactId).length>0};
   if(name==='retrieval.syncTextBatch'){scopes.push(input.contactId);return {processed:0,remaining:0};}
   if(name==='retrieval.claimVectorBatch'){
-   const rows=eligible(input.contactId);return {items:rows.slice(0,input.limit),remaining:Math.max(0,rows.length-input.limit),scanMore:rows.length>input.limit};
+   const rows=eligible(input.contactId);return {items:rows.slice(0,input.limit),scanMore:rows.length>input.limit};
   }
   if(name==='retrieval.commitVectorBatch'){
    for(const row of input.items)remaining.splice(remaining.findIndex(item=>item.docId===row.docId),1);
@@ -283,7 +283,7 @@ test('启动先准备L1小池，当前L1查询只优先联系人与本人记忆�
   if(name==='retrieval.coverage')return {indexIncomplete:eligible(input).length>0};
   if(name==='retrieval.syncTextBatch')return {processed:0,remaining:0};
   if(name==='retrieval.claimVectorBatch'){
-   const rows=eligible(input);return {items:rows.slice(0,input.limit),remaining:Math.max(0,rows.length-input.limit),scanMore:rows.length>input.limit};
+   const rows=eligible(input);return {items:rows.slice(0,input.limit),scanMore:rows.length>input.limit};
   }
   if(name==='retrieval.commitVectorBatch'){
    for(const row of input.items)remaining.splice(remaining.findIndex(item=>item.docId===row.docId),1);

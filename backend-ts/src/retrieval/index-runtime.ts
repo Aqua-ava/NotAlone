@@ -3,7 +3,7 @@ import {StorageFailure} from '../storage/sqlite/contracts.ts';
 import type {SqliteStorage} from '../storage/sqlite/client.ts';
 import type {ActiveHolders} from '../storage/sqlite/deletion/holders.ts';
 import type {EmbedTexts} from './retrieval-embedding.ts';
-import {RETRIEVAL_MODEL_FINGERPRINT,type RetrievalKind,type VectorIndexItem} from './sqlite/contracts.ts';
+import {RETRIEVAL_MODEL_FINGERPRINT,type RetrievalKind,type VectorIndexItem,type VectorIndexBatch} from './sqlite/contracts.ts';
 
 /** 本机固定表示版本；正文向量可持久复用，query与本轮得分不持久化。 */
 export const RETRIEVAL_EMBEDDING_FINGERPRINT=RETRIEVAL_MODEL_FINGERPRINT;
@@ -117,7 +117,7 @@ export function createRetrievalIndex(options:Options):RetrievalIndexLifecycle {
       if(releasePreference(scope)){await new Promise<void>(resolve=>setImmediate(resolve));continue;}
       schedule(Math.max(idleMs,retryAt-Date.now()));return 'idle';
      }
-     const batch=await execute<{items:VectorIndexItem[];remaining:number;scanMore?:boolean}>('retrieval.claimVectorBatch',{...scope,limit:batchSize,modelFingerprint:fingerprint});
+     const batch=await execute<VectorIndexBatch>('retrieval.claimVectorBatch',{...scope,limit:batchSize,modelFingerprint:fingerprint});
      if(closed)return 'idle';
      if(!batch.items.length){
       if(batch.scanMore){await new Promise<void>(resolve=>setImmediate(resolve));continue;}
@@ -127,7 +127,7 @@ export function createRetrievalIndex(options:Options):RetrievalIndexLifecycle {
      const result=await backfill(batch.items);
      // CAS拒绝表示业务已变化；下次重新取合法快照，不在本轮反复读取同一项。
      if(result.rejected){schedule(idleMs);return 'idle';}
-     if(!batch.remaining||batch.scanMore===false){
+     if(!batch.scanMore){
       if(releasePreference(scope)){await new Promise<void>(resolve=>setImmediate(resolve));continue;}
       schedule(idleMs);return 'idle';
      }

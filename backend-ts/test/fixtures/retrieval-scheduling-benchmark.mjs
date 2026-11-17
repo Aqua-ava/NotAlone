@@ -51,7 +51,9 @@ function syntheticStorage(texts) {
   return {async execute(name, input) {
     if (name === 'retrieval.syncTextBatch') return {processed: 0, remaining: 0};
     if (name === 'retrieval.coverage') return {indexIncomplete: pending.length > 0};
-    if (name === 'retrieval.claimVectorBatch') return {items: pending.slice(0, input.limit), remaining: Math.max(0, pending.length - input.limit)};
+    // remaining 只供 --compare-runtime-module 的固定旧实现对照；当前正式合同仅消费 scanMore。
+    if (name === 'retrieval.claimVectorBatch') return {items: pending.slice(0, input.limit), scanMore: pending.length > input.limit,
+      remaining: Math.max(0, pending.length - input.limit)};
     if (name === 'retrieval.commitVectorBatch') {
       for (const row of input.items) {
         const index = pending.findIndex(item => item.docId === row.docId);

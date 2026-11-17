@@ -64,7 +64,7 @@ test('大量L0在前时L1可按层及联系人直接回填，分层游标不跳�
  const memory=await claim({kind:'memory',contactId});
  assert.deepEqual(memory.items.map(item=>item.id).sort(),[contact.memoryId,self.memoryId].sort());
  assert.ok(memory.items.every(item=>item.kind==='memory'&&(item.contactId===contactId||item.contactId===null)));
- assert.equal(memory.remaining,0);assert.equal((await commit(memory.items)).committed,2);
+ assert.equal(memory.scanMore,false);assert.equal(Object.hasOwn(memory,'remaining'),false);assert.equal((await commit(memory.items)).committed,2);
  assert.deepEqual(await f.storage.execute('retrieval.pending',{ownerId:owner,contactId,kind:'memory'}),{textPending:0,vectorPending:0});
  assert.deepEqual(await f.storage.execute('retrieval.pending',{ownerId:owner,kind:'memory'}),{textPending:0,vectorPending:1});
  const check=connect(f.root);let next;
@@ -80,6 +80,29 @@ test('大量L0在前时L1可按层及联系人直接回填，分层游标不跳�
  assert.equal(history.items[0].docId,next,'history独立范围没有继承memory的高位游标');
  assert.equal((await f.storage.execute('retrieval.syncTextBatch',{ownerId:owner,limit:1})).processed,1,'默认全层仍可继续历史词法回填');
  await assert.rejects(()=>f.storage.execute('retrieval.pending',{ownerId:owner,kind:'unknown'}),{code:'retrieval_request_invalid'});
+});
+
+test('真实SQLite领取越过失效来源空页，到扫描尾仍保留未覆盖诊断',async t=>{
+ const f=await fixture(t),[contactId,otherId]=f.saved.map(binding=>binding.contact_id);
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,
+  records:Array.from({length:130},(_,n)=>record(String(n+1))),completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(contactId);
+ f.channel.page=async()=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,
+  records:[record('9001')],completedPartitions:['shard-a'],exhausted:true});
+ await f.service.synchronize(otherId);
+ const {db,tx}=connect(f.root);
+ try{
+  tx.run("UPDATE source_proof SET state='needs_confirmation' WHERE owner_id=? AND contact_id=?",[owner,contactId]);
+  const claim=()=>f.storage.execute('retrieval.claimVectorBatch',{ownerId:owner,modelFingerprint:RETRIEVAL_MODEL_FINGERPRINT,limit:8});
+  const empty=await claim();assert.deepEqual(empty,{items:[],scanMore:true});
+  const tail=await claim();assert.equal(tail.scanMore,false);assert.equal(Object.hasOwn(tail,'remaining'),false);
+  assert.equal(tail.items.length,1);assert.equal(tail.items[0].contactId,otherId);
+  assert.deepEqual(await f.storage.execute('retrieval.commitVectorBatch',{ownerId:owner,items:tail.items.map(item=>({...item,vector:vector()}))}),{committed:1,rejected:0});
+  assert.deepEqual(await f.storage.execute('retrieval.pending',{ownerId:owner}),{textPending:0,vectorPending:130});
+  assert.deepEqual(await f.storage.execute('retrieval.coverage',{ownerId:owner}),{indexIncomplete:true});
+  // 到达扫描尾不代表全量齐备；下一轮绕回失效前缀，也只完成一次固定扫描段。
+  assert.deepEqual(await claim(),{items:[],scanMore:false});
+ }finally{db.close();}
 });
 
 test('正文修正使旧向量领取CAS失败，FTS同事务跟随新版本',async t=>{

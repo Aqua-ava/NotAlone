@@ -5,7 +5,7 @@ import {savedSourceScopeCTE,currentSourcePredicate} from '../../history/sqlite/c
 import {requireVersion} from '../../memory/sqlite/management/qualification.ts';
 import {sourceVerificationState} from '../../memory/sqlite/management/evidence.ts';
 import {memoryTimeEligibility} from '../../memory/sqlite/management/temporal.ts';
-import {RETRIEVAL_MODEL_FINGERPRINT,RETRIEVAL_VECTOR_DIMENSIONS,retrievalHolderKey,type RetrievalKind,type VectorIndexItem} from './contracts.ts';
+import {RETRIEVAL_MODEL_FINGERPRINT,RETRIEVAL_VECTOR_DIMENSIONS,retrievalHolderKey,type RetrievalKind,type VectorIndexItem,type VectorIndexBatch} from './contracts.ts';
 import {synchronizeRetrievalText,removeRetrievalVector} from './text-index.ts';
 import {searchTokenizerFingerprint} from '../search-tokenizer.ts';
 
@@ -101,8 +101,8 @@ export const retrievalIndexActions:StorageAction[]=[
   for(const row of rows)synchronizeRetrievalText(tx,i.ownerId,row.kind as RetrievalKind,String(row.entity_id));
   return {processed:rows.length,remaining:pending(tx,i.ownerId,i.contactId,i.modelFingerprint,i.kind).textPending};
  }},
- {name:'retrieval.claimVectorBatch',mode:'write',retryBusy:true,execute(tx,input){
-  const i=request(input),model=fingerprint(i.modelFingerprint),n=limit(i.limit,8,16);if(!admitted(tx,i.ownerId,i.contactId))return {items:[],remaining:0,scanMore:false};
+ {name:'retrieval.claimVectorBatch',mode:'write',retryBusy:true,execute(tx,input):VectorIndexBatch{
+  const i=request(input),model=fingerprint(i.modelFingerprint),n=limit(i.limit,8,16);if(!admitted(tx,i.ownerId,i.contactId))return {items:[],scanMore:false};
   // 默认全层保留既有游标；层内优先扫描独立编码，不推进或覆盖全局历史进度。
   const key=i.kind===undefined?i.contactId??'':JSON.stringify([i.contactId??null,i.kind]);
   const cursor=tx.get('SELECT last_doc_id FROM retrieval_vector_cursor WHERE owner_id=? AND contact_key=? AND model_fingerprint=?',[i.ownerId,key,model])?.last_doc_id??0n;
@@ -115,7 +115,7 @@ export const retrievalIndexActions:StorageAction[]=[
   for(const row of rows){last=row.id as bigint;const item=vectorItem(tx,row,model);if(item)items.push(item);if(items.length>=n)break;}
   tx.run('INSERT INTO retrieval_vector_cursor VALUES(?,?,?,?) ON CONFLICT(owner_id,contact_key,model_fingerprint) DO UPDATE SET last_doc_id=excluded.last_doc_id',[i.ownerId,key,model,last]);
   const scanMore=!wrapped&&last>0n&&!!tx.get(`SELECT 1 FROM retrieval_document WHERE owner_id=?${where} AND ${vectorPredicate} AND id>? LIMIT 1`,[...scopeValues,model,last]);
-  return {items,remaining:Math.max(0,pending(tx,i.ownerId,i.contactId,model,i.kind).vectorPending-items.length),scanMore};
+  return {items,scanMore};
  }},
  {name:'retrieval.commitVectorBatch',mode:'write',retryBusy:true,execute(tx,input){
   const i=request(input),raw=(input as {items?:unknown}).items;if(!Array.isArray(raw)||raw.length>16)return fail();
