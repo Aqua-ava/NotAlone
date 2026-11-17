@@ -31,7 +31,6 @@
     "onnxruntime-node": "1.30.0",
     "pino": "10.4.0",
     "sharp": "0.35.5",
-    "silk-wasm": "3.7.1",
     "sqlite-vec": "0.1.7-alpha.2",
     "yaml": "2.9.1"
   },
