@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
+import {isDeepStrictEqual} from 'node:util';
 import {
   L3ProfileWorkspace,
   filterProfileProposal,
@@ -305,6 +306,66 @@ test('L3核验输入超预算时在物理调用前拒绝', async () => {
   assert.equal(port.calls, 0);
 });
 
+test('L3生成上下文深冻结且不能改写工作区的读取和编译依据', () => {
+  const workspace=new L3ProfileWorkspace({version_id:randomUUID(),entries:[entry]},[scenario],[memory],budget);
+  const context=workspace.generationContext();
+  for(const value of [context,context.existing.entries,context.existing.entries[0],context.scenarios,
+    context.scenarios[0].paragraphs[0],context.memories,context.memories[0].timing,context.budget])assert.equal(Object.isFrozen(value),true);
+  assert.throws(()=>{context.existing.entries[0].text='尝试覆盖画像';},TypeError);
+  assert.throws(()=>{context.scenarios[0].paragraphs[0].text='尝试覆盖场景';},TypeError);
+  assert.throws(()=>{context.memories[0].timing.current_status='stable';},TypeError);
+  assert.throws(()=>{context.memories.push({...memory,revision:2});},TypeError);
+  assert.equal(workspace.memories,context.memories);
+  assert.match(workspace.read(`${scenario.scenario_id}.md`),new RegExp(memory.text));
+  workspace.write('profile.md',renderProfile({entries:[entry]}));
+  assert.equal(workspace.compile().entries[0].references[0].timing.current_status,'historical');
+});
+
+test('L3生成与编译使用同一冻结输入，构造后的外部修改不改变完整请求序列', async () => {
+  const initial = {existing:{version_id:randomUUID(),entries:[entry]},scenarios:[scenario],memories:[memory],budget};
+  const claim = {task_id:randomUUID(),step_id:randomUUID(),step_name:'organize_memory',worker_id:randomUUID(),lease_generation:1};
+  const ownerId=randomUUID(),contactId=randomUUID(),batchId=randomUUID();
+  async function run(mutate) {
+    const input=structuredClone(initial),requests=[];
+    const workspace=new L3ProfileWorkspace(input.existing,input.scenarios,input.memories,input.budget);
+    if(mutate){
+      input.existing.entries[0].text='构造后改写的旧画像';
+      input.scenarios[0].title='构造后改写的场景';
+      input.scenarios[0].paragraphs[0].text='构造后改写的场景正文';
+      input.memories[0].text='构造后改写的底层记忆';
+      input.memories[0].revision=2;
+      input.memories[0].timing.current_status='stable';
+      input.budget.max_characters=1;
+    }
+    const port={async call(request){
+      const {signal,requireCurrent,messages,...data}=request;
+      requests.push({...structuredClone(data),messages:messages.map(({id,...message})=>structuredClone(message))});
+      const round=requests.length;
+      const [name,args]=round===1?['read',{path:`${scenario.scenario_id}.md`}]
+        :round===2?['write',{path:'profile.md',content:renderProfile({entries:[entry]})}]
+        :['ProfileProposalComplete',{}];
+      return {blocks:[{type:'tool-call',id:`frozen-profile-${round}`,name,arguments:JSON.stringify(args)}],receipt_id:null};
+    }};
+    const result=await runProfileDocumentAgent({
+      workspace,changedScenarioIds:input.scenarios.map(scene=>scene.scenario_id),removedScenarioVersionIds:[],corrections:[],
+      port,claim,owner_id:ownerId,contact_id:contactId,batch_id:batchId,
+      binding:{provider:'synthetic-provider',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off'},
+      profile:{context_window_tokens:32_000,safety_margin_tokens:512},signal:new AbortController().signal,
+      requireCurrent:async()=>{},remainingCalls:6,
+    });
+    return {workspace,requests,result};
+  }
+  const baseline=await run(false),mutated=await run(true);
+  let initialText=baseline.requests[0].messages[0].content[0].text;
+  for(const [identity,label] of [[memory.memory_id,'memory-id'],[scenario.scenario_id,'scenario-id'],[scenario.version_id,'scenario-version'],[initial.existing.version_id,'profile-version']])initialText=initialText.replaceAll(identity,label);
+  assert.equal(createHash('sha256').update(initialText).digest('hex'),'861405cc7101398543f8ab0e1fd547ccda4f4d7a0c8c56341a87d123240d4547','保持重构前模型初始输入的完整字段、顺序与逐字内容');
+  assert.equal(mutated.requests.length,3);
+  assert.ok(isDeepStrictEqual(mutated.requests,baseline.requests),'消息正文、字段顺序、工具、提示及调用序列保持一致');
+  assert.deepEqual(mutated.result,baseline.result);
+  assert.equal(mutated.result.proposal.entries[0].references[0].revision,1);
+  assert.equal(mutated.result.proposal.entries[0].references[0].timing.current_status,'historical');
+});
+
 test('L3多轮提案压缩已执行工具历史，不以旧写入参数耗尽下一轮预算', async () => {
   const constrained = {...budget, max_characters:6_000};
   const workspace = new L3ProfileWorkspace(null, [scenario], [memory], constrained);
@@ -350,12 +411,8 @@ test('L3多轮提案压缩已执行工具历史，不以旧写入参数耗尽下
   }};
   const result = await runProfileDocumentAgent({
     workspace,
-    existing:null,
-    scenarios:[scenario],
-    memories:[memory],
-    changedScenarios:[scenario],
+    changedScenarioIds:[scenario.scenario_id],
     removedScenarioVersionIds:[],
-    baseProfileVersionId:null,
     corrections:[],
     port,
     claim:{task_id:randomUUID(),step_id:randomUUID(),step_name:'organize_memory',worker_id:randomUUID(),lease_generation:1},
@@ -401,12 +458,8 @@ test('L3多轮提案保留跨轮成功写入，末轮只读确认仍可提交', 
   }};
   const result = await runProfileDocumentAgent({
     workspace,
-    existing:null,
-    scenarios:[scenario],
-    memories:[memory],
-    changedScenarios:[scenario],
+    changedScenarioIds:[scenario.scenario_id],
     removedScenarioVersionIds:[],
-    baseProfileVersionId:null,
     corrections:[],
     port,
     claim:{task_id:randomUUID(),step_id:randomUUID(),step_name:'organize_memory',worker_id:randomUUID(),lease_generation:1},
@@ -446,12 +499,8 @@ test('L3多轮提案末轮工具错误不会被此前的成功写入掩盖', asy
   }};
   await assert.rejects(runProfileDocumentAgent({
     workspace,
-    existing:null,
-    scenarios:[scenario],
-    memories:[memory],
-    changedScenarios:[scenario],
+    changedScenarioIds:[scenario.scenario_id],
     removedScenarioVersionIds:[],
-    baseProfileVersionId:null,
     corrections:[],
     port,
     claim:{task_id:randomUUID(),step_id:randomUUID(),step_name:'organize_memory',worker_id:randomUUID(),lease_generation:1},
@@ -494,12 +543,8 @@ test('L3画像在错误写入后成功修正，并在五轮内通过显式完成
   }};
   const result = await runProfileDocumentAgent({
     workspace,
-    existing:null,
-    scenarios:[scenario],
-    memories:[memory],
-    changedScenarios:[scenario],
+    changedScenarioIds:[scenario.scenario_id],
     removedScenarioVersionIds:[],
-    baseProfileVersionId:null,
     corrections:[],
     port,
     claim:{task_id:randomUUID(),step_id:randomUUID(),step_name:'organize_memory',worker_id:randomUUID(),lease_generation:1},

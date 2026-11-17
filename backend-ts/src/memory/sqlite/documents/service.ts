@@ -190,7 +190,7 @@ export class SqliteMemoryDocuments {
   const port=this.port(claim,signal),options=this.options(claim,port,signal),scenarios=scene.scenarios,workspace=new L3ProfileWorkspace(claim.profile,scenarios,claim.memories,DEFAULT_L2_SCENARIO_BUDGET);
   const oldIds=new Set(claim.scenarios.map(s=>s.version_id)),newIds=new Set(scenarios.map(s=>s.version_id));
   const changed=scenarios.filter(s=>!oldIds.has(s.version_id)),removed=claim.scenarios.filter(s=>!newIds.has(s.version_id)).map(s=>s.version_id);
-  const proposal=await runProfileDocumentAgent({...options,workspace,existing:claim.profile,scenarios,memories:claim.memories,changedScenarios:changed,removedScenarioVersionIds:removed,baseProfileVersionId:claim.profile?.version_id??null,corrections:[],remainingCalls:DEFAULT_L2_SCENARIO_BUDGET.max_model_calls});
+  const proposal=await runProfileDocumentAgent({...options,workspace,changedScenarioIds:changed.map(s=>s.scenario_id),removedScenarioVersionIds:removed,corrections:[],remainingCalls:DEFAULT_L2_SCENARIO_BUDGET.max_model_calls});
   const checked=await verifyProfileProposal({...options,entries:proposal.proposal.entries,memories:claim.memories,scenarios,budget:DEFAULT_L2_SCENARIO_BUDGET,corrections:[],remainingCalls:Math.max(0,DEFAULT_L2_SCENARIO_BUDGET.max_model_calls-proposal.calls)});
   const verificationEventId=checked.receipts.at(-1);if(!verificationEventId)throw new StorageFailure('document_verification_unbound');
   await this.storage.execute('memoryDocuments.saveProfile',{ownerId:this.ownerId,attemptId:claim.attemptId,entries:proposal.proposal.entries,verificationEventId});

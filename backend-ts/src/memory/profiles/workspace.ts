@@ -80,10 +80,26 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '长期背景格式无效';
 }
 
+type ProfileGenerationContext = {
+  existing: L3ProfileDocument | null;
+  scenarios: readonly L2ScenarioVersion[];
+  memories: readonly L2ScenarioMemory[];
+  budget: L2ScenarioBudget;
+};
+
+function freezeGenerationContext<T>(value: T): T {
+  if (value && typeof value === 'object') {
+    for (const item of Object.values(value)) freezeGenerationContext(item);
+    Object.freeze(value);
+  }
+  return value;
+}
+
 /** 只能读取本次场景并写 profile.md；不映射任何真实文件系统路径。 */
 export class L3ProfileWorkspace {
   readonly budget: L2ScenarioBudget;
   readonly memories: readonly L2ScenarioMemory[];
+  private readonly initial: ProfileGenerationContext;
   private readonly scenarios = new Map<string, {version: L2ScenarioVersion; content: string}>();
   private content: string;
 
@@ -93,14 +109,20 @@ export class L3ProfileWorkspace {
     memories: readonly L2ScenarioMemory[],
     budget: L2ScenarioBudget,
   ) {
-    this.budget = clone(budget);
-    this.memories = clone(memories);
-    this.content = renderProfile(existing);
-    for (const scenario of scenarios) {
+    this.initial = freezeGenerationContext(clone({existing, scenarios, memories, budget}));
+    this.budget = this.initial.budget;
+    this.memories = this.initial.memories;
+    this.content = renderProfile(this.initial.existing);
+    for (const scenario of this.initial.scenarios) {
       if (!UUID.test(scenario.scenario_id) || !UUID.test(scenario.version_id)) invalid('l3_profile_scenario_invalid');
       const path = `${scenario.scenario_id}.md`;
-      this.scenarios.set(path, {version: clone(scenario), content: renderScenario(scenario)});
+      this.scenarios.set(path, {version: scenario, content: renderScenario(scenario)});
     }
+  }
+
+  /** 模型输入、文档读取与编译共用构造时的深冻结副本，不接收另一套资料。 */
+  generationContext(): Readonly<ProfileGenerationContext> {
+    return this.initial;
   }
 
   index(): Record<string, unknown>[] {
@@ -337,12 +359,8 @@ function continuationMessage(options: {
 
 export async function runProfileDocumentAgent(options: {
   workspace: L3ProfileWorkspace;
-  existing: L3ProfileDocument | null;
-  scenarios: readonly L2ScenarioVersion[];
-  memories: readonly L2ScenarioMemory[];
-  changedScenarios: readonly L2ScenarioVersion[];
+  changedScenarioIds: readonly string[];
   removedScenarioVersionIds: readonly string[];
-  baseProfileVersionId: string | null;
   corrections: readonly Record<string, unknown>[];
   port: ScenarioDocumentCallPort;
   claim: ScenarioDocumentCall['claim'];
@@ -356,6 +374,13 @@ export async function runProfileDocumentAgent(options: {
   remainingCalls: number;
 }): Promise<L3ProfileRunResult> {
   const {workspace} = options;
+  const input = workspace.generationContext();
+  const scenariosById = new Map(input.scenarios.map(scenario => [scenario.scenario_id, scenario]));
+  const changedScenarios = options.changedScenarioIds.map(id => {
+    const scenario = scenariosById.get(id);
+    if (!scenario) invalid('l3_profile_scenario_invalid');
+    return scenario;
+  });
   const tools = [...workspace.tools(), profileCompletionTool];
   const scenarioPaths = new Set(workspace.index().map(item => String(item.path)));
   const maxEntries = Math.min(MAX_PROFILE_ENTRIES, workspace.budget.max_memories);
@@ -385,14 +410,14 @@ export async function runProfileDocumentAgent(options: {
     source:{kind:'user'},
     content:[{type:'text', text:JSON.stringify({
       layer:'l3',
-      mode:options.existing ? 'incremental' : 'first',
-      existing_profile:options.existing,
-      changed_scenarios:options.changedScenarios,
-      changed_scenario_ids:options.changedScenarios.map(scenario => scenario.scenario_id),
+      mode:input.existing ? 'incremental' : 'first',
+      existing_profile:input.existing,
+      changed_scenarios:changedScenarios,
+      changed_scenario_ids:changedScenarios.map(scenario => scenario.scenario_id),
       removed_scenario_version_ids:options.removedScenarioVersionIds,
-      base_profile_version_id:options.baseProfileVersionId,
-      scenarios:options.scenarios,
-      memories:options.memories.map(memory => ({
+      base_profile_version_id:input.existing?.version_id ?? null,
+      scenarios:input.scenarios,
+      memories:input.memories.map(memory => ({
         memory_id:memory.memory_id,
         revision:memory.revision,
         text:memory.text,
