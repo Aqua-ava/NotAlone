@@ -1,5 +1,5 @@
 import type { PageTransport } from './transport';
-import type { ContactCreation, ContactDraft, ContactSelection, ContactSessionBridge, ContactSessionUpdate } from '../shared/contact-session-bridge';
+import type { ContactDraft, ContactSelection, ContactSessionBridge, ContactSessionUpdate } from '../shared/contact-session-bridge';
 
 export function createContactSessionBridge(ipcRenderer: PageTransport): ContactSessionBridge {
   const withoutArguments = (channel: string, args: unknown[]) => args.length === 0
@@ -8,7 +8,6 @@ export function createContactSessionBridge(ipcRenderer: PageTransport): ContactS
     getState: (...args: unknown[]) => withoutArguments('contacts:get-state', args),
     refreshContacts: (...args: unknown[]) => withoutArguments('contacts:refresh', args),
     selectContact: (selection: ContactSelection) => ipcRenderer.invoke('contacts:select', selection&&typeof selection==='object'?{...selection,traceId:selection.traceId??globalThis.crypto.randomUUID()}:selection),
-    createContact: (creation: ContactCreation) => ipcRenderer.invoke('contacts:create', creation),
     readAvatar: (selection: ContactSelection) => ipcRenderer.invoke('contacts:read-avatar', selection),
     confirmManualContact: (selection: ContactSelection) => ipcRenderer.invoke('contacts:confirm-manual', selection),
     setDraft: (draft: ContactDraft) => ipcRenderer.invoke('contacts:set-draft', draft),

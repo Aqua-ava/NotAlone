@@ -77,8 +77,6 @@ void app.whenReady().then(async () => {
   // 本次界面会话只在内存中，不跨重启保存草稿或网页存储。
   const appSession = session.fromPartition('notalone-app');
   installResources(appSession, development);
-  // preload 只按主进程声明的开发态暴露批量修复入口；打包宿主返回 packaged，不注册批量 IPC。
-  ipcMain.on('notalone:host-mode', (event) => { event.returnValue = development ? 'development' : 'packaged'; });
   const windows = new AppWindows(appSession);
   const resourcesDirectory = app.isPackaged ? process.resourcesPath : undefined;
   const diagnostics = new StartupDiagnostics(app.getPath('userData'), resourcesDirectory, development?.projectDirectory);

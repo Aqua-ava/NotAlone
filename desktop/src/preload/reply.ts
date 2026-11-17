@@ -40,12 +40,6 @@ export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
   };
   return Object.freeze({
     getState: (...args: unknown[]) => args.length === 0 ? getState() : Promise.reject(new Error('本次表达操作不可用。')),
-    onStateUpdated: (listener: (update: ReplyStateUpdate) => void) => {
-      if (typeof listener !== 'function') throw new Error('本次表达操作不可用。');
-      const receive = (_event: unknown, event: ReplyStateUpdate) => listener(event);
-      ipcRenderer.on('reply:state-updated', receive);
-      return () => ipcRenderer.removeListener('reply:state-updated', receive);
-    },
     retrySourceValidation: (...args: unknown[]) => ipcRenderer.invoke('reply:retry-source-validation', ...args),
     readSavedSession: (...args: unknown[]) => ipcRenderer.invoke('reply:read-saved-session', ...args),
     listSavedSessions: (...args: unknown[]) => ipcRenderer.invoke('reply:list-saved-sessions', ...args),

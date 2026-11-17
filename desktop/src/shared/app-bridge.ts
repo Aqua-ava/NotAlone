@@ -22,6 +22,7 @@ import type { HistoryClearBridge } from './history-clear-bridge';
 import type { ContactHistoryBridge } from './contact-history-bridge';
 import type { ContactDeletionBridge } from './contact-deletion-bridge';
 import type { QuarantineBridge } from './quarantine-bridge';
+import type { TraceBridge } from './trace-bridge';
 
 export type AppBridge = WindowBridge & DesktopBridge & {
   diagnosticLogs: DiagnosticLogBridge;
@@ -36,9 +37,7 @@ export type AppBridge = WindowBridge & DesktopBridge & {
   fixedMemoryProcessing: FixedMemoryProcessingBridge;
   sqliteMemoryManagement: SqliteMemoryManagementBridge;
   historyClear: HistoryClearBridge;
-  /** 仅开发宿主由 preload 暴露；打包宿主没有此入口。 */
   contactHistory: ContactHistoryBridge;
   contactDeletion: ContactDeletionBridge;
   quarantine: QuarantineBridge;
 };
-import type { TraceBridge } from './trace-bridge';

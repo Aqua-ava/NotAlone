@@ -27,7 +27,6 @@ export type ReplyStateUpdate = { kind: 'snapshot'; state: ReplySessionState }
       changes: Partial<ReplySessionState> };
 export interface ReplyBridge {
   getState(): Promise<ReplySessionState>;
-  onStateUpdated(listener: (update: ReplyStateUpdate) => void): () => void;
   retrySourceValidation(selection: ContactSelection): Promise<void>;
   readSavedSession(selection: ContactSelection): Promise<void>;
   listSavedSessions(selection: ContactSelection): Promise<void>;

@@ -6,7 +6,6 @@ import { normalizeUuid } from '../uuid';
 import type { ContactDeletionQuiet } from './deletion-quiet';
 import { readContactDirectory } from './directory';
 import { ContactSession } from './session';
-import { randomUUID } from 'node:crypto';
 import { readContactAvatar } from './avatar';
 
 export function selectionArguments(args: unknown[], withDraft = false): ContactSelection | ContactDraft {
@@ -44,27 +43,6 @@ export function installContactSessionBridge(commands: PageCommands, backend: Bac
   });
   commands.handle('contacts:read-avatar', (...args: unknown[]) => {
     return readContactAvatar(backend, contacts, selectionArguments(args));
-  }, 'manager');
-  let creating = false;
-  let creation: { name: string; id: string } | undefined;
-  commands.handle('contacts:create', async (...args: unknown[]) => {
-    const value = args[0] as Record<string, unknown> | undefined;
-    const state = contacts.getState(), generation = backend.getConnectionGeneration();
-    if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)
-      || Object.keys(value).sort().join(',') !== 'displayName,scopeRevision' || typeof value.displayName !== 'string'
-      || !value.displayName.trim() || value.displayName.trim().length > 100 || value.scopeRevision !== state.scopeRevision
-      || state.directoryPhase !== 'ready' || generation === undefined || creating) throw new Error('联系人创建不可用。');
-    const name = value.displayName.trim();
-    if (creation?.name !== name) creation = { name, id: randomUUID() };
-    creating = true;
-    try {
-      const response = await backend.requestJson({ method: 'POST', path: '/api/contacts',
-        body: { request_id: creation.id, display_name: name }, maxResponseBytes: 4096 });
-      if (response.generation !== generation || backend.getConnectionGeneration() !== generation) throw new Error('联系人创建状态已失效。');
-      await contacts.refreshContacts();
-      creation = undefined;
-      return contacts.getState();
-    } finally { creating = false; }
   }, 'manager');
   commands.handle('contacts:set-draft', (...args: unknown[]) => {
     return contacts.setDraft(selectionArguments(args, true) as ContactDraft);

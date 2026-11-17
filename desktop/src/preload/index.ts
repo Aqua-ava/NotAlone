@@ -23,16 +23,10 @@ import { createHistoryClearBridge } from './history-clear';
 import { createContactHistoryBridge } from './contact-history';
 import { createContactDeletionBridge } from './contact-deletion';
 import { createQuarantineBridge } from './quarantine';
+import { createTraceBridge } from './traces';
 
 type RendererTransport = typeof ipcRenderer;
-/** 主进程在加载页面前登记开发态查询；打包宿主不暴露批量入口。 */
-function developmentHost(renderer: RendererTransport): boolean {
-  try {
-    const sendSync = (renderer as { sendSync?: (channel: string) => unknown }).sendSync;
-    return typeof sendSync === 'function' && sendSync.call(renderer, 'notalone:host-mode') === 'development';
-  } catch { return false; }
-}
-export function createAppBridge(renderer: RendererTransport, development = developmentHost(renderer)): AppBridge {
+export function createAppBridge(renderer: RendererTransport): AppBridge {
   return {
     diagnosticLogs: createDiagnosticLogBridge(renderer),
     usage: createUsageBridge(renderer),
@@ -72,4 +66,3 @@ export function createAppBridge(renderer: RendererTransport, development = devel
 }
 const bridge = createAppBridge(ipcRenderer);
 contextBridge.exposeInMainWorld('notalone', Object.freeze(bridge));
-import { createTraceBridge } from './traces';
