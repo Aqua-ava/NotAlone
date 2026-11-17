@@ -175,18 +175,23 @@ export function replayMultimodalVerification(window:ExtractionWindow,facts:reado
  return format==='flat-fields-v2'?decodeFlat(readExtractionToolArguments(blocks,'SourceVerificationOutput',{repair:false,drop_stray_closers:true}).value,window,facts,fingerprint):
   decodeNested(argumentsEnvelope(blocks).value,window,facts,fingerprint);
 }
-export function prepareMultimodalVerification(options:{window:ExtractionWindow;facts:readonly ExtractedFact[];images:NonNullable<ExtractionInvocation['images']>;ruleVersion?:string;requireCurrent():Promise<void>;record?(event:{stage:string;payload:unknown}):Promise<void>}):PreparedVerification{
- const window=structuredClone(options.window),facts=structuredClone([...options.facts]);validateExtractionWindow(window);
- const images=structuredClone(options.images),expected=window.messages.flatMap(message=>message.image?[message.image]:[]);
+/** 校验图片准入并冻结来源窗口，返回同一快照摘要；不构造核验请求。 */
+export function validateMultimodalInput(window:ExtractionWindow,images:NonNullable<ExtractionInvocation['images']>):string{
+ validateExtractionWindow(window);
+ const expected=window.messages.flatMap(message=>message.image?[message.image]:[]);
  // 原始字节直接核对冻结摘要；内存规范化版本必须有本进程生成且绑定来源与发送字节的证明。
  if(!expected.length||expected.length!==images.length||new Set(images.map(image=>image.id)).size!==images.length
   ||expected.some(image=>!images.some(actual=>actual.id===image.id&&(
    actual.mimeType===image.mime_type&&sha256(Buffer.from(actual.dataBase64,'base64'))===image.sha256
    ||verifyNormalizedModelImage(actual,image.sha256)))))fail('images_missing');
+ return windowDigest(window);
+}
+export function prepareMultimodalVerification(options:{window:ExtractionWindow;facts:readonly ExtractedFact[];images:NonNullable<ExtractionInvocation['images']>;ruleVersion?:string;requireCurrent():Promise<void>;record?(event:{stage:string;payload:unknown}):Promise<void>}):PreparedVerification{
+ const windowSha=validateMultimodalInput(options.window,options.images);
+ const window=structuredClone(options.window),facts=structuredClone([...options.facts]),images=structuredClone(options.images);
  const system=prompt;
  const body=payload(window,facts),fingerprint=digest({policy:policyId,rule_version:options.ruleVersion??null,window,facts,prompt:system,schema});
- // 绑定值用原窗口对象的记忆化摘要；与断言侧的同一对象命中同一份序列化，整次核验至多算一次。
- const windowSha=windowDigest(options.window);
+ // 绑定沿用准入时冻结的原窗口摘要，断言侧复用同一对象的记忆化结果。
  const requestBody=body;
  let responseSha:string|undefined;
  const decodeResponse=async(blocks:readonly unknown[])=>{

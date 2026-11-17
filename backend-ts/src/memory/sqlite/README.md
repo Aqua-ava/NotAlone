@@ -16,6 +16,8 @@
 
 `service.ts`的`SqliteMemoryExtraction`绑定宿主owner，`start(requestKey)`只消费已保存资料，并异步执行固定目标；`pause/continue/read/trace/waitForIdle/close`不调用微信。`initialize()`只恢复状态，不重发模型。普通暂停在小批边界收尾；撤销和来源删除在每次发送与提交的同一短事务复验。`model-port.ts`沿原正常提取提示、complete-claim-v1核验策略和唯一ModelHost，禁自动HTTP/流程重试；`runtime.ts`供公共宿主组合，未配置时保留可见失败，不能隐式换供应商。宿主须注入llm并复用现有环境加载，不能因为工厂存在声称已经产品接线。
 
+提取运行时只有当前一条执行流程，不接受模式选择。v2 策略存档继续保留严格的 `mode: legacy` 字段以核对已有任务身份，但解析结果不向执行器传递该常量，也不迁移或静默升级旧任务。图文提取前与来源核验共用图片字节准入，并冻结原始来源窗口、复用同一摘要；提取前不构造无候选的核验请求。实际来源核验、策略指纹、提示词及采纳规则保持独立。
+
 多业务宿主先装配唯一ModelHost和provider，再将同一provider与permit传给`createSqliteExtractionModelPort`；同时向讨论传相同provider和该ModelHost的arbiter。提取端口`close`只取消并排空自己调用，不释放注入的共享provider；宿主须在记忆、讨论等所有调用者排空后统一dispose。未注入provider时，端口沿独立装配路径自行安装并释放，不能与另一个同名adapter并行装配。
 
 公共宿主调用`createSqliteMemoryRuntime`时注入`sharedModel: {configuration, provider, permit, resolveUserId}`。此分支只使用共享许可端点及adapter，匿名身份已由provider绑定，不另建ModelHost、arbiter、身份目录或provider，也不持有其关闭能力；close只排空本service。configuration必须来自宿主安全读取既有env文件后的正常解析，`NOTALONE_ENV_FILE`仅是路径，解析器不会自行加载。未注入的独立测试路径才自行安装/关闭资源。

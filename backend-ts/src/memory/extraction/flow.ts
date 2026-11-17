@@ -7,7 +7,7 @@ import {parseDirectExtraction,ExtractionProtocolError,validateExtractionWindow,L
 import {sourceCalendarPayload} from './contract.ts';
 import type {ExtractionWindow,ExtractedFact,SourceVerificationResult} from './protocol.ts';
 import {prepareSourceVerification,type PreparedVerificationPolicy,type VerificationAdmission} from './verification/complete-claim.ts';
-import {prepareMultimodalVerification} from './multimodal.ts';
+import {prepareMultimodalVerification,validateMultimodalInput} from './multimodal.ts';
 import type {ModelImageInput} from '../../platform/models/model-images.ts';
 
 export interface ExtractionInvocation {
@@ -22,7 +22,7 @@ export interface ExtractionFlowOutcome {
  verification:{fact:ExtractedFact;result:SourceVerificationResult}[];
 }
 export interface ExtractionFlowOptions {
- window:ExtractionWindow;signal:AbortSignal;mode?:'legacy';max_retries?:number;retry_delay_ms?:number;
+ window:ExtractionWindow;signal:AbortSignal;max_retries?:number;retry_delay_ms?:number;
  images?:ExtractionInvocation['images'];
  verificationPolicy?:PreparedVerificationPolicy;
  requireCurrent():Promise<void>;
@@ -68,19 +68,12 @@ function rawCandidates(payload:unknown){
 }
 
 export async function runExtractionFlow(options:ExtractionFlowOptions):Promise<ExtractionFlowOutcome>{
- if(options.mode!==undefined&&options.mode!=='legacy')throw new ExtractionProtocolError('extraction_runtime_retired');
- if(options.window.messages.some(message=>message.image)){
-  prepareMultimodalVerification({window:options.window,facts:[],images:options.images??[],requireCurrent:options.requireCurrent});
-  return runDirectExtractionFlow({...options,mode:'legacy'});
- }
- if(options.images?.length)throw new ExtractionProtocolError('图片必须属于本次固定消息窗口。');
- return runDirectExtractionFlow(options);
-}
-
-async function runDirectExtractionFlow(options:ExtractionFlowOptions):Promise<ExtractionFlowOutcome>{
+ // 运行时只执行当前流程；旧模式参数不能选择或恢复已经退役的执行策略。
+ if('mode' in options)throw new ExtractionProtocolError('extraction_runtime_retired');
+ if(options.window.messages.some(message=>message.image))validateMultimodalInput(options.window,options.images??[]);
+ else if(options.images?.length)throw new ExtractionProtocolError('图片必须属于本次固定消息窗口。');
  const retries=options.max_retries??5,retryDelay=options.retry_delay_ms??30000;
  if(!Number.isSafeInteger(retries)||retries<0||retries>5||!Number.isSafeInteger(retryDelay)||retryDelay<0||retryDelay>30000)throw new ExtractionProtocolError();
- if(options.mode!==undefined&&options.mode!=='legacy')throw new ExtractionProtocolError();
  validateExtractionWindow(options.window);options.signal.throwIfAborted();await options.requireCurrent();
  const user=directExtractionInput(options.window);let candidates:ReturnType<typeof rawCandidates>=[];
  for(let attempt=0;attempt<=retries;attempt++){

@@ -32,7 +32,7 @@ function nestedResponse(flat){return {results:flat.results.map(row=>{
 
 async function run(i,change,encode=JSON.stringify){
  const requests=[],events=[];
- const outcome=await runExtractionFlow({window:i.window,images:i.images,signal:new AbortController().signal,mode:'legacy',max_retries:0,
+ const outcome=await runExtractionFlow({window:i.window,images:i.images,signal:new AbortController().signal,max_retries:0,
   requireCurrent:async()=>{},record:async event=>{events.push(event);},
   invoke:async request=>{
    requests.push(request);const body=JSON.parse(request.user);
@@ -56,6 +56,15 @@ test('同一固定窗口的图文在提取和核验中均携带真实图片，�
  const blocks=events.find(event=>event.stage==='verification_return').payload.blocks;
  assert.equal(replayMultimodalVerification(prepared.window,prepared.facts,blocks,prepared.policy_fingerprint,JSON.parse(requests[1].user))[0].admitted,true);
  assert.throws(()=>replayMultimodalVerification({...prepared.window,contact_id:randomUUID()},prepared.facts,blocks,prepared.policy_fingerprint,JSON.parse(requests[1].user)),/stored_request_mismatch/);
+});
+test('图文提取调用期间不能原地改写固定图片来源版本',async()=>{
+ const i=input();let calls=0;
+ await assert.rejects(runExtractionFlow({window:i.window,images:i.images,signal:new AbortController().signal,max_retries:0,
+  requireCurrent:async()=>{},record:async()=>{},invoke:async()=>{
+   calls++;i.window.messages[1].image.sha256='f'.repeat(64);throw new Error('图片来源不应被改写');
+  }}),TypeError);
+ assert.equal(calls,1);
+ assert.equal(i.window.messages[1].image.sha256,createHash('sha256').update(Buffer.from('synthetic-image-bytes')).digest('hex'));
 });
 test('图片字节缺失或不匹配固定摘要时，在提取调用之前停止',async()=>{
  const i=input();let calls=0;

@@ -18,11 +18,12 @@ test('未具名和v1旧策略配置明确退役，不能被当前运行时静默
  assert.throws(()=>version.resolve({...config,source_stamp:'f'.repeat(64)}),{code:'extraction_policy_source_unavailable'});
 });
 
-test('旧核验策略和bounded执行入口不能绕过显式配置退役',async()=>{
+test('旧核验策略和运行模式参数不能绕过显式配置退役',async()=>{
  for(const id of ['legacy-v4','nullable-proof-v3'])
   assert.throws(()=>prepareSourceVerification({window,facts:[],policy:{id},requireCurrent:async()=>{}}),/policy_invalid/);
  let calls=0;
- await assert.rejects(runExtractionFlow({window,mode:'bounded-runtime-v1',signal:new AbortController().signal,
-  requireCurrent:async()=>{},record:async()=>{},invoke:async()=>{calls++;throw new Error('不得执行');}}),/retired/);
+ for(const mode of ['legacy','bounded-runtime-v1'])
+  await assert.rejects(runExtractionFlow({window,mode,signal:new AbortController().signal,
+   requireCurrent:async()=>{},record:async()=>{},invoke:async()=>{calls++;throw new Error('不得执行');}}),/retired/);
  assert.equal(calls,0);
 });

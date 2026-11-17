@@ -330,7 +330,7 @@ export class SqliteMemoryExtraction {
   let verificationInputEventId:string|null=null,verificationCall:{callId:string;reused:boolean}|null=null;
   const verificationEvents=new Map<string,string>();
   const commonCodes=[...sharedFailureCodes];
-  const outcome=await runExtractionFlow({window,images,signal,mode:resolved.mode,verificationPolicy:resolved.verification,max_retries:0,requireCurrent,
+  const outcome=await runExtractionFlow({window,images,signal,verificationPolicy:resolved.verification,max_retries:0,requireCurrent,
    record:async e=>{
     const isVerification=e.stage==='verification';
     const eventId=await this.storage.execute<string>('memoryExtraction.event',{ownerId:this.ownerId,attemptId:batch.attemptId,kind:e.stage,

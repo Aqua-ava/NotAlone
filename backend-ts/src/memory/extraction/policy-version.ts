@@ -12,7 +12,7 @@ export interface CompleteClaimRuntimeConfig {
 }
 export type ExtractionRuntimeConfig=CompleteClaimRuntimeConfig;
 export interface ResolvedExtractionPolicy {
- mode:'legacy';verification:PreparedVerificationPolicy;ruleVersion:string;
+ verification:PreparedVerificationPolicy;ruleVersion:string;
  config:ExtractionRuntimeConfig;
 }
 export interface ExtractionPolicyVersion {
@@ -47,7 +47,7 @@ export function resolveExtractionPolicy(value:unknown,baseRuleVersion:string,sou
  const config=validateExtractionRuntimeConfig(value);
  if(!hash.test(baseRuleVersion)||!sourceStamp||config.source_stamp!==sourceStamp)unavailable();
  const ruleVersion=digest({version:2,base_rule_version:baseRuleVersion,config});
- return {mode:'legacy',verification:{id:'complete-claim-v1',rule_version:ruleVersion},ruleVersion,config};
+ return {verification:{id:'complete-claim-v1',rule_version:ruleVersion},ruleVersion,config};
 }
 
 // 收集所有字面依赖（包括类型边和注释中的可疑相对边），宁可拒绝缺失文件，不静默遗漏。
