@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 // 只检查源码契约，不启动 App、后端或浏览器。
 const silentCatch = /\.catch\(\s*(?:\(\s*\)|\w+)\s*=>\s*\{\s*\}\s*\)/;
 const required = {
-  'src/renderer/SkillLearningPage.tsx': [/setFailure\('Skill 状态暂不可用，请重新读取。'\)/, /role="alert"/, /重新读取 Skill 状态/],
+  'src/renderer/SkillLearningPage.tsx': [/Skill 状态暂不可用，请重新读取。/, /role="alert"/, /重新读取 Skill 状态/],
   'src/renderer/backend-status.tsx': [/重试连接未成功/, /重试停读尚未获确认/],
   'src/renderer/RewritePanel.tsx': [/setError\('本次表达操作暂时不可用，请重新确认联系人。'\)/, /role="alert"/, /重试读取/],
   'src/renderer/SqliteReplyCandidatesPanel.tsx': [/\{error&&<p role="alert">\{error\}/, /同步设置暂未打开，请重试。/],

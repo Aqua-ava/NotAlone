@@ -6,7 +6,6 @@ import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
 import { currentAssistantSession, deleteAssistantSession, readAssistantSession } from './assistant-sessions';
 import { listAssistantSessions, newAssistantSession, selectAssistantSession } from './assistant-session-catalog';
-import { AssistantSessionProjection, type AssistantProjectionScope } from './assistant-session-projection';
 
 type WorkspaceContent = { sessionId: string | null; draft: string };
 
@@ -18,7 +17,6 @@ export class ReplySession {
   private helperHidden = false;
   private savedRead: AbortController | undefined;
   private contactRestoreTimer: ReturnType<typeof setTimeout> | undefined;
-  private readonly sessionProjection = new AssistantSessionProjection();
   private sessionDelete: AbortController | undefined;
   private catalogPending: AbortController | undefined;
   private catalogMutation: AbortController | undefined;
@@ -43,7 +41,6 @@ export class ReplySession {
         this.retainedContent.clear(); this.pendingContent = undefined;
         this.contentGeneration = undefined;
         this.cancelPending(); this.cancelSavedRead(); this.invalidateSessionCatalog();
-        this.sessionProjection.invalidateSource();
         this.publish({ sourceAvailability: undefined, savedSession: this.state.savedSession ? { ...this.state.savedSession,
           phase: 'idle', ...invalidatedSqliteDiscussion() } : undefined,
           inputClearRevision: (this.state.inputClearRevision ?? 0) + 1 });
@@ -98,36 +95,33 @@ export class ReplySession {
     const pending = new AbortController(); this.savedRead = pending;
     const generation = this.backend.getConnectionGeneration(), content = this.pendingContent, inputOperation = this.operation;
     const heldSessionId = this.state.savedSession?.sessionId ?? content?.sessionId;
+    let sessionId = heldSessionId ?? null;
     if (!retainVerifiedDisplay || this.projectState().savedSession?.phase !== 'ready') {
       this.publish({ savedSession: { phase: 'loading', sessionId: heldSessionId ?? null, ...invalidatedSqliteDiscussion() } });
     }
-    let projectionRead = this.sessionProjection.beginRead(this.projectionScope());
-    const current = () => !pending.signal.aborted && selection.scopeRevision === this.state.scopeRevision
-      && selection.contactId === this.state.contactId && generation === this.backend.getConnectionGeneration()
-      && this.sessionProjection.isReadCurrent(projectionRead);
+    // 当前读取由唯一的请求所有者仲裁；即使传输忽略取消，旧结果也不能提交。
+    const current = () => this.savedRead === pending && !pending.signal.aborted
+      && selection.scopeRevision === this.state.scopeRevision && selection.contactId === this.state.contactId
+      && generation === this.backend.getConnectionGeneration();
     try {
       const resolved = heldSessionId ? undefined : await currentAssistantSession(this.backend, selection.contactId, pending.signal);
       if (resolved?.deletionOperationId) {
         if (current() && resolved.generation === generation) {
-          this.sessionProjection.invalidateSource();
           this.publish({ sessionDeletion: 'failed', confirmedSessionDeletion: undefined,
             savedSession: { phase: 'failed', sessionId: resolved.sessionId, ...invalidatedSqliteDiscussion() } });
         }
         return;
       }
-      const sessionId = heldSessionId ?? resolved!.sessionId;
+      sessionId = heldSessionId ?? resolved!.sessionId;
       if (!current()) return;
       if (resolved?.catalog) this.publish({ sessionCatalog: { phase: 'ready', items: resolved.catalog.items,
         currentSessionId: resolved.catalog.currentSessionId } });
       if (!sessionId) { this.publish({ savedSession: { phase: 'ready', sessionId: null, discussionEntries: [], runtimeRecovery: 'none' } }); return; }
-      projectionRead = this.sessionProjection.resolveReadSession(projectionRead, sessionId);
       const saved = await readAssistantSession(this.backend, selection.contactId, sessionId, pending.signal);
       if (!current() || saved.generation !== generation) return;
-      const accepted = this.sessionProjection.acceptRead(projectionRead, saved);
-      if (accepted.kind !== 'accepted') return;
-      projectionRead = accepted.read;
-      this.publish({ savedSession: accepted.snapshot, sourceAvailability: undefined,
-        ...(saved.sessionId !== heldSessionId ? { sessionDeletion: undefined } : {}) }, 'authoritative');
+      this.publish({ savedSession: { phase: 'ready', sessionId: saved.sessionId,
+        discussionEntries: saved.discussionEntries, runtimeRecovery: saved.runtimeRecovery }, sourceAvailability: undefined,
+        ...(saved.sessionId !== heldSessionId ? { sessionDeletion: undefined } : {}) });
       if (current() && content && this.pendingContent === content && inputOperation === this.operation
         && (content.sessionId === null || content.sessionId === saved.sessionId)) {
         this.pendingContent = undefined; this.retainedContent.delete(selection.contactId);
@@ -140,10 +134,9 @@ export class ReplySession {
         && (error.status === 404 && error.code === 'not_found' || error.status === 409
           && ['assistant_session_conflict', 'assistant_session_rejected'].includes(error.code ?? '')
           && ['source_unavailable', 'source_deleted'].includes(error.reason ?? ''));
-      const rejected = this.sessionProjection.failRead(projectionRead, unavailable ? 'unavailable' : 'unknown');
-      if (rejected.kind !== 'failed') return;
       if (unavailable) { this.retainedContent.delete(selection.contactId); this.pendingContent = undefined; }
-      this.publish({ savedSession: rejected.snapshot, sourceAvailability: 'failed' });
+      this.publish({ savedSession: { phase: 'failed', sessionId,
+        ...invalidatedSqliteDiscussion() }, sourceAvailability: 'failed' });
     } finally { if (this.savedRead === pending) this.savedRead = undefined; }
   }
 
@@ -213,7 +206,7 @@ export class ReplySession {
         sessionCatalog: { phase: 'ready', items, currentSessionId, selectionPending: false },
         sessionDeletion: undefined, confirmedSessionDeletion: undefined, sourceAvailability: undefined,
         contextRefresh: !viewOnly && 'contextRefreshed' in selected && selected.contextRefreshed ? { sessionId: saved.sessionId } : undefined,
-        inputClearRevision: (this.state.inputClearRevision ?? 0) + 1 }, 'authoritative');
+        inputClearRevision: (this.state.inputClearRevision ?? 0) + 1 });
       this.catalogPending = undefined;
     } catch {
       // 只有实际变更可能留下未知写入；只读失败保留既有待核对决定。
@@ -232,8 +225,7 @@ export class ReplySession {
       throw new Error('本次助手会话已变化，请重新确认。');
     }
     if (this.state.sessionDeletion === 'deleting') return;
-    this.sessionProjection.invalidateSource();
-    this.savedRead?.abort(); this.savedRead = undefined;
+    this.cancelSavedRead();
     this.cancelPending();
     this.notifyInputChanged();
     const pending = new AbortController(); this.sessionDelete = pending;
@@ -283,7 +275,7 @@ export class ReplySession {
     return () => settlement ??= this.revalidateOwnerContextChange();
   }
   private withdrawDiscussion(): void {
-    this.sessionProjection.invalidateSource(); this.cancelSavedRead(); this.invalidateSessionCatalog(); this.cancelPending();
+    this.cancelSavedRead(); this.invalidateSessionCatalog(); this.cancelPending();
     if (this.state.savedSession) this.publish({ savedSession: { ...this.state.savedSession,
       ...invalidatedSqliteDiscussion(), phase: 'idle' }, sourceAvailability: 'checking' });
   }
@@ -357,14 +349,8 @@ export class ReplySession {
   }
   private cancelSavedRead(): void { this.savedRead?.abort(); this.savedRead = undefined; }
   private cancelPending(): void { ++this.operation; }
-  private projectionScope(): AssistantProjectionScope {
-    return { connectionGeneration: this.backend.getConnectionGeneration(), contactId: this.state.contactId,
-      scopeRevision: this.state.scopeRevision, sessionId: this.state.savedSession?.sessionId ?? null };
-  }
-  private publish(update: Partial<ReplySessionState>, savedOrigin: 'authoritative' | 'local' = 'local'): void {
+  private publish(update: Partial<ReplySessionState>): void {
     const state = { ...this.state, ...update, revision: this.state.revision + 1 };
-    this.sessionProjection.registerDisplay({ connectionGeneration: this.backend.getConnectionGeneration(), contactId: state.contactId,
-      scopeRevision: state.scopeRevision, sessionId: state.savedSession?.sessionId ?? null }, update.savedSession, savedOrigin);
     this.state = state;
     const previous = this.publishedState, projected = this.projectState(); this.publishedState = projected;
     const changes: Partial<ReplySessionState> = {};

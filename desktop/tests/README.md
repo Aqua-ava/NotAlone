@@ -30,7 +30,7 @@
 | 保留要求 | 当前测试入口 |
 | --- | --- |
 | 只读目录与历史，不隐式创建、继续或生成；明确继续后切换当前讨论 | `assistant-session-catalog`、`assistant-session-recovery`、`sqlite-first-session-regression`、`sqlite-discussion-panel`、`sqlite-candidate-history-read` |
-| 回看乱序、连接换代、联系人切换与来源撤下后，迟到正文不能复活 | `assistant-session-projection`、`contact-restore-coalescing`、`manual-confirm-session-recovery`、`sqlite-discussion-session`、`sqlite-discussion-source-lifecycle` |
+| 回看乱序、连接换代、联系人切换与来源撤下后，迟到正文不能复活 | `contact-restore-coalescing`、`manual-confirm-session-recovery`、`sqlite-discussion-session`、`sqlite-discussion-source-lifecycle` |
 | 删除须核实操作终态，404 不冒充完成；失败可重试，旧连接不能确认新范围 | `assistant-session-deletion-guards`；后台 `sqlite-discussion-deletion` |
 | 候选完整消息版本、手工编辑、明确选择、回看与显式携入 | `sqlite-reply-candidate-bridge`、`sqlite-reply-candidates`、`sqlite-candidate-history-read`；后台 `sqlite-reply-candidates` |
 | 来源失效同时撤下候选、依据、选稿、草稿与实际 Skill；迟到读取不能恢复 | `sqlite-reply-candidates`、`sqlite-discussion-source-lifecycle`；后台 `sqlite-reply-candidates`、`sqlite-reply-candidate-input-regressions` |
