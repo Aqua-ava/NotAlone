@@ -1,3 +1,4 @@
+import { subscribePageState } from './transport';
 import { isDeepSeekConfiguration } from '../shared/ai-service-configuration';
 import { isModelParameters } from '../shared/model-parameters';
 import { ipcRenderer } from 'electron';
@@ -22,11 +23,7 @@ export function createSetupBridge(): SetupBridge {
       ? ipcRenderer.invoke('setup:save-official-deepseek-key', args[0], true) : Promise.reject(new Error('官方模型配置尚未确认')),
     retryRestart: (...args: unknown[]) => invoke('setup:retry-restart', args),
     reloadControlledConfiguration: (...args: unknown[]) => invoke('setup:reload-controlled-configuration', args),
-    onStateChanged: (listener: (state: SetupState) => void) => {
-      if (typeof listener !== 'function') throw new Error('首次配置操作不可用');
-      const receive = (_event: unknown, state: SetupState) => listener(state);
-      ipcRenderer.on('setup:state-changed', receive);
-      return () => ipcRenderer.removeListener('setup:state-changed', receive);
-    },
+    onStateChanged: (listener: (state: SetupState) => void) =>
+      subscribePageState(ipcRenderer, 'setup:state-changed', listener, '首次配置操作不可用'),
   });
 }

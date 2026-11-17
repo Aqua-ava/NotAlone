@@ -1,5 +1,6 @@
 {
  "safe-node": [
+  "tests/preload-state-subscriptions.test.mjs",
   "tests/unified-trace.test.mjs",
   "tests/unified-diagnostic-bridge.test.mjs",
   "tests/unified-diagnostic-foreground.test.mjs",

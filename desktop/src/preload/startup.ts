@@ -1,4 +1,4 @@
-import type { PageTransport } from './transport';
+import { subscribePageState, type PageTransport } from './transport';
 import type { StartupBridge, StartupState } from '../shared/startup-bridge';
 
 export function createStartupBridge(ipcRenderer: PageTransport): StartupBridge {
@@ -14,11 +14,7 @@ export function createStartupBridge(ipcRenderer: PageTransport): StartupBridge {
     retry: (...args: unknown[]) => invoke('startup:retry', args),
     prepareConfiguration: (...args: unknown[]) => invoke('startup:prepare-configuration', args),
     revealUpdateBackup: (...args: unknown[]) => invoke('startup:reveal-update-backup', args),
-    onStateChanged: (listener: (state: StartupState) => void) => {
-      if (typeof listener !== 'function') throw new Error('启动诊断不可用');
-      const receive = (_event: unknown, state: StartupState) => listener(state);
-      ipcRenderer.on('startup:state-changed', receive);
-      return () => ipcRenderer.removeListener('startup:state-changed', receive);
-    },
+    onStateChanged: (listener: (state: StartupState) => void) =>
+      subscribePageState(ipcRenderer, 'startup:state-changed', listener, '启动诊断不可用'),
   });
 }

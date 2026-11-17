@@ -1,4 +1,4 @@
-import type { PageTransport } from './transport';
+import { subscribePageState, type PageTransport } from './transport';
 import type { HistoryClearBridge, HistoryClearRequest, HistoryClearState, HistoryResyncRequest } from '../shared/history-clear-bridge';
 
 export function createHistoryClearBridge(transport: PageTransport): HistoryClearBridge {
@@ -9,11 +9,7 @@ export function createHistoryClearBridge(transport: PageTransport): HistoryClear
     refresh: (...args: [HistoryClearRequest]) => single('history-clear:refresh', args),
     clear: (...args: [HistoryClearRequest]) => single('history-clear:clear', args),
     resync: (...args: [HistoryResyncRequest]) => single('history-clear:resync', args),
-    onStateChanged: (listener: (state: HistoryClearState) => void) => {
-      if (typeof listener !== 'function') throw new Error('清空操作不可用。');
-      const receive = (_event: unknown, state: HistoryClearState) => listener(state);
-      transport.on('history-clear:state-changed', receive);
-      return () => transport.removeListener('history-clear:state-changed', receive);
-    },
+    onStateChanged: (listener: (state: HistoryClearState) => void) =>
+      subscribePageState(transport, 'history-clear:state-changed', listener, '清空操作不可用。'),
   });
 }

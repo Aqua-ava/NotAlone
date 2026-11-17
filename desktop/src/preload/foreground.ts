@@ -1,4 +1,4 @@
-import type { PageTransport } from './transport';
+import { subscribePageState, type PageTransport } from './transport';
 import type { ForegroundBridge, ForegroundState } from '../shared/foreground-bridge';
 
 export function createForegroundBridge(transport: PageTransport): ForegroundBridge {
@@ -7,11 +7,7 @@ export function createForegroundBridge(transport: PageTransport): ForegroundBrid
       : Promise.reject(new Error('前台状态操作不可用。')),
     confirm: (...args: unknown[]) => args.length === 1 ? transport.invoke('foreground:confirm', args[0])
       : Promise.reject(new Error('前台联系人确认不可用。')),
-    onStateChanged: (listener: (state: ForegroundState) => void) => {
-      if (typeof listener !== 'function') throw new Error('前台状态操作不可用。');
-      const receive = (_event: unknown, state: ForegroundState) => listener(state);
-      transport.on('foreground:state-changed', receive);
-      return () => transport.removeListener('foreground:state-changed', receive);
-    },
+    onStateChanged: (listener: (state: ForegroundState) => void) =>
+      subscribePageState(transport, 'foreground:state-changed', listener, '前台状态操作不可用。'),
   });
 }

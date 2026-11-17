@@ -1,4 +1,4 @@
-import type { PageTransport } from './transport';
+import { subscribePageState, type PageTransport } from './transport';
 import type { BackendBridge, BackendState } from '../shared/backend-bridge';
 
 export function createBackendBridge(ipcRenderer: PageTransport): BackendBridge {
@@ -8,11 +8,7 @@ export function createBackendBridge(ipcRenderer: PageTransport): BackendBridge {
     getState: (...args: unknown[]) => invoke('backend:get-state', args),
     retryConnection: (...args: unknown[]) => invoke('backend:retry-connection', args),
     quit: (...args: unknown[]) => invoke('backend:quit', args),
-    onStateChanged: (listener: (state: BackendState) => void) => {
-      if (typeof listener !== 'function') throw new Error('后端操作不可用');
-      const receive = (_event: unknown, state: BackendState) => listener(state);
-      ipcRenderer.on('backend:state-changed', receive);
-      return () => ipcRenderer.removeListener('backend:state-changed', receive);
-    },
+    onStateChanged: (listener: (state: BackendState) => void) =>
+      subscribePageState(ipcRenderer, 'backend:state-changed', listener, '后端操作不可用'),
   });
 }

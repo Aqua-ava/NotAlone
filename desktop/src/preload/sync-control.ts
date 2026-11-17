@@ -1,5 +1,5 @@
 import type { HistoryAuthorizationRequest, SyncControlBridge, SyncControlState, SyncControlRequest, SyncScopeRequest } from '../shared/sync-control-bridge';
-import type { PageTransport } from './transport';
+import { subscribePageState, type PageTransport } from './transport';
 
 export function createSyncControlBridge(transport: PageTransport): SyncControlBridge {
   const empty = (channel: string, args: unknown[]) => args.length === 0
@@ -15,11 +15,7 @@ export function createSyncControlBridge(transport: PageTransport): SyncControlBr
     disable: (...args: [SyncControlRequest]) => single('sync-control:disable', args),
     pause: (...args: [SyncControlRequest]) => single('sync-control:pause', args),
     retry: (...args: [SyncControlRequest]) => single('sync-control:retry', args),
-    onStateChanged: (listener: (state: SyncControlState) => void) => {
-      if (typeof listener !== 'function') throw new Error('同步操作不可用。');
-      const receive = (_event: unknown, state: SyncControlState) => listener(state);
-      transport.on('sync-control:state-changed', receive);
-      return () => transport.removeListener('sync-control:state-changed', receive);
-    },
+    onStateChanged: (listener: (state: SyncControlState) => void) =>
+      subscribePageState(transport, 'sync-control:state-changed', listener, '同步操作不可用。'),
   });
 }

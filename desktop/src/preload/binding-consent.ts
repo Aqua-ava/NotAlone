@@ -1,4 +1,4 @@
-import type { PageTransport } from './transport';
+import { subscribePageState, type PageTransport } from './transport';
 import { validBindingHistoryChoice, type BindingConfirmation, type BindingConsentBridge, type BindingConsentState, type BindingRevocation } from '../shared/binding-consent-bridge';
 
 export function createBindingConsentBridge(transport: PageTransport): BindingConsentBridge {
@@ -9,11 +9,7 @@ export function createBindingConsentBridge(transport: PageTransport): BindingCon
     refreshSaved: (...args: unknown[]) => invoke('bindings:refresh-saved', args),
     confirmSelections: (...args: [BindingConfirmation]) => args.length === 1 && validBindingHistoryChoice(args[0]) ? transport.invoke('bindings:confirm-selections', args[0]) : Promise.reject(new Error('授权操作不可用。')),
     revokeBinding: (...args: [BindingRevocation]) => args.length === 1 ? transport.invoke('bindings:revoke-binding', args[0]) : Promise.reject(new Error('授权操作不可用。')),
-    onStateChanged: (listener: (state: BindingConsentState) => void) => {
-      if (typeof listener !== 'function') throw new Error('授权操作不可用。');
-      const receive = (_event: unknown, state: BindingConsentState) => listener(state);
-      transport.on('bindings:state-changed', receive);
-      return () => transport.removeListener('bindings:state-changed', receive);
-    },
+    onStateChanged: (listener: (state: BindingConsentState) => void) =>
+      subscribePageState(transport, 'bindings:state-changed', listener, '授权操作不可用。'),
   });
 }
