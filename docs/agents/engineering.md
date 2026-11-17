@@ -18,7 +18,7 @@
 ## 环境
 
 - 正常开发与测试使用 Node.js ≥24，后台位于 `backend-ts/`。保留已确认配置、SQLite 实例和资料位置；旧 PostgreSQL 资料仅按明确授权处理；旧配置 `pythonExecutable` 兼容忽略，正常产品路径不执行 Python 或 Conda。诊断总账的历史管理 CLI 是独立工具，按[质量诊断工作流](quality-diagnosis.md)隔离运行，不进入产品启动。
-- 旧实现测试仅通过 `backend-ts` 的 `test:historical`、固定Git树和显式独立venv执行；先用 `npm run test:historical -- --list` 核对登记，历史结果与当前默认Node测试分开报告。
+- 旧 Python 实现测试及其登记已从当前树移除；确需复现时从 Git 历史取固定旧树并使用独立 venv，历史结果与当前默认 Node 测试分开报告。
 - `desktop/` 是 Electron + React/TypeScript 桌面端；正常入口使用本机 SQLite 后台，接入联系人、授权微信历史与增量同步、关系资料管理、助手讨论及候选回复；文件导入预览尚未开放。具体能力与限制见[桌面说明](../../desktop/README.md)，端到端可用性按本次实际验收范围报告，不沿用历史 App 的业务或权限验收。
 - **桌面开发只用热更新**：先执行 `cd desktop && pnpm run dev:status`，已有当前项目开发实例就复用，没有才后台启动 `pnpm run dev`；`pnpm start` 也走同一入口。React/CSS 热更新，main、preload、共享代码和 TypeScript 后台变化由开发监督器经认证退出后串行重启。启动后必须再查 `dev:status`，核对实际 `--notalone-dev` 宿主及其监督器仍存活；服务就绪另查应用界面。发现打包版时通过应用菜单正常退出，不强杀、不继续启动第二份。
 - **他人改码时使用稳定实例**：用户需要在其他 Agent 改代码期间继续使用 App 时，运行 `pnpm run dev:stable`（后台启动，规则同上）。它在同级 `<仓库名>-stable` 快照中运行同一套热更新入口，只含主工作区 HEAD 的已提交内容；`--update` 切到最新提交。该实例使用真实资料目录并占用单实例锁，Agent 的验收改用 `pnpm run dev -- --user-data-dir <独立合成资料目录>`，不得终止用户的实例。详见[稳定实例](../../desktop/README.md#他人改码时的稳定实例)。

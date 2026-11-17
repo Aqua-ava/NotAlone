@@ -161,7 +161,7 @@ pnpm run test:pages -- --status
 
 ## 历史页面与专项验收记录
 
-旧 Python／PostgreSQL HTTP、页面和 App 夹具、日期测试成绩及特定阶段暂停记录已移至[桌面开发历史](../docs/history/desktop-development-history.md#桌面说明整理前记录)。需要复现固定旧树时从[历史测试入口](../backend-ts/test/HISTORICAL.md)核对登记与独立环境，不从当前源码恢复旧后台。
+旧 Python／PostgreSQL HTTP、页面和 App 夹具、日期测试成绩及特定阶段暂停记录已移至[桌面开发历史](../docs/history/desktop-development-history.md#桌面说明整理前记录)。需要复现固定旧树时从 Git 历史取旧提交，不从当前源码恢复旧后台。
 
 ### 轻量无头页面验证
 

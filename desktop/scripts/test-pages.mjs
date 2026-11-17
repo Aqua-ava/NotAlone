@@ -37,7 +37,7 @@ function parse(args) {
   return { names, timeout };
 }
 async function run(options) {
-  if (options.mode !== 'probe' && options.mode !== 'status') throw new Error('page_test_historical: 旧Python页面夹具仅通过 backend-ts 的 npm run test:historical -- desktop-pages <原参数> 在固定23a旧树和独立venv执行；当前Node页面与控制器覆盖按测试登记运行。');
+  if (options.mode !== 'probe' && options.mode !== 'status') throw new Error('page_test_historical: 旧Python页面夹具已移出当前树；当前Node页面与控制器覆盖按测试登记运行。');
   const until = Date.now() + options.timeout * 1000;
   const lease = await acquireLease({ mode: 'headless', id: options.id, until, desktop, coordinator: 'page-checks' });
   let child; let code = 0; let confirmed = false; let forceTimer; let runtimeAttempted = false;

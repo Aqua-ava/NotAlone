@@ -20,7 +20,7 @@
 
 宿主必须给 `SqliteHistoryService` 与 `DeletionService` 传同一个 `ActiveHolders`，来源目标携带实际读取goal的holderKeys。关闭/删除等待查询终结及finally释放；忽略取消的渠道会使删除超时受阻，不能仅abort后completed。
 
-渠道资格由运行时匹配的工具、支持档、来源身份和读取守卫共同决定。仓库 `support-profiles/` 的静态档与 `docs/verification/` 记录只保存对应制品证据，不能自动替代当前运行时核验。
+渠道资格由运行时匹配的工具、支持档、来源身份和读取守卫共同决定；制品证据不能自动替代当前运行时核验。
 
 `FirstHistoryCoordinator` 是首次历史的唤醒层，依赖受控 `directory` 与正式 `SqliteHistoryService`。`wake()` 后台合并请求，最多两位联系人任务并发；实际微信 CLI 操作仍经宿主共享串行入口；只处理有效授权下尚未完整的首次覆盖，不做持续增量、轮询、记忆或媒体。`stop(contactId?)`、`close()` 等待真实渠道返回及关闭；`getState()` 只返回固定状态和脱敏错误，`waitForIdle()` 供诊断及验收。正式宿主在成功启动并发布握手后、逐人确认成功及开启读取后唤醒；确认 HTTP 不等待整批历史。全局关闭同时停止首次历史和微信媒体读取，保留合法本地转换；撤销按联系人停止全部读取。退出先排空协调器，再沿共享领域关闭合同处理消费者、模型与SQLite；失败保留共享资源供原操作重试。
 

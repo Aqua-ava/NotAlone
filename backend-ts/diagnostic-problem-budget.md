@@ -42,7 +42,7 @@ node --test --test-concurrency=1 test/diagnostic-model-budget.test.mjs
 pnpm run typecheck
 ```
 
-当前专用用例使用合成账务夹具、私有临时账本和本机 HTTP 假 provider，覆盖两种发送路径、跨进程累计、预算停止与旧 unknown 等场景。Python／TS 并发互操作的旧用例保存在固定历史树，按[历史测试说明](test/HISTORICAL.md)显式运行；历史结果不代表当前版本通过。当前用例、历史用例与真实外部模型验收须分别报告。
+当前专用用例使用合成账务夹具、私有临时账本和本机 HTTP 假 provider，覆盖两种发送路径、跨进程累计、预算停止与旧 unknown 等场景。Python／TS 并发互操作的旧用例已从当前树移除，需要时从 Git 历史取固定旧树；历史结果不代表当前版本通过。当前用例、历史用例与真实外部模型验收须分别报告。
 
 此入口只覆盖通过本模块安装的 TS provider。旧 Python 发送仍须走其已绑定总账的边界；它不是全局网络防火墙。启用方负责把同一逻辑问题固定到同一 ID、路径及启动配置；模块无法识别恶意更换 env、手工清零 SQLite 或重新起问题名的语义绕过。已有旧 unknown 的任务仍须先由原写入方核对，预算可用不等于获准重放。
 
