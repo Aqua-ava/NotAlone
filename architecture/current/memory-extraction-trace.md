@@ -14,7 +14,7 @@
 - 记录实际可观察内容。缺失、截断、脱敏、兼容投影、供应商未知回执和未执行阶段均明确标识，不能补造原请求、模型内部思考或旧阶段成功。
 - 来源支持不等于现实事实为真，完整记录不保证重新调用会产生相同结果，也不证明模型质量达标。
 
-依据：[ADR-037](../adr/037-complete-memory-extraction-trace.md)、[ADR-085](../adr/085-source-verified-automatic-adoption.md)、[ADR-153](../adr/153-joint-text-image-memory-input.md)。
+依据：[ADR-037](../adr/037-complete-memory-extraction-trace.md)、[ADR-085](../adr/085-source-verified-automatic-adoption.md)、[ADR-197](../adr/197-chat-image-and-memory-image-input-consolidated.md)。
 
 ## 2. 当前处理链
 

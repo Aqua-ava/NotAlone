@@ -212,7 +212,7 @@ flowchart TD
 
 ## 6. 多模态输入与回复形态
 
-记忆处理的图文输入以 [ADR-153](../../adr/153-joint-text-image-memory-input.md)为正式入口：聊天文字与实际图片共同带入记忆模型。下图仅描述独立的回复输入与输出适配器，不限制聊天图片的记忆输入：
+记忆处理的图文输入以 [ADR-153](../../adr/superseded/153-joint-text-image-memory-input.md)为正式入口：聊天文字与实际图片共同带入记忆模型。下图仅描述独立的回复输入与输出适配器，不限制聊天图片的记忆输入：
 
 ```text
 文字 -------------------------------> normalized current_message

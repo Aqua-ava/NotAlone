@@ -136,10 +136,10 @@
 - [ADR-133：按变化页持续同步与持久检查点](133-page-delta-private-history-sync.md)
 - [ADR-135：Skill 默认启用与中文场景管理](superseded/135-default-enabled-localized-skill-library.md)（已合并入ADR-196）
 - [ADR-136：回复生成按需组合多个 Skill](superseded/136-multi-skill-reply-composition.md)（已合并入ADR-196）
-- [ADR-137：授权会话同步中的原图保存](137-original-image-authorized-sync.md)
-- [ADR-138：聊天图片原图提取与占位替换](138-chat-image-original-extraction-and-placeholder.md)
+- [ADR-137：授权会话同步中的原图保存](superseded/137-original-image-authorized-sync.md)（已合并入ADR-197）
+- [ADR-138：聊天图片原图提取与占位替换](superseded/138-chat-image-original-extraction-and-placeholder.md)（已合并入ADR-197）
 - [ADR-139：引用回复同步与历史补齐](139-quoted-reply-sync-and-history-enrichment.md)
-- [ADR-140：聊天图片取消原图证明门槛](140-source-verified-viewable-chat-images.md)
+- [ADR-140：聊天图片取消原图证明门槛](superseded/140-source-verified-viewable-chat-images.md)（已合并入ADR-197）
 - [ADR-141：引用回复随正常消息同步读取](141-inline-quoted-reply-sync.md)
 - [ADR-142：首次连接后先选择联系人，再确认开启同步](142-first-connection-contact-selection.md)
 - [ADR-143：混合记忆处理调度](143-hybrid-memory-processing-schedule.md)
@@ -152,10 +152,10 @@
 - [ADR-150：发生时间标注降级为可选信息](150-optional-event-time.md)
 - [ADR-151：单个微信读取进程串行切换联系人](151-shared-wechat-cli-process.md)
 - [ADR-152：历史与增量记忆分开自动处理](152-history-and-incremental-memory-processing.md)
-- [ADR-153：图文共同参与记忆处理](153-joint-text-image-memory-input.md)
-- [ADR-154：按微信资源来源记录图片版本](154-source-grounded-image-versions.md)
-- [ADR-155：图片资源角色展示与缩略图复查](155-image-variant-display-and-thumbnail-refresh.md)
-- [ADR-156：授权范围内自动补查全部图片](156-automatic-image-reconciliation.md)
+- [ADR-153：图文共同参与记忆处理](superseded/153-joint-text-image-memory-input.md)（已合并入ADR-197）
+- [ADR-154：按微信资源来源记录图片版本](superseded/154-source-grounded-image-versions.md)（已合并入ADR-197）
+- [ADR-155：图片资源角色展示与缩略图复查](superseded/155-image-variant-display-and-thumbnail-refresh.md)（已合并入ADR-197）
+- [ADR-156：授权范围内自动补查全部图片](superseded/156-automatic-image-reconciliation.md)（已合并入ADR-197）
 - [ADR-157：Skill 业务身份与可迁移物理定位分离](superseded/157-portable-skill-directory-identity.md)（已合并入ADR-196）
 - [ADR-158：显式选择联系人后继续前台跟随](158-contact-selection-keeps-foreground-follow.md)
 - [ADR-159：前台联系人识别独立读取通道](159-foreground-read-channel-isolation.md)
@@ -168,9 +168,9 @@
 - [ADR-166：记忆自动处理总开关，默认关闭](166-memory-auto-processing-switch.md)
 - [ADR-167：记忆页在读取授权暂时不可用时继续显示已保存记忆](167-memory-page-saved-source-display.md)
 - [ADR-168：受管文件身份不含系统设备号](168-managed-file-identity-without-device.md)
-- [ADR-169：记忆只带入确认不是缩略图的图片](169-memory-uses-confirmed-non-thumbnail-images.md)
-- [ADR-170：不保存缩略图，取消原图分类机制](170-no-thumbnail-storage-and-no-original-classification.md)
-- [ADR-171：同一张图有标准图和高清图时取一张保存，不再比较内容](171-image-pick-standard-over-high-definition.md)
+- [ADR-169：记忆只带入确认不是缩略图的图片](superseded/169-memory-uses-confirmed-non-thumbnail-images.md)（已合并入ADR-197）
+- [ADR-170：不保存缩略图，取消原图分类机制](superseded/170-no-thumbnail-storage-and-no-original-classification.md)（已合并入ADR-197）
+- [ADR-171：同一张图有标准图和高清图时取一张保存，不再比较内容](superseded/171-image-pick-standard-over-high-definition.md)（已合并入ADR-197）
 - [ADR-172：JPEG 结束标记后允许少量尾随，WXGF 支持彩色加透明度双帧](172-jpeg-trailing-bytes-and-wxgf-alpha-frames.md)
 - [ADR-173：开发者批量来源重新认证](superseded/173-developer-batch-source-recertification.md)（已被ADR-177替代，原开发者入口退役）
 - [ADR-174：对齐腾讯方案——不确定性降级而非拦截候选](174-align-tencent-uncertainty-degrade-not-intercept.md)——部分被 ADR-184 替代
@@ -182,9 +182,9 @@
 
 - [ADR-178：按联系人分组限定可用的回复 Skill](superseded/178-contact-skill-groups.md)——用户自定义分组绑定 Skill，联系人至多归入一组，未分组默认不使用 Skill；局部修订 ADR-135／136。（已合并入ADR-196）
 
-- [ADR-179：记忆图片在内存规范化并保留原图依据](179-memory-image-input-normalization.md)
+- [ADR-179：记忆图片在内存规范化并保留原图依据](superseded/179-memory-image-input-normalization.md)（已合并入ADR-197）
 
-- [ADR-180：图片输入有界恢复、单项隔离与运行退休](180-memory-image-recovery-isolation-and-run-retirement.md)
+- [ADR-180：图片输入有界恢复、单项隔离与运行退休](superseded/180-memory-image-recovery-isolation-and-run-retirement.md)（已合并入ADR-197）
 
 - [ADR-181：L3 逐条核验与合格条目发布](181-l3-item-verification-and-partial-publication.md)
 - [ADR-182：回复时联系人／本人记忆改用本机混合检索](superseded/182-reply-memory-hybrid-retrieval.md)（已合并入ADR-195）
@@ -214,3 +214,5 @@
 - [ADR-195：回复检索现行合并决定](195-reply-retrieval-consolidated.md)——合并 ADR-028／035／090／182／185／186／190／191：按需 BM25＋向量＋RRF 检索、全部获准历史、独立额度、未确认候选不进入新回复；原条目归档于 superseded/。
 
 - [ADR-196：回复 Skill 的发现、启用与按需加载现行合并决定](196-reply-skill-library-consolidated.md)——合并 ADR-019／074／093／096／098／129／135／136／157／178／193：授权目录只读包为权威来源，默认启用，联系人分组限定范围，官方 skill 工具按需组合，退役显式预加载；原条目归档于 superseded/。
+
+- [ADR-197：聊天图片取得与记忆图片输入现行合并决定](197-chat-image-and-memory-image-input-consolidated.md)——合并 ADR-137／138／140／153／154／155／156／169／170／171／179／180：缩略图不保存、标准图优先、持久退避补查、图文共同输入、内存规范化与失败隔离；原条目归档于 superseded/。

@@ -1,12 +1,14 @@
 # ADR-154：按微信资源来源记录图片版本
 
+已合并入[ADR-197：聊天图片取得与记忆图片输入现行合并决定](../197-chat-image-and-memory-image-input-consolidated.md)（2026-11-18）：聊天图片的取得、保存、补查与记忆图片输入约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
+
 > 取消分类修订（2026-11-05）：[ADR-170](170-no-thumbnail-storage-and-no-original-classification.md)取消 `original`／`thumbnail`／`unknown` 三层分类与来源分类依据（`image_quality_evidence`）的写入和读取，缩略图不保存；下文分类条款保留为历史决定，旧列因已发布迁移保留但不再使用。
 
 > 自动补查修订（2026-11-03）：[ADR-156](156-automatic-image-reconciliation.md)替代第 6 条中旧未知版本不自动重读的限制，要求在当前有效授权范围内自动重新核验缺少资源角色依据的旧图；仍不得猜测回填，已有原图证明保留。
 
 > 展示与复查补充（2026-11-03）：[ADR-155](155-image-variant-display-and-thumbnail-refresh.md)将资源角色与原图证明分别表达，已确认 `main` 而缺原图证明的图片显示“主图”；已保存缩略图允许在有效同步范围内有界复查。下文 `image_quality` 分类、既有证明保留和旧未知版本不猜测回填的规则保持。
 
-> 状态：已采纳（2026-11-02）。用户要求按来源区分原图与缩略图，不按像素尺寸或文件大小猜测。
+> 状态：已合并（ADR-197）。原记录：已采纳（2026-11-02）。用户要求按来源区分原图与缩略图，不按像素尺寸或文件大小猜测。
 > 补充 [ADR-140](140-source-verified-viewable-chat-images.md)：分类不作为保存门槛，不恢复原图升级或下载。
 
 ## 决定

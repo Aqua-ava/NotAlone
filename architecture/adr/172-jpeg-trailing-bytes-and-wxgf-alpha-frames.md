@@ -1,6 +1,6 @@
 # ADR-172：JPEG 结束标记后允许少量尾随，WXGF 支持彩色加透明度双帧
 
-状态：已采纳并实现于 `native/media-validation`（2026-11-05）。来源：本次任务的方案文档 `image-pipeline-gaps/spec.md`（`.scratch` 目录被 Git 忽略，未入库）。延续 [ADR-140](140-source-verified-viewable-chat-images.md) 的消息、资源关联与完整解码核验，以及 [ADR-170](170-no-thumbnail-storage-and-no-original-classification.md)、[ADR-171](171-image-pick-standard-over-high-definition.md) 的“有可查看的非缩略图就保存”目标；不改变读取程序、制品清单或别名配对。
+状态：已采纳并实现于 `native/media-validation`（2026-11-05）。来源：本次任务的方案文档 `image-pipeline-gaps/spec.md`（`.scratch` 目录被 Git 忽略，未入库）。延续 [ADR-140](superseded/140-source-verified-viewable-chat-images.md) 的消息、资源关联与完整解码核验，以及 [ADR-170](superseded/170-no-thumbnail-storage-and-no-original-classification.md)、[ADR-171](superseded/171-image-pick-standard-over-high-definition.md) 的“有可查看的非缩略图就保存”目标；不改变读取程序、制品清单或别名配对。
 
 ## 背景
 

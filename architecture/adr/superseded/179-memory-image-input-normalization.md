@@ -1,6 +1,8 @@
 # ADR-179：记忆图片在内存规范化并保留原图依据
 
-状态：已采纳（2026-11-11）。用户明确授权向已配置模型发送缩放／重编码的规范化版本；工程及真实验收分别记录在 `.scratch/image-model-input-reliability/`，本决定不替代真实模型验收。
+已合并入[ADR-197：聊天图片取得与记忆图片输入现行合并决定](../197-chat-image-and-memory-image-input-consolidated.md)（2026-11-18）：聊天图片的取得、保存、补查与记忆图片输入约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
+
+状态：已合并（ADR-197）。原记录：已采纳（2026-11-11）。用户明确授权向已配置模型发送缩放／重编码的规范化版本；工程及真实验收分别记录在 `.scratch/image-model-input-reliability/`，本决定不替代真实模型验收。
 
 局部修订：[ADR-153](153-joint-text-image-memory-input.md) 的实际图片输入允许使用与原图绑定的规范化版本；[ADR-169](169-memory-uses-confirmed-non-thumbnail-images.md)、[ADR-170](170-no-thumbnail-storage-and-no-original-classification.md) 的当前可查看受管副本资格、不保存缩略图与来源删除合同继续有效。规范化版本不是新保存的缩略图，也不建立图片质量分类。
 

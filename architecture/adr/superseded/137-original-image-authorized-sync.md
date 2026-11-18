@@ -1,13 +1,15 @@
 # ADR-137：授权会话同步中的原图保存
 
+已合并入[ADR-197：聊天图片取得与记忆图片输入现行合并决定](../197-chat-image-and-memory-image-input-consolidated.md)（2026-11-18）：聊天图片的取得、保存、补查与记忆图片输入约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
+
 > 图文输入修订（2026-11-02）：[ADR-153](153-joint-text-image-memory-input.md)。本文的图片保存范围不限制记忆任务使用图片；记忆输入采用实际图片与聊天文字共同处理。
 
 > 后续修订：[ADR-140](140-source-verified-viewable-chat-images.md)已按用户要求取消原图证明门槛；来源已核验且完整可解码的本机图片（包括已绑定缩略图）可以保存和显示。下文原图限制保留为历史决定，其他来源、停读和删除规则继续适用。
 
 > 后续修订：[ADR-138](138-chat-image-original-extraction-and-placeholder.md)将用户明确要求的当前账号图片密钥准备及 WXGF 解码接回聊天图片提取，并规定占位替换；下文“不自动探测密钥”按其限定范围修订。此前独立开发取图已有成功记录，本页旧实机失败仅描述当时的同步入口。
 
-> 状态：已采纳（2026-10-31）。真实复查发现压缩元数据、缓存标识及封装长度处理缺陷，已修复并升级开发组件；285 个既有授权会话身份保持一致。当前账户的真实图片在解密处返回 `needs_image_key`，尚无真实原图成功保存的证据。最新范围见[解码修复验收](../../docs/verification/original-image-decoding-fix-20261031.md)，早期记录见[实施记录](../../docs/verification/original-image-authorized-sync-20261031.md)。
-> 局部替代：[ADR-125](125-image-video-byte-decoding-and-validation.md)中授权会话同步图片仍须逐条手动触发、允许保存缩略图并主动补提原图的条款。ADR-125关于唯一消息—资源关联、读取授权、应用受管文件、删除及迟到结果拒绝的边界继续适用；视频及语音的单条媒体操作不变。
+> 状态：已合并（ADR-197）。原记录：已采纳（2026-10-31）。真实复查发现压缩元数据、缓存标识及封装长度处理缺陷，已修复并升级开发组件；285 个既有授权会话身份保持一致。当前账户的真实图片在解密处返回 `needs_image_key`，尚无真实原图成功保存的证据。最新范围见[解码修复验收](../../../docs/verification/original-image-decoding-fix-20261031.md)，早期记录见[实施记录](../../../docs/verification/original-image-authorized-sync-20261031.md)。
+> 局部替代：[ADR-125](../125-image-video-byte-decoding-and-validation.md)中授权会话同步图片仍须逐条手动触发、允许保存缩略图并主动补提原图的条款。ADR-125关于唯一消息—资源关联、读取授权、应用受管文件、删除及迟到结果拒绝的边界继续适用；视频及语音的单条媒体操作不变。
 
 ## 背景
 

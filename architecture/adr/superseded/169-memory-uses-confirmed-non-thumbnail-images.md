@@ -1,10 +1,12 @@
 # ADR-169：记忆只带入确认不是缩略图的图片
 
+已合并入[ADR-197：聊天图片取得与记忆图片输入现行合并决定](../197-chat-image-and-memory-image-input-consolidated.md)（2026-11-18）：聊天图片的取得、保存、补查与记忆图片输入约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
+
 > 输入规范化修订（2026-11-11）：[ADR-179](179-memory-image-input-normalization.md)允许仅在内存中生成与原图绑定的缩放／重编码发送版本；不新增缩略图保存，原图资格与来源删除合同继续有效。
 
 > 资格简化修订（2026-11-05）：[ADR-170](170-no-thumbnail-storage-and-no-original-classification.md)后库里不再保存缩略图，记忆收图资格改为“当前可查看的已保存图片”，不再按 `image_quality` 或来源依据过滤；“缩略图不进入记忆”的结果不变。
 
-状态：已采纳并实现（2026-11-05）。用户明确要求：提取图片的目的是让图片消息不再是占位，而是带着能看清的图片进入记忆；缩略图太小看不清，不应用于记忆。局部替代 [ADR-140](140-source-verified-viewable-chat-images.md)、[ADR-155](155-image-variant-display-and-thumbnail-refresh.md) 中“已核验的缩略图可供后续图文记忆使用”的含义，并收窄 [ADR-153](153-joint-text-image-memory-input.md) 的图片范围。
+状态：已合并（ADR-197）。原记录：已采纳并实现（2026-11-05）。用户明确要求：提取图片的目的是让图片消息不再是占位，而是带着能看清的图片进入记忆；缩略图太小看不清，不应用于记忆。局部替代 [ADR-140](140-source-verified-viewable-chat-images.md)、[ADR-155](155-image-variant-display-and-thumbnail-refresh.md) 中“已核验的缩略图可供后续图文记忆使用”的含义，并收窄 [ADR-153](153-joint-text-image-memory-input.md) 的图片范围。
 
 ## 决定
 

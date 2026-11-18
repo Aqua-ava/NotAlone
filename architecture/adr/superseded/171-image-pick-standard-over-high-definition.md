@@ -1,6 +1,8 @@
 # ADR-171：同一张图有标准图和高清图时取一张保存，不再比较内容
 
-状态：已采纳并实现于 Go 读取程序（2026-11-05）。用户明确要求：自动取图，有标准图或高清图就保存一张，“随便取一个，一定要有图”，倾向取标准图；只有缩略图才不保存。
+已合并入[ADR-197：聊天图片取得与记忆图片输入现行合并决定](../197-chat-image-and-memory-image-input-consolidated.md)（2026-11-18）：聊天图片的取得、保存、补查与记忆图片输入约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
+
+状态：已合并（ADR-197）。原记录：已采纳并实现于 Go 读取程序（2026-11-05）。用户明确要求：自动取图，有标准图或高清图就保存一张，“随便取一个，一定要有图”，倾向取标准图；只有缩略图才不保存。
 局部替代：[ADR-170](170-no-thumbnail-storage-and-no-original-classification.md) 第 7 条所述的 Go 层现状（`.dat` 与 `_h.dat` 解码内容不同时整条失败 `history_image_quality_unverified`）。延续 [ADR-154](154-source-grounded-image-versions.md) 以来“标准图／高清图优先于缩略图”的候选顺序，以及 [ADR-138](138-chat-image-original-extraction-and-placeholder.md)、[ADR-140](140-source-verified-viewable-chat-images.md) 对消息、联系人、唯一资源关联和完整解码的核验。
 
 ## 背景

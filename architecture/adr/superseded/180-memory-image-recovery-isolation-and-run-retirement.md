@@ -1,8 +1,10 @@
 # ADR-180：图片输入有界恢复、单项隔离与运行退休
 
-状态：已采纳（2026-11-11）。来自图片可靠性整改中用户确认的六项决策。实现、合成验证与真实验收分别记录，不以此决定宣称真实模型或桌面已通过。
+已合并入[ADR-197：聊天图片取得与记忆图片输入现行合并决定](../197-chat-image-and-memory-image-input-consolidated.md)（2026-11-18）：聊天图片的取得、保存、补查与记忆图片输入约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
 
-本决定补充[ADR-179](179-memory-image-input-normalization.md)，局部修订[ADR-149](149-content-rejection-is-not-failure.md)中技术故障停止整批的图片输入情形；内容拒绝与技术故障仍分别记录。[ADR-162](162-local-reply-context-and-independent-model-lanes.md)的真实未知／孤儿保护、联系人隔离、来源与人工决定门槛继续有效。
+状态：已合并（ADR-197）。原记录：已采纳（2026-11-11）。来自图片可靠性整改中用户确认的六项决策。实现、合成验证与真实验收分别记录，不以此决定宣称真实模型或桌面已通过。
+
+本决定补充[ADR-179](179-memory-image-input-normalization.md)，局部修订[ADR-149](../149-content-rejection-is-not-failure.md)中技术故障停止整批的图片输入情形；内容拒绝与技术故障仍分别记录。[ADR-162](../162-local-reply-context-and-independent-model-lanes.md)的真实未知／孤儿保护、联系人隔离、来源与人工决定门槛继续有效。
 
 ## 决定
 
