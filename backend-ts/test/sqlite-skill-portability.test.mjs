@@ -19,14 +19,11 @@ async function fixture(t){
  const [item]=await library.refresh();return {dir,root,bytes,storage,library,item};
 }
 
-// 用既有维护动作保留一份过期设备编号，模拟旧库重开；不修改真实磁盘或生产资料。
+// 直接改写目录身份以保留一份过期设备编号，模拟旧库重开；不修改真实磁盘或生产资料。
 async function oldDevice(storage,item){
  const identity=JSON.parse(item.directoryIdentity);identity[1]='0';
- const revision=item.revisions.at(-1);
- const [old]=await storage.execute('skills.relocateRoot',{ownerId:'owner-a',packages:[{
-  id:item.id,directoryName:item.directoryName,expectedHead:item.headRevision,expectedDirectoryIdentity:item.directoryIdentity,
-  directoryIdentity:JSON.stringify(identity),manifestDigest:revision.manifestDigest,contentDigest:revision.contentDigest,
- }]});return old;
+ await storage.execute('fixture.setDirectoryIdentity',{ownerId:'owner-a',id:item.id,directoryIdentity:JSON.stringify(identity)});
+ return storage.execute('skills.get',{ownerId:'owner-a',id:item.id});
 }
 
 test('设备编号变化及旧库已记录的目录冲突经完整核验自动恢复，旧运行锚保持失效',async t=>{

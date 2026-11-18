@@ -4,7 +4,6 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { SqliteCapabilitiesConfiguration } from '../../sqlite-capabilities.ts';
 import { installedDeletionScopes } from '../../storage/sqlite/deletion/registration.ts';
-import { recoverSkillRootRelocation } from '../../skills/sqlite/root-relocation.ts';
 import { SqliteStorage } from '../../storage/sqlite/client.ts';
 import { controlledFiles } from '../../storage/sqlite/files.ts';
 import type { CutoverCheckRecord, CutoverCode, CutoverManifest, CutoverReady, CutoverResult, CutoverStorage, CutoverStorageFactory,
@@ -103,8 +102,6 @@ async function runDatabaseStartup<T extends CutoverReady | PreparedDatabaseStart
       throw new Blocked('cutover_legacy_target_unclassified', 'unsupported_managed_entry', manifest ?? initialManifest(now()));
     }
     if (manifest?.phase === 'completed') {
-      try { await recoverSkillRootRelocation(userData); }
-      catch { return {phase:'maintenance',code:'cutover_configuration_conflict',detail:'skill_root_relocation_pending',manifestRevision:manifest.revision}; }
       return await completed(userData, manifest, options);
     }
     // 旧缺陷曾把存活宿主自己的运行锁写成阻断；宿主仍存活时只准备原目标，宿主退出后再走切换自愈。

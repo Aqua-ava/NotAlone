@@ -23,6 +23,7 @@ BEGIN INSERT INTO skill_group_package SELECT NEW.owner_id,id,NEW.id FROM skill_g
  {name:'fixture.contact',mode:'write',retryBusy:false,execute(tx,i){tx.run('INSERT OR IGNORE INTO contact(owner_id,id) VALUES(?,?)',[i.ownerId,i.contactId]);}},
  {name:'fixture.contactState',mode:'write',retryBusy:false,execute(tx,i){tx.run('UPDATE contact SET state=? WHERE owner_id=? AND id=?',[i.state,i.ownerId,i.contactId]);}},
  {name:'fixture.deleteContact',mode:'write',retryBusy:false,execute(tx,i){tx.run('DELETE FROM contact WHERE owner_id=? AND id=?',[i.ownerId,i.contactId]);}},
+ {name:'fixture.setDirectoryIdentity',mode:'write',retryBusy:false,execute(tx,i){tx.run('UPDATE skill_package SET directory_identity=?,head_revision=head_revision+1 WHERE owner_id=? AND id=?',[i.directoryIdentity,i.ownerId,i.id]);}},
  {name:'fixture.owner',mode:'write',retryBusy:false,execute(tx,i){tx.run('INSERT INTO owner(owner_id) VALUES(?)',[i.ownerId]);}},
  {name:'fixture.skillFence',mode:'write',retryBusy:false,execute(tx,i){return skillDeletion.fence(tx,i);}},
  {name:'fixture.skillTargets',mode:'read',retryBusy:false,execute(tx,i){return skillDeletion.collect(tx,i);}},

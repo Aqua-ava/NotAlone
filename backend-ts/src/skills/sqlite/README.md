@@ -36,7 +36,7 @@
 
 正常 `launchDsh` 使用 `profile/sqlite.patch.yml` 的官方 registry 和薄宿主；仅显式 `capabilities: [contacts, skills]` 配合宿主配置的 `skillPackageRoot` 开放管理，缺失或无效配置拒绝启动。Skill 根可位于 App 的 `userData` 之外，须为规范化绝对路径；仍拒绝将 App 数据根及其 `managed` 受管区作为 Skill 根。桌面启动探针与后台共用这一校验，不由模型或管理 HTTP 请求指定路径。握手位于 `managed/sqlite-backend.info`，与数据库维护目录分开。管理能力本身不产生模型请求，管理页状态不宣称回复已经加载 Skill。
 
-日常开发 App 的新实例默认直接读取仓库 `reply-skills/romance`，不再创建 App 数据目录里的内容副本；已有显式配置仍优先。已登记包切换根目录时，通过宿主维护入口 `prepareSkillRootRelocation` 核对目标安全快照与数据库最新历史摘要；旧根可读时额外比较两处内容，旧根已不存在时不阻断有完整基线的迁移。`recoverSkillRootRelocation` 以单事务更新定位和 head，保留包 ID、启停、修订及来源撤销。迁移意图保存在私有控制目录，正常启动先恢复未完成切换再发现 Skill；意图发布后目标磁盘标记变化时重新核验内容，完成配置后由正常刷新重建当前定位。不提供模型、HTTP 或通用文件管理入口。
+日常开发 App 的新实例默认直接读取仓库 `reply-skills/romance`，不再创建 App 数据目录里的内容副本；已有显式配置仍优先。不提供模型、HTTP 或通用文件管理入口。
 
 ## 官方加载与实际输入
 
