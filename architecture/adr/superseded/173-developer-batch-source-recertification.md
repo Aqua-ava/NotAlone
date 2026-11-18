@@ -16,4 +16,4 @@
 
 未采纳的方案：直接删除围栏行或改写守卫来“修复”，理由是这样等于把失证来源宣称为连续，绕过 ADR-144 的来源认证与删除保护；自动静默修复，即在没有用户当前确认时重读全部历史，理由是它改变 ADR-144 的“用户明确选择”前提，需要另行修改规格；并发修复多个联系人，理由是共享读取进程本以独占租约串行，并发没有收益，且会把单点故障放大成多位同时失败。
 
-本决定不改变 [ADR-113](../113-sqlite-private-history-source-contract.md)、[ADR-127](../127-sqlite-history-normal-use-restart-rescan.md)、[ADR-133](../133-page-delta-private-history-sync.md) 的普通来源认证与续证规则，也不替代 [ADR-130](../130-explicit-wechat-source-reconfirmation.md) 的账号来源重新关联；与上述有效 ADR 无条款冲突。实现与验收状态见[开发者批量来源修复验收](../../../docs/verification/fenced-contact-batch-repair-20261106.md)；本 ADR 不认证开发模式以外的入口或发布包。
+本决定不改变 [ADR-113](../113-sqlite-private-history-source-contract.md)、[ADR-127](127-sqlite-history-normal-use-restart-rescan.md)、[ADR-133](../133-page-delta-private-history-sync.md) 的普通来源认证与续证规则，也不替代 [ADR-130](../130-explicit-wechat-source-reconfirmation.md) 的账号来源重新关联；与上述有效 ADR 无条款冲突。实现与验收状态见[开发者批量来源修复验收](../../../docs/verification/fenced-contact-batch-repair-20261106.md)；本 ADR 不认证开发模式以外的入口或发布包。

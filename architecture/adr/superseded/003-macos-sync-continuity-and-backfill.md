@@ -1,6 +1,8 @@
 # ADR-003：Mac 同步连续性与用户补录
 
-> 状态：已采纳  
+已合并入[ADR-199：微信同步授权、读取边界与恢复的早期决定现行合并](../199-wechat-sync-consent-and-recovery-consolidated.md)（2026-11-18）：微信同步早期的授权、读取边界与恢复约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
+
+> 状态：已合并（ADR-199）。原记录：已采纳  
 > 决策日期：2026-08-03
 
 > 后续修订：CLI 消息连续性与自动补齐以 ADR-016、ADR-023、ADR-025、[ADR-030](030-confirmed-contact-background-sync-consent.md) 为准；本文保留最初 OCR 方案的背景及用户主动补录边界。

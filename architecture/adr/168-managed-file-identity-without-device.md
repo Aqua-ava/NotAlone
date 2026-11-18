@@ -1,6 +1,6 @@
 # ADR-168：受管文件身份不含系统设备号
 
-状态：已采纳并实现（2026-11-05）。用户明确要求去掉设备号相关要求。延续 [ADR-127](127-sqlite-history-normal-use-restart-rescan.md) 与 [ADR-157](superseded/157-portable-skill-directory-identity.md) 对来源指纹和 Skill 目录的做法，扩展到应用受管文件（图片、运行副本）。
+状态：已采纳并实现（2026-11-05）。用户明确要求去掉设备号相关要求。延续 [ADR-127](superseded/127-sqlite-history-normal-use-restart-rescan.md) 与 [ADR-157](superseded/157-portable-skill-directory-identity.md) 对来源指纹和 Skill 目录的做法，扩展到应用受管文件（图片、运行副本）。
 
 ## 背景
 
