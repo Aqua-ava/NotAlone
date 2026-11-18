@@ -2,7 +2,7 @@
 
 提案状态：用户已于 2026-10-27 确认粒度及依赖；六票已按本提案发布，当前未开始实现。
 
-依据：[已发布规格](spec.md)及 [ADR-107](../../architecture/adr/107-unified-memory-processing-lifecycle.md)。三层验收入口已由用户确认。以下每票均交付可通过公开入口演示或验证的完整行为，涉及的存储、认证 HTTP、生产桥接、页面与回归在该票内一起完成；不按数据库、后端、前端横向分票。
+依据：[已发布规格](spec.md)及 [ADR-107](../../architecture/adr/superseded/107-unified-memory-processing-lifecycle.md)。三层验收入口已由用户确认。以下每票均交付可通过公开入口演示或验证的完整行为，涉及的存储、认证 HTTP、生产桥接、页面与回归在该票内一起完成；不按数据库、后端、前端横向分票。
 
 ## 依赖图
 

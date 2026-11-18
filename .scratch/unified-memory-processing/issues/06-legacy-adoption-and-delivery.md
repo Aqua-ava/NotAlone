@@ -4,7 +4,7 @@ Triage: ready-for-agent
 State: resolved
 Blocked by: 04, 05
 
-规格：[统一记忆处理生命周期](../spec.md)。决策依据：[ADR-107](../../../architecture/adr/107-unified-memory-processing-lifecycle.md)。
+规格：[统一记忆处理生命周期](../spec.md)。决策依据：[ADR-107](../../../architecture/adr/superseded/107-unified-memory-processing-lifecycle.md)。
 
 **What to build:** 把存量工作的可信证据接入统一管理，并在全部调用方切换后收敛旧的宽范围和逐任务主入口；完成整份规格的用户可见闭环验收。
 

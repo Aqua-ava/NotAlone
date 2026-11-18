@@ -4,7 +4,7 @@ Triage: ready-for-agent
 State: resolved
 Blocked by: 03
 
-规格：[统一记忆处理生命周期](../spec.md)。决策依据：[ADR-107](../../../architecture/adr/107-unified-memory-processing-lifecycle.md)。
+规格：[统一记忆处理生命周期](../spec.md)。决策依据：[ADR-107](../../../architecture/adr/superseded/107-unified-memory-processing-lifecycle.md)。
 
 **What to build:** 为采用新生命周期记录的工作接入启动时安全恢复；该触发入口与 04 的新增资料通知入口独立，二者共用 03 形成的轮次执行与资格合同。
 

@@ -47,10 +47,10 @@
 - [ADR-035：待确认候选作为强制标注的未确认参考进入回复](superseded/035-pending-candidate-unconfirmed-reply-reference.md)（已合并入ADR-195）
 - [ADR-036：按维度放行自动采纳](superseded/036-per-dimension-adoption-release.md)
 - [ADR-037：默认保存记忆提取的完整过程](037-complete-memory-extraction-trace.md)
-- [ADR-038：导入触发原记忆任务并让前台回复优先](038-import-triggered-memory-work-and-reply-priority.md)
+- [ADR-038：导入触发原记忆任务并让前台回复优先](superseded/038-import-triggered-memory-work-and-reply-priority.md)（已合并入ADR-201）
 - [ADR-039：退役 Swift 主界面，重新设计共享前端](039-retire-swift-main-interface.md)
 - [ADR-040：Electron 双窗口桌面宿主](040-electron-dual-window-host.md)
-- [ADR-041：观察提交后唤醒联系人记忆任务](041-observation-triggered-memory-work.md)
+- [ADR-041：观察提交后唤醒联系人记忆任务](superseded/041-observation-triggered-memory-work.md)（已合并入ADR-201）
 - [ADR-042：持续助手会话与单次运行上下文分界](042-assistant-session-context-boundary.md)
 - [ADR-043：聊天场景与有界方向探索](043-conversation-scenarios-and-direction-exploration.md)
 - [ADR-044：主动保存的表达样本独立于助手会话留存](superseded/044-explicit-style-sample-retention.md)
@@ -117,8 +117,8 @@
 - [ADR-104：记忆生成逻辑按领域模块维护](104-tencent-source-memory-engine.md)
 - [ADR-105：以当前有效绑定观察恢复前台确认](superseded/105-fresh-verified-foreground-recovery.md)（已合并入ADR-198）
 - [ADR-106：持久助手会话、空闲分段与恢复职责](106-persistent-assistant-conversations.md)
-- [ADR-107：统一记忆处理入口与安全自动恢复](107-unified-memory-processing-lifecycle.md)
-- [ADR-108：隔离无法核验的存量记忆任务](108-isolate-unresolved-legacy-memory-processing.md)
+- [ADR-107：统一记忆处理入口与安全自动恢复](superseded/107-unified-memory-processing-lifecycle.md)（已合并入ADR-201）
+- [ADR-108：隔离无法核验的存量记忆任务](superseded/108-isolate-unresolved-legacy-memory-processing.md)（已合并入ADR-201）
 - [ADR-109：受控 SQLite 底座与分票切换](109-controlled-sqlite-storage-foundation.md)
 - [ADR-110：SQLite 联系人身份与逐人读取授权](110-selected-sqlite-contact-read-grants.md)
 - [ADR-113：SQLite 私聊历史、消息身份与实际来源](113-sqlite-private-history-source-contract.md)
@@ -142,16 +142,16 @@
 - [ADR-140：聊天图片取消原图证明门槛](superseded/140-source-verified-viewable-chat-images.md)（已合并入ADR-197）
 - [ADR-141：引用回复随正常消息同步读取](141-inline-quoted-reply-sync.md)
 - [ADR-142：首次连接后先选择联系人，再确认开启同步](142-first-connection-contact-selection.md)
-- [ADR-143：混合记忆处理调度](143-hybrid-memory-processing-schedule.md)
+- [ADR-143：混合记忆处理调度](superseded/143-hybrid-memory-processing-schedule.md)（已合并入ADR-201）
 - [ADR-144：保留旧资料的来源重新认证](superseded/144-preserved-history-source-recertification.md)（流程已由ADR-177替代，保留合法旧资料与必要删除事实）
 - [ADR-145：记忆处理卡跟随当前联系人](145-contact-scoped-memory-processing-view.md)
 - [ADR-146：AI 服务地址与密钥由用户填写](146-editable-deepseek-endpoint.md)
 - [ADR-147：OpenCode Go 的模型环境配置](147-opencode-go-model-configuration.md)
-- [ADR-148：代码策略更新后的未完成记忆任务恢复](148-memory-policy-recovery.md)
+- [ADR-148：代码策略更新后的未完成记忆任务恢复](superseded/148-memory-policy-recovery.md)（已合并入ADR-201）
 - [ADR-149：内容级候选拒绝不构成记忆处理失败](superseded/149-content-rejection-is-not-failure.md)（已合并入ADR-200）
 - [ADR-150：发生时间标注降级为可选信息](superseded/150-optional-event-time.md)（已合并入ADR-200）
 - [ADR-151：单个微信读取进程串行切换联系人](151-shared-wechat-cli-process.md)
-- [ADR-152：历史与增量记忆分开自动处理](152-history-and-incremental-memory-processing.md)
+- [ADR-152：历史与增量记忆分开自动处理](superseded/152-history-and-incremental-memory-processing.md)（已合并入ADR-201）
 - [ADR-153：图文共同参与记忆处理](superseded/153-joint-text-image-memory-input.md)（已合并入ADR-197）
 - [ADR-154：按微信资源来源记录图片版本](superseded/154-source-grounded-image-versions.md)（已合并入ADR-197）
 - [ADR-155：图片资源角色展示与缩略图复查](superseded/155-image-variant-display-and-thumbnail-refresh.md)（已合并入ADR-197）
@@ -165,7 +165,7 @@
 - [ADR-163：退役未接入 SQLite 的旧回复流程](163-retire-disconnected-reply-workflows.md)
 - [ADR-164：大历史分段恢复与联系人公平轮转](164-resumable-history-slices.md)
 - [ADR-165：退役逐条消息排除，固定关系背景自动上下文](165-remove-message-exclusion.md)
-- [ADR-166：记忆自动处理总开关，默认关闭](166-memory-auto-processing-switch.md)
+- [ADR-166：记忆自动处理总开关，默认关闭](superseded/166-memory-auto-processing-switch.md)（已合并入ADR-201）
 - [ADR-167：记忆页在读取授权暂时不可用时继续显示已保存记忆](167-memory-page-saved-source-display.md)
 - [ADR-168：受管文件身份不含系统设备号](168-managed-file-identity-without-device.md)
 - [ADR-169：记忆只带入确认不是缩略图的图片](superseded/169-memory-uses-confirmed-non-thumbnail-images.md)（已合并入ADR-197）
@@ -222,3 +222,5 @@
 - [ADR-199：微信同步授权、读取边界与恢复的早期决定现行合并](199-wechat-sync-consent-and-recovery-consolidated.md)——合并 ADR-001／003／016／017／023／025／030／083／095／127：授权范围、前后台分离、默认不选、自动恢复、首次连接账号确认与重启来源核验；原条目归档于 superseded/。
 
 - [ADR-200：记忆采纳、来源核验与更新合并现行合并决定](200-memory-adoption-consolidated.md)——合并 ADR-002／024／033／069／070／085／086／149／150／174／184：全自动来源核验采纳、不设重复门槛、内容拒绝不失败、时间标注可选、不确定性降级、四种动作的有据更新与合并；原条目归档于 superseded/。
+
+- [ADR-201：记忆处理生命周期、调度与恢复现行合并决定](201-memory-processing-lifecycle-consolidated.md)——合并 ADR-038／041／107／108／143／148／152／166：触发只登记待处理、统一入口与五个主状态、历史与增量分开、L2／L3 窗口、自动处理总开关默认关闭、安全恢复；原条目归档于 superseded/。

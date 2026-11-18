@@ -4,7 +4,7 @@ Triage: ready-for-agent
 State: resolved
 Blocked by: 01
 
-规格：[统一记忆处理生命周期](../spec.md)。决策依据：[ADR-107](../../../architecture/adr/107-unified-memory-processing-lifecycle.md)。
+规格：[统一记忆处理生命周期](../spec.md)。决策依据：[ADR-107](../../../architecture/adr/superseded/107-unified-memory-processing-lifecycle.md)。
 
 **What to build:** 范围级暂停／继续从页面到持久控制意图、执行资格和原领域恢复动作完整生效。它控制该范围现有合法工作，不另行解决自动接纳新轮次的问题。
 

@@ -90,8 +90,8 @@ State: open
 
 - [ADR-002](../../architecture/adr/superseded/002-relationship-extraction-and-tiered-adoption.md) 第 2、3 节：提取触发阈值和空闲调度改由本规格参数约束；提取证据、批次固定范围与来源验证继续有效。
 - [ADR-014](../../architecture/adr/014-historical-memory-extraction-window.md)：保留历史／增量输入范围差异；本次只自动安排 read_goal.kind=incremental，历史由独立显式初始化启动。
-- [ADR-041](../../architecture/adr/041-observation-triggered-memory-work.md)：观察提交后仍可唤醒本机调度器，但不再等价于立即启动 L1。重启安全恢复、来源资格、手动暂停及预算约束继续有效。
+- [ADR-041](../../architecture/adr/superseded/041-observation-triggered-memory-work.md)：观察提交后仍可唤醒本机调度器，但不再等价于立即启动 L1。重启安全恢复、来源资格、手动暂停及预算约束继续有效。
 - [ADR-070](../../architecture/adr/superseded/070-automatic-memory-maintenance.md) 第 2 节和保留规则第 1、4 项：默认自动维护范围仍成立，触发时间改由 L1/L2/L3 的分层窗口定义。
-- [ADR-107](../../architecture/adr/107-unified-memory-processing-lifecycle.md) 第 4、9 项和第 3 项完成条件：明确“自动排队”是登记待处理而非每条消息启动模型；固定轮次、暂停恢复、阶段完成和整体完成条件继续有效。
-- [ADR-108](../../architecture/adr/108-isolate-unresolved-legacy-memory-processing.md) 第 3 项：已验证新增文字仍可登记后续工作，但进入正常 L1 门槛而非绕过调度直接提取；旧隔离任务仍不得重放。
+- [ADR-107](../../architecture/adr/superseded/107-unified-memory-processing-lifecycle.md) 第 4、9 项和第 3 项完成条件：明确“自动排队”是登记待处理而非每条消息启动模型；固定轮次、暂停恢复、阶段完成和整体完成条件继续有效。
+- [ADR-108](../../architecture/adr/superseded/108-isolate-unresolved-legacy-memory-processing.md) 第 3 项：已验证新增文字仍可登记后续工作，但进入正常 L1 门槛而非绕过调度直接提取；旧隔离任务仍不得重放。
 - [ADR-118](../../architecture/adr/118-sqlite-memory-documents-and-publication.md)：保留完整发布集合、输入冻结、发布 CAS、来源删除和失效文档禁用约束；实施说明应补记 L2/L3 可延迟/合并，延迟不能让整轮提前完成。

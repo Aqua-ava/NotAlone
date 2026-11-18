@@ -5,7 +5,7 @@ State: claimed
 
 规格状态：已发布，任务拆分提案待用户确认；产品行为及三层验收入口均已由用户确认，尚未实现。
 
-设计依据：[ADR-107](../../architecture/adr/107-unified-memory-processing-lifecycle.md)、[领域词汇](../../CONTEXT.md)及本轮设计讨论。本文修订原“统一记忆处理状态栏”规格的范围，扩展至真实生命周期管理；[旧规格](history/state-bar-spec-20261022.md)与[旧验收记录](history/state-bar-verification-20261022.md)保留为历史，不作为本规格已实现的证据。
+设计依据：[ADR-107](../../architecture/adr/superseded/107-unified-memory-processing-lifecycle.md)、[领域词汇](../../CONTEXT.md)及本轮设计讨论。本文修订原“统一记忆处理状态栏”规格的范围，扩展至真实生命周期管理；[旧规格](history/state-bar-spec-20261022.md)与[旧验收记录](history/state-bar-verification-20261022.md)保留为历史，不作为本规格已实现的证据。
 
 ## 问题陈述（Problem Statement）
 
